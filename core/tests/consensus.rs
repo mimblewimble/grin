@@ -476,7 +476,7 @@ fn test_secondary_pow_ratio() {
 	// Tests for mainnet chain type.
 	{
 		global::set_mining_mode(global::ChainTypes::Mainnet);
-		assert_eq!(global::is_mainnet(), true);
+		assert_eq!(global::is_testnet(), false);
 
 		assert_eq!(secondary_pow_ratio(1), 90);
 		assert_eq!(secondary_pow_ratio(89), 90);
@@ -518,7 +518,7 @@ fn test_secondary_pow_ratio() {
 	// Tests for testnet4 chain type (covers pre and post hardfork).
 	{
 		global::set_mining_mode(global::ChainTypes::Testnet4);
-		assert_eq!(global::is_mainnet(), false);
+		assert_eq!(global::is_testnet(), true);
 
 		assert_eq!(secondary_pow_ratio(1), 90);
 		assert_eq!(secondary_pow_ratio(89), 90);
@@ -566,7 +566,7 @@ fn test_secondary_pow_scale() {
 	// testnet4 testing
 	{
 		global::set_mining_mode(global::ChainTypes::Testnet4);
-		assert_eq!(global::is_mainnet(), false);
+		assert_eq!(global::is_testnet(), true);
 
 		// all primary, factor should increase so it becomes easier to find a high
 		// difficulty block
@@ -640,7 +640,7 @@ fn test_secondary_pow_scale() {
 	// mainnet testing
 	{
 		global::set_mining_mode(global::ChainTypes::Mainnet);
-		assert_eq!(global::is_mainnet(), true);
+		assert_eq!(global::is_testnet(), false);
 
 		// all primary, factor should increase so it becomes easier to find a high
 		// difficulty block

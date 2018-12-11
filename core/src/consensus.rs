@@ -62,29 +62,31 @@ pub const COINBASE_MATURITY: u64 = DAY_HEIGHT;
 /// function of block height (time). Starts at 90% losing a percent
 /// approximately every week. Represented as an integer between 0 and 100.
 pub fn secondary_pow_ratio(height: u64) -> u64 {
-	if global::is_mainnet() {
-		90u64.saturating_sub(height / (2 * YEAR_HEIGHT / 90))
-	} else {
+	if global::is_testnet() {
 		if height < T4_CUCKAROO_HARDFORK {
 			// Maintaining pre hardfork testnet4 behavior
 			90u64.saturating_sub(height / WEEK_HEIGHT)
 		} else {
 			90u64.saturating_sub(height / (2 * YEAR_HEIGHT / 90))
 		}
+	} else {
+		// Mainnet (or testing mainnet code).
+		90u64.saturating_sub(height / (2 * YEAR_HEIGHT / 90))
 	}
 }
 
 /// The AR scale damping factor to use. Dependent on block height
 /// to account for pre HF behavior on testnet4.
 fn ar_scale_damp_factor(height: u64) -> u64 {
-	if global::is_mainnet() {
-		AR_SCALE_DAMP_FACTOR
-	} else {
+	if global::is_testnet() {
 		if height < T4_CUCKAROO_HARDFORK {
 			DIFFICULTY_DAMP_FACTOR
 		} else {
 			AR_SCALE_DAMP_FACTOR
 		}
+	} else {
+		// Mainnet (or testing mainnet code).
+		AR_SCALE_DAMP_FACTOR
 	}
 }
 
@@ -332,7 +334,8 @@ where
 /// the hardfork.
 fn ar_count(height: u64, diff_data: &[HeaderInfo]) -> u64 {
 	let mut to_skip = 1;
-	if !global::is_mainnet() && height < T4_CUCKAROO_HARDFORK {
+	if global::is_testnet() && height < T4_CUCKAROO_HARDFORK {
+		// Maintain behavior of testnet4 pre-HF.
 		to_skip = 0;
 	}
 	100 * diff_data
