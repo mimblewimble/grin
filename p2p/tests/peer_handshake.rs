@@ -17,9 +17,9 @@ use grin_p2p as p2p;
 
 use grin_store as store;
 use grin_util as util;
+use grin_util::{Mutex, StopState};
 
 use std::net::{SocketAddr, TcpListener, TcpStream};
-use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 use std::{thread, time};
 
@@ -57,8 +57,7 @@ fn peer_handshake() {
 			p2p_config.clone(),
 			net_adapter.clone(),
 			Hash::from_vec(&vec![]),
-			Arc::new(AtomicBool::new(false)),
-			Arc::new(AtomicBool::new(false)),
+			Arc::new(Mutex::new(StopState::new())),
 		)
 		.unwrap(),
 	);
