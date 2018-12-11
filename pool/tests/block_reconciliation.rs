@@ -25,7 +25,6 @@ use crate::common::ChainAdapter;
 use crate::common::*;
 use grin_core as core;
 use grin_keychain as keychain;
-use grin_pool as pool;
 use grin_util as util;
 use std::sync::Arc;
 

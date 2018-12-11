@@ -23,11 +23,11 @@ use bufstream::BufStream;
 use grin_core as core;
 use grin_servers as servers;
 use grin_util as util;
+use grin_util::{Mutex, StopState};
 use serde_json::Value;
 use std::io::prelude::{BufRead, Write};
 use std::net::TcpStream;
 use std::process;
-use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 use std::{thread, time};
 
@@ -140,7 +140,7 @@ fn basic_stratum_server() {
 	info!("stratum server and worker stats verification ok");
 
 	// Start mining blocks
-	let stop = Arc::new(AtomicBool::new(false));
+	let stop = Arc::new(Mutex::new(StopState::new()));
 	s.start_test_miner(None, stop.clone());
 	info!("test miner started");
 

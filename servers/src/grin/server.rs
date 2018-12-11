@@ -16,7 +16,6 @@
 //! the peer-to-peer server, the blockchain and the transaction pool) and acts
 //! as a facade.
 
-use crate::util::RwLock;
 use std::net::SocketAddr;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
@@ -38,6 +37,7 @@ use crate::p2p;
 use crate::pool;
 use crate::store;
 use crate::util::file::get_first_line;
+use crate::util::{Mutex, RwLock, StopState};
 
 /// Grin server holding internal structures.
 pub struct Server {
@@ -57,9 +57,7 @@ pub struct Server {
 	/// To be passed around to collect stats and info
 	state_info: ServerStateInfo,
 	/// Stop flag
-	pub stop: Arc<AtomicBool>,
-	/// Pause flag
-	pub pause: Arc<AtomicBool>,
+	pub stop_state: Arc<Mutex<StopState>>,
 }
 
 impl Server {
@@ -90,14 +88,14 @@ impl Server {
 
 		if let Some(s) = enable_test_miner {
 			if s {
-				serv.start_test_miner(test_miner_wallet_url, serv.stop.clone());
+				serv.start_test_miner(test_miner_wallet_url, serv.stop_state.clone());
 			}
 		}
 
 		info_callback(serv.clone());
 		loop {
 			thread::sleep(time::Duration::from_secs(1));
-			if serv.stop.load(Ordering::Relaxed) {
+			if serv.stop_state.lock().is_stopped() {
 				return Ok(());
 			}
 		}
@@ -112,8 +110,7 @@ impl Server {
 			Some(b) => b,
 		};
 
-		let stop = Arc::new(AtomicBool::new(false));
-		let pause = Arc::new(AtomicBool::new(false));
+		let stop_state = Arc::new(Mutex::new(StopState::new()));
 
 		// Shared cache for verification results.
 		// We cache rangeproof verification and kernel signature verification.
@@ -156,6 +153,7 @@ impl Server {
 			pow::verify_size,
 			verifier_cache.clone(),
 			archive_mode,
+			stop_state.clone(),
 		)?);
 
 		pool_adapter.set_chain(shared_chain.clone());
@@ -175,8 +173,7 @@ impl Server {
 			config.p2p_config.clone(),
 			net_adapter.clone(),
 			genesis.hash(),
-			stop.clone(),
-			pause.clone(),
+			stop_state.clone(),
 		)?);
 		chain_adapter.init(p2p_server.peers.clone());
 		pool_net_adapter.init(p2p_server.peers.clone());
@@ -206,8 +203,7 @@ impl Server {
 				config.dandelion_config.clone(),
 				seeder,
 				peers_preferred,
-				stop.clone(),
-				pause.clone(),
+				stop_state.clone(),
 			);
 		}
 
@@ -220,7 +216,7 @@ impl Server {
 			sync_state.clone(),
 			p2p_server.peers.clone(),
 			shared_chain.clone(),
-			stop.clone(),
+			stop_state.clone(),
 		);
 
 		let p2p_inner = p2p_server.clone();
@@ -244,7 +240,7 @@ impl Server {
 			config.dandelion_config.clone(),
 			tx_pool.clone(),
 			verifier_cache.clone(),
-			stop.clone(),
+			stop_state.clone(),
 		);
 
 		warn!("Grin server started.");
@@ -258,8 +254,7 @@ impl Server {
 			state_info: ServerStateInfo {
 				..Default::default()
 			},
-			stop,
-			pause,
+			stop_state,
 		})
 	}
 
@@ -305,7 +300,11 @@ impl Server {
 	/// Start mining for blocks internally on a separate thread. Relies on
 	/// internal miner, and should only be used for automated testing. Burns
 	/// reward if wallet_listener_url is 'None'
-	pub fn start_test_miner(&self, wallet_listener_url: Option<String>, stop: Arc<AtomicBool>) {
+	pub fn start_test_miner(
+		&self,
+		wallet_listener_url: Option<String>,
+		stop_state: Arc<Mutex<StopState>>,
+	) {
 		info!("start_test_miner - start",);
 		let sync_state = self.sync_state.clone();
 		let config_wallet_url = match wallet_listener_url.clone() {
@@ -327,7 +326,7 @@ impl Server {
 			self.chain.clone(),
 			self.tx_pool.clone(),
 			self.verifier_cache.clone(),
-			stop,
+			stop_state,
 		);
 		miner.set_debug_output_id(format!("Port {}", self.config.p2p_config.port));
 		let _ = thread::Builder::new()
@@ -429,24 +428,25 @@ impl Server {
 	/// Stop the server.
 	pub fn stop(&self) {
 		self.p2p.stop();
-		self.stop.store(true, Ordering::Relaxed);
+		self.stop_state.lock().stop();
 	}
 
 	/// Pause the p2p server.
 	pub fn pause(&self) {
-		self.pause.store(true, Ordering::Relaxed);
+		self.stop_state.lock().pause();
 		thread::sleep(time::Duration::from_secs(1));
 		self.p2p.pause();
 	}
 
-	/// Resume the p2p server.
+	/// Resume p2p server.
+	/// TODO - We appear not to resume the p2p server (peer connections) here?
 	pub fn resume(&self) {
-		self.pause.store(false, Ordering::Relaxed);
+		self.stop_state.lock().resume();
 	}
 
 	/// Stops the test miner without stopping the p2p layer
-	pub fn stop_test_miner(&self, stop: Arc<AtomicBool>) {
-		stop.store(true, Ordering::Relaxed);
+	pub fn stop_test_miner(&self, stop: Arc<Mutex<StopState>>) {
+		stop.lock().stop();
 		info!("stop_test_miner - stop",);
 	}
 }

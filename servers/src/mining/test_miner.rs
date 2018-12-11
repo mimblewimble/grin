@@ -19,7 +19,6 @@
 
 use crate::util::RwLock;
 use chrono::prelude::Utc;
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
 use crate::chain;
@@ -30,13 +29,14 @@ use crate::core::core::{Block, BlockHeader};
 use crate::core::global;
 use crate::mining::mine_block;
 use crate::pool;
+use crate::util::{Mutex, StopState};
 
 pub struct Miner {
 	config: StratumServerConfig,
 	chain: Arc<chain::Chain>,
 	tx_pool: Arc<RwLock<pool::TransactionPool>>,
 	verifier_cache: Arc<RwLock<dyn VerifierCache>>,
-	stop: Arc<AtomicBool>,
+	stop_state: Arc<Mutex<StopState>>,
 
 	// Just to hold the port we're on, so this miner can be identified
 	// while watching debug output
@@ -51,7 +51,7 @@ impl Miner {
 		chain: Arc<chain::Chain>,
 		tx_pool: Arc<RwLock<pool::TransactionPool>>,
 		verifier_cache: Arc<RwLock<dyn VerifierCache>>,
-		stop: Arc<AtomicBool>,
+		stop_state: Arc<Mutex<StopState>>,
 	) -> Miner {
 		Miner {
 			config,
@@ -59,7 +59,7 @@ impl Miner {
 			tx_pool,
 			verifier_cache,
 			debug_output_id: String::from("none"),
-			stop,
+			stop_state,
 		}
 	}
 
@@ -135,7 +135,11 @@ impl Miner {
 		// nothing has changed. We only want to create a new key_id for each new block.
 		let mut key_id = None;
 
-		while !self.stop.load(Ordering::Relaxed) {
+		loop {
+			if self.stop_state.lock().is_stopped() {
+				break;
+			}
+
 			trace!("in miner loop. key_id: {:?}", key_id);
 
 			// get the latest chain state and build a block on top of it

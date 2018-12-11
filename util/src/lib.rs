@@ -109,3 +109,52 @@ where
 pub fn to_base64(s: &str) -> String {
 	base64::encode(s)
 }
+
+/// Global stopped/paused state shared across various subcomponents of Grin.
+///
+/// Arc<Mutex<StopState>> allows the chain to lock the stop_state during critical processing.
+/// Other subcomponents cannot abruptly shutdown the server during block/header processing.
+/// This should prevent the chain ever ending up in an inconsistent state on restart.
+///
+/// "Stopped" allows a clean shutdown of the Grin server.
+/// "Paused" is used in some tests to allow nodes to reach steady state etc.
+///
+pub struct StopState {
+	stopped: bool,
+	paused: bool,
+}
+
+impl StopState {
+	/// Create a new stop_state in default "running" state.
+	pub fn new() -> StopState {
+		StopState {
+			stopped: false,
+			paused: false,
+		}
+	}
+
+	/// Check if we are stopped.
+	pub fn is_stopped(&self) -> bool {
+		self.stopped
+	}
+
+	/// Check if we are paused.
+	pub fn is_paused(&self) -> bool {
+		self.paused
+	}
+
+	/// Stop the server.
+	pub fn stop(&mut self) {
+		self.stopped = true;
+	}
+
+	/// Pause the server (only used in tests).
+	pub fn pause(&mut self) {
+		self.paused = true;
+	}
+
+	/// Resume a paused server (only used in tests).
+	pub fn resume(&mut self) {
+		self.paused = false;
+	}
+}

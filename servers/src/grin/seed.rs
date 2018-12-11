@@ -21,13 +21,13 @@ use chrono::prelude::Utc;
 use chrono::{Duration, MIN_DATE};
 use rand::{thread_rng, Rng};
 use std::net::{SocketAddr, ToSocketAddrs};
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{mpsc, Arc};
 use std::{cmp, io, str, thread, time};
 
 use crate::p2p;
 use crate::p2p::ChainAdapter;
 use crate::pool::DandelionConfig;
+use crate::util::{Mutex, StopState};
 
 // DNS Seeds with contact email associated
 const DNS_SEEDS: &'static [&'static str] = &[
@@ -40,8 +40,7 @@ pub fn connect_and_monitor(
 	dandelion_config: DandelionConfig,
 	seed_list: Box<dyn Fn() -> Vec<SocketAddr> + Send>,
 	preferred_peers: Option<Vec<SocketAddr>>,
-	stop: Arc<AtomicBool>,
-	pause: Arc<AtomicBool>,
+	stop_state: Arc<Mutex<StopState>>,
 ) {
 	let _ = thread::Builder::new()
 		.name("seed".to_string())
@@ -65,9 +64,13 @@ pub fn connect_and_monitor(
 			let mut prev_ping = Utc::now();
 			let mut start_attempt = 0;
 
-			while !stop.load(Ordering::Relaxed) {
+			loop {
+				if stop_state.lock().is_stopped() {
+					break;
+				}
+
 				// Pause egress peer connection request. Only for tests.
-				if pause.load(Ordering::Relaxed) {
+				if stop_state.lock().is_paused() {
 					thread::sleep(time::Duration::from_secs(1));
 					continue;
 				}

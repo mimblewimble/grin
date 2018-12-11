@@ -25,7 +25,6 @@ use self::pool::types::*;
 use self::pool::TransactionPool;
 use self::util::secp::pedersen::Commitment;
 use self::util::RwLock;
-use crate::pool::types::*;
 use grin_chain as chain;
 use grin_core as core;
 use grin_keychain as keychain;

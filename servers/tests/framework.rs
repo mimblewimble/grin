@@ -222,7 +222,7 @@ impl LocalServerContainer {
 				"starting test Miner on port {}",
 				self.config.p2p_server_port
 			);
-			s.start_test_miner(wallet_url, s.stop.clone());
+			s.start_test_miner(wallet_url, s.stop_state.clone());
 		}
 
 		for p in &mut self.peer_list {

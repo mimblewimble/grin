@@ -128,6 +128,9 @@ pub enum ErrorKind {
 	/// Error from summing and verifying kernel sums via committed trait.
 	#[fail(display = "Committed Trait: Error summing and verifying kernel sums")]
 	Committed(committed::Error),
+	/// We cannot process data once the Grin server has been stopped.
+	#[fail(display = "Stopped (Grin Shutting Down)")]
+	Stopped,
 }
 
 impl Display for Error {

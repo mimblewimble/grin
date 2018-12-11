@@ -13,7 +13,7 @@
 
 //! Implementation of the persistent Backend for the prunable MMR tree.
 
-use std::{fs, io, marker, time};
+use std::{fs, io, time};
 
 use crate::core::core::hash::{Hash, Hashed};
 use crate::core::core::pmmr::{self, family, Backend};

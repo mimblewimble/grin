@@ -32,7 +32,7 @@ use crate::types::{
 	BlockStatus, ChainAdapter, NoStatus, Options, Tip, TxHashSetRoots, TxHashsetWriteStatus,
 };
 use crate::util::secp::pedersen::{Commitment, RangeProof};
-use crate::util::RwLock;
+use crate::util::{Mutex, RwLock, StopState};
 use grin_store::Error::NotFoundErr;
 use std::collections::HashMap;
 use std::fs::File;
@@ -149,6 +149,7 @@ pub struct Chain {
 	// POW verification function
 	pow_verifier: fn(&BlockHeader) -> Result<(), pow::Error>,
 	archive_mode: bool,
+	stop_state: Arc<Mutex<StopState>>,
 	genesis: BlockHeader,
 }
 
@@ -164,57 +165,64 @@ impl Chain {
 		pow_verifier: fn(&BlockHeader) -> Result<(), pow::Error>,
 		verifier_cache: Arc<RwLock<dyn VerifierCache>>,
 		archive_mode: bool,
+		stop_state: Arc<Mutex<StopState>>,
 	) -> Result<Chain, Error> {
-		let chain_store = store::ChainStore::new(db_env)?;
+		// Note: We take a lock on the stop_state here and do not release it until
+		// we have finished chain initialization.
+		let stop_state_local = stop_state.clone();
+		let stop_lock = stop_state_local.lock();
+		if stop_lock.is_stopped() {
+			return Err(ErrorKind::Stopped.into());
+		}
 
-		let store = Arc::new(chain_store);
+		let store = Arc::new(store::ChainStore::new(db_env)?);
 
 		// open the txhashset, creating a new one if necessary
 		let mut txhashset = txhashset::TxHashSet::open(db_root.clone(), store.clone(), None)?;
 
-		setup_head(genesis.clone(), store.clone(), &mut txhashset)?;
-
-		{
-			let head = store.head()?;
-			debug!(
-				"init: head: {} @ {} [{}]",
-				head.total_difficulty.to_num(),
-				head.height,
-				head.last_block_h,
-			);
-		}
-
-		{
-			let header_head = store.header_head()?;
-			debug!(
-				"init: header_head: {} @ {} [{}]",
-				header_head.total_difficulty.to_num(),
-				header_head.height,
-				header_head.last_block_h,
-			);
-		}
-
-		{
-			let sync_head = store.get_sync_head()?;
-			debug!(
-				"init: sync_head: {} @ {} [{}]",
-				sync_head.total_difficulty.to_num(),
-				sync_head.height,
-				sync_head.last_block_h,
-			);
-		}
+		setup_head(&genesis, &store, &mut txhashset)?;
+		Chain::log_heads(&store)?;
 
 		Ok(Chain {
-			db_root: db_root,
-			store: store,
-			adapter: adapter,
+			db_root,
+			store,
+			adapter,
 			orphans: Arc::new(OrphanBlockPool::new()),
 			txhashset: Arc::new(RwLock::new(txhashset)),
 			pow_verifier,
 			verifier_cache,
 			archive_mode,
+			stop_state,
 			genesis: genesis.header.clone(),
 		})
+	}
+
+	fn log_heads(store: &store::ChainStore) -> Result<(), Error> {
+		let head = store.head()?;
+		debug!(
+			"init: head: {} @ {} [{}]",
+			head.total_difficulty.to_num(),
+			head.height,
+			head.last_block_h,
+		);
+
+		let header_head = store.header_head()?;
+		debug!(
+			"init: header_head: {} @ {} [{}]",
+			header_head.total_difficulty.to_num(),
+			header_head.height,
+			header_head.last_block_h,
+		);
+
+		let sync_head = store.get_sync_head()?;
+		debug!(
+			"init: sync_head: {} @ {} [{}]",
+			sync_head.total_difficulty.to_num(),
+			sync_head.height,
+			sync_head.last_block_h,
+		);
+
+		Ok(())
 	}
 
 	/// Processes a single block, then checks for orphans, processing
@@ -251,6 +259,15 @@ impl Chain {
 	/// or false if it has added to a fork (or orphan?).
 	fn process_block_single(&self, b: Block, opts: Options) -> Result<Option<Tip>, Error> {
 		let (maybe_new_head, prev_head) = {
+			// Note: We take a lock on the stop_state here and do not release it until
+			// we have finished processing this single block.
+			// We take care to write both the txhashset *and* the batch while we
+			// have the stop_state lock.
+			let stop_lock = self.stop_state.lock();
+			if stop_lock.is_stopped() {
+				return Err(ErrorKind::Stopped.into());
+			}
+
 			let mut txhashset = self.txhashset.write();
 			let batch = self.store.batch()?;
 			let mut ctx = self.new_ctx(opts, batch, &mut txhashset)?;
@@ -258,6 +275,11 @@ impl Chain {
 			let prev_head = ctx.batch.head()?;
 
 			let maybe_new_head = pipe::process_block(&b, &mut ctx);
+
+			// We have flushed txhashset extension changes to disk
+			// but not yet committed the batch.
+			// A node shutdown at this point can be catastrophic...
+			// We prevent this via the stop_lock (see above).
 			if let Ok(_) = maybe_new_head {
 				ctx.batch.commit()?;
 			}
@@ -322,11 +344,12 @@ impl Chain {
 
 	/// Process a block header received during "header first" propagation.
 	pub fn process_block_header(&self, bh: &BlockHeader, opts: Options) -> Result<(), Error> {
+		// We take a write lock on the txhashset and create a new batch
+		// but this is strictly readonly so we do not commit the batch.
 		let mut txhashset = self.txhashset.write();
 		let batch = self.store.batch()?;
 		let mut ctx = self.new_ctx(opts, batch, &mut txhashset)?;
 		pipe::process_block_header(bh, &mut ctx)?;
-		ctx.batch.commit()?;
 		Ok(())
 	}
 
@@ -334,6 +357,15 @@ impl Chain {
 	/// This is only ever used during sync and is based on sync_head.
 	/// We update header_head here if our total work increases.
 	pub fn sync_block_headers(&self, headers: &[BlockHeader], opts: Options) -> Result<(), Error> {
+		// Note: We take a lock on the stop_state here and do not release it until
+		// we have finished processing this single block.
+		// We take care to write both the txhashset *and* the batch while we
+		// have the stop_state lock.
+		let stop_lock = self.stop_state.lock();
+		if stop_lock.is_stopped() {
+			return Err(ErrorKind::Stopped.into());
+		}
+
 		let mut txhashset = self.txhashset.write();
 		let batch = self.store.batch()?;
 		let mut ctx = self.new_ctx(opts, batch, &mut txhashset)?;
@@ -865,6 +897,13 @@ impl Chain {
 	fn compact_txhashset(&self) -> Result<(), Error> {
 		debug!("Starting blockchain compaction.");
 		{
+			// Note: We take a lock on the stop_state here and do not release it until
+			// we have finished processing this compaction operation.
+			let stop_lock = self.stop_state.lock();
+			if stop_lock.is_stopped() {
+				return Err(ErrorKind::Stopped.into());
+			}
+
 			let mut txhashset = self.txhashset.write();
 			txhashset.compact()?;
 			txhashset::extending_readonly(&mut txhashset, |extension| {
@@ -1145,8 +1184,8 @@ impl Chain {
 }
 
 fn setup_head(
-	genesis: Block,
-	store: Arc<store::ChainStore>,
+	genesis: &Block,
+	store: &store::ChainStore,
 	txhashset: &mut txhashset::TxHashSet,
 ) -> Result<(), Error> {
 	let mut batch = store.batch()?;
@@ -1240,10 +1279,8 @@ fn setup_head(
 			let tip = Tip::from_header(&genesis.header);
 			batch.save_head(&tip)?;
 
-			batch.save_block_header(&genesis.header)?;
-
 			if genesis.kernels().len() > 0 {
-				let (utxo_sum, kernel_sum) = (sums, &genesis as &Committed).verify_kernel_sums(
+				let (utxo_sum, kernel_sum) = (sums, genesis as &Committed).verify_kernel_sums(
 					genesis.header.overage(),
 					genesis.header.total_kernel_offset(),
 				)?;
