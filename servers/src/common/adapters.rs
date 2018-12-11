@@ -232,11 +232,7 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 	}
 
 	fn headers_received(&self, bhs: &[core::BlockHeader], addr: SocketAddr) -> bool {
-		info!(
-			"Received {} block headers from {}",
-			bhs.len(),
-			addr,
-		);
+		info!("Received {} block headers from {}", bhs.len(), addr,);
 
 		if bhs.len() == 0 {
 			return false;
