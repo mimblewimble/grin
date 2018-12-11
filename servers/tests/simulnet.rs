@@ -19,7 +19,7 @@ mod framework;
 
 use self::core::core::hash::Hashed;
 use self::core::global::{self, ChainTypes};
-use self::util::Mutex;
+use self::util::{Mutex, StopState};
 use self::wallet::controller;
 use self::wallet::libwallet::types::{WalletBackend, WalletInst};
 use self::wallet::lmdb_wallet::LMDBBackend;
@@ -35,7 +35,6 @@ use grin_wallet as wallet;
 use std::cmp;
 use std::default::Default;
 use std::process::exit;
-use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 use std::{thread, time};
 
@@ -219,7 +218,7 @@ fn simulate_block_propagation() {
 	}
 
 	// start mining
-	let stop = Arc::new(AtomicBool::new(false));
+	let stop = Arc::new(Mutex::new(StopState::new()));
 	servers[0].start_test_miner(None, stop.clone());
 
 	// monitor for a change of head on a different server and check whether
@@ -272,7 +271,7 @@ fn simulate_full_sync() {
 
 	let s1 = servers::Server::new(framework::config(1000, "grin-sync", 1000)).unwrap();
 	// mine a few blocks on server 1
-	let stop = Arc::new(AtomicBool::new(false));
+	let stop = Arc::new(Mutex::new(StopState::new()));
 	s1.start_test_miner(None, stop.clone());
 	thread::sleep(time::Duration::from_secs(8));
 	s1.stop_test_miner(stop);
@@ -328,7 +327,7 @@ fn simulate_fast_sync() {
 
 	// start s1 and mine enough blocks to get beyond the fast sync horizon
 	let s1 = servers::Server::new(framework::config(2000, "grin-fast", 2000)).unwrap();
-	let stop = Arc::new(AtomicBool::new(false));
+	let stop = Arc::new(Mutex::new(StopState::new()));
 	s1.start_test_miner(None, stop.clone());
 
 	while s1.head().height < 20 {
@@ -460,7 +459,7 @@ fn long_fork_test_preparation() -> Vec<servers::Server> {
 	let s0 = servers::Server::new(conf).unwrap();
 	thread::sleep(time::Duration::from_millis(1_000));
 	s.push(s0);
-	let stop = Arc::new(AtomicBool::new(false));
+	let stop = Arc::new(Mutex::new(StopState::new()));
 	s[0].start_test_miner(None, stop.clone());
 
 	while s[0].head().height < global::cut_through_horizon() as u64 + 10 {
@@ -545,7 +544,7 @@ fn long_fork_test_mining(blocks: u64, n: u16, s: &servers::Server) {
 	let sn_header = s.chain.head().unwrap();
 
 	// Mining
-	let stop = Arc::new(AtomicBool::new(false));
+	let stop = Arc::new(Mutex::new(StopState::new()));
 	s.start_test_miner(None, stop.clone());
 
 	while s.head().height < sn_header.height + blocks {
@@ -928,7 +927,7 @@ fn replicate_tx_fluff_failure() {
 	s1_config.dandelion_config.relay_secs = Some(1);
 	let s1 = servers::Server::new(s1_config.clone()).unwrap();
 	// Mine off of server 1
-	s1.start_test_miner(s1_config.test_miner_wallet_url, s1.stop.clone());
+	s1.start_test_miner(s1_config.test_miner_wallet_url, s1.stop_state.clone());
 	thread::sleep(time::Duration::from_secs(5));
 
 	// Server 2 (another node)

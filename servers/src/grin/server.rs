@@ -445,8 +445,8 @@ impl Server {
 	}
 
 	/// Stops the test miner without stopping the p2p layer
-	pub fn stop_test_miner(&self, stop: Arc<AtomicBool>) {
-		stop.store(true, Ordering::Relaxed);
+	pub fn stop_test_miner(&self, stop: Arc<Mutex<StopState>>) {
+		stop.lock().stop();
 		info!("stop_test_miner - stop",);
 	}
 }
