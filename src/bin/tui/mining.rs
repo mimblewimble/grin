@@ -268,12 +268,8 @@ impl TUIStatusListener for TUIMiningView {
 			);
 
 		let diff_table_view = TableView::<DiffBlock, DiffColumn>::new()
-			.column(DiffColumn::Height, "Height", |c| {
-				c.width_percent(10)
-			})
-			.column(DiffColumn::Hash, "Hash", |c| {
-				c.width_percent(10)
-			})
+			.column(DiffColumn::Height, "Height", |c| c.width_percent(10))
+			.column(DiffColumn::Hash, "Hash", |c| c.width_percent(10))
 			.column(DiffColumn::PoWType, "Type", |c| c.width_percent(10))
 			.column(DiffColumn::Difficulty, "Network Difficulty", |c| {
 				c.width_percent(15)
