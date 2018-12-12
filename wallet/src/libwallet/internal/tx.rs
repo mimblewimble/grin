@@ -38,11 +38,8 @@ where
 	K: Keychain,
 {
 	// create an output using the amount in the slate
-	let (_, mut context, receiver_create_fn) = selection::build_recipient_output_with_slate(
-		wallet,
-		slate,
-		parent_key_id.clone(),
-	)?;
+	let (_, mut context, receiver_create_fn) =
+		selection::build_recipient_output_with_slate(wallet, slate, parent_key_id.clone())?;
 
 	// fill public keys
 	let _ = slate.fill_round_1(
@@ -228,7 +225,7 @@ where
 	}
 	let mut tx = match tx {
 		Some(t) => t,
-		None => return Err(ErrorKind::TransactionDoesntExist(slate.id.to_string()))?
+		None => return Err(ErrorKind::TransactionDoesntExist(slate.id.to_string()))?,
 	};
 	tx.tx_hex = Some(tx_hex);
 	let batch = wallet.batch()?;

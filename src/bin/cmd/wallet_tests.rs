@@ -397,7 +397,6 @@ mod wallet_tests {
 		execute_command(&app, test_dir, "wallet1", &client1, arg_vec)?;
 		bh += 1;
 
-
 		// Check our transaction log, should have bh entries + one for the self receive
 		let wallet1 = instantiate_wallet(config1.clone(), client1.clone(), "password", "default")?;
 
@@ -447,7 +446,9 @@ mod wallet_tests {
 		execute_command(&app, test_dir, "wallet1", &client1, arg_vec)?;
 
 		// txs and outputs (mostly spit out for a visual in test logs)
-		let arg_vec = vec!["grin", "wallet", "-p", "password", "-a", "mining", "outputs"];
+		let arg_vec = vec![
+			"grin", "wallet", "-p", "password", "-a", "mining", "outputs",
+		];
 		execute_command(&app, test_dir, "wallet1", &client1, arg_vec)?;
 
 		// let logging finish
