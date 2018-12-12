@@ -22,18 +22,23 @@ use chrono::Duration;
 use curl;
 use serde_json;
 
+use cuckoo_miner as cuckoo;
 use grin_chain as chain;
 use grin_core as core;
+use grin_miner_plugin as plugin;
 use grin_store as store;
 use grin_util as util;
 
-use grin_keychain::{ExtKeychain, Keychain};
+use grin_core::core::verifier_cache::LruVerifierCache;
+use grin_keychain::{ExtKeychain, Keychain, BlindingFactor};
 
 static BCHAIN_INFO_URL: &str = "https://blockchain.info/latestblock";
 static BCYPHER_URL: &str = "https://api.blockcypher.com/v1/btc/main";
 static BCHAIR_URL: &str = "https://api.blockchair.com/bitcoin/blocks?limit=2";
 
 fn main() {
+	core::global::set_mining_mode(core::global::ChainTypes::Mainnet);
+
 	// get the latest bitcoin hash
 	let h1 = get_bchain_head();
 	let h2 = get_bcypher_head();
@@ -65,7 +70,27 @@ fn main() {
 		tmp_chain.set_txhashset_roots(&mut gen).unwrap();
 	}
 
-	// TODO mine a valid Cuckatoo29 solution
+	// mine a Cuckaroo29 block
+	let plugin_path = "cuckaroo_mean_cuda_29.cuckooplugin";
+	let plugin_lib = cuckoo::PluginLibrary::new(plugin_path).unwrap();
+	let solver_ctx = plugin_lib.create_solver_ctx(&mut plugin_lib.get_default_params());
+
+	let mut solver_sols = plugin::SolverSolutions::default();
+	let mut solver_stats = plugin::SolverStats::default();
+	let mut nonce = 0;
+	while solver_sols.num_sols == 0 {
+		solver_sols = plugin::SolverSolutions::default();
+		plugin_lib.run_solver(solver_ctx, gen.header.pre_pow(), nonce, 1, &mut solver_sols, &mut solver_stats);
+		nonce += 1;
+	}
+
+	// set the PoW solution and make sure the block is mostly valid
+	gen.header.pow.nonce = solver_sols.sols[0].nonce as u64;
+	gen.header.pow.proof.nonces = solver_sols.sols[0].to_u64s();
+	assert!(gen.header.pow.is_secondary(), "Not a secondary header");
+	core::pow::verify_size(&gen.header).unwrap();
+	gen.validate(&BlindingFactor::zero(), Arc::new(util::RwLock::new(LruVerifierCache::new()))).unwrap();
+
 	// TODO check again the bitcoin block to make sure it's not been orphaned
 	// TODO Commit genesis block info in git and tag
 }

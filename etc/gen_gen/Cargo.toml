@@ -15,10 +15,12 @@ path = "src/bin/gen_gen.rs"
 
 [dependencies]
 chrono = "0.4.4"
+cuckoo_miner = "0.4.2"
 curl = "0.4.19"
-serde_json = "1"
-grin_core = { path = "../../core", version = "0.4.2" }
+grin_core = "0.4.2"
 grin_chain = "0.4.2"
 grin_keychain = "0.4.2"
+grin_miner_plugin = "0.4.2"
 grin_store = "0.4.2"
 grin_util = "0.4.2"
+serde_json = "1"
