@@ -109,12 +109,15 @@ impl fmt::Display for Error {
 	}
 }
 
+/// Header entry for storing in the header MMR.
+/// Note: we hash the block header itself and maintain the hash in the entry.
+/// This allows us to lookup the original header from the db as necessary.
 pub struct HeaderEntry {
-	pub hash: Hash,
-	pub timestamp: u64,
-	pub total_difficulty: Difficulty,
-	pub secondary_scaling: u32,
-	pub is_secondary: bool,
+	hash: Hash,
+	timestamp: u64,
+	total_difficulty: Difficulty,
+	secondary_scaling: u32,
+	is_secondary: bool,
 }
 
 impl Readable for HeaderEntry {
@@ -159,6 +162,7 @@ impl FixedLength for HeaderEntry {
 }
 
 impl HeaderEntry {
+	/// The hash of the underlying block.
 	pub fn hash(&self) -> Hash {
 		self.hash
 	}
