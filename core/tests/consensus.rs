@@ -386,7 +386,15 @@ fn next_target_adjustment() {
 	// Check we don't get stuck on difficulty <= MIN_DIFFICULTY (at 4x faster blocks at least)
 	let mut hi = HeaderInfo::from_diff_scaling(diff_min, AR_SCALE_DAMP_FACTOR as u32);
 	hi.is_secondary = false;
-	let hinext = next_difficulty(1, repeat(BLOCK_TIME_SEC/4, hi.clone(), DIFFICULTY_ADJUST_WINDOW, None));
+	let hinext = next_difficulty(
+		1,
+		repeat(
+			BLOCK_TIME_SEC / 4,
+			hi.clone(),
+			DIFFICULTY_ADJUST_WINDOW,
+			None,
+		),
+	);
 
 	assert_ne!(hinext.difficulty, diff_min);
 
