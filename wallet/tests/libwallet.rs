@@ -12,7 +12,7 @@
 // limitations under the License.
 
 //! core::libtx specific tests
-use self::core::core::transaction::kernel_sig_msg;
+use self::core::core::transaction;
 use self::core::libtx::{aggsig, proof};
 use self::keychain::{BlindSum, BlindingFactor, ExtKeychain, Keychain};
 use self::util::secp;
@@ -24,6 +24,10 @@ use grin_keychain as keychain;
 use grin_util as util;
 use grin_wallet as wallet;
 use rand::thread_rng;
+
+fn kernel_sig_msg() -> secp::Message {
+	transaction::kernel_sig_msg(0, 0, transaction::KernelFeatures::DEFAULT_KERNEL).unwrap()
+}
 
 #[test]
 fn aggsig_sender_receiver_interaction() {
@@ -105,7 +109,7 @@ fn aggsig_sender_receiver_interaction() {
 		)
 		.unwrap();
 
-		let msg = kernel_sig_msg(0, 0).unwrap();
+		let msg = kernel_sig_msg();
 		let sig_part = aggsig::calculate_partial_sig(
 			&keychain.secp(),
 			&rx_cx.sec_key,
@@ -122,7 +126,7 @@ fn aggsig_sender_receiver_interaction() {
 	// received in the response back from the receiver
 	{
 		let keychain = sender_keychain.clone();
-		let msg = kernel_sig_msg(0, 0).unwrap();
+		let msg = kernel_sig_msg();
 		let sig_verifies = aggsig::verify_partial_sig(
 			&keychain.secp(),
 			&rx_sig_part,
@@ -137,7 +141,7 @@ fn aggsig_sender_receiver_interaction() {
 	// now sender signs with their key
 	let sender_sig_part = {
 		let keychain = sender_keychain.clone();
-		let msg = kernel_sig_msg(0, 0).unwrap();
+		let msg = kernel_sig_msg();
 		let sig_part = aggsig::calculate_partial_sig(
 			&keychain.secp(),
 			&s_cx.sec_key,
@@ -154,7 +158,7 @@ fn aggsig_sender_receiver_interaction() {
 	// received by the sender
 	{
 		let keychain = receiver_keychain.clone();
-		let msg = kernel_sig_msg(0, 0).unwrap();
+		let msg = kernel_sig_msg();
 		let sig_verifies = aggsig::verify_partial_sig(
 			&keychain.secp(),
 			&sender_sig_part,
@@ -170,7 +174,7 @@ fn aggsig_sender_receiver_interaction() {
 	let (final_sig, final_pubkey) = {
 		let keychain = receiver_keychain.clone();
 
-		let msg = kernel_sig_msg(0, 0).unwrap();
+		let msg = kernel_sig_msg();
 		let our_sig_part = aggsig::calculate_partial_sig(
 			&keychain.secp(),
 			&rx_cx.sec_key,
@@ -205,7 +209,7 @@ fn aggsig_sender_receiver_interaction() {
 	// Receiver checks the final signature verifies
 	{
 		let keychain = receiver_keychain.clone();
-		let msg = kernel_sig_msg(0, 0).unwrap();
+		let msg = kernel_sig_msg();
 
 		// Receiver check the final signature verifies
 		let sig_verifies = aggsig::verify_completed_sig(
@@ -221,7 +225,7 @@ fn aggsig_sender_receiver_interaction() {
 	// Check we can verify the sig using the kernel excess
 	{
 		let keychain = ExtKeychain::from_random_seed().unwrap();
-		let msg = kernel_sig_msg(0, 0).unwrap();
+		let msg = kernel_sig_msg();
 		let sig_verifies =
 			aggsig::verify_single_from_commit(&keychain.secp(), &final_sig, &msg, &kernel_excess);
 
@@ -321,7 +325,7 @@ fn aggsig_sender_receiver_interaction_offset() {
 		)
 		.unwrap();
 
-		let msg = kernel_sig_msg(0, 0).unwrap();
+		let msg = kernel_sig_msg();
 		let sig_part = aggsig::calculate_partial_sig(
 			&keychain.secp(),
 			&rx_cx.sec_key,
@@ -338,7 +342,7 @@ fn aggsig_sender_receiver_interaction_offset() {
 	// received in the response back from the receiver
 	{
 		let keychain = sender_keychain.clone();
-		let msg = kernel_sig_msg(0, 0).unwrap();
+		let msg = kernel_sig_msg();
 		let sig_verifies = aggsig::verify_partial_sig(
 			&keychain.secp(),
 			&sig_part,
@@ -353,7 +357,7 @@ fn aggsig_sender_receiver_interaction_offset() {
 	// now sender signs with their key
 	let sender_sig_part = {
 		let keychain = sender_keychain.clone();
-		let msg = kernel_sig_msg(0, 0).unwrap();
+		let msg = kernel_sig_msg();
 		let sig_part = aggsig::calculate_partial_sig(
 			&keychain.secp(),
 			&s_cx.sec_key,
@@ -370,7 +374,7 @@ fn aggsig_sender_receiver_interaction_offset() {
 	// received by the sender
 	{
 		let keychain = receiver_keychain.clone();
-		let msg = kernel_sig_msg(0, 0).unwrap();
+		let msg = kernel_sig_msg();
 		let sig_verifies = aggsig::verify_partial_sig(
 			&keychain.secp(),
 			&sender_sig_part,
@@ -385,7 +389,7 @@ fn aggsig_sender_receiver_interaction_offset() {
 	// Receiver now builds final signature from sender and receiver parts
 	let (final_sig, final_pubkey) = {
 		let keychain = receiver_keychain.clone();
-		let msg = kernel_sig_msg(0, 0).unwrap();
+		let msg = kernel_sig_msg();
 		let our_sig_part = aggsig::calculate_partial_sig(
 			&keychain.secp(),
 			&rx_cx.sec_key,
@@ -420,7 +424,7 @@ fn aggsig_sender_receiver_interaction_offset() {
 	// Receiver checks the final signature verifies
 	{
 		let keychain = receiver_keychain.clone();
-		let msg = kernel_sig_msg(0, 0).unwrap();
+		let msg = kernel_sig_msg();
 
 		// Receiver check the final signature verifies
 		let sig_verifies = aggsig::verify_completed_sig(
@@ -436,7 +440,7 @@ fn aggsig_sender_receiver_interaction_offset() {
 	// Check we can verify the sig using the kernel excess
 	{
 		let keychain = ExtKeychain::from_random_seed().unwrap();
-		let msg = kernel_sig_msg(0, 0).unwrap();
+		let msg = kernel_sig_msg();
 		let sig_verifies =
 			aggsig::verify_single_from_commit(&keychain.secp(), &final_sig, &msg, &kernel_excess);
 

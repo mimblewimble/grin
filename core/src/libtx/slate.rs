@@ -17,9 +17,9 @@
 
 use crate::blake2::blake2b::blake2b;
 use crate::core::committed::Committed;
-use crate::core::transaction::kernel_sig_msg;
+use crate::core::transaction::{kernel_sig_msg, KernelFeatures, Transaction};
 use crate::core::verifier_cache::LruVerifierCache;
-use crate::core::{amount_to_hr_string, Transaction};
+use crate::core::amount_to_hr_string;
 use crate::keychain::{BlindSum, BlindingFactor, Keychain};
 use crate::libtx::error::{Error, ErrorKind};
 use crate::libtx::{aggsig, build, tx_fee};
@@ -159,7 +159,10 @@ impl Slate {
 	// This is the msg that we will sign as part of the tx kernel.
 	// Currently includes the fee and the lock_height.
 	fn msg_to_sign(&self) -> Result<secp::Message, Error> {
-		let msg = kernel_sig_msg(self.fee, self.lock_height)?;
+		// Currently we only support interactively creating a tx with a "default" kernel.
+		let features = KernelFeatures::DEFAULT_KERNEL;
+
+		let msg = kernel_sig_msg(self.fee, self.lock_height, features)?;
 		Ok(msg)
 	}
 

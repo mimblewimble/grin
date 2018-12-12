@@ -51,8 +51,8 @@ impl<H: Hashed> ShortIdentifiable for H {
 		use std::hash::Hasher;
 
 		// extract k0/k1 from the block_hash
-		let k0 = LittleEndian::read_u64(&hash_with_nonce.0[0..8]);
-		let k1 = LittleEndian::read_u64(&hash_with_nonce.0[8..16]);
+		let k0 = LittleEndian::read_u64(&hash_with_nonce.as_bytes()[0..8]);
+		let k1 = LittleEndian::read_u64(&hash_with_nonce.as_bytes()[8..16]);
 
 		// initialize a siphasher24 with k0/k1
 		let mut sip_hasher = SipHasher24::new_with_keys(k0, k1);

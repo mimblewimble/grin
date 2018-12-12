@@ -18,6 +18,7 @@ use crate::consensus;
 use crate::core::hash::Hashed;
 use crate::core::verifier_cache::VerifierCache;
 use crate::core::{committed, Committed};
+use crate::global;
 use crate::keychain::{self, BlindingFactor};
 use crate::ser::{
 	self, read_multi, FixedLength, PMMRable, Readable, Reader, VerifySortedAndUnique, Writeable,
@@ -43,6 +44,13 @@ bitflags! {
 		const DEFAULT_KERNEL = 0b00000000;
 		/// Kernel matching a coinbase output
 		const COINBASE_KERNEL = 0b00000001;
+	}
+}
+
+impl Writeable for KernelFeatures {
+	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
+		writer.write_u8(self.bits())?;
+		Ok(())
 	}
 }
 
@@ -163,13 +171,9 @@ impl ::std::hash::Hash for TxKernel {
 
 impl Writeable for TxKernel {
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
-		ser_multiwrite!(
-			writer,
-			[write_u8, self.features.bits()],
-			[write_u64, self.fee],
-			[write_u64, self.lock_height],
-			[write_fixed_bytes, &self.excess]
-		);
+		self.features.write(writer)?;
+		ser_multiwrite!(writer, [write_u64, self.fee], [write_u64, self.lock_height]);
+		self.excess.write(writer)?;
 		self.excess_sig.write(writer)?;
 		Ok(())
 	}
@@ -207,7 +211,7 @@ impl TxKernel {
 	/// The msg signed as part of the tx kernel.
 	/// Consists of the fee and the lock_height.
 	pub fn msg_to_sign(&self) -> Result<secp::Message, Error> {
-		let msg = kernel_sig_msg(self.fee, self.lock_height)?;
+		let msg = kernel_sig_msg(self.fee, self.lock_height, self.features)?;
 		Ok(msg)
 	}
 
@@ -272,29 +276,14 @@ pub struct TxKernelEntry {
 
 impl Writeable for TxKernelEntry {
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
-		ser_multiwrite!(
-			writer,
-			[write_u8, self.kernel.features.bits()],
-			[write_u64, self.kernel.fee],
-			[write_u64, self.kernel.lock_height],
-			[write_fixed_bytes, &self.kernel.excess]
-		);
-		self.kernel.excess_sig.write(writer)?;
+		self.kernel.write(writer)?;
 		Ok(())
 	}
 }
 
 impl Readable for TxKernelEntry {
-	fn read(reader: &mut dyn Reader) -> Result<TxKernelEntry, ser::Error> {
-		let features =
-			KernelFeatures::from_bits(reader.read_u8()?).ok_or(ser::Error::CorruptedData)?;
-		let kernel = TxKernel {
-			features: features,
-			fee: reader.read_u64()?,
-			lock_height: reader.read_u64()?,
-			excess: Commitment::read(reader)?,
-			excess_sig: secp::Signature::read(reader)?,
-		};
+	fn read(reader: &mut Reader) -> Result<TxKernelEntry, ser::Error> {
+		let kernel = TxKernel::read(reader)?;
 		Ok(TxKernelEntry { kernel })
 	}
 }
@@ -1293,12 +1282,28 @@ impl From<Output> for OutputIdentifier {
 	}
 }
 
-/// Construct msg from tx fee and lock_height.
-pub fn kernel_sig_msg(fee: u64, lock_height: u64) -> Result<secp::Message, Error> {
-	let mut bytes = [0; 32];
-	BigEndian::write_u64(&mut bytes[16..24], fee);
-	BigEndian::write_u64(&mut bytes[24..], lock_height);
-	let msg = secp::Message::from_slice(&bytes)?;
+/// Construct msg from tx fee, lock_height and kernel features.
+/// In testnet4 we did not include the kernel features in the message being signed.
+/// In mainnet we changed this to include features and we hash (fee || lock_height || features)
+/// to produce a 32 byte message to sign.
+///
+/// testnet4: msg = (fee || lock_height)
+/// mainnet:  msg = hash(fee || lock_height || features)
+///
+pub fn kernel_sig_msg(
+	fee: u64,
+	lock_height: u64,
+	features: KernelFeatures,
+) -> Result<secp::Message, Error> {
+	let msg = if global::is_mainnet() {
+		let hash = (fee, lock_height, features).hash();
+		secp::Message::from_slice(&hash.as_bytes())?
+	} else {
+		let mut bytes = [0; 32];
+		BigEndian::write_u64(&mut bytes[16..24], fee);
+		BigEndian::write_u64(&mut bytes[24..], lock_height);
+		secp::Message::from_slice(&bytes)?
+	};
 	Ok(msg)
 }
 
