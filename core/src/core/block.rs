@@ -123,7 +123,9 @@ impl Readable for HeaderEntry {
 		let timestamp = reader.read_u64()?;
 		let total_difficulty = Difficulty::read(reader)?;
 		let secondary_scaling = reader.read_u32()?;
-		let is_secondary = reader.read_u8()? == 1;
+
+		// Using a full byte to represent the bool for now.
+		let is_secondary = reader.read_u8()? != 0;
 
 		Ok(HeaderEntry {
 			hash,
@@ -141,6 +143,8 @@ impl Writeable for HeaderEntry {
 		writer.write_u64(self.timestamp)?;
 		self.total_difficulty.write(writer)?;
 		writer.write_u32(self.secondary_scaling)?;
+
+		// Using a full byte to represent the bool for now.
 		if self.is_secondary {
 			writer.write_u8(1)?;
 		} else {
