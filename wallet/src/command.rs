@@ -234,13 +234,13 @@ pub fn send(
 		};
 		if adapter.supports_sync() {
 			slate = adapter.send_tx_sync(&args.dest, &slate)?;
+			api.tx_lock_outputs(&slate, lock_fn)?;
 			if args.method == "self" {
 				controller::foreign_single_use(wallet, |api| {
 					api.receive_tx(&mut slate, Some(&args.dest), None)?;
 					Ok(())
 				})?;
 			}
-			api.tx_lock_outputs(&slate, lock_fn)?;
 			if let Err(e) = api.verify_slate_messages(&slate) {
 				error!("Error validating participant messages: {}", e);
 				return Err(e);

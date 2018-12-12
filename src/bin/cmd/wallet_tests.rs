@@ -310,6 +310,17 @@ mod wallet_tests {
 		execute_command(&app, test_dir, "wallet1", &client1, arg_vec)?;
 		bh += 1;
 
+		let wallet1 = instantiate_wallet(config1.clone(), client1.clone(), "password", "default")?;
+
+		// Check our transaction log, should have 10 entries
+		grin_wallet::controller::owner_single_use(wallet1.clone(), |api| {
+			api.set_active_account("mining")?;
+			let (refreshed, txs) = api.retrieve_txs(true, None, None)?;
+			assert!(refreshed);
+			assert_eq!(txs.len(), bh as usize);
+			Ok(())
+		})?;
+
 		let _ = test_framework::award_blocks_to_wallet(&chain, wallet1.clone(), 10);
 		bh += 10;
 
@@ -338,8 +349,106 @@ mod wallet_tests {
 			Ok(())
 		})?;
 
-		// txs
+		// Self-send to same account, using smallest strategy
+		let arg_vec = vec![
+			"grin",
+			"wallet",
+			"-p",
+			"password",
+			"-a",
+			"mining",
+			"send",
+			"-m",
+			"file",
+			"-d",
+			&file_name,
+			"-g",
+			"Love, Yeast, Smallest",
+			"-s",
+			"smallest",
+			"10",
+		];
+		execute_command(&app, test_dir, "wallet1", &client1, arg_vec)?;
+
+		let arg_vec = vec![
+			"grin",
+			"wallet",
+			"-p",
+			"password",
+			"-a",
+			"mining",
+			"receive",
+			"-i",
+			&file_name,
+			"-g",
+			"Thanks, Yeast!",
+		];
+		execute_command(&app, test_dir, "wallet1", &client1, arg_vec.clone())?;
+
+		let arg_vec = vec![
+			"grin",
+			"wallet",
+			"-p",
+			"password",
+			"finalize",
+			"-i",
+			&response_file_name,
+		];
+		execute_command(&app, test_dir, "wallet1", &client1, arg_vec)?;
+		bh += 1;
+
+		// Check our transaction log, should have bh entries + one for the self receive
+		let wallet1 = instantiate_wallet(config1.clone(), client1.clone(), "password", "default")?;
+
+		grin_wallet::controller::owner_single_use(wallet1.clone(), |api| {
+			api.set_active_account("mining")?;
+			let (refreshed, txs) = api.retrieve_txs(true, None, None)?;
+			assert!(refreshed);
+			assert_eq!(txs.len(), bh as usize + 1);
+			Ok(())
+		})?;
+
+		// Try using the self-send method
+		let arg_vec = vec![
+			"grin",
+			"wallet",
+			"-p",
+			"password",
+			"-a",
+			"mining",
+			"send",
+			"-m",
+			"self",
+			"-d",
+			"mining",
+			"-g",
+			"Self love",
+			"-s",
+			"smallest",
+			"10",
+		];
+		execute_command(&app, test_dir, "wallet1", &client1, arg_vec)?;
+		bh += 1;
+
+		// Check our transaction log, should have bh entries + 2 for the self receives
+		let wallet1 = instantiate_wallet(config1.clone(), client1.clone(), "password", "default")?;
+
+		grin_wallet::controller::owner_single_use(wallet1.clone(), |api| {
+			api.set_active_account("mining")?;
+			let (refreshed, txs) = api.retrieve_txs(true, None, None)?;
+			assert!(refreshed);
+			assert_eq!(txs.len(), bh as usize + 2);
+			Ok(())
+		})?;
+
+		// txs and outputs (mostly spit out for a visual in test logs)
 		let arg_vec = vec!["grin", "wallet", "-p", "password", "-a", "mining", "txs"];
+		execute_command(&app, test_dir, "wallet1", &client1, arg_vec)?;
+
+		// txs and outputs (mostly spit out for a visual in test logs)
+		let arg_vec = vec![
+			"grin", "wallet", "-p", "password", "-a", "mining", "outputs",
+		];
 		execute_command(&app, test_dir, "wallet1", &client1, arg_vec)?;
 
 		// let logging finish

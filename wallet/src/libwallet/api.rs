@@ -41,8 +41,8 @@ use crate::core::ser;
 use crate::keychain::{Identifier, Keychain};
 use crate::libwallet::internal::{keys, tx, updater};
 use crate::libwallet::types::{
-	AcctPathMapping, BlockFees, CbData, NodeClient, OutputData, TxLogEntry, TxWrapper,
-	WalletBackend, WalletInfo,
+	AcctPathMapping, BlockFees, CbData, NodeClient, OutputData, TxLogEntry, TxLogEntryType,
+	TxWrapper, WalletBackend, WalletInfo,
 };
 use crate::libwallet::{Error, ErrorKind};
 use crate::util;
@@ -634,7 +634,6 @@ where
 			num_change_outputs,
 			selection_strategy_is_use_all,
 			&parent_key_id,
-			false,
 			message,
 		)?;
 
@@ -834,10 +833,12 @@ where
 		};
 		// Don't do this multiple times
 		let tx = updater::retrieve_txs(&mut *w, None, Some(slate.id), Some(&parent_key_id))?;
-		if tx.len() > 0 {
-			return Err(ErrorKind::TransactionAlreadyReceived(slate.id.to_string()).into());
+		for t in &tx {
+			if t.tx_type == TxLogEntryType::TxReceived {
+				return Err(ErrorKind::TransactionAlreadyReceived(slate.id.to_string()).into());
+			}
 		}
-		let res = tx::receive_tx(&mut *w, slate, &parent_key_id, false, message);
+		let res = tx::receive_tx(&mut *w, slate, &parent_key_id, message);
 		w.close()?;
 
 		if let Err(e) = res {

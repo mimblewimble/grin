@@ -30,7 +30,6 @@ pub fn receive_tx<T: ?Sized, C, K>(
 	wallet: &mut T,
 	slate: &mut Slate,
 	parent_key_id: &Identifier,
-	is_self: bool,
 	message: Option<String>,
 ) -> Result<(), Error>
 where
@@ -39,12 +38,8 @@ where
 	K: Keychain,
 {
 	// create an output using the amount in the slate
-	let (_, mut context, receiver_create_fn) = selection::build_recipient_output_with_slate(
-		wallet,
-		slate,
-		parent_key_id.clone(),
-		is_self,
-	)?;
+	let (_, mut context, receiver_create_fn) =
+		selection::build_recipient_output_with_slate(wallet, slate, parent_key_id.clone())?;
 
 	// fill public keys
 	let _ = slate.fill_round_1(
@@ -74,7 +69,6 @@ pub fn create_send_tx<T: ?Sized, C, K>(
 	num_change_outputs: usize,
 	selection_strategy_is_use_all: bool,
 	parent_key_id: &Identifier,
-	is_self: bool,
 	message: Option<String>,
 ) -> Result<
 	(
@@ -114,7 +108,6 @@ where
 		num_change_outputs,
 		selection_strategy_is_use_all,
 		parent_key_id.clone(),
-		is_self,
 	)?;
 
 	// Generate a kernel offset and subtract from our context's secret key. Store
@@ -210,7 +203,7 @@ where
 /// Update the stored hex transaction (this update needs to happen when the TX is finalised)
 pub fn update_tx_hex<T: ?Sized, C, K>(
 	wallet: &mut T,
-	parent_key_id: &Identifier,
+	_parent_key_id: &Identifier,
 	slate: &Slate,
 ) -> Result<(), Error>
 where
@@ -220,15 +213,23 @@ where
 {
 	let tx_hex = util::to_hex(ser::ser_vec(&slate.tx).unwrap());
 	// This will ignore the parent key, so no need to specify account on the
-	// finalise command
+	// finalize command
 	let tx_vec = updater::retrieve_txs(wallet, None, Some(slate.id), None)?;
-	if tx_vec.len() != 1 {
-		return Err(ErrorKind::TransactionDoesntExist(slate.id.to_string()))?;
+	let mut tx = None;
+	// don't want to assume this is the right tx, in case of self-sending
+	for t in tx_vec {
+		if t.tx_type == TxLogEntryType::TxSent {
+			tx = Some(t.clone());
+			break;
+		}
 	}
-	let mut tx = tx_vec[0].clone();
+	let mut tx = match tx {
+		Some(t) => t,
+		None => return Err(ErrorKind::TransactionDoesntExist(slate.id.to_string()))?,
+	};
 	tx.tx_hex = Some(tx_hex);
 	let batch = wallet.batch()?;
-	batch.save_tx_log_entry(tx, &parent_key_id)?;
+	batch.save_tx_log_entry(tx.clone(), &tx.parent_key_id)?;
 	batch.commit()?;
 	Ok(())
 }
