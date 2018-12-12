@@ -20,6 +20,7 @@ use std::sync::Arc;
 use std::time::SystemTime;
 
 use crate::core::consensus::graph_weight;
+use crate::core::core::hash::Hash;
 
 use chrono::prelude::*;
 
@@ -118,8 +119,10 @@ pub struct DiffStats {
 /// Last n blocks for difficulty calculation purposes
 #[derive(Clone, Debug)]
 pub struct DiffBlock {
-	/// Block number (can be negative for a new chain)
-	pub block_number: i64,
+	/// Block height (can be negative for a new chain)
+	pub block_height: i64,
+	/// Block hash (may be synthetic for a new chain)
+	pub block_hash: Hash,
 	/// Block network difficulty
 	pub difficulty: u64,
 	/// Time block was found (epoch seconds)

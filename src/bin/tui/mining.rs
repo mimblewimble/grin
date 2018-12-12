@@ -99,7 +99,8 @@ impl TableViewItem<StratumWorkerColumn> for WorkerStats {
 }
 #[derive(Copy, Clone, PartialEq, Eq, Hash)]
 enum DiffColumn {
-	BlockNumber,
+	Height,
+	Hash,
 	PoWType,
 	Difficulty,
 	SecondaryScaling,
@@ -110,7 +111,8 @@ enum DiffColumn {
 impl DiffColumn {
 	fn _as_str(&self) -> &str {
 		match *self {
-			DiffColumn::BlockNumber => "Block Number",
+			DiffColumn::Height => "Height",
+			DiffColumn::Hash => "Hash",
 			DiffColumn::PoWType => "Type",
 			DiffColumn::Difficulty => "Network Difficulty",
 			DiffColumn::SecondaryScaling => "Sec. Scaling",
@@ -130,7 +132,8 @@ impl TableViewItem<DiffColumn> for DiffBlock {
 		};
 
 		match column {
-			DiffColumn::BlockNumber => self.block_number.to_string(),
+			DiffColumn::Height => self.block_height.to_string(),
+			DiffColumn::Hash => self.block_hash.to_string(),
 			DiffColumn::PoWType => pow_type,
 			DiffColumn::Difficulty => self.difficulty.to_string(),
 			DiffColumn::SecondaryScaling => self.secondary_scaling.to_string(),
@@ -144,7 +147,8 @@ impl TableViewItem<DiffColumn> for DiffBlock {
 		Self: Sized,
 	{
 		match column {
-			DiffColumn::BlockNumber => Ordering::Equal,
+			DiffColumn::Height => Ordering::Equal,
+			DiffColumn::Hash => Ordering::Equal,
 			DiffColumn::PoWType => Ordering::Equal,
 			DiffColumn::Difficulty => Ordering::Equal,
 			DiffColumn::SecondaryScaling => Ordering::Equal,
@@ -264,9 +268,8 @@ impl TUIStatusListener for TUIMiningView {
 			);
 
 		let diff_table_view = TableView::<DiffBlock, DiffColumn>::new()
-			.column(DiffColumn::BlockNumber, "Block Number", |c| {
-				c.width_percent(15)
-			})
+			.column(DiffColumn::Height, "Height", |c| c.width_percent(10))
+			.column(DiffColumn::Hash, "Hash", |c| c.width_percent(10))
 			.column(DiffColumn::PoWType, "Type", |c| c.width_percent(10))
 			.column(DiffColumn::Difficulty, "Network Difficulty", |c| {
 				c.width_percent(15)
