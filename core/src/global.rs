@@ -284,7 +284,8 @@ pub fn is_user_testing_mode() -> bool {
 	ChainTypes::UserTesting == *param_ref
 }
 
-/// Are we in production mode (a live public network)?
+/// Are we in production mode?
+/// Production defined as a live public network, testnet[n] or mainnet.
 pub fn is_production_mode() -> bool {
 	let param_ref = CHAIN_TYPE.read();
 	ChainTypes::Testnet1 == *param_ref
@@ -294,10 +295,13 @@ pub fn is_production_mode() -> bool {
 		|| ChainTypes::Mainnet == *param_ref
 }
 
-/// Are we in mainnet?
-pub fn is_mainnet() -> bool {
+/// Are we in one of our (many) testnets?
+pub fn is_testnet() -> bool {
 	let param_ref = CHAIN_TYPE.read();
-	ChainTypes::Mainnet == *param_ref
+	ChainTypes::Testnet1 == *param_ref
+		|| ChainTypes::Testnet2 == *param_ref
+		|| ChainTypes::Testnet3 == *param_ref
+		|| ChainTypes::Testnet4 == *param_ref
 }
 
 /// Helper function to get a nonce known to create a valid POW on
