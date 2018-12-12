@@ -1295,14 +1295,14 @@ pub fn kernel_sig_msg(
 	lock_height: u64,
 	features: KernelFeatures,
 ) -> Result<secp::Message, Error> {
-	let msg = if global::is_mainnet() {
-		let hash = (fee, lock_height, features).hash();
-		secp::Message::from_slice(&hash.as_bytes())?
-	} else {
+	let msg = if global::is_testnet() {
 		let mut bytes = [0; 32];
 		BigEndian::write_u64(&mut bytes[16..24], fee);
 		BigEndian::write_u64(&mut bytes[24..], lock_height);
 		secp::Message::from_slice(&bytes)?
+	} else {
+		let hash = (fee, lock_height, features).hash();
+		secp::Message::from_slice(&hash.as_bytes())?
 	};
 	Ok(msg)
 }
