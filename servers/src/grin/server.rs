@@ -28,6 +28,7 @@ use crate::common::adapters::{
 use crate::common::stats::{DiffBlock, DiffStats, PeerStats, ServerStateInfo, ServerStats};
 use crate::common::types::{Error, ServerConfig, StratumServerConfig, SyncState, SyncStatus};
 use crate::core::core::verifier_cache::{LruVerifierCache, VerifierCache};
+use crate::core::core::hash::{Hashed, ZERO_HASH};
 use crate::core::{consensus, genesis, global, pow};
 use crate::grin::{dandelion_monitor, seed, sync};
 use crate::mining::stratumserver;
@@ -378,14 +379,27 @@ impl Server {
 
 			let diff_entries: Vec<DiffBlock> = last_blocks
 				.iter()
-				.skip(1)
 				.map(|n| {
 					let dur = n.timestamp - last_time;
 					let height = earliest_block_height + i;
+
+					// Use header hash if rela header.
+					// Default to "zero" hash if synthetic header_info.
+					let hash = if height >= 0 {
+						if let Ok(header) = self.chain.get_header_by_height(height as u64) {
+							header.hash()
+						} else {
+							ZERO_HASH
+						}
+					} else {
+						ZERO_HASH
+					};
+
 					i += 1;
 					last_time = n.timestamp;
 					DiffBlock {
-						block_number: height,
+						block_height: height,
+						block_hash: hash,
 						difficulty: n.difficulty.to_num(),
 						time: n.timestamp,
 						duration: dur,
