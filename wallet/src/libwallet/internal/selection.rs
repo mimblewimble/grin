@@ -36,7 +36,6 @@ pub fn build_send_tx_slate<T: ?Sized, C, K>(
 	change_outputs: usize,
 	selection_strategy_is_use_all: bool,
 	parent_key_id: Identifier,
-	is_self: bool,
 ) -> Result<
 	(
 		Slate,
@@ -99,9 +98,6 @@ where
 		let mut batch = wallet.batch()?;
 		let log_id = batch.next_tx_log_id(&parent_key_id)?;
 		let mut t = TxLogEntry::new(parent_key_id.clone(), TxLogEntryType::TxSent, log_id);
-		if is_self {
-			t.tx_type = TxLogEntryType::TxSentSelf;
-		}
 		t.tx_slate_id = Some(slate_id);
 		t.fee = Some(fee);
 		t.tx_hex = Some(tx_hex.to_owned());
@@ -148,7 +144,6 @@ pub fn build_recipient_output_with_slate<T: ?Sized, C, K>(
 	wallet: &mut T,
 	slate: &mut Slate,
 	parent_key_id: Identifier,
-	is_self: bool,
 ) -> Result<
 	(
 		Identifier,
@@ -190,9 +185,6 @@ where
 		let mut batch = wallet.batch()?;
 		let log_id = batch.next_tx_log_id(&parent_key_id)?;
 		let mut t = TxLogEntry::new(parent_key_id.clone(), TxLogEntryType::TxReceived, log_id);
-		if is_self {
-			t.tx_type = TxLogEntryType::TxReceivedSelf;
-		}
 		t.tx_slate_id = Some(slate_id);
 		t.amount_credited = amount;
 		t.num_outputs = 1;
