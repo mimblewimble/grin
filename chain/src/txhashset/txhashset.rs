@@ -204,8 +204,8 @@ impl TxHashSet {
 		let pos = pmmr::insertion_to_pmmr_index(height + 1);
 		let header_pmmr =
 			ReadonlyPMMR::at(&self.header_pmmr_h.backend, self.header_pmmr_h.last_pos);
-		if let Some(hash) = header_pmmr.get_data(pos) {
-			let header = self.commit_index.get_block_header(&hash)?;
+		if let Some(entry) = header_pmmr.get_data(pos) {
+			let header = self.commit_index.get_block_header(&entry.hash())?;
 			Ok(header)
 		} else {
 			Err(ErrorKind::Other(format!("get header by height")).into())
@@ -613,7 +613,7 @@ impl<'a> HeaderExtension<'a> {
 
 	/// Get the header hash for the specified pos from the underlying MMR backend.
 	fn get_header_hash(&self, pos: u64) -> Option<Hash> {
-		self.pmmr.get_data(pos)
+		self.pmmr.get_data(pos).map(|x| x.hash())
 	}
 
 	/// Get the header at the specified height based on the current state of the header extension.
@@ -989,7 +989,7 @@ impl<'a> Extension<'a> {
 
 	/// Get the header hash for the specified pos from the underlying MMR backend.
 	fn get_header_hash(&self, pos: u64) -> Option<Hash> {
-		self.header_pmmr.get_data(pos)
+		self.header_pmmr.get_data(pos).map(|x| x.hash())
 	}
 
 	/// Get the header at the specified height based on the current state of the extension.
