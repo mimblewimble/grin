@@ -64,8 +64,7 @@ pub struct Tip {
 }
 
 impl Tip {
-	/// TODO - why do we have Tip when we could just use a block header?
-	/// Creates a new tip based on header.
+	/// Creates a new tip based on provided header.
 	pub fn from_header(header: &BlockHeader) -> Tip {
 		Tip {
 			height: header.height,
@@ -73,6 +72,12 @@ impl Tip {
 			prev_block_h: header.prev_hash,
 			total_difficulty: header.total_difficulty(),
 		}
+	}
+
+	/// *Really* easy to accidentally call hash() on a tip (thinking its a header).
+	/// So lets make hash() do the right thing here.
+	pub fn hash(&self) -> Hash {
+		self.last_block_h
 	}
 }
 
