@@ -299,7 +299,8 @@ where
 				max_outputs,
 				selection_strategy_is_use_all,
 				parent_key_id,
-			).1;
+			)
+			.1;
 			fee = tx_fee(coins.len(), num_outputs, 1, None);
 			total = coins.iter().map(|c| c.value).sum();
 			amount_with_fee = amount + fee;
