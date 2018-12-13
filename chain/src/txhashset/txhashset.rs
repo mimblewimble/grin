@@ -279,17 +279,13 @@ impl TxHashSet {
 		{
 			let cutoff_pos = pmmr::insertion_to_pmmr_index(horizon_header.height);
 			self.header_pmmr_h.backend.remove_range(0..cutoff_pos);
-			self.header_pmmr_h.backend.check_compact(
-				cutoff_pos,
-				&Bitmap::create(),
-				&prune_noop,
-			)?;
+			self.header_pmmr_h
+				.backend
+				.check_compact(cutoff_pos, &Bitmap::create(), &prune_noop)?;
 			self.sync_pmmr_h.backend.remove_range(0..cutoff_pos);
-			self.sync_pmmr_h.backend.check_compact(
-				cutoff_pos,
-				&Bitmap::create(),
-				&prune_noop,
-			)?;
+			self.sync_pmmr_h
+				.backend
+				.check_compact(cutoff_pos, &Bitmap::create(), &prune_noop)?;
 		}
 
 		// Compact the prunable output and rangeproof backends based on "spent" outputs.
@@ -697,9 +693,7 @@ impl<'a> HeaderExtension<'a> {
 	/// including the genesis block header.
 	pub fn truncate(&mut self) -> Result<(), Error> {
 		debug!("Truncating header extension.");
-		self.pmmr
-			.truncate()
-			.map_err(&ErrorKind::TxHashSetErr)?;
+		self.pmmr.truncate().map_err(&ErrorKind::TxHashSetErr)?;
 		Ok(())
 	}
 
