@@ -408,7 +408,7 @@ mod wallet_tests {
 			Ok(())
 		})?;
 
-		// Try using the self-send method
+		// Try using the self-send method, splitting up outputs for the fun of it
 		let arg_vec = vec![
 			"grin",
 			"wallet",
@@ -423,6 +423,8 @@ mod wallet_tests {
 			"mining",
 			"-g",
 			"Self love",
+			"-o",
+			"75",
 			"-s",
 			"smallest",
 			"10",

@@ -228,7 +228,7 @@ where
 		None => return Err(ErrorKind::TransactionDoesntExist(slate.id.to_string()))?,
 	};
 	tx.tx_hex = Some(tx_hex);
-	let batch = wallet.batch()?;
+	let mut batch = wallet.batch()?;
 	batch.save_tx_log_entry(tx.clone(), &tx.parent_key_id)?;
 	batch.commit()?;
 	Ok(())

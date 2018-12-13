@@ -113,6 +113,7 @@ where
 		t.amount_debited = amount_debited;
 
 		// write the output representing our change
+		error!("OUTTING LOADS OF OUTPUTS");
 		for (change_amount, id) in &change_amounts_derivations {
 			t.num_outputs += 1;
 			t.amount_credited += change_amount;
@@ -128,6 +129,7 @@ where
 				tx_log_entry: Some(log_id),
 			})?;
 		}
+		error!("SAVING TX LOG ENTRY: {}", t.tx_slate_id.as_ref().unwrap());
 		batch.save_tx_log_entry(t, &parent_key_id)?;
 		batch.commit()?;
 		Ok(())
