@@ -235,7 +235,7 @@ where
 	K: Keychain,
 {
 	// select some spendable coins from the wallet
-	let (max_outputs, coins) = select_coins(
+	let (max_outputs, mut coins) = select_coins(
 		wallet,
 		amount,
 		current_height,
@@ -291,7 +291,7 @@ where
 			}
 
 			// select some spendable coins from the wallet
-			let (_, coins) = select_coins(
+			coins = select_coins(
 				wallet,
 				amount_with_fee,
 				current_height,
@@ -299,7 +299,8 @@ where
 				max_outputs,
 				selection_strategy_is_use_all,
 				parent_key_id,
-			);
+			)
+			.1;
 			fee = tx_fee(coins.len(), num_outputs, 1, None);
 			total = coins.iter().map(|c| c.value).sum();
 			amount_with_fee = amount + fee;

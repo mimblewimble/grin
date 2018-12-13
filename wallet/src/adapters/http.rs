@@ -48,8 +48,9 @@ impl WalletCommAdapter for HTTPWalletCommAdapter {
 		let url = format!("{}/v1/wallet/foreign/receive_tx", dest);
 		debug!("Posting transaction slate to {}", url);
 
-		let res = api::client::post(url.as_str(), None, slate)
-			.context(ErrorKind::ClientCallback("Posting transaction slate"))?;
+		let res = api::client::post(url.as_str(), None, slate).context(
+			ErrorKind::ClientCallback("Posting transaction slate (is recipient listening?)"),
+		)?;
 		Ok(res)
 	}
 
