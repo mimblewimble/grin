@@ -62,6 +62,12 @@ impl PruneList {
 		}
 	}
 
+	pub fn truncate(&mut self) -> io::Result<()> {
+		self.bitmap = Bitmap::create();
+		self.flush()?;
+		Ok(())
+	}
+
 	/// Open an existing prune_list or create a new one.
 	pub fn open(path: &str) -> io::Result<PruneList> {
 		let file_path = Path::new(&path);
@@ -153,6 +159,7 @@ impl PruneList {
 
 	fn build_shift_cache(&mut self) {
 		if self.bitmap.is_empty() {
+			self.shift_cache.clear();
 			return;
 		}
 
@@ -194,6 +201,7 @@ impl PruneList {
 
 	fn build_leaf_shift_cache(&mut self) {
 		if self.bitmap.is_empty() {
+			self.leaf_shift_cache.clear();
 			return;
 		}
 
@@ -261,8 +269,10 @@ impl PruneList {
 
 	fn build_pruned_cache(&mut self) {
 		if self.bitmap.is_empty() {
+			self.pruned_cache = Bitmap::create();
 			return;
 		}
+
 		self.pruned_cache = Bitmap::create_with_capacity(self.bitmap.maximum());
 		for pos in 1..(self.bitmap.maximum() + 1) {
 			let path = path(pos as u64, self.bitmap.maximum() as u64);

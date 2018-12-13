@@ -13,6 +13,7 @@
 
 //! Implementation of the persistent Backend for the prunable MMR tree.
 
+use std::ops::Range;
 use std::{fs, io, time};
 
 use crate::core::core::hash::{Hash, Hashed};
@@ -118,6 +119,14 @@ impl<T: PMMRable> Backend<T> for PMMRBackend<T> {
 			return None;
 		}
 		self.get_data_from_file(pos)
+	}
+
+	fn truncate(&mut self) -> Result<(), String> {
+		self.prune_list.truncate();
+		self.leaf_set.truncate();
+		self.hash_file.truncate();
+		self.data_file.truncate();
+		Ok(())
 	}
 
 	/// Rewind the PMMR backend to the given position.
@@ -255,6 +264,12 @@ impl<T: PMMRable> PMMRBackend<T> {
 		self.hash_file.discard();
 		self.leaf_set.discard();
 		self.data_file.discard();
+	}
+
+	/// Remove a range of positions from the backend.
+	pub fn remove_range(&mut self, pos: Range<u64>) {
+		assert!(self.prunable, "Remove on non-prunable MMR");
+		self.leaf_set.remove_range(pos);
 	}
 
 	/// Takes the leaf_set at a given cutoff_pos and generates an updated

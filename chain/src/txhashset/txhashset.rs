@@ -118,14 +118,14 @@ impl TxHashSet {
 				&root_dir,
 				HEADERHASHSET_SUBDIR,
 				HEADER_HEAD_SUBDIR,
-				false,
+				true,
 				None,
 			)?,
 			sync_pmmr_h: PMMRHandle::new(
 				&root_dir,
 				HEADERHASHSET_SUBDIR,
 				SYNC_HEAD_SUBDIR,
-				false,
+				true,
 				None,
 			)?,
 			output_pmmr_h: PMMRHandle::new(
@@ -275,9 +275,27 @@ impl TxHashSet {
 
 		let batch = self.commit_index.batch()?;
 
-		let rewind_rm_pos = input_pos_to_rewind(&horizon_header, &head_header, &batch)?;
-
+		// Compact the header and sync_header MMRs based on horizon.
 		{
+			let cutoff_pos = pmmr::insertion_to_pmmr_index(horizon_header.height);
+			self.header_pmmr_h.backend.remove_range(0..cutoff_pos);
+			self.header_pmmr_h.backend.check_compact(
+				cutoff_pos,
+				&Bitmap::create(),
+				&prune_noop,
+			)?;
+			self.sync_pmmr_h.backend.remove_range(0..cutoff_pos);
+			self.sync_pmmr_h.backend.check_compact(
+				cutoff_pos,
+				&Bitmap::create(),
+				&prune_noop,
+			)?;
+		}
+
+		// Compact the prunable output and rangeproof backends based on "spent" outputs.
+		{
+			let rewind_rm_pos = input_pos_to_rewind(&horizon_header, &head_header, &batch)?;
+
 			let clean_output_index = |commit: &[u8]| {
 				let _ = batch.delete_output_pos(commit);
 			};
@@ -680,7 +698,7 @@ impl<'a> HeaderExtension<'a> {
 	pub fn truncate(&mut self) -> Result<(), Error> {
 		debug!("Truncating header extension.");
 		self.pmmr
-			.rewind(0, &Bitmap::create())
+			.truncate()
 			.map_err(&ErrorKind::TxHashSetErr)?;
 		Ok(())
 	}
@@ -1269,7 +1287,7 @@ impl<'a> Extension<'a> {
 	pub fn rebuild_index(&self) -> Result<(), Error> {
 		for n in 1..self.output_pmmr.unpruned_size() + 1 {
 			// non-pruned leaves only
-			if pmmr::bintree_postorder_height(n) == 0 {
+			if pmmr::is_leaf(n) {
 				if let Some(out) = self.output_pmmr.get_data(n) {
 					self.batch.save_output_pos(&out.commit, n)?;
 				}

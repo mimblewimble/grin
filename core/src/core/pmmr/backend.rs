@@ -36,6 +36,8 @@ pub trait Backend<T: PMMRable> {
 	/// during the rewind.
 	fn rewind(&mut self, position: u64, rewind_rm_pos: &Bitmap) -> Result<(), String>;
 
+	fn truncate(&mut self) -> Result<(), String>;
+
 	/// Get a Hash by insertion position.
 	fn get_hash(&self, position: u64) -> Option<Hash>;
 
@@ -50,10 +52,7 @@ pub trait Backend<T: PMMRable> {
 	/// (ignoring the remove log).
 	fn get_data_from_file(&self, position: u64) -> Option<T::E>;
 
-	/// Remove Hash by insertion position. An index is also provided so the
-	/// underlying backend can implement some rollback of positions up to a
-	/// given index (practically the index is the height of a block that
-	/// triggered removal).
+	/// Remove by insertion position.
 	fn remove(&mut self, position: u64) -> Result<(), String>;
 
 	/// Returns the data file path.. this is a bit of a hack now that doesn't

@@ -15,6 +15,7 @@
 //! Compact (roaring) bitmap representing the set of leaf positions
 //! that exist and are not currently pruned in the MMR.
 
+use std::ops::Range;
 use std::path::Path;
 
 use croaring::Bitmap;
@@ -52,6 +53,12 @@ impl LeafSet {
 			bitmap_bak: bitmap.clone(),
 			bitmap,
 		})
+	}
+
+	pub fn truncate(&mut self) -> io::Result<()> {
+		self.bitmap = Bitmap::create();
+		self.flush()?;
+		Ok(())
 	}
 
 	/// Copies a snapshot of the utxo file into the primary utxo file.
@@ -139,6 +146,11 @@ impl LeafSet {
 	/// Remove the provided position from the leaf_set.
 	pub fn remove(&mut self, pos: u64) {
 		self.bitmap.remove(pos as u32);
+	}
+
+	/// Remove the provided positions from the leaf_set.
+	pub fn remove_range(&mut self, pos: Range<u64>) {
+		self.bitmap.remove_range(pos);
 	}
 
 	/// Saves the utxo file tagged with block hash as filename suffix.

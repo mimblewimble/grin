@@ -41,6 +41,12 @@ where
 		})
 	}
 
+	pub fn truncate(&mut self) -> io::Result<()> {
+		self.rewind(0);
+		self.flush()?;
+		Ok(())
+	}
+
 	/// Append an element to the file.
 	/// Will not be written to disk until flush() is subsequently called.
 	/// Alternatively discard() may be called to discard any pending changes.
