@@ -20,6 +20,9 @@ use crate::core;
 use crate::global;
 use crate::pow::{Difficulty, Proof, ProofOfWork};
 
+use crate::core::hash::Hash;
+use crate::keychain::BlindingFactor;
+
 /// Genesis block definition for development networks. The proof of work size
 /// is small enough to mine it on the fly, so it does not contain its own
 /// proof of work solution. Can also be easily mutated for different tests.
@@ -135,18 +138,37 @@ pub fn genesis_testnet4() -> core::Block {
 pub fn genesis_main() -> core::Block {
 	core::Block::with_header(core::BlockHeader {
 		height: 0,
-		timestamp: Utc.ymd(2019, 0, 15).and_hms(12, 0, 0),
+		timestamp: Utc.ymd(2019, 1, 15).and_hms(12, 0, 0), // REPLACE
+		prev_root: Hash::default(), // REPLACE
+		output_root: Hash::default(), // REPLACE
+		range_proof_root: Hash::default(), // REPLACE
+		kernel_root: Hash::default(), // REPLACE
+		total_kernel_offset: BlindingFactor::zero(), // REPLACE
 		output_mmr_size: 1,
 		kernel_mmr_size: 1,
 		pow: ProofOfWork {
 			total_difficulty: Difficulty::from_num(10_u64.pow(8)),
 			secondary_scaling: 1856,
-			nonce: 1,
+			nonce: 1, // REPLACE
 			proof: Proof {
-				nonces: vec![0; 42],
+				nonces: vec![0; 42], // REPLACE
 				edge_bits: 29,
 			},
 		},
 		..Default::default()
 	})
+}
+
+
+#[cfg(test)]
+mod test {
+	use super::*;
+
+	// TODO update the hash once genesis is set
+	#[test]
+	fn mainnet_genesis_hash() {
+		let gen_hash = genesis_main().hash();
+		println!("mainnet genesis hash: {}", gen_hash.to_hex());
+		//assert_eq!(gene_hash.to_hex, "");
+	}
 }

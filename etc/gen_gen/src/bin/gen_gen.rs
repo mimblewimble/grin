@@ -14,11 +14,12 @@
 
 //! Main for building the genesis generation utility.
 
-use std::fs;
+use std::{fs, io, path, process};
+use std::io::{BufRead, Write};
 use std::sync::Arc;
 
 use chrono::prelude::Utc;
-use chrono::Duration;
+use chrono::{Duration, Timelike, Datelike};
 use curl;
 use serde_json;
 
@@ -30,14 +31,23 @@ use grin_store as store;
 use grin_util as util;
 
 use grin_core::core::verifier_cache::LruVerifierCache;
-use grin_keychain::{ExtKeychain, Keychain, BlindingFactor};
+use grin_keychain::{BlindingFactor, ExtKeychain, Keychain};
 
 static BCHAIN_INFO_URL: &str = "https://blockchain.info/latestblock";
 static BCYPHER_URL: &str = "https://api.blockcypher.com/v1/btc/main";
 static BCHAIR_URL: &str = "https://api.blockchair.com/bitcoin/blocks?limit=2";
 
+static GENESIS_RS_PATH: &str = "../../core/src/genesis.rs";
+static PLUGIN_PATH: &str = "cuckaroo_mean_cuda_29.cuckooplugin";
+
 fn main() {
 	core::global::set_mining_mode(core::global::ChainTypes::Mainnet);
+	if !path::Path::new(GENESIS_RS_PATH).exists() {
+		panic!("File {} not found, make sure you're running this from the gen_gen directory", GENESIS_RS_PATH);
+	}
+	if !path::Path::new(PLUGIN_PATH).exists() {
+		panic!("File {} not found, make sure you're running this from the gen_gen directory", PLUGIN_PATH);
+	}
 
 	// get the latest bitcoin hash
 	let h1 = get_bchain_head();
@@ -71,8 +81,7 @@ fn main() {
 	}
 
 	// mine a Cuckaroo29 block
-	let plugin_path = "cuckaroo_mean_cuda_29.cuckooplugin";
-	let plugin_lib = cuckoo::PluginLibrary::new(plugin_path).unwrap();
+	let plugin_lib = cuckoo::PluginLibrary::new(PLUGIN_PATH).unwrap();
 	let solver_ctx = plugin_lib.create_solver_ctx(&mut plugin_lib.get_default_params());
 
 	let mut solver_sols = plugin::SolverSolutions::default();
@@ -80,7 +89,14 @@ fn main() {
 	let mut nonce = 0;
 	while solver_sols.num_sols == 0 {
 		solver_sols = plugin::SolverSolutions::default();
-		plugin_lib.run_solver(solver_ctx, gen.header.pre_pow(), nonce, 1, &mut solver_sols, &mut solver_stats);
+		plugin_lib.run_solver(
+			solver_ctx,
+			gen.header.pre_pow(),
+			nonce,
+			1,
+			&mut solver_sols,
+			&mut solver_stats,
+		);
 		nonce += 1;
 	}
 
@@ -89,10 +105,95 @@ fn main() {
 	gen.header.pow.proof.nonces = solver_sols.sols[0].to_u64s();
 	assert!(gen.header.pow.is_secondary(), "Not a secondary header");
 	core::pow::verify_size(&gen.header).unwrap();
-	gen.validate(&BlindingFactor::zero(), Arc::new(util::RwLock::new(LruVerifierCache::new()))).unwrap();
+	gen.validate(
+		&BlindingFactor::zero(),
+		Arc::new(util::RwLock::new(LruVerifierCache::new())),
+	)
+	.unwrap();
+
+	println!("Final genesis hash: {}", gen.hash().to_hex());
 
 	// TODO check again the bitcoin block to make sure it's not been orphaned
-	// TODO Commit genesis block info in git and tag
+
+	update_genesis_rs(&gen);
+	println!("genesis.rs has been updated, check it and press c+enter to proceed.");
+	let mut input = String::new();
+	io::stdin().read_line(&mut input).unwrap();
+	if input != "c" {
+		return
+	}
+
+	// Commit genesis block info in git and tag
+	process::Command::new("git")
+		.args(&["commit", "-am", "Minor: finalized genesis block"])
+		.status()
+		.expect("git commit failed");
+	process::Command::new("git")
+		.args(&["tag", "-a", "v1.0", "-m", "Mainnet release"])
+		.status()
+		.expect("git tag failed");
+	process::Command::new("git")
+		.args(&["push", "origin", "v1.0"])
+		.status()
+		.expect("git tag push failed");
+	println!("All done!");
+}
+
+fn update_genesis_rs(gen: &core::core::Block) {
+	// TODO coinbase output and kernel
+
+	// set the replacement patterns
+	let mut replacements = vec![];
+	replacements.push((
+		"timestamp".to_string(),
+		format!(
+			"Utc.ymd({}, {}, {}).and_hms({}, {}, {})",
+			gen.header.timestamp.date().year(),
+			gen.header.timestamp.date().month(),
+			gen.header.timestamp.date().day(),
+			gen.header.timestamp.time().hour(),
+			gen.header.timestamp.time().minute(),
+			gen.header.timestamp.time().second(),
+		),
+	));
+	replacements.push((
+		"output_root".to_string(),
+		format!("Hash::from_hex(\"{}\")", gen.header.output_root.to_hex()),
+	));
+	replacements.push((
+		"range_proof_root".to_string(),
+		format!("Hash::from_hex(\"{}\")", gen.header.range_proof_root.to_hex()),
+	));
+	replacements.push((
+		"kernel_root".to_string(),
+		format!("Hash::from_hex(\"{}\")", gen.header.kernel_root.to_hex()),
+	));
+
+	// check each possible replacement in the file
+	let mut replaced = String::new();
+	{
+		let genesis_rs = fs::File::open(GENESIS_RS_PATH).unwrap();
+		let reader = io::BufReader::new(&genesis_rs);
+		for rline in reader.lines() {
+			let line = rline.unwrap();
+			let mut has_replaced = false;
+			if line.contains("REPLACE") {
+				for (pos, replacement) in replacements.iter().enumerate() {
+					if line.contains(&replacement.0) {
+						replaced.push_str(&format!("{}: {},\n", replacement.0, replacement.1));
+						replacements.remove(pos);
+						has_replaced = true;
+						break;
+					}
+				}
+				if !has_replaced {
+					replaced.push_str(&format!("{}\n", line));
+				}
+			}
+		}
+	}
+	let mut genesis_rs = fs::File::create(GENESIS_RS_PATH).unwrap();
+	genesis_rs.write_all(replaced.as_bytes()).unwrap();
 }
 
 fn setup_chain(dir_name: &str, genesis: core::core::Block) -> chain::Chain {
