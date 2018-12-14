@@ -23,9 +23,9 @@ use crate::core;
 use crate::global;
 use crate::pow::{Difficulty, Proof, ProofOfWork};
 use crate::util;
-use crate::util::secp::Signature;
 use crate::util::secp::constants::SINGLE_BULLET_PROOF_SIZE;
 use crate::util::secp::pedersen::{Commitment, RangeProof};
+use crate::util::secp::Signature;
 
 use crate::core::hash::Hash;
 use crate::keychain::BlindingFactor;
@@ -178,7 +178,7 @@ pub fn genesis_main() -> core::Block {
 		proof: RangeProof {
 			plen: SINGLE_BULLET_PROOF_SIZE,
 			proof: [0; SINGLE_BULLET_PROOF_SIZE], // REPLACE
-		}
+		},
 	};
 	gen.with_reward(output, kernel)
 }
