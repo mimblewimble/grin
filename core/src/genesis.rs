@@ -19,6 +19,8 @@ use chrono::prelude::{TimeZone, Utc};
 use crate::core;
 use crate::global;
 use crate::pow::{Difficulty, Proof, ProofOfWork};
+use crate::util::secp::Signature;
+use crate::util::secp::pedersen::{Commitment, RangeProof};
 
 use crate::core::hash::Hash;
 use crate::keychain::BlindingFactor;
@@ -136,14 +138,14 @@ pub fn genesis_testnet4() -> core::Block {
 /// Placeholder for mainnet genesis block, will definitely change before
 /// release so no use trying to pre-mine it.
 pub fn genesis_main() -> core::Block {
-	core::Block::with_header(core::BlockHeader {
+	let gen = core::Block::with_header(core::BlockHeader {
 		height: 0,
 		timestamp: Utc.ymd(2019, 1, 15).and_hms(12, 0, 0), // REPLACE
-		prev_root: Hash::default(), // REPLACE
-		output_root: Hash::default(), // REPLACE
-		range_proof_root: Hash::default(), // REPLACE
-		kernel_root: Hash::default(), // REPLACE
-		total_kernel_offset: BlindingFactor::zero(), // REPLACE
+		prev_root: Hash::default(),                        // REPLACE
+		output_root: Hash::default(),                      // REPLACE
+		range_proof_root: Hash::default(),                 // REPLACE
+		kernel_root: Hash::default(),                      // REPLACE
+		total_kernel_offset: BlindingFactor::zero(),       // REPLACE
 		output_mmr_size: 1,
 		kernel_mmr_size: 1,
 		pow: ProofOfWork {
@@ -156,9 +158,21 @@ pub fn genesis_main() -> core::Block {
 			},
 		},
 		..Default::default()
-	})
+	});
+	let kernel = core::TxKernel {
+		features: core::KernelFeatures::COINBASE_KERNEL,
+		fee: 0,
+		lock_height: 0,
+		excess: Commitment::from_vec(vec![]), // REPLACE
+		excess_sig: Signature::from_raw_data(&[0; 64]).unwrap(), //REPLACE
+	};
+	let output = core::Output {
+		features: core::OutputFeatures::COINBASE_OUTPUT,
+		commit: Commitment::from_vec(vec![]), // REPLACE
+		proof: RangeProof::zero(), // REPLACE
+	};
+	gen.with_reward(output, kernel)
 }
-
 
 #[cfg(test)]
 mod test {

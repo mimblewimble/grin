@@ -14,12 +14,12 @@
 
 //! Main for building the genesis generation utility.
 
-use std::{fs, io, path, process};
 use std::io::{BufRead, Write};
 use std::sync::Arc;
+use std::{fs, io, path, process};
 
 use chrono::prelude::Utc;
-use chrono::{Duration, Timelike, Datelike};
+use chrono::{Datelike, Duration, Timelike};
 use curl;
 use serde_json;
 
@@ -43,10 +43,16 @@ static PLUGIN_PATH: &str = "cuckaroo_mean_cuda_29.cuckooplugin";
 fn main() {
 	core::global::set_mining_mode(core::global::ChainTypes::Mainnet);
 	if !path::Path::new(GENESIS_RS_PATH).exists() {
-		panic!("File {} not found, make sure you're running this from the gen_gen directory", GENESIS_RS_PATH);
+		panic!(
+			"File {} not found, make sure you're running this from the gen_gen directory",
+			GENESIS_RS_PATH
+		);
 	}
 	if !path::Path::new(PLUGIN_PATH).exists() {
-		panic!("File {} not found, make sure you're running this from the gen_gen directory", PLUGIN_PATH);
+		panic!(
+			"File {} not found, make sure you're running this from the gen_gen directory",
+			PLUGIN_PATH
+		);
 	}
 
 	// get the latest bitcoin hash
@@ -61,12 +67,10 @@ fn main() {
 	}
 	println!("Using bitcoin block hash {}", h1);
 
-	// build the basic parts of the genesis block header, perhaps some of this
-	// can be moved to core
+	// build the basic parts of the genesis block header
 	let mut gen = core::genesis::genesis_main();
 	gen.header.timestamp = Utc::now() + Duration::minutes(30);
 	gen.header.prev_root = core::core::hash::Hash::from_hex(&h1).unwrap();
-	println!("Built genesis:\n{:?}", gen);
 
 	// TODO get the proper keychain and/or raw coinbase
 	let keychain = ExtKeychain::from_random_seed().unwrap();
@@ -100,7 +104,7 @@ fn main() {
 		nonce += 1;
 	}
 
-	// set the PoW solution and make sure the block is mostly valid
+	// // set the PoW solution and make sure the block is mostly valid
 	gen.header.pow.nonce = solver_sols.sols[0].nonce as u64;
 	gen.header.pow.proof.nonces = solver_sols.sols[0].to_u64s();
 	assert!(gen.header.pow.is_secondary(), "Not a secondary header");
@@ -111,16 +115,17 @@ fn main() {
 	)
 	.unwrap();
 
+	println!("Built genesis:\n{:?}", gen);
 	println!("Final genesis hash: {}", gen.hash().to_hex());
 
-	// TODO check again the bitcoin block to make sure it's not been orphaned
-
 	update_genesis_rs(&gen);
-	println!("genesis.rs has been updated, check it and press c+enter to proceed.");
+	println!("genesis.rs has been updated, check it and run mainnet_genesis_hash test");
+	println!("also check bitcoin block {} hasn't been orphaned.", h1);
+	println!("press c+enter to proceed.");
 	let mut input = String::new();
 	io::stdin().read_line(&mut input).unwrap();
 	if input != "c" {
-		return
+		return;
 	}
 
 	// Commit genesis block info in git and tag
@@ -140,8 +145,6 @@ fn main() {
 }
 
 fn update_genesis_rs(gen: &core::core::Block) {
-	// TODO coinbase output and kernel
-
 	// set the replacement patterns
 	let mut replacements = vec![];
 	replacements.push((
@@ -157,19 +160,67 @@ fn update_genesis_rs(gen: &core::core::Block) {
 		),
 	));
 	replacements.push((
+		"prev_root".to_string(),
+		format!("Hash::from_hex(\"{}\")", gen.header.prev_root.to_hex()),
+	));
+	replacements.push((
 		"output_root".to_string(),
 		format!("Hash::from_hex(\"{}\")", gen.header.output_root.to_hex()),
 	));
 	replacements.push((
 		"range_proof_root".to_string(),
-		format!("Hash::from_hex(\"{}\")", gen.header.range_proof_root.to_hex()),
+		format!(
+			"Hash::from_hex(\"{}\")",
+			gen.header.range_proof_root.to_hex()
+		),
 	));
 	replacements.push((
 		"kernel_root".to_string(),
 		format!("Hash::from_hex(\"{}\")", gen.header.kernel_root.to_hex()),
 	));
+	replacements.push((
+		"total_kernel_offset".to_string(),
+		format!("BlindingFactor::from_hex(\"{}\")", gen.header.total_kernel_offset.to_hex()),
+	));
+	replacements.push((
+		"nonce".to_string(),
+		format!("{}", gen.header.pow.nonce),
+	));
+	replacements.push((
+		"nonces".to_string(),
+		format!("{:x?}", gen.header.pow.proof.nonces),
+	));
+	replacements.push((
+		"excess".to_string(),
+		format!(
+			"Commitment::from_vec(util::from_hex(\"{:x?}\"))",
+			util::to_hex(gen.kernels()[0].excess.0.to_vec())
+		),
+	));
+	replacements.push((
+		"excess_sig".to_string(),
+		format!(
+			"Signature::from_raw_data(&util::from_hex(\"{:x?}\"))",
+			util::to_hex(gen.kernels()[0].excess_sig.to_raw_data().to_vec())
+		),
+	));
+	replacements.push((
+		"commit".to_string(),
+		format!(
+			"Commitment::from_vec(util::from_hex(\"{:x?}\"))",
+			util::to_hex(gen.outputs()[0].commitment().0.to_vec())
+		),
+	));
+	replacements.push((
+		"proof".to_string(),
+		format!(
+			"RangeProof::from_vec(util::from_hex(\"{:x?}\"))",
+			util::to_hex(gen.outputs()[0].proof.bytes().to_vec())
+		),
+	));
 
-	// check each possible replacement in the file
+	// check each possible replacement in the file, remove the replacement from
+	// the list when found to avoid double replacements
 	let mut replaced = String::new();
 	{
 		let genesis_rs = fs::File::open(GENESIS_RS_PATH).unwrap();

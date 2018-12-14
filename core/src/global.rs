@@ -311,6 +311,8 @@ pub fn get_genesis_nonce() -> u64 {
 		ChainTypes::AutomatedTesting => 0,
 		// Magic nonce for current genesis block at cuckatoo15
 		ChainTypes::UserTesting => 27944,
+		// Placeholder, obviously not the right value
+		ChainTypes::Mainnet => 0,
 		// Magic nonce for genesis block for testnet2 (cuckatoo29)
 		_ => panic!("Pre-set"),
 	}

@@ -24,3 +24,7 @@ grin_miner_plugin = "0.4.2"
 grin_store = "0.4.2"
 grin_util = "0.4.2"
 serde_json = "1"
+
+[patch.crates-io]
+grin_core = { path = "../../core" }
+grin_keychain = { path = "../../keychain" }
