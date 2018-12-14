@@ -418,6 +418,10 @@ impl Peer {
 	/// Stops the peer, closing its connection
 	pub fn stop(&self) {
 		stop_with_connection(&self.connection.as_ref().unwrap().lock());
+		let mut state = self.state.write();
+		if State::Connected == *state {
+			*state = State::Disconnected;
+		}
 	}
 
 	fn check_connection(&self) -> bool {

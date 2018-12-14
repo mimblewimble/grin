@@ -28,6 +28,8 @@ pub struct HeaderSync {
 
 	history_locator: Vec<(u64, Hash)>,
 	prev_header_sync: (DateTime<Utc>, u64, u64),
+
+	syncing_peer: Option<Arc<Peer>>,
 }
 
 impl HeaderSync {
@@ -42,6 +44,7 @@ impl HeaderSync {
 			chain,
 			history_locator: vec![],
 			prev_header_sync: (Utc::now(), 0, 0),
+			syncing_peer: None,
 		}
 	}
 
@@ -81,7 +84,7 @@ impl HeaderSync {
 				highest_height: highest_height,
 			});
 
-			self.header_sync();
+			self.syncing_peer = self.header_sync();
 			return true;
 		}
 		false
@@ -109,6 +112,18 @@ impl HeaderSync {
 				header_head.height,
 				header_head.height,
 			);
+			if !all_headers_received {
+				// close this slow peer to avoid possible 2 parallel headers downloading
+				if let Some(ref peer) = self.syncing_peer {
+					peer.stop();
+					debug!(
+						"sync: disconnect a slow peer: {}. downloaded headers on this peer: {}",
+						peer.info.addr,
+						header_head.height - prev_height,
+					);
+				}
+			}
+			self.syncing_peer = None;
 			true
 		} else {
 			// resetting the timeout as long as we progress
@@ -120,20 +135,22 @@ impl HeaderSync {
 		}
 	}
 
-	fn header_sync(&mut self) {
+	fn header_sync(&mut self) -> Option<Arc<Peer>> {
 		if let Ok(header_head) = self.chain.header_head() {
 			let difficulty = header_head.total_difficulty;
 
 			if let Some(peer) = self.peers.most_work_peer() {
 				if peer.info.total_difficulty() > difficulty {
-					self.request_headers(&peer);
+					return self.request_headers(peer);
 				}
 			}
 		}
+
+		return None;
 	}
 
 	/// Request some block headers from a peer to advance us.
-	fn request_headers(&mut self, peer: &Peer) {
+	fn request_headers(&mut self, peer: Arc<Peer>) -> Option<Arc<Peer>> {
 		if let Ok(locator) = self.get_locator() {
 			debug!(
 				"sync: request_headers: asking {} for headers, {:?}",
@@ -141,7 +158,10 @@ impl HeaderSync {
 			);
 
 			let _ = peer.send_header_request(locator);
+			return Some(peer.clone());
 		}
+
+		return None;
 	}
 
 	/// We build a locator based on sync_head.
