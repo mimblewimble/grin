@@ -30,6 +30,7 @@ use grin_miner_plugin as plugin;
 use grin_store as store;
 use grin_util as util;
 
+use grin_core::core::hash::Hashed;
 use grin_core::core::verifier_cache::LruVerifierCache;
 use grin_keychain::{BlindingFactor, ExtKeychain, Keychain};
 
@@ -129,7 +130,9 @@ fn main() {
 	)
 	.unwrap();
 
-	println!("Final genesis hash: {}", gen.hash().to_hex());
+	println!("\nFinal genesis cyclehash: {}", gen.hash().to_hex());
+	let gen_bin = core::ser::ser_vec(&gen).unwrap();
+	println!("Final genesis full hash: {}\n", gen_bin.hash().to_hex());
 
 	update_genesis_rs(&gen);
 	println!("genesis.rs has been updated, check it and run mainnet_genesis_hash test");

@@ -187,11 +187,13 @@ pub fn genesis_main() -> core::Block {
 mod test {
 	use super::*;
 
-	// TODO update the hash once genesis is set
+	// TODO hardcode the hashes once genesis is set
 	#[test]
 	fn mainnet_genesis_hash() {
 		let gen_hash = genesis_main().hash();
 		println!("mainnet genesis hash: {}", gen_hash.to_hex());
+		let gen_bin = core::ser::ser_vec(&genesis_main()).unwrap();
+		println!("mainnet genesis full hash: {}\n", gen_bin.hash().to_hex());
 		//assert_eq!(gene_hash.to_hex, "");
 	}
 }
