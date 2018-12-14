@@ -47,8 +47,9 @@ impl TUIStatusListener for TUIStatusView {
 						.child(TextView::new("0").with_id("connected_peers")),
 				)
 				.child(
-					LinearLayout::new(Orientation::Horizontal)
-						.child(TextView::new("------------------------------------------------")),
+					LinearLayout::new(Orientation::Horizontal).child(TextView::new(
+						"------------------------------------------------",
+					)),
 				)
 				.child(
 					LinearLayout::new(Orientation::Horizontal)
@@ -66,8 +67,9 @@ impl TUIStatusListener for TUIStatusView {
 						.child(TextView::new("  ").with_id("basic_header_total_difficulty")),
 				)
 				.child(
-					LinearLayout::new(Orientation::Horizontal)
-						.child(TextView::new("------------------------------------------------")),
+					LinearLayout::new(Orientation::Horizontal).child(TextView::new(
+						"------------------------------------------------",
+					)),
 				)
 				.child(
 					LinearLayout::new(Orientation::Horizontal)
@@ -85,8 +87,9 @@ impl TUIStatusListener for TUIStatusView {
 						.child(TextView::new("  ").with_id("basic_total_difficulty")),
 				)
 				.child(
-					LinearLayout::new(Orientation::Horizontal)
-						.child(TextView::new("------------------------------------------------")),
+					LinearLayout::new(Orientation::Horizontal).child(TextView::new(
+						"------------------------------------------------",
+					)),
 				)
 				.child(
 					LinearLayout::new(Orientation::Horizontal)
