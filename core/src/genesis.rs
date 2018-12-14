@@ -14,12 +14,17 @@
 
 //! Definition of the genesis block. Placeholder for now.
 
+// required for genesis replacement
+//! #![allow(unused_imports)]
+
 use chrono::prelude::{TimeZone, Utc};
 
 use crate::core;
 use crate::global;
 use crate::pow::{Difficulty, Proof, ProofOfWork};
+use crate::util;
 use crate::util::secp::Signature;
+use crate::util::secp::constants::SINGLE_BULLET_PROOF_SIZE;
 use crate::util::secp::pedersen::{Commitment, RangeProof};
 
 use crate::core::hash::Hash;
@@ -135,6 +140,7 @@ pub fn genesis_testnet4() -> core::Block {
 		..Default::default()
 	})
 }
+
 /// Placeholder for mainnet genesis block, will definitely change before
 /// release so no use trying to pre-mine it.
 pub fn genesis_main() -> core::Block {
@@ -169,7 +175,10 @@ pub fn genesis_main() -> core::Block {
 	let output = core::Output {
 		features: core::OutputFeatures::COINBASE_OUTPUT,
 		commit: Commitment::from_vec(vec![]), // REPLACE
-		proof: RangeProof::zero(), // REPLACE
+		proof: RangeProof {
+			plen: SINGLE_BULLET_PROOF_SIZE,
+			proof: [0; SINGLE_BULLET_PROOF_SIZE], // REPLACE
+		}
 	};
 	gen.with_reward(output, kernel)
 }

@@ -470,8 +470,8 @@ impl Block {
 	/// Consumes this block and returns a new block with the coinbase output
 	/// and kernels added
 	pub fn with_reward(mut self, reward_out: Output, reward_kern: TxKernel) -> Block {
-		self.body.outputs.push(reward_out);
-		self.body.kernels.push(reward_kern);
+		self.body.outputs = vec![reward_out];
+		self.body.kernels = vec![reward_kern];
 		self
 	}
 

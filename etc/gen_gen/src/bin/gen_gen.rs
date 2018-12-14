@@ -41,7 +41,6 @@ static GENESIS_RS_PATH: &str = "../../core/src/genesis.rs";
 static PLUGIN_PATH: &str = "cuckaroo_mean_cuda_29.cuckooplugin";
 
 fn main() {
-	core::global::set_mining_mode(core::global::ChainTypes::Mainnet);
 	if !path::Path::new(GENESIS_RS_PATH).exists() {
 		panic!(
 			"File {} not found, make sure you're running this from the gen_gen directory",
@@ -80,11 +79,13 @@ fn main() {
 
 	{
 		// setup a tmp chain to set block header roots
+		core::global::set_mining_mode(core::global::ChainTypes::AutomatedTesting);
 		let tmp_chain = setup_chain(".grin.tmp", core::pow::mine_genesis_block().unwrap());
 		tmp_chain.set_txhashset_roots(&mut gen).unwrap();
 	}
 
 	// mine a Cuckaroo29 block
+	core::global::set_mining_mode(core::global::ChainTypes::Mainnet);
 	let plugin_lib = cuckoo::PluginLibrary::new(PLUGIN_PATH).unwrap();
 	let solver_ctx = plugin_lib.create_solver_ctx(&mut plugin_lib.get_default_params());
 
@@ -104,18 +105,18 @@ fn main() {
 		nonce += 1;
 	}
 
-	// // set the PoW solution and make sure the block is mostly valid
+	// set the PoW solution and make sure the block is mostly valid
 	gen.header.pow.nonce = solver_sols.sols[0].nonce as u64;
 	gen.header.pow.proof.nonces = solver_sols.sols[0].to_u64s();
 	assert!(gen.header.pow.is_secondary(), "Not a secondary header");
-	core::pow::verify_size(&gen.header).unwrap();
+	println!("Built genesis:\n{:?}", gen);
+	// core::pow::verify_size(&gen.header).unwrap();
 	gen.validate(
 		&BlindingFactor::zero(),
 		Arc::new(util::RwLock::new(LruVerifierCache::new())),
 	)
 	.unwrap();
 
-	println!("Built genesis:\n{:?}", gen);
 	println!("Final genesis hash: {}", gen.hash().to_hex());
 
 	update_genesis_rs(&gen);
@@ -124,7 +125,7 @@ fn main() {
 	println!("press c+enter to proceed.");
 	let mut input = String::new();
 	io::stdin().read_line(&mut input).unwrap();
-	if input != "c" {
+	if input != "c\n" {
 		return;
 	}
 
@@ -161,62 +162,59 @@ fn update_genesis_rs(gen: &core::core::Block) {
 	));
 	replacements.push((
 		"prev_root".to_string(),
-		format!("Hash::from_hex(\"{}\")", gen.header.prev_root.to_hex()),
+		format!("Hash::from_hex(\"{}\").unwrap()", gen.header.prev_root.to_hex()),
 	));
 	replacements.push((
 		"output_root".to_string(),
-		format!("Hash::from_hex(\"{}\")", gen.header.output_root.to_hex()),
+		format!("Hash::from_hex(\"{}\").unwrap()", gen.header.output_root.to_hex()),
 	));
 	replacements.push((
 		"range_proof_root".to_string(),
 		format!(
-			"Hash::from_hex(\"{}\")",
+			"Hash::from_hex(\"{}\").unwrap()",
 			gen.header.range_proof_root.to_hex()
 		),
 	));
 	replacements.push((
 		"kernel_root".to_string(),
-		format!("Hash::from_hex(\"{}\")", gen.header.kernel_root.to_hex()),
+		format!("Hash::from_hex(\"{}\").unwrap()", gen.header.kernel_root.to_hex()),
 	));
 	replacements.push((
 		"total_kernel_offset".to_string(),
-		format!("BlindingFactor::from_hex(\"{}\")", gen.header.total_kernel_offset.to_hex()),
+		format!(
+			"BlindingFactor::from_hex(\"{}\").unwrap()",
+			gen.header.total_kernel_offset.to_hex()
+		),
 	));
-	replacements.push((
-		"nonce".to_string(),
-		format!("{}", gen.header.pow.nonce),
-	));
+	replacements.push(("nonce".to_string(), format!("{}", gen.header.pow.nonce)));
 	replacements.push((
 		"nonces".to_string(),
-		format!("{:x?}", gen.header.pow.proof.nonces),
+		format!("vec!{:x?}", gen.header.pow.proof.nonces),
 	));
 	replacements.push((
 		"excess".to_string(),
 		format!(
-			"Commitment::from_vec(util::from_hex(\"{:x?}\"))",
+			"Commitment::from_vec(util::from_hex({:x?}.to_string()).unwrap())",
 			util::to_hex(gen.kernels()[0].excess.0.to_vec())
 		),
 	));
 	replacements.push((
 		"excess_sig".to_string(),
 		format!(
-			"Signature::from_raw_data(&util::from_hex(\"{:x?}\"))",
-			util::to_hex(gen.kernels()[0].excess_sig.to_raw_data().to_vec())
+			"Signature::from_raw_data(&{:?}).unwrap()",
+			gen.kernels()[0].excess_sig.to_raw_data().to_vec(),
 		),
 	));
 	replacements.push((
 		"commit".to_string(),
 		format!(
-			"Commitment::from_vec(util::from_hex(\"{:x?}\"))",
+			"Commitment::from_vec(util::from_hex({:x?}.to_string()).unwrap())",
 			util::to_hex(gen.outputs()[0].commitment().0.to_vec())
 		),
 	));
 	replacements.push((
 		"proof".to_string(),
-		format!(
-			"RangeProof::from_vec(util::from_hex(\"{:x?}\"))",
-			util::to_hex(gen.outputs()[0].proof.bytes().to_vec())
-		),
+		format!("{:?}", gen.outputs()[0].proof.bytes().to_vec()),
 	));
 
 	// check each possible replacement in the file, remove the replacement from
@@ -237,9 +235,9 @@ fn update_genesis_rs(gen: &core::core::Block) {
 						break;
 					}
 				}
-				if !has_replaced {
-					replaced.push_str(&format!("{}\n", line));
-				}
+			}
+			if !has_replaced {
+				replaced.push_str(&format!("{}\n", line));
 			}
 		}
 	}
