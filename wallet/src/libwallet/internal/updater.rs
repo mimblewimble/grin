@@ -191,7 +191,7 @@ where
 	if tx.tx_type == TxLogEntryType::TxReceived {
 		tx.tx_type = TxLogEntryType::TxReceivedCancelled;
 	}
-	batch.save_tx_log_entry(tx, parent_key_id, None)?;
+	batch.save_tx_log_entry(tx, parent_key_id)?;
 	batch.commit()?;
 	Ok(())
 }
@@ -243,7 +243,7 @@ where
 							t.num_outputs = 1;
 							t.update_confirmation_ts();
 							output.tx_log_entry = Some(log_id);
-							batch.save_tx_log_entry(t, &parent_key_id, None)?;
+							batch.save_tx_log_entry(t, &parent_key_id)?;
 						}
 						// also mark the transaction in which this output is involved as confirmed
 						// note that one involved input/output confirmation SHOULD be enough
@@ -256,7 +256,7 @@ where
 							if let Some(mut t) = tx {
 								t.update_confirmation_ts();
 								t.confirmed = true;
-								batch.save_tx_log_entry(t, &parent_key_id, None)?;
+								batch.save_tx_log_entry(t, &parent_key_id)?;
 							}
 						}
 						output.height = o.1;

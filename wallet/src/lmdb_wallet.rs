@@ -21,6 +21,8 @@ use std::fs::File;
 use std::io::{Read, Write};
 use std::path::Path;
 
+use serde_json;
+
 use failure::ResultExt;
 use uuid::Uuid;
 
@@ -32,8 +34,8 @@ use crate::core::ser;
 use crate::libwallet::types::*;
 use crate::libwallet::{internal, Error, ErrorKind};
 use crate::types::{WalletConfig, WalletSeed};
-use crate::util;
 use crate::util::secp::pedersen;
+use crate::util;
 
 pub const DB_DIR: &'static str = "db";
 pub const TX_SAVE_DIR: &'static str = "saved_txs";
@@ -46,8 +48,6 @@ const PRIVATE_TX_CONTEXT_PREFIX: u8 = 'p' as u8;
 const TX_LOG_ENTRY_PREFIX: u8 = 't' as u8;
 const TX_LOG_ID_PREFIX: u8 = 'i' as u8;
 const ACCOUNT_PATH_MAPPING_PREFIX: u8 = 'a' as u8;
-
-const DATA_PATH_KEY: &'static str = "root_data_path";
 
 impl From<store::Error> for Error {
 	fn from(error: store::Error) -> Error {
@@ -81,8 +81,7 @@ impl<C, K> LMDBBackend<C, K> {
 		fs::create_dir_all(&db_path).expect("Couldn't create wallet backend directory!");
 
 		let stored_tx_path = path::Path::new(&config.data_file_dir).join(TX_SAVE_DIR);
-		fs::create_dir_all(&stored_tx_path)
-			.expect("Couldn't create wallet backend tx storage directory!");
+		fs::create_dir_all(&stored_tx_path).expect("Couldn't create wallet backend tx storage directory!");
 
 		let lmdb_env = Arc::new(store::new_env(db_path.to_str().unwrap().to_string()));
 		let store = store::Store::open(lmdb_env, DB_DIR);
@@ -102,10 +101,6 @@ impl<C, K> LMDBBackend<C, K> {
 		{
 			let batch = store.batch()?;
 			batch.put_ser(&acct_key, &default_account)?;
-			batch.put(
-				&DATA_PATH_KEY.as_bytes(),
-				stored_tx_path.to_str().unwrap().to_owned().into_bytes(),
-			)?;
 			batch.commit()?;
 		}
 
@@ -247,6 +242,19 @@ where
 	fn get_acct_path(&self, label: String) -> Result<Option<AcctPathMapping>, Error> {
 		let acct_key = to_key(ACCOUNT_PATH_MAPPING_PREFIX, &mut label.as_bytes().to_vec());
 		self.db.get_ser(&acct_key).map_err(|e| e.into())
+	}
+
+	fn store_tx(&self, uuid: &str, tx: &Transaction) -> Result<(), Error> {
+		let filename = format!("{}.grintx", uuid);
+		let path = path::Path::new(&self.config.data_file_dir)
+			.join(TX_SAVE_DIR)
+			.join(filename);
+		let path_buf = Path::new(&path).to_path_buf();
+		let mut stored_tx = File::create(path_buf)?;
+		let tx_hex = util::to_hex(ser::ser_vec(tx).unwrap());;
+		stored_tx.write_all(&tx_hex.as_bytes())?;
+		stored_tx.sync_all()?;
+		Ok(())
 	}
 
 	fn get_stored_tx(&self, entry: &TxLogEntry) -> Result<Option<Transaction>, Error> {
@@ -444,48 +452,14 @@ where
 
 	fn save_tx_log_entry(
 		&mut self,
-		mut tx_in: TxLogEntry,
+		tx_in: TxLogEntry,
 		parent_id: &Identifier,
-		tx_hex_in: Option<String>,
 	) -> Result<(), Error> {
 		let tx_log_key = to_key_u64(
 			TX_LOG_ENTRY_PREFIX,
 			&mut parent_id.to_bytes().to_vec(),
 			tx_in.id as u64,
 		);
-		// Fun Hack: Save tx log entries to files on the system instead of directly in the DB
-		if let Some(tx_hex) = tx_hex_in {
-			let path = match self
-				.db
-				.borrow()
-				.as_ref()
-				.unwrap()
-				.get(&DATA_PATH_KEY.as_bytes())?
-			{
-				Some(p) => match String::from_utf8(p) {
-					Ok(u) => u,
-					Err(_) => {
-						return Err(ErrorKind::GenericError(
-							"Couldn't get tx storage path from db".to_owned(),
-						)
-						.into())
-					}
-				},
-				None => {
-					return Err(ErrorKind::GenericError(
-						"Couldn't get tx storage path from db".to_owned(),
-					)
-					.into())
-				}
-			};
-			let mut path_buf = Path::new(&path).to_path_buf();
-			let tx_file_name = format!("{}.grintx", tx_in.tx_slate_id.unwrap());
-			path_buf.push(tx_file_name.clone());
-			let mut stored_tx = File::create(path_buf)?;
-			stored_tx.write_all(&tx_hex.as_bytes())?;
-			stored_tx.sync_all()?;
-			tx_in.tx_hex = Some(tx_file_name);
-		}
 		self.db
 			.borrow()
 			.as_ref()

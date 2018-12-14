@@ -612,7 +612,7 @@ where
 		num_change_outputs: usize,
 		selection_strategy_is_use_all: bool,
 		message: Option<String>,
-	) -> Result<(Slate, impl FnOnce(&mut W, &str) -> Result<(), Error>), Error> {
+	) -> Result<(Slate, impl FnOnce(&mut W, &Transaction) -> Result<(), Error>), Error> {
 		let mut w = self.wallet.lock();
 		w.open_with_credentials()?;
 		let parent_key_id = match src_acct_name {
@@ -653,12 +653,11 @@ where
 	pub fn tx_lock_outputs(
 		&mut self,
 		slate: &Slate,
-		lock_fn: impl FnOnce(&mut W, &str) -> Result<(), Error>,
+		lock_fn: impl FnOnce(&mut W, &Transaction) -> Result<(), Error>,
 	) -> Result<(), Error> {
 		let mut w = self.wallet.lock();
 		w.open_with_credentials()?;
-		let tx_hex = util::to_hex(ser::ser_vec(&slate.tx).unwrap());
-		lock_fn(&mut *w, &tx_hex)?;
+		lock_fn(&mut *w, &slate.tx)?;
 		Ok(())
 	}
 
@@ -668,11 +667,10 @@ where
 	/// propagation.
 	pub fn finalize_tx(&mut self, slate: &mut Slate) -> Result<(), Error> {
 		let mut w = self.wallet.lock();
-		let parent_key_id = w.parent_key_id();
 		w.open_with_credentials()?;
 		let context = w.get_private_context(slate.id.as_bytes())?;
 		tx::complete_tx(&mut *w, slate, &context)?;
-		tx::update_tx_hex(&mut *w, &parent_key_id, slate)?;
+		tx::update_stored_tx(&mut *w, slate)?;
 		{
 			let mut batch = w.batch()?;
 			batch.delete_private_context(slate.id.as_bytes())?;

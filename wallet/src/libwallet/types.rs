@@ -101,6 +101,9 @@ where
 	/// Gets an account path for a given label
 	fn get_acct_path(&self, label: String) -> Result<Option<AcctPathMapping>, Error>;
 
+	/// Stores a transaction
+	fn store_tx(&self, uuid: &str, tx: &Transaction) -> Result<(), Error>;
+
 	/// Retrieves a stored transaction from a TxLogEntry
 	fn get_stored_tx(&self, entry: &TxLogEntry) -> Result<Option<Transaction>, Error>;
 
@@ -162,7 +165,6 @@ where
 		&mut self,
 		t: TxLogEntry,
 		parent_id: &Identifier,
-		tx_hex_in: Option<String>,
 	) -> Result<(), Error>;
 
 	/// save an account label -> path mapping
@@ -602,6 +604,7 @@ pub struct TxLogEntry {
 	pub amount_debited: u64,
 	/// Fee
 	pub fee: Option<u64>,
+	// TODO: rename this to 'stored_tx_file' or something for mainnet
 	/// The transaction json itself, stored for reference or resending
 	pub tx_hex: Option<String>,
 }
