@@ -189,9 +189,7 @@ impl TUIStatusListener for TUIMiningView {
 		});
 
 		let table_view = TableView::<WorkerStats, StratumWorkerColumn>::new()
-			.column(StratumWorkerColumn::Id, "Worker ID", |c| {
-				c.width_percent(8)
-			})
+			.column(StratumWorkerColumn::Id, "Worker ID", |c| c.width_percent(8))
 			.column(StratumWorkerColumn::IsConnected, "Connected", |c| {
 				c.width_percent(8)
 			})
@@ -346,8 +344,10 @@ impl TUIStatusListener for TUIMiningView {
 		let stratum_is_running = format!("Mining server running: {}", stratum_stats.is_running);
 		let stratum_num_workers = format!("Number of workers:     {}", stratum_stats.num_workers);
 		let stratum_block_height = format!("Solving Block Height:  {}", stratum_stats.block_height);
-		let stratum_network_difficulty =
-			format!("Network Difficulty:    {}", stratum_stats.network_difficulty);
+		let stratum_network_difficulty = format!(
+			"Network Difficulty:    {}",
+			stratum_stats.network_difficulty
+		);
 		let stratum_edge_bits = format!("Cuckoo Size:           {}", stratum_stats.edge_bits);
 
 		c.call_on_id("stratum_config_status", |t: &mut TextView| {
