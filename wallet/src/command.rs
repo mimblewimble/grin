@@ -409,7 +409,7 @@ pub fn repost(
 ) -> Result<(), Error> {
 	controller::owner_single_use(wallet.clone(), |api| {
 		let (_, txs) = api.retrieve_txs(true, Some(args.id), None)?;
-		let stored_tx = txs[0].get_stored_tx();
+		let stored_tx = api.get_stored_tx(&txs[0])?;
 		if stored_tx.is_none() {
 			error!(
 				"Transaction with id {} does not have transaction data. Not reposting.",

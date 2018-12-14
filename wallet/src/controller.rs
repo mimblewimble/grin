@@ -231,7 +231,10 @@ where
 		if let Some(id_string) = params.get("id") {
 			match id_string[0].parse() {
 				Ok(id) => match api.retrieve_txs(true, Some(id), None) {
-					Ok((_, txs)) => Ok((txs[0].confirmed, txs[0].get_stored_tx())),
+					Ok((_, txs)) => {
+						let stored_tx = api.get_stored_tx(&txs[0])?;
+						Ok((txs[0].confirmed, stored_tx))
+					}
 					Err(e) => {
 						error!("retrieve_stored_tx: failed with error: {}", e);
 						Err(e)

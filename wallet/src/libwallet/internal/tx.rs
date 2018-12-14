@@ -14,11 +14,10 @@
 
 //! Transaction building functions
 
-use crate::util;
 use uuid::Uuid;
 
+use crate::core::core::Transaction;
 use crate::core::libtx::slate::Slate;
-use crate::core::ser;
 use crate::keychain::{Identifier, Keychain};
 use crate::libwallet::internal::{selection, updater};
 use crate::libwallet::types::{Context, NodeClient, TxLogEntryType, WalletBackend};
@@ -74,7 +73,7 @@ pub fn create_send_tx<T: ?Sized, C, K>(
 	(
 		Slate,
 		Context,
-		impl FnOnce(&mut T, &str) -> Result<(), Error>,
+		impl FnOnce(&mut T, &Transaction) -> Result<(), Error>,
 	),
 	Error,
 >
@@ -200,19 +199,13 @@ where
 	Ok((tx.confirmed, tx.tx_hex))
 }
 
-/// Update the stored hex transaction (this update needs to happen when the TX is finalised)
-pub fn update_tx_hex<T: ?Sized, C, K>(
-	wallet: &mut T,
-	_parent_key_id: &Identifier,
-	slate: &Slate,
-) -> Result<(), Error>
+/// Update the stored transaction (this update needs to happen when the TX is finalised)
+pub fn update_stored_tx<T: ?Sized, C, K>(wallet: &mut T, slate: &Slate) -> Result<(), Error>
 where
 	T: WalletBackend<C, K>,
 	C: NodeClient,
 	K: Keychain,
 {
-	let tx_hex = util::to_hex(ser::ser_vec(&slate.tx).unwrap());
-	// This will ignore the parent key, so no need to specify account on the
 	// finalize command
 	let tx_vec = updater::retrieve_txs(wallet, None, Some(slate.id), None)?;
 	let mut tx = None;
@@ -223,14 +216,11 @@ where
 			break;
 		}
 	}
-	let mut tx = match tx {
+	let tx = match tx {
 		Some(t) => t,
 		None => return Err(ErrorKind::TransactionDoesntExist(slate.id.to_string()))?,
 	};
-	tx.tx_hex = Some(tx_hex);
-	let batch = wallet.batch()?;
-	batch.save_tx_log_entry(tx.clone(), &tx.parent_key_id)?;
-	batch.commit()?;
+	wallet.store_tx(&format!("{}", tx.tx_slate_id.unwrap()), &slate.tx)?;
 	Ok(())
 }
 

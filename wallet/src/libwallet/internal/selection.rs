@@ -14,6 +14,7 @@
 
 //! Selection of inputs for building transactions
 
+use crate::core::core::Transaction;
 use crate::core::libtx::{build, slate::Slate, tx_fee};
 use crate::keychain::{Identifier, Keychain};
 use crate::libwallet::error::{Error, ErrorKind};
@@ -40,7 +41,7 @@ pub fn build_send_tx_slate<T: ?Sized, C, K>(
 	(
 		Slate,
 		Context,
-		impl FnOnce(&mut T, &str) -> Result<(), Error>,
+		impl FnOnce(&mut T, &Transaction) -> Result<(), Error>,
 	),
 	Error,
 >
@@ -94,42 +95,47 @@ where
 
 	// Return a closure to acquire wallet lock and lock the coins being spent
 	// so we avoid accidental double spend attempt.
-	let update_sender_wallet_fn = move |wallet: &mut T, tx_hex: &str| {
-		let mut batch = wallet.batch()?;
-		let log_id = batch.next_tx_log_id(&parent_key_id)?;
-		let mut t = TxLogEntry::new(parent_key_id.clone(), TxLogEntryType::TxSent, log_id);
-		t.tx_slate_id = Some(slate_id);
-		t.fee = Some(fee);
-		t.tx_hex = Some(tx_hex.to_owned());
-		let mut amount_debited = 0;
-		t.num_inputs = lock_inputs.len();
-		for id in lock_inputs {
-			let mut coin = batch.get(&id).unwrap();
-			coin.tx_log_entry = Some(log_id);
-			amount_debited = amount_debited + coin.value;
-			batch.lock_output(&mut coin)?;
-		}
+	let update_sender_wallet_fn = move |wallet: &mut T, tx: &Transaction| {
+		let tx_entry = {
+			let mut batch = wallet.batch()?;
+			let log_id = batch.next_tx_log_id(&parent_key_id)?;
+			let mut t = TxLogEntry::new(parent_key_id.clone(), TxLogEntryType::TxSent, log_id);
+			t.tx_slate_id = Some(slate_id);
+			let filename = format!("{}.grintx", slate_id);
+			t.tx_hex = Some(filename);
+			t.fee = Some(fee);
+			let mut amount_debited = 0;
+			t.num_inputs = lock_inputs.len();
+			for id in lock_inputs {
+				let mut coin = batch.get(&id).unwrap();
+				coin.tx_log_entry = Some(log_id);
+				amount_debited = amount_debited + coin.value;
+				batch.lock_output(&mut coin)?;
+			}
 
-		t.amount_debited = amount_debited;
+			t.amount_debited = amount_debited;
 
-		// write the output representing our change
-		for (change_amount, id) in &change_amounts_derivations {
-			t.num_outputs += 1;
-			t.amount_credited += change_amount;
-			batch.save(OutputData {
-				root_key_id: parent_key_id.clone(),
-				key_id: id.clone(),
-				n_child: id.to_path().last_path_index(),
-				value: change_amount.clone(),
-				status: OutputStatus::Unconfirmed,
-				height: current_height,
-				lock_height: 0,
-				is_coinbase: false,
-				tx_log_entry: Some(log_id),
-			})?;
-		}
-		batch.save_tx_log_entry(t, &parent_key_id)?;
-		batch.commit()?;
+			// write the output representing our change
+			for (change_amount, id) in &change_amounts_derivations {
+				t.num_outputs += 1;
+				t.amount_credited += change_amount;
+				batch.save(OutputData {
+					root_key_id: parent_key_id.clone(),
+					key_id: id.clone(),
+					n_child: id.to_path().last_path_index(),
+					value: change_amount.clone(),
+					status: OutputStatus::Unconfirmed,
+					height: current_height,
+					lock_height: 0,
+					is_coinbase: false,
+					tx_log_entry: Some(log_id),
+				})?;
+			}
+			batch.save_tx_log_entry(t.clone(), &parent_key_id)?;
+			batch.commit()?;
+			t
+		};
+		wallet.store_tx(&format!("{}", tx_entry.tx_slate_id.unwrap()), tx)?;
 		Ok(())
 	};
 
