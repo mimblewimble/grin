@@ -234,7 +234,7 @@ where
 					Ok((_, txs)) => {
 						let stored_tx = api.get_stored_tx(&txs[0])?;
 						Ok((txs[0].confirmed, stored_tx))
-					},
+					}
 					Err(e) => {
 						error!("retrieve_stored_tx: failed with error: {}", e);
 						Err(e)
