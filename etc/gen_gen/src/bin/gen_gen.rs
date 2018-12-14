@@ -108,7 +108,7 @@ fn main() {
 				solver_stats.get_plugin_name(),
 				solver_stats.get_device_name(),
 				solver_stats.get_error_reason(),
-				);
+			);
 			return;
 		}
 
@@ -172,11 +172,17 @@ fn update_genesis_rs(gen: &core::core::Block) {
 	));
 	replacements.push((
 		"prev_root".to_string(),
-		format!("Hash::from_hex(\"{}\").unwrap()", gen.header.prev_root.to_hex()),
+		format!(
+			"Hash::from_hex(\"{}\").unwrap()",
+			gen.header.prev_root.to_hex()
+		),
 	));
 	replacements.push((
 		"output_root".to_string(),
-		format!("Hash::from_hex(\"{}\").unwrap()", gen.header.output_root.to_hex()),
+		format!(
+			"Hash::from_hex(\"{}\").unwrap()",
+			gen.header.output_root.to_hex()
+		),
 	));
 	replacements.push((
 		"range_proof_root".to_string(),
@@ -187,7 +193,10 @@ fn update_genesis_rs(gen: &core::core::Block) {
 	));
 	replacements.push((
 		"kernel_root".to_string(),
-		format!("Hash::from_hex(\"{}\").unwrap()", gen.header.kernel_root.to_hex()),
+		format!(
+			"Hash::from_hex(\"{}\").unwrap()",
+			gen.header.kernel_root.to_hex()
+		),
 	));
 	replacements.push((
 		"total_kernel_offset".to_string(),
