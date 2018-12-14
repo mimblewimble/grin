@@ -43,7 +43,7 @@ use crate::util;
 
 #[derive(Serialize, Deserialize, Debug)]
 struct RpcRequest {
-	id: String,
+	id: Value,
 	jsonrpc: String,
 	method: String,
 	params: Option<Value>,
@@ -51,7 +51,7 @@ struct RpcRequest {
 
 #[derive(Serialize, Deserialize, Debug)]
 struct RpcResponse {
-	id: String,
+	id: Value,
 	jsonrpc: String,
 	method: String,
 	result: Option<Value>,
@@ -617,7 +617,7 @@ impl StratumServer {
 		// Issue #1159 - use a serde_json Value type to avoid extra quoting
 		let job_template_value: Value = serde_json::from_str(&job_template_json).unwrap();
 		let job_request = RpcRequest {
-			id: String::from("Stratum"),
+			id: serde_json::json!("Stratum"),
 			jsonrpc: String::from("2.0"),
 			method: String::from("job"),
 			params: Some(job_template_value),
