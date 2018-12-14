@@ -41,13 +41,11 @@ env:
 matrix:
   include:
     - os: linux
-      env: TEST_SUITE=.
-    - os: linux
       env: TEST_SUITE=servers
     - os: linux
       env: TEST_SUITE=chain-core
     - os: linux
-      env: TEST_SUITE=pool-p2p
+      env: TEST_SUITE=pool-p2p-src
     - os: linux
       env: TEST_SUITE=keychain-wallet
     - os: linux
@@ -71,7 +69,7 @@ script:
     fi;
 
 before_deploy:
-  - if [[ "$TEST_SUITE" == "pool-p2p" ]]; then
+  - if [[ "$TEST_SUITE" == "pool-p2p-src" ]]; then
       cargo clean && cargo build --release && ./.auto-release.sh;
     fi
   - if [[ "$TEST_SUITE" == "release" ]]  && [[ "$TRAVIS_OS_NAME" == "osx" ]]; then
