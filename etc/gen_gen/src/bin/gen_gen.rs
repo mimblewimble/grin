@@ -38,7 +38,7 @@ static BCYPHER_URL: &str = "https://api.blockcypher.com/v1/btc/main";
 static BCHAIR_URL: &str = "https://api.blockchair.com/bitcoin/blocks?limit=2";
 
 static GENESIS_RS_PATH: &str = "../../core/src/genesis.rs";
-static PLUGIN_PATH: &str = "cuckaroo_mean_cuda_29.cuckooplugin";
+static PLUGIN_PATH: &str = "./cuckaroo_mean_cuda_29.cuckooplugin";
 
 fn main() {
 	if !path::Path::new(GENESIS_RS_PATH).exists() {
@@ -87,14 +87,17 @@ fn main() {
 	// mine a Cuckaroo29 block
 	core::global::set_mining_mode(core::global::ChainTypes::Mainnet);
 	let plugin_lib = cuckoo::PluginLibrary::new(PLUGIN_PATH).unwrap();
-	let solver_ctx = plugin_lib.create_solver_ctx(&mut plugin_lib.get_default_params());
+	let mut params = plugin_lib.get_default_params();
+	params.mutate_nonce = false;
+	let solver_ctx = plugin_lib.create_solver_ctx(&mut params);
 
 	let mut solver_sols = plugin::SolverSolutions::default();
 	let mut solver_stats = plugin::SolverStats::default();
 	let mut nonce = 0;
 	while solver_sols.num_sols == 0 {
 		solver_sols = plugin::SolverSolutions::default();
-		plugin_lib.run_solver(
+		gen.header.pow.nonce = nonce;
+		let _ = plugin_lib.run_solver(
 			solver_ctx,
 			gen.header.pre_pow(),
 			nonce,
@@ -115,8 +118,7 @@ fn main() {
 		nonce += 1;
 	}
 
-	// set the PoW solution and make sure the block is mostly valid
-	gen.header.pow.nonce = solver_sols.sols[0].nonce as u64;
+	// Set the PoW solution and make sure the block is mostly valid
 	gen.header.pow.proof.nonces = solver_sols.sols[0].to_u64s();
 	assert!(gen.header.pow.is_secondary(), "Not a secondary header");
 	println!("Built genesis:\n{:?}", gen);
