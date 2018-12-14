@@ -227,9 +227,9 @@ where
 		Some(t) => t,
 		None => return Err(ErrorKind::TransactionDoesntExist(slate.id.to_string()))?,
 	};
-	tx.tx_hex = Some(tx_hex);
+	tx.tx_hex = Some(tx_hex.clone());
 	let mut batch = wallet.batch()?;
-	batch.save_tx_log_entry(tx.clone(), &tx.parent_key_id)?;
+	batch.save_tx_log_entry(tx.clone(), &tx.parent_key_id, Some(tx_hex.to_owned()))?;
 	batch.commit()?;
 	Ok(())
 }

@@ -27,9 +27,12 @@ use uuid::Uuid;
 use crate::keychain::{ChildNumber, ExtKeychain, Identifier, Keychain};
 use crate::store::{self, option_to_not_found, to_key, to_key_u64};
 
+use crate::core::core::Transaction;
+use crate::core::ser;
 use crate::libwallet::types::*;
 use crate::libwallet::{internal, Error, ErrorKind};
 use crate::types::{WalletConfig, WalletSeed};
+use crate::util;
 use crate::util::secp::pedersen;
 
 pub const DB_DIR: &'static str = "db";
@@ -221,43 +224,7 @@ where
 
 	fn get_tx_log_entry(&self, u: &Uuid) -> Result<Option<TxLogEntry>, Error> {
 		let key = to_key(TX_LOG_ENTRY_PREFIX, &mut u.as_bytes().to_vec());
-		let entry: Result<Option<TxLogEntry>, Error> = self.db.get_ser(&key).map_err(|e| e.into());
-		match entry {
-			Ok(tx_entry) => {
-				if let Some(mut tx) = tx_entry {
-					if let Some(t) = tx.tx_hex {
-						let path = match self.db.get(&DATA_PATH_KEY.as_bytes())? {
-							Some(p) => match String::from_utf8(p) {
-								Ok(u) => u,
-								Err(_) => {
-									return Err(ErrorKind::GenericError(
-										"Couldn't get tx storage path from db".to_owned(),
-									)
-									.into())
-								}
-							},
-							None => {
-								return Err(ErrorKind::GenericError(
-									"Couldn't get tx storage path from db".to_owned(),
-								)
-								.into())
-							}
-						};
-						error!("STORAGE PATH: {}", path);
-						let mut tx_file = Path::new(&path).to_path_buf();
-						tx_file.push(t);
-						let mut tx_f = File::open(tx_file)?;
-						let mut content = String::new();
-						tx_f.read_to_string(&mut content)?;
-						tx.tx_hex = Some(content);
-					}
-					Ok(Some(tx))
-				} else {
-					Ok(tx_entry)
-				}
-			}
-			Err(e) => Err(e),
-		}
+		self.db.get_ser(&key).map_err(|e| e.into())
 	}
 
 	fn tx_log_iter<'a>(&'a self) -> Box<dyn Iterator<Item = TxLogEntry> + 'a> {
@@ -280,6 +247,22 @@ where
 	fn get_acct_path(&self, label: String) -> Result<Option<AcctPathMapping>, Error> {
 		let acct_key = to_key(ACCOUNT_PATH_MAPPING_PREFIX, &mut label.as_bytes().to_vec());
 		self.db.get_ser(&acct_key).map_err(|e| e.into())
+	}
+
+	fn get_stored_tx(&self, entry: &TxLogEntry) -> Result<Option<Transaction>, Error> {
+		let filename = match entry.tx_hex.clone() {
+			Some(f) => f,
+			None => return Ok(None),
+		};
+		let path = path::Path::new(&self.config.data_file_dir)
+			.join(TX_SAVE_DIR)
+			.join(filename);
+		let tx_file = Path::new(&path).to_path_buf();
+		let mut tx_f = File::open(tx_file)?;
+		let mut content = String::new();
+		tx_f.read_to_string(&mut content)?;
+		let tx_bin = util::from_hex(content).unwrap();
+		Ok(Some(ser::deserialize::<Transaction>(&mut &tx_bin[..]).unwrap()))
 	}
 
 	fn batch<'a>(&'a mut self) -> Result<Box<dyn WalletOutputBatch<K> + 'a>, Error> {
@@ -461,15 +444,15 @@ where
 		&mut self,
 		mut tx_in: TxLogEntry,
 		parent_id: &Identifier,
+		tx_hex_in: Option<String>,
 	) -> Result<(), Error> {
 		let tx_log_key = to_key_u64(
 			TX_LOG_ENTRY_PREFIX,
 			&mut parent_id.to_bytes().to_vec(),
 			tx_in.id as u64,
 		);
-		error!("TX LOG KEY: {:?}", tx_log_key);
 		// Fun Hack: Save tx log entries to files on the system instead of directly in the DB
-		if let Some(tx_hex) = tx_in.clone().tx_hex {
+		if let Some(tx_hex) = tx_hex_in {
 			let path = match self
 				.db
 				.borrow()
@@ -493,23 +476,19 @@ where
 					.into())
 				}
 			};
-			error!("STORAGE PATH: {}", path);
 			let mut path_buf = Path::new(&path).to_path_buf();
 			let tx_file_name = format!("{}.grintx", tx_in.tx_slate_id.unwrap());
 			path_buf.push(tx_file_name.clone());
 			let mut stored_tx = File::create(path_buf)?;
-			error!("STORING: {}", tx_hex);
 			stored_tx.write_all(&tx_hex.as_bytes())?;
 			stored_tx.sync_all()?;
 			tx_in.tx_hex = Some(tx_file_name);
 		}
-		error!("T: {:?}", tx_in);
 		self.db
 			.borrow()
 			.as_ref()
 			.unwrap()
 			.put_ser(&tx_log_key, &tx_in)?;
-		error!("TX_LOG OKAY");
 		Ok(())
 	}
 

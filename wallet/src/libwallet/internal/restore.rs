@@ -162,7 +162,7 @@ where
 			t.amount_credited = output.value;
 			t.num_outputs = 1;
 			t.update_confirmation_ts();
-			batch.save_tx_log_entry(t, &parent_key_id)?;
+			batch.save_tx_log_entry(t, &parent_key_id, None)?;
 
 			let _ = batch.save(OutputData {
 				root_key_id: parent_key_id.clone(),

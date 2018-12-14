@@ -706,6 +706,12 @@ where
 		Ok(())
 	}
 
+	/// Retrieves a stored transaction from a TxLogEntry
+	pub fn get_stored_tx(&self, entry: &TxLogEntry) -> Result<Option<Transaction>, Error> {
+		let w = self.wallet.lock();
+		w.get_stored_tx(entry)
+	}
+
 	/// Posts a transaction to the chain
 	pub fn post_tx(&self, tx: &Transaction, fluff: bool) -> Result<(), Error> {
 		let tx_hex = util::to_hex(ser::ser_vec(tx).unwrap());
