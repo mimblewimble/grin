@@ -34,8 +34,8 @@ use crate::core::ser;
 use crate::libwallet::types::*;
 use crate::libwallet::{internal, Error, ErrorKind};
 use crate::types::{WalletConfig, WalletSeed};
-use crate::util::secp::pedersen;
 use crate::util;
+use crate::util::secp::pedersen;
 
 pub const DB_DIR: &'static str = "db";
 pub const TX_SAVE_DIR: &'static str = "saved_txs";
@@ -81,7 +81,8 @@ impl<C, K> LMDBBackend<C, K> {
 		fs::create_dir_all(&db_path).expect("Couldn't create wallet backend directory!");
 
 		let stored_tx_path = path::Path::new(&config.data_file_dir).join(TX_SAVE_DIR);
-		fs::create_dir_all(&stored_tx_path).expect("Couldn't create wallet backend tx storage directory!");
+		fs::create_dir_all(&stored_tx_path)
+			.expect("Couldn't create wallet backend tx storage directory!");
 
 		let lmdb_env = Arc::new(store::new_env(db_path.to_str().unwrap().to_string()));
 		let store = store::Store::open(lmdb_env, DB_DIR);

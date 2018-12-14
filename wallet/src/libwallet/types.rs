@@ -161,11 +161,7 @@ where
 	fn tx_log_iter(&self) -> Box<dyn Iterator<Item = TxLogEntry>>;
 
 	/// save a tx log entry
-	fn save_tx_log_entry(
-		&mut self,
-		t: TxLogEntry,
-		parent_id: &Identifier,
-	) -> Result<(), Error>;
+	fn save_tx_log_entry(&mut self, t: TxLogEntry, parent_id: &Identifier) -> Result<(), Error>;
 
 	/// save an account label -> path mapping
 	fn save_acct_path(&mut self, mapping: AcctPathMapping) -> Result<(), Error>;

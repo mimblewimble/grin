@@ -16,8 +16,8 @@
 
 use uuid::Uuid;
 
-use crate::core::libtx::slate::Slate;
 use crate::core::core::Transaction;
+use crate::core::libtx::slate::Slate;
 use crate::keychain::{Identifier, Keychain};
 use crate::libwallet::internal::{selection, updater};
 use crate::libwallet::types::{Context, NodeClient, TxLogEntryType, WalletBackend};
@@ -200,10 +200,7 @@ where
 }
 
 /// Update the stored transaction (this update needs to happen when the TX is finalised)
-pub fn update_stored_tx<T: ?Sized, C, K>(
-	wallet: &mut T,
-	slate: &Slate,
-) -> Result<(), Error>
+pub fn update_stored_tx<T: ?Sized, C, K>(wallet: &mut T, slate: &Slate) -> Result<(), Error>
 where
 	T: WalletBackend<C, K>,
 	C: NodeClient,

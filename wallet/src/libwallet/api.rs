@@ -612,7 +612,13 @@ where
 		num_change_outputs: usize,
 		selection_strategy_is_use_all: bool,
 		message: Option<String>,
-	) -> Result<(Slate, impl FnOnce(&mut W, &Transaction) -> Result<(), Error>), Error> {
+	) -> Result<
+		(
+			Slate,
+			impl FnOnce(&mut W, &Transaction) -> Result<(), Error>,
+		),
+		Error,
+	> {
 		let mut w = self.wallet.lock();
 		w.open_with_credentials()?;
 		let parent_key_id = match src_acct_name {
