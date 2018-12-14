@@ -186,13 +186,15 @@ pub fn genesis_main() -> core::Block {
 #[cfg(test)]
 mod test {
 	use super::*;
+	use crate::ser;
+	use crate::core::hash::Hashed;
 
 	// TODO hardcode the hashes once genesis is set
 	#[test]
 	fn mainnet_genesis_hash() {
 		let gen_hash = genesis_main().hash();
 		println!("mainnet genesis hash: {}", gen_hash.to_hex());
-		let gen_bin = core::ser::ser_vec(&genesis_main()).unwrap();
+		let gen_bin = ser::ser_vec(&genesis_main()).unwrap();
 		println!("mainnet genesis full hash: {}\n", gen_bin.hash().to_hex());
 		//assert_eq!(gene_hash.to_hex, "");
 	}
