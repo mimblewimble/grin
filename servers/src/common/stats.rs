@@ -80,6 +80,8 @@ pub struct WorkerStats {
 	pub num_rejected: u64,
 	/// number of shares submitted too late
 	pub num_stale: u64,
+	/// number of valid blocks found
+	pub num_blocks_found: u64,
 }
 
 /// Struct to return relevant information about the stratum server
@@ -209,6 +211,7 @@ impl Default for WorkerStats {
 			num_accepted: 0,
 			num_rejected: 0,
 			num_stale: 0,
+			num_blocks_found: 0,
 		}
 	}
 }
