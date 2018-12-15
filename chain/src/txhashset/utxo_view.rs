@@ -14,10 +14,10 @@
 
 //! Lightweight readonly view into output MMR for convenience.
 
-use crate::core::global;
 use crate::core::core::hash::Hash;
 use crate::core::core::pmmr::{self, ReadonlyPMMR};
 use crate::core::core::{Block, BlockHeader, Input, Output, OutputFeatures, Transaction};
+use crate::core::global;
 use crate::core::ser::PMMRIndexHashable;
 use crate::error::{Error, ErrorKind};
 use crate::store::Batch;
@@ -37,7 +37,11 @@ impl<'a> UTXOView<'a> {
 		header_pmmr: ReadonlyPMMR<'a, BlockHeader, PMMRBackend<BlockHeader>>,
 		batch: &'a Batch<'_>,
 	) -> UTXOView<'a> {
-		UTXOView { output_pmmr, header_pmmr, batch }
+		UTXOView {
+			output_pmmr,
+			header_pmmr,
+			batch,
+		}
 	}
 
 	/// Validate a block against the current UTXO set.
@@ -96,11 +100,7 @@ impl<'a> UTXOView<'a> {
 
 	/// Verify we are not attempting to spend any coinbase outputs
 	/// that have not sufficiently matured.
-	pub fn verify_coinbase_maturity(
-		&self,
-		inputs: &Vec<Input>,
-		height: u64,
-	) -> Result<(), Error> {
+	pub fn verify_coinbase_maturity(&self, inputs: &Vec<Input>, height: u64) -> Result<(), Error> {
 		// Find the greatest output pos of any coinbase
 		// outputs we are attempting to spend.
 		let pos = inputs

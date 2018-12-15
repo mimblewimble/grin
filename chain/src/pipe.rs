@@ -435,11 +435,9 @@ fn validate_block(block: &Block, ctx: &mut BlockContext<'_>) -> Result<(), Error
 }
 
 /// Verify the block is not spending coinbase outputs before they have sufficiently matured.
-fn verify_coinbase_maturity(
-	block: &Block,
-	ext: &txhashset::Extension<'_>,
-) -> Result<(), Error> {
-	ext.utxo_view().verify_coinbase_maturity(&block.inputs(), block.header.height)
+fn verify_coinbase_maturity(block: &Block, ext: &txhashset::Extension<'_>) -> Result<(), Error> {
+	ext.utxo_view()
+		.verify_coinbase_maturity(&block.inputs(), block.header.height)
 }
 
 /// Some "real magick" verification logic.
