@@ -5,7 +5,7 @@
 A Grin wallet maintains its state in an LMDB database, with the master seed stored in a separate file.
 When creating a new wallet, the file structure should be:
 
-```sh
+```
 ~/[Wallet Directory]
    -wallet_data/
       -db/
@@ -38,8 +38,8 @@ Logging configuration for the wallet is read from `grin-wallet.toml`.
 
 The wallet supports multiple accounts. To set the active account for a wallet command, use the '-a' switch, e.g:
 
-```
-[host]$ grin wallet -a account_1 info
+```sh
+grin wallet -a account_1 info
 ```
 
 All output creation, transaction building, and querying is done against a particular account in the wallet.
@@ -52,7 +52,7 @@ tries to contact a node at `127.0.0.1:13413`. To change this, modify the value i
 you can provide the `-r` (seRver) switch to the wallet command, e.g.:
 
 ```sh
-[host]$ grin wallet -a "http://192.168.0.2:1341" info
+grin wallet -a "http://192.168.0.2:1341" info
 ```
 
 If commands that need to update from a grin node can't find one, they will generally inform you that the node couldn't be reached
@@ -65,7 +65,7 @@ at wallet creation time, and must be provided for any wallet operation. You will
 you can also specify it on the command line by providing the `-p`argument.
 
 ```sh
-[host]$ grin wallet -p mypass info
+grin wallet -p mypass info
 ```
 
 ## Basic Wallet Commands
@@ -79,14 +79,14 @@ Before using a wallet a new `grin-wallet.toml` configuration file, master seed c
 to be generated via the init command as follows:
 
 ```sh
-[host]$ grin wallet init
+grin wallet init
 ```
 
 You will be prompted to enter a password for the new wallet. By default, your wallet files will be placed into `~/.grin`. Alternatively, 
 if you'd like to run a wallet in a directory other than the default, you can run:
 
 ```sh
-[host]$ grin wallet -p mypass init -h
+grin wallet -p mypass init -h
 ```
 
 This will create a `grin-wallet.toml` file in the current directory configured to use the data files in the current directory,
@@ -110,11 +110,11 @@ the correct recovery phrase,) your wallet contents should again be usable.
 To recover your wallet seed, delete (or backup) the wallet's `wallet_data/wallet.seed` file, then run:
 
 ```sh
-[host]$ grin wallet recover -p "[12 or 24 word passphrase separated by spaces"
-
+grin wallet recover -p "[12 or 24 word passphrase separated by spaces"
+```
 e.g:
-
-[host]$ grin wallet recover -p "shiver alarm excuse turtle absorb surface lunch virtual want remind hard slow vacuum park silver asthma engage library battle jelly buffalo female inquiry wire"
+```sh
+grin wallet recover -p "shiver alarm excuse turtle absorb surface lunch virtual want remind hard slow vacuum park silver asthma engage library battle jelly buffalo female inquiry wire"
 ```
 
 If you're restoring a wallet from scratch, you'll then need to use the `grin wallet restore` command to scan the chain
@@ -124,7 +124,7 @@ You can also view your recovery phrase with your password by running the recover
 
 
 ```sh
-[host]$ grin wallet recover
+grin wallet recover
 Password:
 Your recovery phrase is:
 shiver alarm excuse turtle absorb surface lunch virtual want remind hard slow vacuum park silver asthma engage library battle jelly buffalo female inquiry wire
@@ -135,21 +135,21 @@ Please back-up these words in a non-digital format.
 
 To create a new account, use the 'grin wallet account' command with the argument '-c', e.g.:
 
-```
-[host]$ grin wallet account -c my_account
+```sh
+grin wallet account -c my_account
 ```
 
 This will create a new account called 'my_account'. To use this account in subsequent commands, provide the '-a' flag to
 all wallet commands:
 
-```
-[host]$ grin wallet -a my_account info
+```sh
+grin wallet -a my_account info
 ```
 
 To display a list of created accounts in the wallet, use the 'account' command with no flags:
 
-```
-[host]$ grin wallet account
+```sh
+grin wallet account
 ```
 This will print out the following.
 ```sh
@@ -191,13 +191,13 @@ By default the `listen` commands runs in a manner that only allows access from t
 to other machines, use the `-e` switch:
 
 ```sh
-[host]$ grin wallet -e listen
+grin wallet -e listen
 ```
 
 To change the port on which the wallet is listening, either configure `grin-wallet.toml` or use the `-l` flag, e.g:
 
 ```sh
-[host]$ grin wallet -l 14000 listen
+grin wallet -l 14000 listen
 ```
 
 The wallet will listen for requests until the process is cancelled with `<Ctrl-C>`. Note that external ports/firewalls need to be configured
@@ -211,7 +211,7 @@ this is how you send Grins to another party.
 The most important fields here are the destination (`-d`)  and the amount itself. To send an amount to another listening wallet:
 
 ```sh
-[host]$ grin wallet send -d "http://192.168.0.10:13415" 60.00
+grin wallet send -d "http://192.168.0.10:13415" 60.00
 ```
 
 This will create a transaction with the other wallet listening at 192.168.0.10, port 13415 which credits the other wallet 60 grins
@@ -231,13 +231,13 @@ Outputs in your wallet will appear as unconfirmed or locked until the transactio
 You can also create a transaction entirely within your own wallet by specifying the method 'self'. Using the 'self' method, you can send yourself money in a single command (for testing purposes,) or distribute funds between accounts within your wallet without having to run a listener or manipulate files. For instance, to send funds from your wallet's 'default' account to an account called 'account1', use:
 
 ```sh
-[host]$ grin wallet send -m self -d "account1" 60
+grin wallet send -m self -d "account1" 60
 ```
 
 or, to send between accounts, use the -a flag to specify the source account:
 
 ```sh
-[host]$ grin wallet -a "my_source_account" send -m self -d "my_dest_account" 60
+grin wallet -a "my_source_account" send -m self -d "my_dest_account" 60
 ```
 
 When sending to self, the transaction will be created and posted to the chain in the same operation.
@@ -247,7 +247,7 @@ Other flags here are:
 * `-m` 'Method', which can be 'http', 'file' or 'self' (described above). If 'http' is specified (default), the transaction will be sent to the IP address which follows the `-d` flag. If 'file' is specified, Grin wallet will generate a partial transaction file under the file name specified in the `-d` flag. This file needs to be signed by the recipient using the `grin wallet receive -i filename` command and finalized by the sender using the `grin wallet finalize -i filename.response` command. To create a partial transaction file, use:
 
  ```sh
-[host]$ grin wallet send -d "transaction" -m file 60.00
+grin wallet send -d "transaction" -m file 60.00
 ```
 
 * `-s` 'Selection strategy', which can be 'all' or 'smallest'. Since it's advantageous for outputs to be removed from the Grin chain,
@@ -257,7 +257,7 @@ Other flags here are:
   cover the amount you want to send + fees, use:
 
  ```sh
-[host]$ grin wallet send -d "http://192.168.0.10:13415" -s smallest 60.00
+grin wallet send -d "http://192.168.0.10:13415" -s smallest 60.00
 ```
 
 * `-f` 'Fluff' Grin uses a protocol called 'Dandelion' which bounces your transaction directly through several listening nodes in a
@@ -265,7 +265,7 @@ Other flags here are:
   the time before your transaction appears on the chain. To ignore the stem phase and broadcast immediately:
 
  ```sh
-[host]$ grin wallet send -f -d "http://192.168.0.10:13415" 60.00
+grin wallet send -f -d "http://192.168.0.10:13415" 60.00
 ```
 
 * `-g` 'Message' - You can specify an optional message to include alongside your transaction data. This message is purely for informational
@@ -274,7 +274,7 @@ a signature that can be verified with the participant's public key. A message ca
 command.
 
 ```sh
-[host]$ grin wallet send -f -d "http://192.168.0.10:13415" -g "This is from Dave" 60.00
+grin wallet send -f -d "http://192.168.0.10:13415" -g "This is from Dave" 60.00
 ```
 
 ### outputs
@@ -282,7 +282,7 @@ command.
 Simply displays all the the outputs in your wallet: e.g:
 
 ```sh
-[host]$ grin wallet outputs
+grin wallet outputs
 Wallet Outputs - Account 'default' - Block Height: 49                                                                                                               
 ------------------------------------------------------------------------------------------------------------------------------------------------
  Key Id                Child Key Index  Block Height  Locked Until  Status       Is Coinbase?  Num. of Confirmations  Value         Transaction
@@ -302,8 +302,8 @@ Wallet Outputs - Account 'default' - Block Height: 49
 
 Spent outputs are not shown by default. To show them, provide the `-s` flag.
 
- ```sh
-[host]$ grin wallet -s outputs
+```sh
+grin wallet -s outputs
 ```
 
 ### txs
@@ -314,7 +314,7 @@ this transaction log is necessary in order to allow your wallet to keep track of
 transaction log, use the `txs`
 
 ```sh
-[host]$ grin wallet txs
+grin wallet txs
 Transaction Log - Account 'default' - Block Height: 49                                                                                                                                                                                                                                                                                            
 ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Id  Type                 Shared Transaction Id                 Creation Time                      Confirmed?  Confirmation Time                  Num. Inputs  Num. Outputs  Amount Credited  Amount Debited  Fee          Net Difference
@@ -331,11 +331,11 @@ Transaction Log - Account 'default' - Block Height: 49
 ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  6   Received Tx          03715cf6-f29b-4a3a-bda5-b02cba6bf0d9  2018-07-20 19:46:46.120244904 UTC  false       None                               0            1             60.000000000     0.000000000     None         60.000000000
 ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-
+```
 To see the inputs/outputs associated with a particular transaction, use the `-i` switch providing the Id of the given transaction, e.g:
 
 ```sh
-[host]$ grin wallet txs -i 6
+grin wallet txs -i 6
 Transaction Log - Account 'default' - Block Height: 49
 -----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Id  Type         Shared Transaction Id                 Creation Time                      Confirmed?  Confirmation Time  Num. Inputs  Num. Outputs  Amount Credited  Amount Debited  Fee   Net Difference
@@ -365,8 +365,8 @@ outputs can be unlocked and associate unconfirmed outputs removed with the `canc
 Running against the data above:
 
 ```sh
-[host]$ grin wallet cancel -i 6
-[host]$ grin wallet txs -i 6
+grin wallet cancel -i 6
+grin wallet txs -i 6
 Transaction Log - Account 'default' - Block Height: 49
 -----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Id  Type                     Shared Transaction Id                 Creation Time                      Confirmed?  Confirmation Time  Num. Inputs  Num. Outputs  Amount Credited  Amount Debited  Fee   Net Difference
@@ -389,13 +389,17 @@ If you're the sender of a posted transaction that doesn't confirm on the chain (
 
 To do this, look up the transaction id using the `grin wallet txs` command, and using the id (say 3 in this example,) enter:
 
-`grin wallet repost -i 3`
+```sh
+grin wallet repost -i 3
+```
 
 This will attempt to repost the transaction to the chain. Note this won't attempt to send if the transaction is already marked as 'confirmed' within the wallet.
 
 You can also use the `repost` command to dump the transaction in a raw json format with the `-m` (duMp) switch, e.g:
 
-`grin wallet repost -i 3 -m tx_3.json`
+```sh
+grin wallet repost -i 3 -m tx_3.json
+```
 
 This will create a file called tx_3.json containing your raw transaction data. Note that this formatting in the file isn't yet very user-readable.
 
@@ -416,7 +420,7 @@ Delete the newly generated wallet data directory and seed file:
 [host@new_wallet_dir]# rm wallet_data/wallet.seed
 ```
 
-If you need to recover your wallet seed from a recovery phrase, use the `grin wallet recover -p "[recovery phrase]" command
+If you need to recover your wallet seed from a recovery phrase, use the `grin wallet recover -p "[recovery phrase]"` command
 as outlined above. Otherwise, if you're restoring from a backed-up seed file, simply copy your backed up `wallet.seed` file 
 into the new `wallet_data` directory, ensuring it's called `wallet.seed`
 
