@@ -44,7 +44,7 @@ enum StratumWorkerColumn {
 	NumAccepted,
 	NumRejected,
 	NumStale,
-	NumSolutionsFound,
+	NumBlocksFound,
 }
 
 impl StratumWorkerColumn {
@@ -57,7 +57,7 @@ impl StratumWorkerColumn {
 			StratumWorkerColumn::NumAccepted => "Num Accepted",
 			StratumWorkerColumn::NumRejected => "Num Rejected",
 			StratumWorkerColumn::NumStale => "Num Stale",
-			StratumWorkerColumn::NumSolutionsFound => "Solutions Found",
+			StratumWorkerColumn::NumBlocksFound => "Blocks Found",
 		}
 	}
 }
@@ -81,7 +81,7 @@ impl TableViewItem<StratumWorkerColumn> for WorkerStats {
 			StratumWorkerColumn::NumAccepted => self.num_accepted.to_string(),
 			StratumWorkerColumn::NumRejected => self.num_rejected.to_string(),
 			StratumWorkerColumn::NumStale => self.num_stale.to_string(),
-			StratumWorkerColumn::NumSolutionsFound => self.num_solution_found.to_string(),
+			StratumWorkerColumn::NumBlocksFound => self.num_blocks_found.to_string(),
 		}
 	}
 
@@ -97,7 +97,7 @@ impl TableViewItem<StratumWorkerColumn> for WorkerStats {
 			StratumWorkerColumn::NumAccepted => Ordering::Equal,
 			StratumWorkerColumn::NumRejected => Ordering::Equal,
 			StratumWorkerColumn::NumStale => Ordering::Equal,
-			StratumWorkerColumn::NumSolutionsFound => Ordering::Equal,
+			StratumWorkerColumn::NumBlocksFound => Ordering::Equal,
 		}
 	}
 }
@@ -208,7 +208,7 @@ impl TUIStatusListener for TUIMiningView {
 			.column(StratumWorkerColumn::NumStale, "Num Stale", |c| {
 				c.width_percent(10)
 			})
-			.column(StratumWorkerColumn::NumSolutionsFound, "Solu. Found", |c| {
+			.column(StratumWorkerColumn::NumBlocksFound, "Blocks Found", |c| {
 				c.width_percent(10)
 			});
 

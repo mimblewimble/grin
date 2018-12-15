@@ -512,13 +512,13 @@ impl StratumServer {
 				return Err(serde_json::to_value(e).unwrap());
 			}
 			share_is_block = true;
-			worker_stats.num_solution_found += 1;
+			worker_stats.num_blocks_found += 1;
 			// Log message to make it obvious we found a block
 			warn!(
-				"(Server ID: {}) Solution Found for block {} - Yay!!! Worker ID: {}, solutions found: {}, shares: {}",
+				"(Server ID: {}) Solution Found for block {} - Yay!!! Worker ID: {}, blocks found: {}, shares: {}",
 				self.id, params.height,
 				worker_stats.id,
-				worker_stats.num_solution_found,
+				worker_stats.num_blocks_found,
 				worker_stats.num_accepted,
 			);
 		} else {
