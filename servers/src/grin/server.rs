@@ -374,42 +374,40 @@ impl Server {
 			let tip_height = self.chain.head().unwrap().height as i64;
 			let mut height = tip_height as i64 - last_blocks.len() as i64 + 1;
 
-			let diff_entries: Vec<DiffBlock> = {
-				let txhashset = self.chain.txhashset();
-				let txhashset = txhashset.read();
+			let txhashset = self.chain.txhashset();
+			let txhashset = txhashset.read();
 
-				last_blocks
-					.windows(2)
-					.map(|pair| {
-						let prev = &pair[0];
-						let next = &pair[1];
+			let diff_entries: Vec<DiffBlock> = last_blocks
+				.windows(2)
+				.map(|pair| {
+					let prev = &pair[0];
+					let next = &pair[1];
 
-						height += 1;
+					height += 1;
 
-						// Use header hash if real header.
-						// Default to "zero" hash if synthetic header_info.
-						let hash = if height >= 0 {
-							if let Ok(header) = txhashset.get_header_by_height(height as u64) {
-								header.hash()
-							} else {
-								ZERO_HASH
-							}
+					// Use header hash if real header.
+					// Default to "zero" hash if synthetic header_info.
+					let hash = if height >= 0 {
+						if let Ok(header) = txhashset.get_header_by_height(height as u64) {
+							header.hash()
 						} else {
 							ZERO_HASH
-						};
-
-						DiffBlock {
-							block_height: height,
-							block_hash: hash,
-							difficulty: next.difficulty.to_num(),
-							time: next.timestamp,
-							duration: next.timestamp - prev.timestamp,
-							secondary_scaling: next.secondary_scaling,
-							is_secondary: next.is_secondary,
 						}
-					})
-					.collect()
-			};
+					} else {
+						ZERO_HASH
+					};
+
+					DiffBlock {
+						block_height: height,
+						block_hash: hash,
+						difficulty: next.difficulty.to_num(),
+						time: next.timestamp,
+						duration: next.timestamp - prev.timestamp,
+						secondary_scaling: next.secondary_scaling,
+						is_secondary: next.is_secondary,
+					}
+				})
+				.collect();
 
 			let block_time_sum = diff_entries.iter().fold(0, |sum, t| sum + t.duration);
 			let block_diff_sum = diff_entries.iter().fold(0, |sum, d| sum + d.difficulty);
