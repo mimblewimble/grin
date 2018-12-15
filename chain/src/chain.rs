@@ -1123,11 +1123,9 @@ impl Chain {
 		&self,
 		output_ref: &OutputIdentifier,
 	) -> Result<BlockHeader, Error> {
-		let pos = {
-			let txhashset = self.txhashset.read();
-			let (_, pos) = txhashset.is_unspent(output_ref)?;
-			pos
-		};
+		let txhashset = self.txhashset.read();
+
+		let (_, pos) = txhashset.is_unspent(output_ref)?;
 
 		let mut min = 1;
 		let mut max = {
@@ -1137,8 +1135,8 @@ impl Chain {
 
 		loop {
 			let search_height = max - (max - min) / 2;
-			let h = self.get_header_by_height(search_height)?;
-			let h_prev = self.get_header_by_height(search_height - 1)?;
+			let h = txhashset.get_header_by_height(search_height)?;
+			let h_prev = txhashset.get_header_by_height(search_height - 1)?;
 			if pos > h.output_mmr_size {
 				min = search_height;
 			} else if pos < h_prev.output_mmr_size {
