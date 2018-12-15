@@ -434,16 +434,12 @@ fn validate_block(block: &Block, ctx: &mut BlockContext<'_>) -> Result<(), Error
 	Ok(())
 }
 
-/// TODO - This can move into the utxo_view.
-/// Verify the block is not attempting to spend coinbase outputs
-/// before they have sufficiently matured.
-/// Note: requires a txhashset extension.
+/// Verify the block is not spending coinbase outputs before they have sufficiently matured.
 fn verify_coinbase_maturity(
 	block: &Block,
-	ext: &mut txhashset::Extension<'_>,
+	ext: &txhashset::Extension<'_>,
 ) -> Result<(), Error> {
-	ext.verify_coinbase_maturity(&block.inputs(), block.header.height)?;
-	Ok(())
+	ext.utxo_view().verify_coinbase_maturity(&block.inputs(), block.header.height)
 }
 
 /// Some "real magick" verification logic.
@@ -649,7 +645,5 @@ pub fn rewind_and_apply_fork(b: &Block, ext: &mut txhashset::Extension<'_>) -> R
 }
 
 fn validate_utxo(block: &Block, ext: &txhashset::Extension<'_>) -> Result<(), Error> {
-	let utxo = ext.utxo_view();
-	utxo.validate_block(block)?;
-	Ok(())
+	ext.utxo_view().validate_block(block)
 }
