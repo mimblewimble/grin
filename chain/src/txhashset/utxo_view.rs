@@ -14,8 +14,10 @@
 
 //! Lightweight readonly view into output MMR for convenience.
 
-use crate::core::core::pmmr::ReadonlyPMMR;
-use crate::core::core::{Block, Input, Output, Transaction};
+use crate::core::core::hash::Hash;
+use crate::core::core::pmmr::{self, ReadonlyPMMR};
+use crate::core::core::{Block, BlockHeader, Input, Output, OutputFeatures, Transaction};
+use crate::core::global;
 use crate::core::ser::PMMRIndexHashable;
 use crate::error::{Error, ErrorKind};
 use crate::store::Batch;
@@ -23,17 +25,23 @@ use grin_store::pmmr::PMMRBackend;
 
 /// Readonly view of the UTXO set (based on output MMR).
 pub struct UTXOView<'a> {
-	pmmr: ReadonlyPMMR<'a, Output, PMMRBackend<Output>>,
+	output_pmmr: ReadonlyPMMR<'a, Output, PMMRBackend<Output>>,
+	header_pmmr: ReadonlyPMMR<'a, BlockHeader, PMMRBackend<BlockHeader>>,
 	batch: &'a Batch<'a>,
 }
 
 impl<'a> UTXOView<'a> {
 	/// Build a new UTXO view.
 	pub fn new(
-		pmmr: ReadonlyPMMR<'a, Output, PMMRBackend<Output>>,
+		output_pmmr: ReadonlyPMMR<'a, Output, PMMRBackend<Output>>,
+		header_pmmr: ReadonlyPMMR<'a, BlockHeader, PMMRBackend<BlockHeader>>,
 		batch: &'a Batch<'_>,
 	) -> UTXOView<'a> {
-		UTXOView { pmmr, batch }
+		UTXOView {
+			output_pmmr,
+			header_pmmr,
+			batch,
+		}
 	}
 
 	/// Validate a block against the current UTXO set.
@@ -69,7 +77,7 @@ impl<'a> UTXOView<'a> {
 	// Compare the hash in the output MMR at the expected pos.
 	fn validate_input(&self, input: &Input) -> Result<(), Error> {
 		if let Ok(pos) = self.batch.get_output_pos(&input.commitment()) {
-			if let Some(hash) = self.pmmr.get_hash(pos) {
+			if let Some(hash) = self.output_pmmr.get_hash(pos) {
 				if hash == input.hash_with_index(pos - 1) {
 					return Ok(());
 				}
@@ -81,12 +89,65 @@ impl<'a> UTXOView<'a> {
 	// Output is valid if it would not result in a duplicate commitment in the output MMR.
 	fn validate_output(&self, output: &Output) -> Result<(), Error> {
 		if let Ok(pos) = self.batch.get_output_pos(&output.commitment()) {
-			if let Some(out_mmr) = self.pmmr.get_data(pos) {
+			if let Some(out_mmr) = self.output_pmmr.get_data(pos) {
 				if out_mmr.commitment() == output.commitment() {
 					return Err(ErrorKind::DuplicateCommitment(output.commitment()).into());
 				}
 			}
 		}
 		Ok(())
+	}
+
+	/// Verify we are not attempting to spend any coinbase outputs
+	/// that have not sufficiently matured.
+	pub fn verify_coinbase_maturity(&self, inputs: &Vec<Input>, height: u64) -> Result<(), Error> {
+		// Find the greatest output pos of any coinbase
+		// outputs we are attempting to spend.
+		let pos = inputs
+			.iter()
+			.filter(|x| x.features.contains(OutputFeatures::COINBASE_OUTPUT))
+			.filter_map(|x| self.batch.get_output_pos(&x.commitment()).ok())
+			.max()
+			.unwrap_or(0);
+
+		if pos > 0 {
+			// If we have not yet reached 1,000 / 1,440 blocks then
+			// we can fail immediately as coinbase cannot be mature.
+			if height < global::coinbase_maturity() {
+				return Err(ErrorKind::ImmatureCoinbase.into());
+			}
+
+			// Find the "cutoff" pos in the output MMR based on the
+			// header from 1,000 blocks ago.
+			let cutoff_height = height.checked_sub(global::coinbase_maturity()).unwrap_or(0);
+			let cutoff_header = self.get_header_by_height(cutoff_height)?;
+			let cutoff_pos = cutoff_header.output_mmr_size;
+
+			// If any output pos exceed the cutoff_pos
+			// we know they have not yet sufficiently matured.
+			if pos > cutoff_pos {
+				return Err(ErrorKind::ImmatureCoinbase.into());
+			}
+		}
+
+		Ok(())
+	}
+
+	/// Get the header hash for the specified pos from the underlying MMR backend.
+	fn get_header_hash(&self, pos: u64) -> Option<Hash> {
+		self.header_pmmr.get_data(pos).map(|x| x.hash())
+	}
+
+	/// Get the header at the specified height based on the current state of the extension.
+	/// Derives the MMR pos from the height (insertion index) and retrieves the header hash.
+	/// Looks the header up in the db by hash.
+	pub fn get_header_by_height(&self, height: u64) -> Result<BlockHeader, Error> {
+		let pos = pmmr::insertion_to_pmmr_index(height + 1);
+		if let Some(hash) = self.get_header_hash(pos) {
+			let header = self.batch.get_block_header(&hash)?;
+			Ok(header)
+		} else {
+			Err(ErrorKind::Other(format!("get header by height")).into())
+		}
 	}
 }

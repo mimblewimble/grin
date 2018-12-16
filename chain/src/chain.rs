@@ -506,9 +506,9 @@ impl Chain {
 	/// that has not yet sufficiently matured.
 	pub fn verify_coinbase_maturity(&self, tx: &Transaction) -> Result<(), Error> {
 		let height = self.next_block_height()?;
-		let mut txhashset = self.txhashset.write();
-		txhashset::extending_readonly(&mut txhashset, |extension| {
-			extension.verify_coinbase_maturity(&tx.inputs(), height)?;
+		let txhashset = self.txhashset.read();
+		txhashset::utxo_view(&txhashset, |utxo| {
+			utxo.verify_coinbase_maturity(&tx.inputs(), height)?;
 			Ok(())
 		})
 	}
