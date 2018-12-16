@@ -374,6 +374,9 @@ impl Server {
 			let tip_height = self.chain.head().unwrap().height as i64;
 			let mut height = tip_height as i64 - last_blocks.len() as i64 + 1;
 
+			let txhashset = self.chain.txhashset();
+			let txhashset = txhashset.read();
+
 			let diff_entries: Vec<DiffBlock> = last_blocks
 				.windows(2)
 				.map(|pair| {
@@ -385,7 +388,7 @@ impl Server {
 					// Use header hash if real header.
 					// Default to "zero" hash if synthetic header_info.
 					let hash = if height >= 0 {
-						if let Ok(header) = self.chain.get_header_by_height(height as u64) {
+						if let Ok(header) = txhashset.get_header_by_height(height as u64) {
 							header.hash()
 						} else {
 							ZERO_HASH

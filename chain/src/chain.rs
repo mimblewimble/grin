@@ -28,6 +28,7 @@ use crate::lmdb;
 use crate::pipe;
 use crate::store;
 use crate::txhashset;
+use crate::txhashset::TxHashSet;
 use crate::types::{
 	BlockStatus, ChainAdapter, NoStatus, Options, Tip, TxHashSetRoots, TxHashsetWriteStatus,
 };
@@ -205,6 +206,11 @@ impl Chain {
 		chain.compact()?;
 
 		Ok(chain)
+	}
+
+	/// Return our shared txhashset instance.
+	pub fn txhashset(&self) -> Arc<RwLock<TxHashSet>> {
+		self.txhashset.clone()
 	}
 
 	fn log_heads(store: &store::ChainStore) -> Result<(), Error> {
@@ -1106,19 +1112,16 @@ impl Chain {
 			.map_err(|e| ErrorKind::StoreErr(e, "chain get block_sums".to_owned()).into())
 	}
 
-	/// Gets the block header at the provided height
+	/// Gets the block header at the provided height.
+	/// Note: This takes a read lock on the txhashset.
+	/// Take care not to call this repeatedly in a tight loop.
 	pub fn get_header_by_height(&self, height: u64) -> Result<BlockHeader, Error> {
-		let mut txhashset = self.txhashset.write();
-		let mut batch = self.store.batch()?;
-		let header = txhashset::header_extending(&mut txhashset, &mut batch, |extension| {
-			let header = extension.get_header_by_height(height)?;
-			Ok(header)
-		})?;
-
+		let txhashset = self.txhashset.read();
+		let header = txhashset.get_header_by_height(height)?;
 		Ok(header)
 	}
 
-	/// Gets the block header in which a given output appears in the txhashset
+	/// Gets the block header in which a given output appears in the txhashset.
 	pub fn get_header_for_output(
 		&self,
 		output_ref: &OutputIdentifier,
