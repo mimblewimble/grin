@@ -38,26 +38,27 @@ impl TUIStatusListener for TUIStatusView {
 			LinearLayout::new(Orientation::Vertical)
 				.child(
 					LinearLayout::new(Orientation::Horizontal)
-						.child(TextView::new("Current Status: "))
+						.child(TextView::new("Current Status:               "))
 						.child(TextView::new("Starting").with_id("basic_current_status")),
 				)
 				.child(
 					LinearLayout::new(Orientation::Horizontal)
-						.child(TextView::new("Connected Peers: "))
+						.child(TextView::new("Connected Peers:              "))
 						.child(TextView::new("0").with_id("connected_peers")),
 				)
 				.child(
-					LinearLayout::new(Orientation::Horizontal)
-						.child(TextView::new("------------------------")),
+					LinearLayout::new(Orientation::Horizontal).child(TextView::new(
+						"------------------------------------------------",
+					)),
 				)
 				.child(
 					LinearLayout::new(Orientation::Horizontal)
-						.child(TextView::new("Header Tip Hash: "))
+						.child(TextView::new("Header Tip Hash:              "))
 						.child(TextView::new("  ").with_id("basic_header_tip_hash")),
 				)
 				.child(
 					LinearLayout::new(Orientation::Horizontal)
-						.child(TextView::new("Header Chain Height: "))
+						.child(TextView::new("Header Chain Height:          "))
 						.child(TextView::new("  ").with_id("basic_header_chain_height")),
 				)
 				.child(
@@ -66,27 +67,29 @@ impl TUIStatusListener for TUIStatusView {
 						.child(TextView::new("  ").with_id("basic_header_total_difficulty")),
 				)
 				.child(
-					LinearLayout::new(Orientation::Horizontal)
-						.child(TextView::new("------------------------")),
+					LinearLayout::new(Orientation::Horizontal).child(TextView::new(
+						"------------------------------------------------",
+					)),
 				)
 				.child(
 					LinearLayout::new(Orientation::Horizontal)
-						.child(TextView::new("Tip Hash: "))
+						.child(TextView::new("Chain Tip Hash:               "))
 						.child(TextView::new("  ").with_id("tip_hash")),
 				)
 				.child(
 					LinearLayout::new(Orientation::Horizontal)
-						.child(TextView::new("Chain Height: "))
+						.child(TextView::new("Chain Height:                 "))
 						.child(TextView::new("  ").with_id("chain_height")),
 				)
 				.child(
 					LinearLayout::new(Orientation::Horizontal)
-						.child(TextView::new("Cumulative Difficulty: "))
+						.child(TextView::new("Chain Cumulative Difficulty:  "))
 						.child(TextView::new("  ").with_id("basic_total_difficulty")),
 				)
 				.child(
-					LinearLayout::new(Orientation::Horizontal)
-						.child(TextView::new("------------------------")),
+					LinearLayout::new(Orientation::Horizontal).child(TextView::new(
+						"------------------------------------------------",
+					)),
 				)
 				.child(
 					LinearLayout::new(Orientation::Horizontal)

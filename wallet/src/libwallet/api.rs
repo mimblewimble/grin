@@ -41,8 +41,8 @@ use crate::core::ser;
 use crate::keychain::{Identifier, Keychain};
 use crate::libwallet::internal::{keys, tx, updater};
 use crate::libwallet::types::{
-	AcctPathMapping, BlockFees, CbData, NodeClient, OutputData, TxLogEntry, TxWrapper,
-	WalletBackend, WalletInfo,
+	AcctPathMapping, BlockFees, CbData, NodeClient, OutputData, TxLogEntry, TxLogEntryType,
+	TxWrapper, WalletBackend, WalletInfo,
 };
 use crate::libwallet::{Error, ErrorKind};
 use crate::util;
@@ -612,7 +612,13 @@ where
 		num_change_outputs: usize,
 		selection_strategy_is_use_all: bool,
 		message: Option<String>,
-	) -> Result<(Slate, impl FnOnce(&mut W, &str) -> Result<(), Error>), Error> {
+	) -> Result<
+		(
+			Slate,
+			impl FnOnce(&mut W, &Transaction) -> Result<(), Error>,
+		),
+		Error,
+	> {
 		let mut w = self.wallet.lock();
 		w.open_with_credentials()?;
 		let parent_key_id = match src_acct_name {
@@ -634,7 +640,6 @@ where
 			num_change_outputs,
 			selection_strategy_is_use_all,
 			&parent_key_id,
-			false,
 			message,
 		)?;
 
@@ -654,12 +659,11 @@ where
 	pub fn tx_lock_outputs(
 		&mut self,
 		slate: &Slate,
-		lock_fn: impl FnOnce(&mut W, &str) -> Result<(), Error>,
+		lock_fn: impl FnOnce(&mut W, &Transaction) -> Result<(), Error>,
 	) -> Result<(), Error> {
 		let mut w = self.wallet.lock();
 		w.open_with_credentials()?;
-		let tx_hex = util::to_hex(ser::ser_vec(&slate.tx).unwrap());
-		lock_fn(&mut *w, &tx_hex)?;
+		lock_fn(&mut *w, &slate.tx)?;
 		Ok(())
 	}
 
@@ -669,11 +673,10 @@ where
 	/// propagation.
 	pub fn finalize_tx(&mut self, slate: &mut Slate) -> Result<(), Error> {
 		let mut w = self.wallet.lock();
-		let parent_key_id = w.parent_key_id();
 		w.open_with_credentials()?;
 		let context = w.get_private_context(slate.id.as_bytes())?;
 		tx::complete_tx(&mut *w, slate, &context)?;
-		tx::update_tx_hex(&mut *w, &parent_key_id, slate)?;
+		tx::update_stored_tx(&mut *w, slate)?;
 		{
 			let mut batch = w.batch()?;
 			batch.delete_private_context(slate.id.as_bytes())?;
@@ -705,6 +708,12 @@ where
 		tx::cancel_tx(&mut *w, &parent_key_id, tx_id, tx_slate_id)?;
 		w.close()?;
 		Ok(())
+	}
+
+	/// Retrieves a stored transaction from a TxLogEntry
+	pub fn get_stored_tx(&self, entry: &TxLogEntry) -> Result<Option<Transaction>, Error> {
+		let w = self.wallet.lock();
+		w.get_stored_tx(entry)
 	}
 
 	/// Posts a transaction to the chain
@@ -834,10 +843,12 @@ where
 		};
 		// Don't do this multiple times
 		let tx = updater::retrieve_txs(&mut *w, None, Some(slate.id), Some(&parent_key_id))?;
-		if tx.len() > 0 {
-			return Err(ErrorKind::TransactionAlreadyReceived(slate.id.to_string()).into());
+		for t in &tx {
+			if t.tx_type == TxLogEntryType::TxReceived {
+				return Err(ErrorKind::TransactionAlreadyReceived(slate.id.to_string()).into());
+			}
 		}
-		let res = tx::receive_tx(&mut *w, slate, &parent_key_id, false, message);
+		let res = tx::receive_tx(&mut *w, slate, &parent_key_id, message);
 		w.close()?;
 
 		if let Err(e) = res {

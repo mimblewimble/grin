@@ -234,13 +234,13 @@ pub fn send(
 		};
 		if adapter.supports_sync() {
 			slate = adapter.send_tx_sync(&args.dest, &slate)?;
+			api.tx_lock_outputs(&slate, lock_fn)?;
 			if args.method == "self" {
 				controller::foreign_single_use(wallet, |api| {
 					api.receive_tx(&mut slate, Some(&args.dest), None)?;
 					Ok(())
 				})?;
 			}
-			api.tx_lock_outputs(&slate, lock_fn)?;
 			if let Err(e) = api.verify_slate_messages(&slate) {
 				error!("Error validating participant messages: {}", e);
 				return Err(e);
@@ -409,7 +409,7 @@ pub fn repost(
 ) -> Result<(), Error> {
 	controller::owner_single_use(wallet.clone(), |api| {
 		let (_, txs) = api.retrieve_txs(true, Some(args.id), None)?;
-		let stored_tx = txs[0].get_stored_tx();
+		let stored_tx = api.get_stored_tx(&txs[0])?;
 		if stored_tx.is_none() {
 			error!(
 				"Transaction with id {} does not have transaction data. Not reposting.",

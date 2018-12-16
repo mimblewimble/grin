@@ -27,6 +27,7 @@ use crate::common::adapters::{
 };
 use crate::common::stats::{DiffBlock, DiffStats, PeerStats, ServerStateInfo, ServerStats};
 use crate::common::types::{Error, ServerConfig, StratumServerConfig, SyncState, SyncStatus};
+use crate::core::core::hash::{Hashed, ZERO_HASH};
 use crate::core::core::verifier_cache::{LruVerifierCache, VerifierCache};
 use crate::core::{consensus, genesis, global, pow};
 use crate::grin::{dandelion_monitor, seed, sync};
@@ -368,29 +369,42 @@ impl Server {
 			let last_blocks: Vec<consensus::HeaderInfo> =
 				global::difficulty_data_to_vector(self.chain.difficulty_iter())
 					.into_iter()
-					.take(consensus::DIFFICULTY_ADJUST_WINDOW as usize)
 					.collect();
 
-			let mut last_time = last_blocks[0].timestamp;
 			let tip_height = self.chain.head().unwrap().height as i64;
-			let earliest_block_height = tip_height as i64 - last_blocks.len() as i64;
-			let mut i = 1;
+			let mut height = tip_height as i64 - last_blocks.len() as i64 + 1;
+
+			let txhashset = self.chain.txhashset();
+			let txhashset = txhashset.read();
 
 			let diff_entries: Vec<DiffBlock> = last_blocks
-				.iter()
-				.skip(1)
-				.map(|n| {
-					let dur = n.timestamp - last_time;
-					let height = earliest_block_height + i;
-					i += 1;
-					last_time = n.timestamp;
+				.windows(2)
+				.map(|pair| {
+					let prev = &pair[0];
+					let next = &pair[1];
+
+					height += 1;
+
+					// Use header hash if real header.
+					// Default to "zero" hash if synthetic header_info.
+					let hash = if height >= 0 {
+						if let Ok(header) = txhashset.get_header_by_height(height as u64) {
+							header.hash()
+						} else {
+							ZERO_HASH
+						}
+					} else {
+						ZERO_HASH
+					};
+
 					DiffBlock {
-						block_number: height,
-						difficulty: n.difficulty.to_num(),
-						time: n.timestamp,
-						duration: dur,
-						secondary_scaling: n.secondary_scaling,
-						is_secondary: n.is_secondary,
+						block_height: height,
+						block_hash: hash,
+						difficulty: next.difficulty.to_num(),
+						time: next.timestamp,
+						duration: next.timestamp - prev.timestamp,
+						secondary_scaling: next.secondary_scaling,
+						is_secondary: next.is_secondary,
 					}
 				})
 				.collect();
@@ -398,7 +412,7 @@ impl Server {
 			let block_time_sum = diff_entries.iter().fold(0, |sum, t| sum + t.duration);
 			let block_diff_sum = diff_entries.iter().fold(0, |sum, d| sum + d.difficulty);
 			DiffStats {
-				height: tip_height as u64,
+				height: height as u64,
 				last_blocks: diff_entries,
 				average_block_time: block_time_sum / (consensus::DIFFICULTY_ADJUST_WINDOW - 1),
 				average_difficulty: block_diff_sum / (consensus::DIFFICULTY_ADJUST_WINDOW - 1),

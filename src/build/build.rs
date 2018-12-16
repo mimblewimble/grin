@@ -59,59 +59,61 @@ fn main() {
 		format!("{}{}", env::var("OUT_DIR").unwrap(), "/built.rs"),
 	);
 
-	install_web_wallet();
+	let web_wallet_install = install_web_wallet();
+	match web_wallet_install {
+		Ok(true) => {}
+		_ => println!(
+			"WARNING : Web wallet could not be installed due to {:?}",
+			web_wallet_install
+		),
+	}
 }
 
-fn download_and_decompress(target_file: &str) {
+fn download_and_decompress(target_file: &str) -> Result<bool, Box<std::error::Error>> {
 	let req_path = format!("https://github.com/mimblewimble/grin-web-wallet/releases/download/{}/grin-web-wallet.tar.gz", WEB_WALLET_TAG);
-	let resp = reqwest::get(&req_path);
+	let mut resp = reqwest::get(&req_path)?;
 
-	// don't interfere if this doesn't work
-	if resp.is_err() {
-		println!("Warning: Failed to download grin-web-wallet. Web wallet will not be available");
-		return;
+	if !resp.status().is_success() {
+		return Ok(false);
 	}
 
-	let mut resp = resp.unwrap();
-	if resp.status().is_success() {
-		// read response
-		let mut out: Vec<u8> = vec![];
-		let r2 = resp.read_to_end(&mut out);
-		if r2.is_err() {
-			println!(
-				"Warning: Failed to download grin-web-wallet. Web wallet will not be available"
-			);
-			return;
-		}
+	// read response
+	let mut out: Vec<u8> = vec![];
+	resp.read_to_end(&mut out)?;
 
-		// Gunzip
-		let mut d = GzDecoder::new(&out[..]);
-		let mut decomp: Vec<u8> = vec![];
-		d.read_to_end(&mut decomp).unwrap();
+	// Gunzip
+	let mut d = GzDecoder::new(&out[..]);
+	let mut decomp: Vec<u8> = vec![];
+	d.read_to_end(&mut decomp)?;
 
-		// write temp file
-		let mut buffer = File::create(target_file.clone()).unwrap();
-		buffer.write_all(&decomp).unwrap();
-		buffer.flush().unwrap();
-	}
+	// write temp file
+	let mut buffer = File::create(target_file.clone())?;
+	buffer.write_all(&decomp)?;
+	buffer.flush()?;
+
+	Ok(true)
 }
 
 /// Download and unzip tagged web-wallet build
-fn install_web_wallet() {
+fn install_web_wallet() -> Result<bool, Box<std::error::Error>> {
 	let target_file = format!(
 		"{}/grin-web-wallet-{}.tar",
-		env::var("OUT_DIR").unwrap(),
+		env::var("OUT_DIR")?,
 		WEB_WALLET_TAG
 	);
-	let out_dir = env::var("OUT_DIR").unwrap();
+	let out_dir = env::var("OUT_DIR")?;
 	let mut out_path = PathBuf::from(&out_dir);
 	out_path.pop();
 	out_path.pop();
 	out_path.pop();
 
 	// only re-download if needed
+	println!("{}", target_file);
 	if !Path::new(&target_file).is_file() {
-		download_and_decompress(&target_file);
+		let success = download_and_decompress(&target_file)?;
+		if !success {
+			return Ok(false); // could not download and decompress
+		}
 	}
 
 	// remove old version
@@ -120,26 +122,28 @@ fn install_web_wallet() {
 	let _ = fs::remove_dir_all(remove_path);
 
 	// Untar
-	let file = File::open(target_file).unwrap();
+	let file = File::open(target_file)?;
 	let mut a = Archive::new(file);
 
-	for file in a.entries().unwrap() {
-		let mut file = file.unwrap();
+	for file in a.entries()? {
+		let mut file = file?;
 		let h = file.header().clone();
-		let path = h.path().unwrap().clone().into_owned();
+		let path = h.path()?.clone().into_owned();
 		let is_dir = path.to_str().unwrap().ends_with(path::MAIN_SEPARATOR);
-		let path = path.strip_prefix("dist").unwrap();
+		let path = path.strip_prefix("dist")?;
 		let mut final_path = out_path.clone();
 		final_path.push(path);
 
 		let mut tmp: Vec<u8> = vec![];
-		file.read_to_end(&mut tmp).unwrap();
+		file.read_to_end(&mut tmp)?;
 		if is_dir {
-			fs::create_dir_all(final_path).unwrap();
+			fs::create_dir_all(final_path)?;
 		} else {
-			let mut buffer = File::create(final_path).unwrap();
-			buffer.write_all(&tmp).unwrap();
-			buffer.flush().unwrap();
+			let mut buffer = File::create(final_path)?;
+			buffer.write_all(&tmp)?;
+			buffer.flush()?;
 		}
 	}
+
+	Ok(true)
 }

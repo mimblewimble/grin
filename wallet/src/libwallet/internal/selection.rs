@@ -14,6 +14,7 @@
 
 //! Selection of inputs for building transactions
 
+use crate::core::core::Transaction;
 use crate::core::libtx::{build, slate::Slate, tx_fee};
 use crate::keychain::{Identifier, Keychain};
 use crate::libwallet::error::{Error, ErrorKind};
@@ -36,12 +37,11 @@ pub fn build_send_tx_slate<T: ?Sized, C, K>(
 	change_outputs: usize,
 	selection_strategy_is_use_all: bool,
 	parent_key_id: Identifier,
-	is_self: bool,
 ) -> Result<
 	(
 		Slate,
 		Context,
-		impl FnOnce(&mut T, &str) -> Result<(), Error>,
+		impl FnOnce(&mut T, &Transaction) -> Result<(), Error>,
 	),
 	Error,
 >
@@ -95,45 +95,47 @@ where
 
 	// Return a closure to acquire wallet lock and lock the coins being spent
 	// so we avoid accidental double spend attempt.
-	let update_sender_wallet_fn = move |wallet: &mut T, tx_hex: &str| {
-		let mut batch = wallet.batch()?;
-		let log_id = batch.next_tx_log_id(&parent_key_id)?;
-		let mut t = TxLogEntry::new(parent_key_id.clone(), TxLogEntryType::TxSent, log_id);
-		if is_self {
-			t.tx_type = TxLogEntryType::TxSentSelf;
-		}
-		t.tx_slate_id = Some(slate_id);
-		t.fee = Some(fee);
-		t.tx_hex = Some(tx_hex.to_owned());
-		let mut amount_debited = 0;
-		t.num_inputs = lock_inputs.len();
-		for id in lock_inputs {
-			let mut coin = batch.get(&id).unwrap();
-			coin.tx_log_entry = Some(log_id);
-			amount_debited = amount_debited + coin.value;
-			batch.lock_output(&mut coin)?;
-		}
+	let update_sender_wallet_fn = move |wallet: &mut T, tx: &Transaction| {
+		let tx_entry = {
+			let mut batch = wallet.batch()?;
+			let log_id = batch.next_tx_log_id(&parent_key_id)?;
+			let mut t = TxLogEntry::new(parent_key_id.clone(), TxLogEntryType::TxSent, log_id);
+			t.tx_slate_id = Some(slate_id);
+			let filename = format!("{}.grintx", slate_id);
+			t.tx_hex = Some(filename);
+			t.fee = Some(fee);
+			let mut amount_debited = 0;
+			t.num_inputs = lock_inputs.len();
+			for id in lock_inputs {
+				let mut coin = batch.get(&id).unwrap();
+				coin.tx_log_entry = Some(log_id);
+				amount_debited = amount_debited + coin.value;
+				batch.lock_output(&mut coin)?;
+			}
 
-		t.amount_debited = amount_debited;
+			t.amount_debited = amount_debited;
 
-		// write the output representing our change
-		for (change_amount, id) in &change_amounts_derivations {
-			t.num_outputs += 1;
-			t.amount_credited += change_amount;
-			batch.save(OutputData {
-				root_key_id: parent_key_id.clone(),
-				key_id: id.clone(),
-				n_child: id.to_path().last_path_index(),
-				value: change_amount.clone(),
-				status: OutputStatus::Unconfirmed,
-				height: current_height,
-				lock_height: 0,
-				is_coinbase: false,
-				tx_log_entry: Some(log_id),
-			})?;
-		}
-		batch.save_tx_log_entry(t, &parent_key_id)?;
-		batch.commit()?;
+			// write the output representing our change
+			for (change_amount, id) in &change_amounts_derivations {
+				t.num_outputs += 1;
+				t.amount_credited += change_amount;
+				batch.save(OutputData {
+					root_key_id: parent_key_id.clone(),
+					key_id: id.clone(),
+					n_child: id.to_path().last_path_index(),
+					value: change_amount.clone(),
+					status: OutputStatus::Unconfirmed,
+					height: current_height,
+					lock_height: 0,
+					is_coinbase: false,
+					tx_log_entry: Some(log_id),
+				})?;
+			}
+			batch.save_tx_log_entry(t.clone(), &parent_key_id)?;
+			batch.commit()?;
+			t
+		};
+		wallet.store_tx(&format!("{}", tx_entry.tx_slate_id.unwrap()), tx)?;
 		Ok(())
 	};
 
@@ -148,7 +150,6 @@ pub fn build_recipient_output_with_slate<T: ?Sized, C, K>(
 	wallet: &mut T,
 	slate: &mut Slate,
 	parent_key_id: Identifier,
-	is_self: bool,
 ) -> Result<
 	(
 		Identifier,
@@ -190,9 +191,6 @@ where
 		let mut batch = wallet.batch()?;
 		let log_id = batch.next_tx_log_id(&parent_key_id)?;
 		let mut t = TxLogEntry::new(parent_key_id.clone(), TxLogEntryType::TxReceived, log_id);
-		if is_self {
-			t.tx_type = TxLogEntryType::TxReceivedSelf;
-		}
 		t.tx_slate_id = Some(slate_id);
 		t.amount_credited = amount;
 		t.num_outputs = 1;
@@ -243,7 +241,7 @@ where
 	K: Keychain,
 {
 	// select some spendable coins from the wallet
-	let (max_outputs, coins) = select_coins(
+	let (max_outputs, mut coins) = select_coins(
 		wallet,
 		amount,
 		current_height,
@@ -299,7 +297,7 @@ where
 			}
 
 			// select some spendable coins from the wallet
-			let (_, coins) = select_coins(
+			coins = select_coins(
 				wallet,
 				amount_with_fee,
 				current_height,
@@ -307,7 +305,8 @@ where
 				max_outputs,
 				selection_strategy_is_use_all,
 				parent_key_id,
-			);
+			)
+			.1;
 			fee = tx_fee(coins.len(), num_outputs, 1, None);
 			total = coins.iter().map(|c| c.value).sum();
 			amount_with_fee = amount + fee;

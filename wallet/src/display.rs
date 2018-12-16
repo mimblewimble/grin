@@ -178,7 +178,7 @@ pub fn txs(
 			)
 		};
 		let tx_data = match t.tx_hex {
-			Some(_) => format!("Exists"),
+			Some(t) => format!("{}", t),
 			None => "None".to_owned(),
 		};
 		if dark_background_color_scheme {

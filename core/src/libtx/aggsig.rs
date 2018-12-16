@@ -229,7 +229,7 @@ pub fn verify_partial_sig(
 /// use util::secp::key::{PublicKey, SecretKey};
 /// use util::secp::{ContextFlag, Secp256k1};
 /// use core::libtx::{aggsig, proof};
-/// use core::core::transaction::kernel_sig_msg;
+/// use core::core::transaction::{kernel_sig_msg, KernelFeatures};
 /// use core::core::{Output, OutputFeatures};
 /// use keychain::{Keychain, ExtKeychain};
 ///
@@ -248,7 +248,7 @@ pub fn verify_partial_sig(
 /// let height = 20;
 /// let over_commit = secp.commit_value(reward(fees)).unwrap();
 /// let out_commit = output.commitment();
-/// let msg = kernel_sig_msg(0, height).unwrap();
+/// let msg = kernel_sig_msg(0, height, KernelFeatures::DEFAULT_KERNEL).unwrap();
 /// let excess = secp.commit_sum(vec![out_commit], vec![over_commit]).unwrap();
 /// let pubkey = excess.to_pubkey(&secp).unwrap();
 /// let sig = aggsig::sign_from_key_id(&secp, &keychain, &msg, &key_id, Some(&pubkey)).unwrap();
@@ -301,7 +301,7 @@ where
 /// use core::libtx::{aggsig, proof};
 /// use util::secp::key::{PublicKey, SecretKey};
 /// use util::secp::{ContextFlag, Secp256k1};
-/// use core::core::transaction::kernel_sig_msg;
+/// use core::core::transaction::{kernel_sig_msg, KernelFeatures};
 /// use core::core::{Output, OutputFeatures};
 /// use keychain::{Keychain, ExtKeychain};
 ///
@@ -321,7 +321,7 @@ where
 /// let height = 20;
 /// let over_commit = secp.commit_value(reward(fees)).unwrap();
 /// let out_commit = output.commitment();
-/// let msg = kernel_sig_msg(0, height).unwrap();
+/// let msg = kernel_sig_msg(0, height, KernelFeatures::DEFAULT_KERNEL).unwrap();
 /// let excess = secp.commit_sum(vec![out_commit], vec![over_commit]).unwrap();
 /// let pubkey = excess.to_pubkey(&secp).unwrap();
 /// let sig = aggsig::sign_from_key_id(&secp, &keychain, &msg, &key_id, Some(&pubkey)).unwrap();

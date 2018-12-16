@@ -20,7 +20,7 @@ use crate::core::core::hash::{Hash, Hashed};
 use crate::core::core::merkle_proof::MerkleProof;
 use crate::core::core::pmmr::{self, ReadonlyPMMR, RewindablePMMR, PMMR};
 use crate::core::core::{
-	Block, BlockHeader, Input, Output, OutputFeatures, OutputIdentifier, TxKernel, TxKernelEntry,
+	Block, BlockHeader, Input, Output, OutputIdentifier, TxKernel, TxKernelEntry,
 };
 use crate::core::global;
 use crate::core::ser::{PMMRIndexHashable, PMMRable};
@@ -204,8 +204,8 @@ impl TxHashSet {
 		let pos = pmmr::insertion_to_pmmr_index(height + 1);
 		let header_pmmr =
 			ReadonlyPMMR::at(&self.header_pmmr_h.backend, self.header_pmmr_h.last_pos);
-		if let Some(hash) = header_pmmr.get_data(pos) {
-			let header = self.commit_index.get_block_header(&hash)?;
+		if let Some(entry) = header_pmmr.get_data(pos) {
+			let header = self.commit_index.get_block_header(&entry.hash())?;
 			Ok(header)
 		} else {
 			Err(ErrorKind::Other(format!("get header by height")).into())
@@ -353,11 +353,13 @@ where
 	{
 		let output_pmmr =
 			ReadonlyPMMR::at(&trees.output_pmmr_h.backend, trees.output_pmmr_h.last_pos);
+		let header_pmmr =
+			ReadonlyPMMR::at(&trees.header_pmmr_h.backend, trees.header_pmmr_h.last_pos);
 
 		// Create a new batch here to pass into the utxo_view.
 		// Discard it (rollback) after we finish with the utxo_view.
 		let batch = trees.commit_index.batch()?;
-		let utxo = UTXOView::new(output_pmmr, &batch);
+		let utxo = UTXOView::new(output_pmmr, header_pmmr, &batch);
 		res = inner(&utxo);
 	}
 	res
@@ -613,7 +615,7 @@ impl<'a> HeaderExtension<'a> {
 
 	/// Get the header hash for the specified pos from the underlying MMR backend.
 	fn get_header_hash(&self, pos: u64) -> Option<Hash> {
-		self.pmmr.get_data(pos)
+		self.pmmr.get_data(pos).map(|x| x.hash())
 	}
 
 	/// Get the header at the specified height based on the current state of the header extension.
@@ -829,46 +831,11 @@ impl<'a> Extension<'a> {
 
 	/// Build a view of the current UTXO set based on the output PMMR.
 	pub fn utxo_view(&'a self) -> UTXOView<'a> {
-		UTXOView::new(self.output_pmmr.readonly_pmmr(), self.batch)
-	}
-
-	/// Verify we are not attempting to spend any coinbase outputs
-	/// that have not sufficiently matured.
-	pub fn verify_coinbase_maturity(
-		&mut self,
-		inputs: &Vec<Input>,
-		height: u64,
-	) -> Result<(), Error> {
-		// Find the greatest output pos of any coinbase
-		// outputs we are attempting to spend.
-		let pos = inputs
-			.iter()
-			.filter(|x| x.features.contains(OutputFeatures::COINBASE_OUTPUT))
-			.filter_map(|x| self.batch.get_output_pos(&x.commitment()).ok())
-			.max()
-			.unwrap_or(0);
-
-		if pos > 0 {
-			// If we have not yet reached 1,000 / 1,440 blocks then
-			// we can fail immediately as coinbase cannot be mature.
-			if height < global::coinbase_maturity() {
-				return Err(ErrorKind::ImmatureCoinbase.into());
-			}
-
-			// Find the "cutoff" pos in the output MMR based on the
-			// header from 1,000 blocks ago.
-			let cutoff_height = height.checked_sub(global::coinbase_maturity()).unwrap_or(0);
-			let cutoff_header = self.get_header_by_height(cutoff_height)?;
-			let cutoff_pos = cutoff_header.output_mmr_size;
-
-			// If any output pos exceed the cutoff_pos
-			// we know they have not yet sufficiently matured.
-			if pos > cutoff_pos {
-				return Err(ErrorKind::ImmatureCoinbase.into());
-			}
-		}
-
-		Ok(())
+		UTXOView::new(
+			self.output_pmmr.readonly_pmmr(),
+			self.header_pmmr.readonly_pmmr(),
+			self.batch,
+		)
 	}
 
 	/// Apply a new block to the existing state.
@@ -989,7 +956,7 @@ impl<'a> Extension<'a> {
 
 	/// Get the header hash for the specified pos from the underlying MMR backend.
 	fn get_header_hash(&self, pos: u64) -> Option<Hash> {
-		self.header_pmmr.get_data(pos)
+		self.header_pmmr.get_data(pos).map(|x| x.hash())
 	}
 
 	/// Get the header at the specified height based on the current state of the extension.

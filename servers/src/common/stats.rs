@@ -20,6 +20,7 @@ use std::sync::Arc;
 use std::time::SystemTime;
 
 use crate::core::consensus::graph_weight;
+use crate::core::core::hash::Hash;
 
 use chrono::prelude::*;
 
@@ -79,6 +80,8 @@ pub struct WorkerStats {
 	pub num_rejected: u64,
 	/// number of shares submitted too late
 	pub num_stale: u64,
+	/// number of valid blocks found
+	pub num_blocks_found: u64,
 }
 
 /// Struct to return relevant information about the stratum server
@@ -118,8 +121,10 @@ pub struct DiffStats {
 /// Last n blocks for difficulty calculation purposes
 #[derive(Clone, Debug)]
 pub struct DiffBlock {
-	/// Block number (can be negative for a new chain)
-	pub block_number: i64,
+	/// Block height (can be negative for a new chain)
+	pub block_height: i64,
+	/// Block hash (may be synthetic for a new chain)
+	pub block_hash: Hash,
 	/// Block network difficulty
 	pub difficulty: u64,
 	/// Time block was found (epoch seconds)
@@ -206,6 +211,7 @@ impl Default for WorkerStats {
 			num_accepted: 0,
 			num_rejected: 0,
 			num_stale: 0,
+			num_blocks_found: 0,
 		}
 	}
 }

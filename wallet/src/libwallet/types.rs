@@ -21,7 +21,6 @@ use crate::core::libtx::aggsig;
 use crate::core::ser;
 use crate::keychain::{Identifier, Keychain};
 use crate::libwallet::error::{Error, ErrorKind};
-use crate::util;
 use crate::util::secp::key::{PublicKey, SecretKey};
 use crate::util::secp::{self, pedersen, Secp256k1};
 use chrono::prelude::*;
@@ -102,6 +101,12 @@ where
 	/// Gets an account path for a given label
 	fn get_acct_path(&self, label: String) -> Result<Option<AcctPathMapping>, Error>;
 
+	/// Stores a transaction
+	fn store_tx(&self, uuid: &str, tx: &Transaction) -> Result<(), Error>;
+
+	/// Retrieves a stored transaction from a TxLogEntry
+	fn get_stored_tx(&self, entry: &TxLogEntry) -> Result<Option<Transaction>, Error>;
+
 	/// Create a new write batch to update or remove output data
 	fn batch<'a>(&'a mut self) -> Result<Box<dyn WalletOutputBatch<K> + 'a>, Error>;
 
@@ -156,7 +161,7 @@ where
 	fn tx_log_iter(&self) -> Box<dyn Iterator<Item = TxLogEntry>>;
 
 	/// save a tx log entry
-	fn save_tx_log_entry(&self, t: TxLogEntry, parent_id: &Identifier) -> Result<(), Error>;
+	fn save_tx_log_entry(&mut self, t: TxLogEntry, parent_id: &Identifier) -> Result<(), Error>;
 
 	/// save an account label -> path mapping
 	fn save_acct_path(&mut self, mapping: AcctPathMapping) -> Result<(), Error>;
@@ -544,10 +549,6 @@ pub enum TxLogEntryType {
 	TxReceived,
 	/// Inputs locked + change outputs when a transaction is created
 	TxSent,
-	/// As above, but self-transaction
-	TxReceivedSelf,
-	/// As Above
-	TxSentSelf,
 	/// Received transaction that was rolled back by user
 	TxReceivedCancelled,
 	/// Sent transaction that was rolled back by user
@@ -560,8 +561,6 @@ impl fmt::Display for TxLogEntryType {
 			TxLogEntryType::ConfirmedCoinbase => write!(f, "Confirmed \nCoinbase"),
 			TxLogEntryType::TxReceived => write!(f, "Received Tx"),
 			TxLogEntryType::TxSent => write!(f, "Sent Tx"),
-			TxLogEntryType::TxReceivedSelf => write!(f, "Received Tx (Self)"),
-			TxLogEntryType::TxSentSelf => write!(f, "Sent Tx (Self)"),
 			TxLogEntryType::TxReceivedCancelled => write!(f, "Received Tx\n- Cancelled"),
 			TxLogEntryType::TxSentCancelled => write!(f, "Send Tx\n- Cancelled"),
 		}
@@ -601,6 +600,7 @@ pub struct TxLogEntry {
 	pub amount_debited: u64,
 	/// Fee
 	pub fee: Option<u64>,
+	// TODO: rename this to 'stored_tx_file' or something for mainnet
 	/// The transaction json itself, stored for reference or resending
 	pub tx_hex: Option<String>,
 }
@@ -641,17 +641,6 @@ impl TxLogEntry {
 	/// Update confirmation TS with now
 	pub fn update_confirmation_ts(&mut self) {
 		self.confirmation_ts = Some(Utc::now());
-	}
-
-	/// Retrieve the stored transaction, if any
-	pub fn get_stored_tx(&self) -> Option<Transaction> {
-		match self.tx_hex.as_ref() {
-			None => None,
-			Some(t) => {
-				let tx_bin = util::from_hex(t.clone()).unwrap();
-				Some(ser::deserialize::<Transaction>(&mut &tx_bin[..]).unwrap())
-			}
-		}
 	}
 }
 

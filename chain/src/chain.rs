@@ -28,6 +28,7 @@ use crate::lmdb;
 use crate::pipe;
 use crate::store;
 use crate::txhashset;
+use crate::txhashset::TxHashSet;
 use crate::types::{
 	BlockStatus, ChainAdapter, NoStatus, Options, Tip, TxHashSetRoots, TxHashsetWriteStatus,
 };
@@ -205,6 +206,11 @@ impl Chain {
 		chain.compact()?;
 
 		Ok(chain)
+	}
+
+	/// Return our shared txhashset instance.
+	pub fn txhashset(&self) -> Arc<RwLock<TxHashSet>> {
+		self.txhashset.clone()
 	}
 
 	fn log_heads(store: &store::ChainStore) -> Result<(), Error> {
@@ -500,9 +506,9 @@ impl Chain {
 	/// that has not yet sufficiently matured.
 	pub fn verify_coinbase_maturity(&self, tx: &Transaction) -> Result<(), Error> {
 		let height = self.next_block_height()?;
-		let mut txhashset = self.txhashset.write();
-		txhashset::extending_readonly(&mut txhashset, |extension| {
-			extension.verify_coinbase_maturity(&tx.inputs(), height)?;
+		let txhashset = self.txhashset.read();
+		txhashset::utxo_view(&txhashset, |utxo| {
+			utxo.verify_coinbase_maturity(&tx.inputs(), height)?;
 			Ok(())
 		})
 	}
@@ -1106,28 +1112,23 @@ impl Chain {
 			.map_err(|e| ErrorKind::StoreErr(e, "chain get block_sums".to_owned()).into())
 	}
 
-	/// Gets the block header at the provided height
+	/// Gets the block header at the provided height.
+	/// Note: This takes a read lock on the txhashset.
+	/// Take care not to call this repeatedly in a tight loop.
 	pub fn get_header_by_height(&self, height: u64) -> Result<BlockHeader, Error> {
-		let mut txhashset = self.txhashset.write();
-		let mut batch = self.store.batch()?;
-		let header = txhashset::header_extending(&mut txhashset, &mut batch, |extension| {
-			let header = extension.get_header_by_height(height)?;
-			Ok(header)
-		})?;
-
+		let txhashset = self.txhashset.read();
+		let header = txhashset.get_header_by_height(height)?;
 		Ok(header)
 	}
 
-	/// Gets the block header in which a given output appears in the txhashset
+	/// Gets the block header in which a given output appears in the txhashset.
 	pub fn get_header_for_output(
 		&self,
 		output_ref: &OutputIdentifier,
 	) -> Result<BlockHeader, Error> {
-		let pos = {
-			let txhashset = self.txhashset.read();
-			let (_, pos) = txhashset.is_unspent(output_ref)?;
-			pos
-		};
+		let txhashset = self.txhashset.read();
+
+		let (_, pos) = txhashset.is_unspent(output_ref)?;
 
 		let mut min = 1;
 		let mut max = {
@@ -1137,8 +1138,8 @@ impl Chain {
 
 		loop {
 			let search_height = max - (max - min) / 2;
-			let h = self.get_header_by_height(search_height)?;
-			let h_prev = self.get_header_by_height(search_height - 1)?;
+			let h = txhashset.get_header_by_height(search_height)?;
+			let h_prev = txhashset.get_header_by_height(search_height - 1)?;
 			if pos > h.output_mmr_size {
 				min = search_height;
 			} else if pos < h_prev.output_mmr_size {
