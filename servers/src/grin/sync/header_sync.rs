@@ -69,7 +69,7 @@ impl HeaderSync {
 				// Rebuild the sync MMR to match our updated sync_head.
 				self.chain.rebuild_sync_mmr(&header_head).unwrap();
 
-				self.history_locator.clear();
+				self.history_locator.retain(|&x| x.0 == 0);
 				true
 			}
 			_ => false,
@@ -154,7 +154,7 @@ impl HeaderSync {
 		// for security, clear history_locator[] in any case of header chain rollback,
 		// the easiest way is to check whether the sync head and the header head are identical.
 		if self.history_locator.len() > 0 && tip.hash() != self.chain.header_head()?.hash() {
-			self.history_locator.clear();
+			self.history_locator.retain(|&x| x.0 == 0);
 		}
 
 		// for each height we need, we either check if something is close enough from
@@ -168,8 +168,10 @@ impl HeaderSync {
 				let last_loc = locator.last().unwrap().clone();
 				let mut header_cursor = self.chain.get_block_header(&last_loc.1);
 				while let Ok(header) = header_cursor {
-					if header.height == h && header.height != last_loc.0 {
-						locator.push((header.height, header.hash()));
+					if header.height == h {
+						if header.height != last_loc.0 {
+							locator.push((header.height, header.hash()));
+						}
 						break;
 					}
 					header_cursor = self.chain.get_previous_header(&header);
