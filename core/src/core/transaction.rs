@@ -40,10 +40,12 @@ bitflags! {
 	/// Options for a kernel's structure or use
 	#[derive(Serialize, Deserialize)]
 	pub struct KernelFeatures: u8 {
-		/// No flags
+		/// plain kernel
 		const DEFAULT_KERNEL = 0b00000000;
-		/// Kernel matching a coinbase output
+		/// kernel matching a coinbase output
 		const COINBASE_KERNEL = 0b00000001;
+		/// absolute height locked kernel; required for lock_height != 0
+		const HEIGHT_LOCKED_KERNEL = 0b00000010;
 	}
 }
 
@@ -258,6 +260,11 @@ impl TxKernel {
 	/// Builds a new tx kernel with the provided lock_height.
 	pub fn with_lock_height(self, lock_height: u64) -> TxKernel {
 		TxKernel {
+			features: if lock_height == 0 {
+				KernelFeatures::DEFAULT_KERNEL
+			} else {
+				KernelFeatures::HEIGHT_LOCKED_KERNEL
+			},
 			lock_height,
 			..self
 		}
@@ -1295,6 +1302,9 @@ pub fn kernel_sig_msg(
 	lock_height: u64,
 	features: KernelFeatures,
 ) -> Result<secp::Message, Error> {
+	if (features.contains(KernelFeatures::HEIGHT_LOCKED_KERNEL) != (lock_height > 0)) {
+		return Err(Error::InvalidKernelFeatures)
+	}
 	let msg = if global::is_testnet() {
 		let mut bytes = [0; 32];
 		BigEndian::write_u64(&mut bytes[16..24], fee);
@@ -1343,7 +1353,7 @@ mod test {
 
 		// now check a kernel with lock_height serialize/deserialize correctly
 		let kernel = TxKernel {
-			features: KernelFeatures::DEFAULT_KERNEL,
+			features: KernelFeatures::HEIGHT_LOCKED_KERNEL,
 			lock_height: 100,
 			excess: commit,
 			excess_sig: sig.clone(),
@@ -1353,7 +1363,7 @@ mod test {
 		let mut vec = vec![];
 		ser::serialize(&mut vec, &kernel).expect("serialized failed");
 		let kernel2: TxKernel = ser::deserialize(&mut &vec[..]).unwrap();
-		assert_eq!(kernel2.features, KernelFeatures::DEFAULT_KERNEL);
+		assert_eq!(kernel2.features, KernelFeatures::HEIGHT_LOCKED_KERNEL);
 		assert_eq!(kernel2.lock_height, 100);
 		assert_eq!(kernel2.excess, commit);
 		assert_eq!(kernel2.excess_sig, sig.clone());

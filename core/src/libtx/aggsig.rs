@@ -248,7 +248,7 @@ pub fn verify_partial_sig(
 /// let height = 20;
 /// let over_commit = secp.commit_value(reward(fees)).unwrap();
 /// let out_commit = output.commitment();
-/// let msg = kernel_sig_msg(0, height, KernelFeatures::DEFAULT_KERNEL).unwrap();
+/// let msg = kernel_sig_msg(0, height, KernelFeatures::HEIGHT_LOCKED_KERNEL).unwrap();
 /// let excess = secp.commit_sum(vec![out_commit], vec![over_commit]).unwrap();
 /// let pubkey = excess.to_pubkey(&secp).unwrap();
 /// let sig = aggsig::sign_from_key_id(&secp, &keychain, &msg, &key_id, Some(&pubkey)).unwrap();
@@ -321,7 +321,7 @@ where
 /// let height = 20;
 /// let over_commit = secp.commit_value(reward(fees)).unwrap();
 /// let out_commit = output.commitment();
-/// let msg = kernel_sig_msg(0, height, KernelFeatures::DEFAULT_KERNEL).unwrap();
+/// let msg = kernel_sig_msg(0, height, KernelFeatures::HEIGHT_LOCKED_KERNEL).unwrap();
 /// let excess = secp.commit_sum(vec![out_commit], vec![over_commit]).unwrap();
 /// let pubkey = excess.to_pubkey(&secp).unwrap();
 /// let sig = aggsig::sign_from_key_id(&secp, &keychain, &msg, &key_id, Some(&pubkey)).unwrap();
