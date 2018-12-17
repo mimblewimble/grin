@@ -221,6 +221,9 @@ impl TxKernel {
 	/// as a public key and checking the signature verifies with the fee as
 	/// message.
 	pub fn verify(&self) -> Result<(), Error> {
+		if (self.features.contains(KernelFeatures::HEIGHT_LOCKED_KERNEL) != (self.lock_height > 0)) {
+			return Err(Error::InvalidKernelFeatures)
+		}
 		let secp = static_secp_instance();
 		let secp = secp.lock();
 		let sig = &self.excess_sig;
@@ -260,11 +263,7 @@ impl TxKernel {
 	/// Builds a new tx kernel with the provided lock_height.
 	pub fn with_lock_height(self, lock_height: u64) -> TxKernel {
 		TxKernel {
-			features: if lock_height == 0 {
-				KernelFeatures::DEFAULT_KERNEL
-			} else {
-				KernelFeatures::HEIGHT_LOCKED_KERNEL
-			},
+			features: kernel_features(lock_height),
 			lock_height,
 			..self
 		}
@@ -1315,6 +1314,17 @@ pub fn kernel_sig_msg(
 		secp::Message::from_slice(&hash.as_bytes())?
 	};
 	Ok(msg)
+}
+
+/// kernel features as determined by lock height
+pub fn kernel_features(
+	lock_height: u64,
+) -> KernelFeatures {
+	if lock_height > 0 {
+		KernelFeatures::HEIGHT_LOCKED_KERNEL
+	} else {
+		KernelFeatures::DEFAULT_KERNEL
+	}
 }
 
 #[cfg(test)]
