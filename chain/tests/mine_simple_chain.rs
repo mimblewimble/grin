@@ -283,7 +283,7 @@ fn spend_in_fork_and_compact() {
 	// so we can spend the coinbase later
 	let b = prepare_block(&kc, &fork_head, &chain, 2);
 	let out_id = OutputIdentifier::from_output(&b.outputs()[0]);
-	assert!(out_id.features.contains(OutputFeatures::COINBASE_OUTPUT));
+	assert!(out_id.features.is_coinbase());
 	fork_head = b.header.clone();
 	chain
 		.process_block(b.clone(), chain::Options::SKIP_POW)

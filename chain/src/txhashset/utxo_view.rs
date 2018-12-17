@@ -105,7 +105,7 @@ impl<'a> UTXOView<'a> {
 		// outputs we are attempting to spend.
 		let pos = inputs
 			.iter()
-			.filter(|x| x.features.contains(OutputFeatures::COINBASE_OUTPUT))
+			.filter(|x| x.is_coinbase())
 			.filter_map(|x| self.batch.get_output_pos(&x.commitment()).ok())
 			.max()
 			.unwrap_or(0);

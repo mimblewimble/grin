@@ -85,9 +85,7 @@ fn test_coinbase_maturity() {
 
 	assert_eq!(block.outputs().len(), 1);
 	let coinbase_output = block.outputs()[0];
-	assert!(coinbase_output
-		.features
-		.contains(transaction::OutputFeatures::COINBASE_OUTPUT));
+	assert!(coinbase_output.is_coinbase());
 
 	chain
 		.process_block(block.clone(), chain::Options::MINE)

@@ -168,7 +168,7 @@ impl From<Block> for CompactBlock {
 		let out_full = block
 			.outputs()
 			.iter()
-			.filter(|x| x.features.contains(OutputFeatures::COINBASE_OUTPUT))
+			.filter(|x| x.is_coinbase())
 			.cloned()
 			.collect::<Vec<_>>();
 
@@ -176,7 +176,7 @@ impl From<Block> for CompactBlock {
 		let mut kern_ids = vec![];
 
 		for k in block.kernels() {
-			if k.features.contains(KernelFeatures::COINBASE_KERNEL) {
+			if k.is_coinbase() {
 				kern_full.push(k.clone());
 			} else {
 				kern_ids.push(k.short_id(&header.hash(), nonce));

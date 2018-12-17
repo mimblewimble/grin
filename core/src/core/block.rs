@@ -663,14 +663,14 @@ impl Block {
 			.body
 			.outputs
 			.iter()
-			.filter(|out| out.features.contains(OutputFeatures::COINBASE_OUTPUT))
+			.filter(|out| out.is_coinbase())
 			.collect::<Vec<&Output>>();
 
 		let cb_kerns = self
 			.body
 			.kernels
 			.iter()
-			.filter(|kernel| kernel.features.contains(KernelFeatures::COINBASE_KERNEL))
+			.filter(|kernel| kernel.is_coinbase())
 			.collect::<Vec<&TxKernel>>();
 
 		{

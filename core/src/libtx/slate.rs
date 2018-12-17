@@ -17,7 +17,7 @@
 
 use crate::blake2::blake2b::blake2b;
 use crate::core::committed::Committed;
-use crate::core::transaction::{kernel_features, kernel_sig_msg, KernelFeatures, Transaction};
+use crate::core::transaction::{kernel_features, kernel_sig_msg, Transaction};
 use crate::core::verifier_cache::LruVerifierCache;
 use crate::core::amount_to_hr_string;
 use crate::keychain::{BlindSum, BlindingFactor, Keychain};
