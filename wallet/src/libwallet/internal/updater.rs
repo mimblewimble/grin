@@ -96,7 +96,10 @@ where
 	let mut txs = if let Some(id) = tx_id {
 		wallet.tx_log_iter().filter(|t| t.id == id).collect()
 	} else if tx_slate_id.is_some() {
-		wallet.tx_log_iter().filter(|t| t.tx_slate_id == tx_slate_id).collect()
+		wallet
+			.tx_log_iter()
+			.filter(|t| t.tx_slate_id == tx_slate_id)
+			.collect()
 	} else {
 		wallet.tx_log_iter().collect::<Vec<_>>()
 	};
