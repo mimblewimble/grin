@@ -253,9 +253,8 @@ impl TxKernel {
 	/// as a public key and checking the signature verifies with the fee as
 	/// message.
 	pub fn verify(&self) -> Result<(), Error> {
-		if (self.is_height_locked() != (self.lock_height > 0)
-		|| (self.is_coinbase()      &&  self.fee        != 0)) {
-		// remove_coinbase_kernel_flag test requires a plain kernel to have 0 fee
+		if   self.is_coinbase()      && self.fee         != 0
+		 || !self.is_height_locked() && self.lock_height != 0 {
 			return Err(Error::InvalidKernelFeatures)
 		}
 		let secp = static_secp_instance();
@@ -1370,9 +1369,8 @@ pub fn kernel_sig_msg(
 	lock_height: u64,
 	features: KernelFeatures,
 ) -> Result<secp::Message, Error> {
-	if (features.is_height_locked() != (lock_height > 0)
-	|| (features.is_coinbase()      &&  fee        != 0)) {
-	// remove_coinbase_kernel_flag test requires a plain kernel to have 0 fee
+	if   features.is_coinbase()      && fee         != 0
+	 || !features.is_height_locked() && lock_height != 0 {
 		return Err(Error::InvalidKernelFeatures)
 	}
 	let msg = if global::is_testnet() {
