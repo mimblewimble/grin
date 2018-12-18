@@ -85,7 +85,6 @@ impl Keychain for ExtKeychain {
 		}
 	}
 
-
 	fn commit(&self, amount: u64, id: &Identifier) -> Result<Commitment, Error> {
 		let key = self.derive_key(amount, id)?;
 		let commit = self.secp.commit(amount, key)?;
@@ -155,7 +154,7 @@ impl Keychain for ExtKeychain {
 		Ok(sig)
 	}
 
-	fn set_use_switch_commits(&mut self, value: bool){
+	fn set_use_switch_commits(&mut self, value: bool) {
 		self.use_switch_commits = value;
 	}
 

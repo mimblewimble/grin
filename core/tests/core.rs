@@ -81,9 +81,11 @@ fn test_zero_commit_fails() {
 
 	// blinding should fail as signing with a zero r*G shouldn't work
 	build::transaction(
-		vec![input(10, key_id1.clone()), 
-				 output(9, key_id1.clone()),
-				 with_fee(1),],
+		vec![
+			input(10, key_id1.clone()),
+			output(9, key_id1.clone()),
+			with_fee(1),
+		],
 		&keychain,
 	)
 	.unwrap();
