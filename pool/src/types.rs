@@ -31,7 +31,7 @@ use grin_keychain as keychain;
 const DANDELION_RELAY_SECS: u64 = 600;
 
 /// Dandelion embargo timer
-const DANDELION_EMBARGO_SECS: u64 = 180;
+const DANDELION_EMBARGO_SECS: u64 = 600;
 
 /// Dandelion patience timer
 const DANDELION_PATIENCE_SECS: u64 = 10;
