@@ -456,6 +456,7 @@ pub trait Keychain: Sync + Send + Clone {
 	fn blind_sum(&self, blind_sum: &BlindSum) -> Result<BlindingFactor, Error>;
 	fn sign(&self, msg: &Message, amount: u64, id: &Identifier) -> Result<Signature, Error>;
 	fn sign_with_blinding(&self, _: &Message, _: &BlindingFactor) -> Result<Signature, Error>;
+	fn set_use_switch_commits(&mut self, value: bool);
 	fn secp(&self) -> &Secp256k1;
 }
 

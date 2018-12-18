@@ -29,6 +29,7 @@ use crate::util::secp::{self, Message, Secp256k1, Signature};
 pub struct ExtKeychain {
 	secp: Secp256k1,
 	master: ExtendedPrivKey,
+	use_switch_commits: bool,
 }
 
 impl Keychain for ExtKeychain {
@@ -39,6 +40,7 @@ impl Keychain for ExtKeychain {
 		let keychain = ExtKeychain {
 			secp: secp,
 			master: master,
+			use_switch_commits: true,
 		};
 		Ok(keychain)
 	}
@@ -49,6 +51,7 @@ impl Keychain for ExtKeychain {
 		let keychain = ExtKeychain {
 			secp: secp,
 			master: master,
+			use_switch_commits: true,
 		};
 		Ok(keychain)
 	}
@@ -76,10 +79,12 @@ impl Keychain for ExtKeychain {
 			ext_key = ext_key.ckd_priv(&self.secp, &mut h, p.path[i as usize])?;
 		}
 
-		// use switch commit for generating keys
-		let key = self.secp.blind_switch(amount, ext_key.secret_key)?;
-		Ok(key)
+		match self.use_switch_commits {
+			true => Ok(self.secp.blind_switch(amount, ext_key.secret_key)?),
+			false => Ok(ext_key.secret_key),
+		}
 	}
+
 
 	fn commit(&self, amount: u64, id: &Identifier) -> Result<Commitment, Error> {
 		let key = self.derive_key(amount, id)?;
@@ -148,6 +153,10 @@ impl Keychain for ExtKeychain {
 		let skey = &blinding.secret_key(&self.secp)?;
 		let sig = self.secp.sign(msg, &skey)?;
 		Ok(sig)
+	}
+
+	fn set_use_switch_commits(&mut self, value: bool){
+		self.use_switch_commits = value;
 	}
 
 	fn secp(&self) -> &Secp256k1 {
