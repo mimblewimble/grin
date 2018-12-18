@@ -44,7 +44,7 @@ pub enum Error {
 	KeyDerivation(extkey_bip32::Error),
 	Transaction(String),
 	RangeProof(String),
-	SwitchCommitment
+	SwitchCommitment,
 }
 
 impl From<secp::Error> for Error {
@@ -130,7 +130,7 @@ impl Identifier {
 	pub fn to_value_path(&self, value: u64) -> ValueExtKeychainPath {
 		ValueExtKeychainPath {
 			value,
-			ext_keychain_path: self.to_path()
+			ext_keychain_path: self.to_path(),
 		}
 	}
 
@@ -442,13 +442,13 @@ impl ExtKeychainPath {
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Deserialize)]
 pub struct ValueExtKeychainPath {
 	pub value: u64,
-	pub ext_keychain_path: ExtKeychainPath
+	pub ext_keychain_path: ExtKeychainPath,
 }
 
 pub trait Keychain: Sync + Send + Clone {
-	fn from_seed(seed: &[u8], use_switch_commitments: bool) -> Result<Self, Error>;
+	fn from_seed(seed: &[u8]) -> Result<Self, Error>;
 	fn from_mnemonic(word_list: &str, extension_word: &str) -> Result<Self, Error>;
-	fn from_random_seed(use_switch_commitments: bool) -> Result<Self, Error>;
+	fn from_random_seed() -> Result<Self, Error>;
 	fn root_key_id() -> Identifier;
 	fn derive_key_id(depth: u8, d1: u32, d2: u32, d3: u32, d4: u32) -> Identifier;
 	fn derive_key(&self, amount: u64, id: &Identifier) -> Result<SecretKey, Error>;
@@ -456,8 +456,8 @@ pub trait Keychain: Sync + Send + Clone {
 	fn blind_sum(&self, blind_sum: &BlindSum) -> Result<BlindingFactor, Error>;
 	fn sign(&self, msg: &Message, amount: u64, id: &Identifier) -> Result<Signature, Error>;
 	fn sign_with_blinding(&self, _: &Message, _: &BlindingFactor) -> Result<Signature, Error>;
+	fn set_use_switch_commits(&mut self, value: bool);
 	fn secp(&self) -> &Secp256k1;
-	fn use_switch_commitments(&self) -> Option<bool>;
 }
 
 #[cfg(test)]

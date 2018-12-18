@@ -140,7 +140,11 @@ where
 	fn open_with_credentials(&mut self) -> Result<(), Error> {
 		let wallet_seed = WalletSeed::from_file(&self.config, &self.passphrase)
 			.context(ErrorKind::CallbackImpl("Error opening wallet"))?;
-		self.keychain = Some(wallet_seed.derive_keychain(self.config.use_switch_commitments).context(ErrorKind::CallbackImpl("Error deriving keychain"))?);
+		self.keychain = Some(
+			wallet_seed
+				.derive_keychain()
+				.context(ErrorKind::CallbackImpl("Error deriving keychain"))?,
+		);
 		Ok(())
 	}
 

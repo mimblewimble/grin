@@ -32,16 +32,14 @@ fn kernel_sig_msg() -> secp::Message {
 #[test]
 fn aggsig_sender_receiver_interaction() {
 	let sender_keychain = ExtKeychain::from_random_seed().unwrap();
-	sender_keychain.set_use_switch_commitments(false);
 	let receiver_keychain = ExtKeychain::from_random_seed().unwrap();
-	receiver_keychain.set_use_switch_commitments(false);
 
 	// Calculate the kernel excess here for convenience.
 	// Normally this would happen during transaction building.
 	let kernel_excess = {
 		let id1 = ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
-		let skey1 = sender_keychain.derive_key(0, &id1).unwrap().secret_key;
-		let skey2 = receiver_keychain.derive_key(0, &id1).unwrap().secret_key;
+		let skey1 = sender_keychain.derive_key(0, &id1).unwrap();
+		let skey2 = receiver_keychain.derive_key(0, &id1).unwrap();
 
 		let keychain = ExtKeychain::from_random_seed().unwrap();
 		let blinding_factor = keychain
@@ -64,7 +62,7 @@ fn aggsig_sender_receiver_interaction() {
 	let (sender_pub_excess, _sender_pub_nonce) = {
 		let keychain = sender_keychain.clone();
 		let id1 = ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
-		let skey = keychain.derive_key(0, &id1).unwrap().secret_key;
+		let skey = keychain.derive_key(0, &id1).unwrap();
 
 		// dealing with an input here so we need to negate the blinding_factor
 		// rather than use it as is
@@ -87,7 +85,7 @@ fn aggsig_sender_receiver_interaction() {
 		let key_id = ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
 
 		// let blind = blind_sum.secret_key(&keychain.secp())?;
-		let blind = keychain.derive_key(0, &key_id).unwrap().secret_key;
+		let blind = keychain.derive_key(0, &key_id).unwrap();
 
 		rx_cx = Context::new(&keychain.secp(), blind);
 		let (pub_excess, pub_nonce) = rx_cx.get_public_keys(&keychain.secp());
@@ -238,9 +236,7 @@ fn aggsig_sender_receiver_interaction() {
 #[test]
 fn aggsig_sender_receiver_interaction_offset() {
 	let sender_keychain = ExtKeychain::from_random_seed().unwrap();
-	sender_keychain.set_use_switch_commitments(false);
 	let receiver_keychain = ExtKeychain::from_random_seed().unwrap();
-	receiver_keychain.set_use_switch_commitments(false);
 
 	// This is the kernel offset that we use to split the key
 	// Summing these at the block level prevents the
@@ -251,8 +247,8 @@ fn aggsig_sender_receiver_interaction_offset() {
 	// Normally this would happen during transaction building.
 	let kernel_excess = {
 		let id1 = ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
-		let skey1 = sender_keychain.derive_key(0, &id1).unwrap().secret_key;
-		let skey2 = receiver_keychain.derive_key(0, &id1).unwrap().secret_key;
+		let skey1 = sender_keychain.derive_key(0, &id1).unwrap();
+		let skey2 = receiver_keychain.derive_key(0, &id1).unwrap();
 
 		let keychain = ExtKeychain::from_random_seed().unwrap();
 		let blinding_factor = keychain
@@ -278,7 +274,7 @@ fn aggsig_sender_receiver_interaction_offset() {
 	let (sender_pub_excess, _sender_pub_nonce) = {
 		let keychain = sender_keychain.clone();
 		let id1 = ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
-		let skey = keychain.derive_key(0, &id1).unwrap().secret_key;
+		let skey = keychain.derive_key(0, &id1).unwrap();
 
 		// dealing with an input here so we need to negate the blinding_factor
 		// rather than use it as is
@@ -305,7 +301,7 @@ fn aggsig_sender_receiver_interaction_offset() {
 		let keychain = receiver_keychain.clone();
 		let key_id = ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
 
-		let blind = keychain.derive_key(0, &key_id).unwrap().secret_key;
+		let blind = keychain.derive_key(0, &key_id).unwrap();
 
 		rx_cx = Context::new(&keychain.secp(), blind);
 		let (pub_excess, pub_nonce) = rx_cx.get_public_keys(&keychain.secp());
