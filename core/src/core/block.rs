@@ -28,7 +28,7 @@ use crate::core::compact_block::{CompactBlock, CompactBlockBody};
 use crate::core::hash::{Hash, Hashed, ZERO_HASH};
 use crate::core::verifier_cache::VerifierCache;
 use crate::core::{
-	transaction, Commitment, Input, KernelFeatures, Output, OutputFeatures, Transaction,
+	transaction, Commitment, Input, Output, Transaction,
 	TransactionBody, TxKernel,
 };
 use crate::global;

@@ -16,10 +16,10 @@
 //! around during an interactive wallet exchange
 
 use crate::blake2::blake2b::blake2b;
+use crate::core::amount_to_hr_string;
 use crate::core::committed::Committed;
 use crate::core::transaction::{kernel_features, kernel_sig_msg, Transaction};
 use crate::core::verifier_cache::LruVerifierCache;
-use crate::core::amount_to_hr_string;
 use crate::keychain::{BlindSum, BlindingFactor, Keychain};
 use crate::libtx::error::{Error, ErrorKind};
 use crate::libtx::{aggsig, build, tx_fee};

@@ -16,7 +16,7 @@
 
 use crate::core::core::hash::Hash;
 use crate::core::core::pmmr::{self, ReadonlyPMMR};
-use crate::core::core::{Block, BlockHeader, Input, Output, OutputFeatures, Transaction};
+use crate::core::core::{Block, BlockHeader, Input, Output, Transaction};
 use crate::core::global;
 use crate::core::ser::PMMRIndexHashable;
 use crate::error::{Error, ErrorKind};

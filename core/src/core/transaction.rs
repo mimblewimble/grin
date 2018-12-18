@@ -253,9 +253,9 @@ impl TxKernel {
 	/// as a public key and checking the signature verifies with the fee as
 	/// message.
 	pub fn verify(&self) -> Result<(), Error> {
-		if   self.is_coinbase()      && self.fee         != 0
-		 || !self.is_height_locked() && self.lock_height != 0 {
-			return Err(Error::InvalidKernelFeatures)
+		if self.is_coinbase() && self.fee != 0 || !self.is_height_locked() && self.lock_height != 0
+		{
+			return Err(Error::InvalidKernelFeatures);
 		}
 		let secp = static_secp_instance();
 		let secp = secp.lock();
@@ -624,11 +624,7 @@ impl TransactionBody {
 
 	// Verify we have no outputs tagged as COINBASE.
 	fn verify_output_features(&self) -> Result<(), Error> {
-		if self
-			.outputs
-			.iter()
-			.any(|x| x.is_coinbase())
-		{
+		if self.outputs.iter().any(|x| x.is_coinbase()) {
 			return Err(Error::InvalidOutputFeatures);
 		}
 		Ok(())
@@ -636,11 +632,7 @@ impl TransactionBody {
 
 	// Verify we have no kernels tagged as COINBASE.
 	fn verify_kernel_features(&self) -> Result<(), Error> {
-		if self
-			.kernels
-			.iter()
-			.any(|x| x.is_coinbase())
-		{
+		if self.kernels.iter().any(|x| x.is_coinbase()) {
 			return Err(Error::InvalidKernelFeatures);
 		}
 		Ok(())
@@ -1127,7 +1119,6 @@ impl Input {
 	pub fn is_plain(&self) -> bool {
 		self.features.is_plain()
 	}
-
 }
 
 bitflags! {
@@ -1369,9 +1360,8 @@ pub fn kernel_sig_msg(
 	lock_height: u64,
 	features: KernelFeatures,
 ) -> Result<secp::Message, Error> {
-	if   features.is_coinbase()      && fee         != 0
-	 || !features.is_height_locked() && lock_height != 0 {
-		return Err(Error::InvalidKernelFeatures)
+	if features.is_coinbase() && fee != 0 || !features.is_height_locked() && lock_height != 0 {
+		return Err(Error::InvalidKernelFeatures);
 	}
 	let msg = if global::is_testnet() {
 		let mut bytes = [0; 32];
@@ -1392,9 +1382,7 @@ pub fn kernel_sig_msg(
 }
 
 /// kernel features as determined by lock height
-pub fn kernel_features(
-	lock_height: u64,
-) -> KernelFeatures {
+pub fn kernel_features(lock_height: u64) -> KernelFeatures {
 	if lock_height > 0 {
 		KernelFeatures::HEIGHT_LOCKED
 	} else {

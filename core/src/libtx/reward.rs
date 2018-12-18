@@ -27,7 +27,6 @@ pub fn output<K>(
 	keychain: &K,
 	key_id: &Identifier,
 	fees: u64,
-	height: u64,
 ) -> Result<(Output, TxKernel), Error>
 where
 	K: Keychain,
