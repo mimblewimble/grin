@@ -446,9 +446,9 @@ pub struct ValueExtKeychainPath {
 }
 
 pub trait Keychain: Sync + Send + Clone {
-	fn from_seed(seed: &[u8], use_switch_commitments: bool) -> Result<Self, Error>;
+	fn from_seed(seed: &[u8]) -> Result<Self, Error>;
 	fn from_mnemonic(word_list: &str, extension_word: &str) -> Result<Self, Error>;
-	fn from_random_seed(use_switch_commitments: bool) -> Result<Self, Error>;
+	fn from_random_seed() -> Result<Self, Error>;
 	fn root_key_id() -> Identifier;
 	fn derive_key_id(depth: u8, d1: u32, d2: u32, d3: u32, d4: u32) -> Identifier;
 	fn derive_key(&self, amount: u64, id: &Identifier) -> Result<SecretKey, Error>;
@@ -457,7 +457,6 @@ pub trait Keychain: Sync + Send + Clone {
 	fn sign(&self, msg: &Message, amount: u64, id: &Identifier) -> Result<Signature, Error>;
 	fn sign_with_blinding(&self, _: &Message, _: &BlindingFactor) -> Result<Signature, Error>;
 	fn secp(&self) -> &Secp256k1;
-	fn use_switch_commitments(&self) -> Option<bool>;
 }
 
 #[cfg(test)]

@@ -57,8 +57,6 @@ pub struct WalletConfig {
 	/// Whether to use the black background color scheme for command line
 	/// if enabled, wallet command output color will be suitable for black background terminal
 	pub dark_background_color_scheme: Option<bool>,
-	/// Whether we want to use switch commitments for this wallet
-	pub use_switch_commitments: bool
 }
 
 impl Default for WalletConfig {
@@ -74,7 +72,6 @@ impl Default for WalletConfig {
 			tls_certificate_file: None,
 			tls_certificate_key: None,
 			dark_background_color_scheme: Some(true),
-			use_switch_commitments: false // TODO: possibly change to true when we want it on by default
 		}
 	}
 }
@@ -124,8 +121,8 @@ impl WalletSeed {
 		seed.as_bytes().to_vec()
 	}
 
-	pub fn derive_keychain<K: Keychain>(&self, use_switch_commitments: bool) -> Result<K, Error> {
-		let result = K::from_seed(&self.0, use_switch_commitments)?;
+	pub fn derive_keychain<K: Keychain>(&self) -> Result<K, Error> {
+		let result = K::from_seed(&self.0)?;
 		Ok(result)
 	}
 
