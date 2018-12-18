@@ -253,10 +253,6 @@ impl TxKernel {
 	/// as a public key and checking the signature verifies with the fee as
 	/// message.
 	pub fn verify(&self) -> Result<(), Error> {
-		if self.is_coinbase() && self.fee != 0 || !self.is_height_locked() && self.lock_height != 0
-		{
-			return Err(Error::InvalidKernelFeatures);
-		}
 		let secp = static_secp_instance();
 		let secp = secp.lock();
 		let sig = &self.excess_sig;
@@ -1346,36 +1342,30 @@ impl From<Output> for OutputIdentifier {
 }
 
 /// Construct msg from tx fee, lock_height and kernel features.
-/// In testnet4 we did not include the kernel features in the message being signed.
-/// In mainnet we changed this to include features and we hash (fee || lock_height || features)
-/// to produce a 32 byte message to sign.
-///
-/// testnet4: msg = (fee || lock_height)
-/// mainnet:  msg = hash(features)                       for coinbase kernels
-///                 hash(features || fee)                for plain kernels
-///                 hash(features || fee || lock_height) for height locked kernels
+/// msg = hash(features)                       for coinbase kernels
+///       hash(features || fee)                for plain kernels
+///       hash(features || fee || lock_height) for height locked kernels
 ///
 pub fn kernel_sig_msg(
 	fee: u64,
 	lock_height: u64,
 	features: KernelFeatures,
 ) -> Result<secp::Message, Error> {
-	if features.is_coinbase() && fee != 0 || !features.is_height_locked() && lock_height != 0 {
+	let features_ok = match features {
+		KernelFeatures::COINBASE => fee == 0 && lock_height == 0,
+		KernelFeatures::PLAIN => lock_height == 0,
+		KernelFeatures::HEIGHT_LOCKED => true, 
+		_ => false
+	};
+	if !features_ok {
 		return Err(Error::InvalidKernelFeatures);
 	}
-	let msg = if global::is_testnet() {
-		let mut bytes = [0; 32];
-		BigEndian::write_u64(&mut bytes[16..24], fee);
-		BigEndian::write_u64(&mut bytes[24..], lock_height);
-		secp::Message::from_slice(&bytes)?
-	} else {
-		let hash = match features {
-			KernelFeatures::COINBASE => (features).hash(),
-			KernelFeatures::PLAIN => (features, fee).hash(),
-			_ => (features, fee, lock_height).hash(),
-		};
-		secp::Message::from_slice(&hash.as_bytes())?
+	let hash = match features {
+		KernelFeatures::COINBASE => features.hash(),
+		KernelFeatures::PLAIN => (features, fee).hash(),
+		KernelFeatures::HEIGHT_LOCKED => (features, fee, lock_height).hash(),
 	};
+	let msg = secp::Message::from_slice(&hash.as_bytes())?;
 	Ok(msg)
 }
 
