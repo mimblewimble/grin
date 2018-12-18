@@ -1369,12 +1369,10 @@ pub fn kernel_sig_msg(
 		BigEndian::write_u64(&mut bytes[24..], lock_height);
 		secp::Message::from_slice(&bytes)?
 	} else {
-		let hash = if features.is_coinbase() {
-			(features).hash()
-		} else if features.is_plain() {
-			(features, fee).hash()
-		} else {
-			(features, fee, lock_height).hash()
+		let hash = match features {
+			KernelFeatures::COINBASE => (features).hash(),
+			KernelFeatures::PLAIN => (features, fee).hash(),
+			_ => (features, fee, lock_height).hash(),
 		};
 		secp::Message::from_slice(&hash.as_bytes())?
 	};
