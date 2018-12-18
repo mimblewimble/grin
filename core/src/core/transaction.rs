@@ -365,8 +365,7 @@ impl Readable for TransactionBody {
 
 		// quick block weight check before proceeding
 		let tx_block_weight =
-			TransactionBody::weight(input_len as usize, output_len as usize, kernel_len as usize)
-				as usize;
+			TransactionBody::weight(input_len as usize, output_len as usize, kernel_len as usize);
 
 		if tx_block_weight > consensus::MAX_BLOCK_WEIGHT {
 			return Err(ser::Error::TooLargeReadErr);
@@ -500,29 +499,33 @@ impl TransactionBody {
 	}
 
 	/// Calculate transaction weight
-	pub fn body_weight(&self) -> u32 {
+	pub fn body_weight(&self) -> usize {
 		TransactionBody::weight(self.inputs.len(), self.outputs.len(), self.kernels.len())
 	}
 
 	/// Calculate weight of transaction using block weighing
-	pub fn body_weight_as_block(&self) -> u32 {
+	pub fn body_weight_as_block(&self) -> usize {
 		TransactionBody::weight_as_block(self.inputs.len(), self.outputs.len(), self.kernels.len())
 	}
 
 	/// Calculate transaction weight from transaction details. This is non
 	/// consensus critical and compared to block weight, incentivizes spending
 	/// more outputs (to lower the fee).
-	pub fn weight(input_len: usize, output_len: usize, kernel_len: usize) -> u32 {
-		let body_weight = -(input_len as i32) + (4 * output_len as i32) + kernel_len as i32;
-		max(body_weight, 1) as u32
+	pub fn weight(input_len: usize, output_len: usize, kernel_len: usize) -> usize {
+		let body_weight = output_len
+			.saturating_mul(4)
+			.saturating_add(kernel_len)
+			.saturating_sub(input_len);
+		max(body_weight, 1)
 	}
 
 	/// Calculate transaction weight using block weighing from transaction
 	/// details. Consensus critical and uses consensus weight values.
-	pub fn weight_as_block(input_len: usize, output_len: usize, kernel_len: usize) -> u32 {
-		(input_len * consensus::BLOCK_INPUT_WEIGHT
-			+ output_len * consensus::BLOCK_OUTPUT_WEIGHT
-			+ kernel_len * consensus::BLOCK_KERNEL_WEIGHT) as u32
+	pub fn weight_as_block(input_len: usize, output_len: usize, kernel_len: usize) -> usize {
+		input_len
+			.saturating_mul(consensus::BLOCK_INPUT_WEIGHT)
+			.saturating_add(output_len.saturating_mul(consensus::BLOCK_OUTPUT_WEIGHT))
+			.saturating_add(kernel_len.saturating_mul(consensus::BLOCK_KERNEL_WEIGHT))
 	}
 
 	/// Lock height of a body is the max lock height of the kernels.
@@ -543,7 +546,7 @@ impl TransactionBody {
 			self.inputs.len(),
 			self.outputs.len() + reserve,
 			self.kernels.len() + reserve,
-		) as usize;
+		);
 
 		if tx_block_weight > consensus::MAX_BLOCK_WEIGHT {
 			return Err(Error::TooHeavy);
@@ -863,17 +866,17 @@ impl Transaction {
 	}
 
 	/// Calculate transaction weight
-	pub fn tx_weight(&self) -> u32 {
+	pub fn tx_weight(&self) -> usize {
 		self.body.body_weight()
 	}
 
 	/// Calculate transaction weight as a block
-	pub fn tx_weight_as_block(&self) -> u32 {
+	pub fn tx_weight_as_block(&self) -> usize {
 		self.body.body_weight_as_block()
 	}
 
 	/// Calculate transaction weight from transaction details
-	pub fn weight(input_len: usize, output_len: usize, kernel_len: usize) -> u32 {
+	pub fn weight(input_len: usize, output_len: usize, kernel_len: usize) -> usize {
 		TransactionBody::weight(input_len, output_len, kernel_len)
 	}
 }
