@@ -29,16 +29,18 @@ use crate::util::secp::{self, Message, Secp256k1, Signature};
 pub struct ExtKeychain {
 	secp: Secp256k1,
 	master: ExtendedPrivKey,
+	use_switch_commitments: Option<bool>
 }
 
 impl Keychain for ExtKeychain {
-	fn from_seed(seed: &[u8]) -> Result<ExtKeychain, Error> {
+	fn from_seed(seed: &[u8], use_switch_commitments: bool) -> Result<ExtKeychain, Error> {
 		let mut h = BIP32GrinHasher::new();
 		let secp = secp::Secp256k1::with_caps(secp::ContextFlag::Commit);
 		let master = ExtendedPrivKey::new_master(&secp, &mut h, seed)?;
 		let keychain = ExtKeychain {
 			secp: secp,
 			master: master,
+			use_switch_commitments: Some(use_switch_commitments)
 		};
 		Ok(keychain)
 	}
@@ -49,15 +51,16 @@ impl Keychain for ExtKeychain {
 		let keychain = ExtKeychain {
 			secp: secp,
 			master: master,
+			use_switch_commitments: None
 		};
 		Ok(keychain)
 	}
 
 	/// For testing - probably not a good idea to use outside of tests.
-	fn from_random_seed() -> Result<ExtKeychain, Error> {
+	fn from_random_seed(use_switch_commitments: bool) -> Result<ExtKeychain, Error> {
 		let seed: String = thread_rng().sample_iter(&Alphanumeric).take(16).collect();
 		let seed = blake2::blake2b::blake2b(32, &[], seed.as_bytes());
-		ExtKeychain::from_seed(seed.as_bytes())
+		ExtKeychain::from_seed(seed.as_bytes(), use_switch_commitments)
 	}
 
 	fn root_key_id() -> Identifier {
@@ -68,19 +71,27 @@ impl Keychain for ExtKeychain {
 		ExtKeychainPath::new(depth, d1, d2, d3, d4).to_identifier()
 	}
 
-	fn derive_key(&self, id: &Identifier) -> Result<ExtendedPrivKey, Error> {
+	fn derive_key(&self, amount: u64, id: &Identifier) -> Result<SecretKey, Error> {
 		let mut h = BIP32GrinHasher::new();
 		let p = id.to_path();
-		let mut sk = self.master;
+		let mut ext_key = self.master;
 		for i in 0..p.depth {
-			sk = sk.ckd_priv(&self.secp, &mut h, p.path[i as usize])?;
+			ext_key = ext_key.ckd_priv(&self.secp, &mut h, p.path[i as usize])?;
 		}
-		Ok(sk)
+
+		// Switch commitments have to be explicitly turned on or off
+		let use_switch = self.use_switch_commitments.ok_or(Error::SwitchCommitment)?;
+		if use_switch {
+			Ok(self.secp.blind_switch(amount, ext_key.secret_key)?)
+		}
+		else {
+			Ok(ext_key.secret_key)
+		}
 	}
 
 	fn commit(&self, amount: u64, id: &Identifier) -> Result<Commitment, Error> {
-		let key = self.derive_key(id)?;
-		let commit = self.secp.commit(amount, key.secret_key)?;
+		let key = self.derive_key(amount, id)?;
+		let commit = self.secp.commit(amount, key)?;
 		Ok(commit)
 	}
 
@@ -89,9 +100,9 @@ impl Keychain for ExtKeychain {
 			.positive_key_ids
 			.iter()
 			.filter_map(|k| {
-				let res = self.derive_key(&Identifier::from_path(&k));
+				let res = self.derive_key(k.value, &Identifier::from_path(&k.ext_keychain_path));
 				if let Ok(s) = res {
-					Some(s.secret_key)
+					Some(s)
 				} else {
 					None
 				}
@@ -102,9 +113,9 @@ impl Keychain for ExtKeychain {
 			.negative_key_ids
 			.iter()
 			.filter_map(|k| {
-				let res = self.derive_key(&Identifier::from_path(&k));
+				let res = self.derive_key(k.value, &Identifier::from_path(&k.ext_keychain_path));
 				if let Ok(s) = res {
-					Some(s.secret_key)
+					Some(s)
 				} else {
 					None
 				}
@@ -131,9 +142,9 @@ impl Keychain for ExtKeychain {
 		Ok(BlindingFactor::from_secret_key(sum))
 	}
 
-	fn sign(&self, msg: &Message, id: &Identifier) -> Result<Signature, Error> {
-		let skey = self.derive_key(id)?;
-		let sig = self.secp.sign(msg, &skey.secret_key)?;
+	fn sign(&self, msg: &Message, amount: u64, id: &Identifier) -> Result<Signature, Error> {
+		let skey = self.derive_key(amount, id)?;
+		let sig = self.secp.sign(msg, &skey)?;
 		Ok(sig)
 	}
 
@@ -150,6 +161,10 @@ impl Keychain for ExtKeychain {
 	fn secp(&self) -> &Secp256k1 {
 		&self.secp
 	}
+
+	fn use_switch_commitments(&self) -> Option<bool> {
+		self.use_switch_commitments
+	}
 }
 
 #[cfg(test)]
@@ -162,6 +177,7 @@ mod test {
 	#[test]
 	fn test_key_derivation() {
 		let keychain = ExtKeychain::from_random_seed().unwrap();
+		keychain.set_use_switch_commitments(true);
 		let secp = keychain.secp();
 
 		let path = ExtKeychainPath::new(1, 1, 0, 0, 0);
@@ -175,7 +191,7 @@ mod test {
 		let commit = keychain.commit(0, &key_id).unwrap();
 
 		// now check we can use our key to verify a signature from this zero commitment
-		let sig = keychain.sign(&msg, &key_id).unwrap();
+		let sig = keychain.sign(&msg, 0, &key_id).unwrap();
 		secp.verify_from_commit(&msg, &sig, &commit).unwrap();
 	}
 
@@ -186,6 +202,7 @@ mod test {
 	#[test]
 	fn secret_key_addition() {
 		let keychain = ExtKeychain::from_random_seed().unwrap();
+		keychain.set_use_switch_commitments(false);
 
 		let skey1 = SecretKey::from_slice(
 			&keychain.secp,

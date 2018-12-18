@@ -406,6 +406,13 @@ fn comments() -> HashMap<String, String> {
 "
 		.to_string(),
 	);
+	retval.insert(
+		"use_switch_commitments".to_string(),
+		"
+#Whether to use switch commitments for this wallet
+"
+		.to_string(),
+	);
 
 	retval.insert(
 		"[logging]".to_string(),
