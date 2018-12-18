@@ -177,7 +177,7 @@ pub fn txs(
 				core::amount_to_hr_string(t.amount_debited - t.amount_credited, true)
 			)
 		};
-		let tx_data = match t.tx_hex {
+		let tx_data = match t.stored_tx {
 			Some(t) => format!("{}", t),
 			None => "None".to_owned(),
 		};

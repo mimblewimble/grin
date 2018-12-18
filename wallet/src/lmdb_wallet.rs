@@ -262,7 +262,7 @@ where
 	}
 
 	fn get_stored_tx(&self, entry: &TxLogEntry) -> Result<Option<Transaction>, Error> {
-		let filename = match entry.tx_hex.clone() {
+		let filename = match entry.stored_tx.clone() {
 			Some(f) => f,
 			None => return Ok(None),
 		};

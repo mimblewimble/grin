@@ -600,9 +600,8 @@ pub struct TxLogEntry {
 	pub amount_debited: u64,
 	/// Fee
 	pub fee: Option<u64>,
-	// TODO: rename this to 'stored_tx_file' or something for mainnet
-	/// The transaction json itself, stored for reference or resending
-	pub tx_hex: Option<String>,
+	/// Location of the store transaction, (reference or resending)
+	pub stored_tx: Option<String>,
 }
 
 impl ser::Writeable for TxLogEntry {
@@ -634,7 +633,7 @@ impl TxLogEntry {
 			num_inputs: 0,
 			num_outputs: 0,
 			fee: None,
-			tx_hex: None,
+			stored_tx: None,
 		}
 	}
 
