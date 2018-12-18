@@ -458,13 +458,7 @@ where
 
 	debug!("receive_coinbase: {:?}", block_fees);
 
-	let (out, kern) = reward::output(
-		wallet.keychain(),
-		&key_id,
-		block_fees.fees,
-		block_fees.height,
-	)
-	.unwrap();
+	let (out, kern) = reward::output(wallet.keychain(), &key_id, block_fees.fees).unwrap();
 	/* .context(ErrorKind::Keychain)?; */
 	Ok((out, kern, block_fees))
 }

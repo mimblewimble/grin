@@ -241,14 +241,14 @@ pub fn verify_partial_sig(
 /// let commit = keychain.commit(value, &key_id).unwrap();
 /// let rproof = proof::create(&keychain, value, &key_id, commit, None).unwrap();
 /// let output = Output {
-///		features: OutputFeatures::COINBASE_OUTPUT,
+///		features: OutputFeatures::COINBASE,
 ///		commit: commit,
 ///		proof: rproof,
 /// };
 /// let height = 20;
 /// let over_commit = secp.commit_value(reward(fees)).unwrap();
 /// let out_commit = output.commitment();
-/// let msg = kernel_sig_msg(0, height, KernelFeatures::DEFAULT_KERNEL).unwrap();
+/// let msg = kernel_sig_msg(0, height, KernelFeatures::HEIGHT_LOCKED).unwrap();
 /// let excess = secp.commit_sum(vec![out_commit], vec![over_commit]).unwrap();
 /// let pubkey = excess.to_pubkey(&secp).unwrap();
 /// let sig = aggsig::sign_from_key_id(&secp, &keychain, &msg, value, &key_id, Some(&pubkey)).unwrap();
@@ -315,14 +315,14 @@ where
 /// let commit = keychain.commit(value, &key_id).unwrap();
 /// let rproof = proof::create(&keychain, value, &key_id, commit, None).unwrap();
 /// let output = Output {
-///		features: OutputFeatures::COINBASE_OUTPUT,
+///		features: OutputFeatures::COINBASE,
 ///		commit: commit,
 ///		proof: rproof,
 /// };
 /// let height = 20;
 /// let over_commit = secp.commit_value(reward(fees)).unwrap();
 /// let out_commit = output.commitment();
-/// let msg = kernel_sig_msg(0, height, KernelFeatures::DEFAULT_KERNEL).unwrap();
+/// let msg = kernel_sig_msg(0, height, KernelFeatures::HEIGHT_LOCKED).unwrap();
 /// let excess = secp.commit_sum(vec![out_commit], vec![over_commit]).unwrap();
 /// let pubkey = excess.to_pubkey(&secp).unwrap();
 /// let sig = aggsig::sign_from_key_id(&secp, &keychain, &msg, value, &key_id, Some(&pubkey)).unwrap();

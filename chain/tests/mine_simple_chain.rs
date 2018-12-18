@@ -70,7 +70,7 @@ fn mine_genesis_reward_chain() {
 	let mut genesis = genesis::genesis_dev();
 	let keychain = keychain::ExtKeychain::from_random_seed().unwrap();
 	let key_id = keychain::ExtKeychain::derive_key_id(0, 1, 0, 0, 0);
-	let reward = reward::output(&keychain, &key_id, 0, 0).unwrap();
+	let reward = reward::output(&keychain, &key_id, 0).unwrap();
 	genesis = genesis.with_reward(reward.0, reward.1);
 
 	{
@@ -103,7 +103,7 @@ where
 		let prev = chain.head_header().unwrap();
 		let next_header_info = consensus::next_difficulty(1, chain.difficulty_iter());
 		let pk = ExtKeychainPath::new(1, n as u32, 0, 0, 0).to_identifier();
-		let reward = libtx::reward::output(keychain, &pk, 0, prev.height).unwrap();
+		let reward = libtx::reward::output(keychain, &pk, 0).unwrap();
 		let mut b =
 			core::core::Block::new(&prev, vec![], next_header_info.clone().difficulty, reward)
 				.unwrap();
@@ -283,7 +283,7 @@ fn spend_in_fork_and_compact() {
 	// so we can spend the coinbase later
 	let b = prepare_block(&kc, &fork_head, &chain, 2);
 	let out_id = OutputIdentifier::from_output(&b.outputs()[0]);
-	assert!(out_id.features.contains(OutputFeatures::COINBASE_OUTPUT));
+	assert!(out_id.features.is_coinbase());
 	fork_head = b.header.clone();
 	chain
 		.process_block(b.clone(), chain::Options::SKIP_POW)
@@ -411,7 +411,7 @@ fn output_header_mappings() {
 		let prev = chain.head_header().unwrap();
 		let next_header_info = consensus::next_difficulty(1, chain.difficulty_iter());
 		let pk = ExtKeychainPath::new(1, n as u32, 0, 0, 0).to_identifier();
-		let reward = libtx::reward::output(&keychain, &pk, 0, prev.height).unwrap();
+		let reward = libtx::reward::output(&keychain, &pk, 0).unwrap();
 		reward_outputs.push(reward.0.clone());
 		let mut b =
 			core::core::Block::new(&prev, vec![], next_header_info.clone().difficulty, reward)
@@ -511,7 +511,7 @@ where
 	let key_id = ExtKeychainPath::new(1, diff as u32, 0, 0, 0).to_identifier();
 
 	let fees = txs.iter().map(|tx| tx.fee()).sum();
-	let reward = libtx::reward::output(kc, &key_id, fees, prev.height).unwrap();
+	let reward = libtx::reward::output(kc, &key_id, fees).unwrap();
 	let mut b = match core::core::Block::new(
 		prev,
 		txs.into_iter().cloned().collect(),

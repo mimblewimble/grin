@@ -27,7 +27,6 @@ pub fn output<K>(
 	keychain: &K,
 	key_id: &Identifier,
 	fees: u64,
-	height: u64,
 ) -> Result<(Output, TxKernel), Error>
 where
 	K: Keychain,
@@ -40,7 +39,7 @@ where
 	let rproof = proof::create(keychain, value, key_id, commit, None)?;
 
 	let output = Output {
-		features: OutputFeatures::COINBASE_OUTPUT,
+		features: OutputFeatures::COINBASE,
 		commit: commit,
 		proof: rproof,
 	};
@@ -53,22 +52,18 @@ where
 	let pubkey = excess.to_pubkey(&secp)?;
 
 	// NOTE: Remember we sign the fee *and* the lock_height.
-	// For a coinbase output the fee is 0 and the lock_height is
-	// the lock_height of the coinbase output itself,
-	// not the lock_height of the tx (there is no tx for a coinbase output).
-	// This output will not be spendable earlier than lock_height (and we sign this
-	// here).
-	let msg = kernel_sig_msg(0, height, KernelFeatures::COINBASE_KERNEL)?;
+	// For a coinbase output the fee is 0 and the lock_height is 0
+	let msg = kernel_sig_msg(0, 0, KernelFeatures::COINBASE)?;
 	let sig = aggsig::sign_from_key_id(&secp, keychain, &msg, value, &key_id, Some(&pubkey))?;
 
 	let proof = TxKernel {
-		features: KernelFeatures::COINBASE_KERNEL,
+		features: KernelFeatures::COINBASE,
 		excess: excess,
 		excess_sig: sig,
 		fee: 0,
-		// lock_height here is the height of the block (tx should be valid immediately)
-		// *not* the lock_height of the coinbase output (only spendable 1,000 blocks later)
-		lock_height: height,
+		// lock_height here is 0
+		// *not* the maturity of the coinbase output (only spendable 1,440 blocks later)
+		lock_height: 0,
 	};
 	Ok((output, proof))
 }
