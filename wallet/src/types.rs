@@ -62,7 +62,7 @@ pub struct WalletConfig {
 impl Default for WalletConfig {
 	fn default() -> WalletConfig {
 		WalletConfig {
-			chain_type: Some(ChainTypes::Testnet4),
+			chain_type: Some(ChainTypes::Floonet),
 			api_listen_interface: "127.0.0.1".to_string(),
 			api_listen_port: 13415,
 			api_secret_path: Some(".api_secret".to_string()),

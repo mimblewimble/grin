@@ -20,7 +20,7 @@ use crate::consensus::HeaderInfo;
 use crate::consensus::{
 	graph_weight, BASE_EDGE_BITS, BLOCK_TIME_SEC, COINBASE_MATURITY, CUT_THROUGH_HORIZON,
 	DAY_HEIGHT, DEFAULT_MIN_EDGE_BITS, DIFFICULTY_ADJUST_WINDOW, INITIAL_DIFFICULTY, PROOFSIZE,
-	SECOND_POW_EDGE_BITS, STATE_SYNC_THRESHOLD, T4_CUCKAROO_HARDFORK, UNIT_DIFFICULTY,
+	SECOND_POW_EDGE_BITS, STATE_SYNC_THRESHOLD,
 };
 use crate::pow::{self, new_cuckaroo_ctx, new_cuckatoo_ctx, EdgeType, PoWContext};
 /// An enum collecting sets of parameters used throughout the
@@ -62,13 +62,6 @@ pub const TESTING_INITIAL_GRAPH_WEIGHT: u32 = 1;
 /// Testing initial block difficulty
 pub const TESTING_INITIAL_DIFFICULTY: u64 = 1;
 
-/// Testnet 2 initial block difficulty, high to see how it goes
-pub const TESTNET2_INITIAL_DIFFICULTY: u64 = 1000;
-
-/// Testnet 3 initial block difficulty, moderately high, taking into account
-/// a 30x Cuckoo adjustment factor
-pub const TESTNET3_INITIAL_DIFFICULTY: u64 = 30000;
-
 /// If a peer's last updated difficulty is 2 hours ago and its difficulty's lower than ours,
 /// we're sure this peer is a stuck node, and we will kick out such kind of stuck peers.
 pub const STUCK_PEER_KICK_TIME: i64 = 2 * 3600 * 1000;
@@ -78,13 +71,6 @@ const PEER_EXPIRATION_DAYS: i64 = 7 * 2;
 
 /// Constant that expresses defunct peer timeout in seconds to be used in checks.
 pub const PEER_EXPIRATION_REMOVE_TIME: i64 = PEER_EXPIRATION_DAYS * 24 * 3600;
-
-/// Testnet 4 initial block difficulty
-/// 1_000 times natural scale factor for cuckatoo29
-pub const TESTNET4_INITIAL_DIFFICULTY: u64 = 1_000 * UNIT_DIFFICULTY;
-
-/// Cuckatoo edge_bits on T4
-pub const TESTNET4_MIN_EDGE_BITS: u8 = 30;
 
 /// Trigger compaction check on average every day for all nodes.
 /// Randomized per node - roll the dice on every block to decide.
@@ -101,21 +87,15 @@ pub enum ChainTypes {
 	AutomatedTesting,
 	/// For User testing
 	UserTesting,
-	/// First test network
-	Testnet1,
-	/// Second test network
-	Testnet2,
-	/// Third test network
-	Testnet3,
-	/// Fourth test network
-	Testnet4,
+	/// Protocol testing network
+	Floonet,
 	/// Main production network
 	Mainnet,
 }
 
 impl Default for ChainTypes {
 	fn default() -> ChainTypes {
-		ChainTypes::Testnet4
+		ChainTypes::Floonet
 	}
 }
 
@@ -149,7 +129,7 @@ pub fn set_mining_mode(mode: ChainTypes) {
 /// Return either a cuckoo context or a cuckatoo context
 /// Single change point
 pub fn create_pow_context<T>(
-	height: u64,
+	_height: u64,
 	edge_bits: u8,
 	proof_size: usize,
 	max_sols: u32,
@@ -163,12 +143,9 @@ where
 		ChainTypes::Mainnet if edge_bits == 29 => new_cuckaroo_ctx(edge_bits, proof_size),
 		ChainTypes::Mainnet => new_cuckatoo_ctx(edge_bits, proof_size, max_sols),
 
-		// T4 has Cuckatoo for everything up to hard fork, then Cuckaroo29 for AR
-		// and Cuckatoo30+ for AF PoW
-		ChainTypes::Testnet4 if edge_bits == 29 && height >= T4_CUCKAROO_HARDFORK => {
-			new_cuckaroo_ctx(edge_bits, proof_size)
-		}
-		ChainTypes::Testnet4 => new_cuckatoo_ctx(edge_bits, proof_size, max_sols),
+		// Same for Floonet
+		ChainTypes::Floonet if edge_bits == 29 => new_cuckaroo_ctx(edge_bits, proof_size),
+		ChainTypes::Floonet => new_cuckatoo_ctx(edge_bits, proof_size, max_sols),
 
 		// Everything else is Cuckatoo only
 		_ => new_cuckatoo_ctx(edge_bits, proof_size, max_sols),
@@ -186,8 +163,6 @@ pub fn min_edge_bits() -> u8 {
 	match *param_ref {
 		ChainTypes::AutomatedTesting => AUTOMATED_TESTING_MIN_EDGE_BITS,
 		ChainTypes::UserTesting => USER_TESTING_MIN_EDGE_BITS,
-		ChainTypes::Testnet1 => USER_TESTING_MIN_EDGE_BITS,
-		ChainTypes::Testnet4 => TESTNET4_MIN_EDGE_BITS,
 		_ => DEFAULT_MIN_EDGE_BITS,
 	}
 }
@@ -200,7 +175,6 @@ pub fn base_edge_bits() -> u8 {
 	match *param_ref {
 		ChainTypes::AutomatedTesting => AUTOMATED_TESTING_MIN_EDGE_BITS,
 		ChainTypes::UserTesting => USER_TESTING_MIN_EDGE_BITS,
-		ChainTypes::Testnet1 => USER_TESTING_MIN_EDGE_BITS,
 		_ => BASE_EDGE_BITS,
 	}
 }
@@ -231,10 +205,7 @@ pub fn initial_block_difficulty() -> u64 {
 	match *param_ref {
 		ChainTypes::AutomatedTesting => TESTING_INITIAL_DIFFICULTY,
 		ChainTypes::UserTesting => TESTING_INITIAL_DIFFICULTY,
-		ChainTypes::Testnet1 => TESTING_INITIAL_DIFFICULTY,
-		ChainTypes::Testnet2 => TESTNET2_INITIAL_DIFFICULTY,
-		ChainTypes::Testnet3 => TESTNET3_INITIAL_DIFFICULTY,
-		ChainTypes::Testnet4 => TESTNET4_INITIAL_DIFFICULTY,
+		ChainTypes::Floonet => INITIAL_DIFFICULTY,
 		ChainTypes::Mainnet => INITIAL_DIFFICULTY,
 	}
 }
@@ -244,10 +215,7 @@ pub fn initial_graph_weight() -> u32 {
 	match *param_ref {
 		ChainTypes::AutomatedTesting => TESTING_INITIAL_GRAPH_WEIGHT,
 		ChainTypes::UserTesting => TESTING_INITIAL_GRAPH_WEIGHT,
-		ChainTypes::Testnet1 => TESTING_INITIAL_GRAPH_WEIGHT,
-		ChainTypes::Testnet2 => TESTING_INITIAL_GRAPH_WEIGHT,
-		ChainTypes::Testnet3 => TESTING_INITIAL_GRAPH_WEIGHT,
-		ChainTypes::Testnet4 => graph_weight(0, SECOND_POW_EDGE_BITS) as u32,
+		ChainTypes::Floonet => graph_weight(0, SECOND_POW_EDGE_BITS) as u32,
 		ChainTypes::Mainnet => graph_weight(0, SECOND_POW_EDGE_BITS) as u32,
 	}
 }
@@ -288,20 +256,14 @@ pub fn is_user_testing_mode() -> bool {
 /// Production defined as a live public network, testnet[n] or mainnet.
 pub fn is_production_mode() -> bool {
 	let param_ref = CHAIN_TYPE.read();
-	ChainTypes::Testnet1 == *param_ref
-		|| ChainTypes::Testnet2 == *param_ref
-		|| ChainTypes::Testnet3 == *param_ref
-		|| ChainTypes::Testnet4 == *param_ref
+	ChainTypes::Floonet == *param_ref
 		|| ChainTypes::Mainnet == *param_ref
 }
 
 /// Are we in one of our (many) testnets?
 pub fn is_testnet() -> bool {
 	let param_ref = CHAIN_TYPE.read();
-	ChainTypes::Testnet1 == *param_ref
-		|| ChainTypes::Testnet2 == *param_ref
-		|| ChainTypes::Testnet3 == *param_ref
-		|| ChainTypes::Testnet4 == *param_ref
+	ChainTypes::Floonet == *param_ref
 }
 
 /// Helper function to get a nonce known to create a valid POW on
@@ -316,9 +278,9 @@ pub fn get_genesis_nonce() -> u64 {
 		// Magic nonce for current genesis block at cuckatoo15
 		ChainTypes::UserTesting => 27944,
 		// Placeholder, obviously not the right value
+		ChainTypes::Floonet => 0,
+		// Placeholder, obviously not the right value
 		ChainTypes::Mainnet => 0,
-		// Magic nonce for genesis block for testnet2 (cuckatoo29)
-		_ => panic!("Pre-set"),
 	}
 }
 

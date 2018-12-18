@@ -206,18 +206,6 @@ fn add_block(
 	ret_chain_sim
 }
 
-// Adds many defined blocks
-fn add_blocks(
-	intervals: Vec<u64>,
-	chain_sim: Vec<(HeaderInfo, DiffStats)>,
-) -> Vec<(HeaderInfo, DiffStats)> {
-	let mut return_chain = chain_sim.clone();
-	for i in intervals {
-		return_chain = add_block(i, return_chain.clone());
-	}
-	return_chain
-}
-
 // Adds another n 'blocks' to the iterator, with difficulty calculated
 fn add_block_repeated(
 	interval: u64,
@@ -355,25 +343,6 @@ fn adjustment_scenarios() {
 	print_chain_sim(chain_sim);
 	println!("*********************************************************");
 
-	// Actual testnet 2 timings
-	let testnet2_intervals = [
-		2880, 16701, 1882, 3466, 614, 605, 1551, 538, 931, 23, 690, 1397, 2112, 2058, 605, 721,
-		2148, 1605, 134, 1234, 1569, 482, 1775, 2732, 540, 958, 883, 3475, 518, 1346, 1926, 780,
-		865, 269, 1079, 141, 105, 781, 289, 256, 709, 68, 165, 1813, 3899, 1458, 955, 2336, 239,
-		674, 1059, 157, 214, 15, 157, 558, 1945, 1677, 1825, 1307, 1973, 660, 77, 3134, 410, 347,
-		537, 649, 325, 370, 2271, 106, 19, 329,
-	];
-
-	global::set_mining_mode(global::ChainTypes::Testnet2);
-	let chain_sim = create_chain_sim(global::initial_block_difficulty());
-	let chain_sim = add_blocks(testnet2_intervals.to_vec(), chain_sim);
-
-	println!("");
-	println!("*********************************************************");
-	println!("Scenario 6) Testnet2");
-	println!("*********************************************************");
-	print_chain_sim(chain_sim);
-	println!("*********************************************************");
 }
 
 /// Checks different next_target adjustments and difficulty boundaries
@@ -526,7 +495,7 @@ fn test_secondary_pow_ratio() {
 
 	// Tests for testnet4 chain type (covers pre and post hardfork).
 	{
-		global::set_mining_mode(global::ChainTypes::Testnet4);
+		global::set_mining_mode(global::ChainTypes::Floonet);
 		assert_eq!(global::is_testnet(), true);
 
 		assert_eq!(secondary_pow_ratio(1), 90);
@@ -539,16 +508,16 @@ fn test_secondary_pow_ratio() {
 
 		let one_week = 60 * 24 * 7;
 		assert_eq!(secondary_pow_ratio(one_week - 1), 90);
-		assert_eq!(secondary_pow_ratio(one_week), 89);
-		assert_eq!(secondary_pow_ratio(one_week + 1), 89);
+		assert_eq!(secondary_pow_ratio(one_week), 90);
+		assert_eq!(secondary_pow_ratio(one_week + 1), 90);
 
 		let two_weeks = one_week * 2;
 		assert_eq!(secondary_pow_ratio(two_weeks - 1), 89);
-		assert_eq!(secondary_pow_ratio(two_weeks), 88);
-		assert_eq!(secondary_pow_ratio(two_weeks + 1), 88);
+		assert_eq!(secondary_pow_ratio(two_weeks), 89);
+		assert_eq!(secondary_pow_ratio(two_weeks + 1), 89);
 
 		let t4_fork_height = 64_000;
-		assert_eq!(secondary_pow_ratio(t4_fork_height - 1), 84);
+		assert_eq!(secondary_pow_ratio(t4_fork_height - 1), 85);
 		assert_eq!(secondary_pow_ratio(t4_fork_height), 85);
 		assert_eq!(secondary_pow_ratio(t4_fork_height + 1), 85);
 
@@ -572,9 +541,9 @@ fn test_secondary_pow_scale() {
 	let window = DIFFICULTY_ADJUST_WINDOW;
 	let mut hi = HeaderInfo::from_diff_scaling(Difficulty::from_num(10), 100);
 
-	// testnet4 testing
+	// floonet testing
 	{
-		global::set_mining_mode(global::ChainTypes::Testnet4);
+		global::set_mining_mode(global::ChainTypes::Floonet);
 		assert_eq!(global::is_testnet(), true);
 
 		// all primary, factor should increase so it becomes easier to find a high
@@ -582,13 +551,13 @@ fn test_secondary_pow_scale() {
 		hi.is_secondary = false;
 		assert_eq!(
 			secondary_pow_scaling(1, &(0..window).map(|_| hi.clone()).collect::<Vec<_>>()),
-			147
+			106
 		);
 		// all secondary on 90%, factor should go down a bit
 		hi.is_secondary = true;
 		assert_eq!(
 			secondary_pow_scaling(1, &(0..window).map(|_| hi.clone()).collect::<Vec<_>>()),
-			94
+			97
 		);
 		// all secondary on 1%, factor should go down to bound (divide by 2)
 		assert_eq!(
@@ -631,7 +600,7 @@ fn test_secondary_pow_scale() {
 					.chain((0..(window * 95 / 100)).map(|_| hi.clone()))
 					.collect::<Vec<_>>()
 			),
-			94
+			96
 		);
 		// 40% secondary, should come up based on 70 average
 		assert_eq!(
@@ -642,7 +611,7 @@ fn test_secondary_pow_scale() {
 					.chain((0..(window * 4 / 10)).map(|_| hi.clone()))
 					.collect::<Vec<_>>()
 			),
-			84
+			72
 		);
 	}
 
