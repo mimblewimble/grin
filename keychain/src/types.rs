@@ -44,7 +44,7 @@ pub enum Error {
 	KeyDerivation(extkey_bip32::Error),
 	Transaction(String),
 	RangeProof(String),
-	SwitchCommitment
+	SwitchCommitment,
 }
 
 impl From<secp::Error> for Error {
@@ -130,7 +130,7 @@ impl Identifier {
 	pub fn to_value_path(&self, value: u64) -> ValueExtKeychainPath {
 		ValueExtKeychainPath {
 			value,
-			ext_keychain_path: self.to_path()
+			ext_keychain_path: self.to_path(),
 		}
 	}
 
@@ -442,7 +442,7 @@ impl ExtKeychainPath {
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Deserialize)]
 pub struct ValueExtKeychainPath {
 	pub value: u64,
-	pub ext_keychain_path: ExtKeychainPath
+	pub ext_keychain_path: ExtKeychainPath,
 }
 
 pub trait Keychain: Sync + Send + Clone {

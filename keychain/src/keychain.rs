@@ -79,7 +79,6 @@ impl Keychain for ExtKeychain {
 		// use switch commit for generating keys
 		let key = self.secp.blind_switch(amount, ext_key.secret_key)?;
 		Ok(key)
-
 	}
 
 	fn commit(&self, amount: u64, id: &Identifier) -> Result<Commitment, Error> {
@@ -154,7 +153,6 @@ impl Keychain for ExtKeychain {
 	fn secp(&self) -> &Secp256k1 {
 		&self.secp
 	}
-
 }
 
 #[cfg(test)]
