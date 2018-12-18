@@ -524,7 +524,7 @@ Grin Stratum protocol implementation contains the following error message:
 
 Miners SHOULD, MAY or MUST respect the following rules:
 
-- Miners SHOULD randomize the job nonce before starting (not the way it is now, the way it should be)
+- Miners SHOULD randomize the job nonce before starting
 - Miners MUST continue mining the same job until the server sends a new one, though a miner MAY request a new job at any time
 - Miners MUST NOT send an rpc response to a job request from the server
 - Miners MAY set the RPC "id" and expect responses to have that same id

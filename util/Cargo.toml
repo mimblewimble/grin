@@ -24,8 +24,8 @@ zip = "0.4"
 parking_lot = {version = "0.6"}
 
 [dependencies.grin_secp256k1zkp]
-#git = "https://github.com/mimblewimble/rust-secp256k1-zkp"
-#tag = "grin_integration_28"
+git = "https://github.com/mimblewimble/rust-secp256k1-zkp"
+tag = "grin_integration_29"
 #path = "../../rust-secp256k1-zkp"
-version = "0.7.1"
+#version = "0.7.1"
 features = ["bullet-proof-sizing"]
