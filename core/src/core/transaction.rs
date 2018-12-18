@@ -36,6 +36,14 @@ use std::collections::HashSet;
 use std::sync::Arc;
 use std::{error, fmt};
 
+/// KernelFeatures TOTALLY needs to be a sumtype / tagged union as
+/// pub enum KernelFeatures {
+/// 	COINBASE,
+///	PLAIN { fee: u64 },
+///	HEIGHTLOCKED { fee: u64, lock_height: u64 },
+/// }
+/// Similarly for OutputFeatures
+///
 bitflags! {
 	/// Options for a kernel's structure or use
 	#[derive(Serialize, Deserialize)]
@@ -1366,7 +1374,7 @@ pub fn kernel_sig_msg(
 	let hash = match features {
 		KernelFeatures::COINBASE => features.hash(),
 		KernelFeatures::PLAIN => (features, fee).hash(),
-		KernelFeatures::HEIGHT_LOCKED => (features, fee, lock_height).hash(),
+		_ => (features, fee, lock_height).hash(),
 	};
 	let msg = secp::Message::from_slice(&hash.as_bytes())?;
 	Ok(msg)

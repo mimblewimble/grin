@@ -166,14 +166,14 @@ pub fn genesis_main() -> core::Block {
 		..Default::default()
 	});
 	let kernel = core::TxKernel {
-		features: core::KernelFeatures::COINBASE_KERNEL,
+		features: core::KernelFeatures::COINBASE,
 		fee: 0,
 		lock_height: 0,
 		excess: Commitment::from_vec(vec![]), // REPLACE
 		excess_sig: Signature::from_raw_data(&[0; 64]).unwrap(), //REPLACE
 	};
 	let output = core::Output {
-		features: core::OutputFeatures::COINBASE_OUTPUT,
+		features: core::OutputFeatures::COINBASE,
 		commit: Commitment::from_vec(vec![]), // REPLACE
 		proof: RangeProof {
 			plen: SINGLE_BULLET_PROOF_SIZE,
