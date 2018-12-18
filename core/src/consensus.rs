@@ -62,32 +62,13 @@ pub const COINBASE_MATURITY: u64 = DAY_HEIGHT;
 /// function of block height (time). Starts at 90% losing a percent
 /// approximately every week. Represented as an integer between 0 and 100.
 pub fn secondary_pow_ratio(height: u64) -> u64 {
-	if global::is_testnet() {
-		if height < T4_CUCKAROO_HARDFORK {
-			// Maintaining pre hardfork testnet4 behavior
-			90u64.saturating_sub(height / WEEK_HEIGHT)
-		} else {
-			90u64.saturating_sub(height / (2 * YEAR_HEIGHT / 90))
-		}
-	} else {
-		// Mainnet (or testing mainnet code).
-		90u64.saturating_sub(height / (2 * YEAR_HEIGHT / 90))
-	}
+	90u64.saturating_sub(height / (2 * YEAR_HEIGHT / 90))
 }
 
 /// The AR scale damping factor to use. Dependent on block height
 /// to account for pre HF behavior on testnet4.
-fn ar_scale_damp_factor(height: u64) -> u64 {
-	if global::is_testnet() {
-		if height < T4_CUCKAROO_HARDFORK {
-			DIFFICULTY_DAMP_FACTOR
-		} else {
-			AR_SCALE_DAMP_FACTOR
-		}
-	} else {
-		// Mainnet (or testing mainnet code).
-		AR_SCALE_DAMP_FACTOR
-	}
+fn ar_scale_damp_factor(_height: u64) -> u64 {
+	AR_SCALE_DAMP_FACTOR
 }
 
 /// Cuckoo-cycle proof size (cycle length)
@@ -98,10 +79,6 @@ pub const DEFAULT_MIN_EDGE_BITS: u8 = 31;
 
 /// Cuckaroo proof-of-work edge_bits, meant to be ASIC resistant.
 pub const SECOND_POW_EDGE_BITS: u8 = 29;
-
-/// Block height at which testnet 4 hard forks to use Cuckaroo instead of
-/// Cuckatoo for ASIC-resistant PoW
-pub const T4_CUCKAROO_HARDFORK: u64 = 64_000;
 
 /// Original reference edge_bits to compute difficulty factors for higher
 /// Cuckoo graph sizes, changing this would hard fork
@@ -332,15 +309,10 @@ where
 /// Count the number of "secondary" (AR) blocks in the provided window of blocks.
 /// Note: we skip the first one, but testnet4 was incorrectly including it before
 /// the hardfork.
-fn ar_count(height: u64, diff_data: &[HeaderInfo]) -> u64 {
-	let mut to_skip = 1;
-	if global::is_testnet() && height < T4_CUCKAROO_HARDFORK {
-		// Maintain behavior of testnet4 pre-HF.
-		to_skip = 0;
-	}
+fn ar_count(_height: u64, diff_data: &[HeaderInfo]) -> u64 {
 	100 * diff_data
 		.iter()
-		.skip(to_skip)
+		.skip(1)
 		.filter(|n| n.is_secondary)
 		.count() as u64
 }
