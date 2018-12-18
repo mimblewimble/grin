@@ -72,8 +72,6 @@ fn tx_double_ser_deser() {
 	assert_eq!(dtx.hash(), dtx2.hash());
 }
 
-// construction doesn't work with switch commits enforced
-#[ignore]
 #[test]
 #[should_panic(expected = "Keychain Error")]
 fn test_zero_commit_fails() {
@@ -84,8 +82,7 @@ fn test_zero_commit_fails() {
 	build::transaction(
 		vec![
 			input(10, key_id1.clone()),
-			output(9, key_id1.clone()),
-			with_fee(1),
+			output(10, key_id1.clone()),
 		],
 		&keychain,
 	)
