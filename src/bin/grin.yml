@@ -149,7 +149,7 @@ subcommands:
                   possible_values:
                     - all
                     - smallest
-                  default_value: all
+                  default_value: smallest
                   takes_value: true
               - change_outputs:
                   help: Number of change outputs to generate (mainly for testing)
