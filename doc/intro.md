@@ -21,8 +21,7 @@ The main goal and characteristics of the Grin project are:
 * Strong and proven cryptography. MimbleWimble only relies on Elliptic Curve
   Cryptography which has been tried and tested for decades.
 * Design simplicity that makes it easy to audit and maintain over time.
-* Community driven, using an asic-resistant mining algorithm (Cuckoo Cycle)
-  encouraging mining decentralization.
+* Community driven, encouraging mining decentralization.
 
 ## Tongue Tying for Everyone
 
