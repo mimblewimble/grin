@@ -13,9 +13,9 @@
 // limitations under the License.
 
 //! Mining Stratum Server
-use crate::util::{Mutex, RwLock};
 use bufstream::BufStream;
 use chrono::prelude::Utc;
+use crate::util::{Mutex, RwLock};
 use serde;
 use serde_json;
 use serde_json::Value;
@@ -530,10 +530,9 @@ impl StratumServer {
 			if !pow::verify_size(&b.header).is_ok() {
 				// Return error status
 				error!(
-					"(Server ID: {}) Failed to validate share at height {}, nonce {}, hash {}, with {} edge_bits with nonce {} using job_id {}",
+					"(Server ID: {}) Failed to validate share at height {}, hash {}, with {} edge_bits with nonce {} using job_id {}",
 					self.id,
 					params.height,
-                                        params.nonce,
                                         b.hash(),
 					params.edge_bits,
 					b.header.pow.nonce,
