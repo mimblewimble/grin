@@ -165,7 +165,12 @@ impl TransactionPool {
 		// If new tx - add it to our stempool.
 		// If we have seen any of the kernels before then fallback to fluff,
 		// adding directly to txpool.
-		if stem && self.stempool.find_matching_transactions(entry.tx.kernels()).is_empty() {
+		if stem
+			&& self
+				.stempool
+				.find_matching_transactions(entry.tx.kernels())
+				.is_empty()
+		{
 			self.add_to_stempool(entry, header)?;
 			return Ok(());
 		}
