@@ -36,8 +36,7 @@ use crate::types::{
 pub struct Peers {
 	pub adapter: Arc<dyn ChainAdapter>,
 	store: PeerStore,
-	peers: RwLock<HashMap<PeerAddr, Arc<Peer>>>,
-	dandelion_relay: RwLock<Option<(i64, Arc<Peer>)>>,
+	peers: RwLock<HashMap<SocketAddr, Arc<Peer>>>,
 	config: P2PConfig,
 }
 
@@ -48,7 +47,6 @@ impl Peers {
 			store,
 			config,
 			peers: RwLock::new(HashMap::new()),
-			dandelion_relay: RwLock::new(None),
 		}
 	}
 
@@ -87,38 +85,39 @@ impl Peers {
 		self.save_peer(&peer_data)
 	}
 
-	// Update the dandelion relay
-	pub fn update_dandelion_relay(&self) {
-		let peers = self.outgoing_connected_peers();
-
-		let peer = &self
-			.config
-			.dandelion_peer
-			.and_then(|ip| peers.iter().find(|x| x.info.addr == ip))
-			.or(thread_rng().choose(&peers));
-
-		match peer {
-			Some(peer) => self.set_dandelion_relay(peer),
-			None => debug!("Could not update dandelion relay"),
-		}
-	}
-
-	fn set_dandelion_relay(&self, peer: &Arc<Peer>) {
-		// Clear the map and add new relay
-		let dandelion_relay = &self.dandelion_relay;
-		dandelion_relay
-			.write()
-			.replace((Utc::now().timestamp(), peer.clone()));
-		debug!(
-			"Successfully updated Dandelion relay to: {}",
-			peer.info.addr
-		);
-	}
-
-	// Get the dandelion relay
-	pub fn get_dandelion_relay(&self) -> Option<(i64, Arc<Peer>)> {
-		self.dandelion_relay.read().clone()
-	}
+	// // Update the dandelion relay
+	// pub fn update_dandelion_relay(&self) {
+	// 	let peers = self.outgoing_connected_peers();
+	//
+	// 	let peer = &self
+	// 		.config
+	// 		.dandelion_peer
+	// 		.and_then(|ip| peers.iter().find(|x| x.info.addr == ip))
+	// 		.or(thread_rng().choose(&peers));
+	//
+	// 	match peer {
+	// 		Some(peer) => self.set_dandelion_relay(peer),
+	// 		None => debug!("Could not update dandelion relay"),
+	// 	}
+	// }
+	//
+	// fn set_dandelion_relay(&self, peer: &Arc<Peer>) {
+	// 	// Clear the map and add new relay
+	// 	let dandelion_relay = &self.dandelion_relay;
+	// 	dandelion_relay.write().clear();
+	// 	dandelion_relay
+	// 		.write()
+	// 		.insert(Utc::now().timestamp(), peer.clone());
+	// 	debug!(
+	// 		"Successfully updated Dandelion relay to: {}",
+	// 		peer.info.addr
+	// 	);
+	// }
+	//
+	// // Get the dandelion relay
+	// pub fn get_dandelion_relay(&self) -> HashMap<i64, Arc<Peer>> {
+	// 	self.dandelion_relay.read().clone()
+	// }
 
 	pub fn is_known(&self, addr: PeerAddr) -> bool {
 		self.peers.read().contains_key(&addr)
@@ -335,29 +334,29 @@ impl Peers {
 		);
 	}
 
-	/// Relays the provided stem transaction to our single stem peer.
-	pub fn relay_stem_transaction(&self, tx: &core::Transaction) -> Result<(), Error> {
-		self.get_dandelion_relay()
-			.or_else(|| {
-				debug!("No dandelion relay, updating.");
-				self.update_dandelion_relay();
-				self.get_dandelion_relay()
-			})
-			// If still return an error, let the caller handle this as they see fit.
-			// The caller will "fluff" at this point as the stem phase is finished.
-			.ok_or(Error::NoDandelionRelay)
-			.map(|(_, relay)| {
-				if relay.is_connected() {
-					if let Err(e) = relay.send_stem_transaction(tx) {
-						debug!("Error sending stem transaction to peer relay: {:?}", e);
-					}
-				}
-			})
-	}
+	// /// Relays the provided stem transaction to our single stem peer.
+	// pub fn relay_stem_transaction(&self, tx: &core::Transaction) -> Result<(), Error> {
+	// 	let dandelion_relay = self.get_dandelion_relay();
+	// 	if dandelion_relay.is_empty() {
+	// 		debug!("No dandelion relay, updating.");
+	// 		self.update_dandelion_relay();
+	// 	}
+	// 	// If still return an error, let the caller handle this as they see fit.
+	// 	// The caller will "fluff" at this point as the stem phase is finished.
+	// 	if dandelion_relay.is_empty() {
+	// 		return Err(Error::NoDandelionRelay);
+	// 	}
+	// 	for relay in dandelion_relay.values() {
+	// 		if relay.is_connected() {
+	// 			if let Err(e) = relay.send_stem_transaction(tx) {
+	// 				debug!("Error sending stem transaction to peer relay: {:?}", e);
+	// 			}
+	// 		}
+	// 	}
+	// 	Ok(())
+	// }
 
-	/// Broadcasts the provided transaction to PEER_PREFERRED_COUNT of our
-	/// peers. We may be connected to PEER_MAX_COUNT peers so we only
-	/// want to broadcast to a random subset of peers.
+	/// Broadcasts the provided transaction to PEER_MAX_COUNT of our peers.
 	/// A peer implementation may drop the broadcast request
 	/// if it knows the remote peer already has the transaction.
 	pub fn broadcast_transaction(&self, tx: &core::Transaction) {

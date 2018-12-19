@@ -397,3 +397,41 @@ impl chain::TxHashsetWriteStatus for SyncState {
 		self.update(SyncStatus::TxHashsetDone);
 	}
 }
+
+pub struct DandelionEpoch {
+	// When did this epoch start?
+	start_time: i64,
+	is_stem: bool,
+	relay_peer: Option<Arc<p2p::Peer>>,
+}
+
+impl DandelionEpoch {
+	pub fn new() -> DandelionEpoch {
+		DandelionEpoch {
+			start_time: Utc::now().timestamp(),
+			is_stem: false,
+			relay_peer: None,
+		}
+	}
+
+	// TODO - config for epoch duration
+	pub fn is_expired(&self) -> bool {
+		Utc::now().timestamp() - self.start_time > 600
+	}
+
+	pub fn next_epoch(&mut self, peers: &Arc<p2p::Peers>) {
+		self.start_time = Utc::now().timestamp();
+
+		// TODO - select a new relay_peer.
+		self.relay_peer = None;
+	}
+
+	// Are we stemming transactions in this epoch?
+	pub fn is_stem(&self) -> bool {
+		self.is_stem
+	}
+
+	pub fn relay_peer(&self) -> Option<Arc<p2p::Peer>> {
+		self.relay_peer.clone()
+	}
+}

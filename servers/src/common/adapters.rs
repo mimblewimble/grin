@@ -22,7 +22,9 @@ use std::thread;
 use std::time::Instant;
 
 use crate::chain::{self, BlockStatus, ChainAdapter, Options};
-use crate::common::types::{self, ChainValidationMode, ServerConfig, SyncState, SyncStatus};
+use crate::common::types::{
+	self, ChainValidationMode, DandelionEpoch, ServerConfig, SyncState, SyncStatus,
+};
 use crate::core::core::hash::{Hash, Hashed};
 use crate::core::core::transaction::Transaction;
 use crate::core::core::verifier_cache::VerifierCache;
@@ -700,18 +702,38 @@ impl ChainToPoolAndNetAdapter {
 /// transactions that have been accepted.
 pub struct PoolToNetAdapter {
 	peers: OneTime<Weak<p2p::Peers>>,
+	dandelion_epoch: Arc<RwLock<DandelionEpoch>>,
 }
 
-impl pool::PoolAdapter for PoolToNetAdapter {
-	fn stem_tx_accepted(&self, tx: &core::Transaction) -> Result<(), pool::PoolError> {
-		self.peers()
-			.relay_stem_transaction(tx)
-			.map_err(|_| pool::PoolError::DandelionError)?;
-		Ok(())
-	}
+pub trait DandelionAdapter {}
 
+impl DandelionAdapter for PoolToNetAdapter {}
+
+impl pool::PoolAdapter for PoolToNetAdapter {
 	fn tx_accepted(&self, tx: &core::Transaction) {
 		self.peers().broadcast_transaction(tx);
+	}
+
+	fn stem_tx_accepted(&self, tx: &core::Transaction) {
+		let mut epoch = self.dandelion_epoch.write();
+		if epoch.is_expired() {
+			warn!("epoch expired, setting up next epoch");
+			epoch.next_epoch(&self.peers());
+		}
+
+		if epoch.is_stem() {
+			if let Some(peer) = epoch.relay_peer() {
+				if peer.is_connected() {
+					peer.send_stem_transaction(tx);
+				} else {
+					error!("what to do here? relay peer is not connected?");
+				}
+			} else {
+				error!("what to do here? We have no relay peer?");
+			}
+		} else {
+			warn!("not forwarding stem tx, we fluff for this epoch");
+		}
 	}
 }
 
@@ -720,6 +742,7 @@ impl PoolToNetAdapter {
 	pub fn new() -> PoolToNetAdapter {
 		PoolToNetAdapter {
 			peers: OneTime::new(),
+			dandelion_epoch: Arc::new(RwLock::new(DandelionEpoch::new())),
 		}
 	}
 

@@ -12,17 +12,18 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::util::{Mutex, RwLock, StopState};
 use chrono::prelude::Utc;
 use rand::{thread_rng, Rng};
 use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
 
+use crate::common::adapters::DandelionAdapter;
 use crate::core::core::hash::Hashed;
 use crate::core::core::transaction;
 use crate::core::core::verifier_cache::VerifierCache;
 use crate::pool::{DandelionConfig, PoolEntryState, PoolError, TransactionPool, TxSource};
+use crate::util::{Mutex, RwLock, StopState};
 
 /// A process to monitor transactions in the stempool.
 /// With Dandelion, transaction can be broadcasted in stem or fluff phase.
@@ -35,6 +36,7 @@ use crate::pool::{DandelionConfig, PoolEntryState, PoolError, TransactionPool, T
 pub fn monitor_transactions(
 	dandelion_config: DandelionConfig,
 	tx_pool: Arc<RwLock<TransactionPool>>,
+	adapter: Arc<DandelionAdapter>,
 	verifier_cache: Arc<RwLock<dyn VerifierCache>>,
 	stop_state: Arc<Mutex<StopState>>,
 ) {
@@ -48,32 +50,43 @@ pub fn monitor_transactions(
 					break;
 				}
 
+				// Our adapter hooks us into the current Dandelion Epoch.
+				// From this we can determine if we should fluff everything currently in the stempool.
+				// TODO - how to handle expired epoch here?
+
 				// This is the patience timer, we loop every n secs.
 				let patience_secs = dandelion_config.patience_secs.unwrap();
 				thread::sleep(Duration::from_secs(patience_secs));
 
-				// Step 1: find all "ToStem" entries in stempool from last run.
-				// Aggregate them up to give a single (valid) aggregated tx and propagate it
-				// to the next Dandelion relay along the stem.
-				if process_stem_phase(tx_pool.clone(), verifier_cache.clone()).is_err() {
-					error!("dand_mon: Problem with stem phase.");
-				}
+				// Vastly simplified -
+				// check if we are is_stem() via the adapter (current epoch)
+				// * if we are stem then do nothing (nothing to aggregate here)
+				// * if fluff then aggregate and add to txpool
 
-				// Step 2: find all "ToFluff" entries in stempool from last run.
-				// Aggregate them up to give a single (valid) aggregated tx and (re)add it
-				// to our pool with stem=false (which will then broadcast it).
-				if process_fluff_phase(tx_pool.clone(), verifier_cache.clone()).is_err() {
-					error!("dand_mon: Problem with fluff phase.");
-				}
+				if adapter.is_fluff() {}
 
-				// Step 3: now find all "Fresh" entries in stempool since last run.
-				// Coin flip for each (90/10) and label them as either "ToStem" or "ToFluff".
-				// We will process these in the next run (waiting patience secs).
-				if process_fresh_entries(dandelion_config.clone(), tx_pool.clone()).is_err() {
-					error!("dand_mon: Problem processing fresh pool entries.");
-				}
+				// // Step 1: find all "ToStem" entries in stempool from last run.
+				// // Aggregate them up to give a single (valid) aggregated tx and propagate it
+				// // to the next Dandelion relay along the stem.
+				// if process_stem_phase(tx_pool.clone(), verifier_cache.clone()).is_err() {
+				// 	error!("dand_mon: Problem with stem phase.");
+				// }
+				//
+				// // Step 2: find all "ToFluff" entries in stempool from last run.
+				// // Aggregate them up to give a single (valid) aggregated tx and (re)add it
+				// // to our pool with stem=false (which will then broadcast it).
+				// if process_fluff_phase(tx_pool.clone(), verifier_cache.clone()).is_err() {
+				// 	error!("dand_mon: Problem with fluff phase.");
+				// }
+				//
+				// // Step 3: now find all "Fresh" entries in stempool since last run.
+				// // Coin flip for each (90/10) and label them as either "ToStem" or "ToFluff".
+				// // We will process these in the next run (waiting patience secs).
+				// if process_fresh_entries(dandelion_config.clone(), tx_pool.clone()).is_err() {
+				// 	error!("dand_mon: Problem processing fresh pool entries.");
+				// }
 
-				// Step 4: now find all expired entries based on embargo timer.
+				// Now find all expired entries based on embargo timer.
 				if process_expired_entries(dandelion_config.clone(), tx_pool.clone()).is_err() {
 					error!("dand_mon: Problem processing fresh pool entries.");
 				}

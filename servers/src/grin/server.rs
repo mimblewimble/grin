@@ -174,6 +174,8 @@ impl Server {
 			genesis.hash(),
 			stop_state.clone(),
 		)?);
+
+		// Initialize various adapters with our set of connected peers.
 		chain_adapter.init(p2p_server.peers.clone());
 		pool_net_adapter.init(p2p_server.peers.clone());
 		net_adapter.init(p2p_server.peers.clone());
@@ -248,6 +250,7 @@ impl Server {
 		dandelion_monitor::monitor_transactions(
 			config.dandelion_config.clone(),
 			tx_pool.clone(),
+			pool_net_adapter.clone(),
 			verifier_cache.clone(),
 			stop_state.clone(),
 		);

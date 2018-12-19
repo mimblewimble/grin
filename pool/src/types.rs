@@ -267,13 +267,11 @@ pub trait BlockChain: Sync + Send {
 /// downstream processing of valid transactions by the rest of the system, most
 /// importantly the broadcasting of transactions to our peers.
 pub trait PoolAdapter: Send + Sync {
-	/// The transaction pool has accepted this transactions as valid and added
+	/// The transaction pool has accepted this transaction as valid and added
 	/// it to its internal cache.
 	fn tx_accepted(&self, tx: &transaction::Transaction);
-	/// The stem transaction pool has accepted this transactions as valid and
-	/// added it to its internal cache, we have waited for the "patience" timer
-	/// to fire and we now want to propagate the tx to the next Dandelion relay.
-	fn stem_tx_accepted(&self, tx: &transaction::Transaction) -> Result<(), PoolError>;
+
+	fn stem_tx_accepted(&self, tx: &transaction::Transaction);
 }
 
 /// Dummy adapter used as a placeholder for real implementations
@@ -281,9 +279,6 @@ pub trait PoolAdapter: Send + Sync {
 pub struct NoopAdapter {}
 
 impl PoolAdapter for NoopAdapter {
-	fn tx_accepted(&self, _: &transaction::Transaction) {}
-
-	fn stem_tx_accepted(&self, _: &transaction::Transaction) -> Result<(), PoolError> {
-		Ok(())
-	}
+	fn tx_accepted(&self, _tx: &transaction::Transaction) {}
+	fn stem_tx_accepted(&self, _tx: &transaction::Transaction) {}
 }

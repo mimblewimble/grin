@@ -79,10 +79,8 @@ impl TransactionPool {
 	fn add_to_stempool(&mut self, entry: PoolEntry, header: &BlockHeader) -> Result<(), PoolError> {
 		// Add tx to stempool (passing in all txs from txpool to validate against).
 		self.stempool
-			.add_to_pool(entry, self.txpool.all_transactions(), header)?;
-
-		// Note: we do not notify the adapter here,
-		// we let the dandelion monitor handle this.
+			.add_to_pool(entry.clone(), self.txpool.all_transactions(), header)?;
+		self.adapter.stem_tx_accepted(&entry.tx);
 		Ok(())
 	}
 
@@ -165,16 +163,7 @@ impl TransactionPool {
 			tx,
 		};
 
-		// If we are in "stem" mode then check if this is a new tx or if we have seen it before.
-		// If new tx - add it to our stempool.
-		// If we have seen any of the kernels before then fallback to fluff,
-		// adding directly to txpool.
-		if stem
-			&& self
-				.stempool
-				.find_matching_transactions(entry.tx.kernels())
-				.is_empty()
-		{
+		if stem {
 			self.add_to_stempool(entry, header)?;
 			return Ok(());
 		}
