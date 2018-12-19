@@ -7,7 +7,7 @@ Grin has a [code of conduct](CODE_OF_CONDUCT.md) and the handling of vulnerabili
 For all security related issues, Grin has two main points of contact:
 
 * Daniel Lehnberg, daniel.lehnberg at protonmail.com
-* Ignotus Peverell, igno.peverell at protonmail.net
+* Ignotus Peverell, igno.peverell at protonmail.com
 
 Send all communications to both parties and expect a reply within 48h. Public keys can be found at the end of this document.
 
