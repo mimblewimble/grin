@@ -76,7 +76,7 @@ fn test_the_transaction_pool() {
 		let tx = test_transaction_spending_coinbase(&keychain, &header, vec![501]);
 		let mut write_pool = pool.write();
 		assert!(write_pool
-			.add_to_pool(test_source(), tx, true, &header)
+			.add_to_pool(test_source(), tx, false, &header)
 			.is_err());
 	}
 
@@ -92,28 +92,26 @@ fn test_the_transaction_pool() {
 		// Check we have a single initial tx in the pool.
 		assert_eq!(write_pool.total_size(), 1);
 
-		// First, add a simple tx to the pool in "stem" mode.
+		// First, add a simple tx directly to the txpool (stem = false).
 		write_pool
-			.add_to_pool(test_source(), tx1.clone(), true, &header)
+			.add_to_pool(test_source(), tx1.clone(), false, &header)
 			.unwrap();
-		assert_eq!(write_pool.total_size(), 1);
-		assert_eq!(write_pool.stempool.size(), 1);
+		assert_eq!(write_pool.total_size(), 2);
 
 		// Add another tx spending outputs from the previous tx.
 		write_pool
-			.add_to_pool(test_source(), tx2.clone(), true, &header)
+			.add_to_pool(test_source(), tx2.clone(), false, &header)
 			.unwrap();
-		assert_eq!(write_pool.total_size(), 1);
-		assert_eq!(write_pool.stempool.size(), 2);
+		assert_eq!(write_pool.total_size(), 3);
 	}
 
 	// Test adding the exact same tx multiple times (same kernel signature).
-	// This will fail during tx aggregation due to duplicate outputs and duplicate
-	// kernels.
+	// This will fail for stem=false during tx aggregation due to duplicate
+	// outputs and duplicate kernels.
 	{
 		let mut write_pool = pool.write();
 		assert!(write_pool
-			.add_to_pool(test_source(), tx1.clone(), true, &header)
+			.add_to_pool(test_source(), tx1.clone(), false, &header)
 			.is_err());
 	}
 
@@ -123,7 +121,7 @@ fn test_the_transaction_pool() {
 		let tx1a = test_transaction(&keychain, vec![500, 600], vec![499, 599]);
 		let mut write_pool = pool.write();
 		assert!(write_pool
-			.add_to_pool(test_source(), tx1a, true, &header)
+			.add_to_pool(test_source(), tx1a, false, &header)
 			.is_err());
 	}
 
@@ -132,7 +130,7 @@ fn test_the_transaction_pool() {
 		let bad_tx = test_transaction(&keychain, vec![10_001], vec![10_000]);
 		let mut write_pool = pool.write();
 		assert!(write_pool
-			.add_to_pool(test_source(), bad_tx, true, &header)
+			.add_to_pool(test_source(), bad_tx, false, &header)
 			.is_err());
 	}
 
@@ -144,7 +142,7 @@ fn test_the_transaction_pool() {
 		let tx = test_transaction(&keychain, vec![900], vec![498]);
 		let mut write_pool = pool.write();
 		assert!(write_pool
-			.add_to_pool(test_source(), tx, true, &header)
+			.add_to_pool(test_source(), tx, false, &header)
 			.is_err());
 	}
 
@@ -153,9 +151,23 @@ fn test_the_transaction_pool() {
 		let mut write_pool = pool.write();
 		let tx3 = test_transaction(&keychain, vec![500], vec![497]);
 		assert!(write_pool
-			.add_to_pool(test_source(), tx3, true, &header)
+			.add_to_pool(test_source(), tx3, false, &header)
 			.is_err());
-		assert_eq!(write_pool.total_size(), 1);
+		assert_eq!(write_pool.total_size(), 3);
+	}
+
+	// Now add a couple of txs to the stempool (stem = true).
+	{
+		let mut write_pool = pool.write();
+		let tx = test_transaction(&keychain, vec![599], vec![598]);
+		write_pool
+			.add_to_pool(test_source(), tx, true, &header)
+			.unwrap();
+		let tx2 = test_transaction(&keychain, vec![598], vec![597]);
+		write_pool
+			.add_to_pool(test_source(), tx2, true, &header)
+			.unwrap();
+		assert_eq!(write_pool.total_size(), 3);
 		assert_eq!(write_pool.stempool.size(), 2);
 	}
 
@@ -172,7 +184,27 @@ fn test_the_transaction_pool() {
 		write_pool
 			.add_to_pool(test_source(), agg_tx, false, &header)
 			.unwrap();
-		assert_eq!(write_pool.total_size(), 2);
+		assert_eq!(write_pool.total_size(), 4);
+		assert!(write_pool.stempool.is_empty());
+	}
+
+	// Adding a duplicate tx to the stempool will result in it being fluffed.
+	// This handles the case of the stem path having a cycle in it.
+	{
+		let mut write_pool = pool.write();
+		let tx = test_transaction(&keychain, vec![597], vec![596]);
+		write_pool
+			.add_to_pool(test_source(), tx.clone(), true, &header)
+			.unwrap();
+		assert_eq!(write_pool.total_size(), 4);
+		assert_eq!(write_pool.stempool.size(), 1);
+
+		// Duplicate stem tx so fluff, adding it to txpool and removing it from stempool.
+		write_pool
+			.add_to_pool(test_source(), tx.clone(), true, &header)
+			.unwrap();
+		assert_eq!(write_pool.total_size(), 5);
+		assert!(write_pool.stempool.is_empty());
 	}
 
 	// Now check we can correctly deaggregate a multi-kernel tx based on current
@@ -192,7 +224,7 @@ fn test_the_transaction_pool() {
 		write_pool
 			.add_to_pool(test_source(), agg_tx, false, &header)
 			.unwrap();
-		assert_eq!(write_pool.total_size(), 3);
+		assert_eq!(write_pool.total_size(), 6);
 		let entry = write_pool.txpool.entries.last().unwrap();
 		assert_eq!(entry.tx.kernels().len(), 1);
 		assert_eq!(entry.src.debug_name, "deagg");
