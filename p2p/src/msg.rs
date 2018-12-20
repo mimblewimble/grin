@@ -36,7 +36,7 @@ pub const PROTOCOL_VERSION: u32 = 1;
 pub const USER_AGENT: &'static str = concat!("MW/Grin ", env!("CARGO_PKG_VERSION"));
 
 /// Magic number expected in the header of every message
-const MAGIC: [u8; 2] = [0x54, 0x34];
+const MAGIC: [u8; 2] = [0x53, 0x35];
 
 /// Max theoretical size of a block filled with outputs.
 const MAX_BLOCK_SIZE: u64 =
