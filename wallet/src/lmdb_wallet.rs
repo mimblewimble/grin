@@ -270,7 +270,7 @@ where
 		let ctx_key = to_key(PRIVATE_TX_CONTEXT_PREFIX, &mut slate_id.to_vec());
 		let (blind_xor_key, nonce_xor_key) = private_ctx_xor_keys(self.keychain(), slate_id)?;
 
-		let mut ctx:Context = option_to_not_found(
+		let mut ctx: Context = option_to_not_found(
 			self.db.get_ser(&ctx_key),
 			&format!("Slate id: {:x?}", slate_id.to_vec()),
 		)?;
