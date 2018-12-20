@@ -24,6 +24,7 @@ use std::net::{SocketAddr, ToSocketAddrs};
 use std::sync::{mpsc, Arc};
 use std::{cmp, io, str, thread, time};
 
+use crate::core::global;
 use crate::p2p;
 use crate::p2p::ChainAdapter;
 use crate::pool::DandelionConfig;
@@ -335,9 +336,9 @@ pub fn dns_seeds() -> Box<dyn Fn() -> Vec<SocketAddr> + Send> {
 	Box::new(|| {
 		let mut addresses: Vec<SocketAddr> = vec![];
 		let net_seeds = if global::is_testnet() {
-			FLOONET_SEEDS
+			FLOONET_DNS_SEEDS
 		} else {
-			MAINNET_SEEDS
+			MAINNET_DNS_SEEDS
 		};
 		for dns_seed in net_seeds {
 			let temp_addresses = addresses.clone();
