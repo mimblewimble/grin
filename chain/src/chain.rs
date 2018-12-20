@@ -1130,7 +1130,7 @@ impl Chain {
 
 		let (_, pos) = txhashset.is_unspent(output_ref)?;
 
-		let mut min = 1;
+		let mut min = 0;
 		let mut max = {
 			let head = self.head()?;
 			head.height
