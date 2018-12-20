@@ -21,6 +21,7 @@ use std::{fs, io, path, process};
 use chrono::prelude::Utc;
 use chrono::{Datelike, Duration, Timelike};
 use curl;
+use rpassword;
 use serde_json;
 
 use cuckoo_miner as cuckoo;
@@ -29,6 +30,7 @@ use grin_core as core;
 use grin_miner_plugin as plugin;
 use grin_store as store;
 use grin_util as util;
+use grin_wallet as wallet;
 
 use grin_core::core::hash::Hashed;
 use grin_core::core::verifier_cache::LruVerifierCache;
@@ -40,6 +42,7 @@ static BCHAIR_URL: &str = "https://api.blockchair.com/bitcoin/blocks?limit=2";
 
 static GENESIS_RS_PATH: &str = "../../core/src/genesis.rs";
 static PLUGIN_PATH: &str = "./cuckaroo_mean_cuda_29.cuckooplugin";
+static WALLET_SEED_PATH: &str = "./wallet.seed";
 
 fn main() {
 	if !path::Path::new(GENESIS_RS_PATH).exists() {
@@ -52,6 +55,12 @@ fn main() {
 		panic!(
 			"File {} not found, make sure you're running this from the gen_gen directory",
 			PLUGIN_PATH
+		);
+	}
+	if !path::Path::new(WALLET_SEED_PATH).exists() {
+		panic!(
+			"File {} not found, make sure you're running this from the gen_gen directory",
+			WALLET_SEED_PATH
 		);
 	}
 
@@ -72,10 +81,14 @@ fn main() {
 	gen.header.timestamp = Utc::now() + Duration::minutes(30);
 	gen.header.prev_root = core::core::hash::Hash::from_hex(&h1).unwrap();
 
-	// TODO get the proper keychain and/or raw coinbase
-	let keychain = ExtKeychain::from_random_seed().unwrap();
-	let key_id = ExtKeychain::derive_key_id(0, 1, 0, 0, 0);
-	let reward = core::libtx::reward::output(&keychain, &key_id, 0, 0).unwrap();
+	// build the wallet seed and derive a coinbase from local wallet.seed
+	let seed = wallet::WalletSeed::from_file(
+		&wallet::WalletConfig::default(),
+		&rpassword::prompt_password_stdout("Password: ").unwrap()
+	).unwrap();
+	let keychain: ExtKeychain = seed.derive_keychain().unwrap();
+	let key_id = ExtKeychain::derive_key_id(2, 1, 0, 0, 0);
+	let reward = core::libtx::reward::output(&keychain, &key_id, 0).unwrap();
 	gen = gen.with_reward(reward.0, reward.1);
 
 	{
@@ -284,6 +297,7 @@ fn setup_chain(dir_name: &str, genesis: core::core::Block) -> chain::Chain {
 		core::pow::verify_size,
 		verifier_cache,
 		false,
+		Arc::new(util::Mutex::new(util::StopState::new())),
 	)
 	.unwrap()
 }
@@ -322,3 +336,4 @@ fn get_json(url: &str) -> serde_json::Value {
 	}
 	serde_json::from_slice(&body).unwrap()
 }
+

@@ -30,8 +30,11 @@ use crate::pool::DandelionConfig;
 use crate::util::{Mutex, StopState};
 
 // DNS Seeds with contact email associated
-const DNS_SEEDS: &'static [&'static str] = &[
-	"t4.seed.grin-tech.org", // igno.peverell@protonmail.com
+const MAINNET_DNS_SEEDS: &'static [&'static str] = &[
+	"mainnet.seed.grin-tech.org", // igno.peverell@protonmail.com
+];
+const FLOONET_DNS_SEEDS: &'static [&'static str] = &[
+	"floonet.seed.grin-tech.org", // igno.peverell@protonmail.com
 ];
 
 pub fn connect_and_monitor(
@@ -331,7 +334,12 @@ fn listen_for_addrs(
 pub fn dns_seeds() -> Box<dyn Fn() -> Vec<SocketAddr> + Send> {
 	Box::new(|| {
 		let mut addresses: Vec<SocketAddr> = vec![];
-		for dns_seed in DNS_SEEDS {
+		let net_seeds = if global::is_testnet() {
+			FLOONET_SEEDS
+		} else {
+			MAINNET_SEEDS
+		};
+		for dns_seed in net_seeds {
 			let temp_addresses = addresses.clone();
 			debug!("Retrieving seed nodes from dns {}", dns_seed);
 			match (dns_seed.to_owned(), 0).to_socket_addrs() {
