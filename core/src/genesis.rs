@@ -219,8 +219,14 @@ mod test {
 		println!("floonet genesis hash: {}", gen_hash.to_hex());
 		let gen_bin = ser::ser_vec(&genesis_floo()).unwrap();
 		println!("floonet genesis full hash: {}\n", gen_bin.hash().to_hex());
-		assert_eq!(gen_hash.to_hex(), "cb272478ee4abbf41a3d8cc8f2f828785cf38bd7f0dcacfdd6db5f8f2d8f6e24");
-		assert_eq!(gen_bin.hash().to_hex(), "5fcc7afebc2dcfb98f982dd4d9ff7878fca45038d22677ef6360745c90505035");
+		assert_eq!(
+			gen_hash.to_hex(),
+			"cb272478ee4abbf41a3d8cc8f2f828785cf38bd7f0dcacfdd6db5f8f2d8f6e24"
+		);
+		assert_eq!(
+			gen_bin.hash().to_hex(),
+			"5fcc7afebc2dcfb98f982dd4d9ff7878fca45038d22677ef6360745c90505035"
+		);
 	}
 
 	// TODO hardcode the hashes once genesis is set
