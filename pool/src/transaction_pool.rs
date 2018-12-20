@@ -74,7 +74,11 @@ impl TransactionPool {
 		self.blockchain.chain_head()
 	}
 
-	fn add_to_stempool(&mut self, entry: &PoolEntry, header: &BlockHeader) -> Result<(), PoolError> {
+	fn add_to_stempool(
+		&mut self,
+		entry: &PoolEntry,
+		header: &BlockHeader,
+	) -> Result<(), PoolError> {
 		// Add tx to stempool (passing in all txs from txpool to validate against).
 		self.stempool
 			.add_to_pool(entry, &self.txpool.all_transactions(), header)?;
@@ -94,11 +98,7 @@ impl TransactionPool {
 		debug!("added tx to reorg_cache: size now {}", cache.len());
 	}
 
-	fn add_to_txpool(
-		&mut self,
-		entry: &PoolEntry,
-		header: &BlockHeader,
-	) -> Result<(), PoolError> {
+	fn add_to_txpool(&mut self, entry: &PoolEntry, header: &BlockHeader) -> Result<(), PoolError> {
 		// First deaggregate the tx based on current txpool txs.
 		if entry.tx.kernels().len() > 1 {
 			let txs = self.txpool.find_matching_transactions(entry.tx.kernels());
