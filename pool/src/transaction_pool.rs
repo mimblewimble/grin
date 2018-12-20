@@ -23,9 +23,7 @@ use self::core::core::verifier_cache::VerifierCache;
 use self::core::core::{transaction, Block, BlockHeader, Transaction, Weighting};
 use self::util::RwLock;
 use crate::pool::Pool;
-use crate::types::{
-	BlockChain, PoolAdapter, PoolConfig, PoolEntry, PoolError, TxSource,
-};
+use crate::types::{BlockChain, PoolAdapter, PoolConfig, PoolEntry, PoolError, TxSource};
 use chrono::prelude::*;
 use grin_core as core;
 use grin_util as util;
@@ -76,10 +74,10 @@ impl TransactionPool {
 		self.blockchain.chain_head()
 	}
 
-	fn add_to_stempool(&mut self, entry: PoolEntry, header: &BlockHeader) -> Result<(), PoolError> {
+	fn add_to_stempool(&mut self, entry: &PoolEntry, header: &BlockHeader) -> Result<(), PoolError> {
 		// Add tx to stempool (passing in all txs from txpool to validate against).
 		self.stempool
-			.add_to_pool(&entry, &self.txpool.all_transactions(), header)?;
+			.add_to_pool(entry, &self.txpool.all_transactions(), header)?;
 		self.adapter.stem_tx_accepted(&entry.tx);
 		Ok(())
 	}
@@ -98,7 +96,7 @@ impl TransactionPool {
 
 	fn add_to_txpool(
 		&mut self,
-		mut entry: PoolEntry,
+		entry: &PoolEntry,
 		header: &BlockHeader,
 	) -> Result<(), PoolError> {
 		// First deaggregate the tx based on current txpool txs.
@@ -114,7 +112,7 @@ impl TransactionPool {
 				entry.src.debug_name = "deagg".to_string();
 			}
 		}
-		self.txpool.add_to_pool(&entry, &vec![], header)?;
+		self.txpool.add_to_pool(entry, &vec![], header)?;
 
 		// We now need to reconcile the stempool based on the new state of the txpool.
 		// Some stempool txs may no longer be valid and we need to evict them.
@@ -131,8 +129,8 @@ impl TransactionPool {
 	/// txpool based on stem flag provided.
 	pub fn add_to_pool(
 		&mut self,
-		src: TxSource,
-		tx: Transaction,
+		src: &TxSource,
+		tx: &Transaction,
 		stem: bool,
 		header: &BlockHeader,
 	) -> Result<(), PoolError> {
@@ -143,7 +141,7 @@ impl TransactionPool {
 		}
 
 		// Do we have the capacity to accept this transaction?
-		self.is_acceptable(&tx, stem)?;
+		self.is_acceptable(tx, stem)?;
 
 		// Make sure the transaction is valid before anything else.
 		// Validate tx accounting for max tx weight.
@@ -151,24 +149,24 @@ impl TransactionPool {
 			.map_err(PoolError::InvalidTx)?;
 
 		// Check the tx lock_time is valid based on current chain state.
-		self.blockchain.verify_tx_lock_height(&tx)?;
+		self.blockchain.verify_tx_lock_height(tx)?;
 
 		// Check coinbase maturity before we go any further.
-		self.blockchain.verify_coinbase_maturity(&tx)?;
+		self.blockchain.verify_coinbase_maturity(tx)?;
 
 		let entry = PoolEntry {
-			src,
+			src: src.clone(),
 			tx_at: Utc::now(),
-			tx,
+			tx: tx.clone(),
 		};
 
 		if stem {
-			self.add_to_stempool(entry, header)?;
-			return Ok(());
+			self.add_to_stempool(&entry, header)?;
+		} else {
+			self.add_to_txpool(&entry, header)?;
+			self.add_to_reorg_cache(entry);
 		}
 
-		self.add_to_txpool(entry.clone(), header)?;
-		self.add_to_reorg_cache(entry);
 		Ok(())
 	}
 
@@ -191,7 +189,7 @@ impl TransactionPool {
 			header.hash(),
 		);
 		for entry in entries {
-			let _ = &self.add_to_txpool(entry.clone(), header);
+			let _ = &self.add_to_txpool(&entry, header);
 		}
 		debug!(
 			"reconcile_reorg_cache: block: {:?} ... done.",

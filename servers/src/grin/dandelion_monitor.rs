@@ -95,9 +95,10 @@ fn process_fluff_phase(
 	let txpool_tx = tx_pool.txpool.all_transactions_aggregate()?;
 
 	let header = tx_pool.chain_head()?;
-	let stem_txs = tx_pool
-		.stempool
-		.select_valid_transactions(&stem_txs, txpool_tx.as_ref(), &header)?;
+	let stem_txs =
+		tx_pool
+			.stempool
+			.select_valid_transactions(&stem_txs, txpool_tx.as_ref(), &header)?;
 
 	if stem_txs.is_empty() {
 		return Ok(());

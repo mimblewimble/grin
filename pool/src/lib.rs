@@ -35,6 +35,4 @@ pub mod transaction_pool;
 pub mod types;
 
 pub use crate::transaction_pool::TransactionPool;
-pub use crate::types::{
-	BlockChain, DandelionConfig, PoolAdapter, PoolConfig, PoolError, TxSource,
-};
+pub use crate::types::{BlockChain, DandelionConfig, PoolAdapter, PoolConfig, PoolError, TxSource};

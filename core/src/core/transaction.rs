@@ -1044,7 +1044,7 @@ pub fn aggregate(txs: &[Transaction]) -> Result<Transaction, Error> {
 
 /// Attempt to deaggregate a multi-kernel transaction based on multiple
 /// transactions
-pub fn deaggregate(mk_tx: Transaction, txs: &[Transaction]) -> Result<Transaction, Error> {
+pub fn deaggregate(mk_tx: &Transaction, txs: &[Transaction]) -> Result<Transaction, Error> {
 	let mut inputs: Vec<Input> = vec![];
 	let mut outputs: Vec<Output> = vec![];
 	let mut kernels: Vec<TxKernel> = vec![];
@@ -1055,19 +1055,19 @@ pub fn deaggregate(mk_tx: Transaction, txs: &[Transaction]) -> Result<Transactio
 
 	let tx = aggregate(txs)?;
 
-	for mk_input in mk_tx.body.inputs {
+	for mk_input in mk_tx.inputs() {
 		if !tx.body.inputs.contains(&mk_input) && !inputs.contains(&mk_input) {
-			inputs.push(mk_input);
+			inputs.push(mk_input.clone());
 		}
 	}
-	for mk_output in mk_tx.body.outputs {
+	for mk_output in mk_tx.outputs() {
 		if !tx.body.outputs.contains(&mk_output) && !outputs.contains(&mk_output) {
-			outputs.push(mk_output);
+			outputs.push(mk_output.clone());
 		}
 	}
-	for mk_kernel in mk_tx.body.kernels {
+	for mk_kernel in mk_tx.kernels() {
 		if !tx.body.kernels.contains(&mk_kernel) && !kernels.contains(&mk_kernel) {
-			kernels.push(mk_kernel);
+			kernels.push(mk_kernel.clone());
 		}
 	}
 
@@ -1314,10 +1314,7 @@ impl Output {
 
 	/// Batch validates the range proofs using the commitments.
 	/// TODO - can verify_bullet_proof_multi be reworked to take slices?
-	pub fn batch_verify_proofs(
-		commits: &[Commitment],
-		proofs: &[RangeProof],
-	) -> Result<(), Error> {
+	pub fn batch_verify_proofs(commits: &[Commitment], proofs: &[RangeProof]) -> Result<(), Error> {
 		let secp = static_secp_instance();
 		secp.lock()
 			.verify_bullet_proof_multi(commits.to_vec(), proofs.to_vec(), None)?;
