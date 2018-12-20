@@ -23,7 +23,7 @@ use self::core::core::{
 	Block, BlockHeader, BlockSums, Committed, Transaction, TxKernel, Weighting,
 };
 use self::util::RwLock;
-use crate::types::{BlockChain, PoolEntry, PoolEntryState, PoolError};
+use crate::types::{BlockChain, PoolEntry, PoolError};
 use grin_core as core;
 use grin_util as util;
 use std::collections::{HashMap, HashSet};
@@ -139,7 +139,7 @@ impl Pool {
 		// Verify these txs produce an aggregated tx below max tx weight.
 		// Return a vec of all the valid txs.
 		let txs = self.validate_raw_txs(
-			tx_buckets,
+			&tx_buckets,
 			None,
 			&header,
 			Weighting::AsLimitedTransaction { max_weight },
@@ -159,7 +159,7 @@ impl Pool {
 			return Ok(None);
 		}
 
-		let tx = transaction::aggregate(txs)?;
+		let tx = transaction::aggregate(&txs)?;
 
 		// Validate the single aggregate transaction "as pool", not subject to tx weight limits.
 		tx.validate(Weighting::NoLimit, self.verifier_cache.clone())?;
@@ -167,31 +167,15 @@ impl Pool {
 		Ok(Some(tx))
 	}
 
+	/// TODO - Consider reworking this. We pass txs in rather than looking in the pool?
 	pub fn select_valid_transactions(
 		&self,
-		txs: Vec<Transaction>,
-		extra_tx: Option<Transaction>,
+		txs: &[Transaction],
+		extra_tx: Option<&Transaction>,
 		header: &BlockHeader,
 	) -> Result<Vec<Transaction>, PoolError> {
 		let valid_txs = self.validate_raw_txs(txs, extra_tx, header, Weighting::NoLimit)?;
 		Ok(valid_txs)
-	}
-
-	pub fn get_transactions_in_state(&self, state: PoolEntryState) -> Vec<Transaction> {
-		self.entries
-			.iter()
-			.filter(|x| x.state == state)
-			.map(|x| x.tx.clone())
-			.collect::<Vec<_>>()
-	}
-
-	// Transition the specified pool entries to the new state.
-	pub fn transition_to_state(&mut self, txs: &[Transaction], state: PoolEntryState) {
-		for x in &mut self.entries {
-			if txs.contains(&x.tx) {
-				x.state = state;
-			}
-		}
 	}
 
 	// Aggregate this new tx with all existing txs in the pool.
@@ -199,8 +183,8 @@ impl Pool {
 	// then we can safely add the tx to the pool.
 	pub fn add_to_pool(
 		&mut self,
-		entry: PoolEntry,
-		extra_txs: Vec<Transaction>,
+		entry: &PoolEntry,
+		extra_txs: &[Transaction],
 		header: &BlockHeader,
 	) -> Result<(), PoolError> {
 		// Combine all the txs from the pool with any extra txs provided.
@@ -211,7 +195,7 @@ impl Pool {
 			return Err(PoolError::DuplicateTx);
 		}
 
-		txs.extend(extra_txs);
+		txs.extend_from_slice(extra_txs);
 
 		let agg_tx = if txs.is_empty() {
 			// If we have nothing to aggregate then simply return the tx itself.
@@ -220,7 +204,10 @@ impl Pool {
 			// Create a single aggregated tx from the existing pool txs and the
 			// new entry
 			txs.push(entry.tx.clone());
-			transaction::aggregate(txs)?
+
+			let tx = transaction::aggregate(&txs)?;
+			tx.validate(self.verifier_cache.clone())?;
+			tx
 		};
 
 		// Validate aggregated tx (existing pool + new tx), ignoring tx weight limits.
@@ -267,10 +254,11 @@ impl Pool {
 		Ok(new_sums)
 	}
 
+	/// TODO - We seem to have moved a lot of cloning into here. Rethink this.
 	fn validate_raw_txs(
 		&self,
-		txs: Vec<Transaction>,
-		extra_tx: Option<Transaction>,
+		txs: &[Transaction],
+		extra_tx: Option<&Transaction>,
 		header: &BlockHeader,
 		weighting: Weighting,
 	) -> Result<Vec<Transaction>, PoolError> {
@@ -278,14 +266,14 @@ impl Pool {
 
 		for tx in txs {
 			let mut candidate_txs = vec![];
-			if let Some(extra_tx) = extra_tx.clone() {
-				candidate_txs.push(extra_tx);
+			if let Some(extra_tx) = extra_tx {
+				candidate_txs.push(extra_tx.clone());
 			};
-			candidate_txs.extend(valid_txs.clone());
+			candidate_txs.extend_from_slice(&valid_txs);
 			candidate_txs.push(tx.clone());
 
 			// Build a single aggregate tx from candidate txs.
-			let agg_tx = transaction::aggregate(candidate_txs)?;
+			let agg_tx = transaction::aggregate(&candidate_txs)?;
 
 			// We know the tx is valid if the entire aggregate tx is valid.
 			if self.validate_raw_tx(&agg_tx, header, weighting).is_ok() {
@@ -319,7 +307,7 @@ impl Pool {
 
 	pub fn reconcile(
 		&mut self,
-		extra_tx: Option<Transaction>,
+		extra_tx: Option<&Transaction>,
 		header: &BlockHeader,
 	) -> Result<(), PoolError> {
 		let existing_entries = self.entries.clone();
@@ -327,11 +315,11 @@ impl Pool {
 
 		let mut extra_txs = vec![];
 		if let Some(extra_tx) = extra_tx {
-			extra_txs.push(extra_tx);
+			extra_txs.push(extra_tx.clone());
 		}
 
 		for x in existing_entries {
-			let _ = self.add_to_pool(x, extra_txs.clone(), header);
+			let _ = self.add_to_pool(&x, &extra_txs, header);
 		}
 
 		Ok(())

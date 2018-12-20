@@ -24,7 +24,7 @@ use self::core::core::{transaction, Block, BlockHeader, Transaction, Weighting};
 use self::util::RwLock;
 use crate::pool::Pool;
 use crate::types::{
-	BlockChain, PoolAdapter, PoolConfig, PoolEntry, PoolEntryState, PoolError, TxSource,
+	BlockChain, PoolAdapter, PoolConfig, PoolEntry, PoolError, TxSource,
 };
 use chrono::prelude::*;
 use grin_core as core;
@@ -79,7 +79,7 @@ impl TransactionPool {
 	fn add_to_stempool(&mut self, entry: PoolEntry, header: &BlockHeader) -> Result<(), PoolError> {
 		// Add tx to stempool (passing in all txs from txpool to validate against).
 		self.stempool
-			.add_to_pool(entry.clone(), self.txpool.all_transactions(), header)?;
+			.add_to_pool(&entry, &self.txpool.all_transactions(), header)?;
 		self.adapter.stem_tx_accepted(&entry.tx);
 		Ok(())
 	}
@@ -114,7 +114,7 @@ impl TransactionPool {
 				entry.src.debug_name = "deagg".to_string();
 			}
 		}
-		self.txpool.add_to_pool(entry.clone(), vec![], header)?;
+		self.txpool.add_to_pool(&entry, &vec![], header)?;
 
 		// We now need to reconcile the stempool based on the new state of the txpool.
 		// Some stempool txs may no longer be valid and we need to evict them.
@@ -157,7 +157,6 @@ impl TransactionPool {
 		self.blockchain.verify_coinbase_maturity(&tx)?;
 
 		let entry = PoolEntry {
-			state: PoolEntryState::Fresh,
 			src,
 			tx_at: Utc::now(),
 			tx,

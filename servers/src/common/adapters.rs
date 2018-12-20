@@ -705,9 +705,27 @@ pub struct PoolToNetAdapter {
 	dandelion_epoch: Arc<RwLock<DandelionEpoch>>,
 }
 
-pub trait DandelionAdapter {}
+pub trait DandelionAdapter: Send + Sync {
+	fn is_stem(&self) -> bool;
 
-impl DandelionAdapter for PoolToNetAdapter {}
+	fn is_expired(&self) -> bool;
+
+	fn next_epoch(&self);
+}
+
+impl DandelionAdapter for PoolToNetAdapter {
+	fn is_stem(&self) -> bool {
+		self.dandelion_epoch.read().is_stem()
+	}
+
+	fn is_expired(&self) -> bool {
+		self.dandelion_epoch.read().is_expired()
+	}
+
+	fn next_epoch(&self) {
+		self.dandelion_epoch.write().next_epoch(&self.peers());
+	}
+}
 
 impl pool::PoolAdapter for PoolToNetAdapter {
 	fn tx_accepted(&self, tx: &core::Transaction) {
@@ -724,15 +742,16 @@ impl pool::PoolAdapter for PoolToNetAdapter {
 		if epoch.is_stem() {
 			if let Some(peer) = epoch.relay_peer() {
 				if peer.is_connected() {
+					warn!("Stemming this epoch, relaying to next peer.");
 					peer.send_stem_transaction(tx);
 				} else {
-					error!("what to do here? relay peer is not connected?");
+					error!("What to do here? Relay peer is not connected?");
 				}
 			} else {
-				error!("what to do here? We have no relay peer?");
+				error!("What to do here? We have no relay peer?");
 			}
 		} else {
-			warn!("not forwarding stem tx, we fluff for this epoch");
+			warn!("Not forwarding stem tx. Collecting, aggregating and dispersing txs this epoch.");
 		}
 	}
 }

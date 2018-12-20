@@ -451,7 +451,7 @@ impl Readable for TransactionBody {
 		let kernels = read_multi(reader, kernel_len)?;
 
 		// Initialize tx body and verify everything is sorted.
-		let body = TransactionBody::init(inputs, outputs, kernels, true)
+		let body = TransactionBody::init(&inputs, &outputs, &kernels, true)
 			.map_err(|_| ser::Error::CorruptedData)?;
 
 		Ok(body)
@@ -499,9 +499,9 @@ impl TransactionBody {
 	/// the provided inputs, outputs and kernels.
 	/// Guarantees inputs, outputs, kernels are sorted lexicographically.
 	pub fn init(
-		inputs: Vec<Input>,
-		outputs: Vec<Output>,
-		kernels: Vec<TxKernel>,
+		inputs: &[Input],
+		outputs: &[Output],
+		kernels: &[TxKernel],
 		verify_sorted: bool,
 	) -> Result<TransactionBody, Error> {
 		let mut body = TransactionBody {
@@ -830,7 +830,7 @@ impl Transaction {
 
 	/// Creates a new transaction initialized with
 	/// the provided inputs, outputs, kernels
-	pub fn new(inputs: Vec<Input>, outputs: Vec<Output>, kernels: Vec<TxKernel>) -> Transaction {
+	pub fn new(inputs: &[Input], outputs: &[Output], kernels: &[TxKernel]) -> Transaction {
 		let offset = BlindingFactor::zero();
 
 		// Initialize a new tx body and sort everything.
@@ -877,7 +877,7 @@ impl Transaction {
 	}
 
 	/// Get inputs
-	pub fn inputs(&self) -> &Vec<Input> {
+	pub fn inputs(&self) -> &[Input] {
 		&self.body.inputs
 	}
 
@@ -887,7 +887,7 @@ impl Transaction {
 	}
 
 	/// Get outputs
-	pub fn outputs(&self) -> &Vec<Output> {
+	pub fn outputs(&self) -> &[Output] {
 		&self.body.outputs
 	}
 
@@ -897,7 +897,7 @@ impl Transaction {
 	}
 
 	/// Get kernels
-	pub fn kernels(&self) -> &Vec<TxKernel> {
+	pub fn kernels(&self) -> &[TxKernel] {
 		&self.body.kernels
 	}
 
@@ -990,12 +990,12 @@ pub fn cut_through(inputs: &mut Vec<Input>, outputs: &mut Vec<Output>) -> Result
 }
 
 /// Aggregate a vec of txs into a multi-kernel tx with cut_through.
-pub fn aggregate(mut txs: Vec<Transaction>) -> Result<Transaction, Error> {
+pub fn aggregate(txs: &[Transaction]) -> Result<Transaction, Error> {
 	// convenience short-circuiting
 	if txs.is_empty() {
 		return Ok(Transaction::empty());
 	} else if txs.len() == 1 {
-		return Ok(txs.pop().unwrap());
+		return Ok(txs.first().unwrap().clone());
 	}
 	let mut n_inputs = 0;
 	let mut n_outputs = 0;
@@ -1017,9 +1017,9 @@ pub fn aggregate(mut txs: Vec<Transaction>) -> Result<Transaction, Error> {
 		// we will sum these later to give a single aggregate offset
 		kernel_offsets.push(tx.offset);
 
-		inputs.append(&mut tx.body.inputs);
-		outputs.append(&mut tx.body.outputs);
-		kernels.append(&mut tx.body.kernels);
+		inputs.extend_from_slice(tx.inputs());
+		outputs.extend_from_slice(tx.outputs());
+		kernels.extend_from_slice(tx.kernels());
 	}
 
 	// Sort inputs and outputs during cut_through.
@@ -1037,14 +1037,14 @@ pub fn aggregate(mut txs: Vec<Transaction>) -> Result<Transaction, Error> {
 	//   * cut-through outputs
 	//   * full set of tx kernels
 	//   * sum of all kernel offsets
-	let tx = Transaction::new(inputs, outputs, kernels).with_offset(total_kernel_offset);
+	let tx = Transaction::new(&inputs, &outputs, &kernels).with_offset(total_kernel_offset);
 
 	Ok(tx)
 }
 
 /// Attempt to deaggregate a multi-kernel transaction based on multiple
 /// transactions
-pub fn deaggregate(mk_tx: Transaction, txs: Vec<Transaction>) -> Result<Transaction, Error> {
+pub fn deaggregate(mk_tx: Transaction, txs: &[Transaction]) -> Result<Transaction, Error> {
 	let mut inputs: Vec<Input> = vec![];
 	let mut outputs: Vec<Output> = vec![];
 	let mut kernels: Vec<TxKernel> = vec![];
@@ -1102,7 +1102,7 @@ pub fn deaggregate(mk_tx: Transaction, txs: Vec<Transaction>) -> Result<Transact
 	kernels.sort_unstable();
 
 	// Build a new tx from the above data.
-	let tx = Transaction::new(inputs, outputs, kernels).with_offset(total_kernel_offset);
+	let tx = Transaction::new(&inputs, &outputs, &kernels).with_offset(total_kernel_offset);
 	Ok(tx)
 }
 
@@ -1312,14 +1312,15 @@ impl Output {
 		Ok(())
 	}
 
-	/// Batch validates the range proofs using the commitments
+	/// Batch validates the range proofs using the commitments.
+	/// TODO - can verify_bullet_proof_multi be reworked to take slices?
 	pub fn batch_verify_proofs(
-		commits: &Vec<Commitment>,
-		proofs: &Vec<RangeProof>,
+		commits: &[Commitment],
+		proofs: &[RangeProof],
 	) -> Result<(), Error> {
 		let secp = static_secp_instance();
 		secp.lock()
-			.verify_bullet_proof_multi(commits.clone(), proofs.clone(), None)?;
+			.verify_bullet_proof_multi(commits.to_vec(), proofs.to_vec(), None)?;
 		Ok(())
 	}
 }

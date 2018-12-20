@@ -525,7 +525,7 @@ impl Chain {
 		let height = self.next_block_height()?;
 		let txhashset = self.txhashset.read();
 		txhashset::utxo_view(&txhashset, |utxo| {
-			utxo.verify_coinbase_maturity(&tx.inputs(), height)?;
+			utxo.verify_coinbase_maturity(tx.inputs(), height)?;
 			Ok(())
 		})
 	}

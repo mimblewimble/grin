@@ -480,7 +480,7 @@ impl Block {
 		let all_kernels = Vec::from_iter(all_kernels);
 
 		// Initialize a tx body and sort everything.
-		let body = TransactionBody::init(all_inputs, all_outputs, all_kernels, false)?;
+		let body = TransactionBody::init(&all_inputs, &all_outputs, &all_kernels, false)?;
 
 		// Finally return the full block.
 		// Note: we have not actually validated the block here,
@@ -509,7 +509,7 @@ impl Block {
 		// A block is just a big transaction, aggregate and add the reward output
 		// and reward kernel. At this point the tx is technically invalid but the
 		// tx body is valid if we account for the reward (i.e. as a block).
-		let agg_tx = transaction::aggregate(txs)?
+		let agg_tx = transaction::aggregate(&txs)?
 			.with_output(reward_out)
 			.with_kernel(reward_kern);
 
@@ -598,7 +598,7 @@ impl Block {
 		let kernels = self.kernels().clone();
 
 		// Initialize tx body and sort everything.
-		let body = TransactionBody::init(inputs, outputs, kernels, false)?;
+		let body = TransactionBody::init(&inputs, &outputs, &kernels, false)?;
 
 		Ok(Block {
 			header: self.header,

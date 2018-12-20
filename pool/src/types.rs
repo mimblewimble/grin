@@ -138,29 +138,12 @@ fn default_mineable_max_weight() -> usize {
 /// A single (possibly aggregated) transaction.
 #[derive(Clone, Debug)]
 pub struct PoolEntry {
-	/// The state of the pool entry.
-	pub state: PoolEntryState,
 	/// Info on where this tx originated from.
 	pub src: TxSource,
 	/// Timestamp of when this tx was originally added to the pool.
 	pub tx_at: DateTime<Utc>,
 	/// The transaction itself.
 	pub tx: Transaction,
-}
-
-/// The possible states a pool entry can be in.
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub enum PoolEntryState {
-	/// A new entry, not yet processed.
-	Fresh,
-	/// Tx to be included in the next "stem" run.
-	ToStem,
-	/// Tx previously "stemmed" and propagated.
-	Stemmed,
-	/// Tx to be included in the next "fluff" run.
-	ToFluff,
-	/// Tx previously "fluffed" and broadcast.
-	Fluffed,
 }
 
 /// Placeholder: the data representing where we heard about a tx from.
