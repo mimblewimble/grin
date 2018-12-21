@@ -23,7 +23,7 @@ use std::ops::Add;
 use std::{error, fmt};
 
 use crate::blake2::blake2b::blake2b;
-use crate::extkey_bip32::{self, ChildNumber, ExtendedPrivKey};
+use crate::extkey_bip32::{self, ChildNumber};
 use serde::{de, ser}; //TODO: Convert errors to use ErrorKind
 
 use crate::util;
@@ -44,6 +44,7 @@ pub enum Error {
 	KeyDerivation(extkey_bip32::Error),
 	Transaction(String),
 	RangeProof(String),
+	SwitchCommitment,
 }
 
 impl From<secp::Error> for Error {
@@ -124,6 +125,13 @@ impl Identifier {
 
 	pub fn to_path(&self) -> ExtKeychainPath {
 		ExtKeychainPath::from_identifier(&self)
+	}
+
+	pub fn to_value_path(&self, value: u64) -> ValueExtKeychainPath {
+		ValueExtKeychainPath {
+			value,
+			ext_keychain_path: self.to_path(),
+		}
 	}
 
 	/// output the path itself, for insertion into bulletproof
@@ -327,8 +335,8 @@ pub struct SplitBlindingFactor {
 /// factor as well as the "sign" with which they should be combined.
 #[derive(Clone, Debug, PartialEq)]
 pub struct BlindSum {
-	pub positive_key_ids: Vec<ExtKeychainPath>,
-	pub negative_key_ids: Vec<ExtKeychainPath>,
+	pub positive_key_ids: Vec<ValueExtKeychainPath>,
+	pub negative_key_ids: Vec<ValueExtKeychainPath>,
 	pub positive_blinding_factors: Vec<BlindingFactor>,
 	pub negative_blinding_factors: Vec<BlindingFactor>,
 }
@@ -344,12 +352,12 @@ impl BlindSum {
 		}
 	}
 
-	pub fn add_key_id(mut self, path: ExtKeychainPath) -> BlindSum {
+	pub fn add_key_id(mut self, path: ValueExtKeychainPath) -> BlindSum {
 		self.positive_key_ids.push(path);
 		self
 	}
 
-	pub fn sub_key_id(mut self, path: ExtKeychainPath) -> BlindSum {
+	pub fn sub_key_id(mut self, path: ValueExtKeychainPath) -> BlindSum {
 		self.negative_key_ids.push(path);
 		self
 	}
@@ -430,17 +438,25 @@ impl ExtKeychainPath {
 	}
 }
 
+/// Wrapper for amount + path
+#[derive(Copy, Clone, PartialEq, Eq, Debug, Deserialize)]
+pub struct ValueExtKeychainPath {
+	pub value: u64,
+	pub ext_keychain_path: ExtKeychainPath,
+}
+
 pub trait Keychain: Sync + Send + Clone {
 	fn from_seed(seed: &[u8]) -> Result<Self, Error>;
 	fn from_mnemonic(word_list: &str, extension_word: &str) -> Result<Self, Error>;
 	fn from_random_seed() -> Result<Self, Error>;
 	fn root_key_id() -> Identifier;
 	fn derive_key_id(depth: u8, d1: u32, d2: u32, d3: u32, d4: u32) -> Identifier;
-	fn derive_key(&self, id: &Identifier) -> Result<ExtendedPrivKey, Error>;
+	fn derive_key(&self, amount: u64, id: &Identifier) -> Result<SecretKey, Error>;
 	fn commit(&self, amount: u64, id: &Identifier) -> Result<Commitment, Error>;
 	fn blind_sum(&self, blind_sum: &BlindSum) -> Result<BlindingFactor, Error>;
-	fn sign(&self, msg: &Message, id: &Identifier) -> Result<Signature, Error>;
+	fn sign(&self, msg: &Message, amount: u64, id: &Identifier) -> Result<Signature, Error>;
 	fn sign_with_blinding(&self, _: &Message, _: &BlindingFactor) -> Result<Signature, Error>;
+	fn set_use_switch_commits(&mut self, value: bool);
 	fn secp(&self) -> &Secp256k1;
 }
 

@@ -99,6 +99,7 @@ where
 	/// use wallet::{LMDBBackend, HTTPNodeClient, WalletBackend,  WalletConfig};
 	///
 	/// let mut wallet_config = WalletConfig::default();
+	/// # wallet_config.data_file_dir = "test_output/doc/wallet1".to_owned();
 	///
 	/// // A NodeClient must first be created to handle communication between
 	/// // the wallet and the node.
@@ -148,6 +149,7 @@ where
 	/// # use wallet::libwallet::api::APIOwner;
 	/// # use wallet::{LMDBBackend, HTTPNodeClient, WalletBackend,  WalletConfig};
 	/// # let mut wallet_config = WalletConfig::default();
+	/// # wallet_config.data_file_dir = "test_output/doc/wallet1".to_owned();
 	/// # let node_client = HTTPNodeClient::new(&wallet_config.check_node_api_http_addr, None);
 	/// # let mut wallet:Arc<Mutex<WalletBackend<HTTPNodeClient, ExtKeychain>>> =
 	/// # Arc::new(Mutex::new(
@@ -203,6 +205,7 @@ where
 	/// # use wallet::libwallet::api::APIOwner;
 	/// # use wallet::{LMDBBackend, HTTPNodeClient, WalletBackend,  WalletConfig};
 	/// # let mut wallet_config = WalletConfig::default();
+	/// # wallet_config.data_file_dir = "test_output/doc/wallet1".to_owned();
 	/// # let node_client = HTTPNodeClient::new(&wallet_config.check_node_api_http_addr, None);
 	/// # let mut wallet:Arc<Mutex<WalletBackend<HTTPNodeClient, ExtKeychain>>> =
 	/// # Arc::new(Mutex::new(
@@ -256,6 +259,7 @@ where
 	/// # use wallet::libwallet::api::APIOwner;
 	/// # use wallet::{LMDBBackend, HTTPNodeClient, WalletBackend,  WalletConfig};
 	/// # let mut wallet_config = WalletConfig::default();
+	/// # wallet_config.data_file_dir = "test_output/doc/wallet1".to_owned();
 	/// # let node_client = HTTPNodeClient::new(&wallet_config.check_node_api_http_addr, None);
 	/// # let mut wallet:Arc<Mutex<WalletBackend<HTTPNodeClient, ExtKeychain>>> =
 	/// # Arc::new(Mutex::new(
@@ -313,6 +317,7 @@ where
 	/// # use wallet::libwallet::api::APIOwner;
 	/// # use wallet::{LMDBBackend, HTTPNodeClient, WalletBackend,  WalletConfig};
 	/// # let mut wallet_config = WalletConfig::default();
+	/// # wallet_config.data_file_dir = "test_output/doc/wallet1".to_owned();
 	/// # let node_client = HTTPNodeClient::new(&wallet_config.check_node_api_http_addr, None);
 	/// # let mut wallet:Arc<Mutex<WalletBackend<HTTPNodeClient, ExtKeychain>>> =
 	/// # Arc::new(Mutex::new(
@@ -389,6 +394,7 @@ where
 	/// # use wallet::libwallet::api::APIOwner;
 	/// # use wallet::{LMDBBackend, HTTPNodeClient, WalletBackend,  WalletConfig};
 	/// # let mut wallet_config = WalletConfig::default();
+	/// # wallet_config.data_file_dir = "test_output/doc/wallet1".to_owned();
 	/// # let node_client = HTTPNodeClient::new(&wallet_config.check_node_api_http_addr, None);
 	/// # let mut wallet:Arc<Mutex<WalletBackend<HTTPNodeClient, ExtKeychain>>> =
 	/// # Arc::new(Mutex::new(
@@ -462,6 +468,7 @@ where
 	/// # use wallet::libwallet::api::APIOwner;
 	/// # use wallet::{LMDBBackend, HTTPNodeClient, WalletBackend,  WalletConfig};
 	/// # let mut wallet_config = WalletConfig::default();
+	/// # wallet_config.data_file_dir = "test_output/doc/wallet1".to_owned();
 	/// # let node_client = HTTPNodeClient::new(&wallet_config.check_node_api_http_addr, None);
 	/// # let mut wallet:Arc<Mutex<WalletBackend<HTTPNodeClient, ExtKeychain>>> =
 	/// # Arc::new(Mutex::new(
@@ -575,6 +582,7 @@ where
 	/// # use wallet::libwallet::api::APIOwner;
 	/// # use wallet::{LMDBBackend, HTTPNodeClient, WalletBackend,  WalletConfig};
 	/// # let mut wallet_config = WalletConfig::default();
+	/// # wallet_config.data_file_dir = "test_output/doc/wallet1".to_owned();
 	/// # let node_client = HTTPNodeClient::new(&wallet_config.check_node_api_http_addr, None);
 	/// # let mut wallet:Arc<Mutex<WalletBackend<HTTPNodeClient, ExtKeychain>>> =
 	/// # Arc::new(Mutex::new(

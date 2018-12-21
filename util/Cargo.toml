@@ -20,12 +20,12 @@ serde_derive = "1"
 log4rs = { version = "0.8.1", features = ["rolling_file_appender", "compound_policy", "size_trigger", "fixed_window_roller"] }
 log = "0.4"
 walkdir = "2"
-zip = "0.4"
+zip = { version = "0.4", default-features = false }
 parking_lot = {version = "0.6"}
 
 [dependencies.grin_secp256k1zkp]
-#git = "https://github.com/mimblewimble/rust-secp256k1-zkp"
-#tag = "grin_integration_28"
+git = "https://github.com/mimblewimble/rust-secp256k1-zkp"
+tag = "grin_integration_29"
 #path = "../../rust-secp256k1-zkp"
-version = "0.7.1"
+#version = "0.7.1"
 features = ["bullet-proof-sizing"]

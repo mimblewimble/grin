@@ -196,7 +196,7 @@ where
 		return Err(ErrorKind::TransactionDoesntExist(tx_id.to_string()))?;
 	}
 	let tx = tx_vec[0].clone();
-	Ok((tx.confirmed, tx.tx_hex))
+	Ok((tx.confirmed, tx.stored_tx))
 }
 
 /// Update the stored transaction (this update needs to happen when the TX is finalised)

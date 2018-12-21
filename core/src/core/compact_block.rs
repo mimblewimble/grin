@@ -19,7 +19,7 @@ use rand::{thread_rng, Rng};
 use crate::core::block::{Block, BlockHeader, Error};
 use crate::core::hash::Hashed;
 use crate::core::id::ShortIdentifiable;
-use crate::core::{KernelFeatures, Output, OutputFeatures, ShortId, TxKernel};
+use crate::core::{Output, ShortId, TxKernel};
 use crate::ser::{self, read_multi, Readable, Reader, VerifySortedAndUnique, Writeable, Writer};
 
 /// Container for full (full) outputs and kernels and kern_ids for a compact block.
@@ -168,7 +168,7 @@ impl From<Block> for CompactBlock {
 		let out_full = block
 			.outputs()
 			.iter()
-			.filter(|x| x.features.contains(OutputFeatures::COINBASE_OUTPUT))
+			.filter(|x| x.is_coinbase())
 			.cloned()
 			.collect::<Vec<_>>();
 
@@ -176,7 +176,7 @@ impl From<Block> for CompactBlock {
 		let mut kern_ids = vec![];
 
 		for k in block.kernels() {
-			if k.features.contains(KernelFeatures::COINBASE_KERNEL) {
+			if k.is_coinbase() {
 				kern_full.push(k.clone());
 			} else {
 				kern_ids.push(k.short_id(&header.hash(), nonce));

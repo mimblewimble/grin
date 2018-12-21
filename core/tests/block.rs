@@ -131,7 +131,7 @@ fn empty_block_with_coinbase_is_valid() {
 	let coinbase_outputs = b
 		.outputs()
 		.iter()
-		.filter(|out| out.features.contains(OutputFeatures::COINBASE_OUTPUT))
+		.filter(|out| out.is_coinbase())
 		.map(|o| o.clone())
 		.collect::<Vec<_>>();
 	assert_eq!(coinbase_outputs.len(), 1);
@@ -139,7 +139,7 @@ fn empty_block_with_coinbase_is_valid() {
 	let coinbase_kernels = b
 		.kernels()
 		.iter()
-		.filter(|out| out.features.contains(KernelFeatures::COINBASE_KERNEL))
+		.filter(|out| out.is_coinbase())
 		.map(|o| o.clone())
 		.collect::<Vec<_>>();
 	assert_eq!(coinbase_kernels.len(), 1);
@@ -152,7 +152,7 @@ fn empty_block_with_coinbase_is_valid() {
 }
 
 #[test]
-// test that flipping the COINBASE_OUTPUT flag on the output features
+// test that flipping the COINBASE flag on the output features
 // invalidates the block and specifically it causes verify_coinbase to fail
 // additionally verifying the merkle_inputs_outputs also fails
 fn remove_coinbase_output_flag() {
@@ -161,12 +161,8 @@ fn remove_coinbase_output_flag() {
 	let key_id = ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
 	let mut b = new_block(vec![], &keychain, &prev, &key_id);
 
-	assert!(b.outputs()[0]
-		.features
-		.contains(OutputFeatures::COINBASE_OUTPUT));
-	b.outputs_mut()[0]
-		.features
-		.remove(OutputFeatures::COINBASE_OUTPUT);
+	assert!(b.outputs()[0].is_coinbase());
+	b.outputs_mut()[0].features = OutputFeatures::PLAIN;
 
 	assert_eq!(b.verify_coinbase(), Err(Error::CoinbaseSumMismatch));
 	assert!(b
@@ -179,7 +175,7 @@ fn remove_coinbase_output_flag() {
 }
 
 #[test]
-// test that flipping the COINBASE_KERNEL flag on the kernel features
+// test that flipping the COINBASE flag on the kernel features
 // invalidates the block and specifically it causes verify_coinbase to fail
 fn remove_coinbase_kernel_flag() {
 	let keychain = ExtKeychain::from_random_seed().unwrap();
@@ -187,12 +183,8 @@ fn remove_coinbase_kernel_flag() {
 	let key_id = ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
 	let mut b = new_block(vec![], &keychain, &prev, &key_id);
 
-	assert!(b.kernels()[0]
-		.features
-		.contains(KernelFeatures::COINBASE_KERNEL));
-	b.kernels_mut()[0]
-		.features
-		.remove(KernelFeatures::COINBASE_KERNEL);
+	assert!(b.kernels()[0].is_coinbase());
+	b.kernels_mut()[0].features = KernelFeatures::PLAIN;
 
 	// Flipping the coinbase flag results in kernels not summing correctly.
 	assert_eq!(
@@ -380,7 +372,7 @@ fn convert_block_to_compact_block() {
 		cb.kern_ids()[0],
 		b.kernels()
 			.iter()
-			.find(|x| !x.features.contains(KernelFeatures::COINBASE_KERNEL))
+			.find(|x| !x.is_coinbase())
 			.unwrap()
 			.short_id(&cb.hash(), cb.nonce)
 	);

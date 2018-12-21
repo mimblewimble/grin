@@ -54,7 +54,7 @@ where
 		move |build, (tx, kern, sum)| -> (Transaction, TxKernel, BlindSum) {
 			let commit = build.keychain.commit(value, &key_id).unwrap();
 			let input = Input::new(features, commit);
-			(tx.with_input(input), kern, sum.sub_key_id(key_id.to_path()))
+			(tx.with_input(input), kern, sum.sub_key_id(key_id.to_value_path(value)))
 		},
 	)
 }
@@ -69,7 +69,7 @@ where
 		"Building input (spending regular output): {}, {}",
 		value, key_id
 	);
-	build_input(value, OutputFeatures::DEFAULT_OUTPUT, key_id)
+	build_input(value, OutputFeatures::PLAIN, key_id)
 }
 
 /// Adds a coinbase input spending a coinbase output.
@@ -78,7 +78,7 @@ where
 	K: Keychain,
 {
 	debug!("Building input (spending coinbase): {}, {}", value, key_id);
-	build_input(value, OutputFeatures::COINBASE_OUTPUT, key_id)
+	build_input(value, OutputFeatures::COINBASE, key_id)
 }
 
 /// Adds an output with the provided value and key identifier from the
@@ -97,12 +97,12 @@ where
 
 			(
 				tx.with_output(Output {
-					features: OutputFeatures::DEFAULT_OUTPUT,
+					features: OutputFeatures::PLAIN,
 					commit: commit,
 					proof: rproof,
 				}),
 				kern,
-				sum.add_key_id(key_id.to_path()),
+				sum.add_key_id(key_id.to_value_path(value)),
 			)
 		},
 	)

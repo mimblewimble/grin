@@ -16,7 +16,7 @@
 
 use crate::core::core::hash::Hash;
 use crate::core::core::pmmr::{self, ReadonlyPMMR};
-use crate::core::core::{Block, BlockHeader, Input, Output, OutputFeatures, Transaction};
+use crate::core::core::{Block, BlockHeader, Input, Output, Transaction};
 use crate::core::global;
 use crate::core::ser::PMMRIndexHashable;
 use crate::error::{Error, ErrorKind};
@@ -105,7 +105,7 @@ impl<'a> UTXOView<'a> {
 		// outputs we are attempting to spend.
 		let pos = inputs
 			.iter()
-			.filter(|x| x.features.contains(OutputFeatures::COINBASE_OUTPUT))
+			.filter(|x| x.is_coinbase())
 			.filter_map(|x| self.batch.get_output_pos(&x.commitment()).ok())
 			.max()
 			.unwrap_or(0);

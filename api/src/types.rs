@@ -251,10 +251,7 @@ impl OutputPrintable {
 		block_header: Option<&core::BlockHeader>,
 		include_proof: bool,
 	) -> OutputPrintable {
-		let output_type = if output
-			.features
-			.contains(core::transaction::OutputFeatures::COINBASE_OUTPUT)
-		{
+		let output_type = if output.is_coinbase() {
 			OutputType::Coinbase
 		} else {
 			OutputType::Transaction
@@ -278,11 +275,7 @@ impl OutputPrintable {
 		// We require the rewind() to be stable even after the PMMR is pruned and
 		// compacted so we can still recreate the necessary proof.
 		let mut merkle_proof = None;
-		if output
-			.features
-			.contains(core::transaction::OutputFeatures::COINBASE_OUTPUT)
-			&& !spent && block_header.is_some()
-		{
+		if output.is_coinbase() && !spent && block_header.is_some() {
 			merkle_proof = chain.get_merkle_proof(&out_id, &block_header.unwrap()).ok()
 		};
 

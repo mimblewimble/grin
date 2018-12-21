@@ -26,6 +26,8 @@ use serde_json;
 use failure::ResultExt;
 use uuid::Uuid;
 
+use crate::blake2::blake2b::Blake2b;
+
 use crate::keychain::{ChildNumber, ExtKeychain, Identifier, Keychain};
 use crate::store::{self, option_to_not_found, to_key, to_key_u64};
 
@@ -35,6 +37,7 @@ use crate::libwallet::types::*;
 use crate::libwallet::{internal, Error, ErrorKind};
 use crate::types::{WalletConfig, WalletSeed};
 use crate::util;
+use crate::util::secp::constants::SECRET_KEY_SIZE;
 use crate::util::secp::pedersen;
 
 pub const DB_DIR: &'static str = "db";
@@ -60,6 +63,39 @@ impl From<store::Error> for Error {
 pub fn wallet_db_exists(config: WalletConfig) -> bool {
 	let db_path = path::Path::new(&config.data_file_dir).join(DB_DIR);
 	db_path.exists()
+}
+
+/// Helper to derive XOR keys for storing private transaction keys in the DB
+/// (blind_xor_key, nonce_xor_key)
+fn private_ctx_xor_keys<K>(
+	keychain: &K,
+	slate_id: &[u8],
+) -> Result<([u8; SECRET_KEY_SIZE], [u8; SECRET_KEY_SIZE]), Error>
+where
+	K: Keychain,
+{
+	let root_key = keychain.derive_key(0, &K::root_key_id())?;
+
+	// derive XOR values for storing secret values in DB
+	// h(root_key|slate_id|"blind")
+	let mut hasher = Blake2b::new(SECRET_KEY_SIZE);
+	hasher.update(&root_key.0[..]);
+	hasher.update(&slate_id[..]);
+	hasher.update(&"blind".as_bytes()[..]);
+	let blind_xor_key = hasher.finalize();
+	let mut ret_blind = [0; SECRET_KEY_SIZE];
+	ret_blind.copy_from_slice(&blind_xor_key.as_bytes()[0..SECRET_KEY_SIZE]);
+
+	// h(root_key|slate_id|"nonce")
+	let mut hasher = Blake2b::new(SECRET_KEY_SIZE);
+	hasher.update(&root_key.0[..]);
+	hasher.update(&slate_id[..]);
+	hasher.update(&"nonce".as_bytes()[..]);
+	let nonce_xor_key = hasher.finalize();
+	let mut ret_nonce = [0; SECRET_KEY_SIZE];
+	ret_nonce.copy_from_slice(&nonce_xor_key.as_bytes()[0..SECRET_KEY_SIZE]);
+
+	Ok((ret_blind, ret_nonce))
 }
 
 pub struct LMDBBackend<C, K> {
@@ -140,8 +176,11 @@ where
 	fn open_with_credentials(&mut self) -> Result<(), Error> {
 		let wallet_seed = WalletSeed::from_file(&self.config, &self.passphrase)
 			.context(ErrorKind::CallbackImpl("Error opening wallet"))?;
-		let keychain = wallet_seed.derive_keychain();
-		self.keychain = Some(keychain.context(ErrorKind::CallbackImpl("Error deriving keychain"))?);
+		self.keychain = Some(
+			wallet_seed
+				.derive_keychain()
+				.context(ErrorKind::CallbackImpl("Error deriving keychain"))?,
+		);
 		Ok(())
 	}
 
@@ -229,11 +268,19 @@ where
 
 	fn get_private_context(&mut self, slate_id: &[u8]) -> Result<Context, Error> {
 		let ctx_key = to_key(PRIVATE_TX_CONTEXT_PREFIX, &mut slate_id.to_vec());
-		option_to_not_found(
+		let (blind_xor_key, nonce_xor_key) = private_ctx_xor_keys(self.keychain(), slate_id)?;
+
+		let mut ctx: Context = option_to_not_found(
 			self.db.get_ser(&ctx_key),
 			&format!("Slate id: {:x?}", slate_id.to_vec()),
-		)
-		.map_err(|e| e.into())
+		)?;
+
+		for i in 0..SECRET_KEY_SIZE {
+			ctx.sec_key.0[i] = ctx.sec_key.0[i] ^ blind_xor_key[i];
+			ctx.sec_nonce.0[i] = ctx.sec_nonce.0[i] ^ nonce_xor_key[i];
+		}
+
+		Ok(ctx)
 	}
 
 	fn acct_path_iter<'a>(&'a self) -> Box<dyn Iterator<Item = AcctPathMapping> + 'a> {
@@ -259,7 +306,7 @@ where
 	}
 
 	fn get_stored_tx(&self, entry: &TxLogEntry) -> Result<Option<Transaction>, Error> {
-		let filename = match entry.tx_hex.clone() {
+		let filename = match entry.stored_tx.clone() {
 			Some(f) => f,
 			None => return Ok(None),
 		};
@@ -498,11 +545,21 @@ where
 		self.save(out.clone())
 	}
 
-	//TODO: Keys stored unencrypted in DB.. not good
-	// should store keys as derivation paths instead
 	fn save_private_context(&mut self, slate_id: &[u8], ctx: &Context) -> Result<(), Error> {
 		let ctx_key = to_key(PRIVATE_TX_CONTEXT_PREFIX, &mut slate_id.to_vec());
-		self.db.borrow().as_ref().unwrap().put_ser(&ctx_key, &ctx)?;
+		let (blind_xor_key, nonce_xor_key) = private_ctx_xor_keys(self.keychain(), slate_id)?;
+
+		let mut s_ctx = ctx.clone();
+		for i in 0..SECRET_KEY_SIZE {
+			s_ctx.sec_key.0[i] = s_ctx.sec_key.0[i] ^ blind_xor_key[i];
+			s_ctx.sec_nonce.0[i] = s_ctx.sec_nonce.0[i] ^ nonce_xor_key[i];
+		}
+
+		self.db
+			.borrow()
+			.as_ref()
+			.unwrap()
+			.put_ser(&ctx_key, &s_ctx)?;
 		Ok(())
 	}
 

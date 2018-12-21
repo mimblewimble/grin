@@ -1130,7 +1130,7 @@ impl Chain {
 
 		let (_, pos) = txhashset.is_unspent(output_ref)?;
 
-		let mut min = 1;
+		let mut min = 0;
 		let mut max = {
 			let head = self.head()?;
 			head.height
@@ -1139,6 +1139,9 @@ impl Chain {
 		loop {
 			let search_height = max - (max - min) / 2;
 			let h = txhashset.get_header_by_height(search_height)?;
+			if search_height == 0 {
+				return Ok(h);
+			}
 			let h_prev = txhashset.get_header_by_height(search_height - 1)?;
 			if pos > h.output_mmr_size {
 				min = search_height;

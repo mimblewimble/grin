@@ -31,7 +31,7 @@ fn test_output_ser_deser() {
 	let proof = proof::create(&keychain, 5, &key_id, commit, None).unwrap();
 
 	let out = Output {
-		features: OutputFeatures::DEFAULT_OUTPUT,
+		features: OutputFeatures::PLAIN,
 		commit: commit,
 		proof: proof,
 	};
@@ -40,7 +40,7 @@ fn test_output_ser_deser() {
 	ser::serialize(&mut vec, &out).expect("serialized failed");
 	let dout: Output = ser::deserialize(&mut &vec[..]).unwrap();
 
-	assert_eq!(dout.features, OutputFeatures::DEFAULT_OUTPUT);
+	assert_eq!(dout.features, OutputFeatures::PLAIN);
 	assert_eq!(dout.commit, out.commit);
 	assert_eq!(dout.proof, out.proof);
 }

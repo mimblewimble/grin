@@ -40,10 +40,12 @@ bitflags! {
 	/// Options for a kernel's structure or use
 	#[derive(Serialize, Deserialize)]
 	pub struct KernelFeatures: u8 {
-		/// No flags
-		const DEFAULT_KERNEL = 0b00000000;
-		/// Kernel matching a coinbase output
-		const COINBASE_KERNEL = 0b00000001;
+		/// plain kernel has fee, but no lock_height
+		const PLAIN         = 0;
+		/// coinbase kernel has neither fee nor lock_height (both zero)
+		const COINBASE      = 1;
+		/// absolute height locked kernel; has fee and lock_height
+		const HEIGHT_LOCKED = 2;
 	}
 }
 
@@ -202,7 +204,39 @@ impl PMMRable for TxKernel {
 	}
 }
 
+impl KernelFeatures {
+	/// Is this a coinbase kernel?
+	pub fn is_coinbase(&self) -> bool {
+		self.contains(KernelFeatures::COINBASE)
+	}
+
+	/// Is this a plain kernel?
+	pub fn is_plain(&self) -> bool {
+		!self.is_coinbase() && !self.is_height_locked()
+	}
+
+	/// Is this a height locked kernel?
+	pub fn is_height_locked(&self) -> bool {
+		self.contains(KernelFeatures::HEIGHT_LOCKED)
+	}
+}
+
 impl TxKernel {
+	/// Is this a coinbase kernel?
+	pub fn is_coinbase(&self) -> bool {
+		self.features.is_coinbase()
+	}
+
+	/// Is this a plain kernel?
+	pub fn is_plain(&self) -> bool {
+		self.features.is_plain()
+	}
+
+	/// Is this a height locked kernel?
+	pub fn is_height_locked(&self) -> bool {
+		self.features.is_height_locked()
+	}
+
 	/// Return the excess commitment for this tx_kernel.
 	pub fn excess(&self) -> Commitment {
 		self.excess
@@ -219,6 +253,10 @@ impl TxKernel {
 	/// as a public key and checking the signature verifies with the fee as
 	/// message.
 	pub fn verify(&self) -> Result<(), Error> {
+		if self.is_coinbase() && self.fee != 0 || !self.is_height_locked() && self.lock_height != 0
+		{
+			return Err(Error::InvalidKernelFeatures);
+		}
 		let secp = static_secp_instance();
 		let secp = secp.lock();
 		let sig = &self.excess_sig;
@@ -242,7 +280,7 @@ impl TxKernel {
 	/// Build an empty tx kernel with zero values.
 	pub fn empty() -> TxKernel {
 		TxKernel {
-			features: KernelFeatures::DEFAULT_KERNEL,
+			features: KernelFeatures::PLAIN,
 			fee: 0,
 			lock_height: 0,
 			excess: Commitment::from_vec(vec![0; 33]),
@@ -258,6 +296,7 @@ impl TxKernel {
 	/// Builds a new tx kernel with the provided lock_height.
 	pub fn with_lock_height(self, lock_height: u64) -> TxKernel {
 		TxKernel {
+			features: kernel_features(lock_height),
 			lock_height,
 			..self
 		}
@@ -586,25 +625,17 @@ impl TransactionBody {
 		Ok(())
 	}
 
-	// Verify we have no outputs tagged as COINBASE_OUTPUT.
+	// Verify we have no outputs tagged as COINBASE.
 	fn verify_output_features(&self) -> Result<(), Error> {
-		if self
-			.outputs
-			.iter()
-			.any(|x| x.features.contains(OutputFeatures::COINBASE_OUTPUT))
-		{
+		if self.outputs.iter().any(|x| x.is_coinbase()) {
 			return Err(Error::InvalidOutputFeatures);
 		}
 		Ok(())
 	}
 
-	// Verify we have no kernels tagged as COINBASE_KERNEL.
+	// Verify we have no kernels tagged as COINBASE.
 	fn verify_kernel_features(&self) -> Result<(), Error> {
-		if self
-			.kernels
-			.iter()
-			.any(|x| x.features.contains(KernelFeatures::COINBASE_KERNEL))
-		{
+		if self.kernels.iter().any(|x| x.is_coinbase()) {
 			return Err(Error::InvalidKernelFeatures);
 		}
 		Ok(())
@@ -1081,6 +1112,16 @@ impl Input {
 	pub fn commitment(&self) -> Commitment {
 		self.commit
 	}
+
+	/// Is this a coinbase input?
+	pub fn is_coinbase(&self) -> bool {
+		self.features.is_coinbase()
+	}
+
+	/// Is this a plain input?
+	pub fn is_plain(&self) -> bool {
+		self.features.is_plain()
+	}
 }
 
 bitflags! {
@@ -1088,9 +1129,9 @@ bitflags! {
 	#[derive(Serialize, Deserialize)]
 	pub struct OutputFeatures: u8 {
 		/// No flags
-		const DEFAULT_OUTPUT = 0b00000000;
+		const PLAIN    = 0;
 		/// Output is a coinbase output, must not be spent until maturity
-		const COINBASE_OUTPUT = 0b00000001;
+		const COINBASE = 1;
 	}
 }
 
@@ -1160,10 +1201,32 @@ impl PMMRable for Output {
 	}
 }
 
+impl OutputFeatures {
+	/// Is this a coinbase output?
+	pub fn is_coinbase(&self) -> bool {
+		self.contains(OutputFeatures::COINBASE)
+	}
+
+	/// Is this a plain output?
+	pub fn is_plain(&self) -> bool {
+		!self.contains(OutputFeatures::COINBASE)
+	}
+}
+
 impl Output {
 	/// Commitment for the output
 	pub fn commitment(&self) -> Commitment {
 		self.commit
+	}
+
+	/// Is this a coinbase kernel?
+	pub fn is_coinbase(&self) -> bool {
+		self.features.is_coinbase()
+	}
+
+	/// Is this a plain kernel?
+	pub fn is_plain(&self) -> bool {
+		self.features.is_plain()
 	}
 
 	/// Range proof for the output
@@ -1291,23 +1354,41 @@ impl From<Output> for OutputIdentifier {
 /// to produce a 32 byte message to sign.
 ///
 /// testnet4: msg = (fee || lock_height)
-/// mainnet:  msg = hash(fee || lock_height || features)
+/// mainnet:  msg = hash(features)                       for coinbase kernels
+///                 hash(features || fee)                for plain kernels
+///                 hash(features || fee || lock_height) for height locked kernels
 ///
 pub fn kernel_sig_msg(
 	fee: u64,
 	lock_height: u64,
 	features: KernelFeatures,
 ) -> Result<secp::Message, Error> {
+	if features.is_coinbase() && fee != 0 || !features.is_height_locked() && lock_height != 0 {
+		return Err(Error::InvalidKernelFeatures);
+	}
 	let msg = if global::is_testnet() {
 		let mut bytes = [0; 32];
 		BigEndian::write_u64(&mut bytes[16..24], fee);
 		BigEndian::write_u64(&mut bytes[24..], lock_height);
 		secp::Message::from_slice(&bytes)?
 	} else {
-		let hash = (fee, lock_height, features).hash();
+		let hash = match features {
+			KernelFeatures::COINBASE => (features).hash(),
+			KernelFeatures::PLAIN => (features, fee).hash(),
+			_ => (features, fee, lock_height).hash(),
+		};
 		secp::Message::from_slice(&hash.as_bytes())?
 	};
 	Ok(msg)
+}
+
+/// kernel features as determined by lock height
+pub fn kernel_features(lock_height: u64) -> KernelFeatures {
+	if lock_height > 0 {
+		KernelFeatures::HEIGHT_LOCKED
+	} else {
+		KernelFeatures::PLAIN
+	}
 }
 
 #[cfg(test)]
@@ -1328,7 +1409,7 @@ mod test {
 		let sig = secp::Signature::from_raw_data(&[0; 64]).unwrap();
 
 		let kernel = TxKernel {
-			features: KernelFeatures::DEFAULT_KERNEL,
+			features: KernelFeatures::PLAIN,
 			lock_height: 0,
 			excess: commit,
 			excess_sig: sig.clone(),
@@ -1338,7 +1419,7 @@ mod test {
 		let mut vec = vec![];
 		ser::serialize(&mut vec, &kernel).expect("serialized failed");
 		let kernel2: TxKernel = ser::deserialize(&mut &vec[..]).unwrap();
-		assert_eq!(kernel2.features, KernelFeatures::DEFAULT_KERNEL);
+		assert_eq!(kernel2.features, KernelFeatures::PLAIN);
 		assert_eq!(kernel2.lock_height, 0);
 		assert_eq!(kernel2.excess, commit);
 		assert_eq!(kernel2.excess_sig, sig.clone());
@@ -1346,7 +1427,7 @@ mod test {
 
 		// now check a kernel with lock_height serialize/deserialize correctly
 		let kernel = TxKernel {
-			features: KernelFeatures::DEFAULT_KERNEL,
+			features: KernelFeatures::HEIGHT_LOCKED,
 			lock_height: 100,
 			excess: commit,
 			excess_sig: sig.clone(),
@@ -1356,7 +1437,7 @@ mod test {
 		let mut vec = vec![];
 		ser::serialize(&mut vec, &kernel).expect("serialized failed");
 		let kernel2: TxKernel = ser::deserialize(&mut &vec[..]).unwrap();
-		assert_eq!(kernel2.features, KernelFeatures::DEFAULT_KERNEL);
+		assert_eq!(kernel2.features, KernelFeatures::HEIGHT_LOCKED);
 		assert_eq!(kernel2.lock_height, 100);
 		assert_eq!(kernel2.excess, commit);
 		assert_eq!(kernel2.excess_sig, sig.clone());
@@ -1383,7 +1464,7 @@ mod test {
 		let commit = keychain.commit(5, &key_id).unwrap();
 
 		let input = Input {
-			features: OutputFeatures::DEFAULT_OUTPUT,
+			features: OutputFeatures::PLAIN,
 			commit: commit,
 		};
 
@@ -1394,16 +1475,16 @@ mod test {
 		let nonce = 0;
 
 		let short_id = input.short_id(&block_hash, nonce);
-		assert_eq!(short_id, ShortId::from_hex("df31d96e3cdb").unwrap());
+		assert_eq!(short_id, ShortId::from_hex("c4b05f2ba649").unwrap());
 
 		// now generate the short_id for a *very* similar output (single feature flag
 		// different) and check it generates a different short_id
 		let input = Input {
-			features: OutputFeatures::COINBASE_OUTPUT,
+			features: OutputFeatures::COINBASE,
 			commit: commit,
 		};
 
 		let short_id = input.short_id(&block_hash, nonce);
-		assert_eq!(short_id, ShortId::from_hex("784fc5afd5d9").unwrap());
+		assert_eq!(short_id, ShortId::from_hex("3f0377c624e9").unwrap());
 	}
 }

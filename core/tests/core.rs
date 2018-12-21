@@ -75,7 +75,8 @@ fn tx_double_ser_deser() {
 #[test]
 #[should_panic(expected = "Keychain Error")]
 fn test_zero_commit_fails() {
-	let keychain = ExtKeychain::from_random_seed().unwrap();
+	let mut keychain = ExtKeychain::from_random_seed().unwrap();
+	keychain.set_use_switch_commits(false);
 	let key_id1 = ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
 
 	// blinding should fail as signing with a zero r*G shouldn't work
@@ -121,7 +122,7 @@ fn build_tx_kernel() {
 	let kern = &tx.kernels()[0];
 	kern.verify().unwrap();
 
-	assert_eq!(kern.features, KernelFeatures::DEFAULT_KERNEL);
+	assert_eq!(kern.features, KernelFeatures::PLAIN);
 	assert_eq!(kern.fee, tx.fee());
 }
 
