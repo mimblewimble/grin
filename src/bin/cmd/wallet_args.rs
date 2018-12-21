@@ -23,6 +23,7 @@ use grin_keychain as keychain;
 use grin_wallet::{command, instantiate_wallet, NodeClient, WalletConfig, WalletInst, WalletSeed};
 use grin_wallet::{Error, ErrorKind};
 use rpassword;
+use std::io::{self, BufRead};
 use std::path::Path;
 use std::sync::Arc;
 
@@ -60,6 +61,14 @@ fn prompt_password_confirm() -> String {
 		std::process::exit(0);
 	}
 	first
+}
+
+fn prompt_recovery_phrase() -> String {
+	println!("Type your recovery phrase carefully (ctrl+c to abort and retry):");
+	let stdin = io::stdin();
+	let mut line_iter = stdin.lock().lines();
+	let first = line_iter.next().unwrap().unwrap();
+	first.clone()
 }
 
 // instantiate wallet (needed by most functions)
@@ -179,10 +188,11 @@ pub fn parse_recover_args(
 	args: &ArgMatches,
 ) -> Result<command::RecoverArgs, ParseError> {
 	let (passphrase, recovery_phrase) = {
-		match args.value_of("recovery_phrase") {
-			None => (prompt_password(&g_args.password), None),
-			Some(l) => {
-				if WalletSeed::from_mnemonic(l).is_err() {
+		match args.is_present("recovery_phrase") {
+			false => (prompt_password(&g_args.password), None),
+			true => {
+				let l = prompt_recovery_phrase();
+				if WalletSeed::from_mnemonic(&l).is_err() {
 					let msg = format!("Recovery word phrase is invalid");
 					return Err(ParseError::ArgumentError(msg));
 				}
