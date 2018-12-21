@@ -152,11 +152,6 @@ where
 	}
 }
 
-/// Return the type of the pos
-pub fn pow_type() -> PoWContextTypes {
-	PoWContextTypes::Cuckatoo
-}
-
 /// The minimum acceptable edge_bits
 pub fn min_edge_bits() -> u8 {
 	let param_ref = CHAIN_TYPE.read();
