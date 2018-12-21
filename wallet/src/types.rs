@@ -151,6 +151,9 @@ impl WalletSeed {
 		word_list: &str,
 		password: &str,
 	) -> Result<(), Error> {
+		// create directory if it doesn't exist
+		fs::create_dir_all(&wallet_config.data_file_dir).context(ErrorKind::IO)?;
+
 		let seed_file_path = &format!(
 			"{}{}{}",
 			wallet_config.data_file_dir, MAIN_SEPARATOR, SEED_FILE,
