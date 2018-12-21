@@ -439,6 +439,20 @@ impl StratumServer {
 		// Validate parameters
 		let params: SubmitParams = parse_params(params)?;
 
+		if params.height != self.current_block_versions.last().unwrap().header.height {
+			// Return error status
+			error!(
+				"(Server ID: {}) Share at height {}, edge_bits {}, nonce {}, job_id {} submitted too late",
+				self.id, params.height, params.edge_bits, params.nonce, params.job_id,
+			);
+			worker_stats.num_stale += 1;
+			let e = RpcError {
+				code: -32503,
+				message: "Solution submitted too late".to_string(),
+			};
+			return Err(serde_json::to_value(e).unwrap());
+		}
+
 		let share_difficulty: u64;
 		let mut share_is_block = false;
 
@@ -477,19 +491,6 @@ impl StratumServer {
 			return Err(serde_json::to_value(e).unwrap());
 		}
 
-		if params.height != self.current_block_versions.last().unwrap().header.height {
-			// Return error status
-			error!(
-				"(Server ID: {}) Share at height {}, hash {}, edge_bits {}, nonce {}, job_id {} submitted too late",
-				self.id, params.height, b.hash(), params.edge_bits, params.nonce, params.job_id,
-			);
-			worker_stats.num_stale += 1;
-			let e = RpcError {
-				code: -32503,
-				message: "Solution submitted too late".to_string(),
-			};
-			return Err(serde_json::to_value(e).unwrap());
-		}
 		// Get share difficulty
 		share_difficulty = b.header.pow.to_difficulty(b.header.height).to_num();
 		// If the difficulty is too low its an error
