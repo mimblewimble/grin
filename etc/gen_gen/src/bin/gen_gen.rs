@@ -16,7 +16,7 @@
 
 use std::io::{BufRead, Write};
 use std::sync::Arc;
-use std::{fs, io, path, process};
+use std::{fs, io, path};
 
 use chrono::prelude::Utc;
 use chrono::{Datelike, Duration, Timelike};
@@ -78,8 +78,6 @@ fn main() {
 
 	// build the basic parts of the genesis block header
 	let mut gen = core::genesis::genesis_main();
-	gen.header.timestamp = Utc::now() + Duration::minutes(30);
-	gen.header.prev_root = core::core::hash::Hash::from_hex(&h1).unwrap();
 
 	// build the wallet seed and derive a coinbase from local wallet.seed
 	let seed = wallet::WalletSeed::from_file(
@@ -97,6 +95,11 @@ fn main() {
 		let tmp_chain = setup_chain(".grin.tmp", core::pow::mine_genesis_block().unwrap());
 		tmp_chain.set_txhashset_roots(&mut gen).unwrap();
 	}
+
+	// sets the timestamp and prev_root from the bitcoin block (needs to be
+	// after set_txhashset roots to not get overwritten)
+	gen.header.timestamp = Utc::now() + Duration::minutes(30);
+	gen.header.prev_root = core::core::hash::Hash::from_hex(&h1).unwrap();
 
 	// mine a Cuckaroo29 block
 	core::global::set_mining_mode(core::global::ChainTypes::Mainnet);
@@ -150,26 +153,6 @@ fn main() {
 	update_genesis_rs(&gen);
 	println!("genesis.rs has been updated, check it and run mainnet_genesis_hash test");
 	println!("also check bitcoin block {} hasn't been orphaned.", h1);
-	println!("press c+enter to proceed.");
-	let mut input = String::new();
-	io::stdin().read_line(&mut input).unwrap();
-	if input != "c\n" {
-		return;
-	}
-
-	// Commit genesis block info in git and tag
-	process::Command::new("git")
-		.args(&["commit", "-am", "Minor: finalized genesis block"])
-		.status()
-		.expect("git commit failed");
-	process::Command::new("git")
-		.args(&["tag", "-a", "v1.0", "-m", "Mainnet release"])
-		.status()
-		.expect("git tag failed");
-	process::Command::new("git")
-		.args(&["push", "origin", "v1.0"])
-		.status()
-		.expect("git tag push failed");
 	println!("All done!");
 }
 
