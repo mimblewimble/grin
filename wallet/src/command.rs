@@ -282,6 +282,10 @@ pub fn receive(
 	let adapter = FileWalletCommAdapter::new();
 	let mut slate = adapter.receive_tx_async(&args.input)?;
 	controller::foreign_single_use(wallet, |api| {
+		if let Err(e) = api.verify_slate_messages(&slate) {
+			error!("Error validating participant messages: {}", e);
+			return Err(e);
+		}
 		api.receive_tx(&mut slate, Some(&g_args.account), args.message.clone())?;
 		Ok(())
 	})?;

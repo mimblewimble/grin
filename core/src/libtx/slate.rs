@@ -351,8 +351,8 @@ impl Slate {
 	/// Verifies any messages in the slate's participant data match their signatures
 	pub fn verify_messages(&self, secp: &secp::Secp256k1) -> Result<(), Error> {
 		for p in self.participant_data.iter() {
-			if let Some(m) = p.message.clone() {
-				let hashed = blake2b(secp::constants::MESSAGE_SIZE, &[], &m.as_bytes()[..]);
+			if let Some(msg) = p.message.clone() {
+				let hashed = blake2b(secp::constants::MESSAGE_SIZE, &[], &msg.as_bytes()[..]);
 				let m = secp::Message::from_slice(&hashed.as_bytes())?;
 				if !aggsig::verify_single(
 					secp,
@@ -363,9 +363,16 @@ impl Slate {
 					None,
 					false,
 				) {
+					error!("verify_messages - participant message doesn't match signature. Message: \"{}\"",
+						   String::from_utf8_lossy(&msg.as_bytes()[..]));
 					return Err(ErrorKind::Signature(
 						"Optional participant messages do not match signatures".to_owned(),
 					))?;
+				} else {
+					info!(
+						"verify_messages - signature verified ok. Participant message: \"{}\"",
+						String::from_utf8_lossy(&msg.as_bytes()[..])
+					);
 				}
 			}
 		}
