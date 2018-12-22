@@ -50,13 +50,7 @@ where
 	let mut outputs = wallet
 		.iter()
 		.filter(|out| out.root_key_id == *parent_key_id)
-		.filter(|out| {
-			if show_spent {
-				true
-			} else {
-				out.status != OutputStatus::Spent
-			}
-		})
+		.filter(|out| show_spent || out.status != OutputStatus::Spent)
 		.collect::<Vec<_>>();
 
 	// only include outputs with a given tx_id if provided
