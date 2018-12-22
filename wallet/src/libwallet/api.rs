@@ -832,6 +832,7 @@ where
 
 	/// Verifies all messages in the slate match their public keys
 	pub fn verify_slate_messages(&mut self, slate: &Slate) -> Result<(), Error> {
+		error!("verify_slate_messages - enter");
 		let secp = Secp256k1::with_caps(ContextFlag::VerifyOnly);
 		slate.verify_messages(&secp)?;
 		Ok(())
