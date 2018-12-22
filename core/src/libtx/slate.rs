@@ -369,8 +369,10 @@ impl Slate {
 						"Optional participant messages do not match signatures".to_owned(),
 					))?;
 				} else {
-					info!("verify_messages - signature verified ok. Participant message: \"{}\"",
-						  String::from_utf8_lossy(&msg.as_bytes()[..]));
+					info!(
+						"verify_messages - signature verified ok. Participant message: \"{}\"",
+						String::from_utf8_lossy(&msg.as_bytes()[..])
+					);
 				}
 			}
 		}
