@@ -266,6 +266,12 @@ pub fn is_testnet() -> bool {
 	ChainTypes::Floonet == *param_ref
 }
 
+/// Are we for real?
+pub fn is_mainnet() -> bool {
+	let param_ref = CHAIN_TYPE.read();
+	ChainTypes::Mainnet == *param_ref
+}
+
 /// Helper function to get a nonce known to create a valid POW on
 /// the genesis block, to prevent it taking ages. Should be fine for now
 /// as the genesis block POW solution turns out to be the same for every new

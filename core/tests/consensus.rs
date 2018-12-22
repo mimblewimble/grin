@@ -541,118 +541,44 @@ fn test_secondary_pow_scale() {
 	let window = DIFFICULTY_ADJUST_WINDOW;
 	let mut hi = HeaderInfo::from_diff_scaling(Difficulty::from_num(10), 100);
 
-	// floonet testing
-	{
-		global::set_mining_mode(global::ChainTypes::Floonet);
-		assert_eq!(global::is_testnet(), true);
-
-		// all primary, factor should increase so it becomes easier to find a high
-		// difficulty block
-		hi.is_secondary = false;
-		assert_eq!(
-			secondary_pow_scaling(1, &(0..window).map(|_| hi.clone()).collect::<Vec<_>>()),
-			106
-		);
-		// all secondary on 90%, factor should go down a bit
-		hi.is_secondary = true;
-		assert_eq!(
-			secondary_pow_scaling(1, &(0..window).map(|_| hi.clone()).collect::<Vec<_>>()),
-			97
-		);
-		// all secondary on 1%, factor should go down to bound (divide by 2)
-		assert_eq!(
-			secondary_pow_scaling(
-				890_000,
-				&(0..window).map(|_| hi.clone()).collect::<Vec<_>>()
-			),
-			67
-		);
-		// same as above, testing lowest bound
-		let mut low_hi =
-			HeaderInfo::from_diff_scaling(Difficulty::from_num(10), MIN_DIFFICULTY as u32);
-		low_hi.is_secondary = true;
-		assert_eq!(
-			secondary_pow_scaling(
-				890_000,
-				&(0..window).map(|_| low_hi.clone()).collect::<Vec<_>>()
-			),
-			MIN_DIFFICULTY as u32
-		);
-		// just about the right ratio, also no longer playing with median
-		let mut primary_hi = HeaderInfo::from_diff_scaling(Difficulty::from_num(10), 50);
-		primary_hi.is_secondary = false;
-		assert_eq!(
-			secondary_pow_scaling(
-				1,
-				&(0..(window / 10))
-					.map(|_| primary_hi.clone())
-					.chain((0..(window * 9 / 10)).map(|_| hi.clone()))
-					.collect::<Vec<_>>()
-			),
-			94
-		);
-		// 95% secondary, should come down based on 97.5 average
-		assert_eq!(
-			secondary_pow_scaling(
-				1,
-				&(0..(window / 20))
-					.map(|_| primary_hi.clone())
-					.chain((0..(window * 95 / 100)).map(|_| hi.clone()))
-					.collect::<Vec<_>>()
-			),
-			96
-		);
-		// 40% secondary, should come up based on 70 average
-		assert_eq!(
-			secondary_pow_scaling(
-				1,
-				&(0..(window * 6 / 10))
-					.map(|_| primary_hi.clone())
-					.chain((0..(window * 4 / 10)).map(|_| hi.clone()))
-					.collect::<Vec<_>>()
-			),
-			72
-		);
-	}
-
 	// mainnet testing
 	{
 		global::set_mining_mode(global::ChainTypes::Mainnet);
-		assert_eq!(global::is_testnet(), false);
+		assert_eq!(global::is_mainnet(), true);
 
 		// all primary, factor should increase so it becomes easier to find a high
 		// difficulty block
 		hi.is_secondary = false;
 		assert_eq!(
 			secondary_pow_scaling(1, &(0..window).map(|_| hi.clone()).collect::<Vec<_>>()),
-			106
+			108
 		);
 		// all secondary on 90%, factor should go down a bit
 		hi.is_secondary = true;
 		assert_eq!(
 			secondary_pow_scaling(1, &(0..window).map(|_| hi.clone()).collect::<Vec<_>>()),
-			97
+			99
 		);
 		// all secondary on 1%, factor should go down to bound (divide by 2)
 		assert_eq!(
 			secondary_pow_scaling(
-				890_000,
+				2 * YEAR_HEIGHT * 83 / 90,
 				&(0..window).map(|_| hi.clone()).collect::<Vec<_>>()
 			),
-			67
+			50
 		);
 		// same as above, testing lowest bound
 		let mut low_hi =
-			HeaderInfo::from_diff_scaling(Difficulty::from_num(10), MIN_DIFFICULTY as u32);
+			HeaderInfo::from_diff_scaling(Difficulty::from_num(10), MIN_AR_SCALE as u32);
 		low_hi.is_secondary = true;
 		assert_eq!(
 			secondary_pow_scaling(
-				890_000,
+				2 * YEAR_HEIGHT,
 				&(0..window).map(|_| low_hi.clone()).collect::<Vec<_>>()
 			),
-			MIN_DIFFICULTY as u32
+			MIN_AR_SCALE as u32
 		);
-		// just about the right ratio, also no longer playing with median
+		// the right ratio of 95% secondary
 		let mut primary_hi = HeaderInfo::from_diff_scaling(Difficulty::from_num(10), 50);
 		primary_hi.is_secondary = false;
 		assert_eq!(
@@ -663,7 +589,7 @@ fn test_secondary_pow_scale() {
 					.chain((0..(window * 9 / 10)).map(|_| hi.clone()))
 					.collect::<Vec<_>>()
 			),
-			94
+			95, // avg ar_scale of 10% * 50 + 90% * 100
 		);
 		// 95% secondary, should come down based on 97.5 average
 		assert_eq!(
@@ -674,7 +600,7 @@ fn test_secondary_pow_scale() {
 					.chain((0..(window * 95 / 100)).map(|_| hi.clone()))
 					.collect::<Vec<_>>()
 			),
-			96
+			97
 		);
 		// 40% secondary, should come up based on 70 average
 		assert_eq!(
@@ -685,7 +611,7 @@ fn test_secondary_pow_scale() {
 					.chain((0..(window * 4 / 10)).map(|_| hi.clone()))
 					.collect::<Vec<_>>()
 			),
-			72
+			73
 		);
 	}
 }
