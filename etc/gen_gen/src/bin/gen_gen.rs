@@ -82,8 +82,9 @@ fn main() {
 	// build the wallet seed and derive a coinbase from local wallet.seed
 	let seed = wallet::WalletSeed::from_file(
 		&wallet::WalletConfig::default(),
-		&rpassword::prompt_password_stdout("Password: ").unwrap()
-	).unwrap();
+		&rpassword::prompt_password_stdout("Password: ").unwrap(),
+	)
+	.unwrap();
 	let keychain: ExtKeychain = seed.derive_keychain().unwrap();
 	let key_id = ExtKeychain::derive_key_id(2, 1, 0, 0, 0);
 	let reward = core::libtx::reward::output(&keychain, &key_id, 0).unwrap();
@@ -319,4 +320,3 @@ fn get_json(url: &str) -> serde_json::Value {
 	}
 	serde_json::from_slice(&body).unwrap()
 }
-
