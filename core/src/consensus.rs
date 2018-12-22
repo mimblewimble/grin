@@ -84,11 +84,6 @@ pub const SECOND_POW_EDGE_BITS: u8 = 29;
 /// Cuckoo graph sizes, changing this would hard fork
 pub const BASE_EDGE_BITS: u8 = 24;
 
-/// Maximum scaling factor for secondary pow, enforced in diff retargetting
-/// increasing scaling factor increases frequency of secondary blocks
-/// ONLY IN TESTNET4 LIMITED TO ABOUT 8 TIMES THE NATURAL SCALE
-pub const MAX_SECONDARY_SCALING: u64 = 8 << 11;
-
 /// Default number of blocks in the past when cross-block cut-through will start
 /// happening. Needs to be long enough to not overlap with a long reorg.
 /// Rational
@@ -181,8 +176,13 @@ pub fn graph_weight(height: u64, edge_bits: u8) -> u64 {
 	(2 << (edge_bits - global::base_edge_bits()) as u64) * xpr_edge_bits
 }
 
-/// minimum difficulty to avoid getting stuck when trying to increase subject to dampening
+/// Minimum difficulty, enforced in diff retargetting
+/// avoids getting stuck when trying to increase difficulty subject to dampening
 pub const MIN_DIFFICULTY: u64 = DIFFICULTY_DAMP_FACTOR;
+
+/// Minimum scaling factor for AR pow, enforced in diff retargetting
+/// avoids getting stuck when trying to increase ar_scale subject to dampening
+pub const MIN_AR_SCALE: u64 = AR_SCALE_DAMP_FACTOR;
 
 /// unit difficulty, equal to graph_weight(SECOND_POW_EDGE_BITS)
 pub const UNIT_DIFFICULTY: u64 =
@@ -231,7 +231,7 @@ impl HeaderInfo {
 			timestamp,
 			difficulty,
 			secondary_scaling: global::initial_graph_weight(),
-			is_secondary: false,
+			is_secondary: global::is_mainnet(), // floonet launched with false:-(
 		}
 	}
 
@@ -280,8 +280,8 @@ where
 	// DIFFICULTY_ADJUST_WINDOW + 1 (for initial block time bound)
 	let diff_data = global::difficulty_data_to_vector(cursor);
 
-	// First, get the ratio of secondary PoW vs primary
-	let sec_pow_scaling = secondary_pow_scaling(height, &diff_data);
+	// First, get the ratio of secondary PoW vs primary, skipping initial header
+	let sec_pow_scaling = secondary_pow_scaling(height, &diff_data[1..]);
 
 	// Get the timestamp delta across the window
 	let ts_delta: u64 =
@@ -306,13 +306,10 @@ where
 	HeaderInfo::from_diff_scaling(Difficulty::from_num(difficulty), sec_pow_scaling)
 }
 
-/// Count the number of "secondary" (AR) blocks in the provided window of blocks.
-/// Note: we skip the first one, but testnet4 was incorrectly including it before
-/// the hardfork.
-fn ar_count(_height: u64, diff_data: &[HeaderInfo]) -> u64 {
+/// Count, in units of 1/100 (a percent), the number of "secondary" (AR) blocks in the provided window of blocks.
+pub fn ar_count(_height: u64, diff_data: &[HeaderInfo]) -> u64 {
 	100 * diff_data
 		.iter()
-		.skip(1)
 		.filter(|n| n.is_secondary)
 		.count() as u64
 }
@@ -322,7 +319,6 @@ pub fn secondary_pow_scaling(height: u64, diff_data: &[HeaderInfo]) -> u32 {
 	// Get the scaling factor sum of the last DIFFICULTY_ADJUST_WINDOW elements
 	let scale_sum: u64 = diff_data
 		.iter()
-		.skip(1)
 		.map(|dd| dd.secondary_scaling as u64)
 		.sum();
 
@@ -341,10 +337,10 @@ pub fn secondary_pow_scaling(height: u64, diff_data: &[HeaderInfo]) -> u32 {
 		target_count,
 		CLAMP_FACTOR,
 	);
-	let scale = scale_sum * target_pct / adj_count;
+	let scale = scale_sum * target_pct / max(1, adj_count);
 
-	// minimum difficulty avoids getting stuck due to dampening
-	max(MIN_DIFFICULTY, min(scale, MAX_SECONDARY_SCALING)) as u32
+	// minimum AR scale avoids getting stuck due to dampening
+	max(MIN_AR_SCALE, scale) as u32
 }
 
 #[cfg(test)]
