@@ -9,6 +9,7 @@ What's working so far?
 
 * Linux x86\_64 and MacOS [grin + mining + development]
 * Not Windows 10 yet [grin kind-of builds. No mining yet. Help wanted!]
+* Not ARM-based systems yet (eg. Raspberry Pi)
 
 ## Requirements
 
