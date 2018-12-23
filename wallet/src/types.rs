@@ -57,6 +57,8 @@ pub struct WalletConfig {
 	/// Whether to use the black background color scheme for command line
 	/// if enabled, wallet command output color will be suitable for black background terminal
 	pub dark_background_color_scheme: Option<bool>,
+	// The exploding lifetime (minutes) for keybase notification on coins received
+	pub keybase_notify_ttl: u16,
 }
 
 impl Default for WalletConfig {
@@ -72,6 +74,7 @@ impl Default for WalletConfig {
 			tls_certificate_file: None,
 			tls_certificate_key: None,
 			dark_background_color_scheme: Some(true),
+			keybase_notify_ttl: 1440,
 		}
 	}
 }

@@ -157,6 +157,32 @@ fn send<T: Serialize>(message: T, channel: &str, topic: &str, ttl: u16) -> bool 
 	}
 }
 
+/// Send a notify to self that self-destructs after ttl minutes.
+fn notify(message: &str, channel: &str, ttl: u16) -> bool {
+	let minutes = format!("{}m", ttl);
+	let payload = to_string(&json!({
+		"method": "send",
+		"params": {
+			"options": {
+				"channel": {
+						"name": channel
+					},
+						"message": {
+								"body": message
+							},
+							"exploding_lifetime": minutes
+						}
+					}
+				}
+	))
+		.unwrap();
+	let response = api_send(&payload);
+	match response["result"]["message"].as_str() {
+		Some("message sent") => true,
+		_ => false,
+	}
+}
+
 /// Listen for a message from a specific channel with topic SLATE_SIGNED for nseconds and return the first valid slate.
 fn poll(nseconds: u64, channel: &str) -> Option<Slate> {
 	let start = Instant::now();
@@ -197,7 +223,9 @@ impl WalletCommAdapter for KeybaseWalletCommAdapter {
 		println!("Sent new slate to {}", addr);
 		// Wait for response from recipient with SLATE_SIGNED topic
 		match poll(TTL as u64, addr) {
-			Some(slate) => return Ok(slate),
+			Some(slate) => {
+				return Ok(slate)
+			},
 			None => return Err(ErrorKind::ClientCallback("Receiving reply from recipient"))?,
 		}
 	}
@@ -234,6 +262,7 @@ impl WalletCommAdapter for KeybaseWalletCommAdapter {
 				let blob = from_str::<Slate>(msg);
 				match blob {
 					Ok(mut slate) => {
+						let tx_uuid = slate.id;
 						println!("Received message from channel {}", channel);
 						match controller::foreign_single_use(wallet.clone(), |api| {
 							api.receive_tx(&mut slate, None, None)?;
@@ -242,6 +271,15 @@ impl WalletCommAdapter for KeybaseWalletCommAdapter {
 							// Reply to the same channel with topic SLATE_SIGNED
 							Ok(_) => match send(slate, channel, SLATE_SIGNED, TTL) {
 								true => {
+									if config.keybase_notify_ttl > 0 {
+										let split = channel.split(",");
+										let vec: Vec<&str> = split.collect();
+										if vec.len() > 1 {
+											let msg = format!("[grin wallet notice]: you could have some coins received from @{}\nTransaction Id: {}",
+															  vec[1], tx_uuid);
+											notify(&msg, vec[0], config.keybase_notify_ttl);
+										}
+									}
 									println!("Returned slate to {}", channel);
 								}
 								false => {
