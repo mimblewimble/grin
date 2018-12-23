@@ -375,8 +375,11 @@ impl BlindSum {
 	}
 }
 
-/// Encapsulates a max 4-level deep BIP32 path, which is the
-/// most we can currently fit into a rangeproof message
+/// Encapsulates a max 4-level deep BIP32 path, which is the most we can
+/// currently fit into a rangeproof message. The depth encodes how far the
+/// derivation depths go and allows differentiating paths. As m/0, m/0/0
+/// or m/0/0/0/0 result in different derivations, a path needs to encode
+/// its maximum depth.
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Deserialize)]
 pub struct ExtKeychainPath {
 	pub depth: u8,
@@ -446,10 +449,21 @@ pub struct ValueExtKeychainPath {
 }
 
 pub trait Keychain: Sync + Send + Clone {
+	/// Generates a keychain from a raw binary seed (which has already been
+	/// decrypted if applicable).
 	fn from_seed(seed: &[u8]) -> Result<Self, Error>;
+
+	/// Generates a keychain from a list of space-separated mnemonic words
 	fn from_mnemonic(word_list: &str, extension_word: &str) -> Result<Self, Error>;
+
+	/// Generates a keychain from a randomly generated seed. Mostly used for tests.
 	fn from_random_seed() -> Result<Self, Error>;
+
+	/// Root identifier for that keychain
 	fn root_key_id() -> Identifier;
+
+	/// Derives a key id from the depth of the keychain and the values at each
+	/// depth level. See `KeychainPath` for more information.
 	fn derive_key_id(depth: u8, d1: u32, d2: u32, d3: u32, d4: u32) -> Identifier;
 	fn derive_key(&self, amount: u64, id: &Identifier) -> Result<SecretKey, Error>;
 	fn commit(&self, amount: u64, id: &Identifier) -> Result<Commitment, Error>;
