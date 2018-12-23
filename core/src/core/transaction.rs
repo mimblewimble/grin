@@ -1366,7 +1366,7 @@ pub fn kernel_sig_msg(
 	if features.is_coinbase() && fee != 0 || !features.is_height_locked() && lock_height != 0 {
 		return Err(Error::InvalidKernelFeatures);
 	}
-	let msg = if global::is_testnet() {
+	let msg = if global::is_floonet() {
 		let mut bytes = [0; 32];
 		BigEndian::write_u64(&mut bytes[16..24], fee);
 		BigEndian::write_u64(&mut bytes[24..], lock_height);

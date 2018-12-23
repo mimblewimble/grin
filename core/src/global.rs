@@ -260,16 +260,10 @@ pub fn is_production_mode() -> bool {
 		|| ChainTypes::Mainnet == *param_ref
 }
 
-/// Are we in one of our (many) testnets?
-pub fn is_testnet() -> bool {
+/// Are we in floonet?
+pub fn is_floonet() -> bool {
 	let param_ref = CHAIN_TYPE.read();
 	ChainTypes::Floonet == *param_ref
-}
-
-/// Are we for real?
-pub fn is_mainnet() -> bool {
-	let param_ref = CHAIN_TYPE.read();
-	ChainTypes::Mainnet == *param_ref
 }
 
 /// Helper function to get a nonce known to create a valid POW on
