@@ -64,10 +64,10 @@ impl Default for WalletConfig {
 		WalletConfig {
 			chain_type: Some(ChainTypes::Floonet),
 			api_listen_interface: "127.0.0.1".to_string(),
-			api_listen_port: 13415,
+			api_listen_port: 3415,
 			api_secret_path: Some(".api_secret".to_string()),
 			node_api_secret_path: Some(".api_secret".to_string()),
-			check_node_api_http_addr: "http://127.0.0.1:13413".to_string(),
+			check_node_api_http_addr: "http://127.0.0.1:3413".to_string(),
 			data_file_dir: ".".to_string(),
 			tls_certificate_file: None,
 			tls_certificate_key: None,

@@ -14,11 +14,12 @@
 
 /// Grin configuration file output command
 use crate::config::{GlobalConfig, GlobalWalletConfig};
+use crate::core::global;
 use std::env;
 
 /// Create a config file in the current directory
-pub fn config_command_server(file_name: &str) {
-	let mut default_config = GlobalConfig::default();
+pub fn config_command_server(chain_type: &global::ChainTypes, file_name: &str) {
+	let mut default_config = GlobalConfig::for_chain(chain_type);
 	let current_dir = env::current_dir().unwrap_or_else(|e| {
 		panic!("Error creating config file: {}", e);
 	});
@@ -44,8 +45,8 @@ pub fn config_command_server(file_name: &str) {
 }
 
 /// Create a config file in the current directory
-pub fn config_command_wallet(file_name: &str) {
-	let mut default_config = GlobalWalletConfig::default();
+pub fn config_command_wallet(chain_type: &global::ChainTypes, file_name: &str) {
+	let mut default_config = GlobalWalletConfig::for_chain(chain_type);
 	let current_dir = env::current_dir().unwrap_or_else(|e| {
 		panic!("Error creating config file: {}", e);
 	});

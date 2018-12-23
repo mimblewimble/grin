@@ -3,6 +3,15 @@ version: "0.4.2"
 about: Lightweight implementation of the MimbleWimble protocol.
 author: The Grin Team
 
+args:
+  - floonet:
+      help: Run grin against the Floonet (as opposed to mainnet)
+      long: floonet
+      takes_value: false
+  - usernet:
+      help: Run grin against the Floonet (as opposed to mainnet)
+      long: usernet
+      takes_value: false
 subcommands:
   - server:
       about: Control the Grin server
