@@ -140,15 +140,14 @@ fn send<T: Serialize>(message: T, channel: &str, topic: &str, ttl: u16) -> bool 
 			"options": {
 				"channel": {
 						"name": channel, "topic_name": topic, "topic_type": "dev"
-					},
-						"message": {
-								"body": to_string(&message).unwrap()
-							},
-							"exploding_lifetime": seconds
-						}
-					}
-				}
-	))
+				},
+				"message": {
+						"body": to_string(&message).unwrap()
+				},
+				"exploding_lifetime": seconds
+			}
+		}
+	}))
 	.unwrap();
 	let response = api_send(&payload);
 	match response["result"]["message"].as_str() {
@@ -166,15 +165,14 @@ fn notify(message: &str, channel: &str, ttl: u16) -> bool {
 			"options": {
 				"channel": {
 						"name": channel
-					},
-						"message": {
-								"body": message
-							},
-							"exploding_lifetime": minutes
-						}
-					}
-				}
-	))
+				},
+				"message": {
+						"body": message
+				},
+				"exploding_lifetime": minutes
+			}
+		}
+	}))
 	.unwrap();
 	let response = api_send(&payload);
 	match response["result"]["message"].as_str() {
@@ -273,8 +271,12 @@ impl WalletCommAdapter for KeybaseWalletCommAdapter {
 										let split = channel.split(",");
 										let vec: Vec<&str> = split.collect();
 										if vec.len() > 1 {
-											let msg = format!("[grin wallet notice]: you could have some coins received from @{}\nTransaction Id: {}",
-															  vec[1], tx_uuid);
+											let msg = format!(
+												"[grin wallet notice]: \
+												 you could have some coins received from @{}\n\
+												 Transaction Id: {}",
+												vec[1], tx_uuid
+											);
 											notify(&msg, vec[0], config.keybase_notify_ttl);
 										}
 									}
