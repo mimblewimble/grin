@@ -236,6 +236,10 @@ impl WalletCommAdapter for KeybaseWalletCommAdapter {
 					Ok(mut slate) => {
 						println!("Received message from channel {}", channel);
 						match controller::foreign_single_use(wallet.clone(), |api| {
+							if let Err(e) = api.verify_slate_messages(&slate) {
+								error!("Error validating participant messages: {}", e);
+								return Err(e);
+							}
 							api.receive_tx(&mut slate, None, None)?;
 							Ok(())
 						}) {

@@ -830,6 +830,13 @@ where
 		res
 	}
 
+	/// Verifies all messages in the slate match their public keys
+	pub fn verify_slate_messages(&mut self, slate: &Slate) -> Result<(), Error> {
+		let secp = Secp256k1::with_caps(ContextFlag::VerifyOnly);
+		slate.verify_messages(&secp)?;
+		Ok(())
+	}
+
 	/// Receive a transaction from a sender
 	pub fn receive_tx(
 		&mut self,
