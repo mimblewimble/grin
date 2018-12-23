@@ -411,7 +411,7 @@ fn comments() -> HashMap<String, String> {
 #Refer to https://keybase.io/blog/keybase-exploding-messages for detail.
 #To disable this notification, set it as 0.
 "
-			.to_string(),
+		.to_string(),
 	);
 
 	retval.insert(

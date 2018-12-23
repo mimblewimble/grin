@@ -175,7 +175,7 @@ fn notify(message: &str, channel: &str, ttl: u16) -> bool {
 					}
 				}
 	))
-		.unwrap();
+	.unwrap();
 	let response = api_send(&payload);
 	match response["result"]["message"].as_str() {
 		Some("message sent") => true,
@@ -223,9 +223,7 @@ impl WalletCommAdapter for KeybaseWalletCommAdapter {
 		println!("Sent new slate to {}", addr);
 		// Wait for response from recipient with SLATE_SIGNED topic
 		match poll(TTL as u64, addr) {
-			Some(slate) => {
-				return Ok(slate)
-			},
+			Some(slate) => return Ok(slate),
 			None => return Err(ErrorKind::ClientCallback("Receiving reply from recipient"))?,
 		}
 	}
