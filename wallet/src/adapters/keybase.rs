@@ -63,6 +63,21 @@ fn api_send(payload: &str) -> Value {
 	response
 }
 
+/// Get keybase username
+fn whoami() -> Option<String> {
+	let mut proc = Command::new("keybase");
+	proc.args(&["status", "-json"]);
+	let output = proc.output().expect("No output").stdout;
+	let response: Value = from_str(from_utf8(&output).expect("Bad output")).expect("Bad output");
+
+	let username = response["Username"].as_str();
+	if let Some(s) = username {
+		return Some(s.to_string());
+	} else {
+		return None;
+	}
+}
+
 /// Get all unread messages from a specific channel/topic and mark as read.
 fn read_from_channel(channel: &str, topic: &str) -> Vec<String> {
 	let payload = to_string(&json!({
@@ -139,10 +154,10 @@ fn send<T: Serialize>(message: T, channel: &str, topic: &str, ttl: u16) -> bool 
 		"params": {
 			"options": {
 				"channel": {
-						"name": channel, "topic_name": topic, "topic_type": "dev"
+					"name": channel, "topic_name": topic, "topic_type": "dev"
 				},
 				"message": {
-						"body": to_string(&message).unwrap()
+					"body": to_string(&message).unwrap()
 				},
 				"exploding_lifetime": seconds
 			}
@@ -164,10 +179,10 @@ fn notify(message: &str, channel: &str, ttl: u16) -> bool {
 		"params": {
 			"options": {
 				"channel": {
-						"name": channel
+					"name": channel
 				},
 				"message": {
-						"body": message
+					"body": message
 				},
 				"exploding_lifetime": minutes
 			}
@@ -268,16 +283,31 @@ impl WalletCommAdapter for KeybaseWalletCommAdapter {
 							Ok(_) => match send(slate, channel, SLATE_SIGNED, TTL) {
 								true => {
 									if config.keybase_notify_ttl > 0 {
-										let split = channel.split(",");
-										let vec: Vec<&str> = split.collect();
-										if vec.len() > 1 {
-											let msg = format!(
-												"[grin wallet notice]: \
+										let my_username = whoami();
+										if let Some(username) = my_username {
+											let split = channel.split(",");
+											let vec: Vec<&str> = split.collect();
+											if vec.len() > 1 {
+												let receiver = username;
+												let sender = if vec[0] == receiver {
+													vec[1]
+												} else {
+													if vec[1] != receiver {
+														error!("keybase - channel doesn't include my username! channel: {}, username: {}",
+															channel, receiver
+														);
+													}
+													vec[0]
+												};
+
+												let msg = format!(
+													"[grin wallet notice]: \
 												 you could have some coins received from @{}\n\
 												 Transaction Id: {}",
-												vec[1], tx_uuid
-											);
-											notify(&msg, vec[0], config.keybase_notify_ttl);
+													sender, tx_uuid
+												);
+												notify(&msg, &receiver, config.keybase_notify_ttl);
+											}
 										}
 									}
 									println!("Returned slate to {}", channel);
