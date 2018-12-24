@@ -55,31 +55,54 @@ impl KeybaseWalletCommAdapter {
 }
 
 /// Send a json object to the keybase process. Type `keybase chat api --help` for a list of available methods.
-fn api_send(payload: &str) -> Value {
+fn api_send(payload: &str) -> Result<Value, Error> {
 	let mut proc = Command::new("keybase");
 	proc.args(&["chat", "api", "-m", &payload]);
-	let output = proc.output().expect("No output").stdout;
-	let response: Value = from_str(from_utf8(&output).expect("Bad output")).expect("Bad output");
-	response
+	let output = proc.output().expect("No output");
+	if !output.status.success() {
+		info!(
+			"keybase api fail: {} {}",
+			String::from_utf8_lossy(&output.stdout),
+			String::from_utf8_lossy(&output.stderr)
+		);
+		Err(ErrorKind::GenericError("keybase api fail".to_owned()))?
+	} else {
+		let response: Value =
+			from_str(from_utf8(&output.stdout).expect("Bad output")).expect("Bad output");
+		Ok(response)
+	}
 }
 
 /// Get keybase username
-fn whoami() -> Option<String> {
+fn whoami() -> Result<String, Error> {
 	let mut proc = Command::new("keybase");
 	proc.args(&["status", "-json"]);
-	let output = proc.output().expect("No output").stdout;
-	let response: Value = from_str(from_utf8(&output).expect("Bad output")).expect("Bad output");
-
-	let username = response["Username"].as_str();
-	if let Some(s) = username {
-		return Some(s.to_string());
+	let output = proc.output().expect("No output");
+	if !output.status.success() {
+		error!(
+			"keybase api fail: {} {}",
+			String::from_utf8_lossy(&output.stdout),
+			String::from_utf8_lossy(&output.stderr)
+		);
+		Err(ErrorKind::GenericError("keybase api fail".to_owned()))?
 	} else {
-		return None;
+		let response: Value =
+			from_str(from_utf8(&output.stdout).expect("Bad output")).expect("Bad output");
+
+		let username = response["Username"].as_str();
+		if let Some(s) = username {
+			Ok(s.to_string())
+		} else {
+			error!("keybase username query fail");
+			Err(ErrorKind::GenericError(
+				"keybase username query fail".to_owned(),
+			))?
+		}
 	}
 }
 
 /// Get all unread messages from a specific channel/topic and mark as read.
-fn read_from_channel(channel: &str, topic: &str) -> Vec<String> {
+fn read_from_channel(channel: &str, topic: &str) -> Result<Vec<String>, Error> {
 	let payload = to_string(&json!({
 		"method": "read",
 		"params": {
@@ -95,22 +118,26 @@ fn read_from_channel(channel: &str, topic: &str) -> Vec<String> {
 	.unwrap();
 
 	let response = api_send(&payload);
-	let mut unread: Vec<String> = Vec::new();
-	for msg in response["result"]["messages"]
-		.as_array()
-		.unwrap_or(&vec![json!({})])
-		.iter()
-	{
-		if (msg["msg"]["content"]["type"] == "text") && (msg["msg"]["unread"] == true) {
-			let message = msg["msg"]["content"]["text"]["body"].as_str().unwrap_or("");
-			unread.push(message.to_owned());
+	if let Ok(res) = response {
+		let mut unread: Vec<String> = Vec::new();
+		for msg in res["result"]["messages"]
+			.as_array()
+			.unwrap_or(&vec![json!({})])
+			.iter()
+		{
+			if (msg["msg"]["content"]["type"] == "text") && (msg["msg"]["unread"] == true) {
+				let message = msg["msg"]["content"]["text"]["body"].as_str().unwrap_or("");
+				unread.push(message.to_owned());
+			}
 		}
+		Ok(unread)
+	} else {
+		Err(ErrorKind::GenericError("keybase api fail".to_owned()))?
 	}
-	unread
 }
 
 /// Get unread messages from all channels and mark as read.
-fn get_unread(topic: &str) -> HashMap<String, String> {
+fn get_unread(topic: &str) -> Result<HashMap<String, String>, Error> {
 	let payload = to_string(&json!({
 		"method": "list",
 		"params": {
@@ -122,27 +149,34 @@ fn get_unread(topic: &str) -> HashMap<String, String> {
 	.unwrap();
 	let response = api_send(&payload);
 
-	let mut channels = HashSet::new();
-	// Unfortunately the response does not contain the message body
-	// and a seperate call is needed for each channel
-	for msg in response["result"]["conversations"]
-		.as_array()
-		.unwrap_or(&vec![json!({})])
-		.iter()
-	{
-		if (msg["unread"] == true) && (msg["channel"]["topic_name"] == topic) {
-			let channel = msg["channel"]["name"].as_str().unwrap();
-			channels.insert(channel.to_string());
+	if let Ok(res) = response {
+		let mut channels = HashSet::new();
+		// Unfortunately the response does not contain the message body
+		// and a separate call is needed for each channel
+		for msg in res["result"]["conversations"]
+			.as_array()
+			.unwrap_or(&vec![json!({})])
+			.iter()
+		{
+			if (msg["unread"] == true) && (msg["channel"]["topic_name"] == topic) {
+				let channel = msg["channel"]["name"].as_str().unwrap();
+				channels.insert(channel.to_string());
+			}
 		}
-	}
-	let mut unread: HashMap<String, String> = HashMap::new();
-	for channel in channels.iter() {
-		let messages = read_from_channel(channel, topic);
-		for msg in messages {
-			unread.insert(msg, channel.to_string());
+		let mut unread: HashMap<String, String> = HashMap::new();
+		for channel in channels.iter() {
+			let messages = read_from_channel(channel, topic);
+			if messages.is_err() {
+				break;
+			}
+			for msg in messages.unwrap() {
+				unread.insert(msg, channel.to_string());
+			}
 		}
+		Ok(unread)
+	} else {
+		Err(ErrorKind::GenericError("keybase api fail".to_owned()))?
 	}
-	unread
 }
 
 /// Send a message to a keybase channel that self-destructs after ttl seconds.
@@ -164,9 +198,13 @@ fn send<T: Serialize>(message: T, channel: &str, topic: &str, ttl: u16) -> bool 
 	}))
 	.unwrap();
 	let response = api_send(&payload);
-	match response["result"]["message"].as_str() {
-		Some("message sent") => true,
-		_ => false,
+	if let Ok(res) = response {
+		match res["result"]["message"].as_str() {
+			Some("message sent") => true,
+			_ => false,
+		}
+	} else {
+		false
 	}
 }
 
@@ -189,23 +227,30 @@ fn notify(message: &str, channel: &str, ttl: u16) -> bool {
 	}))
 	.unwrap();
 	let response = api_send(&payload);
-	match response["result"]["message"].as_str() {
-		Some("message sent") => true,
-		_ => false,
+	if let Ok(res) = response {
+		match res["result"]["message"].as_str() {
+			Some("message sent") => true,
+			_ => false,
+		}
+	} else {
+		false
 	}
 }
 
 /// Listen for a message from a specific channel with topic SLATE_SIGNED for nseconds and return the first valid slate.
 fn poll(nseconds: u64, channel: &str) -> Option<Slate> {
 	let start = Instant::now();
-	println!("Waiting for message from {}...", channel);
+	info!("Waiting for response message from @{}...", channel);
 	while start.elapsed().as_secs() < nseconds {
 		let unread = read_from_channel(channel, SLATE_SIGNED);
-		for msg in unread.iter() {
+		for msg in unread.unwrap().iter() {
 			let blob = from_str::<Slate>(msg);
 			match blob {
 				Ok(slate) => {
-					println!("Received message from {}", channel);
+					info!(
+						"keybase response message received from @{}, tx uuid: {}",
+						channel, slate.id,
+					);
 					return Some(slate);
 				}
 				Err(_) => (),
@@ -213,8 +258,8 @@ fn poll(nseconds: u64, channel: &str) -> Option<Slate> {
 		}
 		sleep(SLEEP_DURATION);
 	}
-	println!(
-		"Did not receive reply from {} in {} seconds",
+	error!(
+		"No response from @{} in {} seconds. Grin send failed!",
 		channel, nseconds
 	);
 	None
@@ -232,7 +277,10 @@ impl WalletCommAdapter for KeybaseWalletCommAdapter {
 			true => (),
 			false => return Err(ErrorKind::ClientCallback("Posting transaction slate"))?,
 		}
-		println!("Sent new slate to {}", addr);
+		info!(
+			"tx request has been sent to @{}, tx uuid: {}",
+			addr, slate.id
+		);
 		// Wait for response from recipient with SLATE_SIGNED topic
 		match poll(TTL as u64, addr) {
 			Some(slate) => return Ok(slate),
@@ -264,16 +312,25 @@ impl WalletCommAdapter for KeybaseWalletCommAdapter {
 		let wallet = instantiate_wallet(config.clone(), node_client, passphrase, account)
 			.context(ErrorKind::WalletSeedDecryption)?;
 
-		println!("Listening for messages via keybase chat...");
+		info!("Listening for transactions on keybase ...");
 		loop {
 			// listen for messages from all channels with topic SLATE_NEW
 			let unread = get_unread(SLATE_NEW);
-			for (msg, channel) in &unread {
+			if unread.is_err() {
+				error!("Listening exited for some keybase api failure");
+				break;
+			}
+			for (msg, channel) in &unread.unwrap() {
 				let blob = from_str::<Slate>(msg);
 				match blob {
 					Ok(mut slate) => {
 						let tx_uuid = slate.id;
-						println!("Received message from channel {}", channel);
+						info!(
+							"tx initiated on channel \"{}\", to send you {}(g). tx uuid: {}",
+							channel,
+							slate.amount as f64 / 1000000000.0,
+							tx_uuid,
+						);
 						match controller::foreign_single_use(wallet.clone(), |api| {
 							api.receive_tx(&mut slate, None, None)?;
 							Ok(())
@@ -286,14 +343,17 @@ impl WalletCommAdapter for KeybaseWalletCommAdapter {
 										channel.to_string(),
 										tx_uuid.to_string(),
 									);
-									println!("Returned slate to {}", channel);
+									debug!("Returned slate to @{} via keybase", channel);
 								}
 								false => {
-									println!("Failed to return slate to {}", channel);
+									error!("Failed to return slate to @{} via keybase. Incoming tx failed", channel);
 								}
 							},
 							Err(e) => {
-								println!("Error : {}", e);
+								error!(
+									"Error on receiving tx via keybase: {}. Incoming tx failed",
+									e
+								);
 							}
 						}
 					}
@@ -310,7 +370,7 @@ impl WalletCommAdapter for KeybaseWalletCommAdapter {
 fn notify_on_receive(keybase_notify_ttl: u16, channel: String, tx_uuid: String) {
 	if keybase_notify_ttl > 0 {
 		let my_username = whoami();
-		if let Some(username) = my_username {
+		if let Ok(username) = my_username {
 			let split = channel.split(",");
 			let vec: Vec<&str> = split.collect();
 			if vec.len() > 1 {
@@ -333,7 +393,13 @@ fn notify_on_receive(keybase_notify_ttl: u16, channel: String, tx_uuid: String) 
 					sender, tx_uuid
 				);
 				notify(&msg, &receiver, keybase_notify_ttl);
+				info!("tx from @{} is done, please check on grin wallet. tx uuid: {}",
+					sender,
+					tx_uuid,
+				);
 			}
+		} else {
+			error!("keybase notification fail on whoami query");
 		}
 	}
 }

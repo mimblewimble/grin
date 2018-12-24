@@ -254,11 +254,11 @@ pub fn send(
 			let result = api.post_tx(&slate.tx, args.fluff);
 			match result {
 				Ok(_) => {
-					info!("Tx sent",);
+					info!("Tx sent ok",);
 					return Ok(());
 				}
 				Err(e) => {
-					error!("Tx not sent: {}", e);
+					error!("Tx sent fail: {}", e);
 					return Err(e);
 				}
 			}
