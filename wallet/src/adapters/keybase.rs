@@ -61,7 +61,7 @@ fn api_send(payload: &str) -> Result<Value, Error> {
 	proc.args(&["chat", "api", "-m", &payload]);
 	let output = proc.output().expect("No output");
 	if !output.status.success() {
-		info!(
+		error!(
 			"keybase api fail: {} {}",
 			String::from_utf8_lossy(&output.stdout),
 			String::from_utf8_lossy(&output.stderr)
