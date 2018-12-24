@@ -393,9 +393,9 @@ fn notify_on_receive(keybase_notify_ttl: u16, channel: String, tx_uuid: String) 
 					sender, tx_uuid
 				);
 				notify(&msg, &receiver, keybase_notify_ttl);
-				info!("tx from @{} is done, please check on grin wallet. tx uuid: {}",
-					sender,
-					tx_uuid,
+				info!(
+					"tx from @{} is done, please check on grin wallet. tx uuid: {}",
+					sender, tx_uuid,
 				);
 			}
 		} else {
