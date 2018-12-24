@@ -767,7 +767,7 @@ impl Chain {
 
 		if body_head.total_difficulty >= header_head.total_difficulty {
 			debug!(
-				"{}: no need. header_head.total_difficulty: {} <= body_head.total_difficulty: {}",
+				"{}: no need txhashset. header_head.total_difficulty: {} <= body_head.total_difficulty: {}",
 				caller, header_head.total_difficulty, body_head.total_difficulty,
 			);
 			return false;
@@ -808,7 +808,7 @@ impl Chain {
 		if oldest_height < header_head.height.saturating_sub(horizon) {
 			if oldest_height > 0 {
 				debug!(
-					"{}: oldest block which is not on local chain: {} at {}",
+					"{}: need a state sync for txhashset. oldest block which is not on local chain: {} at {}",
 					caller, oldest_hash, oldest_height,
 				);
 				return true;
