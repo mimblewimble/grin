@@ -302,8 +302,8 @@ impl WalletCommAdapter for KeybaseWalletCommAdapter {
 
 												let msg = format!(
 													"[grin wallet notice]: \
-												 you could have some coins received from @{}\n\
-												 Transaction Id: {}",
+													 you could have some coins received from @{}\n\
+													 Transaction Id: {}",
 													sender, tx_uuid
 												);
 												notify(&msg, &receiver, config.keybase_notify_ttl);
