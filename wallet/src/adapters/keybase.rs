@@ -70,6 +70,11 @@ fn api_send(payload: &str) -> Result<Value, Error> {
 	} else {
 		let response: Value =
 			from_str(from_utf8(&output.stdout).expect("Bad output")).expect("Bad output");
+		let err_msg = format!("{}", response["error"]["message"]);
+		if err_msg.len() > 0 {
+			error!("api_send got error: {}", err_msg);
+		}
+
 		Ok(response)
 	}
 }
@@ -89,6 +94,10 @@ fn whoami() -> Result<String, Error> {
 	} else {
 		let response: Value =
 			from_str(from_utf8(&output.stdout).expect("Bad output")).expect("Bad output");
+		let err_msg = format!("{}", response["error"]["message"]);
+		if err_msg.len() > 0 {
+			error!("status query got error: {}", err_msg);
+		}
 
 		let username = response["Username"].as_str();
 		if let Some(s) = username {
