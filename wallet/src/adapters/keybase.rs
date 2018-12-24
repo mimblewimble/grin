@@ -282,34 +282,11 @@ impl WalletCommAdapter for KeybaseWalletCommAdapter {
 							// Reply to the same channel with topic SLATE_SIGNED
 							Ok(_) => match send(slate, channel, SLATE_SIGNED, TTL) {
 								true => {
-									if config.keybase_notify_ttl > 0 {
-										let my_username = whoami();
-										if let Some(username) = my_username {
-											let split = channel.split(",");
-											let vec: Vec<&str> = split.collect();
-											if vec.len() > 1 {
-												let receiver = username;
-												let sender = if vec[0] == receiver {
-													vec[1]
-												} else {
-													if vec[1] != receiver {
-														error!("keybase - channel doesn't include my username! channel: {}, username: {}",
-															channel, receiver
-														);
-													}
-													vec[0]
-												};
-
-												let msg = format!(
-													"[grin wallet notice]: \
-													 you could have some coins received from @{}\n\
-													 Transaction Id: {}",
-													sender, tx_uuid
-												);
-												notify(&msg, &receiver, config.keybase_notify_ttl);
-											}
-										}
-									}
+									notify_on_receive(
+										config.keybase_notify_ttl,
+										channel.to_string(),
+										tx_uuid.to_string(),
+									);
 									println!("Returned slate to {}", channel);
 								}
 								false => {
@@ -327,5 +304,37 @@ impl WalletCommAdapter for KeybaseWalletCommAdapter {
 			sleep(SLEEP_DURATION);
 		}
 		Ok(())
+	}
+}
+
+/// Notify in keybase on receiving a transaction
+fn notify_on_receive(keybase_notify_ttl: u16, channel: String, tx_uuid: String) {
+	if keybase_notify_ttl > 0 {
+		let my_username = whoami();
+		if let Some(username) = my_username {
+			let split = channel.split(",");
+			let vec: Vec<&str> = split.collect();
+			if vec.len() > 1 {
+				let receiver = username;
+				let sender = if vec[0] == receiver {
+					vec[1]
+				} else {
+					if vec[1] != receiver {
+						error!("keybase - channel doesn't include my username! channel: {}, username: {}",
+							   channel, receiver
+						);
+					}
+					vec[0]
+				};
+
+				let msg = format!(
+					"[grin wallet notice]: \
+					 you could have some coins received from @{}\n\
+					 Transaction Id: {}",
+					sender, tx_uuid
+				);
+				notify(&msg, &receiver, keybase_notify_ttl);
+			}
+		}
 	}
 }
