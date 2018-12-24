@@ -272,6 +272,14 @@ impl WalletCommAdapter for KeybaseWalletCommAdapter {
 
 	// Send a slate to a keybase username then wait for a response for TTL seconds.
 	fn send_tx_sync(&self, addr: &str, slate: &Slate) -> Result<Slate, Error> {
+		// Limit only one recipient
+		let split = addr.split(",");
+		let vec: Vec<&str> = split.collect();
+		if vec.len() > 1 {
+			error!("Only one recipient is supported!");
+			return Err(ErrorKind::GenericError("Tx rejected".to_owned()))?;
+		}
+
 		// Send original slate to recipient with the SLATE_NEW topic
 		match send(slate, addr, SLATE_NEW, TTL) {
 			true => (),
@@ -325,6 +333,22 @@ impl WalletCommAdapter for KeybaseWalletCommAdapter {
 				match blob {
 					Ok(mut slate) => {
 						let tx_uuid = slate.id;
+
+						// Reject multiple recipients channel for safety
+						{
+							let split = channel.split(",");
+							let vec: Vec<&str> = split.collect();
+							if vec.len() > 2 {
+								error!(
+									"Incoming tx initiated on channel \"{}\" is rejected, multiple recipients channel! amount: {}(g), tx uuid: {}",
+									channel,
+									slate.amount as f64 / 1000000000.0,
+									tx_uuid,
+								);
+								continue;
+							}
+						}
+
 						info!(
 							"tx initiated on channel \"{}\", to send you {}(g). tx uuid: {}",
 							channel,
