@@ -213,6 +213,11 @@ impl Chain {
 		self.txhashset.clone()
 	}
 
+	/// Shared store instance.
+	pub fn store(&self) -> Arc<store::ChainStore> {
+		self.store.clone()
+	}
+
 	fn log_heads(store: &store::ChainStore) -> Result<(), Error> {
 		let head = store.head()?;
 		debug!(

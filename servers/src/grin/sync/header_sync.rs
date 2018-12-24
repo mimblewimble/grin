@@ -55,8 +55,6 @@ impl HeaderSync {
 			| SyncStatus::HeaderSync { .. }
 			| SyncStatus::TxHashsetDone => true,
 			SyncStatus::NoSync | SyncStatus::Initial | SyncStatus::AwaitingPeers(_) => {
-				// Reset sync_head to header_head on transition to HeaderSync,
-				// but ONLY on initial transition to HeaderSync state.
 				let sync_head = self.chain.get_sync_head().unwrap();
 				debug!(
 					"sync: initial transition to HeaderSync. sync_head: {} at {}, reset to: {} at {}",
@@ -65,6 +63,15 @@ impl HeaderSync {
 					header_head.hash(),
 					header_head.height,
 				);
+
+				// Reset sync_head to header_head on transition to HeaderSync,
+				// but ONLY on initial transition to HeaderSync state.
+				{
+					let store = self.chain.store();
+					let batch = store.batch().unwrap();
+					batch.reset_sync_head().unwrap();
+					batch.commit().unwrap();
+				}
 
 				// Rebuild the sync MMR to match our updated sync_head.
 				self.chain.rebuild_sync_mmr(&header_head).unwrap();
