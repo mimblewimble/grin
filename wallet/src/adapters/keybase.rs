@@ -115,11 +115,10 @@ fn get_unread(topic: &str) -> HashMap<String, String> {
 		"method": "list",
 		"params": {
 			"options": {
-					"topic_type": "dev",
-				},
-			}
+				"topic_type": "dev",
+			},
 		}
-	))
+	}))
 	.unwrap();
 	let response = api_send(&payload);
 
