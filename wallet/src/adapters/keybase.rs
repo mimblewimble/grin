@@ -71,7 +71,7 @@ fn api_send(payload: &str) -> Result<Value, Error> {
 		let response: Value =
 			from_str(from_utf8(&output.stdout).expect("Bad output")).expect("Bad output");
 		let err_msg = format!("{}", response["error"]["message"]);
-		if err_msg.len() > 0 {
+		if err_msg.len() > 0 && err_msg != "null" {
 			error!("api_send got error: {}", err_msg);
 		}
 
@@ -95,7 +95,7 @@ fn whoami() -> Result<String, Error> {
 		let response: Value =
 			from_str(from_utf8(&output.stdout).expect("Bad output")).expect("Bad output");
 		let err_msg = format!("{}", response["error"]["message"]);
-		if err_msg.len() > 0 {
+		if err_msg.len() > 0 && err_msg != "null" {
 			error!("status query got error: {}", err_msg);
 		}
 
