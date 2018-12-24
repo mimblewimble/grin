@@ -28,7 +28,8 @@ use std::thread::sleep;
 use std::time::{Duration, Instant};
 
 const TTL: u16 = 60; // TODO: Pass this as a parameter
-const SLEEP_DURATION: Duration = Duration::from_millis(5000);
+const LISTEN_SLEEP_DURATION: Duration = Duration::from_millis(5000);
+const POLL_SLEEP_DURATION: Duration = Duration::from_millis(1000);
 
 // Which topic names to use for communication
 const SLATE_NEW: &str = "grin_slate_new";
@@ -256,7 +257,7 @@ fn poll(nseconds: u64, channel: &str) -> Option<Slate> {
 				Err(_) => (),
 			}
 		}
-		sleep(SLEEP_DURATION);
+		sleep(POLL_SLEEP_DURATION);
 	}
 	error!(
 		"No response from @{} in {} seconds. Grin send failed!",
@@ -384,7 +385,7 @@ impl WalletCommAdapter for KeybaseWalletCommAdapter {
 					Err(_) => (),
 				}
 			}
-			sleep(SLEEP_DURATION);
+			sleep(LISTEN_SLEEP_DURATION);
 		}
 		Ok(())
 	}
