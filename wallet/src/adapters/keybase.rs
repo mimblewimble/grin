@@ -344,7 +344,7 @@ impl WalletCommAdapter for KeybaseWalletCommAdapter {
 
 						// Reject multiple recipients channel for safety
 						{
-							if channel.matches(",").count() > 0 {
+							if channel.matches(",").count() > 1 {
 								error!(
 									"Incoming tx initiated on channel \"{}\" is rejected, multiple recipients channel! amount: {}(g), tx uuid: {}",
 									channel,
@@ -373,7 +373,7 @@ impl WalletCommAdapter for KeybaseWalletCommAdapter {
 							Ok(_) => match send(slate, channel, SLATE_SIGNED, TTL) {
 								true => {
 									notify_on_receive(
-										config.keybase_notify_ttl,
+										config.keybase_notify_ttl.unwrap_or(1440),
 										channel.to_string(),
 										tx_uuid.to_string(),
 									);
