@@ -335,7 +335,7 @@ fn listen_for_addrs(
 pub fn dns_seeds() -> Box<dyn Fn() -> Vec<SocketAddr> + Send> {
 	Box::new(|| {
 		let mut addresses: Vec<SocketAddr> = vec![];
-		let net_seeds = if global::is_testnet() {
+		let net_seeds = if global::is_floonet() {
 			FLOONET_DNS_SEEDS
 		} else {
 			MAINNET_DNS_SEEDS
