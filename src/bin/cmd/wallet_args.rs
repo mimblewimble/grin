@@ -431,7 +431,7 @@ pub fn wallet_command(
 		let res = inst_wallet(wallet_config.clone(), &global_wallet_args, node_client);
 		res.unwrap_or_else(|e| {
 			println!("{}", e);
-			std::process::exit(0);
+			std::process::exit(1);
 		})
 	};
 
