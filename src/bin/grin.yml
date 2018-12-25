@@ -9,7 +9,7 @@ args:
       long: floonet
       takes_value: false
   - usernet:
-      help: Run grin against the Floonet (as opposed to mainnet)
+      help: Run grin as a local-only network. Doesn't block peer connections but will not connect to any peer or seed
       long: usernet
       takes_value: false
 subcommands:

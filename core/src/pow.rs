@@ -136,11 +136,12 @@ mod test {
 	/// We'll be generating genesis blocks differently
 	#[test]
 	fn genesis_pow() {
-		global::set_mining_mode(ChainTypes::AutomatedTesting);
+		global::set_mining_mode(ChainTypes::UserTesting);
 
 		let mut b = genesis::genesis_dev();
-		b.header.pow.nonce = 485;
+		b.header.pow.nonce = 28106;
 		b.header.pow.proof.edge_bits = global::min_edge_bits();
+		println!("proof {}", global::proofsize());
 		pow_size(
 			&mut b.header,
 			Difficulty::min(),
@@ -148,8 +149,13 @@ mod test {
 			global::min_edge_bits(),
 		)
 		.unwrap();
+		println!("nonce {}", b.header.pow.nonce);
 		assert_ne!(b.header.pow.nonce, 310);
 		assert!(b.header.pow.to_difficulty(0) >= Difficulty::min());
-		assert!(verify_size(&b.header).is_ok());
+		let start = ::std::time::Instant::now();
+		for n in 0..100000 {
+			assert!(verify_size(&b.header).is_ok());
+		}
+		println!("==> {}", start.elapsed().as_secs());
 	}
 }
