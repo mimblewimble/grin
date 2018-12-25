@@ -404,9 +404,12 @@ fn comments() -> HashMap<String, String> {
 		.to_string(),
 	);
 	retval.insert(
-		"use_switch_commitments".to_string(),
+		"keybase_notify_ttl".to_string(),
 		"
-#Whether to use switch commitments for this wallet
+#The exploding lifetime for keybase notification on coins received.
+#Unit: Minute. Default value 1440 minutes for one day.
+#Refer to https://keybase.io/blog/keybase-exploding-messages for detail.
+#To disable this notification, set it as 0.
 "
 		.to_string(),
 	);
