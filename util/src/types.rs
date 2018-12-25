@@ -64,3 +64,27 @@ impl Default for LoggingConfig {
 		}
 	}
 }
+
+use std::ops::Deref;
+use zeroize::Zeroize;
+pub struct ZeroingString(String);
+
+impl Drop for ZeroingString {
+	fn drop(&mut self) {
+		self.0.zeroize();
+	}
+}
+
+impl From<&str> for ZeroingString {
+	fn from(s: &str) -> Self {
+		ZeroingString(String::from(s))
+	}
+}
+
+impl Deref for ZeroingString {
+	type Target = str;
+
+	fn deref(&self) -> &str {
+		&self.0
+	}
+}
