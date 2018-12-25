@@ -132,7 +132,7 @@ impl Default for P2PConfig {
 		let ipaddr = "0.0.0.0".parse().unwrap();
 		P2PConfig {
 			host: ipaddr,
-			port: 13414,
+			port: 3414,
 			capabilities: Capabilities::FULL_NODE,
 			seeding_type: Seeding::default(),
 			seeds: None,

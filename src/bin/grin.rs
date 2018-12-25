@@ -79,12 +79,26 @@ fn real_main() -> i32 {
 	let mut wallet_config = None;
 	let mut node_config = None;
 
+	let chain_type = if args.is_present("floonet") {
+		global::ChainTypes::Floonet
+	} else if args.is_present("usernet") {
+		global::ChainTypes::UserTesting
+	} else {
+		global::ChainTypes::Mainnet
+	};
+
+	// TODO remove for mainnet
+	if chain_type == global::ChainTypes::Mainnet {
+		println!("Mainnet not ready yet! In the meantime run 'grin --floonet ...'");
+		exit(1);
+	}
+
 	// Deal with configuration file creation
 	match args.subcommand() {
 		("server", Some(server_args)) => {
 			// If it's just a server config command, do it and exit
 			if let ("config", Some(_)) = server_args.subcommand() {
-				cmd::config_command_server(SERVER_CONFIG_FILE_NAME);
+				cmd::config_command_server(&chain_type, SERVER_CONFIG_FILE_NAME);
 				return 0;
 			}
 		}
@@ -93,7 +107,7 @@ fn real_main() -> i32 {
 			// (if desired)
 			if let ("init", Some(init_args)) = wallet_args.subcommand() {
 				if init_args.is_present("here") {
-					cmd::config_command_wallet(WALLET_CONFIG_FILE_NAME);
+					cmd::config_command_wallet(&chain_type, WALLET_CONFIG_FILE_NAME);
 				}
 			}
 		}
@@ -103,7 +117,7 @@ fn real_main() -> i32 {
 	match args.subcommand() {
 		// If it's a wallet command, try and load a wallet config file
 		("wallet", Some(wallet_args)) => {
-			let mut w = config::initial_setup_wallet().unwrap_or_else(|e| {
+			let mut w = config::initial_setup_wallet(&chain_type).unwrap_or_else(|e| {
 				panic!("Error loading wallet configuration: {}", e);
 			});
 			if !cmd::seed_exists(w.members.as_ref().unwrap().wallet.clone()) {
@@ -124,7 +138,7 @@ fn real_main() -> i32 {
 		}
 		// Otherwise load up the node config as usual
 		_ => {
-			let mut s = config::initial_setup_server().unwrap_or_else(|e| {
+			let mut s = config::initial_setup_server(&chain_type).unwrap_or_else(|e| {
 				panic!("Error loading server configuration: {}", e);
 			});
 			let mut l = s.members.as_mut().unwrap().logging.clone().unwrap();

@@ -749,6 +749,7 @@ name = "grin_config"
 version = "0.4.2"
 dependencies = [
  "dirs 1.0.4 (registry+https://github.com/rust-lang/crates.io-index)",
+ "grin_core 0.4.2",
  "grin_p2p 0.4.2",
  "grin_servers 0.4.2",
  "grin_util 0.4.2",
