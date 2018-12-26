@@ -213,6 +213,11 @@ impl Chain {
 		self.txhashset.clone()
 	}
 
+	/// Shared store instance.
+	pub fn store(&self) -> Arc<store::ChainStore> {
+		self.store.clone()
+	}
+
 	fn log_heads(store: &store::ChainStore) -> Result<(), Error> {
 		let head = store.head()?;
 		debug!(
@@ -239,6 +244,18 @@ impl Chain {
 		);
 
 		Ok(())
+	}
+
+	/// Reset sync_head to current header_head.
+	/// We do this when we first transition to header_sync to ensure we extend
+	/// the "sync" header MMR from a known consistent state and to ensure we track
+	/// the header chain correctly at the fork point.
+	pub fn reset_sync_head(&self) -> Result<Tip, Error> {
+		let batch = self.store.batch()?;
+		batch.reset_sync_head()?;
+		let head = batch.get_sync_head()?;
+		batch.commit()?;
+		Ok(head)
 	}
 
 	/// Processes a single block, then checks for orphans, processing
