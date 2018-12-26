@@ -114,8 +114,8 @@ impl BIP32Hasher for BIP32GrinHasher {
 	}
 	fn network_pub(&self) -> [u8; 4] {
 		match self.is_floo {
-			true => [0x03, 0x27, 0x3E, 0x4A],  // fpub
-			false => [0x03, 0x3C, 0x08, 0xDE], // gpub
+			true => [0x03, 0x27, 0x3E, 0x4B],  // fpub
+			false => [0x03, 0x3C, 0x08, 0xDF], // gpub
 		}
 	}
 	fn master_seed() -> [u8; 12] {
