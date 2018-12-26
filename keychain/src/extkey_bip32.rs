@@ -108,13 +108,13 @@ impl BIP32GrinHasher {
 impl BIP32Hasher for BIP32GrinHasher {
 	fn network_priv(&self) -> [u8; 4] {
 		match self.is_floo {
-			true => [0x03, 0x27, 0x3A, 0x10], // fprv
+			true => [0x03, 0x27, 0x3A, 0x10],  // fprv
 			false => [0x03, 0x3C, 0x04, 0xA4], // gprv
 		}
 	}
 	fn network_pub(&self) -> [u8; 4] {
 		match self.is_floo {
-			true => [0x03, 0x27, 0x3E, 0x4A], // fpub
+			true => [0x03, 0x27, 0x3E, 0x4A],  // fpub
 			false => [0x03, 0x3C, 0x08, 0xDE], // gpub
 		}
 	}

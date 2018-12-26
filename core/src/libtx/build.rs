@@ -54,7 +54,11 @@ where
 		move |build, (tx, kern, sum)| -> (Transaction, TxKernel, BlindSum) {
 			let commit = build.keychain.commit(value, &key_id).unwrap();
 			let input = Input::new(features, commit);
-			(tx.with_input(input), kern, sum.sub_key_id(key_id.to_value_path(value)))
+			(
+				tx.with_input(input),
+				kern,
+				sum.sub_key_id(key_id.to_value_path(value)),
+			)
 		},
 	)
 }

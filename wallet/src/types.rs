@@ -217,7 +217,8 @@ impl WalletSeed {
 			let mut file = File::open(seed_file_path).context(ErrorKind::IO)?;
 			let mut buffer = String::new();
 			file.read_to_string(&mut buffer).context(ErrorKind::IO)?;
-			let enc_seed: EncryptedWalletSeed = serde_json::from_str(&buffer).context(ErrorKind::Format)?;
+			let enc_seed: EncryptedWalletSeed =
+				serde_json::from_str(&buffer).context(ErrorKind::Format)?;
 			let wallet_seed = enc_seed.decrypt(password)?;
 			Ok(wallet_seed)
 		} else {
