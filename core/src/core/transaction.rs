@@ -1349,14 +1349,10 @@ impl From<Output> for OutputIdentifier {
 }
 
 /// Construct msg from tx fee, lock_height and kernel features.
-/// In testnet4 we did not include the kernel features in the message being signed.
-/// In mainnet we changed this to include features and we hash (fee || lock_height || features)
-/// to produce a 32 byte message to sign.
 ///
-/// testnet4: msg = (fee || lock_height)
-/// mainnet:  msg = hash(features)                       for coinbase kernels
-///                 hash(features || fee)                for plain kernels
-///                 hash(features || fee || lock_height) for height locked kernels
+/// msg = hash(features)                       for coinbase kernels
+///       hash(features || fee)                for plain kernels
+///       hash(features || fee || lock_height) for height locked kernels
 ///
 pub fn kernel_sig_msg(
 	fee: u64,
@@ -1366,20 +1362,12 @@ pub fn kernel_sig_msg(
 	if features.is_coinbase() && fee != 0 || !features.is_height_locked() && lock_height != 0 {
 		return Err(Error::InvalidKernelFeatures);
 	}
-	let msg = if global::is_floonet() {
-		let mut bytes = [0; 32];
-		BigEndian::write_u64(&mut bytes[16..24], fee);
-		BigEndian::write_u64(&mut bytes[24..], lock_height);
-		secp::Message::from_slice(&bytes)?
-	} else {
-		let hash = match features {
-			KernelFeatures::COINBASE => (features).hash(),
-			KernelFeatures::PLAIN => (features, fee).hash(),
-			_ => (features, fee, lock_height).hash(),
-		};
-		secp::Message::from_slice(&hash.as_bytes())?
+	let hash = match features {
+		KernelFeatures::COINBASE => (features).hash(),
+		KernelFeatures::PLAIN => (features, fee).hash(),
+		_ => (features, fee, lock_height).hash(),
 	};
-	Ok(msg)
+	Ok(secp::Message::from_slice(&hash.as_bytes())?)
 }
 
 /// kernel features as determined by lock height
