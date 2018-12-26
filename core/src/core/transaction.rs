@@ -1401,7 +1401,7 @@ mod test {
 
 	#[test]
 	fn test_kernel_ser_deser() {
-		let keychain = ExtKeychain::from_random_seed().unwrap();
+		let keychain = ExtKeychain::from_random_seed(false).unwrap();
 		let key_id = ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
 		let commit = keychain.commit(5, &key_id).unwrap();
 
@@ -1446,7 +1446,7 @@ mod test {
 
 	#[test]
 	fn commit_consistency() {
-		let keychain = ExtKeychain::from_seed(&[0; 32]).unwrap();
+		let keychain = ExtKeychain::from_seed(&[0; 32], false).unwrap();
 		let key_id = ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
 
 		let commit = keychain.commit(1003, &key_id).unwrap();
@@ -1459,7 +1459,7 @@ mod test {
 
 	#[test]
 	fn input_short_id() {
-		let keychain = ExtKeychain::from_seed(&[0; 32]).unwrap();
+		let keychain = ExtKeychain::from_seed(&[0; 32], false).unwrap();
 		let key_id = ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
 		let commit = keychain.commit(5, &key_id).unwrap();
 

@@ -67,7 +67,7 @@ impl BlockChain for CoinbaseMaturityErrorChainAdapter {
 /// Test we correctly verify coinbase maturity when adding txs to the pool.
 #[test]
 fn test_coinbase_maturity() {
-	let keychain: ExtKeychain = Keychain::from_random_seed().unwrap();
+	let keychain: ExtKeychain = Keychain::from_random_seed(false).unwrap();
 
 	// Mocking this up with an adapter that will raise an error for coinbase
 	// maturity.

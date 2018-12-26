@@ -58,7 +58,7 @@ fn setup(dir_name: &str, genesis: Block) -> Chain {
 #[test]
 fn mine_empty_chain() {
 	global::set_mining_mode(ChainTypes::AutomatedTesting);
-	let keychain = keychain::ExtKeychain::from_random_seed().unwrap();
+	let keychain = keychain::ExtKeychain::from_random_seed(false).unwrap();
 	mine_some_on_top(".grin", pow::mine_genesis_block().unwrap(), &keychain);
 }
 
@@ -68,7 +68,7 @@ fn mine_genesis_reward_chain() {
 
 	// add coinbase data from the dev genesis block
 	let mut genesis = genesis::genesis_dev();
-	let keychain = keychain::ExtKeychain::from_random_seed().unwrap();
+	let keychain = keychain::ExtKeychain::from_random_seed(false).unwrap();
 	let key_id = keychain::ExtKeychain::derive_key_id(0, 1, 0, 0, 0);
 	let reward = reward::output(&keychain, &key_id, 0).unwrap();
 	genesis = genesis.with_reward(reward.0, reward.1);
@@ -158,7 +158,7 @@ where
 fn mine_forks() {
 	global::set_mining_mode(ChainTypes::AutomatedTesting);
 	let chain = setup(".grin2", pow::mine_genesis_block().unwrap());
-	let kc = ExtKeychain::from_random_seed().unwrap();
+	let kc = ExtKeychain::from_random_seed(false).unwrap();
 
 	// add a first block to not fork genesis
 	let prev = chain.head_header().unwrap();
@@ -200,7 +200,7 @@ fn mine_forks() {
 #[test]
 fn mine_losing_fork() {
 	global::set_mining_mode(ChainTypes::AutomatedTesting);
-	let kc = ExtKeychain::from_random_seed().unwrap();
+	let kc = ExtKeychain::from_random_seed(false).unwrap();
 	let chain = setup(".grin3", pow::mine_genesis_block().unwrap());
 
 	// add a first block we'll be forking from
@@ -232,7 +232,7 @@ fn mine_losing_fork() {
 #[test]
 fn longer_fork() {
 	global::set_mining_mode(ChainTypes::AutomatedTesting);
-	let kc = ExtKeychain::from_random_seed().unwrap();
+	let kc = ExtKeychain::from_random_seed(false).unwrap();
 	// to make it easier to compute the txhashset roots in the test, we
 	// prepare 2 chains, the 2nd will be have the forked blocks we can
 	// then send back on the 1st
@@ -275,7 +275,7 @@ fn spend_in_fork_and_compact() {
 	util::init_test_logger();
 	let chain = setup(".grin6", pow::mine_genesis_block().unwrap());
 	let prev = chain.head_header().unwrap();
-	let kc = ExtKeychain::from_random_seed().unwrap();
+	let kc = ExtKeychain::from_random_seed(false).unwrap();
 
 	let mut fork_head = prev;
 
@@ -404,7 +404,7 @@ fn output_header_mappings() {
 		".grin_header_for_output",
 		pow::mine_genesis_block().unwrap(),
 	);
-	let keychain = ExtKeychain::from_random_seed().unwrap();
+	let keychain = ExtKeychain::from_random_seed(false).unwrap();
 	let mut reward_outputs = vec![];
 
 	for n in 1..15 {

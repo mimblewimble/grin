@@ -75,7 +75,7 @@ fn tx_double_ser_deser() {
 #[test]
 #[should_panic(expected = "Keychain Error")]
 fn test_zero_commit_fails() {
-	let mut keychain = ExtKeychain::from_random_seed().unwrap();
+	let mut keychain = ExtKeychain::from_random_seed(false).unwrap();
 	keychain.set_use_switch_commits(false);
 	let key_id1 = ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
 
@@ -97,7 +97,7 @@ fn verifier_cache() -> Arc<RwLock<dyn VerifierCache>> {
 
 #[test]
 fn build_tx_kernel() {
-	let keychain = ExtKeychain::from_random_seed().unwrap();
+	let keychain = ExtKeychain::from_random_seed(false).unwrap();
 	let key_id1 = ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
 	let key_id2 = ExtKeychain::derive_key_id(1, 2, 0, 0, 0);
 	let key_id3 = ExtKeychain::derive_key_id(1, 3, 0, 0, 0);
@@ -322,7 +322,7 @@ fn basic_transaction_deaggregation() {
 
 #[test]
 fn hash_output() {
-	let keychain = ExtKeychain::from_random_seed().unwrap();
+	let keychain = ExtKeychain::from_random_seed(false).unwrap();
 	let key_id1 = ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
 	let key_id2 = ExtKeychain::derive_key_id(1, 2, 0, 0, 0);
 	let key_id3 = ExtKeychain::derive_key_id(1, 3, 0, 0, 0);
@@ -377,7 +377,7 @@ fn tx_hash_diff() {
 /// 2 inputs, 2 outputs transaction.
 #[test]
 fn tx_build_exchange() {
-	let keychain = ExtKeychain::from_random_seed().unwrap();
+	let keychain = ExtKeychain::from_random_seed(false).unwrap();
 	let key_id1 = ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
 	let key_id2 = ExtKeychain::derive_key_id(1, 2, 0, 0, 0);
 	let key_id3 = ExtKeychain::derive_key_id(1, 3, 0, 0, 0);
@@ -415,7 +415,7 @@ fn tx_build_exchange() {
 
 #[test]
 fn reward_empty_block() {
-	let keychain = keychain::ExtKeychain::from_random_seed().unwrap();
+	let keychain = keychain::ExtKeychain::from_random_seed(false).unwrap();
 	let key_id = ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
 
 	let previous_header = BlockHeader::default();
@@ -430,7 +430,7 @@ fn reward_empty_block() {
 
 #[test]
 fn reward_with_tx_block() {
-	let keychain = keychain::ExtKeychain::from_random_seed().unwrap();
+	let keychain = keychain::ExtKeychain::from_random_seed(false).unwrap();
 	let key_id = ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
 
 	let vc = verifier_cache();
@@ -450,7 +450,7 @@ fn reward_with_tx_block() {
 
 #[test]
 fn simple_block() {
-	let keychain = keychain::ExtKeychain::from_random_seed().unwrap();
+	let keychain = keychain::ExtKeychain::from_random_seed(false).unwrap();
 	let key_id = ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
 
 	let vc = verifier_cache();
@@ -471,7 +471,7 @@ fn simple_block() {
 
 #[test]
 fn test_block_with_timelocked_tx() {
-	let keychain = keychain::ExtKeychain::from_random_seed().unwrap();
+	let keychain = keychain::ExtKeychain::from_random_seed(false).unwrap();
 
 	let key_id1 = ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
 	let key_id2 = ExtKeychain::derive_key_id(1, 2, 0, 0, 0);

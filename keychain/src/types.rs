@@ -451,13 +451,13 @@ pub struct ValueExtKeychainPath {
 pub trait Keychain: Sync + Send + Clone {
 	/// Generates a keychain from a raw binary seed (which has already been
 	/// decrypted if applicable).
-	fn from_seed(seed: &[u8]) -> Result<Self, Error>;
+	fn from_seed(seed: &[u8], is_floo: bool) -> Result<Self, Error>;
 
 	/// Generates a keychain from a list of space-separated mnemonic words
-	fn from_mnemonic(word_list: &str, extension_word: &str) -> Result<Self, Error>;
+	fn from_mnemonic(word_list: &str, extension_word: &str, is_floo: bool) -> Result<Self, Error>;
 
 	/// Generates a keychain from a randomly generated seed. Mostly used for tests.
-	fn from_random_seed() -> Result<Self, Error>;
+	fn from_random_seed(is_floo: bool) -> Result<Self, Error>;
 
 	/// Root identifier for that keychain
 	fn root_key_id() -> Identifier;
