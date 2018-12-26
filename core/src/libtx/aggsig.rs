@@ -266,16 +266,7 @@ where
 	K: Keychain,
 {
 	let skey = k.derive_key(value, key_id)?;
-	let sig = aggsig::sign_single(
-		secp,
-		&msg,
-		&skey,
-		None,
-		None,
-		None,
-		blind_sum,
-		None,
-	)?;
+	let sig = aggsig::sign_single(secp, &msg, &skey, None, None, None, blind_sum, None)?;
 	Ok(sig)
 }
 
