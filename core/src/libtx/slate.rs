@@ -260,7 +260,7 @@ impl Slate {
 			if let Some(m) = message.clone() {
 				let hashed = blake2b(secp::constants::MESSAGE_SIZE, &[], &m.as_bytes()[..]);
 				let m = secp::Message::from_slice(&hashed.as_bytes())?;
-				let res = aggsig::sign_single(&keychain.secp(), &m, &sec_key, None)?;
+				let res = aggsig::sign_single(&keychain.secp(), &m, &sec_key, Some(&pub_key))?;
 				Some(res)
 			} else {
 				None
@@ -360,7 +360,7 @@ impl Slate {
 					&m,
 					None,
 					&p.public_blind_excess,
-					None,
+					Some(&p.public_blind_excess),
 					false,
 				) {
 					error!("verify_messages - participant message doesn't match signature. Message: \"{}\"",
