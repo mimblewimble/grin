@@ -1366,20 +1366,12 @@ pub fn kernel_sig_msg(
 	if features.is_coinbase() && fee != 0 || !features.is_height_locked() && lock_height != 0 {
 		return Err(Error::InvalidKernelFeatures);
 	}
-	let msg = if global::is_floonet() {
-		let mut bytes = [0; 32];
-		BigEndian::write_u64(&mut bytes[16..24], fee);
-		BigEndian::write_u64(&mut bytes[24..], lock_height);
-		secp::Message::from_slice(&bytes)?
-	} else {
-		let hash = match features {
-			KernelFeatures::COINBASE => (features).hash(),
-			KernelFeatures::PLAIN => (features, fee).hash(),
-			_ => (features, fee, lock_height).hash(),
-		};
-		secp::Message::from_slice(&hash.as_bytes())?
+	let hash = match features {
+		KernelFeatures::COINBASE => (features).hash(),
+		KernelFeatures::PLAIN => (features, fee).hash(),
+		_ => (features, fee, lock_height).hash(),
 	};
-	Ok(msg)
+	Ok(secp::Message::from_slice(&hash.as_bytes())?)
 }
 
 /// kernel features as determined by lock height
