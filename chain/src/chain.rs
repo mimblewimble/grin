@@ -246,6 +246,18 @@ impl Chain {
 		Ok(())
 	}
 
+	/// Reset sync_head to current header_head.
+	/// We do this when we first transition to header_sync to ensure we extend
+	/// the "sync" header MMR from a known consistent state and to ensure we track
+	/// the header chain correctly at the fork point.
+	pub fn reset_sync_head(&self) -> Result<Tip, Error> {
+		let batch = self.store.batch()?;
+		batch.reset_sync_head()?;
+		let head = batch.get_sync_head()?;
+		batch.commit()?;
+		Ok(head)
+	}
+
 	/// Processes a single block, then checks for orphans, processing
 	/// those as well if they're found
 	pub fn process_block(&self, b: Block, opts: Options) -> Result<Option<Tip>, Error> {
