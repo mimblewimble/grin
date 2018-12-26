@@ -30,37 +30,41 @@ pub struct ExtKeychain {
 	secp: Secp256k1,
 	master: ExtendedPrivKey,
 	use_switch_commits: bool,
+	hasher: BIP32GrinHasher,
 }
 
 impl Keychain for ExtKeychain {
-	fn from_seed(seed: &[u8]) -> Result<ExtKeychain, Error> {
-		let mut h = BIP32GrinHasher::new();
+	fn from_seed(seed: &[u8], is_floo: bool) -> Result<ExtKeychain, Error> {
+		let mut h = BIP32GrinHasher::new(is_floo);
 		let secp = secp::Secp256k1::with_caps(secp::ContextFlag::Commit);
 		let master = ExtendedPrivKey::new_master(&secp, &mut h, seed)?;
 		let keychain = ExtKeychain {
 			secp: secp,
 			master: master,
 			use_switch_commits: true,
+			hasher: h,
 		};
 		Ok(keychain)
 	}
 
-	fn from_mnemonic(word_list: &str, extension_word: &str) -> Result<Self, Error> {
+	fn from_mnemonic(word_list: &str, extension_word: &str, is_floo: bool) -> Result<Self, Error> {
 		let secp = secp::Secp256k1::with_caps(secp::ContextFlag::Commit);
-		let master = ExtendedPrivKey::from_mnemonic(&secp, word_list, extension_word)?;
+		let h = BIP32GrinHasher::new(is_floo);
+		let master = ExtendedPrivKey::from_mnemonic(&secp, word_list, extension_word, is_floo)?;
 		let keychain = ExtKeychain {
 			secp: secp,
 			master: master,
 			use_switch_commits: true,
+			hasher: h,
 		};
 		Ok(keychain)
 	}
 
 	/// For testing - probably not a good idea to use outside of tests.
-	fn from_random_seed() -> Result<ExtKeychain, Error> {
+	fn from_random_seed(is_floo: bool) -> Result<ExtKeychain, Error> {
 		let seed: String = thread_rng().sample_iter(&Alphanumeric).take(16).collect();
 		let seed = blake2::blake2b::blake2b(32, &[], seed.as_bytes());
-		ExtKeychain::from_seed(seed.as_bytes())
+		ExtKeychain::from_seed(seed.as_bytes(), is_floo)
 	}
 
 	fn root_key_id() -> Identifier {
@@ -72,7 +76,7 @@ impl Keychain for ExtKeychain {
 	}
 
 	fn derive_key(&self, amount: u64, id: &Identifier) -> Result<SecretKey, Error> {
-		let mut h = BIP32GrinHasher::new();
+		let mut h = self.hasher.clone();
 		let p = id.to_path();
 		let mut ext_key = self.master;
 		for i in 0..p.depth {
@@ -172,7 +176,7 @@ mod test {
 
 	#[test]
 	fn test_key_derivation() {
-		let keychain = ExtKeychain::from_random_seed().unwrap();
+		let keychain = ExtKeychain::from_random_seed(false).unwrap();
 		let secp = keychain.secp();
 
 		let path = ExtKeychainPath::new(1, 1, 0, 0, 0);
@@ -196,7 +200,7 @@ mod test {
 	// and summing the keys used to commit to 0 have the same result.
 	#[test]
 	fn secret_key_addition() {
-		let keychain = ExtKeychain::from_random_seed().unwrap();
+		let keychain = ExtKeychain::from_random_seed(false).unwrap();
 
 		let skey1 = SecretKey::from_slice(
 			&keychain.secp,

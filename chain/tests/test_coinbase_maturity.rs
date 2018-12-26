@@ -60,7 +60,7 @@ fn test_coinbase_maturity() {
 
 	let prev = chain.head_header().unwrap();
 
-	let keychain = ExtKeychain::from_random_seed().unwrap();
+	let keychain = ExtKeychain::from_random_seed(false).unwrap();
 	let key_id1 = ExtKeychainPath::new(1, 1, 0, 0, 0).to_identifier();
 	let key_id2 = ExtKeychainPath::new(1, 2, 0, 0, 0).to_identifier();
 	let key_id3 = ExtKeychainPath::new(1, 3, 0, 0, 0).to_identifier();
@@ -142,7 +142,7 @@ fn test_coinbase_maturity() {
 	for _ in 0..3 {
 		let prev = chain.head_header().unwrap();
 
-		let keychain = ExtKeychain::from_random_seed().unwrap();
+		let keychain = ExtKeychain::from_random_seed(false).unwrap();
 		let pk = ExtKeychainPath::new(1, 1, 0, 0, 0).to_identifier();
 
 		let reward = libtx::reward::output(&keychain, &pk, 0).unwrap();

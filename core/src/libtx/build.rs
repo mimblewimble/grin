@@ -54,7 +54,11 @@ where
 		move |build, (tx, kern, sum)| -> (Transaction, TxKernel, BlindSum) {
 			let commit = build.keychain.commit(value, &key_id).unwrap();
 			let input = Input::new(features, commit);
-			(tx.with_input(input), kern, sum.sub_key_id(key_id.to_value_path(value)))
+			(
+				tx.with_input(input),
+				kern,
+				sum.sub_key_id(key_id.to_value_path(value)),
+			)
 		},
 	)
 }
@@ -261,7 +265,7 @@ mod test {
 
 	#[test]
 	fn blind_simple_tx() {
-		let keychain = ExtKeychain::from_random_seed().unwrap();
+		let keychain = ExtKeychain::from_random_seed(false).unwrap();
 		let key_id1 = ExtKeychainPath::new(1, 1, 0, 0, 0).to_identifier();
 		let key_id2 = ExtKeychainPath::new(1, 2, 0, 0, 0).to_identifier();
 		let key_id3 = ExtKeychainPath::new(1, 3, 0, 0, 0).to_identifier();
@@ -284,7 +288,7 @@ mod test {
 
 	#[test]
 	fn blind_simple_tx_with_offset() {
-		let keychain = ExtKeychain::from_random_seed().unwrap();
+		let keychain = ExtKeychain::from_random_seed(false).unwrap();
 		let key_id1 = ExtKeychainPath::new(1, 1, 0, 0, 0).to_identifier();
 		let key_id2 = ExtKeychainPath::new(1, 2, 0, 0, 0).to_identifier();
 		let key_id3 = ExtKeychainPath::new(1, 3, 0, 0, 0).to_identifier();
@@ -307,7 +311,7 @@ mod test {
 
 	#[test]
 	fn blind_simpler_tx() {
-		let keychain = ExtKeychain::from_random_seed().unwrap();
+		let keychain = ExtKeychain::from_random_seed(false).unwrap();
 		let key_id1 = ExtKeychainPath::new(1, 1, 0, 0, 0).to_identifier();
 		let key_id2 = ExtKeychainPath::new(1, 2, 0, 0, 0).to_identifier();
 

@@ -51,7 +51,7 @@ fn test_various_store_indices() {
 	let chain_dir = ".grin_idx_1";
 	clean_output_dir(chain_dir);
 
-	let keychain = ExtKeychain::from_random_seed().unwrap();
+	let keychain = ExtKeychain::from_random_seed(false).unwrap();
 	let key_id = ExtKeychainPath::new(1, 1, 0, 0, 0).to_identifier();
 	let db_env = Arc::new(store::new_env(chain_dir.to_string()));
 
