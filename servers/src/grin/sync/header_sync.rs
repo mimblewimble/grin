@@ -132,7 +132,10 @@ impl HeaderSync {
 				self.stalling_ts = None;
 			}
 
-			if !all_headers_received {
+			if all_headers_received {
+				// reset the stalling start time if syncing goes well
+				self.stalling_ts = None;
+			} else {
 				if let Some(ref stalling_ts) = self.stalling_ts {
 					if let Some(ref peer) = self.syncing_peer {
 						match self.sync_state.status() {
