@@ -635,9 +635,9 @@ impl ChainAdapter for ChainToPoolAndNetAdapter {
 			}
 		}
 
-		if self.sync_state.is_syncing() {
-			return;
-		}
+//		if self.sync_state.is_syncing() {
+//			return;
+//		}
 
 		// If we mined the block then we want to broadcast the compact block.
 		// If we received the block from another node then broadcast "header first"
