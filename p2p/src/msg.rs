@@ -37,7 +37,7 @@ pub const USER_AGENT: &'static str = concat!("MW/Grin ", env!("CARGO_PKG_VERSION
 
 /// Magic numbers expected in the header of every message
 const OTHER_MAGIC: [u8; 2] = [73, 43];
-const FLOONET_MAGIC: [u8; 2] = [83, 53];
+const FLOONET_MAGIC: [u8; 2] = [83, 59];
 const MAINNET_MAGIC: [u8; 2] = [97, 61];
 
 /// Max theoretical size of a block filled with outputs.
