@@ -1359,7 +1359,13 @@ pub fn kernel_sig_msg(
 	lock_height: u64,
 	features: KernelFeatures,
 ) -> Result<secp::Message, Error> {
-	if features.is_coinbase() && fee != 0 || !features.is_height_locked() && lock_height != 0 {
+	let valid_features = match features {
+		KernelFeatures::COINBASE => fee == 0 && lock_height == 0,
+		KernelFeatures::PLAIN => lock_height == 0,
+		KernelFeatures::HEIGHT_LOCKED => true,
+		_ => false,
+	};
+	if !valid_features {
 		return Err(Error::InvalidKernelFeatures);
 	}
 	let hash = match features {
