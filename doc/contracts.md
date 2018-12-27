@@ -135,7 +135,7 @@ spent when multiple parties approve it. This construction is very similar to
 the previous setup for trustless transactions, however in this case both the
 signature and a Pedersen Commitment need to be aggregated.
 
-This time, Alice wants to sends funds such that both Bob and her need to agree
+This time, Alice wants to send funds such that both Bob and her need to agree
 to spend. Alice builds the transaction normally and adds the multiparty output
 such that:
 
