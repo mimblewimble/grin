@@ -625,8 +625,8 @@ impl NetAdapter for Peers {
 	}
 
 	fn is_banned(&self, addr: SocketAddr) -> bool {
-		if let Some(peer) = self.get_connected_peer(&addr) {
-			peer.is_banned()
+		if let Ok(peer) = self.get_peer(addr) {
+			peer.flags == State::Banned
 		} else {
 			false
 		}
