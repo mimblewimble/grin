@@ -226,7 +226,7 @@ impl GlobalConfig {
 					.stratum_mining_config
 					.as_mut()
 					.unwrap()
-					.wallet_listener_url = "127.0.0.1:13415".to_owned();
+					.wallet_listener_url = "http://127.0.0.1:13415".to_owned();
 			}
 			global::ChainTypes::UserTesting => {
 				defaults.api_http_addr = "127.0.0.1:23413".to_owned();
@@ -241,7 +241,7 @@ impl GlobalConfig {
 					.stratum_mining_config
 					.as_mut()
 					.unwrap()
-					.wallet_listener_url = "127.0.0.1:23415".to_owned();
+					.wallet_listener_url = "http://127.0.0.1:23415".to_owned();
 			}
 			global::ChainTypes::AutomatedTesting => {
 				panic!("Can't run automated testing directly");
