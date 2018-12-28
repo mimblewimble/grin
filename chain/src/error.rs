@@ -120,7 +120,7 @@ pub enum ErrorKind {
 	#[fail(display = "Genesis Block Required")]
 	GenesisBlockRequired,
 	/// Error from underlying tx handling
-	#[fail(display = "Transaction Error")]
+	#[fail(display = "Transaction Validation Error: {:?}", _0)]
 	Transaction(transaction::Error),
 	/// Anything else
 	#[fail(display = "Other Error: {}", _0)]

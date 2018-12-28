@@ -19,11 +19,11 @@ use std::io::{Read, Write};
 use std::net::{Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV4, SocketAddrV6};
 use std::time;
 
-use crate::core::{consensus, global};
 use crate::core::core::hash::Hash;
 use crate::core::core::BlockHeader;
 use crate::core::pow::Difficulty;
 use crate::core::ser::{self, FixedLength, Readable, Reader, StreamingReader, Writeable, Writer};
+use crate::core::{consensus, global};
 use crate::types::{
 	Capabilities, Error, ReasonForBan, MAX_BLOCK_HEADERS, MAX_LOCATORS, MAX_PEER_ADDRS,
 };
