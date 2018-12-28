@@ -157,7 +157,7 @@ pub fn initial_setup_wallet(
 
 		// Spit it out if it doesn't exist
 		if !config_path.exists() {
-			let mut default_config = GlobalWalletConfig::default();
+			let mut default_config = GlobalWalletConfig::for_chain(chain_type);
 			// update paths relative to current dir
 			default_config.update_paths(&grin_path);
 			default_config.write_to_file(config_path.to_str().unwrap())?;
