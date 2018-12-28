@@ -39,6 +39,7 @@ use crate::types::{WalletConfig, WalletSeed};
 use crate::util;
 use crate::util::secp::constants::SECRET_KEY_SIZE;
 use crate::util::secp::pedersen;
+use crate::util::ZeroingString;
 
 pub const DB_DIR: &'static str = "db";
 pub const TX_SAVE_DIR: &'static str = "saved_txs";
@@ -102,7 +103,7 @@ pub struct LMDBBackend<C, K> {
 	db: store::Store,
 	config: WalletConfig,
 	/// passphrase: TODO better ways of dealing with this other than storing
-	passphrase: String,
+	passphrase: ZeroingString,
 	/// Keychain
 	pub keychain: Option<K>,
 	/// Parent path to use by default for output operations
@@ -144,7 +145,7 @@ impl<C, K> LMDBBackend<C, K> {
 		let res = LMDBBackend {
 			db: store,
 			config: config.clone(),
-			passphrase: String::from(passphrase),
+			passphrase: ZeroingString::from(passphrase),
 			keychain: None,
 			parent_key_id: LMDBBackend::<C, K>::default_path(),
 			w2n_client: n_client,

@@ -22,6 +22,7 @@ log = "0.4"
 walkdir = "2"
 zip = { version = "0.4", default-features = false }
 parking_lot = {version = "0.6"}
+zeroize = "0.5.1"
 
 [dependencies.grin_secp256k1zkp]
 git = "https://github.com/mimblewimble/rust-secp256k1-zkp"
