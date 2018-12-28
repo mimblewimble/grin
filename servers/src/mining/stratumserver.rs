@@ -708,12 +708,18 @@ impl StratumServer {
 			self.config.stratum_server_addr.clone().unwrap()
 		);
 
+		// Initial Loop. Waiting node complete syncing
+		while self.sync_state.is_syncing() {
+			self.clean_workers(&mut stratum_stats.clone());
+
+			// Handle any messages from the workers
+			self.handle_rpc_requests(&mut stratum_stats.clone());
+
+			thread::sleep(Duration::from_millis(50));
+		}
+
 		// Main Loop
 		loop {
-			// If we're fallen into sync mode, (or are just starting up,
-			// tell connected clients to stop what they're doing
-			let mining_stopped = self.sync_state.is_syncing();
-
 			// Remove workers with failed connections
 			num_workers = self.clean_workers(&mut stratum_stats.clone());
 
@@ -724,10 +730,8 @@ impl StratumServer {
 			// Build a new block if:
 			//    There is a new block on the chain
 			// or We are rebuilding the current one to include new transactions
-			// and we're not synching
 			// and there is at least one worker connected
 			if (current_hash != latest_hash || Utc::now().timestamp() >= deadline)
-				&& !mining_stopped
 				&& num_workers > 0
 			{
 				let mut wallet_listener_url: Option<String> = None;
