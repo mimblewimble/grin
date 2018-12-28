@@ -66,10 +66,10 @@ impl Default for WalletConfig {
 		WalletConfig {
 			chain_type: Some(ChainTypes::Floonet),
 			api_listen_interface: "127.0.0.1".to_string(),
-			api_listen_port: 13415,
+			api_listen_port: 3415,
 			api_secret_path: Some(".api_secret".to_string()),
 			node_api_secret_path: Some(".api_secret".to_string()),
-			check_node_api_http_addr: "http://127.0.0.1:13413".to_string(),
+			check_node_api_http_addr: "http://127.0.0.1:3413".to_string(),
 			data_file_dir: ".".to_string(),
 			tls_certificate_file: None,
 			tls_certificate_key: None,
@@ -124,8 +124,8 @@ impl WalletSeed {
 		seed.as_bytes().to_vec()
 	}
 
-	pub fn derive_keychain<K: Keychain>(&self) -> Result<K, Error> {
-		let result = K::from_seed(&self.0)?;
+	pub fn derive_keychain<K: Keychain>(&self, is_floonet: bool) -> Result<K, Error> {
+		let result = K::from_seed(&self.0, is_floonet)?;
 		Ok(result)
 	}
 
@@ -218,36 +218,7 @@ impl WalletSeed {
 			let mut buffer = String::new();
 			file.read_to_string(&mut buffer).context(ErrorKind::IO)?;
 			let enc_seed: EncryptedWalletSeed =
-				match serde_json::from_str(&buffer).context(ErrorKind::Format) {
-					Ok(s) => s,
-					Err(_) => {
-						println!("Attempting to convert old wallet seed file to new format");
-						// TODO: remove for mainnet
-						// try to convert from old format
-						let mut bak_file = File::create(format!("{}.bak", seed_file_path))
-							.context(ErrorKind::IO)?;
-						let mut file = File::create(seed_file_path).context(ErrorKind::IO)?;
-						let old_wallet_seed = WalletSeed::from_hex(&buffer.trim())?;
-						bak_file
-							.write_all(&old_wallet_seed.to_hex().as_bytes())
-							.context(ErrorKind::IO)?;
-						let mut c_wallet_seed = [0u8; 32];
-						c_wallet_seed.copy_from_slice(&old_wallet_seed.0[0..32]);
-						let converted_wallet_seed =
-							WalletSeed::derive_keychain_old(c_wallet_seed, password);
-						let enc_seed = EncryptedWalletSeed::from_seed(
-							&WalletSeed::from_bytes(&converted_wallet_seed),
-							password,
-						)?;
-						let enc_seed_json =
-							serde_json::to_string_pretty(&enc_seed).context(ErrorKind::Format)?;
-						file.write_all(&enc_seed_json.as_bytes())
-							.context(ErrorKind::IO)?;
-						println!("Seed file conversion done");
-						println!("Consider moving funds to a newly-created wallet to support recovery phrases");
-						enc_seed
-					}
-				};
+				serde_json::from_str(&buffer).context(ErrorKind::Format)?;
 			let wallet_seed = enc_seed.decrypt(password)?;
 			Ok(wallet_seed)
 		} else {

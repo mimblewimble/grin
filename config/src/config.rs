@@ -26,6 +26,8 @@ use std::path::PathBuf;
 use toml;
 
 use crate::comments::insert_comments;
+use crate::core::global;
+use crate::p2p;
 use crate::servers::ServerConfig;
 use crate::types::{
 	ConfigError, ConfigMembers, GlobalConfig, GlobalWalletConfig, GlobalWalletConfigMembers,
@@ -45,21 +47,14 @@ const GRIN_CHAIN_DIR: &'static str = "chain_data";
 const GRIN_WALLET_DIR: &'static str = "wallet_data";
 const API_SECRET_FILE_NAME: &'static str = ".api_secret";
 
-fn get_grin_path() -> Result<PathBuf, ConfigError> {
+fn get_grin_path(chain_type: &global::ChainTypes) -> Result<PathBuf, ConfigError> {
 	// Check if grin dir exists
-	let grin_path = {
-		match dirs::home_dir() {
-			Some(mut p) => {
-				p.push(GRIN_HOME);
-				p
-			}
-			None => {
-				let mut pb = PathBuf::new();
-				pb.push(GRIN_HOME);
-				pb
-			}
-		}
+	let mut grin_path = match dirs::home_dir() {
+		Some(p) => p,
+		None => PathBuf::new(),
 	};
+	grin_path.push(GRIN_HOME);
+	grin_path.push(chain_type.shortname());
 	// Create if the default path doesn't exist
 	if !grin_path.exists() {
 		fs::create_dir_all(grin_path.clone())?;
@@ -107,8 +102,8 @@ fn check_api_secret(api_secret_path: &PathBuf) -> Result<(), ConfigError> {
 }
 
 /// Check that the api secret file exists and is valid
-fn check_api_secret_file() -> Result<(), ConfigError> {
-	let grin_path = get_grin_path()?;
+fn check_api_secret_file(chain_type: &global::ChainTypes) -> Result<(), ConfigError> {
+	let grin_path = get_grin_path(chain_type)?;
 	let mut api_secret_path = grin_path.clone();
 	api_secret_path.push(API_SECRET_FILE_NAME);
 	if !api_secret_path.exists() {
@@ -119,14 +114,14 @@ fn check_api_secret_file() -> Result<(), ConfigError> {
 }
 
 /// Handles setup and detection of paths for node
-pub fn initial_setup_server() -> Result<GlobalConfig, ConfigError> {
-	check_api_secret_file()?;
+pub fn initial_setup_server(chain_type: &global::ChainTypes) -> Result<GlobalConfig, ConfigError> {
+	check_api_secret_file(chain_type)?;
 	// Use config file if current directory if it exists, .grin home otherwise
 	if let Some(p) = check_config_current_dir(SERVER_CONFIG_FILE_NAME) {
 		GlobalConfig::new(p.to_str().unwrap())
 	} else {
 		// Check if grin dir exists
-		let grin_path = get_grin_path()?;
+		let grin_path = get_grin_path(chain_type)?;
 
 		// Get path to default config file
 		let mut config_path = grin_path.clone();
@@ -134,7 +129,7 @@ pub fn initial_setup_server() -> Result<GlobalConfig, ConfigError> {
 
 		// Spit it out if it doesn't exist
 		if !config_path.exists() {
-			let mut default_config = GlobalConfig::default();
+			let mut default_config = GlobalConfig::for_chain(chain_type);
 			// update paths relative to current dir
 			default_config.update_paths(&grin_path);
 			default_config.write_to_file(config_path.to_str().unwrap())?;
@@ -145,14 +140,16 @@ pub fn initial_setup_server() -> Result<GlobalConfig, ConfigError> {
 }
 
 /// Handles setup and detection of paths for wallet
-pub fn initial_setup_wallet() -> Result<GlobalWalletConfig, ConfigError> {
-	check_api_secret_file()?;
+pub fn initial_setup_wallet(
+	chain_type: &global::ChainTypes,
+) -> Result<GlobalWalletConfig, ConfigError> {
+	check_api_secret_file(chain_type)?;
 	// Use config file if current directory if it exists, .grin home otherwise
 	if let Some(p) = check_config_current_dir(WALLET_CONFIG_FILE_NAME) {
 		GlobalWalletConfig::new(p.to_str().unwrap())
 	} else {
 		// Check if grin dir exists
-		let grin_path = get_grin_path()?;
+		let grin_path = get_grin_path(chain_type)?;
 
 		// Get path to default config file
 		let mut config_path = grin_path.clone();
@@ -160,7 +157,7 @@ pub fn initial_setup_wallet() -> Result<GlobalWalletConfig, ConfigError> {
 
 		// Spit it out if it doesn't exist
 		if !config_path.exists() {
-			let mut default_config = GlobalWalletConfig::default();
+			let mut default_config = GlobalWalletConfig::for_chain(chain_type);
 			// update paths relative to current dir
 			default_config.update_paths(&grin_path);
 			default_config.write_to_file(config_path.to_str().unwrap())?;
@@ -208,6 +205,51 @@ impl Default for GlobalWalletConfig {
 }
 
 impl GlobalConfig {
+	/// Same as GlobalConfig::default() but further tweaks parameters to
+	/// apply defaults for each chain type
+	pub fn for_chain(chain_type: &global::ChainTypes) -> GlobalConfig {
+		let mut defaults_conf = GlobalConfig::default();
+		let mut defaults = &mut defaults_conf.members.as_mut().unwrap().server;
+		defaults.chain_type = chain_type.clone();
+
+		match *chain_type {
+			global::ChainTypes::Mainnet => {}
+			global::ChainTypes::Floonet => {
+				defaults.api_http_addr = "127.0.0.1:13413".to_owned();
+				defaults.p2p_config.port = 13414;
+				defaults
+					.stratum_mining_config
+					.as_mut()
+					.unwrap()
+					.stratum_server_addr = Some("127.0.0.1:13416".to_owned());
+				defaults
+					.stratum_mining_config
+					.as_mut()
+					.unwrap()
+					.wallet_listener_url = "http://127.0.0.1:13415".to_owned();
+			}
+			global::ChainTypes::UserTesting => {
+				defaults.api_http_addr = "127.0.0.1:23413".to_owned();
+				defaults.p2p_config.port = 23414;
+				defaults.p2p_config.seeding_type = p2p::Seeding::None;
+				defaults
+					.stratum_mining_config
+					.as_mut()
+					.unwrap()
+					.stratum_server_addr = Some("127.0.0.1:23416".to_owned());
+				defaults
+					.stratum_mining_config
+					.as_mut()
+					.unwrap()
+					.wallet_listener_url = "http://127.0.0.1:23415".to_owned();
+			}
+			global::ChainTypes::AutomatedTesting => {
+				panic!("Can't run automated testing directly");
+			}
+		}
+		defaults_conf
+	}
+
 	/// Requires the path to a config file
 	pub fn new(file_path: &str) -> Result<GlobalConfig, ConfigError> {
 		let mut return_value = GlobalConfig::default();
@@ -315,6 +357,29 @@ impl GlobalConfig {
 
 /// TODO: Properly templatize these structs (if it's worth the effort)
 impl GlobalWalletConfig {
+	/// Same as GlobalConfig::default() but further tweaks parameters to
+	/// apply defaults for each chain type
+	pub fn for_chain(chain_type: &global::ChainTypes) -> GlobalWalletConfig {
+		let mut defaults_conf = GlobalWalletConfig::default();
+		let mut defaults = &mut defaults_conf.members.as_mut().unwrap().wallet;
+		defaults.chain_type = Some(chain_type.clone());
+
+		match *chain_type {
+			global::ChainTypes::Mainnet => {}
+			global::ChainTypes::Floonet => {
+				defaults.api_listen_port = 13415;
+				defaults.check_node_api_http_addr = "http://127.0.0.1:13413".to_owned();
+			}
+			global::ChainTypes::UserTesting => {
+				defaults.api_listen_port = 23415;
+				defaults.check_node_api_http_addr = "http://127.0.0.1:23413".to_owned();
+			}
+			global::ChainTypes::AutomatedTesting => {
+				panic!("Can't run automated testing directly");
+			}
+		}
+		defaults_conf
+	}
 	/// Requires the path to a config file
 	pub fn new(file_path: &str) -> Result<GlobalWalletConfig, ConfigError> {
 		let mut return_value = GlobalWalletConfig::default();

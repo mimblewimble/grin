@@ -233,7 +233,7 @@ mod test {
 	// demonstrate that input.commitment == referenced output.commitment
 	// based on the public key and amount begin spent
 	fn output_commitment_equals_input_commitment_on_spend() {
-		let keychain = ExtKeychain::from_random_seed().unwrap();
+		let keychain = ExtKeychain::from_random_seed(false).unwrap();
 		let key_id1 = ExtKeychainPath::new(1, 1, 0, 0, 0).to_identifier();
 
 		let tx1 = build::transaction(vec![build::output(105, key_id1.clone())], &keychain).unwrap();

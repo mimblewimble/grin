@@ -93,6 +93,18 @@ pub enum ChainTypes {
 	Mainnet,
 }
 
+impl ChainTypes {
+	/// Short name representing the chain type ("floo", "main", etc.)
+	pub fn shortname(&self) -> String {
+		match *self {
+			ChainTypes::AutomatedTesting => "auto".to_owned(),
+			ChainTypes::UserTesting => "user".to_owned(),
+			ChainTypes::Floonet => "floo".to_owned(),
+			ChainTypes::Mainnet => "main".to_owned(),
+		}
+	}
+}
+
 impl Default for ChainTypes {
 	fn default() -> ChainTypes {
 		ChainTypes::Floonet
@@ -150,11 +162,6 @@ where
 		// Everything else is Cuckatoo only
 		_ => new_cuckatoo_ctx(edge_bits, proof_size, max_sols),
 	}
-}
-
-/// Return the type of the pos
-pub fn pow_type() -> PoWContextTypes {
-	PoWContextTypes::Cuckatoo
 }
 
 /// The minimum acceptable edge_bits
@@ -256,12 +263,11 @@ pub fn is_user_testing_mode() -> bool {
 /// Production defined as a live public network, testnet[n] or mainnet.
 pub fn is_production_mode() -> bool {
 	let param_ref = CHAIN_TYPE.read();
-	ChainTypes::Floonet == *param_ref
-		|| ChainTypes::Mainnet == *param_ref
+	ChainTypes::Floonet == *param_ref || ChainTypes::Mainnet == *param_ref
 }
 
-/// Are we in one of our (many) testnets?
-pub fn is_testnet() -> bool {
+/// Are we in floonet?
+pub fn is_floonet() -> bool {
 	let param_ref = CHAIN_TYPE.read();
 	ChainTypes::Floonet == *param_ref
 }
@@ -288,6 +294,12 @@ pub fn get_genesis_nonce() -> u64 {
 		// Placeholder, obviously not the right value
 		ChainTypes::Mainnet => 0,
 	}
+}
+
+/// Short name representing the current chain type ("floo", "main", etc.)
+pub fn chain_shortname() -> String {
+	let param_ref = CHAIN_TYPE.read();
+	param_ref.shortname()
 }
 
 /// Converts an iterator of block difficulty data to more a more manageable

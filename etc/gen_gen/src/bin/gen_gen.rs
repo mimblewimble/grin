@@ -85,21 +85,21 @@ fn main() {
 		&rpassword::prompt_password_stdout("Password: ").unwrap(),
 	)
 	.unwrap();
-	let keychain: ExtKeychain = seed.derive_keychain().unwrap();
-	let key_id = ExtKeychain::derive_key_id(2, 1, 0, 0, 0);
+	let keychain: ExtKeychain = seed.derive_keychain(false).unwrap();
+	let key_id = ExtKeychain::derive_key_id(3, 1, 0, 0, 0);
 	let reward = core::libtx::reward::output(&keychain, &key_id, 0).unwrap();
 	gen = gen.with_reward(reward.0, reward.1);
 
 	{
 		// setup a tmp chain to set block header roots
-		core::global::set_mining_mode(core::global::ChainTypes::AutomatedTesting);
+		core::global::set_mining_mode(core::global::ChainTypes::UserTesting);
 		let tmp_chain = setup_chain(".grin.tmp", core::pow::mine_genesis_block().unwrap());
 		tmp_chain.set_txhashset_roots(&mut gen).unwrap();
 	}
 
 	// sets the timestamp and prev_root from the bitcoin block (needs to be
 	// after set_txhashset roots to not get overwritten)
-	gen.header.timestamp = Utc::now() + Duration::minutes(30);
+	gen.header.timestamp = Utc::now() + Duration::minutes(45);
 	gen.header.prev_root = core::core::hash::Hash::from_hex(&h1).unwrap();
 
 	// mine a Cuckaroo29 block

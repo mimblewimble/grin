@@ -231,7 +231,8 @@ impl HeaderInfo {
 			timestamp,
 			difficulty,
 			secondary_scaling: global::initial_graph_weight(),
-			is_secondary: global::is_mainnet(), // floonet launched with false:-(
+
+			is_secondary: true,
 		}
 	}
 
@@ -242,7 +243,7 @@ impl HeaderInfo {
 			timestamp: 1,
 			difficulty,
 			secondary_scaling,
-			is_secondary: false,
+			is_secondary: true,
 		}
 	}
 }

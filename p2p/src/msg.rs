@@ -19,11 +19,11 @@ use std::io::{Read, Write};
 use std::net::{Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV4, SocketAddrV6};
 use std::time;
 
-use crate::core::consensus;
 use crate::core::core::hash::Hash;
 use crate::core::core::BlockHeader;
 use crate::core::pow::Difficulty;
 use crate::core::ser::{self, FixedLength, Readable, Reader, StreamingReader, Writeable, Writer};
+use crate::core::{consensus, global};
 use crate::types::{
 	Capabilities, Error, ReasonForBan, MAX_BLOCK_HEADERS, MAX_LOCATORS, MAX_PEER_ADDRS,
 };
@@ -35,8 +35,10 @@ pub const PROTOCOL_VERSION: u32 = 1;
 /// Grin's user agent with current version
 pub const USER_AGENT: &'static str = concat!("MW/Grin ", env!("CARGO_PKG_VERSION"));
 
-/// Magic number expected in the header of every message
-const MAGIC: [u8; 2] = [0x53, 0x35];
+/// Magic numbers expected in the header of every message
+const OTHER_MAGIC: [u8; 2] = [73, 43];
+const FLOONET_MAGIC: [u8; 2] = [83, 59];
+const MAINNET_MAGIC: [u8; 2] = [97, 61];
 
 /// Max theoretical size of a block filled with outputs.
 const MAX_BLOCK_SIZE: u64 =
@@ -96,6 +98,14 @@ fn max_msg_size(msg_type: Type) -> u64 {
 		Type::BanReason => 64,
 		Type::GetTransaction => 32,
 		Type::TransactionKernel => 32,
+	}
+}
+
+fn magic() -> [u8; 2] {
+	match *global::CHAIN_TYPE.read() {
+		global::ChainTypes::Floonet => FLOONET_MAGIC,
+		global::ChainTypes::Mainnet => MAINNET_MAGIC,
+		_ => OTHER_MAGIC,
 	}
 }
 
@@ -187,7 +197,7 @@ impl MsgHeader {
 	/// Creates a new message header.
 	pub fn new(msg_type: Type, len: u64) -> MsgHeader {
 		MsgHeader {
-			magic: MAGIC,
+			magic: magic(),
 			msg_type: msg_type,
 			msg_len: len,
 		}
@@ -213,12 +223,13 @@ impl Writeable for MsgHeader {
 
 impl Readable for MsgHeader {
 	fn read(reader: &mut dyn Reader) -> Result<MsgHeader, ser::Error> {
-		reader.expect_u8(MAGIC[0])?;
-		reader.expect_u8(MAGIC[1])?;
+		let m = magic();
+		reader.expect_u8(m[0])?;
+		reader.expect_u8(m[1])?;
 		let (t, len) = ser_multiread!(reader, read_u8, read_u64);
 		match Type::from_u8(t) {
 			Some(ty) => Ok(MsgHeader {
-				magic: MAGIC,
+				magic: m,
 				msg_type: ty,
 				msg_len: len,
 			}),

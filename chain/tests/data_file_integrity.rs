@@ -77,7 +77,7 @@ fn data_files() {
 	//new block so chain references should be freed
 	{
 		let chain = setup(chain_dir);
-		let keychain = ExtKeychain::from_random_seed().unwrap();
+		let keychain = ExtKeychain::from_random_seed(false).unwrap();
 
 		for n in 1..4 {
 			let prev = chain.head_header().unwrap();

@@ -32,7 +32,7 @@ use crate::keychain::{ChildNumber, ExtKeychain, Identifier, Keychain};
 use crate::store::{self, option_to_not_found, to_key, to_key_u64};
 
 use crate::core::core::Transaction;
-use crate::core::ser;
+use crate::core::{global, ser};
 use crate::libwallet::types::*;
 use crate::libwallet::{internal, Error, ErrorKind};
 use crate::types::{WalletConfig, WalletSeed};
@@ -179,7 +179,7 @@ where
 			.context(ErrorKind::CallbackImpl("Error opening wallet"))?;
 		self.keychain = Some(
 			wallet_seed
-				.derive_keychain()
+				.derive_keychain(global::is_floonet())
 				.context(ErrorKind::CallbackImpl("Error deriving keychain"))?,
 		);
 		Ok(())

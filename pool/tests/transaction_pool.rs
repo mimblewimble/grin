@@ -29,7 +29,7 @@ use std::sync::Arc;
 /// Test we can add some txs to the pool (both stempool and txpool).
 #[test]
 fn test_the_transaction_pool() {
-	let keychain: ExtKeychain = Keychain::from_random_seed().unwrap();
+	let keychain: ExtKeychain = Keychain::from_random_seed(false).unwrap();
 
 	let db_root = ".grin_transaction_pool".to_string();
 	clean_output_dir(db_root.clone());
