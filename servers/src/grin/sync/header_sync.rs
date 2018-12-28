@@ -19,7 +19,7 @@ use std::sync::Arc;
 use crate::chain;
 use crate::common::types::{Error, SyncState, SyncStatus};
 use crate::core::core::hash::{Hash, Hashed};
-use crate::p2p::{self, Peer};
+use crate::p2p::{self, types::ReasonForBan, Peer};
 
 pub struct HeaderSync {
 	sync_state: Arc<SyncState>,
@@ -28,6 +28,9 @@ pub struct HeaderSync {
 
 	history_locator: Vec<(u64, Hash)>,
 	prev_header_sync: (DateTime<Utc>, u64, u64),
+
+	syncing_peer: Option<Arc<Peer>>,
+	stalling_ts: Option<DateTime<Utc>>,
 }
 
 impl HeaderSync {
@@ -42,6 +45,8 @@ impl HeaderSync {
 			chain,
 			history_locator: vec![],
 			prev_header_sync: (Utc::now(), 0, 0),
+			syncing_peer: None,
+			stalling_ts: None,
 		}
 	}
 
@@ -89,7 +94,7 @@ impl HeaderSync {
 				highest_height: highest_height,
 			});
 
-			self.header_sync();
+			self.syncing_peer = self.header_sync();
 			return true;
 		}
 		false
@@ -117,6 +122,47 @@ impl HeaderSync {
 				header_head.height,
 				header_head.height,
 			);
+
+			// save the stalling start time
+			if stalling {
+				if self.stalling_ts.is_none() {
+					self.stalling_ts = Some(now);
+				}
+			} else {
+				self.stalling_ts = None;
+			}
+
+			if all_headers_received {
+				// reset the stalling start time if syncing goes well
+				self.stalling_ts = None;
+			} else {
+				if let Some(ref stalling_ts) = self.stalling_ts {
+					if let Some(ref peer) = self.syncing_peer {
+						match self.sync_state.status() {
+							SyncStatus::HeaderSync {
+								current_height: _,
+								highest_height,
+							} => {
+								// Ban this fraud peer which claims a higher work but can't send us the real headers
+								if now > *stalling_ts + Duration::seconds(120)
+									&& highest_height == peer.info.height()
+								{
+									self.peers
+										.ban_peer(&peer.info.addr, ReasonForBan::FraudHeight);
+									info!(
+										"sync: ban a fraud peer: {}, claimed height: {}, total difficulty: {}",
+										peer.info.addr,
+										peer.info.height(),
+										peer.info.total_difficulty(),
+									);
+								}
+							}
+							_ => (),
+						}
+					}
+				}
+			}
+			self.syncing_peer = None;
 			true
 		} else {
 			// resetting the timeout as long as we progress
@@ -128,20 +174,21 @@ impl HeaderSync {
 		}
 	}
 
-	fn header_sync(&mut self) {
+	fn header_sync(&mut self) -> Option<Arc<Peer>> {
 		if let Ok(header_head) = self.chain.header_head() {
 			let difficulty = header_head.total_difficulty;
 
 			if let Some(peer) = self.peers.most_work_peer() {
 				if peer.info.total_difficulty() > difficulty {
-					self.request_headers(&peer);
+					return self.request_headers(peer);
 				}
 			}
 		}
+		return None;
 	}
 
 	/// Request some block headers from a peer to advance us.
-	fn request_headers(&mut self, peer: &Peer) {
+	fn request_headers(&mut self, peer: Arc<Peer>) -> Option<Arc<Peer>> {
 		if let Ok(locator) = self.get_locator() {
 			debug!(
 				"sync: request_headers: asking {} for headers, {:?}",
@@ -149,7 +196,9 @@ impl HeaderSync {
 			);
 
 			let _ = peer.send_header_request(locator);
+			return Some(peer.clone());
 		}
+		return None;
 	}
 
 	/// We build a locator based on sync_head.

@@ -240,6 +240,7 @@ enum_from_primitive! {
 		BadBlockHeader = 3,
 		BadTxHashSet = 4,
 		ManualBan = 5,
+		FraudHeight = 6,
 	}
 }
 
