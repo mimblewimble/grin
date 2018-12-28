@@ -26,7 +26,7 @@ zeroize = "0.5.1"
 
 [dependencies.grin_secp256k1zkp]
 git = "https://github.com/mimblewimble/rust-secp256k1-zkp"
-tag = "grin_integration_29"
+#tag = "grin_integration_29"
 #path = "../../rust-secp256k1-zkp"
-#version = "0.7.1"
+version = "0.7.3"
 features = ["bullet-proof-sizing"]
