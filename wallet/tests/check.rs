@@ -108,9 +108,8 @@ fn check_repair_impl(test_dir: &str) -> Result<(), libwallet::Error> {
 		w1_outputs_commits = api.retrieve_outputs(false, true, None)?.1;
 		Ok(())
 	})?;
-	let w1_outputs: Vec<libwallet::types::OutputData> = w1_outputs_commits.into_iter()
-		.map(|o| o.0)
-		.collect();
+	let w1_outputs: Vec<libwallet::types::OutputData> =
+		w1_outputs_commits.into_iter().map(|o| o.0).collect();
 	{
 		let mut w = wallet1.lock();
 		w.open_with_credentials()?;
@@ -148,7 +147,6 @@ fn check_repair_impl(test_dir: &str) -> Result<(), libwallet::Error> {
 		assert_eq!(wallet1_info.total, bh * reward);
 		Ok(())
 	})?;
-
 
 	// let logging finish
 	thread::sleep(Duration::from_millis(200));

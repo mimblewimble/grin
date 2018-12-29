@@ -152,14 +152,13 @@ where
 		let res = updater::retrieve_outputs(&mut *wallet, true, None, None)?;
 		res
 	};
-	
+
 	// check all definitive outputs exist in the wallet outputs
 	let mut missing_outs = vec![];
 	let mut accidental_spend_outs = vec![];
 	let mut locked_outs = vec![];
 	for deffo in chain_outs.into_iter() {
-		let matched_out = wallet_outputs.iter()
-			.find(|wo| wo.0.key_id == deffo.key_id);
+		let matched_out = wallet_outputs.iter().find(|wo| wo.0.key_id == deffo.key_id);
 		match matched_out {
 			Some(s) => {
 				if s.0.status == OutputStatus::Spent {
@@ -168,7 +167,7 @@ where
 				if s.0.status == OutputStatus::Locked {
 					locked_outs.push((s.0.clone(), deffo));
 				}
-			},
+			}
 			None => missing_outs.push(deffo),
 		}
 	}
