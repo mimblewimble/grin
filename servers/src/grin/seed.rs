@@ -33,9 +33,11 @@ use crate::util::{Mutex, StopState};
 // DNS Seeds with contact email associated
 const MAINNET_DNS_SEEDS: &'static [&'static str] = &[
 	"mainnet.seed.grin-tech.org", // igno.peverell@protonmail.com
+	"mainnet.seed.grin.icu",      // gary.peverell@protonmail.com
 ];
 const FLOONET_DNS_SEEDS: &'static [&'static str] = &[
 	"floonet.seed.grin-tech.org", // igno.peverell@protonmail.com
+	"floonet.seed.grin.icu",      // gary.peverell@protonmail.com
 ];
 
 pub fn connect_and_monitor(
