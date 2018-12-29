@@ -39,7 +39,7 @@ pub fn retrieve_outputs<T: ?Sized, C, K>(
 	wallet: &mut T,
 	show_spent: bool,
 	tx_id: Option<u32>,
-	parent_key_id: &Identifier,
+	parent_key_id: Option<&Identifier>,
 ) -> Result<Vec<(OutputData, pedersen::Commitment)>, Error>
 where
 	T: WalletBackend<C, K>,
@@ -49,7 +49,6 @@ where
 	// just read the wallet here, no need for a write lock
 	let mut outputs = wallet
 		.iter()
-		.filter(|out| out.root_key_id == *parent_key_id)
 		.filter(|out| {
 			if show_spent {
 				true
@@ -63,8 +62,16 @@ where
 	if let Some(id) = tx_id {
 		outputs = outputs
 			.into_iter()
-			.filter(|out| out.tx_log_entry == Some(id) && out.root_key_id == *parent_key_id)
+			.filter(|out| out.tx_log_entry == Some(id))
 			.collect::<Vec<_>>();
+	}
+
+	if let Some(k) = parent_key_id {
+		outputs = outputs
+			.iter()
+			.filter(|o| o.root_key_id == *k)
+			.map(|o| o.clone())
+			.collect();
 	}
 
 	outputs.sort_by_key(|out| out.n_child);

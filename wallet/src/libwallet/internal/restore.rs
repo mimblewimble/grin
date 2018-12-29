@@ -16,13 +16,14 @@
 use crate::core::global;
 use crate::core::libtx::proof;
 use crate::keychain::{ExtKeychain, Identifier, Keychain};
-use crate::libwallet::internal::keys;
+use crate::libwallet::internal::{keys, updater};
 use crate::libwallet::types::*;
 use crate::libwallet::Error;
 use crate::util::secp::{key::SecretKey, pedersen};
 use std::collections::HashMap;
 
 /// Utility struct for return values from below
+#[derive(Clone)]
 struct OutputResult {
 	///
 	pub commit: pedersen::Commitment,
@@ -97,6 +98,125 @@ where
 	Ok(wallet_outputs)
 }
 
+fn collect_chain_outputs<T, C, K>(wallet: &mut T) -> Result<Vec<OutputResult>, Error>
+where
+	T: WalletBackend<C, K>,
+	C: NodeClient,
+	K: Keychain,
+{
+	let batch_size = 1000;
+	let mut start_index = 1;
+	let mut result_vec: Vec<OutputResult> = vec![];
+	loop {
+		let (highest_index, last_retrieved_index, outputs) = wallet
+			.w2n_client()
+			.get_outputs_by_pmmr_index(start_index, batch_size)?;
+		debug!(
+			"Retrieved {} outputs, up to index {}. (Highest index: {})",
+			outputs.len(),
+			highest_index,
+			last_retrieved_index,
+		);
+
+		result_vec.append(&mut identify_utxo_outputs(wallet, outputs.clone())?);
+
+		if highest_index == last_retrieved_index {
+			break;
+		}
+		start_index = last_retrieved_index + 1;
+	}
+	Ok(result_vec)
+}
+
+/// Check / repair wallet contents
+/// assume wallet contents have been freshly updated with contents
+/// of latest block
+pub fn check<T, C, K>(wallet: &mut T) -> Result<(), Error>
+where
+	T: WalletBackend<C, K>,
+	C: NodeClient,
+	K: Keychain,
+{
+	// First, get a definitive list of outputs we own from the chain
+	warn!("Starting wallet check.");
+	let chain_outs = collect_chain_outputs(wallet)?;
+	warn!(
+		"Identified {} wallet_outputs as belonging to this wallet",
+		chain_outs.len(),
+	);
+
+	wallet.open_with_credentials()?;
+
+	// Now, get all outputs owned by this wallet (regardless of account)
+	let wallet_outputs = {
+		let res = updater::retrieve_outputs(&mut *wallet, true, None, None)?;
+		res
+	};
+	
+	// check all definitive outputs exist in the wallet outputs
+	let mut missing_outs = vec![];
+	let mut accidental_spend_outs = vec![];
+	let mut locked_outs = vec![];
+	for deffo in chain_outs.into_iter() {
+		let matched_out = wallet_outputs.iter()
+			.find(|wo| wo.0.key_id == deffo.key_id);
+		match matched_out {
+			Some(s) => {
+				if s.0.status == OutputStatus::Spent {
+					accidental_spend_outs.push((s.0.clone(), deffo.clone()));
+				}
+				if s.0.status == OutputStatus::Locked {
+					locked_outs.push((s.0.clone(), deffo));
+				}
+			},
+			None => missing_outs.push(deffo),
+		}
+	}
+
+	// mark problem spent outputs as unspent
+	for m in accidental_spend_outs.into_iter() {
+		let mut o = m.0;
+		warn!(
+			"Output for {} with ID {} ({:?}) marked as spent but exists in UTXO set. Marking unspent.",
+			o.value,
+			o.key_id,
+			m.1.commit,
+			);
+		let mut batch = wallet.batch()?;
+		o.status = OutputStatus::Unspent;
+		batch.save(o)?;
+		batch.commit()?;
+	}
+
+	// Restore missing outputs
+	for m in missing_outs.into_iter() {
+		warn!(
+			"Confirmed output for {} with ID {} ({:?}) exists in UTXO set but not in wallet. Restoring.",
+			m.value,
+			m.key_id,
+			m.commit,
+			);
+		let parent_key_id = m.key_id.parent_path();
+		let mut batch = wallet.batch()?;
+		let _ = batch.save(OutputData {
+			root_key_id: parent_key_id.clone(),
+			key_id: m.key_id,
+			n_child: m.n_child,
+			value: m.value,
+			status: OutputStatus::Unspent,
+			height: m.height,
+			lock_height: m.lock_height,
+			is_coinbase: m.is_coinbase,
+			tx_log_entry: None,
+		});
+		batch.commit()?;
+	}
+
+	wallet.close()?;
+
+	Ok(())
+}
+
 /// Restore a wallet
 pub fn restore<T, C, K>(wallet: &mut T) -> Result<(), Error>
 where
@@ -113,27 +233,7 @@ where
 
 	info!("Starting restore.");
 
-	let batch_size = 1000;
-	let mut start_index = 1;
-	let mut result_vec: Vec<OutputResult> = vec![];
-	loop {
-		let (highest_index, last_retrieved_index, outputs) = wallet
-			.w2n_client()
-			.get_outputs_by_pmmr_index(start_index, batch_size)?;
-		info!(
-			"Retrieved {} outputs, up to index {}. (Highest index: {})",
-			outputs.len(),
-			highest_index,
-			last_retrieved_index,
-		);
-
-		result_vec.append(&mut identify_utxo_outputs(wallet, outputs.clone())?);
-
-		if highest_index == last_retrieved_index {
-			break;
-		}
-		start_index = last_retrieved_index + 1;
-	}
+	let result_vec = collect_chain_outputs(wallet)?;
 
 	info!(
 		"Identified {} wallet_outputs as belonging to this wallet",

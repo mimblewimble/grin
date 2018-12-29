@@ -118,6 +118,9 @@ where
 
 	/// Attempt to restore the contents of a wallet from seed
 	fn restore(&mut self) -> Result<(), Error>;
+
+	/// Attempt to check and fix wallet state
+	fn check(&mut self) -> Result<(), Error>;
 }
 
 /// Batch trait to update the output data backend atomically. Trying to use a
@@ -635,6 +638,16 @@ impl TxLogEntry {
 			fee: None,
 			stored_tx: None,
 		}
+	}
+
+	/// Given a vec of TX log entries, return credited + debited sums
+	pub fn sum_confirmed(txs: &Vec<TxLogEntry>) -> (u64, u64) {
+		txs.iter().fold((0, 0), |acc, tx| {
+			match tx.confirmed {
+				true => (acc.0 + tx.amount_credited, acc.1 + tx.amount_debited),
+				false => acc
+			}
+		})
 	}
 
 	/// Update confirmation TS with now

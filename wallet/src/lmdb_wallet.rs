@@ -369,6 +369,11 @@ where
 		internal::restore::restore(self).context(ErrorKind::Restore)?;
 		Ok(())
 	}
+
+	fn check(&mut self) -> Result<(), Error> {
+		internal::restore::check(self).context(ErrorKind::Restore)?;
+		Ok(())
+	}
 }
 
 /// An atomic batch in which all changes can be committed all at once or
