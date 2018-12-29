@@ -152,10 +152,6 @@ mod test {
 		println!("nonce {}", b.header.pow.nonce);
 		assert_ne!(b.header.pow.nonce, 310);
 		assert!(b.header.pow.to_difficulty(0) >= Difficulty::min());
-		let start = ::std::time::Instant::now();
-		for n in 0..100000 {
-			assert!(verify_size(&b.header).is_ok());
-		}
-		println!("==> {}", start.elapsed().as_secs());
+		assert!(verify_size(&b.header).is_ok());
 	}
 }
