@@ -129,12 +129,11 @@ fn build_block(
 	b.header.pow.secondary_scaling = difficulty.secondary_scaling;
 	b.header.timestamp = DateTime::<Utc>::from_utc(NaiveDateTime::from_timestamp(now_sec, 0), Utc);
 
-	let b_difficulty = (b.header.total_difficulty() - head.total_difficulty()).to_num();
 	debug!(
-		"Built new block with {} inputs and {} outputs, network difficulty: {}, cumulative difficulty {}",
+		"Built new block with {} inputs and {} outputs, block difficulty: {}, cumulative difficulty {}",
 		b.inputs().len(),
 		b.outputs().len(),
-		b_difficulty,
+		difficulty.difficulty,
 		b.header.total_difficulty().to_num(),
 	);
 
