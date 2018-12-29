@@ -52,7 +52,7 @@ tries to contact a node at `127.0.0.1:13413`. To change this, modify the value i
 you can provide the `-r` (seRver) switch to the wallet command, e.g.:
 
 ```sh
-grin wallet -a "http://192.168.0.2:1341" info
+grin wallet -r "http://192.168.0.2:1341" info
 ```
 
 If commands that need to update from a grin node can't find one, they will generally inform you that the node couldn't be reached
