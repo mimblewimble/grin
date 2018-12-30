@@ -292,5 +292,7 @@ subcommands:
                   long: recovery_phrase
                   takes_value: true
         - restore:
-            about: Initialize a new wallet seed file and database
+            about: Restores a wallet contents from a seed file
+        - check_repair:
+            about: Checks a wallet's outputs against a live node, repairing and restoring missing outputs if required
  

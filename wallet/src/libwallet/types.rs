@@ -565,7 +565,7 @@ impl fmt::Display for TxLogEntryType {
 			TxLogEntryType::TxReceived => write!(f, "Received Tx"),
 			TxLogEntryType::TxSent => write!(f, "Sent Tx"),
 			TxLogEntryType::TxReceivedCancelled => write!(f, "Received Tx\n- Cancelled"),
-			TxLogEntryType::TxSentCancelled => write!(f, "Send Tx\n- Cancelled"),
+			TxLogEntryType::TxSentCancelled => write!(f, "Sent Tx\n- Cancelled"),
 		}
 	}
 }

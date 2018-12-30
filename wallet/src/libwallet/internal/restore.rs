@@ -79,7 +79,7 @@ where
 		// through to find the right path if required later
 		let key_id = Identifier::from_serialized_path(3u8, &info.message.as_bytes());
 
-		warn!(
+		info!(
 			"Output found: {:?}, amount: {:?}, parent_key_id: {:?}",
 			commit, info.value, key_id
 		);
@@ -112,7 +112,7 @@ where
 			.w2n_client()
 			.get_outputs_by_pmmr_index(start_index, batch_size)?;
 		warn!(
-			"Retrieved {} outputs, up to index {}. (Highest index: {})",
+			"Checking {} outputs, up to index {}. (Highest index: {})",
 			outputs.len(),
 			highest_index,
 			last_retrieved_index,

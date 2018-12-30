@@ -480,11 +480,31 @@ pub fn restore(
 		let result = api.restore();
 		match result {
 			Ok(_) => {
-				info!("Wallet restore complete",);
+				warn!("Wallet restore complete",);
 				Ok(())
 			}
 			Err(e) => {
 				error!("Wallet restore failed: {}", e);
+				error!("Backtrace: {}", e.backtrace().unwrap());
+				Err(e)
+			}
+		}
+	})?;
+	Ok(())
+}
+
+pub fn check_repair(
+	wallet: Arc<Mutex<WalletInst<impl NodeClient + 'static, keychain::ExtKeychain>>>,
+) -> Result<(), Error> {
+	controller::owner_single_use(wallet.clone(), |api| {
+		let result = api.check_repair();
+		match result {
+			Ok(_) => {
+				warn!("Wallet check/repair complete",);
+				Ok(())
+			}
+			Err(e) => {
+				error!("Wallet check/repair failed: {}", e);
 				error!("Backtrace: {}", e.backtrace().unwrap());
 				Err(e)
 			}
