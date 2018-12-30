@@ -54,7 +54,7 @@ where
 {
 	let mut wallet_outputs: Vec<OutputResult> = Vec::new();
 
-	info!(
+	warn!(
 		"Scanning {} outputs in the current Grin utxo set",
 		outputs.len(),
 	);
@@ -79,7 +79,7 @@ where
 		// through to find the right path if required later
 		let key_id = Identifier::from_serialized_path(3u8, &info.message.as_bytes());
 
-		info!(
+		warn!(
 			"Output found: {:?}, amount: {:?}, parent_key_id: {:?}",
 			commit, info.value, key_id
 		);
@@ -111,7 +111,7 @@ where
 		let (highest_index, last_retrieved_index, outputs) = wallet
 			.w2n_client()
 			.get_outputs_by_pmmr_index(start_index, batch_size)?;
-		debug!(
+		warn!(
 			"Retrieved {} outputs, up to index {}. (Highest index: {})",
 			outputs.len(),
 			highest_index,
@@ -129,7 +129,11 @@ where
 }
 
 ///
-fn restore_missing_output<T, C, K>(wallet: &mut T, output: OutputResult, found_parents: &mut HashMap<Identifier, u32>) -> Result<(), Error>
+fn restore_missing_output<T, C, K>(
+	wallet: &mut T,
+	output: OutputResult,
+	found_parents: &mut HashMap<Identifier, u32>,
+) -> Result<(), Error>
 where
 	T: WalletBackend<C, K>,
 	C: NodeClient,
@@ -185,7 +189,12 @@ where
 {
 	let parent_key_id = output.key_id.parent_path();
 	let updated_tx_entry = if output.tx_log_entry.is_some() {
-		let entries = updater::retrieve_txs(wallet, output.tx_log_entry.clone(), None, Some(&parent_key_id))?;
+		let entries = updater::retrieve_txs(
+			wallet,
+			output.tx_log_entry.clone(),
+			None,
+			Some(&parent_key_id),
+		)?;
 		if entries.len() > 0 {
 			let mut entry = entries[0].clone();
 			match entry.tx_type {
@@ -257,11 +266,9 @@ where
 		let mut o = m.0;
 		warn!(
 			"Output for {} with ID {} ({:?}) marked as spent but exists in UTXO set. \
-			Marking unspent and cancelling any associated transaction log entries.",
-			o.value,
-			o.key_id,
-			m.1.commit,
-			);
+			 Marking unspent and cancelling any associated transaction log entries.",
+			o.value, o.key_id, m.1.commit,
+		);
 		o.status = OutputStatus::Unspent;
 		// any transactions associated with this should be cancelled
 		cancel_tx_log_entry(wallet, &o)?;
@@ -276,11 +283,9 @@ where
 	for m in missing_outs.into_iter() {
 		warn!(
 			"Confirmed output for {} with ID {} ({:?}) exists in UTXO set but not in wallet. \
-			Restoring.",
-			m.value,
-			m.key_id,
-			m.commit,
-			);
+			 Restoring.",
+			m.value, m.key_id, m.commit,
+		);
 		restore_missing_output(wallet, m, &mut found_parents)?;
 	}
 
@@ -288,11 +293,9 @@ where
 		let mut o = m.0;
 		warn!(
 			"Confirmed output for {} with ID {} ({:?}) exists in UTXO set and is locked. \
-			Unlocking and cancelling associated transaction log entries.",
-			o.value,
-			o.key_id,
-			m.1.commit,
-			);
+			 Unlocking and cancelling associated transaction log entries.",
+			o.value, o.key_id, m.1.commit,
+		);
 		o.status = OutputStatus::Unspent;
 		cancel_tx_log_entry(wallet, &o)?;
 		let mut batch = wallet.batch()?;
@@ -319,18 +322,18 @@ where
 		return Ok(());
 	}
 
-	info!("Starting restore.");
+	warn!("Starting restore.");
 
 	let result_vec = collect_chain_outputs(wallet)?;
 
-	info!(
+	warn!(
 		"Identified {} wallet_outputs as belonging to this wallet",
 		result_vec.len(),
 	);
 
 	let mut found_parents: HashMap<Identifier, u32> = HashMap::new();
 	// Now save what we have
-	
+
 	for output in result_vec {
 		restore_missing_output(wallet, output, &mut found_parents)?;
 	}

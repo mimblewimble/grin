@@ -18,8 +18,8 @@ extern crate log;
 use self::core::global;
 use self::core::global::ChainTypes;
 use self::keychain::ExtKeychain;
-use self::wallet::{libwallet, FileWalletCommAdapter};
 use self::wallet::test_framework::{self, LocalWalletClient, WalletProxy};
+use self::wallet::{libwallet, FileWalletCommAdapter};
 use grin_core as core;
 use grin_keychain as keychain;
 use grin_util as util;
@@ -153,12 +153,12 @@ fn check_repair_impl(test_dir: &str) -> Result<(), libwallet::Error> {
 		// send to send
 		let (mut slate, lock_fn) = api.initiate_tx(
 			None,
-			reward * 2,               // amount
-			cm,                       // minimum confirmations
-			500,                      // max outputs
-			1,                        // num change outputs
-			true,                     // select all outputs
-			None, // optional message
+			reward * 2, // amount
+			cm,         // minimum confirmations
+			500,        // max outputs
+			1,          // num change outputs
+			true,       // select all outputs
+			None,       // optional message
 		)?;
 		// output tx file
 		let file_adapter = FileWalletCommAdapter::new();
