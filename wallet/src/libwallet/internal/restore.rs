@@ -234,7 +234,6 @@ where
 		chain_outs.len(),
 	);
 
-
 	// Now, get all outputs owned by this wallet (regardless of account)
 	let wallet_outputs = {
 		let res = updater::retrieve_outputs(&mut *wallet, true, None, None)?;
