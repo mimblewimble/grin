@@ -34,37 +34,49 @@ pub enum ErrorKind {
 	/// Not enough funds
 	#[fail(
 		display = "Not enough funds. Required: {}, Available: {}",
-		needed, available
+		needed_disp, available_disp
 	)]
 	NotEnoughFunds {
 		/// available funds
 		available: u64,
+		/// Display friendly
+		available_disp: String,
 		/// Needed funds
 		needed: u64,
+		/// Display friendly
+		needed_disp: String,
 	},
 
 	/// Fee dispute
 	#[fail(
 		display = "Fee dispute: sender fee {}, recipient fee {}",
-		sender_fee, recipient_fee
+		sender_fee_disp, recipient_fee_disp
 	)]
 	FeeDispute {
 		/// sender fee
 		sender_fee: u64,
+		/// display friendly
+		sender_fee_disp: String,
 		/// recipient fee
 		recipient_fee: u64,
+		/// display friendly
+		recipient_fee_disp: String,
 	},
 
 	/// Fee Exceeds amount
 	#[fail(
 		display = "Fee exceeds amount: sender amount {}, recipient fee {}",
-		sender_amount, recipient_fee
+		sender_amount_disp, recipient_fee
 	)]
 	FeeExceedsAmount {
 		/// sender amount
 		sender_amount: u64,
+		/// display friendly
+		sender_amount_disp: String,
 		/// recipient fee
 		recipient_fee: u64,
+		/// display friendly
+		recipient_fee_disp: String,
 	},
 
 	/// LibTX Error

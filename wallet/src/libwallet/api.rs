@@ -353,7 +353,7 @@ where
 
 		let res = Ok((
 			validated,
-			updater::retrieve_outputs(&mut *w, include_spent, tx_id, &parent_key_id)?,
+			updater::retrieve_outputs(&mut *w, include_spent, tx_id, Some(&parent_key_id))?,
 		));
 
 		w.close()?;
@@ -756,9 +756,19 @@ where
 	pub fn restore(&mut self) -> Result<(), Error> {
 		let mut w = self.wallet.lock();
 		w.open_with_credentials()?;
-		let res = w.restore();
+		w.restore()?;
 		w.close()?;
-		res
+		Ok(())
+	}
+
+	/// Attempt to check and fix the contents of the wallet
+	pub fn check_repair(&mut self) -> Result<(), Error> {
+		let mut w = self.wallet.lock();
+		w.open_with_credentials()?;
+		self.update_outputs(&mut w);
+		w.check_repair()?;
+		w.close()?;
+		Ok(())
 	}
 
 	/// Retrieve current height from node

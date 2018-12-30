@@ -403,11 +403,36 @@ grin wallet repost -i 3 -m tx_3.json
 
 This will create a file called tx_3.json containing your raw transaction data. Note that this formatting in the file isn't yet very user-readable.
 
+##### check_repair
+
+If for some reason the wallet cancel commands above don't work and you believe your outputs are in an inconsistent state, you have two options:
+
+First, you can try the `check_repair` command. This will scan the entire UTXO set from the node, identify which outputs are yours and update your wallet state to
+be consistent with what's currently in the UTXO set. This command will unlock all outputs, restore any missing outputs, and mark any outputs that have been marked
+'Spent' but are still in the UTXO set as 'Unspent' (as can happen during a fork). It will also attempt to cancel any transaction log entries associated with any locked outputs
+or outputs incorrectly marked 'Spent'
+
+For these reasons, you should be fairly sure that nobody will attempt to post any unconfirmed transactions involving your wallet before trying this command,
+(but even it someone does, it should be possible to re-run this command to fix any resulting issues.
+
+To attempt a repair, ensure a wallet listener isn't running, and enter:
+
+```sh
+grin wallet check_repair
+```
+
+The operation may take some time (it's advised to only perform this operation using a release build,) and it will report any inconsistencies it finds and repairs it makes.
+Once it's done, the state of your wallet outputs should match the contents of the UTXO set.
+
 ##### restore
 
-If for some reason the wallet cancel commands above don't work, you need to restore from a backed up `wallet.seed` file and password, or have recovered the wallet seed from a recovery phrase, you can perform a full wallet restore.
+If check_repair isn't working, or you need to restore your wallet from a backed up `wallet.seed` file and password, or have recovered the wallet seed from a recovery phrase,
+you can perform a full wallet restore.
 
-To do this, generate an empty wallet somewhere with:
+This command acts similarly to the check_repair command in that it scans the UTXO set for your outputs, however it will only restore found UTXOs into an empty wallet, 
+refusing to run if the wallet isn't empty.
+
+To restore a wallet, generate an empty wallet somewhere with:
 
 ```sh
 grin wallet init -h

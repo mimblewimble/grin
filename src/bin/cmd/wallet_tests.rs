@@ -443,6 +443,28 @@ mod wallet_tests {
 			Ok(())
 		})?;
 
+		// Another file exchange, don't send, but unlock with repair command
+		let arg_vec = vec![
+			"grin",
+			"wallet",
+			"-p",
+			"password",
+			"-a",
+			"mining",
+			"send",
+			"-m",
+			"file",
+			"-d",
+			&file_name,
+			"-g",
+			"Ain't sending",
+			"10",
+		];
+		execute_command(&app, test_dir, "wallet1", &client1, arg_vec)?;
+
+		let arg_vec = vec!["grin", "wallet", "-p", "password", "check_repair"];
+		execute_command(&app, test_dir, "wallet1", &client1, arg_vec)?;
+
 		// txs and outputs (mostly spit out for a visual in test logs)
 		let arg_vec = vec!["grin", "wallet", "-p", "password", "-a", "mining", "txs"];
 		execute_command(&app, test_dir, "wallet1", &client1, arg_vec)?;

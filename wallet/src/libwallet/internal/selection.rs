@@ -14,7 +14,7 @@
 
 //! Selection of inputs for building transactions
 
-use crate::core::core::Transaction;
+use crate::core::core::{amount_to_hr_string, Transaction};
 use crate::core::libtx::{build, slate::Slate, tx_fee};
 use crate::keychain::{Identifier, Keychain};
 use crate::libwallet::error::{Error, ErrorKind};
@@ -266,7 +266,9 @@ where
 	if total == 0 {
 		return Err(ErrorKind::NotEnoughFunds {
 			available: 0,
+			available_disp: amount_to_hr_string(0, false),
 			needed: amount_with_fee as u64,
+			needed_disp: amount_to_hr_string(amount_with_fee as u64, false),
 		})?;
 	}
 
@@ -274,7 +276,9 @@ where
 	if total < amount_with_fee && coins.len() == max_outputs {
 		return Err(ErrorKind::NotEnoughFunds {
 			available: total,
+			available_disp: amount_to_hr_string(total, false),
 			needed: amount_with_fee as u64,
+			needed_disp: amount_to_hr_string(amount_with_fee as u64, false),
 		})?;
 	}
 
@@ -292,7 +296,9 @@ where
 			if coins.len() == max_outputs {
 				return Err(ErrorKind::NotEnoughFunds {
 					available: total as u64,
+					available_disp: amount_to_hr_string(total, false),
 					needed: amount_with_fee as u64,
+					needed_disp: amount_to_hr_string(amount_with_fee as u64, false),
 				})?;
 			}
 

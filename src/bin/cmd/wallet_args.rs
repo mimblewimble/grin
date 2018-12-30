@@ -504,6 +504,7 @@ pub fn wallet_command(
 			command::cancel(inst_wallet(), a)
 		}
 		("restore", Some(_)) => command::restore(inst_wallet()),
+		("check_repair", Some(_)) => command::check_repair(inst_wallet()),
 		_ => {
 			let msg = format!("Unknown wallet command, use 'grin help wallet' for details");
 			return Err(ErrorKind::ArgumentError(msg).into());
