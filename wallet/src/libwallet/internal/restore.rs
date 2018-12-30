@@ -252,7 +252,7 @@ where
 					accidental_spend_outs.push((s.0.clone(), deffo.clone()));
 				}
 				if s.0.status == OutputStatus::Locked {
-					locked_outs.push((s.0.clone(), deffo));
+					locked_outs.push((s.0.clone(), deffo.clone()));
 				}
 			}
 			None => missing_outs.push(deffo),
@@ -287,6 +287,7 @@ where
 		restore_missing_output(wallet, m, &mut found_parents)?;
 	}
 
+	// Unlock locked outputs
 	for m in locked_outs.into_iter() {
 		let mut o = m.0;
 		warn!(
@@ -298,6 +299,24 @@ where
 		cancel_tx_log_entry(wallet, &o)?;
 		let mut batch = wallet.batch()?;
 		batch.save(o)?;
+		batch.commit()?;
+	}
+
+	let unconfirmed_outs: Vec<&(OutputData, pedersen::Commitment)> = wallet_outputs
+		.iter()
+		.filter(|o| o.0.status == OutputStatus::Unconfirmed)
+		.collect();
+	// Delete unconfirmed outputs
+	for m in unconfirmed_outs.into_iter() {
+		let o = m.0.clone();
+		warn!(
+			"Unconfirmed output for {} with ID {} ({:?}) not in UTXO set. \
+			 Deleting and cancelling associated transaction log entries.",
+			o.value, o.key_id, m.1,
+		);
+		cancel_tx_log_entry(wallet, &o)?;
+		let mut batch = wallet.batch()?;
+		batch.delete(&o.key_id)?;
 		batch.commit()?;
 	}
 
