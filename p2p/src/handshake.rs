@@ -39,7 +39,7 @@ pub struct Handshake {
 	/// a node id.
 	nonces: Arc<RwLock<VecDeque<u64>>>,
 	/// Ring buffer of self addr(s) collected from PeerWithSelf detection (by nonce).
-	addrs: Arc<RwLock<VecDeque<SocketAddr>>>,
+	pub addrs: Arc<RwLock<VecDeque<SocketAddr>>>,
 	/// The genesis block header of the chain seen by this node.
 	/// We only want to connect to other nodes seeing the same chain (forks are
 	/// ok).
