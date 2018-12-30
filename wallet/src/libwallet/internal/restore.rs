@@ -302,8 +302,8 @@ where
 		batch.commit()?;
 	}
 
-
-	let unconfirmed_outs: Vec<&(OutputData, pedersen::Commitment)> = wallet_outputs.iter()
+	let unconfirmed_outs: Vec<&(OutputData, pedersen::Commitment)> = wallet_outputs
+		.iter()
 		.filter(|o| o.0.status == OutputStatus::Unconfirmed)
 		.collect();
 	// Delete unconfirmed outputs
