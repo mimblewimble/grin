@@ -370,8 +370,8 @@ where
 		Ok(())
 	}
 
-	fn check(&mut self) -> Result<(), Error> {
-		internal::restore::check(self).context(ErrorKind::Restore)?;
+	fn check_repair(&mut self) -> Result<(), Error> {
+		internal::restore::check_repair(self).context(ErrorKind::Restore)?;
 		Ok(())
 	}
 }

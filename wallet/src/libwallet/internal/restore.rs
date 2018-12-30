@@ -220,7 +220,7 @@ where
 /// Check / repair wallet contents
 /// assume wallet contents have been freshly updated with contents
 /// of latest block
-pub fn check<T, C, K>(wallet: &mut T) -> Result<(), Error>
+pub fn check_repair<T, C, K>(wallet: &mut T) -> Result<(), Error>
 where
 	T: WalletBackend<C, K>,
 	C: NodeClient,
@@ -234,7 +234,6 @@ where
 		chain_outs.len(),
 	);
 
-	wallet.open_with_credentials()?;
 
 	// Now, get all outputs owned by this wallet (regardless of account)
 	let wallet_outputs = {
@@ -302,8 +301,6 @@ where
 		batch.save(o)?;
 		batch.commit()?;
 	}
-
-	wallet.close()?;
 
 	Ok(())
 }

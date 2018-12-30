@@ -84,7 +84,7 @@ fn check_repair_impl(test_dir: &str) -> Result<(), libwallet::Error> {
 	})?;
 
 	// Do some mining
-	let mut bh = 20u64;
+	let bh = 20u64;
 	let _ = test_framework::award_blocks_to_wallet(&chain, wallet1.clone(), bh as usize);
 
 	// Sanity check contents
@@ -136,7 +136,7 @@ fn check_repair_impl(test_dir: &str) -> Result<(), libwallet::Error> {
 
 	// this should restore our missing outputs
 	wallet::controller::owner_single_use(wallet1.clone(), |api| {
-		api.check()?;
+		api.check_repair()?;
 		Ok(())
 	})?;
 
@@ -177,7 +177,7 @@ fn check_repair_impl(test_dir: &str) -> Result<(), libwallet::Error> {
 
 	// unlock/restore
 	wallet::controller::owner_single_use(wallet1.clone(), |api| {
-		api.check()?;
+		api.check_repair()?;
 		Ok(())
 	})?;
 

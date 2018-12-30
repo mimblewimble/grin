@@ -762,11 +762,11 @@ where
 	}
 
 	/// Attempt to check and fix the contents of the wallet
-	pub fn check(&mut self) -> Result<(), Error> {
+	pub fn check_repair(&mut self) -> Result<(), Error> {
 		let mut w = self.wallet.lock();
 		w.open_with_credentials()?;
 		self.update_outputs(&mut w);
-		w.check()?;
+		w.check_repair()?;
 		w.close()?;
 		Ok(())
 	}

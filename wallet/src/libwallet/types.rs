@@ -120,7 +120,7 @@ where
 	fn restore(&mut self) -> Result<(), Error>;
 
 	/// Attempt to check and fix wallet state
-	fn check(&mut self) -> Result<(), Error>;
+	fn check_repair(&mut self) -> Result<(), Error>;
 }
 
 /// Batch trait to update the output data backend atomically. Trying to use a
