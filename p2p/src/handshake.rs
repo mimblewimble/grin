@@ -21,7 +21,6 @@ use chrono::prelude::*;
 use rand::{thread_rng, Rng};
 
 use crate::core::core::hash::Hash;
-use crate::core::global;
 use crate::core::pow::Difficulty;
 use crate::msg::{
 	read_message, write_message, Hand, Shake, SockAddr, Type, PROTOCOL_VERSION, USER_AGENT,
@@ -162,17 +161,6 @@ impl Handshake {
 					debug!("Error shutting down conn: {:?}", e);
 				}
 				return Err(Error::PeerWithSelf);
-			}
-
-			// double check the ip address except for the travis-ci test
-			if global::is_production_mode() {
-				let addrs = self.addrs.read();
-				if addrs.contains(&addr) {
-					if let Err(e) = conn.shutdown(Shutdown::Both) {
-						debug!("Error shutting down conn: {:?}", e);
-					}
-					return Err(Error::PeerWithSelf);
-				}
 			}
 		}
 
