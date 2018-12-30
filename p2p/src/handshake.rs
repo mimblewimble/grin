@@ -14,7 +14,7 @@
 
 use crate::util::RwLock;
 use std::collections::VecDeque;
-use std::net::{SocketAddr, TcpStream};
+use std::net::{Shutdown, SocketAddr, TcpStream};
 use std::sync::Arc;
 
 use chrono::prelude::*;
@@ -29,6 +29,7 @@ use crate::peer::Peer;
 use crate::types::{Capabilities, Direction, Error, P2PConfig, PeerInfo, PeerLiveInfo};
 
 const NONCES_CAP: usize = 100;
+const ADDRS_CAP: usize = 10;
 
 /// Handles the handshake negotiation when two peers connect and decides on
 /// protocol.
@@ -36,6 +37,8 @@ pub struct Handshake {
 	/// Ring buffer of nonces sent to detect self connections without requiring
 	/// a node id.
 	nonces: Arc<RwLock<VecDeque<u64>>>,
+	/// Ring buffer of self addr(s) collected from PeerWithSelf detection (by nonce).
+	pub addrs: Arc<RwLock<VecDeque<SocketAddr>>>,
 	/// The genesis block header of the chain seen by this node.
 	/// We only want to connect to other nodes seeing the same chain (forks are
 	/// ok).
@@ -48,6 +51,7 @@ impl Handshake {
 	pub fn new(genesis: Hash, config: P2PConfig) -> Handshake {
 		Handshake {
 			nonces: Arc::new(RwLock::new(VecDeque::with_capacity(NONCES_CAP))),
+			addrs: Arc::new(RwLock::new(VecDeque::with_capacity(ADDRS_CAP))),
 			genesis,
 			config,
 		}
@@ -145,7 +149,17 @@ impl Handshake {
 		} else {
 			// check the nonce to see if we are trying to connect to ourselves
 			let nonces = self.nonces.read();
+			let addr = extract_ip(&hand.sender_addr.0, &conn);
 			if nonces.contains(&hand.nonce) {
+				// save ip addresses of ourselves
+				let mut addrs = self.addrs.write();
+				addrs.push_back(addr);
+				if addrs.len() >= ADDRS_CAP {
+					addrs.pop_front();
+				}
+				if let Err(e) = conn.shutdown(Shutdown::Both) {
+					debug!("Error shutting down conn: {:?}", e);
+				}
 				return Err(Error::PeerWithSelf);
 			}
 		}

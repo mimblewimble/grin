@@ -22,6 +22,7 @@ use crate::lmdb;
 
 use crate::core::core;
 use crate::core::core::hash::Hash;
+use crate::core::global;
 use crate::core::pow::Difficulty;
 use crate::handshake::Handshake;
 use crate::peer::Peer;
@@ -108,13 +109,16 @@ impl Server {
 			return Err(Error::ConnectionClose);
 		}
 
-		// check ip and port to see if we are trying to connect to ourselves
-		// todo: this can't detect all cases of PeerWithSelf, for example config.host is '0.0.0.0'
-		//
-		if self.config.port == addr.port()
-			&& (addr.ip().is_loopback() || addr.ip() == self.config.host)
-		{
-			return Err(Error::PeerWithSelf);
+		if global::is_production_mode() {
+			let hs = self.handshake.clone();
+			let addrs = hs.addrs.read();
+			if addrs.contains(&addr) {
+				debug!(
+					"connect: ignore the connecting to PeerWithSelf, addr: {}",
+					addr
+				);
+				return Err(Error::PeerWithSelf);
+			}
 		}
 
 		if let Some(p) = self.peers.get_connected_peer(addr) {
