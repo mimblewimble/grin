@@ -246,7 +246,7 @@ impl StratumServer {
 		verifier_cache: Arc<RwLock<dyn VerifierCache>>,
 	) -> StratumServer {
 		StratumServer {
-			id: String::from("StratumServer"),
+			id: String::from("0"),
 			minimum_share_difficulty: config.minimum_share_difficulty,
 			config,
 			chain,
@@ -535,8 +535,9 @@ impl StratumServer {
 			worker_stats.num_blocks_found += 1;
 			// Log message to make it obvious we found a block
 			warn!(
-				"(Server ID: {}) Solution Found for block {} - Yay!!! Worker ID: {}, blocks found: {}, shares: {}",
+				"(Server ID: {}) Solution Found for block {}, hash {} - Yay!!! Worker ID: {}, blocks found: {}, shares: {}",
 				self.id, params.height,
+				b.hash(),
 				worker_stats.id,
 				worker_stats.num_blocks_found,
 				worker_stats.num_accepted,
