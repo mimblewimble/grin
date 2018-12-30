@@ -34,13 +34,17 @@ pub enum ErrorKind {
 	/// Not enough funds
 	#[fail(
 		display = "Not enough funds. Required: {}, Available: {}",
-		needed, available
+		needed_disp, available_disp
 	)]
 	NotEnoughFunds {
 		/// available funds
 		available: u64,
+		/// Display friendly
+		available_disp: String,
 		/// Needed funds
 		needed: u64,
+		/// Display friendly
+		needed_disp: String,
 	},
 
 	/// Fee dispute
