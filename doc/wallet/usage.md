@@ -409,8 +409,8 @@ If for some reason the wallet cancel commands above don't work and you believe y
 
 First, you can try the `check_repair` command. This will scan the entire UTXO set from the node, identify which outputs are yours and update your wallet state to
 be consistent with what's currently in the UTXO set. This command will unlock all outputs, restore any missing outputs, and mark any outputs that have been marked
-'Spent' but are still in the UTXO set as 'Unspent' (as can happen during a fork). It will also attempt to cancel any transaction log entries associated with any locked 
-or outputs incorrectly marked 'Spent' 
+'Spent' but are still in the UTXO set as 'Unspent' (as can happen during a fork). It will also attempt to cancel any transaction log entries associated with any locked outputs
+or outputs incorrectly marked 'Spent'
 
 For these reasons, you should be fairly sure that nobody will attempt to post any unconfirmed transactions involving your wallet before trying this command,
 (but even it someone does, it should be possible to re-run this command to fix any resulting issues.
@@ -429,9 +429,10 @@ Once it's done, the state of your wallet outputs should match the contents of th
 If check_repair isn't working, or you need to restore your wallet from a backed up `wallet.seed` file and password, or have recovered the wallet seed from a recovery phrase,
 you can perform a full wallet restore.
 
-This command acts similarly to the check_repair command in that it scans the UTXO set for your outputs, however it restores all found UTXOs from scratch into an empty wallet.
+This command acts similarly to the check_repair command in that it scans the UTXO set for your outputs, however it will only restore found UTXOs into an empty wallet, 
+refusing to run if the wallet isn't empty.
 
-To do this, generate an empty wallet somewhere with:
+To restore a wallet, generate an empty wallet somewhere with:
 
 ```sh
 grin wallet init -h
