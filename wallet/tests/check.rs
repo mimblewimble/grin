@@ -18,7 +18,7 @@ extern crate log;
 use self::core::global;
 use self::core::global::ChainTypes;
 use self::keychain::ExtKeychain;
-use self::wallet::libwallet;
+use self::wallet::{libwallet, FileWalletCommAdapter};
 use self::wallet::test_framework::{self, LocalWalletClient, WalletProxy};
 use grin_core as core;
 use grin_keychain as keychain;
@@ -145,6 +145,46 @@ fn check_repair_impl(test_dir: &str) -> Result<(), libwallet::Error> {
 		let (wallet1_refreshed, wallet1_info) = api.retrieve_summary_info(true, 1)?;
 		assert!(wallet1_refreshed);
 		assert_eq!(wallet1_info.total, bh * reward);
+		Ok(())
+	})?;
+
+	// perform a transaction, but don't let it finish
+	wallet::controller::owner_single_use(wallet1.clone(), |api| {
+		// send to send
+		let (mut slate, lock_fn) = api.initiate_tx(
+			None,
+			reward * 2,               // amount
+			cm,                       // minimum confirmations
+			500,                      // max outputs
+			1,                        // num change outputs
+			true,                     // select all outputs
+			None, // optional message
+		)?;
+		// output tx file
+		let file_adapter = FileWalletCommAdapter::new();
+		let send_file = format!("{}/part_tx_1.tx", test_dir);
+		file_adapter.send_tx_async(&send_file, &mut slate)?;
+		api.tx_lock_outputs(&slate, lock_fn)?;
+		Ok(())
+	})?;
+
+	// check we're all locked
+	wallet::controller::owner_single_use(wallet1.clone(), |api| {
+		let (_, wallet1_info) = api.retrieve_summary_info(true, 1)?;
+		assert!(wallet1_info.amount_currently_spendable == 0);
+		Ok(())
+	})?;
+
+	// unlock/restore
+	wallet::controller::owner_single_use(wallet1.clone(), |api| {
+		api.check()?;
+		Ok(())
+	})?;
+
+	// check spendable amount again
+	wallet::controller::owner_single_use(wallet1.clone(), |api| {
+		let (_, wallet1_info) = api.retrieve_summary_info(true, 1)?;
+		assert_eq!(wallet1_info.amount_currently_spendable, (bh - cm) * reward);
 		Ok(())
 	})?;
 
