@@ -18,7 +18,6 @@ use crate::consensus;
 use crate::core::hash::Hashed;
 use crate::core::verifier_cache::VerifierCache;
 use crate::core::{committed, Committed};
-use crate::global;
 use crate::keychain::{self, BlindingFactor};
 use crate::ser::{
 	self, read_multi, FixedLength, PMMRable, Readable, Reader, VerifySortedAndUnique, Writeable,
@@ -29,7 +28,6 @@ use crate::util::secp;
 use crate::util::secp::pedersen::{Commitment, RangeProof};
 use crate::util::static_secp_instance;
 use crate::util::RwLock;
-use byteorder::{BigEndian, ByteOrder};
 use std::cmp::max;
 use std::cmp::Ordering;
 use std::collections::HashSet;
