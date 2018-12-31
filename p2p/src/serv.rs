@@ -126,7 +126,9 @@ impl Server {
 
 		trace!(
 			"connect_peer: on {}:{}. connecting to {}",
-			self.config.host, self.config.port, addr
+			self.config.host,
+			self.config.port,
+			addr
 		);
 		match TcpStream::connect_timeout(addr, Duration::from_secs(10)) {
 			Ok(mut stream) => {

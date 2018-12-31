@@ -76,8 +76,11 @@ impl Peer {
 		match info {
 			Ok(peer_info) => Ok(Peer::new(peer_info, adapter)),
 			Err(e) => {
-				debug!("accept: connection from {:?} failed with error: {:?}",
-					   conn.peer_addr(), e);
+				debug!(
+					"accept: connection from {:?} failed with error: {:?}",
+					conn.peer_addr(),
+					e
+				);
 				if let Err(e) = conn.shutdown(Shutdown::Both) {
 					debug!("Error shutting down conn: {:?}", e);
 				}
@@ -99,8 +102,11 @@ impl Peer {
 		match info {
 			Ok(peer_info) => Ok(Peer::new(peer_info, na)),
 			Err(e) => {
-				debug!("connect: connecting to {:?} failed with error: {:?}",
-					   conn.peer_addr(), e);
+				debug!(
+					"connect: connecting to {:?} failed with error: {:?}",
+					conn.peer_addr(),
+					e
+				);
 				if let Err(e) = conn.shutdown(Shutdown::Both) {
 					debug!("Error shutting down conn: {:?}", e);
 				}

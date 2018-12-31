@@ -303,15 +303,13 @@ fn listen_for_addrs(
 		let p2p_c = p2p.clone();
 		let _ = thread::Builder::new()
 			.name("peer_connect".to_string())
-			.spawn(move || {
-				match p2p_c.connect(&addr) {
-					Ok(p) => {
-						let _ = p.send_peer_request(capab);
-						let _ = peers_c.update_state(addr, p2p::State::Healthy);
-					}
-					Err(_) => {
-						let _ = peers_c.update_state(addr, p2p::State::Defunct);
-					}
+			.spawn(move || match p2p_c.connect(&addr) {
+				Ok(p) => {
+					let _ = p.send_peer_request(capab);
+					let _ = peers_c.update_state(addr, p2p::State::Healthy);
+				}
+				Err(_) => {
+					let _ = peers_c.update_state(addr, p2p::State::Defunct);
 				}
 			});
 	}
