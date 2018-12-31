@@ -83,22 +83,36 @@ impl Peers {
 	// Update the dandelion relay
 	pub fn update_dandelion_relay(&self) {
 		let peers = self.outgoing_connected_peers();
-
-		match thread_rng().choose(&peers) {
-			Some(peer) => {
-				// Clear the map and add new relay
-				let dandelion_relay = &self.dandelion_relay;
-				dandelion_relay.write().clear();
-				dandelion_relay
-					.write()
-					.insert(Utc::now().timestamp(), peer.clone());
-				debug!(
-					"Successfully updated Dandelion relay to: {}",
-					peer.info.addr
-				);
+		match &self.config.dandelion_peer {
+			Some(ip) => {
+				for peer in &peers {
+					if peer.info.addr == *ip {
+						debug!("Found predefined dandelion peer, setting as relay");
+						self.set_dandelion_relay(peer);
+						return;
+					}
+				}
+				debug!("Could not find predefined dandelion peer among connected peers, choosing random")
 			}
+			None => {}
+		}
+		match thread_rng().choose(&peers) {
+			Some(peer) => self.set_dandelion_relay(peer),
 			None => debug!("Could not update dandelion relay"),
 		};
+	}
+
+	fn set_dandelion_relay(&self, peer: &Arc<Peer>) {
+		// Clear the map and add new relay
+		let dandelion_relay = &self.dandelion_relay;
+		dandelion_relay.write().clear();
+		dandelion_relay
+			.write()
+			.insert(Utc::now().timestamp(), peer.clone());
+		debug!(
+			"Successfully updated Dandelion relay to: {}",
+			peer.info.addr
+		);
 	}
 
 	// Get the dandelion relay

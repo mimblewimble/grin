@@ -124,6 +124,8 @@ pub struct P2PConfig {
 	pub peer_max_count: Option<u32>,
 
 	pub peer_min_preferred_count: Option<u32>,
+
+	pub dandelion_peer: Option<SocketAddr>,
 }
 
 /// Default address for peer-to-peer connections.
@@ -142,6 +144,7 @@ impl Default for P2PConfig {
 			ban_window: None,
 			peer_max_count: None,
 			peer_min_preferred_count: None,
+			dandelion_peer: None
 		}
 	}
 }

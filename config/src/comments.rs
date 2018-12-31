@@ -230,6 +230,10 @@ fn comments() -> HashMap<String, String> {
 
 # 15 = Bit flags for FULL_NODE
 #This structure needs to be changed internally, to make it more configurable
+
+# A prefered dandelion_peer, mainly used for testing dandelion
+# dandelion_peer = \"10.0.0.1:13144\"
+
 "
 		.to_string(),
 	);
