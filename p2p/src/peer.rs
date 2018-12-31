@@ -71,12 +71,13 @@ impl Peer {
 		hs: &Handshake,
 		adapter: Arc<dyn NetAdapter>,
 	) -> Result<Peer, Error> {
-		debug!("p2p::peer::accept: connection from {:?}", conn.peer_addr());
+		debug!("accept: connection from {:?}", conn.peer_addr());
 		let info = hs.accept(capab, total_difficulty, conn);
 		match info {
 			Ok(peer_info) => Ok(Peer::new(peer_info, adapter)),
 			Err(e) => {
-				debug!("p2p::peer::accept: fail with error: {:?}", e);
+				debug!("accept: connection from {:?} failed with error: {:?}",
+					   conn.peer_addr(), e);
 				if let Err(e) = conn.shutdown(Shutdown::Both) {
 					debug!("Error shutting down conn: {:?}", e);
 				}
@@ -93,12 +94,13 @@ impl Peer {
 		hs: &Handshake,
 		na: Arc<dyn NetAdapter>,
 	) -> Result<Peer, Error> {
-		debug!("p2p::peer::connect: connecting to {:?}", conn.peer_addr());
+		debug!("connect: connecting to {:?}", conn.peer_addr());
 		let info = hs.initiate(capab, total_difficulty, self_addr, conn);
 		match info {
 			Ok(peer_info) => Ok(Peer::new(peer_info, na)),
 			Err(e) => {
-				debug!("p2p::peer::connect: fail with error: {:?}", e);
+				debug!("connect: connecting to {:?} failed with error: {:?}",
+					   conn.peer_addr(), e);
 				if let Err(e) = conn.shutdown(Shutdown::Both) {
 					debug!("Error shutting down conn: {:?}", e);
 				}

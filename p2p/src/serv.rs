@@ -124,8 +124,8 @@ impl Server {
 			return Ok(p);
 		}
 
-		debug!(
-			"p2p::serv::connect_peer: on {}:{}. connecting to {}",
+		trace!(
+			"connect_peer: on {}:{}. connecting to {}",
 			self.config.host, self.config.port, addr
 		);
 		match TcpStream::connect_timeout(addr, Duration::from_secs(10)) {
