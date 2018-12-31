@@ -84,21 +84,29 @@ impl Peers {
 	pub fn update_dandelion_relay(&self) {
 		let peers = self.outgoing_connected_peers();
 
-		match thread_rng().choose(&peers) {
-			Some(peer) => {
-				// Clear the map and add new relay
-				let dandelion_relay = &self.dandelion_relay;
-				dandelion_relay.write().clear();
-				dandelion_relay
-					.write()
-					.insert(Utc::now().timestamp(), peer.clone());
-				debug!(
-					"Successfully updated Dandelion relay to: {}",
-					peer.info.addr
-				);
-			}
+		let peer = &self
+			.config
+			.dandelion_peer
+			.and_then(|ip| peers.iter().find(|x| x.info.addr == ip))
+			.or(thread_rng().choose(&peers));
+
+		match peer {
+			Some(peer) => self.set_dandelion_relay(peer),
 			None => debug!("Could not update dandelion relay"),
-		};
+		}
+	}
+
+	fn set_dandelion_relay(&self, peer: &Arc<Peer>) {
+		// Clear the map and add new relay
+		let dandelion_relay = &self.dandelion_relay;
+		dandelion_relay.write().clear();
+		dandelion_relay
+			.write()
+			.insert(Utc::now().timestamp(), peer.clone());
+		debug!(
+			"Successfully updated Dandelion relay to: {}",
+			peer.info.addr
+		);
 	}
 
 	// Get the dandelion relay
