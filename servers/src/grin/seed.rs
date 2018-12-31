@@ -305,7 +305,12 @@ fn listen_for_addrs(
 			.name("peer_connect".to_string())
 			.spawn(move || {
 				// connect and retry on fail, but for 3 times at most
-				for _ in 0..3 {
+				for i in 0..3 {
+					debug!(
+						"seed::listen_for_addrs: connecting to {}. trying no.{}",
+						addr, i
+					);
+
 					match p2p_c.connect(&addr) {
 						Ok(p) => {
 							let _ = p.send_peer_request(capab);

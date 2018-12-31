@@ -14,7 +14,7 @@
 
 use crate::util::{Mutex, RwLock};
 use std::fs::File;
-use std::net::{SocketAddr, TcpStream};
+use std::net::{Shutdown, SocketAddr, TcpStream};
 use std::sync::Arc;
 
 use crate::conn;
@@ -71,8 +71,21 @@ impl Peer {
 		hs: &Handshake,
 		adapter: Arc<dyn NetAdapter>,
 	) -> Result<Peer, Error> {
-		let info = hs.accept(capab, total_difficulty, conn)?;
-		Ok(Peer::new(info, adapter))
+		debug!(
+			"p2p::peer::accept: connection from {:?}",
+			conn.peer_addr()
+		);
+		let info = hs.accept(capab, total_difficulty, conn);
+		match info {
+			Ok(peer_info) => Ok(Peer::new(peer_info, adapter)),
+			Err(e) => {
+				debug!("p2p::peer::accept: fail with error: {:?}", e);
+				if let Err(e) = conn.shutdown(Shutdown::Both) {
+					debug!("Error shutting down conn: {:?}", e);
+				}
+				Err(e)
+			}
+		}
 	}
 
 	pub fn connect(
@@ -83,8 +96,21 @@ impl Peer {
 		hs: &Handshake,
 		na: Arc<dyn NetAdapter>,
 	) -> Result<Peer, Error> {
-		let info = hs.initiate(capab, total_difficulty, self_addr, conn)?;
-		Ok(Peer::new(info, na))
+		debug!(
+			"p2p::peer::connect: connecting to {:?}",
+			conn.peer_addr()
+		);
+		let info = hs.initiate(capab, total_difficulty, self_addr, conn);
+		match info {
+			Ok(peer_info) => Ok(Peer::new(peer_info, na)),
+			Err(e) => {
+				debug!("p2p::peer::connect: fail with error: {:?}", e);
+				if let Err(e) = conn.shutdown(Shutdown::Both) {
+					debug!("Error shutting down conn: {:?}", e);
+				}
+				Err(e)
+			}
+		}
 	}
 
 	/// Main peer loop listening for messages and forwarding to the rest of the

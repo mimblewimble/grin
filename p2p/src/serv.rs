@@ -114,7 +114,7 @@ impl Server {
 			let addrs = hs.addrs.read();
 			if addrs.contains(&addr) {
 				debug!(
-					"connect: ignore the connecting to PeerWithSelf, addr: {}",
+					"connect: ignore connecting to PeerWithSelf, addr: {}",
 					addr
 				);
 				return Err(Error::PeerWithSelf);
@@ -127,8 +127,8 @@ impl Server {
 			return Ok(p);
 		}
 
-		trace!(
-			"connect_peer: on {}:{}. connecting to {}",
+		debug!(
+			"p2p::serv::connect_peer: on {}:{}. connecting to {}",
 			self.config.host,
 			self.config.port,
 			addr
