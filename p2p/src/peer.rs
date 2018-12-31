@@ -71,10 +71,7 @@ impl Peer {
 		hs: &Handshake,
 		adapter: Arc<dyn NetAdapter>,
 	) -> Result<Peer, Error> {
-		debug!(
-			"p2p::peer::accept: connection from {:?}",
-			conn.peer_addr()
-		);
+		debug!("p2p::peer::accept: connection from {:?}", conn.peer_addr());
 		let info = hs.accept(capab, total_difficulty, conn);
 		match info {
 			Ok(peer_info) => Ok(Peer::new(peer_info, adapter)),
@@ -96,10 +93,7 @@ impl Peer {
 		hs: &Handshake,
 		na: Arc<dyn NetAdapter>,
 	) -> Result<Peer, Error> {
-		debug!(
-			"p2p::peer::connect: connecting to {:?}",
-			conn.peer_addr()
-		);
+		debug!("p2p::peer::connect: connecting to {:?}", conn.peer_addr());
 		let info = hs.initiate(capab, total_difficulty, self_addr, conn);
 		match info {
 			Ok(peer_info) => Ok(Peer::new(peer_info, na)),
