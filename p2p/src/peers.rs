@@ -83,23 +83,17 @@ impl Peers {
 	// Update the dandelion relay
 	pub fn update_dandelion_relay(&self) {
 		let peers = self.outgoing_connected_peers();
-		match &self.config.dandelion_peer {
-			Some(ip) => {
-				for peer in &peers {
-					if peer.info.addr == *ip {
-						debug!("Found predefined dandelion peer, setting as relay");
-						self.set_dandelion_relay(peer);
-						return;
-					}
-				}
-				debug!("Could not find predefined dandelion peer among connected peers, choosing random")
-			}
-			None => {}
-		}
-		match thread_rng().choose(&peers) {
+
+		let peer = &self
+			.config
+			.dandelion_peer
+			.and_then(|ip| peers.iter().find(|x| x.info.addr == ip))
+			.or(thread_rng().choose(&peers));
+
+		match peer {
 			Some(peer) => self.set_dandelion_relay(peer),
 			None => debug!("Could not update dandelion relay"),
-		};
+		}
 	}
 
 	fn set_dandelion_relay(&self, peer: &Arc<Peer>) {
