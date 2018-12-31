@@ -113,10 +113,7 @@ impl Server {
 			let hs = self.handshake.clone();
 			let addrs = hs.addrs.read();
 			if addrs.contains(&addr) {
-				debug!(
-					"connect: ignore the connecting to PeerWithSelf, addr: {}",
-					addr
-				);
+				debug!("connect: ignore connecting to PeerWithSelf, addr: {}", addr);
 				return Err(Error::PeerWithSelf);
 			}
 		}

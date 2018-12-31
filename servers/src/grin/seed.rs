@@ -22,7 +22,7 @@ use chrono::{Duration, MIN_DATE};
 use rand::{thread_rng, Rng};
 use std::net::{SocketAddr, ToSocketAddrs};
 use std::sync::{mpsc, Arc};
-use std::{cmp, io, str, thread, time};
+use std::{cmp, str, thread, time};
 
 use crate::core::global;
 use crate::p2p;
@@ -303,32 +303,13 @@ fn listen_for_addrs(
 		let p2p_c = p2p.clone();
 		let _ = thread::Builder::new()
 			.name("peer_connect".to_string())
-			.spawn(move || {
-				// connect and retry on fail, but for 3 times at most
-				for _ in 0..3 {
-					match p2p_c.connect(&addr) {
-						Ok(p) => {
-							let _ = p.send_peer_request(capab);
-							let _ = peers_c.update_state(addr, p2p::State::Healthy);
-							break;
-						}
-						Err(e) => {
-							let _ = peers_c.update_state(addr, p2p::State::Defunct);
-
-							// don't retry if connection refused or PeerWithSelf
-							match e {
-								p2p::Error::Connection(io_err) => {
-									if io::ErrorKind::ConnectionRefused == io_err.kind() {
-										break;
-									}
-								}
-								p2p::Error::PeerWithSelf => break,
-								_ => (), // allow to retry on any other error
-							}
-						}
-					}
-
-					thread::sleep(time::Duration::from_secs(1));
+			.spawn(move || match p2p_c.connect(&addr) {
+				Ok(p) => {
+					let _ = p.send_peer_request(capab);
+					let _ = peers_c.update_state(addr, p2p::State::Healthy);
+				}
+				Err(_) => {
+					let _ = peers_c.update_state(addr, p2p::State::Defunct);
 				}
 			});
 	}

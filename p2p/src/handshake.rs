@@ -14,7 +14,7 @@
 
 use crate::util::RwLock;
 use std::collections::VecDeque;
-use std::net::{Shutdown, SocketAddr, TcpStream};
+use std::net::{SocketAddr, TcpStream};
 use std::sync::Arc;
 
 use chrono::prelude::*;
@@ -28,7 +28,13 @@ use crate::msg::{
 use crate::peer::Peer;
 use crate::types::{Capabilities, Direction, Error, P2PConfig, PeerInfo, PeerLiveInfo};
 
+/// Local generated nonce for peer connecting.
+/// Used for self-connecting detection (on receiver side),
+/// nonce(s) in recent 100 connecting requests are saved
 const NONCES_CAP: usize = 100;
+/// Socket addresses of self, extracted from stream when a self-connecting is detected.
+/// Used in connecting request to avoid self-connecting request,
+/// 10 should be enough since most of servers don't have more than 10 IP addresses.
 const ADDRS_CAP: usize = 10;
 
 /// Handles the handshake negotiation when two peers connect and decides on
@@ -156,9 +162,6 @@ impl Handshake {
 				addrs.push_back(addr);
 				if addrs.len() >= ADDRS_CAP {
 					addrs.pop_front();
-				}
-				if let Err(e) = conn.shutdown(Shutdown::Both) {
-					debug!("Error shutting down conn: {:?}", e);
 				}
 				return Err(Error::PeerWithSelf);
 			}
