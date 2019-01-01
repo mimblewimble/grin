@@ -67,15 +67,17 @@ pub fn new_env(path: String) -> lmdb::Environment {
 pub fn new_named_env(path: String, name: String) -> lmdb::Environment {
 	let full_path = [path, name].join("/");
 	fs::create_dir_all(&full_path).unwrap();
-	unsafe {
-		let mut env_builder = lmdb::EnvBuilder::new().unwrap();
-		env_builder.set_maxdbs(8).unwrap();
-		// half a TB should give us plenty room, will be an issue on 32 bits
-		// (which we don't support anyway)
-		env_builder.set_mapsize(549755813888).unwrap_or_else(|e| {
+
+	let mut env_builder = lmdb::EnvBuilder::new().unwrap();
+	env_builder.set_maxdbs(8).unwrap();
+	// half a TB should give us plenty room, will be an issue on 32 bits
+	// (which we don't support anyway)
+	env_builder
+		.set_mapsize(549_755_813_888)
+		.unwrap_or_else(|e| {
 			panic!("Unable to allocate LMDB space: {:?}", e);
 		});
-
+	unsafe {
 		env_builder
 			.open(&full_path, lmdb::open::Flags::empty(), 0o600)
 			.unwrap()
@@ -178,10 +180,10 @@ pub struct Batch<'a> {
 
 impl<'a> Batch<'a> {
 	/// Writes a single key/value pair to the db
-	pub fn put(&self, key: &[u8], value: Vec<u8>) -> Result<(), Error> {
+	pub fn put(&self, key: &[u8], value: &[u8]) -> Result<(), Error> {
 		self.tx
 			.access()
-			.put(&self.store.db, key, &value, lmdb::put::Flags::empty())?;
+			.put(&self.store.db, key, value, lmdb::put::Flags::empty())?;
 		Ok(())
 	}
 
@@ -190,7 +192,7 @@ impl<'a> Batch<'a> {
 	pub fn put_ser<W: ser::Writeable>(&self, key: &[u8], value: &W) -> Result<(), Error> {
 		let ser_value = ser::ser_vec(value);
 		match ser_value {
-			Ok(data) => self.put(key, data),
+			Ok(data) => self.put(key, &data),
 			Err(err) => Err(Error::SerErr(format!("{}", err))),
 		}
 	}

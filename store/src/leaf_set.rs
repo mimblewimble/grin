@@ -15,7 +15,7 @@
 //! Compact (roaring) bitmap representing the set of leaf positions
 //! that exist and are not currently pruned in the MMR.
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use croaring::Bitmap;
 
@@ -31,7 +31,7 @@ use std::io::{self, BufWriter, Write};
 /// Compact (roaring) bitmap representing the set of positions of
 /// leaves that are currently unpruned in the MMR.
 pub struct LeafSet {
-	path: String,
+	path: PathBuf,
 	bitmap: Bitmap,
 	bitmap_bak: Bitmap,
 }
@@ -39,35 +39,42 @@ pub struct LeafSet {
 impl LeafSet {
 	/// Open the remove log file.
 	/// The content of the file will be read in memory for fast checking.
-	pub fn open(path: &str) -> io::Result<LeafSet> {
-		let file_path = Path::new(&path);
+	pub fn open<P: AsRef<Path>>(path: P) -> io::Result<LeafSet> {
+		let file_path = path.as_ref();
 		let bitmap = if file_path.exists() {
-			read_bitmap(file_path)?
+			read_bitmap(&file_path)?
 		} else {
 			Bitmap::create()
 		};
 
 		Ok(LeafSet {
-			path: path.to_string(),
+			path: file_path.to_path_buf(),
 			bitmap_bak: bitmap.clone(),
 			bitmap,
 		})
 	}
 
 	/// Copies a snapshot of the utxo file into the primary utxo file.
-	pub fn copy_snapshot(path: &str, cp_path: &str) -> io::Result<()> {
-		let cp_file_path = Path::new(&cp_path);
+	pub fn copy_snapshot<P: AsRef<Path>>(path: P, cp_path: P) -> io::Result<()> {
+		let cp_file_path = cp_path.as_ref();
 
 		if !cp_file_path.exists() {
-			debug!("leaf_set: rewound leaf file not found: {}", cp_path);
+			debug!(
+				"leaf_set: rewound leaf file not found: {}",
+				cp_file_path.display()
+			);
 			return Ok(());
 		}
 
-		let bitmap = read_bitmap(cp_file_path)?;
-		debug!("leaf_set: copying rewound file {} to {}", cp_path, path);
+		let bitmap = read_bitmap(&cp_file_path)?;
+		debug!(
+			"leaf_set: copying rewound file {} to {}",
+			cp_file_path.display(),
+			path.as_ref().display()
+		);
 
 		let mut leaf_set = LeafSet {
-			path: path.to_string(),
+			path: path.as_ref().to_path_buf(),
 			bitmap_bak: bitmap.clone(),
 			bitmap,
 		};
@@ -148,7 +155,7 @@ impl LeafSet {
 		let mut cp_bitmap = self.bitmap.clone();
 		cp_bitmap.run_optimize();
 
-		let cp_path = format!("{}.{}", self.path, header.hash());
+		let cp_path = self.path.join(header.hash().to_string());
 		let mut file = BufWriter::new(File::create(cp_path)?);
 		file.write_all(&cp_bitmap.serialize())?;
 		file.flush()?;

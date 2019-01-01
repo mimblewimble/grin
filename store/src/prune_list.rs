@@ -22,7 +22,7 @@
 //! files.
 
 use std::io::{self, BufWriter, Write};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use croaring::Bitmap;
 
@@ -41,7 +41,7 @@ use crate::{read_bitmap, save_via_temp_file};
 /// backend storage anymore. The PruneList accounts for that mismatch and does
 /// the position translation.
 pub struct PruneList {
-	path: Option<String>,
+	path: Option<PathBuf>,
 	/// Bitmap representing pruned root node positions.
 	bitmap: Bitmap,
 	/// Bitmap representing all pruned node positions (everything under the pruned roots).
@@ -63,8 +63,8 @@ impl PruneList {
 	}
 
 	/// Open an existing prune_list or create a new one.
-	pub fn open(path: &str) -> io::Result<PruneList> {
-		let file_path = Path::new(&path);
+	pub fn open<P: AsRef<Path>>(path: P) -> io::Result<PruneList> {
+		let file_path = PathBuf::from(path.as_ref());
 		let bitmap = if file_path.exists() {
 			read_bitmap(&file_path)?
 		} else {
@@ -72,7 +72,7 @@ impl PruneList {
 		};
 
 		let mut prune_list = PruneList {
-			path: Some(path.to_string()),
+			path: Some(file_path),
 			bitmap,
 			pruned_cache: Bitmap::create(),
 			shift_cache: vec![],
@@ -111,7 +111,7 @@ impl PruneList {
 
 		// Write the updated bitmap file to disk.
 		if let Some(ref path) = self.path {
-			save_via_temp_file(&path, ".tmp", |w| {
+			save_via_temp_file(path, ".tmp", |w| {
 				let mut w = BufWriter::new(w);
 				w.write_all(&self.bitmap.serialize())?;
 				w.flush()
@@ -264,7 +264,7 @@ impl PruneList {
 			return;
 		}
 		self.pruned_cache = Bitmap::create_with_capacity(self.bitmap.maximum());
-		for pos in 1..(self.bitmap.maximum() + 1) {
+		for pos in 1..=self.bitmap.maximum() {
 			let path = path(pos as u64, self.bitmap.maximum() as u64);
 			let pruned = path.into_iter().any(|x| self.bitmap.contains(x as u32));
 			if pruned {
@@ -277,5 +277,11 @@ impl PruneList {
 	/// Is the specified position a root of a pruned subtree?
 	pub fn is_pruned_root(&self, pos: u64) -> bool {
 		self.bitmap.contains(pos as u32)
+	}
+}
+
+impl Default for PruneList {
+	fn default() -> Self {
+		Self::new()
 	}
 }
