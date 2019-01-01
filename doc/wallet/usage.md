@@ -110,7 +110,7 @@ the correct recovery phrase,) your wallet contents should again be usable.
 To recover your wallet seed, delete (or backup) the wallet's `wallet_data/wallet.seed` file, then run:
 
 ```sh
-grin wallet recover -p "[12 or 24 word passphrase separated by spaces"
+grin wallet recover -p "[12 or 24 word passphrase separated by spaces]"
 ```
 e.g:
 ```sh
