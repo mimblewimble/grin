@@ -22,6 +22,7 @@ use crate::core::merkle_proof::MerkleProof;
 use crate::core::pmmr::{Backend, ReadonlyPMMR};
 use crate::core::BlockHeader;
 use crate::ser::{PMMRIndexHashable, PMMRable};
+use std::path::Path;
 
 /// 64 bits all ones: 0b11111111...1
 const ALL_ONES: u64 = u64::MAX;
@@ -323,7 +324,7 @@ where
 	}
 
 	/// Return the path of the data file (needed to sum kernels efficiently)
-	pub fn data_file_path(&self) -> &str {
+	pub fn data_file_path(&self) -> &Path {
 		self.backend.get_data_file_path()
 	}
 

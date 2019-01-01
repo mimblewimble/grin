@@ -56,7 +56,7 @@ pub fn to_key(prefix: u8, k: &mut Vec<u8>) -> Vec<u8> {
 
 /// Build a db key from a prefix and a byte vector identifier and numeric identifier
 pub fn to_key_u64(prefix: u8, k: &mut Vec<u8>, val: u64) -> Vec<u8> {
-	let mut res = vec![];
+	let mut res = Vec::with_capacity(k.len() + 10);
 	res.push(prefix);
 	res.push(SEP);
 	res.append(k);
@@ -65,31 +65,36 @@ pub fn to_key_u64(prefix: u8, k: &mut Vec<u8>, val: u64) -> Vec<u8> {
 }
 /// Build a db key from a prefix and a numeric identifier.
 pub fn u64_to_key(prefix: u8, val: u64) -> Vec<u8> {
-	let mut u64_vec = vec![];
-	u64_vec.write_u64::<BigEndian>(val).unwrap();
-	u64_vec.insert(0, SEP);
-	u64_vec.insert(0, prefix);
-	u64_vec
+	let mut res = Vec::with_capacity(10);
+	res.push(prefix);
+	res.push(SEP);
+	res.write_u64::<BigEndian>(val).unwrap();
+	res
 }
 
+use std::ffi::OsStr;
+use std::fs::{remove_file, rename, File};
+use std::path::Path;
 /// Creates temporary file with name created by adding `temp_suffix` to `path`.
 /// Applies writer function to it and renames temporary file into original specified by `path`.
-pub fn save_via_temp_file<F>(
-	path: &str,
-	temp_suffix: &str,
+pub fn save_via_temp_file<F, P, E>(
+	path: P,
+	temp_suffix: E,
 	mut writer: F,
 ) -> Result<(), std::io::Error>
 where
 	F: FnMut(Box<dyn std::io::Write>) -> Result<(), std::io::Error>,
+	P: AsRef<Path>,
+	E: AsRef<OsStr>,
 {
-	assert_ne!(*temp_suffix, *"");
+	let temp_suffix = temp_suffix.as_ref();
+	assert!(!temp_suffix.is_empty());
 
-	use std::fs::{remove_file, rename, File};
-	use std::path::Path;
-
+	let original = path.as_ref();
+	let mut _original = original.as_os_str().to_os_string();
+	_original.push(temp_suffix);
 	// Write temporary file
-	let temp_name = format!("{}{}", &path, temp_suffix);
-	let temp_path = Path::new(&temp_name);
+	let temp_path = Path::new(&_original);
 	if temp_path.exists() {
 		remove_file(&temp_path)?;
 	}
@@ -98,7 +103,6 @@ where
 	writer(Box::new(file))?;
 
 	// Move temporary file into original
-	let original = Path::new(&path);
 	if original.exists() {
 		remove_file(&original)?;
 	}
@@ -110,10 +114,8 @@ where
 
 use croaring::Bitmap;
 use std::io::{self, Read};
-use std::path::Path;
 /// Read Bitmap from a file
 pub fn read_bitmap<P: AsRef<Path>>(file_path: P) -> io::Result<Bitmap> {
-	use std::fs::File;
 	let mut bitmap_file = File::open(file_path)?;
 	let f_md = bitmap_file.metadata()?;
 	let mut buffer = Vec::with_capacity(f_md.len() as usize);

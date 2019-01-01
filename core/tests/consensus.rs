@@ -342,7 +342,6 @@ fn adjustment_scenarios() {
 	println!("*********************************************************");
 	print_chain_sim(chain_sim);
 	println!("*********************************************************");
-
 }
 
 /// Checks different next_target adjustments and difficulty boundaries

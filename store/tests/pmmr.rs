@@ -17,7 +17,6 @@ use grin_core as core;
 use grin_store as store;
 
 use std::fs;
-use std::io::prelude::*;
 
 use chrono::prelude::Utc;
 use croaring::Bitmap;
@@ -822,9 +821,9 @@ fn create_numbered_files(
 			prefix,
 			start_index + rewind_file_num
 		));
-		let mut file = fs::File::create(path.clone()).unwrap();
+		let file = fs::File::create(path.clone()).unwrap();
 		let metadata = file.metadata().unwrap();
-		filetime::set_file_times(path, time_to_set_ft, time_to_set_ft);
+		filetime::set_file_times(path, time_to_set_ft, time_to_set_ft).unwrap();
 	}
 }
 

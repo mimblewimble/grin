@@ -20,6 +20,7 @@ use self::core::ser::{FixedLength, PMMRable, Readable, Reader, Writeable, Writer
 use croaring;
 use croaring::Bitmap;
 use grin_core as core;
+use std::path::Path;
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub struct TestElem(pub [u32; 4]);
@@ -117,8 +118,8 @@ impl<T: PMMRable> Backend<T> for VecBackend<T> {
 		Ok(())
 	}
 
-	fn get_data_file_path(&self) -> &str {
-		""
+	fn get_data_file_path(&self) -> &Path {
+		Path::new("")
 	}
 
 	fn dump_stats(&self) {}

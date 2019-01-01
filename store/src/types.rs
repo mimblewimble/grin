@@ -18,6 +18,7 @@ use crate::core::ser::{self, FixedLength, Readable, Writeable};
 use std::fs::{self, File, OpenOptions};
 use std::io::{self, BufWriter, ErrorKind, Read, Write};
 use std::marker;
+use std::path::{Path, PathBuf};
 
 /// A no-op function for doing nothing with some pruned data.
 pub fn prune_noop(_pruned_data: &[u8]) {}
@@ -33,7 +34,7 @@ where
 	T: FixedLength + Readable + Writeable,
 {
 	/// Open (or create) a file at the provided path on disk.
-	pub fn open(path: &str) -> io::Result<DataFile<T>> {
+	pub fn open<P: AsRef<Path>>(path: P) -> io::Result<DataFile<T>> {
 		let file = AppendOnlyFile::open(path)?;
 		Ok(DataFile {
 			file,
@@ -96,12 +97,12 @@ where
 	}
 
 	/// Path of the underlying file
-	pub fn path(&self) -> &str {
+	pub fn path(&self) -> &Path {
 		self.file.path()
 	}
 
 	/// Write the file out to disk, pruning removed elements.
-	pub fn save_prune<F>(&self, target: String, prune_offs: &[u64], prune_cb: F) -> io::Result<()>
+	pub fn save_prune<F>(&self, target: &str, prune_offs: &[u64], prune_cb: F) -> io::Result<()>
 	where
 		F: Fn(&[u8]),
 	{
@@ -123,7 +124,7 @@ where
 /// former simply happens by rewriting it, ignoring some of the data. The
 /// latter by truncating the underlying file and re-creating the mmap.
 pub struct AppendOnlyFile {
-	path: String,
+	path: PathBuf,
 	file: File,
 	mmap: Option<memmap::Mmap>,
 	buffer_start: usize,
@@ -133,7 +134,7 @@ pub struct AppendOnlyFile {
 
 impl AppendOnlyFile {
 	/// Open a file (existing or not) as append-only, backed by a mmap.
-	pub fn open(path: &str) -> io::Result<AppendOnlyFile> {
+	pub fn open<P: AsRef<Path>>(path: P) -> io::Result<AppendOnlyFile> {
 		let file = OpenOptions::new()
 			.read(true)
 			.append(true)
@@ -141,7 +142,7 @@ impl AppendOnlyFile {
 			.open(&path)?;
 		let mut aof = AppendOnlyFile {
 			file,
-			path: path.to_string(),
+			path: path.as_ref().to_path_buf(),
 			mmap: None,
 			buffer_start: 0,
 			buffer: vec![],
@@ -258,15 +259,16 @@ impl AppendOnlyFile {
 
 	/// Saves a copy of the current file content, skipping data at the provided
 	/// prune indices. The prune Vec must be ordered.
-	pub fn save_prune<T>(
+	pub fn save_prune<T, P>(
 		&self,
-		target: String,
+		target: P,
 		prune_offs: &[u64],
 		prune_len: u64,
 		prune_cb: T,
 	) -> io::Result<()>
 	where
 		T: Fn(&[u8]),
+		P: AsRef<Path>,
 	{
 		if prune_offs.is_empty() {
 			fs::copy(&self.path, &target)?;
@@ -322,7 +324,7 @@ impl AppendOnlyFile {
 	}
 
 	/// Path of the underlying file
-	pub fn path(&self) -> &str {
+	pub fn path(&self) -> &Path {
 		&self.path
 	}
 }

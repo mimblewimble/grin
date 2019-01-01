@@ -17,6 +17,7 @@ use croaring::Bitmap;
 use crate::core::hash::Hash;
 use crate::core::BlockHeader;
 use crate::ser::PMMRable;
+use std::path::Path;
 
 /// Storage backend for the MMR, just needs to be indexed by order of insertion.
 /// The PMMR itself does not need the Backend to be accurate on the existence
@@ -59,7 +60,7 @@ pub trait Backend<T: PMMRable> {
 	/// Returns the data file path.. this is a bit of a hack now that doesn't
 	/// sit well with the design, but TxKernels have to be summed and the
 	/// fastest way to to be able to allow direct access to the file
-	fn get_data_file_path(&self) -> &str;
+	fn get_data_file_path(&self) -> &Path;
 
 	/// Also a bit of a hack...
 	/// Saves a snapshot of the rewound utxo file with the block hash as

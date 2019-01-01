@@ -23,6 +23,7 @@ use crate::leaf_set::LeafSet;
 use crate::prune_list::PruneList;
 use crate::types::{prune_noop, DataFile};
 use croaring::Bitmap;
+use std::path::{Path, PathBuf};
 
 const PMMR_HASH_FILE: &str = "pmmr_hash.bin";
 const PMMR_DATA_FILE: &str = "pmmr_data.bin";
@@ -50,7 +51,7 @@ pub const PMMR_FILES: [&str; 4] = [
 /// * A prune_list tracks the positions of pruned (and compacted) roots in the
 /// MMR.
 pub struct PMMRBackend<T: PMMRable> {
-	data_dir: String,
+	data_dir: PathBuf,
 	prunable: bool,
 	hash_file: DataFile<Hash>,
 	data_file: DataFile<T::E>,
@@ -147,7 +148,7 @@ impl<T: PMMRable> Backend<T> for PMMRBackend<T> {
 	}
 
 	/// Return data file path
-	fn get_data_file_path(&self) -> &str {
+	fn get_data_file_path(&self) -> &Path {
 		self.data_file.path()
 	}
 
@@ -173,28 +174,32 @@ impl<T: PMMRable> Backend<T> for PMMRBackend<T> {
 impl<T: PMMRable> PMMRBackend<T> {
 	/// Instantiates a new PMMR backend.
 	/// Use the provided dir to store its files.
-	pub fn new(
-		data_dir: String,
+	pub fn new<P: AsRef<Path>>(
+		data_dir: P,
 		prunable: bool,
 		header: Option<&BlockHeader>,
 	) -> io::Result<PMMRBackend<T>> {
-		let hash_file = DataFile::open(&format!("{}/{}", data_dir, PMMR_HASH_FILE))?;
-		let data_file = DataFile::open(&format!("{}/{}", data_dir, PMMR_DATA_FILE))?;
+		let data_dir = data_dir.as_ref();
+		let hash_file = DataFile::open(&data_dir.join(PMMR_HASH_FILE))?;
+		let data_file = DataFile::open(&data_dir.join(PMMR_DATA_FILE))?;
 
-		let leaf_set_path = format!("{}/{}", data_dir, PMMR_LEAF_FILE);
+		let leaf_set_path = data_dir.join(PMMR_LEAF_FILE);
 
 		// If we received a rewound "snapshot" leaf_set file move it into
 		// place so we use it.
 		if let Some(header) = header {
-			let leaf_snapshot_path = format!("{}/{}.{}", data_dir, PMMR_LEAF_FILE, header.hash());
+			let _leaf_snapshot_path = (data_dir.join(PMMR_LEAF_FILE).to_string_lossy()
+				+ header.hash().to_string().as_ref())
+			.into_owned();
+			let leaf_snapshot_path = PathBuf::from(_leaf_snapshot_path);
 			LeafSet::copy_snapshot(&leaf_set_path, &leaf_snapshot_path)?;
 		}
 
 		let leaf_set = LeafSet::open(&leaf_set_path)?;
-		let prune_list = PruneList::open(&format!("{}/{}", data_dir, PMMR_PRUN_FILE))?;
+		let prune_list = PruneList::open(&data_dir.join(PMMR_PRUN_FILE))?;
 
 		Ok(PMMRBackend {
-			data_dir,
+			data_dir: data_dir.to_path_buf(),
 			prunable,
 			hash_file,
 			data_file,
@@ -278,9 +283,10 @@ impl<T: PMMRable> PMMRBackend<T> {
 		assert!(self.prunable, "Trying to compact a non-prunable PMMR");
 
 		// Paths for tmp hash and data files.
-		let tmp_prune_file_hash = format!("{}/{}.hashprune", self.data_dir, PMMR_HASH_FILE);
-		let tmp_prune_file_data = format!("{}/{}.dataprune", self.data_dir, PMMR_DATA_FILE);
-
+		let tmp_prune_file_hash =
+			format!("{}.hashprune", self.data_dir.join(PMMR_HASH_FILE).display());
+		let tmp_prune_file_data =
+			format!("{}.dataprune", self.data_dir.join(PMMR_DATA_FILE).display());
 		// Calculate the sets of leaf positions and node positions to remove based
 		// on the cutoff_pos provided.
 		let (leaves_removed, pos_to_rm) = self.pos_to_rm(cutoff_pos, rewind_rm_pos);
@@ -293,7 +299,7 @@ impl<T: PMMRable> PMMRBackend<T> {
 			});
 
 			self.hash_file
-				.save_prune(tmp_prune_file_hash.clone(), &off_to_rm, &prune_noop)?;
+				.save_prune(&tmp_prune_file_hash, &off_to_rm, &prune_noop)?;
 		}
 
 		// 2. Save compact copy of the data file, skipping removed leaves.
@@ -311,7 +317,7 @@ impl<T: PMMRable> PMMRBackend<T> {
 			});
 
 			self.data_file
-				.save_prune(tmp_prune_file_data.clone(), &off_to_rm, prune_cb)?;
+				.save_prune(&tmp_prune_file_data, &off_to_rm, prune_cb)?;
 		}
 
 		// 3. Update the prune list and write to disk.
@@ -325,16 +331,16 @@ impl<T: PMMRable> PMMRBackend<T> {
 		// 4. Rename the compact copy of hash file and reopen it.
 		fs::rename(
 			tmp_prune_file_hash.clone(),
-			format!("{}/{}", self.data_dir, PMMR_HASH_FILE),
+			self.data_dir.join(PMMR_HASH_FILE),
 		)?;
-		self.hash_file = DataFile::open(&format!("{}/{}", self.data_dir, PMMR_HASH_FILE))?;
+		self.hash_file = DataFile::open(self.data_dir.join(PMMR_HASH_FILE))?;
 
 		// 5. Rename the compact copy of the data file and reopen it.
 		fs::rename(
 			tmp_prune_file_data.clone(),
-			format!("{}/{}", self.data_dir, PMMR_DATA_FILE),
+			self.data_dir.join(PMMR_DATA_FILE),
 		)?;
-		self.data_file = DataFile::open(&format!("{}/{}", self.data_dir, PMMR_DATA_FILE))?;
+		self.data_file = DataFile::open(self.data_dir.join(PMMR_DATA_FILE))?;
 
 		// 6. Write the leaf_set to disk.
 		// Optimize the bitmap storage in the process.
