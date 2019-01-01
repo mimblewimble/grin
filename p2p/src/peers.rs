@@ -208,9 +208,22 @@ impl Peers {
 	}
 
 	pub fn is_banned(&self, peer_addr: SocketAddr) -> bool {
-		if let Ok(peer_data) = self.store.get_peer(peer_addr) {
-			if peer_data.flags == State::Banned {
-				return true;
+		if global::is_production_mode() {
+			// Ban only cares about ip address, no mather what port.
+			// so, we query all saved peers with one same ip address, and ignore port
+			let peers_data = self.store.find_peers_by_ip(peer_addr);
+			for peer_data in peers_data {
+				if peer_data.flags == State::Banned {
+					return true;
+				}
+			}
+		} else {
+			// For travis-ci test, we need run multiple nodes in one server, with same ip address.
+			// so, just query the ip address and the port
+			if let Ok(peer_data) = self.store.get_peer(peer_addr) {
+				if peer_data.flags == State::Banned {
+					return true;
+				}
 			}
 		}
 		false

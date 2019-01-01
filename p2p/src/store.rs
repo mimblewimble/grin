@@ -162,6 +162,17 @@ impl PeerStore {
 		peers.iter().take(count).cloned().collect()
 	}
 
+	/// Query all peers with same IP address, and ignore the port
+	pub fn find_peers_by_ip(&self, peer_addr: SocketAddr) -> Vec<PeerData> {
+		self.db
+			.iter::<PeerData>(&to_key(
+				PEER_PREFIX,
+				&mut format!("{}", peer_addr.ip()).into_bytes(),
+			))
+			.unwrap()
+			.collect::<Vec<_>>()
+	}
+
 	/// List all known peers
 	/// Used for /v1/peers/all api endpoint
 	pub fn all_peers(&self) -> Vec<PeerData> {
