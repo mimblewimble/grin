@@ -309,19 +309,13 @@ where
 
 /// Count, in units of 1/100 (a percent), the number of "secondary" (AR) blocks in the provided window of blocks.
 pub fn ar_count(_height: u64, diff_data: &[HeaderInfo]) -> u64 {
-	100 * diff_data
-		.iter()
-		.filter(|n| n.is_secondary)
-		.count() as u64
+	100 * diff_data.iter().filter(|n| n.is_secondary).count() as u64
 }
 
 /// Factor by which the secondary proof of work difficulty will be adjusted
 pub fn secondary_pow_scaling(height: u64, diff_data: &[HeaderInfo]) -> u32 {
 	// Get the scaling factor sum of the last DIFFICULTY_ADJUST_WINDOW elements
-	let scale_sum: u64 = diff_data
-		.iter()
-		.map(|dd| dd.secondary_scaling as u64)
-		.sum();
+	let scale_sum: u64 = diff_data.iter().map(|dd| dd.secondary_scaling as u64).sum();
 
 	// compute ideal 2nd_pow_fraction in pct and across window
 	let target_pct = secondary_pow_ratio(height);

@@ -5,10 +5,11 @@ node*
 !node_clients
 !node_clients.rs
 target
-Cargo.lock
+*/Cargo.lock
 *.iml
 grin.log
 wallet.seed
 test_output
 wallet_data
 wallet/db
+.idea/

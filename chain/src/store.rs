@@ -270,7 +270,7 @@ impl<'a> Batch<'a> {
 	fn save_block_input_bitmap(&self, bh: &Hash, bm: &Bitmap) -> Result<(), Error> {
 		self.db.put(
 			&to_key(BLOCK_INPUT_BITMAP_PREFIX, &mut bh.to_vec())[..],
-			bm.serialize(),
+			&bm.serialize(),
 		)
 	}
 
