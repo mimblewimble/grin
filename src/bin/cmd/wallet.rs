@@ -44,10 +44,11 @@ pub fn wallet_command(wallet_args: &ArgMatches<'_>, config: GlobalWalletConfig) 
 	let wallet_config = config.members.unwrap().wallet;
 
 	// web wallet http server must be started from here
-	let _ = match wallet_args.subcommand() {
+	// NB: Turned off for the time being
+	/*let _ = match wallet_args.subcommand() {
 		("web", Some(_)) => start_webwallet_server(),
 		_ => {}
-	};
+	};*/
 
 	let node_client = HTTPNodeClient::new(&wallet_config.check_node_api_http_addr, None);
 	let res = wallet_args::wallet_command(wallet_args, wallet_config, node_client);

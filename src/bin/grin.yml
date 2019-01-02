@@ -137,8 +137,9 @@ subcommands:
                   takes_value: true
         - owner_api:
             about: Runs the wallet's local web API
-        - web:
-            about: Runs the local web wallet which can be accessed through a browser
+#       Turned off, for now
+#       - web:
+#           about: Runs the local web wallet which can be accessed through a browser
         - send:
             about: Builds a transaction to send coins and sends to the specified listener directly
             args:
