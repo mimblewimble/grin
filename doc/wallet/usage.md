@@ -110,21 +110,19 @@ the correct recovery phrase,) your wallet contents should again be usable.
 To recover your wallet seed, delete (or backup) the wallet's `wallet_data/wallet.seed` file, then run:
 
 ```sh
-grin wallet recover -p "[12 or 24 word passphrase separated by spaces"
+grin wallet recover
 ```
-e.g:
-```sh
-grin wallet recover -p "shiver alarm excuse turtle absorb surface lunch virtual want remind hard slow vacuum park silver asthma engage library battle jelly buffalo female inquiry wire"
-```
+
+You will be prompted for your recovery phrase as well as a new password for your seed file.
 
 If you're restoring a wallet from scratch, you'll then need to use the `grin wallet restore` command to scan the chain
 for your outputs and restore them. See the `grin wallet restore` command below for details of the entire process.
 
-You can also view your recovery phrase with your password by running the recover command without any arguments, e.g:
+You can also view your recovery phrase with your password by running the recover command with the -d (display) argument, e.g:
 
 
 ```sh
-grin wallet recover
+grin wallet recover -d
 Password:
 Your recovery phrase is:
 shiver alarm excuse turtle absorb surface lunch virtual want remind hard slow vacuum park silver asthma engage library battle jelly buffalo female inquiry wire
