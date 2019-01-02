@@ -17,21 +17,20 @@ use crate::util::file::get_first_line;
 use crate::util::Mutex;
 /// Argument parsing and error handling for wallet commands
 use clap::ArgMatches;
-use linefeed::{Interface, Prompter, ReadResult};
-use linefeed::chars::escape_sequence;
-use linefeed::complete::{Completer, Completion};
-use linefeed::command::COMMANDS;
-use linefeed::inputrc::parse_text;
-use linefeed::terminal::{Terminal, Signal};
 use failure::Fail;
 use grin_core as core;
 use grin_keychain as keychain;
 use grin_wallet::{command, instantiate_wallet, NodeClient, WalletConfig, WalletInst, WalletSeed};
 use grin_wallet::{Error, ErrorKind};
+use linefeed::chars::escape_sequence;
+use linefeed::command::COMMANDS;
+use linefeed::complete::{Completer, Completion};
+use linefeed::inputrc::parse_text;
+use linefeed::terminal::{Signal, Terminal};
+use linefeed::{Interface, Prompter, ReadResult};
 use rpassword;
 use std::path::Path;
 use std::sync::Arc;
-
 
 // define what to do on argument error
 macro_rules! arg_parse {
@@ -39,163 +38,163 @@ macro_rules! arg_parse {
 		match $r {
 			Ok(res) => res,
 			Err(e) => {
-					return Err(ErrorKind::ArgumentError(format!("{}", e)).into());
-					}
+				return Err(ErrorKind::ArgumentError(format!("{}", e)).into());
 				}
-		};
-	}
-	/// Simple error definition, just so we can return errors from all commands
-	/// and let the caller figure out what to do
+			}
+	};
+}
+/// Simple error definition, just so we can return errors from all commands
+/// and let the caller figure out what to do
 #[derive(Clone, Eq, PartialEq, Debug, Fail)]
-	pub enum ParseError {
-		#[fail(display = "Invalid Arguments: {}", _0)]
-		ArgumentError(String),
-		#[fail(display = "Parsing IO error: {}", _0)]
-		IOError(String),
-		#[fail(display = "User Cancelled")]
-		CancelledError,
+pub enum ParseError {
+	#[fail(display = "Invalid Arguments: {}", _0)]
+	ArgumentError(String),
+	#[fail(display = "Parsing IO error: {}", _0)]
+	IOError(String),
+	#[fail(display = "User Cancelled")]
+	CancelledError,
+}
+
+impl From<std::io::Error> for ParseError {
+	fn from(e: std::io::Error) -> ParseError {
+		ParseError::IOError(format!("{}", e))
 	}
+}
 
-	impl From<std::io::Error> for ParseError {
-		fn from(e: std::io::Error) -> ParseError {
-			ParseError::IOError(format!("{}", e))
-		}
+pub fn prompt_password(password: &Option<String>) -> String {
+	match password {
+		None => rpassword::prompt_password_stdout("Password: ").unwrap(),
+		Some(p) => p.to_owned(),
 	}
+}
 
-	pub fn prompt_password(password: &Option<String>) -> String {
-		match password {
-			None => rpassword::prompt_password_stdout("Password: ").unwrap(),
-			Some(p) => p.to_owned(),
-		}
+fn prompt_password_confirm() -> String {
+	let mut first = String::from("first");
+	let mut second = String::from("second");
+	while first != second {
+		first = rpassword::prompt_password_stdout("Password: ").unwrap();
+		second = rpassword::prompt_password_stdout("Confirm Password: ").unwrap();
 	}
+	first
+}
 
-	fn prompt_password_confirm() -> String {
-		let mut first = String::from("first");
-		let mut second = String::from("second");
-		while first != second {
-			first = rpassword::prompt_password_stdout("Password: ").unwrap();
-			second = rpassword::prompt_password_stdout("Confirm Password: ").unwrap();
-		}
-		first
-	}
+// instantiate wallet (needed by most functions)
 
-	// instantiate wallet (needed by most functions)
-
-	pub fn inst_wallet(
-		config: WalletConfig,
-		g_args: &command::GlobalArgs,
-		node_client: impl NodeClient + 'static,
-	) -> Result<Arc<Mutex<WalletInst<impl NodeClient + 'static, keychain::ExtKeychain>>>, ParseError> {
-		let passphrase = prompt_password(&g_args.password);
-		let res = instantiate_wallet(config.clone(), node_client, &passphrase, &g_args.account);
-		match res {
-			Ok(p) => Ok(p),
-			Err(e) => {
-				let msg = {
-					match e.kind() {
-						ErrorKind::Encryption => {
-							format!("Error decrypting wallet seed (check provided password)")
-						}
-						_ => format!("Error instantiating wallet: {}", e),
+pub fn inst_wallet(
+	config: WalletConfig,
+	g_args: &command::GlobalArgs,
+	node_client: impl NodeClient + 'static,
+) -> Result<Arc<Mutex<WalletInst<impl NodeClient + 'static, keychain::ExtKeychain>>>, ParseError> {
+	let passphrase = prompt_password(&g_args.password);
+	let res = instantiate_wallet(config.clone(), node_client, &passphrase, &g_args.account);
+	match res {
+		Ok(p) => Ok(p),
+		Err(e) => {
+			let msg = {
+				match e.kind() {
+					ErrorKind::Encryption => {
+						format!("Error decrypting wallet seed (check provided password)")
 					}
-				};
-				Err(ParseError::ArgumentError(msg))
-			}
+					_ => format!("Error instantiating wallet: {}", e),
+				}
+			};
+			Err(ParseError::ArgumentError(msg))
 		}
 	}
+}
 
-	// parses a required value, or throws error with message otherwise
-	fn parse_required<'a>(args: &'a ArgMatches, name: &str) -> Result<&'a str, ParseError> {
-		let arg = args.value_of(name);
-		match arg {
-			Some(ar) => Ok(ar),
-			None => {
-				let msg = format!("Value for argument '{}' is required in this context", name,);
-				Err(ParseError::ArgumentError(msg))
-			}
+// parses a required value, or throws error with message otherwise
+fn parse_required<'a>(args: &'a ArgMatches, name: &str) -> Result<&'a str, ParseError> {
+	let arg = args.value_of(name);
+	match arg {
+		Some(ar) => Ok(ar),
+		None => {
+			let msg = format!("Value for argument '{}' is required in this context", name,);
+			Err(ParseError::ArgumentError(msg))
 		}
 	}
+}
 
-	// parses a number, or throws error with message otherwise
-	fn parse_u64(arg: &str, name: &str) -> Result<u64, ParseError> {
-		let val = arg.parse::<u64>();
-		match val {
-			Ok(v) => Ok(v),
-			Err(e) => {
-				let msg = format!("Could not parse {} as a whole number. e={}", name, e);
-				Err(ParseError::ArgumentError(msg))
-			}
+// parses a number, or throws error with message otherwise
+fn parse_u64(arg: &str, name: &str) -> Result<u64, ParseError> {
+	let val = arg.parse::<u64>();
+	match val {
+		Ok(v) => Ok(v),
+		Err(e) => {
+			let msg = format!("Could not parse {} as a whole number. e={}", name, e);
+			Err(ParseError::ArgumentError(msg))
 		}
 	}
+}
 
-	pub fn parse_global_args(
-		config: &WalletConfig,
-		args: &ArgMatches,
-	) -> Result<command::GlobalArgs, ParseError> {
-		let account = parse_required(args, "account")?;
-		let mut show_spent = false;
-		if args.is_present("show_spent") {
-			show_spent = true;
-		}
-		let node_api_secret = get_first_line(config.node_api_secret_path.clone());
-		let password = match args.value_of("pass") {
-			None => None,
-			Some(p) => Some(p.to_owned()),
-		};
-
-		let tls_conf = match config.tls_certificate_file.clone() {
-			None => None,
-			Some(file) => {
-				let key = match config.tls_certificate_key.clone() {
-					Some(k) => k,
-					None => {
-						let msg = format!("Private key for certificate is not set");
-						return Err(ParseError::ArgumentError(msg));
-					}
-				};
-				Some(TLSConfig::new(file, key))
-			}
-		};
-
-		Ok(command::GlobalArgs {
-			account: account.to_owned(),
-			show_spent: show_spent,
-			node_api_secret: node_api_secret,
-			password: password,
-			tls_conf: tls_conf,
-		})
+pub fn parse_global_args(
+	config: &WalletConfig,
+	args: &ArgMatches,
+) -> Result<command::GlobalArgs, ParseError> {
+	let account = parse_required(args, "account")?;
+	let mut show_spent = false;
+	if args.is_present("show_spent") {
+		show_spent = true;
 	}
+	let node_api_secret = get_first_line(config.node_api_secret_path.clone());
+	let password = match args.value_of("pass") {
+		None => None,
+		Some(p) => Some(p.to_owned()),
+	};
 
-	pub fn parse_init_args(
-		config: &WalletConfig,
-		g_args: &command::GlobalArgs,
-		args: &ArgMatches,
-	) -> Result<command::InitArgs, ParseError> {
-		if let Err(e) = WalletSeed::seed_file_exists(config) {
-			let msg = format!("Not creating wallet - {}", e.inner);
-			return Err(ParseError::ArgumentError(msg));
+	let tls_conf = match config.tls_certificate_file.clone() {
+		None => None,
+		Some(file) => {
+			let key = match config.tls_certificate_key.clone() {
+				Some(k) => k,
+				None => {
+					let msg = format!("Private key for certificate is not set");
+					return Err(ParseError::ArgumentError(msg));
+				}
+			};
+			Some(TLSConfig::new(file, key))
 		}
-		let list_length = match args.is_present("short_wordlist") {
-			false => 32,
-			true => 16,
-		};
-		println!("Please enter a password for your new wallet");
-		let password = match g_args.password.clone() {
-			Some(p) => p,
-			None => prompt_password_confirm(),
-		};
-		Ok(command::InitArgs {
-			list_length: list_length,
-			password: password,
-			config: config.clone(),
-		})
-	}
+	};
 
-	pub fn parse_recover_args(
-		g_args: &command::GlobalArgs,
-		args: &ArgMatches,
-	) -> Result<command::RecoverArgs, ParseError> {
-		let (passphrase, recovery_phrase) = {
+	Ok(command::GlobalArgs {
+		account: account.to_owned(),
+		show_spent: show_spent,
+		node_api_secret: node_api_secret,
+		password: password,
+		tls_conf: tls_conf,
+	})
+}
+
+pub fn parse_init_args(
+	config: &WalletConfig,
+	g_args: &command::GlobalArgs,
+	args: &ArgMatches,
+) -> Result<command::InitArgs, ParseError> {
+	if let Err(e) = WalletSeed::seed_file_exists(config) {
+		let msg = format!("Not creating wallet - {}", e.inner);
+		return Err(ParseError::ArgumentError(msg));
+	}
+	let list_length = match args.is_present("short_wordlist") {
+		false => 32,
+		true => 16,
+	};
+	println!("Please enter a password for your new wallet");
+	let password = match g_args.password.clone() {
+		Some(p) => p,
+		None => prompt_password_confirm(),
+	};
+	Ok(command::InitArgs {
+		list_length: list_length,
+		password: password,
+		config: config.clone(),
+	})
+}
+
+pub fn parse_recover_args(
+	g_args: &command::GlobalArgs,
+	args: &ArgMatches,
+) -> Result<command::RecoverArgs, ParseError> {
+	let (passphrase, recovery_phrase) = {
 		match args.is_present("display") {
 			true => (prompt_password(&g_args.password), None),
 			false => {
