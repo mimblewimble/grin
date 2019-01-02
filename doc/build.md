@@ -96,12 +96,15 @@ grin client help
 ```sh
 docker build -t grin -f etc/Dockerfile .
 ```
+For floonet, use `etc/Dockerfile.floonet` instead
 
 You can bind-mount your grin cache to run inside the container.
 
 ```sh
 docker run -it -d -v $HOME/.grin:/root/.grin grin
 ```
+If you prefer to use a docker named volume, you can pass `-v dotgrin:/root/.grin` instead.
+Using a named volume copies default configurations upon volume creation
 
 ## Cross-platform builds
 
