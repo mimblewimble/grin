@@ -439,7 +439,10 @@ impl StratumServer {
 		// Validate parameters
 		let params: SubmitParams = parse_params(params)?;
 
-		if params.height != self.current_block_versions.last().unwrap().header.height {
+		// Find the correct version of the block to match this header
+		let b: Option<&Block> = self.current_block_versions.get(params.job_id as usize);
+		if params.height != self.current_block_versions.last().unwrap().header.height || b.is_none()
+		{
 			// Return error status
 			error!(
 				"(Server ID: {}) Share at height {}, edge_bits {}, nonce {}, job_id {} submitted too late",
@@ -456,21 +459,6 @@ impl StratumServer {
 		let share_difficulty: u64;
 		let mut share_is_block = false;
 
-		// Find the correct version of the block to match this header
-		let b: Option<&Block> = self.current_block_versions.get(params.job_id as usize);
-		if b.is_none() {
-			// Return error status
-			error!(
-				"(Server ID: {}) Failed to validate solution at height {}, edge_bits {}, nonce {}, job_id {}: block data not found",
-				self.id, params.height, params.edge_bits, params.nonce, params.job_id,
-			);
-			worker_stats.num_rejected += 1;
-			let e = RpcError {
-				code: -32502,
-				message: "Failed to validate solution".to_string(),
-			};
-			return Err(serde_json::to_value(e).unwrap());
-		}
 		let mut b: Block = b.unwrap().clone();
 		// Reconstruct the blocks header with this nonce and pow added
 		b.header.pow.proof.edge_bits = params.edge_bits as u8;
