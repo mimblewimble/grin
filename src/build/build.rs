@@ -28,7 +28,7 @@ use std::process::Command;
 
 use tar::Archive;
 
-const WEB_WALLET_TAG: &str = "0.3.0.1";
+const _WEB_WALLET_TAG: &str = "0.3.0.1";
 
 fn main() {
 	// Setting up git hooks in the project: rustfmt and so on.
@@ -59,18 +59,19 @@ fn main() {
 		format!("{}{}", env::var("OUT_DIR").unwrap(), "/built.rs"),
 	);
 
-	let web_wallet_install = install_web_wallet();
+	// NB: Removed for the time being
+	/*let web_wallet_install = install_web_wallet();
 	match web_wallet_install {
 		Ok(true) => {}
 		_ => println!(
 			"WARNING : Web wallet could not be installed due to {:?}",
 			web_wallet_install
 		),
-	}
+	}*/
 }
 
-fn download_and_decompress(target_file: &str) -> Result<bool, Box<std::error::Error>> {
-	let req_path = format!("https://github.com/mimblewimble/grin-web-wallet/releases/download/{}/grin-web-wallet.tar.gz", WEB_WALLET_TAG);
+fn _download_and_decompress(target_file: &str) -> Result<bool, Box<std::error::Error>> {
+	let req_path = format!("https://github.com/mimblewimble/grin-web-wallet/releases/download/{}/grin-web-wallet.tar.gz", _WEB_WALLET_TAG);
 	let mut resp = reqwest::get(&req_path)?;
 
 	if !resp.status().is_success() {
@@ -95,11 +96,11 @@ fn download_and_decompress(target_file: &str) -> Result<bool, Box<std::error::Er
 }
 
 /// Download and unzip tagged web-wallet build
-fn install_web_wallet() -> Result<bool, Box<std::error::Error>> {
+fn _install_web_wallet() -> Result<bool, Box<std::error::Error>> {
 	let target_file = format!(
 		"{}/grin-web-wallet-{}.tar",
 		env::var("OUT_DIR")?,
-		WEB_WALLET_TAG
+		_WEB_WALLET_TAG
 	);
 	let out_dir = env::var("OUT_DIR")?;
 	let mut out_path = PathBuf::from(&out_dir);
@@ -110,7 +111,7 @@ fn install_web_wallet() -> Result<bool, Box<std::error::Error>> {
 	// only re-download if needed
 	println!("{}", target_file);
 	if !Path::new(&target_file).is_file() {
-		let success = download_and_decompress(&target_file)?;
+		let success = _download_and_decompress(&target_file)?;
 		if !success {
 			return Ok(false); // could not download and decompress
 		}
