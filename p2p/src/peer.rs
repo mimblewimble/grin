@@ -97,14 +97,14 @@ impl Peer {
 		hs: &Handshake,
 		na: Arc<dyn NetAdapter>,
 	) -> Result<Peer, Error> {
-		debug!("connect: handshaking with {:?}", conn.peer_addr().unwrap());
+		debug!("connect: handshaking with {:?}", conn.peer_addr());
 		let info = hs.initiate(capab, total_difficulty, self_addr, conn);
 		match info {
 			Ok(peer_info) => Ok(Peer::new(peer_info, na)),
 			Err(e) => {
 				debug!(
 					"connect: handshaking with {:?} failed with error: {:?}",
-					conn.peer_addr().unwrap(),
+					conn.peer_addr(),
 					e
 				);
 				if let Err(e) = conn.shutdown(Shutdown::Both) {
