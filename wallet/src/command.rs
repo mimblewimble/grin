@@ -87,11 +87,7 @@ pub fn recover(config: &WalletConfig, args: RecoverArgs) -> Result<(), Error> {
 			&args.passphrase,
 		);
 		if let Err(e) = res {
-			error!(
-				"Error recovering seed with list '{}' - {}",
-				&args.recovery_phrase.as_ref().unwrap(),
-				e
-			);
+			error!("Error recovering seed - {}", e);
 			return Err(e);
 		}
 	}

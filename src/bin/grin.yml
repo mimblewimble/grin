@@ -285,13 +285,13 @@ subcommands:
                   long: short_wordlist
                   takes_value: false
         - recover:
-            about: recover (create a new wallet.seed file) from a recovery phrase
+            about: Recover a wallet.seed file from a recovery phrase (default) or displays a recovery phrase for an existing seed file
             args:
-              - recovery_phrase:
-                  help: 12 or 24 word recovery phrase (encased in quotes).
-                  short: p
-                  long: recovery_phrase
-                  takes_value: true
+              - display:
+                  help: Display wallet recovery phrase
+                  short: d
+                  long: display
+                  takes_value: false
         - restore:
             about: Restores a wallet contents from a seed file
         - check_repair:

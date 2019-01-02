@@ -49,13 +49,7 @@ where
 	// just read the wallet here, no need for a write lock
 	let mut outputs = wallet
 		.iter()
-		.filter(|out| {
-			if show_spent {
-				true
-			} else {
-				out.status != OutputStatus::Spent
-			}
-		})
+		.filter(|out| show_spent || out.status != OutputStatus::Spent)
 		.collect::<Vec<_>>();
 
 	// only include outputs with a given tx_id if provided

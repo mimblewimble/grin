@@ -22,6 +22,8 @@ use grin_core as core;
 use grin_keychain as keychain;
 use grin_wallet::{command, instantiate_wallet, NodeClient, WalletConfig, WalletInst, WalletSeed};
 use grin_wallet::{Error, ErrorKind};
+use linefeed::terminal::Signal;
+use linefeed::{Interface, ReadResult};
 use rpassword;
 use std::path::Path;
 use std::sync::Arc;
@@ -43,6 +45,16 @@ macro_rules! arg_parse {
 pub enum ParseError {
 	#[fail(display = "Invalid Arguments: {}", _0)]
 	ArgumentError(String),
+	#[fail(display = "Parsing IO error: {}", _0)]
+	IOError(String),
+	#[fail(display = "User Cancelled")]
+	CancelledError,
+}
+
+impl From<std::io::Error> for ParseError {
+	fn from(e: std::io::Error) -> ParseError {
+		ParseError::IOError(format!("{}", e))
+	}
 }
 
 pub fn prompt_password(password: &Option<String>) -> String {
@@ -53,13 +65,45 @@ pub fn prompt_password(password: &Option<String>) -> String {
 }
 
 fn prompt_password_confirm() -> String {
-	let first = rpassword::prompt_password_stdout("Password: ").unwrap();
-	let second = rpassword::prompt_password_stdout("Confirm Password: ").unwrap();
-	if first != second {
-		println!("Passwords do not match");
-		std::process::exit(0);
+	let mut first = String::from("first");
+	let mut second = String::from("second");
+	while first != second {
+		first = rpassword::prompt_password_stdout("Password: ").unwrap();
+		second = rpassword::prompt_password_stdout("Confirm Password: ").unwrap();
 	}
 	first
+}
+
+fn prompt_recovery_phrase() -> Result<String, ParseError> {
+	let interface = Arc::new(Interface::new("recover")?);
+	let mut phrase = String::new();
+	interface.set_report_signal(Signal::Interrupt, true);
+	interface.set_prompt("phrase> ")?;
+	loop {
+		println!("Please enter your recovery phrase:");
+		let res = interface.read_line()?;
+		match res {
+			ReadResult::Eof => break,
+			ReadResult::Signal(sig) => {
+				if sig == Signal::Interrupt {
+					interface.cancel_read_line()?;
+					return Err(ParseError::CancelledError);
+				}
+			}
+			ReadResult::Input(line) => {
+				if WalletSeed::from_mnemonic(&line).is_ok() {
+					phrase = line;
+					break;
+				} else {
+					println!();
+					println!("Recovery word phrase is invalid.");
+					println!();
+					interface.set_buffer(&line)?;
+				}
+			}
+		}
+	}
+	Ok(phrase)
 }
 
 // instantiate wallet (needed by most functions)
@@ -179,15 +223,12 @@ pub fn parse_recover_args(
 	args: &ArgMatches,
 ) -> Result<command::RecoverArgs, ParseError> {
 	let (passphrase, recovery_phrase) = {
-		match args.value_of("recovery_phrase") {
-			None => (prompt_password(&g_args.password), None),
-			Some(l) => {
-				if WalletSeed::from_mnemonic(l).is_err() {
-					let msg = format!("Recovery word phrase is invalid");
-					return Err(ParseError::ArgumentError(msg));
-				}
+		match args.is_present("display") {
+			true => (prompt_password(&g_args.password), None),
+			false => {
+				let phrase = prompt_recovery_phrase()?;
 				println!("Please provide a new password for the recovered wallet");
-				(prompt_password_confirm(), Some(l.to_owned()))
+				(prompt_password_confirm(), Some(phrase.to_owned()))
 			}
 		}
 	};

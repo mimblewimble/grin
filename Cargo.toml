@@ -32,6 +32,7 @@ serde = "1"
 serde_json = "1"
 log = "0.4"
 term = "0.5"
+linefeed = "0.5"
 failure = "0.1"
 failure_derive = "0.1"
 
