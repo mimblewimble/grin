@@ -288,8 +288,6 @@ impl OutputData {
 		}
 		if self.status == OutputStatus::Unconfirmed {
 			0
-		} else if self.height == 0 {
-			0
 		} else {
 			// if an output has height n and we are at block n
 			// then we have a single confirmation (the block it originated in)
