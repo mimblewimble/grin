@@ -22,12 +22,8 @@ use grin_core as core;
 use grin_keychain as keychain;
 use grin_wallet::{command, instantiate_wallet, NodeClient, WalletConfig, WalletInst, WalletSeed};
 use grin_wallet::{Error, ErrorKind};
-use linefeed::chars::escape_sequence;
-use linefeed::command::COMMANDS;
-use linefeed::complete::{Completer, Completion};
-use linefeed::inputrc::parse_text;
-use linefeed::terminal::{Signal, Terminal};
-use linefeed::{Interface, Prompter, ReadResult};
+use linefeed::{Interface, ReadResult};
+use linefeed::terminal::Signal;
 use rpassword;
 use std::path::Path;
 use std::sync::Arc;
@@ -76,6 +72,38 @@ fn prompt_password_confirm() -> String {
 		second = rpassword::prompt_password_stdout("Confirm Password: ").unwrap();
 	}
 	first
+}
+
+fn prompt_recovery_phrase() -> Result<String, ParseError> {
+	let interface = Arc::new(Interface::new("recover")?);
+	let mut phrase = String::new();
+	interface.set_report_signal(Signal::Interrupt, true);
+	interface.set_prompt("phrase> ")?;
+	loop {
+		println!("Please enter your recovery phrase:");
+		let res = interface.read_line()?;
+		match res {
+			ReadResult::Eof => break,
+			ReadResult::Signal(sig) => {
+				if sig == Signal::Interrupt {
+					interface.cancel_read_line()?;
+					return Err(ParseError::CancelledError);
+				}
+			}
+			ReadResult::Input(line) => {
+				if WalletSeed::from_mnemonic(&line).is_ok() {
+					phrase = line;
+					break;
+				} else {
+					println!();
+					println!("Recovery word phrase is invalid.");
+					println!();
+					interface.set_buffer(&line)?;
+				}
+			}
+		}
+	}
+	Ok(phrase)
 }
 
 // instantiate wallet (needed by most functions)
@@ -198,34 +226,7 @@ pub fn parse_recover_args(
 		match args.is_present("display") {
 			true => (prompt_password(&g_args.password), None),
 			false => {
-				let interface = Arc::new(Interface::new("recover")?);
-				let mut phrase = String::new();
-				interface.set_report_signal(Signal::Interrupt, true);
-				interface.set_prompt("phrase> ")?;
-				loop {
-					println!("Please enter your recovery phrase:");
-					let res = interface.read_line()?;
-					match res {
-						ReadResult::Eof => break,
-						ReadResult::Signal(sig) => {
-							if sig == Signal::Interrupt {
-								interface.cancel_read_line()?;
-								return Err(ParseError::CancelledError);
-							}
-						}
-						ReadResult::Input(line) => {
-							if WalletSeed::from_mnemonic(&line).is_ok() {
-								phrase = line;
-								break;
-							} else {
-								println!();
-								println!("Recovery word phrase is invalid.");
-								println!();
-								interface.set_buffer(&line)?;
-							}
-						}
-					}
-				}
+				let phrase = prompt_recovery_phrase()?;
 				println!("Please provide a new password for the recovered wallet");
 				(prompt_password_confirm(), Some(phrase.to_owned()))
 			}

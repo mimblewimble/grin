@@ -88,8 +88,7 @@ pub fn recover(config: &WalletConfig, args: RecoverArgs) -> Result<(), Error> {
 		);
 		if let Err(e) = res {
 			error!(
-				"Error recovering seed with list '{}' - {}",
-				&args.recovery_phrase.as_ref().unwrap(),
+				"Error recovering seed - {}",
 				e
 			);
 			return Err(e);
