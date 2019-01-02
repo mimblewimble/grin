@@ -314,7 +314,11 @@ where
 	}
 	let mut ids_to_del = vec![];
 	for out in wallet.iter() {
-		if out.status == OutputStatus::Unconfirmed && out.height > 0 && out.height < height - 500 {
+		if out.status == OutputStatus::Unconfirmed
+			&& out.height > 0
+			&& out.height < height - 500
+			&& out.is_coinbase
+		{
 			ids_to_del.push(out.key_id.clone())
 		}
 	}
