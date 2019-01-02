@@ -441,7 +441,8 @@ impl StratumServer {
 
 		// Find the correct version of the block to match this header
 		let b: Option<&Block> = self.current_block_versions.get(params.job_id as usize);
-		if params.height != self.current_block_versions.last().unwrap().header.height || b.is_none() {
+		if params.height != self.current_block_versions.last().unwrap().header.height || b.is_none()
+		{
 			// Return error status
 			error!(
 				"(Server ID: {}) Share at height {}, edge_bits {}, nonce {}, job_id {} submitted too late",
