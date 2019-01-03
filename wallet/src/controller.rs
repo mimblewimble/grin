@@ -645,7 +645,7 @@ fn create_error_response(e: Error) -> Response<Body> {
 	Response::builder()
 		.status(StatusCode::INTERNAL_SERVER_ERROR)
 		.header("access-control-allow-origin", "*")
-		.header("access-control-allow-headers", "Content-Type")
+		.header("access-control-allow-headers", "Content-Type, Authorization")
 		.body(format!("{}", e).into())
 		.unwrap()
 }
@@ -654,6 +654,7 @@ fn create_ok_response(json: &str) -> Response<Body> {
 	Response::builder()
 		.status(StatusCode::OK)
 		.header("access-control-allow-origin", "*")
+		.header("access-control-allow-headers", "Content-Type, Authorization")
 		.body(json.to_string().into())
 		.unwrap()
 }
@@ -662,6 +663,7 @@ fn response<T: Into<Body>>(status: StatusCode, text: T) -> Response<Body> {
 	Response::builder()
 		.status(status)
 		.header("access-control-allow-origin", "*")
+		.header("access-control-allow-headers", "Content-Type, Authorization")
 		.body(text.into())
 		.unwrap()
 }
