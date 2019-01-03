@@ -354,7 +354,9 @@ where
 				api.tx_lock_outputs(&slate, lock_fn)?;
 			} else if args.method == "keybase" {
 				let adapter = KeybaseWalletCommAdapter::new();
-				adapter.send_tx_sync(&args.dest, &slate)?;
+				slate = adapter.send_tx_sync(&args.dest, &slate)?;
+				api.tx_lock_outputs(&slate, lock_fn)?;
+				api.finalize_tx(&mut slate)?;
 			} else {
 				error!("unsupported payment method: {}", args.method);
 				return Err(ErrorKind::ClientCallback("unsupported payment method"))?;
