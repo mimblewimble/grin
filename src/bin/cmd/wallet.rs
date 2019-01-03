@@ -14,7 +14,6 @@
 
 use crate::cmd::wallet_args;
 use crate::config::GlobalWalletConfig;
-use crate::servers::start_webwallet_server;
 use clap::ArgMatches;
 use grin_wallet::{self, HTTPNodeClient, WalletConfig, WalletSeed};
 use std::path::PathBuf;

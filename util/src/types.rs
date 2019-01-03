@@ -67,6 +67,7 @@ impl Default for LoggingConfig {
 
 use std::ops::Deref;
 use zeroize::Zeroize;
+/// Zeroing string, mainly useful for password
 pub struct ZeroingString(String);
 
 impl Drop for ZeroingString {
