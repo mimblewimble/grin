@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use std::collections::HashMap;
 use std::fs::File;
 use std::net::{Shutdown, SocketAddr, TcpListener, TcpStream};
 use std::sync::Arc;
@@ -70,6 +71,8 @@ impl Server {
 		let listener = TcpListener::bind(addr)?;
 		listener.set_nonblocking(true)?;
 
+		let mut connected_sockets: HashMap<SocketAddr, TcpStream> = HashMap::new();
+
 		let sleep_time = Duration::from_millis(1);
 		loop {
 			// Pause peer ingress connection request. Only for tests.
@@ -80,9 +83,16 @@ impl Server {
 
 			match listener.accept() {
 				Ok((stream, peer_addr)) => {
+					check_existing_socket(peer_addr, &mut connected_sockets);
+
 					if !self.check_banned(&stream) {
+						let sc = stream.try_clone();
 						if let Err(e) = self.handle_new_peer(stream) {
 							warn!("Error accepting peer {}: {:?}", peer_addr.to_string(), e);
+						} else {
+							if let Ok(s) = sc {
+								connected_sockets.insert(peer_addr, s);
+							}
 						}
 					}
 				}
@@ -202,6 +212,24 @@ impl Server {
 	/// 2. must pause the 'p2p-server' thread also, to avoid the new ingress peer connection.
 	pub fn pause(&self) {
 		self.peers.stop();
+	}
+}
+
+fn check_existing_socket(peer_addr: SocketAddr, sockets: &mut HashMap<SocketAddr, TcpStream>) {
+	let mut found: Vec<SocketAddr> = vec![];
+	for (socket, stream) in sockets.iter() {
+		if peer_addr.ip() == socket.ip() {
+			let _ = stream.shutdown(Shutdown::Both);
+			found.push(socket.clone());
+		}
+	}
+
+	for socket in found {
+		sockets.remove(&socket);
+		debug!(
+			"check_existing_socket - found an old socket: {}, close",
+			socket
+		);
 	}
 }
 
