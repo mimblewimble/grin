@@ -247,8 +247,7 @@ fn check_existing_socket(peer_addr: SocketAddr, sockets: &mut HashMap<SocketAddr
 			if let Ok(_) = stream.shutdown(Shutdown::Both) {
 				debug!(
 					"check_existing_socket - close an old open socket: {}, before accept new: {}",
-					socket,
-					peer_addr,
+					socket, peer_addr,
 				);
 			}
 			existing_sockets.push(socket.clone());
