@@ -83,7 +83,10 @@ impl Server {
 
 			match listener.accept() {
 				Ok((stream, peer_addr)) => {
-					check_existing_socket(peer_addr, &mut connected_sockets);
+					// if any existing socket on same peer ip, close it firstly
+					if global::is_production_mode() {
+						check_existing_socket(peer_addr, &mut connected_sockets);
+					}
 
 					if !self.check_banned(&stream) {
 						let sc = stream.try_clone();
@@ -95,6 +98,9 @@ impl Server {
 							}
 						}
 					}
+
+					// if any active socket not in our peers list, close it
+					self.clean_lost_sockets(&mut connected_sockets);
 				}
 				Err(ref e) if e.kind() == io::ErrorKind::WouldBlock => {
 					// nothing to do, will retry in next iteration
@@ -199,6 +205,24 @@ impl Server {
 			}
 		}
 		false
+	}
+
+	fn clean_lost_sockets(&self, sockets: &mut HashMap<SocketAddr, TcpStream>) {
+		let mut to_clean: Vec<SocketAddr> = vec![];
+		for (socket, stream) in sockets.iter() {
+			if !self.peers.is_known_ip(&socket) {
+				let _ = stream.shutdown(Shutdown::Both);
+				to_clean.push(socket.clone());
+			}
+		}
+
+		for socket in to_clean {
+			sockets.remove(&socket);
+			debug!(
+				"clean_lost_sockets - found a lost open socket: {}, close",
+				socket
+			);
+		}
 	}
 
 	pub fn stop(&self) {
