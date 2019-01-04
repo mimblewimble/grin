@@ -208,20 +208,21 @@ impl Server {
 	}
 
 	fn clean_lost_sockets(&self, sockets: &mut HashMap<SocketAddr, TcpStream>) {
-		let mut to_clean: Vec<SocketAddr> = vec![];
+		let mut lost_sockets: Vec<SocketAddr> = vec![];
 		for (socket, stream) in sockets.iter() {
 			if !self.peers.is_known_ip(&socket) {
-				let _ = stream.shutdown(Shutdown::Both);
-				to_clean.push(socket.clone());
+				if let Ok(_) = stream.shutdown(Shutdown::Both) {
+					debug!(
+						"clean_lost_sockets - close a lost open socket: {}, not in peers list",
+						socket
+					);
+				}
+				lost_sockets.push(socket.clone());
 			}
 		}
 
-		for socket in to_clean {
+		for socket in lost_sockets {
 			sockets.remove(&socket);
-			debug!(
-				"clean_lost_sockets - found a lost open socket: {}, close",
-				socket
-			);
 		}
 	}
 
@@ -240,20 +241,22 @@ impl Server {
 }
 
 fn check_existing_socket(peer_addr: SocketAddr, sockets: &mut HashMap<SocketAddr, TcpStream>) {
-	let mut found: Vec<SocketAddr> = vec![];
+	let mut existing_sockets: Vec<SocketAddr> = vec![];
 	for (socket, stream) in sockets.iter() {
 		if peer_addr.ip() == socket.ip() {
-			let _ = stream.shutdown(Shutdown::Both);
-			found.push(socket.clone());
+			if let Ok(_) = stream.shutdown(Shutdown::Both) {
+				debug!(
+					"check_existing_socket - close an old open socket: {}, before accept new: {}",
+					socket,
+					peer_addr,
+				);
+			}
+			existing_sockets.push(socket.clone());
 		}
 	}
 
-	for socket in found {
+	for socket in existing_sockets {
 		sockets.remove(&socket);
-		debug!(
-			"check_existing_socket - found an old socket: {}, close",
-			socket
-		);
 	}
 }
 
