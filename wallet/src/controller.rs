@@ -343,18 +343,20 @@ where
 					return Err(e);
 				}
 			};
-			let adapter = match args.method.as_ref() {
-				"http" => HTTPWalletCommAdapter::new(),
-				"file" => FileWalletCommAdapter::new(),
-				"keybase" => KeybaseWalletCommAdapter::new(),
+			match args.method.as_ref() {
+				"http" => slate = HTTPWalletCommAdapter::new().send_tx_sync(&args.dest, &slate)?,
+				"file" => {
+					FileWalletCommAdapter::new().send_tx_async(&args.dest, &slate)?;
+				}
+				"keybase" => {
+					//TODO: in case of keybase, the response might take 60s and leave the service hanging
+					slate = KeybaseWalletCommAdapter::new().send_tx_sync(&args.dest, &slate)?;
+				}
 				_ => {
 					error!("unsupported payment method: {}", args.method);
 					return Err(ErrorKind::ClientCallback("unsupported payment method"))?;
 				}
-			};
-			// TODO: improve it:
-			// in case of keybase, the response might take 60s and leave the service hanging
-			slate = adapter.send_tx_sync(&args.dest, &slate)?;
+			}
 			api.tx_lock_outputs(&slate, lock_fn)?;
 			if args.method != "file" {
 				api.finalize_tx(&mut slate)?;
@@ -643,7 +645,10 @@ fn create_error_response(e: Error) -> Response<Body> {
 	Response::builder()
 		.status(StatusCode::INTERNAL_SERVER_ERROR)
 		.header("access-control-allow-origin", "*")
-		.header("access-control-allow-headers", "Content-Type, Authorization")
+		.header(
+			"access-control-allow-headers",
+			"Content-Type, Authorization",
+		)
 		.body(format!("{}", e).into())
 		.unwrap()
 }
@@ -652,7 +657,10 @@ fn create_ok_response(json: &str) -> Response<Body> {
 	Response::builder()
 		.status(StatusCode::OK)
 		.header("access-control-allow-origin", "*")
-		.header("access-control-allow-headers", "Content-Type, Authorization")
+		.header(
+			"access-control-allow-headers",
+			"Content-Type, Authorization",
+		)
 		.body(json.to_string().into())
 		.unwrap()
 }
@@ -661,7 +669,10 @@ fn response<T: Into<Body>>(status: StatusCode, text: T) -> Response<Body> {
 	Response::builder()
 		.status(status)
 		.header("access-control-allow-origin", "*")
-		.header("access-control-allow-headers", "Content-Type, Authorization")
+		.header(
+			"access-control-allow-headers",
+			"Content-Type, Authorization",
+		)
 		.body(text.into())
 		.unwrap()
 }
