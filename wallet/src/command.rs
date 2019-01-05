@@ -127,6 +127,7 @@ pub fn listen(config: &WalletConfig, args: &ListenArgs, g_args: &GlobalArgs) -> 
 
 pub fn owner_api(
 	wallet: Arc<Mutex<WalletInst<impl NodeClient + 'static, keychain::ExtKeychain>>>,
+	config: &WalletConfig,
 	g_args: &GlobalArgs,
 ) -> Result<(), Error> {
 	let res = controller::owner_listener(
@@ -134,6 +135,7 @@ pub fn owner_api(
 		"127.0.0.1:13420",
 		g_args.node_api_secret.clone(),
 		g_args.tls_conf.clone(),
+		config.owner_api_include_foreign.clone(),
 	);
 	if let Err(e) = res {
 		return Err(ErrorKind::LibWallet(e.kind(), e.cause_string()).into());

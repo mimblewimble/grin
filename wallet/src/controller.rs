@@ -74,6 +74,7 @@ pub fn owner_listener<T: ?Sized, C, K>(
 	addr: &str,
 	api_secret: Option<String>,
 	tls_config: Option<TLSConfig>,
+	owner_api_include_foreign: Option<bool>,
 ) -> Result<(), Error>
 where
 	T: WalletBackend<C, K> + Send + Sync + 'static,
@@ -81,7 +82,7 @@ where
 	C: NodeClient + 'static,
 	K: Keychain + 'static,
 {
-	let api_handler = OwnerAPIHandler::new(wallet);
+	let api_handler = OwnerAPIHandler::new(wallet.clone());
 
 	let mut router = Router::new();
 	if api_secret.is_some() {
@@ -94,6 +95,15 @@ where
 	router
 		.add_route("/v1/wallet/owner/**", Arc::new(api_handler))
 		.map_err(|_| ErrorKind::GenericError("Router failed to add route".to_string()))?;
+
+	// If so configured, add the foreign API to the same port
+	if owner_api_include_foreign.unwrap_or(false) {
+		info!("Starting HTTP Foreign API on Owner server at {}.", addr);
+		let foreign_api_handler = ForeignAPIHandler::new(wallet.clone());
+		router
+			.add_route("/v1/wallet/foreign/**", Arc::new(foreign_api_handler))
+			.map_err(|_| ErrorKind::GenericError("Router failed to add route".to_string()))?;
+	}
 
 	let mut apis = ApiServer::new();
 	info!("Starting HTTP Owner API server at {}.", addr);
