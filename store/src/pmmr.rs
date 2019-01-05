@@ -189,7 +189,7 @@ impl<T: PMMRable> PMMRBackend<T> {
 		// place so we use it.
 		if let Some(header) = header {
 			let leaf_snapshot_path =
-				format!("{:?}.{}", data_dir.join(PMMR_LEAF_FILE), header.hash());
+				format!("{}.{}", data_dir.join(PMMR_LEAF_FILE).to_str().unwrap(), header.hash());
 			LeafSet::copy_snapshot(&leaf_set_path, &PathBuf::from(leaf_snapshot_path))?;
 		}
 
