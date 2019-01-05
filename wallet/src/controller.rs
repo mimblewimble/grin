@@ -343,18 +343,22 @@ where
 					return Err(e);
 				}
 			};
-			let adapter = match args.method.as_ref() {
-				"http" => HTTPWalletCommAdapter::new(),
-				"file" => FileWalletCommAdapter::new(),
-				"keybase" => KeybaseWalletCommAdapter::new(),
+			match args.method.as_ref() {
+				"http" => {
+					slate = HTTPWalletCommAdapter::new().send_tx_sync(&args.dest, &slate)?
+				},
+				"file" => {
+					FileWalletCommAdapter::new().send_tx_async(&args.dest, &slate)?;
+				}
+				"keybase" => {
+					//TODO: in case of keybase, the response might take 60s and leave the service hanging
+					slate = KeybaseWalletCommAdapter::new().send_tx_sync(&args.dest, &slate)?;
+				}
 				_ => {
 					error!("unsupported payment method: {}", args.method);
 					return Err(ErrorKind::ClientCallback("unsupported payment method"))?;
 				}
-			};
-			// TODO: improve it:
-			// in case of keybase, the response might take 60s and leave the service hanging
-			slate = adapter.send_tx_sync(&args.dest, &slate)?;
+			}
 			api.tx_lock_outputs(&slate, lock_fn)?;
 			if args.method != "file" {
 				api.finalize_tx(&mut slate)?;
