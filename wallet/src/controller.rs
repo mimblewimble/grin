@@ -354,10 +354,14 @@ where
 			};
 			// TODO: improve it:
 			// in case of keybase, the response might take 60s and leave the service hanging
-			slate = adapter.send_tx_sync(&args.dest, &slate)?;
-			api.tx_lock_outputs(&slate, lock_fn)?;
 			if args.method != "file" {
+				slate = adapter.send_tx_sync(&args.dest, &slate)?;
+				api.tx_lock_outputs(&slate, lock_fn)?;
 				api.finalize_tx(&mut slate)?;
+			} else {
+				// async, and no finalize
+				adapter.send_tx_async(&args.dest, &slate)?;
+				api.tx_lock_outputs(&slate, lock_fn)?;
 			}
 			Ok(slate)
 		}))
