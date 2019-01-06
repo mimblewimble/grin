@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use std::collections::HashMap;
 use std::fs::File;
 use std::net::{Shutdown, SocketAddr, TcpListener, TcpStream};
 use std::sync::Arc;
@@ -70,6 +71,8 @@ impl Server {
 		let listener = TcpListener::bind(addr)?;
 		listener.set_nonblocking(true)?;
 
+		let mut connected_sockets: HashMap<SocketAddr, TcpStream> = HashMap::new();
+
 		let sleep_time = Duration::from_millis(1);
 		loop {
 			// Pause peer ingress connection request. Only for tests.
@@ -81,10 +84,17 @@ impl Server {
 			match listener.accept() {
 				Ok((stream, peer_addr)) => {
 					if !self.check_banned(&stream) {
+						let sc = stream.try_clone();
 						if let Err(e) = self.handle_new_peer(stream) {
 							warn!("Error accepting peer {}: {:?}", peer_addr.to_string(), e);
+						} else {
+							if let Ok(s) = sc {
+								connected_sockets.insert(peer_addr, s);
+							}
 						}
 					}
+					// if any active socket not in our peers list, close it
+					self.clean_lost_sockets(&mut connected_sockets);
 				}
 				Err(ref e) if e.kind() == io::ErrorKind::WouldBlock => {
 					// nothing to do, will retry in next iteration
@@ -189,6 +199,25 @@ impl Server {
 			}
 		}
 		false
+	}
+
+	fn clean_lost_sockets(&self, sockets: &mut HashMap<SocketAddr, TcpStream>) {
+		let mut lost_sockets: Vec<SocketAddr> = vec![];
+		for (socket, stream) in sockets.iter() {
+			if !self.peers.is_known_ip(&socket) {
+				if let Ok(_) = stream.shutdown(Shutdown::Both) {
+					debug!(
+						"clean_lost_sockets: {} cleaned which's not in peers list",
+						socket
+					);
+				}
+				lost_sockets.push(socket.clone());
+			}
+		}
+
+		for socket in lost_sockets {
+			sockets.remove(&socket);
+		}
 	}
 
 	pub fn stop(&self) {
