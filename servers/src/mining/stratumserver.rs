@@ -313,8 +313,8 @@ impl StratumServer {
 					// Call the handler function for requested method
 					let response = match request.method.as_str() {
 						"login" => {
-							stratum_stats.worker_stats[worker_stats_id].initial_block_height
-								= self.current_block_versions.last().unwrap().header.height;
+							stratum_stats.worker_stats[worker_stats_id].initial_block_height =
+								self.current_block_versions.last().unwrap().header.height;
 							self.handle_login(request.params, &mut workers_l[num])
 						}
 						"submit" => {
