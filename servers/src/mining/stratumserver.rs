@@ -394,6 +394,14 @@ impl StratumServer {
 			rejected: worker_stats.num_rejected,
 			stale: worker_stats.num_stale,
 		};
+		debug!("(Server ID: {}) Status of worker: {} - Share Accepted: {}, Rejected: {}, Stale: {}. Blocks Found: {}",
+			self.id,
+			worker_stats.id,
+			worker_stats.num_accepted,
+			worker_stats.num_rejected,
+			worker_stats.num_stale,
+			worker_stats.num_blocks_found,
+		);
 		let response = serde_json::to_value(&status).unwrap();
 		return Ok(response);
 	}
