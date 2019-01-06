@@ -80,7 +80,7 @@ where
 		let key_id = Identifier::from_serialized_path(3u8, &info.message.as_bytes());
 
 		info!(
-			"Output found: {:?}, amount: {:?}, parent_key_id: {:?}",
+			"Output found: {:?}, amount: {:?}, key_id: {:?}",
 			commit, info.value, key_id
 		);
 
