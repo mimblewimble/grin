@@ -171,7 +171,9 @@ impl WalletSeed {
 
 	pub fn show_recovery_phrase(&self) -> Result<(), Error> {
 		println!("Your recovery phrase is:");
+		println!();
 		println!("{}", self.to_mnemonic()?);
+		println!();
 		println!("Please back-up these words in a non-digital format.");
 		Ok(())
 	}
