@@ -201,6 +201,14 @@ impl Server {
 		false
 	}
 
+	/// For all kinds of exception cases, the node could accepted / initiated a peer connection successfully but
+	/// failed on the Handshake protocol communication, or a connected peer was closed but without a successful
+	/// clean-up on its socket, that will cause this connected (on TcpStream) peer becomes so-called "invisible" peer!
+	/// i.e. a peer not included in the 'self.peers.peers' hashmap. This "invisible" peer will cause some security
+	/// concern because it still can send something to this node, but without enough visibility as other connected peers.
+	/// Another impact is these connections could never be closed, which make the node fully occupied by all such
+	/// kind of connections and become un-connectable.
+	/// This function can help to clean the peer connections which is "invisible" for this node.
 	fn clean_lost_sockets(&self, sockets: &mut HashMap<SocketAddr, TcpStream>) {
 		let mut lost_sockets: Vec<SocketAddr> = vec![];
 		for (socket, stream) in sockets.iter() {
