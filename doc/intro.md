@@ -142,7 +142,7 @@ This is the first pillar of MimbleWimble: the arithmetic required to validate a
 transaction can be done without knowing any of the values.
 
 As a final note, this idea is actually derived from Greg Maxwell's
-[Confidential Transactions](https://www.elementsproject.org/elements/confidential-transactions/),
+[Confidential Transactions](https://elementsproject.org/features/confidential-transactions/investigation),
 which is itself derived from an Adam Back proposal for homomorphic values applied
 to Bitcoin.
 
