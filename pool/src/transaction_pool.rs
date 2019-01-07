@@ -161,13 +161,22 @@ impl TransactionPool {
 			tx,
 		};
 
-		if stem {
-			// TODO - what happens to txs in the stempool in a re-org scenario?
+		// If we are in "stem" mode then check if this is a new tx or if we have seen it before.
+		// If new tx - add it to our stempool.
+		// If we have seen any of the kernels before then fallback to fluff,
+		// adding directly to txpool.
+		if stem
+			&& self
+				.stempool
+				.find_matching_transactions(entry.tx.kernels())
+				.is_empty()
+		{
 			self.add_to_stempool(entry, header)?;
-		} else {
-			self.add_to_txpool(entry.clone(), header)?;
-			self.add_to_reorg_cache(entry);
+			return Ok(());
 		}
+
+		self.add_to_txpool(entry.clone(), header)?;
+		self.add_to_reorg_cache(entry);
 		Ok(())
 	}
 

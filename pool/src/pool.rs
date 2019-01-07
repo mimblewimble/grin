@@ -393,7 +393,13 @@ impl Pool {
 		});
 	}
 
+	/// Size of the pool.
 	pub fn size(&self) -> usize {
 		self.entries.len()
+	}
+
+	/// Is the pool empty?
+	pub fn is_empty(&self) -> bool {
+		self.entries.is_empty()
 	}
 }
