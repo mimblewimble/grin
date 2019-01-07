@@ -526,7 +526,9 @@ impl TrackingAdapter {
 		if known.len() > MAX_TRACK_SIZE {
 			known.truncate(MAX_TRACK_SIZE);
 		}
-		known.insert(0, hash);
+		if !known.contains(&hash) {
+			known.insert(0, hash);
+		}
 	}
 }
 

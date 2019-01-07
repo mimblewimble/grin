@@ -291,11 +291,11 @@ fn poll<H>(
 							.map(|a| a.to_string())
 							.unwrap_or("?".to_owned())
 					);
-					let _ = conn.shutdown(Shutdown::Both);
 					break;
 				}
 
 				thread::sleep(sleep_time);
 			}
+			let _ = conn.shutdown(Shutdown::Both);
 		});
 }
