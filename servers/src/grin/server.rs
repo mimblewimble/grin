@@ -21,6 +21,7 @@ use std::sync::Arc;
 use std::{thread, time};
 
 use crate::api;
+use crate::api::TLSConfig;
 use crate::chain;
 use crate::common::adapters::{
 	ChainToPoolAndNetAdapter, NetToChainAdapter, PoolToChainAdapter, PoolToNetAdapter,
@@ -223,13 +224,28 @@ impl Server {
 
 		info!("Starting rest apis at: {}", &config.api_http_addr);
 		let api_secret = get_first_line(config.api_secret_path.clone());
+
+		let tls_conf = match config.tls_certificate_file.clone() {
+			None => None,
+			Some(file) => {
+				let key = match config.tls_certificate_key.clone() {
+					Some(k) => k,
+					None => {
+						let msg = format!("Private key for certificate is not set");
+						return Err(Error::ArgumentError(msg));
+					}
+				};
+				Some(TLSConfig::new(file, key))
+			}
+		};
+
 		api::start_rest_apis(
 			config.api_http_addr.clone(),
 			shared_chain.clone(),
 			tx_pool.clone(),
 			p2p_server.peers.clone(),
 			api_secret,
-			None,
+			tls_conf,
 		);
 
 		info!("Starting dandelion monitor: {}", &config.api_http_addr);

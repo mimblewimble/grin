@@ -43,6 +43,11 @@ fn comments() -> HashMap<String, String> {
 	retval.insert(
 		"api_http_addr".to_string(),
 		"
+#path of TLS certificate file, self-signed certificates are not supported
+#tls_certificate_file = \"\"
+#private key for the TLS certificate
+#tls_certificate_key = \"\"
+
 #the address on which services will listen, e.g. Transaction Pool
 "
 		.to_string(),
