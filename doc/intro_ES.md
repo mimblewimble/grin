@@ -122,7 +122,7 @@ Este es el primer pilar de MimbleWimble: la aritmética necesaria para validar u
 ninguno de los valores.
 
 Como nota final, esta idea se deriva en realidad de Greg Maxwell's
-[Transacciones confidenciales](https://www.elementsproject.org/elements/confidential-transactions/),
+[Transacciones confidenciales](https://elementsproject.org/features/confidential-transactions/investigation),
 que a su vez se deriva de una propuesta de Adam Back para valores homomórficos aplicados a Bitcoin.
 
 #### Propiedad

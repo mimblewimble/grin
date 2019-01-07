@@ -90,7 +90,7 @@ MimbleWimble的交易确认依赖于两个基本属性:
 
 这是MimbleWimble的第一个支柱：验证交易的算术运算可以在完全不知道任何实际交易值的情况下完成。
 
-补充最后一点说明，这个想法实际上派生自Greg Maxwell的[机密交易](https://www.elementsproject.org/elements/confidential-transactions/)，机密交易本身是从Adam Back提出的用于比特币的同态值提议中发展而来。
+补充最后一点说明，这个想法实际上派生自Greg Maxwell的[机密交易](https://elementsproject.org/features/confidential-transactions/investigation)，机密交易本身是从Adam Back提出的用于比特币的同态值提议中发展而来。
 
 ### 所有权
 
