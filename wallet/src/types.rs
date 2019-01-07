@@ -48,6 +48,8 @@ pub struct WalletConfig {
 	// The api address of a running server node against which transaction inputs
 	// will be checked during send
 	pub check_node_api_http_addr: String,
+	// Whether to include foreign API endpoints on the Owner API
+	pub owner_api_include_foreign: Option<bool>,
 	// The directory in which wallet files are stored
 	pub data_file_dir: String,
 	/// TLS certificate file
@@ -70,6 +72,7 @@ impl Default for WalletConfig {
 			api_secret_path: Some(".api_secret".to_string()),
 			node_api_secret_path: Some(".api_secret".to_string()),
 			check_node_api_http_addr: "http://127.0.0.1:3413".to_string(),
+			owner_api_include_foreign: Some(false),
 			data_file_dir: ".".to_string(),
 			tls_certificate_file: None,
 			tls_certificate_key: None,

@@ -13,6 +13,7 @@
     1. [POST Cancel Tx](#post-cancel-tx)
     1. [POST Post Tx](#post-post-tx)
     1. [POST Issue Burn Tx](#post-issue-burn-tx)
+    1. [Adding Foreign API Endpoints](#add-foreign-api-endpoints)
 
 ## Wallet Owner Endpoint
 
@@ -681,3 +682,7 @@ Issue a burn TX.
       }
     });
   ```
+
+### Add Foreign API Endpoints
+
+For some environments it may be convenient to have the [wallet foreign API](wallet_foreign_api.md) available on the same port as the owner API.  You can do so by setting the `owner_api_include_foreign` configuration setting to `true`.

@@ -394,6 +394,15 @@ fn comments() -> HashMap<String, String> {
 		.to_string(),
 	);
 	retval.insert(
+		"owner_api_include_foreign".to_string(),
+		"
+#include the foreign API endpoints on the same port as the owner
+#API. Useful for networking environments like AWS ECS that make
+#it difficult to access multiple ports on a single service.
+"
+		.to_string(),
+	);
+	retval.insert(
 		"data_file_dir".to_string(),
 		"
 #where to find wallet files (seed, data, etc)

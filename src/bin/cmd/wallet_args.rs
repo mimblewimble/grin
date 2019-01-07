@@ -494,9 +494,9 @@ pub fn wallet_command(
 		("owner_api", Some(_)) => {
 			let mut g = global_wallet_args.clone();
 			g.tls_conf = None;
-			command::owner_api(inst_wallet(), &g)
+			command::owner_api(inst_wallet(), &wallet_config, &g)
 		}
-		("web", Some(_)) => command::owner_api(inst_wallet(), &global_wallet_args),
+		("web", Some(_)) => command::owner_api(inst_wallet(), &wallet_config, &global_wallet_args),
 		("account", Some(args)) => {
 			let a = arg_parse!(parse_account_args(&args));
 			command::account(inst_wallet(), a)
