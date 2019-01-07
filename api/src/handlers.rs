@@ -86,7 +86,14 @@ pub fn start_rest_apis(
 
 	info!("Starting HTTP API server at {}.", addr);
 	let socket_addr: SocketAddr = addr.parse().expect("unable to parse socket address");
-	apis.start(socket_addr, router, tls_config).is_ok()
+	let res = apis.start(socket_addr, router, tls_config);
+	match res {
+		Ok(_) => true,
+		Err(e) => {
+			error!("HTTP API server failed to start. Err: {}", e);
+			false
+		}
+	}
 }
 
 pub fn build_router(

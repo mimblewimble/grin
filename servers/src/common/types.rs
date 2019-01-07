@@ -46,6 +46,8 @@ pub enum Error {
 	Cuckoo(pow::Error),
 	/// Error originating from the transaction pool.
 	Pool(pool::PoolError),
+	/// Invalid Arguments.
+	ArgumentError(String),
 }
 
 impl From<core::block::Error> for Error {
@@ -124,6 +126,11 @@ pub struct ServerConfig {
 	/// Location of secret for basic auth on Rest API HTTP server.
 	pub api_secret_path: Option<String>,
 
+	/// TLS certificate file
+	pub tls_certificate_file: Option<String>,
+	/// TLS certificate private key file
+	pub tls_certificate_key: Option<String>,
+
 	/// Setup the server for tests, testnet or mainnet
 	#[serde(default)]
 	pub chain_type: ChainTypes,
@@ -174,6 +181,8 @@ impl Default for ServerConfig {
 			db_root: "grin_chain".to_string(),
 			api_http_addr: "127.0.0.1:3413".to_string(),
 			api_secret_path: Some(".api_secret".to_string()),
+			tls_certificate_file: None,
+			tls_certificate_key: None,
 			p2p_config: p2p::P2PConfig::default(),
 			dandelion_config: pool::DandelionConfig::default(),
 			stratum_mining_config: Some(StratumServerConfig::default()),
