@@ -73,7 +73,7 @@ where
 		"Building input (spending regular output): {}, {}",
 		value, key_id
 	);
-	build_input(value, OutputFeatures::PLAIN, key_id)
+	build_input(value, OutputFeatures::Plain, key_id)
 }
 
 /// Adds a coinbase input spending a coinbase output.
@@ -82,7 +82,7 @@ where
 	K: Keychain,
 {
 	debug!("Building input (spending coinbase): {}, {}", value, key_id);
-	build_input(value, OutputFeatures::COINBASE, key_id)
+	build_input(value, OutputFeatures::Coinbase, key_id)
 }
 
 /// Adds an output with the provided value and key identifier from the
@@ -101,7 +101,7 @@ where
 
 			(
 				tx.with_output(Output {
-					features: OutputFeatures::PLAIN,
+					features: OutputFeatures::Plain,
 					commit: commit,
 					proof: rproof,
 				}),

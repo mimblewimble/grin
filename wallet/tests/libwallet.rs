@@ -26,7 +26,7 @@ use grin_wallet as wallet;
 use rand::thread_rng;
 
 fn kernel_sig_msg() -> secp::Message {
-	transaction::kernel_sig_msg(0, 0, transaction::KernelFeatures::PLAIN).unwrap()
+	transaction::kernel_sig_msg(0, 0, transaction::KernelFeatures::Plain).unwrap()
 }
 
 #[test]

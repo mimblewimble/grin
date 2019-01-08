@@ -35,7 +35,7 @@ where
 	let rproof = proof::create(keychain, value, key_id, commit, None)?;
 
 	let output = Output {
-		features: OutputFeatures::COINBASE,
+		features: OutputFeatures::Coinbase,
 		commit: commit,
 		proof: rproof,
 	};
@@ -49,11 +49,11 @@ where
 
 	// NOTE: Remember we sign the fee *and* the lock_height.
 	// For a coinbase output the fee is 0 and the lock_height is 0
-	let msg = kernel_sig_msg(0, 0, KernelFeatures::COINBASE)?;
+	let msg = kernel_sig_msg(0, 0, KernelFeatures::Coinbase)?;
 	let sig = aggsig::sign_from_key_id(&secp, keychain, &msg, value, &key_id, Some(&pubkey))?;
 
 	let proof = TxKernel {
-		features: KernelFeatures::COINBASE,
+		features: KernelFeatures::Coinbase,
 		excess: excess,
 		excess_sig: sig,
 		fee: 0,
