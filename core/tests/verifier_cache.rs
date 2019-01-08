@@ -38,7 +38,7 @@ fn test_verifier_cache_rangeproofs() {
 	let proof = proof::create(&keychain, 5, &key_id, commit, None).unwrap();
 
 	let out = Output {
-		features: OutputFeatures::PLAIN,
+		features: OutputFeatures::Plain,
 		commit: commit,
 		proof: proof,
 	};

@@ -10,10 +10,10 @@ workspace = ".."
 edition = "2018"
 
 [dependencies]
-bitflags = "1"
 blake2-rfc = "0.2"
 byteorder = "1"
 croaring = "=0.3"
+enum_primitive = "0.1"
 failure = "0.1"
 failure_derive = "0.1"
 lazy_static = "1"

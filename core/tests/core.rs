@@ -122,7 +122,7 @@ fn build_tx_kernel() {
 	let kern = &tx.kernels()[0];
 	kern.verify().unwrap();
 
-	assert_eq!(kern.features, KernelFeatures::PLAIN);
+	assert_eq!(kern.features, KernelFeatures::Plain);
 	assert_eq!(kern.fee, tx.fee());
 }
 
