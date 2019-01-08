@@ -1496,4 +1496,20 @@ mod test {
 		let short_id = input.short_id(&block_hash, nonce);
 		assert_eq!(short_id, ShortId::from_hex("3f0377c624e9").unwrap());
 	}
+
+	#[test]
+	fn kernel_features_serialization() {
+		let features = KernelFeatures::from_u8(0).unwrap();
+		assert_eq!(features, KernelFeatures::Plain);
+
+		let features = KernelFeatures::from_u8(1).unwrap();
+		assert_eq!(features, KernelFeatures::Coinbase);
+
+		let features = KernelFeatures::from_u8(2).unwrap();
+		assert_eq!(features, KernelFeatures::HeightLocked);
+
+		// Verify we cannot deserialize an unexpected kernel feature
+		let features = KernelFeatures::from_u8(3);
+		assert_eq!(features, None);
+	}
 }
