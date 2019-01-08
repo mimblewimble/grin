@@ -416,7 +416,7 @@ impl Readable for Proof {
 
 		// check the last bits of the last byte are zeroed, we don't use them but
 		// still better to enforce to avoid any malleability
-		for n in (bits_len+1)..(bytes_len*8) {
+		for n in bits_len..(bytes_len * 8) {
 			if bitvec.bit_at(n) {
 				return Err(ser::Error::CorruptedData);
 			}
