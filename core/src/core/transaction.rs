@@ -59,7 +59,8 @@ impl Writeable for KernelFeatures {
 
 impl Readable for KernelFeatures {
 	fn read(reader: &mut dyn Reader) -> Result<KernelFeatures, ser::Error> {
-		let features = KernelFeatures::from_u8(reader.read_u8()?).ok_or(ser::Error::CorruptedData)?;
+		let features =
+			KernelFeatures::from_u8(reader.read_u8()?).ok_or(ser::Error::CorruptedData)?;
 		Ok(features)
 	}
 }
@@ -182,11 +183,7 @@ impl ::std::hash::Hash for TxKernel {
 impl Writeable for TxKernel {
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
 		self.features.write(writer)?;
-		ser_multiwrite!(
-			writer,
-			[write_u64, self.fee],
-			[write_u64, self.lock_height]
-		);
+		ser_multiwrite!(writer, [write_u64, self.fee], [write_u64, self.lock_height]);
 		self.excess.write(writer)?;
 		self.excess_sig.write(writer)?;
 		Ok(())
@@ -1153,7 +1150,8 @@ impl Writeable for OutputFeatures {
 
 impl Readable for OutputFeatures {
 	fn read(reader: &mut dyn Reader) -> Result<OutputFeatures, ser::Error> {
-		let features = OutputFeatures::from_u8(reader.read_u8()?).ok_or(ser::Error::CorruptedData)?;
+		let features =
+			OutputFeatures::from_u8(reader.read_u8()?).ok_or(ser::Error::CorruptedData)?;
 		Ok(features)
 	}
 }
