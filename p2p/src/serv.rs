@@ -86,12 +86,12 @@ impl Server {
 					if !self.check_banned(&stream) {
 						let sc = stream.try_clone();
 						if let Err(e) = self.handle_new_peer(stream) {
+							// in theory, should be shutdown when stream gets dropped,
+							// practically doesn't seem to be happening
+							stream.shutdown(Shutdown::Both);
 							warn!("Error accepting peer {}: {:?}", peer_addr.to_string(), e);
-							break;
-						} else {
-							if let Ok(s) = sc {
-								connected_sockets.insert(peer_addr, s);
-							}
+						} else if let Ok(s) = sc {
+							connected_sockets.insert(peer_addr, s);
 						}
 					}
 					// if any active socket not in our peers list, close it
@@ -102,7 +102,6 @@ impl Server {
 				}
 				Err(e) => {
 					warn!("Couldn't establish new client connection: {:?}", e);
-					break;
 				}
 			}
 			if self.stop_state.lock().is_stopped() {
