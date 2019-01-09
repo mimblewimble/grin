@@ -86,9 +86,6 @@ impl Server {
 					if !self.check_banned(&stream) {
 						let sc = stream.try_clone();
 						if let Err(e) = self.handle_new_peer(stream) {
-							// in theory, should be shutdown when stream gets dropped,
-							// practically doesn't seem to be happening
-							stream.shutdown(Shutdown::Both);
 							warn!("Error accepting peer {}: {:?}", peer_addr.to_string(), e);
 						} else if let Ok(s) = sc {
 							connected_sockets.insert(peer_addr, s);
@@ -176,13 +173,21 @@ impl Server {
 		let total_diff = self.peers.total_difficulty();
 
 		// accept the peer and add it to the server map
-		let mut peer = Peer::accept(
+		let mut peer = match Peer::accept(
 			&mut stream,
 			self.capabilities,
 			total_diff,
 			&self.handshake,
 			self.peers.clone(),
-		)?;
+		) {
+			Ok(p) => p,
+			Err(e) => {
+				// in theory, should be shutdown when stream gets dropped,
+				// practically doesn't seem to be happening
+				let _ = stream.shutdown(Shutdown::Both);
+				return Err(e);
+			}
+		};
 		peer.start(stream);
 		self.peers.add_connected(Arc::new(peer))?;
 		Ok(())
