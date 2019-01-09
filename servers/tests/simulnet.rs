@@ -24,7 +24,7 @@ use self::wallet::controller;
 use self::wallet::libwallet::types::{WalletBackend, WalletInst};
 use self::wallet::lmdb_wallet::LMDBBackend;
 use self::wallet::WalletConfig;
-use self::wallet::{HTTPNodeClient, HTTPWalletCommAdapter, WalletCommAdapter};
+use self::wallet::{HTTPNodeClient, HTTPWalletCommAdapter};
 use grin_api as api;
 use grin_core as core;
 use grin_keychain as keychain;

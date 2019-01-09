@@ -14,9 +14,7 @@
 
 use self::keychain::Keychain;
 use self::util::Mutex;
-use self::wallet::{
-	HTTPNodeClient, HTTPWalletCommAdapter, LMDBBackend, WalletCommAdapter, WalletConfig,
-};
+use self::wallet::{HTTPNodeClient, HTTPWalletCommAdapter, LMDBBackend, WalletConfig};
 use blake2_rfc as blake2;
 use grin_api as api;
 use grin_core as core;
