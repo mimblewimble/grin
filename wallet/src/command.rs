@@ -72,6 +72,12 @@ pub struct RecoverArgs {
 	pub passphrase: String,
 }
 
+/// Check whether seed file exists
+pub fn wallet_seed_exists(config: &WalletConfig) -> Result<(), Error> {
+	let res = WalletSeed::seed_file_exists(&config)?;
+	Ok(res)
+}
+
 pub fn recover(config: &WalletConfig, args: RecoverArgs) -> Result<(), Error> {
 	if args.recovery_phrase.is_none() {
 		let res = WalletSeed::from_file(config, &args.passphrase);
