@@ -826,6 +826,7 @@ fn long_fork_test_case_5(s: &Vec<servers::Server>) {
 	println!("test case 5 passed")
 }
 
+#[allow(dead_code)]
 fn long_fork_test_case_6(s: &Vec<servers::Server>) {
 	println!("\ntest case 6 start");
 
