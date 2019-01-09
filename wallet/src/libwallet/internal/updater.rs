@@ -144,9 +144,30 @@ where
 {
 	let mut wallet_outputs: HashMap<pedersen::Commitment, Identifier> = HashMap::new();
 	let keychain = wallet.keychain().clone();
-	let unspents = wallet
+	let unspents: Vec<OutputData> = wallet
 		.iter()
-		.filter(|x| x.root_key_id == *parent_key_id && x.status != OutputStatus::Spent);
+		.filter(|x| x.root_key_id == *parent_key_id && x.status != OutputStatus::Spent)
+		.collect();
+
+	// Only select outputs that are actually involved in an outstanding transaction
+	let unspents: Vec<OutputData> = unspents
+		.into_iter()
+		.filter(|x| match x.tx_log_entry.as_ref() {
+			Some(t) => {
+				let entries = retrieve_txs(wallet, Some(*t), None, Some(&parent_key_id));
+				match entries {
+					Err(_) => true,
+					Ok(e) => {
+						e.len() > 0
+							&& !e[0].confirmed && (e[0].tx_type == TxLogEntryType::TxReceived
+							|| e[0].tx_type == TxLogEntryType::TxSent)
+					}
+				}
+			}
+			None => true,
+		})
+		.collect();
+
 	for out in unspents {
 		let commit = keychain.commit(out.value, &out.key_id)?;
 		wallet_outputs.insert(commit, out.key_id.clone());
