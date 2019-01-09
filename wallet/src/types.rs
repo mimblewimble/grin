@@ -152,6 +152,36 @@ impl WalletSeed {
 		Ok(())
 	}
 
+	pub fn backup_seed(wallet_config: &WalletConfig) -> Result<(), Error> {
+		let seed_file_name = &format!(
+			"{}{}{}",
+			wallet_config.data_file_dir, MAIN_SEPARATOR, SEED_FILE,
+		);
+
+		let mut path = Path::new(seed_file_name).to_path_buf();
+		path.pop();
+		let mut backup_seed_file_name = format!(
+			"{}{}{}.bak",
+			wallet_config.data_file_dir, MAIN_SEPARATOR, SEED_FILE
+		);
+		let mut i = 1;
+		while Path::new(&backup_seed_file_name).exists() {
+			backup_seed_file_name = format!(
+				"{}{}{}.bak.{}",
+				wallet_config.data_file_dir, MAIN_SEPARATOR, SEED_FILE, i
+			);
+			i += 1;
+		}
+		path.push(backup_seed_file_name.clone());
+		if let Err(_) = fs::rename(seed_file_name, backup_seed_file_name.as_str()) {
+			return Err(ErrorKind::GenericError(
+				"Can't rename wallet seed file".to_owned(),
+			))?;
+		}
+		warn!("{} backed up as {}", seed_file_name, backup_seed_file_name);
+		Ok(())
+	}
+
 	pub fn recover_from_phrase(
 		wallet_config: &WalletConfig,
 		word_list: &str,
@@ -161,7 +191,9 @@ impl WalletSeed {
 			"{}{}{}",
 			wallet_config.data_file_dir, MAIN_SEPARATOR, SEED_FILE,
 		);
-		let _ = WalletSeed::seed_file_exists(wallet_config)?;
+		if WalletSeed::seed_file_exists(wallet_config).is_err() {
+			WalletSeed::backup_seed(wallet_config)?;
+		}
 		let seed = WalletSeed::from_mnemonic(word_list)?;
 		let enc_seed = EncryptedWalletSeed::from_seed(&seed, password)?;
 		let enc_seed_json = serde_json::to_string_pretty(&enc_seed).context(ErrorKind::Format)?;

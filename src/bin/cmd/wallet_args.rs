@@ -74,6 +74,33 @@ fn prompt_password_confirm() -> String {
 	first
 }
 
+fn prompt_replace_seed() -> Result<bool, ParseError> {
+	let interface = Arc::new(Interface::new("replace_seed")?);
+	interface.set_report_signal(Signal::Interrupt, true);
+	interface.set_prompt("Replace seed? (y/n)> ")?;
+	println!();
+	println!("Existing wallet.seed file already exists. Continue?");
+	println!("Continuing will back up your existing 'wallet.seed' file as 'wallet.seed.bak'");
+	println!();
+	loop {
+		let res = interface.read_line()?;
+		match res {
+			ReadResult::Eof => return Ok(false),
+			ReadResult::Signal(sig) => {
+				if sig == Signal::Interrupt {
+					interface.cancel_read_line()?;
+					return Err(ParseError::CancelledError);
+				}
+			}
+			ReadResult::Input(line) => match line.trim() {
+				"Y" | "y" => return Ok(true),
+				"N" | "n" => return Ok(false),
+				_ => println!("Please respond y or n"),
+			},
+		}
+	}
+}
+
 fn prompt_recovery_phrase() -> Result<String, ParseError> {
 	let interface = Arc::new(Interface::new("recover")?);
 	let mut phrase = String::new();
@@ -219,6 +246,7 @@ pub fn parse_init_args(
 }
 
 pub fn parse_recover_args(
+	config: &WalletConfig,
 	g_args: &command::GlobalArgs,
 	args: &ArgMatches,
 ) -> Result<command::RecoverArgs, ParseError> {
@@ -226,6 +254,16 @@ pub fn parse_recover_args(
 		match args.is_present("display") {
 			true => (prompt_password(&g_args.password), None),
 			false => {
+				let cont = {
+					if command::wallet_seed_exists(config).is_err() {
+						prompt_replace_seed()?
+					} else {
+						true
+					}
+				};
+				if !cont {
+					return Err(ParseError::CancelledError);
+				}
 				let phrase = prompt_recovery_phrase()?;
 				println!("Please provide a new password for the recovered wallet");
 				(prompt_password_confirm(), Some(phrase.to_owned()))
@@ -482,7 +520,11 @@ pub fn wallet_command(
 			command::init(&global_wallet_args, a)
 		}
 		("recover", Some(args)) => {
-			let a = arg_parse!(parse_recover_args(&global_wallet_args, &args));
+			let a = arg_parse!(parse_recover_args(
+				&wallet_config,
+				&global_wallet_args,
+				&args
+			));
 			command::recover(&wallet_config, a)
 		}
 		("listen", Some(args)) => {
