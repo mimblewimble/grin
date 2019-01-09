@@ -87,6 +87,7 @@ impl Server {
 						let sc = stream.try_clone();
 						if let Err(e) = self.handle_new_peer(stream) {
 							warn!("Error accepting peer {}: {:?}", peer_addr.to_string(), e);
+							break;
 						} else {
 							if let Ok(s) = sc {
 								connected_sockets.insert(peer_addr, s);
@@ -101,6 +102,7 @@ impl Server {
 				}
 				Err(e) => {
 					warn!("Couldn't establish new client connection: {:?}", e);
+					break;
 				}
 			}
 			if self.stop_state.lock().is_stopped() {
