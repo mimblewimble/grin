@@ -89,7 +89,7 @@ pub fn to_entropy(mnemonic: &str) -> Result<Vec<u8>, Error> {
 	for index in indexes.iter().rev() {
 		for i in 0..11 {
 			let bit = index & (1 << i) != 0;
-			entropy[datalen - loc / 8] |= (bit as u8) << loc % 8;
+			entropy[datalen - loc / 8] |= (bit as u8) << (loc % 8);
 			loc += 1;
 		}
 	}
@@ -99,7 +99,7 @@ pub fn to_entropy(mnemonic: &str) -> Result<Vec<u8>, Error> {
 	sha2sum.input(&entropy.clone());
 	hash.copy_from_slice(sha2sum.result().as_slice());
 
-	let actual = (hash[0] >> 8 - checksum_bits) & mask;
+	let actual = (hash[0] >> (8 - checksum_bits)) & mask;
 
 	if actual != checksum {
 		return Err(Error::BadChecksum(checksum, actual));
@@ -134,13 +134,13 @@ pub fn from_entropy(entropy: &Vec<u8>) -> Result<String, Error> {
 	for byte in entropy.iter() {
 		for i in (0..8).rev() {
 			let bit = byte & (1 << i) != 0;
-			indexes[loc / 11] |= (bit as u16) << 10 - (loc % 11);
+			indexes[loc / 11] |= (bit as u16) << (10 - (loc % 11));
 			loc += 1;
 		}
 	}
 	for i in (0..checksum_bits).rev() {
 		let bit = checksum & (1 << i) != 0;
-		indexes[loc / 11] |= (bit as u16) << 10 - (loc % 11);
+		indexes[loc / 11] |= (bit as u16) << (10 - (loc % 11));
 		loc += 1;
 	}
 
