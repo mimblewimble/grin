@@ -233,6 +233,7 @@ pub struct StratumServer {
 	current_key_id: Option<keychain::Identifier>,
 	workers: Arc<Mutex<Vec<Worker>>>,
 	sync_state: Arc<SyncState>,
+	stratum_stats: Arc<RwLock<StratumStats>>,
 }
 
 impl StratumServer {
@@ -242,6 +243,7 @@ impl StratumServer {
 		chain: Arc<chain::Chain>,
 		tx_pool: Arc<RwLock<pool::TransactionPool>>,
 		verifier_cache: Arc<RwLock<dyn VerifierCache>>,
+		stratum_stats: Arc<RwLock<StratumStats>>,
 	) -> StratumServer {
 		StratumServer {
 			id: String::from("0"),
@@ -255,6 +257,7 @@ impl StratumServer {
 			current_key_id: None,
 			workers: Arc::new(Mutex::new(Vec::new())),
 			sync_state: Arc::new(SyncState::new()),
+			stratum_stats: stratum_stats,
 		}
 	}
 
@@ -670,13 +673,7 @@ impl StratumServer {
 	/// existing chain anytime required and sending that to the connected
 	/// stratum miner, proxy, or pool, and accepts full solutions to
 	/// be submitted.
-	pub fn run_loop(
-		&mut self,
-		stratum_stats: Arc<RwLock<StratumStats>>,
-		edge_bits: u32,
-		proof_size: usize,
-		sync_state: Arc<SyncState>,
-	) {
+	pub fn run_loop(&mut self, edge_bits: u32, proof_size: usize, sync_state: Arc<SyncState>) {
 		info!(
 			"(Server ID: {}) Starting stratum server with edge_bits = {}, proof_size = {}",
 			self.id, edge_bits, proof_size
@@ -701,14 +698,14 @@ impl StratumServer {
 		// Start a thread to accept new worker connections
 		let mut workers_th = self.workers.clone();
 		let id_th = self.id.clone();
-		let mut stats_th = stratum_stats.clone();
+		let mut stats_th = self.stratum_stats.clone();
 		let _listener_th = thread::spawn(move || {
 			accept_workers(id_th, listen_addr, &mut workers_th, &mut stats_th);
 		});
 
 		// We have started
 		{
-			let mut stratum_stats = stratum_stats.write();
+			let mut stratum_stats = self.stratum_stats.write();
 			stratum_stats.is_running = true;
 			stratum_stats.edge_bits = edge_bits as u16;
 		}
@@ -720,10 +717,10 @@ impl StratumServer {
 
 		// Initial Loop. Waiting node complete syncing
 		while self.sync_state.is_syncing() {
-			self.clean_workers(&mut stratum_stats.clone());
+			self.clean_workers(&mut self.stratum_stats.clone());
 
 			// Handle any messages from the workers
-			self.handle_rpc_requests(&mut stratum_stats.clone());
+			self.handle_rpc_requests(&mut self.stratum_stats.clone());
 
 			thread::sleep(Duration::from_millis(50));
 		}
@@ -731,7 +728,7 @@ impl StratumServer {
 		// Main Loop
 		loop {
 			// Remove workers with failed connections
-			num_workers = self.clean_workers(&mut stratum_stats.clone());
+			num_workers = self.clean_workers(&mut self.stratum_stats.clone());
 
 			// get the latest chain state
 			head = self.chain.head().unwrap();
@@ -773,7 +770,7 @@ impl StratumServer {
 				deadline = Utc::now().timestamp() + attempt_time_per_block as i64;
 
 				{
-					let mut stratum_stats = stratum_stats.write();
+					let mut stratum_stats = self.stratum_stats.write();
 					stratum_stats.block_height = new_block.header.height;
 					stratum_stats.network_difficulty = self.current_difficulty;
 				}
@@ -784,7 +781,7 @@ impl StratumServer {
 			}
 
 			// Handle any messages from the workers
-			self.handle_rpc_requests(&mut stratum_stats.clone());
+			self.handle_rpc_requests(&mut self.stratum_stats.clone());
 
 			// sleep before restarting loop
 			thread::sleep(Duration::from_micros(1));

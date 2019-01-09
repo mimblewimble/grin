@@ -54,3 +54,6 @@ tar = "0.4"
 [dev-dependencies]
 grin_chain = { path = "./chain", version = "1.0.1" }
 grin_store = { path = "./store", version = "1.0.1" }
+
+[features]
+async = ['grin_servers/async']

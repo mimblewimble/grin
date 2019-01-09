@@ -302,12 +302,12 @@ impl Server {
 			self.chain.clone(),
 			self.tx_pool.clone(),
 			self.verifier_cache.clone(),
+			self.state_info.stratum_stats.clone(),
 		);
-		let stratum_stats = self.state_info.stratum_stats.clone();
 		let _ = thread::Builder::new()
 			.name("stratum_server".to_string())
 			.spawn(move || {
-				stratum_server.run_loop(stratum_stats, edge_bits as u32, proof_size, sync_state);
+				stratum_server.run_loop(edge_bits as u32, proof_size, sync_state);
 			});
 	}
 
