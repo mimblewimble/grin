@@ -17,6 +17,8 @@
 // required for genesis replacement
 //! #![allow(unused_imports)]
 
+#![cfg_attr(feature = "cargo-clippy", allow(clippy::unreadable_literal))]
+
 use chrono::prelude::{TimeZone, Utc};
 
 use crate::core;
