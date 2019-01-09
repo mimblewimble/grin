@@ -395,10 +395,14 @@ impl Readable for Proof {
 			return Err(ser::Error::CorruptedData);
 		}
 
+		// prepare nonces and read the right number of bytes
 		let mut nonces = Vec::with_capacity(global::proofsize());
 		let nonce_bits = edge_bits as usize;
-		let bytes_len = BitVec::bytes_len(nonce_bits * global::proofsize());
+		let bits_len = nonce_bits * global::proofsize();
+		let bytes_len = BitVec::bytes_len(bits_len);
 		let bits = reader.read_fixed_bytes(bytes_len)?;
+
+		// set our nonces from what we read in the bitvec
 		let bitvec = BitVec { bits };
 		for n in 0..global::proofsize() {
 			let mut nonce = 0;
@@ -409,6 +413,15 @@ impl Readable for Proof {
 			}
 			nonces.push(nonce);
 		}
+
+		// check the last bits of the last byte are zeroed, we don't use them but
+		// still better to enforce to avoid any malleability
+		for n in bits_len..(bytes_len * 8) {
+			if bitvec.bit_at(n) {
+				return Err(ser::Error::CorruptedData);
+			}
+		}
+
 		Ok(Proof { edge_bits, nonces })
 	}
 }
