@@ -153,8 +153,7 @@ where
 
 	// Only select outputs that are actually involved in an outstanding transaction
 	let unspents: Vec<OutputData> = match update_all {
-		false => {
-			unspents
+		false => unspents
 			.into_iter()
 			.filter(|x| match x.tx_log_entry.as_ref() {
 				Some(t) => {
@@ -170,11 +169,8 @@ where
 				}
 				None => true,
 			})
-			.collect()
-		},
-		true => {
-			unspents
-		}
+			.collect(),
+		true => unspents,
 	};
 
 	for out in unspents {
