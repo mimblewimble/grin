@@ -506,7 +506,7 @@ pub fn check_repair(
 		let result = api.check_repair();
 		match result {
 			Ok(_) => {
-				warn!("Wallet checkr complete",);
+				warn!("Wallet check complete",);
 				Ok(())
 			}
 			Err(e) => {
