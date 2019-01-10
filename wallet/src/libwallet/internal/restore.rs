@@ -240,10 +240,11 @@ where
 		res
 	};
 
-	// check all definitive outputs exist in the wallet outputs
 	let mut missing_outs = vec![];
 	let mut accidental_spend_outs = vec![];
 	let mut locked_outs = vec![];
+
+	// check all definitive outputs exist in the wallet outputs
 	for deffo in chain_outs.into_iter() {
 		let matched_out = wallet_outputs.iter().find(|wo| wo.0.key_id == deffo.key_id);
 		match matched_out {

@@ -501,14 +501,16 @@ pub fn check_repair(
 	wallet: Arc<Mutex<WalletInst<impl NodeClient + 'static, keychain::ExtKeychain>>>,
 ) -> Result<(), Error> {
 	controller::owner_single_use(wallet.clone(), |api| {
+		warn!("Starting wallet check...",);
+		warn!("Updating all wallet outputs, please wait ...",);
 		let result = api.check_repair();
 		match result {
 			Ok(_) => {
-				warn!("Wallet check/repair complete",);
+				warn!("Wallet check complete",);
 				Ok(())
 			}
 			Err(e) => {
-				error!("Wallet check/repair failed: {}", e);
+				error!("Wallet check failed: {}", e);
 				error!("Backtrace: {}", e.backtrace().unwrap());
 				Err(e)
 			}

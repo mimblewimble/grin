@@ -349,7 +349,8 @@ impl LocalServerContainer {
 			.unwrap_or_else(|e| panic!("Error creating wallet: {:?} Config: {:?}", e, config));
 		wallet.keychain = Some(keychain);
 		let parent_id = keychain::ExtKeychain::derive_key_id(2, 0, 0, 0, 0);
-		let _ = wallet::libwallet::internal::updater::refresh_outputs(&mut wallet, &parent_id);
+		let _ =
+			wallet::libwallet::internal::updater::refresh_outputs(&mut wallet, &parent_id, false);
 		wallet::libwallet::internal::updater::retrieve_info(&mut wallet, &parent_id, 1).unwrap()
 	}
 
