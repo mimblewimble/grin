@@ -216,7 +216,7 @@ impl WalletSeed {
 	pub fn init_file(
 		wallet_config: &WalletConfig,
 		seed_length: usize,
-		recovery_phrase: Option<String>,
+		recovery_phrase: Option<util::ZeroingString>,
 		password: &str,
 	) -> Result<WalletSeed, Error> {
 		// create directory if it doesn't exist

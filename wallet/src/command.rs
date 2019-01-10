@@ -51,7 +51,7 @@ pub struct InitArgs {
 	pub list_length: usize,
 	pub password: ZeroingString,
 	pub config: WalletConfig,
-	pub recovery_phrase: Option<String>,
+	pub recovery_phrase: Option<ZeroingString>,
 	pub restore: bool,
 }
 
