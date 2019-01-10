@@ -85,7 +85,7 @@ where
 	// Get lock height
 	let current_height = wallet.w2n_client().get_chain_height()?;
 	// ensure outputs we're selecting are up to date
-	updater::refresh_outputs(wallet, parent_key_id)?;
+	updater::refresh_outputs(wallet, parent_key_id, false)?;
 
 	let lock_height = current_height;
 

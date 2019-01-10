@@ -217,44 +217,6 @@ where
 	Ok(())
 }
 
-///
-fn confirm_tx_log_entry<T, C, K>(wallet: &mut T, output: &OutputData) -> Result<(), Error>
-where
-	T: WalletBackend<C, K>,
-	C: NodeClient,
-	K: Keychain,
-{
-	let parent_key_id = output.key_id.parent_path();
-	let updated_tx_entry = if output.tx_log_entry.is_some() {
-		let entries = updater::retrieve_txs(
-			wallet,
-			output.tx_log_entry.clone(),
-			None,
-			Some(&parent_key_id),
-		)?;
-		if entries.len() > 0 {
-			let mut entry = entries[0].clone();
-			entry.confirmed = true;
-			entry.update_confirmation_ts();
-			match entry.tx_type {
-				TxLogEntryType::TxSentCancelled => entry.tx_type = TxLogEntryType::TxSent,
-				TxLogEntryType::TxReceivedCancelled => entry.tx_type = TxLogEntryType::TxReceived,
-				_ => {}
-			}
-			Some(entry)
-		} else {
-			None
-		}
-	} else {
-		None
-	};
-	let mut batch = wallet.batch()?;
-	if let Some(t) = updated_tx_entry {
-		batch.save_tx_log_entry(t, &parent_key_id)?;
-	}
-	batch.commit()?;
-	Ok(())
-}
 /// Check / repair wallet contents
 /// assume wallet contents have been freshly updated with contents
 /// of latest block
@@ -281,20 +243,6 @@ where
 	let mut missing_outs = vec![];
 	let mut accidental_spend_outs = vec![];
 	let mut locked_outs = vec![];
-	let mut spent_outs = vec![];
-
-	// check for outputs that have been spent but not marked as such
-	// small chance this can happen if a user cancels a transaction but then
-	// posts it anyhow
-	for o in wallet_outputs.iter() {
-		if o.0.status == OutputStatus::Locked || o.0.status == OutputStatus::Unspent {
-			let matched_out = chain_outs.iter().find(|wo| wo.key_id == o.0.key_id);
-			match matched_out {
-				Some(_) => {}
-				None => spent_outs.push(o.0.clone()),
-			}
-		}
-	}
 
 	// check all definitive outputs exist in the wallet outputs
 	for deffo in chain_outs.into_iter() {
@@ -323,21 +271,6 @@ where
 		o.status = OutputStatus::Unspent;
 		// any transactions associated with this should be cancelled
 		cancel_tx_log_entry(wallet, &o)?;
-		let mut batch = wallet.batch()?;
-		batch.save(o)?;
-		batch.commit()?;
-	}
-
-	// Remove any spent outputs that shouldn't exist
-	for mut o in spent_outs.into_iter() {
-		warn!(
-			"Output for {} with ID {} marked as Unspent but doesn't exist in UTXO set. \
-			 Marking as spent and marking associated transaction confirmed.",
-			o.value, o.key_id,
-		);
-		o.status = OutputStatus::Spent;
-		// any transactions associated with this should be cancelled
-		confirm_tx_log_entry(wallet, &o)?;
 		let mut batch = wallet.batch()?;
 		batch.save(o)?;
 		batch.commit()?;

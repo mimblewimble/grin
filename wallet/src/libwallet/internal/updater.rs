@@ -120,6 +120,7 @@ where
 pub fn refresh_outputs<T: ?Sized, C, K>(
 	wallet: &mut T,
 	parent_key_id: &Identifier,
+	update_all: bool,
 ) -> Result<(), Error>
 where
 	T: WalletBackend<C, K>,
@@ -127,7 +128,7 @@ where
 	K: Keychain,
 {
 	let height = wallet.w2n_client().get_chain_height()?;
-	refresh_output_state(wallet, height, parent_key_id)?;
+	refresh_output_state(wallet, height, parent_key_id, update_all)?;
 	Ok(())
 }
 
@@ -136,6 +137,7 @@ where
 pub fn map_wallet_outputs<T: ?Sized, C, K>(
 	wallet: &mut T,
 	parent_key_id: &Identifier,
+	update_all: bool,
 ) -> Result<HashMap<pedersen::Commitment, Identifier>, Error>
 where
 	T: WalletBackend<C, K>,
@@ -150,23 +152,30 @@ where
 		.collect();
 
 	// Only select outputs that are actually involved in an outstanding transaction
-	let unspents: Vec<OutputData> = unspents
-		.into_iter()
-		.filter(|x| match x.tx_log_entry.as_ref() {
-			Some(t) => {
-				let entries = retrieve_txs(wallet, Some(*t), None, Some(&parent_key_id));
-				match entries {
-					Err(_) => true,
-					Ok(e) => {
-						e.len() > 0
-							&& !e[0].confirmed && (e[0].tx_type == TxLogEntryType::TxReceived
-							|| e[0].tx_type == TxLogEntryType::TxSent)
+	let unspents: Vec<OutputData> = match update_all {
+		false => {
+			unspents
+			.into_iter()
+			.filter(|x| match x.tx_log_entry.as_ref() {
+				Some(t) => {
+					let entries = retrieve_txs(wallet, Some(*t), None, Some(&parent_key_id));
+					match entries {
+						Err(_) => true,
+						Ok(e) => {
+							e.len() > 0
+								&& !e[0].confirmed && (e[0].tx_type == TxLogEntryType::TxReceived
+								|| e[0].tx_type == TxLogEntryType::TxSent)
+						}
 					}
 				}
-			}
-			None => true,
-		})
-		.collect();
+				None => true,
+			})
+			.collect()
+		},
+		true => {
+			unspents
+		}
+	};
 
 	for out in unspents {
 		let commit = keychain.commit(out.value, &out.key_id)?;
@@ -296,6 +305,7 @@ fn refresh_output_state<T: ?Sized, C, K>(
 	wallet: &mut T,
 	height: u64,
 	parent_key_id: &Identifier,
+	update_all: bool,
 ) -> Result<(), Error>
 where
 	T: WalletBackend<C, K>,
@@ -306,7 +316,7 @@ where
 
 	// build a local map of wallet outputs keyed by commit
 	// and a list of outputs we want to query the node for
-	let wallet_outputs = map_wallet_outputs(wallet, parent_key_id)?;
+	let wallet_outputs = map_wallet_outputs(wallet, parent_key_id, update_all)?;
 
 	let wallet_output_keys = wallet_outputs.keys().map(|commit| commit.clone()).collect();
 
