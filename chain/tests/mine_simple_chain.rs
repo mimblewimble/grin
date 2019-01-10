@@ -16,7 +16,7 @@ use self::chain::types::NoopAdapter;
 use self::chain::Chain;
 use self::core::core::hash::Hashed;
 use self::core::core::verifier_cache::LruVerifierCache;
-use self::core::core::{Block, BlockHeader, OutputFeatures, OutputIdentifier, Transaction};
+use self::core::core::{Block, BlockHeader, OutputIdentifier, Transaction};
 use self::core::genesis;
 use self::core::global::ChainTypes;
 use self::core::libtx::{self, build, reward};

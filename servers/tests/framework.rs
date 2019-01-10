@@ -14,9 +14,7 @@
 
 use self::keychain::Keychain;
 use self::util::Mutex;
-use self::wallet::{
-	HTTPNodeClient, HTTPWalletCommAdapter, LMDBBackend, WalletCommAdapter, WalletConfig,
-};
+use self::wallet::{HTTPNodeClient, HTTPWalletCommAdapter, LMDBBackend, WalletConfig};
 use blake2_rfc as blake2;
 use grin_api as api;
 use grin_core as core;
@@ -127,6 +125,7 @@ impl Default for LocalServerContainerConfig {
 /// A top-level container to hold everything that might be running
 /// on a server, i.e. server, wallet in send or receive mode
 
+#[allow(dead_code)]
 pub struct LocalServerContainer {
 	// Configuration
 	config: LocalServerContainerConfig,
@@ -307,6 +306,7 @@ impl LocalServerContainer {
 	}
 
 	/// Starts a wallet owner daemon
+	#[allow(dead_code)]
 	pub fn run_owner(&mut self) {
 		let wallet = self.make_wallet_for_tests();
 
@@ -329,6 +329,7 @@ impl LocalServerContainer {
 		});
 	}
 
+	#[allow(dead_code)]
 	pub fn get_wallet_seed(config: &WalletConfig) -> wallet::WalletSeed {
 		let _ = fs::create_dir_all(config.clone().data_file_dir);
 		wallet::WalletSeed::init_file(config, 32, None, "").unwrap();
@@ -337,6 +338,7 @@ impl LocalServerContainer {
 		wallet_seed
 	}
 
+	#[allow(dead_code)]
 	pub fn get_wallet_info(
 		config: &WalletConfig,
 		wallet_seed: &wallet::WalletSeed,
@@ -354,6 +356,7 @@ impl LocalServerContainer {
 		wallet::libwallet::internal::updater::retrieve_info(&mut wallet, &parent_id, 1).unwrap()
 	}
 
+	#[allow(dead_code)]
 	pub fn send_amount_to(
 		config: &WalletConfig,
 		amount: &str,
@@ -414,6 +417,7 @@ impl LocalServerContainer {
 
 	/// Adds a peer to this server to connect to upon running
 
+	#[allow(dead_code)]
 	pub fn add_peer(&mut self, addr: String) {
 		self.peer_list.push(addr);
 	}
@@ -467,6 +471,7 @@ impl Default for LocalServerContainerPoolConfig {
 /// A convenience pool for running many servers simultaneously
 /// without necessarily having to configure each one manually
 
+#[allow(dead_code)]
 pub struct LocalServerContainerPool {
 	// configuration
 	pub config: LocalServerContainerPoolConfig,
@@ -487,6 +492,7 @@ pub struct LocalServerContainerPool {
 	is_seeding: bool,
 }
 
+#[allow(dead_code)]
 impl LocalServerContainerPool {
 	pub fn new(config: LocalServerContainerPoolConfig) -> LocalServerContainerPool {
 		(LocalServerContainerPool {
@@ -506,6 +512,7 @@ impl LocalServerContainerPool {
 	/// ports/addresses filled in
 	///
 
+	#[allow(dead_code)]
 	pub fn create_server(&mut self, server_config: &mut LocalServerContainerConfig) {
 		// If we're calling it this way, need to override these
 		server_config.p2p_server_port = self.next_p2p_port;
@@ -562,6 +569,7 @@ impl LocalServerContainerPool {
 	/// once they've all been run
 	///
 
+	#[allow(dead_code)]
 	pub fn run_all_servers(self) -> Arc<Mutex<Vec<servers::Server>>> {
 		let run_length = self.config.run_length_in_seconds;
 		let mut handles = vec![];
@@ -603,6 +611,7 @@ impl LocalServerContainerPool {
 		return_containers.clone()
 	}
 
+	#[allow(dead_code)]
 	pub fn connect_all_peers(&mut self) {
 		// just pull out all currently active servers, build a list,
 		// and feed into all servers
@@ -622,6 +631,7 @@ impl LocalServerContainerPool {
 	}
 }
 
+#[allow(dead_code)]
 pub fn stop_all_servers(servers: Arc<Mutex<Vec<servers::Server>>>) {
 	let locked_servs = servers.lock();
 	for s in locked_servs.deref() {
@@ -630,6 +640,7 @@ pub fn stop_all_servers(servers: Arc<Mutex<Vec<servers::Server>>>) {
 }
 
 /// Create and return a ServerConfig
+#[allow(dead_code)]
 pub fn config(n: u16, test_name_dir: &str, seed_n: u16) -> servers::ServerConfig {
 	servers::ServerConfig {
 		api_http_addr: format!("127.0.0.1:{}", 20000 + n),
@@ -649,6 +660,7 @@ pub fn config(n: u16, test_name_dir: &str, seed_n: u16) -> servers::ServerConfig
 }
 
 /// return stratum mining config
+#[allow(dead_code)]
 pub fn stratum_config() -> servers::common::types::StratumServerConfig {
 	servers::common::types::StratumServerConfig {
 		enable_stratum_server: Some(true),
