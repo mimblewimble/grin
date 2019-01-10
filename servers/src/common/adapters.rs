@@ -643,11 +643,10 @@ impl ChainAdapter for ChainToPoolAndNetAdapter {
 			let cb: CompactBlock = b.clone().into();
 			self.peers().broadcast_compact_block(&cb);
 		} else {
-			if !self.sync_state.is_synced_once() {
-				return;
+			if self.sync_state.is_synced_once() {
+				// "header first" propagation if we are not the originator of this block
+				self.peers().broadcast_header(&b.header);
 			}
-			// "header first" propagation if we are not the originator of this block
-			self.peers().broadcast_header(&b.header);
 		}
 
 		// Reconcile the txpool against the new block *after* we have broadcast it too our peers.
