@@ -38,10 +38,10 @@ pub struct Hash([u8; 32]);
 
 impl fmt::Debug for Hash {
 	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-		for i in self.0[..4].iter() {
-			write!(f, "{:02x}", i)?;
-		}
-		Ok(())
+		let hash_hex = self.to_hex();
+		const NUM_SHOW: usize = 12;
+
+		write!(f, "{}...", &hash_hex[..NUM_SHOW])
 	}
 }
 
