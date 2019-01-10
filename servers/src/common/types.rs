@@ -282,6 +282,8 @@ pub enum SyncStatus {
 /// Current sync state. Encapsulates the current SyncStatus.
 pub struct SyncState {
 	current: RwLock<SyncStatus>,
+	/// Flag to indicate whether we already synced once
+	synced_once: RwLock<bool>,
 	sync_error: Arc<RwLock<Option<Error>>>,
 }
 
@@ -290,6 +292,7 @@ impl SyncState {
 	pub fn new() -> SyncState {
 		SyncState {
 			current: RwLock::new(SyncStatus::Initial),
+			synced_once: RwLock::new(false),
 			sync_error: Arc::new(RwLock::new(None)),
 		}
 	}
@@ -298,6 +301,11 @@ impl SyncState {
 	/// Note: This includes our "initial" state.
 	pub fn is_syncing(&self) -> bool {
 		*self.current.read() != SyncStatus::NoSync
+	}
+
+	/// Same as 'is_syncing' except the flag 'synced_once' is true
+	pub fn is_first_syncing(&self) -> bool {
+		*self.current.read() != SyncStatus::NoSync && *self.synced_once.read() == false
 	}
 
 	/// Current syncing status
@@ -312,10 +320,13 @@ impl SyncState {
 		}
 
 		let mut status = self.current.write();
+		*status = new_status;
+
+		if let SyncStatus::NoSync = new_status {
+			*self.synced_once.write() = true;
+		}
 
 		debug!("sync_state: sync_status: {:?} -> {:?}", *status, new_status,);
-
-		*status = new_status;
 	}
 
 	/// Update txhashset downloading progress

@@ -635,7 +635,7 @@ impl ChainAdapter for ChainToPoolAndNetAdapter {
 			}
 		}
 
-		if self.sync_state.is_syncing() {
+		if self.sync_state.is_first_syncing() {
 			return;
 		}
 
