@@ -635,10 +635,6 @@ impl ChainAdapter for ChainToPoolAndNetAdapter {
 			}
 		}
 
-		if !self.sync_state.is_synced_once() {
-			return;
-		}
-
 		// If we mined the block then we want to broadcast the compact block.
 		// If we received the block from another node then broadcast "header first"
 		// to minimize network traffic.
@@ -647,6 +643,9 @@ impl ChainAdapter for ChainToPoolAndNetAdapter {
 			let cb: CompactBlock = b.clone().into();
 			self.peers().broadcast_compact_block(&cb);
 		} else {
+			if !self.sync_state.is_synced_once() {
+				return;
+			}
 			// "header first" propagation if we are not the originator of this block
 			self.peers().broadcast_header(&b.header);
 		}
