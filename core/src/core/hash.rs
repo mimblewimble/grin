@@ -54,11 +54,7 @@ impl fmt::Display for Hash {
 		let starting = &hash_hex[..NUM_SHOW];
 		let ending = &hash_hex[(len - NUM_SHOW)..];
 
-		write!(f,
-			"{}...{}",
-			starting,
-			ending
-		)
+		write!(f, "{}...{}", starting, ending)
 	}
 }
 
