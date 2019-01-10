@@ -233,7 +233,7 @@ pub fn parse_init_args(
 		false => 32,
 		true => 16,
 	};
-	let recovery_phrase = match args.is_present("recover"){
+	let recovery_phrase = match args.is_present("recover") {
 		true => Some(prompt_recovery_phrase()?),
 		false => None,
 	};

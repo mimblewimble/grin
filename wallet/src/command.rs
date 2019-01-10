@@ -56,7 +56,12 @@ pub struct InitArgs {
 }
 
 pub fn init(g_args: &GlobalArgs, args: InitArgs) -> Result<(), Error> {
-	WalletSeed::init_file(&args.config, args.list_length, args.recovery_phrase, &args.password)?;
+	WalletSeed::init_file(
+		&args.config,
+		args.list_length,
+		args.recovery_phrase,
+		&args.password,
+	)?;
 	info!("Wallet seed file created");
 	let client_n = HTTPNodeClient::new(
 		&args.config.check_node_api_http_addr,
