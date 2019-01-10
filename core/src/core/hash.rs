@@ -47,7 +47,18 @@ impl fmt::Debug for Hash {
 
 impl fmt::Display for Hash {
 	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-		fmt::Debug::fmt(self, f)
+		let hash_hex = self.to_hex();
+		let len = hash_hex.len();
+		const NUM_SHOW: usize = 8;
+
+		let starting = &hash_hex[..NUM_SHOW];
+		let ending = &hash_hex[(len - NUM_SHOW)..];
+
+		write!(f,
+			"{}...{}",
+			starting,
+			ending
+		)
 	}
 }
 

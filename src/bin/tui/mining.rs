@@ -137,18 +137,7 @@ impl TableViewItem<DiffColumn> for DiffBlock {
 
 		match column {
 			DiffColumn::Height => self.block_height.to_string(),
-			DiffColumn::Hash => {
-				// Prints part of the hash's hex
-				let hash_hex = self.block_hash.to_hex();
-				let len = hash_hex.len();
-				const NUM_SHOW: usize = 8; // Number of characters to show
-
-				format!(
-					"{}...{}",
-					&hash_hex[..NUM_SHOW / 2],
-					&hash_hex[(len - NUM_SHOW)..]
-				)
-			}
+			DiffColumn::Hash => self.block_hash.to_string(),
 			DiffColumn::PoWType => pow_type,
 			DiffColumn::Difficulty => self.difficulty.to_string(),
 			DiffColumn::SecondaryScaling => self.secondary_scaling.to_string(),
