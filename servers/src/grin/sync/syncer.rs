@@ -87,7 +87,9 @@ impl SyncRunner {
 					&& head.total_difficulty > Difficulty::zero())
 				|| n > wait_secs
 			{
-				break;
+				if wp.len() > 0 {
+					break;
+				}
 			}
 			thread::sleep(time::Duration::from_secs(1));
 			n += 1;
