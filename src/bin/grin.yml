@@ -294,6 +294,6 @@ subcommands:
                   takes_value: false
         - restore:
             about: Restores a wallet contents from a seed file
-        - check_repair:
+        - check:
             about: Checks a wallet's outputs against a live node, repairing and restoring missing outputs if required
  

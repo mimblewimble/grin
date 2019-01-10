@@ -462,7 +462,7 @@ mod wallet_tests {
 		];
 		execute_command(&app, test_dir, "wallet1", &client1, arg_vec)?;
 
-		let arg_vec = vec!["grin", "wallet", "-p", "password", "check_repair"];
+		let arg_vec = vec!["grin", "wallet", "-p", "password", "check"];
 		execute_command(&app, test_dir, "wallet1", &client1, arg_vec)?;
 
 		// txs and outputs (mostly spit out for a visual in test logs)
