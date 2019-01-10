@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::util::Mutex;
+use crate::util::{Mutex, ZeroingString};
 use std::collections::HashMap;
 /// Grin wallet command-line function implementations
 use std::fs::File;
@@ -41,7 +41,7 @@ pub struct GlobalArgs {
 	pub account: String,
 	pub node_api_secret: Option<String>,
 	pub show_spent: bool,
-	pub password: Option<String>,
+	pub password: Option<ZeroingString>,
 	pub tls_conf: Option<TLSConfig>,
 }
 
@@ -49,9 +49,9 @@ pub struct GlobalArgs {
 pub struct InitArgs {
 	/// BIP39 recovery phrase length
 	pub list_length: usize,
-	pub password: String,
+	pub password: ZeroingString,
 	pub config: WalletConfig,
-	pub recovery_phrase: Option<String>,
+	pub recovery_phrase: Option<ZeroingString>,
 	pub restore: bool,
 }
 
@@ -75,8 +75,8 @@ pub fn init(g_args: &GlobalArgs, args: InitArgs) -> Result<(), Error> {
 
 /// Argument for recover
 pub struct RecoverArgs {
-	pub recovery_phrase: Option<String>,
-	pub passphrase: String,
+	pub recovery_phrase: Option<ZeroingString>,
+	pub passphrase: ZeroingString,
 }
 
 /// Check whether seed file exists
