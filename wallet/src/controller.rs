@@ -74,6 +74,7 @@ pub fn owner_listener<T: ?Sized, C, K>(
 	addr: &str,
 	api_secret: Option<String>,
 	tls_config: Option<TLSConfig>,
+	owner_api_include_foreign: Option<bool>,
 ) -> Result<(), Error>
 where
 	T: WalletBackend<C, K> + Send + Sync + 'static,
@@ -81,7 +82,7 @@ where
 	C: NodeClient + 'static,
 	K: Keychain + 'static,
 {
-	let api_handler = OwnerAPIHandler::new(wallet);
+	let api_handler = OwnerAPIHandler::new(wallet.clone());
 
 	let mut router = Router::new();
 	if api_secret.is_some() {
@@ -94,6 +95,15 @@ where
 	router
 		.add_route("/v1/wallet/owner/**", Arc::new(api_handler))
 		.map_err(|_| ErrorKind::GenericError("Router failed to add route".to_string()))?;
+
+	// If so configured, add the foreign API to the same port
+	if owner_api_include_foreign.unwrap_or(false) {
+		info!("Starting HTTP Foreign API on Owner server at {}.", addr);
+		let foreign_api_handler = ForeignAPIHandler::new(wallet.clone());
+		router
+			.add_route("/v1/wallet/foreign/**", Arc::new(foreign_api_handler))
+			.map_err(|_| ErrorKind::GenericError("Router failed to add route".to_string()))?;
+	}
 
 	let mut apis = ApiServer::new();
 	info!("Starting HTTP Owner API server at {}.", addr);
@@ -128,13 +138,14 @@ where
 		.map_err(|_| ErrorKind::GenericError("Router failed to add route".to_string()))?;
 
 	let mut apis = ApiServer::new();
-	info!("Starting HTTP Foreign API server at {}.", addr);
+	warn!("Starting HTTP Foreign listener API server at {}.", addr);
 	let socket_addr: SocketAddr = addr.parse().expect("unable to parse socket address");
 	let api_thread =
 		apis.start(socket_addr, router, tls_config)
 			.context(ErrorKind::GenericError(
 				"API thread failed to start".to_string(),
 			))?;
+	warn!("HTTP Foreign listener started.");
 
 	api_thread
 		.join()
@@ -343,18 +354,20 @@ where
 					return Err(e);
 				}
 			};
-			let adapter = match args.method.as_ref() {
-				"http" => HTTPWalletCommAdapter::new(),
-				"file" => FileWalletCommAdapter::new(),
-				"keybase" => KeybaseWalletCommAdapter::new(),
+			match args.method.as_ref() {
+				"http" => slate = HTTPWalletCommAdapter::new().send_tx_sync(&args.dest, &slate)?,
+				"file" => {
+					FileWalletCommAdapter::new().send_tx_async(&args.dest, &slate)?;
+				}
+				"keybase" => {
+					//TODO: in case of keybase, the response might take 60s and leave the service hanging
+					slate = KeybaseWalletCommAdapter::new().send_tx_sync(&args.dest, &slate)?;
+				}
 				_ => {
 					error!("unsupported payment method: {}", args.method);
 					return Err(ErrorKind::ClientCallback("unsupported payment method"))?;
 				}
-			};
-			// TODO: improve it:
-			// in case of keybase, the response might take 60s and leave the service hanging
-			slate = adapter.send_tx_sync(&args.dest, &slate)?;
+			}
 			api.tx_lock_outputs(&slate, lock_fn)?;
 			if args.method != "file" {
 				api.finalize_tx(&mut slate)?;
@@ -643,7 +656,10 @@ fn create_error_response(e: Error) -> Response<Body> {
 	Response::builder()
 		.status(StatusCode::INTERNAL_SERVER_ERROR)
 		.header("access-control-allow-origin", "*")
-		.header("access-control-allow-headers", "Content-Type, Authorization")
+		.header(
+			"access-control-allow-headers",
+			"Content-Type, Authorization",
+		)
 		.body(format!("{}", e).into())
 		.unwrap()
 }
@@ -652,7 +668,10 @@ fn create_ok_response(json: &str) -> Response<Body> {
 	Response::builder()
 		.status(StatusCode::OK)
 		.header("access-control-allow-origin", "*")
-		.header("access-control-allow-headers", "Content-Type, Authorization")
+		.header(
+			"access-control-allow-headers",
+			"Content-Type, Authorization",
+		)
 		.body(json.to_string().into())
 		.unwrap()
 }
@@ -661,7 +680,10 @@ fn response<T: Into<Body>>(status: StatusCode, text: T) -> Response<Body> {
 	Response::builder()
 		.status(status)
 		.header("access-control-allow-origin", "*")
-		.header("access-control-allow-headers", "Content-Type, Authorization")
+		.header(
+			"access-control-allow-headers",
+			"Content-Type, Authorization",
+		)
 		.body(text.into())
 		.unwrap()
 }

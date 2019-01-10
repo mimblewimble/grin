@@ -45,8 +45,8 @@ pub use self::{testclient::LocalWalletClient, testclient::WalletProxy};
 /// Get an output from the chain locally and present it back as an API output
 fn get_output_local(chain: &chain::Chain, commit: &pedersen::Commitment) -> Option<api::Output> {
 	let outputs = [
-		OutputIdentifier::new(OutputFeatures::PLAIN, commit),
-		OutputIdentifier::new(OutputFeatures::COINBASE, commit),
+		OutputIdentifier::new(OutputFeatures::Plain, commit),
+		OutputIdentifier::new(OutputFeatures::Coinbase, commit),
 	];
 
 	for x in outputs.iter() {
@@ -160,7 +160,7 @@ where
 {
 	let mut wallet_config = WalletConfig::default();
 	wallet_config.data_file_dir = String::from(dir);
-	let _ = WalletSeed::init_file(&wallet_config, 32, "");
+	let _ = WalletSeed::init_file(&wallet_config, 32, None, "");
 	let mut wallet = LMDBBackend::new(wallet_config.clone(), "", n_client)
 		.unwrap_or_else(|e| panic!("Error creating wallet: {:?} Config: {:?}", e, wallet_config));
 	wallet.open_with_credentials().unwrap_or_else(|e| {

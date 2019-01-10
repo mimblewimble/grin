@@ -24,7 +24,7 @@ use self::wallet::controller;
 use self::wallet::libwallet::types::{WalletBackend, WalletInst};
 use self::wallet::lmdb_wallet::LMDBBackend;
 use self::wallet::WalletConfig;
-use self::wallet::{HTTPNodeClient, HTTPWalletCommAdapter, WalletCommAdapter};
+use self::wallet::{HTTPNodeClient, HTTPWalletCommAdapter};
 use grin_api as api;
 use grin_core as core;
 use grin_keychain as keychain;
@@ -826,6 +826,7 @@ fn long_fork_test_case_5(s: &Vec<servers::Server>) {
 	println!("test case 5 passed")
 }
 
+#[allow(dead_code)]
 fn long_fork_test_case_6(s: &Vec<servers::Server>) {
 	println!("\ntest case 6 start");
 
@@ -879,7 +880,7 @@ pub fn create_wallet(
 ) -> Arc<Mutex<dyn WalletInst<HTTPNodeClient, keychain::ExtKeychain>>> {
 	let mut wallet_config = WalletConfig::default();
 	wallet_config.data_file_dir = String::from(dir);
-	let _ = wallet::WalletSeed::init_file(&wallet_config, 32, "");
+	let _ = wallet::WalletSeed::init_file(&wallet_config, 32, None, "");
 	let mut wallet: LMDBBackend<HTTPNodeClient, keychain::ExtKeychain> =
 		LMDBBackend::new(wallet_config.clone(), "", client_n).unwrap_or_else(|e| {
 			panic!("Error creating wallet: {:?} Config: {:?}", e, wallet_config)

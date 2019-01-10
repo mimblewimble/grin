@@ -44,7 +44,8 @@ const SERVER_LOG_FILE_NAME: &'static str = "grin-server.log";
 const WALLET_LOG_FILE_NAME: &'static str = "grin-wallet.log";
 const GRIN_HOME: &'static str = ".grin";
 const GRIN_CHAIN_DIR: &'static str = "chain_data";
-const GRIN_WALLET_DIR: &'static str = "wallet_data";
+/// Wallet data directory
+pub const GRIN_WALLET_DIR: &'static str = "wallet_data";
 const API_SECRET_FILE_NAME: &'static str = ".api_secret";
 
 fn get_grin_path(chain_type: &global::ChainTypes) -> Result<PathBuf, ConfigError> {

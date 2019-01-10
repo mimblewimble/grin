@@ -118,7 +118,7 @@ value が v1 の output からわかってしまうということを意味す�
 これが MimbleWimble の第一の柱である。すなわち、トランザクションを検証するための演算は
 value を知ることなくして実行可能であるということだ。
 
-最後に、本アイディアは実際には Greg Maxwell の [Confidential Transactions](https://www.elementsproject.org/elements/confidential-transactions/), から派生したものである。
+最後に、本アイディアは実際には Greg Maxwell の [Confidential Transactions](https://elementsproject.org/features/confidential-transactions/investigation), から派生したものである。
 更にこれは Adam Back の Bitcoin に応用されている準同型暗号に関する提案から派生したものである。
 
 #### 所有権

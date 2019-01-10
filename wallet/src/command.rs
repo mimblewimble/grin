@@ -51,10 +51,17 @@ pub struct InitArgs {
 	pub list_length: usize,
 	pub password: ZeroingString,
 	pub config: WalletConfig,
+	pub recovery_phrase: Option<String>,
+	pub restore: bool,
 }
 
 pub fn init(g_args: &GlobalArgs, args: InitArgs) -> Result<(), Error> {
-	WalletSeed::init_file(&args.config, args.list_length, &args.password)?;
+	WalletSeed::init_file(
+		&args.config,
+		args.list_length,
+		args.recovery_phrase,
+		&args.password,
+	)?;
 	info!("Wallet seed file created");
 	let client_n = HTTPNodeClient::new(
 		&args.config.check_node_api_http_addr,
@@ -70,6 +77,12 @@ pub fn init(g_args: &GlobalArgs, args: InitArgs) -> Result<(), Error> {
 pub struct RecoverArgs {
 	pub recovery_phrase: Option<ZeroingString>,
 	pub passphrase: ZeroingString,
+}
+
+/// Check whether seed file exists
+pub fn wallet_seed_exists(config: &WalletConfig) -> Result<(), Error> {
+	let res = WalletSeed::seed_file_exists(&config)?;
+	Ok(res)
 }
 
 pub fn recover(config: &WalletConfig, args: RecoverArgs) -> Result<(), Error> {
@@ -127,6 +140,7 @@ pub fn listen(config: &WalletConfig, args: &ListenArgs, g_args: &GlobalArgs) -> 
 
 pub fn owner_api(
 	wallet: Arc<Mutex<WalletInst<impl NodeClient + 'static, keychain::ExtKeychain>>>,
+	config: &WalletConfig,
 	g_args: &GlobalArgs,
 ) -> Result<(), Error> {
 	let res = controller::owner_listener(
@@ -134,6 +148,7 @@ pub fn owner_api(
 		"127.0.0.1:13420",
 		g_args.node_api_secret.clone(),
 		g_args.tls_conf.clone(),
+		config.owner_api_include_foreign.clone(),
 	);
 	if let Err(e) = res {
 		return Err(ErrorKind::LibWallet(e.kind(), e.cause_string()).into());
@@ -493,14 +508,16 @@ pub fn check_repair(
 	wallet: Arc<Mutex<WalletInst<impl NodeClient + 'static, keychain::ExtKeychain>>>,
 ) -> Result<(), Error> {
 	controller::owner_single_use(wallet.clone(), |api| {
+		warn!("Starting wallet check...",);
+		warn!("Updating all wallet outputs, please wait ...",);
 		let result = api.check_repair();
 		match result {
 			Ok(_) => {
-				warn!("Wallet check/repair complete",);
+				warn!("Wallet check complete",);
 				Ok(())
 			}
 			Err(e) => {
-				error!("Wallet check/repair failed: {}", e);
+				error!("Wallet check failed: {}", e);
 				error!("Backtrace: {}", e.backtrace().unwrap());
 				Err(e)
 			}

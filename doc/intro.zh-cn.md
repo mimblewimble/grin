@@ -34,7 +34,7 @@ Grin 项目的主要目的和特性如下:
 
     (k+j)*H = k*H + j*H
 
-在ECC中，如果我们选择一个非常大的数字 _k_ 作为私钥，则`k * H`被作为相应的公钥。 即使人们知道公钥`k * H`的值，推导 _k_ 几乎不可能（或者换句话说，椭圆曲线点的乘法计算是微不足道的，然而曲线点的“除法”计算确极其困难。参见：[椭圆曲线密码学](https://zh.wikipedia.org/wiki/椭圆曲线密码学）。
+在ECC中，如果我们选择一个非常大的数字 _k_ 作为私钥，则`k * H`被作为相应的公钥。 即使人们知道公钥`k * H`的值，推导 _k_ 几乎不可能（或者换句话说，椭圆曲线点的乘法计算是微不足道的，然而曲线点的“除法”计算却极其困难。参见：[椭圆曲线密码学](https://zh.wikipedia.org/wiki/椭圆曲线密码学)。
 
 先前的公式`（k + j）* H = k * H + j * H`中， _k_ 和 _j_ 都是私钥，演示了从两个私钥的加和获取公钥`（k + j）* H`，等价于每个私钥的对应公钥加和（`k * H + j * H`）。在比特币区块链中，[分层确定性钱包(HD Wallets/BIP32)](https://github.com/bitcoin/bips/blob/master/bip-0032.mediawiki)严重依赖于这个原则。 MimbleWimble和Grin也是如此。
 
@@ -90,7 +90,7 @@ MimbleWimble的交易确认依赖于两个基本属性:
 
 这是MimbleWimble的第一个支柱：验证交易的算术运算可以在完全不知道任何实际交易值的情况下完成。
 
-补充最后一点说明，这个想法实际上派生自Greg Maxwell的[机密交易](https://www.elementsproject.org/elements/confidential-transactions/)，机密交易本身是从Adam Back提出的用于比特币的同态值提议中发展而来。
+补充最后一点说明，这个想法实际上派生自Greg Maxwell的[机密交易](https://elementsproject.org/features/confidential-transactions/investigation)，机密交易本身是从Adam Back提出的用于比特币的同态值提议中发展而来。
 
 ### 所有权
 

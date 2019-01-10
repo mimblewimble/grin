@@ -43,6 +43,11 @@ fn comments() -> HashMap<String, String> {
 	retval.insert(
 		"api_http_addr".to_string(),
 		"
+#path of TLS certificate file, self-signed certificates are not supported
+#tls_certificate_file = \"\"
+#private key for the TLS certificate
+#tls_certificate_key = \"\"
+
 #the address on which services will listen, e.g. Transaction Pool
 "
 		.to_string(),
@@ -390,6 +395,15 @@ fn comments() -> HashMap<String, String> {
 		"node_api_secret_path".to_string(),
 		"
 #location of the node api secret for basic auth on the Grin API
+"
+		.to_string(),
+	);
+	retval.insert(
+		"owner_api_include_foreign".to_string(),
+		"
+#include the foreign API endpoints on the same port as the owner
+#API. Useful for networking environments like AWS ECS that make
+#it difficult to access multiple ports on a single service.
 "
 		.to_string(),
 	);

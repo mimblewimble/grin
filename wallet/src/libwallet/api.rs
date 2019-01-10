@@ -348,7 +348,7 @@ where
 
 		let mut validated = false;
 		if refresh_from_node {
-			validated = self.update_outputs(&mut w);
+			validated = self.update_outputs(&mut w, false);
 		}
 
 		let res = Ok((
@@ -426,7 +426,7 @@ where
 
 		let mut validated = false;
 		if refresh_from_node {
-			validated = self.update_outputs(&mut w);
+			validated = self.update_outputs(&mut w, false);
 		}
 
 		let res = Ok((
@@ -498,7 +498,7 @@ where
 
 		let mut validated = false;
 		if refresh_from_node {
-			validated = self.update_outputs(&mut w);
+			validated = self.update_outputs(&mut w, false);
 		}
 
 		let wallet_info = updater::retrieve_info(&mut *w, &parent_key_id, minimum_confirmations)?;
@@ -708,7 +708,7 @@ where
 		let mut w = self.wallet.lock();
 		w.open_with_credentials()?;
 		let parent_key_id = w.parent_key_id();
-		if !self.update_outputs(&mut w) {
+		if !self.update_outputs(&mut w, false) {
 			return Err(ErrorKind::TransactionCancellationError(
 				"Can't contact running Grin node. Not Cancelling.",
 			))?;
@@ -765,7 +765,7 @@ where
 	pub fn check_repair(&mut self) -> Result<(), Error> {
 		let mut w = self.wallet.lock();
 		w.open_with_credentials()?;
-		self.update_outputs(&mut w);
+		self.update_outputs(&mut w, true);
 		w.check_repair()?;
 		w.close()?;
 		Ok(())
@@ -792,9 +792,9 @@ where
 	}
 
 	/// Attempt to update outputs in wallet, return whether it was successful
-	fn update_outputs(&self, w: &mut W) -> bool {
+	fn update_outputs(&self, w: &mut W, update_all: bool) -> bool {
 		let parent_key_id = w.parent_key_id();
-		match updater::refresh_outputs(&mut *w, &parent_key_id) {
+		match updater::refresh_outputs(&mut *w, &parent_key_id, update_all) {
 			Ok(_) => true,
 			Err(_) => false,
 		}

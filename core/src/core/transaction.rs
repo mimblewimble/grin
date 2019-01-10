@@ -28,29 +28,40 @@ use crate::util::secp;
 use crate::util::secp::pedersen::{Commitment, RangeProof};
 use crate::util::static_secp_instance;
 use crate::util::RwLock;
+use enum_primitive::FromPrimitive;
 use std::cmp::max;
 use std::cmp::Ordering;
 use std::collections::HashSet;
 use std::sync::Arc;
 use std::{error, fmt};
 
-bitflags! {
-	/// Options for a kernel's structure or use
-	#[derive(Serialize, Deserialize)]
-	pub struct KernelFeatures: u8 {
-		/// plain kernel has fee, but no lock_height
-		const PLAIN         = 0;
-		/// coinbase kernel has neither fee nor lock_height (both zero)
-		const COINBASE      = 1;
-		/// absolute height locked kernel; has fee and lock_height
-		const HEIGHT_LOCKED = 2;
+/// Enum of various supported kernel "features".
+enum_from_primitive! {
+	/// Various flavors of tx kernel.
+	#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+	#[repr(u8)]
+	pub enum KernelFeatures {
+		/// Plain kernel (the default for Grin txs).
+		Plain = 0,
+		/// A coinbase kernel.
+		Coinbase = 1,
+		/// A kernel with an expicit lock height.
+		HeightLocked = 2,
 	}
 }
 
 impl Writeable for KernelFeatures {
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
-		writer.write_u8(self.bits())?;
+		writer.write_u8(*self as u8)?;
 		Ok(())
+	}
+}
+
+impl Readable for KernelFeatures {
+	fn read(reader: &mut dyn Reader) -> Result<KernelFeatures, ser::Error> {
+		let features =
+			KernelFeatures::from_u8(reader.read_u8()?).ok_or(ser::Error::CorruptedData)?;
+		Ok(features)
 	}
 }
 
@@ -181,10 +192,8 @@ impl Writeable for TxKernel {
 
 impl Readable for TxKernel {
 	fn read(reader: &mut dyn Reader) -> Result<TxKernel, ser::Error> {
-		let features =
-			KernelFeatures::from_bits(reader.read_u8()?).ok_or(ser::Error::CorruptedData)?;
 		Ok(TxKernel {
-			features,
+			features: KernelFeatures::read(reader)?,
 			fee: reader.read_u64()?,
 			lock_height: reader.read_u64()?,
 			excess: Commitment::read(reader)?,
@@ -205,17 +214,17 @@ impl PMMRable for TxKernel {
 impl KernelFeatures {
 	/// Is this a coinbase kernel?
 	pub fn is_coinbase(&self) -> bool {
-		self.contains(KernelFeatures::COINBASE)
+		*self == KernelFeatures::Coinbase
 	}
 
 	/// Is this a plain kernel?
 	pub fn is_plain(&self) -> bool {
-		!self.is_coinbase() && !self.is_height_locked()
+		*self == KernelFeatures::Plain
 	}
 
 	/// Is this a height locked kernel?
 	pub fn is_height_locked(&self) -> bool {
-		self.contains(KernelFeatures::HEIGHT_LOCKED)
+		*self == KernelFeatures::HeightLocked
 	}
 }
 
@@ -278,7 +287,7 @@ impl TxKernel {
 	/// Build an empty tx kernel with zero values.
 	pub fn empty() -> TxKernel {
 		TxKernel {
-			features: KernelFeatures::PLAIN,
+			features: KernelFeatures::Plain,
 			fee: 0,
 			lock_height: 0,
 			excess: Commitment::from_vec(vec![0; 33]),
@@ -1073,7 +1082,7 @@ impl ::std::hash::Hash for Input {
 /// an Input as binary.
 impl Writeable for Input {
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
-		writer.write_u8(self.features.bits())?;
+		self.features.write(writer)?;
 		self.commit.write(writer)?;
 		Ok(())
 	}
@@ -1083,11 +1092,8 @@ impl Writeable for Input {
 /// an Input from a binary stream.
 impl Readable for Input {
 	fn read(reader: &mut dyn Reader) -> Result<Input, ser::Error> {
-		let features =
-			OutputFeatures::from_bits(reader.read_u8()?).ok_or(ser::Error::CorruptedData)?;
-
+		let features = OutputFeatures::read(reader)?;
 		let commit = Commitment::read(reader)?;
-
 		Ok(Input::new(features, commit))
 	}
 }
@@ -1122,14 +1128,31 @@ impl Input {
 	}
 }
 
-bitflags! {
-	/// Options for block validation
-	#[derive(Serialize, Deserialize)]
-	pub struct OutputFeatures: u8 {
-		/// No flags
-		const PLAIN    = 0;
-		/// Output is a coinbase output, must not be spent until maturity
-		const COINBASE = 1;
+/// Enum of various supported kernel "features".
+enum_from_primitive! {
+	/// Various flavors of tx kernel.
+	#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+	#[repr(u8)]
+	pub enum OutputFeatures {
+		/// Plain output (the default for Grin txs).
+		Plain = 0,
+		/// A coinbase output.
+		Coinbase = 1,
+	}
+}
+
+impl Writeable for OutputFeatures {
+	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
+		writer.write_u8(*self as u8)?;
+		Ok(())
+	}
+}
+
+impl Readable for OutputFeatures {
+	fn read(reader: &mut dyn Reader) -> Result<OutputFeatures, ser::Error> {
+		let features =
+			OutputFeatures::from_u8(reader.read_u8()?).ok_or(ser::Error::CorruptedData)?;
+		Ok(features)
 	}
 }
 
@@ -1164,7 +1187,7 @@ impl ::std::hash::Hash for Output {
 /// an Output as binary.
 impl Writeable for Output {
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
-		writer.write_u8(self.features.bits())?;
+		self.features.write(writer)?;
 		self.commit.write(writer)?;
 		// The hash of an output doesn't include the range proof, which
 		// is committed to separately
@@ -1179,11 +1202,8 @@ impl Writeable for Output {
 /// an Output from a binary stream.
 impl Readable for Output {
 	fn read(reader: &mut dyn Reader) -> Result<Output, ser::Error> {
-		let features =
-			OutputFeatures::from_bits(reader.read_u8()?).ok_or(ser::Error::CorruptedData)?;
-
 		Ok(Output {
-			features,
+			features: OutputFeatures::read(reader)?,
 			commit: Commitment::read(reader)?,
 			proof: RangeProof::read(reader)?,
 		})
@@ -1202,12 +1222,12 @@ impl PMMRable for Output {
 impl OutputFeatures {
 	/// Is this a coinbase output?
 	pub fn is_coinbase(&self) -> bool {
-		self.contains(OutputFeatures::COINBASE)
+		*self == OutputFeatures::Coinbase
 	}
 
 	/// Is this a plain output?
 	pub fn is_plain(&self) -> bool {
-		!self.contains(OutputFeatures::COINBASE)
+		*self == OutputFeatures::Plain
 	}
 }
 
@@ -1308,7 +1328,7 @@ impl OutputIdentifier {
 	pub fn to_hex(&self) -> String {
 		format!(
 			"{:b}{}",
-			self.features.bits(),
+			self.features as u8,
 			util::to_hex(self.commit.0.to_vec()),
 		)
 	}
@@ -1320,7 +1340,7 @@ impl FixedLength for OutputIdentifier {
 
 impl Writeable for OutputIdentifier {
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
-		writer.write_u8(self.features.bits())?;
+		self.features.write(writer)?;
 		self.commit.write(writer)?;
 		Ok(())
 	}
@@ -1328,10 +1348,8 @@ impl Writeable for OutputIdentifier {
 
 impl Readable for OutputIdentifier {
 	fn read(reader: &mut dyn Reader) -> Result<OutputIdentifier, ser::Error> {
-		let features =
-			OutputFeatures::from_bits(reader.read_u8()?).ok_or(ser::Error::CorruptedData)?;
 		Ok(OutputIdentifier {
-			features,
+			features: OutputFeatures::read(reader)?,
 			commit: Commitment::read(reader)?,
 		})
 	}
@@ -1358,18 +1376,17 @@ pub fn kernel_sig_msg(
 	features: KernelFeatures,
 ) -> Result<secp::Message, Error> {
 	let valid_features = match features {
-		KernelFeatures::COINBASE => fee == 0 && lock_height == 0,
-		KernelFeatures::PLAIN => lock_height == 0,
-		KernelFeatures::HEIGHT_LOCKED => true,
-		_ => false,
+		KernelFeatures::Coinbase => fee == 0 && lock_height == 0,
+		KernelFeatures::Plain => lock_height == 0,
+		KernelFeatures::HeightLocked => true,
 	};
 	if !valid_features {
 		return Err(Error::InvalidKernelFeatures);
 	}
 	let hash = match features {
-		KernelFeatures::COINBASE => (features).hash(),
-		KernelFeatures::PLAIN => (features, fee).hash(),
-		_ => (features, fee, lock_height).hash(),
+		KernelFeatures::Coinbase => (features).hash(),
+		KernelFeatures::Plain => (features, fee).hash(),
+		KernelFeatures::HeightLocked => (features, fee, lock_height).hash(),
 	};
 	Ok(secp::Message::from_slice(&hash.as_bytes())?)
 }
@@ -1377,9 +1394,9 @@ pub fn kernel_sig_msg(
 /// kernel features as determined by lock height
 pub fn kernel_features(lock_height: u64) -> KernelFeatures {
 	if lock_height > 0 {
-		KernelFeatures::HEIGHT_LOCKED
+		KernelFeatures::HeightLocked
 	} else {
-		KernelFeatures::PLAIN
+		KernelFeatures::Plain
 	}
 }
 
@@ -1401,7 +1418,7 @@ mod test {
 		let sig = secp::Signature::from_raw_data(&[0; 64]).unwrap();
 
 		let kernel = TxKernel {
-			features: KernelFeatures::PLAIN,
+			features: KernelFeatures::Plain,
 			lock_height: 0,
 			excess: commit,
 			excess_sig: sig.clone(),
@@ -1411,7 +1428,7 @@ mod test {
 		let mut vec = vec![];
 		ser::serialize(&mut vec, &kernel).expect("serialized failed");
 		let kernel2: TxKernel = ser::deserialize(&mut &vec[..]).unwrap();
-		assert_eq!(kernel2.features, KernelFeatures::PLAIN);
+		assert_eq!(kernel2.features, KernelFeatures::Plain);
 		assert_eq!(kernel2.lock_height, 0);
 		assert_eq!(kernel2.excess, commit);
 		assert_eq!(kernel2.excess_sig, sig.clone());
@@ -1419,7 +1436,7 @@ mod test {
 
 		// now check a kernel with lock_height serialize/deserialize correctly
 		let kernel = TxKernel {
-			features: KernelFeatures::HEIGHT_LOCKED,
+			features: KernelFeatures::HeightLocked,
 			lock_height: 100,
 			excess: commit,
 			excess_sig: sig.clone(),
@@ -1429,7 +1446,7 @@ mod test {
 		let mut vec = vec![];
 		ser::serialize(&mut vec, &kernel).expect("serialized failed");
 		let kernel2: TxKernel = ser::deserialize(&mut &vec[..]).unwrap();
-		assert_eq!(kernel2.features, KernelFeatures::HEIGHT_LOCKED);
+		assert_eq!(kernel2.features, KernelFeatures::HeightLocked);
 		assert_eq!(kernel2.lock_height, 100);
 		assert_eq!(kernel2.excess, commit);
 		assert_eq!(kernel2.excess_sig, sig.clone());
@@ -1456,7 +1473,7 @@ mod test {
 		let commit = keychain.commit(5, &key_id).unwrap();
 
 		let input = Input {
-			features: OutputFeatures::PLAIN,
+			features: OutputFeatures::Plain,
 			commit: commit,
 		};
 
@@ -1472,11 +1489,27 @@ mod test {
 		// now generate the short_id for a *very* similar output (single feature flag
 		// different) and check it generates a different short_id
 		let input = Input {
-			features: OutputFeatures::COINBASE,
+			features: OutputFeatures::Coinbase,
 			commit: commit,
 		};
 
 		let short_id = input.short_id(&block_hash, nonce);
 		assert_eq!(short_id, ShortId::from_hex("3f0377c624e9").unwrap());
+	}
+
+	#[test]
+	fn kernel_features_serialization() {
+		let features = KernelFeatures::from_u8(0).unwrap();
+		assert_eq!(features, KernelFeatures::Plain);
+
+		let features = KernelFeatures::from_u8(1).unwrap();
+		assert_eq!(features, KernelFeatures::Coinbase);
+
+		let features = KernelFeatures::from_u8(2).unwrap();
+		assert_eq!(features, KernelFeatures::HeightLocked);
+
+		// Verify we cannot deserialize an unexpected kernel feature
+		let features = KernelFeatures::from_u8(3);
+		assert_eq!(features, None);
 	}
 }

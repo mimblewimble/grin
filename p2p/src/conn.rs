@@ -22,7 +22,7 @@
 
 use std::fs::File;
 use std::io::{self, Read, Write};
-use std::net::TcpStream;
+use std::net::{Shutdown, TcpStream};
 use std::sync::{mpsc, Arc};
 use std::{cmp, thread, time};
 
@@ -296,5 +296,6 @@ fn poll<H>(
 
 				thread::sleep(sleep_time);
 			}
+			let _ = conn.shutdown(Shutdown::Both);
 		});
 }

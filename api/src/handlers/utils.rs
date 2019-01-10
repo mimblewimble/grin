@@ -44,8 +44,8 @@ pub fn get_output(
 	// For now we can just try both (but this probably needs to be part of the api
 	// params)
 	let outputs = [
-		OutputIdentifier::new(OutputFeatures::PLAIN, &commit),
-		OutputIdentifier::new(OutputFeatures::COINBASE, &commit),
+		OutputIdentifier::new(OutputFeatures::Plain, &commit),
+		OutputIdentifier::new(OutputFeatures::Coinbase, &commit),
 	];
 
 	for x in outputs.iter() {

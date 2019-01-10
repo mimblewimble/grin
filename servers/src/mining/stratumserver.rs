@@ -312,7 +312,11 @@ impl StratumServer {
 
 					// Call the handler function for requested method
 					let response = match request.method.as_str() {
-						"login" => self.handle_login(request.params, &mut workers_l[num]),
+						"login" => {
+							stratum_stats.worker_stats[worker_stats_id].initial_block_height =
+								self.current_block_versions.last().unwrap().header.height;
+							self.handle_login(request.params, &mut workers_l[num])
+						}
 						"submit" => {
 							let res = self.handle_submit(
 								request.params,
@@ -338,7 +342,7 @@ impl StratumServer {
 							}
 						}
 						"status" => {
-							self.handle_status(&stratum_stats.worker_stats[worker_stats_id])
+							self.handle_status(&mut stratum_stats.worker_stats[worker_stats_id])
 						}
 						_ => {
 							// Called undefined method
@@ -384,7 +388,7 @@ impl StratumServer {
 	}
 
 	// Handle STATUS message
-	fn handle_status(&self, worker_stats: &WorkerStats) -> Result<Value, Value> {
+	fn handle_status(&self, worker_stats: &mut WorkerStats) -> Result<Value, Value> {
 		// Return worker status in json for use by a dashboard or healthcheck.
 		let status = WorkerStatus {
 			id: worker_stats.id.clone(),
@@ -394,6 +398,18 @@ impl StratumServer {
 			rejected: worker_stats.num_rejected,
 			stale: worker_stats.num_stale,
 		};
+		if worker_stats.initial_block_height == 0 {
+			worker_stats.initial_block_height = status.height;
+		}
+		debug!("(Server ID: {}) Status of worker: {} - Share Accepted: {}, Rejected: {}, Stale: {}. Blocks Found: {}/{}",
+			self.id,
+			worker_stats.id,
+			worker_stats.num_accepted,
+			worker_stats.num_rejected,
+			worker_stats.num_stale,
+			worker_stats.num_blocks_found,
+			status.height - worker_stats.initial_block_height,
+		);
 		let response = serde_json::to_value(&status).unwrap();
 		return Ok(response);
 	}

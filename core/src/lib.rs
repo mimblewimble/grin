@@ -21,9 +21,9 @@
 #![deny(unused_mut)]
 #![warn(missing_docs)]
 
-#[macro_use]
-extern crate bitflags;
 use blake2_rfc as blake2;
+#[macro_use]
+extern crate enum_primitive;
 use grin_keychain as keychain;
 use grin_util as util;
 #[macro_use]

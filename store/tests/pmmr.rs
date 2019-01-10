@@ -822,7 +822,7 @@ fn create_numbered_files(
 			start_index + rewind_file_num
 		));
 		let file = fs::File::create(path.clone()).unwrap();
-		let metadata = file.metadata().unwrap();
+		let _metadata = file.metadata().unwrap();
 		filetime::set_file_times(path, time_to_set_ft, time_to_set_ft).unwrap();
 	}
 }

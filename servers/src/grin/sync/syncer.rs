@@ -18,6 +18,7 @@ use std::time;
 
 use crate::chain;
 use crate::common::types::{SyncState, SyncStatus};
+use crate::core::global;
 use crate::core::pow::Difficulty;
 use crate::grin::sync::body_sync::BodySync;
 use crate::grin::sync::header_sync::HeaderSync;
@@ -87,7 +88,9 @@ impl SyncRunner {
 					&& head.total_difficulty > Difficulty::zero())
 				|| n > wait_secs
 			{
-				break;
+				if wp.len() > 0 || !global::is_production_mode() {
+					break;
+				}
 			}
 			thread::sleep(time::Duration::from_secs(1));
 			n += 1;

@@ -1,5 +1,5 @@
 name: grin
-version: "0.5.0"
+version: "0.5.1"
 about: Lightweight implementation of the MimbleWimble protocol.
 author: The Grin Team
 
@@ -284,6 +284,11 @@ subcommands:
                   short: s
                   long: short_wordlist
                   takes_value: false
+              - recover:
+                  help: Initialize new wallet using a recovery phrase
+                  short: r
+                  long: recover
+                  takes_value: false
         - recover:
             about: Recover a wallet.seed file from a recovery phrase (default) or displays a recovery phrase for an existing seed file
             args:
@@ -294,6 +299,6 @@ subcommands:
                   takes_value: false
         - restore:
             about: Restores a wallet contents from a seed file
-        - check_repair:
+        - check:
             about: Checks a wallet's outputs against a live node, repairing and restoring missing outputs if required
  

@@ -188,11 +188,12 @@ impl<T: PMMRable> PMMRBackend<T> {
 		// If we received a rewound "snapshot" leaf_set file move it into
 		// place so we use it.
 		if let Some(header) = header {
-			let _leaf_snapshot_path = (data_dir.join(PMMR_LEAF_FILE).to_string_lossy()
-				+ header.hash().to_string().as_ref())
-			.into_owned();
-			let leaf_snapshot_path = PathBuf::from(_leaf_snapshot_path);
-			LeafSet::copy_snapshot(&leaf_set_path, &leaf_snapshot_path)?;
+			let leaf_snapshot_path = format!(
+				"{}.{}",
+				data_dir.join(PMMR_LEAF_FILE).to_str().unwrap(),
+				header.hash()
+			);
+			LeafSet::copy_snapshot(&leaf_set_path, &PathBuf::from(leaf_snapshot_path))?;
 		}
 
 		let leaf_set = LeafSet::open(&leaf_set_path)?;

@@ -72,6 +72,8 @@ pub struct WorkerStats {
 	pub is_connected: bool,
 	/// Timestamp of most recent communication with this worker
 	pub last_seen: SystemTime,
+	/// which block height it starts mining
+	pub initial_block_height: u64,
 	/// pow difficulty this worker is using
 	pub pow_difficulty: u64,
 	/// number of valid shares submitted
@@ -207,6 +209,7 @@ impl Default for WorkerStats {
 			id: String::from("unknown"),
 			is_connected: false,
 			last_seen: SystemTime::now(),
+			initial_block_height: 0,
 			pow_difficulty: 0,
 			num_accepted: 0,
 			num_rejected: 0,

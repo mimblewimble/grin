@@ -7,12 +7,13 @@
     1. [GET Retrieve Summary Info](#get-retrieve-summary-info)
     1. [GET Node Height](#get-node-height)
     1. [GET Retrieve Txs](#get-retrieve-txs)
-    1. [GET Dump Stored Tx](#get-dump-stored-tx)
+    1. [GET Retrieve Stored Tx](#get-retrieve-stored-tx)
     1. [POST Issue Send Tx](#post-issue-send-tx)
     1. [POST Finalize Tx](#post-finalize-tx)
     1. [POST Cancel Tx](#post-cancel-tx)
     1. [POST Post Tx](#post-post-tx)
     1. [POST Issue Burn Tx](#post-issue-burn-tx)
+    1. [Adding Foreign API Endpoints](#add-foreign-api-endpoints)
 
 ## Wallet Owner Endpoint
 
@@ -252,13 +253,13 @@ Return whether the outputs were validated against a node and an array of TxLogEn
     });
   ```
 
-### GET Dump Stored Tx
+### GET Retrieve Stored Tx
 
 Retrieves a given transaction.
 
 * **URL**
 
-  /v1/wallet/owner/dump_stored_tx?id=x
+  /v1/wallet/owner/retrieve_stored_tx?id=x
 
 * **Method:**
 
@@ -308,7 +309,7 @@ Retrieves a given transaction.
 
   ```javascript
     $.ajax({
-      url: "/v1/wallet/owner/dump_stored_tx?id=13",
+      url: "/v1/wallet/owner/retrieve_stored_tx?id=13",
       dataType: "json",
       type : "GET",
       success : function(r) {
@@ -681,3 +682,7 @@ Issue a burn TX.
       }
     });
   ```
+
+### Add Foreign API Endpoints
+
+For some environments it may be convenient to have the [wallet foreign API](wallet_foreign_api.md) available on the same port as the owner API.  You can do so by setting the `owner_api_include_foreign` configuration setting to `true`.

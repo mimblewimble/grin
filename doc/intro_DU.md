@@ -144,7 +144,7 @@ Dit is de eerste pijler van MimbleWimble: de arithmetische vereist om een transa
 zonder dat één van de waarden gekend is.
 
 Tot slot, is dit idee eigenlijk afgeleid van Greg Maxwell's
-[Confidential Transactions](https://www.elementsproject.org/elements/confidential-transactions/),
+[Confidential Transactions](https://elementsproject.org/features/confidential-transactions/investigation),
 welke zelf is afgeleid van een Adam Back voorstel voor homomorfische waarden toegepast
 aan Bitcoin.
 

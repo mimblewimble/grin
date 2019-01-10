@@ -118,6 +118,16 @@ impl Peers {
 		self.peers.read().contains_key(addr)
 	}
 
+	/// Check whether an ip address is in the active peers list, ignore the port
+	pub fn is_known_ip(&self, addr: &SocketAddr) -> bool {
+		for socket in self.peers.read().keys() {
+			if addr.ip() == socket.ip() {
+				return true;
+			}
+		}
+		return false;
+	}
+
 	/// Get vec of peers we are currently connected to.
 	pub fn connected_peers(&self) -> Vec<Arc<Peer>> {
 		let mut res = self
