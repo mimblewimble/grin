@@ -272,7 +272,7 @@ impl LocalServerContainer {
 		self.wallet_config.owner_api_include_foreign = Some(self.config.owner_api_include_foreign);
 
 		let _ = fs::create_dir_all(self.wallet_config.clone().data_file_dir);
-		let r = wallet::WalletSeed::init_file(&self.wallet_config, 32, "");
+		let r = wallet::WalletSeed::init_file(&self.wallet_config, 32, None, "");
 
 		let client_n = HTTPNodeClient::new(&self.wallet_config.check_node_api_http_addr, None);
 
@@ -331,7 +331,7 @@ impl LocalServerContainer {
 
 	pub fn get_wallet_seed(config: &WalletConfig) -> wallet::WalletSeed {
 		let _ = fs::create_dir_all(config.clone().data_file_dir);
-		wallet::WalletSeed::init_file(config, 32, "").unwrap();
+		wallet::WalletSeed::init_file(config, 32, None, "").unwrap();
 		let wallet_seed =
 			wallet::WalletSeed::from_file(config, "").expect("Failed to read wallet seed file.");
 		wallet_seed

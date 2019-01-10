@@ -879,7 +879,7 @@ pub fn create_wallet(
 ) -> Arc<Mutex<dyn WalletInst<HTTPNodeClient, keychain::ExtKeychain>>> {
 	let mut wallet_config = WalletConfig::default();
 	wallet_config.data_file_dir = String::from(dir);
-	let _ = wallet::WalletSeed::init_file(&wallet_config, 32, "");
+	let _ = wallet::WalletSeed::init_file(&wallet_config, 32, None, "");
 	let mut wallet: LMDBBackend<HTTPNodeClient, keychain::ExtKeychain> =
 		LMDBBackend::new(wallet_config.clone(), "", client_n).unwrap_or_else(|e| {
 			panic!("Error creating wallet: {:?} Config: {:?}", e, wallet_config)

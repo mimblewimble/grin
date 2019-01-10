@@ -216,6 +216,7 @@ impl WalletSeed {
 	pub fn init_file(
 		wallet_config: &WalletConfig,
 		seed_length: usize,
+		recovery_phrase: Option<String>,
 		password: &str,
 	) -> Result<WalletSeed, Error> {
 		// create directory if it doesn't exist
@@ -229,7 +230,11 @@ impl WalletSeed {
 		warn!("Generating wallet seed file at: {}", seed_file_path);
 		let _ = WalletSeed::seed_file_exists(wallet_config)?;
 
-		let seed = WalletSeed::init_new(seed_length);
+		let seed = match recovery_phrase {
+			Some(p) => WalletSeed::from_mnemonic(&p)?,
+			None => WalletSeed::init_new(seed_length),
+		};
+
 		let enc_seed = EncryptedWalletSeed::from_seed(&seed, password)?;
 		let enc_seed_json = serde_json::to_string_pretty(&enc_seed).context(ErrorKind::Format)?;
 		let mut file = File::create(seed_file_path).context(ErrorKind::IO)?;
