@@ -65,7 +65,7 @@ pub fn config_command_wallet(chain_type: &global::ChainTypes, file_name: &str) {
 
 	// just leave as is if file exists but there's no data dir
 	if config_file_name.exists() {
-		return
+		return;
 	}
 
 	default_config.update_paths(&current_dir);
