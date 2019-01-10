@@ -303,9 +303,9 @@ impl SyncState {
 		*self.current.read() != SyncStatus::NoSync
 	}
 
-	/// Same as 'is_syncing' except the flag 'synced_once' is true
-	pub fn is_first_syncing(&self) -> bool {
-		*self.current.read() != SyncStatus::NoSync && *self.synced_once.read() == false
+	/// Whether it was synced once after grin running
+	pub fn is_synced_once(&self) -> bool {
+		*self.synced_once.read() == true
 	}
 
 	/// Current syncing status
