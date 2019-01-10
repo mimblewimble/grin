@@ -233,15 +233,28 @@ pub fn parse_init_args(
 		false => 32,
 		true => 16,
 	};
-	println!("Please enter a password for your new wallet");
+	let recovery_phrase = match args.is_present("recover") {
+		true => Some(prompt_recovery_phrase()?),
+		false => None,
+	};
+
+	if recovery_phrase.is_some() {
+		println!("Please provide a new password for the recovered wallet");
+	} else {
+		println!("Please enter a password for your new wallet");
+	}
+
 	let password = match g_args.password.clone() {
 		Some(p) => p,
 		None => prompt_password_confirm(),
 	};
+
 	Ok(command::InitArgs {
 		list_length: list_length,
 		password: password,
 		config: config.clone(),
+		recovery_phrase: recovery_phrase,
+		restore: false,
 	})
 }
 
