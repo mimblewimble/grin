@@ -244,6 +244,7 @@ enum_from_primitive! {
 		BadTxHashSet = 4,
 		ManualBan = 5,
 		FraudHeight = 6,
+		BadHandshake = 7,
 	}
 }
 

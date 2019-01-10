@@ -28,8 +28,8 @@ use crate::core::pow::Difficulty;
 use crate::handshake::Handshake;
 use crate::peer::Peer;
 use crate::peers::Peers;
-use crate::store::{PeerStore, State};
-use crate::types::{Capabilities, ChainAdapter, Error, NetAdapter, P2PConfig, TxHashSetRead};
+use crate::store::PeerStore;
+use crate::types::{Capabilities, ChainAdapter, Error, NetAdapter, P2PConfig, TxHashSetRead, ReasonForBan};
 use crate::util::{Mutex, StopState};
 use chrono::prelude::{DateTime, Utc};
 
@@ -87,7 +87,7 @@ impl Server {
 						let sc = stream.try_clone();
 						if let Err(e) = self.handle_new_peer(stream) {
 							warn!("Error accepting peer {}: {:?}", peer_addr.to_string(), e);
-							let _ = self.peers.update_state(peer_addr, State::Banned);
+							let _ = self.peers.add_banned(peer_addr, ReasonForBan::BadHandshake);
 						} else if let Ok(s) = sc {
 							connected_sockets.insert(peer_addr, s);
 						}
@@ -174,21 +174,13 @@ impl Server {
 		let total_diff = self.peers.total_difficulty();
 
 		// accept the peer and add it to the server map
-		let mut peer = match Peer::accept(
+		let mut peer = Peer::accept(
 			&mut stream,
 			self.capabilities,
 			total_diff,
 			&self.handshake,
 			self.peers.clone(),
-		) {
-			Ok(p) => p,
-			Err(e) => {
-				// in theory, should be shutdown when stream gets dropped,
-				// practically doesn't seem to be happening
-				let _ = stream.shutdown(Shutdown::Both);
-				return Err(e);
-			}
-		};
+		)?;
 		peer.start(stream);
 		self.peers.add_connected(Arc::new(peer))?;
 		Ok(())
