@@ -29,7 +29,9 @@ use crate::handshake::Handshake;
 use crate::peer::Peer;
 use crate::peers::Peers;
 use crate::store::PeerStore;
-use crate::types::{Capabilities, ChainAdapter, Error, NetAdapter, P2PConfig, TxHashSetRead, ReasonForBan};
+use crate::types::{
+	Capabilities, ChainAdapter, Error, NetAdapter, P2PConfig, ReasonForBan, TxHashSetRead,
+};
 use crate::util::{Mutex, StopState};
 use chrono::prelude::{DateTime, Utc};
 
