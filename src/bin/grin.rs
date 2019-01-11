@@ -114,6 +114,7 @@ fn real_main() -> i32 {
 		_ => {}
 	}
 
+	// Load relevant config
 	match args.subcommand() {
 		// If it's a wallet command, try and load a wallet config file
 		("wallet", Some(wallet_args)) => {
@@ -136,33 +137,54 @@ fn real_main() -> i32 {
 			);
 			wallet_config = Some(w);
 		}
+		// When the subscommand is 'server' take into account the 'config_file' flag
+		("server", Some(server_args)) => {
+			if let Some(_path) = server_args.value_of("config_file") {
+				node_config = Some(config::GlobalConfig::new(_path).unwrap_or_else(|e| {
+					panic!("Error loading server configuration: {}", e);
+				}));
+			} else {
+				node_config = Some(
+					config::initial_setup_server(&chain_type).unwrap_or_else(|e| {
+						panic!("Error loading server configuration: {}", e);
+					}),
+				);
+			}
+		}
 		// Otherwise load up the node config as usual
 		_ => {
-			let mut s = config::initial_setup_server(&chain_type).unwrap_or_else(|e| {
-				panic!("Error loading server configuration: {}", e);
-			});
-			let mut l = s.members.as_mut().unwrap().logging.clone().unwrap();
-			let run_tui = s.members.as_mut().unwrap().server.run_tui;
-			if let Some(true) = run_tui {
-				l.log_to_stdout = false;
-				l.tui_running = Some(true);
-			}
-			init_logger(Some(l));
-			global::set_mining_mode(s.members.as_mut().unwrap().server.clone().chain_type);
-			if let Some(file_path) = &s.config_file_path {
-				info!(
-					"Using configuration file at {}",
-					file_path.to_str().unwrap()
-				);
-			} else {
-				info!("Node configuration file not found, using default");
-			}
-			node_config = Some(s);
+			node_config = Some(
+				config::initial_setup_server(&chain_type).unwrap_or_else(|e| {
+					panic!("Error loading server configuration: {}", e);
+				}),
+			);
+		}
+	}
+
+	if let Some(mut config) = node_config.clone() {
+		let mut l = config.members.as_mut().unwrap().logging.clone().unwrap();
+		let run_tui = config.members.as_mut().unwrap().server.run_tui;
+		if let Some(true) = run_tui {
+			l.log_to_stdout = false;
+			l.tui_running = Some(true);
+		}
+		init_logger(Some(l));
+
+		global::set_mining_mode(config.members.unwrap().server.clone().chain_type);
+
+		if let Some(file_path) = &config.config_file_path {
+			info!(
+				"Using configuration file at {}",
+				file_path.to_str().unwrap()
+			);
+		} else {
+			info!("Node configuration file not found, using default");
 		}
 	}
 
 	log_build_info();
 
+	// Execute subcommand
 	match args.subcommand() {
 		// server commands and options
 		("server", Some(server_args)) => {
