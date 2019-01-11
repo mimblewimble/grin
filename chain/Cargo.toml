@@ -1,6 +1,6 @@
 [package]
 name = "grin_chain"
-version = "0.5.1"
+version = "0.5.2"
 authors = ["Grin Developers <mimblewimble@lists.launchpad.net>"]
 description = "Chain implementation for grin, a simple, private and scalable cryptocurrency implementation based on the MimbleWimble chain format."
 license = "Apache-2.0"
@@ -22,10 +22,10 @@ serde_derive = "1"
 chrono = "0.4.4"
 lru-cache = "0.1"
 
-grin_core = { path = "../core", version = "0.5.1" }
-grin_keychain = { path = "../keychain", version = "0.5.1" }
-grin_store = { path = "../store", version = "0.5.1" }
-grin_util = { path = "../util", version = "0.5.1" }
+grin_core = { path = "../core", version = "0.5.2" }
+grin_keychain = { path = "../keychain", version = "0.5.2" }
+grin_store = { path = "../store", version = "0.5.2" }
+grin_util = { path = "../util", version = "0.5.2" }
 
 [dev-dependencies]
 env_logger = "0.5"

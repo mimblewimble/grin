@@ -23,8 +23,8 @@ for crate in "${crates[@]}"
 do
 	echo "** Publishing $crate"
 	cd $crate
-	cargo package
-	cargo publish
+	cargo package --allow-dirty
+	cargo publish --allow-dirty
 	cd ..
 done
 
