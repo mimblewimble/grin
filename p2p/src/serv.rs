@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::collections::HashMap;
 use std::fs::File;
 use std::net::{Shutdown, SocketAddr, TcpListener, TcpStream};
 use std::sync::Arc;
@@ -30,7 +29,7 @@ use crate::peer::Peer;
 use crate::peers::Peers;
 use crate::store::PeerStore;
 use crate::types::{
-	Capabilities, ChainAdapter, Error, NetAdapter, P2PConfig, ReasonForBan, TxHashSetRead,
+	Capabilities, ChainAdapter, Error, NetAdapter, P2PConfig, ReasonForBan, Seeding, TxHashSetRead,
 };
 use crate::util::{Mutex, StopState};
 use chrono::prelude::{DateTime, Utc};
@@ -73,8 +72,6 @@ impl Server {
 		let listener = TcpListener::bind(addr)?;
 		listener.set_nonblocking(true)?;
 
-		let mut connected_sockets: HashMap<SocketAddr, TcpStream> = HashMap::new();
-
 		let sleep_time = Duration::from_millis(1);
 		loop {
 			// Pause peer ingress connection request. Only for tests.
@@ -85,23 +82,19 @@ impl Server {
 
 			match listener.accept() {
 				Ok((stream, peer_addr)) => {
-					if !self.check_banned(&stream) {
-						let sc = stream.try_clone();
-						if let Err(e) = self.handle_new_peer(stream) {
-							warn!("Error accepting peer {}: {:?}", peer_addr.to_string(), e);
-							let _ = self.peers.add_banned(peer_addr, ReasonForBan::BadHandshake);
-						} else if let Ok(s) = sc {
-							connected_sockets.insert(peer_addr, s);
-						}
+					if self.check_undesirable(&stream) {
+						continue;
 					}
-					// if any active socket not in our peers list, close it
-					self.clean_lost_sockets(&mut connected_sockets);
+					if let Err(e) = self.handle_new_peer(stream) {
+						debug!("Error accepting peer {}: {:?}", peer_addr.to_string(), e);
+						let _ = self.peers.add_banned(peer_addr, ReasonForBan::BadHandshake);
+					}
 				}
 				Err(ref e) if e.kind() == io::ErrorKind::WouldBlock => {
 					// nothing to do, will retry in next iteration
 				}
 				Err(e) => {
-					warn!("Couldn't establish new client connection: {:?}", e);
+					debug!("Couldn't establish new client connection: {:?}", e);
 				}
 			}
 			if self.stop_state.lock().is_stopped() {
@@ -188,11 +181,23 @@ impl Server {
 		Ok(())
 	}
 
-	fn check_banned(&self, stream: &TcpStream) -> bool {
+	/// Checks whether there's any reason we don't want to accept a peer
+	/// connection. There can be a couple of them:
+	/// 1. The peer has been previously banned and the ban period hasn't
+	/// expired yet.
+	/// 2. We're already connected to a peer at the same IP. While there are
+	/// many reasons multiple peers can legitimately share identical IP
+	/// addresses (NAT), network distribution is improved if they choose
+	/// different sets of peers themselves. In addition, it prevent potential
+	/// duplicate connections, malicious or not.
+	fn check_undesirable(&self, stream: &TcpStream) -> bool {
 		// peer has been banned, go away!
 		if let Ok(peer_addr) = stream.peer_addr() {
-			if self.peers.is_banned(peer_addr) {
-				debug!("Peer {} banned, refusing connection.", peer_addr);
+			let banned = self.peers.is_banned(peer_addr);
+			let known_ip =
+				self.peers.is_known_ip(&peer_addr) && self.config.seeding_type == Seeding::DNSSeed;
+			if banned || known_ip {
+				debug!("Peer {} banned or known, refusing connection.", peer_addr);
 				if let Err(e) = stream.shutdown(Shutdown::Both) {
 					debug!("Error shutting down conn: {:?}", e);
 				}
@@ -200,33 +205,6 @@ impl Server {
 			}
 		}
 		false
-	}
-
-	/// For all kinds of exception cases, the node could accepted / initiated a peer connection successfully but
-	/// failed on the Handshake protocol communication, or a connected peer was closed but without a successful
-	/// clean-up on its socket, that will cause this connected (on TcpStream) peer becomes so-called "invisible" peer!
-	/// i.e. a peer not included in the 'self.peers.peers' hashmap. This "invisible" peer will cause some security
-	/// concern because it still can send something to this node, but without enough visibility as other connected peers.
-	/// Another impact is these connections could never be closed, which make the node fully occupied by all such
-	/// kind of connections and become un-connectable.
-	/// This function can help to clean the peer connections which is "invisible" for this node.
-	fn clean_lost_sockets(&self, sockets: &mut HashMap<SocketAddr, TcpStream>) {
-		let mut lost_sockets: Vec<SocketAddr> = vec![];
-		for (socket, stream) in sockets.iter() {
-			if !self.peers.is_known_ip(&socket) {
-				if let Ok(_) = stream.shutdown(Shutdown::Both) {
-					debug!(
-						"clean_lost_sockets: {} cleaned which's not in peers list",
-						socket
-					);
-				}
-				lost_sockets.push(socket.clone());
-			}
-		}
-
-		for socket in lost_sockets {
-			sockets.remove(&socket);
-		}
 	}
 
 	pub fn stop(&self) {
