@@ -782,7 +782,7 @@ impl StratumServer {
 			self.handle_rpc_requests(&mut stratum_stats.clone());
 
 			// sleep before restarting loop
-			thread::sleep(Duration::from_millis(50));
+			thread::sleep(Duration::from_micros(1));
 		} // Main Loop
 	} // fn run_loop()
 } // StratumServer
