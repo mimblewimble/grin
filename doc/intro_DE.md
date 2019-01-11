@@ -4,7 +4,7 @@
 
 MimbleWimble ist ein Blockchain-Format und Protokoll, welches auf starke kryptographische Primitiven setzt und dadurch äußerst gute Skalierbarkeit, Privatssphäre und Fungibilität bietet. Es befasst sich mit Lücken, die in fast allen gegenwärtigen Blockchainimplementierungen existieren.
 
-Grin ist ein Open-Source-Softwareprojekt, dass eine MimbleWimble-Blockchain implementiert und die für den Einsatz einer vollen Blockchain und Kryptowährung nötigen Lücken schließt.
+Grin ist ein Open-Source-Softwareprojekt, dass eine MimbleWimble-Blockchain implementiert und die für den Einsatz einer vollständigen Blockchain und Kryptowährung nötigen Lücken schließt.
 
 Das Hauptziel und die Charakteristika des Grin-Projekts sind wie folgt:
 
@@ -254,7 +254,7 @@ Ein Block ist einfach ausgebaut aus:
 * Einem Blockheader.
 * Der Liste an Inputs, die nach dem Cut-through übrig bleiben.
 * Der Liste an Outputs, die nach dem Cut-through übrig bleiben.
-* Ein einzelnes Kerneloffset um den vollen Block zu umfassen
+* Ein einzelnes Kerneloffset um den vollständigen Block zu umfassen
 * Die Transaktionskernel, die für jede Transaktion beinhalten:
     * Den öffentlichen Schlüssel `r*G`, der aus der Summierung aller Commitments erhalten wird.
     * Die Signaturen die durch die excess value generiert werden.
