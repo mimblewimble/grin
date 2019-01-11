@@ -81,7 +81,7 @@ impl Server {
 			}
 
 			match listener.accept() {
-				Ok((stream, peer_addr)) => {	
+				Ok((stream, peer_addr)) => {
 					if self.check_undesirable(&stream) {
 						continue;
 					}
