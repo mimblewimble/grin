@@ -98,7 +98,11 @@ impl TransactionPool {
 		debug!("added tx to reorg_cache: size now {}", cache.len());
 	}
 
-	fn add_to_txpool(&mut self, entry: &mut PoolEntry, header: &BlockHeader) -> Result<(), PoolError> {
+	fn add_to_txpool(
+		&mut self,
+		entry: &mut PoolEntry,
+		header: &BlockHeader,
+	) -> Result<(), PoolError> {
 		// First deaggregate the tx based on current txpool txs.
 		if entry.tx.kernels().len() > 1 {
 			let txs = self.txpool.find_matching_transactions(entry.tx.kernels());
