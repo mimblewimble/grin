@@ -409,7 +409,10 @@ where
 	fn save(&mut self, out: OutputData) -> Result<(), Error> {
 		// Save the output data to the db.
 		{
-			let key = to_key(OUTPUT_PREFIX, &mut out.key_id.to_bytes().to_vec());
+			let key = match out.mmr_index {
+				Some(i) => to_key_u64(OUTPUT_PREFIX, &mut out.key_id.to_bytes().to_vec(), i),
+				None => to_key(OUTPUT_PREFIX, &mut out.key_id.to_bytes().to_vec()),
+			};
 			self.db.borrow().as_ref().unwrap().put_ser(&key, &out)?;
 		}
 

@@ -162,7 +162,7 @@ where
 	t.update_confirmation_ts();
 	batch.save_tx_log_entry(t, &parent_key_id)?;
 
-	println!("Saving mmr index");
+	println!("Saving mmr index: {}", output.mmr_index);
 
 	let _ = batch.save(OutputData {
 		root_key_id: parent_key_id.clone(),
