@@ -29,7 +29,8 @@ use crate::peer::Peer;
 use crate::peers::Peers;
 use crate::store::PeerStore;
 use crate::types::{
-	Capabilities, ChainAdapter, Error, NetAdapter, P2PConfig, ReasonForBan, TxHashSetRead,
+	Capabilities, ChainAdapter, Error, NetAdapter, P2PConfig, ReasonForBan,
+	TxHashSetRead, Seeding,
 };
 use crate::util::{Mutex, StopState};
 use chrono::prelude::{DateTime, Utc};
@@ -194,7 +195,8 @@ impl Server {
 		// peer has been banned, go away!
 		if let Ok(peer_addr) = stream.peer_addr() {
 			let banned = self.peers.is_banned(peer_addr);
-			let known_ip = self.peers.is_known_ip(&peer_addr);
+			let known_ip = self.peers.is_known_ip(&peer_addr)
+				&& self.config.seeding_type == Seeding::DNSSeed;
 			if banned || known_ip {
 				debug!("Peer {} banned or known, refusing connection.", peer_addr);
 				if let Err(e) = stream.shutdown(Shutdown::Both) {
