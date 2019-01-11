@@ -29,7 +29,9 @@ use crate::handshake::Handshake;
 use crate::peer::Peer;
 use crate::peers::Peers;
 use crate::store::PeerStore;
-use crate::types::{Capabilities, ChainAdapter, Error, NetAdapter, P2PConfig, TxHashSetRead};
+use crate::types::{
+	Capabilities, ChainAdapter, Error, NetAdapter, P2PConfig, ReasonForBan, TxHashSetRead,
+};
 use crate::util::{Mutex, StopState};
 use chrono::prelude::{DateTime, Utc};
 
@@ -87,10 +89,9 @@ impl Server {
 						let sc = stream.try_clone();
 						if let Err(e) = self.handle_new_peer(stream) {
 							warn!("Error accepting peer {}: {:?}", peer_addr.to_string(), e);
-						} else {
-							if let Ok(s) = sc {
-								connected_sockets.insert(peer_addr, s);
-							}
+							let _ = self.peers.add_banned(peer_addr, ReasonForBan::BadHandshake);
+						} else if let Ok(s) = sc {
+							connected_sockets.insert(peer_addr, s);
 						}
 					}
 					// if any active socket not in our peers list, close it
