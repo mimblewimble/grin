@@ -441,8 +441,14 @@ impl<'de> serde::de::Deserialize<'de> for OutputPrintable {
 			}
 		}
 
-		const FIELDS: &'static [&'static str] =
-			&["output_type", "commit", "spent", "proof", "proof_hash", "mmr_index"];
+		const FIELDS: &'static [&'static str] = &[
+			"output_type",
+			"commit",
+			"spent",
+			"proof",
+			"proof_hash",
+			"mmr_index",
+		];
 		deserializer.deserialize_struct("OutputPrintable", FIELDS, OutputPrintableVisitor)
 	}
 }

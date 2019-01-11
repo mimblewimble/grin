@@ -48,7 +48,6 @@ pub fn get_output(
 		OutputIdentifier::new(OutputFeatures::Coinbase, &commit),
 	];
 
-
 	for x in outputs.iter() {
 		if let Ok(_) = w(chain).is_unspent(&x) {
 			let block_height = w(chain).get_header_for_output(&x).unwrap().height;

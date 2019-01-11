@@ -144,7 +144,8 @@ where
 	C: NodeClient,
 	K: Keychain,
 {
-	let mut wallet_outputs: HashMap<pedersen::Commitment, (Identifier, Option<u64>)> = HashMap::new();
+	let mut wallet_outputs: HashMap<pedersen::Commitment, (Identifier, Option<u64>)> =
+		HashMap::new();
 	let keychain = wallet.keychain().clone();
 	let unspents: Vec<OutputData> = wallet
 		.iter()

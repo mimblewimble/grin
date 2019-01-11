@@ -230,7 +230,11 @@ where
 		option_to_not_found(self.db.get_ser(&key), &format!("Key Id: {}", id)).map_err(|e| e.into())
 	}
 
-	fn get_commitment(&mut self, id: &Identifier, mmr_index: &Option<u64>) -> Result<pedersen::Commitment, Error> {
+	fn get_commitment(
+		&mut self,
+		id: &Identifier,
+		mmr_index: &Option<u64>,
+	) -> Result<pedersen::Commitment, Error> {
 		let key = to_key(COMMITMENT_PREFIX, &mut id.to_bytes().to_vec());
 
 		let res: Result<pedersen::Commitment, Error> =

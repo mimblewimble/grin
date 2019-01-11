@@ -232,8 +232,8 @@ pub fn select_send_tx<T: ?Sized, C, K>(
 		Vec<Box<build::Append<K>>>,
 		Vec<OutputData>,
 		Vec<(u64, Identifier, Option<u64>)>, // change amounts and derivations
-		u64,                    // amount
-		u64,                    // fee
+		u64,                                 // amount
+		u64,                                 // fee
 	),
 	Error,
 >
@@ -339,7 +339,13 @@ pub fn inputs_and_change<T: ?Sized, C, K>(
 	amount: u64,
 	fee: u64,
 	num_change_outputs: usize,
-) -> Result<(Vec<Box<build::Append<K>>>, Vec<(u64, Identifier, Option<u64>)>), Error>
+) -> Result<
+	(
+		Vec<Box<build::Append<K>>>,
+		Vec<(u64, Identifier, Option<u64>)>,
+	),
+	Error,
+>
 where
 	T: WalletBackend<C, K>,
 	C: NodeClient,
