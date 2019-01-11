@@ -187,7 +187,7 @@ impl Server {
 	/// expired yet.
 	/// 2. We're already connected to a peer at the same IP. While there are
 	/// many reasons multiple peers can legitimately share identical IP
-	/// addresses, network distribution is improved if they choose different
+	/// addresses (NAT), network distribution is improved if they choose
 	/// different sets of peers themselves. In addition, it prevent potential
 	/// duplicate connections, malicious or not.
 	fn check_undesirable(&self, stream: &TcpStream) -> bool {
