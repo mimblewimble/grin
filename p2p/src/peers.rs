@@ -199,6 +199,22 @@ impl Peers {
 		max_peers
 	}
 
+	// Return number of connected peers that currently advertise more/same work
+	// (total_difficulty) than/as we do.
+	pub fn more_or_same_work_peers(&self) -> usize {
+		let peers = self.connected_peers();
+		if peers.len() == 0 {
+			return 0;
+		}
+
+		let total_difficulty = self.total_difficulty();
+
+		peers
+			.iter()
+			.filter(|x| x.info.total_difficulty() >= total_difficulty)
+			.count()
+	}
+
 	/// Returns single random peer with more work than us.
 	pub fn more_work_peer(&self) -> Option<Arc<Peer>> {
 		self.more_work_peers().pop()
