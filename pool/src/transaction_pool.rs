@@ -98,7 +98,7 @@ impl TransactionPool {
 		debug!("added tx to reorg_cache: size now {}", cache.len());
 	}
 
-	fn add_to_txpool(&mut self, entry: &PoolEntry, header: &BlockHeader) -> Result<(), PoolError> {
+	fn add_to_txpool(&mut self, entry: &mut PoolEntry, header: &BlockHeader) -> Result<(), PoolError> {
 		// First deaggregate the tx based on current txpool txs.
 		if entry.tx.kernels().len() > 1 {
 			let txs = self.txpool.find_matching_transactions(entry.tx.kernels());
@@ -154,7 +154,7 @@ impl TransactionPool {
 		// Check coinbase maturity before we go any further.
 		self.blockchain.verify_coinbase_maturity(tx)?;
 
-		let entry = PoolEntry {
+		let mut entry = PoolEntry {
 			src: src.clone(),
 			tx_at: Utc::now(),
 			tx: tx.clone(),
@@ -163,7 +163,7 @@ impl TransactionPool {
 		if stem {
 			self.add_to_stempool(&entry, header)?;
 		} else {
-			self.add_to_txpool(&entry, header)?;
+			self.add_to_txpool(&mut entry, header)?;
 			self.add_to_reorg_cache(entry);
 		}
 
@@ -188,8 +188,8 @@ impl TransactionPool {
 			entries.len(),
 			header.hash(),
 		);
-		for entry in entries {
-			let _ = &self.add_to_txpool(&entry, header);
+		for mut entry in entries {
+			let _ = &self.add_to_txpool(&mut entry, header);
 		}
 		debug!(
 			"reconcile_reorg_cache: block: {:?} ... done.",

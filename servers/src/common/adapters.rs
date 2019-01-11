@@ -101,7 +101,7 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 
 		let res = {
 			let mut tx_pool = self.tx_pool.write();
-			tx_pool.add_to_pool(source, tx, stem, &header)
+			tx_pool.add_to_pool(&source, &tx, stem, &header)
 		};
 
 		if let Err(e) = res {

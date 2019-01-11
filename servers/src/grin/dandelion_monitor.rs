@@ -114,7 +114,7 @@ fn process_fluff_phase(
 		identifier: "?.?.?.?".to_string(),
 	};
 
-	tx_pool.add_to_pool(src, agg_tx, false, &header)?;
+	tx_pool.add_to_pool(&src, &agg_tx, false, &header)?;
 	Ok(())
 }
 
@@ -155,7 +155,7 @@ fn process_expired_entries(
 	};
 
 	for entry in expired_entries {
-		match tx_pool.add_to_pool(src.clone(), entry.tx, false, &header) {
+		match tx_pool.add_to_pool(&src, &entry.tx, false, &header) {
 			Ok(_) => debug!("dand_mon: embargo expired, fluffed tx successfully."),
 			Err(e) => debug!("dand_mon: Failed to fluff expired tx - {:?}", e),
 		};
