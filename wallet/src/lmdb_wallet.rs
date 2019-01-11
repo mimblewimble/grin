@@ -222,12 +222,15 @@ where
 		self.parent_key_id.clone()
 	}
 
-	fn get(&self, id: &Identifier) -> Result<OutputData, Error> {
-		let key = to_key(OUTPUT_PREFIX, &mut id.to_bytes().to_vec());
+	fn get(&self, id: &Identifier, mmr_index: &Option<u64>) -> Result<OutputData, Error> {
+		let key = match mmr_index {
+			Some(i) => to_key_u64(OUTPUT_PREFIX, &mut id.to_bytes().to_vec(), *i),
+			None => to_key(OUTPUT_PREFIX, &mut id.to_bytes().to_vec()),
+		};
 		option_to_not_found(self.db.get_ser(&key), &format!("Key Id: {}", id)).map_err(|e| e.into())
 	}
 
-	fn get_commitment(&mut self, id: &Identifier) -> Result<pedersen::Commitment, Error> {
+	fn get_commitment(&mut self, id: &Identifier, mmr_index: &Option<u64>) -> Result<pedersen::Commitment, Error> {
 		let key = to_key(COMMITMENT_PREFIX, &mut id.to_bytes().to_vec());
 
 		let res: Result<pedersen::Commitment, Error> =
@@ -238,7 +241,7 @@ where
 		if let Ok(commit) = res {
 			Ok(commit)
 		} else {
-			let out = self.get(id)?;
+			let out = self.get(id, mmr_index)?;
 
 			// Save the output data back to the db
 			// which builds and saves the associated commitment.
@@ -416,8 +419,11 @@ where
 		Ok(())
 	}
 
-	fn get(&self, id: &Identifier) -> Result<OutputData, Error> {
-		let key = to_key(OUTPUT_PREFIX, &mut id.to_bytes().to_vec());
+	fn get(&self, id: &Identifier, mmr_index: &Option<u64>) -> Result<OutputData, Error> {
+		let key = match mmr_index {
+			Some(i) => to_key_u64(OUTPUT_PREFIX, &mut id.to_bytes().to_vec(), *i),
+			None => to_key(OUTPUT_PREFIX, &mut id.to_bytes().to_vec()),
+		};
 		option_to_not_found(
 			self.db.borrow().as_ref().unwrap().get_ser(&key),
 			&format!("Key ID: {}", id),
@@ -436,10 +442,13 @@ where
 		)
 	}
 
-	fn delete(&mut self, id: &Identifier) -> Result<(), Error> {
+	fn delete(&mut self, id: &Identifier, mmr_index: &Option<u64>) -> Result<(), Error> {
 		// Delete the output data.
 		{
-			let key = to_key(OUTPUT_PREFIX, &mut id.to_bytes().to_vec());
+			let key = match mmr_index {
+				Some(i) => to_key_u64(OUTPUT_PREFIX, &mut id.to_bytes().to_vec(), *i),
+				None => to_key(OUTPUT_PREFIX, &mut id.to_bytes().to_vec()),
+			};
 			let _ = self.db.borrow().as_ref().unwrap().delete(&key);
 		}
 

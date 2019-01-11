@@ -257,6 +257,11 @@ impl TxHashSet {
 		}
 	}
 
+	/// Return Commit's MMR position
+	pub fn get_output_pos(&self, commit: &Commitment) -> Result<u64, Error> {
+		Ok(self.commit_index.get_output_pos(&commit)?)
+	}
+
 	/// build a new merkle proof for the given position.
 	pub fn merkle_proof(&mut self, commit: Commitment) -> Result<MerkleProof, String> {
 		let pos = self.commit_index.get_output_pos(&commit).unwrap();

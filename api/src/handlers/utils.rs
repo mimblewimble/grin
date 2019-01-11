@@ -48,10 +48,12 @@ pub fn get_output(
 		OutputIdentifier::new(OutputFeatures::Coinbase, &commit),
 	];
 
+
 	for x in outputs.iter() {
 		if let Ok(_) = w(chain).is_unspent(&x) {
 			let block_height = w(chain).get_header_for_output(&x).unwrap().height;
-			return Ok((Output::new(&commit, block_height), x.clone()));
+			let output_pos = w(chain).get_output_pos(&x.commit).unwrap_or(0);
+			return Ok((Output::new(&commit, block_height, output_pos), x.clone()));
 		}
 	}
 	Err(ErrorKind::NotFound)?

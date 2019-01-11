@@ -32,6 +32,8 @@ struct OutputResult {
 	///
 	pub n_child: u32,
 	///
+	pub mmr_index: u64,
+	///
 	pub value: u64,
 	///
 	pub height: u64,
@@ -45,7 +47,7 @@ struct OutputResult {
 
 fn identify_utxo_outputs<T, C, K>(
 	wallet: &mut T,
-	outputs: Vec<(pedersen::Commitment, pedersen::RangeProof, bool, u64)>,
+	outputs: Vec<(pedersen::Commitment, pedersen::RangeProof, bool, u64, u64)>,
 ) -> Result<Vec<OutputResult>, Error>
 where
 	T: WalletBackend<C, K>,
@@ -60,7 +62,7 @@ where
 	);
 
 	for output in outputs.iter() {
-		let (commit, proof, is_coinbase, height) = output;
+		let (commit, proof, is_coinbase, height, mmr_index) = output;
 		// attempt to unwind message from the RP and get a value
 		// will fail if it's not ours
 		let info = proof::rewind(wallet.keychain(), *commit, None, *proof)?;
@@ -80,8 +82,8 @@ where
 		let key_id = Identifier::from_serialized_path(3u8, &info.message.as_bytes());
 
 		info!(
-			"Output found: {:?}, amount: {:?}, key_id: {:?}",
-			commit, info.value, key_id
+			"Output found: {:?}, amount: {:?}, key_id: {:?}, mmr_index: {},",
+			commit, info.value, key_id, mmr_index,
 		);
 
 		wallet_outputs.push(OutputResult {
@@ -93,6 +95,7 @@ where
 			lock_height: lock_height,
 			is_coinbase: *is_coinbase,
 			blinding: info.blinding,
+			mmr_index: *mmr_index,
 		});
 	}
 	Ok(wallet_outputs)
@@ -159,10 +162,13 @@ where
 	t.update_confirmation_ts();
 	batch.save_tx_log_entry(t, &parent_key_id)?;
 
+	println!("Saving mmr index");
+
 	let _ = batch.save(OutputData {
 		root_key_id: parent_key_id.clone(),
 		key_id: output.key_id,
 		n_child: output.n_child,
+		mmr_index: Some(output.mmr_index),
 		value: output.value,
 		status: OutputStatus::Unspent,
 		height: output.height,
@@ -317,7 +323,7 @@ where
 		);
 		cancel_tx_log_entry(wallet, &o)?;
 		let mut batch = wallet.batch()?;
-		batch.delete(&o.key_id)?;
+		batch.delete(&o.key_id, &o.mmr_index)?;
 		batch.commit()?;
 	}
 

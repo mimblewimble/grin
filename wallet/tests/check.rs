@@ -115,8 +115,8 @@ fn check_repair_impl(test_dir: &str) -> Result<(), libwallet::Error> {
 		w.open_with_credentials()?;
 		{
 			let mut batch = w.batch()?;
-			batch.delete(&w1_outputs[4].key_id)?;
-			batch.delete(&w1_outputs[10].key_id)?;
+			batch.delete(&w1_outputs[4].key_id, &None)?;
+			batch.delete(&w1_outputs[10].key_id, &None)?;
 			let mut accidental_spent = w1_outputs[13].clone();
 			accidental_spent.status = libwallet::types::OutputStatus::Spent;
 			batch.save(accidental_spent)?;
