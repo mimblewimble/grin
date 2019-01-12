@@ -194,8 +194,8 @@ impl<T: PMMRable> PMMRBackend<T> {
 				header.hash()
 			);
 			// Check for a ... (3 dot) ending version of the file - could probably be removed after mainnet
-			let compaitble_snapshot_path = PathBuf::from(leaf_snapshot_path.clone() + "...");
-			if compaitble_snapshot_path.exists() {
+			let compatible_snapshot_path = PathBuf::from(leaf_snapshot_path.clone() + "...");
+			if compatible_snapshot_path.exists() {
 				LeafSet::copy_snapshot(&leaf_set_path, &compaitble_snapshot_path)?;
 			} else {
 				LeafSet::copy_snapshot(&leaf_set_path, &PathBuf::from(leaf_snapshot_path))?;
