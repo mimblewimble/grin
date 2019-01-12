@@ -325,6 +325,29 @@ where
 		batch.commit()?;
 	}
 
+	// restore labels, account paths and child derivation indices
+	let label_base = "account";
+	let mut index = 1;
+	for (path, max_child_index) in found_parents.iter() {
+		if *path == ExtKeychain::derive_key_id(2, 0, 0, 0, 0) {
+			//default path already exists
+			continue;
+		}
+		let res = wallet.acct_path_iter().find(|e| {
+			e.path == *path
+		});
+		if let None = res {
+			let label = format!("{}_{}", label_base, index);
+			keys::set_acct_path(wallet, &label, path)?;
+			index = index + 1;
+		}
+		{
+			let mut batch = wallet.batch()?;
+			batch.save_child_index(path, max_child_index + 1)?;
+		}
+
+	}
+
 	Ok(())
 }
 

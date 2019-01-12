@@ -291,6 +291,14 @@ fn two_wallets_one_seed_impl(test_dir: &str) -> Result<(), libwallet::Error> {
 	);
 	wallet_proxy.add_wallet("wallet9", client9.get_send_instance(), wallet9.clone());
 
+	let client10 = LocalWalletClient::new("wallet10", wallet_proxy.tx.clone());
+	let wallet10 = test_framework::create_wallet(
+		&format!("{}/wallet10", test_dir),
+		client10.clone(),
+		Some(seed_phrase),
+	);
+	wallet_proxy.add_wallet("wallet10", client10.get_send_instance(), wallet10.clone());
+
 	// Set the wallet proxy listener running
 	thread::spawn(move || {
 		if let Err(e) = wallet_proxy.run() {
@@ -545,6 +553,23 @@ fn two_wallets_one_seed_impl(test_dir: &str) -> Result<(), libwallet::Error> {
 
 	let _ = test_framework::award_blocks_to_wallet(&chain, miner.clone(), cm);
 	bh += cm as u64;
+
+	// 7) Ensure check_repair creates missing accounts
+	wallet::controller::owner_single_use(wallet10.clone(), |api| {
+		api.check_repair()?;
+		api.set_active_account("account_1")?;
+		let info = test_framework::wallet_info(api)?;
+		let outputs = api.retrieve_outputs(true, false, None)?.1;
+		assert_eq!(outputs.len(), 6);
+		assert_eq!(info.amount_currently_spendable, base_amount * 21);
+
+		api.set_active_account("default")?;
+		let info = test_framework::wallet_info(api)?;
+		let outputs = api.retrieve_outputs(true, false, None)?.1;
+		assert_eq!(outputs.len(), 15);
+		assert_eq!(info.amount_currently_spendable, base_amount * 120);
+		Ok(())
+	})?;
 
 	// let logging finish
 	thread::sleep(Duration::from_millis(200));
