@@ -38,13 +38,11 @@ use crate::libwallet::{internal, Error, ErrorKind};
 use crate::types::{WalletConfig, WalletSeed};
 use crate::util;
 use crate::util::secp::constants::SECRET_KEY_SIZE;
-use crate::util::secp::pedersen;
 use crate::util::ZeroingString;
 
 pub const DB_DIR: &'static str = "db";
 pub const TX_SAVE_DIR: &'static str = "saved_txs";
 
-const COMMITMENT_PREFIX: u8 = 'C' as u8;
 const OUTPUT_PREFIX: u8 = 'o' as u8;
 const DERIV_PREFIX: u8 = 'd' as u8;
 const CONFIRMED_HEIGHT_PREFIX: u8 = 'c' as u8;
@@ -230,37 +228,6 @@ where
 		option_to_not_found(self.db.get_ser(&key), &format!("Key Id: {}", id)).map_err(|e| e.into())
 	}
 
-	fn get_commitment(
-		&mut self,
-		id: &Identifier,
-		mmr_index: &Option<u64>,
-	) -> Result<pedersen::Commitment, Error> {
-		let key = to_key(COMMITMENT_PREFIX, &mut id.to_bytes().to_vec());
-
-		let res: Result<pedersen::Commitment, Error> =
-			option_to_not_found(self.db.get_ser(&key), &format!("Key Id: {}", id))
-				.map_err(|e| e.into());
-
-		// "cache hit" and return the commitment
-		if let Ok(commit) = res {
-			Ok(commit)
-		} else {
-			let out = self.get(id, mmr_index)?;
-
-			// Save the output data back to the db
-			// which builds and saves the associated commitment.
-			{
-				let mut batch = self.batch()?;
-				batch.save(out)?;
-				batch.commit()?;
-			}
-
-			// Now retrieve the saved commitment and return it.
-			option_to_not_found(self.db.get_ser(&key), &format!("Key Id: {}", id))
-				.map_err(|e| e.into())
-		}
-	}
-
 	fn iter<'a>(&'a self) -> Box<dyn Iterator<Item = OutputData> + 'a> {
 		Box::new(self.db.iter(&[OUTPUT_PREFIX]).unwrap())
 	}
@@ -416,13 +383,6 @@ where
 			self.db.borrow().as_ref().unwrap().put_ser(&key, &out)?;
 		}
 
-		// Save the associated output commitment.
-		{
-			let key = to_key(COMMITMENT_PREFIX, &mut out.key_id.to_bytes().to_vec());
-			let commit = self.keychain().commit(out.value, &out.key_id)?;
-			self.db.borrow().as_ref().unwrap().put_ser(&key, &commit)?;
-		}
-
 		Ok(())
 	}
 
@@ -456,12 +416,6 @@ where
 				Some(i) => to_key_u64(OUTPUT_PREFIX, &mut id.to_bytes().to_vec(), *i),
 				None => to_key(OUTPUT_PREFIX, &mut id.to_bytes().to_vec()),
 			};
-			let _ = self.db.borrow().as_ref().unwrap().delete(&key);
-		}
-
-		// Delete the associated output commitment.
-		{
-			let key = to_key(COMMITMENT_PREFIX, &mut id.to_bytes().to_vec());
 			let _ = self.db.borrow().as_ref().unwrap().delete(&key);
 		}
 

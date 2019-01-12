@@ -69,11 +69,12 @@ where
 	}
 
 	outputs.sort_by_key(|out| out.n_child);
+	let keychain = wallet.keychain().clone();
 
 	let res = outputs
 		.into_iter()
 		.map(|out| {
-			let commit = wallet.get_commitment(&out.key_id, &out.mmr_index).unwrap();
+			let commit = keychain.commit(out.value, &out.key_id).unwrap();
 			(out, commit)
 		})
 		.collect();

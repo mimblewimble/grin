@@ -83,13 +83,6 @@ where
 	/// Get output data by id
 	fn get(&self, id: &Identifier, mmr_index: &Option<u64>) -> Result<OutputData, Error>;
 
-	/// Get associated output commitment by id.
-	fn get_commitment(
-		&mut self,
-		id: &Identifier,
-		mmr_index: &Option<u64>,
-	) -> Result<pedersen::Commitment, Error>;
-
 	/// Get an (Optional) tx log entry by uuid
 	fn get_tx_log_entry(&self, uuid: &Uuid) -> Result<Option<TxLogEntry>, Error>;
 
