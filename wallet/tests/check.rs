@@ -15,8 +15,8 @@
 #[macro_use]
 extern crate log;
 
-use self::core::global;
 use self::core::consensus;
+use self::core::global;
 use self::core::global::ChainTypes;
 use self::keychain::ExtKeychain;
 use self::wallet::test_framework::{self, LocalWalletClient, WalletProxy};
@@ -49,12 +49,14 @@ fn check_repair_impl(test_dir: &str) -> Result<(), libwallet::Error> {
 	// Create a new wallet test client, and set its queues to communicate with the
 	// proxy
 	let client1 = LocalWalletClient::new("wallet1", wallet_proxy.tx.clone());
-	let wallet1 = test_framework::create_wallet(&format!("{}/wallet1", test_dir), client1.clone(), None);
+	let wallet1 =
+		test_framework::create_wallet(&format!("{}/wallet1", test_dir), client1.clone(), None);
 	wallet_proxy.add_wallet("wallet1", client1.get_send_instance(), wallet1.clone());
 
 	let client2 = LocalWalletClient::new("wallet2", wallet_proxy.tx.clone());
 	// define recipient wallet, add to proxy
-	let wallet2 = test_framework::create_wallet(&format!("{}/wallet2", test_dir), client2.clone(), None);
+	let wallet2 =
+		test_framework::create_wallet(&format!("{}/wallet2", test_dir), client2.clone(), None);
 	wallet_proxy.add_wallet("wallet2", client2.get_send_instance(), wallet2.clone());
 
 	// Set the wallet proxy listener running
@@ -196,9 +198,10 @@ fn check_repair_impl(test_dir: &str) -> Result<(), libwallet::Error> {
 
 fn two_wallets_one_seed_impl(test_dir: &str) -> Result<(), libwallet::Error> {
 	setup(test_dir);
-	let seed_phrase = "affair pistol cancel crush garment candy ancient flag work \
-	market crush dry stand focus mutual weapon offer ceiling rival turn team spring \
-	where swift";
+	let seed_phrase =
+		"affair pistol cancel crush garment candy ancient flag work \
+		 market crush dry stand focus mutual weapon offer ceiling rival turn team spring \
+		 where swift";
 
 	// Create a new proxy to simulate server and wallet responses
 	let mut wallet_proxy: WalletProxy<LocalWalletClient, ExtKeychain> = WalletProxy::new(test_dir);
@@ -207,48 +210,85 @@ fn two_wallets_one_seed_impl(test_dir: &str) -> Result<(), libwallet::Error> {
 	// Create a new wallet test client, and set its queues to communicate with the
 	// proxy
 	let m_client = LocalWalletClient::new("miner", wallet_proxy.tx.clone());
-	let miner = test_framework::create_wallet(&format!("{}/miner", test_dir), m_client.clone(), None);
+	let miner =
+		test_framework::create_wallet(&format!("{}/miner", test_dir), m_client.clone(), None);
 	wallet_proxy.add_wallet("miner", m_client.get_send_instance(), miner.clone());
 
 	// non-mining recipient wallets
 	let client1 = LocalWalletClient::new("wallet1", wallet_proxy.tx.clone());
-	let wallet1 = test_framework::create_wallet(&format!("{}/wallet1", test_dir), client1.clone(), Some(seed_phrase));
+	let wallet1 = test_framework::create_wallet(
+		&format!("{}/wallet1", test_dir),
+		client1.clone(),
+		Some(seed_phrase),
+	);
 	wallet_proxy.add_wallet("wallet1", client1.get_send_instance(), wallet1.clone());
 
 	let client2 = LocalWalletClient::new("wallet2", wallet_proxy.tx.clone());
-	let wallet2 = test_framework::create_wallet(&format!("{}/wallet2", test_dir), client2.clone(), Some(seed_phrase));
+	let wallet2 = test_framework::create_wallet(
+		&format!("{}/wallet2", test_dir),
+		client2.clone(),
+		Some(seed_phrase),
+	);
 	wallet_proxy.add_wallet("wallet2", client2.get_send_instance(), wallet2.clone());
 
 	// we'll restore into here
 	let client3 = LocalWalletClient::new("wallet3", wallet_proxy.tx.clone());
-	let wallet3 = test_framework::create_wallet(&format!("{}/wallet3", test_dir), client3.clone(), Some(seed_phrase));
+	let wallet3 = test_framework::create_wallet(
+		&format!("{}/wallet3", test_dir),
+		client3.clone(),
+		Some(seed_phrase),
+	);
 	wallet_proxy.add_wallet("wallet3", client3.get_send_instance(), wallet3.clone());
 
 	// also restore into here
 	let client4 = LocalWalletClient::new("wallet4", wallet_proxy.tx.clone());
-	let wallet4 = test_framework::create_wallet(&format!("{}/wallet4", test_dir), client4.clone(), Some(seed_phrase));
+	let wallet4 = test_framework::create_wallet(
+		&format!("{}/wallet4", test_dir),
+		client4.clone(),
+		Some(seed_phrase),
+	);
 	wallet_proxy.add_wallet("wallet4", client4.get_send_instance(), wallet4.clone());
 
 	// Simulate a recover from seed without restore into here
 	let client5 = LocalWalletClient::new("wallet5", wallet_proxy.tx.clone());
-	let wallet5 = test_framework::create_wallet(&format!("{}/wallet5", test_dir), client5.clone(), Some(seed_phrase));
+	let wallet5 = test_framework::create_wallet(
+		&format!("{}/wallet5", test_dir),
+		client5.clone(),
+		Some(seed_phrase),
+	);
 	wallet_proxy.add_wallet("wallet5", client5.get_send_instance(), wallet5.clone());
 
 	//simulate a recover from seed without restore into here
 	let client6 = LocalWalletClient::new("wallet6", wallet_proxy.tx.clone());
-	let wallet6 = test_framework::create_wallet(&format!("{}/wallet6", test_dir), client6.clone(), Some(seed_phrase));
+	let wallet6 = test_framework::create_wallet(
+		&format!("{}/wallet6", test_dir),
+		client6.clone(),
+		Some(seed_phrase),
+	);
 	wallet_proxy.add_wallet("wallet6", client6.get_send_instance(), wallet6.clone());
 
 	let client7 = LocalWalletClient::new("wallet7", wallet_proxy.tx.clone());
-	let wallet7 = test_framework::create_wallet(&format!("{}/wallet7", test_dir), client7.clone(), Some(seed_phrase));
+	let wallet7 = test_framework::create_wallet(
+		&format!("{}/wallet7", test_dir),
+		client7.clone(),
+		Some(seed_phrase),
+	);
 	wallet_proxy.add_wallet("wallet7", client7.get_send_instance(), wallet7.clone());
 
 	let client8 = LocalWalletClient::new("wallet8", wallet_proxy.tx.clone());
-	let wallet8 = test_framework::create_wallet(&format!("{}/wallet8", test_dir), client8.clone(), Some(seed_phrase));
+	let wallet8 = test_framework::create_wallet(
+		&format!("{}/wallet8", test_dir),
+		client8.clone(),
+		Some(seed_phrase),
+	);
 	wallet_proxy.add_wallet("wallet8", client8.get_send_instance(), wallet8.clone());
 
 	let client9 = LocalWalletClient::new("wallet9", wallet_proxy.tx.clone());
-	let wallet9 = test_framework::create_wallet(&format!("{}/wallet9", test_dir), client9.clone(), Some(seed_phrase));
+	let wallet9 = test_framework::create_wallet(
+		&format!("{}/wallet9", test_dir),
+		client9.clone(),
+		Some(seed_phrase),
+	);
 	wallet_proxy.add_wallet("wallet9", client9.get_send_instance(), wallet9.clone());
 
 	// Set the wallet proxy listener running

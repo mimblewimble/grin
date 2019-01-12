@@ -18,7 +18,7 @@ use self::core::{consensus, global, pow, ser};
 use self::util::secp::pedersen;
 use self::util::Mutex;
 use crate::libwallet::api::APIOwner;
-use crate::libwallet::types::{BlockFees, CbData, NodeClient, WalletInst, WalletInfo};
+use crate::libwallet::types::{BlockFees, CbData, NodeClient, WalletInfo, WalletInst};
 use crate::lmdb_wallet::LMDBBackend;
 use crate::{controller, libwallet, WalletSeed};
 use crate::{WalletBackend, WalletConfig};
@@ -155,7 +155,11 @@ where
 }
 
 /// dispatch a db wallet
-pub fn create_wallet<C, K>(dir: &str, n_client: C, rec_phrase: Option<&str>) -> Arc<Mutex<dyn WalletInst<C, K>>>
+pub fn create_wallet<C, K>(
+	dir: &str,
+	n_client: C,
+	rec_phrase: Option<&str>,
+) -> Arc<Mutex<dyn WalletInst<C, K>>>
 where
 	C: NodeClient + 'static,
 	K: keychain::Keychain + 'static,
@@ -179,12 +183,17 @@ where
 }
 
 /// send an amount to a destination
-pub fn send_to_dest<T: ?Sized, C, K>(client: LocalWalletClient, api: &mut APIOwner<T, C, K>, dest: &str, amount: u64) -> Result<(), libwallet::Error>
+pub fn send_to_dest<T: ?Sized, C, K>(
+	client: LocalWalletClient,
+	api: &mut APIOwner<T, C, K>,
+	dest: &str,
+	amount: u64,
+) -> Result<(), libwallet::Error>
 where
 	T: WalletBackend<C, K>,
 	C: NodeClient,
 	K: keychain::Keychain,
-	{
+{
 	let (slate_i, lock_fn) = api.initiate_tx(
 		None,   // account
 		amount, // amount
@@ -202,14 +211,15 @@ where
 }
 
 /// get wallet info totals
-pub fn wallet_info<T: ?Sized, C, K>(api: &mut APIOwner<T, C, K>) -> Result<WalletInfo, libwallet::Error>
+pub fn wallet_info<T: ?Sized, C, K>(
+	api: &mut APIOwner<T, C, K>,
+) -> Result<WalletInfo, libwallet::Error>
 where
 	T: WalletBackend<C, K>,
 	C: NodeClient,
 	K: keychain::Keychain,
-	{
+{
 	let (wallet_refreshed, wallet_info) = api.retrieve_summary_info(true, 1)?;
 	assert!(wallet_refreshed);
 	Ok(wallet_info)
 }
-
