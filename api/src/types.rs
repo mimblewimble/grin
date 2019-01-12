@@ -697,7 +697,8 @@ mod test {
 		let hex_commit =
 			"{\
 			 \"commit\":\"083eafae5d61a85ab07b12e1a51b3918d8e6de11fc6cde641d54af53608aa77b9f\",\
-			 \"height\":0\
+			 \"height\":0,\
+			 \"mmr_index\":0\
 			 }";
 		let deserialized: Output = serde_json::from_str(&hex_commit).unwrap();
 		let serialized = serde_json::to_string(&deserialized).unwrap();

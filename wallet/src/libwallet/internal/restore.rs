@@ -162,8 +162,6 @@ where
 	t.update_confirmation_ts();
 	batch.save_tx_log_entry(t, &parent_key_id)?;
 
-	println!("Saving mmr index: {}", output.mmr_index);
-
 	let _ = batch.save(OutputData {
 		root_key_id: parent_key_id.clone(),
 		key_id: output.key_id,
@@ -252,7 +250,7 @@ where
 
 	// check all definitive outputs exist in the wallet outputs
 	for deffo in chain_outs.into_iter() {
-		let matched_out = wallet_outputs.iter().find(|wo| wo.0.key_id == deffo.key_id);
+		let matched_out = wallet_outputs.iter().find(|wo| wo.1 == deffo.commit);
 		match matched_out {
 			Some(s) => {
 				if s.0.status == OutputStatus::Spent {
