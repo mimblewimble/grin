@@ -107,7 +107,7 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 		}
 	}
 
-	fn block_received(&self, b: core::Block, addr: SocketAddr) -> bool {
+	fn block_received(&self, b: core::Block, addr: SocketAddr, was_requested: bool) -> bool {
 		debug!(
 			"Received block {} at {} from {} [in/out/kern: {}/{}/{}] going to process.",
 			b.hash(),
@@ -117,7 +117,7 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 			b.outputs().len(),
 			b.kernels().len(),
 		);
-		self.process_block(b, addr)
+		self.process_block(b, addr, was_requested)
 	}
 
 	fn compact_block_received(&self, cb: core::CompactBlock, addr: SocketAddr) -> bool {
@@ -136,7 +136,7 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 		if cb.kern_ids().is_empty() {
 			// push the freshly hydrated block through the chain pipeline
 			match core::Block::hydrate_from(cb, vec![]) {
-				Ok(block) => self.process_block(block, addr),
+				Ok(block) => self.process_block(block, addr, false),
 				Err(e) => {
 					debug!("Invalid hydrated block {}: {:?}", cb_hash, e);
 					return false;
@@ -146,7 +146,7 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 			// check at least the header is valid before hydrating
 			if let Err(e) = self
 				.chain()
-				.process_block_header(&cb.header, self.chain_opts())
+				.process_block_header(&cb.header, self.chain_opts(false))
 			{
 				debug!("Invalid compact block header {}: {:?}", cb_hash, e.kind());
 				return !e.is_bad_data();
@@ -183,7 +183,7 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 					.is_ok()
 				{
 					debug!("successfully hydrated block from tx pool!");
-					self.process_block(block, addr)
+					self.process_block(block, addr, false)
 				} else {
 					if self.sync_state.status() == SyncStatus::NoSync {
 						debug!("adapter: block invalid after hydration, requesting full block");
@@ -210,7 +210,7 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 
 		// pushing the new block header through the header chain pipeline
 		// we will go ask for the block if this is a new header
-		let res = self.chain().process_block_header(&bh, self.chain_opts());
+		let res = self.chain().process_block_header(&bh, self.chain_opts(false));
 
 		if let &Err(ref e) = &res {
 			debug!("Block header {} refused by chain: {:?}", bhash, e.kind());
@@ -239,7 +239,7 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 		}
 
 		// try to add headers to our header chain
-		let res = self.chain().sync_block_headers(bhs, self.chain_opts());
+		let res = self.chain().sync_block_headers(bhs, self.chain_opts(true));
 		if let &Err(ref e) = &res {
 			debug!("Block headers refused by chain: {:?}", e);
 
@@ -419,7 +419,7 @@ impl NetToChainAdapter {
 
 	// pushing the new block through the chain pipeline
 	// remembering to reset the head if we have a bad block
-	fn process_block(&self, b: core::Block, addr: SocketAddr) -> bool {
+	fn process_block(&self, b: core::Block, addr: SocketAddr, was_requested: bool) -> bool {
 		// We cannot process blocks earlier than the horizon so check for this here.
 		{
 			let head = self.chain().head().unwrap();
@@ -434,7 +434,7 @@ impl NetToChainAdapter {
 		let bhash = b.hash();
 		let previous = self.chain().get_previous_header(&b.header);
 
-		match self.chain().process_block(b, self.chain_opts()) {
+		match self.chain().process_block(b, self.chain_opts(was_requested)) {
 			Ok(_) => {
 				self.validate_chain(bhash);
 				self.check_compact();
@@ -587,8 +587,8 @@ impl NetToChainAdapter {
 	}
 
 	/// Prepare options for the chain pipeline
-	fn chain_opts(&self) -> chain::Options {
-		let opts = if self.sync_state.is_syncing() {
+	fn chain_opts(&self, was_requested: bool) -> chain::Options {
+		let opts = if was_requested {
 			chain::Options::SYNC
 		} else {
 			chain::Options::NONE
@@ -635,20 +635,19 @@ impl ChainAdapter for ChainToPoolAndNetAdapter {
 			}
 		}
 
-		if self.sync_state.is_syncing() {
-			return;
-		}
-
-		// If we mined the block then we want to broadcast the compact block.
-		// If we received the block from another node then broadcast "header first"
-		// to minimize network traffic.
-		if opts.contains(Options::MINE) {
-			// propagate compact block out if we mined the block
-			let cb: CompactBlock = b.clone().into();
-			self.peers().broadcast_compact_block(&cb);
-		} else {
-			// "header first" propagation if we are not the originator of this block
-			self.peers().broadcast_header(&b.header);
+		// not broadcasting blocks received through sync
+		if !opts.contains(chain::Options::SYNC) {
+			// If we mined the block then we want to broadcast the compact block.
+			// If we received the block from another node then broadcast "header first"
+			// to minimize network traffic.
+			if opts.contains(Options::MINE) {
+				// propagate compact block out if we mined the block
+				let cb: CompactBlock = b.clone().into();
+				self.peers().broadcast_compact_block(&cb);
+			} else {
+				// "header first" propagation if we are not the originator of this block
+				self.peers().broadcast_header(&b.header);
+			}
 		}
 
 		// Reconcile the txpool against the new block *after* we have broadcast it too our peers.

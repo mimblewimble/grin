@@ -242,7 +242,7 @@ impl ChainAdapter for DummyAdapter {
 	fn header_received(&self, _bh: core::BlockHeader, _addr: SocketAddr) -> bool {
 		true
 	}
-	fn block_received(&self, _: core::Block, _: SocketAddr) -> bool {
+	fn block_received(&self, _: core::Block, _: SocketAddr, _: bool) -> bool {
 		true
 	}
 	fn headers_received(&self, _: &[core::BlockHeader], _: SocketAddr) -> bool {
