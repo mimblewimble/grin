@@ -41,7 +41,7 @@ impl fmt::Debug for Hash {
 		let hash_hex = self.to_hex();
 		const NUM_SHOW: usize = 12;
 
-		write!(f, "{}...", &hash_hex[..NUM_SHOW])
+		write!(f, "{}", &hash_hex[..NUM_SHOW])
 	}
 }
 
