@@ -1456,7 +1456,7 @@ fn check_and_remove_files(txhashset_path: &PathBuf, header: &BlockHeader) -> Res
 	}
 
 	// Then compare the files found in the subdirectories
-	let pmmr_files_expected: HashSet<_> = PMMR_FILES
+	let mut pmmr_files_expected: HashSet<_> = PMMR_FILES
 		.iter()
 		.cloned()
 		.map(|s| {
@@ -1467,6 +1467,8 @@ fn check_and_remove_files(txhashset_path: &PathBuf, header: &BlockHeader) -> Res
 			}
 		})
 		.collect();
+	// prevent checker from deleting 3 dot file, could be removed after mainnet
+	pmmr_files_expected.insert(format!("pmmr_leaf.bin.{}...", header.hash()));
 
 	let subdirectories = fs::read_dir(txhashset_path)?;
 	for subdirectory in subdirectories {
