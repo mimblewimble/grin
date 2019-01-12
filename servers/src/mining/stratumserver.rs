@@ -85,6 +85,7 @@ pub struct JobTemplate {
 	height: u64,
 	job_id: u64,
 	difficulty: u64,
+	secondary_scaling: u32,
 	pre_pow: String,
 }
 
@@ -275,6 +276,7 @@ impl StratumServer {
 			height: bh.height,
 			job_id: (self.current_block_versions.len() - 1) as u64,
 			difficulty: self.minimum_share_difficulty,
+			secondary_scaling: bh.pow.secondary_scaling,
 			pre_pow,
 		};
 		return job_template;
