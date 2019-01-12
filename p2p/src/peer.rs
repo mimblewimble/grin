@@ -261,7 +261,7 @@ impl Peer {
 	/// Sends the provided block to the remote peer. The request may be dropped
 	/// if the remote peer is known to already have the block.
 	pub fn send_block(&self, b: &core::Block) -> Result<bool, Error> {
-		if !self.tracking_adapter.has(b.hash()) {
+		if !self.tracking_adapter.has_recv(b.hash()) {
 			trace!("Send block {} to {}", b.hash(), self.info.addr);
 			self.connection
 				.as_ref()
@@ -280,7 +280,7 @@ impl Peer {
 	}
 
 	pub fn send_compact_block(&self, b: &core::CompactBlock) -> Result<bool, Error> {
-		if !self.tracking_adapter.has(b.hash()) {
+		if !self.tracking_adapter.has_recv(b.hash()) {
 			trace!("Send compact block {} to {}", b.hash(), self.info.addr);
 			self.connection
 				.as_ref()
@@ -299,7 +299,7 @@ impl Peer {
 	}
 
 	pub fn send_header(&self, bh: &core::BlockHeader) -> Result<bool, Error> {
-		if !self.tracking_adapter.has(bh.hash()) {
+		if !self.tracking_adapter.has_recv(bh.hash()) {
 			debug!("Send header {} to {}", bh.hash(), self.info.addr);
 			self.connection
 				.as_ref()
@@ -318,7 +318,7 @@ impl Peer {
 	}
 
 	pub fn send_tx_kernel_hash(&self, h: Hash) -> Result<bool, Error> {
-		if !self.tracking_adapter.has(h) {
+		if !self.tracking_adapter.has_recv(h) {
 			debug!("Send tx kernel hash {} to {}", h, self.info.addr);
 			self.connection
 				.as_ref()
@@ -350,7 +350,7 @@ impl Peer {
 			return self.send_tx_kernel_hash(kernel.hash());
 		}
 
-		if !self.tracking_adapter.has(kernel.hash()) {
+		if !self.tracking_adapter.has_recv(kernel.hash()) {
 			debug!("Send full tx {} to {}", tx.hash(), self.info.addr);
 			self.connection
 				.as_ref()
@@ -405,6 +405,7 @@ impl Peer {
 	/// Sends a request for a specific block by hash
 	pub fn send_block_request(&self, h: Hash) -> Result<(), Error> {
 		debug!("Requesting block {} from peer {}.", h, self.info.addr);
+		self.tracking_adapter.push_req(h);
 		self.connection
 			.as_ref()
 			.unwrap()
@@ -499,35 +500,55 @@ fn stop_with_connection(connection: &conn::Tracker) {
 }
 
 /// Adapter implementation that forwards everything to an underlying adapter
-/// but keeps track of the block and transaction hashes that were received.
+/// but keeps track of the block and transaction hashes that were requested or
+/// received.
 #[derive(Clone)]
 struct TrackingAdapter {
 	adapter: Arc<dyn NetAdapter>,
 	known: Arc<RwLock<Vec<Hash>>>,
+	requested: Arc<RwLock<Vec<Hash>>>,
 }
 
 impl TrackingAdapter {
 	fn new(adapter: Arc<dyn NetAdapter>) -> TrackingAdapter {
 		TrackingAdapter {
 			adapter: adapter,
-			known: Arc::new(RwLock::new(vec![])),
+			known: Arc::new(RwLock::new(Vec::with_capacity(MAX_TRACK_SIZE))),
+			requested: Arc::new(RwLock::new(Vec::with_capacity(MAX_TRACK_SIZE))),
 		}
 	}
 
-	fn has(&self, hash: Hash) -> bool {
+	fn has_recv(&self, hash: Hash) -> bool {
 		let known = self.known.read();
 		// may become too slow, an ordered set (by timestamp for eviction) may
 		// end up being a better choice
 		known.contains(&hash)
 	}
 
-	fn push(&self, hash: Hash) {
+	fn push_recv(&self, hash: Hash) {
 		let mut known = self.known.write();
 		if known.len() > MAX_TRACK_SIZE {
 			known.truncate(MAX_TRACK_SIZE);
 		}
 		if !known.contains(&hash) {
 			known.insert(0, hash);
+		}
+	}
+
+	fn has_req(&self, hash: Hash) -> bool {
+		let requested = self.requested.read();
+		// may become too slow, an ordered set (by timestamp for eviction) may
+		// end up being a better choice
+		requested.contains(&hash)
+	}
+
+	fn push_req(&self, hash: Hash) {
+		let mut requested = self.requested.write();
+		if requested.len() > MAX_TRACK_SIZE {
+			requested.truncate(MAX_TRACK_SIZE);
+		}
+		if !requested.contains(&hash) {
+			requested.insert(0, hash);
 		}
 	}
 }
@@ -546,7 +567,7 @@ impl ChainAdapter for TrackingAdapter {
 	}
 
 	fn tx_kernel_received(&self, kernel_hash: Hash, addr: SocketAddr) {
-		self.push(kernel_hash);
+		self.push_recv(kernel_hash);
 		self.adapter.tx_kernel_received(kernel_hash, addr)
 	}
 
@@ -556,23 +577,24 @@ impl ChainAdapter for TrackingAdapter {
 		// correctly.
 		if !stem {
 			let kernel = &tx.kernels()[0];
-			self.push(kernel.hash());
+			self.push_recv(kernel.hash());
 		}
 		self.adapter.transaction_received(tx, stem)
 	}
 
-	fn block_received(&self, b: core::Block, addr: SocketAddr) -> bool {
-		self.push(b.hash());
-		self.adapter.block_received(b, addr)
+	fn block_received(&self, b: core::Block, addr: SocketAddr, _was_requested: bool) -> bool {
+		let bh = b.hash();
+		self.push_recv(bh);
+		self.adapter.block_received(b, addr, self.has_req(bh))
 	}
 
 	fn compact_block_received(&self, cb: core::CompactBlock, addr: SocketAddr) -> bool {
-		self.push(cb.hash());
+		self.push_recv(cb.hash());
 		self.adapter.compact_block_received(cb, addr)
 	}
 
 	fn header_received(&self, bh: core::BlockHeader, addr: SocketAddr) -> bool {
-		self.push(bh.hash());
+		self.push_recv(bh.hash());
 		self.adapter.header_received(bh, addr)
 	}
 

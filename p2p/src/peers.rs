@@ -554,9 +554,9 @@ impl ChainAdapter for Peers {
 		self.adapter.transaction_received(tx, stem)
 	}
 
-	fn block_received(&self, b: core::Block, peer_addr: SocketAddr) -> bool {
+	fn block_received(&self, b: core::Block, peer_addr: SocketAddr, was_requested: bool) -> bool {
 		let hash = b.hash();
-		if !self.adapter.block_received(b, peer_addr) {
+		if !self.adapter.block_received(b, peer_addr, was_requested) {
 			// if the peer sent us a block that's intrinsically bad
 			// they are either mistaken or malevolent, both of which require a ban
 			debug!(
