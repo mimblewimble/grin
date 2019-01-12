@@ -29,7 +29,10 @@ use crate::store::{Batch, ChainStore};
 use crate::txhashset::{RewindableKernelView, UTXOView};
 use crate::types::{Tip, TxHashSetRoots, TxHashsetWriteStatus};
 use crate::util::secp::pedersen::{Commitment, RangeProof};
+use crate::util::RwLock;
 use crate::util::{file, secp_static, zip};
+use chrono::prelude::{DateTime, Utc};
+use chrono::Duration;
 use croaring::Bitmap;
 use grin_store;
 use grin_store::pmmr::{PMMRBackend, PMMR_FILES};
@@ -1369,7 +1372,12 @@ impl<'a> Extension<'a> {
 
 /// Packages the txhashset data files into a zip and returns a Read to the
 /// resulting file
-pub fn zip_read(root_dir: String, header: &BlockHeader, rand: Option<u32>) -> Result<File, Error> {
+pub fn zip_read(
+	root_dir: String,
+	header: &BlockHeader,
+	rand: Option<u32>,
+	txhashset_snapshot_zips: Arc<RwLock<Vec<(PathBuf, DateTime<Utc>)>>>,
+) -> Result<File, Error> {
 	let ts = if let None = rand {
 		let now = SystemTime::now();
 		now.duration_since(UNIX_EPOCH).unwrap().subsec_micros()
@@ -1381,7 +1389,7 @@ pub fn zip_read(root_dir: String, header: &BlockHeader, rand: Option<u32>) -> Re
 	let txhashset_path = Path::new(&root_dir).join(TXHASHSET_SUBDIR);
 	let zip_path = Path::new(&root_dir).join(txhashset_zip);
 	// create the zip archive
-	{
+	let path_to_be_cleanup = {
 		// Temp txhashset directory
 		let temp_txhashset_path =
 			Path::new(&root_dir).join(format!("{}_zip_{}", TXHASHSET_SUBDIR, ts));
@@ -1396,10 +1404,47 @@ pub fn zip_read(root_dir: String, header: &BlockHeader, rand: Option<u32>) -> Re
 		// Compress zip
 		zip::compress(&temp_txhashset_path, &File::create(zip_path.clone())?)
 			.map_err(|ze| ErrorKind::Other(ze.to_string()))?;
-	}
+
+		temp_txhashset_path
+	};
 
 	// open it again to read it back
-	let zip_file = File::open(zip_path)?;
+	let zip_file = File::open(zip_path.clone())?;
+
+	// clean-up temp txhashset directory.
+	// TODO: error cases clean-up
+	if let Err(e) = fs::remove_dir_all(&path_to_be_cleanup) {
+		warn!(
+			"txhashset zip file: {:?} fail to remove, err: {}",
+			zip_path.to_str(),
+			e
+		);
+	}
+
+	// save the zip path for clean-up later
+	{
+		let now = Utc::now();
+		let mut zip_paths = txhashset_snapshot_zips.write();
+		zip_paths.insert(0, (zip_path.clone(), now));
+
+		// and when a new zip file generated, it's a good time to clean-up some old zip files.
+		// clean-up zip files which were created 30 minutes ago
+		let mut position = 0;
+		for (zip_path, time) in zip_paths.iter() {
+			if *time + Duration::minutes(30) > now {
+				position += 1;
+				continue;
+			}
+			if let Err(e) = fs::remove_file(&zip_path) {
+				warn!(
+					"txhashset zip file: {:?} fail to remove, err: {}",
+					zip_path.to_str(),
+					e
+				);
+			}
+		}
+		zip_paths.truncate(position);
+	}
 	Ok(zip_file)
 }
 

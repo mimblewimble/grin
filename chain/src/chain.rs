@@ -34,9 +34,11 @@ use crate::types::{
 };
 use crate::util::secp::pedersen::{Commitment, RangeProof};
 use crate::util::{Mutex, RwLock, StopState};
+use chrono::prelude::{DateTime, Utc};
 use grin_store::Error::NotFoundErr;
 use std::collections::HashMap;
 use std::fs::File;
+use std::path::PathBuf;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -152,6 +154,7 @@ pub struct Chain {
 	archive_mode: bool,
 	stop_state: Arc<Mutex<StopState>>,
 	genesis: BlockHeader,
+	txhashset_snapshot_zips: Arc<RwLock<Vec<(PathBuf, DateTime<Utc>)>>>,
 }
 
 impl Chain {
@@ -196,6 +199,7 @@ impl Chain {
 				archive_mode,
 				stop_state,
 				genesis: genesis.header.clone(),
+				txhashset_snapshot_zips: Arc::new(RwLock::new(Vec::new())),
 			}
 		};
 
@@ -690,7 +694,12 @@ impl Chain {
 		}
 
 		// prepares the zip and return the corresponding Read
-		let txhashset_reader = txhashset::zip_read(self.db_root.clone(), &header, None)?;
+		let txhashset_reader = txhashset::zip_read(
+			self.db_root.clone(),
+			&header,
+			None,
+			self.txhashset_snapshot_zips.clone(),
+		)?;
 		Ok((
 			header.output_mmr_size,
 			header.kernel_mmr_size,
