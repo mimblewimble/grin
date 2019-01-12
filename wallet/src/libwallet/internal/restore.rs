@@ -333,9 +333,7 @@ where
 			//default path already exists
 			continue;
 		}
-		let res = wallet.acct_path_iter().find(|e| {
-			e.path == *path
-		});
+		let res = wallet.acct_path_iter().find(|e| e.path == *path);
 		if let None = res {
 			let label = format!("{}_{}", label_base, index);
 			keys::set_acct_path(wallet, &label, path)?;
@@ -345,7 +343,6 @@ where
 			let mut batch = wallet.batch()?;
 			batch.save_child_index(path, max_child_index + 1)?;
 		}
-
 	}
 
 	Ok(())
