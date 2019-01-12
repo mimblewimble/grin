@@ -69,11 +69,12 @@ where
 	}
 
 	outputs.sort_by_key(|out| out.n_child);
+	let keychain = wallet.keychain().clone();
 
 	let res = outputs
 		.into_iter()
 		.map(|out| {
-			let commit = wallet.get_commitment(&out.key_id).unwrap();
+			let commit = keychain.commit(out.value, &out.key_id).unwrap();
 			(out, commit)
 		})
 		.collect();
@@ -138,13 +139,14 @@ pub fn map_wallet_outputs<T: ?Sized, C, K>(
 	wallet: &mut T,
 	parent_key_id: &Identifier,
 	update_all: bool,
-) -> Result<HashMap<pedersen::Commitment, Identifier>, Error>
+) -> Result<HashMap<pedersen::Commitment, (Identifier, Option<u64>)>, Error>
 where
 	T: WalletBackend<C, K>,
 	C: NodeClient,
 	K: Keychain,
 {
-	let mut wallet_outputs: HashMap<pedersen::Commitment, Identifier> = HashMap::new();
+	let mut wallet_outputs: HashMap<pedersen::Commitment, (Identifier, Option<u64>)> =
+		HashMap::new();
 	let keychain = wallet.keychain().clone();
 	let unspents: Vec<OutputData> = wallet
 		.iter()
@@ -175,7 +177,7 @@ where
 
 	for out in unspents {
 		let commit = keychain.commit(out.value, &out.key_id)?;
-		wallet_outputs.insert(commit, out.key_id.clone());
+		wallet_outputs.insert(commit, (out.key_id.clone(), out.mmr_index));
 	}
 	Ok(wallet_outputs)
 }
@@ -197,7 +199,7 @@ where
 	for mut o in outputs {
 		// unlock locked outputs
 		if o.status == OutputStatus::Unconfirmed {
-			batch.delete(&o.key_id)?;
+			batch.delete(&o.key_id, &o.mmr_index)?;
 		}
 		if o.status == OutputStatus::Locked {
 			o.status = OutputStatus::Unconfirmed;
@@ -219,8 +221,8 @@ where
 /// Apply refreshed API output data to the wallet
 pub fn apply_api_outputs<T: ?Sized, C, K>(
 	wallet: &mut T,
-	wallet_outputs: &HashMap<pedersen::Commitment, Identifier>,
-	api_outputs: &HashMap<pedersen::Commitment, (String, u64)>,
+	wallet_outputs: &HashMap<pedersen::Commitment, (Identifier, Option<u64>)>,
+	api_outputs: &HashMap<pedersen::Commitment, (String, u64, u64)>,
 	height: u64,
 	parent_key_id: &Identifier,
 ) -> Result<(), libwallet::Error>
@@ -245,8 +247,8 @@ where
 			return Ok(());
 		}
 		let mut batch = wallet.batch()?;
-		for (commit, id) in wallet_outputs.iter() {
-			if let Ok(mut output) = batch.get(id) {
+		for (commit, (id, mmr_index)) in wallet_outputs.iter() {
+			if let Ok(mut output) = batch.get(id, mmr_index) {
 				match api_outputs.get(&commit) {
 					Some(o) => {
 						// if this is a coinbase tx being confirmed, it's recordable in tx log
@@ -345,7 +347,7 @@ where
 	}
 	let mut batch = wallet.batch()?;
 	for id in ids_to_del {
-		batch.delete(&id)?;
+		batch.delete(&id, &None)?;
 	}
 	batch.commit()?;
 	Ok(())
@@ -458,7 +460,7 @@ where
 	let parent_key_id = wallet.parent_key_id();
 
 	let key_id = match key_id {
-		Some(key_id) => keys::retrieve_existing_key(wallet, key_id)?.0,
+		Some(key_id) => keys::retrieve_existing_key(wallet, key_id, None)?.0,
 		None => keys::next_available_key(wallet)?,
 	};
 
@@ -469,6 +471,7 @@ where
 			root_key_id: parent_key_id,
 			key_id: key_id.clone(),
 			n_child: key_id.to_path().last_path_index(),
+			mmr_index: None,
 			value: reward(block_fees.fees),
 			status: OutputStatus::Unconfirmed,
 			height: height,

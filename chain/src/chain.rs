@@ -1041,6 +1041,11 @@ impl Chain {
 		self.txhashset.read().last_n_kernel(distance)
 	}
 
+	/// as above, for kernels
+	pub fn get_output_pos(&self, commit: &Commitment) -> Result<u64, Error> {
+		Ok(self.txhashset.read().get_output_pos(commit)?)
+	}
+
 	/// outputs by insertion index
 	pub fn unspent_outputs_by_insertion_index(
 		&self,

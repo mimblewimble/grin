@@ -94,6 +94,9 @@ impl TxHashSetHandler {
 			id
 		)))?;
 		let commit = Commitment::from_vec(c);
+		let output_pos = w(&self.chain)
+			.get_output_pos(&commit)
+			.context(ErrorKind::NotFound)?;
 		let merkle_proof = chain::Chain::get_merkle_proof_for_pos(&w(&self.chain), commit)
 			.map_err(|_| ErrorKind::NotFound)?;
 		Ok(OutputPrintable {
@@ -104,6 +107,7 @@ impl TxHashSetHandler {
 			proof_hash: "".to_string(),
 			block_height: None,
 			merkle_proof: Some(merkle_proof),
+			mmr_index: output_pos,
 		})
 	}
 }

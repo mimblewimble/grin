@@ -82,12 +82,12 @@ where
 
 	// Store our private identifiers for each input
 	for input in inputs {
-		context.add_input(&input.key_id);
+		context.add_input(&input.key_id, &input.mmr_index);
 	}
 
 	// Store change output(s)
-	for (_, id) in &change_amounts_derivations {
-		context.add_output(&id);
+	for (_, id, mmr_index) in &change_amounts_derivations {
+		context.add_output(&id, &mmr_index);
 	}
 
 	let lock_inputs = context.get_inputs().clone();
@@ -107,7 +107,7 @@ where
 			let mut amount_debited = 0;
 			t.num_inputs = lock_inputs.len();
 			for id in lock_inputs {
-				let mut coin = batch.get(&id).unwrap();
+				let mut coin = batch.get(&id.0, &id.1).unwrap();
 				coin.tx_log_entry = Some(log_id);
 				amount_debited = amount_debited + coin.value;
 				batch.lock_output(&mut coin)?;
@@ -116,13 +116,14 @@ where
 			t.amount_debited = amount_debited;
 
 			// write the output representing our change
-			for (change_amount, id) in &change_amounts_derivations {
+			for (change_amount, id, _) in &change_amounts_derivations {
 				t.num_outputs += 1;
 				t.amount_credited += change_amount;
 				batch.save(OutputData {
 					root_key_id: parent_key_id.clone(),
 					key_id: id.clone(),
 					n_child: id.to_path().last_path_index(),
+					mmr_index: None,
 					value: change_amount.clone(),
 					status: OutputStatus::Unconfirmed,
 					height: current_height,
@@ -183,7 +184,7 @@ where
 			.unwrap(),
 	);
 
-	context.add_output(&key_id);
+	context.add_output(&key_id, &None);
 
 	// Create closure that adds the output to recipient's wallet
 	// (up to the caller to decide when to do)
@@ -197,6 +198,7 @@ where
 		batch.save(OutputData {
 			root_key_id: parent_key_id.clone(),
 			key_id: key_id_inner.clone(),
+			mmr_index: None,
 			n_child: key_id_inner.to_path().last_path_index(),
 			value: amount,
 			status: OutputStatus::Unconfirmed,
@@ -229,9 +231,9 @@ pub fn select_send_tx<T: ?Sized, C, K>(
 	(
 		Vec<Box<build::Append<K>>>,
 		Vec<OutputData>,
-		Vec<(u64, Identifier)>, // change amounts and derivations
-		u64,                    // amount
-		u64,                    // fee
+		Vec<(u64, Identifier, Option<u64>)>, // change amounts and derivations
+		u64,                                 // amount
+		u64,                                 // fee
 	),
 	Error,
 >
@@ -337,7 +339,13 @@ pub fn inputs_and_change<T: ?Sized, C, K>(
 	amount: u64,
 	fee: u64,
 	num_change_outputs: usize,
-) -> Result<(Vec<Box<build::Append<K>>>, Vec<(u64, Identifier)>), Error>
+) -> Result<
+	(
+		Vec<Box<build::Append<K>>>,
+		Vec<(u64, Identifier, Option<u64>)>,
+	),
+	Error,
+>
 where
 	T: WalletBackend<C, K>,
 	C: NodeClient,
@@ -387,7 +395,7 @@ where
 
 			let change_key = wallet.next_child().unwrap();
 
-			change_amounts_derivations.push((change_amount, change_key.clone()));
+			change_amounts_derivations.push((change_amount, change_key.clone(), None));
 			parts.push(build::output(change_amount, change_key));
 		}
 	}

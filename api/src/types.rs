@@ -159,15 +159,18 @@ pub struct Output {
 	pub commit: PrintableCommitment,
 	/// Height of the block which contains the output
 	pub height: u64,
+	/// MMR Index of output
+	pub mmr_index: u64,
 }
 
 impl Output {
-	pub fn new(commit: &pedersen::Commitment, height: u64) -> Output {
+	pub fn new(commit: &pedersen::Commitment, height: u64, mmr_index: u64) -> Output {
 		Output {
 			commit: PrintableCommitment {
 				commit: commit.clone(),
 			},
 			height: height,
+			mmr_index: mmr_index,
 		}
 	}
 }
@@ -242,6 +245,8 @@ pub struct OutputPrintable {
 	pub block_height: Option<u64>,
 	/// Merkle Proof
 	pub merkle_proof: Option<MerkleProof>,
+	/// MMR Position
+	pub mmr_index: u64,
 }
 
 impl OutputPrintable {
@@ -279,6 +284,8 @@ impl OutputPrintable {
 			merkle_proof = chain.get_merkle_proof(&out_id, &block_header.unwrap()).ok()
 		};
 
+		let output_pos = chain.get_output_pos(&output.commit).unwrap_or(0);
+
 		OutputPrintable {
 			output_type,
 			commit: output.commit,
@@ -287,6 +294,7 @@ impl OutputPrintable {
 			proof_hash: util::to_hex(output.proof.hash().to_vec()),
 			block_height,
 			merkle_proof,
+			mmr_index: output_pos,
 		}
 	}
 
@@ -327,6 +335,7 @@ impl serde::ser::Serialize for OutputPrintable {
 
 		let hex_merkle_proof = &self.merkle_proof.clone().map(|x| x.to_hex());
 		state.serialize_field("merkle_proof", &hex_merkle_proof)?;
+		state.serialize_field("mmr_index", &self.mmr_index)?;
 
 		state.end()
 	}
@@ -347,6 +356,7 @@ impl<'de> serde::de::Deserialize<'de> for OutputPrintable {
 			ProofHash,
 			BlockHeight,
 			MerkleProof,
+			MmrIndex,
 		}
 
 		struct OutputPrintableVisitor;
@@ -369,6 +379,7 @@ impl<'de> serde::de::Deserialize<'de> for OutputPrintable {
 				let mut proof_hash = None;
 				let mut block_height = None;
 				let mut merkle_proof = None;
+				let mut mmr_index = None;
 
 				while let Some(key) = map.next_key()? {
 					match key {
@@ -410,6 +421,10 @@ impl<'de> serde::de::Deserialize<'de> for OutputPrintable {
 								}
 							}
 						}
+						Field::MmrIndex => {
+							no_dup!(mmr_index);
+							mmr_index = Some(map.next_value()?)
+						}
 					}
 				}
 
@@ -421,12 +436,19 @@ impl<'de> serde::de::Deserialize<'de> for OutputPrintable {
 					proof_hash: proof_hash.unwrap(),
 					block_height: block_height,
 					merkle_proof: merkle_proof,
+					mmr_index: mmr_index.unwrap(),
 				})
 			}
 		}
 
-		const FIELDS: &'static [&'static str] =
-			&["output_type", "commit", "spent", "proof", "proof_hash"];
+		const FIELDS: &'static [&'static str] = &[
+			"output_type",
+			"commit",
+			"spent",
+			"proof",
+			"proof_hash",
+			"mmr_index",
+		];
 		deserializer.deserialize_struct("OutputPrintable", FIELDS, OutputPrintableVisitor)
 	}
 }
@@ -662,7 +684,8 @@ mod test {
 			 \"proof\":null,\
 			 \"proof_hash\":\"ed6ba96009b86173bade6a9227ed60422916593fa32dd6d78b25b7a4eeef4946\",\
 			 \"block_height\":0,\
-			 \"merkle_proof\":null\
+			 \"merkle_proof\":null,\
+			 \"mmr_index\":0\
 			 }";
 		let deserialized: OutputPrintable = serde_json::from_str(&hex_output).unwrap();
 		let serialized = serde_json::to_string(&deserialized).unwrap();
@@ -674,7 +697,8 @@ mod test {
 		let hex_commit =
 			"{\
 			 \"commit\":\"083eafae5d61a85ab07b12e1a51b3918d8e6de11fc6cde641d54af53608aa77b9f\",\
-			 \"height\":0\
+			 \"height\":0,\
+			 \"mmr_index\":0\
 			 }";
 		let deserialized: Output = serde_json::from_str(&hex_commit).unwrap();
 		let serialized = serde_json::to_string(&deserialized).unwrap();

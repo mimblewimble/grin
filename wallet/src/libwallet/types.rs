@@ -81,10 +81,7 @@ where
 	fn iter<'a>(&'a self) -> Box<dyn Iterator<Item = OutputData> + 'a>;
 
 	/// Get output data by id
-	fn get(&self, id: &Identifier) -> Result<OutputData, Error>;
-
-	/// Get associated output commitment by id.
-	fn get_commitment(&mut self, id: &Identifier) -> Result<pedersen::Commitment, Error>;
+	fn get(&self, id: &Identifier, mmr_index: &Option<u64>) -> Result<OutputData, Error>;
 
 	/// Get an (Optional) tx log entry by uuid
 	fn get_tx_log_entry(&self, uuid: &Uuid) -> Result<Option<TxLogEntry>, Error>;
@@ -139,13 +136,13 @@ where
 	fn save(&mut self, out: OutputData) -> Result<(), Error>;
 
 	/// Gets output data by id
-	fn get(&self, id: &Identifier) -> Result<OutputData, Error>;
+	fn get(&self, id: &Identifier, mmr_index: &Option<u64>) -> Result<OutputData, Error>;
 
 	/// Iterate over all output data stored by the backend
 	fn iter(&self) -> Box<dyn Iterator<Item = OutputData>>;
 
 	/// Delete data about an output from the backend
-	fn delete(&mut self, id: &Identifier) -> Result<(), Error>;
+	fn delete(&mut self, id: &Identifier, mmr_index: &Option<u64>) -> Result<(), Error>;
 
 	/// Save last stored child index of a given parent
 	fn save_child_index(&mut self, parent_key_id: &Identifier, child_n: u32) -> Result<(), Error>;
@@ -211,13 +208,13 @@ pub trait NodeClient: Sync + Send + Clone {
 	fn get_outputs_from_node(
 		&self,
 		wallet_outputs: Vec<pedersen::Commitment>,
-	) -> Result<HashMap<pedersen::Commitment, (String, u64)>, Error>;
+	) -> Result<HashMap<pedersen::Commitment, (String, u64, u64)>, Error>;
 
 	/// Get a list of outputs from the node by traversing the UTXO
 	/// set in PMMR index order.
 	/// Returns
 	/// (last available output index, last insertion index retrieved,
-	/// outputs(commit, proof, is_coinbase, height))
+	/// outputs(commit, proof, is_coinbase, height, mmr_index))
 	fn get_outputs_by_pmmr_index(
 		&self,
 		start_height: u64,
@@ -226,7 +223,7 @@ pub trait NodeClient: Sync + Send + Clone {
 		(
 			u64,
 			u64,
-			Vec<(pedersen::Commitment, pedersen::RangeProof, bool, u64)>,
+			Vec<(pedersen::Commitment, pedersen::RangeProof, bool, u64, u64)>,
 		),
 		Error,
 	>;
@@ -244,6 +241,9 @@ pub struct OutputData {
 	pub key_id: Identifier,
 	/// How many derivations down from the root key
 	pub n_child: u32,
+	/// PMMR Index, used on restore in case of duplicate wallets using the same
+	/// key_id (2 wallets using same seed, for instance
+	pub mmr_index: Option<u64>,
 	/// Value of the output, necessary to rebuild the commitment
 	pub value: u64,
 	/// Current status of the output
@@ -368,9 +368,9 @@ pub struct Context {
 	/// (basically a SecretKey)
 	pub sec_nonce: SecretKey,
 	/// store my outputs between invocations
-	pub output_ids: Vec<Identifier>,
+	pub output_ids: Vec<(Identifier, Option<u64>)>,
 	/// store my inputs
-	pub input_ids: Vec<Identifier>,
+	pub input_ids: Vec<(Identifier, Option<u64>)>,
 	/// store the calculated fee
 	pub fee: u64,
 }
@@ -391,23 +391,23 @@ impl Context {
 impl Context {
 	/// Tracks an output contributing to my excess value (if it needs to
 	/// be kept between invocations
-	pub fn add_output(&mut self, output_id: &Identifier) {
-		self.output_ids.push(output_id.clone());
+	pub fn add_output(&mut self, output_id: &Identifier, mmr_index: &Option<u64>) {
+		self.output_ids.push((output_id.clone(), mmr_index.clone()));
 	}
 
 	/// Returns all stored outputs
-	pub fn get_outputs(&self) -> Vec<Identifier> {
+	pub fn get_outputs(&self) -> Vec<(Identifier, Option<u64>)> {
 		self.output_ids.clone()
 	}
 
 	/// Tracks IDs of my inputs into the transaction
 	/// be kept between invocations
-	pub fn add_input(&mut self, input_id: &Identifier) {
-		self.input_ids.push(input_id.clone());
+	pub fn add_input(&mut self, input_id: &Identifier, mmr_index: &Option<u64>) {
+		self.input_ids.push((input_id.clone(), mmr_index.clone()));
 	}
 
 	/// Returns all stored input identifiers
-	pub fn get_inputs(&self) -> Vec<Identifier> {
+	pub fn get_inputs(&self) -> Vec<(Identifier, Option<u64>)> {
 		self.input_ids.clone()
 	}
 

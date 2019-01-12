@@ -44,6 +44,7 @@ pub fn outputs(
 
 	table.set_titles(row![
 		bMG->"Output Commitment",
+		bMG->"MMR Index",
 		bMG->"Block Height",
 		bMG->"Locked Until",
 		bMG->"Status",
@@ -55,6 +56,10 @@ pub fn outputs(
 
 	for (out, commit) in outputs {
 		let commit = format!("{}", util::to_hex(commit.as_ref().to_vec()));
+		let index = match out.mmr_index {
+			None => "None".to_owned(),
+			Some(t) => t.to_string(),
+		};
 		let height = format!("{}", out.height);
 		let lock_height = format!("{}", out.lock_height);
 		let is_coinbase = format!("{}", out.is_coinbase);
@@ -75,6 +80,7 @@ pub fn outputs(
 		if dark_background_color_scheme {
 			table.add_row(row![
 				bFC->commit,
+				bFB->index,
 				bFB->height,
 				bFB->lock_height,
 				bFR->status,

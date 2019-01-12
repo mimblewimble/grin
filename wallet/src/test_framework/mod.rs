@@ -17,7 +17,8 @@ use self::core::core::{OutputFeatures, OutputIdentifier, Transaction};
 use self::core::{consensus, global, pow, ser};
 use self::util::secp::pedersen;
 use self::util::Mutex;
-use crate::libwallet::types::{BlockFees, CbData, NodeClient, WalletInst};
+use crate::libwallet::api::APIOwner;
+use crate::libwallet::types::{BlockFees, CbData, NodeClient, WalletInfo, WalletInst};
 use crate::lmdb_wallet::LMDBBackend;
 use crate::{controller, libwallet, WalletSeed};
 use crate::{WalletBackend, WalletConfig};
@@ -52,7 +53,8 @@ fn get_output_local(chain: &chain::Chain, commit: &pedersen::Commitment) -> Opti
 	for x in outputs.iter() {
 		if let Ok(_) = chain.is_unspent(&x) {
 			let block_height = chain.get_header_for_output(&x).unwrap().height;
-			return Some(api::Output::new(&commit, block_height));
+			let output_pos = chain.get_output_pos(&x.commit).unwrap_or(0);
+			return Some(api::Output::new(&commit, block_height, output_pos));
 		}
 	}
 	None
@@ -153,14 +155,22 @@ where
 }
 
 /// dispatch a db wallet
-pub fn create_wallet<C, K>(dir: &str, n_client: C) -> Arc<Mutex<dyn WalletInst<C, K>>>
+pub fn create_wallet<C, K>(
+	dir: &str,
+	n_client: C,
+	rec_phrase: Option<&str>,
+) -> Arc<Mutex<dyn WalletInst<C, K>>>
 where
 	C: NodeClient + 'static,
 	K: keychain::Keychain + 'static,
 {
+	let z_string = match rec_phrase {
+		Some(s) => Some(util::ZeroingString::from(s)),
+		None => None,
+	};
 	let mut wallet_config = WalletConfig::default();
 	wallet_config.data_file_dir = String::from(dir);
-	let _ = WalletSeed::init_file(&wallet_config, 32, None, "");
+	let _ = WalletSeed::init_file(&wallet_config, 32, z_string, "");
 	let mut wallet = LMDBBackend::new(wallet_config.clone(), "", n_client)
 		.unwrap_or_else(|e| panic!("Error creating wallet: {:?} Config: {:?}", e, wallet_config));
 	wallet.open_with_credentials().unwrap_or_else(|e| {
@@ -170,4 +180,46 @@ where
 		)
 	});
 	Arc::new(Mutex::new(wallet))
+}
+
+/// send an amount to a destination
+pub fn send_to_dest<T: ?Sized, C, K>(
+	client: LocalWalletClient,
+	api: &mut APIOwner<T, C, K>,
+	dest: &str,
+	amount: u64,
+) -> Result<(), libwallet::Error>
+where
+	T: WalletBackend<C, K>,
+	C: NodeClient,
+	K: keychain::Keychain,
+{
+	let (slate_i, lock_fn) = api.initiate_tx(
+		None,   // account
+		amount, // amount
+		2,      // minimum confirmations
+		500,    // max outputs
+		1,      // num change outputs
+		true,   // select all outputs
+		None,
+	)?;
+	let mut slate = client.send_tx_slate_direct(dest, &slate_i)?;
+	api.tx_lock_outputs(&slate, lock_fn)?;
+	api.finalize_tx(&mut slate)?;
+	api.post_tx(&slate.tx, false)?; // mines a block
+	Ok(())
+}
+
+/// get wallet info totals
+pub fn wallet_info<T: ?Sized, C, K>(
+	api: &mut APIOwner<T, C, K>,
+) -> Result<WalletInfo, libwallet::Error>
+where
+	T: WalletBackend<C, K>,
+	C: NodeClient,
+	K: keychain::Keychain,
+{
+	let (wallet_refreshed, wallet_info) = api.retrieve_summary_info(true, 1)?;
+	assert!(wallet_refreshed);
+	Ok(wallet_info)
 }

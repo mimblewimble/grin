@@ -48,7 +48,8 @@ fn self_send_test_impl(test_dir: &str) -> Result<(), libwallet::Error> {
 	// Create a new wallet test client, and set its queues to communicate with the
 	// proxy
 	let client1 = LocalWalletClient::new("wallet1", wallet_proxy.tx.clone());
-	let wallet1 = test_framework::create_wallet(&format!("{}/wallet1", test_dir), client1.clone());
+	let wallet1 =
+		test_framework::create_wallet(&format!("{}/wallet1", test_dir), client1.clone(), None);
 	wallet_proxy.add_wallet("wallet1", client1.get_send_instance(), wallet1.clone());
 
 	// Set the wallet proxy listener running

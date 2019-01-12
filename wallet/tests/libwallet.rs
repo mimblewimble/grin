@@ -89,7 +89,7 @@ fn aggsig_sender_receiver_interaction() {
 
 		rx_cx = Context::new(&keychain.secp(), blind);
 		let (pub_excess, pub_nonce) = rx_cx.get_public_keys(&keychain.secp());
-		rx_cx.add_output(&key_id);
+		rx_cx.add_output(&key_id, &None);
 
 		pub_nonce_sum = PublicKey::from_combination(
 			keychain.secp(),
@@ -305,7 +305,7 @@ fn aggsig_sender_receiver_interaction_offset() {
 
 		rx_cx = Context::new(&keychain.secp(), blind);
 		let (pub_excess, pub_nonce) = rx_cx.get_public_keys(&keychain.secp());
-		rx_cx.add_output(&key_id);
+		rx_cx.add_output(&key_id, &None);
 
 		pub_nonce_sum = PublicKey::from_combination(
 			keychain.secp(),

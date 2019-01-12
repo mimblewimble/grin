@@ -89,7 +89,7 @@ impl NodeClient for HTTPNodeClient {
 	fn get_outputs_from_node(
 		&self,
 		wallet_outputs: Vec<pedersen::Commitment>,
-	) -> Result<HashMap<pedersen::Commitment, (String, u64)>, libwallet::Error> {
+	) -> Result<HashMap<pedersen::Commitment, (String, u64, u64)>, libwallet::Error> {
 		let addr = self.node_url();
 		// build the necessary query params -
 		// ?id=xxx&id=yyy&id=zzz
@@ -99,7 +99,7 @@ impl NodeClient for HTTPNodeClient {
 			.collect();
 
 		// build a map of api outputs by commit so we can look them up efficiently
-		let mut api_outputs: HashMap<pedersen::Commitment, (String, u64)> = HashMap::new();
+		let mut api_outputs: HashMap<pedersen::Commitment, (String, u64, u64)> = HashMap::new();
 		let mut tasks = Vec::new();
 
 		for query_chunk in query_params.chunks(500) {
@@ -125,7 +125,7 @@ impl NodeClient for HTTPNodeClient {
 			for out in res {
 				api_outputs.insert(
 					out.commit.commit(),
-					(util::to_hex(out.commit.to_vec()), out.height),
+					(util::to_hex(out.commit.to_vec()), out.height, out.mmr_index),
 				);
 			}
 		}
@@ -140,7 +140,7 @@ impl NodeClient for HTTPNodeClient {
 		(
 			u64,
 			u64,
-			Vec<(pedersen::Commitment, pedersen::RangeProof, bool, u64)>,
+			Vec<(pedersen::Commitment, pedersen::RangeProof, bool, u64, u64)>,
 		),
 		libwallet::Error,
 	> {
@@ -149,7 +149,7 @@ impl NodeClient for HTTPNodeClient {
 
 		let url = format!("{}/v1/txhashset/outputs?{}", addr, query_param,);
 
-		let mut api_outputs: Vec<(pedersen::Commitment, pedersen::RangeProof, bool, u64)> =
+		let mut api_outputs: Vec<(pedersen::Commitment, pedersen::RangeProof, bool, u64, u64)> =
 			Vec::new();
 
 		match api::client::get::<api::OutputListing>(url.as_str(), self.node_api_secret()) {
@@ -164,6 +164,7 @@ impl NodeClient for HTTPNodeClient {
 						out.range_proof().unwrap(),
 						is_coinbase,
 						out.block_height.unwrap(),
+						out.mmr_index,
 					));
 				}
 
