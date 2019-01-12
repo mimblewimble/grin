@@ -241,7 +241,7 @@ impl TUIStatusListener for TUIStatusView {
 			t.set_content(stats.peer_count.to_string());
 		});
 		c.call_on_id("tip_hash", |t: &mut TextView| {
-			t.set_content(stats.head.last_block_h.to_string());
+			t.set_content(stats.head.last_block_h.to_string() + "...");
 		});
 		c.call_on_id("chain_height", |t: &mut TextView| {
 			t.set_content(stats.head.height.to_string());
@@ -250,7 +250,7 @@ impl TUIStatusListener for TUIStatusView {
 			t.set_content(stats.head.total_difficulty.to_string());
 		});
 		c.call_on_id("basic_header_tip_hash", |t: &mut TextView| {
-			t.set_content(stats.header_head.last_block_h.to_string());
+			t.set_content(stats.header_head.last_block_h.to_string() + "...");
 		});
 		c.call_on_id("basic_header_chain_height", |t: &mut TextView| {
 			t.set_content(stats.header_head.height.to_string());
