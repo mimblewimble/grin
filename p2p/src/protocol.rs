@@ -14,7 +14,7 @@
 
 use std::cmp;
 use std::env;
-use std::fs::File;
+use std::fs::{self, File};
 use std::io::{BufWriter, Write};
 use std::net::SocketAddr;
 use std::sync::Arc;
@@ -330,7 +330,7 @@ impl MessageHandler for Protocol {
 					tmp,
 				);
 
-				let tmp_zip = File::open(tmp)?;
+				let tmp_zip = File::open(tmp.clone())?;
 				let res = self
 					.adapter
 					.txhashset_write(sm_arch.hash, tmp_zip, self.addr);
@@ -339,6 +339,7 @@ impl MessageHandler for Protocol {
 					"handle_payload: txhashset archive for {} at {}, DONE. Data Ok: {}",
 					sm_arch.hash, sm_arch.height, res
 				);
+				let _ = fs::remove_file(&tmp);
 
 				Ok(None)
 			}
