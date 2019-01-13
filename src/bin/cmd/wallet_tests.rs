@@ -465,6 +465,30 @@ mod wallet_tests {
 		let arg_vec = vec!["grin", "wallet", "-p", "password", "check"];
 		execute_command(&app, test_dir, "wallet1", &client1, arg_vec)?;
 
+		// Another file exchange, cancel this time
+		let arg_vec = vec![
+			"grin",
+			"wallet",
+			"-p",
+			"password",
+			"-a",
+			"mining",
+			"send",
+			"-m",
+			"file",
+			"-d",
+			&file_name,
+			"-g",
+			"Ain't sending 2",
+			"10",
+		];
+		execute_command(&app, test_dir, "wallet1", &client1, arg_vec)?;
+
+		let arg_vec = vec![
+			"grin", "wallet", "-p", "password", "-a", "mining", "cancel", "-i", "26",
+		];
+		execute_command(&app, test_dir, "wallet1", &client1, arg_vec)?;
+
 		// txs and outputs (mostly spit out for a visual in test logs)
 		let arg_vec = vec!["grin", "wallet", "-p", "password", "-a", "mining", "txs"];
 		execute_command(&app, test_dir, "wallet1", &client1, arg_vec)?;
