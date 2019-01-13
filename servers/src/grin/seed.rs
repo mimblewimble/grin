@@ -17,7 +17,7 @@
 //! configurable with either no peers, a user-defined list or a preset
 //! list of DNS records (the default).
 
-use chrono::prelude::Utc;
+use chrono::prelude::{DateTime, Utc};
 use chrono::{Duration, MIN_DATE};
 use rand::{thread_rng, Rng};
 use std::net::{SocketAddr, ToSocketAddrs};
@@ -76,6 +76,8 @@ pub fn connect_and_monitor(
 			let mut prev_ping = Utc::now();
 			let mut start_attempt = 0;
 
+			let mut connecting_history: Vec<(SocketAddr, DateTime<Utc>)> = Vec::new();
+
 			loop {
 				if stop_state.lock().is_stopped() {
 					break;
@@ -98,7 +100,13 @@ pub fn connect_and_monitor(
 				// with exponential backoff
 				if Utc::now() - prev > Duration::seconds(cmp::min(20, 1 << start_attempt)) {
 					// try to connect to any address sent to the channel
-					listen_for_addrs(peers.clone(), p2p_server.clone(), capabilities, &rx);
+					listen_for_addrs(
+						peers.clone(),
+						p2p_server.clone(),
+						capabilities,
+						&rx,
+						&mut connecting_history,
+					);
 
 					// monitor additional peers if we need to add more
 					monitor_peers(
@@ -297,6 +305,7 @@ fn listen_for_addrs(
 	p2p: Arc<p2p::Server>,
 	capab: p2p::Capabilities,
 	rx: &mpsc::Receiver<SocketAddr>,
+	connecting_history: &mut Vec<(SocketAddr, DateTime<Utc>)>,
 ) {
 	if peers.peer_count() >= p2p.config.peer_max_count() {
 		// clean the rx messages to avoid accumulating
@@ -304,7 +313,21 @@ fn listen_for_addrs(
 		return;
 	}
 
+	let now = Utc::now();
 	for addr in rx.try_iter() {
+		// ignore the duplicate connecting to same peer within 10 seconds
+		if let Some(pos) = connecting_history.iter().position(|&r| r.0 == addr) {
+			let (_, last_connect_time) = connecting_history[pos];
+			if last_connect_time + Duration::seconds(10) > now {
+				debug!(
+					"peer_connect: ignore a duplicate connect request to {}",
+					addr
+				);
+				continue;
+			}
+		}
+		connecting_history.insert(0, (addr, now));
+
 		let peers_c = peers.clone();
 		let p2p_c = p2p.clone();
 		let _ = thread::Builder::new()
@@ -319,6 +342,14 @@ fn listen_for_addrs(
 					let _ = peers_c.update_state(addr, p2p::State::Defunct);
 				}
 			});
+	}
+
+	// shrink the connecting history vector, removing history 60 seconds ago
+	if let Some(pos) = connecting_history
+		.iter()
+		.position(|&r| r.1 + Duration::seconds(60) < now)
+	{
+		connecting_history.truncate(pos);
 	}
 }
 
