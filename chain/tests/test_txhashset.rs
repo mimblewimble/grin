@@ -18,6 +18,8 @@ use grin_core as core;
 use grin_store as store;
 use grin_util as util;
 
+use crate::util::RwLock;
+use chrono::prelude::{DateTime, Utc};
 use std::collections::HashSet;
 use std::fs::{self, File, OpenOptions};
 use std::iter::FromIterator;
@@ -38,6 +40,8 @@ fn clean_output_dir(dir_name: &str) {
 fn test_unexpected_zip() {
 	let now = SystemTime::now();
 	let rand = now.duration_since(UNIX_EPOCH).unwrap().subsec_micros();
+	let txhashset_snapshot_zips: Arc<RwLock<Vec<(PathBuf, DateTime<Utc>)>>>;
+	txhashset_snapshot_zips = Arc::new(RwLock::new(Vec::new()));
 
 	let db_root = format!(".grin_txhashset_zip");
 	clean_output_dir(&db_root);
@@ -46,22 +50,38 @@ fn test_unexpected_zip() {
 	let store = Arc::new(chain_store);
 	txhashset::TxHashSet::open(db_root.clone(), store.clone(), None).unwrap();
 	// First check if everything works out of the box
-	assert!(txhashset::zip_read(db_root.clone(), &BlockHeader::default(), Some(rand)).is_ok());
+	assert!(txhashset::zip_read(
+		db_root.clone(),
+		&BlockHeader::default(),
+		Some(rand),
+		txhashset_snapshot_zips.clone()
+	)
+	.is_ok());
 	let zip_path = Path::new(&db_root).join(format!("txhashset_snapshot_{}.zip", rand));
 	let zip_file = File::open(&zip_path).unwrap();
 	assert!(txhashset::zip_write(db_root.clone(), zip_file, &BlockHeader::default()).is_ok());
-	// Remove temp txhashset dir
-	fs::remove_dir_all(Path::new(&db_root).join(format!("txhashset_zip_{}", rand))).unwrap();
+	// Fail on remove temp txhashset dir, since it's already cleaned in function zip_read
+	assert!(
+		fs::remove_dir_all(Path::new(&db_root).join(format!("txhashset_zip_{}", rand))).is_err()
+	);
 	// Then add strange files in the original txhashset folder
 	write_file(db_root.clone());
-	assert!(txhashset::zip_read(db_root.clone(), &BlockHeader::default(), Some(rand)).is_ok());
+	assert!(txhashset::zip_read(
+		db_root.clone(),
+		&BlockHeader::default(),
+		Some(rand),
+		txhashset_snapshot_zips.clone()
+	)
+	.is_ok());
 	// Check that the temp dir dos not contains the strange files
 	let txhashset_zip_path = Path::new(&db_root).join(format!("txhashset_zip_{}", rand));
 	assert!(txhashset_contains_expected_files(
 		format!("txhashset_zip_{}", rand),
 		txhashset_zip_path.clone()
 	));
-	fs::remove_dir_all(Path::new(&db_root).join(format!("txhashset_zip_{}", rand))).unwrap();
+	assert!(
+		fs::remove_dir_all(Path::new(&db_root).join(format!("txhashset_zip_{}", rand))).is_err()
+	);
 
 	let zip_file = File::open(zip_path).unwrap();
 	assert!(txhashset::zip_write(db_root.clone(), zip_file, &BlockHeader::default()).is_ok());
