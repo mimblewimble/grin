@@ -202,7 +202,7 @@ where
 			batch.delete(&o.key_id, &o.mmr_index)?;
 		}
 		if o.status == OutputStatus::Locked {
-			o.status = OutputStatus::Unconfirmed;
+			o.status = OutputStatus::Unspent;
 			batch.save(o)?;
 		}
 	}
