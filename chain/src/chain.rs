@@ -37,7 +37,7 @@ use crate::util::{Mutex, RwLock, StopState};
 use chrono::prelude::{DateTime, Utc};
 use grin_store::Error::NotFoundErr;
 use std::collections::HashMap;
-use std::fs::File;
+use std::fs::{self, File};
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
@@ -155,6 +155,27 @@ pub struct Chain {
 	stop_state: Arc<Mutex<StopState>>,
 	genesis: BlockHeader,
 	txhashset_snapshot_zips: Arc<RwLock<Vec<(PathBuf, DateTime<Utc>)>>>,
+}
+
+/// Clean-up all the remaining txhashset zip files when process exit
+impl Drop for Chain {
+	fn drop(&mut self) {
+		let zip_paths = self.txhashset_snapshot_zips.read();
+		for (zip_path, _) in zip_paths.iter() {
+			if let Err(e) = fs::remove_file(&zip_path) {
+				warn!(
+					"txhashset zip file: {:?} fail to remove, err: {}",
+					zip_path.to_str(),
+					e
+				);
+			} else {
+				debug!(
+					"clean-up txhashset zip file: {:?} on exit",
+					zip_path.to_str()
+				);
+			}
+		}
+	}
 }
 
 impl Chain {
