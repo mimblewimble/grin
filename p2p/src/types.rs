@@ -72,7 +72,6 @@ pub enum Error {
 	},
 	Send(String),
 	PeerException,
-	DuplicateConnection,
 }
 
 impl From<ser::Error> for Error {
