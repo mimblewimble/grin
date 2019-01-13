@@ -1412,7 +1412,7 @@ pub fn zip_read(
 	let zip_file = File::open(zip_path.clone())?;
 
 	// clean-up temp txhashset directory.
-	// TODO: error cases clean-up
+	// TODO: clean-up on above error cases
 	if let Err(e) = fs::remove_dir_all(&path_to_be_cleanup) {
 		warn!(
 			"txhashset zip file: {:?} fail to remove, err: {}",
@@ -1423,12 +1423,11 @@ pub fn zip_read(
 
 	// save the zip path for clean-up later
 	{
-		let now = Utc::now();
 		let mut zip_paths = txhashset_snapshot_zips.write();
-		zip_paths.insert(0, (zip_path.clone(), now));
 
-		// and when a new zip file generated, it's a good time to clean-up some old zip files.
+		// when a new zip file generated, it's a good time to clean-up some old zip files.
 		// clean-up zip files which were created 30 minutes ago
+		let now = Utc::now();
 		let mut position = 0;
 		for (zip_path, time) in zip_paths.iter() {
 			if *time + Duration::minutes(30) > now {
@@ -1441,9 +1440,14 @@ pub fn zip_read(
 					zip_path.to_str(),
 					e
 				);
+			} else {
+				debug!("clean-up old txhashset zip file: {:?}", zip_path.to_str());
 			}
 		}
 		zip_paths.truncate(position);
+
+		// save the new zip path
+		zip_paths.insert(0, (zip_path.clone(), now));
 	}
 	Ok(zip_file)
 }
