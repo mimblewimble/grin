@@ -147,6 +147,16 @@ impl Server {
 					&self.handshake,
 					self.peers.clone(),
 				)?;
+
+				// to avoid duplicate connection if we're already connected to the addr
+				let addr = peer.info.addr.clone();
+				if let Some(_) = self.peers.get_connected_peer(&addr) {
+					debug!("connect_peer: already connected {}", addr);
+					if let Err(e) = stream.shutdown(Shutdown::Both) {
+						debug!("Error shutting down conn: {:?}", e);
+					}
+					return Err(Error::DuplicateConnection);
+				}
 				peer.start(stream);
 				let peer = Arc::new(peer);
 				self.peers.add_connected(peer.clone())?;

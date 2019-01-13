@@ -314,6 +314,7 @@ fn listen_for_addrs(
 					let _ = p.send_peer_request(capab);
 					let _ = peers_c.update_state(addr, p2p::State::Healthy);
 				}
+				Err(p2p::Error::DuplicateConnection) => (),
 				Err(_) => {
 					let _ = peers_c.update_state(addr, p2p::State::Defunct);
 				}
