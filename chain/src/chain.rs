@@ -157,27 +157,6 @@ pub struct Chain {
 	txhashset_snapshot_zips: Arc<RwLock<Vec<(PathBuf, DateTime<Utc>)>>>,
 }
 
-/// Clean-up all the remaining txhashset zip files when process exit
-impl Drop for Chain {
-	fn drop(&mut self) {
-		let zip_paths = self.txhashset_snapshot_zips.read();
-		for (zip_path, _) in zip_paths.iter() {
-			if let Err(e) = fs::remove_file(&zip_path) {
-				warn!(
-					"txhashset zip file: {:?} fail to remove, err: {}",
-					zip_path.to_str(),
-					e
-				);
-			} else {
-				debug!(
-					"clean-up txhashset zip file: {:?} on exit",
-					zip_path.to_str()
-				);
-			}
-		}
-	}
-}
-
 impl Chain {
 	/// Initializes the blockchain and returns a new Chain instance. Does a
 	/// check on the current chain head to make sure it exists and creates one
@@ -231,6 +210,26 @@ impl Chain {
 		chain.compact()?;
 
 		Ok(chain)
+	}
+
+	/// Clean-up all the remaining txhashset snapshot zip files.
+	/// Only call it when server stop
+	pub fn drop_txhashset_zips(&self) {
+		let zip_paths = self.txhashset_snapshot_zips.read();
+		for (zip_path, _) in zip_paths.iter() {
+			if let Err(e) = fs::remove_file(&zip_path) {
+				warn!(
+					"txhashset zip file: {:?} fail to remove, err: {}",
+					zip_path.to_str(),
+					e
+				);
+			} else {
+				debug!(
+					"clean-up txhashset zip file: {:?} on exit",
+					zip_path.to_str()
+				);
+			}
+		}
 	}
 
 	/// Return our shared txhashset instance.

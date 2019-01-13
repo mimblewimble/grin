@@ -455,6 +455,7 @@ impl Server {
 	pub fn stop(&self) {
 		self.p2p.stop();
 		self.stop_state.lock().stop();
+		self.chain.drop_txhashset_zips();
 	}
 
 	/// Pause the p2p server.
