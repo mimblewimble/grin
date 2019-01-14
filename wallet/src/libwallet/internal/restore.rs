@@ -421,8 +421,6 @@ where
 		)?;
 	}
 
-	println!("RESTORE STATS: {:?}", restore_stats);
-
 	// restore labels, account paths and child derivation indices
 	let label_base = "account";
 	let mut acct_index = 1;
