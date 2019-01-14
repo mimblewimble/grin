@@ -502,7 +502,7 @@ pub fn parse_sign_utxo_args(args: &ArgMatches) -> Result<command::SignUtxoArgs, 
 
 	Ok(command::SignUtxoArgs {
 		utxo_commitment_string: utxo_commitment_string.to_owned(),
-		message_hash_to_sign: message_hash.to_owned()
+		message_hash_to_sign: message_hash.to_owned(),
 	})
 }
 

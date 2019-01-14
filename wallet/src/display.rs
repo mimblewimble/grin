@@ -14,7 +14,9 @@
 
 use crate::core::core::{self, amount_to_hr_string};
 use crate::core::global;
-use crate::libwallet::types::{AcctPathMapping, OutputData, OutputStatus, TxLogEntry, WalletInfo, OutputProof};
+use crate::libwallet::types::{
+	AcctPathMapping, OutputData, OutputProof, OutputStatus, TxLogEntry, WalletInfo,
+};
 use crate::libwallet::Error;
 use crate::util;
 use crate::util::secp::pedersen;
@@ -361,10 +363,19 @@ pub fn accounts(acct_mappings: Vec<AcctPathMapping>) {
 pub fn output_proof(utxo_proof: &OutputProof) {
 	println!("\n____ Output Proof of Possession ____\n",);
 
-	println!("Output amount: {}", core::amount_to_hr_string(utxo_proof.amount, false));
+	println!(
+		"Output amount: {}",
+		core::amount_to_hr_string(utxo_proof.amount, false)
+	);
 	println!("Message hash: {}", utxo_proof.msg_hash.to_hex());
-	println!("Public key (compressed): {}", util::to_hex(utxo_proof.public_key.to_vec()));
-	println!("Message signature (compact): {}", util::to_hex(utxo_proof.signature.to_vec()));
+	println!(
+		"Public key (compressed): {}",
+		util::to_hex(utxo_proof.public_key.to_vec())
+	);
+	println!(
+		"Message signature (compact): {}",
+		util::to_hex(utxo_proof.signature.to_vec())
+	);
 
 	println!();
 }

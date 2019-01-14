@@ -702,7 +702,6 @@ pub struct SendTXArgs {
 	pub message: Option<String>,
 }
 
-
 /// Output's proof-of-possession
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct OutputProof {
@@ -716,5 +715,5 @@ pub struct OutputProof {
 	pub public_key: Vec<u8>,
 
 	/// Signature (compact)
-	pub signature: Vec<u8>
+	pub signature: Vec<u8>,
 }

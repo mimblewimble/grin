@@ -532,8 +532,9 @@ pub struct SignUtxoArgs {
 	pub message_hash_to_sign: String,
 }
 
-pub fn sign_utxo(wallet: Arc<Mutex<WalletInst<impl NodeClient + 'static, keychain::ExtKeychain>>>,
-				 args: SignUtxoArgs,
+pub fn sign_utxo(
+	wallet: Arc<Mutex<WalletInst<impl NodeClient + 'static, keychain::ExtKeychain>>>,
+	args: SignUtxoArgs,
 ) -> Result<(), Error> {
 	controller::owner_single_use(wallet.clone(), |api| {
 		let proof = api
@@ -556,8 +557,9 @@ pub struct VerifyUtxoArgs {
 	pub signature: String,
 }
 
-pub fn verify_utxo(wallet: Arc<Mutex<WalletInst<impl NodeClient + 'static, keychain::ExtKeychain>>>,
-				 args: VerifyUtxoArgs,
+pub fn verify_utxo(
+	wallet: Arc<Mutex<WalletInst<impl NodeClient + 'static, keychain::ExtKeychain>>>,
+	args: VerifyUtxoArgs,
 ) -> Result<(), Error> {
 	controller::owner_single_use(wallet.clone(), |api| {
 		let proof = api
