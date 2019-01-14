@@ -62,7 +62,7 @@ pub const COINBASE_MATURITY: u64 = DAY_HEIGHT;
 /// function of block height (time). Starts at 90% losing a percent
 /// approximately every week. Represented as an integer between 0 and 100.
 pub fn secondary_pow_ratio(height: u64) -> u64 {
-	90u64.saturating_sub(height / (2 * YEAR_HEIGHT / 90))
+	90u64.saturating_add(height / (2 * YEAR_HEIGHT / 90))
 }
 
 /// The AR scale damping factor to use. Dependent on block height
