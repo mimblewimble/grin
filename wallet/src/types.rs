@@ -52,6 +52,9 @@ pub struct WalletConfig {
 	pub owner_api_include_foreign: Option<bool>,
 	// The directory in which wallet files are stored
 	pub data_file_dir: String,
+	/// If Some(true), don't cache commits alongside output data
+	/// speed improvement, but your commits are in the database
+	pub no_commit_cache: Option<bool>,
 	/// TLS certificate file
 	pub tls_certificate_file: Option<String>,
 	/// TLS certificate private key file
@@ -74,6 +77,7 @@ impl Default for WalletConfig {
 			check_node_api_http_addr: "http://127.0.0.1:3413".to_string(),
 			owner_api_include_foreign: Some(false),
 			data_file_dir: ".".to_string(),
+			no_commit_cache: Some(false),
 			tls_certificate_file: None,
 			tls_certificate_key: None,
 			dark_background_color_scheme: Some(true),

@@ -142,6 +142,7 @@ where
 	C: NodeClient,
 	K: Keychain,
 {
+	let commit = wallet.calc_commit_for_cache(output.value, &output.key_id)?;
 	let mut batch = wallet.batch()?;
 
 	let parent_key_id = output.key_id.parent_path();
@@ -167,6 +168,7 @@ where
 		key_id: output.key_id,
 		n_child: output.n_child,
 		mmr_index: Some(output.mmr_index),
+		commit: commit,
 		value: output.value,
 		status: OutputStatus::Unspent,
 		height: output.height,
@@ -198,6 +200,7 @@ where
 			output.tx_log_entry.clone(),
 			None,
 			Some(&parent_key_id),
+			false,
 		)?;
 		if entries.len() > 0 {
 			let mut entry = entries[0].clone();

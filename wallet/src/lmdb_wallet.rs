@@ -199,6 +199,21 @@ where
 		&mut self.w2n_client
 	}
 
+	/// return the version of the commit for caching
+	fn calc_commit_for_cache(
+		&mut self,
+		amount: u64,
+		id: &Identifier,
+	) -> Result<Option<String>, Error> {
+		if self.config.no_commit_cache == Some(true) {
+			Ok(None)
+		} else {
+			Ok(Some(util::to_hex(
+				self.keychain().commit(amount, &id)?.0.to_vec(),
+			)))
+		}
+	}
+
 	/// Set parent path by account name
 	fn set_parent_key_id_by_name(&mut self, label: &str) -> Result<(), Error> {
 		let label = label.to_owned();

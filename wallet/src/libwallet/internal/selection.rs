@@ -21,6 +21,8 @@ use crate::libwallet::error::{Error, ErrorKind};
 use crate::libwallet::internal::keys;
 use crate::libwallet::types::*;
 
+use std::collections::HashMap;
+
 /// Initialize a transaction on the sender side, returns a corresponding
 /// libwallet transaction slate with the appropriate inputs selected,
 /// and saves the private wallet identifiers of our selected outputs
@@ -85,9 +87,15 @@ where
 		context.add_input(&input.key_id, &input.mmr_index);
 	}
 
-	// Store change output(s)
-	for (_, id, mmr_index) in &change_amounts_derivations {
+	let mut commits: HashMap<Identifier, Option<String>> = HashMap::new();
+
+	// Store change output(s) and cached commits
+	for (change_amount, id, mmr_index) in &change_amounts_derivations {
 		context.add_output(&id, &mmr_index);
+		commits.insert(
+			id.clone(),
+			wallet.calc_commit_for_cache(*change_amount, &id)?,
+		);
 	}
 
 	let lock_inputs = context.get_inputs().clone();
@@ -119,10 +127,12 @@ where
 			for (change_amount, id, _) in &change_amounts_derivations {
 				t.num_outputs += 1;
 				t.amount_credited += change_amount;
+				let commit = commits.get(&id).unwrap().clone();
 				batch.save(OutputData {
 					root_key_id: parent_key_id.clone(),
 					key_id: id.clone(),
 					n_child: id.to_path().last_path_index(),
+					commit: commit,
 					mmr_index: None,
 					value: change_amount.clone(),
 					status: OutputStatus::Unconfirmed,
@@ -189,6 +199,7 @@ where
 	// Create closure that adds the output to recipient's wallet
 	// (up to the caller to decide when to do)
 	let wallet_add_fn = move |wallet: &mut T| {
+		let commit = wallet.calc_commit_for_cache(amount, &key_id_inner)?;
 		let mut batch = wallet.batch()?;
 		let log_id = batch.next_tx_log_id(&parent_key_id)?;
 		let mut t = TxLogEntry::new(parent_key_id.clone(), TxLogEntryType::TxReceived, log_id);
@@ -200,6 +211,7 @@ where
 			key_id: key_id_inner.clone(),
 			mmr_index: None,
 			n_child: key_id_inner.to_path().last_path_index(),
+			commit: commit,
 			value: amount,
 			status: OutputStatus::Unconfirmed,
 			height: height,

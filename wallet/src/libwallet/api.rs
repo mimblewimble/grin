@@ -431,7 +431,7 @@ where
 
 		let res = Ok((
 			validated,
-			updater::retrieve_txs(&mut *w, tx_id, tx_slate_id, Some(&parent_key_id))?,
+			updater::retrieve_txs(&mut *w, tx_id, tx_slate_id, Some(&parent_key_id), false)?,
 		));
 
 		w.close()?;
@@ -867,7 +867,7 @@ where
 			None => w.parent_key_id(),
 		};
 		// Don't do this multiple times
-		let tx = updater::retrieve_txs(&mut *w, None, Some(slate.id), Some(&parent_key_id))?;
+		let tx = updater::retrieve_txs(&mut *w, None, Some(slate.id), Some(&parent_key_id), false)?;
 		for t in &tx {
 			if t.tx_type == TxLogEntryType::TxReceived {
 				return Err(ErrorKind::TransactionAlreadyReceived(slate.id.to_string()).into());
