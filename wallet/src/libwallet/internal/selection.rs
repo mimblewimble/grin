@@ -92,7 +92,7 @@ where
 	// Store change output(s) and cached commits
 	for (change_amount, id, mmr_index) in &change_amounts_derivations {
 		context.add_output(&id, &mmr_index);
-		commits.insert(id.clone(), wallet.cached_commit(*change_amount, &id)?);
+		commits.insert(id.clone(), wallet.calc_commit_for_cache(*change_amount, &id)?);
 	}
 
 	let lock_inputs = context.get_inputs().clone();
@@ -196,7 +196,7 @@ where
 	// Create closure that adds the output to recipient's wallet
 	// (up to the caller to decide when to do)
 	let wallet_add_fn = move |wallet: &mut T| {
-		let commit = wallet.cached_commit(amount, &key_id_inner)?;
+		let commit = wallet.calc_commit_for_cache(amount, &key_id_inner)?;
 		let mut batch = wallet.batch()?;
 		let log_id = batch.next_tx_log_id(&parent_key_id)?;
 		let mut t = TxLogEntry::new(parent_key_id.clone(), TxLogEntryType::TxReceived, log_id);

@@ -67,8 +67,8 @@ where
 	/// Return the client being used to communicate with the node
 	fn w2n_client(&mut self) -> &mut C;
 
-	/// return the commit if allowed, if enabled, None otherwise
-	fn cached_commit(&mut self, amount: u64, id: &Identifier) -> Result<Option<String>, Error>;
+	/// return the commit for caching if allowed, none otherwise
+	fn calc_commit_for_cache(&mut self, amount: u64, id: &Identifier) -> Result<Option<String>, Error>;
 
 	/// Set parent key id by stored account name
 	fn set_parent_key_id_by_name(&mut self, label: &str) -> Result<(), Error>;
