@@ -38,6 +38,7 @@ const MAINNET_DNS_SEEDS: &'static [&'static str] = &[
 	"mainnet.seed.713.mw",             // jasper@713.mw
 	"mainnet.seed.grin.lesceller.com", // q.lesceller@gmail.com
 	"mainnet.seed.grin.prokapi.com",   // hendi@prokapi.com
+	"grinseed.yeastplume.org",         // yeastplume@protonmail.com
 ];
 const FLOONET_DNS_SEEDS: &'static [&'static str] = &[
 	"floonet.seed.grin-tech.org",      // igno.peverell@protonmail.com
