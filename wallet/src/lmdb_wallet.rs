@@ -199,8 +199,12 @@ where
 		&mut self.w2n_client
 	}
 
-	/// return the commit, if enabled, None otherwise
-	fn cached_commit(&mut self, amount: u64, id: &Identifier) -> Result<Option<String>, Error> {
+	/// return the version of the commit for caching
+	fn calc_commit_for_cache(
+		&mut self,
+		amount: u64,
+		id: &Identifier,
+	) -> Result<Option<String>, Error> {
 		if self.config.no_commit_cache == Some(true) {
 			Ok(None)
 		} else {
