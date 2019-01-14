@@ -115,7 +115,7 @@ where
 			};
 			let f_outstanding = match outstanding_only {
 				true => {
-					tx_entry.confirmed
+					!tx_entry.confirmed
 						&& (tx_entry.tx_type == TxLogEntryType::TxReceived
 							|| tx_entry.tx_type == TxLogEntryType::TxSent)
 				}
