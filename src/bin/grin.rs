@@ -87,12 +87,6 @@ fn real_main() -> i32 {
 		global::ChainTypes::Mainnet
 	};
 
-	// TODO remove for mainnet
-	if chain_type == global::ChainTypes::Mainnet {
-		println!("Mainnet not ready yet! In the meantime run 'grin --floonet ...'");
-		exit(1);
-	}
-
 	// Deal with configuration file creation
 	match args.subcommand() {
 		("server", Some(server_args)) => {

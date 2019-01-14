@@ -179,7 +179,7 @@ pub fn genesis_main() -> core::Block {
 		output_mmr_size: 1,
 		kernel_mmr_size: 1,
 		pow: ProofOfWork {
-			total_difficulty: Difficulty::from_num(10_u64.pow(8)),
+			total_difficulty: Difficulty::from_num(2_u64.pow(34)),
 			secondary_scaling: 1856,
 			nonce: 1, // REPLACE
 			proof: Proof {
