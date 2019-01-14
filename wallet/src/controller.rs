@@ -627,6 +627,10 @@ where
 			ok(create_error_response(e))
 		}))
 	}
+
+	fn options(&self, _req: Request<Body>) -> ResponseFuture {
+		Box::new(ok(create_ok_response("{}")))
+	}
 }
 
 // Utility to serialize a struct into JSON and produce a sensible Response
