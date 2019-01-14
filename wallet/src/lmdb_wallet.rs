@@ -200,11 +200,13 @@ where
 	}
 
 	/// return the commit, if enabled, None otherwise
-	fn cached_commit(&mut self, amount: u64, id: &Identifier) -> Result<Option<String>, Error>{
+	fn cached_commit(&mut self, amount: u64, id: &Identifier) -> Result<Option<String>, Error> {
 		if self.config.no_commit_cache == Some(true) {
 			Ok(None)
 		} else {
-			Ok(Some(util::to_hex(self.keychain().commit(amount, &id)?.0.to_vec())))
+			Ok(Some(util::to_hex(
+				self.keychain().commit(amount, &id)?.0.to_vec(),
+			)))
 		}
 	}
 

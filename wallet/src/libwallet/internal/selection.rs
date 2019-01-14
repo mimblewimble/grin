@@ -87,7 +87,7 @@ where
 		context.add_input(&input.key_id, &input.mmr_index);
 	}
 
-	let mut commits:HashMap<Identifier, Option<String>> = HashMap::new();
+	let mut commits: HashMap<Identifier, Option<String>> = HashMap::new();
 
 	// Store change output(s) and cached commits
 	for (change_amount, id, mmr_index) in &change_amounts_derivations {
