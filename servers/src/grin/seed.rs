@@ -314,9 +314,9 @@ fn listen_for_addrs(
 		return;
 	}
 
-	let now = Utc::now();
 	for addr in rx.try_iter() {
 		// ignore the duplicate connecting to same peer within 10 seconds
+		let now = Utc::now();
 		if let Some(last_connect_time) = connecting_history.get(&addr) {
 			if *last_connect_time + Duration::seconds(10) > now {
 				debug!(
@@ -348,10 +348,11 @@ fn listen_for_addrs(
 
 	// shrink the connecting history.
 	// put a threshold here to avoid frequent shrinking in every call
+	let now = Utc::now();
 	if connecting_history.len() > 100 {
 		let old: Vec<_> = connecting_history
 			.iter()
-			.filter(|&(_, t)| *t + Duration::seconds(10) < now)
+			.filter(|&(_, t)| *t + Duration::seconds(20) < now)
 			.map(|(s, _)| s.clone())
 			.collect();
 		for addr in old {
