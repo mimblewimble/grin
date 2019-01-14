@@ -92,7 +92,10 @@ where
 	// Store change output(s) and cached commits
 	for (change_amount, id, mmr_index) in &change_amounts_derivations {
 		context.add_output(&id, &mmr_index);
-		commits.insert(id.clone(), wallet.calc_commit_for_cache(*change_amount, &id)?);
+		commits.insert(
+			id.clone(),
+			wallet.calc_commit_for_cache(*change_amount, &id)?,
+		);
 	}
 
 	let lock_inputs = context.get_inputs().clone();

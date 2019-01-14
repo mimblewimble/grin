@@ -200,7 +200,11 @@ where
 	}
 
 	/// return the version of the commit for caching
-	fn calc_commit_for_cache(&mut self, amount: u64, id: &Identifier) -> Result<Option<String>, Error> {
+	fn calc_commit_for_cache(
+		&mut self,
+		amount: u64,
+		id: &Identifier,
+	) -> Result<Option<String>, Error> {
 		if self.config.no_commit_cache == Some(true) {
 			Ok(None)
 		} else {
