@@ -22,10 +22,10 @@ use crate::tui::humansize::{file_size_opts::CONVENTIONAL, FileSize};
 use chrono::prelude::*;
 
 use cursive::direction::Orientation;
+use cursive::event::Key;
 use cursive::traits::{Boxable, Identifiable};
 use cursive::view::View;
-use cursive::event::Key;
-use cursive::views::{BoxView, Dialog, LinearLayout, TextView, OnEventView};
+use cursive::views::{BoxView, Dialog, LinearLayout, OnEventView, TextView};
 use cursive::Cursive;
 
 use crate::tui::constants::{MAIN_MENU, TABLE_PEER_STATUS, VIEW_PEER_SYNC};
@@ -151,8 +151,8 @@ impl TUIStatusListener for TUIPeerView {
 		)
 		.with_id(VIEW_PEER_SYNC);
 
-		let peer_status_view = OnEventView::new(peer_status_view)
-			.on_pre_event(Key::Esc, move |c| {
+		let peer_status_view =
+			OnEventView::new(peer_status_view).on_pre_event(Key::Esc, move |c| {
 				let _ = c.focus_id(MAIN_MENU);
 			});
 
