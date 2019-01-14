@@ -43,7 +43,7 @@ pub const REWARD: u64 = BLOCK_TIME_SEC * GRIN_BASE;
 
 /// Actual block reward for a given total fee amount
 pub fn reward(fee: u64) -> u64 {
-	REWARD + fee
+	REWARD.saturating_add(fee)
 }
 
 /// Nominal height for standard time intervals, hour is 60 blocks
