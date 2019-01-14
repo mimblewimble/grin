@@ -143,7 +143,6 @@ where
 	K: Keychain,
 {
 	let commit = wallet.cached_commit(output.value, &output.key_id)?;
-	println!("Storing commit : {:?}", commit);
 	let mut batch = wallet.batch()?;
 
 	let parent_key_id = output.key_id.parent_path();
@@ -201,6 +200,7 @@ where
 			output.tx_log_entry.clone(),
 			None,
 			Some(&parent_key_id),
+			false,
 		)?;
 		if entries.len() > 0 {
 			let mut entry = entries[0].clone();

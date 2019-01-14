@@ -91,30 +91,36 @@ pub fn retrieve_txs<T: ?Sized, C, K>(
 	tx_id: Option<u32>,
 	tx_slate_id: Option<Uuid>,
 	parent_key_id: Option<&Identifier>,
+	outstanding_only: bool,
 ) -> Result<Vec<TxLogEntry>, Error>
 where
 	T: WalletBackend<C, K>,
 	C: NodeClient,
 	K: Keychain,
 {
-	// just read the wallet here, no need for a write lock
-	let mut txs = if let Some(id) = tx_id {
-		wallet.tx_log_iter().filter(|t| t.id == id).collect()
-	} else if tx_slate_id.is_some() {
-		wallet
-			.tx_log_iter()
-			.filter(|t| t.tx_slate_id == tx_slate_id)
-			.collect()
-	} else {
-		wallet.tx_log_iter().collect::<Vec<_>>()
-	};
-	if let Some(k) = parent_key_id {
-		txs = txs
-			.iter()
-			.filter(|t| t.parent_key_id == *k)
-			.map(|t| t.clone())
-			.collect();
-	}
+	let mut txs : Vec<TxLogEntry> = wallet.tx_log_iter()
+	.filter(|tx_entry| {
+		let f_pk = match parent_key_id {
+			Some(k) => tx_entry.parent_key_id == *k,
+			None => true,
+		};
+		let f_tx_id = match tx_id {
+			Some(i) => tx_entry.id == i,
+			None => true,
+		};
+		let f_txs = match tx_slate_id {
+			Some(t) => tx_entry.tx_slate_id == Some(t),
+			None => true,
+		};
+		let f_outstanding = match outstanding_only {
+			true => tx_entry.confirmed &&
+				(tx_entry.tx_type == TxLogEntryType::TxReceived
+				|| tx_entry.tx_type == TxLogEntryType::TxSent),
+			false => true,
+		};
+		f_pk && f_tx_id && f_txs && f_outstanding
+	})
+	.collect();
 	txs.sort_by_key(|tx| tx.creation_ts);
 	Ok(txs)
 }
@@ -156,20 +162,18 @@ where
 		.filter(|x| x.root_key_id == *parent_key_id && x.status != OutputStatus::Spent)
 		.collect();
 
+	let tx_entries = retrieve_txs(wallet, None, None, Some(&parent_key_id), true)?;
+
 	// Only select outputs that are actually involved in an outstanding transaction
 	let unspents: Vec<OutputData> = match update_all {
 		false => unspents
 			.into_iter()
 			.filter(|x| match x.tx_log_entry.as_ref() {
 				Some(t) => {
-					let entries = retrieve_txs(wallet, Some(*t), None, Some(&parent_key_id));
-					match entries {
-						Err(_) => true,
-						Ok(e) => {
-							e.len() > 0
-								&& !e[0].confirmed && (e[0].tx_type == TxLogEntryType::TxReceived
-								|| e[0].tx_type == TxLogEntryType::TxSent)
-						}
+					if let Some(_) = tx_entries.iter().find(|&te| te.id == *t) {
+						true
+					} else {
+						false
 					}
 				}
 				None => true,
