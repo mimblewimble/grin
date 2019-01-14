@@ -74,7 +74,10 @@ where
 	let res = outputs
 		.into_iter()
 		.map(|out| {
-			let commit = keychain.commit(out.value, &out.key_id).unwrap();
+			let commit = match out.commit.clone() {
+				Some(c) => pedersen::Commitment::from_vec(util::from_hex(c).unwrap()),
+				None => keychain.commit(out.value, &out.key_id).unwrap(),
+			};
 			(out, commit)
 		})
 		.collect();
@@ -176,7 +179,10 @@ where
 	};
 
 	for out in unspents {
-		let commit = keychain.commit(out.value, &out.key_id)?;
+		let commit = match out.commit.clone() {
+			Some(c) => pedersen::Commitment::from_vec(util::from_hex(c).unwrap()),
+			None => keychain.commit(out.value, &out.key_id).unwrap(),
+		};
 		wallet_outputs.insert(commit, (out.key_id.clone(), out.mmr_index));
 	}
 	Ok(wallet_outputs)
@@ -466,13 +472,16 @@ where
 
 	{
 		// Now acquire the wallet lock and write the new output.
+		let amount = reward(block_fees.fees);
+		let commit = wallet.cached_commit(amount, &key_id)?;
 		let mut batch = wallet.batch()?;
 		batch.save(OutputData {
 			root_key_id: parent_key_id,
 			key_id: key_id.clone(),
 			n_child: key_id.to_path().last_path_index(),
 			mmr_index: None,
-			value: reward(block_fees.fees),
+			commit: commit,
+			value: amount,
 			status: OutputStatus::Unconfirmed,
 			height: height,
 			lock_height: lock_height,

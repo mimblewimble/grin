@@ -142,6 +142,8 @@ where
 	C: NodeClient,
 	K: Keychain,
 {
+	let commit = wallet.cached_commit(output.value, &output.key_id)?;
+	println!("Storing commit : {:?}", commit);
 	let mut batch = wallet.batch()?;
 
 	let parent_key_id = output.key_id.parent_path();
@@ -167,6 +169,7 @@ where
 		key_id: output.key_id,
 		n_child: output.n_child,
 		mmr_index: Some(output.mmr_index),
+		commit: commit,
 		value: output.value,
 		status: OutputStatus::Unspent,
 		height: output.height,
