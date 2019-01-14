@@ -14,7 +14,7 @@
 
 use crate::core::core::{self, amount_to_hr_string};
 use crate::core::global;
-use crate::libwallet::types::{AcctPathMapping, OutputData, OutputStatus, TxLogEntry, WalletInfo};
+use crate::libwallet::types::{AcctPathMapping, OutputData, OutputStatus, TxLogEntry, WalletInfo, OutputProof};
 use crate::libwallet::Error;
 use crate::util;
 use crate::util::secp::pedersen;
@@ -354,5 +354,30 @@ pub fn accounts(acct_mappings: Vec<AcctPathMapping>) {
 	}
 	table.set_format(*prettytable::format::consts::FORMAT_NO_BORDER_LINE_SEPARATOR);
 	table.printstd();
+	println!();
+}
+
+/// Display output's proof of possession (ownership)
+pub fn output_proof(utxo_proof: &OutputProof) {
+	println!("\n____ Output Proof of Possession ____\n",);
+
+	println!("Output amount: {}", core::amount_to_hr_string(utxo_proof.amount, false));
+	println!("Message hash: {}", utxo_proof.msg_hash.to_hex());
+	println!("Public key (compressed): {}", util::to_hex(utxo_proof.public_key.to_vec()));
+	println!("Message signature (compact): {}", util::to_hex(utxo_proof.signature.to_vec()));
+
+	println!();
+}
+
+/// Display output's proof is verified or not
+pub fn output_verification(is_verified: bool) {
+	println!("\n____ Output Proof of Possession ____\n",);
+
+	if is_verified {
+		println!("\tVERIFIED");
+	} else {
+		println!("\tINVALID");
+	}
+
 	println!();
 }

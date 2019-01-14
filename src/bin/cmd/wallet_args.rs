@@ -496,6 +496,31 @@ pub fn parse_cancel_args(args: &ArgMatches) -> Result<command::CancelArgs, Parse
 	})
 }
 
+pub fn parse_sign_utxo_args(args: &ArgMatches) -> Result<command::SignUtxoArgs, ParseError> {
+	let utxo_commitment_string = parse_required(args, "utxo")?;
+	let message_hash = parse_required(args, "msghash")?;
+
+	Ok(command::SignUtxoArgs {
+		utxo_commitment_string: utxo_commitment_string.to_owned(),
+		message_hash_to_sign: message_hash.to_owned()
+	})
+}
+
+pub fn parse_verify_utxo_args(args: &ArgMatches) -> Result<command::VerifyUtxoArgs, ParseError> {
+	let amount = parse_required(args, "amount")?;
+	let amount = parse_u64(amount, "amount")?;
+	let message_hash = parse_required(args, "msghash")?.to_owned();
+	let pubkey = parse_required(args, "pubkey")?.to_owned();
+	let signature = parse_required(args, "signature")?.to_owned();
+
+	Ok(command::VerifyUtxoArgs {
+		amount,
+		message_hash,
+		pubkey,
+		signature,
+	})
+}
+
 pub fn wallet_command(
 	wallet_args: &ArgMatches,
 	mut wallet_config: WalletConfig,
@@ -602,6 +627,14 @@ pub fn wallet_command(
 		("cancel", Some(args)) => {
 			let a = arg_parse!(parse_cancel_args(&args));
 			command::cancel(inst_wallet(), a)
+		}
+		("sign_utxo", Some(args)) => {
+			let a = arg_parse!(parse_sign_utxo_args(&args));
+			command::sign_utxo(inst_wallet(), a)
+		}
+		("verify_utxo", Some(args)) => {
+			let a = arg_parse!(parse_verify_utxo_args(&args));
+			command::verify_utxo(inst_wallet(), a)
 		}
 		("restore", Some(_)) => command::restore(inst_wallet()),
 		("check", Some(_)) => command::check_repair(inst_wallet()),

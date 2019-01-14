@@ -34,19 +34,19 @@ use std::marker::PhantomData;
 use std::sync::Arc;
 use uuid::Uuid;
 
-use crate::core::core::hash::Hashed;
+use crate::core::core::hash::{Hash, Hashed};
 use crate::core::core::Transaction;
 use crate::core::libtx::slate::Slate;
 use crate::core::ser;
 use crate::keychain::{Identifier, Keychain};
 use crate::libwallet::internal::{keys, tx, updater};
 use crate::libwallet::types::{
-	AcctPathMapping, BlockFees, CbData, NodeClient, OutputData, TxLogEntry, TxLogEntryType,
-	TxWrapper, WalletBackend, WalletInfo,
+	AcctPathMapping, BlockFees, CbData, NodeClient, OutputData, OutputStatus, TxLogEntry, TxLogEntryType,
+	TxWrapper, WalletBackend, WalletInfo, OutputProof,
 };
 use crate::libwallet::{Error, ErrorKind};
 use crate::util;
-use crate::util::secp::{pedersen, ContextFlag, Secp256k1};
+use crate::util::secp::{pedersen, ContextFlag, Secp256k1, Message, key::PublicKey, Signature};
 
 /// Functions intended for use by the owner (e.g. master seed holder) of the wallet.
 pub struct APIOwner<W: ?Sized, C, K>
@@ -788,6 +788,82 @@ where
 				};
 				Ok((height, false))
 			}
+		}
+	}
+
+	/// Signs a user-provided message with UTXO's blinding factor to construct a proof that
+    /// user is indeed in possession of said UTXO.
+	pub fn sign_utxo(&mut self, utxo_commitment: &str, message_hash: &str) -> Result<OutputProof, Error> {
+		let mut w = self.wallet.lock();
+		w.open_with_credentials()?;
+
+		let parent_key_id = w.parent_key_id();
+
+		self.update_outputs(&mut w, false);
+		let outputs = updater::retrieve_outputs(&mut *w, false, None, Some(&parent_key_id))?;
+
+		let output = outputs
+			.into_iter()
+			.filter(|(_, commit)| util::to_hex(commit.as_ref().to_vec()) == *utxo_commitment)
+			.collect::<Vec<_>>()
+			.first()
+			.cloned();
+
+		if let Some((output, _)) = output {
+			if let OutputStatus::Unspent = output.status {
+				if let Ok(msg_hash) = Hash::from_hex(&message_hash) {
+					let keychain = w.keychain();
+					let secp = keychain.secp();
+
+					let message = Message::from_slice(&msg_hash.as_bytes()).unwrap();
+					let sk = keychain.derive_key(output.value, &output.key_id).unwrap();
+					let public_key = PublicKey::from_secret_key(secp, &sk)
+						.unwrap()
+						.serialize_vec(secp, true)
+						.to_vec();
+					let signature = keychain
+						.sign(&message, output.value, &output.key_id)
+						.unwrap()
+						.serialize_compact(secp)
+						.to_vec();
+
+					let proof = OutputProof {
+						amount: output.value,
+						msg_hash,
+						public_key,
+						signature
+					};
+
+					w.close()?;
+
+					return Ok(proof)
+				} else {
+					return Err(ErrorKind::GenericError("Invalid message hash".to_owned()))?
+				}
+			}
+		}
+
+		w.close()?;
+
+		Err(ErrorKind::GenericError(format!("UTXO with commitment {} is not found", utxo_commitment)))?
+	}
+
+	pub fn verify_utxo(&mut self, amount: u64, msg_hash: &str, pubkey: String, signature: String) -> Result<bool, Error> {
+		if let Ok(msg_hash) = Hash::from_hex(&msg_hash) {
+
+			let secp = Secp256k1::with_caps(ContextFlag::VerifyOnly);
+			let pk = util::from_hex(pubkey).unwrap();
+			let pk = PublicKey::from_slice(&secp, &pk).unwrap();
+			let msg = Message::from_slice(&msg_hash.as_bytes()).unwrap();
+			let signature = util::from_hex(signature).unwrap();
+			let signature = Signature::from_compact(&secp, &signature).unwrap();
+
+			let is_verified = secp.verify(&msg, &signature, &pk).is_ok();
+
+			Ok(is_verified)
+
+		} else {
+			return Err(ErrorKind::GenericError("Invalid message hash".to_owned()))?
 		}
 	}
 

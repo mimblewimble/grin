@@ -271,6 +271,42 @@ subcommands:
                   long: min_conf
                   default_value: "10"
                   takes_value: true
+        - sign_utxo:
+            about: Sign a specific message with output's associated blinding factor to create proof of ownership
+            args:
+              - utxo:
+                  help: Output's Pedersen Commitment in hex
+                  short: u
+                  long: utxo
+                  takes_value: true
+              - msghash:
+                  help: A message hash which is to be signed with the blinding factor of UTXO
+                  short: m
+                  long: msghash
+                  takes_value: true
+        - verify_utxo:
+            about: Verify proof of output ownership received from another party
+            args:
+              - amount:
+                  help: Output amount
+                  short: a
+                  long: amount
+                  takes_value: true
+              - msghash:
+                  help: A message hash which is comes with the proof
+                  short: m
+                  long: msghash
+                  takes_value: true
+              - pubkey:
+                  help: A public key of the proof (comes from output's blinding factor)
+                  short: p
+                  long: pubkey
+                  takes_value: true
+              - signature:
+                  help: A signature of the proof (signs message hash with blinding factor)
+                  short: s
+                  long: signature
+                  takes_value: true
         - init:
             about: Initialize a new wallet seed file and database
             args:

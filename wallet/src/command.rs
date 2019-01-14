@@ -525,3 +525,49 @@ pub fn check_repair(
 	})?;
 	Ok(())
 }
+
+/// Arguments for `wallet sign_utxo` command.
+pub struct SignUtxoArgs {
+	pub utxo_commitment_string: String,
+	pub message_hash_to_sign: String,
+}
+
+pub fn sign_utxo(wallet: Arc<Mutex<WalletInst<impl NodeClient + 'static, keychain::ExtKeychain>>>,
+				 args: SignUtxoArgs,
+) -> Result<(), Error> {
+	controller::owner_single_use(wallet.clone(), |api| {
+		let proof = api
+			.sign_utxo(&args.utxo_commitment_string, &args.message_hash_to_sign)
+			.unwrap();
+
+		display::output_proof(&proof);
+
+		Ok(())
+	})?;
+
+	Ok(())
+}
+
+/// Arguments for `wallet verify_utxo` command.
+pub struct VerifyUtxoArgs {
+	pub amount: u64,
+	pub message_hash: String,
+	pub pubkey: String,
+	pub signature: String,
+}
+
+pub fn verify_utxo(wallet: Arc<Mutex<WalletInst<impl NodeClient + 'static, keychain::ExtKeychain>>>,
+				 args: VerifyUtxoArgs,
+) -> Result<(), Error> {
+	controller::owner_single_use(wallet.clone(), |api| {
+		let proof = api
+			.verify_utxo(args.amount, &args.message_hash, args.pubkey, args.signature)
+			.unwrap();
+
+		display::output_verification(proof);
+
+		Ok(())
+	})?;
+
+	Ok(())
+}

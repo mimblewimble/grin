@@ -701,3 +701,20 @@ pub struct SendTXArgs {
 	/// Optional message, that will be signed
 	pub message: Option<String>,
 }
+
+
+/// Output's proof-of-possession
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct OutputProof {
+	/// Amount held in the output
+	pub amount: u64,
+
+	/// Signed message hash
+	pub msg_hash: Hash,
+
+	/// Signature's public key (compressed)
+	pub public_key: Vec<u8>,
+
+	/// Signature (compact)
+	pub signature: Vec<u8>
+}
