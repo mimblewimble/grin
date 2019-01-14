@@ -83,6 +83,7 @@ pub fn create() -> Box<dyn View> {
 		.child(TextView::new("------------------"))
 		.child(TextView::new("Tab/Arrow : Cycle "))
 		.child(TextView::new("Enter     : Select"))
+		.child(TextView::new("Esc       : Back  "))
 		.child(TextView::new("Q         : Quit  "));
 	Box::new(main_menu)
 }

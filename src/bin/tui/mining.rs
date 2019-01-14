@@ -184,10 +184,6 @@ impl TUIStatusListener for TUIMiningView {
 			.child(Panel::new(devices_button))
 			.child(Panel::new(difficulty_button));
 
-		let mining_submenu = OnEventView::new(mining_submenu).on_pre_event(Key::Esc, move |c| {
-			let _ = c.focus_id(MAIN_MENU);
-		});
-
 		let table_view = TableView::<WorkerStats, StratumWorkerColumn>::new()
 			.column(StratumWorkerColumn::Id, "Worker ID", |c| c.width_percent(8))
 			.column(StratumWorkerColumn::IsConnected, "Connected", |c| {
@@ -305,6 +301,10 @@ impl TUIStatusListener for TUIMiningView {
 		let mining_view = LinearLayout::new(Orientation::Vertical)
 			.child(mining_submenu)
 			.child(view_stack);
+
+		let mining_view = OnEventView::new(mining_view).on_pre_event(Key::Esc, move |c| {
+			let _ = c.focus_id(MAIN_MENU);
+		});
 
 		Box::new(mining_view.with_id(VIEW_MINING))
 	}
