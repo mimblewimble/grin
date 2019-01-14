@@ -43,7 +43,7 @@ pub const REWARD: u64 = BLOCK_TIME_SEC * GRIN_BASE;
 
 /// Actual block reward for a given total fee amount
 pub fn reward(fee: u64) -> u64 {
-	REWARD.saturating_sub(fee)
+	REWARD.saturating_add(fee)
 }
 
 /// Nominal height for standard time intervals, hour is 60 blocks
@@ -62,7 +62,7 @@ pub const COINBASE_MATURITY: u64 = DAY_HEIGHT;
 /// function of block height (time). Starts at 90% losing a percent
 /// approximately every week. Represented as an integer between 0 and 100.
 pub fn secondary_pow_ratio(height: u64) -> u64 {
-	90u64.saturating_add(height / (2 * YEAR_HEIGHT / 90))
+	90u64.saturating_sub(height / (2 * YEAR_HEIGHT / 90))
 }
 
 /// The AR scale damping factor to use. Dependent on block height
