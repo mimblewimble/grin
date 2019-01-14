@@ -379,6 +379,7 @@ where
 			acct_index += 1;
 		}
 		let mut batch = wallet.batch()?;
+		debug!("Next child for account {} is {}", path, max_child_index + 1);
 		batch.save_child_index(path, max_child_index + 1)?;
 		batch.commit()?;
 	}
@@ -444,6 +445,7 @@ where
 		}
 		let mut batch = wallet.batch()?;
 		batch.save_child_index(path, max_child_index + 1)?;
+		debug!("Next child for account {} is {}", path, max_child_index + 1);
 		batch.commit()?;
 	}
 	Ok(())
