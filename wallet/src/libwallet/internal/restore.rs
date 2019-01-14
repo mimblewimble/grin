@@ -57,7 +57,6 @@ struct RestoredTxStats {
 	pub num_outputs: usize,
 }
 
-
 fn identify_utxo_outputs<T, C, K>(
 	wallet: &mut T,
 	outputs: Vec<(pedersen::Commitment, pedersen::RangeProof, bool, u64, u64)>,
@@ -163,11 +162,14 @@ where
 	if !found_parents.contains_key(&parent_key_id) {
 		found_parents.insert(parent_key_id.clone(), 0);
 		if let Some(ref mut s) = tx_stats {
-			s.insert(parent_key_id.clone(), RestoredTxStats {
-				log_id: batch.next_tx_log_id(&parent_key_id)?,
-				amount_credited: 0,
-				num_outputs: 0,
-			});
+			s.insert(
+				parent_key_id.clone(),
+				RestoredTxStats {
+					log_id: batch.next_tx_log_id(&parent_key_id)?,
+					amount_credited: 0,
+					num_outputs: 0,
+				},
+			);
 		}
 	}
 
@@ -186,12 +188,15 @@ where
 		log_id
 	} else {
 		if let Some(ref mut s) = tx_stats {
-			let ts =  s.get(&parent_key_id).unwrap().clone();
-			s.insert(parent_key_id.clone(), RestoredTxStats {
-				log_id: ts.log_id,
-				amount_credited: ts.amount_credited + output.value,
-				num_outputs: ts.num_outputs + 1,
-			});
+			let ts = s.get(&parent_key_id).unwrap().clone();
+			s.insert(
+				parent_key_id.clone(),
+				RestoredTxStats {
+					log_id: ts.log_id,
+					amount_credited: ts.amount_credited + output.value,
+					num_outputs: ts.num_outputs + 1,
+				},
+			);
 			ts.log_id
 		} else {
 			0
@@ -408,7 +413,12 @@ where
 
 	// Now save what we have
 	for output in result_vec {
-		restore_missing_output(wallet, output, &mut found_parents, &mut Some(&mut restore_stats))?;
+		restore_missing_output(
+			wallet,
+			output,
+			&mut found_parents,
+			&mut Some(&mut restore_stats),
+		)?;
 	}
 
 	println!("RESTORE STATS: {:?}", restore_stats);
