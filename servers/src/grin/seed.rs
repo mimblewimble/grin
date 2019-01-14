@@ -351,7 +351,7 @@ fn listen_for_addrs(
 	if connecting_history.len() > 100 {
 		let old: Vec<_> = connecting_history
 			.iter()
-			.filter(|&(_, t)| *t + Duration::seconds(60) > now)
+			.filter(|&(_, t)| *t + Duration::seconds(10) < now)
 			.map(|(s, _)| s.clone())
 			.collect();
 		for addr in old {
