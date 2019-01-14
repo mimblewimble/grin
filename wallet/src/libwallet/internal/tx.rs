@@ -161,7 +161,7 @@ where
 	} else if let Some(tx_slate_id) = tx_slate_id {
 		tx_id_string = tx_slate_id.to_string();
 	}
-	let tx_vec = updater::retrieve_txs(wallet, tx_id, tx_slate_id, Some(&parent_key_id))?;
+	let tx_vec = updater::retrieve_txs(wallet, tx_id, tx_slate_id, Some(&parent_key_id), false)?;
 	if tx_vec.len() != 1 {
 		return Err(ErrorKind::TransactionDoesntExist(tx_id_string))?;
 	}
@@ -191,7 +191,7 @@ where
 	C: NodeClient,
 	K: Keychain,
 {
-	let tx_vec = updater::retrieve_txs(wallet, Some(tx_id), None, Some(parent_key_id))?;
+	let tx_vec = updater::retrieve_txs(wallet, Some(tx_id), None, Some(parent_key_id), false)?;
 	if tx_vec.len() != 1 {
 		return Err(ErrorKind::TransactionDoesntExist(tx_id.to_string()))?;
 	}
@@ -207,7 +207,7 @@ where
 	K: Keychain,
 {
 	// finalize command
-	let tx_vec = updater::retrieve_txs(wallet, None, Some(slate.id), None)?;
+	let tx_vec = updater::retrieve_txs(wallet, None, Some(slate.id), None, false)?;
 	let mut tx = None;
 	// don't want to assume this is the right tx, in case of self-sending
 	for t in tx_vec {

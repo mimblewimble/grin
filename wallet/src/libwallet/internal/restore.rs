@@ -45,6 +45,18 @@ struct OutputResult {
 	pub blinding: SecretKey,
 }
 
+#[derive(Debug, Clone)]
+/// Collect stats in case we want to just output a single tx log entry
+/// for restored non-coinbase outputs
+struct RestoredTxStats {
+	///
+	pub log_id: u32,
+	///
+	pub amount_credited: u64,
+	///
+	pub num_outputs: usize,
+}
+
 fn identify_utxo_outputs<T, C, K>(
 	wallet: &mut T,
 	outputs: Vec<(pedersen::Commitment, pedersen::RangeProof, bool, u64, u64)>,
@@ -136,37 +148,67 @@ fn restore_missing_output<T, C, K>(
 	wallet: &mut T,
 	output: OutputResult,
 	found_parents: &mut HashMap<Identifier, u32>,
+	tx_stats: &mut Option<&mut HashMap<Identifier, RestoredTxStats>>,
 ) -> Result<(), Error>
 where
 	T: WalletBackend<C, K>,
 	C: NodeClient,
 	K: Keychain,
 {
+	let commit = wallet.calc_commit_for_cache(output.value, &output.key_id)?;
 	let mut batch = wallet.batch()?;
 
 	let parent_key_id = output.key_id.parent_path();
 	if !found_parents.contains_key(&parent_key_id) {
 		found_parents.insert(parent_key_id.clone(), 0);
+		if let Some(ref mut s) = tx_stats {
+			s.insert(
+				parent_key_id.clone(),
+				RestoredTxStats {
+					log_id: batch.next_tx_log_id(&parent_key_id)?,
+					amount_credited: 0,
+					num_outputs: 0,
+				},
+			);
+		}
 	}
 
-	let log_id = batch.next_tx_log_id(&parent_key_id)?;
-	let entry_type = match output.is_coinbase {
-		true => TxLogEntryType::ConfirmedCoinbase,
-		false => TxLogEntryType::TxReceived,
+	let log_id = if tx_stats.is_none() || output.is_coinbase {
+		let log_id = batch.next_tx_log_id(&parent_key_id)?;
+		let entry_type = match output.is_coinbase {
+			true => TxLogEntryType::ConfirmedCoinbase,
+			false => TxLogEntryType::TxReceived,
+		};
+		let mut t = TxLogEntry::new(parent_key_id.clone(), entry_type, log_id);
+		t.confirmed = true;
+		t.amount_credited = output.value;
+		t.num_outputs = 1;
+		t.update_confirmation_ts();
+		batch.save_tx_log_entry(t, &parent_key_id)?;
+		log_id
+	} else {
+		if let Some(ref mut s) = tx_stats {
+			let ts = s.get(&parent_key_id).unwrap().clone();
+			s.insert(
+				parent_key_id.clone(),
+				RestoredTxStats {
+					log_id: ts.log_id,
+					amount_credited: ts.amount_credited + output.value,
+					num_outputs: ts.num_outputs + 1,
+				},
+			);
+			ts.log_id
+		} else {
+			0
+		}
 	};
-
-	let mut t = TxLogEntry::new(parent_key_id.clone(), entry_type, log_id);
-	t.confirmed = true;
-	t.amount_credited = output.value;
-	t.num_outputs = 1;
-	t.update_confirmation_ts();
-	batch.save_tx_log_entry(t, &parent_key_id)?;
 
 	let _ = batch.save(OutputData {
 		root_key_id: parent_key_id.clone(),
 		key_id: output.key_id,
 		n_child: output.n_child,
 		mmr_index: Some(output.mmr_index),
+		commit: commit,
 		value: output.value,
 		status: OutputStatus::Unspent,
 		height: output.height,
@@ -198,6 +240,7 @@ where
 			output.tx_log_entry.clone(),
 			None,
 			Some(&parent_key_id),
+			false,
 		)?;
 		if entries.len() > 0 {
 			let mut entry = entries[0].clone();
@@ -289,7 +332,7 @@ where
 			 Restoring.",
 			m.value, m.key_id, m.commit,
 		);
-		restore_missing_output(wallet, m, &mut found_parents)?;
+		restore_missing_output(wallet, m, &mut found_parents, &mut None)?;
 	}
 
 	// Unlock locked outputs
@@ -327,24 +370,19 @@ where
 
 	// restore labels, account paths and child derivation indices
 	let label_base = "account";
-	let mut index = 1;
+	let mut acct_index = 1;
 	for (path, max_child_index) in found_parents.iter() {
-		if *path == ExtKeychain::derive_key_id(2, 0, 0, 0, 0) {
-			//default path already exists
-			continue;
-		}
-		let res = wallet.acct_path_iter().find(|e| e.path == *path);
-		if let None = res {
-			let label = format!("{}_{}", label_base, index);
+		// default path already exists
+		if *path != ExtKeychain::derive_key_id(2, 0, 0, 0, 0) {
+			let label = format!("{}_{}", label_base, acct_index);
 			keys::set_acct_path(wallet, &label, path)?;
-			index = index + 1;
+			acct_index += 1;
 		}
-		{
-			let mut batch = wallet.batch()?;
-			batch.save_child_index(path, max_child_index + 1)?;
-		}
+		let mut batch = wallet.batch()?;
+		debug!("Next child for account {} is {}", path, max_child_index + 1);
+		batch.save_child_index(path, max_child_index + 1)?;
+		batch.commit()?;
 	}
-
 	Ok(())
 }
 
@@ -372,27 +410,43 @@ where
 	);
 
 	let mut found_parents: HashMap<Identifier, u32> = HashMap::new();
-	// Now save what we have
+	let mut restore_stats = HashMap::new();
 
+	// Now save what we have
 	for output in result_vec {
-		restore_missing_output(wallet, output, &mut found_parents)?;
+		restore_missing_output(
+			wallet,
+			output,
+			&mut found_parents,
+			&mut Some(&mut restore_stats),
+		)?;
 	}
 
 	// restore labels, account paths and child derivation indices
 	let label_base = "account";
-	let mut index = 1;
+	let mut acct_index = 1;
 	for (path, max_child_index) in found_parents.iter() {
-		if *path == ExtKeychain::derive_key_id(2, 0, 0, 0, 0) {
-			//default path already exists
-			continue;
+		// default path already exists
+		if *path != ExtKeychain::derive_key_id(2, 0, 0, 0, 0) {
+			let label = format!("{}_{}", label_base, acct_index);
+			keys::set_acct_path(wallet, &label, path)?;
+			acct_index += 1;
 		}
-		let label = format!("{}_{}", label_base, index);
-		keys::set_acct_path(wallet, &label, path)?;
-		index = index + 1;
-		{
+		// restore tx log entry for non-coinbase outputs
+		if let Some(s) = restore_stats.get(path) {
 			let mut batch = wallet.batch()?;
-			batch.save_child_index(path, max_child_index + 1)?;
+			let mut t = TxLogEntry::new(path.clone(), TxLogEntryType::TxReceived, s.log_id);
+			t.confirmed = true;
+			t.amount_credited = s.amount_credited;
+			t.num_outputs = s.num_outputs;
+			t.update_confirmation_ts();
+			batch.save_tx_log_entry(t, &path)?;
+			batch.commit()?;
 		}
+		let mut batch = wallet.batch()?;
+		batch.save_child_index(path, max_child_index + 1)?;
+		debug!("Next child for account {} is {}", path, max_child_index + 1);
+		batch.commit()?;
 	}
 	Ok(())
 }

@@ -18,7 +18,7 @@ use crate::core::consensus::{BLOCK_OUTPUT_WEIGHT, MAX_BLOCK_WEIGHT};
 use crate::core::core::block::Error;
 use crate::core::core::hash::Hashed;
 use crate::core::core::id::ShortIdentifiable;
-use crate::core::core::transaction;
+use crate::core::core::transaction::{self, Transaction};
 use crate::core::core::verifier_cache::{LruVerifierCache, VerifierCache};
 use crate::core::core::Committed;
 use crate::core::core::{Block, BlockHeader, CompactBlock, KernelFeatures, OutputFeatures};
@@ -109,12 +109,10 @@ fn block_with_cut_through() {
 
 	// block should have been automatically compacted (including reward
 	// output) and should still be valid
-	println!("3");
 	b.validate(&BlindingFactor::zero(), verifier_cache())
 		.unwrap();
 	assert_eq!(b.inputs().len(), 3);
 	assert_eq!(b.outputs().len(), 3);
-	println!("4");
 }
 
 #[test]
@@ -414,4 +412,108 @@ fn serialize_deserialize_compact_block() {
 
 	assert_eq!(cb1.header, cb2.header);
 	assert_eq!(cb1.kern_ids(), cb2.kern_ids());
+}
+
+// Duplicate a range proof from a valid output into another of the same amount
+#[test]
+fn same_amount_outputs_copy_range_proof() {
+	let keychain = keychain::ExtKeychain::from_random_seed(false).unwrap();
+	let key_id1 = keychain::ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
+	let key_id2 = keychain::ExtKeychain::derive_key_id(1, 2, 0, 0, 0);
+	let key_id3 = keychain::ExtKeychain::derive_key_id(1, 3, 0, 0, 0);
+
+	let tx = build::transaction(
+		vec![
+			input(7, key_id1),
+			output(3, key_id2),
+			output(3, key_id3),
+			with_fee(1),
+		],
+		&keychain,
+	)
+	.unwrap();
+
+	// now we reconstruct the transaction, swapping the rangeproofs so they
+	// have the wrong privkey
+	let ins = tx.inputs();
+	let mut outs = tx.outputs().clone();
+	let kernels = tx.kernels();
+	outs[0].proof = outs[1].proof;
+
+	let key_id = keychain::ExtKeychain::derive_key_id(1, 4, 0, 0, 0);
+	let prev = BlockHeader::default();
+	let b = new_block(
+		vec![&mut Transaction::new(
+			ins.clone(),
+			outs.clone(),
+			kernels.clone(),
+		)],
+		&keychain,
+		&prev,
+		&key_id,
+	);
+
+	// block should have been automatically compacted (including reward
+	// output) and should still be valid
+	match b.validate(&BlindingFactor::zero(), verifier_cache()) {
+		Err(Error::Transaction(transaction::Error::Secp(secp::Error::InvalidRangeProof))) => {}
+		_ => panic!("Bad range proof should be invalid"),
+	}
+}
+
+// Swap a range proof with the right private key but wrong amount
+#[test]
+fn wrong_amount_range_proof() {
+	let keychain = keychain::ExtKeychain::from_random_seed(false).unwrap();
+	let key_id1 = keychain::ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
+	let key_id2 = keychain::ExtKeychain::derive_key_id(1, 2, 0, 0, 0);
+	let key_id3 = keychain::ExtKeychain::derive_key_id(1, 3, 0, 0, 0);
+
+	let tx1 = build::transaction(
+		vec![
+			input(7, key_id1.clone()),
+			output(3, key_id2.clone()),
+			output(3, key_id3.clone()),
+			with_fee(1),
+		],
+		&keychain,
+	)
+	.unwrap();
+	let tx2 = build::transaction(
+		vec![
+			input(7, key_id1),
+			output(2, key_id2),
+			output(4, key_id3),
+			with_fee(1),
+		],
+		&keychain,
+	)
+	.unwrap();
+
+	// we take the range proofs from tx2 into tx1 and rebuild the transaction
+	let ins = tx1.inputs();
+	let mut outs = tx1.outputs().clone();
+	let kernels = tx1.kernels();
+	outs[0].proof = tx2.outputs()[0].proof;
+	outs[1].proof = tx2.outputs()[1].proof;
+
+	let key_id = keychain::ExtKeychain::derive_key_id(1, 4, 0, 0, 0);
+	let prev = BlockHeader::default();
+	let b = new_block(
+		vec![&mut Transaction::new(
+			ins.clone(),
+			outs.clone(),
+			kernels.clone(),
+		)],
+		&keychain,
+		&prev,
+		&key_id,
+	);
+
+	// block should have been automatically compacted (including reward
+	// output) and should still be valid
+	match b.validate(&BlindingFactor::zero(), verifier_cache()) {
+		Err(Error::Transaction(transaction::Error::Secp(secp::Error::InvalidRangeProof))) => {}
+		_ => panic!("Bad range proof should be invalid"),
+	}
 }

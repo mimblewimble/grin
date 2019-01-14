@@ -415,6 +415,15 @@ fn comments() -> HashMap<String, String> {
 		.to_string(),
 	);
 	retval.insert(
+		"no_commit_cache".to_string(),
+		"
+#If true, don't store calculated commits in the database
+#better privacy, but at a performance cost of having to 
+#re-calculate commits every time they're used
+"
+		.to_string(),
+	);
+	retval.insert(
 		"dark_background_color_scheme".to_string(),
 		"
 #Whether to use the black background color scheme for command line
