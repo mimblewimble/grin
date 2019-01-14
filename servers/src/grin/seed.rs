@@ -320,8 +320,9 @@ fn listen_for_addrs(
 		if let Some(last_connect_time) = connecting_history.get(&addr) {
 			if *last_connect_time + Duration::seconds(10) > now {
 				debug!(
-					"peer_connect: ignore a duplicate connect request to {}",
-					addr
+					"peer_connect: ignore a duplicate request to {}. previous connecting time: {}",
+					addr,
+					last_connect_time.format("%H:%M:%S%.3f").to_string(),
 				);
 				continue;
 			} else {
@@ -346,7 +347,7 @@ fn listen_for_addrs(
 	}
 
 	// shrink the connecting history.
-	// put a threshold here to avoid shrink checking in every call
+	// put a threshold here to avoid frequent shrinking in every call
 	if connecting_history.len() > 100 {
 		let old: Vec<_> = connecting_history
 			.iter()
