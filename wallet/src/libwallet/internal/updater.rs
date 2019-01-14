@@ -98,29 +98,32 @@ where
 	C: NodeClient,
 	K: Keychain,
 {
-	let mut txs : Vec<TxLogEntry> = wallet.tx_log_iter()
-	.filter(|tx_entry| {
-		let f_pk = match parent_key_id {
-			Some(k) => tx_entry.parent_key_id == *k,
-			None => true,
-		};
-		let f_tx_id = match tx_id {
-			Some(i) => tx_entry.id == i,
-			None => true,
-		};
-		let f_txs = match tx_slate_id {
-			Some(t) => tx_entry.tx_slate_id == Some(t),
-			None => true,
-		};
-		let f_outstanding = match outstanding_only {
-			true => tx_entry.confirmed &&
-				(tx_entry.tx_type == TxLogEntryType::TxReceived
-				|| tx_entry.tx_type == TxLogEntryType::TxSent),
-			false => true,
-		};
-		f_pk && f_tx_id && f_txs && f_outstanding
-	})
-	.collect();
+	let mut txs: Vec<TxLogEntry> = wallet
+		.tx_log_iter()
+		.filter(|tx_entry| {
+			let f_pk = match parent_key_id {
+				Some(k) => tx_entry.parent_key_id == *k,
+				None => true,
+			};
+			let f_tx_id = match tx_id {
+				Some(i) => tx_entry.id == i,
+				None => true,
+			};
+			let f_txs = match tx_slate_id {
+				Some(t) => tx_entry.tx_slate_id == Some(t),
+				None => true,
+			};
+			let f_outstanding = match outstanding_only {
+				true => {
+					tx_entry.confirmed
+						&& (tx_entry.tx_type == TxLogEntryType::TxReceived
+							|| tx_entry.tx_type == TxLogEntryType::TxSent)
+				}
+				false => true,
+			};
+			f_pk && f_tx_id && f_txs && f_outstanding
+		})
+		.collect();
 	txs.sort_by_key(|tx| tx.creation_ts);
 	Ok(txs)
 }
