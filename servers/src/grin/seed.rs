@@ -336,7 +336,7 @@ pub fn dns_seeds() -> Box<dyn Fn() -> Vec<SocketAddr> + Send> {
 				Ok(addrs) => addresses.append(
 					&mut (addrs
 						.map(|mut addr| {
-							addr.set_port(13414);
+							addr.set_port(3414);
 							addr
 						})
 						.filter(|addr| !temp_addresses.contains(addr))
