@@ -46,8 +46,7 @@ pub fn genesis_dev() -> core::Block {
 	})
 }
 
-/// Placeholder for floonet genesis block, will definitely change before
-/// release
+/// Floonet genesis block
 pub fn genesis_floo() -> core::Block {
 	let gen = core::Block::with_header(core::BlockHeader {
 		height: 0,
@@ -165,8 +164,7 @@ pub fn genesis_floo() -> core::Block {
 	gen.with_reward(output, kernel)
 }
 
-/// Placeholder for mainnet genesis block, will definitely change before
-/// release so no use trying to pre-mine it.
+/// Mainnet genesis block
 pub fn genesis_main() -> core::Block {
 	let gen = core::Block::with_header(core::BlockHeader {
 		height: 0,
@@ -311,7 +309,7 @@ mod test {
 		let gen_hash = genesis_main().hash();
 		println!("mainnet genesis hash: {}", gen_hash.to_hex());
 		let gen_bin = ser::ser_vec(&genesis_main()).unwrap();
-		println!("floonet genesis full hash: {}\n", gen_bin.hash().to_hex());
+		println!("mainnet genesis full hash: {}\n", gen_bin.hash().to_hex());
 		assert_eq!(
 			gen_hash.to_hex(),
 			"40adad0aec27797b48840aa9e00472015c21baea118ce7a2ff1a82c0f8f5bf82"
