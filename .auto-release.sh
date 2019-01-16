@@ -2,6 +2,7 @@
 
 repo_slug="mimblewimble/grin"
 token="$GITHUB_TOKEN"
+export CHANGELOG_GITHUB_TOKEN="$token"
 
 tagname=`git describe --tags --exact-match 2>/dev/null || git symbolic-ref -q --short HEAD`
 
@@ -42,7 +43,6 @@ LAST_RELEASE_TAG=$(git describe --abbrev=0 --tags ${LAST_REVISION})
 github_changelog_generator \
   -u $(cut -d "/" -f1 <<< $repo_slug) \
   -p $(cut -d "/" -f2 <<< $repo_slug) \
-  --token $token \
   --since-tag ${LAST_RELEASE_TAG}
 
 body="$(cat CHANGELOG.md)"
@@ -62,7 +62,8 @@ jq -n \
     prerelease: false
   }' > CHANGELOG.md
 
-echo "Create release $version for repo: $repo_slug, branch: $branch"
-curl -H "Authorization: token $token" --data @CHANGELOG.md "https://api.github.com/repos/$repo_slug/releases"
+release_id="$(curl -0 -XGET -H "Authorization: token $token" https://api.github.com/repos/garyyu/grin/releases/tags/$tagname 2>/dev/null | grep id | head -n 1 | sed 's/ *"id": *\(.*\),/\1/')"
+echo "Updating release $version for repo: $repo_slug, branch: $branch. release id: $release_id"
+curl -H "Authorization: token $token" --request PATCH  --data @CHANGELOG.md "https://api.github.com/repos/$repo_slug/releases/$release_id"
 echo "auto changelog uploaded.\n"
 
