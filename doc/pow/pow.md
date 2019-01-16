@@ -63,7 +63,13 @@ in order for there to be a solution.
 
 Let's add a few more edges, again at random:
 
-![alt text](images/cuckoo_base_numbered_few_edges_cycle.png)
+![alt text](images/cuckoo_base_numbered_more_edges.png)
+
+*8 Nodes with 7 Edges*
+
+Where we can find a cycle:
+
+![alt text](images/cuckoo_base_numbered_more_edges_cycle.png)
 
 *Cycle Found from 0-5-4-1-0*
 
