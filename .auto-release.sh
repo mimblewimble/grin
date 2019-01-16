@@ -62,7 +62,7 @@ jq -n \
     prerelease: false
   }' > CHANGELOG.md
 
-release_id="$(curl -0 -XGET -H "Authorization: token $token" https://api.github.com/repos/garyyu/grin/releases/tags/$tagname 2>/dev/null | grep id | head -n 1 | sed 's/ *"id": *\(.*\),/\1/')"
+release_id="$(curl -0 -XGET -H "Authorization: token $token" https://api.github.com/repos/$repo_slug/releases/tags/$tagname 2>/dev/null | grep id | head -n 1 | sed 's/ *"id": *\(.*\),/\1/')"
 echo "Updating release $version for repo: $repo_slug, branch: $branch. release id: $release_id"
 curl -H "Authorization: token $token" --request PATCH  --data @CHANGELOG.md "https://api.github.com/repos/$repo_slug/releases/$release_id"
 echo "auto changelog uploaded.\n"
