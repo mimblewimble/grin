@@ -581,7 +581,8 @@ where
 					error!("Error validating participant messages: {}", e);
 					err(e)
 				} else {
-					match api.receive_tx(&mut slate, None, None) {
+					let msg = slate.participant_data[0].message.clone();
+					match api.receive_tx(&mut slate, None, msg) {
 						Ok(_) => ok(slate.clone()),
 						Err(e) => {
 							error!("receive_tx: failed with error: {}", e);

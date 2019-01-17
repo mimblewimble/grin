@@ -71,6 +71,15 @@ where
 	slate.lock_height = lock_height;
 	slate.fee = fee;
 	let slate_id = slate.id.clone();
+	let mut message = "".to_string();
+	if slate.participant_data.len() > 0 {
+		for data in slate.participant_data.iter() {
+			if message.len() > 0 {
+				message.push_str(&"|".to_string());
+			}
+			message.push_str(&data.message.clone().unwrap_or("".to_string()));
+		}
+	}
 
 	let keychain = wallet.keychain().clone();
 
@@ -109,6 +118,7 @@ where
 			let log_id = batch.next_tx_log_id(&parent_key_id)?;
 			let mut t = TxLogEntry::new(parent_key_id.clone(), TxLogEntryType::TxSent, log_id);
 			t.tx_slate_id = Some(slate_id);
+			t.message = Some(message);
 			let filename = format!("{}.grintx", slate_id);
 			t.stored_tx = Some(filename);
 			t.fee = Some(fee);
@@ -183,6 +193,16 @@ where
 	let height = slate.height;
 
 	let slate_id = slate.id.clone();
+	let mut message = "".to_string();
+	if slate.participant_data.len() > 0 {
+		for data in slate.participant_data.iter() {
+			if message.len() > 0 {
+				message.push_str(&"|".to_string());
+			}
+			message.push_str(&data.message.clone().unwrap_or("".to_string()));
+		}
+	}
+
 	let blinding =
 		slate.add_transaction_elements(&keychain, vec![build::output(amount, key_id.clone())])?;
 
@@ -205,6 +225,7 @@ where
 		let mut t = TxLogEntry::new(parent_key_id.clone(), TxLogEntryType::TxReceived, log_id);
 		t.tx_slate_id = Some(slate_id);
 		t.amount_credited = amount;
+		t.message = Some(message);
 		t.num_outputs = 1;
 		batch.save(OutputData {
 			root_key_id: parent_key_id.clone(),

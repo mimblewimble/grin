@@ -612,6 +612,8 @@ pub struct TxLogEntry {
 	pub fee: Option<u64>,
 	/// Location of the store transaction, (reference or resending)
 	pub stored_tx: Option<String>,
+	/// Message
+	pub message: Option<String>,
 }
 
 impl ser::Writeable for TxLogEntry {
@@ -644,6 +646,7 @@ impl TxLogEntry {
 			num_outputs: 0,
 			fee: None,
 			stored_tx: None,
+			message: None,
 		}
 	}
 
