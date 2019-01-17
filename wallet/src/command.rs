@@ -145,7 +145,7 @@ pub fn owner_api(
 ) -> Result<(), Error> {
 	let res = controller::owner_listener(
 		wallet,
-		"127.0.0.1:13420",
+		"127.0.0.1:3420",
 		g_args.node_api_secret.clone(),
 		g_args.tls_conf.clone(),
 		config.owner_api_include_foreign.clone(),
