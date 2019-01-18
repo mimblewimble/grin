@@ -311,14 +311,20 @@ fn listen_for_addrs(
 	rx: &mpsc::Receiver<SocketAddr>,
 	connecting_history: &mut HashMap<SocketAddr, DateTime<Utc>>,
 ) {
-	if peers.peer_count() >= p2p.config.peer_max_count() {
-		// clean the rx messages to avoid accumulating
-		for _ in rx.try_iter() {}
-		return;
-	}
+	// Pull everything currently on the queue off the queue.
+	// Does not block so addrs may be empty.
+	let addrs: Vec<SocketAddr> = rx.try_iter().collect();
+
+	warn!("***** listen_for_addrs: addrs count here: {}", addrs.len());
+
+	// if peers.peer_count() >= p2p.config.peer_max_count() {
+	// 	// clean the rx messages to avoid accumulating
+	// 	for _ in rx.try_iter() {}
+	// 	return;
+	// }
 
 	let connect_min_interval = 30;
-	for addr in rx.try_iter() {
+	for addr in addrs.into_iter().take(config.peer_max_count() as usize) {
 		// ignore the duplicate connecting to same peer within 30 seconds
 		let now = Utc::now();
 		if let Some(last_connect_time) = connecting_history.get(&addr) {
