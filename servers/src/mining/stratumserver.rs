@@ -168,12 +168,11 @@ impl Worker {
 	}
 
 	// Get Message from the worker
-	fn read_message(&mut self) -> Option<String> {
+	fn read_message(&mut self, line: &mut String) -> Option<usize> {
 		// Read and return a single message or None
-		let mut line = String::new();
-		match self.stream.read_line(&mut line) {
-			Ok(_) => {
-				return Some(line);
+		match self.stream.read_line(line) {
+			Ok(n) => {
+				return Some(n);
 			}
 			Err(ref e) if e.kind() == ErrorKind::WouldBlock => {
 				// Not an error, just no messages ready
@@ -191,9 +190,8 @@ impl Worker {
 	}
 
 	// Send Message to the worker
-	fn write_message(&mut self, message_in: String) {
+	fn write_message(&mut self, mut message: String) {
 		// Write and Flush the message
-		let mut message = message_in.clone();
 		if !message.ends_with("\n") {
 			message += "\n";
 		}
@@ -283,9 +281,10 @@ impl StratumServer {
 	// Handle an RPC request message from the worker(s)
 	fn handle_rpc_requests(&mut self, stratum_stats: &mut Arc<RwLock<StratumStats>>) {
 		let mut workers_l = self.workers.lock();
+		let mut the_message = String::with_capacity(4096);
 		for num in 0..workers_l.len() {
-			match workers_l[num].read_message() {
-				Some(the_message) => {
+			match workers_l[num].read_message(&mut the_message) {
+				Some(_) => {
 					// Decompose the request from the JSONRpc wrapper
 					let request: RpcRequest = match serde_json::from_str(&the_message) {
 						Ok(request) => request,
