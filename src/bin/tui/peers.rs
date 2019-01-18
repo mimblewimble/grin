@@ -181,7 +181,11 @@ impl TUIStatusListener for TUIPeerView {
 			t.set_content(format!(
 				"Total Peers: {} (Outbound: {})",
 				stats.peer_stats.len(),
-				stats.peer_stats.iter().filter(|x| x.direction == "Outbound").count(),
+				stats
+					.peer_stats
+					.iter()
+					.filter(|x| x.direction == "Outbound")
+					.count(),
 			));
 		});
 		let _ = c.call_on_id("longest_work_peer", |t: &mut TextView| {
