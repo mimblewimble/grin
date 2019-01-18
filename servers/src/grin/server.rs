@@ -128,9 +128,7 @@ impl Server {
 
 		let sync_state = Arc::new(SyncState::new());
 
-		let chain_adapter = Arc::new(ChainToPoolAndNetAdapter::new(
-			tx_pool.clone(),
-		));
+		let chain_adapter = Arc::new(ChainToPoolAndNetAdapter::new(tx_pool.clone()));
 
 		let genesis = match config.chain_type {
 			global::ChainTypes::AutomatedTesting => genesis::genesis_dev(),
