@@ -210,7 +210,9 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 
 		// pushing the new block header through the header chain pipeline
 		// we will go ask for the block if this is a new header
-		let res = self.chain().process_block_header(&bh, self.chain_opts(false));
+		let res = self
+			.chain()
+			.process_block_header(&bh, self.chain_opts(false));
 
 		if let &Err(ref e) = &res {
 			debug!("Block header {} refused by chain: {:?}", bhash, e.kind());
@@ -434,7 +436,10 @@ impl NetToChainAdapter {
 		let bhash = b.hash();
 		let previous = self.chain().get_previous_header(&b.header);
 
-		match self.chain().process_block(b, self.chain_opts(was_requested)) {
+		match self
+			.chain()
+			.process_block(b, self.chain_opts(was_requested))
+		{
 			Ok(_) => {
 				self.validate_chain(bhash);
 				self.check_compact();
@@ -601,7 +606,6 @@ impl NetToChainAdapter {
 ///  accepted a new block, asking the pool to update its state and
 /// the network to broadcast the block
 pub struct ChainToPoolAndNetAdapter {
-	sync_state: Arc<SyncState>,
 	tx_pool: Arc<RwLock<pool::TransactionPool>>,
 	peers: OneTime<Weak<p2p::Peers>>,
 }
@@ -671,12 +675,8 @@ impl ChainAdapter for ChainToPoolAndNetAdapter {
 
 impl ChainToPoolAndNetAdapter {
 	/// Construct a ChainToPoolAndNetAdapter instance.
-	pub fn new(
-		sync_state: Arc<SyncState>,
-		tx_pool: Arc<RwLock<pool::TransactionPool>>,
-	) -> ChainToPoolAndNetAdapter {
+	pub fn new(tx_pool: Arc<RwLock<pool::TransactionPool>>) -> ChainToPoolAndNetAdapter {
 		ChainToPoolAndNetAdapter {
-			sync_state,
 			tx_pool,
 			peers: OneTime::new(),
 		}
