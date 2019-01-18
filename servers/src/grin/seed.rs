@@ -313,18 +313,20 @@ fn listen_for_addrs(
 ) {
 	// Pull everything currently on the queue off the queue.
 	// Does not block so addrs may be empty.
+	// We will take(max_peers) from this later but we want to drain the rx queue
+	// here to prevent it backing up.
 	let addrs: Vec<SocketAddr> = rx.try_iter().collect();
 
 	warn!("***** listen_for_addrs: addrs count here: {}", addrs.len());
 
-	// if peers.peer_count() >= p2p.config.peer_max_count() {
-	// 	// clean the rx messages to avoid accumulating
-	// 	for _ in rx.try_iter() {}
-	// 	return;
-	// }
+	// If we have a healthy number of outbound peers then we are done here.
+	// Note: We drained the rx queue earlier to keep it under control.
+	if peers.peer_outbound_count() >= p2p.config.peer_min_preferred_count() / 2 {
+		return;
+	}
 
 	let connect_min_interval = 30;
-	for addr in addrs.into_iter().take(config.peer_max_count() as usize) {
+	for addr in addrs.into_iter().take(p2p.config.peer_max_count() as usize) {
 		// ignore the duplicate connecting to same peer within 30 seconds
 		let now = Utc::now();
 		if let Some(last_connect_time) = connecting_history.get(&addr) {
