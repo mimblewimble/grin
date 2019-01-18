@@ -187,9 +187,10 @@ fn monitor_peers(
 	peers.clean_peers(config.peer_max_count() as usize);
 
 	// We have enough peers, both total connected and outbound connected so we are good.
-	if peers.peer_count() >= config.peer_min_preferred_count() 
-		&& peers.peer_outbound_count() >= config.peer_min_preferred_count() / 2 {
-			return;
+	if peers.peer_count() >= config.peer_min_preferred_count()
+		&& peers.peer_outbound_count() >= config.peer_min_preferred_count() / 2
+	{
+		return;
 	}
 
 	// loop over connected peers
