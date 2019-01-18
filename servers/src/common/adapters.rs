@@ -601,7 +601,6 @@ impl NetToChainAdapter {
 ///  accepted a new block, asking the pool to update its state and
 /// the network to broadcast the block
 pub struct ChainToPoolAndNetAdapter {
-	sync_state: Arc<SyncState>,
 	tx_pool: Arc<RwLock<pool::TransactionPool>>,
 	peers: OneTime<Weak<p2p::Peers>>,
 }
@@ -672,11 +671,9 @@ impl ChainAdapter for ChainToPoolAndNetAdapter {
 impl ChainToPoolAndNetAdapter {
 	/// Construct a ChainToPoolAndNetAdapter instance.
 	pub fn new(
-		sync_state: Arc<SyncState>,
 		tx_pool: Arc<RwLock<pool::TransactionPool>>,
 	) -> ChainToPoolAndNetAdapter {
 		ChainToPoolAndNetAdapter {
-			sync_state,
 			tx_pool,
 			peers: OneTime::new(),
 		}
