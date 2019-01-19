@@ -186,8 +186,10 @@ fn monitor_peers(
 	// maintenance step first, clean up p2p server peers
 	peers.clean_peers(config.peer_max_count() as usize);
 
-	// not enough peers, getting more from db
-	if peers.peer_count() >= config.peer_min_preferred_count() {
+	// We have enough peers, both total connected and outbound connected so we are good.
+	if peers.peer_count() >= config.peer_min_preferred_count()
+		&& peers.peer_outbound_count() >= config.peer_min_preferred_count() / 2
+	{
 		return;
 	}
 
@@ -309,14 +311,22 @@ fn listen_for_addrs(
 	rx: &mpsc::Receiver<SocketAddr>,
 	connecting_history: &mut HashMap<SocketAddr, DateTime<Utc>>,
 ) {
-	if peers.peer_count() >= p2p.config.peer_max_count() {
-		// clean the rx messages to avoid accumulating
-		for _ in rx.try_iter() {}
+	// Pull everything currently on the queue off the queue.
+	// Does not block so addrs may be empty.
+	// We will take(max_peers) from this later but we want to drain the rx queue
+	// here to prevent it backing up.
+	let addrs: Vec<SocketAddr> = rx.try_iter().collect();
+
+	// If we have a healthy number of outbound peers then we are done here.
+	if peers.peer_outbound_count() >= p2p.config.peer_min_preferred_count() / 2 {
 		return;
 	}
 
+	// Try to connect to (up to max peers) peer addresses.
+	// Note: We drained the rx queue earlier to keep it under control.
+	// Even if there are many addresses to try we will only try a bounded number of them.
 	let connect_min_interval = 30;
-	for addr in rx.try_iter() {
+	for addr in addrs.into_iter().take(p2p.config.peer_max_count() as usize) {
 		// ignore the duplicate connecting to same peer within 30 seconds
 		let now = Utc::now();
 		if let Some(last_connect_time) = connecting_history.get(&addr) {

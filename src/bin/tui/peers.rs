@@ -135,7 +135,6 @@ impl TUIStatusListener for TUIPeerView {
 			LinearLayout::new(Orientation::Vertical)
 				.child(
 					LinearLayout::new(Orientation::Horizontal)
-						.child(TextView::new("Total Peers: "))
 						.child(TextView::new("  ").with_id("peers_total")),
 				)
 				.child(
@@ -179,7 +178,15 @@ impl TUIStatusListener for TUIPeerView {
 			},
 		);
 		let _ = c.call_on_id("peers_total", |t: &mut TextView| {
-			t.set_content(stats.peer_stats.len().to_string());
+			t.set_content(format!(
+				"Total Peers: {} (Outbound: {})",
+				stats.peer_stats.len(),
+				stats
+					.peer_stats
+					.iter()
+					.filter(|x| x.direction == "Outbound")
+					.count(),
+			));
 		});
 		let _ = c.call_on_id("longest_work_peer", |t: &mut TextView| {
 			t.set_content(lp_str);

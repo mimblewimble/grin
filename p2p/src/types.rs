@@ -273,6 +273,10 @@ impl PeerInfo {
 		self.live_info.read().total_difficulty
 	}
 
+	pub fn is_outbound(&self) -> bool {
+		self.direction == Direction::Outbound
+	}
+
 	/// The current height of the peer.
 	pub fn height(&self) -> u64 {
 		self.live_info.read().height

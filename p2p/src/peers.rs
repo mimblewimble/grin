@@ -171,12 +171,21 @@ impl Peers {
 		self.peers.read().get(addr).map(|p| p.clone())
 	}
 
-	/// Number of peers we're currently connected to.
+	/// Number of peers currently connected to.
 	pub fn peer_count(&self) -> u32 {
 		self.peers
 			.read()
 			.values()
 			.filter(|x| x.is_connected())
+			.count() as u32
+	}
+
+	/// Number of outbound peers currently connected to.
+	pub fn peer_outbound_count(&self) -> u32 {
+		self.peers
+			.read()
+			.values()
+			.filter(|x| x.is_connected() && x.info.is_outbound())
 			.count() as u32
 	}
 
