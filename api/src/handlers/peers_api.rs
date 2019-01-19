@@ -85,7 +85,7 @@ impl Handler for PeerHandler {
 					return response(
 						StatusCode::BAD_REQUEST,
 						format!("invalid peer address: {}", e),
-					)
+					);
 				}
 				Ok(addr) => addr,
 			},
