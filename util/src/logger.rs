@@ -136,7 +136,7 @@ pub fn init_logger(config: Option<LoggingConfig>) {
 							.append(c.log_file_append)
 							.encoder(Box::new(PatternEncoder::new(&LOGGING_PATTERN)))
 							.build(c.log_file_path, Box::new(policy))
-							.unwrap(),
+							.expect("Failed to create logfile"),
 					)
 				} else {
 					Box::new(
@@ -144,7 +144,7 @@ pub fn init_logger(config: Option<LoggingConfig>) {
 							.append(c.log_file_append)
 							.encoder(Box::new(PatternEncoder::new(&LOGGING_PATTERN)))
 							.build(c.log_file_path)
-							.unwrap(),
+							.expect("Failed to create logfile"),
 					)
 				}
 			};
