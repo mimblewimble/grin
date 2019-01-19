@@ -66,7 +66,8 @@ pub fn new_env(path: String) -> lmdb::Environment {
 /// Create a new LMDB env under the provided directory with the provided name.
 pub fn new_named_env(path: String, name: String) -> lmdb::Environment {
 	let full_path = [path, name].join("/");
-	fs::create_dir_all(&full_path).unwrap();
+	fs::create_dir_all(&full_path)
+		.expect("Unable to create directory 'db_root' to store chain_data");
 
 	let mut env_builder = lmdb::EnvBuilder::new().unwrap();
 	env_builder.set_maxdbs(8).unwrap();
