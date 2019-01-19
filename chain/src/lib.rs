@@ -33,7 +33,6 @@ extern crate log;
 use failure;
 use grin_core as core;
 use grin_keychain as keychain;
-use grin_store;
 use grin_util as util;
 
 mod chain;
