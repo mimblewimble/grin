@@ -45,7 +45,7 @@ fn start_server(config: servers::ServerConfig) {
 fn start_server_tui(config: servers::ServerConfig) {
 	// Run the UI controller.. here for now for simplicity to access
 	// everything it might need
-	if config.run_tui.is_some() && config.run_tui.unwrap() {
+	if config.run_tui.unwrap_or(false) {
 		warn!("Starting GRIN in UI mode...");
 		servers::Server::start(config, |serv: Arc<servers::Server>| {
 			let running = Arc::new(AtomicBool::new(true));
