@@ -27,6 +27,9 @@ use grin_util as util;
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
+/// Max size of a "bucket" of dependent txs in the pool.
+const MAX_BUCKET_SIZE: usize = 64;
+
 pub struct Pool {
 	/// Entries in the pool (tx + info + timer) in simple insertion order.
 	pub entries: Vec<PoolEntry>,
@@ -327,9 +330,9 @@ impl Pool {
 		Ok(())
 	}
 
-	// Group dependent transactions in buckets (vectors), each bucket
-	// is therefore independent from the others. Relies on the entries
-	// Vec having parent transactions first (should always be the case)
+	// Group dependent transactions in buckets. Each bucket
+	// independent from subsequent buckets. Relies on the entries
+	// having parent transactions first (should always be the case).
 	fn bucket_transactions(&self) -> Vec<Vec<Transaction>> {
 		let mut tx_buckets = vec![];
 		let mut output_commits = HashMap::new();
@@ -350,8 +353,15 @@ impl Pool {
 				insert_pos = tx_buckets.len() as i32;
 				tx_buckets.push(vec![entry.tx.clone()]);
 			} else {
-				// parent found, add to its bucket
-				tx_buckets[insert_pos as usize].push(entry.tx.clone());
+				// parent(s) found, add to last parent bucket (if room in bucket)
+				let bucket = &mut tx_buckets[insert_pos as usize];
+				if bucket.len() < MAX_BUCKET_SIZE {
+					bucket.push(entry.tx.clone());
+				} else {
+					// start a new bucket at the end
+					insert_pos = tx_buckets.len() as i32;
+					tx_buckets.push(vec![entry.tx.clone()]);
+				}
 			}
 
 			// update the commits index
