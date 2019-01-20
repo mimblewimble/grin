@@ -60,8 +60,8 @@ impl HeaderHandler {
 	fn get_header_for_output(&self, commit_id: String) -> Result<BlockHeaderPrintable, Error> {
 		let oid = get_output(&self.chain, &commit_id)?.1;
 		match w(&self.chain).get_header_for_output(&oid) {
-			Ok(header) => return Ok(BlockHeaderPrintable::from_header(&header)),
-			Err(_) => return Err(ErrorKind::NotFound)?,
+			Ok(header) => Ok(BlockHeaderPrintable::from_header(&header)),
+			Err(_) => Err(ErrorKind::NotFound)?,
 		}
 	}
 }
