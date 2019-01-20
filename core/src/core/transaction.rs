@@ -25,11 +25,11 @@ use crate::ser::{
 };
 use crate::serde::{Deserialize, Deserializer, Serializer};
 use crate::util;
+use crate::util::from_hex;
 use crate::util::secp;
 use crate::util::secp::pedersen::{Commitment, RangeProof};
 use crate::util::static_secp_instance;
 use crate::util::RwLock;
-use crate::util::{from_hex};
 use enum_primitive::FromPrimitive;
 use std::cmp::max;
 use std::cmp::Ordering;
@@ -99,7 +99,7 @@ mod sig_serde {
 }
 
 /// Seralizes a byte string into hex
-pub fn as_hex<T,S>(bytes: T, serializer: S) -> Result<S::Ok, S::Error>
+pub fn as_hex<T, S>(bytes: T, serializer: S) -> Result<S::Ok, S::Error>
 where
 	T: AsRef<[u8]>,
 	S: Serializer,
