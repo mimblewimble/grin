@@ -68,7 +68,7 @@ impl HeaderHandler {
 
 impl Handler for HeaderHandler {
 	fn get(&self, req: Request<Body>) -> ResponseFuture {
-		let el = match req.uri().path().trim_right_matches("/").rsplit("/").next() {
+		let el = match req.uri().path().trim_right_matches('/').rsplit('/').next() {
 			None => return response(StatusCode::BAD_REQUEST, "invalid url"),
 			Some(el) => el,
 		};
@@ -125,12 +125,12 @@ fn check_block_param(input: &String) -> Result<(), Error> {
 			"Not a valid hash or height.".to_owned(),
 		))?;
 	}
-	return Ok(());
+	Ok(())
 }
 
 impl Handler for BlockHandler {
 	fn get(&self, req: Request<Body>) -> ResponseFuture {
-		let el = match req.uri().path().trim_right_matches("/").rsplit("/").next() {
+		let el = match req.uri().path().trim_right_matches('/').rsplit('/').next() {
 			None => return response(StatusCode::BAD_REQUEST, "invalid url"),
 			Some(el) => el,
 		};
