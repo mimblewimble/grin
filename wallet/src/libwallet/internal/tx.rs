@@ -54,7 +54,7 @@ where
 	// Save output in wallet
 	let _ = receiver_create_fn(wallet);
 
-	update_message(wallet, parent_key_id, slate)?;
+	update_message(wallet, slate)?;
 
 	Ok(())
 }
@@ -221,15 +221,13 @@ where
 		Some(t) => t,
 		None => return Err(ErrorKind::TransactionDoesntExist(slate.id.to_string()))?,
 	};
-	let slate_id = tx.tx_slate_id.as_ref().unwrap().clone();
-	wallet.store_tx(&format!("{}", slate_id), &slate.tx)?;
+	wallet.store_tx(&format!("{}", tx.tx_slate_id.unwrap()), &slate.tx)?;
 	Ok(())
 }
 
 /// Update the transaction participant messages
 pub fn update_message<T: ?Sized, C, K>(
 	wallet: &mut T,
-	parent_key_id: &Identifier,
 	slate: &Slate,
 ) -> Result<(), Error>
 where
@@ -237,23 +235,17 @@ where
 	C: NodeClient,
 	K: Keychain,
 {
-	// finalize command
 	let tx_vec = updater::retrieve_txs(wallet, None, Some(slate.id), None, false)?;
-	let mut tx = None;
-	for t in tx_vec {
-		tx = Some(t.clone());
-		break;
+	if tx_vec.is_empty() {
+		return Err(ErrorKind::TransactionDoesntExist(slate.id.to_string()))?;
 	}
-	let mut tx = match tx {
-		Some(t) => t,
-		None => return Err(ErrorKind::TransactionDoesntExist(slate.id.to_string()))?,
-	};
-	tx.messages = Some(slate.participant_messages());
-	{
-		let mut batch = wallet.batch()?;
-		batch.save_tx_log_entry(tx, parent_key_id)?;
-		batch.commit()?;
+	let mut batch = wallet.batch()?;
+	for tx in tx_vec.into_iter() {
+		let mut t = tx.clone();
+		t.messages = Some(slate.participant_messages());
+		batch.save_tx_log_entry(t.clone(), &t.parent_key_id.clone())?;
 	}
+	batch.commit()?;
 	Ok(())
 }
 #[cfg(test)]

@@ -682,17 +682,15 @@ where
 	pub fn finalize_tx(&mut self, slate: &mut Slate) -> Result<(), Error> {
 		let mut w = self.wallet.lock();
 		w.open_with_credentials()?;
-		let parent_key_id = w.parent_key_id();
 		let context = w.get_private_context(slate.id.as_bytes())?;
 		tx::complete_tx(&mut *w, slate, &context)?;
 		tx::update_stored_tx(&mut *w, slate)?;
-		tx::update_message(&mut *w, &parent_key_id, slate)?;
+		tx::update_message(&mut *w, slate)?;
 		{
 			let mut batch = w.batch()?;
 			batch.delete_private_context(slate.id.as_bytes())?;
 			batch.commit()?;
 		}
-
 		w.close()?;
 		Ok(())
 	}

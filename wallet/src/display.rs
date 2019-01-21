@@ -368,11 +368,18 @@ pub fn tx_messages(tx: &TxLogEntry, dark_background_color_scheme: bool) -> Resul
 
 	let msgs = match tx.messages.clone() {
 		None => {
-			println!("None");
+			writeln!(t, "{}", "None").unwrap();
+			t.reset().unwrap();
 			return Ok(());
 		}
 		Some(m) => m.clone(),
 	};
+
+	if msgs.messages.is_empty() {
+		writeln!(t, "{}", "None").unwrap();
+		t.reset().unwrap();
+		return Ok(());
+	}
 
 	let mut table = table!();
 
