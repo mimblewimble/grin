@@ -23,6 +23,7 @@ use crate::keychain::{Identifier, Keychain};
 use crate::libwallet::error::{Error, ErrorKind};
 use crate::util::secp::key::{PublicKey, SecretKey};
 use crate::util::secp::{self, pedersen, Secp256k1};
+use grin_core::libtx::slate::ParticipantMessages;
 use chrono::prelude::*;
 use failure::ResultExt;
 use serde;
@@ -610,6 +611,8 @@ pub struct TxLogEntry {
 	pub amount_debited: u64,
 	/// Fee
 	pub fee: Option<u64>,
+	/// Message data, stored as json
+	pub messages: Option<ParticipantMessages>,
 	/// Location of the store transaction, (reference or resending)
 	pub stored_tx: Option<String>,
 }
@@ -643,6 +646,7 @@ impl TxLogEntry {
 			num_inputs: 0,
 			num_outputs: 0,
 			fee: None,
+			messages: None,
 			stored_tx: None,
 		}
 	}

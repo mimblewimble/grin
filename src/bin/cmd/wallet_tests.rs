@@ -493,6 +493,10 @@ mod wallet_tests {
 		let arg_vec = vec!["grin", "wallet", "-p", "password", "-a", "mining", "txs"];
 		execute_command(&app, test_dir, "wallet1", &client1, arg_vec)?;
 
+		// message output (mostly spit out for a visual in test logs)
+		let arg_vec = vec!["grin", "wallet", "-p", "password", "-a", "mining", "-i", "3", "txs"];
+		execute_command(&app, test_dir, "wallet1", &client1, arg_vec)?;
+
 		// txs and outputs (mostly spit out for a visual in test logs)
 		let arg_vec = vec![
 			"grin", "wallet", "-p", "password", "-a", "mining", "outputs",

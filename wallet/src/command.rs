@@ -396,15 +396,19 @@ pub fn txs(
 			&g_args.account,
 			height,
 			validated,
-			txs,
+			&txs,
 			include_status,
 			dark_scheme,
 		)?;
 		// if given a particular transaction id, also get and display associated
-		// inputs/outputs
+		// inputs/outputs and messages
 		if args.id.is_some() {
 			let (_, outputs) = api.retrieve_outputs(true, false, args.id)?;
 			display::outputs(&g_args.account, height, validated, outputs, dark_scheme)?;
+			// should only be one here, but just in case
+			for tx in txs {
+				display::tx_messages(&tx, dark_scheme)?;
+			}
 		};
 		Ok(())
 	})?;

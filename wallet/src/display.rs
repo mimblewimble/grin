@@ -122,7 +122,7 @@ pub fn txs(
 	account: &str,
 	cur_height: u64,
 	validated: bool,
-	txs: Vec<TxLogEntry>,
+	txs: &Vec<TxLogEntry>,
 	include_status: bool,
 	dark_background_color_scheme: bool,
 ) -> Result<(), Error> {
@@ -183,7 +183,7 @@ pub fn txs(
 				core::amount_to_hr_string(t.amount_debited - t.amount_credited, true)
 			)
 		};
-		let tx_data = match t.stored_tx {
+		let tx_data = match t.clone().stored_tx {
 			Some(t) => format!("{}", t),
 			None => "None".to_owned(),
 		};
@@ -355,4 +355,74 @@ pub fn accounts(acct_mappings: Vec<AcctPathMapping>) {
 	table.set_format(*prettytable::format::consts::FORMAT_NO_BORDER_LINE_SEPARATOR);
 	table.printstd();
 	println!();
+}
+
+/// Display transaction log messages
+pub fn tx_messages(
+	tx: &TxLogEntry,
+	dark_background_color_scheme: bool,
+) -> Result<(), Error> {
+	let title = format!(
+		"Transaction Messages - Transaction '{}'",
+		tx.id,
+	);
+	println!();
+	let mut t = term::stdout().unwrap();
+	t.fg(term::color::MAGENTA).unwrap();
+	writeln!(t, "{}", title).unwrap();
+	t.reset().unwrap();
+
+	let msgs = match tx.messages.clone() {
+		None => {
+			println!("None");
+			return Ok(());
+		},
+		Some(m) => m.clone(),
+	};
+
+	let mut table = table!();
+
+	table.set_titles(row![
+		bMG->"Participant Id",
+		bMG->"Message",
+		bMG->"Public Key",
+		bMG->"Signature",
+	]);
+
+	let secp = util::static_secp_instance();
+	let secp_lock = secp.lock();
+
+	for m in msgs.messages {
+		let id = format!("{}", m.id);
+		let public_key = format!("{}", util::to_hex(m.public_key.serialize_vec(&secp_lock, true).to_vec()));
+		let message = match m.message {
+			Some(m) => format!("{}", m),
+			None => "None".to_owned(),
+		};
+		let message_sig = match m.message_sig {
+			Some(s) => format!("{}", util::to_hex(s.serialize_der(&secp_lock))),
+			None => "None".to_owned(),
+		};
+		if dark_background_color_scheme {
+			table.add_row(row![
+				bFC->id,
+				bFC->message,
+				bFC->public_key,
+				bFB->message_sig,
+			]);
+		} else {
+			table.add_row(row![
+				bFD->id,
+				bFb->message,
+				bFD->public_key,
+				bFB->message_sig,
+			]);
+		}
+	}
+
+	table.set_format(*prettytable::format::consts::FORMAT_NO_COLSEP);
+	table.printstd();
+	println!();
+
+	Ok(())
 }

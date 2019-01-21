@@ -39,7 +39,6 @@ where
 	// create an output using the amount in the slate
 	let (_, mut context, receiver_create_fn) =
 		selection::build_recipient_output_with_slate(wallet, slate, parent_key_id.clone())?;
-
 	// fill public keys
 	let _ = slate.fill_round_1(
 		wallet.keychain(),
@@ -54,6 +53,8 @@ where
 
 	// Save output in wallet
 	let _ = receiver_create_fn(wallet);
+
+	update_message(wallet, parent_key_id, slate)?;
 
 	Ok(())
 }
@@ -220,10 +221,37 @@ where
 		Some(t) => t,
 		None => return Err(ErrorKind::TransactionDoesntExist(slate.id.to_string()))?,
 	};
-	wallet.store_tx(&format!("{}", tx.tx_slate_id.unwrap()), &slate.tx)?;
+	let slate_id = tx.tx_slate_id.as_ref().unwrap().clone();
+	wallet.store_tx(&format!("{}", slate_id), &slate.tx)?;
 	Ok(())
 }
 
+/// Update the transaction participant messages
+pub fn update_message<T: ?Sized, C, K>(wallet: &mut T, parent_key_id: &Identifier, slate: &Slate) -> Result<(), Error>
+where
+	T: WalletBackend<C, K>,
+	C: NodeClient,
+	K: Keychain,
+{
+	// finalize command
+	let tx_vec = updater::retrieve_txs(wallet, None, Some(slate.id), None, false)?;
+	let mut tx = None;
+	for t in tx_vec {
+		tx = Some(t.clone());
+		break;
+	}
+	let mut tx = match tx {
+		Some(t) => t,
+		None => return Err(ErrorKind::TransactionDoesntExist(slate.id.to_string()))?,
+	};
+	tx.messages = Some(slate.participant_messages());
+	{
+		let mut batch = wallet.batch()?;
+		batch.save_tx_log_entry(tx, parent_key_id)?;
+		batch.commit()?;
+	}
+	Ok(())
+}
 #[cfg(test)]
 mod test {
 	use crate::core::libtx::build;
