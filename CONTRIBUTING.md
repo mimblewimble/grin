@@ -20,6 +20,20 @@ In case of problems with trying out grin, before starting to contribute, there's
 * Also see `docs/*.md` and the folder structure explanations, and [the wiki](https://github.com/mimblewimble/docs/wiki).
 * Further information and discussions are in the [Forum](https://www.grin-forum.org/), the [website](https://grin-tech.org), the [mailing list](https://lists.launchpad.net/mimblewimble/) and news channels like the [@grincouncil](https://twitter.com/grincouncil) and a (mostly unfiltered!) Twitter bot that collects headlines, mailing list posts, and reddit posts related to MimbleWinble/Grin: [@grinmw](https://twitter.com/grinmw)
 
+## Testing
+
+Run all tests with `cargo test --all` and please remember to test locally before creating a PR on github.
+
+### Check Travis output
+
+After creating a PR on github, the code will be tested automatically by Travis CI, and from the results you'll get a red or green light. The test can take a while, and you'll have a "yellow traffic light" on your PR until Travis CI is done testing.
+
+### Building quality
+
+The most important thing you can do alongside - or even before - changing code, is adding tests for how grin should and should not work. See the various `tests` folders and derive test that are already there in grin.
+
+After that, if you want to raise code quality another level, you can use `cargo check`, `cargo cov test` and `cargo tarpaulin`. Install them with `cargo install cargo-check cargo-cov; RUSTFLAGS="--cfg procmacro2_semver_exempt" cargo install cargo-tarpaulin`. Run with `cargo cov test` and `cargo tarpaulin`. The quality check tools are often integrated with `rustc` and as a side-effect only activated when some code is compiled. Because of this, if you want a complete check you'll need to `cargo clean` first.
+
 # Pull-Request Title Prefix
 
 **Note**: *[draft part! to be reviewed and discussed]*
@@ -38,54 +52,51 @@ For example: `fix: a panick on xxx when grin exiting`. Please don't worry if you
 
 # Grin Style Guide
 
-Grin uses `rustfmt` to maintain consistent formatting, and we're using the git commit hook as explained below.
+This project uses `rustfmt` to maintain consistent formatting. We've made sure that rustfmt runs **automatically**, but you must install rustfmt manually first.
 
 ## Install rustfmt
 
-You should use `rustup`. See [build docs](doc/build.md) for more info.
+**Note**: To work with grin you must use `rustup`. Linux package managers typically carry a too old rust version.
+See [build docs](doc/build.md) for more info.
 
+First ensure you have a new enough rustfmt:
 ```
-rustup component add rustfmt-preview
 rustup update
+rustup component add rustfmt
 rustfmt --version
 ```
 
-and verify you did get version `rustfmt 0.99.1-stable (da17b689 2018-08-04)` or newer.
+and verify you did get version `rustfmt 1.0.0-stable (43206f4 2018-11-30)` or newer.
 
-## Automatic "pre-commit hook"
+Then run `cargo build` to activate a git `pre-commit` hook that automates the rustfmt usage so you don't have to worry much about it. Read on for how to make this work in your advantage.
 
-There is a basic git [pre-commit](.hooks/pre-commit) hook in the repo, and this pre-commit hook will be **automatically** configured in this project, once you run `cargo build` for the 1st time.
-  
-Or you can config it manually with the following command without building, and check it:
-```
-git config core.hooksPath ./.hooks
-git config --list | grep hook
-```
-The output will be:
-```
-core.hookspath=./.hooks
-```
+## Creating git commits
+
+When you make a commit, rustfmt will be run and we also **automatically** reformat the .rs files that your commit is touching.
+
+Please separate the rustfmt changes into one (or several) separate commits. This is best practice.
+
+Easiest is to make your commit as normal and if rustfmt stops you, just redo the commit again, since it should always be allowed on the second try. Then add all rustfmt:ed files (`git add -u`) and commit them (`git commit -m "rustfmt"`).
+
+You do have to remember to do this manually.
 
 **Note**: The pre-commit hook will not prevent commits if style issues are present, instead it will indicate any files that need formatting, and it will automatically run `rustfmt` on your changed files, each time when you try to do `git commit`.
 
-## Running rustfmt manually
+### Manually configuring git hooks
 
-You can run rustfmt (i.e. rustfmt-preview) on one file or on all files.
+If you are developing new or changed git hooks, or are curious, you can config hooks manually like this `git config core.hooksPath ./.hooks` and to verify the effect do `git config --list | grep hook` and expect the output to be `core.hookspath=./.hooks`
 
-For example:
-```
-rustfmt client.rs
-```
+### Running rustfmt manually
+
+Not recommended, but you can run rustfmt on a file like this: `rustfmt client.rs`
 
 **Notes**:
-1. *Please add the rustfmt corrections as a separate commit at the end of your Pull Request to make the reviewers happy.*
+1. *Please keep rustfmt corrections in a separate commit. This is best practice and makes reviewing and merging your contribution work better.*
 
-2. *If you're still not sure about what should do on the format, please feel free to ignore it. Since `rustfmt` is just a tool to make your code having pretty formatting, your changed code is definitely more important than the format. Hope you're happy to contribute on this open source project!*
+2. *If unsure about code formatting, it's just fine if you ignore and discard any rustfmt changes. It's only a nice-to-have. Your contribution and code changes is the priority here. Hope you're happy to contribute on this open source project!*
 
-3. And anyway please don't use ~~`cargo +nightly fmt`~~ if at all possible.
+3. Please don't ~~`cargo +nightly fmt`~~ because all grin developers are using stable rustfmt. Also please don't rustfmt files that your code changes does not touch to avoid causing merge conflicts.
 
 ## Thanks for any contribution
 
 Even one word correction are welcome! Our objective is to encourage you to get interested in Grin and contribute in any way possible. Thanks for any help!
-
-
