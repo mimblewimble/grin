@@ -34,6 +34,8 @@ The most important thing you can do alongside - or even before - changing code, 
 
 After that, if you want to raise code quality another level, you can use `cargo check`, `cargo cov test` and `cargo tarpaulin`. Install them with `cargo install cargo-check cargo-cov; RUSTFLAGS="--cfg procmacro2_semver_exempt" cargo install cargo-tarpaulin`. Run with `cargo cov test` and `cargo tarpaulin`. The quality check tools are often integrated with `rustc` and as a side-effect only activated when some code is compiled. Because of this, if you want a complete check you'll need to `cargo clean` first.
 
+We have some details on [code coverage and historical numbers on the wiki](https://github.com/mimblewimble/docs/wiki/Code-coverage-and-metrics).
+
 # Pull-Request Title Prefix
 
 **Note**: *[draft part! to be reviewed and discussed]*
