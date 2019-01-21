@@ -19,7 +19,7 @@ To learn more, read our [introduction to MimbleWimble and Grin](doc/intro.md).
 
 ## Status
 
-Grin is live with MainNet. Still, much is left to be done and [contributions](CONTRIBUTING.md) are welcome (see below). Check our [mailing list archives](https://lists.launchpad.net/mimblewimble/) for the latest status.
+Grin is live with mainnet. Still, much is left to be done and [contributions](CONTRIBUTING.md) are welcome (see below). Check our [mailing list archives](https://lists.launchpad.net/mimblewimble/) for the latest status.
 
 ## Contributing
 
