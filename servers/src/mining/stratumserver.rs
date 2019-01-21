@@ -354,29 +354,23 @@ impl StratumServer {
 					};
 
 					// Package the reply as RpcResponse json
-					let rpc_response: String;
-					match response {
-						Err(response) => {
-							let resp = RpcResponse {
-								id: request.id,
-								jsonrpc: String::from("2.0"),
-								method: request.method,
-								result: None,
-								error: Some(response),
-							};
-							rpc_response = serde_json::to_string(&resp).unwrap();
-						}
-						Ok(response) => {
-							let resp = RpcResponse {
-								id: request.id,
-								jsonrpc: String::from("2.0"),
-								method: request.method,
-								result: Some(response),
-								error: None,
-							};
-							rpc_response = serde_json::to_string(&resp).unwrap();
-						}
-					}
+					let resp = match response {
+						Err(response) => RpcResponse {
+							id: request.id,
+							jsonrpc: String::from("2.0"),
+							method: request.method,
+							result: None,
+							error: Some(response),
+						},
+						Ok(response) => RpcResponse {
+							id: request.id,
+							jsonrpc: String::from("2.0"),
+							method: request.method,
+							result: Some(response),
+							error: None,
+						},
+					};
+					let rpc_response = serde_json::to_string(&resp).unwrap(); //
 
 					// Send the reply
 					workers_l[num].write_message(rpc_response);
