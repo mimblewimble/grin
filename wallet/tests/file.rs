@@ -177,15 +177,27 @@ fn file_exchange_test_impl(test_dir: &str) -> Result<(), libwallet::Error> {
 	// Check messages, all participants should have both
 	wallet::controller::owner_single_use(wallet1.clone(), |api| {
 		let (_, tx) = api.retrieve_txs(true, None, Some(slate.id))?;
-		assert_eq!(tx[0].clone().messages.unwrap().messages[0].message, Some(message.to_owned()));
-		assert_eq!(tx[0].clone().messages.unwrap().messages[1].message, Some(sender2_message.to_owned()));
+		assert_eq!(
+			tx[0].clone().messages.unwrap().messages[0].message,
+			Some(message.to_owned())
+		);
+		assert_eq!(
+			tx[0].clone().messages.unwrap().messages[1].message,
+			Some(sender2_message.to_owned())
+		);
 		Ok(())
 	})?;
 
 	wallet::controller::owner_single_use(wallet2.clone(), |api| {
 		let (_, tx) = api.retrieve_txs(true, None, Some(slate.id))?;
-		assert_eq!(tx[0].clone().messages.unwrap().messages[0].message, Some(message.to_owned()));
-		assert_eq!(tx[0].clone().messages.unwrap().messages[1].message, Some(sender2_message));
+		assert_eq!(
+			tx[0].clone().messages.unwrap().messages[0].message,
+			Some(message.to_owned())
+		);
+		assert_eq!(
+			tx[0].clone().messages.unwrap().messages[1].message,
+			Some(sender2_message)
+		);
 		Ok(())
 	})?;
 

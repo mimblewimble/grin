@@ -83,10 +83,10 @@ impl ParticipantMessageData {
 	/// extract relevant message data from participant data
 	pub fn from_participant_data(p: &ParticipantData) -> ParticipantMessageData {
 		ParticipantMessageData {
-				id: p.id,
-				public_key: p.public_blind_excess,
-				message: p.message.clone(),
-				message_sig: p.message_sig.clone(),
+			id: p.id,
+			public_key: p.public_blind_excess,
+			message: p.message.clone(),
+			message_sig: p.message_sig.clone(),
 		}
 	}
 }
@@ -310,12 +310,11 @@ impl Slate {
 	}
 
 	/// helper to return all participant messages
-	pub fn participant_messages(&self)->ParticipantMessages {
-		let mut ret = ParticipantMessages{
-			messages: vec![],
-		};
+	pub fn participant_messages(&self) -> ParticipantMessages {
+		let mut ret = ParticipantMessages { messages: vec![] };
 		for ref m in self.participant_data.iter() {
-			ret.messages.push(ParticipantMessageData::from_participant_data(m));
+			ret.messages
+				.push(ParticipantMessageData::from_participant_data(m));
 		}
 		ret
 	}

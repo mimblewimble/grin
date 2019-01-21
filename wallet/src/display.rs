@@ -358,14 +358,8 @@ pub fn accounts(acct_mappings: Vec<AcctPathMapping>) {
 }
 
 /// Display transaction log messages
-pub fn tx_messages(
-	tx: &TxLogEntry,
-	dark_background_color_scheme: bool,
-) -> Result<(), Error> {
-	let title = format!(
-		"Transaction Messages - Transaction '{}'",
-		tx.id,
-	);
+pub fn tx_messages(tx: &TxLogEntry, dark_background_color_scheme: bool) -> Result<(), Error> {
+	let title = format!("Transaction Messages - Transaction '{}'", tx.id,);
 	println!();
 	let mut t = term::stdout().unwrap();
 	t.fg(term::color::MAGENTA).unwrap();
@@ -376,7 +370,7 @@ pub fn tx_messages(
 		None => {
 			println!("None");
 			return Ok(());
-		},
+		}
 		Some(m) => m.clone(),
 	};
 
@@ -394,7 +388,10 @@ pub fn tx_messages(
 
 	for m in msgs.messages {
 		let id = format!("{}", m.id);
-		let public_key = format!("{}", util::to_hex(m.public_key.serialize_vec(&secp_lock, true).to_vec()));
+		let public_key = format!(
+			"{}",
+			util::to_hex(m.public_key.serialize_vec(&secp_lock, true).to_vec())
+		);
 		let message = match m.message {
 			Some(m) => format!("{}", m),
 			None => "None".to_owned(),

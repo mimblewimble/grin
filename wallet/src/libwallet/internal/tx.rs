@@ -227,7 +227,11 @@ where
 }
 
 /// Update the transaction participant messages
-pub fn update_message<T: ?Sized, C, K>(wallet: &mut T, parent_key_id: &Identifier, slate: &Slate) -> Result<(), Error>
+pub fn update_message<T: ?Sized, C, K>(
+	wallet: &mut T,
+	parent_key_id: &Identifier,
+	slate: &Slate,
+) -> Result<(), Error>
 where
 	T: WalletBackend<C, K>,
 	C: NodeClient,
