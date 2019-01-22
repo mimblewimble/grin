@@ -92,6 +92,7 @@ pub fn outputs(
 		} else {
 			table.add_row(row![
 				bFD->commit,
+				bFB->index,
 				bFB->height,
 				bFB->lock_height,
 				bFR->status,
