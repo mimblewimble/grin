@@ -27,6 +27,8 @@ use std::fs;
 use std::thread;
 use std::time::Duration;
 
+use serde_json;
+
 fn clean_output_dir(test_dir: &str) {
 	let _ = fs::remove_dir_all(test_dir);
 }
@@ -185,6 +187,9 @@ fn file_exchange_test_impl(test_dir: &str) -> Result<(), libwallet::Error> {
 			tx[0].clone().messages.unwrap().messages[1].message,
 			Some(sender2_message.to_owned())
 		);
+
+		let msg_json = serde_json::to_string_pretty(&tx[0].clone().messages.unwrap()).unwrap();
+		println!("{}", msg_json);
 		Ok(())
 	})?;
 
