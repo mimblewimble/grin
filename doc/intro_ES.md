@@ -1,6 +1,6 @@
 # Introducción a MimbleWimble y Grin
 
-*Lea esto en otros idiomas: [English](intro.md), [简体中文](intro.zh-cn.md).*
+*Lea esto en otros idiomas: [English](intro.md), [简体中文](intro_ZH-CN.md), [Español](intro_ES.md), [Nederlands](intro_NL.md), [Русский](intro_RU.md), [日本語](intro_JP.md), [Deutsch](intro_DE.md).*
 
 MimbleWimble es un formato y un protocolo de cadena de bloques que proporciona una escalabilidad, privacidad y funcionalidad 
 extremadamente buenas al basarse en fuertes algoritmos criptográficos. Aborda los vacíos existentes en casi todas las 

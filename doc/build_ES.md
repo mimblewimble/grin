@@ -28,6 +28,15 @@ Para las distribuciones basadas en Debian (Debian, Ubuntu, Mint, etc), todo en u
 apt install build-essential cmake git libgit2-dev clang libncurses5-dev libncursesw5-dev zlib1g-dev pkg-config libssl-dev llvm
 ```
 
+Para las Mac:
+
+```sh
+xcode-select --install
+brew install --with-toolchain llvm
+brew install pkg-config
+brew install openssl
+```
+
 ## Pasos para la compilación
 
 ```sh
@@ -48,7 +57,7 @@ Con una compilación finalizada se obtiene:
 
 * `target/release/grin` - los binarios principales de grin
 
-Todos los datos, configuración y archivos de registro creados y utilizados por Grin se encuentran en el directorio oculto `~/.grin` (bajo el directorio home del usuario) por defecto. Puede modificar toda la configuración editando el archivo `~/.grin/grin-server.toml`.
+Todos los datos, configuración y archivos de registro creados y utilizados por Grin se encuentran en el directorio oculto `~/.grin` (bajo el directorio home del usuario) por defecto. Puede modificar toda la configuración editando el archivo `~/.grin/main/grin-server.toml`.
 
 También es posible hacer que Grin cree sus propios archivos de datos en el directorio actual. Para ello ejecute:
 
@@ -56,12 +65,12 @@ También es posible hacer que Grin cree sus propios archivos de datos en el dire
 grin server config
 ```
 
-Lo que generará un archivo `grin-server.toml` en el directorio actual, preconfigurado para usar el directorio actual para todos sus datos. Ejecutando Grin desde un directorio que contiene el archivo `grin-server.toml` usará los valores de ese archivo en lugar de los valores por defecto de `~/.grin/grin-server.toml`.
+Lo que generará un archivo `grin-server.toml` en el directorio actual, preconfigurado para usar el directorio actual para todos sus datos. Ejecutando Grin desde un directorio que contiene el archivo `grin-server.toml` usará los valores de ese archivo en lugar de los valores por defecto de `~/.grin/main/grin-server.toml`.
 
 Durante las pruebas, ponga el binario de Grin en su ruta de esta manera:
 
 ```sh
-export PATH=/path/to/grin/dir/target/debug:$PATH
+export PATH=/path/to/grin/dir/target/release:$PATH
 ```
 
 Donde `path/to/grin/dir` es su ruta absoluta al directorio raíz de la instalación de Grin.

@@ -92,6 +92,7 @@ pub fn outputs(
 		} else {
 			table.add_row(row![
 				bFD->commit,
+				bFB->index,
 				bFB->height,
 				bFB->lock_height,
 				bFR->status,
@@ -184,7 +185,7 @@ pub fn txs(
 			)
 		};
 		let tx_data = match t.stored_tx {
-			Some(t) => format!("{}", t),
+			Some(_) => "Yes".to_owned(),
 			None => "None".to_owned(),
 		};
 		if dark_background_color_scheme {
