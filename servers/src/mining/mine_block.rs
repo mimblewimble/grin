@@ -107,8 +107,11 @@ fn build_block(
 	// Note: do not keep the difficulty_iter in scope (it has an active batch).
 	let difficulty = consensus::next_difficulty(head.height + 1, chain.difficulty_iter());
 
-	// extract current transaction from the pool
-	let txs = tx_pool.read().prepare_mineable_transactions()?;
+	// Extract current "mineable" transactions from the pool.
+	// If this fails for *any* reason then fallback to an empty vec of txs.
+	// This will allow us to mine an "empty" block if the txpool is in an
+	// invalid (and unexpected) state.
+	let txs = tx_pool.read().prepare_mineable_transactions().unwrap_or(vec![]);
 
 	// build the coinbase and the block itself
 	let fees = txs.iter().map(|tx| tx.fee()).sum();
@@ -138,21 +141,18 @@ fn build_block(
 	);
 
 	// Now set txhashset roots and sizes on the header of the block being built.
-	let roots_result = chain.set_txhashset_roots(&mut b);
-
-	match roots_result {
+	match chain.set_txhashset_roots(&mut b) {
 		Ok(_) => Ok((b, block_fees)),
-
-		// If it's a duplicate commitment, it's likely trying to use
-		// a key that's already been derived but not in the wallet
-		// for some reason, allow caller to retry
 		Err(e) => {
 			match e.kind() {
+				// If this is a duplicate commitment then likely trying to use
+				// a key that hass already been derived but not in the wallet
+				// for some reason, allow caller to retry.
 				chain::ErrorKind::DuplicateCommitment(e) => Err(Error::Chain(
 					chain::ErrorKind::DuplicateCommitment(e).into(),
 				)),
 
-				//Some other issue, possibly duplicate kernel
+				// Some other issue, possibly duplicate kernel
 				_ => {
 					error!("Error setting txhashset root to build a block: {:?}", e);
 					Err(Error::Chain(
