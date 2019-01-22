@@ -302,11 +302,14 @@ impl StratumServer {
 					};
 
 					let mut stratum_stats = stratum_stats.write();
-					let worker_stats_id = stratum_stats
+					let worker_stats_id = match stratum_stats
 						.worker_stats
 						.iter()
 						.position(|r| r.id == workers_l[num].id)
-						.unwrap();
+					{
+						Some(id) => id,
+						None => continue,
+					};
 					stratum_stats.worker_stats[worker_stats_id].last_seen = SystemTime::now();
 
 					// Call the handler function for requested method
