@@ -301,6 +301,8 @@ impl StratumServer {
 						}
 					};
 
+					the_message.clear();
+
 					let mut stratum_stats = stratum_stats.write();
 					let worker_stats_id = stratum_stats
 						.worker_stats
