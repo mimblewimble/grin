@@ -50,7 +50,7 @@ A successful build gets you:
 
 All data, configuration and log files created and used by grin are located in the hidden
 `~/.grin` directory (under your user home directory) by default. You can modify all configuration
-values by editing the file `~/.grin/grin-server.toml`.
+values by editing the file `~/.grin/main/grin-server.toml`.
 
 It is also possible to have grin create its data files in the current directory. To do this, run
 
@@ -61,15 +61,15 @@ grin server config
 Which will generate a `grin-server.toml` file in the current directory, pre-configured to use
 the current directory for all of its data. Running grin from a directory that contains a
 `grin-server.toml` file will use the values in that file instead of the default
-`~/.grin/grin-server.toml`.
+`~/.grin/main/grin-server.toml`.
 
 While testing, put the grin binary on your path like this:
 
 ```sh
-export PATH=/path/to/grin/dir/target/debug:$PATH
+export PATH=`pwd`/target/release:$PATH
 ```
 
-Where path/to/grin/dir is your absolute path to the root directory of your Grin installation.
+assuming you are running from the root directory of your Grin installation.
 
 You can then run `grin` directly (try `grin help` for more options).
 
