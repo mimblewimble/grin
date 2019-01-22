@@ -1,5 +1,7 @@
 # Grin - Build, Configuration, and Running
 
+*Read this in other languages: [Español](build_ES.md).*
+
 ## Supported Platforms
 
 Longer term, most platforms will likely be supported to some extent.
