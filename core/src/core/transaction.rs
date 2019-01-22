@@ -409,9 +409,13 @@ impl Readable for TransactionBody {
 		let (input_len, output_len, kernel_len) =
 			ser_multiread!(reader, read_u64, read_u64, read_u64);
 
-		// quick block weight check before proceeding
-		let tx_block_weight =
-			TransactionBody::weight(input_len as usize, output_len as usize, kernel_len as usize);
+		// Quick block weight check before proceeding.
+		// Note: We use weight_as_block here (inputs have weight).
+		let tx_block_weight = TransactionBody::weight_as_block(
+			input_len as usize,
+			output_len as usize,
+			kernel_len as usize,
+		);
 
 		if tx_block_weight > consensus::MAX_BLOCK_WEIGHT {
 			return Err(ser::Error::TooLargeReadErr);
