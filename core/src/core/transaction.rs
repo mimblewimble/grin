@@ -19,13 +19,14 @@ use crate::core::hash::Hashed;
 use crate::core::verifier_cache::VerifierCache;
 use crate::core::{committed, Committed};
 use crate::keychain::{self, BlindingFactor};
+use crate::libtx::serialization::{
+	as_hex, blind_from_hex, commitment_from_hex, rangeproof_from_hex, sig_serde,
+};
 use crate::ser::{
 	self, read_multi, FixedLength, PMMRable, Readable, Reader, VerifySortedAndUnique, Writeable,
 	Writer,
 };
-use crate::serde::{Deserialize, Deserializer, Serializer};
 use crate::util;
-use crate::util::from_hex;
 use crate::util::secp;
 use crate::util::secp::pedersen::{Commitment, RangeProof};
 use crate::util::static_secp_instance;
@@ -65,46 +66,6 @@ impl Readable for KernelFeatures {
 			KernelFeatures::from_u8(reader.read_u8()?).ok_or(ser::Error::CorruptedData)?;
 		Ok(features)
 	}
-}
-
-mod sig_serde {
-	use crate::serde::{Deserialize, Deserializer, Serializer};
-	use crate::util::secp;
-	use crate::util::static_secp_instance;
-	use crate::util::{from_hex, to_hex};
-	use serde::de::Error;
-
-	pub fn serialize<S>(sig: &secp::Signature, serializer: S) -> Result<S::Ok, S::Error>
-	where
-		S: Serializer,
-	{
-		let static_secp = static_secp_instance();
-		let static_secp = static_secp.lock();
-		serializer.serialize_str(&to_hex(sig.serialize_der(&static_secp)))
-	}
-
-	pub fn deserialize<'de, D>(deserializer: D) -> Result<secp::Signature, D::Error>
-	where
-		D: Deserializer<'de>,
-	{
-		let static_secp = static_secp_instance();
-		let static_secp = static_secp.lock();
-		String::deserialize(deserializer)
-			.and_then(|string| from_hex(string).map_err(|err| Error::custom(err.to_string())))
-			.and_then(|bytes: Vec<u8>| {
-				secp::Signature::from_der(&static_secp, &bytes)
-					.map_err(|err| Error::custom(err.to_string()))
-			})
-	}
-}
-
-/// Seralizes a byte string into hex
-pub fn as_hex<T, S>(bytes: T, serializer: S) -> Result<S::Ok, S::Error>
-where
-	T: AsRef<[u8]>,
-	S: Serializer,
-{
-	serializer.serialize_str(&util::to_hex(bytes.as_ref().to_vec()))
 }
 
 /// Errors thrown by Transaction validation
@@ -206,22 +167,12 @@ pub struct TxKernel {
 	/// Remainder of the sum of all transaction commitments. If the transaction
 	/// is well formed, amounts components should sum to zero and the excess
 	/// is hence a valid public key.
-	#[serde(serialize_with = "as_hex", deserialize_with = "commitment_from_hex")]
+	///#[serde(serialize_with = "as_hex", deserialize_with = "commitment_from_hex")]
 	pub excess: Commitment,
 	/// The signature proving the excess is a valid public key, which signs
 	/// the transaction fee.
-	#[serde(with = "sig_serde")]
+	///#[serde(with = "sig_serde")]
 	pub excess_sig: secp::Signature,
-}
-
-fn commitment_from_hex<'de, D>(deserializer: D) -> Result<Commitment, D::Error>
-where
-	D: Deserializer<'de>,
-{
-	use serde::de::Error;
-	String::deserialize(deserializer)
-		.and_then(|string| from_hex(string).map_err(|err| Error::custom(err.to_string())))
-		.and_then(|bytes: Vec<u8>| Ok(Commitment::from_vec(bytes.to_vec())))
 }
 
 hashable_ord!(TxKernel);
@@ -768,20 +719,10 @@ impl TransactionBody {
 pub struct Transaction {
 	/// The kernel "offset" k2
 	/// excess is k1G after splitting the key k = k1 + k2
-	#[serde(serialize_with = "as_hex", deserialize_with = "blind_from_hex")]
+	///#[serde(serialize_with = "as_hex", deserialize_with = "blind_from_hex")]
 	pub offset: BlindingFactor,
 	/// The transaction body - inputs/outputs/kernels
 	body: TransactionBody,
-}
-
-fn blind_from_hex<'de, D>(deserializer: D) -> Result<BlindingFactor, D::Error>
-where
-	D: Deserializer<'de>,
-{
-	use serde::de::Error;
-	String::deserialize(deserializer).and_then(|string| {
-		BlindingFactor::from_hex(&string).map_err(|err| Error::custom(err.to_string()))
-	})
 }
 
 /// PartialEq
@@ -1130,7 +1071,7 @@ pub struct Input {
 	/// We will check maturity for coinbase output.
 	pub features: OutputFeatures,
 	/// The commit referencing the output being spent.
-	#[serde(serialize_with = "as_hex", deserialize_with = "commitment_from_hex")]
+	///#[serde(serialize_with = "as_hex", deserialize_with = "commitment_from_hex")]
 	pub commit: Commitment,
 }
 
@@ -1234,25 +1175,14 @@ pub struct Output {
 	/// Options for an output's structure or use
 	pub features: OutputFeatures,
 	/// The homomorphic commitment representing the output amount
-	#[serde(serialize_with = "as_hex", deserialize_with = "commitment_from_hex")]
+	///#[serde(serialize_with = "as_hex", deserialize_with = "commitment_from_hex")]
 	pub commit: Commitment,
 	/// A proof that the commitment is in the right range
-	#[serde(serialize_with = "as_hex", deserialize_with = "rangeproof_from_hex")]
+	///#[serde(serialize_with = "as_hex", deserialize_with = "rangeproof_from_hex")]
 	pub proof: RangeProof,
 }
 
 hashable_ord!(Output);
-
-fn rangeproof_from_hex<'de, D>(deserializer: D) -> Result<RangeProof, D::Error>
-where
-	D: Deserializer<'de>,
-{
-	use serde::de::{Error, IntoDeserializer};
-
-	let val = String::deserialize(deserializer)
-		.and_then(|string| from_hex(string).map_err(|err| Error::custom(err.to_string())))?;
-	RangeProof::deserialize(val.into_deserializer())
-}
 
 impl ::std::hash::Hash for Output {
 	fn hash<H: ::std::hash::Hasher>(&self, state: &mut H) {

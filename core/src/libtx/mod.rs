@@ -26,6 +26,7 @@ pub mod build;
 mod error;
 pub mod proof;
 pub mod reward;
+pub mod serialization;
 pub mod slate;
 
 use crate::consensus;

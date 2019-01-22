@@ -22,6 +22,7 @@ use crate::core::transaction::{kernel_features, kernel_sig_msg, Transaction};
 use crate::core::verifier_cache::LruVerifierCache;
 use crate::keychain::{BlindSum, BlindingFactor, Keychain};
 use crate::libtx::error::{Error, ErrorKind};
+use crate::libtx::serialization::{option_sig_serde, pubkey_serde};
 use crate::libtx::{aggsig, build, tx_fee};
 use crate::util::secp;
 use crate::util::secp::key::{PublicKey, SecretKey};
@@ -31,78 +32,6 @@ use rand::thread_rng;
 use std::sync::Arc;
 use uuid::Uuid;
 
-mod pubkey_serde {
-	use crate::serde::{Deserialize, Deserializer, Serializer};
-	use crate::util::secp::key::PublicKey;
-	use crate::util::{from_hex, static_secp_instance, to_hex};
-
-	pub fn serialize<S>(key: &PublicKey, serializer: S) -> Result<S::Ok, S::Error>
-	where
-		S: Serializer,
-	{
-		let static_secp = static_secp_instance();
-		let static_secp = static_secp.lock();
-		serializer.serialize_str(&to_hex(key.serialize_vec(&static_secp, false).to_vec()))
-	}
-
-	pub fn deserialize<'de, D>(deserializer: D) -> Result<PublicKey, D::Error>
-	where
-		D: Deserializer<'de>,
-	{
-		use serde::de::Error;
-		let static_secp = static_secp_instance();
-		let static_secp = static_secp.lock();
-		String::deserialize(deserializer)
-			.and_then(|string| from_hex(string).map_err(|err| Error::custom(err.to_string())))
-			.and_then(|bytes: Vec<u8>| {
-				PublicKey::from_slice(&static_secp, &bytes)
-					.map_err(|err| Error::custom(err.to_string()))
-			})
-	}
-}
-
-mod option_sig_serde {
-	use crate::serde::{Deserialize, Deserializer, Serializer};
-	use crate::util::secp;
-	use crate::util::static_secp_instance;
-	use crate::util::{from_hex, to_hex};
-	use serde::de::Error;
-
-	pub fn serialize<S>(sig: &Option<secp::Signature>, serializer: S) -> Result<S::Ok, S::Error>
-	where
-		S: Serializer,
-	{
-		match sig {
-			Some(sig) => {
-				let static_secp = static_secp_instance();
-				let static_secp = static_secp.lock();
-				serializer.serialize_str(&to_hex(sig.serialize_der(&static_secp)))
-			}
-			None => serializer.serialize_none(),
-		}
-	}
-
-	pub fn deserialize<'de, D>(deserializer: D) -> Result<Option<secp::Signature>, D::Error>
-	where
-		D: Deserializer<'de>,
-	{
-		let static_secp = static_secp_instance();
-		let static_secp = static_secp.lock();
-
-		Option::<&str>::deserialize(deserializer).and_then(|res| match res {
-			Some(string) => from_hex(string.to_string())
-				.map_err(|err| Error::custom(err.to_string()))
-				.and_then(|bytes: Vec<u8>| {
-					secp::Signature::from_der(&static_secp, &bytes)
-						.map(|val| Some(val))
-						.map_err(|err| Error::custom(err.to_string()))
-				}),
-			None => Ok(None),
-		})
-	}
-
-}
-
 /// Public data for each participant in the slate
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -110,18 +39,18 @@ pub struct ParticipantData {
 	/// Id of participant in the transaction. (For now, 0=sender, 1=rec)
 	pub id: u64,
 	/// Public key corresponding to private blinding factor
-	#[serde(with = "pubkey_serde")]
+	///#[serde(with = "pubkey_serde")]
 	pub public_blind_excess: PublicKey,
 	/// Public key corresponding to private nonce
-	#[serde(with = "pubkey_serde")]
+	///#[serde(with = "pubkey_serde")]
 	pub public_nonce: PublicKey,
 	/// Public partial signature
-	#[serde(with = "option_sig_serde")]
+	///#[serde(with = "option_sig_serde")]
 	pub part_sig: Option<Signature>,
 	/// A message for other participants
 	pub message: Option<String>,
 	/// Signature, created with private key corresponding to 'public_blind_excess'
-	#[serde(with = "option_sig_serde")]
+	///#[serde(with = "option_sig_serde")]
 	pub message_sig: Option<Signature>,
 }
 
