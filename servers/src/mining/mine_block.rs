@@ -111,10 +111,14 @@ fn build_block(
 	// If this fails for *any* reason then fallback to an empty vec of txs.
 	// This will allow us to mine an "empty" block if the txpool is in an
 	// invalid (and unexpected) state.
-	let txs = tx_pool
-		.read()
-		.prepare_mineable_transactions()
-		.unwrap_or(vec![]);
+	let txs = match tx_pool.read().prepare_mineable_transactions() {
+		Ok(txs) => txs,
+		Err(e) => {
+			error!("build_block: Failed to prepare mineable txs from txpool: {:?}", e);
+			warn!("build_block: Falling back to mining empty block.");
+			vec![]
+		}
+	};
 
 	// build the coinbase and the block itself
 	let fees = txs.iter().map(|tx| tx.fee()).sum();
