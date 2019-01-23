@@ -354,7 +354,9 @@ impl StratumServer {
 							if let None = worker_stats_id {
 								continue;
 							}
-							self.handle_status(&mut stratum_stats.worker_stats[worker_stats_id.unwrap()])
+							self.handle_status(
+								&mut stratum_stats.worker_stats[worker_stats_id.unwrap()],
+							)
 						}
 						_ => {
 							// Called undefined method
