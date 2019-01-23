@@ -297,6 +297,7 @@ impl StratumServer {
 								the_message.as_bytes(),
 							);
 							workers_l[num].error = true;
+							the_message.clear();
 							continue;
 						}
 					};
