@@ -114,7 +114,10 @@ fn build_block(
 	let txs = match tx_pool.read().prepare_mineable_transactions() {
 		Ok(txs) => txs,
 		Err(e) => {
-			error!("build_block: Failed to prepare mineable txs from txpool: {:?}", e);
+			error!(
+				"build_block: Failed to prepare mineable txs from txpool: {:?}",
+				e
+			);
 			warn!("build_block: Falling back to mining empty block.");
 			vec![]
 		}
