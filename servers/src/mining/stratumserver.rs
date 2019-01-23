@@ -307,22 +307,30 @@ impl StratumServer {
 					let worker_stats_id = stratum_stats
 						.worker_stats
 						.iter()
-						.position(|r| r.id == workers_l[num].id)
-						.unwrap();
-					stratum_stats.worker_stats[worker_stats_id].last_seen = SystemTime::now();
+						.position(|r| r.id == workers_l[num].id);
+					if let Some(stats_id) = worker_stats_id {
+						stratum_stats.worker_stats[stats_id].last_seen = SystemTime::now();
+					}
 
 					// Call the handler function for requested method
 					let response = match request.method.as_str() {
 						"login" => {
-							stratum_stats.worker_stats[worker_stats_id].initial_block_height =
-								self.current_block_versions.last().unwrap().header.height;
+							if let Some(stats_id) = worker_stats_id {
+								if let Some(last_block_ver) = self.current_block_versions.last() {
+									stratum_stats.worker_stats[stats_id].initial_block_height =
+										last_block_ver.header.height;
+								}
+							}
 							self.handle_login(request.params, &mut workers_l[num])
 						}
 						"submit" => {
+							if let None = worker_stats_id {
+								continue;
+							}
 							let res = self.handle_submit(
 								request.params,
 								&mut workers_l[num],
-								&mut stratum_stats.worker_stats[worker_stats_id],
+								&mut stratum_stats.worker_stats[worker_stats_id.unwrap()],
 							);
 							// this key_id has been used now, reset
 							if let Ok((_, true)) = res {
@@ -343,7 +351,10 @@ impl StratumServer {
 							}
 						}
 						"status" => {
-							self.handle_status(&mut stratum_stats.worker_stats[worker_stats_id])
+							if let None = worker_stats_id {
+								continue;
+							}
+							self.handle_status(&mut stratum_stats.worker_stats[worker_stats_id.unwrap()])
 						}
 						_ => {
 							// Called undefined method
