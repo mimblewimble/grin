@@ -297,9 +297,12 @@ impl StratumServer {
 								the_message.as_bytes(),
 							);
 							workers_l[num].error = true;
+							the_message.clear();
 							continue;
 						}
 					};
+
+					the_message.clear();
 
 					let mut stratum_stats = stratum_stats.write();
 					let worker_stats_id = stratum_stats

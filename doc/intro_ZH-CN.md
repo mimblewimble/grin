@@ -1,7 +1,7 @@
 MimbleWimble 和 Grin 简介
 =====================================
 
-*阅读其它语言版本: [English](intro.md), [简体中文](intro.zh-cn.md).*
+*阅读其它语言版本: [English](intro.md), [简体中文](intro_ZH-CN.md), [Español](intro_ES.md), [Nederlands](intro_NL.md), [Русский](intro_RU.md), [日本語](intro_JP.md), [Deutsch](intro_DE.md).*
 
 MimbleWimble是一个区块链格式和协议，依托于健壮的加密原语，提供非常好的可扩展性、隐私和可替代性。它解决了当前几乎所有实现的区块链（与现实需求之间）差距。MimbleWimble 的白皮书在[本项目的WiKi](https://github.com/mimblewimble/docs/wiki/A-Brief-History-of-MinbleWimble-White-Paper)中可以找到，WiKi是开放的。
 
