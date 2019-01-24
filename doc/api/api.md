@@ -17,7 +17,7 @@ To learn about what specific calls can be made read the [wallet foreign API doc]
 
 ### Wallet Owner API
 
-The wallet owner API is an endpoint to manage the user wallet: broadcast transaction, sign transaction, see the current balance... This REST API can be started with the `grin wallet owner_api` command and will listen on `localhost:13420` for --floonet or `localhost:3420` for --mainnet.
+The wallet owner API is an endpoint to manage the user wallet: broadcast transaction, sign transaction, see the current balance... This REST API can be started with the `grin wallet owner_api` command and will listen on `localhost:13420` for --floonet or `localhost:3420` for the default mainnet.
 
 __This endpoint must **never** be exposed to the outside world.__
 
