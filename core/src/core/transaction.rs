@@ -373,9 +373,9 @@ impl FixedLength for TxKernelEntry {
 ///
 #[derive(Clone, Copy)]
 pub enum WeightVerificationType {
-	/// Tx represents a tx (max weight).
+	/// Tx represents a tx (max block weight, accounting for additional coinbase reward).
 	AsTransaction,
-	/// Tx represents a block (max weight + additional coinbase reward).
+	/// Tx represents a block (max block weight).
 	AsBlock,
 	/// Tx represents the txpool (no max weight).
 	AsPool,
