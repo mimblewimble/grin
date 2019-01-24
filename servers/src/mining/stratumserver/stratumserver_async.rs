@@ -114,9 +114,9 @@ struct Handler {
 	workers: Arc<WorkersList>,
 	current_block_versions: Arc<RwLock<Vec<Block>>>,
 	sync_state: Arc<SyncState>,
-	minimum_share_difficulty: u64,
+	minimum_share_difficulty: Arc<RwLock<u64>>,
 	current_key_id: Arc<RwLock<Option<keychain::Identifier>>>,
-	current_difficulty: u64,
+	current_difficulty: Arc<RwLock<u64>>,
 	chain: Arc<chain::Chain>,
 }
 
@@ -126,9 +126,9 @@ impl Handler {
 		workers: Arc<WorkersList>,
 		current_block_versions: Arc<RwLock<Vec<Block>>>,
 		sync_state: Arc<SyncState>,
-		minimum_share_difficulty: u64,
+		minimum_share_difficulty: Arc<RwLock<u64>>,
 		current_key_id: Arc<RwLock<Option<keychain::Identifier>>>,
-		current_difficulty: u64,
+		current_difficulty: Arc<RwLock<u64>>,
 		chain: Arc<chain::Chain>,
 	) -> Self {
 		Handler {
@@ -148,9 +148,9 @@ impl Handler {
 			stratum.workers.clone(),
 			stratum.current_block_versions.clone(),
 			stratum.sync_state.clone(),
-			stratum.minimum_share_difficulty,
+			stratum.minimum_share_difficulty.clone(),
 			stratum.current_key_id.clone(),
-			stratum.current_difficulty,
+			stratum.current_difficulty.clone(),
 			stratum.chain.clone(),
 		)
 	}
@@ -287,7 +287,7 @@ impl Handler {
 		let job_template = JobTemplate {
 			height: bh.height,
 			job_id: (self.current_block_versions.read().len() - 1) as u64,
-			difficulty: self.minimum_share_difficulty,
+			difficulty: *self.minimum_share_difficulty.read(),
 			pre_pow,
 		};
 		return job_template;
@@ -357,11 +357,11 @@ impl Handler {
 		// Get share difficulty
 		share_difficulty = b.header.pow.to_difficulty(b.header.height).to_num();
 		// If the difficulty is too low its an error
-		if share_difficulty < self.minimum_share_difficulty {
+		if share_difficulty < *self.minimum_share_difficulty.read() {
 			// Return error status
 			error!(
 					"(Server ID: {}) Share at height {}, hash {}, edge_bits {}, nonce {}, job_id {} rejected due to low difficulty: {}/{}",
-					self.id, params.height, b.hash(), params.edge_bits, params.nonce, params.job_id, share_difficulty, self.minimum_share_difficulty,
+					self.id, params.height, b.hash(), params.edge_bits, params.nonce, params.job_id, share_difficulty, *self.minimum_share_difficulty.read(),
 				);
 			self.workers
 				.update_stats(worker_id, |worker_stats| worker_stats.num_rejected += 1);
@@ -371,8 +371,9 @@ impl Handler {
 			};
 			return Err(serde_json::to_value(e).unwrap());
 		}
+
 		// If the difficulty is high enough, submit it (which also validates it)
-		if share_difficulty >= self.current_difficulty {
+		if share_difficulty >= *self.current_difficulty.read() {
 			// This is a full solution, submit it to the network
 			let res = self.chain.process_block(b.clone(), chain::Options::MINE);
 			if let Err(e) = res {
@@ -461,7 +462,7 @@ impl Handler {
 				b.header.pow.nonce,
 				params.job_id,
 				share_difficulty,
-				self.current_difficulty,
+				*self.current_difficulty.read(),
 				submitted_by,
 			);
 		self.workers
@@ -627,8 +628,8 @@ pub struct StratumServer {
 	tx_pool: Arc<RwLock<pool::TransactionPool>>,
 	verifier_cache: Arc<RwLock<dyn VerifierCache>>,
 	current_block_versions: Arc<RwLock<Vec<Block>>>,
-	current_difficulty: u64,
-	minimum_share_difficulty: u64,
+	current_difficulty: Arc<RwLock<u64>>,
+	minimum_share_difficulty: Arc<RwLock<u64>>,
 	current_key_id: Arc<RwLock<Option<keychain::Identifier>>>,
 	workers: Arc<WorkersList>,
 	sync_state: Arc<SyncState>,
@@ -646,13 +647,13 @@ impl StratumServer {
 	) -> StratumServer {
 		StratumServer {
 			id: String::from("0"),
-			minimum_share_difficulty: config.minimum_share_difficulty,
+			minimum_share_difficulty: Arc::new(RwLock::new(config.minimum_share_difficulty)),
 			config,
 			chain,
 			tx_pool,
 			verifier_cache,
 			current_block_versions: Arc::new(RwLock::new(Vec::new())),
-			current_difficulty: <u64>::max_value(),
+			current_difficulty: Arc::new(RwLock::new(<u64>::max_value())),
 			current_key_id: Arc::new(RwLock::new(None)),
 			workers: Arc::new(WorkersList::new(stratum_stats.clone())),
 			sync_state: Arc::new(SyncState::new()),
@@ -680,7 +681,7 @@ impl StratumServer {
 		let job_template = JobTemplate {
 			height: bh.height,
 			job_id: (self.current_block_versions.read().len() - 1) as u64,
-			difficulty: self.minimum_share_difficulty,
+			difficulty: *self.minimum_share_difficulty.read(),
 			pre_pow,
 		};
 		return job_template;
@@ -796,25 +797,31 @@ impl StratumServer {
 					self.current_key_id.read().clone(),
 					wallet_listener_url,
 				);
-				self.current_difficulty =
-					(new_block.header.total_difficulty() - head.total_difficulty).to_num();
+				{
+					let mut current_difficulty = self.current_difficulty.write();
+					*current_difficulty =
+						(new_block.header.total_difficulty() - head.total_difficulty).to_num();
+				}
 				{
 					let mut current_key_id = self.current_key_id.write();
 					*current_key_id = block_fees.key_id();
 				}
 				current_hash = latest_hash;
-				// set the minimum acceptable share difficulty for this block
-				self.minimum_share_difficulty = cmp::min(
-					self.config.minimum_share_difficulty,
-					self.current_difficulty,
-				);
+				{
+					// set the minimum acceptable share difficulty for this block
+					let mut minimum_share_difficulty = self.minimum_share_difficulty.write();
+					*minimum_share_difficulty = cmp::min(
+						self.config.minimum_share_difficulty,
+						*self.current_difficulty.read(),
+					);
+				}
 				// set a new deadline for rebuilding with fresh transactions
 				deadline = Utc::now().timestamp() + attempt_time_per_block as i64;
 
 				{
 					let mut stratum_stats = self.stratum_stats.write();
 					stratum_stats.block_height = new_block.header.height;
-					stratum_stats.network_difficulty = self.current_difficulty;
+					stratum_stats.network_difficulty = *self.current_difficulty.read();
 				}
 				// Add this new block version to our current block map
 				{
