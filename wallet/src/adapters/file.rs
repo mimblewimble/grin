@@ -52,7 +52,7 @@ impl WalletCommAdapter for FileWalletCommAdapter {
 		let mut pub_tx_f = File::open(params)?;
 		let mut content = String::new();
 		pub_tx_f.read_to_string(&mut content)?;
-		Ok(json::from_str(&content).map_err(|_| ErrorKind::Format)?)
+		Ok(json::from_str(&content).map_err(|err| ErrorKind::Format(err.to_string()))?)
 	}
 
 	fn listen(
