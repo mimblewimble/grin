@@ -102,7 +102,7 @@ pub enum ErrorKind {
 	#[fail(display = "Invalid TxHashSet: {}", _0)]
 	InvalidTxHashSet(String),
 	/// Internal issue when trying to save or load data from store
-	#[fail(display = "Store Error: {}", _1)]
+	#[fail(display = "Store Error: {}, reason: {}", _1, _0)]
 	StoreErr(store::Error, String),
 	/// Internal issue when trying to save or load data from append only files
 	#[fail(display = "File Read Error: {}", _0)]
