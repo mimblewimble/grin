@@ -80,7 +80,7 @@ pub fn new_named_env(path: String, name: String) -> lmdb::Environment {
 		});
 	unsafe {
 		env_builder
-			.open(&full_path, lmdb::open::Flags::empty(), 0o600)
+			.open(&full_path, lmdb::open::NOTLS, 0o600)
 			.unwrap()
 	}
 }
