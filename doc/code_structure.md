@@ -38,13 +38,13 @@ After checking out grin, building and using, these are the folders you'll have:
 - `server`\
  A folder you're [supposed to create](build.md#running-a-node), before starting your server: cd to project root; mkdir server; cd server; grin server start (or run) and it will create a subfolder .grin
   - `.grin`
-    - `chain` - a Rocksdb with the blockchain blocks and related information
-    - `peers` - a Rocksdb with the list of Grin peers you're connected to
+    - `chain` - a database with the blockchain blocks and related information
+    - `peers` - a database with the list of Grin peers you're connected to
     - `txhashset` - contains folders kernel, rangeproof and output that each have a pmmr_dat.bin
 - `src`\
   Code for the `grin` binary.
 - `store`\
-  Data store - a thin wrapper for Rocksdb, a key-value database forked from LevelDB.
+  Data store - Grin uses near-zero-cost Rust wrapper around LMDB, key-value embedded data store.
 - `target`\
   Where the grin binary ends up, after the compile and build process finishes.
   In case of trouble, see [troubleshooting](https://github.com/mimblewimble/docs/wiki/Troubleshooting)
