@@ -56,7 +56,7 @@ pub struct PeerHandler {
 
 impl Handler for PeerHandler {
 	fn get(&self, req: Request<Body>) -> ResponseFuture {
-		let command = match req.uri().path().trim_right_matches("/").rsplit("/").next() {
+		let command = match req.uri().path().trim_right_matches('/').rsplit('/').next() {
 			Some(c) => c,
 			None => return response(StatusCode::BAD_REQUEST, "invalid url"),
 		};
@@ -73,7 +73,7 @@ impl Handler for PeerHandler {
 		}
 	}
 	fn post(&self, req: Request<Body>) -> ResponseFuture {
-		let mut path_elems = req.uri().path().trim_right_matches("/").rsplit("/");
+		let mut path_elems = req.uri().path().trim_right_matches('/').rsplit('/');
 		let command = match path_elems.next() {
 			None => return response(StatusCode::BAD_REQUEST, "invalid url"),
 			Some(c) => c,

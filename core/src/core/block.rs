@@ -418,6 +418,7 @@ impl Block {
 	/// TODO - Move this somewhere where only tests will use it.
 	/// *** Only used in tests. ***
 	///
+	#[warn(clippy::new_ret_no_self)]
 	pub fn new(
 		prev: &BlockHeader,
 		txs: Vec<Transaction>,

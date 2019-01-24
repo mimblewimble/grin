@@ -60,15 +60,15 @@ impl HeaderHandler {
 	fn get_header_for_output(&self, commit_id: String) -> Result<BlockHeaderPrintable, Error> {
 		let oid = get_output(&self.chain, &commit_id)?.1;
 		match w(&self.chain).get_header_for_output(&oid) {
-			Ok(header) => return Ok(BlockHeaderPrintable::from_header(&header)),
-			Err(_) => return Err(ErrorKind::NotFound)?,
+			Ok(header) => Ok(BlockHeaderPrintable::from_header(&header)),
+			Err(_) => Err(ErrorKind::NotFound)?,
 		}
 	}
 }
 
 impl Handler for HeaderHandler {
 	fn get(&self, req: Request<Body>) -> ResponseFuture {
-		let el = match req.uri().path().trim_right_matches("/").rsplit("/").next() {
+		let el = match req.uri().path().trim_right_matches('/').rsplit('/').next() {
 			None => return response(StatusCode::BAD_REQUEST, "invalid url"),
 			Some(el) => el,
 		};
@@ -125,12 +125,12 @@ fn check_block_param(input: &String) -> Result<(), Error> {
 			"Not a valid hash or height.".to_owned(),
 		))?;
 	}
-	return Ok(());
+	Ok(())
 }
 
 impl Handler for BlockHandler {
 	fn get(&self, req: Request<Body>) -> ResponseFuture {
-		let el = match req.uri().path().trim_right_matches("/").rsplit("/").next() {
+		let el = match req.uri().path().trim_right_matches('/').rsplit('/').next() {
 			None => return response(StatusCode::BAD_REQUEST, "invalid url"),
 			Some(el) => el,
 		};
