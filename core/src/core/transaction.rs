@@ -603,7 +603,8 @@ impl TransactionBody {
 			.unwrap_or(0)
 	}
 
-	// Verify the body is not too big in terms of number of inputs|outputs|kernels.
+	/// Verify the body is not too big in terms of number of inputs|outputs|kernels.
+	/// Weight rules vary depending on the "weight type" (block or tx or pool).
 	fn verify_weight(&self, weight_type: WeightVerificationType) -> Result<(), Error> {
 		// If "tx" body then remember to reduce the max_block_weight for block requirements.
 		// If "block" body then verify weight based on full set of inputs|outputs|kernels.
@@ -616,6 +617,7 @@ impl TransactionBody {
 			WeightVerificationType::AsTransaction => 1,
 			WeightVerificationType::AsBlock => 0,
 			WeightVerificationType::AsPool => {
+				// We do not verify "tx as pool" weight so we are done here.
 				return Ok(());
 			}
 		};
@@ -624,7 +626,7 @@ impl TransactionBody {
 		// allowed in the body itself.
 		// A block is allowed to be slightly weightier than a tx to account for
 		// the additional coinbase reward output and kernel.
-		//
+		// i.e. We need to reserve space for coinbase reward when verifying tx weight.
 		// max_block = max_tx + coinbase
 		//
 		let tx_block_weight = TransactionBody::weight_as_block(
