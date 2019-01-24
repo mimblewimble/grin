@@ -22,7 +22,6 @@ use crate::core::transaction::{kernel_features, kernel_sig_msg, Transaction};
 use crate::core::verifier_cache::LruVerifierCache;
 use crate::keychain::{BlindSum, BlindingFactor, Keychain};
 use crate::libtx::error::{Error, ErrorKind};
-use crate::libtx::serialization::{option_sig_serde, pubkey_serde};
 use crate::libtx::{aggsig, build, tx_fee};
 use crate::util::secp;
 use crate::util::secp::key::{PublicKey, SecretKey};
@@ -39,18 +38,14 @@ pub struct ParticipantData {
 	/// Id of participant in the transaction. (For now, 0=sender, 1=rec)
 	pub id: u64,
 	/// Public key corresponding to private blinding factor
-	///#[serde(with = "pubkey_serde")]
 	pub public_blind_excess: PublicKey,
 	/// Public key corresponding to private nonce
-	///#[serde(with = "pubkey_serde")]
 	pub public_nonce: PublicKey,
 	/// Public partial signature
-	///#[serde(with = "option_sig_serde")]
 	pub part_sig: Option<Signature>,
 	/// A message for other participants
 	pub message: Option<String>,
 	/// Signature, created with private key corresponding to 'public_blind_excess'
-	///#[serde(with = "option_sig_serde")]
 	pub message_sig: Option<Signature>,
 }
 
