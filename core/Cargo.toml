@@ -30,3 +30,6 @@ chrono = "0.4.4"
 
 grin_keychain = { path = "../keychain", version = "1.0.0" }
 grin_util = { path = "../util", version = "1.0.0" }
+
+[dev-dependencies]
+serde_json = "1"

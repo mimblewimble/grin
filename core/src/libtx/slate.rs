@@ -22,7 +22,7 @@ use crate::core::transaction::{kernel_features, kernel_sig_msg, Transaction};
 use crate::core::verifier_cache::LruVerifierCache;
 use crate::keychain::{BlindSum, BlindingFactor, Keychain};
 use crate::libtx::error::{Error, ErrorKind};
-use crate::libtx::{aggsig, build, tx_fee};
+use crate::libtx::{aggsig, build, tx_fee, secp_ser};
 use crate::util::secp;
 use crate::util::secp::key::{PublicKey, SecretKey};
 use crate::util::secp::Signature;
@@ -72,10 +72,12 @@ pub struct ParticipantMessageData {
 	/// id of the particpant in the tx
 	pub id: u64,
 	/// Public key
+	#[serde(with = "secp_ser::pubkey_serde")]
 	pub public_key: PublicKey,
 	/// Message,
 	pub message: Option<String>,
 	/// Signature
+	#[serde(with = "secp_ser::option_sig_serde")]
 	pub message_sig: Option<Signature>,
 }
 
