@@ -174,7 +174,6 @@ where
 	serializer.serialize_str(&to_hex(bytes.as_ref().to_vec()))
 }
 
-
 // Test serialization methods of components that are being used
 #[cfg(test)]
 mod test {
@@ -182,13 +181,13 @@ mod test {
 	use crate::libtx::aggsig;
 	use crate::util::secp::key::{PublicKey, SecretKey};
 	use crate::util::secp::{Message, Signature};
-	use crate::util::{static_secp_instance};
-	
+	use crate::util::static_secp_instance;
+
 	use serde_json;
 
 	use rand::{thread_rng, Rng};
 
-#[derive(Serialize, Deserialize, PartialEq, Eq, Debug, Clone)]
+	#[derive(Serialize, Deserialize, PartialEq, Eq, Debug, Clone)]
 	struct SerTest {
 		#[serde(with = "pubkey_serde")]
 		pub pub_key: PublicKey,

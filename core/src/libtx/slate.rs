@@ -22,7 +22,7 @@ use crate::core::transaction::{kernel_features, kernel_sig_msg, Transaction};
 use crate::core::verifier_cache::LruVerifierCache;
 use crate::keychain::{BlindSum, BlindingFactor, Keychain};
 use crate::libtx::error::{Error, ErrorKind};
-use crate::libtx::{aggsig, build, tx_fee, secp_ser};
+use crate::libtx::{aggsig, build, secp_ser, tx_fee};
 use crate::util::secp;
 use crate::util::secp::key::{PublicKey, SecretKey};
 use crate::util::secp::Signature;
