@@ -146,7 +146,14 @@ pub fn owner_api(
 ) -> Result<(), Error> {
 	let res = controller::owner_listener(
 		wallet,
-		&format!("127.0.0.1:{}", (if global::is_floonet() { "13420" } else { "3420" })),
+		&format!(
+			"127.0.0.1:{}",
+			(if global::is_floonet() {
+				"13420"
+			} else {
+				"3420"
+			})
+		),
 		g_args.node_api_secret.clone(),
 		g_args.tls_conf.clone(),
 		config.owner_api_include_foreign.clone(),
