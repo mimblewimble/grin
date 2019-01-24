@@ -365,6 +365,22 @@ impl FixedLength for TxKernelEntry {
 		+ secp::constants::AGG_SIGNATURE_SIZE;
 }
 
+/// Enum of possible tx weight verification options -
+///
+/// * As "transaction" checks tx (as block) weight does not exceed max_block_weight.
+/// * As "block" same as above but allow for additional coinbase reward (1 output, 1 kernel).
+/// * As "pool" skips weight check (pool as one big tx, but without max weight).
+///
+#[derive(Clone, Copy)]
+pub enum WeightVerificationType {
+	/// Tx represents a tx (max weight).
+	AsTransaction,
+	/// Tx represents a block (max weight + additional coinbase reward).
+	AsBlock,
+	/// Tx represents the txpool (no max weight).
+	AsPool,
+}
+
 /// TransactionBody is a common abstraction for transaction and block
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct TransactionBody {
@@ -588,10 +604,29 @@ impl TransactionBody {
 	}
 
 	// Verify the body is not too big in terms of number of inputs|outputs|kernels.
-	fn verify_weight(&self, with_reward: bool) -> Result<(), Error> {
-		// if as_block check the body as if it was a block, with an additional output and
-		// kernel for reward
-		let reserve = if with_reward { 0 } else { 1 };
+	fn verify_weight(&self, weight_type: WeightVerificationType) -> Result<(), Error> {
+		// If "tx" body then remember to reduce the max_block_weight for block requirements.
+		// If "block" body then verify weight based on full set of inputs|outputs|kernels.
+		// If "pool" body then skip weight verification (pool can be larger than single block).
+		//
+		// Note: Taking a max tx and building a block from it we need to allow room
+		// for the additional coinbase reward (output + kernel).
+		//
+		let reserve = match weight_type {
+			WeightVerificationType::AsTransaction => 1,
+			WeightVerificationType::AsBlock => 0,
+			WeightVerificationType::AsPool => {
+				return Ok(());
+			}
+		};
+
+		// Note: If we add a reserve then we are reducing the number of outputs and kernels
+		// allowed in the body itself.
+		// A block is allowed to be slightly weightier than a tx to account for
+		// the additional coinbase reward output and kernel.
+		//
+		// max_block = max_tx + coinbase
+		//
 		let tx_block_weight = TransactionBody::weight_as_block(
 			self.inputs.len(),
 			self.outputs.len() + reserve,
@@ -656,8 +691,8 @@ impl TransactionBody {
 	/// Subset of full validation that skips expensive verification steps, specifically -
 	/// * rangeproof verification
 	/// * kernel signature verification
-	pub fn validate_read(&self, with_reward: bool) -> Result<(), Error> {
-		self.verify_weight(with_reward)?;
+	pub fn validate_read(&self, weight_type: WeightVerificationType) -> Result<(), Error> {
+		self.verify_weight(weight_type)?;
 		self.verify_sorted()?;
 		self.verify_cut_through()?;
 		Ok(())
@@ -668,10 +703,10 @@ impl TransactionBody {
 	/// output.
 	pub fn validate(
 		&self,
-		with_reward: bool,
+		weight_type: WeightVerificationType,
 		verifier: Arc<RwLock<dyn VerifierCache>>,
 	) -> Result<(), Error> {
-		self.validate_read(with_reward)?;
+		self.validate_read(weight_type)?;
 
 		// Find all the outputs that have not had their rangeproofs verified.
 		let outputs = {
@@ -892,7 +927,8 @@ impl Transaction {
 	/// * kernel signature verification (on the body)
 	/// * kernel sum verification
 	pub fn validate_read(&self) -> Result<(), Error> {
-		self.body.validate_read(false)?;
+		self.body
+			.validate_read(WeightVerificationType::AsTransaction)?;
 		self.body.verify_features()?;
 		Ok(())
 	}
@@ -900,8 +936,12 @@ impl Transaction {
 	/// Validates all relevant parts of a fully built transaction. Checks the
 	/// excess value against the signature as well as range proofs for each
 	/// output.
-	pub fn validate(&self, verifier: Arc<RwLock<dyn VerifierCache>>) -> Result<(), Error> {
-		self.body.validate(false, verifier)?;
+	pub fn validate(
+		&self,
+		weight_type: WeightVerificationType,
+		verifier: Arc<RwLock<dyn VerifierCache>>,
+	) -> Result<(), Error> {
+		self.body.validate(weight_type, verifier)?;
 		self.body.verify_features()?;
 		self.verify_kernel_sums(self.overage(), self.offset)?;
 		Ok(())
