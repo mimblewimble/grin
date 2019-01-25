@@ -627,6 +627,10 @@ impl TransactionBody {
 		// A block is allowed to be slightly weightier than a tx to account for
 		// the additional coinbase reward output and kernel.
 		// i.e. We need to reserve space for coinbase reward when verifying tx weight.
+		//
+		// In effect we are verifying the tx _can_ be included in a block without exceeding
+		// MAX_BLOCK_WEIGHT.
+		//
 		// max_block = max_tx + coinbase
 		//
 		let tx_block_weight = TransactionBody::weight_as_block(

@@ -109,7 +109,7 @@ impl TransactionPool {
 			if !txs.is_empty() {
 				let tx = transaction::deaggregate(entry.tx, txs)?;
 
-				// Validate this deaggregated tx "as tx", subject to regulat tx weight limits.
+				// Validate this deaggregated tx "as tx", subject to regular tx weight limits.
 				tx.validate(
 					WeightVerificationType::AsTransaction,
 					self.verifier_cache.clone(),
