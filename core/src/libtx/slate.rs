@@ -18,7 +18,7 @@
 use crate::blake2::blake2b::blake2b;
 use crate::core::amount_to_hr_string;
 use crate::core::committed::Committed;
-use crate::core::transaction::{kernel_features, kernel_sig_msg, Transaction};
+use crate::core::transaction::{kernel_features, kernel_sig_msg, Transaction, Weighting};
 use crate::core::verifier_cache::LruVerifierCache;
 use crate::keychain::{BlindSum, BlindingFactor, Keychain};
 use crate::libtx::error::{Error, ErrorKind};
@@ -472,8 +472,9 @@ impl Slate {
 		final_tx.kernels()[0].verify()?;
 
 		// confirm the overall transaction is valid (including the updated kernel)
+		// accounting for tx weight limits
 		let verifier_cache = Arc::new(RwLock::new(LruVerifierCache::new()));
-		let _ = final_tx.validate(verifier_cache)?;
+		let _ = final_tx.validate(Weighting::AsTransaction, verifier_cache)?;
 
 		self.tx = final_tx;
 		Ok(())

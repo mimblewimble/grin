@@ -20,7 +20,7 @@
 use self::core::core::hash::{Hash, Hashed};
 use self::core::core::id::ShortId;
 use self::core::core::verifier_cache::VerifierCache;
-use self::core::core::{transaction, Block, BlockHeader, Transaction};
+use self::core::core::{transaction, Block, BlockHeader, Transaction, Weighting};
 use self::util::RwLock;
 use crate::pool::Pool;
 use crate::types::{
@@ -108,7 +108,10 @@ impl TransactionPool {
 			let txs = self.txpool.find_matching_transactions(entry.tx.kernels());
 			if !txs.is_empty() {
 				let tx = transaction::deaggregate(entry.tx, txs)?;
-				tx.validate(self.verifier_cache.clone())?;
+
+				// Validate this deaggregated tx "as tx", subject to regular tx weight limits.
+				tx.validate(Weighting::AsTransaction, self.verifier_cache.clone())?;
+
 				entry.tx = tx;
 				entry.src.debug_name = "deagg".to_string();
 			}
@@ -118,7 +121,7 @@ impl TransactionPool {
 		// We now need to reconcile the stempool based on the new state of the txpool.
 		// Some stempool txs may no longer be valid and we need to evict them.
 		{
-			let txpool_tx = self.txpool.aggregate_transaction()?;
+			let txpool_tx = self.txpool.all_transactions_aggregate()?;
 			self.stempool.reconcile(txpool_tx, header)?;
 		}
 
@@ -145,7 +148,8 @@ impl TransactionPool {
 		self.is_acceptable(&tx, stem)?;
 
 		// Make sure the transaction is valid before anything else.
-		tx.validate(self.verifier_cache.clone())
+		// Validate tx accounting for max tx weight.
+		tx.validate(Weighting::AsTransaction, self.verifier_cache.clone())
 			.map_err(PoolError::InvalidTx)?;
 
 		// Check the tx lock_time is valid based on current chain state.
@@ -218,7 +222,7 @@ impl TransactionPool {
 		// Now reconcile our stempool, accounting for the updated txpool txs.
 		self.stempool.reconcile_block(block);
 		{
-			let txpool_tx = self.txpool.aggregate_transaction()?;
+			let txpool_tx = self.txpool.all_transactions_aggregate()?;
 			self.stempool.reconcile(txpool_tx, &block.header)?;
 		}
 
