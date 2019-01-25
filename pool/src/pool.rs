@@ -228,21 +228,21 @@ impl Pool {
 			// Create a single aggregated tx from the existing pool txs and the
 			// new entry
 			txs.push(entry.tx.clone());
-
-			let tx = transaction::aggregate(txs)?;
-
-			// TODO - Is this necessary? We validate_raw_tx below.
-			// Validate this single aggregated tx (existing pool + new tx),
-			// not subject to tx weight limits.
-			// tx.validate(Weighting::NoLimit, self.verifier_cache.clone())?;
-
-			tx
+			transaction::aggregate(txs)?
 		};
 
 		// Validate aggregated tx (existing pool + new tx), ignoring tx weight limits.
 		// Validate against known chain state at the provided header.
 		self.validate_raw_tx(&agg_tx, header, Weighting::NoLimit)?;
 
+		// If we get here successfully then we can safely add the entry to the pool.
+		self.log_pool_add(&entry, header);
+		self.entries.push(entry);
+
+		Ok(())
+	}
+
+	fn log_pool_add(&self, entry: &PoolEntry, header: &BlockHeader) {
 		debug!(
 			"add_to_pool [{}]: {} ({}) [in/out/kern: {}/{}/{}] pool: {} (at block {})",
 			self.name,
@@ -254,10 +254,6 @@ impl Pool {
 			self.size(),
 			header.hash(),
 		);
-		// If we get here successfully then we can safely add the entry to the pool.
-		self.entries.push(entry);
-
-		Ok(())
 	}
 
 	fn validate_raw_tx(
