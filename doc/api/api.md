@@ -17,6 +17,13 @@ To learn about what specific calls can be made read the [wallet foreign API doc]
 
 ### Wallet Owner API
 
-The wallet owner API is an endpoint to manage the user wallet: broadcast transaction, sign transaction, see the current balance... This REST API can be started with the `grin wallet owner_api` command and will listen on `localhost:3420`. This endpoint must **never** be exposed to the outside world.
+The wallet owner API is an endpoint to manage the user wallet: broadcast transaction, sign transaction, see the current balance... This REST API can be started with the `grin wallet owner_api` command and will listen on `localhost:3420`.
+
+__This endpoint must **never** be exposed to the outside world.__
+
 This endpoint requires, by default, Basic Authentication. The username is `grin` and the password can be found in the `.api_secret` file.
 To learn about what specific calls can be made read the [wallet owner API doc](wallet_owner_api.md).
+
+## Ports above 10000?
+
+All ports should be below 10000 when running with default settings on mainnet. If your grin owner_api is using the 13420 port but is on mainnet, then you're using an outdated version of grin.
