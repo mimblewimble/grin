@@ -177,15 +177,15 @@ where
 	fn post_tx(&mut self, m: WalletProxyMessage) -> Result<WalletProxyMessage, libwallet::Error> {
 		let dest_wallet = self.wallets.get_mut(&m.sender_id).unwrap().1.clone();
 		let wrapper: TxWrapper = serde_json::from_str(&m.body).context(
-			libwallet::ErrorKind::ClientCallback("Error parsing TxWrapper"),
+			libwallet::ErrorKind::ClientCallback("Error parsing TxWrapper".to_owned()),
 		)?;
 
 		let tx_bin = util::from_hex(wrapper.tx_hex).context(
-			libwallet::ErrorKind::ClientCallback("Error parsing TxWrapper: tx_bin"),
+			libwallet::ErrorKind::ClientCallback("Error parsing TxWrapper: tx_bin".to_owned()),
 		)?;
 
 		let tx: Transaction = ser::deserialize(&mut &tx_bin[..]).context(
-			libwallet::ErrorKind::ClientCallback("Error parsing TxWrapper: tx"),
+			libwallet::ErrorKind::ClientCallback("Error parsing TxWrapper: tx".to_owned()),
 		)?;
 
 		super::award_block_to_wallet(&self.chain, vec![&tx], dest_wallet)?;
@@ -323,15 +323,16 @@ impl LocalWalletClient {
 		};
 		{
 			let p = self.proxy_tx.lock();
-			p.send(m)
-				.context(libwallet::ErrorKind::ClientCallback("Send TX Slate"))?;
+			p.send(m).context(libwallet::ErrorKind::ClientCallback(
+				"Send TX Slate".to_owned(),
+			))?;
 		}
 		let r = self.rx.lock();
 		let m = r.recv().unwrap();
 		trace!("Received send_tx_slate response: {:?}", m.clone());
 		Ok(
 			serde_json::from_str(&m.body).context(libwallet::ErrorKind::ClientCallback(
-				"Parsing send_tx_slate response",
+				"Parsing send_tx_slate response".to_owned(),
 			))?,
 		)
 	}
@@ -352,15 +353,16 @@ impl WalletCommAdapter for LocalWalletClient {
 		};
 		{
 			let p = self.proxy_tx.lock();
-			p.send(m)
-				.context(libwallet::ErrorKind::ClientCallback("Send TX Slate"))?;
+			p.send(m).context(libwallet::ErrorKind::ClientCallback(
+				"Send TX Slate".to_owned(),
+			))?;
 		}
 		let r = self.rx.lock();
 		let m = r.recv().unwrap();
 		trace!("Received send_tx_slate response: {:?}", m.clone());
 		Ok(
 			serde_json::from_str(&m.body).context(libwallet::ErrorKind::ClientCallback(
-				"Parsing send_tx_slate response",
+				"Parsing send_tx_slate response".to_owned(),
 			))?,
 		)
 	}
@@ -405,8 +407,9 @@ impl NodeClient for LocalWalletClient {
 		};
 		{
 			let p = self.proxy_tx.lock();
-			p.send(m)
-				.context(libwallet::ErrorKind::ClientCallback("post_tx send"))?;
+			p.send(m).context(libwallet::ErrorKind::ClientCallback(
+				"post_tx send".to_owned(),
+			))?;
 		}
 		let r = self.rx.lock();
 		let m = r.recv().unwrap();
@@ -425,7 +428,7 @@ impl NodeClient for LocalWalletClient {
 		{
 			let p = self.proxy_tx.lock();
 			p.send(m).context(libwallet::ErrorKind::ClientCallback(
-				"Get chain height send",
+				"Get chain height send".to_owned(),
 			))?;
 		}
 		let r = self.rx.lock();
@@ -434,7 +437,7 @@ impl NodeClient for LocalWalletClient {
 		Ok(m.body
 			.parse::<u64>()
 			.context(libwallet::ErrorKind::ClientCallback(
-				"Parsing get_height response",
+				"Parsing get_height response".to_owned(),
 			))?)
 	}
 
@@ -457,7 +460,7 @@ impl NodeClient for LocalWalletClient {
 		{
 			let p = self.proxy_tx.lock();
 			p.send(m).context(libwallet::ErrorKind::ClientCallback(
-				"Get outputs from node send",
+				"Get outputs from node send".to_owned(),
 			))?;
 		}
 		let r = self.rx.lock();
@@ -496,7 +499,7 @@ impl NodeClient for LocalWalletClient {
 		{
 			let p = self.proxy_tx.lock();
 			p.send(m).context(libwallet::ErrorKind::ClientCallback(
-				"Get outputs from node by PMMR index send",
+				"Get outputs from node by PMMR index send".to_owned(),
 			))?;
 		}
 
