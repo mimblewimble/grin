@@ -48,7 +48,7 @@ use crate::libwallet::{Error, ErrorKind};
 use crate::util;
 use crate::util::secp::{pedersen, ContextFlag, Secp256k1};
 
-const USER_MESSAGE_MAX_LEN:usize = 256;
+const USER_MESSAGE_MAX_LEN: usize = 256;
 
 /// Functions intended for use by the owner (e.g. master seed holder) of the wallet.
 pub struct APIOwner<W: ?Sized, C, K>
@@ -647,7 +647,7 @@ where
 			Some(mut m) => {
 				m.truncate(USER_MESSAGE_MAX_LEN);
 				Some(m)
-			},
+			}
 			None => None,
 		};
 
@@ -889,7 +889,7 @@ where
 			Some(mut m) => {
 				m.truncate(USER_MESSAGE_MAX_LEN);
 				Some(m)
-			},
+			}
 			None => None,
 		};
 

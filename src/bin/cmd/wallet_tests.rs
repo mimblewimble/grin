@@ -256,14 +256,14 @@ mod wallet_tests {
 		let _ = test_framework::award_blocks_to_wallet(&chain, wallet1.clone(), bh as usize);
 
 		let very_long_message = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdef\
-		ABCDEFGHIJKLMNOPQRSTUVWXYZabcdef\
-		ABCDEFGHIJKLMNOPQRSTUVWXYZabcdef\
-		ABCDEFGHIJKLMNOPQRSTUVWXYZabcdef\
-		ABCDEFGHIJKLMNOPQRSTUVWXYZabcdef\
-		ABCDEFGHIJKLMNOPQRSTUVWXYZabcdef\
-		ABCDEFGHIJKLMNOPQRSTUVWXYZabcdef\
-		ABCDEFGHIJKLMNOPQRSTUVWXYZabcdef\
-		This part should all be truncated";
+		                         ABCDEFGHIJKLMNOPQRSTUVWXYZabcdef\
+		                         ABCDEFGHIJKLMNOPQRSTUVWXYZabcdef\
+		                         ABCDEFGHIJKLMNOPQRSTUVWXYZabcdef\
+		                         ABCDEFGHIJKLMNOPQRSTUVWXYZabcdef\
+		                         ABCDEFGHIJKLMNOPQRSTUVWXYZabcdef\
+		                         ABCDEFGHIJKLMNOPQRSTUVWXYZabcdef\
+		                         ABCDEFGHIJKLMNOPQRSTUVWXYZabcdef\
+		                         This part should all be truncated";
 
 		// Update info and check
 		let arg_vec = vec!["grin", "wallet", "-p", "password", "-a", "mining", "info"];
