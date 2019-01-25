@@ -88,8 +88,8 @@ impl NodeClient for HTTPNodeClient {
 				let report = format!("Getting chain height from node: {}", e);
 				error!("Get chain height error: {}", e);
 				Err(libwallet::ErrorKind::ClientCallback(report).into())
-			},
-			Ok(r) => Ok(r.height)
+			}
+			Ok(r) => Ok(r.height),
 		}
 	}
 
@@ -186,9 +186,7 @@ impl NodeClient for HTTPNodeClient {
 					addr, e
 				);
 				let report = format!("outputs by pmmr index: {}", e);
-				Err(libwallet::ErrorKind::ClientCallback(
-					report
-				))?
+				Err(libwallet::ErrorKind::ClientCallback(report))?
 			}
 		}
 	}

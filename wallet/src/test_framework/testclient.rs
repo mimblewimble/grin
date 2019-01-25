@@ -323,8 +323,9 @@ impl LocalWalletClient {
 		};
 		{
 			let p = self.proxy_tx.lock();
-			p.send(m)
-				.context(libwallet::ErrorKind::ClientCallback("Send TX Slate".to_owned()))?;
+			p.send(m).context(libwallet::ErrorKind::ClientCallback(
+				"Send TX Slate".to_owned(),
+			))?;
 		}
 		let r = self.rx.lock();
 		let m = r.recv().unwrap();
@@ -352,8 +353,9 @@ impl WalletCommAdapter for LocalWalletClient {
 		};
 		{
 			let p = self.proxy_tx.lock();
-			p.send(m)
-				.context(libwallet::ErrorKind::ClientCallback("Send TX Slate".to_owned()))?;
+			p.send(m).context(libwallet::ErrorKind::ClientCallback(
+				"Send TX Slate".to_owned(),
+			))?;
 		}
 		let r = self.rx.lock();
 		let m = r.recv().unwrap();
@@ -405,8 +407,9 @@ impl NodeClient for LocalWalletClient {
 		};
 		{
 			let p = self.proxy_tx.lock();
-			p.send(m)
-				.context(libwallet::ErrorKind::ClientCallback("post_tx send".to_owned()))?;
+			p.send(m).context(libwallet::ErrorKind::ClientCallback(
+				"post_tx send".to_owned(),
+			))?;
 		}
 		let r = self.rx.lock();
 		let m = r.recv().unwrap();
