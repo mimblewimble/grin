@@ -369,7 +369,7 @@ impl FixedLength for TxKernelEntry {
 ///
 /// * As "transaction" checks tx (as block) weight does not exceed max_block_weight.
 /// * As "block" same as above but allow for additional coinbase reward (1 output, 1 kernel).
-/// * As "pool" skips weight check (pool as one big tx, but without max weight).
+/// * With "no limit" to skip the weight check.
 ///
 #[derive(Clone, Copy)]
 pub enum Weighting {
@@ -377,8 +377,8 @@ pub enum Weighting {
 	AsTransaction,
 	/// Tx represents a block (max block weight).
 	AsBlock,
-	/// Tx represents the txpool (no max weight).
-	AsPool,
+	/// No max weight limit (skip the weight check).
+	NoLimit,
 }
 
 /// TransactionBody is a common abstraction for transaction and block
@@ -616,7 +616,7 @@ impl TransactionBody {
 		let reserve = match weighting {
 			Weighting::AsTransaction => 1,
 			Weighting::AsBlock => 0,
-			Weighting::AsPool => {
+			Weighting::NoLimit => {
 				// We do not verify "tx as pool" weight so we are done here.
 				return Ok(());
 			}

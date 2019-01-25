@@ -170,7 +170,7 @@ impl Pool {
 		let tx = transaction::aggregate(txs)?;
 
 		// Validate the single aggregate transaction "as pool", not subject to tx weight limits.
-		tx.validate(Weighting::AsPool, self.verifier_cache.clone())?;
+		tx.validate(Weighting::NoLimit, self.verifier_cache.clone())?;
 
 		Ok(Some(tx))
 	}
@@ -181,7 +181,7 @@ impl Pool {
 		extra_tx: Option<Transaction>,
 		header: &BlockHeader,
 	) -> Result<Vec<Transaction>, PoolError> {
-		let valid_txs = self.validate_raw_txs(txs, extra_tx, header, Weighting::AsPool)?;
+		let valid_txs = self.validate_raw_txs(txs, extra_tx, header, Weighting::NoLimit)?;
 		Ok(valid_txs)
 	}
 
@@ -234,14 +234,14 @@ impl Pool {
 			// TODO - Is this necessary? We validate_raw_tx below.
 			// Validate this single aggregated tx (existing pool + new tx),
 			// not subject to tx weight limits.
-			// tx.validate(Weighting::AsPool, self.verifier_cache.clone())?;
+			// tx.validate(Weighting::NoLimit, self.verifier_cache.clone())?;
 
 			tx
 		};
 
 		// Validate aggregated tx (existing pool + new tx), ignoring tx weight limits.
 		// Validate against known chain state at the provided header.
-		self.validate_raw_tx(&agg_tx, header, Weighting::AsPool)?;
+		self.validate_raw_tx(&agg_tx, header, Weighting::NoLimit)?;
 
 		debug!(
 			"add_to_pool [{}]: {} ({}) [in/out/kern: {}/{}/{}] pool: {} (at block {})",
