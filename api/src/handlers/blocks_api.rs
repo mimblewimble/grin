@@ -140,7 +140,7 @@ impl Handler for BlockHandler {
 				return response(
 					StatusCode::BAD_REQUEST,
 					format!("failed to parse input: {}", e),
-				)
+				);
 			}
 			Ok(h) => h,
 		};

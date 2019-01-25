@@ -16,9 +16,7 @@
 
 #[macro_use]
 extern crate clap;
-use ctrlc;
 
-use serde_json;
 #[macro_use]
 extern crate log;
 use crate::config::config::{SERVER_CONFIG_FILE_NAME, WALLET_CONFIG_FILE_NAME};
@@ -31,9 +29,7 @@ use grin_core as core;
 use grin_p2p as p2p;
 use grin_servers as servers;
 use grin_util as util;
-use grin_wallet;
 use std::process::exit;
-use term;
 
 mod cmd;
 pub mod tui;

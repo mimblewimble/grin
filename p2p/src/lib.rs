@@ -29,7 +29,6 @@ use lmdb_zero as lmdb;
 
 #[macro_use]
 extern crate grin_core as core;
-use grin_store;
 use grin_util as util;
 
 #[macro_use]
