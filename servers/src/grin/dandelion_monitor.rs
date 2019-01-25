@@ -112,7 +112,7 @@ fn process_stem_phase(
 
 		let agg_tx = transaction::aggregate(stem_txs)?;
 		agg_tx.validate(
-			transaction::WeightVerificationType::AsTransaction,
+			transaction::Weighting::AsTransaction,
 			verifier_cache.clone(),
 		)?;
 
@@ -162,7 +162,7 @@ fn process_fluff_phase(
 
 		let agg_tx = transaction::aggregate(stem_txs)?;
 		agg_tx.validate(
-			transaction::WeightVerificationType::AsTransaction,
+			transaction::Weighting::AsTransaction,
 			verifier_cache.clone(),
 		)?;
 

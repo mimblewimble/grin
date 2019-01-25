@@ -20,7 +20,7 @@
 use self::core::core::hash::{Hash, Hashed};
 use self::core::core::id::ShortId;
 use self::core::core::verifier_cache::VerifierCache;
-use self::core::core::{transaction, Block, BlockHeader, Transaction, WeightVerificationType};
+use self::core::core::{transaction, Block, BlockHeader, Transaction, Weighting};
 use self::util::RwLock;
 use crate::pool::Pool;
 use crate::types::{
@@ -110,10 +110,7 @@ impl TransactionPool {
 				let tx = transaction::deaggregate(entry.tx, txs)?;
 
 				// Validate this deaggregated tx "as tx", subject to regular tx weight limits.
-				tx.validate(
-					WeightVerificationType::AsTransaction,
-					self.verifier_cache.clone(),
-				)?;
+				tx.validate(Weighting::AsTransaction, self.verifier_cache.clone())?;
 
 				entry.tx = tx;
 				entry.src.debug_name = "deagg".to_string();
@@ -152,11 +149,8 @@ impl TransactionPool {
 
 		// Make sure the transaction is valid before anything else.
 		// Validate tx accounting for max tx weight.
-		tx.validate(
-			WeightVerificationType::AsTransaction,
-			self.verifier_cache.clone(),
-		)
-		.map_err(PoolError::InvalidTx)?;
+		tx.validate(Weighting::AsTransaction, self.verifier_cache.clone())
+			.map_err(PoolError::InvalidTx)?;
 
 		// Check the tx lock_time is valid based on current chain state.
 		self.blockchain.verify_tx_lock_height(&tx)?;

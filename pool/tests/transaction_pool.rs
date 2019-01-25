@@ -15,7 +15,7 @@
 pub mod common;
 
 use self::core::core::verifier_cache::LruVerifierCache;
-use self::core::core::{transaction, Block, BlockHeader, WeightVerificationType};
+use self::core::core::{transaction, Block, BlockHeader, Weighting};
 use self::core::libtx;
 use self::core::pow::Difficulty;
 use self::keychain::{ExtKeychain, Keychain};
@@ -220,10 +220,7 @@ fn test_the_transaction_pool() {
 		let agg_tx = transaction::aggregate(vec![tx1.clone(), tx2.clone(), tx4]).unwrap();
 
 		agg_tx
-			.validate(
-				WeightVerificationType::AsTransaction,
-				verifier_cache.clone(),
-			)
+			.validate(Weighting::AsTransaction, verifier_cache.clone())
 			.unwrap();
 
 		write_pool

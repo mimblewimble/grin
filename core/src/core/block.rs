@@ -28,8 +28,7 @@ use crate::core::compact_block::{CompactBlock, CompactBlockBody};
 use crate::core::hash::{Hash, Hashed, ZERO_HASH};
 use crate::core::verifier_cache::VerifierCache;
 use crate::core::{
-	transaction, Commitment, Input, Output, Transaction, TransactionBody, TxKernel,
-	WeightVerificationType,
+	transaction, Commitment, Input, Output, Transaction, TransactionBody, TxKernel, Weighting,
 };
 use crate::global;
 use crate::keychain::{self, BlindingFactor};
@@ -380,7 +379,7 @@ impl Readable for Block {
 		// Treat any validation issues as data corruption.
 		// An example of this would be reading a block
 		// that exceeded the allowed number of inputs.
-		body.validate_read(WeightVerificationType::AsBlock)
+		body.validate_read(Weighting::AsBlock)
 			.map_err(|_| ser::Error::CorruptedData)?;
 
 		Ok(Block { header, body })
@@ -610,7 +609,7 @@ impl Block {
 	/// * coinbase sum verification
 	/// * kernel sum verification
 	pub fn validate_read(&self) -> Result<(), Error> {
-		self.body.validate_read(WeightVerificationType::AsBlock)?;
+		self.body.validate_read(Weighting::AsBlock)?;
 		self.verify_kernel_lock_heights()?;
 		Ok(())
 	}
@@ -640,8 +639,7 @@ impl Block {
 		prev_kernel_offset: &BlindingFactor,
 		verifier: Arc<RwLock<dyn VerifierCache>>,
 	) -> Result<Commitment, Error> {
-		self.body
-			.validate(WeightVerificationType::AsBlock, verifier)?;
+		self.body.validate(Weighting::AsBlock, verifier)?;
 
 		self.verify_kernel_lock_heights()?;
 		self.verify_coinbase()?;

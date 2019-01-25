@@ -372,7 +372,7 @@ impl FixedLength for TxKernelEntry {
 /// * As "pool" skips weight check (pool as one big tx, but without max weight).
 ///
 #[derive(Clone, Copy)]
-pub enum WeightVerificationType {
+pub enum Weighting {
 	/// Tx represents a tx (max block weight, accounting for additional coinbase reward).
 	AsTransaction,
 	/// Tx represents a block (max block weight).
@@ -605,7 +605,7 @@ impl TransactionBody {
 
 	/// Verify the body is not too big in terms of number of inputs|outputs|kernels.
 	/// Weight rules vary depending on the "weight type" (block or tx or pool).
-	fn verify_weight(&self, weight_type: WeightVerificationType) -> Result<(), Error> {
+	fn verify_weight(&self, weighting: Weighting) -> Result<(), Error> {
 		// If "tx" body then remember to reduce the max_block_weight for block requirements.
 		// If "block" body then verify weight based on full set of inputs|outputs|kernels.
 		// If "pool" body then skip weight verification (pool can be larger than single block).
@@ -613,10 +613,10 @@ impl TransactionBody {
 		// Note: Taking a max tx and building a block from it we need to allow room
 		// for the additional coinbase reward (output + kernel).
 		//
-		let reserve = match weight_type {
-			WeightVerificationType::AsTransaction => 1,
-			WeightVerificationType::AsBlock => 0,
-			WeightVerificationType::AsPool => {
+		let reserve = match weighting {
+			Weighting::AsTransaction => 1,
+			Weighting::AsBlock => 0,
+			Weighting::AsPool => {
 				// We do not verify "tx as pool" weight so we are done here.
 				return Ok(());
 			}
@@ -697,8 +697,8 @@ impl TransactionBody {
 	/// Subset of full validation that skips expensive verification steps, specifically -
 	/// * rangeproof verification
 	/// * kernel signature verification
-	pub fn validate_read(&self, weight_type: WeightVerificationType) -> Result<(), Error> {
-		self.verify_weight(weight_type)?;
+	pub fn validate_read(&self, weighting: Weighting) -> Result<(), Error> {
+		self.verify_weight(weighting)?;
 		self.verify_sorted()?;
 		self.verify_cut_through()?;
 		Ok(())
@@ -709,10 +709,10 @@ impl TransactionBody {
 	/// output.
 	pub fn validate(
 		&self,
-		weight_type: WeightVerificationType,
+		weighting: Weighting,
 		verifier: Arc<RwLock<dyn VerifierCache>>,
 	) -> Result<(), Error> {
-		self.validate_read(weight_type)?;
+		self.validate_read(weighting)?;
 
 		// Find all the outputs that have not had their rangeproofs verified.
 		let outputs = {
@@ -933,8 +933,7 @@ impl Transaction {
 	/// * kernel signature verification (on the body)
 	/// * kernel sum verification
 	pub fn validate_read(&self) -> Result<(), Error> {
-		self.body
-			.validate_read(WeightVerificationType::AsTransaction)?;
+		self.body.validate_read(Weighting::AsTransaction)?;
 		self.body.verify_features()?;
 		Ok(())
 	}
@@ -944,10 +943,10 @@ impl Transaction {
 	/// output.
 	pub fn validate(
 		&self,
-		weight_type: WeightVerificationType,
+		weighting: Weighting,
 		verifier: Arc<RwLock<dyn VerifierCache>>,
 	) -> Result<(), Error> {
-		self.body.validate(weight_type, verifier)?;
+		self.body.validate(weighting, verifier)?;
 		self.body.verify_features()?;
 		self.verify_kernel_sums(self.overage(), self.offset)?;
 		Ok(())
