@@ -591,10 +591,6 @@ impl WorkersList {
 		self.stratum_stats.write().num_workers = self.workers_list.read().len();
 	}
 
-	//pub fn get_stats(&self, worker_id: usize) -> WorkerStats {
-	//let stats = self.stratum_stats.read().worker_stats;
-	//stats[worker_id]
-	//}
 	pub fn last_seen(&self, worker_id: usize) {
 		//self.stratum_stats.write().worker_stats[worker_id].last_seen = SystemTime::now();
 		self.update_stats(worker_id, |ws| ws.last_seen = SystemTime::now());
