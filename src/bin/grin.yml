@@ -46,6 +46,8 @@ subcommands:
             about: Generate a configuration grin-server.toml file in the current directory
         - start:
             about: Start the Grin server as a daemon
+        - status:
+            about: Check the status of the Grin server daemon based on pidfile
         - stop:
             about: Stop the Grin server daemon
         - run:

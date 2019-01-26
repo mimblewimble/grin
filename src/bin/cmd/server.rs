@@ -13,7 +13,7 @@
 // limitations under the License.
 
 /// Grin server commands processing
-use std::env::current_dir;
+use std::path::Path;
 use std::process::exit;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
@@ -22,7 +22,7 @@ use std::time::Duration;
 
 use clap::ArgMatches;
 use ctrlc;
-use daemonize::Daemonize;
+use parity_daemonize::daemonize;
 
 use crate::config::GlobalConfig;
 use crate::core::global;
@@ -30,9 +30,15 @@ use crate::p2p::Seeding;
 use crate::servers;
 use crate::tui::ui;
 
+use psutil::pidfile;
+use psutil::process::Process;
+
+const SERVER_PIDFILE: &str = "/tmp/grin.pid";
+
 /// wrap below to allow UI to clean up on stop
 fn start_server(config: servers::ServerConfig) {
 	start_server_tui(config);
+
 	// Just kill process for now, otherwise the process
 	// hangs around until sigint because the API server
 	// currently has no shutdown facility
@@ -163,23 +169,40 @@ pub fn server_command(
 			("run", _) => {
 				start_server(server_config);
 			}
-			("start", _) => {
-				let daemonize = Daemonize::new()
-					.pid_file("/tmp/grin.pid")
-					.chown_pid_file(true)
-					.working_directory(current_dir().unwrap())
-					.privileged_action(move || {
-						start_server(server_config.clone());
-						loop {
-							thread::sleep(Duration::from_secs(60));
-						}
-					});
-				match daemonize.start() {
-					Ok(_) => info!("Grin server successfully started."),
-					Err(e) => error!("Error starting: {}", e),
+			("start", _) => match daemonize(SERVER_PIDFILE) {
+				Ok(mut handle) => {
+					handle.detach_with_msg("'grin-server' started\n");
+					start_server(server_config.clone());
+					unreachable!();
 				}
-			}
-			("stop", _) => println!("TODO. Just 'kill $pid' for now. Maybe /tmp/grin.pid is $pid"),
+				Err(e) => error!("Error starting: {}", e),
+			},
+			("status", _) => match pidfile::read_pidfile(Path::new(SERVER_PIDFILE)) {
+				Ok(pid) => match Process::new(pid) {
+					Ok(pr) => println!("'grin-server' running with PID {}", pr.pid),
+					Err(err) => {
+						trace!("Process referenced in pidfile cannot be accessed: {}", err);
+						println!("'grin-server' is not running");
+					}
+				},
+				Err(err) => {
+					trace!("Unable to read pidfile: {}", err);
+					println!("'grin-server' is not running");
+				}
+			},
+			("stop", _) => match Process::from_pidfile(Path::new(SERVER_PIDFILE)) {
+				Ok(proc) => {
+					println!("'grin-server' found running with PID {}", proc.pid);
+					match proc.kill() {
+						Ok(_) => println!("Successfully stopped"),
+						Err(err) => println!("Failed to stop: {}", err),
+					}
+				}
+				Err(err) => {
+					trace!("Unable to find pid of a live process in pidfile: {}", err);
+					println!("'grin-server' is not running");
+				}
+			},
 			("", _) => {
 				println!("Subcommand required, use 'grin help server' for details");
 			}
