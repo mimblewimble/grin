@@ -777,51 +777,51 @@ impl StratumServer {
 			if (current_hash != latest_hash || Utc::now().timestamp() >= deadline)
 				&& self.workers.count() > 0
 			{
-				let mut wallet_listener_url: Option<String> = None;
-				if !self.config.burn_reward {
-					wallet_listener_url = Some(self.config.wallet_listener_url.clone());
-				}
-				// If this is a new block, clear the current_block version history
-				if current_hash != latest_hash {
-					self.current_block_versions.write().clear();
-				}
-				// Build the new block (version)
-				let (new_block, block_fees) = mine_block::get_block(
-					&self.chain,
-					&self.tx_pool,
-					self.verifier_cache.clone(),
-					self.current_key_id.read().clone(),
-					wallet_listener_url,
-				);
 				{
-					let mut current_difficulty = self.current_difficulty.write();
-					*current_difficulty =
-						(new_block.header.total_difficulty() - head.total_difficulty).to_num();
-				}
-				{
-					let mut current_key_id = self.current_key_id.write();
-					*current_key_id = block_fees.key_id();
-				}
-				current_hash = latest_hash;
-				{
-					// set the minimum acceptable share difficulty for this block
-					let mut minimum_share_difficulty = self.minimum_share_difficulty.write();
-					*minimum_share_difficulty = cmp::min(
-						self.config.minimum_share_difficulty,
-						*self.current_difficulty.read(),
+					let mut current_block_versions = self.current_block_versions.write();
+					let mut wallet_listener_url: Option<String> = None;
+					if !self.config.burn_reward {
+						wallet_listener_url = Some(self.config.wallet_listener_url.clone());
+					}
+					// If this is a new block, clear the current_block version history
+					if current_hash != latest_hash {
+						current_block_versions.clear();
+					}
+					// Build the new block (version)
+					let (new_block, block_fees) = mine_block::get_block(
+						&self.chain,
+						&self.tx_pool,
+						self.verifier_cache.clone(),
+						self.current_key_id.read().clone(),
+						wallet_listener_url,
 					);
-				}
-				// set a new deadline for rebuilding with fresh transactions
-				deadline = Utc::now().timestamp() + attempt_time_per_block as i64;
+					{
+						let mut current_difficulty = self.current_difficulty.write();
+						*current_difficulty =
+							(new_block.header.total_difficulty() - head.total_difficulty).to_num();
+					}
+					{
+						let mut current_key_id = self.current_key_id.write();
+						*current_key_id = block_fees.key_id();
+					}
+					current_hash = latest_hash;
+					{
+						// set the minimum acceptable share difficulty for this block
+						let mut minimum_share_difficulty = self.minimum_share_difficulty.write();
+						*minimum_share_difficulty = cmp::min(
+							self.config.minimum_share_difficulty,
+							*self.current_difficulty.read(),
+						);
+					}
+					// set a new deadline for rebuilding with fresh transactions
+					deadline = Utc::now().timestamp() + attempt_time_per_block as i64;
 
-				{
 					let mut stratum_stats = self.stratum_stats.write();
 					stratum_stats.block_height = new_block.header.height;
 					stratum_stats.network_difficulty = *self.current_difficulty.read();
-				}
-				// Add this new block version to our current block map
-				{
-					self.current_block_versions.write().push(new_block);
+
+					// Add this new block version to our current block map
+					current_block_versions.push(new_block);
 				}
 				// Send this job to all connected workers
 				self.broadcast_job();
