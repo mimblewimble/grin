@@ -249,7 +249,6 @@ impl Handler {
 		};
 
 		// Package the reply as RpcResponse json
-		let rpc_response: String;
 		match response {
 			Err(rpc_error) => {
 				let resp = RpcResponse {
@@ -259,7 +258,7 @@ impl Handler {
 					result: None,
 					error: Some(rpc_error.into()),
 				};
-				rpc_response = serde_json::to_string(&resp).unwrap();
+				serde_json::to_string(&resp).unwrap()
 			}
 			Ok(response) => {
 				let resp = RpcResponse {
@@ -269,10 +268,9 @@ impl Handler {
 					result: Some(response),
 					error: None,
 				};
-				rpc_response = serde_json::to_string(&resp).unwrap();
+				serde_json::to_string(&resp).unwrap()
 			}
 		}
-		rpc_response
 	}
 	fn handle_login(&self, params: Option<Value>, worker_id: usize) -> Result<Value, RpcError> {
 		let params: LoginParams = parse_params(params)?;
