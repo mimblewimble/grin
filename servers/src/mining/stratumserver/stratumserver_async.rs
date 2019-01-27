@@ -75,6 +75,70 @@ struct RpcError {
 	message: String,
 }
 
+impl RpcError {
+	pub fn internal_error() -> Self {
+		RpcError {
+			code: 32603,
+			message: "Internal error".to_owned(),
+		}
+	}
+	pub fn node_is_syncing() -> Self {
+		RpcError {
+			code: -32000,
+			message: "Node is syncing - Please wait".to_owned(),
+		}
+	}
+	pub fn method_not_found() -> Self {
+		RpcError {
+			code: -32601,
+			message: "Method not found".to_owned(),
+		}
+	}
+	pub fn too_late() -> Self {
+		RpcError {
+			code: -32503,
+			message: "Solution submitted too late".to_string(),
+		}
+	}
+	pub fn cannot_validate() -> Self {
+		RpcError {
+			code: -32502,
+			message: "Failed to validate solution".to_string(),
+		}
+	}
+	pub fn too_low_difficulty() -> Self {
+		RpcError {
+			code: -32501,
+			message: "Share rejected due to low difficulty".to_string(),
+		}
+	}
+	pub fn invalid_request() -> Self {
+		RpcError {
+			code: -32600,
+			message: "Invalid Request".to_string(),
+		}
+	}
+}
+
+impl From<RpcError> for Value {
+	fn from(e: RpcError) -> Self {
+		serde_json::to_value(e).unwrap()
+	}
+}
+
+impl<T> From<T> for RpcError
+where
+	T: std::error::Error,
+{
+	fn from(e: T) -> Self {
+		let err = RpcError {
+			code: 32603,
+			message: "Internal error".to_owned(),
+		};
+		err
+	}
+}
+
 #[derive(Serialize, Deserialize, Debug)]
 struct LoginParams {
 	login: String,
@@ -172,11 +236,7 @@ impl Handler {
 			"keepalive" => self.handle_keepalive(),
 			"getjobtemplate" => {
 				if self.sync_state.is_syncing() {
-					let e = RpcError {
-						code: -32000,
-						message: "Node is syncing - Please wait".to_string(),
-					};
-					Err(serde_json::to_value(e).unwrap())
+					Err(RpcError::node_is_syncing())
 				} else {
 					self.handle_getjobtemplate()
 				}
@@ -184,24 +244,20 @@ impl Handler {
 			"status" => self.handle_status(worker_id),
 			_ => {
 				// Called undefined method
-				let e = RpcError {
-					code: -32601,
-					message: "Method not found".to_string(),
-				};
-				Err(serde_json::to_value(e).unwrap())
+				Err(RpcError::method_not_found())
 			}
 		};
 
 		// Package the reply as RpcResponse json
 		let rpc_response: String;
 		match response {
-			Err(response) => {
+			Err(rpc_error) => {
 				let resp = RpcResponse {
 					id: request.id,
 					jsonrpc: String::from("2.0"),
 					method: request.method,
 					result: None,
-					error: Some(response),
+					error: Some(rpc_error.into()),
 				};
 				rpc_response = serde_json::to_string(&resp).unwrap();
 			}
@@ -218,23 +274,25 @@ impl Handler {
 		}
 		rpc_response
 	}
-	fn handle_login(&self, params: Option<Value>, worker_id: usize) -> Result<Value, Value> {
+	fn handle_login(&self, params: Option<Value>, worker_id: usize) -> Result<Value, RpcError> {
 		let params: LoginParams = parse_params(params)?;
 		let mut workers = self.workers.workers_list.write();
-		let worker = workers.get_mut(&worker_id).unwrap();
+		let worker = workers
+			.get_mut(&worker_id)
+			.ok_or(RpcError::internal_error())?;
 		worker.login = Some(params.login);
 		// XXX TODO Future - Validate password?
 		worker.agent = params.agent;
 		worker.authenticated = true;
-		return Ok(serde_json::to_value("ok".to_string()).unwrap());
+		return Ok("ok".into());
 	}
 
 	// Handle KEEPALIVE message
-	fn handle_keepalive(&self) -> Result<Value, Value> {
-		return Ok(serde_json::to_value("ok".to_string()).unwrap());
+	fn handle_keepalive(&self) -> Result<Value, RpcError> {
+		return Ok("ok".into());
 	}
 
-	fn handle_status(&self, worker_id: usize) -> Result<Value, Value> {
+	fn handle_status(&self, worker_id: usize) -> Result<Value, RpcError> {
 		// Return worker status in json for use by a dashboard or healthcheck.
 		let status = WorkerStatus {
 			id: self.workers.stratum_stats.read().worker_stats[worker_id]
@@ -256,7 +314,7 @@ impl Handler {
 		return Ok(response);
 	}
 	// Handle GETJOBTEMPLATE message
-	fn handle_getjobtemplate(&self) -> Result<Value, Value> {
+	fn handle_getjobtemplate(&self) -> Result<Value, RpcError> {
 		// Build a JobTemplate from a BlockHeader and return JSON
 		let job_template = self.build_block_template();
 		let response = serde_json::to_value(&job_template).unwrap();
@@ -301,7 +359,7 @@ impl Handler {
 		&self,
 		params: Option<Value>,
 		worker_id: usize,
-	) -> Result<(Value, bool), Value> {
+	) -> Result<(Value, bool), RpcError> {
 		// Validate parameters
 		let params: SubmitParams = parse_params(params)?;
 
@@ -323,11 +381,7 @@ impl Handler {
 					self.id, params.height, params.edge_bits, params.nonce, params.job_id,
 				);
 			self.workers.update_stats(worker_id, |ws| ws.num_stale += 1);
-			let e = RpcError {
-				code: -32503,
-				message: "Solution submitted too late".to_string(),
-			};
-			return Err(serde_json::to_value(e).unwrap());
+			return Err(RpcError::too_late());
 		}
 
 		let share_difficulty: u64;
@@ -347,11 +401,7 @@ impl Handler {
 				);
 			self.workers
 				.update_stats(worker_id, |worker_stats| worker_stats.num_rejected += 1);
-			let e = RpcError {
-				code: -32502,
-				message: "Failed to validate solution".to_string(),
-			};
-			return Err(serde_json::to_value(e).unwrap());
+			return Err(RpcError::cannot_validate());
 		}
 
 		// Get share difficulty
@@ -365,11 +415,7 @@ impl Handler {
 				);
 			self.workers
 				.update_stats(worker_id, |worker_stats| worker_stats.num_rejected += 1);
-			let e = RpcError {
-				code: -32501,
-				message: "Share rejected due to low difficulty".to_string(),
-			};
-			return Err(serde_json::to_value(e).unwrap());
+			return Err(RpcError::too_low_difficulty());
 		}
 
 		// If the difficulty is high enough, submit it (which also validates it)
@@ -391,11 +437,7 @@ impl Handler {
 					);
 				self.workers
 					.update_stats(worker_id, |worker_stats| worker_stats.num_rejected += 1);
-				let e = RpcError {
-					code: -32502,
-					message: "Failed to validate solution".to_string(),
-				};
-				return Err(serde_json::to_value(e).unwrap());
+				return Err(RpcError::cannot_validate());
 			}
 			share_is_block = true;
 			self.workers
@@ -426,11 +468,7 @@ impl Handler {
 					);
 				self.workers
 					.update_stats(worker_id, |worker_stats| worker_stats.num_rejected += 1);
-				let e = RpcError {
-					code: -32502,
-					message: "Failed to validate solution".to_string(),
-				};
-				return Err(serde_json::to_value(e).unwrap());
+				return Err(RpcError::cannot_validate());
 			}
 		}
 		// Log this as a valid share
@@ -835,17 +873,11 @@ impl StratumServer {
 
 // Utility function to parse a JSON RPC parameter object, returning a proper
 // error if things go wrong.
-fn parse_params<T>(params: Option<Value>) -> Result<T, Value>
+fn parse_params<T>(params: Option<Value>) -> Result<T, RpcError>
 where
 	for<'de> T: serde::Deserialize<'de>,
 {
 	params
 		.and_then(|v| serde_json::from_value(v).ok())
-		.ok_or_else(|| {
-			let e = RpcError {
-				code: -32600,
-				message: "Invalid Request".to_string(),
-			};
-			serde_json::to_value(e).unwrap()
-		})
+		.ok_or(RpcError::invalid_request())
 }
