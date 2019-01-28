@@ -25,9 +25,8 @@ use chrono::prelude::Utc;
 use serde;
 use serde_json;
 use serde_json::Value;
-use std::io::BufReader;
-//use std::net::{TcpListener, TcpStream};
 use std::collections::HashMap;
+use std::io::BufReader;
 use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::{Duration, SystemTime};
@@ -132,11 +131,7 @@ where
 {
 	fn from(e: T) -> Self {
 		error!("Received unhandled error: {}", e);
-		let err = RpcError {
-			code: 32603,
-			message: "Internal error".to_owned(),
-		};
-		err
+		RpcError::internal_error()
 	}
 }
 
@@ -197,14 +192,14 @@ impl Handler {
 		chain: Arc<chain::Chain>,
 	) -> Self {
 		Handler {
-			id: id,
-			workers: workers,
-			current_block_versions: current_block_versions,
-			sync_state: sync_state,
-			minimum_share_difficulty: minimum_share_difficulty,
-			current_key_id: current_key_id,
-			current_difficulty: current_difficulty,
-			chain: chain,
+			id,
+			workers,
+			current_block_versions,
+			sync_state,
+			minimum_share_difficulty,
+			current_key_id,
+			current_difficulty,
+			chain,
 		}
 	}
 	pub fn from_stratum(stratum: &StratumServer) -> Self {
@@ -250,28 +245,23 @@ impl Handler {
 		};
 
 		// Package the reply as RpcResponse json
-		match response {
-			Err(rpc_error) => {
-				let resp = RpcResponse {
-					id: request.id,
-					jsonrpc: String::from("2.0"),
-					method: request.method,
-					result: None,
-					error: Some(rpc_error.into()),
-				};
-				serde_json::to_string(&resp).unwrap()
-			}
-			Ok(response) => {
-				let resp = RpcResponse {
-					id: request.id,
-					jsonrpc: String::from("2.0"),
-					method: request.method,
-					result: Some(response),
-					error: None,
-				};
-				serde_json::to_string(&resp).unwrap()
-			}
-		}
+		let resp = match response {
+			Err(rpc_error) => RpcResponse {
+				id: request.id,
+				jsonrpc: String::from("2.0"),
+				method: request.method,
+				result: None,
+				error: Some(rpc_error.into()),
+			},
+			Ok(response) => RpcResponse {
+				id: request.id,
+				jsonrpc: String::from("2.0"),
+				method: request.method,
+				result: Some(response),
+				error: None,
+			},
+		};
+		serde_json::to_string(&resp).unwrap()
 	}
 	fn handle_login(&self, params: Option<Value>, worker_id: usize) -> Result<Value, RpcError> {
 		let params: LoginParams = parse_params(params)?;
@@ -520,7 +510,10 @@ impl Handler {
 // ----------------------------------------
 // Worker Factory Thread Function
 fn accept_connections(listen_addr: SocketAddr, handler: Handler) {
-	let listener = TcpListener::bind(&listen_addr).expect("Failed to bind to listen address");
+	let listener = TcpListener::bind(&listen_addr).expect(&format!(
+		"Stratum: Failed to bind to listen address {}",
+		listen_addr
+	));
 	let handler = Arc::new(handler);
 	let server = listener
 		.incoming()
@@ -624,7 +617,7 @@ impl WorkersList {
 		self.workers_list
 			.write()
 			.remove(&worker_id)
-			.expect("no such addr in map");
+			.expect("Stratum: no such addr in map");
 		self.stratum_stats.write().num_workers = self.workers_list.read().len();
 	}
 
@@ -773,7 +766,7 @@ impl StratumServer {
 			.clone()
 			.unwrap()
 			.parse()
-			.expect("Incorrect address");
+			.expect("Stratum: Incorrect address ");
 		{
 			self.current_block_versions.write().push(Block::default());
 		}
