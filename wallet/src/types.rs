@@ -94,7 +94,6 @@ impl WalletConfig {
 		format!("{}:{}", self.api_listen_interface, self.api_listen_port)
 	}
 
-	// TODO - This should default to 3420 for mainnent and 13420 for floonet.
 	pub fn default_owner_api_listen_port() -> u16 {
 		3420
 	}
