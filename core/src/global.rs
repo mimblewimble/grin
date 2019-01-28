@@ -107,7 +107,7 @@ impl ChainTypes {
 
 impl Default for ChainTypes {
 	fn default() -> ChainTypes {
-		ChainTypes::Floonet
+		ChainTypes::Mainnet
 	}
 }
 
