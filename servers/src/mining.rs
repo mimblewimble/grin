@@ -15,14 +15,5 @@
 //! Mining + Mining server
 
 mod mine_block;
-pub mod stratumserver {
-	#[cfg(not(feature = "async"))]
-	mod stratumserver_std;
-	#[cfg(not(feature = "async"))]
-	pub use self::stratumserver_std::*;
-	#[cfg(feature = "async")]
-	mod stratumserver_async;
-	#[cfg(feature = "async")]
-	pub use self::stratumserver_async::*;
-}
+pub mod stratumserver;
 pub mod test_miner;
