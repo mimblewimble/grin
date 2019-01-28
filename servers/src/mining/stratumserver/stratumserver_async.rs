@@ -131,6 +131,7 @@ where
 	T: std::error::Error,
 {
 	fn from(e: T) -> Self {
+		error!("Received unhandled error: {}", e);
 		let err = RpcError {
 			code: 32603,
 			message: "Internal error".to_owned(),
