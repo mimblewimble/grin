@@ -858,7 +858,7 @@ impl StratumServer {
 			}
 
 			// sleep before restarting loop
-			thread::sleep(Duration::from_millis(50));
+			thread::sleep(Duration::from_millis(5));
 		} // Main Loop
 	} // fn run_loop()
 } // StratumServer
