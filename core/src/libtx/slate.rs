@@ -31,6 +31,8 @@ use rand::thread_rng;
 use std::sync::Arc;
 use uuid::Uuid;
 
+const CURRENT_SLATE_VERSION: u64 = 1;
+
 /// Public data for each participant in the slate
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -108,7 +110,7 @@ impl Slate {
 			height: 0,
 			lock_height: 0,
 			participant_data: vec![],
-			version: Some(1),
+			version: Some(CURRENT_SLATE_VERSION),
 		}
 	}
 
