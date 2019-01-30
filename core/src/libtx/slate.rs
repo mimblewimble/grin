@@ -108,7 +108,7 @@ impl Slate {
 			height: 0,
 			lock_height: 0,
 			participant_data: vec![],
-			version:Some(1)
+			version: Some(1),
 		}
 	}
 
