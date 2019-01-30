@@ -104,7 +104,7 @@ pub enum ErrorKind {
 	CallbackImpl(&'static str),
 
 	/// Wallet backend error
-	#[fail(display = "Wallet store error")]
+	#[fail(display = "Wallet store error: {}", _0)]
 	Backend(String),
 
 	/// Callback implementation error conversion

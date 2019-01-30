@@ -471,9 +471,13 @@ where
 	let lock_height = height + global::coinbase_maturity();
 	let key_id = block_fees.key_id();
 	let parent_key_id = wallet.parent_key_id();
+	println!("HEYHO key id {:?}", key_id);
 
 	let key_id = match key_id {
-		Some(key_id) => keys::retrieve_existing_key(wallet, key_id, None)?.0,
+		Some(key_id) => match keys::retrieve_existing_key(wallet, key_id, None) {
+			Ok(k) => k.0,
+			Err(_) => keys::next_available_key(wallet)?,
+		},
 		None => keys::next_available_key(wallet)?,
 	};
 
