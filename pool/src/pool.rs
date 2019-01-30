@@ -123,7 +123,7 @@ impl Pool {
 		max_weight: usize,
 	) -> Result<Vec<Transaction>, PoolError> {
 		let header = self.blockchain.chain_head()?;
-		let mut tx_buckets = self.bucket_transactions();
+		let mut tx_buckets = self.bucket_transactions(max_weight);
 
 		// At this point we know that all "buckets" are valid and that
 		// there are no dependencies between them.
@@ -134,18 +134,16 @@ impl Pool {
 		// We want to select the txs with highest fee per unit of weight first.
 		tx_buckets.sort_unstable_by_key(|tx| tx.fee() * 1000 / tx.tx_weight() as u64);
 
-		// Select as many as we can fit in a block by looking at "weight as block".
-		let mut weight = 0;
-		tx_buckets.retain(|tx| {
-			weight += tx.tx_weight_as_block() as usize;
-			weight < max_weight
-		});
-
 		// Iteratively apply the txs to the current chain state,
 		// rejecting any that do not result in a valid state.
 		// Verify these txs produce an aggregated tx below max tx weight.
 		// Return a vec of all the valid txs.
-		let txs = self.validate_raw_txs(tx_buckets, None, &header, Weighting::AsTransaction)?;
+		let txs = self.validate_raw_txs(
+			tx_buckets,
+			None,
+			&header,
+			Weighting::AsLimitedTransaction { max_weight },
+		)?;
 		Ok(txs)
 	}
 
@@ -342,7 +340,7 @@ impl Pool {
 	// Group dependent transactions in buckets (aggregated txs).
 	// Each bucket is independent from the others. Relies on the entries
 	// vector having parent transactions first (should always be the case).
-	fn bucket_transactions(&self) -> Vec<Transaction> {
+	fn bucket_transactions(&self, max_weight: usize) -> Vec<Transaction> {
 		let mut tx_buckets = vec![];
 		let mut output_commits = HashMap::new();
 		let mut rejected = HashSet::new();
@@ -396,7 +394,10 @@ impl Pool {
 					let current = tx_buckets[pos].clone();
 					if let Ok(agg_tx) = transaction::aggregate(vec![current, entry.tx.clone()]) {
 						if agg_tx
-							.validate(Weighting::AsTransaction, self.verifier_cache.clone())
+							.validate(
+								Weighting::AsLimitedTransaction { max_weight },
+								self.verifier_cache.clone(),
+							)
 							.is_ok()
 						{
 							tx_buckets[pos] = agg_tx;

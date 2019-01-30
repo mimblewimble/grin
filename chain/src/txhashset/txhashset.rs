@@ -1232,9 +1232,6 @@ impl<'a> Extension<'a> {
 			self.verify_kernel_signatures(status)?;
 		}
 
-		// Log some stats for the output MMR.
-		self.dump_output_pmmr();
-
 		Ok((output_sum, kernel_sum))
 	}
 
