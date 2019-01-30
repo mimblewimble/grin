@@ -19,8 +19,8 @@
 use crate::consensus::HeaderInfo;
 use crate::consensus::{
 	graph_weight, BASE_EDGE_BITS, BLOCK_TIME_SEC, COINBASE_MATURITY, CUT_THROUGH_HORIZON,
-	DAY_HEIGHT, DEFAULT_MIN_EDGE_BITS, DIFFICULTY_ADJUST_WINDOW, INITIAL_DIFFICULTY, PROOFSIZE,
-	SECOND_POW_EDGE_BITS, STATE_SYNC_THRESHOLD,
+	DAY_HEIGHT, DEFAULT_MIN_EDGE_BITS, DIFFICULTY_ADJUST_WINDOW, INITIAL_DIFFICULTY,
+	MAX_BLOCK_WEIGHT, PROOFSIZE, SECOND_POW_EDGE_BITS, STATE_SYNC_THRESHOLD,
 };
 use crate::pow::{self, new_cuckaroo_ctx, new_cuckatoo_ctx, EdgeType, PoWContext};
 /// An enum collecting sets of parameters used throughout the
@@ -61,6 +61,9 @@ pub const TESTING_INITIAL_GRAPH_WEIGHT: u32 = 1;
 
 /// Testing initial block difficulty
 pub const TESTING_INITIAL_DIFFICULTY: u64 = 1;
+
+/// Testing max_block_weight (artifically low, just enough to support a few txs).
+pub const TESTING_MAX_BLOCK_WEIGHT: usize = 20;
 
 /// If a peer's last updated difficulty is 2 hours ago and its difficulty's lower than ours,
 /// we're sure this peer is a stuck node, and we will kick out such kind of stuck peers.
@@ -224,6 +227,17 @@ pub fn initial_graph_weight() -> u32 {
 		ChainTypes::UserTesting => TESTING_INITIAL_GRAPH_WEIGHT,
 		ChainTypes::Floonet => graph_weight(0, SECOND_POW_EDGE_BITS) as u32,
 		ChainTypes::Mainnet => graph_weight(0, SECOND_POW_EDGE_BITS) as u32,
+	}
+}
+
+///
+pub fn max_block_weight() -> usize {
+	let param_ref = CHAIN_TYPE.read();
+	match *param_ref {
+		ChainTypes::AutomatedTesting => TESTING_MAX_BLOCK_WEIGHT,
+		ChainTypes::UserTesting => TESTING_MAX_BLOCK_WEIGHT,
+		ChainTypes::Floonet => MAX_BLOCK_WEIGHT,
+		ChainTypes::Mainnet => MAX_BLOCK_WEIGHT,
 	}
 }
 
