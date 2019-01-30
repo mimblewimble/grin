@@ -377,7 +377,10 @@ pub enum Weighting {
 	AsTransaction,
 	/// Tx representing a tx with artificially limited max_weight.
 	/// This is used when selecting mineable txs from the pool.
-	AsLimitedTransaction { max_weight: usize },
+	AsLimitedTransaction {
+		/// The maximum (block) weight that we will allow.
+		max_weight: usize,
+	},
 	/// Tx represents a block (max block weight).
 	AsBlock,
 	/// No max weight limit (skip the weight check).
