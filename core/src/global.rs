@@ -63,7 +63,7 @@ pub const TESTING_INITIAL_GRAPH_WEIGHT: u32 = 1;
 pub const TESTING_INITIAL_DIFFICULTY: u64 = 1;
 
 /// Testing max_block_weight (artifically low, just enough to support a few txs).
-pub const TESTING_MAX_BLOCK_WEIGHT: usize = 20;
+pub const TESTING_MAX_BLOCK_WEIGHT: usize = 50;
 
 /// If a peer's last updated difficulty is 2 hours ago and its difficulty's lower than ours,
 /// we're sure this peer is a stuck node, and we will kick out such kind of stuck peers.
