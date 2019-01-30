@@ -78,7 +78,8 @@ fn comments() -> HashMap<String, String> {
 #parameters used for mining as well as wallet output coinbase maturity. Can be:
 #AutomatedTesting - For CI builds and instant blockchain creation
 #UserTesting - For regular user testing (cuckoo 16)
-#Floonet - For the long term Floonet test network
+#Floonet - For the long term floonet test network
+#Mainnet - For mainnet
 "
 		.to_string(),
 	);
