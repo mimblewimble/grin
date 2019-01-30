@@ -130,7 +130,7 @@ fn default_max_stempool_size() -> usize {
 	50_000
 }
 fn default_mineable_max_weight() -> usize {
-	global::max_block_weight() - consensus::BLOCK_OUTPUT_WEIGHT - consensus::BLOCK_KERNEL_WEIGHT
+	global::max_block_weight()
 }
 
 /// Represents a single entry in the pool.
