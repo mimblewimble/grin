@@ -14,7 +14,6 @@
 
 //! Transactions
 
-use crate::consensus;
 use crate::core::hash::Hashed;
 use crate::core::verifier_cache::VerifierCache;
 use crate::core::{committed, Committed};
@@ -28,6 +27,7 @@ use crate::util::secp;
 use crate::util::secp::pedersen::{Commitment, RangeProof};
 use crate::util::static_secp_instance;
 use crate::util::RwLock;
+use crate::{consensus, global};
 use enum_primitive::FromPrimitive;
 use std::cmp::max;
 use std::cmp::Ordering;
@@ -433,7 +433,7 @@ impl Readable for TransactionBody {
 			kernel_len as usize,
 		);
 
-		if tx_block_weight > consensus::MAX_BLOCK_WEIGHT {
+		if tx_block_weight > global::max_block_weight() {
 			return Err(ser::Error::TooLargeReadErr);
 		}
 
@@ -629,7 +629,7 @@ impl TransactionBody {
 		// i.e. We need to reserve space for coinbase reward when verifying tx weight.
 		//
 		// In effect we are verifying the tx _can_ be included in a block without exceeding
-		// MAX_BLOCK_WEIGHT.
+		// max_block_weight.
 		//
 		// max_block = max_tx + coinbase
 		//
@@ -639,7 +639,7 @@ impl TransactionBody {
 			self.kernels.len() + reserve,
 		);
 
-		if tx_block_weight > consensus::MAX_BLOCK_WEIGHT {
+		if tx_block_weight > global::max_block_weight() {
 			return Err(Error::TooHeavy);
 		}
 		Ok(())
