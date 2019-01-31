@@ -14,11 +14,9 @@
 //! Test wallet command line works as expected
 #[cfg(test)]
 mod wallet_tests {
-	use chrono;
 	use clap;
 	use grin_util as util;
 	use grin_wallet;
-	use serde;
 
 	use grin_wallet::test_framework::{self, LocalWalletClient, WalletProxy};
 

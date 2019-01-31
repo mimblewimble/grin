@@ -19,7 +19,9 @@ use self::core::core::hash::{Hash, Hashed};
 use self::core::core::id::{ShortId, ShortIdentifiable};
 use self::core::core::transaction;
 use self::core::core::verifier_cache::VerifierCache;
-use self::core::core::{Block, BlockHeader, BlockSums, Committed, Transaction, TxKernel};
+use self::core::core::{
+	Block, BlockHeader, BlockSums, Committed, Transaction, TxKernel, Weighting,
+};
 use self::util::RwLock;
 use crate::types::{BlockChain, PoolEntry, PoolEntryState, PoolError};
 use grin_core as core;
@@ -127,7 +129,11 @@ impl Pool {
 		let mut flat_txs: Vec<Transaction> = tx_buckets
 			.into_iter()
 			.filter_map(|bucket| transaction::aggregate(bucket).ok())
-			.filter(|x| x.validate(self.verifier_cache.clone()).is_ok())
+			.filter(|x| {
+				// Here we validate the tx, subject to regular tx weight limits.
+				x.validate(Weighting::AsTransaction, self.verifier_cache.clone())
+					.is_ok()
+			})
 			.collect();
 
 		// sort by fees over weight, multiplying by 1000 to keep some precision
@@ -143,8 +149,9 @@ impl Pool {
 
 		// Iteratively apply the txs to the current chain state,
 		// rejecting any that do not result in a valid state.
+		// Verify these txs produce an aggregated tx below max tx weight.
 		// Return a vec of all the valid txs.
-		let txs = self.validate_raw_txs(flat_txs, None, &header)?;
+		let txs = self.validate_raw_txs(flat_txs, None, &header, Weighting::AsTransaction)?;
 		Ok(txs)
 	}
 
@@ -152,14 +159,19 @@ impl Pool {
 		self.entries.iter().map(|x| x.tx.clone()).collect()
 	}
 
-	pub fn aggregate_transaction(&self) -> Result<Option<Transaction>, PoolError> {
+	/// Return a single aggregate tx representing all txs in the txpool.
+	/// Returns None if the txpool is empty.
+	pub fn all_transactions_aggregate(&self) -> Result<Option<Transaction>, PoolError> {
 		let txs = self.all_transactions();
 		if txs.is_empty() {
 			return Ok(None);
 		}
 
 		let tx = transaction::aggregate(txs)?;
-		tx.validate(self.verifier_cache.clone())?;
+
+		// Validate the single aggregate transaction "as pool", not subject to tx weight limits.
+		tx.validate(Weighting::NoLimit, self.verifier_cache.clone())?;
+
 		Ok(Some(tx))
 	}
 
@@ -169,7 +181,7 @@ impl Pool {
 		extra_tx: Option<Transaction>,
 		header: &BlockHeader,
 	) -> Result<Vec<Transaction>, PoolError> {
-		let valid_txs = self.validate_raw_txs(txs, extra_tx, header)?;
+		let valid_txs = self.validate_raw_txs(txs, extra_tx, header, Weighting::NoLimit)?;
 		Ok(valid_txs)
 	}
 
@@ -216,15 +228,21 @@ impl Pool {
 			// Create a single aggregated tx from the existing pool txs and the
 			// new entry
 			txs.push(entry.tx.clone());
-
-			let tx = transaction::aggregate(txs)?;
-			tx.validate(self.verifier_cache.clone())?;
-			tx
+			transaction::aggregate(txs)?
 		};
 
-		// Validate aggregated tx against a known chain state.
-		self.validate_raw_tx(&agg_tx, header)?;
+		// Validate aggregated tx (existing pool + new tx), ignoring tx weight limits.
+		// Validate against known chain state at the provided header.
+		self.validate_raw_tx(&agg_tx, header, Weighting::NoLimit)?;
 
+		// If we get here successfully then we can safely add the entry to the pool.
+		self.log_pool_add(&entry, header);
+		self.entries.push(entry);
+
+		Ok(())
+	}
+
+	fn log_pool_add(&self, entry: &PoolEntry, header: &BlockHeader) {
 		debug!(
 			"add_to_pool [{}]: {} ({}) [in/out/kern: {}/{}/{}] pool: {} (at block {})",
 			self.name,
@@ -236,18 +254,17 @@ impl Pool {
 			self.size(),
 			header.hash(),
 		);
-		// If we get here successfully then we can safely add the entry to the pool.
-		self.entries.push(entry);
-
-		Ok(())
 	}
 
 	fn validate_raw_tx(
 		&self,
 		tx: &Transaction,
 		header: &BlockHeader,
+		weighting: Weighting,
 	) -> Result<BlockSums, PoolError> {
-		tx.validate(self.verifier_cache.clone())?;
+		// Validate the tx, conditionally checking against weight limits,
+		// based on weight verification type.
+		tx.validate(weighting, self.verifier_cache.clone())?;
 
 		// Validate the tx against current chain state.
 		// Check all inputs are in the current UTXO set.
@@ -263,6 +280,7 @@ impl Pool {
 		txs: Vec<Transaction>,
 		extra_tx: Option<Transaction>,
 		header: &BlockHeader,
+		weighting: Weighting,
 	) -> Result<Vec<Transaction>, PoolError> {
 		let mut valid_txs = vec![];
 
@@ -278,7 +296,7 @@ impl Pool {
 			let agg_tx = transaction::aggregate(candidate_txs)?;
 
 			// We know the tx is valid if the entire aggregate tx is valid.
-			if self.validate_raw_tx(&agg_tx, header).is_ok() {
+			if self.validate_raw_tx(&agg_tx, header, weighting).is_ok() {
 				valid_txs.push(tx);
 			}
 		}

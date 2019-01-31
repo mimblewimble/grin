@@ -20,9 +20,6 @@
 #![deny(unused_mut)]
 #![warn(missing_docs)]
 
-use lmdb_zero;
-use memmap;
-
 #[macro_use]
 extern crate log;
 use failure;

@@ -20,11 +20,8 @@
 #![deny(unused_mut)]
 #![warn(missing_docs)]
 
-use dirs;
-
 #[macro_use]
 extern crate serde_derive;
-use toml;
 
 use grin_core as core;
 use grin_p2p as p2p;

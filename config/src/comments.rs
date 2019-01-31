@@ -78,7 +78,8 @@ fn comments() -> HashMap<String, String> {
 #parameters used for mining as well as wallet output coinbase maturity. Can be:
 #AutomatedTesting - For CI builds and instant blockchain creation
 #UserTesting - For regular user testing (cuckoo 16)
-#Floonet - For the long term Floonet test network
+#Floonet - For the long term floonet test network
+#Mainnet - For mainnet
 "
 		.to_string(),
 	);
@@ -365,13 +366,20 @@ fn comments() -> HashMap<String, String> {
 	retval.insert(
 		"api_listen_port".to_string(),
 		"
-#port for wallet listener
-
 #path of TLS certificate file, self-signed certificates are not supported
 #tls_certificate_file = \"\"
 #private key for the TLS certificate
 #tls_certificate_key = \"\"
 
+#port for wallet listener
+"
+		.to_string(),
+	);
+
+	retval.insert(
+		"owner_api_listen_port".to_string(),
+		"
+#port for wallet owner api
 "
 		.to_string(),
 	);
@@ -418,7 +426,7 @@ fn comments() -> HashMap<String, String> {
 		"no_commit_cache".to_string(),
 		"
 #If true, don't store calculated commits in the database
-#better privacy, but at a performance cost of having to 
+#better privacy, but at a performance cost of having to
 #re-calculate commits every time they're used
 "
 		.to_string(),

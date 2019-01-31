@@ -111,7 +111,7 @@ impl OutputHandler {
 
 		for (k, id) in params {
 			if k == "id" {
-				for id in id.split(",") {
+				for id in id.split(',') {
 					commitments.push(id.to_owned());
 				}
 			}
@@ -178,7 +178,7 @@ impl OutputHandler {
 
 		if let Some(ids) = params.get("id") {
 			for id in ids {
-				for id in id.split(",") {
+				for id in id.split(',') {
 					if let Ok(x) = util::from_hex(String::from(id)) {
 						commitments.push(Commitment::from_vec(x));
 					}
@@ -223,7 +223,7 @@ impl OutputHandler {
 
 impl Handler for OutputHandler {
 	fn get(&self, req: Request<Body>) -> ResponseFuture {
-		let command = match req.uri().path().trim_right_matches("/").rsplit("/").next() {
+		let command = match req.uri().path().trim_right_matches('/').rsplit('/').next() {
 			Some(c) => c,
 			None => return response(StatusCode::BAD_REQUEST, "invalid url"),
 		};

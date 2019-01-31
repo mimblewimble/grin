@@ -21,10 +21,8 @@
 #![deny(unused_mut)]
 #![warn(missing_docs)]
 
-use serde;
 #[macro_use]
 extern crate serde_derive;
-use serde_json;
 #[macro_use]
 extern crate log;
 

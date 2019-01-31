@@ -365,7 +365,9 @@ where
 				}
 				_ => {
 					error!("unsupported payment method: {}", args.method);
-					return Err(ErrorKind::ClientCallback("unsupported payment method"))?;
+					return Err(ErrorKind::ClientCallback(
+						"unsupported payment method".to_owned(),
+					))?;
 				}
 			}
 			api.tx_lock_outputs(&slate, lock_fn)?;

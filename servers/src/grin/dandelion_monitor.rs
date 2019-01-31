@@ -97,7 +97,8 @@ fn process_stem_phase(
 		return Ok(());
 	}
 
-	let txpool_tx = tx_pool.txpool.aggregate_transaction()?;
+	// Get the aggregate tx representing the entire txpool.
+	let txpool_tx = tx_pool.txpool.all_transactions_aggregate()?;
 
 	let stem_txs = tx_pool
 		.stempool
@@ -110,7 +111,10 @@ fn process_stem_phase(
 		debug!("dand_mon: Found {} txs for stemming.", stem_txs.len());
 
 		let agg_tx = transaction::aggregate(stem_txs)?;
-		agg_tx.validate(verifier_cache.clone())?;
+		agg_tx.validate(
+			transaction::Weighting::AsTransaction,
+			verifier_cache.clone(),
+		)?;
 
 		let res = tx_pool.adapter.stem_tx_accepted(&agg_tx);
 		if res.is_err() {
@@ -143,7 +147,8 @@ fn process_fluff_phase(
 		return Ok(());
 	}
 
-	let txpool_tx = tx_pool.txpool.aggregate_transaction()?;
+	// Get the aggregate tx representing the entire txpool.
+	let txpool_tx = tx_pool.txpool.all_transactions_aggregate()?;
 
 	let stem_txs = tx_pool
 		.stempool
@@ -156,7 +161,10 @@ fn process_fluff_phase(
 		debug!("dand_mon: Found {} txs for fluffing.", stem_txs.len());
 
 		let agg_tx = transaction::aggregate(stem_txs)?;
-		agg_tx.validate(verifier_cache.clone())?;
+		agg_tx.validate(
+			transaction::Weighting::AsTransaction,
+			verifier_cache.clone(),
+		)?;
 
 		let src = TxSource {
 			debug_name: "fluff".to_string(),

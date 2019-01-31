@@ -237,10 +237,10 @@ where
 		return Err(ErrorKind::TransactionDoesntExist(slate.id.to_string()))?;
 	}
 	let mut batch = wallet.batch()?;
-	for tx in tx_vec.into_iter() {
-		let mut t = tx.clone();
-		t.messages = Some(slate.participant_messages());
-		batch.save_tx_log_entry(t.clone(), &t.parent_key_id.clone())?;
+	for mut tx in tx_vec.into_iter() {
+		tx.messages = Some(slate.participant_messages());
+		let parent_key = tx.parent_key_id.clone();
+		batch.save_tx_log_entry(tx, &parent_key)?;
 	}
 	batch.commit()?;
 	Ok(())
