@@ -41,7 +41,7 @@ use crate::core::ser;
 use crate::keychain::{Identifier, Keychain};
 use crate::libwallet::internal::{keys, tx, updater};
 use crate::libwallet::types::{
-	AcctPathMapping, BlockFees, CbData, NodeClient, OutputData, TxLogEntry, TxLogEntryType,
+	AcctPathMapping, BlockFees, CbData, NodeClient, OutputData, OutputLockFn, TxLogEntry, TxLogEntryType,
 	TxWrapper, WalletBackend, WalletInfo,
 };
 use crate::libwallet::{Error, ErrorKind};
@@ -616,7 +616,6 @@ where
 
 	pub fn initiate_tx(
 		&mut self,
-		as_recipient: bool,
 		src_acct_name: Option<&str>,
 		amount: u64,
 		minimum_confirmations: u64,
@@ -627,7 +626,7 @@ where
 	) -> Result<
 		(
 			Slate,
-			impl FnOnce(&mut W, &Transaction) -> Result<(), Error>,
+			OutputLockFn<W, C, K>,
 		),
 		Error,
 	> {
@@ -654,20 +653,17 @@ where
 
 		let mut slate = tx::new_tx_slate(&mut *w, amount, 2)?;
 
-		let (context, lock_fn) = match as_recipient {
-			false => tx::add_inputs_to_slate(
-				&mut *w,
-				&mut slate,
-				minimum_confirmations,
-				max_outputs,
-				num_change_outputs,
-				selection_strategy_is_use_all,
-				&parent_key_id,
-				0,
-				message,
-			)?,
-			true => tx::add_output_to_slate(&mut *w, &mut slate, &parent_key_id, 1, message)?,
-		};
+		let (context, lock_fn) = tx::add_inputs_to_slate(
+			&mut *w,
+			&mut slate,
+			minimum_confirmations,
+			max_outputs,
+			num_change_outputs,
+			selection_strategy_is_use_all,
+			&parent_key_id,
+			0,
+			message,
+		)?;
 
 		// Save the aggsig context in our DB for when we
 		// recieve the transaction back
@@ -685,11 +681,11 @@ where
 	pub fn tx_lock_outputs(
 		&mut self,
 		slate: &Slate,
-		lock_fn: impl FnOnce(&mut W, &Transaction) -> Result<(), Error>,
+		mut lock_fn: OutputLockFn<W, C, K>,
 	) -> Result<(), Error> {
 		let mut w = self.wallet.lock();
 		w.open_with_credentials()?;
-		lock_fn(&mut *w, &slate.tx)?;
+		lock_fn(&mut *w, &slate.tx, PhantomData, PhantomData)?;
 		Ok(())
 	}
 
@@ -900,8 +896,8 @@ where
 			None => None,
 		};
 
-		let create_fn = tx::add_output_to_slate(&mut *w, slate, &parent_key_id, 1, message)?;
-		create_fn(&mut *w)?;
+		let (_, mut create_fn) = tx::add_output_to_slate(&mut *w, slate, &parent_key_id, 1, message)?;
+		create_fn(&mut *w, &slate.tx, PhantomData, PhantomData)?;
 		tx::update_message(&mut *w, slate)?;
 		w.close()?;
 		Ok(())

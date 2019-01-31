@@ -16,11 +16,10 @@
 
 use uuid::Uuid;
 
-use crate::core::core::Transaction;
 use crate::core::libtx::slate::Slate;
 use crate::keychain::{Identifier, Keychain};
 use crate::libwallet::internal::{selection, updater};
-use crate::libwallet::types::{Context, NodeClient, TxLogEntryType, WalletBackend};
+use crate::libwallet::types::{Context, NodeClient, OutputLockFn, TxLogEntryType, WalletBackend};
 use crate::libwallet::{Error, ErrorKind};
 
 /// Creates a new slate for a transaction, can be called by anyone involved in
@@ -57,7 +56,7 @@ pub fn add_inputs_to_slate<T: ?Sized, C, K>(
 ) -> Result<
 	(
 		Context,
-		impl FnOnce(&mut T, &Transaction) -> Result<(), Error>,
+		OutputLockFn<T, C, K>,
 	),
 	Error,
 >
@@ -110,7 +109,7 @@ pub fn add_output_to_slate<T: ?Sized, C, K>(
 ) -> Result<
 	(
 		Context,
-		impl FnOnce(&mut T, &Transaction) -> Result<(), Error>,
+		OutputLockFn<T, C, K>,
 	),
 	Error,
 >

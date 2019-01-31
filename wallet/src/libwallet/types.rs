@@ -31,6 +31,11 @@ use serde_json;
 use std::collections::HashMap;
 use std::fmt;
 use uuid::Uuid;
+use std::marker::PhantomData;
+
+/// Lock function type
+pub type OutputLockFn<T, C, K>
+= Box<dyn FnMut(&mut T, &Transaction, PhantomData<C>, PhantomData<K>) -> Result<(), Error>>;
 
 /// Combined trait to allow dynamic wallet dispatch
 pub trait WalletInst<C, K>: WalletBackend<C, K> + Send + Sync + 'static
