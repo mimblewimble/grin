@@ -655,28 +655,18 @@ where
 		let mut slate = tx::new_tx_slate(&mut *w, amount, 2)?;
 
 		let (context, lock_fn) = match as_recipient {
-			false => {
-				tx::add_inputs_to_slate(
-					&mut *w,
-					&mut slate,
-					minimum_confirmations,
-					max_outputs,
-					num_change_outputs,
-					selection_strategy_is_use_all,
-					&parent_key_id,
-					0,
-					message,
-				)?
-			},
-			true => {
-				tx::add_output_to_slate(
-					&mut *w,
-					&mut slate,
-					&parent_key_id,
-					1,
-					message,
-				)?
-			}
+			false => tx::add_inputs_to_slate(
+				&mut *w,
+				&mut slate,
+				minimum_confirmations,
+				max_outputs,
+				num_change_outputs,
+				selection_strategy_is_use_all,
+				&parent_key_id,
+				0,
+				message,
+			)?,
+			true => tx::add_output_to_slate(&mut *w, &mut slate, &parent_key_id, 1, message)?,
 		};
 
 		// Save the aggsig context in our DB for when we

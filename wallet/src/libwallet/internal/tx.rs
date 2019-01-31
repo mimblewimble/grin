@@ -107,7 +107,13 @@ pub fn add_output_to_slate<T: ?Sized, C, K>(
 	parent_key_id: &Identifier,
 	participant_id: usize,
 	message: Option<String>,
-) -> Result<(Context, impl FnOnce(&mut T, &Transaction) -> Result<(), Error>), Error>
+) -> Result<
+	(
+		Context,
+		impl FnOnce(&mut T, &Transaction) -> Result<(), Error>,
+	),
+	Error,
+>
 where
 	T: WalletBackend<C, K>,
 	C: NodeClient,
