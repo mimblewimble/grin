@@ -25,7 +25,11 @@ use crate::libwallet::{Error, ErrorKind};
 
 /// Creates a new slate for a transaction, can be called by anyone involved in
 /// the transaction (sender(s), receiver(s))
-pub fn new_tx_slate<T: ?Sized, C, K>(wallet: &mut T, amount: u64, num_participants: usize) -> Result<Slate, Error>
+pub fn new_tx_slate<T: ?Sized, C, K>(
+	wallet: &mut T,
+	amount: u64,
+	num_participants: usize,
+) -> Result<Slate, Error>
 where
 	T: WalletBackend<C, K>,
 	C: NodeClient,
@@ -123,7 +127,12 @@ where
 	)?;
 
 	// perform partial sig
-	let _ = slate.fill_round_2(wallet.keychain(), &context.sec_key, &context.sec_nonce, participant_id)?;
+	let _ = slate.fill_round_2(
+		wallet.keychain(),
+		&context.sec_key,
+		&context.sec_nonce,
+		participant_id,
+	)?;
 
 	Ok(create_fn)
 }
@@ -140,7 +149,12 @@ where
 	C: NodeClient,
 	K: Keychain,
 {
-	let _ = slate.fill_round_2(wallet.keychain(), &context.sec_key, &context.sec_nonce, participant_id)?;
+	let _ = slate.fill_round_2(
+		wallet.keychain(),
+		&context.sec_key,
+		&context.sec_nonce,
+		participant_id,
+	)?;
 	// Final transaction can be built by anyone at this stage
 	let res = slate.finalize(wallet.keychain());
 	if let Err(e) = res {
