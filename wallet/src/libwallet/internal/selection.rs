@@ -100,6 +100,7 @@ where
 
 	let lock_inputs = context.get_inputs().clone();
 	let _lock_outputs = context.get_outputs().clone();
+	let messages = Some(slate.participant_messages());
 
 	// Return a closure to acquire wallet lock and lock the coins being spent
 	// so we avoid accidental double spend attempt.
@@ -122,6 +123,7 @@ where
 			}
 
 			t.amount_debited = amount_debited;
+			t.messages = messages;
 
 			// write the output representing our change
 			for (change_amount, id, _) in &change_amounts_derivations {
@@ -195,6 +197,7 @@ where
 	);
 
 	context.add_output(&key_id, &None);
+	let messages = Some(slate.participant_messages());
 
 	// Create closure that adds the output to recipient's wallet
 	// (up to the caller to decide when to do)
@@ -206,6 +209,7 @@ where
 		t.tx_slate_id = Some(slate_id);
 		t.amount_credited = amount;
 		t.num_outputs = 1;
+		t.messages = messages;
 		batch.save(OutputData {
 			root_key_id: parent_key_id.clone(),
 			key_id: key_id_inner.clone(),

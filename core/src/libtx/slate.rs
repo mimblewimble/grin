@@ -22,7 +22,7 @@ use crate::core::transaction::{kernel_features, kernel_sig_msg, Transaction, Wei
 use crate::core::verifier_cache::LruVerifierCache;
 use crate::keychain::{BlindSum, BlindingFactor, Keychain};
 use crate::libtx::error::{Error, ErrorKind};
-use crate::libtx::{aggsig, build, tx_fee};
+use crate::libtx::{aggsig, build, secp_ser, tx_fee};
 use crate::util::secp;
 use crate::util::secp::key::{PublicKey, SecretKey};
 use crate::util::secp::Signature;
@@ -68,6 +68,33 @@ impl ParticipantData {
 	}
 }
 
+/// Public message data (for serialising and storage)
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct ParticipantMessageData {
+	/// id of the particpant in the tx
+	pub id: u64,
+	/// Public key
+	#[serde(with = "secp_ser::pubkey_serde")]
+	pub public_key: PublicKey,
+	/// Message,
+	pub message: Option<String>,
+	/// Signature
+	#[serde(with = "secp_ser::option_sig_serde")]
+	pub message_sig: Option<Signature>,
+}
+
+impl ParticipantMessageData {
+	/// extract relevant message data from participant data
+	pub fn from_participant_data(p: &ParticipantData) -> ParticipantMessageData {
+		ParticipantMessageData {
+			id: p.id,
+			public_key: p.public_blind_excess,
+			message: p.message.clone(),
+			message_sig: p.message_sig.clone(),
+		}
+	}
+}
+
 /// A 'Slate' is passed around to all parties to build up all of the public
 /// transaction data needed to create a finalized transaction. Callers can pass
 /// the slate around by whatever means they choose, (but we can provide some
@@ -96,6 +123,13 @@ pub struct Slate {
 	pub participant_data: Vec<ParticipantData>,
 	/// Slate format version
 	pub version: Option<u64>,
+}
+
+/// Helper just to facilitate serialization
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct ParticipantMessages {
+	/// included messages
+	pub messages: Vec<ParticipantMessageData>,
 }
 
 impl Slate {
@@ -279,8 +313,17 @@ impl Slate {
 			message: message,
 			message_sig: message_sig,
 		});
-
 		Ok(())
+	}
+
+	/// helper to return all participant messages
+	pub fn participant_messages(&self) -> ParticipantMessages {
+		let mut ret = ParticipantMessages { messages: vec![] };
+		for ref m in self.participant_data.iter() {
+			ret.messages
+				.push(ParticipantMessageData::from_participant_data(m));
+		}
+		ret
 	}
 
 	/// Somebody involved needs to generate an offset with their private key

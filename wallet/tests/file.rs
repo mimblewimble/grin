@@ -27,6 +27,8 @@ use std::fs;
 use std::thread;
 use std::time::Duration;
 
+use serde_json;
+
 fn clean_output_dir(test_dir: &str) {
 	let _ = fs::remove_dir_all(test_dir);
 }
@@ -137,7 +139,7 @@ fn file_exchange_test_impl(test_dir: &str) -> Result<(), libwallet::Error> {
 
 	// wallet 2 receives file, completes, sends file back
 	wallet::controller::foreign_single_use(wallet2.clone(), |api| {
-		api.receive_tx(&mut slate, None, Some(sender2_message))?;
+		api.receive_tx(&mut slate, None, Some(sender2_message.clone()))?;
 		adapter.send_tx_async(&receive_file, &mut slate)?;
 		Ok(())
 	})?;
@@ -171,6 +173,36 @@ fn file_exchange_test_impl(test_dir: &str) -> Result<(), libwallet::Error> {
 		assert!(wallet2_refreshed);
 		assert_eq!(wallet2_info.last_confirmed_height, bh);
 		assert_eq!(wallet2_info.total, 2 * reward);
+		Ok(())
+	})?;
+
+	// Check messages, all participants should have both
+	wallet::controller::owner_single_use(wallet1.clone(), |api| {
+		let (_, tx) = api.retrieve_txs(true, None, Some(slate.id))?;
+		assert_eq!(
+			tx[0].clone().messages.unwrap().messages[0].message,
+			Some(message.to_owned())
+		);
+		assert_eq!(
+			tx[0].clone().messages.unwrap().messages[1].message,
+			Some(sender2_message.to_owned())
+		);
+
+		let msg_json = serde_json::to_string_pretty(&tx[0].clone().messages.unwrap()).unwrap();
+		println!("{}", msg_json);
+		Ok(())
+	})?;
+
+	wallet::controller::owner_single_use(wallet2.clone(), |api| {
+		let (_, tx) = api.retrieve_txs(true, None, Some(slate.id))?;
+		assert_eq!(
+			tx[0].clone().messages.unwrap().messages[0].message,
+			Some(message.to_owned())
+		);
+		assert_eq!(
+			tx[0].clone().messages.unwrap().messages[1].message,
+			Some(sender2_message)
+		);
 		Ok(())
 	})?;
 
