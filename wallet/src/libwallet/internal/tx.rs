@@ -107,7 +107,7 @@ pub fn add_output_to_slate<T: ?Sized, C, K>(
 	parent_key_id: &Identifier,
 	participant_id: usize,
 	message: Option<String>,
-) -> Result<impl FnOnce(&mut T) -> Result<(), Error>, Error>
+) -> Result<(Context, impl FnOnce(&mut T, &Transaction) -> Result<(), Error>), Error>
 where
 	T: WalletBackend<C, K>,
 	C: NodeClient,
@@ -134,7 +134,7 @@ where
 		participant_id,
 	)?;
 
-	Ok(create_fn)
+	Ok((context, create_fn))
 }
 
 /// Complete a transaction as the sender

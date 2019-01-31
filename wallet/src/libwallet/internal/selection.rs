@@ -158,7 +158,7 @@ pub fn build_recipient_output<T: ?Sized, C, K>(
 	(
 		Identifier,
 		Context,
-		impl FnOnce(&mut T) -> Result<(), Error>,
+		impl FnOnce(&mut T, &Transaction) -> Result<(), Error>,
 	),
 	Error,
 >
@@ -192,7 +192,7 @@ where
 
 	// Create closure that adds the output to recipient's wallet
 	// (up to the caller to decide when to do)
-	let wallet_add_fn = move |wallet: &mut T| {
+	let wallet_add_fn = move |wallet: &mut T, tx: &Transaction| {
 		let commit = wallet.calc_commit_for_cache(amount, &key_id_inner)?;
 		let mut batch = wallet.batch()?;
 		let log_id = batch.next_tx_log_id(&parent_key_id)?;
@@ -215,6 +215,7 @@ where
 			tx_log_entry: Some(log_id),
 		})?;
 		batch.save_tx_log_entry(t, &parent_key_id)?;
+		wallet.store_tx(&format!("{}", t.tx_slate_id.unwrap()), tx)?;
 		batch.commit()?;
 		Ok(())
 	};
