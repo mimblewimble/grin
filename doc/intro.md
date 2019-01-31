@@ -119,7 +119,7 @@ Where:
 Neither _v_ nor _r_ can be deduced, leveraging the fundamental properties of Elliptic
 Curve Cryptography. `r*G + v*H` is called a _Pedersen Commitment_.
 
-As a an example, let's assume we want to build a transaction with two inputs and one
+As an example, let's assume we want to build a transaction with two inputs and one
 output. We have (ignoring fees):
 
 * vi1 and vi2 as input values.
