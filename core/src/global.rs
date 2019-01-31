@@ -267,15 +267,12 @@ pub fn is_production_mode() -> bool {
 }
 
 /// Are we in floonet?
+/// Note: We do not have a corresponding is_mainnet() as we want any tests to be as close
+/// as possible to "mainnet" configuration as possible.
+/// We want to avoid missing any mainnet only code paths.
 pub fn is_floonet() -> bool {
 	let param_ref = CHAIN_TYPE.read();
 	ChainTypes::Floonet == *param_ref
-}
-
-/// Are we for real?
-pub fn is_mainnet() -> bool {
-	let param_ref = CHAIN_TYPE.read();
-	ChainTypes::Mainnet == *param_ref
 }
 
 /// Helper function to get a nonce known to create a valid POW on
