@@ -651,14 +651,17 @@ where
 			None => None,
 		};
 
-		let (slate, context, lock_fn) = tx::create_send_tx(
+		let mut slate = tx::new_tx_slate(&mut *w, amount, 2)?;
+
+		let (context, lock_fn) = tx::add_inputs_to_slate(
 			&mut *w,
-			amount,
+			&mut slate,
 			minimum_confirmations,
 			max_outputs,
 			num_change_outputs,
 			selection_strategy_is_use_all,
 			&parent_key_id,
+			0,
 			message,
 		)?;
 
@@ -694,7 +697,7 @@ where
 		let mut w = self.wallet.lock();
 		w.open_with_credentials()?;
 		let context = w.get_private_context(slate.id.as_bytes())?;
-		tx::complete_tx(&mut *w, slate, &context)?;
+		tx::complete_tx(&mut *w, slate, 0, &context)?;
 		tx::update_stored_tx(&mut *w, slate)?;
 		tx::update_message(&mut *w, slate)?;
 		{
@@ -893,18 +896,10 @@ where
 			None => None,
 		};
 
-		let res = tx::receive_tx(&mut *w, slate, &parent_key_id, message);
+		let create_fn = tx::add_output_to_slate(&mut *w, slate, &parent_key_id, 1, message)?;
+		create_fn(&mut *w)?;
+		tx::update_message(&mut *w, slate)?;
 		w.close()?;
-
-		if let Err(e) = res {
-			error!("api: receive_tx: failed with error: {}", e);
-			Err(e)
-		} else {
-			debug!(
-				"api: receive_tx: successfully received tx: {}",
-				slate.tx.hash()
-			);
-			Ok(())
-		}
+		Ok(())
 	}
 }

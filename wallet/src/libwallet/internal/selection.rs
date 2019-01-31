@@ -31,10 +31,7 @@ use std::collections::HashMap;
 pub fn build_send_tx<T: ?Sized, C, K>(
 	wallet: &mut T,
 	slate: &mut Slate,
-	amount: u64,
-	current_height: u64,
 	minimum_confirmations: u64,
-	lock_height: u64,
 	max_outputs: usize,
 	change_outputs: usize,
 	selection_strategy_is_use_all: bool,
@@ -51,19 +48,18 @@ where
 	C: NodeClient,
 	K: Keychain,
 {
-	let (elems, inputs, change_amounts_derivations, amount, fee) = select_send_tx(
+	let (elems, inputs, change_amounts_derivations, fee) = select_send_tx(
 		wallet,
-		amount,
-		current_height,
+		slate.amount,
+		slate.height,
 		minimum_confirmations,
-		lock_height,
+		slate.lock_height,
 		max_outputs,
 		change_outputs,
 		selection_strategy_is_use_all,
 		&parent_key_id,
 	)?;
 
-	slate.amount = amount;
 	slate.fee = fee;
 
 	let keychain = wallet.keychain().clone();
@@ -95,6 +91,7 @@ where
 	let _lock_outputs = context.get_outputs().clone();
 	let messages = Some(slate.participant_messages());
 	let slate_id = slate.id.clone();
+	let height = slate.height;
 
 	// Return a closure to acquire wallet lock and lock the coins being spent
 	// so we avoid accidental double spend attempt.
@@ -132,7 +129,7 @@ where
 					mmr_index: None,
 					value: change_amount.clone(),
 					status: OutputStatus::Unconfirmed,
-					height: current_height,
+					height: height,
 					lock_height: 0,
 					is_coinbase: false,
 					tx_log_entry: Some(log_id),
@@ -153,7 +150,7 @@ where
 /// returning the key of the fresh output and a closure
 /// that actually performs the addition of the output to the
 /// wallet
-pub fn build_recipient_output_with_slate<T: ?Sized, C, K>(
+pub fn build_recipient_output<T: ?Sized, C, K>(
 	wallet: &mut T,
 	slate: &mut Slate,
 	parent_key_id: Identifier,
@@ -242,7 +239,6 @@ pub fn select_send_tx<T: ?Sized, C, K>(
 		Vec<Box<build::Append<K>>>,
 		Vec<OutputData>,
 		Vec<(u64, Identifier, Option<u64>)>, // change amounts and derivations
-		u64,                                 // amount
 		u64,                                 // fee
 	),
 	Error,
@@ -339,7 +335,7 @@ where
 	// on tx being sent (based on current chain height via api).
 	parts.push(build::with_lock_height(lock_height));
 
-	Ok((parts, coins, change_amounts_derivations, amount, fee))
+	Ok((parts, coins, change_amounts_derivations, fee))
 }
 
 /// Selects inputs and change for a transaction
