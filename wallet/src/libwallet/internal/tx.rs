@@ -39,7 +39,6 @@ where
 	// create an output using the amount in the slate
 	let (_, mut context, receiver_create_fn) =
 		selection::build_recipient_output_with_slate(wallet, slate, parent_key_id.clone())?;
-
 	// fill public keys
 	let _ = slate.fill_round_1(
 		wallet.keychain(),
@@ -54,6 +53,8 @@ where
 
 	// Save output in wallet
 	let _ = receiver_create_fn(wallet);
+
+	update_message(wallet, slate)?;
 
 	Ok(())
 }
@@ -224,6 +225,26 @@ where
 	Ok(())
 }
 
+/// Update the transaction participant messages
+pub fn update_message<T: ?Sized, C, K>(wallet: &mut T, slate: &Slate) -> Result<(), Error>
+where
+	T: WalletBackend<C, K>,
+	C: NodeClient,
+	K: Keychain,
+{
+	let tx_vec = updater::retrieve_txs(wallet, None, Some(slate.id), None, false)?;
+	if tx_vec.is_empty() {
+		return Err(ErrorKind::TransactionDoesntExist(slate.id.to_string()))?;
+	}
+	let mut batch = wallet.batch()?;
+	for mut tx in tx_vec.into_iter() {
+		tx.messages = Some(slate.participant_messages());
+		let parent_key = tx.parent_key_id.clone();
+		batch.save_tx_log_entry(tx, &parent_key)?;
+	}
+	batch.commit()?;
+	Ok(())
+}
 #[cfg(test)]
 mod test {
 	use crate::core::libtx::build;

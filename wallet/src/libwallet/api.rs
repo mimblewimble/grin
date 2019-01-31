@@ -48,6 +48,8 @@ use crate::libwallet::{Error, ErrorKind};
 use crate::util;
 use crate::util::secp::{pedersen, ContextFlag, Secp256k1};
 
+const USER_MESSAGE_MAX_LEN: usize = 256;
+
 /// Functions intended for use by the owner (e.g. master seed holder) of the wallet.
 pub struct APIOwner<W: ?Sized, C, K>
 where
@@ -551,7 +553,8 @@ where
 	/// ParticipantData within the slate. This message will include a signature created with the
 	/// sender's private keys, and will be publically verifiable. Note this message is for
 	/// the convenience of the participants during the exchange; it is not included in the final
-	/// transaction sent to the chain. Validation of this message is optional.
+	/// transaction sent to the chain. The message will be truncated to 256 characters.
+	/// Validation of this message is optional.
 	///
 	/// # Returns
 	/// * a result containing:
@@ -640,6 +643,14 @@ where
 			None => w.parent_key_id(),
 		};
 
+		let message = match message {
+			Some(mut m) => {
+				m.truncate(USER_MESSAGE_MAX_LEN);
+				Some(m)
+			}
+			None => None,
+		};
+
 		let (slate, context, lock_fn) = tx::create_send_tx(
 			&mut *w,
 			amount,
@@ -685,12 +696,12 @@ where
 		let context = w.get_private_context(slate.id.as_bytes())?;
 		tx::complete_tx(&mut *w, slate, &context)?;
 		tx::update_stored_tx(&mut *w, slate)?;
+		tx::update_message(&mut *w, slate)?;
 		{
 			let mut batch = w.batch()?;
 			batch.delete_private_context(slate.id.as_bytes())?;
 			batch.commit()?;
 		}
-
 		w.close()?;
 		Ok(())
 	}
@@ -873,6 +884,15 @@ where
 				return Err(ErrorKind::TransactionAlreadyReceived(slate.id.to_string()).into());
 			}
 		}
+
+		let message = match message {
+			Some(mut m) => {
+				m.truncate(USER_MESSAGE_MAX_LEN);
+				Some(m)
+			}
+			None => None,
+		};
+
 		let res = tx::receive_tx(&mut *w, slate, &parent_key_id, message);
 		w.close()?;
 

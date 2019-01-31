@@ -253,6 +253,16 @@ mod wallet_tests {
 		let mut bh = 10u64;
 		let _ = test_framework::award_blocks_to_wallet(&chain, wallet1.clone(), bh as usize);
 
+		let very_long_message = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdef\
+		                         ABCDEFGHIJKLMNOPQRSTUVWXYZabcdef\
+		                         ABCDEFGHIJKLMNOPQRSTUVWXYZabcdef\
+		                         ABCDEFGHIJKLMNOPQRSTUVWXYZabcdef\
+		                         ABCDEFGHIJKLMNOPQRSTUVWXYZabcdef\
+		                         ABCDEFGHIJKLMNOPQRSTUVWXYZabcdef\
+		                         ABCDEFGHIJKLMNOPQRSTUVWXYZabcdef\
+		                         ABCDEFGHIJKLMNOPQRSTUVWXYZabcdef\
+		                         This part should all be truncated";
+
 		// Update info and check
 		let arg_vec = vec!["grin", "wallet", "-p", "password", "-a", "mining", "info"];
 		execute_command(&app, test_dir, "wallet1", &client1, arg_vec)?;
@@ -273,7 +283,7 @@ mod wallet_tests {
 			"-d",
 			&file_name,
 			"-g",
-			"Love, Yeast",
+			very_long_message,
 			"10",
 		];
 		execute_command(&app, test_dir, "wallet1", &client1, arg_vec)?;
@@ -489,6 +499,12 @@ mod wallet_tests {
 
 		// txs and outputs (mostly spit out for a visual in test logs)
 		let arg_vec = vec!["grin", "wallet", "-p", "password", "-a", "mining", "txs"];
+		execute_command(&app, test_dir, "wallet1", &client1, arg_vec)?;
+
+		// message output (mostly spit out for a visual in test logs)
+		let arg_vec = vec![
+			"grin", "wallet", "-p", "password", "-a", "mining", "txs", "-i", "10",
+		];
 		execute_command(&app, test_dir, "wallet1", &client1, arg_vec)?;
 
 		// txs and outputs (mostly spit out for a visual in test logs)

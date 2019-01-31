@@ -173,3 +173,58 @@ where
 {
 	serializer.serialize_str(&to_hex(bytes.as_ref().to_vec()))
 }
+
+// Test serialization methods of components that are being used
+#[cfg(test)]
+mod test {
+	use super::*;
+	use crate::libtx::aggsig;
+	use crate::util::secp::key::{PublicKey, SecretKey};
+	use crate::util::secp::{Message, Signature};
+	use crate::util::static_secp_instance;
+
+	use serde_json;
+
+	use rand::{thread_rng, Rng};
+
+	#[derive(Serialize, Deserialize, PartialEq, Eq, Debug, Clone)]
+	struct SerTest {
+		#[serde(with = "pubkey_serde")]
+		pub pub_key: PublicKey,
+		#[serde(with = "option_sig_serde")]
+		pub opt_sig: Option<Signature>,
+		#[serde(with = "sig_serde")]
+		pub sig: Signature,
+	}
+
+	impl SerTest {
+		pub fn random() -> SerTest {
+			let static_secp = static_secp_instance();
+			let secp = static_secp.lock();
+			let sk = SecretKey::new(&secp, &mut thread_rng());
+			let mut msg = [0u8; 32];
+			thread_rng().fill(&mut msg);
+			let msg = Message::from_slice(&msg).unwrap();
+			let sig = aggsig::sign_single(&secp, &msg, &sk, None).unwrap();
+			SerTest {
+				pub_key: PublicKey::from_secret_key(&secp, &sk).unwrap(),
+				opt_sig: Some(sig.clone()),
+				sig: sig.clone(),
+			}
+		}
+	}
+
+	#[test]
+	fn ser_secp_primitives() {
+		for _ in 0..10 {
+			let s = SerTest::random();
+			println!("Before Serialization: {:?}", s);
+			let serialized = serde_json::to_string_pretty(&s).unwrap();
+			println!("JSON: {}", serialized);
+			let deserialized: SerTest = serde_json::from_str(&serialized).unwrap();
+			println!("After Serialization: {:?}", deserialized);
+			println!();
+			assert_eq!(s, deserialized);
+		}
+	}
+}
