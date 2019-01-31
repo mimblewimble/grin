@@ -41,8 +41,8 @@ use crate::core::ser;
 use crate::keychain::{Identifier, Keychain};
 use crate::libwallet::internal::{keys, tx, updater};
 use crate::libwallet::types::{
-	AcctPathMapping, BlockFees, CbData, NodeClient, OutputData, OutputLockFn, TxLogEntry, TxLogEntryType,
-	TxWrapper, WalletBackend, WalletInfo,
+	AcctPathMapping, BlockFees, CbData, NodeClient, OutputData, OutputLockFn, TxLogEntry,
+	TxLogEntryType, TxWrapper, WalletBackend, WalletInfo,
 };
 use crate::libwallet::{Error, ErrorKind};
 use crate::util;
@@ -623,13 +623,7 @@ where
 		num_change_outputs: usize,
 		selection_strategy_is_use_all: bool,
 		message: Option<String>,
-	) -> Result<
-		(
-			Slate,
-			OutputLockFn<W, C, K>,
-		),
-		Error,
-	> {
+	) -> Result<(Slate, OutputLockFn<W, C, K>), Error> {
 		let mut w = self.wallet.lock();
 		w.open_with_credentials()?;
 		let parent_key_id = match src_acct_name {
@@ -896,7 +890,8 @@ where
 			None => None,
 		};
 
-		let (_, mut create_fn) = tx::add_output_to_slate(&mut *w, slate, &parent_key_id, 1, message)?;
+		let (_, mut create_fn) =
+			tx::add_output_to_slate(&mut *w, slate, &parent_key_id, 1, message)?;
 		create_fn(&mut *w, &slate.tx, PhantomData, PhantomData)?;
 		tx::update_message(&mut *w, slate)?;
 		w.close()?;

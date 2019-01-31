@@ -53,13 +53,7 @@ pub fn add_inputs_to_slate<T: ?Sized, C, K>(
 	parent_key_id: &Identifier,
 	participant_id: usize,
 	message: Option<String>,
-) -> Result<
-	(
-		Context,
-		OutputLockFn<T, C, K>,
-	),
-	Error,
->
+) -> Result<(Context, OutputLockFn<T, C, K>), Error>
 where
 	T: WalletBackend<C, K>,
 	C: NodeClient,
@@ -106,13 +100,7 @@ pub fn add_output_to_slate<T: ?Sized, C, K>(
 	parent_key_id: &Identifier,
 	participant_id: usize,
 	message: Option<String>,
-) -> Result<
-	(
-		Context,
-		OutputLockFn<T, C, K>,
-	),
-	Error,
->
+) -> Result<(Context, OutputLockFn<T, C, K>), Error>
 where
 	T: WalletBackend<C, K>,
 	C: NodeClient,
