@@ -28,9 +28,9 @@ use std::collections::HashMap;
 /// and saves the private wallet identifiers of our selected outputs
 /// into our transaction context
 
-pub fn build_send_tx_slate<T: ?Sized, C, K>(
+pub fn build_send_tx<T: ?Sized, C, K>(
 	wallet: &mut T,
-	num_participants: usize,
+	slate: &mut Slate,
 	amount: u64,
 	current_height: u64,
 	minimum_confirmations: u64,
@@ -41,7 +41,6 @@ pub fn build_send_tx_slate<T: ?Sized, C, K>(
 	parent_key_id: Identifier,
 ) -> Result<
 	(
-		Slate,
 		Context,
 		impl FnOnce(&mut T, &Transaction) -> Result<(), Error>,
 	),
@@ -64,16 +63,10 @@ where
 		&parent_key_id,
 	)?;
 
-	// Create public slate
-	let mut slate = Slate::blank(num_participants);
 	slate.amount = amount;
-	slate.height = current_height;
-	slate.lock_height = lock_height;
 	slate.fee = fee;
-	let slate_id = slate.id.clone();
 
 	let keychain = wallet.keychain().clone();
-
 	let blinding = slate.add_transaction_elements(&keychain, elems)?;
 
 	// Create our own private context
@@ -101,6 +94,7 @@ where
 	let lock_inputs = context.get_inputs().clone();
 	let _lock_outputs = context.get_outputs().clone();
 	let messages = Some(slate.participant_messages());
+	let slate_id = slate.id.clone();
 
 	// Return a closure to acquire wallet lock and lock the coins being spent
 	// so we avoid accidental double spend attempt.
@@ -152,7 +146,7 @@ where
 		Ok(())
 	};
 
-	Ok((slate, context, update_sender_wallet_fn))
+	Ok((context, update_sender_wallet_fn))
 }
 
 /// Creates a new output in the wallet for the recipient,

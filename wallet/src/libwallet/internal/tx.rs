@@ -90,6 +90,12 @@ where
 
 	let lock_height = current_height;
 
+	// Create slate
+	let num_participants = 2;
+	let mut slate = Slate::blank(num_participants);
+	slate.height = current_height;
+	slate.lock_height = lock_height;
+
 	// Sender selects outputs into a new slate and save our corresponding keys in
 	// a transaction context. The secret key in our transaction context will be
 	// randomly selected. This returns the public slate, and a closure that locks
@@ -97,9 +103,9 @@ where
 	// according to plan
 	// This function is just a big helper to do all of that, in theory
 	// this process can be split up in any way
-	let (mut slate, mut context, sender_lock_fn) = selection::build_send_tx_slate(
+	let (mut context, sender_lock_fn) = selection::build_send_tx(
 		wallet,
-		2,
+		&mut slate,
 		amount,
 		current_height,
 		minimum_confirmations,
