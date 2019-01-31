@@ -59,12 +59,12 @@ pub fn option_to_not_found<T>(res: Result<Option<T>, Error>, field_name: &str) -
 /// Be aware of transactional semantics in lmdb
 /// (transactions are per environment, not per database).
 pub fn new_env(path: String) -> lmdb::Environment {
-	new_named_env(path, "lmdb".into())
+	new_named_env(path, "lmdb".into(), None)
 }
 
 /// TODO - We probably need more flexibility here, 500GB probably too big for peers...
 /// Create a new LMDB env under the provided directory with the provided name.
-pub fn new_named_env(path: String, name: String) -> lmdb::Environment {
+pub fn new_named_env(path: String, name: String, max_readers: Option<u32>) -> lmdb::Environment {
 	let full_path = [path, name].join("/");
 	fs::create_dir_all(&full_path)
 		.expect("Unable to create directory 'db_root' to store chain_data");
@@ -78,6 +78,11 @@ pub fn new_named_env(path: String, name: String) -> lmdb::Environment {
 		.unwrap_or_else(|e| {
 			panic!("Unable to allocate LMDB space: {:?}", e);
 		});
+	if let Some(max_readers) = max_readers {
+		env_builder
+			.set_maxreaders(max_readers)
+			.expect("Unable set max_readers");
+	}
 	unsafe {
 		env_builder
 			.open(&full_path, lmdb::open::NOTLS, 0o600)
