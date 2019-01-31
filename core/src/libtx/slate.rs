@@ -122,7 +122,12 @@ pub struct Slate {
 	/// is receiver, though this will change for multi-party
 	pub participant_data: Vec<ParticipantData>,
 	/// Slate format version
-	pub version: Option<u64>,
+	#[serde(default = "no_version")]
+	pub version: u64,
+}
+
+fn no_version() -> u64 {
+	0
 }
 
 /// Helper just to facilitate serialization
@@ -144,7 +149,7 @@ impl Slate {
 			height: 0,
 			lock_height: 0,
 			participant_data: vec![],
-			version: Some(CURRENT_SLATE_VERSION),
+			version: CURRENT_SLATE_VERSION,
 		}
 	}
 
