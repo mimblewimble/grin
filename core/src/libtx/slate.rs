@@ -31,6 +31,8 @@ use rand::thread_rng;
 use std::sync::Arc;
 use uuid::Uuid;
 
+const CURRENT_SLATE_VERSION: u64 = 1;
+
 /// Public data for each participant in the slate
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -119,6 +121,13 @@ pub struct Slate {
 	/// insert their public data here. For now, 0 is sender and 1
 	/// is receiver, though this will change for multi-party
 	pub participant_data: Vec<ParticipantData>,
+	/// Slate format version
+	#[serde(default = "no_version")]
+	pub version: u64,
+}
+
+fn no_version() -> u64 {
+	0
 }
 
 /// Helper just to facilitate serialization
@@ -140,6 +149,7 @@ impl Slate {
 			height: 0,
 			lock_height: 0,
 			participant_data: vec![],
+			version: CURRENT_SLATE_VERSION,
 		}
 	}
 
