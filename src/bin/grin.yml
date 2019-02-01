@@ -1,5 +1,5 @@
 name: grin
-version: "1.0.0"
+version: "1.0.1"
 about: Lightweight implementation of the MimbleWimble protocol.
 author: The Grin Team
 
@@ -301,4 +301,3 @@ subcommands:
             about: Restores a wallet contents from a seed file
         - check:
             about: Checks a wallet's outputs against a live node, repairing and restoring missing outputs if required
- 
