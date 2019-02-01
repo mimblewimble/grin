@@ -16,79 +16,51 @@
 
 use uuid::Uuid;
 
-use crate::core::core::Transaction;
 use crate::core::libtx::slate::Slate;
 use crate::keychain::{Identifier, Keychain};
 use crate::libwallet::internal::{selection, updater};
-use crate::libwallet::types::{Context, NodeClient, TxLogEntryType, WalletBackend};
+use crate::libwallet::types::{Context, NodeClient, OutputLockFn, TxLogEntryType, WalletBackend};
 use crate::libwallet::{Error, ErrorKind};
 
-/// Receive a transaction, modifying the slate accordingly (which can then be
-/// sent back to sender for posting)
-pub fn receive_tx<T: ?Sized, C, K>(
+/// Creates a new slate for a transaction, can be called by anyone involved in
+/// the transaction (sender(s), receiver(s))
+pub fn new_tx_slate<T: ?Sized, C, K>(
 	wallet: &mut T,
-	slate: &mut Slate,
-	parent_key_id: &Identifier,
-	message: Option<String>,
-) -> Result<(), Error>
+	amount: u64,
+	num_participants: usize,
+) -> Result<Slate, Error>
 where
 	T: WalletBackend<C, K>,
 	C: NodeClient,
 	K: Keychain,
 {
-	// create an output using the amount in the slate
-	let (_, mut context, receiver_create_fn) =
-		selection::build_recipient_output_with_slate(wallet, slate, parent_key_id.clone())?;
-	// fill public keys
-	let _ = slate.fill_round_1(
-		wallet.keychain(),
-		&mut context.sec_key,
-		&context.sec_nonce,
-		1,
-		message,
-	)?;
-
-	// perform partial sig
-	let _ = slate.fill_round_2(wallet.keychain(), &context.sec_key, &context.sec_nonce, 1)?;
-
-	// Save output in wallet
-	let _ = receiver_create_fn(wallet);
-
-	update_message(wallet, slate)?;
-
-	Ok(())
+	let current_height = wallet.w2n_client().get_chain_height()?;
+	let mut slate = Slate::blank(num_participants);
+	slate.amount = amount;
+	slate.height = current_height;
+	slate.lock_height = current_height;
+	Ok(slate)
 }
 
-/// Issue a new transaction to the provided sender by spending some of our
-/// wallet
-pub fn create_send_tx<T: ?Sized, C, K>(
+/// Add inputs to the slate (effectively becoming the sender)
+pub fn add_inputs_to_slate<T: ?Sized, C, K>(
 	wallet: &mut T,
-	amount: u64,
+	slate: &mut Slate,
 	minimum_confirmations: u64,
 	max_outputs: usize,
 	num_change_outputs: usize,
 	selection_strategy_is_use_all: bool,
 	parent_key_id: &Identifier,
+	participant_id: usize,
 	message: Option<String>,
-) -> Result<
-	(
-		Slate,
-		Context,
-		impl FnOnce(&mut T, &Transaction) -> Result<(), Error>,
-	),
-	Error,
->
+) -> Result<(Context, OutputLockFn<T, C, K>), Error>
 where
 	T: WalletBackend<C, K>,
 	C: NodeClient,
 	K: Keychain,
 {
-	// Get lock height
-	let current_height = wallet.w2n_client().get_chain_height()?;
-	// ensure outputs we're selecting are up to date
+	// sender should always refresh outputs
 	updater::refresh_outputs(wallet, parent_key_id, false)?;
-
-	let lock_height = current_height;
 
 	// Sender selects outputs into a new slate and save our corresponding keys in
 	// a transaction context. The secret key in our transaction context will be
@@ -97,13 +69,10 @@ where
 	// according to plan
 	// This function is just a big helper to do all of that, in theory
 	// this process can be split up in any way
-	let (mut slate, mut context, sender_lock_fn) = selection::build_send_tx_slate(
+	let (mut context, sender_lock_fn) = selection::build_send_tx(
 		wallet,
-		2,
-		amount,
-		current_height,
+		slate,
 		minimum_confirmations,
-		lock_height,
 		max_outputs,
 		num_change_outputs,
 		selection_strategy_is_use_all,
@@ -117,17 +86,55 @@ where
 		wallet.keychain(),
 		&mut context.sec_key,
 		&context.sec_nonce,
-		0,
+		participant_id,
 		message,
 	)?;
 
-	Ok((slate, context, sender_lock_fn))
+	Ok((context, sender_lock_fn))
+}
+
+/// Add outputs to the slate, becoming the recipient
+pub fn add_output_to_slate<T: ?Sized, C, K>(
+	wallet: &mut T,
+	slate: &mut Slate,
+	parent_key_id: &Identifier,
+	participant_id: usize,
+	message: Option<String>,
+) -> Result<(Context, OutputLockFn<T, C, K>), Error>
+where
+	T: WalletBackend<C, K>,
+	C: NodeClient,
+	K: Keychain,
+{
+	// create an output using the amount in the slate
+	let (_, mut context, create_fn) =
+		selection::build_recipient_output(wallet, slate, parent_key_id.clone())?;
+
+	// fill public keys
+	let _ = slate.fill_round_1(
+		wallet.keychain(),
+		&mut context.sec_key,
+		&context.sec_nonce,
+		1,
+		message,
+	)?;
+
+	// perform partial sig
+	let _ = slate.fill_round_2(
+		wallet.keychain(),
+		&context.sec_key,
+		&context.sec_nonce,
+		participant_id,
+	)?;
+
+	Ok((context, create_fn))
 }
 
 /// Complete a transaction as the sender
 pub fn complete_tx<T: ?Sized, C, K>(
 	wallet: &mut T,
 	slate: &mut Slate,
+	participant_id: usize,
 	context: &Context,
 ) -> Result<(), Error>
 where
@@ -135,7 +142,12 @@ where
 	C: NodeClient,
 	K: Keychain,
 {
-	let _ = slate.fill_round_2(wallet.keychain(), &context.sec_key, &context.sec_nonce, 0)?;
+	let _ = slate.fill_round_2(
+		wallet.keychain(),
+		&context.sec_key,
+		&context.sec_nonce,
+		participant_id,
+	)?;
 	// Final transaction can be built by anyone at this stage
 	let res = slate.finalize(wallet.keychain());
 	if let Err(e) = res {
