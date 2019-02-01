@@ -349,6 +349,9 @@ pub fn parse_send_args(args: &ArgMatches) -> Result<command::SendArgs, ParseErro
 	// selection_strategy
 	let selection_strategy = parse_required(args, "selection_strategy")?;
 
+	// estimate_selection_strategies
+	let estimate_selection_strategies = args.is_present("estimate_selection_strategies");
+
 	// method
 	let method = parse_required(args, "method")?;
 
@@ -360,10 +363,18 @@ pub fn parse_send_args(args: &ArgMatches) -> Result<command::SendArgs, ParseErro
 				None => "default",
 			}
 		} else {
-			parse_required(args, "dest")?
+			if !estimate_selection_strategies {
+				parse_required(args, "dest")?
+			} else {
+				""
+			}
 		}
 	};
-	if method == "http" && !dest.starts_with("http://") && !dest.starts_with("https://") {
+	if !estimate_selection_strategies
+		&& method == "http"
+		&& !dest.starts_with("http://")
+		&& !dest.starts_with("https://")
+	{
 		let msg = format!(
 			"HTTP Destination should start with http://: or https://: {}",
 			dest,
@@ -386,6 +397,7 @@ pub fn parse_send_args(args: &ArgMatches) -> Result<command::SendArgs, ParseErro
 		message: message,
 		minimum_confirmations: min_c,
 		selection_strategy: selection_strategy.to_owned(),
+		estimate_selection_strategies,
 		method: method.to_owned(),
 		dest: dest.to_owned(),
 		change_outputs: change_outputs,
@@ -562,7 +574,11 @@ pub fn wallet_command(
 		}
 		("send", Some(args)) => {
 			let a = arg_parse!(parse_send_args(&args));
-			command::send(inst_wallet(), a)
+			command::send(
+				inst_wallet(),
+				a,
+				wallet_config.dark_background_color_scheme.unwrap_or(true),
+			)
 		}
 		("receive", Some(args)) => {
 			let a = arg_parse!(parse_receive_args(&args));

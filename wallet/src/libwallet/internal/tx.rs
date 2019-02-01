@@ -42,6 +42,52 @@ where
 	Ok(slate)
 }
 
+/// Estimates locked amount and fee for the transaction without creating one
+pub fn estimate_send_tx<T: ?Sized, C, K>(
+	wallet: &mut T,
+	amount: u64,
+	minimum_confirmations: u64,
+	max_outputs: usize,
+	num_change_outputs: usize,
+	selection_strategy_is_use_all: bool,
+	parent_key_id: &Identifier,
+) -> Result<
+	(
+		u64, // total
+		u64, // fee
+	),
+	Error,
+>
+where
+	T: WalletBackend<C, K>,
+	C: NodeClient,
+	K: Keychain,
+{
+	// Get lock height
+	let current_height = wallet.w2n_client().get_chain_height()?;
+	// ensure outputs we're selecting are up to date
+	updater::refresh_outputs(wallet, parent_key_id, false)?;
+
+	// Sender selects outputs into a new slate and save our corresponding keys in
+	// a transaction context. The secret key in our transaction context will be
+	// randomly selected. This returns the public slate, and a closure that locks
+	// our inputs and outputs once we're convinced the transaction exchange went
+	// according to plan
+	// This function is just a big helper to do all of that, in theory
+	// this process can be split up in any way
+	let (_coins, total, _amount, fee) = selection::select_coins_and_fee(
+		wallet,
+		amount,
+		current_height,
+		minimum_confirmations,
+		max_outputs,
+		num_change_outputs,
+		selection_strategy_is_use_all,
+		parent_key_id,
+	)?;
+	Ok((total, fee))
+}
+
 /// Add inputs to the slate (effectively becoming the sender)
 pub fn add_inputs_to_slate<T: ?Sized, C, K>(
 	wallet: &mut T,

@@ -226,6 +226,33 @@ fn basic_transaction_api(test_dir: &str) -> Result<(), libwallet::Error> {
 		Ok(())
 	})?;
 
+	// Estimate fee and locked amount for a transaction
+	wallet::controller::owner_single_use(wallet1.clone(), |sender_api| {
+		let (total, fee) = sender_api.estimate_initiate_tx(
+			None,
+			amount * 2, // amount
+			2,          // minimum confirmations
+			500,        // max outputs
+			1,          // num change outputs
+			true,       // select all outputs
+		)?;
+		assert_eq!(total, 600_000_000_000);
+		assert_eq!(fee, 4_000_000);
+
+		let (total, fee) = sender_api.estimate_initiate_tx(
+			None,
+			amount * 2, // amount
+			2,          // minimum confirmations
+			500,        // max outputs
+			1,          // num change outputs
+			false,      // select the smallest amount of outputs
+		)?;
+		assert_eq!(total, 180_000_000_000);
+		assert_eq!(fee, 6_000_000);
+
+		Ok(())
+	})?;
+
 	// Send another transaction, but don't post to chain immediately and use
 	// the stored transaction instead
 	wallet::controller::owner_single_use(wallet1.clone(), |sender_api| {
