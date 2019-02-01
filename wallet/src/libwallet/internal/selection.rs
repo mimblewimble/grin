@@ -92,6 +92,7 @@ where
 	let update_sender_wallet_fn =
 		move |wallet: &mut T, tx: &Transaction, _: PhantomData<C>, _: PhantomData<K>| {
 			let tx_entry = {
+				// These ensure the closure remains FnMut
 				let lock_inputs = lock_inputs_in.clone();
 				let messages = messages_in.clone();
 				let slate_id = slate_id_in.clone();
@@ -186,6 +187,7 @@ where
 	// (up to the caller to decide when to do)
 	let wallet_add_fn =
 		move |wallet: &mut T, _tx: &Transaction, _: PhantomData<C>, _: PhantomData<K>| {
+			// Ensure closure remains FnMut
 			let messages = messages_in.clone();
 			let commit = wallet.calc_commit_for_cache(amount, &key_id_inner)?;
 			let mut batch = wallet.batch()?;
