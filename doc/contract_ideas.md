@@ -7,7 +7,7 @@
 Note that this requires both chains to support hash preimages: all Bitcoin script derivatives, Ethereum, and now Mimblewimble support this." - Andrew Poelstra
 - https://lists.launchpad.net/mimblewimble/msg00022.html
 
-"At the Stanford BPASE Conference [https://cyber.stanford.edu/blockchainconf] I gave a talk where I briefly mentioned that it was possible to do atomic swaps with no preimages at all."
+"At the [Stanford BPASE Conference](https://cyber.stanford.edu/blockchainconf) I gave a talk where I briefly mentioned that it was possible to do atomic swaps with no preimages at all."
 
 "Ok, so algebraically how do atomic swaps work in a scriptless way? Suppose I'm trying to send Igno 1 MW1 coin on one chain in exchange for MW2 coin on another. Then:
 
