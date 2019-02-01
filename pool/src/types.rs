@@ -17,12 +17,12 @@
 
 use chrono::prelude::{DateTime, Utc};
 
-use self::core::consensus;
 use self::core::core::block;
 use self::core::core::committed;
 use self::core::core::hash::Hash;
 use self::core::core::transaction::{self, Transaction};
 use self::core::core::{BlockHeader, BlockSums};
+use self::core::{consensus, global};
 use grin_core as core;
 use grin_keychain as keychain;
 
@@ -130,7 +130,7 @@ fn default_max_stempool_size() -> usize {
 	50_000
 }
 fn default_mineable_max_weight() -> usize {
-	consensus::MAX_BLOCK_WEIGHT - consensus::BLOCK_OUTPUT_WEIGHT - consensus::BLOCK_KERNEL_WEIGHT
+	global::max_block_weight()
 }
 
 /// Represents a single entry in the pool.

@@ -14,7 +14,6 @@
 
 //! Transactions
 
-use crate::consensus;
 use crate::core::hash::Hashed;
 use crate::core::verifier_cache::VerifierCache;
 use crate::core::{committed, Committed};
@@ -28,9 +27,10 @@ use crate::util::secp;
 use crate::util::secp::pedersen::{Commitment, RangeProof};
 use crate::util::static_secp_instance;
 use crate::util::RwLock;
+use crate::{consensus, global};
 use enum_primitive::FromPrimitive;
-use std::cmp::max;
 use std::cmp::Ordering;
+use std::cmp::{max, min};
 use std::collections::HashSet;
 use std::sync::Arc;
 use std::{error, fmt};
@@ -375,6 +375,12 @@ impl FixedLength for TxKernelEntry {
 pub enum Weighting {
 	/// Tx represents a tx (max block weight, accounting for additional coinbase reward).
 	AsTransaction,
+	/// Tx representing a tx with artificially limited max_weight.
+	/// This is used when selecting mineable txs from the pool.
+	AsLimitedTransaction {
+		/// The maximum (block) weight that we will allow.
+		max_weight: usize,
+	},
 	/// Tx represents a block (max block weight).
 	AsBlock,
 	/// No max weight limit (skip the weight check).
@@ -433,7 +439,7 @@ impl Readable for TransactionBody {
 			kernel_len as usize,
 		);
 
-		if tx_block_weight > consensus::MAX_BLOCK_WEIGHT {
+		if tx_block_weight > global::max_block_weight() {
 			return Err(ser::Error::TooLargeReadErr);
 		}
 
@@ -606,40 +612,31 @@ impl TransactionBody {
 	/// Verify the body is not too big in terms of number of inputs|outputs|kernels.
 	/// Weight rules vary depending on the "weight type" (block or tx or pool).
 	fn verify_weight(&self, weighting: Weighting) -> Result<(), Error> {
-		// If "tx" body then remember to reduce the max_block_weight for block requirements.
+		// A coinbase reward is a single output and a single kernel (for now).
+		// We need to account for this when verifying max tx weights.
+		let coinbase_weight = consensus::BLOCK_OUTPUT_WEIGHT + consensus::BLOCK_KERNEL_WEIGHT;
+
+		// If "tx" body then remember to reduce the max_block_weight by the weight of a kernel.
+		// If "limited tx" then compare against the provided max_weight.
 		// If "block" body then verify weight based on full set of inputs|outputs|kernels.
 		// If "pool" body then skip weight verification (pool can be larger than single block).
 		//
 		// Note: Taking a max tx and building a block from it we need to allow room
-		// for the additional coinbase reward (output + kernel).
+		// for the additional coinbase reward (1 output + 1 kernel).
 		//
-		let reserve = match weighting {
-			Weighting::AsTransaction => 1,
-			Weighting::AsBlock => 0,
+		let max_weight = match weighting {
+			Weighting::AsTransaction => global::max_block_weight().saturating_sub(coinbase_weight),
+			Weighting::AsLimitedTransaction { max_weight } => {
+				min(global::max_block_weight(), max_weight).saturating_sub(coinbase_weight)
+			}
+			Weighting::AsBlock => global::max_block_weight(),
 			Weighting::NoLimit => {
 				// We do not verify "tx as pool" weight so we are done here.
 				return Ok(());
 			}
 		};
 
-		// Note: If we add a reserve then we are reducing the number of outputs and kernels
-		// allowed in the body itself.
-		// A block is allowed to be slightly weightier than a tx to account for
-		// the additional coinbase reward output and kernel.
-		// i.e. We need to reserve space for coinbase reward when verifying tx weight.
-		//
-		// In effect we are verifying the tx _can_ be included in a block without exceeding
-		// MAX_BLOCK_WEIGHT.
-		//
-		// max_block = max_tx + coinbase
-		//
-		let tx_block_weight = TransactionBody::weight_as_block(
-			self.inputs.len(),
-			self.outputs.len() + reserve,
-			self.kernels.len() + reserve,
-		);
-
-		if tx_block_weight > consensus::MAX_BLOCK_WEIGHT {
+		if self.body_weight_as_block() > max_weight {
 			return Err(Error::TooHeavy);
 		}
 		Ok(())

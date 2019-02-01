@@ -14,7 +14,7 @@
 
 pub mod common;
 use crate::common::{new_block, tx1i2o, tx2i1o, txspend1i1o};
-use crate::core::consensus::{BLOCK_OUTPUT_WEIGHT, MAX_BLOCK_WEIGHT};
+use crate::core::consensus::BLOCK_OUTPUT_WEIGHT;
 use crate::core::core::block::Error;
 use crate::core::core::hash::Hashed;
 use crate::core::core::id::ShortIdentifiable;
@@ -43,7 +43,7 @@ fn verifier_cache() -> Arc<RwLock<dyn VerifierCache>> {
 #[allow(dead_code)]
 fn too_large_block() {
 	let keychain = ExtKeychain::from_random_seed(false).unwrap();
-	let max_out = MAX_BLOCK_WEIGHT / BLOCK_OUTPUT_WEIGHT;
+	let max_out = global::max_block_weight() / BLOCK_OUTPUT_WEIGHT;
 
 	let mut pks = vec![];
 	for n in 0..(max_out + 1) {

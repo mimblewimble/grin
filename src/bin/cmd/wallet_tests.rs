@@ -432,7 +432,7 @@ mod wallet_tests {
 			"-g",
 			"Self love",
 			"-o",
-			"75",
+			"3",
 			"-s",
 			"smallest",
 			"10",
