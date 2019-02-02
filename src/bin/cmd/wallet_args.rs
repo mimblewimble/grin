@@ -509,7 +509,7 @@ pub fn wallet_command(
 		wallet_config.api_listen_interface = "0.0.0.0".to_string();
 	}
 
-	if let Some(dir) = wallet_args.value_of("dir") {
+	if let Some(dir) = wallet_args.value_of("data_dir") {
 		wallet_config.data_file_dir = dir.to_string().clone();
 	}
 
