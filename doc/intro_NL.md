@@ -1,6 +1,6 @@
 # Inleiding tot MimbleWimble en Grin
 
-*Lees dit in andere talen: [English](intro.md), [简体中文](intro_ZH-CN.md), [Español](intro_ES.md), [Nederlands](intro_NL.md), [Русский](intro_RU.md), [日本語](intro_JP.md), [Deutsch](intro_DE.md).*
+*Lees dit in andere talen: [English](intro.md), [简体中文](intro_ZH-CN.md), [Español](intro_ES.md), [Nederlands](intro_NL.md), [Русский](intro_RU.md), [日本語](intro_JP.md), [Deutsch](intro_DE.md), [Portuguese](intro_PT-BR.md).*
 
 MimbleWimble is een blockchain formaat en protocol die extreem goede schaalbaarheid, privacy en fungibiliteit biedt door zich te berusten op sterke cryptografische primiteven. Het adresseert de lacunes die in bijna alle huidige blockchain-implementaties bestaan.
 
