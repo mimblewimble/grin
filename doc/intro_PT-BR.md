@@ -51,7 +51,7 @@ Se _v_ é o montante de uma entrada ou saída de transação e _H_ é uma curva 
 
     v1 + v2 = v3  =>  v1*H + v2*H = v3*H
 
-A verificação dessa propriedade em toda transação permite que o protocolo verifique que uma transação não cria dinheiro do nada, sem de fato saber quais são seus montantes. No entanto, há um número finito de montantes utilizáveis e pode-se tentar cada um deles no intuito de adivinhar o montante da transação. Além disso, ter conhecimendo de v1 (vindo de uma transação anterior, por exemplo) e do montante resultante `v1*H` revela todas as saídas com montante v1 do blockchain inteiro. Por estas razões, introduzimos uma segunda curva elíptica _G_ (na pratica _G_ é apenas outro ponto gerador no mesmo grupo de curvas que _H_) e uma chave privada _r_ usada como *fator de cegueira* (blinding factor).
+A verificação dessa propriedade em toda transação permite que o protocolo verifique que uma transação não cria dinheiro do nada, sem de fato saber quais são seus montantes. No entanto, há um número finito de montantes utilizáveis e pode-se tentar cada um deles no intuito de adivinhar o montante da transação. Além disso, ter conhecimento de v1 (vindo de uma transação anterior, por exemplo) e do montante resultante `v1*H` revela todas as saídas com montante v1 do blockchain inteiro. Por estas razões, introduzimos uma segunda curva elíptica _G_ (na pratica _G_ é apenas outro ponto gerador no mesmo grupo de curvas que _H_) e uma chave privada _r_ usada como *fator de cegueira* (blinding factor).
 
 Um montante de entrada ou saída em uma transação pode ser expresso como:
 
@@ -73,7 +73,7 @@ De modo que:
 
     ve1 + ve2 = vs3
 
-Gerando uma chave privada como fator de cegueira para cada montante de entrada e substituindo, na equação anterior, cada montante por seus respectivo Compromisso de Pedersen, obtemos:
+Gerando uma chave privada como fator de cegueira para cada montante de entrada e substituindo, na equação anterior, cada montante por seus respectivos Compromisso de Pedersen, obtemos:
 
     (re1*G + ve1*H) + (re2*G + ve2*H) = (rs3*G + vs3*H)
 
@@ -83,11 +83,11 @@ Que, como consequência, requer:
 
 Este é o primeiro pilar do MimbleWimble: a aritmética necessária para validar uma transação pode ser feita sem conhecer nenhum dos montantes.
 
-Como nota final, esta ideia é na verdade derivada das [Transações Confidenciais](https://elementsproject.org/features/confidential-transactions/investigation) de  Greg Maxwell, que por si derivou de uma proposta de Adam Back para montantes homomórficos aplicados ao Bitcoin.
+Como nota final, esta ideia é, na verdade, derivada das [Transações Confidenciais](https://elementsproject.org/features/confidential-transactions/investigation) de  Greg Maxwell, que por si derivou de uma proposta de Adam Back para montantes homomórficos aplicados ao Bitcoin.
 
 #### Propriedade
 
-Na seção anterior, introduzimos uma chave privada como um fator de cegueira para obscurecer or montantes da transação. A segunda perspicácia do MimbleWimble é que esta chave privada pode ser aproveitada para provar a propriedade do montante.
+Na seção anterior, introduzimos uma chave privada como um fator de cegueira para obscurecer os montantes da transação. A segunda perspicácia do MimbleWimble é que esta chave privada pode ser aproveitada para provar a propriedade do montante.
 
 Alice lhe envia 3 moedas e, para obscurecer essa quantia, você escolheu 28 como seu fator de cegueira (note que, na prática, o fator de cegueira sendo uma chave privada, é um número extremamente grande). Em algum lugar no blockchain, a seguinte saída aparece e só pode ser gasta por você:
 
@@ -111,14 +111,14 @@ Para resolver isso, a Carol usa uma chave privada escolhida por ela. Vamos dizer
 
     Y - Xi = (113*G + 3*H) - (28*G + 3*H) = 85*G + 0*H
 
-Agora a soma da transação não é mais zero e temos um _montante excedente_ em _G_ (85), que é o resultado da soma de todos os fatores de cegueira. Mas, dado que `85*G` é uma chave pública válida na curva elíptica _G_, com chave privada 85, para qualquer x e y, logo `x*G + y*H` será uma chave pública válida em _G_ somente se `y = 0`.
+Agora a soma da transação não é mais zero e temos um _montante excedente_ (excess value) em _G_ (85), que é o resultado da soma de todos os fatores de cegueira. Mas, dado que `85*G` é uma chave pública válida na curva elíptica _G_, com chave privada 85, para qualquer x e y, logo `x*G + y*H` será uma chave pública válida em _G_ somente se `y = 0`.
 
 Então, tudo o que o protocolo precisa verificar é que (`Y - Xi`) é uma chave pública válida em _G_ e que as partes envolvidas na transação conhecem coletivamente a chave privada (85 em nossa transação com Carol). A maneira mais simples de fazer isso é exigir uma assinatura construída com o montante excedente (85), que por conseguinte valida que:
 
 * As partes envolvidas na transação conhecem coletivamente a chave privada e
 * A soma das saídas da transação, menos as entradas, é zero (porque somente uma chave pública válida, correspondente à chave privada, verificará a assinatura).
 
-Esta assinatura, anexada a todas as transações, juntamente com alguns dados adicionais (como as taxas de mineração), é chamada de _núcleo da transação_ e é verificada por todos os validadores.
+Esta assinatura, anexada a todas as transações, juntamente com alguns dados adicionais (como as taxas de mineração), é chamada de _núcleo da transação_ (transaction kernel) e é verificada por todos os validadores.
 
 #### Alguns Pontos Refinados
 
@@ -143,7 +143,7 @@ Por exemplo, pode-se criar uma transação com uma entrada de montante 2 e saíd
 
 Para resolver este problema, o MimbleWimble utiliza outro conceito criptográfico (também proveniente de transações confidenciais) chamado prova de intervalo: uma prova que um número se enquadra dentro de um determinado intervalo, sem revelar este número. Nós não iremos elaborar sobre a prova de intervalo, basta saber que para qualquer `r.G + v.H` podemos construir uma prova que mostrará que _v_ é maior que zero e não sofre estouro numérico.
 
-Também é importante notar que, para criar uma prova de intervalo válida a partir do exemplo acima, ambos os montantes 113 e 28 usados na criação e assinatura do montante excedente devem ser conhecidos. A razão disto, assim como um descrição aprofundada da prova de intervalo, estão mais detalhadas no [artigo sobre provas de intervalo] (https://eprint.iacr.org/2017/1066.pdf).
+Também é importante notar que, para criar uma prova de intervalo válida a partir do exemplo acima, ambos os montantes 113 e 28 usados na criação e assinatura do montante excedente devem ser conhecidos. A razão disto, assim como uma descrição aprofundada da prova de intervalo, estão mais detalhadas no [artigo sobre provas de intervalo] (https://eprint.iacr.org/2017/1066.pdf).
 
 #### Juntando Tudo
 
@@ -164,7 +164,7 @@ O formato de bloco MimbleWimble se baseia nisso, introduzindo um conceito: _cort
 
 * Ótima escalabilidade, já que a grande maioria dos dados de transações podem ser eliminados com o tempo, sem comprometer a segurança.
 * Mais anonimato, misturando e removendo dados de transações.
-* E a capacidade de novos nós sincronizarem com o resto da rede eficientemente.
+* E a capacidade de novos nodos sincronizarem com o resto da rede eficientemente.
 
 #### Agregando Transações
 
@@ -194,7 +194,7 @@ Simplificando um pouco (ignorando novamente as taxas de transação), podemos di
 
 ##### Deslocamentos do Núcleo
 
-Há um problema sutil nos blocos e transações do MimbleWimble, conforme descrito acima. É possível (e em alguns casos trivial) reconstruir as transações constituintes de um bloco. Isso é claramente ruim para a privacidade. Este é o problema do "subconjunto" - dado um conjunto de entradas, saídas e núcleos de transação, um subconjunto destes recombinará para reconstruir uma transação válida.
+Há um problema sutil nos blocos e transações do MimbleWimble, conforme descrito acima. É possível (e em alguns casos, é trivial) reconstruir as transações constituintes de um bloco. Isso é claramente ruim para a privacidade. Este é o problema do "subconjunto" - dado um conjunto de entradas, saídas e núcleos de transação, um subconjunto destes recombinará para reconstruir uma transação válida.
 
 Por exemplo, dadas as duas transações a seguir -
 
@@ -266,7 +266,7 @@ Quando estruturado dessa maneira, um bloco MimbleWimble oferece garantias extrem
 * Todas as saídas se assemelham: apenas números muito grandes que são impossíveis de distinguir um do outro. Se alguém quisesse excluir algumas saídas, este teria que excluir todas.
 * Toda estrutura da transação foi removida, tornando impossível dizer qual saída foi combinado com cada entrada.
 
-E, no entanto, tudo ainda permanece valido!
+E, no entanto, tudo ainda permanece válido!
 
 #### Corte-completo Inteiramente
 
