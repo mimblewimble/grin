@@ -510,6 +510,7 @@ impl Handler {
 // ----------------------------------------
 // Worker Factory Thread Function
 fn accept_connections(listen_addr: SocketAddr, handler: Handler) {
+	info!("Start tokio stratum server");
 	let listener = TcpListener::bind(&listen_addr).expect(&format!(
 		"Stratum: Failed to bind to listen address {}",
 		listen_addr
