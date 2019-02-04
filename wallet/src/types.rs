@@ -105,7 +105,7 @@ impl WalletConfig {
 	}
 
 	pub fn owner_api_listen_addr(&self) -> String {
-		format!("127.0.0.1:{}", self.owner_api_listen_port())
+		format!("0.0.0.0:{}", self.owner_api_listen_port())
 	}
 }
 
