@@ -16,9 +16,9 @@
 
 use uuid::Uuid;
 
-use crate::libwallet::slate::Slate;
 use crate::keychain::{Identifier, Keychain};
 use crate::libwallet::internal::{selection, updater};
+use crate::libwallet::slate::Slate;
 use crate::libwallet::types::{Context, NodeClient, OutputLockFn, TxLogEntryType, WalletBackend};
 use crate::libwallet::{Error, ErrorKind};
 
