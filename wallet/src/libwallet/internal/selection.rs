@@ -15,7 +15,8 @@
 //! Selection of inputs for building transactions
 
 use crate::core::core::{amount_to_hr_string, Transaction};
-use crate::core::libtx::{build, slate::Slate, tx_fee};
+use crate::libwallet::slate::Slate;
+use crate::core::libtx::{build, tx_fee};
 use crate::keychain::{Identifier, Keychain};
 use crate::libwallet::error::{Error, ErrorKind};
 use crate::libwallet::internal::keys;

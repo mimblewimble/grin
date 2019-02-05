@@ -36,7 +36,7 @@ use uuid::Uuid;
 
 use crate::core::core::hash::Hashed;
 use crate::core::core::Transaction;
-use crate::core::libtx::slate::Slate;
+use crate::libwallet::slate::Slate;
 use crate::core::ser;
 use crate::keychain::{Identifier, Keychain};
 use crate::libwallet::internal::{keys, tx, updater};

@@ -19,7 +19,7 @@ use crate::adapters::{FileWalletCommAdapter, HTTPWalletCommAdapter, KeybaseWalle
 use crate::api::{ApiServer, BasicAuthMiddleware, Handler, ResponseFuture, Router, TLSConfig};
 use crate::core::core;
 use crate::core::core::Transaction;
-use crate::core::libtx::slate::Slate;
+use crate::libwallet::slate::Slate;
 use crate::keychain::Keychain;
 use crate::libwallet::api::{APIForeign, APIOwner};
 use crate::libwallet::types::{
@@ -344,8 +344,7 @@ where
 					match e.kind() {
 						// user errors, don't backtrace
 						ErrorKind::NotEnoughFunds { .. } => {}
-						ErrorKind::FeeDispute { .. } => {}
-						ErrorKind::FeeExceedsAmount { .. } => {}
+						ErrorKind::Fee { .. } => {}
 						_ => {
 							// otherwise give full dump
 							error!("Backtrace: {}", e.backtrace().unwrap());

@@ -25,7 +25,7 @@ use crate::util::secp::key::{PublicKey, SecretKey};
 use crate::util::secp::{self, pedersen, Secp256k1};
 use chrono::prelude::*;
 use failure::ResultExt;
-use grin_core::libtx::slate::ParticipantMessages;
+use crate::libwallet::slate::ParticipantMessages;
 use serde;
 use serde_json;
 use std::collections::HashMap;

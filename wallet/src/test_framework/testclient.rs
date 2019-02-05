@@ -21,7 +21,7 @@ use self::chain::Chain;
 use self::core::core::verifier_cache::LruVerifierCache;
 use self::core::core::Transaction;
 use self::core::global::{set_mining_mode, ChainTypes};
-use self::core::libtx::slate::Slate;
+use crate::libwallet::slate::Slate;
 use self::core::{pow, ser};
 use self::keychain::Keychain;
 use self::util::secp::pedersen;
