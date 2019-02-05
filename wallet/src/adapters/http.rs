@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use crate::adapters::util::serialize_slate;
 use crate::api;
 use crate::controller;
 use crate::core::libtx::slate::Slate;
@@ -47,8 +48,8 @@ impl WalletCommAdapter for HTTPWalletCommAdapter {
 		}
 		let url = format!("{}/v1/wallet/foreign/receive_tx", dest);
 		debug!("Posting transaction slate to {}", url);
-
-		let res = api::client::post(url.as_str(), None, slate);
+		let slate = serialize_slate(slate);
+		let res = api::client::post(url.as_str(), None, &slate);
 		match res {
 			Err(e) => {
 				let report = format!("Posting transaction slate (is recipient listening?): {}", e);

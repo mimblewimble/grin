@@ -19,7 +19,7 @@ use crate::adapters::{FileWalletCommAdapter, HTTPWalletCommAdapter, KeybaseWalle
 use crate::api::{ApiServer, BasicAuthMiddleware, Handler, ResponseFuture, Router, TLSConfig};
 use crate::core::core;
 use crate::core::core::Transaction;
-use crate::core::libtx::slate::Slate;
+use crate::core::libtx::slate::{Slate, VersionedSlate};
 use crate::keychain::Keychain;
 use crate::libwallet::api::{APIForeign, APIOwner};
 use crate::libwallet::types::{
@@ -40,7 +40,6 @@ use std::marker::PhantomData;
 use std::net::SocketAddr;
 use std::sync::Arc;
 use url::form_urlencoded;
-
 /// Instantiate wallet Owner API for a single-use (command line) call
 /// Return a function containing a loaded API context to call
 pub fn owner_single_use<F, T: ?Sized, C, K>(wallet: Arc<Mutex<T>>, f: F) -> Result<(), Error>
@@ -578,7 +577,8 @@ where
 	) -> Box<dyn Future<Item = Slate, Error = Error> + Send> {
 		Box::new(parse_body(req).and_then(
 			//TODO: No way to insert a message from the params
-			move |mut slate| {
+			move |slate: VersionedSlate| {
+				let mut slate:Slate = slate.into();
 				if let Err(e) = api.verify_slate_messages(&slate) {
 					error!("Error validating participant messages: {}", e);
 					err(e)

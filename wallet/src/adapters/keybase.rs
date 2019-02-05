@@ -14,8 +14,9 @@
 
 // Keybase Wallet Plugin
 
+use crate::adapters::util::serialize_slate;
 use crate::controller;
-use crate::core::libtx::slate::Slate;
+use crate::core::libtx::slate::{Slate, VersionedSlate};
 use crate::libwallet::{Error, ErrorKind};
 use crate::{instantiate_wallet, HTTPNodeClient, WalletCommAdapter, WalletConfig};
 use failure::ResultExt;
@@ -254,9 +255,10 @@ fn poll(nseconds: u64, channel: &str) -> Option<Slate> {
 	while start.elapsed().as_secs() < nseconds {
 		let unread = read_from_channel(channel, SLATE_SIGNED);
 		for msg in unread.unwrap().iter() {
-			let blob = from_str::<Slate>(msg);
+			let blob = from_str::<VersionedSlate>(msg);
 			match blob {
 				Ok(slate) => {
+					let slate: Slate = slate.into();
 					info!(
 						"keybase response message received from @{}, tx uuid: {}",
 						channel, slate.id,
@@ -288,8 +290,11 @@ impl WalletCommAdapter for KeybaseWalletCommAdapter {
 			return Err(ErrorKind::GenericError("Tx rejected".to_owned()))?;
 		}
 
+		let id = slate.id;
+		let slate = serialize_slate(slate);
+
 		// Send original slate to recipient with the SLATE_NEW topic
-		match send(slate, addr, SLATE_NEW, TTL) {
+		match send(&slate, addr, SLATE_NEW, TTL) {
 			true => (),
 			false => {
 				return Err(ErrorKind::ClientCallback(
@@ -297,10 +302,7 @@ impl WalletCommAdapter for KeybaseWalletCommAdapter {
 				))?
 			}
 		}
-		info!(
-			"tx request has been sent to @{}, tx uuid: {}",
-			addr, slate.id
-		);
+		info!("tx request has been sent to @{}, tx uuid: {}", addr, id);
 		// Wait for response from recipient with SLATE_SIGNED topic
 		match poll(TTL as u64, addr) {
 			Some(slate) => return Ok(slate),
@@ -345,9 +347,10 @@ impl WalletCommAdapter for KeybaseWalletCommAdapter {
 				break;
 			}
 			for (msg, channel) in &unread.unwrap() {
-				let blob = from_str::<Slate>(msg);
+				let blob = from_str::<VersionedSlate>(msg);
 				match blob {
-					Ok(mut slate) => {
+					Ok(slate) => {
+						let mut slate: Slate = slate.into();
 						let tx_uuid = slate.id;
 
 						// Reject multiple recipients channel for safety
