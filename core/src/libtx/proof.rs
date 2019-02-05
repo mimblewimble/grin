@@ -29,11 +29,7 @@ where
 	let root_key = k.derive_key(0, &K::root_key_id())?;
 	let res = blake2::blake2b::blake2b(32, &commit.0, &root_key.0[..]);
 	let res = res.as_bytes();
-	let mut ret_val = [0; 32];
-	for i in 0..res.len() {
-		ret_val[i] = res[i];
-	}
-	match SecretKey::from_slice(k.secp(), &ret_val) {
+	match SecretKey::from_slice(k.secp(), &res) {
 		Ok(sk) => Ok(sk),
 		Err(e) => Err(ErrorKind::RangeProof(
 			format!("Unable to create nonce: {:?}", e).to_string(),
