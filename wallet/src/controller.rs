@@ -578,7 +578,7 @@ where
 		Box::new(parse_body(req).and_then(
 			//TODO: No way to insert a message from the params
 			move |slate: VersionedSlate| {
-				let mut slate:Slate = slate.into();
+				let mut slate: Slate = slate.into();
 				if let Err(e) = api.verify_slate_messages(&slate) {
 					error!("Error validating participant messages: {}", e);
 					err(e)
