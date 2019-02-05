@@ -16,17 +16,17 @@
 //! around during an interactive wallet exchange
 
 use crate::blake2::blake2b::blake2b;
-use crate::core::amount_to_hr_string;
-use crate::core::committed::Committed;
-use crate::core::transaction::{kernel_features, kernel_sig_msg, Transaction, Weighting};
-use crate::core::verifier_cache::LruVerifierCache;
 use crate::keychain::{BlindSum, BlindingFactor, Keychain};
-use crate::libtx::error::{Error, ErrorKind};
-use crate::libtx::{aggsig, build, secp_ser, tx_fee};
+use crate::libwallet::error::{Error, ErrorKind};
 use crate::util::secp;
 use crate::util::secp::key::{PublicKey, SecretKey};
 use crate::util::secp::Signature;
 use crate::util::RwLock;
+use grin_core::core::amount_to_hr_string;
+use grin_core::core::committed::Committed;
+use grin_core::core::transaction::{kernel_features, kernel_sig_msg, Transaction, Weighting};
+use grin_core::core::verifier_cache::LruVerifierCache;
+use grin_core::libtx::{aggsig, build, secp_ser, tx_fee};
 use rand::thread_rng;
 use std::sync::Arc;
 use uuid::Uuid;

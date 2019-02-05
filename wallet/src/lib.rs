@@ -46,6 +46,7 @@ pub use crate::adapters::{
 	WalletCommAdapter,
 };
 pub use crate::error::{Error, ErrorKind};
+pub use crate::libwallet::slate::Slate;
 pub use crate::libwallet::types::{
 	BlockFees, CbData, NodeClient, WalletBackend, WalletInfo, WalletInst,
 };

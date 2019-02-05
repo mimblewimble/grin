@@ -16,9 +16,9 @@
 
 use uuid::Uuid;
 
-use crate::core::libtx::slate::Slate;
 use crate::keychain::{Identifier, Keychain};
 use crate::libwallet::internal::{selection, updater};
+use crate::libwallet::slate::Slate;
 use crate::libwallet::types::{Context, NodeClient, OutputLockFn, TxLogEntryType, WalletBackend};
 use crate::libwallet::{Error, ErrorKind};
 
@@ -149,10 +149,7 @@ where
 		participant_id,
 	)?;
 	// Final transaction can be built by anyone at this stage
-	let res = slate.finalize(wallet.keychain());
-	if let Err(e) = res {
-		Err(ErrorKind::LibTX(e.kind()))?
-	}
+	slate.finalize(wallet.keychain())?;
 	Ok(())
 }
 

@@ -16,7 +16,7 @@
 use std::fs::File;
 use std::io::{Read, Write};
 
-use crate::core::libtx::slate::Slate;
+use crate::libwallet::slate::Slate;
 use crate::libwallet::{Error, ErrorKind};
 use crate::{WalletCommAdapter, WalletConfig};
 use serde_json as json;

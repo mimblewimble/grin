@@ -14,9 +14,10 @@
 
 //! Error types for libwallet
 
-use crate::core::core::transaction;
+use crate::core::core::{committed, transaction};
 use crate::core::libtx;
 use crate::keychain;
+use crate::util::secp;
 use failure::{Backtrace, Context, Fail};
 use std::env;
 use std::fmt::{self, Display};
@@ -47,37 +48,9 @@ pub enum ErrorKind {
 		needed_disp: String,
 	},
 
-	/// Fee dispute
-	#[fail(
-		display = "Fee dispute: sender fee {}, recipient fee {}",
-		sender_fee_disp, recipient_fee_disp
-	)]
-	FeeDispute {
-		/// sender fee
-		sender_fee: u64,
-		/// display friendly
-		sender_fee_disp: String,
-		/// recipient fee
-		recipient_fee: u64,
-		/// display friendly
-		recipient_fee_disp: String,
-	},
-
-	/// Fee Exceeds amount
-	#[fail(
-		display = "Fee exceeds amount: sender amount {}, recipient fee {}",
-		sender_amount_disp, recipient_fee
-	)]
-	FeeExceedsAmount {
-		/// sender amount
-		sender_amount: u64,
-		/// display friendly
-		sender_amount_disp: String,
-		/// recipient fee
-		recipient_fee: u64,
-		/// display friendly
-		recipient_fee_disp: String,
-	},
+	/// Fee error
+	#[fail(display = "Fee Error: {}", _0)]
+	Fee(String),
 
 	/// LibTX Error
 	#[fail(display = "LibTx Error")]
@@ -97,7 +70,7 @@ pub enum ErrorKind {
 
 	/// Secp Error
 	#[fail(display = "Secp error")]
-	Secp,
+	Secp(secp::Error),
 
 	/// Callback implementation error conversion
 	#[fail(display = "Trait Implementation error")]
@@ -140,8 +113,8 @@ pub enum ErrorKind {
 	Uri,
 
 	/// Signature error
-	#[fail(display = "Signature error")]
-	Signature(&'static str),
+	#[fail(display = "Signature error: {}", _0)]
+	Signature(String),
 
 	/// Attempt to use duplicate transaction id in separate transactions
 	#[fail(display = "Duplicate transaction ID error")]
@@ -198,6 +171,10 @@ pub enum ErrorKind {
 	/// Reference unknown account label
 	#[fail(display = "Unknown Account Label '{}'", _0)]
 	UnknownAccountLabel(String),
+
+	/// Error from summing commitments via committed trait.
+	#[fail(display = "Committed Error")]
+	Committed(committed::Error),
 
 	/// Other
 	#[fail(display = "Generic error: {}", _0)]
@@ -302,6 +279,22 @@ impl From<crate::core::ser::Error> for Error {
 	fn from(error: crate::core::ser::Error) -> Error {
 		Error {
 			inner: Context::new(ErrorKind::Deser(error)),
+		}
+	}
+}
+
+impl From<secp::Error> for Error {
+	fn from(error: secp::Error) -> Error {
+		Error {
+			inner: Context::new(ErrorKind::Secp(error)),
+		}
+	}
+}
+
+impl From<committed::Error> for Error {
+	fn from(error: committed::Error) -> Error {
+		Error {
+			inner: Context::new(ErrorKind::Committed(error)),
 		}
 	}
 }

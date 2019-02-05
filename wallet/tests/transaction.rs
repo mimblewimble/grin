@@ -16,8 +16,8 @@
 extern crate log;
 use self::core::global;
 use self::core::global::ChainTypes;
-use self::core::libtx::slate::Slate;
 use self::keychain::ExtKeychain;
+use self::libwallet::slate::Slate;
 use self::wallet::libwallet;
 use self::wallet::libwallet::types::OutputStatus;
 use self::wallet::test_framework::{self, LocalWalletClient, WalletProxy};

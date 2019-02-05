@@ -15,7 +15,7 @@
 // Keybase Wallet Plugin
 
 use crate::controller;
-use crate::core::libtx::slate::Slate;
+use crate::libwallet::slate::Slate;
 use crate::libwallet::{Error, ErrorKind};
 use crate::{instantiate_wallet, HTTPNodeClient, WalletCommAdapter, WalletConfig};
 use failure::ResultExt;
