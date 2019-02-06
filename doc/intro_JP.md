@@ -1,6 +1,6 @@
 # MimbleWimble と Grin 概論
 
-*この文章を他の言語で読む： [English](intro.md), [简体中文](intro_ZH-CN.md), [Español](intro_ES.md), [Nederlands](intro_NL.md), [Русский](intro_RU.md), [日本語](intro_JP.md), [Deutsch](intro_DE.md).*
+*この文章を他の言語で読む： [English](intro.md), [简体中文](intro_ZH-CN.md), [Español](intro_ES.md), [Nederlands](intro_NL.md), [Русский](intro_RU.md), [日本語](intro_JP.md), [Deutsch](intro_DE.md), [Portuguese](intro_PT-BR.md).*
 
 MimbleWimble は、極めてよいスケーラビリティ、プライバシー、そして代替可能性（fungibility）の解決法を提供
 するブロックチェーンのフォーマット・プロトコルである。MimbleWimble は、ほとんどすべてのブロックチェーンの
