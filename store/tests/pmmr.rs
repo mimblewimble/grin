@@ -520,28 +520,41 @@ fn pmmr_compact_entire_peak() {
 fn pmmr_compact_horizon() {
 	let (data_dir, elems) = setup("compact_horizon");
 	{
-		let mut backend = store::pmmr::PMMRBackend::new(data_dir.clone(), true, None).unwrap();
-		let mmr_size = load(0, &elems[..], &mut backend);
-		backend.sync().unwrap();
+		let pos_1_hash;
+		let pos_2_hash;
+		let pos_3_hash;
+		let pos_6_hash;
+		let pos_7_hash;
 
-		// 0010012001001230
-		// 9 leaves
-		assert_eq!(backend.data_size(), 19);
-		assert_eq!(backend.hash_size(), 35);
+		let pos_8;
+		let pos_8_hash;
 
-		let pos_1_hash = backend.get_hash(1).unwrap();
-		let pos_2_hash = backend.get_hash(2).unwrap();
-		let pos_3_hash = backend.get_hash(3).unwrap();
-		let pos_6_hash = backend.get_hash(6).unwrap();
-		let pos_7_hash = backend.get_hash(7).unwrap();
+		let pos_11;
+		let pos_11_hash;
 
-		let pos_8 = backend.get_data(8).unwrap();
-		let pos_8_hash = backend.get_hash(8).unwrap();
-
-		let pos_11 = backend.get_data(11).unwrap();
-		let pos_11_hash = backend.get_hash(11).unwrap();
-
+		let mmr_size;
 		{
+			let mut backend = store::pmmr::PMMRBackend::new(data_dir.clone(), true, None).unwrap();
+			mmr_size = load(0, &elems[..], &mut backend);
+			backend.sync().unwrap();
+
+			// 0010012001001230
+			// 9 leaves
+			assert_eq!(backend.data_size(), 19);
+			assert_eq!(backend.hash_size(), 35);
+
+			pos_1_hash = backend.get_hash(1).unwrap();
+			pos_2_hash = backend.get_hash(2).unwrap();
+			pos_3_hash = backend.get_hash(3).unwrap();
+			pos_6_hash = backend.get_hash(6).unwrap();
+			pos_7_hash = backend.get_hash(7).unwrap();
+
+			pos_8 = backend.get_data(8).unwrap();
+			pos_8_hash = backend.get_hash(8).unwrap();
+
+			pos_11 = backend.get_data(11).unwrap();
+			pos_11_hash = backend.get_hash(11).unwrap();
+
 			// pruning some choice nodes
 			{
 				let mut pmmr: PMMR<'_, TestElem, _> = PMMR::at(&mut backend, mmr_size);

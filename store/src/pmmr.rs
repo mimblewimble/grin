@@ -306,7 +306,6 @@ impl<T: PMMRable> PMMRBackend<T> {
 		// Calculate the sets of leaf positions and node positions to remove based
 		// on the cutoff_pos provided.
 		let (leaves_removed, pos_to_rm) = self.pos_to_rm(cutoff_pos, rewind_rm_pos);
-		println!("1");
 
 		// 1. Save compact copy of the hash file, skipping removed data.
 		{
@@ -321,7 +320,6 @@ impl<T: PMMRable> PMMRBackend<T> {
 				&prune_noop,
 			)?;
 		}
-		println!("2");
 
 		// 2. Save compact copy of the data file, skipping removed leaves.
 		{
@@ -343,7 +341,6 @@ impl<T: PMMRable> PMMRBackend<T> {
 				prune_cb,
 			)?;
 		}
-		println!("3");
 
 		// 3. Update the prune list and write to disk.
 		{
@@ -352,20 +349,15 @@ impl<T: PMMRable> PMMRBackend<T> {
 			}
 			self.prune_list.flush()?;
 		}
-		println!("4");
 		// drop hash file, or windows will still have a lock on it and won't allow the rename
 		self.hash_file = None;
-		println!("4.3");
 		// 4. Rename the compact copy of hash file and reopen it.
 		fs::remove_file(self.data_dir.join(PMMR_HASH_FILE))?;
-		println!("4.5");
 		fs::rename(
 			tmp_prune_file_hash.clone(),
 			self.data_dir.join(PMMR_HASH_FILE),
 		)?;
-		println!("4.6");
 		self.hash_file = Some(DataFile::open(self.data_dir.join(PMMR_HASH_FILE))?);
-		println!("5");
 
 		// 5. Rename the compact copy of the data file and reopen it.
 		// drop data file, or windows will still have a lock on it and won't allow the rename
@@ -375,7 +367,6 @@ impl<T: PMMRable> PMMRBackend<T> {
 			self.data_dir.join(PMMR_DATA_FILE),
 		)?;
 		self.data_file = Some(DataFile::open(self.data_dir.join(PMMR_DATA_FILE))?);
-		println!("6");
 
 		// 6. Write the leaf_set to disk.
 		// Optimize the bitmap storage in the process.
