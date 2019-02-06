@@ -318,7 +318,9 @@ fn listen_for_addrs(
 	let addrs: Vec<SocketAddr> = rx.try_iter().collect();
 
 	// If we have a healthy number of outbound peers then we are done here.
-	if peers.peer_outbound_count() >= p2p.config.peer_min_preferred_count() / 2 {
+	if peers.peer_count() >= p2p.config.peer_min_preferred_count()
+		&& peers.peer_outbound_count() >= p2p.config.peer_max_count() / 2
+	{
 		return;
 	}
 
