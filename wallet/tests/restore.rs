@@ -26,9 +26,9 @@ use grin_keychain as keychain;
 use grin_util as util;
 use grin_wallet as wallet;
 use std::fs;
+use std::sync::atomic::Ordering;
 use std::thread;
 use std::time::Duration;
-use std::sync::atomic::Ordering;
 
 fn clean_output_dir(test_dir: &str) {
 	let _ = fs::remove_dir_all(test_dir);
