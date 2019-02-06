@@ -13,6 +13,7 @@
 // limitations under the License.
 
 /// Grin server commands processing
+#[cfg(not(target_os = "windows"))]
 use std::env::current_dir;
 use std::process::exit;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -22,6 +23,7 @@ use std::time::Duration;
 
 use clap::ArgMatches;
 use ctrlc;
+#[cfg(not(target_os = "windows"))]
 use daemonize::Daemonize;
 
 use crate::config::GlobalConfig;
@@ -164,20 +166,7 @@ pub fn server_command(
 				start_server(server_config);
 			}
 			("start", _) => {
-				let daemonize = Daemonize::new()
-					.pid_file("/tmp/grin.pid")
-					.chown_pid_file(true)
-					.working_directory(current_dir().unwrap())
-					.privileged_action(move || {
-						start_server(server_config.clone());
-						loop {
-							thread::sleep(Duration::from_secs(60));
-						}
-					});
-				match daemonize.start() {
-					Ok(_) => info!("Grin server successfully started."),
-					Err(e) => error!("Error starting: {}", e),
-				}
+				daemonize();
 			}
 			("stop", _) => println!("TODO. Just 'kill $pid' for now. Maybe /tmp/grin.pid is $pid"),
 			("", _) => {
@@ -195,4 +184,28 @@ pub fn server_command(
 		start_server(server_config);
 	}
 	0
+}
+
+//TODO: This
+#[cfg(target_os = "windows")]
+fn daemonize() {
+	error!("Running as a Windows service not yet supported.");
+}
+
+#[cfg(not(target_os = "windows"))]
+fn daemonize() {
+	let daemonize = Daemonize::new()
+		.pid_file("/tmp/grin.pid")
+		.chown_pid_file(true)
+		.working_directory(current_dir().unwrap())
+		.privileged_action(move || {
+			start_server(server_config.clone());
+			loop {
+				thread::sleep(Duration::from_secs(60));
+			}
+		});
+	match daemonize.start() {
+		Ok(_) => info!("Grin server successfully started."),
+		Err(e) => error!("Error starting: {}", e),
+	}
 }

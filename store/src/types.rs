@@ -125,7 +125,7 @@ where
 /// latter by truncating the underlying file and re-creating the mmap.
 pub struct AppendOnlyFile {
 	path: PathBuf,
-	file: File,
+	file: Option<File>,
 	mmap: Option<memmap::Mmap>,
 	buffer_start: usize,
 	buffer: Vec<u8>,
@@ -141,7 +141,7 @@ impl AppendOnlyFile {
 			.create(true)
 			.open(&path)?;
 		let mut aof = AppendOnlyFile {
-			file,
+			file: Some(file),
 			path: path.as_ref().to_path_buf(),
 			mmap: None,
 			buffer_start: 0,
@@ -152,7 +152,7 @@ impl AppendOnlyFile {
 		let sz = aof.size();
 		if sz > 0 {
 			aof.buffer_start = sz as usize;
-			aof.mmap = Some(unsafe { memmap::Mmap::map(&aof.file)? });
+			aof.mmap = Some(unsafe { memmap::Mmap::map(&aof.file.as_ref().unwrap())? });
 		}
 		Ok(aof)
 	}
@@ -193,21 +193,37 @@ impl AppendOnlyFile {
 	pub fn flush(&mut self) -> io::Result<()> {
 		if self.buffer_start_bak > 0 {
 			// Flushing a rewound state, we need to truncate via set_len() before applying.
-			self.file.set_len(self.buffer_start as u64)?;
+			// Drop and recreate, or windows throws an access error
+			self.mmap = None;
+			self.file = None;
+			{
+				let file = OpenOptions::new()
+					.read(true)
+					.create(true)
+					.write(true)
+					.open(&self.path)?;
+				file.set_len(self.buffer_start as u64)?;
+			}
+			let file = OpenOptions::new()
+				.read(true)
+				.create(true)
+				.append(true)
+				.open(&self.path)?;
+			self.file = Some(file);
 			self.buffer_start_bak = 0;
 		}
 
 		self.buffer_start += self.buffer.len();
-		self.file.write_all(&self.buffer[..])?;
-		self.file.sync_all()?;
+		self.file.as_mut().unwrap().write_all(&self.buffer[..])?;
+		self.file.as_mut().unwrap().sync_all()?;
 
 		self.buffer = vec![];
 
 		// Note: file must be non-empty to memory map it
-		if self.file.metadata()?.len() == 0 {
+		if self.file.as_ref().unwrap().metadata()?.len() == 0 {
 			self.mmap = None;
 		} else {
-			self.mmap = Some(unsafe { memmap::Mmap::map(&self.file)? });
+			self.mmap = Some(unsafe { memmap::Mmap::map(&self.file.as_ref().unwrap())? });
 		}
 
 		Ok(())
