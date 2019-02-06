@@ -33,7 +33,7 @@ use crate::servers;
 use crate::tui::ui;
 
 /// wrap below to allow UI to clean up on stop
-fn start_server(config: servers::ServerConfig) {
+pub fn start_server(config: servers::ServerConfig) {
 	start_server_tui(config);
 	// Just kill process for now, otherwise the process
 	// hangs around until sigint because the API server
@@ -166,7 +166,7 @@ pub fn server_command(
 				start_server(server_config);
 			}
 			("start", _) => {
-				daemonize();
+				daemonize(server_config);
 			}
 			("stop", _) => println!("TODO. Just 'kill $pid' for now. Maybe /tmp/grin.pid is $pid"),
 			("", _) => {
@@ -188,18 +188,18 @@ pub fn server_command(
 
 //TODO: This
 #[cfg(target_os = "windows")]
-fn daemonize() {
+fn daemonize(config: servers::ServerConfig) {
 	error!("Running as a Windows service not yet supported.");
 }
 
 #[cfg(not(target_os = "windows"))]
-fn daemonize() {
+fn daemonize(config: servers::ServerConfig) {
 	let daemonize = Daemonize::new()
 		.pid_file("/tmp/grin.pid")
 		.chown_pid_file(true)
 		.working_directory(current_dir().unwrap())
 		.privileged_action(move || {
-			start_server(server_config.clone());
+			start_server(config.clone());
 			loop {
 				thread::sleep(Duration::from_secs(60));
 			}
