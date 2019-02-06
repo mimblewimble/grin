@@ -16,7 +16,7 @@
 
 use crate::adapters::util::serialize_slate;
 use crate::controller;
-use crate::core::libtx::slate::{Slate, VersionedSlate};
+use crate::libwallet::slate::{Slate, VersionedSlate};
 use crate::libwallet::{Error, ErrorKind};
 use crate::{instantiate_wallet, HTTPNodeClient, WalletCommAdapter, WalletConfig};
 use failure::ResultExt;

@@ -1,5 +1,5 @@
-use crate::core::libtx::slate::{Slate, VersionedSlate};
-use crate::core::libtx::slate_versions::v0::SlateV0;
+use crate::libwallet::slate::{Slate, VersionedSlate};
+use crate::libwallet::slate_versions::v0::SlateV0;
 use crate::libwallet::ErrorKind;
 use serde_json as json;
 

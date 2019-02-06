@@ -13,11 +13,11 @@
 // limitations under the License.
 
 // Contains V0 of the slate
-use crate::core::transaction::{
+use crate::core::core::transaction::{
 	Input, KernelFeatures, Output, OutputFeatures, Transaction, TransactionBody, TxKernel,
 };
 use crate::keychain::BlindingFactor;
-use crate::libtx::slate::{ParticipantData, Slate};
+use crate::libwallet::slate::{ParticipantData, Slate};
 use crate::util::secp;
 use crate::util::secp::key::PublicKey;
 use crate::util::secp::pedersen::{Commitment, RangeProof};

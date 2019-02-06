@@ -25,6 +25,8 @@
 pub mod api;
 mod error;
 pub mod internal;
+pub mod slate;
+pub mod slate_versions;
 pub mod types;
 
 pub use crate::libwallet::error::{Error, ErrorKind};

@@ -17,8 +17,8 @@ use std::fs::File;
 use std::io::{Read, Write};
 
 use crate::adapters::util::{deserialize_slate, serialize_slate};
-use crate::core::libtx::slate::Slate;
 use crate::libwallet::Error;
+use crate::libwallet::slate::Slate;
 use crate::{WalletCommAdapter, WalletConfig};
 use std::collections::HashMap;
 

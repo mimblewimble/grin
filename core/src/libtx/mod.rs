@@ -27,8 +27,6 @@ mod error;
 pub mod proof;
 pub mod reward;
 pub mod secp_ser;
-pub mod slate;
-pub mod slate_versions;
 
 use crate::consensus;
 use crate::core::Transaction;
