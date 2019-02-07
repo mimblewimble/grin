@@ -240,8 +240,8 @@ fn basic_transaction_api(test_dir: &str) -> Result<(), libwallet::Error> {
 			None,
 		)?;
 		slate = client1.send_tx_slate_direct("wallet2", &slate_i)?;
-		sender_api.finalize_tx(&mut slate)?;
 		sender_api.tx_lock_outputs(&slate, lock_fn)?;
+		sender_api.finalize_tx(&mut slate)?;
 		Ok(())
 	})?;
 
@@ -337,8 +337,8 @@ fn tx_rollback(test_dir: &str) -> Result<(), libwallet::Error> {
 			None,
 		)?;
 		slate = client1.send_tx_slate_direct("wallet2", &slate_i)?;
-		sender_api.finalize_tx(&mut slate)?;
 		sender_api.tx_lock_outputs(&slate, lock_fn)?;
+		sender_api.finalize_tx(&mut slate)?;
 		Ok(())
 	})?;
 
@@ -458,7 +458,7 @@ fn tx_rollback(test_dir: &str) -> Result<(), libwallet::Error> {
 fn db_wallet_basic_transaction_api() {
 	let test_dir = "test_output/basic_transaction_api";
 	if let Err(e) = basic_transaction_api(test_dir) {
-		println!("Libwallet Error: {}", e);
+		panic!("Libwallet Error: {} - {}", e, e.backtrace().unwrap());
 	}
 }
 
@@ -466,6 +466,6 @@ fn db_wallet_basic_transaction_api() {
 fn db_wallet_tx_rollback() {
 	let test_dir = "test_output/tx_rollback";
 	if let Err(e) = tx_rollback(test_dir) {
-		println!("Libwallet Error: {}", e);
+		panic!("Libwallet Error: {} - {}", e, e.backtrace().unwrap());
 	}
 }

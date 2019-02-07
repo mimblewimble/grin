@@ -366,10 +366,10 @@ fn perform_restore(test_dir: &str) -> Result<(), libwallet::Error> {
 fn wallet_restore() {
 	let test_dir = "test_output/wallet_restore";
 	if let Err(e) = setup_restore(test_dir) {
-		println!("Set up restore: Libwallet Error: {}", e);
+		panic!("Libwallet Error: {} - {}", e, e.backtrace().unwrap());
 	}
 	if let Err(e) = perform_restore(test_dir) {
-		println!("Perform restore: Libwallet Error: {}", e);
+		panic!("Libwallet Error: {} - {}", e, e.backtrace().unwrap());
 	}
 	// let logging finish
 	thread::sleep(Duration::from_millis(200));
