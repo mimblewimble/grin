@@ -513,7 +513,13 @@ impl Peers {
 	}
 
 	pub fn enough_peers(&self) -> bool {
-		self.connected_peers().len() >= self.config.peer_min_preferred_count() as usize
+		self.peer_count() >= self.config.peer_min_preferred_count()
+	}
+
+	/// We have enough peers, both total connected and outbound connected
+	pub fn healthy_peers_mix(&self) -> bool {
+		self.enough_peers()
+			&& self.peer_outbound_count() >= self.config.peer_min_preferred_count() / 2
 	}
 
 	/// Removes those peers that seem to have expired
