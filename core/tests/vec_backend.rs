@@ -122,6 +122,9 @@ impl<T: PMMRable> Backend<T> for VecBackend<T> {
 		Path::new("")
 	}
 
+	fn release_files(&mut self) {
+	}
+
 	fn dump_stats(&self) {}
 }
 
