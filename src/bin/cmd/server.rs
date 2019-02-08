@@ -188,7 +188,7 @@ pub fn server_command(
 
 //TODO: This
 #[cfg(target_os = "windows")]
-fn daemonize(config: servers::ServerConfig) {
+fn daemonize(_config: servers::ServerConfig) {
 	error!("Running as a Windows service not yet supported.");
 }
 

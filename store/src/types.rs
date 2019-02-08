@@ -101,6 +101,12 @@ where
 		self.file.path()
 	}
 
+	/// Replace underlying file with another, deleting original
+	pub fn replace(&mut self, with: &Path) -> io::Result<()> {
+		self.file.replace(with)?;
+		Ok(())
+	}
+
 	/// Write the file out to disk, pruning removed elements.
 	pub fn save_prune<F>(&self, target: &str, prune_offs: &[u64], prune_cb: F) -> io::Result<()>
 	where
@@ -135,27 +141,34 @@ pub struct AppendOnlyFile {
 impl AppendOnlyFile {
 	/// Open a file (existing or not) as append-only, backed by a mmap.
 	pub fn open<P: AsRef<Path>>(path: P) -> io::Result<AppendOnlyFile> {
-		let file = OpenOptions::new()
-			.read(true)
-			.append(true)
-			.create(true)
-			.open(&path)?;
 		let mut aof = AppendOnlyFile {
-			file: Some(file),
+			file: None,
 			path: path.as_ref().to_path_buf(),
 			mmap: None,
 			buffer_start: 0,
 			buffer: vec![],
 			buffer_start_bak: 0,
 		};
-		// If we have a non-empty file then mmap it.
-		let sz = aof.size();
-		if sz > 0 {
-			aof.buffer_start = sz as usize;
-			aof.mmap = Some(unsafe { memmap::Mmap::map(&aof.file.as_ref().unwrap())? });
-		}
+		aof.init()?;
 		Ok(aof)
 	}
+
+	/// (Re)init an underlying file and its associated memmap
+	pub fn init(&mut self) -> io::Result<()> {
+		self.file = Some(OpenOptions::new()
+			.read(true)
+			.append(true)
+			.create(true)
+			.open(self.path.clone())?);
+		// If we have a non-empty file then mmap it.
+		let sz = self.size();
+		if sz > 0 {
+			self.buffer_start = sz as usize;
+			self.mmap = Some(unsafe { memmap::Mmap::map(&self.file.as_ref().unwrap())? });
+		}
+		Ok(())
+	}
+
 
 	/// Append data to the file. Until the append-only file is synced, data is
 	/// only written to memory.
@@ -327,6 +340,17 @@ impl AppendOnlyFile {
 				read += len;
 			}
 		}
+	}
+
+	/// Replace the underlying file with another file
+	/// deleting the original
+	pub fn replace(&mut self, with: &Path) -> io::Result<()> {
+		self.mmap = None;
+		self.file = None;
+		fs::remove_file(&self.path)?;
+		fs::rename(with, &self.path)?;
+		self.init()?;
+		Ok(())
 	}
 
 	/// Current size of the file in bytes.
