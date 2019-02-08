@@ -23,8 +23,6 @@ use std::time::Duration;
 
 use clap::ArgMatches;
 use ctrlc;
-#[cfg(not(target_os = "windows"))]
-use daemonize::Daemonize;
 
 use crate::config::GlobalConfig;
 use crate::core::global;
@@ -162,13 +160,10 @@ pub fn server_command(
 	// start the server in the different run modes (interactive or daemon)
 	if let Some(a) = server_args {
 		match a.subcommand() {
+			//TODO: Keep this here for compatibility, but should remove soon
 			("run", _) => {
 				start_server(server_config);
 			}
-			("start", _) => {
-				daemonize(server_config);
-			}
-			("stop", _) => println!("TODO. Just 'kill $pid' for now. Maybe /tmp/grin.pid is $pid"),
 			("", _) => {
 				println!("Subcommand required, use 'grin help server' for details");
 			}
@@ -184,28 +179,4 @@ pub fn server_command(
 		start_server(server_config);
 	}
 	0
-}
-
-//TODO: This
-#[cfg(target_os = "windows")]
-fn daemonize(_config: servers::ServerConfig) {
-	error!("Running as a Windows service not yet supported.");
-}
-
-#[cfg(not(target_os = "windows"))]
-fn daemonize(config: servers::ServerConfig) {
-	let daemonize = Daemonize::new()
-		.pid_file("/tmp/grin.pid")
-		.chown_pid_file(true)
-		.working_directory(current_dir().unwrap())
-		.privileged_action(move || {
-			start_server(config.clone());
-			loop {
-				thread::sleep(Duration::from_secs(60));
-			}
-		});
-	match daemonize.start() {
-		Ok(_) => info!("Grin server successfully started."),
-		Err(e) => error!("Error starting: {}", e),
-	}
 }
