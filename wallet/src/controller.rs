@@ -612,7 +612,10 @@ where
 				self.receive_tx(req, api)
 					.and_then(|res| ok(json_response(&res))),
 			),
-			_ => Box::new(ok(error_response_with_description(StatusCode::BAD_REQUEST, "unknown action"))),
+			_ => Box::new(ok(error_response_with_description(
+				StatusCode::BAD_REQUEST,
+				"unknown action",
+			))),
 		}
 	}
 }
@@ -642,7 +645,10 @@ where
 {
 	match serde_json::to_string(s) {
 		Ok(json) => response(StatusCode::OK, json),
-		Err(_) => error_response_with_description(StatusCode::INTERNAL_SERVER_ERROR, "json serialization error"),
+		Err(_) => error_response_with_description(
+			StatusCode::INTERNAL_SERVER_ERROR,
+			"json serialization error",
+		),
 	}
 }
 
@@ -653,7 +659,10 @@ where
 {
 	match serde_json::to_string_pretty(s) {
 		Ok(json) => response(StatusCode::OK, json),
-		Err(_) => error_response_with_description(StatusCode::INTERNAL_SERVER_ERROR, "json serialization error"),
+		Err(_) => error_response_with_description(
+			StatusCode::INTERNAL_SERVER_ERROR,
+			"json serialization error",
+		),
 	}
 }
 
@@ -695,8 +704,6 @@ fn response<T: Into<Body>>(status: StatusCode, text: T) -> Response<Body> {
 		.body(text.into())
 		.unwrap()
 }
-
-
 
 fn error_response_with_description(status: StatusCode, text: &str) -> Response<Body> {
 	Response::builder()

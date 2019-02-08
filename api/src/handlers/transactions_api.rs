@@ -173,7 +173,10 @@ impl Handler for TxHashSetHandler {
 			"lastkernels" => json_response_pretty(&self.get_last_n_kernel(last_n)),
 			"outputs" => result_to_response(self.outputs(start_index, max)),
 			"merkleproof" => result_to_response(self.get_merkle_proof_for_output(&id)),
-			_ => error_response_with_description(StatusCode::BAD_REQUEST, format!("unknown command \"{}\"", command)),
+			_ => error_response_with_description(
+				StatusCode::BAD_REQUEST,
+				format!("unknown command \"{}\"", command),
+			),
 		}
 	}
 }

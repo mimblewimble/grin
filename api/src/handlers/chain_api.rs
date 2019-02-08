@@ -230,7 +230,10 @@ impl Handler for OutputHandler {
 		match command {
 			"byids" => result_to_response(self.outputs_by_ids(&req)),
 			"byheight" => result_to_response(self.outputs_block_batch(&req)),
-			_ => error_response_with_description(StatusCode::BAD_REQUEST, format!("invalid command \"{}\"", command)),
+			_ => error_response_with_description(
+				StatusCode::BAD_REQUEST,
+				format!("invalid command \"{}\"", command),
+			),
 		}
 	}
 }
