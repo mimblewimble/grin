@@ -33,12 +33,12 @@ where
 	match res {
 		Ok(s) => json_response_pretty(&s),
 		Err(e) => match e.kind() {
-			ErrorKind::Argument(msg) => response(StatusCode::BAD_REQUEST, msg.clone()),
-			ErrorKind::RequestError(msg) => response(StatusCode::BAD_REQUEST, msg.clone()),
-			ErrorKind::NotFound => response(StatusCode::NOT_FOUND, ""),
-			ErrorKind::Internal(msg) => response(StatusCode::INTERNAL_SERVER_ERROR, msg.clone()),
+			ErrorKind::Argument(msg) => error_response_with_description(StatusCode::BAD_REQUEST, msg.clone()),
+			ErrorKind::RequestError(msg) => error_response_with_description(StatusCode::BAD_REQUEST, msg.clone()),
+			ErrorKind::NotFound => error_response_with_description(StatusCode::NOT_FOUND, ""),
+			ErrorKind::Internal(msg) => error_response_with_description(StatusCode::INTERNAL_SERVER_ERROR, msg.clone()),
 			ErrorKind::ResponseError(msg) => {
-				response(StatusCode::INTERNAL_SERVER_ERROR, msg.clone())
+				error_response_with_description(StatusCode::INTERNAL_SERVER_ERROR, msg.clone())
 			}
 		},
 	}
@@ -52,7 +52,7 @@ where
 {
 	match serde_json::to_string(s) {
 		Ok(json) => response(StatusCode::OK, json),
-		Err(_) => response(StatusCode::INTERNAL_SERVER_ERROR, ""),
+		Err(e) => error_response_with_description(StatusCode::INTERNAL_SERVER_ERROR, format!("json serialization failed: {}", e)),
 	}
 }
 
@@ -63,7 +63,7 @@ where
 {
 	match serde_json::to_string_pretty(s) {
 		Ok(json) => response(StatusCode::OK, json),
-		Err(e) => response(
+		Err(e) => error_response_with_description(
 			StatusCode::INTERNAL_SERVER_ERROR,
 			format!("can't create json response: {}", e),
 		),

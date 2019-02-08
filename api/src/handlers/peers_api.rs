@@ -58,15 +58,15 @@ impl Handler for PeerHandler {
 	fn get(&self, req: Request<Body>) -> ResponseFuture {
 		let command = match req.uri().path().trim_right_matches('/').rsplit('/').next() {
 			Some(c) => c,
-			None => return response(StatusCode::BAD_REQUEST, "invalid url"),
+			None => return error_response_with_description(StatusCode::BAD_REQUEST, "invalid url"),
 		};
 		if let Ok(addr) = command.parse() {
 			match w(&self.peers).get_peer(addr) {
 				Ok(peer) => json_response(&peer),
-				Err(_) => response(StatusCode::NOT_FOUND, "peer not found"),
+				Err(_) => error_response_with_description(StatusCode::NOT_FOUND, "peer not found"),
 			}
 		} else {
-			response(
+			error_response_with_description(
 				StatusCode::BAD_REQUEST,
 				format!("peer address unrecognized: {}", req.uri().path()),
 			)
@@ -75,14 +75,14 @@ impl Handler for PeerHandler {
 	fn post(&self, req: Request<Body>) -> ResponseFuture {
 		let mut path_elems = req.uri().path().trim_right_matches('/').rsplit('/');
 		let command = match path_elems.next() {
-			None => return response(StatusCode::BAD_REQUEST, "invalid url"),
+			None => return error_response_with_description(StatusCode::BAD_REQUEST, "invalid url"),
 			Some(c) => c,
 		};
 		let addr = match path_elems.next() {
-			None => return response(StatusCode::BAD_REQUEST, "invalid url"),
+			None => return error_response_with_description(StatusCode::BAD_REQUEST, "invalid url"),
 			Some(a) => match a.parse() {
 				Err(e) => {
-					return response(
+					return error_response_with_description(
 						StatusCode::BAD_REQUEST,
 						format!("invalid peer address: {}", e),
 					);
@@ -94,9 +94,9 @@ impl Handler for PeerHandler {
 		match command {
 			"ban" => w(&self.peers).ban_peer(&addr, ReasonForBan::ManualBan),
 			"unban" => w(&self.peers).unban_peer(&addr),
-			_ => return response(StatusCode::BAD_REQUEST, "invalid command"),
+			_ => return error_response_with_description(StatusCode::BAD_REQUEST, "invalid command"),
 		};
 
-		response(StatusCode::OK, "")
+		response(StatusCode::OK, "{}")
 	}
 }

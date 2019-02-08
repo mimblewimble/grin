@@ -309,7 +309,7 @@ where
 				"node_height" => json_response(&self.node_height(req, api)?),
 				"retrieve_txs" => json_response(&self.retrieve_txs(req, api)?),
 				"retrieve_stored_tx" => json_response(&self.retrieve_stored_tx(req, api)?),
-				_ => response(StatusCode::BAD_REQUEST, ""),
+				_ => error_response_with_description(StatusCode::BAD_REQUEST, "unknown url"),
 			},
 		)
 	}
@@ -487,11 +487,11 @@ where
 			),
 			"cancel_tx" => Box::new(
 				self.cancel_tx(req, api)
-					.and_then(|_| ok(response(StatusCode::OK, ""))),
+					.and_then(|_| ok(response(StatusCode::OK, "{}"))),
 			),
 			"post_tx" => Box::new(
 				self.post_tx(req, api)
-					.and_then(|_| ok(response(StatusCode::OK, ""))),
+					.and_then(|_| ok(response(StatusCode::OK, "{}"))),
 			),
 			_ => Box::new(err(ErrorKind::GenericError(
 				"Unknown error handling post request".to_owned(),
@@ -612,7 +612,7 @@ where
 				self.receive_tx(req, api)
 					.and_then(|res| ok(json_response(&res))),
 			),
-			_ => Box::new(ok(response(StatusCode::BAD_REQUEST, "unknown action"))),
+			_ => Box::new(ok(error_response_with_description(StatusCode::BAD_REQUEST, "unknown action"))),
 		}
 	}
 }
@@ -642,7 +642,7 @@ where
 {
 	match serde_json::to_string(s) {
 		Ok(json) => response(StatusCode::OK, json),
-		Err(_) => response(StatusCode::INTERNAL_SERVER_ERROR, ""),
+		Err(_) => error_response_with_description(StatusCode::INTERNAL_SERVER_ERROR, "json serialization error"),
 	}
 }
 
@@ -653,7 +653,7 @@ where
 {
 	match serde_json::to_string_pretty(s) {
 		Ok(json) => response(StatusCode::OK, json),
-		Err(_) => response(StatusCode::INTERNAL_SERVER_ERROR, ""),
+		Err(_) => error_response_with_description(StatusCode::INTERNAL_SERVER_ERROR, "json serialization error"),
 	}
 }
 
@@ -693,6 +693,21 @@ fn response<T: Into<Body>>(status: StatusCode, text: T) -> Response<Body> {
 		)
 		.header(hyper::header::CONTENT_TYPE, "application/json")
 		.body(text.into())
+		.unwrap()
+}
+
+
+
+fn error_response_with_description(status: StatusCode, text: &str) -> Response<Body> {
+	Response::builder()
+		.status(status)
+		.header(hyper::header::ACCESS_CONTROL_ALLOW_ORIGIN, "*")
+		.header(
+			hyper::header::ACCESS_CONTROL_ALLOW_HEADERS,
+			"Content-Type, Authorization",
+		)
+		.header(hyper::header::CONTENT_TYPE, "application/json")
+		.body(format!("{\"error\":\"{}\"}", text))
 		.unwrap()
 }
 

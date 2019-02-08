@@ -163,7 +163,7 @@ impl Handler for TxHashSetHandler {
 			.next()
 		{
 			Some(c) => c,
-			None => return response(StatusCode::BAD_REQUEST, "invalid url"),
+			None => return error_response_with_description(StatusCode::BAD_REQUEST, "invalid url"),
 		};
 
 		match command {
@@ -173,7 +173,7 @@ impl Handler for TxHashSetHandler {
 			"lastkernels" => json_response_pretty(&self.get_last_n_kernel(last_n)),
 			"outputs" => result_to_response(self.outputs(start_index, max)),
 			"merkleproof" => result_to_response(self.get_merkle_proof_for_output(&id)),
-			_ => response(StatusCode::BAD_REQUEST, ""),
+			_ => error_response_with_description(StatusCode::BAD_REQUEST, format!("unknown command \"{}\"", command)),
 		}
 	}
 }

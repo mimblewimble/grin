@@ -69,7 +69,7 @@ impl HeaderHandler {
 impl Handler for HeaderHandler {
 	fn get(&self, req: Request<Body>) -> ResponseFuture {
 		let el = match req.uri().path().trim_right_matches('/').rsplit('/').next() {
-			None => return response(StatusCode::BAD_REQUEST, "invalid url"),
+			None => return request(StatusCode::BAD_REQUEST, "invalid url"),
 			Some(el) => el,
 		};
 		result_to_response(self.get_header(el.to_string()))
@@ -131,13 +131,13 @@ fn check_block_param(input: &String) -> Result<(), Error> {
 impl Handler for BlockHandler {
 	fn get(&self, req: Request<Body>) -> ResponseFuture {
 		let el = match req.uri().path().trim_right_matches('/').rsplit('/').next() {
-			None => return response(StatusCode::BAD_REQUEST, "invalid url"),
+			None => return error_response_with_description(StatusCode::BAD_REQUEST, "invalid url"),
 			Some(el) => el,
 		};
 
 		let h = match self.parse_input(el.to_string()) {
 			Err(e) => {
-				return response(
+				return error_response_with_description(
 					StatusCode::BAD_REQUEST,
 					format!("failed to parse input: {}", e),
 				);
@@ -149,7 +149,7 @@ impl Handler for BlockHandler {
 			if param == "compact" {
 				result_to_response(self.get_compact_block(&h))
 			} else {
-				response(
+				error_response_with_description(
 					StatusCode::BAD_REQUEST,
 					format!("unsupported query parameter: {}", param),
 				)

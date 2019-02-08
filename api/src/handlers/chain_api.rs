@@ -56,8 +56,8 @@ pub struct ChainValidationHandler {
 impl Handler for ChainValidationHandler {
 	fn get(&self, _req: Request<Body>) -> ResponseFuture {
 		match w(&self.chain).validate(true) {
-			Ok(_) => response(StatusCode::OK, ""),
-			Err(e) => response(
+			Ok(_) => response(StatusCode::OK, "{}"),
+			Err(e) => error_response_with_description(
 				StatusCode::INTERNAL_SERVER_ERROR,
 				format!("validate failed: {}", e),
 			),
@@ -75,8 +75,8 @@ pub struct ChainCompactHandler {
 impl Handler for ChainCompactHandler {
 	fn post(&self, _req: Request<Body>) -> ResponseFuture {
 		match w(&self.chain).compact() {
-			Ok(_) => response(StatusCode::OK, ""),
-			Err(e) => response(
+			Ok(_) => response(StatusCode::OK, "{}"),
+			Err(e) => error_response_with_description(
 				StatusCode::INTERNAL_SERVER_ERROR,
 				format!("compact failed: {}", e),
 			),
@@ -225,12 +225,12 @@ impl Handler for OutputHandler {
 	fn get(&self, req: Request<Body>) -> ResponseFuture {
 		let command = match req.uri().path().trim_right_matches('/').rsplit('/').next() {
 			Some(c) => c,
-			None => return response(StatusCode::BAD_REQUEST, "invalid url"),
+			None => return error_response_with_description(StatusCode::BAD_REQUEST, "invalid url"),
 		};
 		match command {
 			"byids" => result_to_response(self.outputs_by_ids(&req)),
 			"byheight" => result_to_response(self.outputs_block_batch(&req)),
-			_ => response(StatusCode::BAD_REQUEST, ""),
+			_ => error_response_with_description(StatusCode::BAD_REQUEST, format!("invalid command \"{}\"", command)),
 		}
 	}
 }
