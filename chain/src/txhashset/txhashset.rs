@@ -155,11 +155,11 @@ impl TxHashSet {
 
 	/// Close all backend file handles
 	pub fn release_backend_files(&mut self) {
-		self.header_pmmr_h.backend.release_files();	
-		self.sync_pmmr_h.backend.release_files();	
-		self.output_pmmr_h.backend.release_files();	
-		self.rproof_pmmr_h.backend.release_files();	
-		self.kernel_pmmr_h.backend.release_files();	
+		self.header_pmmr_h.backend.release_files();
+		self.sync_pmmr_h.backend.release_files();
+		self.output_pmmr_h.backend.release_files();
+		self.rproof_pmmr_h.backend.release_files();
+		self.kernel_pmmr_h.backend.release_files();
 	}
 
 	/// Check if an output is unspent.

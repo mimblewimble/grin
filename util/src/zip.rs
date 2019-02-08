@@ -86,7 +86,7 @@ where
 				Err(e) => {
 					error!("{:?}", e);
 					return Err(zip::result::ZipError::Io(e));
-				},
+				}
 				Ok(r) => r,
 			};
 			io::copy(&mut file, &mut outfile)?;

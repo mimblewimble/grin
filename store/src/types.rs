@@ -108,7 +108,7 @@ where
 	}
 
 	/// Drop underlying file handles
-	pub fn release(&mut self){
+	pub fn release(&mut self) {
 		self.file.release();
 	}
 
