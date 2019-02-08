@@ -152,6 +152,12 @@ impl<T: PMMRable> Backend<T> for PMMRBackend<T> {
 		self.data_file.path()
 	}
 
+	/// Release underlying data files
+	fn release_files(&mut self) {
+		self.data_file.release();
+		self.hash_file.release();
+	}
+
 	fn snapshot(&self, header: &BlockHeader) -> Result<(), String> {
 		self.leaf_set
 			.snapshot(header)
