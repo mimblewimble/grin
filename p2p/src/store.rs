@@ -29,7 +29,7 @@ use grin_store::{self, option_to_not_found, to_key, Error};
 
 const STORE_SUBPATH: &'static str = "peers";
 
-const PEER_PREFIX: u8 = 'p' as u8;
+const PEER_PREFIX: u8 = 'P' as u8;
 
 /// Types of messages
 enum_from_primitive! {
@@ -162,17 +162,6 @@ impl PeerStore {
 		peers.iter().take(count).cloned().collect()
 	}
 
-	/// Query all peers with same IP address, and ignore the port
-	pub fn find_peers_by_ip(&self, peer_addr: SocketAddr) -> Vec<PeerData> {
-		self.db
-			.iter::<PeerData>(&to_key(
-				PEER_PREFIX,
-				&mut format!("{}", peer_addr.ip()).into_bytes(),
-			))
-			.unwrap()
-			.collect::<Vec<_>>()
-	}
-
 	/// List all known peers
 	/// Used for /v1/peers/all api endpoint
 	pub fn all_peers(&self) -> Vec<PeerData> {
@@ -226,9 +215,15 @@ impl PeerStore {
 	}
 }
 
+// If this is a "loopback" address then we care about the port and construct the key "ip:port".
+// Otherwise we *only* care about the ip and we ignore the port.
 fn peer_key(peer_addr: SocketAddr) -> Vec<u8> {
-	to_key(
-		PEER_PREFIX,
-		&mut format!("{}:{}", peer_addr.ip(), peer_addr.port()).into_bytes(),
-	)
+	if peer_addr.ip().is_loopback() {
+		to_key(
+			PEER_PREFIX,
+			&mut format!("{}:{}", peer_addr.ip(), peer_addr.port()).into_bytes(),
+		)
+	} else {
+		to_key(PEER_PREFIX, &mut format!("{}", peer_addr.ip()).into_bytes())
+	}
 }

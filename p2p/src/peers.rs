@@ -37,8 +37,8 @@ use crate::types::{
 pub struct Peers {
 	pub adapter: Arc<dyn ChainAdapter>,
 	store: PeerStore,
-	peers: RwLock<HashMap<SocketAddr, Arc<Peer>>>,
-	dandelion_relay: RwLock<Option<(i64, Arc<Peer>)>>,
+	peers: RwLock<HashMap<String, Arc<Peer>>>,
+	dandelion_relay: RwLock<HashMap<i64, Arc<Peer>>>,
 	config: P2PConfig,
 }
 
@@ -72,11 +72,8 @@ impl Peers {
 		}
 		debug!("Saving newly connected peer {}.", addr);
 		self.save_peer(&peer_data)?;
+		self.peers.write().insert(peer_key(&addr), peer.clone());
 
-		{
-			let mut peers = self.peers.write();
-			peers.insert(addr, peer.clone());
-		}
 		Ok(())
 	}
 
@@ -130,17 +127,7 @@ impl Peers {
 	}
 
 	pub fn is_known(&self, addr: &SocketAddr) -> bool {
-		self.peers.read().contains_key(addr)
-	}
-
-	/// Check whether an ip address is in the active peers list, ignore the port
-	pub fn is_known_ip(&self, addr: &SocketAddr) -> bool {
-		for socket in self.peers.read().keys() {
-			if addr.ip() == socket.ip() {
-				return true;
-			}
-		}
-		return false;
+		self.peers.read().contains_key(&peer_key(addr))
 	}
 
 	/// Get vec of peers we are currently connected to.
@@ -167,7 +154,7 @@ impl Peers {
 
 	/// Get a peer we're connected to by address.
 	pub fn get_connected_peer(&self, addr: &SocketAddr) -> Option<Arc<Peer>> {
-		self.peers.read().get(addr).map(|p| p.clone())
+		self.peers.read().get(&peer_key(addr)).map(|p| p.clone())
 	}
 
 	/// Number of peers currently connected to.
@@ -258,22 +245,9 @@ impl Peers {
 	}
 
 	pub fn is_banned(&self, peer_addr: SocketAddr) -> bool {
-		if global::is_production_mode() {
-			// Ban only cares about ip address, no mather what port.
-			// so, we query all saved peers with one same ip address, and ignore port
-			let peers_data = self.store.find_peers_by_ip(peer_addr);
-			for peer_data in peers_data {
-				if peer_data.flags == State::Banned {
-					return true;
-				}
-			}
-		} else {
-			// For travis-ci test, we need run multiple nodes in one server, with same ip address.
-			// so, just query the ip address and the port
-			if let Ok(peer_data) = self.store.get_peer(peer_addr) {
-				if peer_data.flags == State::Banned {
-					return true;
-				}
+		if let Ok(peer) = self.store.get_peer(peer_addr) {
+			if peer.flags == State::Banned {
+				return true;
 			}
 		}
 		false
@@ -495,9 +469,10 @@ impl Peers {
 		// now clean up peer map based on the list to remove
 		{
 			let mut peers = self.peers.write();
-			for p in rm {
-				let _ = peers.get(&p).map(|p| p.stop());
-				peers.remove(&p);
+			for ref p in rm {
+				let key = peer_key(p);
+				let _ = peers.get(&key).map(|peer| peer.stop());
+				peers.remove(&key);
 			}
 		}
 	}
@@ -705,5 +680,16 @@ impl NetAdapter for Peers {
 		} else {
 			false
 		}
+	}
+}
+
+// TODO - PeerAddr struct for encapsulation and reuse here and in the store.
+// If this is a "loopback" address then we care about the port and construct the key "ip:port".
+// Otherwise we *only* care about the ip and we ignore the port.
+fn peer_key(addr: &SocketAddr) -> String {
+	if addr.ip().is_loopback() {
+		format!("{}:{}", addr.ip(), addr.port())
+	} else {
+		format!("{}", addr.ip())
 	}
 }

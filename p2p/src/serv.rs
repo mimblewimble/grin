@@ -29,7 +29,7 @@ use crate::peer::Peer;
 use crate::peers::Peers;
 use crate::store::PeerStore;
 use crate::types::{
-	Capabilities, ChainAdapter, Error, NetAdapter, P2PConfig, ReasonForBan, Seeding, TxHashSetRead,
+	Capabilities, ChainAdapter, Error, NetAdapter, P2PConfig, ReasonForBan, TxHashSetRead,
 };
 use crate::util::{Mutex, StopState};
 use chrono::prelude::{DateTime, Utc};
@@ -191,13 +191,16 @@ impl Server {
 	/// different sets of peers themselves. In addition, it prevent potential
 	/// duplicate connections, malicious or not.
 	fn check_undesirable(&self, stream: &TcpStream) -> bool {
-		// peer has been banned, go away!
 		if let Ok(peer_addr) = stream.peer_addr() {
-			let banned = self.peers.is_banned(peer_addr);
-			let known_ip =
-				self.peers.is_known_ip(&peer_addr) && self.config.seeding_type == Seeding::DNSSeed;
-			if banned || known_ip {
-				debug!("Peer {} banned or known, refusing connection.", peer_addr);
+			if self.peers.is_banned(peer_addr) {
+				debug!("Peer {} banned, refusing connection.", peer_addr);
+				if let Err(e) = stream.shutdown(Shutdown::Both) {
+					debug!("Error shutting down conn: {:?}", e);
+				}
+				return true;
+			}
+			if self.peers.is_known(&peer_addr) {
+				debug!("Peer {} already known, refusing connection.", peer_addr);
 				if let Err(e) = stream.shutdown(Shutdown::Both) {
 					debug!("Error shutting down conn: {:?}", e);
 				}
