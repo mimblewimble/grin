@@ -13,7 +13,7 @@
 // limitations under the License.
 
 /// Grin configuration file output command
-use crate::config::{GlobalConfig, GlobalWalletConfig, GRIN_WALLET_DIR};
+use crate::config::{config, GlobalConfig, GlobalWalletConfig, GRIN_WALLET_DIR};
 use crate::core::global;
 use std::env;
 
@@ -79,4 +79,12 @@ pub fn config_command_wallet(chain_type: &global::ChainTypes, file_name: &str) {
 		"File {} configured and created",
 		config_file_name.to_str().unwrap(),
 	);
+
+	let mut api_secret_path = current_dir.clone();
+	api_secret_path.push(config::API_SECRET_FILE_NAME);
+	if !api_secret_path.exists() {
+		config::init_api_secret(&api_secret_path).unwrap();
+	} else {
+		config::check_api_secret(&api_secret_path).unwrap();
+	}
 }
