@@ -692,15 +692,12 @@ fn response<T: Into<Body>>(status: StatusCode, text: T) -> Response<Body> {
 			"access-control-allow-headers",
 			"Content-Type, Authorization",
 		);
-	
+
 	if status == StatusCode::OK {
-		builder = builder
-			.header(hyper::header::CONTENT_TYPE, "application/json");
+		builder = builder.header(hyper::header::CONTENT_TYPE, "application/json");
 	}
 
-	builder
-		.body(text.into())
-		.unwrap()
+	builder.body(text.into()).unwrap()
 }
 
 fn parse_params(req: &Request<Body>) -> HashMap<String, Vec<String>> {
