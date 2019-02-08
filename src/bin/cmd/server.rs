@@ -157,10 +157,8 @@ pub fn server_command(
 			});
 	}*/
 
-	// start the server in the different run modes (interactive or daemon)
 	if let Some(a) = server_args {
 		match a.subcommand() {
-			//TODO: Keep this here for compatibility, but should remove soon
 			("run", _) => {
 				start_server(server_config);
 			}
