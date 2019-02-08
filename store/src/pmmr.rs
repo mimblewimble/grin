@@ -135,8 +135,7 @@ impl<T: PMMRable> Backend<T> for PMMRBackend<T> {
 		// Rewind the data file accounting for pruned/compacted pos
 		let flatfile_pos = pmmr::n_leaves(position);
 		let leaf_shift = self.prune_list.get_leaf_shift(position);
-		self.data_file
-			.rewind(flatfile_pos - leaf_shift);
+		self.data_file.rewind(flatfile_pos - leaf_shift);
 
 		Ok(())
 	}
@@ -306,11 +305,8 @@ impl<T: PMMRable> PMMRBackend<T> {
 				pos as u64 - 1 - shift
 			});
 
-			self.hash_file.save_prune(
-				&tmp_prune_file_hash,
-				&off_to_rm,
-				&prune_noop,
-			)?;
+			self.hash_file
+				.save_prune(&tmp_prune_file_hash, &off_to_rm, &prune_noop)?;
 		}
 
 		// 2. Save compact copy of the data file, skipping removed leaves.
@@ -327,11 +323,8 @@ impl<T: PMMRable> PMMRBackend<T> {
 				(flat_pos - 1 - shift)
 			});
 
-			self.data_file.save_prune(
-				&tmp_prune_file_data,
-				&off_to_rm,
-				prune_cb,
-			)?;
+			self.data_file
+				.save_prune(&tmp_prune_file_data, &off_to_rm, prune_cb)?;
 		}
 
 		// 3. Update the prune list and write to disk.

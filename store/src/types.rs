@@ -155,11 +155,13 @@ impl AppendOnlyFile {
 
 	/// (Re)init an underlying file and its associated memmap
 	pub fn init(&mut self) -> io::Result<()> {
-		self.file = Some(OpenOptions::new()
-			.read(true)
-			.append(true)
-			.create(true)
-			.open(self.path.clone())?);
+		self.file = Some(
+			OpenOptions::new()
+				.read(true)
+				.append(true)
+				.create(true)
+				.open(self.path.clone())?,
+		);
 		// If we have a non-empty file then mmap it.
 		let sz = self.size();
 		if sz > 0 {
@@ -168,7 +170,6 @@ impl AppendOnlyFile {
 		}
 		Ok(())
 	}
-
 
 	/// Append data to the file. Until the append-only file is synced, data is
 	/// only written to memory.
