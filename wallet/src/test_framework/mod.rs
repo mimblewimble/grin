@@ -198,7 +198,6 @@ where
 		None,   // account
 		amount, // amount
 		2,      // minimum confirmations
-		500,    // max outputs
 		1,      // num change outputs
 		true,   // select all outputs
 		None,
