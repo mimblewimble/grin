@@ -660,11 +660,12 @@ where
 fn create_error_response(e: Error) -> Response<Body> {
 	Response::builder()
 		.status(StatusCode::INTERNAL_SERVER_ERROR)
-		.header("access-control-allow-origin", "*")
+		.header(hyper::header::ACCESS_CONTROL_ALLOW_ORIGIN, "*")
 		.header(
-			"access-control-allow-headers",
+			hyper::header::ACCESS_CONTROL_ALLOW_HEADERS,
 			"Content-Type, Authorization",
 		)
+		.header(hyper::header::CONTENT_TYPE, "application/json")
 		.body(format!("{}", e).into())
 		.unwrap()
 }
@@ -672,11 +673,12 @@ fn create_error_response(e: Error) -> Response<Body> {
 fn create_ok_response(json: &str) -> Response<Body> {
 	Response::builder()
 		.status(StatusCode::OK)
-		.header("access-control-allow-origin", "*")
+		.header(hyper::header::ACCESS_CONTROL_ALLOW_ORIGIN, "*")
 		.header(
-			"access-control-allow-headers",
+			hyper::header::ACCESS_CONTROL_ALLOW_HEADERS,
 			"Content-Type, Authorization",
 		)
+		.header(hyper::header::CONTENT_TYPE, "application/json")
 		.body(json.to_string().into())
 		.unwrap()
 }
@@ -684,11 +686,12 @@ fn create_ok_response(json: &str) -> Response<Body> {
 fn response<T: Into<Body>>(status: StatusCode, text: T) -> Response<Body> {
 	Response::builder()
 		.status(status)
-		.header("access-control-allow-origin", "*")
+		.header(hyper::header::ACCESS_CONTROL_ALLOW_ORIGIN, "*")
 		.header(
-			"access-control-allow-headers",
+			hyper::header::ACCESS_CONTROL_ALLOW_HEADERS,
 			"Content-Type, Authorization",
 		)
+		.header(hyper::header::CONTENT_TYPE, "application/json")
 		.body(text.into())
 		.unwrap()
 }
