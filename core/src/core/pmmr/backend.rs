@@ -62,6 +62,9 @@ pub trait Backend<T: PMMRable> {
 	/// fastest way to to be able to allow direct access to the file
 	fn get_data_file_path(&self) -> &Path;
 
+	/// Release underlying datafiles and locks
+	fn release_files(&mut self);
+
 	/// Also a bit of a hack...
 	/// Saves a snapshot of the rewound utxo file with the block hash as
 	/// filename suffix. We need this when sending a txhashset zip file to a
