@@ -369,24 +369,22 @@ impl Peers {
 
 	/// Relays the provided stem transaction to our single stem peer.
 	pub fn relay_stem_transaction(&self, tx: &core::Transaction) -> Result<(), Error> {
-		let dandelion_relay = self.get_dandelion_relay();
-		if dandelion_relay.is_none() {
-			debug!("No dandelion relay, updating.");
-			self.update_dandelion_relay();
-		}
-		// If still return an error, let the caller handle this as they see fit.
-		// The caller will "fluff" at this point as the stem phase is finished.
-		match dandelion_relay {
-			Some((ts, relay)) => {
+		self.get_dandelion_relay()
+			.or_else(|| {
+				debug!("No dandelion relay, updating.");
+				self.update_dandelion_relay();
+				self.get_dandelion_relay()
+			})
+			// If still return an error, let the caller handle this as they see fit.
+			// The caller will "fluff" at this point as the stem phase is finished.
+			.ok_or(Error::NoDandelionRelay)
+			.map(|(_, relay)| {
 				if relay.is_connected() {
 					if let Err(e) = relay.send_stem_transaction(tx) {
 						debug!("Error sending stem transaction to peer relay: {:?}", e);
 					}
 				}
-				Ok(())
-			}
-			None => Err(Error::NoDandelionRelay),
-		}
+			})
 	}
 
 	/// Broadcasts the provided transaction to PEER_PREFERRED_COUNT of our
