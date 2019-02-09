@@ -12,6 +12,7 @@
     1. [POST Finalize Tx](#post-finalize-tx)
     1. [POST Cancel Tx](#post-cancel-tx)
     1. [POST Post Tx](#post-post-tx)
+    1. [POST Repost Tx](#post-repost-tx)
     1. [POST Issue Burn Tx](#post-issue-burn-tx)
     1. [Adding Foreign API Endpoints](#add-foreign-api-endpoints)
 
@@ -639,6 +640,50 @@ Push new transaction to the connected node transaction pool. Add `?fluff` at the
       data: {
         file: tx.json
       },
+    });
+  ```
+### POST Repost Tx
+
+Repost a `sending` transaction to the connected node transaction pool with a given transaction id. Add `?fluff` at the end of the URL to bypass Dandelion relay . This could be used for retry posting when a `sending` transaction is created but somehow failed on posting.
+
+* **URL**
+
+  * /v1/wallet/owner/repost?id=x
+  * /v1/wallet/owner/repost?tx_id=x
+  * /v1/wallet/owner/repost?fluff&tx_id=x
+
+* **Method:**
+
+  `POST`
+  
+* **URL Params**
+
+  **Required:**
+  * `id=[number]` the transaction id
+  * `tx_id=[string]`the transaction slate id
+
+* **Data Params**
+
+  None
+
+* **Success Response:**
+
+  * **Code:** 200
+
+* **Error Response:**
+
+  * **Code:** 400
+
+* **Sample Call:**
+
+  ```javascript
+    $.ajax({
+      url: "/v1/wallet/owner/repost?id=3",
+      dataType: "json",
+      type : "POST",
+      success : function(r) {
+        console.log(r);
+      }
     });
   ```
 
