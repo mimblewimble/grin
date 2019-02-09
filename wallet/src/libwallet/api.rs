@@ -600,7 +600,6 @@ where
 	///		None,
 	///		amount,     // amount
 	///		10,         // minimum confirmations
-	///		500,        // max outputs
 	///		1,          // num change outputs
 	///		true,       // select all outputs
 	///		Some("Have some Grins. Love, Yeastplume".to_owned()),

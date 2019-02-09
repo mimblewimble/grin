@@ -378,7 +378,6 @@ impl LocalServerContainer {
 		let client_n = HTTPNodeClient::new(&config.check_node_api_http_addr, None);
 		let client_w = HTTPWalletCommAdapter::new();
 
-		let max_outputs = 500;
 		let change_outputs = 1;
 
 		let mut wallet = LMDBBackend::new(config.clone(), "", client_n)
@@ -389,7 +388,6 @@ impl LocalServerContainer {
 				None,
 				amount,
 				minimum_confirmations,
-				max_outputs,
 				change_outputs,
 				selection_strategy == "all",
 				None,
