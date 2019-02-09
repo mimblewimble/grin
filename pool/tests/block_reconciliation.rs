@@ -49,7 +49,7 @@ fn test_transaction_pool_block_reconciliation() {
 		let mut block = Block::new(&genesis, vec![], Difficulty::min(), reward).unwrap();
 
 		// Set the prev_root to the prev hash for testing purposes (no MMR to obtain a root from).
-		block.header.prev_root = genesis.hash();
+		block.header.prev_root = genesis.crypto_hash();
 
 		chain.update_db_for_block(&block);
 
@@ -67,7 +67,7 @@ fn test_transaction_pool_block_reconciliation() {
 		let mut block = Block::new(&header, vec![initial_tx], Difficulty::min(), reward).unwrap();
 
 		// Set the prev_root to the prev hash for testing purposes (no MMR to obtain a root from).
-		block.header.prev_root = header.hash();
+		block.header.prev_root = header.crypto_hash();
 
 		chain.update_db_for_block(&block);
 
@@ -160,7 +160,7 @@ fn test_transaction_pool_block_reconciliation() {
 		let mut block = Block::new(&header, block_txs, Difficulty::min(), reward).unwrap();
 
 		// Set the prev_root to the prev hash for testing purposes (no MMR to obtain a root from).
-		block.header.prev_root = header.hash();
+		block.header.prev_root = header.crypto_hash();
 
 		chain.update_db_for_block(&block);
 		block

@@ -105,7 +105,7 @@ impl BlockHandler {
 	fn parse_input(&self, input: String) -> Result<Hash, Error> {
 		if let Ok(height) = input.parse() {
 			match w(&self.chain).get_header_by_height(height) {
-				Ok(header) => return Ok(header.hash()),
+				Ok(header) => return Ok(header.crypto_hash()),
 				Err(_) => return Err(ErrorKind::NotFound)?,
 			}
 		}

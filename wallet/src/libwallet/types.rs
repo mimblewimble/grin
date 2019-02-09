@@ -459,7 +459,7 @@ pub struct BlockIdentifier(pub Hash);
 
 impl BlockIdentifier {
 	/// return hash
-	pub fn hash(&self) -> Hash {
+	pub fn crypto_hash(&self) -> Hash {
 		self.0
 	}
 

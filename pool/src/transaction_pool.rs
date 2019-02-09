@@ -140,7 +140,7 @@ impl TransactionPool {
 	) -> Result<(), PoolError> {
 		// Quick check to deal with common case of seeing the *same* tx
 		// broadcast from multiple peers simultaneously.
-		if !stem && self.txpool.contains_tx(tx.hash()) {
+		if !stem && self.txpool.contains_tx(tx.crypto_hash()) {
 			return Err(PoolError::DuplicateTx);
 		}
 
@@ -200,14 +200,14 @@ impl TransactionPool {
 		debug!(
 			"reconcile_reorg_cache: size: {}, block: {:?} ...",
 			entries.len(),
-			header.hash(),
+			header.crypto_hash(),
 		);
 		for entry in entries {
 			let _ = &self.add_to_txpool(entry.clone(), header);
 		}
 		debug!(
 			"reconcile_reorg_cache: block: {:?} ... done.",
-			header.hash()
+			header.crypto_hash()
 		);
 		Ok(())
 	}

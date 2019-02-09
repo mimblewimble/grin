@@ -52,7 +52,7 @@ fn simple_tx_ser_deser() {
 	assert_eq!(dtx.fee(), 2);
 	assert_eq!(dtx.inputs().len(), 2);
 	assert_eq!(dtx.outputs().len(), 1);
-	assert_eq!(tx.hash(), dtx.hash());
+	assert_eq!(tx.crypto_hash(), dtx.crypto_hash());
 }
 
 #[test]
@@ -68,8 +68,8 @@ fn tx_double_ser_deser() {
 	assert!(ser::serialize(&mut vec2, &btx).is_ok());
 	let dtx2: Transaction = ser::deserialize(&mut &vec2[..]).unwrap();
 
-	assert_eq!(btx.hash(), dtx.hash());
-	assert_eq!(dtx.hash(), dtx2.hash());
+	assert_eq!(btx.crypto_hash(), dtx.crypto_hash());
+	assert_eq!(dtx.crypto_hash(), dtx2.crypto_hash());
 }
 
 #[test]
@@ -364,9 +364,9 @@ fn hash_output() {
 		&keychain,
 	)
 	.unwrap();
-	let h = tx.outputs()[0].hash();
+	let h = tx.outputs()[0].crypto_hash();
 	assert!(h != ZERO_HASH);
-	let h2 = tx.outputs()[1].hash();
+	let h2 = tx.outputs()[1].crypto_hash();
 	assert!(h != h2);
 }
 
@@ -397,7 +397,7 @@ fn tx_hash_diff() {
 	let btx1 = tx2i1o();
 	let btx2 = tx1i1o();
 
-	if btx1.hash() == btx2.hash() {
+	if btx1.crypto_hash() == btx2.crypto_hash() {
 		panic!("diff txs have same hash")
 	}
 }

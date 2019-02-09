@@ -84,7 +84,9 @@ impl ChainAdapter {
 			utxo_sum,
 			kernel_sum,
 		};
-		batch.save_block_sums(&header.hash(), &block_sums).unwrap();
+		batch
+			.save_block_sums(&header.crypto_hash(), &block_sums)
+			.unwrap();
 
 		batch.commit().unwrap();
 

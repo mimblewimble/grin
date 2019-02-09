@@ -48,7 +48,7 @@ fn test_transaction_pool_block_building() {
 		let mut block = Block::new(&prev_header, txs, Difficulty::min(), reward).unwrap();
 
 		// Set the prev_root to the prev hash for testing purposes (no MMR to obtain a root from).
-		block.header.prev_root = prev_header.hash();
+		block.header.prev_root = prev_header.crypto_hash();
 
 		chain.update_db_for_block(&block);
 		block

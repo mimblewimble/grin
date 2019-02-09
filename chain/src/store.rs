@@ -204,7 +204,7 @@ impl<'a> Batch<'a> {
 
 		// Save the block itself to the db.
 		self.db
-			.put_ser(&to_key(BLOCK_PREFIX, &mut b.hash().to_vec())[..], b)?;
+			.put_ser(&to_key(BLOCK_PREFIX, &mut b.header_hash().to_vec())[..], b)?;
 
 		Ok(())
 	}
@@ -226,7 +226,7 @@ impl<'a> Batch<'a> {
 	}
 
 	pub fn save_block_header(&self, header: &BlockHeader) -> Result<(), Error> {
-		let hash = header.hash();
+		let hash = header.crypto_hash();
 
 		// Store the header itself indexed by hash.
 		self.db
@@ -310,7 +310,7 @@ impl<'a> Batch<'a> {
 		let bitmap = self.build_block_input_bitmap(block)?;
 
 		// Save the bitmap to the db (via the batch).
-		self.save_block_input_bitmap(&block.hash(), &bitmap)?;
+		self.save_block_input_bitmap(&block.header_hash(), &bitmap)?;
 
 		Ok(bitmap)
 	}

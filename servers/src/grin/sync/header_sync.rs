@@ -63,9 +63,9 @@ impl HeaderSync {
 				let sync_head = self.chain.get_sync_head().unwrap();
 				debug!(
 					"sync: initial transition to HeaderSync. sync_head: {} at {}, resetting to: {} at {}",
-					sync_head.hash(),
+					sync_head.last_block_h,
 					sync_head.height,
-					header_head.hash(),
+					header_head.last_block_h,
 					header_head.height,
 				);
 
@@ -210,7 +210,9 @@ impl HeaderSync {
 
 		// for security, clear history_locator[] in any case of header chain rollback,
 		// the easiest way is to check whether the sync head and the header head are identical.
-		if self.history_locator.len() > 0 && tip.hash() != self.chain.header_head()?.hash() {
+		if self.history_locator.len() > 0
+			&& tip.last_block_h != self.chain.header_head()?.last_block_h
+		{
 			self.history_locator.retain(|&x| x.0 == 0);
 		}
 
@@ -227,7 +229,7 @@ impl HeaderSync {
 				while let Ok(header) = header_cursor {
 					if header.height == h {
 						if header.height != last_loc.0 {
-							locator.push((header.height, header.hash()));
+							locator.push((header.height, header.crypto_hash()));
 						}
 						break;
 					}

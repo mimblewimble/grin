@@ -210,7 +210,7 @@ fn serialize_deserialize_block_header() {
 	ser::serialize(&mut vec, &header1).expect("serialization failed");
 	let header2: BlockHeader = ser::deserialize(&mut &vec[..]).unwrap();
 
-	assert_eq!(header1.hash(), header2.hash());
+	assert_eq!(header1.crypto_hash(), header2.crypto_hash());
 	assert_eq!(header1, header2);
 }
 
@@ -226,7 +226,7 @@ fn serialize_deserialize_block() {
 	ser::serialize(&mut vec, &b).expect("serialization failed");
 	let b2: Block = ser::deserialize(&mut &vec[..]).unwrap();
 
-	assert_eq!(b.hash(), b2.hash());
+	assert_eq!(b.header_hash(), b2.header_hash());
 	assert_eq!(b.header, b2.header);
 	assert_eq!(b.inputs(), b2.inputs());
 	assert_eq!(b.outputs(), b2.outputs());
@@ -336,8 +336,8 @@ fn compact_block_hash_with_nonce() {
 	// random nonce will not affect the hash of the compact block itself
 	// hash is based on header POW only
 	assert!(cb1.nonce != cb2.nonce);
-	assert_eq!(b.hash(), cb1.hash());
-	assert_eq!(cb1.hash(), cb2.hash());
+	assert_eq!(b.header_hash(), cb1.crypto_hash());
+	assert_eq!(cb1.crypto_hash(), cb2.crypto_hash());
 
 	assert!(cb1.kern_ids()[0] != cb2.kern_ids()[0]);
 
@@ -345,11 +345,11 @@ fn compact_block_hash_with_nonce() {
 	// correctly in both of the compact_blocks
 	assert_eq!(
 		cb1.kern_ids()[0],
-		tx.kernels()[0].short_id(&cb1.hash(), cb1.nonce)
+		tx.kernels()[0].short_id(&cb1.crypto_hash(), cb1.nonce)
 	);
 	assert_eq!(
 		cb2.kern_ids()[0],
-		tx.kernels()[0].short_id(&cb2.hash(), cb2.nonce)
+		tx.kernels()[0].short_id(&cb2.crypto_hash(), cb2.nonce)
 	);
 }
 
@@ -372,7 +372,7 @@ fn convert_block_to_compact_block() {
 			.iter()
 			.find(|x| !x.is_coinbase())
 			.unwrap()
-			.short_id(&cb.hash(), cb.nonce)
+			.short_id(&cb.crypto_hash(), cb.nonce)
 	);
 }
 

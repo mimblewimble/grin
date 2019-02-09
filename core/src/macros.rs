@@ -99,7 +99,7 @@ macro_rules! hashable_ord {
 	($hashable:ident) => {
 		impl Ord for $hashable {
 			fn cmp(&self, other: &$hashable) -> Ordering {
-				self.hash().cmp(&other.hash())
+				self.crypto_hash().cmp(&other.crypto_hash())
 			}
 		}
 		impl PartialOrd for $hashable {
@@ -109,7 +109,7 @@ macro_rules! hashable_ord {
 		}
 		impl PartialEq for $hashable {
 			fn eq(&self, other: &$hashable) -> bool {
-				self.hash() == other.hash()
+				self.crypto_hash() == other.crypto_hash()
 			}
 		}
 		impl Eq for $hashable {}

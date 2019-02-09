@@ -158,7 +158,7 @@ impl Writeable for Hash {
 impl Add for Hash {
 	type Output = Hash;
 	fn add(self, other: Hash) -> Hash {
-		self.hash_with(other)
+		self.crypto_hash_with(other)
 	}
 }
 
@@ -211,13 +211,13 @@ impl ser::Writer for HashWriter {
 /// A trait for types that have a canonical hash
 pub trait Hashed {
 	/// Obtain the hash of the object
-	fn hash(&self) -> Hash;
+	fn crypto_hash(&self) -> Hash;
 	/// Hash the object together with another writeable object
-	fn hash_with<T: Writeable>(&self, other: T) -> Hash;
+	fn crypto_hash_with<T: Writeable>(&self, other: T) -> Hash;
 }
 
 impl<W: ser::Writeable> Hashed for W {
-	fn hash(&self) -> Hash {
+	fn crypto_hash(&self) -> Hash {
 		let mut hasher = HashWriter::default();
 		ser::Writeable::write(self, &mut hasher).unwrap();
 		let mut ret = [0; 32];
@@ -225,7 +225,7 @@ impl<W: ser::Writeable> Hashed for W {
 		Hash(ret)
 	}
 
-	fn hash_with<T: Writeable>(&self, other: T) -> Hash {
+	fn crypto_hash_with<T: Writeable>(&self, other: T) -> Hash {
 		let mut hasher = HashWriter::default();
 		ser::Writeable::write(self, &mut hasher).unwrap();
 		ser::Writeable::write(&other, &mut hasher).unwrap();

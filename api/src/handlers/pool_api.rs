@@ -91,7 +91,7 @@ impl PoolPushHandler {
 					};
 					info!(
 						"Pushing transaction {} to pool (inputs: {}, outputs: {}, kernels: {})",
-						tx.hash(),
+						tx.crypto_hash(),
 						tx.inputs().len(),
 						tx.outputs().len(),
 						tx.kernels().len(),

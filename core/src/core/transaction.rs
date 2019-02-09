@@ -1430,9 +1430,9 @@ pub fn kernel_sig_msg(
 		return Err(Error::InvalidKernelFeatures);
 	}
 	let hash = match features {
-		KernelFeatures::Coinbase => (features).hash(),
-		KernelFeatures::Plain => (features, fee).hash(),
-		KernelFeatures::HeightLocked => (features, fee, lock_height).hash(),
+		KernelFeatures::Coinbase => (features).crypto_hash(),
+		KernelFeatures::Plain => (features, fee).crypto_hash(),
+		KernelFeatures::HeightLocked => (features, fee, lock_height).crypto_hash(),
 	};
 	Ok(secp::Message::from_slice(&hash.as_bytes())?)
 }

@@ -543,7 +543,10 @@ pub trait VerifySortedAndUnique<T> {
 
 impl<T: Hashed> VerifySortedAndUnique<T> for Vec<T> {
 	fn verify_sorted_and_unique(&self) -> Result<(), Error> {
-		let hashes = self.iter().map(|item| item.hash()).collect::<Vec<_>>();
+		let hashes = self
+			.iter()
+			.map(|item| item.crypto_hash())
+			.collect::<Vec<_>>();
 		let pairs = hashes.windows(2);
 		for pair in pairs {
 			if pair[0] > pair[1] {
@@ -615,7 +618,7 @@ where
 			match elem {
 				Ok(e) => buf.push(e),
 				Err(Error::IOErr(ref _d, ref kind)) if *kind == io::ErrorKind::UnexpectedEof => {
-					break
+					break;
 				}
 				Err(e) => return Err(e),
 			}
@@ -723,7 +726,7 @@ pub trait PMMRIndexHashable {
 
 impl<T: Writeable> PMMRIndexHashable for T {
 	fn hash_with_index(&self, index: u64) -> Hash {
-		(index, self).hash()
+		(index, self).crypto_hash()
 	}
 }
 

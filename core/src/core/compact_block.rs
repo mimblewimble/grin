@@ -179,7 +179,7 @@ impl From<Block> for CompactBlock {
 			if k.is_coinbase() {
 				kern_full.push(k.clone());
 			} else {
-				kern_ids.push(k.short_id(&header.hash(), nonce));
+				kern_ids.push(k.short_id(&header.crypto_hash(), nonce));
 			}
 		}
 

@@ -60,7 +60,11 @@ impl VerifierCache for LruVerifierCache {
 	fn filter_kernel_sig_unverified(&mut self, kernels: &[TxKernel]) -> Vec<TxKernel> {
 		let res = kernels
 			.iter()
-			.filter(|x| !self.kernel_sig_verification_cache.contains_key(&x.hash()))
+			.filter(|x| {
+				!self
+					.kernel_sig_verification_cache
+					.contains_key(&x.crypto_hash())
+			})
 			.cloned()
 			.collect::<Vec<_>>();
 		trace!(
@@ -77,7 +81,7 @@ impl VerifierCache for LruVerifierCache {
 			.filter(|x| {
 				!self
 					.rangeproof_verification_cache
-					.contains_key(&x.proof.hash())
+					.contains_key(&x.proof.crypto_hash())
 			})
 			.cloned()
 			.collect::<Vec<_>>();
@@ -91,14 +95,15 @@ impl VerifierCache for LruVerifierCache {
 
 	fn add_kernel_sig_verified(&mut self, kernels: Vec<TxKernel>) {
 		for k in kernels {
-			self.kernel_sig_verification_cache.insert(k.hash(), ());
+			self.kernel_sig_verification_cache
+				.insert(k.crypto_hash(), ());
 		}
 	}
 
 	fn add_rangeproof_verified(&mut self, outputs: Vec<Output>) {
 		for o in outputs {
 			self.rangeproof_verification_cache
-				.insert(o.proof.hash(), ());
+				.insert(o.proof.crypto_hash(), ());
 		}
 	}
 }

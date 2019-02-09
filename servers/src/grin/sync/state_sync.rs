@@ -167,7 +167,7 @@ impl StateSync {
 			for _ in 0..threshold {
 				txhashset_head = self.chain.get_previous_header(&txhashset_head).unwrap();
 			}
-			let bhash = txhashset_head.hash();
+			let bhash = txhashset_head.crypto_hash();
 			debug!(
 				"state_sync: before txhashset request, header head: {} / {}, txhashset_head: {} / {}",
 				header_head.height,

@@ -68,16 +68,18 @@ impl Tip {
 	pub fn from_header(header: &BlockHeader) -> Tip {
 		Tip {
 			height: header.height,
-			last_block_h: header.hash(),
+			last_block_h: header.crypto_hash(),
 			prev_block_h: header.prev_hash,
 			total_difficulty: header.total_difficulty(),
 		}
 	}
 
 	/// *Really* easy to accidentally call hash() on a tip (thinking its a header).
-	/// So lets make hash() do the right thing here.
-	pub fn hash(&self) -> Hash {
-		self.last_block_h
+	/// So lets make crypto_hash() panic so we can find where we make this error easily
+	/// If you need to call crypto_hash on Tip, use UFCS
+	#[deprecated]
+	pub fn crypto_hash(&self) -> ! {
+		unimplemented!();
 	}
 }
 

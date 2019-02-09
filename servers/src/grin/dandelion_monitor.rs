@@ -226,7 +226,10 @@ fn process_expired_entries(
 			.iter()
 			.filter(|x| x.tx_at.timestamp() < cutoff)
 		{
-			debug!("dand_mon: Embargo timer expired for {:?}", entry.tx.hash());
+			debug!(
+				"dand_mon: Embargo timer expired for {:?}",
+				entry.tx.crypto_hash()
+			);
 			expired_entries.push(entry.clone());
 		}
 	}

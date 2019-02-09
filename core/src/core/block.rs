@@ -162,8 +162,13 @@ impl FixedLength for HeaderEntry {
 
 impl HeaderEntry {
 	/// The hash of the underlying block.
-	pub fn hash(&self) -> Hash {
+	pub fn header_hash(&self) -> Hash {
 		self.hash
+	}
+	/// If you need the crypto_hash, use UFCS
+	#[deprecated]
+	pub fn crypto_hash(&self) -> ! {
+		unimplemented!();
 	}
 }
 
@@ -222,7 +227,7 @@ impl PMMRable for BlockHeader {
 
 	fn as_elmt(&self) -> Self::E {
 		HeaderEntry {
-			hash: self.hash(),
+			hash: self.crypto_hash(),
 			timestamp: self.timestamp.timestamp() as u64,
 			total_difficulty: self.total_difficulty(),
 			secondary_scaling: self.pow.secondary_scaling,
@@ -443,7 +448,11 @@ impl Block {
 	/// Note: caller must validate the block themselves, we do not validate it
 	/// here.
 	pub fn hydrate_from(cb: CompactBlock, txs: Vec<Transaction>) -> Result<Block, Error> {
-		trace!("block: hydrate_from: {}, {} txs", cb.hash(), txs.len(),);
+		trace!(
+			"block: hydrate_from: {}, {} txs",
+			cb.crypto_hash(),
+			txs.len(),
+		);
 
 		let header = cb.header.clone();
 
@@ -519,7 +528,7 @@ impl Block {
 			header: BlockHeader {
 				height: prev.height + 1,
 				timestamp,
-				prev_hash: prev.hash(),
+				prev_hash: prev.crypto_hash(),
 				total_kernel_offset,
 				pow: ProofOfWork {
 					total_difficulty: difficulty + prev.pow.total_difficulty,
@@ -571,8 +580,13 @@ impl Block {
 	}
 
 	/// Blockhash, computed using only the POW
-	pub fn hash(&self) -> Hash {
-		self.header.hash()
+	pub fn header_hash(&self) -> Hash {
+		self.header.crypto_hash()
+	}
+	/// If you need the crypto_hash, use UFCS
+	#[deprecated]
+	pub fn crypto_hash(&self) -> ! {
+		unimplemented!();
 	}
 
 	/// Sum of all fees (inputs less outputs) in the block

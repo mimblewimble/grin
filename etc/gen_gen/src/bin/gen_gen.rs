@@ -147,9 +147,12 @@ fn main() {
 	)
 	.unwrap();
 
-	println!("\nFinal genesis cyclehash: {}", gen.hash().to_hex());
+	println!("\nFinal genesis cyclehash: {}", gen.crypto_hash().to_hex());
 	let gen_bin = core::ser::ser_vec(&gen).unwrap();
-	println!("Final genesis full hash: {}\n", gen_bin.hash().to_hex());
+	println!(
+		"Final genesis full hash: {}\n",
+		gen_bin.crypto_hash().to_hex()
+	);
 
 	update_genesis_rs(&gen);
 	println!("genesis.rs has been updated, check it and run mainnet_genesis_hash test");

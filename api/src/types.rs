@@ -291,7 +291,7 @@ impl OutputPrintable {
 			commit: output.commit,
 			spent,
 			proof,
-			proof_hash: util::to_hex(output.proof.hash().to_vec()),
+			proof_hash: util::to_hex(output.proof.crypto_hash().to_vec()),
 			block_height,
 			merkle_proof,
 			mmr_index: output_pos,
@@ -489,7 +489,7 @@ pub struct BlockHeaderInfo {
 impl BlockHeaderInfo {
 	pub fn from_header(header: &core::BlockHeader) -> BlockHeaderInfo {
 		BlockHeaderInfo {
-			hash: util::to_hex(header.hash().to_vec()),
+			hash: util::to_hex(header.crypto_hash().to_vec()),
 			height: header.height,
 			previous: util::to_hex(header.prev_hash.to_vec()),
 		}
@@ -533,7 +533,7 @@ pub struct BlockHeaderPrintable {
 impl BlockHeaderPrintable {
 	pub fn from_header(header: &core::BlockHeader) -> BlockHeaderPrintable {
 		BlockHeaderPrintable {
-			hash: util::to_hex(header.hash().to_vec()),
+			hash: util::to_hex(header.crypto_hash().to_vec()),
 			version: header.version,
 			height: header.height,
 			previous: util::to_hex(header.prev_hash.to_vec()),
@@ -621,7 +621,7 @@ impl CompactBlockPrintable {
 		cb: &core::CompactBlock,
 		chain: Arc<chain::Chain>,
 	) -> CompactBlockPrintable {
-		let block = chain.get_block(&cb.hash()).unwrap();
+		let block = chain.get_block(&cb.crypto_hash()).unwrap();
 		let out_full = cb
 			.out_full()
 			.iter()

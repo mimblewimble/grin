@@ -86,7 +86,7 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 			identifier: "?.?.?.?".to_string(),
 		};
 
-		let tx_hash = tx.hash();
+		let tx_hash = tx.crypto_hash();
 		let header = self.chain().head_header().unwrap();
 
 		debug!(
@@ -110,7 +110,7 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 	fn block_received(&self, b: core::Block, addr: SocketAddr, was_requested: bool) -> bool {
 		debug!(
 			"Received block {} at {} from {} [in/out/kern: {}/{}/{}] going to process.",
-			b.hash(),
+			b.header_hash(),
 			b.header.height,
 			addr,
 			b.inputs().len(),
@@ -121,7 +121,7 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 	}
 
 	fn compact_block_received(&self, cb: core::CompactBlock, addr: SocketAddr) -> bool {
-		let bhash = cb.hash();
+		let bhash = cb.crypto_hash();
 		debug!(
 			"Received compact_block {} at {} from {} [out/kern/kern_ids: {}/{}/{}] going to process.",
 			bhash,
@@ -132,7 +132,7 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 			cb.kern_ids().len(),
 		);
 
-		let cb_hash = cb.hash();
+		let cb_hash = cb.crypto_hash();
 		if cb.kern_ids().is_empty() {
 			// push the freshly hydrated block through the chain pipeline
 			match core::Block::hydrate_from(cb, vec![]) {
@@ -155,7 +155,7 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 			let (txs, missing_short_ids) = {
 				self.tx_pool
 					.read()
-					.retrieve_transactions(cb.hash(), cb.nonce, cb.kern_ids())
+					.retrieve_transactions(cb.crypto_hash(), cb.nonce, cb.kern_ids())
 			};
 
 			debug!(
@@ -172,7 +172,7 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 			let block = match core::Block::hydrate_from(cb.clone(), txs) {
 				Ok(block) => block,
 				Err(e) => {
-					debug!("Invalid hydrated block {}: {:?}", cb.hash(), e);
+					debug!("Invalid hydrated block {}: {:?}", cb.crypto_hash(), e);
 					return false;
 				}
 			};
@@ -202,7 +202,7 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 	}
 
 	fn header_received(&self, bh: core::BlockHeader, addr: SocketAddr) -> bool {
-		let bhash = bh.hash();
+		let bhash = bh.crypto_hash();
 		debug!(
 			"Received block header {} at {} from {}, going to process.",
 			bhash, bh.height, addr,
@@ -410,7 +410,7 @@ impl NetToChainAdapter {
 		for hash in locator {
 			if let Ok(header) = self.chain().get_block_header(&hash) {
 				if let Ok(header_at_height) = txhashset.get_header_by_height(header.height) {
-					if header.hash() == header_at_height.hash() {
+					if header.crypto_hash() == header_at_height.crypto_hash() {
 						return Some(header);
 					}
 				}
@@ -433,7 +433,7 @@ impl NetToChainAdapter {
 			}
 		}
 
-		let bhash = b.hash();
+		let bhash = b.header_hash();
 		let previous = self.chain().get_previous_header(&b.header);
 
 		match self
@@ -454,11 +454,11 @@ impl NetToChainAdapter {
 					chain::ErrorKind::Orphan => {
 						if let Ok(previous) = previous {
 							// make sure we did not miss the parent block
-							if !self.chain().is_orphan(&previous.hash())
+							if !self.chain().is_orphan(&previous.crypto_hash())
 								&& !self.sync_state.is_syncing()
 							{
-								debug!("process_block: received an orphan block, checking the parent: {:}", previous.hash());
-								self.request_block_by_hash(previous.hash(), &addr)
+								debug!("process_block: received an orphan block, checking the parent: {:}", previous.crypto_hash());
+								self.request_block_by_hash(previous.crypto_hash(), &addr)
 							}
 						}
 						true
@@ -534,7 +534,7 @@ impl NetToChainAdapter {
 	// from the same peer that gave us the compact block
 	// consider additional peers for redundancy?
 	fn request_block(&self, bh: &BlockHeader, addr: &SocketAddr) {
-		self.request_block_by_hash(bh.hash(), addr)
+		self.request_block_by_hash(bh.crypto_hash(), addr)
 	}
 
 	fn request_block_by_hash(&self, h: Hash, addr: &SocketAddr) {
@@ -545,7 +545,7 @@ impl NetToChainAdapter {
 	// we need to go request the block (compact representation) from the
 	// same peer that gave us the header (unless we have already accepted the block)
 	fn request_compact_block(&self, bh: &BlockHeader, addr: &SocketAddr) {
-		self.send_block_request_to_peer(bh.hash(), addr, |peer, h| {
+		self.send_block_request_to_peer(bh.crypto_hash(), addr, |peer, h| {
 			peer.send_compact_block_request(h)
 		})
 	}
@@ -616,7 +616,7 @@ impl ChainAdapter for ChainToPoolAndNetAdapter {
 			BlockStatus::Reorg => {
 				warn!(
 					"block_accepted (REORG!): {:?} at {} (diff: {})",
-					b.hash(),
+					b.header_hash(),
 					b.header.height,
 					b.header.total_difficulty(),
 				);
@@ -624,7 +624,7 @@ impl ChainAdapter for ChainToPoolAndNetAdapter {
 			BlockStatus::Fork => {
 				debug!(
 					"block_accepted (fork?): {:?} at {} (diff: {})",
-					b.hash(),
+					b.header_hash(),
 					b.header.height,
 					b.header.total_difficulty(),
 				);
@@ -632,7 +632,7 @@ impl ChainAdapter for ChainToPoolAndNetAdapter {
 			BlockStatus::Next => {
 				debug!(
 					"block_accepted (head+): {:?} at {} (diff: {})",
-					b.hash(),
+					b.header_hash(),
 					b.header.height,
 					b.header.total_difficulty(),
 				);

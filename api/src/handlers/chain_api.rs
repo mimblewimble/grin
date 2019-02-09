@@ -139,7 +139,7 @@ impl OutputHandler {
 		// TODO - possible to compact away blocks we care about
 		// in the period between accepting the block and refreshing the wallet
 		let block = w(&self.chain)
-			.get_block(&header.hash())
+			.get_block(&header.crypto_hash())
 			.map_err(|_| ErrorKind::NotFound)?;
 		let outputs = block
 			.outputs()

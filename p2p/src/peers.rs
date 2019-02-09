@@ -344,7 +344,7 @@ impl Peers {
 		let count = self.broadcast("compact block", num_peers, |p| p.send_compact_block(b));
 		debug!(
 			"broadcast_compact_block: {}, {} at {}, to {} peers, done.",
-			b.hash(),
+			b.crypto_hash(),
 			b.header.pow.total_difficulty,
 			b.header.height,
 			count,
@@ -361,7 +361,7 @@ impl Peers {
 		let count = self.broadcast("header", num_peers, |p| p.send_header(bh));
 		debug!(
 			"broadcast_header: {}, {} at {}, to {} peers, done.",
-			bh.hash(),
+			bh.crypto_hash(),
 			bh.pow.total_difficulty,
 			bh.height,
 			count,
@@ -400,7 +400,7 @@ impl Peers {
 		let count = self.broadcast("transaction", num_peers, |p| p.send_transaction(tx));
 		debug!(
 			"broadcast_transaction: {} to {} peers, done.",
-			tx.hash(),
+			tx.crypto_hash(),
 			count,
 		);
 	}
@@ -570,7 +570,7 @@ impl ChainAdapter for Peers {
 	}
 
 	fn block_received(&self, b: core::Block, peer_addr: SocketAddr, was_requested: bool) -> bool {
-		let hash = b.hash();
+		let hash = b.header_hash();
 		if !self.adapter.block_received(b, peer_addr, was_requested) {
 			// if the peer sent us a block that's intrinsically bad
 			// they are either mistaken or malevolent, both of which require a ban
@@ -586,7 +586,7 @@ impl ChainAdapter for Peers {
 	}
 
 	fn compact_block_received(&self, cb: core::CompactBlock, peer_addr: SocketAddr) -> bool {
-		let hash = cb.hash();
+		let hash = cb.crypto_hash();
 		if !self.adapter.compact_block_received(cb, peer_addr) {
 			// if the peer sent us a block that's intrinsically bad
 			// they are either mistaken or malevolent, both of which require a ban

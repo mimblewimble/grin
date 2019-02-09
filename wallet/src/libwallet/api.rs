@@ -746,7 +746,7 @@ where
 		} else {
 			debug!(
 				"api: post_tx: successfully posted tx: {}, fluff? {}",
-				tx.hash(),
+				tx.crypto_hash(),
 				fluff
 			);
 			Ok(())

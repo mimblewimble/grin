@@ -89,8 +89,8 @@ impl OrphanBlockPool {
 			let height_hashes = height_idx
 				.entry(orphan.block.header.height)
 				.or_insert(vec![]);
-			height_hashes.push(orphan.block.hash());
-			orphans.insert(orphan.block.hash(), orphan);
+			height_hashes.push(orphan.block.header_hash());
+			orphans.insert(orphan.block.header_hash(), orphan);
 		}
 
 		if orphans.len() > MAX_ORPHAN_SIZE {
@@ -332,7 +332,7 @@ impl Chain {
 			}
 			Err(e) => match e.kind() {
 				ErrorKind::Orphan => {
-					let block_hash = b.hash();
+					let block_hash = b.header_hash();
 					let orphan = Orphan {
 						block: b,
 						opts: opts,
@@ -356,7 +356,7 @@ impl Chain {
 				ErrorKind::Unfit(ref msg) => {
 					debug!(
 						"Block {} at {} is unfit at this time: {}",
-						b.hash(),
+						b.header_hash(),
 						b.header.height,
 						msg
 					);
@@ -365,7 +365,7 @@ impl Chain {
 				_ => {
 					info!(
 						"Rejected block {} at {}: {:?}",
-						b.hash(),
+						b.header_hash(),
 						b.header.height,
 						e
 					);
@@ -455,7 +455,7 @@ impl Chain {
 				for (i, orphan) in orphans.into_iter().enumerate() {
 					debug!(
 						"check_orphans: get block {} at {}{}",
-						orphan.block.hash(),
+						orphan.block.header_hash(),
 						height,
 						if orphans_len > 1 {
 							format!(", no.{} of {} orphans", i, orphans_len)
@@ -570,7 +570,7 @@ impl Chain {
 		b: &mut Block,
 		prev: &BlockHeader,
 	) -> Result<(), Error> {
-		let prev_block = self.get_block(&prev.hash())?;
+		let prev_block = self.get_block(&prev.crypto_hash())?;
 		let mut txhashset = self.txhashset.write();
 		let (prev_root, roots, sizes) =
 			txhashset::extending_readonly(&mut txhashset, |extension| {
@@ -815,7 +815,7 @@ impl Chain {
 			}
 
 			oldest_height = header.height;
-			oldest_hash = header.hash();
+			oldest_hash = header.crypto_hash();
 			if let Some(hs) = hashes {
 				hs.push(oldest_hash);
 			}
@@ -883,7 +883,7 @@ impl Chain {
 
 			// Save the block_sums (utxo_sum, kernel_sum) to the db for use later.
 			extension.batch.save_block_sums(
-				&header.hash(),
+				&header.crypto_hash(),
 				&BlockSums {
 					utxo_sum,
 					kernel_sum,
@@ -979,9 +979,9 @@ impl Chain {
 		let batch = self.store.batch()?;
 		loop {
 			// Go to the store directly so we can handle NotFoundErr robustly.
-			match self.store.get_block(&current.hash()) {
+			match self.store.get_block(&current.crypto_hash()) {
 				Ok(b) => {
-					batch.delete_block(&b.hash())?;
+					batch.delete_block(&b.header_hash())?;
 					count += 1;
 				}
 				Err(NotFoundErr(_)) => {
@@ -1183,7 +1183,7 @@ impl Chain {
 	/// it is
 	pub fn is_on_current_chain(&self, header: &BlockHeader) -> Result<(), Error> {
 		let chain_header = self.get_header_by_height(header.height)?;
-		if chain_header.hash() == header.hash() {
+		if chain_header.crypto_hash() == header.crypto_hash() {
 			Ok(())
 		} else {
 			Err(ErrorKind::Other(format!("not on current chain")).into())
@@ -1239,7 +1239,7 @@ fn setup_head(
 				// Supports old nodes with no header MMR.
 				txhashset::header_extending(txhashset, &mut batch, |extension| {
 					let needs_rebuild = match extension.get_header_by_height(head.height) {
-						Ok(header) => header.hash() != head.last_block_h,
+						Ok(header) => header.crypto_hash() != head.last_block_h,
 						Err(_) => true,
 					};
 
@@ -1257,12 +1257,16 @@ fn setup_head(
 					// now check we have the "block sums" for the block in question
 					// if we have no sums (migrating an existing node) we need to go
 					// back to the txhashset and sum the outputs and kernels
-					if header.height > 0 && extension.batch.get_block_sums(&header.hash()).is_err()
+					if header.height > 0
+						&& extension
+							.batch
+							.get_block_sums(&header.crypto_hash())
+							.is_err()
 					{
 						debug!(
 							"init: building (missing) block sums for {} @ {}",
 							header.height,
-							header.hash()
+							header.crypto_hash()
 						);
 
 						// Do a full (and slow) validation of the txhashset extension
@@ -1271,7 +1275,7 @@ fn setup_head(
 
 						// Save the block_sums to the db for use later.
 						extension.batch.save_block_sums(
-							&header.hash(),
+							&header.crypto_hash(),
 							&BlockSums {
 								utxo_sum,
 								kernel_sum,
@@ -1281,7 +1285,7 @@ fn setup_head(
 
 					debug!(
 						"init: rewinding and validating before we start... {} at {}",
-						header.hash(),
+						header.crypto_hash(),
 						header.height,
 					);
 					Ok(())
@@ -1294,7 +1298,7 @@ fn setup_head(
 					// node. If this appears to be the case revert the head to the previous
 					// header and try again
 					let prev_header = batch.get_block_header(&head.prev_block_h)?;
-					let _ = batch.delete_block(&header.hash());
+					let _ = batch.delete_block(&header.crypto_hash());
 					head = Tip::from_header(&prev_header);
 					batch.save_head(&head)?;
 				}
@@ -1329,9 +1333,9 @@ fn setup_head(
 			})?;
 
 			// Save the block_sums to the db for use later.
-			batch.save_block_sums(&genesis.hash(), &sums)?;
+			batch.save_block_sums(&genesis.header_hash(), &sums)?;
 
-			info!("init: saved genesis: {:?}", genesis.hash());
+			info!("init: saved genesis: {:?}", genesis.header_hash());
 		}
 		Err(e) => return Err(ErrorKind::StoreErr(e, "chain init load head".to_owned()))?,
 	};

@@ -64,7 +64,7 @@ fn test_various_store_indices() {
 
 	let reward = libtx::reward::output(&keychain, &key_id, 0).unwrap();
 	let block = Block::new(&genesis.header, vec![], Difficulty::min(), reward).unwrap();
-	let block_hash = block.hash();
+	let block_hash = block.header_hash();
 
 	{
 		let batch = chain_store.batch().unwrap();
@@ -74,7 +74,7 @@ fn test_various_store_indices() {
 	}
 
 	let block_header = chain_store.get_block_header(&block_hash).unwrap();
-	assert_eq!(block_header.hash(), block_hash);
+	assert_eq!(block_header.crypto_hash(), block_hash);
 
 	// Test we can retrive the block from the db and that we can safely delete the
 	// block from the db even though the block_sums are missing.

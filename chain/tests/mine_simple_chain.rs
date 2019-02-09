@@ -127,7 +127,7 @@ where
 		.unwrap();
 		b.header.pow.proof.edge_bits = edge_bits;
 
-		let bhash = b.hash();
+		let bhash = b.header_hash();
 		chain.process_block(b, chain::Options::MINE).unwrap();
 
 		// checking our new head
@@ -138,17 +138,17 @@ where
 		// now check the block_header of the head
 		let header = chain.head_header().unwrap();
 		assert_eq!(header.height, n);
-		assert_eq!(header.hash(), bhash);
+		assert_eq!(header.crypto_hash(), bhash);
 
 		// now check the block itself
-		let block = chain.get_block(&header.hash()).unwrap();
+		let block = chain.get_block(&header.crypto_hash()).unwrap();
 		assert_eq!(block.header.height, n);
-		assert_eq!(block.hash(), bhash);
+		assert_eq!(block.header_hash(), bhash);
 		assert_eq!(block.outputs().len(), 1);
 
 		// now check the block height index
 		let header_by_height = chain.get_header_by_height(n).unwrap();
-		assert_eq!(header_by_height.hash(), bhash);
+		assert_eq!(header_by_height.crypto_hash(), bhash);
 
 		chain.validate(false).unwrap();
 	}
@@ -176,24 +176,24 @@ fn mine_forks() {
 		let b2 = prepare_block(&kc, &prev, &chain, 3 * n + 1);
 
 		// process the first block to extend the chain
-		let bhash = b1.hash();
+		let bhash = b1.header_hash();
 		chain.process_block(b1, chain::Options::SKIP_POW).unwrap();
 
 		// checking our new head
 		let head = chain.head().unwrap();
 		assert_eq!(head.height, (n + 1) as u64);
 		assert_eq!(head.last_block_h, bhash);
-		assert_eq!(head.prev_block_h, prev.hash());
+		assert_eq!(head.prev_block_h, prev.crypto_hash());
 
 		// process the 2nd block to build a fork with more work
-		let bhash = b2.hash();
+		let bhash = b2.header_hash();
 		chain.process_block(b2, chain::Options::SKIP_POW).unwrap();
 
 		// checking head switch
 		let head = chain.head().unwrap();
 		assert_eq!(head.height, (n + 1) as u64);
 		assert_eq!(head.last_block_h, bhash);
-		assert_eq!(head.prev_block_h, prev.hash());
+		assert_eq!(head.prev_block_h, prev.crypto_hash());
 	}
 }
 
@@ -217,7 +217,10 @@ fn mine_losing_fork() {
 	// add higher difficulty first, prepare its successor, then fork
 	// with lower diff
 	chain.process_block(b2, chain::Options::SKIP_POW).unwrap();
-	assert_eq!(chain.head_header().unwrap().hash(), b2head.hash());
+	assert_eq!(
+		chain.head_header().unwrap().crypto_hash(),
+		b2head.crypto_hash()
+	);
 	let b3 = prepare_block(&kc, &b2head, &chain, 5);
 	chain
 		.process_block(bfork, chain::Options::SKIP_POW)
@@ -226,7 +229,10 @@ fn mine_losing_fork() {
 	// adding the successor
 	let b3head = b3.header.clone();
 	chain.process_block(b3, chain::Options::SKIP_POW).unwrap();
-	assert_eq!(chain.head_header().unwrap().hash(), b3head.hash());
+	assert_eq!(
+		chain.head_header().unwrap().crypto_hash(),
+		b3head.crypto_hash()
+	);
 }
 
 #[test]
@@ -252,7 +258,7 @@ fn longer_fork() {
 
 	let head = chain.head_header().unwrap();
 	assert_eq!(head.height, 10);
-	assert_eq!(head.hash(), prev.hash());
+	assert_eq!(head.crypto_hash(), prev.crypto_hash());
 
 	let mut prev = forked_block;
 	for n in 0..7 {
@@ -266,7 +272,7 @@ fn longer_fork() {
 	// After all this the chain should have switched to the fork.
 	let head = chain.head_header().unwrap();
 	assert_eq!(head.height, 12);
-	assert_eq!(head.hash(), new_head.hash());
+	assert_eq!(head.crypto_hash(), new_head.crypto_hash());
 }
 
 #[test]
@@ -352,7 +358,7 @@ fn spend_in_fork_and_compact() {
 	// check state
 	let head = chain.head_header().unwrap();
 	assert_eq!(head.height, 6);
-	assert_eq!(head.hash(), prev_main.hash());
+	assert_eq!(head.crypto_hash(), prev_main.crypto_hash());
 	assert!(chain
 		.is_unspent(&OutputIdentifier::from_output(&tx2.outputs()[0]))
 		.is_ok());
@@ -371,7 +377,7 @@ fn spend_in_fork_and_compact() {
 	// check state
 	let head = chain.head_header().unwrap();
 	assert_eq!(head.height, 7);
-	assert_eq!(head.hash(), prev_fork.hash());
+	assert_eq!(head.crypto_hash(), prev_fork.crypto_hash());
 	assert!(chain
 		.is_unspent(&OutputIdentifier::from_output(&tx2.outputs()[0]))
 		.is_ok());

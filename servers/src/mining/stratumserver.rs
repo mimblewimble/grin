@@ -490,7 +490,7 @@ impl StratumServer {
 			// Return error status
 			error!(
 				"(Server ID: {}) Failed to validate solution at height {}, hash {}, edge_bits {}, nonce {}, job_id {}: cuckoo size too small",
-				self.id, params.height, b.hash(), params.edge_bits, params.nonce, params.job_id,
+				self.id, params.height, b.header_hash(), params.edge_bits, params.nonce, params.job_id,
 			);
 			worker_stats.num_rejected += 1;
 			let e = RpcError {
@@ -507,7 +507,7 @@ impl StratumServer {
 			// Return error status
 			error!(
 				"(Server ID: {}) Share at height {}, hash {}, edge_bits {}, nonce {}, job_id {} rejected due to low difficulty: {}/{}",
-				self.id, params.height, b.hash(), params.edge_bits, params.nonce, params.job_id, share_difficulty, self.minimum_share_difficulty,
+				self.id, params.height, b.header_hash(), params.edge_bits, params.nonce, params.job_id, share_difficulty, self.minimum_share_difficulty,
 			);
 			worker_stats.num_rejected += 1;
 			let e = RpcError {
@@ -526,7 +526,7 @@ impl StratumServer {
 					"(Server ID: {}) Failed to validate solution at height {}, hash {}, edge_bits {}, nonce {}, job_id {}, {}: {}",
 					self.id,
 					params.height,
-					b.hash(),
+					b.header_hash(),
 					params.edge_bits,
 					params.nonce,
 					params.job_id,
@@ -546,7 +546,7 @@ impl StratumServer {
 			warn!(
 				"(Server ID: {}) Solution Found for block {}, hash {} - Yay!!! Worker ID: {}, blocks found: {}, shares: {}",
 				self.id, params.height,
-				b.hash(),
+				b.header_hash(),
 				worker_stats.id,
 				worker_stats.num_blocks_found,
 				worker_stats.num_accepted,
@@ -560,7 +560,7 @@ impl StratumServer {
 					"(Server ID: {}) Failed to validate share at height {}, hash {}, edge_bits {}, nonce {}, job_id {}. {:?}",
 					self.id,
 					params.height,
-					b.hash(),
+					b.header_hash(),
 					params.edge_bits,
 					b.header.pow.nonce,
 					params.job_id,
@@ -583,7 +583,7 @@ impl StratumServer {
 			"(Server ID: {}) Got share at height {}, hash {}, edge_bits {}, nonce {}, job_id {}, difficulty {}/{}, submitted by {}",
 			self.id,
 			b.header.height,
-			b.hash(),
+			b.header_hash(),
 			b.header.pow.proof.edge_bits,
 			b.header.pow.nonce,
 			params.job_id,
@@ -594,7 +594,7 @@ impl StratumServer {
 		worker_stats.num_accepted += 1;
 		let submit_response;
 		if share_is_block {
-			submit_response = format!("blockfound - {}", b.hash().to_hex());
+			submit_response = format!("blockfound - {}", b.header_hash().to_hex());
 		} else {
 			submit_response = "ok".to_string();
 		}

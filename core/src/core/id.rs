@@ -39,12 +39,12 @@ impl<H: Hashed> ShortIdentifiable for H {
 	///
 	/// * extract k0/k1 from block_hash hashed with the nonce (first two u64
 	/// values)   * initialize a siphasher24 with k0/k1
-	///   * self.hash() passing in the siphasher24 instance
+	///   * self.crypto_hash() passing in the siphasher24 instance
 	///   * drop the 2 most significant bytes (to return a 6 byte short_id)
 	///
 	fn short_id(&self, hash: &Hash, nonce: u64) -> ShortId {
 		// take the block hash and the nonce and hash them together
-		let hash_with_nonce = (hash, nonce).hash();
+		let hash_with_nonce = (hash, nonce).crypto_hash();
 
 		// we "use" core::hash::Hash in the outer namespace
 		// so doing this here in the fn to minimize collateral damage/confusion
@@ -57,8 +57,8 @@ impl<H: Hashed> ShortIdentifiable for H {
 		// initialize a siphasher24 with k0/k1
 		let mut sip_hasher = SipHasher24::new_with_keys(k0, k1);
 
-		// hash our id (self.hash()) using the siphasher24 instance
-		sip_hasher.write(&self.hash().to_vec()[..]);
+		// hash our id (self.crypto_hash()) using the siphasher24 instance
+		sip_hasher.write(&self.crypto_hash().to_vec()[..]);
 		let res = sip_hasher.finish();
 
 		// construct a short_id from the resulting bytes (dropping the 2 most
@@ -142,13 +142,16 @@ mod test {
 		let mut ids = vec![id_1.clone(), id_2.clone(), id_3.clone()];
 		println!("{:?}", ids);
 
-		let mut hashes = ids.iter().map(|x| x.hash()).collect::<Vec<_>>();
+		let mut hashes = ids.iter().map(|x| x.crypto_hash()).collect::<Vec<_>>();
 		println!("{:?}", hashes);
 
 		// NOTE: after sorting hash(3) comes before hash(2)
 		hashes.sort();
 		println!("{:?}", hashes);
-		assert_eq!(hashes, [id_1.hash(), id_3.hash(), id_2.hash()]);
+		assert_eq!(
+			hashes,
+			[id_1.crypto_hash(), id_3.crypto_hash(), id_2.crypto_hash()]
+		);
 
 		// NOTE: this also applies to sorting the ids (we sort based on hashes)
 		ids.sort();
@@ -173,7 +176,7 @@ mod test {
 		let expected_hash =
 			Hash::from_hex("81e47a19e6b29b0a65b9591762ce5143ed30d0261e5d24a3201752506b20f15c")
 				.unwrap();
-		assert_eq!(foo.hash(), expected_hash);
+		assert_eq!(foo.crypto_hash(), expected_hash);
 
 		let other_hash = Hash::default();
 		assert_eq!(
@@ -185,7 +188,7 @@ mod test {
 		let expected_hash =
 			Hash::from_hex("3a42e66e46dd7633b57d1f921780a1ac715e6b93c19ee52ab714178eb3a9f673")
 				.unwrap();
-		assert_eq!(foo.hash(), expected_hash);
+		assert_eq!(foo.crypto_hash(), expected_hash);
 
 		let other_hash = Hash::default();
 		assert_eq!(
@@ -197,7 +200,7 @@ mod test {
 		let expected_hash =
 			Hash::from_hex("3a42e66e46dd7633b57d1f921780a1ac715e6b93c19ee52ab714178eb3a9f673")
 				.unwrap();
-		assert_eq!(foo.hash(), expected_hash);
+		assert_eq!(foo.crypto_hash(), expected_hash);
 
 		let other_hash =
 			Hash::from_hex("81e47a19e6b29b0a65b9591762ce5143ed30d0261e5d24a3201752506b20f15c")

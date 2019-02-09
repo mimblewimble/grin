@@ -282,7 +282,7 @@ fn simulate_full_sync() {
 	let s1_header = s1.chain.head_header().unwrap();
 	info!(
 		"simulate_full_sync - s1 header head: {} at {}",
-		s1_header.hash(),
+		s1_header.crypto_hash(),
 		s1_header.height
 	);
 
@@ -302,7 +302,7 @@ fn simulate_full_sync() {
 	}
 
 	// Confirm both s1 and s2 see a consistent header at that height.
-	let s2_header = s2.chain.get_block_header(&s1_header.hash()).unwrap();
+	let s2_header = s2.chain.get_block_header(&s1_header.crypto_hash()).unwrap();
 	assert_eq!(s1_header, s2_header);
 
 	// Stop our servers cleanly.
@@ -359,7 +359,7 @@ fn simulate_fast_sync() {
 	}
 
 	// Confirm both s1 and s2 see a consistent header at that height.
-	let s2_header = s2.chain.get_block_header(&s1_header.hash()).unwrap();
+	let s2_header = s2.chain.get_block_header(&s1_header.crypto_hash()).unwrap();
 	assert_eq!(s1_header, s2_header);
 
 	// Stop our servers cleanly.
@@ -651,7 +651,7 @@ fn long_fork_test_case_2(s: &Vec<servers::Server>) {
 	}
 	let s0_tail_new = s[0].chain.tail().unwrap();
 	assert_eq!(s0_tail_new.height, s0_tail.height);
-	assert_eq!(s[0].head().hash(), s3_header.hash());
+	assert_eq!(s[0].head().last_block_h, s3_header.last_block_h);
 
 	let _ = s[0].chain.compact();
 	let s0_header = s[0].chain.head().unwrap();
@@ -700,7 +700,7 @@ fn long_fork_test_case_3(s: &Vec<servers::Server>) {
 			exit(1);
 		}
 	}
-	assert_eq!(s[0].head().hash(), s4_header.hash());
+	assert_eq!(s[0].head().last_block_h, s4_header.last_block_h);
 
 	s[0].stop();
 	s[1].resume();
@@ -725,7 +725,7 @@ fn long_fork_test_case_3(s: &Vec<servers::Server>) {
 		s1_tail_new.height, s1_tail.height
 	);
 	assert_ne!(s1_tail_new.height, s1_tail.height);
-	assert_eq!(s[1].head().hash(), s4_header.hash());
+	assert_eq!(s[1].head().last_block_h, s4_header.last_block_h);
 
 	s[1].pause();
 	s[4].pause();
@@ -771,7 +771,7 @@ fn long_fork_test_case_4(s: &Vec<servers::Server>) {
 		s1_tail_new.height, s1_tail.height
 	);
 	assert_ne!(s1_tail_new.height, s1_tail.height);
-	assert_eq!(s[1].head().hash(), s5_header.hash());
+	assert_eq!(s[1].head().last_block_h, s5_header.last_block_h);
 
 	s[1].pause();
 	s[5].pause();
@@ -818,7 +818,7 @@ fn long_fork_test_case_5(s: &Vec<servers::Server>) {
 		s1_tail_new.height, s1_tail.height
 	);
 	assert_eq!(s1_tail_new.height, s1_tail.height);
-	assert_eq!(s[1].head().hash(), s5_header.hash());
+	assert_eq!(s[1].head().last_block_h, s5_header.last_block_h);
 
 	s[1].pause();
 	s[5].pause();
@@ -866,7 +866,7 @@ fn long_fork_test_case_6(s: &Vec<servers::Server>) {
 		s1_tail_new.height, s1_tail.height
 	);
 	assert_eq!(s1_tail_new.height, s1_tail.height);
-	assert_eq!(s[1].head().hash(), s5_header.hash());
+	assert_eq!(s[1].head().last_block_h, s5_header.last_block_h);
 
 	s[1].pause();
 	s[5].pause();

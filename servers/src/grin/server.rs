@@ -137,7 +137,7 @@ impl Server {
 			global::ChainTypes::Mainnet => genesis::genesis_main(),
 		};
 
-		info!("Starting server, genesis block: {}", genesis.hash());
+		info!("Starting server, genesis block: {}", genesis.header_hash());
 
 		let db_env = Arc::new(store::new_env(config.db_root.clone()));
 		let shared_chain = Arc::new(chain::Chain::init(
@@ -171,7 +171,7 @@ impl Server {
 			config.p2p_config.capabilities,
 			config.p2p_config.clone(),
 			net_adapter.clone(),
-			genesis.hash(),
+			genesis.header_hash(),
 			stop_state.clone(),
 		)?);
 		chain_adapter.init(p2p_server.peers.clone());
@@ -403,7 +403,7 @@ impl Server {
 					// Default to "zero" hash if synthetic header_info.
 					let hash = if height >= 0 {
 						if let Ok(header) = txhashset.get_header_by_height(height as u64) {
-							header.hash()
+							header.crypto_hash()
 						} else {
 							ZERO_HASH
 						}

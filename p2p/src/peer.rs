@@ -261,8 +261,8 @@ impl Peer {
 	/// Sends the provided block to the remote peer. The request may be dropped
 	/// if the remote peer is known to already have the block.
 	pub fn send_block(&self, b: &core::Block) -> Result<bool, Error> {
-		if !self.tracking_adapter.has_recv(b.hash()) {
-			trace!("Send block {} to {}", b.hash(), self.info.addr);
+		if !self.tracking_adapter.has_recv(b.header_hash()) {
+			trace!("Send block {} to {}", b.header_hash(), self.info.addr);
 			self.connection
 				.as_ref()
 				.unwrap()
@@ -272,7 +272,7 @@ impl Peer {
 		} else {
 			debug!(
 				"Suppress block send {} to {} (already seen)",
-				b.hash(),
+				b.header_hash(),
 				self.info.addr,
 			);
 			Ok(false)
@@ -280,8 +280,12 @@ impl Peer {
 	}
 
 	pub fn send_compact_block(&self, b: &core::CompactBlock) -> Result<bool, Error> {
-		if !self.tracking_adapter.has_recv(b.hash()) {
-			trace!("Send compact block {} to {}", b.hash(), self.info.addr);
+		if !self.tracking_adapter.has_recv(b.crypto_hash()) {
+			trace!(
+				"Send compact block {} to {}",
+				b.crypto_hash(),
+				self.info.addr
+			);
 			self.connection
 				.as_ref()
 				.unwrap()
@@ -291,7 +295,7 @@ impl Peer {
 		} else {
 			debug!(
 				"Suppress compact block send {} to {} (already seen)",
-				b.hash(),
+				b.crypto_hash(),
 				self.info.addr,
 			);
 			Ok(false)
@@ -299,8 +303,8 @@ impl Peer {
 	}
 
 	pub fn send_header(&self, bh: &core::BlockHeader) -> Result<bool, Error> {
-		if !self.tracking_adapter.has_recv(bh.hash()) {
-			debug!("Send header {} to {}", bh.hash(), self.info.addr);
+		if !self.tracking_adapter.has_recv(bh.crypto_hash()) {
+			debug!("Send header {} to {}", bh.crypto_hash(), self.info.addr);
 			self.connection
 				.as_ref()
 				.unwrap()
@@ -310,7 +314,7 @@ impl Peer {
 		} else {
 			debug!(
 				"Suppress header send {} to {} (already seen)",
-				bh.hash(),
+				bh.crypto_hash(),
 				self.info.addr,
 			);
 			Ok(false)
@@ -347,11 +351,11 @@ impl Peer {
 			.capabilities
 			.contains(Capabilities::TX_KERNEL_HASH)
 		{
-			return self.send_tx_kernel_hash(kernel.hash());
+			return self.send_tx_kernel_hash(kernel.crypto_hash());
 		}
 
-		if !self.tracking_adapter.has_recv(kernel.hash()) {
-			debug!("Send full tx {} to {}", tx.hash(), self.info.addr);
+		if !self.tracking_adapter.has_recv(kernel.crypto_hash()) {
+			debug!("Send full tx {} to {}", tx.crypto_hash(), self.info.addr);
 			self.connection
 				.as_ref()
 				.unwrap()
@@ -361,7 +365,7 @@ impl Peer {
 		} else {
 			debug!(
 				"Not sending tx {} to {} (already seen)",
-				tx.hash(),
+				tx.crypto_hash(),
 				self.info.addr
 			);
 			Ok(false)
@@ -372,7 +376,7 @@ impl Peer {
 	/// Note: tracking adapter is ignored for stem transactions (while under
 	/// embargo).
 	pub fn send_stem_transaction(&self, tx: &core::Transaction) -> Result<(), Error> {
-		debug!("Send (stem) tx {} to {}", tx.hash(), self.info.addr);
+		debug!("Send (stem) tx {} to {}", tx.crypto_hash(), self.info.addr);
 		self.connection
 			.as_ref()
 			.unwrap()
@@ -577,24 +581,24 @@ impl ChainAdapter for TrackingAdapter {
 		// correctly.
 		if !stem {
 			let kernel = &tx.kernels()[0];
-			self.push_recv(kernel.hash());
+			self.push_recv(kernel.crypto_hash());
 		}
 		self.adapter.transaction_received(tx, stem)
 	}
 
 	fn block_received(&self, b: core::Block, addr: SocketAddr, _was_requested: bool) -> bool {
-		let bh = b.hash();
+		let bh = b.header_hash();
 		self.push_recv(bh);
 		self.adapter.block_received(b, addr, self.has_req(bh))
 	}
 
 	fn compact_block_received(&self, cb: core::CompactBlock, addr: SocketAddr) -> bool {
-		self.push_recv(cb.hash());
+		self.push_recv(cb.crypto_hash());
 		self.adapter.compact_block_received(cb, addr)
 	}
 
 	fn header_received(&self, bh: core::BlockHeader, addr: SocketAddr) -> bool {
-		self.push_recv(bh.hash());
+		self.push_recv(bh.crypto_hash());
 		self.adapter.header_received(bh, addr)
 	}
 

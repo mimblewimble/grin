@@ -91,7 +91,7 @@ pub fn process_block(b: &Block, ctx: &mut BlockContext<'_>) -> Result<Option<Tip
 
 	debug!(
 		"pipe: process_block {} at {} [in/out/kern: {}/{}/{}]",
-		b.hash(),
+		b.header_hash(),
 		b.header.height,
 		b.inputs().len(),
 		b.outputs().len(),
@@ -111,7 +111,7 @@ pub fn process_block(b: &Block, ctx: &mut BlockContext<'_>) -> Result<Option<Tip
 	// Block is an orphan if we do not know about the previous full block.
 	// Skip this check if we have just processed the previous block
 	// or the full txhashset state (fast sync) at the previous block height.
-	if !is_next && !ctx.batch.block_exists(&prev.hash())? {
+	if !is_next && !ctx.batch.block_exists(&prev.crypto_hash())? {
 		return Err(ErrorKind::Orphan.into());
 	}
 
@@ -187,7 +187,7 @@ pub fn sync_block_headers(
 		debug!(
 			"pipe: sync_block_headers: {} headers from {} at {}",
 			headers.len(),
-			header.hash(),
+			header.crypto_hash(),
 			header.height,
 		);
 	} else {
@@ -195,7 +195,9 @@ pub fn sync_block_headers(
 	}
 
 	let all_known = if let Some(last_header) = headers.last() {
-		ctx.batch.get_block_header(&last_header.hash()).is_ok()
+		ctx.batch
+			.get_block_header(&last_header.crypto_hash())
+			.is_ok()
 	} else {
 		false
 	};
@@ -252,7 +254,7 @@ pub fn sync_block_headers(
 pub fn process_block_header(header: &BlockHeader, ctx: &mut BlockContext<'_>) -> Result<(), Error> {
 	debug!(
 		"pipe: process_block_header: {} at {}",
-		header.hash(),
+		header.crypto_hash(),
 		header.height,
 	); // keep this
 
@@ -266,7 +268,9 @@ pub fn process_block_header(header: &BlockHeader, ctx: &mut BlockContext<'_>) ->
 /// ctx here is specific to the header_head (tip of the header chain)
 fn check_header_known(header: &BlockHeader, ctx: &mut BlockContext<'_>) -> Result<(), Error> {
 	let header_head = ctx.batch.header_head()?;
-	if header.hash() == header_head.last_block_h || header.hash() == header_head.prev_block_h {
+	if header.crypto_hash() == header_head.last_block_h
+		|| header.crypto_hash() == header_head.prev_block_h
+	{
 		return Err(ErrorKind::Unfit("header already known".to_string()).into());
 	}
 	Ok(())
@@ -277,7 +281,7 @@ fn check_header_known(header: &BlockHeader, ctx: &mut BlockContext<'_>) -> Resul
 /// Checks against the last_block_h and prev_block_h of the chain head.
 fn check_known_head(header: &BlockHeader, ctx: &mut BlockContext<'_>) -> Result<(), Error> {
 	let head = ctx.batch.head()?;
-	let bh = header.hash();
+	let bh = header.crypto_hash();
 	if bh == head.last_block_h || bh == head.prev_block_h {
 		return Err(ErrorKind::Unfit("already known in head".to_string()).into());
 	}
@@ -286,7 +290,7 @@ fn check_known_head(header: &BlockHeader, ctx: &mut BlockContext<'_>) -> Result<
 
 /// Check if this block is in the set of known orphans.
 fn check_known_orphans(header: &BlockHeader, ctx: &mut BlockContext<'_>) -> Result<(), Error> {
-	if ctx.orphans.contains(&header.hash()) {
+	if ctx.orphans.contains(&header.crypto_hash()) {
 		Err(ErrorKind::Unfit("already known in orphans".to_string()).into())
 	} else {
 		Ok(())
@@ -295,7 +299,7 @@ fn check_known_orphans(header: &BlockHeader, ctx: &mut BlockContext<'_>) -> Resu
 
 // Check if this block is in the store already.
 fn check_known_store(header: &BlockHeader, ctx: &mut BlockContext<'_>) -> Result<(), Error> {
-	match ctx.batch.block_exists(&header.hash()) {
+	match ctx.batch.block_exists(&header.crypto_hash()) {
 		Ok(true) => {
 			let head = ctx.batch.head()?;
 			if header.height < head.height.saturating_sub(50) {
@@ -403,7 +407,7 @@ fn validate_header(header: &BlockHeader, ctx: &mut BlockContext<'_>) -> Result<(
 		// the _network_ difficulty of the previous block
 		// (during testnet1 we use _block_ difficulty here)
 		let child_batch = ctx.batch.child()?;
-		let diff_iter = store::DifficultyIter::from_batch(prev.hash(), child_batch);
+		let diff_iter = store::DifficultyIter::from_batch(prev.crypto_hash(), child_batch);
 		let next_header_info = consensus::next_difficulty(header.height, diff_iter);
 		if target_difficulty != next_header_info.difficulty {
 			info!(
@@ -449,7 +453,7 @@ fn verify_block_sums(b: &Block, ext: &mut txhashset::Extension<'_>) -> Result<()
 	// TODO - this is 2 db calls, can we optimize this?
 	// Retrieve the block_sums for the previous block.
 	let prev = ext.batch.get_previous_header(&b.header)?;
-	let block_sums = ext.batch.get_block_sums(&prev.hash())?;
+	let block_sums = ext.batch.get_block_sums(&prev.crypto_hash())?;
 
 	// Overage is based purely on the new block.
 	// Previous block_sums have taken all previous overage into account.
@@ -464,7 +468,7 @@ fn verify_block_sums(b: &Block, ext: &mut txhashset::Extension<'_>) -> Result<()
 
 	// Save the new block_sums for the new block to the db via the batch.
 	ext.batch.save_block_sums(
-		&b.header.hash(),
+		&b.header_hash(),
 		&BlockSums {
 			utxo_sum,
 			kernel_sum,
@@ -502,7 +506,7 @@ fn update_body_tail(bh: &BlockHeader, batch: &store::Batch<'_>) -> Result<(), Er
 	batch
 		.save_body_tail(&tip)
 		.map_err(|e| ErrorKind::StoreErr(e, "pipe save body tail".to_owned()))?;
-	debug!("body tail {} @ {}", bh.hash(), bh.height);
+	debug!("body tail {} @ {}", bh.crypto_hash(), bh.height);
 	Ok(())
 }
 
@@ -550,7 +554,7 @@ fn update_sync_head(bh: &BlockHeader, batch: &mut store::Batch<'_>) -> Result<()
 	batch
 		.save_sync_head(&tip)
 		.map_err(|e| ErrorKind::StoreErr(e, "pipe save sync head".to_owned()))?;
-	debug!("sync head {} @ {}", bh.hash(), bh.height);
+	debug!("sync head {} @ {}", bh.crypto_hash(), bh.height);
 	Ok(())
 }
 
@@ -582,7 +586,7 @@ pub fn rewind_and_apply_header_fork(
 	let mut fork_hashes = vec![];
 	let mut current = ext.batch.get_previous_header(header)?;
 	while current.height > 0 && !ext.is_on_current_chain(&current).is_ok() {
-		fork_hashes.push(current.hash());
+		fork_hashes.push(current.crypto_hash());
 		current = ext.batch.get_previous_header(&current)?;
 	}
 	fork_hashes.reverse();
@@ -613,7 +617,7 @@ pub fn rewind_and_apply_fork(b: &Block, ext: &mut txhashset::Extension<'_>) -> R
 	let mut fork_hashes = vec![];
 	let mut current = ext.batch.get_previous_header(&b.header)?;
 	while current.height > 0 && !ext.is_on_current_chain(&current).is_ok() {
-		fork_hashes.push(current.hash());
+		fork_hashes.push(current.crypto_hash());
 		current = ext.batch.get_previous_header(&current)?;
 	}
 	fork_hashes.reverse();

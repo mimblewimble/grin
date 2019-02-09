@@ -292,32 +292,38 @@ mod test {
 
 	#[test]
 	fn floonet_genesis_hash() {
-		let gen_hash = genesis_floo().hash();
+		let gen_hash = genesis_floo().header_hash();
 		println!("floonet genesis hash: {}", gen_hash.to_hex());
 		let gen_bin = ser::ser_vec(&genesis_floo()).unwrap();
-		println!("floonet genesis full hash: {}\n", gen_bin.hash().to_hex());
+		println!(
+			"floonet genesis full hash: {}\n",
+			gen_bin.crypto_hash().to_hex()
+		);
 		assert_eq!(
 			gen_hash.to_hex(),
 			"edc758c1370d43e1d733f70f58cf187c3be8242830429b1676b89fd91ccf2dab"
 		);
 		assert_eq!(
-			gen_bin.hash().to_hex(),
+			gen_bin.crypto_hash().to_hex(),
 			"91c638fc019a54e6652bd6bb3d9c5e0c17e889cef34a5c28528e7eb61a884dc4"
 		);
 	}
 
 	#[test]
 	fn mainnet_genesis_hash() {
-		let gen_hash = genesis_main().hash();
+		let gen_hash = genesis_main().header_hash();
 		println!("mainnet genesis hash: {}", gen_hash.to_hex());
 		let gen_bin = ser::ser_vec(&genesis_main()).unwrap();
-		println!("mainnet genesis full hash: {}\n", gen_bin.hash().to_hex());
+		println!(
+			"mainnet genesis full hash: {}\n",
+			gen_bin.crypto_hash().to_hex()
+		);
 		assert_eq!(
 			gen_hash.to_hex(),
 			"40adad0aec27797b48840aa9e00472015c21baea118ce7a2ff1a82c0f8f5bf82"
 		);
 		assert_eq!(
-			gen_bin.hash().to_hex(),
+			gen_bin.crypto_hash().to_hex(),
 			"6be6f34b657b785e558e85cc3b8bdb5bcbe8c10e7e58524c8027da7727e189ef"
 		);
 	}

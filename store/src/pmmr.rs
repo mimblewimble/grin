@@ -153,9 +153,12 @@ impl<T: PMMRable> Backend<T> for PMMRBackend<T> {
 	}
 
 	fn snapshot(&self, header: &BlockHeader) -> Result<(), String> {
-		self.leaf_set
-			.snapshot(header)
-			.map_err(|_| format!("Failed to save copy of leaf_set for {}", header.hash()))?;
+		self.leaf_set.snapshot(header).map_err(|_| {
+			format!(
+				"Failed to save copy of leaf_set for {}",
+				header.crypto_hash()
+			)
+		})?;
 		Ok(())
 	}
 
@@ -191,7 +194,7 @@ impl<T: PMMRable> PMMRBackend<T> {
 			let leaf_snapshot_path = format!(
 				"{}.{}",
 				data_dir.join(PMMR_LEAF_FILE).to_str().unwrap(),
-				header.hash()
+				header.crypto_hash()
 			);
 			// Check for a ... (3 dot) ending version of the file - could probably be removed after mainnet
 			let compatible_snapshot_path = PathBuf::from(leaf_snapshot_path.clone() + "...");

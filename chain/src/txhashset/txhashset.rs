@@ -205,7 +205,7 @@ impl TxHashSet {
 		let header_pmmr =
 			ReadonlyPMMR::at(&self.header_pmmr_h.backend, self.header_pmmr_h.last_pos);
 		if let Some(entry) = header_pmmr.get_data(pos) {
-			let header = self.commit_index.get_block_header(&entry.hash())?;
+			let header = self.commit_index.get_block_header(&entry.header_hash())?;
 			Ok(header)
 		} else {
 			Err(ErrorKind::Other(format!("get header by height")).into())
@@ -620,7 +620,7 @@ impl<'a> HeaderExtension<'a> {
 
 	/// Get the header hash for the specified pos from the underlying MMR backend.
 	fn get_header_hash(&self, pos: u64) -> Option<Hash> {
-		self.pmmr.get_data(pos).map(|x| x.hash())
+		self.pmmr.get_data(pos).map(|x| x.header_hash())
 	}
 
 	/// Get the header at the specified height based on the current state of the header extension.
@@ -640,7 +640,7 @@ impl<'a> HeaderExtension<'a> {
 	/// If these match we know the header is on the current chain.
 	pub fn is_on_current_chain(&mut self, header: &BlockHeader) -> Result<(), Error> {
 		let chain_header = self.get_header_by_height(header.height)?;
-		if chain_header.hash() == header.hash() {
+		if chain_header.crypto_hash() == header.crypto_hash() {
 			Ok(())
 		} else {
 			Err(ErrorKind::Other(format!("not on current chain")).into())
@@ -666,7 +666,7 @@ impl<'a> HeaderExtension<'a> {
 	pub fn rewind(&mut self, header: &BlockHeader) -> Result<(), Error> {
 		debug!(
 			"Rewind header extension to {} at {}",
-			header.hash(),
+			header.crypto_hash(),
 			header.height
 		);
 
@@ -702,14 +702,14 @@ impl<'a> HeaderExtension<'a> {
 	pub fn rebuild(&mut self, head: &Tip, genesis: &BlockHeader) -> Result<(), Error> {
 		debug!(
 			"About to rebuild header extension from {:?} to {:?}.",
-			genesis.hash(),
+			genesis.crypto_hash(),
 			head.last_block_h,
 		);
 
 		let mut header_hashes = vec![];
 		let mut current = self.batch.get_block_header(&head.last_block_h)?;
 		while current.height > 0 {
-			header_hashes.push(current.hash());
+			header_hashes.push(current.crypto_hash());
 			current = self.batch.get_previous_header(&current)?;
 		}
 
@@ -961,7 +961,7 @@ impl<'a> Extension<'a> {
 
 	/// Get the header hash for the specified pos from the underlying MMR backend.
 	fn get_header_hash(&self, pos: u64) -> Option<Hash> {
-		self.header_pmmr.get_data(pos).map(|x| x.hash())
+		self.header_pmmr.get_data(pos).map(|x| x.header_hash())
 	}
 
 	/// Get the header at the specified height based on the current state of the extension.
@@ -981,7 +981,7 @@ impl<'a> Extension<'a> {
 	/// If these match we know the header is on the current chain.
 	pub fn is_on_current_chain(&mut self, header: &BlockHeader) -> Result<(), Error> {
 		let chain_header = self.get_header_by_height(header.height)?;
-		if chain_header.hash() == header.hash() {
+		if chain_header.crypto_hash() == header.crypto_hash() {
 			Ok(())
 		} else {
 			Err(ErrorKind::Other(format!("not on current chain")).into())
@@ -1023,7 +1023,11 @@ impl<'a> Extension<'a> {
 	/// Rewinds the MMRs to the provided block, rewinding to the last output pos
 	/// and last kernel pos of that block.
 	pub fn rewind(&mut self, header: &BlockHeader) -> Result<(), Error> {
-		debug!("Rewind to header {} at {}", header.hash(), header.height,);
+		debug!(
+			"Rewind to header {} at {}",
+			header.crypto_hash(),
+			header.height,
+		);
 
 		// We need to build bitmaps of added and removed output positions
 		// so we can correctly rewind all operations applied to the output MMR
@@ -1461,14 +1465,14 @@ fn check_and_remove_files(txhashset_path: &PathBuf, header: &BlockHeader) -> Res
 		.cloned()
 		.map(|s| {
 			if s.contains("pmmr_leaf.bin") {
-				format!("{}.{}", s, header.hash())
+				format!("{}.{}", s, header.crypto_hash())
 			} else {
 				String::from(s)
 			}
 		})
 		.collect();
 	// prevent checker from deleting 3 dot file, could be removed after mainnet
-	pmmr_files_expected.insert(format!("pmmr_leaf.bin.{}...", header.hash()));
+	pmmr_files_expected.insert(format!("pmmr_leaf.bin.{}...", header.crypto_hash()));
 
 	let subdirectories = fs::read_dir(txhashset_path)?;
 	for subdirectory in subdirectories {
@@ -1541,14 +1545,14 @@ pub fn input_pos_to_rewind(
 	let mut block_input_bitmaps: Vec<Bitmap> = vec![];
 
 	let mut current = head_header.clone();
-	while current.hash() != block_header.hash() {
+	while current.crypto_hash() != block_header.crypto_hash() {
 		if current.height < 1 {
 			break;
 		}
 
 		// I/O should be minimized or eliminated here for most
 		// rewind scenarios.
-		if let Ok(b_res) = batch.get_block_input_bitmap(&current.hash()) {
+		if let Ok(b_res) = batch.get_block_input_bitmap(&current.crypto_hash()) {
 			bitmap_fast_or(Some(b_res), &mut block_input_bitmaps);
 		}
 		current = batch.get_previous_header(&current)?;

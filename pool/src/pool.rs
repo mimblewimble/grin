@@ -54,13 +54,13 @@ impl Pool {
 
 	/// Does the transaction pool contain an entry for the given transaction?
 	pub fn contains_tx(&self, hash: Hash) -> bool {
-		self.entries.iter().any(|x| x.tx.hash() == hash)
+		self.entries.iter().any(|x| x.tx.crypto_hash() == hash)
 	}
 
 	pub fn get_tx(&self, hash: Hash) -> Option<Transaction> {
 		self.entries
 			.iter()
-			.find(|x| x.tx.hash() == hash)
+			.find(|x| x.tx.crypto_hash() == hash)
 			.map(|x| x.tx.clone())
 	}
 
@@ -68,7 +68,7 @@ impl Pool {
 	pub fn retrieve_tx_by_kernel_hash(&self, hash: Hash) -> Option<Transaction> {
 		for x in &self.entries {
 			for k in x.tx.kernels() {
-				if k.hash() == hash {
+				if k.crypto_hash() == hash {
 					return Some(x.tx.clone());
 				}
 			}
@@ -238,13 +238,13 @@ impl Pool {
 		debug!(
 			"add_to_pool [{}]: {} ({}) [in/out/kern: {}/{}/{}] pool: {} (at block {})",
 			self.name,
-			entry.tx.hash(),
+			entry.tx.crypto_hash(),
 			entry.src.debug_name,
 			entry.tx.inputs().len(),
 			entry.tx.outputs().len(),
 			entry.tx.kernels().len(),
 			self.size(),
-			header.hash(),
+			header.crypto_hash(),
 		);
 	}
 
@@ -304,7 +304,7 @@ impl Pool {
 		let overage = tx.overage();
 		let offset = (header.total_kernel_offset() + tx.offset)?;
 
-		let block_sums = self.blockchain.get_block_sums(&header.hash())?;
+		let block_sums = self.blockchain.get_block_sums(&header.crypto_hash())?;
 
 		// Verify the kernel sums for the block_sums with the new tx applied,
 		// accounting for overage and offset.

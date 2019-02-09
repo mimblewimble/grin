@@ -93,7 +93,7 @@ impl Miner {
 		);
 		let mut iter_count = 0;
 
-		while head.hash() == *latest_hash && Utc::now().timestamp() < deadline {
+		while head.crypto_hash() == *latest_hash && Utc::now().timestamp() < deadline {
 			let mut ctx = global::create_pow_context::<u32>(
 				head.height,
 				global::min_edge_bits(),
@@ -166,7 +166,7 @@ impl Miner {
 				info!(
 					"(Server ID: {}) Found valid proof of work, adding block {} (prev_root {}).",
 					self.debug_output_id,
-					b.hash(),
+					b.header_hash(),
 					b.header.prev_root,
 				);
 				let res = self.chain.process_block(b, chain::Options::MINE);
