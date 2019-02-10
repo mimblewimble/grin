@@ -809,15 +809,13 @@ impl StratumServer {
 				&& self.workers.count() > 0
 			{
 				{
-					let mut current_block_versions = self.current_block_versions.write();
 					let mut wallet_listener_url: Option<String> = None;
 					if !self.config.burn_reward {
 						wallet_listener_url = Some(self.config.wallet_listener_url.clone());
 					}
 					// If this is a new block, clear the current_block version history
-					if current_hash != latest_hash {
-						current_block_versions.clear();
-					}
+					let clear_blocks = current_hash != latest_hash;
+
 					// Build the new block (version)
 					let (new_block, block_fees) = mine_block::get_block(
 						&self.chain,
@@ -851,8 +849,14 @@ impl StratumServer {
 					stratum_stats.block_height = new_block.header.height;
 					stratum_stats.network_difficulty = *self.current_difficulty.read();
 
-					// Add this new block version to our current block map
-					current_block_versions.push(new_block);
+					{
+						let mut current_block_versions = self.current_block_versions.write();
+						// Add this new block version to our current block map
+						if clear_blocks {
+							current_block_versions.clear();
+						}
+						current_block_versions.push(new_block);
+					}
 				}
 				// Send this job to all connected workers
 				self.broadcast_job();
