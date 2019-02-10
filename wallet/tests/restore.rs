@@ -45,6 +45,7 @@ fn restore_wallet(base_dir: &str, wallet_dir: &str) -> Result<(), libwallet::Err
 	let dest_dir = format!("{}/{}_restore", base_dir, wallet_dir);
 	fs::create_dir_all(dest_dir.clone())?;
 	let dest_seed = format!("{}/wallet.seed", dest_dir);
+	println!("Source: {}, Dest: {}", source_seed, dest_seed);
 	fs::copy(source_seed, dest_seed)?;
 
 	let mut wallet_proxy: WalletProxy<LocalWalletClient, ExtKeychain> = WalletProxy::new(base_dir);
@@ -343,13 +344,13 @@ fn setup_restore(test_dir: &str) -> Result<(), libwallet::Error> {
 }
 
 fn perform_restore(test_dir: &str) -> Result<(), libwallet::Error> {
-	restore_wallet(&format!("{}_r1", test_dir), "wallet1")?;
+	restore_wallet(test_dir, "wallet1")?;
 	compare_wallet_restore(
 		test_dir,
 		"wallet1",
 		&ExtKeychain::derive_key_id(2, 0, 0, 0, 0),
 	)?;
-	restore_wallet(&format!("{}_r2", test_dir), "wallet2")?;
+	restore_wallet(test_dir, "wallet2")?;
 	compare_wallet_restore(
 		test_dir,
 		"wallet2",
@@ -365,7 +366,7 @@ fn perform_restore(test_dir: &str) -> Result<(), libwallet::Error> {
 		"wallet2",
 		&ExtKeychain::derive_key_id(2, 2, 0, 0, 0),
 	)?;
-	restore_wallet(&format!("{}_r3", test_dir), "wallet3")?;
+	restore_wallet(test_dir, "wallet3")?;
 	compare_wallet_restore(
 		test_dir,
 		"wallet3",
