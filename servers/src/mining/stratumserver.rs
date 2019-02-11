@@ -424,13 +424,14 @@ impl Handler {
 			self.workers
 				.update_stats(worker_id, |worker_stats| worker_stats.num_blocks_found += 1);
 			// Log message to make it obvious we found a block
+			let stats = self.workers.get_stats(worker_id)?;
 			warn!(
 					"(Server ID: {}) Solution Found for block {}, hash {} - Yay!!! Worker ID: {}, blocks found: {}, shares: {}",
 					self.id, params.height,
 					b.hash(),
-					self.workers.stratum_stats.read().worker_stats[worker_id].id,
-					self.workers.stratum_stats.read().worker_stats[worker_id].num_blocks_found,
-					self.workers.stratum_stats.read().worker_stats[worker_id].num_accepted,
+					stats.id,
+					stats.num_blocks_found,
+					stats.num_accepted,
 				);
 		} else {
 			// Do some validation but dont submit
