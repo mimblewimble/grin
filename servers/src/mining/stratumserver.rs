@@ -265,14 +265,7 @@ impl Handler {
 	}
 	fn handle_login(&self, params: Option<Value>, worker_id: usize) -> Result<Value, RpcError> {
 		let params: LoginParams = parse_params(params)?;
-		let mut workers = self.workers.workers_list.write();
-		let worker = workers
-			.get_mut(&worker_id)
-			.ok_or(RpcError::internal_error())?;
-		worker.login = Some(params.login);
-		// XXX TODO Future - Validate password?
-		worker.agent = params.agent;
-		worker.authenticated = true;
+		self.workers.login(worker_id, params.login, params.agent)?;
 		return Ok("ok".into());
 	}
 
@@ -461,25 +454,12 @@ impl Handler {
 			}
 		}
 		// Log this as a valid share
-		let submitted_by = match self
-			.workers
-			.workers_list
-			.read()
-			.get(&worker_id)
-			.unwrap()
-			.login
-			.clone()
-		{
-			None => self
-				.workers
-				.workers_list
-				.read()
-				.get(&worker_id)
-				.unwrap()
-				.id
-				.to_string(),
+		let worker = self.workers.get_worker(worker_id)?;
+		let submitted_by = match worker.login {
+			None => worker.id.to_string(),
 			Some(login) => login.clone(),
 		};
+
 		info!(
 				"(Server ID: {}) Got share at height {}, hash {}, edge_bits {}, nonce {}, job_id {}, difficulty {}/{}, submitted by {}",
 				self.id,
@@ -564,6 +544,7 @@ fn accept_connections(listen_addr: SocketAddr, handler: Handler) {
 // ----------------------------------------
 // Worker Object - a connected stratum client - a miner, pool, proxy, etc...
 
+#[derive(Clone)]
 pub struct Worker {
 	id: usize,
 	agent: String,
@@ -620,6 +601,27 @@ impl WorkersList {
 			.remove(&worker_id)
 			.expect("Stratum: no such addr in map");
 		self.stratum_stats.write().num_workers = self.workers_list.read().len();
+	}
+
+	pub fn login(&self, worker_id: usize, login: String, agent: String) -> Result<(), RpcError> {
+		let mut wl = self.workers_list.write();
+		let mut worker = wl.get_mut(&worker_id).ok_or(RpcError::internal_error())?;
+		worker.login = Some(login);
+		// XXX TODO Future - Validate password?
+		worker.agent = agent;
+		worker.authenticated = true;
+		Ok(())
+	}
+
+	pub fn get_worker(&self, worker_id: usize) -> Result<Worker, RpcError> {
+		self.workers_list
+			.read()
+			.get(&worker_id)
+			.ok_or_else(|| {
+				error!("Worker {} not found", worker_id);
+				RpcError::internal_error()
+			})
+			.map(|w| w.clone())
 	}
 
 	pub fn last_seen(&self, worker_id: usize) {
