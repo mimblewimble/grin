@@ -487,11 +487,11 @@ where
 			),
 			"cancel_tx" => Box::new(
 				self.cancel_tx(req, api)
-					.and_then(|_| ok(response(StatusCode::OK, ""))),
+					.and_then(|_| ok(response(StatusCode::OK, "{}"))),
 			),
 			"post_tx" => Box::new(
 				self.post_tx(req, api)
-					.and_then(|_| ok(response(StatusCode::OK, ""))),
+					.and_then(|_| ok(response(StatusCode::OK, "{}"))),
 			),
 			_ => Box::new(err(ErrorKind::GenericError(
 				"Unknown error handling post request".to_owned(),
@@ -677,20 +677,31 @@ fn create_ok_response(json: &str) -> Response<Body> {
 			"access-control-allow-headers",
 			"Content-Type, Authorization",
 		)
+		.header(hyper::header::CONTENT_TYPE, "application/json")
 		.body(json.to_string().into())
 		.unwrap()
 }
 
+/// Build a new hyper Response with the status code and body provided.
+///
+/// Whenever the status code is `StatusCode::OK` the text parameter should be
+/// valid JSON as the content type header will be set to `application/json'
 fn response<T: Into<Body>>(status: StatusCode, text: T) -> Response<Body> {
-	Response::builder()
+	let mut builder = &mut Response::builder();
+
+	builder = builder
 		.status(status)
 		.header("access-control-allow-origin", "*")
 		.header(
 			"access-control-allow-headers",
 			"Content-Type, Authorization",
-		)
-		.body(text.into())
-		.unwrap()
+		);
+
+	if status == StatusCode::OK {
+		builder = builder.header(hyper::header::CONTENT_TYPE, "application/json");
+	}
+
+	builder.body(text.into()).unwrap()
 }
 
 fn parse_params(req: &Request<Body>) -> HashMap<String, Vec<String>> {
