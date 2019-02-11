@@ -14,9 +14,9 @@
 
 // Keybase Wallet Plugin
 
-use crate::adapters::util::serialize_slate;
 use crate::controller;
 use crate::libwallet::slate::{Slate, VersionedSlate};
+use crate::libwallet::slate_versions::v0::SlateV0;
 use crate::libwallet::{Error, ErrorKind};
 use crate::{instantiate_wallet, HTTPNodeClient, WalletCommAdapter, WalletConfig};
 use failure::ResultExt;
@@ -193,6 +193,7 @@ fn get_unread(topic: &str) -> Result<HashMap<String, String>, Error> {
 /// Send a message to a keybase channel that self-destructs after ttl seconds.
 fn send<T: Serialize>(message: T, channel: &str, topic: &str, ttl: u16) -> bool {
 	let seconds = format!("{}s", ttl);
+	let serialized = to_string(&message).unwrap();
 	let payload = to_string(&json!({
 		"method": "send",
 		"params": {
@@ -201,7 +202,7 @@ fn send<T: Serialize>(message: T, channel: &str, topic: &str, ttl: u16) -> bool 
 					"name": channel, "topic_name": topic, "topic_type": "dev"
 				},
 				"message": {
-					"body": to_string(&message).unwrap()
+					"body": serialized
 				},
 				"exploding_lifetime": seconds
 			}
@@ -211,7 +212,10 @@ fn send<T: Serialize>(message: T, channel: &str, topic: &str, ttl: u16) -> bool 
 	let response = api_send(&payload);
 	if let Ok(res) = response {
 		match res["result"]["message"].as_str() {
-			Some("message sent") => true,
+			Some("message sent") => {
+				debug!("Message sent to {}: {}", channel, serialized);
+				true
+			}
 			_ => false,
 		}
 	} else {
@@ -291,7 +295,6 @@ impl WalletCommAdapter for KeybaseWalletCommAdapter {
 		}
 
 		let id = slate.id;
-		let slate = serialize_slate(slate);
 
 		// Send original slate to recipient with the SLATE_NEW topic
 		match send(&slate, addr, SLATE_NEW, TTL) {
@@ -349,8 +352,8 @@ impl WalletCommAdapter for KeybaseWalletCommAdapter {
 			for (msg, channel) in &unread.unwrap() {
 				let blob = from_str::<VersionedSlate>(msg);
 				match blob {
-					Ok(slate) => {
-						let mut slate: Slate = slate.into();
+					Ok(message) => {
+						let mut slate: Slate = message.clone().into();
 						let tx_uuid = slate.id;
 
 						// Reject multiple recipients channel for safety
@@ -381,19 +384,29 @@ impl WalletCommAdapter for KeybaseWalletCommAdapter {
 							Ok(())
 						}) {
 							// Reply to the same channel with topic SLATE_SIGNED
-							Ok(_) => match send(slate, channel, SLATE_SIGNED, TTL) {
-								true => {
+							Ok(_) => {
+								let success = match message {
+									// Send the same version of slate that was sent to us
+									VersionedSlate::V0(_) => {
+										send(SlateV0::from(slate), channel, SLATE_SIGNED, TTL)
+									}
+									VersionedSlate::V1(_) => {
+										send(slate, channel, SLATE_SIGNED, TTL)
+									}
+								};
+
+								if success {
 									notify_on_receive(
 										config.keybase_notify_ttl.unwrap_or(1440),
 										channel.to_string(),
 										tx_uuid.to_string(),
 									);
 									debug!("Returned slate to @{} via keybase", channel);
-								}
-								false => {
+								} else {
 									error!("Failed to return slate to @{} via keybase. Incoming tx failed", channel);
 								}
-							},
+							}
+
 							Err(e) => {
 								error!(
 									"Error on receiving tx via keybase: {}. Incoming tx failed",
@@ -402,7 +415,7 @@ impl WalletCommAdapter for KeybaseWalletCommAdapter {
 							}
 						}
 					}
-					Err(_) => (),
+					Err(_) => debug!("Failed to deserialize keybase message: {}", msg),
 				}
 			}
 			sleep(LISTEN_SLEEP_DURATION);
