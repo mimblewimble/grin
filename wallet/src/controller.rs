@@ -683,7 +683,7 @@ fn create_ok_response(json: &str) -> Response<Body> {
 }
 
 /// Build a new hyper Response with the status code and body provided.
-/// 
+///
 /// Whenever the status code is `StatusCode::OK` the text parameter should be
 /// valid JSON as the content type header will be set to `application/json'
 fn response<T: Into<Body>>(status: StatusCode, text: T) -> Response<Body> {
