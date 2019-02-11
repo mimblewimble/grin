@@ -212,10 +212,10 @@ fn send<T: Serialize>(message: T, channel: &str, topic: &str, ttl: u16) -> bool 
 	let response = api_send(&payload);
 	if let Ok(res) = response {
 		match res["result"]["message"].as_str() {
-			Some("message sent") => { 
+			Some("message sent") => {
 				debug!("Message sent to {}: {}", channel, serialized);
 				true
-			},
+			}
 			_ => false,
 		}
 	} else {
@@ -353,7 +353,6 @@ impl WalletCommAdapter for KeybaseWalletCommAdapter {
 				let blob = from_str::<VersionedSlate>(msg);
 				match blob {
 					Ok(message) => {
-
 						let mut slate: Slate = message.clone().into();
 						let tx_uuid = slate.id;
 
@@ -388,8 +387,12 @@ impl WalletCommAdapter for KeybaseWalletCommAdapter {
 							Ok(_) => {
 								let success = match message {
 									// Send the same version of slate that was sent to us
-									VersionedSlate::V0(_) => send(SlateV0::from(slate), channel, SLATE_SIGNED, TTL),
-									VersionedSlate::V1(_) => send(slate, channel, SLATE_SIGNED, TTL),
+									VersionedSlate::V0(_) => {
+										send(SlateV0::from(slate), channel, SLATE_SIGNED, TTL)
+									}
+									VersionedSlate::V1(_) => {
+										send(slate, channel, SLATE_SIGNED, TTL)
+									}
 								};
 
 								if success {
