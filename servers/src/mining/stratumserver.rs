@@ -276,10 +276,9 @@ impl Handler {
 
 	fn handle_status(&self, worker_id: usize) -> Result<Value, RpcError> {
 		// Return worker status in json for use by a dashboard or healthcheck.
+		let stats = self.workers.get_stats(worker_id)?;
 		let status = WorkerStatus {
-			id: self.workers.stratum_stats.read().worker_stats[worker_id]
-				.id
-				.clone(),
+			id: stats.id.clone(),
 			height: self
 				.current_block_versions
 				.read()
@@ -287,10 +286,10 @@ impl Handler {
 				.unwrap()
 				.header
 				.height,
-			difficulty: self.workers.stratum_stats.read().worker_stats[worker_id].pow_difficulty,
-			accepted: self.workers.stratum_stats.read().worker_stats[worker_id].num_accepted,
-			rejected: self.workers.stratum_stats.read().worker_stats[worker_id].num_rejected,
-			stale: self.workers.stratum_stats.read().worker_stats[worker_id].num_stale,
+			difficulty: stats.pow_difficulty,
+			accepted: stats.num_accepted,
+			rejected: stats.num_rejected,
+			stale: stats.num_stale,
 		};
 		let response = serde_json::to_value(&status).unwrap();
 		return Ok(response);
@@ -622,6 +621,15 @@ impl WorkersList {
 				RpcError::internal_error()
 			})
 			.map(|w| w.clone())
+	}
+
+	pub fn get_stats(&self, worker_id: usize) -> Result<WorkerStats, RpcError> {
+		self.stratum_stats
+			.read()
+			.worker_stats
+			.get(worker_id)
+			.ok_or(RpcError::internal_error())
+			.map(|ws| ws.clone())
 	}
 
 	pub fn last_seen(&self, worker_id: usize) {
