@@ -640,6 +640,13 @@ impl WorkersList {
 			.tx
 			.unbounded_send(msg);
 	}
+
+	pub fn broadcast(&self, msg: String) {
+		for worker in self.workers_list.read().values() {
+			worker.tx.unbounded_send(msg.clone());
+		}
+	}
+
 	pub fn count(&self) -> usize {
 		self.workers_list.read().len()
 	}
@@ -733,9 +740,7 @@ impl StratumServer {
 			"(Server ID: {}) sending block {} with id {} to stratum clients",
 			self.id, job_template.height, job_template.job_id,
 		);
-		for worker in self.workers.workers_list.read().values() {
-			worker.tx.unbounded_send(job_request_json.clone());
-		}
+		self.workers.broadcast(job_request_json.clone());
 	}
 
 	/// "main()" - Starts the stratum-server.  Creates a thread to Listens for
