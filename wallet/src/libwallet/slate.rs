@@ -35,7 +35,7 @@ use uuid::Uuid;
 const CURRENT_SLATE_VERSION: u64 = 1;
 
 /// A wrapper around slates the enables support for versioning
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Clone)]
 #[serde(untagged)]
 pub enum VersionedSlate {
 	/// Pre versioning version
