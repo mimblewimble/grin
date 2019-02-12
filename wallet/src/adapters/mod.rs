@@ -16,7 +16,7 @@ mod file;
 mod http;
 mod keybase;
 mod null;
-mod util;
+pub mod util;
 
 pub use self::file::FileWalletCommAdapter;
 pub use self::http::HTTPWalletCommAdapter;

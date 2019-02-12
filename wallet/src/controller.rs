@@ -15,6 +15,7 @@
 //! Controller for wallet.. instantiates and handles listeners (or single-run
 //! invocations) as needed.
 //! Still experimental
+use crate::adapters::util::get_versioned_slate;
 use crate::adapters::{FileWalletCommAdapter, HTTPWalletCommAdapter, KeybaseWalletCommAdapter};
 use crate::api::{ApiServer, BasicAuthMiddleware, Handler, ResponseFuture, Router, TLSConfig};
 use crate::core::core;
@@ -573,7 +574,7 @@ where
 		&self,
 		req: Request<Body>,
 		mut api: APIForeign<T, C, K>,
-	) -> Box<dyn Future<Item = Slate, Error = Error> + Send> {
+	) -> Box<dyn Future<Item = VersionedSlate, Error = Error> + Send> {
 		Box::new(parse_body(req).and_then(
 			//TODO: No way to insert a message from the params
 			move |slate: VersionedSlate| {
@@ -583,7 +584,7 @@ where
 					err(e)
 				} else {
 					match api.receive_tx(&mut slate, None, None) {
-						Ok(_) => ok(slate.clone()),
+						Ok(_) => ok(get_versioned_slate(&slate.clone())),
 						Err(e) => {
 							error!("receive_tx: failed with error: {}", e);
 							err(e)
