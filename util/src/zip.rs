@@ -80,7 +80,15 @@ where
 					fs::create_dir_all(&p)?;
 				}
 			}
-			let mut outfile = fs::File::create(&file_path)?;
+			//let mut outfile = fs::File::create(&file_path)?;
+			let res = fs::File::create(&file_path);
+			let mut outfile = match res {
+				Err(e) => {
+					error!("{:?}", e);
+					return Err(zip::result::ZipError::Io(e));
+				}
+				Ok(r) => r,
+			};
 			io::copy(&mut file, &mut outfile)?;
 		}
 

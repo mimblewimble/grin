@@ -137,6 +137,10 @@ where
 		self.wallets.insert(addr.to_owned(), (tx, wallet));
 	}
 
+	pub fn stop(&mut self) {
+		self.running.store(false, Ordering::Relaxed);
+	}
+
 	/// Run the incoming message queue and respond more or less
 	/// synchronously
 	pub fn run(&mut self) -> Result<(), libwallet::Error> {

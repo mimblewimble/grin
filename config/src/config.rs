@@ -46,7 +46,7 @@ const GRIN_HOME: &'static str = ".grin";
 const GRIN_CHAIN_DIR: &'static str = "chain_data";
 /// Wallet data directory
 pub const GRIN_WALLET_DIR: &'static str = "wallet_data";
-const API_SECRET_FILE_NAME: &'static str = ".api_secret";
+pub const API_SECRET_FILE_NAME: &'static str = ".api_secret";
 
 fn get_grin_path(chain_type: &global::ChainTypes) -> Result<PathBuf, ConfigError> {
 	// Check if grin dir exists
@@ -79,7 +79,7 @@ fn check_config_current_dir(path: &str) -> Option<PathBuf> {
 }
 
 /// Create file with api secret
-fn init_api_secret(api_secret_path: &PathBuf) -> Result<(), ConfigError> {
+pub fn init_api_secret(api_secret_path: &PathBuf) -> Result<(), ConfigError> {
 	let mut api_secret_file = File::create(api_secret_path)?;
 	let api_secret: String = Alphanumeric
 		.sample_iter(&mut thread_rng())
@@ -89,8 +89,8 @@ fn init_api_secret(api_secret_path: &PathBuf) -> Result<(), ConfigError> {
 	Ok(())
 }
 
-/// // Check if file contains a secret and nothing else
-fn check_api_secret(api_secret_path: &PathBuf) -> Result<(), ConfigError> {
+/// Check if file contains a secret and nothing else
+pub fn check_api_secret(api_secret_path: &PathBuf) -> Result<(), ConfigError> {
 	let api_secret_file = File::open(api_secret_path)?;
 	let buf_reader = BufReader::new(api_secret_file);
 	let mut lines_iter = buf_reader.lines();
