@@ -535,15 +535,10 @@ where
 	/// * `amount` - The amount to send, in nanogrins. (`1 G = 1_000_000_000nG`)
 	/// * `minimum_confirmations` - The minimum number of confirmations an output
 	/// should have in order to be included in the transaction.
-	/// * `max_outputs` - By default, the wallet selects as many inputs as possible in a
-	/// transaction, to reduce the Output set and the fees. The wallet will attempt to spend
-	/// include up to `max_outputs` in a transaction, however if this is not enough to cover
-	/// the whole amount, the wallet will include more outputs. This parameter should be considered
-	/// a soft limit.
 	/// * `num_change_outputs` - The target number of change outputs to create in the transaction.
 	/// The actual number created will be `num_change_outputs` + whatever remainder is needed.
 	/// * `selection_strategy_is_use_all` - If `true`, attempt to use up as many outputs as
-	/// possible to create the transaction, up the 'soft limit' of `max_outputs`. This helps
+	/// possible to create the transaction. This helps
 	/// to reduce the size of the UTXO set and the amount of data stored in the wallet, and
 	/// minimizes fees. This will generally result in many inputs and a large change output(s),
 	/// usually much larger than the amount being sent. If `false`, the transaction will include
@@ -600,7 +595,6 @@ where
 	///		None,
 	///		amount,     // amount
 	///		10,         // minimum confirmations
-	///		500,        // max outputs
 	///		1,          // num change outputs
 	///		true,       // select all outputs
 	///		Some("Have some Grins. Love, Yeastplume".to_owned()),
@@ -619,7 +613,6 @@ where
 		src_acct_name: Option<&str>,
 		amount: u64,
 		minimum_confirmations: u64,
-		max_outputs: usize,
 		num_change_outputs: usize,
 		selection_strategy_is_use_all: bool,
 		message: Option<String>,
@@ -651,7 +644,6 @@ where
 			&mut *w,
 			&mut slate,
 			minimum_confirmations,
-			max_outputs,
 			num_change_outputs,
 			selection_strategy_is_use_all,
 			&parent_key_id,
@@ -681,15 +673,10 @@ where
 	/// * `amount` - The amount to send, in nanogrins. (`1 G = 1_000_000_000nG`)
 	/// * `minimum_confirmations` - The minimum number of confirmations an output
 	/// should have in order to be included in the transaction.
-	/// * `max_outputs` - By default, the wallet selects as many inputs as possible in a
-	/// transaction, to reduce the Output set and the fees. The wallet will attempt to spend
-	/// include up to `max_outputs` in a transaction, however if this is not enough to cover
-	/// the whole amount, the wallet will include more outputs. This parameter should be considered
-	/// a soft limit.
 	/// * `num_change_outputs` - The target number of change outputs to create in the transaction.
 	/// The actual number created will be `num_change_outputs` + whatever remainder is needed.
 	/// * `selection_strategy_is_use_all` - If `true`, attempt to use up as many outputs as
-	/// possible to create the transaction, up the 'soft limit' of `max_outputs`. This helps
+	/// possible to estimate the transaction. This helps
 	/// to reduce the size of the UTXO set and the amount of data stored in the wallet, and
 	/// minimizes fees. This will generally result in many inputs and a large change output(s),
 	/// usually much larger than the amount being sent. If `false`, the transaction will include
@@ -706,7 +693,6 @@ where
 		src_acct_name: Option<&str>,
 		amount: u64,
 		minimum_confirmations: u64,
-		max_outputs: usize,
 		num_change_outputs: usize,
 		selection_strategy_is_use_all: bool,
 	) -> Result<
@@ -732,7 +718,6 @@ where
 			&mut *w,
 			amount,
 			minimum_confirmations,
-			max_outputs,
 			num_change_outputs,
 			selection_strategy_is_use_all,
 			&parent_key_id,

@@ -158,7 +158,6 @@ fn check_repair_impl(test_dir: &str) -> Result<(), libwallet::Error> {
 			None,
 			reward * 2, // amount
 			cm,         // minimum confirmations
-			500,        // max outputs
 			1,          // num change outputs
 			true,       // select all outputs
 			None,       // optional message

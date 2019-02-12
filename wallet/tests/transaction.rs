@@ -99,7 +99,6 @@ fn basic_transaction_api(test_dir: &str) -> Result<(), libwallet::Error> {
 		let (slate_i, lock_fn) = sender_api.initiate_tx(
 			None, amount, // amount
 			2,      // minimum confirmations
-			500,    // max outputs
 			1,      // num change outputs
 			true,   // select all outputs
 			None,
@@ -232,7 +231,6 @@ fn basic_transaction_api(test_dir: &str) -> Result<(), libwallet::Error> {
 			None,
 			amount * 2, // amount
 			2,          // minimum confirmations
-			500,        // max outputs
 			1,          // num change outputs
 			true,       // select all outputs
 		)?;
@@ -243,7 +241,6 @@ fn basic_transaction_api(test_dir: &str) -> Result<(), libwallet::Error> {
 			None,
 			amount * 2, // amount
 			2,          // minimum confirmations
-			500,        // max outputs
 			1,          // num change outputs
 			false,      // select the smallest amount of outputs
 		)?;
@@ -261,7 +258,6 @@ fn basic_transaction_api(test_dir: &str) -> Result<(), libwallet::Error> {
 			None,
 			amount * 2, // amount
 			2,          // minimum confirmations
-			500,        // max outputs
 			1,          // num change outputs
 			true,       // select all outputs
 			None,
@@ -312,6 +308,24 @@ fn basic_transaction_api(test_dir: &str) -> Result<(), libwallet::Error> {
 		Ok(())
 	})?;
 
+	// Initiate transaction with weight more that
+	// core::global::max_block_weight() should fail
+	let invalid_amount_of_outputs =
+		core::global::max_block_weight() / core::consensus::BLOCK_OUTPUT_WEIGHT + 1;
+	let res = wallet::controller::owner_single_use(wallet1.clone(), |sender_api| {
+		// note this will increment the block count as part of the transaction "posting"
+		sender_api.initiate_tx(
+			None,
+			amount,                    // amount
+			2,                         // minimum confirmations
+			invalid_amount_of_outputs, // num change outputs
+			true,                      // select all outputs
+			None,
+		)?;
+		Ok(())
+	});
+	assert!(res.is_err());
+
 	// let logging finish
 	thread::sleep(Duration::from_millis(200));
 	Ok(())
@@ -358,7 +372,6 @@ fn tx_rollback(test_dir: &str) -> Result<(), libwallet::Error> {
 		let (slate_i, lock_fn) = sender_api.initiate_tx(
 			None, amount, // amount
 			2,      // minimum confirmations
-			500,    // max outputs
 			1,      // num change outputs
 			true,   // select all outputs
 			None,

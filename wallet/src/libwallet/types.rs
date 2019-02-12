@@ -710,8 +710,6 @@ pub struct SendTXArgs {
 	pub method: String,
 	/// destination url
 	pub dest: String,
-	/// Max number of outputs
-	pub max_outputs: usize,
 	/// Number of change outputs to generate
 	pub num_change_outputs: usize,
 	/// whether to use all outputs (combine)

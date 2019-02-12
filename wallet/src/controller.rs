@@ -325,7 +325,6 @@ where
 				None,
 				args.amount,
 				args.minimum_confirmations,
-				args.max_outputs,
 				args.num_change_outputs,
 				args.selection_strategy_is_use_all,
 				args.message,

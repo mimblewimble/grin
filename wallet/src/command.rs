@@ -205,7 +205,6 @@ pub struct SendArgs {
 	pub dest: String,
 	pub change_outputs: usize,
 	pub fluff: bool,
-	pub max_outputs: usize,
 }
 
 pub fn send(
@@ -223,7 +222,6 @@ pub fn send(
 							None,
 							args.amount,
 							args.minimum_confirmations,
-							args.max_outputs,
 							args.change_outputs,
 							strategy == "all",
 						)
@@ -237,7 +235,6 @@ pub fn send(
 				None,
 				args.amount,
 				args.minimum_confirmations,
-				args.max_outputs,
 				args.change_outputs,
 				args.selection_strategy == "all",
 				args.message.clone(),

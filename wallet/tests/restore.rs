@@ -237,7 +237,6 @@ fn setup_restore(test_dir: &str) -> Result<(), libwallet::Error> {
 		let (slate_i, lock_fn) = sender_api.initiate_tx(
 			None, amount, // amount
 			2,      // minimum confirmations
-			500,    // max outputs
 			1,      // num change outputs
 			true,   // select all outputs
 			None,
@@ -259,7 +258,6 @@ fn setup_restore(test_dir: &str) -> Result<(), libwallet::Error> {
 			None,
 			amount * 2, // amount
 			2,          // minimum confirmations
-			500,        // max outputs
 			1,          // num change outputs
 			true,       // select all outputs
 			None,
@@ -281,7 +279,6 @@ fn setup_restore(test_dir: &str) -> Result<(), libwallet::Error> {
 			None,
 			amount * 3, // amount
 			2,          // minimum confirmations
-			500,        // max outputs
 			1,          // num change outputs
 			true,       // select all outputs
 			None,
@@ -309,7 +306,6 @@ fn setup_restore(test_dir: &str) -> Result<(), libwallet::Error> {
 			None,
 			amount * 3, // amount
 			2,          // minimum confirmations
-			500,        // max outputs
 			1,          // num change outputs
 			true,       // select all outputs
 			None,

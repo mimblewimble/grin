@@ -105,7 +105,6 @@ fn file_exchange_test_impl(test_dir: &str) -> Result<(), libwallet::Error> {
 			Some("mining"),
 			reward * 2,               // amount
 			2,                        // minimum confirmations
-			500,                      // max outputs
 			1,                        // num change outputs
 			true,                     // select all outputs
 			Some(message.to_owned()), // optional message
