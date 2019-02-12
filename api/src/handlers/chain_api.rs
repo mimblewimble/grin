@@ -56,7 +56,7 @@ pub struct ChainValidationHandler {
 impl Handler for ChainValidationHandler {
 	fn get(&self, _req: Request<Body>) -> ResponseFuture {
 		match w(&self.chain).validate(true) {
-			Ok(_) => response(StatusCode::OK, ""),
+			Ok(_) => response(StatusCode::OK, "{}"),
 			Err(e) => response(
 				StatusCode::INTERNAL_SERVER_ERROR,
 				format!("validate failed: {}", e),
@@ -75,7 +75,7 @@ pub struct ChainCompactHandler {
 impl Handler for ChainCompactHandler {
 	fn post(&self, _req: Request<Body>) -> ResponseFuture {
 		match w(&self.chain).compact() {
-			Ok(_) => response(StatusCode::OK, ""),
+			Ok(_) => response(StatusCode::OK, "{}"),
 			Err(e) => response(
 				StatusCode::INTERNAL_SERVER_ERROR,
 				format!("compact failed: {}", e),

@@ -101,6 +101,17 @@ where
 		self.file.path()
 	}
 
+	/// Replace underlying file with another, deleting original
+	pub fn replace(&mut self, with: &Path) -> io::Result<()> {
+		self.file.replace(with)?;
+		Ok(())
+	}
+
+	/// Drop underlying file handles
+	pub fn release(&mut self) {
+		self.file.release();
+	}
+
 	/// Write the file out to disk, pruning removed elements.
 	pub fn save_prune<F>(&self, target: &str, prune_offs: &[u64], prune_cb: F) -> io::Result<()>
 	where
@@ -125,7 +136,7 @@ where
 /// latter by truncating the underlying file and re-creating the mmap.
 pub struct AppendOnlyFile {
 	path: PathBuf,
-	file: File,
+	file: Option<File>,
 	mmap: Option<memmap::Mmap>,
 	buffer_start: usize,
 	buffer: Vec<u8>,
@@ -135,26 +146,34 @@ pub struct AppendOnlyFile {
 impl AppendOnlyFile {
 	/// Open a file (existing or not) as append-only, backed by a mmap.
 	pub fn open<P: AsRef<Path>>(path: P) -> io::Result<AppendOnlyFile> {
-		let file = OpenOptions::new()
-			.read(true)
-			.append(true)
-			.create(true)
-			.open(&path)?;
 		let mut aof = AppendOnlyFile {
-			file,
+			file: None,
 			path: path.as_ref().to_path_buf(),
 			mmap: None,
 			buffer_start: 0,
 			buffer: vec![],
 			buffer_start_bak: 0,
 		};
-		// If we have a non-empty file then mmap it.
-		let sz = aof.size();
-		if sz > 0 {
-			aof.buffer_start = sz as usize;
-			aof.mmap = Some(unsafe { memmap::Mmap::map(&aof.file)? });
-		}
+		aof.init()?;
 		Ok(aof)
+	}
+
+	/// (Re)init an underlying file and its associated memmap
+	pub fn init(&mut self) -> io::Result<()> {
+		self.file = Some(
+			OpenOptions::new()
+				.read(true)
+				.append(true)
+				.create(true)
+				.open(self.path.clone())?,
+		);
+		// If we have a non-empty file then mmap it.
+		let sz = self.size();
+		if sz > 0 {
+			self.buffer_start = sz as usize;
+			self.mmap = Some(unsafe { memmap::Mmap::map(&self.file.as_ref().unwrap())? });
+		}
+		Ok(())
 	}
 
 	/// Append data to the file. Until the append-only file is synced, data is
@@ -193,21 +212,37 @@ impl AppendOnlyFile {
 	pub fn flush(&mut self) -> io::Result<()> {
 		if self.buffer_start_bak > 0 {
 			// Flushing a rewound state, we need to truncate via set_len() before applying.
-			self.file.set_len(self.buffer_start as u64)?;
+			// Drop and recreate, or windows throws an access error
+			self.mmap = None;
+			self.file = None;
+			{
+				let file = OpenOptions::new()
+					.read(true)
+					.create(true)
+					.write(true)
+					.open(&self.path)?;
+				file.set_len(self.buffer_start as u64)?;
+			}
+			let file = OpenOptions::new()
+				.read(true)
+				.create(true)
+				.append(true)
+				.open(&self.path)?;
+			self.file = Some(file);
 			self.buffer_start_bak = 0;
 		}
 
 		self.buffer_start += self.buffer.len();
-		self.file.write_all(&self.buffer[..])?;
-		self.file.sync_all()?;
+		self.file.as_mut().unwrap().write_all(&self.buffer[..])?;
+		self.file.as_mut().unwrap().sync_all()?;
 
 		self.buffer = vec![];
 
 		// Note: file must be non-empty to memory map it
-		if self.file.metadata()?.len() == 0 {
+		if self.file.as_ref().unwrap().metadata()?.len() == 0 {
 			self.mmap = None;
 		} else {
-			self.mmap = Some(unsafe { memmap::Mmap::map(&self.file)? });
+			self.mmap = Some(unsafe { memmap::Mmap::map(&self.file.as_ref().unwrap())? });
 		}
 
 		Ok(())
@@ -311,6 +346,23 @@ impl AppendOnlyFile {
 				read += len;
 			}
 		}
+	}
+
+	/// Replace the underlying file with another file
+	/// deleting the original
+	pub fn replace(&mut self, with: &Path) -> io::Result<()> {
+		self.mmap = None;
+		self.file = None;
+		fs::remove_file(&self.path)?;
+		fs::rename(with, &self.path)?;
+		self.init()?;
+		Ok(())
+	}
+
+	/// Release underlying file handles
+	pub fn release(&mut self) {
+		self.mmap = None;
+		self.file = None;
 	}
 
 	/// Current size of the file in bytes.

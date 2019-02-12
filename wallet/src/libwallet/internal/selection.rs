@@ -247,6 +247,52 @@ where
 	C: NodeClient,
 	K: Keychain,
 {
+	let (coins, _total, amount, fee) = select_coins_and_fee(
+		wallet,
+		amount,
+		current_height,
+		minimum_confirmations,
+		max_outputs,
+		change_outputs,
+		selection_strategy_is_use_all,
+		&parent_key_id,
+	)?;
+
+	// build transaction skeleton with inputs and change
+	let (mut parts, change_amounts_derivations) =
+		inputs_and_change(&coins, wallet, amount, fee, change_outputs)?;
+
+	// This is more proof of concept than anything but here we set lock_height
+	// on tx being sent (based on current chain height via api).
+	parts.push(build::with_lock_height(lock_height));
+
+	Ok((parts, coins, change_amounts_derivations, fee))
+}
+
+/// Select outputs and calculating fee.
+pub fn select_coins_and_fee<T: ?Sized, C, K>(
+	wallet: &mut T,
+	amount: u64,
+	current_height: u64,
+	minimum_confirmations: u64,
+	max_outputs: usize,
+	change_outputs: usize,
+	selection_strategy_is_use_all: bool,
+	parent_key_id: &Identifier,
+) -> Result<
+	(
+		Vec<OutputData>,
+		u64, // total
+		u64, // amount
+		u64, // fee
+	),
+	Error,
+>
+where
+	T: WalletBackend<C, K>,
+	C: NodeClient,
+	K: Keychain,
+{
 	// select some spendable coins from the wallet
 	let (max_outputs, mut coins) = select_coins(
 		wallet,
@@ -325,16 +371,7 @@ where
 			amount_with_fee = amount + fee;
 		}
 	}
-
-	// build transaction skeleton with inputs and change
-	let (mut parts, change_amounts_derivations) =
-		inputs_and_change(&coins, wallet, amount, fee, change_outputs)?;
-
-	// This is more proof of concept than anything but here we set lock_height
-	// on tx being sent (based on current chain height via api).
-	parts.push(build::with_lock_height(lock_height));
-
-	Ok((parts, coins, change_amounts_derivations, fee))
+	Ok((coins, total, amount, fee))
 }
 
 /// Selects inputs and change for a transaction

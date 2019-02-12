@@ -338,6 +338,49 @@ pub fn info(
 		);
 	}
 }
+
+/// Display summary info in a pretty way
+pub fn estimate(
+	amount: u64,
+	strategies: Vec<(
+		&str, // strategy
+		u64,  // total amount to be locked
+		u64,  // fee
+	)>,
+	dark_background_color_scheme: bool,
+) {
+	println!(
+		"\nEstimation for sending {}:\n",
+		amount_to_hr_string(amount, false)
+	);
+
+	let mut table = table!();
+
+	table.set_titles(row![
+		bMG->"Selection strategy",
+		bMG->"Fee",
+		bMG->"Will be locked",
+	]);
+
+	for (strategy, total, fee) in strategies {
+		if dark_background_color_scheme {
+			table.add_row(row![
+				bFC->strategy,
+				FR->amount_to_hr_string(fee, false),
+				FY->amount_to_hr_string(total, false),
+			]);
+		} else {
+			table.add_row(row![
+				bFD->strategy,
+				FR->amount_to_hr_string(fee, false),
+				FY->amount_to_hr_string(total, false),
+			]);
+		}
+	}
+	table.printstd();
+	println!();
+}
+
 /// Display list of wallet accounts in a pretty way
 pub fn accounts(acct_mappings: Vec<AcctPathMapping>) {
 	println!("\n____ Wallet Accounts ____\n",);

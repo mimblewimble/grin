@@ -152,6 +152,12 @@ impl<T: PMMRable> Backend<T> for PMMRBackend<T> {
 		self.data_file.path()
 	}
 
+	/// Release underlying data files
+	fn release_files(&mut self) {
+		self.data_file.release();
+		self.hash_file.release();
+	}
+
 	fn snapshot(&self, header: &BlockHeader) -> Result<(), String> {
 		self.leaf_set
 			.snapshot(header)
@@ -208,8 +214,8 @@ impl<T: PMMRable> PMMRBackend<T> {
 		Ok(PMMRBackend {
 			data_dir: data_dir.to_path_buf(),
 			prunable,
-			hash_file,
-			data_file,
+			hash_file: hash_file,
+			data_file: data_file,
 			leaf_set,
 			prune_list,
 		})
@@ -334,20 +340,11 @@ impl<T: PMMRable> PMMRBackend<T> {
 			}
 			self.prune_list.flush()?;
 		}
-
 		// 4. Rename the compact copy of hash file and reopen it.
-		fs::rename(
-			tmp_prune_file_hash.clone(),
-			self.data_dir.join(PMMR_HASH_FILE),
-		)?;
-		self.hash_file = DataFile::open(self.data_dir.join(PMMR_HASH_FILE))?;
+		self.hash_file.replace(Path::new(&tmp_prune_file_hash))?;
 
 		// 5. Rename the compact copy of the data file and reopen it.
-		fs::rename(
-			tmp_prune_file_data.clone(),
-			self.data_dir.join(PMMR_DATA_FILE),
-		)?;
-		self.data_file = DataFile::open(self.data_dir.join(PMMR_DATA_FILE))?;
+		self.data_file.replace(Path::new(&tmp_prune_file_data))?;
 
 		// 6. Write the leaf_set to disk.
 		// Optimize the bitmap storage in the process.

@@ -200,6 +200,7 @@ pub struct SendArgs {
 	pub message: Option<String>,
 	pub minimum_confirmations: u64,
 	pub selection_strategy: String,
+	pub estimate_selection_strategies: bool,
 	pub method: String,
 	pub dest: String,
 	pub change_outputs: usize,
@@ -210,67 +211,88 @@ pub struct SendArgs {
 pub fn send(
 	wallet: Arc<Mutex<WalletInst<impl NodeClient + 'static, keychain::ExtKeychain>>>,
 	args: SendArgs,
+	dark_scheme: bool,
 ) -> Result<(), Error> {
 	controller::owner_single_use(wallet.clone(), |api| {
-		let result = api.initiate_tx(
-			None,
-			args.amount,
-			args.minimum_confirmations,
-			args.max_outputs,
-			args.change_outputs,
-			args.selection_strategy == "all",
-			args.message.clone(),
-		);
-		let (mut slate, lock_fn) = match result {
-			Ok(s) => {
-				info!(
-					"Tx created: {} grin to {} (strategy '{}')",
-					core::amount_to_hr_string(args.amount, false),
-					args.dest,
-					args.selection_strategy,
-				);
-				s
-			}
-			Err(e) => {
-				info!("Tx not created: {}", e);
-				return Err(e);
-			}
-		};
-		let adapter = match args.method.as_str() {
-			"http" => HTTPWalletCommAdapter::new(),
-			"file" => FileWalletCommAdapter::new(),
-			"keybase" => KeybaseWalletCommAdapter::new(),
-			"self" => NullWalletCommAdapter::new(),
-			_ => NullWalletCommAdapter::new(),
-		};
-		if adapter.supports_sync() {
-			slate = adapter.send_tx_sync(&args.dest, &slate)?;
-			api.tx_lock_outputs(&slate, lock_fn)?;
-			if args.method == "self" {
-				controller::foreign_single_use(wallet, |api| {
-					api.receive_tx(&mut slate, Some(&args.dest), None)?;
-					Ok(())
-				})?;
-			}
-			if let Err(e) = api.verify_slate_messages(&slate) {
-				error!("Error validating participant messages: {}", e);
-				return Err(e);
-			}
-			api.finalize_tx(&mut slate)?;
+		if args.estimate_selection_strategies {
+			let strategies = vec!["smallest", "all"]
+				.into_iter()
+				.map(|strategy| {
+					let (total, fee) = api
+						.estimate_initiate_tx(
+							None,
+							args.amount,
+							args.minimum_confirmations,
+							args.max_outputs,
+							args.change_outputs,
+							strategy == "all",
+						)
+						.unwrap();
+					(strategy, total, fee)
+				})
+				.collect();
+			display::estimate(args.amount, strategies, dark_scheme);
 		} else {
-			adapter.send_tx_async(&args.dest, &slate)?;
-			api.tx_lock_outputs(&slate, lock_fn)?;
-		}
-		if adapter.supports_sync() {
-			let result = api.post_tx(&slate.tx, args.fluff);
-			match result {
-				Ok(_) => {
-					info!("Tx sent ok",);
-					return Ok(());
+			let result = api.initiate_tx(
+				None,
+				args.amount,
+				args.minimum_confirmations,
+				args.max_outputs,
+				args.change_outputs,
+				args.selection_strategy == "all",
+				args.message.clone(),
+			);
+			let (mut slate, lock_fn) = match result {
+				Ok(s) => {
+					info!(
+						"Tx created: {} grin to {} (strategy '{}')",
+						core::amount_to_hr_string(args.amount, false),
+						args.dest,
+						args.selection_strategy,
+					);
+					s
 				}
 				Err(e) => {
-					error!("Tx sent fail: {}", e);
+					info!("Tx not created: {}", e);
 					return Err(e);
+				}
+			};
+			let adapter = match args.method.as_str() {
+				"http" => HTTPWalletCommAdapter::new(),
+				"file" => FileWalletCommAdapter::new(),
+				"keybase" => KeybaseWalletCommAdapter::new(),
+				"self" => NullWalletCommAdapter::new(),
+				_ => NullWalletCommAdapter::new(),
+			};
+			if adapter.supports_sync() {
+				slate = adapter.send_tx_sync(&args.dest, &slate)?;
+				api.tx_lock_outputs(&slate, lock_fn)?;
+				if args.method == "self" {
+					controller::foreign_single_use(wallet, |api| {
+						api.receive_tx(&mut slate, Some(&args.dest), None)?;
+						Ok(())
+					})?;
+				}
+				if let Err(e) = api.verify_slate_messages(&slate) {
+					error!("Error validating participant messages: {}", e);
+					return Err(e);
+				}
+				api.finalize_tx(&mut slate)?;
+			} else {
+				adapter.send_tx_async(&args.dest, &slate)?;
+				api.tx_lock_outputs(&slate, lock_fn)?;
+			}
+			if adapter.supports_sync() {
+				let result = api.post_tx(&slate.tx, args.fluff);
+				match result {
+					Ok(_) => {
+						info!("Tx sent ok",);
+						return Ok(());
+					}
+					Err(e) => {
+						error!("Tx sent fail: {}", e);
+						return Err(e);
+					}
 				}
 			}
 		}

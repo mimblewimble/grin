@@ -44,10 +44,6 @@ subcommands:
       subcommands:
         - config:
             about: Generate a configuration grin-server.toml file in the current directory
-        - start:
-            about: Start the Grin server as a daemon
-        - stop:
-            about: Stop the Grin server daemon
         - run:
             about: Run the Grin server in this console
   - client:
@@ -161,6 +157,10 @@ subcommands:
                     - smallest
                   default_value: all
                   takes_value: true
+              - estimate_selection_strategies:
+                  help: Estimates all possible Coin/Output selection strategies.
+                  short: e
+                  long: estimate-selection
               - change_outputs:
                   help: Number of change outputs to generate (mainly for testing)
                   short: o
