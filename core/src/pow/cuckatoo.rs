@@ -265,7 +265,7 @@ where
 		self.graph.solutions.pop();
 		for s in &mut self.graph.solutions {
 			s.nonces = map_vec!(s.nonces, |n| val[*n as usize]);
-			s.nonces.sort();
+			s.nonces.sort_unstable();
 		}
 		for s in &self.graph.solutions {
 			self.verify_impl(&s)?;

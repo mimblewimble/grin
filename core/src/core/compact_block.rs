@@ -62,9 +62,9 @@ impl CompactBlockBody {
 
 	/// Sort everything.
 	fn sort(&mut self) {
-		self.out_full.sort();
-		self.kern_full.sort();
-		self.kern_ids.sort();
+		self.out_full.sort_unstable();
+		self.kern_full.sort_unstable();
+		self.kern_ids.sort_unstable();
 	}
 
 	/// "Lightweight" validation.
