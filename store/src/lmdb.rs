@@ -73,11 +73,19 @@ pub fn new_named_env(path: String, name: String, max_readers: Option<u32>) -> lm
 	env_builder.set_maxdbs(8).unwrap();
 	// half a TB should give us plenty room, will be an issue on 32 bits
 	// (which we don't support anyway)
-	env_builder
-		.set_mapsize(549_755_813_888)
-		.unwrap_or_else(|e| {
-			panic!("Unable to allocate LMDB space: {:?}", e);
-		});
+
+	#[cfg(not(target_os = "windows"))]
+	env_builder.set_mapsize(5_368_709_120).unwrap_or_else(|e| {
+		panic!("Unable to allocate LMDB space: {:?}", e);
+	});
+	//TODO: This is temporary to support (beta) windows support
+	//Windows allocates the entire file at once, so this needs to
+	//be changed to allocate as little as possible and increase as needed
+	#[cfg(target_os = "windows")]
+	env_builder.set_mapsize(524_288_000).unwrap_or_else(|e| {
+		panic!("Unable to allocate LMDB space: {:?}", e);
+	});
+
 	if let Some(max_readers) = max_readers {
 		env_builder
 			.set_maxreaders(max_readers)

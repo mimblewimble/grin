@@ -1,6 +1,6 @@
 # Introduktion till MimbleWimble och Grin
 
-*Läs detta på andra språk: [English](intro.md), [简体中文](intro_ZH-CN.md), [Español](intro_ES.md), [Nederlands](intro_NL.md), [Русский](intro_RU.md), [日本語](intro_JP.md), [Deutsch](intro_DE.md).*
+*Läs detta på andra språk: [English](intro.md), [简体中文](intro_ZH-CN.md), [Español](intro_ES.md), [Nederlands](intro_NL.md), [Русский](intro_RU.md), [日本語](intro_JP.md), [Deutsch](intro_DE.md), [Portuguese](intro_PT-BR.md).*
 
 MimbleWimble är ett blockkedjeformat och protokoll som erbjuder extremt bra
 skalbarhet, integritet, och fungibilitet genom starka kryptografiska primitiver.

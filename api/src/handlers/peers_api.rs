@@ -97,6 +97,6 @@ impl Handler for PeerHandler {
 			_ => return response(StatusCode::BAD_REQUEST, "invalid command"),
 		};
 
-		response(StatusCode::OK, "")
+		response(StatusCode::OK, "{}")
 	}
 }

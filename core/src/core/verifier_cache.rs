@@ -41,8 +41,8 @@ pub trait VerifierCache: Sync + Send {
 /// Caches tx kernels by kernel hash.
 /// Caches outputs by output rangeproof hash (rangeproofs are committed to separately).
 pub struct LruVerifierCache {
-	kernel_sig_verification_cache: LruCache<Hash, bool>,
-	rangeproof_verification_cache: LruCache<Hash, bool>,
+	kernel_sig_verification_cache: LruCache<Hash, ()>,
+	rangeproof_verification_cache: LruCache<Hash, ()>,
 }
 
 impl LruVerifierCache {
@@ -60,12 +60,7 @@ impl VerifierCache for LruVerifierCache {
 	fn filter_kernel_sig_unverified(&mut self, kernels: &[TxKernel]) -> Vec<TxKernel> {
 		let res = kernels
 			.iter()
-			.filter(|x| {
-				!*self
-					.kernel_sig_verification_cache
-					.get_mut(&x.hash())
-					.unwrap_or(&mut false)
-			})
+			.filter(|x| !self.kernel_sig_verification_cache.contains_key(&x.hash()))
 			.cloned()
 			.collect::<Vec<_>>();
 		trace!(
@@ -80,10 +75,9 @@ impl VerifierCache for LruVerifierCache {
 		let res = outputs
 			.iter()
 			.filter(|x| {
-				!*self
+				!self
 					.rangeproof_verification_cache
-					.get_mut(&x.proof.hash())
-					.unwrap_or(&mut false)
+					.contains_key(&x.proof.hash())
 			})
 			.cloned()
 			.collect::<Vec<_>>();
@@ -97,14 +91,14 @@ impl VerifierCache for LruVerifierCache {
 
 	fn add_kernel_sig_verified(&mut self, kernels: Vec<TxKernel>) {
 		for k in kernels {
-			self.kernel_sig_verification_cache.insert(k.hash(), true);
+			self.kernel_sig_verification_cache.insert(k.hash(), ());
 		}
 	}
 
 	fn add_rangeproof_verified(&mut self, outputs: Vec<Output>) {
 		for o in outputs {
 			self.rangeproof_verification_cache
-				.insert(o.proof.hash(), true);
+				.insert(o.proof.hash(), ());
 		}
 	}
 }
