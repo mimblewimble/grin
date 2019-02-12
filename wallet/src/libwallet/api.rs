@@ -671,6 +671,74 @@ where
 		Ok((slate, lock_fn))
 	}
 
+	/// Estimates the amount to be locked and fee for the transaction without creating one
+	///
+	/// # Arguments
+	/// * `src_acct_name` - The human readable account name from which to draw outputs
+	/// for the transaction, overriding whatever the active account is as set via the
+	/// [`set_active_account`](struct.APIOwner.html#method.set_active_account) method.
+	/// If None, the transaction will use the active account.
+	/// * `amount` - The amount to send, in nanogrins. (`1 G = 1_000_000_000nG`)
+	/// * `minimum_confirmations` - The minimum number of confirmations an output
+	/// should have in order to be included in the transaction.
+	/// * `max_outputs` - By default, the wallet selects as many inputs as possible in a
+	/// transaction, to reduce the Output set and the fees. The wallet will attempt to spend
+	/// include up to `max_outputs` in a transaction, however if this is not enough to cover
+	/// the whole amount, the wallet will include more outputs. This parameter should be considered
+	/// a soft limit.
+	/// * `num_change_outputs` - The target number of change outputs to create in the transaction.
+	/// The actual number created will be `num_change_outputs` + whatever remainder is needed.
+	/// * `selection_strategy_is_use_all` - If `true`, attempt to use up as many outputs as
+	/// possible to create the transaction, up the 'soft limit' of `max_outputs`. This helps
+	/// to reduce the size of the UTXO set and the amount of data stored in the wallet, and
+	/// minimizes fees. This will generally result in many inputs and a large change output(s),
+	/// usually much larger than the amount being sent. If `false`, the transaction will include
+	/// as many outputs as are needed to meet the amount, (and no more) starting with the smallest
+	/// value outputs.
+	///
+	/// # Returns
+	/// * a result containing:
+	/// * (total, fee) - A tuple:
+	/// * Total amount to be locked.
+	/// * Transaction fee
+	pub fn estimate_initiate_tx(
+		&mut self,
+		src_acct_name: Option<&str>,
+		amount: u64,
+		minimum_confirmations: u64,
+		max_outputs: usize,
+		num_change_outputs: usize,
+		selection_strategy_is_use_all: bool,
+	) -> Result<
+		(
+			u64, // total
+			u64, // fee
+		),
+		Error,
+	> {
+		let mut w = self.wallet.lock();
+		w.open_with_credentials()?;
+		let parent_key_id = match src_acct_name {
+			Some(d) => {
+				let pm = w.get_acct_path(d.to_owned())?;
+				match pm {
+					Some(p) => p.path,
+					None => w.parent_key_id(),
+				}
+			}
+			None => w.parent_key_id(),
+		};
+		tx::estimate_send_tx(
+			&mut *w,
+			amount,
+			minimum_confirmations,
+			max_outputs,
+			num_change_outputs,
+			selection_strategy_is_use_all,
+			&parent_key_id,
+		)
+	}
+
 	/// Lock outputs associated with a given slate/transaction
 	pub fn tx_lock_outputs(
 		&mut self,
