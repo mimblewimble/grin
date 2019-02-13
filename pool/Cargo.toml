@@ -16,6 +16,8 @@ serde = "1"
 serde_derive = "1"
 log = "0.4"
 chrono = "0.4.4"
+failure = "0.1"
+failure_derive = "0.1"
 
 grin_core = { path = "../core", version = "1.0.1" }
 grin_keychain = { path = "../keychain", version = "1.0.1" }
