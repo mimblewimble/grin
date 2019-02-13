@@ -18,6 +18,7 @@
 use crate::blake2::blake2b::blake2b;
 use crate::keychain::{BlindSum, BlindingFactor, Keychain};
 use crate::libwallet::error::{Error, ErrorKind};
+use crate::libwallet::slate_versions::v0::SlateV0;
 use crate::util::secp;
 use crate::util::secp::key::{PublicKey, SecretKey};
 use crate::util::secp::Signature;
@@ -33,6 +34,25 @@ use uuid::Uuid;
 
 const CURRENT_SLATE_VERSION: u64 = 1;
 
+/// A wrapper around slates the enables support for versioning
+#[derive(Serialize, Deserialize, Clone)]
+#[serde(untagged)]
+pub enum VersionedSlate {
+	/// Pre versioning version
+	V0(SlateV0),
+	/// Version 1 with versioning and hex serialization - current
+	V1(Slate),
+}
+
+impl From<VersionedSlate> for Slate {
+	fn from(ver: VersionedSlate) -> Self {
+		match ver {
+			VersionedSlate::V0(slate_v0) => Slate::from(slate_v0),
+			VersionedSlate::V1(slate) => slate,
+		}
+	}
+}
+
 /// Public data for each participant in the slate
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -40,14 +60,18 @@ pub struct ParticipantData {
 	/// Id of participant in the transaction. (For now, 0=sender, 1=rec)
 	pub id: u64,
 	/// Public key corresponding to private blinding factor
+	#[serde(with = "secp_ser::pubkey_serde")]
 	pub public_blind_excess: PublicKey,
 	/// Public key corresponding to private nonce
+	#[serde(with = "secp_ser::pubkey_serde")]
 	pub public_nonce: PublicKey,
 	/// Public partial signature
+	#[serde(with = "secp_ser::option_sig_serde")]
 	pub part_sig: Option<Signature>,
 	/// A message for other participants
 	pub message: Option<String>,
 	/// Signature, created with private key corresponding to 'public_blind_excess'
+	#[serde(with = "secp_ser::option_sig_serde")]
 	pub message_sig: Option<Signature>,
 }
 

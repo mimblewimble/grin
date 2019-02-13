@@ -1,4 +1,4 @@
-// Copyright 2018 The Grin Developers
+// Copyright 2019 The Grin Developers
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -12,21 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! Higher level wallet functions which can be used by callers to operate
-//! on the wallet, as well as helpers to invoke and instantiate wallets
-//! and listeners
-
-#![deny(non_upper_case_globals)]
-#![deny(non_camel_case_types)]
-#![deny(non_snake_case)]
-#![deny(unused_mut)]
-#![warn(missing_docs)]
-
-pub mod api;
-mod error;
-pub mod internal;
-pub mod slate;
-pub mod slate_versions;
-pub mod types;
-
-pub use crate::libwallet::error::{Error, ErrorKind};
+//! This module contains old slate versions and conversions to the newest slate version
+//! Used for serialization and deserialization of slates in a backwards compatible way.
+#[allow(missing_docs)]
+pub mod v0;

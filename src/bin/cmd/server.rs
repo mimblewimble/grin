@@ -13,6 +13,7 @@
 // limitations under the License.
 
 /// Grin server commands processing
+#[cfg(not(target_os = "windows"))]
 use std::env::current_dir;
 use std::process::exit;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -22,7 +23,6 @@ use std::time::Duration;
 
 use clap::ArgMatches;
 use ctrlc;
-use daemonize::Daemonize;
 
 use crate::config::GlobalConfig;
 use crate::core::global;
@@ -31,7 +31,7 @@ use crate::servers;
 use crate::tui::ui;
 
 /// wrap below to allow UI to clean up on stop
-fn start_server(config: servers::ServerConfig) {
+pub fn start_server(config: servers::ServerConfig) {
 	start_server_tui(config);
 	// Just kill process for now, otherwise the process
 	// hangs around until sigint because the API server
@@ -157,29 +157,11 @@ pub fn server_command(
 			});
 	}*/
 
-	// start the server in the different run modes (interactive or daemon)
 	if let Some(a) = server_args {
 		match a.subcommand() {
 			("run", _) => {
 				start_server(server_config);
 			}
-			("start", _) => {
-				let daemonize = Daemonize::new()
-					.pid_file("/tmp/grin.pid")
-					.chown_pid_file(true)
-					.working_directory(current_dir().unwrap())
-					.privileged_action(move || {
-						start_server(server_config.clone());
-						loop {
-							thread::sleep(Duration::from_secs(60));
-						}
-					});
-				match daemonize.start() {
-					Ok(_) => info!("Grin server successfully started."),
-					Err(e) => error!("Error starting: {}", e),
-				}
-			}
-			("stop", _) => println!("TODO. Just 'kill $pid' for now. Maybe /tmp/grin.pid is $pid"),
 			("", _) => {
 				println!("Subcommand required, use 'grin help server' for details");
 			}

@@ -18,6 +18,7 @@ use crate::core::hash::Hashed;
 use crate::core::verifier_cache::VerifierCache;
 use crate::core::{committed, Committed};
 use crate::keychain::{self, BlindingFactor};
+use crate::libtx::secp_ser;
 use crate::ser::{
 	self, read_multi, FixedLength, PMMRable, Readable, Reader, VerifySortedAndUnique, Writeable,
 	Writer,
@@ -164,9 +165,14 @@ pub struct TxKernel {
 	/// Remainder of the sum of all transaction commitments. If the transaction
 	/// is well formed, amounts components should sum to zero and the excess
 	/// is hence a valid public key.
+	#[serde(
+		serialize_with = "secp_ser::as_hex",
+		deserialize_with = "secp_ser::commitment_from_hex"
+	)]
 	pub excess: Commitment,
 	/// The signature proving the excess is a valid public key, which signs
 	/// the transaction fee.
+	#[serde(with = "secp_ser::sig_serde")]
 	pub excess_sig: secp::Signature,
 }
 
@@ -756,6 +762,10 @@ impl TransactionBody {
 pub struct Transaction {
 	/// The kernel "offset" k2
 	/// excess is k1G after splitting the key k = k1 + k2
+	#[serde(
+		serialize_with = "secp_ser::as_hex",
+		deserialize_with = "secp_ser::blind_from_hex"
+	)]
 	pub offset: BlindingFactor,
 	/// The transaction body - inputs/outputs/kernels
 	body: TransactionBody,
@@ -1111,6 +1121,10 @@ pub struct Input {
 	/// We will check maturity for coinbase output.
 	pub features: OutputFeatures,
 	/// The commit referencing the output being spent.
+	#[serde(
+		serialize_with = "secp_ser::as_hex",
+		deserialize_with = "secp_ser::commitment_from_hex"
+	)]
 	pub commit: Commitment,
 }
 
@@ -1214,8 +1228,16 @@ pub struct Output {
 	/// Options for an output's structure or use
 	pub features: OutputFeatures,
 	/// The homomorphic commitment representing the output amount
+	#[serde(
+		serialize_with = "secp_ser::as_hex",
+		deserialize_with = "secp_ser::commitment_from_hex"
+	)]
 	pub commit: Commitment,
 	/// A proof that the commitment is in the right range
+	#[serde(
+		serialize_with = "secp_ser::as_hex",
+		deserialize_with = "secp_ser::rangeproof_from_hex"
+	)]
 	pub proof: RangeProof,
 }
 

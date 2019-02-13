@@ -16,10 +16,10 @@
 use std::fs::File;
 use std::io::{Read, Write};
 
+use crate::adapters::util::{deserialize_slate, serialize_slate};
 use crate::libwallet::slate::Slate;
-use crate::libwallet::{Error, ErrorKind};
+use crate::libwallet::Error;
 use crate::{WalletCommAdapter, WalletConfig};
-use serde_json as json;
 use std::collections::HashMap;
 
 #[derive(Clone)]
@@ -43,7 +43,8 @@ impl WalletCommAdapter for FileWalletCommAdapter {
 
 	fn send_tx_async(&self, dest: &str, slate: &Slate) -> Result<(), Error> {
 		let mut pub_tx = File::create(dest)?;
-		pub_tx.write_all(json::to_string(&slate).unwrap().as_bytes())?;
+		let slate_string = serialize_slate(slate);
+		pub_tx.write_all(slate_string.as_bytes())?;
 		pub_tx.sync_all()?;
 		Ok(())
 	}
@@ -52,7 +53,7 @@ impl WalletCommAdapter for FileWalletCommAdapter {
 		let mut pub_tx_f = File::open(params)?;
 		let mut content = String::new();
 		pub_tx_f.read_to_string(&mut content)?;
-		Ok(json::from_str(&content).map_err(|err| ErrorKind::Format(err.to_string()))?)
+		Ok(deserialize_slate(&content))
 	}
 
 	fn listen(

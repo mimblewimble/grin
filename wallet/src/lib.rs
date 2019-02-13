@@ -25,7 +25,8 @@ extern crate serde_derive;
 extern crate log;
 use failure;
 use grin_api as api;
-use grin_core as core;
+#[macro_use]
+extern crate grin_core as core;
 use grin_keychain as keychain;
 use grin_store as store;
 use grin_util as util;
