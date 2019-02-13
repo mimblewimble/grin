@@ -32,7 +32,7 @@ use crate::util::secp::pedersen::{Commitment, RangeProof};
 use crate::util::{file, secp_static, zip};
 use croaring::Bitmap;
 use grin_store;
-use grin_store::pmmr::{PMMRBackend, PMMR_FILES, clean_files_by_prefix};
+use grin_store::pmmr::{clean_files_by_prefix, PMMRBackend, PMMR_FILES};
 use grin_store::types::prune_noop;
 use std::collections::HashSet;
 use std::fs::{self, File};
@@ -1399,16 +1399,22 @@ pub fn zip_read(root_dir: String, header: &BlockHeader) -> Result<File, Error> {
 		// But practically, these zip files are not small ones, we just keep the zips in last one hour
 		let data_dir = txhashset_path.clone();
 		let pattern = format!("{}_", TXHASHSET_ZIP);
-		if let Ok(n) = clean_files_by_prefix(data_dir.clone(), &pattern, 60*60) {
-			debug!("{} zip files have been clean up in folder: {:?}", n, data_dir);
+		if let Ok(n) = clean_files_by_prefix(data_dir.clone(), &pattern, 60 * 60) {
+			debug!(
+				"{} zip files have been clean up in folder: {:?}",
+				n, data_dir
+			);
 		}
 	}
 
 	// otherwise, create the zip archive
 	let path_to_be_cleanup = {
 		// Temp txhashset directory
-		let temp_txhashset_path =
-			Path::new(&root_dir).join(format!("{}_zip_{}", TXHASHSET_SUBDIR, header.hash().to_string()));
+		let temp_txhashset_path = Path::new(&root_dir).join(format!(
+			"{}_zip_{}",
+			TXHASHSET_SUBDIR,
+			header.hash().to_string()
+		));
 		// Remove temp dir if it exist
 		if temp_txhashset_path.exists() {
 			fs::remove_dir_all(&temp_txhashset_path)?;
