@@ -1000,15 +1000,22 @@ pub fn aggregate(mut txs: Vec<Transaction>) -> Result<Transaction, Error> {
 	} else if txs.len() == 1 {
 		return Ok(txs.pop().unwrap());
 	}
+	let mut n_inputs = 0;
+	let mut n_outputs = 0;
+	let mut n_kernels = 0;
+	for tx in txs.iter() {
+		n_inputs += tx.body.inputs.len();
+		n_outputs += tx.body.outputs.len();
+		n_kernels += tx.body.kernels.len();
+	}
 
-	let mut inputs: Vec<Input> = vec![];
-	let mut outputs: Vec<Output> = vec![];
-	let mut kernels: Vec<TxKernel> = vec![];
+	let mut inputs: Vec<Input> = Vec::with_capacity(n_inputs);
+	let mut outputs: Vec<Output> = Vec::with_capacity(n_outputs);
+	let mut kernels: Vec<TxKernel> = Vec::with_capacity(n_kernels);
 
 	// we will sum these together at the end to give us the overall offset for the
 	// transaction
-	let mut kernel_offsets: Vec<BlindingFactor> = vec![];
-
+	let mut kernel_offsets: Vec<BlindingFactor> = Vec::with_capacity(txs.len());
 	for mut tx in txs {
 		// we will sum these later to give a single aggregate offset
 		kernel_offsets.push(tx.offset);
