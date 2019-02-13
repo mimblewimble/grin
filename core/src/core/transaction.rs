@@ -14,7 +14,7 @@
 
 //! Transactions
 
-use crate::core::hash::Hashed;
+use crate::core::hash::{DefaultHashable, Hashed};
 use crate::core::verifier_cache::VerifierCache;
 use crate::core::{committed, Committed};
 use crate::keychain::{self, BlindingFactor};
@@ -49,6 +49,8 @@ enum_from_primitive! {
 		HeightLocked = 2,
 	}
 }
+
+impl DefaultHashable for KernelFeatures {}
 
 impl Writeable for KernelFeatures {
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
@@ -170,6 +172,7 @@ pub struct TxKernel {
 	pub excess_sig: secp::Signature,
 }
 
+impl DefaultHashable for TxKernel {}
 hashable_ord!(TxKernel);
 
 impl ::std::hash::Hash for TxKernel {
@@ -761,6 +764,8 @@ pub struct Transaction {
 	body: TransactionBody,
 }
 
+impl DefaultHashable for Transaction {}
+
 /// PartialEq
 impl PartialEq for Transaction {
 	fn eq(&self, tx: &Transaction) -> bool {
@@ -1114,6 +1119,7 @@ pub struct Input {
 	pub commit: Commitment,
 }
 
+impl DefaultHashable for Input {}
 hashable_ord!(Input);
 
 impl ::std::hash::Hash for Input {
@@ -1219,6 +1225,7 @@ pub struct Output {
 	pub proof: RangeProof,
 }
 
+impl DefaultHashable for Output {}
 hashable_ord!(Output);
 
 impl ::std::hash::Hash for Output {
@@ -1330,6 +1337,8 @@ pub struct OutputIdentifier {
 	/// Output commitment
 	pub commit: Commitment,
 }
+
+impl DefaultHashable for OutputIdentifier {}
 
 impl OutputIdentifier {
 	/// Build a new output_identifier.

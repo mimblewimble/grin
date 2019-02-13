@@ -20,7 +20,7 @@ use std::cmp::Ordering;
 use byteorder::{ByteOrder, LittleEndian};
 use siphasher::sip::SipHasher24;
 
-use crate::core::hash::{Hash, Hashed};
+use crate::core::hash::{DefaultHashable, Hash, Hashed};
 use crate::ser::{self, Readable, Reader, Writeable, Writer};
 use crate::util;
 
@@ -73,6 +73,7 @@ impl<H: Hashed> ShortIdentifiable for H {
 #[derive(Clone, Serialize, Deserialize, Hash)]
 pub struct ShortId([u8; 6]);
 
+impl DefaultHashable for ShortId {}
 /// We want to sort short_ids in a canonical and consistent manner so we can
 /// verify sort order in the same way we do for full inputs|outputs|kernels
 /// themselves.
@@ -167,6 +168,8 @@ mod test {
 				Ok(())
 			}
 		}
+
+		impl DefaultHashable for Foo {}
 
 		let foo = Foo(0);
 

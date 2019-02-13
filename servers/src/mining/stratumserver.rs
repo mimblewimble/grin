@@ -29,6 +29,7 @@ use std::{cmp, thread};
 use crate::chain;
 use crate::common::stats::{StratumStats, WorkerStats};
 use crate::common::types::{StratumServerConfig, SyncState};
+use crate::core::core::hash::Hashed;
 use crate::core::core::verifier_cache::VerifierCache;
 use crate::core::core::Block;
 use crate::core::{pow, ser};
