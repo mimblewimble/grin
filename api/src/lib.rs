@@ -30,13 +30,14 @@ extern crate serde_derive;
 #[macro_use]
 extern crate log;
 
+#[macro_use]
+mod web;
 pub mod auth;
 pub mod client;
 mod handlers;
 mod rest;
 mod router;
 mod types;
-mod web;
 
 pub use crate::auth::BasicAuthMiddleware;
 pub use crate::handlers::start_rest_apis;

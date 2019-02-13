@@ -37,11 +37,11 @@ pub struct PeersConnectedHandler {
 
 impl Handler for PeersConnectedHandler {
 	fn get(&self, _req: Request<Body>) -> ResponseFuture {
-		let mut peers: Vec<PeerInfoDisplay> = vec![];
-		for p in &w(&self.peers).connected_peers() {
-			let peer_info = p.info.clone();
-			peers.push(peer_info.into());
-		}
+		let peers: Vec<PeerInfoDisplay> = w(&self.peers)
+			.connected_peers()
+			.iter()
+			.map(|p| p.info.clone().into())
+			.collect();
 		json_response(&peers)
 	}
 }
@@ -56,10 +56,7 @@ pub struct PeerHandler {
 
 impl Handler for PeerHandler {
 	fn get(&self, req: Request<Body>) -> ResponseFuture {
-		let command = match req.uri().path().trim_right_matches('/').rsplit('/').next() {
-			Some(c) => c,
-			None => return response(StatusCode::BAD_REQUEST, "invalid url"),
-		};
+		let command = right_path_element!(req);
 		if let Ok(addr) = command.parse() {
 			match w(&self.peers).get_peer(addr) {
 				Ok(peer) => json_response(&peer),
