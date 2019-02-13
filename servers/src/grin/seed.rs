@@ -249,17 +249,15 @@ fn monitor_peers(
 fn update_dandelion_relay(peers: Arc<p2p::Peers>, dandelion_config: DandelionConfig) {
 	// Dandelion Relay Updater
 	let dandelion_relay = peers.get_dandelion_relay();
-	if dandelion_relay.is_empty() {
+	if let Some((last_added, _)) = dandelion_relay {
+		let dandelion_interval = Utc::now().timestamp() - last_added;
+		if dandelion_interval >= dandelion_config.relay_secs.unwrap() as i64 {
+			debug!("monitor_peers: updating expired dandelion relay");
+			peers.update_dandelion_relay();
+		}
+	} else {
 		debug!("monitor_peers: no dandelion relay updating");
 		peers.update_dandelion_relay();
-	} else {
-		for last_added in dandelion_relay.keys() {
-			let dandelion_interval = Utc::now().timestamp() - last_added;
-			if dandelion_interval >= dandelion_config.relay_secs.unwrap() as i64 {
-				debug!("monitor_peers: updating expired dandelion relay");
-				peers.update_dandelion_relay();
-			}
-		}
 	}
 }
 

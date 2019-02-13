@@ -38,7 +38,7 @@ pub struct Peers {
 	pub adapter: Arc<dyn ChainAdapter>,
 	store: PeerStore,
 	peers: RwLock<HashMap<SocketAddr, Arc<Peer>>>,
-	dandelion_relay: RwLock<HashMap<i64, Arc<Peer>>>,
+	dandelion_relay: RwLock<Option<(i64, Arc<Peer>)>>,
 	config: P2PConfig,
 }
 
@@ -49,7 +49,7 @@ impl Peers {
 			store,
 			config,
 			peers: RwLock::new(HashMap::new()),
-			dandelion_relay: RwLock::new(HashMap::new()),
+			dandelion_relay: RwLock::new(None),
 		}
 	}
 
@@ -115,10 +115,9 @@ impl Peers {
 	fn set_dandelion_relay(&self, peer: &Arc<Peer>) {
 		// Clear the map and add new relay
 		let dandelion_relay = &self.dandelion_relay;
-		dandelion_relay.write().clear();
 		dandelion_relay
 			.write()
-			.insert(Utc::now().timestamp(), peer.clone());
+			.replace((Utc::now().timestamp(), peer.clone()));
 		debug!(
 			"Successfully updated Dandelion relay to: {}",
 			peer.info.addr
@@ -126,7 +125,7 @@ impl Peers {
 	}
 
 	// Get the dandelion relay
-	pub fn get_dandelion_relay(&self) -> HashMap<i64, Arc<Peer>> {
+	pub fn get_dandelion_relay(&self) -> Option<(i64, Arc<Peer>)> {
 		self.dandelion_relay.read().clone()
 	}
 
@@ -370,24 +369,22 @@ impl Peers {
 
 	/// Relays the provided stem transaction to our single stem peer.
 	pub fn relay_stem_transaction(&self, tx: &core::Transaction) -> Result<(), Error> {
-		let dandelion_relay = self.get_dandelion_relay();
-		if dandelion_relay.is_empty() {
-			debug!("No dandelion relay, updating.");
-			self.update_dandelion_relay();
-		}
-		// If still return an error, let the caller handle this as they see fit.
-		// The caller will "fluff" at this point as the stem phase is finished.
-		if dandelion_relay.is_empty() {
-			return Err(Error::NoDandelionRelay);
-		}
-		for relay in dandelion_relay.values() {
-			if relay.is_connected() {
-				if let Err(e) = relay.send_stem_transaction(tx) {
-					debug!("Error sending stem transaction to peer relay: {:?}", e);
+		self.get_dandelion_relay()
+			.or_else(|| {
+				debug!("No dandelion relay, updating.");
+				self.update_dandelion_relay();
+				self.get_dandelion_relay()
+			})
+			// If still return an error, let the caller handle this as they see fit.
+			// The caller will "fluff" at this point as the stem phase is finished.
+			.ok_or(Error::NoDandelionRelay)
+			.map(|(_, relay)| {
+				if relay.is_connected() {
+					if let Err(e) = relay.send_stem_transaction(tx) {
+						debug!("Error sending stem transaction to peer relay: {:?}", e);
+					}
 				}
-			}
-		}
-		Ok(())
+			})
 	}
 
 	/// Broadcasts the provided transaction to PEER_PREFERRED_COUNT of our
