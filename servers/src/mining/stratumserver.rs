@@ -485,17 +485,116 @@ impl Handler {
 			share_is_block,
 		));
 	} // handle submit a solution
+
+	fn broadcast_job(&self) {
+		// Package new block into RpcRequest
+		let job_template = self.build_block_template();
+		let job_template_json = serde_json::to_string(&job_template).unwrap();
+		// Issue #1159 - use a serde_json Value type to avoid extra quoting
+		let job_template_value: Value = serde_json::from_str(&job_template_json).unwrap();
+		let job_request = RpcRequest {
+			id: String::from("Stratum"),
+			jsonrpc: String::from("2.0"),
+			method: String::from("job"),
+			params: Some(job_template_value),
+		};
+		let job_request_json = serde_json::to_string(&job_request).unwrap();
+		debug!(
+			"(Server ID: {}) sending block {} with id {} to stratum clients",
+			self.id, job_template.height, job_template.job_id,
+		);
+		self.workers.broadcast(job_request_json.clone());
+	}
+
+	pub fn run(
+		&self,
+		config: &StratumServerConfig,
+		tx_pool: &Arc<RwLock<pool::TransactionPool>>,
+		verifier_cache: Arc<RwLock<dyn VerifierCache>>,
+	) {
+		let mut deadline: i64 = 0;
+		let mut head = self.chain.head().unwrap();
+		let mut current_hash = head.prev_block_h;
+		loop {
+			// get the latest chain state
+			head = self.chain.head().unwrap();
+			let latest_hash = head.last_block_h;
+
+			// Build a new block if:
+			//    There is a new block on the chain
+			// or We are rebuilding the current one to include new transactions
+			// and there is at least one worker connected
+			if (current_hash != latest_hash || Utc::now().timestamp() >= deadline)
+				&& self.workers.count() > 0
+			{
+				{
+					let mut wallet_listener_url: Option<String> = None;
+					if !config.burn_reward {
+						wallet_listener_url = Some(config.wallet_listener_url.clone());
+					}
+					// If this is a new block, clear the current_block version history
+					let clear_blocks = current_hash != latest_hash;
+
+					// Build the new block (version)
+					let (new_block, block_fees) = mine_block::get_block(
+						&self.chain,
+						tx_pool,
+						verifier_cache.clone(),
+						self.current_key_id.read().clone(),
+						wallet_listener_url,
+					);
+					{
+						let mut current_difficulty = self.current_difficulty.write();
+						*current_difficulty =
+							(new_block.header.total_difficulty() - head.total_difficulty).to_num();
+					}
+					{
+						let mut current_key_id = self.current_key_id.write();
+						*current_key_id = block_fees.key_id();
+					}
+					current_hash = latest_hash;
+					{
+						// set the minimum acceptable share difficulty for this block
+						let mut minimum_share_difficulty = self.minimum_share_difficulty.write();
+						*minimum_share_difficulty = cmp::min(
+							config.minimum_share_difficulty,
+							*self.current_difficulty.read(),
+						);
+					}
+					// set a new deadline for rebuilding with fresh transactions
+					deadline = Utc::now().timestamp() + config.attempt_time_per_block as i64;
+
+					self.workers.update_block_height(new_block.header.height);
+					self.workers
+						.update_network_difficulty(*self.current_difficulty.read());
+
+					{
+						let mut current_block_versions = self.current_block_versions.write();
+						// Add this new block version to our current block map
+						if clear_blocks {
+							current_block_versions.clear();
+						}
+						current_block_versions.push(new_block);
+					}
+				}
+				// Send this job to all connected workers
+				self.broadcast_job();
+			}
+
+			// sleep before restarting loop
+			thread::sleep(Duration::from_millis(5));
+		} // Main Loop
+	}
 }
 
 // ----------------------------------------
 // Worker Factory Thread Function
-fn accept_connections(listen_addr: SocketAddr, handler: Handler) {
+fn accept_connections(listen_addr: SocketAddr, handler: Arc<Handler>) {
 	info!("Start tokio stratum server");
 	let listener = TcpListener::bind(&listen_addr).expect(&format!(
 		"Stratum: Failed to bind to listen address {}",
 		listen_addr
 	));
-	let handler = Arc::new(handler);
 	let server = listener
 		.incoming()
 		.for_each(move |socket| {
@@ -661,6 +760,16 @@ impl WorkersList {
 	pub fn count(&self) -> usize {
 		self.workers_list.read().len()
 	}
+
+	pub fn update_block_height(&self, height: u64) {
+		let mut stratum_stats = self.stratum_stats.write();
+		stratum_stats.block_height = height;
+	}
+
+	pub fn update_network_difficulty(&self, difficulty: u64) {
+		let mut stratum_stats = self.stratum_stats.write();
+		stratum_stats.network_difficulty = difficulty;
+	}
 }
 
 // ----------------------------------------
@@ -767,16 +876,10 @@ impl StratumServer {
 
 		self.sync_state = sync_state;
 
-		// "globals" for this function
-		let attempt_time_per_block = self.config.attempt_time_per_block;
-		let mut deadline: i64 = 0;
 		// to prevent the wallet from generating a new HD key derivation for each
 		// iteration, we keep the returned derivation to provide it back when
 		// nothing has changed. We only want to create a key_id for each new block,
 		// and reuse it when we rebuild the current block to add new tx.
-		let mut head = self.chain.head().unwrap();
-		let mut current_hash = head.prev_block_h;
-		let mut latest_hash;
 		let listen_addr = self
 			.config
 			.stratum_server_addr
@@ -788,10 +891,11 @@ impl StratumServer {
 			self.current_block_versions.write().push(Block::default());
 		}
 
-		let handler = Handler::from_stratum(&self);
+		let handler = Arc::new(Handler::from_stratum(&self));
+		let h = handler.clone();
 
 		let _listener_th = thread::spawn(move || {
-			accept_connections(listen_addr, handler);
+			accept_connections(listen_addr, h);
 		});
 
 		// We have started
@@ -811,76 +915,7 @@ impl StratumServer {
 			thread::sleep(Duration::from_millis(50));
 		}
 
-		// Main Loop
-		loop {
-			// get the latest chain state
-			head = self.chain.head().unwrap();
-			latest_hash = head.last_block_h;
-
-			// Build a new block if:
-			//    There is a new block on the chain
-			// or We are rebuilding the current one to include new transactions
-			// and there is at least one worker connected
-			if (current_hash != latest_hash || Utc::now().timestamp() >= deadline)
-				&& self.workers.count() > 0
-			{
-				{
-					let mut wallet_listener_url: Option<String> = None;
-					if !self.config.burn_reward {
-						wallet_listener_url = Some(self.config.wallet_listener_url.clone());
-					}
-					// If this is a new block, clear the current_block version history
-					let clear_blocks = current_hash != latest_hash;
-
-					// Build the new block (version)
-					let (new_block, block_fees) = mine_block::get_block(
-						&self.chain,
-						&self.tx_pool,
-						self.verifier_cache.clone(),
-						self.current_key_id.read().clone(),
-						wallet_listener_url,
-					);
-					{
-						let mut current_difficulty = self.current_difficulty.write();
-						*current_difficulty =
-							(new_block.header.total_difficulty() - head.total_difficulty).to_num();
-					}
-					{
-						let mut current_key_id = self.current_key_id.write();
-						*current_key_id = block_fees.key_id();
-					}
-					current_hash = latest_hash;
-					{
-						// set the minimum acceptable share difficulty for this block
-						let mut minimum_share_difficulty = self.minimum_share_difficulty.write();
-						*minimum_share_difficulty = cmp::min(
-							self.config.minimum_share_difficulty,
-							*self.current_difficulty.read(),
-						);
-					}
-					// set a new deadline for rebuilding with fresh transactions
-					deadline = Utc::now().timestamp() + attempt_time_per_block as i64;
-
-					let mut stratum_stats = self.stratum_stats.write();
-					stratum_stats.block_height = new_block.header.height;
-					stratum_stats.network_difficulty = *self.current_difficulty.read();
-
-					{
-						let mut current_block_versions = self.current_block_versions.write();
-						// Add this new block version to our current block map
-						if clear_blocks {
-							current_block_versions.clear();
-						}
-						current_block_versions.push(new_block);
-					}
-				}
-				// Send this job to all connected workers
-				self.broadcast_job();
-			}
-
-			// sleep before restarting loop
-			thread::sleep(Duration::from_millis(5));
-		} // Main Loop
+		handler.run(&self.config, &self.tx_pool, self.verifier_cache.clone());
 	} // fn run_loop()
 } // StratumServer
 
