@@ -14,7 +14,7 @@
 
 use super::utils::w;
 use crate::p2p;
-use crate::p2p::types::{PeerInfoDisplay, ReasonForBan};
+use crate::p2p::types::{PeerAddr, PeerInfoDisplay, ReasonForBan};
 use crate::router::{Handler, ResponseFuture};
 use crate::web::*;
 use hyper::{Body, Request, StatusCode};
@@ -58,7 +58,8 @@ impl Handler for PeerHandler {
 	fn get(&self, req: Request<Body>) -> ResponseFuture {
 		let command = right_path_element!(req);
 		if let Ok(addr) = command.parse() {
-			match w(&self.peers).get_peer(addr) {
+			let peer_addr = PeerAddr(addr);
+			match w(&self.peers).get_peer(peer_addr) {
 				Ok(peer) => json_response(&peer),
 				Err(_) => response(StatusCode::NOT_FOUND, "peer not found"),
 			}
@@ -84,13 +85,13 @@ impl Handler for PeerHandler {
 						format!("invalid peer address: {}", e),
 					);
 				}
-				Ok(addr) => addr,
+				Ok(addr) => PeerAddr(addr),
 			},
 		};
 
 		match command {
-			"ban" => w(&self.peers).ban_peer(&addr, ReasonForBan::ManualBan),
-			"unban" => w(&self.peers).unban_peer(&addr),
+			"ban" => w(&self.peers).ban_peer(addr, ReasonForBan::ManualBan),
+			"unban" => w(&self.peers).unban_peer(addr),
 			_ => return response(StatusCode::BAD_REQUEST, "invalid command"),
 		};
 

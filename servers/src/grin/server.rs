@@ -35,6 +35,7 @@ use crate::grin::{dandelion_monitor, seed, sync};
 use crate::mining::stratumserver;
 use crate::mining::test_miner::Miner;
 use crate::p2p;
+use crate::p2p::types::PeerAddr;
 use crate::pool;
 use crate::store;
 use crate::util::file::get_first_line;
@@ -178,22 +179,15 @@ impl Server {
 		pool_net_adapter.init(p2p_server.peers.clone());
 		net_adapter.init(p2p_server.peers.clone());
 
-		if config.p2p_config.seeding_type.clone() != p2p::Seeding::Programmatic {
-			let seeder = match config.p2p_config.seeding_type.clone() {
+		if config.p2p_config.seeding_type != p2p::Seeding::Programmatic {
+			let seeder = match config.p2p_config.seeding_type {
 				p2p::Seeding::None => {
 					warn!("No seed configured, will stay solo until connected to");
-					seed::predefined_seeds(vec![])
+					vec![]
 				}
-				p2p::Seeding::List => {
-					seed::predefined_seeds(config.p2p_config.seeds.as_mut().unwrap().clone())
-				}
+				p2p::Seeding::List => config.p2p_config.seeds.unwrap_or(vec![]),
 				p2p::Seeding::DNSSeed => seed::dns_seeds(),
 				_ => unreachable!(),
-			};
-
-			let peers_preferred = match config.p2p_config.peers_preferred.clone() {
-				Some(peers_preferred) => seed::preferred_peers(peers_preferred),
-				None => None,
 			};
 
 			seed::connect_and_monitor(
@@ -201,7 +195,7 @@ impl Server {
 				config.p2p_config.capabilities,
 				config.dandelion_config.clone(),
 				seeder,
-				peers_preferred,
+				config.p2p_config.peers_preferred,
 				stop_state.clone(),
 			);
 		}
@@ -273,8 +267,8 @@ impl Server {
 	}
 
 	/// Asks the server to connect to a peer at the provided network address.
-	pub fn connect_peer(&self, addr: SocketAddr) -> Result<(), Error> {
-		self.p2p.connect(&addr)?;
+	pub fn connect_peer(&self, addr: PeerAddr) -> Result<(), Error> {
+		self.p2p.connect(addr)?;
 		Ok(())
 	}
 
