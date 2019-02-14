@@ -342,7 +342,7 @@ impl Eq for Proof {}
 impl Proof {
 	/// Builds a proof with provided nonces at default edge_bits
 	pub fn new(mut in_nonces: Vec<u64>) -> Proof {
-		in_nonces.sort();
+		in_nonces.sort_unstable();
 		Proof {
 			edge_bits: global::min_edge_bits(),
 			nonces: in_nonces,
@@ -369,7 +369,7 @@ impl Proof {
 			.map(|()| (rng.gen::<u32>() & nonce_mask) as u64)
 			.take(proof_size)
 			.collect();
-		v.sort();
+		v.sort_unstable();
 		Proof {
 			edge_bits: global::min_edge_bits(),
 			nonces: v,

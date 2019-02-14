@@ -487,9 +487,9 @@ impl TransactionBody {
 
 	/// Sort the inputs|outputs|kernels.
 	pub fn sort(&mut self) {
-		self.inputs.sort();
-		self.outputs.sort();
-		self.kernels.sort();
+		self.inputs.sort_unstable();
+		self.outputs.sort_unstable();
+		self.kernels.sort_unstable();
 	}
 
 	/// Creates a new transaction body initialized with
@@ -501,7 +501,7 @@ impl TransactionBody {
 		kernels: Vec<TxKernel>,
 		verify_sorted: bool,
 	) -> Result<TransactionBody, Error> {
-		let body = TransactionBody {
+		let mut body = TransactionBody {
 			inputs,
 			outputs,
 			kernels,
@@ -511,52 +511,44 @@ impl TransactionBody {
 			// If we are verifying sort order then verify and
 			// return an error if not sorted lexicographically.
 			body.verify_sorted()?;
-			Ok(body)
 		} else {
 			// If we are not verifying sort order then sort in place and return.
-			let mut body = body;
 			body.sort();
-			Ok(body)
 		}
+		Ok(body)
 	}
 
 	/// Builds a new body with the provided inputs added. Existing
 	/// inputs, if any, are kept intact.
 	/// Sort order is maintained.
-	pub fn with_input(self, input: Input) -> TransactionBody {
-		let mut new_ins = self.inputs;
-		new_ins.push(input);
-		new_ins.sort();
-		TransactionBody {
-			inputs: new_ins,
-			..self
-		}
+	pub fn with_input(mut self, input: Input) -> TransactionBody {
+		self.inputs
+			.binary_search(&input)
+			.err()
+			.map(|e| self.inputs.insert(e, input));
+		self
 	}
 
 	/// Builds a new TransactionBody with the provided output added. Existing
 	/// outputs, if any, are kept intact.
 	/// Sort order is maintained.
-	pub fn with_output(self, output: Output) -> TransactionBody {
-		let mut new_outs = self.outputs;
-		new_outs.push(output);
-		new_outs.sort();
-		TransactionBody {
-			outputs: new_outs,
-			..self
-		}
+	pub fn with_output(mut self, output: Output) -> TransactionBody {
+		self.outputs
+			.binary_search(&output)
+			.err()
+			.map(|e| self.outputs.insert(e, output));
+		self
 	}
 
 	/// Builds a new TransactionBody with the provided kernel added. Existing
 	/// kernels, if any, are kept intact.
 	/// Sort order is maintained.
-	pub fn with_kernel(self, kernel: TxKernel) -> TransactionBody {
-		let mut new_kerns = self.kernels;
-		new_kerns.push(kernel);
-		new_kerns.sort();
-		TransactionBody {
-			kernels: new_kerns,
-			..self
-		}
+	pub fn with_kernel(mut self, kernel: TxKernel) -> TransactionBody {
+		self.kernels
+			.binary_search(&kernel)
+			.err()
+			.map(|e| self.kernels.insert(e, kernel));
+		self
 	}
 
 	/// Total fee for a TransactionBody is the sum of fees of all kernels.
@@ -987,8 +979,8 @@ pub fn cut_through(inputs: &mut Vec<Input>, outputs: &mut Vec<Output>) -> Result
 	// filter and sort
 	inputs.retain(|inp| !to_cut_through.contains(&inp.commitment()));
 	outputs.retain(|out| !to_cut_through.contains(&out.commitment()));
-	inputs.sort();
-	outputs.sort();
+	inputs.sort_unstable();
+	outputs.sort_unstable();
 	Ok(())
 }
 
@@ -1029,7 +1021,7 @@ pub fn aggregate(mut txs: Vec<Transaction>) -> Result<Transaction, Error> {
 	cut_through(&mut inputs, &mut outputs)?;
 
 	// Now sort kernels.
-	kernels.sort();
+	kernels.sort_unstable();
 
 	// now sum the kernel_offsets up to give us an aggregate offset for the
 	// transaction
@@ -1100,9 +1092,9 @@ pub fn deaggregate(mk_tx: Transaction, txs: Vec<Transaction>) -> Result<Transact
 	};
 
 	// Sorting them lexicographically
-	inputs.sort();
-	outputs.sort();
-	kernels.sort();
+	inputs.sort_unstable();
+	outputs.sort_unstable();
+	kernels.sort_unstable();
 
 	// Build a new tx from the above data.
 	let tx = Transaction::new(inputs, outputs, kernels).with_offset(total_kernel_offset);
