@@ -493,6 +493,7 @@ impl Handler {
 	} // handle submit a solution
 
 	fn broadcast_job(&self) {
+		debug!("broadcast job");
 		// Package new block into RpcRequest
 		let job_template = self.build_block_template();
 		let job_template_json = serde_json::to_string(&job_template).unwrap();
@@ -518,6 +519,7 @@ impl Handler {
 		tx_pool: &Arc<RwLock<pool::TransactionPool>>,
 		verifier_cache: Arc<RwLock<dyn VerifierCache>>,
 	) {
+		debug!("Run main loop");
 		let mut deadline: i64 = 0;
 		let mut head = self.chain.head().unwrap();
 		let mut current_hash = head.prev_block_h;
@@ -533,45 +535,48 @@ impl Handler {
 			if (current_hash != latest_hash || Utc::now().timestamp() >= deadline)
 				&& self.workers.count() > 0
 			{
-				let mut state = self.current_state.write();
-				let mut wallet_listener_url: Option<String> = None;
-				if !config.burn_reward {
-					wallet_listener_url = Some(config.wallet_listener_url.clone());
+				{
+					debug!("resend updated block");
+					let mut state = self.current_state.write();
+					let mut wallet_listener_url: Option<String> = None;
+					if !config.burn_reward {
+						wallet_listener_url = Some(config.wallet_listener_url.clone());
+					}
+					// If this is a new block, clear the current_block version history
+					let clear_blocks = current_hash != latest_hash;
+
+					// Build the new block (version)
+					let (new_block, block_fees) = mine_block::get_block(
+						&self.chain,
+						tx_pool,
+						verifier_cache.clone(),
+						state.current_key_id.clone(),
+						wallet_listener_url,
+					);
+
+					state.current_difficulty =
+						(new_block.header.total_difficulty() - head.total_difficulty).to_num();
+
+					state.current_key_id = block_fees.key_id();
+
+					current_hash = latest_hash;
+					// set the minimum acceptable share difficulty for this block
+					state.minimum_share_difficulty =
+						cmp::min(config.minimum_share_difficulty, state.current_difficulty);
+
+					// set a new deadline for rebuilding with fresh transactions
+					deadline = Utc::now().timestamp() + config.attempt_time_per_block as i64;
+
+					self.workers.update_block_height(new_block.header.height);
+					self.workers
+						.update_network_difficulty(state.current_difficulty);
+
+					if clear_blocks {
+						state.current_block_versions.clear();
+					}
+					state.current_block_versions.push(new_block);
+					// Send this job to all connected workers
 				}
-				// If this is a new block, clear the current_block version history
-				let clear_blocks = current_hash != latest_hash;
-
-				// Build the new block (version)
-				let (new_block, block_fees) = mine_block::get_block(
-					&self.chain,
-					tx_pool,
-					verifier_cache.clone(),
-					state.current_key_id.clone(),
-					wallet_listener_url,
-				);
-
-				state.current_difficulty =
-					(new_block.header.total_difficulty() - head.total_difficulty).to_num();
-
-				state.current_key_id = block_fees.key_id();
-
-				current_hash = latest_hash;
-				// set the minimum acceptable share difficulty for this block
-				state.minimum_share_difficulty =
-					cmp::min(config.minimum_share_difficulty, state.current_difficulty);
-
-				// set a new deadline for rebuilding with fresh transactions
-				deadline = Utc::now().timestamp() + config.attempt_time_per_block as i64;
-
-				self.workers.update_block_height(new_block.header.height);
-				self.workers
-					.update_network_difficulty(state.current_difficulty);
-
-				if clear_blocks {
-					state.current_block_versions.clear();
-				}
-				state.current_block_versions.push(new_block);
-				// Send this job to all connected workers
 				self.broadcast_job();
 			}
 
