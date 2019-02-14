@@ -19,6 +19,7 @@ mod framework;
 
 use self::core::core::hash::Hashed;
 use self::core::global::{self, ChainTypes};
+use self::p2p::PeerAddr;
 use self::util::{Mutex, StopState};
 use self::wallet::controller;
 use self::wallet::libwallet::types::{WalletBackend, WalletInst};
@@ -933,7 +934,9 @@ fn replicate_tx_fluff_failure() {
 
 	// Server 2 (another node)
 	let mut s2_config = framework::config(3001, "tx_fluff", 3001);
-	s2_config.p2p_config.seeds = Some(vec!["127.0.0.1:13000".to_owned()]);
+	s2_config.p2p_config.seeds = Some(vec![PeerAddr(
+		"127.0.0.1:13000".to_owned().parse().unwrap(),
+	)]);
 	s2_config.dandelion_config.embargo_secs = Some(10);
 	s2_config.dandelion_config.patience_secs = Some(1);
 	s2_config.dandelion_config.relay_secs = Some(1);
@@ -944,7 +947,9 @@ fn replicate_tx_fluff_failure() {
 	for i in 0..dl_nodes {
 		// (create some stem nodes)
 		let mut s_config = framework::config(3002 + i, "tx_fluff", 3002 + i);
-		s_config.p2p_config.seeds = Some(vec!["127.0.0.1:13000".to_owned()]);
+		s_config.p2p_config.seeds = Some(vec![PeerAddr(
+			"127.0.0.1:13000".to_owned().parse().unwrap(),
+		)]);
 		s_config.dandelion_config.embargo_secs = Some(10);
 		s_config.dandelion_config.patience_secs = Some(1);
 		s_config.dandelion_config.relay_secs = Some(1);
