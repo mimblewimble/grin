@@ -98,34 +98,33 @@ The previous formula `(k+j)*H = k*H + j*H`, with _k_ and _j_ both private
 keys, demonstrates that a public key obtained from the addition of two private
 keys (`(k+j)*H`) is identical to the addition of the public keys for each of those
 two private keys (`k*H + j*H`).
-_k_ 와 _j_ 둘다 비밀키인 이전 공식 `(k+j)*H = k*H + j*H` 는 두개의 비밀키를 더해서 얻은  한 개의 공개키 (`(k+j)*H`) 와 각각 두개의 비밀키에 공개키를 더한것과 같습니다. 
-
+_k_ 와 _j_ 둘다 비밀키인 이전 공식 `(k+j)*H = k*H + j*H` 는 두개의 비밀키를 더해서 얻은  한 개의 공개키 (`(k+j)*H`) 와 각각 두개의 비밀키에 공개키를 더한것과 같습니다.
 In the Bitcoin blockchain, Hierarchical Deterministic wallets heavily rely on this principle. 
 Bitcoin blockchain에서도 HD 지갑은 이 원칙에 의존하고 있습니다. 
 MimbleWimble and the Grin implementation do as well.
-MimbleWimble 과 Grin의 구현또한 마찬가지 입니다. 
+MimbleWimble 과 Grin의 구현또한 마찬가지 입니다.
 
 ### Transacting with MimbleWimble
 ### MimbleWimble 함께 거래하기 
 
 The structure of transactions demonstrates a crucial tenet of MimbleWimble:
-트랜잭션의 구조는 MimbleWimble의 강력한 프라이버시와 비밀이 유지된다라고 하는 중요한 규칙을 나타냅니다. 
+트랜잭션의 구조는 MimbleWimble의 강력한 프라이버시와 비밀이 유지된다라고 하는 중요한 규칙을 나타냅니다.
 strong privacy and confidentiality guarantees.
 
 The validation of MimbleWimble transactions relies on two basic properties:
-MimbleWimble 트랜잭션의 확인은 두가지 기본적인 성격을 전제로 합니다.  
+MimbleWimble 트랜잭션의 확인은 두가지 기본적인 성격을 전제로 합니다.
 * **Verification of zero sums.** The sum of outputs minus inputs always equals zero,
   proving that the transaction did not create new funds, _without revealing the actual amounts_.
-* **제로섬의 검증** 결과값에서 입력값을 뺸 합은 항상 0과 같습니다. 이것은 실제 전송되는 코인의 양을 드러내지 않고도 트랜잭션ㅇ이 새로운 코인을 만들지 않았다는 것을 증명합니다. 
+* **제로섬의 검증** 결과값에서 입력값을 뺸 합은 항상 0과 같습니다. 이것은 실제 전송되는 코인의 양을 드러내지 않고도 트랜잭션ㅇ이 새로운 코인을 만들지 않았다는 것을 증명합니다.
 * **Possession of private keys.** Like with most other cryptocurrencies, ownership of
   transaction outputs is guaranteed by the possession of ECC private keys. However,
   the proof that an entity owns those private keys is not achieved by directly signing
   the transaction.
-* **비밀키의 소유**  다른 많은 크립토커런시들 처럼 , 트랜잭션의 소유권은 ECC 비밀키에 의해 보장됩니다. 그러나 어떤 실체가 이런 비밀키들을 소유하고 있다고 증명하는것이 직접적으로 트랜잭션에 사인한다고해서 얻어지는 것은 아닙니다.  
+* **비밀키의 소유**  다른 많은 크립토커런시들 처럼 , 트랜잭션의 소유권은 ECC 비밀키에 의해 보장됩니다. 그러나 어떤 실체가 이런 비밀키들을 소유하고 있다고 증명하는것이 직접적으로 트랜잭션에 사인한다고해서 얻어지는 것은 아닙니다.
 
 The next sections on balance, ownership, change and proofs details how those two
 fundamental properties are achieved.
-다음 섹션들에서는 잔고, 소유권, 거스름돈과 증명들의 상세들이 어떻게 저 두가지 기본적인 성질에 의해서 얻어지는지 알아보겠습니다. 
+다음 섹션들에서는 잔고, 소유권, 거스름돈과 증명들의 상세들이 어떻게 저 두가지 기본적인 성질에 의해서 얻어지는지 알아보겠습니다.
 
 #### Balance
 #### 잔고
@@ -135,65 +134,73 @@ in a transaction.
 위에서 언급한 ECC의 특성들을 기반으로 해서 트랜잭션안의 가치들을 보기 어렵게 할 수 있습니다.
 
 If _v_ is the value of a transaction input or output and _H_ an elliptic curve, we can simply
-embed `v*H` instead of _v_ in a transaction. 
-만약 _v_ 가 트랜잭션 입력값이거나 출력값이고 _H_가 타원곡선이라면 , 단순히 _v_ 대신 `v*H`를 끼워넣을 수 있습니다. 
+embed `v*H` instead of _v_ in a transaction.
+만약 _v_ 가 트랜잭션 입력값이거나 출력값이고 _H_가 타원곡선이라면 , 단순히 _v_ 대신 `v*H`를 끼워넣을 수 있습니다.
 
 This works because using the ECC operations, we can still validate that the sum of the outputs of a transaction equals the sum of inputs:
-이것은 ECC를 사용하기 때문에 작동하는 것입니다. 우리는 출력값의 합이 입력값의 합과 같다는 것을 여전히 확인할 수 있습니다. 
+이것은 ECC를 사용하기 때문에 작동하는 것입니다. 우리는 출력값의 합이 입력값의 합과 같다는 것을 여전히 확인할 수 있습니다.
 
     v1 + v2 = v3  =>  v1*H + v2*H = v3*H
 
 Verifying this property on every transaction allows the protocol to verify that a
 transaction doesn't create money out of thin air, without knowing what the actual
-values are. 
-이 특성을 모든 트랜잭션에 확인하는것은 프로토콜이 트랜잭션은 돈을 난데없이 만들지 않는다는 것을 실제 돈이 얼마나 있는지 알지 않아도 검증할 수 있게 합니다. 
+values are.
+이 특성을 모든 트랜잭션에 확인하는것은 프로토콜이 트랜잭션은 돈을 난데없이 만들지 않는다는 것을 실제 돈이 얼마나 있는지 알지 않아도 검증할 수 있게 합니다.
 However, there are a finite number of usable values and one could try every single
-one of them to guess the value of your transaction. 
-그러나 
-In addition, knowing v1 (from a previous transaction for example) and the resulting `v1*H` reveals all outputs with value v1 across the blockchain. For these reasons, we introduce a second elliptic curve _G_ (practically _G_ is just another generator point on the same curve group as _H_) and a private key _r_ used as a *blinding factor*.
+one of them to guess the value of your transaction.
+그러나 사용가능한 한정된 숫자가 있고 그 숫자 중 하나를 사용해서 당신의 트랜잭션이 얼마만큼의 코인을 가졌는지 추측해 할 수 있습니다.
+In addition, knowing v1 (from a previous transaction for example) and the resulting `v1*H` reveals all outputs with value v1 across the blockchain.
+더해서 , v1을 알고 ( 예시로 사용된 이전의 트랜잭션에서 온 값 ) 그에따른 `v1*H`의 결과를 알면 블록체인 전체에 걸쳐서 v1 값이 있는 모든 출력값들이 드러나게 됩니다.
+
+For these reasons, we introduce a second elliptic curve _G_ (practically _G_ is just another generator point on the same curve group as _H_) and a private key _r_ used as a *blinding factor*.
+이러한 이유때문에 우리는 두번째 타원곡선인 _G_를 제시합니다. ( 실제로 _G_ 는 _H_ 의 그룹과 같은 곡선에 있는 단지 다른 좌표를 생성해 냅니다.) 그리고 비밀키 _r_은 *blinding factor* 로 사용됩니다.
 
 An input or output value in a transaction can then be expressed as:
-
+그렇다면 트랜잭션 안의 입력값과 출력값은 다음과 같이 표현됩니다.
     r*G + v*H
-
 Where:
-
+여기서
 * _r_ is a private key used as a blinding factor, _G_ is an elliptic curve and
   their product `r*G` is the public key for _r_ on _G_.
+* _r_ 은 비밀키이고 blinding factor 로 사용됩니다. _G_ 는 타원 곡선 이고 `r*G`는 _G_ 안에 있는 _r_ 의 공개키 입니다.
 * _v_ is the value of an input or output and _H_ is another elliptic curve.
-
+* _v_ 는 출력값이거나 입력값이고 _H_ 는 다른 타원곡선입니다.
 Neither _v_ nor _r_ can be deduced, leveraging the fundamental properties of Elliptic
 Curve Cryptography. `r*G + v*H` is called a _Pedersen Commitment_.
-
+타원곡선의 근본적인 특성을 이용했기 때문에 _v_ 와 _r_ 은 추측될 수 없습니다.  `r*G + v*H`를 _Pedersen Commitment_ 라고 부릅니다.
 As a an example, let's assume we want to build a transaction with two inputs and one
 output. We have (ignoring fees):
-
+예를 들어 , ( 전송료는 무시하고) 두개의 입력값과 한개의 출력값으로 트랜잭션을 만들기 원한다고 가정해봅시다. 
 * vi1 and vi2 as input values.
+* vi1 과 v2 는 출력값
 * vo3 as output value.
-
+* vo3는 출력값 이라면
 Such that:
 
     vi1 + vi2 = vo3
 
 Generating a private key as a blinding factor for each input value and replacing each value
 with their respective Pedersen Commitments in the previous equation, we obtain:
+각각의 입력값에 대해서 blining factor 로 비밀키를 만들고 각각의 값을 각각의 이전의 공식에 있던 Pederson Commitment로 교체한다고 하면 다음과 같습니다.
 
     (ri1*G + vi1*H) + (ri2*G + vi2*H) = (ro3*G + vo3*H)
 
 Which as a consequence requires that:
-
+결과로 다음과 같습니다.
     ri1 + ri2 = ro3
 
 This is the first pillar of MimbleWimble: the arithmetic required to validate a
 transaction can be done without knowing any of the values.
+이것이 MimbleWimble의 첫번째 특징입니다. 트랜잭션을 검증하는 산술적인 연산은 아무런 값을 알지 못해도 가능합니다.
 
 As a final note, this idea is actually derived from Greg Maxwell's
 [Confidential Transactions](https://elementsproject.org/features/confidential-transactions/investigation),
 which is itself derived from an Adam Back proposal for homomorphic values applied
 to Bitcoin.
+마지막으로 이 아이디어는 Greg Maxwell 의 [Confidential Transactions](https://elementsproject.org/features/confidential-transactions/investigation) 에서 유래했습니다. Confidential transaction은 Adam back의 비트코인에 동형암호를 적용하자는 제안에서 비롯되었습니다.
 
 #### Ownership
-
+#### 소유권
 In the previous section we introduced a private key as a blinding factor to obscure the
 transaction's values. The second insight of MimbleWimble is that this private
 key can be leveraged to prove ownership of the value.
