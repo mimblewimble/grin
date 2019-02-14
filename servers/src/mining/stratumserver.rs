@@ -169,48 +169,59 @@ pub struct WorkerStatus {
 	stale: u64,
 }
 
+struct State {
+	current_block_versions: Vec<Block>,
+	// to prevent the wallet from generating a new HD key derivation for each
+	// iteration, we keep the returned derivation to provide it back when
+	// nothing has changed. We only want to create a key_id for each new block,
+	// and reuse it when we rebuild the current block to add new tx.
+	current_key_id: Option<keychain::Identifier>,
+	current_difficulty: u64,
+	minimum_share_difficulty: u64,
+}
+
+impl State {
+	pub fn new(minimum_share_difficulty: u64) -> Self {
+		let blocks = vec![Block::default()];
+		State {
+			current_block_versions: blocks,
+			current_key_id: None,
+			current_difficulty: <u64>::max_value(),
+			minimum_share_difficulty: minimum_share_difficulty,
+		}
+	}
+}
+
 struct Handler {
 	id: String,
 	workers: Arc<WorkersList>,
-	current_block_versions: Arc<RwLock<Vec<Block>>>,
 	sync_state: Arc<SyncState>,
-	minimum_share_difficulty: Arc<RwLock<u64>>,
-	current_key_id: Arc<RwLock<Option<keychain::Identifier>>>,
-	current_difficulty: Arc<RwLock<u64>>,
 	chain: Arc<chain::Chain>,
+	current_state: Arc<RwLock<State>>,
 }
 
 impl Handler {
 	pub fn new(
 		id: String,
-		workers: Arc<WorkersList>,
-		current_block_versions: Arc<RwLock<Vec<Block>>>,
+		stratum_stats: Arc<RwLock<StratumStats>>,
 		sync_state: Arc<SyncState>,
-		minimum_share_difficulty: Arc<RwLock<u64>>,
-		current_key_id: Arc<RwLock<Option<keychain::Identifier>>>,
-		current_difficulty: Arc<RwLock<u64>>,
+		minimum_share_difficulty: u64,
 		chain: Arc<chain::Chain>,
 	) -> Self {
 		Handler {
-			id,
-			workers,
-			current_block_versions,
-			sync_state,
-			minimum_share_difficulty,
-			current_key_id,
-			current_difficulty,
-			chain,
+			id: id,
+			workers: Arc::new(WorkersList::new(stratum_stats.clone())),
+			sync_state: sync_state,
+			chain: chain,
+			current_state: Arc::new(RwLock::new(State::new(minimum_share_difficulty))),
 		}
 	}
 	pub fn from_stratum(stratum: &StratumServer) -> Self {
 		Handler::new(
 			stratum.id.clone(),
-			stratum.workers.clone(),
-			stratum.current_block_versions.clone(),
+			stratum.stratum_stats.clone(),
 			stratum.sync_state.clone(),
-			stratum.minimum_share_difficulty.clone(),
-			stratum.current_key_id.clone(),
-			stratum.current_difficulty.clone(),
+			stratum.config.minimum_share_difficulty,
 			stratum.chain.clone(),
 		)
 	}
@@ -224,8 +235,7 @@ impl Handler {
 				let res = self.handle_submit(request.params, worker_id);
 				// this key_id has been used now, reset
 				if let Ok((_, true)) = res {
-					let mut current_key_id = self.current_key_id.write();
-					*current_key_id = None;
+					self.current_state.write().current_key_id = None;
 				}
 				res.map(|(v, _)| v)
 			}
@@ -280,8 +290,9 @@ impl Handler {
 		let status = WorkerStatus {
 			id: stats.id.clone(),
 			height: self
-				.current_block_versions
+				.current_state
 				.read()
+				.current_block_versions
 				.last()
 				.unwrap()
 				.header
@@ -309,8 +320,9 @@ impl Handler {
 	// Build and return a JobTemplate for mining the current block
 	fn build_block_template(&self) -> JobTemplate {
 		let bh = self
-			.current_block_versions
+			.current_state
 			.read()
+			.current_block_versions
 			.last()
 			.unwrap()
 			.header
@@ -325,8 +337,8 @@ impl Handler {
 		let pre_pow = util::to_hex(header_buf);
 		let job_template = JobTemplate {
 			height: bh.height,
-			job_id: (self.current_block_versions.read().len() - 1) as u64,
-			difficulty: *self.minimum_share_difficulty.read(),
+			job_id: (self.current_state.read().current_block_versions.len() - 1) as u64,
+			difficulty: self.current_state.read().minimum_share_difficulty,
 			pre_pow,
 		};
 		return job_template;
@@ -344,17 +356,11 @@ impl Handler {
 		// Validate parameters
 		let params: SubmitParams = parse_params(params)?;
 
-		let current_block_versions = self.current_block_versions.read();
+		let state = self.current_state.read();
 		// Find the correct version of the block to match this header
-		let b: Option<&Block> = current_block_versions.get(params.job_id as usize);
-		if params.height
-			!= self
-				.current_block_versions
-				.read()
-				.last()
-				.unwrap()
-				.header
-				.height || b.is_none()
+		let b: Option<&Block> = state.current_block_versions.get(params.job_id as usize);
+		if params.height != state.current_block_versions.last().unwrap().header.height
+			|| b.is_none()
 		{
 			// Return error status
 			error!(
@@ -388,11 +394,11 @@ impl Handler {
 		// Get share difficulty
 		share_difficulty = b.header.pow.to_difficulty(b.header.height).to_num();
 		// If the difficulty is too low its an error
-		if share_difficulty < *self.minimum_share_difficulty.read() {
+		if share_difficulty < state.minimum_share_difficulty {
 			// Return error status
 			error!(
 					"(Server ID: {}) Share at height {}, hash {}, edge_bits {}, nonce {}, job_id {} rejected due to low difficulty: {}/{}",
-					self.id, params.height, b.hash(), params.edge_bits, params.nonce, params.job_id, share_difficulty, *self.minimum_share_difficulty.read(),
+					self.id, params.height, b.hash(), params.edge_bits, params.nonce, params.job_id, share_difficulty, state.minimum_share_difficulty,
 				);
 			self.workers
 				.update_stats(worker_id, |worker_stats| worker_stats.num_rejected += 1);
@@ -400,7 +406,7 @@ impl Handler {
 		}
 
 		// If the difficulty is high enough, submit it (which also validates it)
-		if share_difficulty >= *self.current_difficulty.read() {
+		if share_difficulty >= state.current_difficulty {
 			// This is a full solution, submit it to the network
 			let res = self.chain.process_block(b.clone(), chain::Options::MINE);
 			if let Err(e) = res {
@@ -469,7 +475,7 @@ impl Handler {
 				b.header.pow.nonce,
 				params.job_id,
 				share_difficulty,
-				*self.current_difficulty.read(),
+				state.current_difficulty,
 				submitted_by,
 			);
 		self.workers
@@ -527,56 +533,44 @@ impl Handler {
 			if (current_hash != latest_hash || Utc::now().timestamp() >= deadline)
 				&& self.workers.count() > 0
 			{
-				{
-					let mut wallet_listener_url: Option<String> = None;
-					if !config.burn_reward {
-						wallet_listener_url = Some(config.wallet_listener_url.clone());
-					}
-					// If this is a new block, clear the current_block version history
-					let clear_blocks = current_hash != latest_hash;
-
-					// Build the new block (version)
-					let (new_block, block_fees) = mine_block::get_block(
-						&self.chain,
-						tx_pool,
-						verifier_cache.clone(),
-						self.current_key_id.read().clone(),
-						wallet_listener_url,
-					);
-					{
-						let mut current_difficulty = self.current_difficulty.write();
-						*current_difficulty =
-							(new_block.header.total_difficulty() - head.total_difficulty).to_num();
-					}
-					{
-						let mut current_key_id = self.current_key_id.write();
-						*current_key_id = block_fees.key_id();
-					}
-					current_hash = latest_hash;
-					{
-						// set the minimum acceptable share difficulty for this block
-						let mut minimum_share_difficulty = self.minimum_share_difficulty.write();
-						*minimum_share_difficulty = cmp::min(
-							config.minimum_share_difficulty,
-							*self.current_difficulty.read(),
-						);
-					}
-					// set a new deadline for rebuilding with fresh transactions
-					deadline = Utc::now().timestamp() + config.attempt_time_per_block as i64;
-
-					self.workers.update_block_height(new_block.header.height);
-					self.workers
-						.update_network_difficulty(*self.current_difficulty.read());
-
-					{
-						let mut current_block_versions = self.current_block_versions.write();
-						// Add this new block version to our current block map
-						if clear_blocks {
-							current_block_versions.clear();
-						}
-						current_block_versions.push(new_block);
-					}
+				let mut state = self.current_state.write();
+				let mut wallet_listener_url: Option<String> = None;
+				if !config.burn_reward {
+					wallet_listener_url = Some(config.wallet_listener_url.clone());
 				}
+				// If this is a new block, clear the current_block version history
+				let clear_blocks = current_hash != latest_hash;
+
+				// Build the new block (version)
+				let (new_block, block_fees) = mine_block::get_block(
+					&self.chain,
+					tx_pool,
+					verifier_cache.clone(),
+					state.current_key_id.clone(),
+					wallet_listener_url,
+				);
+
+				state.current_difficulty =
+					(new_block.header.total_difficulty() - head.total_difficulty).to_num();
+
+				state.current_key_id = block_fees.key_id();
+
+				current_hash = latest_hash;
+				// set the minimum acceptable share difficulty for this block
+				state.minimum_share_difficulty =
+					cmp::min(config.minimum_share_difficulty, state.current_difficulty);
+
+				// set a new deadline for rebuilding with fresh transactions
+				deadline = Utc::now().timestamp() + config.attempt_time_per_block as i64;
+
+				self.workers.update_block_height(new_block.header.height);
+				self.workers
+					.update_network_difficulty(state.current_difficulty);
+
+				if clear_blocks {
+					state.current_block_versions.clear();
+				}
+				state.current_block_versions.push(new_block);
 				// Send this job to all connected workers
 				self.broadcast_job();
 			}
@@ -781,11 +775,6 @@ pub struct StratumServer {
 	chain: Arc<chain::Chain>,
 	tx_pool: Arc<RwLock<pool::TransactionPool>>,
 	verifier_cache: Arc<RwLock<dyn VerifierCache>>,
-	current_block_versions: Arc<RwLock<Vec<Block>>>,
-	current_difficulty: Arc<RwLock<u64>>,
-	minimum_share_difficulty: Arc<RwLock<u64>>,
-	current_key_id: Arc<RwLock<Option<keychain::Identifier>>>,
-	workers: Arc<WorkersList>,
 	sync_state: Arc<SyncState>,
 	stratum_stats: Arc<RwLock<StratumStats>>,
 }
@@ -801,66 +790,13 @@ impl StratumServer {
 	) -> StratumServer {
 		StratumServer {
 			id: String::from("0"),
-			minimum_share_difficulty: Arc::new(RwLock::new(config.minimum_share_difficulty)),
 			config,
 			chain,
 			tx_pool,
 			verifier_cache,
-			current_block_versions: Arc::new(RwLock::new(Vec::new())),
-			current_difficulty: Arc::new(RwLock::new(<u64>::max_value())),
-			current_key_id: Arc::new(RwLock::new(None)),
-			workers: Arc::new(WorkersList::new(stratum_stats.clone())),
 			sync_state: Arc::new(SyncState::new()),
 			stratum_stats: stratum_stats,
 		}
-	}
-
-	// Build and return a JobTemplate for mining the current block
-	fn build_block_template(&self) -> JobTemplate {
-		let bh = self
-			.current_block_versions
-			.read()
-			.last()
-			.unwrap()
-			.header
-			.clone();
-		// Serialize the block header into pre and post nonce strings
-		let mut header_buf = vec![];
-		{
-			let mut writer = ser::BinWriter::new(&mut header_buf);
-			bh.write_pre_pow(&mut writer).unwrap();
-			bh.pow.write_pre_pow(bh.version, &mut writer).unwrap();
-		}
-		let pre_pow = util::to_hex(header_buf);
-		let job_template = JobTemplate {
-			height: bh.height,
-			job_id: (self.current_block_versions.read().len() - 1) as u64,
-			difficulty: *self.minimum_share_difficulty.read(),
-			pre_pow,
-		};
-		return job_template;
-	}
-
-	// Broadcast a jobtemplate RpcRequest to all connected workers - no response
-	// expected
-	fn broadcast_job(&mut self) {
-		// Package new block into RpcRequest
-		let job_template = self.build_block_template();
-		let job_template_json = serde_json::to_string(&job_template).unwrap();
-		// Issue #1159 - use a serde_json Value type to avoid extra quoting
-		let job_template_value: Value = serde_json::from_str(&job_template_json).unwrap();
-		let job_request = RpcRequest {
-			id: String::from("Stratum"),
-			jsonrpc: String::from("2.0"),
-			method: String::from("job"),
-			params: Some(job_template_value),
-		};
-		let job_request_json = serde_json::to_string(&job_request).unwrap();
-		debug!(
-			"(Server ID: {}) sending block {} with id {} to stratum clients",
-			self.id, job_template.height, job_template.job_id,
-		);
-		self.workers.broadcast(job_request_json.clone());
 	}
 
 	/// "main()" - Starts the stratum-server.  Creates a thread to Listens for
@@ -876,10 +812,6 @@ impl StratumServer {
 
 		self.sync_state = sync_state;
 
-		// to prevent the wallet from generating a new HD key derivation for each
-		// iteration, we keep the returned derivation to provide it back when
-		// nothing has changed. We only want to create a key_id for each new block,
-		// and reuse it when we rebuild the current block to add new tx.
 		let listen_addr = self
 			.config
 			.stratum_server_addr
@@ -887,9 +819,6 @@ impl StratumServer {
 			.unwrap()
 			.parse()
 			.expect("Stratum: Incorrect address ");
-		{
-			self.current_block_versions.write().push(Block::default());
-		}
 
 		let handler = Arc::new(Handler::from_stratum(&self));
 		let h = handler.clone();
