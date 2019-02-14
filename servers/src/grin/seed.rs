@@ -400,18 +400,3 @@ pub fn dns_seeds() -> Box<dyn Fn() -> Vec<PeerAddr> + Send> {
 pub fn predefined_seeds(addrs: Vec<PeerAddr>) -> Box<dyn Fn() -> Vec<PeerAddr> + Send> {
 	Box::new(move || addrs.clone())
 }
-
-// /// Convenience function when the seed list is immediately known. Mostly used
-// /// for tests.
-// pub fn preferred_peers(addrs_str: Vec<PeerAddr>) -> Option<Vec<PeerAddr>> {
-// 	if addrs_str.is_empty() {
-// 		None
-// 	} else {
-// 		Some(
-// 			addrs_str
-// 				.iter()
-// 				.map(|s| PeerAddr(s.parse().unwrap()))
-// 				.collect::<Vec<_>>(),
-// 		)
-// 	}
-// }

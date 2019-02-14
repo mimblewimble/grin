@@ -126,7 +126,6 @@ impl Peer {
 	}
 
 	pub fn is_denied(config: &P2PConfig, peer_addr: PeerAddr) -> bool {
-		// let peer = format!("{}:{}", peer_addr.0.ip(), peer_addr.0.port());
 		if let Some(ref denied) = config.peers_deny {
 			if denied.contains(&peer_addr) {
 				debug!(

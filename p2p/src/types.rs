@@ -178,6 +178,18 @@ impl std::fmt::Display for PeerAddr {
 	}
 }
 
+impl PeerAddr {
+	/// If the ip is loopback then our key is "ip:port" (mainly for local usernet testing).
+	/// Otherwise we only care about the ip (we disallow multiple peers on the same ip address).
+	pub fn as_key(&self) -> String {
+		if self.0.ip().is_loopback() {
+			format!("{}:{}", self.0.ip(), self.0.port())
+		} else {
+			format!("{}", self.0.ip())
+		}
+	}
+}
+
 /// Configuration for the peer-to-peer server.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct P2PConfig {

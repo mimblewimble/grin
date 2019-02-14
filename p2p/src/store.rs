@@ -213,20 +213,7 @@ impl PeerStore {
 	}
 }
 
-// TODO - Put this on PeerAddr itself.
-//
-// If this is a "loopback" address then we care about the port and construct the key "ip:port".
-// Otherwise we *only* care about the ip and we ignore the port.
+// Ignore the port unless ip is loopback address.
 fn peer_key(peer_addr: PeerAddr) -> Vec<u8> {
-	if peer_addr.0.ip().is_loopback() {
-		to_key(
-			PEER_PREFIX,
-			&mut format!("{}:{}", peer_addr.0.ip(), peer_addr.0.port()).into_bytes(),
-		)
-	} else {
-		to_key(
-			PEER_PREFIX,
-			&mut format!("{}", peer_addr.0.ip()).into_bytes(),
-		)
-	}
+	to_key(PEER_PREFIX, &mut peer_addr.as_key().into_bytes())
 }
