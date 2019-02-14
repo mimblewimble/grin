@@ -7,68 +7,107 @@ extremely good scalability, privacy and fungibility by relying on strong
 cryptographic primitives. It addresses gaps existing in almost all current
 blockchain implementations.
 
+MimbleWimlbe ㅇㅡㄴ 블록체인 포맷이면서 프로토콜 입니다.
+MimbleWimble 은 암호학적 기반에 의해서 극대화된 좋은 확장성, 프라이버시, 그리고 대체가능성을 제공합니다.
+이러한 특성은 지금 현존하는 모든 블록체인 구현체에 존재하는 문제점들을 처리합니다.
+
+
 Grin is an open source software project that implements a MimbleWimble
 blockchain and fills the gaps required for a full blockchain and
 cryptocurrency deployment.
 
+Grin 은 Mimble Wimble 블록체인을 구현한 오픈소스 프로젝트 입니다.
+또한 완전한 블록체인와 크립토 커런시의 배포에 필요한 갭을 채워줍니다.
+
 The main goal and characteristics of the Grin project are:
+Grin 프로젝트의 주요 목적과 특성들은 아래 설명을 참고하십시오.
 
 * Privacy by default. This enables complete fungibility without precluding
   the ability to selectively disclose information as needed.
+* 프라이버시가 기본으로 제공됩니다. 이 기능은 필요에 따라서 선택적으로 정보를 공개 할 수 없도록 해서 완전한 대체가능성을 할 수 있게 합니다.
 * Scales mostly with the number of users and minimally with the number of
   transactions (<100 byte `kernel`), resulting in a large space saving compared
   to other blockchains.
+* 주로 유저의 규모와 최소한의 트랜잭션 수의 규모로 (100byte 미만의 kernel(transaction)) 다른 블록체인들과 비교하면 많은 공간을 절약할 수 있습니다.
 * Strong and proven cryptography. MimbleWimble only relies on Elliptic Curve
   Cryptography which has been tried and tested for decades.
+* Mimble Wimble 은 수십년 동안 테스트하고 사용되었던 강력한 암호기술인 ECC만 사용합니다.
 * Design simplicity that makes it easy to audit and maintain over time.
+* 간단한 디자인은 감사와 유지보수를 시간이 지나도 수월하게 만듭니다.
 * Community driven, encouraging mining decentralization.
-
+* 커뮤니티가 주도하며, 채굴 탈중앙화가 권장됩니다.
+  
 ## Tongue Tying for Everyone
-
+## 모두의 혀를 묶자.
 This document is targeted at readers with a good
-understanding of blockchains and basic cryptography. With that in mind, we attempt
-to explain the technical buildup of MimbleWimble and how it's applied in Grin. We hope
-this document is understandable to most technically-minded readers. Our objective is
-to encourage you to get interested in Grin and contribute in any way possible.
+understanding of blockchains and basic cryptography.
+이 문서는 블록체인에 대해 어느정도 이해가 있고 암호학에 대한 기본적인 이해가 있는 독자들을 대상으로 합니다.
 
-To achieve this objective, we will introduce the main concepts required for a good
-understanding of Grin as a MimbleWimble implementation. We will start with a brief
-description of some relevant properties of Elliptic Curve Cryptography (ECC) to lay the
-foundation on which Grin is based and then describe all the key elements of a
-MimbleWimble blockchain's transactions and blocks.
+With that in mind, we attempt to explain the technical buildup of MimbleWimble and how it's applied in Grin.
+이것을 염두에 두고 우리는 MimbleWimble의 기술적인 발전과 어떻게 Grin에 적용되었는지 관해 설명할것입니다.
+
+We hope this document is understandable to most technically-minded readers. Our objective is
+to encourage you to get interested in Grin and contribute in any way possible.
+저희는 이 문서가 대부분의 기술적인 성격을 가진 독자들을 이해시킬 수 있길 바랍니다.
+우리의 목적은 독자가 Grin에 대해 흥기를 느끼게 하고 어떤 방식으로든 Grin에 기여할 수 있게 이끄는 것입니다. 
+
+To achieve this objective, we will introduce the main concepts required for a good understanding of Grin as a MimbleWimble implementation.
+이러한 목적을 이루기 위해, 우리는 MimbleWimble 의 구현체인 Grin을 이해하는데 필요한 주요 컨셉들에 대해서 소개할것입니다.
+
+We will start with a brief description of some relevant properties of Elliptic Curve Cryptography (ECC) to lay the foundation on which Grin is based and then describe all the key elements of a MimbleWimble blockchain's transactions and blocks.
+우선 Grin이 어디에서 부터 기초로 하고 있는지에 대해 이해하기 위해서 타원 곡선 암호 (ECC)의 몇몇 속성들에 대한 간단한 설명으로 시작하겠습니다.  그 다음, MimbleWimble 블록체인의 트랜잭션과 블록에 한 모든 요소들을 설명하겠습니다.
 
 ### Tiny Bits of Elliptic Curves
+### 타원곡선에 대한 조그마한 조각들
 
 We start with a brief primer on Elliptic Curve Cryptography, reviewing just the
 properties necessary to understand how MimbleWimble works and without
-delving too much into the intricacies of ECC. For readers who would want to
-dive deeper into those assumptions, there are other opportunities to
-[learn more](http://andrea.corbellini.name/2015/05/17/elliptic-curve-cryptography-a-gentle-introduction/).
+delving too much into the intricacies of ECC.
+
+- ECC의 너무 복잡한 사항을 캐지 않고 어떻게 mimble wimble 이 어떻게 작동하는지에 대해 이해하는데 필요한 요소들만 리뷰할 것입니다.
+
+ For readers who would want to dive deeper into those assumptions, there are other opportunities to [learn more](http://andrea.corbellini.name/2015/05/17/elliptic-curve-cryptography-a-gentle-introduction/).
+- 이런 가정들을 좀 더 알고싶은 독자들은 [이 링크]() 를 참고하세요.
 
 An Elliptic Curve for the purpose of cryptography is simply a large set of points that
 we will call _C_. These points can be added, subtracted, or multiplied by integers (also called scalars).
-Given an integer _k_ and
-using the scalar multiplication operation we can compute `k*H`, which is also a point on
-curve _C_. Given another integer _j_ we can also calculate `(k+j)*H`, which equals
-`k*H + j*H`. The addition and scalar multiplication operations on an elliptic curve
-maintain the commutative and associative properties of addition and multiplication:
+암호학에서의 타원 곡선이란 우리가 _C_ 라고 부르는 단순히 아주 큰 좌표의 집합입니다.
+이 좌표들은 정수들로 (인티저, 또는 스칼라 ) 더하고 빼고 곱할수 있습니다.
+
+Given an integer _k_ and using the scalar multiplication operation we can compute `k*H`, which is also a point on curve _C_.
+주어진 정수 _K_ 에 스칼라 곱셈을 한다면 우리는 곡선 _c_ 위에 있는 좌표 K*H를 계산 할 수 있습니다.
+
+Given another integer _j_ we can also calculate `(k+j)*H`, which equals `k*H + j*H`.
+또 달리 주어진 정수 _j_ 에 우리는`k*H + j*H` 와 같은 `(k+j)*H`를 계산 할 수 있습니다.
+
+The addition and scalar multiplication operations on an elliptic curve maintain the commutative and associative properties of addition and multiplication:
+타원곡선 위에서의 덧셈과 정수 곱셈은 제시덴 수의 순서에 관계없이 결과가 동일하다는 성질과 덧셈과 곱셈의 계산 순서와 관계없이 동일한 결과가 나온다는 성질을 가지고 있습니다.
+
+
 
     (k+j)*H = k*H + j*H
 
 In ECC, if we pick a very large number _k_ as a private key, `k*H` is
-considered the corresponding public key. Even if one knows the
-value of the public key `k*H`, deducing _k_ is close to impossible (or said
-differently, while multiplication is trivial, "division" by curve points is
+considered the corresponding public key.
+ECC 안에서 우리가 매우 큰 숫자인 _k_ 를 프라이빗 키로 가정할 때 `k*H` 는 해당하는 퍼블릭 키로 해당되어 집니다.
+
+Even if one knows the value of the public key `k*H`, deducing _k_ is close to impossible (or said differently, while multiplication is trivial, "division" by curve points is
 extremely difficult).
+
+
 
 The previous formula `(k+j)*H = k*H + j*H`, with _k_ and _j_ both private
 keys, demonstrates that a public key obtained from the addition of two private
 keys (`(k+j)*H`) is identical to the addition of the public keys for each of those
-two private keys (`k*H + j*H`). In the Bitcoin blockchain, Hierarchical
-Deterministic wallets heavily rely on this principle. MimbleWimble and the Grin
-implementation do as well.
+two private keys (`k*H + j*H`).
+
+In the Bitcoin blockchain, Hierarchical Deterministic wallets heavily rely on this principle. 
+Bitcoin blockchain에서도 HD 지갑은 이 원칙에 의존하고 있습니다. 
+MimbleWimble and the Grin implementation do as well.
+MimbleWimble 과 Grin의 구현또한 마찬가지 입니다. 
 
 ### Transacting with MimbleWimble
+### MimbleWimble 함께 거래하기 
 
 The structure of transactions demonstrates a crucial tenet of MimbleWimble:
 strong privacy and confidentiality guarantees.
