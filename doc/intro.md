@@ -93,13 +93,15 @@ ECC 안에서 우리가 매우 큰 숫자인 _k_ 를 프라이빗 키로 가정�
 
 Even if one knows the value of the public key `k*H`, deducing _k_ is close to impossible (or said differently, while multiplication is trivial, "division" by curve points is
 extremely difficult).
-
+누군가 공개키인 `k*H`의 값을 알더라도 _k_ 를 추론해 내는것은 불가능에 가깝습니다. ( 달리 얘기하자면, 곱셉은 쉬우나 곡선 좌표에 의한 "나눗셈"은 정말 어렵습니다.  )
 
 
 The previous formula `(k+j)*H = k*H + j*H`, with _k_ and _j_ both private
 keys, demonstrates that a public key obtained from the addition of two private
 keys (`(k+j)*H`) is identical to the addition of the public keys for each of those
 two private keys (`k*H + j*H`).
+
+
 
 In the Bitcoin blockchain, Hierarchical Deterministic wallets heavily rely on this principle. 
 Bitcoin blockchain에서도 HD 지갑은 이 원칙에 의존하고 있습니다. 
