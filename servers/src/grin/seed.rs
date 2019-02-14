@@ -21,7 +21,7 @@ use chrono::prelude::{DateTime, Utc};
 use chrono::{Duration, MIN_DATE};
 use rand::{thread_rng, Rng};
 use std::collections::HashMap;
-use std::net::{SocketAddr, ToSocketAddrs};
+use std::net::ToSocketAddrs;
 use std::sync::{mpsc, Arc};
 use std::{cmp, str, thread, time};
 
@@ -395,17 +395,12 @@ pub fn dns_seeds() -> Box<dyn Fn() -> Vec<PeerAddr> + Send> {
 	})
 }
 
-// /// Convenience function when the seed list is immediately known. Mostly used
-// /// for tests.
-// pub fn predefined_seeds(addrs_str: Vec<PeerAddr>) -> Box<dyn Fn() -> Vec<PeerAddr> + Send> {
-// 	Box::new(move || {
-// 		addrs_str
-// 			.iter()
-// 			.map(|s| PeerAddr(s.parse().unwrap()))
-// 			.collect::<Vec<_>>()
-// 	})
-// }
-//
+/// Convenience function when the seed list is immediately known. Mostly used
+/// for tests.
+pub fn predefined_seeds(addrs: Vec<PeerAddr>) -> Box<dyn Fn() -> Vec<PeerAddr> + Send> {
+	Box::new(move || addrs.clone())
+}
+
 // /// Convenience function when the seed list is immediately known. Mostly used
 // /// for tests.
 // pub fn preferred_peers(addrs_str: Vec<PeerAddr>) -> Option<Vec<PeerAddr>> {

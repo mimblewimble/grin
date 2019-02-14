@@ -24,7 +24,7 @@ use ctrlc;
 
 use crate::config::GlobalConfig;
 use crate::core::global;
-use crate::p2p::Seeding;
+use crate::p2p::{PeerAddr, Seeding};
 use crate::servers;
 use crate::tui::ui;
 
@@ -116,44 +116,14 @@ pub fn server_command(
 		}
 
 		if let Some(seeds) = a.values_of("seed") {
+			let seed_addrs = seeds
+				.filter_map(|x| x.parse().ok())
+				.map(|x| PeerAddr(x))
+				.collect();
 			server_config.p2p_config.seeding_type = Seeding::List;
-			server_config.p2p_config.seeds = Some(seeds.map(|s| s.to_string()).collect());
+			server_config.p2p_config.seeds = Some(seed_addrs);
 		}
 	}
-
-	/*if let Some(true) = server_config.run_wallet_listener {
-		let mut wallet_config = global_config.members.as_ref().unwrap().wallet.clone();
-		wallet::init_wallet_seed(wallet_config.clone());
-		let wallet = wallet::instantiate_wallet(wallet_config.clone(), "");
-
-		let _ = thread::Builder::new()
-			.name("wallet_listener".to_string())
-			.spawn(move || {
-				controller::foreign_listener(wallet, &wallet_config.api_listen_addr())
-					.unwrap_or_else(|e| {
-						panic!(
-							"Error creating wallet listener: {:?} Config: {:?}",
-							e, wallet_config
-						)
-					});
-			});
-	}
-	if let Some(true) = server_config.run_wallet_owner_api {
-		let mut wallet_config = global_config.members.unwrap().wallet;
-		let wallet = wallet::instantiate_wallet(wallet_config.clone(), "");
-		wallet::init_wallet_seed(wallet_config.clone());
-
-		let _ = thread::Builder::new()
-			.name("wallet_owner_listener".to_string())
-			.spawn(move || {
-				controller::owner_listener(wallet, "127.0.0.1:13420").unwrap_or_else(|e| {
-					panic!(
-						"Error creating wallet api listener: {:?} Config: {:?}",
-						e, wallet_config
-					)
-				});
-			});
-	}*/
 
 	if let Some(a) = server_args {
 		match a.subcommand() {

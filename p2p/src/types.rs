@@ -174,7 +174,7 @@ impl Eq for PeerAddr {}
 
 impl std::fmt::Display for PeerAddr {
 	fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-		write!(f, "PeerAddr({})", self.0)
+		write!(f, "{}", self.0)
 	}
 }
 

@@ -16,7 +16,6 @@
 //! the peer-to-peer server, the blockchain and the transaction pool) and acts
 //! as a facade.
 
-use std::net::SocketAddr;
 use std::sync::Arc;
 use std::{thread, time};
 
@@ -104,7 +103,7 @@ impl Server {
 	}
 
 	/// Instantiates a new server associated with the provided future reactor.
-	pub fn new(mut config: ServerConfig) -> Result<Server, Error> {
+	pub fn new(config: ServerConfig) -> Result<Server, Error> {
 		// Defaults to None (optional) in config file.
 		// This translates to false here.
 		let archive_mode = match config.archive_mode {
@@ -183,9 +182,11 @@ impl Server {
 			let seeder = match config.p2p_config.seeding_type {
 				p2p::Seeding::None => {
 					warn!("No seed configured, will stay solo until connected to");
-					vec![]
+					seed::predefined_seeds(vec![])
 				}
-				p2p::Seeding::List => config.p2p_config.seeds.unwrap_or(vec![]),
+				p2p::Seeding::List => {
+					seed::predefined_seeds(config.p2p_config.seeds.clone().unwrap())
+				}
 				p2p::Seeding::DNSSeed => seed::dns_seeds(),
 				_ => unreachable!(),
 			};
@@ -195,7 +196,7 @@ impl Server {
 				config.p2p_config.capabilities,
 				config.dandelion_config.clone(),
 				seeder,
-				config.p2p_config.peers_preferred,
+				config.p2p_config.peers_preferred.clone(),
 				stop_state.clone(),
 			);
 		}

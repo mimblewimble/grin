@@ -37,7 +37,7 @@ pub struct Peers {
 	pub adapter: Arc<dyn ChainAdapter>,
 	store: PeerStore,
 	peers: RwLock<HashMap<PeerAddr, Arc<Peer>>>,
-	dandelion_relay: RwLock<HashMap<i64, Arc<Peer>>>,
+	dandelion_relay: RwLock<Option<(i64, Arc<Peer>)>>,
 	config: P2PConfig,
 }
 
