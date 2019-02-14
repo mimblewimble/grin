@@ -83,8 +83,6 @@ Given another integer _j_ we can also calculate `(k+j)*H`, which equals `k*H + j
 The addition and scalar multiplication operations on an elliptic curve maintain the commutative and associative properties of addition and multiplication:
 타원곡선 위에서의 덧셈과 정수 곱셈은 제시덴 수의 순서에 관계없이 결과가 동일하다는 성질과 덧셈과 곱셈의 계산 순서와 관계없이 동일한 결과가 나온다는 성질을 가지고 있습니다.
 
-
-
     (k+j)*H = k*H + j*H
 
 In ECC, if we pick a very large number _k_ as a private key, `k*H` is
@@ -100,8 +98,7 @@ The previous formula `(k+j)*H = k*H + j*H`, with _k_ and _j_ both private
 keys, demonstrates that a public key obtained from the addition of two private
 keys (`(k+j)*H`) is identical to the addition of the public keys for each of those
 two private keys (`k*H + j*H`).
-
-
+_k_ 와 _j_ 둘다 비밀키인 이전 공식 `(k+j)*H = k*H + j*H` 는 두개의 비밀키를 더해서 얻은  한 개의 공개키 (`(k+j)*H`) 와 각각 두개의 비밀키에 공개키를 더한것과 같습니다. 
 
 In the Bitcoin blockchain, Hierarchical Deterministic wallets heavily rely on this principle. 
 Bitcoin blockchain에서도 HD 지갑은 이 원칙에 의존하고 있습니다. 
@@ -112,40 +109,48 @@ MimbleWimble 과 Grin의 구현또한 마찬가지 입니다.
 ### MimbleWimble 함께 거래하기 
 
 The structure of transactions demonstrates a crucial tenet of MimbleWimble:
+트랜잭션의 구조는 MimbleWimble의 강력한 프라이버시와 비밀이 유지된다라고 하는 중요한 규칙을 나타냅니다. 
 strong privacy and confidentiality guarantees.
 
 The validation of MimbleWimble transactions relies on two basic properties:
-
+MimbleWimble 트랜잭션의 확인은 두가지 기본적인 성격을 전제로 합니다.  
 * **Verification of zero sums.** The sum of outputs minus inputs always equals zero,
   proving that the transaction did not create new funds, _without revealing the actual amounts_.
+* **제로섬의 검증** 결과값에서 입력값을 뺸 합은 항상 0과 같습니다. 이것은 실제 전송되는 코인의 양을 드러내지 않고도 트랜잭션ㅇ이 새로운 코인을 만들지 않았다는 것을 증명합니다. 
 * **Possession of private keys.** Like with most other cryptocurrencies, ownership of
   transaction outputs is guaranteed by the possession of ECC private keys. However,
   the proof that an entity owns those private keys is not achieved by directly signing
   the transaction.
+* **비밀키의 소유**  다른 많은 크립토커런시들 처럼 , 트랜잭션의 소유권은 ECC 비밀키에 의해 보장됩니다. 그러나 어떤 실체가 이런 비밀키들을 소유하고 있다고 증명하는것이 직접적으로 트랜잭션에 사인한다고해서 얻어지는 것은 아닙니다.  
 
 The next sections on balance, ownership, change and proofs details how those two
 fundamental properties are achieved.
+다음 섹션들에서는 잔고, 소유권, 거스름돈과 증명들의 상세들이 어떻게 저 두가지 기본적인 성질에 의해서 얻어지는지 알아보겠습니다. 
 
 #### Balance
+#### 잔고
 
 Building upon the properties of ECC we described above, one can obscure the values
 in a transaction.
+위에서 언급한 ECC의 특성들을 기반으로 해서 트랜잭션안의 가치들을 보기 어렵게 할 수 있습니다.
 
 If _v_ is the value of a transaction input or output and _H_ an elliptic curve, we can simply
-embed `v*H` instead of _v_ in a transaction. This works because using the ECC
-operations, we can still validate that the sum of the outputs of a transaction equals the
-sum of inputs:
+embed `v*H` instead of _v_ in a transaction. 
+만약 _v_ 가 트랜잭션 입력값이거나 출력값이고 _H_가 타원곡선이라면 , 단순히 _v_ 대신 `v*H`를 끼워넣을 수 있습니다. 
+
+This works because using the ECC operations, we can still validate that the sum of the outputs of a transaction equals the sum of inputs:
+이것은 ECC를 사용하기 때문에 작동하는 것입니다. 우리는 출력값의 합이 입력값의 합과 같다는 것을 여전히 확인할 수 있습니다. 
 
     v1 + v2 = v3  =>  v1*H + v2*H = v3*H
 
 Verifying this property on every transaction allows the protocol to verify that a
 transaction doesn't create money out of thin air, without knowing what the actual
-values are. However, there are a finite number of usable values and one could try every single
-one of them to guess the value of your transaction. In addition, knowing v1 (from
-a previous transaction for example) and the resulting `v1*H` reveals all outputs with
-value v1 across the blockchain. For these reasons, we introduce a second elliptic curve
-_G_ (practically _G_ is just another generator point on the same curve group as _H_) and
-a private key _r_ used as a *blinding factor*.
+values are. 
+이 특성을 모든 트랜잭션에 확인하는것은 프로토콜이 트랜잭션은 돈을 난데없이 만들지 않는다는 것을 실제 돈이 얼마나 있는지 알지 않아도 검증할 수 있게 합니다. 
+However, there are a finite number of usable values and one could try every single
+one of them to guess the value of your transaction. 
+그러나 
+In addition, knowing v1 (from a previous transaction for example) and the resulting `v1*H` reveals all outputs with value v1 across the blockchain. For these reasons, we introduce a second elliptic curve _G_ (practically _G_ is just another generator point on the same curve group as _H_) and a private key _r_ used as a *blinding factor*.
 
 An input or output value in a transaction can then be expressed as:
 
