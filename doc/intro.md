@@ -202,7 +202,9 @@ to Bitcoin.
 #### Ownership
 #### 소유권
 In the previous section we introduced a private key as a blinding factor to obscure the
-transaction's values. The second insight of MimbleWimble is that this private
+transaction's values. 
+
+The second insight of MimbleWimble is that this private
 key can be leveraged to prove ownership of the value.
 
 Alice sends you 3 coins and to obscure that amount, you chose 28 as your
