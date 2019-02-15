@@ -28,6 +28,7 @@
 
 //! Macros to support Rust BIP-32 code (though could conceivably be used for other things)
 
+/// gives a newtype array wrapper standard array traits
 #[macro_export]
 macro_rules! impl_array_newtype {
 	($thing:ident, $ty:ty, $len:expr) => {
@@ -83,16 +84,6 @@ macro_rules! impl_array_newtype {
 				let mut ret = [0; $len];
 				ret.copy_from_slice(&data[..]);
 				$thing(ret)
-			}
-		}
-
-		impl ::std::ops::Index<usize> for $thing {
-			type Output = $ty;
-
-			#[inline]
-			fn index(&self, index: usize) -> &$ty {
-				let &$thing(ref dat) = self;
-				&dat[index]
 			}
 		}
 
@@ -164,6 +155,7 @@ macro_rules! impl_array_newtype {
 	};
 }
 
+/// gives a newtype array wrapper serialization and deserialization methods
 #[macro_export]
 macro_rules! impl_array_newtype_encodable {
 	($thing:ident, $ty:ty, $len:expr) => {
@@ -193,7 +185,7 @@ macro_rules! impl_array_newtype_encodable {
 							*item = match seq.next_element()? {
 								Some(c) => c,
 								None => {
-									return Err($crate::serde::de::Error::custom("end of stream"))
+									return Err($crate::serde::de::Error::custom("end of stream"));
 								}
 							};
 						}
@@ -218,6 +210,7 @@ macro_rules! impl_array_newtype_encodable {
 	};
 }
 
+/// gives a newtype array wrapper the Debug trait
 #[macro_export]
 macro_rules! impl_array_newtype_show {
 	($thing:ident) => {
@@ -229,9 +222,19 @@ macro_rules! impl_array_newtype_show {
 	};
 }
 
+/// gives a newtype array wrapper Index traits
 #[macro_export]
 macro_rules! impl_index_newtype {
 	($thing:ident, $ty:ty) => {
+		impl ::std::ops::Index<usize> for $thing {
+			type Output = $ty;
+
+			#[inline]
+			fn index(&self, index: usize) -> &$ty {
+				let &$thing(ref dat) = self;
+				&dat[index]
+			}
+		}
 		impl ::std::ops::Index<::std::ops::Range<usize>> for $thing {
 			type Output = [$ty];
 
