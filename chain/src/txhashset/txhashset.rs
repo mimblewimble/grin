@@ -32,12 +32,12 @@ use crate::util::secp::pedersen::{Commitment, RangeProof};
 use crate::util::{file, secp_static, zip};
 use croaring::Bitmap;
 use grin_store;
-use grin_store::pmmr::{PMMRBackend, PMMR_FILES};
+use grin_store::pmmr::{clean_files_by_prefix, PMMRBackend, PMMR_FILES};
 use std::collections::HashSet;
 use std::fs::{self, File};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use std::time::{Instant, SystemTime, UNIX_EPOCH};
+use std::time::Instant;
 
 const HEADERHASHSET_SUBDIR: &'static str = "header";
 const TXHASHSET_SUBDIR: &'static str = "txhashset";
@@ -1422,8 +1422,27 @@ pub fn zip_read(root_dir: String, header: &BlockHeader) -> Result<File, Error> {
 
 	let txhashset_path = Path::new(&root_dir).join(TXHASHSET_SUBDIR);
 	let zip_path = Path::new(&root_dir).join(txhashset_zip);
-	// create the zip archive
-	{
+
+	// if file exist, just re-use it
+	let zip_file = File::open(zip_path.clone());
+	if let Ok(zip) = zip_file {
+		return Ok(zip);
+	} else {
+		// clean up old zips.
+		// Theoretically, we only need clean-up those zip files older than STATE_SYNC_THRESHOLD.
+		// But practically, these zip files are not small ones, we just keep the zips in last one hour
+		let data_dir = Path::new(&root_dir);
+		let pattern = format!("{}_", TXHASHSET_ZIP);
+		if let Ok(n) = clean_files_by_prefix(data_dir.clone(), &pattern, 60 * 60) {
+			debug!(
+				"{} zip files have been clean up in folder: {:?}",
+				n, data_dir
+			);
+		}
+	}
+
+	// otherwise, create the zip archive
+	let path_to_be_cleanup = {
 		// Temp txhashset directory
 		let temp_txhashset_path = Path::new(&root_dir).join(format!(
 			"{}_zip_{}",
