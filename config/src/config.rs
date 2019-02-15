@@ -46,6 +46,7 @@ const GRIN_HOME: &'static str = ".grin";
 const GRIN_CHAIN_DIR: &'static str = "chain_data";
 /// Wallet data directory
 pub const GRIN_WALLET_DIR: &'static str = "wallet_data";
+/// API secret file name
 pub const API_SECRET_FILE_NAME: &'static str = ".api_secret";
 
 fn get_grin_path(chain_type: &global::ChainTypes) -> Result<PathBuf, ConfigError> {
