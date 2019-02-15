@@ -1500,21 +1500,22 @@ fn check_and_remove_files(txhashset_path: &PathBuf, header: &BlockHeader) -> Res
 		if !difference.is_empty() {
 			for diff in &difference {
 				let diff_path = subdirectory_path.join(diff);
-				if let Err(e) = file::delete(diff_path.clone()) {
-					error!(
-						"check_and_remove_files: fail to remove unexpected file '{:?}', Err: {:?}",
+				match file::delete(diff_path.clone()) {
+					Err(e) => error!(
+						"check_and_remove_files: fail to remove file '{:?}', Err: {:?}",
 						diff_path, e,
-					);
-				} else {
-					removed += 1;
-					trace!(
-						"check_and_remove_files: unexpected file '{:?}' removed",
-						diff_path
-					);
+					),
+					Ok(_) => {
+						removed += 1;
+						trace!(
+							"check_and_remove_files: file '{:?}' removed",
+							diff_path
+						);
+					}
 				}
 			}
 			debug!(
-				"{} unexpected file(s) found in txhashset subfolder {:?}, {} removed.",
+				"{} tmp file(s) found in txhashset subfolder {:?}, {} removed.",
 				difference.len(),
 				&subdirectory_path,
 				removed,
