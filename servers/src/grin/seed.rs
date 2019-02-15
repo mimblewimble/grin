@@ -186,7 +186,7 @@ fn monitor_peers(
 	// maintenance step first, clean up p2p server peers
 	peers.clean_peers(config.peer_max_count() as usize);
 
-	if peers.peer_count() > peers.peer_outbound_count() && peers.healthy_peers_mix() {
+	if peers.healthy_peers_mix() {
 		return;
 	}
 
@@ -315,7 +315,7 @@ fn listen_for_addrs(
 	let addrs: Vec<SocketAddr> = rx.try_iter().collect();
 
 	// If we have a healthy number of outbound peers then we are done here.
-	if peers.healthy_peers_mix() {
+	if peers.peer_count() > peers.peer_outbound_count() && peers.healthy_peers_mix() {
 		return;
 	}
 
