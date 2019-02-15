@@ -86,15 +86,18 @@ impl Handler for PeerHandler {
 		};
 		let addr = match path_elems.next() {
 			None => return response(StatusCode::BAD_REQUEST, "invalid url"),
-			Some(a) => match a.parse() {
-				Err(e) => {
+			Some(a) => {
+				if let Ok(ip_addr) = a.parse() {
+					PeerAddr::from_ip(ip_addr)
+				} else if let Ok(addr) = a.parse() {
+					PeerAddr(addr)
+				} else {
 					return response(
 						StatusCode::BAD_REQUEST,
-						format!("invalid peer address: {}", e),
+						format!("invalid peer address: {}", req.uri().path()),
 					);
 				}
-				Ok(addr) => PeerAddr(addr),
-			},
+			}
 		};
 
 		match command {
