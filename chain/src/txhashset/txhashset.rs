@@ -1507,10 +1507,7 @@ fn check_and_remove_files(txhashset_path: &PathBuf, header: &BlockHeader) -> Res
 					),
 					Ok(_) => {
 						removed += 1;
-						trace!(
-							"check_and_remove_files: file '{:?}' removed",
-							diff_path
-						);
+						trace!("check_and_remove_files: file '{:?}' removed", diff_path);
 					}
 				}
 			}
