@@ -142,7 +142,7 @@ impl From<Request<Body>> for QueryParams {
 #[macro_export]
 macro_rules! right_path_element(
 	($req: expr) =>(
-		match $req.uri().path().trim_right_matches('/').rsplit('/').next() {
+		match $req.uri().path().trim_end_matches('/').rsplit('/').next() {
 			None => return response(StatusCode::BAD_REQUEST, "invalid url"),
 			Some(el) => el,
 		};
