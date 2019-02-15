@@ -11,7 +11,6 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-
 use super::utils::{get_output, w};
 use crate::chain;
 use crate::core::core::hash::Hash;
@@ -68,10 +67,7 @@ impl HeaderHandler {
 
 impl Handler for HeaderHandler {
 	fn get(&self, req: Request<Body>) -> ResponseFuture {
-		let el = match req.uri().path().trim_right_matches('/').rsplit('/').next() {
-			None => return response(StatusCode::BAD_REQUEST, "invalid url"),
-			Some(el) => el,
-		};
+		let el = right_path_element!(req);
 		result_to_response(self.get_header(el.to_string()))
 	}
 }
@@ -130,11 +126,7 @@ fn check_block_param(input: &String) -> Result<(), Error> {
 
 impl Handler for BlockHandler {
 	fn get(&self, req: Request<Body>) -> ResponseFuture {
-		let el = match req.uri().path().trim_right_matches('/').rsplit('/').next() {
-			None => return response(StatusCode::BAD_REQUEST, "invalid url"),
-			Some(el) => el,
-		};
-
+		let el = right_path_element!(req);
 		let h = match self.parse_input(el.to_string()) {
 			Err(e) => {
 				return response(

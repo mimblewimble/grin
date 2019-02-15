@@ -5,7 +5,9 @@ use futures::{Future, Stream};
 use hyper::{Body, Request, Response, StatusCode};
 use serde::{Deserialize, Serialize};
 use serde_json;
+use std::collections::HashMap;
 use std::fmt::Debug;
+use url::form_urlencoded;
 
 /// Parse request body
 pub fn parse_body<T>(req: Request<Body>) -> Box<dyn Future<Item = T, Error = Error> + Send>
@@ -81,3 +83,100 @@ pub fn just_response<T: Into<Body> + Debug>(status: StatusCode, text: T) -> Resp
 pub fn response<T: Into<Body> + Debug>(status: StatusCode, text: T) -> ResponseFuture {
 	Box::new(ok(just_response(status, text)))
 }
+
+pub struct QueryParams {
+	params: HashMap<String, Vec<String>>,
+}
+
+impl QueryParams {
+	pub fn process_multival_param<F>(&self, name: &str, mut f: F)
+	where
+		F: FnMut(&str),
+	{
+		if let Some(ids) = self.params.get(name) {
+			for id in ids {
+				for id in id.split(',') {
+					f(id);
+				}
+			}
+		}
+	}
+
+	pub fn get(&self, name: &str) -> Option<&String> {
+		match self.params.get(name) {
+			None => None,
+			Some(v) => v.first(),
+		}
+	}
+}
+
+impl From<&str> for QueryParams {
+	fn from(query_string: &str) -> Self {
+		let params = form_urlencoded::parse(query_string.as_bytes())
+			.into_owned()
+			.fold(HashMap::new(), |mut hm, (k, v)| {
+				hm.entry(k).or_insert(vec![]).push(v);
+				hm
+			});
+		QueryParams { params }
+	}
+}
+
+impl From<Option<&str>> for QueryParams {
+	fn from(query_string: Option<&str>) -> Self {
+		match query_string {
+			Some(query_string) => Self::from(query_string),
+			None => QueryParams {
+				params: HashMap::new(),
+			},
+		}
+	}
+}
+
+impl From<Request<Body>> for QueryParams {
+	fn from(req: Request<Body>) -> Self {
+		Self::from(req.uri().query())
+	}
+}
+
+#[macro_export]
+macro_rules! right_path_element(
+	($req: expr) =>(
+		match $req.uri().path().trim_right_matches('/').rsplit('/').next() {
+			None => return response(StatusCode::BAD_REQUEST, "invalid url"),
+			Some(el) => el,
+		};
+	));
+
+#[macro_export]
+macro_rules! must_get_query(
+	($req: expr) =>(
+		match $req.uri().query() {
+			Some(q) => q,
+			None => return Err(ErrorKind::RequestError("no query string".to_owned()))?,
+		}
+	));
+
+#[macro_export]
+macro_rules! parse_param(
+	($param: expr, $name: expr, $default: expr) =>(
+	match $param.get($name) {
+		None => $default,
+		Some(val) =>  match val.parse() {
+			Ok(val) => val,
+			Err(_) => return Err(ErrorKind::RequestError(format!("invalid value of parameter {}", $name)))?,
+		}
+	}
+	));
+
+#[macro_export]
+macro_rules! parse_param_no_err(
+	($param: expr, $name: expr, $default: expr) =>(
+	match $param.get($name) {
+		None => $default,
+		Some(val) =>  match val.parse() {
+			Ok(val) => val,
+			Err(_) => $default,
+		}
+	}
+	));

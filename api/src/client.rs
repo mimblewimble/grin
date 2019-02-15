@@ -52,6 +52,15 @@ where
 	}
 }
 
+/// Helper function to easily issue a HTTP GET request
+/// on a given URL that returns nothing. Handles request
+/// building and response code checking.
+pub fn get_no_ret(url: &str, api_secret: Option<String>) -> Result<(), Error> {
+	let req = build_request(url, "GET", api_secret, None)?;
+	send_request(req)?;
+	Ok(())
+}
+
 /// Helper function to easily issue a HTTP POST request with the provided JSON
 /// object as body on a given URL that returns a JSON object. Handles request
 /// building, JSON serialization and deserialization, and response code
