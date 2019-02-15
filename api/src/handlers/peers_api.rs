@@ -57,17 +57,25 @@ pub struct PeerHandler {
 impl Handler for PeerHandler {
 	fn get(&self, req: Request<Body>) -> ResponseFuture {
 		let command = right_path_element!(req);
-		if let Ok(addr) = command.parse() {
-			let peer_addr = PeerAddr(addr);
-			match w(&self.peers).get_peer(peer_addr) {
-				Ok(peer) => json_response(&peer),
-				Err(_) => response(StatusCode::NOT_FOUND, "peer not found"),
-			}
+
+		// We support both "ip" and "ip:port" here for peer_addr.
+		// "ip:port" is only really useful for local usernet testing on loopback address.
+		// Normally we map peers to ip and only allow a single peer per ip address.
+		let peer_addr;
+		if let Ok(ip_addr) = command.parse() {
+			peer_addr = PeerAddr::from_ip(ip_addr);
+		} else if let Ok(addr) = command.parse() {
+			peer_addr = PeerAddr(addr);
 		} else {
-			response(
+			return response(
 				StatusCode::BAD_REQUEST,
 				format!("peer address unrecognized: {}", req.uri().path()),
-			)
+			);
+		}
+
+		match w(&self.peers).get_peer(peer_addr) {
+			Ok(peer) => json_response(&peer),
+			Err(_) => response(StatusCode::NOT_FOUND, "peer not found"),
 		}
 	}
 	fn post(&self, req: Request<Body>) -> ResponseFuture {

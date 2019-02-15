@@ -25,6 +25,7 @@ use chrono::prelude::*;
 
 use crate::core::core;
 use crate::core::core::hash::Hash;
+use crate::core::global;
 use crate::core::pow::Difficulty;
 use crate::core::ser::{self, Readable, Reader, Writeable, Writer};
 use grin_store;
@@ -179,6 +180,13 @@ impl std::fmt::Display for PeerAddr {
 }
 
 impl PeerAddr {
+	/// Convenient way of constructing a new peer_addr from an ip_addr
+	/// defaults to port 3414 on mainnet and 13414 on floonet.
+	pub fn from_ip(addr: IpAddr) -> PeerAddr {
+		let port = if global::is_floonet() { 13414 } else { 3414 };
+		PeerAddr(SocketAddr::new(addr, port))
+	}
+
 	/// If the ip is loopback then our key is "ip:port" (mainly for local usernet testing).
 	/// Otherwise we only care about the ip (we disallow multiple peers on the same ip address).
 	pub fn as_key(&self) -> String {
