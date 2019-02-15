@@ -22,7 +22,7 @@ use rand::{thread_rng, Rng};
 use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
 
 use crate::consensus::{graph_weight, MIN_DIFFICULTY, SECOND_POW_EDGE_BITS};
-use crate::core::hash::Hashed;
+use crate::core::hash::{DefaultHashable, Hashed};
 use crate::global;
 use crate::ser::{self, FixedLength, Readable, Reader, Writeable, Writer};
 
@@ -323,6 +323,8 @@ pub struct Proof {
 	/// The nonces
 	pub nonces: Vec<u64>,
 }
+
+impl DefaultHashable for Proof {}
 
 impl fmt::Debug for Proof {
 	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {

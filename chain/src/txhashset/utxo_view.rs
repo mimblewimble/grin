@@ -14,7 +14,7 @@
 
 //! Lightweight readonly view into output MMR for convenience.
 
-use crate::core::core::hash::Hash;
+use crate::core::core::hash::{Hash, Hashed};
 use crate::core::core::pmmr::{self, ReadonlyPMMR};
 use crate::core::core::{Block, BlockHeader, Input, Output, Transaction};
 use crate::core::global;

@@ -73,10 +73,11 @@ impl Tip {
 			total_difficulty: header.total_difficulty(),
 		}
 	}
+}
 
-	/// *Really* easy to accidentally call hash() on a tip (thinking its a header).
-	/// So lets make hash() do the right thing here.
-	pub fn hash(&self) -> Hash {
+impl Hashed for Tip {
+	/// The hash of the underlying block.
+	fn hash(&self) -> Hash {
 		self.last_block_h
 	}
 }
