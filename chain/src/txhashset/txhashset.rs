@@ -1417,22 +1417,19 @@ impl<'a> Extension<'a> {
 
 /// Packages the txhashset data files into a zip and returns a Read to the
 /// resulting file
-pub fn zip_read(root_dir: String, header: &BlockHeader, rand: Option<u32>) -> Result<File, Error> {
-	let ts = if let None = rand {
-		let now = SystemTime::now();
-		now.duration_since(UNIX_EPOCH).unwrap().subsec_micros()
-	} else {
-		rand.unwrap()
-	};
-	let txhashset_zip = format!("{}_{}.zip", TXHASHSET_ZIP, ts);
+pub fn zip_read(root_dir: String, header: &BlockHeader) -> Result<File, Error> {
+	let txhashset_zip = format!("{}_{}.zip", TXHASHSET_ZIP, header.hash().to_string());
 
 	let txhashset_path = Path::new(&root_dir).join(TXHASHSET_SUBDIR);
 	let zip_path = Path::new(&root_dir).join(txhashset_zip);
 	// create the zip archive
 	{
 		// Temp txhashset directory
-		let temp_txhashset_path =
-			Path::new(&root_dir).join(format!("{}_zip_{}", TXHASHSET_SUBDIR, ts));
+		let temp_txhashset_path = Path::new(&root_dir).join(format!(
+			"{}_zip_{}",
+			TXHASHSET_SUBDIR,
+			header.hash().to_string()
+		));
 		// Remove temp dir if it exist
 		if temp_txhashset_path.exists() {
 			fs::remove_dir_all(&temp_txhashset_path)?;
@@ -1444,10 +1441,21 @@ pub fn zip_read(root_dir: String, header: &BlockHeader, rand: Option<u32>) -> Re
 		// Compress zip
 		zip::compress(&temp_txhashset_path, &File::create(zip_path.clone())?)
 			.map_err(|ze| ErrorKind::Other(ze.to_string()))?;
-	}
+
+		temp_txhashset_path
+	};
 
 	// open it again to read it back
-	let zip_file = File::open(zip_path)?;
+	let zip_file = File::open(zip_path.clone())?;
+
+	// clean-up temp txhashset directory.
+	if let Err(e) = fs::remove_dir_all(&path_to_be_cleanup) {
+		warn!(
+			"txhashset zip file: {:?} fail to remove, err: {}",
+			zip_path.to_str(),
+			e
+		);
+	}
 	Ok(zip_file)
 }
 
