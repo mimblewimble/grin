@@ -7,10 +7,9 @@ extremely good scalability, privacy and fungibility by relying on strong
 cryptographic primitives. It addresses gaps existing in almost all current
 blockchain implementations.
 
-MimbleWimlbe ㅇㅡㄴ 블록체인 포맷이면서 프로토콜 입니다.
-MimbleWimble 은 암호학적 기반에 의해서 극대화된 좋은 확장성, 프라이버시, 그리고 대체가능성을 제공합니다.
+MimbleWimlbe은 블록체인 포맷이면서 프로토콜 입니다.
+MimbleWimble은 암호학적 기반에 의해서 극대화된 좋은 확장성, 프라이버시, 그리고 대체가능성을 제공합니다.
 이러한 특성은 지금 현존하는 모든 블록체인 구현체에 존재하는 문제점들을 처리합니다.
-
 
 Grin is an open source software project that implements a MimbleWimble
 blockchain and fills the gaps required for a full blockchain and
@@ -28,7 +27,7 @@ Grin 프로젝트의 주요 목적과 특성들은 아래 설명을 참고하십
 * Scales mostly with the number of users and minimally with the number of
   transactions (<100 byte `kernel`), resulting in a large space saving compared
   to other blockchains.
-* 주로 유저의 규모와 최소한의 트랜잭션 수의 규모로 (100byte 미만의 kernel(transaction)) 다른 블록체인들과 비교하면 많은 공간을 절약할 수 있습니다.
+* 주로 유저의 규모와 최소한의 트랜잭션 수의 규모로 (100byte 미만의 kernel(transaction)) 다른 블록체인들과 비교하면 많은 저장공간을 절약할 수 있습니다.
 * Strong and proven cryptography. MimbleWimble only relies on Elliptic Curve
   Cryptography which has been tried and tested for decades.
 * Mimble Wimble 은 수십년 동안 테스트하고 사용되었던 강력한 암호기술인 ECC만 사용합니다.
@@ -49,7 +48,7 @@ With that in mind, we attempt to explain the technical buildup of MimbleWimble a
 We hope this document is understandable to most technically-minded readers. Our objective is
 to encourage you to get interested in Grin and contribute in any way possible.
 저희는 이 문서가 대부분의 기술적인 성격을 가진 독자들을 이해시킬 수 있길 바랍니다.
-우리의 목적은 독자가 Grin에 대해 흥기를 느끼게 하고 어떤 방식으로든 Grin에 기여할 수 있게 이끄는 것입니다. 
+우리의 목적은 독자가 Grin에 대해 흥미를 느끼게 하고 어떤 방식으로든 Grin에 기여할 수 있게 이끄는 것입니다.
 
 To achieve this objective, we will introduce the main concepts required for a good understanding of Grin as a MimbleWimble implementation.
 이러한 목적을 이루기 위해, 우리는 MimbleWimble 의 구현체인 Grin을 이해하는데 필요한 주요 컨셉들에 대해서 소개할것입니다.
@@ -64,10 +63,10 @@ We start with a brief primer on Elliptic Curve Cryptography, reviewing just the
 properties necessary to understand how MimbleWimble works and without
 delving too much into the intricacies of ECC.
 
-- ECC의 너무 복잡한 사항을 캐지 않고 어떻게 mimble wimble 이 어떻게 작동하는지에 대해 이해하는데 필요한 요소들만 리뷰할 것입니다.
+ECC의 너무 복잡한 사항을 캐지 않고 어떻게 mimble wimble 이 어떻게 작동하는지에 대해 이해하는데 필요한 요소들만 리뷰할 것입니다.
 
- For readers who would want to dive deeper into those assumptions, there are other opportunities to [learn more](http://andrea.corbellini.name/2015/05/17/elliptic-curve-cryptography-a-gentle-introduction/).
-- 이런 가정들을 좀 더 알고싶은 독자들은 [이 링크]() 를 참고하세요.
+For readers who would want to dive deeper into those assumptions, there are other opportunities to [learn more](http://andrea.corbellini.name/2015/05/17/elliptic-curve-cryptography-a-gentle-introduction/).
+이런 가정들을 좀 더 알고싶은 독자들은 [이 링크](http://andrea.corbellini.name/2015/05/17/elliptic-curve-cryptography-a-gentle-introduction/)를 참고하세요.
 
 An Elliptic Curve for the purpose of cryptography is simply a large set of points that
 we will call _C_. These points can be added, subtracted, or multiplied by integers (also called scalars).
@@ -93,14 +92,13 @@ Even if one knows the value of the public key `k*H`, deducing _k_ is close to im
 extremely difficult).
 누군가 공개키인 `k*H`의 값을 알더라도 _k_ 를 추론해 내는것은 불가능에 가깝습니다. ( 달리 얘기하자면, 곱셉은 쉬우나 곡선 좌표에 의한 "나눗셈"은 정말 어렵습니다.  )
 
-
 The previous formula `(k+j)*H = k*H + j*H`, with _k_ and _j_ both private
 keys, demonstrates that a public key obtained from the addition of two private
 keys (`(k+j)*H`) is identical to the addition of the public keys for each of those
 two private keys (`k*H + j*H`).
-_k_ 와 _j_ 둘다 비밀키인 이전 공식 `(k+j)*H = k*H + j*H` 는 두개의 비밀키를 더해서 얻은  한 개의 공개키 (`(k+j)*H`) 와 각각 두개의 비밀키에 공개키를 더한것과 같습니다.
-In the Bitcoin blockchain, Hierarchical Deterministic wallets heavily rely on this principle. 
-Bitcoin blockchain에서도 HD 지갑은 이 원칙에 의존하고 있습니다. 
+_k_ 와 _j_ 둘다 비밀키인 이전 공식 `(k+j)*H = k*H + j*H` 는 두개의 비밀키를 더해서 얻은 한 개의 공개키 (`(k+j)*H`) 와 각각 두개의 비밀키에 공개키를 더한것과 같습니다.
+In the Bitcoin blockchain, Hierarchical Deterministic wallets heavily rely on this principle.
+Bitcoin blockchain에서도 HD 지갑은 이 원칙에 의존하고 있습니다.
 MimbleWimble and the Grin implementation do as well.
 MimbleWimble 과 Grin의 구현또한 마찬가지 입니다.
 
@@ -160,8 +158,8 @@ An input or output value in a transaction can then be expressed as:
     r*G + v*H
 Where:
 여기서
-* _r_ is a private key used as a blinding factor, _G_ is an elliptic curve and
-  their product `r*G` is the public key for _r_ on _G_.
+
+* _r_ is a private key used as a blinding factor, _G_ is an elliptic curve and their product `r*G` is the public key for _r_ on _G_.
 * _r_ 은 비밀키이고 blinding factor 로 사용됩니다. _G_ 는 타원 곡선 이고 `r*G`는 _G_ 안에 있는 _r_ 의 공개키 입니다.
 * _v_ is the value of an input or output and _H_ is another elliptic curve.
 * _v_ 는 출력값이거나 입력값이고 _H_ 는 다른 타원곡선입니다.
@@ -170,7 +168,7 @@ Curve Cryptography. `r*G + v*H` is called a _Pedersen Commitment_.
 타원곡선의 근본적인 특성을 이용했기 때문에 _v_ 와 _r_ 은 추측될 수 없습니다.  `r*G + v*H`를 _Pedersen Commitment_ 라고 부릅니다.
 As a an example, let's assume we want to build a transaction with two inputs and one
 output. We have (ignoring fees):
-예를 들어 , ( 전송료는 무시하고) 두개의 입력값과 한개의 출력값으로 트랜잭션을 만들기 원한다고 가정해봅시다. 
+예를 들어 , ( 전송료는 무시하고) 두개의 입력값과 한개의 출력값으로 트랜잭션을 만들기 원한다고 가정해봅시다.
 * vi1 and vi2 as input values.
 * vi1 과 v2 는 출력값
 * vo3 as output value.
@@ -200,7 +198,9 @@ to Bitcoin.
 마지막으로 이 아이디어는 Greg Maxwell 의 [Confidential Transactions](https://elementsproject.org/features/confidential-transactions/investigation) 에서 유래했습니다. Confidential transaction은 Adam back의 비트코인에 동형암호를 적용하자는 제안에서 비롯되었습니다.
 
 #### Ownership
+
 #### 소유권
+
 In the previous section we introduced a private key as a blinding factor to obscure the
 transaction's values.
 이전의 섹션에서 우리는  트랜잭션의 값을 보기 어렵게 하는 Blinding factor로서 비밀키를 소개했습니다.
@@ -212,7 +212,7 @@ extremely large number).
 Alice는 당신에게 3 코인을 보내면서 그 양을 가렸고, 당신은 28을 당신의 blinding factor로 선택했습니다. ( 실제로 blinding factor는 비밀키로 정말 무진장 큰 숫자 입니다.)
 
 Somewhere on the blockchain, the following output appears and should only be spendable by you:
-블록체인 어딘가에 다음과 같은 출력값이 나타나 있고 당신에 의해서만 소비될 수 있습니다. 
+블록체인 어딘가에 다음과 같은 출력값이 나타나 있고 당신에 의해서만 소비될 수 있습니다.
     X = 28*G + 3*H
 
 _X_, the result of the addition, is visible by everyone. The value 3 is only known to you and Alice, and 28 is only known to you.
@@ -228,7 +228,7 @@ You need to build a simple transaction such that:
 
     Xi => Y
 
-Where _Xi_ is an input that spends your _X_ output and Y is Carol's output. 
+Where _Xi_ is an input that spends your _X_ output and Y is Carol's output.
 여기서 _Xi_는 _X_ 출력을 사용하는 입력이고 Y는 Carol의 출력입니다.
 There is no way to build such a transaction and balance it without knowing your private key of 28.
 당신의 비밀키인 28을 모르고서는 트랜잭션과 잔액을 만들 수 있는 방법이 없습니다.
@@ -236,7 +236,7 @@ There is no way to build such a transaction and balance it without knowing your 
 Indeed, if Carol is to balance this transaction, she needs to know both the value sent and your private key
 실제로 캐롤이 이 트랜잭션의 잔액을 위해선 그녀는 받는 값과 당신의 비밀키를 알아야 합니다.
 so that:
-그러므로 
+그러므로
     Y - Xi = (28*G + 3*H) - (28*G + 3*H) = 0*G + 0*H
 
 By checking that everything has been zeroed out, we can again make sure that
@@ -253,7 +253,7 @@ She picks 113 say, and what ends up on the blockchain is:
     Y - Xi = (113*G + 3*H) - (28*G + 3*H) = 85*G + 0*H
 
 Now the transaction no longer sums to zero and we have an _excess value_ on _G_
-(85), which is the result of the summation of all blinding factors. 
+(85), which is the result of the summation of all blinding factors.
 모든 blinding factor합계 결과로 타원곡선 _G_ 위에서 트랜잭션은 _초과값_ 을 가지게 되고 트랜잭션의 합은 더이상 0 이 아닙니다.
 
 But because `85*G` is a valid public key on the elliptic curve _G_, with private key 85,
@@ -261,12 +261,13 @@ for any x and y, only if `y = 0` is `x*G + y*H` a valid public key on _G_.
 그러나 `85*G` 은 비밀키 85 와 함께 타원곡선 _G_ 에서 유효한 공개키이기 때문에 모든 x와 y는 `y = 0`가 `x*G + y*H`일때 곡선 _G_ 에서 유효한 공개키입니다.
 
 So all the protocol needs to verify is that (`Y - Xi`) is a valid public key on _G_ and that
-the transacting parties collectively know the private key (85 in our transaction with Carol). 
-그러므로 모든 프로토콜은 (`Y - Xi`) 가 _G_위에서 유효한 공개키인지 ,거래당사자들이 비밀키를 알고있는지 ( 캐롤과의 트랜잭션에서는 85) 를 검증해야 할 필요가 있습니다. 
+the transacting parties collectively know the private key (85 in our transaction with Carol).
+그러므로 모든 프로토콜은 (`Y - Xi`) 가 _G_위에서 유효한 공개키인지 ,거래당사자들이 비밀키를 알고있는지 ( 캐롤과의 트랜잭션에서는 85) 를 검증해야 할 필요가 있습니다.
 
 The simplest way to do so is to require a signature built with the excess value (85),
 which then validates that:
 가장 간단하게 검증하는 방법은 Signature가 초과값과 함께 만들어졌다는 것을 요구한 다음 아래와 같은것을 인증하는 겁니다.
+
 * The transacting parties collectively know the private key, and
 * 거래하는 당사자들은 모두 비밀키를 알고 있고
 * The sum of the transaction outputs, minus the inputs, sum to a zero value
@@ -279,89 +280,136 @@ fees), is called a _transaction kernel_ and is checked by all validators.
 모든 트랜잭션에 포함된 이 Signature 는 덧붙여진 어떤 데이터와 함께(채굴 수수료와 같은 데이터) _transaction kernel_ 이라고 부르고 모든 Validator 에 의해 체크됩니다.
 
 #### Some Finer Points
-#### 몇몇 좋은 점들
+#### 몇몇 더 좋은 점들
+
 This section elaborates on the building of transactions by discussing how change is
 introduced and the requirement for range proofs so all values are proven to be
-non-negative. 
+non-negative.
 이 섹션은 트랜잭션을 만들때 잔돈이 어떻게 보여지고 범위 증명(range proofs)의 요구사항에 대해서 모든 값이 음수가 아닌지에 대해서 좀 더 자세하게 설명하려고 합니다.  
 Neither of these are absolutely required to understand MimbleWimble and Grin, so if you're in a hurry, feel free to jump straight to [Putting It All Together](#putting-it-all-together).
-이러한 개념들 역시 MimbleWimble 과 Grin 에 대한 이해가 당연히 필요합니다. 
-만약 당신이 조급하다면 
+이러한 개념들 역시 MimbleWimble 과 Grin 에 대한 이해가 당연히 필요합니다.
+만약 당신이 조급하다면 [이 링크를 참고하세요.](#putting-it-all-together).
+
 ##### Change
 
+##### 잔돈에 대해서
+
 Let's say you only want to send 2 coins to Carol from the 3 you received from
-Alice. To do this you would send the remaining 1 coin back to yourself as change.
+Alice.
+캐롤에게 2개의 코인을 보내고 3개를 앨리스에게서 받는다고 해봅시다.
+To do this you would send the remaining 1 coin back to yourself as change.
+이렇게 하려면 당신은 남은 1개의 코인을 잔돈으로 당신에게 돌려줘야 합니다.
 You generate another private key (say 12) as a blinding factor to
 protect your change output. Carol uses her own private key as before.
+이때, 다른 비밀키를 blinding factor 로 만들어서 (12라고 합시다.) 출력값을 보호해야 합니다. 캐롤은 이전에 썻던 그녀의 비밀키를 씁니다.
 
     Change output:     12*G + 1*H
     Carol's output:    113*G + 2*H
 
 What ends up on the blockchain is something very similar to before.
+블록체인 안에서의 결과는 예전과 매우 흡사합니다.
 And the signature is again built with the excess value, 97 in this example.
-
+그리고 Signature 은 초과되는 값과 함께 다시 만들어질겁니다. 이 예시에서는 97이라고 합시다.
     (12*G + 1*H) + (113*G + 2*H) - (28*G + 3*H) = 97*G + 0*H
 
 ##### Range Proofs
 
-In all the above calculations, we rely on the transaction values to always be positive. The
-introduction of negative amounts would be extremely problematic as one could
+In all the above calculations, we rely on the transaction values to always be positive.
+위의 모든 게산에서 트랜잭션의 값들은 항상 양의(+)값입니다.
+The introduction of negative amounts would be extremely problematic as one could
 create new funds in every transaction.
+음의 값은 모든 트랜잭션마다 새로운 돈을 만들수 있다는 것이므로 매우 문제점이 될겁니다.
 
 For example, one could create a transaction with an input of 2 and outputs of 5
 and -3 and still obtain a well-balanced transaction, following the definition in
-the previous sections. This can't be easily detected because even if _x_ is
+the previous sections.
+예를 들어 입력값이 3이고 출력값이 5과 -3인 트랜잭션을 만들수 있고 이전 섹션의 정의에 따라 잘 구성된 트랜잭션입니다.
+This can't be easily detected because even if _x_ is
 negative, the corresponding point `x.H` on the curve looks like any other.
+적잘한 좌표 `x.H`가 다른 좌표처럼 곡선위에 있어서 _x_가 음수이더라도 찾기가 쉽지 않습니다.
 
 To solve this problem, MimbleWimble leverages another cryptographic concept (also
-coming from Confidential Transactions) called
-range proofs: a proof that a number falls within a given range, without revealing
-the number. We won't elaborate on the range proof, but you just need to know
+coming from Confidential Transactions) called range proofs:
+이 문제점을 해결하기 위해서, MimbleWimble 은 Range proofs 라는 다른 암호학 개념을 사용합니다. ( 이 또한 Confidential Transaction 에서 유래했습니다.)
+a proof that a number falls within a given range, without revealing
+the number.
+Range proof 란 숫자를 밝히지 않고 어떤 숫자가 주어진 범위안에 있는지 증명하는 것입니다.
+We won't elaborate on the range proof, but you just need to know
 that for any `r.G + v.H` we can build a proof that will show that _v_ is greater than
 zero and does not overflow.
-
-It's also important to note that in order to create a valid range proof from the example above, both of the values 113 and 28 used in creating and signing for the excess value must be known. The reason for this, as well as a more detailed description of range proofs are further detailed in the [range proof paper](https://eprint.iacr.org/2017/1066.pdf).
+Range proof 에 대해서 자세히 설명하지 않을것이지만은, 그래도 어떤 `r.G + v.H` 의 결과가 _v_ 가 0보다 크고 오버플로우가 일어나지 않는다는 것을 증명할 수 있습니다.
+It's also important to note that in order to create a valid range proof from the example above, both of the values 113 and 28 used in creating and signing for the excess value must be known. 또한 위의 예에서 유효한 Range proof 를 만들기 위해서 트랜잭션을 만들고 Signing 할때 사용된 초과값인 113과 28 두 값이 알려지는것은 중요합니다.  
+The reason for this, as well as a more detailed description of range proofs are further detailed in the [range proof paper](https://eprint.iacr.org/2017/1066.pdf).
+그 이유는, [range proof paper](https://eprint.iacr.org/2017/1066.pdf)에 Range proof에 대해 좀더 자세한 설명이 있습니다.
 
 #### Putting It All Together
 
+#### 모든것을 함깨 놓고 이해하기
+
 A MimbleWimble transaction includes the following:
+MimbleWimlbe 트랜잭션은 다음을 포함합니다.
 
 * A set of inputs, that reference and spend a set of previous outputs.
+* 이전의 출력값들이 참조하고 사용한 입력값의 셋트들
 * A set of new outputs that include:
+* 새로운 출력값들은 다음을 포함합니다.
   * A value and a blinding factor (which is just a new private key) multiplied on
   a curve and summed to be `r.G + v.H`.
+  * 곡선위에서 `r.G + v.H` 로 합해 지는 값 과 blinding factor (그냥 새로운 비밀 키).
   * A range proof that shows that v is non-negative.
+  * v 가 음수가 아님을 보여주는 Range proof.
 * An explicit transaction fee, in clear.
+* 분명히 명시된 트랜잭션 수수료
 * A signature, computed by taking the excess blinding value (the sum of all
   outputs plus the fee, minus the inputs) and using it as a private key.
+* 수수료가 더해진 모든 출력밧에서 입력값을 뺸 초과 blinding 값이 계산되고 그것이 비밀키로 사용된 Signature.
 
 ### Blocks and Chain State
 
+### 블록들과 체인 state에 대해서
+
 We've explained above how MimbleWimble transactions can provide
 strong anonymity guarantees while maintaining the properties required for a valid
-blockchain, i.e., a transaction does not create money and proof of ownership
+blockchain,
+위에서 MimbleWimble 트랜잭션이 유요한 블록체인에 필요한 속성을 유지하면서 어떻게 강한 익명성을 보장하는지 설명했습니다.
+i.e., a transaction does not create money and proof of ownership
 is established through private keys.
+예를들면 트랜잭션이 더이상 코인을 만들지 않으면서 비밀키를 통해 소유권을 증명하지 않는 방법들 같은것 말이죠.
 
 The MimbleWimble block format builds on this by introducing one additional
-concept: _cut-through_. With this addition, a MimbleWimble chain gains:
+concept: _cut-through_.
+추가적으로 _cut-through_ 라는 개념이 MimbleWimble 블록 포멧에 사용 됩니다.
+ With this addition, a MimbleWimble chain gains:
+이로 인해 MimbleWimble 체인은 아래와 같은 장점을 얻습니다.
 
 * Extremely good scalability, as the great majority of transaction data can be
   eliminated over time, without compromising security.
+* 대부분의 트랜잭션 데이터는 보안을 희생하지 않고서도 시간이 지나면 없어 질 수 있으므로 엄청나게 좋은 확장성을 얻게 됩니다.
 * Further anonymity by mixing and removing transaction data.
+* 트랜잭션 데이터를 섞고 없애서 익명성을 추가로 획득합니다.
 * And the ability for new nodes to sync up with the rest of the network very
   efficiently.
+* 새로운 노드가 네트웍에서 동기화를 이룰때 매우 효과적입니다.
 
 #### Transaction Aggregation
 
+#### 트랜잭션 합치기
+
 Recall that a transaction consists of the following -
+트랜잭션언 다음와 같은것들로 이뤄져 있다는걸 상기해봅시다.
 
 * a set of inputs that reference and spent a set of previous outputs
+* 이전의 출력값들이 참조하고 사용한 입력값의 셋트들
 * a set of new outputs (Pedersen commitments)
+* 새로운 출력값의 세트들 ( Pederson commitment)
 * a transaction kernel, consisting of
   * kernel excess (Pedersen commitment to zero)
   * transaction signature (using kernel excess as public key)
+* kernal execess와  (kernel 초과값이 공개키로 사용된) 트랜잭션 Signature로 이뤄진 트랜잭션 Kernel
+  
+A tx is signed and the signature included in a _transaction kernel_.
 
-A tx is signed and the signature included in a _transaction kernel_. The signature is generated using the _kernel excess_ as a public key proving that the transaction sums to 0.
+The signature is generated using the _kernel excess_ as a public key proving that the transaction sums to 0.
 
     (42*G + 1*H) + (99*G + 2*H) - (113*G + 3*H) = 28*G + 0*H
 
@@ -471,9 +519,12 @@ guarantees:
 And yet, it all still validates!
 
 #### Cut-through All The Way
+#### 내내 Cut-through 하기
 
 Going back to the previous example block, outputs x1 and x2, spent by I1 and
-I2, must have appeared previously in the blockchain. So after the addition of
+I2, must have appeared previously in the blockchain. 
+
+So after the addition of
 this block, those outputs as well as I1 and I2 can also be removed from the
 overall chain, as they do not contribute to the overall sum.
 
@@ -500,9 +551,14 @@ blinding factors in the transaction kernels to differ from the summation of blin
 factors in the outputs.
 
 ### Conclusion
-
+### 결론 내리기
 In this document we covered the basic principles that underlie a MimbleWimble
-blockchain. By using the addition properties of Elliptic Curve Cryptography, we're
+blockchain.
+이 문서에서는 MimbleWimble 블록체인 안의 기본적인 원리에 대해서 다루었습니다.
+By using the addition properties of Elliptic Curve Cryptography, we're
 able to build transactions that are completely opaque but can still be properly
-validated. And by generalizing those properties to blocks, we can eliminate a large
+validated.
+타원 곡선 암호의 다른 성질을 사용해서 알아보기 어려우나 적절하게 입증될 수 있는 트랜잭션을 만들수 있습니다.
+And by generalizing those properties to blocks, we can eliminate a large
 amount of blockchain data, allowing for great scaling and fast sync of new peers.
+블록들에 이러한 성질들을 일반화 시키면 큰 용량의 블록체인 데이터를 없앨 수 있고 새로운 피어들에게 높은 확장성과 빠른 동기화를 가능하게 할 수 있습니다.
