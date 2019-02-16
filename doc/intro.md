@@ -1,16 +1,15 @@
 # Introduction to MimbleWimble and Grin
 
-*Read this in other languages: [English](intro.md), [简体中文](intro.zh-cn.md), [Español](intro_ES.md), [Русский](intro.ru.md), [日本語　](intro.jp.md).*
+*Read this in other languages: [English](intro.md), [简体中文](intro_ZH-CN.md), [Español](intro_ES.md), [Nederlands](intro_NL.md), [Русский](intro_RU.md), [日本語](intro_JP.md), [Deutsch](intro_DE.md), [Portuguese](intro_PT-BR.md).*
 
 MimbleWimble is a blockchain format and protocol that provides
 extremely good scalability, privacy and fungibility by relying on strong
 cryptographic primitives. It addresses gaps existing in almost all current
 blockchain implementations.
 
-MimbleWimlbe ㅇㅡㄴ 블록체인 포맷이면서 프로토콜 입니다.
+MimbleWimlbe은 블록체인 포맷이면서 프로토콜 입니다.
 MimbleWimble 은 암호학적 기반에 의해서 극대화된 좋은 확장성, 프라이버시, 그리고 대체가능성을 제공합니다.
 이러한 특성은 지금 현존하는 모든 블록체인 구현체에 존재하는 문제점들을 처리합니다.
-
 
 Grin is an open source software project that implements a MimbleWimble
 blockchain and fills the gaps required for a full blockchain and
@@ -39,8 +38,8 @@ Grin 프로젝트의 주요 목적과 특성들은 아래 설명을 참고하십
   
 ## Tongue Tying for Everyone
 ## 모두의 혀를 묶자.
-This document is targeted at readers with a good
-understanding of blockchains and basic cryptography.
+
+This document is targeted at readers with a good understanding of blockchains and basic cryptography.
 이 문서는 블록체인에 대해 어느정도 이해가 있고 암호학에 대한 기본적인 이해가 있는 독자들을 대상으로 합니다.
 
 With that in mind, we attempt to explain the technical buildup of MimbleWimble and how it's applied in Grin.
@@ -58,6 +57,7 @@ We will start with a brief description of some relevant properties of Elliptic C
 우선 Grin이 어디에서 부터 기초로 하고 있는지에 대해 이해하기 위해서 타원 곡선 암호 (ECC)의 몇몇 속성들에 대한 간단한 설명으로 시작하겠습니다.  그 다음, MimbleWimble 블록체인의 트랜잭션과 블록에 한 모든 요소들을 설명하겠습니다.
 
 ### Tiny Bits of Elliptic Curves
+
 ### 타원곡선에 대한 조그마한 조각들
 
 We start with a brief primer on Elliptic Curve Cryptography, reviewing just the
@@ -67,7 +67,7 @@ delving too much into the intricacies of ECC.
 - ECC의 너무 복잡한 사항을 캐지 않고 어떻게 mimble wimble 이 어떻게 작동하는지에 대해 이해하는데 필요한 요소들만 리뷰할 것입니다.
 
  For readers who would want to dive deeper into those assumptions, there are other opportunities to [learn more](http://andrea.corbellini.name/2015/05/17/elliptic-curve-cryptography-a-gentle-introduction/).
-- 이런 가정들을 좀 더 알고싶은 독자들은 [이 링크]() 를 참고하세요.
+- 이런 가정들을 좀 더 알고싶은 독자들은 [이 링크](http://andrea.corbellini.name/2015/05/17/elliptic-curve-cryptography-a-gentle-introduction/) 를 참고하세요.
 
 An Elliptic Curve for the purpose of cryptography is simply a large set of points that
 we will call _C_. These points can be added, subtracted, or multiplied by integers (also called scalars).
@@ -93,19 +93,19 @@ Even if one knows the value of the public key `k*H`, deducing _k_ is close to im
 extremely difficult).
 누군가 공개키인 `k*H`의 값을 알더라도 _k_ 를 추론해 내는것은 불가능에 가깝습니다. ( 달리 얘기하자면, 곱셉은 쉬우나 곡선 좌표에 의한 "나눗셈"은 정말 어렵습니다.  )
 
-
 The previous formula `(k+j)*H = k*H + j*H`, with _k_ and _j_ both private
 keys, demonstrates that a public key obtained from the addition of two private
 keys (`(k+j)*H`) is identical to the addition of the public keys for each of those
 two private keys (`k*H + j*H`).
 _k_ 와 _j_ 둘다 비밀키인 이전 공식 `(k+j)*H = k*H + j*H` 는 두개의 비밀키를 더해서 얻은  한 개의 공개키 (`(k+j)*H`) 와 각각 두개의 비밀키에 공개키를 더한것과 같습니다.
-In the Bitcoin blockchain, Hierarchical Deterministic wallets heavily rely on this principle. 
-Bitcoin blockchain에서도 HD 지갑은 이 원칙에 의존하고 있습니다. 
+In the Bitcoin blockchain, Hierarchical Deterministic wallets heavily rely on this principle.
+Bitcoin blockchain에서도 HD 지갑은 이 원칙에 의존하고 있습니다.
 MimbleWimble and the Grin implementation do as well.
 MimbleWimble 과 Grin의 구현또한 마찬가지 입니다.
 
 ### Transacting with MimbleWimble
-### MimbleWimble 함께 거래하기 
+
+### MimbleWimble 로 거래하기
 
 The structure of transactions demonstrates a crucial tenet of MimbleWimble:
 트랜잭션의 구조는 MimbleWimble의 강력한 프라이버시와 비밀이 유지된다라고 하는 중요한 규칙을 나타냅니다.
@@ -113,6 +113,7 @@ strong privacy and confidentiality guarantees.
 
 The validation of MimbleWimble transactions relies on two basic properties:
 MimbleWimble 트랜잭션의 확인은 두가지 기본적인 성격을 전제로 합니다.
+
 * **Verification of zero sums.** The sum of outputs minus inputs always equals zero,
   proving that the transaction did not create new funds, _without revealing the actual amounts_.
 * **제로섬의 검증** 결과값에서 입력값을 뺸 합은 항상 0과 같습니다. 이것은 실제 전송되는 코인의 양을 드러내지 않고도 트랜잭션ㅇ이 새로운 코인을 만들지 않았다는 것을 증명합니다.
@@ -127,6 +128,7 @@ fundamental properties are achieved.
 다음 섹션들에서는 잔고, 소유권, 거스름돈과 증명들의 상세들이 어떻게 저 두가지 기본적인 성질에 의해서 얻어지는지 알아보겠습니다.
 
 #### Balance
+
 #### 잔고
 
 Building upon the properties of ECC we described above, one can obscure the values
@@ -160,6 +162,7 @@ An input or output value in a transaction can then be expressed as:
     r*G + v*H
 Where:
 여기서
+
 * _r_ is a private key used as a blinding factor, _G_ is an elliptic curve and
   their product `r*G` is the public key for _r_ on _G_.
 * _r_ 은 비밀키이고 blinding factor 로 사용됩니다. _G_ 는 타원 곡선 이고 `r*G`는 _G_ 안에 있는 _r_ 의 공개키 입니다.
@@ -167,10 +170,12 @@ Where:
 * _v_ 는 출력값이거나 입력값이고 _H_ 는 다른 타원곡선입니다.
 Neither _v_ nor _r_ can be deduced, leveraging the fundamental properties of Elliptic
 Curve Cryptography. `r*G + v*H` is called a _Pedersen Commitment_.
-타원곡선의 근본적인 특성을 이용했기 때문에 _v_ 와 _r_ 은 추측될 수 없습니다.  `r*G + v*H`를 _Pedersen Commitment_ 라고 부릅니다.
-As a an example, let's assume we want to build a transaction with two inputs and one
+타원곡선 암호의 기본적인 성질을 이용해서 _v_, _r_ 둘다 유추 할 수 없습니다.
+`r*G + v*H`은 _Pederson Commitment_ 라고 불립니다.
+As an example, let's assume we want to build a transaction with two inputs and one
 output. We have (ignoring fees):
-예를 들어 , ( 전송료는 무시하고) 두개의 입력값과 한개의 출력값으로 트랜잭션을 만들기 원한다고 가정해봅시다. 
+예를 들어 , ( 전송료는 무시하고) 두개의 입력값과 한개의 출력값으로 트랜잭션을 만들기 원한다고 가정해봅시다.
+
 * vi1 and vi2 as input values.
 * vi1 과 v2 는 출력값
 * vo3 as output value.
