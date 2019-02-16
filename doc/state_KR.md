@@ -36,11 +36,11 @@ With a full Grin state, we can validate the following:
    모든 UTXO, range prook 와 Kernel 해쉬들은 각각의 MMR이 있고 그 MMR 들은 유효한 root 를 해쉬합니다.
 4. A known block header with the most work at a given point in time includes
    the roots of the 3 MMRs.
-   
+   특정 시점에 가장 많이 일했다고 알려진 Block header 에는 3개의 MMR에 대한 root 가 포함됩니다.
    This validates the MMRs and proves that the whole state has been produced by the most worked chain.
    이것은 MMR과 인증하고 전체 상태가 가장 많이 일한 chain ( 가장 긴 체인)에서 만들어졌다는 것을 증명합니다.
 
-### MMRs and Pruning
+### MMR 과 Pruning
 
 The data used to produce the hashes for leaf nodes in each MMR (in addition to
 their position is the following:
@@ -59,12 +59,15 @@ As outputs get spent, both their commitment and range proof data can be
 removed. In addition, the corresponding output and range proof MMRs can be
 pruned.
 
-## State Storage
+## 상태 스토리지
 
-Data storage for outputs, range proofs and kernels in Grin is simple: a plain
-append-only file that's memory-mapped for data access. As outputs get spent,
-a remove log maintains which positions can be removed. Those positions nicely
-match MMR node positions as they're all inserted in the same order. When the
-remove log gets large, corresponding files can be occasionally compacted by
-rewriting them without the removed pieces (also append-only) and the remove
-log can be emptied. As for MMRs, we need to add a little more complexity.
+Data storage for outputs, range proofs and kernels in Grin is simple: 
+Grin 에 있는 출력값에 대한 데이터 스토리지, Range proof 와 kernel은 간단합니다.
+a plain append-only file that's memory-mapped for data access. As outputs get spent,a remove log maintains which positions can be removed. 
+
+Those positions nicely match MMR node positions as they're all inserted in the same order.
+
+When the remove log gets large, corresponding files can be occasionally compacted by rewriting them without the removed pieces (also append-only) and the remove log can be emptied.
+
+As for MMRs, we need to add a little more complexity.
+MMR 에 대해서는 약간의 복잡함을 더할 필요가 있습니다.
