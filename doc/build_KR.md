@@ -108,7 +108,7 @@ grin client help
 docker build -t grin -f etc/Dockerfile .
 ```
 
-floonet을 사용하려면 `etc/Dockerfile.floonet` 을 사용하세요. 
+floonet을 사용하려면 `etc/Dockerfile.floonet` 을 사용하세요.
 You can bind-mount your grin cache to run inside the container.
 
 ```sh
@@ -122,14 +122,16 @@ Using a named volume copies default configurations upon volume creation
 
 Rust (cargo) can build grin for many platforms, so in theory running `grin`
 as a validating node on your low powered device might be possible.
+Rust(Cargo)는 여러 플랫폼에서 Grin을 빌드 할 수 있습니다. 그래서 이론적으로 낮은 성능의 디바이스 에서도 인증받은 노드로 grin을 작동 시킬 수 있습니다.
 To cross-compile `grin` on a x86 Linux platform and produce ARM binaries,
 say, for a Raspberry Pi.
+
 
 ## Grin 사용하기
 
 The wiki page [Wallet User Guide](https://github.com/mimblewimble/docs/wiki/Wallet-User-Guide)
-and linked pages have more information on what features we have,
-troubleshooting, etc.
+and linked pages have more information on what features we have, troubleshooting, etc.
+[Wallet User Guide](https://github.com/mimblewimble/docs/wiki/Wallet-User-Guide) 위키페이지와 링크된 페이지들은 어떤 Feature 를 가지고 있는지 , 트러블 슈팅 등등에 대한 좀 더 많은 정보를 가지고 있습니다.
 
 ## Grin 채굴하기
 
