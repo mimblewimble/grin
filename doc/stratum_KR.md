@@ -4,6 +4,7 @@ This document describes the current Stratum RPC protocol implemented in Grin.
 이 문서는 Grin에 구현되어 있는 현재 Stratum RPC protocol 을 설명한 것입니다.
 
 ## Table of Contents
+
 ## 목차 
 
 1. [Messages](#messages)
@@ -22,7 +23,7 @@ This document describes the current Stratum RPC protocol implemented in Grin.
 In this section, we detail each message and the potential response.
 이 섹션에서는 각 메시지와 그 응답에 대해서 상술합니다.
 At any point, if miner the tries to do one of the following request (except login) and login is required, the miner will receive the following error message.
-어느때든, 채굴자가 로그인을 제외한 다음 중 한 요청을 하고 login 이 요구된다면 채굴자는 다음과 같은 에러 메시지를 받게 됩니다. 
+어느때든, 채굴자가 로그인을 제외한 다음 중 한 요청을 하고 login 이 요구된다면 채굴자는 다음과 같은 에러 메시지를 받게 됩니다.
 
 | Field         | Content                                 |
 | :------------ | :-------------------------------------- |
@@ -34,7 +35,7 @@ At any point, if miner the tries to do one of the following request (except logi
 | error         | {"code":-32500,"message":"login first"} |
 
 Example:
-예시 
+예시:
 
 ```JSON
 {  
@@ -49,6 +50,7 @@ Example:
 ```
 
 if the request is not one of the following, the stratum server will give this error response:
+만약에 요청이 다음중 하나가 아니라면, Stratum 서버가 이런 에러 메시지를 보내게 됩니다.
 
 | Field         | Content                                      |
 | :------------ | :------------------------------------------- |
@@ -58,6 +60,7 @@ if the request is not one of the following, the stratum server will give this er
 | error         | {"code":-32601,"message":"Method not found"} |
 
 Example:
+예시:
 
 ```JSON
 {  
@@ -74,7 +77,9 @@ Example:
 ### `getjobtemplate`
 
 A message initiated by the miner.
+채굴자에 의해 초기화 되는 메시지입니다.
 Miner can request a job with this message.
+채굴자는 이 메시지로 작업을 요청 할 수 있습니다.
 
 #### Request
 
@@ -86,6 +91,7 @@ Miner can request a job with this message.
 | params        | null                           |
 
 Example:
+예시 :
 
 ``` JSON
 {  
@@ -99,6 +105,7 @@ Example:
 #### Response
 
 The response can be of two types:
+Response 는 두가지 타입이 될 수 있습니다.
 
 ##### OK response
 
@@ -121,6 +128,7 @@ Example:
 ##### Error response
 
 If the node is syncing, it will send the following message:
+만약 노드가 동기화 중이라면, 다음과 같은 메시지를 보낼것입니다.
 
 | Field         | Content                                                   |
 | :------------ | :-------------------------------------------------------- |
@@ -130,6 +138,7 @@ If the node is syncing, it will send the following message:
 | error         | {"code":-32701,"message":"Node is syncing - Please wait"} |
 
 Example:
+예시:
 
 ```JSON
 {  
@@ -146,8 +155,11 @@ Example:
 ### `job`
 
 A message initiated by the Stratum server.
+Stratum 서버가 초기화 하는 메세지입니다.
 Stratum server will send job automatically to connected miners.
+Stratum 서버는 연결된 채굴자에게 작업을 자동적으로 보냅니다.
 The miner SHOULD interrupt current job if job_id = 0, and SHOULD replace the current job with this one after the current graph is complete.
+채굴자는 job_id=0 이면 현재의 작업을 중단해야 합니다. 그리고 현재의 작업을 현재 graph 가 완료되면 이 작업으로 대체해야 합니다.
 
 #### Request
 
@@ -177,10 +189,12 @@ Example:
 #### Response
 
 No response is required for this message.
+이 메세지에는 Response 가 필요하지 않습니다. 
 
 ### `keepalive`
 
 A message initiated by the miner in order to keep the connection alive.
+연결을 계속 하기 위해서 채굴자에 의해 초기화 되는 메시지입니다. 
 
 #### Request
 
@@ -229,7 +243,9 @@ Example:
 ***
 
 A message initiated by the miner.
+채굴자에 의해 시작되는 메시지입니다.
 Miner can log in on a Grin Stratum server with a login, password and agent (usually statically set by the miner program).
+채굴자는 보통 마이너 프로그램으로 고정적으로 정해지는 login, password, agent 로 Grin Stratum 서버에 로그인 할 수 있습니다.
 
 #### Request
 
@@ -241,6 +257,7 @@ Miner can log in on a Grin Stratum server with a login, password and agent (usua
 | params        | Strings: login, pass and agent |
 
 Example:
+예시:
 
 ``` JSON
 
@@ -256,9 +273,11 @@ Example:
 }
 
 ```
+
 #### Response
 
 The response can be of two types:
+Response 는 두가지 타입  일 수 있습니다.
 
 ##### OK response
 
@@ -285,11 +304,14 @@ Example:
 ##### Error response
 
 Not yet implemented. Should return error -32500 "Login first" when login is required.
+아직 구현되지 않았습니다. login이 필요할때, -32500 "Login firtst" 라는 에러를 리턴합니다.
 
 ### `status`
 
 A message initiated by the miner.
+채굴자에 의해 시작되는 메시지입니다.
 This message allows a miner to get the status of its current worker and the network.
+이 메시지는 채굴자에게 현재의 워커와 네트워크의 상태를 얻을 수 있게 합니다.
 
 #### Request
 
@@ -314,6 +336,7 @@ Example:
 #### Response
 
 The response is the following:
+Response 는 아래와 같습니다.
 
 | Field         | Content                                                                                                  |
 | :------------ | :------------------------------------------------------------------------------------------------------- |
@@ -324,6 +347,7 @@ The response is the following:
 | error         | null                                                                                                     |
 
 Example:
+예시:
 
 ```JSON
 {  
@@ -345,11 +369,14 @@ Example:
 ### `submit`
 
 A message initiated by the miner.
+채굴자에 의해 시작되는 메시지입니다.
 When a miner find a share, it will submit it to the node.
+마이너가 쉐어를 찾았을때, 노드에게 보내집니다.
 
 #### Request
 
 The miner submit a solution to a job to the Stratum server.
+채굴자는 Stratum 서버에 작업 정답을 보냅니다.
 
 | Field         | Content                                                                     |
 | :------------ | :-------------------------------------------------------------------------- |
@@ -359,6 +386,7 @@ The miner submit a solution to a job to the Stratum server.
 | params        | Int `edge_bits`,`nonce`, `height`, `job_id` and array of integers `pow` |
 
 Example:
+예시:
 
 ``` JSON
 {
@@ -380,6 +408,7 @@ Example:
 #### Response
 
 The response can be of three types.
+Response 는 세가지 타입이 될것입니다.
 
 ##### OK response
 
