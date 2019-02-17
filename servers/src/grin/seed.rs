@@ -186,10 +186,7 @@ fn monitor_peers(
 	// maintenance step first, clean up p2p server peers
 	peers.clean_peers(config.peer_max_count() as usize);
 
-	// We have enough peers, both total connected and outbound connected so we are good.
-	if peers.peer_count() >= config.peer_min_preferred_count()
-		&& peers.peer_outbound_count() >= config.peer_min_preferred_count() / 2
-	{
+	if peers.healthy_peers_mix() {
 		return;
 	}
 
@@ -252,17 +249,15 @@ fn monitor_peers(
 fn update_dandelion_relay(peers: Arc<p2p::Peers>, dandelion_config: DandelionConfig) {
 	// Dandelion Relay Updater
 	let dandelion_relay = peers.get_dandelion_relay();
-	if dandelion_relay.is_empty() {
+	if let Some((last_added, _)) = dandelion_relay {
+		let dandelion_interval = Utc::now().timestamp() - last_added;
+		if dandelion_interval >= dandelion_config.relay_secs.unwrap() as i64 {
+			debug!("monitor_peers: updating expired dandelion relay");
+			peers.update_dandelion_relay();
+		}
+	} else {
 		debug!("monitor_peers: no dandelion relay updating");
 		peers.update_dandelion_relay();
-	} else {
-		for last_added in dandelion_relay.keys() {
-			let dandelion_interval = Utc::now().timestamp() - last_added;
-			if dandelion_interval >= dandelion_config.relay_secs.unwrap() as i64 {
-				debug!("monitor_peers: updating expired dandelion relay");
-				peers.update_dandelion_relay();
-			}
-		}
 	}
 }
 
@@ -318,7 +313,7 @@ fn listen_for_addrs(
 	let addrs: Vec<SocketAddr> = rx.try_iter().collect();
 
 	// If we have a healthy number of outbound peers then we are done here.
-	if peers.peer_outbound_count() >= p2p.config.peer_min_preferred_count() / 2 {
+	if peers.healthy_peers_mix() {
 		return;
 	}
 

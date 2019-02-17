@@ -14,7 +14,7 @@
 
 use crate::api;
 use crate::controller;
-use crate::core::libtx::slate::Slate;
+use crate::libwallet::slate::Slate;
 use crate::libwallet::{Error, ErrorKind};
 use crate::{instantiate_wallet, HTTPNodeClient, WalletCommAdapter, WalletConfig};
 /// HTTP Wallet 'plugin' implementation
@@ -48,10 +48,15 @@ impl WalletCommAdapter for HTTPWalletCommAdapter {
 		let url = format!("{}/v1/wallet/foreign/receive_tx", dest);
 		debug!("Posting transaction slate to {}", url);
 
-		let res = api::client::post(url.as_str(), None, slate).context(
-			ErrorKind::ClientCallback("Posting transaction slate (is recipient listening?)"),
-		)?;
-		Ok(res)
+		let res = api::client::post(url.as_str(), None, slate);
+		match res {
+			Err(e) => {
+				let report = format!("Posting transaction slate (is recipient listening?): {}", e);
+				error!("{}", report);
+				Err(ErrorKind::ClientCallback(report).into())
+			}
+			Ok(r) => Ok(r),
+		}
 	}
 
 	fn send_tx_async(&self, _dest: &str, _slate: &Slate) -> Result<(), Error> {

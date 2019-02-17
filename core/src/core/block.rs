@@ -25,9 +25,11 @@ use std::sync::Arc;
 use crate::consensus::{reward, REWARD};
 use crate::core::committed::{self, Committed};
 use crate::core::compact_block::{CompactBlock, CompactBlockBody};
-use crate::core::hash::{Hash, Hashed, ZERO_HASH};
+use crate::core::hash::{DefaultHashable, Hash, Hashed, ZERO_HASH};
 use crate::core::verifier_cache::VerifierCache;
-use crate::core::{transaction, Commitment, Input, Output, Transaction, TransactionBody, TxKernel};
+use crate::core::{
+	transaction, Commitment, Input, Output, Transaction, TransactionBody, TxKernel, Weighting,
+};
 use crate::global;
 use crate::keychain::{self, BlindingFactor};
 use crate::pow::{Difficulty, Proof, ProofOfWork};
@@ -158,9 +160,9 @@ impl FixedLength for HeaderEntry {
 	const LEN: usize = Hash::LEN + 8 + Difficulty::LEN + 4 + 1;
 }
 
-impl HeaderEntry {
+impl Hashed for HeaderEntry {
 	/// The hash of the underlying block.
-	pub fn hash(&self) -> Hash {
+	fn hash(&self) -> Hash {
 		self.hash
 	}
 }
@@ -195,6 +197,7 @@ pub struct BlockHeader {
 	/// Proof of work and related
 	pub pow: ProofOfWork,
 }
+impl DefaultHashable for BlockHeader {}
 
 impl Default for BlockHeader {
 	fn default() -> BlockHeader {
@@ -351,6 +354,13 @@ pub struct Block {
 	body: TransactionBody,
 }
 
+impl Hashed for Block {
+	/// The hash of the underlying block.
+	fn hash(&self) -> Hash {
+		self.header.hash()
+	}
+}
+
 /// Implementation of Writeable for a block, defines how to write the block to a
 /// binary writer. Differentiates between writing the block for the purpose of
 /// full serialization and the one of just extracting a hash.
@@ -377,7 +387,7 @@ impl Readable for Block {
 		// Treat any validation issues as data corruption.
 		// An example of this would be reading a block
 		// that exceeded the allowed number of inputs.
-		body.validate_read(true)
+		body.validate_read(Weighting::AsBlock)
 			.map_err(|_| ser::Error::CorruptedData)?;
 
 		Ok(Block { header, body })
@@ -418,6 +428,7 @@ impl Block {
 	/// TODO - Move this somewhere where only tests will use it.
 	/// *** Only used in tests. ***
 	///
+	#[warn(clippy::new_ret_no_self)]
 	pub fn new(
 		prev: &BlockHeader,
 		txs: Vec<Transaction>,
@@ -567,11 +578,6 @@ impl Block {
 		&mut self.body.kernels
 	}
 
-	/// Blockhash, computed using only the POW
-	pub fn hash(&self) -> Hash {
-		self.header.hash()
-	}
-
 	/// Sum of all fees (inputs less outputs) in the block
 	pub fn total_fees(&self) -> u64 {
 		self.body
@@ -607,7 +613,7 @@ impl Block {
 	/// * coinbase sum verification
 	/// * kernel sum verification
 	pub fn validate_read(&self) -> Result<(), Error> {
-		self.body.validate_read(true)?;
+		self.body.validate_read(Weighting::AsBlock)?;
 		self.verify_kernel_lock_heights()?;
 		Ok(())
 	}
@@ -637,7 +643,7 @@ impl Block {
 		prev_kernel_offset: &BlindingFactor,
 		verifier: Arc<RwLock<dyn VerifierCache>>,
 	) -> Result<Commitment, Error> {
-		self.body.validate(true, verifier)?;
+		self.body.validate(Weighting::AsBlock, verifier)?;
 
 		self.verify_kernel_lock_heights()?;
 		self.verify_coinbase()?;

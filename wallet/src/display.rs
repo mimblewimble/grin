@@ -92,6 +92,7 @@ pub fn outputs(
 		} else {
 			table.add_row(row![
 				bFD->commit,
+				bFB->index,
 				bFB->height,
 				bFB->lock_height,
 				bFR->status,
@@ -122,7 +123,7 @@ pub fn txs(
 	account: &str,
 	cur_height: u64,
 	validated: bool,
-	txs: Vec<TxLogEntry>,
+	txs: &Vec<TxLogEntry>,
 	include_status: bool,
 	dark_background_color_scheme: bool,
 ) -> Result<(), Error> {
@@ -184,7 +185,7 @@ pub fn txs(
 			)
 		};
 		let tx_data = match t.stored_tx {
-			Some(t) => format!("{}", t),
+			Some(_) => "Yes".to_owned(),
 			None => "None".to_owned(),
 		};
 		if dark_background_color_scheme {
@@ -337,6 +338,49 @@ pub fn info(
 		);
 	}
 }
+
+/// Display summary info in a pretty way
+pub fn estimate(
+	amount: u64,
+	strategies: Vec<(
+		&str, // strategy
+		u64,  // total amount to be locked
+		u64,  // fee
+	)>,
+	dark_background_color_scheme: bool,
+) {
+	println!(
+		"\nEstimation for sending {}:\n",
+		amount_to_hr_string(amount, false)
+	);
+
+	let mut table = table!();
+
+	table.set_titles(row![
+		bMG->"Selection strategy",
+		bMG->"Fee",
+		bMG->"Will be locked",
+	]);
+
+	for (strategy, total, fee) in strategies {
+		if dark_background_color_scheme {
+			table.add_row(row![
+				bFC->strategy,
+				FR->amount_to_hr_string(fee, false),
+				FY->amount_to_hr_string(total, false),
+			]);
+		} else {
+			table.add_row(row![
+				bFD->strategy,
+				FR->amount_to_hr_string(fee, false),
+				FY->amount_to_hr_string(total, false),
+			]);
+		}
+	}
+	table.printstd();
+	println!();
+}
+
 /// Display list of wallet accounts in a pretty way
 pub fn accounts(acct_mappings: Vec<AcctPathMapping>) {
 	println!("\n____ Wallet Accounts ____\n",);
@@ -355,4 +399,78 @@ pub fn accounts(acct_mappings: Vec<AcctPathMapping>) {
 	table.set_format(*prettytable::format::consts::FORMAT_NO_BORDER_LINE_SEPARATOR);
 	table.printstd();
 	println!();
+}
+
+/// Display transaction log messages
+pub fn tx_messages(tx: &TxLogEntry, dark_background_color_scheme: bool) -> Result<(), Error> {
+	let title = format!("Transaction Messages - Transaction '{}'", tx.id,);
+	println!();
+	let mut t = term::stdout().unwrap();
+	t.fg(term::color::MAGENTA).unwrap();
+	writeln!(t, "{}", title).unwrap();
+	t.reset().unwrap();
+
+	let msgs = match tx.messages.clone() {
+		None => {
+			writeln!(t, "{}", "None").unwrap();
+			t.reset().unwrap();
+			return Ok(());
+		}
+		Some(m) => m.clone(),
+	};
+
+	if msgs.messages.is_empty() {
+		writeln!(t, "{}", "None").unwrap();
+		t.reset().unwrap();
+		return Ok(());
+	}
+
+	let mut table = table!();
+
+	table.set_titles(row![
+		bMG->"Participant Id",
+		bMG->"Message",
+		bMG->"Public Key",
+		bMG->"Signature",
+	]);
+
+	let secp = util::static_secp_instance();
+	let secp_lock = secp.lock();
+
+	for m in msgs.messages {
+		let id = format!("{}", m.id);
+		let public_key = format!(
+			"{}",
+			util::to_hex(m.public_key.serialize_vec(&secp_lock, true).to_vec())
+		);
+		let message = match m.message {
+			Some(m) => format!("{}", m),
+			None => "None".to_owned(),
+		};
+		let message_sig = match m.message_sig {
+			Some(s) => format!("{}", util::to_hex(s.serialize_der(&secp_lock))),
+			None => "None".to_owned(),
+		};
+		if dark_background_color_scheme {
+			table.add_row(row![
+				bFC->id,
+				bFC->message,
+				bFC->public_key,
+				bFB->message_sig,
+			]);
+		} else {
+			table.add_row(row![
+				bFD->id,
+				bFb->message,
+				bFD->public_key,
+				bFB->message_sig,
+			]);
+		}
+	}
+
+	table.set_format(*prettytable::format::consts::FORMAT_NO_COLSEP);
+	table.printstd();
+	println!();
+
+	Ok(())
 }

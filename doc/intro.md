@@ -170,8 +170,12 @@ Where:
 * _v_ 는 출력값이거나 입력값이고 _H_ 는 다른 타원곡선입니다.
 Neither _v_ nor _r_ can be deduced, leveraging the fundamental properties of Elliptic
 Curve Cryptography. `r*G + v*H` is called a _Pedersen Commitment_.
+<<<<<<< HEAD
 타원곡선 암호의 기본적인 성질을 이용해서 _v_, _r_ 둘다 유추 할 수 없습니다.
 `r*G + v*H`은 _Pederson Commitment_ 라고 불립니다.
+=======
+
+>>>>>>> dc6542d82b04cbab65abfd3e986946f86267db44
 As an example, let's assume we want to build a transaction with two inputs and one
 output. We have (ignoring fees):
 예를 들어 , ( 전송료는 무시하고) 두개의 입력값과 한개의 출력값으로 트랜잭션을 만들기 원한다고 가정해봅시다.

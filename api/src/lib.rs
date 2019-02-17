@@ -22,29 +22,22 @@ use grin_util as util;
 use failure;
 #[macro_use]
 extern crate failure_derive;
-use hyper;
 #[macro_use]
 extern crate lazy_static;
 
-use serde;
 #[macro_use]
 extern crate serde_derive;
-use serde_json;
 #[macro_use]
 extern crate log;
 
-use hyper_rustls;
-use rustls;
-
-use tokio_tcp;
-
+#[macro_use]
+mod web;
 pub mod auth;
 pub mod client;
 mod handlers;
 mod rest;
 mod router;
 mod types;
-mod web;
 
 pub use crate::auth::BasicAuthMiddleware;
 pub use crate::handlers::start_rest_apis;

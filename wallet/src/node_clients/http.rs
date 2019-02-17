@@ -69,9 +69,12 @@ impl NodeClient for HTTPNodeClient {
 		} else {
 			url = format!("{}/v1/pool/push", dest);
 		}
-		api::client::post_no_ret(url.as_str(), self.node_api_secret(), tx).context(
-			libwallet::ErrorKind::ClientCallback("Posting transaction to node"),
-		)?;
+		let res = api::client::post_no_ret(url.as_str(), self.node_api_secret(), tx);
+		if let Err(e) = res {
+			let report = format!("Posting transaction to node: {}", e);
+			error!("Post TX Error: {}", e);
+			return Err(libwallet::ErrorKind::ClientCallback(report).into());
+		}
 		Ok(())
 	}
 
@@ -79,10 +82,15 @@ impl NodeClient for HTTPNodeClient {
 	fn get_chain_height(&self) -> Result<u64, libwallet::Error> {
 		let addr = self.node_url();
 		let url = format!("{}/v1/chain", addr);
-		let res = api::client::get::<api::Tip>(url.as_str(), self.node_api_secret()).context(
-			libwallet::ErrorKind::ClientCallback("Getting chain height from node"),
-		)?;
-		Ok(res.height)
+		let res = api::client::get::<api::Tip>(url.as_str(), self.node_api_secret());
+		match res {
+			Err(e) => {
+				let report = format!("Getting chain height from node: {}", e);
+				error!("Get chain height error: {}", e);
+				Err(libwallet::ErrorKind::ClientCallback(report).into())
+			}
+			Ok(r) => Ok(r.height),
+		}
 	}
 
 	/// Retrieve outputs from node
@@ -116,8 +124,9 @@ impl NodeClient for HTTPNodeClient {
 		let results = match rt.block_on(task) {
 			Ok(outputs) => outputs,
 			Err(e) => {
+				let report = format!("Getting outputs by id: {}", e);
 				error!("Outputs by id failed: {}", e);
-				return Err(libwallet::ErrorKind::ClientCallback("Error from server"))?;
+				return Err(libwallet::ErrorKind::ClientCallback(report).into());
 			}
 		};
 
@@ -173,12 +182,11 @@ impl NodeClient for HTTPNodeClient {
 			Err(e) => {
 				// if we got anything other than 200 back from server, bye
 				error!(
-					"get_outputs_by_pmmr_index: unable to contact API {}. Error: {}",
+					"get_outputs_by_pmmr_index: error contacting {}. Error: {}",
 					addr, e
 				);
-				Err(libwallet::ErrorKind::ClientCallback(
-					"unable to contact api",
-				))?
+				let report = format!("outputs by pmmr index: {}", e);
+				Err(libwallet::ErrorKind::ClientCallback(report))?
 			}
 		}
 	}

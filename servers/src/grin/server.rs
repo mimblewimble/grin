@@ -161,7 +161,11 @@ impl Server {
 			config.clone(),
 		));
 
-		let peer_db_env = Arc::new(store::new_named_env(config.db_root.clone(), "peer".into()));
+		let peer_db_env = Arc::new(store::new_named_env(
+			config.db_root.clone(),
+			"peer".into(),
+			config.p2p_config.peer_max_count,
+		));
 		let p2p_server = Arc::new(p2p::Server::new(
 			peer_db_env,
 			config.p2p_config.capabilities,

@@ -29,6 +29,7 @@ use std::{cmp, thread};
 use crate::chain;
 use crate::common::stats::{StratumStats, WorkerStats};
 use crate::common::types::{StratumServerConfig, SyncState};
+use crate::core::core::hash::Hashed;
 use crate::core::core::verifier_cache::VerifierCache;
 use crate::core::core::Block;
 use crate::core::{pow, ser};
@@ -152,6 +153,7 @@ pub struct Worker {
 	stream: BufStream<TcpStream>,
 	error: bool,
 	authenticated: bool,
+	buffer: String,
 }
 
 impl Worker {
@@ -164,15 +166,18 @@ impl Worker {
 			stream: stream,
 			error: false,
 			authenticated: false,
+			buffer: String::with_capacity(4096),
 		}
 	}
 
 	// Get Message from the worker
-	fn read_message(&mut self, line: &mut String) -> Option<usize> {
+	fn read_message(&mut self) -> Option<String> {
 		// Read and return a single message or None
-		match self.stream.read_line(line) {
-			Ok(n) => {
-				return Some(n);
+		match self.stream.read_line(&mut self.buffer) {
+			Ok(_) => {
+				let res = self.buffer.clone();
+				self.buffer.clear();
+				return Some(res);
 			}
 			Err(ref e) if e.kind() == ErrorKind::WouldBlock => {
 				// Not an error, just no messages ready
@@ -183,6 +188,7 @@ impl Worker {
 					"(Server ID: {}) Error in connection with stratum client: {}",
 					self.id, e
 				);
+				self.buffer.clear();
 				self.error = true;
 				return None;
 			}
@@ -195,7 +201,11 @@ impl Worker {
 		if !message.ends_with("\n") {
 			message += "\n";
 		}
-		match self.stream.write(message.as_bytes()) {
+		match util::read_write::write_all(
+			&mut self.stream,
+			message.as_bytes(),
+			Duration::from_secs(1),
+		) {
 			Ok(_) => match self.stream.flush() {
 				Ok(_) => {}
 				Err(e) => {
@@ -281,10 +291,9 @@ impl StratumServer {
 	// Handle an RPC request message from the worker(s)
 	fn handle_rpc_requests(&mut self, stratum_stats: &mut Arc<RwLock<StratumStats>>) {
 		let mut workers_l = self.workers.lock();
-		let mut the_message = String::with_capacity(4096);
 		for num in 0..workers_l.len() {
-			match workers_l[num].read_message(&mut the_message) {
-				Some(_) => {
+			match workers_l[num].read_message() {
+				Some(the_message) => {
 					// Decompose the request from the JSONRpc wrapper
 					let request: RpcRequest = match serde_json::from_str(&the_message) {
 						Ok(request) => request,
@@ -302,16 +311,22 @@ impl StratumServer {
 					};
 
 					let mut stratum_stats = stratum_stats.write();
-					let worker_stats_id = stratum_stats
+					let worker_stats_id = match stratum_stats
 						.worker_stats
 						.iter()
 						.position(|r| r.id == workers_l[num].id)
-						.unwrap();
+					{
+						Some(id) => id,
+						None => continue,
+					};
 					stratum_stats.worker_stats[worker_stats_id].last_seen = SystemTime::now();
 
 					// Call the handler function for requested method
 					let response = match request.method.as_str() {
 						"login" => {
+							if self.current_block_versions.is_empty() {
+								continue;
+							}
 							stratum_stats.worker_stats[worker_stats_id].initial_block_height =
 								self.current_block_versions.last().unwrap().header.height;
 							self.handle_login(request.params, &mut workers_l[num])
@@ -353,33 +368,30 @@ impl StratumServer {
 						}
 					};
 
+					let id = request.id.clone();
 					// Package the reply as RpcResponse json
-					let rpc_response: String;
-					match response {
-						Err(response) => {
-							let resp = RpcResponse {
-								id: request.id,
-								jsonrpc: String::from("2.0"),
-								method: request.method,
-								result: None,
-								error: Some(response),
-							};
-							rpc_response = serde_json::to_string(&resp).unwrap();
-						}
-						Ok(response) => {
-							let resp = RpcResponse {
-								id: request.id,
-								jsonrpc: String::from("2.0"),
-								method: request.method,
-								result: Some(response),
-								error: None,
-							};
-							rpc_response = serde_json::to_string(&resp).unwrap();
-						}
-					}
-
-					// Send the reply
-					workers_l[num].write_message(rpc_response);
+					let resp = match response {
+						Err(response) => RpcResponse {
+							id: id,
+							jsonrpc: String::from("2.0"),
+							method: request.method,
+							result: None,
+							error: Some(response),
+						},
+						Ok(response) => RpcResponse {
+							id: id,
+							jsonrpc: String::from("2.0"),
+							method: request.method,
+							result: Some(response),
+							error: None,
+						},
+					};
+					if let Ok(rpc_response) = serde_json::to_string(&resp) {
+						// Send the reply
+						workers_l[num].write_message(rpc_response);
+					} else {
+						warn!("handle_rpc_requests: failed responding to {:?}", request.id);
+					};
 				}
 				None => {} // No message for us from this worker
 			}

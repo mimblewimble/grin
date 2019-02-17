@@ -857,6 +857,14 @@ impl Chain {
 		}
 
 		let header = self.get_block_header(&h)?;
+
+		{
+			let mut txhashset_ref = self.txhashset.write();
+			// Drop file handles in underlying txhashset
+			txhashset_ref.release_backend_files();
+		}
+
+		// Rewrite hashset
 		txhashset::zip_write(self.db_root.clone(), txhashset_data, &header)?;
 
 		let mut txhashset =
@@ -990,7 +998,7 @@ impl Chain {
 				Err(e) => {
 					return Err(
 						ErrorKind::StoreErr(e, "retrieving block to compact".to_owned()).into(),
-					)
+					);
 				}
 			}
 			if current.height <= 1 {

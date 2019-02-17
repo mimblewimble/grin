@@ -22,9 +22,7 @@ use crate::util::secp::pedersen::Commitment;
 use crate::web::*;
 use failure::ResultExt;
 use hyper::{Body, Request, StatusCode};
-use std::collections::HashMap;
 use std::sync::Weak;
-use url::form_urlencoded;
 
 // Sum tree handler. Retrieve the roots:
 // GET /v1/txhashset/roots
@@ -114,59 +112,14 @@ impl TxHashSetHandler {
 
 impl Handler for TxHashSetHandler {
 	fn get(&self, req: Request<Body>) -> ResponseFuture {
-		let mut start_index = 1;
-		let mut max = 100;
-		let mut id = "".to_owned();
-
 		// TODO: probably need to set a reasonable max limit here
-		let mut last_n = 10;
-		if let Some(query_string) = req.uri().query() {
-			let params = form_urlencoded::parse(query_string.as_bytes())
-				.into_owned()
-				.fold(HashMap::new(), |mut hm, (k, v)| {
-					hm.entry(k).or_insert(vec![]).push(v);
-					hm
-				});
-			if let Some(nums) = params.get("n") {
-				for num in nums {
-					if let Ok(n) = str::parse(num) {
-						last_n = n;
-					}
-				}
-			}
-			if let Some(start_indexes) = params.get("start_index") {
-				for si in start_indexes {
-					if let Ok(s) = str::parse(si) {
-						start_index = s;
-					}
-				}
-			}
-			if let Some(maxes) = params.get("max") {
-				for ma in maxes {
-					if let Ok(m) = str::parse(ma) {
-						max = m;
-					}
-				}
-			}
-			if let Some(ids) = params.get("id") {
-				if !ids.is_empty() {
-					id = ids.last().unwrap().to_owned();
-				}
-			}
-		}
-		let command = match req
-			.uri()
-			.path()
-			.trim_right()
-			.trim_right_matches("/")
-			.rsplit("/")
-			.next()
-		{
-			Some(c) => c,
-			None => return response(StatusCode::BAD_REQUEST, "invalid url"),
-		};
+		let params = QueryParams::from(req.uri().query());
+		let last_n = parse_param_no_err!(params, "n", 10);
+		let start_index = parse_param_no_err!(params, "start_index", 1);
+		let max = parse_param_no_err!(params, "max", 100);
+		let id = parse_param_no_err!(params, "id", "".to_owned());
 
-		match command {
+		match right_path_element!(req) {
 			"roots" => json_response_pretty(&self.get_roots()),
 			"lastoutputs" => json_response_pretty(&self.get_last_n_output(last_n)),
 			"lastrangeproofs" => json_response_pretty(&self.get_last_n_rangeproof(last_n)),

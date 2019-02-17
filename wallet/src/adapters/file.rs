@@ -16,7 +16,7 @@
 use std::fs::File;
 use std::io::{Read, Write};
 
-use crate::core::libtx::slate::Slate;
+use crate::libwallet::slate::Slate;
 use crate::libwallet::{Error, ErrorKind};
 use crate::{WalletCommAdapter, WalletConfig};
 use serde_json as json;
@@ -52,7 +52,7 @@ impl WalletCommAdapter for FileWalletCommAdapter {
 		let mut pub_tx_f = File::open(params)?;
 		let mut content = String::new();
 		pub_tx_f.read_to_string(&mut content)?;
-		Ok(json::from_str(&content).map_err(|_| ErrorKind::Format)?)
+		Ok(json::from_str(&content).map_err(|err| ErrorKind::Format(err.to_string()))?)
 	}
 
 	fn listen(

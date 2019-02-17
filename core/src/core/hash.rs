@@ -36,6 +36,19 @@ pub const ZERO_HASH: Hash = Hash([0; 32]);
 #[derive(Copy, Clone, PartialEq, PartialOrd, Eq, Ord, Hash, Serialize, Deserialize)]
 pub struct Hash([u8; 32]);
 
+impl DefaultHashable for Hash {}
+
+impl Hash {
+	fn hash_with<T: Writeable>(&self, other: T) -> Hash {
+		let mut hasher = HashWriter::default();
+		ser::Writeable::write(self, &mut hasher).unwrap();
+		ser::Writeable::write(&other, &mut hasher).unwrap();
+		let mut ret = [0; 32];
+		hasher.finalize(&mut ret);
+		Hash(ret)
+	}
+}
+
 impl fmt::Debug for Hash {
 	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
 		let hash_hex = self.to_hex();
@@ -212,25 +225,26 @@ impl ser::Writer for HashWriter {
 pub trait Hashed {
 	/// Obtain the hash of the object
 	fn hash(&self) -> Hash;
-	/// Hash the object together with another writeable object
-	fn hash_with<T: Writeable>(&self, other: T) -> Hash;
 }
 
-impl<W: ser::Writeable> Hashed for W {
+/// Implementing this trait enables the default
+/// hash implementation
+pub trait DefaultHashable: Writeable {}
+impl<D: DefaultHashable> Hashed for D {
 	fn hash(&self) -> Hash {
 		let mut hasher = HashWriter::default();
-		ser::Writeable::write(self, &mut hasher).unwrap();
-		let mut ret = [0; 32];
-		hasher.finalize(&mut ret);
-		Hash(ret)
-	}
-
-	fn hash_with<T: Writeable>(&self, other: T) -> Hash {
-		let mut hasher = HashWriter::default();
-		ser::Writeable::write(self, &mut hasher).unwrap();
-		ser::Writeable::write(&other, &mut hasher).unwrap();
+		Writeable::write(self, &mut hasher).unwrap();
 		let mut ret = [0; 32];
 		hasher.finalize(&mut ret);
 		Hash(ret)
 	}
 }
+
+impl<D: DefaultHashable> DefaultHashable for &D {}
+impl<D: DefaultHashable, E: DefaultHashable> DefaultHashable for (D, E) {}
+impl<D: DefaultHashable, E: DefaultHashable, F: DefaultHashable> DefaultHashable for (D, E, F) {}
+
+/// Implement Hashed trait for external types here
+impl DefaultHashable for crate::util::secp::pedersen::RangeProof {}
+impl DefaultHashable for Vec<u8> {}
+impl DefaultHashable for u64 {}

@@ -18,7 +18,7 @@
 use crate::core::core::committed::Committed;
 use crate::core::core::hash::{Hash, Hashed};
 use crate::core::core::merkle_proof::MerkleProof;
-use crate::core::core::pmmr::{self, ReadonlyPMMR, RewindablePMMR, PMMR};
+use crate::core::core::pmmr::{self, Backend, ReadonlyPMMR, RewindablePMMR, PMMR};
 use crate::core::core::{
 	Block, BlockHeader, Input, Output, OutputIdentifier, TxKernel, TxKernelEntry,
 };
@@ -151,6 +151,15 @@ impl TxHashSet {
 			)?,
 			commit_index,
 		})
+	}
+
+	/// Close all backend file handles
+	pub fn release_backend_files(&mut self) {
+		self.header_pmmr_h.backend.release_files();
+		self.sync_pmmr_h.backend.release_files();
+		self.output_pmmr_h.backend.release_files();
+		self.rproof_pmmr_h.backend.release_files();
+		self.kernel_pmmr_h.backend.release_files();
 	}
 
 	/// Check if an output is unspent.
@@ -1487,19 +1496,27 @@ fn check_and_remove_files(txhashset_path: &PathBuf, header: &BlockHeader) -> Res
 			.difference(&pmmr_files_expected)
 			.cloned()
 			.collect();
+		let mut removed = 0;
 		if !difference.is_empty() {
-			debug!(
-				"Unexpected file(s) found in txhashset subfolder {:?}, removing.",
-				&subdirectory_path
-			);
-			for diff in difference {
+			for diff in &difference {
 				let diff_path = subdirectory_path.join(diff);
-				file::delete(diff_path.clone())?;
-				debug!(
-					"check_and_remove_files: unexpected file '{:?}' removed",
-					diff_path
-				);
+				match file::delete(diff_path.clone()) {
+					Err(e) => error!(
+						"check_and_remove_files: fail to remove file '{:?}', Err: {:?}",
+						diff_path, e,
+					),
+					Ok(_) => {
+						removed += 1;
+						trace!("check_and_remove_files: file '{:?}' removed", diff_path);
+					}
+				}
 			}
+			debug!(
+				"{} tmp file(s) found in txhashset subfolder {:?}, {} removed.",
+				difference.len(),
+				&subdirectory_path,
+				removed,
+			);
 		}
 	}
 	Ok(())

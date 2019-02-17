@@ -21,8 +21,6 @@ use std::fs::File;
 use std::io::{Read, Write};
 use std::path::Path;
 
-use serde_json;
-
 use failure::ResultExt;
 use uuid::Uuid;
 
@@ -53,7 +51,7 @@ const ACCOUNT_PATH_MAPPING_PREFIX: u8 = 'a' as u8;
 
 impl From<store::Error> for Error {
 	fn from(error: store::Error) -> Error {
-		Error::from(ErrorKind::Backend(format!("{:?}", error)))
+		Error::from(ErrorKind::Backend(format!("{}", error)))
 	}
 }
 

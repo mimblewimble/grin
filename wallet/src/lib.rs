@@ -19,7 +19,6 @@ use blake2_rfc as blake2;
 #[macro_use]
 extern crate prettytable;
 
-use serde;
 #[macro_use]
 extern crate serde_derive;
 #[macro_use]
@@ -30,7 +29,6 @@ use grin_core as core;
 use grin_keychain as keychain;
 use grin_store as store;
 use grin_util as util;
-use term;
 
 mod adapters;
 pub mod command;
@@ -48,6 +46,7 @@ pub use crate::adapters::{
 	WalletCommAdapter,
 };
 pub use crate::error::{Error, ErrorKind};
+pub use crate::libwallet::slate::Slate;
 pub use crate::libwallet::types::{
 	BlockFees, CbData, NodeClient, WalletBackend, WalletInfo, WalletInst,
 };

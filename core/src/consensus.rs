@@ -250,7 +250,7 @@ impl HeaderInfo {
 
 /// Move value linearly toward a goal
 pub fn damp(actual: u64, goal: u64, damp_factor: u64) -> u64 {
-	(1 * actual + (damp_factor - 1) * goal) / damp_factor
+	(actual + (damp_factor - 1) * goal) / damp_factor
 }
 
 /// limit value to be within some factor from a goal

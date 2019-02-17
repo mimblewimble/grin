@@ -36,17 +36,19 @@ use uuid::Uuid;
 
 use crate::core::core::hash::Hashed;
 use crate::core::core::Transaction;
-use crate::core::libtx::slate::Slate;
 use crate::core::ser;
 use crate::keychain::{Identifier, Keychain};
 use crate::libwallet::internal::{keys, tx, updater};
+use crate::libwallet::slate::Slate;
 use crate::libwallet::types::{
-	AcctPathMapping, BlockFees, CbData, NodeClient, OutputData, TxLogEntry, TxLogEntryType,
-	TxWrapper, WalletBackend, WalletInfo,
+	AcctPathMapping, BlockFees, CbData, NodeClient, OutputData, OutputLockFn, TxLogEntry,
+	TxLogEntryType, TxWrapper, WalletBackend, WalletInfo,
 };
 use crate::libwallet::{Error, ErrorKind};
 use crate::util;
 use crate::util::secp::{pedersen, ContextFlag, Secp256k1};
+
+const USER_MESSAGE_MAX_LEN: usize = 256;
 
 /// Functions intended for use by the owner (e.g. master seed holder) of the wallet.
 pub struct APIOwner<W: ?Sized, C, K>
@@ -533,15 +535,10 @@ where
 	/// * `amount` - The amount to send, in nanogrins. (`1 G = 1_000_000_000nG`)
 	/// * `minimum_confirmations` - The minimum number of confirmations an output
 	/// should have in order to be included in the transaction.
-	/// * `max_outputs` - By default, the wallet selects as many inputs as possible in a
-	/// transaction, to reduce the Output set and the fees. The wallet will attempt to spend
-	/// include up to `max_outputs` in a transaction, however if this is not enough to cover
-	/// the whole amount, the wallet will include more outputs. This parameter should be considered
-	/// a soft limit.
 	/// * `num_change_outputs` - The target number of change outputs to create in the transaction.
 	/// The actual number created will be `num_change_outputs` + whatever remainder is needed.
 	/// * `selection_strategy_is_use_all` - If `true`, attempt to use up as many outputs as
-	/// possible to create the transaction, up the 'soft limit' of `max_outputs`. This helps
+	/// possible to create the transaction. This helps
 	/// to reduce the size of the UTXO set and the amount of data stored in the wallet, and
 	/// minimizes fees. This will generally result in many inputs and a large change output(s),
 	/// usually much larger than the amount being sent. If `false`, the transaction will include
@@ -551,7 +548,8 @@ where
 	/// ParticipantData within the slate. This message will include a signature created with the
 	/// sender's private keys, and will be publically verifiable. Note this message is for
 	/// the convenience of the participants during the exchange; it is not included in the final
-	/// transaction sent to the chain. Validation of this message is optional.
+	/// transaction sent to the chain. The message will be truncated to 256 characters.
+	/// Validation of this message is optional.
 	///
 	/// # Returns
 	/// * a result containing:
@@ -597,7 +595,6 @@ where
 	///		None,
 	///		amount,     // amount
 	///		10,         // minimum confirmations
-	///		500,        // max outputs
 	///		1,          // num change outputs
 	///		true,       // select all outputs
 	///		Some("Have some Grins. Love, Yeastplume".to_owned()),
@@ -616,17 +613,10 @@ where
 		src_acct_name: Option<&str>,
 		amount: u64,
 		minimum_confirmations: u64,
-		max_outputs: usize,
 		num_change_outputs: usize,
 		selection_strategy_is_use_all: bool,
 		message: Option<String>,
-	) -> Result<
-		(
-			Slate,
-			impl FnOnce(&mut W, &Transaction) -> Result<(), Error>,
-		),
-		Error,
-	> {
+	) -> Result<(Slate, OutputLockFn<W, C, K>), Error> {
 		let mut w = self.wallet.lock();
 		w.open_with_credentials()?;
 		let parent_key_id = match src_acct_name {
@@ -640,14 +630,24 @@ where
 			None => w.parent_key_id(),
 		};
 
-		let (slate, context, lock_fn) = tx::create_send_tx(
+		let message = match message {
+			Some(mut m) => {
+				m.truncate(USER_MESSAGE_MAX_LEN);
+				Some(m)
+			}
+			None => None,
+		};
+
+		let mut slate = tx::new_tx_slate(&mut *w, amount, 2)?;
+
+		let (context, lock_fn) = tx::add_inputs_to_slate(
 			&mut *w,
-			amount,
+			&mut slate,
 			minimum_confirmations,
-			max_outputs,
 			num_change_outputs,
 			selection_strategy_is_use_all,
 			&parent_key_id,
+			0,
 			message,
 		)?;
 
@@ -663,15 +663,76 @@ where
 		Ok((slate, lock_fn))
 	}
 
+	/// Estimates the amount to be locked and fee for the transaction without creating one
+	///
+	/// # Arguments
+	/// * `src_acct_name` - The human readable account name from which to draw outputs
+	/// for the transaction, overriding whatever the active account is as set via the
+	/// [`set_active_account`](struct.APIOwner.html#method.set_active_account) method.
+	/// If None, the transaction will use the active account.
+	/// * `amount` - The amount to send, in nanogrins. (`1 G = 1_000_000_000nG`)
+	/// * `minimum_confirmations` - The minimum number of confirmations an output
+	/// should have in order to be included in the transaction.
+	/// * `num_change_outputs` - The target number of change outputs to create in the transaction.
+	/// The actual number created will be `num_change_outputs` + whatever remainder is needed.
+	/// * `selection_strategy_is_use_all` - If `true`, attempt to use up as many outputs as
+	/// possible to estimate the transaction. This helps
+	/// to reduce the size of the UTXO set and the amount of data stored in the wallet, and
+	/// minimizes fees. This will generally result in many inputs and a large change output(s),
+	/// usually much larger than the amount being sent. If `false`, the transaction will include
+	/// as many outputs as are needed to meet the amount, (and no more) starting with the smallest
+	/// value outputs.
+	///
+	/// # Returns
+	/// * a result containing:
+	/// * (total, fee) - A tuple:
+	/// * Total amount to be locked.
+	/// * Transaction fee
+	pub fn estimate_initiate_tx(
+		&mut self,
+		src_acct_name: Option<&str>,
+		amount: u64,
+		minimum_confirmations: u64,
+		num_change_outputs: usize,
+		selection_strategy_is_use_all: bool,
+	) -> Result<
+		(
+			u64, // total
+			u64, // fee
+		),
+		Error,
+	> {
+		let mut w = self.wallet.lock();
+		w.open_with_credentials()?;
+		let parent_key_id = match src_acct_name {
+			Some(d) => {
+				let pm = w.get_acct_path(d.to_owned())?;
+				match pm {
+					Some(p) => p.path,
+					None => w.parent_key_id(),
+				}
+			}
+			None => w.parent_key_id(),
+		};
+		tx::estimate_send_tx(
+			&mut *w,
+			amount,
+			minimum_confirmations,
+			num_change_outputs,
+			selection_strategy_is_use_all,
+			&parent_key_id,
+		)
+	}
+
 	/// Lock outputs associated with a given slate/transaction
 	pub fn tx_lock_outputs(
 		&mut self,
 		slate: &Slate,
-		lock_fn: impl FnOnce(&mut W, &Transaction) -> Result<(), Error>,
+		mut lock_fn: OutputLockFn<W, C, K>,
 	) -> Result<(), Error> {
 		let mut w = self.wallet.lock();
 		w.open_with_credentials()?;
-		lock_fn(&mut *w, &slate.tx)?;
+		lock_fn(&mut *w, &slate.tx, PhantomData, PhantomData)?;
 		Ok(())
 	}
 
@@ -683,14 +744,14 @@ where
 		let mut w = self.wallet.lock();
 		w.open_with_credentials()?;
 		let context = w.get_private_context(slate.id.as_bytes())?;
-		tx::complete_tx(&mut *w, slate, &context)?;
+		tx::complete_tx(&mut *w, slate, 0, &context)?;
 		tx::update_stored_tx(&mut *w, slate)?;
+		tx::update_message(&mut *w, slate)?;
 		{
 			let mut batch = w.batch()?;
 			batch.delete_private_context(slate.id.as_bytes())?;
 			batch.commit()?;
 		}
-
 		w.close()?;
 		Ok(())
 	}
@@ -873,18 +934,20 @@ where
 				return Err(ErrorKind::TransactionAlreadyReceived(slate.id.to_string()).into());
 			}
 		}
-		let res = tx::receive_tx(&mut *w, slate, &parent_key_id, message);
-		w.close()?;
 
-		if let Err(e) = res {
-			error!("api: receive_tx: failed with error: {}", e);
-			Err(e)
-		} else {
-			debug!(
-				"api: receive_tx: successfully received tx: {}",
-				slate.tx.hash()
-			);
-			Ok(())
-		}
+		let message = match message {
+			Some(mut m) => {
+				m.truncate(USER_MESSAGE_MAX_LEN);
+				Some(m)
+			}
+			None => None,
+		};
+
+		let (_, mut create_fn) =
+			tx::add_output_to_slate(&mut *w, slate, &parent_key_id, 1, message)?;
+		create_fn(&mut *w, &slate.tx, PhantomData, PhantomData)?;
+		tx::update_message(&mut *w, slate)?;
+		w.close()?;
+		Ok(())
 	}
 }

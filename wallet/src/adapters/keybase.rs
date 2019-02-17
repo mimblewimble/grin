@@ -15,7 +15,7 @@
 // Keybase Wallet Plugin
 
 use crate::controller;
-use crate::core::libtx::slate::Slate;
+use crate::libwallet::slate::Slate;
 use crate::libwallet::{Error, ErrorKind};
 use crate::{instantiate_wallet, HTTPNodeClient, WalletCommAdapter, WalletConfig};
 use failure::ResultExt;
@@ -291,7 +291,11 @@ impl WalletCommAdapter for KeybaseWalletCommAdapter {
 		// Send original slate to recipient with the SLATE_NEW topic
 		match send(slate, addr, SLATE_NEW, TTL) {
 			true => (),
-			false => return Err(ErrorKind::ClientCallback("Posting transaction slate"))?,
+			false => {
+				return Err(ErrorKind::ClientCallback(
+					"Posting transaction slate".to_owned(),
+				))?
+			}
 		}
 		info!(
 			"tx request has been sent to @{}, tx uuid: {}",
@@ -300,7 +304,11 @@ impl WalletCommAdapter for KeybaseWalletCommAdapter {
 		// Wait for response from recipient with SLATE_SIGNED topic
 		match poll(TTL as u64, addr) {
 			Some(slate) => return Ok(slate),
-			None => return Err(ErrorKind::ClientCallback("Receiving reply from recipient"))?,
+			None => {
+				return Err(ErrorKind::ClientCallback(
+					"Receiving reply from recipient".to_owned(),
+				))?
+			}
 		}
 	}
 

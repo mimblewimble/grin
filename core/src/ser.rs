@@ -19,7 +19,7 @@
 //! To use it simply implement `Writeable` or `Readable` and then use the
 //! `serialize` or `deserialize` functions on them as appropriate.
 
-use crate::core::hash::{Hash, Hashed};
+use crate::core::hash::{DefaultHashable, Hash, Hashed};
 use crate::keychain::{BlindingFactor, Identifier, IDENTIFIER_SIZE};
 use crate::util::read_write::read_exact;
 use crate::util::secp::constants::{
@@ -615,7 +615,7 @@ where
 			match elem {
 				Ok(e) => buf.push(e),
 				Err(Error::IOErr(ref _d, ref kind)) if *kind == io::ErrorKind::UnexpectedEof => {
-					break
+					break;
 				}
 				Err(e) => return Err(e),
 			}
@@ -706,7 +706,7 @@ pub trait FixedLength {
 }
 
 /// Trait for types that can be added to a PMMR.
-pub trait PMMRable: Writeable + Clone + Debug {
+pub trait PMMRable: Writeable + Clone + Debug + DefaultHashable {
 	/// The type of element actually stored in the MMR data file.
 	/// This allows us to store Hash elements in the header MMR for variable size BlockHeaders.
 	type E: FixedLength + Readable + Writeable;
@@ -721,7 +721,7 @@ pub trait PMMRIndexHashable {
 	fn hash_with_index(&self, index: u64) -> Hash;
 }
 
-impl<T: Writeable> PMMRIndexHashable for T {
+impl<T: DefaultHashable> PMMRIndexHashable for T {
 	fn hash_with_index(&self, index: u64) -> Hash {
 		(index, self).hash()
 	}

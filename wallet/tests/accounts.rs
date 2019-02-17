@@ -180,7 +180,6 @@ fn accounts_test_impl(test_dir: &str) -> Result<(), libwallet::Error> {
 		let (mut slate, lock_fn) = api.initiate_tx(
 			None, reward, // amount
 			2,      // minimum confirmations
-			500,    // max outputs
 			1,      // num change outputs
 			true,   // select all outputs
 			None,

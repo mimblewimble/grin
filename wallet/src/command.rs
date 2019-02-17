@@ -26,7 +26,6 @@ use uuid::Uuid;
 
 use crate::api::TLSConfig;
 use crate::core::core;
-use crate::core::global;
 use crate::keychain;
 
 use crate::error::{Error, ErrorKind};
@@ -146,7 +145,7 @@ pub fn owner_api(
 ) -> Result<(), Error> {
 	let res = controller::owner_listener(
 		wallet,
-		&format!("127.0.0.1:{}", (if global::is_floonet() { "13420" } else { "3420" })),
+		config.owner_api_listen_addr().as_str(),
 		g_args.node_api_secret.clone(),
 		g_args.tls_conf.clone(),
 		config.owner_api_include_foreign.clone(),
@@ -201,77 +200,96 @@ pub struct SendArgs {
 	pub message: Option<String>,
 	pub minimum_confirmations: u64,
 	pub selection_strategy: String,
+	pub estimate_selection_strategies: bool,
 	pub method: String,
 	pub dest: String,
 	pub change_outputs: usize,
 	pub fluff: bool,
-	pub max_outputs: usize,
 }
 
 pub fn send(
 	wallet: Arc<Mutex<WalletInst<impl NodeClient + 'static, keychain::ExtKeychain>>>,
 	args: SendArgs,
+	dark_scheme: bool,
 ) -> Result<(), Error> {
 	controller::owner_single_use(wallet.clone(), |api| {
-		let result = api.initiate_tx(
-			None,
-			args.amount,
-			args.minimum_confirmations,
-			args.max_outputs,
-			args.change_outputs,
-			args.selection_strategy == "all",
-			args.message.clone(),
-		);
-		let (mut slate, lock_fn) = match result {
-			Ok(s) => {
-				info!(
-					"Tx created: {} grin to {} (strategy '{}')",
-					core::amount_to_hr_string(args.amount, false),
-					args.dest,
-					args.selection_strategy,
-				);
-				s
-			}
-			Err(e) => {
-				info!("Tx not created: {}", e);
-				return Err(e);
-			}
-		};
-		let adapter = match args.method.as_str() {
-			"http" => HTTPWalletCommAdapter::new(),
-			"file" => FileWalletCommAdapter::new(),
-			"keybase" => KeybaseWalletCommAdapter::new(),
-			"self" => NullWalletCommAdapter::new(),
-			_ => NullWalletCommAdapter::new(),
-		};
-		if adapter.supports_sync() {
-			slate = adapter.send_tx_sync(&args.dest, &slate)?;
-			api.tx_lock_outputs(&slate, lock_fn)?;
-			if args.method == "self" {
-				controller::foreign_single_use(wallet, |api| {
-					api.receive_tx(&mut slate, Some(&args.dest), None)?;
-					Ok(())
-				})?;
-			}
-			if let Err(e) = api.verify_slate_messages(&slate) {
-				error!("Error validating participant messages: {}", e);
-				return Err(e);
-			}
-			api.finalize_tx(&mut slate)?;
+		if args.estimate_selection_strategies {
+			let strategies = vec!["smallest", "all"]
+				.into_iter()
+				.map(|strategy| {
+					let (total, fee) = api
+						.estimate_initiate_tx(
+							None,
+							args.amount,
+							args.minimum_confirmations,
+							args.change_outputs,
+							strategy == "all",
+						)
+						.unwrap();
+					(strategy, total, fee)
+				})
+				.collect();
+			display::estimate(args.amount, strategies, dark_scheme);
 		} else {
-			adapter.send_tx_async(&args.dest, &slate)?;
-			api.tx_lock_outputs(&slate, lock_fn)?;
-		}
-		if adapter.supports_sync() {
-			let result = api.post_tx(&slate.tx, args.fluff);
-			match result {
-				Ok(_) => {
-					info!("Tx sent ok",);
-					return Ok(());
+			let result = api.initiate_tx(
+				None,
+				args.amount,
+				args.minimum_confirmations,
+				args.change_outputs,
+				args.selection_strategy == "all",
+				args.message.clone(),
+			);
+			let (mut slate, lock_fn) = match result {
+				Ok(s) => {
+					info!(
+						"Tx created: {} grin to {} (strategy '{}')",
+						core::amount_to_hr_string(args.amount, false),
+						args.dest,
+						args.selection_strategy,
+					);
+					s
 				}
 				Err(e) => {
-					error!("Tx sent fail: {}", e);
+					info!("Tx not created: {}", e);
 					return Err(e);
+				}
+			};
+			let adapter = match args.method.as_str() {
+				"http" => HTTPWalletCommAdapter::new(),
+				"file" => FileWalletCommAdapter::new(),
+				"keybase" => KeybaseWalletCommAdapter::new(),
+				"self" => NullWalletCommAdapter::new(),
+				_ => NullWalletCommAdapter::new(),
+			};
+			if adapter.supports_sync() {
+				slate = adapter.send_tx_sync(&args.dest, &slate)?;
+				api.tx_lock_outputs(&slate, lock_fn)?;
+				if args.method == "self" {
+					controller::foreign_single_use(wallet, |api| {
+						api.receive_tx(&mut slate, Some(&args.dest), None)?;
+						Ok(())
+					})?;
+				}
+				if let Err(e) = api.verify_slate_messages(&slate) {
+					error!("Error validating participant messages: {}", e);
+					return Err(e);
+				}
+				api.finalize_tx(&mut slate)?;
+			} else {
+				adapter.send_tx_async(&args.dest, &slate)?;
+				api.tx_lock_outputs(&slate, lock_fn)?;
+			}
+			if adapter.supports_sync() {
+				let result = api.post_tx(&slate.tx, args.fluff);
+				match result {
+					Ok(_) => {
+						info!("Tx sent ok",);
+						return Ok(());
+					}
+					Err(e) => {
+						error!("Tx sent fail: {}", e);
+						return Err(e);
+					}
 				}
 			}
 		}
@@ -397,15 +415,19 @@ pub fn txs(
 			&g_args.account,
 			height,
 			validated,
-			txs,
+			&txs,
 			include_status,
 			dark_scheme,
 		)?;
 		// if given a particular transaction id, also get and display associated
-		// inputs/outputs
+		// inputs/outputs and messages
 		if args.id.is_some() {
 			let (_, outputs) = api.retrieve_outputs(true, false, args.id)?;
 			display::outputs(&g_args.account, height, validated, outputs, dark_scheme)?;
+			// should only be one here, but just in case
+			for tx in txs {
+				display::tx_messages(&tx, dark_scheme)?;
+			}
 		};
 		Ok(())
 	})?;

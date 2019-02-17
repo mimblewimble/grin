@@ -17,8 +17,8 @@ extern crate log;
 
 use self::core::global;
 use self::core::global::ChainTypes;
-use self::core::libtx::slate::Slate;
 use self::keychain::ExtKeychain;
+use self::libwallet::slate::Slate;
 use self::wallet::test_framework::{self, LocalWalletClient, WalletProxy};
 use self::wallet::{libwallet, FileWalletCommAdapter};
 use grin_core as core;
@@ -104,7 +104,6 @@ fn file_repost_test_impl(test_dir: &str) -> Result<(), libwallet::Error> {
 			Some("mining"),
 			reward * 2, // amount
 			2,          // minimum confirmations
-			500,        // max outputs
 			1,          // num change outputs
 			true,       // select all outputs
 			None,
@@ -200,7 +199,6 @@ fn file_repost_test_impl(test_dir: &str) -> Result<(), libwallet::Error> {
 			None,
 			amount * 2, // amount
 			2,          // minimum confirmations
-			500,        // max outputs
 			1,          // num change outputs
 			true,       // select all outputs
 			None,

@@ -256,6 +256,7 @@ mod test {
 	use std::sync::Arc;
 
 	use super::*;
+	use crate::core::transaction::Weighting;
 	use crate::core::verifier_cache::{LruVerifierCache, VerifierCache};
 	use crate::keychain::{ExtKeychain, ExtKeychainPath};
 
@@ -283,7 +284,7 @@ mod test {
 		)
 		.unwrap();
 
-		tx.validate(vc.clone()).unwrap();
+		tx.validate(Weighting::AsTransaction, vc.clone()).unwrap();
 	}
 
 	#[test]
@@ -306,7 +307,7 @@ mod test {
 		)
 		.unwrap();
 
-		tx.validate(vc.clone()).unwrap();
+		tx.validate(Weighting::AsTransaction, vc.clone()).unwrap();
 	}
 
 	#[test]
@@ -323,6 +324,6 @@ mod test {
 		)
 		.unwrap();
 
-		tx.validate(vc.clone()).unwrap();
+		tx.validate(Weighting::AsTransaction, vc.clone()).unwrap();
 	}
 }

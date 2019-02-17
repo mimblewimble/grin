@@ -963,7 +963,6 @@ fn replicate_tx_fluff_failure() {
 		let (mut slate, lock_fn) = api.initiate_tx(
 			None, amount, // amount
 			2,      // minimum confirmations
-			500,    // max outputs
 			1000,   // num change outputs
 			true,   // select all outputs
 			None,

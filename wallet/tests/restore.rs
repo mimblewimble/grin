@@ -16,8 +16,8 @@
 extern crate log;
 use self::core::global;
 use self::core::global::ChainTypes;
-use self::core::libtx::slate::Slate;
 use self::keychain::{ExtKeychain, Identifier, Keychain};
+use self::libwallet::slate::Slate;
 use self::wallet::libwallet;
 use self::wallet::libwallet::types::AcctPathMapping;
 use self::wallet::test_framework::{self, LocalWalletClient, WalletProxy};
@@ -26,6 +26,7 @@ use grin_keychain as keychain;
 use grin_util as util;
 use grin_wallet as wallet;
 use std::fs;
+use std::sync::atomic::Ordering;
 use std::thread;
 use std::time::Duration;
 
@@ -44,6 +45,7 @@ fn restore_wallet(base_dir: &str, wallet_dir: &str) -> Result<(), libwallet::Err
 	let dest_dir = format!("{}/{}_restore", base_dir, wallet_dir);
 	fs::create_dir_all(dest_dir.clone())?;
 	let dest_seed = format!("{}/wallet.seed", dest_dir);
+	println!("Source: {}, Dest: {}", source_seed, dest_seed);
 	fs::copy(source_seed, dest_seed)?;
 
 	let mut wallet_proxy: WalletProxy<LocalWalletClient, ExtKeychain> = WalletProxy::new(base_dir);
@@ -54,6 +56,7 @@ fn restore_wallet(base_dir: &str, wallet_dir: &str) -> Result<(), libwallet::Err
 	wallet_proxy.add_wallet(wallet_dir, client.get_send_instance(), wallet.clone());
 
 	// Set the wallet proxy listener running
+	let wp_running = wallet_proxy.running.clone();
 	thread::spawn(move || {
 		if let Err(e) = wallet_proxy.run() {
 			error!("Wallet Proxy error: {}", e);
@@ -66,6 +69,9 @@ fn restore_wallet(base_dir: &str, wallet_dir: &str) -> Result<(), libwallet::Err
 		let _ = api.retrieve_summary_info(true, 1)?;
 		Ok(())
 	})?;
+
+	wp_running.store(false, Ordering::Relaxed);
+	//thread::sleep(Duration::from_millis(1000));
 
 	Ok(())
 }
@@ -108,6 +114,7 @@ fn compare_wallet_restore(
 	}
 
 	// Set the wallet proxy listener running
+	let wp_running = wallet_proxy.running.clone();
 	thread::spawn(move || {
 		if let Err(e) = wallet_proxy.run() {
 			error!("Wallet Proxy error: {}", e);
@@ -164,6 +171,9 @@ fn compare_wallet_restore(
 		dest_accts.as_ref().unwrap().len()
 	);
 
+	wp_running.store(false, Ordering::Relaxed);
+	//thread::sleep(Duration::from_millis(1000));
+
 	Ok(())
 }
 
@@ -208,6 +218,7 @@ fn setup_restore(test_dir: &str) -> Result<(), libwallet::Error> {
 	wallet_proxy.add_wallet("wallet3", client3.get_send_instance(), wallet3.clone());
 
 	// Set the wallet proxy listener running
+	let wp_running = wallet_proxy.running.clone();
 	thread::spawn(move || {
 		if let Err(e) = wallet_proxy.run() {
 			error!("Wallet Proxy error: {}", e);
@@ -226,7 +237,6 @@ fn setup_restore(test_dir: &str) -> Result<(), libwallet::Error> {
 		let (slate_i, lock_fn) = sender_api.initiate_tx(
 			None, amount, // amount
 			2,      // minimum confirmations
-			500,    // max outputs
 			1,      // num change outputs
 			true,   // select all outputs
 			None,
@@ -248,7 +258,6 @@ fn setup_restore(test_dir: &str) -> Result<(), libwallet::Error> {
 			None,
 			amount * 2, // amount
 			2,          // minimum confirmations
-			500,        // max outputs
 			1,          // num change outputs
 			true,       // select all outputs
 			None,
@@ -270,7 +279,6 @@ fn setup_restore(test_dir: &str) -> Result<(), libwallet::Error> {
 			None,
 			amount * 3, // amount
 			2,          // minimum confirmations
-			500,        // max outputs
 			1,          // num change outputs
 			true,       // select all outputs
 			None,
@@ -298,7 +306,6 @@ fn setup_restore(test_dir: &str) -> Result<(), libwallet::Error> {
 			None,
 			amount * 3, // amount
 			2,          // minimum confirmations
-			500,        // max outputs
 			1,          // num change outputs
 			true,       // select all outputs
 			None,
@@ -326,6 +333,8 @@ fn setup_restore(test_dir: &str) -> Result<(), libwallet::Error> {
 		let _ = api.retrieve_summary_info(true, 1)?;
 		Ok(())
 	})?;
+
+	wp_running.store(false, Ordering::Relaxed);
 
 	Ok(())
 }
@@ -366,10 +375,10 @@ fn perform_restore(test_dir: &str) -> Result<(), libwallet::Error> {
 fn wallet_restore() {
 	let test_dir = "test_output/wallet_restore";
 	if let Err(e) = setup_restore(test_dir) {
-		println!("Set up restore: Libwallet Error: {}", e);
+		panic!("Libwallet Error: {} - {}", e, e.backtrace().unwrap());
 	}
 	if let Err(e) = perform_restore(test_dir) {
-		println!("Perform restore: Libwallet Error: {}", e);
+		panic!("Libwallet Error: {} - {}", e, e.backtrace().unwrap());
 	}
 	// let logging finish
 	thread::sleep(Duration::from_millis(200));

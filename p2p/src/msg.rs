@@ -40,10 +40,6 @@ const OTHER_MAGIC: [u8; 2] = [73, 43];
 const FLOONET_MAGIC: [u8; 2] = [83, 59];
 const MAINNET_MAGIC: [u8; 2] = [97, 61];
 
-/// Max theoretical size of a block filled with outputs.
-const MAX_BLOCK_SIZE: u64 =
-	(consensus::MAX_BLOCK_WEIGHT / consensus::BLOCK_OUTPUT_WEIGHT * 708) as u64;
-
 /// Types of messages.
 /// Note: Values here are *important* so we should only add new values at the
 /// end.
@@ -74,6 +70,11 @@ enum_from_primitive! {
 	}
 }
 
+/// Max theoretical size of a block filled with outputs.
+fn max_block_size() -> u64 {
+	(global::max_block_weight() / consensus::BLOCK_OUTPUT_WEIGHT * 708) as u64
+}
+
 // Max msg size for each msg type.
 fn max_msg_size(msg_type: Type) -> u64 {
 	match msg_type {
@@ -88,11 +89,11 @@ fn max_msg_size(msg_type: Type) -> u64 {
 		Type::Header => 365,
 		Type::Headers => 2 + 365 * MAX_BLOCK_HEADERS as u64,
 		Type::GetBlock => 32,
-		Type::Block => MAX_BLOCK_SIZE,
+		Type::Block => max_block_size(),
 		Type::GetCompactBlock => 32,
-		Type::CompactBlock => MAX_BLOCK_SIZE / 10,
-		Type::StemTransaction => MAX_BLOCK_SIZE,
-		Type::Transaction => MAX_BLOCK_SIZE,
+		Type::CompactBlock => max_block_size() / 10,
+		Type::StemTransaction => max_block_size(),
+		Type::Transaction => max_block_size(),
 		Type::TxHashSetRequest => 40,
 		Type::TxHashSetArchive => 64,
 		Type::BanReason => 64,

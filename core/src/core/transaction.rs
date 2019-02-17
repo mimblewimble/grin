@@ -14,8 +14,7 @@
 
 //! Transactions
 
-use crate::consensus;
-use crate::core::hash::Hashed;
+use crate::core::hash::{DefaultHashable, Hashed};
 use crate::core::verifier_cache::VerifierCache;
 use crate::core::{committed, Committed};
 use crate::keychain::{self, BlindingFactor};
@@ -28,9 +27,10 @@ use crate::util::secp;
 use crate::util::secp::pedersen::{Commitment, RangeProof};
 use crate::util::static_secp_instance;
 use crate::util::RwLock;
+use crate::{consensus, global};
 use enum_primitive::FromPrimitive;
-use std::cmp::max;
 use std::cmp::Ordering;
+use std::cmp::{max, min};
 use std::collections::HashSet;
 use std::sync::Arc;
 use std::{error, fmt};
@@ -49,6 +49,8 @@ enum_from_primitive! {
 		HeightLocked = 2,
 	}
 }
+
+impl DefaultHashable for KernelFeatures {}
 
 impl Writeable for KernelFeatures {
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
@@ -170,6 +172,7 @@ pub struct TxKernel {
 	pub excess_sig: secp::Signature,
 }
 
+impl DefaultHashable for TxKernel {}
 hashable_ord!(TxKernel);
 
 impl ::std::hash::Hash for TxKernel {
@@ -365,6 +368,28 @@ impl FixedLength for TxKernelEntry {
 		+ secp::constants::AGG_SIGNATURE_SIZE;
 }
 
+/// Enum of possible tx weight verification options -
+///
+/// * As "transaction" checks tx (as block) weight does not exceed max_block_weight.
+/// * As "block" same as above but allow for additional coinbase reward (1 output, 1 kernel).
+/// * With "no limit" to skip the weight check.
+///
+#[derive(Clone, Copy)]
+pub enum Weighting {
+	/// Tx represents a tx (max block weight, accounting for additional coinbase reward).
+	AsTransaction,
+	/// Tx representing a tx with artificially limited max_weight.
+	/// This is used when selecting mineable txs from the pool.
+	AsLimitedTransaction {
+		/// The maximum (block) weight that we will allow.
+		max_weight: usize,
+	},
+	/// Tx represents a block (max block weight).
+	AsBlock,
+	/// No max weight limit (skip the weight check).
+	NoLimit,
+}
+
 /// TransactionBody is a common abstraction for transaction and block
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct TransactionBody {
@@ -409,11 +434,15 @@ impl Readable for TransactionBody {
 		let (input_len, output_len, kernel_len) =
 			ser_multiread!(reader, read_u64, read_u64, read_u64);
 
-		// quick block weight check before proceeding
-		let tx_block_weight =
-			TransactionBody::weight(input_len as usize, output_len as usize, kernel_len as usize);
+		// Quick block weight check before proceeding.
+		// Note: We use weight_as_block here (inputs have weight).
+		let tx_block_weight = TransactionBody::weight_as_block(
+			input_len as usize,
+			output_len as usize,
+			kernel_len as usize,
+		);
 
-		if tx_block_weight > consensus::MAX_BLOCK_WEIGHT {
+		if tx_block_weight > global::max_block_weight() {
 			return Err(ser::Error::TooLargeReadErr);
 		}
 
@@ -461,9 +490,9 @@ impl TransactionBody {
 
 	/// Sort the inputs|outputs|kernels.
 	pub fn sort(&mut self) {
-		self.inputs.sort();
-		self.outputs.sort();
-		self.kernels.sort();
+		self.inputs.sort_unstable();
+		self.outputs.sort_unstable();
+		self.kernels.sort_unstable();
 	}
 
 	/// Creates a new transaction body initialized with
@@ -475,7 +504,7 @@ impl TransactionBody {
 		kernels: Vec<TxKernel>,
 		verify_sorted: bool,
 	) -> Result<TransactionBody, Error> {
-		let body = TransactionBody {
+		let mut body = TransactionBody {
 			inputs,
 			outputs,
 			kernels,
@@ -485,52 +514,44 @@ impl TransactionBody {
 			// If we are verifying sort order then verify and
 			// return an error if not sorted lexicographically.
 			body.verify_sorted()?;
-			Ok(body)
 		} else {
 			// If we are not verifying sort order then sort in place and return.
-			let mut body = body;
 			body.sort();
-			Ok(body)
 		}
+		Ok(body)
 	}
 
 	/// Builds a new body with the provided inputs added. Existing
 	/// inputs, if any, are kept intact.
 	/// Sort order is maintained.
-	pub fn with_input(self, input: Input) -> TransactionBody {
-		let mut new_ins = self.inputs;
-		new_ins.push(input);
-		new_ins.sort();
-		TransactionBody {
-			inputs: new_ins,
-			..self
-		}
+	pub fn with_input(mut self, input: Input) -> TransactionBody {
+		self.inputs
+			.binary_search(&input)
+			.err()
+			.map(|e| self.inputs.insert(e, input));
+		self
 	}
 
 	/// Builds a new TransactionBody with the provided output added. Existing
 	/// outputs, if any, are kept intact.
 	/// Sort order is maintained.
-	pub fn with_output(self, output: Output) -> TransactionBody {
-		let mut new_outs = self.outputs;
-		new_outs.push(output);
-		new_outs.sort();
-		TransactionBody {
-			outputs: new_outs,
-			..self
-		}
+	pub fn with_output(mut self, output: Output) -> TransactionBody {
+		self.outputs
+			.binary_search(&output)
+			.err()
+			.map(|e| self.outputs.insert(e, output));
+		self
 	}
 
 	/// Builds a new TransactionBody with the provided kernel added. Existing
 	/// kernels, if any, are kept intact.
 	/// Sort order is maintained.
-	pub fn with_kernel(self, kernel: TxKernel) -> TransactionBody {
-		let mut new_kerns = self.kernels;
-		new_kerns.push(kernel);
-		new_kerns.sort();
-		TransactionBody {
-			kernels: new_kerns,
-			..self
-		}
+	pub fn with_kernel(mut self, kernel: TxKernel) -> TransactionBody {
+		self.kernels
+			.binary_search(&kernel)
+			.err()
+			.map(|e| self.kernels.insert(e, kernel));
+		self
 	}
 
 	/// Total fee for a TransactionBody is the sum of fees of all kernels.
@@ -583,18 +604,34 @@ impl TransactionBody {
 			.unwrap_or(0)
 	}
 
-	// Verify the body is not too big in terms of number of inputs|outputs|kernels.
-	fn verify_weight(&self, with_reward: bool) -> Result<(), Error> {
-		// if as_block check the body as if it was a block, with an additional output and
-		// kernel for reward
-		let reserve = if with_reward { 0 } else { 1 };
-		let tx_block_weight = TransactionBody::weight_as_block(
-			self.inputs.len(),
-			self.outputs.len() + reserve,
-			self.kernels.len() + reserve,
-		);
+	/// Verify the body is not too big in terms of number of inputs|outputs|kernels.
+	/// Weight rules vary depending on the "weight type" (block or tx or pool).
+	fn verify_weight(&self, weighting: Weighting) -> Result<(), Error> {
+		// A coinbase reward is a single output and a single kernel (for now).
+		// We need to account for this when verifying max tx weights.
+		let coinbase_weight = consensus::BLOCK_OUTPUT_WEIGHT + consensus::BLOCK_KERNEL_WEIGHT;
 
-		if tx_block_weight > consensus::MAX_BLOCK_WEIGHT {
+		// If "tx" body then remember to reduce the max_block_weight by the weight of a kernel.
+		// If "limited tx" then compare against the provided max_weight.
+		// If "block" body then verify weight based on full set of inputs|outputs|kernels.
+		// If "pool" body then skip weight verification (pool can be larger than single block).
+		//
+		// Note: Taking a max tx and building a block from it we need to allow room
+		// for the additional coinbase reward (1 output + 1 kernel).
+		//
+		let max_weight = match weighting {
+			Weighting::AsTransaction => global::max_block_weight().saturating_sub(coinbase_weight),
+			Weighting::AsLimitedTransaction { max_weight } => {
+				min(global::max_block_weight(), max_weight).saturating_sub(coinbase_weight)
+			}
+			Weighting::AsBlock => global::max_block_weight(),
+			Weighting::NoLimit => {
+				// We do not verify "tx as pool" weight so we are done here.
+				return Ok(());
+			}
+		};
+
+		if self.body_weight_as_block() > max_weight {
 			return Err(Error::TooHeavy);
 		}
 		Ok(())
@@ -652,8 +689,8 @@ impl TransactionBody {
 	/// Subset of full validation that skips expensive verification steps, specifically -
 	/// * rangeproof verification
 	/// * kernel signature verification
-	pub fn validate_read(&self, with_reward: bool) -> Result<(), Error> {
-		self.verify_weight(with_reward)?;
+	pub fn validate_read(&self, weighting: Weighting) -> Result<(), Error> {
+		self.verify_weight(weighting)?;
 		self.verify_sorted()?;
 		self.verify_cut_through()?;
 		Ok(())
@@ -664,10 +701,10 @@ impl TransactionBody {
 	/// output.
 	pub fn validate(
 		&self,
-		with_reward: bool,
+		weighting: Weighting,
 		verifier: Arc<RwLock<dyn VerifierCache>>,
 	) -> Result<(), Error> {
-		self.validate_read(with_reward)?;
+		self.validate_read(weighting)?;
 
 		// Find all the outputs that have not had their rangeproofs verified.
 		let outputs = {
@@ -718,6 +755,8 @@ pub struct Transaction {
 	/// The transaction body - inputs/outputs/kernels
 	body: TransactionBody,
 }
+
+impl DefaultHashable for Transaction {}
 
 /// PartialEq
 impl PartialEq for Transaction {
@@ -888,7 +927,7 @@ impl Transaction {
 	/// * kernel signature verification (on the body)
 	/// * kernel sum verification
 	pub fn validate_read(&self) -> Result<(), Error> {
-		self.body.validate_read(false)?;
+		self.body.validate_read(Weighting::AsTransaction)?;
 		self.body.verify_features()?;
 		Ok(())
 	}
@@ -896,8 +935,12 @@ impl Transaction {
 	/// Validates all relevant parts of a fully built transaction. Checks the
 	/// excess value against the signature as well as range proofs for each
 	/// output.
-	pub fn validate(&self, verifier: Arc<RwLock<dyn VerifierCache>>) -> Result<(), Error> {
-		self.body.validate(false, verifier)?;
+	pub fn validate(
+		&self,
+		weighting: Weighting,
+		verifier: Arc<RwLock<dyn VerifierCache>>,
+	) -> Result<(), Error> {
+		self.body.validate(weighting, verifier)?;
 		self.body.verify_features()?;
 		self.verify_kernel_sums(self.overage(), self.offset)?;
 		Ok(())
@@ -941,8 +984,8 @@ pub fn cut_through(inputs: &mut Vec<Input>, outputs: &mut Vec<Output>) -> Result
 	// filter and sort
 	inputs.retain(|inp| !to_cut_through.contains(&inp.commitment()));
 	outputs.retain(|out| !to_cut_through.contains(&out.commitment()));
-	inputs.sort();
-	outputs.sort();
+	inputs.sort_unstable();
+	outputs.sort_unstable();
 	Ok(())
 }
 
@@ -954,15 +997,22 @@ pub fn aggregate(mut txs: Vec<Transaction>) -> Result<Transaction, Error> {
 	} else if txs.len() == 1 {
 		return Ok(txs.pop().unwrap());
 	}
+	let mut n_inputs = 0;
+	let mut n_outputs = 0;
+	let mut n_kernels = 0;
+	for tx in txs.iter() {
+		n_inputs += tx.body.inputs.len();
+		n_outputs += tx.body.outputs.len();
+		n_kernels += tx.body.kernels.len();
+	}
 
-	let mut inputs: Vec<Input> = vec![];
-	let mut outputs: Vec<Output> = vec![];
-	let mut kernels: Vec<TxKernel> = vec![];
+	let mut inputs: Vec<Input> = Vec::with_capacity(n_inputs);
+	let mut outputs: Vec<Output> = Vec::with_capacity(n_outputs);
+	let mut kernels: Vec<TxKernel> = Vec::with_capacity(n_kernels);
 
 	// we will sum these together at the end to give us the overall offset for the
 	// transaction
-	let mut kernel_offsets: Vec<BlindingFactor> = vec![];
-
+	let mut kernel_offsets: Vec<BlindingFactor> = Vec::with_capacity(txs.len());
 	for mut tx in txs {
 		// we will sum these later to give a single aggregate offset
 		kernel_offsets.push(tx.offset);
@@ -976,7 +1026,7 @@ pub fn aggregate(mut txs: Vec<Transaction>) -> Result<Transaction, Error> {
 	cut_through(&mut inputs, &mut outputs)?;
 
 	// Now sort kernels.
-	kernels.sort();
+	kernels.sort_unstable();
 
 	// now sum the kernel_offsets up to give us an aggregate offset for the
 	// transaction
@@ -1047,9 +1097,9 @@ pub fn deaggregate(mk_tx: Transaction, txs: Vec<Transaction>) -> Result<Transact
 	};
 
 	// Sorting them lexicographically
-	inputs.sort();
-	outputs.sort();
-	kernels.sort();
+	inputs.sort_unstable();
+	outputs.sort_unstable();
+	kernels.sort_unstable();
 
 	// Build a new tx from the above data.
 	let tx = Transaction::new(inputs, outputs, kernels).with_offset(total_kernel_offset);
@@ -1068,6 +1118,7 @@ pub struct Input {
 	pub commit: Commitment,
 }
 
+impl DefaultHashable for Input {}
 hashable_ord!(Input);
 
 impl ::std::hash::Hash for Input {
@@ -1173,6 +1224,7 @@ pub struct Output {
 	pub proof: RangeProof,
 }
 
+impl DefaultHashable for Output {}
 hashable_ord!(Output);
 
 impl ::std::hash::Hash for Output {
@@ -1284,6 +1336,8 @@ pub struct OutputIdentifier {
 	/// Output commitment
 	pub commit: Commitment,
 }
+
+impl DefaultHashable for OutputIdentifier {}
 
 impl OutputIdentifier {
 	/// Build a new output_identifier.

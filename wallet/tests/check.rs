@@ -158,7 +158,6 @@ fn check_repair_impl(test_dir: &str) -> Result<(), libwallet::Error> {
 			None,
 			reward * 2, // amount
 			cm,         // minimum confirmations
-			500,        // max outputs
 			1,          // num change outputs
 			true,       // select all outputs
 			None,       // optional message
@@ -552,7 +551,6 @@ fn two_wallets_one_seed_impl(test_dir: &str) -> Result<(), libwallet::Error> {
 	})?;
 
 	let _ = test_framework::award_blocks_to_wallet(&chain, miner.clone(), cm);
-	bh += cm as u64;
 
 	// 7) Ensure check_repair creates missing accounts
 	wallet::controller::owner_single_use(wallet10.clone(), |api| {

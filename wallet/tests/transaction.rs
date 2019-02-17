@@ -16,8 +16,8 @@
 extern crate log;
 use self::core::global;
 use self::core::global::ChainTypes;
-use self::core::libtx::slate::Slate;
 use self::keychain::ExtKeychain;
+use self::libwallet::slate::Slate;
 use self::wallet::libwallet;
 use self::wallet::libwallet::types::OutputStatus;
 use self::wallet::test_framework::{self, LocalWalletClient, WalletProxy};
@@ -99,7 +99,6 @@ fn basic_transaction_api(test_dir: &str) -> Result<(), libwallet::Error> {
 		let (slate_i, lock_fn) = sender_api.initiate_tx(
 			None, amount, // amount
 			2,      // minimum confirmations
-			500,    // max outputs
 			1,      // num change outputs
 			true,   // select all outputs
 			None,
@@ -226,6 +225,31 @@ fn basic_transaction_api(test_dir: &str) -> Result<(), libwallet::Error> {
 		Ok(())
 	})?;
 
+	// Estimate fee and locked amount for a transaction
+	wallet::controller::owner_single_use(wallet1.clone(), |sender_api| {
+		let (total, fee) = sender_api.estimate_initiate_tx(
+			None,
+			amount * 2, // amount
+			2,          // minimum confirmations
+			1,          // num change outputs
+			true,       // select all outputs
+		)?;
+		assert_eq!(total, 600_000_000_000);
+		assert_eq!(fee, 4_000_000);
+
+		let (total, fee) = sender_api.estimate_initiate_tx(
+			None,
+			amount * 2, // amount
+			2,          // minimum confirmations
+			1,          // num change outputs
+			false,      // select the smallest amount of outputs
+		)?;
+		assert_eq!(total, 180_000_000_000);
+		assert_eq!(fee, 6_000_000);
+
+		Ok(())
+	})?;
+
 	// Send another transaction, but don't post to chain immediately and use
 	// the stored transaction instead
 	wallet::controller::owner_single_use(wallet1.clone(), |sender_api| {
@@ -234,14 +258,13 @@ fn basic_transaction_api(test_dir: &str) -> Result<(), libwallet::Error> {
 			None,
 			amount * 2, // amount
 			2,          // minimum confirmations
-			500,        // max outputs
 			1,          // num change outputs
 			true,       // select all outputs
 			None,
 		)?;
 		slate = client1.send_tx_slate_direct("wallet2", &slate_i)?;
-		sender_api.finalize_tx(&mut slate)?;
 		sender_api.tx_lock_outputs(&slate, lock_fn)?;
+		sender_api.finalize_tx(&mut slate)?;
 		Ok(())
 	})?;
 
@@ -284,6 +307,24 @@ fn basic_transaction_api(test_dir: &str) -> Result<(), libwallet::Error> {
 		assert!(tx.confirmation_ts.is_some());
 		Ok(())
 	})?;
+
+	// Initiate transaction with weight more that
+	// core::global::max_block_weight() should fail
+	let invalid_amount_of_outputs =
+		core::global::max_block_weight() / core::consensus::BLOCK_OUTPUT_WEIGHT + 1;
+	let res = wallet::controller::owner_single_use(wallet1.clone(), |sender_api| {
+		// note this will increment the block count as part of the transaction "posting"
+		sender_api.initiate_tx(
+			None,
+			amount,                    // amount
+			2,                         // minimum confirmations
+			invalid_amount_of_outputs, // num change outputs
+			true,                      // select all outputs
+			None,
+		)?;
+		Ok(())
+	});
+	assert!(res.is_err());
 
 	// let logging finish
 	thread::sleep(Duration::from_millis(200));
@@ -331,14 +372,13 @@ fn tx_rollback(test_dir: &str) -> Result<(), libwallet::Error> {
 		let (slate_i, lock_fn) = sender_api.initiate_tx(
 			None, amount, // amount
 			2,      // minimum confirmations
-			500,    // max outputs
 			1,      // num change outputs
 			true,   // select all outputs
 			None,
 		)?;
 		slate = client1.send_tx_slate_direct("wallet2", &slate_i)?;
-		sender_api.finalize_tx(&mut slate)?;
 		sender_api.tx_lock_outputs(&slate, lock_fn)?;
+		sender_api.finalize_tx(&mut slate)?;
 		Ok(())
 	})?;
 
@@ -458,7 +498,7 @@ fn tx_rollback(test_dir: &str) -> Result<(), libwallet::Error> {
 fn db_wallet_basic_transaction_api() {
 	let test_dir = "test_output/basic_transaction_api";
 	if let Err(e) = basic_transaction_api(test_dir) {
-		println!("Libwallet Error: {}", e);
+		panic!("Libwallet Error: {} - {}", e, e.backtrace().unwrap());
 	}
 }
 
@@ -466,6 +506,6 @@ fn db_wallet_basic_transaction_api() {
 fn db_wallet_tx_rollback() {
 	let test_dir = "test_output/tx_rollback";
 	if let Err(e) = tx_rollback(test_dir) {
-		println!("Libwallet Error: {}", e);
+		panic!("Libwallet Error: {} - {}", e, e.backtrace().unwrap());
 	}
 }

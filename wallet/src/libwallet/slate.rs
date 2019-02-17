@@ -16,20 +16,22 @@
 //! around during an interactive wallet exchange
 
 use crate::blake2::blake2b::blake2b;
-use crate::core::amount_to_hr_string;
-use crate::core::committed::Committed;
-use crate::core::transaction::{kernel_features, kernel_sig_msg, Transaction};
-use crate::core::verifier_cache::LruVerifierCache;
 use crate::keychain::{BlindSum, BlindingFactor, Keychain};
-use crate::libtx::error::{Error, ErrorKind};
-use crate::libtx::{aggsig, build, tx_fee};
+use crate::libwallet::error::{Error, ErrorKind};
 use crate::util::secp;
 use crate::util::secp::key::{PublicKey, SecretKey};
 use crate::util::secp::Signature;
 use crate::util::RwLock;
+use grin_core::core::amount_to_hr_string;
+use grin_core::core::committed::Committed;
+use grin_core::core::transaction::{kernel_features, kernel_sig_msg, Transaction, Weighting};
+use grin_core::core::verifier_cache::LruVerifierCache;
+use grin_core::libtx::{aggsig, build, secp_ser, tx_fee};
 use rand::thread_rng;
 use std::sync::Arc;
 use uuid::Uuid;
+
+const CURRENT_SLATE_VERSION: u64 = 1;
 
 /// Public data for each participant in the slate
 
@@ -66,6 +68,33 @@ impl ParticipantData {
 	}
 }
 
+/// Public message data (for serialising and storage)
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct ParticipantMessageData {
+	/// id of the particpant in the tx
+	pub id: u64,
+	/// Public key
+	#[serde(with = "secp_ser::pubkey_serde")]
+	pub public_key: PublicKey,
+	/// Message,
+	pub message: Option<String>,
+	/// Signature
+	#[serde(with = "secp_ser::option_sig_serde")]
+	pub message_sig: Option<Signature>,
+}
+
+impl ParticipantMessageData {
+	/// extract relevant message data from participant data
+	pub fn from_participant_data(p: &ParticipantData) -> ParticipantMessageData {
+		ParticipantMessageData {
+			id: p.id,
+			public_key: p.public_blind_excess,
+			message: p.message.clone(),
+			message_sig: p.message_sig.clone(),
+		}
+	}
+}
+
 /// A 'Slate' is passed around to all parties to build up all of the public
 /// transaction data needed to create a finalized transaction. Callers can pass
 /// the slate around by whatever means they choose, (but we can provide some
@@ -92,6 +121,20 @@ pub struct Slate {
 	/// insert their public data here. For now, 0 is sender and 1
 	/// is receiver, though this will change for multi-party
 	pub participant_data: Vec<ParticipantData>,
+	/// Slate format version
+	#[serde(default = "no_version")]
+	pub version: u64,
+}
+
+fn no_version() -> u64 {
+	0
+}
+
+/// Helper just to facilitate serialization
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct ParticipantMessages {
+	/// included messages
+	pub messages: Vec<ParticipantMessageData>,
 }
 
 impl Slate {
@@ -106,6 +149,7 @@ impl Slate {
 			height: 0,
 			lock_height: 0,
 			participant_data: vec![],
+			version: CURRENT_SLATE_VERSION,
 		}
 	}
 
@@ -274,8 +318,17 @@ impl Slate {
 			message: message,
 			message_sig: message_sig,
 		});
-
 		Ok(())
+	}
+
+	/// helper to return all participant messages
+	pub fn participant_messages(&self) -> ParticipantMessages {
+		let mut ret = ParticipantMessages { messages: vec![] };
+		for ref m in self.participant_data.iter() {
+			ret.messages
+				.push(ParticipantMessageData::from_participant_data(m));
+		}
+		ret
 	}
 
 	/// Somebody involved needs to generate an offset with their private key
@@ -472,8 +525,9 @@ impl Slate {
 		final_tx.kernels()[0].verify()?;
 
 		// confirm the overall transaction is valid (including the updated kernel)
+		// accounting for tx weight limits
 		let verifier_cache = Arc::new(RwLock::new(LruVerifierCache::new()));
-		let _ = final_tx.validate(verifier_cache)?;
+		let _ = final_tx.validate(Weighting::AsTransaction, verifier_cache)?;
 
 		self.tx = final_tx;
 		Ok(())

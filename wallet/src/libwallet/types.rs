@@ -21,6 +21,7 @@ use crate::core::libtx::aggsig;
 use crate::core::ser;
 use crate::keychain::{Identifier, Keychain};
 use crate::libwallet::error::{Error, ErrorKind};
+use crate::libwallet::slate::ParticipantMessages;
 use crate::util::secp::key::{PublicKey, SecretKey};
 use crate::util::secp::{self, pedersen, Secp256k1};
 use chrono::prelude::*;
@@ -29,7 +30,12 @@ use serde;
 use serde_json;
 use std::collections::HashMap;
 use std::fmt;
+use std::marker::PhantomData;
 use uuid::Uuid;
+
+/// Lock function type
+pub type OutputLockFn<T, C, K> =
+	Box<dyn FnMut(&mut T, &Transaction, PhantomData<C>, PhantomData<K>) -> Result<(), Error>>;
 
 /// Combined trait to allow dynamic wallet dispatch
 pub trait WalletInst<C, K>: WalletBackend<C, K> + Send + Sync + 'static
@@ -610,6 +616,8 @@ pub struct TxLogEntry {
 	pub amount_debited: u64,
 	/// Fee
 	pub fee: Option<u64>,
+	/// Message data, stored as json
+	pub messages: Option<ParticipantMessages>,
 	/// Location of the store transaction, (reference or resending)
 	pub stored_tx: Option<String>,
 }
@@ -643,6 +651,7 @@ impl TxLogEntry {
 			num_inputs: 0,
 			num_outputs: 0,
 			fee: None,
+			messages: None,
 			stored_tx: None,
 		}
 	}
@@ -701,8 +710,6 @@ pub struct SendTXArgs {
 	pub method: String,
 	/// destination url
 	pub dest: String,
-	/// Max number of outputs
-	pub max_outputs: usize,
 	/// Number of change outputs to generate
 	pub num_change_outputs: usize,
 	/// whether to use all outputs (combine)

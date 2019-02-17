@@ -19,9 +19,9 @@ use crate::adapters::{FileWalletCommAdapter, HTTPWalletCommAdapter, KeybaseWalle
 use crate::api::{ApiServer, BasicAuthMiddleware, Handler, ResponseFuture, Router, TLSConfig};
 use crate::core::core;
 use crate::core::core::Transaction;
-use crate::core::libtx::slate::Slate;
 use crate::keychain::Keychain;
 use crate::libwallet::api::{APIForeign, APIOwner};
+use crate::libwallet::slate::Slate;
 use crate::libwallet::types::{
 	CbData, NodeClient, OutputData, SendTXArgs, TxLogEntry, WalletBackend, WalletInfo,
 };
@@ -40,6 +40,7 @@ use std::marker::PhantomData;
 use std::net::SocketAddr;
 use std::sync::Arc;
 use url::form_urlencoded;
+use uuid::Uuid;
 
 /// Instantiate wallet Owner API for a single-use (command line) call
 /// Return a function containing a loaded API context to call
@@ -324,7 +325,6 @@ where
 				None,
 				args.amount,
 				args.minimum_confirmations,
-				args.max_outputs,
 				args.num_change_outputs,
 				args.selection_strategy_is_use_all,
 				args.message,
@@ -344,8 +344,7 @@ where
 					match e.kind() {
 						// user errors, don't backtrace
 						ErrorKind::NotEnoughFunds { .. } => {}
-						ErrorKind::FeeDispute { .. } => {}
-						ErrorKind::FeeExceedsAmount { .. } => {}
+						ErrorKind::Fee { .. } => {}
 						_ => {
 							// otherwise give full dump
 							error!("Backtrace: {}", e.backtrace().unwrap());
@@ -365,7 +364,9 @@ where
 				}
 				_ => {
 					error!("unsupported payment method: {}", args.method);
-					return Err(ErrorKind::ClientCallback("unsupported payment method"))?;
+					return Err(ErrorKind::ClientCallback(
+						"unsupported payment method".to_owned(),
+					))?;
 				}
 			}
 			api.tx_lock_outputs(&slate, lock_fn)?;
@@ -466,6 +467,87 @@ where
 		))
 	}
 
+	pub fn repost(
+		&self,
+		req: Request<Body>,
+		api: APIOwner<T, C, K>,
+	) -> Box<dyn Future<Item = (), Error = Error> + Send> {
+		let params = parse_params(&req);
+		let mut id_int: Option<u32> = None;
+		let mut tx_uuid: Option<Uuid> = None;
+
+		if let Some(id_string) = params.get("id") {
+			match id_string[0].parse() {
+				Ok(id) => id_int = Some(id),
+				Err(e) => {
+					error!("repost: could not parse id: {}", e);
+					return Box::new(err(ErrorKind::GenericError(
+						"repost: cannot repost transaction. Could not parse id in request."
+							.to_owned(),
+					)
+					.into()));
+				}
+			}
+		} else if let Some(tx_id_string) = params.get("tx_id") {
+			match tx_id_string[0].parse() {
+				Ok(tx_id) => tx_uuid = Some(tx_id),
+				Err(e) => {
+					error!("repost: could not parse tx_id: {}", e);
+					return Box::new(err(ErrorKind::GenericError(
+						"repost: cannot repost transaction. Could not parse tx_id in request."
+							.to_owned(),
+					)
+					.into()));
+				}
+			}
+		} else {
+			return Box::new(err(ErrorKind::GenericError(
+				"repost: Cannot repost transaction. Missing id or tx_id param in request."
+					.to_owned(),
+			)
+			.into()));
+		}
+
+		let res = api.retrieve_txs(true, id_int, tx_uuid);
+		if let Err(e) = res {
+			return Box::new(err(ErrorKind::GenericError(format!(
+				"repost: cannot repost transaction. retrieve_txs failed, err: {:?}",
+				e
+			))
+			.into()));
+		}
+		let (_, txs) = res.unwrap();
+		let res = api.get_stored_tx(&txs[0]);
+		if let Err(e) = res {
+			return Box::new(err(ErrorKind::GenericError(format!(
+				"repost: cannot repost transaction. get_stored_tx failed, err: {:?}",
+				e
+			))
+			.into()));
+		}
+		let stored_tx = res.unwrap();
+		if stored_tx.is_none() {
+			error!(
+				"Transaction with id {:?}/{:?} does not have transaction data. Not reposting.",
+				id_int, tx_uuid,
+			);
+			return Box::new(err(ErrorKind::GenericError(
+				"repost: Cannot repost transaction. Missing id or tx_id param in request."
+					.to_owned(),
+			)
+			.into()));
+		}
+
+		let fluff = params.get("fluff").is_some();
+		Box::new(match api.post_tx(&stored_tx.unwrap(), fluff) {
+			Ok(_) => ok(()),
+			Err(e) => {
+				error!("repost: failed with error: {}", e);
+				err(e)
+			}
+		})
+	}
+
 	fn handle_post_request(&self, req: Request<Body>) -> WalletResponseFuture {
 		let api = APIOwner::new(self.wallet.clone());
 		match req
@@ -486,10 +568,14 @@ where
 			),
 			"cancel_tx" => Box::new(
 				self.cancel_tx(req, api)
-					.and_then(|_| ok(response(StatusCode::OK, ""))),
+					.and_then(|_| ok(response(StatusCode::OK, "{}"))),
 			),
 			"post_tx" => Box::new(
 				self.post_tx(req, api)
+					.and_then(|_| ok(response(StatusCode::OK, "{}"))),
+			),
+			"repost" => Box::new(
+				self.repost(req, api)
 					.and_then(|_| ok(response(StatusCode::OK, ""))),
 			),
 			_ => Box::new(err(ErrorKind::GenericError(
@@ -676,20 +762,31 @@ fn create_ok_response(json: &str) -> Response<Body> {
 			"access-control-allow-headers",
 			"Content-Type, Authorization",
 		)
+		.header(hyper::header::CONTENT_TYPE, "application/json")
 		.body(json.to_string().into())
 		.unwrap()
 }
 
+/// Build a new hyper Response with the status code and body provided.
+///
+/// Whenever the status code is `StatusCode::OK` the text parameter should be
+/// valid JSON as the content type header will be set to `application/json'
 fn response<T: Into<Body>>(status: StatusCode, text: T) -> Response<Body> {
-	Response::builder()
+	let mut builder = &mut Response::builder();
+
+	builder = builder
 		.status(status)
 		.header("access-control-allow-origin", "*")
 		.header(
 			"access-control-allow-headers",
 			"Content-Type, Authorization",
-		)
-		.body(text.into())
-		.unwrap()
+		);
+
+	if status == StatusCode::OK {
+		builder = builder.header(hyper::header::CONTENT_TYPE, "application/json");
+	}
+
+	builder.body(text.into()).unwrap()
 }
 
 fn parse_params(req: &Request<Body>) -> HashMap<String, Vec<String>> {
