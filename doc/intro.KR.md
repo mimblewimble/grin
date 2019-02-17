@@ -405,12 +405,13 @@ Recall that a transaction consists of the following -
 * a transaction kernel, consisting of
   * kernel excess (Pedersen commitment to zero)
   * transaction signature (using kernel excess as public key)
-* kernal execess와  (kernel 초과값이 공개키로 사용된) 트랜잭션 Signature로 이뤄진 트랜잭션 Kernel
+* kernal execess와  (kernel 초과값이 공개키로 사용된) 트랜잭션 Signature로 이뤄진 트랜잭션 Kernel.
   
 A tx is signed and the signature included in a _transaction kernel_.
+sign 된 트랜잭션과 Signature 은 _transaction kernel_ 에 포함됩니다.
 
 The signature is generated using the _kernel excess_ as a public key proving that the transaction sums to 0.
-
+Signature 은 
     (42*G + 1*H) + (99*G + 2*H) - (113*G + 3*H) = 28*G + 0*H
 
 The public key in this example being `28*G`.
