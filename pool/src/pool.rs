@@ -204,10 +204,7 @@ impl Pool {
 			// Create a single aggregated tx from the existing pool txs and the
 			// new entry
 			txs.push(entry.tx.clone());
-
-			let tx = transaction::aggregate(&txs)?;
-			tx.validate(self.verifier_cache.clone())?;
-			tx
+			transaction::aggregate(&txs)?
 		};
 
 		// Validate aggregated tx (existing pool + new tx), ignoring tx weight limits.
@@ -216,7 +213,7 @@ impl Pool {
 
 		// If we get here successfully then we can safely add the entry to the pool.
 		self.log_pool_add(&entry, header);
-		self.entries.push(entry);
+		self.entries.push(entry.clone());
 
 		Ok(())
 	}
@@ -277,7 +274,7 @@ impl Pool {
 
 			// We know the tx is valid if the entire aggregate tx is valid.
 			if self.validate_raw_tx(&agg_tx, header, weighting).is_ok() {
-				valid_txs.push(tx);
+				valid_txs.push(tx.clone());
 			}
 		}
 
@@ -380,7 +377,7 @@ impl Pool {
 					// if the aggregate tx is a valid tx.
 					// Otherwise discard and let the next block pick this tx up.
 					let current = tx_buckets[pos].clone();
-					if let Ok(agg_tx) = transaction::aggregate(vec![current, entry.tx.clone()]) {
+					if let Ok(agg_tx) = transaction::aggregate(&vec![current, entry.tx.clone()]) {
 						if agg_tx
 							.validate(
 								Weighting::AsLimitedTransaction { max_weight },

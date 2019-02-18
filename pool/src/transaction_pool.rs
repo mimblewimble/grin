@@ -107,7 +107,7 @@ impl TransactionPool {
 		if entry.tx.kernels().len() > 1 {
 			let txs = self.txpool.find_matching_transactions(entry.tx.kernels());
 			if !txs.is_empty() {
-				let tx = transaction::deaggregate(entry.tx, txs)?;
+				let tx = transaction::deaggregate(&entry.tx, &txs)?;
 
 				// Validate this deaggregated tx "as tx", subject to regular tx weight limits.
 				tx.validate(Weighting::AsTransaction, self.verifier_cache.clone())?;
@@ -122,7 +122,7 @@ impl TransactionPool {
 		// Some stempool txs may no longer be valid and we need to evict them.
 		{
 			let txpool_tx = self.txpool.all_transactions_aggregate()?;
-			self.stempool.reconcile(txpool_tx, header)?;
+			self.stempool.reconcile(txpool_tx.as_ref(), header)?;
 		}
 
 		self.adapter.tx_accepted(&entry.tx);
@@ -213,7 +213,7 @@ impl TransactionPool {
 		self.stempool.reconcile_block(block);
 		{
 			let txpool_tx = self.txpool.all_transactions_aggregate()?;
-			self.stempool.reconcile(txpool_tx, &block.header)?;
+			self.stempool.reconcile(txpool_tx.as_ref(), &block.header)?;
 		}
 
 		Ok(())

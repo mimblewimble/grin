@@ -398,17 +398,21 @@ impl chain::TxHashsetWriteStatus for SyncState {
 	}
 }
 
+/// A node is either "stem" of "fluff" for the duration of a single epoch.
+/// A node also maintains an outbound relay peer for the epoch.
 pub struct DandelionEpoch {
 	// When did this epoch start?
-	start_time: i64,
+	start_time: Option<i64>,
+	// Are we in "stem" mode or "fluff" mode for this epoch?
 	is_stem: bool,
+	// Our current Dandelion relay peer (effective for this epoch).
 	relay_peer: Option<Arc<p2p::Peer>>,
 }
 
 impl DandelionEpoch {
 	pub fn new() -> DandelionEpoch {
 		DandelionEpoch {
-			start_time: Utc::now().timestamp(),
+			start_time: None,
 			is_stem: false,
 			relay_peer: None,
 		}
@@ -416,11 +420,15 @@ impl DandelionEpoch {
 
 	// TODO - config for epoch duration
 	pub fn is_expired(&self) -> bool {
-		Utc::now().timestamp() - self.start_time > 600
+		if let Some(start_time) = self.start_time {
+			Utc::now().timestamp() - start_time > 600
+		} else {
+			true
+		}
 	}
 
 	pub fn next_epoch(&mut self, peers: &Arc<p2p::Peers>) {
-		self.start_time = Utc::now().timestamp();
+		self.start_time = Some(Utc::now().timestamp());
 
 		// TODO - select a new relay_peer.
 		self.relay_peer = None;

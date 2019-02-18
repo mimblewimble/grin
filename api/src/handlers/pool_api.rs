@@ -95,7 +95,7 @@ impl PoolPushHandler {
 						.chain_head()
 						.context(ErrorKind::Internal("Failed to get chain head".to_owned()))?;
 					let res = tx_pool
-						.add_to_pool(source, tx, !fluff, &header)
+						.add_to_pool(&source, &tx, !fluff, &header)
 						.context(ErrorKind::Internal("Failed to update pool".to_owned()))?;
 					Ok(res)
 				}),

@@ -505,9 +505,9 @@ impl TransactionBody {
 		verify_sorted: bool,
 	) -> Result<TransactionBody, Error> {
 		let mut body = TransactionBody {
-			inputs,
-			outputs,
-			kernels,
+			inputs: inputs.to_vec(),
+			outputs: outputs.to_vec(),
+			kernels: kernels.to_vec(),
 		};
 
 		if verify_sorted {
@@ -1013,7 +1013,7 @@ pub fn aggregate(txs: &[Transaction]) -> Result<Transaction, Error> {
 	// we will sum these together at the end to give us the overall offset for the
 	// transaction
 	let mut kernel_offsets: Vec<BlindingFactor> = Vec::with_capacity(txs.len());
-	for mut tx in txs {
+	for tx in txs {
 		// we will sum these later to give a single aggregate offset
 		kernel_offsets.push(tx.offset);
 

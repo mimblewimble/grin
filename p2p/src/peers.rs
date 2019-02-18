@@ -36,7 +36,7 @@ use crate::types::{
 pub struct Peers {
 	pub adapter: Arc<dyn ChainAdapter>,
 	store: PeerStore,
-	peers: RwLock<HashMap<SocketAddr, Arc<Peer>>>,
+	peers: RwLock<HashMap<PeerAddr, Arc<Peer>>>,
 	config: P2PConfig,
 }
 
