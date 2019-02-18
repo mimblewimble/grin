@@ -17,3 +17,4 @@
 pub mod adapters;
 pub mod stats;
 pub mod types;
+pub mod hooks;
