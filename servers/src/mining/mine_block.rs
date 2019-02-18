@@ -22,8 +22,8 @@ use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
 
-use crate::chain;
 use crate::api;
+use crate::chain;
 use crate::common::types::Error;
 use crate::core::core::verifier_cache::VerifierCache;
 use crate::core::{consensus, core, global, ser};

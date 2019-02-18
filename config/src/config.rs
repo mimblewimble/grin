@@ -29,9 +29,7 @@ use crate::comments::insert_comments;
 use crate::core::global;
 use crate::p2p;
 use crate::servers::ServerConfig;
-use crate::types::{
-	ConfigError, ConfigMembers, GlobalConfig,
-};
+use crate::types::{ConfigError, ConfigMembers, GlobalConfig};
 use crate::util::LoggingConfig;
 
 /// The default file name to use when trying to derive
