@@ -17,9 +17,8 @@
 use built;
 
 use std::env;
-use std::path:: PathBuf;
+use std::path::PathBuf;
 use std::process::Command;
-
 
 fn main() {
 	// Setting up git hooks in the project: rustfmt and so on.
