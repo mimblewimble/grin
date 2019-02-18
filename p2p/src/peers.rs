@@ -15,7 +15,6 @@
 use crate::util::RwLock;
 use std::collections::HashMap;
 use std::fs::File;
-use std::net::SocketAddr;
 use std::sync::Arc;
 
 use rand::{thread_rng, Rng};
@@ -30,14 +29,14 @@ use chrono::Duration;
 use crate::peer::Peer;
 use crate::store::{PeerData, PeerStore, State};
 use crate::types::{
-	Capabilities, ChainAdapter, Direction, Error, NetAdapter, P2PConfig, ReasonForBan,
+	Capabilities, ChainAdapter, Direction, Error, NetAdapter, P2PConfig, PeerAddr, ReasonForBan,
 	TxHashSetRead, MAX_PEER_ADDRS,
 };
 
 pub struct Peers {
 	pub adapter: Arc<dyn ChainAdapter>,
 	store: PeerStore,
-	peers: RwLock<HashMap<SocketAddr, Arc<Peer>>>,
+	peers: RwLock<HashMap<PeerAddr, Arc<Peer>>>,
 	dandelion_relay: RwLock<Option<(i64, Arc<Peer>)>>,
 	config: P2PConfig,
 }
@@ -56,33 +55,25 @@ impl Peers {
 	/// Adds the peer to our internal peer mapping. Note that the peer is still
 	/// returned so the server can run it.
 	pub fn add_connected(&self, peer: Arc<Peer>) -> Result<(), Error> {
-		let peer_data: PeerData;
-		let addr: SocketAddr;
-		{
-			peer_data = PeerData {
-				addr: peer.info.addr,
-				capabilities: peer.info.capabilities,
-				user_agent: peer.info.user_agent.clone(),
-				flags: State::Healthy,
-				last_banned: 0,
-				ban_reason: ReasonForBan::None,
-				last_connected: Utc::now().timestamp(),
-			};
-			addr = peer.info.addr.clone();
-		}
-		debug!("Saving newly connected peer {}.", addr);
+		let peer_data = PeerData {
+			addr: peer.info.addr,
+			capabilities: peer.info.capabilities,
+			user_agent: peer.info.user_agent.clone(),
+			flags: State::Healthy,
+			last_banned: 0,
+			ban_reason: ReasonForBan::None,
+			last_connected: Utc::now().timestamp(),
+		};
+		debug!("Saving newly connected peer {}.", peer_data.addr);
 		self.save_peer(&peer_data)?;
+		self.peers.write().insert(peer_data.addr, peer.clone());
 
-		{
-			let mut peers = self.peers.write();
-			peers.insert(addr, peer.clone());
-		}
 		Ok(())
 	}
 
 	/// Add a peer as banned to block future connections, usually due to failed
 	/// handshake
-	pub fn add_banned(&self, addr: SocketAddr, ban_reason: ReasonForBan) -> Result<(), Error> {
+	pub fn add_banned(&self, addr: PeerAddr, ban_reason: ReasonForBan) -> Result<(), Error> {
 		let peer_data = PeerData {
 			addr,
 			capabilities: Capabilities::UNKNOWN,
@@ -129,18 +120,8 @@ impl Peers {
 		self.dandelion_relay.read().clone()
 	}
 
-	pub fn is_known(&self, addr: &SocketAddr) -> bool {
-		self.peers.read().contains_key(addr)
-	}
-
-	/// Check whether an ip address is in the active peers list, ignore the port
-	pub fn is_known_ip(&self, addr: &SocketAddr) -> bool {
-		for socket in self.peers.read().keys() {
-			if addr.ip() == socket.ip() {
-				return true;
-			}
-		}
-		return false;
+	pub fn is_known(&self, addr: PeerAddr) -> bool {
+		self.peers.read().contains_key(&addr)
 	}
 
 	/// Get vec of peers we are currently connected to.
@@ -166,8 +147,8 @@ impl Peers {
 	}
 
 	/// Get a peer we're connected to by address.
-	pub fn get_connected_peer(&self, addr: &SocketAddr) -> Option<Arc<Peer>> {
-		self.peers.read().get(addr).map(|p| p.clone())
+	pub fn get_connected_peer(&self, addr: PeerAddr) -> Option<Arc<Peer>> {
+		self.peers.read().get(&addr).map(|p| p.clone())
 	}
 
 	/// Number of peers currently connected to.
@@ -257,31 +238,18 @@ impl Peers {
 		self.most_work_peers().pop()
 	}
 
-	pub fn is_banned(&self, peer_addr: SocketAddr) -> bool {
-		if global::is_production_mode() {
-			// Ban only cares about ip address, no mather what port.
-			// so, we query all saved peers with one same ip address, and ignore port
-			let peers_data = self.store.find_peers_by_ip(peer_addr);
-			for peer_data in peers_data {
-				if peer_data.flags == State::Banned {
-					return true;
-				}
-			}
-		} else {
-			// For travis-ci test, we need run multiple nodes in one server, with same ip address.
-			// so, just query the ip address and the port
-			if let Ok(peer_data) = self.store.get_peer(peer_addr) {
-				if peer_data.flags == State::Banned {
-					return true;
-				}
+	pub fn is_banned(&self, peer_addr: PeerAddr) -> bool {
+		if let Ok(peer) = self.store.get_peer(peer_addr) {
+			if peer.flags == State::Banned {
+				return true;
 			}
 		}
 		false
 	}
 
 	/// Ban a peer, disconnecting it if we're currently connected
-	pub fn ban_peer(&self, peer_addr: &SocketAddr, ban_reason: ReasonForBan) {
-		if let Err(e) = self.update_state(*peer_addr, State::Banned) {
+	pub fn ban_peer(&self, peer_addr: PeerAddr, ban_reason: ReasonForBan) {
+		if let Err(e) = self.update_state(peer_addr, State::Banned) {
 			error!("Couldn't ban {}: {:?}", peer_addr, e);
 		}
 
@@ -295,12 +263,12 @@ impl Peers {
 	}
 
 	/// Unban a peer, checks if it exists and banned then unban
-	pub fn unban_peer(&self, peer_addr: &SocketAddr) {
+	pub fn unban_peer(&self, peer_addr: PeerAddr) {
 		debug!("unban_peer: peer {}", peer_addr);
-		match self.get_peer(*peer_addr) {
+		match self.get_peer(peer_addr) {
 			Ok(_) => {
-				if self.is_banned(*peer_addr) {
-					if let Err(e) = self.update_state(*peer_addr, State::Healthy) {
+				if self.is_banned(peer_addr) {
+					if let Err(e) = self.update_state(peer_addr, State::Healthy) {
 						error!("Couldn't unban {}: {:?}", peer_addr, e);
 					}
 				} else {
@@ -424,12 +392,12 @@ impl Peers {
 	}
 
 	/// Get peer in store by address
-	pub fn get_peer(&self, peer_addr: SocketAddr) -> Result<PeerData, Error> {
+	pub fn get_peer(&self, peer_addr: PeerAddr) -> Result<PeerData, Error> {
 		self.store.get_peer(peer_addr).map_err(From::from)
 	}
 
 	/// Whether we've already seen a peer with the provided address
-	pub fn exists_peer(&self, peer_addr: SocketAddr) -> Result<bool, Error> {
+	pub fn exists_peer(&self, peer_addr: PeerAddr) -> Result<bool, Error> {
 		self.store.exists_peer(peer_addr).map_err(From::from)
 	}
 
@@ -439,7 +407,7 @@ impl Peers {
 	}
 
 	/// Updates the state of a peer in store
-	pub fn update_state(&self, peer_addr: SocketAddr, new_state: State) -> Result<(), Error> {
+	pub fn update_state(&self, peer_addr: PeerAddr, new_state: State) -> Result<(), Error> {
 		self.store
 			.update_state(peer_addr, new_state)
 			.map_err(From::from)
@@ -495,9 +463,9 @@ impl Peers {
 		// now clean up peer map based on the list to remove
 		{
 			let mut peers = self.peers.write();
-			for p in rm {
-				let _ = peers.get(&p).map(|p| p.stop());
-				peers.remove(&p);
+			for addr in rm {
+				let _ = peers.get(&addr).map(|peer| peer.stop());
+				peers.remove(&addr);
 			}
 		}
 	}
@@ -558,7 +526,7 @@ impl ChainAdapter for Peers {
 		self.adapter.get_transaction(kernel_hash)
 	}
 
-	fn tx_kernel_received(&self, kernel_hash: Hash, addr: SocketAddr) {
+	fn tx_kernel_received(&self, kernel_hash: Hash, addr: PeerAddr) {
 		self.adapter.tx_kernel_received(kernel_hash, addr)
 	}
 
@@ -566,7 +534,7 @@ impl ChainAdapter for Peers {
 		self.adapter.transaction_received(tx, stem)
 	}
 
-	fn block_received(&self, b: core::Block, peer_addr: SocketAddr, was_requested: bool) -> bool {
+	fn block_received(&self, b: core::Block, peer_addr: PeerAddr, was_requested: bool) -> bool {
 		let hash = b.hash();
 		if !self.adapter.block_received(b, peer_addr, was_requested) {
 			// if the peer sent us a block that's intrinsically bad
@@ -575,45 +543,45 @@ impl ChainAdapter for Peers {
 				"Received a bad block {} from  {}, the peer will be banned",
 				hash, peer_addr
 			);
-			self.ban_peer(&peer_addr, ReasonForBan::BadBlock);
+			self.ban_peer(peer_addr, ReasonForBan::BadBlock);
 			false
 		} else {
 			true
 		}
 	}
 
-	fn compact_block_received(&self, cb: core::CompactBlock, peer_addr: SocketAddr) -> bool {
+	fn compact_block_received(&self, cb: core::CompactBlock, peer_addr: PeerAddr) -> bool {
 		let hash = cb.hash();
 		if !self.adapter.compact_block_received(cb, peer_addr) {
 			// if the peer sent us a block that's intrinsically bad
 			// they are either mistaken or malevolent, both of which require a ban
 			debug!(
 				"Received a bad compact block {} from  {}, the peer will be banned",
-				hash, &peer_addr
+				hash, peer_addr
 			);
-			self.ban_peer(&peer_addr, ReasonForBan::BadCompactBlock);
+			self.ban_peer(peer_addr, ReasonForBan::BadCompactBlock);
 			false
 		} else {
 			true
 		}
 	}
 
-	fn header_received(&self, bh: core::BlockHeader, peer_addr: SocketAddr) -> bool {
+	fn header_received(&self, bh: core::BlockHeader, peer_addr: PeerAddr) -> bool {
 		if !self.adapter.header_received(bh, peer_addr) {
 			// if the peer sent us a block header that's intrinsically bad
 			// they are either mistaken or malevolent, both of which require a ban
-			self.ban_peer(&peer_addr, ReasonForBan::BadBlockHeader);
+			self.ban_peer(peer_addr, ReasonForBan::BadBlockHeader);
 			false
 		} else {
 			true
 		}
 	}
 
-	fn headers_received(&self, headers: &[core::BlockHeader], peer_addr: SocketAddr) -> bool {
+	fn headers_received(&self, headers: &[core::BlockHeader], peer_addr: PeerAddr) -> bool {
 		if !self.adapter.headers_received(headers, peer_addr) {
 			// if the peer sent us a block header that's intrinsically bad
 			// they are either mistaken or malevolent, both of which require a ban
-			self.ban_peer(&peer_addr, ReasonForBan::BadBlockHeader);
+			self.ban_peer(peer_addr, ReasonForBan::BadBlockHeader);
 			false
 		} else {
 			true
@@ -636,13 +604,13 @@ impl ChainAdapter for Peers {
 		self.adapter.txhashset_receive_ready()
 	}
 
-	fn txhashset_write(&self, h: Hash, txhashset_data: File, peer_addr: SocketAddr) -> bool {
+	fn txhashset_write(&self, h: Hash, txhashset_data: File, peer_addr: PeerAddr) -> bool {
 		if !self.adapter.txhashset_write(h, txhashset_data, peer_addr) {
 			debug!(
 				"Received a bad txhashset data from {}, the peer will be banned",
 				&peer_addr
 			);
-			self.ban_peer(&peer_addr, ReasonForBan::BadTxHashSet);
+			self.ban_peer(peer_addr, ReasonForBan::BadTxHashSet);
 			false
 		} else {
 			true
@@ -663,14 +631,14 @@ impl ChainAdapter for Peers {
 impl NetAdapter for Peers {
 	/// Find good peers we know with the provided capability and return their
 	/// addresses.
-	fn find_peer_addrs(&self, capab: Capabilities) -> Vec<SocketAddr> {
+	fn find_peer_addrs(&self, capab: Capabilities) -> Vec<PeerAddr> {
 		let peers = self.find_peers(State::Healthy, capab, MAX_PEER_ADDRS as usize);
 		trace!("find_peer_addrs: {} healthy peers picked", peers.len());
 		map_vec!(peers, |p| p.addr)
 	}
 
 	/// A list of peers has been received from one of our peers.
-	fn peer_addrs_received(&self, peer_addrs: Vec<SocketAddr>) {
+	fn peer_addrs_received(&self, peer_addrs: Vec<PeerAddr>) {
 		trace!("Received {} peer addrs, saving.", peer_addrs.len());
 		for pa in peer_addrs {
 			if let Ok(e) = self.exists_peer(pa) {
@@ -693,13 +661,13 @@ impl NetAdapter for Peers {
 		}
 	}
 
-	fn peer_difficulty(&self, addr: SocketAddr, diff: Difficulty, height: u64) {
-		if let Some(peer) = self.get_connected_peer(&addr) {
+	fn peer_difficulty(&self, addr: PeerAddr, diff: Difficulty, height: u64) {
+		if let Some(peer) = self.get_connected_peer(addr) {
 			peer.info.update(height, diff);
 		}
 	}
 
-	fn is_banned(&self, addr: SocketAddr) -> bool {
+	fn is_banned(&self, addr: PeerAddr) -> bool {
 		if let Ok(peer) = self.get_peer(addr) {
 			peer.flags == State::Banned
 		} else {

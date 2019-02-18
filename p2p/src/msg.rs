@@ -16,7 +16,6 @@
 
 use num::FromPrimitive;
 use std::io::{Read, Write};
-use std::net::{Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV4, SocketAddrV6};
 use std::time;
 
 use crate::core::core::hash::Hash;
@@ -25,7 +24,7 @@ use crate::core::pow::Difficulty;
 use crate::core::ser::{self, FixedLength, Readable, Reader, StreamingReader, Writeable, Writer};
 use crate::core::{consensus, global};
 use crate::types::{
-	Capabilities, Error, ReasonForBan, MAX_BLOCK_HEADERS, MAX_LOCATORS, MAX_PEER_ADDRS,
+	Capabilities, Error, PeerAddr, ReasonForBan, MAX_BLOCK_HEADERS, MAX_LOCATORS, MAX_PEER_ADDRS,
 };
 use crate::util::read_write::read_exact;
 
@@ -254,9 +253,9 @@ pub struct Hand {
 	/// may be needed
 	pub total_difficulty: Difficulty,
 	/// network address of the sender
-	pub sender_addr: SockAddr,
+	pub sender_addr: PeerAddr,
 	/// network address of the receiver
-	pub receiver_addr: SockAddr,
+	pub receiver_addr: PeerAddr,
 	/// name of version of the software
 	pub user_agent: String,
 }
@@ -283,8 +282,8 @@ impl Readable for Hand {
 		let (version, capab, nonce) = ser_multiread!(reader, read_u32, read_u32, read_u64);
 		let capabilities = Capabilities::from_bits_truncate(capab);
 		let total_diff = Difficulty::read(reader)?;
-		let sender_addr = SockAddr::read(reader)?;
-		let receiver_addr = SockAddr::read(reader)?;
+		let sender_addr = PeerAddr::read(reader)?;
+		let receiver_addr = PeerAddr::read(reader)?;
 		let ua = reader.read_bytes_len_prefix()?;
 		let user_agent = String::from_utf8(ua).map_err(|_| ser::Error::CorruptedData)?;
 		let genesis = Hash::read(reader)?;
@@ -373,7 +372,7 @@ impl Readable for GetPeerAddrs {
 /// GetPeerAddrs.
 #[derive(Debug)]
 pub struct PeerAddrs {
-	pub peers: Vec<SockAddr>,
+	pub peers: Vec<PeerAddr>,
 }
 
 impl Writeable for PeerAddrs {
@@ -394,10 +393,9 @@ impl Readable for PeerAddrs {
 		} else if peer_count == 0 {
 			return Ok(PeerAddrs { peers: vec![] });
 		}
-		// let peers = try_map_vec!([0..peer_count], |_| SockAddr::read(reader));
 		let mut peers = Vec::with_capacity(peer_count as usize);
 		for _ in 0..peer_count {
-			peers.push(SockAddr::read(reader)?);
+			peers.push(PeerAddr::read(reader)?);
 		}
 		Ok(PeerAddrs { peers: peers })
 	}
@@ -428,58 +426,6 @@ impl Readable for PeerError {
 			code: code,
 			message: message,
 		})
-	}
-}
-
-/// Only necessary so we can implement Readable and Writeable. Rust disallows
-/// implementing traits when both types are outside of this crate (which is the
-/// case for SocketAddr and Readable/Writeable).
-#[derive(Debug)]
-pub struct SockAddr(pub SocketAddr);
-
-impl Writeable for SockAddr {
-	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
-		match self.0 {
-			SocketAddr::V4(sav4) => {
-				ser_multiwrite!(
-					writer,
-					[write_u8, 0],
-					[write_fixed_bytes, &sav4.ip().octets().to_vec()],
-					[write_u16, sav4.port()]
-				);
-			}
-			SocketAddr::V6(sav6) => {
-				writer.write_u8(1)?;
-				for seg in &sav6.ip().segments() {
-					writer.write_u16(*seg)?;
-				}
-				writer.write_u16(sav6.port())?;
-			}
-		}
-		Ok(())
-	}
-}
-
-impl Readable for SockAddr {
-	fn read(reader: &mut dyn Reader) -> Result<SockAddr, ser::Error> {
-		let v4_or_v6 = reader.read_u8()?;
-		if v4_or_v6 == 0 {
-			let ip = reader.read_fixed_bytes(4)?;
-			let port = reader.read_u16()?;
-			Ok(SockAddr(SocketAddr::V4(SocketAddrV4::new(
-				Ipv4Addr::new(ip[0], ip[1], ip[2], ip[3]),
-				port,
-			))))
-		} else {
-			let ip = try_iter_map_vec!(0..8, |_| reader.read_u16());
-			let port = reader.read_u16()?;
-			Ok(SockAddr(SocketAddr::V6(SocketAddrV6::new(
-				Ipv6Addr::new(ip[0], ip[1], ip[2], ip[3], ip[4], ip[5], ip[6], ip[7]),
-				port,
-				0,
-				0,
-			))))
-		}
 	}
 }
 

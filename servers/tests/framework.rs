@@ -13,6 +13,7 @@
 // limitations under the License.
 
 use self::keychain::Keychain;
+use self::p2p::PeerAddr;
 use self::util::Mutex;
 use self::wallet::{HTTPNodeClient, HTTPWalletCommAdapter, LMDBBackend, WalletConfig};
 use blake2_rfc as blake2;
@@ -191,7 +192,7 @@ impl LocalServerContainer {
 
 		if self.config.seed_addr.len() > 0 {
 			seeding_type = p2p::Seeding::List;
-			seeds = vec![self.config.seed_addr.to_string()];
+			seeds = vec![PeerAddr(self.config.seed_addr.parse().unwrap())];
 		}
 
 		let s = servers::Server::new(servers::ServerConfig {
@@ -233,9 +234,9 @@ impl LocalServerContainer {
 			s.start_test_miner(wallet_url, s.stop_state.clone());
 		}
 
-		for p in &mut self.peer_list {
+		for p in &self.peer_list {
 			println!("{} connecting to peer: {}", self.config.p2p_server_port, p);
-			let _ = s.connect_peer(p.parse().unwrap());
+			let _ = s.connect_peer(PeerAddr(p.parse().unwrap()));
 		}
 
 		if self.wallet_is_running {
@@ -647,7 +648,9 @@ pub fn config(n: u16, test_name_dir: &str, seed_n: u16) -> servers::ServerConfig
 		p2p_config: p2p::P2PConfig {
 			port: 10000 + n,
 			seeding_type: p2p::Seeding::List,
-			seeds: Some(vec![format!("127.0.0.1:{}", 10000 + seed_n)]),
+			seeds: Some(vec![PeerAddr(
+				format!("127.0.0.1:{}", 10000 + seed_n).parse().unwrap(),
+			)]),
 			..p2p::P2PConfig::default()
 		},
 		chain_type: core::global::ChainTypes::AutomatedTesting,
