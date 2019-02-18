@@ -15,42 +15,36 @@
 //! Adapters connecting new block, new transaction, and accepted transaction
 //! events to consumers of those events.
 
-use std::net::SocketAddr;
 use crate::chain::BlockStatus;
 use crate::core::core;
 use crate::core::core::hash::Hashed;
+use std::net::SocketAddr;
 
 #[allow(unused_variables)]
 /// Trait to be implemented by Network Event Hooks
 pub trait NetEvents {
-
-    /// Triggers when a new transaction arrives
+	/// Triggers when a new transaction arrives
 	fn on_transaction_received(&self, tx: &core::Transaction) {}
 
-    /// Triggers when a new block arrives
+	/// Triggers when a new block arrives
 	fn on_block_received(&self, block: &core::Block, addr: &SocketAddr) {}
 
-    /// Triggers when a new block header arrives
+	/// Triggers when a new block header arrives
 	fn on_header_received(&self, bh: &core::BlockHeader, addr: &SocketAddr) {}
-
 }
 
 #[allow(unused_variables)]
 /// Trait to be implemented by Chain Event Hooks
 pub trait ChainEvents {
-
-    /// Triggers when a new block is accepted by the chain (might be a Reorg or a Fork)
+	/// Triggers when a new block is accepted by the chain (might be a Reorg or a Fork)
 	fn on_block_accepted(&self, block: &core::Block, status: &BlockStatus) {}
-
 }
 
 /// Basic Logger
 pub struct EventLogger;
 
 impl NetEvents for EventLogger {
-	
 	fn on_transaction_received(&self, tx: &core::Transaction) {
-
 		debug!(
 			"Received tx {}, [in/out/kern: {}/{}/{}] going to process.",
 			tx.hash(),
@@ -61,7 +55,6 @@ impl NetEvents for EventLogger {
 	}
 
 	fn on_block_received(&self, block: &core::Block, addr: &SocketAddr) {
-
 		debug!(
 			"Received block {} at {} from {} [in/out/kern: {}/{}/{}] going to process.",
 			block.hash(),
@@ -73,15 +66,14 @@ impl NetEvents for EventLogger {
 		);
 	}
 
-
 	fn on_header_received(&self, header: &core::BlockHeader, addr: &SocketAddr) {
-
 		debug!(
 			"Received block header {} at {} from {}, going to process.",
-			header.hash(), header.height, addr
+			header.hash(),
+			header.height,
+			addr
 		);
 	}
-
 }
 
 impl ChainEvents for EventLogger {

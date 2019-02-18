@@ -29,7 +29,7 @@ use crate::api;
 use crate::api::TLSConfig;
 use crate::chain;
 use crate::common::adapters::{
-	ChainToPoolAndNetAdapter, NetToChainAdapter, PoolToChainAdapter, PoolToNetAdapter
+	ChainToPoolAndNetAdapter, NetToChainAdapter, PoolToChainAdapter, PoolToNetAdapter,
 };
 use crate::common::hooks::EventLogger;
 use crate::common::stats::{DiffBlock, DiffStats, PeerStats, ServerStateInfo, ServerStats};
