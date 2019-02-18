@@ -13,9 +13,11 @@
 // limitations under the License.
 
 //! Server types
-use crate::util::RwLock;
 use std::convert::From;
 use std::sync::Arc;
+
+use chrono::prelude::{DateTime, Utc};
+use rand::prelude::*;
 
 use crate::api;
 use crate::chain;
@@ -23,9 +25,10 @@ use crate::core::global::ChainTypes;
 use crate::core::{core, pow};
 use crate::p2p;
 use crate::pool;
+use crate::pool::types::DandelionConfig;
 use crate::store;
+use crate::util::RwLock;
 use crate::wallet;
-use chrono::prelude::{DateTime, Utc};
 
 /// Error type wrapping underlying module errors.
 #[derive(Debug)]
@@ -400,7 +403,9 @@ impl chain::TxHashsetWriteStatus for SyncState {
 
 /// A node is either "stem" of "fluff" for the duration of a single epoch.
 /// A node also maintains an outbound relay peer for the epoch.
+#[derive(Debug)]
 pub struct DandelionEpoch {
+	config: DandelionConfig,
 	// When did this epoch start?
 	start_time: Option<i64>,
 	// Are we in "stem" mode or "fluff" mode for this epoch?
@@ -410,28 +415,34 @@ pub struct DandelionEpoch {
 }
 
 impl DandelionEpoch {
-	pub fn new() -> DandelionEpoch {
+	pub fn new(config: DandelionConfig) -> DandelionEpoch {
 		DandelionEpoch {
+			config,
 			start_time: None,
 			is_stem: false,
 			relay_peer: None,
 		}
 	}
 
-	// TODO - config for epoch duration
 	pub fn is_expired(&self) -> bool {
-		if let Some(start_time) = self.start_time {
-			Utc::now().timestamp() - start_time > 600
+		let expired = if let Some(start_time) = self.start_time {
+			Utc::now().timestamp().saturating_sub(start_time) > self.config.epoch_secs() as i64
 		} else {
 			true
-		}
+		};
+		error!("DandelionEpoch: is_expired: {}", expired);
+		expired
 	}
 
 	pub fn next_epoch(&mut self, peers: &Arc<p2p::Peers>) {
 		self.start_time = Some(Utc::now().timestamp());
+		self.relay_peer = peers.outgoing_connected_peers().first().cloned();
 
-		// TODO - select a new relay_peer.
-		self.relay_peer = None;
+		// If stem_probability == 90 then we stem 90% of the time.
+		let mut rng = rand::thread_rng();
+		self.is_stem = rng.gen_range(0, 101) < self.config.stem_probability();
+
+		error!("DandelionEpoch: next_epoch: {:?}", self);
 	}
 
 	// Are we stemming transactions in this epoch?
@@ -439,7 +450,20 @@ impl DandelionEpoch {
 		self.is_stem
 	}
 
-	pub fn relay_peer(&self) -> Option<Arc<p2p::Peer>> {
+	pub fn relay_peer(&mut self, peers: &Arc<p2p::Peers>) -> Option<Arc<p2p::Peer>> {
+		let mut update_relay = false;
+		if let Some(peer) = &self.relay_peer {
+			if !peer.is_connected() {
+				update_relay = true;
+			}
+		} else {
+			update_relay = true;
+		}
+
+		if update_relay {
+			self.relay_peer = peers.outgoing_connected_peers().first().cloned();
+		}
+
 		self.relay_peer.clone()
 	}
 }

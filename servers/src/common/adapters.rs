@@ -34,6 +34,7 @@ use crate::core::{core, global};
 use crate::p2p;
 use crate::p2p::types::PeerAddr;
 use crate::pool;
+use crate::pool::types::DandelionConfig;
 use crate::util::OneTime;
 use chrono::prelude::*;
 use chrono::Duration;
@@ -740,28 +741,25 @@ impl pool::PoolAdapter for PoolToNetAdapter {
 		}
 
 		if epoch.is_stem() {
-			if let Some(peer) = epoch.relay_peer() {
-				if peer.is_connected() {
-					warn!("Stemming this epoch, relaying to next peer.");
-					peer.send_stem_transaction(tx);
-				} else {
-					error!("What to do here? Relay peer is not connected?");
-				}
+			if let Some(peer) = epoch.relay_peer(&self.peers()) {
+				warn!("Stemming this epoch, relaying to next peer.");
+				peer.send_stem_transaction(tx);
 			} else {
+				// TODO - no relay peer, no available outgoing peers, do we fluff here?
 				error!("What to do here? We have no relay peer?");
 			}
 		} else {
-			warn!("Not forwarding stem tx. Collecting, aggregating and dispersing txs this epoch.");
+			warn!("Not forwarding stem tx. Collecting, aggregating and fluffing txs this epoch. (Ok and expected).");
 		}
 	}
 }
 
 impl PoolToNetAdapter {
 	/// Create a new pool to net adapter
-	pub fn new() -> PoolToNetAdapter {
+	pub fn new(config: DandelionConfig) -> PoolToNetAdapter {
 		PoolToNetAdapter {
 			peers: OneTime::new(),
-			dandelion_epoch: Arc::new(RwLock::new(DandelionEpoch::new())),
+			dandelion_epoch: Arc::new(RwLock::new(DandelionEpoch::new(config))),
 		}
 	}
 

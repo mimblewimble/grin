@@ -37,7 +37,7 @@ const DANDELION_EMBARGO_SECS: u64 = 600;
 const DANDELION_PATIENCE_SECS: u64 = 10;
 
 /// Dandelion stem probability (stem 90% of the time, fluff 10%).
-const DANDELION_STEM_PROBABILITY: usize = 90;
+const DANDELION_STEM_PROBABILITY: u64 = 90;
 
 /// Configuration for "Dandelion".
 /// Note: shared between p2p and pool.
@@ -56,7 +56,18 @@ pub struct DandelionConfig {
 	pub patience_secs: Option<u64>,
 	/// Dandelion stem probability (stem 90% of the time, fluff 10% etc.)
 	#[serde = "default_dandelion_stem_probability"]
-	pub stem_probability: Option<usize>,
+	pub stem_probability: Option<u64>,
+}
+
+impl DandelionConfig {
+	pub fn stem_probability(&self) -> u64 {
+		self.stem_probability.unwrap_or(DANDELION_STEM_PROBABILITY)
+	}
+
+	// TODO - Cleanup config for Dandelion++
+	pub fn epoch_secs(&self) -> u64 {
+		self.relay_secs.unwrap_or(DANDELION_RELAY_SECS)
+	}
 }
 
 impl Default for DandelionConfig {
@@ -82,7 +93,7 @@ fn default_dandelion_patience_secs() -> Option<u64> {
 	Some(DANDELION_PATIENCE_SECS)
 }
 
-fn default_dandelion_stem_probability() -> Option<usize> {
+fn default_dandelion_stem_probability() -> Option<u64> {
 	Some(DANDELION_STEM_PROBABILITY)
 }
 
