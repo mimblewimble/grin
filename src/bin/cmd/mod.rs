@@ -15,11 +15,7 @@
 mod client;
 mod config;
 mod server;
-mod wallet;
-mod wallet_args;
-mod wallet_tests;
 
 pub use self::client::client_command;
-pub use self::config::{config_command_server, config_command_wallet};
+pub use self::config::config_command_server;
 pub use self::server::server_command;
-pub use self::wallet::{seed_exists, wallet_command};

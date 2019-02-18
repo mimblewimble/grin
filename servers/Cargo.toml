@@ -34,7 +34,6 @@ grin_p2p = { path = "../p2p", version = "1.1.0" }
 grin_pool = { path = "../pool", version = "1.1.0" }
 grin_store = { path = "../store", version = "1.1.0" }
 grin_util = { path = "../util", version = "1.1.0" }
-grin_wallet = { path = "../wallet", version = "1.1.0" }
 
 [dev-dependencies]
 blake2-rfc = "0.2"

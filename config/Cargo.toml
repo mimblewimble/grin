@@ -20,7 +20,6 @@ grin_core = { path = "../core", version = "1.1.0" }
 grin_servers = { path = "../servers", version = "1.1.0" }
 grin_p2p = { path = "../p2p", version = "1.1.0" }
 grin_util = { path = "../util", version = "1.1.0" }
-grin_wallet = { path = "../wallet", version = "1.1.0" }
 
 [dev-dependencies]
 pretty_assertions = "0.5.1"
