@@ -1204,11 +1204,19 @@ impl<'a> Extension<'a> {
 	/// from the respective MMRs.
 	/// For a significantly faster way of validating full kernel sums see BlockSums.
 	pub fn validate_kernel_sums(&self) -> Result<((Commitment, Commitment)), Error> {
+		let now = Instant::now();
+
 		let genesis = self.get_header_by_height(0)?;
 		let (utxo_sum, kernel_sum) = self.verify_kernel_sums(
 			self.header.total_overage(genesis.kernel_mmr_size > 0),
 			self.header.total_kernel_offset(),
 		)?;
+
+		debug!(
+			"txhashset: validated total kernel sums, took {}s",
+			now.elapsed().as_secs(),
+		);
+
 		Ok((utxo_sum, kernel_sum))
 	}
 
