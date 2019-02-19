@@ -124,8 +124,9 @@ pub fn init_logger(config: Option<LoggingConfig>) {
 			let filter = Box::new(ThresholdFilter::new(level_file));
 			let file: Box<dyn Append> = {
 				if let Some(size) = c.log_max_size {
+					let count = c.log_max_files.unwrap_or_else(||32);
 					let roller = FixedWindowRoller::builder()
-						.build(&format!("{}.{{}}.gz", c.log_file_path), 32)
+						.build(&format!("{}.{{}}.gz", c.log_file_path), count)
 						.unwrap();
 					let trigger = SizeTrigger::new(size);
 
