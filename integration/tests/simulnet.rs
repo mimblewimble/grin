@@ -13,8 +13,8 @@
 // limitations under the License.
 
 extern crate grin_apiwallet as apiwallet;
-extern crate grin_refwallet as wallet;
 extern crate grin_libwallet as libwallet;
+extern crate grin_refwallet as wallet;
 extern crate grin_wallet_config as wallet_config;
 #[macro_use]
 extern crate log;
@@ -23,12 +23,13 @@ mod framework;
 
 use self::core::core::hash::Hashed;
 use self::core::global::{self, ChainTypes};
+use self::libwallet::types::{WalletBackend, WalletInst};
 use self::util::{Mutex, StopState};
 use self::wallet::controller;
-use self::libwallet::types::{WalletBackend, WalletInst};
 use self::wallet::lmdb_wallet::LMDBBackend;
-use self::wallet_config::WalletConfig;
 use self::wallet::{HTTPNodeClient, HTTPWalletCommAdapter};
+use self::wallet_config::WalletConfig;
+use apiwallet::{APIForeign, APIOwner};
 use grin_api as api;
 use grin_core as core;
 use grin_keychain as keychain;
@@ -40,7 +41,6 @@ use std::default::Default;
 use std::process::exit;
 use std::sync::Arc;
 use std::{thread, time};
-use apiwallet::{APIForeign, APIOwner};
 
 use crate::framework::{
 	config, stop_all_servers, LocalServerContainerConfig, LocalServerContainerPool,

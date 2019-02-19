@@ -13,8 +13,8 @@
 // limitations under the License.
 
 extern crate grin_apiwallet as apiwallet;
-extern crate grin_refwallet as wallet;
 extern crate grin_libwallet as libwallet;
+extern crate grin_refwallet as wallet;
 extern crate grin_wallet_config as wallet_config;
 
 use self::keychain::Keychain;
