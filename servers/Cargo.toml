@@ -11,6 +11,7 @@ edition = "2018"
 
 [dependencies]
 hyper = "0.12"
+fs2 = "0.4"
 futures = "0.1"
 http = "0.1"
 hyper-staticfile = "0.3"
