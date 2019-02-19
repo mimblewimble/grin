@@ -1,5 +1,5 @@
 [package]
-name = "grin_servers"
+name = "grin_integration"
 version = "1.1.0"
 authors = ["Grin Developers <mimblewimble@lists.launchpad.net>"]
 description = "Simple, private and scalable cryptocurrency implementation based on the MimbleWimble chain format."
@@ -31,3 +31,13 @@ grin_p2p = { path = "../p2p", version = "1.1.0" }
 grin_pool = { path = "../pool", version = "1.1.0" }
 grin_store = { path = "../store", version = "1.1.0" }
 grin_util = { path = "../util", version = "1.1.0" }
+grin_servers = { path = "../servers", version = "1.1.0" }
+
+grin_apiwallet = { git = "https://github.com/mimblewimble/grin-wallet", branch = "master" }
+grin_libwallet = { git = "https://github.com/mimblewimble/grin-wallet", branch = "master" }
+grin_refwallet = { git = "https://github.com/mimblewimble/grin-wallet", branch = "master" }
+grin_wallet_config = { git = "https://github.com/mimblewimble/grin-wallet", branch = "master" }
+
+[dev-dependencies]
+blake2-rfc = "0.2"
+
