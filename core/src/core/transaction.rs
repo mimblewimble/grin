@@ -1063,17 +1063,17 @@ where
 
 	for mk_input in mk_tx.body.inputs.iter() {
 		if !tx.body.inputs.contains(&mk_input) && !inputs.contains(&mk_input) {
-			inputs.push(*mk_input);
+			inputs.push((*mk_input).clone());
 		}
 	}
 	for mk_output in mk_tx.body.outputs.iter() {
 		if !tx.body.outputs.contains(&mk_output) && !outputs.contains(&mk_output) {
-			outputs.push(*mk_output);
+			outputs.push((*mk_output).clone());
 		}
 	}
 	for mk_kernel in mk_tx.body.kernels.iter() {
 		if !tx.body.kernels.contains(&mk_kernel) && !kernels.contains(&mk_kernel) {
-			kernels.push(*mk_kernel);
+			kernels.push((*mk_kernel).clone());
 		}
 	}
 

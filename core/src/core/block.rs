@@ -474,9 +474,9 @@ impl Block {
 		let mut all_kernels = HashSet::with_capacity(n_kernels);
 		// collect all the inputs, outputs and kernels from the txs
 		for tx in txs {
-			all_inputs.extend(tx.inputs().iter());
-			all_outputs.extend(tx.outputs().iter());
-			all_kernels.extend(tx.kernels().iter());
+			all_inputs.extend(tx.inputs().iter().cloned());
+			all_outputs.extend(tx.outputs().iter().cloned());
+			all_kernels.extend(tx.kernels().iter().cloned());
 		}
 
 		// include the coinbase output(s) and kernel(s) from the compact_block
