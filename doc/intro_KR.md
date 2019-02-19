@@ -262,81 +262,57 @@ Signature 공개키로서 트랜잭션의 합이 0임을 증명하는 _kernel ex
 
 다음과 같은 두가지 성질을 알려드리자면:
 * 이 블록 안에서는 어떤 출력값은 포함된 입력값을 바로 사용합니다.(I3는 02를 소비하고 I4는 03을 소비합니다.)
-* The structure of each transaction does not actually matter. As all transactions
-  individually sum to zero, the sum of all transaction inputs and outputs must be zero.
+* 실제로 각 트랜잭션의 구조는 문제가 아닙니다. 모든 트랜잭션들의 개개의 합계가 0이듯이 모든 트랜잭션의 입력값과 출력값이 0이여야만 합니다.
 
-Similarly to a transaction, all that needs to be checked in a block is that ownership
-has been proven (which comes from _transaction kernels_) and that the whole block did
-not add any money supply (other than what's allowed by the coinbase).
-Therefore, matching inputs and outputs can be eliminated, as their contribution to the overall
-sum cancels out. Which leads to the following, much more compact block:
-
+트랜잭션과 비슷하게 블록에서 체크해야 되는 것은 _transaction kernels_ 에서 비롯되는 소유권의 증명과 coinbase 에서 증가하는 코인 외 모든 블록이 돈의 공급을 추가하지 않았다는 것입니다.
+매칭된 값은 전체의 값을 상쇄하므로 매치되는 입력값과 출력값은 없앨 수 있고 다음과 같이 좀 더 작은 블록이 됩니다.
+ 
     I1(x1) | O1
     I2(x2) | O4
            | O5
 
-Note that all transaction structure has been eliminated and the order of inputs and
-outputs does not matter anymore. However, the sum of all outputs in this block,
-minus the inputs, is still guaranteed to be zero.
+모든 트랜잭션 구조는 다 제거되었고 입력값과 출력값의 순서는 더이상 중요하지 않습니다. 
+그러나 블록에서 입력값을 뺸 모든 출력값의 합은 여전히 0임을 보증합니다. 
 
-A block is simply built from:
+블록은 아래와 간단히 말하자면 아래를 포함합니다. 
 
-* A block header.
-* The list of inputs remaining after cut-through.
-* The list of outputs remaining after cut-through.
-* A single kernel offset to cover the full block.
-* The transaction kernels containing, for each transaction:
+* 블록헤더
+* 컷 스루 이후 남은 입력값의 리스트
+* 컷 스루 이후 남은 출력값의 리스트
+* 모든 블록을 커버하기 위한 단일 kernel offset 
+* 트랜잭션 kernel들은 각 트랜잭션에 아래와 같은 것들을 포함합니다.
   * The public key `r*G` obtained from the summation of all the commitments.
-  * The signatures generated using the excess value.
-  * The mining fee.
+  * 모든 커밋들의 합을 포함한 공개키 `r*G` 
+  * 초과값 (excess value) 을 이용해 생성된 Signature
+  * 채굴 수수료
 
-When structured this way, a MimbleWimble block offers extremely good privacy
-guarantees:
+이런 방법으로 구조가 만들어진다면 MimbleWimblw 블록은 엄청나게 좋은 프라이버시를 보장할 수 있습니다.
 
-* Intermediate (cut-through) transactions will be represented only by their transaction kernels.
-* All outputs look the same: just very large numbers that are impossible to
-  differentiate from one another. If one wanted to exclude some outputs, they'd have
-  to exclude all.
-* All transaction structure has been removed, making it impossible to tell which output
-  was matched with each input.
+* 중간 트랜잭션 ( 컷 스루 트랜잭션) 은 트랜잭션 kernel에서만 표시될것 입니다.
+* 모든 출력값은 똑같이 보일것입니다. 출력값은 다른 것과 구분하기 블가능한 아주 큰 숫자일겁니다. 만약 하나를 다른 출력값에서 제외하려면 모든 출력값을 제외해야 합니다.
+* 모든 트랜잭션 구조는 지워지고 출력값이 각 입력값과 매치된다고 말하기엔 불가능 해집니다.
 
-And yet, it all still validates!
+그리고 아직까진 모든게 유효합니다!
 
-#### Cut-through All The Way
-#### 내내 Cut-through 하기
+#### 모두 컷 스루( Cut-through ) 하기
+ 
+이전 예시의 블록으로 돌아가서 출력값인 x1,과 x2는 I1과 I2에 대해서 사용되고 이것은 반드시 이전 블록체인 안에서 나타나야 합니다. 이 블록이 추가된 이후에 I1과 I2 과 출력값들은 전체 합계에 영향을 주지 않으므로 모든 체인에서 지워 질 수 있습니다. 
 
-Going back to the previous example block, outputs x1 and x2, spent by I1 and
-I2, must have appeared previously in the blockchain. 
+일반화 하자면, 헤더를 제외하고 어떤 시점에서든 체인의 스테이트는 다음과 같은 정보로 요약될 수 있습니다.  
 
-So after the addition of
-this block, those outputs as well as I1 and I2 can also be removed from the
-overall chain, as they do not contribute to the overall sum.
 
-Generalizing, we conclude that the chain state (excluding headers) at any point
-in time can be summarized by just these pieces of information:
+1. 체인안에서 채굴에 의해서 만들어진 코인의 총량
+2. 쓰지 않은 출력값의 모든 세트
+3. 각 트랜잭션의 트랜잭션 kernel
 
-1. The total amount of coins created by mining in the chain.
-2. The complete set of unspent outputs.
-3. The transactions kernels for each transaction.
+첫번째 정보는 Genesis 블록으로부터의 거리인 블록 높이를 가지고 유추 될 수 있습니다. 그리고 쓰지 않는 출력값과 트랜잭션 kernel은 매우 작습니다. 이것에는 아래와 같이 2가지 중요한 결과를 가지고 있습니다.
 
-The first piece of information can be deduced just using the block
-height (its distance from the genesis block). And both the unspent outputs and the
-transaction kernels are extremely compact. This has 2 important consequences:
+* MimbleWimble 블록체인에 있는 노드가 유지해야 되는 스테이트가 매우 작습니다.(비트코인 사이즈의 Blockchain의 경우 수 기가 바이트이고 잠재젹으로 수백 메가바이트까지 최적화 될 수 있습니다.)
+* 새로운 노드가 MimbleWimble 체인에 가입히면, 전달해야 하는 정보의 양이 매우 적습니다.
 
-* The state a given node in a MimbleWimble blockchain needs to maintain is very
-  small (on the order of a few gigabytes for a bitcoin-sized blockchain, and
-  potentially optimizable to a few hundreds of megabytes).
-* When a new node joins a network building up a MimbleWimble chain, the amount of
-  information that needs to be transferred is also very small.
-
-In addition, the complete set of unspent outputs cannot be tampered with, even
-only by adding or removing an output. Doing so would cause the summation of all
-blinding factors in the transaction kernels to differ from the summation of blinding
-factors in the outputs.
-
+덧붙여서 출력값을 더하거나 제거하더라도 쓰지 않는 출력값의 모든 세트를 조작할 순 없습니다. 그렇게 하면 트랜잭션 kernel 내의 모든 blinding factor의 합과 출력값 내의 blinding factor의 합이 달라집니다.
 
 ### 결론 내리기
 
 이 문서에서는 MimbleWimble 블록체인 안의 기본적인 원리에 대해서 다루었습니다.
-타원 곡선 암호의 다른 성질을 사용해서 알아보기 어려우나 적절하게 입증될 수 있는 트랜잭션을 만들수 있습니다.
-블록들에 이러한 성질들을 일반화 시키면 큰 용량의 블록체인 데이터를 없앨 수 있고 새로운 피어들에게 높은 확장성과 빠른 동기화를 가능하게 할 수 있습니다.
+타원 곡선 암호의 다른 성질을 사용해서 알아보기 어려우나 적절하게 입증될 수 있는 트랜잭션을 만들수 있습니다. 블록에 이러한 성질들을 일반화 시키면 큰 용량의 블록체인 데이터를 없앨 수 있고 새로운 피어들에게 높은 확장성과 빠른 동기화를 가능하게 할 수 있습니다.
