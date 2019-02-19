@@ -1,6 +1,6 @@
 # Introdução ao MimbleWimble e ao Grin
 
-*Leia isto em outros idiomas: [English](intro.md), [简体中文](intro_ZH-CN.md), [Español](intro_ES.md), [Nederlands](intro_NL.md), [Русский](intro_RU.md), [日本語](intro_JP.md), [Deutsch](intro_DE.md), [Portuguese](intro_PT-BR.md).*
+*Leia isto em outros idiomas: [English](intro.md), [简体中文](intro_ZH-CN.md), [Español](intro_ES.md), [Nederlands](intro_NL.md), [Русский](intro_RU.md), [日本語](intro_JP.md), [Deutsch](intro_DE.md), [Portuguese](intro_PT-BR.md), [Korean](intro_KR.md).*
 
 O MimbleWimble é um formato e protocolo blockchain que fornece ótima escalabilidade, privacidade e fungibilidade, para isso contando com primitivas criptográficas fortes. Ele aborda as lacunas existentes em quase todos as implementações blockchain atuais.
 

@@ -1,219 +1,155 @@
 # Introduction to MimbleWimble and Grin
 
-*Read this in other languages: [English](intro.md), [简体中文](intro_ZH-CN.md), [Español](intro_ES.md), [Nederlands](intro_NL.md), [Русский](intro_RU.md), [日本語](intro_JP.md), [Deutsch](intro_DE.md), [Portuguese](intro_PT-BR.md).*
+*Read this in other languages: [English](intro.md), [简体中文](intro_ZH-CN.md), [Español](intro_ES.md), [Nederlands](intro_NL.md), [Русский](intro_RU.md), [日本語](intro_JP.md), [Deutsch](intro_DE.md), [Portuguese](intro_PT-BR.md), [Korean](intro_KR.md).*
 
 MimbleWimble is a blockchain format and protocol that provides
 extremely good scalability, privacy and fungibility by relying on strong
 cryptographic primitives. It addresses gaps existing in almost all current
 blockchain implementations.
 
-MimbleWimlbe은 블록체인 포맷이면서 프로토콜 입니다.
-MimbleWimble 은 암호학적 기반에 의해서 극대화된 좋은 확장성, 프라이버시, 그리고 대체가능성을 제공합니다.
-이러한 특성은 지금 현존하는 모든 블록체인 구현체에 존재하는 문제점들을 처리합니다.
-
 Grin is an open source software project that implements a MimbleWimble
 blockchain and fills the gaps required for a full blockchain and
 cryptocurrency deployment.
 
-Grin 은 Mimble Wimble 블록체인을 구현한 오픈소스 프로젝트 입니다.
-또한 완전한 블록체인와 크립토 커런시의 배포에 필요한 갭을 채워줍니다.
-
 The main goal and characteristics of the Grin project are:
-Grin 프로젝트의 주요 목적과 특성들은 아래 설명을 참고하십시오.
 
 * Privacy by default. This enables complete fungibility without precluding
   the ability to selectively disclose information as needed.
-* 프라이버시가 기본으로 제공됩니다. 이 기능은 필요에 따라서 선택적으로 정보를 공개 할 수 없도록 해서 완전한 대체가능성을 할 수 있게 합니다.
 * Scales mostly with the number of users and minimally with the number of
   transactions (<100 byte `kernel`), resulting in a large space saving compared
   to other blockchains.
-* 주로 유저의 규모와 최소한의 트랜잭션 수의 규모로 (100byte 미만의 kernel(transaction)) 다른 블록체인들과 비교하면 많은 공간을 절약할 수 있습니다.
 * Strong and proven cryptography. MimbleWimble only relies on Elliptic Curve
   Cryptography which has been tried and tested for decades.
-* Mimble Wimble 은 수십년 동안 테스트하고 사용되었던 강력한 암호기술인 ECC만 사용합니다.
 * Design simplicity that makes it easy to audit and maintain over time.
-* 간단한 디자인은 감사와 유지보수를 시간이 지나도 수월하게 만듭니다.
 * Community driven, encouraging mining decentralization.
-* 커뮤니티가 주도하며, 채굴 탈중앙화가 권장됩니다.
-  
+
 ## Tongue Tying for Everyone
-## 모두의 혀를 묶자.
 
-This document is targeted at readers with a good understanding of blockchains and basic cryptography.
-이 문서는 블록체인에 대해 어느정도 이해가 있고 암호학에 대한 기본적인 이해가 있는 독자들을 대상으로 합니다.
-
-With that in mind, we attempt to explain the technical buildup of MimbleWimble and how it's applied in Grin.
-이것을 염두에 두고 우리는 MimbleWimble의 기술적인 발전과 어떻게 Grin에 적용되었는지 관해 설명할것입니다.
-
-We hope this document is understandable to most technically-minded readers. Our objective is
+This document is targeted at readers with a good
+understanding of blockchains and basic cryptography. With that in mind, we attempt
+to explain the technical buildup of MimbleWimble and how it's applied in Grin. We hope
+this document is understandable to most technically-minded readers. Our objective is
 to encourage you to get interested in Grin and contribute in any way possible.
-저희는 이 문서가 대부분의 기술적인 성격을 가진 독자들을 이해시킬 수 있길 바랍니다.
-우리의 목적은 독자가 Grin에 대해 흥기를 느끼게 하고 어떤 방식으로든 Grin에 기여할 수 있게 이끄는 것입니다. 
 
-To achieve this objective, we will introduce the main concepts required for a good understanding of Grin as a MimbleWimble implementation.
-이러한 목적을 이루기 위해, 우리는 MimbleWimble 의 구현체인 Grin을 이해하는데 필요한 주요 컨셉들에 대해서 소개할것입니다.
-
-We will start with a brief description of some relevant properties of Elliptic Curve Cryptography (ECC) to lay the foundation on which Grin is based and then describe all the key elements of a MimbleWimble blockchain's transactions and blocks.
-우선 Grin이 어디에서 부터 기초로 하고 있는지에 대해 이해하기 위해서 타원 곡선 암호 (ECC)의 몇몇 속성들에 대한 간단한 설명으로 시작하겠습니다.  그 다음, MimbleWimble 블록체인의 트랜잭션과 블록에 한 모든 요소들을 설명하겠습니다.
+To achieve this objective, we will introduce the main concepts required for a good
+understanding of Grin as a MimbleWimble implementation. We will start with a brief
+description of some relevant properties of Elliptic Curve Cryptography (ECC) to lay the
+foundation on which Grin is based and then describe all the key elements of a
+MimbleWimble blockchain's transactions and blocks.
 
 ### Tiny Bits of Elliptic Curves
 
-### 타원곡선에 대한 조그마한 조각들
-
 We start with a brief primer on Elliptic Curve Cryptography, reviewing just the
 properties necessary to understand how MimbleWimble works and without
-delving too much into the intricacies of ECC.
-
-- ECC의 너무 복잡한 사항을 캐지 않고 어떻게 mimble wimble 이 어떻게 작동하는지에 대해 이해하는데 필요한 요소들만 리뷰할 것입니다.
-
- For readers who would want to dive deeper into those assumptions, there are other opportunities to [learn more](http://andrea.corbellini.name/2015/05/17/elliptic-curve-cryptography-a-gentle-introduction/).
-- 이런 가정들을 좀 더 알고싶은 독자들은 [이 링크](http://andrea.corbellini.name/2015/05/17/elliptic-curve-cryptography-a-gentle-introduction/) 를 참고하세요.
+delving too much into the intricacies of ECC. For readers who would want to
+dive deeper into those assumptions, there are other opportunities to
+[learn more](http://andrea.corbellini.name/2015/05/17/elliptic-curve-cryptography-a-gentle-introduction/).
 
 An Elliptic Curve for the purpose of cryptography is simply a large set of points that
 we will call _C_. These points can be added, subtracted, or multiplied by integers (also called scalars).
-암호학에서의 타원 곡선이란 우리가 _C_ 라고 부르는 단순히 아주 큰 좌표의 집합입니다.
-이 좌표들은 정수들로 (인티저, 또는 스칼라 ) 더하고 빼고 곱할수 있습니다.
-
-Given an integer _k_ and using the scalar multiplication operation we can compute `k*H`, which is also a point on curve _C_.
-주어진 정수 _K_ 에 스칼라 곱셈을 한다면 우리는 곡선 _c_ 위에 있는 좌표 K*H를 계산 할 수 있습니다.
-
-Given another integer _j_ we can also calculate `(k+j)*H`, which equals `k*H + j*H`.
-또 달리 주어진 정수 _j_ 에 우리는`k*H + j*H` 와 같은 `(k+j)*H`를 계산 할 수 있습니다.
-
-The addition and scalar multiplication operations on an elliptic curve maintain the commutative and associative properties of addition and multiplication:
-타원곡선 위에서의 덧셈과 정수 곱셈은 제시덴 수의 순서에 관계없이 결과가 동일하다는 성질과 덧셈과 곱셈의 계산 순서와 관계없이 동일한 결과가 나온다는 성질을 가지고 있습니다.
+Given an integer _k_ and
+using the scalar multiplication operation we can compute `k*H`, which is also a point on
+curve _C_. Given another integer _j_ we can also calculate `(k+j)*H`, which equals
+`k*H + j*H`. The addition and scalar multiplication operations on an elliptic curve
+maintain the commutative and associative properties of addition and multiplication:
 
     (k+j)*H = k*H + j*H
 
 In ECC, if we pick a very large number _k_ as a private key, `k*H` is
-considered the corresponding public key.
-ECC 안에서 우리가 매우 큰 숫자인 _k_ 를 프라이빗 키로 가정할 때 `k*H` 는 해당하는 퍼블릭 키로 해당되어 집니다.
-
-Even if one knows the value of the public key `k*H`, deducing _k_ is close to impossible (or said differently, while multiplication is trivial, "division" by curve points is
+considered the corresponding public key. Even if one knows the
+value of the public key `k*H`, deducing _k_ is close to impossible (or said
+differently, while multiplication is trivial, "division" by curve points is
 extremely difficult).
-누군가 공개키인 `k*H`의 값을 알더라도 _k_ 를 추론해 내는것은 불가능에 가깝습니다. ( 달리 얘기하자면, 곱셉은 쉬우나 곡선 좌표에 의한 "나눗셈"은 정말 어렵습니다.  )
 
 The previous formula `(k+j)*H = k*H + j*H`, with _k_ and _j_ both private
 keys, demonstrates that a public key obtained from the addition of two private
 keys (`(k+j)*H`) is identical to the addition of the public keys for each of those
-two private keys (`k*H + j*H`).
-_k_ 와 _j_ 둘다 비밀키인 이전 공식 `(k+j)*H = k*H + j*H` 는 두개의 비밀키를 더해서 얻은  한 개의 공개키 (`(k+j)*H`) 와 각각 두개의 비밀키에 공개키를 더한것과 같습니다.
-In the Bitcoin blockchain, Hierarchical Deterministic wallets heavily rely on this principle.
-Bitcoin blockchain에서도 HD 지갑은 이 원칙에 의존하고 있습니다.
-MimbleWimble and the Grin implementation do as well.
-MimbleWimble 과 Grin의 구현또한 마찬가지 입니다.
+two private keys (`k*H + j*H`). In the Bitcoin blockchain, Hierarchical
+Deterministic wallets heavily rely on this principle. MimbleWimble and the Grin
+implementation do as well.
 
 ### Transacting with MimbleWimble
 
-### MimbleWimble 로 거래하기
-
 The structure of transactions demonstrates a crucial tenet of MimbleWimble:
-트랜잭션의 구조는 MimbleWimble의 강력한 프라이버시와 비밀이 유지된다라고 하는 중요한 규칙을 나타냅니다.
 strong privacy and confidentiality guarantees.
 
 The validation of MimbleWimble transactions relies on two basic properties:
-MimbleWimble 트랜잭션의 확인은 두가지 기본적인 성격을 전제로 합니다.
 
 * **Verification of zero sums.** The sum of outputs minus inputs always equals zero,
   proving that the transaction did not create new funds, _without revealing the actual amounts_.
-* **제로섬의 검증** 결과값에서 입력값을 뺸 합은 항상 0과 같습니다. 이것은 실제 전송되는 코인의 양을 드러내지 않고도 트랜잭션ㅇ이 새로운 코인을 만들지 않았다는 것을 증명합니다.
 * **Possession of private keys.** Like with most other cryptocurrencies, ownership of
   transaction outputs is guaranteed by the possession of ECC private keys. However,
   the proof that an entity owns those private keys is not achieved by directly signing
   the transaction.
-* **비밀키의 소유**  다른 많은 크립토커런시들 처럼 , 트랜잭션의 소유권은 ECC 비밀키에 의해 보장됩니다. 그러나 어떤 실체가 이런 비밀키들을 소유하고 있다고 증명하는것이 직접적으로 트랜잭션에 사인한다고해서 얻어지는 것은 아닙니다.
 
 The next sections on balance, ownership, change and proofs details how those two
 fundamental properties are achieved.
-다음 섹션들에서는 잔고, 소유권, 거스름돈과 증명들의 상세들이 어떻게 저 두가지 기본적인 성질에 의해서 얻어지는지 알아보겠습니다.
 
 #### Balance
 
-#### 잔고
-
 Building upon the properties of ECC we described above, one can obscure the values
 in a transaction.
-위에서 언급한 ECC의 특성들을 기반으로 해서 트랜잭션안의 가치들을 보기 어렵게 할 수 있습니다.
 
 If _v_ is the value of a transaction input or output and _H_ an elliptic curve, we can simply
-embed `v*H` instead of _v_ in a transaction.
-만약 _v_ 가 트랜잭션 입력값이거나 출력값이고 _H_가 타원곡선이라면 , 단순히 _v_ 대신 `v*H`를 끼워넣을 수 있습니다.
-
-This works because using the ECC operations, we can still validate that the sum of the outputs of a transaction equals the sum of inputs:
-이것은 ECC를 사용하기 때문에 작동하는 것입니다. 우리는 출력값의 합이 입력값의 합과 같다는 것을 여전히 확인할 수 있습니다.
+embed `v*H` instead of _v_ in a transaction. This works because using the ECC
+operations, we can still validate that the sum of the outputs of a transaction equals the
+sum of inputs:
 
     v1 + v2 = v3  =>  v1*H + v2*H = v3*H
 
 Verifying this property on every transaction allows the protocol to verify that a
 transaction doesn't create money out of thin air, without knowing what the actual
-values are.
-이 특성을 모든 트랜잭션에 확인하는것은 프로토콜이 트랜잭션은 돈을 난데없이 만들지 않는다는 것을 실제 돈이 얼마나 있는지 알지 않아도 검증할 수 있게 합니다.
-However, there are a finite number of usable values and one could try every single
-one of them to guess the value of your transaction.
-그러나 사용가능한 한정된 숫자가 있고 그 숫자 중 하나를 사용해서 당신의 트랜잭션이 얼마만큼의 코인을 가졌는지 추측해 할 수 있습니다.
-In addition, knowing v1 (from a previous transaction for example) and the resulting `v1*H` reveals all outputs with value v1 across the blockchain.
-더해서 , v1을 알고 ( 예시로 사용된 이전의 트랜잭션에서 온 값 ) 그에따른 `v1*H`의 결과를 알면 블록체인 전체에 걸쳐서 v1 값이 있는 모든 출력값들이 드러나게 됩니다.
-
-For these reasons, we introduce a second elliptic curve _G_ (practically _G_ is just another generator point on the same curve group as _H_) and a private key _r_ used as a *blinding factor*.
-이러한 이유때문에 우리는 두번째 타원곡선인 _G_를 제시합니다. ( 실제로 _G_ 는 _H_ 의 그룹과 같은 곡선에 있는 단지 다른 좌표를 생성해 냅니다.) 그리고 비밀키 _r_은 *blinding factor* 로 사용됩니다.
+values are. However, there are a finite number of usable values and one could try every single
+one of them to guess the value of your transaction. In addition, knowing v1 (from
+a previous transaction for example) and the resulting `v1*H` reveals all outputs with
+value v1 across the blockchain. For these reasons, we introduce a second elliptic curve
+_G_ (practically _G_ is just another generator point on the same curve group as _H_) and
+a private key _r_ used as a *blinding factor*.
 
 An input or output value in a transaction can then be expressed as:
-그렇다면 트랜잭션 안의 입력값과 출력값은 다음과 같이 표현됩니다.
+
     r*G + v*H
+
 Where:
-여기서
 
 * _r_ is a private key used as a blinding factor, _G_ is an elliptic curve and
   their product `r*G` is the public key for _r_ on _G_.
-* _r_ 은 비밀키이고 blinding factor 로 사용됩니다. _G_ 는 타원 곡선 이고 `r*G`는 _G_ 안에 있는 _r_ 의 공개키 입니다.
 * _v_ is the value of an input or output and _H_ is another elliptic curve.
-* _v_ 는 출력값이거나 입력값이고 _H_ 는 다른 타원곡선입니다.
+
 Neither _v_ nor _r_ can be deduced, leveraging the fundamental properties of Elliptic
 Curve Cryptography. `r*G + v*H` is called a _Pedersen Commitment_.
-<<<<<<< HEAD
-타원곡선 암호의 기본적인 성질을 이용해서 _v_, _r_ 둘다 유추 할 수 없습니다.
-`r*G + v*H`은 _Pederson Commitment_ 라고 불립니다.
-=======
 
->>>>>>> dc6542d82b04cbab65abfd3e986946f86267db44
 As an example, let's assume we want to build a transaction with two inputs and one
 output. We have (ignoring fees):
-예를 들어 , ( 전송료는 무시하고) 두개의 입력값과 한개의 출력값으로 트랜잭션을 만들기 원한다고 가정해봅시다.
 
 * vi1 and vi2 as input values.
-* vi1 과 v2 는 출력값
 * vo3 as output value.
-* vo3는 출력값 이라면
+
 Such that:
 
     vi1 + vi2 = vo3
 
 Generating a private key as a blinding factor for each input value and replacing each value
 with their respective Pedersen Commitments in the previous equation, we obtain:
-각각의 입력값에 대해서 blining factor 로 비밀키를 만들고 각각의 값을 각각의 이전의 공식에 있던 Pederson Commitment로 교체한다고 하면 다음과 같습니다.
 
     (ri1*G + vi1*H) + (ri2*G + vi2*H) = (ro3*G + vo3*H)
 
 Which as a consequence requires that:
-결과로 다음과 같습니다.
+
     ri1 + ri2 = ro3
 
 This is the first pillar of MimbleWimble: the arithmetic required to validate a
 transaction can be done without knowing any of the values.
-이것이 MimbleWimble의 첫번째 특징입니다. 트랜잭션을 검증하는 산술적인 연산은 아무런 값을 알지 못해도 가능합니다.
 
 As a final note, this idea is actually derived from Greg Maxwell's
 [Confidential Transactions](https://elementsproject.org/features/confidential-transactions/investigation),
 which is itself derived from an Adam Back proposal for homomorphic values applied
 to Bitcoin.
-마지막으로 이 아이디어는 Greg Maxwell 의 [Confidential Transactions](https://elementsproject.org/features/confidential-transactions/investigation) 에서 유래했습니다. Confidential transaction은 Adam back의 비트코인에 동형암호를 적용하자는 제안에서 비롯되었습니다.
 
 #### Ownership
-#### 소유권
-In the previous section we introduced a private key as a blinding factor to obscure the
-transaction's values. 
 
-The second insight of MimbleWimble is that this private
+In the previous section we introduced a private key as a blinding factor to obscure the
+transaction's values. The second insight of MimbleWimble is that this private
 key can be leveraged to prove ownership of the value.
 
 Alice sends you 3 coins and to obscure that amount, you chose 28 as your
