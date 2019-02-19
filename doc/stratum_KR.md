@@ -12,8 +12,8 @@
     5. [status](#status)
     6. [submit](#submit)
 2. [에러 메시지들](#error-messages)
-3. [채굴자의 행동양식](#채굴자-행동양식)
-4. [참고 구현체](#참고-구현체)
+3. [채굴자의 행동양식](#miner-behavior)
+4. [참고 구현체](#reference-implementation)
 
 ## 메세지 들
 
