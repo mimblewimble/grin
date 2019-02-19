@@ -27,7 +27,7 @@ use failure::ResultExt;
 use futures::future::ok;
 use futures::Future;
 use hyper::{Body, Request, StatusCode};
-use std::sync::Weak;
+use std::sync::{Arc, Weak};
 
 /// Get basic information about the transaction pool.
 /// GET /v1/pool
@@ -95,7 +95,7 @@ impl PoolPushHandler {
 						.chain_head()
 						.context(ErrorKind::Internal("Failed to get chain head".to_owned()))?;
 					let res = tx_pool
-						.add_to_pool(source, tx, !fluff, &header)
+						.add_to_pool(source, Arc::new(tx), !fluff, &header)
 						.context(ErrorKind::Internal("Failed to update pool".to_owned()))?;
 					Ok(res)
 				}),

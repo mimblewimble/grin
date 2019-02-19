@@ -429,12 +429,15 @@ impl Block {
 	/// *** Only used in tests. ***
 	///
 	#[warn(clippy::new_ret_no_self)]
-	pub fn new(
+	pub fn new<T>(
 		prev: &BlockHeader,
-		txs: Vec<Transaction>,
+		txs: Vec<T>,
 		difficulty: Difficulty,
 		reward_output: (Output, TxKernel),
-	) -> Result<Block, Error> {
+	) -> Result<Block, Error>
+	where
+		T: std::ops::Deref<Target = Transaction>,
+	{
 		let mut block =
 			Block::from_reward(prev, txs, reward_output.0, reward_output.1, difficulty)?;
 
@@ -450,21 +453,30 @@ impl Block {
 	/// Hydrate a block from a compact block.
 	/// Note: caller must validate the block themselves, we do not validate it
 	/// here.
-	pub fn hydrate_from(cb: CompactBlock, txs: Vec<Transaction>) -> Result<Block, Error> {
+	pub fn hydrate_from<T>(cb: CompactBlock, txs: Vec<T>) -> Result<Block, Error>
+	where
+		T: std::ops::Deref<Target = Transaction>,
+	{
 		trace!("block: hydrate_from: {}, {} txs", cb.hash(), txs.len(),);
 
 		let header = cb.header.clone();
 
-		let mut all_inputs = HashSet::new();
-		let mut all_outputs = HashSet::new();
-		let mut all_kernels = HashSet::new();
-
+		let mut n_inputs = 0;
+		let mut n_outputs = 1;
+		let mut n_kernels = 1;
+		for tx in txs.iter() {
+			n_inputs += tx.inputs().len();
+			n_outputs += tx.outputs().len();
+			n_kernels += tx.kernels().len();
+		}
+		let mut all_inputs = HashSet::with_capacity(n_inputs);
+		let mut all_outputs = HashSet::with_capacity(n_outputs);
+		let mut all_kernels = HashSet::with_capacity(n_kernels);
 		// collect all the inputs, outputs and kernels from the txs
 		for tx in txs {
-			let tb: TransactionBody = tx.into();
-			all_inputs.extend(tb.inputs);
-			all_outputs.extend(tb.outputs);
-			all_kernels.extend(tb.kernels);
+			all_inputs.extend(tx.inputs().iter());
+			all_outputs.extend(tx.outputs().iter());
+			all_kernels.extend(tx.kernels().iter());
 		}
 
 		// include the coinbase output(s) and kernel(s) from the compact_block
@@ -499,13 +511,16 @@ impl Block {
 	/// Builds a new block ready to mine from the header of the previous block,
 	/// a vector of transactions and the reward information. Checks
 	/// that all transactions are valid and calculates the Merkle tree.
-	pub fn from_reward(
+	pub fn from_reward<T>(
 		prev: &BlockHeader,
-		txs: Vec<Transaction>,
+		txs: Vec<T>,
 		reward_out: Output,
 		reward_kern: TxKernel,
 		difficulty: Difficulty,
-	) -> Result<Block, Error> {
+	) -> Result<Block, Error>
+	where
+		T: std::ops::Deref<Target = Transaction>,
+	{
 		// A block is just a big transaction, aggregate and add the reward output
 		// and reward kernel. At this point the tx is technically invalid but the
 		// tx body is valid if we account for the reward (i.e. as a block).

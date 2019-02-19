@@ -79,7 +79,7 @@ impl TransactionPool {
 	fn add_to_stempool(&mut self, entry: PoolEntry, header: &BlockHeader) -> Result<(), PoolError> {
 		// Add tx to stempool (passing in all txs from txpool to validate against).
 		self.stempool
-			.add_to_pool(entry, self.txpool.all_transactions(), header)?;
+			.add_to_pool(entry, self.txpool.all_transactions().into_iter(), header)?;
 
 		// Note: we do not notify the adapter here,
 		// we let the dandelion monitor handle this.
@@ -107,16 +107,17 @@ impl TransactionPool {
 		if entry.tx.kernels().len() > 1 {
 			let txs = self.txpool.find_matching_transactions(entry.tx.kernels());
 			if !txs.is_empty() {
-				let tx = transaction::deaggregate(entry.tx, txs)?;
+				let tx = transaction::deaggregate(entry.tx.clone(), txs)?;
 
 				// Validate this deaggregated tx "as tx", subject to regular tx weight limits.
 				tx.validate(Weighting::AsTransaction, self.verifier_cache.clone())?;
 
-				entry.tx = tx;
 				entry.src.debug_name = "deagg".to_string();
+				*Arc::make_mut(&mut entry.tx) = tx;
 			}
 		}
-		self.txpool.add_to_pool(entry.clone(), vec![], header)?;
+		self.txpool
+			.add_to_pool(entry.clone(), std::iter::empty(), header)?;
 
 		// We now need to reconcile the stempool based on the new state of the txpool.
 		// Some stempool txs may no longer be valid and we need to evict them.
@@ -134,7 +135,7 @@ impl TransactionPool {
 	pub fn add_to_pool(
 		&mut self,
 		src: TxSource,
-		tx: Transaction,
+		tx: Arc<Transaction>,
 		stem: bool,
 		header: &BlockHeader,
 	) -> Result<(), PoolError> {
@@ -230,7 +231,7 @@ impl TransactionPool {
 	}
 
 	/// Retrieve individual transaction for the given kernel hash.
-	pub fn retrieve_tx_by_kernel_hash(&self, hash: Hash) -> Option<Transaction> {
+	pub fn retrieve_tx_by_kernel_hash(&self, hash: Hash) -> Option<Arc<Transaction>> {
 		self.txpool.retrieve_tx_by_kernel_hash(hash)
 	}
 
@@ -242,7 +243,7 @@ impl TransactionPool {
 		hash: Hash,
 		nonce: u64,
 		kern_ids: &[ShortId],
-	) -> (Vec<Transaction>, Vec<ShortId>) {
+	) -> (Vec<Arc<Transaction>>, Vec<ShortId>) {
 		self.txpool.retrieve_transactions(hash, nonce, kern_ids)
 	}
 
@@ -282,7 +283,7 @@ impl TransactionPool {
 
 	/// Returns a vector of transactions from the txpool so we can build a
 	/// block from them.
-	pub fn prepare_mineable_transactions(&self) -> Result<Vec<Transaction>, PoolError> {
+	pub fn prepare_mineable_transactions(&self) -> Result<Vec<Arc<Transaction>>, PoolError> {
 		self.txpool
 			.prepare_mineable_transactions(self.config.mineable_max_weight)
 	}

@@ -98,7 +98,7 @@ fn process_stem_phase(
 	}
 
 	// Get the aggregate tx representing the entire txpool.
-	let txpool_tx = tx_pool.txpool.all_transactions_aggregate()?;
+	let txpool_tx = tx_pool.txpool.all_transactions_aggregate()?.map(Arc::new);
 
 	let stem_txs = tx_pool
 		.stempool
@@ -125,7 +125,7 @@ fn process_stem_phase(
 				identifier: "?.?.?.?".to_string(),
 			};
 
-			tx_pool.add_to_pool(src, agg_tx, false, &header)?;
+			tx_pool.add_to_pool(src, Arc::new(agg_tx), false, &header)?;
 		}
 	}
 	Ok(())
@@ -148,7 +148,7 @@ fn process_fluff_phase(
 	}
 
 	// Get the aggregate tx representing the entire txpool.
-	let txpool_tx = tx_pool.txpool.all_transactions_aggregate()?;
+	let txpool_tx = tx_pool.txpool.all_transactions_aggregate()?.map(Arc::new);
 
 	let stem_txs = tx_pool
 		.stempool
@@ -171,7 +171,7 @@ fn process_fluff_phase(
 			identifier: "?.?.?.?".to_string(),
 		};
 
-		tx_pool.add_to_pool(src, agg_tx, false, &header)?;
+		tx_pool.add_to_pool(src, Arc::new(agg_tx), false, &header)?;
 	}
 	Ok(())
 }

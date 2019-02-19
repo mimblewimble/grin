@@ -294,7 +294,7 @@ impl WalletCommAdapter for KeybaseWalletCommAdapter {
 			false => {
 				return Err(ErrorKind::ClientCallback(
 					"Posting transaction slate".to_owned(),
-				))?
+				))?;
 			}
 		}
 		info!(
@@ -307,7 +307,7 @@ impl WalletCommAdapter for KeybaseWalletCommAdapter {
 			None => {
 				return Err(ErrorKind::ClientCallback(
 					"Receiving reply from recipient".to_owned(),
-				))?
+				))?;
 			}
 		}
 	}

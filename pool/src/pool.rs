@@ -57,7 +57,7 @@ impl Pool {
 		self.entries.iter().any(|x| x.tx.hash() == hash)
 	}
 
-	pub fn get_tx(&self, hash: Hash) -> Option<Transaction> {
+	pub fn get_tx(&self, hash: Hash) -> Option<Arc<Transaction>> {
 		self.entries
 			.iter()
 			.find(|x| x.tx.hash() == hash)
@@ -65,7 +65,7 @@ impl Pool {
 	}
 
 	/// Query the tx pool for an individual tx matching the given kernel hash.
-	pub fn retrieve_tx_by_kernel_hash(&self, hash: Hash) -> Option<Transaction> {
+	pub fn retrieve_tx_by_kernel_hash(&self, hash: Hash) -> Option<Arc<Transaction>> {
 		for x in &self.entries {
 			for k in x.tx.kernels() {
 				if k.hash() == hash {
@@ -85,7 +85,7 @@ impl Pool {
 		hash: Hash,
 		nonce: u64,
 		kern_ids: &[ShortId],
-	) -> (Vec<Transaction>, Vec<ShortId>) {
+	) -> (Vec<Arc<Transaction>>, Vec<ShortId>) {
 		let mut txs = vec![];
 		let mut found_ids = vec![];
 
@@ -121,7 +121,7 @@ impl Pool {
 	pub fn prepare_mineable_transactions(
 		&self,
 		max_weight: usize,
-	) -> Result<Vec<Transaction>, PoolError> {
+	) -> Result<Vec<Arc<Transaction>>, PoolError> {
 		let header = self.blockchain.chain_head()?;
 		let mut tx_buckets = self.bucket_transactions(max_weight);
 
@@ -147,7 +147,7 @@ impl Pool {
 		Ok(txs)
 	}
 
-	pub fn all_transactions(&self) -> Vec<Transaction> {
+	pub fn all_transactions(&self) -> Vec<Arc<Transaction>> {
 		self.entries.iter().map(|x| x.tx.clone()).collect()
 	}
 
@@ -169,15 +169,15 @@ impl Pool {
 
 	pub fn select_valid_transactions(
 		&self,
-		txs: Vec<Transaction>,
-		extra_tx: Option<Transaction>,
+		txs: Vec<Arc<Transaction>>,
+		extra_tx: Option<Arc<Transaction>>,
 		header: &BlockHeader,
-	) -> Result<Vec<Transaction>, PoolError> {
+	) -> Result<Vec<Arc<Transaction>>, PoolError> {
 		let valid_txs = self.validate_raw_txs(txs, extra_tx, header, Weighting::NoLimit)?;
 		Ok(valid_txs)
 	}
 
-	pub fn get_transactions_in_state(&self, state: PoolEntryState) -> Vec<Transaction> {
+	pub fn get_transactions_in_state(&self, state: PoolEntryState) -> Vec<Arc<Transaction>> {
 		self.entries
 			.iter()
 			.filter(|x| x.state == state)
@@ -186,7 +186,7 @@ impl Pool {
 	}
 
 	// Transition the specified pool entries to the new state.
-	pub fn transition_to_state(&mut self, txs: &[Transaction], state: PoolEntryState) {
+	pub fn transition_to_state(&mut self, txs: &[Arc<Transaction>], state: PoolEntryState) {
 		for x in &mut self.entries {
 			if txs.contains(&x.tx) {
 				x.state = state;
@@ -197,12 +197,15 @@ impl Pool {
 	// Aggregate this new tx with all existing txs in the pool.
 	// If we can validate the aggregated tx against the current chain state
 	// then we can safely add the tx to the pool.
-	pub fn add_to_pool(
+	pub fn add_to_pool<I>(
 		&mut self,
 		entry: PoolEntry,
-		extra_txs: Vec<Transaction>,
+		extra_txs: I,
 		header: &BlockHeader,
-	) -> Result<(), PoolError> {
+	) -> Result<(), PoolError>
+	where
+		I: Iterator<Item = Arc<Transaction>>,
+	{
 		// Combine all the txs from the pool with any extra txs provided.
 		let mut txs = self.all_transactions();
 
@@ -215,7 +218,7 @@ impl Pool {
 
 		let agg_tx = if txs.is_empty() {
 			// If we have nothing to aggregate then simply return the tx itself.
-			entry.tx.clone()
+			(*entry.tx).clone()
 		} else {
 			// Create a single aggregated tx from the existing pool txs and the
 			// new entry
@@ -269,18 +272,15 @@ impl Pool {
 
 	fn validate_raw_txs(
 		&self,
-		txs: Vec<Transaction>,
-		extra_tx: Option<Transaction>,
+		txs: Vec<Arc<Transaction>>,
+		extra_tx: Option<Arc<Transaction>>,
 		header: &BlockHeader,
 		weighting: Weighting,
-	) -> Result<Vec<Transaction>, PoolError> {
-		let mut valid_txs = vec![];
+	) -> Result<Vec<Arc<Transaction>>, PoolError> {
+		let mut valid_txs: Vec<Arc<_>> = vec![];
 
 		for tx in txs {
-			let mut candidate_txs = vec![];
-			if let Some(extra_tx) = extra_tx.clone() {
-				candidate_txs.push(extra_tx);
-			};
+			let mut candidate_txs: Vec<_> = extra_tx.clone().into_iter().collect();
 			candidate_txs.extend(valid_txs.clone());
 			candidate_txs.push(tx.clone());
 
@@ -325,13 +325,9 @@ impl Pool {
 		let existing_entries = self.entries.clone();
 		self.entries.clear();
 
-		let mut extra_txs = vec![];
-		if let Some(extra_tx) = extra_tx {
-			extra_txs.push(extra_tx);
-		}
-
+		let arc_extra_tx = extra_tx.map(Arc::new);
 		for x in existing_entries {
-			let _ = self.add_to_pool(x, extra_txs.clone(), header);
+			let _ = self.add_to_pool(x, arc_extra_tx.clone().into_iter(), header);
 		}
 
 		Ok(())
@@ -340,7 +336,7 @@ impl Pool {
 	// Group dependent transactions in buckets (aggregated txs).
 	// Each bucket is independent from the others. Relies on the entries
 	// vector having parent transactions first (should always be the case).
-	fn bucket_transactions(&self, max_weight: usize) -> Vec<Transaction> {
+	fn bucket_transactions(&self, max_weight: usize) -> Vec<Arc<Transaction>> {
 		let mut tx_buckets = vec![];
 		let mut output_commits = HashMap::new();
 		let mut rejected = HashSet::new();
@@ -400,7 +396,7 @@ impl Pool {
 							)
 							.is_ok()
 						{
-							tx_buckets[pos] = agg_tx;
+							tx_buckets[pos] = Arc::new(agg_tx);
 						} else {
 							// Aggregated tx is not valid so discard this new tx.
 							is_rejected = true;
@@ -427,7 +423,7 @@ impl Pool {
 		tx_buckets
 	}
 
-	pub fn find_matching_transactions(&self, kernels: &[TxKernel]) -> Vec<Transaction> {
+	pub fn find_matching_transactions(&self, kernels: &[TxKernel]) -> Vec<Arc<Transaction>> {
 		// While the inputs outputs can be cut-through the kernel will stay intact
 		// In order to deaggregate tx we look for tx with the same kernel
 		let mut found_txs = vec![];

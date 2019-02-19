@@ -154,7 +154,7 @@ impl From<committed::Error> for Error {
 /// amount to zero.
 /// The signature signs the fee and the lock_height, which are retained for
 /// signature validation.
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone, Copy)]
 pub struct TxKernel {
 	/// Options for a kernel's structure or use
 	pub features: KernelFeatures,
@@ -990,12 +990,15 @@ pub fn cut_through(inputs: &mut Vec<Input>, outputs: &mut Vec<Output>) -> Result
 }
 
 /// Aggregate a vec of txs into a multi-kernel tx with cut_through.
-pub fn aggregate(mut txs: Vec<Transaction>) -> Result<Transaction, Error> {
+pub fn aggregate<T>(mut txs: Vec<T>) -> Result<Transaction, Error>
+where
+	T: std::ops::Deref<Target = Transaction>,
+{
 	// convenience short-circuiting
 	if txs.is_empty() {
 		return Ok(Transaction::empty());
 	} else if txs.len() == 1 {
-		return Ok(txs.pop().unwrap());
+		return Ok(txs.pop().unwrap().clone());
 	}
 	let mut n_inputs = 0;
 	let mut n_outputs = 0;
@@ -1013,13 +1016,13 @@ pub fn aggregate(mut txs: Vec<Transaction>) -> Result<Transaction, Error> {
 	// we will sum these together at the end to give us the overall offset for the
 	// transaction
 	let mut kernel_offsets: Vec<BlindingFactor> = Vec::with_capacity(txs.len());
-	for mut tx in txs {
+	for tx in txs {
 		// we will sum these later to give a single aggregate offset
 		kernel_offsets.push(tx.offset);
 
-		inputs.append(&mut tx.body.inputs);
-		outputs.append(&mut tx.body.outputs);
-		kernels.append(&mut tx.body.kernels);
+		inputs.append(&mut tx.body.inputs.clone());
+		outputs.append(&mut tx.body.outputs.clone());
+		kernels.append(&mut tx.body.kernels.clone());
 	}
 
 	// Sort inputs and outputs during cut_through.
@@ -1044,7 +1047,10 @@ pub fn aggregate(mut txs: Vec<Transaction>) -> Result<Transaction, Error> {
 
 /// Attempt to deaggregate a multi-kernel transaction based on multiple
 /// transactions
-pub fn deaggregate(mk_tx: Transaction, txs: Vec<Transaction>) -> Result<Transaction, Error> {
+pub fn deaggregate<T>(mk_tx: T, txs: Vec<T>) -> Result<Transaction, Error>
+where
+	T: std::ops::Deref<Target = Transaction>,
+{
 	let mut inputs: Vec<Input> = vec![];
 	let mut outputs: Vec<Output> = vec![];
 	let mut kernels: Vec<TxKernel> = vec![];
@@ -1055,19 +1061,19 @@ pub fn deaggregate(mk_tx: Transaction, txs: Vec<Transaction>) -> Result<Transact
 
 	let tx = aggregate(txs)?;
 
-	for mk_input in mk_tx.body.inputs {
+	for mk_input in mk_tx.body.inputs.iter() {
 		if !tx.body.inputs.contains(&mk_input) && !inputs.contains(&mk_input) {
-			inputs.push(mk_input);
+			inputs.push(*mk_input);
 		}
 	}
-	for mk_output in mk_tx.body.outputs {
+	for mk_output in mk_tx.body.outputs.iter() {
 		if !tx.body.outputs.contains(&mk_output) && !outputs.contains(&mk_output) {
-			outputs.push(mk_output);
+			outputs.push(*mk_output);
 		}
 	}
-	for mk_kernel in mk_tx.body.kernels {
+	for mk_kernel in mk_tx.body.kernels.iter() {
 		if !tx.body.kernels.contains(&mk_kernel) && !kernels.contains(&mk_kernel) {
-			kernels.push(mk_kernel);
+			kernels.push(*mk_kernel);
 		}
 	}
 

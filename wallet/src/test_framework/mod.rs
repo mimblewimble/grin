@@ -90,7 +90,7 @@ pub fn add_block_with_reward(chain: &Chain, txs: Vec<&Transaction>, reward: CbDa
 	let kernel = ser::deserialize(&mut &kern_bin[..]).unwrap();
 	let mut b = core::core::Block::new(
 		&prev,
-		txs.into_iter().cloned().collect(),
+		txs.into_iter().cloned().map(Arc::new).collect(),
 		next_header_info.clone().difficulty,
 		(output, kernel),
 	)

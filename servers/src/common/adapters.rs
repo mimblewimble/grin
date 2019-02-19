@@ -59,7 +59,10 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 	}
 
 	fn get_transaction(&self, kernel_hash: Hash) -> Option<core::Transaction> {
-		self.tx_pool.read().retrieve_tx_by_kernel_hash(kernel_hash)
+		self.tx_pool
+			.read()
+			.retrieve_tx_by_kernel_hash(kernel_hash)
+			.map(|x| (*x).clone())
 	}
 
 	fn tx_kernel_received(&self, kernel_hash: Hash, addr: PeerAddr) {
@@ -99,7 +102,7 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 
 		let res = {
 			let mut tx_pool = self.tx_pool.write();
-			tx_pool.add_to_pool(source, tx, stem, &header)
+			tx_pool.add_to_pool(source, Arc::new(tx), stem, &header)
 		};
 
 		if let Err(e) = res {
@@ -135,7 +138,7 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 		let cb_hash = cb.hash();
 		if cb.kern_ids().is_empty() {
 			// push the freshly hydrated block through the chain pipeline
-			match core::Block::hydrate_from(cb, vec![]) {
+			match core::Block::hydrate_from::<Arc<_>>(cb, vec![]) {
 				Ok(block) => self.process_block(block, addr, false),
 				Err(e) => {
 					debug!("Invalid hydrated block {}: {:?}", cb_hash, e);

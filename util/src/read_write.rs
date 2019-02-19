@@ -89,7 +89,7 @@ pub fn write_all(stream: &mut dyn Write, mut buf: &[u8], timeout: Duration) -> i
 				return Err(io::Error::new(
 					io::ErrorKind::WriteZero,
 					"failed to write whole buffer",
-				))
+				));
 			}
 			Ok(n) => buf = &buf[n..],
 			Err(ref e) if e.kind() == io::ErrorKind::Interrupted => {}

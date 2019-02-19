@@ -136,6 +136,7 @@ fn default_mineable_max_weight() -> usize {
 
 /// Represents a single entry in the pool.
 /// A single (possibly aggregated) transaction.
+use std::sync::Arc;
 #[derive(Clone, Debug)]
 pub struct PoolEntry {
 	/// The state of the pool entry.
@@ -145,7 +146,7 @@ pub struct PoolEntry {
 	/// Timestamp of when this tx was originally added to the pool.
 	pub tx_at: DateTime<Utc>,
 	/// The transaction itself.
-	pub tx: Transaction,
+	pub tx: Arc<Transaction>,
 }
 
 /// The possible states a pool entry can be in.
