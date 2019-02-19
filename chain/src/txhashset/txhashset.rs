@@ -292,6 +292,27 @@ impl TxHashSet {
 		let rewind_rm_pos = input_pos_to_rewind(&horizon_header, &head_header, &batch)?;
 
 		{
+			// Callback for every output commitment being removed from the data file.
+			//
+			// TODO - Pretty sure there is a bug here.
+			//
+			// We do not allow duplicate commitments in the UTXO set, but we do allow
+			// duplicates to exist, an output can be spent and then that commitment can
+			// potentially be reused later and reintroduced to the UTXO set.
+			//
+			// Scenario -
+			//
+			// * output A exists in the UTXO set (pos P1 in output MMR)
+			// * output A is then spent (pos P1 removed from leaf_set)
+			// * output A is reintroduced to the UTXO (now at pos P2 in output MMR)
+			//
+			// So even though we do not allow duplicates in the UTXO set we actually have
+			// output A at pos P1 *and* pos P2 (one of them is spent, one unspent).
+			//
+			// When we compact the txhashset (and prune pos P1) -
+			// callback runs for commitment for A (for the previously spent instance of A)
+			// This will delete the output_pos index for A (impacting the unspent instance of A).
+			//
 			let clean_output_index = |commit: &[u8]| {
 				let _ = batch.delete_output_pos(commit);
 			};
