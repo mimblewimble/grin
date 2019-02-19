@@ -25,8 +25,8 @@ use lmdb_zero::LmdbResultExt;
 use crate::core::ser;
 
 /// number of bytes to grow the database by when needed
-pub const ALLOC_CHUNK_SIZE:usize = 134_217_728; //128 MB
-const RESIZE_PERCENT:f32 = 0.9;
+pub const ALLOC_CHUNK_SIZE: usize = 134_217_728; //128 MB
+const RESIZE_PERCENT: f32 = 0.9;
 
 /// Main error type for this lmdb
 #[derive(Clone, Eq, PartialEq, Debug, Fail)]
@@ -121,9 +121,17 @@ impl Store {
 		trace!("Space used: {}", size_used);
 		trace!("Space remaining: {}", env_info.mapsize - size_used);
 		let resize_percent = RESIZE_PERCENT;
-		trace!("Percent used: {:.*}  Percent threshold: {:.*}", 4, size_used as f64 / env_info.mapsize as f64, 4, resize_percent);
+		trace!(
+			"Percent used: {:.*}  Percent threshold: {:.*}",
+			4,
+			size_used as f64 / env_info.mapsize as f64,
+			4,
+			resize_percent
+		);
 
-		if size_used as f32 / env_info.mapsize as f32 > resize_percent || env_info.mapsize < ALLOC_CHUNK_SIZE {
+		if size_used as f32 / env_info.mapsize as f32 > resize_percent
+			|| env_info.mapsize < ALLOC_CHUNK_SIZE
+		{
 			trace!("Resize threshold met (percent-based)");
 			Ok(true)
 		} else {
@@ -143,10 +151,12 @@ impl Store {
 		unsafe {
 			self.env.set_mapsize(new_mapsize)?;
 		}
-		info!("Resized database from {} to {}", env_info.mapsize, new_mapsize);
+		info!(
+			"Resized database from {} to {}",
+			env_info.mapsize, new_mapsize
+		);
 		Ok(())
 	}
-
 
 	/// Gets a value from the db, provided its key
 	pub fn get(&self, key: &[u8]) -> Result<Option<Vec<u8>>, Error> {
