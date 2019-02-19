@@ -1047,9 +1047,10 @@ where
 
 /// Attempt to deaggregate a multi-kernel transaction based on multiple
 /// transactions
-pub fn deaggregate<T>(mk_tx: T, txs: Vec<T>) -> Result<Transaction, Error>
+pub fn deaggregate<T1, T2>(mk_tx: T1, txs: Vec<T2>) -> Result<Transaction, Error>
 where
-	T: std::ops::Deref<Target = Transaction>,
+	T1: std::ops::Deref<Target = Transaction>,
+	T2: std::ops::Deref<Target = Transaction>,
 {
 	let mut inputs: Vec<Input> = vec![];
 	let mut outputs: Vec<Output> = vec![];
