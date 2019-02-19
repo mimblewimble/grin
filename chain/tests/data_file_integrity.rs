@@ -84,9 +84,13 @@ fn data_files() {
 			let next_header_info = consensus::next_difficulty(1, chain.difficulty_iter());
 			let pk = ExtKeychainPath::new(1, n as u32, 0, 0, 0).to_identifier();
 			let reward = libtx::reward::output(&keychain, &pk, 0).unwrap();
-			let mut b =
-				core::core::Block::new(&prev, vec![], next_header_info.clone().difficulty, reward)
-					.unwrap();
+			let mut b = core::core::Block::new(
+				&prev,
+				Vec::<&Transaction>::new(),
+				next_header_info.clone().difficulty,
+				reward,
+			)
+			.unwrap();
 			b.header.timestamp = prev.timestamp + Duration::seconds(60);
 			b.header.pow.secondary_scaling = next_header_info.secondary_scaling;
 
@@ -160,12 +164,7 @@ fn _prepare_block_nosum(
 
 	let fees = txs.iter().map(|tx| tx.fee()).sum();
 	let reward = libtx::reward::output(kc, &key_id, fees).unwrap();
-	let mut b = match core::core::Block::new(
-		prev,
-		txs.into_iter().cloned().collect(),
-		Difficulty::from_num(diff),
-		reward,
-	) {
+	let mut b = match core::core::Block::new(prev, txs, Difficulty::from_num(diff), reward) {
 		Err(e) => panic!("{:?}", e),
 		Ok(b) => b,
 	};

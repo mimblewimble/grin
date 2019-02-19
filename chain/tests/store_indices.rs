@@ -15,6 +15,7 @@
 use self::chain::{Error, Tip};
 use self::core::core::hash::Hashed;
 use self::core::core::Block;
+use self::core::core::Transaction;
 use self::core::global::{self, ChainTypes};
 use self::core::libtx;
 use self::core::pow::{self, Difficulty};
@@ -63,7 +64,13 @@ fn test_various_store_indices() {
 	setup_chain(&genesis, chain_store.clone()).unwrap();
 
 	let reward = libtx::reward::output(&keychain, &key_id, 0).unwrap();
-	let block = Block::new(&genesis.header, vec![], Difficulty::min(), reward).unwrap();
+	let block = Block::new(
+		&genesis.header,
+		Vec::<&Transaction>::new(),
+		Difficulty::min(),
+		reward,
+	)
+	.unwrap();
 	let block_hash = block.hash();
 
 	{

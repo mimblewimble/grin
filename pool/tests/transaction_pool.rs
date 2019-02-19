@@ -24,6 +24,7 @@ use crate::common::*;
 use grin_core as core;
 use grin_keychain as keychain;
 use grin_util as util;
+use std::borrow::Borrow;
 use std::sync::Arc;
 
 /// Test we can add some txs to the pool (both stempool and txpool).
@@ -44,7 +45,13 @@ fn test_the_transaction_pool() {
 		let height = 1;
 		let key_id = ExtKeychain::derive_key_id(1, height as u32, 0, 0, 0);
 		let reward = libtx::reward::output(&keychain, &key_id, 0).unwrap();
-		let block = Block::new(&BlockHeader::default(), vec![], Difficulty::min(), reward).unwrap();
+		let block = Block::new(
+			&BlockHeader::default(),
+			Vec::<&_>::new(),
+			Difficulty::min(),
+			reward,
+		)
+		.unwrap();
 
 		chain.update_db_for_block(&block);
 
@@ -54,11 +61,11 @@ fn test_the_transaction_pool() {
 	// Now create tx to spend a coinbase, giving us some useful outputs for testing
 	// with.
 	let initial_tx = {
-		test_transaction_spending_coinbase(
+		Arc::new(test_transaction_spending_coinbase(
 			&keychain,
 			&header,
 			vec![500, 600, 700, 800, 900, 1000, 1100, 1200, 1300, 1400],
-		)
+		))
 	};
 
 	// Add this tx to the pool (stem=false, direct to txpool).
@@ -73,7 +80,11 @@ fn test_the_transaction_pool() {
 	// Test adding a tx that "double spends" an output currently spent by a tx
 	// already in the txpool. In this case we attempt to spend the original coinbase twice.
 	{
-		let tx = test_transaction_spending_coinbase(&keychain, &header, vec![501]);
+		let tx = Arc::new(test_transaction_spending_coinbase(
+			&keychain,
+			&header,
+			vec![501],
+		));
 		let mut write_pool = pool.write();
 		assert!(write_pool
 			.add_to_pool(test_source(), tx, false, &header)
@@ -81,9 +92,9 @@ fn test_the_transaction_pool() {
 	}
 
 	// tx1 spends some outputs from the initial test tx.
-	let tx1 = test_transaction(&keychain, vec![500, 600], vec![499, 599]);
+	let tx1 = Arc::new(test_transaction(&keychain, vec![500, 600], vec![499, 599]));
 	// tx2 spends some outputs from both tx1 and the initial test tx.
-	let tx2 = test_transaction(&keychain, vec![499, 700], vec![498]);
+	let tx2 = Arc::new(test_transaction(&keychain, vec![499, 700], vec![498]));
 
 	// Take a write lock and add a couple of tx entries to the pool.
 	{
@@ -121,7 +132,7 @@ fn test_the_transaction_pool() {
 		let tx1a = test_transaction(&keychain, vec![500, 600], vec![499, 599]);
 		let mut write_pool = pool.write();
 		assert!(write_pool
-			.add_to_pool(test_source(), tx1a, false, &header)
+			.add_to_pool(test_source(), Arc::new(tx1a), false, &header)
 			.is_err());
 	}
 
@@ -130,7 +141,7 @@ fn test_the_transaction_pool() {
 		let bad_tx = test_transaction(&keychain, vec![10_001], vec![10_000]);
 		let mut write_pool = pool.write();
 		assert!(write_pool
-			.add_to_pool(test_source(), bad_tx, false, &header)
+			.add_to_pool(test_source(), Arc::new(bad_tx), false, &header)
 			.is_err());
 	}
 
@@ -142,7 +153,7 @@ fn test_the_transaction_pool() {
 		let tx = test_transaction(&keychain, vec![900], vec![498]);
 		let mut write_pool = pool.write();
 		assert!(write_pool
-			.add_to_pool(test_source(), tx, false, &header)
+			.add_to_pool(test_source(), Arc::new(tx), false, &header)
 			.is_err());
 	}
 
@@ -151,7 +162,7 @@ fn test_the_transaction_pool() {
 		let mut write_pool = pool.write();
 		let tx3 = test_transaction(&keychain, vec![500], vec![497]);
 		assert!(write_pool
-			.add_to_pool(test_source(), tx3, false, &header)
+			.add_to_pool(test_source(), Arc::new(tx3), false, &header)
 			.is_err());
 		assert_eq!(write_pool.total_size(), 3);
 	}
@@ -161,11 +172,11 @@ fn test_the_transaction_pool() {
 		let mut write_pool = pool.write();
 		let tx = test_transaction(&keychain, vec![599], vec![598]);
 		write_pool
-			.add_to_pool(test_source(), tx, true, &header)
+			.add_to_pool(test_source(), Arc::new(tx), true, &header)
 			.unwrap();
 		let tx2 = test_transaction(&keychain, vec![598], vec![597]);
 		write_pool
-			.add_to_pool(test_source(), tx2, true, &header)
+			.add_to_pool(test_source(), Arc::new(tx2), true, &header)
 			.unwrap();
 		assert_eq!(write_pool.total_size(), 3);
 		assert_eq!(write_pool.stempool.size(), 2);
@@ -182,7 +193,7 @@ fn test_the_transaction_pool() {
 			.unwrap();
 		assert_eq!(agg_tx.kernels().len(), 2);
 		write_pool
-			.add_to_pool(test_source(), agg_tx, false, &header)
+			.add_to_pool(test_source(), Arc::new(agg_tx), false, &header)
 			.unwrap();
 		assert_eq!(write_pool.total_size(), 4);
 		assert!(write_pool.stempool.is_empty());
@@ -192,7 +203,7 @@ fn test_the_transaction_pool() {
 	// This handles the case of the stem path having a cycle in it.
 	{
 		let mut write_pool = pool.write();
-		let tx = test_transaction(&keychain, vec![597], vec![596]);
+		let tx = Arc::new(test_transaction(&keychain, vec![597], vec![596]));
 		write_pool
 			.add_to_pool(test_source(), tx.clone(), true, &header)
 			.unwrap();
@@ -201,7 +212,7 @@ fn test_the_transaction_pool() {
 
 		// Duplicate stem tx so fluff, adding it to txpool and removing it from stempool.
 		write_pool
-			.add_to_pool(test_source(), tx.clone(), true, &header)
+			.add_to_pool(test_source(), tx, true, &header)
 			.unwrap();
 		assert_eq!(write_pool.total_size(), 5);
 		assert!(write_pool.stempool.is_empty());
@@ -217,14 +228,14 @@ fn test_the_transaction_pool() {
 		let tx4 = test_transaction(&keychain, vec![800], vec![799]);
 		// tx1 and tx2 are already in the txpool (in aggregated form)
 		// tx4 is the "new" part of this aggregated tx that we care about
-		let agg_tx = transaction::aggregate(vec![tx1.clone(), tx2.clone(), tx4]).unwrap();
+		let agg_tx = transaction::aggregate(vec![tx1.borrow(), tx2.borrow(), &tx4]).unwrap();
 
 		agg_tx
 			.validate(Weighting::AsTransaction, verifier_cache.clone())
 			.unwrap();
 
 		write_pool
-			.add_to_pool(test_source(), agg_tx, false, &header)
+			.add_to_pool(test_source(), Arc::new(agg_tx), false, &header)
 			.unwrap();
 		assert_eq!(write_pool.total_size(), 6);
 		let entry = write_pool.txpool.entries.last().unwrap();
@@ -238,7 +249,7 @@ fn test_the_transaction_pool() {
 		let mut write_pool = pool.write();
 
 		let double_spend_tx =
-			{ test_transaction_spending_coinbase(&keychain, &header, vec![1000]) };
+			Arc::new({ test_transaction_spending_coinbase(&keychain, &header, vec![1000]) });
 
 		// check we cannot add a double spend to the stempool
 		assert!(write_pool

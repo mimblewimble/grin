@@ -383,7 +383,7 @@ fn hydrate_empty_compact_block() {
 	let key_id = ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
 	let b = new_block(vec![], &keychain, &prev, &key_id);
 	let cb: CompactBlock = b.clone().into();
-	let hb = Block::hydrate_from(cb, vec![]).unwrap();
+	let hb = Block::hydrate_from(cb, Vec::<&_>::new()).unwrap();
 	assert_eq!(hb.header, b.header);
 	assert_eq!(hb.outputs(), b.outputs());
 	assert_eq!(hb.kernels(), b.kernels());

@@ -45,19 +45,20 @@ fn test_block_building_max_weight() {
 	let verifier_cache = Arc::new(RwLock::new(LruVerifierCache::new()));
 
 	// Convenient was to add a new block to the chain.
-	let add_block = |prev_header: BlockHeader, txs: Vec<Transaction>, chain: &mut ChainAdapter| {
-		let height = prev_header.height + 1;
-		let key_id = ExtKeychain::derive_key_id(1, height as u32, 0, 0, 0);
-		let fee = txs.iter().map(|x| x.fee()).sum();
-		let reward = libtx::reward::output(&keychain, &key_id, fee).unwrap();
-		let mut block = Block::new(&prev_header, txs, Difficulty::min(), reward).unwrap();
+	let add_block =
+		|prev_header: BlockHeader, txs: Vec<Arc<Transaction>>, chain: &mut ChainAdapter| {
+			let height = prev_header.height + 1;
+			let key_id = ExtKeychain::derive_key_id(1, height as u32, 0, 0, 0);
+			let fee = txs.iter().map(|x| x.fee()).sum();
+			let reward = libtx::reward::output(&keychain, &key_id, fee).unwrap();
+			let mut block = Block::new(&prev_header, txs, Difficulty::min(), reward).unwrap();
 
-		// Set the prev_root to the prev hash for testing purposes (no MMR to obtain a root from).
-		block.header.prev_root = prev_header.hash();
+			// Set the prev_root to the prev hash for testing purposes (no MMR to obtain a root from).
+			block.header.prev_root = prev_header.hash();
 
-		chain.update_db_for_block(&block);
-		block
-	};
+			chain.update_db_for_block(&block);
+			block
+		};
 
 	// Initialize the chain/txhashset with an initial block
 	// so we have a non-empty UTXO set.
@@ -69,7 +70,7 @@ fn test_block_building_max_weight() {
 	let initial_tx = test_transaction_spending_coinbase(&keychain, &header, vec![100, 200, 300]);
 
 	// Mine that initial tx so we can spend it with multiple txs
-	let block = add_block(header, vec![initial_tx], &mut chain);
+	let block = add_block(header, vec![Arc::new(initial_tx)], &mut chain);
 	let header = block.header;
 
 	// Initialize a new pool with our chain adapter.
@@ -90,7 +91,7 @@ fn test_block_building_max_weight() {
 		let mut write_pool = pool.write();
 		for tx in txs {
 			write_pool
-				.add_to_pool(test_source(), tx, false, &header)
+				.add_to_pool(test_source(), Arc::new(tx), false, &header)
 				.unwrap();
 		}
 	}

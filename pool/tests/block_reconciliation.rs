@@ -46,7 +46,7 @@ fn test_transaction_pool_block_reconciliation() {
 		let key_id = ExtKeychain::derive_key_id(1, height as u32, 0, 0, 0);
 		let reward = libtx::reward::output(&keychain, &key_id, 0).unwrap();
 		let genesis = BlockHeader::default();
-		let mut block = Block::new(&genesis, vec![], Difficulty::min(), reward).unwrap();
+		let mut block = Block::new(&genesis, Vec::<&_>::new(), Difficulty::min(), reward).unwrap();
 
 		// Set the prev_root to the prev hash for testing purposes (no MMR to obtain a root from).
 		block.header.prev_root = genesis.hash();
@@ -64,7 +64,7 @@ fn test_transaction_pool_block_reconciliation() {
 		let key_id = ExtKeychain::derive_key_id(1, 2, 0, 0, 0);
 		let fees = initial_tx.fee();
 		let reward = libtx::reward::output(&keychain, &key_id, fees).unwrap();
-		let mut block = Block::new(&header, vec![initial_tx], Difficulty::min(), reward).unwrap();
+		let mut block = Block::new(&header, vec![&initial_tx], Difficulty::min(), reward).unwrap();
 
 		// Set the prev_root to the prev hash for testing purposes (no MMR to obtain a root from).
 		block.header.prev_root = header.hash();
@@ -123,6 +123,7 @@ fn test_transaction_pool_block_reconciliation() {
 		valid_child_valid.clone(),
 		mixed_child,
 	];
+	let n_txs_to_add = txs_to_add.len();
 
 	// First we add the above transactions to the pool.
 	// All should be accepted.
@@ -130,13 +131,13 @@ fn test_transaction_pool_block_reconciliation() {
 		let mut write_pool = pool.write();
 		assert_eq!(write_pool.total_size(), 0);
 
-		for tx in &txs_to_add {
+		for tx in txs_to_add {
 			write_pool
-				.add_to_pool(test_source(), tx.clone(), false, &header)
+				.add_to_pool(test_source(), Arc::new(tx), false, &header)
 				.unwrap();
 		}
 
-		assert_eq!(write_pool.total_size(), txs_to_add.len());
+		assert_eq!(write_pool.total_size(), n_txs_to_add);
 	}
 
 	// Now we prepare the block that will cause the above conditions to be met.
@@ -150,7 +151,7 @@ fn test_transaction_pool_block_reconciliation() {
 	// - Output conflict w/ 8
 	let block_tx_4 = test_transaction(&keychain, vec![40], vec![9, 31]);
 
-	let block_txs = vec![block_tx_1, block_tx_2, block_tx_3, block_tx_4];
+	let block_txs = vec![&block_tx_1, &block_tx_2, &block_tx_3, &block_tx_4];
 
 	// Now apply this block.
 	let block = {
@@ -169,7 +170,7 @@ fn test_transaction_pool_block_reconciliation() {
 	// Check the pool still contains everything we expect at this point.
 	{
 		let write_pool = pool.write();
-		assert_eq!(write_pool.total_size(), txs_to_add.len());
+		assert_eq!(write_pool.total_size(), n_txs_to_add);
 	}
 
 	// And reconcile the pool with this latest block.
@@ -178,9 +179,9 @@ fn test_transaction_pool_block_reconciliation() {
 		write_pool.reconcile_block(&block).unwrap();
 
 		assert_eq!(write_pool.total_size(), 4);
-		assert_eq!(write_pool.txpool.entries[0].tx, valid_transaction);
-		assert_eq!(write_pool.txpool.entries[1].tx, pool_child);
-		assert_eq!(write_pool.txpool.entries[2].tx, conflict_valid_child);
-		assert_eq!(write_pool.txpool.entries[3].tx, valid_child_valid);
+		assert_eq!(*write_pool.txpool.entries[0].tx, valid_transaction);
+		assert_eq!(*write_pool.txpool.entries[1].tx, pool_child);
+		assert_eq!(*write_pool.txpool.entries[2].tx, conflict_valid_child);
+		assert_eq!(*write_pool.txpool.entries[3].tx, valid_child_valid);
 	}
 }

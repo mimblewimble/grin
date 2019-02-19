@@ -78,7 +78,7 @@ fn test_coinbase_maturity() {
 	{
 		let mut write_pool = pool.write();
 		let tx = test_transaction(&keychain, vec![50], vec![49]);
-		match write_pool.add_to_pool(test_source(), tx.clone(), true, &BlockHeader::default()) {
+		match write_pool.add_to_pool(test_source(), Arc::new(tx), true, &BlockHeader::default()) {
 			Err(PoolError::ImmatureCoinbase) => {}
 			_ => panic!("Expected an immature coinbase error here."),
 		}

@@ -92,13 +92,7 @@ where
 {
 	let fees = txs.iter().map(|tx| tx.fee()).sum();
 	let reward_output = reward::output(keychain, &key_id, fees).unwrap();
-	Block::new(
-		&previous_header,
-		txs.into_iter().cloned().collect(),
-		Difficulty::min(),
-		reward_output,
-	)
-	.unwrap()
+	Block::new(&previous_header, txs, Difficulty::min(), reward_output).unwrap()
 }
 
 // utility producing a transaction that spends an output with the provided
