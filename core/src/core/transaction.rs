@@ -31,7 +31,6 @@ use crate::{consensus, global};
 use enum_primitive::FromPrimitive;
 use std::cmp::Ordering;
 use std::cmp::{max, min};
-use std::collections::HashSet;
 use std::sync::Arc;
 use std::{error, fmt};
 
@@ -647,14 +646,21 @@ impl TransactionBody {
 	}
 
 	// Verify that no input is spending an output from the same block.
+	// Assumes inputs and outputs are sorted
 	fn verify_cut_through(&self) -> Result<(), Error> {
-		let mut out_set = HashSet::new();
-		for out in &self.outputs {
-			out_set.insert(out.commitment());
-		}
-		for inp in &self.inputs {
-			if out_set.contains(&inp.commitment()) {
-				return Err(Error::CutThrough);
+		let mut inputs = self.inputs.iter().map(|x| x.hash()).peekable();
+		let mut outputs = self.outputs.iter().map(|x| x.hash()).peekable();
+		while let (Some(ih), Some(oh)) = (inputs.peek(), outputs.peek()) {
+			match ih.cmp(oh) {
+				Ordering::Less => {
+					inputs.next();
+				}
+				Ordering::Greater => {
+					outputs.next();
+				}
+				Ordering::Equal => {
+					return Err(Error::CutThrough);
+				}
 			}
 		}
 		Ok(())
@@ -968,24 +974,34 @@ impl Transaction {
 /// and outputs.
 pub fn cut_through(inputs: &mut Vec<Input>, outputs: &mut Vec<Output>) -> Result<(), Error> {
 	// assemble output commitments set, checking they're all unique
-	let mut out_set = HashSet::new();
-	let all_uniq = { outputs.iter().all(|o| out_set.insert(o.commitment())) };
-	if !all_uniq {
+	outputs.sort_unstable();
+	if outputs.windows(2).any(|pair| pair[0] == pair[1]) {
 		return Err(Error::AggregationError);
 	}
-
-	let in_set = inputs
-		.iter()
-		.map(|inp| inp.commitment())
-		.collect::<HashSet<_>>();
-
-	let to_cut_through = in_set.intersection(&out_set).collect::<HashSet<_>>();
-
-	// filter and sort
-	inputs.retain(|inp| !to_cut_through.contains(&inp.commitment()));
-	outputs.retain(|out| !to_cut_through.contains(&out.commitment()));
 	inputs.sort_unstable();
-	outputs.sort_unstable();
+	let mut inputs_idx = 0;
+	let mut outputs_idx = 0;
+	let mut ncut = 0;
+	while inputs_idx < inputs.len() && outputs_idx < outputs.len() {
+		match inputs[inputs_idx].hash().cmp(&outputs[outputs_idx].hash()) {
+			Ordering::Less => {
+				inputs[inputs_idx - ncut] = inputs[inputs_idx];
+				inputs_idx += 1;
+			}
+			Ordering::Greater => {
+				outputs[outputs_idx - ncut] = outputs[outputs_idx];
+				outputs_idx += 1;
+			}
+			Ordering::Equal => {
+				inputs_idx += 1;
+				outputs_idx += 1;
+				ncut += 1;
+			}
+		}
+	}
+	// Cut elements that have already been copied
+	outputs.drain(outputs_idx - ncut..outputs_idx);
+	inputs.drain(inputs_idx - ncut..inputs_idx);
 	Ok(())
 }
 
@@ -1109,7 +1125,7 @@ pub fn deaggregate(mk_tx: Transaction, txs: Vec<Transaction>) -> Result<Transact
 /// A transaction input.
 ///
 /// Primarily a reference to an output being spent by the transaction.
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone, Copy)]
 pub struct Input {
 	/// The features of the output being spent.
 	/// We will check maturity for coinbase output.
