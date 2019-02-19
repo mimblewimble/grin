@@ -1252,18 +1252,29 @@ impl<'a> Extension<'a> {
 		Ok((output_sum, kernel_sum))
 	}
 
-	/// Rebuild the index of MMR positions to the corresponding Output and
-	/// kernel by iterating over the whole MMR data. This is a costly operation
-	/// performed only when we receive a full new chain state.
+	/// Rebuild the index of MMR positions to the corresponding UTXOs.
+	/// This is a costly operation performed only when we receive a full new chain state.
 	pub fn rebuild_index(&self) -> Result<(), Error> {
+		let now = Instant::now();
+
+		let mut count = 0;
+
 		for n in 1..self.output_pmmr.unpruned_size() + 1 {
 			// non-pruned leaves only
 			if pmmr::bintree_postorder_height(n) == 0 {
 				if let Some(out) = self.output_pmmr.get_data(n) {
 					self.batch.save_output_pos(&out.commit, n)?;
+					count += 1;
 				}
 			}
 		}
+
+		debug!(
+			"txhashset: rebuild_index ({} UTXOs), took {}s",
+			count,
+			now.elapsed().as_secs(),
+		);
+
 		Ok(())
 	}
 
