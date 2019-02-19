@@ -24,6 +24,10 @@ use lmdb_zero::LmdbResultExt;
 
 use crate::core::ser;
 
+/// number of bytes to grow the database by when needed
+pub const ALLOC_CHUNK_SIZE:usize = 134_217_728; //128 MB
+const RESIZE_PERCENT:f32 = 0.9;
+
 /// Main error type for this lmdb
 #[derive(Clone, Eq, PartialEq, Debug, Fail)]
 pub enum Error {
@@ -71,26 +75,13 @@ pub fn new_named_env(path: String, name: String, max_readers: Option<u32>) -> lm
 
 	let mut env_builder = lmdb::EnvBuilder::new().unwrap();
 	env_builder.set_maxdbs(8).unwrap();
-	// half a TB should give us plenty room, will be an issue on 32 bits
-	// (which we don't support anyway)
-
-	#[cfg(not(target_os = "windows"))]
-	env_builder.set_mapsize(5_368_709_120).unwrap_or_else(|e| {
-		panic!("Unable to allocate LMDB space: {:?}", e);
-	});
-	//TODO: This is temporary to support (beta) windows support
-	//Windows allocates the entire file at once, so this needs to
-	//be changed to allocate as little as possible and increase as needed
-	#[cfg(target_os = "windows")]
-	env_builder.set_mapsize(524_288_000).unwrap_or_else(|e| {
-		panic!("Unable to allocate LMDB space: {:?}", e);
-	});
 
 	if let Some(max_readers) = max_readers {
 		env_builder
 			.set_maxreaders(max_readers)
 			.expect("Unable set max_readers");
 	}
+
 	unsafe {
 		env_builder
 			.open(&full_path, lmdb::open::NOTLS, 0o600)
@@ -119,6 +110,43 @@ impl Store {
 		);
 		Store { env, db }
 	}
+
+	/// Determines whether the environment needs a resize based on a simple percentage threshold
+	pub fn needs_resize(&self) -> Result<bool, Error> {
+		let env_info = self.env.info()?;
+		let stat = self.env.stat()?;
+
+		let size_used = stat.psize as usize * env_info.last_pgno;
+		trace!("DB map size: {}", env_info.mapsize);
+		trace!("Space used: {}", size_used);
+		trace!("Space remaining: {}", env_info.mapsize - size_used);
+		let resize_percent = RESIZE_PERCENT;
+		trace!("Percent used: {:.*}  Percent threshold: {:.*}", 4, size_used as f64 / env_info.mapsize as f64, 4, resize_percent);
+
+		if size_used as f32 / env_info.mapsize as f32 > resize_percent || env_info.mapsize < ALLOC_CHUNK_SIZE {
+			trace!("Resize threshold met (percent-based)");
+			Ok(true)
+		} else {
+			trace!("Resize threshold not met (percent-based)");
+			Ok(false)
+		}
+	}
+
+	/// Increments the database size by one ALLOC_CHUNK_SIZE
+	pub fn do_resize(&self) -> Result<(), Error> {
+		let env_info = self.env.info()?;
+		let new_mapsize = if env_info.mapsize < ALLOC_CHUNK_SIZE {
+			ALLOC_CHUNK_SIZE
+		} else {
+			env_info.mapsize + ALLOC_CHUNK_SIZE
+		};
+		unsafe {
+			self.env.set_mapsize(new_mapsize)?;
+		}
+		info!("Resized database from {} to {}", env_info.mapsize, new_mapsize);
+		Ok(())
+	}
+
 
 	/// Gets a value from the db, provided its key
 	pub fn get(&self, key: &[u8]) -> Result<Option<Vec<u8>>, Error> {
@@ -178,6 +206,10 @@ impl Store {
 
 	/// Builds a new batch to be used with this store.
 	pub fn batch(&self) -> Result<Batch<'_>, Error> {
+		// check if the db needs resizing before returning the batch
+		if self.needs_resize()? {
+			self.do_resize()?;
+		}
 		let txn = lmdb::WriteTransaction::new(self.env.clone())?;
 		Ok(Batch {
 			store: self,

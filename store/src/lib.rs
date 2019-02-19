@@ -31,7 +31,7 @@ extern crate grin_core as core;
 //use grin_core as core;
 
 pub mod leaf_set;
-mod lmdb;
+pub mod lmdb;
 pub mod pmmr;
 pub mod prune_list;
 pub mod types;
