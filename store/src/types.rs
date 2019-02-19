@@ -333,6 +333,13 @@ impl AppendOnlyFile {
 					if prune_at != buf_start {
 						writer.write_all(&buf[buf_start..prune_at])?;
 					} else {
+						// TODO - Two issues here, turning this into a no-op -
+						//
+						// 1) buf_start == prune_at (see above) so slice is "empty"
+						// 2) even if slice was not empty, its an output_identifier not a commitment
+						//
+						// The problem with passing raw slices of bytes around is we have no type safety.
+						// We are attempting to cleanup the output_pos index by commitment here.
 						prune_cb(&buf[buf_start..prune_at]);
 					}
 					buf_start = prune_at + (prune_len as usize);
