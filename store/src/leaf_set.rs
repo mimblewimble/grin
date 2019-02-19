@@ -199,4 +199,8 @@ impl LeafSet {
 	pub fn is_empty(&self) -> bool {
 		self.len() == 0
 	}
+
+	pub fn iter<'a>(&'a self) -> Box<Iterator<Item = u64> + 'a> {
+		Box::new(self.bitmap.iter().map(|x| x as u64))
+	}
 }

@@ -33,7 +33,6 @@ use crate::util::{file, secp_static, zip};
 use croaring::Bitmap;
 use grin_store;
 use grin_store::pmmr::{PMMRBackend, PMMR_FILES};
-use grin_store::types::prune_noop;
 use std::collections::HashSet;
 use std::fs::{self, File};
 use std::path::{Path, PathBuf};
@@ -293,23 +292,15 @@ impl TxHashSet {
 
 		let rewind_rm_pos = input_pos_to_rewind(&horizon_header, &head_header, &batch)?;
 
-		{
-			let clean_output_index = |commit: &[u8]| {
-				let _ = batch.delete_output_pos(commit);
-			};
+		self.output_pmmr_h
+			.backend
+			.check_compact(horizon_header.output_mmr_size, &rewind_rm_pos)?;
 
-			self.output_pmmr_h.backend.check_compact(
-				horizon_header.output_mmr_size,
-				&rewind_rm_pos,
-				clean_output_index,
-			)?;
+		self.rproof_pmmr_h
+			.backend
+			.check_compact(horizon_header.output_mmr_size, &rewind_rm_pos)?;
 
-			self.rproof_pmmr_h.backend.check_compact(
-				horizon_header.output_mmr_size,
-				&rewind_rm_pos,
-				&prune_noop,
-			)?;
-		}
+		// Cleanup output_pos index to reflect current UTXO set.
 
 		// Finally commit the batch, saving everything to the db.
 		batch.commit()?;
@@ -797,11 +788,9 @@ impl<'a> Committed for Extension<'a> {
 
 	fn outputs_committed(&self) -> Vec<Commitment> {
 		let mut commitments = vec![];
-		for n in 1..self.output_pmmr.unpruned_size() + 1 {
-			if pmmr::is_leaf(n) {
-				if let Some(out) = self.output_pmmr.get_data(n) {
-					commitments.push(out.commit);
-				}
+		for pos in self.output_pmmr.leaf_pos_iter() {
+			if let Some(out) = self.output_pmmr.get_data(pos) {
+				commitments.push(out.commit);
 			}
 		}
 		commitments
@@ -1261,13 +1250,9 @@ impl<'a> Extension<'a> {
 
 		let mut count = 0;
 
-		for n in 1..self.output_pmmr.unpruned_size() + 1 {
-			// non-pruned leaves only
-			if pmmr::bintree_postorder_height(n) == 0 {
-				if let Some(out) = self.output_pmmr.get_data(n) {
-					self.batch.save_output_pos(&out.commit, n)?;
-					count += 1;
-				}
+		for pos in self.output_pmmr.leaf_pos_iter() {
+			if let Some(out) = self.output_pmmr.get_data(pos) {
+				self.batch.save_output_pos(&out.commit, pos)?;
 			}
 		}
 
@@ -1330,7 +1315,7 @@ impl<'a> Extension<'a> {
 					kern_count += 1;
 				}
 			}
-			if n % 20 == 0 {
+			if kern_count % 20 == 0 {
 				status.on_validation(kern_count, total_kernels, 0, 0);
 			}
 		}
@@ -1353,30 +1338,28 @@ impl<'a> Extension<'a> {
 
 		let mut proof_count = 0;
 		let total_rproofs = pmmr::n_leaves(self.output_pmmr.unpruned_size());
-		for n in 1..self.output_pmmr.unpruned_size() + 1 {
-			if pmmr::is_leaf(n) {
-				if let Some(out) = self.output_pmmr.get_data(n) {
-					if let Some(rp) = self.rproof_pmmr.get_data(n) {
-						commits.push(out.commit);
-						proofs.push(rp);
-					} else {
-						// TODO - rangeproof not found
-						return Err(ErrorKind::OutputNotFound.into());
-					}
-					proof_count += 1;
+		for pos in self.output_pmmr.leaf_pos_iter() {
+			if let Some(out) = self.output_pmmr.get_data(pos) {
+				if let Some(rp) = self.rproof_pmmr.get_data(pos) {
+					commits.push(out.commit);
+					proofs.push(rp);
+				} else {
+					// TODO - rangeproof not found
+					return Err(ErrorKind::OutputNotFound.into());
+				}
+				proof_count += 1;
 
-					if proofs.len() >= 1000 {
-						Output::batch_verify_proofs(&commits, &proofs)?;
-						commits.clear();
-						proofs.clear();
-						debug!(
-							"txhashset: verify_rangeproofs: verified {} rangeproofs",
-							proof_count,
-						);
-					}
+				if proofs.len() >= 1000 {
+					Output::batch_verify_proofs(&commits, &proofs)?;
+					commits.clear();
+					proofs.clear();
+					debug!(
+						"txhashset: verify_rangeproofs: verified {} rangeproofs",
+						proof_count,
+					);
 				}
 			}
-			if n % 20 == 0 {
+			if proof_count % 20 == 0 {
 				status.on_validation(0, 0, proof_count, total_rproofs);
 			}
 		}

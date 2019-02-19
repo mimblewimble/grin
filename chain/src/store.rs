@@ -250,10 +250,10 @@ impl<'a> Batch<'a> {
 		)
 	}
 
-	pub fn delete_output_pos(&self, commit: &[u8]) -> Result<(), Error> {
-		self.db
-			.delete(&to_key(COMMIT_POS_PREFIX, &mut commit.to_vec()))
-	}
+	// pub fn delete_output_pos(&self, commit: &[u8]) -> Result<(), Error> {
+	// 	self.db
+	// 		.delete(&to_key(COMMIT_POS_PREFIX, &mut commit.to_vec()))
+	// }
 
 	pub fn get_previous_header(&self, header: &BlockHeader) -> Result<BlockHeader, Error> {
 		self.get_block_header(&header.prev_hash)

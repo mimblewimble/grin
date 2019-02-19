@@ -51,6 +51,8 @@ pub trait Backend<T: PMMRable> {
 	/// (ignoring the remove log).
 	fn get_data_from_file(&self, position: u64) -> Option<T::E>;
 
+	fn leaf_pos_iter<'a>(&'a self) -> Box<Iterator<Item = u64> + 'a>;
+
 	/// Remove Hash by insertion position. An index is also provided so the
 	/// underlying backend can implement some rollback of positions up to a
 	/// given index (practically the index is the height of a block that

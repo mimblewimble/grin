@@ -75,6 +75,10 @@ where
 		ReadonlyPMMR::at(&self.backend, self.last_pos)
 	}
 
+	pub fn leaf_pos_iter(&'a self) -> Box<Iterator<Item = u64> + 'a> {
+		self.backend.leaf_pos_iter()
+	}
+
 	/// Returns a vec of the peaks of this MMR.
 	pub fn peaks(&self) -> Vec<Hash> {
 		let peaks_pos = peaks(self.last_pos);
