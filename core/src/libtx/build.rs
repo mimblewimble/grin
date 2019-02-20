@@ -34,7 +34,7 @@ pub struct Context<'a, K>
 where
 	K: Keychain,
 {
-	// The keychain used for key derivation
+	/// The keychain used for key derivation
 	pub keychain: &'a K,
 }
 

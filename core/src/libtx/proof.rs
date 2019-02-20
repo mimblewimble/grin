@@ -14,7 +14,6 @@
 
 //! Rangeproof library functions
 
-use crate::blake2;
 use crate::keychain::{Identifier, Keychain};
 use crate::libtx::error::{Error, ErrorKind};
 use crate::util::secp::key::SecretKey;
@@ -34,7 +33,8 @@ where
 {
 	let commit = k.commit(amount, key_id)?;
 	let skey = k.derive_key(amount, key_id)?;
-	let nonce = k.create_nonce(&commit)
+	let nonce = k
+		.create_nonce(&commit)
 		.map_err(|e| ErrorKind::RangeProof(e.to_string()))?;
 	let message = ProofMessage::from_bytes(&key_id.serialize_path());
 	Ok(k.secp()
@@ -65,7 +65,8 @@ pub fn rewind<K>(
 where
 	K: Keychain,
 {
-	let nonce = k.create_nonce(&commit)
+	let nonce = k
+		.create_nonce(&commit)
 		.map_err(|e| ErrorKind::RangeProof(e.to_string()))?;
 	let proof_message = k
 		.secp()
