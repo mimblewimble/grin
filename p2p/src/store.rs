@@ -157,6 +157,7 @@ impl PeerStore {
 		let mut peers = self
 			.db
 			.iter::<PeerData>(&to_key(PEER_PREFIX, &mut "".to_string().into_bytes()))?
+			.map(|(_, v)| v)
 			.filter(|p| p.flags == state && p.capabilities.contains(cap))
 			.collect::<Vec<_>>();
 		thread_rng().shuffle(&mut peers[..]);
@@ -167,7 +168,10 @@ impl PeerStore {
 	/// Used for /v1/peers/all api endpoint
 	pub fn all_peers(&self) -> Result<Vec<PeerData>, Error> {
 		let key = to_key(PEER_PREFIX, &mut "".to_string().into_bytes());
-		Ok(self.db.iter::<PeerData>(&key)?.collect::<Vec<_>>())
+		Ok(self.db
+			.iter::<PeerData>(&key)?
+			.map(|(_, v)| v)
+			.collect::<Vec<_>>())
 	}
 
 	/// Convenience method to load a peer data, update its status and save it

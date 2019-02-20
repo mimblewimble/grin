@@ -75,6 +75,7 @@ where
 		ReadonlyPMMR::at(&self.backend, self.last_pos)
 	}
 
+	/// Iterator over current (unpruned, unremoved) leaf positions.
 	pub fn leaf_pos_iter(&'a self) -> Box<Iterator<Item = u64> + 'a> {
 		self.backend.leaf_pos_iter()
 	}

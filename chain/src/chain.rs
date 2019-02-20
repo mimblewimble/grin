@@ -955,7 +955,7 @@ impl Chain {
 	/// Cleanup old blocks from the db.
 	/// Determine the cutoff height from the horizon and the current block height.
 	/// *Only* runs if we are not in archive mode.
-	fn compact_blocks_db(&self) -> Result<(), Error> {
+	fn remove_historical_blocks(&self) -> Result<(), Error> {
 		if self.archive_mode {
 			return Ok(());
 		}
@@ -971,7 +971,7 @@ impl Chain {
 		let cutoff = head.height.saturating_sub(horizon);
 
 		debug!(
-			"compact_blocks_db: head height: {}, tail height: {}, horizon: {}, cutoff: {}",
+			"remove_historical_blocks: head height: {}, tail height: {}, horizon: {}, cutoff: {}",
 			head.height, tail.height, horizon, cutoff,
 		);
 
@@ -1013,7 +1013,7 @@ impl Chain {
 		batch.save_body_tail(&Tip::from_header(&tail))?;
 		batch.commit()?;
 		debug!(
-			"compact_blocks_db: removed {} blocks. tail height: {}",
+			"remove_historical_blocks: removed {} blocks. tail height: {}",
 			count, tail.height
 		);
 		Ok(())
@@ -1028,7 +1028,7 @@ impl Chain {
 		self.compact_txhashset()?;
 
 		if !self.archive_mode {
-			self.compact_blocks_db()?;
+			self.remove_historical_blocks()?;
 		}
 
 		Ok(())

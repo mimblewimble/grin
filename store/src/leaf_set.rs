@@ -200,6 +200,7 @@ impl LeafSet {
 		self.len() == 0
 	}
 
+	/// Iterator over positionns in the leaf_set (all leaf positions).
 	pub fn iter<'a>(&'a self) -> Box<Iterator<Item = u64> + 'a> {
 		Box::new(self.bitmap.iter().map(|x| x as u64))
 	}

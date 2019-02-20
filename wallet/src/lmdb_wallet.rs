@@ -242,7 +242,7 @@ where
 	}
 
 	fn iter<'a>(&'a self) -> Box<dyn Iterator<Item = OutputData> + 'a> {
-		Box::new(self.db.iter(&[OUTPUT_PREFIX]).unwrap())
+		Box::new(self.db.iter(&[OUTPUT_PREFIX]).unwrap().map(|(_, v)| v))
 	}
 
 	fn get_tx_log_entry(&self, u: &Uuid) -> Result<Option<TxLogEntry>, Error> {
@@ -251,7 +251,12 @@ where
 	}
 
 	fn tx_log_iter<'a>(&'a self) -> Box<dyn Iterator<Item = TxLogEntry> + 'a> {
-		Box::new(self.db.iter(&[TX_LOG_ENTRY_PREFIX]).unwrap())
+		Box::new(
+			self.db
+				.iter(&[TX_LOG_ENTRY_PREFIX])
+				.unwrap()
+				.map(|(_, v)| v),
+		)
 	}
 
 	fn get_private_context(&mut self, slate_id: &[u8]) -> Result<Context, Error> {
@@ -272,7 +277,12 @@ where
 	}
 
 	fn acct_path_iter<'a>(&'a self) -> Box<dyn Iterator<Item = AcctPathMapping> + 'a> {
-		Box::new(self.db.iter(&[ACCOUNT_PATH_MAPPING_PREFIX]).unwrap())
+		Box::new(
+			self.db
+				.iter(&[ACCOUNT_PATH_MAPPING_PREFIX])
+				.unwrap()
+				.map(|(_, v)| v),
+		)
 	}
 
 	fn get_acct_path(&self, label: String) -> Result<Option<AcctPathMapping>, Error> {
@@ -418,7 +428,8 @@ where
 				.as_ref()
 				.unwrap()
 				.iter(&[OUTPUT_PREFIX])
-				.unwrap(),
+				.unwrap()
+				.map(|(_, v)| v),
 		)
 	}
 
@@ -456,7 +467,8 @@ where
 				.as_ref()
 				.unwrap()
 				.iter(&[TX_LOG_ENTRY_PREFIX])
-				.unwrap(),
+				.unwrap()
+				.map(|(_, v)| v),
 		)
 	}
 
@@ -525,7 +537,8 @@ where
 				.as_ref()
 				.unwrap()
 				.iter(&[ACCOUNT_PATH_MAPPING_PREFIX])
-				.unwrap(),
+				.unwrap()
+				.map(|(_, v)| v),
 		)
 	}
 

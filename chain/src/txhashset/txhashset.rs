@@ -1348,11 +1348,12 @@ impl<'a> Extension<'a> {
 					proofs.push(rp);
 				} else {
 					// TODO - rangeproof not found
+					// We expect to have a rangeproof for every unspent UTXO.
 					return Err(ErrorKind::OutputNotFound.into());
 				}
 				proof_count += 1;
 
-				if proofs.len() >= 1000 {
+				if proofs.len() >= 1_000 {
 					Output::batch_verify_proofs(&commits, &proofs)?;
 					commits.clear();
 					proofs.clear();
@@ -1361,6 +1362,9 @@ impl<'a> Extension<'a> {
 						proof_count,
 					);
 				}
+			} else {
+				// We expect to have an output for every unspent UTXO.
+				return Err(ErrorKind::OutputNotFound.into());
 			}
 			if proof_count % 20 == 0 {
 				status.on_validation(0, 0, proof_count, total_rproofs);
