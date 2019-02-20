@@ -31,7 +31,7 @@ use crate::chain;
 use crate::common::adapters::{
 	ChainToPoolAndNetAdapter, NetToChainAdapter, PoolToChainAdapter, PoolToNetAdapter,
 };
-use crate::common::hooks::EventLogger;
+use crate::common::hooks::{init_chain_hooks, init_net_hooks};
 use crate::common::stats::{DiffBlock, DiffStats, PeerStats, ServerStateInfo, ServerStats};
 use crate::common::types::{Error, ServerConfig, StratumServerConfig, SyncState, SyncStatus};
 use crate::core::core::hash::{Hashed, ZERO_HASH};
@@ -165,10 +165,11 @@ impl Server {
 
 		let sync_state = Arc::new(SyncState::new());
 
-		let chain_hooks = vec![EventLogger];
-		let net_hooks = vec![EventLogger];
 
-		let chain_adapter = Arc::new(ChainToPoolAndNetAdapter::new(tx_pool.clone(), chain_hooks));
+		let chain_adapter = Arc::new(ChainToPoolAndNetAdapter::new(
+			tx_pool.clone(),
+			init_chain_hooks(&config),
+			));
 
 		let genesis = match config.chain_type {
 			global::ChainTypes::AutomatedTesting => genesis::genesis_dev(),
@@ -199,7 +200,7 @@ impl Server {
 			tx_pool.clone(),
 			verifier_cache.clone(),
 			config.clone(),
-			net_hooks,
+			init_net_hooks(&config)
 		));
 
 		let peer_db_env = Arc::new(store::new_named_env(
