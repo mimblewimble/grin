@@ -1248,11 +1248,14 @@ impl<'a> Extension<'a> {
 	pub fn rebuild_index(&self) -> Result<(), Error> {
 		let now = Instant::now();
 
+		// TODO - clear the index out first (via iterator on db?)
+
 		let mut count = 0;
 
 		for pos in self.output_pmmr.leaf_pos_iter() {
 			if let Some(out) = self.output_pmmr.get_data(pos) {
 				self.batch.save_output_pos(&out.commit, pos)?;
+				count += 1;
 			}
 		}
 
