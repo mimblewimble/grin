@@ -258,7 +258,6 @@ impl Default for WebHooksConfig {
 			block_received_url: None,
 			block_accepted_url: None,
 		}
-
 	}
 }
 

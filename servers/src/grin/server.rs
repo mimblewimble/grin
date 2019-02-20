@@ -165,11 +165,10 @@ impl Server {
 
 		let sync_state = Arc::new(SyncState::new());
 
-
 		let chain_adapter = Arc::new(ChainToPoolAndNetAdapter::new(
 			tx_pool.clone(),
 			init_chain_hooks(&config),
-			));
+		));
 
 		let genesis = match config.chain_type {
 			global::ChainTypes::AutomatedTesting => genesis::genesis_dev(),
@@ -200,7 +199,7 @@ impl Server {
 			tx_pool.clone(),
 			verifier_cache.clone(),
 			config.clone(),
-			init_net_hooks(&config)
+			init_net_hooks(&config),
 		));
 
 		let peer_db_env = Arc::new(store::new_named_env(

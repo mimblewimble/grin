@@ -373,7 +373,7 @@ impl NetToChainAdapter {
 		tx_pool: Arc<RwLock<pool::TransactionPool>>,
 		verifier_cache: Arc<RwLock<dyn VerifierCache>>,
 		config: ServerConfig,
-		hooks: Vec<Box<dyn NetEvents + Send + Sync>>
+		hooks: Vec<Box<dyn NetEvents + Send + Sync>>,
 	) -> NetToChainAdapter {
 		NetToChainAdapter {
 			sync_state,
@@ -658,7 +658,7 @@ impl ChainToPoolAndNetAdapter {
 	/// Construct a ChainToPoolAndNetAdapter instance.
 	pub fn new(
 		tx_pool: Arc<RwLock<pool::TransactionPool>>,
-		hooks: Vec<Box<dyn ChainEvents + Send + Sync>>
+		hooks: Vec<Box<dyn ChainEvents + Send + Sync>>,
 	) -> ChainToPoolAndNetAdapter {
 		ChainToPoolAndNetAdapter {
 			tx_pool,

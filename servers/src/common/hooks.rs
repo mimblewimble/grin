@@ -18,35 +18,34 @@
 extern crate hyper;
 extern crate tokio;
 
-use crate::common::types::{WebHooksConfig, ServerConfig};
 use crate::chain::BlockStatus;
+use crate::common::types::{ServerConfig, WebHooksConfig};
 use crate::core::core;
 use crate::core::core::hash::Hashed;
-use std::net::SocketAddr;
-use hyper::Client;
-use hyper::client::HttpConnector;
 use futures::future::Future;
-use tokio::runtime::Runtime;
-use hyper::{Body, Method, Request};
+use hyper::client::HttpConnector;
 use hyper::header::HeaderValue;
+use hyper::Client;
+use hyper::{Body, Method, Request};
 use serde_json::to_string;
+use std::net::SocketAddr;
+use tokio::runtime::Runtime;
 
 /// Returns the list of event hooks that will be initialized for network events
 pub fn init_net_hooks(config: &ServerConfig) -> Vec<Box<dyn NetEvents + Send + Sync>> {
-    let mut list: Vec<Box<NetEvents+ Send + Sync>> = Vec::new();
-    list.push(Box::new(EventLogger));
-    list.push(Box::new(WebHook::from_config(&config.webhook_config)));
-    list
+	let mut list: Vec<Box<NetEvents + Send + Sync>> = Vec::new();
+	list.push(Box::new(EventLogger));
+	list.push(Box::new(WebHook::from_config(&config.webhook_config)));
+	list
 }
 
 /// Returns the list of event hooks that will be initialized for chain events
 pub fn init_chain_hooks(config: &ServerConfig) -> Vec<Box<dyn ChainEvents + Send + Sync>> {
-    let mut list: Vec<Box<ChainEvents+ Send + Sync>> = Vec::new();
-    list.push(Box::new(EventLogger));
-    list.push(Box::new(WebHook::from_config(&config.webhook_config)));
-    list  
+	let mut list: Vec<Box<ChainEvents + Send + Sync>> = Vec::new();
+	list.push(Box::new(EventLogger));
+	list.push(Box::new(WebHook::from_config(&config.webhook_config)));
+	list
 }
-
 
 #[allow(unused_variables)]
 /// Trait to be implemented by Network Event Hooks
@@ -136,154 +135,164 @@ impl ChainEvents for EventLogger {
 }
 
 fn parse_url(value: &Option<String>) -> Option<hyper::Uri> {
-    match value {
-        Some(url) => {
-            let uri: hyper::Uri = url.parse().unwrap();
-            let scheme = uri.scheme_part().map(|s| s.as_str());
-            if  scheme != Some("http") {
-                panic!("Invalid url scheme {}, expected 'http'", url)
-            };
-            Some(uri)
-        }
-        None => None
-    }  
+	match value {
+		Some(url) => {
+			let uri: hyper::Uri = url.parse().unwrap();
+			let scheme = uri.scheme_part().map(|s| s.as_str());
+			if scheme != Some("http") {
+				panic!("Invalid url scheme {}, expected 'http'", url)
+			};
+			Some(uri)
+		}
+		None => None,
+	}
 }
-
 
 /// A struct that holds the hyper/tokio runtime.
 pub struct WebHook {
-
-    /// url to POST transaction data when a new transaction arrives from a peer
-    tx_received_url: Option<hyper::Uri>,
-    /// url to POST header data when a new header arrives from a peer
-    header_received_url: Option<hyper::Uri>,
-    /// url to POST block data when a new block arrives from a peer
-    block_received_url: Option<hyper::Uri>,
-    /// url to POST block data when a new block is accepted by our node (might be a reorg or a fork)
-    block_accepted_url: Option<hyper::Uri>,
-    /// The hyper client to be used for all requests
-    client: Client<HttpConnector>,
-    /// The tokio event loop
-    runtime: Runtime,
+	/// url to POST transaction data when a new transaction arrives from a peer
+	tx_received_url: Option<hyper::Uri>,
+	/// url to POST header data when a new header arrives from a peer
+	header_received_url: Option<hyper::Uri>,
+	/// url to POST block data when a new block arrives from a peer
+	block_received_url: Option<hyper::Uri>,
+	/// url to POST block data when a new block is accepted by our node (might be a reorg or a fork)
+	block_accepted_url: Option<hyper::Uri>,
+	/// The hyper client to be used for all requests
+	client: Client<HttpConnector>,
+	/// The tokio event loop
+	runtime: Runtime,
 }
 
 impl WebHook {
-    
-    /// Instantiates a Webhook struct
-    pub fn new(
-        tx_received_url: Option<hyper::Uri>,
-        header_received_url: Option<hyper::Uri>,
-        block_received_url: Option<hyper::Uri>, 
-        block_accepted_url: Option<hyper::Uri>,
-        ) -> WebHook {
-            WebHook {
-                tx_received_url,
-                block_received_url,
-                header_received_url,
-                block_accepted_url,
-                client: Client::new(),
-                runtime: Runtime::new().unwrap(),
-            } 
-        }
-    
-    /// Instantiates a Webhook struct from a configuration file
-    pub fn from_config(config: &WebHooksConfig) -> WebHook {
-        WebHook::new( 
-            parse_url(&config.tx_received_url),
-            parse_url(&config.header_received_url),
-            parse_url(&config.block_received_url),
-            parse_url(&config.block_accepted_url),            
-        )
-    }
+	/// Instantiates a Webhook struct
+	pub fn new(
+		tx_received_url: Option<hyper::Uri>,
+		header_received_url: Option<hyper::Uri>,
+		block_received_url: Option<hyper::Uri>,
+		block_accepted_url: Option<hyper::Uri>,
+	) -> WebHook {
+		WebHook {
+			tx_received_url,
+			block_received_url,
+			header_received_url,
+			block_accepted_url,
+			client: Client::new(),
+			runtime: Runtime::new().unwrap(),
+		}
+	}
 
-    fn post(&self, url: hyper::Uri, data: String) {
+	/// Instantiates a Webhook struct from a configuration file
+	pub fn from_config(config: &WebHooksConfig) -> WebHook {
+		WebHook::new(
+			parse_url(&config.tx_received_url),
+			parse_url(&config.header_received_url),
+			parse_url(&config.block_received_url),
+			parse_url(&config.block_accepted_url),
+		)
+	}
 
-        let mut req = Request::new(Body::from(data));
-        *req.method_mut() = Method::POST;
-        *req.uri_mut() = url.clone();
-        req.headers_mut().insert(
-            hyper::header::CONTENT_TYPE,
-            HeaderValue::from_static("application/json")
-        );
+	fn post(&self, url: hyper::Uri, data: String) {
+		let mut req = Request::new(Body::from(data));
+		*req.method_mut() = Method::POST;
+		*req.uri_mut() = url.clone();
+		req.headers_mut().insert(
+			hyper::header::CONTENT_TYPE,
+			HeaderValue::from_static("application/json"),
+		);
 
-        let future = self.client.request(req)
-            .map(|_res| {})
-            .map_err(move |_res| { warn!("Error sending POST request to {}", url); });
+		let future = self
+			.client
+			.request(req)
+			.map(|_res| {})
+			.map_err(move |_res| {
+				warn!("Error sending POST request to {}", url);
+			});
 
-        let handle = self.runtime.executor();
-        handle.spawn(future);
-    } 
+		let handle = self.runtime.executor();
+		handle.spawn(future);
+	}
 }
 
 impl ChainEvents for WebHook {
-    fn on_block_accepted(&self, block: &core::Block, _status: &BlockStatus) {
-        match &self.block_accepted_url {
-            None => { return },
-            Some(url) => {
-                let payload = match to_string(block) {
-                    Ok(serialized) => serialized,
-                    Err(_) => { 
-                        error!("Failed to serialize block {} at height {}", block.hash(), block.header.height);
-                        return
-                    }
-                };
-                self.post(url.clone(), payload);
-            }
-        }
-    }
+	fn on_block_accepted(&self, block: &core::Block, _status: &BlockStatus) {
+		match &self.block_accepted_url {
+			None => return,
+			Some(url) => {
+				let payload = match to_string(block) {
+					Ok(serialized) => serialized,
+					Err(_) => {
+						error!(
+							"Failed to serialize block {} at height {}",
+							block.hash(),
+							block.header.height
+						);
+						return;
+					}
+				};
+				self.post(url.clone(), payload);
+			}
+		}
+	}
 }
 
 impl NetEvents for WebHook {
-    
-    /// Triggers when a new transaction arrives
-    fn on_transaction_received(&self, tx: &core::Transaction) {
-        match &self.tx_received_url {
-            None => { return },
-            Some(url) => {
-                let payload = match to_string(tx) {
-                    Ok(serialized) => serialized,
-                    Err(_) => { 
-                        error!("Failed to serialize transaction {}", tx.hash());
-                        return
-                    }
-                };
-                self.post(url.clone(), payload);
-            }
-        }        
-    }
+	/// Triggers when a new transaction arrives
+	fn on_transaction_received(&self, tx: &core::Transaction) {
+		match &self.tx_received_url {
+			None => return,
+			Some(url) => {
+				let payload = match to_string(tx) {
+					Ok(serialized) => serialized,
+					Err(_) => {
+						error!("Failed to serialize transaction {}", tx.hash());
+						return;
+					}
+				};
+				self.post(url.clone(), payload);
+			}
+		}
+	}
 
 	/// Triggers when a new block arrives
 	fn on_block_received(&self, block: &core::Block, _addr: &SocketAddr) {
-        match &self.block_received_url {
-            None => { return },
-            Some(url) => {
-                let payload = match to_string(block) {
-                    Ok(serialized) => serialized,
-                    Err(_) => { 
-                        error!("Failed to serialize block {} at height {}", block.hash(), block.header.height);
-                        return
-                    }
-                };
-                self.post(url.clone(), payload);
-            }
-        }    
-    }
+		match &self.block_received_url {
+			None => return,
+			Some(url) => {
+				let payload = match to_string(block) {
+					Ok(serialized) => serialized,
+					Err(_) => {
+						error!(
+							"Failed to serialize block {} at height {}",
+							block.hash(),
+							block.header.height
+						);
+						return;
+					}
+				};
+				self.post(url.clone(), payload);
+			}
+		}
+	}
 
 	/// Triggers when a new block header arrives
 	fn on_header_received(&self, header: &core::BlockHeader, _addr: &SocketAddr) {
-        match &self.header_received_url {
-            None => { return },
-            Some(url) => {
-                let payload = match to_string(header) {
-                    Ok(serialized) => serialized,
-                    Err(_) => { 
-                        error!("Failed to serialize header {} at height {}", header.hash(), header.height);
-                        return
-                    }
-                };
-                self.post(url.clone(), payload);
-            }
-        }        
-    }
+		match &self.header_received_url {
+			None => return,
+			Some(url) => {
+				let payload = match to_string(header) {
+					Ok(serialized) => serialized,
+					Err(_) => {
+						error!(
+							"Failed to serialize header {} at height {}",
+							header.hash(),
+							header.height
+						);
+						return;
+					}
+				};
+				self.post(url.clone(), payload);
+			}
+		}
+	}
 }
-
