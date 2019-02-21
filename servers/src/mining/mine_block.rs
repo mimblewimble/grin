@@ -22,6 +22,7 @@ use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
 
+use crate::api;
 use crate::chain;
 use crate::common::types::Error;
 use crate::core::core::verifier_cache::VerifierCache;
@@ -29,7 +30,36 @@ use crate::core::{consensus, core, global, ser};
 use crate::keychain::{ExtKeychain, Identifier, Keychain};
 use crate::pool;
 use crate::util;
-use crate::wallet::{self, BlockFees};
+
+/// Fees in block to use for coinbase amount calculation
+/// (Duplicated from Grin wallet project)
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct BlockFees {
+	/// fees
+	pub fees: u64,
+	/// height
+	pub height: u64,
+	/// key id
+	pub key_id: Option<Identifier>,
+}
+
+impl BlockFees {
+	/// return key id
+	pub fn key_id(&self) -> Option<Identifier> {
+		self.key_id.clone()
+	}
+}
+
+/// Response to build a coinbase output.
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct CbData {
+	/// Output
+	pub output: String,
+	/// Kernel
+	pub kernel: String,
+	/// Key Id
+	pub key_id: String,
+}
 
 // Ensure a block suitable for mining is built and returned
 // If a wallet listener URL is not provided the reward will be "burnt"
@@ -62,7 +92,7 @@ pub fn get_block(
 					error!("Chain Error: {}", c);
 				}
 			},
-			self::Error::Wallet(_) => {
+			self::Error::WalletComm(_) => {
 				error!(
 					"Error building new block: Can't connect to wallet listener at {:?}; will retry",
 					wallet_listener_url.as_ref().unwrap()
@@ -198,7 +228,7 @@ fn get_coinbase(
 			return burn_reward(block_fees);
 		}
 		Some(wallet_listener_url) => {
-			let res = wallet::create_coinbase(&wallet_listener_url, &block_fees)?;
+			let res = create_coinbase(&wallet_listener_url, &block_fees)?;
 			let out_bin = util::from_hex(res.output).unwrap();
 			let kern_bin = util::from_hex(res.kernel).unwrap();
 			let key_id_bin = util::from_hex(res.key_id).unwrap();
@@ -213,5 +243,21 @@ fn get_coinbase(
 			debug!("get_coinbase: {:?}", block_fees);
 			return Ok((output, kernel, block_fees));
 		}
+	}
+}
+
+/// Call the wallet API to create a coinbase output for the given block_fees.
+/// Will retry based on default "retry forever with backoff" behavior.
+fn create_coinbase(dest: &str, block_fees: &BlockFees) -> Result<CbData, Error> {
+	let url = format!("{}/v1/wallet/foreign/build_coinbase", dest);
+	match api::client::post(&url, None, &block_fees) {
+		Err(e) => {
+			error!(
+				"Failed to get coinbase from {}. Is the wallet listening?",
+				url
+			);
+			Err(Error::WalletComm(format!("{}", e)))
+		}
+		Ok(res) => Ok(res),
 	}
 }

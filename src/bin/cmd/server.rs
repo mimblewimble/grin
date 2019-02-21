@@ -13,8 +13,6 @@
 // limitations under the License.
 
 /// Grin server commands processing
-#[cfg(not(target_os = "windows"))]
-use std::env::current_dir;
 use std::process::exit;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;

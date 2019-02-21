@@ -24,7 +24,6 @@ use crate::core::{core, pow};
 use crate::p2p;
 use crate::pool;
 use crate::store;
-use crate::wallet;
 use chrono::prelude::{DateTime, Utc};
 
 /// Error type wrapping underlying module errors.
@@ -40,14 +39,14 @@ pub enum Error {
 	P2P(p2p::Error),
 	/// Error originating from HTTP API calls.
 	API(api::Error),
-	/// Error originating from wallet API.
-	Wallet(wallet::Error),
 	/// Error originating from the cuckoo miner
 	Cuckoo(pow::Error),
 	/// Error originating from the transaction pool.
 	Pool(pool::PoolError),
 	/// Invalid Arguments.
 	ArgumentError(String),
+	/// Wallet communication error
+	WalletComm(String),
 }
 
 impl From<core::block::Error> for Error {
@@ -82,12 +81,6 @@ impl From<store::Error> for Error {
 impl From<api::Error> for Error {
 	fn from(e: api::Error) -> Error {
 		Error::API(e)
-	}
-}
-
-impl From<wallet::Error> for Error {
-	fn from(e: wallet::Error) -> Error {
-		Error::Wallet(e)
 	}
 }
 
@@ -150,9 +143,6 @@ pub struct ServerConfig {
 	/// if enabled, this will disable logging to stdout
 	pub run_tui: Option<bool>,
 
-	/// Whether to use the DB wallet backend implementation
-	pub use_db_wallet: Option<bool>,
-
 	/// Whether to run the test miner (internal, cuckoo 16)
 	pub run_test_miner: Option<bool>,
 
@@ -192,7 +182,6 @@ impl Default for ServerConfig {
 			pool_config: pool::PoolConfig::default(),
 			skip_sync_wait: Some(false),
 			run_tui: Some(true),
-			use_db_wallet: None,
 			run_test_miner: Some(false),
 			test_miner_wallet_url: None,
 		}
