@@ -42,8 +42,8 @@ impl AllocChunkSize {
 	/// Return value
 	pub fn value(&self) -> usize {
 		match *self {
-			AllocChunkSize::ChainDB => 134_217_728, //128 MB
-			AllocChunkSize::PeerDB => 134_217_728, //128 MB
+			AllocChunkSize::ChainDB => 134_217_728,  //128 MB
+			AllocChunkSize::PeerDB => 134_217_728,   //128 MB
 			AllocChunkSize::WalletDB => 134_217_728, //128 MB
 		}
 	}
@@ -98,42 +98,40 @@ impl Store {
 			None => "lmdb".to_owned(),
 		};
 		let full_path = [path.to_owned(), name.clone()].join("/");
-			fs::create_dir_all(&full_path)
-				.expect("Unable to create directory 'db_root' to store chain_data");
+		fs::create_dir_all(&full_path)
+			.expect("Unable to create directory 'db_root' to store chain_data");
 
-			let mut env_builder = lmdb::EnvBuilder::new().unwrap();
-			env_builder.set_maxdbs(8)?;
+		let mut env_builder = lmdb::EnvBuilder::new().unwrap();
+		env_builder.set_maxdbs(8)?;
 
-			if let Some(max_readers) = max_readers {
-				env_builder
-					.set_maxreaders(max_readers)?;
-			}
+		if let Some(max_readers) = max_readers {
+			env_builder.set_maxreaders(max_readers)?;
+		}
 
-			let env = unsafe {
-				env_builder
-					.open(&full_path, lmdb::open::NOTLS, 0o600)?
-			};
+		let env = unsafe { env_builder.open(&full_path, lmdb::open::NOTLS, 0o600)? };
 
-			debug!("DB Mapsize for {} is {}", full_path, env.info().as_ref().unwrap().mapsize);
-			let mut res = Store {
-				env: Arc::new(env),
-				db: None,
-				name: name,
-			};
+		debug!(
+			"DB Mapsize for {} is {}",
+			full_path,
+			env.info().as_ref().unwrap().mapsize
+		);
+		let mut res = Store {
+			env: Arc::new(env),
+			db: None,
+			name: name,
+		};
 
-			res.open()?;
-			Ok(res)
+		res.open()?;
+		Ok(res)
 	}
 
 	/// Opens the database environment
 	pub fn open(&mut self) -> Result<(), Error> {
-		self.db = Some(Arc::new(
-			lmdb::Database::open(
-				self.env.clone(),
-				Some(&self.name),
-				&lmdb::DatabaseOptions::new(lmdb::db::CREATE),
-			)?
-		));
+		self.db = Some(Arc::new(lmdb::Database::open(
+			self.env.clone(),
+			Some(&self.name),
+			&lmdb::DatabaseOptions::new(lmdb::db::CREATE),
+		)?));
 		Ok(())
 	}
 
@@ -271,9 +269,12 @@ pub struct Batch<'a> {
 impl<'a> Batch<'a> {
 	/// Writes a single key/value pair to the db
 	pub fn put(&self, key: &[u8], value: &[u8]) -> Result<(), Error> {
-		self.tx
-			.access()
-			.put(&self.store.db.as_ref().unwrap(), key, value, lmdb::put::Flags::empty())?;
+		self.tx.access().put(
+			&self.store.db.as_ref().unwrap(),
+			key,
+			value,
+			lmdb::put::Flags::empty(),
+		)?;
 		Ok(())
 	}
 
@@ -312,7 +313,9 @@ impl<'a> Batch<'a> {
 
 	/// Deletes a key/value pair from the db
 	pub fn delete(&self, key: &[u8]) -> Result<(), Error> {
-		self.tx.access().del_key(&self.store.db.as_ref().unwrap(), key)?;
+		self.tx
+			.access()
+			.del_key(&self.store.db.as_ref().unwrap(), key)?;
 		Ok(())
 	}
 

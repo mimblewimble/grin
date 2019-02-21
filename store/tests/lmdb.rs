@@ -87,7 +87,6 @@ fn lmdb_allocate() -> Result<(), store::Error> {
 	println!("***********************************");
 	// Open env again and keep adding
 	{
-
 		let mut store = store::Store::new(test_dir, Some("test1"), None)?;
 		for i in 0..WRITE_CHUNK_SIZE * 2 {
 			println!("Allocating chunk: {}", i);

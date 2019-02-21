@@ -32,7 +32,8 @@ use crate::types::{
 	BlockStatus, ChainAdapter, NoStatus, Options, Tip, TxHashSetRoots, TxHashsetWriteStatus,
 };
 use crate::util::secp::pedersen::{Commitment, RangeProof};
-use crate::util::{Mutex, RwLock, StopState}; use grin_store::Error::NotFoundErr;
+use crate::util::{Mutex, RwLock, StopState};
+use grin_store::Error::NotFoundErr;
 use std::collections::HashMap;
 use std::fs::File;
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -1094,56 +1095,64 @@ impl Chain {
 
 	/// Tip (head) of the block chain.
 	pub fn head(&self) -> Result<Tip, Error> {
-		self.store.read()
+		self.store
+			.read()
 			.head()
 			.map_err(|e| ErrorKind::StoreErr(e, "chain head".to_owned()).into())
 	}
 
 	/// Tail of the block chain in this node after compact (cross-block cut-through)
 	pub fn tail(&self) -> Result<Tip, Error> {
-		self.store.read()
+		self.store
+			.read()
 			.tail()
 			.map_err(|e| ErrorKind::StoreErr(e, "chain tail".to_owned()).into())
 	}
 
 	/// Tip (head) of the header chain.
 	pub fn header_head(&self) -> Result<Tip, Error> {
-		self.store.read()
+		self.store
+			.read()
 			.header_head()
 			.map_err(|e| ErrorKind::StoreErr(e, "chain header head".to_owned()).into())
 	}
 
 	/// Block header for the chain head
 	pub fn head_header(&self) -> Result<BlockHeader, Error> {
-		self.store.read()
+		self.store
+			.read()
 			.head_header()
 			.map_err(|e| ErrorKind::StoreErr(e, "chain head header".to_owned()).into())
 	}
 
 	/// Gets a block header by hash
 	pub fn get_block(&self, h: &Hash) -> Result<Block, Error> {
-		self.store.read()
+		self.store
+			.read()
 			.get_block(h)
 			.map_err(|e| ErrorKind::StoreErr(e, "chain get block".to_owned()).into())
 	}
 
 	/// Gets a block header by hash
 	pub fn get_block_header(&self, h: &Hash) -> Result<BlockHeader, Error> {
-		self.store.read()
+		self.store
+			.read()
 			.get_block_header(h)
 			.map_err(|e| ErrorKind::StoreErr(e, "chain get header".to_owned()).into())
 	}
 
 	/// Get previous block header.
 	pub fn get_previous_header(&self, header: &BlockHeader) -> Result<BlockHeader, Error> {
-		self.store.read()
+		self.store
+			.read()
 			.get_previous_header(header)
 			.map_err(|e| ErrorKind::StoreErr(e, "chain get previous header".to_owned()).into())
 	}
 
 	/// Get block_sums by header hash.
 	pub fn get_block_sums(&self, h: &Hash) -> Result<BlockSums, Error> {
-		self.store.read()
+		self.store
+			.read()
 			.get_block_sums(h)
 			.map_err(|e| ErrorKind::StoreErr(e, "chain get block_sums".to_owned()).into())
 	}
@@ -1207,7 +1216,8 @@ impl Chain {
 	/// Get the tip of the current "sync" header chain.
 	/// This may be significantly different to current header chain.
 	pub fn get_sync_head(&self) -> Result<Tip, Error> {
-		self.store.read()
+		self.store
+			.read()
 			.get_sync_head()
 			.map_err(|e| ErrorKind::StoreErr(e, "chain get sync head".to_owned()).into())
 	}
@@ -1223,7 +1233,8 @@ impl Chain {
 
 	/// Check whether we have a block without reading it
 	pub fn block_exists(&self, h: Hash) -> Result<bool, Error> {
-		self.store.read()
+		self.store
+			.read()
 			.block_exists(&h)
 			.map_err(|e| ErrorKind::StoreErr(e, "chain block exists".to_owned()).into())
 	}
