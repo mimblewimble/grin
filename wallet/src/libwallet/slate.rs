@@ -526,7 +526,7 @@ impl Slate {
 
 		// confirm the overall transaction is valid (including the updated kernel)
 		// accounting for tx weight limits
-		let verifier_cache = Arc::new(RwLock::new(LruVerifierCache::new()));
+		let verifier_cache = Arc::new(LruVerifierCache::new());
 		let _ = final_tx.validate(Weighting::AsTransaction, verifier_cache)?;
 
 		self.tx = final_tx;
