@@ -101,10 +101,8 @@ where
 		let genesis_block = pow::mine_genesis_block().unwrap();
 		let verifier_cache = Arc::new(RwLock::new(LruVerifierCache::new()));
 		let dir_name = format!("{}/.grin", chain_dir);
-		let db_env = Arc::new(store::new_env(dir_name.to_string()));
 		let c = Chain::init(
-			dir_name.to_string(),
-			db_env,
+			dir_name,
 			Arc::new(NoopAdapter {}),
 			genesis_block,
 			pow::verify_size,

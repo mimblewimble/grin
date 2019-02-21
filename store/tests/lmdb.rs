@@ -18,7 +18,6 @@ use grin_util as util;
 use grin_core::ser::{self, Readable, Reader, Writeable, Writer};
 
 use std::fs;
-use std::sync::Arc;
 
 const WRITE_CHUNK_SIZE: usize = 20;
 const TEST_ALLOC_SIZE: usize = store::lmdb::ALLOC_CHUNK_SIZE / 8 / WRITE_CHUNK_SIZE;
@@ -71,8 +70,7 @@ fn lmdb_allocate() -> Result<(), store::Error> {
 	// Allocate more than the initial chunk, ensuring
 	// the DB resizes underneath
 	{
-		let env = Arc::new(store::new_env(test_dir.to_owned()));
-		let store = store::Store::open(env.clone(), "test1");
+		let mut store = store::Store::new(test_dir, Some("test1"), None)?;
 
 		for i in 0..WRITE_CHUNK_SIZE * 2 {
 			println!("Allocating chunk: {}", i);
@@ -84,14 +82,13 @@ fn lmdb_allocate() -> Result<(), store::Error> {
 			batch.commit()?;
 		}
 	}
+	println!("***********************************");
+	println!("***************NEXT*****************");
+	println!("***********************************");
 	// Open env again and keep adding
 	{
-		println!("***********************************");
-		println!("***************NEXT*****************");
-		println!("***********************************");
-		let env = Arc::new(store::new_env(test_dir.to_owned()));
-		let store = store::Store::open(env.clone(), "test1");
 
+		let mut store = store::Store::new(test_dir, Some("test1"), None)?;
 		for i in 0..WRITE_CHUNK_SIZE * 2 {
 			println!("Allocating chunk: {}", i);
 			let chunk = PhatChunkStruct::new();

@@ -18,14 +18,12 @@ use chrono::Utc;
 use num::FromPrimitive;
 use rand::{thread_rng, Rng};
 use std::net::SocketAddr;
-use std::sync::Arc;
-
-use crate::lmdb;
 
 use crate::core::ser::{self, Readable, Reader, Writeable, Writer};
 use crate::msg::SockAddr;
 use crate::types::{Capabilities, ReasonForBan};
 use grin_store::{self, option_to_not_found, to_key, Error};
+use grin_util::RwLock;
 
 const STORE_SUBPATH: &'static str = "peers";
 
@@ -114,46 +112,50 @@ impl Readable for PeerData {
 
 /// Storage facility for peer data.
 pub struct PeerStore {
-	db: grin_store::Store,
+	db: RwLock<grin_store::Store>,
 }
 
 impl PeerStore {
 	/// Instantiates a new peer store under the provided root path.
-	pub fn new(db_env: Arc<lmdb::Environment>) -> Result<PeerStore, Error> {
-		let db = grin_store::Store::open(db_env, STORE_SUBPATH);
-		Ok(PeerStore { db: db })
+	pub fn new(db_root: &str) -> Result<PeerStore, Error> {
+		let db = grin_store::Store::new(db_root, Some(STORE_SUBPATH), None)?;
+		Ok(PeerStore { db: RwLock::new(db) })
 	}
 
 	pub fn save_peer(&self, p: &PeerData) -> Result<(), Error> {
 		debug!("save_peer: {:?} marked {:?}", p.addr, p.flags);
 
-		let batch = self.db.batch()?;
+		let mut s = self.db.write();
+		let batch = s.batch()?;
 		batch.put_ser(&peer_key(p.addr)[..], p)?;
 		batch.commit()
 	}
 
 	pub fn get_peer(&self, peer_addr: SocketAddr) -> Result<PeerData, Error> {
+		let db = self.db.read();
 		option_to_not_found(
-			self.db.get_ser(&peer_key(peer_addr)[..]),
+			db.get_ser(&peer_key(peer_addr)[..]),
 			&format!("Peer at address: {}", peer_addr),
 		)
 	}
 
 	pub fn exists_peer(&self, peer_addr: SocketAddr) -> Result<bool, Error> {
-		self.db.exists(&peer_key(peer_addr)[..])
+		let db = self.db.read();
+		db.exists(&peer_key(peer_addr)[..])
 	}
 
 	/// TODO - allow below added to avoid github issue reports
 	#[allow(dead_code)]
-	pub fn delete_peer(&self, peer_addr: SocketAddr) -> Result<(), Error> {
-		let batch = self.db.batch()?;
+	pub fn delete_peer(&mut self, peer_addr: SocketAddr) -> Result<(), Error> {
+		let mut s = self.db.write();
+		let batch = s.batch()?;
 		batch.delete(&peer_key(peer_addr)[..])?;
 		batch.commit()
 	}
 
 	pub fn find_peers(&self, state: State, cap: Capabilities, count: usize) -> Vec<PeerData> {
-		let mut peers = self
-			.db
+		let db = self.db.read();
+		let mut peers = db
 			.iter::<PeerData>(&to_key(PEER_PREFIX, &mut "".to_string().into_bytes()))
 			.unwrap()
 			.filter(|p| p.flags == state && p.capabilities.contains(cap))
@@ -164,7 +166,8 @@ impl PeerStore {
 
 	/// Query all peers with same IP address, and ignore the port
 	pub fn find_peers_by_ip(&self, peer_addr: SocketAddr) -> Vec<PeerData> {
-		self.db
+		let db = self.db.read();
+		db
 			.iter::<PeerData>(&to_key(
 				PEER_PREFIX,
 				&mut format!("{}", peer_addr.ip()).into_bytes(),
@@ -177,13 +180,15 @@ impl PeerStore {
 	/// Used for /v1/peers/all api endpoint
 	pub fn all_peers(&self) -> Vec<PeerData> {
 		let key = to_key(PEER_PREFIX, &mut "".to_string().into_bytes());
-		self.db.iter::<PeerData>(&key).unwrap().collect::<Vec<_>>()
+		let db = self.db.read();
+		db.iter::<PeerData>(&key).unwrap().collect::<Vec<_>>()
 	}
 
 	/// Convenience method to load a peer data, update its status and save it
 	/// back. If new state is Banned its last banned time will be updated too.
 	pub fn update_state(&self, peer_addr: SocketAddr, new_state: State) -> Result<(), Error> {
-		let batch = self.db.batch()?;
+		let mut s = self.db.write();
+		let batch = s.batch()?;
 
 		let mut peer = option_to_not_found(
 			batch.get_ser::<PeerData>(&peer_key(peer_addr)[..]),
@@ -213,7 +218,8 @@ impl PeerStore {
 
 		// Delete peers in single batch
 		if !to_remove.is_empty() {
-			let batch = self.db.batch()?;
+			let mut s = self.db.write();
+			let batch = s.batch()?;
 
 			for peer in to_remove {
 				batch.delete(&peer_key(peer.addr)[..])?;

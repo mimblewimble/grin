@@ -29,7 +29,7 @@ use crate::store::{Batch, ChainStore};
 use crate::txhashset::{RewindableKernelView, UTXOView};
 use crate::types::{Tip, TxHashSetRoots, TxHashsetWriteStatus};
 use crate::util::secp::pedersen::{Commitment, RangeProof};
-use crate::util::{file, secp_static, zip};
+use crate::util::{file, secp_static, zip, RwLock};
 use croaring::Bitmap;
 use grin_store;
 use grin_store::pmmr::{clean_files_by_prefix, PMMRBackend, PMMR_FILES};
@@ -103,14 +103,14 @@ pub struct TxHashSet {
 	kernel_pmmr_h: PMMRHandle<TxKernel>,
 
 	// chain store used as index of commitments to MMR positions
-	commit_index: Arc<ChainStore>,
+	commit_index: Arc<RwLock<ChainStore>>,
 }
 
 impl TxHashSet {
 	/// Open an existing or new set of backends for the TxHashSet
 	pub fn open(
 		root_dir: String,
-		commit_index: Arc<ChainStore>,
+		commit_index: Arc<RwLock<ChainStore>>,
 		header: Option<&BlockHeader>,
 	) -> Result<TxHashSet, Error> {
 		Ok(TxHashSet {
@@ -166,7 +166,7 @@ impl TxHashSet {
 	/// We look in the index to find the output MMR pos.
 	/// Then we check the entry in the output MMR and confirm the hash matches.
 	pub fn is_unspent(&self, output_id: &OutputIdentifier) -> Result<(Hash, u64), Error> {
-		match self.commit_index.get_output_pos(&output_id.commit) {
+		match self.commit_index.read().get_output_pos(&output_id.commit) {
 			Ok(pos) => {
 				let output_pmmr: ReadonlyPMMR<'_, Output, _> =
 					ReadonlyPMMR::at(&self.output_pmmr_h.backend, self.output_pmmr_h.last_pos);
@@ -214,7 +214,7 @@ impl TxHashSet {
 		let header_pmmr =
 			ReadonlyPMMR::at(&self.header_pmmr_h.backend, self.header_pmmr_h.last_pos);
 		if let Some(entry) = header_pmmr.get_data(pos) {
-			let header = self.commit_index.get_block_header(&entry.hash())?;
+			let header = self.commit_index.read().get_block_header(&entry.hash())?;
 			Ok(header)
 		} else {
 			Err(ErrorKind::Other(format!("get header by height")).into())
@@ -268,26 +268,27 @@ impl TxHashSet {
 
 	/// Return Commit's MMR position
 	pub fn get_output_pos(&self, commit: &Commitment) -> Result<u64, Error> {
-		Ok(self.commit_index.get_output_pos(&commit)?)
+		Ok(self.commit_index.read().get_output_pos(&commit)?)
 	}
 
 	/// build a new merkle proof for the given position.
 	pub fn merkle_proof(&mut self, commit: Commitment) -> Result<MerkleProof, String> {
-		let pos = self.commit_index.get_output_pos(&commit).unwrap();
+		let pos = self.commit_index.read().get_output_pos(&commit).unwrap();
 		PMMR::at(&mut self.output_pmmr_h.backend, self.output_pmmr_h.last_pos).merkle_proof(pos)
 	}
 
 	/// Compact the MMR data files and flush the rm logs
 	pub fn compact(&mut self) -> Result<(), Error> {
 		let commit_index = self.commit_index.clone();
-		let head_header = commit_index.head_header()?;
+		let head_header = commit_index.read().head_header()?;
 		let current_height = head_header.height;
 
 		// horizon for compacting is based on current_height
 		let horizon = current_height.saturating_sub(global::cut_through_horizon().into());
 		let horizon_header = self.get_header_by_height(horizon)?;
 
-		let batch = self.commit_index.batch()?;
+		let mut s = self.commit_index.write();
+		let batch = s.batch()?;
 
 		let rewind_rm_pos = input_pos_to_rewind(&horizon_header, &head_header, &batch)?;
 
@@ -327,7 +328,8 @@ where
 	F: FnOnce(&mut Extension<'_>) -> Result<T, Error>,
 {
 	let commit_index = trees.commit_index.clone();
-	let batch = commit_index.batch()?;
+	let mut s = commit_index.write();
+	let batch = s.batch()?;
 
 	// We want to use the current head of the most work chain unless
 	// we explicitly rewind the extension.
@@ -372,7 +374,8 @@ where
 
 		// Create a new batch here to pass into the utxo_view.
 		// Discard it (rollback) after we finish with the utxo_view.
-		let batch = trees.commit_index.batch()?;
+		let mut s = trees.commit_index.write();
+		let batch = s.batch()?;
 		let utxo = UTXOView::new(output_pmmr, header_pmmr, &batch);
 		res = inner(&utxo);
 	}
@@ -395,7 +398,8 @@ where
 
 		// Create a new batch here to pass into the kernel_view.
 		// Discard it (rollback) after we finish with the kernel_view.
-		let batch = trees.commit_index.batch()?;
+		let mut s = trees.commit_index.write();
+		let batch = s.batch()?;
 		let header = batch.head_header()?;
 		let mut view = RewindableKernelView::new(kernel_pmmr, &batch, header);
 		res = inner(&mut view);

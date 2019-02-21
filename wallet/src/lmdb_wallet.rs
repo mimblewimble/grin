@@ -117,8 +117,7 @@ impl<C, K> LMDBBackend<C, K> {
 		fs::create_dir_all(&stored_tx_path)
 			.expect("Couldn't create wallet backend tx storage directory!");
 
-		let lmdb_env = Arc::new(store::new_env(db_path.to_str().unwrap().to_string()));
-		let store = store::Store::open(lmdb_env, DB_DIR);
+		let mut store = store::Store::new(&db_path.to_str().unwrap(), Some(DB_DIR), None)?;
 
 		// Make sure default wallet derivation path always exists
 		// as well as path (so it can be retrieved by batches to know where to store
@@ -314,7 +313,8 @@ where
 	fn batch<'a>(&'a mut self) -> Result<Box<dyn WalletOutputBatch<K> + 'a>, Error> {
 		Ok(Box::new(Batch {
 			_store: self,
-			db: RefCell::new(Some(self.db.batch()?)),
+			//db: RefCell::new(Some(self.db.batch()?)),
+			db: RefCell::new(None),
 			keychain: self.keychain.clone(),
 		}))
 	}

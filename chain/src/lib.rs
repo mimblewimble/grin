@@ -23,8 +23,6 @@
 #[macro_use]
 extern crate bitflags;
 
-use lmdb_zero as lmdb;
-
 #[macro_use]
 extern crate serde_derive;
 #[macro_use]

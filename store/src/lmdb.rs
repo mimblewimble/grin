@@ -25,8 +25,29 @@ use lmdb_zero::LmdbResultExt;
 use crate::core::ser;
 
 /// number of bytes to grow the database by when needed
-pub const ALLOC_CHUNK_SIZE: usize = 134_217_728; //128 MB
+pub const ALLOC_CHUNK_SIZE: usize = 134_217_728 / 64; //128 MB
 const RESIZE_PERCENT: f32 = 0.9;
+
+/// Varying allocation chunk sizes for different needs
+pub enum AllocChunkSize {
+	/// The Chain DB itself
+	ChainDB,
+	/// The Peer DB
+	PeerDB,
+	/// Wallet DB
+	WalletDB,
+}
+
+impl AllocChunkSize {
+	/// Return value
+	pub fn value(&self) -> usize {
+		match *self {
+			AllocChunkSize::ChainDB => 134_217_728, //128 MB
+			AllocChunkSize::PeerDB => 134_217_728, //128 MB
+			AllocChunkSize::WalletDB => 134_217_728, //128 MB
+		}
+	}
+}
 
 /// Main error type for this lmdb
 #[derive(Clone, Eq, PartialEq, Debug, Fail)]
@@ -58,57 +79,68 @@ pub fn option_to_not_found<T>(res: Result<Option<T>, Error>, field_name: &str) -
 	}
 }
 
-/// Create a new LMDB env under the provided directory.
-/// By default creates an environment named "lmdb".
-/// Be aware of transactional semantics in lmdb
-/// (transactions are per environment, not per database).
-pub fn new_env(path: String) -> lmdb::Environment {
-	new_named_env(path, "lmdb".into(), None)
-}
-
-/// TODO - We probably need more flexibility here, 500GB probably too big for peers...
-/// Create a new LMDB env under the provided directory with the provided name.
-pub fn new_named_env(path: String, name: String, max_readers: Option<u32>) -> lmdb::Environment {
-	let full_path = [path, name].join("/");
-	fs::create_dir_all(&full_path)
-		.expect("Unable to create directory 'db_root' to store chain_data");
-
-	let mut env_builder = lmdb::EnvBuilder::new().unwrap();
-	env_builder.set_maxdbs(8).unwrap();
-
-	if let Some(max_readers) = max_readers {
-		env_builder
-			.set_maxreaders(max_readers)
-			.expect("Unable set max_readers");
-	}
-
-	unsafe {
-		env_builder
-			.open(&full_path, lmdb::open::NOTLS, 0o600)
-			.unwrap()
-	}
-}
-
 /// LMDB-backed store facilitating data access and serialization. All writes
 /// are done through a Batch abstraction providing atomicity.
 pub struct Store {
 	env: Arc<lmdb::Environment>,
-	db: Arc<lmdb::Database<'static>>,
+	db: Option<Arc<lmdb::Database<'static>>>,
+	name: String,
 }
 
 impl Store {
-	/// Creates a new store with the provided name under the specified
-	/// environment
-	pub fn open(env: Arc<lmdb::Environment>, name: &str) -> Store {
-		let db = Arc::new(
+	/// Create a new LMDB env under the provided directory.
+	/// By default creates an environment named "lmdb".
+	/// Be aware of transactional semantics in lmdb
+	/// (transactions are per environment, not per database).
+	pub fn new(path: &str, name: Option<&str>, max_readers: Option<u32>) -> Result<Store, Error> {
+		let name = match name {
+			Some(n) => n.to_owned(),
+			None => "lmdb".to_owned(),
+		};
+		let full_path = [path.to_owned(), name.clone()].join("/");
+			fs::create_dir_all(&full_path)
+				.expect("Unable to create directory 'db_root' to store chain_data");
+
+			let mut env_builder = lmdb::EnvBuilder::new().unwrap();
+			env_builder.set_maxdbs(8)?;
+
+			if let Some(max_readers) = max_readers {
+				env_builder
+					.set_maxreaders(max_readers)?;
+			}
+
+			let env = unsafe {
+				env_builder
+					.open(&full_path, lmdb::open::NOTLS, 0o600)?
+			};
+
+			debug!("DB Mapsize for {} is {}", full_path, env.info().as_ref().unwrap().mapsize);
+			let mut res = Store {
+				env: Arc::new(env),
+				db: None,
+				name: name,
+			};
+
+			res.open()?;
+			Ok(res)
+	}
+
+	/// Opens the database environment
+	pub fn open(&mut self) -> Result<(), Error> {
+		self.db = Some(Arc::new(
 			lmdb::Database::open(
-				env.clone(),
-				Some(name),
+				self.env.clone(),
+				Some(&self.name),
 				&lmdb::DatabaseOptions::new(lmdb::db::CREATE),
-			)
-			.unwrap(),
-		);
-		Store { env, db }
+			)?
+		));
+		Ok(())
+	}
+
+	/// Closes the db
+	pub fn close(&mut self) -> Result<(), Error> {
+		self.db = None;
+		Ok(())
 	}
 
 	/// Determines whether the environment needs a resize based on a simple percentage threshold
@@ -141,16 +173,18 @@ impl Store {
 	}
 
 	/// Increments the database size by one ALLOC_CHUNK_SIZE
-	pub fn do_resize(&self) -> Result<(), Error> {
+	pub fn do_resize(&mut self) -> Result<(), Error> {
 		let env_info = self.env.info()?;
 		let new_mapsize = if env_info.mapsize < ALLOC_CHUNK_SIZE {
 			ALLOC_CHUNK_SIZE
 		} else {
 			env_info.mapsize + ALLOC_CHUNK_SIZE
 		};
+		self.close()?;
 		unsafe {
 			self.env.set_mapsize(new_mapsize)?;
 		}
+		self.open()?;
 		info!(
 			"Resized database from {} to {}",
 			env_info.mapsize, new_mapsize
@@ -162,7 +196,7 @@ impl Store {
 	pub fn get(&self, key: &[u8]) -> Result<Option<Vec<u8>>, Error> {
 		let txn = lmdb::ReadTransaction::new(self.env.clone())?;
 		let access = txn.access();
-		let res = access.get(&self.db, key);
+		let res = access.get(&self.db.as_ref().unwrap(), key);
 		res.map(|res: &[u8]| res.to_vec())
 			.to_opt()
 			.map_err(From::from)
@@ -181,7 +215,7 @@ impl Store {
 		key: &[u8],
 		access: &lmdb::ConstAccessor<'_>,
 	) -> Result<Option<T>, Error> {
-		let res: lmdb::error::Result<&[u8]> = access.get(&self.db, key);
+		let res: lmdb::error::Result<&[u8]> = access.get(&self.db.as_ref().unwrap(), key);
 		match res.to_opt() {
 			Ok(Some(mut res)) => match ser::deserialize(&mut res) {
 				Ok(res) => Ok(Some(res)),
@@ -196,7 +230,7 @@ impl Store {
 	pub fn exists(&self, key: &[u8]) -> Result<bool, Error> {
 		let txn = lmdb::ReadTransaction::new(self.env.clone())?;
 		let access = txn.access();
-		let res: lmdb::error::Result<&lmdb::Ignore> = access.get(&self.db, key);
+		let res: lmdb::error::Result<&lmdb::Ignore> = access.get(&self.db.as_ref().unwrap(), key);
 		res.to_opt().map(|r| r.is_some()).map_err(From::from)
 	}
 
@@ -204,7 +238,7 @@ impl Store {
 	/// provided key.
 	pub fn iter<T: ser::Readable>(&self, from: &[u8]) -> Result<SerIterator<T>, Error> {
 		let tx = Arc::new(lmdb::ReadTransaction::new(self.env.clone())?);
-		let cursor = Arc::new(tx.cursor(self.db.clone()).unwrap());
+		let cursor = Arc::new(tx.cursor(self.db.as_ref().unwrap().clone()).unwrap());
 		Ok(SerIterator {
 			tx,
 			cursor,
@@ -215,7 +249,7 @@ impl Store {
 	}
 
 	/// Builds a new batch to be used with this store.
-	pub fn batch(&self) -> Result<Batch<'_>, Error> {
+	pub fn batch(&mut self) -> Result<Batch<'_>, Error> {
 		// check if the db needs resizing before returning the batch
 		if self.needs_resize()? {
 			self.do_resize()?;
@@ -239,7 +273,7 @@ impl<'a> Batch<'a> {
 	pub fn put(&self, key: &[u8], value: &[u8]) -> Result<(), Error> {
 		self.tx
 			.access()
-			.put(&self.store.db, key, value, lmdb::put::Flags::empty())?;
+			.put(&self.store.db.as_ref().unwrap(), key, value, lmdb::put::Flags::empty())?;
 		Ok(())
 	}
 
@@ -278,7 +312,7 @@ impl<'a> Batch<'a> {
 
 	/// Deletes a key/value pair from the db
 	pub fn delete(&self, key: &[u8]) -> Result<(), Error> {
-		self.tx.access().del_key(&self.store.db, key)?;
+		self.tx.access().del_key(&self.store.db.as_ref().unwrap(), key)?;
 		Ok(())
 	}
 
