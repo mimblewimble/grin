@@ -713,10 +713,7 @@ impl TransactionBody {
 		self.validate_read(weighting)?;
 
 		// Find all the outputs that have not had their rangeproofs verified.
-		let outputs = {
-			let mut verifier = verifier.write();
-			verifier.filter_rangeproof_unverified(&self.outputs)
-		};
+		let outputs = verifier.read().filter_rangeproof_unverified(&self.outputs);
 
 		// Now batch verify all those unverified rangeproofs
 		if !outputs.is_empty() {
@@ -730,10 +727,7 @@ impl TransactionBody {
 		}
 
 		// Find all the kernels that have not yet been verified.
-		let kernels = {
-			let mut verifier = verifier.write();
-			verifier.filter_kernel_sig_unverified(&self.kernels)
-		};
+		let kernels = verifier.read().filter_kernel_sig_unverified(&self.kernels);
 
 		// Verify the unverified tx kernels.
 		// No ability to batch verify these right now
