@@ -28,7 +28,7 @@ use hyper::header::HeaderValue;
 use hyper::Client;
 use hyper::{Body, Method, Request};
 use serde::Serialize;
-use serde_json::to_string;
+use serde_json::{to_string, json};
 use std::net::SocketAddr;
 use tokio::runtime::Runtime;
 
@@ -138,7 +138,10 @@ impl ChainEvents for EventLogger {
 fn parse_url(value: &Option<String>) -> Option<hyper::Uri> {
 	match value {
 		Some(url) => {
-			let uri: hyper::Uri = url.parse().unwrap();
+			let uri: hyper::Uri = match url.parse() {
+				Ok(value) => value,
+				Err(_) => { panic!("Invalid url : {}", url) }
+			};
 			let scheme = uri.scheme_part().map(|s| s.as_str());
 			if scheme != Some("http") {
 				panic!("Invalid url scheme {}, expected 'http'", url)
@@ -219,7 +222,7 @@ impl WebHook {
 				Ok(serialized) => serialized,
 				Err(_) => {
 					return false; // print error message
-				} 
+				}
 			};
 			self.post(url.clone(), payload);
 		}
@@ -228,8 +231,18 @@ impl WebHook {
 }
 
 impl ChainEvents for WebHook {
-	fn on_block_accepted(&self, block: &core::Block, _status: &BlockStatus) {
-		if !self.make_request(block, &self.block_accepted_url) {
+	fn on_block_accepted(&self, block: &core::Block, status: &BlockStatus) {
+		let status =  match status {
+			BlockStatus::Reorg => "reorg",
+			BlockStatus::Fork => "fork",
+			BlockStatus::Next => "head"
+		};
+		let payload = json!({
+			"hash": block.header.hash().to_hex(),
+			"status": status,
+			"data": block
+		});
+		if !self.make_request(&payload, &self.block_accepted_url) {
 			error!(
 				"Failed to serialize block {} at height {}",
 				block.hash(),
@@ -242,25 +255,39 @@ impl ChainEvents for WebHook {
 impl NetEvents for WebHook {
 	/// Triggers when a new transaction arrives
 	fn on_transaction_received(&self, tx: &core::Transaction) {
-		if !self.make_request(tx, &self.tx_received_url) {
+		let payload = json!({
+			"hash": tx.hash().to_hex(),
+			"data": tx
+		});
+		if !self.make_request(&payload, &self.tx_received_url) {
 			error!("Failed to serialize transaction {}", tx.hash());
 		}
 	}
 
 	/// Triggers when a new block arrives
-	fn on_block_received(&self, block: &core::Block, _addr: &SocketAddr) {
-		if !self.make_request(block, &self.block_received_url) {
+	fn on_block_received(&self, block: &core::Block, addr: &SocketAddr) {
+		let payload = json!({
+			"hash": block.header.hash().to_hex(),
+			"peer": addr,
+			"data": block
+		});
+		if !self.make_request(&payload, &self.block_received_url) {
 			error!(
 				"Failed to serialize block {} at height {}",
-				block.hash(),
+				block.hash().to_hex(),
 				block.header.height
 			);
 		}
 	}
 
 	/// Triggers when a new block header arrives
-	fn on_header_received(&self, header: &core::BlockHeader, _addr: &SocketAddr) {
-		if !self.make_request(header, &self.header_received_url) {
+	fn on_header_received(&self, header: &core::BlockHeader, addr: &SocketAddr) {
+		let payload = json!({
+			"hash": header.hash().to_hex(),
+			"peer": addr,
+			"data": header
+		});
+		if !self.make_request(&payload, &self.header_received_url) {
 			error!(
 				"Failed to serialize header {} at height {}",
 				header.hash(),
