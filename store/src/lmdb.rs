@@ -25,29 +25,8 @@ use lmdb_zero::LmdbResultExt;
 use crate::core::ser;
 
 /// number of bytes to grow the database by when needed
-pub const ALLOC_CHUNK_SIZE: usize = 134_217_728 / 64; //128 MB
+pub const ALLOC_CHUNK_SIZE: usize = 134_217_728; //128 MB
 const RESIZE_PERCENT: f32 = 0.9;
-
-/// Varying allocation chunk sizes for different needs
-pub enum AllocChunkSize {
-	/// The Chain DB itself
-	ChainDB,
-	/// The Peer DB
-	PeerDB,
-	/// Wallet DB
-	WalletDB,
-}
-
-impl AllocChunkSize {
-	/// Return value
-	pub fn value(&self) -> usize {
-		match *self {
-			AllocChunkSize::ChainDB => 134_217_728,  //128 MB
-			AllocChunkSize::PeerDB => 134_217_728,   //128 MB
-			AllocChunkSize::WalletDB => 134_217_728, //128 MB
-		}
-	}
-}
 
 /// Main error type for this lmdb
 #[derive(Clone, Eq, PartialEq, Debug, Fail)]
