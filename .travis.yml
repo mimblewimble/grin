@@ -47,7 +47,7 @@ matrix:
     - os: linux
       env: TEST_SUITE=pool-p2p-src
     - os: linux
-      env: TEST_SUITE=keychain-wallet
+      env: TEST_SUITE=keychain
     - os: linux
       env: TEST_SUITE=api-util-store
     - os: osx
