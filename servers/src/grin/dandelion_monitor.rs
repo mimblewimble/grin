@@ -35,7 +35,7 @@ use crate::pool::{DandelionConfig, PoolEntryState, PoolError, TransactionPool, T
 pub fn monitor_transactions(
 	dandelion_config: DandelionConfig,
 	tx_pool: Arc<RwLock<TransactionPool>>,
-	verifier_cache: Arc<RwLock<dyn VerifierCache>>,
+	verifier_cache: Arc<dyn VerifierCache>,
 	stop_state: Arc<Mutex<StopState>>,
 ) {
 	debug!("Started Dandelion transaction monitor.");
@@ -83,7 +83,7 @@ pub fn monitor_transactions(
 
 fn process_stem_phase(
 	tx_pool: Arc<RwLock<TransactionPool>>,
-	verifier_cache: Arc<RwLock<dyn VerifierCache>>,
+	verifier_cache: Arc<dyn VerifierCache>,
 ) -> Result<(), PoolError> {
 	let mut tx_pool = tx_pool.write();
 
@@ -133,7 +133,7 @@ fn process_stem_phase(
 
 fn process_fluff_phase(
 	tx_pool: Arc<RwLock<TransactionPool>>,
-	verifier_cache: Arc<RwLock<dyn VerifierCache>>,
+	verifier_cache: Arc<dyn VerifierCache>,
 ) -> Result<(), PoolError> {
 	let mut tx_pool = tx_pool.write();
 

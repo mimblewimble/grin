@@ -34,14 +34,14 @@ pub struct Pool {
 	pub entries: Vec<PoolEntry>,
 	/// The blockchain
 	pub blockchain: Arc<dyn BlockChain>,
-	pub verifier_cache: Arc<RwLock<dyn VerifierCache>>,
+	pub verifier_cache: Arc<dyn VerifierCache>,
 	pub name: String,
 }
 
 impl Pool {
 	pub fn new(
 		chain: Arc<dyn BlockChain>,
-		verifier_cache: Arc<RwLock<dyn VerifierCache>>,
+		verifier_cache: Arc<dyn VerifierCache>,
 		name: String,
 	) -> Pool {
 		Pool {

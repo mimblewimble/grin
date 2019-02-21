@@ -236,7 +236,7 @@ pub struct StratumServer {
 	config: StratumServerConfig,
 	chain: Arc<chain::Chain>,
 	tx_pool: Arc<RwLock<pool::TransactionPool>>,
-	verifier_cache: Arc<RwLock<dyn VerifierCache>>,
+	verifier_cache: Arc<dyn VerifierCache>,
 	current_block_versions: Vec<Block>,
 	current_difficulty: u64,
 	minimum_share_difficulty: u64,
@@ -251,7 +251,7 @@ impl StratumServer {
 		config: StratumServerConfig,
 		chain: Arc<chain::Chain>,
 		tx_pool: Arc<RwLock<pool::TransactionPool>>,
-		verifier_cache: Arc<RwLock<dyn VerifierCache>>,
+		verifier_cache: Arc<dyn VerifierCache>,
 	) -> StratumServer {
 		StratumServer {
 			id: String::from("0"),

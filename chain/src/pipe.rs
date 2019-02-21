@@ -44,7 +44,7 @@ pub struct BlockContext<'a> {
 	/// The active batch to use for block processing.
 	pub batch: store::Batch<'a>,
 	/// The verifier cache (caching verifier for rangeproofs and kernel signatures)
-	pub verifier_cache: Arc<RwLock<dyn VerifierCache>>,
+	pub verifier_cache: Arc<dyn VerifierCache>,
 	/// Recent orphan blocks to avoid double-processing
 	pub orphans: Arc<OrphanBlockPool>,
 }

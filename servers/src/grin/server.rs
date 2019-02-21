@@ -58,7 +58,7 @@ pub struct Server {
 	tx_pool: Arc<RwLock<pool::TransactionPool>>,
 	/// Shared cache for verification results when
 	/// verifying rangeproof and kernel signatures.
-	verifier_cache: Arc<RwLock<dyn VerifierCache>>,
+	verifier_cache: Arc<dyn VerifierCache>,
 	/// Whether we're currently syncing
 	sync_state: Arc<SyncState>,
 	/// To be passed around to collect stats and info
@@ -151,7 +151,7 @@ impl Server {
 
 		// Shared cache for verification results.
 		// We cache rangeproof verification and kernel signature verification.
-		let verifier_cache = Arc::new(RwLock::new(LruVerifierCache::new()));
+		let verifier_cache = Arc::new(LruVerifierCache::new());
 
 		let pool_adapter = Arc::new(PoolToChainAdapter::new());
 		let pool_net_adapter = Arc::new(PoolToNetAdapter::new());

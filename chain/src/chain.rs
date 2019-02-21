@@ -146,7 +146,7 @@ pub struct Chain {
 	adapter: Arc<dyn ChainAdapter + Send + Sync>,
 	orphans: Arc<OrphanBlockPool>,
 	txhashset: Arc<RwLock<txhashset::TxHashSet>>,
-	verifier_cache: Arc<RwLock<dyn VerifierCache>>,
+	verifier_cache: Arc<dyn VerifierCache>,
 	// POW verification function
 	pow_verifier: fn(&BlockHeader) -> Result<(), pow::Error>,
 	archive_mode: bool,
@@ -164,7 +164,7 @@ impl Chain {
 		adapter: Arc<dyn ChainAdapter + Send + Sync>,
 		genesis: Block,
 		pow_verifier: fn(&BlockHeader) -> Result<(), pow::Error>,
-		verifier_cache: Arc<RwLock<dyn VerifierCache>>,
+		verifier_cache: Arc<dyn VerifierCache>,
 		archive_mode: bool,
 		stop_state: Arc<Mutex<StopState>>,
 	) -> Result<Chain, Error> {

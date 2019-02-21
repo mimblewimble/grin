@@ -44,7 +44,7 @@ pub struct TransactionPool {
 	pub reorg_cache: Arc<RwLock<VecDeque<PoolEntry>>>,
 	/// The blockchain
 	pub blockchain: Arc<dyn BlockChain>,
-	pub verifier_cache: Arc<RwLock<dyn VerifierCache>>,
+	pub verifier_cache: Arc<dyn VerifierCache>,
 	/// The pool adapter
 	pub adapter: Arc<dyn PoolAdapter>,
 }
@@ -54,7 +54,7 @@ impl TransactionPool {
 	pub fn new(
 		config: PoolConfig,
 		chain: Arc<dyn BlockChain>,
-		verifier_cache: Arc<RwLock<dyn VerifierCache>>,
+		verifier_cache: Arc<dyn VerifierCache>,
 		adapter: Arc<dyn PoolAdapter>,
 	) -> TransactionPool {
 		TransactionPool {

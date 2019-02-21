@@ -708,12 +708,12 @@ impl TransactionBody {
 	pub fn validate(
 		&self,
 		weighting: Weighting,
-		verifier: Arc<RwLock<dyn VerifierCache>>,
+		verifier: Arc<dyn VerifierCache>,
 	) -> Result<(), Error> {
 		self.validate_read(weighting)?;
 
 		// Find all the outputs that have not had their rangeproofs verified.
-		let outputs = verifier.read().filter_rangeproof_unverified(&self.outputs);
+		let outputs = verifier.filter_rangeproof_unverified(&self.outputs);
 
 		// Now batch verify all those unverified rangeproofs
 		if !outputs.is_empty() {
@@ -727,7 +727,7 @@ impl TransactionBody {
 		}
 
 		// Find all the kernels that have not yet been verified.
-		let kernels = verifier.read().filter_kernel_sig_unverified(&self.kernels);
+		let kernels = verifier.filter_kernel_sig_unverified(&self.kernels);
 
 		// Verify the unverified tx kernels.
 		// No ability to batch verify these right now
@@ -737,11 +737,8 @@ impl TransactionBody {
 		}
 
 		// Cache the successful verification results for the new outputs and kernels.
-		{
-			let mut verifier = verifier.write();
-			verifier.add_rangeproof_verified(outputs);
-			verifier.add_kernel_sig_verified(kernels);
-		}
+		verifier.add_rangeproof_verified(outputs);
+		verifier.add_kernel_sig_verified(kernels);
 		Ok(())
 	}
 }
@@ -938,7 +935,7 @@ impl Transaction {
 	pub fn validate(
 		&self,
 		weighting: Weighting,
-		verifier: Arc<RwLock<dyn VerifierCache>>,
+		verifier: Arc<dyn VerifierCache>,
 	) -> Result<(), Error> {
 		self.body.validate(weighting, verifier)?;
 		self.body.verify_features()?;

@@ -44,7 +44,7 @@ pub struct NetToChainAdapter {
 	sync_state: Arc<SyncState>,
 	chain: Weak<chain::Chain>,
 	tx_pool: Arc<RwLock<pool::TransactionPool>>,
-	verifier_cache: Arc<RwLock<dyn VerifierCache>>,
+	verifier_cache: Arc<dyn VerifierCache>,
 	peers: OneTime<Weak<p2p::Peers>>,
 	config: ServerConfig,
 }
@@ -370,7 +370,7 @@ impl NetToChainAdapter {
 		sync_state: Arc<SyncState>,
 		chain: Arc<chain::Chain>,
 		tx_pool: Arc<RwLock<pool::TransactionPool>>,
-		verifier_cache: Arc<RwLock<dyn VerifierCache>>,
+		verifier_cache: Arc<dyn VerifierCache>,
 		config: ServerConfig,
 	) -> NetToChainAdapter {
 		NetToChainAdapter {

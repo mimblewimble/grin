@@ -19,6 +19,7 @@ use cuckoocache::cache::{Cache, SaltedHasher};
 
 use crate::core::hash::{DefaultHashable, Hash, Hashed, ZERO_HASH};
 use crate::core::{Output, TxKernel};
+use crate::util::RwLock;
 use rand::prelude::random;
 
 struct VerifierHasher {
@@ -63,17 +64,18 @@ pub trait VerifierCache: Sync + Send {
 	/// that have not yet had their rangeproofs verified.
 	fn filter_rangeproof_unverified(&self, outputs: &[Output]) -> Vec<Output>;
 	/// Adds a vec of tx kernels to the cache (used in conjunction with the the filter above).
-	fn add_kernel_sig_verified(&mut self, kernels: Vec<TxKernel>);
+	fn add_kernel_sig_verified(&self, kernels: Vec<TxKernel>);
 	/// Adds a vec of outputs to the cache (used in conjunction with the the filter above).
-	fn add_rangeproof_verified(&mut self, outputs: Vec<Output>);
+	fn add_rangeproof_verified(&self, outputs: Vec<Output>);
 }
 
 /// An implementation of verifier_cache using lru_cache.
 /// Caches tx kernels by kernel hash.
 /// Caches outputs by output rangeproof hash (rangeproofs are committed to separately).
 pub struct LruVerifierCache {
-	kernel_sig_verification_cache: Cache<TxKernel, VerifierHasher>,
-	rangeproof_verification_cache: Cache<crate::util::secp::pedersen::RangeProof, VerifierHasher>,
+	kernel_sig_verification_cache: RwLock<Cache<TxKernel, VerifierHasher>>,
+	rangeproof_verification_cache:
+		RwLock<Cache<crate::util::secp::pedersen::RangeProof, VerifierHasher>>,
 }
 
 impl LruVerifierCache {
@@ -81,21 +83,22 @@ impl LruVerifierCache {
 	/// They need to be *at least* large enough to cover a maxed out block.
 	/// Because we're using a low overhead cache, use 2x the entries
 	pub fn new() -> LruVerifierCache {
-		let mut c = LruVerifierCache {
-			kernel_sig_verification_cache: Cache::empty(),
-			rangeproof_verification_cache: Cache::empty(),
+		let c = LruVerifierCache {
+			kernel_sig_verification_cache: RwLock::new(Cache::empty()),
+			rangeproof_verification_cache: RwLock::new(Cache::empty()),
 		};
-		c.kernel_sig_verification_cache.setup(2 * 50_000);
-		c.rangeproof_verification_cache.setup(2 * 50_000);
+		c.kernel_sig_verification_cache.write().setup(2 * 50_000);
+		c.rangeproof_verification_cache.write().setup(2 * 50_000);
 		c
 	}
 }
 
 impl VerifierCache for LruVerifierCache {
 	fn filter_kernel_sig_unverified(&self, kernels: &[TxKernel]) -> Vec<TxKernel> {
+		let cache = &self.kernel_sig_verification_cache;
 		let res = kernels
 			.iter()
-			.filter(|x| !self.kernel_sig_verification_cache.contains(&x, false))
+			.filter(|x| !cache.read().contains(&x, false))
 			.cloned()
 			.collect::<Vec<_>>();
 		trace!(
@@ -107,9 +110,10 @@ impl VerifierCache for LruVerifierCache {
 	}
 
 	fn filter_rangeproof_unverified(&self, outputs: &[Output]) -> Vec<Output> {
+		let cache = &self.rangeproof_verification_cache.read();
 		let res = outputs
 			.iter()
-			.filter(|x| !self.rangeproof_verification_cache.contains(&x.proof, false))
+			.filter(|x| !cache.contains(&x.proof, false))
 			.cloned()
 			.collect::<Vec<_>>();
 		trace!(
@@ -120,15 +124,17 @@ impl VerifierCache for LruVerifierCache {
 		res
 	}
 
-	fn add_kernel_sig_verified(&mut self, kernels: Vec<TxKernel>) {
+	fn add_kernel_sig_verified(&self, kernels: Vec<TxKernel>) {
+		let cache = &mut self.kernel_sig_verification_cache.write();
 		for k in kernels {
-			self.kernel_sig_verification_cache.insert(&k);
+			cache.insert(&k);
 		}
 	}
 
-	fn add_rangeproof_verified(&mut self, outputs: Vec<Output>) {
+	fn add_rangeproof_verified(&self, outputs: Vec<Output>) {
+		let cache = &mut self.rangeproof_verification_cache.write();
 		for o in outputs {
-			self.rangeproof_verification_cache.insert(&o.proof);
+			cache.insert(&o.proof);
 		}
 	}
 }

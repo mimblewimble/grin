@@ -35,7 +35,7 @@ pub struct Miner {
 	config: StratumServerConfig,
 	chain: Arc<chain::Chain>,
 	tx_pool: Arc<RwLock<pool::TransactionPool>>,
-	verifier_cache: Arc<RwLock<dyn VerifierCache>>,
+	verifier_cache: Arc<dyn VerifierCache>,
 	stop_state: Arc<Mutex<StopState>>,
 
 	// Just to hold the port we're on, so this miner can be identified
@@ -50,7 +50,7 @@ impl Miner {
 		config: StratumServerConfig,
 		chain: Arc<chain::Chain>,
 		tx_pool: Arc<RwLock<pool::TransactionPool>>,
-		verifier_cache: Arc<RwLock<dyn VerifierCache>>,
+		verifier_cache: Arc<dyn VerifierCache>,
 		stop_state: Arc<Mutex<StopState>>,
 	) -> Miner {
 		Miner {

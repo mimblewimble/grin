@@ -641,7 +641,7 @@ impl Block {
 	pub fn validate(
 		&self,
 		prev_kernel_offset: &BlindingFactor,
-		verifier: Arc<RwLock<dyn VerifierCache>>,
+		verifier: Arc<dyn VerifierCache>,
 	) -> Result<Commitment, Error> {
 		self.body.validate(Weighting::AsBlock, verifier)?;
 
