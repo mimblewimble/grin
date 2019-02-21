@@ -34,8 +34,8 @@ use grin_util as util;
 use std::sync::Arc;
 use std::time::Instant;
 
-fn verifier_cache() -> Arc<RwLock<dyn VerifierCache>> {
-	Arc::new(RwLock::new(LruVerifierCache::new()))
+fn verifier_cache() -> Arc<dyn VerifierCache> {
+	Arc::new(LruVerifierCache::new())
 }
 
 // Too slow for now #[test]

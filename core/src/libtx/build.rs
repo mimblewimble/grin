@@ -260,8 +260,8 @@ mod test {
 	use crate::core::verifier_cache::{LruVerifierCache, VerifierCache};
 	use crate::keychain::{ExtKeychain, ExtKeychainPath};
 
-	fn verifier_cache() -> Arc<RwLock<dyn VerifierCache>> {
-		Arc::new(RwLock::new(LruVerifierCache::new()))
+	fn verifier_cache() -> Arc<dyn VerifierCache> {
+		Arc::new(LruVerifierCache::new())
 	}
 
 	#[test]

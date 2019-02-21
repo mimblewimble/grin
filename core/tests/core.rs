@@ -91,8 +91,8 @@ fn test_zero_commit_fails() {
 	.unwrap();
 }
 
-fn verifier_cache() -> Arc<RwLock<dyn VerifierCache>> {
-	Arc::new(RwLock::new(LruVerifierCache::new()))
+fn verifier_cache() -> Arc<dyn VerifierCache> {
+	Arc::new(LruVerifierCache::new())
 }
 
 #[test]

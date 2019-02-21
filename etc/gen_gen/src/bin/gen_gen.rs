@@ -141,11 +141,8 @@ fn main() {
 	assert!(gen.header.pow.is_secondary(), "Not a secondary header");
 	println!("Built genesis:\n{:?}", gen);
 	core::pow::verify_size(&gen.header).unwrap();
-	gen.validate(
-		&BlindingFactor::zero(),
-		Arc::new(util::RwLock::new(LruVerifierCache::new())),
-	)
-	.unwrap();
+	gen.validate(&BlindingFactor::zero(), Arc::new(LruVerifierCache::new()))
+		.unwrap();
 
 	println!("\nFinal genesis cyclehash: {}", gen.hash().to_hex());
 	let gen_bin = core::ser::ser_vec(&gen).unwrap();
@@ -269,9 +266,7 @@ fn update_genesis_rs(gen: &core::core::Block) {
 fn setup_chain(dir_name: &str, genesis: core::core::Block) -> chain::Chain {
 	util::init_test_logger();
 	let _ = fs::remove_dir_all(dir_name);
-	let verifier_cache = Arc::new(util::RwLock::new(
-		core::core::verifier_cache::LruVerifierCache::new(),
-	));
+	let verifier_cache = Arc::new(core::core::verifier_cache::LruVerifierCache::new());
 	let db_env = Arc::new(store::new_env(dir_name.to_string()));
 	chain::Chain::init(
 		dir_name.to_string(),

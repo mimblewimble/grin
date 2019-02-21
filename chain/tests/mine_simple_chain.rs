@@ -40,7 +40,7 @@ fn clean_output_dir(dir_name: &str) {
 fn setup(dir_name: &str, genesis: Block) -> Chain {
 	util::init_test_logger();
 	clean_output_dir(dir_name);
-	let verifier_cache = Arc::new(RwLock::new(LruVerifierCache::new()));
+	let verifier_cache = Arc::new(LruVerifierCache::new());
 	let db_env = Arc::new(store::new_env(dir_name.to_string()));
 	chain::Chain::init(
 		dir_name.to_string(),
@@ -533,7 +533,7 @@ fn actual_diff_iter_output() {
 	global::set_mining_mode(ChainTypes::AutomatedTesting);
 	let genesis_block = pow::mine_genesis_block().unwrap();
 	let db_env = Arc::new(store::new_env(".grin".to_string()));
-	let verifier_cache = Arc::new(RwLock::new(LruVerifierCache::new()));
+	let verifier_cache = Arc::new(LruVerifierCache::new());
 	let chain = chain::Chain::init(
 		"../.grin".to_string(),
 		db_env,

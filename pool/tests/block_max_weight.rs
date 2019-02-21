@@ -42,7 +42,7 @@ fn test_block_building_max_weight() {
 
 	let mut chain = ChainAdapter::init(db_root.clone()).unwrap();
 
-	let verifier_cache = Arc::new(RwLock::new(LruVerifierCache::new()));
+	let verifier_cache = Arc::new(LruVerifierCache::new());
 
 	// Convenient was to add a new block to the chain.
 	let add_block = |prev_header: BlockHeader, txs: Vec<Transaction>, chain: &mut ChainAdapter| {

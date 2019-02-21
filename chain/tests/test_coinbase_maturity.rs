@@ -43,7 +43,7 @@ fn test_coinbase_maturity() {
 
 	let genesis_block = pow::mine_genesis_block().unwrap();
 
-	let verifier_cache = Arc::new(RwLock::new(LruVerifierCache::new()));
+	let verifier_cache = Arc::new(LruVerifierCache::new());
 
 	let db_env = Arc::new(store::new_env(".grin".to_string()));
 	let chain = chain::Chain::init(

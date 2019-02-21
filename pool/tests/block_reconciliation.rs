@@ -36,7 +36,7 @@ fn test_transaction_pool_block_reconciliation() {
 	clean_output_dir(db_root.clone());
 	let chain = Arc::new(ChainAdapter::init(db_root.clone()).unwrap());
 
-	let verifier_cache = Arc::new(RwLock::new(LruVerifierCache::new()));
+	let verifier_cache = Arc::new(LruVerifierCache::new());
 
 	// Initialize a new pool with our chain adapter.
 	let pool = RwLock::new(test_setup(chain.clone(), verifier_cache.clone()));

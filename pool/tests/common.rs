@@ -151,7 +151,7 @@ impl BlockChain for ChainAdapter {
 
 pub fn test_setup(
 	chain: Arc<dyn BlockChain>,
-	verifier_cache: Arc<RwLock<dyn VerifierCache>>,
+	verifier_cache: Arc<dyn VerifierCache>,
 ) -> TransactionPool {
 	TransactionPool::new(
 		PoolConfig {

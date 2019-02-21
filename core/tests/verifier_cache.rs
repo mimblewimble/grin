@@ -24,8 +24,8 @@ use grin_keychain as keychain;
 use grin_util as util;
 use std::sync::Arc;
 
-fn verifier_cache() -> Arc<RwLock<dyn VerifierCache>> {
-	Arc::new(RwLock::new(LruVerifierCache::new()))
+fn verifier_cache() -> Arc<dyn VerifierCache> {
+	Arc::new(LruVerifierCache::new())
 }
 
 #[test]
@@ -45,20 +45,17 @@ fn test_verifier_cache_rangeproofs() {
 
 	// Check our output is not verified according to the cache.
 	{
-		let mut cache = cache.write();
 		let unverified = cache.filter_rangeproof_unverified(&vec![out]);
 		assert_eq!(unverified, vec![out]);
 	}
 
 	// Add our output to the cache.
 	{
-		let mut cache = cache.write();
 		cache.add_rangeproof_verified(vec![out]);
 	}
 
 	// Check it shows as verified according to the cache.
 	{
-		let mut cache = cache.write();
 		let unverified = cache.filter_rangeproof_unverified(&vec![out]);
 		assert_eq!(unverified, vec![]);
 	}

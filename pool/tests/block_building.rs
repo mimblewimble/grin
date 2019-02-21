@@ -36,7 +36,7 @@ fn test_transaction_pool_block_building() {
 	clean_output_dir(db_root.clone());
 	let mut chain = ChainAdapter::init(db_root.clone()).unwrap();
 
-	let verifier_cache = Arc::new(RwLock::new(LruVerifierCache::new()));
+	let verifier_cache = Arc::new(LruVerifierCache::new());
 
 	// Initialize the chain/txhashset with an initial block
 	// so we have a non-empty UTXO set.

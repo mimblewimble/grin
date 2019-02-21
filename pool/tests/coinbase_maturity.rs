@@ -72,7 +72,7 @@ fn test_coinbase_maturity() {
 	// Mocking this up with an adapter that will raise an error for coinbase
 	// maturity.
 	let chain = Arc::new(CoinbaseMaturityErrorChainAdapter::new());
-	let verifier_cache = Arc::new(RwLock::new(LruVerifierCache::new()));
+	let verifier_cache = Arc::new(LruVerifierCache::new());
 	let pool = RwLock::new(test_setup(chain, verifier_cache));
 
 	{
