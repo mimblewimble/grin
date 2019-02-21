@@ -27,10 +27,10 @@ use hyper::client::HttpConnector;
 use hyper::header::HeaderValue;
 use hyper::Client;
 use hyper::{Body, Method, Request};
+use serde::Serialize;
 use serde_json::to_string;
 use std::net::SocketAddr;
 use tokio::runtime::Runtime;
-use serde::Serialize;
 
 /// Returns the list of event hooks that will be initialized for network events
 pub fn init_net_hooks(config: &ServerConfig) -> Vec<Box<dyn NetEvents + Send + Sync>> {
@@ -217,7 +217,9 @@ impl WebHook {
 		if let Some(url) = uri {
 			let payload = match to_string(payload) {
 				Ok(serialized) => serialized,
-				Err(_) => { return false; } // print error message
+				Err(_) => {
+					return false; // print error message
+				} 
 			};
 			self.post(url.clone(), payload);
 		}
@@ -234,18 +236,15 @@ impl ChainEvents for WebHook {
 				block.header.height
 			);
 		}
-	}		
+	}
 }
 
 impl NetEvents for WebHook {
 	/// Triggers when a new transaction arrives
 	fn on_transaction_received(&self, tx: &core::Transaction) {
 		if !self.make_request(tx, &self.tx_received_url) {
-			error!(
-				"Failed to serialize transaction {}",
-				tx.hash()
-			);
-		}		
+			error!("Failed to serialize transaction {}", tx.hash());
+		}
 	}
 
 	/// Triggers when a new block arrives
@@ -270,5 +269,3 @@ impl NetEvents for WebHook {
 		}
 	}
 }
-
-
