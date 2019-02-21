@@ -68,7 +68,7 @@ pub trait ChainEvents {
 }
 
 /// Basic Logger
-pub struct EventLogger;
+struct EventLogger;
 
 impl NetEvents for EventLogger {
 	fn on_transaction_received(&self, tx: &core::Transaction) {
@@ -149,7 +149,7 @@ fn parse_url(value: &Option<String>) -> Option<hyper::Uri> {
 }
 
 /// A struct that holds the hyper/tokio runtime.
-pub struct WebHook {
+struct WebHook {
 	/// url to POST transaction data when a new transaction arrives from a peer
 	tx_received_url: Option<hyper::Uri>,
 	/// url to POST header data when a new header arrives from a peer
@@ -166,7 +166,7 @@ pub struct WebHook {
 
 impl WebHook {
 	/// Instantiates a Webhook struct
-	pub fn new(
+	fn new(
 		tx_received_url: Option<hyper::Uri>,
 		header_received_url: Option<hyper::Uri>,
 		block_received_url: Option<hyper::Uri>,
@@ -183,7 +183,7 @@ impl WebHook {
 	}
 
 	/// Instantiates a Webhook struct from a configuration file
-	pub fn from_config(config: &WebHooksConfig) -> WebHook {
+	fn from_config(config: &WebHooksConfig) -> WebHook {
 		WebHook::new(
 			parse_url(&config.tx_received_url),
 			parse_url(&config.header_received_url),
