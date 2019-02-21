@@ -30,6 +30,7 @@ use hyper::{Body, Method, Request};
 use serde_json::to_string;
 use std::net::SocketAddr;
 use tokio::runtime::Runtime;
+use serde::Serialize;
 
 /// Returns the list of event hooks that will be initialized for network events
 pub fn init_net_hooks(config: &ServerConfig) -> Vec<Box<dyn NetEvents + Send + Sync>> {
@@ -212,87 +213,62 @@ impl WebHook {
 		let handle = self.runtime.executor();
 		handle.spawn(future);
 	}
+	fn make_request<T: Serialize>(&self, payload: &T, uri: &Option<hyper::Uri>) -> bool {
+		if let Some(url) = uri {
+			let payload = match to_string(payload) {
+				Ok(serialized) => serialized,
+				Err(_) => { return false; } // print error message
+			};
+			self.post(url.clone(), payload);
+		}
+		true
+	}
 }
 
 impl ChainEvents for WebHook {
 	fn on_block_accepted(&self, block: &core::Block, _status: &BlockStatus) {
-		match &self.block_accepted_url {
-			None => return,
-			Some(url) => {
-				let payload = match to_string(block) {
-					Ok(serialized) => serialized,
-					Err(_) => {
-						error!(
-							"Failed to serialize block {} at height {}",
-							block.hash(),
-							block.header.height
-						);
-						return;
-					}
-				};
-				self.post(url.clone(), payload);
-			}
+		if !self.make_request(block, &self.block_accepted_url) {
+			error!(
+				"Failed to serialize block {} at height {}",
+				block.hash(),
+				block.header.height
+			);
 		}
-	}
+	}		
 }
 
 impl NetEvents for WebHook {
 	/// Triggers when a new transaction arrives
 	fn on_transaction_received(&self, tx: &core::Transaction) {
-		match &self.tx_received_url {
-			None => return,
-			Some(url) => {
-				let payload = match to_string(tx) {
-					Ok(serialized) => serialized,
-					Err(_) => {
-						error!("Failed to serialize transaction {}", tx.hash());
-						return;
-					}
-				};
-				self.post(url.clone(), payload);
-			}
-		}
+		if !self.make_request(tx, &self.tx_received_url) {
+			error!(
+				"Failed to serialize transaction {}",
+				tx.hash()
+			);
+		}		
 	}
 
 	/// Triggers when a new block arrives
 	fn on_block_received(&self, block: &core::Block, _addr: &SocketAddr) {
-		match &self.block_received_url {
-			None => return,
-			Some(url) => {
-				let payload = match to_string(block) {
-					Ok(serialized) => serialized,
-					Err(_) => {
-						error!(
-							"Failed to serialize block {} at height {}",
-							block.hash(),
-							block.header.height
-						);
-						return;
-					}
-				};
-				self.post(url.clone(), payload);
-			}
+		if !self.make_request(block, &self.block_received_url) {
+			error!(
+				"Failed to serialize block {} at height {}",
+				block.hash(),
+				block.header.height
+			);
 		}
 	}
 
 	/// Triggers when a new block header arrives
 	fn on_header_received(&self, header: &core::BlockHeader, _addr: &SocketAddr) {
-		match &self.header_received_url {
-			None => return,
-			Some(url) => {
-				let payload = match to_string(header) {
-					Ok(serialized) => serialized,
-					Err(_) => {
-						error!(
-							"Failed to serialize header {} at height {}",
-							header.hash(),
-							header.height
-						);
-						return;
-					}
-				};
-				self.post(url.clone(), payload);
-			}
+		if !self.make_request(header, &self.header_received_url) {
+			error!(
+				"Failed to serialize header {} at height {}",
+				header.hash(),
+				header.height
+			);
 		}
 	}
 }
+
+
