@@ -14,7 +14,7 @@
 
 //! Transactions
 
-use crate::core::hash::{DefaultHashable, Hashed};
+use crate::core::hash::{DefaultHashCache, DefaultHashable, GetHashCache, Hash, Hashed};
 use crate::core::verifier_cache::VerifierCache;
 use crate::core::{committed, Committed};
 use crate::keychain::{self, BlindingFactor};
@@ -50,6 +50,7 @@ enum_from_primitive! {
 }
 
 impl DefaultHashable for KernelFeatures {}
+impl DefaultHashCache for KernelFeatures {}
 
 impl Writeable for KernelFeatures {
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
@@ -172,6 +173,7 @@ pub struct TxKernel {
 }
 
 impl DefaultHashable for TxKernel {}
+impl DefaultHashCache for TxKernel {}
 hashable_ord!(TxKernel);
 
 impl ::std::hash::Hash for TxKernel {
@@ -760,9 +762,15 @@ pub struct Transaction {
 	pub offset: BlindingFactor,
 	/// The transaction body - inputs/outputs/kernels
 	body: TransactionBody,
+	hash_cache: Option<Hash>,
 }
 
 impl DefaultHashable for Transaction {}
+impl GetHashCache for Transaction {
+	fn get_cached(&self) -> Option<Hash> {
+		self.hash_cache
+	}
+}
 
 /// PartialEq
 impl PartialEq for Transaction {
@@ -793,7 +801,12 @@ impl Readable for Transaction {
 	fn read(reader: &mut dyn Reader) -> Result<Transaction, ser::Error> {
 		let offset = BlindingFactor::read(reader)?;
 		let body = TransactionBody::read(reader)?;
-		let tx = Transaction { offset, body };
+		let mut tx = Transaction {
+			offset,
+			body,
+			hash_cache: None,
+		};
+		tx.hash_cache = Some(tx.hash());
 
 		// Now "lightweight" validation of the tx.
 		// Treat any validation issues as data corruption.
@@ -831,7 +844,13 @@ impl Transaction {
 		Transaction {
 			offset: BlindingFactor::zero(),
 			body: Default::default(),
+			hash_cache: None,
 		}
+	}
+	fn recompute_hash(mut self) -> Transaction {
+		self.hash_cache = None;
+		self.hash_cache = Some(self.hash());
+		self
 	}
 
 	/// Creates a new transaction initialized with
@@ -843,13 +862,19 @@ impl Transaction {
 		let body =
 			TransactionBody::init(inputs, outputs, kernels, false).expect("sorting, not verifying");
 
-		Transaction { offset, body }
+		let mut tx = Transaction {
+			offset,
+			body,
+			hash_cache: None,
+		};
+		tx.hash_cache = Some(tx.hash());
+		tx
 	}
 
 	/// Creates a new transaction using this transaction as a template
 	/// and with the specified offset.
 	pub fn with_offset(self, offset: BlindingFactor) -> Transaction {
-		Transaction { offset, ..self }
+		Transaction { offset, ..self }.recompute_hash()
 	}
 
 	/// Builds a new transaction with the provided inputs added. Existing
@@ -860,6 +885,7 @@ impl Transaction {
 			body: self.body.with_input(input),
 			..self
 		}
+		.recompute_hash()
 	}
 
 	/// Builds a new transaction with the provided output added. Existing
@@ -870,6 +896,7 @@ impl Transaction {
 			body: self.body.with_output(output),
 			..self
 		}
+		.recompute_hash()
 	}
 
 	/// Builds a new transaction with the provided output added. Existing
@@ -880,6 +907,7 @@ impl Transaction {
 			body: self.body.with_kernel(kernel),
 			..self
 		}
+		.recompute_hash()
 	}
 
 	/// Get inputs
@@ -899,6 +927,7 @@ impl Transaction {
 
 	/// Get outputs mutable
 	pub fn outputs_mut(&mut self) -> &mut Vec<Output> {
+		self.hash_cache = None;
 		&mut self.body.outputs
 	}
 
@@ -909,6 +938,7 @@ impl Transaction {
 
 	/// Get kernels mut
 	pub fn kernels_mut(&mut self) -> &mut Vec<TxKernel> {
+		self.hash_cache = None;
 		&mut self.body.kernels
 	}
 
@@ -1132,9 +1162,16 @@ pub struct Input {
 	pub features: OutputFeatures,
 	/// The commit referencing the output being spent.
 	pub commit: Commitment,
+	/// Cached hash value, and validity
+	hash_cache: Option<Hash>,
 }
 
 impl DefaultHashable for Input {}
+impl GetHashCache for Input {
+	fn get_cached(&self) -> Option<Hash> {
+		self.hash_cache
+	}
+}
 hashable_ord!(Input);
 
 impl ::std::hash::Hash for Input {
@@ -1173,7 +1210,13 @@ impl Input {
 	/// Build a new input from the data required to identify and verify an
 	/// output being spent.
 	pub fn new(features: OutputFeatures, commit: Commitment) -> Input {
-		Input { features, commit }
+		let mut i = Input {
+			features,
+			commit,
+			hash_cache: None,
+		};
+		i.hash_cache = Some(i.hash());
+		i
 	}
 
 	/// The input commitment which _partially_ identifies the output being
@@ -1241,6 +1284,7 @@ pub struct Output {
 }
 
 impl DefaultHashable for Output {}
+impl DefaultHashCache for Output {}
 hashable_ord!(Output);
 
 impl ::std::hash::Hash for Output {
@@ -1354,6 +1398,7 @@ pub struct OutputIdentifier {
 }
 
 impl DefaultHashable for OutputIdentifier {}
+impl DefaultHashCache for OutputIdentifier {}
 
 impl OutputIdentifier {
 	/// Build a new output_identifier.
@@ -1545,6 +1590,7 @@ mod test {
 		let input = Input {
 			features: OutputFeatures::Plain,
 			commit: commit,
+			hash_cache: None,
 		};
 
 		let block_hash =
@@ -1561,6 +1607,7 @@ mod test {
 		let input = Input {
 			features: OutputFeatures::Coinbase,
 			commit: commit,
+			hash_cache: None,
 		};
 
 		let short_id = input.short_id(&block_hash, nonce);

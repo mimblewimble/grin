@@ -17,7 +17,7 @@
 use rand::{thread_rng, Rng};
 
 use crate::core::block::{Block, BlockHeader, Error};
-use crate::core::hash::{DefaultHashable, Hashed};
+use crate::core::hash::{DefaultHashCache, DefaultHashable, Hashed};
 use crate::core::id::ShortIdentifiable;
 use crate::core::{Output, ShortId, TxKernel};
 use crate::ser::{self, read_multi, Readable, Reader, VerifySortedAndUnique, Writeable, Writer};
@@ -138,6 +138,7 @@ pub struct CompactBlock {
 }
 
 impl DefaultHashable for CompactBlock {}
+impl DefaultHashCache for CompactBlock {}
 
 impl CompactBlock {
 	/// "Lightweight" validation.

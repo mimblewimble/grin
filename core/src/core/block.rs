@@ -25,7 +25,7 @@ use std::sync::Arc;
 use crate::consensus::{reward, REWARD};
 use crate::core::committed::{self, Committed};
 use crate::core::compact_block::{CompactBlock, CompactBlockBody};
-use crate::core::hash::{DefaultHashable, Hash, Hashed, ZERO_HASH};
+use crate::core::hash::{DefaultHashCache, DefaultHashable, Hash, Hashed, ZERO_HASH};
 use crate::core::verifier_cache::VerifierCache;
 use crate::core::{
 	transaction, Commitment, Input, Output, Transaction, TransactionBody, TxKernel, Weighting,
@@ -159,7 +159,7 @@ impl Writeable for HeaderEntry {
 impl FixedLength for HeaderEntry {
 	const LEN: usize = Hash::LEN + 8 + Difficulty::LEN + 4 + 1;
 }
-
+impl DefaultHashCache for HeaderEntry {}
 impl Hashed for HeaderEntry {
 	/// The hash of the underlying block.
 	fn hash(&self) -> Hash {
@@ -198,6 +198,7 @@ pub struct BlockHeader {
 	pub pow: ProofOfWork,
 }
 impl DefaultHashable for BlockHeader {}
+impl DefaultHashCache for BlockHeader {}
 
 impl Default for BlockHeader {
 	fn default() -> BlockHeader {
@@ -353,7 +354,7 @@ pub struct Block {
 	/// The body - inputs/outputs/kernels
 	body: TransactionBody,
 }
-
+impl DefaultHashCache for Block {}
 impl Hashed for Block {
 	/// The hash of the underlying block.
 	fn hash(&self) -> Hash {

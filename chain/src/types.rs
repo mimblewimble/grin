@@ -14,7 +14,7 @@
 
 //! Base types that the block chain pipeline requires.
 
-use crate::core::core::hash::{Hash, Hashed, ZERO_HASH};
+use crate::core::core::hash::{DefaultHashCache, Hash, Hashed, ZERO_HASH};
 use crate::core::core::{Block, BlockHeader};
 use crate::core::pow::Difficulty;
 use crate::core::ser;
@@ -81,6 +81,7 @@ impl Hashed for Tip {
 		self.last_block_h
 	}
 }
+impl DefaultHashCache for Tip {}
 
 impl Default for Tip {
 	fn default() -> Self {

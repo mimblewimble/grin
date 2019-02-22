@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use self::core::core::hash::{DefaultHashable, Hash};
+use self::core::core::hash::{DefaultHashCache, DefaultHashable, Hash};
 use self::core::core::pmmr::{self, Backend};
 use self::core::core::BlockHeader;
 use self::core::ser;
@@ -26,6 +26,7 @@ use std::path::Path;
 pub struct TestElem(pub [u32; 4]);
 
 impl DefaultHashable for TestElem {}
+impl DefaultHashCache for TestElem {}
 
 impl FixedLength for TestElem {
 	const LEN: usize = 16;

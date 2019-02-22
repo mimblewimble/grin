@@ -21,7 +21,7 @@ use std::fs;
 use chrono::prelude::Utc;
 use croaring::Bitmap;
 
-use crate::core::core::hash::DefaultHashable;
+use crate::core::core::hash::{DefaultHashCache, DefaultHashable};
 use crate::core::core::pmmr::{Backend, PMMR};
 use crate::core::ser::{
 	Error, FixedLength, PMMRIndexHashable, PMMRable, Readable, Reader, Writeable, Writer,
@@ -905,6 +905,7 @@ fn load(pos: u64, elems: &[TestElem], backend: &mut store::pmmr::PMMRBackend<Tes
 struct TestElem(u32);
 
 impl DefaultHashable for TestElem {}
+impl DefaultHashCache for TestElem {}
 
 impl FixedLength for TestElem {
 	const LEN: usize = 4;

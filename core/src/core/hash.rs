@@ -37,9 +37,10 @@ pub const ZERO_HASH: Hash = Hash([0; 32]);
 pub struct Hash([u8; 32]);
 
 impl DefaultHashable for Hash {}
+impl DefaultHashCache for Hash {}
 
 impl Hash {
-	fn hash_with<T: Writeable>(&self, other: T) -> Hash {
+	pub fn hash_with<T: Writeable>(&self, other: T) -> Hash {
 		let mut hasher = HashWriter::default();
 		ser::Writeable::write(self, &mut hasher).unwrap();
 		ser::Writeable::write(&other, &mut hasher).unwrap();
@@ -221,8 +222,11 @@ impl ser::Writer for HashWriter {
 	}
 }
 
+pub trait GetHashCache {
+	fn get_cached(&self) -> Option<Hash>;
+}
 /// A trait for types that have a canonical hash
-pub trait Hashed {
+pub trait Hashed: GetHashCache {
 	/// Obtain the hash of the object
 	fn hash(&self) -> Hash;
 }
@@ -230,8 +234,17 @@ pub trait Hashed {
 /// Implementing this trait enables the default
 /// hash implementation
 pub trait DefaultHashable: Writeable {}
-impl<D: DefaultHashable> Hashed for D {
+pub trait DefaultHashCache {}
+impl<D: DefaultHashCache> GetHashCache for D {
+	fn get_cached(&self) -> Option<Hash> {
+		None
+	}
+}
+impl<D: DefaultHashable + GetHashCache> Hashed for D {
 	fn hash(&self) -> Hash {
+		if let Some(h) = self.get_cached() {
+			return h;
+		}
 		let mut hasher = HashWriter::default();
 		Writeable::write(self, &mut hasher).unwrap();
 		let mut ret = [0; 32];
@@ -244,7 +257,14 @@ impl<D: DefaultHashable> DefaultHashable for &D {}
 impl<D: DefaultHashable, E: DefaultHashable> DefaultHashable for (D, E) {}
 impl<D: DefaultHashable, E: DefaultHashable, F: DefaultHashable> DefaultHashable for (D, E, F) {}
 
+impl<D: GetHashCache> DefaultHashCache for &D {}
+impl<D: GetHashCache, E: GetHashCache> DefaultHashCache for (D, E) {}
+impl<D: GetHashCache, E: GetHashCache, F: GetHashCache> DefaultHashCache for (D, E, F) {}
+
 /// Implement Hashed trait for external types here
+impl DefaultHashCache for crate::util::secp::pedersen::RangeProof {}
+impl DefaultHashCache for Vec<u8> {}
+impl DefaultHashCache for u64 {}
 impl DefaultHashable for crate::util::secp::pedersen::RangeProof {}
 impl DefaultHashable for Vec<u8> {}
 impl DefaultHashable for u64 {}
