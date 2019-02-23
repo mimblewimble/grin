@@ -8,6 +8,46 @@
 
 ## Wallet Foreign Endpoint
 
+### GET Status
+
+Returns a simple status code that allows clients to check if a wallet foreign endpoint is
+listening.
+
+* **URL**
+
+  /v1/wallet/foreign/status
+
+* **Method:**
+
+  `GET`
+
+* **URL Params**
+
+  None
+
+* **Data Params**
+
+  None
+
+* **Success Response:**
+
+  * **Code:** 200
+  * **Content:**
+
+    None
+
+* **Error Response:**
+
+  None
+
+* **Sample Call:**
+
+  ```javascript
+    $.ajax({url: "/v1/wallet/foreign/status", success: function(r) {
+      console.log("Foreign wallet is listening.");
+	 }});
+  ```
+  
 ### POST Build Coinbase
 
 Creates a coinbase output for the given height and block fees
@@ -19,7 +59,7 @@ Creates a coinbase output for the given height and block fees
 * **Method:**
 
   `POST`
-  
+
 * **URL Params**
 
   None
@@ -81,7 +121,7 @@ Receives a transaction, modifying the slate accordingly (which can then be sent 
 * **Method:**
 
   `POST`
-  
+
 * **URL Params**
 
   None

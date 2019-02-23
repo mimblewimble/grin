@@ -679,7 +679,21 @@ where
 		))
 	}
 
-	fn handle_request(&self, req: Request<Body>) -> WalletResponseFuture {
+	fn handle_get_request(&self, req: Request<Body>) -> WalletResponseFuture {
+		match req
+			.uri()
+			.path()
+			.trim_right_matches("/")
+			.rsplit("/")
+			.next()
+			.unwrap()
+		{
+			"status" => Box::new(ok(response(StatusCode::OK, ""))),
+			_ => Box::new(ok(response(StatusCode::BAD_REQUEST, ""))),
+		}
+	}
+
+	fn handle_post_request(&self, req: Request<Body>) -> WalletResponseFuture {
 		let api = *APIForeign::new(self.wallet.clone());
 		match req
 			.uri()
@@ -707,11 +721,26 @@ where
 	C: NodeClient + Send + Sync + 'static,
 	K: Keychain + 'static,
 {
+	fn get(&self, req: Request<Body>) -> ResponseFuture {
+		Box::new(
+			self.handle_get_request(req)
+				.and_then(|r| ok(r))
+				.or_else(|e| {
+					error!("Request Error: {:?}", e);
+					ok(create_error_response(e))
+				}),
+		)
+	}
+
 	fn post(&self, req: Request<Body>) -> ResponseFuture {
-		Box::new(self.handle_request(req).and_then(|r| ok(r)).or_else(|e| {
-			error!("Request Error: {:?}", e);
-			ok(create_error_response(e))
-		}))
+		Box::new(
+			self.handle_post_request(req)
+				.and_then(|r| ok(r))
+				.or_else(|e| {
+					error!("Request Error: {:?}", e);
+					ok(create_error_response(e))
+				}),
+		)
 	}
 
 	fn options(&self, _req: Request<Body>) -> ResponseFuture {
