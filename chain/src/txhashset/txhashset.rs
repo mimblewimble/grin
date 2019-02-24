@@ -1356,17 +1356,19 @@ impl<'a> Extension<'a> {
 		let mut proof_count = 0;
 		let total_rproofs = pmmr::n_leaves(self.output_pmmr.unpruned_size());
 		for pos in self.output_pmmr.leaf_pos_iter() {
-			let out = self
-				.output_pmmr
-				.get_data(pos)
-				.ok_or::<Error>(ErrorKind::OutputNotFound.into())?;
-			commits.push(out.commit);
+			let output = self.output_pmmr.get_data(pos);
+			let proof = self.rproof_pmmr.get_data(pos);
 
-			let proof = self
-				.rproof_pmmr
-				.get_data(pos)
-				.ok_or::<Error>(ErrorKind::RangeproofNotFound.into())?;
-			proofs.push(proof);
+			// Output and corresponding rangeproof *must* exist.
+			// It is invalid for either to be missing and we fail immediately in this case.
+			match (output, proof) {
+				(None, _) => return Err(ErrorKind::OutputNotFound.into()),
+				(_, None) => return Err(ErrorKind::RangeproofNotFound.into()),
+				(Some(output), Some(proof)) => {
+					commits.push(output.commit);
+					proofs.push(proof);
+				}
+			}
 
 			proof_count += 1;
 
