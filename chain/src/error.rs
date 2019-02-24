@@ -131,6 +131,9 @@ pub enum ErrorKind {
 	/// We cannot process data once the Grin server has been stopped.
 	#[fail(display = "Stopped (Grin Shutting Down)")]
 	Stopped,
+	/// Internal Roaring Bitmap error
+	#[fail(display = "Roaring Bitmap error")]
+	Bitmap,
 }
 
 impl Display for Error {

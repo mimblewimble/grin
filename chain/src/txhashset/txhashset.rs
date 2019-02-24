@@ -272,9 +272,11 @@ impl TxHashSet {
 	}
 
 	/// build a new merkle proof for the given position.
-	pub fn merkle_proof(&mut self, commit: Commitment) -> Result<MerkleProof, String> {
-		let pos = self.commit_index.get_output_pos(&commit).unwrap();
-		PMMR::at(&mut self.output_pmmr_h.backend, self.output_pmmr_h.last_pos).merkle_proof(pos)
+	pub fn merkle_proof(&mut self, commit: Commitment) -> Result<MerkleProof, Error> {
+		let pos = self.commit_index.get_output_pos(&commit)?;
+		PMMR::at(&mut self.output_pmmr_h.backend, self.output_pmmr_h.last_pos)
+			.merkle_proof(pos)
+			.map_err(|_| ErrorKind::MerkleProof.into())
 	}
 
 	/// Compact the MMR data files and flush the rm logs
@@ -1590,6 +1592,5 @@ pub fn input_pos_to_rewind(
 		current = batch.get_previous_header(&current)?;
 	}
 
-	let bitmap = bitmap_fast_or(None, &mut block_input_bitmaps).unwrap();
-	Ok(bitmap)
+	bitmap_fast_or(None, &mut block_input_bitmaps).ok_or_else(|| ErrorKind::Bitmap.into())
 }
