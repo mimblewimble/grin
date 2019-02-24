@@ -17,39 +17,38 @@
 
 use cuckoocache::cache::{Cache, SaltedHasher};
 
-use crate::core::hash::{DefaultHashable, Hash, Hashed, ZERO_HASH};
+use crate::core::hash::HashWriter;
 use crate::core::{Output, TxKernel};
+use crate::ser::Writeable;
 use crate::util::RwLock;
-use rand::prelude::random;
+use byteorder::{BigEndian, ByteOrder};
 
 struct VerifierHasher {
-	salt: Hash,
+	hasher: HashWriter,
 }
-impl<E: DefaultHashable> SaltedHasher<E> for VerifierHasher {
+impl<E: Writeable> SaltedHasher<E> for VerifierHasher {
 	fn new() -> Self {
 		Self {
-			salt: Hash::from_vec(&random::<[u8; 32]>()[..]),
+			hasher: HashWriter::random_keyed(),
 		}
 	}
 	fn hashes(&self, e: &E) -> [u32; 8] {
-		let mut hs = [0u32; 8];
-
-		for (v, h) in (self.salt, e)
-			.hash()
-			.as_bytes()
-			.chunks_exact(4)
-			.zip(hs.iter_mut())
-		{
-			let mut u = [0u8; 4];
-			u.copy_from_slice(v);
-			*h = u32::from_ne_bytes(u);
+		let mut hasher = self.hasher.clone();
+		Writeable::write(e, &mut hasher).unwrap();
+		let mut h = [0; 32];
+		hasher.finalize(&mut h);
+		let mut ret = [0u32; 8];
+		for i in 0..8 {
+			ret[i] = BigEndian::read_u32(&h[i * 4..(i + 1) * 4]);
 		}
-		hs
+		ret
 	}
 }
 impl Default for VerifierHasher {
 	fn default() -> Self {
-		Self { salt: ZERO_HASH }
+		Self {
+			hasher: HashWriter::default(),
+		}
 	}
 }
 /// Verifier cache for caching expensive verification results.

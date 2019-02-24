@@ -27,6 +27,7 @@ use crate::blake2::blake2b::Blake2b;
 
 use crate::ser::{self, AsFixedBytes, Error, FixedLength, Readable, Reader, Writeable, Writer};
 use crate::util;
+use rand::prelude::random;
 
 /// A hash consisting of all zeroes, used as a sentinel. No known preimage.
 pub const ZERO_HASH: Hash = Hash([0; 32]);
@@ -182,6 +183,7 @@ impl Default for Hash {
 }
 
 /// Serializer that outputs a hash of the serialized object
+#[derive(Clone)]
 pub struct HashWriter {
 	state: Blake2b,
 }
@@ -199,6 +201,12 @@ impl HashWriter {
 		let mut res = [0; 32];
 		res.copy_from_slice(self.state.finalize().as_bytes());
 		Hash(res)
+	}
+
+	pub fn random_keyed() -> HashWriter {
+		HashWriter {
+			state: Blake2b::with_key(32, &random::<[u8; 32]>()[..]),
+		}
 	}
 }
 
