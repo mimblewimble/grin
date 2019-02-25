@@ -1447,9 +1447,26 @@ pub fn zip_write(
 ) -> Result<(), Error> {
 	let txhashset_path = Path::new(&root_dir).join(TXHASHSET_SUBDIR);
 	fs::create_dir_all(txhashset_path.clone())?;
-	zip::decompress(txhashset_data, &txhashset_path)
+	zip::decompress(txhashset_data, &txhashset_path, expected_file)
 		.map_err(|ze| ErrorKind::Other(ze.to_string()))?;
 	check_and_remove_files(&txhashset_path, header)
+}
+
+fn expected_file(path: &Path) -> bool {
+	use lazy_static::lazy_static;
+	use regex::Regex;
+	let s_path = path.to_str().unwrap_or_else(|| "");
+	lazy_static! {
+		static ref RE: Regex = Regex::new(
+			format!(
+				r#"^({}|{}|{})(/pmmr_(hash|data|leaf|prun)\.bin(\.\w*)?)?$"#,
+				OUTPUT_SUBDIR, KERNEL_SUBDIR, RANGE_PROOF_SUBDIR
+			)
+			.as_str()
+		)
+		.unwrap();
+	}
+	RE.is_match(&s_path)
 }
 
 /// Check a txhashset directory and remove any unexpected
@@ -1593,4 +1610,24 @@ pub fn input_pos_to_rewind(
 	}
 
 	bitmap_fast_or(None, &mut block_input_bitmaps).ok_or_else(|| ErrorKind::Bitmap.into())
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+
+	#[test]
+	fn test_expected_files() {
+		assert!(!expected_file(Path::new("kernels")));
+		assert!(!expected_file(Path::new("xkernel")));
+		assert!(expected_file(Path::new("kernel")));
+		assert!(expected_file(Path::new("kernel/pmmr_data.bin")));
+		assert!(expected_file(Path::new("kernel/pmmr_hash.bin")));
+		assert!(expected_file(Path::new("kernel/pmmr_leaf.bin")));
+		assert!(expected_file(Path::new("kernel/pmmr_prun.bin")));
+		assert!(expected_file(Path::new("kernel/pmmr_leaf.bin.deadbeef")));
+		assert!(!expected_file(Path::new("xkernel/pmmr_data.bin")));
+		assert!(!expected_file(Path::new("kernel/pmmrx_data.bin")));
+		assert!(!expected_file(Path::new("kernel/pmmr_data.binx")));
+	}
 }
