@@ -119,8 +119,6 @@ pub fn connect_and_monitor(
 						preferred_peers.clone(),
 					);
 
-					update_dandelion_relay(peers.clone(), dandelion_config.clone());
-
 					prev = Utc::now();
 					start_attempt = cmp::min(6, start_attempt + 1);
 				}
@@ -241,21 +239,6 @@ fn monitor_peers(
 			p.addr,
 		);
 		tx.send(p.addr).unwrap();
-	}
-}
-
-fn update_dandelion_relay(peers: Arc<p2p::Peers>, dandelion_config: DandelionConfig) {
-	// Dandelion Relay Updater
-	let dandelion_relay = peers.get_dandelion_relay();
-	if let Some((last_added, _)) = dandelion_relay {
-		let dandelion_interval = Utc::now().timestamp() - last_added;
-		if dandelion_interval >= dandelion_config.relay_secs.unwrap() as i64 {
-			debug!("monitor_peers: updating expired dandelion relay");
-			peers.update_dandelion_relay();
-		}
-	} else {
-		debug!("monitor_peers: no dandelion relay updating");
-		peers.update_dandelion_relay();
 	}
 }
 

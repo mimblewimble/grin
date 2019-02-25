@@ -27,6 +27,7 @@ use failure::Fail;
 use grin_core as core;
 use grin_keychain as keychain;
 
+/// TODO - This now maps to the "epoch length"?
 /// Dandelion relay timer
 const DANDELION_RELAY_SECS: u64 = 600;
 
@@ -37,7 +38,7 @@ const DANDELION_EMBARGO_SECS: u64 = 180;
 const DANDELION_PATIENCE_SECS: u64 = 10;
 
 /// Dandelion stem probability (stem 90% of the time, fluff 10%).
-const DANDELION_STEM_PROBABILITY: usize = 90;
+const DANDELION_STEM_PROBABILITY: u64 = 90;
 
 /// Configuration for "Dandelion".
 /// Note: shared between p2p and pool.
@@ -56,7 +57,18 @@ pub struct DandelionConfig {
 	pub patience_secs: Option<u64>,
 	/// Dandelion stem probability (stem 90% of the time, fluff 10% etc.)
 	#[serde = "default_dandelion_stem_probability"]
-	pub stem_probability: Option<usize>,
+	pub stem_probability: Option<u64>,
+}
+
+impl DandelionConfig {
+	pub fn stem_probability(&self) -> u64 {
+		self.stem_probability.unwrap_or(DANDELION_STEM_PROBABILITY)
+	}
+
+	// TODO - Cleanup config for Dandelion++
+	pub fn epoch_secs(&self) -> u64 {
+		self.relay_secs.unwrap_or(DANDELION_RELAY_SECS)
+	}
 }
 
 impl Default for DandelionConfig {
@@ -82,7 +94,7 @@ fn default_dandelion_patience_secs() -> Option<u64> {
 	Some(DANDELION_PATIENCE_SECS)
 }
 
-fn default_dandelion_stem_probability() -> Option<usize> {
+fn default_dandelion_stem_probability() -> Option<u64> {
 	Some(DANDELION_STEM_PROBABILITY)
 }
 
@@ -138,29 +150,12 @@ fn default_mineable_max_weight() -> usize {
 /// A single (possibly aggregated) transaction.
 #[derive(Clone, Debug)]
 pub struct PoolEntry {
-	/// The state of the pool entry.
-	pub state: PoolEntryState,
 	/// Info on where this tx originated from.
 	pub src: TxSource,
 	/// Timestamp of when this tx was originally added to the pool.
 	pub tx_at: DateTime<Utc>,
 	/// The transaction itself.
 	pub tx: Transaction,
-}
-
-/// The possible states a pool entry can be in.
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub enum PoolEntryState {
-	/// A new entry, not yet processed.
-	Fresh,
-	/// Tx to be included in the next "stem" run.
-	ToStem,
-	/// Tx previously "stemmed" and propagated.
-	Stemmed,
-	/// Tx to be included in the next "fluff" run.
-	ToFluff,
-	/// Tx previously "fluffed" and broadcast.
-	Fluffed,
 }
 
 /// Placeholder: the data representing where we heard about a tx from.
@@ -267,13 +262,10 @@ pub trait BlockChain: Sync + Send {
 /// downstream processing of valid transactions by the rest of the system, most
 /// importantly the broadcasting of transactions to our peers.
 pub trait PoolAdapter: Send + Sync {
-	/// The transaction pool has accepted this transactions as valid and added
-	/// it to its internal cache.
+	/// The transaction pool has accepted this transaction as valid.
 	fn tx_accepted(&self, tx: &transaction::Transaction);
-	/// The stem transaction pool has accepted this transactions as valid and
-	/// added it to its internal cache, we have waited for the "patience" timer
-	/// to fire and we now want to propagate the tx to the next Dandelion relay.
-	fn stem_tx_accepted(&self, tx: &transaction::Transaction) -> Result<(), PoolError>;
+	/// The stem transaction pool has accepted this transactions as valid.
+	fn stem_tx_accepted(&self, tx: &transaction::Transaction);
 }
 
 /// Dummy adapter used as a placeholder for real implementations
@@ -281,9 +273,6 @@ pub trait PoolAdapter: Send + Sync {
 pub struct NoopAdapter {}
 
 impl PoolAdapter for NoopAdapter {
-	fn tx_accepted(&self, _: &transaction::Transaction) {}
-
-	fn stem_tx_accepted(&self, _: &transaction::Transaction) -> Result<(), PoolError> {
-		Ok(())
-	}
+	fn tx_accepted(&self, _tx: &transaction::Transaction) {}
+	fn stem_tx_accepted(&self, _tx: &transaction::Transaction) {}
 }

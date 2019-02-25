@@ -23,9 +23,7 @@ use self::core::core::verifier_cache::VerifierCache;
 use self::core::core::{transaction, Block, BlockHeader, Transaction, Weighting};
 use self::util::RwLock;
 use crate::pool::Pool;
-use crate::types::{
-	BlockChain, PoolAdapter, PoolConfig, PoolEntry, PoolEntryState, PoolError, TxSource,
-};
+use crate::types::{BlockChain, PoolAdapter, PoolConfig, PoolEntry, PoolError, TxSource};
 use chrono::prelude::*;
 use grin_core as core;
 use grin_util as util;
@@ -79,10 +77,8 @@ impl TransactionPool {
 	fn add_to_stempool(&mut self, entry: PoolEntry, header: &BlockHeader) -> Result<(), PoolError> {
 		// Add tx to stempool (passing in all txs from txpool to validate against).
 		self.stempool
-			.add_to_pool(entry, self.txpool.all_transactions(), header)?;
-
-		// Note: we do not notify the adapter here,
-		// we let the dandelion monitor handle this.
+			.add_to_pool(entry.clone(), self.txpool.all_transactions(), header)?;
+		self.adapter.stem_tx_accepted(&entry.tx);
 		Ok(())
 	}
 
@@ -159,28 +155,18 @@ impl TransactionPool {
 		self.blockchain.verify_coinbase_maturity(&tx)?;
 
 		let entry = PoolEntry {
-			state: PoolEntryState::Fresh,
 			src,
 			tx_at: Utc::now(),
 			tx,
 		};
 
-		// If we are in "stem" mode then check if this is a new tx or if we have seen it before.
-		// If new tx - add it to our stempool.
-		// If we have seen any of the kernels before then fallback to fluff,
-		// adding directly to txpool.
-		if stem
-			&& self
-				.stempool
-				.find_matching_transactions(entry.tx.kernels())
-				.is_empty()
-		{
-			self.add_to_stempool(entry, header)?;
-			return Ok(());
+		if stem {
+			self.add_to_stempool(entry.clone(), header)?;
+		} else {
+			self.add_to_txpool(entry.clone(), header)?;
+			self.add_to_reorg_cache(entry);
 		}
 
-		self.add_to_txpool(entry.clone(), header)?;
-		self.add_to_reorg_cache(entry);
 		Ok(())
 	}
 

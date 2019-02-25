@@ -23,7 +23,7 @@ use self::core::core::{
 	Block, BlockHeader, BlockSums, Committed, Transaction, TxKernel, Weighting,
 };
 use self::util::RwLock;
-use crate::types::{BlockChain, PoolEntry, PoolEntryState, PoolError};
+use crate::types::{BlockChain, PoolEntry, PoolError};
 use grin_core as core;
 use grin_util as util;
 use std::collections::{HashMap, HashSet};
@@ -175,23 +175,6 @@ impl Pool {
 	) -> Result<Vec<Transaction>, PoolError> {
 		let valid_txs = self.validate_raw_txs(txs, extra_tx, header, Weighting::NoLimit)?;
 		Ok(valid_txs)
-	}
-
-	pub fn get_transactions_in_state(&self, state: PoolEntryState) -> Vec<Transaction> {
-		self.entries
-			.iter()
-			.filter(|x| x.state == state)
-			.map(|x| x.tx.clone())
-			.collect::<Vec<_>>()
-	}
-
-	// Transition the specified pool entries to the new state.
-	pub fn transition_to_state(&mut self, txs: &[Transaction], state: PoolEntryState) {
-		for x in &mut self.entries {
-			if txs.contains(&x.tx) {
-				x.state = state;
-			}
-		}
 	}
 
 	// Aggregate this new tx with all existing txs in the pool.
