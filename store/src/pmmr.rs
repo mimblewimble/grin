@@ -124,7 +124,7 @@ impl<T: PMMRable> Backend<T> for PMMRBackend<T> {
 	/// Returns an iterator over all the leaf positions.
 	/// for a prunable PMMR this is an iterator over the leaf_set bitmap.
 	/// For a non-prunable PMMR this is *all* leaves (this is not yet implemented).
-	fn leaf_pos_iter<'a>(&'a self) -> Box<Iterator<Item = u64> + 'a> {
+	fn leaf_pos_iter(&self) -> Box<Iterator<Item = u64> + '_> {
 		if self.prunable {
 			Box::new(self.leaf_set.iter())
 		} else {
