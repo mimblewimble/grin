@@ -199,13 +199,7 @@ impl<T: PMMRable> PMMRBackend<T> {
 				data_dir.join(PMMR_LEAF_FILE).to_str().unwrap(),
 				header.hash()
 			);
-			// Check for a ... (3 dot) ending version of the file - could probably be removed after mainnet
-			let compatible_snapshot_path = PathBuf::from(leaf_snapshot_path.clone() + "...");
-			if compatible_snapshot_path.exists() {
-				LeafSet::copy_snapshot(&leaf_set_path, &compatible_snapshot_path)?;
-			} else {
-				LeafSet::copy_snapshot(&leaf_set_path, &PathBuf::from(leaf_snapshot_path))?;
-			}
+			LeafSet::copy_snapshot(&leaf_set_path, &PathBuf::from(leaf_snapshot_path))?;
 		}
 
 		let leaf_set = LeafSet::open(&leaf_set_path)?;
