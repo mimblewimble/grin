@@ -660,7 +660,7 @@ impl Chain {
 
 	/// Return a merkle proof valid for the current output pmmr state at the
 	/// given pos
-	pub fn get_merkle_proof_for_pos(&self, commit: Commitment) -> Result<MerkleProof, String> {
+	pub fn get_merkle_proof_for_pos(&self, commit: Commitment) -> Result<MerkleProof, Error> {
 		let mut txhashset = self.txhashset.write();
 		txhashset.merkle_proof(commit)
 	}

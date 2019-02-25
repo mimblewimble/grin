@@ -68,7 +68,8 @@ impl<'a> RewindableKernelView<'a> {
 	/// fast sync where a reorg past the horizon could allow a whole rewrite of
 	/// the kernel set.
 	pub fn validate_root(&self) -> Result<(), Error> {
-		if self.pmmr.root() != self.header.kernel_root {
+		let root = self.pmmr.root().map_err(|_| ErrorKind::InvalidRoot)?;
+		if root != self.header.kernel_root {
 			return Err(ErrorKind::InvalidTxHashSet(format!(
 				"Kernel root at {} does not match",
 				self.header.height
