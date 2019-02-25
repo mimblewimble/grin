@@ -76,7 +76,7 @@ where
 	}
 
 	/// Iterator over current (unpruned, unremoved) leaf positions.
-	pub fn leaf_pos_iter(&'a self) -> Box<Iterator<Item = u64> + 'a> {
+	pub fn leaf_pos_iter(&self) -> impl Iterator<Item = u64> + '_ {
 		self.backend.leaf_pos_iter()
 	}
 
