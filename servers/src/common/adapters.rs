@@ -721,20 +721,28 @@ impl pool::PoolAdapter for PoolToNetAdapter {
 	fn stem_tx_accepted(&self, tx: &core::Transaction) {
 		let mut epoch = self.dandelion_epoch.write();
 		if epoch.is_expired() {
-			warn!("epoch expired, setting up next epoch");
+			debug!("Epoch expired, setting up next epoch.");
 			epoch.next_epoch(&self.peers());
 		}
 
+		// If "stem" epoch attempt to relay the tx to the next Dandelion relay.
+		// Fallback to immediately fluffing the tx if we cannot stem for any reason.
+		// If "fluff" epoch then nothing to do right now (fluff when epoch expires).
 		if epoch.is_stem() {
 			if let Some(peer) = epoch.relay_peer(&self.peers()) {
-				warn!("Stemming this epoch, relaying to next peer.");
-				peer.send_stem_transaction(tx);
+				match peer.send_stem_transaction(tx) {
+					Ok(_) => info!("Stemming this epoch, relaying to next peer."),
+					Err(e) => {
+						error!("Stemming tx failed. Fluffing. {:?}", e);
+						self.peers().broadcast_transaction(tx);
+					}
+				}
 			} else {
-				// TODO - no relay peer, no available outgoing peers, do we fluff here?
-				error!("What to do here? We have no relay peer?");
+				error!("No relay peer. Fluffing.");
+				self.peers().broadcast_transaction(tx);
 			}
 		} else {
-			warn!("Not forwarding stem tx. Collecting, aggregating and fluffing txs this epoch. (Ok and expected).");
+			info!("Fluff epoch. Aggregating stem tx(s). Fluffing when epoch expires.");
 		}
 	}
 }
