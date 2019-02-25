@@ -273,7 +273,7 @@ impl TxHashSet {
 
 	/// build a new merkle proof for the given position.
 	pub fn merkle_proof(&mut self, commit: Commitment) -> Result<MerkleProof, Error> {
-		let pos = self.commit_index.get_output_pos(&commit)?;
+		let pos = self.commit_index.read().get_output_pos(&commit)?;
 		PMMR::at(&mut self.output_pmmr_h.backend, self.output_pmmr_h.last_pos)
 			.merkle_proof(pos)
 			.map_err(|_| ErrorKind::MerkleProof.into())
