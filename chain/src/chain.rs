@@ -1017,25 +1017,31 @@ impl Chain {
 	pub fn compact(&self) -> Result<(), Error> {
 		// Note: We take a lock on the stop_state here and do not release it until
 		// we have finished processing this chain compaction operation.
+		// We want to avoid shutting the node down in the middle of compacting the data.
 		let stop_lock = self.stop_state.lock();
 		if stop_lock.is_stopped() {
 			return Err(ErrorKind::Stopped.into());
 		}
 
+		// Take a write lock on the txhashet and start a new writeable db batch.
 		let mut txhashset = self.txhashset.write();
 		let mut batch = self.store.batch()?;
 
+		// Compact the txhashset itself (rewriting the pruned backend files).
 		txhashset.compact(&mut batch)?;
 
+		// Rebuild our output_pos index in the db based on current UTXO set.
 		txhashset::extending(&mut txhashset, &mut batch, |extension| {
 			extension.rebuild_index()?;
 			Ok(())
 		})?;
 
+		// If we are not in archival mode remove historical blocks from the db.
 		if !self.archive_mode {
 			self.remove_historical_blocks(&txhashset, &mut batch)?;
 		}
 
+		// Commit all the above db changes.
 		batch.commit()?;
 
 		Ok(())
