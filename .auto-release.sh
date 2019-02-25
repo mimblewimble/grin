@@ -6,7 +6,7 @@ export CHANGELOG_GITHUB_TOKEN="$token"
 
 tagname=`git describe --tags --exact-match 2>/dev/null || git symbolic-ref -q --short HEAD`
 
-echo 'make a tarball for the release binary...\n'
+echo 'package the release binary...\n'
 
 if [[ $TRAVIS_OS_NAME == 'osx' ]]; then
 
@@ -16,7 +16,19 @@ if [[ $TRAVIS_OS_NAME == 'osx' ]]; then
     md5 "grin-$tagname-$TRAVIS_JOB_ID-osx.tgz" > "grin-$tagname-$TRAVIS_JOB_ID-osx.tgz"-md5sum.txt
     /bin/ls -ls *-md5sum.txt  | awk '{print $6,$7,$8,$9,$10}'
     cd - > /dev/null;
-    echo "tarball generated\n"
+    echo "osx tarball generated\n"
+
+    # Only generate changelog on Linux platform, to avoid duplication
+    exit 0
+elif [[ $TRAVIS_OS_NAME == 'windows' ]]; then
+
+    # Custom requirements on windows
+    cd target/release ; rm -f *.zip ; 7z a -tzip "grin-$tagname-$TRAVIS_JOB_ID-win-x64.zip" grin.exe
+    /bin/ls -ls *.zip  | awk '{print $6,$7,$8,$9,$10}'
+    md5sum "grin-$tagname-$TRAVIS_JOB_ID-win-x64.zip" > "grin-$tagname-$TRAVIS_JOB_ID-win-x64.zip"-md5sum.txt
+    /bin/ls -ls *-md5sum.txt  | awk '{print $6,$7,$8,$9,$10}'
+    cd - > /dev/null;
+    echo "win x64 zip file generated\n"
 
     # Only generate changelog on Linux platform, to avoid duplication
     exit 0
@@ -27,7 +39,7 @@ else
     md5sum "grin-$tagname-$TRAVIS_JOB_ID-linux-amd64.tgz" > "grin-$tagname-$TRAVIS_JOB_ID-linux-amd64.tgz"-md5sum.txt
     /bin/ls -ls *-md5sum.txt  | awk '{print $6,$7,$8,$9,$10}'
     cd - > /dev/null;
-    echo "tarball generated\n"
+    echo "linux tarball generated\n"
 fi
 
 version="$tagname"
