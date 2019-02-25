@@ -16,7 +16,6 @@ use std::cmp;
 use std::env;
 use std::fs::File;
 use std::io::{BufWriter, Write};
-use std::net::SocketAddr;
 use std::sync::Arc;
 
 use crate::conn::{Message, MessageHandler, Response};
@@ -25,18 +24,18 @@ use crate::util::{RateCounter, RwLock};
 use chrono::prelude::Utc;
 
 use crate::msg::{
-	BanReason, GetPeerAddrs, Headers, Locator, PeerAddrs, Ping, Pong, SockAddr, TxHashSetArchive,
+	BanReason, GetPeerAddrs, Headers, Locator, PeerAddrs, Ping, Pong, TxHashSetArchive,
 	TxHashSetRequest, Type,
 };
-use crate::types::{Error, NetAdapter};
+use crate::types::{Error, NetAdapter, PeerAddr};
 
 pub struct Protocol {
 	adapter: Arc<dyn NetAdapter>,
-	addr: SocketAddr,
+	addr: PeerAddr,
 }
 
 impl Protocol {
-	pub fn new(adapter: Arc<dyn NetAdapter>, addr: SocketAddr) -> Protocol {
+	pub fn new(adapter: Arc<dyn NetAdapter>, addr: PeerAddr) -> Protocol {
 		Protocol { adapter, addr }
 	}
 }
@@ -231,19 +230,17 @@ impl MessageHandler for Protocol {
 
 			Type::GetPeerAddrs => {
 				let get_peers: GetPeerAddrs = msg.body()?;
-				let peer_addrs = adapter.find_peer_addrs(get_peers.capabilities);
+				let peers = adapter.find_peer_addrs(get_peers.capabilities);
 				Ok(Some(Response::new(
 					Type::PeerAddrs,
-					PeerAddrs {
-						peers: peer_addrs.iter().map(|sa| SockAddr(*sa)).collect(),
-					},
+					PeerAddrs { peers },
 					writer,
 				)))
 			}
 
 			Type::PeerAddrs => {
 				let peer_addrs: PeerAddrs = msg.body()?;
-				adapter.peer_addrs_received(peer_addrs.peers.iter().map(|pa| pa.0).collect());
+				adapter.peer_addrs_received(peer_addrs.peers);
 				Ok(None)
 			}
 

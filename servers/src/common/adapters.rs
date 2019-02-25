@@ -17,7 +17,6 @@
 
 use crate::util::RwLock;
 use std::fs::File;
-use std::net::SocketAddr;
 use std::sync::{Arc, Weak};
 use std::thread;
 use std::time::Instant;
@@ -31,6 +30,7 @@ use crate::core::core::{BlockHeader, BlockSums, CompactBlock};
 use crate::core::pow::Difficulty;
 use crate::core::{core, global};
 use crate::p2p;
+use crate::p2p::types::PeerAddr;
 use crate::pool;
 use crate::util::OneTime;
 use chrono::prelude::*;
@@ -62,7 +62,7 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 		self.tx_pool.read().retrieve_tx_by_kernel_hash(kernel_hash)
 	}
 
-	fn tx_kernel_received(&self, kernel_hash: Hash, addr: SocketAddr) {
+	fn tx_kernel_received(&self, kernel_hash: Hash, addr: PeerAddr) {
 		// nothing much we can do with a new transaction while syncing
 		if self.sync_state.is_syncing() {
 			return;
@@ -71,7 +71,7 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 		let tx = self.tx_pool.read().retrieve_tx_by_kernel_hash(kernel_hash);
 
 		if tx.is_none() {
-			self.request_transaction(kernel_hash, &addr);
+			self.request_transaction(kernel_hash, addr);
 		}
 	}
 
@@ -107,7 +107,7 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 		}
 	}
 
-	fn block_received(&self, b: core::Block, addr: SocketAddr, was_requested: bool) -> bool {
+	fn block_received(&self, b: core::Block, addr: PeerAddr, was_requested: bool) -> bool {
 		debug!(
 			"Received block {} at {} from {} [in/out/kern: {}/{}/{}] going to process.",
 			b.hash(),
@@ -120,7 +120,7 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 		self.process_block(b, addr, was_requested)
 	}
 
-	fn compact_block_received(&self, cb: core::CompactBlock, addr: SocketAddr) -> bool {
+	fn compact_block_received(&self, cb: core::CompactBlock, addr: PeerAddr) -> bool {
 		let bhash = cb.hash();
 		debug!(
 			"Received compact_block {} at {} from {} [out/kern/kern_ids: {}/{}/{}] going to process.",
@@ -187,7 +187,7 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 				} else {
 					if self.sync_state.status() == SyncStatus::NoSync {
 						debug!("adapter: block invalid after hydration, requesting full block");
-						self.request_block(&cb.header, &addr);
+						self.request_block(&cb.header, addr);
 						true
 					} else {
 						debug!("block invalid after hydration, ignoring it, cause still syncing");
@@ -201,7 +201,7 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 		}
 	}
 
-	fn header_received(&self, bh: core::BlockHeader, addr: SocketAddr) -> bool {
+	fn header_received(&self, bh: core::BlockHeader, addr: PeerAddr) -> bool {
 		let bhash = bh.hash();
 		debug!(
 			"Received block header {} at {} from {}, going to process.",
@@ -227,13 +227,13 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 
 		// we have successfully processed a block header
 		// so we can go request the block itself
-		self.request_compact_block(&bh, &addr);
+		self.request_compact_block(&bh, addr);
 
 		// done receiving the header
 		true
 	}
 
-	fn headers_received(&self, bhs: &[core::BlockHeader], addr: SocketAddr) -> bool {
+	fn headers_received(&self, bhs: &[core::BlockHeader], addr: PeerAddr) -> bool {
 		info!("Received {} block headers from {}", bhs.len(), addr,);
 
 		if bhs.len() == 0 {
@@ -342,7 +342,7 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 	/// If we're willing to accept that new state, the data stream will be
 	/// read as a zip file, unzipped and the resulting state files should be
 	/// rewound to the provided indexes.
-	fn txhashset_write(&self, h: Hash, txhashset_data: File, _peer_addr: SocketAddr) -> bool {
+	fn txhashset_write(&self, h: Hash, txhashset_data: File, _peer_addr: PeerAddr) -> bool {
 		// check status again after download, in case 2 txhashsets made it somehow
 		if let SyncStatus::TxHashsetDownload { .. } = self.sync_state.status() {
 		} else {
@@ -421,7 +421,7 @@ impl NetToChainAdapter {
 
 	// pushing the new block through the chain pipeline
 	// remembering to reset the head if we have a bad block
-	fn process_block(&self, b: core::Block, addr: SocketAddr, was_requested: bool) -> bool {
+	fn process_block(&self, b: core::Block, addr: PeerAddr, was_requested: bool) -> bool {
 		// We cannot process blocks earlier than the horizon so check for this here.
 		{
 			let head = self.chain().head().unwrap();
@@ -458,7 +458,7 @@ impl NetToChainAdapter {
 								&& !self.sync_state.is_syncing()
 							{
 								debug!("process_block: received an orphan block, checking the parent: {:}", previous.hash());
-								self.request_block_by_hash(previous.hash(), &addr)
+								self.request_block_by_hash(previous.hash(), addr)
 							}
 						}
 						true
@@ -525,7 +525,7 @@ impl NetToChainAdapter {
 		}
 	}
 
-	fn request_transaction(&self, h: Hash, addr: &SocketAddr) {
+	fn request_transaction(&self, h: Hash, addr: PeerAddr) {
 		self.send_tx_request_to_peer(h, addr, |peer, h| peer.send_tx_request(h))
 	}
 
@@ -533,24 +533,24 @@ impl NetToChainAdapter {
 	// it into a full block then fallback to requesting the full block
 	// from the same peer that gave us the compact block
 	// consider additional peers for redundancy?
-	fn request_block(&self, bh: &BlockHeader, addr: &SocketAddr) {
+	fn request_block(&self, bh: &BlockHeader, addr: PeerAddr) {
 		self.request_block_by_hash(bh.hash(), addr)
 	}
 
-	fn request_block_by_hash(&self, h: Hash, addr: &SocketAddr) {
+	fn request_block_by_hash(&self, h: Hash, addr: PeerAddr) {
 		self.send_block_request_to_peer(h, addr, |peer, h| peer.send_block_request(h))
 	}
 
 	// After we have received a block header in "header first" propagation
 	// we need to go request the block (compact representation) from the
 	// same peer that gave us the header (unless we have already accepted the block)
-	fn request_compact_block(&self, bh: &BlockHeader, addr: &SocketAddr) {
+	fn request_compact_block(&self, bh: &BlockHeader, addr: PeerAddr) {
 		self.send_block_request_to_peer(bh.hash(), addr, |peer, h| {
 			peer.send_compact_block_request(h)
 		})
 	}
 
-	fn send_tx_request_to_peer<F>(&self, h: Hash, addr: &SocketAddr, f: F)
+	fn send_tx_request_to_peer<F>(&self, h: Hash, addr: PeerAddr, f: F)
 	where
 		F: Fn(&p2p::Peer, Hash) -> Result<(), p2p::Error>,
 	{
@@ -567,7 +567,7 @@ impl NetToChainAdapter {
 		}
 	}
 
-	fn send_block_request_to_peer<F>(&self, h: Hash, addr: &SocketAddr, f: F)
+	fn send_block_request_to_peer<F>(&self, h: Hash, addr: PeerAddr, f: F)
 	where
 		F: Fn(&p2p::Peer, Hash) -> Result<(), p2p::Error>,
 	{

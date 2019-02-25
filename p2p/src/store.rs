@@ -17,17 +17,15 @@
 use chrono::Utc;
 use num::FromPrimitive;
 use rand::{thread_rng, Rng};
-use std::net::SocketAddr;
 
 use crate::core::ser::{self, Readable, Reader, Writeable, Writer};
-use crate::msg::SockAddr;
-use crate::types::{Capabilities, ReasonForBan};
+use crate::types::{Capabilities, PeerAddr, ReasonForBan};
 use grin_store::{self, option_to_not_found, to_key, Error};
 use grin_util::RwLock;
 
 const STORE_SUBPATH: &'static str = "peers";
 
-const PEER_PREFIX: u8 = 'p' as u8;
+const PEER_PREFIX: u8 = 'P' as u8;
 
 /// Types of messages
 enum_from_primitive! {
@@ -43,7 +41,7 @@ enum_from_primitive! {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PeerData {
 	/// Network address of the peer.
-	pub addr: SocketAddr,
+	pub addr: PeerAddr,
 	/// What capabilities the peer advertises. Unknown until a successful
 	/// connection.
 	pub capabilities: Capabilities,
@@ -61,7 +59,7 @@ pub struct PeerData {
 
 impl Writeable for PeerData {
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
-		SockAddr(self.addr).write(writer)?;
+		self.addr.write(writer)?;
 		ser_multiwrite!(
 			writer,
 			[write_u32, self.capabilities.bits()],
@@ -77,7 +75,7 @@ impl Writeable for PeerData {
 
 impl Readable for PeerData {
 	fn read(reader: &mut dyn Reader) -> Result<PeerData, ser::Error> {
-		let addr = SockAddr::read(reader)?;
+		let addr = PeerAddr::read(reader)?;
 		let capab = reader.read_u32()?;
 		let ua = reader.read_bytes_len_prefix()?;
 		let (fl, lb, br) = ser_multiread!(reader, read_u8, read_i64, read_i32);
@@ -97,7 +95,7 @@ impl Readable for PeerData {
 
 		match State::from_u8(fl) {
 			Some(flags) => Ok(PeerData {
-				addr: addr.0,
+				addr,
 				capabilities,
 				user_agent,
 				flags: flags,
@@ -133,7 +131,7 @@ impl PeerStore {
 		batch.commit()
 	}
 
-	pub fn get_peer(&self, peer_addr: SocketAddr) -> Result<PeerData, Error> {
+	pub fn get_peer(&self, peer_addr: PeerAddr) -> Result<PeerData, Error> {
 		let db = self.db.read();
 		option_to_not_found(
 			db.get_ser(&peer_key(peer_addr)[..]),
@@ -141,14 +139,14 @@ impl PeerStore {
 		)
 	}
 
-	pub fn exists_peer(&self, peer_addr: SocketAddr) -> Result<bool, Error> {
+	pub fn exists_peer(&self, peer_addr: PeerAddr) -> Result<bool, Error> {
 		let db = self.db.read();
 		db.exists(&peer_key(peer_addr)[..])
 	}
 
 	/// TODO - allow below added to avoid github issue reports
 	#[allow(dead_code)]
-	pub fn delete_peer(&mut self, peer_addr: SocketAddr) -> Result<(), Error> {
+	pub fn delete_peer(&self, peer_addr: PeerAddr) -> Result<(), Error> {
 		let mut s = self.db.write();
 		let batch = s.batch()?;
 		batch.delete(&peer_key(peer_addr)[..])?;
@@ -166,17 +164,6 @@ impl PeerStore {
 		peers.iter().take(count).cloned().collect()
 	}
 
-	/// Query all peers with same IP address, and ignore the port
-	pub fn find_peers_by_ip(&self, peer_addr: SocketAddr) -> Vec<PeerData> {
-		let db = self.db.read();
-		db.iter::<PeerData>(&to_key(
-			PEER_PREFIX,
-			&mut format!("{}", peer_addr.ip()).into_bytes(),
-		))
-		.unwrap()
-		.collect::<Vec<_>>()
-	}
-
 	/// List all known peers
 	/// Used for /v1/peers/all api endpoint
 	pub fn all_peers(&self) -> Vec<PeerData> {
@@ -187,7 +174,7 @@ impl PeerStore {
 
 	/// Convenience method to load a peer data, update its status and save it
 	/// back. If new state is Banned its last banned time will be updated too.
-	pub fn update_state(&self, peer_addr: SocketAddr, new_state: State) -> Result<(), Error> {
+	pub fn update_state(&self, peer_addr: PeerAddr, new_state: State) -> Result<(), Error> {
 		let mut s = self.db.write();
 		let batch = s.batch()?;
 
@@ -200,7 +187,7 @@ impl PeerStore {
 			peer.last_banned = Utc::now().timestamp();
 		}
 
-		batch.put_ser(&peer_key(peer.addr)[..], &peer)?;
+		batch.put_ser(&peer_key(peer_addr)[..], &peer)?;
 		batch.commit()
 	}
 
@@ -233,9 +220,7 @@ impl PeerStore {
 	}
 }
 
-fn peer_key(peer_addr: SocketAddr) -> Vec<u8> {
-	to_key(
-		PEER_PREFIX,
-		&mut format!("{}:{}", peer_addr.ip(), peer_addr.port()).into_bytes(),
-	)
+// Ignore the port unless ip is loopback address.
+fn peer_key(peer_addr: PeerAddr) -> Vec<u8> {
+	to_key(PEER_PREFIX, &mut peer_addr.as_key().into_bytes())
 }

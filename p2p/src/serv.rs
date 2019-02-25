@@ -27,7 +27,7 @@ use crate::peer::Peer;
 use crate::peers::Peers;
 use crate::store::PeerStore;
 use crate::types::{
-	Capabilities, ChainAdapter, Error, NetAdapter, P2PConfig, ReasonForBan, Seeding, TxHashSetRead,
+	Capabilities, ChainAdapter, Error, NetAdapter, P2PConfig, PeerAddr, ReasonForBan, TxHashSetRead,
 };
 use crate::util::{Mutex, StopState};
 use chrono::prelude::{DateTime, Utc};
@@ -80,6 +80,8 @@ impl Server {
 
 			match listener.accept() {
 				Ok((stream, peer_addr)) => {
+					let peer_addr = PeerAddr(peer_addr);
+
 					if self.check_undesirable(&stream) {
 						continue;
 					}
@@ -105,8 +107,8 @@ impl Server {
 
 	/// Asks the server to connect to a new peer. Directly returns the peer if
 	/// we're already connected to the provided address.
-	pub fn connect(&self, addr: &SocketAddr) -> Result<Arc<Peer>, Error> {
-		if Peer::is_denied(&self.config, &addr) {
+	pub fn connect(&self, addr: PeerAddr) -> Result<Arc<Peer>, Error> {
+		if Peer::is_denied(&self.config, addr) {
 			debug!("connect_peer: peer {} denied, not connecting.", addr);
 			return Err(Error::ConnectionClose);
 		}
@@ -132,7 +134,7 @@ impl Server {
 			self.config.port,
 			addr
 		);
-		match TcpStream::connect_timeout(addr, Duration::from_secs(10)) {
+		match TcpStream::connect_timeout(&addr.0, Duration::from_secs(10)) {
 			Ok(mut stream) => {
 				let addr = SocketAddr::new(self.config.host, self.config.port);
 				let total_diff = self.peers.total_difficulty();
@@ -141,7 +143,7 @@ impl Server {
 					&mut stream,
 					self.capabilities,
 					total_diff,
-					addr,
+					PeerAddr(addr),
 					&self.handshake,
 					self.peers.clone(),
 				)?;
@@ -189,13 +191,17 @@ impl Server {
 	/// different sets of peers themselves. In addition, it prevent potential
 	/// duplicate connections, malicious or not.
 	fn check_undesirable(&self, stream: &TcpStream) -> bool {
-		// peer has been banned, go away!
 		if let Ok(peer_addr) = stream.peer_addr() {
-			let banned = self.peers.is_banned(peer_addr);
-			let known_ip =
-				self.peers.is_known_ip(&peer_addr) && self.config.seeding_type == Seeding::DNSSeed;
-			if banned || known_ip {
-				debug!("Peer {} banned or known, refusing connection.", peer_addr);
+			let peer_addr = PeerAddr(peer_addr);
+			if self.peers.is_banned(peer_addr) {
+				debug!("Peer {} banned, refusing connection.", peer_addr);
+				if let Err(e) = stream.shutdown(Shutdown::Both) {
+					debug!("Error shutting down conn: {:?}", e);
+				}
+				return true;
+			}
+			if self.peers.is_known(peer_addr) {
+				debug!("Peer {} already known, refusing connection.", peer_addr);
 				if let Err(e) = stream.shutdown(Shutdown::Both) {
 					debug!("Error shutting down conn: {:?}", e);
 				}
@@ -232,18 +238,18 @@ impl ChainAdapter for DummyAdapter {
 	fn get_transaction(&self, _h: Hash) -> Option<core::Transaction> {
 		None
 	}
-	fn tx_kernel_received(&self, _h: Hash, _addr: SocketAddr) {}
+	fn tx_kernel_received(&self, _h: Hash, _addr: PeerAddr) {}
 	fn transaction_received(&self, _: core::Transaction, _stem: bool) {}
-	fn compact_block_received(&self, _cb: core::CompactBlock, _addr: SocketAddr) -> bool {
+	fn compact_block_received(&self, _cb: core::CompactBlock, _addr: PeerAddr) -> bool {
 		true
 	}
-	fn header_received(&self, _bh: core::BlockHeader, _addr: SocketAddr) -> bool {
+	fn header_received(&self, _bh: core::BlockHeader, _addr: PeerAddr) -> bool {
 		true
 	}
-	fn block_received(&self, _: core::Block, _: SocketAddr, _: bool) -> bool {
+	fn block_received(&self, _: core::Block, _: PeerAddr, _: bool) -> bool {
 		true
 	}
-	fn headers_received(&self, _: &[core::BlockHeader], _: SocketAddr) -> bool {
+	fn headers_received(&self, _: &[core::BlockHeader], _: PeerAddr) -> bool {
 		true
 	}
 	fn locate_headers(&self, _: &[Hash]) -> Vec<core::BlockHeader> {
@@ -260,7 +266,7 @@ impl ChainAdapter for DummyAdapter {
 		false
 	}
 
-	fn txhashset_write(&self, _h: Hash, _txhashset_data: File, _peer_addr: SocketAddr) -> bool {
+	fn txhashset_write(&self, _h: Hash, _txhashset_data: File, _peer_addr: PeerAddr) -> bool {
 		false
 	}
 
@@ -275,12 +281,12 @@ impl ChainAdapter for DummyAdapter {
 }
 
 impl NetAdapter for DummyAdapter {
-	fn find_peer_addrs(&self, _: Capabilities) -> Vec<SocketAddr> {
+	fn find_peer_addrs(&self, _: Capabilities) -> Vec<PeerAddr> {
 		vec![]
 	}
-	fn peer_addrs_received(&self, _: Vec<SocketAddr>) {}
-	fn peer_difficulty(&self, _: SocketAddr, _: Difficulty, _: u64) {}
-	fn is_banned(&self, _: SocketAddr) -> bool {
+	fn peer_addrs_received(&self, _: Vec<PeerAddr>) {}
+	fn peer_difficulty(&self, _: PeerAddr, _: Difficulty, _: u64) {}
+	fn is_banned(&self, _: PeerAddr) -> bool {
 		false
 	}
 }

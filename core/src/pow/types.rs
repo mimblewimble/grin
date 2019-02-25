@@ -22,7 +22,7 @@ use rand::{thread_rng, Rng};
 use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
 
 use crate::consensus::{graph_weight, MIN_DIFFICULTY, SECOND_POW_EDGE_BITS};
-use crate::core::hash::Hashed;
+use crate::core::hash::{DefaultHashable, Hashed};
 use crate::global;
 use crate::ser::{self, FixedLength, Readable, Reader, Writeable, Writer};
 
@@ -324,6 +324,8 @@ pub struct Proof {
 	pub nonces: Vec<u64>,
 }
 
+impl DefaultHashable for Proof {}
+
 impl fmt::Debug for Proof {
 	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
 		write!(f, "Cuckoo{}(", self.edge_bits)?;
@@ -342,7 +344,7 @@ impl Eq for Proof {}
 impl Proof {
 	/// Builds a proof with provided nonces at default edge_bits
 	pub fn new(mut in_nonces: Vec<u64>) -> Proof {
-		in_nonces.sort();
+		in_nonces.sort_unstable();
 		Proof {
 			edge_bits: global::min_edge_bits(),
 			nonces: in_nonces,
@@ -369,7 +371,7 @@ impl Proof {
 			.map(|()| (rng.gen::<u32>() & nonce_mask) as u64)
 			.take(proof_size)
 			.collect();
-		v.sort();
+		v.sort_unstable();
 		Proof {
 			edge_bits: global::min_edge_bits(),
 			nonces: v,

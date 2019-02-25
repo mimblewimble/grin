@@ -14,7 +14,7 @@
 
 //! Transactions
 
-use crate::core::hash::Hashed;
+use crate::core::hash::{DefaultHashable, Hashed};
 use crate::core::verifier_cache::VerifierCache;
 use crate::core::{committed, Committed};
 use crate::keychain::{self, BlindingFactor};
@@ -32,7 +32,6 @@ use crate::{consensus, global};
 use enum_primitive::FromPrimitive;
 use std::cmp::Ordering;
 use std::cmp::{max, min};
-use std::collections::HashSet;
 use std::sync::Arc;
 use std::{error, fmt};
 
@@ -50,6 +49,8 @@ enum_from_primitive! {
 		HeightLocked = 2,
 	}
 }
+
+impl DefaultHashable for KernelFeatures {}
 
 impl Writeable for KernelFeatures {
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
@@ -176,6 +177,7 @@ pub struct TxKernel {
 	pub excess_sig: secp::Signature,
 }
 
+impl DefaultHashable for TxKernel {}
 hashable_ord!(TxKernel);
 
 impl ::std::hash::Hash for TxKernel {
@@ -493,9 +495,9 @@ impl TransactionBody {
 
 	/// Sort the inputs|outputs|kernels.
 	pub fn sort(&mut self) {
-		self.inputs.sort();
-		self.outputs.sort();
-		self.kernels.sort();
+		self.inputs.sort_unstable();
+		self.outputs.sort_unstable();
+		self.kernels.sort_unstable();
 	}
 
 	/// Creates a new transaction body initialized with
@@ -507,7 +509,7 @@ impl TransactionBody {
 		kernels: Vec<TxKernel>,
 		verify_sorted: bool,
 	) -> Result<TransactionBody, Error> {
-		let body = TransactionBody {
+		let mut body = TransactionBody {
 			inputs,
 			outputs,
 			kernels,
@@ -517,52 +519,44 @@ impl TransactionBody {
 			// If we are verifying sort order then verify and
 			// return an error if not sorted lexicographically.
 			body.verify_sorted()?;
-			Ok(body)
 		} else {
 			// If we are not verifying sort order then sort in place and return.
-			let mut body = body;
 			body.sort();
-			Ok(body)
 		}
+		Ok(body)
 	}
 
 	/// Builds a new body with the provided inputs added. Existing
 	/// inputs, if any, are kept intact.
 	/// Sort order is maintained.
-	pub fn with_input(self, input: Input) -> TransactionBody {
-		let mut new_ins = self.inputs;
-		new_ins.push(input);
-		new_ins.sort();
-		TransactionBody {
-			inputs: new_ins,
-			..self
-		}
+	pub fn with_input(mut self, input: Input) -> TransactionBody {
+		self.inputs
+			.binary_search(&input)
+			.err()
+			.map(|e| self.inputs.insert(e, input));
+		self
 	}
 
 	/// Builds a new TransactionBody with the provided output added. Existing
 	/// outputs, if any, are kept intact.
 	/// Sort order is maintained.
-	pub fn with_output(self, output: Output) -> TransactionBody {
-		let mut new_outs = self.outputs;
-		new_outs.push(output);
-		new_outs.sort();
-		TransactionBody {
-			outputs: new_outs,
-			..self
-		}
+	pub fn with_output(mut self, output: Output) -> TransactionBody {
+		self.outputs
+			.binary_search(&output)
+			.err()
+			.map(|e| self.outputs.insert(e, output));
+		self
 	}
 
 	/// Builds a new TransactionBody with the provided kernel added. Existing
 	/// kernels, if any, are kept intact.
 	/// Sort order is maintained.
-	pub fn with_kernel(self, kernel: TxKernel) -> TransactionBody {
-		let mut new_kerns = self.kernels;
-		new_kerns.push(kernel);
-		new_kerns.sort();
-		TransactionBody {
-			kernels: new_kerns,
-			..self
-		}
+	pub fn with_kernel(mut self, kernel: TxKernel) -> TransactionBody {
+		self.kernels
+			.binary_search(&kernel)
+			.err()
+			.map(|e| self.kernels.insert(e, kernel));
+		self
 	}
 
 	/// Total fee for a TransactionBody is the sum of fees of all kernels.
@@ -658,14 +652,21 @@ impl TransactionBody {
 	}
 
 	// Verify that no input is spending an output from the same block.
+	// Assumes inputs and outputs are sorted
 	fn verify_cut_through(&self) -> Result<(), Error> {
-		let mut out_set = HashSet::new();
-		for out in &self.outputs {
-			out_set.insert(out.commitment());
-		}
-		for inp in &self.inputs {
-			if out_set.contains(&inp.commitment()) {
-				return Err(Error::CutThrough);
+		let mut inputs = self.inputs.iter().map(|x| x.hash()).peekable();
+		let mut outputs = self.outputs.iter().map(|x| x.hash()).peekable();
+		while let (Some(ih), Some(oh)) = (inputs.peek(), outputs.peek()) {
+			match ih.cmp(oh) {
+				Ordering::Less => {
+					inputs.next();
+				}
+				Ordering::Greater => {
+					outputs.next();
+				}
+				Ordering::Equal => {
+					return Err(Error::CutThrough);
+				}
 			}
 		}
 		Ok(())
@@ -770,6 +771,8 @@ pub struct Transaction {
 	/// The transaction body - inputs/outputs/kernels
 	body: TransactionBody,
 }
+
+impl DefaultHashable for Transaction {}
 
 /// PartialEq
 impl PartialEq for Transaction {
@@ -981,24 +984,34 @@ impl Transaction {
 /// and outputs.
 pub fn cut_through(inputs: &mut Vec<Input>, outputs: &mut Vec<Output>) -> Result<(), Error> {
 	// assemble output commitments set, checking they're all unique
-	let mut out_set = HashSet::new();
-	let all_uniq = { outputs.iter().all(|o| out_set.insert(o.commitment())) };
-	if !all_uniq {
+	outputs.sort_unstable();
+	if outputs.windows(2).any(|pair| pair[0] == pair[1]) {
 		return Err(Error::AggregationError);
 	}
-
-	let in_set = inputs
-		.iter()
-		.map(|inp| inp.commitment())
-		.collect::<HashSet<_>>();
-
-	let to_cut_through = in_set.intersection(&out_set).collect::<HashSet<_>>();
-
-	// filter and sort
-	inputs.retain(|inp| !to_cut_through.contains(&inp.commitment()));
-	outputs.retain(|out| !to_cut_through.contains(&out.commitment()));
-	inputs.sort();
-	outputs.sort();
+	inputs.sort_unstable();
+	let mut inputs_idx = 0;
+	let mut outputs_idx = 0;
+	let mut ncut = 0;
+	while inputs_idx < inputs.len() && outputs_idx < outputs.len() {
+		match inputs[inputs_idx].hash().cmp(&outputs[outputs_idx].hash()) {
+			Ordering::Less => {
+				inputs[inputs_idx - ncut] = inputs[inputs_idx];
+				inputs_idx += 1;
+			}
+			Ordering::Greater => {
+				outputs[outputs_idx - ncut] = outputs[outputs_idx];
+				outputs_idx += 1;
+			}
+			Ordering::Equal => {
+				inputs_idx += 1;
+				outputs_idx += 1;
+				ncut += 1;
+			}
+		}
+	}
+	// Cut elements that have already been copied
+	outputs.drain(outputs_idx - ncut..outputs_idx);
+	inputs.drain(inputs_idx - ncut..inputs_idx);
 	Ok(())
 }
 
@@ -1010,15 +1023,22 @@ pub fn aggregate(mut txs: Vec<Transaction>) -> Result<Transaction, Error> {
 	} else if txs.len() == 1 {
 		return Ok(txs.pop().unwrap());
 	}
+	let mut n_inputs = 0;
+	let mut n_outputs = 0;
+	let mut n_kernels = 0;
+	for tx in txs.iter() {
+		n_inputs += tx.body.inputs.len();
+		n_outputs += tx.body.outputs.len();
+		n_kernels += tx.body.kernels.len();
+	}
 
-	let mut inputs: Vec<Input> = vec![];
-	let mut outputs: Vec<Output> = vec![];
-	let mut kernels: Vec<TxKernel> = vec![];
+	let mut inputs: Vec<Input> = Vec::with_capacity(n_inputs);
+	let mut outputs: Vec<Output> = Vec::with_capacity(n_outputs);
+	let mut kernels: Vec<TxKernel> = Vec::with_capacity(n_kernels);
 
 	// we will sum these together at the end to give us the overall offset for the
 	// transaction
-	let mut kernel_offsets: Vec<BlindingFactor> = vec![];
-
+	let mut kernel_offsets: Vec<BlindingFactor> = Vec::with_capacity(txs.len());
 	for mut tx in txs {
 		// we will sum these later to give a single aggregate offset
 		kernel_offsets.push(tx.offset);
@@ -1032,7 +1052,7 @@ pub fn aggregate(mut txs: Vec<Transaction>) -> Result<Transaction, Error> {
 	cut_through(&mut inputs, &mut outputs)?;
 
 	// Now sort kernels.
-	kernels.sort();
+	kernels.sort_unstable();
 
 	// now sum the kernel_offsets up to give us an aggregate offset for the
 	// transaction
@@ -1103,9 +1123,9 @@ pub fn deaggregate(mk_tx: Transaction, txs: Vec<Transaction>) -> Result<Transact
 	};
 
 	// Sorting them lexicographically
-	inputs.sort();
-	outputs.sort();
-	kernels.sort();
+	inputs.sort_unstable();
+	outputs.sort_unstable();
+	kernels.sort_unstable();
 
 	// Build a new tx from the above data.
 	let tx = Transaction::new(inputs, outputs, kernels).with_offset(total_kernel_offset);
@@ -1115,7 +1135,7 @@ pub fn deaggregate(mk_tx: Transaction, txs: Vec<Transaction>) -> Result<Transact
 /// A transaction input.
 ///
 /// Primarily a reference to an output being spent by the transaction.
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone, Copy)]
 pub struct Input {
 	/// The features of the output being spent.
 	/// We will check maturity for coinbase output.
@@ -1128,6 +1148,7 @@ pub struct Input {
 	pub commit: Commitment,
 }
 
+impl DefaultHashable for Input {}
 hashable_ord!(Input);
 
 impl ::std::hash::Hash for Input {
@@ -1241,6 +1262,7 @@ pub struct Output {
 	pub proof: RangeProof,
 }
 
+impl DefaultHashable for Output {}
 hashable_ord!(Output);
 
 impl ::std::hash::Hash for Output {
@@ -1352,6 +1374,8 @@ pub struct OutputIdentifier {
 	/// Output commitment
 	pub commit: Commitment,
 }
+
+impl DefaultHashable for OutputIdentifier {}
 
 impl OutputIdentifier {
 	/// Build a new output_identifier.

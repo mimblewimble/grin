@@ -22,9 +22,7 @@ use crate::util;
 use crate::util::secp::pedersen::Commitment;
 use crate::web::*;
 use hyper::{Body, Request, StatusCode};
-use std::collections::HashMap;
 use std::sync::Weak;
-use url::form_urlencoded;
 
 /// Chain handler. Get the head details.
 /// GET /v1/chain
@@ -101,21 +99,9 @@ impl OutputHandler {
 	fn outputs_by_ids(&self, req: &Request<Body>) -> Result<Vec<Output>, Error> {
 		let mut commitments: Vec<String> = vec![];
 
-		let query = match req.uri().query() {
-			Some(q) => q,
-			None => return Err(ErrorKind::RequestError("no query string".to_owned()))?,
-		};
-		let params = form_urlencoded::parse(query.as_bytes())
-			.into_owned()
-			.collect::<Vec<(String, String)>>();
-
-		for (k, id) in params {
-			if k == "id" {
-				for id in id.split(',') {
-					commitments.push(id.to_owned());
-				}
-			}
-		}
+		let query = must_get_query!(req);
+		let params = QueryParams::from(query);
+		params.process_multival_param("id", |id| commitments.push(id.to_owned()));
 
 		let mut outputs: Vec<Output> = vec![];
 		for x in commitments {
@@ -159,49 +145,17 @@ impl OutputHandler {
 	// returns outputs for a specified range of blocks
 	fn outputs_block_batch(&self, req: &Request<Body>) -> Result<Vec<BlockOutputs>, Error> {
 		let mut commitments: Vec<Commitment> = vec![];
-		let mut start_height = 1;
-		let mut end_height = 1;
-		let mut include_rp = false;
 
-		let query = match req.uri().query() {
-			Some(q) => q,
-			None => return Err(ErrorKind::RequestError("no query string".to_owned()))?,
-		};
-
-		let params = form_urlencoded::parse(query.as_bytes()).into_owned().fold(
-			HashMap::new(),
-			|mut hm, (k, v)| {
-				hm.entry(k).or_insert(vec![]).push(v);
-				hm
-			},
-		);
-
-		if let Some(ids) = params.get("id") {
-			for id in ids {
-				for id in id.split(',') {
-					if let Ok(x) = util::from_hex(String::from(id)) {
-						commitments.push(Commitment::from_vec(x));
-					}
-				}
+		let query = must_get_query!(req);
+		let params = QueryParams::from(query);
+		params.process_multival_param("id", |id| {
+			if let Ok(x) = util::from_hex(String::from(id)) {
+				commitments.push(Commitment::from_vec(x));
 			}
-		}
-		if let Some(heights) = params.get("start_height") {
-			for height in heights {
-				start_height = height
-					.parse()
-					.map_err(|_| ErrorKind::RequestError("invalid start_height".to_owned()))?;
-			}
-		}
-		if let Some(heights) = params.get("end_height") {
-			for height in heights {
-				end_height = height
-					.parse()
-					.map_err(|_| ErrorKind::RequestError("invalid end_height".to_owned()))?;
-			}
-		}
-		if let Some(_) = params.get("include_rp") {
-			include_rp = true;
-		}
+		});
+		let start_height = parse_param!(params, "start_height", 1);
+		let end_height = parse_param!(params, "end_height", 1);
+		let include_rp = params.get("include_rp").is_some();
 
 		debug!(
 			"outputs_block_batch: {}-{}, {:?}, {:?}",
@@ -223,11 +177,7 @@ impl OutputHandler {
 
 impl Handler for OutputHandler {
 	fn get(&self, req: Request<Body>) -> ResponseFuture {
-		let command = match req.uri().path().trim_right_matches('/').rsplit('/').next() {
-			Some(c) => c,
-			None => return response(StatusCode::BAD_REQUEST, "invalid url"),
-		};
-		match command {
+		match right_path_element!(req) {
 			"byids" => result_to_response(self.outputs_by_ids(&req)),
 			"byheight" => result_to_response(self.outputs_block_batch(&req)),
 			_ => response(StatusCode::BAD_REQUEST, ""),
