@@ -85,10 +85,9 @@ impl Readable for PeerData {
 		let lc = reader.read_i64();
 		// this only works because each PeerData is read in its own vector and this
 		// is the last data element
-		let last_connected = if let Err(_) = lc {
-			Utc::now().timestamp()
-		} else {
-			lc.unwrap()
+		let last_connected = match lc {
+			Err(_) => Utc::now().timestamp(),
+			Ok(lc) => lc,
 		};
 
 		let user_agent = String::from_utf8(ua).map_err(|_| ser::Error::CorruptedData)?;
@@ -149,22 +148,26 @@ impl PeerStore {
 		batch.commit()
 	}
 
-	pub fn find_peers(&self, state: State, cap: Capabilities, count: usize) -> Vec<PeerData> {
+	pub fn find_peers(
+		&self,
+		state: State,
+		cap: Capabilities,
+		count: usize,
+	) -> Result<Vec<PeerData>, Error> {
 		let mut peers = self
 			.db
-			.iter::<PeerData>(&to_key(PEER_PREFIX, &mut "".to_string().into_bytes()))
-			.unwrap()
+			.iter::<PeerData>(&to_key(PEER_PREFIX, &mut "".to_string().into_bytes()))?
 			.filter(|p| p.flags == state && p.capabilities.contains(cap))
 			.collect::<Vec<_>>();
 		thread_rng().shuffle(&mut peers[..]);
-		peers.iter().take(count).cloned().collect()
+		Ok(peers.iter().take(count).cloned().collect())
 	}
 
 	/// List all known peers
 	/// Used for /v1/peers/all api endpoint
-	pub fn all_peers(&self) -> Vec<PeerData> {
+	pub fn all_peers(&self) -> Result<Vec<PeerData>, Error> {
 		let key = to_key(PEER_PREFIX, &mut "".to_string().into_bytes());
-		self.db.iter::<PeerData>(&key).unwrap().collect::<Vec<_>>()
+		Ok(self.db.iter::<PeerData>(&key)?.collect::<Vec<_>>())
 	}
 
 	/// Convenience method to load a peer data, update its status and save it
@@ -192,7 +195,7 @@ impl PeerStore {
 	{
 		let mut to_remove = vec![];
 
-		for x in self.all_peers() {
+		for x in self.all_peers()? {
 			if predicate(&x) {
 				to_remove.push(x)
 			}

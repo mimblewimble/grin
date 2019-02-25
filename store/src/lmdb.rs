@@ -166,7 +166,7 @@ impl Store {
 	/// provided key.
 	pub fn iter<T: ser::Readable>(&self, from: &[u8]) -> Result<SerIterator<T>, Error> {
 		let tx = Arc::new(lmdb::ReadTransaction::new(self.env.clone())?);
-		let cursor = Arc::new(tx.cursor(self.db.clone()).unwrap());
+		let cursor = Arc::new(tx.cursor(self.db.clone())?);
 		Ok(SerIterator {
 			tx,
 			cursor,
