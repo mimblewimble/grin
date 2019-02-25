@@ -14,7 +14,7 @@
 
 use super::utils::w;
 use crate::p2p;
-use crate::p2p::types::{PeerInfoDisplay, ReasonForBan};
+use crate::p2p::types::{PeerAddr, PeerInfoDisplay, ReasonForBan};
 use crate::router::{Handler, ResponseFuture};
 use crate::web::*;
 use hyper::{Body, Request, StatusCode};
@@ -37,11 +37,11 @@ pub struct PeersConnectedHandler {
 
 impl Handler for PeersConnectedHandler {
 	fn get(&self, _req: Request<Body>) -> ResponseFuture {
-		let mut peers: Vec<PeerInfoDisplay> = vec![];
-		for p in &w(&self.peers).connected_peers() {
-			let peer_info = p.info.clone();
-			peers.push(peer_info.into());
-		}
+		let peers: Vec<PeerInfoDisplay> = w(&self.peers)
+			.connected_peers()
+			.iter()
+			.map(|p| p.info.clone().into())
+			.collect();
 		json_response(&peers)
 	}
 }
@@ -56,20 +56,26 @@ pub struct PeerHandler {
 
 impl Handler for PeerHandler {
 	fn get(&self, req: Request<Body>) -> ResponseFuture {
-		let command = match req.uri().path().trim_right_matches('/').rsplit('/').next() {
-			Some(c) => c,
-			None => return response(StatusCode::BAD_REQUEST, "invalid url"),
-		};
-		if let Ok(addr) = command.parse() {
-			match w(&self.peers).get_peer(addr) {
-				Ok(peer) => json_response(&peer),
-				Err(_) => response(StatusCode::NOT_FOUND, "peer not found"),
-			}
+		let command = right_path_element!(req);
+
+		// We support both "ip" and "ip:port" here for peer_addr.
+		// "ip:port" is only really useful for local usernet testing on loopback address.
+		// Normally we map peers to ip and only allow a single peer per ip address.
+		let peer_addr;
+		if let Ok(ip_addr) = command.parse() {
+			peer_addr = PeerAddr::from_ip(ip_addr);
+		} else if let Ok(addr) = command.parse() {
+			peer_addr = PeerAddr(addr);
 		} else {
-			response(
+			return response(
 				StatusCode::BAD_REQUEST,
 				format!("peer address unrecognized: {}", req.uri().path()),
-			)
+			);
+		}
+
+		match w(&self.peers).get_peer(peer_addr) {
+			Ok(peer) => json_response(&peer),
+			Err(_) => response(StatusCode::NOT_FOUND, "peer not found"),
 		}
 	}
 	fn post(&self, req: Request<Body>) -> ResponseFuture {
@@ -80,20 +86,23 @@ impl Handler for PeerHandler {
 		};
 		let addr = match path_elems.next() {
 			None => return response(StatusCode::BAD_REQUEST, "invalid url"),
-			Some(a) => match a.parse() {
-				Err(e) => {
+			Some(a) => {
+				if let Ok(ip_addr) = a.parse() {
+					PeerAddr::from_ip(ip_addr)
+				} else if let Ok(addr) = a.parse() {
+					PeerAddr(addr)
+				} else {
 					return response(
 						StatusCode::BAD_REQUEST,
-						format!("invalid peer address: {}", e),
+						format!("invalid peer address: {}", req.uri().path()),
 					);
 				}
-				Ok(addr) => addr,
-			},
+			}
 		};
 
 		match command {
-			"ban" => w(&self.peers).ban_peer(&addr, ReasonForBan::ManualBan),
-			"unban" => w(&self.peers).unban_peer(&addr),
+			"ban" => w(&self.peers).ban_peer(addr, ReasonForBan::ManualBan),
+			"unban" => w(&self.peers).unban_peer(addr),
 			_ => return response(StatusCode::BAD_REQUEST, "invalid command"),
 		};
 

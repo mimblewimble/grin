@@ -38,7 +38,7 @@ fn zip_unzip() {
 
 	fs::create_dir_all(root.join("./dezipped")).unwrap();
 	let zip_file = File::open(zip_name).unwrap();
-	zip::decompress(zip_file, &root.join("./dezipped")).unwrap();
+	zip::decompress(zip_file, &root.join("./dezipped"), |_| true).unwrap();
 
 	assert!(root.join("to_zip/foo.txt").is_file());
 	assert!(root.join("to_zip/bar.txt").is_file());
@@ -46,6 +46,14 @@ fn zip_unzip() {
 	let lorem = root.join("to_zip/sub/lorem");
 	assert!(lorem.is_file());
 	assert!(lorem.metadata().unwrap().len() == 55);
+
+	let decompressed = zip::decompress(
+		File::open("tests/test.zip").unwrap(),
+		&root.join("./dezipped"),
+		|_| true,
+	)
+	.unwrap();
+	assert_eq!(decompressed, 1);
 }
 
 fn write_files(dir_name: String, root: &Path) -> io::Result<()> {

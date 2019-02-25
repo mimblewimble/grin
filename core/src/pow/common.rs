@@ -102,7 +102,7 @@ pub fn create_siphash_keys(header: &[u8]) -> Result<[u64; 4], Error> {
 	])
 }
 
-/// Macros to clean up integer unwrapping
+/// Macro to clean up u64 unwrapping
 #[macro_export]
 macro_rules! to_u64 {
 	($n:expr) => {
@@ -110,6 +110,7 @@ macro_rules! to_u64 {
 	};
 }
 
+/// Macro to clean up u64 unwrapping as u32
 #[macro_export]
 macro_rules! to_u32 {
 	($n:expr) => {
@@ -117,6 +118,7 @@ macro_rules! to_u32 {
 	};
 }
 
+/// Macro to clean up u64 unwrapping as usize
 #[macro_export]
 macro_rules! to_usize {
 	($n:expr) => {
@@ -124,6 +126,8 @@ macro_rules! to_usize {
 	};
 }
 
+/// Macro to clean up casting to edge type
+/// TODO: this macro uses unhygenic data T
 #[macro_export]
 macro_rules! to_edge {
 	($n:expr) => {

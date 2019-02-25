@@ -272,9 +272,11 @@ impl TxHashSet {
 	}
 
 	/// build a new merkle proof for the given position.
-	pub fn merkle_proof(&mut self, commit: Commitment) -> Result<MerkleProof, String> {
-		let pos = self.commit_index.get_output_pos(&commit).unwrap();
-		PMMR::at(&mut self.output_pmmr_h.backend, self.output_pmmr_h.last_pos).merkle_proof(pos)
+	pub fn merkle_proof(&mut self, commit: Commitment) -> Result<MerkleProof, Error> {
+		let pos = self.commit_index.get_output_pos(&commit)?;
+		PMMR::at(&mut self.output_pmmr_h.backend, self.output_pmmr_h.last_pos)
+			.merkle_proof(pos)
+			.map_err(|_| ErrorKind::MerkleProof.into())
 	}
 
 	/// Compact the MMR data files and flush the rm logs
@@ -1204,11 +1206,19 @@ impl<'a> Extension<'a> {
 	/// from the respective MMRs.
 	/// For a significantly faster way of validating full kernel sums see BlockSums.
 	pub fn validate_kernel_sums(&self) -> Result<((Commitment, Commitment)), Error> {
+		let now = Instant::now();
+
 		let genesis = self.get_header_by_height(0)?;
 		let (utxo_sum, kernel_sum) = self.verify_kernel_sums(
 			self.header.total_overage(genesis.kernel_mmr_size > 0),
 			self.header.total_kernel_offset(),
 		)?;
+
+		debug!(
+			"txhashset: validated total kernel sums, took {}s",
+			now.elapsed().as_secs(),
+		);
+
 		Ok((utxo_sum, kernel_sum))
 	}
 
@@ -1244,18 +1254,29 @@ impl<'a> Extension<'a> {
 		Ok((output_sum, kernel_sum))
 	}
 
-	/// Rebuild the index of MMR positions to the corresponding Output and
-	/// kernel by iterating over the whole MMR data. This is a costly operation
-	/// performed only when we receive a full new chain state.
+	/// Rebuild the index of MMR positions to the corresponding UTXOs.
+	/// This is a costly operation performed only when we receive a full new chain state.
 	pub fn rebuild_index(&self) -> Result<(), Error> {
+		let now = Instant::now();
+
+		let mut count = 0;
+
 		for n in 1..self.output_pmmr.unpruned_size() + 1 {
 			// non-pruned leaves only
 			if pmmr::bintree_postorder_height(n) == 0 {
 				if let Some(out) = self.output_pmmr.get_data(n) {
 					self.batch.save_output_pos(&out.commit, n)?;
+					count += 1;
 				}
 			}
 		}
+
+		debug!(
+			"txhashset: rebuild_index ({} UTXOs), took {}s",
+			count,
+			now.elapsed().as_secs(),
+		);
+
 		Ok(())
 	}
 
@@ -1453,9 +1474,26 @@ pub fn zip_write(
 ) -> Result<(), Error> {
 	let txhashset_path = Path::new(&root_dir).join(TXHASHSET_SUBDIR);
 	fs::create_dir_all(txhashset_path.clone())?;
-	zip::decompress(txhashset_data, &txhashset_path)
+	zip::decompress(txhashset_data, &txhashset_path, expected_file)
 		.map_err(|ze| ErrorKind::Other(ze.to_string()))?;
 	check_and_remove_files(&txhashset_path, header)
+}
+
+fn expected_file(path: &Path) -> bool {
+	use lazy_static::lazy_static;
+	use regex::Regex;
+	let s_path = path.to_str().unwrap_or_else(|| "");
+	lazy_static! {
+		static ref RE: Regex = Regex::new(
+			format!(
+				r#"^({}|{}|{})(/pmmr_(hash|data|leaf|prun)\.bin(\.\w*)?)?$"#,
+				OUTPUT_SUBDIR, KERNEL_SUBDIR, RANGE_PROOF_SUBDIR
+			)
+			.as_str()
+		)
+		.unwrap();
+	}
+	RE.is_match(&s_path)
 }
 
 /// Check a txhashset directory and remove any unexpected
@@ -1523,19 +1561,27 @@ fn check_and_remove_files(txhashset_path: &PathBuf, header: &BlockHeader) -> Res
 			.difference(&pmmr_files_expected)
 			.cloned()
 			.collect();
+		let mut removed = 0;
 		if !difference.is_empty() {
-			debug!(
-				"Unexpected file(s) found in txhashset subfolder {:?}, removing.",
-				&subdirectory_path
-			);
-			for diff in difference {
+			for diff in &difference {
 				let diff_path = subdirectory_path.join(diff);
-				file::delete(diff_path.clone())?;
-				debug!(
-					"check_and_remove_files: unexpected file '{:?}' removed",
-					diff_path
-				);
+				match file::delete(diff_path.clone()) {
+					Err(e) => error!(
+						"check_and_remove_files: fail to remove file '{:?}', Err: {:?}",
+						diff_path, e,
+					),
+					Ok(_) => {
+						removed += 1;
+						trace!("check_and_remove_files: file '{:?}' removed", diff_path);
+					}
+				}
 			}
+			debug!(
+				"{} tmp file(s) found in txhashset subfolder {:?}, {} removed.",
+				difference.len(),
+				&subdirectory_path,
+				removed,
+			);
 		}
 	}
 	Ok(())
@@ -1590,6 +1636,25 @@ pub fn input_pos_to_rewind(
 		current = batch.get_previous_header(&current)?;
 	}
 
-	let bitmap = bitmap_fast_or(None, &mut block_input_bitmaps).unwrap();
-	Ok(bitmap)
+	bitmap_fast_or(None, &mut block_input_bitmaps).ok_or_else(|| ErrorKind::Bitmap.into())
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+
+	#[test]
+	fn test_expected_files() {
+		assert!(!expected_file(Path::new("kernels")));
+		assert!(!expected_file(Path::new("xkernel")));
+		assert!(expected_file(Path::new("kernel")));
+		assert!(expected_file(Path::new("kernel/pmmr_data.bin")));
+		assert!(expected_file(Path::new("kernel/pmmr_hash.bin")));
+		assert!(expected_file(Path::new("kernel/pmmr_leaf.bin")));
+		assert!(expected_file(Path::new("kernel/pmmr_prun.bin")));
+		assert!(expected_file(Path::new("kernel/pmmr_leaf.bin.deadbeef")));
+		assert!(!expected_file(Path::new("xkernel/pmmr_data.bin")));
+		assert!(!expected_file(Path::new("kernel/pmmrx_data.bin")));
+		assert!(!expected_file(Path::new("kernel/pmmr_data.binx")));
+	}
 }

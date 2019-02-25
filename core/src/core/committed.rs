@@ -20,17 +20,22 @@ use crate::keychain::BlindingFactor;
 use crate::util::secp::key::SecretKey;
 use crate::util::secp::pedersen::Commitment;
 use crate::util::{secp, secp_static, static_secp_instance};
+use failure::Fail;
 
 /// Errors from summing and verifying kernel excesses via committed trait.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Fail)]
 pub enum Error {
 	/// Keychain related error.
+	#[fail(display = "Keychain error {}", _0)]
 	Keychain(keychain::Error),
 	/// Secp related error.
+	#[fail(display = "Secp error {}", _0)]
 	Secp(secp::Error),
 	/// Kernel sums do not equal output sums.
+	#[fail(display = "Kernel sum mismatch")]
 	KernelSumMismatch,
 	/// Committed overage (fee or reward) is invalid
+	#[fail(display = "Invalid value")]
 	InvalidValue,
 }
 

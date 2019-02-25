@@ -16,9 +16,14 @@
 //! the peer-to-peer server, the blockchain and the transaction pool) and acts
 //! as a facade.
 
-use std::net::SocketAddr;
+use std::fs;
+use std::fs::File;
+use std::io::prelude::*;
+use std::path::Path;
 use std::sync::Arc;
 use std::{thread, time};
+
+use fs2::FileExt;
 
 use crate::api;
 use crate::api::TLSConfig;
@@ -35,6 +40,7 @@ use crate::grin::{dandelion_monitor, seed, sync};
 use crate::mining::stratumserver;
 use crate::mining::test_miner::Miner;
 use crate::p2p;
+use crate::p2p::types::PeerAddr;
 use crate::pool;
 use crate::store;
 use crate::util::file::get_first_line;
@@ -59,6 +65,8 @@ pub struct Server {
 	state_info: ServerStateInfo,
 	/// Stop flag
 	pub stop_state: Arc<Mutex<StopState>>,
+	/// Maintain a lock_file so we do not run multiple Grin nodes from same dir.
+	lock_file: Arc<File>,
 }
 
 impl Server {
@@ -102,8 +110,36 @@ impl Server {
 		}
 	}
 
+	// Exclusive (advisory) lock_file to ensure we do not run multiple
+	// instance of grin server from the same dir.
+	// This uses fs2 and should be safe cross-platform unless somebody abuses the file itself.
+	fn one_grin_at_a_time(config: &ServerConfig) -> Result<Arc<File>, Error> {
+		let path = Path::new(&config.db_root);
+		fs::create_dir_all(path.clone())?;
+		let path = path.join("grin.lock");
+		let lock_file = fs::OpenOptions::new()
+			.read(true)
+			.write(true)
+			.create(true)
+			.open(&path)?;
+		lock_file.try_lock_exclusive().map_err(|e| {
+			let mut stderr = std::io::stderr();
+			writeln!(
+				&mut stderr,
+				"Failed to lock {:?} (grin server already running?)",
+				path
+			)
+			.expect("Could not write to stderr");
+			e
+		})?;
+		Ok(Arc::new(lock_file))
+	}
+
 	/// Instantiates a new server associated with the provided future reactor.
-	pub fn new(mut config: ServerConfig) -> Result<Server, Error> {
+	pub fn new(config: ServerConfig) -> Result<Server, Error> {
+		// Obtain our lock_file or fail immediately with an error.
+		let lock_file = Server::one_grin_at_a_time(&config)?;
+
 		// Defaults to None (optional) in config file.
 		// This translates to false here.
 		let archive_mode = match config.archive_mode {
@@ -178,22 +214,17 @@ impl Server {
 		pool_net_adapter.init(p2p_server.peers.clone());
 		net_adapter.init(p2p_server.peers.clone());
 
-		if config.p2p_config.seeding_type.clone() != p2p::Seeding::Programmatic {
-			let seeder = match config.p2p_config.seeding_type.clone() {
+		if config.p2p_config.seeding_type != p2p::Seeding::Programmatic {
+			let seeder = match config.p2p_config.seeding_type {
 				p2p::Seeding::None => {
 					warn!("No seed configured, will stay solo until connected to");
 					seed::predefined_seeds(vec![])
 				}
 				p2p::Seeding::List => {
-					seed::predefined_seeds(config.p2p_config.seeds.as_mut().unwrap().clone())
+					seed::predefined_seeds(config.p2p_config.seeds.clone().unwrap())
 				}
 				p2p::Seeding::DNSSeed => seed::dns_seeds(),
 				_ => unreachable!(),
-			};
-
-			let peers_preferred = match config.p2p_config.peers_preferred.clone() {
-				Some(peers_preferred) => seed::preferred_peers(peers_preferred),
-				None => None,
 			};
 
 			seed::connect_and_monitor(
@@ -201,7 +232,7 @@ impl Server {
 				config.p2p_config.capabilities,
 				config.dandelion_config.clone(),
 				seeder,
-				peers_preferred,
+				config.p2p_config.peers_preferred.clone(),
 				stop_state.clone(),
 			);
 		}
@@ -269,12 +300,13 @@ impl Server {
 				..Default::default()
 			},
 			stop_state,
+			lock_file,
 		})
 	}
 
 	/// Asks the server to connect to a peer at the provided network address.
-	pub fn connect_peer(&self, addr: SocketAddr) -> Result<(), Error> {
-		self.p2p.connect(&addr)?;
+	pub fn connect_peer(&self, addr: PeerAddr) -> Result<(), Error> {
+		self.p2p.connect(addr)?;
 		Ok(())
 	}
 
@@ -456,6 +488,7 @@ impl Server {
 	pub fn stop(&self) {
 		self.p2p.stop();
 		self.stop_state.lock().stop();
+		let _ = self.lock_file.unlock();
 	}
 
 	/// Pause the p2p server.
