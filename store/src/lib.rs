@@ -27,6 +27,7 @@ use failure;
 extern crate failure_derive;
 #[macro_use]
 extern crate grin_core as core;
+extern crate grin_util as util;
 
 //use grin_core as core;
 

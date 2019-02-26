@@ -23,10 +23,14 @@ use lmdb_zero::traits::CreateCursor;
 use lmdb_zero::LmdbResultExt;
 
 use crate::core::ser;
+use crate::util::RwLock;
 
 /// number of bytes to grow the database by when needed
 pub const ALLOC_CHUNK_SIZE: usize = 134_217_728; //128 MB
 const RESIZE_PERCENT: f32 = 0.9;
+/// Want to ensure that each resize gives us at least this %
+/// of total space free
+const RESIZE_MIN_TARGET_PERCENT: f32 = 0.6;
 
 /// Main error type for this lmdb
 #[derive(Clone, Eq, PartialEq, Debug, Fail)]
@@ -62,7 +66,7 @@ pub fn option_to_not_found<T>(res: Result<Option<T>, Error>, field_name: &str) -
 /// are done through a Batch abstraction providing atomicity.
 pub struct Store {
 	env: Arc<lmdb::Environment>,
-	db: Option<Arc<lmdb::Database<'static>>>,
+	db: RwLock<Option<Arc<lmdb::Database<'static>>>>,
 	name: String,
 }
 
@@ -94,9 +98,9 @@ impl Store {
 			full_path,
 			env.info().as_ref().unwrap().mapsize
 		);
-		let mut res = Store {
+		let res = Store {
 			env: Arc::new(env),
-			db: None,
+			db: RwLock::new(None),
 			name: name,
 		};
 
@@ -105,8 +109,9 @@ impl Store {
 	}
 
 	/// Opens the database environment
-	pub fn open(&mut self) -> Result<(), Error> {
-		self.db = Some(Arc::new(lmdb::Database::open(
+	pub fn open(&self) -> Result<(), Error> {
+		let mut w = self.db.write();
+		*w = Some(Arc::new(lmdb::Database::open(
 			self.env.clone(),
 			Some(&self.name),
 			&lmdb::DatabaseOptions::new(lmdb::db::CREATE),
@@ -115,8 +120,9 @@ impl Store {
 	}
 
 	/// Closes the db
-	pub fn close(&mut self) -> Result<(), Error> {
-		self.db = None;
+	pub fn close(&self) -> Result<(), Error> {
+		let mut w = self.db.write();
+		*w = None;
 		Ok(())
 	}
 
@@ -149,13 +155,21 @@ impl Store {
 		}
 	}
 
-	/// Increments the database size by one ALLOC_CHUNK_SIZE
-	pub fn do_resize(&mut self) -> Result<(), Error> {
+	/// Increments the database size by as many ALLOC_CHUNK_SIZES
+	/// to give a minimum threshold of free space
+	pub fn do_resize(&self) -> Result<(), Error> {
 		let env_info = self.env.info()?;
+		let stat = self.env.stat()?;
+		let size_used = stat.psize as usize * env_info.last_pgno;
+
 		let new_mapsize = if env_info.mapsize < ALLOC_CHUNK_SIZE {
 			ALLOC_CHUNK_SIZE
 		} else {
-			env_info.mapsize + ALLOC_CHUNK_SIZE
+			let mut tot = env_info.mapsize;
+			while size_used as f32 / tot as f32 > RESIZE_MIN_TARGET_PERCENT {
+				tot += ALLOC_CHUNK_SIZE;
+			}
+			tot
 		};
 		self.close()?;
 		unsafe {
@@ -173,7 +187,8 @@ impl Store {
 	pub fn get(&self, key: &[u8]) -> Result<Option<Vec<u8>>, Error> {
 		let txn = lmdb::ReadTransaction::new(self.env.clone())?;
 		let access = txn.access();
-		let res = access.get(&self.db.as_ref().unwrap(), key);
+		let db = self.db.read();
+		let res = access.get(&db.as_ref().unwrap(), key);
 		res.map(|res: &[u8]| res.to_vec())
 			.to_opt()
 			.map_err(From::from)
@@ -192,7 +207,8 @@ impl Store {
 		key: &[u8],
 		access: &lmdb::ConstAccessor<'_>,
 	) -> Result<Option<T>, Error> {
-		let res: lmdb::error::Result<&[u8]> = access.get(&self.db.as_ref().unwrap(), key);
+		let db = self.db.read();
+		let res: lmdb::error::Result<&[u8]> = access.get(&db.as_ref().unwrap(), key);
 		match res.to_opt() {
 			Ok(Some(mut res)) => match ser::deserialize(&mut res) {
 				Ok(res) => Ok(Some(res)),
@@ -207,7 +223,8 @@ impl Store {
 	pub fn exists(&self, key: &[u8]) -> Result<bool, Error> {
 		let txn = lmdb::ReadTransaction::new(self.env.clone())?;
 		let access = txn.access();
-		let res: lmdb::error::Result<&lmdb::Ignore> = access.get(&self.db.as_ref().unwrap(), key);
+		let db = self.db.read();
+		let res: lmdb::error::Result<&lmdb::Ignore> = access.get(&db.as_ref().unwrap(), key);
 		res.to_opt().map(|r| r.is_some()).map_err(From::from)
 	}
 
@@ -215,7 +232,8 @@ impl Store {
 	/// provided key.
 	pub fn iter<T: ser::Readable>(&self, from: &[u8]) -> Result<SerIterator<T>, Error> {
 		let tx = Arc::new(lmdb::ReadTransaction::new(self.env.clone())?);
-		let cursor = Arc::new(tx.cursor(self.db.as_ref().unwrap().clone()).unwrap());
+		let db = self.db.read();
+		let cursor = Arc::new(tx.cursor(db.as_ref().unwrap().clone()).unwrap());
 		Ok(SerIterator {
 			tx,
 			cursor,
@@ -226,7 +244,7 @@ impl Store {
 	}
 
 	/// Builds a new batch to be used with this store.
-	pub fn batch(&mut self) -> Result<Batch<'_>, Error> {
+	pub fn batch(&self) -> Result<Batch<'_>, Error> {
 		// check if the db needs resizing before returning the batch
 		if self.needs_resize()? {
 			self.do_resize()?;
@@ -248,8 +266,9 @@ pub struct Batch<'a> {
 impl<'a> Batch<'a> {
 	/// Writes a single key/value pair to the db
 	pub fn put(&self, key: &[u8], value: &[u8]) -> Result<(), Error> {
+		let db = self.store.db.read();
 		self.tx.access().put(
-			&self.store.db.as_ref().unwrap(),
+			&db.as_ref().unwrap(),
 			key,
 			value,
 			lmdb::put::Flags::empty(),
@@ -292,9 +311,10 @@ impl<'a> Batch<'a> {
 
 	/// Deletes a key/value pair from the db
 	pub fn delete(&self, key: &[u8]) -> Result<(), Error> {
+		let db = self.store.db.read();
 		self.tx
 			.access()
-			.del_key(&self.store.db.as_ref().unwrap(), key)?;
+			.del_key(&db.as_ref().unwrap(), key)?;
 		Ok(())
 	}
 

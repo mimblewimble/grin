@@ -141,7 +141,7 @@ impl OrphanBlockPool {
 /// maintains locking for the pipeline to avoid conflicting processing.
 pub struct Chain {
 	db_root: String,
-	store: Arc<RwLock<store::ChainStore>>,
+	store: Arc<store::ChainStore>,
 	adapter: Arc<dyn ChainAdapter + Send + Sync>,
 	orphans: Arc<OrphanBlockPool>,
 	txhashset: Arc<RwLock<txhashset::TxHashSet>>,
@@ -175,13 +175,13 @@ impl Chain {
 				return Err(ErrorKind::Stopped.into());
 			}
 
-			let store = Arc::new(RwLock::new(store::ChainStore::new(&db_root)?));
+			let store = Arc::new(store::ChainStore::new(&db_root)?);
 
 			// open the txhashset, creating a new one if necessary
 			let mut txhashset = txhashset::TxHashSet::open(db_root.clone(), store.clone(), None)?;
 
-			setup_head(&genesis, &mut store.write(), &mut txhashset)?;
-			Chain::log_heads(&store.read())?;
+			setup_head(&genesis, &store, &mut txhashset)?;
+			Chain::log_heads(&store)?;
 
 			Chain {
 				db_root,
@@ -212,7 +212,7 @@ impl Chain {
 	}
 
 	/// Shared store instance.
-	pub fn store(&self) -> Arc<RwLock<store::ChainStore>> {
+	pub fn store(&self) -> Arc<store::ChainStore> {
 		self.store.clone()
 	}
 
@@ -249,8 +249,7 @@ impl Chain {
 	/// the "sync" header MMR from a known consistent state and to ensure we track
 	/// the header chain correctly at the fork point.
 	pub fn reset_sync_head(&self) -> Result<Tip, Error> {
-		let mut s = self.store.write();
-		let batch = s.batch()?;
+		let batch = self.store.batch()?;
 		batch.reset_sync_head()?;
 		let head = batch.get_sync_head()?;
 		batch.commit()?;
@@ -301,8 +300,7 @@ impl Chain {
 			}
 
 			let mut txhashset = self.txhashset.write();
-			let mut s = self.store.write();
-			let batch = s.batch()?;
+			let batch = self.store.batch()?;
 			let mut ctx = self.new_ctx(opts, batch, &mut txhashset)?;
 
 			let prev_head = ctx.batch.head()?;
@@ -380,8 +378,7 @@ impl Chain {
 		// We take a write lock on the txhashset and create a new batch
 		// but this is strictly readonly so we do not commit the batch.
 		let mut txhashset = self.txhashset.write();
-		let mut s = self.store.write();
-		let batch = s.batch()?;
+		let batch = self.store.batch()?;
 		let mut ctx = self.new_ctx(opts, batch, &mut txhashset)?;
 		pipe::process_block_header(bh, &mut ctx)?;
 		Ok(())
@@ -401,8 +398,7 @@ impl Chain {
 		}
 
 		let mut txhashset = self.txhashset.write();
-		let mut s = self.store.write();
-		let batch = s.batch()?;
+		let batch = self.store.batch()?;
 		let mut ctx = self.new_ctx(opts, batch, &mut txhashset)?;
 
 		pipe::sync_block_headers(headers, &mut ctx)?;
@@ -545,7 +541,7 @@ impl Chain {
 
 	/// Validate the current chain state.
 	pub fn validate(&self, fast_validation: bool) -> Result<(), Error> {
-		let header = self.store.read().head_header()?;
+		let header = self.store.head_header()?;
 
 		// Lets just treat an "empty" node that just got started up as valid.
 		if header.height == 0 {
@@ -738,8 +734,7 @@ impl Chain {
 	/// TODO - think about how to optimize this.
 	pub fn rebuild_sync_mmr(&self, head: &Tip) -> Result<(), Error> {
 		let mut txhashset = self.txhashset.write();
-		let mut s = self.store.write();
-		let mut batch = s.batch()?;
+		let mut batch = self.store.batch()?;
 		txhashset::sync_extending(&mut txhashset, &mut batch, |extension| {
 			extension.rebuild(head, &self.genesis)?;
 			Ok(())
@@ -758,8 +753,7 @@ impl Chain {
 		head: &Tip,
 		txhashset: &mut txhashset::TxHashSet,
 	) -> Result<(), Error> {
-		let mut s = self.store.write();
-		let mut batch = s.batch()?;
+		let mut batch = self.store.batch()?;
 		txhashset::header_extending(txhashset, &mut batch, |extension| {
 			extension.rebuild(head, &self.genesis)?;
 			Ok(())
@@ -884,8 +878,7 @@ impl Chain {
 		// all good, prepare a new batch and update all the required records
 		debug!("txhashset_write: rewinding a 2nd time (writeable)");
 
-		let mut s = self.store.write();
-		let mut batch = s.batch()?;
+		let mut batch = self.store.batch()?;
 
 		txhashset::extending(&mut txhashset, &mut batch, |extension| {
 			extension.rewind(&header)?;
@@ -989,12 +982,11 @@ impl Chain {
 		let tail = self.get_header_by_height(head.height - horizon)?;
 		let mut current = self.get_header_by_height(head.height - horizon - 1)?;
 
-		let mut s = self.store.write();
-		let batch = s.batch()?;
+		let batch = self.store.batch()?;
 
 		loop {
 			// Go to the store directly so we can handle NotFoundErr robustly.
-			match self.store.read().get_block(&current.hash()) {
+			match self.store.get_block(&current.hash()) {
 				Ok(b) => {
 					batch.delete_block(&b.hash())?;
 					count += 1;
@@ -1096,7 +1088,6 @@ impl Chain {
 	/// Tip (head) of the block chain.
 	pub fn head(&self) -> Result<Tip, Error> {
 		self.store
-			.read()
 			.head()
 			.map_err(|e| ErrorKind::StoreErr(e, "chain head".to_owned()).into())
 	}
@@ -1104,7 +1095,6 @@ impl Chain {
 	/// Tail of the block chain in this node after compact (cross-block cut-through)
 	pub fn tail(&self) -> Result<Tip, Error> {
 		self.store
-			.read()
 			.tail()
 			.map_err(|e| ErrorKind::StoreErr(e, "chain tail".to_owned()).into())
 	}
@@ -1112,7 +1102,6 @@ impl Chain {
 	/// Tip (head) of the header chain.
 	pub fn header_head(&self) -> Result<Tip, Error> {
 		self.store
-			.read()
 			.header_head()
 			.map_err(|e| ErrorKind::StoreErr(e, "chain header head".to_owned()).into())
 	}
@@ -1120,7 +1109,6 @@ impl Chain {
 	/// Block header for the chain head
 	pub fn head_header(&self) -> Result<BlockHeader, Error> {
 		self.store
-			.read()
 			.head_header()
 			.map_err(|e| ErrorKind::StoreErr(e, "chain head header".to_owned()).into())
 	}
@@ -1128,7 +1116,6 @@ impl Chain {
 	/// Gets a block header by hash
 	pub fn get_block(&self, h: &Hash) -> Result<Block, Error> {
 		self.store
-			.read()
 			.get_block(h)
 			.map_err(|e| ErrorKind::StoreErr(e, "chain get block".to_owned()).into())
 	}
@@ -1136,7 +1123,6 @@ impl Chain {
 	/// Gets a block header by hash
 	pub fn get_block_header(&self, h: &Hash) -> Result<BlockHeader, Error> {
 		self.store
-			.read()
 			.get_block_header(h)
 			.map_err(|e| ErrorKind::StoreErr(e, "chain get header".to_owned()).into())
 	}
@@ -1144,7 +1130,6 @@ impl Chain {
 	/// Get previous block header.
 	pub fn get_previous_header(&self, header: &BlockHeader) -> Result<BlockHeader, Error> {
 		self.store
-			.read()
 			.get_previous_header(header)
 			.map_err(|e| ErrorKind::StoreErr(e, "chain get previous header".to_owned()).into())
 	}
@@ -1152,7 +1137,6 @@ impl Chain {
 	/// Get block_sums by header hash.
 	pub fn get_block_sums(&self, h: &Hash) -> Result<BlockSums, Error> {
 		self.store
-			.read()
 			.get_block_sums(h)
 			.map_err(|e| ErrorKind::StoreErr(e, "chain get block_sums".to_owned()).into())
 	}
@@ -1217,7 +1201,6 @@ impl Chain {
 	/// This may be significantly different to current header chain.
 	pub fn get_sync_head(&self) -> Result<Tip, Error> {
 		self.store
-			.read()
 			.get_sync_head()
 			.map_err(|e| ErrorKind::StoreErr(e, "chain get sync head".to_owned()).into())
 	}
@@ -1234,7 +1217,6 @@ impl Chain {
 	/// Check whether we have a block without reading it
 	pub fn block_exists(&self, h: Hash) -> Result<bool, Error> {
 		self.store
-			.read()
 			.block_exists(&h)
 			.map_err(|e| ErrorKind::StoreErr(e, "chain block exists".to_owned()).into())
 	}
@@ -1242,7 +1224,7 @@ impl Chain {
 
 fn setup_head(
 	genesis: &Block,
-	store: &mut store::ChainStore,
+	store: &store::ChainStore,
 	txhashset: &mut txhashset::TxHashSet,
 ) -> Result<(), Error> {
 	let mut batch = store.batch()?;

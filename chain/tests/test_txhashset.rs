@@ -26,7 +26,7 @@ use std::sync::Arc;
 use crate::chain::store::ChainStore;
 use crate::chain::txhashset;
 use crate::core::core::BlockHeader;
-use crate::util::{file, RwLock};
+use crate::util::file;
 use grin_core::core::hash::Hashed;
 
 fn clean_output_dir(dir_name: &str) {
@@ -38,7 +38,7 @@ fn test_unexpected_zip() {
 	let db_root = format!(".grin_txhashset_zip");
 	clean_output_dir(&db_root);
 	let chain_store = ChainStore::new(&db_root).unwrap();
-	let store = Arc::new(RwLock::new(chain_store));
+	let store = Arc::new(chain_store);
 	txhashset::TxHashSet::open(db_root.clone(), store.clone(), None).unwrap();
 	let head = BlockHeader::default();
 	// First check if everything works out of the box

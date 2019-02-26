@@ -20,7 +20,6 @@ use crate::core::core::{Block, BlockHeader, BlockSums};
 use crate::core::pow::Difficulty;
 use crate::types::Tip;
 use crate::util::secp::pedersen::Commitment;
-use crate::util::RwLock;
 use croaring::Bitmap;
 use grin_store as store;
 use grin_store::{option_to_not_found, to_key, Error};
@@ -114,7 +113,7 @@ impl ChainStore {
 	}
 
 	/// Builds a new batch to be used with this store.
-	pub fn batch(&mut self) -> Result<Batch<'_>, Error> {
+	pub fn batch(&self) -> Result<Batch<'_>, Error> {
 		Ok(Batch {
 			db: self.db.batch()?,
 		})
@@ -355,7 +354,7 @@ impl<'a> Batch<'a> {
 /// calculation.
 pub struct DifficultyIter<'a> {
 	start: Hash,
-	store: Option<Arc<RwLock<ChainStore>>>,
+	store: Option<Arc<ChainStore>>,
 	batch: Option<Batch<'a>>,
 
 	// maintain state for both the "next" header in this iteration
@@ -369,7 +368,7 @@ pub struct DifficultyIter<'a> {
 impl<'a> DifficultyIter<'a> {
 	/// Build a new iterator using the provided chain store and starting from
 	/// the provided block hash.
-	pub fn from<'b>(start: Hash, store: Arc<RwLock<ChainStore>>) -> DifficultyIter<'b> {
+	pub fn from<'b>(start: Hash, store: Arc<ChainStore>) -> DifficultyIter<'b> {
 		DifficultyIter {
 			start,
 			store: Some(store),
@@ -403,7 +402,7 @@ impl<'a> Iterator for DifficultyIter<'a> {
 				batch.get_block_header(&self.start).ok()
 			} else {
 				if let Some(ref store) = self.store {
-					store.read().get_block_header(&self.start).ok()
+					store.get_block_header(&self.start).ok()
 				} else {
 					None
 				}
@@ -419,7 +418,7 @@ impl<'a> Iterator for DifficultyIter<'a> {
 				self.prev_header = batch.get_previous_header(&header).ok();
 			} else {
 				if let Some(ref store) = self.store {
-					self.prev_header = store.read().get_previous_header(&header).ok();
+					self.prev_header = store.get_previous_header(&header).ok();
 				} else {
 					self.prev_header = None;
 				}

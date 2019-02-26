@@ -21,7 +21,6 @@ use rand::{thread_rng, Rng};
 use crate::core::ser::{self, Readable, Reader, Writeable, Writer};
 use crate::types::{Capabilities, PeerAddr, ReasonForBan};
 use grin_store::{self, option_to_not_found, to_key, Error};
-use grin_util::RwLock;
 
 const STORE_SUBPATH: &'static str = "peers";
 
@@ -110,7 +109,7 @@ impl Readable for PeerData {
 
 /// Storage facility for peer data.
 pub struct PeerStore {
-	db: RwLock<grin_store::Store>,
+	db: grin_store::Store,
 }
 
 impl PeerStore {
@@ -118,44 +117,39 @@ impl PeerStore {
 	pub fn new(db_root: &str) -> Result<PeerStore, Error> {
 		let db = grin_store::Store::new(db_root, Some(STORE_SUBPATH), None)?;
 		Ok(PeerStore {
-			db: RwLock::new(db),
+			db: db,
 		})
 	}
 
 	pub fn save_peer(&self, p: &PeerData) -> Result<(), Error> {
 		debug!("save_peer: {:?} marked {:?}", p.addr, p.flags);
 
-		let mut s = self.db.write();
-		let batch = s.batch()?;
+		let batch = self.db.batch()?;
 		batch.put_ser(&peer_key(p.addr)[..], p)?;
 		batch.commit()
 	}
 
 	pub fn get_peer(&self, peer_addr: PeerAddr) -> Result<PeerData, Error> {
-		let db = self.db.read();
 		option_to_not_found(
-			db.get_ser(&peer_key(peer_addr)[..]),
+			self.db.get_ser(&peer_key(peer_addr)[..]),
 			&format!("Peer at address: {}", peer_addr),
 		)
 	}
 
 	pub fn exists_peer(&self, peer_addr: PeerAddr) -> Result<bool, Error> {
-		let db = self.db.read();
-		db.exists(&peer_key(peer_addr)[..])
+		self.db.exists(&peer_key(peer_addr)[..])
 	}
 
 	/// TODO - allow below added to avoid github issue reports
 	#[allow(dead_code)]
 	pub fn delete_peer(&self, peer_addr: PeerAddr) -> Result<(), Error> {
-		let mut s = self.db.write();
-		let batch = s.batch()?;
+		let batch = self.db.batch()?;
 		batch.delete(&peer_key(peer_addr)[..])?;
 		batch.commit()
 	}
 
 	pub fn find_peers(&self, state: State, cap: Capabilities, count: usize) -> Vec<PeerData> {
-		let db = self.db.read();
-		let mut peers = db
+		let mut peers = self.db
 			.iter::<PeerData>(&to_key(PEER_PREFIX, &mut "".to_string().into_bytes()))
 			.unwrap()
 			.filter(|p| p.flags == state && p.capabilities.contains(cap))
@@ -168,15 +162,13 @@ impl PeerStore {
 	/// Used for /v1/peers/all api endpoint
 	pub fn all_peers(&self) -> Vec<PeerData> {
 		let key = to_key(PEER_PREFIX, &mut "".to_string().into_bytes());
-		let db = self.db.read();
-		db.iter::<PeerData>(&key).unwrap().collect::<Vec<_>>()
+		self.db.iter::<PeerData>(&key).unwrap().collect::<Vec<_>>()
 	}
 
 	/// Convenience method to load a peer data, update its status and save it
 	/// back. If new state is Banned its last banned time will be updated too.
 	pub fn update_state(&self, peer_addr: PeerAddr, new_state: State) -> Result<(), Error> {
-		let mut s = self.db.write();
-		let batch = s.batch()?;
+		let batch = self.db.batch()?;
 
 		let mut peer = option_to_not_found(
 			batch.get_ser::<PeerData>(&peer_key(peer_addr)[..]),
@@ -206,8 +198,7 @@ impl PeerStore {
 
 		// Delete peers in single batch
 		if !to_remove.is_empty() {
-			let mut s = self.db.write();
-			let batch = s.batch()?;
+			let batch = self.db.batch()?;
 
 			for peer in to_remove {
 				batch.delete(&peer_key(peer.addr)[..])?;

@@ -42,7 +42,6 @@ use crate::mining::test_miner::Miner;
 use crate::p2p;
 use crate::p2p::types::PeerAddr;
 use crate::pool;
-use crate::store;
 use crate::util::file::get_first_line;
 use crate::util::{Mutex, RwLock, StopState};
 

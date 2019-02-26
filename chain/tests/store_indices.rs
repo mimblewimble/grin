@@ -23,7 +23,6 @@ use env_logger;
 use grin_chain as chain;
 use grin_core as core;
 use grin_keychain as keychain;
-use grin_util::RwLock;
 use std::fs;
 use std::sync::Arc;
 
@@ -33,10 +32,9 @@ fn clean_output_dir(dir_name: &str) {
 
 fn setup_chain(
 	genesis: &Block,
-	chain_store: Arc<RwLock<chain::store::ChainStore>>,
+	chain_store: Arc<chain::store::ChainStore>,
 ) -> Result<(), Error> {
-	let mut s = chain_store.write();
-	let batch = s.batch()?;
+	let batch = chain_store.batch()?;
 	batch.save_block_header(&genesis.header)?;
 	batch.save_block(&genesis)?;
 	let head = Tip::from_header(&genesis.header);
@@ -58,9 +56,7 @@ fn test_various_store_indices() {
 	let keychain = ExtKeychain::from_random_seed(false).unwrap();
 	let key_id = ExtKeychainPath::new(1, 1, 0, 0, 0).to_identifier();
 
-	let chain_store = Arc::new(RwLock::new(
-		chain::store::ChainStore::new(chain_dir).unwrap(),
-	));
+	let chain_store = Arc::new(chain::store::ChainStore::new(chain_dir).unwrap());
 
 	global::set_mining_mode(ChainTypes::AutomatedTesting);
 	let genesis = pow::mine_genesis_block().unwrap();
@@ -72,14 +68,11 @@ fn test_various_store_indices() {
 	let block_hash = block.hash();
 
 	{
-		let mut s = chain_store.write();
-		let batch = s.batch().unwrap();
+		let batch = chain_store.batch().unwrap();
 		batch.save_block_header(&block.header).unwrap();
 		batch.save_block(&block).unwrap();
 		batch.commit().unwrap();
 	}
-
-	let mut chain_store = chain_store.write();
 
 	let block_header = chain_store.get_block_header(&block_hash).unwrap();
 	assert_eq!(block_header.hash(), block_hash);
