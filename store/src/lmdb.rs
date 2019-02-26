@@ -217,7 +217,7 @@ impl Store {
 		&self,
 		key: &[u8],
 		access: &lmdb::ConstAccessor<'_>,
-		db: RwLockReadGuard<'_, Option<Arc<lmdb::Database<'static>>>>
+		db: RwLockReadGuard<'_, Option<Arc<lmdb::Database<'static>>>>,
 	) -> Result<Option<T>, Error> {
 		let res: lmdb::error::Result<&[u8]> = access.get(&db.as_ref().unwrap(), key);
 		match res.to_opt() {
