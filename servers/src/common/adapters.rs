@@ -22,6 +22,7 @@ use std::thread;
 use std::time::Instant;
 
 use crate::chain::{self, BlockStatus, ChainAdapter, Options};
+use crate::common::hooks::{ChainEvents, NetEvents};
 use crate::common::types::{self, ChainValidationMode, ServerConfig, SyncState, SyncStatus};
 use crate::core::core::hash::{Hash, Hashed};
 use crate::core::core::transaction::Transaction;
@@ -47,6 +48,7 @@ pub struct NetToChainAdapter {
 	verifier_cache: Arc<RwLock<dyn VerifierCache>>,
 	peers: OneTime<Weak<p2p::Peers>>,
 	config: ServerConfig,
+	hooks: Vec<Box<dyn NetEvents + Send + Sync>>,
 }
 
 impl p2p::ChainAdapter for NetToChainAdapter {
@@ -86,16 +88,13 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 			identifier: "?.?.?.?".to_string(),
 		};
 
-		let tx_hash = tx.hash();
 		let header = self.chain().head_header().unwrap();
 
-		debug!(
-			"Received tx {}, [in/out/kern: {}/{}/{}] going to process.",
-			tx_hash,
-			tx.inputs().len(),
-			tx.outputs().len(),
-			tx.kernels().len(),
-		);
+		for hook in &self.hooks {
+			hook.on_transaction_received(&tx);
+		}
+
+		let tx_hash = tx.hash();
 
 		let res = {
 			let mut tx_pool = self.tx_pool.write();
@@ -108,35 +107,24 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 	}
 
 	fn block_received(&self, b: core::Block, addr: PeerAddr, was_requested: bool) -> bool {
-		debug!(
-			"Received block {} at {} from {} [in/out/kern: {}/{}/{}] going to process.",
-			b.hash(),
-			b.header.height,
-			addr,
-			b.inputs().len(),
-			b.outputs().len(),
-			b.kernels().len(),
-		);
+		for hook in &self.hooks {
+			hook.on_block_received(&b, &addr);
+		}
+
 		self.process_block(b, addr, was_requested)
 	}
 
 	fn compact_block_received(&self, cb: core::CompactBlock, addr: PeerAddr) -> bool {
-		let bhash = cb.hash();
-		debug!(
-			"Received compact_block {} at {} from {} [out/kern/kern_ids: {}/{}/{}] going to process.",
-			bhash,
-			cb.header.height,
-			addr,
-			cb.out_full().len(),
-			cb.kern_full().len(),
-			cb.kern_ids().len(),
-		);
-
 		let cb_hash = cb.hash();
 		if cb.kern_ids().is_empty() {
 			// push the freshly hydrated block through the chain pipeline
 			match core::Block::hydrate_from(cb, vec![]) {
-				Ok(block) => self.process_block(block, addr, false),
+				Ok(block) => {
+					for hook in &self.hooks {
+						hook.on_block_received(&block, &addr);
+					}
+					self.process_block(block, addr, false)
+				}
 				Err(e) => {
 					debug!("Invalid hydrated block {}: {:?}", cb_hash, e);
 					return false;
@@ -170,7 +158,12 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 			// 3) we hydrate an invalid block (peer sent us a "bad" compact block) - [TBD]
 
 			let block = match core::Block::hydrate_from(cb.clone(), txs) {
-				Ok(block) => block,
+				Ok(block) => {
+					for hook in &self.hooks {
+						hook.on_block_received(&block, &addr);
+					}
+					block
+				}
 				Err(e) => {
 					debug!("Invalid hydrated block {}: {:?}", cb.hash(), e);
 					return false;
@@ -202,11 +195,9 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 	}
 
 	fn header_received(&self, bh: core::BlockHeader, addr: PeerAddr) -> bool {
-		let bhash = bh.hash();
-		debug!(
-			"Received block header {} at {} from {}, going to process.",
-			bhash, bh.height, addr,
-		);
+		for hook in &self.hooks {
+			hook.on_header_received(&bh, &addr);
+		}
 
 		// pushing the new block header through the header chain pipeline
 		// we will go ask for the block if this is a new header
@@ -215,7 +206,11 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 			.process_block_header(&bh, self.chain_opts(false));
 
 		if let &Err(ref e) = &res {
-			debug!("Block header {} refused by chain: {:?}", bhash, e.kind());
+			debug!(
+				"Block header {} refused by chain: {:?}",
+				bh.hash(),
+				e.kind()
+			);
 			if e.is_bad_data() {
 				return false;
 			} else {
@@ -238,6 +233,12 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 
 		if bhs.len() == 0 {
 			return false;
+		}
+
+		for header in bhs.iter() {
+			for hook in &self.hooks {
+				hook.on_header_received(&header, &addr);
+			}
 		}
 
 		// try to add headers to our header chain
@@ -372,6 +373,7 @@ impl NetToChainAdapter {
 		tx_pool: Arc<RwLock<pool::TransactionPool>>,
 		verifier_cache: Arc<RwLock<dyn VerifierCache>>,
 		config: ServerConfig,
+		hooks: Vec<Box<dyn NetEvents + Send + Sync>>,
 	) -> NetToChainAdapter {
 		NetToChainAdapter {
 			sync_state,
@@ -380,6 +382,7 @@ impl NetToChainAdapter {
 			verifier_cache,
 			peers: OneTime::new(),
 			config,
+			hooks,
 		}
 	}
 
@@ -608,35 +611,13 @@ impl NetToChainAdapter {
 pub struct ChainToPoolAndNetAdapter {
 	tx_pool: Arc<RwLock<pool::TransactionPool>>,
 	peers: OneTime<Weak<p2p::Peers>>,
+	hooks: Vec<Box<dyn ChainEvents + Send + Sync>>,
 }
 
 impl ChainAdapter for ChainToPoolAndNetAdapter {
 	fn block_accepted(&self, b: &core::Block, status: BlockStatus, opts: Options) {
-		match status {
-			BlockStatus::Reorg => {
-				warn!(
-					"block_accepted (REORG!): {:?} at {} (diff: {})",
-					b.hash(),
-					b.header.height,
-					b.header.total_difficulty(),
-				);
-			}
-			BlockStatus::Fork => {
-				debug!(
-					"block_accepted (fork?): {:?} at {} (diff: {})",
-					b.hash(),
-					b.header.height,
-					b.header.total_difficulty(),
-				);
-			}
-			BlockStatus::Next => {
-				debug!(
-					"block_accepted (head+): {:?} at {} (diff: {})",
-					b.hash(),
-					b.header.height,
-					b.header.total_difficulty(),
-				);
-			}
+		for hook in &self.hooks {
+			hook.on_block_accepted(b, &status);
 		}
 
 		// not broadcasting blocks received through sync
@@ -675,10 +656,14 @@ impl ChainAdapter for ChainToPoolAndNetAdapter {
 
 impl ChainToPoolAndNetAdapter {
 	/// Construct a ChainToPoolAndNetAdapter instance.
-	pub fn new(tx_pool: Arc<RwLock<pool::TransactionPool>>) -> ChainToPoolAndNetAdapter {
+	pub fn new(
+		tx_pool: Arc<RwLock<pool::TransactionPool>>,
+		hooks: Vec<Box<dyn ChainEvents + Send + Sync>>,
+	) -> ChainToPoolAndNetAdapter {
 		ChainToPoolAndNetAdapter {
 			tx_pool,
 			peers: OneTime::new(),
+			hooks: hooks,
 		}
 	}
 

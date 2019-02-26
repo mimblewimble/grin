@@ -169,6 +169,10 @@ pub struct ServerConfig {
 	/// Configuration for the mining daemon
 	#[serde(default)]
 	pub stratum_mining_config: Option<StratumServerConfig>,
+
+	/// Configuration for the webhooks that trigger on certain events
+	#[serde(default)]
+	pub webhook_config: WebHooksConfig,
 }
 
 impl Default for ServerConfig {
@@ -190,6 +194,7 @@ impl Default for ServerConfig {
 			run_tui: Some(true),
 			run_test_miner: Some(false),
 			test_miner_wallet_url: None,
+			webhook_config: WebHooksConfig::default(),
 		}
 	}
 }
@@ -228,6 +233,30 @@ impl Default for StratumServerConfig {
 			minimum_share_difficulty: 1,
 			enable_stratum_server: Some(false),
 			stratum_server_addr: Some("127.0.0.1:3416".to_string()),
+		}
+	}
+}
+
+/// Web hooks configuration
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct WebHooksConfig {
+	/// url to POST transaction data when a new transaction arrives from a peer
+	pub tx_received_url: Option<String>,
+	/// url to POST header data when a new header arrives from a peer
+	pub header_received_url: Option<String>,
+	/// url to POST block data when a new block arrives from a peer
+	pub block_received_url: Option<String>,
+	/// url to POST block data when a new block is accepted by our node (might be a reorg or a fork)
+	pub block_accepted_url: Option<String>,
+}
+
+impl Default for WebHooksConfig {
+	fn default() -> WebHooksConfig {
+		WebHooksConfig {
+			tx_received_url: None,
+			header_received_url: None,
+			block_received_url: None,
+			block_accepted_url: None,
 		}
 	}
 }
