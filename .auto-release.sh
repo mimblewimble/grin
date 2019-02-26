@@ -32,15 +32,6 @@ elif [[ $TRAVIS_OS_NAME == 'windows' ]]; then
 
     # Only generate changelog on Linux platform, to avoid duplication
     exit 0
-elif [[ $TRAVIS_OS_NAME == 'windows' ]]; then
-    # Custom requirements for windows
-    cd target/release ; rm -f *.zip; zip "grin-$tagname-$TRAVIS_JOB_ID-win-x64.zip" grin
-    /bin/ls -ls *.zip  | awk '{print $6,$7,$8,$9,$10}'
-    md5 "grin-$tagname-$TRAVIS_JOB_ID-win-x64.zip" > "grin-$tagname-$TRAVIS_JOB_ID-win-x64.zip"-md5sum.txt
-    /bin/ls -ls *-md5sum.txt  | awk '{print $6,$7,$8,$9,$10}'
-    cd - > /dev/null;
-    echo "windows zip file generated\n"
-    exit 0
 else
     # Do some custom requirements on Linux
     cd target/release ; rm -f *.tgz; tar zcf "grin-$tagname-$TRAVIS_JOB_ID-linux-amd64.tgz" grin
