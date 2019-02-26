@@ -106,7 +106,7 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 		}
 	}
 
-	fn block_received(&self, b: core::Block, addr: SocketAddr, was_requested: bool) -> bool {
+	fn block_received(&self, b: core::Block, addr: PeerAddr, was_requested: bool) -> bool {
 		for hook in &self.hooks {
 			hook.on_block_received(&b, &addr);
 		}
@@ -114,7 +114,7 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 		self.process_block(b, addr, was_requested)
 	}
 
-	fn compact_block_received(&self, cb: core::CompactBlock, addr: SocketAddr) -> bool {
+	fn compact_block_received(&self, cb: core::CompactBlock, addr: PeerAddr) -> bool {
 		let cb_hash = cb.hash();
 		if cb.kern_ids().is_empty() {
 			// push the freshly hydrated block through the chain pipeline
@@ -194,7 +194,7 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 		}
 	}
 
-	fn header_received(&self, bh: core::BlockHeader, addr: SocketAddr) -> bool {
+	fn header_received(&self, bh: core::BlockHeader, addr: PeerAddr) -> bool {
 		for hook in &self.hooks {
 			hook.on_header_received(&bh, &addr);
 		}

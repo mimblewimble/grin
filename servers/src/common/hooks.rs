@@ -29,7 +29,7 @@ use hyper::Client;
 use hyper::{Body, Method, Request};
 use serde::Serialize;
 use serde_json::{json, to_string};
-use std::net::SocketAddr;
+use crate::p2p::types::PeerAddr;
 use tokio::runtime::Runtime;
 
 /// Returns the list of event hooks that will be initialized for network events
@@ -62,10 +62,10 @@ pub trait NetEvents {
 	fn on_transaction_received(&self, tx: &core::Transaction) {}
 
 	/// Triggers when a new block arrives
-	fn on_block_received(&self, block: &core::Block, addr: &SocketAddr) {}
+	fn on_block_received(&self, block: &core::Block, addr: &PeerAddr) {}
 
 	/// Triggers when a new block header arrives
-	fn on_header_received(&self, header: &core::BlockHeader, addr: &SocketAddr) {}
+	fn on_header_received(&self, header: &core::BlockHeader, addr: &PeerAddr) {}
 }
 
 #[allow(unused_variables)]
@@ -89,7 +89,7 @@ impl NetEvents for EventLogger {
 		);
 	}
 
-	fn on_block_received(&self, block: &core::Block, addr: &SocketAddr) {
+	fn on_block_received(&self, block: &core::Block, addr: &PeerAddr) {
 		debug!(
 			"Received block {} at {} from {} [in/out/kern: {}/{}/{}] going to process.",
 			block.hash(),
@@ -101,7 +101,7 @@ impl NetEvents for EventLogger {
 		);
 	}
 
-	fn on_header_received(&self, header: &core::BlockHeader, addr: &SocketAddr) {
+	fn on_header_received(&self, header: &core::BlockHeader, addr: &PeerAddr) {
 		debug!(
 			"Received block header {} at {} from {}, going to process.",
 			header.hash(),
@@ -272,7 +272,7 @@ impl NetEvents for WebHook {
 	}
 
 	/// Triggers when a new block arrives
-	fn on_block_received(&self, block: &core::Block, addr: &SocketAddr) {
+	fn on_block_received(&self, block: &core::Block, addr: &PeerAddr) {
 		let payload = json!({
 			"hash": block.header.hash().to_hex(),
 			"peer": addr,
@@ -288,7 +288,7 @@ impl NetEvents for WebHook {
 	}
 
 	/// Triggers when a new block header arrives
-	fn on_header_received(&self, header: &core::BlockHeader, addr: &SocketAddr) {
+	fn on_header_received(&self, header: &core::BlockHeader, addr: &PeerAddr) {
 		let payload = json!({
 			"hash": header.hash().to_hex(),
 			"peer": addr,
