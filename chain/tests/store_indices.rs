@@ -30,10 +30,7 @@ fn clean_output_dir(dir_name: &str) {
 	let _ = fs::remove_dir_all(dir_name);
 }
 
-fn setup_chain(
-	genesis: &Block,
-	chain_store: Arc<chain::store::ChainStore>,
-) -> Result<(), Error> {
+fn setup_chain(genesis: &Block, chain_store: Arc<chain::store::ChainStore>) -> Result<(), Error> {
 	let batch = chain_store.batch()?;
 	batch.save_block_header(&genesis.header)?;
 	batch.save_block(&genesis)?;

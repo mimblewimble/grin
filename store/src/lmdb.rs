@@ -267,12 +267,9 @@ impl<'a> Batch<'a> {
 	/// Writes a single key/value pair to the db
 	pub fn put(&self, key: &[u8], value: &[u8]) -> Result<(), Error> {
 		let db = self.store.db.read();
-		self.tx.access().put(
-			&db.as_ref().unwrap(),
-			key,
-			value,
-			lmdb::put::Flags::empty(),
-		)?;
+		self.tx
+			.access()
+			.put(&db.as_ref().unwrap(), key, value, lmdb::put::Flags::empty())?;
 		Ok(())
 	}
 
@@ -312,9 +309,7 @@ impl<'a> Batch<'a> {
 	/// Deletes a key/value pair from the db
 	pub fn delete(&self, key: &[u8]) -> Result<(), Error> {
 		let db = self.store.db.read();
-		self.tx
-			.access()
-			.del_key(&db.as_ref().unwrap(), key)?;
+		self.tx.access().del_key(&db.as_ref().unwrap(), key)?;
 		Ok(())
 	}
 

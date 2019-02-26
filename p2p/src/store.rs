@@ -116,9 +116,7 @@ impl PeerStore {
 	/// Instantiates a new peer store under the provided root path.
 	pub fn new(db_root: &str) -> Result<PeerStore, Error> {
 		let db = grin_store::Store::new(db_root, Some(STORE_SUBPATH), None)?;
-		Ok(PeerStore {
-			db: db,
-		})
+		Ok(PeerStore { db: db })
 	}
 
 	pub fn save_peer(&self, p: &PeerData) -> Result<(), Error> {
@@ -149,7 +147,8 @@ impl PeerStore {
 	}
 
 	pub fn find_peers(&self, state: State, cap: Capabilities, count: usize) -> Vec<PeerData> {
-		let mut peers = self.db
+		let mut peers = self
+			.db
 			.iter::<PeerData>(&to_key(PEER_PREFIX, &mut "".to_string().into_bytes()))
 			.unwrap()
 			.filter(|p| p.flags == state && p.capabilities.contains(cap))

@@ -743,7 +743,8 @@ impl WorkersList {
 	}
 
 	pub fn send_to(&self, worker_id: usize, msg: String) {
-		let _ = self.workers_list
+		let _ = self
+			.workers_list
 			.read()
 			.get(&worker_id)
 			.unwrap()
