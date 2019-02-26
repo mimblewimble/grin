@@ -23,14 +23,14 @@ use lmdb_zero::traits::CreateCursor;
 use lmdb_zero::LmdbResultExt;
 
 use crate::core::ser;
-use crate::util::RwLock;
+use crate::util::{RwLock, RwLockReadGuard};
 
 /// number of bytes to grow the database by when needed
 pub const ALLOC_CHUNK_SIZE: usize = 134_217_728; //128 MB
 const RESIZE_PERCENT: f32 = 0.9;
 /// Want to ensure that each resize gives us at least this %
 /// of total space free
-const RESIZE_MIN_TARGET_PERCENT: f32 = 0.6;
+const RESIZE_MIN_TARGET_PERCENT: f32 = 0.65;
 
 /// Main error type for this lmdb
 #[derive(Clone, Eq, PartialEq, Debug, Fail)]
@@ -104,7 +104,14 @@ impl Store {
 			name: name,
 		};
 
-		res.open()?;
+		{
+			let mut w = res.db.write();
+			*w = Some(Arc::new(lmdb::Database::open(
+				res.env.clone(),
+				Some(&res.name),
+				&lmdb::DatabaseOptions::new(lmdb::db::CREATE),
+			)?));
+		}
 		Ok(res)
 	}
 
@@ -116,13 +123,6 @@ impl Store {
 			Some(&self.name),
 			&lmdb::DatabaseOptions::new(lmdb::db::CREATE),
 		)?));
-		Ok(())
-	}
-
-	/// Closes the db
-	pub fn close(&self) -> Result<(), Error> {
-		let mut w = self.db.write();
-		*w = None;
 		Ok(())
 	}
 
@@ -171,11 +171,21 @@ impl Store {
 			}
 			tot
 		};
-		self.close()?;
+
+		// close
+		let mut w = self.db.write();
+		*w = None;
+
 		unsafe {
 			self.env.set_mapsize(new_mapsize)?;
 		}
-		self.open()?;
+
+		*w = Some(Arc::new(lmdb::Database::open(
+			self.env.clone(),
+			Some(&self.name),
+			&lmdb::DatabaseOptions::new(lmdb::db::CREATE),
+		)?));
+
 		info!(
 			"Resized database from {} to {}",
 			env_info.mapsize, new_mapsize
@@ -185,9 +195,9 @@ impl Store {
 
 	/// Gets a value from the db, provided its key
 	pub fn get(&self, key: &[u8]) -> Result<Option<Vec<u8>>, Error> {
+		let db = self.db.read();
 		let txn = lmdb::ReadTransaction::new(self.env.clone())?;
 		let access = txn.access();
-		let db = self.db.read();
 		let res = access.get(&db.as_ref().unwrap(), key);
 		res.map(|res: &[u8]| res.to_vec())
 			.to_opt()
@@ -197,17 +207,18 @@ impl Store {
 	/// Gets a `Readable` value from the db, provided its key. Encapsulates
 	/// serialization.
 	pub fn get_ser<T: ser::Readable>(&self, key: &[u8]) -> Result<Option<T>, Error> {
+		let db = self.db.read();
 		let txn = lmdb::ReadTransaction::new(self.env.clone())?;
 		let access = txn.access();
-		self.get_ser_access(key, &access)
+		self.get_ser_access(key, &access, db)
 	}
 
 	fn get_ser_access<T: ser::Readable>(
 		&self,
 		key: &[u8],
 		access: &lmdb::ConstAccessor<'_>,
+		db: RwLockReadGuard<'_, Option<Arc<lmdb::Database<'static>>>>
 	) -> Result<Option<T>, Error> {
-		let db = self.db.read();
 		let res: lmdb::error::Result<&[u8]> = access.get(&db.as_ref().unwrap(), key);
 		match res.to_opt() {
 			Ok(Some(mut res)) => match ser::deserialize(&mut res) {
@@ -221,9 +232,9 @@ impl Store {
 
 	/// Whether the provided key exists
 	pub fn exists(&self, key: &[u8]) -> Result<bool, Error> {
+		let db = self.db.read();
 		let txn = lmdb::ReadTransaction::new(self.env.clone())?;
 		let access = txn.access();
-		let db = self.db.read();
 		let res: lmdb::error::Result<&lmdb::Ignore> = access.get(&db.as_ref().unwrap(), key);
 		res.to_opt().map(|r| r.is_some()).map_err(From::from)
 	}
@@ -231,8 +242,8 @@ impl Store {
 	/// Produces an iterator of `Readable` types moving forward from the
 	/// provided key.
 	pub fn iter<T: ser::Readable>(&self, from: &[u8]) -> Result<SerIterator<T>, Error> {
-		let tx = Arc::new(lmdb::ReadTransaction::new(self.env.clone())?);
 		let db = self.db.read();
+		let tx = Arc::new(lmdb::ReadTransaction::new(self.env.clone())?);
 		let cursor = Arc::new(tx.cursor(db.as_ref().unwrap().clone()).unwrap());
 		Ok(SerIterator {
 			tx,
@@ -303,7 +314,8 @@ impl<'a> Batch<'a> {
 	/// content of the current batch into account.
 	pub fn get_ser<T: ser::Readable>(&self, key: &[u8]) -> Result<Option<T>, Error> {
 		let access = self.tx.access();
-		self.store.get_ser_access(key, &access)
+		let db = self.store.db.read();
+		self.store.get_ser_access(key, &access, db)
 	}
 
 	/// Deletes a key/value pair from the db
