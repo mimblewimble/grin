@@ -718,7 +718,7 @@ impl pool::PoolAdapter for PoolToNetAdapter {
 		self.peers().broadcast_transaction(tx);
 	}
 
-	fn stem_tx_accepted(&self, tx: &core::Transaction) {
+	fn stem_tx_accepted(&self, tx: &core::Transaction) -> Result<(), pool::PoolError> {
 		let mut epoch = self.dandelion_epoch.write();
 		if epoch.is_expired() {
 			debug!("Epoch expired, setting up next epoch.");
@@ -731,18 +731,22 @@ impl pool::PoolAdapter for PoolToNetAdapter {
 		if epoch.is_stem() {
 			if let Some(peer) = epoch.relay_peer(&self.peers()) {
 				match peer.send_stem_transaction(tx) {
-					Ok(_) => info!("Stemming this epoch, relaying to next peer."),
+					Ok(_) => {
+						info!("Stemming this epoch, relaying to next peer.");
+						Ok(())
+					}
 					Err(e) => {
 						error!("Stemming tx failed. Fluffing. {:?}", e);
-						self.peers().broadcast_transaction(tx);
+						Err(pool::PoolError::DandelionError)
 					}
 				}
 			} else {
 				error!("No relay peer. Fluffing.");
-				self.peers().broadcast_transaction(tx);
+				Err(pool::PoolError::DandelionError)
 			}
 		} else {
 			info!("Fluff epoch. Aggregating stem tx(s). Fluffing when epoch expires.");
+			Ok(())
 		}
 	}
 }

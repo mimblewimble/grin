@@ -78,7 +78,6 @@ impl TransactionPool {
 		// Add tx to stempool (passing in all txs from txpool to validate against).
 		self.stempool
 			.add_to_pool(entry.clone(), self.txpool.all_transactions(), header)?;
-		self.adapter.stem_tx_accepted(&entry.tx);
 		Ok(())
 	}
 
@@ -120,8 +119,6 @@ impl TransactionPool {
 			let txpool_tx = self.txpool.all_transactions_aggregate()?;
 			self.stempool.reconcile(txpool_tx, header)?;
 		}
-
-		self.adapter.tx_accepted(&entry.tx);
 		Ok(())
 	}
 
@@ -160,11 +157,22 @@ impl TransactionPool {
 			tx,
 		};
 
-		if stem {
+		// If this is a stem tx then attempt to stem.
+		// Any problems fallback to fluff later.
+		// If not stem then we are fluff.
+		let fluff = if stem {
 			self.add_to_stempool(entry.clone(), header)?;
+			self.adapter.stem_tx_accepted(&entry.tx).is_err()
 		} else {
+			true
+		};
+
+		// Fluff (broadcast) the tx if tagged as fluff or if
+		// stemming failed for any reason.
+		if fluff {
 			self.add_to_txpool(entry.clone(), header)?;
-			self.add_to_reorg_cache(entry);
+			self.add_to_reorg_cache(entry.clone());
+			self.adapter.tx_accepted(&entry.tx);
 		}
 
 		Ok(())
