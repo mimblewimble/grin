@@ -1226,10 +1226,7 @@ impl Readable for OutputFeatures {
 /// Output for a transaction, defining the new ownership of coins that are being
 /// transferred. The commitment is a blinded value for the output while the
 /// range proof guarantees the commitment includes a positive value without
-/// overflow and the ownership of the private key. The switch commitment hash
-/// provides future-proofing against quantum-based attacks, as well as providing
-/// wallet implementations with a way to identify their outputs for wallet
-/// reconstruction.
+/// overflow and the ownership of the private key.
 #[derive(Debug, Copy, Clone, Serialize, Deserialize)]
 pub struct Output {
 	/// Options for an output's structure or use
