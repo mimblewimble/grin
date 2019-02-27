@@ -51,12 +51,13 @@ impl ChainStore {
 	}
 }
 
-#[allow(missing_docs)]
 impl ChainStore {
+	/// The current chain head.
 	pub fn head(&self) -> Result<Tip, Error> {
 		option_to_not_found(self.db.get_ser(&vec![HEAD_PREFIX]), "HEAD")
 	}
 
+	/// The current chain "tail" (earliest block in the store).
 	pub fn tail(&self) -> Result<Tip, Error> {
 		option_to_not_found(self.db.get_ser(&vec![TAIL_PREFIX]), "TAIL")
 	}
@@ -71,10 +72,12 @@ impl ChainStore {
 		option_to_not_found(self.db.get_ser(&vec![HEADER_HEAD_PREFIX]), "HEADER_HEAD")
 	}
 
+	/// The "sync" head.
 	pub fn get_sync_head(&self) -> Result<Tip, Error> {
 		option_to_not_found(self.db.get_ser(&vec![SYNC_HEAD_PREFIX]), "SYNC_HEAD")
 	}
 
+	/// Get full block.
 	pub fn get_block(&self, h: &Hash) -> Result<Block, Error> {
 		option_to_not_found(
 			self.db.get_ser(&to_key(BLOCK_PREFIX, &mut h.to_vec())),
@@ -82,10 +85,12 @@ impl ChainStore {
 		)
 	}
 
+	/// Does this full block exist?
 	pub fn block_exists(&self, h: &Hash) -> Result<bool, Error> {
 		self.db.exists(&to_key(BLOCK_PREFIX, &mut h.to_vec()))
 	}
 
+	/// Get block_sums for the block hash.
 	pub fn get_block_sums(&self, h: &Hash) -> Result<BlockSums, Error> {
 		option_to_not_found(
 			self.db.get_ser(&to_key(BLOCK_SUMS_PREFIX, &mut h.to_vec())),
@@ -93,10 +98,12 @@ impl ChainStore {
 		)
 	}
 
+	/// Get previous header.
 	pub fn get_previous_header(&self, header: &BlockHeader) -> Result<BlockHeader, Error> {
 		self.get_block_header(&header.prev_hash)
 	}
 
+	/// Get block header.
 	pub fn get_block_header(&self, h: &Hash) -> Result<BlockHeader, Error> {
 		option_to_not_found(
 			self.db
@@ -105,6 +112,7 @@ impl ChainStore {
 		)
 	}
 
+	/// Get PMMR pos for the given output commitment.
 	pub fn get_output_pos(&self, commit: &Commitment) -> Result<u64, Error> {
 		option_to_not_found(
 			self.db
@@ -127,12 +135,13 @@ pub struct Batch<'a> {
 	db: store::Batch<'a>,
 }
 
-#[allow(missing_docs)]
 impl<'a> Batch<'a> {
+	/// The head.
 	pub fn head(&self) -> Result<Tip, Error> {
 		option_to_not_found(self.db.get_ser(&vec![HEAD_PREFIX]), "HEAD")
 	}
 
+	/// The tail.
 	pub fn tail(&self) -> Result<Tip, Error> {
 		option_to_not_found(self.db.get_ser(&vec![TAIL_PREFIX]), "TAIL")
 	}
@@ -147,27 +156,33 @@ impl<'a> Batch<'a> {
 		option_to_not_found(self.db.get_ser(&vec![HEADER_HEAD_PREFIX]), "HEADER_HEAD")
 	}
 
+	/// Get "sync" head.
 	pub fn get_sync_head(&self) -> Result<Tip, Error> {
 		option_to_not_found(self.db.get_ser(&vec![SYNC_HEAD_PREFIX]), "SYNC_HEAD")
 	}
 
+	/// Save head to db.
 	pub fn save_head(&self, t: &Tip) -> Result<(), Error> {
 		self.db.put_ser(&vec![HEAD_PREFIX], t)?;
 		self.db.put_ser(&vec![HEADER_HEAD_PREFIX], t)
 	}
 
+	/// Save body head to db.
 	pub fn save_body_head(&self, t: &Tip) -> Result<(), Error> {
 		self.db.put_ser(&vec![HEAD_PREFIX], t)
 	}
 
+	/// Save body "tail" to db.
 	pub fn save_body_tail(&self, t: &Tip) -> Result<(), Error> {
 		self.db.put_ser(&vec![TAIL_PREFIX], t)
 	}
 
+	/// Save header_head to db.
 	pub fn save_header_head(&self, t: &Tip) -> Result<(), Error> {
 		self.db.put_ser(&vec![HEADER_HEAD_PREFIX], t)
 	}
 
+	/// Save "sync" head to db.
 	pub fn save_sync_head(&self, t: &Tip) -> Result<(), Error> {
 		self.db.put_ser(&vec![SYNC_HEAD_PREFIX], t)
 	}
@@ -192,6 +207,7 @@ impl<'a> Batch<'a> {
 		)
 	}
 
+	/// Does the block exist?
 	pub fn block_exists(&self, h: &Hash) -> Result<bool, Error> {
 		self.db.exists(&to_key(BLOCK_PREFIX, &mut h.to_vec()))
 	}
@@ -225,6 +241,7 @@ impl<'a> Batch<'a> {
 		Ok(())
 	}
 
+	/// Save block header to db.
 	pub fn save_block_header(&self, header: &BlockHeader) -> Result<(), Error> {
 		let hash = header.hash();
 
@@ -235,6 +252,7 @@ impl<'a> Batch<'a> {
 		Ok(())
 	}
 
+	/// Save output_pos to index.
 	pub fn save_output_pos(&self, commit: &Commitment, pos: u64) -> Result<(), Error> {
 		self.db.put_ser(
 			&to_key(COMMIT_POS_PREFIX, &mut commit.as_ref().to_vec())[..],
@@ -242,6 +260,7 @@ impl<'a> Batch<'a> {
 		)
 	}
 
+	/// Get output_pos from index.
 	pub fn get_output_pos(&self, commit: &Commitment) -> Result<u64, Error> {
 		option_to_not_found(
 			self.db
@@ -250,15 +269,21 @@ impl<'a> Batch<'a> {
 		)
 	}
 
-	pub fn delete_output_pos(&self, commit: &[u8]) -> Result<(), Error> {
-		self.db
-			.delete(&to_key(COMMIT_POS_PREFIX, &mut commit.to_vec()))
+	/// Clear all entries from the output_pos index (must be rebuilt after).
+	pub fn clear_output_pos(&self) -> Result<(), Error> {
+		let key = to_key(COMMIT_POS_PREFIX, &mut "".to_string().into_bytes());
+		for (k, _) in self.db.iter::<u64>(&key).unwrap() {
+			self.db.delete(&k)?;
+		}
+		Ok(())
 	}
 
+	/// Get the previous header.
 	pub fn get_previous_header(&self, header: &BlockHeader) -> Result<BlockHeader, Error> {
 		self.get_block_header(&header.prev_hash)
 	}
 
+	/// Get block header.
 	pub fn get_block_header(&self, h: &Hash) -> Result<BlockHeader, Error> {
 		option_to_not_found(
 			self.db
@@ -267,6 +292,7 @@ impl<'a> Batch<'a> {
 		)
 	}
 
+	/// Save the input bitmap for the block.
 	fn save_block_input_bitmap(&self, bh: &Hash, bm: &Bitmap) -> Result<(), Error> {
 		self.db.put(
 			&to_key(BLOCK_INPUT_BITMAP_PREFIX, &mut bh.to_vec())[..],
@@ -274,16 +300,19 @@ impl<'a> Batch<'a> {
 		)
 	}
 
+	/// Delete the block input bitmap.
 	fn delete_block_input_bitmap(&self, bh: &Hash) -> Result<(), Error> {
 		self.db
 			.delete(&to_key(BLOCK_INPUT_BITMAP_PREFIX, &mut bh.to_vec()))
 	}
 
+	/// Save block_sums for the block.
 	pub fn save_block_sums(&self, h: &Hash, sums: &BlockSums) -> Result<(), Error> {
 		self.db
 			.put_ser(&to_key(BLOCK_SUMS_PREFIX, &mut h.to_vec())[..], &sums)
 	}
 
+	/// Get block_sums for the block.
 	pub fn get_block_sums(&self, h: &Hash) -> Result<BlockSums, Error> {
 		option_to_not_found(
 			self.db.get_ser(&to_key(BLOCK_SUMS_PREFIX, &mut h.to_vec())),
@@ -291,10 +320,12 @@ impl<'a> Batch<'a> {
 		)
 	}
 
+	/// Delete the block_sums for the block.
 	fn delete_block_sums(&self, bh: &Hash) -> Result<(), Error> {
 		self.db.delete(&to_key(BLOCK_SUMS_PREFIX, &mut bh.to_vec()))
 	}
 
+	/// Build the input bitmap for the given block.
 	fn build_block_input_bitmap(&self, block: &Block) -> Result<Bitmap, Error> {
 		let bitmap = block
 			.inputs()
@@ -305,6 +336,7 @@ impl<'a> Batch<'a> {
 		Ok(bitmap)
 	}
 
+	/// Build and store the input bitmap for the given block.
 	fn build_and_store_block_input_bitmap(&self, block: &Block) -> Result<Bitmap, Error> {
 		// Build the bitmap.
 		let bitmap = self.build_block_input_bitmap(block)?;
@@ -315,8 +347,8 @@ impl<'a> Batch<'a> {
 		Ok(bitmap)
 	}
 
-	// Get the block input bitmap from the db or build the bitmap from
-	// the full block from the db (if the block is found).
+	/// Get the block input bitmap from the db or build the bitmap from
+	/// the full block from the db (if the block is found).
 	pub fn get_block_input_bitmap(&self, bh: &Hash) -> Result<Bitmap, Error> {
 		if let Ok(Some(bytes)) = self
 			.db

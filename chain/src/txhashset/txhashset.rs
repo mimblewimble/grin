@@ -33,7 +33,6 @@ use crate::util::{file, secp_static, zip};
 use croaring::Bitmap;
 use grin_store;
 use grin_store::pmmr::{PMMRBackend, PMMR_FILES};
-use grin_store::types::prune_noop;
 use std::collections::HashSet;
 use std::fs::{self, File};
 use std::path::{Path, PathBuf};
@@ -206,19 +205,25 @@ impl TxHashSet {
 			.get_last_n_insertions(distance)
 	}
 
-	/// Get the header at the specified height based on the current state of the txhashset.
-	/// Derives the MMR pos from the height (insertion index) and retrieves the header hash.
-	/// Looks the header up in the db by hash.
-	pub fn get_header_by_height(&self, height: u64) -> Result<BlockHeader, Error> {
+	/// Get the header hash at the specified height based on the current state of the txhashset.
+	pub fn get_header_hash_by_height(&self, height: u64) -> Result<Hash, Error> {
 		let pos = pmmr::insertion_to_pmmr_index(height + 1);
 		let header_pmmr =
 			ReadonlyPMMR::at(&self.header_pmmr_h.backend, self.header_pmmr_h.last_pos);
 		if let Some(entry) = header_pmmr.get_data(pos) {
-			let header = self.commit_index.get_block_header(&entry.hash())?;
-			Ok(header)
+			Ok(entry.hash())
 		} else {
-			Err(ErrorKind::Other(format!("get header by height")).into())
+			Err(ErrorKind::Other(format!("get header hash by height")).into())
 		}
+	}
+
+	/// Get the header at the specified height based on the current state of the txhashset.
+	/// Derives the MMR pos from the height (insertion index) and retrieves the header hash.
+	/// Looks the header up in the db by hash.
+	pub fn get_header_by_height(&self, height: u64) -> Result<BlockHeader, Error> {
+		let hash = self.get_header_hash_by_height(height)?;
+		let header = self.commit_index.get_block_header(&hash)?;
+		Ok(header)
 	}
 
 	/// returns outputs from the given insertion (leaf) index up to the
@@ -280,39 +285,30 @@ impl TxHashSet {
 	}
 
 	/// Compact the MMR data files and flush the rm logs
-	pub fn compact(&mut self) -> Result<(), Error> {
-		let commit_index = self.commit_index.clone();
-		let head_header = commit_index.head_header()?;
+	pub fn compact(&mut self, batch: &mut Batch<'_>) -> Result<(), Error> {
+		debug!("txhashset: starting compaction...");
+
+		let head_header = batch.head_header()?;
 		let current_height = head_header.height;
 
 		// horizon for compacting is based on current_height
-		let horizon = current_height.saturating_sub(global::cut_through_horizon().into());
-		let horizon_header = self.get_header_by_height(horizon)?;
+		let horizon_height = current_height.saturating_sub(global::cut_through_horizon().into());
+		let horizon_hash = self.get_header_hash_by_height(horizon_height)?;
+		let horizon_header = batch.get_block_header(&horizon_hash)?;
 
-		let batch = self.commit_index.batch()?;
+		let rewind_rm_pos = input_pos_to_rewind(&horizon_header, &head_header, batch)?;
 
-		let rewind_rm_pos = input_pos_to_rewind(&horizon_header, &head_header, &batch)?;
+		debug!("txhashset: check_compact output mmr backend...");
+		self.output_pmmr_h
+			.backend
+			.check_compact(horizon_header.output_mmr_size, &rewind_rm_pos)?;
 
-		{
-			let clean_output_index = |commit: &[u8]| {
-				let _ = batch.delete_output_pos(commit);
-			};
+		debug!("txhashset: check_compact rangeproof mmr backend...");
+		self.rproof_pmmr_h
+			.backend
+			.check_compact(horizon_header.output_mmr_size, &rewind_rm_pos)?;
 
-			self.output_pmmr_h.backend.check_compact(
-				horizon_header.output_mmr_size,
-				&rewind_rm_pos,
-				clean_output_index,
-			)?;
-
-			self.rproof_pmmr_h.backend.check_compact(
-				horizon_header.output_mmr_size,
-				&rewind_rm_pos,
-				&prune_noop,
-			)?;
-		}
-
-		// Finally commit the batch, saving everything to the db.
-		batch.commit()?;
+		debug!("txhashset: ... compaction finished");
 
 		Ok(())
 	}
@@ -797,11 +793,9 @@ impl<'a> Committed for Extension<'a> {
 
 	fn outputs_committed(&self) -> Vec<Commitment> {
 		let mut commitments = vec![];
-		for n in 1..self.output_pmmr.unpruned_size() + 1 {
-			if pmmr::is_leaf(n) {
-				if let Some(out) = self.output_pmmr.get_data(n) {
-					commitments.push(out.commit);
-				}
+		for pos in self.output_pmmr.leaf_pos_iter() {
+			if let Some(out) = self.output_pmmr.get_data(pos) {
+				commitments.push(out.commit);
 			}
 		}
 		commitments
@@ -1259,20 +1253,18 @@ impl<'a> Extension<'a> {
 	pub fn rebuild_index(&self) -> Result<(), Error> {
 		let now = Instant::now();
 
-		let mut count = 0;
+		self.batch.clear_output_pos()?;
 
-		for n in 1..self.output_pmmr.unpruned_size() + 1 {
-			// non-pruned leaves only
-			if pmmr::bintree_postorder_height(n) == 0 {
-				if let Some(out) = self.output_pmmr.get_data(n) {
-					self.batch.save_output_pos(&out.commit, n)?;
-					count += 1;
-				}
+		let mut count = 0;
+		for pos in self.output_pmmr.leaf_pos_iter() {
+			if let Some(out) = self.output_pmmr.get_data(pos) {
+				self.batch.save_output_pos(&out.commit, pos)?;
+				count += 1;
 			}
 		}
 
 		debug!(
-			"txhashset: rebuild_index ({} UTXOs), took {}s",
+			"txhashset: rebuild_index: {} UTXOs, took {}s",
 			count,
 			now.elapsed().as_secs(),
 		);
@@ -1325,13 +1317,23 @@ impl<'a> Extension<'a> {
 		let total_kernels = pmmr::n_leaves(self.kernel_pmmr.unpruned_size());
 		for n in 1..self.kernel_pmmr.unpruned_size() + 1 {
 			if pmmr::is_leaf(n) {
-				if let Some(kernel) = self.kernel_pmmr.get_data(n) {
-					kernel.verify()?;
-					kern_count += 1;
+				let kernel = self
+					.kernel_pmmr
+					.get_data(n)
+					.ok_or::<Error>(ErrorKind::TxKernelNotFound.into())?;
+
+				kernel.verify()?;
+				kern_count += 1;
+
+				if kern_count % 20 == 0 {
+					status.on_validation(kern_count, total_kernels, 0, 0);
 				}
-			}
-			if n % 20 == 0 {
-				status.on_validation(kern_count, total_kernels, 0, 0);
+				if kern_count % 1_000 == 0 {
+					debug!(
+						"txhashset: verify_kernel_signatures: verified {} signatures",
+						kern_count,
+					);
+				}
 			}
 		}
 
@@ -1353,30 +1355,34 @@ impl<'a> Extension<'a> {
 
 		let mut proof_count = 0;
 		let total_rproofs = pmmr::n_leaves(self.output_pmmr.unpruned_size());
-		for n in 1..self.output_pmmr.unpruned_size() + 1 {
-			if pmmr::is_leaf(n) {
-				if let Some(out) = self.output_pmmr.get_data(n) {
-					if let Some(rp) = self.rproof_pmmr.get_data(n) {
-						commits.push(out.commit);
-						proofs.push(rp);
-					} else {
-						// TODO - rangeproof not found
-						return Err(ErrorKind::OutputNotFound.into());
-					}
-					proof_count += 1;
+		for pos in self.output_pmmr.leaf_pos_iter() {
+			let output = self.output_pmmr.get_data(pos);
+			let proof = self.rproof_pmmr.get_data(pos);
 
-					if proofs.len() >= 1000 {
-						Output::batch_verify_proofs(&commits, &proofs)?;
-						commits.clear();
-						proofs.clear();
-						debug!(
-							"txhashset: verify_rangeproofs: verified {} rangeproofs",
-							proof_count,
-						);
-					}
+			// Output and corresponding rangeproof *must* exist.
+			// It is invalid for either to be missing and we fail immediately in this case.
+			match (output, proof) {
+				(None, _) => return Err(ErrorKind::OutputNotFound.into()),
+				(_, None) => return Err(ErrorKind::RangeproofNotFound.into()),
+				(Some(output), Some(proof)) => {
+					commits.push(output.commit);
+					proofs.push(proof);
 				}
 			}
-			if n % 20 == 0 {
+
+			proof_count += 1;
+
+			if proofs.len() >= 1_000 {
+				Output::batch_verify_proofs(&commits, &proofs)?;
+				commits.clear();
+				proofs.clear();
+				debug!(
+					"txhashset: verify_rangeproofs: verified {} rangeproofs",
+					proof_count,
+				);
+			}
+
+			if proof_count % 20 == 0 {
 				status.on_validation(0, 0, proof_count, total_rproofs);
 			}
 		}

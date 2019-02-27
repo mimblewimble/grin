@@ -162,8 +162,8 @@ impl Store {
 		res.to_opt().map(|r| r.is_some()).map_err(From::from)
 	}
 
-	/// Produces an iterator of `Readable` types moving forward from the
-	/// provided key.
+	/// Produces an iterator of (key, value) pairs, where values are `Readable` types
+	/// moving forward from the provided key.
 	pub fn iter<T: ser::Readable>(&self, from: &[u8]) -> Result<SerIterator<T>, Error> {
 		let tx = Arc::new(lmdb::ReadTransaction::new(self.env.clone())?);
 		let cursor = Arc::new(tx.cursor(self.db.clone())?);
@@ -273,9 +273,9 @@ impl<T> Iterator for SerIterator<T>
 where
 	T: ser::Readable,
 {
-	type Item = T;
+	type Item = (Vec<u8>, T);
 
-	fn next(&mut self) -> Option<T> {
+	fn next(&mut self) -> Option<(Vec<u8>, T)> {
 		let access = self.tx.access();
 		let kv = if self.seek {
 			Arc::get_mut(&mut self.cursor).unwrap().next(&access)
@@ -285,7 +285,10 @@ where
 				.unwrap()
 				.seek_range_k(&access, &self.prefix[..])
 		};
-		self.deser_if_prefix_match(kv)
+		match kv {
+			Ok((k, v)) => self.deser_if_prefix_match(k, v),
+			Err(_) => None,
+		}
 	}
 }
 
@@ -293,17 +296,16 @@ impl<T> SerIterator<T>
 where
 	T: ser::Readable,
 {
-	fn deser_if_prefix_match(&self, kv: Result<(&[u8], &[u8]), lmdb::Error>) -> Option<T> {
-		match kv {
-			Ok((k, v)) => {
-				let plen = self.prefix.len();
-				if plen == 0 || k[0..plen] == self.prefix[..] {
-					ser::deserialize(&mut &v[..]).ok()
-				} else {
-					None
-				}
+	fn deser_if_prefix_match(&self, key: &[u8], value: &[u8]) -> Option<(Vec<u8>, T)> {
+		let plen = self.prefix.len();
+		if plen == 0 || key[0..plen] == self.prefix[..] {
+			if let Ok(value) = ser::deserialize(&mut &value[..]) {
+				Some((key.to_vec(), value))
+			} else {
+				None
 			}
-			Err(_) => None,
+		} else {
+			None
 		}
 	}
 }

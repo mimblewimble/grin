@@ -89,9 +89,15 @@ pub enum ErrorKind {
 	/// Error validating a Merkle proof (coinbase output)
 	#[fail(display = "Error validating merkle proof")]
 	MerkleProof,
-	/// output not found
+	/// Output not found
 	#[fail(display = "Output not found")]
 	OutputNotFound,
+	/// Rangeproof not found
+	#[fail(display = "Rangeproof not found")]
+	RangeproofNotFound,
+	/// Tx kernel not found
+	#[fail(display = "Tx kernel not found")]
+	TxKernelNotFound,
 	/// output spent
 	#[fail(display = "Output is spent")]
 	OutputSpent,

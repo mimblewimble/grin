@@ -935,35 +935,22 @@ impl Chain {
 		Ok(())
 	}
 
-	fn compact_txhashset(&self) -> Result<(), Error> {
-		debug!("Starting txhashset compaction...");
-		{
-			// Note: We take a lock on the stop_state here and do not release it until
-			// we have finished processing this chain compaction operation.
-			let stop_lock = self.stop_state.lock();
-			if stop_lock.is_stopped() {
-				return Err(ErrorKind::Stopped.into());
-			}
-
-			let mut txhashset = self.txhashset.write();
-			txhashset.compact()?;
-		}
-		debug!("... finished txhashset compaction.");
-		Ok(())
-	}
-
 	/// Cleanup old blocks from the db.
 	/// Determine the cutoff height from the horizon and the current block height.
 	/// *Only* runs if we are not in archive mode.
-	fn compact_blocks_db(&self) -> Result<(), Error> {
+	fn remove_historical_blocks(
+		&self,
+		txhashset: &txhashset::TxHashSet,
+		batch: &mut store::Batch<'_>,
+	) -> Result<(), Error> {
 		if self.archive_mode {
 			return Ok(());
 		}
 
 		let horizon = global::cut_through_horizon() as u64;
-		let head = self.head()?;
+		let head = batch.head()?;
 
-		let tail = match self.tail() {
+		let tail = match batch.tail() {
 			Ok(tail) => tail,
 			Err(_) => Tip::from_header(&self.genesis),
 		};
@@ -971,7 +958,7 @@ impl Chain {
 		let cutoff = head.height.saturating_sub(horizon);
 
 		debug!(
-			"compact_blocks_db: head height: {}, tail height: {}, horizon: {}, cutoff: {}",
+			"remove_historical_blocks: head height: {}, tail height: {}, horizon: {}, cutoff: {}",
 			head.height, tail.height, horizon, cutoff,
 		);
 
@@ -981,10 +968,12 @@ impl Chain {
 
 		let mut count = 0;
 
-		let tail = self.get_header_by_height(head.height - horizon)?;
-		let mut current = self.get_header_by_height(head.height - horizon - 1)?;
+		let tail_hash = txhashset.get_header_hash_by_height(head.height - horizon)?;
+		let tail = batch.get_block_header(&tail_hash)?;
 
-		let batch = self.store.batch()?;
+		let current_hash = txhashset.get_header_hash_by_height(head.height - horizon - 1)?;
+		let mut current = batch.get_block_header(&current_hash)?;
+
 		loop {
 			// Go to the store directly so we can handle NotFoundErr robustly.
 			match self.store.get_block(&current.hash()) {
@@ -1011,11 +1000,12 @@ impl Chain {
 			}
 		}
 		batch.save_body_tail(&Tip::from_header(&tail))?;
-		batch.commit()?;
+
 		debug!(
-			"compact_blocks_db: removed {} blocks. tail height: {}",
+			"remove_historical_blocks: removed {} blocks. tail height: {}",
 			count, tail.height
 		);
+
 		Ok(())
 	}
 
@@ -1025,11 +1015,34 @@ impl Chain {
 	/// * removes historical blocks and associated data from the db (unless archive mode)
 	///
 	pub fn compact(&self) -> Result<(), Error> {
-		self.compact_txhashset()?;
-
-		if !self.archive_mode {
-			self.compact_blocks_db()?;
+		// Note: We take a lock on the stop_state here and do not release it until
+		// we have finished processing this chain compaction operation.
+		// We want to avoid shutting the node down in the middle of compacting the data.
+		let stop_lock = self.stop_state.lock();
+		if stop_lock.is_stopped() {
+			return Err(ErrorKind::Stopped.into());
 		}
+
+		// Take a write lock on the txhashet and start a new writeable db batch.
+		let mut txhashset = self.txhashset.write();
+		let mut batch = self.store.batch()?;
+
+		// Compact the txhashset itself (rewriting the pruned backend files).
+		txhashset.compact(&mut batch)?;
+
+		// Rebuild our output_pos index in the db based on current UTXO set.
+		txhashset::extending(&mut txhashset, &mut batch, |extension| {
+			extension.rebuild_index()?;
+			Ok(())
+		})?;
+
+		// If we are not in archival mode remove historical blocks from the db.
+		if !self.archive_mode {
+			self.remove_historical_blocks(&txhashset, &mut batch)?;
+		}
+
+		// Commit all the above db changes.
+		batch.commit()?;
 
 		Ok(())
 	}
@@ -1143,12 +1156,20 @@ impl Chain {
 	}
 
 	/// Gets the block header at the provided height.
-	/// Note: This takes a read lock on the txhashset.
+	/// Note: Takes a read lock on the txhashset.
 	/// Take care not to call this repeatedly in a tight loop.
 	pub fn get_header_by_height(&self, height: u64) -> Result<BlockHeader, Error> {
+		let hash = self.get_header_hash_by_height(height)?;
+		self.get_block_header(&hash)
+	}
+
+	/// Gets the header hash at the provided height.
+	/// Note: Takes a read lock on the txhashset.
+	/// Take care not to call this repeatedly in a tight loop.
+	fn get_header_hash_by_height(&self, height: u64) -> Result<Hash, Error> {
 		let txhashset = self.txhashset.read();
-		let header = txhashset.get_header_by_height(height)?;
-		Ok(header)
+		let hash = txhashset.get_header_hash_by_height(height)?;
+		Ok(hash)
 	}
 
 	/// Gets the block header in which a given output appears in the txhashset.
