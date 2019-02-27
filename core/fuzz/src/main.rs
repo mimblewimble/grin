@@ -1,8 +1,9 @@
 extern crate grin_core;
 extern crate grin_keychain;
-extern crate grin_wallet;
 
-use grin_core::core::target::Difficulty;
+/* These are completely out of date. Commented out until someone attends to them */
+
+/*use grin_core::core::target::Difficulty;
 use grin_core::core::{Block, BlockHeader, CompactBlock, Transaction};
 use grin_core::libtx::build::{input, output, transaction, with_fee};
 use grin_core::libtx::reward;
@@ -10,14 +11,15 @@ use grin_core::ser;
 use grin_keychain::keychain::ExtKeychain;
 use grin_keychain::Keychain;
 use std::fs::{self, File};
-use std::path::Path;
+use std::path::Path;*/
 
 fn main() {
-	generate("transaction_read", &tx()).unwrap();
+	/*generate("transaction_read", &tx()).unwrap();
 	generate("block_read", &block()).unwrap();
-	generate("compact_block_read", &compact_block()).unwrap();
+	generate("compact_block_read", &compact_block()).unwrap();*/
 }
 
+/*
 fn generate<W: ser::Writeable>(target: &str, obj: W) -> Result<(), ser::Error> {
 	let dir_path = Path::new("corpus").join(target);
 	if !dir_path.is_dir() {
@@ -80,3 +82,4 @@ fn tx() -> Transaction {
 	)
 	.unwrap()
 }
+*/
