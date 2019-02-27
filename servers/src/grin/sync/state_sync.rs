@@ -147,6 +147,9 @@ impl StateSync {
 
 				self.sync_state.update(SyncStatus::TxHashsetDownload {
 					start_time: Utc::now(),
+					prev_update_time: Utc::now(),
+					update_time: Utc::now(),
+					prev_downloaded_size: 0,
 					downloaded_size: 0,
 					total_size: 0,
 				});
