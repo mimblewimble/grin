@@ -43,7 +43,6 @@ use crate::mining::test_miner::Miner;
 use crate::p2p;
 use crate::p2p::types::PeerAddr;
 use crate::pool;
-use crate::store;
 use crate::util::file::get_first_line;
 use crate::util::{Mutex, RwLock, StopState};
 
@@ -179,10 +178,8 @@ impl Server {
 
 		info!("Starting server, genesis block: {}", genesis.hash());
 
-		let db_env = Arc::new(store::new_env(config.db_root.clone()));
 		let shared_chain = Arc::new(chain::Chain::init(
 			config.db_root.clone(),
-			db_env,
 			chain_adapter.clone(),
 			genesis.clone(),
 			pow::verify_size,
@@ -202,13 +199,8 @@ impl Server {
 			init_net_hooks(&config),
 		));
 
-		let peer_db_env = Arc::new(store::new_named_env(
-			config.db_root.clone(),
-			"peer".into(),
-			config.p2p_config.peer_max_count,
-		));
 		let p2p_server = Arc::new(p2p::Server::new(
-			peer_db_env,
+			&config.db_root,
 			config.p2p_config.capabilities,
 			config.p2p_config.clone(),
 			net_adapter.clone(),

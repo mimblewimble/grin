@@ -743,7 +743,8 @@ impl WorkersList {
 	}
 
 	pub fn send_to(&self, worker_id: usize, msg: String) {
-		self.workers_list
+		let _ = self
+			.workers_list
 			.read()
 			.get(&worker_id)
 			.unwrap()
@@ -753,7 +754,7 @@ impl WorkersList {
 
 	pub fn broadcast(&self, msg: String) {
 		for worker in self.workers_list.read().values() {
-			worker.tx.unbounded_send(msg.clone());
+			let _ = worker.tx.unbounded_send(msg.clone());
 		}
 	}
 

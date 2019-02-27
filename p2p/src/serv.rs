@@ -18,8 +18,6 @@ use std::sync::Arc;
 use std::time::Duration;
 use std::{io, thread};
 
-use crate::lmdb;
-
 use crate::core::core;
 use crate::core::core::hash::Hash;
 use crate::core::global;
@@ -48,7 +46,7 @@ pub struct Server {
 impl Server {
 	/// Creates a new idle p2p server with no peers
 	pub fn new(
-		db_env: Arc<lmdb::Environment>,
+		db_root: &str,
 		capab: Capabilities,
 		config: P2PConfig,
 		adapter: Arc<dyn ChainAdapter>,
@@ -59,7 +57,7 @@ impl Server {
 			config: config.clone(),
 			capabilities: capab,
 			handshake: Arc::new(Handshake::new(genesis, config.clone())),
-			peers: Arc::new(Peers::new(PeerStore::new(db_env)?, adapter, config)),
+			peers: Arc::new(Peers::new(PeerStore::new(db_root)?, adapter, config)),
 			stop_state,
 		})
 	}

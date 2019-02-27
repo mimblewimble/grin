@@ -15,7 +15,6 @@
 use grin_core as core;
 use grin_p2p as p2p;
 
-use grin_store as store;
 use grin_util as util;
 use grin_util::{Mutex, StopState};
 
@@ -50,10 +49,9 @@ fn peer_handshake() {
 		..p2p::P2PConfig::default()
 	};
 	let net_adapter = Arc::new(p2p::DummyAdapter {});
-	let db_env = Arc::new(store::new_env(".grin".to_string()));
 	let server = Arc::new(
 		p2p::Server::new(
-			db_env,
+			".grin",
 			p2p::Capabilities::UNKNOWN,
 			p2p_config.clone(),
 			net_adapter.clone(),

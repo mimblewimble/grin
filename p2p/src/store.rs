@@ -17,9 +17,6 @@
 use chrono::Utc;
 use num::FromPrimitive;
 use rand::{thread_rng, Rng};
-use std::sync::Arc;
-
-use crate::lmdb;
 
 use crate::core::ser::{self, Readable, Reader, Writeable, Writer};
 use crate::types::{Capabilities, PeerAddr, ReasonForBan};
@@ -117,8 +114,8 @@ pub struct PeerStore {
 
 impl PeerStore {
 	/// Instantiates a new peer store under the provided root path.
-	pub fn new(db_env: Arc<lmdb::Environment>) -> Result<PeerStore, Error> {
-		let db = grin_store::Store::open(db_env, STORE_SUBPATH);
+	pub fn new(db_root: &str) -> Result<PeerStore, Error> {
+		let db = grin_store::Store::new(db_root, Some(STORE_SUBPATH), None)?;
 		Ok(PeerStore { db: db })
 	}
 

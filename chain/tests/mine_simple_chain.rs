@@ -28,7 +28,6 @@ use chrono::Duration;
 use grin_chain as chain;
 use grin_core as core;
 use grin_keychain as keychain;
-use grin_store as store;
 use grin_util as util;
 use std::fs;
 use std::sync::Arc;
@@ -41,10 +40,8 @@ fn setup(dir_name: &str, genesis: Block) -> Chain {
 	util::init_test_logger();
 	clean_output_dir(dir_name);
 	let verifier_cache = Arc::new(RwLock::new(LruVerifierCache::new()));
-	let db_env = Arc::new(store::new_env(dir_name.to_string()));
 	chain::Chain::init(
 		dir_name.to_string(),
-		db_env,
 		Arc::new(NoopAdapter {}),
 		genesis,
 		pow::verify_size,
@@ -532,11 +529,9 @@ where
 fn actual_diff_iter_output() {
 	global::set_mining_mode(ChainTypes::AutomatedTesting);
 	let genesis_block = pow::mine_genesis_block().unwrap();
-	let db_env = Arc::new(store::new_env(".grin".to_string()));
 	let verifier_cache = Arc::new(RwLock::new(LruVerifierCache::new()));
 	let chain = chain::Chain::init(
 		"../.grin".to_string(),
-		db_env,
 		Arc::new(NoopAdapter {}),
 		genesis_block,
 		pow::verify_size,

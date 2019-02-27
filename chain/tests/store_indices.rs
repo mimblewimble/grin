@@ -23,7 +23,6 @@ use env_logger;
 use grin_chain as chain;
 use grin_core as core;
 use grin_keychain as keychain;
-use grin_store as store;
 use std::fs;
 use std::sync::Arc;
 
@@ -53,9 +52,8 @@ fn test_various_store_indices() {
 
 	let keychain = ExtKeychain::from_random_seed(false).unwrap();
 	let key_id = ExtKeychainPath::new(1, 1, 0, 0, 0).to_identifier();
-	let db_env = Arc::new(store::new_env(chain_dir.to_string()));
 
-	let chain_store = Arc::new(chain::store::ChainStore::new(db_env).unwrap());
+	let chain_store = Arc::new(chain::store::ChainStore::new(chain_dir).unwrap());
 
 	global::set_mining_mode(ChainTypes::AutomatedTesting);
 	let genesis = pow::mine_genesis_block().unwrap();
