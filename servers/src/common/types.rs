@@ -453,7 +453,10 @@ impl DandelionEpoch {
 		} else {
 			true
 		};
-		error!("DandelionEpoch: is_expired: {}", expired);
+		error!(
+			"DandelionEpoch: is_expired: {}, is_stem: {}",
+			expired, self.is_stem
+		);
 		expired
 	}
 
