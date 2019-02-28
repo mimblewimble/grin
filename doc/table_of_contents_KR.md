@@ -2,7 +2,7 @@
 
 ## Grin 에 대한 설명들
 
-- [intro](intro.md) - Grin 에 대한 기술적인 소개
+- [intro](intro_KR.md) - Grin 에 대한 기술적인 소개
 - [grin4bitcoiners](grin4bitcoiners.md) - Bitcoinner 의 관점에서 Grin 을 설명하기
 
 ## Grin 구현에 대해서 이해하기
