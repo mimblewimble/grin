@@ -1465,7 +1465,7 @@ fn expected_file(path: &Path) -> bool {
 	lazy_static! {
 		static ref RE: Regex = Regex::new(
 			format!(
-				r#"^({}|{}|{})(/pmmr_(hash|data|leaf|prun)\.bin(\.\w*)?)?$"#,
+				r#"^({}|{}|{})((/|\\)pmmr_(hash|data|leaf|prun)\.bin(\.\w*)?)?$"#,
 				OUTPUT_SUBDIR, KERNEL_SUBDIR, RANGE_PROOF_SUBDIR
 			)
 			.as_str()
