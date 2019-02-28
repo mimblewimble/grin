@@ -341,7 +341,7 @@ Send a transaction either directly by http or file (then display the slate)
 
     | Field                         | Type     | Description                          |
     |:------------------------------|:---------|:-------------------------------------|
-    | amount                        | number   | Amount to send                       |
+    | amount                        | number   | Amount to send (in nanogrin)         |
     | minimum_confirmations         | number   | Minimum confirmations                |
     | method                        | string   | Payment method                       |
     | dest                          | string   | Destination url                      |
