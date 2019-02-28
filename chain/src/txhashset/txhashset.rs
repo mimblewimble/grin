@@ -1486,7 +1486,7 @@ fn expected_file(path: &Path) -> bool {
 	lazy_static! {
 		static ref RE: Regex = Regex::new(
 			format!(
-				r#"^({}|{}|{})(/pmmr_(hash|data|leaf|prun)\.bin(\.\w*)?)?$"#,
+				r#"^({}|{}|{})((/|\\)pmmr_(hash|data|leaf|prun)\.bin(\.\w*)?)?$"#,
 				OUTPUT_SUBDIR, KERNEL_SUBDIR, RANGE_PROOF_SUBDIR
 			)
 			.as_str()
@@ -1648,7 +1648,7 @@ mod tests {
 		assert!(!expected_file(Path::new("kernels")));
 		assert!(!expected_file(Path::new("xkernel")));
 		assert!(expected_file(Path::new("kernel")));
-		assert!(expected_file(Path::new("kernel/pmmr_data.bin")));
+		assert!(expected_file(Path::new("kernel\\pmmr_data.bin")));
 		assert!(expected_file(Path::new("kernel/pmmr_hash.bin")));
 		assert!(expected_file(Path::new("kernel/pmmr_leaf.bin")));
 		assert!(expected_file(Path::new("kernel/pmmr_prun.bin")));

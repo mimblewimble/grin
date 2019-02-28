@@ -73,8 +73,14 @@ where
 	for i in 0..archive.len() {
 		let mut file = archive.by_index(i)?;
 		let san_name = file.sanitized_name();
-		if san_name.to_str().unwrap_or("") != file.name() || !expected(&san_name) {
-			info!("ignoring a suspicious file: {}", file.name());
+		if san_name.to_str().unwrap_or("").replace("\\", "/") != file.name().replace("\\", "/")
+			|| !expected(&san_name)
+		{
+			info!(
+				"ignoring a suspicious file: {}, got {:?}",
+				file.name(),
+				san_name.to_str()
+			);
 			continue;
 		}
 		let file_path = dest.join(san_name);
