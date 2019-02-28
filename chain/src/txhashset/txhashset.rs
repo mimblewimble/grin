@@ -1625,7 +1625,7 @@ mod tests {
 		assert!(!expected_file(Path::new("kernels")));
 		assert!(!expected_file(Path::new("xkernel")));
 		assert!(expected_file(Path::new("kernel")));
-		assert!(expected_file(Path::new("kernel/pmmr_data.bin")));
+		assert!(expected_file(Path::new("kernel\\pmmr_data.bin")));
 		assert!(expected_file(Path::new("kernel/pmmr_hash.bin")));
 		assert!(expected_file(Path::new("kernel/pmmr_leaf.bin")));
 		assert!(expected_file(Path::new("kernel/pmmr_prun.bin")));
