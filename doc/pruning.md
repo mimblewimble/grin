@@ -63,8 +63,7 @@ The full validation of the chain state requires that:
 In addition, while not necessary to validate the full chain state, to be able
 to accept and validate new blocks additional data is required:
 
-* The output features and switch commitments, making the full output data
-  necessary for all UTXOs.
+* The output features, making the full output data necessary for all UTXOs.
 
 At minimum, this requires the following data:
 

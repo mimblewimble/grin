@@ -95,9 +95,9 @@ where
 
 	/// Computes the root of the MMR. Find all the peaks in the current
 	/// tree and "bags" them to get a single peak.
-	pub fn root(&self) -> Hash {
+	pub fn root(&self) -> Result<Hash, String> {
 		if self.is_empty() {
-			return ZERO_HASH;
+			return Ok(ZERO_HASH);
 		}
 		let mut res = None;
 		for peak in self.peaks().iter().rev() {
@@ -106,7 +106,7 @@ where
 				Some(rhash) => Some((*peak, rhash).hash_with_index(self.unpruned_size())),
 			}
 		}
-		res.expect("no root, invalid tree")
+		res.ok_or_else(|| "no root, invalid tree".to_owned())
 	}
 
 	/// Returns a vec of the peaks of this MMR.

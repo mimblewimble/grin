@@ -104,6 +104,10 @@ impl<T: PMMRable> Backend<T> for VecBackend<T> {
 		Some(data.as_elmt())
 	}
 
+	fn leaf_pos_iter(&self) -> Box<Iterator<Item = u64> + '_> {
+		unimplemented!()
+	}
+
 	fn remove(&mut self, position: u64) -> Result<(), String> {
 		self.remove_list.push(position);
 		Ok(())

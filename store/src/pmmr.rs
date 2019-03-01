@@ -21,7 +21,7 @@ use crate::core::core::BlockHeader;
 use crate::core::ser::PMMRable;
 use crate::leaf_set::LeafSet;
 use crate::prune_list::PruneList;
-use crate::types::{prune_noop, DataFile};
+use crate::types::DataFile;
 use croaring::Bitmap;
 use std::path::{Path, PathBuf};
 
@@ -121,6 +121,17 @@ impl<T: PMMRable> Backend<T> for PMMRBackend<T> {
 		self.get_data_from_file(pos)
 	}
 
+	/// Returns an iterator over all the leaf positions.
+	/// for a prunable PMMR this is an iterator over the leaf_set bitmap.
+	/// For a non-prunable PMMR this is *all* leaves (this is not yet implemented).
+	fn leaf_pos_iter(&self) -> Box<Iterator<Item = u64> + '_> {
+		if self.prunable {
+			Box::new(self.leaf_set.iter())
+		} else {
+			panic!("leaf_pos_iter not implemented for non-prunable PMMR")
+		}
+	}
+
 	/// Rewind the PMMR backend to the given position.
 	fn rewind(&mut self, position: u64, rewind_rm_pos: &Bitmap) -> Result<(), String> {
 		// First rewind the leaf_set with the necessary added and removed positions.
@@ -199,13 +210,7 @@ impl<T: PMMRable> PMMRBackend<T> {
 				data_dir.join(PMMR_LEAF_FILE).to_str().unwrap(),
 				header.hash()
 			);
-			// Check for a ... (3 dot) ending version of the file - could probably be removed after mainnet
-			let compatible_snapshot_path = PathBuf::from(leaf_snapshot_path.clone() + "...");
-			if compatible_snapshot_path.exists() {
-				LeafSet::copy_snapshot(&leaf_set_path, &compatible_snapshot_path)?;
-			} else {
-				LeafSet::copy_snapshot(&leaf_set_path, &PathBuf::from(leaf_snapshot_path))?;
-			}
+			LeafSet::copy_snapshot(&leaf_set_path, &PathBuf::from(leaf_snapshot_path))?;
 		}
 
 		let leaf_set = LeafSet::open(&leaf_set_path)?;
@@ -284,15 +289,7 @@ impl<T: PMMRable> PMMRBackend<T> {
 	/// aligned. The block_marker in the db/index for the particular block
 	/// will have a suitable output_pos. This is used to enforce a horizon
 	/// after which the local node should have all the data to allow rewinding.
-	pub fn check_compact<P>(
-		&mut self,
-		cutoff_pos: u64,
-		rewind_rm_pos: &Bitmap,
-		prune_cb: P,
-	) -> io::Result<bool>
-	where
-		P: Fn(&[u8]),
-	{
+	pub fn check_compact(&mut self, cutoff_pos: u64, rewind_rm_pos: &Bitmap) -> io::Result<bool> {
 		assert!(self.prunable, "Trying to compact a non-prunable PMMR");
 
 		// Paths for tmp hash and data files.
@@ -312,7 +309,7 @@ impl<T: PMMRable> PMMRBackend<T> {
 			});
 
 			self.hash_file
-				.save_prune(&tmp_prune_file_hash, &off_to_rm, &prune_noop)?;
+				.save_prune(&tmp_prune_file_hash, &off_to_rm)?;
 		}
 
 		// 2. Save compact copy of the data file, skipping removed leaves.
@@ -330,7 +327,7 @@ impl<T: PMMRable> PMMRBackend<T> {
 			});
 
 			self.data_file
-				.save_prune(&tmp_prune_file_data, &off_to_rm, prune_cb)?;
+				.save_prune(&tmp_prune_file_data, &off_to_rm)?;
 		}
 
 		// 3. Update the prune list and write to disk.

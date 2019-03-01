@@ -54,6 +54,15 @@ pub struct Peer {
 	connection: Option<Mutex<conn::Tracker>>,
 }
 
+macro_rules! connection {
+	($holder:expr) => {
+		match $holder.connection.as_ref() {
+			Some(conn) => conn.lock(),
+			None => return Err(Error::Internal),
+			}
+	};
+}
+
 impl Peer {
 	// Only accept and connect can be externally used to build a peer
 	fn new(info: PeerInfo, adapter: Arc<dyn NetAdapter>) -> Peer {
@@ -233,29 +242,15 @@ impl Peer {
 			total_difficulty,
 			height,
 		};
-		self.connection
-			.as_ref()
-			.unwrap()
-			.lock()
-			.send(ping_msg, msg::Type::Ping)
+		connection!(self).send(ping_msg, msg::Type::Ping)
 	}
 
 	/// Send the ban reason before banning
-	pub fn send_ban_reason(&self, ban_reason: ReasonForBan) {
+	pub fn send_ban_reason(&self, ban_reason: ReasonForBan) -> Result<(), Error> {
 		let ban_reason_msg = BanReason { ban_reason };
-		match self
-			.connection
-			.as_ref()
-			.unwrap()
-			.lock()
+		connection!(self)
 			.send(ban_reason_msg, msg::Type::BanReason)
-		{
-			Ok(_) => debug!("Sent ban reason {:?} to {}", ban_reason, self.info.addr),
-			Err(e) => error!(
-				"Could not send ban reason {:?} to {}: {:?}",
-				ban_reason, self.info.addr, e
-			),
-		};
+			.map(|_| ())
 	}
 
 	/// Sends the provided block to the remote peer. The request may be dropped
@@ -263,11 +258,7 @@ impl Peer {
 	pub fn send_block(&self, b: &core::Block) -> Result<bool, Error> {
 		if !self.tracking_adapter.has_recv(b.hash()) {
 			trace!("Send block {} to {}", b.hash(), self.info.addr);
-			self.connection
-				.as_ref()
-				.unwrap()
-				.lock()
-				.send(b, msg::Type::Block)?;
+			connection!(self).send(b, msg::Type::Block)?;
 			Ok(true)
 		} else {
 			debug!(
@@ -282,11 +273,7 @@ impl Peer {
 	pub fn send_compact_block(&self, b: &core::CompactBlock) -> Result<bool, Error> {
 		if !self.tracking_adapter.has_recv(b.hash()) {
 			trace!("Send compact block {} to {}", b.hash(), self.info.addr);
-			self.connection
-				.as_ref()
-				.unwrap()
-				.lock()
-				.send(b, msg::Type::CompactBlock)?;
+			connection!(self).send(b, msg::Type::CompactBlock)?;
 			Ok(true)
 		} else {
 			debug!(
@@ -301,11 +288,7 @@ impl Peer {
 	pub fn send_header(&self, bh: &core::BlockHeader) -> Result<bool, Error> {
 		if !self.tracking_adapter.has_recv(bh.hash()) {
 			debug!("Send header {} to {}", bh.hash(), self.info.addr);
-			self.connection
-				.as_ref()
-				.unwrap()
-				.lock()
-				.send(bh, msg::Type::Header)?;
+			connection!(self).send(bh, msg::Type::Header)?;
 			Ok(true)
 		} else {
 			debug!(
@@ -320,11 +303,7 @@ impl Peer {
 	pub fn send_tx_kernel_hash(&self, h: Hash) -> Result<bool, Error> {
 		if !self.tracking_adapter.has_recv(h) {
 			debug!("Send tx kernel hash {} to {}", h, self.info.addr);
-			self.connection
-				.as_ref()
-				.unwrap()
-				.lock()
-				.send(h, msg::Type::TransactionKernel)?;
+			connection!(self).send(h, msg::Type::TransactionKernel)?;
 			Ok(true)
 		} else {
 			debug!(
@@ -352,11 +331,7 @@ impl Peer {
 
 		if !self.tracking_adapter.has_recv(kernel.hash()) {
 			debug!("Send full tx {} to {}", tx.hash(), self.info.addr);
-			self.connection
-				.as_ref()
-				.unwrap()
-				.lock()
-				.send(tx, msg::Type::Transaction)?;
+			connection!(self).send(tx, msg::Type::Transaction)?;
 			Ok(true)
 		} else {
 			debug!(
@@ -373,21 +348,12 @@ impl Peer {
 	/// embargo).
 	pub fn send_stem_transaction(&self, tx: &core::Transaction) -> Result<(), Error> {
 		debug!("Send (stem) tx {} to {}", tx.hash(), self.info.addr);
-		self.connection
-			.as_ref()
-			.unwrap()
-			.lock()
-			.send(tx, msg::Type::StemTransaction)?;
-		Ok(())
+		connection!(self).send(tx, msg::Type::StemTransaction)
 	}
 
 	/// Sends a request for block headers from the provided block locator
 	pub fn send_header_request(&self, locator: Vec<Hash>) -> Result<(), Error> {
-		self.connection
-			.as_ref()
-			.unwrap()
-			.lock()
-			.send(&Locator { hashes: locator }, msg::Type::GetHeaders)
+		connection!(self).send(&Locator { hashes: locator }, msg::Type::GetHeaders)
 	}
 
 	pub fn send_tx_request(&self, h: Hash) -> Result<(), Error> {
@@ -395,37 +361,25 @@ impl Peer {
 			"Requesting tx (kernel hash) {} from peer {}.",
 			h, self.info.addr
 		);
-		self.connection
-			.as_ref()
-			.unwrap()
-			.lock()
-			.send(&h, msg::Type::GetTransaction)
+		connection!(self).send(&h, msg::Type::GetTransaction)
 	}
 
 	/// Sends a request for a specific block by hash
 	pub fn send_block_request(&self, h: Hash) -> Result<(), Error> {
 		debug!("Requesting block {} from peer {}.", h, self.info.addr);
 		self.tracking_adapter.push_req(h);
-		self.connection
-			.as_ref()
-			.unwrap()
-			.lock()
-			.send(&h, msg::Type::GetBlock)
+		connection!(self).send(&h, msg::Type::GetBlock)
 	}
 
 	/// Sends a request for a specific compact block by hash
 	pub fn send_compact_block_request(&self, h: Hash) -> Result<(), Error> {
 		debug!("Requesting compact block {} from {}", h, self.info.addr);
-		self.connection
-			.as_ref()
-			.unwrap()
-			.lock()
-			.send(&h, msg::Type::GetCompactBlock)
+		connection!(self).send(&h, msg::Type::GetCompactBlock)
 	}
 
 	pub fn send_peer_request(&self, capab: Capabilities) -> Result<(), Error> {
 		trace!("Asking {} for more peers {:?}", self.info.addr, capab);
-		self.connection.as_ref().unwrap().lock().send(
+		connection!(self).send(
 			&GetPeerAddrs {
 				capabilities: capab,
 			},
@@ -438,7 +392,7 @@ impl Peer {
 			"Asking {} for txhashset archive at {} {}.",
 			self.info.addr, height, hash
 		);
-		self.connection.as_ref().unwrap().lock().send(
+		connection!(self).send(
 			&TxHashSetRequest { hash, height },
 			msg::Type::TxHashSetRequest,
 		)
@@ -446,11 +400,16 @@ impl Peer {
 
 	/// Stops the peer, closing its connection
 	pub fn stop(&self) {
-		stop_with_connection(&self.connection.as_ref().unwrap().lock());
+		if let Some(conn) = self.connection.as_ref() {
+			stop_with_connection(&conn.lock());
+		}
 	}
 
 	fn check_connection(&self) -> bool {
-		let connection = self.connection.as_ref().unwrap().lock();
+		let connection = match self.connection.as_ref() {
+			Some(conn) => conn.lock(),
+			None => return false,
+		};
 		match connection.error_channel.try_recv() {
 			Ok(Error::Serialization(e)) => {
 				let need_stop = {
