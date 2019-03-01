@@ -445,7 +445,7 @@ where
 		&self,
 		req: Request<Body>,
 		api: APIOwner<T, C, K>,
-	) -> Box<dyn Future<Item = (), Error = Error> + Send> {
+	) -> Box<dyn Future<Item = Slate, Error = Error> + Send> {
 		let params = match req.uri().query() {
 			Some(query_string) => form_urlencoded::parse(query_string.as_bytes())
 				.into_owned()
@@ -458,7 +458,7 @@ where
 		let fluff = params.get("fluff").is_some();
 		Box::new(parse_body(req).and_then(
 			move |slate: Slate| match api.post_tx(&slate.tx, fluff) {
-				Ok(_) => ok(()),
+				Ok(_) => ok(slate),
 				Err(e) => {
 					error!("post_tx: failed with error: {}", e);
 					err(e)
