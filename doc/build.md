@@ -1,6 +1,6 @@
 # Grin - Build, Configuration, and Running
 
-*Read this in other languages: [Español](build_ES.md).*
+*Read this in other languages: [Español](build_ES.md), [Korean](build_KR.md).*
 
 ## Supported Platforms
 

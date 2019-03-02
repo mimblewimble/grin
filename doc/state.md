@@ -1,5 +1,7 @@
 # State and Storage
 
+*Read this in other languages: [Korean](state_KR.md).*
+
 ## The Grin State
 
 ### Structure
@@ -7,9 +9,9 @@
 The full state of a Grin chain consists of all the following data:
 
 1. The full unspent output (UTXO) set.
-1. The range proof for each output.
-1. All the transaction kernels.
-1. A MMR for each of the above (with the exception that the output MMR includes
+2. The range proof for each output.
+3. All the transaction kernels.
+4. A MMR for each of the above (with the exception that the output MMR includes
    hashes for *all* outputs, not only the unspent ones).
 
 In addition, all headers in the chain are required to anchor the above state
