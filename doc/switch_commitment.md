@@ -12,9 +12,9 @@ up with in the first place (and not a different one) you can prove this simply b
 key of the box to the other person.
 
 They can unlock the box, compare the secret within the box with the secret you just published
-and can be sure that you didn't change your secret since you locked it. You "**commited**"
+and can be sure that you didn't change your secret since you locked it. You "**committed**"
 to the secret number beforehand, meaning you cannot change it between the time of
-commitment and time of revealing.
+commitment and the time of revealing.
 
 
 ## Examples
@@ -27,7 +27,7 @@ Bob has to guess in the game, then before the game starts, Alice calculates:
 
     hash( 29 + r )
 
-an publishes the result to Bob. The `r` is a randomly chosen  _Blinding Factor_ which is
+and publishes the result to Bob. The `r` is a randomly chosen  _Blinding Factor_ which is
 needed because otherwise Bob could just try hashing all the possible numbers for the game and
 compare the hashes.
 
@@ -113,35 +113,34 @@ secure then the other can be at most _computationally_ secure
 (and the other way around).
 
 
-### Considerations for crytpocurrencies:
+### Considerations for cryptocurrencies
 
-Which roles play these properties in the design of cryptocurrencies?
+Which roles do these properties play in the design of cryptocurrencies?
 
 **Hidingness**:
-In privacy oriented cryptocurrencies like Grin commitment schemes are used to secure
+In privacy oriented cryptocurrencies like Grin, commitment schemes are used to secure
 the contents of transactions. The sender commits to an amount of coins he sends, but for
-the general public the concrete amount (and also the information who the sender is) should
-remain private (protected by the _hidingness_ property of the commitment scheme).
+the general public the concrete amount should remain private (protected by the _hidingness_ property of the commitment scheme).
 
 **Bindingness**:
 At the same time no transaction creator should ever be able to change his commitment
-to a different transaction amount later in time. (If this would be possible, an attacker
-could spend more coins than previously were commited to in an UTXO (unspent transaction
+to a different transaction amount later in time. If this would be possible, an attacker
+could spend more coins than previously committed to in an UTXO (unspent transaction
 output) and therefore inflate coins out of thin air. Even worse, as the amounts are
-hidden, this could happen undetected.)
+hidden, this could go undetected.
 
 So there is a valid interest in having both of these properties always secured and
 never be violated.
 
 Even with the intent being that both of these properties will hold for the lifetime
-of a cryptocurrency, still a choice has to be made which commitment scheme to use.
+of a cryptocurrency, still a choice has to be made about which commitment scheme to use.
 
 
 #### A hard choice?
 
 Which one of these two properties needs to be _perfectly_ safe
 and for which one it would be sufficient to be _computationally_ safe?
-Or in other words: in case of disaster, if the commitment scheme unexpectedly
+Or in other words: in case of a disaster, if the commitment scheme unexpectedly
 gets broken, which one of the two properties should be valued higher?
 Economical soundness (no hidden inflation possible) or ensured privacy (privacy will
 be preserved)?
@@ -154,17 +153,17 @@ _perfectly_ binding at the point in time when the scheme actually gets broken. U
 then it will be safe even if it's only _computationally_ binding.
 
 At the same time a privacy-oriented cryptocurrency needs to ensure the _hidingness_
-property **forever**. Unlike the _binding_ property (which only is important at the
-time when a transaction is created and will not affect past transactions) the _hidingness_
-property must be ensured for all times, because in the unfortunate case should the
+property **forever**. Unlike the _binding_ property, which only is important at the
+time when a transaction is created and will not affect past transactions, the _hidingness_
+property must be ensured at all times. Otherwise, in the unfortunate case should the
 commitment scheme be broken, an attacker could go back in the chain and unblind
-past transactions thus breaking the privacy property retroactively.
+past transactions, thus break the privacy property retroactively.
 
 
 ## Properties of Pedersen Commitments
 
 Pedersen Commitments are **computationally binding** and **perfectly hiding** as for a given
-commitment to the value "v": `v*H + r*G` there may exist a pair of different values `r1`
+commitment to the value `v`: `v*H + r*G` there may exist a pair of different values `r1`
 and `v1` such that the sum will be the same. Even if you have infinite computing power
 and could try all possible values, you would not be able to tell which one is the original one
 (thus _perfectly hiding_).
@@ -172,21 +171,21 @@ and could try all possible values, you would not be able to tell which one is th
 
 ## Introducing Switch Commitments
 
-So what could be done if the bindingness of the Pedersen Commitment unexpectedly gets broken?
+So what can be done if the bindingness of the Pedersen Commitment unexpectedly gets broken?
 
 In general a cryptocurrency confronted with a broken commitment scheme could choose to
 change the scheme in use, but the problem with this approach would be that it requires to
 create new transaction outputs using the new scheme to make funds secure again. This would
-require that every coin holder has to move his coins into a new transaction ouptut.
-If coins are not moved into a "new" transaction they would not profit from the
-security of the new commitment scheme. Also this has to happen **before** the scheme gets
-actually broken in the wild, as otherwise the existing UTXOs no longer can be assumed
+require every coin holder to move his coins into new transaction outputs.
+If coins are not moved into new outputs, they will not profit from the
+security of the new commitment scheme. Also, this has to happen **before** the scheme gets
+actually broken in the wild, otherwise the existing UTXOs no longer can be assumed
 to contain correct values.
 
 In this situation [_Switch Commitments_](https://eprint.iacr.org/2017/237.pdf) offer a neat 
 solution. These type of commitments allow changing the properties of the commitments just
-by changing the revealing / validating procedure without changing the way how commitments
-are created. (You "_switch_" to a new validation scheme and it automatically works backwards
+by changing the revealing / validating procedure without changing the way commitments
+are created. (You "_switch_" to a new validation scheme which is backwards
 compatible with commitments created long before the actual "_switch_").
 
 
@@ -195,16 +194,16 @@ compatible with commitments created long before the actual "_switch_").
 First let's introduce a new commitment scheme: The **ElGamal commitment** scheme is a commitment
 scheme similiar to Pedersen Commitments and it's _perfectly binding_ (but only _computationally
 hiding_ as we can never have both).
-Compared to a Pedersen Commitment it looks very similiar, it just adds an additional
-element, calculated by multiplying the blinding value `r` with another generator point `J`:
+It looks very similar to a Pedersen Commitment, with the addition of a new
+element, calculated by multiplying the blinding factor `r` with another generator point `J`:
 
     v*H + r*G ,  r*J
 
-So if we store the additional field `r*J` and ignore it for now, we can treat it as
-Peterson Commitments like before (until we decide to also validate the full ElGamal
-commitment at some time in future). This is exactly what was implemented in an
-[earlier version of Grin](https://github.com/mimblewimble/grin/blob/5a47a1710112153fb38e4406251c9874c366f1c0/core/src/core/transaction.rs#L812)
-(before mainnet was launched). In detail: the hashed value of `r*J`
+So if we store the additional field `r*J` and ignore it for now, we can treat it like
+Pedersen Commitments, until we decide to also validate the full ElGamal
+commitment at some time in future. This is exactly what was implemented in an
+[earlier version of Grin](https://github.com/mimblewimble/grin/blob/5a47a1710112153fb38e4406251c9874c366f1c0/core/src/core/transaction.rs#L812),
+before mainnet was launched. In detail: the hashed value of `r*J`
 (_switch\_commit\_hash_) was added to the transaction output, but this came with
 the burden of increasing the size of each output by 32 bytes.
 
@@ -219,7 +218,7 @@ A normal Pedersen commitment looks like this:
 
     v*H + r*G
 
-(`v` is value of the input/output, `r` is a truly random blinding factor and `H` and `G` are
+(`v` is value of the input/output, `r` is a truly random blinding factor, and `H` and `G` are
 two generator points on the elliptic curve).
 
 If we adapt this by having `r` not being random itself, but using another random number `r'`
@@ -232,7 +231,7 @@ such that:
     r = r' + hash( v*H + r'*G  ,  r'*J )
    
 (using the additional third generation point `J` on the curve) then `r` still is perfectly
-valid as a blinding factor (as it's still randomly distributed) but now we see
+valid as a blinding factor, as it's still randomly distributed, but now we see
 that the part within the brackets of the hash function (`v*H + r'*G  ,  r'*J`) is an
 **ElGamal commitment**.
 
@@ -247,47 +246,47 @@ only by random, it is calculated by adding the hash of an ElGamal commitment to 
 (see here in [main_impl.h#L267](https://github.com/mimblewimble/secp256k1-zkp/blob/73617d0fcc4f51896cce4f9a1a6977a6958297f8/src/modules/commitment/main_impl.h#L267)).
 
 
-In general switch commitments first have been described in the paper
+In general switch commitments were first described in the paper
 ["Switch Commitments: A Safety Switch for Confidential Transactions"](https://eprint.iacr.org/2017/237.pdf)).
 The **"switch"** in the name comes from the fact that you can virtually flip a "switch" in
 the future and simply by changing the validation procedure you can change the strength of
-the bindingness and hidningness property of your commitments and this even works in a
+the bindingness and hidingness property of your commitments and this even works in a
 backwards compatible way with commitments created today.
 
 
 
-## Conclusion:
+## Conclusion
 
 Grin uses Pedersen Commitments - like other privacy cryptocurrencies do as well - with
-the only difference that the random Blinding factor `r` is created using the ElGamal
+the only difference that the random blinding factor `r` is created using the ElGamal
 commitment scheme.
 
-This might not seem like a big change on the first look, but this provides an
+This might not seem like a big change on a first look, but it provides an
 important safety measure:
 
 Pedersen Commitments are already _perfectly hiding_ so whatever happens, privacy will
-never be at risk without requiring any action from users. But in case of disaster if the
+never be at risk without requiring any action from users. But in case of a disaster if the
 bindingness of the commitment scheme gets broken, then switch commitments can be enabled 
 (via a soft fork) requiring that all new transactions prove that their commitment is not
 breaking the bindingness by validating the full ElGamal commitment. 
 
 But in this case users would still have a choice:
 
-- they can decide to continue to create new transations, even if this might compromise 
+- they can decide to continue to create new transactions, even if this might compromise
   their privacy (only on their **last** UTXOs) as the ElGamal commitment scheme is 
-  only computationally hiding, but at least users would still have access to their coins
+  only computationally hiding, but at least they would still have access to their coins
 
 - or users can decide to just leave the money alone, walk away and make no more transactions
   (but preserve their privacy, as their old transactions only validated the Pedersen commitment
   which is perfectly hiding)
   
 There are many cases where a privacy leak is much more dangerous to one's life than
-some cryptocurrency might be worth. But this is a decision that should be up to 
+some cryptocurrency might be worth. But this is a decision that should be left up to
 the individual user and switch commitments enable this type of choice.
 
-It also should be made clear that this is a last measure meant for the case of
-disaster and not expected to be needed on the normal path of development. If advances in
-computing would put the hardness of the discrete log problem in question also a lot of
-other cryptographic systems (and cryptocurrencies) will be in urgent need of updating their
-primitives to a future-proof system. The switch commitments just provide an additional layer
-of security if the bindingness of Pedersen commitments breaks suddenly and unexpected.
+It should be made clear that this is a safety measure meant to be enabled in case of a
+disaster. If advances in computing would put the hardness of the discrete log problem
+in question, a lot of other cryptographic systems, including other cryptocurrencies,
+will be in urgent need of updating their primitives to a future-proof system. The switch
+commitments just provide an additional layer of security if the bindingness of Pedersen
+commitments ever breaks unexpectedly.
