@@ -29,6 +29,9 @@ pub enum LogLevel {
 	Trace,
 }
 
+/// 32 log files to rotate over by default
+pub const DEFAULT_ROTATE_LOG_FILES: u32 = 32 as u32;
+
 /// Logging config
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct LoggingConfig {
@@ -62,7 +65,7 @@ impl Default for LoggingConfig {
 			log_file_path: String::from("grin.log"),
 			log_file_append: true,
 			log_max_size: Some(1024 * 1024 * 16), // 16 megabytes default
-			log_max_files: Some(32),              // 32 log files to rotate over by default
+			log_max_files: Some(DEFAULT_ROTATE_LOG_FILES),
 			tui_running: None,
 		}
 	}
