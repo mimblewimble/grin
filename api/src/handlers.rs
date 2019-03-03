@@ -105,7 +105,7 @@ pub fn build_router(
 		"get blocks".to_string(),
 		"get chain".to_string(),
 		"post chain/compact".to_string(),
-		"post chain/validate".to_string(),
+		"get chain/validate".to_string(),
 		"get chain/outputs".to_string(),
 		"get status".to_string(),
 		"get txhashset/roots".to_string(),
