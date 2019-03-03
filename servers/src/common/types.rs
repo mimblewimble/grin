@@ -262,6 +262,9 @@ pub enum SyncStatus {
 	/// Downloading the various txhashsets
 	TxHashsetDownload {
 		start_time: DateTime<Utc>,
+		prev_update_time: DateTime<Utc>,
+		update_time: DateTime<Utc>,
+		prev_downloaded_size: u64,
 		downloaded_size: u64,
 		total_size: u64,
 	},
