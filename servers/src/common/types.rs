@@ -466,7 +466,10 @@ impl DandelionEpoch {
 		self.is_stem = rng.gen_range(0, 101) < self.config.stem_probability();
 
 		let addr = self.relay_peer.clone().map(|p| p.info.addr);
-		info!("DandelionEpoch: next_epoch: is_stem: {}, relay: {:?}", self.is_stem, addr);
+		info!(
+			"DandelionEpoch: next_epoch: is_stem: {}, relay: {:?}",
+			self.is_stem, addr
+		);
 	}
 
 	// Are we stemming transactions in this epoch?
