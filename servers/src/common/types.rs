@@ -48,6 +48,8 @@ pub enum Error {
 	Pool(pool::PoolError),
 	/// Invalid Arguments.
 	ArgumentError(String),
+	/// Error originating from some I/O operation (likely a file on disk).
+	IOError(std::io::Error),
 }
 
 impl From<core::block::Error> for Error {
@@ -60,7 +62,11 @@ impl From<chain::Error> for Error {
 		Error::Chain(e)
 	}
 }
-
+impl From<std::io::Error> for Error {
+	fn from(e: std::io::Error) -> Error {
+		Error::IOError(e)
+	}
+}
 impl From<p2p::Error> for Error {
 	fn from(e: p2p::Error) -> Error {
 		Error::P2P(e)
@@ -256,6 +262,9 @@ pub enum SyncStatus {
 	/// Downloading the various txhashsets
 	TxHashsetDownload {
 		start_time: DateTime<Utc>,
+		prev_update_time: DateTime<Utc>,
+		update_time: DateTime<Utc>,
+		prev_downloaded_size: u64,
 		downloaded_size: u64,
 		total_size: u64,
 	},

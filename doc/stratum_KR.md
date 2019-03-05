@@ -1,36 +1,33 @@
-# Grin Stratum RPC Protocol
+# Grin Stratum RPC 프로토콜
 
-*Read this in other languages: [Korean](stratum_KR.md).*
+이 문서는 Grin에 구현되어 있는 현재 Stratum RPC protocol 을 설명한 것입니다.
 
-This document describes the current Stratum RPC protocol implemented in Grin.
+## 목차
 
-## Table of Contents
-
-1. [Messages](#messages)
+1. [Messages](#메세지_들)
     1. [getjobtemplate](#getjobtemplate)
-    1. [job](#job)
-    1. [keepalive](#keepalive)
-    1. [login](#login)
-    1. [status](#status)
-    1. [submit](#submit)
-1. [Error Messages](#error-messages)
-1. [Miner Behavior](#miner-behavior)
-1. [Reference Implementation](#reference-implementation)
+    2. [job](#job)
+    3. [keepalive](#keepalive)
+    4. [login](#login)
+    5. [status](#status)
+    6. [submit](#submit)
+2. [에러 메시지들](#error-messages)
+3. [채굴자의 행동양식](#miner-behavior)
+4. [참고 구현체](#reference-implementation)
 
-## Messages
+## 메세지 들
 
-In this section, we detail each message and the potential response.
-
-At any point, if miner the tries to do one of the following request (except login) and login is required, the miner will receive the following error message.
+이 섹션에서는 각 메시지와 그 응답에 대해서 상술합니다.
+어느때든, 채굴자가 로그인을 제외한 다음 중 한 요청을 하고 login 이 요구된다면 채굴자는 다음과 같은 에러 메시지를 받게 됩니다.
 
 | Field         | Content                                 |
 | :------------ | :-------------------------------------- |
-| id            | ID of the request                       |
+| id            | 요청 ID                                 |
 | jsonrpc       | "2.0"                                   |
-| method        | method sent by the miner                |
+| method        | 채굴자가 보낸 method                        |
 | error         | {"code":-32500,"message":"login first"} |
 
-Example:
+예시:
 
 ```JSON
 {  
@@ -43,17 +40,16 @@ Example:
    }
 }
 ```
-
-if the request is not one of the following, the stratum server will give this error response:
+만약에 요청이 다음중 하나가 아니라면, Stratum 서버가 아래와 같은 에러 메시지를 보내게 됩니다.
 
 | Field         | Content                                      |
 | :------------ | :------------------------------------------- |
-| id            | ID of the request                            |
+| id            | 요청 ID                                       |
 | jsonrpc       | "2.0"                                        |
-| method        | method sent by the miner                     |
+| method        | 채굴자가 보낸 method                            |
 | error         | {"code":-32601,"message":"Method not found"} |
 
-Example:
+예시:
 
 ```JSON
 {  
@@ -69,19 +65,19 @@ Example:
 
 ### `getjobtemplate`
 
-A message initiated by the miner.
-Miner can request a job with this message.
+채굴자에 의해 시작되는 메시지입니다.
+채굴자는 이 메시지로 작업을 요청 할 수 있습니다.
 
 #### Request
 
 | Field         | Content                        |
 | :------------ | :----------------------------- |
-| id            | ID of the request              |
+| id            | 요청 ID                         |
 | jsonrpc       | "2.0"                          |
 | method        | "getjobtemplate"               |
 | params        | null                           |
 
-Example:
+예시 :
 
 ``` JSON
 {  
@@ -94,11 +90,11 @@ Example:
 
 #### Response
 
-The response can be of two types:
+Response 는 두가지 타입이 될 수 있습니다.
 
 ##### OK response
 
-Example:
+예시
 
 ``` JSON
 {  
@@ -116,16 +112,16 @@ Example:
 
 ##### Error response
 
-If the node is syncing, it will send the following message:
+만약 노드가 동기화 중이라면, 다음과 같은 메시지를 보낼것입니다.
 
 | Field         | Content                                                   |
 | :------------ | :-------------------------------------------------------- |
-| id            | ID of the request                                         |
+| id            | 요청 ID                                                    |
 | jsonrpc       | "2.0"                                                     |
 | method        | "getjobtemplate"                                          |
 | error         | {"code":-32701,"message":"Node is syncing - Please wait"} |
 
-Example:
+예시:
 
 ```JSON
 {  
@@ -141,20 +137,20 @@ Example:
 
 ### `job`
 
-A message initiated by the Stratum server.
-Stratum server will send job automatically to connected miners.
-The miner SHOULD interrupt current job if job_id = 0, and SHOULD replace the current job with this one after the current graph is complete.
+Stratum 서버로 인해 시작되는 메세지입니다.
+Stratum 서버는 연결된 채굴자에게 작업을 자동적으로 보냅니다.
+채굴자는 job_id=0 이면 현재의 작업을 중단해야 합니다. 그리고 현재의 작업을 현재 graph 가 완료되면 이 작업으로 대체해야 합니다.
 
 #### Request
 
 | Field         | Content                                                                   |
 | :------------ | :------------------------------------------------------------------------- |
-| id            | ID of the request                                                         |
+| id            | 요청 ID                                                                    |
 | jsonrpc       | "2.0"                                                                     |
 | method        | "job"                                                                     |
 | params        | Int `difficulty`, `height`, `job_id` and string `pre_pow` |
 
-Example:
+예시:
 
 ``` JSON
 {  
@@ -172,22 +168,22 @@ Example:
 
 #### Response
 
-No response is required for this message.
+이 메세지에는 Response 가 필요하지 않습니다.
 
 ### `keepalive`
 
-A message initiated by the miner in order to keep the connection alive.
+연결을 계속 하기 위해서 채굴자에 의해 초기화 되는 메시지입니다.
 
 #### Request
 
 | Field         | Content                |
 | :------------ | :--------------------- |
-| id            | ID of the request      |
+| id            | 요청 ID                 |
 | jsonrpc       | "2.0"                  |
 | method        | "keepalive"            |
 | params        | null                   |
 
-Example:
+예시:
 
 ``` JSON
 {  
@@ -202,13 +198,13 @@ Example:
 
 | Field         | Content                        |
 | :------------ | :----------------------------- |
-| id            | ID of the request              |
+| id            | 요청 ID                         |
 | jsonrpc       | "2.0"                          |
 | method        | "keepalive"                    |
 | result        | "ok"                           |
 | error         | null                           |
 
-Example:
+예시:
 
 ``` JSON
 {  
@@ -223,20 +219,19 @@ Example:
 ### `login`
 
 ***
-
-A message initiated by the miner.
-Miner can log in on a Grin Stratum server with a login, password and agent (usually statically set by the miner program).
+채굴자에 의해 시작되는 메시지입니다.
+채굴자는 보통 채굴 프로그램으로 고정적으로 정해지는 login, password, agent 로 Grin Stratum 서버에 로그인 할 수 있습니다.
 
 #### Request
 
 | Field         | Content                        |
 | :------------ | :----------------------------- |
-| id            | ID of the request              |
+| id            | 요청 ID                         |
 | jsonrpc       | "2.0"                          |
 | method        | "login"                        |
 | params        | Strings: login, pass and agent |
 
-Example:
+예시:
 
 ``` JSON
 
@@ -252,21 +247,22 @@ Example:
 }
 
 ```
+
 #### Response
 
-The response can be of two types:
+Response 는 두가지 타입이 될 수 있습니다.
 
 ##### OK response
 
 | Field         | Content                        |
 | :------------ | :----------------------------- |
-| id            | ID of the request              |
+| id            | 요청 ID                         |
 | jsonrpc       | "2.0"                          |
 | method        | "login"                        |
 | result        | "ok"                           |
 | error         | null                           |
 
-Example:
+예사:
 
 ``` JSON
 {  
@@ -280,23 +276,23 @@ Example:
 
 ##### Error response
 
-Not yet implemented. Should return error -32500 "Login first" when login is required.
+아직 구현되지 않았습니다. login이 필요할때, -32500 "Login firtst" 라는 에러를 리턴합니다.
 
 ### `status`
 
-A message initiated by the miner.
-This message allows a miner to get the status of its current worker and the network.
+채굴자에 의해 시작되는 메시지입니다.
+이 메시지는 채굴자에게 현재의 워커와 네트워크의 상태를 얻을 수 있게 합니다.
 
 #### Request
 
 | Field         | Content                |
 | :------------ | :--------------------- |
-| id            | ID of the request      |
+| id            | 요청 ID                 |
 | jsonrpc       | "2.0"                  |
 | method        | "status"               |
 | params        | null                   |
 
-Example:
+예시:
 
 ``` JSON
 {  
@@ -309,17 +305,17 @@ Example:
 
 #### Response
 
-The response is the following:
+Response 는 아래와 같습니다.
 
 | Field         | Content                                                                                                  |
 | :------------ | :------------------------------------------------------------------------------------------------------- |
-| id            | ID of the request                                                                                        |
+| id            | 요청 ID                                                                                                   |
 | jsonrpc       | "2.0"                                                                                                    |
 | method        | "status"                                                                                                 |
-| result        | String `id`. Integers `height`, `difficulty`, `accepted`, `rejected` and `stale` |
+| result        | String `id`. Integers `height`, `difficulty`, `accepted`, `rejected` and `stale`                         |
 | error         | null                                                                                                     |
 
-Example:
+예시:
 
 ```JSON
 {  
@@ -340,21 +336,21 @@ Example:
 
 ### `submit`
 
-A message initiated by the miner.
-When a miner find a share, it will submit it to the node.
+채굴자에 의해 시작되는 메시지입니다.
+마이너가 쉐어를 찾았을때, 노드에게 보내집니다.
 
 #### Request
 
-The miner submit a solution to a job to the Stratum server.
+채굴자는 Stratum 서버에 작업 솔루션을 보냅니다.
 
 | Field         | Content                                                                     |
 | :------------ | :-------------------------------------------------------------------------- |
-| id            | ID of the request                                                           |
+| id            | 요청 ID                                                                      |
 | jsonrpc       | "2.0"                                                                       |
 | method        | "submit"                                                                    |
-| params        | Int `edge_bits`,`nonce`, `height`, `job_id` and array of integers `pow` |
+| params        | Int `edge_bits`,`nonce`, `height`, `job_id` and array of integers `pow`     |
 
-Example:
+예시:
 
 ``` JSON
 {
@@ -375,21 +371,21 @@ Example:
 
 #### Response
 
-The response can be of three types.
+Response 는 세가지 타입이 될 수 있습니다.
 
 ##### OK response
 
-The share is accepted by the Stratum but is not a valid cuck(at)oo solution at the network target difficulty.
+이 타입은 Stratum 에 받아들여지지만 네트워크 타켓 난이도에서는 유효한 cuck(at)oo 솔루션이 아닙니다.
 
 | Field         | Content                        |
 | :------------ | :----------------------------- |
-| id            | ID of the request              |
+| id            | 요청 ID                         |
 | jsonrpc       | "2.0"                          |
 | method        | "submit"                       |
 | result        | "ok"                           |
 | error         | null                           |
 
-Example:
+예시:
 
 ``` JSON
 {  
@@ -403,17 +399,17 @@ Example:
 
 ##### Blockfound response
 
-The share is accepted by the Stratum and is a valid cuck(at)oo solution at the network target difficulty.
+이 타입은 Stratum 에 받아들여지고 네트워크 타켓 난이도에서는 유효한 cuck(at)oo 솔루션 입니다.
 
 | Field         | Content                        |
 | :------------ | :----------------------------- |
-| id            | ID of the request              |
+| id            | 요청 ID                         |
 | jsonrpc       | "2.0"                          |
 | method        | "submit"                       |
 | result        | "block - " + hash of the block |
 | error         | null                           |
 
-Example:
+예시:
 
 ``` JSON
 {  
@@ -427,18 +423,18 @@ Example:
 
 ##### Error response
 
-The error response can be of two types: stale and rejected.
+에러 response는 stale과 rejected 라는 두가지 타입이 될 수 있습니다.
 
 ##### Stale share error response
 
-The share is a valid solution to a previous job not the current one.
+이 타입은 유효한 솔루션이나 지난 작업이 현재의 것이 아닙니다.
 
 | Field         | Content                                                   |
 | :------------ | :-------------------------------------------------------- |
-| id            | ID of the request                                         |
+| id            | 요청 ID                                                    |
 | jsonrpc       | "2.0"                                                     |
-| method        | "submit"                                          |
-| error         | {"code":-32503,"message":"Solution submitted too late"} |
+| method        | "submit"                                                  |
+| error         | {"code":-32503,"message":"Solution submitted too late"}   |
 
 Example:
 
@@ -456,18 +452,18 @@ Example:
 
 ##### Rejected share error responses
 
-Two possibilities: the solution cannot be validated or the solution is of too low difficulty.
+솔루션이 유효하지 않거나 너무 낮은 난이도일 수 있는 두 가지 가능성이 있습니다.
 
 ###### Failed to validate solution error
 
-The submitted solution cannot be validated.
+재출된 솔루션이 유효하지 않을 수 았습니다.
 
 | Field         | Content                                                   |
 | :------------ | :-------------------------------------------------------- |
-| id            | ID of the request                                         |
+| id            | 요청 ID                                                    |
 | jsonrpc       | "2.0"                                                     |
-| method        | "submit"                                          |
-| error         | {"code":-32502,"message":"Failed to validate solution"} |
+| method        | "submit"                                                  |
+| error         | {"code":-32502,"message":"Failed to validate solution"}   |
 
 Example:
 
@@ -485,11 +481,11 @@ Example:
 
 ###### Share rejected due to low difficulty error
 
-The submitted solution is of too low difficulty.
+제출된 솔루션의 난이도가 너무 낮습니다.
 
 | Field         | Content                                                          |
 | :------------ | :--------------------------------------------------------------- |
-| id            | ID of the request                                                |
+| id            | 요청 ID                                                           |
 | jsonrpc       | "2.0"                                                            |
 | method        | "submit"                                                         |
 | error         | {"code":-32501,"message":"Share rejected due to low difficulty"} |
@@ -510,7 +506,7 @@ Example:
 
 ## Error Messages
 
-Grin Stratum protocol implementation contains the following error message:
+Grin Stratum protocole 구현체는 다음과 같은 에러 메시지를 포함하고 있습니다.
 
 | Error code  | Error Message                          |
 | :---------- | :------------------------------------- |
@@ -524,16 +520,17 @@ Grin Stratum protocol implementation contains the following error message:
 
 ## Miner behavior
 
-Miners SHOULD, MAY or MUST respect the following rules:
+채굴자들은 반드시 다음과 같은 규칙들을 존중해야 할 것입니다.
 
-- Miners SHOULD randomize the job nonce before starting
-- Miners MUST continue mining the same job until the server sends a new one, though a miner MAY request a new job at any time
-- Miners MUST NOT send an rpc response to a job request from the server
-- Miners MAY set the RPC "id" and expect responses to have that same id
-- Miners MAY send a keepalive message
-- Miners MAY send a login request (to identify which miner finds shares / solutions in the logs), the login request MUST have all 3 params.
+- 마이너들은 작업을 시작하기 전에 작업 nounce를 랜덤화 시켜야 합니다.
+- 채굴자들은 반드시 서버가 샤로운 작업을 보낼때끼지 같은 작업을 채굴해야 하지만 언제든 새로운 작업을 요청 할 수 있습니다.
+- 채굴자들은 서버로 부터 온 작업 요청을 rpc response로 보내면 안됩니다.
+- 채굴자들은 RPC "id"를 정할 수 있고 같은 id로 response를 받기를 요구 할 수 있습니다.
+- 마이너들은 keepalive 메시지를 보낼수 있습니다.
+- 채굴자들은 로그인 request를 보낼 수 있습니다.(어떤 채굴자가 쉐어를 찾았는지 확인하기 위해서 / Log안에서 솔루션을 확인하기 위해 ) 로그인 request는 3가지 파라미터를 가지고 있어야만 합니다.
 - Miners MUST return the supplied job_id with submit messages.
+- 채굴자들은 주어진 job_id를 제출하는 메시지에 리턴해야 합니다.
 
 ## Reference Implementation
 
-The current reference implementation is available at [mimblewimble/grin-miner](https://github.com/mimblewimble/grin-miner/blob/master/src/bin/client.rs).
+현재 구현체는 [mimblewimble/grin-miner](https://github.com/mimblewimble/grin-miner/blob/master/src/bin/client.rs) 에서 참고하세요.

@@ -136,9 +136,5 @@ fn txhashset_contains_expected_files(dirname: String, path_buf: PathBuf) -> bool
 	let intersection: HashSet<_> = zip_files_hashset
 		.difference(&expected_files_hashset)
 		.collect();
-	if intersection.is_empty() {
-		true
-	} else {
-		false
-	}
+	intersection.is_empty()
 }

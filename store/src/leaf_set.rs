@@ -199,4 +199,9 @@ impl LeafSet {
 	pub fn is_empty(&self) -> bool {
 		self.len() == 0
 	}
+
+	/// Iterator over positionns in the leaf_set (all leaf positions).
+	pub fn iter(&self) -> impl Iterator<Item = u64> + '_ {
+		self.bitmap.iter().map(|x| x as u64)
+	}
 }

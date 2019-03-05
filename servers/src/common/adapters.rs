@@ -326,10 +326,17 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 		total_size: u64,
 	) -> bool {
 		match self.sync_state.status() {
-			SyncStatus::TxHashsetDownload { .. } => {
+			SyncStatus::TxHashsetDownload {
+				update_time: old_update_time,
+				downloaded_size: old_downloaded_size,
+				..
+			} => {
 				self.sync_state
 					.update_txhashset_download(SyncStatus::TxHashsetDownload {
 						start_time,
+						prev_update_time: old_update_time,
+						update_time: Utc::now(),
+						prev_downloaded_size: old_downloaded_size,
 						downloaded_size,
 						total_size,
 					})

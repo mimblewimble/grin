@@ -62,15 +62,28 @@ pub fn compress(src_dir: &Path, dst_file: &File) -> ZipResult<()> {
 }
 
 /// Decompress a source file into the provided destination path.
-pub fn decompress<R>(src_file: R, dest: &Path) -> ZipResult<()>
+pub fn decompress<R, F>(src_file: R, dest: &Path, expected: F) -> ZipResult<usize>
 where
 	R: io::Read + io::Seek,
+	F: Fn(&Path) -> bool,
 {
+	let mut decompressed = 0;
 	let mut archive = zip_rs::ZipArchive::new(src_file)?;
 
 	for i in 0..archive.len() {
 		let mut file = archive.by_index(i)?;
-		let file_path = dest.join(file.name());
+		let san_name = file.sanitized_name();
+		if san_name.to_str().unwrap_or("").replace("\\", "/") != file.name().replace("\\", "/")
+			|| !expected(&san_name)
+		{
+			info!(
+				"ignoring a suspicious file: {}, got {:?}",
+				file.name(),
+				san_name.to_str()
+			);
+			continue;
+		}
+		let file_path = dest.join(san_name);
 
 		if (&*file.name()).ends_with('/') {
 			fs::create_dir_all(&file_path)?;
@@ -80,7 +93,6 @@ where
 					fs::create_dir_all(&p)?;
 				}
 			}
-			//let mut outfile = fs::File::create(&file_path)?;
 			let res = fs::File::create(&file_path);
 			let mut outfile = match res {
 				Err(e) => {
@@ -90,6 +102,7 @@ where
 				Ok(r) => r,
 			};
 			io::copy(&mut file, &mut outfile)?;
+			decompressed += 1;
 		}
 
 		// Get and Set permissions
@@ -104,5 +117,5 @@ where
 			}
 		}
 	}
-	Ok(())
+	Ok(decompressed)
 }

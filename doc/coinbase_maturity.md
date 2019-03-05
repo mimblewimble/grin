@@ -119,9 +119,7 @@ To summarize -
 
 Output MMR stores output hashes based on `commitment|features` (the commitment itself is not sufficient).
 
-We do not need to include the range proof or the switch commitment hash in the generation of the output hash.
-
-We do not need to encode the lock height in the switch commitment hash.
+We do not need to include the range proof in the generation of the output hash.
 
 To spend an output we continue to need -
 
