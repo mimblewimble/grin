@@ -148,9 +148,7 @@ impl Keychain for ExtKeychain {
 		let res = blake2::blake2b::blake2b(32, &commit.0, &root_key.0[..]);
 		let res = res.as_bytes();
 		SecretKey::from_slice(&self.secp, &res)
-			.map_err(|e| Error::RangeProof(
-				format!("Unable to create nonce: {:?}", e).to_string(),
-			))
+			.map_err(|e| Error::RangeProof(format!("Unable to create nonce: {:?}", e).to_string()))
 	}
 
 	fn sign(&self, msg: &Message, amount: u64, id: &Identifier) -> Result<Signature, Error> {
