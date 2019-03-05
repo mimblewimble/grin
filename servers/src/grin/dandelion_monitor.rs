@@ -61,11 +61,6 @@ pub fn monitor_transactions(
 					adapter.next_epoch();
 				}
 
-				// Vastly simplified -
-				// check if we are is_stem() via the adapter (current epoch)
-				// * if we are stem then do nothing (nothing to aggregate here)
-				// * if fluff then aggregate and add to txpool
-
 				if !adapter.is_stem() {
 					if process_fluff_phase(&tx_pool, &verifier_cache).is_err() {
 						error!("dand_mon: Problem processing fresh pool entries.");
@@ -86,18 +81,35 @@ fn process_fluff_phase(
 ) -> Result<(), PoolError> {
 	let mut tx_pool = tx_pool.write();
 
-	let stem_txs = tx_pool.stempool.all_transactions();
-	if stem_txs.is_empty() {
+	// Get the aggregate tx representing the entire txpool.
+	let txpool_tx = tx_pool.txpool.all_transactions_aggregate()?;
+
+	// Nothing to process? Then we are done.
+	if txpool_tx.is_none() {
 		return Ok(());
 	}
 
-	// Get the aggregate tx representing the entire txpool.
-	let txpool_tx = tx_pool.txpool.all_transactions_aggregate()?;
+	// TODO - If this runs every 10s (patience time?) we don't have much time to aggregate txs.
+	// It would be good if we could let txs build up over a longer period of time here.
+	// This would complicate the selection and aggregation rules quite significantly though.
+	// We want to leave txs in here but we also want to maximize the chance of aggregation,
+	// so sometimes it is desirable to aggregate more recent txs along with them.
+	//
+	// Something like -
+	// * If everything is recent then leave them in there.
+	// * If anything is old enough to fluff then fluff everything (even recent txs).
+	//
+	// Or maybe the rule is as simple as -
+	// * If multiple txs then aggregate and fluff
+	// * If single tx then wait until old enough before fluffing
+	//
+	// Note: We do not want to simply wait for epoch to expire as that could be 10 mins.
+	// We likely want to aggregate and fluff after 60s or so.
 
 	let header = tx_pool.chain_head()?;
 	let stem_txs = tx_pool
 		.stempool
-		.select_valid_transactions(stem_txs, txpool_tx, &header)?;
+		.select_valid_transactions(txpool_tx, &header)?;
 
 	if stem_txs.is_empty() {
 		return Ok(());

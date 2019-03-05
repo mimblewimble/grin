@@ -442,7 +442,7 @@ impl DandelionEpoch {
 		DandelionEpoch {
 			config,
 			start_time: None,
-			is_stem: false,
+			is_stem: true,
 			relay_peer: None,
 		}
 	}
@@ -451,12 +451,9 @@ impl DandelionEpoch {
 		let expired = if let Some(start_time) = self.start_time {
 			Utc::now().timestamp().saturating_sub(start_time) > self.config.epoch_secs() as i64
 		} else {
+			info!("DandelionEpoch: expired, is_stem: {}", self.is_stem);
 			true
 		};
-		error!(
-			"DandelionEpoch: is_expired: {}, is_stem: {}",
-			expired, self.is_stem
-		);
 		expired
 	}
 
@@ -468,7 +465,8 @@ impl DandelionEpoch {
 		let mut rng = rand::thread_rng();
 		self.is_stem = rng.gen_range(0, 101) < self.config.stem_probability();
 
-		error!("DandelionEpoch: next_epoch: {:?}", self);
+		let addr = self.relay_peer.clone().map(|p| p.info.addr);
+		info!("DandelionEpoch: next_epoch: is_stem: {}, relay: {:?}", self.is_stem, addr);
 	}
 
 	// Are we stemming transactions in this epoch?

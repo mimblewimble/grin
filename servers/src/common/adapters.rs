@@ -727,7 +727,7 @@ impl pool::PoolAdapter for PoolToNetAdapter {
 
 		// If "stem" epoch attempt to relay the tx to the next Dandelion relay.
 		// Fallback to immediately fluffing the tx if we cannot stem for any reason.
-		// If "fluff" epoch then nothing to do right now (fluff when epoch expires).
+		// If "fluff" epoch then nothing to do right now (fluff via Dandelion monitor).
 		if epoch.is_stem() {
 			if let Some(peer) = epoch.relay_peer(&self.peers()) {
 				match peer.send_stem_transaction(tx) {
@@ -745,7 +745,7 @@ impl pool::PoolAdapter for PoolToNetAdapter {
 				Err(pool::PoolError::DandelionError)
 			}
 		} else {
-			info!("Fluff epoch. Aggregating stem tx(s). Fluffing when epoch expires.");
+			info!("Fluff epoch. Aggregating stem tx(s). Will fluff via Dandelion monitor.");
 			Ok(())
 		}
 	}
