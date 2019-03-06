@@ -45,7 +45,7 @@ pub struct ChainStore {
 impl ChainStore {
 	/// Create new chain store
 	pub fn new(db_root: &str) -> Result<ChainStore, Error> {
-		let db = store::Store::new(db_root, Some(STORE_SUBPATH.clone()), None)?;
+		let db = store::Store::new(db_root, None, Some(STORE_SUBPATH.clone()), None)?;
 		Ok(ChainStore { db })
 	}
 }

@@ -75,12 +75,21 @@ impl Store {
 	/// By default creates an environment named "lmdb".
 	/// Be aware of transactional semantics in lmdb
 	/// (transactions are per environment, not per database).
-	pub fn new(path: &str, name: Option<&str>, max_readers: Option<u32>) -> Result<Store, Error> {
-		let name = match name {
+	pub fn new(
+		root_path: &str,
+		env_name: Option<&str>,
+		db_name: Option<&str>,
+		max_readers: Option<u32>,
+	) -> Result<Store, Error> {
+		let name = match env_name {
 			Some(n) => n.to_owned(),
 			None => "lmdb".to_owned(),
 		};
-		let full_path = [path.to_owned(), name.clone()].join("/");
+		let db_name = match db_name {
+			Some(n) => n.to_owned(),
+			None => "lmdb".to_owned(),
+		};
+		let full_path = [root_path.to_owned(), name.clone()].join("/");
 		fs::create_dir_all(&full_path)
 			.expect("Unable to create directory 'db_root' to store chain_data");
 
@@ -101,7 +110,7 @@ impl Store {
 		let res = Store {
 			env: Arc::new(env),
 			db: RwLock::new(None),
-			name: name,
+			name: db_name,
 		};
 
 		{
