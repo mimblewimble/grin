@@ -75,7 +75,12 @@ impl Store {
 	/// By default creates an environment named "lmdb".
 	/// Be aware of transactional semantics in lmdb
 	/// (transactions are per environment, not per database).
-	pub fn new(root_path: &str, env_name: Option<&str>, db_name: Option<&str>, max_readers: Option<u32>) -> Result<Store, Error> {
+	pub fn new(
+		root_path: &str,
+		env_name: Option<&str>,
+		db_name: Option<&str>,
+		max_readers: Option<u32>,
+	) -> Result<Store, Error> {
 		let name = match env_name {
 			Some(n) => n.to_owned(),
 			None => "lmdb".to_owned(),
