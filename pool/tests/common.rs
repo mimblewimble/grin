@@ -54,7 +54,7 @@ impl ChainAdapter {
 	pub fn update_db_for_block(&self, block: &Block) {
 		let header = &block.header;
 		let tip = Tip::from_header(header);
-		let mut s = self.store.write();
+		let s = self.store.write();
 		let batch = s.batch().unwrap();
 
 		batch.save_block_header(header).unwrap();

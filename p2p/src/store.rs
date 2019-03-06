@@ -115,7 +115,7 @@ pub struct PeerStore {
 impl PeerStore {
 	/// Instantiates a new peer store under the provided root path.
 	pub fn new(db_root: &str) -> Result<PeerStore, Error> {
-		let db = grin_store::Store::new(db_root, Some(STORE_SUBPATH), None)?;
+		let db = grin_store::Store::new(db_root, Some(STORE_SUBPATH), None, None)?;
 		Ok(PeerStore { db: db })
 	}
 
