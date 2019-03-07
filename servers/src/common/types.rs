@@ -452,7 +452,8 @@ impl DandelionEpoch {
 	/// It is expired if start_time is older than the configured epoch_secs.
 	pub fn is_expired(&self) -> bool {
 		let expired = if let Some(start_time) = self.start_time {
-			Utc::now().timestamp().saturating_sub(start_time) > self.config.epoch_secs() as i64
+			let epoch_secs = self.config.epoch_secs.expect("epoch_secs config missing") as i64;
+			Utc::now().timestamp().saturating_sub(start_time) > epoch_secs
 		} else {
 			let addr = self.relay_peer.clone().map(|p| p.info.addr);
 			info!(
@@ -473,14 +474,16 @@ impl DandelionEpoch {
 
 		// If stem_probability == 90 then we stem 90% of the time.
 		let mut rng = rand::thread_rng();
-		self.is_stem = rng.gen_range(0, 101) < self.config.stem_probability();
+		let stem_probability = self
+			.config
+			.stem_probability
+			.expect("stem_probability config missing");
+		self.is_stem = rng.gen_range(0, 101) < stem_probability;
 
 		let addr = self.relay_peer.clone().map(|p| p.info.addr);
 		info!(
 			"DandelionEpoch: next_epoch: is_stem: {} ({}%), relay: {:?}",
-			self.is_stem,
-			self.config.stem_probability(),
-			addr
+			self.is_stem, stem_probability, addr
 		);
 	}
 

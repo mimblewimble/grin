@@ -22,7 +22,7 @@ use crate::common::adapters::DandelionAdapter;
 use crate::core::core::hash::Hashed;
 use crate::core::core::transaction;
 use crate::core::core::verifier_cache::VerifierCache;
-use crate::pool::{DandelionConfig, PoolError, TransactionPool, TxSource};
+use crate::pool::{DandelionConfig, Pool, PoolEntry, PoolError, TransactionPool, TxSource};
 use crate::util::{Mutex, RwLock, StopState};
 
 /// A process to monitor transactions in the stempool.
@@ -46,14 +46,10 @@ pub fn monitor_transactions(
 		.name("dandelion".to_string())
 		.spawn(move || {
 			loop {
+				// Halt Dandelion monitor if we have been notified that we are stopping.
 				if stop_state.lock().is_stopped() {
 					break;
 				}
-
-				// TODO - may be preferable to loop more often and check for expired patience time?
-				// This is the patience timer, we loop every n secs.
-				let patience_secs = dandelion_config.patience_secs.unwrap();
-				thread::sleep(Duration::from_secs(patience_secs));
 
 				// Our adapter hooks us into the current Dandelion "epoch".
 				// From this we can determine if we should fluff txs in stempool.
@@ -62,7 +58,7 @@ pub fn monitor_transactions(
 				}
 
 				if !adapter.is_stem() {
-					if process_fluff_phase(&tx_pool, &verifier_cache).is_err() {
+					if process_fluff_phase(&dandelion_config, &tx_pool, &verifier_cache).is_err() {
 						error!("dand_mon: Problem processing fresh pool entries.");
 					}
 				}
@@ -71,52 +67,60 @@ pub fn monitor_transactions(
 				if process_expired_entries(&dandelion_config, &tx_pool).is_err() {
 					error!("dand_mon: Problem processing fresh pool entries.");
 				}
+
+				// Monitor loops every 10s.
+				thread::sleep(Duration::from_secs(10));
 			}
 		});
 }
 
+// Query the pool for transactions older than the cutoff.
+// Used for both periodic fluffing and handling expired embargo timer.
+fn select_txs_cutoff(pool: &Pool, cutoff_secs: u64) -> Vec<PoolEntry> {
+	let cutoff = Utc::now().timestamp() - cutoff_secs as i64;
+	pool.entries
+		.iter()
+		.filter(|x| x.tx_at.timestamp() < cutoff)
+		.cloned()
+		.collect()
+}
+
 fn process_fluff_phase(
+	dandelion_config: &DandelionConfig,
 	tx_pool: &Arc<RwLock<TransactionPool>>,
 	verifier_cache: &Arc<RwLock<dyn VerifierCache>>,
 ) -> Result<(), PoolError> {
 	// Take a write lock on the txpool for the duration of this processing.
 	let mut tx_pool = tx_pool.write();
 
-	// Get the aggregate tx representing the entire txpool.
-	let txpool_tx = tx_pool.txpool.all_transactions_aggregate()?;
+	let cutoff_secs = dandelion_config
+		.aggregation_secs
+		.expect("aggregation secs config missing");
+	let fluffable_entries = select_txs_cutoff(&tx_pool.stempool, cutoff_secs);
 
-	// TODO - If this runs every 10s (patience time?) we don't have much time to aggregate txs.
-	// It would be good if we could let txs build up over a longer period of time here.
-	// This would complicate the selection and aggregation rules quite significantly though.
-	// We want to leave txs in here but we also want to maximize the chance of aggregation,
-	// so sometimes it is desirable to aggregate more recent txs along with them.
-	//
-	// Something like -
-	// * If everything is recent then leave them in there.
-	// * If anything is old enough to fluff then fluff everything (even recent txs).
-	//
-	// Or maybe the rule is as simple as -
-	// * If multiple txs then aggregate and fluff
-	// * If single tx then wait until old enough before fluffing
-	//
-	// Note: We do not want to simply wait for epoch to expire as that could be 10 mins.
-	// We likely want to aggregate and fluff after 60s or so.
-
-	let header = tx_pool.chain_head()?;
-	let stem_txs = tx_pool
-		.stempool
-		.select_valid_transactions(txpool_tx, &header)?;
-
-	if stem_txs.is_empty() {
+	if fluffable_entries.is_empty() {
 		return Ok(());
 	}
 
+	let header = tx_pool.chain_head()?;
+
+	let fluffable_txs = {
+		let txpool_tx = tx_pool.txpool.all_transactions_aggregate()?;
+		let txs: Vec<_> = fluffable_entries.iter().map(|x| x.tx.clone()).collect();
+		tx_pool.stempool.validate_raw_txs(
+			txs,
+			txpool_tx,
+			&header,
+			transaction::Weighting::NoLimit,
+		)?
+	};
+
 	debug!(
 		"dand_mon: Found {} txs in local stempool to fluff",
-		stem_txs.len()
+		fluffable_txs.len()
 	);
 
-	let agg_tx = transaction::aggregate(stem_txs)?;
+	let agg_tx = transaction::aggregate(fluffable_txs)?;
 	agg_tx.validate(
 		transaction::Weighting::AsTransaction,
 		verifier_cache.clone(),
@@ -135,23 +139,14 @@ fn process_expired_entries(
 	dandelion_config: &DandelionConfig,
 	tx_pool: &Arc<RwLock<TransactionPool>>,
 ) -> Result<(), PoolError> {
-	let now = Utc::now().timestamp();
-	let embargo_sec = dandelion_config.embargo_secs.unwrap() + thread_rng().gen_range(0, 31);
-	let cutoff = now - embargo_sec as i64;
+	// Take a write lock on the txpool for the duration of this processing.
+	let mut tx_pool = tx_pool.write();
 
-	let mut expired_entries = vec![];
-	{
-		let tx_pool = tx_pool.read();
-		for entry in tx_pool
-			.stempool
-			.entries
-			.iter()
-			.filter(|x| x.tx_at.timestamp() < cutoff)
-		{
-			debug!("dand_mon: Embargo timer expired for {:?}", entry.tx.hash());
-			expired_entries.push(entry.clone());
-		}
-	}
+	let embargo_secs = dandelion_config
+		.embargo_secs
+		.expect("embargo_secs config missing")
+		+ thread_rng().gen_range(0, 31);
+	let expired_entries = select_txs_cutoff(&tx_pool.stempool, embargo_secs);
 
 	if expired_entries.is_empty() {
 		return Ok(());
@@ -159,7 +154,6 @@ fn process_expired_entries(
 
 	debug!("dand_mon: Found {} expired txs.", expired_entries.len());
 
-	let mut tx_pool = tx_pool.write();
 	let header = tx_pool.chain_head()?;
 
 	let src = TxSource {
@@ -168,9 +162,13 @@ fn process_expired_entries(
 	};
 
 	for entry in expired_entries {
+		let txhash = entry.tx.hash();
 		match tx_pool.add_to_pool(src.clone(), entry.tx, false, &header) {
-			Ok(_) => debug!("dand_mon: embargo expired, fluffed tx successfully."),
-			Err(e) => debug!("dand_mon: Failed to fluff expired tx - {:?}", e),
+			Ok(_) => info!(
+				"dand_mon: embargo expired for {}, fluffed successfully.",
+				txhash
+			),
+			Err(e) => warn!("dand_mon: failed to fluff expired tx {}, {:?}", txhash, e),
 		};
 	}
 

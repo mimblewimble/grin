@@ -167,16 +167,6 @@ impl Pool {
 		Ok(Some(tx))
 	}
 
-	pub fn select_valid_transactions(
-		&self,
-		extra_tx: Option<Transaction>,
-		header: &BlockHeader,
-	) -> Result<Vec<Transaction>, PoolError> {
-		let txs = self.all_transactions();
-		let valid_txs = self.validate_raw_txs(txs, extra_tx, header, Weighting::NoLimit)?;
-		Ok(valid_txs)
-	}
-
 	// Aggregate this new tx with all existing txs in the pool.
 	// If we can validate the aggregated tx against the current chain state
 	// then we can safely add the tx to the pool.
@@ -250,7 +240,7 @@ impl Pool {
 		Ok(new_sums)
 	}
 
-	fn validate_raw_txs(
+	pub fn validate_raw_txs(
 		&self,
 		txs: Vec<Transaction>,
 		extra_tx: Option<Transaction>,

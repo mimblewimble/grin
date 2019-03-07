@@ -27,15 +27,14 @@ use failure::Fail;
 use grin_core as core;
 use grin_keychain as keychain;
 
-/// TODO - This now maps to the "epoch length"?
-/// Dandelion relay timer
-const DANDELION_RELAY_SECS: u64 = 600;
+/// Dandelion "epoch" length.
+const DANDELION_EPOCH_SECS: u64 = 600;
 
-/// Dandelion embargo timer
+/// Dandelion embargo timer.
 const DANDELION_EMBARGO_SECS: u64 = 180;
 
-/// Dandelion patience timer
-const DANDELION_PATIENCE_SECS: u64 = 10;
+/// Dandelion aggregation timer.
+const DANDELION_AGGREGATION_SECS: u64 = 30;
 
 /// Dandelion stem probability (stem 90% of the time, fluff 10%).
 const DANDELION_STEM_PROBABILITY: u64 = 90;
@@ -44,54 +43,42 @@ const DANDELION_STEM_PROBABILITY: u64 = 90;
 /// Note: shared between p2p and pool.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct DandelionConfig {
-	/// Choose new Dandelion relay peer every n secs.
-	#[serde = "default_dandelion_relay_secs"]
-	pub relay_secs: Option<u64>,
-	/// Dandelion embargo, fluff and broadcast tx if not seen on network before
-	/// embargo expires.
-	#[serde = "default_dandelion_embargo_secs"]
+	/// Length of each "epoch".
+	#[serde(default = "default_dandelion_epoch_secs")]
+	pub epoch_secs: Option<u64>,
+	/// Dandelion embargo timer. Fluff and broadcast individual txs if not seen
+	/// on network before embargo expires.
+	#[serde(default = "default_dandelion_embargo_secs")]
 	pub embargo_secs: Option<u64>,
-	/// Dandelion patience timer, fluff/stem processing runs every n secs.
-	/// Tx aggregation happens on stem txs received within this window.
-	#[serde = "default_dandelion_patience_secs"]
-	pub patience_secs: Option<u64>,
+	/// Dandelion aggregation timer.
+	#[serde(default = "default_dandelion_aggregation_secs")]
+	pub aggregation_secs: Option<u64>,
 	/// Dandelion stem probability (stem 90% of the time, fluff 10% etc.)
-	#[serde = "default_dandelion_stem_probability"]
+	#[serde(default = "default_dandelion_stem_probability")]
 	pub stem_probability: Option<u64>,
-}
-
-impl DandelionConfig {
-	pub fn stem_probability(&self) -> u64 {
-		self.stem_probability.unwrap_or(DANDELION_STEM_PROBABILITY)
-	}
-
-	// TODO - Cleanup config for Dandelion++
-	pub fn epoch_secs(&self) -> u64 {
-		self.relay_secs.unwrap_or(DANDELION_RELAY_SECS)
-	}
 }
 
 impl Default for DandelionConfig {
 	fn default() -> DandelionConfig {
 		DandelionConfig {
-			relay_secs: default_dandelion_relay_secs(),
+			epoch_secs: default_dandelion_epoch_secs(),
 			embargo_secs: default_dandelion_embargo_secs(),
-			patience_secs: default_dandelion_patience_secs(),
+			aggregation_secs: default_dandelion_aggregation_secs(),
 			stem_probability: default_dandelion_stem_probability(),
 		}
 	}
 }
 
-fn default_dandelion_relay_secs() -> Option<u64> {
-	Some(DANDELION_RELAY_SECS)
+fn default_dandelion_epoch_secs() -> Option<u64> {
+	Some(DANDELION_EPOCH_SECS)
 }
 
 fn default_dandelion_embargo_secs() -> Option<u64> {
 	Some(DANDELION_EMBARGO_SECS)
 }
 
-fn default_dandelion_patience_secs() -> Option<u64> {
-	Some(DANDELION_PATIENCE_SECS)
+fn default_dandelion_aggregation_secs() -> Option<u64> {
+	Some(DANDELION_AGGREGATION_SECS)
 }
 
 fn default_dandelion_stem_probability() -> Option<u64> {
