@@ -17,12 +17,14 @@
 
 extern crate hyper;
 extern crate tokio;
+extern crate hyper_rustls;
 
 use crate::chain::BlockStatus;
 use crate::common::types::{ServerConfig, WebHooksConfig};
 use crate::core::core;
 use crate::core::core::hash::Hashed;
 use futures::future::Future;
+use hyper_rustls::HttpsConnector;
 use hyper::client::HttpConnector;
 use hyper::header::HeaderValue;
 use hyper::Client;
@@ -150,8 +152,8 @@ fn parse_url(value: &Option<String>) -> Option<hyper::Uri> {
 				Err(_) => panic!("Invalid url : {}", url),
 			};
 			let scheme = uri.scheme_part().map(|s| s.as_str());
-			if scheme != Some("http") {
-				panic!("Invalid url scheme {}, expected 'http'", url)
+			if (scheme != Some("http")) && (scheme != Some("https")) {
+				panic!("Invalid url scheme {}, expected one of ['http', https']", url)
 			};
 			Some(uri)
 		}
@@ -170,7 +172,7 @@ struct WebHook {
 	/// url to POST block data when a new block is accepted by our node (might be a reorg or a fork)
 	block_accepted_url: Option<hyper::Uri>,
 	/// The hyper client to be used for all requests
-	client: Client<HttpConnector>,
+	client: Client<HttpsConnector<HttpConnector>>,
 	/// The tokio event loop
 	runtime: Runtime,
 }
@@ -183,12 +185,15 @@ impl WebHook {
 		block_received_url: Option<hyper::Uri>,
 		block_accepted_url: Option<hyper::Uri>,
 	) -> WebHook {
+		let https = HttpsConnector::new(4);
+		let client = Client::builder()
+    		.build::<_, hyper::Body>(https);
 		WebHook {
 			tx_received_url,
 			block_received_url,
 			header_received_url,
 			block_accepted_url,
-			client: Client::new(),
+			client,
 			runtime: Runtime::new().unwrap(),
 		}
 	}
