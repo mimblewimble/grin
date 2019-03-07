@@ -192,6 +192,9 @@ impl WebHook {
 		timeout: u16,
 	) -> WebHook {
 		let keep_alive = Duration::from_secs(timeout as u64);
+
+		info!("Spawning {} threads for webhooks (timeout set to {} secs)", nthreads, timeout);
+		
 		let https = HttpsConnector::new(nthreads as usize);
 		let client = Client::builder()
 			.keep_alive_timeout(keep_alive)
