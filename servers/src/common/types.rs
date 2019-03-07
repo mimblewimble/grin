@@ -251,17 +251,17 @@ pub struct WebHooksConfig {
 	/// number of worker threads in the tokio runtime
 	#[serde(default = "default_nthreads")]
 	pub nthreads: u16,
-	/// timeout in seconds for the http request 
+	/// timeout in seconds for the http request
 	#[serde(default = "default_timeout")]
 	pub timeout: u16,
 }
 
 fn default_timeout() -> u16 {
-    10
+	10
 }
 
 fn default_nthreads() -> u16 {
-    4
+	4
 }
 
 impl Default for WebHooksConfig {
@@ -272,7 +272,7 @@ impl Default for WebHooksConfig {
 			block_received_url: None,
 			block_accepted_url: None,
 			nthreads: default_nthreads(),
-			timeout: default_timeout()
+			timeout: default_timeout(),
 		}
 	}
 }

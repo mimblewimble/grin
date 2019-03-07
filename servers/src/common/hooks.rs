@@ -32,8 +32,8 @@ use hyper::{Body, Method, Request};
 use hyper_rustls::HttpsConnector;
 use serde::Serialize;
 use serde_json::{json, to_string};
-use tokio::runtime::Runtime;
 use std::time::Duration;
+use tokio::runtime::Runtime;
 
 /// Returns the list of event hooks that will be initialized for network events
 pub fn init_net_hooks(config: &ServerConfig) -> Vec<Box<dyn NetEvents + Send + Sync>> {
@@ -193,8 +193,10 @@ impl WebHook {
 	) -> WebHook {
 		let keep_alive = Duration::from_secs(timeout as u64);
 		let https = HttpsConnector::new(nthreads as usize);
-		let client = Client::builder().keep_alive_timeout(keep_alive).build::<_, hyper::Body>(https);
-		
+		let client = Client::builder()
+			.keep_alive_timeout(keep_alive)
+			.build::<_, hyper::Body>(https);
+
 		WebHook {
 			tx_received_url,
 			block_received_url,
