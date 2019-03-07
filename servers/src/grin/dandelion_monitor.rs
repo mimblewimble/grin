@@ -79,15 +79,11 @@ fn process_fluff_phase(
 	tx_pool: &Arc<RwLock<TransactionPool>>,
 	verifier_cache: &Arc<RwLock<dyn VerifierCache>>,
 ) -> Result<(), PoolError> {
+	// Take a write lock on the txpool for the duration of this processing.
 	let mut tx_pool = tx_pool.write();
 
 	// Get the aggregate tx representing the entire txpool.
 	let txpool_tx = tx_pool.txpool.all_transactions_aggregate()?;
-
-	// Nothing to process? Then we are done.
-	if txpool_tx.is_none() {
-		return Ok(());
-	}
 
 	// TODO - If this runs every 10s (patience time?) we don't have much time to aggregate txs.
 	// It would be good if we could let txs build up over a longer period of time here.
@@ -115,7 +111,10 @@ fn process_fluff_phase(
 		return Ok(());
 	}
 
-	debug!("dand_mon: Found {} txs for fluffing.", stem_txs.len());
+	debug!(
+		"dand_mon: Found {} txs in local stempool to fluff",
+		stem_txs.len()
+	);
 
 	let agg_tx = transaction::aggregate(stem_txs)?;
 	agg_tx.validate(

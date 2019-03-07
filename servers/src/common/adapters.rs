@@ -691,11 +691,15 @@ pub struct PoolToNetAdapter {
 	dandelion_epoch: Arc<RwLock<DandelionEpoch>>,
 }
 
+/// Adapter between the Dandelion monitor and the current Dandelion "epoch".
 pub trait DandelionAdapter: Send + Sync {
+	/// Is the node stemming (or fluffing) transactions in the current epoch?
 	fn is_stem(&self) -> bool;
 
+	/// Is the current Dandelion epoch expired?
 	fn is_expired(&self) -> bool;
 
+	/// Transition to the next Dandelion epoch (new stem/fluff state, select new relay peer).
 	fn next_epoch(&self);
 }
 

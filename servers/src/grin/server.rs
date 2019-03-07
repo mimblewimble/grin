@@ -229,7 +229,6 @@ impl Server {
 			seed::connect_and_monitor(
 				p2p_server.clone(),
 				config.p2p_config.capabilities,
-				config.dandelion_config.clone(),
 				seeder,
 				config.p2p_config.peers_preferred.clone(),
 				stop_state.clone(),

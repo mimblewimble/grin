@@ -29,7 +29,6 @@ use crate::core::global;
 use crate::p2p;
 use crate::p2p::types::PeerAddr;
 use crate::p2p::ChainAdapter;
-use crate::pool::DandelionConfig;
 use crate::util::{Mutex, StopState};
 
 // DNS Seeds with contact email associated
@@ -52,7 +51,6 @@ const FLOONET_DNS_SEEDS: &'static [&'static str] = &[
 pub fn connect_and_monitor(
 	p2p_server: Arc<p2p::Server>,
 	capabilities: p2p::Capabilities,
-	dandelion_config: DandelionConfig,
 	seed_list: Box<dyn Fn() -> Vec<PeerAddr> + Send>,
 	preferred_peers: Option<Vec<PeerAddr>>,
 	stop_state: Arc<Mutex<StopState>>,

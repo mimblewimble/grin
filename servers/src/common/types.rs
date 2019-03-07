@@ -438,6 +438,7 @@ pub struct DandelionEpoch {
 }
 
 impl DandelionEpoch {
+	/// Create a new Dandelion epoch, defaulting to "stem" and no outbound relay peer.
 	pub fn new(config: DandelionConfig) -> DandelionEpoch {
 		DandelionEpoch {
 			config,
@@ -447,16 +448,25 @@ impl DandelionEpoch {
 		}
 	}
 
+	/// Is the current Dandelion epoch expired?
+	/// It is expired if start_time is older than the configured epoch_secs.
 	pub fn is_expired(&self) -> bool {
 		let expired = if let Some(start_time) = self.start_time {
 			Utc::now().timestamp().saturating_sub(start_time) > self.config.epoch_secs() as i64
 		} else {
-			info!("DandelionEpoch: expired, is_stem: {}", self.is_stem);
+			let addr = self.relay_peer.clone().map(|p| p.info.addr);
+			info!(
+				"DandelionEpoch: epoch expired, is_stem: {}, relay: {:?}",
+				self.is_stem, addr
+			);
 			true
 		};
 		expired
 	}
 
+	/// Transition to next Dandelion epoch.
+	/// Select stem/fluff based on configured stem_probability.
+	/// Choose a new outbound stem relay peer.
 	pub fn next_epoch(&mut self, peers: &Arc<p2p::Peers>) {
 		self.start_time = Some(Utc::now().timestamp());
 		self.relay_peer = peers.outgoing_connected_peers().first().cloned();
@@ -467,20 +477,28 @@ impl DandelionEpoch {
 
 		let addr = self.relay_peer.clone().map(|p| p.info.addr);
 		info!(
-			"DandelionEpoch: next_epoch: is_stem: {}, relay: {:?}",
-			self.is_stem, addr
+			"DandelionEpoch: next_epoch: is_stem: {} ({}%), relay: {:?}",
+			self.is_stem,
+			self.config.stem_probability(),
+			addr
 		);
 	}
 
-	// Are we stemming transactions in this epoch?
+	/// Are we stemming (or fluffing) transactions in this epoch?
 	pub fn is_stem(&self) -> bool {
 		self.is_stem
 	}
 
+	/// What is out current relay peer?
+	/// If it is not connected then choose a new one.
 	pub fn relay_peer(&mut self, peers: &Arc<p2p::Peers>) -> Option<Arc<p2p::Peer>> {
 		let mut update_relay = false;
 		if let Some(peer) = &self.relay_peer {
 			if !peer.is_connected() {
+				info!(
+					"DandelionEpoch: relay_peer: {:?} not connected, choosing a new one.",
+					peer.info.addr
+				);
 				update_relay = true;
 			}
 		} else {
@@ -489,6 +507,10 @@ impl DandelionEpoch {
 
 		if update_relay {
 			self.relay_peer = peers.outgoing_connected_peers().first().cloned();
+			info!(
+				"DandelionEpoch: relay_peer: new peer chosen: {:?}",
+				self.relay_peer.clone().map(|p| p.info.addr)
+			);
 		}
 
 		self.relay_peer.clone()
