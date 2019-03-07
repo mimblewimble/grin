@@ -16,22 +16,22 @@
 //! callback simply implement the coresponding trait and add it to the init function
 
 extern crate hyper;
-extern crate tokio;
 extern crate hyper_rustls;
+extern crate tokio;
 
 use crate::chain::BlockStatus;
 use crate::common::types::{ServerConfig, WebHooksConfig};
 use crate::core::core;
 use crate::core::core::hash::Hashed;
+use crate::p2p::types::PeerAddr;
 use futures::future::Future;
-use hyper_rustls::HttpsConnector;
 use hyper::client::HttpConnector;
 use hyper::header::HeaderValue;
 use hyper::Client;
 use hyper::{Body, Method, Request};
+use hyper_rustls::HttpsConnector;
 use serde::Serialize;
 use serde_json::{json, to_string};
-use crate::p2p::types::PeerAddr;
 use tokio::runtime::Runtime;
 
 /// Returns the list of event hooks that will be initialized for network events
@@ -153,7 +153,10 @@ fn parse_url(value: &Option<String>) -> Option<hyper::Uri> {
 			};
 			let scheme = uri.scheme_part().map(|s| s.as_str());
 			if (scheme != Some("http")) && (scheme != Some("https")) {
-				panic!("Invalid url scheme {}, expected one of ['http', https']", url)
+				panic!(
+					"Invalid url scheme {}, expected one of ['http', https']",
+					url
+				)
 			};
 			Some(uri)
 		}
@@ -186,8 +189,7 @@ impl WebHook {
 		block_accepted_url: Option<hyper::Uri>,
 	) -> WebHook {
 		let https = HttpsConnector::new(4);
-		let client = Client::builder()
-    		.build::<_, hyper::Body>(https);
+		let client = Client::builder().build::<_, hyper::Body>(https);
 		WebHook {
 			tx_received_url,
 			block_received_url,
