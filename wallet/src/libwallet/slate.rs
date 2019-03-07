@@ -124,9 +124,6 @@ pub struct Slate {
 	/// Slate format version
 	#[serde(default = "no_version")]
 	pub version: u64,
-	/// Whether to check for fees on finalizing
-	#[serde(skip)]
-	pub check_fees: bool,
 }
 
 fn no_version() -> u64 {
@@ -153,7 +150,6 @@ impl Slate {
 			lock_height: 0,
 			participant_data: vec![],
 			version: CURRENT_SLATE_VERSION,
-			check_fees: true,
 		}
 	}
 
@@ -359,10 +355,6 @@ impl Slate {
 
 	/// Checks the fees in the transaction in the given slate are valid
 	fn check_fees(&self) -> Result<(), Error> {
-		if !self.check_fees {
-			return Ok(());
-		}
-
 		// double check the fee amount included in the partial tx
 		// we don't necessarily want to just trust the sender
 		// we could just overwrite the fee here (but we won't) due to the sig
