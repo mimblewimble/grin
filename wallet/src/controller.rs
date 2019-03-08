@@ -300,7 +300,7 @@ where
 			match req
 				.uri()
 				.path()
-				.trim_right_matches("/")
+				.trim_end_matches("/")
 				.rsplit("/")
 				.next()
 				.unwrap()
@@ -553,7 +553,7 @@ where
 		match req
 			.uri()
 			.path()
-			.trim_right_matches("/")
+			.trim_end_matches("/")
 			.rsplit("/")
 			.next()
 			.unwrap()
@@ -684,7 +684,7 @@ where
 		match req
 			.uri()
 			.path()
-			.trim_right_matches("/")
+			.trim_end_matches("/")
 			.rsplit("/")
 			.next()
 			.unwrap()
