@@ -25,4 +25,11 @@ case "${CI_JOB}" in
             cd - > /dev/null || exit 1
         done
         ;;
+
+    "coverage")
+        RUSTFLAGS="--cfg procmacro2_semver_exempt" \
+        cargo install --force cargo-tarpaulin
+        cargo tarpaulin --verbose --out Xml
+        bash <(curl -s https://codecov.io/bash)
+        ;;
 esac

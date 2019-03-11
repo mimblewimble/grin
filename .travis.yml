@@ -50,6 +50,7 @@ env:
     - RUST_FLAGS="-C debug-assertions"
 
 matrix:
+  fast_finish: true
   include:
     - os: linux
       env: CI_JOB="test"        CI_JOB_ARGS="servers"
@@ -67,6 +68,12 @@ matrix:
       env: CI_JOB="release"     CI_JOB_ARGS=
 #    - os: windows
 #      env: CI_JOB="release"     CI_JOB_ARGS=
+    # Coverage with Tarpaulin requires nightly Rust and currently is Linux only.
+    - os: linux
+      rust: nightly
+      env: CI_JOB="coverage"    CI_JOB_ARGS=
+  allow_failures:
+    - env: CI_JOB="coverage"    CI_JOB_ARGS=
 
 script: .ci/general-jobs
 
