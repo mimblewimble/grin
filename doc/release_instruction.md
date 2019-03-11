@@ -123,9 +123,9 @@ Remember to replace `0.3.1-pre1` as the real version, and warmly remind the [[Ve
 If you're NOT the owner of the github repo, but at least you have to be a committer which has the right to do a release, the following steps are needed to trigger a version release:
 
 1. Go to release page of the repo, click **Draft a new release**, remember to check the branch is what you're working on! set the **Tag version** to the release number (for    example: `0.3.1-pre1`), and set anything in **Release title** and **description**, then click **Publish release**. Don't worry the title and description parts because we need delete it in next step.
-1. Because github **release** will be auto-created by our `auto-release` building script, we MUST delete the **release** which we just created in previous step! (Unfortunately, there's no way to only create **tag** by web.)
+1. Because github **release** will be auto-created by our `release-jobs` building script, we MUST delete the **release** which we just created in previous step! (Unfortunately, there's no way to only create **tag** by web.)
 
-Even normally Travis-CI need tens of minutes to complete building, I suggest you complete step 2 quickly, otherwise the `auto-release` script will fail on error "release already exist".
+Even normally Travis-CI need tens of minutes to complete building, I suggest you complete step 2 quickly, otherwise the `release-jobs` script will fail on error "release already exist".
 
 ### 2. Travis-CI Building
 
@@ -135,7 +135,7 @@ The release building is just one of the **TEST_DIRS**, named as `none`. So each 
 
 So, the point is: the release building job is that one tagged with `TEST_DIR=none`.
 
-Note: `auto-release` script will only be executed on `deploy` stage, and according to Travis-CI, it will be skipped for any **pull-request** trigger, and since we set `tag: true` it will be only executed when triggered by a tag.
+Note: `release-jobs` script will only be executed on `deploy` stage, and according to Travis-CI, it will be skipped for any **pull-request** trigger, and since we set `tag: true` it will be only executed when triggered by a tag.
 
 ### 3. Check the Release Page
 
