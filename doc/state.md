@@ -1,5 +1,7 @@
 # State and Storage
 
+*Read this in other languages: [Korean](state_KR.md).*
+
 ## The Grin State
 
 ### Structure
