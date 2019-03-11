@@ -161,11 +161,11 @@ impl TransactionPool {
 		// Any problems fallback to fluff later.
 		// If not stem then we are fluff.
 		let fluff = if stem {
-			// First attempt to add to stempool and return an error if this fails.
-			self.add_to_stempool(entry.clone(), header)?;
-			// Then attempt to relay it to the next stem peer,
-			// falling back to fluffing locally if this fails.
-			self.adapter.stem_tx_accepted(&entry.tx).is_err()
+			// Attempt to add to stempool, notifying adapter to relay to outbound peer.
+			// Fall back to fluffing (via txpool) if stempool interaction fails.
+			self.add_to_stempool(entry.clone(), header)
+				.and_then(|_| self.adapter.stem_tx_accepted(&entry.tx))
+				.is_err()
 		} else {
 			true
 		};
