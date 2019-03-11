@@ -65,9 +65,7 @@ pub mod option_sig_serde {
 		S: Serializer,
 	{
 		match sig {
-			Some(sig) => {
-				serializer.serialize_str(&to_hex(sig.to_raw_data().to_vec()))
-			}
+			Some(sig) => serializer.serialize_str(&to_hex(sig.to_raw_data().to_vec())),
 			None => serializer.serialize_none(),
 		}
 	}
@@ -81,7 +79,7 @@ pub mod option_sig_serde {
 			Some(string) => from_hex(string.to_string())
 				.map_err(|err| Error::custom(err.to_string()))
 				.and_then(|bytes: Vec<u8>| {
-					let mut b = [0u8;64];
+					let mut b = [0u8; 64];
 					b.copy_from_slice(&bytes[0..64]);
 					secp::Signature::from_raw_data(&b)
 						.map(|val| Some(val))
