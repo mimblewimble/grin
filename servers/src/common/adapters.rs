@@ -723,11 +723,9 @@ impl pool::PoolAdapter for PoolToNetAdapter {
 	}
 
 	fn stem_tx_accepted(&self, tx: &core::Transaction) -> Result<(), pool::PoolError> {
+		// Take write lock on the current epoch.
+		// We need to be able to update the current relay peer if not currently connected.
 		let mut epoch = self.dandelion_epoch.write();
-		if epoch.is_expired() {
-			debug!("Epoch expired, setting up next epoch.");
-			epoch.next_epoch(&self.peers());
-		}
 
 		// If "stem" epoch attempt to relay the tx to the next Dandelion relay.
 		// Fallback to immediately fluffing the tx if we cannot stem for any reason.

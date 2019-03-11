@@ -455,11 +455,6 @@ impl DandelionEpoch {
 			let epoch_secs = self.config.epoch_secs.expect("epoch_secs config missing") as i64;
 			Utc::now().timestamp().saturating_sub(start_time) > epoch_secs
 		} else {
-			let addr = self.relay_peer.clone().map(|p| p.info.addr);
-			info!(
-				"DandelionEpoch: epoch expired, is_stem: {}, relay: {:?}",
-				self.is_stem, addr
-			);
 			true
 		};
 		expired
@@ -492,7 +487,7 @@ impl DandelionEpoch {
 		self.is_stem
 	}
 
-	/// What is out current relay peer?
+	/// What is our current relay peer?
 	/// If it is not connected then choose a new one.
 	pub fn relay_peer(&mut self, peers: &Arc<p2p::Peers>) -> Option<Arc<p2p::Peer>> {
 		let mut update_relay = false;

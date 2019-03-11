@@ -51,12 +51,6 @@ pub fn monitor_transactions(
 					break;
 				}
 
-				// Our adapter hooks us into the current Dandelion "epoch".
-				// From this we can determine if we should fluff txs in stempool.
-				if adapter.is_expired() {
-					adapter.next_epoch();
-				}
-
 				if !adapter.is_stem() {
 					if process_fluff_phase(&dandelion_config, &tx_pool, &verifier_cache).is_err() {
 						error!("dand_mon: Problem processing fresh pool entries.");
@@ -66,6 +60,13 @@ pub fn monitor_transactions(
 				// Now find all expired entries based on embargo timer.
 				if process_expired_entries(&dandelion_config, &tx_pool).is_err() {
 					error!("dand_mon: Problem processing fresh pool entries.");
+				}
+
+				// Handle the tx above *before* we transition to next epoch.
+				// This gives us an opportunity to do the final "fluff" before we start
+				// stemming on the subsequent epoch.
+				if adapter.is_expired() {
+					adapter.next_epoch();
 				}
 
 				// Monitor loops every 10s.
