@@ -32,7 +32,7 @@ pub mod pubkey_serde {
 	{
 		let static_secp = static_secp_instance();
 		let static_secp = static_secp.lock();
-		serializer.serialize_str(&to_hex(key.serialize_vec(&static_secp, false).to_vec()))
+		serializer.serialize_str(&to_hex(key.serialize_vec(&static_secp, true).to_vec()))
 	}
 
 	///
