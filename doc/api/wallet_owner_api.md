@@ -108,7 +108,7 @@ Attempt to update and retrieve outputs.
 * **Success Response:**
 
   * **Code:** 200
-  * **Content:** Array of
+  * **Content:** All listed amounts in nanogrin. Array of
 
     | Field                             | Type     | Description                             |
     |:----------------------------------|:---------|:----------------------------------------|
