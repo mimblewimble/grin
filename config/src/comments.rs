@@ -141,9 +141,17 @@ fn comments() -> HashMap<String, String> {
 	);
 
 	retval.insert(
-		"relay_secs".to_string(),
+		"epoch_secs".to_string(),
 		"
-#dandelion relay time (choose new relay peer every n secs)
+#dandelion epoch duration
+"
+		.to_string(),
+	);
+
+	retval.insert(
+		"aggregation_secs".to_string(),
+		"
+#dandelion aggregation period in secs
 "
 		.to_string(),
 	);
@@ -156,13 +164,6 @@ fn comments() -> HashMap<String, String> {
 		.to_string(),
 	);
 
-	retval.insert(
-		"patience_secs".to_string(),
-		"
-#run dandelion stem/fluff processing every n secs (stem tx aggregation in this window)
-"
-		.to_string(),
-	);
 	retval.insert(
 		"stem_probability".to_string(),
 		"
