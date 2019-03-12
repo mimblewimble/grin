@@ -52,17 +52,17 @@ pub fn monitor_transactions(
 				}
 
 				if !adapter.is_stem() {
-					if process_fluff_phase(&dandelion_config, &tx_pool, &adapter, &verifier_cache)
-						.is_err()
-					{
-						error!("dand_mon: Problem processing fresh pool entries.");
-					}
+					let _ =
+						process_fluff_phase(&dandelion_config, &tx_pool, &adapter, &verifier_cache)
+							.map_err(|e| {
+								error!("dand_mon: Problem processing fluff phase. {:?}", e);
+							});
 				}
 
 				// Now find all expired entries based on embargo timer.
-				if process_expired_entries(&dandelion_config, &tx_pool).is_err() {
-					error!("dand_mon: Problem processing fresh pool entries.");
-				}
+				let _ = process_expired_entries(&dandelion_config, &tx_pool).map_err(|e| {
+					error!("dand_mon: Problem processing expired entries. {:?}", e);
+				});
 
 				// Handle the tx above *before* we transition to next epoch.
 				// This gives us an opportunity to do the final "fluff" before we start
