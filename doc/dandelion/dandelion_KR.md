@@ -42,7 +42,7 @@ Dandelion 프로토콜은 아래와 같은 세가지 매커니즘을 기반으�
     Dandelion 트랜잭션은 "Stem(줄기) 모드"에서 시작됩니다. 각 노드는 거래를 무작위로 선택된 하나의 노드에게 중계합니다. 고정 된 확률로 트랜잭션은 "fluff(솜털)" 모드로 전환되고 이후에는 일반적인 플러딩 / 확산에 따라 릴레이됩니다.
 
 2. *Stem Mempool.* During the stem phase, each stem node (Alice) stores the transaction in a transaction pool containing only stem transactions: the stempool. The content of the stempool is specific to each node and is non shareable. A stem transaction is removed from the stempool if:
-   =
+   
     1. Alice receives it "normally" advertising the transaction as being in fluff mode.
     2. Alice receives a block containing this transaction meaning that the transaction was propagated and included in a block.
 
