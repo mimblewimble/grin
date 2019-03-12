@@ -1,0 +1,122 @@
+#!/usr/bin/env bash
+
+# Copyright 2019 The Grin Developers
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# This script contains release-related jobs.
+
+# Redeclare CI and VCP specific environment variables
+# to make future migration to other providers easier.
+readonly JOB_ID="${TRAVIS_JOB_ID}"
+readonly OS_NAME="${TRAVIS_OS_NAME}"
+readonly TEST_RESULT="${TRAVIS_TEST_RESULT}"
+readonly VCP_AUTH_TOKEN="${GITHUB_TOKEN}"
+
+case "${CI_JOB}" in
+    "release")
+        # The release can only be triggered after successful completion of all tests.
+        [[ "${TEST_RESULT}" != 0 ]] && exit 1
+
+        readonly REPO_TAG="$(git describe --tags --exact-match 2> /dev/null || git symbolic-ref -q --short HEAD)"
+
+        case "${OS_NAME}" in
+            "linux")
+                cargo clean && \
+                cargo build --release
+                readonly ARCHIVE_CMD="tar zcf"
+                readonly BIN_SUFFIX=""
+                readonly PKG_NAME="grin-${REPO_TAG}-${JOB_ID}-linux-amd64"
+                readonly PKG_SUFFIX=".tgz"
+                ;;
+
+            "osx")
+                brew update
+                cargo clean && \
+                cargo build --release
+                readonly ARCHIVE_CMD="tar zcf"
+                readonly BIN_SUFFIX=""
+                readonly PKG_NAME="grin-${REPO_TAG}-${JOB_ID}-osx"
+                readonly PKG_SUFFIX=".tgz"
+                ;;
+
+            "windows")
+                cargo clean && \
+                cargo build --release
+                readonly ARCHIVE_CMD="7z a -tzip"
+                readonly BIN_SUFFIX=".exe"
+                readonly PKG_NAME="grin-${REPO_TAG}-${JOB_ID}-win-x64"
+                readonly PKG_SUFFIX=".zip"
+                ;;
+
+            *)
+                printf "Error! Unknown \$OS_NAME: \`%s\`" "${OS_NAME}"
+                exit 1
+        esac
+
+        printf "creating package \`%s\` for the release binary...\n" "${PKG_NAME}${PKG_SUFFIX}"
+
+        cd ./target/release/ || exit 1
+        rm -f -- *"${PKG_SUFFIX}"
+        ${ARCHIVE_CMD} "${PKG_NAME}${PKG_SUFFIX}" "grin${BIN_SUFFIX}"
+        ls -ls -- *.tgz | cut -d' ' -f6-
+        openssl md5 "${PKG_NAME}${PKG_SUFFIX}" > "${PKG_NAME}${PKG_SUFFIX}-md5sum.txt"
+        ls -ls -- *-md5sum.txt | cut -d' ' -f6-
+        cd - > /dev/null || exit 1
+
+        printf "%s package \`%s\` generated\n" "${OS_NAME}" "${PKG_NAME}${PKG_SUFFIX}"
+
+        # Generate changelog only on the Linux platform to avoid duplication.
+        [[ "${OS_NAME}" != "linux" ]] && exit 0
+
+        # Generate CHANGELOG.md
+        readonly REPO_SLUG="mimblewimble/grin"
+        readonly REPO_BRANCH="$(git symbolic-ref -q --short HEAD)"
+        readonly REPO_PREV_RELEASE_TAG="$(git describe --abbrev=0 --tags "$(git rev-list --tags --skip=0 --max-count=1)")"
+
+        gem install github_changelog_generator
+
+        # Needed by github_changelog_generator.
+        export CHANGELOG_GITHUB_TOKEN="${VCP_AUTH_TOKEN}"
+
+        github_changelog_generator \
+          --user "$(cut -d "/" -f1 <<< ${REPO_SLUG})" \
+          --project "$(cut -d "/" -f2 <<< ${REPO_SLUG})" \
+          --since-tag "${REPO_PREV_RELEASE_TAG}"
+
+        readonly CHANGELOG_CONTENT="$(<CHANGELOG.md)"
+
+        # Overwrite CHANGELOG.md with JSON data for release patch.
+        jq --null-input \
+          --arg body "${CHANGELOG_CONTENT}" \
+          --arg name "${REPO_TAG}" \
+          --arg tag_name "${REPO_TAG}" \
+          --arg target_commitish "${REPO_BRANCH}" \
+          '{
+            body: $body,
+            name: $name,
+            tag_name: $tag_name,
+            target_commitish: $target_commitish,
+            draft: false,
+            prerelease: false
+          }' > CHANGELOG.md
+
+        readonly HEADERS="Authorization: token ${VCP_AUTH_TOKEN}"
+        readonly RELEASE_URL="https://api.github.com/repos/${REPO_SLUG}/releases"
+        readonly RELEASE_ID="$(curl -0 --request GET -H "${HEADERS}" "${RELEASE_URL}/tags/${REPO_TAG}" 2> /dev/null | grep id | head -n 1 | sed 's/ *"id": *\(.*\),/\1/')"
+
+        printf "updating release changelog %s for repo: %s, branch: %s, release id: %s\n" "${REPO_TAG}" "${REPO_SLUG}" "${REPO_BRANCH}" "${RELEASE_ID}"
+        curl -H "${HEADERS}" --request PATCH --data @CHANGELOG.md "${RELEASE_URL}/${RELEASE_ID}"
+        printf "changelog uploaded.\n"
+        ;;
+esac

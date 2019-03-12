@@ -1,23 +1,27 @@
-language: rust
-
-git:
-  depth: false
+# Copyright 2019 The Grin Developers
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 
 dist: trusty
 sudo: required
 
-cache:
-  cargo: true
-  timeout: 240
-  directories:
-    - $HOME/.cargo
-    - $TRAVIS_BUILD_DIR/target
-
-before_cache:
-  - rm -rf $TRAVIS_BUILD_DIR/target/tmp
+language: rust
 
 rust:
   - stable
+
+git:
+  depth: false
 
 addons:
   apt:
@@ -33,6 +37,13 @@ addons:
       - gcc
       - binutils-dev
 
+cache:
+  cargo: true
+  timeout: 240
+  directories:
+    - $HOME/.cargo
+    - $TRAVIS_BUILD_DIR/target
+
 env:
   global:
     - RUST_BACKTRACE="1"
@@ -41,41 +52,29 @@ env:
 matrix:
   include:
     - os: linux
-      env: TEST_SUITE=servers
+      env: CI_JOB="test"        CI_JOB_ARGS="servers"
     - os: linux
-      env: TEST_SUITE=chain-core
+      env: CI_JOB="test"        CI_JOB_ARGS="chain core"
     - os: linux
-      env: TEST_SUITE=pool-p2p-src
+      env: CI_JOB="test"        CI_JOB_ARGS="pool p2p src"
     - os: linux
-      env: TEST_SUITE=keychain-wallet
+      env: CI_JOB="test"        CI_JOB_ARGS="keychain wallet"
     - os: linux
-      env: TEST_SUITE=api-util-store
+      env: CI_JOB="test"        CI_JOB_ARGS="api util store"
+    - os: linux
+      env: CI_JOB="release"     CI_JOB_ARGS=
     - os: osx
-      env: TEST_SUITE=release
+      env: CI_JOB="release"     CI_JOB_ARGS=
+#    - os: windows
+#      env: CI_JOB="release"     CI_JOB_ARGS=
 
-script:
-  - IFS='-' read -r -a DIRS <<< "$TEST_SUITE"; DIR=${DIRS[0]};
-    echo "start testing on folder $DIR...";
-    if [[ -n "$DIR" ]] && [[ "$TRAVIS_OS_NAME" == "linux" ]];  then cd $DIR && cargo test --release && cd - > /dev/null; fi;
-  - IFS='-' read -r -a DIRS <<< "$TEST_SUITE"; DIR=${DIRS[1]};
-    if [[ -n "$DIR" ]];  then
-      echo "start testing on folder $DIR...";
-      cd $DIR && cargo test --release && cd - > /dev/null;
-    fi;
-  - IFS='-' read -r -a DIRS <<< "$TEST_SUITE"; DIR=${DIRS[2]};
-    if [[ -n "$DIR" ]];  then
-      echo "start testing on folder $DIR...";
-      cd $DIR && cargo test --release && cd - > /dev/null;
-    fi;
+script: .ci/general-jobs
+
+before_cache:
+  - rm -rf $TRAVIS_BUILD_DIR/target/tmp
 
 before_deploy:
-  - if [[ "$TEST_SUITE" == "pool-p2p-src" ]]; then
-      cargo clean && cargo build --release && ./.auto-release.sh;
-    fi
-  - if [[ "$TEST_SUITE" == "release" ]]  && [[ "$TRAVIS_OS_NAME" == "osx" ]]; then
-      brew update;
-      cargo clean && cargo build --release && ./.auto-release.sh;
-    fi
+  - bash .ci/release-jobs
 
 deploy:
   provider: releases

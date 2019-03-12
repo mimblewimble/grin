@@ -79,7 +79,7 @@ impl Handler for PeerHandler {
 		}
 	}
 	fn post(&self, req: Request<Body>) -> ResponseFuture {
-		let mut path_elems = req.uri().path().trim_right_matches('/').rsplit('/');
+		let mut path_elems = req.uri().path().trim_end_matches('/').rsplit('/');
 		let command = match path_elems.next() {
 			None => return response(StatusCode::BAD_REQUEST, "invalid url"),
 			Some(c) => c,

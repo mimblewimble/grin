@@ -9,7 +9,7 @@
 1. [Chain Endpoint](#chain-endpoint)
     1. [GET Chain](#get-chain)
     1. [POST Chain Compact](#post-chain-compact)
-    1. [POST Chain Validate](#post-chain-validate)
+    1. [GET Chain Validate](#get-chain-validate)
     1. [GET Chain Outputs by IDs](#get-chain-outputs-by-ids)
     1. [GET Chain Outputs by Height](#get-chain-outputs-by-height)
 1. [Status Endpoint](#status-endpoint)
@@ -282,7 +282,7 @@ Trigger a compaction of the chain state to regain storage space.
     });
   ```
 
-### POST Chain Validate
+### GET Chain Validate
 
 Trigger a validation of the chain state.
 
@@ -292,7 +292,7 @@ Trigger a validation of the chain state.
 
 * **Method:**
 
-  `POST`
+  `GET`
   
 * **URL Params**
 
@@ -316,7 +316,7 @@ Trigger a validation of the chain state.
     $.ajax({
       url: "/v1/chain/validate",
       dataType: "json",
-      type : "POST",
+      type : "GET",
       success : function(r) {
         console.log(r);
       }
