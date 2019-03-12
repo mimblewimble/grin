@@ -16,20 +16,23 @@
 //! callback simply implement the coresponding trait and add it to the init function
 
 extern crate hyper;
+extern crate hyper_rustls;
 extern crate tokio;
 
 use crate::chain::BlockStatus;
 use crate::common::types::{ServerConfig, WebHooksConfig};
 use crate::core::core;
 use crate::core::core::hash::Hashed;
+use crate::p2p::types::PeerAddr;
 use futures::future::Future;
 use hyper::client::HttpConnector;
 use hyper::header::HeaderValue;
 use hyper::Client;
 use hyper::{Body, Method, Request};
+use hyper_rustls::HttpsConnector;
 use serde::Serialize;
 use serde_json::{json, to_string};
-use crate::p2p::types::PeerAddr;
+use std::time::Duration;
 use tokio::runtime::Runtime;
 
 /// Returns the list of event hooks that will be initialized for network events
@@ -150,8 +153,11 @@ fn parse_url(value: &Option<String>) -> Option<hyper::Uri> {
 				Err(_) => panic!("Invalid url : {}", url),
 			};
 			let scheme = uri.scheme_part().map(|s| s.as_str());
-			if scheme != Some("http") {
-				panic!("Invalid url scheme {}, expected 'http'", url)
+			if (scheme != Some("http")) && (scheme != Some("https")) {
+				panic!(
+					"Invalid url scheme {}, expected one of ['http', https']",
+					url
+				)
 			};
 			Some(uri)
 		}
@@ -170,7 +176,7 @@ struct WebHook {
 	/// url to POST block data when a new block is accepted by our node (might be a reorg or a fork)
 	block_accepted_url: Option<hyper::Uri>,
 	/// The hyper client to be used for all requests
-	client: Client<HttpConnector>,
+	client: Client<HttpsConnector<HttpConnector>>,
 	/// The tokio event loop
 	runtime: Runtime,
 }
@@ -182,13 +188,27 @@ impl WebHook {
 		header_received_url: Option<hyper::Uri>,
 		block_received_url: Option<hyper::Uri>,
 		block_accepted_url: Option<hyper::Uri>,
+		nthreads: u16,
+		timeout: u16,
 	) -> WebHook {
+		let keep_alive = Duration::from_secs(timeout as u64);
+
+		info!(
+			"Spawning {} threads for webhooks (timeout set to {} secs)",
+			nthreads, timeout
+		);
+
+		let https = HttpsConnector::new(nthreads as usize);
+		let client = Client::builder()
+			.keep_alive_timeout(keep_alive)
+			.build::<_, hyper::Body>(https);
+
 		WebHook {
 			tx_received_url,
 			block_received_url,
 			header_received_url,
 			block_accepted_url,
-			client: Client::new(),
+			client,
 			runtime: Runtime::new().unwrap(),
 		}
 	}
@@ -200,6 +220,8 @@ impl WebHook {
 			parse_url(&config.header_received_url),
 			parse_url(&config.block_received_url),
 			parse_url(&config.block_accepted_url),
+			config.nthreads,
+			config.timeout,
 		)
 	}
 

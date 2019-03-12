@@ -248,6 +248,20 @@ pub struct WebHooksConfig {
 	pub block_received_url: Option<String>,
 	/// url to POST block data when a new block is accepted by our node (might be a reorg or a fork)
 	pub block_accepted_url: Option<String>,
+	/// number of worker threads in the tokio runtime
+	#[serde(default = "default_nthreads")]
+	pub nthreads: u16,
+	/// timeout in seconds for the http request
+	#[serde(default = "default_timeout")]
+	pub timeout: u16,
+}
+
+fn default_timeout() -> u16 {
+	10
+}
+
+fn default_nthreads() -> u16 {
+	4
 }
 
 impl Default for WebHooksConfig {
@@ -257,6 +271,8 @@ impl Default for WebHooksConfig {
 			header_received_url: None,
 			block_received_url: None,
 			block_accepted_url: None,
+			nthreads: default_nthreads(),
+			timeout: default_timeout(),
 		}
 	}
 }
