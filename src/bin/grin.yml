@@ -16,6 +16,11 @@ subcommands:
   - server:
       about: Control the Grin server
       args:
+        - tui_enabled:
+            help: Run with or without TUI, bypassing config
+            short: t
+            long: tui_enabled
+            takes_value: true
         - config_file:
             help: Path to a grin-server.toml configuration file
             short: c
