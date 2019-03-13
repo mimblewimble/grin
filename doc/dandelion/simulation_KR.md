@@ -1,10 +1,7 @@
-# Dandelion Simulation
+# Dandelion 시뮬레이션
 
-This document describes a network of node using the Dandelion protocol with transaction aggregation.
-
-In this scenario, we simulate a successful aggregation.
-
-This document also helps visualizing all the timers in a simple way.
+이 문서는 노드의 네트워크가 Dandelion 프로토콜을 트랜잭션 통합(Transaction aggregation)과 함께 사용하는 것에 대해서 설명합니다. 이 시나리오에서 성공적인 (트랜잭션)통합을 시뮬레이션 할 것입니다.
+이 문서는 (트랜잭션의) 모든 순간 순간에 대해서 간단히 시각화 하는것을 도와줄것입니다.
 
 ## T = 0 - Initial Situation
 
