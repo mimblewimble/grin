@@ -27,7 +27,7 @@ To run the tests make sure youre in folder `core` otherwise you may get
 some misleading errors, then run one of the following tests:
 
 ```
-cargo fuzz run tx_read
+cargo fuzz run transaction_read
 
 cargo fuzz run block_read
 
