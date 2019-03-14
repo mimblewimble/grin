@@ -9,14 +9,14 @@
 
 ## T = 5
 
-A sends grins to B. A adds the transaction to its stempool and starts the embargo timer for this transaction.
+A는 B에게 grin를 보냅니다. A는 거래를 스템풀(stem pool)에 추가하고 이 트랜잭션에 대한 엠바고 타이머를 시작합니다.
 
 ![t = 5](images/t5.png)
 
 ## T = 10
 
 A waits until he runs out of patience.
-
+A는 
 ![t = 10](images/t10.png)
 
 ## T = 30
