@@ -66,7 +66,10 @@ impl<T: PMMRable> PMMRHandle<T> {
 	) -> Result<PMMRHandle<T>, Error> {
 		let path = Path::new(root_dir).join(sub_dir).join(file_name);
 		fs::create_dir_all(path.clone())?;
-		let backend = PMMRBackend::new(path.to_str().unwrap().to_string(), prunable, header)?;
+		let path_str = path.to_str().ok_or(Error::from(ErrorKind::Other(
+			"invalid file path".to_owned(),
+		)))?;
+		let backend = PMMRBackend::new(path_str.to_string(), prunable, header)?;
 		let last_pos = backend.unpruned_size();
 		Ok(PMMRHandle { backend, last_pos })
 	}
@@ -732,8 +735,8 @@ impl<'a> HeaderExtension<'a> {
 			debug!(
 				"Re-applying {} headers to extension, from {:?} to {:?}.",
 				header_hashes.len(),
-				header_hashes.first().unwrap(),
-				header_hashes.last().unwrap(),
+				header_hashes.first()?,
+				header_hashes.last()?,
 			);
 
 			for h in header_hashes {
@@ -1470,7 +1473,7 @@ fn expected_file(path: &Path) -> bool {
 			)
 			.as_str()
 		)
-		.unwrap();
+		.expect("invalid txhashset regular expression");
 	}
 	RE.is_match(&s_path)
 }
