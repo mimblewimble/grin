@@ -735,8 +735,8 @@ impl<'a> HeaderExtension<'a> {
 			debug!(
 				"Re-applying {} headers to extension, from {:?} to {:?}.",
 				header_hashes.len(),
-				header_hashes.first()?,
-				header_hashes.last()?,
+				header_hashes.first().unwrap(),
+				header_hashes.last().unwrap(),
 			);
 
 			for h in header_hashes {
