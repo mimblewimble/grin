@@ -97,11 +97,6 @@ fn process_fluff_phase(
 	// Take a write lock on the txpool for the duration of this processing.
 	let mut tx_pool = tx_pool.write();
 
-	// if we are expired the look for all txs.
-	// if not expired then -
-	// if multiple look for all txs
-	// if single then wait 30s
-
 	let all_entries = select_txs_cutoff(&tx_pool.stempool, 0);
 	if all_entries.is_empty() {
 		return Ok(());
@@ -112,15 +107,10 @@ fn process_fluff_phase(
 		.expect("aggregation secs config missing");
 	let cutoff_entries = select_txs_cutoff(&tx_pool.stempool, cutoff_secs);
 
-	if adapter.is_expired() {
-		// If epoch is expired, fluff *all* outstanding entries in stempool.
-	} else if cutoff_entries.len() > 0 {
-		// If *any* entry older than aggregation_secs (30s) then fluff *all* entries.
-		// If we only have a single tx in the stempool and it is older
-		// than aggregation_secs we will fluff it without aggregation,
-		// but we must broadcast the tx in a timely manner.
-	} else {
-		// Give any fresh txs time to aggregate, do nothing this time.
+	// If epoch is expired, fluff *all* outstanding entries in stempool.
+	// If *any* entry older than aggregation_secs (30s) then fluff *all* entries.
+	// Otherwise we are done for now and we can give txs more time to aggregate.
+	if !adapter.is_expired() && cutoff_entries.is_empty() {
 		return Ok(());
 	}
 
@@ -128,9 +118,9 @@ fn process_fluff_phase(
 
 	let fluffable_txs = {
 		let txpool_tx = tx_pool.txpool.all_transactions_aggregate()?;
-		let txs: Vec<_> = all_entries.iter().map(|x| x.tx.clone()).collect();
+		let txs: Vec<_> = all_entries.into_iter().map(|x| x.tx).collect();
 		tx_pool.stempool.validate_raw_txs(
-			txs,
+			&txs,
 			txpool_tx,
 			&header,
 			transaction::Weighting::NoLimit,

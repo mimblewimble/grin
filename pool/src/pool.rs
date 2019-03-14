@@ -139,7 +139,7 @@ impl Pool {
 		// Verify these txs produce an aggregated tx below max tx weight.
 		// Return a vec of all the valid txs.
 		let txs = self.validate_raw_txs(
-			tx_buckets,
+			&tx_buckets,
 			None,
 			&header,
 			Weighting::AsLimitedTransaction { max_weight },
@@ -242,7 +242,7 @@ impl Pool {
 
 	pub fn validate_raw_txs(
 		&self,
-		txs: Vec<Transaction>,
+		txs: &[Transaction],
 		extra_tx: Option<Transaction>,
 		header: &BlockHeader,
 		weighting: Weighting,
@@ -262,7 +262,7 @@ impl Pool {
 
 			// We know the tx is valid if the entire aggregate tx is valid.
 			if self.validate_raw_tx(&agg_tx, header, weighting).is_ok() {
-				valid_txs.push(tx);
+				valid_txs.push(tx.clone());
 			}
 		}
 
