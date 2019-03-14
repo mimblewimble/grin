@@ -474,7 +474,7 @@ impl DandelionEpoch {
 			.config
 			.stem_probability
 			.expect("stem_probability config missing");
-		self.is_stem = rng.gen_range(0, 101) < stem_probability;
+		self.is_stem = rng.gen_range(0, 100) < stem_probability;
 
 		let addr = self.relay_peer.clone().map(|p| p.info.addr);
 		info!(
