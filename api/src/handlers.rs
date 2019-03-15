@@ -20,39 +20,26 @@ mod server_api;
 mod transactions_api;
 mod utils;
 
-use crate::router::{Router, RouterError};
-
-// Server
-use self::server_api::IndexHandler;
-use self::server_api::StatusHandler;
-
-// Blocks
 use self::blocks_api::BlockHandler;
 use self::blocks_api::HeaderHandler;
-
-// TX Set
-use self::transactions_api::TxHashSetHandler;
-
-// Chain
 use self::chain_api::ChainCompactHandler;
 use self::chain_api::ChainHandler;
 use self::chain_api::ChainValidationHandler;
 use self::chain_api::OutputHandler;
-
-// Pool Handlers
-use self::pool_api::PoolInfoHandler;
-use self::pool_api::PoolPushHandler;
-
-// Peers
 use self::peers_api::PeerHandler;
 use self::peers_api::PeersAllHandler;
 use self::peers_api::PeersConnectedHandler;
-
+use self::pool_api::PoolInfoHandler;
+use self::pool_api::PoolPushHandler;
+use self::server_api::IndexHandler;
+use self::server_api::StatusHandler;
+use self::transactions_api::TxHashSetHandler;
 use crate::auth::{BasicAuthMiddleware, GRIN_BASIC_REALM};
 use crate::chain;
 use crate::p2p;
 use crate::pool;
 use crate::rest::*;
+use crate::router::{Router, RouterError};
 use crate::util;
 use crate::util::RwLock;
 use std::net::SocketAddr;
