@@ -39,7 +39,7 @@ mod rest;
 mod router;
 mod types;
 
-pub use crate::auth::BasicAuthMiddleware;
+pub use crate::auth::{BasicAuthMiddleware, GRIN_BASIC_REALM};
 pub use crate::handlers::start_rest_apis;
 pub use crate::rest::*;
 pub use crate::router::*;

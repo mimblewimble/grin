@@ -48,7 +48,7 @@ use self::peers_api::PeerHandler;
 use self::peers_api::PeersAllHandler;
 use self::peers_api::PeersConnectedHandler;
 
-use crate::auth::BasicAuthMiddleware;
+use crate::auth::{BasicAuthMiddleware, GRIN_BASIC_REALM};
 use crate::chain;
 use crate::p2p;
 use crate::pool;
@@ -76,11 +76,10 @@ pub fn start_rest_apis(
 ) -> bool {
 	let mut apis = ApiServer::new();
 	let mut router = build_router(chain, tx_pool, peers).expect("unable to build API router");
-	if api_secret.is_some() {
-		let api_basic_auth =
-			"Basic ".to_string() + &util::to_base64(&("grin:".to_string() + &api_secret.unwrap()));
-		let basic_realm = "Basic realm=GrinAPI".to_string();
-		let basic_auth_middleware = Arc::new(BasicAuthMiddleware::new(api_basic_auth, basic_realm));
+	if let Some(api_secret) = api_secret {
+		let api_basic_auth = format!("Basic {}", util::to_base64(&format!("grin:{}", api_secret)));
+		let basic_auth_middleware =
+			Arc::new(BasicAuthMiddleware::new(api_basic_auth, &GRIN_BASIC_REALM));
 		router.add_middleware(basic_auth_middleware);
 	}
 

@@ -45,23 +45,26 @@ pub struct TxHashSetHandler {
 
 impl TxHashSetHandler {
 	// gets roots
-	fn get_roots(&self) -> TxHashSet {
-		TxHashSet::from_head(w(&self.chain))
+	fn get_roots(&self) -> Result<TxHashSet, Error> {
+		Ok(TxHashSet::from_head(w(&self.chain)?))
 	}
 
 	// gets last n outputs inserted in to the tree
-	fn get_last_n_output(&self, distance: u64) -> Vec<TxHashSetNode> {
-		TxHashSetNode::get_last_n_output(w(&self.chain), distance)
+	fn get_last_n_output(&self, distance: u64) -> Result<Vec<TxHashSetNode>, Error> {
+		Ok(TxHashSetNode::get_last_n_output(w(&self.chain)?, distance))
 	}
 
 	// gets last n outputs inserted in to the tree
-	fn get_last_n_rangeproof(&self, distance: u64) -> Vec<TxHashSetNode> {
-		TxHashSetNode::get_last_n_rangeproof(w(&self.chain), distance)
+	fn get_last_n_rangeproof(&self, distance: u64) -> Result<Vec<TxHashSetNode>, Error> {
+		Ok(TxHashSetNode::get_last_n_rangeproof(
+			w(&self.chain)?,
+			distance,
+		))
 	}
 
 	// gets last n outputs inserted in to the tree
-	fn get_last_n_kernel(&self, distance: u64) -> Vec<TxHashSetNode> {
-		TxHashSetNode::get_last_n_kernel(w(&self.chain), distance)
+	fn get_last_n_kernel(&self, distance: u64) -> Result<Vec<TxHashSetNode>, Error> {
+		Ok(TxHashSetNode::get_last_n_kernel(w(&self.chain)?, distance))
 	}
 
 	// allows traversal of utxo set
@@ -70,18 +73,21 @@ impl TxHashSetHandler {
 		if max > 1000 {
 			max = 1000;
 		}
-		let outputs = w(&self.chain)
+		let chain = w(&self.chain)?;
+		let outputs = chain
 			.unspent_outputs_by_insertion_index(start_index, max)
 			.context(ErrorKind::NotFound)?;
-		Ok(OutputListing {
+		let out = OutputListing {
 			last_retrieved_index: outputs.0,
 			highest_index: outputs.1,
 			outputs: outputs
 				.2
 				.iter()
-				.map(|x| OutputPrintable::from_output(x, w(&self.chain), None, true))
-				.collect(),
-		})
+				.map(|x| OutputPrintable::from_output(x, chain.clone(), None, true))
+				.collect::<Result<Vec<_>, _>>()
+				.context(ErrorKind::Internal("cain error".to_owned()))?,
+		};
+		Ok(out)
 	}
 
 	// return a dummy output with merkle proof for position filled out
@@ -92,10 +98,9 @@ impl TxHashSetHandler {
 			id
 		)))?;
 		let commit = Commitment::from_vec(c);
-		let output_pos = w(&self.chain)
-			.get_output_pos(&commit)
-			.context(ErrorKind::NotFound)?;
-		let merkle_proof = chain::Chain::get_merkle_proof_for_pos(&w(&self.chain), commit)
+		let chain = w(&self.chain)?;
+		let output_pos = chain.get_output_pos(&commit).context(ErrorKind::NotFound)?;
+		let merkle_proof = chain::Chain::get_merkle_proof_for_pos(&chain, commit)
 			.map_err(|_| ErrorKind::NotFound)?;
 		Ok(OutputPrintable {
 			output_type: OutputType::Coinbase,
@@ -120,10 +125,10 @@ impl Handler for TxHashSetHandler {
 		let id = parse_param_no_err!(params, "id", "".to_owned());
 
 		match right_path_element!(req) {
-			"roots" => json_response_pretty(&self.get_roots()),
-			"lastoutputs" => json_response_pretty(&self.get_last_n_output(last_n)),
-			"lastrangeproofs" => json_response_pretty(&self.get_last_n_rangeproof(last_n)),
-			"lastkernels" => json_response_pretty(&self.get_last_n_kernel(last_n)),
+			"roots" => result_to_response(self.get_roots()),
+			"lastoutputs" => result_to_response(self.get_last_n_output(last_n)),
+			"lastrangeproofs" => result_to_response(self.get_last_n_rangeproof(last_n)),
+			"lastkernels" => result_to_response(self.get_last_n_kernel(last_n)),
 			"outputs" => result_to_response(self.outputs(start_index, max)),
 			"merkleproof" => result_to_response(self.get_merkle_proof_for_output(&id)),
 			_ => response(StatusCode::BAD_REQUEST, ""),

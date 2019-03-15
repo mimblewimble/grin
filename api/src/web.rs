@@ -180,3 +180,12 @@ macro_rules! parse_param_no_err(
 		}
 	}
 	));
+
+#[macro_export]
+macro_rules! w_fut(
+	($p: expr) =>(
+		match w($p) {
+			Ok(p) => p,
+			Err(_) => return response(StatusCode::INTERNAL_SERVER_ERROR, "weak reference upgrade failed" ),
+		}
+	));
