@@ -19,7 +19,7 @@ use crate::util::to_base64;
 use failure::{Fail, ResultExt};
 use futures::future::{err, ok, Either};
 use http::uri::{InvalidUri, Uri};
-use hyper::header::{ACCEPT, AUTHORIZATION, USER_AGENT};
+use hyper::header::{ACCEPT, AUTHORIZATION, CONTENT_TYPE, USER_AGENT};
 use hyper::rt::{Future, Stream};
 use hyper::{Body, Client, Request};
 use hyper_rustls;
@@ -147,6 +147,7 @@ fn build_request<'a>(
 		.uri(uri)
 		.header(USER_AGENT, "grin-client")
 		.header(ACCEPT, "application/json")
+		.header(CONTENT_TYPE, "application/json")
 		.body(match body {
 			None => Body::empty(),
 			Some(json) => json.into(),
