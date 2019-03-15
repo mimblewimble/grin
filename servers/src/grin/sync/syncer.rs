@@ -209,18 +209,20 @@ impl SyncRunner {
 			}
 		} else {
 			// sum the last 5 difficulties to give us the threshold
-			let diff_iter = match self.chain.difficulty_iter() {
-				Ok(v) => v,
-				Err(e) => {
-					error!("failed to get difficulty iterator: {:?}", e);
-					// we handle 0 height in the caller
-					return (false, 0);
-				}
+			let threshold = {
+				let diff_iter = match self.chain.difficulty_iter() {
+					Ok(v) => v,
+					Err(e) => {
+						error!("failed to get difficulty iterator: {:?}", e);
+						// we handle 0 height in the caller
+						return (false, 0);
+					}
+				};
+				diff_iter
+					.map(|x| x.difficulty)
+					.take(5)
+					.fold(Difficulty::zero(), |sum, val| sum + val)
 			};
-			let threshold = diff_iter
-				.map(|x| x.difficulty)
-				.take(5)
-				.fold(Difficulty::zero(), |sum, val| sum + val);
 
 			let peer_diff = peer_info.total_difficulty();
 			if peer_diff > local_diff.clone() + threshold.clone() {
