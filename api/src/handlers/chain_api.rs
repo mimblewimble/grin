@@ -105,9 +105,10 @@ impl OutputHandler {
 
 		let mut outputs: Vec<Output> = vec![];
 		for x in commitments {
-			if let Ok(output) = self.get_output(&x) {
-				outputs.push(output);
-			}
+			match self.get_output(&x) {
+				Ok(output) => outputs.push(output),
+				Err(e) => error!("{}", e),
+			};
 		}
 		Ok(outputs)
 	}
