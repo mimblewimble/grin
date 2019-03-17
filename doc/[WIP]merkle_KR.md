@@ -1,13 +1,8 @@
-# Merkle Structures
+# 머클의 구조
 
-MimbleWimble is designed for users to verify the state of the system given
-only pruned data. To achieve this goal, all transaction data is committed
-to the blockchain by means of Merkle trees which should support efficient
-updates and serialization even when pruned.
+MimbleWimble은 Pruning 데이터만 있는 시스템의 상태를 사용자가 증명하도록 설계되었습니다. 이러한 목표를 달성하기 위해 모든 트랜잭션 데이터는 pruning 된 경우라도 효율적인 업데이트와 serialization을 지원하는 Merkle 트리를 사용하여 블록 체인에 커밋됩니다.
 
-Also, almost all transaction data (inputs, outputs, excesses and excess
-proofs) have the ability to be summed in some way, so it makes sense to
-treat Merkle sum trees as the default option, and address the sums here.
+또한 거의 모든 거래 데이터 (입력, 출력, Excess 및 Excess proof)는 어떤 방식으로 합산 될 수 있으므로 Merkle sum 트리를 기본 옵션으로 처리하고 여기에서 합계를 처리하는 것이 좋습니다.
 
 A design goal of Grin is that all structures be as easy to implement and
 as simple as possible. MimbleWimble introduces a lot of new cryptography
@@ -16,70 +11,59 @@ are simple to specify (no scripts) and Grin is written in a language with
 very explicit semantics, so simplicity is also good to achieve well-understood
 consensus rules.
 
+Grin의 디자인 목표는 모든 구조를 구현하기 쉽고 가능한 한 간단하게 만드는 것입니다.
+MimbleWimble은 많은 새로운 암호화 방식을 내 놓았고 이러한 방식을  가능한 한 쉽게 이해할 수 있도록 만들어야합니다.
+새로운 암호화 방식의 유효성 규칙은 스크립트가 없이도 지정하기 쉽고 Grin은 매우 명확한 의미론을 가진 프로그래밍 언어로 작성되기 때문에 잘 이해되는 합의 규칙을 달성하는 것이 단순합니다.
+
 ## Merkle Trees
 
-There are four Merkle trees committed to by each block:
+각 블록마다 4가지의 머클 트리가 커밋됩니다.
 
 ### Total Output Set
 
-Each object is one of two things: a commitment indicating an unspent output
-or a NULL marker indicating a spent one. It is a sum-tree over all unspent
-outputs (spent ones contribute nothing to the sum). The output set should
-reflect the state of the chain *after* the current block has taken effect.
+각 오브젝트는 uspent output 을 나타내는 commitment 또는 spent를 나타내는 NULL 마커 두 가지 중 하나입니다. Unspent 출력에 대한 sum-tree 입니다 (Spent 된 것은 합계에 아무런 영향을 미치지 않습니다). output 세트는 현재 블록이 적용된 *후에* 체인 의 상태를 반영해야합니다.
 
-The root sum should be equal to the sum of all excesses since the genesis.
+Root 합계는 제네시스 블록 이후 모든 Excess의 합계와 같아야합니다.
 
-Design requirements:
+설계 요구 사항은 아래와 같습니다.
 
-1. Efficient additions and updating from unspent to spent.
-2. Efficient proofs that a specific output was spent.
-3. Efficient storage of diffs between UTXO roots.
-4. Efficient tree storage even with missing data, even with millions of entries.
-5. If a node commits to NULL, it has no unspent children and its data should
-   eventually be able to be dropped forever.
-6. Support for serialization and efficient merging of pruned trees from partial archival nodes.
+1. 효율적으로 추가 되어야 하고 및 unspent 에서 spent 로 업데이트가 되어야 합니다.
+2. 특정 출력값이 Spent 임을 효율적으로 증명해야 합니다.
+3. UTXO root간에 diffs를 효율적으로 저장합니다.
+4. 수백만 개의 항목이 있거나 누락된 데이터가 있는 경우에도 트리에 효율적으로 저장되어야 합니다.
+5. 노드가 NULL로 커밋되는 경우에는 unspent 하위 항목이 없고 그 데이터를 결과적으로 영구히 삭제할 수 있게 합니다.
+6. 부분 아카이브 노드에서 Pruning된 트리의 serializtion 및 효율적인 병합을 지원합니다.
 
-### Output witnesses
+### Output의 증거
 
-This tree mirrors the total output set but has rangeproofs in place of commitments.
-It is never updated, only appended to, and does not sum over anything. When an
-output is spent it is sufficient to prune its rangeproof from the tree rather
-than deleting it.
+이 트리는 전체 출력 set을 반영하지만 commitment 대신 range proof를 가집니다. 이 트리는 절대 업데이트 되지 않고, 단지 추가되고, 어떤 것이든 더이상 더하지 않습니다. 출력을 소비 할 때 Tree를 삭제하는 것보다는 tree 에서 rangeproof를 삭제하는 것으로 충분합니다.
 
-Design requirements:
+설계 요구 사항은 아래와 같습니다.
 
-1. Support for serialization and efficient merging of pruned trees from partial archival nodes.
+1. 부분 아카이브 노드에서 Pruning 된 트리의 serializtion 과 효율적인 병합을 지원해야 합니다.
 
-### Inputs and Outputs
+### 입력과 출력
 
-Each object is one of two things: an input (unambiguous reference to an old
-transaction output), or an output (a (commitment, rangeproof) pair). It is
-a sum-tree over the commitments of outputs, and the negatives of the commitments
-of inputs.
+각 객체는 입력 (이전 트랜잭션 출력에 대한 명확한 레퍼런스) 또는 출력 (commitment, rangeproof) 중 하나입니다. 이 sum-tree는 출력에 대한 commitment이고 입력의 commitment에 대한 원본입니다.
 
-Input references are hashes of old commitments. It is a consensus rule that
-all unspent outputs must be unique.
+입력 레퍼런스는 이전 commitment의 해시입니다. 모든 unspent 출력은 유니크 해야한다는 것이 컨센서스의 규착입니다.
 
-The root sum should be equal to the sum of excesses for this block. See the
-next section.
+Root 합계는 이 블록의 Excess 합계와 같아야 합니다. 이에 대해 다음 섹션을 참고하세요.
 
-In general, validators will see either 100% of this Merkle tree or 0% of it,
-so it is compatible with any design. Design requirements:
+일반적으로 밸리데이터는 이 Merkle 트리의 100 % 또는 0 %를 확인 할 수 있으므로 모든 디자인과 호환됩니다.
+설계 요구 사항은 다음과 같습니다 :
 
-1. Efficient inclusion proofs, for proof-of-publication.
+1. Proof of publication을 위해서 증명을 효율적으로 포함해야 합니다.
 
 ### Excesses
 
-Each object is of the form (excess, signature). It is a sum tree over the
-excesses.
+각 객체는 (초과, 서명) 형식입니다. 이러한 객체는 Excess를 합친 sum-tree 입니다.
 
-In general, validators will always see 100% of this tree, so it is not even
-necessary to have a Merkle structure at all. However, to support partial
-archival nodes in the future we want to support efficient pruning.
+일반적으로 밸리데이터는 항상 이 트리의 100 %를 확인 할 것이므로 Merkle 구조일 필요가 전혀 없습니다. 그러나 나중에 부분 아카이브 노드를 지원하기 위해 효율적인 Pruning을 지원하기를 원합니다.
 
-Design requirements:
+설계 요구 사항 은 아래와 같습니다. :
 
-1. Support for serialization and efficient merging of pruned trees from partial archival nodes.
+1. 부분 아카이브 노드에서 pruning 된 tree의 serialzatoin 과 효율적인 병합을 지원해야 합니다.
 
 ## Proposed Merkle Structure
 
@@ -87,54 +71,40 @@ Design requirements:
 sums a count of its children _as well as_ the data it is supposed to sum.
 The result is that every node commits to the count of all its children.**
 
+**모든 tree에 대해 다음과 같은 설계가 제안됩니다. Sum-MMR은 더할 데이터 뿐만 아니라 자식의 수도 더합니다.
+결과적으로 모든 노드가 모든 하위 노드의 수로 커밋됩니다.**
+
 [MMRs, or Merkle Mountain Ranges](https://github.com/opentimestamps/opentimestamps-server/blob/master/doc/merkle-mountain-range.md)
 
-The six design criteria for the output set are:
+출력값 세트를 위해서 6개의 디자인 원칙은 다음과 같습니다.
 
-### Efficient insert/updates
+### 효율적인 insert/updates
 
-Immediate (as is proof-of-inclusion). This is true for any balanced Merkle
-tree design.
+즉시적이여야 합니다. (지금은 proof-of-inclusion입니다.). 이 원칙은 균형 잡힌 Merkle tree 디자인에 합당합니다.
 
-### Efficient proof-of-spentness
+### 효율적인 proof-of-spentness
 
-Grin itself does not need proof-of-spentness but it is a good thing to support
-in the future for SPV clients.
+Grin은 proof of spentness가 필요하지 않지만 SPV client 을 위해 앞으로 지원하는 것이 좋습니다.
 
-The children-counts imply an index of each object in the tree, which does not
-change because insertions happen only at the far right of the tree.
+자식의 수는 tree의 각 개체에 대한 인덱스를 의미합니다. 삽입은 트리의 맨 오른쪽에서만 발생하므로 변경되지 않습니다.
 
-This allows permanent proof-of-spentness, even if an identical output is later
-added to the tree, and prevents false proofs even for identical outputs. These
-properties are hard to achieve for a non-insertion-ordered tree.
+이렇게하면 동일한 출력이 나중에 트리에 추가 되더라도 영구적으로 proof-of-spentness를 허용하고 동일한 출력에 대해서도 오류 잘못된 증명에 대해서도 방지 할 수 있습니다. 이러한 속성은 삽입 순서가 지정되지 않은 tree에서는 하기 어렵습니다.
 
-### Efficient storage of diffs
+### 효율적인 diffs의 저장
 
-Storing complete blocks should be sufficient for this. Updates are obviously
-as easy to undo as they are to do, and since blocks are always processed in
-order, rewinding them during reorgs is as simple as removing a contiguous
-set of outputs from the right of the tree. (This should be even faster than
-repeated deletions in a tree designed to support deletions.)
+모든 블록을 저장하면 충분합니다. 업데이트는 실행 취소만큼 수월하고, 블록은 항상 순서대로 처리되기 때문에 트리의 오른쪽에서 인접한 출력 세트를 제거하는 것과 만큼 reorg를 하는 동안 블록을 되감는 것이 간단합니다. 삭제를 지원하도록 설계된 트리의 반복 삭제보다 훨씬 빠릅니다.
 
-### Efficient tree storage even with missing data
+### 데이터가 손실되는 상황에서도 효율적인 tree의 저장
 
-To update the root hash when random outputs are spent, we do not want to need
-to store or compute the entire tree. Instead we can store only the hashes at
-depth 20, say, of which there will be at most a million. Then each update only
-needs to recompute hashes above this depth (Bitcoin has less than 2^29 outputs
-in its history, so this means computing a tree of size 2^9 = 512 for each update)
-and after all updates are done, the root hash can be recomputed.
+랜덤한 결과가 소비되었을 때 root 해시를 업데이트하려면 전체 tree를 저장하거나 계산할 필요가 없습니다. 대신 depth 20에 해시 만 저장할 수 있습니다. 쉽세 말하자면 최대 100 만개가 저장됩니다. 그런 다음 각 업데이트는 이 depth보다 위의 해시를 다시 계산하면됩니다 (Bitcoin의 히스토리에는 2 ^ 29 미만의 출력이 있으므로 각 업데이트에 대해 크기가 2 ^ 9 = 512 인 트리를 계산해야 함). 모든 업데이트가 완료되면 root 해시를 다시 계산할 수 있습니다.
 
-This depth is configurable and may be changed as the output set grows, or
-depending on available disk space.
+이 깊이는 설정 할 수 있고 출력 set가 증가하거나 사용 가능한 디스크 공간에 따라 변경 될 수 있습니다.
 
-This is doable for any Merkle tree but may be complicated by PATRICIA trees or
-other prefix trees, depending how depth is computed.
+이런 과정은 어느 Merkle 트리에서 가능하지만 깊이를 어떻게 계산하느냐에 따라 PATRICIA tree 나 다른 prefix tree로 인해 복잡 할 수 있습니다.
 
-### Dropping spent coins
+### 사용된 코인 지우기
 
-Since coins never go from spent to unspent, the data on spent coins is not needed
-for any more updates or lookups.
+코인은 spent 에서 unspent로 이동하지 않으므로 spent 된 코인에 대한 데이터는 더 이상 업데이트나 검색를 위해 필요하지 않습니다.
 
 ### Efficient serialization of pruned trees
 
@@ -145,6 +115,10 @@ nodes are siblings, and so on.
 In the output set each node also commits to a sum of its unspent children, so
 a validator knows if it is missing data on unspent coins by checking whether or
 not this sum on a pruned node is zero.
+
+모든 노드는 자식 수를 가지므로 밸리데이터는 모든 해시를 필요로하지 않고 tree 구조를 결정할 수 있으며 형제 노드를 결정할 수 있습니다.
+
+출력 세트에서 각 노드는 unspent한 자식의 합계도 커밋하므로 밸리데이터는 정리되지 않은 노드에서이 합계가 0인지 여부를 확인하여 사용되지 않은 동전의 데이터가 누락되었는지 확인합니다.
 
 ## Algorithms
 
@@ -168,3 +142,8 @@ additional index over the whole key space is required. As an MMR is an append
 only binary tree, we can find a key in the tree by its insertion position. So a
 full index of keys inserted in the tree (i.e. an output commitment) to their
 insertion positions is also required.
+
+
+합계 트리 데이터 구조를 사용하면 출력 집합과 출력 증인을 효율적으로 저장하면서 루트 해시 또는 루트 합계 (해당되는 경우)를 즉시 검색 할 수 있습니다. 그러나 트리는 시스템에 모든 출력 약속 및 감시 해시를 포함해야합니다. 이 데이터는 너무 커서 메모리에 영구적으로 저장 될 수 없으며 재시작 할 때마다 처음부터 다시 작성하기에는 너무 비싸다. (이번에는 Bitcoin이 적어도 3.2GB를 필요로하는 50M UTXO를 가지고있다. UTXO 당). 따라서이 데이터 구조를 디스크에 저장하는 효율적인 방법이 필요합니다.
+
+해시 트리의 또 다른 한계는 키 (즉, 출력 커미트먼트)가 주어지면, 그 키와 연관된 트리에서 잎을 발견하는 것이 불가능하다는 것이다. 우리는 의미있는 방식으로 뿌리에서 나무를 걸어 내려 갈 수 없습니다. 따라서 전체 키 공간에 대한 추가 색인이 필요합니다. MMR은 추가 전용 이진 트리이므로 삽입 위치를 기준으로 트리에서 키를 찾을 수 있습니다. 따라서 트리에 삽입 된 키의 전체 인덱스 (즉, 출력 커미트먼트)가 그들의 삽입 위치에 또한 요구된다.

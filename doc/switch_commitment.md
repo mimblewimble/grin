@@ -1,5 +1,7 @@
 # Introduction to Switch Commitments
 
+*Read this in other languages:[Korean](switch_commitment_KR.md)
+
 ## General introduction
 
 In cryptography a _Commitment_ (or _commitment scheme_) refers to a concept which can be imagined
