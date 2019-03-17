@@ -83,7 +83,7 @@ fn get_outputs_by_pmmr_index_local(
 /// Adds a block with a given reward to the chain and mines it
 pub fn add_block_with_reward(chain: &Chain, txs: Vec<&Transaction>, reward: CbData) {
 	let prev = chain.head_header().unwrap();
-	let next_header_info = consensus::next_difficulty(1, chain.difficulty_iter());
+	let next_header_info = consensus::next_difficulty(1, chain.difficulty_iter().unwrap());
 	let out_bin = util::from_hex(reward.output).unwrap();
 	let kern_bin = util::from_hex(reward.kernel).unwrap();
 	let output = ser::deserialize(&mut &out_bin[..]).unwrap();

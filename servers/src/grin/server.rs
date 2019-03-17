@@ -413,7 +413,7 @@ impl Server {
 		// for release
 		let diff_stats = {
 			let last_blocks: Vec<consensus::HeaderInfo> =
-				global::difficulty_data_to_vector(self.chain.difficulty_iter())
+				global::difficulty_data_to_vector(self.chain.difficulty_iter()?)
 					.into_iter()
 					.collect();
 
