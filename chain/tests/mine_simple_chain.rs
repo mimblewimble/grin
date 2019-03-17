@@ -101,7 +101,7 @@ where
 
 	for n in 1..4 {
 		let prev = chain.head_header().unwrap();
-		let next_header_info = consensus::next_difficulty(1, chain.difficulty_iter());
+		let next_header_info = consensus::next_difficulty(1, chain.difficulty_iter().unwrap());
 		let pk = ExtKeychainPath::new(1, n as u32, 0, 0, 0).to_identifier();
 		let reward = libtx::reward::output(keychain, &pk, 0).unwrap();
 		let mut b =
@@ -409,7 +409,7 @@ fn output_header_mappings() {
 
 	for n in 1..15 {
 		let prev = chain.head_header().unwrap();
-		let next_header_info = consensus::next_difficulty(1, chain.difficulty_iter());
+		let next_header_info = consensus::next_difficulty(1, chain.difficulty_iter().unwrap());
 		let pk = ExtKeychainPath::new(1, n as u32, 0, 0, 0).to_identifier();
 		let reward = libtx::reward::output(&keychain, &pk, 0).unwrap();
 		reward_outputs.push(reward.0.clone());
@@ -545,7 +545,7 @@ fn actual_diff_iter_output() {
 		Arc::new(Mutex::new(StopState::new())),
 	)
 	.unwrap();
-	let iter = chain.difficulty_iter();
+	let iter = chain.difficulty_iter().unwrap();
 	let mut last_time = 0;
 	let mut first = true;
 	for elem in iter.into_iter() {
