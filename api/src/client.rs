@@ -136,9 +136,8 @@ fn build_request<'a>(
 			.into()
 	})?;
 	let mut builder = Request::builder();
-	if api_secret.is_some() {
-		let basic_auth =
-			"Basic ".to_string() + &to_base64(&("grin:".to_string() + &api_secret.unwrap()));
+	if let Some(api_secret) = api_secret {
+		let basic_auth = format!("Basic {}", to_base64(&format!("grin:{}", api_secret)));
 		builder.header(AUTHORIZATION, basic_auth);
 	}
 
@@ -224,6 +223,7 @@ fn send_request_async(req: Request<Body>) -> Box<dyn Future<Item = String, Error
 
 fn send_request(req: Request<Body>) -> Result<String, Error> {
 	let task = send_request_async(req);
-	let mut rt = Runtime::new().unwrap();
+	let mut rt =
+		Runtime::new().context(ErrorKind::Internal("can't create Tokio runtime".to_owned()))?;
 	Ok(rt.block_on(task)?)
 }

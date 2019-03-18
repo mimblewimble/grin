@@ -26,7 +26,7 @@ pub struct PeersAllHandler {
 
 impl Handler for PeersAllHandler {
 	fn get(&self, _req: Request<Body>) -> ResponseFuture {
-		let peers = &w(&self.peers).all_peers();
+		let peers = &w_fut!(&self.peers).all_peers();
 		json_response_pretty(&peers)
 	}
 }
@@ -37,7 +37,7 @@ pub struct PeersConnectedHandler {
 
 impl Handler for PeersConnectedHandler {
 	fn get(&self, _req: Request<Body>) -> ResponseFuture {
-		let peers: Vec<PeerInfoDisplay> = w(&self.peers)
+		let peers: Vec<PeerInfoDisplay> = w_fut!(&self.peers)
 			.connected_peers()
 			.iter()
 			.map(|p| p.info.clone().into())
@@ -73,7 +73,7 @@ impl Handler for PeerHandler {
 			);
 		}
 
-		match w(&self.peers).get_peer(peer_addr) {
+		match w_fut!(&self.peers).get_peer(peer_addr) {
 			Ok(peer) => json_response(&peer),
 			Err(_) => response(StatusCode::NOT_FOUND, "peer not found"),
 		}
@@ -101,8 +101,8 @@ impl Handler for PeerHandler {
 		};
 
 		match command {
-			"ban" => w(&self.peers).ban_peer(addr, ReasonForBan::ManualBan),
-			"unban" => w(&self.peers).unban_peer(addr),
+			"ban" => w_fut!(&self.peers).ban_peer(addr, ReasonForBan::ManualBan),
+			"unban" => w_fut!(&self.peers).unban_peer(addr),
 			_ => return response(StatusCode::BAD_REQUEST, "invalid command"),
 		};
 

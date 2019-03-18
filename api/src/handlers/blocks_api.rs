@@ -41,7 +41,7 @@ impl HeaderHandler {
 			return Ok(h);
 		}
 		if let Ok(height) = input.parse() {
-			match w(&self.chain).get_header_by_height(height) {
+			match w(&self.chain)?.get_header_by_height(height) {
 				Ok(header) => return Ok(BlockHeaderPrintable::from_header(&header)),
 				Err(_) => return Err(ErrorKind::NotFound)?,
 			}
@@ -50,7 +50,7 @@ impl HeaderHandler {
 		let vec = util::from_hex(input)
 			.map_err(|e| ErrorKind::Argument(format!("invalid input: {}", e)))?;
 		let h = Hash::from_vec(&vec);
-		let header = w(&self.chain)
+		let header = w(&self.chain)?
 			.get_block_header(&h)
 			.context(ErrorKind::NotFound)?;
 		Ok(BlockHeaderPrintable::from_header(&header))
@@ -58,7 +58,7 @@ impl HeaderHandler {
 
 	fn get_header_for_output(&self, commit_id: String) -> Result<BlockHeaderPrintable, Error> {
 		let oid = get_output(&self.chain, &commit_id)?.1;
-		match w(&self.chain).get_header_for_output(&oid) {
+		match w(&self.chain)?.get_header_for_output(&oid) {
 			Ok(header) => Ok(BlockHeaderPrintable::from_header(&header)),
 			Err(_) => Err(ErrorKind::NotFound)?,
 		}
@@ -85,22 +85,23 @@ pub struct BlockHandler {
 
 impl BlockHandler {
 	fn get_block(&self, h: &Hash) -> Result<BlockPrintable, Error> {
-		let block = w(&self.chain).get_block(h).context(ErrorKind::NotFound)?;
-		Ok(BlockPrintable::from_block(&block, w(&self.chain), false))
+		let chain = w(&self.chain)?;
+		let block = chain.get_block(h).context(ErrorKind::NotFound)?;
+		BlockPrintable::from_block(&block, chain, false)
+			.map_err(|_| ErrorKind::Internal("chain error".to_owned()).into())
 	}
 
 	fn get_compact_block(&self, h: &Hash) -> Result<CompactBlockPrintable, Error> {
-		let block = w(&self.chain).get_block(h).context(ErrorKind::NotFound)?;
-		Ok(CompactBlockPrintable::from_compact_block(
-			&block.into(),
-			w(&self.chain),
-		))
+		let chain = w(&self.chain)?;
+		let block = chain.get_block(h).context(ErrorKind::NotFound)?;
+		CompactBlockPrintable::from_compact_block(&block.into(), chain)
+			.map_err(|_| ErrorKind::Internal("chain error".to_owned()).into())
 	}
 
 	// Try to decode the string as a height or a hash.
 	fn parse_input(&self, input: String) -> Result<Hash, Error> {
 		if let Ok(height) = input.parse() {
-			match w(&self.chain).get_header_by_height(height) {
+			match w(&self.chain)?.get_header_by_height(height) {
 				Ok(header) => return Ok(header.hash()),
 				Err(_) => return Err(ErrorKind::NotFound)?,
 			}

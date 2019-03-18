@@ -222,7 +222,9 @@ impl<'de> serde::de::Visitor<'de> for PrintableCommitmentVisitor {
 		E: serde::de::Error,
 	{
 		Ok(PrintableCommitment {
-			commit: pedersen::Commitment::from_vec(util::from_hex(String::from(v)).unwrap()),
+			commit: pedersen::Commitment::from_vec(
+				util::from_hex(String::from(v)).map_err(serde::de::Error::custom)?,
+			),
 		})
 	}
 }
@@ -255,7 +257,7 @@ impl OutputPrintable {
 		chain: Arc<chain::Chain>,
 		block_header: Option<&core::BlockHeader>,
 		include_proof: bool,
-	) -> OutputPrintable {
+	) -> Result<OutputPrintable, chain::Error> {
 		let output_type = if output.is_coinbase() {
 			OutputType::Coinbase
 		} else {
@@ -266,7 +268,7 @@ impl OutputPrintable {
 		let spent = chain.is_unspent(&out_id).is_err();
 		let block_height = match spent {
 			true => None,
-			false => Some(chain.get_header_for_output(&out_id).unwrap().height),
+			false => Some(chain.get_header_for_output(&out_id)?.height),
 		};
 
 		let proof = if include_proof {
@@ -280,13 +282,15 @@ impl OutputPrintable {
 		// We require the rewind() to be stable even after the PMMR is pruned and
 		// compacted so we can still recreate the necessary proof.
 		let mut merkle_proof = None;
-		if output.is_coinbase() && !spent && block_header.is_some() {
-			merkle_proof = chain.get_merkle_proof(&out_id, &block_header.unwrap()).ok()
+		if output.is_coinbase() && !spent {
+			if let Some(block_header) = block_header {
+				merkle_proof = chain.get_merkle_proof(&out_id, &block_header).ok();
+			}
 		};
 
 		let output_pos = chain.get_output_pos(&output.commit).unwrap_or(0);
 
-		OutputPrintable {
+		Ok(OutputPrintable {
 			output_type,
 			commit: output.commit,
 			spent,
@@ -295,7 +299,7 @@ impl OutputPrintable {
 			block_height,
 			merkle_proof,
 			mmr_index: output_pos,
-		}
+		})
 	}
 
 	pub fn commit(&self) -> Result<pedersen::Commitment, ser::Error> {
@@ -303,12 +307,13 @@ impl OutputPrintable {
 	}
 
 	pub fn range_proof(&self) -> Result<pedersen::RangeProof, ser::Error> {
-		let proof_str = self
-			.proof
-			.clone()
-			.ok_or_else(|| ser::Error::HexError(format!("output range_proof missing")))
-			.unwrap();
-		let p_vec = util::from_hex(proof_str).unwrap();
+		let proof_str = match self.proof.clone() {
+			Some(p) => p,
+			None => return Err(ser::Error::HexError(format!("output range_proof missing"))),
+		};
+
+		let p_vec = util::from_hex(proof_str)
+			.map_err(|_| ser::Error::HexError(format!("invalud output range_proof")))?;
 		let mut p_bytes = [0; util::secp::constants::MAX_PROOF_SIZE];
 		for i in 0..p_bytes.len() {
 			p_bytes[i] = p_vec[i];
@@ -426,6 +431,15 @@ impl<'de> serde::de::Deserialize<'de> for OutputPrintable {
 							mmr_index = Some(map.next_value()?)
 						}
 					}
+				}
+
+				if output_type.is_none()
+					|| commit.is_none()
+					|| spent.is_none()
+					|| proof_hash.is_none()
+					|| mmr_index.is_none()
+				{
+					return Err(serde::de::Error::custom("invalid output"));
 				}
 
 				Ok(OutputPrintable {
@@ -570,7 +584,7 @@ impl BlockPrintable {
 		block: &core::Block,
 		chain: Arc<chain::Chain>,
 		include_proof: bool,
-	) -> BlockPrintable {
+	) -> Result<BlockPrintable, chain::Error> {
 		let inputs = block
 			.inputs()
 			.iter()
@@ -587,18 +601,19 @@ impl BlockPrintable {
 					include_proof,
 				)
 			})
-			.collect();
+			.collect::<Result<Vec<_>, _>>()?;
+
 		let kernels = block
 			.kernels()
 			.iter()
 			.map(|kernel| TxKernelPrintable::from_txkernel(kernel))
 			.collect();
-		BlockPrintable {
+		Ok(BlockPrintable {
 			header: BlockHeaderPrintable::from_header(&block.header),
 			inputs: inputs,
 			outputs: outputs,
 			kernels: kernels,
-		}
+		})
 	}
 }
 
@@ -620,24 +635,24 @@ impl CompactBlockPrintable {
 	pub fn from_compact_block(
 		cb: &core::CompactBlock,
 		chain: Arc<chain::Chain>,
-	) -> CompactBlockPrintable {
-		let block = chain.get_block(&cb.hash()).unwrap();
+	) -> Result<CompactBlockPrintable, chain::Error> {
+		let block = chain.get_block(&cb.hash())?;
 		let out_full = cb
 			.out_full()
 			.iter()
 			.map(|x| OutputPrintable::from_output(x, chain.clone(), Some(&block.header), false))
-			.collect();
+			.collect::<Result<Vec<_>, _>>()?;
 		let kern_full = cb
 			.kern_full()
 			.iter()
 			.map(|x| TxKernelPrintable::from_txkernel(x))
 			.collect();
-		CompactBlockPrintable {
+		Ok(CompactBlockPrintable {
 			header: BlockHeaderPrintable::from_header(&cb.header),
 			out_full,
 			kern_full,
 			kern_ids: cb.kern_ids().iter().map(|x| x.to_hex()).collect(),
-		}
+		})
 	}
 }
 
