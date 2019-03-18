@@ -113,7 +113,7 @@ impl StateSync {
 		}
 
 		// run fast sync if applicable, normally only run one-time, except restart in error
-		if header_head.height == highest_height {
+		if sync_need_restart || header_head.height == highest_height {
 			let (go, download_timeout) = self.state_sync_due();
 
 			if let SyncStatus::TxHashsetDownload { .. } = self.sync_state.status() {
