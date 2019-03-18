@@ -62,6 +62,7 @@ impl<T: PMMRable> PMMRHandle<T> {
 		sub_dir: &str,
 		file_name: &str,
 		prunable: bool,
+		fixed_size: bool,
 		header: Option<&BlockHeader>,
 	) -> Result<PMMRHandle<T>, Error> {
 		let path = Path::new(root_dir).join(sub_dir).join(file_name);
@@ -69,7 +70,7 @@ impl<T: PMMRable> PMMRHandle<T> {
 		let path_str = path.to_str().ok_or(Error::from(ErrorKind::Other(
 			"invalid file path".to_owned(),
 		)))?;
-		let backend = PMMRBackend::new(path_str.to_string(), prunable, header)?;
+		let backend = PMMRBackend::new(path_str.to_string(), prunable, fixed_size, header)?;
 		let last_pos = backend.unpruned_size();
 		Ok(PMMRHandle { backend, last_pos })
 	}
@@ -121,6 +122,7 @@ impl TxHashSet {
 				HEADERHASHSET_SUBDIR,
 				HEADER_HEAD_SUBDIR,
 				false,
+				true,
 				None,
 			)?,
 			sync_pmmr_h: PMMRHandle::new(
@@ -128,12 +130,14 @@ impl TxHashSet {
 				HEADERHASHSET_SUBDIR,
 				SYNC_HEAD_SUBDIR,
 				false,
+				true,
 				None,
 			)?,
 			output_pmmr_h: PMMRHandle::new(
 				&root_dir,
 				TXHASHSET_SUBDIR,
 				OUTPUT_SUBDIR,
+				true,
 				true,
 				header,
 			)?,
@@ -142,13 +146,15 @@ impl TxHashSet {
 				TXHASHSET_SUBDIR,
 				RANGE_PROOF_SUBDIR,
 				true,
+				true,
 				header,
 			)?,
 			kernel_pmmr_h: PMMRHandle::new(
 				&root_dir,
 				TXHASHSET_SUBDIR,
 				KERNEL_SUBDIR,
-				false,
+				false, // not prunable
+				false, // variable size kernel data file
 				None,
 			)?,
 			commit_index,
@@ -696,9 +702,7 @@ impl<'a> HeaderExtension<'a> {
 	/// including the genesis block header.
 	pub fn truncate(&mut self) -> Result<(), Error> {
 		debug!("Truncating header extension.");
-		self.pmmr
-			.rewind(0, &Bitmap::create())
-			.map_err(&ErrorKind::TxHashSetErr)?;
+		self.pmmr.truncate().map_err(&ErrorKind::TxHashSetErr)?;
 		Ok(())
 	}
 

@@ -126,8 +126,15 @@ impl PruneList {
 	}
 
 	/// Return the total shift from all entries in the prune_list.
+	/// This is the shift we need to account for when adding new entries to our PMMR.
 	pub fn get_total_shift(&self) -> u64 {
 		self.get_shift(self.bitmap.maximum() as u64)
+	}
+
+	/// Return the total leaf_shift from all entries in the prune_list.
+	/// This is the leaf_shift we need to account for when adding new entries to our PMMR.
+	pub fn get_total_leaf_shift(&self) -> u64 {
+		self.get_leaf_shift(self.bitmap.maximum() as u64)
 	}
 
 	/// Computes by how many positions a node at pos should be shifted given the
