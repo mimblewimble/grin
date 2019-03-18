@@ -180,7 +180,8 @@ impl Chain {
 			let store = Arc::new(store::ChainStore::new(db_env)?);
 
 			// open the txhashset, creating a new one if necessary
-			let mut txhashset = txhashset::TxHashSet::open(db_root.clone(), store.clone(), None)?;
+			let mut txhashset =
+				txhashset::TxHashSet::open(db_root.clone(), store.clone(), None, false)?;
 
 			setup_head(&genesis, &store, &mut txhashset)?;
 			Chain::log_heads(&store)?;
@@ -842,6 +843,11 @@ impl Chain {
 		}
 	}
 
+	/// Clean the temporary sandbox folder
+	pub fn clean_txhashset_sandbox(&self) {
+		txhashset::clean_txhashset_sandbox(self.db_root.clone());
+	}
+
 	/// Writes a reading view on a txhashset state that's been provided to us.
 	/// If we're willing to accept that new state, the data stream will be
 	/// read as a zip file, unzipped and the resulting state files should be
@@ -863,17 +869,21 @@ impl Chain {
 
 		let header = self.get_block_header(&h)?;
 
-		{
-			let mut txhashset_ref = self.txhashset.write();
-			// Drop file handles in underlying txhashset
-			txhashset_ref.release_backend_files();
-		}
+		// Write hashset to sandbox
+		txhashset::clean_txhashset_sandbox(self.db_root.clone());
+		txhashset::zip_write(
+			self.db_root.clone(),
+			txhashset_data.try_clone()?,
+			&header,
+			true,
+		)?;
 
-		// Rewrite hashset
-		txhashset::zip_write(self.db_root.clone(), txhashset_data, &header)?;
-
-		let mut txhashset =
-			txhashset::TxHashSet::open(self.db_root.clone(), self.store.clone(), Some(&header))?;
+		let mut txhashset = txhashset::TxHashSet::open(
+			self.db_root.clone(),
+			self.store.clone(),
+			Some(&header),
+			true,
+		)?;
 
 		// The txhashset.zip contains the output, rangeproof and kernel MMRs.
 		// We must rebuild the header MMR ourselves based on the headers in our db.
@@ -881,6 +891,26 @@ impl Chain {
 
 		// Validate the full kernel history (kernel MMR root for every block header).
 		self.validate_kernel_history(&header, &txhashset)?;
+
+		// sandbox validation ok, go to overwrite txhashset and clean the sandbox
+		{
+			// Before overwriting, drop file handles in underlying txhashset
+			{
+				let mut txhashset_ref = self.txhashset.write();
+				txhashset_ref.release_backend_files();
+			}
+
+			txhashset::zip_write(self.db_root.clone(), txhashset_data, &header, false)?;
+
+			txhashset = txhashset::TxHashSet::open(
+				self.db_root.clone(),
+				self.store.clone(),
+				Some(&header),
+				false,
+			)?;
+
+			txhashset::clean_txhashset_sandbox(self.db_root.clone());
+		}
 
 		// all good, prepare a new batch and update all the required records
 		debug!("txhashset_write: rewinding a 2nd time (writeable)");

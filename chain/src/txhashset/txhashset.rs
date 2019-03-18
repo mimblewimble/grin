@@ -41,6 +41,7 @@ use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
 const HEADERHASHSET_SUBDIR: &'static str = "header";
 const TXHASHSET_SUBDIR: &'static str = "txhashset";
+const TXHASHSET_SANDBOX_SUBDIR: &'static str = "txhashset_sandbox";
 
 const HEADER_HEAD_SUBDIR: &'static str = "header_head";
 const SYNC_HEAD_SUBDIR: &'static str = "sync_head";
@@ -114,7 +115,9 @@ impl TxHashSet {
 		root_dir: String,
 		commit_index: Arc<ChainStore>,
 		header: Option<&BlockHeader>,
+		sandbox: bool,
 	) -> Result<TxHashSet, Error> {
+		let txhashset_subdir = if sandbox { TXHASHSET_SANDBOX_SUBDIR } else { TXHASHSET_SUBDIR };
 		Ok(TxHashSet {
 			header_pmmr_h: PMMRHandle::new(
 				&root_dir,
@@ -132,21 +135,21 @@ impl TxHashSet {
 			)?,
 			output_pmmr_h: PMMRHandle::new(
 				&root_dir,
-				TXHASHSET_SUBDIR,
+				txhashset_subdir,
 				OUTPUT_SUBDIR,
 				true,
 				header,
 			)?,
 			rproof_pmmr_h: PMMRHandle::new(
 				&root_dir,
-				TXHASHSET_SUBDIR,
+				txhashset_subdir,
 				RANGE_PROOF_SUBDIR,
 				true,
 				header,
 			)?,
 			kernel_pmmr_h: PMMRHandle::new(
 				&root_dir,
-				TXHASHSET_SUBDIR,
+				txhashset_subdir,
 				KERNEL_SUBDIR,
 				false,
 				None,
@@ -1453,12 +1456,28 @@ pub fn zip_write(
 	root_dir: String,
 	txhashset_data: File,
 	header: &BlockHeader,
+	sandbox: bool,
 ) -> Result<(), Error> {
-	let txhashset_path = Path::new(&root_dir).join(TXHASHSET_SUBDIR);
+	let txhashset_path = Path::new(&root_dir).join(
+		if sandbox { TXHASHSET_SANDBOX_SUBDIR } else { TXHASHSET_SUBDIR }
+	);
 	fs::create_dir_all(txhashset_path.clone())?;
 	zip::decompress(txhashset_data, &txhashset_path, expected_file)
 		.map_err(|ze| ErrorKind::Other(ze.to_string()))?;
 	check_and_remove_files(&txhashset_path, header)
+}
+
+/// Clean the temporary sandbox folder
+pub fn clean_txhashset_sandbox(root_dir: String) {
+	let txhashset_path = Path::new(&root_dir).join(TXHASHSET_SANDBOX_SUBDIR);
+	if txhashset_path.exists() {
+		if let Err(e) = fs::remove_dir_all(&txhashset_path) {
+			warn!(
+				"clean_txhashset_sandbox: fail on {:?}. err: {}",
+				txhashset_path, e
+			);
+		}
+	}
 }
 
 fn expected_file(path: &Path) -> bool {
