@@ -35,6 +35,7 @@ use grin_store;
 use grin_store::pmmr::{PMMRBackend, PMMR_FILES};
 use std::collections::HashSet;
 use std::fs::{self, File};
+use std::panic;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
@@ -1456,8 +1457,31 @@ pub fn zip_write(
 ) -> Result<(), Error> {
 	let txhashset_path = Path::new(&root_dir).join(TXHASHSET_SUBDIR);
 	fs::create_dir_all(txhashset_path.clone())?;
-	zip::decompress(txhashset_data, &txhashset_path, expected_file)
-		.map_err(|ze| ErrorKind::Other(ze.to_string()))?;
+
+	// catch the panic to avoid the thread quit
+	{
+		panic::set_hook(Box::new(|_info| {
+			// do nothing
+		}));
+		let result = panic::catch_unwind(|| {
+			zip::decompress(txhashset_data, &txhashset_path, expected_file)
+				.map_err(|ze| ErrorKind::Other(ze.to_string()))
+		});
+		match result {
+			Ok(res) => {
+				if let Err(e) = res {
+					return Err(e.into());
+				}
+			}
+			Err(_) => {
+				error!("caught panic on zip::decompress!");
+				return Err(
+					ErrorKind::InvalidTxHashSet("panic on zip::decompress".to_owned()).into(),
+				);
+			}
+		}
+	}
+
 	check_and_remove_files(&txhashset_path, header)
 }
 
