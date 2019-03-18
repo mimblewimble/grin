@@ -803,6 +803,7 @@ impl Chain {
 				"{}: header_head not found in chain db: {} at {}",
 				caller, header_head.last_block_h, header_head.height,
 			);
+			return Ok(false);
 		}
 
 		//
@@ -828,15 +829,20 @@ impl Chain {
 
 		if oldest_height < header_head.height.saturating_sub(horizon) {
 			if oldest_height > 0 {
+				// this is the normal case. for example:
+				// body head height is 1 (and not a fork), oldest_height will be 2
+				// body head height is 0 (a typical fresh node), oldest_height will be 1
+				// body head height is 10,001 (but at a fork), oldest_height will be 10,001
+				// body head height is 10,005 (but at a fork with depth 5), oldest_height will be 10,001
 				debug!(
 					"{}: need a state sync for txhashset. oldest block which is not on local chain: {} at {}",
 					caller, oldest_hash, oldest_height,
 				);
-				Ok(true)
 			} else {
-				error!("{}: something is wrong! oldest_height is 0", caller);
-				Ok(false)
+				// this is the abnormal case, when is_on_current_chain() already return Err, and even for genesis block.
+				error!("{}: corrupted storage? oldest_height is 0 when check_txhashset_needed. state sync is needed", caller);
 			}
+			Ok(true)
 		} else {
 			Ok(false)
 		}
