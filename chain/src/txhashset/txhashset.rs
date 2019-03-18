@@ -117,7 +117,11 @@ impl TxHashSet {
 		header: Option<&BlockHeader>,
 		sandbox: bool,
 	) -> Result<TxHashSet, Error> {
-		let txhashset_subdir = if sandbox { TXHASHSET_SANDBOX_SUBDIR } else { TXHASHSET_SUBDIR };
+		let txhashset_subdir = if sandbox {
+			TXHASHSET_SANDBOX_SUBDIR
+		} else {
+			TXHASHSET_SUBDIR
+		};
 		Ok(TxHashSet {
 			header_pmmr_h: PMMRHandle::new(
 				&root_dir,
@@ -1458,9 +1462,11 @@ pub fn zip_write(
 	header: &BlockHeader,
 	sandbox: bool,
 ) -> Result<(), Error> {
-	let txhashset_path = Path::new(&root_dir).join(
-		if sandbox { TXHASHSET_SANDBOX_SUBDIR } else { TXHASHSET_SUBDIR }
-	);
+	let txhashset_path = Path::new(&root_dir).join(if sandbox {
+		TXHASHSET_SANDBOX_SUBDIR
+	} else {
+		TXHASHSET_SUBDIR
+	});
 	fs::create_dir_all(txhashset_path.clone())?;
 	zip::decompress(txhashset_data, &txhashset_path, expected_file)
 		.map_err(|ze| ErrorKind::Other(ze.to_string()))?;
