@@ -716,7 +716,7 @@ pub trait FixedLength {
 pub trait PMMRable: Writeable + Clone + Debug + DefaultHashable {
 	/// The type of element actually stored in the MMR data file.
 	/// This allows us to store Hash elements in the header MMR for variable size BlockHeaders.
-	type E: FixedLength + Readable + Writeable;
+	type E: FixedLength + Readable + Writeable + Debug;
 
 	/// Convert the pmmrable into the element to be stored in the MMR data file.
 	fn as_elmt(&self) -> Self::E;
