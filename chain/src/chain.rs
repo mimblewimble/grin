@@ -765,11 +765,15 @@ impl Chain {
 	}
 
 	/// Check chain status whether a txhashset downloading is needed
-	pub fn check_txhashset_needed(&self, caller: String, hashes: &mut Option<Vec<Hash>>) -> bool {
+	pub fn check_txhashset_needed(
+		&self,
+		caller: String,
+		hashes: &mut Option<Vec<Hash>>,
+	) -> Result<bool, Error> {
 		let horizon = global::cut_through_horizon() as u64;
-		let body_head = self.head().unwrap();
-		let header_head = self.header_head().unwrap();
-		let sync_head = self.get_sync_head().unwrap();
+		let body_head = self.head()?;
+		let header_head = self.header_head()?;
+		let sync_head = self.get_sync_head()?;
 
 		debug!(
 			"{}: body_head - {}, {}, header_head - {}, {}, sync_head - {}, {}",
@@ -787,7 +791,7 @@ impl Chain {
 				"{}: no need txhashset. header_head.total_difficulty: {} <= body_head.total_difficulty: {}",
 				caller, header_head.total_difficulty, body_head.total_difficulty,
 			);
-			return false;
+			return Ok(false);
 		}
 
 		let mut oldest_height = 0;
@@ -799,7 +803,7 @@ impl Chain {
 				"{}: header_head not found in chain db: {} at {}",
 				caller, header_head.last_block_h, header_head.height,
 			);
-			return false;
+			return Ok(false);
 		}
 
 		//
@@ -838,9 +842,10 @@ impl Chain {
 				// this is the abnormal case, when is_on_current_chain() already return Err, and even for genesis block.
 				error!("{}: corrupted storage? oldest_height is 0 when check_txhashset_needed. state sync is needed", caller);
 			}
-			return true;
+			Ok(true)
+		} else {
+			Ok(false)
 		}
-		return false;
 	}
 
 	/// Writes a reading view on a txhashset state that's been provided to us.
@@ -857,7 +862,7 @@ impl Chain {
 
 		// Initial check whether this txhashset is needed or not
 		let mut hashes: Option<Vec<Hash>> = None;
-		if !self.check_txhashset_needed("txhashset_write".to_owned(), &mut hashes) {
+		if !self.check_txhashset_needed("txhashset_write".to_owned(), &mut hashes)? {
 			warn!("txhashset_write: txhashset received but it's not needed! ignored.");
 			return Err(ErrorKind::InvalidTxHashSet("not needed".to_owned()).into());
 		}
@@ -1236,10 +1241,10 @@ impl Chain {
 	/// Builds an iterator on blocks starting from the current chain head and
 	/// running backward. Specialized to return information pertaining to block
 	/// difficulty calculation (timestamp and previous difficulties).
-	pub fn difficulty_iter(&self) -> store::DifficultyIter<'_> {
-		let head = self.head().unwrap();
+	pub fn difficulty_iter(&self) -> Result<store::DifficultyIter<'_>, Error> {
+		let head = self.head()?;
 		let store = self.store.clone();
-		store::DifficultyIter::from(head.last_block_h, store)
+		Ok(store::DifficultyIter::from(head.last_block_h, store))
 	}
 
 	/// Check whether we have a block without reading it

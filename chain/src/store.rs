@@ -272,7 +272,7 @@ impl<'a> Batch<'a> {
 	/// Clear all entries from the output_pos index (must be rebuilt after).
 	pub fn clear_output_pos(&self) -> Result<(), Error> {
 		let key = to_key(COMMIT_POS_PREFIX, &mut "".to_string().into_bytes());
-		for (k, _) in self.db.iter::<u64>(&key).unwrap() {
+		for (k, _) in self.db.iter::<u64>(&key)? {
 			self.db.delete(&k)?;
 		}
 		Ok(())
