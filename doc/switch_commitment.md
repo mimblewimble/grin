@@ -1,6 +1,5 @@
 # Introduction to Switch Commitments
 
-*Read this in other languages:[Korean](switch_commitment_KR.md)
 
 ## General introduction
 
