@@ -468,6 +468,7 @@ pub trait Keychain: Sync + Send + Clone {
 	fn derive_key(&self, amount: u64, id: &Identifier) -> Result<SecretKey, Error>;
 	fn commit(&self, amount: u64, id: &Identifier) -> Result<Commitment, Error>;
 	fn blind_sum(&self, blind_sum: &BlindSum) -> Result<BlindingFactor, Error>;
+	fn create_nonce(&self, commit: &Commitment) -> Result<SecretKey, Error>;
 	fn sign(&self, msg: &Message, amount: u64, id: &Identifier) -> Result<Signature, Error>;
 	fn sign_with_blinding(&self, _: &Message, _: &BlindingFactor) -> Result<Signature, Error>;
 	fn set_use_switch_commits(&mut self, value: bool);
