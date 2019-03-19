@@ -4,16 +4,9 @@ MimbleWimble은 Pruning 데이터만 있는 시스템의 상태를 사용자가 
 
 또한 거의 모든 거래 데이터 (입력, 출력, Excess 및 Excess proof)는 어떤 방식으로 합산 될 수 있으므로 Merkle sum 트리를 기본 옵션으로 처리하고 여기에서 합계를 처리하는 것이 좋습니다.
 
-A design goal of Grin is that all structures be as easy to implement and
-as simple as possible. MimbleWimble introduces a lot of new cryptography
-so it should be made as easy to understand as possible. Its validation rules
-are simple to specify (no scripts) and Grin is written in a language with
-very explicit semantics, so simplicity is also good to achieve well-understood
-consensus rules.
-
 Grin의 디자인 목표는 모든 구조를 구현하기 쉽고 가능한 한 간단하게 만드는 것입니다.
-MimbleWimble은 많은 새로운 암호화 방식을 내 놓았고 이러한 방식을  가능한 한 쉽게 이해할 수 있도록 만들어야합니다.
-새로운 암호화 방식의 유효성 규칙은 스크립트가 없이도 지정하기 쉽고 Grin은 매우 명확한 의미론을 가진 프로그래밍 언어로 작성되기 때문에 잘 이해되는 합의 규칙을 달성하는 것이 단순합니다.
+MimbleWimble은 많은 새로운 암호화 방식을 내 놓았고 이러한 방식을 가능한 한 쉽게 이해할 수 있도록 만들어야합니다.
+새로운 암호화 방식의 입증 규칙은 스크립트가 없이도 구체화 하기 쉽고 Grin은 매우 명확한 의미론을 가진 프로그래밍 언어로 작성되기 때문에 단순함은 잘 알려진 컨센서스 룰을 달성하는 것에도 좋습니다.
 
 ## Merkle Trees
 
@@ -65,13 +58,9 @@ Root 합계는 이 블록의 Excess 합계와 같아야 합니다. 이에 대해
 
 1. 부분 아카이브 노드에서 pruning 된 tree의 serialzatoin 과 효율적인 병합을 지원해야 합니다.
 
-## Proposed Merkle Structure
+## 제안된 Merkle 구조
 
-**The following design is proposed for all trees: a sum-MMR where every node
-sums a count of its children _as well as_ the data it is supposed to sum.
-The result is that every node commits to the count of all its children.**
-
-**모든 tree에 대해 다음과 같은 설계가 제안됩니다. Sum-MMR은 더할 데이터 뿐만 아니라 자식의 수도 더합니다.
+**모든 tree에 대해 다음과 같은 설계가 제안됩니다. Sum-MMR은 모든 노드가 합계에 포함될 데이터 와 자식수의 합계입니다.
 결과적으로 모든 노드가 모든 하위 노드의 수로 커밋됩니다.**
 
 [MMRs, or Merkle Mountain Ranges](https://github.com/opentimestamps/opentimestamps-server/blob/master/doc/merkle-mountain-range.md)
@@ -106,44 +95,19 @@ Grin은 proof of spentness가 필요하지 않지만 SPV client 을 위해 앞�
 
 코인은 spent 에서 unspent로 이동하지 않으므로 spent 된 코인에 대한 데이터는 더 이상 업데이트나 검색를 위해 필요하지 않습니다.
 
-### Efficient serialization of pruned trees
+### Pruning 된 tree 의 효율적인 Serialization
 
-Since every node has a count of its children, validators can determine the
-structure of the tree without needing all the hashes, and can determine which
-nodes are siblings, and so on.
+모든 노드는 자식 수를 가지므로 밸리데이터는 모든 해시가 없이도 tree 구조를 결정할 수 있으며 형제 노드를 결정할 수 있습니다.
 
-In the output set each node also commits to a sum of its unspent children, so
-a validator knows if it is missing data on unspent coins by checking whether or
-not this sum on a pruned node is zero.
-
-모든 노드는 자식 수를 가지므로 밸리데이터는 모든 해시를 필요로하지 않고 tree 구조를 결정할 수 있으며 형제 노드를 결정할 수 있습니다.
-
-출력 세트에서 각 노드는 unspent한 자식의 합계도 커밋하므로 밸리데이터는 정리되지 않은 노드에서이 합계가 0인지 여부를 확인하여 사용되지 않은 동전의 데이터가 누락되었는지 확인합니다.
+출력 세트에서 각 노드는 unspent한 자식의 합계도 커밋하므로 밸리데이터는 pruning 된 노드에서 합계가 0인지 여부를 반드시 확인을 하기에 unspent 된 코인의 데이터가 누락되더라도 알게 됩니다.
 
 ## Algorithms
 
-(To appear alongside an implementation.)
+구현체로서 함께 표시됩니다.
+( 소스코드를 참고하라는 의미 - 역자 주 )
 
 ## Storage
 
-The sum tree data structure allows the efficient storage of the output set and
-output witnesses while allowing immediate retrieval of a root hash or root sum
-(when applicable). However, the tree must contain every output commitment and
-witness hash in the system. This data is too big to be permanently stored in
-memory and too costly to be rebuilt from scratch at every restart, even if we
-consider pruning (at this time, Bitcoin has over 50M UTXOs which would require
-at least 3.2GB, assuming a couple hashes per UTXO). So we need an efficient way
-to store this data structure on disk.
+합계 tree 데이터 구조를 사용하면 출력 set과 출력 증거를 효율적으로 저장하면서 root 해시 또는 root 합계 (해당되는 경우)를 즉시 검색 할 수 있습니다. 그러나 tree는 시스템에 모든 출력 commitment 와 증거 해시를 포함해야합니다. 이 데이터는 너무 커서 pruning을 고려하더라도 메모리에 영구적으로 저장 될 수 없으며 재시작 할 때마다 처음부터 다시 작성하기에는 비용이 큽니다. (이런 경우에 Bitcoin이 UTXO당 2개의 해시를 가진다고 가정하면 적어도 3.2GB의 용량을 필요로 하는 50M UTXO가 있습니다.). 따라서 이 데이터 구조를 디스크에 저장하는 효율적인 방법이 필요합니다.
 
-Another limitation of a hash tree is that, given a key (i.e. an output
-commitment), it's impossible to find the leaf in the tree associated with that
-key. We can't walk down the tree from the root in any meaningful way. So an
-additional index over the whole key space is required. As an MMR is an append
-only binary tree, we can find a key in the tree by its insertion position. So a
-full index of keys inserted in the tree (i.e. an output commitment) to their
-insertion positions is also required.
-
-
-합계 트리 데이터 구조를 사용하면 출력 집합과 출력 증인을 효율적으로 저장하면서 루트 해시 또는 루트 합계 (해당되는 경우)를 즉시 검색 할 수 있습니다. 그러나 트리는 시스템에 모든 출력 약속 및 감시 해시를 포함해야합니다. 이 데이터는 너무 커서 메모리에 영구적으로 저장 될 수 없으며 재시작 할 때마다 처음부터 다시 작성하기에는 너무 비싸다. (이번에는 Bitcoin이 적어도 3.2GB를 필요로하는 50M UTXO를 가지고있다. UTXO 당). 따라서이 데이터 구조를 디스크에 저장하는 효율적인 방법이 필요합니다.
-
-해시 트리의 또 다른 한계는 키 (즉, 출력 커미트먼트)가 주어지면, 그 키와 연관된 트리에서 잎을 발견하는 것이 불가능하다는 것이다. 우리는 의미있는 방식으로 뿌리에서 나무를 걸어 내려 갈 수 없습니다. 따라서 전체 키 공간에 대한 추가 색인이 필요합니다. MMR은 추가 전용 이진 트리이므로 삽입 위치를 기준으로 트리에서 키를 찾을 수 있습니다. 따라서 트리에 삽입 된 키의 전체 인덱스 (즉, 출력 커미트먼트)가 그들의 삽입 위치에 또한 요구된다.
+해시 트리의 또 다른 한계는 키 (즉, 출력 commitment)가 주어지면, 그 키와 연관된 tree에서 리프노드를 발견하는 것이 불가능합니다. 그래서 root에서 tree로 찾아 내려 갈 수 없습니다. 따라서 전체 키에 대한 추가 인덱스가 필요합니다. MMR은 append 전용 바이너리 tree이므로 삽입 위치를 기준으로 tree에서 키를 찾을 수 있습니다. 따라서 tree에 삽입 된 키의 전체 인덱스 (즉, 출력 commitment)의 삽입 포지션 또한 필요합니다.
