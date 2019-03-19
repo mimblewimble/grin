@@ -79,7 +79,7 @@ pub fn monitor_transactions(
 
 // Query the pool for transactions older than the cutoff.
 // Used for both periodic fluffing and handling expired embargo timer.
-fn select_txs_cutoff(pool: &Pool, cutoff_secs: u64) -> Vec<PoolEntry> {
+fn select_txs_cutoff(pool: &Pool, cutoff_secs: u16) -> Vec<PoolEntry> {
 	let cutoff = Utc::now().timestamp() - cutoff_secs as i64;
 	pool.entries
 		.iter()
@@ -97,7 +97,7 @@ fn process_fluff_phase(
 	// Take a write lock on the txpool for the duration of this processing.
 	let mut tx_pool = tx_pool.write();
 
-	let all_entries = select_txs_cutoff(&tx_pool.stempool, 0);
+	let all_entries = tx_pool.stempool.entries.clone();
 	if all_entries.is_empty() {
 		return Ok(());
 	}

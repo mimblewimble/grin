@@ -28,16 +28,16 @@ use grin_core as core;
 use grin_keychain as keychain;
 
 /// Dandelion "epoch" length.
-const DANDELION_EPOCH_SECS: u64 = 600;
+const DANDELION_EPOCH_SECS: u16 = 600;
 
 /// Dandelion embargo timer.
-const DANDELION_EMBARGO_SECS: u64 = 180;
+const DANDELION_EMBARGO_SECS: u16 = 180;
 
 /// Dandelion aggregation timer.
-const DANDELION_AGGREGATION_SECS: u64 = 30;
+const DANDELION_AGGREGATION_SECS: u16 = 30;
 
 /// Dandelion stem probability (stem 90% of the time, fluff 10%).
-const DANDELION_STEM_PROBABILITY: u64 = 90;
+const DANDELION_STEM_PROBABILITY: u8 = 90;
 
 /// Configuration for "Dandelion".
 /// Note: shared between p2p and pool.
@@ -45,17 +45,17 @@ const DANDELION_STEM_PROBABILITY: u64 = 90;
 pub struct DandelionConfig {
 	/// Length of each "epoch".
 	#[serde(default = "default_dandelion_epoch_secs")]
-	pub epoch_secs: Option<u64>,
+	pub epoch_secs: Option<u16>,
 	/// Dandelion embargo timer. Fluff and broadcast individual txs if not seen
 	/// on network before embargo expires.
 	#[serde(default = "default_dandelion_embargo_secs")]
-	pub embargo_secs: Option<u64>,
+	pub embargo_secs: Option<u16>,
 	/// Dandelion aggregation timer.
 	#[serde(default = "default_dandelion_aggregation_secs")]
-	pub aggregation_secs: Option<u64>,
+	pub aggregation_secs: Option<u16>,
 	/// Dandelion stem probability (stem 90% of the time, fluff 10% etc.)
 	#[serde(default = "default_dandelion_stem_probability")]
-	pub stem_probability: Option<u64>,
+	pub stem_probability: Option<u8>,
 }
 
 impl Default for DandelionConfig {
@@ -69,19 +69,19 @@ impl Default for DandelionConfig {
 	}
 }
 
-fn default_dandelion_epoch_secs() -> Option<u64> {
+fn default_dandelion_epoch_secs() -> Option<u16> {
 	Some(DANDELION_EPOCH_SECS)
 }
 
-fn default_dandelion_embargo_secs() -> Option<u64> {
+fn default_dandelion_embargo_secs() -> Option<u16> {
 	Some(DANDELION_EMBARGO_SECS)
 }
 
-fn default_dandelion_aggregation_secs() -> Option<u64> {
+fn default_dandelion_aggregation_secs() -> Option<u16> {
 	Some(DANDELION_AGGREGATION_SECS)
 }
 
-fn default_dandelion_stem_probability() -> Option<u64> {
+fn default_dandelion_stem_probability() -> Option<u8> {
 	Some(DANDELION_STEM_PROBABILITY)
 }
 
