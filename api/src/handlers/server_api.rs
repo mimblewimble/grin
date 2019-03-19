@@ -45,12 +45,12 @@ pub struct StatusHandler {
 
 impl StatusHandler {
 	fn get_status(&self) -> Result<Status, Error> {
-		let head = w(&self.chain)
+		let head = w(&self.chain)?
 			.head()
 			.map_err(|e| ErrorKind::Internal(format!("can't get head: {}", e)))?;
 		Ok(Status::from_tip_and_peers(
 			head,
-			w(&self.peers).peer_count(),
+			w(&self.peers)?.peer_count(),
 		))
 	}
 }

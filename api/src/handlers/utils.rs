@@ -24,8 +24,9 @@ use std::sync::{Arc, Weak};
 // All handlers use `Weak` references instead of `Arc` to avoid cycles that
 // can never be destroyed. These 2 functions are simple helpers to reduce the
 // boilerplate of dealing with `Weak`.
-pub fn w<T>(weak: &Weak<T>) -> Arc<T> {
-	weak.upgrade().unwrap()
+pub fn w<T>(weak: &Weak<T>) -> Result<Arc<T>, Error> {
+	weak.upgrade()
+		.ok_or_else(|| ErrorKind::Internal("failed to upgrade weak refernce".to_owned()).into())
 }
 
 /// Retrieves an output from the chain given a commit id (a tiny bit iteratively)
@@ -48,14 +49,16 @@ pub fn get_output(
 		OutputIdentifier::new(OutputFeatures::Coinbase, &commit),
 	];
 
-	for x in outputs.iter().filter(|x| w(chain).is_unspent(x).is_ok()) {
-		let block_height = w(chain)
+	let chain = w(chain)?;
+
+	for x in outputs.iter().filter(|x| chain.is_unspent(x).is_ok()) {
+		let block_height = chain
 			.get_header_for_output(&x)
 			.context(ErrorKind::Internal(
 				"Can't get header for output".to_owned(),
 			))?
 			.height;
-		let output_pos = w(chain).get_output_pos(&x.commit).unwrap_or(0);
+		let output_pos = chain.get_output_pos(&x.commit).unwrap_or(0);
 		return Ok((Output::new(&commit, block_height, output_pos), x.clone()));
 	}
 	Err(ErrorKind::NotFound)?

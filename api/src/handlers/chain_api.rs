@@ -21,6 +21,7 @@ use crate::types::*;
 use crate::util;
 use crate::util::secp::pedersen::Commitment;
 use crate::web::*;
+use failure::ResultExt;
 use hyper::{Body, Request, StatusCode};
 use std::sync::Weak;
 
@@ -32,7 +33,7 @@ pub struct ChainHandler {
 
 impl ChainHandler {
 	fn get_tip(&self) -> Result<Tip, Error> {
-		let head = w(&self.chain)
+		let head = w(&self.chain)?
 			.head()
 			.map_err(|e| ErrorKind::Internal(format!("can't get head: {}", e)))?;
 		Ok(Tip::from_tip(head))
@@ -53,7 +54,7 @@ pub struct ChainValidationHandler {
 
 impl Handler for ChainValidationHandler {
 	fn get(&self, _req: Request<Body>) -> ResponseFuture {
-		match w(&self.chain).validate(true) {
+		match w_fut!(&self.chain).validate(true) {
 			Ok(_) => response(StatusCode::OK, "{}"),
 			Err(e) => response(
 				StatusCode::INTERNAL_SERVER_ERROR,
@@ -72,7 +73,7 @@ pub struct ChainCompactHandler {
 
 impl Handler for ChainCompactHandler {
 	fn post(&self, _req: Request<Body>) -> ResponseFuture {
-		match w(&self.chain).compact() {
+		match w_fut!(&self.chain).compact() {
 			Ok(_) => response(StatusCode::OK, "{}"),
 			Err(e) => response(
 				StatusCode::INTERNAL_SERVER_ERROR,
@@ -118,13 +119,14 @@ impl OutputHandler {
 		commitments: Vec<Commitment>,
 		include_proof: bool,
 	) -> Result<BlockOutputs, Error> {
-		let header = w(&self.chain)
+		let header = w(&self.chain)?
 			.get_header_by_height(block_height)
 			.map_err(|_| ErrorKind::NotFound)?;
 
 		// TODO - possible to compact away blocks we care about
 		// in the period between accepting the block and refreshing the wallet
-		let block = w(&self.chain)
+		let chain = w(&self.chain)?;
+		let block = chain
 			.get_block(&header.hash())
 			.map_err(|_| ErrorKind::NotFound)?;
 		let outputs = block
@@ -132,9 +134,10 @@ impl OutputHandler {
 			.iter()
 			.filter(|output| commitments.is_empty() || commitments.contains(&output.commit))
 			.map(|output| {
-				OutputPrintable::from_output(output, w(&self.chain), Some(&header), include_proof)
+				OutputPrintable::from_output(output, chain.clone(), Some(&header), include_proof)
 			})
-			.collect();
+			.collect::<Result<Vec<_>, _>>()
+			.context(ErrorKind::Internal("cain error".to_owned()))?;
 
 		Ok(BlockOutputs {
 			header: BlockHeaderInfo::from_header(&header),

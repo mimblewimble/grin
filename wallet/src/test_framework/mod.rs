@@ -75,7 +75,7 @@ fn get_outputs_by_pmmr_index_local(
 		outputs: outputs
 			.2
 			.iter()
-			.map(|x| api::OutputPrintable::from_output(x, chain.clone(), None, true))
+			.map(|x| api::OutputPrintable::from_output(x, chain.clone(), None, true).unwrap())
 			.collect(),
 	}
 }
