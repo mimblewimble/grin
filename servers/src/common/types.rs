@@ -468,13 +468,13 @@ impl DandelionEpoch {
 	/// Is the current Dandelion epoch expired?
 	/// It is expired if start_time is older than the configured epoch_secs.
 	pub fn is_expired(&self) -> bool {
-		let expired = if let Some(start_time) = self.start_time {
-			let epoch_secs = self.config.epoch_secs.expect("epoch_secs config missing") as i64;
-			Utc::now().timestamp().saturating_sub(start_time) > epoch_secs
-		} else {
-			true
-		};
-		expired
+		match self.start_time {
+			None => true,
+			Some(start_time) => {
+				let epoch_secs = self.config.epoch_secs.expect("epoch_secs config missing") as i64;
+				Utc::now().timestamp().saturating_sub(start_time) > epoch_secs
+			}
+		}
 	}
 
 	/// Transition to next Dandelion epoch.
