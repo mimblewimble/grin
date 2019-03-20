@@ -13,9 +13,11 @@
 // limitations under the License.
 
 //! Server types
-use crate::util::RwLock;
 use std::convert::From;
 use std::sync::Arc;
+
+use chrono::prelude::{DateTime, Utc};
+use rand::prelude::*;
 
 use crate::api;
 use crate::chain;
@@ -23,8 +25,9 @@ use crate::core::global::ChainTypes;
 use crate::core::{core, pow};
 use crate::p2p;
 use crate::pool;
+use crate::pool::types::DandelionConfig;
 use crate::store;
-use chrono::prelude::{DateTime, Utc};
+use crate::util::RwLock;
 
 /// Error type wrapping underlying module errors.
 #[derive(Debug)]
@@ -435,5 +438,96 @@ impl chain::TxHashsetWriteStatus for SyncState {
 
 	fn on_done(&self) {
 		self.update(SyncStatus::TxHashsetDone);
+	}
+}
+
+/// A node is either "stem" of "fluff" for the duration of a single epoch.
+/// A node also maintains an outbound relay peer for the epoch.
+#[derive(Debug)]
+pub struct DandelionEpoch {
+	config: DandelionConfig,
+	// When did this epoch start?
+	start_time: Option<i64>,
+	// Are we in "stem" mode or "fluff" mode for this epoch?
+	is_stem: bool,
+	// Our current Dandelion relay peer (effective for this epoch).
+	relay_peer: Option<Arc<p2p::Peer>>,
+}
+
+impl DandelionEpoch {
+	/// Create a new Dandelion epoch, defaulting to "stem" and no outbound relay peer.
+	pub fn new(config: DandelionConfig) -> DandelionEpoch {
+		DandelionEpoch {
+			config,
+			start_time: None,
+			is_stem: true,
+			relay_peer: None,
+		}
+	}
+
+	/// Is the current Dandelion epoch expired?
+	/// It is expired if start_time is older than the configured epoch_secs.
+	pub fn is_expired(&self) -> bool {
+		match self.start_time {
+			None => true,
+			Some(start_time) => {
+				let epoch_secs = self.config.epoch_secs.expect("epoch_secs config missing") as i64;
+				Utc::now().timestamp().saturating_sub(start_time) > epoch_secs
+			}
+		}
+	}
+
+	/// Transition to next Dandelion epoch.
+	/// Select stem/fluff based on configured stem_probability.
+	/// Choose a new outbound stem relay peer.
+	pub fn next_epoch(&mut self, peers: &Arc<p2p::Peers>) {
+		self.start_time = Some(Utc::now().timestamp());
+		self.relay_peer = peers.outgoing_connected_peers().first().cloned();
+
+		// If stem_probability == 90 then we stem 90% of the time.
+		let mut rng = rand::thread_rng();
+		let stem_probability = self
+			.config
+			.stem_probability
+			.expect("stem_probability config missing");
+		self.is_stem = rng.gen_range(0, 100) < stem_probability;
+
+		let addr = self.relay_peer.clone().map(|p| p.info.addr);
+		info!(
+			"DandelionEpoch: next_epoch: is_stem: {} ({}%), relay: {:?}",
+			self.is_stem, stem_probability, addr
+		);
+	}
+
+	/// Are we stemming (or fluffing) transactions in this epoch?
+	pub fn is_stem(&self) -> bool {
+		self.is_stem
+	}
+
+	/// What is our current relay peer?
+	/// If it is not connected then choose a new one.
+	pub fn relay_peer(&mut self, peers: &Arc<p2p::Peers>) -> Option<Arc<p2p::Peer>> {
+		let mut update_relay = false;
+		if let Some(peer) = &self.relay_peer {
+			if !peer.is_connected() {
+				info!(
+					"DandelionEpoch: relay_peer: {:?} not connected, choosing a new one.",
+					peer.info.addr
+				);
+				update_relay = true;
+			}
+		} else {
+			update_relay = true;
+		}
+
+		if update_relay {
+			self.relay_peer = peers.outgoing_connected_peers().first().cloned();
+			info!(
+				"DandelionEpoch: relay_peer: new peer chosen: {:?}",
+				self.relay_peer.clone().map(|p| p.info.addr)
+			);
+		}
+
+		self.relay_peer.clone()
 	}
 }

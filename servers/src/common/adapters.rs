@@ -23,7 +23,9 @@ use std::time::Instant;
 
 use crate::chain::{self, BlockStatus, ChainAdapter, Options};
 use crate::common::hooks::{ChainEvents, NetEvents};
-use crate::common::types::{self, ChainValidationMode, ServerConfig, SyncState, SyncStatus};
+use crate::common::types::{
+	self, ChainValidationMode, DandelionEpoch, ServerConfig, SyncState, SyncStatus,
+};
 use crate::core::core::hash::{Hash, Hashed};
 use crate::core::core::transaction::Transaction;
 use crate::core::core::verifier_cache::VerifierCache;
@@ -33,6 +35,7 @@ use crate::core::{core, global};
 use crate::p2p;
 use crate::p2p::types::PeerAddr;
 use crate::pool;
+use crate::pool::types::DandelionConfig;
 use crate::util::OneTime;
 use chrono::prelude::*;
 use chrono::Duration;
@@ -685,26 +688,77 @@ impl ChainToPoolAndNetAdapter {
 /// transactions that have been accepted.
 pub struct PoolToNetAdapter {
 	peers: OneTime<Weak<p2p::Peers>>,
+	dandelion_epoch: Arc<RwLock<DandelionEpoch>>,
+}
+
+/// Adapter between the Dandelion monitor and the current Dandelion "epoch".
+pub trait DandelionAdapter: Send + Sync {
+	/// Is the node stemming (or fluffing) transactions in the current epoch?
+	fn is_stem(&self) -> bool;
+
+	/// Is the current Dandelion epoch expired?
+	fn is_expired(&self) -> bool;
+
+	/// Transition to the next Dandelion epoch (new stem/fluff state, select new relay peer).
+	fn next_epoch(&self);
+}
+
+impl DandelionAdapter for PoolToNetAdapter {
+	fn is_stem(&self) -> bool {
+		self.dandelion_epoch.read().is_stem()
+	}
+
+	fn is_expired(&self) -> bool {
+		self.dandelion_epoch.read().is_expired()
+	}
+
+	fn next_epoch(&self) {
+		self.dandelion_epoch.write().next_epoch(&self.peers());
+	}
 }
 
 impl pool::PoolAdapter for PoolToNetAdapter {
-	fn stem_tx_accepted(&self, tx: &core::Transaction) -> Result<(), pool::PoolError> {
-		self.peers()
-			.relay_stem_transaction(tx)
-			.map_err(|_| pool::PoolError::DandelionError)?;
-		Ok(())
-	}
-
 	fn tx_accepted(&self, tx: &core::Transaction) {
 		self.peers().broadcast_transaction(tx);
+	}
+
+	fn stem_tx_accepted(&self, tx: &core::Transaction) -> Result<(), pool::PoolError> {
+		// Take write lock on the current epoch.
+		// We need to be able to update the current relay peer if not currently connected.
+		let mut epoch = self.dandelion_epoch.write();
+
+		// If "stem" epoch attempt to relay the tx to the next Dandelion relay.
+		// Fallback to immediately fluffing the tx if we cannot stem for any reason.
+		// If "fluff" epoch then nothing to do right now (fluff via Dandelion monitor).
+		if epoch.is_stem() {
+			if let Some(peer) = epoch.relay_peer(&self.peers()) {
+				match peer.send_stem_transaction(tx) {
+					Ok(_) => {
+						info!("Stemming this epoch, relaying to next peer.");
+						Ok(())
+					}
+					Err(e) => {
+						error!("Stemming tx failed. Fluffing. {:?}", e);
+						Err(pool::PoolError::DandelionError)
+					}
+				}
+			} else {
+				error!("No relay peer. Fluffing.");
+				Err(pool::PoolError::DandelionError)
+			}
+		} else {
+			info!("Fluff epoch. Aggregating stem tx(s). Will fluff via Dandelion monitor.");
+			Ok(())
+		}
 	}
 }
 
 impl PoolToNetAdapter {
 	/// Create a new pool to net adapter
-	pub fn new() -> PoolToNetAdapter {
+	pub fn new(config: DandelionConfig) -> PoolToNetAdapter {
 		PoolToNetAdapter {
 			peers: OneTime::new(),
+			dandelion_epoch: Arc::new(RwLock::new(DandelionEpoch::new(config))),
 		}
 	}
 

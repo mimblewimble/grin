@@ -154,7 +154,7 @@ impl Server {
 		let verifier_cache = Arc::new(RwLock::new(LruVerifierCache::new()));
 
 		let pool_adapter = Arc::new(PoolToChainAdapter::new());
-		let pool_net_adapter = Arc::new(PoolToNetAdapter::new());
+		let pool_net_adapter = Arc::new(PoolToNetAdapter::new(config.dandelion_config.clone()));
 		let tx_pool = Arc::new(RwLock::new(pool::TransactionPool::new(
 			config.pool_config.clone(),
 			pool_adapter.clone(),
@@ -207,6 +207,8 @@ impl Server {
 			genesis.hash(),
 			stop_state.clone(),
 		)?);
+
+		// Initialize various adapters with our dynamic set of connected peers.
 		chain_adapter.init(p2p_server.peers.clone());
 		pool_net_adapter.init(p2p_server.peers.clone());
 		net_adapter.init(p2p_server.peers.clone());
@@ -227,7 +229,6 @@ impl Server {
 			seed::connect_and_monitor(
 				p2p_server.clone(),
 				config.p2p_config.capabilities,
-				config.dandelion_config.clone(),
 				seeder,
 				config.p2p_config.peers_preferred.clone(),
 				stop_state.clone(),
@@ -281,6 +282,7 @@ impl Server {
 		dandelion_monitor::monitor_transactions(
 			config.dandelion_config.clone(),
 			tx_pool.clone(),
+			pool_net_adapter.clone(),
 			verifier_cache.clone(),
 			stop_state.clone(),
 		);

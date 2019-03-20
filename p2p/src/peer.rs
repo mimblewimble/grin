@@ -13,6 +13,7 @@
 // limitations under the License.
 
 use crate::util::{Mutex, RwLock};
+use std::fmt;
 use std::fs::File;
 use std::net::{Shutdown, TcpStream};
 use std::sync::Arc;
@@ -52,6 +53,12 @@ pub struct Peer {
 	// set of all hashes known to this peer (so no need to send)
 	tracking_adapter: TrackingAdapter,
 	connection: Option<Mutex<conn::Tracker>>,
+}
+
+impl fmt::Debug for Peer {
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+		write!(f, "Peer({:?})", &self.info)
+	}
 }
 
 impl Peer {
