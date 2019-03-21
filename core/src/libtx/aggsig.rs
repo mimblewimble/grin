@@ -421,14 +421,15 @@ pub fn add_signatures(
 	Ok(sig)
 }
 
-/// Just a simple sig, creates its own nonce, etc
+/// Just a simple sig, creates its own nonce if not provided
 pub fn sign_single(
 	secp: &Secp256k1,
 	msg: &Message,
 	skey: &SecretKey,
+	snonce: Option<&SecretKey>,
 	pubkey_sum: Option<&PublicKey>,
 ) -> Result<Signature, Error> {
-	let sig = aggsig::sign_single(secp, &msg, skey, None, None, None, pubkey_sum, None)?;
+	let sig = aggsig::sign_single(secp, &msg, skey, snonce, None, None, pubkey_sum, None)?;
 	Ok(sig)
 }
 
