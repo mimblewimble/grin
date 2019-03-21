@@ -75,7 +75,7 @@ pub mod option_sig_serde {
 	where
 		D: Deserializer<'de>,
 	{
-		Option::<&str>::deserialize(deserializer).and_then(|res| match res {
+		Option::<String>::deserialize(deserializer).and_then(|res| match res {
 			Some(string) => from_hex(string.to_string())
 				.map_err(|err| Error::custom(err.to_string()))
 				.and_then(|bytes: Vec<u8>| {
