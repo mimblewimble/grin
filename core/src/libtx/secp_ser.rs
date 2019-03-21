@@ -195,7 +195,7 @@ mod test {
 			let mut msg = [0u8; 32];
 			thread_rng().fill(&mut msg);
 			let msg = Message::from_slice(&msg).unwrap();
-			let sig = aggsig::sign_single(&secp, &msg, &sk, None).unwrap();
+			let sig = aggsig::sign_single(&secp, &msg, &sk, None, None).unwrap();
 			SerTest {
 				pub_key: PublicKey::from_secret_key(&secp, &sk).unwrap(),
 				opt_sig: Some(sig.clone()),
