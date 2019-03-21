@@ -159,9 +159,11 @@ pub struct TxKernel {
 	/// Options for a kernel's structure or use
 	pub features: KernelFeatures,
 	/// Fee originally included in the transaction this proof is for.
+	#[serde(with = "secp_ser::string_or_u64")]
 	pub fee: u64,
 	/// This kernel is not valid earlier than lock_height blocks
 	/// The max lock_height of all *inputs* to this transaction
+	#[serde(with = "secp_ser::string_or_u64")]
 	pub lock_height: u64,
 	/// Remainder of the sum of all transaction commitments. If the transaction
 	/// is well formed, amounts components should sum to zero and the excess
