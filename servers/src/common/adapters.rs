@@ -245,14 +245,6 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 			return false;
 		}
 
-		if !self.sync_state.is_syncing() {
-			for header in bhs.iter() {
-				for hook in &self.hooks {
-					hook.on_header_received(&header, &addr);
-				}
-			}
-		}
-
 		// try to add headers to our header chain
 		let res = self.chain().sync_block_headers(bhs, self.chain_opts(true));
 		if let &Err(ref e) = &res {
