@@ -36,7 +36,9 @@ use crate::util::secp::pedersen::{Commitment, RangeProof};
 use crate::util::{Mutex, RwLock, StopState};
 use grin_store::Error::NotFoundErr;
 use std::collections::HashMap;
+use std::env;
 use std::fs::File;
+use std::path::PathBuf;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -181,7 +183,7 @@ impl Chain {
 
 			// open the txhashset, creating a new one if necessary
 			let mut txhashset =
-				txhashset::TxHashSet::open(db_root.clone(), store.clone(), None, false)?;
+				txhashset::TxHashSet::open(db_root.clone(), store.clone(), None, None)?;
 
 			setup_head(&genesis, &store, &mut txhashset)?;
 			Chain::log_heads(&store)?;
@@ -845,7 +847,7 @@ impl Chain {
 
 	/// Clean the temporary sandbox folder
 	pub fn clean_txhashset_sandbox(&self) {
-		txhashset::clean_txhashset_sandbox(self.db_root.clone());
+		txhashset::clean_txhashset_folder(&env::temp_dir());
 	}
 
 	/// Writes a reading view on a txhashset state that's been provided to us.
@@ -869,20 +871,19 @@ impl Chain {
 
 		let header = self.get_block_header(&h)?;
 
-		// Write hashset to sandbox
-		txhashset::clean_txhashset_sandbox(self.db_root.clone());
+		// Write txhashset to sandbox
+		txhashset::clean_txhashset_folder(&env::temp_dir());
 		txhashset::zip_write(
-			self.db_root.clone(),
+			env::temp_dir(),
 			txhashset_data.try_clone()?,
 			&header,
-			true,
 		)?;
 
 		let mut txhashset = txhashset::TxHashSet::open(
 			self.db_root.clone(),
 			self.store.clone(),
 			Some(&header),
-			true,
+			Some(env::temp_dir().to_str().expect("invalid temp folder").to_owned()),
 		)?;
 
 		// The txhashset.zip contains the output, rangeproof and kernel MMRs.
@@ -900,16 +901,15 @@ impl Chain {
 				txhashset_ref.release_backend_files();
 			}
 
-			txhashset::zip_write(self.db_root.clone(), txhashset_data, &header, false)?;
+			txhashset::txhashset_replace(env::temp_dir(), PathBuf::from(self.db_root.clone()))?;
+			debug!("txhashset_write - overwrite completed successfully");
 
 			txhashset = txhashset::TxHashSet::open(
 				self.db_root.clone(),
 				self.store.clone(),
 				Some(&header),
-				false,
+				None,
 			)?;
-
-			txhashset::clean_txhashset_sandbox(self.db_root.clone());
 		}
 
 		// all good, prepare a new batch and update all the required records

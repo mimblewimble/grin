@@ -41,7 +41,6 @@ use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
 const HEADERHASHSET_SUBDIR: &'static str = "header";
 const TXHASHSET_SUBDIR: &'static str = "txhashset";
-const TXHASHSET_SANDBOX_SUBDIR: &'static str = "txhashset_sandbox";
 
 const HEADER_HEAD_SUBDIR: &'static str = "header_head";
 const SYNC_HEAD_SUBDIR: &'static str = "sync_head";
@@ -115,12 +114,12 @@ impl TxHashSet {
 		root_dir: String,
 		commit_index: Arc<ChainStore>,
 		header: Option<&BlockHeader>,
-		sandbox: bool,
+		sandbox_dir: Option<String>,
 	) -> Result<TxHashSet, Error> {
-		let txhashset_subdir = if sandbox {
-			TXHASHSET_SANDBOX_SUBDIR
+		let txhashset_rootdir = if let Some(sandbox) = sandbox_dir {
+			sandbox.clone()
 		} else {
-			TXHASHSET_SUBDIR
+			root_dir.clone()
 		};
 		Ok(TxHashSet {
 			header_pmmr_h: PMMRHandle::new(
@@ -138,22 +137,22 @@ impl TxHashSet {
 				None,
 			)?,
 			output_pmmr_h: PMMRHandle::new(
-				&root_dir,
-				txhashset_subdir,
+				&txhashset_rootdir,
+				TXHASHSET_SUBDIR,
 				OUTPUT_SUBDIR,
 				true,
 				header,
 			)?,
 			rproof_pmmr_h: PMMRHandle::new(
-				&root_dir,
-				txhashset_subdir,
+				&txhashset_rootdir,
+				TXHASHSET_SUBDIR,
 				RANGE_PROOF_SUBDIR,
 				true,
 				header,
 			)?,
 			kernel_pmmr_h: PMMRHandle::new(
-				&root_dir,
-				txhashset_subdir,
+				&txhashset_rootdir,
+				TXHASHSET_SUBDIR,
 				KERNEL_SUBDIR,
 				false,
 				None,
@@ -1457,29 +1456,45 @@ pub fn zip_read(root_dir: String, header: &BlockHeader, rand: Option<u32>) -> Re
 /// Extract the txhashset data from a zip file and writes the content into the
 /// txhashset storage dir
 pub fn zip_write(
-	root_dir: String,
+	root_dir: PathBuf,
 	txhashset_data: File,
 	header: &BlockHeader,
-	sandbox: bool,
 ) -> Result<(), Error> {
-	let txhashset_path = Path::new(&root_dir).join(if sandbox {
-		TXHASHSET_SANDBOX_SUBDIR
-	} else {
-		TXHASHSET_SUBDIR
-	});
+	let txhashset_path = root_dir.clone().join(TXHASHSET_SUBDIR);
 	fs::create_dir_all(txhashset_path.clone())?;
 	zip::decompress(txhashset_data, &txhashset_path, expected_file)
 		.map_err(|ze| ErrorKind::Other(ze.to_string()))?;
 	check_and_remove_files(&txhashset_path, header)
 }
 
-/// Clean the temporary sandbox folder
-pub fn clean_txhashset_sandbox(root_dir: String) {
-	let txhashset_path = Path::new(&root_dir).join(TXHASHSET_SANDBOX_SUBDIR);
+/// Rename a folder to another
+pub fn txhashset_replace(
+	from: PathBuf,
+	to: PathBuf,
+) -> Result<(), Error>  {
+	// clean the 'to' folder firstly
+	clean_txhashset_folder(&to);
+
+	// rename the 'from' folder as the 'to' folder
+	let txhashset_from_path = from.clone().join(TXHASHSET_SUBDIR);
+	let txhashset_to_path = to.clone().join(TXHASHSET_SUBDIR);
+	if let Err(e) = fs::rename(txhashset_from_path, txhashset_to_path) {
+		error!("txhashset_replace fail. err: {}", e);
+		Err(ErrorKind::TxHashSetErr(format!("txhashset replacing fail")).into())
+	} else {
+		Ok(())
+	}
+}
+
+/// Clean the txhashset folder
+pub fn clean_txhashset_folder(
+	root_dir: &PathBuf,
+) {
+	let txhashset_path = root_dir.clone().join(TXHASHSET_SUBDIR);
 	if txhashset_path.exists() {
-		if let Err(e) = fs::remove_dir_all(&txhashset_path) {
+		if let Err(e) = fs::remove_dir_all(txhashset_path.clone()) {
 			warn!(
-				"clean_txhashset_sandbox: fail on {:?}. err: {}",
+				"clean_txhashset_folder: fail on {:?}. err: {}",
 				txhashset_path, e
 			);
 		}
