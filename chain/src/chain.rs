@@ -873,17 +873,18 @@ impl Chain {
 
 		// Write txhashset to sandbox
 		txhashset::clean_txhashset_folder(&env::temp_dir());
-		txhashset::zip_write(
-			env::temp_dir(),
-			txhashset_data.try_clone()?,
-			&header,
-		)?;
+		txhashset::zip_write(env::temp_dir(), txhashset_data.try_clone()?, &header)?;
 
 		let mut txhashset = txhashset::TxHashSet::open(
 			self.db_root.clone(),
 			self.store.clone(),
 			Some(&header),
-			Some(env::temp_dir().to_str().expect("invalid temp folder").to_owned()),
+			Some(
+				env::temp_dir()
+					.to_str()
+					.expect("invalid temp folder")
+					.to_owned(),
+			),
 		)?;
 
 		// The txhashset.zip contains the output, rangeproof and kernel MMRs.

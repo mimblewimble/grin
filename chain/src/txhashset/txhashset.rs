@@ -1468,10 +1468,7 @@ pub fn zip_write(
 }
 
 /// Rename a folder to another
-pub fn txhashset_replace(
-	from: PathBuf,
-	to: PathBuf,
-) -> Result<(), Error>  {
+pub fn txhashset_replace(from: PathBuf, to: PathBuf) -> Result<(), Error> {
 	// clean the 'to' folder firstly
 	clean_txhashset_folder(&to);
 
@@ -1487,9 +1484,7 @@ pub fn txhashset_replace(
 }
 
 /// Clean the txhashset folder
-pub fn clean_txhashset_folder(
-	root_dir: &PathBuf,
-) {
+pub fn clean_txhashset_folder(root_dir: &PathBuf) {
 	let txhashset_path = root_dir.clone().join(TXHASHSET_SUBDIR);
 	if txhashset_path.exists() {
 		if let Err(e) = fs::remove_dir_all(txhashset_path.clone()) {
