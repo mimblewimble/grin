@@ -71,8 +71,8 @@ where
 	let mut decompressed = 0;
 
 	// catch the panic to avoid the thread quit
-	panic::set_hook(Box::new(|_info| {
-		// do nothing
+	panic::set_hook(Box::new(|panic_info| {
+		error!("panic occurred: {:?}", panic_info.payload().downcast_ref::<&str>().unwrap());
 	}));
 	let result = panic::catch_unwind(move || {
 		let mut archive = zip_rs::ZipArchive::new(src_file)?;
@@ -132,8 +132,8 @@ where
 			Ok(_) => res,
 		},
 		Err(e) => {
-			error!("caught panic on zip::decompress! e: {:?}", e);
-			Err(zip::result::ZipError::InvalidArchive("caught panic"))
+			error!("panic occurred on zip::decompress!");
+			Err(zip::result::ZipError::InvalidArchive("panic occurred on zip::decompress"))
 		}
 	}
 }
