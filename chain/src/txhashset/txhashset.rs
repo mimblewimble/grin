@@ -1456,10 +1456,8 @@ pub fn zip_write(
 ) -> Result<(), Error> {
 	let txhashset_path = Path::new(&root_dir).join(TXHASHSET_SUBDIR);
 	fs::create_dir_all(txhashset_path.clone())?;
-
 	zip::decompress(txhashset_data, &txhashset_path, expected_file)
 		.map_err(|ze| ErrorKind::Other(ze.to_string()))?;
-
 	check_and_remove_files(&txhashset_path, header)
 }
 
