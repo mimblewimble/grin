@@ -134,7 +134,7 @@ where
 			Err(e) => Err(e.into()),
 			Ok(_) => res,
 		},
-		Err(e) => {
+		Err(_) => {
 			error!("panic occurred on zip::decompress!");
 			Err(zip::result::ZipError::InvalidArchive(
 				"panic occurred on zip::decompress",
