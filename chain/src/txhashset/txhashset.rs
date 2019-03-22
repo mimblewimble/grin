@@ -1460,6 +1460,7 @@ pub fn zip_write(
 	txhashset_data: File,
 	header: &BlockHeader,
 ) -> Result<(), Error> {
+	debug!("zip_write on path: {:?}", root_dir);
 	let txhashset_path = root_dir.clone().join(TXHASHSET_SUBDIR);
 	fs::create_dir_all(txhashset_path.clone())?;
 	zip::decompress(txhashset_data, &txhashset_path, expected_file)
@@ -1469,6 +1470,8 @@ pub fn zip_write(
 
 /// Rename a folder to another
 pub fn txhashset_replace(from: PathBuf, to: PathBuf) -> Result<(), Error> {
+	debug!("txhashset_replace: move from {:?} to {:?}", from, to);
+
 	// clean the 'to' folder firstly
 	clean_txhashset_folder(&to);
 

@@ -894,25 +894,6 @@ impl Chain {
 		// Validate the full kernel history (kernel MMR root for every block header).
 		self.validate_kernel_history(&header, &txhashset)?;
 
-		// sandbox validation ok, go to overwrite txhashset and clean the sandbox
-		{
-			// Before overwriting, drop file handles in underlying txhashset
-			{
-				let mut txhashset_ref = self.txhashset.write();
-				txhashset_ref.release_backend_files();
-			}
-
-			txhashset::txhashset_replace(env::temp_dir(), PathBuf::from(self.db_root.clone()))?;
-			debug!("txhashset_write - overwrite completed successfully");
-
-			txhashset = txhashset::TxHashSet::open(
-				self.db_root.clone(),
-				self.store.clone(),
-				Some(&header),
-				None,
-			)?;
-		}
-
 		// all good, prepare a new batch and update all the required records
 		debug!("txhashset_write: rewinding a 2nd time (writeable)");
 
@@ -955,6 +936,24 @@ impl Chain {
 		batch.commit()?;
 
 		debug!("txhashset_write: finished committing the batch (head etc.)");
+
+		// sandbox full validation ok, go to overwrite txhashset on db root
+		{
+			// Before overwriting, drop file handles in underlying txhashset
+			{
+				let mut txhashset_ref = self.txhashset.write();
+				txhashset_ref.release_backend_files();
+			}
+
+			txhashset::txhashset_replace(env::temp_dir(), PathBuf::from(self.db_root.clone()))?;
+
+			txhashset = txhashset::TxHashSet::open(
+				self.db_root.clone(),
+				self.store.clone(),
+				Some(&header),
+				None,
+			)?;
+		}
 
 		// Replace the chain txhashset with the newly built one.
 		{
