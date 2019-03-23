@@ -182,8 +182,7 @@ impl Chain {
 			let store = Arc::new(store::ChainStore::new(db_env)?);
 
 			// open the txhashset, creating a new one if necessary
-			let mut txhashset =
-				txhashset::TxHashSet::open(db_root.clone(), store.clone(), None)?;
+			let mut txhashset = txhashset::TxHashSet::open(db_root.clone(), store.clone(), None)?;
 
 			setup_head(&genesis, &store, &mut txhashset)?;
 			Chain::log_heads(&store)?;

@@ -1470,14 +1470,23 @@ pub fn hashset_replace(from: PathBuf, to: PathBuf) -> Result<(), Error> {
 	clean_hashset_folder(&to);
 
 	// rename the 'from' folder as the 'to' folder
-	if let Err(e) = fs::rename(from.clone().join(TXHASHSET_SUBDIR), to.clone().join(TXHASHSET_SUBDIR)) {
+	if let Err(e) = fs::rename(
+		from.clone().join(TXHASHSET_SUBDIR),
+		to.clone().join(TXHASHSET_SUBDIR),
+	) {
 		error!("hashset_replace fail on {}. err: {}", TXHASHSET_SUBDIR, e);
 		return Err(ErrorKind::TxHashSetErr(format!("txhashset replacing fail")).into());
 	}
 
 	// rename the 'from' folder as the 'to' folder
-	if let Err(e) = fs::rename(from.clone().join(HEADERHASHSET_SUBDIR), to.clone().join(HEADERHASHSET_SUBDIR)) {
-		error!("hashset_replace fail on {}. err: {}", HEADERHASHSET_SUBDIR, e);
+	if let Err(e) = fs::rename(
+		from.clone().join(HEADERHASHSET_SUBDIR),
+		to.clone().join(HEADERHASHSET_SUBDIR),
+	) {
+		error!(
+			"hashset_replace fail on {}. err: {}",
+			HEADERHASHSET_SUBDIR, e
+		);
 		return Err(ErrorKind::TxHashSetErr(format!("txhashset replacing fail")).into());
 	}
 
