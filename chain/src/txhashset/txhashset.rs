@@ -1462,12 +1462,12 @@ pub fn zip_write(
 	check_and_remove_files(&txhashset_path, header)
 }
 
-/// Overwrite 2 hashset folders ('txhashset' & 'header') in "to" folder with "from" folder
-pub fn hashset_replace(from: PathBuf, to: PathBuf) -> Result<(), Error> {
-	debug!("hashset_replace: move from {:?} to {:?}", from, to);
+/// Overwrite txhashset folders in "to" folder with "from" folder
+pub fn txhashset_replace(from: PathBuf, to: PathBuf) -> Result<(), Error> {
+	debug!("txhashset_replace: move from {:?} to {:?}", from, to);
 
 	// clean the 'to' folder firstly
-	clean_hashset_folder(&to);
+	clean_txhashset_folder(&to);
 
 	// rename the 'from' folder as the 'to' folder
 	if let Err(e) = fs::rename(
@@ -1475,42 +1475,20 @@ pub fn hashset_replace(from: PathBuf, to: PathBuf) -> Result<(), Error> {
 		to.clone().join(TXHASHSET_SUBDIR),
 	) {
 		error!("hashset_replace fail on {}. err: {}", TXHASHSET_SUBDIR, e);
-		return Err(ErrorKind::TxHashSetErr(format!("txhashset replacing fail")).into());
+		Err(ErrorKind::TxHashSetErr(format!("txhashset replacing fail")).into())
+	} else {
+		Ok(())
 	}
-
-	// rename the 'from' folder as the 'to' folder
-	if let Err(e) = fs::rename(
-		from.clone().join(HEADERHASHSET_SUBDIR),
-		to.clone().join(HEADERHASHSET_SUBDIR),
-	) {
-		error!(
-			"hashset_replace fail on {}. err: {}",
-			HEADERHASHSET_SUBDIR, e
-		);
-		return Err(ErrorKind::TxHashSetErr(format!("txhashset replacing fail")).into());
-	}
-
-	return Ok(());
 }
 
-/// Clean the hashset folder (txhashset and header hashset)
-pub fn clean_hashset_folder(root_dir: &PathBuf) {
+/// Clean the txhashset folder
+pub fn clean_txhashset_folder(root_dir: &PathBuf) {
 	let txhashset_path = root_dir.clone().join(TXHASHSET_SUBDIR);
 	if txhashset_path.exists() {
 		if let Err(e) = fs::remove_dir_all(txhashset_path.clone()) {
 			warn!(
-				"clean_hashset_folder: fail on {:?}. err: {}",
+				"clean_txhashset_folder: fail on {:?}. err: {}",
 				txhashset_path, e
-			);
-		}
-	}
-
-	let header_hashset_path = root_dir.clone().join(HEADERHASHSET_SUBDIR);
-	if header_hashset_path.exists() {
-		if let Err(e) = fs::remove_dir_all(header_hashset_path.clone()) {
-			warn!(
-				"clean_hashset_folder: fail on {:?}. err: {}",
-				header_hashset_path, e
 			);
 		}
 	}

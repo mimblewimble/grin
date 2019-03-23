@@ -845,8 +845,8 @@ impl Chain {
 	}
 
 	/// Clean the temporary sandbox folder
-	pub fn clean_hashset_sandbox(&self) {
-		txhashset::clean_hashset_folder(&env::temp_dir());
+	pub fn clean_txhashset_sandbox(&self) {
+		txhashset::clean_txhashset_folder(&env::temp_dir());
 	}
 
 	/// Writes a reading view on a txhashset state that's been provided to us.
@@ -871,7 +871,7 @@ impl Chain {
 		let header = self.get_block_header(&h)?;
 
 		// Write txhashset to sandbox (in the os temporary directory)
-		txhashset::clean_hashset_folder(&env::temp_dir());
+		txhashset::clean_txhashset_folder(&env::temp_dir());
 		txhashset::zip_write(env::temp_dir(), txhashset_data.try_clone()?, &header)?;
 
 		let mut txhashset = txhashset::TxHashSet::open(
@@ -935,25 +935,25 @@ impl Chain {
 
 		// Sandbox full validation ok, go to overwrite txhashset on db root
 		{
+			let mut txhashset_ref = self.txhashset.write();
+
 			// Before overwriting, drop file handlers in underlying txhashset
-			{
-				let mut txhashset_ref = self.txhashset.write();
-				txhashset_ref.release_backend_files();
-			}
+			txhashset_ref.release_backend_files();
 
+			// Move sandbox to overwrite
 			txhashset.release_backend_files();
-			txhashset::hashset_replace(env::temp_dir(), PathBuf::from(self.db_root.clone()))?;
+			txhashset::txhashset_replace(env::temp_dir(), PathBuf::from(self.db_root.clone()))?;
 
+			// Re-open on db root dir
 			txhashset = txhashset::TxHashSet::open(
 				self.db_root.clone(),
 				self.store.clone(),
 				Some(&header),
 			)?;
-		}
 
-		// Replace the chain txhashset with the newly built one.
-		{
-			let mut txhashset_ref = self.txhashset.write();
+			self.rebuild_header_mmr(&Tip::from_header(&header), &mut txhashset)?;
+
+			// Replace the chain txhashset with the newly built one.
 			*txhashset_ref = txhashset;
 		}
 
