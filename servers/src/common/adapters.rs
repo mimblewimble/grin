@@ -110,10 +110,11 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 	}
 
 	fn block_received(&self, b: core::Block, addr: PeerAddr, was_requested: bool) -> bool {
-		for hook in &self.hooks {
-			hook.on_block_received(&b, &addr);
+		if !self.sync_state.is_syncing() {
+			for hook in &self.hooks {
+				hook.on_block_received(&b, &addr);
+			}
 		}
-
 		self.process_block(b, addr, was_requested)
 	}
 
@@ -123,8 +124,10 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 			// push the freshly hydrated block through the chain pipeline
 			match core::Block::hydrate_from(cb, vec![]) {
 				Ok(block) => {
-					for hook in &self.hooks {
-						hook.on_block_received(&block, &addr);
+					if !self.sync_state.is_syncing() {
+						for hook in &self.hooks {
+							hook.on_block_received(&block, &addr);
+						}
 					}
 					self.process_block(block, addr, false)
 				}
@@ -162,8 +165,10 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 
 			let block = match core::Block::hydrate_from(cb.clone(), txs) {
 				Ok(block) => {
-					for hook in &self.hooks {
-						hook.on_block_received(&block, &addr);
+					if !self.sync_state.is_syncing() {
+						for hook in &self.hooks {
+							hook.on_block_received(&block, &addr);
+						}
 					}
 					block
 				}
@@ -198,8 +203,10 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 	}
 
 	fn header_received(&self, bh: core::BlockHeader, addr: PeerAddr) -> bool {
-		for hook in &self.hooks {
-			hook.on_header_received(&bh, &addr);
+		if !self.sync_state.is_syncing() {
+			for hook in &self.hooks {
+				hook.on_header_received(&bh, &addr);
+			}
 		}
 
 		// pushing the new block header through the header chain pipeline
@@ -236,12 +243,6 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 
 		if bhs.len() == 0 {
 			return false;
-		}
-
-		for header in bhs.iter() {
-			for hook in &self.hooks {
-				hook.on_header_received(&header, &addr);
-			}
 		}
 
 		// try to add headers to our header chain
@@ -619,12 +620,11 @@ pub struct ChainToPoolAndNetAdapter {
 
 impl ChainAdapter for ChainToPoolAndNetAdapter {
 	fn block_accepted(&self, b: &core::Block, status: BlockStatus, opts: Options) {
-		for hook in &self.hooks {
-			hook.on_block_accepted(b, &status);
-		}
-
 		// not broadcasting blocks received through sync
 		if !opts.contains(chain::Options::SYNC) {
+			for hook in &self.hooks {
+				hook.on_block_accepted(b, &status);
+			}
 			// If we mined the block then we want to broadcast the compact block.
 			// If we received the block from another node then broadcast "header first"
 			// to minimize network traffic.
