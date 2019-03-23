@@ -44,7 +44,7 @@ fn test_unexpected_zip() {
 	let db_env = Arc::new(store::new_env(db_root.clone()));
 	let chain_store = ChainStore::new(db_env).unwrap();
 	let store = Arc::new(chain_store);
-	txhashset::TxHashSet::open(db_root.clone(), store.clone(), None, None).unwrap();
+	txhashset::TxHashSet::open(db_root.clone(), store.clone(), None).unwrap();
 	// First check if everything works out of the box
 	assert!(txhashset::zip_read(db_root.clone(), &BlockHeader::default(), Some(rand)).is_ok());
 	let zip_path = Path::new(&db_root).join(format!("txhashset_snapshot_{}.zip", rand));

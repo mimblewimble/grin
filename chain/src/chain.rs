@@ -183,7 +183,7 @@ impl Chain {
 
 			// open the txhashset, creating a new one if necessary
 			let mut txhashset =
-				txhashset::TxHashSet::open(db_root.clone(), store.clone(), None, None)?;
+				txhashset::TxHashSet::open(db_root.clone(), store.clone(), None)?;
 
 			setup_head(&genesis, &store, &mut txhashset)?;
 			Chain::log_heads(&store)?;
@@ -846,8 +846,8 @@ impl Chain {
 	}
 
 	/// Clean the temporary sandbox folder
-	pub fn clean_txhashset_sandbox(&self) {
-		txhashset::clean_txhashset_folder(&env::temp_dir());
+	pub fn clean_hashset_sandbox(&self) {
+		txhashset::clean_hashset_folder(&env::temp_dir());
 	}
 
 	/// Writes a reading view on a txhashset state that's been provided to us.
@@ -871,20 +871,17 @@ impl Chain {
 
 		let header = self.get_block_header(&h)?;
 
-		// Write txhashset to sandbox
-		txhashset::clean_txhashset_folder(&env::temp_dir());
+		// Write txhashset to sandbox (in the os temporary directory)
+		txhashset::clean_hashset_folder(&env::temp_dir());
 		txhashset::zip_write(env::temp_dir(), txhashset_data.try_clone()?, &header)?;
 
 		let mut txhashset = txhashset::TxHashSet::open(
-			self.db_root.clone(),
+			env::temp_dir()
+				.to_str()
+				.expect("invalid temp folder")
+				.to_owned(),
 			self.store.clone(),
 			Some(&header),
-			Some(
-				env::temp_dir()
-					.to_str()
-					.expect("invalid temp folder")
-					.to_owned(),
-			),
 		)?;
 
 		// The txhashset.zip contains the output, rangeproof and kernel MMRs.
@@ -937,21 +934,21 @@ impl Chain {
 
 		debug!("txhashset_write: finished committing the batch (head etc.)");
 
-		// sandbox full validation ok, go to overwrite txhashset on db root
+		// Sandbox full validation ok, go to overwrite txhashset on db root
 		{
-			// Before overwriting, drop file handles in underlying txhashset
+			// Before overwriting, drop file handlers in underlying txhashset
 			{
 				let mut txhashset_ref = self.txhashset.write();
 				txhashset_ref.release_backend_files();
 			}
 
-			txhashset::txhashset_replace(env::temp_dir(), PathBuf::from(self.db_root.clone()))?;
+			txhashset.release_backend_files();
+			txhashset::hashset_replace(env::temp_dir(), PathBuf::from(self.db_root.clone()))?;
 
 			txhashset = txhashset::TxHashSet::open(
 				self.db_root.clone(),
 				self.store.clone(),
 				Some(&header),
-				None,
 			)?;
 		}
 

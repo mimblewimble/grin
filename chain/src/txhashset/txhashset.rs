@@ -114,13 +114,7 @@ impl TxHashSet {
 		root_dir: String,
 		commit_index: Arc<ChainStore>,
 		header: Option<&BlockHeader>,
-		sandbox_dir: Option<String>,
 	) -> Result<TxHashSet, Error> {
-		let txhashset_rootdir = if let Some(sandbox) = sandbox_dir {
-			sandbox.clone()
-		} else {
-			root_dir.clone()
-		};
 		Ok(TxHashSet {
 			header_pmmr_h: PMMRHandle::new(
 				&root_dir,
@@ -137,21 +131,21 @@ impl TxHashSet {
 				None,
 			)?,
 			output_pmmr_h: PMMRHandle::new(
-				&txhashset_rootdir,
+				&root_dir,
 				TXHASHSET_SUBDIR,
 				OUTPUT_SUBDIR,
 				true,
 				header,
 			)?,
 			rproof_pmmr_h: PMMRHandle::new(
-				&txhashset_rootdir,
+				&root_dir,
 				TXHASHSET_SUBDIR,
 				RANGE_PROOF_SUBDIR,
 				true,
 				header,
 			)?,
 			kernel_pmmr_h: PMMRHandle::new(
-				&txhashset_rootdir,
+				&root_dir,
 				TXHASHSET_SUBDIR,
 				KERNEL_SUBDIR,
 				false,
@@ -1468,32 +1462,46 @@ pub fn zip_write(
 	check_and_remove_files(&txhashset_path, header)
 }
 
-/// Rename a folder to another
-pub fn txhashset_replace(from: PathBuf, to: PathBuf) -> Result<(), Error> {
-	debug!("txhashset_replace: move from {:?} to {:?}", from, to);
+/// Overwrite 2 hashset folders ('txhashset' & 'header') in "to" folder with "from" folder
+pub fn hashset_replace(from: PathBuf, to: PathBuf) -> Result<(), Error> {
+	debug!("hashset_replace: move from {:?} to {:?}", from, to);
 
 	// clean the 'to' folder firstly
-	clean_txhashset_folder(&to);
+	clean_hashset_folder(&to);
 
 	// rename the 'from' folder as the 'to' folder
-	let txhashset_from_path = from.clone().join(TXHASHSET_SUBDIR);
-	let txhashset_to_path = to.clone().join(TXHASHSET_SUBDIR);
-	if let Err(e) = fs::rename(txhashset_from_path, txhashset_to_path) {
-		error!("txhashset_replace fail. err: {}", e);
-		Err(ErrorKind::TxHashSetErr(format!("txhashset replacing fail")).into())
-	} else {
-		Ok(())
+	if let Err(e) = fs::rename(from.clone().join(TXHASHSET_SUBDIR), to.clone().join(TXHASHSET_SUBDIR)) {
+		error!("hashset_replace fail on {}. err: {}", TXHASHSET_SUBDIR, e);
+		return Err(ErrorKind::TxHashSetErr(format!("txhashset replacing fail")).into());
 	}
+
+	// rename the 'from' folder as the 'to' folder
+	if let Err(e) = fs::rename(from.clone().join(HEADERHASHSET_SUBDIR), to.clone().join(HEADERHASHSET_SUBDIR)) {
+		error!("hashset_replace fail on {}. err: {}", HEADERHASHSET_SUBDIR, e);
+		return Err(ErrorKind::TxHashSetErr(format!("txhashset replacing fail")).into());
+	}
+
+	return Ok(());
 }
 
-/// Clean the txhashset folder
-pub fn clean_txhashset_folder(root_dir: &PathBuf) {
+/// Clean the hashset folder (txhashset and header hashset)
+pub fn clean_hashset_folder(root_dir: &PathBuf) {
 	let txhashset_path = root_dir.clone().join(TXHASHSET_SUBDIR);
 	if txhashset_path.exists() {
 		if let Err(e) = fs::remove_dir_all(txhashset_path.clone()) {
 			warn!(
-				"clean_txhashset_folder: fail on {:?}. err: {}",
+				"clean_hashset_folder: fail on {:?}. err: {}",
 				txhashset_path, e
+			);
+		}
+	}
+
+	let header_hashset_path = root_dir.clone().join(HEADERHASHSET_SUBDIR);
+	if header_hashset_path.exists() {
+		if let Err(e) = fs::remove_dir_all(header_hashset_path.clone()) {
+			warn!(
+				"clean_hashset_folder: fail on {:?}. err: {}",
+				header_hashset_path, e
 			);
 		}
 	}
