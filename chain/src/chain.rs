@@ -871,13 +871,14 @@ impl Chain {
 		let header = self.get_block_header(&h)?;
 
 		// Write txhashset to sandbox (in the os temporary directory)
-		txhashset::clean_txhashset_folder(&env::temp_dir());
-		txhashset::zip_write(env::temp_dir(), txhashset_data.try_clone()?, &header)?;
+		let sandbox_dir = env::temp_dir();
+		txhashset::clean_txhashset_folder(&sandbox_dir);
+		txhashset::zip_write(sandbox_dir.clone(), txhashset_data.try_clone()?, &header)?;
 
 		let mut txhashset = txhashset::TxHashSet::open(
-			env::temp_dir()
+			sandbox_dir
 				.to_str()
-				.expect("invalid temp folder")
+				.expect("invalid sandbox folder")
 				.to_owned(),
 			self.store.clone(),
 			Some(&header),
@@ -942,7 +943,7 @@ impl Chain {
 
 			// Move sandbox to overwrite
 			txhashset.release_backend_files();
-			txhashset::txhashset_replace(env::temp_dir(), PathBuf::from(self.db_root.clone()))?;
+			txhashset::txhashset_replace(sandbox_dir, PathBuf::from(self.db_root.clone()))?;
 
 			// Re-open on db root dir
 			txhashset = txhashset::TxHashSet::open(
