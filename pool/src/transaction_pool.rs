@@ -29,6 +29,7 @@ use crate::types::{
 use chrono::prelude::*;
 use grin_core as core;
 use grin_util as util;
+use std::cmp::Ordering;
 use std::collections::VecDeque;
 use std::sync::Arc;
 
@@ -145,7 +146,13 @@ impl TransactionPool {
 		}
 
 		// Do we have the capacity to accept this transaction?
-		self.is_acceptable(&tx, stem)?;
+		let acceptability = self.is_acceptable(&tx, stem);
+		let mut evict = false;
+		if !stem && acceptability.as_ref().err() == Some(&PoolError::OverCapacity) {
+			evict = true;
+		} else if acceptability.is_err() {
+			return acceptability;
+		}
 
 		// Make sure the transaction is valid before anything else.
 		// Validate tx accounting for max tx weight.
@@ -157,6 +164,11 @@ impl TransactionPool {
 
 		// Check coinbase maturity before we go any further.
 		self.blockchain.verify_coinbase_maturity(&tx)?;
+
+		// Transaction passed all the checks but we have to make space for it
+		if evict {
+			self.evict_from_txpool(&tx)?;
+		}
 
 		let entry = PoolEntry {
 			state: PoolEntryState::Fresh,
@@ -182,6 +194,50 @@ impl TransactionPool {
 		self.add_to_txpool(entry.clone(), header)?;
 		self.add_to_reorg_cache(entry);
 		Ok(())
+	}
+
+	pub fn evict_from_txpool(&mut self, tx: &Transaction) -> Result<(), PoolError> {
+		// Order pool by fee over weight and time of the transaction
+		let mut ordered_entries = self.txpool.entries.clone();
+		ordered_entries.sort_by(|entry_a, entry_b| {
+			let fw_a = entry_a.tx.fee_weight_ratio();
+			let fw_b = entry_b.tx.fee_weight_ratio();
+			if fw_a > fw_b {
+				Ordering::Greater
+			} else if fw_a == fw_b && entry_a.tx_at < entry_b.tx_at {
+				Ordering::Greater
+			} else {
+				Ordering::Less
+			}
+		});
+
+		// Compute a list of parent transaction
+		let evictable_transactions = self.txpool.get_evictable_transactions();
+
+		// Compute fee weight ratio for incoming transaction
+		let fw = tx.fee_weight_ratio();
+
+		// Remove a single transaction iff not a bucket root of several txs
+		for entry in ordered_entries {
+			if evictable_transactions.contains(&entry.tx) {
+				let fw_entry = entry.tx.fee_weight_ratio();
+				// Check that the incoming transaction as enough fee compared to the one we will try to evict
+				if fw_entry >= fw {
+					let threshold = (entry.tx.tx_weight() as u64) * self.config.accept_fee_base;
+					return Err(PoolError::LowFeeTransaction(threshold));
+				}
+				// Remove transaction
+				self.txpool.entries = self
+					.txpool
+					.entries
+					.iter()
+					.filter(|x| x.tx != entry.tx)
+					.map(|x| x.clone())
+					.collect::<Vec<_>>();
+				return Ok(());
+			}
+		}
+		Err(PoolError::OverCapacity)
 	}
 
 	// Old txs will "age out" after 30 mins.
@@ -249,17 +305,11 @@ impl TransactionPool {
 	/// Whether the transaction is acceptable to the pool, given both how
 	/// full the pool is and the transaction weight.
 	fn is_acceptable(&self, tx: &Transaction, stem: bool) -> Result<(), PoolError> {
-		if self.total_size() > self.config.max_pool_size {
-			// TODO evict old/large transactions instead
-			return Err(PoolError::OverCapacity);
-		}
-
 		// Check that the stempool can accept this transaction
-		if stem {
-			if self.stempool.size() > self.config.max_stempool_size {
-				// TODO evict old/large transactions instead
-				return Err(PoolError::OverCapacity);
-			}
+		if stem && self.stempool.size() > self.config.max_stempool_size {
+			return Err(PoolError::OverCapacity);
+		} else if self.total_size() > self.config.max_pool_size {
+			return Err(PoolError::OverCapacity);
 		}
 
 		// for a basic transaction (1 input, 2 outputs) -

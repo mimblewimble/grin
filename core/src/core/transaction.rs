@@ -957,6 +957,11 @@ impl Transaction {
 		self.body.body_weight()
 	}
 
+	/// Calculate fee weight ratio
+	pub fn fee_weight_ratio(&self) -> u64 {
+		self.fee() * 1000 / self.tx_weight() as u64
+	}
+
 	/// Calculate transaction weight as a block
 	pub fn tx_weight_as_block(&self) -> usize {
 		self.body.body_weight_as_block()

@@ -340,7 +340,7 @@ impl Pool {
 	// Group dependent transactions in buckets (aggregated txs).
 	// Each bucket is independent from the others. Relies on the entries
 	// vector having parent transactions first (should always be the case).
-	fn bucket_transactions(&self, max_weight: usize) -> Vec<Transaction> {
+	pub fn bucket_transactions(&self, max_weight: usize) -> Vec<Transaction> {
 		let mut tx_buckets = vec![];
 		let mut output_commits = HashMap::new();
 		let mut rejected = HashSet::new();
@@ -425,6 +425,47 @@ impl Pool {
 			}
 		}
 		tx_buckets
+	}
+
+	/// Get a list of transaction that are potentially evictable, i.e. only transaction with no children
+	pub fn get_evictable_transactions(&self) -> Vec<Transaction> {
+		let mut tx_buckets = vec![];
+		let mut evictable_transactions = vec![];
+		let mut output_commits = HashMap::new();
+
+		for entry in &self.entries {
+			// check the commits index to find parents and their position
+			// picking the last one for bucket (so all parents come first)
+			let mut insert_pos: i32 = -1;
+			for input in entry.tx.inputs() {
+				if let Some(pos) = output_commits.get(&input.commitment()) {
+					if *pos > insert_pos {
+						insert_pos = *pos;
+					}
+				}
+			}
+			if insert_pos == -1 {
+				// no parent, just add to the end in its own bucket
+				insert_pos = tx_buckets.len() as i32;
+				tx_buckets.push(vec![entry.tx.clone()]);
+			} else {
+				// parent found, add to its bucket
+				tx_buckets[insert_pos as usize].push(entry.tx.clone());
+			}
+
+			// update the commits index
+			for out in entry.tx.outputs() {
+				output_commits.insert(out.commitment(), insert_pos);
+			}
+		}
+
+		for tx_bucket in tx_buckets {
+			if tx_bucket.len() == 1 {
+				// Add to evictable transactions list
+				evictable_transactions.push(tx_bucket[0].clone());
+			}
+		}
+		evictable_transactions
 	}
 
 	pub fn find_matching_transactions(&self, kernels: &[TxKernel]) -> Vec<Transaction> {
