@@ -131,6 +131,10 @@ impl WalletSeed {
 		Ok(WalletSeed::from_bytes(&bytes))
 	}
 
+	pub fn to_bytes(&self) -> Vec<u8> {
+		self.0.clone()
+	}
+
 	pub fn to_hex(&self) -> String {
 		util::to_hex(self.0.to_vec())
 	}

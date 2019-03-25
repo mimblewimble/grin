@@ -516,6 +516,14 @@ fn comments() -> HashMap<String, String> {
 		.to_string(),
 	);
 
+	retval.insert(
+		"log_max_files".to_string(),
+		"
+#maximum count of the log files to rotate over
+"
+		.to_string(),
+	);
+
 	retval
 }
 

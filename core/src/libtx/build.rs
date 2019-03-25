@@ -34,7 +34,8 @@ pub struct Context<'a, K>
 where
 	K: Keychain,
 {
-	keychain: &'a K,
+	/// The keychain used for key derivation
+	pub keychain: &'a K,
 }
 
 /// Function type returned by the transaction combinators. Transforms a

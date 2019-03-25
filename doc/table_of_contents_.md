@@ -1,5 +1,7 @@
 # Documentation structure
 
+*Read this in other languages: [Korean](table_of_contents_KR.md).*
+
 ## Explaining grin
 
 - [intro](intro.md) - Technical introduction to grin

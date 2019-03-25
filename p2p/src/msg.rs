@@ -160,18 +160,18 @@ pub fn read_message<T: Readable>(stream: &mut dyn Read, msg_type: Type) -> Resul
 	read_body(&header, stream)
 }
 
-pub fn write_to_buf<T: Writeable>(msg: T, msg_type: Type) -> Vec<u8> {
+pub fn write_to_buf<T: Writeable>(msg: T, msg_type: Type) -> Result<Vec<u8>, Error> {
 	// prepare the body first so we know its serialized length
 	let mut body_buf = vec![];
-	ser::serialize(&mut body_buf, &msg).unwrap();
+	ser::serialize(&mut body_buf, &msg)?;
 
 	// build and serialize the header using the body size
 	let mut msg_buf = vec![];
 	let blen = body_buf.len() as u64;
-	ser::serialize(&mut msg_buf, &MsgHeader::new(msg_type, blen)).unwrap();
+	ser::serialize(&mut msg_buf, &MsgHeader::new(msg_type, blen))?;
 	msg_buf.append(&mut body_buf);
 
-	msg_buf
+	Ok(msg_buf)
 }
 
 pub fn write_message<T: Writeable>(
@@ -179,7 +179,7 @@ pub fn write_message<T: Writeable>(
 	msg: T,
 	msg_type: Type,
 ) -> Result<(), Error> {
-	let buf = write_to_buf(msg, msg_type);
+	let buf = write_to_buf(msg, msg_type)?;
 	stream.write_all(&buf[..])?;
 	Ok(())
 }
@@ -268,11 +268,11 @@ impl Writeable for Hand {
 			[write_u32, self.capabilities.bits()],
 			[write_u64, self.nonce]
 		);
-		self.total_difficulty.write(writer).unwrap();
-		self.sender_addr.write(writer).unwrap();
-		self.receiver_addr.write(writer).unwrap();
-		writer.write_bytes(&self.user_agent).unwrap();
-		self.genesis.write(writer).unwrap();
+		self.total_difficulty.write(writer)?;
+		self.sender_addr.write(writer)?;
+		self.receiver_addr.write(writer)?;
+		writer.write_bytes(&self.user_agent)?;
+		self.genesis.write(writer)?;
 		Ok(())
 	}
 }
@@ -323,9 +323,9 @@ impl Writeable for Shake {
 			[write_u32, self.version],
 			[write_u32, self.capabilities.bits()]
 		);
-		self.total_difficulty.write(writer).unwrap();
-		writer.write_bytes(&self.user_agent).unwrap();
-		self.genesis.write(writer).unwrap();
+		self.total_difficulty.write(writer)?;
+		writer.write_bytes(&self.user_agent)?;
+		self.genesis.write(writer)?;
 		Ok(())
 	}
 }
@@ -379,7 +379,7 @@ impl Writeable for PeerAddrs {
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
 		writer.write_u32(self.peers.len() as u32)?;
 		for p in &self.peers {
-			p.write(writer).unwrap();
+			p.write(writer)?;
 		}
 		Ok(())
 	}
@@ -484,8 +484,8 @@ pub struct Ping {
 
 impl Writeable for Ping {
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
-		self.total_difficulty.write(writer).unwrap();
-		self.height.write(writer).unwrap();
+		self.total_difficulty.write(writer)?;
+		self.height.write(writer)?;
 		Ok(())
 	}
 }
@@ -511,8 +511,8 @@ pub struct Pong {
 
 impl Writeable for Pong {
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
-		self.total_difficulty.write(writer).unwrap();
-		self.height.write(writer).unwrap();
+		self.total_difficulty.write(writer)?;
+		self.height.write(writer)?;
 		Ok(())
 	}
 }
@@ -537,7 +537,7 @@ pub struct BanReason {
 impl Writeable for BanReason {
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
 		let ban_reason_i32 = self.ban_reason as i32;
-		ban_reason_i32.write(writer).unwrap();
+		ban_reason_i32.write(writer)?;
 		Ok(())
 	}
 }

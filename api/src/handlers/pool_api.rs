@@ -24,7 +24,7 @@ use crate::util;
 use crate::util::RwLock;
 use crate::web::*;
 use failure::ResultExt;
-use futures::future::ok;
+use futures::future::{err, ok};
 use futures::Future;
 use hyper::{Body, Request, StatusCode};
 use std::sync::Weak;
@@ -37,7 +37,7 @@ pub struct PoolInfoHandler {
 
 impl Handler for PoolInfoHandler {
 	fn get(&self, _req: Request<Body>) -> ResponseFuture {
-		let pool_arc = w(&self.tx_pool);
+		let pool_arc = w_fut!(&self.tx_pool);
 		let pool = pool_arc.read();
 
 		json_response(&PoolInfo {
@@ -63,7 +63,11 @@ impl PoolPushHandler {
 		let params = QueryParams::from(req.uri().query());
 
 		let fluff = params.get("fluff").is_some();
-		let pool_arc = w(&self.tx_pool).clone();
+		let pool_arc = match w(&self.tx_pool) {
+			//w(&self.tx_pool).clone();
+			Ok(p) => p,
+			Err(e) => return Box::new(err(e)),
+		};
 
 		Box::new(
 			parse_body(req)

@@ -72,7 +72,7 @@ impl MessageHandler for Protocol {
 						height: adapter.total_height(),
 					},
 					writer,
-				)))
+				)?))
 			}
 
 			Type::Pong => {
@@ -105,7 +105,7 @@ impl MessageHandler for Protocol {
 				);
 				let tx = adapter.get_transaction(h);
 				if let Some(tx) = tx {
-					Ok(Some(Response::new(Type::Transaction, tx, writer)))
+					Ok(Some(Response::new(Type::Transaction, tx, writer)?))
 				} else {
 					Ok(None)
 				}
@@ -141,7 +141,7 @@ impl MessageHandler for Protocol {
 
 				let bo = adapter.get_block(h);
 				if let Some(b) = bo {
-					return Ok(Some(Response::new(Type::Block, b, writer)));
+					return Ok(Some(Response::new(Type::Block, b, writer)?));
 				}
 				Ok(None)
 			}
@@ -163,7 +163,7 @@ impl MessageHandler for Protocol {
 				let h: Hash = msg.body()?;
 				if let Some(b) = adapter.get_block(h) {
 					let cb: CompactBlock = b.into();
-					Ok(Some(Response::new(Type::CompactBlock, cb, writer)))
+					Ok(Some(Response::new(Type::CompactBlock, cb, writer)?))
 				} else {
 					Ok(None)
 				}
@@ -190,7 +190,7 @@ impl MessageHandler for Protocol {
 					Type::Headers,
 					Headers { headers },
 					writer,
-				)))
+				)?))
 			}
 
 			// "header first" block propagation - if we have not yet seen this block
@@ -235,7 +235,7 @@ impl MessageHandler for Protocol {
 					Type::PeerAddrs,
 					PeerAddrs { peers },
 					writer,
-				)))
+				)?))
 			}
 
 			Type::PeerAddrs => {
@@ -263,7 +263,7 @@ impl MessageHandler for Protocol {
 							bytes: file_sz,
 						},
 						writer,
-					);
+					)?;
 					resp.add_attachment(txhashset.reader);
 					Ok(Some(resp))
 				} else {
@@ -312,7 +312,10 @@ impl MessageHandler for Protocol {
 							received_bytes.inc_quiet(size as u64);
 						}
 					}
-					tmp_zip.into_inner().unwrap().sync_all()?;
+					tmp_zip
+						.into_inner()
+						.map_err(|_| Error::Internal)?
+						.sync_all()?;
 					Ok(())
 				};
 

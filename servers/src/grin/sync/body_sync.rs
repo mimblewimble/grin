@@ -69,10 +69,17 @@ impl BodySync {
 	/// Return true if txhashset download is needed (when requested block is under the horizon).
 	fn body_sync(&mut self) -> bool {
 		let mut hashes: Option<Vec<Hash>> = Some(vec![]);
-		if self
+		let txhashset_needed = match self
 			.chain
 			.check_txhashset_needed("body_sync".to_owned(), &mut hashes)
 		{
+			Ok(v) => v,
+			Err(e) => {
+				error!("body_sync: failed to call txhashset_needed: {:?}", e);
+				return false;
+			}
+		};
+		if txhashset_needed {
 			debug!(
 				"body_sync: cannot sync full blocks earlier than horizon. will request txhashset",
 			);

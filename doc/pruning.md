@@ -1,5 +1,7 @@
 # Pruning Blockchain Data
 
+*Read this in other languages: [Korean](pruning_KR.md).*
+
 One of the principal attractions of MimbleWimble is its theoretical space
 efficiency. Indeed, a trusted or pre-validated full blockchain state only
 requires unspent transaction outputs, which could be tiny.
@@ -63,8 +65,7 @@ The full validation of the chain state requires that:
 In addition, while not necessary to validate the full chain state, to be able
 to accept and validate new blocks additional data is required:
 
-* The output features and switch commitments, making the full output data
-  necessary for all UTXOs.
+* The output features, making the full output data necessary for all UTXOs.
 
 At minimum, this requires the following data:
 

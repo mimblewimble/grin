@@ -1,5 +1,7 @@
 # Blocks and Block headers
 
+*Read this in other languages: [Korean](blocks_and_headers_KR.md).*
+
 ## Node receives block from peer (normal operation)
 
 During normal operation the Grin node will receive blocks from connected peers via the gossip protocol.

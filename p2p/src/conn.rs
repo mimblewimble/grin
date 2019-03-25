@@ -113,19 +113,18 @@ impl<'a> Response<'a> {
 		resp_type: Type,
 		body: T,
 		stream: &'a mut dyn Write,
-	) -> Response<'a> {
-		let body = ser::ser_vec(&body).unwrap();
-		Response {
+	) -> Result<Response<'a>, Error> {
+		let body = ser::ser_vec(&body)?;
+		Ok(Response {
 			resp_type,
 			body,
 			stream,
 			attachment: None,
-		}
+		})
 	}
 
 	fn write(mut self, sent_bytes: Arc<RwLock<RateCounter>>) -> Result<(), Error> {
-		let mut msg =
-			ser::ser_vec(&MsgHeader::new(self.resp_type, self.body.len() as u64)).unwrap();
+		let mut msg = ser::ser_vec(&MsgHeader::new(self.resp_type, self.body.len() as u64))?;
 		msg.append(&mut self.body);
 		write_all(&mut self.stream, &msg[..], time::Duration::from_secs(10))?;
 		// Increase sent bytes counter
@@ -177,7 +176,7 @@ impl Tracker {
 	where
 		T: ser::Writeable,
 	{
-		let buf = write_to_buf(body, msg_type);
+		let buf = write_to_buf(body, msg_type)?;
 		let buf_len = buf.len();
 		self.send_channel.try_send(buf)?;
 

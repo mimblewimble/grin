@@ -217,11 +217,10 @@ impl Peers {
 			return vec![];
 		}
 
-		let max_total_difficulty = peers
-			.iter()
-			.map(|x| x.info.total_difficulty())
-			.max()
-			.unwrap();
+		let max_total_difficulty = match peers.iter().map(|x| x.info.total_difficulty()).max() {
+			Some(v) => v,
+			None => return vec![],
+		};
 
 		let mut max_peers = peers
 			.into_iter()
@@ -256,7 +255,10 @@ impl Peers {
 		if let Some(peer) = self.get_connected_peer(peer_addr) {
 			debug!("Banning peer {}", peer_addr);
 			// setting peer status will get it removed at the next clean_peer
-			peer.send_ban_reason(ban_reason);
+			match peer.send_ban_reason(ban_reason) {
+				Err(e) => error!("failed to send a ban reason to{}: {:?}", peer_addr, e),
+				Ok(_) => debug!("ban reason {:?} was sent to {}", ban_reason, peer_addr),
+			};
 			peer.set_banned();
 			peer.stop();
 		}
@@ -383,12 +385,24 @@ impl Peers {
 
 	/// All peer information we have in storage
 	pub fn all_peers(&self) -> Vec<PeerData> {
-		self.store.all_peers()
+		match self.store.all_peers() {
+			Ok(peers) => peers,
+			Err(e) => {
+				error!("all_peers failed: {:?}", e);
+				vec![]
+			}
+		}
 	}
 
 	/// Find peers in store (not necessarily connected) and return their data
 	pub fn find_peers(&self, state: State, cap: Capabilities, count: usize) -> Vec<PeerData> {
-		self.store.find_peers(state, cap, count)
+		match self.store.find_peers(state, cap, count) {
+			Ok(peers) => peers,
+			Err(e) => {
+				error!("failed to find peers: {:?}", e);
+				vec![]
+			}
+		}
 	}
 
 	/// Get peer in store by address
@@ -428,11 +442,12 @@ impl Peers {
 				debug!("clean_peers {:?}, not connected", peer.info.addr);
 				rm.push(peer.info.addr.clone());
 			} else if peer.is_abusive() {
-				let counts = peer.last_min_message_counts().unwrap();
-				debug!(
-					"clean_peers {:?}, abusive ({} sent, {} recv)",
-					peer.info.addr, counts.0, counts.1,
-				);
+				if let Some(counts) = peer.last_min_message_counts() {
+					debug!(
+						"clean_peers {:?}, abusive ({} sent, {} recv)",
+						peer.info.addr, counts.0, counts.1,
+					);
+				}
 				let _ = self.update_state(peer.info.addr, State::Banned);
 				rm.push(peer.info.addr.clone());
 			} else {

@@ -15,6 +15,7 @@
 use std::fs::{self, File};
 /// Wrappers around the `zip-rs` library to compress and decompress zip archives.
 use std::io;
+use std::panic;
 use std::path::Path;
 use walkdir::WalkDir;
 
@@ -64,52 +65,80 @@ pub fn compress(src_dir: &Path, dst_file: &File) -> ZipResult<()> {
 /// Decompress a source file into the provided destination path.
 pub fn decompress<R, F>(src_file: R, dest: &Path, expected: F) -> ZipResult<usize>
 where
-	R: io::Read + io::Seek,
-	F: Fn(&Path) -> bool,
+	R: io::Read + io::Seek + panic::UnwindSafe,
+	F: Fn(&Path) -> bool + panic::UnwindSafe,
 {
 	let mut decompressed = 0;
-	let mut archive = zip_rs::ZipArchive::new(src_file)?;
 
-	for i in 0..archive.len() {
-		let mut file = archive.by_index(i)?;
-		let san_name = file.sanitized_name();
-		if san_name.to_str().unwrap_or("") != file.name() || !expected(&san_name) {
-			info!("ignoring a suspicious file: {}", file.name());
-			continue;
-		}
-		let file_path = dest.join(san_name);
+	// catch the panic to avoid the thread quit
+	panic::set_hook(Box::new(|panic_info| {
+		error!(
+			"panic occurred: {:?}",
+			panic_info.payload().downcast_ref::<&str>().unwrap()
+		);
+	}));
+	let result = panic::catch_unwind(move || {
+		let mut archive = zip_rs::ZipArchive::new(src_file)?;
 
-		if (&*file.name()).ends_with('/') {
-			fs::create_dir_all(&file_path)?;
-		} else {
-			if let Some(p) = file_path.parent() {
-				if !p.exists() {
-					fs::create_dir_all(&p)?;
+		for i in 0..archive.len() {
+			let mut file = archive.by_index(i)?;
+			let san_name = file.sanitized_name();
+			if san_name.to_str().unwrap_or("").replace("\\", "/") != file.name().replace("\\", "/")
+				|| !expected(&san_name)
+			{
+				info!(
+					"ignoring a suspicious file: {}, got {:?}",
+					file.name(),
+					san_name.to_str()
+				);
+				continue;
+			}
+			let file_path = dest.join(san_name);
+
+			if (&*file.name()).ends_with('/') {
+				fs::create_dir_all(&file_path)?;
+			} else {
+				if let Some(p) = file_path.parent() {
+					if !p.exists() {
+						fs::create_dir_all(&p)?;
+					}
+				}
+				let res = fs::File::create(&file_path);
+				let mut outfile = match res {
+					Err(e) => {
+						error!("{:?}", e);
+						return Err(zip::result::ZipError::Io(e));
+					}
+					Ok(r) => r,
+				};
+				io::copy(&mut file, &mut outfile)?;
+				decompressed += 1;
+			}
+
+			// Get and Set permissions
+			#[cfg(unix)]
+			{
+				use std::os::unix::fs::PermissionsExt;
+				if let Some(mode) = file.unix_mode() {
+					fs::set_permissions(
+						&file_path.to_str().unwrap(),
+						PermissionsExt::from_mode(mode),
+					)?;
 				}
 			}
-			let res = fs::File::create(&file_path);
-			let mut outfile = match res {
-				Err(e) => {
-					error!("{:?}", e);
-					return Err(zip::result::ZipError::Io(e));
-				}
-				Ok(r) => r,
-			};
-			io::copy(&mut file, &mut outfile)?;
-			decompressed += 1;
 		}
-
-		// Get and Set permissions
-		#[cfg(unix)]
-		{
-			use std::os::unix::fs::PermissionsExt;
-			if let Some(mode) = file.unix_mode() {
-				fs::set_permissions(
-					&file_path.to_str().unwrap(),
-					PermissionsExt::from_mode(mode),
-				)?;
-			}
+		Ok(decompressed)
+	});
+	match result {
+		Ok(res) => match res {
+			Err(e) => Err(e.into()),
+			Ok(_) => res,
+		},
+		Err(_) => {
+			error!("panic occurred on zip::decompress!");
+			Err(zip::result::ZipError::InvalidArchive(
+				"panic occurred on zip::decompress",
+			))
 		}
 	}
-	Ok(decompressed)
 }

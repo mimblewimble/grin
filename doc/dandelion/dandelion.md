@@ -1,5 +1,6 @@
 # Dandelion in Grin: Privacy-Preserving Transaction Aggregation and Propagation
 
+*Read this document in other languages: [Korean](dandelion_KR.md).*
 
 This document describes the implementation of Dandelion in Grin and its modification to handle transactions aggregation in the P2P protocol.
 ## Introduction
