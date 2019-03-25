@@ -1,7 +1,10 @@
-[![Build Status](https://travis-ci.org/mimblewimble/grin.svg?branch=master)](https://travis-ci.org/mimblewimble/grin)
-[![Gitter chat](https://badges.gitter.im/grin_community/Lobby.png)](https://gitter.im/grin_community/Lobby)
-[![Support chat](https://badges.gitter.im/grin_community/Lobby.png)](https://gitter.im/grin_community/support)
-[![Codecov coverage status](https://codecov.io/gh/mimblewimble/grin/branch/master/graph/badge.svg)](https://codecov.io/gh/mimblewimble/grin)
+[![Build Status](https://img.shields.io/travis/mimblewimble/grin/master.svg)](https://travis-ci.org/mimblewimble/grin)
+[![Coverage Status](https://img.shields.io/codecov/c/github/mimblewimble/grin/master.svg)](https://codecov.io/gh/mimblewimble/grin)
+[![Chat](https://img.shields.io/gitter/room/grin_community/Lobby.svg)](https://gitter.im/grin_community/Lobby)
+[![Support](https://img.shields.io/badge/support-on%20gitter-brightgreen.svg)](https://gitter.im/grin_community/support)
+[![Documentation Wiki](https://img.shields.io/badge/doc-wiki-blue.svg)](https://github.com/mimblewimble/docs/wiki)
+[![Release Version](https://img.shields.io/github/release/mimblewimble/grin.svg)](https://github.com/mimblewimble/grin/releases)
+[![License](https://img.shields.io/github/license/mimblewimble/grin.svg)](https://github.com/mimblewimble/grin/blob/master/LICENSE)
 
 # Grin
 
