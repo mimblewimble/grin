@@ -857,7 +857,10 @@ where
 		let parent_key_id = w.parent_key_id();
 		match updater::refresh_outputs(&mut *w, &parent_key_id, update_all) {
 			Ok(_) => true,
-			Err(_) => false,
+			Err(e) => {
+				error!("failed to refresh outputs for wallet with error : {:?}", e);
+				false
+			}
 		}
 	}
 }

@@ -1,5 +1,7 @@
 # Dandelion Simulation
 
+*Read this document in other languages: [Korean](simulation_KR.md).*
+
 This document describes a network of node using the Dandelion protocol with transaction aggregation.
 
 In this scenario, we simulate a successful aggregation.

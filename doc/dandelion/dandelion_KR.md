@@ -10,7 +10,11 @@ Dandelion은 발신 IP에 도청 연결 트랜잭션(eavesdroppers linking trans
 
 Dandelion은 G. Fanti 에 의해 소개되었습니다([1] 참고). 그리고 ACM Sigmetrics 2017에서 발표되었습니다. 2017 년 6 월 BIP [2]는 2018 년 후반에 발표될 Dandelion ++ [3]이라고 불리는 더 실용적이고 견고한 Dandelion의 다른 버전을 소개하려고 제안되었습니다. 이 문서는 Grin을 위한 BIP의 개정판이라고 생각하시면 됩니다.
 
+<<<<<<< HEAD
 우선은 오리지널 Dandelion 전파에 대해서 정의한 다음, 트랜잭션 통합 (transaction aggregation)과 함께 어떻게 Grin의 프로토콜에 적용되었는지 알아보겠습니다.
+=======
+우선은 오리지널 Dandelion 전파에 대해서 정의한 다음, 트랜잭션 에그레게이션 (transaction aggregation)과 함께 어떻게 Grin의 프로토콜에 적용되었는지 알아보겠습니다.
+>>>>>>> c3cd98cae71d4bf3b97d2802850316cc56acb37a
 
 ## Original Dandelion
 
