@@ -858,7 +858,7 @@ where
 		match updater::refresh_outputs(&mut *w, &parent_key_id, update_all) {
 			Ok(_) => true,
 			Err(e) => {
-				error!("{:?}", e);
+				error!("failed to refresh outputs for wallet with error : {:?}", e);
 				false
 			}
 		}

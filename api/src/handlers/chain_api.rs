@@ -108,7 +108,7 @@ impl OutputHandler {
 		for x in commitments {
 			match self.get_output(&x) {
 				Ok(output) => outputs.push(output),
-				Err(e) => error!("{}", e),
+				Err(e) => error!("Failure to get output for commitment {} with error {}", x, e),
 			};
 		}
 		Ok(outputs)
