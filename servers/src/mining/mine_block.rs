@@ -26,8 +26,8 @@ use crate::api;
 use crate::chain;
 use crate::common::types::Error;
 use crate::core::core::verifier_cache::VerifierCache;
+use crate::core::core::{Output, TxKernel};
 use crate::core::{consensus, core, global};
-use crate::core::core::{TxKernel, Output};
 use crate::keychain::{ExtKeychain, Identifier, Keychain};
 use crate::pool;
 
