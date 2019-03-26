@@ -57,7 +57,7 @@ where
 	let msg = kernel_sig_msg(0, 0, KernelFeatures::Coinbase)?;
 	let sig = match test_mode {
 		true => {
-			let test_nonce = secp::key::SecretKey::from_slice(&secp, &[0u8; 32])?;
+			let test_nonce = secp::key::SecretKey::from_slice(&secp, &[1; 32])?;
 			aggsig::sign_from_key_id(
 				&secp,
 				keychain,
