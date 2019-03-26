@@ -26,10 +26,10 @@ use crate::api;
 use crate::chain;
 use crate::common::types::Error;
 use crate::core::core::verifier_cache::VerifierCache;
-use crate::core::{consensus, core, global, ser};
+use crate::core::core::{Output, TxKernel};
+use crate::core::{consensus, core, global};
 use crate::keychain::{ExtKeychain, Identifier, Keychain};
 use crate::pool;
-use crate::util;
 
 /// Fees in block to use for coinbase amount calculation
 /// (Duplicated from Grin wallet project)
@@ -54,11 +54,11 @@ impl BlockFees {
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct CbData {
 	/// Output
-	pub output: String,
+	pub output: Output,
 	/// Kernel
-	pub kernel: String,
+	pub kernel: TxKernel,
 	/// Key Id
-	pub key_id: String,
+	pub key_id: Option<Identifier>,
 }
 
 // Ensure a block suitable for mining is built and returned
@@ -212,7 +212,7 @@ fn burn_reward(block_fees: BlockFees) -> Result<(core::Output, core::TxKernel, B
 	let keychain = ExtKeychain::from_random_seed(global::is_floonet()).unwrap();
 	let key_id = ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
 	let (out, kernel) =
-		crate::core::libtx::reward::output(&keychain, &key_id, block_fees.fees).unwrap();
+		crate::core::libtx::reward::output(&keychain, &key_id, block_fees.fees, false).unwrap();
 	Ok((out, kernel, block_fees))
 }
 
@@ -229,14 +229,11 @@ fn get_coinbase(
 		}
 		Some(wallet_listener_url) => {
 			let res = create_coinbase(&wallet_listener_url, &block_fees)?;
-			let out_bin = util::from_hex(res.output).unwrap();
-			let kern_bin = util::from_hex(res.kernel).unwrap();
-			let key_id_bin = util::from_hex(res.key_id).unwrap();
-			let output = ser::deserialize(&mut &out_bin[..]).unwrap();
-			let kernel = ser::deserialize(&mut &kern_bin[..]).unwrap();
-			let key_id = ser::deserialize(&mut &key_id_bin[..]).unwrap();
+			let output = res.output;
+			let kernel = res.kernel;
+			let key_id = res.key_id;
 			let block_fees = BlockFees {
-				key_id: Some(key_id),
+				key_id: key_id,
 				..block_fees
 			};
 
