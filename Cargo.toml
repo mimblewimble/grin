@@ -49,7 +49,7 @@ cursive = { version = "0.10.0", default-features = false, features = ["pancurses
 version = "0.16.0"
 features = ["win32"]
 [target.'cfg(unix)'.dependencies]
-cursive = "0.9.0"
+cursive = "0.10.0"
 
 [build-dependencies]
 built = "0.3"
