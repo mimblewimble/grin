@@ -924,9 +924,9 @@ fn replicate_tx_fluff_failure() {
 	// Server 1 (mines into wallet 1)
 	let mut s1_config = framework::config(3000, "tx_fluff", 3000);
 	s1_config.test_miner_wallet_url = Some("http://127.0.0.1:33000".to_owned());
-	s1_config.dandelion_config.embargo_secs = 10;
-	s1_config.dandelion_config.patience_secs = 1;
-	s1_config.dandelion_config.relay_secs = 1;
+	s1_config.dandelion_config.embargo_secs = Some(10);
+	s1_config.dandelion_config.patience_secs = Some(1);
+	s1_config.dandelion_config.relay_secs = Some(1);
 	let s1 = servers::Server::new(s1_config.clone()).unwrap();
 	// Mine off of server 1
 	s1.start_test_miner(s1_config.test_miner_wallet_url, s1.stop_state.clone());
@@ -937,9 +937,9 @@ fn replicate_tx_fluff_failure() {
 	s2_config.p2p_config.seeds = Some(vec![PeerAddr(
 		"127.0.0.1:13000".to_owned().parse().unwrap(),
 	)]);
-	s2_config.dandelion_config.embargo_secs = 10;
-	s2_config.dandelion_config.patience_secs = 1;
-	s2_config.dandelion_config.relay_secs = 1;
+	s2_config.dandelion_config.embargo_secs = Some(10);
+	s2_config.dandelion_config.patience_secs = Some(1);
+	s2_config.dandelion_config.relay_secs = Some(1);
 	let _s2 = servers::Server::new(s2_config.clone()).unwrap();
 
 	let dl_nodes = 5;
@@ -950,9 +950,9 @@ fn replicate_tx_fluff_failure() {
 		s_config.p2p_config.seeds = Some(vec![PeerAddr(
 			"127.0.0.1:13000".to_owned().parse().unwrap(),
 		)]);
-		s_config.dandelion_config.embargo_secs = 10;
-		s_config.dandelion_config.patience_secs = 1;
-		s_config.dandelion_config.relay_secs = 1;
+		s_config.dandelion_config.embargo_secs = Some(10);
+		s_config.dandelion_config.patience_secs = Some(1);
+		s_config.dandelion_config.relay_secs = Some(1);
 		let _ = servers::Server::new(s_config.clone()).unwrap();
 	}
 
