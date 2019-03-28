@@ -1,5 +1,7 @@
 # Grin/MimbleWimble for Bitcoiners
 
+*Read this in other languages:[Korean](grin4bitcoiners_KR.md)
+
 ## Privacy and Fungibility
 
 There are 3 main properties of Grin transactions that make them private:
