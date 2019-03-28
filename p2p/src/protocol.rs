@@ -13,7 +13,7 @@
 // limitations under the License.
 
 use std::cmp;
-use std::fs::{self, File};
+use std::fs::{self, File, OpenOptions};
 use std::io::{BufWriter, Write};
 use std::sync::Arc;
 
@@ -298,7 +298,8 @@ impl MessageHandler for Protocol {
 				}
 				tmp.push(format!("txhashset-{}.zip", download_start_time.timestamp()));
 				let mut save_txhashset_to_file = |file| -> Result<(), Error> {
-					let mut tmp_zip = BufWriter::new(File::create(file)?);
+					let mut tmp_zip =
+						BufWriter::new(OpenOptions::new().write(true).create_new(true).open(file)?);
 					let total_size = sm_arch.bytes as usize;
 					let mut downloaded_size: usize = 0;
 					let mut request_size = cmp::min(48_000, total_size);
