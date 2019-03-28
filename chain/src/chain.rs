@@ -24,6 +24,7 @@ use crate::core::core::{
 use crate::core::global;
 use crate::core::pow;
 use crate::error::{Error, ErrorKind};
+use crate::lmdb;
 use crate::pipe;
 use crate::store;
 use crate::txhashset;
@@ -35,7 +36,6 @@ use crate::util::secp::pedersen::{Commitment, RangeProof};
 use crate::util::{Mutex, RwLock, StopState};
 use grin_store::Error::NotFoundErr;
 use std::collections::HashMap;
-use std::env;
 use std::fs::File;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -161,6 +161,7 @@ impl Chain {
 	/// based on the genesis block if necessary.
 	pub fn init(
 		db_root: String,
+		db_env: Arc<lmdb::Environment>,
 		adapter: Arc<dyn ChainAdapter + Send + Sync>,
 		genesis: Block,
 		pow_verifier: fn(&BlockHeader) -> Result<(), pow::Error>,
@@ -177,7 +178,7 @@ impl Chain {
 				return Err(ErrorKind::Stopped.into());
 			}
 
-			let store = Arc::new(store::ChainStore::new(&db_root)?);
+			let store = Arc::new(store::ChainStore::new(db_env)?);
 
 			// open the txhashset, creating a new one if necessary
 			let mut txhashset = txhashset::TxHashSet::open(db_root.clone(), store.clone(), None)?;
@@ -850,9 +851,21 @@ impl Chain {
 
 	/// Clean the temporary sandbox folder
 	pub fn clean_txhashset_sandbox(&self) {
-		let sandbox_dir = env::temp_dir();
-		txhashset::clean_txhashset_folder(&sandbox_dir);
-		txhashset::clean_header_folder(&sandbox_dir);
+		txhashset::clean_txhashset_folder(&self.get_tmp_dir());
+		txhashset::clean_header_folder(&self.get_tmp_dir());
+	}
+
+	/// Specific tmp dir.
+	/// Normally it's ~/.grin/main/tmp for mainnet
+	/// or ~/.grin/floo/tmp for floonet
+	fn get_tmp_dir(&self) -> PathBuf {
+		let mut tmp_dir = PathBuf::from(self.db_root.clone());
+		tmp_dir = tmp_dir
+			.parent()
+			.expect("fail to get parent of db_root dir")
+			.to_path_buf();
+		tmp_dir.push("tmp");
+		tmp_dir
 	}
 
 	/// Writes a reading view on a txhashset state that's been provided to us.
@@ -876,8 +889,8 @@ impl Chain {
 
 		let header = self.get_block_header(&h)?;
 
-		// Write txhashset to sandbox (in the os temporary directory)
-		let sandbox_dir = env::temp_dir();
+		// Write txhashset to sandbox (in the Grin specific tmp dir)
+		let sandbox_dir = self.get_tmp_dir();
 		txhashset::clean_txhashset_folder(&sandbox_dir);
 		txhashset::clean_header_folder(&sandbox_dir);
 		txhashset::zip_write(sandbox_dir.clone(), txhashset_data.try_clone()?, &header)?;
