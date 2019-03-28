@@ -290,17 +290,11 @@ impl MessageHandler for Protocol {
 				let mut tmp = self.adapter.get_tmp_dir();
 				if tmp.exists() {
 					if let Err(e) = fs::remove_dir_all(tmp.clone()) {
-						warn!(
-							"fail to clean tmp folder on {:?}. err: {}",
-							tmp, e
-						);
+						warn!("fail to clean tmp folder on {:?}. err: {}", tmp, e);
 					}
 				}
 				if let Err(e) = fs::create_dir(tmp.clone()) {
-					warn!(
-						"fail to create tmp folder on {:?}. err: {}",
-						tmp, e
-					);
+					warn!("fail to create tmp folder on {:?}. err: {}", tmp, e);
 				}
 				tmp.push(format!("txhashset-{}.zip", download_start_time.timestamp()));
 				let mut save_txhashset_to_file = |file| -> Result<(), Error> {
@@ -356,10 +350,7 @@ impl MessageHandler for Protocol {
 				);
 
 				if let Err(e) = fs::remove_file(tmp.clone()) {
-					warn!(
-						"fail to remove tmp file: {:?}. err: {}",
-						tmp, e
-					);
+					warn!("fail to remove tmp file: {:?}. err: {}", tmp, e);
 				}
 
 				Ok(None)

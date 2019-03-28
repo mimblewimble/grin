@@ -331,17 +331,16 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 				update_time: old_update_time,
 				downloaded_size: old_downloaded_size,
 				..
-			} => {
-				self.sync_state
-					.update_txhashset_download(SyncStatus::TxHashsetDownload {
-						start_time,
-						prev_update_time: old_update_time,
-						update_time: Utc::now(),
-						prev_downloaded_size: old_downloaded_size,
-						downloaded_size,
-						total_size,
-					})
-			}
+			} => self
+				.sync_state
+				.update_txhashset_download(SyncStatus::TxHashsetDownload {
+					start_time,
+					prev_update_time: old_update_time,
+					update_time: Utc::now(),
+					prev_downloaded_size: old_downloaded_size,
+					downloaded_size,
+					total_size,
+				}),
 			_ => false,
 		}
 	}
@@ -375,8 +374,11 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 	/// Normally it's ~/.grin/main/tmp for mainnet
 	/// or ~/.grin/floo/tmp for floonet
 	fn get_tmp_dir(&self) -> PathBuf {
-		let mut tmp_dir = PathBuf::from( self.config.db_root.clone() );
-		tmp_dir = tmp_dir.parent().expect("fail to get parent of db_root dir").to_path_buf();
+		let mut tmp_dir = PathBuf::from(self.config.db_root.clone());
+		tmp_dir = tmp_dir
+			.parent()
+			.expect("fail to get parent of db_root dir")
+			.to_path_buf();
 		tmp_dir.push("tmp");
 		tmp_dir
 	}
