@@ -12,11 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use rand::{thread_rng, Rng};
 use std::cmp;
 use std::fs::{self, File, OpenOptions};
 use std::io::{BufWriter, Write};
 use std::sync::Arc;
-use rand::{thread_rng, Rng};
 
 use crate::conn::{Message, MessageHandler, Response};
 use crate::core::core::{self, hash::Hash, CompactBlock};
@@ -298,7 +298,11 @@ impl MessageHandler for Protocol {
 					warn!("fail to create tmp folder on {:?}. err: {}", tmp, e);
 				}
 				let nonce: u32 = thread_rng().gen_range(0, 1_000_000);
-				tmp.push(format!("txhashset-{}-{}.zip", download_start_time.timestamp(), nonce));
+				tmp.push(format!(
+					"txhashset-{}-{}.zip",
+					download_start_time.timestamp(),
+					nonce
+				));
 				let mut save_txhashset_to_file = |file| -> Result<(), Error> {
 					let mut tmp_zip =
 						BufWriter::new(OpenOptions::new().write(true).create_new(true).open(file)?);
