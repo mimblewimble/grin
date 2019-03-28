@@ -17,6 +17,7 @@
 
 use crate::util::RwLock;
 use std::fs::File;
+use std::path::PathBuf;
 use std::sync::{Arc, Weak};
 use std::thread;
 use std::time::Instant;
@@ -368,6 +369,16 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 			info!("Received valid txhashset data for {}.", h);
 			true
 		}
+	}
+
+	/// Specific tmp dir.
+	/// Normally it's ~/.grin/main/tmp for mainnet
+	/// or ~/.grin/floo/tmp for floonet
+	fn get_tmp_dir(&self) -> PathBuf {
+		let mut tmp_dir = PathBuf::from( self.config.db_root.clone() );
+		tmp_dir = tmp_dir.parent().expect("fail to get parent of db_root dir").to_path_buf();
+		tmp_dir.push("tmp");
+		tmp_dir
 	}
 }
 

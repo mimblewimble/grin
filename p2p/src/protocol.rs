@@ -13,8 +13,7 @@
 // limitations under the License.
 
 use std::cmp;
-use std::env;
-use std::fs::File;
+use std::fs::{self, File};
 use std::io::{BufWriter, Write};
 use std::sync::Arc;
 
@@ -288,8 +287,22 @@ impl MessageHandler for Protocol {
 				self.adapter
 					.txhashset_download_update(download_start_time, 0, sm_arch.bytes);
 
-				let mut tmp = env::temp_dir();
-				tmp.push("txhashset.zip");
+				let mut tmp = self.adapter.get_tmp_dir();
+				if tmp.exists() {
+					if let Err(e) = fs::remove_dir_all(tmp.clone()) {
+						warn!(
+							"fail to clean tmp folder on {:?}. err: {}",
+							tmp, e
+						);
+					}
+				}
+				if let Err(e) = fs::create_dir(tmp.clone()) {
+					warn!(
+						"fail to create tmp folder on {:?}. err: {}",
+						tmp, e
+					);
+				}
+				tmp.push(format!("txhashset-{}.zip", download_start_time.timestamp()));
 				let mut save_txhashset_to_file = |file| -> Result<(), Error> {
 					let mut tmp_zip = BufWriter::new(File::create(file)?);
 					let total_size = sm_arch.bytes as usize;
@@ -332,7 +345,7 @@ impl MessageHandler for Protocol {
 					tmp,
 				);
 
-				let tmp_zip = File::open(tmp)?;
+				let tmp_zip = File::open(tmp.clone())?;
 				let res = self
 					.adapter
 					.txhashset_write(sm_arch.hash, tmp_zip, self.addr);
@@ -341,6 +354,13 @@ impl MessageHandler for Protocol {
 					"handle_payload: txhashset archive for {} at {}, DONE. Data Ok: {}",
 					sm_arch.hash, sm_arch.height, res
 				);
+
+				if let Err(e) = fs::remove_file(tmp.clone()) {
+					warn!(
+						"fail to remove tmp file: {:?}. err: {}",
+						tmp, e
+					);
+				}
 
 				Ok(None)
 			}

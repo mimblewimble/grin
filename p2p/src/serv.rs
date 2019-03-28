@@ -12,8 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use std::env;
 use std::fs::File;
 use std::net::{Shutdown, SocketAddr, TcpListener, TcpStream};
+use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
 use std::{io, thread};
@@ -279,6 +281,10 @@ impl ChainAdapter for DummyAdapter {
 		_total_size: u64,
 	) -> bool {
 		false
+	}
+
+	fn get_tmp_dir(&self) -> PathBuf {
+		env::temp_dir()
 	}
 }
 
