@@ -27,9 +27,9 @@ use crate::chain;
 use crate::common::types::Error;
 use crate::core::core::verifier_cache::VerifierCache;
 use crate::core::core::{Output, TxKernel};
+use crate::core::libtx::secp_ser;
 use crate::core::{consensus, core, global};
 use crate::keychain::{ExtKeychain, Identifier, Keychain};
-use crate::core::libtx::secp_ser;
 use crate::pool;
 
 /// Fees in block to use for coinbase amount calculation
