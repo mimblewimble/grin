@@ -1499,10 +1499,7 @@ pub fn clean_header_folder(root_dir: &PathBuf) {
 	let header_path = root_dir.clone().join(HEADERHASHSET_SUBDIR);
 	if header_path.exists() {
 		if let Err(e) = fs::remove_dir_all(header_path.clone()) {
-			warn!(
-				"clean_header_folder: fail on {:?}. err: {}",
-				header_path, e
-			);
+			warn!("clean_header_folder: fail on {:?}. err: {}", header_path, e);
 		}
 	}
 }
