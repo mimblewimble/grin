@@ -15,6 +15,7 @@
 use crate::util::RwLock;
 use std::collections::HashMap;
 use std::fs::File;
+use std::path::PathBuf;
 use std::sync::Arc;
 
 use rand::{thread_rng, Rng};
@@ -585,6 +586,10 @@ impl ChainAdapter for Peers {
 	) -> bool {
 		self.adapter
 			.txhashset_download_update(start_time, downloaded_size, total_size)
+	}
+
+	fn get_tmp_dir(&self) -> PathBuf {
+		self.adapter.get_tmp_dir()
 	}
 }
 
