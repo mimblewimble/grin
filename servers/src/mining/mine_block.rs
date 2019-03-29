@@ -27,6 +27,7 @@ use crate::chain;
 use crate::common::types::Error;
 use crate::core::core::verifier_cache::VerifierCache;
 use crate::core::core::{Output, TxKernel};
+use crate::core::libtx::secp_ser;
 use crate::core::{consensus, core, global};
 use crate::keychain::{ExtKeychain, Identifier, Keychain};
 use crate::pool;
@@ -36,8 +37,10 @@ use crate::pool;
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct BlockFees {
 	/// fees
+	#[serde(with = "secp_ser::string_or_u64")]
 	pub fees: u64,
 	/// height
+	#[serde(with = "secp_ser::string_or_u64")]
 	pub height: u64,
 	/// key id
 	pub key_id: Option<Identifier>,
