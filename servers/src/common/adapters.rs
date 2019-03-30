@@ -371,17 +371,8 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 		}
 	}
 
-	/// Specific tmp dir.
-	/// Normally it's ~/.grin/main/tmp for mainnet
-	/// or ~/.grin/floo/tmp for floonet
 	fn get_tmp_dir(&self) -> PathBuf {
-		let mut tmp_dir = PathBuf::from(self.config.db_root.clone());
-		tmp_dir = tmp_dir
-			.parent()
-			.expect("fail to get parent of db_root dir")
-			.to_path_buf();
-		tmp_dir.push("tmp");
-		tmp_dir
+		self.chain().get_tmp_dir()
 	}
 }
 
