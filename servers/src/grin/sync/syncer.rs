@@ -100,7 +100,7 @@ impl SyncRunner {
 
 	/// Starts the syncing loop, just spawns two threads that loop forever
 	fn sync_loop(&self) {
-		macro_rules! unwrap_or_retry(
+		macro_rules! unwrap_or_restart_loop(
 	($obj: expr) =>(
 		match $obj {
 			Ok(v) => v,
@@ -147,7 +147,7 @@ impl SyncRunner {
 			thread::sleep(time::Duration::from_millis(10));
 
 			// check whether syncing is generally needed, when we compare our state with others
-			let (syncing, most_work_height) = unwrap_or_retry!(self.needs_syncing());
+			let (syncing, most_work_height) = unwrap_or_restart_loop!(self.needs_syncing());
 			if most_work_height > 0 {
 				// we can occasionally get a most work height of 0 if read locks fail
 				highest_height = most_work_height;
@@ -161,13 +161,13 @@ impl SyncRunner {
 			}
 
 			// if syncing is needed
-			let head = unwrap_or_retry!(self.chain.head());
+			let head = unwrap_or_restart_loop!(self.chain.head());
 			let tail = self.chain.tail().unwrap_or_else(|_| head.clone());
-			let header_head = unwrap_or_retry!(self.chain.header_head());
+			let header_head = unwrap_or_restart_loop!(self.chain.header_head());
 
 			// run each sync stage, each of them deciding whether they're needed
 			// except for state sync that only runs if body sync return true (means txhashset is needed)
-			unwrap_or_retry!(header_sync.check_run(&header_head, highest_height));
+			unwrap_or_restart_loop!(header_sync.check_run(&header_head, highest_height));
 
 			let mut check_state_sync = false;
 			match self.sync_state.status() {
