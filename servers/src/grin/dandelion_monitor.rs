@@ -49,7 +49,7 @@ pub fn monitor_transactions(
 				}
 
 				// This is the patience timer, we loop every n secs.
-				let patience_secs = dandelion_config.patience_secs.unwrap();
+				let patience_secs = dandelion_config.patience_secs();
 				thread::sleep(Duration::from_secs(patience_secs));
 
 				// Step 1: find all "ToStem" entries in stempool from last run.
@@ -199,7 +199,7 @@ fn process_fresh_entries(
 
 		for x in &mut fresh_entries.iter_mut() {
 			let random = rng.gen_range(0, 101);
-			if random <= dandelion_config.stem_probability.unwrap() {
+			if random <= dandelion_config.stem_probability() {
 				x.state = PoolEntryState::ToStem;
 			} else {
 				x.state = PoolEntryState::ToFluff;
@@ -214,7 +214,7 @@ fn process_expired_entries(
 	tx_pool: Arc<RwLock<TransactionPool>>,
 ) -> Result<(), PoolError> {
 	let now = Utc::now().timestamp();
-	let embargo_sec = dandelion_config.embargo_secs.unwrap() + thread_rng().gen_range(0, 31);
+	let embargo_sec = dandelion_config.embargo_secs() + thread_rng().gen_range(0, 31);
 	let cutoff = now - embargo_sec as i64;
 
 	let mut expired_entries = vec![];
