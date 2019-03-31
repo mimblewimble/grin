@@ -31,7 +31,7 @@ and some of the motivations behind it.
 ### Cycles in a Graph
 
 Cuckoo Cycle is an algorithm meant to detect cycles in a bipartite graph of N nodes
-and M edges. In plainer terms, a bipartite graph is one in which edges (i.e. lines connecting nodes)
+and M edges. In plain terms, a bipartite graph is one in which edges (i.e. lines connecting nodes)
 travel only between 2 separate groups of nodes. In the case of the Cuckoo hashtable in Cuckoo Cycle,
 one side of the graph is an array numbered with odd indices (up to the size of the graph), and the other is numbered with even
 indices. A node is simply a numbered 'space' on either side of the Cuckoo Table, and an Edge is a

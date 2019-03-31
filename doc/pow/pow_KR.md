@@ -1,61 +1,30 @@
-# Grin's Proof-of-Work
+# Grin의 작업증명
 
-This document is meant to outline, at a level suitable for someone without prior knowledge,
-the algorithms and processes currently involved in Grin's Proof-of-Work system. We'll start
-with a general overview of cycles in a graph and the Cuckoo Cycle algorithm which forms the
-basis of Grin's proof-of-work. We'll then move on to Grin-specific details, which will outline
-the other systems that combine with Cuckoo Cycle to form the entirety of mining in Grin.
+이 문서는 사전지식이 없는 사람의 수준에서 Grin의 작업증명 시스템과 관련된 알고리즘 및 프로세스를 대략적으로 설명합니다. Grin의 작업 증명의 기초를 형성하는 Cuckoo Cycle 알고리즘과 그래프의 사이클에 대한 개요로 시작하겠습니다. 그런 다음 Cuckoo Cycle과 결합하여 Grin에서 마이닝 전체 형태를 형성하는 시스템인 Grin특유의 세부 정보에 대해서  설명합니다.
 
-Please note that Grin is currently under active development, and any and all of this is subject to
-(and will) change before a general release.
+Grin은 현재 활발하게 개발 중이며,이 중 일부 및 전부는 릴리즈 전에 변경 될 수 있습니다.
 
-이 문서는 사전 지식이없는 사람에게 적합한 수준에서 Grin의 Proof-of-Work 시스템과 관련된 알고리즘 및 프로세스를 개괄적으로 설명합니다. Grin의 작업 증명의 기초를 형성하는 Cuckoo Cycle 알고리즘과 그래프의주기에 대한 일반적인 개요로 시작하겠습니다. 그런 다음 Grin 고유의 세부 정보로 이동하여 Cuckoo Cycle과 결합하여 Grin에서 광업 전체를 형성하는 다른 시스템에 대해 설명합니다.
+## Graphs 와 Cuckoo Cycle
 
-Grin은 현재 적극적으로 개발 중이며,이 중 일부 및 전부는 일반 출시 전에 변경 될 수 있습니다.
+Grin의 기본 Proof-of-Work 알고리즘은 Cuckoo Cycle 이라고 합니다 이 알고리즘은 Bitcoin 스타일의 하드웨어 경쟁에 (ASIC을 뜻함 - 역자 주) 내성을 갖도록 특별히 설계되었습니다 . Cuckoo cycle은 이론 상으로 slution time 이 CPU 프로세서 또는 GPU 속도가 아닌 메모리 대역폭에 의해 제한된다는 메모리 바운드( [memory bound function](https://en.wikipedia.org/wiki/Memory_bound_function)) 알고리즘 입니다. 따라서 마이닝 Cuckoo cycle solution은 대부분의 상용 하드웨어에서 실행 가능해야만 하고 다른 대부분의 GPU, CPU 또는 ASIC 바인딩 된 작업 증명 알고리즘보다 훨씬 적은 에너지를 필요로 합니다.
 
-## Graphs and Cuckoo Cycle
+Cuckoo cyle pow의 최신 문서들과 구현은 John Tromp 의 [깃헙](https://github.com/tromp/cuckoo)에서 볼 수 있으며 이 알고리즘의 pow는 그의 작업 결과물입니다. 이 [링크](https://github.com/tromp/cuckoo/blob/master/doc/cuckoo.pdf)는 Cuckoo cycle 의 백서이고 좀 더 기술적인 디테일에 대해서 최고의 자료입니다. 
 
-Grin's basic Proof-of-Work algorithm is called Cuckoo Cycle, which is specifically designed
-to be resistant to Bitcoin style hardware arms-races. It is primarily a memory bound algorithm,
-which, (at least in theory,) means that solution time is bound by memory bandwidth
-rather than raw processor or GPU speed. As such, mining Cuckoo Cycle solutions should be viable on
-most commodity hardware, and require far less energy than most other GPU, CPU or ASIC-bound
-proof of work algorithms.
+John Tromp가 Cuckoo Cycle 에 대해 한참을 이야기하는 [Monero Monitor의 마이크가 진하는 팟 캐스트 (Podcast)](https://moneromonitor.com/episodes/2017-09-26-Episode-014.html)도 있습니다. Cuckoo cycle 에 대한 기술적인 세부사항 이라던지 알고리즘 개발의 역사 또는 그 안에 숨겨진 개발 동기등 관련 배경 지식을 더 많이 원하는 사람들을 위해 청취해보기를 추천합니다.
 
-Grin의 기본 Proof-of-Work 알고리즘은 Bitcoin 스타일 하드웨어 군비에 내성을 갖도록 특별히 설계된 Cuckoo Cycle이라고합니다. 이것은 주로 메모리 바운드 알고리즘입니다. (적어도 이론 상으로는) 솔루션 시간이 원시 프로세서 또는 GPU 속도가 아닌 메모리 대역폭에 의해 제한된다는 것을 의미합니다. 따라서 광산 뻐꾸기 사이클 솔루션은 대부분의 상용 하드웨어에서 실행 가능해야하며 다른 대부분의 GPU, CPU 또는 ASIC의 바인딩 된 작업 증명 알고리즘보다 훨씬 적은 에너지를 필요로합니다.
+### Graph 의 Cycle
 
-The Cuckoo Cycle POW is the work of John Tromp, and the most up-to-date documentation and implementations
-can be found in [his github repository](https://github.com/tromp/cuckoo). The
-[white paper](https://github.com/tromp/cuckoo/blob/master/doc/cuckoo.pdf) is the best source of
-further technical details.
-
-There is also a [podcast with Mike from Monero Monitor](https://moneromonitor.com/episodes/2017-09-26-Episode-014.html)
-in which John Tromp talks at length about Cuckoo Cycle; recommended listening for anyone wanting
-more background on Cuckoo Cycle, including more technical detail, the history of the algorithm's development
-and some of the motivations behind it.
-
-### Cycles in a Graph
-
-Cuckoo Cycle is an algorithm meant to detect cycles in a bipartite graph of N nodes
-and M edges. In plainer terms, a bipartite graph is one in which edges (i.e. lines connecting nodes)
-travel only between 2 separate groups of nodes. In the case of the Cuckoo hashtable in Cuckoo Cycle,
-one side of the graph is an array numbered with odd indices (up to the size of the graph), and the other is numbered with even
-indices. A node is simply a numbered 'space' on either side of the Cuckoo Table, and an Edge is a
-line connecting two nodes on opposite sides. The simple graph below denotes just such a graph,
-with 4 nodes on the 'even' side (top), 4 nodes on the odd side (bottom) and zero Edges
-(i.e. no lines connecting any nodes.)
-
-Cuckoo Cycle은 N 개의 노드와 M 개의 가장자리로 구성된 이진 그래프의 사이클을 감지하기위한 알고리즘입니다. 간단히 말해서, 2 부분 그래프는 모서리 (즉, 노드를 연결하는 선)가 2 개의 개별 노드 그룹 사이에서만 이동하는 그래프입니다. Cuckoo Cycle에서 Cuckoo 해시 테이블의 경우, 그래프의 한면은 홀수 색인 (그래프 크기까지)이 붙은 배열이고 다른 배열은 짝수 인덱스로 번호가 매겨집니다. 노드는 단순히 Cuckoo Table의 한쪽에 번호가 매겨진 '공간'이고, Edge는 반대쪽에있는 두 노드를 연결하는 선입니다. 아래의 간단한 그래프는 '짝수'측면 (상단)에 4 개의 노드, 홀수 측면 (하단)에 4 개의 노드 및 가장자리가없는 에지 (즉, 모든 노드를 연결하는 선)가없는 그래프를 나타냅니다.
+Cuckoo Cycle은 N 개의 노드와 M 개의 가장자리로 구성된 양분 그래프의 사이클을 감지하기 위한 알고리즘입니다. 간단히 말해서, 양분 그래프는 엣지(즉, 노드를 연결하는 선)가 2개의 노드 그룹 사이에서만 이동하는 그래프입니다. Cuckoo Cycle에서 Cuckoo 해시 테이블의 경우, 그래프의 한면은 인덱스(그래프 크기까지)가 홀수개 인 배열이고 다른 배열은 짝수 인덱스로 번호가 매겨집니다. 노드는 단순히 Cuckoo Table의 한쪽에 번호가 매겨진 '공간'이고, Edge는 반대쪽에있는 두 노드를 연결하는 선입니다. 아래의 간단한 그래프는 '짝수'측면 (상단)에 4 개의 노드, 홀수 측면 (하단)에 4 개의 노드 및 엣지 (즉, 모든 노드를 연결하는 선)가 없는 그래프를 나타냅니다.
 
 ![alt text](images/cuckoo_base_numbered_minimal.png)
 
-*A graph of 8 Nodes with Zero Edges*
+*제로 엣지가 있는 8개 노드의 그래프*
 
-Let's throw a few Edges into the graph now, randomly:
+랜덤하게 몇개의 엣지들을 그래프에 던져 보겠습니다.
 
 ![alt text](images/cuckoo_base_numbered_few_edges.png)
 
-*8 Nodes with 4 Edges, no solution*
+*솔루션이 없는 8개의 노드와 4개의 엣지*
 
 We now have a randomly-generated graph with 8 nodes (N) and 4 edges (M), or an NxM graph where
 N=8 and M=4. Our basic Proof-of-Work is now concerned with finding 'cycles' of a certain length
@@ -70,7 +39,7 @@ would mean that all 4 edges would need to be randomly generated in a perfect cyc
 in order for there to be a solution.
 
 
-이제 8 개의 노드 (N)와 4 개의 에지 (M) 또는 N = 8과 M = 4 인 NxM 그래프가있는 무작위로 생성 된 그래프가 있습니다. 우리의 기본적인 Proof-of-Work는 이제이 무작위 그래프 내에서 특정 길이의 '주기'를 찾거나 단순히 같은 노드에서 시작하고 끝나는 일련의 연결된 노드를 찾는 것과 관련이 있습니다. 따라서 길이 4 (동일한 노드에서 시작하고 끝나는 4 개의 노드를 연결하는 경로)의 사이클을 찾는다면이 그래프에서 하나를 발견 할 수 없습니다.
+이제 8개의 노드 (N)와 4개의 에지 (M) 또는 N = 8과 M = 4 인 NxM 그래프가 있는 랜덤하게 생성된 그래프가 있습니다. 기본적인 Proof-of-Work는 이 랜덤한 그래프 내에서 특정 길이의 '주기'를 찾거나 단순히 같은 노드에서 시작하고 끝나는 일련의 연결된 노드를 찾는 것과 관련이 있습니다. 따라서 길이 4 (동일한 노드에서 시작하고 끝나는 4 개의 노드를 연결하는 경로)의 사이클을 찾는다면이 그래프에서 하나를 발견 할 수 없습니다.
 
 노드 수 N을 기준으로 한 모서리 수를 조정하면 사이클 찾기 문제의 난이도와 현재 그래프에 사이클이 존재할 확률이 변경됩니다. 예를 들어, POW 문제가 그래프에서 길이 4의주기를 찾는 것과 관련된다면, 현재의 4/8 난이도 (M / N)는 모든 4 개의 엣지가 완벽한 사이클에서 무작위로 생성 될 필요가 있음을 의미합니다. 0-5-4-1-0)을 사용하십시오.
 
