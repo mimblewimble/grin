@@ -22,7 +22,8 @@ use rand::prelude::*;
 use crate::api;
 use crate::chain;
 use crate::core::global::ChainTypes;
-use crate::core::{core, pow};
+use crate::core::{core, libtx, pow};
+use crate::keychain;
 use crate::p2p;
 use crate::pool;
 use crate::pool::types::DandelionConfig;
@@ -34,6 +35,8 @@ use crate::util::RwLock;
 pub enum Error {
 	/// Error originating from the core implementation.
 	Core(core::block::Error),
+	/// Error originating from the libtx implementation.
+	LibTx(libtx::Error),
 	/// Error originating from the db storage.
 	Store(store::Error),
 	/// Error originating from the blockchain implementation.
@@ -46,12 +49,18 @@ pub enum Error {
 	Cuckoo(pow::Error),
 	/// Error originating from the transaction pool.
 	Pool(pool::PoolError),
+	/// Error originating from the keychain.
+	Keychain(keychain::Error),
 	/// Invalid Arguments.
 	ArgumentError(String),
 	/// Wallet communication error
 	WalletComm(String),
 	/// Error originating from some I/O operation (likely a file on disk).
 	IOError(std::io::Error),
+	/// Configuration error
+	Configuration(String),
+	/// General error
+	General(String),
 }
 
 impl From<core::block::Error> for Error {
@@ -96,6 +105,18 @@ impl From<api::Error> for Error {
 impl From<pool::PoolError> for Error {
 	fn from(e: pool::PoolError) -> Error {
 		Error::Pool(e)
+	}
+}
+
+impl From<keychain::Error> for Error {
+	fn from(e: keychain::Error) -> Error {
+		Error::Keychain(e)
+	}
+}
+
+impl From<libtx::Error> for Error {
+	fn from(e: libtx::Error) -> Error {
+		Error::LibTx(e)
 	}
 }
 
@@ -299,6 +320,9 @@ pub enum SyncStatus {
 	/// Downloading the various txhashsets
 	TxHashsetDownload {
 		start_time: DateTime<Utc>,
+		prev_update_time: DateTime<Utc>,
+		update_time: DateTime<Utc>,
+		prev_downloaded_size: u64,
 		downloaded_size: u64,
 		total_size: u64,
 	},

@@ -20,9 +20,6 @@ use std::io::{self, BufWriter, ErrorKind, Read, Write};
 use std::marker;
 use std::path::{Path, PathBuf};
 
-/// A no-op function for doing nothing with some pruned data.
-pub fn prune_noop(_pruned_data: &[u8]) {}
-
 /// Data file (MMR) wrapper around an append only file.
 pub struct DataFile<T> {
 	file: AppendOnlyFile,
@@ -113,16 +110,13 @@ where
 	}
 
 	/// Write the file out to disk, pruning removed elements.
-	pub fn save_prune<F>(&self, target: &str, prune_offs: &[u64], prune_cb: F) -> io::Result<()>
-	where
-		F: Fn(&[u8]),
-	{
+	pub fn save_prune(&self, target: &str, prune_offs: &[u64]) -> io::Result<()> {
 		let prune_offs = prune_offs
 			.iter()
 			.map(|x| x * T::LEN as u64)
 			.collect::<Vec<_>>();
 		self.file
-			.save_prune(target, prune_offs.as_slice(), T::LEN as u64, prune_cb)
+			.save_prune(target, prune_offs.as_slice(), T::LEN as u64)
 	}
 }
 
@@ -294,15 +288,8 @@ impl AppendOnlyFile {
 
 	/// Saves a copy of the current file content, skipping data at the provided
 	/// prune indices. The prune Vec must be ordered.
-	pub fn save_prune<T, P>(
-		&self,
-		target: P,
-		prune_offs: &[u64],
-		prune_len: u64,
-		prune_cb: T,
-	) -> io::Result<()>
+	pub fn save_prune<P>(&self, target: P, prune_offs: &[u64], prune_len: u64) -> io::Result<()>
 	where
-		T: Fn(&[u8]),
 		P: AsRef<Path>,
 	{
 		if prune_offs.is_empty() {
@@ -332,8 +319,6 @@ impl AppendOnlyFile {
 					let prune_at = (prune_offs[prune_pos] - read) as usize;
 					if prune_at != buf_start {
 						writer.write_all(&buf[buf_start..prune_at])?;
-					} else {
-						prune_cb(&buf[buf_start..prune_at]);
 					}
 					buf_start = prune_at + (prune_len as usize);
 					if prune_offs.len() > prune_pos + 1 {

@@ -63,7 +63,7 @@ fn test_coinbase_maturity() {
 	let key_id3 = ExtKeychainPath::new(1, 3, 0, 0, 0).to_identifier();
 	let key_id4 = ExtKeychainPath::new(1, 4, 0, 0, 0).to_identifier();
 
-	let next_header_info = consensus::next_difficulty(1, chain.difficulty_iter());
+	let next_header_info = consensus::next_difficulty(1, chain.difficulty_iter().unwrap());
 	let reward = libtx::reward::output(&keychain, &key_id1, 0, false).unwrap();
 	let mut block = core::core::Block::new(&prev, vec![], Difficulty::min(), reward).unwrap();
 	block.header.timestamp = prev.timestamp + Duration::seconds(60);
@@ -110,7 +110,7 @@ fn test_coinbase_maturity() {
 	let fees = txs.iter().map(|tx| tx.fee()).sum();
 	let reward = libtx::reward::output(&keychain, &key_id3, fees, false).unwrap();
 	let mut block = core::core::Block::new(&prev, txs, Difficulty::min(), reward).unwrap();
-	let next_header_info = consensus::next_difficulty(1, chain.difficulty_iter());
+	let next_header_info = consensus::next_difficulty(1, chain.difficulty_iter().unwrap());
 	block.header.timestamp = prev.timestamp + Duration::seconds(60);
 	block.header.pow.secondary_scaling = next_header_info.secondary_scaling;
 
@@ -144,7 +144,7 @@ fn test_coinbase_maturity() {
 
 		let reward = libtx::reward::output(&keychain, &pk, 0, false).unwrap();
 		let mut block = core::core::Block::new(&prev, vec![], Difficulty::min(), reward).unwrap();
-		let next_header_info = consensus::next_difficulty(1, chain.difficulty_iter());
+		let next_header_info = consensus::next_difficulty(1, chain.difficulty_iter().unwrap());
 		block.header.timestamp = prev.timestamp + Duration::seconds(60);
 		block.header.pow.secondary_scaling = next_header_info.secondary_scaling;
 
@@ -169,7 +169,7 @@ fn test_coinbase_maturity() {
 
 	let txs = vec![coinbase_txn];
 	let fees = txs.iter().map(|tx| tx.fee()).sum();
-	let next_header_info = consensus::next_difficulty(1, chain.difficulty_iter());
+	let next_header_info = consensus::next_difficulty(1, chain.difficulty_iter().unwrap());
 	let reward = libtx::reward::output(&keychain, &key_id4, fees, false).unwrap();
 	let mut block = core::core::Block::new(&prev, txs, Difficulty::min(), reward).unwrap();
 

@@ -19,11 +19,12 @@
 //! register them on a ApiServer.
 
 use crate::router::{Handler, HandlerObj, ResponseFuture, Router};
+use crate::web::response;
 use failure::{Backtrace, Context, Fail, ResultExt};
 use futures::sync::oneshot;
 use futures::Stream;
 use hyper::rt::Future;
-use hyper::{rt, Body, Request, Server};
+use hyper::{rt, Body, Request, Server, StatusCode};
 use rustls;
 use rustls::internal::pemfile;
 use std::fmt::{self, Display};
@@ -264,6 +265,9 @@ impl Handler for LoggingMiddleware {
 		mut handlers: Box<dyn Iterator<Item = HandlerObj>>,
 	) -> ResponseFuture {
 		debug!("REST call: {} {}", req.method(), req.uri().path());
-		handlers.next().unwrap().call(req, handlers)
+		match handlers.next() {
+			Some(handler) => handler.call(req, handlers),
+			None => response(StatusCode::INTERNAL_SERVER_ERROR, "no handler found"),
+		}
 	}
 }

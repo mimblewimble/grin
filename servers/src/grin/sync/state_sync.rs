@@ -113,7 +113,7 @@ impl StateSync {
 		}
 
 		// run fast sync if applicable, normally only run one-time, except restart in error
-		if header_head.height == highest_height {
+		if sync_need_restart || header_head.height == highest_height {
 			let (go, download_timeout) = self.state_sync_due();
 
 			if let SyncStatus::TxHashsetDownload { .. } = self.sync_state.status() {
@@ -147,6 +147,9 @@ impl StateSync {
 
 				self.sync_state.update(SyncStatus::TxHashsetDownload {
 					start_time: Utc::now(),
+					prev_update_time: Utc::now(),
+					update_time: Utc::now(),
+					prev_downloaded_size: 0,
 					downloaded_size: 0,
 					total_size: 0,
 				});
@@ -163,9 +166,25 @@ impl StateSync {
 			let mut txhashset_head = self
 				.chain
 				.get_block_header(&header_head.prev_block_h)
-				.unwrap();
+				.map_err(|e| {
+					error!(
+						"chain error dirung getting a block header {}: {:?}",
+						&header_head.prev_block_h, e
+					);
+					p2p::Error::Internal
+				})?;
 			for _ in 0..threshold {
-				txhashset_head = self.chain.get_previous_header(&txhashset_head).unwrap();
+				txhashset_head = self
+					.chain
+					.get_previous_header(&txhashset_head)
+					.map_err(|e| {
+						error!(
+							"chain error dirung getting a previous block header {}: {:?}",
+							txhashset_head.hash(),
+							e
+						);
+						p2p::Error::Internal
+					})?;
 			}
 			let bhash = txhashset_head.hash();
 			debug!(

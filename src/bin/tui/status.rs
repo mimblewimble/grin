@@ -128,6 +128,9 @@ impl TUIStatusListener for TUIStatusView {
 				}
 				SyncStatus::TxHashsetDownload {
 					start_time,
+					prev_update_time,
+					update_time: _,
+					prev_downloaded_size,
 					downloaded_size,
 					total_size,
 				} => {
@@ -137,14 +140,14 @@ impl TUIStatusListener for TUIStatusView {
 						} else {
 							0
 						};
-						let start = start_time.timestamp_nanos();
+						let start = prev_update_time.timestamp_nanos();
 						let fin = Utc::now().timestamp_nanos();
 						let dur_ms = (fin - start) as f64 * NANO_TO_MILLIS;
 
 						format!("Downloading {}(MB) chain state for state sync: {}% at {:.1?}(kB/s), step 2/4",
 						total_size / 1_000_000,
 						percent,
-						if dur_ms > 1.0f64 { downloaded_size as f64 / dur_ms as f64 } else { 0f64 },
+						if dur_ms > 1.0f64 { (downloaded_size - prev_downloaded_size) as f64 / dur_ms as f64 } else { 0f64 },
 						)
 					} else {
 						let start = start_time.timestamp_millis();
