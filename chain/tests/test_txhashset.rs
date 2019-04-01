@@ -47,10 +47,7 @@ fn test_unexpected_zip() {
 	let head = BlockHeader::default();
 	// First check if everything works out of the box
 	assert!(txhashset::zip_read(db_root.clone(), &head, Some(rand)).is_ok());
-	let zip_path = Path::new(&db_root).join(format!(
-		"txhashset_snapshot_{}.zip",
-		rand
-	));
+	let zip_path = Path::new(&db_root).join(format!("txhashset_snapshot_{}.zip", rand));
 	let zip_file = File::open(&zip_path).unwrap();
 	assert!(txhashset::zip_write(
 		PathBuf::from(db_root.clone()),
