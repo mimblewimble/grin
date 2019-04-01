@@ -18,7 +18,7 @@ use std::ops::Deref;
 use backtrace::Backtrace;
 use std::{panic, thread};
 
-use crate::types::{LogLevel, LoggingConfig};
+use crate::types::{self, LogLevel, LoggingConfig};
 
 use log::{LevelFilter, Record};
 use log4rs;
@@ -124,8 +124,11 @@ pub fn init_logger(config: Option<LoggingConfig>) {
 			let filter = Box::new(ThresholdFilter::new(level_file));
 			let file: Box<dyn Append> = {
 				if let Some(size) = c.log_max_size {
+					let count = c
+						.log_max_files
+						.unwrap_or_else(|| types::DEFAULT_ROTATE_LOG_FILES);
 					let roller = FixedWindowRoller::builder()
-						.build(&format!("{}.{{}}.gz", c.log_file_path), 32)
+						.build(&format!("{}.{{}}.gz", c.log_file_path), count)
 						.unwrap();
 					let trigger = SizeTrigger::new(size);
 

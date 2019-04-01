@@ -183,6 +183,5 @@ fn process_expired_entries(
 			Err(e) => warn!("dand_mon: failed to fluff expired tx {}, {:?}", txhash, e),
 		};
 	}
-
 	Ok(())
 }

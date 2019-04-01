@@ -1,5 +1,7 @@
 # Blockchain Syncing
 
+*Read this in other languages: [Korean](chain_sync_KR.md).*
+
 We describe here the different methods used by a new node when joining the network
 to catch up with the latest chain state. We start with reminding the reader of the
 following assumptions, which are all characteristics of Grin or MimbleWimble:
@@ -110,7 +112,7 @@ that block.
 
 If a hard fork occurs, the network may become split, forcing new nodes to always
 push their horizon back to when the hard fork occurred. While this is not a problem
-for short-term hard forks, it may become an issue for long-term or permanent forks
+for short-term hard forks, it may become an issue for long-term or permanent forks.
 To prevent this situation, peers should always be checked for hard fork related
 capabilities (a bitmask of features a peer exposes) on connection.
 

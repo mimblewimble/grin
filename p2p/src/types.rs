@@ -75,6 +75,7 @@ pub enum Error {
 	},
 	Send(String),
 	PeerException,
+	Internal,
 }
 
 impl From<ser::Error> for Error {
