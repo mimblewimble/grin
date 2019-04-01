@@ -113,7 +113,7 @@ impl UI {
 				.send(ControllerMessage::Shutdown)
 				.unwrap();
 		});
-		grin_ui.cursive.set_fps(4);
+		grin_ui.cursive.set_autorefresh(true);
 		grin_ui
 	}
 
