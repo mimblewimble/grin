@@ -100,7 +100,7 @@ impl BodySync {
 
 		hashes.reverse();
 
-		let peers = self.peers.more_work_peers();
+		let peers = self.peers.more_work_peers()?;
 
 		// if we have 5 peers to sync from then ask for 50 blocks total (peer_count *
 		// 10) max will be 80 if all 8 peers are advertising more work

@@ -77,7 +77,7 @@ impl SyncRunner {
 		let mut n = 0;
 		const MIN_PEERS: usize = 3;
 		loop {
-			let wp = self.peers.more_or_same_work_peers();
+			let wp = self.peers.more_or_same_work_peers()?;
 			// exit loop when:
 			// * we have more than MIN_PEERS more_or_same_work peers
 			// * we are synced already, e.g. grin was quickly restarted
