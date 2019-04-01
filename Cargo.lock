@@ -376,28 +376,6 @@ dependencies = [
 
 [[package]]
 name = "cursive"
-version = "0.10.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-dependencies = [
- "crossbeam-channel 0.3.8 (registry+https://github.com/rust-lang/crates.io-index)",
- "enum-map 0.4.1 (registry+https://github.com/rust-lang/crates.io-index)",
- "enumset 0.3.17 (registry+https://github.com/rust-lang/crates.io-index)",
- "libc 0.2.51 (registry+https://github.com/rust-lang/crates.io-index)",
- "log 0.4.6 (registry+https://github.com/rust-lang/crates.io-index)",
- "maplit 1.0.1 (registry+https://github.com/rust-lang/crates.io-index)",
- "ncurses 5.99.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "num 0.2.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "owning_ref 0.4.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "signal-hook 0.1.8 (registry+https://github.com/rust-lang/crates.io-index)",
- "term_size 0.3.1 (registry+https://github.com/rust-lang/crates.io-index)",
- "toml 0.4.10 (registry+https://github.com/rust-lang/crates.io-index)",
- "unicode-segmentation 1.2.1 (registry+https://github.com/rust-lang/crates.io-index)",
- "unicode-width 0.1.5 (registry+https://github.com/rust-lang/crates.io-index)",
- "xi-unicode 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
-]
-
-[[package]]
-name = "cursive"
 version = "0.11.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 dependencies = [
@@ -410,6 +388,7 @@ dependencies = [
  "libc 0.2.51 (registry+https://github.com/rust-lang/crates.io-index)",
  "log 0.4.6 (registry+https://github.com/rust-lang/crates.io-index)",
  "maplit 1.0.1 (registry+https://github.com/rust-lang/crates.io-index)",
+ "ncurses 5.99.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "num 0.2.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "owning_ref 0.4.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "pancurses 0.16.1 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -453,16 +432,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 name = "either"
 version = "1.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-
-[[package]]
-name = "enum-map"
-version = "0.4.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-dependencies = [
- "array-macro 1.0.3 (registry+https://github.com/rust-lang/crates.io-index)",
- "enum-map-derive 0.4.1 (registry+https://github.com/rust-lang/crates.io-index)",
- "reexport-proc-macro 1.0.6 (registry+https://github.com/rust-lang/crates.io-index)",
-]
 
 [[package]]
 name = "enum-map"
@@ -662,7 +631,6 @@ dependencies = [
  "chrono 0.4.6 (registry+https://github.com/rust-lang/crates.io-index)",
  "clap 2.32.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "ctrlc 3.1.1 (registry+https://github.com/rust-lang/crates.io-index)",
- "cursive 0.10.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "cursive 0.11.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "failure 0.1.5 (registry+https://github.com/rust-lang/crates.io-index)",
  "failure_derive 0.1.5 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -1802,11 +1770,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "reexport-proc-macro"
-version = "1.0.6"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-
-[[package]]
 name = "regex"
 version = "1.1.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2656,14 +2619,12 @@ dependencies = [
 "checksum crypto-mac 0.6.2 (registry+https://github.com/rust-lang/crates.io-index)" = "7afa06d05a046c7a47c3a849907ec303504608c927f4e85f7bfff22b7180d971"
 "checksum ct-logs 0.4.0 (registry+https://github.com/rust-lang/crates.io-index)" = "95a4bf5107667e12bf6ce31a3a5066d67acc88942b6742117a41198734aaccaa"
 "checksum ctrlc 3.1.1 (registry+https://github.com/rust-lang/crates.io-index)" = "630391922b1b893692c6334369ff528dcc3a9d8061ccf4c803aa8f83cb13db5e"
-"checksum cursive 0.10.0 (registry+https://github.com/rust-lang/crates.io-index)" = "ad36e47ece323d806b1daa3c87c7eb2aae54ef15e6554e27fe3dbdacf6b515fc"
 "checksum cursive 0.11.1 (registry+https://github.com/rust-lang/crates.io-index)" = "f57253da196e8f814d81a0f1e502d2181f7963574568ed949439069162f4405c"
 "checksum difference 2.0.0 (registry+https://github.com/rust-lang/crates.io-index)" = "524cbf6897b527295dff137cec09ecf3a05f4fddffd7dfcd1585403449e74198"
 "checksum digest 0.7.6 (registry+https://github.com/rust-lang/crates.io-index)" = "03b072242a8cbaf9c145665af9d250c59af3b958f83ed6824e13533cf76d5b90"
 "checksum dirs 1.0.5 (registry+https://github.com/rust-lang/crates.io-index)" = "3fd78930633bd1c6e35c4b42b1df7b0cbc6bc191146e512bb3bedf243fcc3901"
 "checksum dtoa 0.4.3 (registry+https://github.com/rust-lang/crates.io-index)" = "6d301140eb411af13d3115f9a562c85cc6b541ade9dfa314132244aaee7489dd"
 "checksum either 1.5.1 (registry+https://github.com/rust-lang/crates.io-index)" = "c67353c641dc847124ea1902d69bd753dee9bb3beff9aa3662ecf86c971d1fac"
-"checksum enum-map 0.4.1 (registry+https://github.com/rust-lang/crates.io-index)" = "caa1769f019df7ccd8f9a741d2d608309688d0f1bd8a8747c14ac993660c761c"
 "checksum enum-map 0.5.0 (registry+https://github.com/rust-lang/crates.io-index)" = "ccd9b2d5e0eb5c2ff851791e2af90ab4531b1168cfc239d1c0bf467e60ba3c89"
 "checksum enum-map-derive 0.4.1 (registry+https://github.com/rust-lang/crates.io-index)" = "153f6e8a8b2868e2fedf921b165f30229edcccb74d6a9bb1ccf0480ef61cd07e"
 "checksum enum-map-internals 0.1.2 (registry+https://github.com/rust-lang/crates.io-index)" = "38b0bacf3ea7aba18ce84032efc3f0fa29f5c814048b742ab3e64d07d83ac3e8"
@@ -2784,7 +2745,6 @@ dependencies = [
 "checksum redox_syscall 0.1.52 (registry+https://github.com/rust-lang/crates.io-index)" = "d32b3053e5ced86e4bc0411fec997389532bf56b000e66cb4884eeeb41413d69"
 "checksum redox_termios 0.1.1 (registry+https://github.com/rust-lang/crates.io-index)" = "7e891cfe48e9100a70a3b6eb652fef28920c117d366339687bd5576160db0f76"
 "checksum redox_users 0.3.0 (registry+https://github.com/rust-lang/crates.io-index)" = "3fe5204c3a17e97dde73f285d49be585df59ed84b50a872baf416e73b62c3828"
-"checksum reexport-proc-macro 1.0.6 (registry+https://github.com/rust-lang/crates.io-index)" = "b90ec417f693152463d468b6d06ccc45ae3833f0538ef9e1cc154cf09eb1f575"
 "checksum regex 1.1.4 (registry+https://github.com/rust-lang/crates.io-index)" = "2cf47563eeec4ae0b6f5b0e0306024ccef91e779342705bbaa4b6ffc75ad825d"
 "checksum regex-syntax 0.6.6 (registry+https://github.com/rust-lang/crates.io-index)" = "dcfd8681eebe297b81d98498869d4aae052137651ad7b96822f09ceb690d0a96"
 "checksum ring 0.13.5 (registry+https://github.com/rust-lang/crates.io-index)" = "2c4db68a2e35f3497146b7e4563df7d4773a2433230c5e4b448328e31740458a"

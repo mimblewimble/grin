@@ -51,22 +51,22 @@ env:
 
 matrix:
   include:
-#    - os: linux
-#      env: CI_JOB="test"        CI_JOB_ARGS="servers"
-#    - os: linux
-#      env: CI_JOB="test"        CI_JOB_ARGS="chain core"
-#    - os: linux
-#      env: CI_JOB="test"        CI_JOB_ARGS="pool p2p src"
-#    - os: linux
-#      env: CI_JOB="test"        CI_JOB_ARGS="keychain"
-#    - os: linux
-#      env: CI_JOB="test"        CI_JOB_ARGS="api util store"
-#    - os: linux
-#      env: CI_JOB="release"     CI_JOB_ARGS=
-#    - os: osx
-#      env: CI_JOB="release"     CI_JOB_ARGS=
-    - os: windows
+    - os: linux
+      env: CI_JOB="test"        CI_JOB_ARGS="servers"
+    - os: linux
+      env: CI_JOB="test"        CI_JOB_ARGS="chain core"
+    - os: linux
+      env: CI_JOB="test"        CI_JOB_ARGS="pool p2p src"
+    - os: linux
+      env: CI_JOB="test"        CI_JOB_ARGS="keychain"
+    - os: linux
+      env: CI_JOB="test"        CI_JOB_ARGS="api util store"
+    - os: linux
       env: CI_JOB="release"     CI_JOB_ARGS=
+    - os: osx
+      env: CI_JOB="release"     CI_JOB_ARGS=
+#    - os: windows
+#      env: CI_JOB="release"     CI_JOB_ARGS=
 
 script: .ci/general-jobs
 
