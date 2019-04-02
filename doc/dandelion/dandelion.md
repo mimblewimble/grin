@@ -1,17 +1,35 @@
-# Dandelion in Grin: Privacy-Preserving Transaction Aggregation and Propagation
+# Dandelion++ in Grin: Privacy-Preserving Transaction Aggregation and Propagation
 
-*Read this document in other languages: [Korean](dandelion_KR.md).*
+*Read this document in other languages: [Korean](dandelion_KR.md). [out of date]*
 
-This document describes the implementation of Dandelion in Grin and its modification to handle transactions aggregation in the P2P protocol.
 ## Introduction
 
-Dandelion is a new transaction broadcasting mechanism that reduces the risk of eavesdroppers linking transactions to the source IP. Moreover, it allows Grin transactions to be aggregated (removing input-output pairs) before being broadcasted to the entire network giving an additional privacy perk.
+The Dandelion++ protocol for broadcasting transactions, proposed by Fanti et al. (2018)[1], intends to defend against de-anonymization attacks during transaction propagation. In Grin, it also provides an opportunity to aggregate transactions before they are broadcasted to the entire network. This document describes the protocol and the simplified version of it that is implemented in Grin.
 
-Dandelion was introduced in [1] by G. Fanti et al. and presented at ACM Sigmetrics 2017. On June 2017, a BIP [2] was proposed introducing a more practical and robust variant of Dandelion called Dandelion++ [3] published later in 2018.  This document is an adaptation of this BIP for Grin.
+In the following section, past research on the protocol is summarized. This is then followed by describing details on the Grin implementation; what the motivation behind its inclusion are, how the current implementation differs from the original paper, what some of the known issues are, and outlining some areas of improvement for future work. The final section concludes with a summary.
 
-We first define the original Dandelion propagation then the Grin adaptation  of the protocol with transaction aggregation.
+## Previous research
 
-## Original Dandelion
+### Dandelion
+
+### Dandelion++
+
+## Dandelion in Grin
+
+### Motivation
+
+### Current implementation
+
+### Known issues
+
+### Future work
+
+## Conclusion
+
+Dandelion++ is a transaction broadcasting mechanism that reduces the risk of eavesdroppers linking transactions to the source IP. Moreover, it allows Grin transactions to be aggregated (removing input-output pairs) before being broadcasted to the entire network giving an additional privacy perk.
+
+The original version of Dandelion was introduced by G. Fanti et al. and presented at ACM Sigmetrics 2017 [X]. On June 2017, a BIP [X] was proposed introducing a more practical and robust variant of Dandelion called Dandelion++, which was formalized in a paper published in 2018 [X].
+
 
 ### Mechanism
 
@@ -80,8 +98,8 @@ This gives us a P2P protocol that can handle transaction merging.
 A simulation of this scenario is available [here](simulation.md).
 
 ## References
+* [1] (Sigmetrics 2018) [Dandelion++: Lightweight Cryptocurrency Networking with Formal Anonymity Guarantees](https://arxiv.org/abs/1805.11060)
+* [X] (Sigmetrics 2017) [Dandelion: Redesigning the Bitcoin Network for Anonymity](https://arxiv.org/abs/1701.04439)
+* [X] [Dandelion BIP](https://github.com/dandelion-org/bips/blob/master/bip-dandelion.mediawiki)
 
-* [1] (Sigmetrics 2017) [Dandelion: Redesigning the Bitcoin Network for Anonymity](https://arxiv.org/abs/1701.04439)
-* [2] [Dandelion BIP](https://github.com/dandelion-org/bips/blob/master/bip-dandelion.mediawiki)
-* [3] (Sigmetrics 2018) [Dandelion++: Lightweight Cryptocurrency Networking with Formal Anonymity Guarantees](https://arxiv.org/abs/1805.11060)
-* [4] [Dandelion Grin Pull Request #1067](https://github.com/mimblewimble/grin/pull/1067)
+* [X] [Dandelion Grin Pull Request #1067](https://github.com/mimblewimble/grin/pull/1067)
