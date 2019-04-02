@@ -22,7 +22,7 @@ use crate::core::core::hash::{Hash, Hashed};
 use crate::core::pow::Difficulty;
 use crate::core::{core, global};
 use crate::handshake::Handshake;
-use crate::msg::{self, BanReason, GetPeerAddrs, Locator, Ping, TxHashSetRequest};
+use crate::msg::{self, BanReason, GetPeerAddrs, Locator, PeerAddrs, Ping, TxHashSetRequest};
 use crate::protocol::Protocol;
 use crate::types::{
 	Capabilities, ChainAdapter, Error, NetAdapter, P2PConfig, PeerAddr, PeerInfo, ReasonForBan,
@@ -385,6 +385,11 @@ impl Peer {
 			},
 			msg::Type::GetPeerAddrs,
 		)
+	}
+
+	pub fn send_peer_list(&self, peers: Vec<PeerAddr>) -> Result<(), Error> {
+		trace!("Sending {} more peers", self.info.addr);
+		connection!(self).send(&PeerAddrs { peers }, msg::Type::PeerAddrs)
 	}
 
 	pub fn send_txhashset_request(&self, height: u64, hash: Hash) -> Result<(), Error> {

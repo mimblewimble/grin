@@ -466,13 +466,21 @@ impl Peers {
 			.saturating_sub(max_count);
 		if excess_count > 0 {
 			// map peers to addrs in a block to bound how long we keep the read lock for
-			let mut addrs = self
-				.connected_peers()
-				.iter()
-				.take(excess_count)
-				.map(|x| x.info.addr.clone())
-				.collect::<Vec<_>>();
-			rm.append(&mut addrs);
+			let peers_to_stop = self.connected_peers().into_iter().take(excess_count);
+			let peers = self.find_peer_addrs(Capabilities::PEER_LIST);
+			for peer in peers_to_stop {
+				match peer.send_peer_list(peers.clone()) {
+					Ok(_) => info!(
+						"preparing to drop a peer {:?}, sent the peer list",
+						peer.info.addr
+					),
+					Err(e) => error!(
+						"failed to send list of peers to {:?} before dropping the conection: {:?}",
+						peer.info.addr, e
+					),
+				};
+				rm.push(peer.info.addr);
+			}
 		}
 
 		// now clean up peer map based on the list to remove
