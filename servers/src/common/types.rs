@@ -316,7 +316,7 @@ pub struct SyncState {
 }
 
 impl SyncState {
-	/// Return a new SyncState initialize to NoSync
+	/// Return a new SyncState initialize to Initial
 	pub fn new() -> SyncState {
 		SyncState {
 			current: RwLock::new(SyncStatus::Initial),

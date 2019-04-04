@@ -62,8 +62,9 @@ impl HeaderSync {
 		let enable_header_sync = match self.sync_state.status() {
 			SyncStatus::BodySync { .. }
 			| SyncStatus::HeaderSync { .. }
-			| SyncStatus::TxHashsetDone => true,
-			SyncStatus::NoSync | SyncStatus::Initial | SyncStatus::AwaitingPeers(_) => {
+			| SyncStatus::TxHashsetDone
+			| SyncStatus::NoSync => true,
+			SyncStatus::Initial | SyncStatus::AwaitingPeers(_) => {
 				let sync_head = self.chain.get_sync_head()?;
 				debug!(
 					"sync: initial transition to HeaderSync. sync_head: {} at {}, resetting to: {} at {}",
@@ -114,9 +115,9 @@ impl HeaderSync {
 		// no headers processed and we're past timeout, need to ask for more
 		let stalling = header_head.height <= latest_height && now > timeout;
 
-		// always enable header sync on initial state transition from NoSync / Initial
+		// always enable header sync on initial state transition from Initial
 		let force_sync = match self.sync_state.status() {
-			SyncStatus::NoSync | SyncStatus::Initial | SyncStatus::AwaitingPeers(_) => true,
+			SyncStatus::Initial | SyncStatus::AwaitingPeers(_) => true,
 			_ => false,
 		};
 
