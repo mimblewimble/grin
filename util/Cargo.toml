@@ -1,6 +1,6 @@
 [package]
 name = "grin_util"
-version = "1.0.2"
+version = "1.0.3"
 authors = ["Grin Developers <mimblewimble@lists.launchpad.net>"]
 description = "Simple, private and scalable cryptocurrency implementation based on the MimbleWimble chain format."
 license = "Apache-2.0"
@@ -28,5 +28,5 @@ zeroize = "0.5.2"
 #git = "https://github.com/mimblewimble/rust-secp256k1-zkp"
 #tag = "grin_integration_29"
 #path = "../../rust-secp256k1-zkp"
-version = "0.7.4"
+version = "0.7.5"
 features = ["bullet-proof-sizing"]
