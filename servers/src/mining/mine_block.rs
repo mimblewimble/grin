@@ -179,10 +179,9 @@ fn build_block(
 ///
 fn burn_reward(block_fees: BlockFees) -> Result<(core::Output, core::TxKernel, BlockFees), Error> {
 	warn!("Burning block fees: {:?}", block_fees);
-	let keychain = ExtKeychain::from_random_seed(global::is_floonet()).unwrap();
+	let keychain = ExtKeychain::from_random_seed(global::is_floonet())?;
 	let key_id = ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
-	let (out, kernel) =
-		crate::core::libtx::reward::output(&keychain, &key_id, block_fees.fees).unwrap();
+	let (out, kernel) = crate::core::libtx::reward::output(&keychain, &key_id, block_fees.fees)?;
 	Ok((out, kernel, block_fees))
 }
 
@@ -199,12 +198,20 @@ fn get_coinbase(
 		}
 		Some(wallet_listener_url) => {
 			let res = wallet::create_coinbase(&wallet_listener_url, &block_fees)?;
-			let out_bin = util::from_hex(res.output).unwrap();
-			let kern_bin = util::from_hex(res.kernel).unwrap();
-			let key_id_bin = util::from_hex(res.key_id).unwrap();
-			let output = ser::deserialize(&mut &out_bin[..]).unwrap();
-			let kernel = ser::deserialize(&mut &kern_bin[..]).unwrap();
-			let key_id = ser::deserialize(&mut &key_id_bin[..]).unwrap();
+			let out_bin = util::from_hex(res.output)
+				.map_err(|_| Error::General("failed to parse hex output".to_owned()))?;
+			let kern_bin = util::from_hex(res.kernel)
+				.map_err(|_| Error::General("failed to parse hex kernel".to_owned()))?;
+
+			let key_id_bin = util::from_hex(res.key_id)
+				.map_err(|_| Error::General("failed to parse hex key id".to_owned()))?;
+			let output = ser::deserialize(&mut &out_bin[..])
+				.map_err(|_| Error::General("failed to deserialize output".to_owned()))?;
+
+			let kernel = ser::deserialize(&mut &kern_bin[..])
+				.map_err(|_| Error::General("failed to deserialize kernel".to_owned()))?;
+			let key_id = ser::deserialize(&mut &key_id_bin[..])
+				.map_err(|_| Error::General("failed to deserialize key id".to_owned()))?;
 			let block_fees = BlockFees {
 				key_id: Some(key_id),
 				..block_fees
