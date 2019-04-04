@@ -358,6 +358,7 @@ pub struct PeerLiveInfo {
 	pub height: u64,
 	pub last_seen: DateTime<Utc>,
 	pub stuck_detector: DateTime<Utc>,
+	pub first_seen: DateTime<Utc>,
 }
 
 /// General information about a connected peer that's useful to other modules.
@@ -369,6 +370,18 @@ pub struct PeerInfo {
 	pub addr: PeerAddr,
 	pub direction: Direction,
 	pub live_info: Arc<RwLock<PeerLiveInfo>>,
+}
+
+impl PeerLiveInfo {
+	pub fn new(difficulty: Difficulty) -> PeerLiveInfo {
+		PeerLiveInfo {
+			total_difficulty: difficulty,
+			height: 0,
+			first_seen: Utc::now(),
+			last_seen: Utc::now(),
+			stuck_detector: Utc::now(),
+		}
+	}
 }
 
 impl PeerInfo {
@@ -389,6 +402,11 @@ impl PeerInfo {
 	/// Time of last_seen for this peer (via ping/pong).
 	pub fn last_seen(&self) -> DateTime<Utc> {
 		self.live_info.read().last_seen
+	}
+
+	/// Time of first_seen for this peer.
+	pub fn first_seen(&self) -> DateTime<Utc> {
+		self.live_info.read().first_seen
 	}
 
 	/// Update the total_difficulty, height and last_seen of the peer.
