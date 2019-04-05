@@ -257,6 +257,13 @@ that for any `r*G + v*H` we can build a proof that will show that _v_ is greater
 zero and does not overflow.
 
 It's also important to note that in order to create a valid range proof from the example above, both of the values 113 and 28 used in creating and signing for the excess value must be known. The reason for this, as well as a more detailed description of range proofs are further detailed in the [range proof paper](https://eprint.iacr.org/2017/1066.pdf).
+The requirement to know both values to generate valid rangeproofs is an important feature since it prevents a censoring attack where a third party could lock up UTXOs without knowing their private key by creating a transaction from
+
+    Carol's UTXO:       113*G + 2*H
+    Attacker's output:  (113 + 99)*G + 2*H
+    
+which can be signed by the attacker since Carols private key of 113 cancels due to the adverserial choice of keys. The new output could only be spent by both the attacker and Carol together. However, while the attacker can provide a valid signature for the transaction, it is impossible to create a valid rangeproof for the new output invalidating this attack.  
+
 
 #### Putting It All Together
 

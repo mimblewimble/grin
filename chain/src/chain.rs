@@ -36,7 +36,9 @@ use crate::util::secp::pedersen::{Commitment, RangeProof};
 use crate::util::{Mutex, RwLock, StopState};
 use grin_store::Error::NotFoundErr;
 use std::collections::HashMap;
+use std::env;
 use std::fs::File;
+use std::path::PathBuf;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -848,6 +850,13 @@ impl Chain {
 		}
 	}
 
+	/// Clean the temporary sandbox folder
+	pub fn clean_txhashset_sandbox(&self) {
+		let sandbox_dir = env::temp_dir();
+		txhashset::clean_txhashset_folder(&sandbox_dir);
+		txhashset::clean_header_folder(&sandbox_dir);
+	}
+
 	/// Writes a reading view on a txhashset state that's been provided to us.
 	/// If we're willing to accept that new state, the data stream will be
 	/// read as a zip file, unzipped and the resulting state files should be
@@ -869,17 +878,20 @@ impl Chain {
 
 		let header = self.get_block_header(&h)?;
 
-		{
-			let mut txhashset_ref = self.txhashset.write();
-			// Drop file handles in underlying txhashset
-			txhashset_ref.release_backend_files();
-		}
+		// Write txhashset to sandbox (in the os temporary directory)
+		let sandbox_dir = env::temp_dir();
+		txhashset::clean_txhashset_folder(&sandbox_dir);
+		txhashset::clean_header_folder(&sandbox_dir);
+		txhashset::zip_write(sandbox_dir.clone(), txhashset_data.try_clone()?, &header)?;
 
-		// Rewrite hashset
-		txhashset::zip_write(self.db_root.clone(), txhashset_data, &header)?;
-
-		let mut txhashset =
-			txhashset::TxHashSet::open(self.db_root.clone(), self.store.clone(), Some(&header))?;
+		let mut txhashset = txhashset::TxHashSet::open(
+			sandbox_dir
+				.to_str()
+				.expect("invalid sandbox folder")
+				.to_owned(),
+			self.store.clone(),
+			Some(&header),
+		)?;
 
 		// The txhashset.zip contains the output, rangeproof and kernel MMRs.
 		// We must rebuild the header MMR ourselves based on the headers in our db.
@@ -931,9 +943,28 @@ impl Chain {
 
 		debug!("txhashset_write: finished committing the batch (head etc.)");
 
-		// Replace the chain txhashset with the newly built one.
+		// Sandbox full validation ok, go to overwrite txhashset on db root
 		{
 			let mut txhashset_ref = self.txhashset.write();
+
+			// Before overwriting, drop file handlers in underlying txhashset
+			txhashset_ref.release_backend_files();
+
+			// Move sandbox to overwrite
+			txhashset.release_backend_files();
+			txhashset::txhashset_replace(sandbox_dir.clone(), PathBuf::from(self.db_root.clone()))?;
+
+			// Re-open on db root dir
+			txhashset = txhashset::TxHashSet::open(
+				self.db_root.clone(),
+				self.store.clone(),
+				Some(&header),
+			)?;
+
+			self.rebuild_header_mmr(&Tip::from_header(&header), &mut txhashset)?;
+			txhashset::clean_header_folder(&sandbox_dir);
+
+			// Replace the chain txhashset with the newly built one.
 			*txhashset_ref = txhashset;
 		}
 

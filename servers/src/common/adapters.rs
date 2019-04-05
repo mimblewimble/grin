@@ -330,17 +330,16 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 				update_time: old_update_time,
 				downloaded_size: old_downloaded_size,
 				..
-			} => {
-				self.sync_state
-					.update_txhashset_download(SyncStatus::TxHashsetDownload {
-						start_time,
-						prev_update_time: old_update_time,
-						update_time: Utc::now(),
-						prev_downloaded_size: old_downloaded_size,
-						downloaded_size,
-						total_size,
-					})
-			}
+			} => self
+				.sync_state
+				.update_txhashset_download(SyncStatus::TxHashsetDownload {
+					start_time,
+					prev_update_time: old_update_time,
+					update_time: Utc::now(),
+					prev_downloaded_size: old_downloaded_size,
+					downloaded_size,
+					total_size,
+				}),
 			_ => false,
 		}
 	}
@@ -360,6 +359,7 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 			.chain()
 			.txhashset_write(h, txhashset_data, self.sync_state.as_ref())
 		{
+			self.chain().clean_txhashset_sandbox();
 			error!("Failed to save txhashset archive: {}", e);
 			let is_good_data = !e.is_bad_data();
 			self.sync_state.set_sync_error(types::Error::Chain(e));

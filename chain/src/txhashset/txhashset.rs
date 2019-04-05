@@ -1450,15 +1450,58 @@ pub fn zip_read(root_dir: String, header: &BlockHeader, rand: Option<u32>) -> Re
 /// Extract the txhashset data from a zip file and writes the content into the
 /// txhashset storage dir
 pub fn zip_write(
-	root_dir: String,
+	root_dir: PathBuf,
 	txhashset_data: File,
 	header: &BlockHeader,
 ) -> Result<(), Error> {
-	let txhashset_path = Path::new(&root_dir).join(TXHASHSET_SUBDIR);
+	debug!("zip_write on path: {:?}", root_dir);
+	let txhashset_path = root_dir.clone().join(TXHASHSET_SUBDIR);
 	fs::create_dir_all(txhashset_path.clone())?;
 	zip::decompress(txhashset_data, &txhashset_path, expected_file)
 		.map_err(|ze| ErrorKind::Other(ze.to_string()))?;
 	check_and_remove_files(&txhashset_path, header)
+}
+
+/// Overwrite txhashset folders in "to" folder with "from" folder
+pub fn txhashset_replace(from: PathBuf, to: PathBuf) -> Result<(), Error> {
+	debug!("txhashset_replace: move from {:?} to {:?}", from, to);
+
+	// clean the 'to' folder firstly
+	clean_txhashset_folder(&to);
+
+	// rename the 'from' folder as the 'to' folder
+	if let Err(e) = fs::rename(
+		from.clone().join(TXHASHSET_SUBDIR),
+		to.clone().join(TXHASHSET_SUBDIR),
+	) {
+		error!("hashset_replace fail on {}. err: {}", TXHASHSET_SUBDIR, e);
+		Err(ErrorKind::TxHashSetErr(format!("txhashset replacing fail")).into())
+	} else {
+		Ok(())
+	}
+}
+
+/// Clean the txhashset folder
+pub fn clean_txhashset_folder(root_dir: &PathBuf) {
+	let txhashset_path = root_dir.clone().join(TXHASHSET_SUBDIR);
+	if txhashset_path.exists() {
+		if let Err(e) = fs::remove_dir_all(txhashset_path.clone()) {
+			warn!(
+				"clean_txhashset_folder: fail on {:?}. err: {}",
+				txhashset_path, e
+			);
+		}
+	}
+}
+
+/// Clean the header folder
+pub fn clean_header_folder(root_dir: &PathBuf) {
+	let header_path = root_dir.clone().join(HEADERHASHSET_SUBDIR);
+	if header_path.exists() {
+		if let Err(e) = fs::remove_dir_all(header_path.clone()) {
+			warn!("clean_header_folder: fail on {:?}. err: {}", header_path, e);
+		}
+	}
 }
 
 fn expected_file(path: &Path) -> bool {

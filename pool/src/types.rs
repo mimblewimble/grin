@@ -59,6 +59,24 @@ pub struct DandelionConfig {
 	pub stem_probability: Option<usize>,
 }
 
+impl DandelionConfig {
+	pub fn relay_secs(&self) -> u64 {
+		self.relay_secs.unwrap_or(DANDELION_RELAY_SECS)
+	}
+
+	pub fn embargo_secs(&self) -> u64 {
+		self.embargo_secs.unwrap_or(DANDELION_EMBARGO_SECS)
+	}
+
+	pub fn patience_secs(&self) -> u64 {
+		self.patience_secs.unwrap_or(DANDELION_PATIENCE_SECS)
+	}
+
+	pub fn stem_probability(&self) -> usize {
+		self.stem_probability.unwrap_or(DANDELION_STEM_PROBABILITY)
+	}
+}
+
 impl Default for DandelionConfig {
 	fn default() -> DandelionConfig {
 		DandelionConfig {
