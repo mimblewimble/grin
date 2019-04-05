@@ -551,10 +551,15 @@ where
 		Ok(())
 	}
 
-	/// Release underlying file handles
+	/// Release underlying file handles.
 	pub fn release(&mut self) {
 		self.mmap = None;
 		self.file = None;
+
+		// Remember to release the size_file as well if we have one.
+		if let Some(ref mut size_file) = self.size_file {
+			size_file.release();
+		}
 	}
 
 	/// Current size of the file in bytes.
