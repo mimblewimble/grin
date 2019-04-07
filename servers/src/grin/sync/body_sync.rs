@@ -51,11 +51,15 @@ impl BodySync {
 
 	/// Check whether a body sync is needed and run it if so.
 	/// Return true if txhashset download is needed (when requested block is under the horizon).
-	pub fn check_run(&mut self, head: &chain::Tip, highest_height: u64) -> bool {
+	pub fn check_run(
+		&mut self,
+		head: &chain::Tip,
+		highest_height: u64,
+	) -> Result<bool, chain::Error> {
 		// run the body_sync every 5s
-		if self.body_sync_due() {
-			if self.body_sync() {
-				return true;
+		if self.body_sync_due()? {
+			if self.body_sync()? {
+				return Ok(true);
 			}
 
 			self.sync_state.update(SyncStatus::BodySync {
@@ -63,11 +67,11 @@ impl BodySync {
 				highest_height: highest_height,
 			});
 		}
-		false
+		Ok(false)
 	}
 
 	/// Return true if txhashset download is needed (when requested block is under the horizon).
-	fn body_sync(&mut self) -> bool {
+	fn body_sync(&mut self) -> Result<bool, chain::Error> {
 		let mut hashes: Option<Vec<Hash>> = Some(vec![]);
 		let txhashset_needed = match self
 			.chain
@@ -76,17 +80,24 @@ impl BodySync {
 			Ok(v) => v,
 			Err(e) => {
 				error!("body_sync: failed to call txhashset_needed: {:?}", e);
-				return false;
+				return Ok(false);
 			}
 		};
 		if txhashset_needed {
 			debug!(
 				"body_sync: cannot sync full blocks earlier than horizon. will request txhashset",
 			);
-			return true;
+			return Ok(true);
 		}
 
-		let mut hashes = hashes.unwrap();
+		let mut hashes = match hashes {
+			Some(v) => v,
+			None => {
+				error!("unexpected: hashes is None");
+				return Ok(false);
+			}
+		};
+
 		hashes.reverse();
 
 		let peers = self.peers.more_work_peers();
@@ -110,8 +121,8 @@ impl BodySync {
 			.collect::<Vec<_>>();
 
 		if hashes_to_get.len() > 0 {
-			let body_head = self.chain.head().unwrap();
-			let header_head = self.chain.header_head().unwrap();
+			let body_head = self.chain.head()?;
+			let header_head = self.chain.header_head()?;
 
 			debug!(
 				"block_sync: {}/{} requesting blocks {:?} from {} peers",
@@ -136,12 +147,12 @@ impl BodySync {
 				}
 			}
 		}
-		return false;
+		return Ok(false);
 	}
 
 	// Should we run block body sync and ask for more full blocks?
-	fn body_sync_due(&mut self) -> bool {
-		let blocks_received = self.blocks_received();
+	fn body_sync_due(&mut self) -> Result<bool, chain::Error> {
+		let blocks_received = self.blocks_received()?;
 
 		// some blocks have been requested
 		if self.blocks_requested > 0 {
@@ -152,7 +163,7 @@ impl BodySync {
 					"body_sync: expecting {} more blocks and none received for a while",
 					self.blocks_requested,
 				);
-				return true;
+				return Ok(true);
 			}
 		}
 
@@ -169,16 +180,16 @@ impl BodySync {
 		if self.blocks_requested < 2 {
 			// no pending block requests, ask more
 			debug!("body_sync: no pending block request, asking more");
-			return true;
+			return Ok(true);
 		}
 
-		return false;
+		Ok(false)
 	}
 
 	// Total numbers received on this chain, including the head and orphans
-	fn blocks_received(&self) -> u64 {
-		self.chain.head().unwrap().height
+	fn blocks_received(&self) -> Result<u64, chain::Error> {
+		Ok((self.chain.head()?).height
 			+ self.chain.orphans_len() as u64
-			+ self.chain.orphans_evicted_len() as u64
+			+ self.chain.orphans_evicted_len() as u64)
 	}
 }

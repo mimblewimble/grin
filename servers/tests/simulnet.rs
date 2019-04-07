@@ -229,7 +229,7 @@ fn simulate_block_propagation() {
 	loop {
 		let mut count = 0;
 		for n in 0..5 {
-			if servers[n].head().height > 3 {
+			if servers[n].head().unwrap().height > 3 {
 				count += 1;
 			}
 		}
@@ -289,13 +289,13 @@ fn simulate_full_sync() {
 
 	// Wait for s2 to sync up to and including the header from s1.
 	let mut time_spent = 0;
-	while s2.head().height < s1_header.height {
+	while s2.head().unwrap().height < s1_header.height {
 		thread::sleep(time::Duration::from_millis(1_000));
 		time_spent += 1;
 		if time_spent >= 30 {
 			info!(
-				"sync fail. s2.head().height: {}, s1_header.height: {}",
-				s2.head().height,
+				"sync fail. s2.head().unwrap().height: {}, s1_header.height: {}",
+				s2.head().unwrap().height,
 				s1_header.height
 			);
 			break;
@@ -331,7 +331,7 @@ fn simulate_fast_sync() {
 	let stop = Arc::new(Mutex::new(StopState::new()));
 	s1.start_test_miner(None, stop.clone());
 
-	while s1.head().height < 20 {
+	while s1.head().unwrap().height < 20 {
 		thread::sleep(time::Duration::from_millis(1_000));
 	}
 	s1.stop_test_miner(stop);
@@ -346,13 +346,13 @@ fn simulate_fast_sync() {
 
 	// Wait for s2 to sync up to and including the header from s1.
 	let mut total_wait = 0;
-	while s2.head().height < s1_header.height {
+	while s2.head().unwrap().height < s1_header.height {
 		thread::sleep(time::Duration::from_millis(1_000));
 		total_wait += 1;
 		if total_wait >= 30 {
 			error!(
 				"simulate_fast_sync test fail on timeout! s2 height: {}, s1 height: {}",
-				s2.head().height,
+				s2.head().unwrap().height,
 				s1_header.height,
 			);
 			break;
@@ -463,7 +463,7 @@ fn long_fork_test_preparation() -> Vec<servers::Server> {
 	let stop = Arc::new(Mutex::new(StopState::new()));
 	s[0].start_test_miner(None, stop.clone());
 
-	while s[0].head().height < global::cut_through_horizon() as u64 + 10 {
+	while s[0].head().unwrap().height < global::cut_through_horizon() as u64 + 10 {
 		thread::sleep(time::Duration::from_millis(1_000));
 	}
 	s[0].stop_test_miner(stop);
@@ -505,7 +505,7 @@ fn long_fork_test_preparation() -> Vec<servers::Server> {
 		}
 		min_height = s0_header.height;
 		for i in 1..6 {
-			min_height = cmp::min(s[i].head().height, min_height);
+			min_height = cmp::min(s[i].head().unwrap().height, min_height);
 		}
 	}
 
@@ -548,17 +548,17 @@ fn long_fork_test_mining(blocks: u64, n: u16, s: &servers::Server) {
 	let stop = Arc::new(Mutex::new(StopState::new()));
 	s.start_test_miner(None, stop.clone());
 
-	while s.head().height < sn_header.height + blocks {
+	while s.head().unwrap().height < sn_header.height + blocks {
 		thread::sleep(time::Duration::from_millis(1));
 	}
 	s.stop_test_miner(stop);
 	thread::sleep(time::Duration::from_millis(1_000));
 	println!(
 		"{} blocks mined on s{}. s{}.height: {} (old height: {})",
-		s.head().height - sn_header.height,
+		s.head().unwrap().height - sn_header.height,
 		n,
 		n,
-		s.head().height,
+		s.head().unwrap().height,
 		sn_header.height,
 	);
 
@@ -566,7 +566,7 @@ fn long_fork_test_mining(blocks: u64, n: u16, s: &servers::Server) {
 	let sn_header = s.chain.head().unwrap();
 	let sn_tail = s.chain.tail().unwrap();
 	println!(
-		"after compacting, s{}.head().height: {}, s{}.tail().height: {}",
+		"after compacting, s{}.head().unwrap().height: {}, s{}.tail().height: {}",
 		n, sn_header.height, n, sn_tail.height,
 	);
 }
@@ -584,7 +584,7 @@ fn long_fork_test_case_1(s: &Vec<servers::Server>) {
 	let s0_header = s[0].chain.head().unwrap();
 	let s0_tail = s[0].chain.tail().unwrap();
 	println!(
-		"test case 1: s0 start syncing with s2... s0.head().height: {}, s2.head().height: {}",
+		"test case 1: s0 start syncing with s2... s0.head().unwrap().height: {}, s2.head().height: {}",
 		s0_header.height, s2_header.height,
 	);
 	s[0].resume();
@@ -592,13 +592,13 @@ fn long_fork_test_case_1(s: &Vec<servers::Server>) {
 
 	// Check server s0 can sync to s2 without txhashset download.
 	let mut total_wait = 0;
-	while s[0].head().height < s2_header.height {
+	while s[0].head().unwrap().height < s2_header.height {
 		thread::sleep(time::Duration::from_millis(1_000));
 		total_wait += 1;
 		if total_wait >= 120 {
 			println!(
 				"test case 1: test fail on timeout! s0 height: {}, s2 height: {}",
-				s[0].head().height,
+				s[0].head().unwrap().height,
 				s2_header.height,
 			);
 			exit(1);
@@ -607,11 +607,11 @@ fn long_fork_test_case_1(s: &Vec<servers::Server>) {
 	let s0_tail_new = s[0].chain.tail().unwrap();
 	assert_eq!(s0_tail_new.height, s0_tail.height);
 	println!(
-		"test case 1: s0.head().height: {}, s2_header.height: {}",
-		s[0].head().height,
+		"test case 1: s0.head().unwrap().height: {}, s2_header.height: {}",
+		s[0].head().unwrap().height,
 		s2_header.height,
 	);
-	assert_eq!(s[0].head().last_block_h, s2_header.last_block_h);
+	assert_eq!(s[0].head().unwrap().last_block_h, s2_header.last_block_h);
 
 	s[0].pause();
 	s[2].stop();
@@ -630,7 +630,7 @@ fn long_fork_test_case_2(s: &Vec<servers::Server>) {
 	let s0_header = s[0].chain.head().unwrap();
 	let s0_tail = s[0].chain.tail().unwrap();
 	println!(
-		"test case 2: s0 start syncing with s3. s0.head().height: {}, s3.head().height: {}",
+		"test case 2: s0 start syncing with s3. s0.head().unwrap().height: {}, s3.head().height: {}",
 		s0_header.height, s3_header.height,
 	);
 	s[0].resume();
@@ -638,13 +638,13 @@ fn long_fork_test_case_2(s: &Vec<servers::Server>) {
 
 	// Check server s0 can sync to s3 without txhashset download.
 	let mut total_wait = 0;
-	while s[0].head().height < s3_header.height {
+	while s[0].head().unwrap().height < s3_header.height {
 		thread::sleep(time::Duration::from_millis(1_000));
 		total_wait += 1;
 		if total_wait >= 120 {
 			println!(
 				"test case 2: test fail on timeout! s0 height: {}, s3 height: {}",
-				s[0].head().height,
+				s[0].head().unwrap().height,
 				s3_header.height,
 			);
 			exit(1);
@@ -652,13 +652,13 @@ fn long_fork_test_case_2(s: &Vec<servers::Server>) {
 	}
 	let s0_tail_new = s[0].chain.tail().unwrap();
 	assert_eq!(s0_tail_new.height, s0_tail.height);
-	assert_eq!(s[0].head().hash(), s3_header.hash());
+	assert_eq!(s[0].head().unwrap().hash(), s3_header.hash());
 
 	let _ = s[0].chain.compact();
 	let s0_header = s[0].chain.head().unwrap();
 	let s0_tail = s[0].chain.tail().unwrap();
 	println!(
-		"test case 2: after compacting, s0.head().height: {}, s0.tail().height: {}",
+		"test case 2: after compacting, s0.head().unwrap().height: {}, s0.tail().height: {}",
 		s0_header.height, s0_tail.height,
 	);
 
@@ -679,7 +679,7 @@ fn long_fork_test_case_3(s: &Vec<servers::Server>) {
 	let s1_header = s[1].chain.head().unwrap();
 	let s1_tail = s[1].chain.tail().unwrap();
 	println!(
-		"test case 3: s0/1 start syncing with s4. s0.head().height: {}, s0.tail().height: {}, s1.head().height: {}, s1.tail().height: {}, s4.head().height: {}",
+		"test case 3: s0/1 start syncing with s4. s0.head().unwrap().height: {}, s0.tail().height: {}, s1.head().height: {}, s1.tail().height: {}, s4.head().height: {}",
 		s0_header.height, s0_tail.height,
 		s1_header.height, s1_tail.height,
 		s4_header.height,
@@ -689,32 +689,32 @@ fn long_fork_test_case_3(s: &Vec<servers::Server>) {
 
 	// Check server s0 can sync to s4.
 	let mut total_wait = 0;
-	while s[0].head().height < s4_header.height {
+	while s[0].head().unwrap().height < s4_header.height {
 		thread::sleep(time::Duration::from_millis(1_000));
 		total_wait += 1;
 		if total_wait >= 120 {
 			println!(
 				"test case 3: test fail on timeout! s0 height: {}, s4 height: {}",
-				s[0].head().height,
+				s[0].head().unwrap().height,
 				s4_header.height,
 			);
 			exit(1);
 		}
 	}
-	assert_eq!(s[0].head().hash(), s4_header.hash());
+	assert_eq!(s[0].head().unwrap().hash(), s4_header.hash());
 
 	s[0].stop();
 	s[1].resume();
 
 	// Check server s1 can sync to s4 but with txhashset download.
 	let mut total_wait = 0;
-	while s[1].head().height < s4_header.height {
+	while s[1].head().unwrap().height < s4_header.height {
 		thread::sleep(time::Duration::from_millis(1_000));
 		total_wait += 1;
 		if total_wait >= 120 {
 			println!(
 				"test case 3: test fail on timeout! s1 height: {}, s4 height: {}",
-				s[1].head().height,
+				s[1].head().unwrap().height,
 				s4_header.height,
 			);
 			exit(1);
@@ -726,7 +726,7 @@ fn long_fork_test_case_3(s: &Vec<servers::Server>) {
 		s1_tail_new.height, s1_tail.height
 	);
 	assert_ne!(s1_tail_new.height, s1_tail.height);
-	assert_eq!(s[1].head().hash(), s4_header.hash());
+	assert_eq!(s[1].head().unwrap().hash(), s4_header.hash());
 
 	s[1].pause();
 	s[4].pause();
@@ -745,7 +745,7 @@ fn long_fork_test_case_4(s: &Vec<servers::Server>) {
 	let s1_header = s[1].chain.head().unwrap();
 	let s1_tail = s[1].chain.tail().unwrap();
 	println!(
-		"test case 4: s1 start syncing with s5. s1.head().height: {}, s1.tail().height: {}, s5.head().height: {}",
+		"test case 4: s1 start syncing with s5. s1.head().unwrap().height: {}, s1.tail().height: {}, s5.head().height: {}",
 		s1_header.height, s1_tail.height,
 		s5_header.height,
 	);
@@ -754,13 +754,13 @@ fn long_fork_test_case_4(s: &Vec<servers::Server>) {
 
 	// Check server s1 can sync to s5 with a new txhashset download.
 	let mut total_wait = 0;
-	while s[1].head().height < s5_header.height {
+	while s[1].head().unwrap().height < s5_header.height {
 		thread::sleep(time::Duration::from_millis(1_000));
 		total_wait += 1;
 		if total_wait >= 120 {
 			println!(
 				"test case 4: test fail on timeout! s1 height: {}, s5 height: {}",
-				s[1].head().height,
+				s[1].head().unwrap().height,
 				s5_header.height,
 			);
 			exit(1);
@@ -772,7 +772,7 @@ fn long_fork_test_case_4(s: &Vec<servers::Server>) {
 		s1_tail_new.height, s1_tail.height
 	);
 	assert_ne!(s1_tail_new.height, s1_tail.height);
-	assert_eq!(s[1].head().hash(), s5_header.hash());
+	assert_eq!(s[1].head().unwrap().hash(), s5_header.hash());
 
 	s[1].pause();
 	s[5].pause();
@@ -792,7 +792,7 @@ fn long_fork_test_case_5(s: &Vec<servers::Server>) {
 	let s1_header = s[1].chain.head().unwrap();
 	let s1_tail = s[1].chain.tail().unwrap();
 	println!(
-		"test case 5: s1 start syncing with s5. s1.head().height: {}, s1.tail().height: {}, s5.head().height: {}",
+		"test case 5: s1 start syncing with s5. s1.head().unwrap().height: {}, s1.tail().height: {}, s5.head().height: {}",
 		s1_header.height, s1_tail.height,
 		s5_header.height,
 	);
@@ -801,13 +801,13 @@ fn long_fork_test_case_5(s: &Vec<servers::Server>) {
 
 	// Check server s1 can sync to s5 without a txhashset download (normal body sync)
 	let mut total_wait = 0;
-	while s[1].head().height < s5_header.height {
+	while s[1].head().unwrap().height < s5_header.height {
 		thread::sleep(time::Duration::from_millis(1_000));
 		total_wait += 1;
 		if total_wait >= 120 {
 			println!(
 				"test case 5: test fail on timeout! s1 height: {}, s5 height: {}",
-				s[1].head().height,
+				s[1].head().unwrap().height,
 				s5_header.height,
 			);
 			exit(1);
@@ -819,7 +819,7 @@ fn long_fork_test_case_5(s: &Vec<servers::Server>) {
 		s1_tail_new.height, s1_tail.height
 	);
 	assert_eq!(s1_tail_new.height, s1_tail.height);
-	assert_eq!(s[1].head().hash(), s5_header.hash());
+	assert_eq!(s[1].head().unwrap().hash(), s5_header.hash());
 
 	s[1].pause();
 	s[5].pause();
@@ -840,7 +840,7 @@ fn long_fork_test_case_6(s: &Vec<servers::Server>) {
 	let s1_header = s[1].chain.head().unwrap();
 	let s1_tail = s[1].chain.tail().unwrap();
 	println!(
-		"test case 6: s1 start syncing with s5. s1.head().height: {}, s1.tail().height: {}, s5.head().height: {}",
+		"test case 6: s1 start syncing with s5. s1.head().unwrap().height: {}, s1.tail().height: {}, s5.head().height: {}",
 		s1_header.height, s1_tail.height,
 		s5_header.height,
 	);
@@ -849,13 +849,13 @@ fn long_fork_test_case_6(s: &Vec<servers::Server>) {
 
 	// Check server s1 can sync to s5 without a txhashset download (normal body sync)
 	let mut total_wait = 0;
-	while s[1].head().height < s5_header.height {
+	while s[1].head().unwrap().height < s5_header.height {
 		thread::sleep(time::Duration::from_millis(1_000));
 		total_wait += 1;
 		if total_wait >= 120 {
 			println!(
 				"test case 6: test fail on timeout! s1 height: {}, s5 height: {}",
-				s[1].head().height,
+				s[1].head().unwrap().height,
 				s5_header.height,
 			);
 			exit(1);
@@ -867,7 +867,7 @@ fn long_fork_test_case_6(s: &Vec<servers::Server>) {
 		s1_tail_new.height, s1_tail.height
 	);
 	assert_eq!(s1_tail_new.height, s1_tail.height);
-	assert_eq!(s[1].head().hash(), s5_header.hash());
+	assert_eq!(s[1].head().unwrap().hash(), s5_header.hash());
 
 	s[1].pause();
 	s[5].pause();
