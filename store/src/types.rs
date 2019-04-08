@@ -460,28 +460,31 @@ where
 	pub fn save_prune(&mut self, prune_pos: &[u64]) -> io::Result<()> {
 		let tmp_path = self.path.with_extension("tmp");
 
-		let reader = File::open(&self.path)?;
-		let mut buf_reader = BufReader::new(reader);
-		let mut streaming_reader =
-			StreamingReader::new(&mut buf_reader, time::Duration::from_secs(1));
+		// Scope the reader and writer to within the block so we can safely replace files later on.
+		{
+			let reader = File::open(&self.path)?;
+			let mut buf_reader = BufReader::new(reader);
+			let mut streaming_reader =
+				StreamingReader::new(&mut buf_reader, time::Duration::from_secs(1));
 
-		let mut buf_writer = BufWriter::new(File::create(&tmp_path)?);
-		let mut bin_writer = BinWriter::new(&mut buf_writer);
+			let mut buf_writer = BufWriter::new(File::create(&tmp_path)?);
+			let mut bin_writer = BinWriter::new(&mut buf_writer);
 
-		let mut current_pos = 0;
-		let mut prune_pos = prune_pos;
-		while let Ok(elmt) = T::read(&mut streaming_reader) {
-			if prune_pos.contains(&current_pos) {
-				// Pruned pos, moving on.
-				prune_pos = &prune_pos[1..];
-			} else {
-				// Not pruned, write to file.
-				elmt.write(&mut bin_writer)
-					.map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
+			let mut current_pos = 0;
+			let mut prune_pos = prune_pos;
+			while let Ok(elmt) = T::read(&mut streaming_reader) {
+				if prune_pos.contains(&current_pos) {
+					// Pruned pos, moving on.
+					prune_pos = &prune_pos[1..];
+				} else {
+					// Not pruned, write to file.
+					elmt.write(&mut bin_writer)
+						.map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
+				}
+				current_pos += 1;
 			}
-			current_pos += 1;
+			buf_writer.flush()?;
 		}
-		buf_writer.flush()?;
 
 		// Replace the underlying file -
 		// pmmr_data.tmp -> pmmr_data.bin
@@ -504,32 +507,35 @@ where
 			// Note: Reading from data file and writing sizes to the associated (tmp) size_file.
 			let tmp_path = size_file.path.with_extension("tmp");
 
-			let reader = File::open(&self.path)?;
-			let mut buf_reader = BufReader::new(reader);
-			let mut streaming_reader =
-				StreamingReader::new(&mut buf_reader, time::Duration::from_secs(1));
+			// Scope the reader and writer to within the block so we can safely replace files later on.
+			{
+				let reader = File::open(&self.path)?;
+				let mut buf_reader = BufReader::new(reader);
+				let mut streaming_reader =
+					StreamingReader::new(&mut buf_reader, time::Duration::from_secs(1));
 
-			let mut buf_writer = BufWriter::new(File::create(&tmp_path)?);
-			let mut bin_writer = BinWriter::new(&mut buf_writer);
+				let mut buf_writer = BufWriter::new(File::create(&tmp_path)?);
+				let mut bin_writer = BinWriter::new(&mut buf_writer);
 
-			let mut current_offset = 0;
-			while let Ok(_) = T::read(&mut streaming_reader) {
-				let size = streaming_reader
-					.total_bytes_read()
-					.saturating_sub(current_offset) as u16;
-				let entry = SizeEntry {
-					offset: current_offset,
-					size,
-				};
+				let mut current_offset = 0;
+				while let Ok(_) = T::read(&mut streaming_reader) {
+					let size = streaming_reader
+						.total_bytes_read()
+						.saturating_sub(current_offset) as u16;
+					let entry = SizeEntry {
+						offset: current_offset,
+						size,
+					};
 
-				// Not pruned, write to file.
-				entry
-					.write(&mut bin_writer)
-					.map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
+					// Not pruned, write to file.
+					entry
+						.write(&mut bin_writer)
+						.map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
 
-				current_offset += size as u64;
+					current_offset += size as u64;
+				}
+				buf_writer.flush()?;
 			}
-			buf_writer.flush()?;
 
 			// Replace the underlying file for our size_file -
 			// pmmr_size.tmp -> pmmr_size.bin
