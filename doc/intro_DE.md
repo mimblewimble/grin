@@ -221,7 +221,7 @@ Wenn wir Transaktionen in einem Block aggregieren, speichern wir ein _einzeln_ a
 
     sum(outputs) - sum(inputs) = sum(kernel_excess) + kernel_offset
 
-Wir "teilen" den Schlüssel `k` in `k1+k2` während des Aufbaus der Transaktion. Für einen Transaktionskernel `(k1+k2)*G` veröffentlichen wir `k1*G` (den Überschuss) und `k2` (das Offset), und signieren die Transaktion mit `k1*G` wie zuvor. Während des Blockaufbaus können wir einfach die `k2`-Offsets summieren um ein einzeln zusammengefasstes `k2`-Offset zu generieren, das alle Transaktionen in einem Block abdeckt.
+Wir "teilen" den Schlüssel `k` in `k1+k2` während des Aufbaus der Transaktion. Für einen Transaktionskernel `(k1+k2)*G` veröffentlichen wir `k1*G` (den Überschuss) und `k2` (das Offset), und signieren die Transaktion mit `k1` wie zuvor. Während des Blockaufbaus können wir einfach die `k2`-Offsets summieren um ein einzeln zusammengefasstes `k2`-Offset zu generieren, das alle Transaktionen in einem Block abdeckt.
 
 #### Cut-through
 
