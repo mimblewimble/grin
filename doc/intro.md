@@ -349,7 +349,7 @@ When we aggregate transactions in a block we store a _single_ aggregate offset i
 
     sum(outputs) - sum(inputs) = sum(kernel_excess) + kernel_offset
 
-We "split" the key `k` into `k1+k2` during transaction construction. For a transaction kernel `(k1+k2)*G` we publish `k1*G` (the excess) and `k2` (the offset) and sign the transaction with `k1*G` as before.
+We "split" the key `k` into `k1+k2` during transaction construction. For a transaction kernel `(k1+k2)*G` we publish `k1*G` (the excess) and `k2` (the offset) and sign the transaction with `k1` as before.
 During block construction we can simply sum the `k2` offsets to generate a single aggregate `k2` offset to cover all transactions in the block. The `k2` offset for any individual transaction is unrecoverable.
 
 #### Cut-through
