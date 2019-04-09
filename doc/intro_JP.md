@@ -305,7 +305,7 @@ tx outputs の和から tx inputs の和を引いて、その結果である Ped
 
     sum(outputs) - sum(inputs) = sum(kernel_excess) + kernel_offset
 
-トランザクションを構成する際、鍵 `k` を `k1+k2` に分割する。transaction kernel `(k1+k2)*G` については、`k1*G` （excess）と `k2`（offset）をパブリッシュし、トランザクションに `k1*G` で署名をする。
+トランザクションを構成する際、鍵 `k` を `k1+k2` に分割する。transaction kernel `(k1+k2)*G` については、`k1*G` （excess）と `k2`（offset）をパブリッシュし、トランザクションに `k1` で署名をする。
 ブロックを構成する際には、単純に `k2` を足し合わせて一つの集約した `k2` offset を生成でき、それによりブロックの中のすべてのトランザクションをカバーできる。個々のトランザクションの `k2` offset を再構成するのは不可能である。
 
 #### Cut-through
