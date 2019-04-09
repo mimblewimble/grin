@@ -1,11 +1,80 @@
+# Copyright 2019 The Grin Developers
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 # Official rust image https://hub.docker.com/r/library/rust/tags/
 image: "rust:latest"
 
-before_script:
- - apt-get update --yes -qq # yqq = yes, very quitely
- - apt-get install -yqq --no-install-recommends cmake llvm-dev libclang-dev clang
+stages:
+  - test
+  - deploy
 
-test:cargo:
-  script:
-  - rustc --version && cargo --version
-  - cargo test --all --verbose # matrix-style is a possibility too
+variables:
+  RUST_BACKTRACE: "1"
+  RUST_FLAGS: "-C debug-assertions"
+
+before_script:
+ - apt-get update --yes -qq # yqq = yes, very quietly
+ - apt-get install -yqq --no-install-recommends libclang-dev clang
+
+cache:
+  paths:
+    - $HOME/.cargo
+    - $CI_BUILDS_DIR/grin/target/
+
+servers:
+  stage: test
+  variables:
+    CI_JOB: "test"
+    CI_JOB_ARGS: "servers"
+  script: .ci/general-jobs
+
+chain/core:
+  stage: test
+  variables:
+    CI_JOB: "test"
+    CI_JOB_ARGS: "chain core"
+  script: .ci/general-jobs
+
+pool/p2p/src:
+  stage: test
+  variables:
+    CI_JOB: "test"
+    CI_JOB_ARGS: "pool p2p src"
+  script: .ci/general-jobs
+
+keychain/wallet:
+  stage: test
+  variables:
+    CI_JOB: "test"
+    CI_JOB_ARGS: "keychain wallet"
+  script: .ci/general-jobs
+
+api/util/store:
+  stage: test
+  variables:
+    CI_JOB: "test"
+    CI_JOB_ARGS: "api util store"
+  script: .ci/general-jobs
+
+release:
+  stage: test
+  variables:
+    CI_JOB: "release"
+  script: .ci/general-jobs
+
+deploy:
+  stage: deploy
+  script: .ci/release-jobs
+  only:
+  - tags
