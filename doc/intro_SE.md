@@ -302,7 +302,7 @@ tilläggas överskottsbeloppet för att verifiera att det summeras till noll:
     summa(utmatningar) - summa(inmatningar) = överskottsbelopp + kärn-offset
     
 Vi "separerar" nyckeln `k` till `k1 + k2` under transaktionsbyggandet. För ett överskottsbelopp `(k1+k2)*G` publicerar vi
-`k1*G` (överskottet) och `k2` (offset) och signerar transaktionen med `k1*G` som tidigare. Under block-konstruktionen
+`k1*G` (överskottet) och `k2` (offset) och signerar transaktionen med `k1` som tidigare. Under block-konstruktionen
 kan vi enkelt summera alla `k2`-offset för att generera ett aggregat-offset för alla transaktioner i blocket. `k2`-offsetet
 för en individuell transaktion är omöjlig att få fram.
 
