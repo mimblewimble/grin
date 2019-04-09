@@ -303,7 +303,7 @@ las transacciones ya no pueden reconstruirse. -
 
     sum(outputs) - sum(inputs) = sum(kernel_excess) + kernel_offset
 
-"Dividimos" la clave `k` en `k1+k2` durante la construcción de la transacción. Para una transacción kernel `(k1+k2)*G` publicamos `k1*G` (el exceso) y `k2` (el offset) y firmamos la transacción con `k1*G` como antes.
+"Dividimos" la clave `k` en `k1+k2` durante la construcción de la transacción. Para una transacción kernel `(k1+k2)*G` publicamos `k1*G` (el exceso) y `k2` (el offset) y firmamos la transacción con `k1` como antes.
 Durante la construcción del bloque podemos simplemente sumar las compensaciones `k2` para generar una sola compensación 
 agregada `k2` para cubrir todas las transacciones en el bloque. La compensación `k2` para cualquier transacción individual es 
 imposible de recuperar.
