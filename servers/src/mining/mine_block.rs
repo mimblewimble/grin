@@ -51,12 +51,15 @@ pub fn get_block(
 		wallet_listener_url.clone(),
 	);
 	while let Err(e) = result {
+		let mut new_key_id = key_id.to_owned();
 		match e {
 			self::Error::Chain(c) => match c.kind() {
 				chain::ErrorKind::DuplicateCommitment(_) => {
 					debug!(
 						"Duplicate commit for potential coinbase detected. Trying next derivation."
 					);
+					// use the next available key to generate a different coinbase commitment
+					new_key_id = None;
 				}
 				_ => {
 					error!("Chain Error: {}", c);
@@ -73,12 +76,18 @@ pub fn get_block(
 				warn!("Error building new block: {:?}. Retrying.", ae);
 			}
 		}
-		thread::sleep(Duration::from_millis(100));
+
+		// only wait if we are still using the same key: a different coinbase commitment is unlikely
+		// to have duplication
+		if new_key_id.is_some() {
+			thread::sleep(Duration::from_millis(100));
+		}
+
 		result = build_block(
 			chain,
 			tx_pool,
 			verifier_cache.clone(),
-			key_id.clone(),
+			new_key_id,
 			wallet_listener_url.clone(),
 		);
 	}
