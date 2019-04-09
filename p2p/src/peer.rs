@@ -17,6 +17,7 @@ use std::fs::File;
 use std::net::{Shutdown, TcpStream};
 use std::sync::Arc;
 
+use crate::chain;
 use crate::conn;
 use crate::core::core::hash::{Hash, Hashed};
 use crate::core::pow::Difficulty;
@@ -513,11 +514,11 @@ impl TrackingAdapter {
 }
 
 impl ChainAdapter for TrackingAdapter {
-	fn total_difficulty(&self) -> Difficulty {
+	fn total_difficulty(&self) -> Result<Difficulty, chain::Error> {
 		self.adapter.total_difficulty()
 	}
 
-	fn total_height(&self) -> u64 {
+	fn total_height(&self) -> Result<u64, chain::Error> {
 		self.adapter.total_height()
 	}
 
@@ -525,12 +526,16 @@ impl ChainAdapter for TrackingAdapter {
 		self.adapter.get_transaction(kernel_hash)
 	}
 
-	fn tx_kernel_received(&self, kernel_hash: Hash, addr: PeerAddr) {
+	fn tx_kernel_received(&self, kernel_hash: Hash, addr: PeerAddr) -> Result<bool, chain::Error> {
 		self.push_recv(kernel_hash);
 		self.adapter.tx_kernel_received(kernel_hash, addr)
 	}
 
-	fn transaction_received(&self, tx: core::Transaction, stem: bool) {
+	fn transaction_received(
+		&self,
+		tx: core::Transaction,
+		stem: bool,
+	) -> Result<bool, chain::Error> {
 		// Do not track the tx hash for stem txs.
 		// Otherwise we fail to handle the subsequent fluff or embargo expiration
 		// correctly.
@@ -541,27 +546,40 @@ impl ChainAdapter for TrackingAdapter {
 		self.adapter.transaction_received(tx, stem)
 	}
 
-	fn block_received(&self, b: core::Block, addr: PeerAddr, _was_requested: bool) -> bool {
+	fn block_received(
+		&self,
+		b: core::Block,
+		addr: PeerAddr,
+		_was_requested: bool,
+	) -> Result<bool, chain::Error> {
 		let bh = b.hash();
 		self.push_recv(bh);
 		self.adapter.block_received(b, addr, self.has_req(bh))
 	}
 
-	fn compact_block_received(&self, cb: core::CompactBlock, addr: PeerAddr) -> bool {
+	fn compact_block_received(
+		&self,
+		cb: core::CompactBlock,
+		addr: PeerAddr,
+	) -> Result<bool, chain::Error> {
 		self.push_recv(cb.hash());
 		self.adapter.compact_block_received(cb, addr)
 	}
 
-	fn header_received(&self, bh: core::BlockHeader, addr: PeerAddr) -> bool {
+	fn header_received(&self, bh: core::BlockHeader, addr: PeerAddr) -> Result<bool, chain::Error> {
 		self.push_recv(bh.hash());
 		self.adapter.header_received(bh, addr)
 	}
 
-	fn headers_received(&self, bh: &[core::BlockHeader], addr: PeerAddr) -> bool {
+	fn headers_received(
+		&self,
+		bh: &[core::BlockHeader],
+		addr: PeerAddr,
+	) -> Result<bool, chain::Error> {
 		self.adapter.headers_received(bh, addr)
 	}
 
-	fn locate_headers(&self, locator: &[Hash]) -> Vec<core::BlockHeader> {
+	fn locate_headers(&self, locator: &[Hash]) -> Result<Vec<core::BlockHeader>, chain::Error> {
 		self.adapter.locate_headers(locator)
 	}
 
@@ -577,7 +595,12 @@ impl ChainAdapter for TrackingAdapter {
 		self.adapter.txhashset_receive_ready()
 	}
 
-	fn txhashset_write(&self, h: Hash, txhashset_data: File, peer_addr: PeerAddr) -> bool {
+	fn txhashset_write(
+		&self,
+		h: Hash,
+		txhashset_data: File,
+		peer_addr: PeerAddr,
+	) -> Result<bool, chain::Error> {
 		self.adapter.txhashset_write(h, txhashset_data, peer_addr)
 	}
 
