@@ -221,7 +221,7 @@ Quando agregamos transações em um bloco, armazenamos um _único_ deslocamento 
 
     soma(saídas) - soma(entradas) = soma(excedente do núcleo) + deslocamento do núcleo
 
-Nós "dividimos" a chave `k` em` k1+k2` durante a construção da transação. Para um núcleo de transação `(k1+k2)*G` publicamos` k1*G` (o excedente) e `k2` (o deslocamento) e assinamos a transação com `k1*G` como antes. Durante a construção de blocos, podemos simplesmente somar os deslocamentos `k2` para gerar um único deslocamento agregado de `k2` para cobrir todas as transações no bloco. O deslocamento `k2` para qualquer transação individual é irrecuperável.
+Nós "dividimos" a chave `k` em` k1+k2` durante a construção da transação. Para um núcleo de transação `(k1+k2)*G` publicamos` k1*G` (o excedente) e `k2` (o deslocamento) e assinamos a transação com `k1` como antes. Durante a construção de blocos, podemos simplesmente somar os deslocamentos `k2` para gerar um único deslocamento agregado de `k2` para cobrir todas as transações no bloco. O deslocamento `k2` para qualquer transação individual é irrecuperável.
 
 #### Corte-completo
 
