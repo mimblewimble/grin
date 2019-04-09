@@ -237,7 +237,7 @@ MimbleWimble区块格式通过引入一个附加概念来构建：核销（_cut-
 
 	sum(outputs) - sum(inputs) = sum(kernel_excess) + kernel_offset
 
-具体的实现方法就是，在创建交易时将 `k` 分割成 `k1+k2`。 对于交易核 `(k1+k2)*G`，我们在交易核中发布出去的是 `k1*G` （称之为：the excess），以及 `k2`（称为：the offset），并跟以前一样使用 `k1*G` 作为公钥来对交易进行签名。
+具体的实现方法就是，在创建交易时将 `k` 分割成 `k1+k2`。 对于交易核 `(k1+k2)*G`，我们在交易核中发布出去的是 `k1*G` （称之为：the excess），以及 `k2`（称为：the offset），并跟以前一样使用 `k1` 作为私钥来对交易进行签名。
 在矿工构建区块的时候，我们对打包的所有交易的`k2`（the offset）求和，以生成一个单个的聚合值（aggregate `k2` offset）用于该区块所打包的所有交易。一旦区块打包完成并发布和被链所接受，其原始的对应每笔交易的`k2` （the offset）即成为不可恢复的。
 
 ### 核销（_Cut-through_）
