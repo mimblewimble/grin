@@ -323,7 +323,7 @@ Wanneer we transacties in een blok samenvoegen, bewaren we een _single_ geaggreg
 
     som(uitvoeren) - sum(invoeren) = sum(kernel_excess) + kernel_offset
 
-We "splitsen" de sleutel `k` in `k1+k2` tijdens de transactie opbouw. Voor een transactie kernel `(k1+k2)*G` publiceren we `k1*G` (de overspil) en `k2` (de offset) en ondertekenen we de transactie met `k1*G` zoals eerder.
+We "splitsen" de sleutel `k` in `k1+k2` tijdens de transactie opbouw. Voor een transactie kernel `(k1+k2)*G` publiceren we `k1*G` (de overspil) en `k2` (de offset) en ondertekenen we de transactie met `k1` zoals eerder.
 Tijdens de blockconstructie kunnen we eenvoudigweg de `k2` offsets optellen om een single aggregate `k2` offset te genereren om alle transacties in de blok te dekken. De `k2` offset voor elke individuele transactie is niet-terugvorderbaar. 
 
 #### Cut-through
