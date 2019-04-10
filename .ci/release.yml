@@ -1,0 +1,4 @@
+steps:
+  - script: '.ci/release-jobs'
+    displayName: Release
+    condition:  and(succeeded(), contains(variables['Build.SourceBranch'], 'refs/tags/'))
