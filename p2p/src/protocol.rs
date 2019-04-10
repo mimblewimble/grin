@@ -362,7 +362,14 @@ impl MessageHandler for Protocol {
 					Ok(None)
 				}
 			}
-			Type::KernelDataResponse => Ok(None),
+			Type::KernelDataResponse => {
+				let response: KernelDataResponse = msg.body()?;
+				debug!(
+					"handle_payload: kernel_data_response: bytes: {}",
+					response.bytes
+				);
+				Ok(None)
+			}
 			_ => {
 				debug!("unknown message type {:?}", msg.header.msg_type);
 				Ok(None)
