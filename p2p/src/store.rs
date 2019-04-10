@@ -124,18 +124,18 @@ impl PeerStore {
 		debug!("save_peer: {:?} marked {:?}", p.addr, p.flags);
 
 		let batch = self.db.batch()?;
-		batch.put_ser(&peer_key(p.addr)[..], p)?;
+		batch.put_ser(&peer_key(&p.addr)[..], p)?;
 		batch.commit()
 	}
 
-	pub fn get_peer(&self, peer_addr: PeerAddr) -> Result<PeerData, Error> {
+	pub fn get_peer(&self, peer_addr: &PeerAddr) -> Result<PeerData, Error> {
 		option_to_not_found(
 			self.db.get_ser(&peer_key(peer_addr)[..]),
 			&format!("Peer at address: {}", peer_addr),
 		)
 	}
 
-	pub fn exists_peer(&self, peer_addr: PeerAddr) -> Result<bool, Error> {
+	pub fn exists_peer(&self, peer_addr: &PeerAddr) -> Result<bool, Error> {
 		self.db.exists(&peer_key(peer_addr)[..])
 	}
 
@@ -143,7 +143,7 @@ impl PeerStore {
 	#[allow(dead_code)]
 	pub fn delete_peer(&self, peer_addr: PeerAddr) -> Result<(), Error> {
 		let batch = self.db.batch()?;
-		batch.delete(&peer_key(peer_addr)[..])?;
+		batch.delete(&peer_key(&peer_addr)[..])?;
 		batch.commit()
 	}
 
@@ -176,7 +176,7 @@ impl PeerStore {
 
 	/// Convenience method to load a peer data, update its status and save it
 	/// back. If new state is Banned its last banned time will be updated too.
-	pub fn update_state(&self, peer_addr: PeerAddr, new_state: State) -> Result<(), Error> {
+	pub fn update_state(&self, peer_addr: &PeerAddr, new_state: State) -> Result<(), Error> {
 		let batch = self.db.batch()?;
 
 		let mut peer = option_to_not_found(
@@ -210,7 +210,7 @@ impl PeerStore {
 			let batch = self.db.batch()?;
 
 			for peer in to_remove {
-				batch.delete(&peer_key(peer.addr)[..])?;
+				batch.delete(&peer_key(&peer.addr)[..])?;
 			}
 
 			batch.commit()?;
@@ -221,6 +221,6 @@ impl PeerStore {
 }
 
 // Ignore the port unless ip is loopback address.
-fn peer_key(peer_addr: PeerAddr) -> Vec<u8> {
+fn peer_key(peer_addr: &PeerAddr) -> Vec<u8> {
 	to_key(PEER_PREFIX, &mut peer_addr.as_key().into_bytes())
 }
