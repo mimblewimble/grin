@@ -129,13 +129,12 @@ impl Peer {
 	/// Main peer loop listening for messages and forwarding to the rest of the
 	/// system.
 	pub fn start(&mut self, conn: TcpStream) {
-		let addr = self.info.addr;
 		let adapter = Arc::new(self.tracking_adapter.clone());
-		let handler = Protocol::new(adapter, addr);
+		let handler = Protocol::new(adapter, self.info.addr.clone());
 		self.connection = Some(Mutex::new(conn::listen(conn, handler)));
 	}
 
-	pub fn is_denied(config: &P2PConfig, peer_addr: PeerAddr) -> bool {
+	pub fn is_denied(config: &P2PConfig, peer_addr: &PeerAddr) -> bool {
 		if let Some(ref denied) = config.peers_deny {
 			if denied.contains(&peer_addr) {
 				debug!(

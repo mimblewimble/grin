@@ -161,7 +161,7 @@ fn monitor_peers(
 				let interval = Utc::now().timestamp() - x.last_banned;
 				// Unban peer
 				if interval >= config.ban_window() {
-					peers.unban_peer(x.addr);
+					peers.unban_peer(&x.addr);
 					debug!(
 						"monitor_peers: unbanned {} after {} seconds",
 						x.addr, interval
@@ -206,7 +206,7 @@ fn monitor_peers(
 			p.info.addr,
 		);
 		let _ = p.send_peer_request(p2p::Capabilities::PEER_LIST);
-		connected_peers.push(p.info.addr)
+		connected_peers.push(p.info.addr.clone())
 	}
 
 	// Attempt to connect to preferred peers if there is some
@@ -226,7 +226,7 @@ fn monitor_peers(
 	// peer will see another as defunct eventually, gives us a chance to retry
 	if defuncts.len() > 0 {
 		thread_rng().shuffle(&mut defuncts);
-		let _ = peers.update_state(defuncts[0].addr, p2p::State::Healthy);
+		let _ = peers.update_state(&defuncts[0].addr, p2p::State::Healthy);
 	}
 
 	// find some peers from our db
@@ -237,14 +237,14 @@ fn monitor_peers(
 		config.peer_max_count() as usize,
 	);
 
-	for p in new_peers.iter().filter(|p| !peers.is_known(p.addr)) {
+	for p in new_peers.iter().filter(|p| !peers.is_known(&p.addr)) {
 		trace!(
 			"monitor_peers: on {}:{}, queue to soon try {}",
 			config.host,
 			config.port,
 			p.addr,
 		);
-		tx.send(p.addr).unwrap();
+		tx.send(p.addr.clone()).unwrap();
 	}
 }
 
@@ -273,11 +273,11 @@ fn connect_to_seeds_and_preferred_peers(
 ) {
 	// check if we have some peers in db
 	// look for peers that are able to give us other peers (via PEER_LIST capability)
-	let peers = peers.find_peers(p2p::State::Healthy, p2p::Capabilities::PEER_LIST, 100);
+	let mut peers = peers.find_peers(p2p::State::Healthy, p2p::Capabilities::PEER_LIST, 100);
 
 	// if so, get their addresses, otherwise use our seeds
 	let mut peer_addrs = if peers.len() > 3 {
-		peers.iter().map(|p| p.addr).collect::<Vec<_>>()
+		peers.drain(0..).map(|p| p.addr).collect::<Vec<_>>()
 	} else {
 		seed_list()
 	};
@@ -340,19 +340,19 @@ fn listen_for_addrs(
 				}
 			}
 		}
-		connecting_history.insert(addr, now);
+		connecting_history.insert(addr.clone(), now);
 
 		let peers_c = peers.clone();
 		let p2p_c = p2p.clone();
 		let _ = thread::Builder::new()
 			.name("peer_connect".to_string())
-			.spawn(move || match p2p_c.connect(addr) {
+			.spawn(move || match p2p_c.connect(addr.clone()) {
 				Ok(p) => {
 					let _ = p.send_peer_request(capab);
-					let _ = peers_c.update_state(addr, p2p::State::Healthy);
+					let _ = peers_c.update_state(&addr, p2p::State::Healthy);
 				}
 				Err(_) => {
-					let _ = peers_c.update_state(addr, p2p::State::Defunct);
+					let _ = peers_c.update_state(&addr, p2p::State::Defunct);
 				}
 			});
 	}
@@ -388,7 +388,7 @@ pub fn dns_seeds() -> Box<dyn Fn() -> Vec<PeerAddr> + Send> {
 					&mut (addrs
 						.map(|mut addr| {
 							addr.set_port(if global::is_floonet() { 13414 } else { 3414 });
-							PeerAddr(addr)
+							PeerAddr::Socket(addr)
 						})
 						.filter(|addr| !temp_addresses.contains(addr))
 						.collect()),

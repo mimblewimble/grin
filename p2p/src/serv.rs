@@ -109,7 +109,7 @@ impl Server {
 	/// Asks the server to connect to a new peer. Directly returns the peer if
 	/// we're already connected to the provided address.
 	pub fn connect(&self, addr: PeerAddr) -> Result<Arc<Peer>, Error> {
-		if Peer::is_denied(&self.config, addr) {
+		if Peer::is_denied(&self.config, &addr) {
 			debug!("connect_peer: peer {} denied, not connecting.", addr);
 			return Err(Error::ConnectionClose);
 		}
@@ -123,7 +123,7 @@ impl Server {
 			}
 		}
 
-		if let Some(p) = self.peers.get_connected_peer(addr) {
+		if let Some(p) = self.peers.get_connected_peer(&addr) {
 			// if we're already connected to the addr, just return the peer
 			trace!("connect_peer: already connected {}", addr);
 			return Ok(p);
@@ -201,14 +201,14 @@ impl Server {
 	fn check_undesirable(&self, stream: &TcpStream) -> bool {
 		if let Ok(peer_addr) = stream.peer_addr() {
 			let peer_addr = PeerAddr::Socket(peer_addr);
-			if self.peers.is_banned(peer_addr) {
+			if self.peers.is_banned(&peer_addr) {
 				debug!("Peer {} banned, refusing connection.", peer_addr);
 				if let Err(e) = stream.shutdown(Shutdown::Both) {
 					debug!("Error shutting down conn: {:?}", e);
 				}
 				return true;
 			}
-			if self.peers.is_known(peer_addr) {
+			if self.peers.is_known(&peer_addr) {
 				debug!("Peer {} already known, refusing connection.", peer_addr);
 				if let Err(e) = stream.shutdown(Shutdown::Both) {
 					debug!("Error shutting down conn: {:?}", e);

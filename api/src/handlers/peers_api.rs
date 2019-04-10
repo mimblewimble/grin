@@ -65,7 +65,7 @@ impl Handler for PeerHandler {
 		if let Ok(ip_addr) = command.parse() {
 			peer_addr = PeerAddr::from_ip(ip_addr);
 		} else if let Ok(addr) = command.parse() {
-			peer_addr = PeerAddr(addr);
+			peer_addr = PeerAddr::Socket(addr);
 		} else {
 			return response(
 				StatusCode::BAD_REQUEST,
@@ -73,7 +73,7 @@ impl Handler for PeerHandler {
 			);
 		}
 
-		match w_fut!(&self.peers).get_peer(peer_addr) {
+		match w_fut!(&self.peers).get_peer(&peer_addr) {
 			Ok(peer) => json_response(&peer),
 			Err(_) => response(StatusCode::NOT_FOUND, "peer not found"),
 		}
@@ -90,7 +90,7 @@ impl Handler for PeerHandler {
 				if let Ok(ip_addr) = a.parse() {
 					PeerAddr::from_ip(ip_addr)
 				} else if let Ok(addr) = a.parse() {
-					PeerAddr(addr)
+					PeerAddr::Socket(addr)
 				} else {
 					return response(
 						StatusCode::BAD_REQUEST,
@@ -101,8 +101,8 @@ impl Handler for PeerHandler {
 		};
 
 		match command {
-			"ban" => w_fut!(&self.peers).ban_peer(addr, ReasonForBan::ManualBan),
-			"unban" => w_fut!(&self.peers).unban_peer(addr),
+			"ban" => w_fut!(&self.peers).ban_peer(&addr, ReasonForBan::ManualBan),
+			"unban" => w_fut!(&self.peers).unban_peer(&addr),
 			_ => return response(StatusCode::BAD_REQUEST, "invalid command"),
 		};
 
