@@ -16,7 +16,6 @@
 
 use std::fs::File;
 use std::io;
-use tempfile::tempfile;
 
 use crate::core::core::pmmr::RewindablePMMR;
 use crate::core::core::{BlockHeader, TxKernel};
