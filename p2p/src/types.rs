@@ -172,7 +172,10 @@ impl Readable for PeerAddr {
 			}
 			let addr_str = str::from_utf8(&addr).map_err(|_| ser::Error::CorruptedData)?;
 			let port = reader.read_u16()?;
-			Ok(PeerAddr::I2p(I2pSocketAddr::new(I2pAddr::new(&addr_str), port)))
+			Ok(PeerAddr::I2p(I2pSocketAddr::new(
+				I2pAddr::new(&addr_str),
+				port,
+			)))
 		} else {
 			Err(ser::Error::CorruptedData)
 		}
@@ -191,9 +194,7 @@ impl std::hash::Hash for PeerAddr {
 					s.ip().hash(state);
 				}
 			}
-			PeerAddr::I2p(i2p_addr) => {
-				i2p_addr.hash(state)
-			}
+			PeerAddr::I2p(i2p_addr) => i2p_addr.hash(state),
 		}
 	}
 }
@@ -205,17 +206,15 @@ impl PartialEq for PeerAddr {
 		match self {
 			PeerAddr::Socket(s) => {
 				if !other.is_ip() {
-					return false
+					return false;
 				}
 				if s.ip().is_loopback() {
-					*s == other.unwrap_ip()
+					s == &other.clone().unwrap_ip()
 				} else {
-					s.ip() == other.unwrap_ip().ip()
+					s.ip() == other.clone().unwrap_ip().ip()
 				}
 			}
-			PeerAddr::I2p(i2p_addr) => {
-				*i2p_addr == other.unwrap_i2p()
-			}
+			PeerAddr::I2p(i2p_addr) => i2p_addr == &other.clone().unwrap_i2p(),
 		}
 	}
 }
@@ -225,12 +224,8 @@ impl Eq for PeerAddr {}
 impl std::fmt::Display for PeerAddr {
 	fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
 		match self {
-			PeerAddr::Socket(s) => {
-				write!(f, "{}", s)
-			}
-			PeerAddr::I2p(i2p_addr) => {
-				write!(f, "{}", i2p_addr.to_string())
-			}
+			PeerAddr::Socket(s) => write!(f, "{}", s),
+			PeerAddr::I2p(i2p_addr) => write!(f, "{}", i2p_addr.to_string()),
 		}
 	}
 }
@@ -254,9 +249,7 @@ impl PeerAddr {
 					format!("{}", s.ip())
 				}
 			}
-			PeerAddr::I2p(i2p_addr) => {
-				i2p_addr.to_string()
-			}
+			PeerAddr::I2p(i2p_addr) => i2p_addr.to_string(),
 		}
 	}
 
@@ -270,10 +263,7 @@ impl PeerAddr {
 
 	/// Whether this is an classic IP address
 	pub fn is_ip(&self) -> bool {
-		if let PeerAddr::I2p(_) = self {
-			return true;
-		}
-		false
+		!self.is_i2p()
 	}
 
 	/// Returns the underlying I2P address if this is one, otherwise panics

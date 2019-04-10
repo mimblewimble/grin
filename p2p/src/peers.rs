@@ -66,7 +66,7 @@ impl Peers {
 			}
 		};
 		let peer_data = PeerData {
-			addr: peer.info.addr,
+			addr: peer.info.addr.clone(),
 			capabilities: peer.info.capabilities,
 			user_agent: peer.info.user_agent.clone(),
 			flags: State::Healthy,
@@ -84,6 +84,7 @@ impl Peers {
 	/// Add a peer as banned to block future connections, usually due to failed
 	/// handshake
 	pub fn add_banned(&self, addr: PeerAddr, ban_reason: ReasonForBan) -> Result<(), Error> {
+		debug!("Banning peer {}.", addr);
 		let peer_data = PeerData {
 			addr,
 			capabilities: Capabilities::UNKNOWN,
@@ -93,7 +94,6 @@ impl Peers {
 			ban_reason,
 			last_connected: Utc::now().timestamp(),
 		};
-		debug!("Banning peer {}.", addr);
 		self.save_peer(&peer_data)
 	}
 
@@ -229,7 +229,7 @@ impl Peers {
 		self.most_work_peers().pop()
 	}
 
-	pub fn is_banned(&self, peer_addr: PeerAddr) -> bool {
+	pub fn is_banned(&self, peer_addr: &PeerAddr) -> bool {
 		if let Ok(peer) = self.store.get_peer(peer_addr) {
 			return peer.flags == State::Banned;
 		}
@@ -237,7 +237,7 @@ impl Peers {
 	}
 
 	/// Ban a peer, disconnecting it if we're currently connected
-	pub fn ban_peer(&self, peer_addr: PeerAddr, ban_reason: ReasonForBan) {
+	pub fn ban_peer(&self, peer_addr: &PeerAddr, ban_reason: ReasonForBan) {
 		if let Err(e) = self.update_state(peer_addr, State::Banned) {
 			error!("Couldn't ban {}: {:?}", peer_addr, e);
 			return;
@@ -265,7 +265,7 @@ impl Peers {
 	}
 
 	/// Unban a peer, checks if it exists and banned then unban
-	pub fn unban_peer(&self, peer_addr: PeerAddr) {
+	pub fn unban_peer(&self, peer_addr: &PeerAddr) {
 		debug!("unban_peer: peer {}", peer_addr);
 		match self.get_peer(peer_addr) {
 			Ok(_) => {
@@ -409,12 +409,12 @@ impl Peers {
 	}
 
 	/// Get peer in store by address
-	pub fn get_peer(&self, peer_addr: PeerAddr) -> Result<PeerData, Error> {
+	pub fn get_peer(&self, peer_addr: &PeerAddr) -> Result<PeerData, Error> {
 		self.store.get_peer(peer_addr).map_err(From::from)
 	}
 
 	/// Whether we've already seen a peer with the provided address
-	pub fn exists_peer(&self, peer_addr: PeerAddr) -> Result<bool, Error> {
+	pub fn exists_peer(&self, peer_addr: &PeerAddr) -> Result<bool, Error> {
 		self.store.exists_peer(peer_addr).map_err(From::from)
 	}
 
@@ -424,7 +424,7 @@ impl Peers {
 	}
 
 	/// Updates the state of a peer in store
-	pub fn update_state(&self, peer_addr: PeerAddr, new_state: State) -> Result<(), Error> {
+	pub fn update_state(&self, peer_addr: &PeerAddr, new_state: State) -> Result<(), Error> {
 		self.store
 			.update_state(peer_addr, new_state)
 			.map_err(From::from)
@@ -723,16 +723,16 @@ impl NetAdapter for Peers {
 	/// Find good peers we know with the provided capability and return their
 	/// addresses.
 	fn find_peer_addrs(&self, capab: Capabilities) -> Vec<PeerAddr> {
-		let peers = self.find_peers(State::Healthy, capab, MAX_PEER_ADDRS as usize);
+		let mut peers = self.find_peers(State::Healthy, capab, MAX_PEER_ADDRS as usize);
 		trace!("find_peer_addrs: {} healthy peers picked", peers.len());
-		map_vec!(peers, |p| p.addr)
+		peers.drain(0..).map(|p| p.addr).collect()
 	}
 
 	/// A list of peers has been received from one of our peers.
 	fn peer_addrs_received(&self, peer_addrs: Vec<PeerAddr>) {
 		trace!("Received {} peer addrs, saving.", peer_addrs.len());
 		for pa in peer_addrs {
-			if let Ok(e) = self.exists_peer(pa) {
+			if let Ok(e) = self.exists_peer(&pa) {
 				if e {
 					continue;
 				}
@@ -753,13 +753,13 @@ impl NetAdapter for Peers {
 	}
 
 	fn peer_difficulty(&self, addr: PeerAddr, diff: Difficulty, height: u64) {
-		if let Some(peer) = self.get_connected_peer(addr) {
+		if let Some(peer) = self.get_connected_peer(&addr) {
 			peer.info.update(height, diff);
 		}
 	}
 
 	fn is_banned(&self, addr: PeerAddr) -> bool {
-		if let Ok(peer) = self.get_peer(addr) {
+		if let Ok(peer) = self.get_peer(&addr) {
 			peer.flags == State::Banned
 		} else {
 			false

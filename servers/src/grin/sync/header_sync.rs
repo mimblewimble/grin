@@ -149,7 +149,7 @@ impl HeaderSync {
 									&& header_head.total_difficulty < peer.info.total_difficulty()
 								{
 									self.peers
-										.ban_peer(peer.info.addr, ReasonForBan::FraudHeight);
+										.ban_peer(&peer.info.addr, ReasonForBan::FraudHeight);
 									info!(
 										"sync: ban a fraud peer: {}, claimed height: {}, total difficulty: {}",
 										peer.info.addr,

@@ -113,7 +113,7 @@ pub fn server_command(
 		if let Some(seeds) = a.values_of("seed") {
 			let seed_addrs = seeds
 				.filter_map(|x| x.parse().ok())
-				.map(|x| PeerAddr(x))
+				.map(|x| PeerAddr::Socket(x))
 				.collect();
 			server_config.p2p_config.seeding_type = Seeding::List;
 			server_config.p2p_config.seeds = Some(seed_addrs);
