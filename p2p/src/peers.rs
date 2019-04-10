@@ -644,6 +644,10 @@ impl ChainAdapter for Peers {
 		self.adapter.get_block(h)
 	}
 
+	fn kernel_data_read(&self) -> Option<File> {
+		self.adapter.kernel_data_read()
+	}
+
 	fn txhashset_read(&self, h: Hash) -> Option<TxHashSetRead> {
 		self.adapter.txhashset_read(h)
 	}

@@ -17,6 +17,8 @@ use croaring::Bitmap;
 use crate::core::hash::Hash;
 use crate::core::BlockHeader;
 use crate::ser::PMMRable;
+use std::fs::File;
+use std::io::Read;
 use std::path::Path;
 
 /// Storage backend for the MMR, just needs to be indexed by order of insertion.
@@ -54,16 +56,13 @@ pub trait Backend<T: PMMRable> {
 	/// Iterator over current (unpruned, unremoved) leaf positions.
 	fn leaf_pos_iter(&self) -> Box<Iterator<Item = u64> + '_>;
 
+	fn temp_data_file(&self) -> Result<File, String>;
+
 	/// Remove Hash by insertion position. An index is also provided so the
 	/// underlying backend can implement some rollback of positions up to a
 	/// given index (practically the index is the height of a block that
 	/// triggered removal).
 	fn remove(&mut self, position: u64) -> Result<(), String>;
-
-	/// Returns the data file path.. this is a bit of a hack now that doesn't
-	/// sit well with the design, but TxKernels have to be summed and the
-	/// fastest way to to be able to allow direct access to the file
-	fn get_data_file_path(&self) -> &Path;
 
 	/// Release underlying datafiles and locks
 	fn release_files(&mut self);

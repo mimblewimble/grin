@@ -521,6 +521,8 @@ pub trait ChainAdapter: Sync + Send {
 	/// Gets a full block by its hash.
 	fn get_block(&self, h: Hash) -> Option<core::Block>;
 
+	fn kernel_data_read(&self) -> Option<File>;
+
 	/// Provides a reading view into the current txhashset state as well as
 	/// the required indexes for a consumer to rewind to a consistant state
 	/// at the provided block hash.

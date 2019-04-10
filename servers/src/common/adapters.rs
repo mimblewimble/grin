@@ -315,6 +315,16 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 		}
 	}
 
+	fn kernel_data_read(&self) -> Option<File> {
+		match self.chain().kernel_data_read() {
+			Ok(file) => Some(file),
+			Err(e) => {
+				warn!("Couldn't produce kernel data file: {:?}", e);
+				None
+			}
+		}
+	}
+
 	/// Provides a reading view into the current txhashset state as well as
 	/// the required indexes for a consumer to rewind to a consistent state
 	/// at the provided block hash.

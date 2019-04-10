@@ -24,8 +24,8 @@ use crate::util::{RateCounter, RwLock};
 use chrono::prelude::Utc;
 
 use crate::msg::{
-	BanReason, GetPeerAddrs, Headers, Locator, PeerAddrs, Ping, Pong, TxHashSetArchive,
-	TxHashSetRequest, Type,
+	BanReason, GetPeerAddrs, Headers, KernelDataResponse, Locator, PeerAddrs, Ping, Pong,
+	TxHashSetArchive, TxHashSetRequest, Type,
 };
 use crate::types::{Error, NetAdapter, PeerAddr};
 
@@ -344,7 +344,25 @@ impl MessageHandler for Protocol {
 
 				Ok(None)
 			}
+			Type::KernelDataRequest => {
+				debug!("handle_payload: kernel_data_request");
 
+				let kernel_data = self.adapter.kernel_data_read();
+
+				if let Some(kernel_data) = kernel_data {
+					let file_sz = kernel_data.metadata()?.len();
+					let mut resp = Response::new(
+						Type::KernelDataResponse,
+						&KernelDataResponse { bytes: file_sz },
+						writer,
+					)?;
+					resp.add_attachment(kernel_data);
+					Ok(Some(resp))
+				} else {
+					Ok(None)
+				}
+			}
+			Type::KernelDataResponse => Ok(None),
 			_ => {
 				debug!("unknown message type {:?}", msg.header.msg_type);
 				Ok(None)

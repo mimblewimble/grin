@@ -13,6 +13,7 @@
 
 //! Implementation of the persistent Backend for the prunable MMR tree.
 
+use std::fs::File;
 use std::{fs, io, time};
 
 use crate::core::core::hash::{Hash, Hashed};
@@ -132,6 +133,12 @@ impl<T: PMMRable> Backend<T> for PMMRBackend<T> {
 		}
 	}
 
+	fn temp_data_file(&self) -> Result<File, String> {
+		self.data_file
+			.as_temp_file()
+			.map_err(|_| format!("Failed to build temp data file"))
+	}
+
 	/// Rewind the PMMR backend to the given position.
 	fn rewind(&mut self, position: u64, rewind_rm_pos: &Bitmap) -> Result<(), String> {
 		// First rewind the leaf_set with the necessary added and removed positions.
@@ -156,11 +163,6 @@ impl<T: PMMRable> Backend<T> for PMMRBackend<T> {
 		assert!(self.prunable, "Remove on non-prunable MMR");
 		self.leaf_set.remove(pos);
 		Ok(())
-	}
-
-	/// Return data file path
-	fn get_data_file_path(&self) -> &Path {
-		self.data_file.path()
 	}
 
 	/// Release underlying data files

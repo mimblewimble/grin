@@ -672,6 +672,11 @@ impl Chain {
 		self.txhashset.read().roots()
 	}
 
+	pub fn kernel_data_read(&self) -> Result<File, Error> {
+		let txhashset = self.txhashset.read();
+		txhashset::rewindable_kernel_view(&txhashset, |view| view.kernel_data_read())
+	}
+
 	/// Provides a reading view into the current txhashset state as well as
 	/// the required indexes for a consumer to rewind to a consistent state
 	/// at the provided block hash.

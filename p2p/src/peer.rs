@@ -23,7 +23,9 @@ use crate::core::core::hash::{Hash, Hashed};
 use crate::core::pow::Difficulty;
 use crate::core::{core, global};
 use crate::handshake::Handshake;
-use crate::msg::{self, BanReason, GetPeerAddrs, Locator, Ping, TxHashSetRequest};
+use crate::msg::{
+	self, BanReason, GetPeerAddrs, KernelDataRequest, Locator, Ping, TxHashSetRequest,
+};
 use crate::protocol::Protocol;
 use crate::types::{
 	Capabilities, ChainAdapter, Error, NetAdapter, P2PConfig, PeerAddr, PeerInfo, ReasonForBan,
@@ -399,6 +401,11 @@ impl Peer {
 		)
 	}
 
+	pub fn send_kernel_data_request(&self) -> Result<(), Error> {
+		debug!("Asking {} for kernel data.", self.info.addr);
+		connection!(self).send(&KernelDataRequest {}, msg::Type::KernelDataRequest)
+	}
+
 	/// Stops the peer, closing its connection
 	pub fn stop(&self) {
 		if let Some(conn) = self.connection.as_ref() {
@@ -585,6 +592,10 @@ impl ChainAdapter for TrackingAdapter {
 
 	fn get_block(&self, h: Hash) -> Option<core::Block> {
 		self.adapter.get_block(h)
+	}
+
+	fn kernel_data_read(&self) -> Option<File> {
+		self.adapter.kernel_data_read()
 	}
 
 	fn txhashset_read(&self, h: Hash) -> Option<TxHashSetRead> {

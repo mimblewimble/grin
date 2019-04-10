@@ -13,10 +13,11 @@
 
 //! Common storage-related types
 use memmap;
+use tempfile::tempfile;
 
 use crate::core::ser::{self, FixedLength, Readable, Writeable};
 use std::fs::{self, File, OpenOptions};
-use std::io::{self, BufWriter, ErrorKind, Read, Write};
+use std::io::{self, BufReader, BufWriter, ErrorKind, Read, Write};
 use std::marker;
 use std::path::{Path, PathBuf};
 
@@ -37,6 +38,10 @@ where
 			file,
 			_marker: marker::PhantomData,
 		})
+	}
+
+	pub fn as_temp_file(&self) -> io::Result<File> {
+		self.file.as_temp_file()
 	}
 
 	/// Append an element to the file.
@@ -168,6 +173,15 @@ impl AppendOnlyFile {
 			self.mmap = Some(unsafe { memmap::Mmap::map(&self.file.as_ref().unwrap())? });
 		}
 		Ok(())
+	}
+
+	pub fn as_temp_file(&self) -> io::Result<File> {
+		debug!("as_temp_file: creating temp file for {:?}", self.path);
+		let mut reader = BufReader::new(File::open(&self.path)?);
+		let mut writer = BufWriter::new(tempfile()?);
+		let res = io::copy(&mut reader, &mut writer)?;
+		debug!("as_temp_file: copied {} bytes into temp file", res);
+		Ok(writer.into_inner()?)
 	}
 
 	/// Append data to the file. Until the append-only file is synced, data is

@@ -124,10 +124,6 @@ impl<T: PMMRable> Backend<T> for VecBackend<T> {
 		Ok(())
 	}
 
-	fn get_data_file_path(&self) -> &Path {
-		Path::new("")
-	}
-
 	fn release_files(&mut self) {}
 
 	fn dump_stats(&self) {}

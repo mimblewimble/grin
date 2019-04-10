@@ -276,6 +276,9 @@ impl ChainAdapter for DummyAdapter {
 	fn get_block(&self, _: Hash) -> Option<core::Block> {
 		None
 	}
+	fn kernel_data_read(&self) -> Option<File> {
+		unimplemented!()
+	}
 	fn txhashset_read(&self, _h: Hash) -> Option<TxHashSetRead> {
 		unimplemented!()
 	}
