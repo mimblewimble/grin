@@ -18,11 +18,13 @@ use std::fs::File;
 use std::io::{self, Read};
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV4, SocketAddrV6};
 use std::path::PathBuf;
+use std::str;
 
 use std::sync::mpsc;
 use std::sync::Arc;
 
 use chrono::prelude::*;
+use i2p::net::{I2pAddr, I2pSocketAddr};
 
 use crate::chain;
 use crate::core::core;
@@ -44,6 +46,10 @@ pub const MAX_PEER_ADDRS: u32 = 256;
 
 /// Maximum number of block header hashes to send as part of a locator
 pub const MAX_LOCATORS: u32 = 20;
+
+/// Just enough to allow .b32.i2p addresses. We only accept vanity addresses
+/// (like igno.i2p) that are shorter or just as long.
+const MAX_I2P_ADDR_LENGTH: usize = 60;
 
 /// How long a banned peer should be banned for
 const BAN_WINDOW: i64 = 10800;
@@ -103,13 +109,16 @@ impl<T> From<mpsc::TrySendError<T>> for Error {
 	}
 }
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
-pub struct PeerAddr(pub SocketAddr);
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum PeerAddr {
+	Socket(SocketAddr),
+	I2p(I2pSocketAddr),
+}
 
 impl Writeable for PeerAddr {
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
-		match self.0 {
-			SocketAddr::V4(sav4) => {
+		match self {
+			PeerAddr::Socket(SocketAddr::V4(sav4)) => {
 				ser_multiwrite!(
 					writer,
 					[write_u8, 0],
@@ -117,12 +126,20 @@ impl Writeable for PeerAddr {
 					[write_u16, sav4.port()]
 				);
 			}
-			SocketAddr::V6(sav6) => {
+			PeerAddr::Socket(SocketAddr::V6(sav6)) => {
 				writer.write_u8(1)?;
 				for seg in &sav6.ip().segments() {
 					writer.write_u16(*seg)?;
 				}
 				writer.write_u16(sav6.port())?;
+			}
+			PeerAddr::I2p(i2p_addr) => {
+				ser_multiwrite!(
+					writer,
+					[write_u8, 2],
+					[write_bytes, &i2p_addr.dest().to_string().into_bytes()],
+					[write_u16, i2p_addr.port()]
+				);
 			}
 		}
 		Ok(())
@@ -131,23 +148,33 @@ impl Writeable for PeerAddr {
 
 impl Readable for PeerAddr {
 	fn read(reader: &mut dyn Reader) -> Result<PeerAddr, ser::Error> {
-		let v4_or_v6 = reader.read_u8()?;
-		if v4_or_v6 == 0 {
+		let addr_format = reader.read_u8()?;
+		if addr_format == 0 {
 			let ip = reader.read_fixed_bytes(4)?;
 			let port = reader.read_u16()?;
-			Ok(PeerAddr(SocketAddr::V4(SocketAddrV4::new(
+			Ok(PeerAddr::Socket(SocketAddr::V4(SocketAddrV4::new(
 				Ipv4Addr::new(ip[0], ip[1], ip[2], ip[3]),
 				port,
 			))))
-		} else {
+		} else if addr_format == 1 {
 			let ip = try_iter_map_vec!(0..8, |_| reader.read_u16());
 			let port = reader.read_u16()?;
-			Ok(PeerAddr(SocketAddr::V6(SocketAddrV6::new(
+			Ok(PeerAddr::Socket(SocketAddr::V6(SocketAddrV6::new(
 				Ipv6Addr::new(ip[0], ip[1], ip[2], ip[3], ip[4], ip[5], ip[6], ip[7]),
 				port,
 				0,
 				0,
 			))))
+		} else if addr_format == 2 {
+			let addr = reader.read_bytes_len_prefix()?;
+			if addr.len() > MAX_I2P_ADDR_LENGTH {
+				return Err(ser::Error::TooLargeReadErr);
+			}
+			let addr_str = str::from_utf8(&addr).map_err(|_| ser::Error::CorruptedData)?;
+			let port = reader.read_u16()?;
+			Ok(PeerAddr::I2p(I2pSocketAddr::new(I2pAddr::new(&addr_str), port)))
+		} else {
+			Err(ser::Error::CorruptedData)
 		}
 	}
 }
@@ -156,10 +183,17 @@ impl std::hash::Hash for PeerAddr {
 	/// If loopback address then we care about ip and port.
 	/// If regular address then we only care about the ip and ignore the port.
 	fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-		if self.0.ip().is_loopback() {
-			self.0.hash(state);
-		} else {
-			self.0.ip().hash(state);
+		match self {
+			PeerAddr::Socket(s) => {
+				if s.ip().is_loopback() {
+					s.hash(state);
+				} else {
+					s.ip().hash(state);
+				}
+			}
+			PeerAddr::I2p(i2p_addr) => {
+				i2p_addr.hash(state)
+			}
 		}
 	}
 }
@@ -168,10 +202,20 @@ impl PartialEq for PeerAddr {
 	/// If loopback address then we care about ip and port.
 	/// If regular address then we only care about the ip and ignore the port.
 	fn eq(&self, other: &PeerAddr) -> bool {
-		if self.0.ip().is_loopback() {
-			self.0 == other.0
-		} else {
-			self.0.ip() == other.0.ip()
+		match self {
+			PeerAddr::Socket(s) => {
+				if !other.is_ip() {
+					return false
+				}
+				if s.ip().is_loopback() {
+					*s == other.unwrap_ip()
+				} else {
+					s.ip() == other.unwrap_ip().ip()
+				}
+			}
+			PeerAddr::I2p(i2p_addr) => {
+				*i2p_addr == other.unwrap_i2p()
+			}
 		}
 	}
 }
@@ -180,7 +224,14 @@ impl Eq for PeerAddr {}
 
 impl std::fmt::Display for PeerAddr {
 	fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-		write!(f, "{}", self.0)
+		match self {
+			PeerAddr::Socket(s) => {
+				write!(f, "{}", s)
+			}
+			PeerAddr::I2p(i2p_addr) => {
+				write!(f, "{}", i2p_addr.to_string())
+			}
+		}
 	}
 }
 
@@ -189,17 +240,56 @@ impl PeerAddr {
 	/// defaults to port 3414 on mainnet and 13414 on floonet.
 	pub fn from_ip(addr: IpAddr) -> PeerAddr {
 		let port = if global::is_floonet() { 13414 } else { 3414 };
-		PeerAddr(SocketAddr::new(addr, port))
+		PeerAddr::Socket(SocketAddr::new(addr, port))
 	}
 
 	/// If the ip is loopback then our key is "ip:port" (mainly for local usernet testing).
 	/// Otherwise we only care about the ip (we disallow multiple peers on the same ip address).
 	pub fn as_key(&self) -> String {
-		if self.0.ip().is_loopback() {
-			format!("{}:{}", self.0.ip(), self.0.port())
-		} else {
-			format!("{}", self.0.ip())
+		match self {
+			PeerAddr::Socket(s) => {
+				if s.ip().is_loopback() {
+					format!("{}:{}", s.ip(), s.port())
+				} else {
+					format!("{}", s.ip())
+				}
+			}
+			PeerAddr::I2p(i2p_addr) => {
+				i2p_addr.to_string()
+			}
 		}
+	}
+
+	/// Whether this is an i2p address
+	pub fn is_i2p(&self) -> bool {
+		if let PeerAddr::I2p(_) = self {
+			return true;
+		}
+		false
+	}
+
+	/// Whether this is an classic IP address
+	pub fn is_ip(&self) -> bool {
+		if let PeerAddr::I2p(_) = self {
+			return true;
+		}
+		false
+	}
+
+	/// Returns the underlying I2P address if this is one, otherwise panics
+	pub fn unwrap_i2p(self) -> I2pSocketAddr {
+		if let PeerAddr::I2p(i2p_addr) = self {
+			return i2p_addr;
+		}
+		panic!("not an i2p address");
+	}
+
+	/// Returns the underlying IP address if this is one, otherwise panics
+	pub fn unwrap_ip(self) -> SocketAddr {
+		if let PeerAddr::Socket(s) = self {
+			return s;
+		}
+		panic!("not a IP address");
 	}
 }
 

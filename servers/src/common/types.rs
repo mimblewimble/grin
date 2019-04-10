@@ -136,6 +136,28 @@ impl Default for ChainValidationMode {
 	}
 }
 
+/// I2P configuration, if enabled
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub enum I2pMode {
+	/// No I2P, only use classic TCP
+	Disabled,
+	/// Enable I2P
+	Enabled {
+		/// Attempts to start i2pd with grin
+		autostart: bool,
+		/// Only connect through I2P, disable classic TCP
+		exclusive: bool,
+		/// Address of the I2P server
+		addr: String,
+	},
+}
+
+impl Default for I2pMode {
+	fn default() -> I2pMode {
+		I2pMode::Disabled
+	}
+}
+
 /// Full server configuration, aggregating configurations required for the
 /// different components.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -197,6 +219,9 @@ pub struct ServerConfig {
 	/// Configuration for the webhooks that trigger on certain events
 	#[serde(default)]
 	pub webhook_config: WebHooksConfig,
+
+	/// Mode of use and configuration for i2p
+	pub i2pd_mode: I2pMode,
 }
 
 impl Default for ServerConfig {
@@ -219,6 +244,7 @@ impl Default for ServerConfig {
 			run_test_miner: Some(false),
 			test_miner_wallet_url: None,
 			webhook_config: WebHooksConfig::default(),
+			i2pd_mode: I2pMode::default(),
 		}
 	}
 }

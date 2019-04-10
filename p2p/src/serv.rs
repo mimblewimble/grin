@@ -84,7 +84,7 @@ impl Server {
 
 			match listener.accept() {
 				Ok((stream, peer_addr)) => {
-					let peer_addr = PeerAddr(peer_addr);
+					let peer_addr = PeerAddr::Socket(peer_addr);
 
 					if self.check_undesirable(&stream) {
 						continue;
@@ -146,32 +146,40 @@ impl Server {
 			self.config.port,
 			addr
 		);
-		match TcpStream::connect_timeout(&addr.0, Duration::from_secs(10)) {
-			Ok(stream) => {
-				let addr = SocketAddr::new(self.config.host, self.config.port);
-				let total_diff = self.peers.total_difficulty()?;
+		match addr {
+			PeerAddr::Socket(addr) => {
+				match TcpStream::connect_timeout(&addr, Duration::from_secs(10)) {
+					Ok(mut stream) => {
+						let addr = SocketAddr::new(self.config.host, self.config.port);
+						let total_diff = self.peers.total_difficulty()?;
 
-				let peer = Peer::connect(
-					stream,
-					self.capabilities,
-					total_diff,
-					PeerAddr(addr),
-					&self.handshake,
-					self.peers.clone(),
-				)?;
-				let peer = Arc::new(peer);
-				self.peers.add_connected(peer.clone())?;
-				Ok(peer)
+						let mut peer = Peer::connect(
+							&mut stream,
+							self.capabilities,
+							total_diff,
+							PeerAddr::Socket(addr),
+							&self.handshake,
+							self.peers.clone(),
+						)?;
+						peer.start(stream);
+						let peer = Arc::new(peer);
+						self.peers.add_connected(peer.clone())?;
+						Ok(peer)
+					}
+					Err(e) => {
+						trace!(
+							"connect_peer: on {}:{}. Could not connect to {}: {:?}",
+							self.config.host,
+							self.config.port,
+							addr,
+							e
+						);
+						Err(Error::Connection(e))
+					}
+				}
 			}
-			Err(e) => {
-				trace!(
-					"connect_peer: on {}:{}. Could not connect to {}: {:?}",
-					self.config.host,
-					self.config.port,
-					addr,
-					e
-				);
-				Err(Error::Connection(e))
+			PeerAddr::I2p(_) => {
+				unimplemented!();
 			}
 		}
 	}
@@ -205,7 +213,7 @@ impl Server {
 	/// duplicate connections, malicious or not.
 	fn check_undesirable(&self, stream: &TcpStream) -> bool {
 		if let Ok(peer_addr) = stream.peer_addr() {
-			let peer_addr = PeerAddr(peer_addr);
+			let peer_addr = PeerAddr::Socket(peer_addr);
 			if self.peers.is_banned(peer_addr) {
 				debug!("Peer {} banned, refusing connection.", peer_addr);
 				if let Err(e) = stream.shutdown(Shutdown::Both) {

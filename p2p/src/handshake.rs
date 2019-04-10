@@ -69,7 +69,7 @@ impl Handshake {
 		// prepare the first part of the handshake
 		let nonce = self.next_nonce();
 		let peer_addr = match conn.peer_addr() {
-			Ok(pa) => PeerAddr(pa),
+			Ok(pa) => PeerAddr::Socket(pa),
 			Err(e) => return Err(Error::Connection(e)),
 		};
 
@@ -206,10 +206,17 @@ impl Handshake {
 
 /// Resolve the correct peer_addr based on the connection and the advertised port.
 fn resolve_peer_addr(advertised: PeerAddr, conn: &TcpStream) -> PeerAddr {
-	let port = advertised.0.port();
-	if let Ok(addr) = conn.peer_addr() {
-		PeerAddr(SocketAddr::new(addr.ip(), port))
-	} else {
-		advertised
+	match advertised.clone() {
+		PeerAddr::Socket(addr) => {
+			let port = addr.port();
+			if let Ok(addr) = conn.peer_addr() {
+				PeerAddr::Socket(SocketAddr::new(addr.ip(), port))
+			} else {
+				advertised
+			}
+		}
+		PeerAddr::I2p(_) => {
+			advertised
+		}
 	}
 }
