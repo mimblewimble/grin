@@ -55,7 +55,7 @@ jobs:
   strategy:
     matrix:
       test:
-        CI_JOB: test
+        CI_JOB: test-all
       release:
         CI_JOB: release
   steps:
@@ -68,7 +68,7 @@ jobs:
   strategy:
     matrix:
       test:
-        CI_JOB: test
+        CI_JOB: test-all
       release:
         CI_JOB: release
   steps:
