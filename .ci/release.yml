@@ -1,4 +1,47 @@
 steps:
-  - script: '.ci/release-jobs'
-    displayName: Release
+  - script: 'cargo build --release'
+    displayName: Build Relase
     condition:  and(succeeded(), contains(variables['Build.SourceBranch'], 'refs/tags/'))
+  - task: CopyFiles@2
+    displayName: Copy assets
+    condition:  and(succeeded(), contains(variables['Build.SourceBranch'], 'refs/tags/'))
+    inputs:
+      sourceFolder: '$(Build.SourcesDirectory)/target/$(TARGET)/release'
+      contents: 'grin'
+      targetFolder: '$(Build.BinariesDirectory)/grin'
+  - task: ArchiveFiles@2
+    displayName: Gather assets
+    condition:  and(succeeded(), contains(variables['Build.SourceBranch'], 'refs/tags/'))
+    inputs:
+      rootFolderOrFile: '$(Build.BinariesDirectory)/grin'
+      archiveType: 'tar'
+      tarCompression: 'gz'
+      archiveFile: '$(Build.ArtifactStagingDirectory)/grin-$(build.my_tag)-$(TARGET).tar.gz'
+  - task: GithubRelease@0
+    displayName: Github release without changelog
+    condition: and(succeeded(), startsWith(variables['Build.SourceBranch'], 'refs/tags/'))
+    inputs:
+      gitHubConnection: 'quentinlesceller'
+      repositoryName: 'quentinlesceller/grin'
+      action: 'edit'
+      target: '$(build.sourceVersion)'
+      tagSource: 'manual'
+      tag: '$(build.my_tag)'
+      assets: '$(Build.ArtifactStagingDirectory)/rrinlog-$(build.my_tag)-$(TARGET).tar.gz'
+      title: '$(build.my_tag) - $(build.date)'
+      assetUploadMode: 'replace'
+      addChangeLog: false
+  - task: GithubRelease@0
+    displayName: Github release with changelog
+    condition: and(succeeded(), startsWith(variables['Build.SourceBranch'], 'refs/tags/'), variables['Agent.OS'], 'Linux' ))
+    inputs:
+      gitHubConnection: 'quentinlesceller'
+      repositoryName: 'quentinlesceller/grin'
+      action: 'edit'
+      target: '$(build.sourceVersion)'
+      tagSource: 'manual'
+      tag: '$(build.my_tag)'
+      assets: '$(Build.ArtifactStagingDirectory)/rrinlog-$(build.my_tag)-$(TARGET).tar.gz'
+      title: '$(build.my_tag) - $(build.date)'
+      assetUploadMode: 'replace'
+      addChangeLog: true
