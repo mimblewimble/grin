@@ -94,7 +94,8 @@ impl Peers {
 
 		let peer = &self
 			.config
-			.dandelion_peer.clone()
+			.dandelion_peer
+			.clone()
 			.and_then(|ip| peers.iter().find(|x| x.info.addr == ip))
 			.or(thread_rng().choose(&peers));
 
@@ -572,7 +573,10 @@ impl ChainAdapter for Peers {
 		was_requested: bool,
 	) -> Result<bool, chain::Error> {
 		let hash = b.hash();
-		if !self.adapter.block_received(b, peer_addr.clone(), was_requested)? {
+		if !self
+			.adapter
+			.block_received(b, peer_addr.clone(), was_requested)?
+		{
 			// if the peer sent us a block that's intrinsically bad
 			// they are either mistaken or malevolent, both of which require a ban
 			debug!(
@@ -658,7 +662,10 @@ impl ChainAdapter for Peers {
 		txhashset_data: File,
 		peer_addr: PeerAddr,
 	) -> Result<bool, chain::Error> {
-		if !self.adapter.txhashset_write(h, txhashset_data, peer_addr.clone())? {
+		if !self
+			.adapter
+			.txhashset_write(h, txhashset_data, peer_addr.clone())?
+		{
 			debug!(
 				"Received a bad txhashset data from {}, the peer will be banned",
 				&peer_addr

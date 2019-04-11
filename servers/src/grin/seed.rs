@@ -115,6 +115,7 @@ pub fn connect_and_monitor(
 					monitor_peers(
 						peers.clone(),
 						p2p_server.config.clone(),
+						capabilities,
 						tx.clone(),
 						preferred_peers.clone(),
 					);
@@ -145,6 +146,7 @@ pub fn connect_and_monitor(
 fn monitor_peers(
 	peers: Arc<p2p::Peers>,
 	config: p2p::P2PConfig,
+	capab: p2p::Capabilities,
 	tx: mpsc::Sender<PeerAddr>,
 	preferred_peers_list: Option<Vec<PeerAddr>>,
 ) {
@@ -205,7 +207,7 @@ fn monitor_peers(
 			config.port,
 			p.info.addr,
 		);
-		let _ = p.send_peer_request(p2p::Capabilities::PEER_LIST);
+		let _ = p.send_peer_request(capab);
 		connected_peers.push(p.info.addr.clone())
 	}
 
