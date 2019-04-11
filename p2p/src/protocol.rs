@@ -350,14 +350,15 @@ impl MessageHandler for Protocol {
 				let kernel_data = self.adapter.kernel_data_read();
 
 				if let Some(kernel_data) = kernel_data {
-					let file_sz = kernel_data.metadata()?.len();
-					let mut resp = Response::new(
-						Type::KernelDataResponse,
-						&KernelDataResponse { bytes: file_sz },
-						writer,
-					)?;
-					resp.add_attachment(kernel_data);
-					Ok(Some(resp))
+					// We can migrate to version = 1 "variable size" kernels once this is widely supported.
+
+					let version = 0; // original "fixed size" kernel serialization
+					let bytes = kernel_data.metadata()?.len();
+					let kernel_data_response = KernelDataResponse { version, bytes };
+					let mut response =
+						Response::new(Type::KernelDataResponse, &kernel_data_response, writer)?;
+					response.add_attachment(kernel_data);
+					Ok(Some(response))
 				} else {
 					Ok(None)
 				}
@@ -365,9 +366,12 @@ impl MessageHandler for Protocol {
 			Type::KernelDataResponse => {
 				let response: KernelDataResponse = msg.body()?;
 				debug!(
-					"handle_payload: kernel_data_response: bytes: {}",
-					response.bytes
+					"handle_payload: kernel_data_response: version: {}, bytes: {}",
+					response.version, response.bytes
 				);
+
+				// TODO - actually handle the response (demonstrate we can rebuild hash file etc.)
+
 				Ok(None)
 			}
 			_ => {

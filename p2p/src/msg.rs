@@ -626,12 +626,23 @@ impl Writeable for KernelDataRequest {
 }
 
 pub struct KernelDataResponse {
+	/// Support for multiple versions of data serialization.
+	/// 0 - the original "fixed size" kernel serialization format (lock_height and fee required)
+	/// 1 - "variable size" kernel serialization
+	///    * lock_height only included in HeightLocked kernels
+	///    * fee omitted for coinbase kernels
+	///
+	/// Note: Both versions will produce identical hash values (and corresponding MMR root).
+	/// Only the "data" serialization differs.
+	///
+	pub version: u8,
 	/// Size in bytes of the kernel data file.
 	pub bytes: u64,
 }
 
 impl Writeable for KernelDataResponse {
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
+		writer.write_u8(self.version)?;
 		writer.write_u64(self.bytes)?;
 		Ok(())
 	}
@@ -639,7 +650,8 @@ impl Writeable for KernelDataResponse {
 
 impl Readable for KernelDataResponse {
 	fn read(reader: &mut dyn Reader) -> Result<KernelDataResponse, ser::Error> {
+		let version = reader.read_u8()?;
 		let bytes = reader.read_u64()?;
-		Ok(KernelDataResponse { bytes })
+		Ok(KernelDataResponse { version, bytes })
 	}
 }
