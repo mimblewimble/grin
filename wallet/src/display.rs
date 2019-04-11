@@ -36,6 +36,7 @@ pub fn outputs(
 	);
 	println!();
 	if term::stdout().is_none() {
+		println!("Could not open terminal");
 		return Ok(());
 	}
 	let mut t = term::stdout().unwrap();
@@ -136,6 +137,7 @@ pub fn txs(
 	);
 	println!();
 	if term::stdout().is_none() {
+		println!("Could not open terminal");
 		return Ok(());
 	}
 	let mut t = term::stdout().unwrap();
@@ -412,6 +414,7 @@ pub fn tx_messages(tx: &TxLogEntry, dark_background_color_scheme: bool) -> Resul
 	let title = format!("Transaction Messages - Transaction '{}'", tx.id,);
 	println!();
 	if term::stdout().is_none() {
+		println!("Could not open terminal");
 		return Ok(());
 	}
 	let mut t = term::stdout().unwrap();

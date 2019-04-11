@@ -63,6 +63,7 @@ pub fn show_status(config: &ServerConfig, api_secret: Option<String>) {
 	println!();
 	let title = format!("Grin Server Status");
 	if term::stdout().is_none() {
+		println!("Could not open terminal");
 		return;
 	}
 	let mut t = term::stdout().unwrap();
