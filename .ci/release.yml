@@ -21,7 +21,7 @@ steps:
     displayName: Github release without changelog
     condition: and(succeeded(), startsWith(variables['Build.SourceBranch'], 'refs/tags/'))
     inputs:
-      gitHubConnection: 'quentinlesceller'
+      gitHubConnection: 'quentinrelease'
       repositoryName: 'quentinlesceller/grin'
       action: 'edit'
       target: '$(build.sourceVersion)'
