@@ -139,7 +139,7 @@ impl Server {
 	}
 
 	/// Instantiates a new server associated with the provided future reactor.
-	pub fn new(config: ServerConfig) -> Result<Server, Error> {
+	pub fn new(mut config: ServerConfig) -> Result<Server, Error> {
 		// Obtain our lock_file or fail immediately with an error.
 		let lock_file = Server::one_grin_at_a_time(&config)?;
 
@@ -150,7 +150,12 @@ impl Server {
 			Some(b) => b,
 		};
 
-		let stop_state = Arc::new(StopState::new());
+		// Slight override of capabilities if i2p is enabled
+		if config.p2p_config.i2p_mode != p2p::I2pMode::Disabled {
+			config.p2p_config.capabilities |= p2p::Capabilities::I2P_SUPPORTED;
+		}
+
+		let stop_state = Arc::new(Mutex::new(StopState::new()));
 
 		// Shared cache for verification results.
 		// We cache rangeproof verification and kernel signature verification.
