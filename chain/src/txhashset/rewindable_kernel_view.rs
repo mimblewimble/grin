@@ -91,4 +91,8 @@ impl<'a> RewindableKernelView<'a> {
 			.map_err(|_| ErrorKind::FileReadErr("Data file woes".into()))?;
 		Ok(file)
 	}
+
+	pub fn kernel_data_write(&self, file: &File) -> Result<(), Error> {
+		Ok(())
+	}
 }

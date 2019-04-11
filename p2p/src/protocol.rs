@@ -22,6 +22,7 @@ use crate::conn::{Message, MessageHandler, Response};
 use crate::core::core::{self, hash::Hash, CompactBlock};
 use crate::util::{RateCounter, RwLock};
 use chrono::prelude::Utc;
+use tempfile::tempfile;
 
 use crate::msg::{
 	BanReason, GetPeerAddrs, Headers, KernelDataResponse, Locator, PeerAddrs, Ping, Pong,
@@ -370,7 +371,32 @@ impl MessageHandler for Protocol {
 					response.version, response.bytes
 				);
 
-				// TODO - actually handle the response (demonstrate we can rebuild hash file etc.)
+				let mut writer = BufWriter::new(tempfile()?);
+
+				let total_size = response.bytes as usize;
+				let mut remaining_size = total_size;
+				// let mut downloaded_size: usize = 0;
+
+				while remaining_size > 0 {
+					debug!("in loop, remaining: {}", remaining_size);
+
+					let size = msg.copy_attachment(remaining_size, &mut writer)?;
+					debug!("in loop, size here: {}", size);
+
+					remaining_size = remaining_size.saturating_sub(size);
+					debug!("in loop, remaining now: {}", remaining_size);
+
+					// Increase received bytes quietly (without affecting the counters).
+					// Otherwise we risk banning a peer as "abusive".
+					received_bytes.write().inc_quiet(size as u64);
+				}
+
+				let file = writer.into_inner().map_err(|_| Error::Internal)?;
+
+				debug!(
+					"handle_payload: kernel_data_response: file size: {}",
+					file.metadata().unwrap().len()
+				);
 
 				Ok(None)
 			}

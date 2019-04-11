@@ -21,7 +21,7 @@
 //! stream and make sure we get the right number of bytes out.
 
 use std::fs::File;
-use std::io::{self, Read, Write};
+use std::io::{self, BufReader, BufWriter, Read, Write};
 use std::net::{Shutdown, TcpStream};
 use std::sync::{mpsc, Arc};
 use std::{cmp, thread, time};
@@ -132,21 +132,18 @@ impl<'a> Response<'a> {
 			let mut sent_bytes = sent_bytes.write();
 			sent_bytes.inc(msg.len() as u64);
 		}
-		if let Some(mut file) = self.attachment {
-			let mut buf = [0u8; 8000];
-			loop {
-				match file.read(&mut buf[..]) {
-					Ok(0) => break,
-					Ok(n) => {
-						write_all(&mut self.stream, &buf[..n], time::Duration::from_secs(10))?;
-						// Increase sent bytes "quietly" without incrementing the counter.
-						// (In a loop here for the single attachment).
-						let mut sent_bytes = sent_bytes.write();
-						sent_bytes.inc_quiet(n as u64);
-					}
-					Err(e) => return Err(From::from(e)),
-				}
-			}
+		if let Some(file) = self.attachment {
+			error!(
+				"***** writing attachment (reading from file): file size: {}",
+				file.metadata().unwrap().len()
+			);
+			let mut reader = BufReader::new(file);
+			let mut writer = BufWriter::new(self.stream);
+
+			let bytes_written = io::copy(&mut reader, &mut writer)?;
+			sent_bytes.write().inc_quiet(bytes_written as u64);
+
+			error!("***** wrote some bytes: {}", bytes_written);
 		}
 		Ok(())
 	}

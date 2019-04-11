@@ -16,8 +16,9 @@ use memmap;
 use tempfile::tempfile;
 
 use crate::core::ser::{self, FixedLength, Readable, Writeable};
+use std::env;
 use std::fs::{self, File, OpenOptions};
-use std::io::{self, BufReader, BufWriter, ErrorKind, Read, Write};
+use std::io::{self, BufReader, BufWriter, ErrorKind, Read, Seek, SeekFrom, Write};
 use std::marker;
 use std::path::{Path, PathBuf};
 
@@ -176,12 +177,16 @@ impl AppendOnlyFile {
 	}
 
 	pub fn as_temp_file(&self) -> io::Result<File> {
-		debug!("as_temp_file: creating temp file for {:?}", self.path);
 		let mut reader = BufReader::new(File::open(&self.path)?);
 		let mut writer = BufWriter::new(tempfile()?);
-		let res = io::copy(&mut reader, &mut writer)?;
-		debug!("as_temp_file: copied {} bytes into temp file", res);
-		Ok(writer.into_inner()?)
+		io::copy(&mut reader, &mut writer)?;
+
+		// Remember to seek back to start of the file as the caller is likely
+		// to read this file directly without reopening it.
+		writer.seek(SeekFrom::Start(0))?;
+
+		let file = writer.into_inner()?;
+		Ok(file)
 	}
 
 	/// Append data to the file. Until the append-only file is synced, data is
