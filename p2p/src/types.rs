@@ -283,6 +283,28 @@ impl PeerAddr {
 	}
 }
 
+/// I2P configuration, if enabled
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub enum I2pMode {
+	/// No I2P, only use classic TCP
+	Disabled,
+	/// Enable I2P
+	Enabled {
+		/// Attempts to start i2pd with grin
+		autostart: bool,
+		/// Only connect through I2P, disable classic TCP
+		exclusive: bool,
+		/// Address of the I2P server
+		addr: String,
+	},
+}
+
+impl Default for I2pMode {
+	fn default() -> I2pMode {
+		I2pMode::Disabled
+	}
+}
+
 /// Configuration for the peer-to-peer server.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct P2PConfig {
@@ -314,6 +336,9 @@ pub struct P2PConfig {
 	pub peer_min_preferred_count: Option<u32>,
 
 	pub dandelion_peer: Option<PeerAddr>,
+
+	/// Mode of use and configuration for i2p
+	pub i2p_mode: I2pMode,
 }
 
 /// Default address for peer-to-peer connections.
@@ -333,6 +358,7 @@ impl Default for P2PConfig {
 			peer_max_count: None,
 			peer_min_preferred_count: None,
 			dandelion_peer: None,
+			i2p_mode: I2pMode::default(),
 		}
 	}
 }
@@ -400,6 +426,8 @@ bitflags! {
 		const PEER_LIST = 0b00000100;
 		/// Can broadcast and request txs by kernel hash.
 		const TX_KERNEL_HASH = 0b00001000;
+		/// I2P addresses can be received and connected to
+		const I2P_SUPPORTED = 0b00010000;
 
 		/// All nodes right now are "full nodes".
 		/// Some nodes internally may maintain longer block histories (archival_mode)

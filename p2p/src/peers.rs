@@ -590,7 +590,10 @@ impl ChainAdapter for Peers {
 		was_requested: bool,
 	) -> Result<bool, chain::Error> {
 		let hash = b.hash();
-		if !self.adapter.block_received(b, peer_info, was_requested)? {
+		if !self
+			.adapter
+			.block_received(b, peer_addr.clone(), was_requested)?
+		{
 			// if the peer sent us a block that's intrinsically bad
 			// they are either mistaken or malevolent, both of which require a ban
 			debug!(
@@ -688,7 +691,10 @@ impl ChainAdapter for Peers {
 		txhashset_data: File,
 		peer_info: &PeerInfo,
 	) -> Result<bool, chain::Error> {
-		if self.adapter.txhashset_write(h, txhashset_data, peer_info)? {
+		if !self
+			.adapter
+			.txhashset_write(h, txhashset_data, peer_addr.clone())?
+		{
 			debug!(
 				"Received a bad txhashset data from {}, the peer will be banned",
 				peer_info.addr
