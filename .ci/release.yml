@@ -35,7 +35,7 @@ steps:
     displayName: Github release with changelog
     condition: and(succeeded(), startsWith(variables['Build.SourceBranch'], 'refs/tags/'), eq(variables['Agent.OS'], 'Linux' ))
     inputs:
-      gitHubConnection: 'quentinlesceller'
+      gitHubConnection: 'quentinrelease'
       repositoryName: 'quentinlesceller/grin'
       action: 'edit'
       target: '$(build.sourceVersion)'
