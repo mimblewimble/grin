@@ -279,9 +279,10 @@ pub fn deserialize<T: Readable>(source: &mut dyn Read) -> Result<T, Error> {
 }
 
 /// Serializes a Writeable into any std::io::Write implementation.
-pub fn serialize<W: Writeable>(sink: &mut dyn Write, thing: &W) -> Result<(), Error> {
-	let mut writer = BinWriter { sink };
-	thing.write(&mut writer)
+pub fn serialize<W: Writeable>(sink: &mut dyn Write, thing: &W) -> Result<u64, Error> {
+	let mut writer = BinWriter::new(sink);
+	thing.write(&mut writer)?;
+	Ok(writer.bytes_written as u64)
 }
 
 /// Utility function to serialize a writeable directly in memory using a
@@ -559,13 +560,17 @@ impl<T: Hashed> VerifySortedAndUnique<T> for Vec<T> {
 /// Utility wrapper for an underlying byte Writer. Defines higher level methods
 /// to write numbers, byte vectors, hashes, etc.
 pub struct BinWriter<'a> {
+	bytes_written: usize,
 	sink: &'a mut dyn Write,
 }
 
 impl<'a> BinWriter<'a> {
 	/// Wraps a standard Write in a new BinWriter
-	pub fn new(write: &'a mut dyn Write) -> BinWriter<'a> {
-		BinWriter { sink: write }
+	pub fn new(sink: &'a mut dyn Write) -> BinWriter<'a> {
+		BinWriter {
+			bytes_written: 0,
+			sink,
+		}
 	}
 }
 
@@ -576,6 +581,7 @@ impl<'a> Writer for BinWriter<'a> {
 
 	fn write_fixed_bytes<T: AsFixedBytes>(&mut self, fixed: &T) -> Result<(), Error> {
 		let bs = fixed.as_ref();
+		self.bytes_written = self.bytes_written.saturating_add(bs.len());
 		self.sink.write_all(bs)?;
 		Ok(())
 	}

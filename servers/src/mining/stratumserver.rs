@@ -201,11 +201,7 @@ impl Worker {
 		if !message.ends_with("\n") {
 			message += "\n";
 		}
-		match util::read_write::write_all(
-			&mut self.stream,
-			message.as_bytes(),
-			Duration::from_secs(1),
-		) {
+		match self.stream.write_all(message.as_bytes()) {
 			Ok(_) => match self.stream.flush() {
 				Ok(_) => {}
 				Err(e) => {

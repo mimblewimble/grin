@@ -21,7 +21,7 @@
 //! stream and make sure we get the right number of bytes out.
 
 use std::fs::File;
-use std::io::{self, Read, Write};
+use std::io::{self, BufReader, BufWriter, Read, Write};
 use std::net::{Shutdown, TcpStream};
 use std::sync::{mpsc, Arc};
 use std::{cmp, thread, time};
@@ -30,7 +30,7 @@ use crate::core::ser;
 use crate::core::ser::FixedLength;
 use crate::msg::{read_body, read_header, read_item, write_to_buf, MsgHeader, Type};
 use crate::types::Error;
-use crate::util::read_write::{read_exact, write_all};
+use crate::util::read_write::read_exact;
 use crate::util::{RateCounter, RwLock};
 
 /// A trait to be implemented in order to receive messages from the
@@ -123,31 +123,30 @@ impl<'a> Response<'a> {
 		})
 	}
 
-	fn write(mut self, sent_bytes: Arc<RwLock<RateCounter>>) -> Result<(), Error> {
-		let mut msg = ser::ser_vec(&MsgHeader::new(self.resp_type, self.body.len() as u64))?;
-		msg.append(&mut self.body);
-		write_all(&mut self.stream, &msg[..], time::Duration::from_secs(10))?;
-		// Increase sent bytes counter
-		{
-			let mut sent_bytes = sent_bytes.write();
-			sent_bytes.inc(msg.len() as u64);
+	fn header(&self) -> MsgHeader {
+		MsgHeader::new(self.resp_type, self.body.len() as u64)
+	}
+
+	fn write(self, sent_bytes: Arc<RwLock<RateCounter>>) -> Result<(), Error> {
+		let header = self.header();
+		let mut writer = BufWriter::new(self.stream);
+		let mut sent_bytes = sent_bytes.write();
+
+		// Write header bytes.
+		ser::serialize(&mut writer, &header).map(|x| sent_bytes.inc(x))?;
+
+		// Write body bytes.
+		// TODO - Make body just be Writeable and serialize it here (avoid intermediate Vec<T>)
+		io::copy(&mut &self.body[..], &mut writer).map(|x| sent_bytes.inc(x))?;
+
+		// Write optional attachment bytes.
+		if let Some(file) = self.attachment {
+			io::copy(&mut BufReader::new(file), &mut writer).map(|x| sent_bytes.inc_quiet(x))?;
 		}
-		if let Some(mut file) = self.attachment {
-			let mut buf = [0u8; 8000];
-			loop {
-				match file.read(&mut buf[..]) {
-					Ok(0) => break,
-					Ok(n) => {
-						write_all(&mut self.stream, &buf[..n], time::Duration::from_secs(10))?;
-						// Increase sent bytes "quietly" without incrementing the counter.
-						// (In a loop here for the single attachment).
-						let mut sent_bytes = sent_bytes.write();
-						sent_bytes.inc_quiet(n as u64);
-					}
-					Err(e) => return Err(From::from(e)),
-				}
-			}
-		}
+
+		// Explicitly flush the buffer here to catch any errors.
+		writer.flush()?;
+
 		Ok(())
 	}
 

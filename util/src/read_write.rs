@@ -77,34 +77,3 @@ pub fn read_exact(
 	}
 	Ok(())
 }
-
-/// Same as `read_exact` but for writing.
-pub fn write_all(stream: &mut dyn Write, mut buf: &[u8], timeout: Duration) -> io::Result<()> {
-	let sleep_time = Duration::from_micros(10);
-	let mut count = Duration::new(0, 0);
-
-	while !buf.is_empty() {
-		match stream.write(buf) {
-			Ok(0) => {
-				return Err(io::Error::new(
-					io::ErrorKind::WriteZero,
-					"failed to write whole buffer",
-				))
-			}
-			Ok(n) => buf = &buf[n..],
-			Err(ref e) if e.kind() == io::ErrorKind::Interrupted => {}
-			Err(ref e) if e.kind() == io::ErrorKind::WouldBlock => {}
-			Err(e) => return Err(e),
-		}
-		if !buf.is_empty() {
-			thread::sleep(sleep_time);
-			count += sleep_time;
-		} else {
-			break;
-		}
-		if count > timeout {
-			return Err(io::Error::new(io::ErrorKind::TimedOut, "writing to stream"));
-		}
-	}
-	Ok(())
-}
