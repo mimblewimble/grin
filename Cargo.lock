@@ -853,10 +853,7 @@ dependencies = [
  "bytes 0.4.11 (registry+https://github.com/rust-lang/crates.io-index)",
  "chrono 0.4.6 (registry+https://github.com/rust-lang/crates.io-index)",
  "enum_primitive 0.1.1 (registry+https://github.com/rust-lang/crates.io-index)",
-<<<<<<< HEAD
-=======
  "grin_chain 1.0.3",
->>>>>>> 160a83679380b39aa57732a885155d02a6763d4a
  "grin_core 1.0.3",
  "grin_pool 1.0.3",
  "grin_store 1.0.3",

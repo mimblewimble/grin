@@ -1,5 +1,7 @@
 # Grin's Proof-of-Work
 
+*Read this document in other languages: [Korean](pow_KR.md).*
+
 This document is meant to outline, at a level suitable for someone without prior knowledge,
 the algorithms and processes currently involved in Grin's Proof-of-Work system. We'll start
 with a general overview of cycles in a graph and the Cuckoo Cycle algorithm which forms the
