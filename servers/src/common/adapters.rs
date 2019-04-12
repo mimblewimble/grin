@@ -17,6 +17,7 @@
 
 use crate::util::RwLock;
 use std::fs::File;
+use std::io::Read;
 use std::sync::{Arc, Weak};
 use std::thread;
 use std::time::Instant;
@@ -323,6 +324,12 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 				None
 			}
 		}
+	}
+
+	fn kernel_data_write(&self, reader: &mut Read) -> Result<bool, chain::Error> {
+		let res = self.chain().kernel_data_write(reader)?;
+		error!("***** kernel_data_write: {:?}", res);
+		Ok(true)
 	}
 
 	/// Provides a reading view into the current txhashset state as well as

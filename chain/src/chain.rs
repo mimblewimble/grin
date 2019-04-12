@@ -38,10 +38,12 @@ use grin_store::Error::NotFoundErr;
 use std::collections::HashMap;
 use std::env;
 use std::fs::File;
+use std::io::Read;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
+use tempfile::tempdir;
 
 /// Orphan pool size is limited by MAX_ORPHAN_SIZE
 pub const MAX_ORPHAN_SIZE: usize = 200;
@@ -860,6 +862,26 @@ impl Chain {
 		let sandbox_dir = env::temp_dir();
 		txhashset::clean_txhashset_folder(&sandbox_dir);
 		txhashset::clean_header_folder(&sandbox_dir);
+	}
+
+	pub fn kernel_data_write(&self, reader: &mut Read) -> Result<(), Error> {
+		error!("***** kernel_data_write: entered");
+
+		// write to an actual tmp file with a path?
+		let dir = tempdir()?;
+		let path = dir.path();
+		error!("***** tempdir: {:?}", path);
+
+		let txhashset = TxHashSet::open(path.to_str().unwrap().into(), self.store.clone(), None)?;
+		// txhashset::rewindable_kernel_view(&txhashset, |view| view.kernel_data_read())
+
+		// Some kind of "rebuildable" kernel view
+		// Copy the pmmr_data.bin file into place under <path>/txhashset/kernel/pmmr_data.bin
+		// Streaming read it and build -
+		//  * the size file
+		//  * the hash file
+
+		Ok(())
 	}
 
 	/// Writes a reading view on a txhashset state that's been provided to us.

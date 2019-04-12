@@ -375,7 +375,6 @@ impl MessageHandler for Protocol {
 
 				let total_size = response.bytes as usize;
 				let mut remaining_size = total_size;
-				// let mut downloaded_size: usize = 0;
 
 				while remaining_size > 0 {
 					debug!("in loop, remaining: {}", remaining_size);
@@ -391,12 +390,14 @@ impl MessageHandler for Protocol {
 					received_bytes.write().inc_quiet(size as u64);
 				}
 
-				let file = writer.into_inner().map_err(|_| Error::Internal)?;
+				let mut file = writer.into_inner().map_err(|_| Error::Internal)?;
 
 				debug!(
 					"handle_payload: kernel_data_response: file size: {}",
 					file.metadata().unwrap().len()
 				);
+
+				self.adapter.kernel_data_write(&mut file)?;
 
 				Ok(None)
 			}

@@ -28,6 +28,7 @@ use crate::types::{
 use crate::util::{Mutex, StopState};
 use chrono::prelude::{DateTime, Utc};
 use std::fs::File;
+use std::io::Read;
 use std::net::{Shutdown, SocketAddr, TcpListener, TcpStream};
 use std::sync::Arc;
 use std::time::Duration;
@@ -277,6 +278,9 @@ impl ChainAdapter for DummyAdapter {
 		None
 	}
 	fn kernel_data_read(&self) -> Option<File> {
+		unimplemented!()
+	}
+	fn kernel_data_write(&self, _reader: &mut Read) -> Result<bool, chain::Error> {
 		unimplemented!()
 	}
 	fn txhashset_read(&self, _h: Hash) -> Option<TxHashSetRead> {

@@ -15,6 +15,7 @@
 use crate::util::RwLock;
 use std::collections::HashMap;
 use std::fs::File;
+use std::io::Read;
 use std::sync::Arc;
 
 use rand::{thread_rng, Rng};
@@ -646,6 +647,10 @@ impl ChainAdapter for Peers {
 
 	fn kernel_data_read(&self) -> Option<File> {
 		self.adapter.kernel_data_read()
+	}
+
+	fn kernel_data_write(&self, reader: &mut Read) -> Result<bool, chain::Error> {
+		self.adapter.kernel_data_write(reader)
 	}
 
 	fn txhashset_read(&self, h: Hash) -> Option<TxHashSetRead> {

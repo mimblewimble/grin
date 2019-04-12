@@ -14,6 +14,7 @@
 
 use crate::util::{Mutex, RwLock};
 use std::fs::File;
+use std::io::Read;
 use std::net::{Shutdown, TcpStream};
 use std::sync::Arc;
 
@@ -596,6 +597,10 @@ impl ChainAdapter for TrackingAdapter {
 
 	fn kernel_data_read(&self) -> Option<File> {
 		self.adapter.kernel_data_read()
+	}
+
+	fn kernel_data_write(&self, reader: &mut Read) -> Result<bool, chain::Error> {
+		self.adapter.kernel_data_write(reader)
 	}
 
 	fn txhashset_read(&self, h: Hash) -> Option<TxHashSetRead> {
