@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::env;
 use std::fs::File;
 use std::net::{Shutdown, SocketAddr, TcpListener, TcpStream};
 use std::path::PathBuf;
@@ -282,8 +281,10 @@ impl ChainAdapter for DummyAdapter {
 	}
 
 	fn get_tmp_dir(&self) -> PathBuf {
-		env::temp_dir()
+		unimplemented!()
 	}
+
+	fn get_tmpfile_pathname(&self, _tmpfile_name: String) -> PathBuf { unimplemented!() }
 }
 
 impl NetAdapter for DummyAdapter {

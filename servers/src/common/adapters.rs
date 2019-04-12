@@ -379,6 +379,8 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 	fn get_tmp_dir(&self) -> PathBuf {
 		self.chain().get_tmp_dir()
 	}
+
+	fn get_tmpfile_pathname(&self, tmpfile_name: String) -> PathBuf {self.chain().get_tmpfile_pathname(tmpfile_name)}
 }
 
 impl NetToChainAdapter {
