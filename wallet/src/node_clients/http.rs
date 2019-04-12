@@ -110,7 +110,7 @@ impl NodeClient for HTTPNodeClient {
 		let mut api_outputs: HashMap<pedersen::Commitment, (String, u64, u64)> = HashMap::new();
 		let mut tasks = Vec::new();
 
-		for query_chunk in query_params.chunks(500) {
+		for query_chunk in query_params.chunks(200) {
 			let url = format!("{}/v1/chain/outputs/byids?{}", addr, query_chunk.join("&"),);
 			tasks.push(api::client::get_async::<Vec<api::Output>>(
 				url.as_str(),
