@@ -592,7 +592,9 @@ impl ChainAdapter for Peers {
 		self.adapter.get_tmp_dir()
 	}
 
-	fn get_tmpfile_pathname(&self, tmpfile_name: String) -> PathBuf {self.adapter.get_tmpfile_pathname(tmpfile_name)}
+	fn get_tmpfile_pathname(&self, tmpfile_name: String) -> PathBuf {
+		self.adapter.get_tmpfile_pathname(tmpfile_name)
+	}
 }
 
 impl NetAdapter for Peers {
