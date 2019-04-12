@@ -111,6 +111,7 @@ impl fmt::Display for Error {
 /// Header entry for storing in the header MMR.
 /// Note: we hash the block header itself and maintain the hash in the entry.
 /// This allows us to lookup the original header from the db as necessary.
+#[derive(Debug)]
 pub struct HeaderEntry {
 	hash: Hash,
 	timestamp: u64,
