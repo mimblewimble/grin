@@ -140,4 +140,6 @@ fn test_block_building_max_weight() {
 		// remained in the txpool.
 		assert_eq!(write_pool.total_size(), 2);
 	}
+	// Cleanup db directory
+	clean_output_dir(db_root.clone());
 }

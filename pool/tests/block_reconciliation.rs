@@ -183,4 +183,6 @@ fn test_transaction_pool_block_reconciliation() {
 		assert_eq!(write_pool.txpool.entries[2].tx, conflict_valid_child);
 		assert_eq!(write_pool.txpool.entries[3].tx, valid_child_valid);
 	}
+	// Cleanup db directory
+	clean_output_dir(db_root.clone());
 }

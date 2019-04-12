@@ -117,4 +117,6 @@ fn test_transaction_pool_block_building() {
 
 		assert_eq!(write_pool.total_size(), 0);
 	}
+	// Cleanup db directory
+	clean_output_dir(db_root.clone());
 }

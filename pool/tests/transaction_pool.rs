@@ -250,4 +250,6 @@ fn test_the_transaction_pool() {
 			.add_to_pool(test_source(), double_spend_tx.clone(), false, &header)
 			.is_err());
 	}
+	// Cleanup db directory
+	clean_output_dir(db_root.clone());
 }
