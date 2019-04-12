@@ -23,6 +23,7 @@ use crate::core::core::{
 };
 use crate::core::global;
 use crate::core::pow;
+use crate::core::ser::{Readable, StreamingReader};
 use crate::error::{Error, ErrorKind};
 use crate::lmdb;
 use crate::pipe;
@@ -864,6 +865,7 @@ impl Chain {
 		txhashset::clean_header_folder(&sandbox_dir);
 	}
 
+	/// TODO - Pull this out into a "rebuildable kernel view" or something similar?
 	pub fn kernel_data_write(&self, reader: &mut Read) -> Result<(), Error> {
 		error!("***** kernel_data_write: entered");
 
@@ -872,12 +874,27 @@ impl Chain {
 		let path = dir.path();
 		error!("***** tempdir: {:?}", path);
 
-		let txhashset = TxHashSet::open(path.to_str().unwrap().into(), self.store.clone(), None)?;
-		// txhashset::rewindable_kernel_view(&txhashset, |view| view.kernel_data_read())
+		let mut txhashset =
+			TxHashSet::open(path.to_str().unwrap().into(), self.store.clone(), None)?;
+
+		let mut streaming_reader = StreamingReader::new(reader, Duration::from_secs(1));
+
+		let mut batch = self.store.batch()?;
+		txhashset::extending(&mut txhashset, &mut batch, |extension| {
+			while let Ok(kernel) = TxKernelEntry::read(&mut streaming_reader) {
+				debug!("***** applying a kernel");
+				extension.apply_kernel(&kernel.kernel)?;
+			}
+			Ok(())
+		})?;
+
+		error!(
+			"***** total bytes read (and applied): {}",
+			streaming_reader.total_bytes_read()
+		);
 
 		// Some kind of "rebuildable" kernel view
-		// Copy the pmmr_data.bin file into place under <path>/txhashset/kernel/pmmr_data.bin
-		// Streaming read it and build -
+		// Streaming (somehow) the reader here and apply_kernel each time -
 		//  * the size file
 		//  * the hash file
 

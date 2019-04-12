@@ -15,7 +15,7 @@
 use std::cmp;
 use std::env;
 use std::fs::File;
-use std::io::{BufWriter, Write};
+use std::io::{BufWriter, Seek, SeekFrom, Write};
 use std::sync::Arc;
 
 use crate::conn::{Message, MessageHandler, Response};
@@ -389,6 +389,10 @@ impl MessageHandler for Protocol {
 					// Otherwise we risk banning a peer as "abusive".
 					received_bytes.write().inc_quiet(size as u64);
 				}
+
+				// Remember to seek back to start of the file as the caller is likely
+				// to read this file directly without reopening it.
+				writer.seek(SeekFrom::Start(0))?;
 
 				let mut file = writer.into_inner().map_err(|_| Error::Internal)?;
 
