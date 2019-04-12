@@ -1,5 +1,7 @@
 # Merkle Mountain Ranges
 
+*Read this in other languages:[Korean](mmr_KR.md)
+
 ## Structure
 
 Merkle Mountain Ranges [1] are an alternative to Merkle trees [2]. While the
