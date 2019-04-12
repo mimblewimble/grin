@@ -129,8 +129,12 @@ pub fn connect_and_monitor(
 				if Utc::now() - prev_ping > Duration::seconds(10) {
 					let total_diff = peers.total_difficulty();
 					let total_height = peers.total_height();
-					peers.check_all(total_diff, total_height);
-					prev_ping = Utc::now();
+					if total_diff.is_ok() && total_height.is_ok() {
+						peers.check_all(total_diff.unwrap(), total_height.unwrap());
+						prev_ping = Utc::now();
+					} else {
+						error!("failed to get peers difficulty and/or height");
+					}
 				}
 
 				thread::sleep(time::Duration::from_secs(1));

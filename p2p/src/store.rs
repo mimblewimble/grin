@@ -168,7 +168,8 @@ impl PeerStore {
 	/// Used for /v1/peers/all api endpoint
 	pub fn all_peers(&self) -> Result<Vec<PeerData>, Error> {
 		let key = to_key(PEER_PREFIX, &mut "".to_string().into_bytes());
-		Ok(self.db
+		Ok(self
+			.db
 			.iter::<PeerData>(&key)?
 			.map(|(_, v)| v)
 			.collect::<Vec<_>>())
