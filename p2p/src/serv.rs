@@ -286,7 +286,9 @@ impl ChainAdapter for DummyAdapter {
 		unimplemented!()
 	}
 
-	fn get_tmpfile_pathname(&self, _tmpfile_name: String) -> PathBuf { unimplemented!() }
+	fn get_tmpfile_pathname(&self, _tmpfile_name: String) -> PathBuf {
+		unimplemented!()
+	}
 }
 
 impl NetAdapter for DummyAdapter {
