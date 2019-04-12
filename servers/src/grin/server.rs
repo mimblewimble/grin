@@ -220,9 +220,14 @@ impl Server {
 					warn!("No seed configured, will stay solo until connected to");
 					seed::predefined_seeds(vec![])
 				}
-				p2p::Seeding::List => {
-					seed::predefined_seeds(config.p2p_config.seeds.clone().unwrap())
-				}
+				p2p::Seeding::List => match &config.p2p_config.seeds {
+					Some(seeds) => seed::predefined_seeds(seeds.clone()),
+					None => {
+						return Err(Error::Configuration(
+							"Seeds must be configured for seeding type List".to_owned(),
+						));
+					}
+				},
 				p2p::Seeding::DNSSeed => seed::dns_seeds(),
 				_ => unreachable!(),
 			};
@@ -389,13 +394,13 @@ impl Server {
 	}
 
 	/// The chain head
-	pub fn head(&self) -> chain::Tip {
-		self.chain.head().unwrap()
+	pub fn head(&self) -> Result<chain::Tip, Error> {
+		self.chain.head().map_err(|e| e.into())
 	}
 
 	/// The head of the block header chain
-	pub fn header_head(&self) -> chain::Tip {
-		self.chain.header_head().unwrap()
+	pub fn header_head(&self) -> Result<chain::Tip, Error> {
+		self.chain.header_head().map_err(|e| e.into())
 	}
 
 	/// Returns a set of stats about this server. This and the ServerStats
@@ -417,7 +422,7 @@ impl Server {
 					.into_iter()
 					.collect();
 
-			let tip_height = self.chain.head().unwrap().height as i64;
+			let tip_height = self.head()?.height as i64;
 			let mut height = tip_height as i64 - last_blocks.len() as i64 + 1;
 
 			let txhashset = self.chain.txhashset();
@@ -475,8 +480,8 @@ impl Server {
 			.collect();
 		Ok(ServerStats {
 			peer_count: self.peer_count(),
-			head: self.head(),
-			header_head: self.header_head(),
+			head: self.head()?,
+			header_head: self.header_head()?,
 			sync_status: self.sync_state.status(),
 			stratum_stats: stratum_stats,
 			peer_stats: peer_stats,

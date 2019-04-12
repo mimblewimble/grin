@@ -20,7 +20,8 @@ use std::sync::Arc;
 use crate::api;
 use crate::chain;
 use crate::core::global::ChainTypes;
-use crate::core::{core, pow};
+use crate::core::{core, libtx, pow};
+use crate::keychain;
 use crate::p2p;
 use crate::pool;
 use crate::store;
@@ -32,6 +33,8 @@ use chrono::prelude::{DateTime, Utc};
 pub enum Error {
 	/// Error originating from the core implementation.
 	Core(core::block::Error),
+	/// Error originating from the libtx implementation.
+	LibTx(libtx::Error),
 	/// Error originating from the db storage.
 	Store(store::Error),
 	/// Error originating from the blockchain implementation.
@@ -46,10 +49,16 @@ pub enum Error {
 	Cuckoo(pow::Error),
 	/// Error originating from the transaction pool.
 	Pool(pool::PoolError),
+	/// Error originating from the keychain.
+	Keychain(keychain::Error),
 	/// Invalid Arguments.
 	ArgumentError(String),
 	/// Error originating from some I/O operation (likely a file on disk).
 	IOError(std::io::Error),
+	/// Configuration error
+	Configuration(String),
+	/// General error
+	General(String),
 }
 
 impl From<core::block::Error> for Error {
@@ -100,6 +109,18 @@ impl From<wallet::Error> for Error {
 impl From<pool::PoolError> for Error {
 	fn from(e: pool::PoolError) -> Error {
 		Error::Pool(e)
+	}
+}
+
+impl From<keychain::Error> for Error {
+	fn from(e: keychain::Error) -> Error {
+		Error::Keychain(e)
+	}
+}
+
+impl From<libtx::Error> for Error {
+	fn from(e: libtx::Error) -> Error {
+		Error::LibTx(e)
 	}
 }
 
