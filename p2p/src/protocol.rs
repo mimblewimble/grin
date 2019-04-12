@@ -288,17 +288,8 @@ impl MessageHandler for Protocol {
 				self.adapter
 					.txhashset_download_update(download_start_time, 0, sm_arch.bytes);
 
-				let mut tmp = self.adapter.get_tmp_dir();
-				if tmp.exists() {
-					if let Err(e) = fs::remove_dir_all(tmp.clone()) {
-						warn!("fail to clean tmp folder on {:?}. err: {}", tmp, e);
-					}
-				}
-				if let Err(e) = fs::create_dir(tmp.clone()) {
-					warn!("fail to create tmp folder on {:?}. err: {}", tmp, e);
-				}
 				let nonce: u32 = thread_rng().gen_range(0, 1_000_000);
-				tmp.push(format!(
+				let tmp = self.adapter.get_tmpfile_pathname(format!(
 					"txhashset-{}-{}.zip",
 					download_start_time.timestamp(),
 					nonce

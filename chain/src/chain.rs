@@ -36,7 +36,7 @@ use crate::util::secp::pedersen::{Commitment, RangeProof};
 use crate::util::{Mutex, RwLock, StopState};
 use grin_store::Error::NotFoundErr;
 use std::collections::HashMap;
-use std::fs::File;
+use std::fs::{self, File};
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
@@ -866,6 +866,24 @@ impl Chain {
 			.to_path_buf();
 		tmp_dir.push("tmp");
 		tmp_dir
+	}
+
+	/// Get a tmp file path in above specific tmp dir (create tmp dir if not exist)
+	/// Delete file if tmp file already exists
+	pub fn get_tmpfile_pathname(&self, tmpfile_name: String) -> PathBuf {
+		let mut tmp = self.get_tmp_dir();
+		if !tmp.exists() {
+			if let Err(e) = fs::create_dir(tmp.clone()) {
+				warn!("fail to create tmp folder on {:?}. err: {}", tmp, e);
+			}
+		}
+		tmp.push(tmpfile_name);
+		if tmp.exists() {
+			if let Err(e) = fs::remove_file(tmp.clone()) {
+				warn!("fail to clean existing tmp file: {:?}. err: {}", tmp, e);
+			}
+		}
+		tmp
 	}
 
 	/// Writes a reading view on a txhashset state that's been provided to us.
