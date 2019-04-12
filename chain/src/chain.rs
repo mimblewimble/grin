@@ -170,44 +170,34 @@ impl Chain {
 		archive_mode: bool,
 		stop_state: Arc<Mutex<StopState>>,
 	) -> Result<Chain, Error> {
-		let chain = {
-			// Note: We take a lock on the stop_state here and do not release it until
-			// we have finished chain initialization.
-			let stop_state_local = stop_state.clone();
-			let stop_lock = stop_state_local.lock();
-			if stop_lock.is_stopped() {
-				return Err(ErrorKind::Stopped.into());
-			}
+		// Note: We take a lock on the stop_state here and do not release it until
+		// we have finished chain initialization.
+		let stop_state_local = stop_state.clone();
+		let stop_lock = stop_state_local.lock();
+		if stop_lock.is_stopped() {
+			return Err(ErrorKind::Stopped.into());
+		}
 
-			let store = Arc::new(store::ChainStore::new(db_env)?);
+		let store = Arc::new(store::ChainStore::new(db_env)?);
 
-			// open the txhashset, creating a new one if necessary
-			let mut txhashset = txhashset::TxHashSet::open(db_root.clone(), store.clone(), None)?;
+		// open the txhashset, creating a new one if necessary
+		let mut txhashset = txhashset::TxHashSet::open(db_root.clone(), store.clone(), None)?;
 
-			setup_head(&genesis, &store, &mut txhashset)?;
-			Chain::log_heads(&store)?;
+		setup_head(&genesis, &store, &mut txhashset)?;
+		Chain::log_heads(&store)?;
 
-			Chain {
-				db_root,
-				store,
-				adapter,
-				orphans: Arc::new(OrphanBlockPool::new()),
-				txhashset: Arc::new(RwLock::new(txhashset)),
-				pow_verifier,
-				verifier_cache,
-				archive_mode,
-				stop_state,
-				genesis: genesis.header.clone(),
-			}
-		};
-
-		// Run chain compaction. Laptops and other intermittent nodes
-		// may not run long enough to trigger daily compaction.
-		// So run it explicitly here on startup (its fast enough to do so).
-		// Note: we release the stop_lock from above as compact also requires a lock.
-		chain.compact()?;
-
-		Ok(chain)
+		Ok(Chain {
+			db_root,
+			store,
+			adapter,
+			orphans: Arc::new(OrphanBlockPool::new()),
+			txhashset: Arc::new(RwLock::new(txhashset)),
+			pow_verifier,
+			verifier_cache,
+			archive_mode,
+			stop_state,
+			genesis: genesis.header.clone(),
+		})
 	}
 
 	/// Return our shared txhashset instance.
@@ -1057,6 +1047,26 @@ impl Chain {
 	/// * removes historical blocks and associated data from the db (unless archive mode)
 	///
 	pub fn compact(&self) -> Result<(), Error> {
+		// A node may be restarted multiple times in a short period of time.
+		// We compact at most once per 60 blocks in this situation by comparing
+		// current "head" and "tail" height to our cut-through horizon and
+		// allowing an additional 60 blocks in height before allowing a further compaction.
+		if let (Ok(tail), Ok(head)) = (self.tail(), self.head()) {
+			let horizon = global::cut_through_horizon() as u64;
+			let threshold = horizon.saturating_add(60);
+			debug!(
+				"compact: head: {}, tail: {}, diff: {}, horizon: {}",
+				head.height,
+				tail.height,
+				head.height.saturating_sub(tail.height),
+				horizon
+			);
+			if tail.height.saturating_add(threshold) > head.height {
+				debug!("compact: skipping compaction - threshold is 60 blocks beyond horizon.");
+				return Ok(());
+			}
+		}
+
 		// Note: We take a lock on the stop_state here and do not release it until
 		// we have finished processing this chain compaction operation.
 		// We want to avoid shutting the node down in the middle of compacting the data.
