@@ -26,207 +26,131 @@ Cuckoo Cycle은 N 개의 노드와 M 개의 가장자리로 구성된 양분 그
 
 *솔루션이 없는 8개의 노드와 4개의 엣지*
 
-We now have a randomly-generated graph with 8 nodes (N) and 4 edges (M), or an NxM graph where
-N=8 and M=4. Our basic Proof-of-Work is now concerned with finding 'cycles' of a certain length
-within this random graph, or, put simply, a series of connected nodes starting and ending on the
-same node. So, if we were looking for a cycle of length 4 (a path connecting 4 nodes, starting
-and ending on the same node), one cannot be detected in this graph.
+이제 8개의 노드 (N)와 4개의 에지 (M) 또는 N = 8과 M = 4 인 NxM 그래프가 있는 랜덤하게 생성된 그래프가 있습니다. 기본적인 Proof-of-Work는 이 랜덤한 그래프 내에서 특정 길이의 '주기'를 찾거나 단순히 같은 노드에서 시작하고 끝나는 일련의 연결된 노드를 찾는 것과 관련이 있습니다. 따라서 길이 4 (동일한 노드에서 시작하고 끝나는 4 개의 노드를 연결하는 경로)의 사이클을 찾는다면 이 그래프에서 하나도 찾을 수 없습니다.
 
-Adjusting the number of Edges M relative to the number of Nodes N changes the difficulty of the
-cycle-finding problem, and the probability that a cycle exists in the current graph. For instance,
-if our POW problem were concerned with finding a cycle of length 4 in the graph, the current difficulty of 4/8 (M/N)
-would mean that all 4 edges would need to be randomly generated in a perfect cycle (from 0-5-4-1-0)
-in order for there to be a solution.
+노드 수 N과 연관된 엣지의 수인 M를 조정하면 사이클 찾기 문제의 난이도와 현재 그래프에서 사이클이 존재할 확률이 바뀝니다. 예를 들어, POW 문제가 그래프에서 길이 4의 주기를 찾는 것과 관련된다면, 현재의 4/8 난이도 (M / N)는 모든 4 개의 엣지가 0-5-4-1-0 인 완벽한 사이클에서 무작위로 생성 된 것을 의미하고 그것이 정답임을 의미합니다.
 
-
-이제 8개의 노드 (N)와 4개의 에지 (M) 또는 N = 8과 M = 4 인 NxM 그래프가 있는 랜덤하게 생성된 그래프가 있습니다. 기본적인 Proof-of-Work는 이 랜덤한 그래프 내에서 특정 길이의 '주기'를 찾거나 단순히 같은 노드에서 시작하고 끝나는 일련의 연결된 노드를 찾는 것과 관련이 있습니다. 따라서 길이 4 (동일한 노드에서 시작하고 끝나는 4 개의 노드를 연결하는 경로)의 사이클을 찾는다면이 그래프에서 하나를 발견 할 수 없습니다.
-
-노드 수 N을 기준으로 한 모서리 수를 조정하면 사이클 찾기 문제의 난이도와 현재 그래프에 사이클이 존재할 확률이 변경됩니다. 예를 들어, POW 문제가 그래프에서 길이 4의주기를 찾는 것과 관련된다면, 현재의 4/8 난이도 (M / N)는 모든 4 개의 엣지가 완벽한 사이클에서 무작위로 생성 될 필요가 있음을 의미합니다. 0-5-4-1-0)을 사용하십시오.
-
-Let's add a few more edges, again at random:
+랜덤으로 몇개의 엣지를 다시 더해보겠습니다.
 
 ![alt text](images/cuckoo_base_numbered_more_edges.png)
 
-*8 Nodes with 7 Edges*
+*7개의 엣지가 있는 8개의 노드*
 
-Where we can find a cycle:
+사이클은 아래와 같이 찾을 수 있습니다.
 
 ![alt text](images/cuckoo_base_numbered_more_edges_cycle.png)
 
-*Cycle Found from 0-5-4-1-0*
+*0-5-4-1-0 에서 발견 할 수 있는 사이클*
 
-If you increase the number of edges relative to the number
-of nodes, you increase the probability that a solution exists. With a few more edges added to the graph above,
-a cycle of length 4 has appeared from 0-5-4-1-0, and the graph has a solution.
+노드 수에 비례하여 엣지의 수를 늘리면 솔루션이 있을 확률이 높아집니다. 위의 그래프에 몇 개의 가장자리가 추가되면 0-5-4-1-0에서 길이 4의 사이클이 나타나고 그래프에는 솔루션이 있습니다.
 
-Thus, modifying the ratio M/N changes the number of expected occurrences of a cycle for a graph with
-randomly generated edges.
+따라서, 비율 M / N을 변경하면 무작위로 생성된 엣지를 갖는 그래프에 대한 사이클의 예상 발생 횟수가 변경됩니다.
 
-For a small graph such as the one above, determining whether a cycle of a certain length exists
-is trivial. But as the graphs get larger, detecting such cycles becomes more difficult. For instance,
-does this graph have a cycle of length 8, i.e. 8 connected nodes starting and ending on the same node?
-
-노드 수를 기준으로 가장자리 수를 늘리면 솔루션이있을 확률이 높아집니다. 위의 그래프에 몇 개의 가장자리가 추가되면 0-5-4-1-0에서 길이 4의 사이클이 나타나고 그래프에는 솔루션이 있습니다.
-
-따라서, 비율 M / N을 변경하면 무작위로 생성 된 에지를 갖는 그래프에 대한 사이클의 예상 발생 횟수가 변경됩니다.
-
-위와 같은 작은 그래프의 경우 특정 길이의주기가 존재하는지 여부를 판별하는 것은 쉽지 않습니다. 그러나 그래프가 커질수록 이러한주기를 감지하는 것이 더욱 어려워집니다. 예를 들어,이 그래프는 길이가 8 인 사이클, 즉 동일한 노드에서 시작하고 끝나는 8 개의 연결된 노드입니까?
+위와 같은 작은 그래프의 경우 특정 길이의 주기가 존재하는지 여부를 판별하는 것은 간단합니다. 그러나 그래프가 커질수록 이러한 주기를 감지하는 것이 더욱 어려워집니다. 예를 들어 이 그래프는 길이가 8 인 사이클, 즉 동일한 노드에서 시작하고 끝나는 8 개의 연결된 노드라고 할 수 있습니까?
 
 ![alt text](images/cuckoo_base_numbered_many_edges.png)
 
-*Meat-space Cycle Detection exercise*
+*실제 사이클을 확인해봅시다*
 
-The answer is left as an exercise to the reader, but the overall takeaways are:
+대답은 독자에게 연습으로 남겨 두지만 전반적인 원리는 다음과 같습니다.
 
-* Detecting cycles in a graph becomes more difficult exercise as the size of a graph grows.
-* The probability of a cycle of a given length in a graph increases as M/N becomes larger,
-  i.e. you add more edges relative to the number of nodes in a graph.
+* 그래프의 크기에 비례해서 그래프에서 사이클을 감지하는 것이 더 어려워집니다.
 
-대답은 독자에게 연습으로 남겨 두지 만 전반적인 테이크 어웨이는 다음과 같습니다.
-
-그래프의 크기가 커짐에 따라 그래프에서 사이클을 감지하는 것이 더 어려워집니다.
-
-* M / N이 커짐에 따라 그래프에서 주어진 길이의주기가 발생할 확률이 증가하고,
-
-  즉 그래프의 노드 수에 상대적으로 가장자리를 더 추가합니다.
+* M/N이 커짐에 따라 그래프에서 주어진 길이의 주기 확률이 증가합니다. 즉, 그래프의 노드 수에 따라서 엣지를 더 추가합니다.
 
 ### Cuckoo Cycle
 
-The Cuckoo Cycle algorithm is a specialized algorithm designed to solve exactly this problem, and it does
-so by inserting values into a structure called a 'Cuckoo Hashtable' according to a hash which maps nodes
-into possible locations in two separate arrays. This document won't go into detail on the base algorithm, as
-it's outlined plainly enough in section 5 of the
-[white paper](https://github.com/tromp/cuckoo/blob/master/doc/cuckoo.pdf). There are also several
-variants on the algorithm that make various speed/memory tradeoffs, again beyond the scope of this document.
-However, there are a few details following from the above that we need to keep in mind before going on to more
-technical aspects of Grin's proof-of-work.
+Cuckoo Cycle 알고리즘은 정확히 이 문제를 해결하기 위해 고안된 특수 알고리즘입니다. Cuckoo Cylcle 알고리즘은 노드를 두 개의 개별 배열로 가능한 위치에 매핑하는 해시에 따라 'Cuckoo Hashtable' 라고 불리는 구조에 값을 삽입하여 수행합니다. 이 문서는 기본 알고리즘에 대해서는 자세히 설명하지 않으며 [백서](https://github.com/tromp/cuckoo/blob/master/doc/cuckoo.pdf)에서 충분히 설명되어 있습니다. 또한 알고리즘에서 속도/메모리 트레이드 오프를 만드는 몇몇 변형이 있지만 이 문서의 (설명)범위를 역시 넘어갑니다.
+하지만 Grin의 작업증명의 기술적 측면을 계속 설명하기 전에 앞서 알아둬야 할 몇 가지 세부 사항이 있습니다.
 
-* The 'random' edges in the graph demonstrated above are not actually random but are generated by
-  putting edge indices (0..N) through a seeded hash function, SIPHASH. Each edge index is put through the
-  SIPHASH function twice to create two edge endpoints, with the first input value being 2 * edge_index,
-  and the second 2 * edge_index+1. The seed for this function is based on a hash of a block header,
-  outlined further below.
-* The 'Proof' created by this algorithm is a set of nonces that generate a cycle of length 42,
-  which can be trivially validated by other peers.
-* Two main parameters, as explained above, are passed into the Cuckoo Cycle algorithm that affect the probability of a solution, and the
-  time it takes to search the graph for a solution:
-  * The M/N ratio outlined above, which controls the number of edges relative to the size of the graph.
-    Cuckoo Cycle fixes M at N/2, which limits the number of cycles to a few at most.
-  * The size of the graph itself
+* 위의 그래프에서 '랜덤'에지는 실제로 랜덤하지 않지만 시드배정을 받은 해시함수 인 SIPHASH에 엣지 인덱스(0..N)를 넣어서 생성됩니다. 각 엣지 인덱스는 SIPHASH 함수를 두 번 사용해서 두 개의 엣지 엔드포인를 만들어 냅니다. 첫 번째 엣지 엔드포인트는 2* edge_index이고, 두 번째 엣지 엔드포인트는 2* edge_index+1 입니다. 이 함수의 시드는 블록 헤더의 해시를 기반으로 하고 관 아래에서 자세히 설명합니다.
 
-How these parameters interact in practice is looked at in more [detail below](#mining-loop-difficulty-control-and-timing).
+* 이 알고리즘에 의해 만들어진 '증명'는 길이가 42 인 사이클을 생성하는 nonce 집합이고 다른 피어들이 쉽게 검증 할 수 있습니다.
 
-Now, (hopefully) armed with a basic understanding of what the Cuckoo Cycle algorithm is intended to do, as well as the parameters that affect how difficult it is to find a solution, we move on to the other portions of Grin's POW system.
+* 위에서 설명한 두 가지 주요 매개 변수는 솔루션의 확률에 영향을 주는 Cuckoo Cycle 알고리즘과 솔루션 검색을 위해 그래프를 검색하는 데 걸리는 시간의 일부가 됩니다.
+  * 위에서 설명한 M/N 비율은 그래프의 크기에 따른 엣지의 숫자를 제어합니다.
+    Cuckoo Cycle이 M을 N의 절반 값으로 고정시킨다면 사이클의 숫자를 최대한 몇몇개로 제한합니다.
+  * 그래프의 사이즈.
+
+이 파라메터들이 실제로 어떻게 상호작용 하는지는 [이 문서](#mining-loop-difficulty-control-and-timing)를 참고하세요.
+
+Cuckoo Cycle 알고리즘이 무엇을 하려는지, 파라매터가 솔루션을 찾는데 것이 얼마나 영향을 미치는 지에 대해 기본적으로 이해하고 있으므로, Grin의 POW 시스템의 다른 부분으로 넘어갑니다.
 
 ## Mining in Grin
 
-The Cuckoo Cycle outlined above forms the basis of Grin's mining process, however Grin uses Cuckoo Cycle in tandem with several other systems to create a Proof-of-Work.
+위에서 설명한 Cuckoo Cycle은 Grin의 마이닝 프로세스의 윤곽을 설명합니다. 그러나 Grin은 Cuckoo Cycle을 여러 다른 시스템과 함께 사용하여 Proof-of-Work를 만듭니다.
 
-### Additional Difficulty Control
+### 추가적인 난이도 조정에 대해서
 
-In order to provide additional difficulty control in a manner that meets the needs of a network with constantly evolving hashpower
-availability, a further Hashcash-based difficulty check is applied to potential solution sets as follows:
+계속 늘어나는 해시파워의 가용성를 가진 네트워크의 필요성 때문에 추가적인 난이도에 대한 제어권을 제공하기 위해 Hashcash 기반 난이도 확인은 다음과 같이 잠재적인 솔루션 세트에 적용됩니다.
 
-If the Blake2b hash
-of a potential set of solution nonces (currently an array of 42 u32s representing the cycle nonces,)
-is less than an evolving difficulty target T, then the solution is considered valid. More precisely,
-the proof difficulty is calculated as the maximum target hash (2^256) divided by the current hash,
-rounded to give an integer. If this integer is larger than the evolving network difficulty, the POW
-is considered valid and the block is submit to the chain for validation.
+솔루션 논스의 잠재적인 집합인 Blake2b 해시가 (현재는 42 u32의 배열이 사이클 논스를 나타냅니다.) 계속 늘어나는 난이도인 타겟 T보다 작다면, 그 솔루션은 유효하다고 간주됩니다.
+좀더 정확하게는, 증명 난이도는 현재 해시로 나눈 최대 목표 해시 (2 ^ 256)로 계산되고 정수(integer)로 얻기 위해 반올림됩니다.
+이 정수가 증가하는 네트워크 난이도보다 큰 경우, POW는 유효한 것으로 간주되며 블록이 유효성 검사를 위해 체인에 제출됩니다.
 
-In other words, a potential proof, as well as containing a valid Cuckoo Cycle, also needs to hash to a value higher than the target difficulty. This difficulty is derived from:
+즉, 잠재적 증거는 유효한 Cuckoo 사이클을 포함 할뿐만 아니라 또한 목표 난이도보다 높은 값으로 해시해야합니다. 이 난이도는 다음과 같이 유도됩니다.
 
-### Evolving Network Difficulty
+### 증가하는 네트워크 난이도
 
-The difficulty target is intended to evolve according to the available network hashpower, with the goal of
-keeping the average block solution time within range of a target (currently 60 seconds, though this is subject
-to change).
+난이도는 평균 블록 생성 시간을 특정 범위 내로 유지하기 위한(현재는 60 초이지만 변경 될 수 있음)목표로 사용 가능한 네트워크 해시파워에 따라 증가시킬 예정입니다.
 
-The difficulty calculation is based on both Digishield and GravityWave family of difficulty computation,
-coming to something very close to ZCash. The reference difficulty is an average of the difficulty over a window of
-23 blocks (the current consensus value). The corresponding timespan is calculated by using the difference between
-the median timestamps at the beginning and the end of the window. If the timespan is higher or lower than a certain
-range, (adjusted with a dampening factor to allow for normal variation,) then the difficulty is raised or lowered
-to a value aiming for the target block solve time.
+난이도 계산은 Digishield 및 GravityWave 계열의 난이도 계산을 기반으로 ZCash와 매우 비슷합니다. 참조 난이도는 현재 합의 값인 23 개 블록 난이도의 평균입니다.
+해당 시간 간격은 23개 블록의 시작과 끝의 중간 타임 스탬프 간의 차이를 사용하여 계산됩니다. 시간 범위가 특정 범위보다 높거나 낮으면 (표준 편차를 허용하는 dampening 팩터로 조정) 블록 생성시간을 목표로 하는 값으로 난이도를 높이거나 낮 춥니 다.
 
-### The Mining Loop
+### 마이닝 루프(Loop)
 
-All of these systems are put together in the mining loop, which attempts to create
-valid Proofs-of-Work to create the latest block in the chain. The following is an outline of what the main mining loop does during a single iteration:
+이러한 시스템은 유요한 작업증명이 체인에 최신 증명을 생성하려 하는  마이닝 루프에 모두 통합됩니다.
+다음은 메인 마이닝 루프가 단일 반복 중에 수행하는 작업에 대한 개요를 설명합니다.
 
-* Get the latest chain state and build a block on top of it, which includes
-  * A Block Header with new values particular to this mining attempt, which are:
-    * The latest target difficulty as selected by the [evolving network difficulty](#evolving-network-difficulty) algorithm
-    * A set of transactions available for validation selected from the transaction pool
-    * A coinbase transaction (which we're hoping to give to ourselves)
-    * The current timestamp
-    * A randomly generated nonce to add further randomness to the header's hash
-    * The merkle root of the UTXO set and fees (not yet implemented)
-      * Then, a sub-loop runs for a set amount of time, currently configured at 2 seconds, where the following happens:
-        * The new block header is hashed to create a hash value
-        * The cuckoo graph generator is initialized, which accepts as parameters:
-          * The hash of the potential block header, which is to be used as the key to a SIPHASH function
-            that will generate pairs of locations for each element in a set of nonces 0..N in the graph.
-          * The size of the graph (a consensus value).
-          * An easiness value, (a consensus value) representing the M/N ratio described above denoting the probability
-            of a solution appearing in the graph
-        * The Cuckoo Cycle detection algorithm tries to find a solution (i.e. a cycle of length 42) within the generated
-          graph.
-        * If a cycle is found, a Blake2b hash of the proof is created and is compared to the current target
-          difficulty, as outlined in [Additional Difficulty Control](#additional-difficulty-control) above.
-        * If the Blake2b Hash difficulty is greater than or equal to the target difficulty, the block is sent to the
-          transaction pool, propagated amongst peers for validation, and work begins on the next block.
-        * If the Blake2b Hash difficulty is less than the target difficulty, the proof is thrown out and the timed loop continues.
-        * If no solution is found, increment the nonce in the header by 1, and update the header's timestamp so the next iteration
-          hashes a different value for seeding the next loop's graph generation step.
-        * If the loop times out with no solution found, start over again from the top, collecting new transactions and creating
-          a new block altogether.
+* 최신 체인 상태를 얻고 그 위해 블록을 만드는 것은 다음을 포함합니다.
+  * 새값을 가진 블록헤더는 :
+    * [이전 섹션](#증가하는-네트워크-난이도) 에서 설명했던 알고리즘으로 선택된 최신 타겟 난이도
+    * 트랜잭션 풀에서 입증된 트랜잭션의 세트
+    * 코인베이스 트랜잭션
+    * 현재 타임 스탬프
+    * 헤더의 해시에 랜덤하게 생성된 논스를 더해서 추가적으로 랜덤성을 추가
+    * (아직 구현되지 않은) UTXO세트와 fee의 머클루트
+      * 그런 다음 Sub-loop는 현재 2초로 설정된 시간동안 작동하며 다음과 같은 상황이 일어납니다.
+        * 새로운 블록 헤더를 해시해서 새로운 해시 값을 만듭니다.
+        * 다음과 같은 값을 파라메터로 받아들인 Cuckoo 그래프 제너레이터가 초기화 됩니다.
+          * 그래프에서 0..n 인 논스세트의 각 요소 위치 쌍을 만들어내는 SIPHASH 함수의 키로 사용 되는 잠재적인 블록 헤더의 해시
+          * 그래프의 사이즈 ( 합의 값)
+          * 합의 값인 Easiness 값은 M/N비율을 나타내며 이 값은 위에서 나타낸것 처럼 그래프에 나타나는 솔루션의 확률입니다.
+        * Cuckoo 사이클 탐지 알고리즘은 생성된 그래프 내에서 솔루션을 찾으려고 합니다.
+        * 만약 사이클을 찾았다면 증거 Blake2b 해시가 생성되고 현재 타겟의 난이도와 비교됩니다. 이와 관련해서는 위에 [추가적인 난이도 조정에 대해서](#추가적인-난이도-조정에-대해서)에 설명되어 있습니다.
+        * 만약 Blake2b 해시의 난이도가 타겟난이도보다 크거나 같다면 블록은 트랜잭션 풀에 보내지고 유효성을 검사하기 위해 피어들에게 전파됩니다. 그리고 다음 블록을 마이닝을 시작합니다.
+        * 만약 Blake2b 해시의 난이도가 타겟의 난이도 보다 낮다면, 증명된 것 (Blake2b 해시)는 버리고 다시 Sub-loop인 타임 루프가 계속됩니다.
+        * 만약 솔루션을 찾지 못했다면 헤더에 있는 논스값을 1 증가시킵니다. 그리고 헤더의 타임스탬프를 업데이트 합니다. 그래서 다음 루프의 그래프 생성 과정의 기초가 되는 이터레이션 해시가 다른 값이 됩니다.
+        * 솔루션을 찾지 못한채 루프의 타임아웃이 되었다면 제일 위해서부터 다시 시작하고 새로운 트랜잭션을 모으고 새로운 블록을 다 같이 만듭니다.
 
-### Mining Loop Difficulty Control and Timing
+### 마이닝 루프 난이도 조정과 타이밍
 
-Controlling the overall difficulty of the mining loop requires finding a balance between the three values outlined above:
+마이닝 루프의 난이도를 조정하기 위해서는 위해서 언급한 세 값의 밸런스를 찾아야 합니다.
 
-* Graph size (currently represented as a bit-shift value n representing a size of 2^n nodes, consensus value
-  DEFAULT_SIZESHIFT). Smaller graphs can be exhaustively searched more quickly, but will also have fewer
-  solutions for a given easiness value. A very small graph needs a higher easiness value to have the same
-  chance to have a solution as a larger graph with a lower easiness value.
-* The 'Easiness' consensus value, or the M/N ratio of the graph expressed as a percentage. The higher this value, the more likely
-  it is a generated graph will contain a solution. In tandem with the above, the larger the graph, the more solutions
-  it will contain for a given easiness value. The Cuckoo Cycle implementations fix this M to N/2, giving
-  a ratio of 50%
-* The evolving network difficulty hash.
+* 그래프 크기 (현재 2 ^ n 노드의 크기를 나타내는 비트 시프트 값 n으로 표현, 합의 값은 DEFAULT_SIZESHIFT임).
+  더 작은 그래프는 철저히 더 빨리 검색 될 수 있지만 주어진 Easiness value 에 대해 더 적은 솔루션를 가집니다. 아주 작은 그래프는 더 낮은 Easiness value을 가진 더 큰 그래프와 (비교를 할때) 해답을 찾는 동일한 기회를 가지기 위해 더 높은 Easiness value가 필요합니다.
+* 'Easiness'합의 값,또는 퍼센티지로 나타나는 그래프의 M / N 비율.
+  이 값이 높을수록 생성 된 그래프에 솔루션이 포함될 확률이 높아집니다. 위와 함께 그래프가 커질수록 주어진 Easiness value 에 대해 더 많은 솔루션이 포함될 가능성이 높아집니다. Cuckoo Cycle 구현은 이 M을 N / 2로 고정시켜 비율을 50%로 만듭니다.
+* 증가한 네트워크 난이도 해시값.
 
-These values need to be carefully tweaked in order for the mining algorithm to find the right balance between the
-cuckoo graph size and the evolving difficulty. The POW needs to remain mostly Cuckoo Cycle based, but still allow for
-reasonably short block times that allow new transactions to be quickly processed.
+마이닝 알고리즘이 Cuckoo 그래프 크기와 증가하는 난이도 사이에서 올바른 균형을 찾을 수 있도록 위의 값들은 신중하게 조정해야 합니다. POW는 대부분 Cuckoo Cycle 기반을 유지할 필요가 있지만 새로운 트랜잭션을 빨리 처리 할 수 ​​있도록 합리적인 수준에서 블록 생성시간을 짧게 해야 합니다.
 
-If the graph size is too low and the easiness too high, for instance, then many cuckoo cycle solutions can easily be
-found for a given block, and the POW will start to favour those who can hash faster, precisely what Cuckoo Cycle is
-trying to avoid. If the graph is too large and easiness too low, however, then it can potentially take any solver a
-long time to find a solution in a single graph, well outside a window in which you'd like to stop to collect new
-transactions.
+예를 들어, 그래프 크기가 ​​너무 작고 easiness (value)가 높다면 주어진 블록에 대해 많은 Cuckoo 사이클 솔루션을 쉽게 찾을 수 있으며 POW는 Cuckoo Cycle이 피하고자 하는 현상 즉, 더 빨리 해싱 할 수 있는 사람들이 선호할 것입니다.
+그러나 만약에 그래프가 너무 크고 easiness (vaule)가 너무 낮으면 단일 그래프에서 솔루션을 찾는 데 시간이 오래 걸릴 수 있고 새로운 트랜잭션을 수집하는것을 중단 할 수도 있습니다.
 
-These values are currently set to 2^12 for the graph size and 50% (as fixed by Cuckoo Cycle) for the easiness value,
-however the size is only a temporary values for testing. The current miner implementation is very unoptimized,
-and the graph size will need to be changed as faster and more optimized Cuckoo Cycle algorithms are put in place.
+현재 이 값은 그래프 사이즈로 2^12으로 세팅되어 있고 Cuckoo Cycle로 고정된 easiness value는 50% 로 설정되어 있지만 (이러한) 사이즈 값은 테스트를 위한 임시 설정 값입니다. 현재의 마이너 구현체는 최적화되지 않았으며, 그래프 사이즈는 보다 빠르고 최적화 된 Cuckoo Cycle 알고리즘으로 변경 될 필요가 있습니다.
 
 ### Pooling Capability
 
-Contrary to some existing concerns about Cuckoo Cycle's poolability, the POW implementation in Grin as described above
-is perfectly suited to a mining pool. While it may be difficult to prove efforts to solve a single graph in isolation,
-the combination of factors within Grin's proof-of-work combine to enforce a notion called 'progress-freeness', which
-enables 'poolability' as well as a level of fairness among all miners.
+Cuckoo Cycle의 poolability에 대한 현재의 우려와는 달리 위에서 설명한 Grin의 POW 구현은 마이닝 풀에 아주 적합합니다.
+별개의 단일 그래프를 풀기 위한 노력을 증명하는 것은 어려운 반면에, Grin의 작업증명 내에서 조합 된 요소들이 결합하여 모든 마이너들의 공정성뿐만 아니라 'poolability'을 가능하게 만드는 'progress-freeness' 라는 개념을 강제합니다.
 
 #### Progress Freeness
 
-Progress-freeness is central to the 'poolability' of a proof-of-work, and is simply based on the idea that a solution
-to a POW problem can be found within a reasonable amount of time. For instance, if a blockchain
-has a one minute POW time and miners have to spend one minute on average to find a solution, this still satisfies the POW
-requirement but gives a strong advantage to big miners. In such a setup, small miners will generally lose at least one minute
-every time while larger miners can move on as soon as they find a solution. So in order to keep mining relatively progress-free,
-a POW that requires multiple solution attempts with each attempt taking a relatively small amount of time is desirable.
+Progress-freeness 는 직업 증명의 'poolability'의 핵심이며 POW 문제에 대한 해결책이 합리적인 시간 내에 발견 될 수 있다는 단순한 생각에 기반합니다.
+예를 들어, 블록체인에서 1분의 POW시간이 있고 (당연히) 마이너가 솔루션을 찾기 위해 평균 1 분을 써야합니다. 이는 POW의 요건을 충족하지만 규모가 큰 마이너에게 이점을 제공합니다.
+이러한 환경에서 소규모 광부는 적어도 1분을 매번 잃어 버리는 반면 큰 광부는 해결책을 찾으면 (바로 다음루프로) 이동할 수 있습니다.
+따라서 광업을 상대적으로 progress-free 시키기 위해서는 각 시도마다 상대적으로 적은 시간이 걸리며 다수의 솔루션을 찾는 시도가 있는 POW가 바람직합니다.
 
-Following from this, Grin's progress-freeness is due to the fact that a solution to a Cuckoo with Grin's default parameters
-can typically be found in under a second on most GPUs, and there is the additional requirement of the Blake2b difficulty check
-on top of that. Members of a pool are thus able to prove they're working on a solution to a block by submitting valid Cuckoo solutions
-(or a small bundle of them) that simply fall under the current network target difficulty.
+Grin의 Progress - freeness는 Grin의 기본 파라매터가있는 Cuckoo의 솔루션이 일반적으로 대부분의 GPU에서 1초 이내에 발견 될 수 있고 Blake2b 난이도 체크의 추가 요구사항이 그 위에 있다는 사실에 기인합니다 .
+따라서 Pool의 멤버는 현재의 네트워크 타겟 난이도에 속하는 유효한 Cuckoo 솔루션 (또는 Cuckoo 솔루션의 작은 묶음)을 제출하여 블록의 솔루션에 대해서 작업하고 있음을 증명할 수 있습니다.
