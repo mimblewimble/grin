@@ -43,7 +43,7 @@ fn peer_handshake() {
 	util::init_test_logger();
 
 	let p2p_config = p2p::P2PConfig {
-		host: "0.0.0.0".parse().unwrap(),
+		host: "127.0.0.1".parse().unwrap(),
 		port: open_port(),
 		peers_allow: None,
 		peers_deny: None,
