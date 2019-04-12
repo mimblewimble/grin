@@ -62,6 +62,10 @@ pub fn client_command(client_args: &ArgMatches<'_>, global_config: GlobalConfig)
 pub fn show_status(config: &ServerConfig, api_secret: Option<String>) {
 	println!();
 	let title = format!("Grin Server Status");
+	if term::stdout().is_none() {
+		println!("Could not open terminal");
+		return;
+	}
 	let mut t = term::stdout().unwrap();
 	let mut e = term::stdout().unwrap();
 	t.fg(term::color::MAGENTA).unwrap();

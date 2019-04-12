@@ -68,8 +68,8 @@ impl MessageHandler for Protocol {
 				Ok(Some(Response::new(
 					Type::Pong,
 					Pong {
-						total_difficulty: adapter.total_difficulty(),
-						height: adapter.total_height(),
+						total_difficulty: adapter.total_difficulty()?,
+						height: adapter.total_height()?,
 					},
 					writer,
 				)?))
@@ -93,7 +93,7 @@ impl MessageHandler for Protocol {
 					"handle_payload: received tx kernel: {}, msg_len: {}",
 					h, msg.header.msg_len
 				);
-				adapter.tx_kernel_received(h, self.addr);
+				adapter.tx_kernel_received(h, self.addr)?;
 				Ok(None)
 			}
 
@@ -117,7 +117,7 @@ impl MessageHandler for Protocol {
 					msg.header.msg_len
 				);
 				let tx: core::Transaction = msg.body()?;
-				adapter.transaction_received(tx, false);
+				adapter.transaction_received(tx, false)?;
 				Ok(None)
 			}
 
@@ -127,7 +127,7 @@ impl MessageHandler for Protocol {
 					msg.header.msg_len
 				);
 				let tx: core::Transaction = msg.body()?;
-				adapter.transaction_received(tx, true);
+				adapter.transaction_received(tx, true)?;
 				Ok(None)
 			}
 
@@ -155,7 +155,7 @@ impl MessageHandler for Protocol {
 
 				// we can't know at this level whether we requested the block or not,
 				// the boolean should be properly set in higher level adapter
-				adapter.block_received(b, self.addr, false);
+				adapter.block_received(b, self.addr, false)?;
 				Ok(None)
 			}
 
@@ -176,14 +176,14 @@ impl MessageHandler for Protocol {
 				);
 				let b: core::CompactBlock = msg.body()?;
 
-				adapter.compact_block_received(b, self.addr);
+				adapter.compact_block_received(b, self.addr)?;
 				Ok(None)
 			}
 
 			Type::GetHeaders => {
 				// load headers from the locator
 				let loc: Locator = msg.body()?;
-				let headers = adapter.locate_headers(&loc.hashes);
+				let headers = adapter.locate_headers(&loc.hashes)?;
 
 				// serialize and send all the headers over
 				Ok(Some(Response::new(
@@ -197,7 +197,7 @@ impl MessageHandler for Protocol {
 			// we can go request it from some of our peers
 			Type::Header => {
 				let header: core::BlockHeader = msg.body()?;
-				adapter.header_received(header, self.addr);
+				adapter.header_received(header, self.addr)?;
 				Ok(None)
 			}
 
@@ -217,7 +217,7 @@ impl MessageHandler for Protocol {
 						headers.push(header);
 						total_bytes_read += bytes_read;
 					}
-					adapter.headers_received(&headers, self.addr);
+					adapter.headers_received(&headers, self.addr)?;
 				}
 
 				// Now check we read the correct total number of bytes off the stream.
@@ -335,7 +335,7 @@ impl MessageHandler for Protocol {
 				let tmp_zip = File::open(tmp)?;
 				let res = self
 					.adapter
-					.txhashset_write(sm_arch.hash, tmp_zip, self.addr);
+					.txhashset_write(sm_arch.hash, tmp_zip, self.addr)?;
 
 				debug!(
 					"handle_payload: txhashset archive for {} at {}, DONE. Data Ok: {}",
