@@ -15,6 +15,7 @@ fs2 = "0.4"
 futures = "0.1"
 http = "0.1"
 hyper-staticfile = "0.3"
+i2p = { version = "0.1.0", git = "https://github.com/ignopeverell/i2p-rs"}
 itertools = "0.7"
 lmdb-zero = "0.4.4"
 rand = "0.5"

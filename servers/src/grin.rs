@@ -15,6 +15,7 @@
 //! Grin P2P / API server
 
 pub mod dandelion_monitor;
+mod i2p;
 pub mod seed;
 pub mod server;
 pub mod sync;
