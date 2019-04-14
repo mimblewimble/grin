@@ -22,14 +22,14 @@
 
 use std::fs::File;
 use std::io::{self, Read, Write};
-use std::net::{Shutdown, TcpStream};
+use std::net::Shutdown;
 use std::sync::{mpsc, Arc};
 use std::{cmp, thread, time};
 
 use crate::core::ser;
 use crate::core::ser::FixedLength;
 use crate::msg::{read_body, read_header, read_item, write_to_buf, MsgHeader, Type};
-use crate::types::Error;
+use crate::types::{Error, Stream};
 use crate::util::read_write::{read_exact, write_all};
 use crate::util::{RateCounter, RwLock};
 
@@ -191,7 +191,7 @@ impl Tracker {
 /// Start listening on the provided connection and wraps it. Does not hang
 /// the current thread, instead just returns a future and the Connection
 /// itself.
-pub fn listen<H>(stream: TcpStream, handler: H) -> Tracker
+pub fn listen<H>(stream: Stream, handler: H) -> Tracker
 where
 	H: MessageHandler,
 {
@@ -227,7 +227,7 @@ where
 }
 
 fn poll<H>(
-	conn: TcpStream,
+	conn: Stream,
 	handler: H,
 	send_rx: mpsc::Receiver<Vec<u8>>,
 	error_tx: mpsc::Sender<Error>,

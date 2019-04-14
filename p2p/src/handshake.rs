@@ -16,11 +16,13 @@ use crate::core::core::hash::Hash;
 use crate::core::pow::Difficulty;
 use crate::msg::{read_message, write_message, Hand, Shake, Type, PROTOCOL_VERSION, USER_AGENT};
 use crate::peer::Peer;
-use crate::types::{Capabilities, Direction, Error, P2PConfig, PeerAddr, PeerInfo, PeerLiveInfo};
+use crate::types::{
+	Capabilities, Direction, Error, P2PConfig, PeerAddr, PeerInfo, PeerLiveInfo, Stream,
+};
 use crate::util::RwLock;
 use rand::{thread_rng, Rng};
 use std::collections::VecDeque;
-use std::net::{SocketAddr, TcpStream};
+use std::net::SocketAddr;
 use std::sync::Arc;
 
 /// Local generated nonce for peer connecting.
@@ -63,14 +65,11 @@ impl Handshake {
 		capab: Capabilities,
 		total_difficulty: Difficulty,
 		self_addr: PeerAddr,
-		conn: &mut TcpStream,
+		conn: &mut Stream,
 	) -> Result<PeerInfo, Error> {
 		// prepare the first part of the handshake
 		let nonce = self.next_nonce();
-		let peer_addr = match conn.peer_addr() {
-			Ok(pa) => PeerAddr::Socket(pa),
-			Err(e) => return Err(Error::Connection(e)),
-		};
+		let peer_addr = conn.peer_addr()?;
 
 		let hand = Hand {
 			version: PROTOCOL_VERSION,
@@ -127,7 +126,7 @@ impl Handshake {
 		&self,
 		capab: Capabilities,
 		total_difficulty: Difficulty,
-		conn: &mut TcpStream,
+		conn: &mut Stream,
 	) -> Result<PeerInfo, Error> {
 		let hand: Hand = read_message(conn, Type::Hand)?;
 
@@ -205,12 +204,12 @@ impl Handshake {
 }
 
 /// Resolve the correct peer_addr based on the connection and the advertised port.
-fn resolve_peer_addr(advertised: PeerAddr, conn: &TcpStream) -> PeerAddr {
+fn resolve_peer_addr(advertised: PeerAddr, conn: &Stream) -> PeerAddr {
 	match advertised.clone() {
 		PeerAddr::Socket(addr) => {
 			let port = addr.port();
 			if let Ok(addr) = conn.peer_addr() {
-				PeerAddr::Socket(SocketAddr::new(addr.ip(), port))
+				PeerAddr::Socket(SocketAddr::new(addr.unwrap_ip().ip(), port))
 			} else {
 				advertised
 			}

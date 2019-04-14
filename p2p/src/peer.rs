@@ -14,7 +14,7 @@
 
 use crate::util::{Mutex, RwLock};
 use std::fs::File;
-use std::net::{Shutdown, TcpStream};
+use std::net::Shutdown;
 use std::sync::Arc;
 
 use crate::chain;
@@ -27,7 +27,7 @@ use crate::msg::{self, BanReason, GetPeerAddrs, Locator, Ping, TxHashSetRequest}
 use crate::protocol::Protocol;
 use crate::types::{
 	Capabilities, ChainAdapter, Error, NetAdapter, P2PConfig, PeerAddr, PeerInfo, ReasonForBan,
-	TxHashSetRead,
+	Stream, TxHashSetRead,
 };
 use chrono::prelude::{DateTime, Utc};
 
@@ -76,7 +76,7 @@ impl Peer {
 	}
 
 	pub fn accept(
-		conn: &mut TcpStream,
+		conn: &mut Stream,
 		capab: Capabilities,
 		total_difficulty: Difficulty,
 		hs: &Handshake,
@@ -101,7 +101,7 @@ impl Peer {
 	}
 
 	pub fn connect(
-		conn: &mut TcpStream,
+		conn: &mut Stream,
 		capab: Capabilities,
 		total_difficulty: Difficulty,
 		self_addr: PeerAddr,
@@ -128,7 +128,7 @@ impl Peer {
 
 	/// Main peer loop listening for messages and forwarding to the rest of the
 	/// system.
-	pub fn start(&mut self, conn: TcpStream) {
+	pub fn start(&mut self, conn: Stream) {
 		let adapter = Arc::new(self.tracking_adapter.clone());
 		let handler = Protocol::new(adapter, self.info.addr.clone());
 		self.connection = Some(Mutex::new(conn::listen(conn, handler)));

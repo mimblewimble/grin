@@ -967,6 +967,7 @@ dependencies = [
  "http 0.1.15 (registry+https://github.com/rust-lang/crates.io-index)",
  "hyper 0.12.19 (registry+https://github.com/rust-lang/crates.io-index)",
  "hyper-staticfile 0.3.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "i2p 0.1.0 (git+https://github.com/ignopeverell/i2p-rs)",
  "itertools 0.7.11 (registry+https://github.com/rust-lang/crates.io-index)",
  "jsonrpc-core 8.0.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "lmdb-zero 0.4.4 (registry+https://github.com/rust-lang/crates.io-index)",

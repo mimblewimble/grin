@@ -15,15 +15,18 @@
 use crate::util::RwLock;
 use std::convert::From;
 use std::fs::File;
-use std::io;
-use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV4, SocketAddrV6};
+use std::io::{self, Read, Write};
+use std::net::{
+	IpAddr, Ipv4Addr, Ipv6Addr, Shutdown, SocketAddr, SocketAddrV4, SocketAddrV6, TcpStream,
+};
 use std::str;
 
 use std::sync::mpsc;
 use std::sync::Arc;
 
 use chrono::prelude::*;
-use i2p::net::{I2pAddr, I2pSocketAddr};
+use i2p;
+use i2p::net::{I2pAddr, I2pSocketAddr, I2pStream};
 
 use crate::chain;
 use crate::core::core;
@@ -63,6 +66,7 @@ const PEER_MIN_PREFERRED_COUNT: u32 = 8;
 pub enum Error {
 	Serialization(ser::Error),
 	Connection(io::Error),
+	I2p(i2p::Error),
 	/// Header type does not match the expected message type
 	BadMessage,
 	MsgLen,
@@ -106,12 +110,21 @@ impl From<io::Error> for Error {
 		Error::Connection(e)
 	}
 }
+impl From<i2p::Error> for Error {
+	fn from(e: i2p::Error) -> Error {
+		Error::I2p(e)
+	}
+}
 impl<T> From<mpsc::TrySendError<T>> for Error {
 	fn from(e: mpsc::TrySendError<T>) -> Error {
 		Error::Send(e.to_string())
 	}
 }
 
+/// The address of a peer, whether local or remote. Wraps the underlying socket
+/// address, whether it's I2P or IP, allowing us to handle both in the same
+/// way. Mostly boilerplate manipulating SocketAddr or I2pSocketAddr
+/// appropriately.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum PeerAddr {
 	Socket(SocketAddr),
@@ -283,6 +296,78 @@ impl PeerAddr {
 			return s;
 		}
 		panic!("not a IP address");
+	}
+}
+
+/// Conveninence type that wraps I2pStream and TcpStream and allows us to
+/// handle either without duplicating code just because their types differ.
+/// Mostly a bunch of boilerplace directly delegating to the concrete stream
+/// type.
+pub enum Stream {
+	Tcp(TcpStream),
+	I2p(I2pStream),
+}
+
+impl Stream {
+	/// Peer address this stream is connected to
+	pub fn peer_addr(&self) -> Result<PeerAddr, Error> {
+		match self {
+			Stream::Tcp(s) => Ok(PeerAddr::Socket(s.peer_addr()?)),
+			Stream::I2p(s) => Ok(PeerAddr::I2p(s.peer_addr()?)),
+		}
+	}
+
+	/// Our network address
+	pub fn local_addr(&self) -> Result<PeerAddr, Error> {
+		match self {
+			Stream::Tcp(s) => Ok(PeerAddr::Socket(s.local_addr()?)),
+			Stream::I2p(s) => Ok(PeerAddr::I2p(s.local_addr()?)),
+		}
+	}
+
+	pub fn shutdown(&self, how: Shutdown) -> Result<(), Error> {
+		match self {
+			Stream::Tcp(s) => Ok(s.shutdown(how)?),
+			Stream::I2p(s) => Ok(s.shutdown(how)?),
+		}
+	}
+
+	pub fn set_nonblocking(&self, nonblocking: bool) -> Result<(), Error> {
+		match self {
+			Stream::Tcp(s) => Ok(s.set_nonblocking(nonblocking)?),
+			Stream::I2p(s) => Ok(s.set_nonblocking(nonblocking)?),
+		}
+	}
+
+	pub fn try_clone(&self) -> Result<Stream, Error> {
+		match self {
+			Stream::Tcp(s) => Ok(Stream::Tcp(s.try_clone()?)),
+			Stream::I2p(s) => Ok(Stream::I2p(s.try_clone()?)),
+		}
+	}
+}
+
+impl Read for Stream {
+	fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+		match self {
+			Stream::Tcp(s) => s.read(buf),
+			Stream::I2p(s) => s.read(buf),
+		}
+	}
+}
+
+impl Write for Stream {
+	fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+		match self {
+			Stream::Tcp(s) => s.write(buf),
+			Stream::I2p(s) => s.write(buf),
+		}
+	}
+	fn flush(&mut self) -> io::Result<()> {
+		match self {
+			Stream::Tcp(s) => s.flush(),
+			Stream::I2p(s) => s.flush(),
+		}
 	}
 }
 

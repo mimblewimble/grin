@@ -33,6 +33,8 @@ use std::sync::Arc;
 use std::time::Duration;
 use std::{io, thread};
 
+use i2p::net::{I2pListener, I2pStream};
+
 /// P2P server implementation, handling bootstrapping to find and connect to
 /// peers, receiving connections from other peers and keep track of all of them.
 pub struct Server {
@@ -106,6 +108,30 @@ impl Server {
 		Ok(())
 	}
 
+	// pub fn listen_i2p(&self, session: Arc<i2p::Session>) -> Result<(), Error> {
+	// 	let listener = I2pListener::bind_with_session(session);
+
+	// 	// TODO break on stop_state
+	// 	for stream in listener.incoming() {
+	// 		match stream {
+	// 			Ok(stream) => {
+	// 				let peer_addr = PeerAddr::I2p(stream.local_addr()?);
+
+	// 				if self.check_undesirable(&stream) {
+	// 					continue;
+	// 				}
+	// 				if let Err(e) = self.handle_new_peer(stream) {
+	// 					debug!("Error accepting i2p peer {}: {:?}", peer_addr.to_string(), e);
+	// 					let _ = self.peers.add_banned(peer_addr, ReasonForBan::BadHandshake);
+	// 				}
+	// 			}
+	// 			Err(e) => {
+	// 				debug!("Couldn't establish new i2p connection: {:?}", e);
+	// 			}
+	// 		}
+	// 	}
+	// }
+
 	/// Asks the server to connect to a new peer. Directly returns the peer if
 	/// we're already connected to the provided address.
 	pub fn connect(&self, addr: PeerAddr) -> Result<Arc<Peer>, Error> {
@@ -138,9 +164,10 @@ impl Server {
 		match addr {
 			PeerAddr::Socket(addr) => {
 				match TcpStream::connect_timeout(&addr, Duration::from_secs(10)) {
-					Ok(mut stream) => {
+					Ok(tcp_stream) => {
 						let addr = SocketAddr::new(self.config.host, self.config.port);
 						let total_diff = self.peers.total_difficulty()?;
+						let mut stream = Stream::Tcp(tcp_stream);
 
 						let mut peer = Peer::connect(
 							&mut stream,
@@ -173,7 +200,7 @@ impl Server {
 		}
 	}
 
-	fn handle_new_peer(&self, mut stream: TcpStream) -> Result<(), Error> {
+	fn handle_new_peer(&self, mut stream: Stream) -> Result<(), Error> {
 		let total_diff = self.peers.total_difficulty()?;
 
 		// accept the peer and add it to the server map
