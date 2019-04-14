@@ -33,7 +33,7 @@ use crate::msg::{
 use crate::protocol::Protocol;
 use crate::types::{
 	Capabilities, ChainAdapter, Error, NetAdapter, P2PConfig, PeerAddr, PeerInfo, ReasonForBan,
-	TxHashSetRead,
+	Stream, TxHashSetRead,
 };
 use chrono::prelude::{DateTime, Utc};
 
@@ -89,7 +89,7 @@ impl Peer {
 	}
 
 	pub fn accept(
-		mut conn: TcpStream,
+		mut conn: Stream,
 		capab: Capabilities,
 		total_difficulty: Difficulty,
 		hs: &Handshake,
@@ -114,7 +114,7 @@ impl Peer {
 	}
 
 	pub fn connect(
-		mut conn: TcpStream,
+		mut conn: Stream,
 		capab: Capabilities,
 		total_difficulty: Difficulty,
 		self_addr: PeerAddr,
@@ -137,6 +137,14 @@ impl Peer {
 				Err(e)
 			}
 		}
+	}
+
+	/// Main peer loop listening for messages and forwarding to the rest of the
+	/// system.
+	pub fn start(&mut self, conn: Stream) {
+		let adapter = Arc::new(self.tracking_adapter.clone());
+		let handler = Protocol::new(adapter, self.info.addr.clone());
+		self.connection = Some(Mutex::new(conn::listen(conn, handler)));
 	}
 
 	pub fn is_denied(config: &P2PConfig, peer_addr: PeerAddr) -> bool {
