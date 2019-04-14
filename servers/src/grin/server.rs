@@ -41,7 +41,7 @@ use crate::core::core::hash::{Hashed, ZERO_HASH};
 use crate::core::core::verifier_cache::{LruVerifierCache, VerifierCache};
 use crate::core::ser::ProtocolVersion;
 use crate::core::{consensus, genesis, global, pow};
-use crate::grin::{dandelion_monitor, seed, sync};
+use crate::grin::{dandelion_monitor, i2p, seed, sync};
 use crate::mining::stratumserver;
 use crate::mining::test_miner::Miner;
 use crate::p2p;
@@ -150,12 +150,10 @@ impl Server {
 			Some(b) => b,
 		};
 
-		// Slight override of capabilities if i2p is enabled
-		if config.p2p_config.i2p_mode != p2p::I2pMode::Disabled {
-			config.p2p_config.capabilities |= p2p::Capabilities::I2P_SUPPORTED;
-		}
-
 		let stop_state = Arc::new(Mutex::new(StopState::new()));
+
+		// Setup i2p keys and daemon if configured
+		let i2p_local_addr = i2p::init(&mut config);
 
 		// Shared cache for verification results.
 		// We cache rangeproof verification and kernel signature verification.
@@ -264,11 +262,12 @@ impl Server {
 		let p2p_inner = p2p_server.clone();
 		let p2p_thread = thread::Builder::new()
 			.name("p2p-server".to_string())
-			.spawn(move || {
-				if let Err(e) = p2p_inner.listen() {
-					error!("P2P server failed with erorr: {:?}", e);
-				}
-			})?;
+			.spawn(move || p2p_inner.listen());
+		if i2p_local_addr.is_some() {
+			let _ = thread::Builder::new()
+				.name("p2p-server-i2p".to_string())
+				.spawn(move || p2p_inner.listen_i2p());
+		}
 
 		info!("Starting rest apis at: {}", &config.api_http_addr);
 		let api_secret = get_first_line(config.api_secret_path.clone());
