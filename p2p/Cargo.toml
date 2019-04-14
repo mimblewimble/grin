@@ -13,6 +13,7 @@ edition = "2018"
 bitflags = "1"
 bytes = "0.4"
 enum_primitive = "0.1"
+i2p = { version = "0.1.0", git = "https://github.com/ignopeverell/i2p-rs"}
 net2 = "0.2"
 num = "0.1"
 rand = "0.6"
@@ -21,7 +22,6 @@ serde_derive = "1"
 tempfile = "3.0.5"
 log = "0.4"
 chrono = { version = "0.4.4", features = ["serde"] }
-i2p = { version = "0.1.0", git = "https://github.com/ignopeverell/i2p-rs"}
 
 grin_core = { path = "../core", version = "2.0.1-beta.1" }
 grin_store = { path = "../store", version = "2.0.1-beta.1" }

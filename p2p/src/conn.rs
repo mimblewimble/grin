@@ -30,8 +30,8 @@ use crate::types::Error;
 use crate::util::{RateCounter, RwLock};
 use std::fs::File;
 use std::io::{self, Read, Write};
-use std::net::{Shutdown, TcpStream};
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::net::Shutdown;
 use std::sync::{mpsc, Arc};
 use std::time::Duration;
 use std::{
@@ -274,7 +274,7 @@ impl Tracker {
 /// the current thread, instead just returns a future and the Connection
 /// itself.
 pub fn listen<H>(
-	stream: TcpStream,
+	stream: Stream,
 	version: ProtocolVersion,
 	tracker: Arc<Tracker>,
 	handler: H,
@@ -309,7 +309,7 @@ where
 }
 
 fn poll<H>(
-	conn: TcpStream,
+	conn: Stream,
 	version: ProtocolVersion,
 	handler: H,
 	send_rx: mpsc::Receiver<Vec<u8>>,

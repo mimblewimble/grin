@@ -14,14 +14,13 @@
 
 ///! Handles initialization and configuration of the i2p daemon. This includes
 ///! the generation and management of i2p keys as well naming services.
-
 use std::fs;
-use std::io::{Write, Read};
+use std::io::{Read, Write};
 use std::net::SocketAddr;
 use std::path::PathBuf;
 
-use i2p::sam::SamConnection;
 use i2p::net::{I2pAddr, I2pSocketAddr};
+use i2p::sam::SamConnection;
 
 use crate::common::types::ServerConfig;
 use crate::p2p;
@@ -34,10 +33,13 @@ const PUBKEY_FILE: &'static str = "pub";
 /// configured to. Will fail loudly if anything isn't where it's expected to
 /// be.
 pub fn init(config: &mut ServerConfig) -> Option<(I2pSocketAddr, Session)> {
-
 	match &config.p2p_config.i2p_mode {
 		p2p::I2pMode::Disabled => None,
-		p2p::I2pMode::Enabled {autostart, exclusive: _, ref addr} => {
+		p2p::I2pMode::Enabled {
+			autostart,
+			exclusive: _,
+			ref addr,
+		} => {
 			// Slight override of capabilities if i2p is enabled
 			config.p2p_config.capabilities |= p2p::Capabilities::I2P_SUPPORTED;
 			if *autostart {
@@ -70,11 +72,16 @@ fn load_keys(i2p_socket: &str, config: &ServerConfig) -> (I2pSocketAddr, String)
 		(pubk, privk)
 	} else {
 		let mut sam_conn = SamConnection::connect(i2p_socket).expect("Couldn't reach i2p daemon");
-		let (pubk, privk) = sam_conn.generate_destination().expect("Error generating i2p keys");
+		let (pubk, privk) = sam_conn
+			.generate_destination()
+			.expect("Error generating i2p keys");
 		fs::write(i2p_pubkey, &pubk).expect("Write error on i2p public key");
 		fs::write(i2p_privkey, &privk).expect("Write error on i2p private key");
 		(pubk, privk)
 	};
-	let i2p_sockaddr = I2pSocketAddr::new(I2pAddr::from_b64(&pubkey).unwrap(), i2p_socket.parse::<SocketAddr>().unwrap().port());
+	let i2p_sockaddr = I2pSocketAddr::new(
+		I2pAddr::from_b64(&pubkey).unwrap(),
+		i2p_socket.parse::<SocketAddr>().unwrap().port(),
+	);
 	(i2p_sockaddr, privkey)
 }
