@@ -275,21 +275,6 @@ impl<T: PMMRable> PMMRBackend<T> {
 		self.hash_file.size()
 	}
 
-	// /// Syncs all files to disk. A call to sync is required to ensure all the
-	// /// data has been successfully written to disk.
-	// pub fn sync(&mut self) -> io::Result<()> {
-	// 	Ok(())
-	// 		.and(self.hash_file.flush())
-	// 		.and(self.data_file.flush())
-	// 		.and(self.sync_leaf_set())
-	// 		.map_err(|e| {
-	// 			io::Error::new(
-	// 				io::ErrorKind::Interrupted,
-	// 				format!("Could not write to state storage, disk full? {:?}", e),
-	// 			)
-	// 		})
-	// }
-
 	// Sync the leaf_set if this is a prunable backend.
 	fn sync_leaf_set(&mut self) -> io::Result<()> {
 		if !self.prunable {

@@ -22,29 +22,31 @@ use std::io::{BufReader, Read};
 use std::time::Duration;
 
 use croaring::Bitmap;
+use tempfile;
+use tempfile::TempDir;
 
-use crate::chain::Chain;
 use crate::core::core::pmmr::{self, PMMR};
 use crate::core::core::{BlockHeader, TxKernel, TxKernelEntry};
 use crate::core::ser::{Readable, StreamingReader};
 use crate::error::{Error, ErrorKind};
 use crate::store::Batch;
-use crate::txhashset::txhashset::PMMRHandle;
+use crate::txhashset::txhashset::{PMMRHandle, TxHashSet};
 use grin_store::pmmr::PMMRBackend;
 
-/// Rewindable (but readonly) view of the kernel set (based on kernel MMR).
+/// Rebuildable kernel view backed by a tempdir.
 pub struct RebuildableKernelView<'a> {
 	pmmr: PMMR<'a, TxKernel, PMMRBackend<TxKernel>>,
 }
 
 impl<'a> RebuildableKernelView<'a> {
-	/// Build a new readonly kernel view.
-	pub fn new(pmmr: PMMR<'a, TxKernel, PMMRBackend<TxKernel>>) -> RebuildableKernelView<'a> {
-		RebuildableKernelView { pmmr }
+	pub fn new(backend: &'a mut PMMRBackend<TxKernel>) -> RebuildableKernelView<'a> {
+		RebuildableKernelView {
+			pmmr: PMMR::at(backend, 0),
+		}
 	}
 
 	pub fn truncate(&mut self) -> Result<(), Error> {
-		debug!("Truncating rebuildable kernel view.");
+		debug!("Truncating temp kernel view.");
 		self.pmmr
 			.rewind(0, &Bitmap::create())
 			.map_err(&ErrorKind::TxHashSetErr)?;
@@ -54,7 +56,7 @@ impl<'a> RebuildableKernelView<'a> {
 	pub fn rebuild(
 		&mut self,
 		data: &mut Read,
-		chain: &Chain,
+		txhashset: &TxHashSet,
 		header: &BlockHeader,
 	) -> Result<(), Error> {
 		// Rebuild is all-or-nothing. Truncate everything before we begin.
@@ -63,7 +65,7 @@ impl<'a> RebuildableKernelView<'a> {
 		let mut stream = StreamingReader::new(data, Duration::from_secs(1));
 
 		let mut current_pos = 0;
-		let mut current_header = chain.get_header_by_height(0)?;
+		let mut current_header = txhashset.get_header_by_height(0)?;
 
 		loop {
 			while current_pos < current_header.kernel_mmr_size {
@@ -87,7 +89,7 @@ impl<'a> RebuildableKernelView<'a> {
 			}
 
 			// Periodically sync the PMMR backend as we rebuild it.
-			if current_header.height % 100 == 0 {
+			if current_header.height % 1000 == 0 {
 				self.pmmr
 					.sync()
 					.map_err(|_| ErrorKind::TxHashSetErr("failed to sync pmmr".into()))?;
@@ -108,7 +110,7 @@ impl<'a> RebuildableKernelView<'a> {
 				))
 				.into());
 			} else {
-				current_header = chain.get_header_by_height(current_header.height + 1)?;
+				current_header = txhashset.get_header_by_height(current_header.height + 1)?;
 			}
 		}
 

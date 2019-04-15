@@ -17,9 +17,11 @@
 
 use crate::core::core::hash::{Hash, Hashed, ZERO_HASH};
 use crate::core::core::merkle_proof::MerkleProof;
+use crate::core::core::pmmr::PMMR;
 use crate::core::core::verifier_cache::VerifierCache;
 use crate::core::core::{
-	Block, BlockHeader, BlockSums, Committed, Output, OutputIdentifier, Transaction, TxKernelEntry,
+	Block, BlockHeader, BlockSums, Committed, Output, OutputIdentifier, Transaction, TxKernel,
+	TxKernelEntry,
 };
 use crate::core::global;
 use crate::core::pow;
@@ -29,12 +31,14 @@ use crate::lmdb;
 use crate::pipe;
 use crate::store;
 use crate::txhashset;
+use crate::txhashset::RebuildableKernelView;
 use crate::txhashset::TxHashSet;
 use crate::types::{
 	BlockStatus, ChainAdapter, NoStatus, Options, Tip, TxHashSetRoots, TxHashsetWriteStatus,
 };
 use crate::util::secp::pedersen::{Commitment, RangeProof};
 use crate::util::{Mutex, RwLock, StopState};
+use grin_store::pmmr::{PMMRBackend, PMMR_FILES};
 use grin_store::Error::NotFoundErr;
 use std::collections::HashMap;
 use std::env;
@@ -44,7 +48,7 @@ use std::path::PathBuf;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
-use tempfile::tempdir;
+use tempfile;
 
 /// Orphan pool size is limited by MAX_ORPHAN_SIZE
 pub const MAX_ORPHAN_SIZE: usize = 200;
@@ -740,6 +744,26 @@ impl Chain {
 		Ok(())
 	}
 
+	fn validate_kernel_history_again(
+		&self,
+		header: &BlockHeader,
+		txhashset: &txhashset::TxHashSet,
+	) -> Result<(), Error> {
+		let mut kernel_data =
+			txhashset::rewindable_kernel_view(&txhashset, |view| view.kernel_data_read())?;
+
+		let tempdir = tempfile::tempdir()?;
+		let mut backend: PMMRBackend<TxKernel> = PMMRBackend::new(tempdir.path(), false, None)?;
+		let mut kernel_view = RebuildableKernelView::new(&mut backend);
+
+		// Rebuilding the kernel view will verify the following -
+		// * all kernel signatures
+		// * kernel MMR root matches for each historical header
+		kernel_view.rebuild(&mut kernel_data, txhashset, header)?;
+
+		Ok(())
+	}
+
 	/// Rebuild the sync MMR based on current header_head.
 	/// We rebuild the sync MMR when first entering sync mode so ensure we
 	/// have an MMR we can safely rewind based on the headers received from a peer.
@@ -866,24 +890,22 @@ impl Chain {
 	}
 
 	pub fn kernel_data_write(&self, reader: &mut Read) -> Result<(), Error> {
-		error!("***** kernel_data_write: entered");
+		let txhashset = self.txhashset.read();
+		let head_header = self.head_header()?;
 
-		let dir = tempdir()?;
-		let path = dir.path();
-		error!("***** tempdir: {:?}", path);
+		let tempdir = tempfile::tempdir()?;
+		let mut backend: PMMRBackend<TxKernel> = PMMRBackend::new(tempdir.path(), false, None)?;
+		let mut kernel_view = RebuildableKernelView::new(&mut backend);
 
-		let mut txhashset =
-			TxHashSet::open(path.to_str().unwrap().into(), self.store.clone(), None)?;
+		// Rebuilding the kernel view will verify the following -
+		// * all kernel signatures
+		// * kernel MMR root matches for each historical header
+		{
+			let txhashset = self.txhashset.read();
+			kernel_view.rebuild(reader, &txhashset, &head_header)?;
+		}
 
-		txhashset::rebuildable_kernel_view(&mut txhashset, |view| {
-			let head_header = self.head_header()?;
-			view.rebuild(reader, self, &head_header)?;
-			Ok(())
-		})?;
-
-		// Note: The txhashset is "temporary".
 		// Backend storage will be deleted once the tempdir goes out of scope.
-		// So be careful with any assumptions here.
 		Ok(())
 	}
 
@@ -929,6 +951,7 @@ impl Chain {
 
 		// Validate the full kernel history (kernel MMR root for every block header).
 		self.validate_kernel_history(&header, &txhashset)?;
+		self.validate_kernel_history_again(&header, &txhashset)?;
 
 		// all good, prepare a new batch and update all the required records
 		debug!("txhashset_write: rewinding a 2nd time (writeable)");
