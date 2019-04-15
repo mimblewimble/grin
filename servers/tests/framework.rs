@@ -184,7 +184,7 @@ impl LocalServerContainer {
 		})
 	}
 
-	pub fn run_server(&mut self, duration_in_seconds: u64) -> servers::Server {
+	pub fn run_server(&mut self) -> servers::Server {
 		let api_addr = format!("{}:{}", self.config.base_addr, self.config.api_server_port);
 
 		let mut seeding_type = p2p::Seeding::None;
@@ -217,7 +217,7 @@ impl LocalServerContainer {
 		let mut wallet_url = None;
 
 		if self.config.start_wallet == true {
-			self.run_wallet(duration_in_seconds + 5);
+			self.run_wallet();
 			// give a second to start wallet before continuing
 			thread::sleep(time::Duration::from_millis(1000));
 			wallet_url = Some(format!(
@@ -292,7 +292,7 @@ impl LocalServerContainer {
 	}
 
 	/// Starts a wallet daemon to receive
-	pub fn run_wallet(&mut self, _duration_in_mills: u64) {
+	pub fn run_wallet(&mut self) {
 		let wallet = self.make_wallet_for_tests();
 
 		wallet::controller::foreign_listener(wallet, &self.wallet_config.api_listen_addr(), None)
@@ -570,7 +570,6 @@ impl LocalServerContainerPool {
 
 	#[allow(dead_code)]
 	pub fn run_all_servers(self) -> Arc<Mutex<Vec<servers::Server>>> {
-		let run_length = self.config.run_length_in_seconds;
 		let mut handles = vec![];
 
 		// return handles to all of the servers, wrapped in mutexes, handles, etc
@@ -586,7 +585,7 @@ impl LocalServerContainerPool {
 					// a chance to start
 					thread::sleep(time::Duration::from_millis(2000));
 				}
-				let server_ref = s.run_server(run_length);
+				let server_ref = s.run_server();
 				return_container_ref.lock().push(server_ref);
 			});
 			// Not a big fan of sleeping hack here, but there appears to be a

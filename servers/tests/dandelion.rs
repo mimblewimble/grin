@@ -54,7 +54,7 @@ fn test_dandelion_timeout() {
 
 	let _ = thread::spawn(move || {
 		let mut w = coinbase_wallet.lock();
-		w.run_wallet(0);
+		w.run_wallet();
 	});
 
 	let mut recp_config = LocalServerContainerConfig::default();
@@ -69,7 +69,7 @@ fn test_dandelion_timeout() {
 	//Start up a second wallet, to receive
 	let _ = thread::spawn(move || {
 		let mut w = target_wallet_cloned.lock();
-		w.run_wallet(0);
+		w.run_wallet();
 	});
 
 	// Spawn server and let it run for a bit
@@ -100,14 +100,14 @@ fn test_dandelion_timeout() {
 
 	// Spawn servers and let them run for a bit
 	let _ = thread::spawn(move || {
-		server_two.run_server(120);
+		server_two.run_server();
 	});
 
 	// Wait for the first server to start
 	thread::sleep(time::Duration::from_millis(5000));
 
 	let _ = thread::spawn(move || {
-		server_one.run_server(120);
+		server_one.run_server();
 	});
 
 	// Let them do a handshake and properly update their peer relay

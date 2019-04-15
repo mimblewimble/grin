@@ -53,7 +53,7 @@ fn basic_wallet_transactions() {
 	let coinbase_seed = LocalServerContainer::get_wallet_seed(&coinbase_wallet_config);
 	let _ = thread::spawn(move || {
 		let mut w = coinbase_wallet.lock();
-		w.run_wallet(0);
+		w.run_wallet();
 	});
 
 	let mut recp_config = LocalServerContainerConfig::default();
@@ -67,7 +67,7 @@ fn basic_wallet_transactions() {
 	//Start up a second wallet, to receive
 	let _ = thread::spawn(move || {
 		let mut w = target_wallet_cloned.lock();
-		w.run_wallet(0);
+		w.run_wallet();
 	});
 
 	let mut server_config = LocalServerContainerConfig::default();
@@ -81,7 +81,7 @@ fn basic_wallet_transactions() {
 	// Spawn server and let it run for a bit
 	let _ = thread::spawn(move || {
 		let mut server_one = LocalServerContainer::new(server_config).unwrap();
-		server_one.run_server(120);
+		server_one.run_server();
 	});
 
 	//Wait until we have some funds to send
