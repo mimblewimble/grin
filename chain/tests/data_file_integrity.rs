@@ -112,6 +112,8 @@ fn data_files() {
 		let chain = reload_chain(chain_dir);
 		chain.validate(false).unwrap();
 	}
+	// Cleanup chain directory
+	clean_output_dir(chain_dir);
 }
 
 fn _prepare_block(kc: &ExtKeychain, prev: &BlockHeader, chain: &Chain, diff: u64) -> Block {
