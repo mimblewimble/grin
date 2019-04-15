@@ -876,7 +876,8 @@ impl Chain {
 			TxHashSet::open(path.to_str().unwrap().into(), self.store.clone(), None)?;
 
 		txhashset::rebuildable_kernel_view(&mut txhashset, |view| {
-			view.rebuild(reader, self)?;
+			let head_header = self.head_header()?;
+			view.rebuild(reader, self, &head_header)?;
 			Ok(())
 		})?;
 

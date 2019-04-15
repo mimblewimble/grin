@@ -51,19 +51,21 @@ impl<'a> RebuildableKernelView<'a> {
 		Ok(())
 	}
 
-	pub fn rebuild(&mut self, reader: &mut Read, chain: &Chain) -> Result<(), Error> {
+	pub fn rebuild(
+		&mut self,
+		data: &mut Read,
+		chain: &Chain,
+		header: &BlockHeader,
+	) -> Result<(), Error> {
 		// Rebuild is all-or-nothing. Truncate everything before we begin.
 		self.truncate()?;
 
-		// TODO - Use horizon for this?
-		let head_header = chain.head_header()?;
-
-		let mut stream = StreamingReader::new(reader, Duration::from_secs(1));
+		let mut stream = StreamingReader::new(data, Duration::from_secs(1));
 
 		let mut current_pos = 0;
 		let mut current_header = chain.get_header_by_height(0)?;
 
-		while current_header.height < head_header.height {
+		loop {
 			while current_pos < current_header.kernel_mmr_size {
 				// Read and verify the next kernel from the stream of data.
 				let kernel = TxKernelEntry::read(&mut stream)?;
@@ -84,21 +86,30 @@ impl<'a> RebuildableKernelView<'a> {
 				.into());
 			}
 
-			// Periodically sync the PMMR backend to disk as we rebuild it.
+			// Periodically sync the PMMR backend as we rebuild it.
 			if current_header.height % 100 == 0 {
 				self.pmmr
 					.sync()
 					.map_err(|_| ErrorKind::TxHashSetErr("failed to sync pmmr".into()))?;
 				debug!(
-					"Rebuilt kernel MMR to height: {}, kernels: {} (MMR size: {}), bytes: {} ...",
+					"Rebuilt kernel MMR to height: {}, kernels: {} (MMR size: {}) ...",
 					current_header.height,
 					pmmr::n_leaves(self.pmmr.last_pos),
 					self.pmmr.last_pos,
-					stream.total_bytes_read(),
 				);
 			}
 
-			current_header = chain.get_header_by_height(current_header.height + 1)?;
+			// Done if we have reached the specified header.
+			if current_header == *header {
+				break;
+			} else if current_header.height >= header.height {
+				return Err(ErrorKind::InvalidTxHashSet(format!(
+					"Header mismatch when rebuilding kernel MMR.",
+				))
+				.into());
+			} else {
+				current_header = chain.get_header_by_height(current_header.height + 1)?;
+			}
 		}
 
 		// One final sync to ensure everything is saved (to the tempdir).
@@ -106,13 +117,12 @@ impl<'a> RebuildableKernelView<'a> {
 			.sync()
 			.map_err(|_| ErrorKind::TxHashSetErr("failed to sync pmmr".into()))?;
 		debug!(
-			"Rebuilt kernel MMR to height: {}, kernels: {} (MMR size: {})",
+			"Rebuilt kernel MMR to height: {}, kernels: {} (MMR size: {}) DONE",
 			current_header.height,
 			pmmr::n_leaves(self.pmmr.last_pos),
 			self.pmmr.last_pos,
 		);
 
-		// TODO - Should we return a header here (sync'd kernels up to this header)?
 		Ok(())
 	}
 
