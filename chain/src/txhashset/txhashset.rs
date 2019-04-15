@@ -26,7 +26,7 @@ use crate::core::global;
 use crate::core::ser::{PMMRIndexHashable, PMMRable};
 use crate::error::{Error, ErrorKind};
 use crate::store::{Batch, ChainStore};
-use crate::txhashset::{RewindableKernelView, UTXOView};
+use crate::txhashset::{RebuildableKernelView, RewindableKernelView, UTXOView};
 use crate::types::{Tip, TxHashSetRoots, TxHashsetWriteStatus};
 use crate::util::secp::pedersen::{Commitment, RangeProof};
 use crate::util::{file, secp_static, zip};
@@ -51,7 +51,7 @@ const KERNEL_SUBDIR: &'static str = "kernel";
 
 const TXHASHSET_ZIP: &'static str = "txhashset_snapshot";
 
-struct PMMRHandle<T: PMMRable> {
+pub struct PMMRHandle<T: PMMRable> {
 	backend: PMMRBackend<T>,
 	last_pos: u64,
 }
@@ -402,6 +402,23 @@ where
 		res = inner(&mut view);
 	}
 	res
+}
+
+pub fn rebuildable_kernel_view<'a, F, T>(trees: &'a mut TxHashSet, inner: F) -> Result<T, Error>
+where
+	F: FnOnce(&mut RebuildableKernelView<'_>) -> Result<T, Error>,
+{
+	let kernel_pmmr = PMMR::at(
+		&mut trees.kernel_pmmr_h.backend,
+		trees.kernel_pmmr_h.last_pos,
+	);
+	let mut view = RebuildableKernelView::new(kernel_pmmr);
+
+	// Note: We do not explicitly rollback or sync here.
+	// The rebuildable kernel view handles this internally
+	// as we need to ensure we sync to backend storage periodically.
+	// The kernel data is too large to handle in memory all at once.
+	inner(&mut view)
 }
 
 /// Starts a new unit of work to extend the chain with additional blocks,
@@ -924,13 +941,13 @@ impl<'a> Extension<'a> {
 			}
 		}
 		// push the new output to the MMR.
-		let output_pos = self
+		let (output_pos, _) = self
 			.output_pmmr
 			.push(out)
 			.map_err(&ErrorKind::TxHashSetErr)?;
 
 		// push the rangeproof to the MMR.
-		let rproof_pos = self
+		let (rproof_pos, _) = self
 			.rproof_pmmr
 			.push(&out.proof)
 			.map_err(&ErrorKind::TxHashSetErr)?;

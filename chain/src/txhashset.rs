@@ -15,10 +15,12 @@
 //! Utility structs to handle the 3 hashtrees (output, range proof,
 //! kernel) more conveniently and transactionally.
 
+mod rebuildable_kernel_view;
 mod rewindable_kernel_view;
 mod txhashset;
 mod utxo_view;
 
+pub use self::rebuildable_kernel_view::*;
 pub use self::rewindable_kernel_view::*;
 pub use self::txhashset::*;
 pub use self::utxo_view::*;

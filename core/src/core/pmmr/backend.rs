@@ -18,6 +18,7 @@ use crate::core::hash::Hash;
 use crate::core::BlockHeader;
 use crate::ser::PMMRable;
 use std::fs::File;
+use std::io;
 use std::io::Read;
 use std::path::Path;
 
@@ -66,6 +67,8 @@ pub trait Backend<T: PMMRable> {
 
 	/// Release underlying datafiles and locks
 	fn release_files(&mut self);
+
+	fn sync(&mut self) -> io::Result<()>;
 
 	/// Also a bit of a hack...
 	/// Saves a snapshot of the rewound utxo file with the block hash as

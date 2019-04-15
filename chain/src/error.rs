@@ -256,6 +256,14 @@ impl From<io::Error> for Error {
 	}
 }
 
+impl From<ser::Error> for Error {
+	fn from(error: ser::Error) -> Error {
+		Error {
+			inner: Context::new(ErrorKind::SerErr(error)),
+		}
+	}
+}
+
 impl From<secp::Error> for Error {
 	fn from(e: secp::Error) -> Error {
 		Error {

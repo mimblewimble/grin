@@ -865,11 +865,9 @@ impl Chain {
 		txhashset::clean_header_folder(&sandbox_dir);
 	}
 
-	/// TODO - Pull this out into a "rebuildable kernel view" or something similar?
 	pub fn kernel_data_write(&self, reader: &mut Read) -> Result<(), Error> {
 		error!("***** kernel_data_write: entered");
 
-		// write to an actual tmp file with a path?
 		let dir = tempdir()?;
 		let path = dir.path();
 		error!("***** tempdir: {:?}", path);
@@ -877,27 +875,14 @@ impl Chain {
 		let mut txhashset =
 			TxHashSet::open(path.to_str().unwrap().into(), self.store.clone(), None)?;
 
-		let mut streaming_reader = StreamingReader::new(reader, Duration::from_secs(1));
-
-		let mut batch = self.store.batch()?;
-		txhashset::extending(&mut txhashset, &mut batch, |extension| {
-			while let Ok(kernel) = TxKernelEntry::read(&mut streaming_reader) {
-				debug!("***** applying a kernel");
-				extension.apply_kernel(&kernel.kernel)?;
-			}
+		txhashset::rebuildable_kernel_view(&mut txhashset, |view| {
+			view.rebuild(reader, self)?;
 			Ok(())
 		})?;
 
-		error!(
-			"***** total bytes read (and applied): {}",
-			streaming_reader.total_bytes_read()
-		);
-
-		// Some kind of "rebuildable" kernel view
-		// Streaming (somehow) the reader here and apply_kernel each time -
-		//  * the size file
-		//  * the hash file
-
+		// Note: The txhashset is "temporary".
+		// Backend storage will be deleted once the tempdir goes out of scope.
+		// So be careful with any assumptions here.
 		Ok(())
 	}
 
