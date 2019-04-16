@@ -387,10 +387,7 @@ pub enum Weighting {
 	AsTransaction,
 	/// Tx representing a tx with artificially limited max_weight.
 	/// This is used when selecting mineable txs from the pool.
-	AsLimitedTransaction {
-		/// The maximum (block) weight that we will allow.
-		max_weight: usize,
-	},
+	AsLimitedTransaction(usize),
 	/// Tx represents a block (max block weight).
 	AsBlock,
 	/// No max weight limit (skip the weight check).
@@ -628,7 +625,7 @@ impl TransactionBody {
 		//
 		let max_weight = match weighting {
 			Weighting::AsTransaction => global::max_block_weight().saturating_sub(coinbase_weight),
-			Weighting::AsLimitedTransaction { max_weight } => {
+			Weighting::AsLimitedTransaction(max_weight) => {
 				min(global::max_block_weight(), max_weight).saturating_sub(coinbase_weight)
 			}
 			Weighting::AsBlock => global::max_block_weight(),
@@ -962,6 +959,12 @@ impl Transaction {
 		self.body.verify_features()?;
 		self.verify_kernel_sums(self.overage(), self.offset)?;
 		Ok(())
+	}
+
+	/// Can be used to compare txs by their fee/weight ratio.
+	/// Don't use these values for anything else though due to precision multiplier.
+	pub fn fee_to_weight(&self) -> u64 {
+		self.fee() * 1_000 / self.tx_weight() as u64
 	}
 
 	/// Calculate transaction weight

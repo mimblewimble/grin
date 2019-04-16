@@ -88,10 +88,25 @@ fn test_block_building_max_weight() {
 			test_transaction(&keychain, vec![290], vec![280, 4]),
 		];
 
+		// Fees and weights of our original txs in insert order.
+		assert_eq!(
+			txs.iter().map(|x| x.fee()).collect::<Vec<_>>(),
+			[9, 8, 1, 7, 6]
+		);
+		assert_eq!(
+			txs.iter().map(|x| x.tx_weight()).collect::<Vec<_>>(),
+			[8, 8, 4, 8, 8]
+		);
+		assert_eq!(
+			txs.iter().map(|x| x.fee_to_weight()).collect::<Vec<_>>(),
+			[1125, 1000, 250, 875, 750]
+		);
+
 		// Populate our txpool with the txs.
 		{
 			let mut write_pool = pool.write();
 			for tx in txs {
+				println!("***** {}", tx.fee_to_weight());
 				write_pool
 					.add_to_pool(test_source(), tx, false, &header)
 					.unwrap();
@@ -101,35 +116,26 @@ fn test_block_building_max_weight() {
 		// Check we added them all to the txpool successfully.
 		assert_eq!(pool.read().total_size(), 5);
 
-		// Prepare some "mineable txs" from the txpool.
+		// Prepare some "mineable" txs from the txpool.
 		// Note: We cannot fit all the txs from the txpool into a block.
 		let txs = pool.read().prepare_mineable_transactions().unwrap();
 
-		// Check resulting tx aggregation is what we expect.
-		// We expect to produce 2 aggregated txs based on txpool contents.
-		assert_eq!(txs.len(), 2);
-
-		// Check the tx we built is the aggregation of the correct set of underlying txs.
-		// We included 4 out of the 5 txs here.
-		assert_eq!(txs[0].kernels().len(), 1);
-		assert_eq!(txs[1].kernels().len(), 2);
-
-		// Check our weights after aggregation.
-		assert_eq!(txs[0].inputs().len(), 1);
-		assert_eq!(txs[0].outputs().len(), 1);
-		assert_eq!(txs[0].kernels().len(), 1);
-		assert_eq!(txs[0].tx_weight_as_block(), 25);
-
-		assert_eq!(txs[1].inputs().len(), 1);
-		assert_eq!(txs[1].outputs().len(), 3);
-		assert_eq!(txs[1].kernels().len(), 2);
-		assert_eq!(txs[1].tx_weight_as_block(), 70);
+		// Fees and weights of the "mineable" txs.
+		assert_eq!(txs.iter().map(|x| x.fee()).collect::<Vec<_>>(), [9, 8, 7]);
+		assert_eq!(
+			txs.iter().map(|x| x.tx_weight()).collect::<Vec<_>>(),
+			[8, 8, 8]
+		);
+		assert_eq!(
+			txs.iter().map(|x| x.fee_to_weight()).collect::<Vec<_>>(),
+			[1125, 1000, 875]
+		);
 
 		let block = add_block(header, txs, &mut chain);
 
 		// Check contents of the block itself (including coinbase reward).
 		assert_eq!(block.inputs().len(), 2);
-		assert_eq!(block.outputs().len(), 5);
+		assert_eq!(block.outputs().len(), 6);
 		assert_eq!(block.kernels().len(), 4);
 
 		// Now reconcile the transaction pool with the new block
