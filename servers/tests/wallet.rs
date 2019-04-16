@@ -202,4 +202,5 @@ fn wallet_config_owner_api_include_foreign() {
 		assert!(wallet::create_coinbase("http://127.0.0.1:20006", &block_fees).is_ok());
 	}
 	framework::clean_all_output(test_name_dir);
+	framework::clean_all_output(&base_config.name);
 }
