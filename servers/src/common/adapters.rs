@@ -22,7 +22,10 @@ use std::thread;
 use std::time::Instant;
 
 use crate::chain::{self, BlockStatus, ChainAdapter, Options};
-use crate::common::types::{self, ChainValidationMode, ServerConfig, SyncState, SyncStatus};
+use crate::common::hooks::{ChainEvents, NetEvents};
+use crate::common::types::{
+	self, ChainValidationMode, DandelionEpoch, ServerConfig, SyncState, SyncStatus,
+};
 use crate::core::core::hash::{Hash, Hashed};
 use crate::core::core::transaction::Transaction;
 use crate::core::core::verifier_cache::VerifierCache;
@@ -32,6 +35,7 @@ use crate::core::{core, global};
 use crate::p2p;
 use crate::p2p::types::PeerAddr;
 use crate::pool;
+use crate::pool::types::DandelionConfig;
 use crate::util::OneTime;
 use chrono::prelude::*;
 use chrono::Duration;
@@ -47,6 +51,7 @@ pub struct NetToChainAdapter {
 	verifier_cache: Arc<RwLock<dyn VerifierCache>>,
 	peers: OneTime<Weak<p2p::Peers>>,
 	config: ServerConfig,
+	hooks: Vec<Box<dyn NetEvents + Send + Sync>>,
 }
 
 impl p2p::ChainAdapter for NetToChainAdapter {
@@ -91,16 +96,13 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 			identifier: "?.?.?.?".to_string(),
 		};
 
-		let tx_hash = tx.hash();
 		let header = self.chain().head_header()?;
 
-		debug!(
-			"Received tx {}, [in/out/kern: {}/{}/{}] going to process.",
-			tx_hash,
-			tx.inputs().len(),
-			tx.outputs().len(),
-			tx.kernels().len(),
-		);
+		for hook in &self.hooks {
+			hook.on_transaction_received(&tx);
+		}
+
+		let tx_hash = tx.hash();
 
 		let mut tx_pool = self.tx_pool.write();
 		match tx_pool.add_to_pool(source, tx, stem, &header) {
@@ -150,7 +152,14 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 		if cb.kern_ids().is_empty() {
 			// push the freshly hydrated block through the chain pipeline
 			match core::Block::hydrate_from(cb, vec![]) {
-				Ok(block) => self.process_block(block, addr, false),
+				Ok(block) => {
+					if !self.sync_state.is_syncing() {
+						for hook in &self.hooks {
+							hook.on_block_received(&block, &addr);
+						}
+					}
+					self.process_block(block, addr, false)
+				}
 				Err(e) => {
 					debug!("Invalid hydrated block {}: {:?}", cb_hash, e);
 					return Ok(false);
@@ -184,7 +193,14 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 			// 3) we hydrate an invalid block (peer sent us a "bad" compact block) - [TBD]
 
 			let block = match core::Block::hydrate_from(cb.clone(), txs) {
-				Ok(block) => block,
+				Ok(block) => {
+					if !self.sync_state.is_syncing() {
+						for hook in &self.hooks {
+							hook.on_block_received(&block, &addr);
+						}
+					}
+					block
+				}
 				Err(e) => {
 					debug!("Invalid hydrated block {}: {:?}", cb.hash(), e);
 					return Ok(false);
@@ -405,6 +421,7 @@ impl NetToChainAdapter {
 		tx_pool: Arc<RwLock<pool::TransactionPool>>,
 		verifier_cache: Arc<RwLock<dyn VerifierCache>>,
 		config: ServerConfig,
+		hooks: Vec<Box<dyn NetEvents + Send + Sync>>,
 	) -> NetToChainAdapter {
 		NetToChainAdapter {
 			sync_state,
@@ -413,6 +430,7 @@ impl NetToChainAdapter {
 			verifier_cache,
 			peers: OneTime::new(),
 			config,
+			hooks,
 		}
 	}
 
@@ -646,39 +664,16 @@ impl NetToChainAdapter {
 pub struct ChainToPoolAndNetAdapter {
 	tx_pool: Arc<RwLock<pool::TransactionPool>>,
 	peers: OneTime<Weak<p2p::Peers>>,
+	hooks: Vec<Box<dyn ChainEvents + Send + Sync>>,
 }
 
 impl ChainAdapter for ChainToPoolAndNetAdapter {
 	fn block_accepted(&self, b: &core::Block, status: BlockStatus, opts: Options) {
-		match status {
-			BlockStatus::Reorg => {
-				warn!(
-					"block_accepted (REORG!): {:?} at {} (diff: {})",
-					b.hash(),
-					b.header.height,
-					b.header.total_difficulty(),
-				);
-			}
-			BlockStatus::Fork => {
-				debug!(
-					"block_accepted (fork?): {:?} at {} (diff: {})",
-					b.hash(),
-					b.header.height,
-					b.header.total_difficulty(),
-				);
-			}
-			BlockStatus::Next => {
-				debug!(
-					"block_accepted (head+): {:?} at {} (diff: {})",
-					b.hash(),
-					b.header.height,
-					b.header.total_difficulty(),
-				);
-			}
-		}
-
 		// not broadcasting blocks received through sync
 		if !opts.contains(chain::Options::SYNC) {
+			for hook in &self.hooks {
+				hook.on_block_accepted(b, &status);
+			}
 			// If we mined the block then we want to broadcast the compact block.
 			// If we received the block from another node then broadcast "header first"
 			// to minimize network traffic.
@@ -713,10 +708,14 @@ impl ChainAdapter for ChainToPoolAndNetAdapter {
 
 impl ChainToPoolAndNetAdapter {
 	/// Construct a ChainToPoolAndNetAdapter instance.
-	pub fn new(tx_pool: Arc<RwLock<pool::TransactionPool>>) -> ChainToPoolAndNetAdapter {
+	pub fn new(
+		tx_pool: Arc<RwLock<pool::TransactionPool>>,
+		hooks: Vec<Box<dyn ChainEvents + Send + Sync>>,
+	) -> ChainToPoolAndNetAdapter {
 		ChainToPoolAndNetAdapter {
 			tx_pool,
 			peers: OneTime::new(),
+			hooks: hooks,
 		}
 	}
 
@@ -738,26 +737,77 @@ impl ChainToPoolAndNetAdapter {
 /// transactions that have been accepted.
 pub struct PoolToNetAdapter {
 	peers: OneTime<Weak<p2p::Peers>>,
+	dandelion_epoch: Arc<RwLock<DandelionEpoch>>,
+}
+
+/// Adapter between the Dandelion monitor and the current Dandelion "epoch".
+pub trait DandelionAdapter: Send + Sync {
+	/// Is the node stemming (or fluffing) transactions in the current epoch?
+	fn is_stem(&self) -> bool;
+
+	/// Is the current Dandelion epoch expired?
+	fn is_expired(&self) -> bool;
+
+	/// Transition to the next Dandelion epoch (new stem/fluff state, select new relay peer).
+	fn next_epoch(&self);
+}
+
+impl DandelionAdapter for PoolToNetAdapter {
+	fn is_stem(&self) -> bool {
+		self.dandelion_epoch.read().is_stem()
+	}
+
+	fn is_expired(&self) -> bool {
+		self.dandelion_epoch.read().is_expired()
+	}
+
+	fn next_epoch(&self) {
+		self.dandelion_epoch.write().next_epoch(&self.peers());
+	}
 }
 
 impl pool::PoolAdapter for PoolToNetAdapter {
-	fn stem_tx_accepted(&self, tx: &core::Transaction) -> Result<(), pool::PoolError> {
-		self.peers()
-			.relay_stem_transaction(tx)
-			.map_err(|_| pool::PoolError::DandelionError)?;
-		Ok(())
-	}
-
 	fn tx_accepted(&self, tx: &core::Transaction) {
 		self.peers().broadcast_transaction(tx);
+	}
+
+	fn stem_tx_accepted(&self, tx: &core::Transaction) -> Result<(), pool::PoolError> {
+		// Take write lock on the current epoch.
+		// We need to be able to update the current relay peer if not currently connected.
+		let mut epoch = self.dandelion_epoch.write();
+
+		// If "stem" epoch attempt to relay the tx to the next Dandelion relay.
+		// Fallback to immediately fluffing the tx if we cannot stem for any reason.
+		// If "fluff" epoch then nothing to do right now (fluff via Dandelion monitor).
+		if epoch.is_stem() {
+			if let Some(peer) = epoch.relay_peer(&self.peers()) {
+				match peer.send_stem_transaction(tx) {
+					Ok(_) => {
+						info!("Stemming this epoch, relaying to next peer.");
+						Ok(())
+					}
+					Err(e) => {
+						error!("Stemming tx failed. Fluffing. {:?}", e);
+						Err(pool::PoolError::DandelionError)
+					}
+				}
+			} else {
+				error!("No relay peer. Fluffing.");
+				Err(pool::PoolError::DandelionError)
+			}
+		} else {
+			info!("Fluff epoch. Aggregating stem tx(s). Will fluff via Dandelion monitor.");
+			Ok(())
+		}
 	}
 }
 
 impl PoolToNetAdapter {
 	/// Create a new pool to net adapter
-	pub fn new() -> PoolToNetAdapter {
+	pub fn new(config: DandelionConfig) -> PoolToNetAdapter {
 		PoolToNetAdapter {
 			peers: OneTime::new(),
+			dandelion_epoch: Arc::new(RwLock::new(DandelionEpoch::new(config))),
 		}
 	}
 

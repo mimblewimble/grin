@@ -22,14 +22,47 @@ use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
 
+use crate::api;
 use crate::chain;
 use crate::common::types::Error;
 use crate::core::core::verifier_cache::VerifierCache;
-use crate::core::{consensus, core, global, ser};
+use crate::core::core::{Output, TxKernel};
+use crate::core::libtx::secp_ser;
+use crate::core::{consensus, core, global};
 use crate::keychain::{ExtKeychain, Identifier, Keychain};
 use crate::pool;
-use crate::util;
-use crate::wallet::{self, BlockFees};
+
+/// Fees in block to use for coinbase amount calculation
+/// (Duplicated from Grin wallet project)
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct BlockFees {
+	/// fees
+	#[serde(with = "secp_ser::string_or_u64")]
+	pub fees: u64,
+	/// height
+	#[serde(with = "secp_ser::string_or_u64")]
+	pub height: u64,
+	/// key id
+	pub key_id: Option<Identifier>,
+}
+
+impl BlockFees {
+	/// return key id
+	pub fn key_id(&self) -> Option<Identifier> {
+		self.key_id.clone()
+	}
+}
+
+/// Response to build a coinbase output.
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct CbData {
+	/// Output
+	pub output: Output,
+	/// Kernel
+	pub kernel: TxKernel,
+	/// Key Id
+	pub key_id: Option<Identifier>,
+}
 
 // Ensure a block suitable for mining is built and returned
 // If a wallet listener URL is not provided the reward will be "burnt"
@@ -65,7 +98,7 @@ pub fn get_block(
 					error!("Chain Error: {}", c);
 				}
 			},
-			self::Error::Wallet(_) => {
+			self::Error::WalletComm(_) => {
 				error!(
 					"Error building new block: Can't connect to wallet listener at {:?}; will retry",
 					wallet_listener_url.as_ref().unwrap()
@@ -190,7 +223,8 @@ fn burn_reward(block_fees: BlockFees) -> Result<(core::Output, core::TxKernel, B
 	warn!("Burning block fees: {:?}", block_fees);
 	let keychain = ExtKeychain::from_random_seed(global::is_floonet())?;
 	let key_id = ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
-	let (out, kernel) = crate::core::libtx::reward::output(&keychain, &key_id, block_fees.fees)?;
+	let (out, kernel) =
+		crate::core::libtx::reward::output(&keychain, &key_id, block_fees.fees, false).unwrap();
 	Ok((out, kernel, block_fees))
 }
 
@@ -206,28 +240,33 @@ fn get_coinbase(
 			return burn_reward(block_fees);
 		}
 		Some(wallet_listener_url) => {
-			let res = wallet::create_coinbase(&wallet_listener_url, &block_fees)?;
-			let out_bin = util::from_hex(res.output)
-				.map_err(|_| Error::General("failed to parse hex output".to_owned()))?;
-			let kern_bin = util::from_hex(res.kernel)
-				.map_err(|_| Error::General("failed to parse hex kernel".to_owned()))?;
-
-			let key_id_bin = util::from_hex(res.key_id)
-				.map_err(|_| Error::General("failed to parse hex key id".to_owned()))?;
-			let output = ser::deserialize(&mut &out_bin[..])
-				.map_err(|_| Error::General("failed to deserialize output".to_owned()))?;
-
-			let kernel = ser::deserialize(&mut &kern_bin[..])
-				.map_err(|_| Error::General("failed to deserialize kernel".to_owned()))?;
-			let key_id = ser::deserialize(&mut &key_id_bin[..])
-				.map_err(|_| Error::General("failed to deserialize key id".to_owned()))?;
+			let res = create_coinbase(&wallet_listener_url, &block_fees)?;
+			let output = res.output;
+			let kernel = res.kernel;
+			let key_id = res.key_id;
 			let block_fees = BlockFees {
-				key_id: Some(key_id),
+				key_id: key_id,
 				..block_fees
 			};
 
 			debug!("get_coinbase: {:?}", block_fees);
 			return Ok((output, kernel, block_fees));
 		}
+	}
+}
+
+/// Call the wallet API to create a coinbase output for the given block_fees.
+/// Will retry based on default "retry forever with backoff" behavior.
+fn create_coinbase(dest: &str, block_fees: &BlockFees) -> Result<CbData, Error> {
+	let url = format!("{}/v1/wallet/foreign/build_coinbase", dest);
+	match api::client::post(&url, None, &block_fees) {
+		Err(e) => {
+			error!(
+				"Failed to get coinbase from {}. Is the wallet listening?",
+				url
+			);
+			Err(Error::WalletComm(format!("{}", e)))
+		}
+		Ok(res) => Ok(res),
 	}
 }

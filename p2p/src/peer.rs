@@ -13,6 +13,7 @@
 // limitations under the License.
 
 use crate::util::{Mutex, RwLock};
+use std::fmt;
 use std::fs::File;
 use std::net::{Shutdown, TcpStream};
 use std::sync::Arc;
@@ -62,6 +63,12 @@ macro_rules! connection {
 			None => return Err(Error::Internal),
 			}
 	};
+}
+
+impl fmt::Debug for Peer {
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+		write!(f, "Peer({:?})", &self.info)
+	}
 }
 
 impl Peer {

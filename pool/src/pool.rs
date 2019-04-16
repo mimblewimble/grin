@@ -23,7 +23,7 @@ use self::core::core::{
 	Block, BlockHeader, BlockSums, Committed, Transaction, TxKernel, Weighting,
 };
 use self::util::RwLock;
-use crate::types::{BlockChain, PoolEntry, PoolEntryState, PoolError};
+use crate::types::{BlockChain, PoolEntry, PoolError};
 use grin_core as core;
 use grin_util as util;
 use std::collections::{HashMap, HashSet};
@@ -139,7 +139,7 @@ impl Pool {
 		// Verify these txs produce an aggregated tx below max tx weight.
 		// Return a vec of all the valid txs.
 		let txs = self.validate_raw_txs(
-			tx_buckets,
+			&tx_buckets,
 			None,
 			&header,
 			Weighting::AsLimitedTransaction { max_weight },
@@ -165,33 +165,6 @@ impl Pool {
 		tx.validate(Weighting::NoLimit, self.verifier_cache.clone())?;
 
 		Ok(Some(tx))
-	}
-
-	pub fn select_valid_transactions(
-		&self,
-		txs: Vec<Transaction>,
-		extra_tx: Option<Transaction>,
-		header: &BlockHeader,
-	) -> Result<Vec<Transaction>, PoolError> {
-		let valid_txs = self.validate_raw_txs(txs, extra_tx, header, Weighting::NoLimit)?;
-		Ok(valid_txs)
-	}
-
-	pub fn get_transactions_in_state(&self, state: PoolEntryState) -> Vec<Transaction> {
-		self.entries
-			.iter()
-			.filter(|x| x.state == state)
-			.map(|x| x.tx.clone())
-			.collect::<Vec<_>>()
-	}
-
-	// Transition the specified pool entries to the new state.
-	pub fn transition_to_state(&mut self, txs: &[Transaction], state: PoolEntryState) {
-		for x in &mut self.entries {
-			if txs.contains(&x.tx) {
-				x.state = state;
-			}
-		}
 	}
 
 	// Aggregate this new tx with all existing txs in the pool.
@@ -267,9 +240,9 @@ impl Pool {
 		Ok(new_sums)
 	}
 
-	fn validate_raw_txs(
+	pub fn validate_raw_txs(
 		&self,
-		txs: Vec<Transaction>,
+		txs: &[Transaction],
 		extra_tx: Option<Transaction>,
 		header: &BlockHeader,
 		weighting: Weighting,
@@ -289,7 +262,7 @@ impl Pool {
 
 			// We know the tx is valid if the entire aggregate tx is valid.
 			if self.validate_raw_tx(&agg_tx, header, weighting).is_ok() {
-				valid_txs.push(tx);
+				valid_txs.push(tx.clone());
 			}
 		}
 

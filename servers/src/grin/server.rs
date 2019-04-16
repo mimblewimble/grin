@@ -31,6 +31,7 @@ use crate::chain;
 use crate::common::adapters::{
 	ChainToPoolAndNetAdapter, NetToChainAdapter, PoolToChainAdapter, PoolToNetAdapter,
 };
+use crate::common::hooks::{init_chain_hooks, init_net_hooks};
 use crate::common::stats::{DiffBlock, DiffStats, PeerStats, ServerStateInfo, ServerStats};
 use crate::common::types::{Error, ServerConfig, StratumServerConfig, SyncState, SyncStatus};
 use crate::core::core::hash::{Hashed, ZERO_HASH};
@@ -42,7 +43,6 @@ use crate::mining::test_miner::Miner;
 use crate::p2p;
 use crate::p2p::types::PeerAddr;
 use crate::pool;
-use crate::store;
 use crate::util::file::get_first_line;
 use crate::util::{Mutex, RwLock, StopState};
 
@@ -154,7 +154,7 @@ impl Server {
 		let verifier_cache = Arc::new(RwLock::new(LruVerifierCache::new()));
 
 		let pool_adapter = Arc::new(PoolToChainAdapter::new());
-		let pool_net_adapter = Arc::new(PoolToNetAdapter::new());
+		let pool_net_adapter = Arc::new(PoolToNetAdapter::new(config.dandelion_config.clone()));
 		let tx_pool = Arc::new(RwLock::new(pool::TransactionPool::new(
 			config.pool_config.clone(),
 			pool_adapter.clone(),
@@ -164,7 +164,10 @@ impl Server {
 
 		let sync_state = Arc::new(SyncState::new());
 
-		let chain_adapter = Arc::new(ChainToPoolAndNetAdapter::new(tx_pool.clone()));
+		let chain_adapter = Arc::new(ChainToPoolAndNetAdapter::new(
+			tx_pool.clone(),
+			init_chain_hooks(&config),
+		));
 
 		let genesis = match config.chain_type {
 			global::ChainTypes::AutomatedTesting => genesis::genesis_dev(),
@@ -175,10 +178,8 @@ impl Server {
 
 		info!("Starting server, genesis block: {}", genesis.hash());
 
-		let db_env = Arc::new(store::new_env(config.db_root.clone()));
 		let shared_chain = Arc::new(chain::Chain::init(
 			config.db_root.clone(),
-			db_env,
 			chain_adapter.clone(),
 			genesis.clone(),
 			pow::verify_size,
@@ -195,21 +196,19 @@ impl Server {
 			tx_pool.clone(),
 			verifier_cache.clone(),
 			config.clone(),
+			init_net_hooks(&config),
 		));
 
-		let peer_db_env = Arc::new(store::new_named_env(
-			config.db_root.clone(),
-			"peer".into(),
-			config.p2p_config.peer_max_count,
-		));
 		let p2p_server = Arc::new(p2p::Server::new(
-			peer_db_env,
+			&config.db_root,
 			config.p2p_config.capabilities,
 			config.p2p_config.clone(),
 			net_adapter.clone(),
 			genesis.hash(),
 			stop_state.clone(),
 		)?);
+
+		// Initialize various adapters with our dynamic set of connected peers.
 		chain_adapter.init(p2p_server.peers.clone());
 		pool_net_adapter.init(p2p_server.peers.clone());
 		net_adapter.init(p2p_server.peers.clone());
@@ -235,7 +234,6 @@ impl Server {
 			seed::connect_and_monitor(
 				p2p_server.clone(),
 				config.p2p_config.capabilities,
-				config.dandelion_config.clone(),
 				seeder,
 				config.p2p_config.peers_preferred.clone(),
 				stop_state.clone(),
@@ -289,6 +287,7 @@ impl Server {
 		dandelion_monitor::monitor_transactions(
 			config.dandelion_config.clone(),
 			tx_pool.clone(),
+			pool_net_adapter.clone(),
 			verifier_cache.clone(),
 			stop_state.clone(),
 		);
@@ -339,12 +338,12 @@ impl Server {
 			self.chain.clone(),
 			self.tx_pool.clone(),
 			self.verifier_cache.clone(),
+			self.state_info.stratum_stats.clone(),
 		);
-		let stratum_stats = self.state_info.stratum_stats.clone();
 		let _ = thread::Builder::new()
 			.name("stratum_server".to_string())
 			.spawn(move || {
-				stratum_server.run_loop(stratum_stats, edge_bits as u32, proof_size, sync_state);
+				stratum_server.run_loop(edge_bits as u32, proof_size, sync_state);
 			});
 	}
 
