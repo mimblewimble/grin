@@ -177,26 +177,29 @@ fn wallet_config_owner_api_include_foreign() {
 	base_config.name = String::from("test_owner_api_include_foreign");
 	base_config.start_wallet = true;
 
-	// Start up the wallet owner API with the default config, and make sure
-	// we get an error when trying to hit the coinbase endpoint
-	let mut default_config = base_config.clone();
-	default_config.owner_port = 20005;
-	let _ = thread::spawn(move || {
-		let mut default_owner = LocalServerContainer::new(default_config).unwrap();
-		default_owner.run_owner();
-	});
-	thread::sleep(time::Duration::from_millis(1000));
-	assert!(wallet::create_coinbase("http://127.0.0.1:20005", &block_fees).is_err());
+	{
+		// Start up the wallet owner API with the default config, and make sure
+		// we get an error when trying to hit the coinbase endpoint
+		let mut default_config = base_config.clone();
+		default_config.owner_port = 20005;
+		let _ = thread::spawn(move || {
+			let mut default_owner = LocalServerContainer::new(default_config).unwrap();
+			default_owner.run_owner();
+		});
+		thread::sleep(time::Duration::from_millis(1000));
+		assert!(wallet::create_coinbase("http://127.0.0.1:20005", &block_fees).is_err());
 
-	// Start up the wallet owner API with the owner_api_include_foreign setting set,
-	// and confirm that we can hit the endpoint
-	let mut foreign_config = base_config.clone();
-	foreign_config.owner_port = 20006;
-	foreign_config.owner_api_include_foreign = true;
-	let _ = thread::spawn(move || {
-		let mut owner_with_foreign = LocalServerContainer::new(foreign_config).unwrap();
-		owner_with_foreign.run_owner();
-	});
-	thread::sleep(time::Duration::from_millis(1000));
-	assert!(wallet::create_coinbase("http://127.0.0.1:20006", &block_fees).is_ok());
+		// Start up the wallet owner API with the owner_api_include_foreign setting set,
+		// and confirm that we can hit the endpoint
+		let mut foreign_config = base_config.clone();
+		foreign_config.owner_port = 20006;
+		foreign_config.owner_api_include_foreign = true;
+		let _ = thread::spawn(move || {
+			let mut owner_with_foreign = LocalServerContainer::new(foreign_config).unwrap();
+			owner_with_foreign.run_owner();
+		});
+		thread::sleep(time::Duration::from_millis(1000));
+		assert!(wallet::create_coinbase("http://127.0.0.1:20006", &block_fees).is_ok());
+	}
+	framework::clean_all_output(test_name_dir);
 }
