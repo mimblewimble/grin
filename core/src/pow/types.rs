@@ -215,7 +215,7 @@ impl<'de> de::Visitor<'de> for DiffVisitor {
 }
 
 /// Block header information pertaining to the proof of work
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct ProofOfWork {
 	/// Total accumulated difficulty since genesis block
 	pub total_difficulty: Difficulty,
@@ -316,7 +316,7 @@ impl ProofOfWork {
 /// them at their exact bit size. The resulting bit sequence is padded to be
 /// byte-aligned.
 ///
-#[derive(Clone, PartialOrd, PartialEq)]
+#[derive(Clone, PartialOrd, PartialEq, Serialize)]
 pub struct Proof {
 	/// Power of 2 used for the size of the cuckoo graph
 	pub edge_bits: u8,

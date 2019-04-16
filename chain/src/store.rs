@@ -18,7 +18,6 @@ use crate::core::consensus::HeaderInfo;
 use crate::core::core::hash::{Hash, Hashed};
 use crate::core::core::{Block, BlockHeader, BlockSums};
 use crate::core::pow::Difficulty;
-use crate::lmdb;
 use crate::types::Tip;
 use crate::util::secp::pedersen::Commitment;
 use croaring::Bitmap;
@@ -45,8 +44,8 @@ pub struct ChainStore {
 
 impl ChainStore {
 	/// Create new chain store
-	pub fn new(db_env: Arc<lmdb::Environment>) -> Result<ChainStore, Error> {
-		let db = store::Store::open(db_env, STORE_SUBPATH);
+	pub fn new(db_root: &str) -> Result<ChainStore, Error> {
+		let db = store::Store::new(db_root, None, Some(STORE_SUBPATH.clone()), None)?;
 		Ok(ChainStore { db })
 	}
 }

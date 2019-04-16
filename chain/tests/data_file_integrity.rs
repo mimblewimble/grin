@@ -26,7 +26,6 @@ use chrono::Duration;
 use grin_chain as chain;
 use grin_core as core;
 use grin_keychain as keychain;
-use grin_store as store;
 use grin_util as util;
 use std::fs;
 use std::sync::Arc;
@@ -41,10 +40,8 @@ fn setup(dir_name: &str) -> Chain {
 	global::set_mining_mode(ChainTypes::AutomatedTesting);
 	let genesis_block = pow::mine_genesis_block().unwrap();
 	let verifier_cache = Arc::new(RwLock::new(LruVerifierCache::new()));
-	let db_env = Arc::new(store::new_env(dir_name.to_string()));
 	chain::Chain::init(
 		dir_name.to_string(),
-		db_env,
 		Arc::new(NoopAdapter {}),
 		genesis_block,
 		pow::verify_size,
@@ -57,10 +54,8 @@ fn setup(dir_name: &str) -> Chain {
 
 fn reload_chain(dir_name: &str) -> Chain {
 	let verifier_cache = Arc::new(RwLock::new(LruVerifierCache::new()));
-	let db_env = Arc::new(store::new_env(dir_name.to_string()));
 	chain::Chain::init(
 		dir_name.to_string(),
-		db_env,
 		Arc::new(NoopAdapter {}),
 		genesis::genesis_dev(),
 		pow::verify_size,
@@ -83,7 +78,7 @@ fn data_files() {
 			let prev = chain.head_header().unwrap();
 			let next_header_info = consensus::next_difficulty(1, chain.difficulty_iter().unwrap());
 			let pk = ExtKeychainPath::new(1, n as u32, 0, 0, 0).to_identifier();
-			let reward = libtx::reward::output(&keychain, &pk, 0).unwrap();
+			let reward = libtx::reward::output(&keychain, &pk, 0, false).unwrap();
 			let mut b =
 				core::core::Block::new(&prev, vec![], next_header_info.clone().difficulty, reward)
 					.unwrap();
@@ -161,7 +156,7 @@ fn _prepare_block_nosum(
 	let key_id = ExtKeychainPath::new(1, diff as u32, 0, 0, 0).to_identifier();
 
 	let fees = txs.iter().map(|tx| tx.fee()).sum();
-	let reward = libtx::reward::output(kc, &key_id, fees).unwrap();
+	let reward = libtx::reward::output(kc, &key_id, fees, false).unwrap();
 	let mut b = match core::core::Block::new(
 		prev,
 		txs.into_iter().cloned().collect(),

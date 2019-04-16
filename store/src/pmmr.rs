@@ -18,7 +18,7 @@ use std::{fs, io, time};
 use crate::core::core::hash::{Hash, Hashed};
 use crate::core::core::pmmr::{self, family, Backend};
 use crate::core::core::BlockHeader;
-use crate::core::ser::PMMRable;
+use crate::core::ser::{FixedLength, PMMRable};
 use crate::leaf_set::LeafSet;
 use crate::prune_list::PruneList;
 use crate::types::DataFile;
@@ -29,6 +29,7 @@ const PMMR_HASH_FILE: &str = "pmmr_hash.bin";
 const PMMR_DATA_FILE: &str = "pmmr_data.bin";
 const PMMR_LEAF_FILE: &str = "pmmr_leaf.bin";
 const PMMR_PRUN_FILE: &str = "pmmr_prun.bin";
+const PMMR_SIZE_FILE: &str = "pmmr_size.bin";
 const REWIND_FILE_CLEANUP_DURATION_SECONDS: u64 = 60 * 60 * 24; // 24 hours as seconds
 
 /// The list of PMMR_Files for internal purposes
@@ -64,13 +65,8 @@ impl<T: PMMRable> Backend<T> for PMMRBackend<T> {
 	/// Add the new leaf pos to our leaf_set if this is a prunable MMR.
 	#[allow(unused_variables)]
 	fn append(&mut self, data: &T, hashes: Vec<Hash>) -> Result<(), String> {
-		if self.prunable {
-			let shift = self.prune_list.get_total_shift();
-			let position = self.hash_file.size_unsync() + shift + 1;
-			self.leaf_set.add(position);
-		}
-
-		self.data_file
+		let size = self
+			.data_file
 			.append(&data.as_elmt())
 			.map_err(|e| format!("Failed to append data to file. {}", e))?;
 
@@ -79,6 +75,14 @@ impl<T: PMMRable> Backend<T> for PMMRBackend<T> {
 				.append(h)
 				.map_err(|e| format!("Failed to append hash to file. {}", e))?;
 		}
+
+		if self.prunable {
+			// (Re)calculate the latest pos given updated size of data file
+			// and the total leaf_shift, and add to our leaf_set.
+			let pos = pmmr::insertion_to_pmmr_index(size + self.prune_list.get_total_leaf_shift());
+			self.leaf_set.add(pos);
+		}
+
 		Ok(())
 	}
 
@@ -91,6 +95,9 @@ impl<T: PMMRable> Backend<T> for PMMRBackend<T> {
 	}
 
 	fn get_data_from_file(&self, position: u64) -> Option<T::E> {
+		if !pmmr::is_leaf(position) {
+			return None;
+		}
 		if self.is_compacted(position) {
 			return None;
 		}
@@ -194,11 +201,26 @@ impl<T: PMMRable> PMMRBackend<T> {
 	pub fn new<P: AsRef<Path>>(
 		data_dir: P,
 		prunable: bool,
+		fixed_size: bool,
 		header: Option<&BlockHeader>,
 	) -> io::Result<PMMRBackend<T>> {
 		let data_dir = data_dir.as_ref();
-		let hash_file = DataFile::open(&data_dir.join(PMMR_HASH_FILE))?;
-		let data_file = DataFile::open(&data_dir.join(PMMR_DATA_FILE))?;
+
+		// We either have a fixed size *or* a path to a file for tracking sizes.
+		let (elmt_size, size_path) = if fixed_size {
+			(Some(T::E::LEN as u16), None)
+		} else {
+			(None, Some(data_dir.join(PMMR_SIZE_FILE)))
+		};
+
+		// Hash file is always "fixed size" and we use 32 bytes per hash.
+		let hash_file =
+			DataFile::open(&data_dir.join(PMMR_HASH_FILE), None, Some(Hash::LEN as u16))?;
+		let data_file = DataFile::open(
+			&data_dir.join(PMMR_DATA_FILE),
+			size_path.as_ref(),
+			elmt_size,
+		)?;
 
 		let leaf_set_path = data_dir.join(PMMR_LEAF_FILE);
 
@@ -219,8 +241,8 @@ impl<T: PMMRable> PMMRBackend<T> {
 		Ok(PMMRBackend {
 			data_dir: data_dir.to_path_buf(),
 			prunable,
-			hash_file: hash_file,
-			data_file: data_file,
+			hash_file,
+			data_file,
 			leaf_set,
 			prune_list,
 		})
@@ -238,12 +260,10 @@ impl<T: PMMRable> PMMRBackend<T> {
 		self.is_pruned(pos) && !self.is_pruned_root(pos)
 	}
 
-	/// Number of elements in the PMMR stored by this backend. Only produces the
+	/// Number of hashes in the PMMR stored by this backend. Only produces the
 	/// fully sync'd size.
 	pub fn unpruned_size(&self) -> u64 {
-		let total_shift = self.prune_list.get_total_shift();
-		let sz = self.hash_file.size();
-		sz + total_shift
+		self.hash_size() + self.prune_list.get_total_shift()
 	}
 
 	/// Number of elements in the underlying stored data. Extremely dependent on
@@ -268,7 +288,7 @@ impl<T: PMMRable> PMMRBackend<T> {
 			.map_err(|e| {
 				io::Error::new(
 					io::ErrorKind::Interrupted,
-					format!("Could not write to state storage, disk full? {:?}", e),
+					format!("Could not sync pmmr to disk: {:?}", e),
 				)
 			})
 	}
@@ -300,24 +320,18 @@ impl<T: PMMRable> PMMRBackend<T> {
 	pub fn check_compact(&mut self, cutoff_pos: u64, rewind_rm_pos: &Bitmap) -> io::Result<bool> {
 		assert!(self.prunable, "Trying to compact a non-prunable PMMR");
 
-		// Paths for tmp hash and data files.
-		let tmp_prune_file_hash =
-			format!("{}.hashprune", self.data_dir.join(PMMR_HASH_FILE).display());
-		let tmp_prune_file_data =
-			format!("{}.dataprune", self.data_dir.join(PMMR_DATA_FILE).display());
 		// Calculate the sets of leaf positions and node positions to remove based
 		// on the cutoff_pos provided.
 		let (leaves_removed, pos_to_rm) = self.pos_to_rm(cutoff_pos, rewind_rm_pos);
 
 		// 1. Save compact copy of the hash file, skipping removed data.
 		{
-			let off_to_rm = map_vec!(pos_to_rm, |pos| {
+			let pos_to_rm = map_vec!(pos_to_rm, |pos| {
 				let shift = self.prune_list.get_shift(pos.into());
-				pos as u64 - 1 - shift
+				pos as u64 - shift
 			});
 
-			self.hash_file
-				.save_prune(&tmp_prune_file_hash, &off_to_rm)?;
+			self.hash_file.save_prune(&pos_to_rm)?;
 		}
 
 		// 2. Save compact copy of the data file, skipping removed leaves.
@@ -328,14 +342,13 @@ impl<T: PMMRable> PMMRBackend<T> {
 				.map(|x| x as u64)
 				.collect::<Vec<_>>();
 
-			let off_to_rm = map_vec!(leaf_pos_to_rm, |&pos| {
+			let pos_to_rm = map_vec!(leaf_pos_to_rm, |&pos| {
 				let flat_pos = pmmr::n_leaves(pos);
 				let shift = self.prune_list.get_leaf_shift(pos);
-				(flat_pos - 1 - shift)
+				flat_pos - shift
 			});
 
-			self.data_file
-				.save_prune(&tmp_prune_file_data, &off_to_rm)?;
+			self.data_file.save_prune(&pos_to_rm)?;
 		}
 
 		// 3. Update the prune list and write to disk.
@@ -345,16 +358,12 @@ impl<T: PMMRable> PMMRBackend<T> {
 			}
 			self.prune_list.flush()?;
 		}
-		// 4. Rename the compact copy of hash file and reopen it.
-		self.hash_file.replace(Path::new(&tmp_prune_file_hash))?;
 
-		// 5. Rename the compact copy of the data file and reopen it.
-		self.data_file.replace(Path::new(&tmp_prune_file_data))?;
+		// 4. Write the leaf_set to disk.
+		// Optimize the bitmap storage in the process.
+		self.leaf_set.flush()?;
 
-		// 6. Write the leaf_set to disk.
-		self.sync_leaf_set()?;
-
-		// 7. cleanup rewind files
+		// 5. cleanup rewind files
 		self.clean_rewind_files()?;
 
 		Ok(true)

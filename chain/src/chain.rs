@@ -24,7 +24,6 @@ use crate::core::core::{
 use crate::core::global;
 use crate::core::pow;
 use crate::error::{Error, ErrorKind};
-use crate::lmdb;
 use crate::pipe;
 use crate::store;
 use crate::txhashset;
@@ -162,7 +161,6 @@ impl Chain {
 	/// based on the genesis block if necessary.
 	pub fn init(
 		db_root: String,
-		db_env: Arc<lmdb::Environment>,
 		adapter: Arc<dyn ChainAdapter + Send + Sync>,
 		genesis: Block,
 		pow_verifier: fn(&BlockHeader) -> Result<(), pow::Error>,
@@ -178,7 +176,7 @@ impl Chain {
 			return Err(ErrorKind::Stopped.into());
 		}
 
-		let store = Arc::new(store::ChainStore::new(db_env)?);
+		let store = Arc::new(store::ChainStore::new(&db_root)?);
 
 		// open the txhashset, creating a new one if necessary
 		let mut txhashset = txhashset::TxHashSet::open(db_root.clone(), store.clone(), None)?;

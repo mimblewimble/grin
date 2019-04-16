@@ -20,7 +20,6 @@ use std::path::PathBuf;
 
 use crate::servers::ServerConfig;
 use crate::util::LoggingConfig;
-use crate::wallet::WalletConfig;
 
 /// Error type wrapping config errors.
 #[derive(Debug)]
@@ -92,25 +91,6 @@ pub struct ConfigMembers {
 	/// Server config
 	#[serde(default)]
 	pub server: ServerConfig,
-	/// Logging config
-	pub logging: Option<LoggingConfig>,
-}
-
-/// Wallet should be split into a separate configuration file
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
-pub struct GlobalWalletConfig {
-	/// Keep track of the file we've read
-	pub config_file_path: Option<PathBuf>,
-	/// Wallet members
-	pub members: Option<GlobalWalletConfigMembers>,
-}
-
-/// Wallet internal members
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
-pub struct GlobalWalletConfigMembers {
-	/// Wallet configuration
-	#[serde(default)]
-	pub wallet: WalletConfig,
 	/// Logging config
 	pub logging: Option<LoggingConfig>,
 }
