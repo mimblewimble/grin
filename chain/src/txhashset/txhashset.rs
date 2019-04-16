@@ -1220,7 +1220,8 @@ impl<'a> Extension<'a> {
 	}
 
 	/// Validate the txhashset state against the provided block header.
-	/// A "fast validation" will skip rangeproof verification and kernel signature verification.
+	/// A "fast validation" will skip rangeproof verification.
+	/// Note: We have already verified the full set of kernels at this point.
 	pub fn validate(
 		&self,
 		fast_validation: bool,
@@ -1239,13 +1240,9 @@ impl<'a> Extension<'a> {
 		// sum of unspent outputs minus total supply.
 		let (output_sum, kernel_sum) = self.validate_kernel_sums()?;
 
-		// These are expensive verification step (skipped for "fast validation").
 		if !fast_validation {
 			// Verify the rangeproof associated with each unspent output.
 			self.verify_rangeproofs(status)?;
-
-			// Verify all the kernel signatures.
-			self.verify_kernel_signatures(status)?;
 		}
 
 		Ok((output_sum, kernel_sum))
@@ -1311,43 +1308,6 @@ impl<'a> Extension<'a> {
 			self.rproof_pmmr.unpruned_size(),
 			self.kernel_pmmr.unpruned_size(),
 		)
-	}
-
-	fn verify_kernel_signatures(&self, status: &dyn TxHashsetWriteStatus) -> Result<(), Error> {
-		let now = Instant::now();
-
-		let mut kern_count = 0;
-		let total_kernels = pmmr::n_leaves(self.kernel_pmmr.unpruned_size());
-		for n in 1..self.kernel_pmmr.unpruned_size() + 1 {
-			if pmmr::is_leaf(n) {
-				let kernel = self
-					.kernel_pmmr
-					.get_data(n)
-					.ok_or::<Error>(ErrorKind::TxKernelNotFound.into())?;
-
-				kernel.verify()?;
-				kern_count += 1;
-
-				if kern_count % 20 == 0 {
-					status.on_validation(kern_count, total_kernels, 0, 0);
-				}
-				if kern_count % 1_000 == 0 {
-					debug!(
-						"txhashset: verify_kernel_signatures: verified {} signatures",
-						kern_count,
-					);
-				}
-			}
-		}
-
-		debug!(
-			"txhashset: verified {} kernel signatures, pmmr size {}, took {}s",
-			kern_count,
-			self.kernel_pmmr.unpruned_size(),
-			now.elapsed().as_secs(),
-		);
-
-		Ok(())
 	}
 
 	fn verify_rangeproofs(&self, status: &dyn TxHashsetWriteStatus) -> Result<(), Error> {

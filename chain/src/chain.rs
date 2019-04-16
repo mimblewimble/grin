@@ -722,7 +722,40 @@ impl Chain {
 		header: &BlockHeader,
 		txhashset: &txhashset::TxHashSet,
 	) -> Result<(), Error> {
-		debug!("validate_kernel_history: rewinding and validating kernel history (readonly)");
+		debug!("validate_kernel_history: about to validate kernels via temporary view");
+
+		let mut kernel_data =
+			txhashset::rewindable_kernel_view(&txhashset, |view| view.kernel_data_read())?;
+
+		{
+			let tempdir = tempfile::tempdir()?;
+			let mut backend: PMMRBackend<TxKernel> = PMMRBackend::new(tempdir.path(), false, None)?;
+			let mut kernel_view = RebuildableKernelView::new(&mut backend);
+
+			// Rebuilding the kernel view will verify the following -
+			// * all kernel signatures
+			// * kernel MMR root matches for each historical header.
+			kernel_view.rebuild(&mut kernel_data, txhashset, header)?;
+		}
+
+		Ok(())
+	}
+
+	// For completeness we also (re)validate the kernel history by rewinding the kernel MMR
+	// in the txhashset.
+	// The call to validate_kernel_history above rebuilds the kernel MMR but we do not yet
+	// use this rebuilt kernel MMR (we simply discard it after validation).
+	// This is only a temprorary solution and can be simplified when we split kernels sync
+	// and txhashset sync.
+	// This prevents a malicious peer sending a kernel MMR where the data file and hash file
+	// are inconsistent. Once the kernel sync is fully implemented we will only receive a data
+	// file and this will no longer be required.
+	fn validate_kernel_history_via_rewind(
+		&self,
+		header: &BlockHeader,
+		txhashset: &txhashset::TxHashSet,
+	) -> Result<(), Error> {
+		debug!("validate_kernel_history_via_rewind: about to validate kernels via rewind");
 
 		let mut count = 0;
 		let mut current = header.clone();
@@ -740,26 +773,6 @@ impl Chain {
 			"validate_kernel_history: validated kernel root on {} headers",
 			count,
 		);
-
-		Ok(())
-	}
-
-	fn validate_kernel_history_again(
-		&self,
-		header: &BlockHeader,
-		txhashset: &txhashset::TxHashSet,
-	) -> Result<(), Error> {
-		let mut kernel_data =
-			txhashset::rewindable_kernel_view(&txhashset, |view| view.kernel_data_read())?;
-
-		let tempdir = tempfile::tempdir()?;
-		let mut backend: PMMRBackend<TxKernel> = PMMRBackend::new(tempdir.path(), false, None)?;
-		let mut kernel_view = RebuildableKernelView::new(&mut backend);
-
-		// Rebuilding the kernel view will verify the following -
-		// * all kernel signatures
-		// * kernel MMR root matches for each historical header
-		kernel_view.rebuild(&mut kernel_data, txhashset, header)?;
 
 		Ok(())
 	}
@@ -949,12 +962,19 @@ impl Chain {
 		// We must rebuild the header MMR ourselves based on the headers in our db.
 		self.rebuild_header_mmr(&Tip::from_header(&header), &mut txhashset)?;
 
-		// Validate the full kernel history (kernel MMR root for every block header).
-		self.validate_kernel_history(&header, &txhashset)?;
-		self.validate_kernel_history_again(&header, &txhashset)?;
+		// Validate the full kernel history -
+		//  * all kernel signatures
+		//  * kernel MMR root at each block height
+		{
+			// Validate kernel MMR roots and all kernel signatures by rebuilding the kernel
+			// MMR from the kernel data file.
+			self.validate_kernel_history(&header, &txhashset)?;
 
-		// all good, prepare a new batch and update all the required records
-		debug!("txhashset_write: rewinding a 2nd time (writeable)");
+			// (Re)validate kernel MMR roots here against the kernel MMR in the txhashset.
+			// Ensures a malicious peer does not send us inconsistent data and hash files.
+			// This will not be necessary once kernel sync is a separate payload.
+			self.validate_kernel_history_via_rewind(&header, &txhashset)?;
+		}
 
 		let mut batch = self.store.batch()?;
 
