@@ -46,7 +46,7 @@ fn test_coinbase_maturity() {
 	let verifier_cache = Arc::new(RwLock::new(LruVerifierCache::new()));
 
 	{
-			let chain = chain::Chain::init(
+		let chain = chain::Chain::init(
 			".grin".to_string(),
 			Arc::new(NoopAdapter {}),
 			genesis_block,
@@ -146,7 +146,8 @@ fn test_coinbase_maturity() {
 
 			let next_header_info = consensus::next_difficulty(1, chain.difficulty_iter().unwrap());
 			let reward = libtx::reward::output(&keychain, &key_id1, 0, false).unwrap();
-			let mut block = core::core::Block::new(&prev, vec![], Difficulty::min(), reward).unwrap();
+			let mut block =
+				core::core::Block::new(&prev, vec![], Difficulty::min(), reward).unwrap();
 
 			block.header.timestamp = prev.timestamp + Duration::seconds(60);
 			block.header.pow.secondary_scaling = next_header_info.secondary_scaling;
@@ -227,7 +228,8 @@ fn test_coinbase_maturity() {
 				let reward = libtx::reward::output(&keychain, &pk, 0, false).unwrap();
 				let mut block =
 					core::core::Block::new(&prev, vec![], Difficulty::min(), reward).unwrap();
-				let next_header_info = consensus::next_difficulty(1, chain.difficulty_iter().unwrap());
+				let next_header_info =
+					consensus::next_difficulty(1, chain.difficulty_iter().unwrap());
 				block.header.timestamp = prev.timestamp + Duration::seconds(60);
 				block.header.pow.secondary_scaling = next_header_info.secondary_scaling;
 

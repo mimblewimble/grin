@@ -177,7 +177,6 @@ fn test_transaction_pool_block_reconciliation() {
 
 		// And reconcile the pool with this latest block.
 		{
-
 			let mut write_pool = pool.write();
 			write_pool.reconcile_block(&block).unwrap();
 
