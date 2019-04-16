@@ -23,6 +23,7 @@ use std::sync::Arc;
 
 use chrono::prelude::*;
 
+use crate::chain;
 use crate::core::core;
 use crate::core::core::hash::Hash;
 use crate::core::global;
@@ -63,6 +64,7 @@ pub enum Error {
 	ConnectionClose,
 	Timeout,
 	Store(grin_store::Error),
+	Chain(chain::Error),
 	PeerWithSelf,
 	NoDandelionRelay,
 	ProtocolMismatch {
@@ -86,6 +88,11 @@ impl From<ser::Error> for Error {
 impl From<grin_store::Error> for Error {
 	fn from(e: grin_store::Error) -> Error {
 		Error::Store(e)
+	}
+}
+impl From<chain::Error> for Error {
+	fn from(e: chain::Error) -> Error {
+		Error::Chain(e)
 	}
 }
 impl From<io::Error> for Error {
@@ -358,6 +365,7 @@ pub struct PeerLiveInfo {
 	pub height: u64,
 	pub last_seen: DateTime<Utc>,
 	pub stuck_detector: DateTime<Utc>,
+	pub first_seen: DateTime<Utc>,
 }
 
 /// General information about a connected peer that's useful to other modules.
@@ -369,6 +377,18 @@ pub struct PeerInfo {
 	pub addr: PeerAddr,
 	pub direction: Direction,
 	pub live_info: Arc<RwLock<PeerLiveInfo>>,
+}
+
+impl PeerLiveInfo {
+	pub fn new(difficulty: Difficulty) -> PeerLiveInfo {
+		PeerLiveInfo {
+			total_difficulty: difficulty,
+			height: 0,
+			first_seen: Utc::now(),
+			last_seen: Utc::now(),
+			stuck_detector: Utc::now(),
+		}
+	}
 }
 
 impl PeerInfo {
@@ -389,6 +409,11 @@ impl PeerInfo {
 	/// Time of last_seen for this peer (via ping/pong).
 	pub fn last_seen(&self) -> DateTime<Utc> {
 		self.live_info.read().last_seen
+	}
+
+	/// Time of first_seen for this peer.
+	pub fn first_seen(&self) -> DateTime<Utc> {
+		self.live_info.read().first_seen
 	}
 
 	/// Update the total_difficulty, height and last_seen of the peer.
@@ -447,37 +472,51 @@ pub struct TxHashSetRead {
 /// other things.
 pub trait ChainAdapter: Sync + Send {
 	/// Current total difficulty on our chain
-	fn total_difficulty(&self) -> Difficulty;
+	fn total_difficulty(&self) -> Result<Difficulty, chain::Error>;
 
 	/// Current total height
-	fn total_height(&self) -> u64;
+	fn total_height(&self) -> Result<u64, chain::Error>;
 
 	/// A valid transaction has been received from one of our peers
-	fn transaction_received(&self, tx: core::Transaction, stem: bool);
+	fn transaction_received(&self, tx: core::Transaction, stem: bool)
+		-> Result<bool, chain::Error>;
 
 	fn get_transaction(&self, kernel_hash: Hash) -> Option<core::Transaction>;
 
-	fn tx_kernel_received(&self, kernel_hash: Hash, addr: PeerAddr);
+	fn tx_kernel_received(&self, kernel_hash: Hash, addr: PeerAddr) -> Result<bool, chain::Error>;
 
 	/// A block has been received from one of our peers. Returns true if the
 	/// block could be handled properly and is not deemed defective by the
 	/// chain. Returning false means the block will never be valid and
 	/// may result in the peer being banned.
-	fn block_received(&self, b: core::Block, addr: PeerAddr, was_requested: bool) -> bool;
+	fn block_received(
+		&self,
+		b: core::Block,
+		addr: PeerAddr,
+		was_requested: bool,
+	) -> Result<bool, chain::Error>;
 
-	fn compact_block_received(&self, cb: core::CompactBlock, addr: PeerAddr) -> bool;
+	fn compact_block_received(
+		&self,
+		cb: core::CompactBlock,
+		addr: PeerAddr,
+	) -> Result<bool, chain::Error>;
 
-	fn header_received(&self, bh: core::BlockHeader, addr: PeerAddr) -> bool;
+	fn header_received(&self, bh: core::BlockHeader, addr: PeerAddr) -> Result<bool, chain::Error>;
 
 	/// A set of block header has been received, typically in response to a
 	/// block
 	/// header request.
-	fn headers_received(&self, bh: &[core::BlockHeader], addr: PeerAddr) -> bool;
+	fn headers_received(
+		&self,
+		bh: &[core::BlockHeader],
+		addr: PeerAddr,
+	) -> Result<bool, chain::Error>;
 
 	/// Finds a list of block headers based on the provided locator. Tries to
 	/// identify the common chain and gets the headers that follow it
 	/// immediately.
-	fn locate_headers(&self, locator: &[Hash]) -> Vec<core::BlockHeader>;
+	fn locate_headers(&self, locator: &[Hash]) -> Result<Vec<core::BlockHeader>, chain::Error>;
 
 	/// Gets a full block by its hash.
 	fn get_block(&self, h: Hash) -> Option<core::Block>;
@@ -505,7 +544,12 @@ pub trait ChainAdapter: Sync + Send {
 	/// If we're willing to accept that new state, the data stream will be
 	/// read as a zip file, unzipped and the resulting state files should be
 	/// rewound to the provided indexes.
-	fn txhashset_write(&self, h: Hash, txhashset_data: File, peer_addr: PeerAddr) -> bool;
+	fn txhashset_write(
+		&self,
+		h: Hash,
+		txhashset_data: File,
+		peer_addr: PeerAddr,
+	) -> Result<bool, chain::Error>;
 }
 
 /// Additional methods required by the protocol that don't need to be

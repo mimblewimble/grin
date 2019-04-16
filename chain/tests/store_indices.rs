@@ -95,4 +95,6 @@ fn test_various_store_indices() {
 		// Check the batch did not commit any changes to the store .
 		assert!(chain_store.get_block(&block_hash).is_ok());
 	}
+	// Cleanup chain directory
+	clean_output_dir(chain_dir);
 }

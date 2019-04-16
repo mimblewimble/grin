@@ -18,6 +18,7 @@ use std::sync::Arc;
 use std::time::Duration;
 use std::{io, thread};
 
+use crate::chain;
 use crate::core::core;
 use crate::core::core::hash::Hash;
 use crate::core::global;
@@ -137,7 +138,7 @@ impl Server {
 		match TcpStream::connect_timeout(&addr.0, Duration::from_secs(10)) {
 			Ok(mut stream) => {
 				let addr = SocketAddr::new(self.config.host, self.config.port);
-				let total_diff = self.peers.total_difficulty();
+				let total_diff = self.peers.total_difficulty()?;
 
 				let mut peer = Peer::connect(
 					&mut stream,
@@ -166,7 +167,7 @@ impl Server {
 	}
 
 	fn handle_new_peer(&self, mut stream: TcpStream) -> Result<(), Error> {
-		let total_diff = self.peers.total_difficulty();
+		let total_diff = self.peers.total_difficulty()?;
 
 		// accept the peer and add it to the server map
 		let mut peer = Peer::accept(
@@ -229,31 +230,48 @@ impl Server {
 pub struct DummyAdapter {}
 
 impl ChainAdapter for DummyAdapter {
-	fn total_difficulty(&self) -> Difficulty {
-		Difficulty::min()
+	fn total_difficulty(&self) -> Result<Difficulty, chain::Error> {
+		Ok(Difficulty::min())
 	}
-	fn total_height(&self) -> u64 {
-		0
+	fn total_height(&self) -> Result<u64, chain::Error> {
+		Ok(0)
 	}
 	fn get_transaction(&self, _h: Hash) -> Option<core::Transaction> {
 		None
 	}
-	fn tx_kernel_received(&self, _h: Hash, _addr: PeerAddr) {}
-	fn transaction_received(&self, _: core::Transaction, _stem: bool) {}
-	fn compact_block_received(&self, _cb: core::CompactBlock, _addr: PeerAddr) -> bool {
-		true
+
+	fn tx_kernel_received(&self, _h: Hash, _addr: PeerAddr) -> Result<bool, chain::Error> {
+		Ok(true)
 	}
-	fn header_received(&self, _bh: core::BlockHeader, _addr: PeerAddr) -> bool {
-		true
+	fn transaction_received(
+		&self,
+		_: core::Transaction,
+		_stem: bool,
+	) -> Result<bool, chain::Error> {
+		Ok(true)
 	}
-	fn block_received(&self, _: core::Block, _: PeerAddr, _: bool) -> bool {
-		true
+	fn compact_block_received(
+		&self,
+		_cb: core::CompactBlock,
+		_addr: PeerAddr,
+	) -> Result<bool, chain::Error> {
+		Ok(true)
 	}
-	fn headers_received(&self, _: &[core::BlockHeader], _: PeerAddr) -> bool {
-		true
+	fn header_received(
+		&self,
+		_bh: core::BlockHeader,
+		_addr: PeerAddr,
+	) -> Result<bool, chain::Error> {
+		Ok(true)
 	}
-	fn locate_headers(&self, _: &[Hash]) -> Vec<core::BlockHeader> {
-		vec![]
+	fn block_received(&self, _: core::Block, _: PeerAddr, _: bool) -> Result<bool, chain::Error> {
+		Ok(true)
+	}
+	fn headers_received(&self, _: &[core::BlockHeader], _: PeerAddr) -> Result<bool, chain::Error> {
+		Ok(true)
+	}
+	fn locate_headers(&self, _: &[Hash]) -> Result<Vec<core::BlockHeader>, chain::Error> {
+		Ok(vec![])
 	}
 	fn get_block(&self, _: Hash) -> Option<core::Block> {
 		None
@@ -266,8 +284,13 @@ impl ChainAdapter for DummyAdapter {
 		false
 	}
 
-	fn txhashset_write(&self, _h: Hash, _txhashset_data: File, _peer_addr: PeerAddr) -> bool {
-		false
+	fn txhashset_write(
+		&self,
+		_h: Hash,
+		_txhashset_data: File,
+		_peer_addr: PeerAddr,
+	) -> Result<bool, chain::Error> {
+		Ok(false)
 	}
 
 	fn txhashset_download_update(

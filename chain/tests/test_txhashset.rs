@@ -28,7 +28,6 @@ use crate::chain::store::ChainStore;
 use crate::chain::txhashset;
 use crate::core::core::BlockHeader;
 use crate::util::file;
-use grin_core::core::hash::Hashed;
 
 fn clean_output_dir(dir_name: &str) {
 	let _ = fs::remove_dir_all(dir_name);
@@ -41,54 +40,50 @@ fn test_unexpected_zip() {
 
 	let db_root = format!(".grin_txhashset_zip");
 	clean_output_dir(&db_root);
-	let chain_store = ChainStore::new(&db_root).unwrap();
-	let store = Arc::new(chain_store);
-	txhashset::TxHashSet::open(db_root.clone(), store.clone(), None).unwrap();
-	let head = BlockHeader::default();
-	// First check if everything works out of the box
-	assert!(txhashset::zip_read(db_root.clone(), &head, Some(rand)).is_ok());
-	let zip_path = Path::new(&db_root).join(format!("txhashset_snapshot_{}.zip", rand));
-	let zip_file = File::open(&zip_path).unwrap();
-	assert!(txhashset::zip_write(
-		PathBuf::from(db_root.clone()),
-		zip_file,
-		&BlockHeader::default()
-	)
-	.is_ok());
-	// Remove temp txhashset dir
-	assert!(fs::remove_dir_all(
-		Path::new(&db_root).join(format!("txhashset_zip_{}", head.hash().to_string()))
-	)
-	.is_err());
-	// Then add strange files in the original txhashset folder
-	write_file(db_root.clone());
-	assert!(txhashset::zip_read(db_root.clone(), &head, Some(rand)).is_ok());
-	// Check that the temp dir dos not contains the strange files
-	let txhashset_zip_path =
-		Path::new(&db_root).join(format!("txhashset_zip_{}", head.hash().to_string()));
-	assert!(txhashset_contains_expected_files(
-		format!("txhashset_zip_{}", head.hash().to_string()),
-		txhashset_zip_path.clone()
-	));
-	assert!(fs::remove_dir_all(
-		Path::new(&db_root).join(format!("txhashset_zip_{}", head.hash().to_string()))
-	)
-	.is_err());
+	{
+		let chain_store = ChainStore::new(&db_root).unwrap();
+		let store = Arc::new(chain_store);
+		txhashset::TxHashSet::open(db_root.clone(), store.clone(), None).unwrap();
+		// First check if everything works out of the box
+		assert!(txhashset::zip_read(db_root.clone(), &BlockHeader::default(), Some(rand)).is_ok());
+		let zip_path = Path::new(&db_root).join(format!("txhashset_snapshot_{}.zip", rand));
+		let zip_file = File::open(&zip_path).unwrap();
+		assert!(txhashset::zip_write(
+			PathBuf::from(db_root.clone()),
+			zip_file,
+			&BlockHeader::default()
+		)
+		.is_ok());
+		// Remove temp txhashset dir
+		fs::remove_dir_all(Path::new(&db_root).join(format!("txhashset_zip_{}", rand))).unwrap();
+		// Then add strange files in the original txhashset folder
+		write_file(db_root.clone());
+		assert!(txhashset::zip_read(db_root.clone(), &BlockHeader::default(), Some(rand)).is_ok());
+		// Check that the temp dir dos not contains the strange files
+		let txhashset_zip_path = Path::new(&db_root).join(format!("txhashset_zip_{}", rand));
+		assert!(txhashset_contains_expected_files(
+			format!("txhashset_zip_{}", rand),
+			txhashset_zip_path.clone()
+		));
+		fs::remove_dir_all(Path::new(&db_root).join(format!("txhashset_zip_{}", rand))).unwrap();
 
-	let zip_file = File::open(zip_path).unwrap();
-	assert!(txhashset::zip_write(
-		PathBuf::from(db_root.clone()),
-		zip_file,
-		&BlockHeader::default()
-	)
-	.is_ok());
-	// Check that the txhashset dir dos not contains the strange files
-	let txhashset_path = Path::new(&db_root).join("txhashset");
-	assert!(txhashset_contains_expected_files(
-		"txhashset".to_string(),
-		txhashset_path.clone()
-	));
-	fs::remove_dir_all(Path::new(&db_root).join("txhashset")).unwrap();
+		let zip_file = File::open(zip_path).unwrap();
+		assert!(txhashset::zip_write(
+			PathBuf::from(db_root.clone()),
+			zip_file,
+			&BlockHeader::default()
+		)
+		.is_ok());
+		// Check that the txhashset dir dos not contains the strange files
+		let txhashset_path = Path::new(&db_root).join("txhashset");
+		assert!(txhashset_contains_expected_files(
+			"txhashset".to_string(),
+			txhashset_path.clone()
+		));
+		fs::remove_dir_all(Path::new(&db_root).join("txhashset")).unwrap();
+	}
+	// Cleanup chain directory
+	clean_output_dir(&db_root);
 }
 
 fn write_file(db_root: String) {

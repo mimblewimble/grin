@@ -77,7 +77,7 @@ impl SyncRunner {
 		let mut n = 0;
 		const MIN_PEERS: usize = 3;
 		loop {
-			let wp = self.peers.more_or_same_work_peers();
+			let wp = self.peers.more_or_same_work_peers()?;
 			// exit loop when:
 			// * we have more than MIN_PEERS more_or_same_work peers
 			// * we are synced already, e.g. grin was quickly restarted
@@ -146,16 +146,27 @@ impl SyncRunner {
 
 			thread::sleep(time::Duration::from_millis(10));
 
+			let currently_syncing = self.sync_state.is_syncing();
+
 			// check whether syncing is generally needed, when we compare our state with others
-			let (syncing, most_work_height) = unwrap_or_restart_loop!(self.needs_syncing());
+			let (needs_syncing, most_work_height) = unwrap_or_restart_loop!(self.needs_syncing());
 			if most_work_height > 0 {
 				// we can occasionally get a most work height of 0 if read locks fail
 				highest_height = most_work_height;
 			}
 
 			// quick short-circuit (and a decent sleep) if no syncing is needed
-			if !syncing {
-				self.sync_state.update(SyncStatus::NoSync);
+			if !needs_syncing {
+				if currently_syncing {
+					self.sync_state.update(SyncStatus::NoSync);
+
+					// Initial transition out of a "syncing" state and into NoSync.
+					// This triggers a chain compaction to keep out local node tidy.
+					// Note: Chain compaction runs with an internal threshold
+					// so can be safely run even if the node is restarted frequently.
+					unwrap_or_restart_loop!(self.chain.compact());
+				}
+
 				thread::sleep(time::Duration::from_secs(10));
 				continue;
 			}

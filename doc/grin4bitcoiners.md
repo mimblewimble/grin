@@ -1,5 +1,7 @@
 # Grin/MimbleWimble for Bitcoiners
 
+*Read this in other languages:[Korean](grin4bitcoiners_KR.md)
+
 ## Privacy and Fungibility
 
 There are 3 main properties of Grin transactions that make them private:
@@ -39,7 +41,7 @@ Bitcoin's 10 minute block time has its initial 50 btc reward cut in half every 4
 
 Nope, no address. All outputs in Grin are unique and have no common data with any previous output. Instead of relying on a known address to send money, transactions have to be built interactively, with two (or more) wallets exchanging data with one another. This interaction **does not require both parties to be online at the same time**. Practically speaking, there are many ways for two programs to interact privately and securely. This interaction could even take place over email or Signal (or carrier pigeons).
 
-### If transaction information gets removed, can't I just cheat and create money?
+### If transaction information gets removed, can I just cheat and create money?
 
 No, and this is where MimbleWimble and Grin shine. Confidential transactions are a form of [homomorphic encryption](https://en.wikipedia.org/wiki/Homomorphic_encryption). Without revealing any amount, Grin can verify that the sum of all transaction inputs equal the sum of transaction outputs, plus the fee. Going even further, comparing the sum of all money created by mining with the total sum of money that's being held, Grin nodes can check the correctness of the total money supply.
 

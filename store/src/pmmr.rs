@@ -284,7 +284,7 @@ impl<T: PMMRable> PMMRBackend<T> {
 		Ok(())
 			.and(self.hash_file.flush())
 			.and(self.data_file.flush())
-			.and(self.leaf_set.flush())
+			.and(self.sync_leaf_set())
 			.map_err(|e| {
 				io::Error::new(
 					io::ErrorKind::Interrupted,
@@ -293,11 +293,19 @@ impl<T: PMMRable> PMMRBackend<T> {
 			})
 	}
 
+	// Sync the leaf_set if this is a prunable backend.
+	fn sync_leaf_set(&mut self) -> io::Result<()> {
+		if !self.prunable {
+			return Ok(());
+		}
+		self.leaf_set.flush()
+	}
+
 	/// Discard the current, non synced state of the backend.
 	pub fn discard(&mut self) {
 		self.hash_file.discard();
-		self.leaf_set.discard();
 		self.data_file.discard();
+		self.leaf_set.discard();
 	}
 
 	/// Takes the leaf_set at a given cutoff_pos and generates an updated
@@ -323,7 +331,8 @@ impl<T: PMMRable> PMMRBackend<T> {
 				pos as u64 - shift
 			});
 
-			self.hash_file.save_prune(&pos_to_rm)?;
+			self.hash_file
+				.save_prune(&pos_to_rm)?;
 		}
 
 		// 2. Save compact copy of the data file, skipping removed leaves.

@@ -24,6 +24,8 @@ chrono = { version = "0.4.4", features = ["serde"] }
 grin_core = { path = "../core", version = "1.1.0-beta.1" }
 grin_store = { path = "../store", version = "1.1.0-beta.1" }
 grin_util = { path = "../util", version = "1.1.0-beta.1" }
+grin_chain = { path = "../chain", version = "1.1.0-beta.1" }
 
 [dev-dependencies]
 grin_pool = { path = "../pool", version = "1.1.0-beta.1" }
+

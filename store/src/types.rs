@@ -59,7 +59,7 @@ impl Writeable for SizeEntry {
 	}
 }
 
-/// Data file (MMR) wrapper around an append-only file.
+/// Data file (MMR) wrapper around an append only file.
 pub struct DataFile<T> {
 	file: AppendOnlyFile<T>,
 }
