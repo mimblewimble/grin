@@ -33,7 +33,7 @@ use crate::core::core::{BlockHeader, BlockSums, CompactBlock};
 use crate::core::pow::Difficulty;
 use crate::core::{core, global};
 use crate::p2p;
-use crate::p2p::types::PeerAddr;
+use crate::p2p::types::PeerInfo;
 use crate::pool;
 use crate::pool::types::DandelionConfig;
 use crate::util::OneTime;
@@ -67,7 +67,11 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 		self.tx_pool.read().retrieve_tx_by_kernel_hash(kernel_hash)
 	}
 
-	fn tx_kernel_received(&self, kernel_hash: Hash, addr: PeerAddr) -> Result<bool, chain::Error> {
+	fn tx_kernel_received(
+		&self,
+		kernel_hash: Hash,
+		peer_info: &PeerInfo,
+	) -> Result<bool, chain::Error> {
 		// nothing much we can do with a new transaction while syncing
 		if self.sync_state.is_syncing() {
 			return Ok(true);
@@ -76,7 +80,7 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 		let tx = self.tx_pool.read().retrieve_tx_by_kernel_hash(kernel_hash);
 
 		if tx.is_none() {
-			self.request_transaction(kernel_hash, addr);
+			self.request_transaction(kernel_hash, peer_info);
 		}
 		Ok(true)
 	}
@@ -117,32 +121,32 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 	fn block_received(
 		&self,
 		b: core::Block,
-		addr: PeerAddr,
+		peer_info: &PeerInfo,
 		was_requested: bool,
 	) -> Result<bool, chain::Error> {
 		debug!(
 			"Received block {} at {} from {} [in/out/kern: {}/{}/{}] going to process.",
 			b.hash(),
 			b.header.height,
-			addr,
+			peer_info.addr,
 			b.inputs().len(),
 			b.outputs().len(),
 			b.kernels().len(),
 		);
-		self.process_block(b, addr, was_requested)
+		self.process_block(b, peer_info, was_requested)
 	}
 
 	fn compact_block_received(
 		&self,
 		cb: core::CompactBlock,
-		addr: PeerAddr,
+		peer_info: &PeerInfo,
 	) -> Result<bool, chain::Error> {
 		let bhash = cb.hash();
 		debug!(
 			"Received compact_block {} at {} from {} [out/kern/kern_ids: {}/{}/{}] going to process.",
 			bhash,
 			cb.header.height,
-			addr,
+			peer_info.addr,
 			cb.out_full().len(),
 			cb.kern_full().len(),
 			cb.kern_ids().len(),
@@ -155,10 +159,10 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 				Ok(block) => {
 					if !self.sync_state.is_syncing() {
 						for hook in &self.hooks {
-							hook.on_block_received(&block, &addr);
+							hook.on_block_received(&block, &peer_info.addr);
 						}
 					}
-					self.process_block(block, addr, false)
+					self.process_block(block, peer_info, false)
 				}
 				Err(e) => {
 					debug!("Invalid hydrated block {}: {:?}", cb_hash, e);
@@ -196,7 +200,7 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 				Ok(block) => {
 					if !self.sync_state.is_syncing() {
 						for hook in &self.hooks {
-							hook.on_block_received(&block, &addr);
+							hook.on_block_received(&block, &peer_info.addr);
 						}
 					}
 					block
@@ -213,11 +217,11 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 					.is_ok()
 				{
 					debug!("successfully hydrated block from tx pool!");
-					self.process_block(block, addr, false)
+					self.process_block(block, peer_info, false)
 				} else {
 					if self.sync_state.status() == SyncStatus::NoSync {
 						debug!("adapter: block invalid after hydration, requesting full block");
-						self.request_block(&cb.header, addr);
+						self.request_block(&cb.header, peer_info);
 						Ok(true)
 					} else {
 						debug!("block invalid after hydration, ignoring it, cause still syncing");
@@ -231,11 +235,15 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 		}
 	}
 
-	fn header_received(&self, bh: core::BlockHeader, addr: PeerAddr) -> Result<bool, chain::Error> {
+	fn header_received(
+		&self,
+		bh: core::BlockHeader,
+		peer_info: &PeerInfo,
+	) -> Result<bool, chain::Error> {
 		let bhash = bh.hash();
 		debug!(
 			"Received block header {} at {} from {}, going to process.",
-			bhash, bh.height, addr,
+			bhash, bh.height, peer_info.addr,
 		);
 
 		// pushing the new block header through the header chain pipeline
@@ -257,7 +265,7 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 
 		// we have successfully processed a block header
 		// so we can go request the block itself
-		self.request_compact_block(&bh, addr);
+		self.request_compact_block(&bh, peer_info);
 
 		// done receiving the header
 		Ok(true)
@@ -266,9 +274,13 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 	fn headers_received(
 		&self,
 		bhs: &[core::BlockHeader],
-		addr: PeerAddr,
+		peer_info: &PeerInfo,
 	) -> Result<bool, chain::Error> {
-		info!("Received {} block headers from {}", bhs.len(), addr,);
+		info!(
+			"Received {} block headers from {}",
+			bhs.len(),
+			peer_info.addr
+		);
 
 		if bhs.len() == 0 {
 			return Ok(false);
@@ -388,7 +400,7 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 		&self,
 		h: Hash,
 		txhashset_data: File,
-		_peer_addr: PeerAddr,
+		_peer_info: &PeerInfo,
 	) -> Result<bool, chain::Error> {
 		// check status again after download, in case 2 txhashsets made it somehow
 		if let SyncStatus::TxHashsetDownload { .. } = self.sync_state.status() {
@@ -475,7 +487,7 @@ impl NetToChainAdapter {
 	fn process_block(
 		&self,
 		b: core::Block,
-		addr: PeerAddr,
+		peer_info: &PeerInfo,
 		was_requested: bool,
 	) -> Result<bool, chain::Error> {
 		// We cannot process blocks earlier than the horizon so check for this here.
@@ -514,7 +526,7 @@ impl NetToChainAdapter {
 								&& !self.sync_state.is_syncing()
 							{
 								debug!("process_block: received an orphan block, checking the parent: {:}", previous.hash());
-								self.request_block_by_hash(previous.hash(), addr)
+								self.request_block_by_hash(previous.hash(), peer_info)
 							}
 						}
 						Ok(true)
@@ -581,39 +593,39 @@ impl NetToChainAdapter {
 		}
 	}
 
-	fn request_transaction(&self, h: Hash, addr: PeerAddr) {
-		self.send_tx_request_to_peer(h, addr, |peer, h| peer.send_tx_request(h))
+	fn request_transaction(&self, h: Hash, peer_info: &PeerInfo) {
+		self.send_tx_request_to_peer(h, peer_info, |peer, h| peer.send_tx_request(h))
 	}
 
 	// After receiving a compact block if we cannot successfully hydrate
 	// it into a full block then fallback to requesting the full block
 	// from the same peer that gave us the compact block
 	// consider additional peers for redundancy?
-	fn request_block(&self, bh: &BlockHeader, addr: PeerAddr) {
-		self.request_block_by_hash(bh.hash(), addr)
+	fn request_block(&self, bh: &BlockHeader, peer_info: &PeerInfo) {
+		self.request_block_by_hash(bh.hash(), peer_info)
 	}
 
-	fn request_block_by_hash(&self, h: Hash, addr: PeerAddr) {
-		self.send_block_request_to_peer(h, addr, |peer, h| peer.send_block_request(h))
+	fn request_block_by_hash(&self, h: Hash, peer_info: &PeerInfo) {
+		self.send_block_request_to_peer(h, peer_info, |peer, h| peer.send_block_request(h))
 	}
 
 	// After we have received a block header in "header first" propagation
 	// we need to go request the block (compact representation) from the
 	// same peer that gave us the header (unless we have already accepted the block)
-	fn request_compact_block(&self, bh: &BlockHeader, addr: PeerAddr) {
-		self.send_block_request_to_peer(bh.hash(), addr, |peer, h| {
+	fn request_compact_block(&self, bh: &BlockHeader, peer_info: &PeerInfo) {
+		self.send_block_request_to_peer(bh.hash(), peer_info, |peer, h| {
 			peer.send_compact_block_request(h)
 		})
 	}
 
-	fn send_tx_request_to_peer<F>(&self, h: Hash, addr: PeerAddr, f: F)
+	fn send_tx_request_to_peer<F>(&self, h: Hash, peer_info: &PeerInfo, f: F)
 	where
 		F: Fn(&p2p::Peer, Hash) -> Result<(), p2p::Error>,
 	{
-		match self.peers().get_connected_peer(addr) {
+		match self.peers().get_connected_peer(peer_info.addr) {
 			None => debug!(
 				"send_tx_request_to_peer: can't send request to peer {:?}, not connected",
-				addr
+				peer_info.addr
 			),
 			Some(peer) => {
 				if let Err(e) = f(&peer, h) {
@@ -623,15 +635,15 @@ impl NetToChainAdapter {
 		}
 	}
 
-	fn send_block_request_to_peer<F>(&self, h: Hash, addr: PeerAddr, f: F)
+	fn send_block_request_to_peer<F>(&self, h: Hash, peer_info: &PeerInfo, f: F)
 	where
 		F: Fn(&p2p::Peer, Hash) -> Result<(), p2p::Error>,
 	{
 		match self.chain().block_exists(h) {
-			Ok(false) => match self.peers().get_connected_peer(addr) {
+			Ok(false) => match self.peers().get_connected_peer(peer_info.addr) {
 				None => debug!(
 					"send_block_request_to_peer: can't send request to peer {:?}, not connected",
-					addr
+					peer_info.addr
 				),
 				Some(peer) => {
 					if let Err(e) = f(&peer, h) {

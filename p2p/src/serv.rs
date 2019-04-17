@@ -28,7 +28,8 @@ use crate::peer::Peer;
 use crate::peers::Peers;
 use crate::store::PeerStore;
 use crate::types::{
-	Capabilities, ChainAdapter, Error, NetAdapter, P2PConfig, PeerAddr, ReasonForBan, TxHashSetRead,
+	Capabilities, ChainAdapter, Error, NetAdapter, P2PConfig, PeerAddr, PeerInfo, ReasonForBan,
+	TxHashSetRead,
 };
 use crate::util::{Mutex, StopState};
 use chrono::prelude::{DateTime, Utc};
@@ -240,7 +241,7 @@ impl ChainAdapter for DummyAdapter {
 		None
 	}
 
-	fn tx_kernel_received(&self, _h: Hash, _addr: PeerAddr) -> Result<bool, chain::Error> {
+	fn tx_kernel_received(&self, _h: Hash, _peer_info: &PeerInfo) -> Result<bool, chain::Error> {
 		Ok(true)
 	}
 	fn transaction_received(
@@ -253,21 +254,25 @@ impl ChainAdapter for DummyAdapter {
 	fn compact_block_received(
 		&self,
 		_cb: core::CompactBlock,
-		_addr: PeerAddr,
+		_peer_info: &PeerInfo,
 	) -> Result<bool, chain::Error> {
 		Ok(true)
 	}
 	fn header_received(
 		&self,
 		_bh: core::BlockHeader,
-		_addr: PeerAddr,
+		_peer_info: &PeerInfo,
 	) -> Result<bool, chain::Error> {
 		Ok(true)
 	}
-	fn block_received(&self, _: core::Block, _: PeerAddr, _: bool) -> Result<bool, chain::Error> {
+	fn block_received(&self, _: core::Block, _: &PeerInfo, _: bool) -> Result<bool, chain::Error> {
 		Ok(true)
 	}
-	fn headers_received(&self, _: &[core::BlockHeader], _: PeerAddr) -> Result<bool, chain::Error> {
+	fn headers_received(
+		&self,
+		_: &[core::BlockHeader],
+		_: &PeerInfo,
+	) -> Result<bool, chain::Error> {
 		Ok(true)
 	}
 	fn locate_headers(&self, _: &[Hash]) -> Result<Vec<core::BlockHeader>, chain::Error> {
@@ -288,7 +293,7 @@ impl ChainAdapter for DummyAdapter {
 		&self,
 		_h: Hash,
 		_txhashset_data: File,
-		_peer_addr: PeerAddr,
+		_peer_info: &PeerInfo,
 	) -> Result<bool, chain::Error> {
 		Ok(false)
 	}

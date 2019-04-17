@@ -483,7 +483,11 @@ pub trait ChainAdapter: Sync + Send {
 
 	fn get_transaction(&self, kernel_hash: Hash) -> Option<core::Transaction>;
 
-	fn tx_kernel_received(&self, kernel_hash: Hash, addr: PeerAddr) -> Result<bool, chain::Error>;
+	fn tx_kernel_received(
+		&self,
+		kernel_hash: Hash,
+		peer_info: &PeerInfo,
+	) -> Result<bool, chain::Error>;
 
 	/// A block has been received from one of our peers. Returns true if the
 	/// block could be handled properly and is not deemed defective by the
@@ -492,17 +496,21 @@ pub trait ChainAdapter: Sync + Send {
 	fn block_received(
 		&self,
 		b: core::Block,
-		addr: PeerAddr,
+		peer_info: &PeerInfo,
 		was_requested: bool,
 	) -> Result<bool, chain::Error>;
 
 	fn compact_block_received(
 		&self,
 		cb: core::CompactBlock,
-		addr: PeerAddr,
+		peer_info: &PeerInfo,
 	) -> Result<bool, chain::Error>;
 
-	fn header_received(&self, bh: core::BlockHeader, addr: PeerAddr) -> Result<bool, chain::Error>;
+	fn header_received(
+		&self,
+		bh: core::BlockHeader,
+		peer_info: &PeerInfo,
+	) -> Result<bool, chain::Error>;
 
 	/// A set of block header has been received, typically in response to a
 	/// block
@@ -510,7 +518,7 @@ pub trait ChainAdapter: Sync + Send {
 	fn headers_received(
 		&self,
 		bh: &[core::BlockHeader],
-		addr: PeerAddr,
+		peer_info: &PeerInfo,
 	) -> Result<bool, chain::Error>;
 
 	/// Finds a list of block headers based on the provided locator. Tries to
@@ -548,7 +556,7 @@ pub trait ChainAdapter: Sync + Send {
 		&self,
 		h: Hash,
 		txhashset_data: File,
-		peer_addr: PeerAddr,
+		peer_peer_info: &PeerInfo,
 	) -> Result<bool, chain::Error>;
 }
 

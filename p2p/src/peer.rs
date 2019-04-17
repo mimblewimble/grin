@@ -136,9 +136,8 @@ impl Peer {
 	/// Main peer loop listening for messages and forwarding to the rest of the
 	/// system.
 	pub fn start(&mut self, conn: TcpStream) {
-		let addr = self.info.addr;
 		let adapter = Arc::new(self.tracking_adapter.clone());
-		let handler = Protocol::new(adapter, addr);
+		let handler = Protocol::new(adapter, self.info.clone());
 		self.connection = Some(Mutex::new(conn::listen(conn, handler)));
 	}
 
@@ -533,9 +532,13 @@ impl ChainAdapter for TrackingAdapter {
 		self.adapter.get_transaction(kernel_hash)
 	}
 
-	fn tx_kernel_received(&self, kernel_hash: Hash, addr: PeerAddr) -> Result<bool, chain::Error> {
+	fn tx_kernel_received(
+		&self,
+		kernel_hash: Hash,
+		peer_info: &PeerInfo,
+	) -> Result<bool, chain::Error> {
 		self.push_recv(kernel_hash);
-		self.adapter.tx_kernel_received(kernel_hash, addr)
+		self.adapter.tx_kernel_received(kernel_hash, peer_info)
 	}
 
 	fn transaction_received(
@@ -556,34 +559,38 @@ impl ChainAdapter for TrackingAdapter {
 	fn block_received(
 		&self,
 		b: core::Block,
-		addr: PeerAddr,
+		peer_info: &PeerInfo,
 		_was_requested: bool,
 	) -> Result<bool, chain::Error> {
 		let bh = b.hash();
 		self.push_recv(bh);
-		self.adapter.block_received(b, addr, self.has_req(bh))
+		self.adapter.block_received(b, peer_info, self.has_req(bh))
 	}
 
 	fn compact_block_received(
 		&self,
 		cb: core::CompactBlock,
-		addr: PeerAddr,
+		peer_info: &PeerInfo,
 	) -> Result<bool, chain::Error> {
 		self.push_recv(cb.hash());
-		self.adapter.compact_block_received(cb, addr)
+		self.adapter.compact_block_received(cb, peer_info)
 	}
 
-	fn header_received(&self, bh: core::BlockHeader, addr: PeerAddr) -> Result<bool, chain::Error> {
+	fn header_received(
+		&self,
+		bh: core::BlockHeader,
+		peer_info: &PeerInfo,
+	) -> Result<bool, chain::Error> {
 		self.push_recv(bh.hash());
-		self.adapter.header_received(bh, addr)
+		self.adapter.header_received(bh, peer_info)
 	}
 
 	fn headers_received(
 		&self,
 		bh: &[core::BlockHeader],
-		addr: PeerAddr,
+		peer_info: &PeerInfo,
 	) -> Result<bool, chain::Error> {
-		self.adapter.headers_received(bh, addr)
+		self.adapter.headers_received(bh, peer_info)
 	}
 
 	fn locate_headers(&self, locator: &[Hash]) -> Result<Vec<core::BlockHeader>, chain::Error> {
@@ -606,9 +613,9 @@ impl ChainAdapter for TrackingAdapter {
 		&self,
 		h: Hash,
 		txhashset_data: File,
-		peer_addr: PeerAddr,
+		peer_info: &PeerInfo,
 	) -> Result<bool, chain::Error> {
-		self.adapter.txhashset_write(h, txhashset_data, peer_addr)
+		self.adapter.txhashset_write(h, txhashset_data, peer_info)
 	}
 
 	fn txhashset_download_update(
