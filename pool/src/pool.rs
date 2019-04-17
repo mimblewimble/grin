@@ -396,11 +396,9 @@ impl Pool {
 		}
 
 		// Now sort them by depth (ascending) to maintain dependency ordering.
-		// And then sort them (within each depth) by fee_to_weight descending.
+		// And then sort them (within each depth) by fee_to_weight (descending).
 		// Txs with no dependencies will be toward the start of the vec.
 		// Txs with a big chain of dependencies will be toward the end of the vec.
-		// Will satisfying the "depth" ordering we will then sort txs such that high
-		// fee_to_weight come first.
 		tx_buckets.sort_unstable_by_key(|x| (x.depth, -(x.fee_to_weight as i64)));
 
 		tx_buckets
