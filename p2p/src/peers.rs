@@ -30,7 +30,7 @@ use chrono::Duration;
 use crate::peer::Peer;
 use crate::store::{PeerData, PeerStore, State};
 use crate::types::{
-	Capabilities, ChainAdapter, Direction, Error, NetAdapter, P2PConfig, PeerAddr, ReasonForBan,
+	Capabilities, ChainAdapter, Error, NetAdapter, P2PConfig, PeerAddr, PeerInfo, ReasonForBan,
 	TxHashSetRead, MAX_PEER_ADDRS,
 };
 
@@ -104,12 +104,10 @@ impl Peers {
 	}
 
 	pub fn outgoing_connected_peers(&self) -> Vec<Arc<Peer>> {
-		let peers = self.connected_peers();
-		let res = peers
+		self.connected_peers()
 			.into_iter()
-			.filter(|x| x.info.direction == Direction::Outbound)
-			.collect::<Vec<_>>();
-		res
+			.filter(|x| x.info.is_outbound())
+			.collect()
 	}
 
 	/// Get a peer we're connected to by address.
@@ -119,20 +117,12 @@ impl Peers {
 
 	/// Number of peers currently connected to.
 	pub fn peer_count(&self) -> u32 {
-		self.peers
-			.read()
-			.values()
-			.filter(|x| x.is_connected())
-			.count() as u32
+		self.connected_peers().len() as u32
 	}
 
 	/// Number of outbound peers currently connected to.
 	pub fn peer_outbound_count(&self) -> u32 {
-		self.peers
-			.read()
-			.values()
-			.filter(|x| x.is_connected() && x.info.is_outbound())
-			.count() as u32
+		self.outgoing_connected_peers().len() as u32
 	}
 
 	// Return vec of connected peers that currently advertise more work
@@ -498,8 +488,12 @@ impl ChainAdapter for Peers {
 		self.adapter.get_transaction(kernel_hash)
 	}
 
-	fn tx_kernel_received(&self, kernel_hash: Hash, addr: PeerAddr) -> Result<bool, chain::Error> {
-		self.adapter.tx_kernel_received(kernel_hash, addr)
+	fn tx_kernel_received(
+		&self,
+		kernel_hash: Hash,
+		peer_info: &PeerInfo,
+	) -> Result<bool, chain::Error> {
+		self.adapter.tx_kernel_received(kernel_hash, peer_info)
 	}
 
 	fn transaction_received(
@@ -513,18 +507,18 @@ impl ChainAdapter for Peers {
 	fn block_received(
 		&self,
 		b: core::Block,
-		peer_addr: PeerAddr,
+		peer_info: &PeerInfo,
 		was_requested: bool,
 	) -> Result<bool, chain::Error> {
 		let hash = b.hash();
-		if !self.adapter.block_received(b, peer_addr, was_requested)? {
+		if !self.adapter.block_received(b, peer_info, was_requested)? {
 			// if the peer sent us a block that's intrinsically bad
 			// they are either mistaken or malevolent, both of which require a ban
 			debug!(
 				"Received a bad block {} from  {}, the peer will be banned",
-				hash, peer_addr
+				hash, peer_info.addr,
 			);
-			self.ban_peer(peer_addr, ReasonForBan::BadBlock);
+			self.ban_peer(peer_info.addr, ReasonForBan::BadBlock);
 			Ok(false)
 		} else {
 			Ok(true)
@@ -534,17 +528,17 @@ impl ChainAdapter for Peers {
 	fn compact_block_received(
 		&self,
 		cb: core::CompactBlock,
-		peer_addr: PeerAddr,
+		peer_info: &PeerInfo,
 	) -> Result<bool, chain::Error> {
 		let hash = cb.hash();
-		if !self.adapter.compact_block_received(cb, peer_addr)? {
+		if !self.adapter.compact_block_received(cb, peer_info)? {
 			// if the peer sent us a block that's intrinsically bad
 			// they are either mistaken or malevolent, both of which require a ban
 			debug!(
 				"Received a bad compact block {} from  {}, the peer will be banned",
-				hash, peer_addr
+				hash, peer_info.addr
 			);
-			self.ban_peer(peer_addr, ReasonForBan::BadCompactBlock);
+			self.ban_peer(peer_info.addr, ReasonForBan::BadCompactBlock);
 			Ok(false)
 		} else {
 			Ok(true)
@@ -554,12 +548,12 @@ impl ChainAdapter for Peers {
 	fn header_received(
 		&self,
 		bh: core::BlockHeader,
-		peer_addr: PeerAddr,
+		peer_info: &PeerInfo,
 	) -> Result<bool, chain::Error> {
-		if !self.adapter.header_received(bh, peer_addr)? {
+		if !self.adapter.header_received(bh, peer_info)? {
 			// if the peer sent us a block header that's intrinsically bad
 			// they are either mistaken or malevolent, both of which require a ban
-			self.ban_peer(peer_addr, ReasonForBan::BadBlockHeader);
+			self.ban_peer(peer_info.addr, ReasonForBan::BadBlockHeader);
 			Ok(false)
 		} else {
 			Ok(true)
@@ -569,12 +563,12 @@ impl ChainAdapter for Peers {
 	fn headers_received(
 		&self,
 		headers: &[core::BlockHeader],
-		peer_addr: PeerAddr,
+		peer_info: &PeerInfo,
 	) -> Result<bool, chain::Error> {
-		if !self.adapter.headers_received(headers, peer_addr)? {
+		if !self.adapter.headers_received(headers, peer_info)? {
 			// if the peer sent us a block header that's intrinsically bad
 			// they are either mistaken or malevolent, both of which require a ban
-			self.ban_peer(peer_addr, ReasonForBan::BadBlockHeader);
+			self.ban_peer(peer_info.addr, ReasonForBan::BadBlockHeader);
 			Ok(false)
 		} else {
 			Ok(true)
@@ -601,14 +595,14 @@ impl ChainAdapter for Peers {
 		&self,
 		h: Hash,
 		txhashset_data: File,
-		peer_addr: PeerAddr,
+		peer_info: &PeerInfo,
 	) -> Result<bool, chain::Error> {
-		if !self.adapter.txhashset_write(h, txhashset_data, peer_addr)? {
+		if !self.adapter.txhashset_write(h, txhashset_data, peer_info)? {
 			debug!(
 				"Received a bad txhashset data from {}, the peer will be banned",
-				&peer_addr
+				peer_info.addr
 			);
-			self.ban_peer(peer_addr, ReasonForBan::BadTxHashSet);
+			self.ban_peer(peer_info.addr, ReasonForBan::BadTxHashSet);
 			Ok(false)
 		} else {
 			Ok(true)
