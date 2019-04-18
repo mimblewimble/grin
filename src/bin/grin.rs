@@ -73,6 +73,20 @@ fn real_main() -> i32 {
 	let args = App::from_yaml(yml).get_matches();
 	let node_config;
 
+	// Temporary wallet warning message
+	match args.subcommand() {
+		("wallet", _) => {
+			println!();
+			println!("As of v1.1.0, the wallet has been split into a seperate executable.");
+			println!(
+				"Please visit https://github.com/mimblewinble/grin-wallet/releases to download"
+			);
+			println!();
+			return 0;
+		}
+		_ => {}
+	}
+
 	let chain_type = if args.is_present("floonet") {
 		global::ChainTypes::Floonet
 	} else if args.is_present("usernet") {
