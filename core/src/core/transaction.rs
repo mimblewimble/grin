@@ -771,7 +771,7 @@ pub struct Transaction {
 	)]
 	pub offset: BlindingFactor,
 	/// The transaction body - inputs/outputs/kernels
-	body: TransactionBody,
+	pub body: TransactionBody,
 }
 
 impl DefaultHashable for Transaction {}
