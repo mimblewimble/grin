@@ -15,7 +15,7 @@
 use crate::util::RwLock;
 use std::convert::From;
 use std::fs::File;
-use std::io;
+use std::io::{self, Read};
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV4, SocketAddrV6};
 use std::path::PathBuf;
 
@@ -526,6 +526,10 @@ pub trait ChainAdapter: Sync + Send {
 
 	/// Gets a full block by its hash.
 	fn get_block(&self, h: Hash) -> Option<core::Block>;
+
+	fn kernel_data_read(&self) -> Result<File, chain::Error>;
+
+	fn kernel_data_write(&self, reader: &mut Read) -> Result<bool, chain::Error>;
 
 	/// Provides a reading view into the current txhashset state as well as
 	/// the required indexes for a consumer to rewind to a consistant state
