@@ -67,10 +67,6 @@ pub enum Error {
 	Chain(chain::Error),
 	PeerWithSelf,
 	NoDandelionRelay,
-	ProtocolMismatch {
-		us: u32,
-		peer: u32,
-	},
 	GenesisMismatch {
 		us: Hash,
 		peer: Hash,

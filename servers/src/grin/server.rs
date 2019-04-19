@@ -402,6 +402,11 @@ impl Server {
 		self.chain.header_head().map_err(|e| e.into())
 	}
 
+	/// Current p2p layer protocol version.
+	pub fn protocol_version() -> u32 {
+		p2p::msg::PROTOCOL_VERSION
+	}
+
 	/// Returns a set of stats about this server. This and the ServerStats
 	/// structure
 	/// can be updated over time to include any information needed by tests or
