@@ -335,11 +335,6 @@ where
 		self.last_pos
 	}
 
-	/// Return the path of the data file (needed to sum kernels efficiently)
-	pub fn data_file_path(&self) -> &Path {
-		self.backend.get_data_file_path()
-	}
-
 	/// Debugging utility to print information about the MMRs. Short version
 	/// only prints the last 8 nodes.
 	pub fn dump(&self, short: bool) {
