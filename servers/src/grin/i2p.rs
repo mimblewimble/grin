@@ -20,7 +20,7 @@ use std::net::SocketAddr;
 use std::path::PathBuf;
 
 use i2p::net::{I2pAddr, I2pSocketAddr};
-use i2p::sam::SamConnection;
+use i2p::{Session, SamConnection};
 
 use crate::common::types::ServerConfig;
 use crate::p2p;
@@ -45,9 +45,9 @@ pub fn init(config: &mut ServerConfig) -> Option<(I2pSocketAddr, Session)> {
 			if *autostart {
 				start_i2pd()
 			}
-			let (addr, privkey) = load_keys(addr, config);
-			let session = Session::from_destination(addr, privkey);
-			Some((addr, session))
+			let (self_i2p_addr, privkey) = load_keys(addr, config);
+			let session = Session::from_destination(addr, &privkey).unwrap();
+			Some((self_i2p_addr, session))
 		}
 	}
 }
@@ -66,7 +66,7 @@ fn load_keys(i2p_socket: &str, config: &ServerConfig) -> (I2pSocketAddr, String)
 	let mut i2p_pubkey = i2p_root.clone();
 	i2p_pubkey.push(PUBKEY_FILE);
 
-	let (pubkey, privkey) = if i2p_pubkey.as_path().exists() && i2p_privkey.as_path().exists() {
+	let (pubkey, privkey): (String, String) = if i2p_pubkey.as_path().exists() && i2p_privkey.as_path().exists() {
 		let privk = fs::read_to_string(i2p_privkey).expect("could not read i2p private key");
 		let pubk = fs::read_to_string(i2p_pubkey).expect("could not read i2p public key");
 		(pubk, privk)

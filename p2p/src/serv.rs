@@ -23,7 +23,8 @@ use crate::peer::Peer;
 use crate::peers::Peers;
 use crate::store::PeerStore;
 use crate::types::{
-	Capabilities, ChainAdapter, Error, NetAdapter, P2PConfig, PeerAddr, ReasonForBan, TxHashSetRead,
+	Capabilities, ChainAdapter, Error, NetAdapter, P2PConfig, PeerAddr, ReasonForBan,
+	Stream, TxHashSetRead,
 };
 use crate::util::{Mutex, StopState};
 use chrono::prelude::{DateTime, Utc};
@@ -33,7 +34,7 @@ use std::sync::Arc;
 use std::time::Duration;
 use std::{io, thread};
 
-use i2p::net::{I2pListener, I2pStream};
+use i2p::net::I2pListener;
 
 /// P2P server implementation, handling bootstrapping to find and connect to
 /// peers, receiving connections from other peers and keep track of all of them.
@@ -84,6 +85,7 @@ impl Server {
 			match listener.accept() {
 				Ok((stream, peer_addr)) => {
 					let peer_addr = PeerAddr::Socket(peer_addr);
+					let stream = Stream::Tcp(stream);
 
 					if self.check_undesirable(&stream) {
 						continue;
@@ -108,29 +110,31 @@ impl Server {
 		Ok(())
 	}
 
-	// pub fn listen_i2p(&self, session: Arc<i2p::Session>) -> Result<(), Error> {
-	// 	let listener = I2pListener::bind_with_session(session);
+	pub fn listen_i2p(&self, session: Arc<i2p::Session>) -> Result<(), Error> {
+		let listener = I2pListener::bind_with_session(&session)?;
 
-	// 	// TODO break on stop_state
-	// 	for stream in listener.incoming() {
-	// 		match stream {
-	// 			Ok(stream) => {
-	// 				let peer_addr = PeerAddr::I2p(stream.local_addr()?);
+		// TODO break on stop_state
+		for stream in listener.incoming() {
+			match stream {
+				Ok(stream) => {
+					let peer_addr = PeerAddr::I2p(stream.local_addr()?);
+					let stream = Stream::I2p(stream);
 
-	// 				if self.check_undesirable(&stream) {
-	// 					continue;
-	// 				}
-	// 				if let Err(e) = self.handle_new_peer(stream) {
-	// 					debug!("Error accepting i2p peer {}: {:?}", peer_addr.to_string(), e);
-	// 					let _ = self.peers.add_banned(peer_addr, ReasonForBan::BadHandshake);
-	// 				}
-	// 			}
-	// 			Err(e) => {
-	// 				debug!("Couldn't establish new i2p connection: {:?}", e);
-	// 			}
-	// 		}
-	// 	}
-	// }
+					if self.check_undesirable(&stream) {
+						continue;
+					}
+					if let Err(e) = self.handle_new_peer(stream) {
+						debug!("Error accepting i2p peer {}: {:?}", peer_addr.to_string(), e);
+						let _ = self.peers.add_banned(peer_addr, ReasonForBan::BadHandshake);
+					}
+				}
+				Err(e) => {
+					debug!("Couldn't establish new i2p connection: {:?}", e);
+				}
+			}
+		}
+		Ok(())
+	}
 
 	/// Asks the server to connect to a new peer. Directly returns the peer if
 	/// we're already connected to the provided address.
@@ -225,9 +229,8 @@ impl Server {
 	/// addresses (NAT), network distribution is improved if they choose
 	/// different sets of peers themselves. In addition, it prevent potential
 	/// duplicate connections, malicious or not.
-	fn check_undesirable(&self, stream: &TcpStream) -> bool {
+	fn check_undesirable(&self, stream: &Stream) -> bool {
 		if let Ok(peer_addr) = stream.peer_addr() {
-			let peer_addr = PeerAddr::Socket(peer_addr);
 			if self.peers.is_banned(&peer_addr) {
 				debug!("Peer {} banned, refusing connection.", peer_addr);
 				if let Err(e) = stream.shutdown(Shutdown::Both) {
