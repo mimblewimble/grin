@@ -23,8 +23,8 @@ use crate::peer::Peer;
 use crate::peers::Peers;
 use crate::store::PeerStore;
 use crate::types::{
-	Capabilities, ChainAdapter, Error, NetAdapter, P2PConfig, PeerAddr, ReasonForBan,
-	Stream, TxHashSetRead,
+	Capabilities, ChainAdapter, Error, NetAdapter, P2PConfig, PeerAddr, ReasonForBan, Stream,
+	TxHashSetRead,
 };
 use crate::util::{Mutex, StopState};
 use chrono::prelude::{DateTime, Utc};
@@ -124,7 +124,11 @@ impl Server {
 						continue;
 					}
 					if let Err(e) = self.handle_new_peer(stream) {
-						debug!("Error accepting i2p peer {}: {:?}", peer_addr.to_string(), e);
+						debug!(
+							"Error accepting i2p peer {}: {:?}",
+							peer_addr.to_string(),
+							e
+						);
 						let _ = self.peers.add_banned(peer_addr, ReasonForBan::BadHandshake);
 					}
 				}
