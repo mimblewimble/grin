@@ -130,7 +130,11 @@ impl Server {
 						continue;
 					}
 					if let Err(e) = self.handle_new_peer(stream) {
-						debug!("Error accepting i2p peer {}: {:?}", peer_addr.to_string(), e);
+						debug!(
+							"Error accepting i2p peer {}: {:?}",
+							peer_addr.to_string(),
+							e
+						);
 						let _ = self.peers.add_banned(peer_addr, ReasonForBan::BadHandshake);
 					}
 				}
