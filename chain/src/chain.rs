@@ -940,7 +940,13 @@ impl Chain {
 
 			// Move sandbox to overwrite
 			txhashset.release_backend_files();
-			txhashset::txhashset_replace(sandbox_dir.clone(), PathBuf::from(self.db_root.clone()))?;
+			let dest = PathBuf::from(self.db_root.clone());
+			let repl = txhashset::txhashset_replace(sandbox_dir.clone(), dest.clone());
+			if repl.is_err() {
+				// common error case for a move is differing partition, try a full
+				// replica in that case
+				txhashset::zip_write(dest, txhashset_data, &header)?;
+			}
 
 			// Re-open on db root dir
 			txhashset = txhashset::TxHashSet::open(
