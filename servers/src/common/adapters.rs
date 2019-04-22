@@ -17,6 +17,7 @@
 
 use crate::util::RwLock;
 use std::fs::File;
+use std::path::PathBuf;
 use std::sync::{Arc, Weak};
 use std::thread;
 use std::time::Instant;
@@ -422,6 +423,14 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 			info!("Received valid txhashset data for {}.", h);
 			Ok(true)
 		}
+	}
+
+	fn get_tmp_dir(&self) -> PathBuf {
+		self.chain().get_tmp_dir()
+	}
+
+	fn get_tmpfile_pathname(&self, tmpfile_name: String) -> PathBuf {
+		self.chain().get_tmpfile_pathname(tmpfile_name)
 	}
 }
 

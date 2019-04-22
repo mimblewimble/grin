@@ -16,6 +16,7 @@ use crate::util::{Mutex, RwLock};
 use std::fmt;
 use std::fs::File;
 use std::net::{Shutdown, TcpStream};
+use std::path::PathBuf;
 use std::sync::Arc;
 
 use crate::chain;
@@ -626,6 +627,14 @@ impl ChainAdapter for TrackingAdapter {
 	) -> bool {
 		self.adapter
 			.txhashset_download_update(start_time, downloaded_size, total_size)
+	}
+
+	fn get_tmp_dir(&self) -> PathBuf {
+		self.adapter.get_tmp_dir()
+	}
+
+	fn get_tmpfile_pathname(&self, tmpfile_name: String) -> PathBuf {
+		self.adapter.get_tmpfile_pathname(tmpfile_name)
 	}
 }
 

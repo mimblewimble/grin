@@ -17,6 +17,7 @@ use std::convert::From;
 use std::fs::File;
 use std::io;
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV4, SocketAddrV6};
+use std::path::PathBuf;
 
 use std::sync::mpsc;
 use std::sync::Arc;
@@ -558,6 +559,13 @@ pub trait ChainAdapter: Sync + Send {
 		txhashset_data: File,
 		peer_peer_info: &PeerInfo,
 	) -> Result<bool, chain::Error>;
+
+	/// Get the Grin specific tmp dir
+	fn get_tmp_dir(&self) -> PathBuf;
+
+	/// Get a tmp file path in above specific tmp dir (create tmp dir if not exist)
+	/// Delete file if tmp file already exists
+	fn get_tmpfile_pathname(&self, tmpfile_name: String) -> PathBuf;
 }
 
 /// Additional methods required by the protocol that don't need to be
