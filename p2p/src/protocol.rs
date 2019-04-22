@@ -12,9 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use rand::{thread_rng, Rng};
 use std::cmp;
-use std::env;
-use std::fs::File;
+use std::fs::{self, File, OpenOptions};
 use std::io::{BufWriter, Write};
 use std::sync::Arc;
 
@@ -288,10 +288,15 @@ impl MessageHandler for Protocol {
 				self.adapter
 					.txhashset_download_update(download_start_time, 0, sm_arch.bytes);
 
-				let mut tmp = env::temp_dir();
-				tmp.push("txhashset.zip");
+				let nonce: u32 = thread_rng().gen_range(0, 1_000_000);
+				let tmp = self.adapter.get_tmpfile_pathname(format!(
+					"txhashset-{}-{}.zip",
+					download_start_time.timestamp(),
+					nonce
+				));
 				let mut save_txhashset_to_file = |file| -> Result<(), Error> {
-					let mut tmp_zip = BufWriter::new(File::create(file)?);
+					let mut tmp_zip =
+						BufWriter::new(OpenOptions::new().write(true).create_new(true).open(file)?);
 					let total_size = sm_arch.bytes as usize;
 					let mut downloaded_size: usize = 0;
 					let mut request_size = cmp::min(48_000, total_size);
@@ -332,7 +337,7 @@ impl MessageHandler for Protocol {
 					tmp,
 				);
 
-				let tmp_zip = File::open(tmp)?;
+				let tmp_zip = File::open(tmp.clone())?;
 				let res = self
 					.adapter
 					.txhashset_write(sm_arch.hash, tmp_zip, &self.peer_info)?;
@@ -341,6 +346,10 @@ impl MessageHandler for Protocol {
 					"handle_payload: txhashset archive for {} at {}, DONE. Data Ok: {}",
 					sm_arch.hash, sm_arch.height, res
 				);
+
+				if let Err(e) = fs::remove_file(tmp.clone()) {
+					warn!("fail to remove tmp file: {:?}. err: {}", tmp, e);
+				}
 
 				Ok(None)
 			}

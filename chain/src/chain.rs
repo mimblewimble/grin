@@ -35,8 +35,7 @@ use crate::util::secp::pedersen::{Commitment, RangeProof};
 use crate::util::{Mutex, RwLock, StopState};
 use grin_store::Error::NotFoundErr;
 use std::collections::HashMap;
-use std::env;
-use std::fs::File;
+use std::fs::{self, File};
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
@@ -840,9 +839,39 @@ impl Chain {
 
 	/// Clean the temporary sandbox folder
 	pub fn clean_txhashset_sandbox(&self) {
-		let sandbox_dir = env::temp_dir();
-		txhashset::clean_txhashset_folder(&sandbox_dir);
-		txhashset::clean_header_folder(&sandbox_dir);
+		txhashset::clean_txhashset_folder(&self.get_tmp_dir());
+		txhashset::clean_header_folder(&self.get_tmp_dir());
+	}
+
+	/// Specific tmp dir.
+	/// Normally it's ~/.grin/main/tmp for mainnet
+	/// or ~/.grin/floo/tmp for floonet
+	pub fn get_tmp_dir(&self) -> PathBuf {
+		let mut tmp_dir = PathBuf::from(self.db_root.clone());
+		tmp_dir = tmp_dir
+			.parent()
+			.expect("fail to get parent of db_root dir")
+			.to_path_buf();
+		tmp_dir.push("tmp");
+		tmp_dir
+	}
+
+	/// Get a tmp file path in above specific tmp dir (create tmp dir if not exist)
+	/// Delete file if tmp file already exists
+	pub fn get_tmpfile_pathname(&self, tmpfile_name: String) -> PathBuf {
+		let mut tmp = self.get_tmp_dir();
+		if !tmp.exists() {
+			if let Err(e) = fs::create_dir(tmp.clone()) {
+				warn!("fail to create tmp folder on {:?}. err: {}", tmp, e);
+			}
+		}
+		tmp.push(tmpfile_name);
+		if tmp.exists() {
+			if let Err(e) = fs::remove_file(tmp.clone()) {
+				warn!("fail to clean existing tmp file: {:?}. err: {}", tmp, e);
+			}
+		}
+		tmp
 	}
 
 	/// Writes a reading view on a txhashset state that's been provided to us.
@@ -866,8 +895,8 @@ impl Chain {
 
 		let header = self.get_block_header(&h)?;
 
-		// Write txhashset to sandbox (in the os temporary directory)
-		let sandbox_dir = env::temp_dir();
+		// Write txhashset to sandbox (in the Grin specific tmp dir)
+		let sandbox_dir = self.get_tmp_dir();
 		txhashset::clean_txhashset_folder(&sandbox_dir);
 		txhashset::clean_header_folder(&sandbox_dir);
 		txhashset::zip_write(sandbox_dir.clone(), txhashset_data.try_clone()?, &header)?;

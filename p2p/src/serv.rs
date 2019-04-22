@@ -14,6 +14,7 @@
 
 use std::fs::File;
 use std::net::{Shutdown, SocketAddr, TcpListener, TcpStream};
+use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
 use std::{io, thread};
@@ -305,6 +306,14 @@ impl ChainAdapter for DummyAdapter {
 		_total_size: u64,
 	) -> bool {
 		false
+	}
+
+	fn get_tmp_dir(&self) -> PathBuf {
+		unimplemented!()
+	}
+
+	fn get_tmpfile_pathname(&self, _tmpfile_name: String) -> PathBuf {
+		unimplemented!()
 	}
 }
 
