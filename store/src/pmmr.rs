@@ -165,11 +165,6 @@ impl<T: PMMRable> Backend<T> for PMMRBackend<T> {
 		Ok(())
 	}
 
-	/// Return data file path
-	fn get_data_file_path(&self) -> &Path {
-		self.data_file.path()
-	}
-
 	/// Release underlying data files
 	fn release_files(&mut self) {
 		self.data_file.release();
