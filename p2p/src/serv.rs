@@ -73,7 +73,7 @@ impl Server {
 		let listener = TcpListener::bind(addr)?;
 		listener.set_nonblocking(true)?;
 
-		let sleep_time = Duration::from_millis(1);
+		let sleep_time = Duration::from_millis(5);
 		loop {
 			// Pause peer ingress connection request. Only for tests.
 			if self.stop_state.lock().is_paused() {

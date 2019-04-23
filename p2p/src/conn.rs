@@ -244,7 +244,7 @@ fn poll<H>(
 	let _ = thread::Builder::new()
 		.name("peer".to_string())
 		.spawn(move || {
-			let sleep_time = time::Duration::from_millis(1);
+			let sleep_time = time::Duration::from_millis(5);
 			let mut retry_send = Err(());
 			loop {
 				// check the read end
