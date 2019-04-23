@@ -17,7 +17,6 @@ use croaring::Bitmap;
 use crate::core::hash::Hash;
 use crate::core::BlockHeader;
 use crate::ser::PMMRable;
-use std::path::Path;
 
 /// Storage backend for the MMR, just needs to be indexed by order of insertion.
 /// The PMMR itself does not need the Backend to be accurate on the existence
