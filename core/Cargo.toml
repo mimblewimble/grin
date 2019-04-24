@@ -12,7 +12,7 @@ edition = "2018"
 [dependencies]
 blake2-rfc = "0.2"
 byteorder = "1"
-croaring = "=0.3.8"
+croaring = "0.3.9"
 enum_primitive = "0.1"
 failure = "0.1"
 failure_derive = "0.1"
