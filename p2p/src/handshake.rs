@@ -86,12 +86,7 @@ impl Handshake {
 		// write and read the handshake response
 		write_message(conn, hand, Type::Hand)?;
 		let shake: Shake = read_message(conn, Type::Shake)?;
-		if shake.version != PROTOCOL_VERSION {
-			return Err(Error::ProtocolMismatch {
-				us: PROTOCOL_VERSION,
-				peer: shake.version,
-			});
-		} else if shake.genesis != self.genesis {
+		if shake.genesis != self.genesis {
 			return Err(Error::GenesisMismatch {
 				us: self.genesis,
 				peer: shake.genesis,
@@ -132,12 +127,7 @@ impl Handshake {
 		let hand: Hand = read_message(conn, Type::Hand)?;
 
 		// all the reasons we could refuse this connection for
-		if hand.version != PROTOCOL_VERSION {
-			return Err(Error::ProtocolMismatch {
-				us: PROTOCOL_VERSION,
-				peer: hand.version,
-			});
-		} else if hand.genesis != self.genesis {
+		if hand.genesis != self.genesis {
 			return Err(Error::GenesisMismatch {
 				us: self.genesis,
 				peer: hand.genesis,
