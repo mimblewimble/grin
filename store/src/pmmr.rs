@@ -21,7 +21,7 @@ use crate::core::core::BlockHeader;
 use crate::core::ser::{FixedLength, PMMRable};
 use crate::leaf_set::LeafSet;
 use crate::prune_list::PruneList;
-use crate::types::DataFile;
+use crate::types::{AppendOnlyFile, DataFile, SizeEntry, SizeInfo};
 use croaring::Bitmap;
 use std::path::{Path, PathBuf};
 
@@ -201,21 +201,22 @@ impl<T: PMMRable> PMMRBackend<T> {
 	) -> io::Result<PMMRBackend<T>> {
 		let data_dir = data_dir.as_ref();
 
-		// We either have a fixed size *or* a path to a file for tracking sizes.
-		let (elmt_size, size_path) = if fixed_size {
-			(Some(T::E::LEN as u16), None)
+		// Are we dealing with "fixed size" data elements or "variable size" data elements
+		// maintained in an associated size file?
+		let size_info = if fixed_size {
+			SizeInfo::FixedSize(T::E::LEN as u16)
 		} else {
-			(None, Some(data_dir.join(PMMR_SIZE_FILE)))
+			SizeInfo::VariableSize(Box::new(AppendOnlyFile::open(
+				data_dir.join(PMMR_SIZE_FILE),
+				SizeInfo::FixedSize(SizeEntry::LEN as u16),
+			)?))
 		};
 
 		// Hash file is always "fixed size" and we use 32 bytes per hash.
-		let hash_file =
-			DataFile::open(&data_dir.join(PMMR_HASH_FILE), None, Some(Hash::LEN as u16))?;
-		let data_file = DataFile::open(
-			&data_dir.join(PMMR_DATA_FILE),
-			size_path.as_ref(),
-			elmt_size,
-		)?;
+		let hash_size_info = SizeInfo::FixedSize(Hash::LEN as u16);
+
+		let hash_file = DataFile::open(&data_dir.join(PMMR_HASH_FILE), hash_size_info)?;
+		let data_file = DataFile::open(&data_dir.join(PMMR_DATA_FILE), size_info)?;
 
 		let leaf_set_path = data_dir.join(PMMR_LEAF_FILE);
 
