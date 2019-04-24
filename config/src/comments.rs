@@ -229,7 +229,7 @@ fn comments() -> HashMap<String, String> {
 #ban_window = 10800
 
 #maximum number of peers
-#peer_max_count = 25
+#peer_max_count = 125
 
 #preferred minimum number of peers (we'll actively keep trying to add peers
 #until we get to at least this number
