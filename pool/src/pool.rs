@@ -26,6 +26,7 @@ use self::util::RwLock;
 use crate::types::{BlockChain, PoolEntry, PoolError};
 use grin_core as core;
 use grin_util as util;
+use std::cmp::Reverse;
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
@@ -302,12 +303,13 @@ impl Pool {
 		Ok(())
 	}
 
-	/// Buckets consist of a vec of txs and track the aggregated fee_to_weight and  a "depth".
-	/// The depth is incremented if a bucket necessarily depends on an earlier bucket.
+	/// Buckets consist of a vec of txs and track the aggregate fee_to_weight.
 	/// We aggregate (cut-through) dependent transactions within a bucket *unless* adding a tx
-	/// would reduce the aggregate fee_to_weight, in which case we start a new bucket (and increment the depth).
-	/// We can then sort the buckets by depth and fee_to_weight to preserve dependency ordering and maximize
-	/// both cut-through and overall fees.
+	/// would reduce the aggregate fee_to_weight, in which case we start a new bucket.
+	/// Note this new bucket will by definition have a lower fee_to_weight than the bucket
+	/// containing the tx it depends on.
+	/// Sorting the buckets by fee_to_weight will therefore preserve dependency ordering,
+	/// maximizing both cut-through and overall fees.
 	fn bucket_transactions(&self, weighting: Weighting) -> Vec<Transaction> {
 		let mut tx_buckets: Vec<Bucket> = Vec::new();
 		let mut output_commits = HashMap::new();
@@ -371,9 +373,9 @@ impl Pool {
 							tx_buckets[pos] = new_bucket;
 						} else {
 							// Otherwise put it in its own bucket at the end.
-							// Note we increment the depth here to track the dependency.
-							tx_buckets
-								.push(Bucket::new_with_depth(entry.tx.clone(), bucket.depth + 1));
+							// Note: This bucket will have a lower fee_to_weight
+							// than the bucket it depends on.
+							tx_buckets.push(Bucket::new(entry.tx.clone()));
 						}
 					} else {
 						// Aggregation failed so discard this new tx.
@@ -395,11 +397,10 @@ impl Pool {
 			}
 		}
 
-		// Now sort them by depth (ascending) to maintain dependency ordering.
-		// And then sort them (within each depth) by fee_to_weight (descending).
+		// Sort them by fee_to_weight (descending).
 		// Txs with no dependencies will be toward the start of the vec.
 		// Txs with a big chain of dependencies will be toward the end of the vec.
-		tx_buckets.sort_unstable_by_key(|x| (x.depth, -(x.fee_to_weight as i64)));
+		tx_buckets.sort_unstable_by_key(|x| Reverse(x.fee_to_weight));
 
 		tx_buckets
 			.into_iter()
@@ -453,7 +454,6 @@ impl Pool {
 struct Bucket {
 	raw_txs: Vec<Transaction>,
 	fee_to_weight: u64,
-	depth: u8,
 }
 
 impl Bucket {
@@ -461,15 +461,6 @@ impl Bucket {
 		Bucket {
 			fee_to_weight: tx.fee_to_weight(),
 			raw_txs: vec![tx.clone()],
-			depth: 0,
-		}
-	}
-
-	fn new_with_depth(tx: Transaction, depth: u8) -> Bucket {
-		Bucket {
-			fee_to_weight: tx.fee_to_weight(),
-			raw_txs: vec![tx.clone()],
-			depth,
 		}
 	}
 
@@ -486,7 +477,6 @@ impl Bucket {
 		Ok(Bucket {
 			fee_to_weight: agg_tx.fee_to_weight(),
 			raw_txs: raw_txs,
-			depth: self.depth,
 		})
 	}
 }
