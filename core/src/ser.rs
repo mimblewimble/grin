@@ -21,7 +21,6 @@
 
 use crate::core::hash::{DefaultHashable, Hash, Hashed};
 use crate::keychain::{BlindingFactor, Identifier, IDENTIFIER_SIZE};
-use crate::util::read_write::read_exact;
 use crate::util::secp::constants::{
 	AGG_SIGNATURE_SIZE, MAX_PROOF_SIZE, PEDERSEN_COMMITMENT_SIZE, SECRET_KEY_SIZE,
 };
@@ -31,7 +30,6 @@ use byteorder::{BigEndian, ByteOrder, ReadBytesExt};
 use std::fmt::Debug;
 use std::io::{self, Read, Write};
 use std::marker;
-use std::time::Duration;
 use std::{cmp, error, fmt};
 
 /// Possible errors deriving from serializing or deserializing.
@@ -366,17 +364,14 @@ impl<'a> Reader for BinReader<'a> {
 pub struct StreamingReader<'a> {
 	total_bytes_read: u64,
 	stream: &'a mut dyn Read,
-	timeout: Duration,
 }
 
 impl<'a> StreamingReader<'a> {
 	/// Create a new streaming reader with the provided underlying stream.
-	/// Also takes a duration to be used for each individual read_exact call.
-	pub fn new(stream: &'a mut dyn Read, timeout: Duration) -> StreamingReader<'a> {
+	pub fn new(stream: &'a mut dyn Read) -> StreamingReader<'a> {
 		StreamingReader {
 			total_bytes_read: 0,
 			stream,
-			timeout,
 		}
 	}
 
@@ -427,7 +422,7 @@ impl<'a> Reader for StreamingReader<'a> {
 	/// Read a fixed number of bytes.
 	fn read_fixed_bytes(&mut self, len: usize) -> Result<Vec<u8>, Error> {
 		let mut buf = vec![0u8; len];
-		read_exact(&mut self.stream, &mut buf, self.timeout, true)?;
+		self.stream.read_exact(&mut buf)?;
 		self.total_bytes_read += len as u64;
 		Ok(buf)
 	}

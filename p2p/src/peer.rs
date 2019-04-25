@@ -12,13 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::util::{Mutex, RwLock};
-use std::fmt;
-use std::fs::File;
-use std::net::{Shutdown, TcpStream};
-use std::path::PathBuf;
-use std::sync::Arc;
-
 use crate::chain;
 use crate::conn;
 use crate::core::core::hash::{Hash, Hashed};
@@ -31,7 +24,14 @@ use crate::types::{
 	Capabilities, ChainAdapter, Error, NetAdapter, P2PConfig, PeerAddr, PeerInfo, ReasonForBan,
 	TxHashSetRead,
 };
+use crate::util::{Mutex, RwLock};
 use chrono::prelude::{DateTime, Utc};
+use std::fmt;
+use std::fs::File;
+use std::net::{Shutdown, TcpStream};
+use std::path::PathBuf;
+use std::sync::mpsc;
+use std::sync::Arc;
 
 const MAX_TRACK_SIZE: usize = 30;
 const MAX_PEER_MSG_PER_MIN: u64 = 500;
@@ -54,13 +54,14 @@ pub struct Peer {
 	state: Arc<RwLock<State>>,
 	// set of all hashes known to this peer (so no need to send)
 	tracking_adapter: TrackingAdapter,
-	connection: Option<Mutex<conn::Tracker>>,
+	connection: Option<Arc<conn::Tracker>>,
+	errors: Option<Mutex<mpsc::Receiver<Error>>>,
 }
 
 macro_rules! connection {
 	($holder:expr) => {
 		match $holder.connection.as_ref() {
-			Some(conn) => conn.lock(),
+			Some(conn) => conn,
 			None => return Err(Error::Internal),
 			}
 	};
@@ -80,6 +81,7 @@ impl Peer {
 			state: Arc::new(RwLock::new(State::Connected)),
 			tracking_adapter: TrackingAdapter::new(adapter),
 			connection: None,
+			errors: None,
 		}
 	}
 
@@ -139,7 +141,9 @@ impl Peer {
 	pub fn start(&mut self, conn: TcpStream) {
 		let adapter = Arc::new(self.tracking_adapter.clone());
 		let handler = Protocol::new(adapter, self.info.clone());
-		self.connection = Some(Mutex::new(conn::listen(conn, handler)));
+		let (tracker, errors) = conn::listen(conn, handler);
+		self.connection = Some(tracker);
+		self.errors = Some(Mutex::new(errors));
 	}
 
 	pub fn is_denied(config: &P2PConfig, peer_addr: PeerAddr) -> bool {
@@ -198,7 +202,6 @@ impl Peer {
 	/// Whether the peer is considered abusive, mostly for spammy nodes
 	pub fn is_abusive(&self) -> bool {
 		if let Some(ref conn) = self.connection {
-			let conn = conn.lock();
 			let rec = conn.received_bytes.read();
 			let sent = conn.sent_bytes.read();
 			rec.count_per_min() > MAX_PEER_MSG_PER_MIN
@@ -211,8 +214,7 @@ impl Peer {
 	/// Number of bytes sent to the peer
 	pub fn last_min_sent_bytes(&self) -> Option<u64> {
 		if let Some(ref tracker) = self.connection {
-			let conn = tracker.lock();
-			let sent_bytes = conn.sent_bytes.read();
+			let sent_bytes = tracker.sent_bytes.read();
 			return Some(sent_bytes.bytes_per_min());
 		}
 		None
@@ -221,8 +223,7 @@ impl Peer {
 	/// Number of bytes received from the peer
 	pub fn last_min_received_bytes(&self) -> Option<u64> {
 		if let Some(ref tracker) = self.connection {
-			let conn = tracker.lock();
-			let received_bytes = conn.received_bytes.read();
+			let received_bytes = tracker.received_bytes.read();
 			return Some(received_bytes.bytes_per_min());
 		}
 		None
@@ -230,9 +231,8 @@ impl Peer {
 
 	pub fn last_min_message_counts(&self) -> Option<(u64, u64)> {
 		if let Some(ref tracker) = self.connection {
-			let conn = tracker.lock();
-			let received_bytes = conn.received_bytes.read();
-			let sent_bytes = conn.sent_bytes.read();
+			let received_bytes = tracker.received_bytes.read();
+			let sent_bytes = tracker.sent_bytes.read();
 			return Some((sent_bytes.count_per_min(), received_bytes.count_per_min()));
 		}
 		None
@@ -409,16 +409,20 @@ impl Peer {
 	/// Stops the peer, closing its connection
 	pub fn stop(&self) {
 		if let Some(conn) = self.connection.as_ref() {
-			stop_with_connection(&conn.lock());
+			stop_with_connection(&conn);
 		}
 	}
 
 	fn check_connection(&self) -> bool {
-		let connection = match self.connection.as_ref() {
-			Some(conn) => conn.lock(),
+		let conn = match self.connection.as_ref() {
+			Some(conn) => conn,
 			None => return false,
 		};
-		match connection.error_channel.try_recv() {
+		let errors = match self.errors.as_ref() {
+			Some(errors) => errors.lock(),
+			None => return false,
+		};
+		match errors.try_recv() {
 			Ok(Error::Serialization(e)) => {
 				let need_stop = {
 					let mut state = self.state.write();
@@ -434,7 +438,7 @@ impl Peer {
 						"Client {} corrupted, will disconnect ({:?}).",
 						self.info.addr, e
 					);
-					stop_with_connection(&connection);
+					stop_with_connection(&conn);
 				}
 				false
 			}
@@ -450,7 +454,7 @@ impl Peer {
 				};
 				if need_stop {
 					debug!("Client {} connection lost: {:?}", self.info.addr, e);
-					stop_with_connection(&connection);
+					stop_with_connection(conn);
 				}
 				false
 			}
@@ -463,7 +467,15 @@ impl Peer {
 }
 
 fn stop_with_connection(connection: &conn::Tracker) {
-	let _ = connection.close_channel.send(());
+	connection.close();
+	// check server shutdown
+	//	while connection
+	//		.number_threads
+	//		.load(std::sync::atomic::Ordering::Relaxed)
+	//		!= 0
+	//	{
+	//		std::thread::sleep(std::time::Duration::from_millis(200));
+	//	}
 }
 
 /// Adapter implementation that forwards everything to an underlying adapter

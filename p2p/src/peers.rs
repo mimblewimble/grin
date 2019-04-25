@@ -434,9 +434,20 @@ impl Peers {
 	}
 
 	pub fn stop(&self) {
+		let mut handles = vec![];
 		let mut peers = self.peers.write();
 		for (_, peer) in peers.drain() {
-			peer.stop();
+			handles.push(
+				std::thread::Builder::new()
+					.name("peer_stop".to_string())
+					.spawn(move || {
+						peer.stop();
+					})
+					.unwrap(),
+			);
+		}
+		for h in handles {
+			let _ = h.join();
 		}
 	}
 
