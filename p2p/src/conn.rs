@@ -51,6 +51,10 @@ macro_rules! try_break {
 		match $inner {
 			Ok(v) => Some(v),
 			Err(Error::Connection(ref e)) if e.kind() == io::ErrorKind::WouldBlock => None,
+			Err(Error::Store(_))
+			| Err(Error::Chain(_))
+			| Err(Error::Internal)
+			| Err(Error::NoDandelionRelay) => None,
 			Err(e) => {
 				let _ = $chan.send(e);
 				break;

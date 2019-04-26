@@ -61,7 +61,7 @@ macro_rules! connection {
 	($holder:expr) => {
 		match $holder.connection.as_ref() {
 			Some(conn) => conn.lock(),
-			None => return Err(Error::Internal),
+			None => return Err(Error::ConnectionClose),
 			}
 	};
 }
