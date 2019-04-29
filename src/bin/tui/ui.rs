@@ -16,9 +16,6 @@
 //! of various subsystems
 
 use chrono::prelude::Utc;
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{mpsc, Arc};
-
 use cursive::direction::Orientation;
 use cursive::theme::BaseColor::{Black, Blue, Cyan, White};
 use cursive::theme::Color::Dark;
@@ -31,14 +28,13 @@ use cursive::traits::Identifiable;
 use cursive::utils::markup::StyledString;
 use cursive::views::{LinearLayout, Panel, StackView, TextView, ViewBox};
 use cursive::Cursive;
+use std::sync::mpsc;
 
+use crate::built_info;
 use crate::servers::Server;
-
 use crate::tui::constants::ROOT_STACK;
 use crate::tui::types::{TUIStatusListener, UIMessage};
 use crate::tui::{menu, mining, peers, status, version};
-
-use crate::built_info;
 
 pub struct UI {
 	cursive: Cursive,
@@ -63,12 +59,19 @@ impl UI {
 	/// Create a new UI
 	pub fn new(controller_tx: mpsc::Sender<ControllerMessage>) -> UI {
 		let (ui_tx, ui_rx) = mpsc::channel::<UIMessage>();
+		let close_tx = controller_tx.clone();
 		let mut grin_ui = UI {
 			cursive: Cursive::default(),
 			ui_tx: ui_tx,
 			ui_rx: ui_rx,
 			controller_tx: controller_tx,
 		};
+		if let Err(e) = ctrlc::set_handler(move || {
+			let _ = close_tx.send(ControllerMessage::Shutdown);
+			std::thread::sleep(std::time::Duration::from_millis(1000));
+		}) {
+			error!("failed to register ctrl-c handler: {:?}", e);
+		}
 
 		// Create UI objects, etc
 		let status_view = status::TUIStatusView::create();
@@ -166,25 +169,20 @@ impl Controller {
 		let (tx, rx) = mpsc::channel::<ControllerMessage>();
 		Ok(Controller {
 			rx: rx,
-			ui: UI::new(tx.clone()),
+			ui: UI::new(tx),
 		})
 	}
 	/// Run the controller
-	pub fn run(&mut self, server: Server, running: Arc<AtomicBool>) {
+	pub fn run(&mut self, server: Server) {
 		let stat_update_interval = 1;
 		let mut next_stat_update = Utc::now().timestamp() + stat_update_interval;
 		while self.ui.step() {
-			if !running.load(Ordering::SeqCst) {
-				warn!("Received SIGINT (Ctrl+C).");
-				server.stop();
-				self.ui.stop();
-			}
 			while let Some(message) = self.rx.try_iter().next() {
 				match message {
 					ControllerMessage::Shutdown => {
+						debug!("Got shutdown message");
 						server.stop();
 						self.ui.stop();
-						running.store(false, Ordering::SeqCst)
 						/*self.ui
 						.ui_tx
 						.send(UIMessage::UpdateOutput("update".to_string()))

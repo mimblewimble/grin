@@ -46,14 +46,13 @@ fn start_server_tui(config: servers::ServerConfig) {
 	if config.run_tui.unwrap_or(false) {
 		warn!("Starting GRIN in UI mode...");
 		servers::Server::start(config, |serv: servers::Server| -> thread::JoinHandle<()> {
-			let running = Arc::new(AtomicBool::new(true));
 			thread::Builder::new()
 				.name("ui".to_string())
 				.spawn(move || {
 					let mut controller = ui::Controller::new().unwrap_or_else(|e| {
 						panic!("Error loading UI controller: {}", e);
 					});
-					controller.run(serv, running);
+					controller.run(serv);
 				})
 				.expect("can't launch UI thread")
 		})
