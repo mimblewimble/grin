@@ -170,7 +170,7 @@ impl Controller {
 		})
 	}
 	/// Run the controller
-	pub fn run(&mut self, server: Arc<Server>, running: Arc<AtomicBool>) {
+	pub fn run(&mut self, server: Server, running: Arc<AtomicBool>) {
 		let stat_update_interval = 1;
 		let mut next_stat_update = Utc::now().timestamp() + stat_update_interval;
 		while self.ui.step() {
