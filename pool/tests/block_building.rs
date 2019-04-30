@@ -84,13 +84,13 @@ fn test_transaction_pool_block_building() {
 
 			// Add the three root txs to the pool.
 			write_pool
-				.add_to_pool(test_source(), root_tx_1, false, &header)
+				.add_to_pool(test_source(), root_tx_1.clone(), false, &header)
 				.unwrap();
 			write_pool
-				.add_to_pool(test_source(), root_tx_2, false, &header)
+				.add_to_pool(test_source(), root_tx_2.clone(), false, &header)
 				.unwrap();
 			write_pool
-				.add_to_pool(test_source(), root_tx_3, false, &header)
+				.add_to_pool(test_source(), root_tx_3.clone(), false, &header)
 				.unwrap();
 
 			// Now add the two child txs to the pool.
@@ -104,14 +104,20 @@ fn test_transaction_pool_block_building() {
 			assert_eq!(write_pool.total_size(), 5);
 		}
 
-		let txs = {
-			let read_pool = pool.read();
-			read_pool.prepare_mineable_transactions().unwrap()
-		};
-		// children should have been aggregated into parents
-		assert_eq!(txs.len(), 3);
+		let txs = pool.read().prepare_mineable_transactions().unwrap();
 
 		let block = add_block(header, txs, &mut chain);
+
+		// Check the block contains what we expect.
+		assert_eq!(block.inputs().len(), 4);
+		assert_eq!(block.outputs().len(), 4);
+		assert_eq!(block.kernels().len(), 6);
+
+		assert!(block.kernels().contains(&root_tx_1.kernels()[0]));
+		assert!(block.kernels().contains(&root_tx_2.kernels()[0]));
+		assert!(block.kernels().contains(&root_tx_3.kernels()[0]));
+		assert!(block.kernels().contains(&child_tx_1.kernels()[0]));
+		assert!(block.kernels().contains(&child_tx_1.kernels()[0]));
 
 		// Now reconcile the transaction pool with the new block
 		// and check the resulting contents of the pool are what we expect.
