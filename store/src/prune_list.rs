@@ -83,7 +83,7 @@ impl PruneList {
 		prune_list.init_caches();
 
 		if !prune_list.bitmap.is_empty() {
-			debug!("prune_list: bitmap {} pos ({} bytes), pruned_cache {} pos ({} bytes), shift_cache {}, leaf_shift_cache {}",
+			debug!("bitmap {} pos ({} bytes), pruned_cache {} pos ({} bytes), shift_cache {}, leaf_shift_cache {}",
 				prune_list.bitmap.cardinality(),
 				prune_list.bitmap.get_serialized_size_in_bytes(),
 				prune_list.pruned_cache.cardinality(),
