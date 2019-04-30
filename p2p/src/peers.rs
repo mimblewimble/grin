@@ -18,7 +18,8 @@ use std::fs::File;
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use rand::{thread_rng, Rng};
+use rand::seq::SliceRandom;
+use rand::thread_rng;
 
 use crate::chain;
 use crate::core::core;
@@ -100,7 +101,7 @@ impl Peers {
 			.filter(|p| p.is_connected())
 			.cloned()
 			.collect::<Vec<_>>();
-		thread_rng().shuffle(&mut res);
+		res.shuffle(&mut thread_rng());
 		res
 	}
 
@@ -141,7 +142,7 @@ impl Peers {
 			.filter(|x| x.info.total_difficulty() > total_difficulty)
 			.collect::<Vec<_>>();
 
-		thread_rng().shuffle(&mut max_peers);
+		max_peers.shuffle(&mut thread_rng());
 		Ok(max_peers)
 	}
 
@@ -190,7 +191,7 @@ impl Peers {
 			.filter(|x| x.info.total_difficulty() == max_total_difficulty)
 			.collect::<Vec<_>>();
 
-		thread_rng().shuffle(&mut max_peers);
+		max_peers.shuffle(&mut thread_rng());
 		max_peers
 	}
 
