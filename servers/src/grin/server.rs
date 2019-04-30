@@ -75,7 +75,7 @@ impl Server {
 	/// to poll info about the server status
 	pub fn start<F>(config: ServerConfig, mut info_callback: F) -> Result<(), Error>
 	where
-		F: FnMut(Server) -> thread::JoinHandle<()>,
+		F: FnMut(Server),
 	{
 		let mining_config = config.stratum_mining_config.clone();
 		let enable_test_miner = config.run_test_miner;
@@ -101,9 +101,7 @@ impl Server {
 			}
 		}
 
-		info_callback(serv)
-			.join()
-			.expect("failed to join UI thread");
+		info_callback(serv);
 		Ok(())
 	}
 

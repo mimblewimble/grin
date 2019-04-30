@@ -45,37 +45,27 @@ fn start_server_tui(config: servers::ServerConfig) {
 	// everything it might need
 	if config.run_tui.unwrap_or(false) {
 		warn!("Starting GRIN in UI mode...");
-		servers::Server::start(config, |serv: servers::Server| -> thread::JoinHandle<()> {
-			thread::Builder::new()
-				.name("ui".to_string())
-				.spawn(move || {
-					let mut controller = ui::Controller::new().unwrap_or_else(|e| {
-						panic!("Error loading UI controller: {}", e);
-					});
-					controller.run(serv);
-				})
-				.expect("can't launch UI thread")
+		servers::Server::start(config, |serv: servers::Server| {
+			let mut controller = ui::Controller::new().unwrap_or_else(|e| {
+				panic!("Error loading UI controller: {}", e);
+			});
+			controller.run(serv);
 		})
 		.unwrap();
 	} else {
 		warn!("Starting GRIN w/o UI...");
-		servers::Server::start(config, |serv: servers::Server| -> thread::JoinHandle<()> {
+		servers::Server::start(config, |serv: servers::Server| {
 			let running = Arc::new(AtomicBool::new(true));
-			thread::Builder::new()
-				.name("no-ui".to_string())
-				.spawn(move || {
-					let r = running.clone();
-					ctrlc::set_handler(move || {
-						r.store(false, Ordering::SeqCst);
-					})
-					.expect("Error setting handler for both SIGINT (Ctrl+C) and SIGTERM (kill)");
-					while running.load(Ordering::SeqCst) {
-						thread::sleep(Duration::from_secs(1));
-					}
-					warn!("Received SIGINT (Ctrl+C) or SIGTERM (kill).");
-					serv.stop();
-				})
-				.expect("can't launch main thread")
+			let r = running.clone();
+			ctrlc::set_handler(move || {
+				r.store(false, Ordering::SeqCst);
+			})
+			.expect("Error setting handler for both SIGINT (Ctrl+C) and SIGTERM (kill)");
+			while running.load(Ordering::SeqCst) {
+				thread::sleep(Duration::from_secs(1));
+			}
+			warn!("Received SIGINT (Ctrl+C) or SIGTERM (kill).");
+			serv.stop();
 		})
 		.unwrap();
 	}

@@ -180,13 +180,8 @@ impl Controller {
 			while let Some(message) = self.rx.try_iter().next() {
 				match message {
 					ControllerMessage::Shutdown => {
-						debug!("Got shutdown message");
 						server.stop();
 						self.ui.stop();
-						/*self.ui
-						.ui_tx
-						.send(UIMessage::UpdateOutput("update".to_string()))
-						.unwrap();*/
 					}
 				}
 			}
