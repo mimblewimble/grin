@@ -69,7 +69,7 @@ pub enum Error {
 	Serialization(ser::Error),
 	Connection(io::Error),
 	I2p(i2p::Error),
-  Socket(io::Error),
+	Socket(io::Error),
 	/// Header type does not match the expected message type
 	BadMessage,
 	MsgLen,
@@ -134,9 +134,9 @@ pub enum PeerAddr {
 enum_from_primitive! {
 	#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
   pub enum PeerAddrType {
-    IPv4 = 0,
-    IPv6 = 1,
-    I2p = 2,
+	IPv4 = 0,
+	IPv6 = 1,
+	I2p = 2,
   }
 }
 
@@ -174,41 +174,39 @@ impl Writeable for PeerAddr {
 impl Readable for PeerAddr {
 	fn read(reader: &mut dyn Reader) -> Result<PeerAddr, ser::Error> {
 		let addr_format = PeerAddrType::from_u8(reader.read_u8()?);
-    match addr_format {
-      Some(PeerAddrType::IPv4) => {
-			  let ip = reader.read_fixed_bytes(4)?;
-			  let port = reader.read_u16()?;
-			  Ok(PeerAddr::Socket(SocketAddr::V4(SocketAddrV4::new(
-			  	Ipv4Addr::new(ip[0], ip[1], ip[2], ip[3]),
-			  	port,
-			  ))))
-      },
-      Some(PeerAddrType::IPv6) => {
-			  let ip = try_iter_map_vec!(0..8, |_| reader.read_u16());
-			  let port = reader.read_u16()?;
-			  Ok(PeerAddr::Socket(SocketAddr::V6(SocketAddrV6::new(
-			  	Ipv6Addr::new(ip[0], ip[1], ip[2], ip[3], ip[4], ip[5], ip[6], ip[7]),
-			  	port,
-			  	0,
-			  	0,
-			  ))))
-      },
-      Some(PeerAddrType::I2p) => {
-			  let addr = reader.read_bytes_len_prefix()?;
-			  if addr.len() > MAX_I2P_ADDR_LENGTH {
-			  	return Err(ser::Error::TooLargeReadErr);
-			  }
-			  let addr_str = str::from_utf8(&addr).map_err(|_| ser::Error::CorruptedData)?;
-			  let port = reader.read_u16()?;
-			  Ok(PeerAddr::I2p(I2pSocketAddr::new(
-			  	I2pAddr::new(&addr_str),
-			  	port,
-			  )))
-      },
-      None => {
-			  Err(ser::Error::CorruptedData)
-      },
-    }
+		match addr_format {
+			Some(PeerAddrType::IPv4) => {
+				let ip = reader.read_fixed_bytes(4)?;
+				let port = reader.read_u16()?;
+				Ok(PeerAddr::Socket(SocketAddr::V4(SocketAddrV4::new(
+					Ipv4Addr::new(ip[0], ip[1], ip[2], ip[3]),
+					port,
+				))))
+			}
+			Some(PeerAddrType::IPv6) => {
+				let ip = try_iter_map_vec!(0..8, |_| reader.read_u16());
+				let port = reader.read_u16()?;
+				Ok(PeerAddr::Socket(SocketAddr::V6(SocketAddrV6::new(
+					Ipv6Addr::new(ip[0], ip[1], ip[2], ip[3], ip[4], ip[5], ip[6], ip[7]),
+					port,
+					0,
+					0,
+				))))
+			}
+			Some(PeerAddrType::I2p) => {
+				let addr = reader.read_bytes_len_prefix()?;
+				if addr.len() > MAX_I2P_ADDR_LENGTH {
+					return Err(ser::Error::TooLargeReadErr);
+				}
+				let addr_str = str::from_utf8(&addr).map_err(|_| ser::Error::CorruptedData)?;
+				let port = reader.read_u16()?;
+				Ok(PeerAddr::I2p(I2pSocketAddr::new(
+					I2pAddr::new(&addr_str),
+					port,
+				)))
+			}
+			None => Err(ser::Error::CorruptedData),
+		}
 	}
 }
 
@@ -306,7 +304,10 @@ impl PeerAddr {
 		if let PeerAddr::I2p(i2p_addr) = self {
 			return Ok(i2p_addr);
 		}
-    Err(Error::I2p(i2p::Error::from(io::Error::new(io::ErrorKind::InvalidInput, "not a valid I2P address"))))
+		Err(Error::I2p(i2p::Error::from(io::Error::new(
+			io::ErrorKind::InvalidInput,
+			"not a valid I2P address",
+		))))
 	}
 
 	/// Returns the underlying IP address if this is one, otherwise panics
@@ -314,7 +315,10 @@ impl PeerAddr {
 		if let PeerAddr::Socket(s) = self {
 			return Ok(s);
 		}
-    Err(Error::Socket(io::Error::new(io::ErrorKind::InvalidInput, "not a valid IP address")))
+		Err(Error::Socket(io::Error::new(
+			io::ErrorKind::InvalidInput,
+			"not a valid IP address",
+		)))
 	}
 }
 
@@ -543,7 +547,8 @@ bitflags! {
 		const FULL_NODE = Capabilities::HEADER_HIST.bits
 			| Capabilities::TXHASHSET_HIST.bits
 			| Capabilities::PEER_LIST.bits
-			| Capabilities::TX_KERNEL_HASH.bits;
+			| Capabilities::TX_KERNEL_HASH.bits
+	  | Capabilities::I2P_SUPPORTED.bits;
 	}
 }
 
