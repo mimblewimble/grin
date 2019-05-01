@@ -209,11 +209,11 @@ fn resolve_peer_addr(advertised: PeerAddr, conn: &Stream) -> PeerAddr {
 		PeerAddr::Socket(addr) => {
 			let port = addr.port();
 			if let Ok(addr) = conn.peer_addr() {
-        if let Ok(ip) = addr.unwrap_ip() {
-				  PeerAddr::Socket(SocketAddr::new(ip.ip(), port))
-        } else {
-          advertised
-        }
+				if let Ok(ip) = addr.unwrap_ip() {
+					PeerAddr::Socket(SocketAddr::new(ip.ip(), port))
+				} else {
+					advertised
+				}
 			} else {
 				advertised
 			}

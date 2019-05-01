@@ -52,11 +52,11 @@ fn test_capabilities() {
 	);
 
 	assert_eq!(
-		p2p::types::Capabilities::from_bits_truncate(0b1111 as u32),
+		p2p::types::Capabilities::from_bits_truncate(0b11111 as u32),
 		p2p::types::Capabilities::FULL_NODE
 	);
 	assert_eq!(
-		p2p::types::Capabilities::from_bits_truncate(0b00001111 as u32),
+		p2p::types::Capabilities::from_bits_truncate(0b00011111 as u32),
 		p2p::types::Capabilities::FULL_NODE
 	);
 	assert_eq!(
@@ -64,12 +64,12 @@ fn test_capabilities() {
 		p2p::types::Capabilities::FULL_NODE
 	);
 	assert_eq!(
-		p2p::types::Capabilities::from_bits_truncate(0b00101111 as u32),
+		p2p::types::Capabilities::from_bits_truncate(0b00111111 as u32),
 		p2p::types::Capabilities::FULL_NODE
 	);
 
 	assert!(
-		p2p::types::Capabilities::from_bits_truncate(0b00101111 as u32)
+		p2p::types::Capabilities::from_bits_truncate(0b00111111 as u32)
 			.contains(p2p::types::Capabilities::FULL_NODE)
 	);
 
