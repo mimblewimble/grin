@@ -24,7 +24,7 @@ use std::{thread, time};
 
 use crate::core::core::hash::Hash;
 use crate::core::pow::Difficulty;
-use crate::p2p::types::{Stream, PeerAddr};
+use crate::p2p::types::{PeerAddr, Stream};
 use crate::p2p::Peer;
 
 fn open_port() -> u16 {

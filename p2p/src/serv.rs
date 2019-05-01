@@ -36,8 +36,8 @@ use crate::types::{
 use crate::util::StopState;
 use chrono::prelude::{DateTime, Utc};
 
-use i2p::Session;
 use i2p::net::{I2pListener, I2pStream};
+use i2p::Session;
 
 /// P2P server implementation, handling bootstrapping to find and connect to
 /// peers, receiving connections from other peers and keep track of all of them.
@@ -187,14 +187,16 @@ impl Server {
 		);
 		let (mut stream, self_addr) = match addr {
 			PeerAddr::Socket(addr) => {
-				let tcp_stream = TcpStream::connect_timeout(&addr, Duration::from_secs(10)).map_err(|e| Error::Connection(e))?;
+				let tcp_stream = TcpStream::connect_timeout(&addr, Duration::from_secs(10))
+					.map_err(|e| Error::Connection(e))?;
 				let addr = PeerAddr::Socket(SocketAddr::new(self.config.host, self.config.port));
 				let stream = Stream::Tcp(tcp_stream);
 				(stream, addr)
 			}
 			PeerAddr::I2p(i2p_addr) => {
 				let session = self.i2p_session.as_ref().ok_or(Error::Internal)?;
-				let stream = Stream::I2p(I2pStream::connect_with_session(&session, i2p_addr.clone())?);
+				let stream =
+					Stream::I2p(I2pStream::connect_with_session(&session, i2p_addr.clone())?);
 				let addr = stream.local_addr()?;
 				(stream, addr)
 			}
