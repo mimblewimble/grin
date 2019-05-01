@@ -60,6 +60,8 @@ pub enum Error {
 	Connection(io::Error),
 	/// Header type does not match the expected message type
 	BadMessage,
+	/// Unkown message type
+	UnknownMessage,
 	MsgLen,
 	Banned,
 	ConnectionClose,
