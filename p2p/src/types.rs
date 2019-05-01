@@ -251,6 +251,11 @@ impl PeerAddr {
 		PeerAddr::Socket(SocketAddr::new(addr, port))
 	}
 
+	/// Convenient way of constructing a new peer_addr from a SocketAddr
+	pub fn from_socket_addr(addr: SocketAddr) -> PeerAddr {
+		PeerAddr::Socket(addr)
+	}
+
 	/// If the ip is loopback then our key is "ip:port" (mainly for local usernet testing).
 	/// Otherwise we only care about the ip (we disallow multiple peers on the same ip address).
 	pub fn as_key(&self) -> String {
