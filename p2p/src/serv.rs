@@ -36,7 +36,8 @@ use crate::types::{
 use crate::util::StopState;
 use chrono::prelude::{DateTime, Utc};
 
-use i2p::net::I2pListener;
+use i2p::Session;
+use i2p::net::{I2pListener, I2pStream};
 
 /// P2P server implementation, handling bootstrapping to find and connect to
 /// peers, receiving connections from other peers and keep track of all of them.
@@ -45,7 +46,8 @@ pub struct Server {
 	capabilities: Capabilities,
 	handshake: Arc<Handshake>,
 	pub peers: Arc<Peers>,
-	stop_state: Arc<StopState>,
+	i2p_session: Option<Arc<Session>>,
+	stop_state: Arc<Mutex<StopState>>,
 }
 
 // TODO TLS
@@ -56,6 +58,7 @@ impl Server {
 		capab: Capabilities,
 		config: P2PConfig,
 		adapter: Arc<dyn ChainAdapter>,
+		i2p_session: Option<Arc<Session>>,
 		genesis: Hash,
 		stop_state: Arc<StopState>,
 	) -> Result<Server, Error> {
@@ -64,6 +67,7 @@ impl Server {
 			capabilities: capab,
 			handshake: Arc::new(Handshake::new(genesis, config.clone())),
 			peers: Arc::new(Peers::new(PeerStore::new(db_root)?, adapter, config)),
+			i2p_session,
 			stop_state,
 		})
 	}
@@ -116,7 +120,8 @@ impl Server {
 		Ok(())
 	}
 
-	pub fn listen_i2p(&self, session: Arc<i2p::Session>) -> Result<(), Error> {
+	pub fn listen_i2p(&self) -> Result<(), Error> {
+		let session = self.i2p_session.as_ref().ok_or(Error::Internal)?;
 		let listener = I2pListener::bind_with_session(&session)?;
 
 		// TODO break on stop_state
@@ -147,7 +152,8 @@ impl Server {
 	}
 
 	/// Asks the server to connect to a new peer. Directly returns the peer if
-	/// we're already connected to the provided address.
+	/// we're already connected to the provided address. Optionally takes an i2p
+	/// session to be able to handle i2p client connections.
 	pub fn connect(&self, addr: PeerAddr) -> Result<Arc<Peer>, Error> {
 		if self.stop_state.is_stopped() {
 			return Err(Error::ConnectionClose);
@@ -179,43 +185,34 @@ impl Server {
 			self.config.port,
 			addr
 		);
-		match addr {
+		let (mut stream, self_addr) = match addr {
 			PeerAddr::Socket(addr) => {
-				match TcpStream::connect_timeout(&addr, Duration::from_secs(10)) {
-					Ok(tcp_stream) => {
-						let addr = SocketAddr::new(self.config.host, self.config.port);
-						let total_diff = self.peers.total_difficulty()?;
-						let mut stream = Stream::Tcp(tcp_stream);
+				let tcp_stream = TcpStream::connect_timeout(&addr, Duration::from_secs(10)).map_err(|e| Error::Connection(e))?;
+				let addr = PeerAddr::Socket(SocketAddr::new(self.config.host, self.config.port));
+				let stream = Stream::Tcp(tcp_stream);
+				(stream, addr)
+			}
+			PeerAddr::I2p(i2p_addr) => {
+				let session = self.i2p_session.as_ref().ok_or(Error::Internal)?;
+				let stream = Stream::I2p(I2pStream::connect_with_session(&session, i2p_addr.clone())?);
+				let addr = stream.local_addr()?;
+				(stream, addr)
+			}
+		};
 
-						let mut peer = Peer::connect(
-							&mut stream,
-							self.capabilities,
-							total_diff,
-							PeerAddr::Socket(addr),
-							&self.handshake,
-							self.peers.clone(),
-						)?;
-						peer.start(stream);
-						let peer = Arc::new(peer);
-						self.peers.add_connected(peer.clone())?;
-						Ok(peer)
-					}
-					Err(e) => {
-						trace!(
-							"connect_peer: on {}:{}. Could not connect to {}: {:?}",
-							self.config.host,
-							self.config.port,
-							addr,
-							e
-						);
-						Err(Error::Connection(e))
-					}
-				}
-			}
-			PeerAddr::I2p(_) => {
-				unimplemented!();
-			}
-		}
+		let total_diff = self.peers.total_difficulty()?;
+		let mut peer = Peer::connect(
+			&mut stream,
+			self.capabilities,
+			total_diff,
+			self_addr,
+			&self.handshake,
+			self.peers.clone(),
+		)?;
+		peer.start(stream);
+		let peer = Arc::new(peer);
+		self.peers.add_connected(peer.clone())?;
+		Ok(peer)
 	}
 
 	fn handle_new_peer(&self, mut stream: Stream) -> Result<(), Error> {

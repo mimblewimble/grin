@@ -152,7 +152,7 @@ impl Server {
 		let stop_state = Arc::new(Mutex::new(StopState::new()));
 
 		// Setup i2p keys and daemon if configured
-		let i2p_info = i2p::init(&mut config);
+		let i2p_session = i2p::init(&mut config);
 
 		// Shared cache for verification results.
 		// We cache rangeproof verification and kernel signature verification.
@@ -208,6 +208,7 @@ impl Server {
 			config.p2p_config.capabilities,
 			config.p2p_config.clone(),
 			net_adapter.clone(),
+			i2p_session.clone(),
 			genesis.hash(),
 			stop_state.clone(),
 		)?);
@@ -263,12 +264,11 @@ impl Server {
 			.name("p2p-server".to_string())
 			.spawn(move || p2p_inner.listen());
 
-		if i2p_info.is_some() {
+		if i2p_session.is_some() {
 			let p2p_inner = p2p_server.clone();
-			let session = Arc::new(i2p_info.unwrap().1);
 			let _ = thread::Builder::new()
 				.name("p2p-server-i2p".to_string())
-				.spawn(move || p2p_inner.listen_i2p(session.clone()));
+				.spawn(move || p2p_inner.listen_i2p());
 		}
 
 		info!("Starting rest apis at: {}", &config.api_http_addr);
