@@ -25,7 +25,7 @@ use std::{thread, time};
 
 use crate::core::core::hash::Hash;
 use crate::core::pow::Difficulty;
-use crate::p2p::types::PeerAddr;
+use crate::p2p::types::{Stream, PeerAddr};
 use crate::p2p::Peer;
 
 fn open_port() -> u16 {
@@ -57,6 +57,7 @@ fn peer_handshake() {
 			p2p::Capabilities::UNKNOWN,
 			p2p_config.clone(),
 			net_adapter.clone(),
+			None,
 			Hash::from_vec(&vec![]),
 			Arc::new(Mutex::new(StopState::new())),
 		)
@@ -69,14 +70,14 @@ fn peer_handshake() {
 	thread::sleep(time::Duration::from_secs(1));
 
 	let addr = SocketAddr::new(p2p_config.host, p2p_config.port);
-	let mut socket = TcpStream::connect_timeout(&addr, time::Duration::from_secs(10)).unwrap();
+	let mut socket = Stream::Tcp(TcpStream::connect_timeout(&addr, time::Duration::from_secs(10)).unwrap());
 
-	let my_addr = PeerAddr("127.0.0.1:5000".parse().unwrap());
+	let my_addr = PeerAddr::from_socket_addr("127.0.0.1:5000".parse().unwrap());
 	let mut peer = Peer::connect(
 		&mut socket,
 		p2p::Capabilities::UNKNOWN,
 		Difficulty::min(),
-		my_addr,
+		my_addr.clone(),
 		&p2p::handshake::Handshake::new(Hash::from_vec(&vec![]), p2p_config.clone()),
 		net_adapter,
 	)
@@ -90,7 +91,7 @@ fn peer_handshake() {
 	peer.send_ping(Difficulty::min(), 0).unwrap();
 	thread::sleep(time::Duration::from_secs(1));
 
-	let server_peer = server.peers.get_connected_peer(my_addr).unwrap();
+	let server_peer = server.peers.get_connected_peer(&my_addr).unwrap();
 	assert_eq!(server_peer.info.total_difficulty(), Difficulty::min());
 	assert!(server.peers.peer_count() > 0);
 }

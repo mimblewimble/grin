@@ -15,9 +15,9 @@
 ///! Handles initialization and configuration of the i2p daemon. This includes
 ///! the generation and management of i2p keys as well naming services.
 use std::fs;
-use std::io::{Read, Write};
 use std::net::SocketAddr;
 use std::path::PathBuf;
+use std::sync::Arc;
 
 use i2p::net::{I2pAddr, I2pSocketAddr};
 use i2p::{SamConnection, Session};
@@ -32,7 +32,7 @@ const PUBKEY_FILE: &'static str = "pub";
 /// Initializes I2P environment to be usable subsequently by the server, if
 /// configured to. Will fail loudly if anything isn't where it's expected to
 /// be.
-pub fn init(config: &mut ServerConfig) -> Option<(I2pSocketAddr, Session)> {
+pub fn init(config: &mut ServerConfig) -> Option<Arc<Session>> {
 	match &config.p2p_config.i2p_mode {
 		p2p::I2pMode::Disabled => None,
 		p2p::I2pMode::Enabled {
@@ -45,9 +45,9 @@ pub fn init(config: &mut ServerConfig) -> Option<(I2pSocketAddr, Session)> {
 			if *autostart {
 				start_i2pd()
 			}
-			let (self_i2p_addr, privkey) = load_keys(addr, config);
+			let (_, privkey) = load_keys(addr, config);
 			let session = Session::from_destination(addr, &privkey).unwrap();
-			Some((self_i2p_addr, session))
+			Some(Arc::new(session))
 		}
 	}
 }
