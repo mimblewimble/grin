@@ -173,7 +173,7 @@ pub fn read_message<T: Readable>(stream: &mut dyn Read, msg_type: Type) -> Resul
 		}
 		MsgHeaderWrapper::Unknown(msg_len) => {
 			read_discard(msg_len, stream)?;
-			Err(Error::UnknownMessage)
+			Err(Error::BadMessage)
 		}
 	}
 }
