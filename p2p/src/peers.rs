@@ -224,6 +224,7 @@ impl Peers {
 			};
 			peer.set_banned();
 			peer.stop();
+			self.peers.write().remove(&peer.info.addr);
 		}
 	}
 
@@ -256,7 +257,14 @@ impl Peers {
 			match inner(&p) {
 				Ok(true) => count += 1,
 				Ok(false) => (),
-				Err(e) => debug!("Error sending {} to peer: {:?}", obj_name, e),
+				Err(e) => {
+					debug!(
+						"Error sending {:?} to peer {:?}: {:?}",
+						obj_name, &p.info.addr, e
+					);
+					p.stop();
+					self.peers.write().remove(&p.info.addr);
+				}
 			}
 
 			if count >= num_peers {
@@ -318,10 +326,11 @@ impl Peers {
 	/// Ping all our connected peers. Always automatically expects a pong back
 	/// or disconnects. This acts as a liveness test.
 	pub fn check_all(&self, total_difficulty: Difficulty, height: u64) {
-		let peers_map = self.peers.read();
-		for p in peers_map.values() {
-			if p.is_connected() {
-				let _ = p.send_ping(total_difficulty, height);
+		for p in self.connected_peers().iter() {
+			if let Err(e) = p.send_ping(total_difficulty, height) {
+				debug!("Error pinging peer {:?}: {:?}", &p.info.addr, e);
+				p.stop();
+				self.peers.write().remove(&p.info.addr);
 			}
 		}
 	}
