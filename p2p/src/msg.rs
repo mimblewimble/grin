@@ -81,6 +81,11 @@ fn max_block_size() -> u64 {
 	(global::max_block_weight() / consensus::BLOCK_OUTPUT_WEIGHT * 708) as u64
 }
 
+// Max msg size when msg type is unknown.
+fn default_max_msg_size() -> u64 {
+	max_block_size()
+}
+
 // Max msg size for each msg type.
 fn max_msg_size(msg_type: Type) -> u64 {
 	match msg_type {
@@ -283,8 +288,7 @@ impl Readable for MsgHeaderWrapper {
 			}
 			None => {
 				// Unknown msg type, but we still want to limit how big the msg is.
-				// Default to max_block_size (4x as above for space to change things).
-				let max_len = max_block_size() * 4;
+				let max_len = default_max_msg_size() * 4;
 				if msg_len > max_len {
 					error!(
 						"Too large read (unknown msg type) {:?}, max_len: {}, msg_len: {}.",
