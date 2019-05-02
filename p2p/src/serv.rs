@@ -12,26 +12,28 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use std::fs::File;
+use std::net::{Shutdown, SocketAddr, TcpListener, TcpStream};
+use std::path::PathBuf;
+use std::sync::Arc;
+use std::time::Duration;
+use std::{io, thread};
+
 use crate::chain;
 use crate::core::core;
 use crate::core::core::hash::Hash;
 use crate::core::global;
 use crate::core::pow::Difficulty;
 use crate::handshake::Handshake;
-use crate::lmdb;
 use crate::peer::Peer;
 use crate::peers::Peers;
 use crate::store::PeerStore;
 use crate::types::{
-	Capabilities, ChainAdapter, Error, NetAdapter, P2PConfig, PeerAddr, ReasonForBan, TxHashSetRead,
+	Capabilities, ChainAdapter, Error, NetAdapter, P2PConfig, PeerAddr, PeerInfo, ReasonForBan,
+	TxHashSetRead,
 };
 use crate::util::{Mutex, StopState};
 use chrono::prelude::{DateTime, Utc};
-use std::fs::File;
-use std::net::{Shutdown, SocketAddr, TcpListener, TcpStream};
-use std::sync::Arc;
-use std::time::Duration;
-use std::{io, thread};
 
 /// P2P server implementation, handling bootstrapping to find and connect to
 /// peers, receiving connections from other peers and keep track of all of them.
@@ -47,7 +49,7 @@ pub struct Server {
 impl Server {
 	/// Creates a new idle p2p server with no peers
 	pub fn new(
-		db_env: Arc<lmdb::Environment>,
+		db_root: &str,
 		capab: Capabilities,
 		config: P2PConfig,
 		adapter: Arc<dyn ChainAdapter>,
@@ -58,7 +60,7 @@ impl Server {
 			config: config.clone(),
 			capabilities: capab,
 			handshake: Arc::new(Handshake::new(genesis, config.clone())),
-			peers: Arc::new(Peers::new(PeerStore::new(db_env)?, adapter, config)),
+			peers: Arc::new(Peers::new(PeerStore::new(db_root)?, adapter, config)),
 			stop_state,
 		})
 	}
@@ -71,7 +73,7 @@ impl Server {
 		let listener = TcpListener::bind(addr)?;
 		listener.set_nonblocking(true)?;
 
-		let sleep_time = Duration::from_millis(1);
+		let sleep_time = Duration::from_millis(5);
 		loop {
 			// Pause peer ingress connection request. Only for tests.
 			if self.stop_state.lock().is_paused() {
@@ -240,7 +242,7 @@ impl ChainAdapter for DummyAdapter {
 		None
 	}
 
-	fn tx_kernel_received(&self, _h: Hash, _addr: PeerAddr) -> Result<bool, chain::Error> {
+	fn tx_kernel_received(&self, _h: Hash, _peer_info: &PeerInfo) -> Result<bool, chain::Error> {
 		Ok(true)
 	}
 	fn transaction_received(
@@ -253,21 +255,25 @@ impl ChainAdapter for DummyAdapter {
 	fn compact_block_received(
 		&self,
 		_cb: core::CompactBlock,
-		_addr: PeerAddr,
+		_peer_info: &PeerInfo,
 	) -> Result<bool, chain::Error> {
 		Ok(true)
 	}
 	fn header_received(
 		&self,
 		_bh: core::BlockHeader,
-		_addr: PeerAddr,
+		_peer_info: &PeerInfo,
 	) -> Result<bool, chain::Error> {
 		Ok(true)
 	}
-	fn block_received(&self, _: core::Block, _: PeerAddr, _: bool) -> Result<bool, chain::Error> {
+	fn block_received(&self, _: core::Block, _: &PeerInfo, _: bool) -> Result<bool, chain::Error> {
 		Ok(true)
 	}
-	fn headers_received(&self, _: &[core::BlockHeader], _: PeerAddr) -> Result<bool, chain::Error> {
+	fn headers_received(
+		&self,
+		_: &[core::BlockHeader],
+		_: &PeerInfo,
+	) -> Result<bool, chain::Error> {
 		Ok(true)
 	}
 	fn locate_headers(&self, _: &[Hash]) -> Result<Vec<core::BlockHeader>, chain::Error> {
@@ -288,7 +294,7 @@ impl ChainAdapter for DummyAdapter {
 		&self,
 		_h: Hash,
 		_txhashset_data: File,
-		_peer_addr: PeerAddr,
+		_peer_info: &PeerInfo,
 	) -> Result<bool, chain::Error> {
 		Ok(false)
 	}
@@ -300,6 +306,14 @@ impl ChainAdapter for DummyAdapter {
 		_total_size: u64,
 	) -> bool {
 		false
+	}
+
+	fn get_tmp_dir(&self) -> PathBuf {
+		unimplemented!()
+	}
+
+	fn get_tmpfile_pathname(&self, _tmpfile_name: String) -> PathBuf {
+		unimplemented!()
 	}
 }
 

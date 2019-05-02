@@ -91,7 +91,7 @@ where
 	K: Keychain,
 {
 	let fees = txs.iter().map(|tx| tx.fee()).sum();
-	let reward_output = reward::output(keychain, &key_id, fees).unwrap();
+	let reward_output = reward::output(keychain, &key_id, fees, false).unwrap();
 	Block::new(
 		&previous_header,
 		txs.into_iter().cloned().collect(),

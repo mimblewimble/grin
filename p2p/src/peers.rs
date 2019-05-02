@@ -15,9 +15,11 @@
 use crate::util::RwLock;
 use std::collections::HashMap;
 use std::fs::File;
+use std::path::PathBuf;
 use std::sync::Arc;
 
-use rand::{thread_rng, Rng};
+use rand::seq::SliceRandom;
+use rand::thread_rng;
 
 use crate::chain;
 use crate::core::core;
@@ -30,7 +32,7 @@ use chrono::Duration;
 use crate::peer::Peer;
 use crate::store::{PeerData, PeerStore, State};
 use crate::types::{
-	Capabilities, ChainAdapter, Direction, Error, NetAdapter, P2PConfig, PeerAddr, ReasonForBan,
+	Capabilities, ChainAdapter, Error, NetAdapter, P2PConfig, PeerAddr, PeerInfo, ReasonForBan,
 	TxHashSetRead, MAX_PEER_ADDRS,
 };
 
@@ -38,7 +40,6 @@ pub struct Peers {
 	pub adapter: Arc<dyn ChainAdapter>,
 	store: PeerStore,
 	peers: RwLock<HashMap<PeerAddr, Arc<Peer>>>,
-	dandelion_relay: RwLock<Option<(i64, Arc<Peer>)>>,
 	config: P2PConfig,
 }
 
@@ -49,7 +50,6 @@ impl Peers {
 			store,
 			config,
 			peers: RwLock::new(HashMap::new()),
-			dandelion_relay: RwLock::new(None),
 		}
 	}
 
@@ -88,39 +88,6 @@ impl Peers {
 		self.save_peer(&peer_data)
 	}
 
-	// Update the dandelion relay
-	pub fn update_dandelion_relay(&self) {
-		let peers = self.outgoing_connected_peers();
-
-		let peer = &self
-			.config
-			.dandelion_peer
-			.and_then(|ip| peers.iter().find(|x| x.info.addr == ip))
-			.or(thread_rng().choose(&peers));
-
-		match peer {
-			Some(peer) => self.set_dandelion_relay(peer),
-			None => debug!("Could not update dandelion relay"),
-		}
-	}
-
-	fn set_dandelion_relay(&self, peer: &Arc<Peer>) {
-		// Clear the map and add new relay
-		let dandelion_relay = &self.dandelion_relay;
-		dandelion_relay
-			.write()
-			.replace((Utc::now().timestamp(), peer.clone()));
-		debug!(
-			"Successfully updated Dandelion relay to: {}",
-			peer.info.addr
-		);
-	}
-
-	// Get the dandelion relay
-	pub fn get_dandelion_relay(&self) -> Option<(i64, Arc<Peer>)> {
-		self.dandelion_relay.read().clone()
-	}
-
 	pub fn is_known(&self, addr: PeerAddr) -> bool {
 		self.peers.read().contains_key(&addr)
 	}
@@ -134,17 +101,15 @@ impl Peers {
 			.filter(|p| p.is_connected())
 			.cloned()
 			.collect::<Vec<_>>();
-		thread_rng().shuffle(&mut res);
+		res.shuffle(&mut thread_rng());
 		res
 	}
 
 	pub fn outgoing_connected_peers(&self) -> Vec<Arc<Peer>> {
-		let peers = self.connected_peers();
-		let res = peers
+		self.connected_peers()
 			.into_iter()
-			.filter(|x| x.info.direction == Direction::Outbound)
-			.collect::<Vec<_>>();
-		res
+			.filter(|x| x.info.is_outbound())
+			.collect()
 	}
 
 	/// Get a peer we're connected to by address.
@@ -154,20 +119,12 @@ impl Peers {
 
 	/// Number of peers currently connected to.
 	pub fn peer_count(&self) -> u32 {
-		self.peers
-			.read()
-			.values()
-			.filter(|x| x.is_connected())
-			.count() as u32
+		self.connected_peers().len() as u32
 	}
 
 	/// Number of outbound peers currently connected to.
 	pub fn peer_outbound_count(&self) -> u32 {
-		self.peers
-			.read()
-			.values()
-			.filter(|x| x.is_connected() && x.info.is_outbound())
-			.count() as u32
+		self.outgoing_connected_peers().len() as u32
 	}
 
 	// Return vec of connected peers that currently advertise more work
@@ -185,7 +142,7 @@ impl Peers {
 			.filter(|x| x.info.total_difficulty() > total_difficulty)
 			.collect::<Vec<_>>();
 
-		thread_rng().shuffle(&mut max_peers);
+		max_peers.shuffle(&mut thread_rng());
 		Ok(max_peers)
 	}
 
@@ -234,7 +191,7 @@ impl Peers {
 			.filter(|x| x.info.total_difficulty() == max_total_difficulty)
 			.collect::<Vec<_>>();
 
-		thread_rng().shuffle(&mut max_peers);
+		max_peers.shuffle(&mut thread_rng());
 		max_peers
 	}
 
@@ -342,26 +299,6 @@ impl Peers {
 			bh.height,
 			count,
 		);
-	}
-
-	/// Relays the provided stem transaction to our single stem peer.
-	pub fn relay_stem_transaction(&self, tx: &core::Transaction) -> Result<(), Error> {
-		self.get_dandelion_relay()
-			.or_else(|| {
-				debug!("No dandelion relay, updating.");
-				self.update_dandelion_relay();
-				self.get_dandelion_relay()
-			})
-			// If still return an error, let the caller handle this as they see fit.
-			// The caller will "fluff" at this point as the stem phase is finished.
-			.ok_or(Error::NoDandelionRelay)
-			.map(|(_, relay)| {
-				if relay.is_connected() {
-					if let Err(e) = relay.send_stem_transaction(tx) {
-						debug!("Error sending stem transaction to peer relay: {:?}", e);
-					}
-				}
-			})
 	}
 
 	/// Broadcasts the provided transaction to PEER_PREFERRED_COUNT of our
@@ -553,8 +490,12 @@ impl ChainAdapter for Peers {
 		self.adapter.get_transaction(kernel_hash)
 	}
 
-	fn tx_kernel_received(&self, kernel_hash: Hash, addr: PeerAddr) -> Result<bool, chain::Error> {
-		self.adapter.tx_kernel_received(kernel_hash, addr)
+	fn tx_kernel_received(
+		&self,
+		kernel_hash: Hash,
+		peer_info: &PeerInfo,
+	) -> Result<bool, chain::Error> {
+		self.adapter.tx_kernel_received(kernel_hash, peer_info)
 	}
 
 	fn transaction_received(
@@ -568,18 +509,18 @@ impl ChainAdapter for Peers {
 	fn block_received(
 		&self,
 		b: core::Block,
-		peer_addr: PeerAddr,
+		peer_info: &PeerInfo,
 		was_requested: bool,
 	) -> Result<bool, chain::Error> {
 		let hash = b.hash();
-		if !self.adapter.block_received(b, peer_addr, was_requested)? {
+		if !self.adapter.block_received(b, peer_info, was_requested)? {
 			// if the peer sent us a block that's intrinsically bad
 			// they are either mistaken or malevolent, both of which require a ban
 			debug!(
 				"Received a bad block {} from  {}, the peer will be banned",
-				hash, peer_addr
+				hash, peer_info.addr,
 			);
-			self.ban_peer(peer_addr, ReasonForBan::BadBlock);
+			self.ban_peer(peer_info.addr, ReasonForBan::BadBlock);
 			Ok(false)
 		} else {
 			Ok(true)
@@ -589,17 +530,17 @@ impl ChainAdapter for Peers {
 	fn compact_block_received(
 		&self,
 		cb: core::CompactBlock,
-		peer_addr: PeerAddr,
+		peer_info: &PeerInfo,
 	) -> Result<bool, chain::Error> {
 		let hash = cb.hash();
-		if !self.adapter.compact_block_received(cb, peer_addr)? {
+		if !self.adapter.compact_block_received(cb, peer_info)? {
 			// if the peer sent us a block that's intrinsically bad
 			// they are either mistaken or malevolent, both of which require a ban
 			debug!(
 				"Received a bad compact block {} from  {}, the peer will be banned",
-				hash, peer_addr
+				hash, peer_info.addr
 			);
-			self.ban_peer(peer_addr, ReasonForBan::BadCompactBlock);
+			self.ban_peer(peer_info.addr, ReasonForBan::BadCompactBlock);
 			Ok(false)
 		} else {
 			Ok(true)
@@ -609,12 +550,12 @@ impl ChainAdapter for Peers {
 	fn header_received(
 		&self,
 		bh: core::BlockHeader,
-		peer_addr: PeerAddr,
+		peer_info: &PeerInfo,
 	) -> Result<bool, chain::Error> {
-		if !self.adapter.header_received(bh, peer_addr)? {
+		if !self.adapter.header_received(bh, peer_info)? {
 			// if the peer sent us a block header that's intrinsically bad
 			// they are either mistaken or malevolent, both of which require a ban
-			self.ban_peer(peer_addr, ReasonForBan::BadBlockHeader);
+			self.ban_peer(peer_info.addr, ReasonForBan::BadBlockHeader);
 			Ok(false)
 		} else {
 			Ok(true)
@@ -624,12 +565,12 @@ impl ChainAdapter for Peers {
 	fn headers_received(
 		&self,
 		headers: &[core::BlockHeader],
-		peer_addr: PeerAddr,
+		peer_info: &PeerInfo,
 	) -> Result<bool, chain::Error> {
-		if !self.adapter.headers_received(headers, peer_addr)? {
+		if !self.adapter.headers_received(headers, peer_info)? {
 			// if the peer sent us a block header that's intrinsically bad
 			// they are either mistaken or malevolent, both of which require a ban
-			self.ban_peer(peer_addr, ReasonForBan::BadBlockHeader);
+			self.ban_peer(peer_info.addr, ReasonForBan::BadBlockHeader);
 			Ok(false)
 		} else {
 			Ok(true)
@@ -656,14 +597,14 @@ impl ChainAdapter for Peers {
 		&self,
 		h: Hash,
 		txhashset_data: File,
-		peer_addr: PeerAddr,
+		peer_info: &PeerInfo,
 	) -> Result<bool, chain::Error> {
-		if !self.adapter.txhashset_write(h, txhashset_data, peer_addr)? {
+		if !self.adapter.txhashset_write(h, txhashset_data, peer_info)? {
 			debug!(
 				"Received a bad txhashset data from {}, the peer will be banned",
-				&peer_addr
+				peer_info.addr
 			);
-			self.ban_peer(peer_addr, ReasonForBan::BadTxHashSet);
+			self.ban_peer(peer_info.addr, ReasonForBan::BadTxHashSet);
 			Ok(false)
 		} else {
 			Ok(true)
@@ -678,6 +619,14 @@ impl ChainAdapter for Peers {
 	) -> bool {
 		self.adapter
 			.txhashset_download_update(start_time, downloaded_size, total_size)
+	}
+
+	fn get_tmp_dir(&self) -> PathBuf {
+		self.adapter.get_tmp_dir()
+	}
+
+	fn get_tmpfile_pathname(&self, tmpfile_name: String) -> PathBuf {
+		self.adapter.get_tmpfile_pathname(tmpfile_name)
 	}
 }
 

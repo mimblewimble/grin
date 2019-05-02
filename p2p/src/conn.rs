@@ -51,6 +51,10 @@ macro_rules! try_break {
 		match $inner {
 			Ok(v) => Some(v),
 			Err(Error::Connection(ref e)) if e.kind() == io::ErrorKind::WouldBlock => None,
+			Err(Error::Store(_))
+			| Err(Error::Chain(_))
+			| Err(Error::Internal)
+			| Err(Error::NoDandelionRelay) => None,
 			Err(e) => {
 				let _ = $chan.send(e);
 				break;
@@ -244,7 +248,7 @@ fn poll<H>(
 	let _ = thread::Builder::new()
 		.name("peer".to_string())
 		.spawn(move || {
-			let sleep_time = time::Duration::from_millis(1);
+			let sleep_time = time::Duration::from_millis(5);
 			let mut retry_send = Err(());
 			loop {
 				// check the read end

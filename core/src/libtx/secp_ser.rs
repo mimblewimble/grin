@@ -32,7 +32,7 @@ pub mod pubkey_serde {
 	{
 		let static_secp = static_secp_instance();
 		let static_secp = static_secp.lock();
-		serializer.serialize_str(&to_hex(key.serialize_vec(&static_secp, false).to_vec()))
+		serializer.serialize_str(&to_hex(key.serialize_vec(&static_secp, true).to_vec()))
 	}
 
 	///
@@ -56,7 +56,6 @@ pub mod pubkey_serde {
 pub mod option_sig_serde {
 	use crate::serde::{Deserialize, Deserializer, Serializer};
 	use crate::util::secp;
-	use crate::util::static_secp_instance;
 	use crate::util::{from_hex, to_hex};
 	use serde::de::Error;
 
@@ -66,11 +65,7 @@ pub mod option_sig_serde {
 		S: Serializer,
 	{
 		match sig {
-			Some(sig) => {
-				let static_secp = static_secp_instance();
-				let static_secp = static_secp.lock();
-				serializer.serialize_str(&to_hex(sig.serialize_der(&static_secp)))
-			}
+			Some(sig) => serializer.serialize_str(&to_hex(sig.to_raw_data().to_vec())),
 			None => serializer.serialize_none(),
 		}
 	}
@@ -80,14 +75,13 @@ pub mod option_sig_serde {
 	where
 		D: Deserializer<'de>,
 	{
-		let static_secp = static_secp_instance();
-		let static_secp = static_secp.lock();
-
-		Option::<&str>::deserialize(deserializer).and_then(|res| match res {
+		Option::<String>::deserialize(deserializer).and_then(|res| match res {
 			Some(string) => from_hex(string.to_string())
 				.map_err(|err| Error::custom(err.to_string()))
 				.and_then(|bytes: Vec<u8>| {
-					secp::Signature::from_der(&static_secp, &bytes)
+					let mut b = [0u8; 64];
+					b.copy_from_slice(&bytes[0..64]);
+					secp::Signature::from_raw_data(&b)
 						.map(|val| Some(val))
 						.map_err(|err| Error::custom(err.to_string()))
 				}),
@@ -101,7 +95,6 @@ pub mod option_sig_serde {
 pub mod sig_serde {
 	use crate::serde::{Deserialize, Deserializer, Serializer};
 	use crate::util::secp;
-	use crate::util::static_secp_instance;
 	use crate::util::{from_hex, to_hex};
 	use serde::de::Error;
 
@@ -110,9 +103,7 @@ pub mod sig_serde {
 	where
 		S: Serializer,
 	{
-		let static_secp = static_secp_instance();
-		let static_secp = static_secp.lock();
-		serializer.serialize_str(&to_hex(sig.serialize_der(&static_secp)))
+		serializer.serialize_str(&to_hex(sig.to_raw_data().to_vec()))
 	}
 
 	///
@@ -120,13 +111,12 @@ pub mod sig_serde {
 	where
 		D: Deserializer<'de>,
 	{
-		let static_secp = static_secp_instance();
-		let static_secp = static_secp.lock();
 		String::deserialize(deserializer)
 			.and_then(|string| from_hex(string).map_err(|err| Error::custom(err.to_string())))
 			.and_then(|bytes: Vec<u8>| {
-				secp::Signature::from_der(&static_secp, &bytes)
-					.map_err(|err| Error::custom(err.to_string()))
+				let mut b = [0u8; 64];
+				b.copy_from_slice(&bytes[0..64]);
+				secp::Signature::from_raw_data(&b).map_err(|err| Error::custom(err.to_string()))
 			})
 	}
 }
@@ -174,6 +164,104 @@ where
 	serializer.serialize_str(&to_hex(bytes.as_ref().to_vec()))
 }
 
+/// Used to ensure u64s are serialised in json
+/// as strings by default, since it can't be guaranteed that consumers
+/// will know what to do with u64 literals (e.g. Javascript). However,
+/// fields using this tag can be deserialized from literals or strings.
+/// From solutions on:
+/// https://github.com/serde-rs/json/issues/329
+pub mod string_or_u64 {
+	use std::fmt;
+
+	use serde::{de, Deserializer, Serializer};
+
+	/// serialize into a string
+	pub fn serialize<T, S>(value: &T, serializer: S) -> Result<S::Ok, S::Error>
+	where
+		T: fmt::Display,
+		S: Serializer,
+	{
+		serializer.collect_str(value)
+	}
+
+	/// deserialize from either literal or string
+	pub fn deserialize<'de, D>(deserializer: D) -> Result<u64, D::Error>
+	where
+		D: Deserializer<'de>,
+	{
+		struct Visitor;
+		impl<'a> de::Visitor<'a> for Visitor {
+			type Value = u64;
+			fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+				write!(
+					formatter,
+					"a string containing digits or an int fitting into u64"
+				)
+			}
+			fn visit_u64<E>(self, v: u64) -> Result<Self::Value, E> {
+				Ok(v)
+			}
+			fn visit_str<E>(self, s: &str) -> Result<Self::Value, E>
+			where
+				E: de::Error,
+			{
+				s.parse().map_err(de::Error::custom)
+			}
+		}
+		deserializer.deserialize_any(Visitor)
+	}
+}
+
+/// As above, for Options
+pub mod opt_string_or_u64 {
+	use std::fmt;
+
+	use serde::{de, Deserializer, Serializer};
+
+	/// serialize into string or none
+	pub fn serialize<T, S>(value: &Option<T>, serializer: S) -> Result<S::Ok, S::Error>
+	where
+		T: fmt::Display,
+		S: Serializer,
+	{
+		match value {
+			Some(v) => serializer.collect_str(v),
+			None => serializer.serialize_none(),
+		}
+	}
+
+	/// deser from 'null', literal or string
+	pub fn deserialize<'de, D>(deserializer: D) -> Result<Option<u64>, D::Error>
+	where
+		D: Deserializer<'de>,
+	{
+		struct Visitor;
+		impl<'a> de::Visitor<'a> for Visitor {
+			type Value = Option<u64>;
+			fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+				write!(
+					formatter,
+					"null, a string containing digits or an int fitting into u64"
+				)
+			}
+			fn visit_unit<E>(self) -> Result<Self::Value, E> {
+				Ok(None)
+			}
+			fn visit_u64<E>(self, v: u64) -> Result<Self::Value, E> {
+				Ok(Some(v))
+			}
+			fn visit_str<E>(self, s: &str) -> Result<Self::Value, E>
+			where
+				E: de::Error,
+			{
+				let val: u64 = s.parse().map_err(de::Error::custom)?;
+				Ok(Some(val))
+			}
+		}
+		deserializer.deserialize_any(Visitor)
+	}
+}
+
 // Test serialization methods of components that are being used
 #[cfg(test)]
 mod test {
@@ -195,6 +283,10 @@ mod test {
 		pub opt_sig: Option<Signature>,
 		#[serde(with = "sig_serde")]
 		pub sig: Signature,
+		#[serde(with = "string_or_u64")]
+		pub num: u64,
+		#[serde(with = "opt_string_or_u64")]
+		pub opt_num: Option<u64>,
 	}
 
 	impl SerTest {
@@ -205,11 +297,13 @@ mod test {
 			let mut msg = [0u8; 32];
 			thread_rng().fill(&mut msg);
 			let msg = Message::from_slice(&msg).unwrap();
-			let sig = aggsig::sign_single(&secp, &msg, &sk, None).unwrap();
+			let sig = aggsig::sign_single(&secp, &msg, &sk, None, None).unwrap();
 			SerTest {
 				pub_key: PublicKey::from_secret_key(&secp, &sk).unwrap(),
 				opt_sig: Some(sig.clone()),
 				sig: sig.clone(),
+				num: 30,
+				opt_num: Some(33),
 			}
 		}
 	}

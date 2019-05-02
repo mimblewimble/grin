@@ -111,6 +111,7 @@ impl fmt::Display for Error {
 /// Header entry for storing in the header MMR.
 /// Note: we hash the block header itself and maintain the hash in the entry.
 /// This allows us to lookup the original header from the db as necessary.
+#[derive(Debug)]
 pub struct HeaderEntry {
 	hash: Hash,
 	timestamp: u64,
@@ -168,7 +169,7 @@ impl Hashed for HeaderEntry {
 }
 
 /// Block header, fairly standard compared to other blockchains.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct BlockHeader {
 	/// Version of the block
 	pub version: u16,
@@ -346,7 +347,7 @@ impl BlockHeader {
 /// non-explicit, assumed to be deducible from block height (similar to
 /// bitcoin's schedule) and expressed as a global transaction fee (added v.H),
 /// additive to the total of fees ever collected.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub struct Block {
 	/// The header with metadata and commitments to the rest of the data
 	pub header: BlockHeader,

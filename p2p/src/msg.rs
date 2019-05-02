@@ -28,7 +28,14 @@ use crate::types::{
 };
 use crate::util::read_write::read_exact;
 
-/// Current latest version of the protocol
+/// Our local node protocol version.
+/// We will increment the protocol version with every change to p2p msg serialization
+/// so we will likely connect with peers with both higher and lower protocol versions.
+/// We need to be aware that some msg formats will be potentially incompatible and handle
+/// this for each individual peer connection.
+/// Note: A peer may disconnect and reconnect with an updated protocol version. Normally
+/// the protocol version will increase but we need to handle decreasing values also
+/// as a peer may rollback to previous version of the code.
 pub const PROTOCOL_VERSION: u32 = 1;
 
 /// Grin's user agent with current version

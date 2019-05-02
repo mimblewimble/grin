@@ -27,80 +27,61 @@ use failure::Fail;
 use grin_core as core;
 use grin_keychain as keychain;
 
-/// Dandelion relay timer
-const DANDELION_RELAY_SECS: u64 = 600;
+/// Dandelion "epoch" length.
+const DANDELION_EPOCH_SECS: u16 = 600;
 
-/// Dandelion embargo timer
-const DANDELION_EMBARGO_SECS: u64 = 180;
+/// Dandelion embargo timer.
+const DANDELION_EMBARGO_SECS: u16 = 180;
 
-/// Dandelion patience timer
-const DANDELION_PATIENCE_SECS: u64 = 10;
+/// Dandelion aggregation timer.
+const DANDELION_AGGREGATION_SECS: u16 = 30;
 
 /// Dandelion stem probability (stem 90% of the time, fluff 10%).
-const DANDELION_STEM_PROBABILITY: usize = 90;
+const DANDELION_STEM_PROBABILITY: u8 = 90;
 
 /// Configuration for "Dandelion".
 /// Note: shared between p2p and pool.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct DandelionConfig {
-	/// Choose new Dandelion relay peer every n secs.
-	#[serde = "default_dandelion_relay_secs"]
-	pub relay_secs: Option<u64>,
-	/// Dandelion embargo, fluff and broadcast tx if not seen on network before
-	/// embargo expires.
-	#[serde = "default_dandelion_embargo_secs"]
-	pub embargo_secs: Option<u64>,
-	/// Dandelion patience timer, fluff/stem processing runs every n secs.
-	/// Tx aggregation happens on stem txs received within this window.
-	#[serde = "default_dandelion_patience_secs"]
-	pub patience_secs: Option<u64>,
+	/// Length of each "epoch".
+	#[serde(default = "default_dandelion_epoch_secs")]
+	pub epoch_secs: Option<u16>,
+	/// Dandelion embargo timer. Fluff and broadcast individual txs if not seen
+	/// on network before embargo expires.
+	#[serde(default = "default_dandelion_embargo_secs")]
+	pub embargo_secs: Option<u16>,
+	/// Dandelion aggregation timer.
+	#[serde(default = "default_dandelion_aggregation_secs")]
+	pub aggregation_secs: Option<u16>,
 	/// Dandelion stem probability (stem 90% of the time, fluff 10% etc.)
-	#[serde = "default_dandelion_stem_probability"]
-	pub stem_probability: Option<usize>,
-}
-
-impl DandelionConfig {
-	pub fn relay_secs(&self) -> u64 {
-		self.relay_secs.unwrap_or(DANDELION_RELAY_SECS)
-	}
-
-	pub fn embargo_secs(&self) -> u64 {
-		self.embargo_secs.unwrap_or(DANDELION_EMBARGO_SECS)
-	}
-
-	pub fn patience_secs(&self) -> u64 {
-		self.patience_secs.unwrap_or(DANDELION_PATIENCE_SECS)
-	}
-
-	pub fn stem_probability(&self) -> usize {
-		self.stem_probability.unwrap_or(DANDELION_STEM_PROBABILITY)
-	}
+	#[serde(default = "default_dandelion_stem_probability")]
+	pub stem_probability: Option<u8>,
 }
 
 impl Default for DandelionConfig {
 	fn default() -> DandelionConfig {
 		DandelionConfig {
-			relay_secs: default_dandelion_relay_secs(),
+			epoch_secs: default_dandelion_epoch_secs(),
 			embargo_secs: default_dandelion_embargo_secs(),
-			patience_secs: default_dandelion_patience_secs(),
+			aggregation_secs: default_dandelion_aggregation_secs(),
 			stem_probability: default_dandelion_stem_probability(),
 		}
 	}
 }
 
-fn default_dandelion_relay_secs() -> Option<u64> {
-	Some(DANDELION_RELAY_SECS)
+fn default_dandelion_epoch_secs() -> Option<u16> {
+	Some(DANDELION_EPOCH_SECS)
 }
 
-fn default_dandelion_embargo_secs() -> Option<u64> {
+fn default_dandelion_embargo_secs() -> Option<u16> {
 	Some(DANDELION_EMBARGO_SECS)
 }
 
-fn default_dandelion_patience_secs() -> Option<u64> {
-	Some(DANDELION_PATIENCE_SECS)
+fn default_dandelion_aggregation_secs() -> Option<u16> {
+	Some(DANDELION_AGGREGATION_SECS)
 }
 
-fn default_dandelion_stem_probability() -> Option<usize> {
+fn default_dandelion_stem_probability() -> Option<u8> {
 	Some(DANDELION_STEM_PROBABILITY)
 }
 
@@ -156,29 +137,12 @@ fn default_mineable_max_weight() -> usize {
 /// A single (possibly aggregated) transaction.
 #[derive(Clone, Debug)]
 pub struct PoolEntry {
-	/// The state of the pool entry.
-	pub state: PoolEntryState,
 	/// Info on where this tx originated from.
 	pub src: TxSource,
 	/// Timestamp of when this tx was originally added to the pool.
 	pub tx_at: DateTime<Utc>,
 	/// The transaction itself.
 	pub tx: Transaction,
-}
-
-/// The possible states a pool entry can be in.
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub enum PoolEntryState {
-	/// A new entry, not yet processed.
-	Fresh,
-	/// Tx to be included in the next "stem" run.
-	ToStem,
-	/// Tx previously "stemmed" and propagated.
-	Stemmed,
-	/// Tx to be included in the next "fluff" run.
-	ToFluff,
-	/// Tx previously "fluffed" and broadcast.
-	Fluffed,
 }
 
 /// Placeholder: the data representing where we heard about a tx from.
@@ -285,12 +249,10 @@ pub trait BlockChain: Sync + Send {
 /// downstream processing of valid transactions by the rest of the system, most
 /// importantly the broadcasting of transactions to our peers.
 pub trait PoolAdapter: Send + Sync {
-	/// The transaction pool has accepted this transactions as valid and added
-	/// it to its internal cache.
+	/// The transaction pool has accepted this transaction as valid.
 	fn tx_accepted(&self, tx: &transaction::Transaction);
-	/// The stem transaction pool has accepted this transactions as valid and
-	/// added it to its internal cache, we have waited for the "patience" timer
-	/// to fire and we now want to propagate the tx to the next Dandelion relay.
+
+	/// The stem transaction pool has accepted this transactions as valid.
 	fn stem_tx_accepted(&self, tx: &transaction::Transaction) -> Result<(), PoolError>;
 }
 
@@ -299,9 +261,8 @@ pub trait PoolAdapter: Send + Sync {
 pub struct NoopAdapter {}
 
 impl PoolAdapter for NoopAdapter {
-	fn tx_accepted(&self, _: &transaction::Transaction) {}
-
-	fn stem_tx_accepted(&self, _: &transaction::Transaction) -> Result<(), PoolError> {
+	fn tx_accepted(&self, _tx: &transaction::Transaction) {}
+	fn stem_tx_accepted(&self, _tx: &transaction::Transaction) -> Result<(), PoolError> {
 		Ok(())
 	}
 }

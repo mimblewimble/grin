@@ -47,6 +47,14 @@ impl LeafSet {
 			Bitmap::create()
 		};
 
+		if !bitmap.is_empty() {
+			debug!(
+				"bitmap {} pos ({} bytes)",
+				bitmap.cardinality(),
+				bitmap.get_serialized_size_in_bytes(),
+			);
+		}
+
 		Ok(LeafSet {
 			path: file_path.to_path_buf(),
 			bitmap_bak: bitmap.clone(),
