@@ -310,7 +310,7 @@ impl Pool {
 	/// containing the tx it depends on.
 	/// Sorting the buckets by fee_to_weight will therefore preserve dependency ordering,
 	/// maximizing both cut-through and overall fees.
-	fn bucket_transactions(&self, weighting: Weighting) -> Vec<Transaction> {
+	pub fn bucket_transactions(&self, weighting: Weighting) -> Vec<Transaction> {
 		let mut tx_buckets: Vec<Bucket> = Vec::new();
 		let mut output_commits = HashMap::new();
 		let mut rejected = HashSet::new();
