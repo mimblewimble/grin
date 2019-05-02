@@ -14,8 +14,14 @@
 
 trigger:
   branches:
-    include: ['*']
+    include:
+      - master
+      - milestone/*
   tags:
+    include: ['*']
+
+pr:
+  branches:
     include: ['*']
 
 variables:
@@ -23,7 +29,7 @@ variables:
   RUST_FLAGS: '-C debug-assertions'
 
 jobs:
-- job: Linux
+- job: linux
   pool:
     vmImage: ubuntu-16.04
   strategy:
@@ -31,25 +37,23 @@ jobs:
       servers:
         CI_JOB: test
         CI_JOB_ARGS: servers
-      chain/core:
+      chain/core/keychain:
         CI_JOB: test
-        CI_JOB_ARGS: chain core
+        CI_JOB_ARGS: chain core keychain
       pool/p2p/src:
         CI_JOB: test
         CI_JOB_ARGS: pool p2p src
-      keychain/wallet:
-        CI_JOB: test
-        CI_JOB_ARGS: keychain wallet
       api/util/store:
         CI_JOB: test
         CI_JOB_ARGS: api util store
       release:
         CI_JOB: release
+        PLATFORM: linux-amd64
   steps:
     - template: '.ci/install.yml'
     - template: '.ci/test.yml'
     - template: '.ci/release.yml'
-- job: macOS
+- job: macos
   pool:
     vmImage: macos-10.13
   strategy:
@@ -58,11 +62,12 @@ jobs:
         CI_JOB: test-all
       release:
         CI_JOB: release
+        PLATFORM: macos
   steps:
     - template: '.ci/install.yml'
     - template: '.ci/test.yml'
     - template: '.ci/release.yml'
-- job: Windows
+- job: windows
   pool:
     vmImage: vs2017-win2016
   strategy:
@@ -71,7 +76,8 @@ jobs:
         CI_JOB: test-all
       release:
         CI_JOB: release
+        PLATFORM: win-x64
   steps:
     - template: '.ci/install.yml'
     - template: '.ci/test.yml'
-    - template: '.ci/release.yml'
+    - template: '.ci/windows-release.yml'

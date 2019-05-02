@@ -3,6 +3,8 @@ steps:
       curl -sSf -o rustup-init.exe https://win.rustup.rs
       rustup-init.exe -y
       echo "##vso[task.setvariable variable=PATH;]%PATH%;%USERPROFILE%\.cargo\bin"
+      git apply .ci/win.patch
+      choco install -y llvm
     displayName: Windows Install Rust
     condition: eq( variables['Agent.OS'], 'Windows_NT' )
   - script: |
