@@ -295,7 +295,7 @@ impl serde::Serialize for ChildNumber {
 }
 
 /// A BIP32 error
-#[derive(Clone, PartialEq, Eq, Debug)]
+#[derive(Clone, PartialEq, Eq, Debug, Serialize, Deserialize)]
 pub enum Error {
 	/// A pk->pk derivation was attempted on a hardened key
 	CannotDeriveFromHardenedKey,

@@ -13,9 +13,11 @@
 // limitations under the License.
 
 //! Server types
-use crate::util::RwLock;
 use std::convert::From;
 use std::sync::Arc;
+
+use chrono::prelude::{DateTime, Utc};
+use rand::prelude::*;
 
 use crate::api;
 use crate::chain;
@@ -24,9 +26,9 @@ use crate::core::{core, libtx, pow};
 use crate::keychain;
 use crate::p2p;
 use crate::pool;
+use crate::pool::types::DandelionConfig;
 use crate::store;
-use crate::wallet;
-use chrono::prelude::{DateTime, Utc};
+use crate::util::RwLock;
 
 /// Error type wrapping underlying module errors.
 #[derive(Debug)]
@@ -43,8 +45,6 @@ pub enum Error {
 	P2P(p2p::Error),
 	/// Error originating from HTTP API calls.
 	API(api::Error),
-	/// Error originating from wallet API.
-	Wallet(wallet::Error),
 	/// Error originating from the cuckoo miner
 	Cuckoo(pow::Error),
 	/// Error originating from the transaction pool.
@@ -53,6 +53,8 @@ pub enum Error {
 	Keychain(keychain::Error),
 	/// Invalid Arguments.
 	ArgumentError(String),
+	/// Wallet communication error
+	WalletComm(String),
 	/// Error originating from some I/O operation (likely a file on disk).
 	IOError(std::io::Error),
 	/// Configuration error
@@ -97,12 +99,6 @@ impl From<store::Error> for Error {
 impl From<api::Error> for Error {
 	fn from(e: api::Error) -> Error {
 		Error::API(e)
-	}
-}
-
-impl From<wallet::Error> for Error {
-	fn from(e: wallet::Error) -> Error {
-		Error::Wallet(e)
 	}
 }
 
@@ -177,9 +173,6 @@ pub struct ServerConfig {
 	/// if enabled, this will disable logging to stdout
 	pub run_tui: Option<bool>,
 
-	/// Whether to use the DB wallet backend implementation
-	pub use_db_wallet: Option<bool>,
-
 	/// Whether to run the test miner (internal, cuckoo 16)
 	pub run_test_miner: Option<bool>,
 
@@ -200,6 +193,10 @@ pub struct ServerConfig {
 	/// Configuration for the mining daemon
 	#[serde(default)]
 	pub stratum_mining_config: Option<StratumServerConfig>,
+
+	/// Configuration for the webhooks that trigger on certain events
+	#[serde(default)]
+	pub webhook_config: WebHooksConfig,
 }
 
 impl Default for ServerConfig {
@@ -219,9 +216,9 @@ impl Default for ServerConfig {
 			pool_config: pool::PoolConfig::default(),
 			skip_sync_wait: Some(false),
 			run_tui: Some(true),
-			use_db_wallet: None,
 			run_test_miner: Some(false),
 			test_miner_wallet_url: None,
+			webhook_config: WebHooksConfig::default(),
 		}
 	}
 }
@@ -260,6 +257,46 @@ impl Default for StratumServerConfig {
 			minimum_share_difficulty: 1,
 			enable_stratum_server: Some(false),
 			stratum_server_addr: Some("127.0.0.1:3416".to_string()),
+		}
+	}
+}
+
+/// Web hooks configuration
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct WebHooksConfig {
+	/// url to POST transaction data when a new transaction arrives from a peer
+	pub tx_received_url: Option<String>,
+	/// url to POST header data when a new header arrives from a peer
+	pub header_received_url: Option<String>,
+	/// url to POST block data when a new block arrives from a peer
+	pub block_received_url: Option<String>,
+	/// url to POST block data when a new block is accepted by our node (might be a reorg or a fork)
+	pub block_accepted_url: Option<String>,
+	/// number of worker threads in the tokio runtime
+	#[serde(default = "default_nthreads")]
+	pub nthreads: u16,
+	/// timeout in seconds for the http request
+	#[serde(default = "default_timeout")]
+	pub timeout: u16,
+}
+
+fn default_timeout() -> u16 {
+	10
+}
+
+fn default_nthreads() -> u16 {
+	4
+}
+
+impl Default for WebHooksConfig {
+	fn default() -> WebHooksConfig {
+		WebHooksConfig {
+			tx_received_url: None,
+			header_received_url: None,
+			block_received_url: None,
+			block_accepted_url: None,
+			nthreads: default_nthreads(),
+			timeout: default_timeout(),
 		}
 	}
 }
@@ -425,5 +462,96 @@ impl chain::TxHashsetWriteStatus for SyncState {
 
 	fn on_done(&self) {
 		self.update(SyncStatus::TxHashsetDone);
+	}
+}
+
+/// A node is either "stem" of "fluff" for the duration of a single epoch.
+/// A node also maintains an outbound relay peer for the epoch.
+#[derive(Debug)]
+pub struct DandelionEpoch {
+	config: DandelionConfig,
+	// When did this epoch start?
+	start_time: Option<i64>,
+	// Are we in "stem" mode or "fluff" mode for this epoch?
+	is_stem: bool,
+	// Our current Dandelion relay peer (effective for this epoch).
+	relay_peer: Option<Arc<p2p::Peer>>,
+}
+
+impl DandelionEpoch {
+	/// Create a new Dandelion epoch, defaulting to "stem" and no outbound relay peer.
+	pub fn new(config: DandelionConfig) -> DandelionEpoch {
+		DandelionEpoch {
+			config,
+			start_time: None,
+			is_stem: true,
+			relay_peer: None,
+		}
+	}
+
+	/// Is the current Dandelion epoch expired?
+	/// It is expired if start_time is older than the configured epoch_secs.
+	pub fn is_expired(&self) -> bool {
+		match self.start_time {
+			None => true,
+			Some(start_time) => {
+				let epoch_secs = self.config.epoch_secs.expect("epoch_secs config missing") as i64;
+				Utc::now().timestamp().saturating_sub(start_time) > epoch_secs
+			}
+		}
+	}
+
+	/// Transition to next Dandelion epoch.
+	/// Select stem/fluff based on configured stem_probability.
+	/// Choose a new outbound stem relay peer.
+	pub fn next_epoch(&mut self, peers: &Arc<p2p::Peers>) {
+		self.start_time = Some(Utc::now().timestamp());
+		self.relay_peer = peers.outgoing_connected_peers().first().cloned();
+
+		// If stem_probability == 90 then we stem 90% of the time.
+		let mut rng = rand::thread_rng();
+		let stem_probability = self
+			.config
+			.stem_probability
+			.expect("stem_probability config missing");
+		self.is_stem = rng.gen_range(0, 100) < stem_probability;
+
+		let addr = self.relay_peer.clone().map(|p| p.info.addr);
+		info!(
+			"DandelionEpoch: next_epoch: is_stem: {} ({}%), relay: {:?}",
+			self.is_stem, stem_probability, addr
+		);
+	}
+
+	/// Are we stemming (or fluffing) transactions in this epoch?
+	pub fn is_stem(&self) -> bool {
+		self.is_stem
+	}
+
+	/// What is our current relay peer?
+	/// If it is not connected then choose a new one.
+	pub fn relay_peer(&mut self, peers: &Arc<p2p::Peers>) -> Option<Arc<p2p::Peer>> {
+		let mut update_relay = false;
+		if let Some(peer) = &self.relay_peer {
+			if !peer.is_connected() {
+				info!(
+					"DandelionEpoch: relay_peer: {:?} not connected, choosing a new one.",
+					peer.info.addr
+				);
+				update_relay = true;
+			}
+		} else {
+			update_relay = true;
+		}
+
+		if update_relay {
+			self.relay_peer = peers.outgoing_connected_peers().first().cloned();
+			info!(
+				"DandelionEpoch: relay_peer: new peer chosen: {:?}",
+				self.relay_peer.clone().map(|p| p.info.addr)
+			);
+		}
+
+		self.relay_peer.clone()
 	}
 }

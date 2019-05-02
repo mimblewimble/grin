@@ -1,5 +1,7 @@
 # Genesis Genesis
 
+N.B: This crate's `Cargo.toml` file has been disabled by renaming it to `_Cargo.toml`. It no longer builds due to changes in the project structure.
+
 This crate isn't strictly part of grin but allows the generation and release of a new Grin Genesis in an automated fashion. The process is the following:
 
 * Prepare a multisig output and kernel to use as coinbase. In the case of Grin mainnet, this is done and owned by the council treasurers. This can be down a few days prior.

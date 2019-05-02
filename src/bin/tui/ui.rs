@@ -88,7 +88,11 @@ impl UI {
 
 		let mut title_string = StyledString::new();
 		title_string.append(StyledString::styled(
-			format!("Grin Version {}", built_info::PKG_VERSION),
+			format!(
+				"Grin Version {} (protocol version: {})",
+				built_info::PKG_VERSION,
+				Server::protocol_version()
+			),
 			Color::Dark(BaseColor::Green),
 		));
 
@@ -113,7 +117,7 @@ impl UI {
 				.send(ControllerMessage::Shutdown)
 				.unwrap();
 		});
-		grin_ui.cursive.set_fps(4);
+		grin_ui.cursive.set_fps(3);
 		grin_ui
 	}
 

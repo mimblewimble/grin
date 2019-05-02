@@ -23,7 +23,7 @@ use crate::util::{secp, secp_static, static_secp_instance};
 use failure::Fail;
 
 /// Errors from summing and verifying kernel excesses via committed trait.
-#[derive(Debug, Clone, PartialEq, Eq, Fail)]
+#[derive(Debug, Clone, PartialEq, Eq, Fail, Serialize, Deserialize)]
 pub enum Error {
 	/// Keychain related error.
 	#[fail(display = "Keychain error {}", _0)]

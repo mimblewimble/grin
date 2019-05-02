@@ -83,7 +83,7 @@ impl PruneList {
 		prune_list.init_caches();
 
 		if !prune_list.bitmap.is_empty() {
-			debug!("prune_list: bitmap {} pos ({} bytes), pruned_cache {} pos ({} bytes), shift_cache {}, leaf_shift_cache {}",
+			debug!("bitmap {} pos ({} bytes), pruned_cache {} pos ({} bytes), shift_cache {}, leaf_shift_cache {}",
 				prune_list.bitmap.cardinality(),
 				prune_list.bitmap.get_serialized_size_in_bytes(),
 				prune_list.pruned_cache.cardinality(),
@@ -126,8 +126,15 @@ impl PruneList {
 	}
 
 	/// Return the total shift from all entries in the prune_list.
+	/// This is the shift we need to account for when adding new entries to our PMMR.
 	pub fn get_total_shift(&self) -> u64 {
 		self.get_shift(self.bitmap.maximum() as u64)
+	}
+
+	/// Return the total leaf_shift from all entries in the prune_list.
+	/// This is the leaf_shift we need to account for when adding new entries to our PMMR.
+	pub fn get_total_leaf_shift(&self) -> u64 {
+		self.get_leaf_shift(self.bitmap.maximum() as u64)
 	}
 
 	/// Computes by how many positions a node at pos should be shifted given the

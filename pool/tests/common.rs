@@ -29,7 +29,6 @@ use grin_chain as chain;
 use grin_core as core;
 use grin_keychain as keychain;
 use grin_pool as pool;
-use grin_store as store;
 use grin_util as util;
 use std::collections::HashSet;
 use std::fs;
@@ -37,17 +36,16 @@ use std::sync::Arc;
 
 #[derive(Clone)]
 pub struct ChainAdapter {
-	pub store: Arc<ChainStore>,
+	pub store: Arc<RwLock<ChainStore>>,
 	pub utxo: Arc<RwLock<HashSet<Commitment>>>,
 }
 
 impl ChainAdapter {
 	pub fn init(db_root: String) -> Result<ChainAdapter, String> {
 		let target_dir = format!("target/{}", db_root);
-		let db_env = Arc::new(store::new_env(target_dir.clone()));
-		let chain_store =
-			ChainStore::new(db_env).map_err(|e| format!("failed to init chain_store, {:?}", e))?;
-		let store = Arc::new(chain_store);
+		let chain_store = ChainStore::new(&target_dir)
+			.map_err(|e| format!("failed to init chain_store, {:?}", e))?;
+		let store = Arc::new(RwLock::new(chain_store));
 		let utxo = Arc::new(RwLock::new(HashSet::new()));
 
 		Ok(ChainAdapter { store, utxo })
@@ -56,7 +54,8 @@ impl ChainAdapter {
 	pub fn update_db_for_block(&self, block: &Block) {
 		let header = &block.header;
 		let tip = Tip::from_header(header);
-		let batch = self.store.batch().unwrap();
+		let s = self.store.write();
+		let batch = s.batch().unwrap();
 
 		batch.save_block_header(header).unwrap();
 		batch.save_head(&tip).unwrap();
@@ -102,20 +101,20 @@ impl ChainAdapter {
 
 impl BlockChain for ChainAdapter {
 	fn chain_head(&self) -> Result<BlockHeader, PoolError> {
-		self.store
-			.head_header()
+		let s = self.store.read();
+		s.head_header()
 			.map_err(|_| PoolError::Other(format!("failed to get chain head")))
 	}
 
 	fn get_block_header(&self, hash: &Hash) -> Result<BlockHeader, PoolError> {
-		self.store
-			.get_block_header(hash)
+		let s = self.store.read();
+		s.get_block_header(hash)
 			.map_err(|_| PoolError::Other(format!("failed to get block header")))
 	}
 
 	fn get_block_sums(&self, hash: &Hash) -> Result<BlockSums, PoolError> {
-		self.store
-			.get_block_sums(hash)
+		let s = self.store.read();
+		s.get_block_sums(hash)
 			.map_err(|_| PoolError::Other(format!("failed to get block sums")))
 	}
 

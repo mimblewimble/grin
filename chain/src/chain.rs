@@ -24,7 +24,6 @@ use crate::core::core::{
 use crate::core::global;
 use crate::core::pow;
 use crate::error::{Error, ErrorKind};
-use crate::lmdb;
 use crate::pipe;
 use crate::store;
 use crate::txhashset;
@@ -36,8 +35,7 @@ use crate::util::secp::pedersen::{Commitment, RangeProof};
 use crate::util::{Mutex, RwLock, StopState};
 use grin_store::Error::NotFoundErr;
 use std::collections::HashMap;
-use std::env;
-use std::fs::File;
+use std::fs::{self, File};
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
@@ -162,7 +160,6 @@ impl Chain {
 	/// based on the genesis block if necessary.
 	pub fn init(
 		db_root: String,
-		db_env: Arc<lmdb::Environment>,
 		adapter: Arc<dyn ChainAdapter + Send + Sync>,
 		genesis: Block,
 		pow_verifier: fn(&BlockHeader) -> Result<(), pow::Error>,
@@ -170,44 +167,34 @@ impl Chain {
 		archive_mode: bool,
 		stop_state: Arc<Mutex<StopState>>,
 	) -> Result<Chain, Error> {
-		let chain = {
-			// Note: We take a lock on the stop_state here and do not release it until
-			// we have finished chain initialization.
-			let stop_state_local = stop_state.clone();
-			let stop_lock = stop_state_local.lock();
-			if stop_lock.is_stopped() {
-				return Err(ErrorKind::Stopped.into());
-			}
+		// Note: We take a lock on the stop_state here and do not release it until
+		// we have finished chain initialization.
+		let stop_state_local = stop_state.clone();
+		let stop_lock = stop_state_local.lock();
+		if stop_lock.is_stopped() {
+			return Err(ErrorKind::Stopped.into());
+		}
 
-			let store = Arc::new(store::ChainStore::new(db_env)?);
+		let store = Arc::new(store::ChainStore::new(&db_root)?);
 
-			// open the txhashset, creating a new one if necessary
-			let mut txhashset = txhashset::TxHashSet::open(db_root.clone(), store.clone(), None)?;
+		// open the txhashset, creating a new one if necessary
+		let mut txhashset = txhashset::TxHashSet::open(db_root.clone(), store.clone(), None)?;
 
-			setup_head(&genesis, &store, &mut txhashset)?;
-			Chain::log_heads(&store)?;
+		setup_head(&genesis, &store, &mut txhashset)?;
+		Chain::log_heads(&store)?;
 
-			Chain {
-				db_root,
-				store,
-				adapter,
-				orphans: Arc::new(OrphanBlockPool::new()),
-				txhashset: Arc::new(RwLock::new(txhashset)),
-				pow_verifier,
-				verifier_cache,
-				archive_mode,
-				stop_state,
-				genesis: genesis.header.clone(),
-			}
-		};
-
-		// Run chain compaction. Laptops and other intermittent nodes
-		// may not run long enough to trigger daily compaction.
-		// So run it explicitly here on startup (its fast enough to do so).
-		// Note: we release the stop_lock from above as compact also requires a lock.
-		chain.compact()?;
-
-		Ok(chain)
+		Ok(Chain {
+			db_root,
+			store,
+			adapter,
+			orphans: Arc::new(OrphanBlockPool::new()),
+			txhashset: Arc::new(RwLock::new(txhashset)),
+			pow_verifier,
+			verifier_cache,
+			archive_mode,
+			stop_state,
+			genesis: genesis.header.clone(),
+		})
 	}
 
 	/// Return our shared txhashset instance.
@@ -692,7 +679,7 @@ impl Chain {
 		}
 
 		// prepares the zip and return the corresponding Read
-		let txhashset_reader = txhashset::zip_read(self.db_root.clone(), &header, None)?;
+		let txhashset_reader = txhashset::zip_read(self.db_root.clone(), &header)?;
 		Ok((
 			header.output_mmr_size,
 			header.kernel_mmr_size,
@@ -852,9 +839,39 @@ impl Chain {
 
 	/// Clean the temporary sandbox folder
 	pub fn clean_txhashset_sandbox(&self) {
-		let sandbox_dir = env::temp_dir();
-		txhashset::clean_txhashset_folder(&sandbox_dir);
-		txhashset::clean_header_folder(&sandbox_dir);
+		txhashset::clean_txhashset_folder(&self.get_tmp_dir());
+		txhashset::clean_header_folder(&self.get_tmp_dir());
+	}
+
+	/// Specific tmp dir.
+	/// Normally it's ~/.grin/main/tmp for mainnet
+	/// or ~/.grin/floo/tmp for floonet
+	pub fn get_tmp_dir(&self) -> PathBuf {
+		let mut tmp_dir = PathBuf::from(self.db_root.clone());
+		tmp_dir = tmp_dir
+			.parent()
+			.expect("fail to get parent of db_root dir")
+			.to_path_buf();
+		tmp_dir.push("tmp");
+		tmp_dir
+	}
+
+	/// Get a tmp file path in above specific tmp dir (create tmp dir if not exist)
+	/// Delete file if tmp file already exists
+	pub fn get_tmpfile_pathname(&self, tmpfile_name: String) -> PathBuf {
+		let mut tmp = self.get_tmp_dir();
+		if !tmp.exists() {
+			if let Err(e) = fs::create_dir(tmp.clone()) {
+				warn!("fail to create tmp folder on {:?}. err: {}", tmp, e);
+			}
+		}
+		tmp.push(tmpfile_name);
+		if tmp.exists() {
+			if let Err(e) = fs::remove_file(tmp.clone()) {
+				warn!("fail to clean existing tmp file: {:?}. err: {}", tmp, e);
+			}
+		}
+		tmp
 	}
 
 	/// Writes a reading view on a txhashset state that's been provided to us.
@@ -878,8 +895,8 @@ impl Chain {
 
 		let header = self.get_block_header(&h)?;
 
-		// Write txhashset to sandbox (in the os temporary directory)
-		let sandbox_dir = env::temp_dir();
+		// Write txhashset to sandbox (in the Grin specific tmp dir)
+		let sandbox_dir = self.get_tmp_dir();
 		txhashset::clean_txhashset_folder(&sandbox_dir);
 		txhashset::clean_header_folder(&sandbox_dir);
 		txhashset::zip_write(sandbox_dir.clone(), txhashset_data.try_clone()?, &header)?;
@@ -1057,6 +1074,26 @@ impl Chain {
 	/// * removes historical blocks and associated data from the db (unless archive mode)
 	///
 	pub fn compact(&self) -> Result<(), Error> {
+		// A node may be restarted multiple times in a short period of time.
+		// We compact at most once per 60 blocks in this situation by comparing
+		// current "head" and "tail" height to our cut-through horizon and
+		// allowing an additional 60 blocks in height before allowing a further compaction.
+		if let (Ok(tail), Ok(head)) = (self.tail(), self.head()) {
+			let horizon = global::cut_through_horizon() as u64;
+			let threshold = horizon.saturating_add(60);
+			debug!(
+				"compact: head: {}, tail: {}, diff: {}, horizon: {}",
+				head.height,
+				tail.height,
+				head.height.saturating_sub(tail.height),
+				horizon
+			);
+			if tail.height.saturating_add(threshold) > head.height {
+				debug!("compact: skipping compaction - threshold is 60 blocks beyond horizon.");
+				return Ok(());
+			}
+		}
+
 		// Note: We take a lock on the stop_state here and do not release it until
 		// we have finished processing this chain compaction operation.
 		// We want to avoid shutting the node down in the middle of compacting the data.
