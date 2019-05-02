@@ -59,19 +59,12 @@ impl UI {
 	/// Create a new UI
 	pub fn new(controller_tx: mpsc::Sender<ControllerMessage>) -> UI {
 		let (ui_tx, ui_rx) = mpsc::channel::<UIMessage>();
-		let close_tx = controller_tx.clone();
 		let mut grin_ui = UI {
 			cursive: Cursive::default(),
 			ui_tx: ui_tx,
 			ui_rx: ui_rx,
 			controller_tx: controller_tx,
 		};
-		if let Err(e) = ctrlc::set_handler(move || {
-			let _ = close_tx.send(ControllerMessage::Shutdown);
-			std::thread::sleep(std::time::Duration::from_millis(1000));
-		}) {
-			error!("failed to register ctrl-c handler: {:?}", e);
-		}
 
 		// Create UI objects, etc
 		let status_view = status::TUIStatusView::create();
@@ -192,5 +185,6 @@ impl Controller {
 				next_stat_update = Utc::now().timestamp() + stat_update_interval;
 			}
 		}
+		server.stop();
 	}
 }
