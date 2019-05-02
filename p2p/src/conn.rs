@@ -286,19 +286,22 @@ fn poll<H>(
 					}
 				}
 
-				// check the close channel
-				if let Ok(_) = close_rx.try_recv() {
-					debug!(
-						"Connection close with {} initiated by us",
-						conn.peer_addr()
-							.map(|a| a.to_string())
-							.unwrap_or("?".to_owned())
-					);
+				// check the close channel, reading all the close msgs if any.
+				let close_msgs: Vec<_> = close_rx.try_iter().collect();
+				if !close_msgs.is_empty() {
 					break;
 				}
 
 				thread::sleep(sleep_time);
 			}
+
+			debug!(
+				"Shutting down connection with {}.",
+				conn.peer_addr()
+					.map(|a| a.to_string())
+					.unwrap_or("?".to_owned())
+			);
+
 			let _ = conn.shutdown(Shutdown::Both);
 		});
 }

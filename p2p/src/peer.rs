@@ -16,6 +16,7 @@ use crate::util::{Mutex, RwLock};
 use std::fmt;
 use std::fs::File;
 use std::net::{Shutdown, TcpStream};
+use std::ops::Deref;
 use std::path::PathBuf;
 use std::sync::Arc;
 
@@ -44,9 +45,6 @@ enum State {
 	Connected,
 	Disconnected,
 	Banned,
-	// Banned from Peers side, by ban_peer().
-	//   This could happen when error in block (or compact block) received, header(s) received,
-	//   or txhashset received.
 }
 
 pub struct Peer {
@@ -418,47 +416,38 @@ impl Peer {
 			Some(conn) => conn.lock(),
 			None => return false,
 		};
-		match connection.error_channel.try_recv() {
-			Ok(Error::Serialization(e)) => {
-				let need_stop = {
-					let mut state = self.state.write();
-					if State::Banned != *state {
-						*state = State::Disconnected;
-						true
-					} else {
-						false
-					}
-				};
-				if need_stop {
-					debug!(
-						"Client {} corrupted, will disconnect ({:?}).",
-						self.info.addr, e
-					);
-					stop_with_connection(&connection);
-				}
-				false
-			}
-			Ok(e) => {
-				let need_stop = {
-					let mut state = self.state.write();
-					if State::Disconnected != *state {
-						*state = State::Disconnected;
-						true
-					} else {
-						false
-					}
-				};
-				if need_stop {
-					debug!("Client {} connection lost: {:?}", self.info.addr, e);
-					stop_with_connection(&connection);
-				}
-				false
-			}
-			Err(_) => {
-				let state = self.state.read();
-				State::Connected == *state
+
+		{
+			let state = self.state.read();
+			if State::Connected != *state {
+				return false;
 			}
 		}
+
+		// Pull all the errors off the error channel if we have any, but do not block.
+		let errors: Vec<_> = connection.error_channel.try_iter().collect();
+		if errors.is_empty() {
+			// We are connected and we have no errors so we are good.
+			return true;
+		}
+
+		// About to stop connection, update state to Disconnected if not already.
+		{
+			let mut state = self.state.write();
+			debug!(
+				"Peer {} ({:?}) disconnecting, {:?}",
+				self.info.addr,
+				state.deref(),
+				errors
+			);
+
+			if State::Connected == *state {
+				*state = State::Disconnected;
+			}
+		}
+
+		stop_with_connection(&connection);
+		return false;
 	}
 }
 
