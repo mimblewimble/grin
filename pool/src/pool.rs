@@ -303,13 +303,6 @@ impl Pool {
 		Ok(())
 	}
 
-<<<<<<< HEAD
-	// Group dependent transactions in buckets (aggregated txs).
-	// Each bucket is independent from the others. Relies on the entries
-	// vector having parent transactions first (should always be the case).
-	pub fn bucket_transactions(&self, max_weight: usize) -> Vec<Transaction> {
-		let mut tx_buckets = vec![];
-=======
 	/// Buckets consist of a vec of txs and track the aggregate fee_to_weight.
 	/// We aggregate (cut-through) dependent transactions within a bucket *unless* adding a tx
 	/// would reduce the aggregate fee_to_weight, in which case we start a new bucket.
@@ -319,7 +312,6 @@ impl Pool {
 	/// maximizing both cut-through and overall fees.
 	fn bucket_transactions(&self, weighting: Weighting) -> Vec<Transaction> {
 		let mut tx_buckets: Vec<Bucket> = Vec::new();
->>>>>>> b9db129b333fa506ec256f78b87736ea584db786
 		let mut output_commits = HashMap::new();
 		let mut rejected = HashSet::new();
 
