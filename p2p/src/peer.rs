@@ -159,9 +159,6 @@ impl Peer {
 
 	/// Whether this peer is currently connected.
 	pub fn is_connected(&self) -> bool {
-		if self.connection.is_none() {
-			return false;
-		}
 		State::Connected == *self.state.read()
 	}
 
