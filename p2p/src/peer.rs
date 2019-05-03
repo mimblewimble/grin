@@ -23,9 +23,10 @@ use crate::chain;
 use crate::conn;
 use crate::core::core::hash::{Hash, Hashed};
 use crate::core::pow::Difficulty;
+use crate::core::ser::Writeable;
 use crate::core::{core, global};
 use crate::handshake::Handshake;
-use crate::msg::{self, BanReason, GetPeerAddrs, Locator, Ping, TxHashSetRequest};
+use crate::msg::{self, BanReason, GetPeerAddrs, Locator, Ping, TxHashSetRequest, Type};
 use crate::protocol::Protocol;
 use crate::types::{
 	Capabilities, ChainAdapter, Error, NetAdapter, P2PConfig, PeerAddr, PeerInfo, ReasonForBan,
@@ -227,6 +228,11 @@ impl Peer {
 		*self.state.write() = State::Banned;
 	}
 
+	/// Send a msg with given msg_type to our peer via the connection.
+	fn send<T: Writeable>(&self, msg: T, msg_type: Type) -> Result<(), Error> {
+		self.connection.lock().send(msg, msg_type)
+	}
+
 	/// Send a ping to the remote peer, providing our local difficulty and
 	/// height
 	pub fn send_ping(&self, total_difficulty: Difficulty, height: u64) -> Result<(), Error> {
@@ -234,7 +240,7 @@ impl Peer {
 			total_difficulty,
 			height,
 		};
-		self.connection.lock().send(ping_msg, msg::Type::Ping)
+		self.send(ping_msg, msg::Type::Ping)
 	}
 
 	/// Send the ban reason before banning
@@ -251,7 +257,7 @@ impl Peer {
 	pub fn send_block(&self, b: &core::Block) -> Result<bool, Error> {
 		if !self.tracking_adapter.has_recv(b.hash()) {
 			trace!("Send block {} to {}", b.hash(), self.info.addr);
-			self.connection.lock().send(b, msg::Type::Block)?;
+			self.send(b, msg::Type::Block)?;
 			Ok(true)
 		} else {
 			debug!(
@@ -266,7 +272,7 @@ impl Peer {
 	pub fn send_compact_block(&self, b: &core::CompactBlock) -> Result<bool, Error> {
 		if !self.tracking_adapter.has_recv(b.hash()) {
 			trace!("Send compact block {} to {}", b.hash(), self.info.addr);
-			self.connection.lock().send(b, msg::Type::CompactBlock)?;
+			self.send(b, msg::Type::CompactBlock)?;
 			Ok(true)
 		} else {
 			debug!(
@@ -281,7 +287,7 @@ impl Peer {
 	pub fn send_header(&self, bh: &core::BlockHeader) -> Result<bool, Error> {
 		if !self.tracking_adapter.has_recv(bh.hash()) {
 			debug!("Send header {} to {}", bh.hash(), self.info.addr);
-			self.connection.lock().send(bh, msg::Type::Header)?;
+			self.send(bh, msg::Type::Header)?;
 			Ok(true)
 		} else {
 			debug!(
@@ -326,7 +332,7 @@ impl Peer {
 
 		if !self.tracking_adapter.has_recv(kernel.hash()) {
 			debug!("Send full tx {} to {}", tx.hash(), self.info.addr);
-			self.connection.lock().send(tx, msg::Type::Transaction)?;
+			self.send(tx, msg::Type::Transaction)?;
 			Ok(true)
 		} else {
 			debug!(
@@ -343,7 +349,7 @@ impl Peer {
 	/// embargo).
 	pub fn send_stem_transaction(&self, tx: &core::Transaction) -> Result<(), Error> {
 		debug!("Send (stem) tx {} to {}", tx.hash(), self.info.addr);
-		self.connection.lock().send(tx, msg::Type::StemTransaction)
+		self.send(tx, msg::Type::StemTransaction)
 	}
 
 	/// Sends a request for block headers from the provided block locator
@@ -358,25 +364,25 @@ impl Peer {
 			"Requesting tx (kernel hash) {} from peer {}.",
 			h, self.info.addr
 		);
-		self.connection.lock().send(&h, msg::Type::GetTransaction)
+		self.send(&h, msg::Type::GetTransaction)
 	}
 
 	/// Sends a request for a specific block by hash
 	pub fn send_block_request(&self, h: Hash) -> Result<(), Error> {
 		debug!("Requesting block {} from peer {}.", h, self.info.addr);
 		self.tracking_adapter.push_req(h);
-		self.connection.lock().send(&h, msg::Type::GetBlock)
+		self.send(&h, msg::Type::GetBlock)
 	}
 
 	/// Sends a request for a specific compact block by hash
 	pub fn send_compact_block_request(&self, h: Hash) -> Result<(), Error> {
 		debug!("Requesting compact block {} from {}", h, self.info.addr);
-		self.connection.lock().send(&h, msg::Type::GetCompactBlock)
+		self.send(&h, msg::Type::GetCompactBlock)
 	}
 
 	pub fn send_peer_request(&self, capab: Capabilities) -> Result<(), Error> {
 		trace!("Asking {} for more peers {:?}", self.info.addr, capab);
-		self.connection.lock().send(
+		self.send(
 			&GetPeerAddrs {
 				capabilities: capab,
 			},
@@ -389,7 +395,7 @@ impl Peer {
 			"Asking {} for txhashset archive at {} {}.",
 			self.info.addr, height, hash
 		);
-		self.connection.lock().send(
+		self.send(
 			&TxHashSetRequest { hash, height },
 			msg::Type::TxHashSetRequest,
 		)
