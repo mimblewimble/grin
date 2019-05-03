@@ -79,7 +79,7 @@ fn real_main() -> i32 {
 			println!();
 			println!("As of v1.1.0, the wallet has been split into a seperate executable.");
 			println!(
-				"Please visit https://github.com/mimblewinble/grin-wallet/releases to download"
+				"Please visit https://github.com/mimblewimble/grin-wallet/releases to download"
 			);
 			println!();
 			return 0;
