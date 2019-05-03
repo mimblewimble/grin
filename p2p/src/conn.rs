@@ -188,6 +188,11 @@ impl Tracker {
 
 		Ok(())
 	}
+
+	/// Schedule this connection to safely close via the async close_channel.
+	pub fn close(&self) {
+		let _ = self.close_channel.send(());
+	}
 }
 
 /// Start listening on the provided connection and wraps it. Does not hang
