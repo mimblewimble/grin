@@ -269,9 +269,9 @@ fn poll<H>(
 							.write()
 							.inc(MsgHeader::LEN as u64 + msg.header.msg_len);
 
-						if let Some(Some(resp)) = try_break!(
-							handler.consume(msg, &mut writer, received_bytes.clone())
-						) {
+						if let Some(Some(resp)) =
+							try_break!(handler.consume(msg, &mut writer, received_bytes.clone()))
+						{
 							try_break!(resp.write(sent_bytes.clone()));
 						}
 					}
