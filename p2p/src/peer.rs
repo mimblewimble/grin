@@ -61,6 +61,7 @@ impl fmt::Debug for Peer {
 }
 
 impl Peer {
+	// Only accept and connect can be externally used to build a peer
 	fn new(info: PeerInfo, conn: TcpStream, adapter: Arc<dyn NetAdapter>) -> Peer {
 		let state = Arc::new(RwLock::new(State::Connected));
 		let tracking_adapter = TrackingAdapter::new(adapter);
