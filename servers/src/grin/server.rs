@@ -75,12 +75,12 @@ impl Server {
 	/// to poll info about the server status
 	pub fn start<F>(config: ServerConfig, mut info_callback: F) -> Result<(), Error>
 	where
-		F: FnMut(Arc<Server>),
+		F: FnMut(Server),
 	{
 		let mining_config = config.stratum_mining_config.clone();
 		let enable_test_miner = config.run_test_miner;
 		let test_miner_wallet_url = config.test_miner_wallet_url.clone();
-		let serv = Arc::new(Server::new(config)?);
+		let serv = Server::new(config)?;
 
 		if let Some(c) = mining_config {
 			let enable_stratum_server = c.enable_stratum_server;
@@ -101,13 +101,8 @@ impl Server {
 			}
 		}
 
-		info_callback(serv.clone());
-		loop {
-			thread::sleep(time::Duration::from_secs(1));
-			if serv.stop_state.lock().is_stopped() {
-				return Ok(());
-			}
-		}
+		info_callback(serv);
+		Ok(())
 	}
 
 	// Exclusive (advisory) lock_file to ensure we do not run multiple
