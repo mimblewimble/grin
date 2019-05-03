@@ -42,11 +42,7 @@ const MAX_PEER_MSG_PER_MIN: u64 = 500;
 ///   For example: 'Disconnected' state here could still be 'Healthy' and could reconnect in next loop.
 enum State {
 	Connected,
-	Disconnected,
 	Banned,
-	// Banned from Peers side, by ban_peer().
-	//   This could happen when error in block (or compact block) received, header(s) received,
-	//   or txhashset received.
 }
 
 pub struct Peer {
@@ -173,9 +169,12 @@ impl Peer {
 		false
 	}
 
-	/// Whether this peer is still connected.
+	/// Whether this peer is currently connected.
 	pub fn is_connected(&self) -> bool {
-		self.check_connection()
+		if self.connection.is_none() {
+			return false;
+		}
+		State::Connected == *self.state.read()
 	}
 
 	/// Whether this peer has been banned.
@@ -409,61 +408,9 @@ impl Peer {
 	/// Stops the peer, closing its connection
 	pub fn stop(&self) {
 		if let Some(conn) = self.connection.as_ref() {
-			stop_with_connection(&conn.lock());
+			let _ = conn.lock().close_channel.send(());
 		}
 	}
-
-	fn check_connection(&self) -> bool {
-		let connection = match self.connection.as_ref() {
-			Some(conn) => conn.lock(),
-			None => return false,
-		};
-		match connection.error_channel.try_recv() {
-			Ok(Error::Serialization(e)) => {
-				let need_stop = {
-					let mut state = self.state.write();
-					if State::Banned != *state {
-						*state = State::Disconnected;
-						true
-					} else {
-						false
-					}
-				};
-				if need_stop {
-					debug!(
-						"Client {} corrupted, will disconnect ({:?}).",
-						self.info.addr, e
-					);
-					stop_with_connection(&connection);
-				}
-				false
-			}
-			Ok(e) => {
-				let need_stop = {
-					let mut state = self.state.write();
-					if State::Disconnected != *state {
-						*state = State::Disconnected;
-						true
-					} else {
-						false
-					}
-				};
-				if need_stop {
-					debug!("Client {} connection lost: {:?}", self.info.addr, e);
-					stop_with_connection(&connection);
-				}
-				false
-			}
-			Err(_) => {
-				let state = self.state.read();
-				State::Connected == *state
-			}
-		}
-	}
-}
-
-fn stop_with_connection(connection: &conn::Tracker) {
-	let _ = connection.close_channel.send(());
 }
 
 /// Adapter implementation that forwards everything to an underlying adapter
