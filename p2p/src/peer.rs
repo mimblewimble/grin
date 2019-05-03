@@ -50,8 +50,8 @@ pub struct Peer {
 	pub info: PeerInfo,
 	state: Arc<RwLock<State>>,
 	// set of all hashes known to this peer (so no need to send)
-	tracking_adapter: Arc<TrackingAdapter>,
-	connection: Arc<Mutex<conn::Tracker>>,
+	tracking_adapter: TrackingAdapter,
+	connection: Mutex<conn::Tracker>,
 }
 
 impl fmt::Debug for Peer {
@@ -71,16 +71,16 @@ impl Peer {
 		debug!("accept: handshaking from {:?}", conn.peer_addr());
 		let info = hs.accept(capab, total_difficulty, &mut conn);
 		match info {
-			Ok(peer_info) => {
+			Ok(info) => {
 				let state = Arc::new(RwLock::new(State::Connected));
-				let tracking_adapter = Arc::new(TrackingAdapter::new(adapter));
-				let handler = Protocol::new(tracking_adapter.clone(), peer_info.clone());
+				let tracking_adapter = TrackingAdapter::new(adapter);
+				let handler = Protocol::new(Arc::new(tracking_adapter.clone()), info.clone());
 
 				let peer = Peer {
-					info: peer_info,
+					info,
 					state,
 					tracking_adapter,
-					connection: Arc::new(Mutex::new(conn::listen(conn, handler))),
+					connection: Mutex::new(conn::listen(conn, handler)),
 				};
 
 				Ok(peer)
@@ -110,16 +110,16 @@ impl Peer {
 		debug!("connect: handshaking with {:?}", conn.peer_addr());
 		let info = hs.initiate(capab, total_difficulty, self_addr, &mut conn);
 		match info {
-			Ok(peer_info) => {
+			Ok(info) => {
 				let state = Arc::new(RwLock::new(State::Connected));
-				let tracking_adapter = Arc::new(TrackingAdapter::new(adapter));
-				let handler = Protocol::new(tracking_adapter.clone(), peer_info.clone());
+				let tracking_adapter = TrackingAdapter::new(adapter);
+				let handler = Protocol::new(Arc::new(tracking_adapter.clone()), info.clone());
 
 				let peer = Peer {
-					info: peer_info,
+					info,
 					state,
 					tracking_adapter,
-					connection: Arc::new(Mutex::new(conn::listen(conn, handler))),
+					connection: Mutex::new(conn::listen(conn, handler)),
 				};
 
 				Ok(peer)
