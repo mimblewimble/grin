@@ -246,10 +246,7 @@ impl Peer {
 	/// Send the ban reason before banning
 	pub fn send_ban_reason(&self, ban_reason: ReasonForBan) -> Result<(), Error> {
 		let ban_reason_msg = BanReason { ban_reason };
-		self.connection
-			.lock()
-			.send(ban_reason_msg, msg::Type::BanReason)
-			.map(|_| ())
+		self.send(ban_reason_msg, msg::Type::BanReason).map(|_| ())
 	}
 
 	/// Sends the provided block to the remote peer. The request may be dropped
@@ -302,9 +299,7 @@ impl Peer {
 	pub fn send_tx_kernel_hash(&self, h: Hash) -> Result<bool, Error> {
 		if !self.tracking_adapter.has_recv(h) {
 			debug!("Send tx kernel hash {} to {}", h, self.info.addr);
-			self.connection
-				.lock()
-				.send(h, msg::Type::TransactionKernel)?;
+			self.send(h, msg::Type::TransactionKernel)?;
 			Ok(true)
 		} else {
 			debug!(
@@ -354,9 +349,7 @@ impl Peer {
 
 	/// Sends a request for block headers from the provided block locator
 	pub fn send_header_request(&self, locator: Vec<Hash>) -> Result<(), Error> {
-		self.connection
-			.lock()
-			.send(&Locator { hashes: locator }, msg::Type::GetHeaders)
+		self.send(&Locator { hashes: locator }, msg::Type::GetHeaders)
 	}
 
 	pub fn send_tx_request(&self, h: Hash) -> Result<(), Error> {
