@@ -179,7 +179,7 @@ impl TransactionPool {
 
 		// Transaction passed all the checks but we have to make space for it
 		if evict {
-			self.evict_from_txpool()?;
+			self.evict_from_txpool();
 		}
 
 		Ok(())
@@ -187,7 +187,7 @@ impl TransactionPool {
 
 	// Remove the last transaction from the flattened bucket transactions.
 	// No other tx depends on it, it has low fee_to_weight and is unlikely to participate in any cut-through.
-	pub fn evict_from_txpool(&mut self) -> Result<(), PoolError> {
+	pub fn evict_from_txpool(&mut self) {
 		// Get bucket transactions
 		let bucket_transactions = self.txpool.bucket_transactions(Weighting::NoLimit);
 
@@ -202,9 +202,8 @@ impl TransactionPool {
 					.filter(|x| x.tx != *evictable_transaction)
 					.map(|x| x.clone())
 					.collect::<Vec<_>>();
-				Ok(())
 			}
-			None => Err(PoolError::OverCapacity),
+			None => (),
 		}
 	}
 
