@@ -49,17 +49,8 @@ pub struct Peer {
 	pub info: PeerInfo,
 	state: Arc<RwLock<State>>,
 	// set of all hashes known to this peer (so no need to send)
-	tracking_adapter: TrackingAdapter,
-	connection: Option<Mutex<conn::Tracker>>,
-}
-
-macro_rules! connection {
-	($holder:expr) => {
-		match $holder.connection.as_ref() {
-			Some(conn) => conn.lock(),
-			None => return Err(Error::ConnectionClose),
-			}
-	};
+	tracking_adapter: Arc<TrackingAdapter>,
+	connection: Arc<Mutex<conn::Tracker>>,
 }
 
 impl fmt::Debug for Peer {
@@ -69,27 +60,30 @@ impl fmt::Debug for Peer {
 }
 
 impl Peer {
-	// Only accept and connect can be externally used to build a peer
-	fn new(info: PeerInfo, adapter: Arc<dyn NetAdapter>) -> Peer {
-		Peer {
-			info,
-			state: Arc::new(RwLock::new(State::Connected)),
-			tracking_adapter: TrackingAdapter::new(adapter),
-			connection: None,
-		}
-	}
-
 	pub fn accept(
-		conn: &mut TcpStream,
+		mut conn: TcpStream,
 		capab: Capabilities,
 		total_difficulty: Difficulty,
 		hs: &Handshake,
 		adapter: Arc<dyn NetAdapter>,
 	) -> Result<Peer, Error> {
 		debug!("accept: handshaking from {:?}", conn.peer_addr());
-		let info = hs.accept(capab, total_difficulty, conn);
+		let info = hs.accept(capab, total_difficulty, &mut conn);
 		match info {
-			Ok(peer_info) => Ok(Peer::new(peer_info, adapter)),
+			Ok(peer_info) => {
+				let state = Arc::new(RwLock::new(State::Connected));
+				let tracking_adapter = Arc::new(TrackingAdapter::new(adapter));
+				let handler = Protocol::new(tracking_adapter.clone(), peer_info.clone());
+
+				let peer = Peer {
+					info: peer_info,
+					state,
+					tracking_adapter,
+					connection: Arc::new(Mutex::new(conn::listen(conn, handler))),
+				};
+
+				Ok(peer)
+			}
 			Err(e) => {
 				debug!(
 					"accept: handshaking from {:?} failed with error: {:?}",
@@ -105,17 +99,30 @@ impl Peer {
 	}
 
 	pub fn connect(
-		conn: &mut TcpStream,
+		mut conn: TcpStream,
 		capab: Capabilities,
 		total_difficulty: Difficulty,
 		self_addr: PeerAddr,
 		hs: &Handshake,
-		na: Arc<dyn NetAdapter>,
+		adapter: Arc<dyn NetAdapter>,
 	) -> Result<Peer, Error> {
 		debug!("connect: handshaking with {:?}", conn.peer_addr());
-		let info = hs.initiate(capab, total_difficulty, self_addr, conn);
+		let info = hs.initiate(capab, total_difficulty, self_addr, &mut conn);
 		match info {
-			Ok(peer_info) => Ok(Peer::new(peer_info, na)),
+			Ok(peer_info) => {
+				let state = Arc::new(RwLock::new(State::Connected));
+				let tracking_adapter = Arc::new(TrackingAdapter::new(adapter));
+				let handler = Protocol::new(tracking_adapter.clone(), peer_info.clone());
+
+				let peer = Peer {
+					info: peer_info,
+					state,
+					tracking_adapter,
+					connection: Arc::new(Mutex::new(conn::listen(conn, handler))),
+				};
+
+				Ok(peer)
+			}
 			Err(e) => {
 				debug!(
 					"connect: handshaking with {:?} failed with error: {:?}",
@@ -128,14 +135,6 @@ impl Peer {
 				Err(e)
 			}
 		}
-	}
-
-	/// Main peer loop listening for messages and forwarding to the rest of the
-	/// system.
-	pub fn start(&mut self, conn: TcpStream) {
-		let adapter = Arc::new(self.tracking_adapter.clone());
-		let handler = Protocol::new(adapter, self.info.clone());
-		self.connection = Some(Mutex::new(conn::listen(conn, handler)));
 	}
 
 	pub fn is_denied(config: &P2PConfig, peer_addr: PeerAddr) -> bool {
@@ -196,45 +195,31 @@ impl Peer {
 
 	/// Whether the peer is considered abusive, mostly for spammy nodes
 	pub fn is_abusive(&self) -> bool {
-		if let Some(ref conn) = self.connection {
-			let conn = conn.lock();
-			let rec = conn.received_bytes.read();
-			let sent = conn.sent_bytes.read();
-			rec.count_per_min() > MAX_PEER_MSG_PER_MIN
-				|| sent.count_per_min() > MAX_PEER_MSG_PER_MIN
-		} else {
-			false
-		}
+		let conn = self.connection.lock();
+		let rec = conn.received_bytes.read();
+		let sent = conn.sent_bytes.read();
+		rec.count_per_min() > MAX_PEER_MSG_PER_MIN || sent.count_per_min() > MAX_PEER_MSG_PER_MIN
 	}
 
 	/// Number of bytes sent to the peer
 	pub fn last_min_sent_bytes(&self) -> Option<u64> {
-		if let Some(ref tracker) = self.connection {
-			let conn = tracker.lock();
-			let sent_bytes = conn.sent_bytes.read();
-			return Some(sent_bytes.bytes_per_min());
-		}
-		None
+		let conn = self.connection.lock();
+		let sent_bytes = conn.sent_bytes.read();
+		Some(sent_bytes.bytes_per_min())
 	}
 
 	/// Number of bytes received from the peer
 	pub fn last_min_received_bytes(&self) -> Option<u64> {
-		if let Some(ref tracker) = self.connection {
-			let conn = tracker.lock();
-			let received_bytes = conn.received_bytes.read();
-			return Some(received_bytes.bytes_per_min());
-		}
-		None
+		let conn = self.connection.lock();
+		let received_bytes = conn.received_bytes.read();
+		Some(received_bytes.bytes_per_min())
 	}
 
 	pub fn last_min_message_counts(&self) -> Option<(u64, u64)> {
-		if let Some(ref tracker) = self.connection {
-			let conn = tracker.lock();
-			let received_bytes = conn.received_bytes.read();
-			let sent_bytes = conn.sent_bytes.read();
-			return Some((sent_bytes.count_per_min(), received_bytes.count_per_min()));
-		}
-		None
+		let conn = self.connection.lock();
+		let received_bytes = conn.received_bytes.read();
+		let sent_bytes = conn.sent_bytes.read();
+		Some((sent_bytes.count_per_min(), received_bytes.count_per_min()))
 	}
 
 	/// Set this peer status to banned
@@ -249,13 +234,14 @@ impl Peer {
 			total_difficulty,
 			height,
 		};
-		connection!(self).send(ping_msg, msg::Type::Ping)
+		self.connection.lock().send(ping_msg, msg::Type::Ping)
 	}
 
 	/// Send the ban reason before banning
 	pub fn send_ban_reason(&self, ban_reason: ReasonForBan) -> Result<(), Error> {
 		let ban_reason_msg = BanReason { ban_reason };
-		connection!(self)
+		self.connection
+			.lock()
 			.send(ban_reason_msg, msg::Type::BanReason)
 			.map(|_| ())
 	}
@@ -265,7 +251,7 @@ impl Peer {
 	pub fn send_block(&self, b: &core::Block) -> Result<bool, Error> {
 		if !self.tracking_adapter.has_recv(b.hash()) {
 			trace!("Send block {} to {}", b.hash(), self.info.addr);
-			connection!(self).send(b, msg::Type::Block)?;
+			self.connection.lock().send(b, msg::Type::Block)?;
 			Ok(true)
 		} else {
 			debug!(
@@ -280,7 +266,7 @@ impl Peer {
 	pub fn send_compact_block(&self, b: &core::CompactBlock) -> Result<bool, Error> {
 		if !self.tracking_adapter.has_recv(b.hash()) {
 			trace!("Send compact block {} to {}", b.hash(), self.info.addr);
-			connection!(self).send(b, msg::Type::CompactBlock)?;
+			self.connection.lock().send(b, msg::Type::CompactBlock)?;
 			Ok(true)
 		} else {
 			debug!(
@@ -295,7 +281,7 @@ impl Peer {
 	pub fn send_header(&self, bh: &core::BlockHeader) -> Result<bool, Error> {
 		if !self.tracking_adapter.has_recv(bh.hash()) {
 			debug!("Send header {} to {}", bh.hash(), self.info.addr);
-			connection!(self).send(bh, msg::Type::Header)?;
+			self.connection.lock().send(bh, msg::Type::Header)?;
 			Ok(true)
 		} else {
 			debug!(
@@ -310,7 +296,9 @@ impl Peer {
 	pub fn send_tx_kernel_hash(&self, h: Hash) -> Result<bool, Error> {
 		if !self.tracking_adapter.has_recv(h) {
 			debug!("Send tx kernel hash {} to {}", h, self.info.addr);
-			connection!(self).send(h, msg::Type::TransactionKernel)?;
+			self.connection
+				.lock()
+				.send(h, msg::Type::TransactionKernel)?;
 			Ok(true)
 		} else {
 			debug!(
@@ -338,7 +326,7 @@ impl Peer {
 
 		if !self.tracking_adapter.has_recv(kernel.hash()) {
 			debug!("Send full tx {} to {}", tx.hash(), self.info.addr);
-			connection!(self).send(tx, msg::Type::Transaction)?;
+			self.connection.lock().send(tx, msg::Type::Transaction)?;
 			Ok(true)
 		} else {
 			debug!(
@@ -355,12 +343,14 @@ impl Peer {
 	/// embargo).
 	pub fn send_stem_transaction(&self, tx: &core::Transaction) -> Result<(), Error> {
 		debug!("Send (stem) tx {} to {}", tx.hash(), self.info.addr);
-		connection!(self).send(tx, msg::Type::StemTransaction)
+		self.connection.lock().send(tx, msg::Type::StemTransaction)
 	}
 
 	/// Sends a request for block headers from the provided block locator
 	pub fn send_header_request(&self, locator: Vec<Hash>) -> Result<(), Error> {
-		connection!(self).send(&Locator { hashes: locator }, msg::Type::GetHeaders)
+		self.connection
+			.lock()
+			.send(&Locator { hashes: locator }, msg::Type::GetHeaders)
 	}
 
 	pub fn send_tx_request(&self, h: Hash) -> Result<(), Error> {
@@ -368,25 +358,25 @@ impl Peer {
 			"Requesting tx (kernel hash) {} from peer {}.",
 			h, self.info.addr
 		);
-		connection!(self).send(&h, msg::Type::GetTransaction)
+		self.connection.lock().send(&h, msg::Type::GetTransaction)
 	}
 
 	/// Sends a request for a specific block by hash
 	pub fn send_block_request(&self, h: Hash) -> Result<(), Error> {
 		debug!("Requesting block {} from peer {}.", h, self.info.addr);
 		self.tracking_adapter.push_req(h);
-		connection!(self).send(&h, msg::Type::GetBlock)
+		self.connection.lock().send(&h, msg::Type::GetBlock)
 	}
 
 	/// Sends a request for a specific compact block by hash
 	pub fn send_compact_block_request(&self, h: Hash) -> Result<(), Error> {
 		debug!("Requesting compact block {} from {}", h, self.info.addr);
-		connection!(self).send(&h, msg::Type::GetCompactBlock)
+		self.connection.lock().send(&h, msg::Type::GetCompactBlock)
 	}
 
 	pub fn send_peer_request(&self, capab: Capabilities) -> Result<(), Error> {
 		trace!("Asking {} for more peers {:?}", self.info.addr, capab);
-		connection!(self).send(
+		self.connection.lock().send(
 			&GetPeerAddrs {
 				capabilities: capab,
 			},
@@ -399,7 +389,7 @@ impl Peer {
 			"Asking {} for txhashset archive at {} {}.",
 			self.info.addr, height, hash
 		);
-		connection!(self).send(
+		self.connection.lock().send(
 			&TxHashSetRequest { hash, height },
 			msg::Type::TxHashSetRequest,
 		)
@@ -407,9 +397,7 @@ impl Peer {
 
 	/// Stops the peer, closing its connection
 	pub fn stop(&self) {
-		if let Some(conn) = self.connection.as_ref() {
-			let _ = conn.lock().close_channel.send(());
-		}
+		self.connection.lock().close();
 	}
 }
 

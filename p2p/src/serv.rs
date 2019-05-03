@@ -138,19 +138,18 @@ impl Server {
 			addr
 		);
 		match TcpStream::connect_timeout(&addr.0, Duration::from_secs(10)) {
-			Ok(mut stream) => {
+			Ok(stream) => {
 				let addr = SocketAddr::new(self.config.host, self.config.port);
 				let total_diff = self.peers.total_difficulty()?;
 
-				let mut peer = Peer::connect(
-					&mut stream,
+				let peer = Peer::connect(
+					stream,
 					self.capabilities,
 					total_diff,
 					PeerAddr(addr),
 					&self.handshake,
 					self.peers.clone(),
 				)?;
-				peer.start(stream);
 				let peer = Arc::new(peer);
 				self.peers.add_connected(peer.clone())?;
 				Ok(peer)
@@ -168,18 +167,17 @@ impl Server {
 		}
 	}
 
-	fn handle_new_peer(&self, mut stream: TcpStream) -> Result<(), Error> {
+	fn handle_new_peer(&self, stream: TcpStream) -> Result<(), Error> {
 		let total_diff = self.peers.total_difficulty()?;
 
 		// accept the peer and add it to the server map
-		let mut peer = Peer::accept(
-			&mut stream,
+		let peer = Peer::accept(
+			stream,
 			self.capabilities,
 			total_diff,
 			&self.handshake,
 			self.peers.clone(),
 		)?;
-		peer.start(stream);
 		self.peers.add_connected(Arc::new(peer))?;
 		Ok(())
 	}
