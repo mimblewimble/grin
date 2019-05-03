@@ -14,7 +14,7 @@ backtrace = "0.3"
 base64 = "0.9"
 byteorder = "1"
 lazy_static = "1"
-rand = "0.5"
+rand = "0.6"
 serde = "1"
 serde_derive = "1"
 log4rs = { version = "0.8.1", features = ["rolling_file_appender", "compound_policy", "size_trigger", "fixed_window_roller"] }

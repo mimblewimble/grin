@@ -240,7 +240,8 @@ impl MsgHeader {
 }
 
 impl FixedLength for MsgHeader {
-	const LEN: usize = 1 + 1 + 1 + 8;
+	// 2 magic bytes + 1 type byte + 8 bytes (msg_len)
+	const LEN: usize = 2 + 1 + 8;
 }
 
 impl Writeable for MsgHeader {

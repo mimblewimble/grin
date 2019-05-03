@@ -18,7 +18,8 @@ use std::fs::File;
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use rand::{thread_rng, Rng};
+use rand::seq::SliceRandom;
+use rand::thread_rng;
 
 use crate::chain;
 use crate::core::core;
@@ -100,7 +101,7 @@ impl Peers {
 			.filter(|p| p.is_connected())
 			.cloned()
 			.collect::<Vec<_>>();
-		thread_rng().shuffle(&mut res);
+		res.shuffle(&mut thread_rng());
 		res
 	}
 
@@ -141,7 +142,7 @@ impl Peers {
 			.filter(|x| x.info.total_difficulty() > total_difficulty)
 			.collect::<Vec<_>>();
 
-		thread_rng().shuffle(&mut max_peers);
+		max_peers.shuffle(&mut thread_rng());
 		Ok(max_peers)
 	}
 
@@ -190,7 +191,7 @@ impl Peers {
 			.filter(|x| x.info.total_difficulty() == max_total_difficulty)
 			.collect::<Vec<_>>();
 
-		thread_rng().shuffle(&mut max_peers);
+		max_peers.shuffle(&mut thread_rng());
 		max_peers
 	}
 
@@ -224,6 +225,7 @@ impl Peers {
 			};
 			peer.set_banned();
 			peer.stop();
+			self.peers.write().remove(&peer.info.addr);
 		}
 	}
 
@@ -256,7 +258,14 @@ impl Peers {
 			match inner(&p) {
 				Ok(true) => count += 1,
 				Ok(false) => (),
-				Err(e) => debug!("Error sending {} to peer: {:?}", obj_name, e),
+				Err(e) => {
+					debug!(
+						"Error sending {:?} to peer {:?}: {:?}",
+						obj_name, &p.info.addr, e
+					);
+					p.stop();
+					self.peers.write().remove(&p.info.addr);
+				}
 			}
 
 			if count >= num_peers {
@@ -318,10 +327,11 @@ impl Peers {
 	/// Ping all our connected peers. Always automatically expects a pong back
 	/// or disconnects. This acts as a liveness test.
 	pub fn check_all(&self, total_difficulty: Difficulty, height: u64) {
-		let peers_map = self.peers.read();
-		for p in peers_map.values() {
-			if p.is_connected() {
-				let _ = p.send_ping(total_difficulty, height);
+		for p in self.connected_peers().iter() {
+			if let Err(e) = p.send_ping(total_difficulty, height) {
+				debug!("Error pinging peer {:?}: {:?}", &p.info.addr, e);
+				p.stop();
+				self.peers.write().remove(&p.info.addr);
 			}
 		}
 	}
