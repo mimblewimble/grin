@@ -61,6 +61,19 @@ impl fmt::Debug for Peer {
 }
 
 impl Peer {
+	fn new(info: PeerInfo, conn: TcpStream, adapter: Arc<dyn NetAdapter>) -> Peer {
+		let state = Arc::new(RwLock::new(State::Connected));
+		let tracking_adapter = TrackingAdapter::new(adapter);
+		let handler = Protocol::new(Arc::new(tracking_adapter.clone()), info.clone());
+		let connection = Mutex::new(conn::listen(conn, handler));
+		Peer {
+			info,
+			state,
+			tracking_adapter,
+			connection,
+		}
+	}
+
 	pub fn accept(
 		mut conn: TcpStream,
 		capab: Capabilities,
@@ -71,20 +84,7 @@ impl Peer {
 		debug!("accept: handshaking from {:?}", conn.peer_addr());
 		let info = hs.accept(capab, total_difficulty, &mut conn);
 		match info {
-			Ok(info) => {
-				let state = Arc::new(RwLock::new(State::Connected));
-				let tracking_adapter = TrackingAdapter::new(adapter);
-				let handler = Protocol::new(Arc::new(tracking_adapter.clone()), info.clone());
-
-				let peer = Peer {
-					info,
-					state,
-					tracking_adapter,
-					connection: Mutex::new(conn::listen(conn, handler)),
-				};
-
-				Ok(peer)
-			}
+			Ok(info) => Ok(Peer::new(info, conn, adapter)),
 			Err(e) => {
 				debug!(
 					"accept: handshaking from {:?} failed with error: {:?}",
@@ -110,20 +110,7 @@ impl Peer {
 		debug!("connect: handshaking with {:?}", conn.peer_addr());
 		let info = hs.initiate(capab, total_difficulty, self_addr, &mut conn);
 		match info {
-			Ok(info) => {
-				let state = Arc::new(RwLock::new(State::Connected));
-				let tracking_adapter = TrackingAdapter::new(adapter);
-				let handler = Protocol::new(Arc::new(tracking_adapter.clone()), info.clone());
-
-				let peer = Peer {
-					info,
-					state,
-					tracking_adapter,
-					connection: Mutex::new(conn::listen(conn, handler)),
-				};
-
-				Ok(peer)
-			}
+			Ok(info) => Ok(Peer::new(info, conn, adapter)),
 			Err(e) => {
 				debug!(
 					"connect: handshaking with {:?} failed with error: {:?}",
