@@ -31,13 +31,13 @@ pub fn run_sync(
 	peers: Arc<p2p::Peers>,
 	chain: Arc<chain::Chain>,
 	stop_state: Arc<Mutex<StopState>>,
-) {
-	let _ = thread::Builder::new()
+) -> std::io::Result<std::thread::JoinHandle<()>> {
+	thread::Builder::new()
 		.name("sync".to_string())
 		.spawn(move || {
 			let runner = SyncRunner::new(sync_state, peers, chain, stop_state);
 			runner.sync_loop();
-		});
+		})
 }
 
 pub struct SyncRunner {

@@ -24,7 +24,11 @@ use std::fs::File;
 use std::io::{self, Read, Write};
 use std::net::{Shutdown, TcpStream};
 use std::sync::{mpsc, Arc};
-use std::{cmp, thread, time};
+use std::{
+	cmp,
+	thread::{self, JoinHandle},
+	time,
+};
 
 use crate::core::ser;
 use crate::core::ser::FixedLength;
@@ -171,6 +175,8 @@ pub struct Tracker {
 	pub send_channel: mpsc::SyncSender<Vec<u8>>,
 	/// Channel to close the connection
 	pub close_channel: mpsc::Sender<()>,
+	// we need Option to take ownhership of the handle in stop()
+	peer_thread: Option<JoinHandle<()>>,
 }
 
 impl Tracker {
@@ -190,15 +196,23 @@ impl Tracker {
 	}
 
 	/// Schedule this connection to safely close via the async close_channel.
-	pub fn close(&self) {
+	pub fn close(&mut self) {
 		let _ = self.close_channel.send(());
+		if let Some(peer_thread) = self.peer_thread.take() {
+			// wait only if other thread is calling us, eg shutdown
+			if thread::current().id() != peer_thread.thread().id() {
+				if let Err(e) = peer_thread.join() {
+					error!("failed to stop peer thread: {:?}", e);
+				}
+			}
+		}
 	}
 }
 
 /// Start listening on the provided connection and wraps it. Does not hang
 /// the current thread, instead just returns a future and the Connection
 /// itself.
-pub fn listen<H>(stream: TcpStream, handler: H) -> Tracker
+pub fn listen<H>(stream: TcpStream, handler: H) -> io::Result<Tracker>
 where
 	H: MessageHandler,
 {
@@ -213,21 +227,22 @@ where
 	stream
 		.set_nonblocking(true)
 		.expect("Non-blocking IO not available.");
-	poll(
+	let peer_thread = poll(
 		stream,
 		handler,
 		send_rx,
 		close_rx,
 		received_bytes.clone(),
 		sent_bytes.clone(),
-	);
+	)?;
 
-	Tracker {
+	Ok(Tracker {
 		sent_bytes: sent_bytes.clone(),
 		received_bytes: received_bytes.clone(),
 		send_channel: send_tx,
 		close_channel: close_tx,
-	}
+		peer_thread: Some(peer_thread),
+	})
 }
 
 fn poll<H>(
@@ -237,14 +252,15 @@ fn poll<H>(
 	close_rx: mpsc::Receiver<()>,
 	received_bytes: Arc<RwLock<RateCounter>>,
 	sent_bytes: Arc<RwLock<RateCounter>>,
-) where
+) -> io::Result<JoinHandle<()>>
+where
 	H: MessageHandler,
 {
 	// Split out tcp stream out into separate reader/writer halves.
 	let mut reader = conn.try_clone().expect("clone conn for reader failed");
 	let mut writer = conn.try_clone().expect("clone conn for writer failed");
 
-	let _ = thread::Builder::new()
+	thread::Builder::new()
 		.name("peer".to_string())
 		.spawn(move || {
 			let sleep_time = time::Duration::from_millis(5);
@@ -299,5 +315,5 @@ fn poll<H>(
 					.unwrap_or("?".to_owned())
 			);
 			let _ = conn.shutdown(Shutdown::Both);
-		});
+		})
 }

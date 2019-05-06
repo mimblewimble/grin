@@ -55,8 +55,8 @@ pub fn connect_and_monitor(
 	seed_list: Box<dyn Fn() -> Vec<PeerAddr> + Send>,
 	preferred_peers: Option<Vec<PeerAddr>>,
 	stop_state: Arc<Mutex<StopState>>,
-) {
-	let _ = thread::Builder::new()
+) -> std::io::Result<thread::JoinHandle<()>> {
+	thread::Builder::new()
 		.name("seed".to_string())
 		.spawn(move || {
 			let peers = p2p_server.peers.clone();
@@ -77,7 +77,6 @@ pub fn connect_and_monitor(
 			let mut prev_expire_check = MIN_DATE.and_hms(0, 0, 0);
 			let mut prev_ping = Utc::now();
 			let mut start_attempt = 0;
-
 			let mut connecting_history: HashMap<PeerAddr, DateTime<Utc>> = HashMap::new();
 
 			loop {
@@ -136,7 +135,7 @@ pub fn connect_and_monitor(
 
 				thread::sleep(time::Duration::from_secs(1));
 			}
-		});
+		})
 }
 
 fn monitor_peers(

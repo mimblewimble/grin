@@ -62,17 +62,17 @@ impl fmt::Debug for Peer {
 
 impl Peer {
 	// Only accept and connect can be externally used to build a peer
-	fn new(info: PeerInfo, conn: TcpStream, adapter: Arc<dyn NetAdapter>) -> Peer {
+	fn new(info: PeerInfo, conn: TcpStream, adapter: Arc<dyn NetAdapter>) -> std::io::Result<Peer> {
 		let state = Arc::new(RwLock::new(State::Connected));
 		let tracking_adapter = TrackingAdapter::new(adapter);
 		let handler = Protocol::new(Arc::new(tracking_adapter.clone()), info.clone());
-		let connection = Mutex::new(conn::listen(conn, handler));
-		Peer {
+		let connection = Mutex::new(conn::listen(conn, handler)?);
+		Ok(Peer {
 			info,
 			state,
 			tracking_adapter,
 			connection,
-		}
+		})
 	}
 
 	pub fn accept(
@@ -85,7 +85,7 @@ impl Peer {
 		debug!("accept: handshaking from {:?}", conn.peer_addr());
 		let info = hs.accept(capab, total_difficulty, &mut conn);
 		match info {
-			Ok(info) => Ok(Peer::new(info, conn, adapter)),
+			Ok(info) => Ok(Peer::new(info, conn, adapter)?),
 			Err(e) => {
 				debug!(
 					"accept: handshaking from {:?} failed with error: {:?}",
@@ -111,7 +111,7 @@ impl Peer {
 		debug!("connect: handshaking with {:?}", conn.peer_addr());
 		let info = hs.initiate(capab, total_difficulty, self_addr, &mut conn);
 		match info {
-			Ok(info) => Ok(Peer::new(info, conn, adapter)),
+			Ok(info) => Ok(Peer::new(info, conn, adapter)?),
 			Err(e) => {
 				debug!(
 					"connect: handshaking with {:?} failed with error: {:?}",
