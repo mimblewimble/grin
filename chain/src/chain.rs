@@ -1033,32 +1033,87 @@ impl Chain {
 		let current_hash = txhashset.get_header_hash_by_height(head.height - horizon - 1)?;
 		let mut current = batch.get_block_header(&current_hash)?;
 
-		loop {
-			// Go to the store directly so we can handle NotFoundErr robustly.
-			match self.store.get_block(&current.hash()) {
-				Ok(b) => {
-					batch.delete_block(&b.hash())?;
-					count += 1;
-				}
-				Err(NotFoundErr(_)) => {
-					break;
-				}
-				Err(e) => {
-					return Err(
-						ErrorKind::StoreErr(e, "retrieving block to compact".to_owned()).into(),
-					);
-				}
+		let mut fork_long_enough = true;
+		match self.store.get_block(&current.hash()) {
+			Ok(_b) => {
+				// do nothing
 			}
-			if current.height <= 1 {
-				break;
+			Err(NotFoundErr(_)) => {
+				fork_long_enough = false;
 			}
-			match batch.get_previous_header(&current) {
-				Ok(h) => current = h,
-				Err(NotFoundErr(_)) => break,
-				Err(e) => return Err(From::from(e)),
+			Err(e) => {
+				return Err(
+					ErrorKind::StoreErr(e, "retrieving block to compact".to_owned()).into(),
+				);
 			}
 		}
-		batch.save_body_tail(&Tip::from_header(&tail))?;
+
+		// if fork is long enough
+		if fork_long_enough {
+			loop {
+				// Go to the store directly so we can handle NotFoundErr robustly.
+				match self.store.get_block(&current.hash()) {
+					Ok(b) => {
+						batch.delete_block(&b.hash())?;
+						count += 1;
+					}
+					Err(NotFoundErr(_)) => {
+						break;
+					}
+					Err(e) => {
+						return Err(
+							ErrorKind::StoreErr(e, "retrieving block to compact".to_owned()).into(),
+						);
+					}
+				}
+				if current.height <= 1 {
+					break;
+				}
+				match batch.get_previous_header(&current) {
+					Ok(h) => current = h,
+					Err(NotFoundErr(_)) => break,
+					Err(e) => return Err(From::from(e)),
+				}
+			}
+			batch.save_body_tail(&Tip::from_header(&tail))?;
+		}
+		else {
+			// clear all, then this blockchain folk will disappear?
+			// clear from head? or use another horizon value?
+			let current_hash = txhashset.get_header_hash_by_height(head.height)?;
+			let mut current = batch.get_block_header(&current_hash)?;
+
+			loop {
+				// Go to the store directly so we can handle NotFoundErr robustly.
+				match self.store.get_block(&current.hash()) {
+					Ok(b) => {
+						batch.delete_block(&b.hash())?;
+						count += 1;
+					}
+					Err(NotFoundErr(_)) => {
+						break;
+					}
+					Err(e) => {
+						return Err(
+							ErrorKind::StoreErr(e, "retrieving block to compact".to_owned()).into(),
+						);
+					}
+				}
+
+				if current.height <= 1 {
+					break;
+				}
+
+				match batch.get_previous_header(&current) {
+					Ok(h) => current = h,
+					Err(NotFoundErr(_)) => break,
+					Err(e) => return Err(From::from(e)),
+				}
+			}
+
+			//TODO: Then need to clear these range flags
+			//batch.save_body_tail(&Tip::from_header(&tail))?;
+		}
 
 		debug!(
 			"remove_historical_blocks: removed {} blocks. tail height: {}",
