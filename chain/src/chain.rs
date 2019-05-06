@@ -1102,7 +1102,7 @@ impl Chain {
 			return Err(ErrorKind::Stopped.into());
 		}
 
-		// Take a write lock on the txhashet and start a new writeable db batch.
+		// Take a write lock on the txhashset and start a new writeable db batch.
 		let mut txhashset = self.txhashset.write();
 		let mut batch = self.store.batch()?;
 
