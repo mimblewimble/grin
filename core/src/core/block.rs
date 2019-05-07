@@ -33,7 +33,9 @@ use crate::core::{
 use crate::global;
 use crate::keychain::{self, BlindingFactor};
 use crate::pow::{Difficulty, Proof, ProofOfWork};
-use crate::ser::{self, FixedLength, PMMRable, Readable, Reader, Writeable, Writer};
+use crate::ser::{
+	self, FixedLength, PMMRable, ProtocolVersion, Readable, Reader, Writeable, Writer,
+};
 use crate::util::{secp, static_secp_instance};
 
 /// Errors thrown by Block validation
@@ -206,8 +208,8 @@ impl Writeable for HeaderVersion {
 
 impl Readable for HeaderVersion {
 	fn read(reader: &mut dyn Reader) -> Result<HeaderVersion, ser::Error> {
-		let version = reader.read_u16()?;
-		Ok(HeaderVersion(version))
+		let header_version = reader.read_u16()?;
+		Ok(HeaderVersion(header_version))
 	}
 }
 
@@ -290,7 +292,7 @@ impl Writeable for BlockHeader {
 /// Deserialization of a block header
 impl Readable for BlockHeader {
 	fn read(reader: &mut dyn Reader) -> Result<BlockHeader, ser::Error> {
-		let version = HeaderVersion::read(reader)?;
+		let header_version = HeaderVersion::read(reader)?;
 		let (height, timestamp) = ser_multiread!(reader, read_u64, read_i64);
 		let prev_hash = Hash::read(reader)?;
 		let prev_root = Hash::read(reader)?;
@@ -311,12 +313,12 @@ impl Readable for BlockHeader {
 		// We want to do this here because blocks can be pretty large
 		// and we want to halt processing as early as possible.
 		// If we receive an invalid block version then the peer is not on our hard-fork.
-		if !consensus::valid_header_version(height, version) {
+		if !consensus::valid_header_version(height, header_version) {
 			return Err(ser::Error::InvalidBlockVersion);
 		}
 
 		Ok(BlockHeader {
-			version,
+			version: header_version,
 			height,
 			timestamp: DateTime::<Utc>::from_utc(NaiveDateTime::from_timestamp(timestamp, 0), Utc),
 			prev_hash,

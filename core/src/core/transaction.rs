@@ -20,8 +20,8 @@ use crate::core::{committed, Committed};
 use crate::keychain::{self, BlindingFactor};
 use crate::libtx::secp_ser;
 use crate::ser::{
-	self, read_multi, FixedLength, PMMRable, Readable, Reader, VerifySortedAndUnique, Writeable,
-	Writer,
+	self, read_multi, FixedLength, PMMRable, ProtocolVersion, Readable, Reader,
+	VerifySortedAndUnique, Writeable, Writer,
 };
 use crate::util;
 use crate::util::secp;

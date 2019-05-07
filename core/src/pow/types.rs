@@ -24,7 +24,7 @@ use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
 use crate::consensus::{graph_weight, MIN_DIFFICULTY, SECOND_POW_EDGE_BITS};
 use crate::core::hash::{DefaultHashable, Hashed};
 use crate::global;
-use crate::ser::{self, FixedLength, Readable, Reader, Writeable, Writer};
+use crate::ser::{self, FixedLength, ProtocolVersion, Readable, Reader, Writeable, Writer};
 
 use crate::pow::common::EdgeType;
 use crate::pow::error::Error;
