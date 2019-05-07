@@ -178,6 +178,13 @@ impl Default for HeaderVersion {
 	}
 }
 
+impl HeaderVersion {
+	/// Constructor taking the provided version.
+	pub fn new(version: u16) -> HeaderVersion {
+		HeaderVersion(version)
+	}
+}
+
 impl From<HeaderVersion> for u16 {
 	fn from(v: HeaderVersion) -> u16 {
 		v.0
