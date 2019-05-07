@@ -398,8 +398,8 @@ impl Server {
 	}
 
 	/// Current p2p layer protocol version.
-	pub fn protocol_version() -> u32 {
-		p2p::msg::PROTOCOL_VERSION
+	pub fn protocol_version() -> p2p::msg::ProtocolVersion {
+		p2p::msg::ProtocolVersion::default()
 	}
 
 	/// Returns a set of stats about this server. This and the ServerStats

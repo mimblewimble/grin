@@ -81,7 +81,7 @@ impl TableViewItem<PeerColumn> for PeerStats {
 			)
 			.to_string(),
 			PeerColumn::Direction => self.direction.clone(),
-			PeerColumn::Version => self.version.to_string(),
+			PeerColumn::Version => format!("{}", self.version),
 			PeerColumn::UserAgent => self.user_agent.clone(),
 		}
 	}
