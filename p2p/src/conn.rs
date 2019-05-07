@@ -201,9 +201,15 @@ impl Tracker {
 		if let Some(peer_thread) = self.peer_thread.take() {
 			// wait only if other thread is calling us, eg shutdown
 			if thread::current().id() != peer_thread.thread().id() {
+				debug!("waiting for thread {:?} exit", peer_thread.thread().id());
 				if let Err(e) = peer_thread.join() {
 					error!("failed to stop peer thread: {:?}", e);
 				}
+			} else {
+				debug!(
+					"stopping thread {:?} within the same thread",
+					peer_thread.thread().id()
+				);
 			}
 		}
 	}

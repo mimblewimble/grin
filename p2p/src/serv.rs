@@ -32,7 +32,7 @@ use crate::types::{
 	Capabilities, ChainAdapter, Error, NetAdapter, P2PConfig, PeerAddr, PeerInfo, ReasonForBan,
 	TxHashSetRead,
 };
-use crate::util::{Mutex, StopState};
+use crate::util::StopState;
 use chrono::prelude::{DateTime, Utc};
 
 /// P2P server implementation, handling bootstrapping to find and connect to
@@ -42,7 +42,7 @@ pub struct Server {
 	capabilities: Capabilities,
 	handshake: Arc<Handshake>,
 	pub peers: Arc<Peers>,
-	stop_state: Arc<Mutex<StopState>>,
+	stop_state: Arc<StopState>,
 }
 
 // TODO TLS
@@ -54,7 +54,7 @@ impl Server {
 		config: P2PConfig,
 		adapter: Arc<dyn ChainAdapter>,
 		genesis: Hash,
-		stop_state: Arc<Mutex<StopState>>,
+		stop_state: Arc<StopState>,
 	) -> Result<Server, Error> {
 		Ok(Server {
 			config: config.clone(),
@@ -76,7 +76,7 @@ impl Server {
 		let sleep_time = Duration::from_millis(5);
 		loop {
 			// Pause peer ingress connection request. Only for tests.
-			if self.stop_state.lock().is_paused() {
+			if self.stop_state.is_paused() {
 				thread::sleep(Duration::from_secs(1));
 				continue;
 			}
@@ -100,7 +100,7 @@ impl Server {
 					debug!("Couldn't establish new client connection: {:?}", e);
 				}
 			}
-			if self.stop_state.lock().is_stopped() {
+			if self.stop_state.is_stopped() {
 				break;
 			}
 			thread::sleep(sleep_time);
@@ -213,7 +213,7 @@ impl Server {
 	}
 
 	pub fn stop(&self) {
-		self.stop_state.lock().stop();
+		self.stop_state.stop();
 		self.peers.stop();
 	}
 

@@ -23,7 +23,7 @@ use self::core::libtx::{self, build, reward};
 use self::core::pow::Difficulty;
 use self::core::{consensus, global, pow};
 use self::keychain::{ExtKeychain, ExtKeychainPath, Keychain};
-use self::util::{Mutex, RwLock, StopState};
+use self::util::{RwLock, StopState};
 use chrono::Duration;
 use grin_chain as chain;
 use grin_core as core;
@@ -47,7 +47,7 @@ fn setup(dir_name: &str, genesis: Block) -> Chain {
 		pow::verify_size,
 		verifier_cache,
 		false,
-		Arc::new(Mutex::new(StopState::new())),
+		Arc::new(StopState::new()),
 	)
 	.unwrap()
 }
@@ -565,7 +565,7 @@ fn actual_diff_iter_output() {
 		pow::verify_size,
 		verifier_cache,
 		false,
-		Arc::new(Mutex::new(StopState::new())),
+		Arc::new(StopState::new()),
 	)
 	.unwrap();
 	let iter = chain.difficulty_iter().unwrap();

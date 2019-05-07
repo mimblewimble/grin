@@ -53,8 +53,8 @@ pub mod read_write;
 // other utils
 #[allow(unused_imports)]
 use std::ops::Deref;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
-
 mod hex;
 pub use crate::hex::*;
 
@@ -112,49 +112,45 @@ pub fn to_base64(s: &str) -> String {
 
 /// Global stopped/paused state shared across various subcomponents of Grin.
 ///
-/// Arc<Mutex<StopState>> allows the chain to lock the stop_state during critical processing.
-/// Other subcomponents cannot abruptly shutdown the server during block/header processing.
-/// This should prevent the chain ever ending up in an inconsistent state on restart.
-///
 /// "Stopped" allows a clean shutdown of the Grin server.
 /// "Paused" is used in some tests to allow nodes to reach steady state etc.
 ///
 pub struct StopState {
-	stopped: bool,
-	paused: bool,
+	stopped: AtomicBool,
+	paused: AtomicBool,
 }
 
 impl StopState {
 	/// Create a new stop_state in default "running" state.
 	pub fn new() -> StopState {
 		StopState {
-			stopped: false,
-			paused: false,
+			stopped: AtomicBool::new(false),
+			paused: AtomicBool::new(false),
 		}
 	}
 
 	/// Check if we are stopped.
 	pub fn is_stopped(&self) -> bool {
-		self.stopped
+		self.stopped.load(Ordering::Relaxed)
 	}
 
 	/// Check if we are paused.
 	pub fn is_paused(&self) -> bool {
-		self.paused
+		self.paused.load(Ordering::Relaxed)
 	}
 
 	/// Stop the server.
-	pub fn stop(&mut self) {
-		self.stopped = true;
+	pub fn stop(&self) {
+		self.stopped.store(true, Ordering::Relaxed)
 	}
 
 	/// Pause the server (only used in tests).
-	pub fn pause(&mut self) {
-		self.paused = true;
+	pub fn pause(&self) {
+		self.paused.store(true, Ordering::Relaxed)
 	}
 
 	/// Resume a paused server (only used in tests).
-	pub fn resume(&mut self) {
-		self.paused = false;
+	pub fn resume(&self) {
+		self.paused.store(false, Ordering::Relaxed)
 	}
 }

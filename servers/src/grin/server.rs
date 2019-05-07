@@ -47,7 +47,7 @@ use crate::p2p;
 use crate::p2p::types::PeerAddr;
 use crate::pool;
 use crate::util::file::get_first_line;
-use crate::util::{Mutex, RwLock, StopState};
+use crate::util::{RwLock, StopState};
 
 /// Grin server holding internal structures.
 pub struct Server {
@@ -67,7 +67,7 @@ pub struct Server {
 	/// To be passed around to collect stats and info
 	state_info: ServerStateInfo,
 	/// Stop flag
-	pub stop_state: Arc<Mutex<StopState>>,
+	pub stop_state: Arc<StopState>,
 	/// Maintain a lock_file so we do not run multiple Grin nodes from same dir.
 	lock_file: Arc<File>,
 	connect_thread: Option<JoinHandle<()>>,
@@ -149,7 +149,7 @@ impl Server {
 			Some(b) => b,
 		};
 
-		let stop_state = Arc::new(Mutex::new(StopState::new()));
+		let stop_state = Arc::new(StopState::new());
 
 		// Shared cache for verification results.
 		// We cache rangeproof verification and kernel signature verification.
@@ -187,7 +187,6 @@ impl Server {
 			pow::verify_size,
 			verifier_cache.clone(),
 			archive_mode,
-			stop_state.clone(),
 		)?);
 
 		pool_adapter.set_chain(shared_chain.clone());
@@ -366,7 +365,7 @@ impl Server {
 	pub fn start_test_miner(
 		&self,
 		wallet_listener_url: Option<String>,
-		stop_state: Arc<Mutex<StopState>>,
+		stop_state: Arc<StopState>,
 	) {
 		info!("start_test_miner - start",);
 		let sync_state = self.sync_state.clone();
@@ -510,7 +509,7 @@ impl Server {
 	pub fn stop(self) {
 		{
 			self.sync_state.update(SyncStatus::Shutdown);
-			self.stop_state.lock().stop();
+			self.stop_state.stop();
 
 			if let Some(connect_thread) = self.connect_thread {
 				match connect_thread.join() {
@@ -541,7 +540,7 @@ impl Server {
 
 	/// Pause the p2p server.
 	pub fn pause(&self) {
-		self.stop_state.lock().pause();
+		self.stop_state.pause();
 		thread::sleep(time::Duration::from_secs(1));
 		self.p2p.pause();
 	}
@@ -549,12 +548,12 @@ impl Server {
 	/// Resume p2p server.
 	/// TODO - We appear not to resume the p2p server (peer connections) here?
 	pub fn resume(&self) {
-		self.stop_state.lock().resume();
+		self.stop_state.resume();
 	}
 
 	/// Stops the test miner without stopping the p2p layer
-	pub fn stop_test_miner(&self, stop: Arc<Mutex<StopState>>) {
-		stop.lock().stop();
+	pub fn stop_test_miner(&self, stop: Arc<StopState>) {
+		stop.stop();
 		info!("stop_test_miner - stop",);
 	}
 }

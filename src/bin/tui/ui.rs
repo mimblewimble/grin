@@ -26,7 +26,7 @@ use cursive::theme::{BaseColor, BorderStyle, Color, Theme};
 use cursive::traits::Boxable;
 use cursive::traits::Identifiable;
 use cursive::utils::markup::StyledString;
-use cursive::views::{Dialog, LinearLayout, Panel, StackView, TextView, ViewBox};
+use cursive::views::{LinearLayout, Panel, StackView, TextView, ViewBox};
 use cursive::Cursive;
 use std::sync::mpsc;
 
@@ -173,10 +173,9 @@ impl Controller {
 			while let Some(message) = self.rx.try_iter().next() {
 				match message {
 					ControllerMessage::Shutdown => {
-						let stats = server.get_server_stats().unwrap();
-						status::TUIStatusView::update(&mut self.ui.cursive, &stats);
-						server.stop();
 						self.ui.stop();
+						println!("Shutdown in progress, please wait");
+						server.stop();
 						return;
 					}
 				}

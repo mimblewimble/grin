@@ -23,7 +23,7 @@ use crate::core::core::hash::Hashed;
 use crate::core::core::transaction;
 use crate::core::core::verifier_cache::VerifierCache;
 use crate::pool::{DandelionConfig, Pool, PoolEntry, PoolError, TransactionPool, TxSource};
-use crate::util::{Mutex, RwLock, StopState};
+use crate::util::{RwLock, StopState};
 
 /// A process to monitor transactions in the stempool.
 /// With Dandelion, transaction can be broadcasted in stem or fluff phase.
@@ -38,7 +38,7 @@ pub fn monitor_transactions(
 	tx_pool: Arc<RwLock<TransactionPool>>,
 	adapter: Arc<DandelionAdapter>,
 	verifier_cache: Arc<RwLock<dyn VerifierCache>>,
-	stop_state: Arc<Mutex<StopState>>,
+	stop_state: Arc<StopState>,
 ) -> std::io::Result<thread::JoinHandle<()>> {
 	debug!("Started Dandelion transaction monitor.");
 
@@ -51,7 +51,7 @@ pub fn monitor_transactions(
 				.unwrap_or_else(|| Instant::now());
 			loop {
 				// Halt Dandelion monitor if we have been notified that we are stopping.
-				if stop_state.lock().is_stopped() {
+				if stop_state.is_stopped() {
 					break;
 				}
 

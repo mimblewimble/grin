@@ -30,7 +30,7 @@ use crate::core::global;
 use crate::p2p;
 use crate::p2p::types::PeerAddr;
 use crate::p2p::ChainAdapter;
-use crate::util::{Mutex, StopState};
+use crate::util::StopState;
 
 // DNS Seeds with contact email associated
 const MAINNET_DNS_SEEDS: &'static [&'static str] = &[
@@ -54,7 +54,7 @@ pub fn connect_and_monitor(
 	capabilities: p2p::Capabilities,
 	seed_list: Box<dyn Fn() -> Vec<PeerAddr> + Send>,
 	preferred_peers: Option<Vec<PeerAddr>>,
-	stop_state: Arc<Mutex<StopState>>,
+	stop_state: Arc<StopState>,
 ) -> std::io::Result<thread::JoinHandle<()>> {
 	thread::Builder::new()
 		.name("seed".to_string())
@@ -80,12 +80,12 @@ pub fn connect_and_monitor(
 			let mut connecting_history: HashMap<PeerAddr, DateTime<Utc>> = HashMap::new();
 
 			loop {
-				if stop_state.lock().is_stopped() {
+				if stop_state.is_stopped() {
 					break;
 				}
 
 				// Pause egress peer connection request. Only for tests.
-				if stop_state.lock().is_paused() {
+				if stop_state.is_paused() {
 					thread::sleep(time::Duration::from_secs(1));
 					continue;
 				}

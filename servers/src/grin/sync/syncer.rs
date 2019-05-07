@@ -24,13 +24,13 @@ use crate::grin::sync::body_sync::BodySync;
 use crate::grin::sync::header_sync::HeaderSync;
 use crate::grin::sync::state_sync::StateSync;
 use crate::p2p;
-use crate::util::{Mutex, StopState};
+use crate::util::StopState;
 
 pub fn run_sync(
 	sync_state: Arc<SyncState>,
 	peers: Arc<p2p::Peers>,
 	chain: Arc<chain::Chain>,
-	stop_state: Arc<Mutex<StopState>>,
+	stop_state: Arc<StopState>,
 ) -> std::io::Result<std::thread::JoinHandle<()>> {
 	thread::Builder::new()
 		.name("sync".to_string())
@@ -44,7 +44,7 @@ pub struct SyncRunner {
 	sync_state: Arc<SyncState>,
 	peers: Arc<p2p::Peers>,
 	chain: Arc<chain::Chain>,
-	stop_state: Arc<Mutex<StopState>>,
+	stop_state: Arc<StopState>,
 }
 
 impl SyncRunner {
@@ -52,7 +52,7 @@ impl SyncRunner {
 		sync_state: Arc<SyncState>,
 		peers: Arc<p2p::Peers>,
 		chain: Arc<chain::Chain>,
-		stop_state: Arc<Mutex<StopState>>,
+		stop_state: Arc<StopState>,
 	) -> SyncRunner {
 		SyncRunner {
 			sync_state,
@@ -140,7 +140,7 @@ impl SyncRunner {
 
 		// Main syncing loop
 		loop {
-			if self.stop_state.lock().is_stopped() {
+			if self.stop_state.is_stopped() {
 				break;
 			}
 
