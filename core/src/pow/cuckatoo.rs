@@ -20,6 +20,7 @@ use croaring::Bitmap;
 use crate::pow::common::{CuckooParams, EdgeType, Link};
 use crate::pow::error::{Error, ErrorKind};
 use crate::pow::{PoWContext, Proof};
+use crate::global;
 use crate::util;
 
 struct Graph<T>
@@ -280,6 +281,10 @@ where
 	/// Verify that given edges are ascending and form a cycle in a header-generated
 	/// graph
 	pub fn verify_impl(&self, proof: &Proof) -> Result<(), Error> {
+                if proof.proof_size() != global::proofsize() {
+                        return Err(ErrorKind::Verification( 
+                                "wrong cycle length".to_owned(),))?;
+                }
 		let nonces = &proof.nonces;
 		let mut uvs = vec![0u64; 2 * proof.proof_size()];
 		let mut xor0: u64 = (self.params.proof_size as u64 / 2) & 1;
