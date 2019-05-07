@@ -120,6 +120,16 @@ impl ChainStore {
 		)
 	}
 
+	/// Retrieve all block headers
+	pub fn all_block_headers(&self) -> Result<Vec<BlockHeader>, Error> {
+		let key = to_key(BLOCK_HEADER_PREFIX, &mut "".to_string().into_bytes());
+		Ok(self
+			.db
+			.iter::<BlockHeader>(&key)?
+			.map(|(_, v)| v)
+			.collect::<Vec<_>>())
+	}
+
 	/// Builds a new batch to be used with this store.
 	pub fn batch(&self) -> Result<Batch<'_>, Error> {
 		Ok(Batch {
