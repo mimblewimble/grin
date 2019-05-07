@@ -20,8 +20,8 @@ use crate::core::{committed, Committed};
 use crate::keychain::{self, BlindingFactor};
 use crate::libtx::secp_ser;
 use crate::ser::{
-	self, read_multi, FixedLength, PMMRable, Readable, Reader, VerifySortedAndUnique, Writeable,
-	Writer,
+	self, read_multi, FixedLength, PMMRable, ProtocolVersion, Readable, Reader,
+	VerifySortedAndUnique, Writeable, Writer,
 };
 use crate::util;
 use crate::util::secp;
@@ -338,7 +338,7 @@ impl Writeable for TxKernelEntry {
 }
 
 impl Readable for TxKernelEntry {
-	fn read(reader: &mut Reader) -> Result<TxKernelEntry, ser::Error> {
+	fn read(reader: &mut dyn Reader) -> Result<TxKernelEntry, ser::Error> {
 		let kernel = TxKernel::read(reader)?;
 		Ok(TxKernelEntry { kernel })
 	}

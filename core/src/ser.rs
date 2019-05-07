@@ -275,6 +275,49 @@ where
 	Ok(res)
 }
 
+#[derive(Clone, Copy, Debug, Deserialize, Eq, Ord, PartialOrd, PartialEq, Serialize)]
+pub struct ProtocolVersion(pub u32);
+
+impl Default for ProtocolVersion {
+	fn default() -> ProtocolVersion {
+		ProtocolVersion(1)
+	}
+}
+
+impl fmt::Display for ProtocolVersion {
+	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+		write!(f, "{}", self.0)
+	}
+}
+
+impl ProtocolVersion {
+	/// We need to specify a protocol version for our local database.
+	/// Regardless of specific version used when sending/receiving data between peers
+	/// we need to take care with serialization/deserialization of data locally in the db.
+	pub fn local_db() -> ProtocolVersion {
+		ProtocolVersion(1)
+	}
+}
+
+impl From<ProtocolVersion> for u32 {
+	fn from(v: ProtocolVersion) -> u32 {
+		v.0
+	}
+}
+
+impl Writeable for ProtocolVersion {
+	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), Error> {
+		writer.write_u32(self.0)
+	}
+}
+
+impl Readable for ProtocolVersion {
+	fn read(reader: &mut dyn Reader) -> Result<ProtocolVersion, Error> {
+		let version = reader.read_u32()?;
+		Ok(ProtocolVersion(version))
+	}
+}
+
 /// Trait that every type that can be deserialized from binary must implement.
 /// Reads directly to a Reader, a utility type thinly wrapping an
 /// underlying Read implementation.
@@ -287,9 +330,17 @@ where
 }
 
 /// Deserializes a Readable from any std::io::Read implementation.
-pub fn deserialize<T: Readable>(source: &mut dyn Read) -> Result<T, Error> {
-	let mut reader = BinReader { source };
+pub fn deserialize<T: Readable>(
+	source: &mut dyn Read,
+	version: ProtocolVersion,
+) -> Result<T, Error> {
+	let mut reader = BinReader::new(source, version);
 	T::read(&mut reader)
+}
+
+/// Deserialize a Readable based on our local db version protocol.
+pub fn deserialize_db<T: Readable>(source: &mut dyn Read) -> Result<T, Error> {
+	deserialize(source, ProtocolVersion::local_db())
 }
 
 /// Serializes a Writeable into any std::io::Write implementation.
@@ -309,6 +360,13 @@ pub fn ser_vec<W: Writeable>(thing: &W) -> Result<Vec<u8>, Error> {
 /// Utility to read from a binary source
 pub struct BinReader<'a> {
 	source: &'a mut dyn Read,
+	version: ProtocolVersion,
+}
+
+impl<'a> BinReader<'a> {
+	pub fn new(source: &'a mut dyn Read, version: ProtocolVersion) -> BinReader<'a> {
+		BinReader { source, version }
+	}
 }
 
 fn map_io_err(err: io::Error) -> Error {
@@ -372,6 +430,7 @@ impl<'a> Reader for BinReader<'a> {
 /// Tracks total bytes read so we can verify we read the right number afterwards.
 pub struct StreamingReader<'a> {
 	total_bytes_read: u64,
+	version: ProtocolVersion,
 	stream: &'a mut dyn Read,
 	timeout: Duration,
 }
@@ -379,9 +438,14 @@ pub struct StreamingReader<'a> {
 impl<'a> StreamingReader<'a> {
 	/// Create a new streaming reader with the provided underlying stream.
 	/// Also takes a duration to be used for each individual read_exact call.
-	pub fn new(stream: &'a mut dyn Read, timeout: Duration) -> StreamingReader<'a> {
+	pub fn new(
+		stream: &'a mut dyn Read,
+		version: ProtocolVersion,
+		timeout: Duration,
+	) -> StreamingReader<'a> {
 		StreamingReader {
 			total_bytes_read: 0,
+			version,
 			stream,
 			timeout,
 		}
@@ -396,32 +460,32 @@ impl<'a> StreamingReader<'a> {
 impl<'a> Reader for StreamingReader<'a> {
 	fn read_u8(&mut self) -> Result<u8, Error> {
 		let buf = self.read_fixed_bytes(1)?;
-		Ok(buf[0])
+		deserialize(&mut &buf[..], self.version)
 	}
 
 	fn read_u16(&mut self) -> Result<u16, Error> {
 		let buf = self.read_fixed_bytes(2)?;
-		Ok(BigEndian::read_u16(&buf[..]))
+		deserialize(&mut &buf[..], self.version)
 	}
 
 	fn read_u32(&mut self) -> Result<u32, Error> {
 		let buf = self.read_fixed_bytes(4)?;
-		Ok(BigEndian::read_u32(&buf[..]))
+		deserialize(&mut &buf[..], self.version)
 	}
 
 	fn read_i32(&mut self) -> Result<i32, Error> {
 		let buf = self.read_fixed_bytes(4)?;
-		Ok(BigEndian::read_i32(&buf[..]))
+		deserialize(&mut &buf[..], self.version)
 	}
 
 	fn read_u64(&mut self) -> Result<u64, Error> {
 		let buf = self.read_fixed_bytes(8)?;
-		Ok(BigEndian::read_u64(&buf[..]))
+		deserialize(&mut &buf[..], self.version)
 	}
 
 	fn read_i64(&mut self) -> Result<i64, Error> {
 		let buf = self.read_fixed_bytes(8)?;
-		Ok(BigEndian::read_i64(&buf[..]))
+		deserialize(&mut &buf[..], self.version)
 	}
 
 	/// Read a variable size vector from the underlying stream. Expects a usize

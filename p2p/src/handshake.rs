@@ -13,8 +13,9 @@
 // limitations under the License.
 
 use crate::core::core::hash::Hash;
+use crate::core::ser::ProtocolVersion;
 use crate::core::pow::Difficulty;
-use crate::msg::{read_message, write_message, Hand, ProtocolVersion, Shake, Type, USER_AGENT};
+use crate::msg::{read_message, write_message, Hand, Shake, Type, USER_AGENT};
 use crate::peer::Peer;
 use crate::types::{Capabilities, Direction, Error, P2PConfig, PeerAddr, PeerInfo, PeerLiveInfo};
 use crate::util::RwLock;
@@ -85,7 +86,7 @@ impl Handshake {
 
 		// write and read the handshake response
 		write_message(conn, hand, Type::Hand)?;
-		let shake: Shake = read_message(conn, Type::Shake)?;
+		let shake: Shake = read_message(conn, ProtocolVersion::default(), Type::Shake)?;
 		if shake.genesis != self.genesis {
 			return Err(Error::GenesisMismatch {
 				us: self.genesis,
@@ -124,7 +125,7 @@ impl Handshake {
 		total_difficulty: Difficulty,
 		conn: &mut TcpStream,
 	) -> Result<PeerInfo, Error> {
-		let hand: Hand = read_message(conn, Type::Hand)?;
+		let hand: Hand = read_message(conn, ProtocolVersion::default(), Type::Hand)?;
 
 		// all the reasons we could refuse this connection for
 		if hand.genesis != self.genesis {

@@ -29,8 +29,7 @@ use crate::core::core;
 use crate::core::core::hash::Hash;
 use crate::core::global;
 use crate::core::pow::Difficulty;
-use crate::core::ser::{self, Readable, Reader, Writeable, Writer};
-use crate::msg::ProtocolVersion;
+use crate::core::ser::{self, ProtocolVersion, Readable, Reader, Writeable, Writer};
 use grin_store;
 
 /// Maximum number of block headers a peer should ever send

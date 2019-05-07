@@ -16,7 +16,7 @@ use memmap;
 use tempfile::tempfile;
 
 use crate::core::ser::{
-	self, BinWriter, FixedLength, Readable, Reader, StreamingReader, Writeable, Writer,
+	self, BinWriter, FixedLength, ProtocolVersion, Readable, Reader, StreamingReader, Writeable, Writer,
 };
 use std::fmt::Debug;
 use std::fs::{self, File, OpenOptions};
@@ -415,7 +415,7 @@ where
 
 	fn read_as_elmt(&self, pos: u64) -> io::Result<T> {
 		let data = self.read(pos)?;
-		ser::deserialize(&mut &data[..]).map_err(|e| io::Error::new(io::ErrorKind::Other, e))
+		ser::deserialize_db(&mut &data[..]).map_err(|e| io::Error::new(io::ErrorKind::Other, e))
 	}
 
 	// Read length bytes starting at offset from the buffer.
@@ -471,7 +471,7 @@ where
 			let reader = File::open(&self.path)?;
 			let mut buf_reader = BufReader::new(reader);
 			let mut streaming_reader =
-				StreamingReader::new(&mut buf_reader, time::Duration::from_secs(1));
+				StreamingReader::new(&mut buf_reader, ProtocolVersion::local_db(), time::Duration::from_secs(1));
 
 			let mut buf_writer = BufWriter::new(File::create(&tmp_path)?);
 			let mut bin_writer = BinWriter::new(&mut buf_writer);
@@ -518,7 +518,7 @@ where
 				let reader = File::open(&self.path)?;
 				let mut buf_reader = BufReader::new(reader);
 				let mut streaming_reader =
-					StreamingReader::new(&mut buf_reader, time::Duration::from_secs(1));
+					StreamingReader::new(&mut buf_reader, ProtocolVersion::local_db(), time::Duration::from_secs(1));
 
 				let mut buf_writer = BufWriter::new(File::create(&tmp_path)?);
 				let mut bin_writer = BinWriter::new(&mut buf_writer);

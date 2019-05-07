@@ -21,7 +21,7 @@ use byteorder::{ByteOrder, LittleEndian};
 use siphasher::sip::SipHasher24;
 
 use crate::core::hash::{DefaultHashable, Hash, Hashed};
-use crate::ser::{self, Readable, Reader, Writeable, Writer};
+use crate::ser::{self, ProtocolVersion, Readable, Reader, Writeable, Writer};
 use crate::util;
 
 /// The size of a short id used to identify inputs|outputs|kernels (6 bytes)

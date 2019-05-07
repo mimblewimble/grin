@@ -230,7 +230,7 @@ impl Store {
 	) -> Result<Option<T>, Error> {
 		let res: lmdb::error::Result<&[u8]> = access.get(&db.as_ref().unwrap(), key);
 		match res.to_opt() {
-			Ok(Some(mut res)) => match ser::deserialize(&mut res) {
+			Ok(Some(mut res)) => match ser::deserialize_db(&mut res) {
 				Ok(res) => Ok(Some(res)),
 				Err(e) => Err(Error::SerErr(format!("{}", e))),
 			},
@@ -393,7 +393,7 @@ where
 	fn deser_if_prefix_match(&self, key: &[u8], value: &[u8]) -> Option<(Vec<u8>, T)> {
 		let plen = self.prefix.len();
 		if plen == 0 || key[0..plen] == self.prefix[..] {
-			if let Ok(value) = ser::deserialize(&mut &value[..]) {
+			if let Ok(value) = ser::deserialize_db(&mut &value[..]) {
 				Some((key.to_vec(), value))
 			} else {
 				None

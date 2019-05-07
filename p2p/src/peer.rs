@@ -75,7 +75,7 @@ impl Peer {
 		let tracking_adapter = TrackingAdapter::new(adapter);
 		let handler = Protocol::new(Arc::new(tracking_adapter.clone()), info.clone());
 		let tracker = Arc::new(conn::Tracker::new());
-		let (sendh, stoph) = conn::listen(conn, tracker.clone(), handler)?;
+		let (sendh, stoph) = conn::listen(conn, info.version, tracker.clone(), handler)?;
 		let send_handle = Mutex::new(sendh);
 		let stop_handle = Mutex::new(stoph);
 		Ok(Peer {
