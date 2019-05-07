@@ -239,9 +239,19 @@ impl Default for ProofOfWork {
 	}
 }
 
-impl ProofOfWork {
-	/// Read implementation, can't define as trait impl as we need a version
-	pub fn read(_ver: u16, reader: &mut dyn Reader) -> Result<ProofOfWork, ser::Error> {
+impl Writeable for ProofOfWork {
+	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
+		if writer.serialization_mode() != ser::SerializationMode::Hash {
+			self.write_pre_pow(writer)?;
+			writer.write_u64(self.nonce)?;
+		}
+		self.proof.write(writer)?;
+		Ok(())
+	}
+}
+
+impl Readable for ProofOfWork {
+	fn read(reader: &mut dyn Reader) -> Result<ProofOfWork, ser::Error> {
 		let total_difficulty = Difficulty::read(reader)?;
 		let secondary_scaling = reader.read_u32()?;
 		let nonce = reader.read_u64()?;
@@ -253,20 +263,11 @@ impl ProofOfWork {
 			proof,
 		})
 	}
+}
 
-	/// Write implementation, can't define as trait impl as we need a version
-	pub fn write<W: Writer>(&self, ver: u16, writer: &mut W) -> Result<(), ser::Error> {
-		if writer.serialization_mode() != ser::SerializationMode::Hash {
-			self.write_pre_pow(ver, writer)?;
-			writer.write_u64(self.nonce)?;
-		}
-
-		self.proof.write(writer)?;
-		Ok(())
-	}
-
+impl ProofOfWork {
 	/// Write the pre-hash portion of the header
-	pub fn write_pre_pow<W: Writer>(&self, _ver: u16, writer: &mut W) -> Result<(), ser::Error> {
+	pub fn write_pre_pow<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
 		ser_multiwrite!(
 			writer,
 			[write_u64, self.total_difficulty.to_num()],

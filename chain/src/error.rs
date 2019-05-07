@@ -102,8 +102,8 @@ pub enum ErrorKind {
 	#[fail(display = "Output is spent")]
 	OutputSpent,
 	/// Invalid block version, either a mistake or outdated software
-	#[fail(display = "Invalid Block Version: {}", _0)]
-	InvalidBlockVersion(u16),
+	#[fail(display = "Invalid Block Version: {:?}", _0)]
+	InvalidBlockVersion(block::HeaderVersion),
 	/// We've been provided a bad txhashset
 	#[fail(display = "Invalid TxHashSet: {}", _0)]
 	InvalidTxHashSet(String),
