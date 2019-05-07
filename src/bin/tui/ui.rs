@@ -173,8 +173,10 @@ impl Controller {
 			while let Some(message) = self.rx.try_iter().next() {
 				match message {
 					ControllerMessage::Shutdown => {
-						self.ui.stop();
+						let stats = server.get_server_stats().unwrap();
+						status::TUIStatusView::update(&mut self.ui.cursive, &stats);
 						server.stop();
+						self.ui.stop();
 						return;
 					}
 				}

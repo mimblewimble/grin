@@ -508,27 +508,29 @@ impl Server {
 
 	/// Stop the server.
 	pub fn stop(self) {
-		self.stop_state.lock().stop();
+		{
+			self.sync_state.update(SyncStatus::Shutdown);
+			self.stop_state.lock().stop();
 
-		if let Some(connect_thread) = self.connect_thread {
-			match connect_thread.join() {
-				Err(e) => error!("failed to join to connect_and_monitor thread: {:?}", e),
-				Ok(_) => info!("connect_and_monitor thread stopped"),
+			if let Some(connect_thread) = self.connect_thread {
+				match connect_thread.join() {
+					Err(e) => error!("failed to join to connect_and_monitor thread: {:?}", e),
+					Ok(_) => info!("connect_and_monitor thread stopped"),
+				}
+			} else {
+				info!("No active connect_and_monitor thread")
 			}
-		} else {
-			info!("No active connect_and_monitor thread")
-		}
 
-		match self.sync_thread.join() {
-			Err(e) => error!("failed to join to sync thread: {:?}", e),
-			Ok(_) => info!("sync thread stopped"),
-		}
+			match self.sync_thread.join() {
+				Err(e) => error!("failed to join to sync thread: {:?}", e),
+				Ok(_) => info!("sync thread stopped"),
+			}
 
-		match self.dandelion_thread.join() {
-			Err(e) => error!("failed to join to dandelion_monitor thread: {:?}", e),
-			Ok(_) => info!("dandelion_monitor thread stopped"),
+			match self.dandelion_thread.join() {
+				Err(e) => error!("failed to join to dandelion_monitor thread: {:?}", e),
+				Ok(_) => info!("dandelion_monitor thread stopped"),
+			}
 		}
-
 		self.p2p.stop();
 		match self.p2p_thread.join() {
 			Err(e) => error!("failed to join to p2p thread: {:?}", e),
