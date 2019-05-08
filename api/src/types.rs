@@ -548,7 +548,7 @@ impl BlockHeaderPrintable {
 	pub fn from_header(header: &core::BlockHeader) -> BlockHeaderPrintable {
 		BlockHeaderPrintable {
 			hash: util::to_hex(header.hash().to_vec()),
-			version: header.version,
+			version: header.version.into(),
 			height: header.height,
 			previous: util::to_hex(header.prev_hash.to_vec()),
 			prev_root: util::to_hex(header.prev_root.to_vec()),

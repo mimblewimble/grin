@@ -65,6 +65,8 @@ pub enum Error {
 	SortError,
 	/// Inputs/outputs/kernels must be unique.
 	DuplicateError,
+	/// Block header version (hard-fork schedule).
+	InvalidBlockVersion,
 }
 
 impl From<io::Error> for Error {
@@ -87,6 +89,7 @@ impl fmt::Display for Error {
 			Error::DuplicateError => f.write_str("duplicate"),
 			Error::TooLargeReadErr => f.write_str("too large read"),
 			Error::HexError(ref e) => write!(f, "hex error {:?}", e),
+			Error::InvalidBlockVersion => f.write_str("invalid block version"),
 		}
 	}
 }
@@ -109,6 +112,7 @@ impl error::Error for Error {
 			Error::DuplicateError => "duplicate error",
 			Error::TooLargeReadErr => "too large read",
 			Error::HexError(_) => "hex error",
+			Error::InvalidBlockVersion => "invalid block version",
 		}
 	}
 }
