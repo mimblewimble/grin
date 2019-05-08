@@ -240,7 +240,7 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 		&self,
 		bh: core::BlockHeader,
 		peer_info: &PeerInfo,
-	) -> Result<bool, chain::Error> {
+	) -> Result<(), chain::Error> {
 		let bhash = bh.hash();
 		debug!(
 			"Received block header {} at {} from {}, going to process.",
@@ -249,27 +249,15 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 
 		// pushing the new block header through the header chain pipeline
 		// we will go ask for the block if this is a new header
-		let res = self
-			.chain()
-			.process_block_header(&bh, self.chain_opts(false));
-
-		if let Err(e) = res {
-			debug!("Block header {} refused by chain: {:?}", bhash, e.kind());
-			if e.is_bad_data() {
-				return Ok(false);
-			} else {
-				// we got an error when trying to process the block header
-				// but nothing serious enough to need to ban the peer upstream
-				return Err(e);
-			}
-		}
+		self.chain()
+			.process_block_header(&bh, self.chain_opts(false))?;
 
 		// we have successfully processed a block header
 		// so we can go request the block itself
 		self.request_compact_block(&bh, peer_info);
 
 		// done receiving the header
-		Ok(true)
+		Ok(())
 	}
 
 	fn headers_received(

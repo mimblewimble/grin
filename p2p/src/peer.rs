@@ -500,7 +500,7 @@ impl ChainAdapter for TrackingAdapter {
 		&self,
 		bh: core::BlockHeader,
 		peer_info: &PeerInfo,
-	) -> Result<bool, chain::Error> {
+	) -> Result<(), chain::Error> {
 		self.push_recv(bh.hash());
 		self.adapter.header_received(bh, peer_info)
 	}

@@ -261,8 +261,8 @@ impl ChainAdapter for DummyAdapter {
 		&self,
 		_bh: core::BlockHeader,
 		_peer_info: &PeerInfo,
-	) -> Result<bool, chain::Error> {
-		Ok(true)
+	) -> Result<(), chain::Error> {
+		Ok(())
 	}
 	fn block_received(&self, _: core::Block, _: &PeerInfo, _: bool) -> Result<bool, chain::Error> {
 		Ok(true)

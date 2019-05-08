@@ -507,7 +507,7 @@ pub trait ChainAdapter: Sync + Send {
 		&self,
 		bh: core::BlockHeader,
 		peer_info: &PeerInfo,
-	) -> Result<bool, chain::Error>;
+	) -> Result<(), chain::Error>;
 
 	/// A set of block header has been received, typically in response to a
 	/// block
