@@ -949,7 +949,9 @@ impl<'a> Extension<'a> {
 			}
 
 			if output_pos != rproof_pos {
-				return Err(ErrorKind::Other(format!("output vs rproof MMRs different pos")).into());
+				return Err(
+					ErrorKind::Other(format!("output vs rproof MMRs different pos")).into(),
+				);
 			}
 		}
 
@@ -1430,10 +1432,10 @@ pub fn zip_read(root_dir: String, header: &BlockHeader) -> Result<File, Error> {
 	} else {
 		// clean up old zips.
 		// Theoretically, we only need clean-up those zip files older than STATE_SYNC_THRESHOLD.
-		// But practically, these zip files are not small ones, we just keep the zips in last one hour
+		// But practically, these zip files are not small ones, we just keep the zips in last 12 hours
 		let data_dir = Path::new(&root_dir);
 		let pattern = format!("{}_", TXHASHSET_ZIP);
-		if let Ok(n) = clean_files_by_prefix(data_dir.clone(), &pattern, 60 * 60) {
+		if let Ok(n) = clean_files_by_prefix(data_dir.clone(), &pattern, 12 * 60 * 60) {
 			debug!(
 				"{} zip files have been clean up in folder: {:?}",
 				n, data_dir
