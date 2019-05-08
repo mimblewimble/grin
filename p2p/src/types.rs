@@ -30,6 +30,7 @@ use crate::core::core::hash::Hash;
 use crate::core::global;
 use crate::core::pow::Difficulty;
 use crate::core::ser::{self, Readable, Reader, Writeable, Writer};
+use crate::msg::ProtocolVersion;
 use grin_store;
 
 /// Maximum number of block headers a peer should ever send
@@ -370,7 +371,7 @@ pub struct PeerLiveInfo {
 pub struct PeerInfo {
 	pub capabilities: Capabilities,
 	pub user_agent: String,
-	pub version: u32,
+	pub version: ProtocolVersion,
 	pub addr: PeerAddr,
 	pub direction: Direction,
 	pub live_info: Arc<RwLock<PeerLiveInfo>>,
@@ -432,7 +433,7 @@ impl PeerInfo {
 pub struct PeerInfoDisplay {
 	pub capabilities: Capabilities,
 	pub user_agent: String,
-	pub version: u32,
+	pub version: ProtocolVersion,
 	pub addr: PeerAddr,
 	pub direction: Direction,
 	pub total_difficulty: Difficulty,
@@ -444,7 +445,7 @@ impl From<PeerInfo> for PeerInfoDisplay {
 		PeerInfoDisplay {
 			capabilities: info.capabilities.clone(),
 			user_agent: info.user_agent.clone(),
-			version: info.version.clone(),
+			version: info.version,
 			addr: info.addr.clone(),
 			direction: info.direction.clone(),
 			total_difficulty: info.total_difficulty(),

@@ -15,6 +15,7 @@
 //! Message types that transit over the network and related serialization code.
 
 use num::FromPrimitive;
+use std::fmt;
 use std::io::{Read, Write};
 use std::time;
 
@@ -36,7 +37,7 @@ use crate::util::read_write::read_exact;
 /// Note: A peer may disconnect and reconnect with an updated protocol version. Normally
 /// the protocol version will increase but we need to handle decreasing values also
 /// as a peer may rollback to previous version of the code.
-pub const PROTOCOL_VERSION: u32 = 1;
+const PROTOCOL_VERSION: u32 = 1;
 
 /// Grin's user agent with current version
 pub const USER_AGENT: &'static str = concat!("MW/Grin ", env!("CARGO_PKG_VERSION"));
@@ -245,11 +246,45 @@ impl Readable for MsgHeader {
 	}
 }
 
+#[derive(Clone, Copy, Debug, Deserialize, Eq, Ord, PartialOrd, PartialEq, Serialize)]
+pub struct ProtocolVersion(pub u32);
+
+impl Default for ProtocolVersion {
+	fn default() -> ProtocolVersion {
+		ProtocolVersion(PROTOCOL_VERSION)
+	}
+}
+
+impl From<ProtocolVersion> for u32 {
+	fn from(v: ProtocolVersion) -> u32 {
+		v.0
+	}
+}
+
+impl fmt::Display for ProtocolVersion {
+	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+		write!(f, "{}", self.0)
+	}
+}
+
+impl Writeable for ProtocolVersion {
+	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
+		writer.write_u32(self.0)
+	}
+}
+
+impl Readable for ProtocolVersion {
+	fn read(reader: &mut dyn Reader) -> Result<ProtocolVersion, ser::Error> {
+		let version = reader.read_u32()?;
+		Ok(ProtocolVersion(version))
+	}
+}
+
 /// First part of a handshake, sender advertises its version and
 /// characteristics.
 pub struct Hand {
 	/// protocol version of the sender
-	pub version: u32,
+	pub version: ProtocolVersion,
 	/// capabilities of the sender
 	pub capabilities: Capabilities,
 	/// randomly generated for each handshake, helps detect self
@@ -269,9 +304,9 @@ pub struct Hand {
 
 impl Writeable for Hand {
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
+		self.version.write(writer)?;
 		ser_multiwrite!(
 			writer,
-			[write_u32, self.version],
 			[write_u32, self.capabilities.bits()],
 			[write_u64, self.nonce]
 		);
@@ -286,23 +321,24 @@ impl Writeable for Hand {
 
 impl Readable for Hand {
 	fn read(reader: &mut dyn Reader) -> Result<Hand, ser::Error> {
-		let (version, capab, nonce) = ser_multiread!(reader, read_u32, read_u32, read_u64);
+		let version = ProtocolVersion::read(reader)?;
+		let (capab, nonce) = ser_multiread!(reader, read_u32, read_u64);
 		let capabilities = Capabilities::from_bits_truncate(capab);
-		let total_diff = Difficulty::read(reader)?;
+		let total_difficulty = Difficulty::read(reader)?;
 		let sender_addr = PeerAddr::read(reader)?;
 		let receiver_addr = PeerAddr::read(reader)?;
 		let ua = reader.read_bytes_len_prefix()?;
 		let user_agent = String::from_utf8(ua).map_err(|_| ser::Error::CorruptedData)?;
 		let genesis = Hash::read(reader)?;
 		Ok(Hand {
-			version: version,
-			capabilities: capabilities,
-			nonce: nonce,
-			genesis: genesis,
-			total_difficulty: total_diff,
-			sender_addr: sender_addr,
-			receiver_addr: receiver_addr,
-			user_agent: user_agent,
+			version,
+			capabilities,
+			nonce,
+			genesis,
+			total_difficulty,
+			sender_addr,
+			receiver_addr,
+			user_agent,
 		})
 	}
 }
@@ -311,7 +347,7 @@ impl Readable for Hand {
 /// version and characteristics.
 pub struct Shake {
 	/// sender version
-	pub version: u32,
+	pub version: ProtocolVersion,
 	/// sender capabilities
 	pub capabilities: Capabilities,
 	/// genesis block of our chain, only connect to peers on the same chain
@@ -325,11 +361,8 @@ pub struct Shake {
 
 impl Writeable for Shake {
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
-		ser_multiwrite!(
-			writer,
-			[write_u32, self.version],
-			[write_u32, self.capabilities.bits()]
-		);
+		self.version.write(writer)?;
+		writer.write_u32(self.capabilities.bits())?;
 		self.total_difficulty.write(writer)?;
 		writer.write_bytes(&self.user_agent)?;
 		self.genesis.write(writer)?;
@@ -339,18 +372,21 @@ impl Writeable for Shake {
 
 impl Readable for Shake {
 	fn read(reader: &mut dyn Reader) -> Result<Shake, ser::Error> {
-		let (version, capab) = ser_multiread!(reader, read_u32, read_u32);
+		let version = ProtocolVersion::read(reader)?;
+
+		let capab = reader.read_u32()?;
 		let capabilities = Capabilities::from_bits_truncate(capab);
-		let total_diff = Difficulty::read(reader)?;
+
+		let total_difficulty = Difficulty::read(reader)?;
 		let ua = reader.read_bytes_len_prefix()?;
 		let user_agent = String::from_utf8(ua).map_err(|_| ser::Error::CorruptedData)?;
 		let genesis = Hash::read(reader)?;
 		Ok(Shake {
-			version: version,
-			capabilities: capabilities,
-			genesis: genesis,
-			total_difficulty: total_diff,
-			user_agent: user_agent,
+			version,
+			capabilities,
+			genesis,
+			total_difficulty,
+			user_agent,
 		})
 	}
 }

@@ -81,7 +81,7 @@ impl TableViewItem<PeerColumn> for PeerStats {
 			)
 			.to_string(),
 			PeerColumn::Direction => self.direction.clone(),
-			PeerColumn::Version => self.version.to_string(),
+			PeerColumn::Version => format!("{}", self.version),
 			PeerColumn::UserAgent => self.user_agent.clone(),
 		}
 	}
@@ -129,7 +129,7 @@ impl TUIStatusListener for TUIPeerView {
 			.column(PeerColumn::TotalDifficulty, "Total Difficulty", |c| {
 				c.width_percent(24)
 			})
-			.column(PeerColumn::Version, "Ver", |c| c.width_percent(6))
+			.column(PeerColumn::Version, "Proto", |c| c.width_percent(6))
 			.column(PeerColumn::UserAgent, "User Agent", |c| c.width_percent(18));
 		let peer_status_view = BoxView::with_full_screen(
 			LinearLayout::new(Orientation::Vertical)
