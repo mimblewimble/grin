@@ -22,7 +22,7 @@ use std::fmt;
 use std::iter::FromIterator;
 use std::sync::Arc;
 
-use crate::consensus::{reward, REWARD};
+use crate::consensus::{self, reward, REWARD};
 use crate::core::committed::{self, Committed};
 use crate::core::compact_block::{CompactBlock, CompactBlockBody};
 use crate::core::hash::{DefaultHashable, Hash, Hashed, ZERO_HASH};
@@ -298,6 +298,14 @@ impl Readable for BlockHeader {
 			|| timestamp < MIN_DATE.and_hms(0, 0, 0).timestamp()
 		{
 			return Err(ser::Error::CorruptedData);
+		}
+
+		// Check the block version before proceeding any further.
+		// We want to do this here because blocks can be pretty large
+		// and we want to halt processing as early as possible.
+		// If we receive an invalid block version then the peer is not on our hard-fork.
+		if !consensus::valid_header_version(height, version) {
+			return Err(ser::Error::InvalidBlockVersion);
 		}
 
 		Ok(BlockHeader {
