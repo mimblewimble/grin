@@ -362,7 +362,7 @@ pub struct Shake {
 impl Writeable for Shake {
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
 		self.version.write(writer)?;
-		ser_multiwrite!(writer, [write_u32, self.capabilities.bits()]);
+		writer.write_u32(self.capabilities.bits())?;
 		self.total_difficulty.write(writer)?;
 		writer.write_bytes(&self.user_agent)?;
 		self.genesis.write(writer)?;
