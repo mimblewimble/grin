@@ -22,7 +22,7 @@ use crate::types::Tip;
 use crate::util::secp::pedersen::Commitment;
 use croaring::Bitmap;
 use grin_store as store;
-use grin_store::{option_to_not_found, to_key, Error};
+use grin_store::{option_to_not_found, to_key, Error, SerIterator};
 use std::sync::Arc;
 
 const STORE_SUBPATH: &'static str = "chain";
@@ -118,16 +118,6 @@ impl ChainStore {
 				.get_ser(&to_key(COMMIT_POS_PREFIX, &mut commit.as_ref().to_vec())),
 			&format!("Output position for: {:?}", commit),
 		)
-	}
-
-	/// Retrieve all block headers
-	pub fn all_block_headers(&self) -> Result<Vec<BlockHeader>, Error> {
-		let key = to_key(BLOCK_HEADER_PREFIX, &mut "".to_string().into_bytes());
-		Ok(self
-			.db
-			.iter::<BlockHeader>(&key)?
-			.map(|(_, v)| v)
-			.collect::<Vec<_>>())
 	}
 
 	/// Builds a new batch to be used with this store.
@@ -388,6 +378,13 @@ impl<'a> Batch<'a> {
 			db: self.db.child()?,
 		})
 	}
+
+	/// An iterator to all lived block now
+	pub fn iter_lived_blocks(&self) -> Result<SerIterator<Block>, Error> {
+		let key = to_key(BLOCK_PREFIX, &mut "".to_string().into_bytes());
+		self.db.iter(&key)
+	}
+	
 }
 
 /// An iterator on blocks, from latest to earliest, specialized to return

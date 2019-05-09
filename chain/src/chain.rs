@@ -34,7 +34,7 @@ use crate::types::{
 use crate::util::secp::pedersen::{Commitment, RangeProof};
 use crate::util::{Mutex, RwLock, StopState};
 use grin_store::Error::NotFoundErr;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::fs::{self, File};
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -1026,87 +1026,24 @@ impl Chain {
 		}
 
 		let mut count = 0;
-
 		let tail_hash = txhashset.get_header_hash_by_height(head.height - horizon)?;
 		let tail = batch.get_block_header(&tail_hash)?;
 
-		let current_hash = txhashset.get_header_hash_by_height(head.height - horizon - 1)?;
-		let mut current = batch.get_block_header(&current_hash)?;
+		// Remove old blocks and short live fork blocks
+		// here b is a lived block
+		let _ = batch.iter_lived_blocks()?.map(|(_, b)| {
+			if self.is_on_current_chain(&b.header).is_err() || b.header.height < tail.height {
+				let _ = batch.delete_block(&b.hash());
+				count += 1;
+			}
+		});
 
-		loop {
-			// Go to the store directly so we can handle NotFoundErr robustly.
-			match self.store.get_block(&current.hash()) {
-				Ok(b) => {
-					batch.delete_block(&b.hash())?;
-					count += 1;
-				}
-				Err(NotFoundErr(_)) => {
-					break;
-				}
-				Err(e) => {
-					return Err(
-						ErrorKind::StoreErr(e, "retrieving block to compact".to_owned()).into(),
-					);
-				}
-			}
-			if current.height <= 1 {
-				break;
-			}
-			match batch.get_previous_header(&current) {
-				Ok(h) => current = h,
-				Err(NotFoundErr(_)) => break,
-				Err(e) => return Err(From::from(e)),
-			}
-		}
 		batch.save_body_tail(&Tip::from_header(&tail))?;
 
 		debug!(
 			"remove_historical_blocks: removed {} blocks. tail height: {}",
 			count, tail.height
 		);
-
-		// Remove short live fork blocks
-		// Get all block headers in db
-		let all_block_headers = self.store.all_block_headers()?;
-
-		let mut on_chain_block_set: HashSet<Hash> = HashSet::new();
-
-		let current_hash = txhashset.get_header_hash_by_height(head.height)?;
-		let mut current = batch.get_block_header(&current_hash)?;
-
-		loop {
-			// Go to the store directly so we can handle NotFoundErr robustly.
-			match self.store.get_block(&current.hash()) {
-				Ok(_b) => {
-					on_chain_block_set.insert(current.hash());
-				}
-				Err(NotFoundErr(_)) => {
-					break;
-				}
-				Err(e) => {
-					return Err(
-						ErrorKind::StoreErr(e, "retrieving block to compact".to_owned()).into(),
-					);
-				}
-			}
-			if current.height <= 1 {
-				break;
-			}
-			match batch.get_previous_header(&current) {
-				Ok(h) => current = h,
-				Err(NotFoundErr(_)) => break,
-				Err(e) => return Err(From::from(e)),
-			}
-		}
-
-		// clean all not in current chain fork
-		for header in all_block_headers {
-			let header_hash = header.hash();
-			if !on_chain_block_set.contains(&header_hash) {
-				let block = self.store.get_block(&header_hash)?;
-				batch.delete_block(&block.hash())?;
-			}
-		}
 
 		Ok(())
 	}
