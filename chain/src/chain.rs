@@ -696,8 +696,9 @@ impl Chain {
 	pub fn txhashset_archive_header(&self) -> Result<BlockHeader, Error> {
 		let horizon = global::cut_through_horizon() as u64;
 		let body_head = self.head()?;
-		let mut txhashset_height = body_head.height.saturating_sub(horizon) + 250;
-		txhashset_height = txhashset_height.saturating_sub(txhashset_height % 250);
+		let archive_interval = global::txhashset_archive_interval();
+		let mut txhashset_height = body_head.height.saturating_sub(horizon) + archive_interval;
+		txhashset_height = txhashset_height.saturating_sub(txhashset_height % archive_interval);
 
 		debug!(
 			"txhashset_archive_header: body_head - {}, {}, txhashset height - {}",
