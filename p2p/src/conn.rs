@@ -78,8 +78,16 @@ pub struct Message<'a> {
 }
 
 impl<'a> Message<'a> {
-	fn from_header(header: MsgHeader, stream: &'a mut dyn Read, version: ProtocolVersion) -> Message<'a> {
-		Message { header, stream, version }
+	fn from_header(
+		header: MsgHeader,
+		stream: &'a mut dyn Read,
+		version: ProtocolVersion,
+	) -> Message<'a> {
+		Message {
+			header,
+			stream,
+			version,
+		}
 	}
 
 	/// Read the message body from the underlying connection

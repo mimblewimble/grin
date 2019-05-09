@@ -75,7 +75,10 @@ impl PoolPushHandler {
 						.map_err(|e| ErrorKind::RequestError(format!("Bad request: {}", e)).into())
 				})
 				.and_then(move |tx_bin| {
-					ser::deserialize(&mut &tx_bin[..], ProtocolVersion::default())
+					// TODO - pass protocol version in via the api call?
+					let version = ProtocolVersion::default();
+
+					ser::deserialize(&mut &tx_bin[..], version)
 						.map_err(|e| ErrorKind::RequestError(format!("Bad request: {}", e)).into())
 				})
 				.and_then(move |tx: Transaction| {

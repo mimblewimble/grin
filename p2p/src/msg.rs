@@ -21,22 +21,14 @@ use std::time;
 use crate::core::core::hash::Hash;
 use crate::core::core::BlockHeader;
 use crate::core::pow::Difficulty;
-use crate::core::ser::{self, FixedLength, ProtocolVersion, Readable, Reader, StreamingReader, Writeable, Writer};
+use crate::core::ser::{
+	self, FixedLength, ProtocolVersion, Readable, Reader, StreamingReader, Writeable, Writer,
+};
 use crate::core::{consensus, global};
 use crate::types::{
 	Capabilities, Error, PeerAddr, ReasonForBan, MAX_BLOCK_HEADERS, MAX_LOCATORS, MAX_PEER_ADDRS,
 };
 use crate::util::read_write::read_exact;
-
-/// Our local node protocol version.
-/// We will increment the protocol version with every change to p2p msg serialization
-/// so we will likely connect with peers with both higher and lower protocol versions.
-/// We need to be aware that some msg formats will be potentially incompatible and handle
-/// this for each individual peer connection.
-/// Note: A peer may disconnect and reconnect with an updated protocol version. Normally
-/// the protocol version will increase but we need to handle decreasing values also
-/// as a peer may rollback to previous version of the code.
-const PROTOCOL_VERSION: u32 = 1;
 
 /// Grin's user agent with current version
 pub const USER_AGENT: &'static str = concat!("MW/Grin ", env!("CARGO_PKG_VERSION"));
@@ -149,7 +141,10 @@ pub fn read_header(
 /// Read a single item from the provided stream, always blocking until we
 /// have a result (or timeout).
 /// Returns the item and the total bytes read.
-pub fn read_item<T: Readable>(stream: &mut dyn Read, version: ProtocolVersion) -> Result<(T, u64), Error> {
+pub fn read_item<T: Readable>(
+	stream: &mut dyn Read,
+	version: ProtocolVersion,
+) -> Result<(T, u64), Error> {
 	let timeout = time::Duration::from_secs(20);
 	let mut reader = StreamingReader::new(stream, version, timeout);
 	let res = T::read(&mut reader)?;
@@ -158,7 +153,11 @@ pub fn read_item<T: Readable>(stream: &mut dyn Read, version: ProtocolVersion) -
 
 /// Read a message body from the provided stream, always blocking
 /// until we have a result (or timeout).
-pub fn read_body<T: Readable>(h: &MsgHeader, stream: &mut dyn Read, version: ProtocolVersion) -> Result<T, Error> {
+pub fn read_body<T: Readable>(
+	h: &MsgHeader,
+	stream: &mut dyn Read,
+	version: ProtocolVersion,
+) -> Result<T, Error> {
 	let mut body = vec![0u8; h.msg_len as usize];
 	read_exact(stream, &mut body, time::Duration::from_secs(20), true)?;
 	ser::deserialize(&mut &body[..], version).map_err(From::from)
@@ -172,7 +171,11 @@ pub fn read_discard(msg_len: u64, stream: &mut dyn Read) -> Result<(), Error> {
 }
 
 /// Reads a full message from the underlying stream.
-pub fn read_message<T: Readable>(stream: &mut dyn Read, version: ProtocolVersion, msg_type: Type) -> Result<T, Error> {
+pub fn read_message<T: Readable>(
+	stream: &mut dyn Read,
+	version: ProtocolVersion,
+	msg_type: Type,
+) -> Result<T, Error> {
 	match read_header(stream, version, Some(msg_type))? {
 		MsgHeaderWrapper::Known(header) => {
 			if header.msg_type == msg_type {
@@ -643,9 +646,7 @@ impl Writeable for TxHashSetRequest {
 }
 
 impl Readable for TxHashSetRequest {
-	fn read(
-		reader: &mut dyn Reader,
-	) -> Result<TxHashSetRequest, ser::Error> {
+	fn read(reader: &mut dyn Reader) -> Result<TxHashSetRequest, ser::Error> {
 		Ok(TxHashSetRequest {
 			hash: Hash::read(reader)?,
 			height: reader.read_u64()?,

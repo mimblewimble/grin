@@ -31,11 +31,11 @@ use crate::util::secp::pedersen::{Commitment, RangeProof};
 use crate::util::secp::Signature;
 use crate::util::secp::{ContextFlag, Secp256k1};
 use byteorder::{BigEndian, ByteOrder, ReadBytesExt};
-use std::fmt::Debug;
+use std::fmt::{self, Debug};
 use std::io::{self, Read, Write};
 use std::marker;
 use std::time::Duration;
-use std::{cmp, error, fmt};
+use std::{cmp, error};
 
 /// Possible errors deriving from serializing or deserializing.
 #[derive(Clone, Eq, PartialEq, Debug, Serialize, Deserialize)]
@@ -209,6 +209,9 @@ pub trait Reader {
 	/// Consumes a byte from the reader, producing an error if it doesn't have
 	/// the expected value
 	fn expect_u8(&mut self, val: u8) -> Result<u8, Error>;
+	/// Access to underlying protocol version to support
+	/// version specific deserialization logic.
+	fn protocol_version(&self) -> ProtocolVersion;
 }
 
 /// Trait that every type that can be serialized as binary must implement.
@@ -275,6 +278,11 @@ where
 	Ok(res)
 }
 
+/// Protocol version for serialization/deserialization.
+/// Note: This is used in various places including but limited to
+/// the p2p layer and our local db storage layer.
+/// We may speak multiple versions to various peers and a potentially *different*
+/// version for our local db.
 #[derive(Clone, Copy, Debug, Deserialize, Eq, Ord, PartialOrd, PartialEq, Serialize)]
 pub struct ProtocolVersion(pub u32);
 
@@ -424,6 +432,10 @@ impl<'a> Reader for BinReader<'a> {
 			})
 		}
 	}
+
+	fn protocol_version(&self) -> ProtocolVersion {
+		self.version
+	}
 }
 
 /// A reader that reads straight off a stream.
@@ -513,6 +525,10 @@ impl<'a> Reader for StreamingReader<'a> {
 				received: vec![b],
 			})
 		}
+	}
+
+	fn protocol_version(&self) -> ProtocolVersion {
+		self.version
 	}
 }
 

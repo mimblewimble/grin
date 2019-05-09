@@ -16,7 +16,7 @@
 //! Allows fast "full" verification of kernel sums at a given block height.
 
 use crate::core::committed::Committed;
-use crate::ser::{self, ProtocolVersion, Readable, Reader, Writeable, Writer};
+use crate::ser::{self, Readable, Reader, Writeable, Writer};
 use crate::util::secp::pedersen::Commitment;
 use crate::util::secp_static;
 
