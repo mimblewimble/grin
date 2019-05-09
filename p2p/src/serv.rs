@@ -110,7 +110,11 @@ impl Server {
 
 	/// Asks the server to connect to a new peer. Directly returns the peer if
 	/// we're already connected to the provided address.
-	pub fn connect(&self, addr: PeerAddr) -> Result<Arc<Peer>, Error> {
+	pub fn connect(&self, addr: PeerAddr) -> Result<(Arc<Peer>, bool), Error> {
+		if self.stop_state.is_stopped() {
+			return Err(Error::ConnectionClose);
+		}
+
 		if Peer::is_denied(&self.config, addr) {
 			debug!("connect_peer: peer {} denied, not connecting.", addr);
 			return Err(Error::ConnectionClose);
@@ -128,7 +132,7 @@ impl Server {
 		if let Some(p) = self.peers.get_connected_peer(addr) {
 			// if we're already connected to the addr, just return the peer
 			trace!("connect_peer: already connected {}", addr);
-			return Ok(p);
+			return Ok((p, false));
 		}
 
 		trace!(
@@ -152,7 +156,7 @@ impl Server {
 				)?;
 				let peer = Arc::new(peer);
 				self.peers.add_connected(peer.clone())?;
-				Ok(peer)
+				Ok((peer, true))
 			}
 			Err(e) => {
 				trace!(

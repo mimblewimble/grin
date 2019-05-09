@@ -44,6 +44,7 @@ const MAX_PEER_MSG_PER_MIN: u64 = 500;
 enum State {
 	Connected,
 	Banned,
+	Stopping,
 }
 
 pub struct Peer {
@@ -51,7 +52,8 @@ pub struct Peer {
 	state: Arc<RwLock<State>>,
 	// set of all hashes known to this peer (so no need to send)
 	tracking_adapter: TrackingAdapter,
-	connection: Mutex<conn::Tracker>,
+	tracker: Arc<conn::Tracker>,
+	handle: Mutex<conn::ConnHandle>,
 }
 
 impl fmt::Debug for Peer {
@@ -66,12 +68,14 @@ impl Peer {
 		let state = Arc::new(RwLock::new(State::Connected));
 		let tracking_adapter = TrackingAdapter::new(adapter);
 		let handler = Protocol::new(Arc::new(tracking_adapter.clone()), info.clone());
-		let connection = Mutex::new(conn::listen(conn, handler)?);
+		let tracker = Arc::new(conn::Tracker::new());
+		let handle = Mutex::new(conn::listen(conn, tracker.clone(), handler)?);
 		Ok(Peer {
 			info,
 			state,
 			tracking_adapter,
-			connection,
+			tracker,
+			handle,
 		})
 	}
 
@@ -152,7 +156,7 @@ impl Peer {
 			}
 		}
 
-		// default to allowing peer connection if we do not explicitly allow or deny
+		// default to allowing peer tracker if we do not explicitly allow or deny
 		// the peer
 		false
 	}
@@ -164,6 +168,11 @@ impl Peer {
 
 	/// Whether this peer has been banned.
 	pub fn is_banned(&self) -> bool {
+		State::Banned == *self.state.read()
+	}
+
+	/// Whether this peer has been stopping.
+	pub fn is_stopping(&self) -> bool {
 		State::Banned == *self.state.read()
 	}
 
@@ -181,30 +190,26 @@ impl Peer {
 
 	/// Whether the peer is considered abusive, mostly for spammy nodes
 	pub fn is_abusive(&self) -> bool {
-		let conn = self.connection.lock();
-		let rec = conn.received_bytes.read();
-		let sent = conn.sent_bytes.read();
+		let rec = self.tracker.received_bytes.read();
+		let sent = self.tracker.sent_bytes.read();
 		rec.count_per_min() > MAX_PEER_MSG_PER_MIN || sent.count_per_min() > MAX_PEER_MSG_PER_MIN
 	}
 
 	/// Number of bytes sent to the peer
 	pub fn last_min_sent_bytes(&self) -> Option<u64> {
-		let conn = self.connection.lock();
-		let sent_bytes = conn.sent_bytes.read();
+		let sent_bytes = self.tracker.sent_bytes.read();
 		Some(sent_bytes.bytes_per_min())
 	}
 
 	/// Number of bytes received from the peer
 	pub fn last_min_received_bytes(&self) -> Option<u64> {
-		let conn = self.connection.lock();
-		let received_bytes = conn.received_bytes.read();
+		let received_bytes = self.tracker.received_bytes.read();
 		Some(received_bytes.bytes_per_min())
 	}
 
 	pub fn last_min_message_counts(&self) -> Option<(u64, u64)> {
-		let conn = self.connection.lock();
-		let received_bytes = conn.received_bytes.read();
-		let sent_bytes = conn.sent_bytes.read();
+		let received_bytes = self.tracker.received_bytes.read();
+		let sent_bytes = self.tracker.sent_bytes.read();
 		Some((sent_bytes.count_per_min(), received_bytes.count_per_min()))
 	}
 
@@ -213,9 +218,19 @@ impl Peer {
 		*self.state.write() = State::Banned;
 	}
 
-	/// Send a msg with given msg_type to our peer via the connection.
+	/// Set this peer status to stopping
+	pub fn set_stopping(&self) {
+		*self.state.write() = State::Stopping;
+	}
+
+	/// Send a msg with given msg_type to our peer via the tracker.
 	fn send<T: Writeable>(&self, msg: T, msg_type: Type) -> Result<(), Error> {
-		self.connection.lock().send(msg, msg_type)
+		if self.is_stopping() {
+			return Err(Error::ConnectionClose);
+		}
+		let bytes = self.handle.lock().send(msg, msg_type)?;
+		self.tracker.inc_sent(bytes);
+		Ok(())
 	}
 
 	/// Send a ping to the remote peer, providing our local difficulty and
@@ -379,9 +394,10 @@ impl Peer {
 		)
 	}
 
-	/// Stops the peer, closing its connection
+	/// Stops the peer, closing its tracker
 	pub fn stop(&self) {
-		self.connection.lock().close();
+		self.set_stopping();
+		self.handle.lock().close();
 	}
 }
 

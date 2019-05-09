@@ -18,9 +18,8 @@ use std::fs::{self, File, OpenOptions};
 use std::io::{BufWriter, Write};
 use std::sync::Arc;
 
-use crate::conn::{Message, MessageHandler, Response};
+use crate::conn::{Message, MessageHandler, Response, Tracker};
 use crate::core::core::{self, hash::Hash, CompactBlock};
-use crate::util::{RateCounter, RwLock};
 use chrono::prelude::Utc;
 
 use crate::msg::{
@@ -45,7 +44,7 @@ impl MessageHandler for Protocol {
 		&self,
 		mut msg: Message<'a>,
 		writer: &'a mut dyn Write,
-		received_bytes: Arc<RwLock<RateCounter>>,
+		tracker: Arc<Tracker>,
 	) -> Result<Option<Response<'a>>, Error> {
 		let adapter = &self.adapter;
 
@@ -312,10 +311,7 @@ impl MessageHandler for Protocol {
 
 						// Increase received bytes quietly (without affecting the counters).
 						// Otherwise we risk banning a peer as "abusive".
-						{
-							let mut received_bytes = received_bytes.write();
-							received_bytes.inc_quiet(size as u64);
-						}
+						tracker.inc_quiet_received(size as u64)
 					}
 					tmp_zip
 						.into_inner()
