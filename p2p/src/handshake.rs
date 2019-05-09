@@ -13,8 +13,8 @@
 // limitations under the License.
 
 use crate::core::core::hash::Hash;
-use crate::core::ser::ProtocolVersion;
 use crate::core::pow::Difficulty;
+use crate::core::ser::ProtocolVersion;
 use crate::msg::{read_message, write_message, Hand, Shake, Type, USER_AGENT};
 use crate::peer::Peer;
 use crate::types::{Capabilities, Direction, Error, P2PConfig, PeerAddr, PeerInfo, PeerLiveInfo};
