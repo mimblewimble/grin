@@ -16,8 +16,7 @@ mod vec_backend;
 
 use self::core::core::merkle_proof::MerkleProof;
 use self::core::core::pmmr::PMMR;
-use self::core::ser;
-use self::core::ser::PMMRIndexHashable;
+use self::core::ser::{self, PMMRIndexHashable};
 use crate::vec_backend::{TestElem, VecBackend};
 use grin_core as core;
 
@@ -39,7 +38,7 @@ fn merkle_proof_ser_deser() {
 
 	let mut vec = Vec::new();
 	ser::serialize(&mut vec, &proof).expect("serialization failed");
-	let proof_2: MerkleProof = ser::deserialize(&mut &vec[..]).unwrap();
+	let proof_2: MerkleProof = ser::deserialize_default(&mut &vec[..]).unwrap();
 
 	assert_eq!(proof, proof_2);
 }

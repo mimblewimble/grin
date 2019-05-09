@@ -221,7 +221,7 @@ fn serialize_deserialize_header_version() {
 	assert_eq!(vec1, vec2);
 
 	// Check we can successfully deserialize a header_version.
-	let version: HeaderVersion = ser::deserialize(&mut &vec2[..]).unwrap();
+	let version: HeaderVersion = ser::deserialize_default(&mut &vec2[..]).unwrap();
 	assert_eq!(version.0, 1)
 }
 
@@ -236,7 +236,7 @@ fn serialize_deserialize_block_header() {
 
 	let mut vec = Vec::new();
 	ser::serialize(&mut vec, &header1).expect("serialization failed");
-	let header2: BlockHeader = ser::deserialize(&mut &vec[..]).unwrap();
+	let header2: BlockHeader = ser::deserialize_default(&mut &vec[..]).unwrap();
 
 	assert_eq!(header1.hash(), header2.hash());
 	assert_eq!(header1, header2);
@@ -253,7 +253,7 @@ fn serialize_deserialize_block() {
 
 	let mut vec = Vec::new();
 	ser::serialize(&mut vec, &b).expect("serialization failed");
-	let b2: Block = ser::deserialize(&mut &vec[..]).unwrap();
+	let b2: Block = ser::deserialize_default(&mut &vec[..]).unwrap();
 
 	assert_eq!(b.hash(), b2.hash());
 	assert_eq!(b.header, b2.header);
@@ -447,7 +447,7 @@ fn serialize_deserialize_compact_block() {
 	cb1.header.timestamp =
 		origin_ts - Duration::nanoseconds(origin_ts.timestamp_subsec_nanos() as i64);
 
-	let cb2: CompactBlock = ser::deserialize(&mut &vec[..]).unwrap();
+	let cb2: CompactBlock = ser::deserialize_default(&mut &vec[..]).unwrap();
 
 	assert_eq!(cb1.header, cb2.header);
 	assert_eq!(cb1.kern_ids(), cb2.kern_ids());

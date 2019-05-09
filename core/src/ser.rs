@@ -351,6 +351,11 @@ pub fn deserialize_db<T: Readable>(source: &mut dyn Read) -> Result<T, Error> {
 	deserialize(source, ProtocolVersion::local_db())
 }
 
+/// Deserialize a Readable based on our local "default" version protocol.
+pub fn deserialize_default<T: Readable>(source: &mut dyn Read) -> Result<T, Error> {
+	deserialize(source, ProtocolVersion::default())
+}
+
 /// Serializes a Writeable into any std::io::Write implementation.
 pub fn serialize<W: Writeable>(sink: &mut dyn Write, thing: &W) -> Result<(), Error> {
 	let mut writer = BinWriter { sink };
@@ -372,6 +377,7 @@ pub struct BinReader<'a> {
 }
 
 impl<'a> BinReader<'a> {
+	/// Constructor for a new BinReader for the provided source and protocol version.
 	pub fn new(source: &'a mut dyn Read, version: ProtocolVersion) -> BinReader<'a> {
 		BinReader { source, version }
 	}
@@ -471,33 +477,22 @@ impl<'a> StreamingReader<'a> {
 
 impl<'a> Reader for StreamingReader<'a> {
 	fn read_u8(&mut self) -> Result<u8, Error> {
-		let buf = self.read_fixed_bytes(1)?;
-		deserialize(&mut &buf[..], self.version)
+		self.stream.read_u8().map_err(map_io_err)
 	}
-
 	fn read_u16(&mut self) -> Result<u16, Error> {
-		let buf = self.read_fixed_bytes(2)?;
-		deserialize(&mut &buf[..], self.version)
+		self.stream.read_u16::<BigEndian>().map_err(map_io_err)
 	}
-
 	fn read_u32(&mut self) -> Result<u32, Error> {
-		let buf = self.read_fixed_bytes(4)?;
-		deserialize(&mut &buf[..], self.version)
+		self.stream.read_u32::<BigEndian>().map_err(map_io_err)
 	}
-
 	fn read_i32(&mut self) -> Result<i32, Error> {
-		let buf = self.read_fixed_bytes(4)?;
-		deserialize(&mut &buf[..], self.version)
+		self.stream.read_i32::<BigEndian>().map_err(map_io_err)
 	}
-
 	fn read_u64(&mut self) -> Result<u64, Error> {
-		let buf = self.read_fixed_bytes(8)?;
-		deserialize(&mut &buf[..], self.version)
+		self.stream.read_u64::<BigEndian>().map_err(map_io_err)
 	}
-
 	fn read_i64(&mut self) -> Result<i64, Error> {
-		let buf = self.read_fixed_bytes(8)?;
-		deserialize(&mut &buf[..], self.version)
+		self.stream.read_i64::<BigEndian>().map_err(map_io_err)
 	}
 
 	/// Read a variable size vector from the underlying stream. Expects a usize
