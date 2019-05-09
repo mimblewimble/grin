@@ -36,8 +36,8 @@ steps:
     displayName: Github release
     condition: and(succeeded(), startsWith(variables['Build.SourceBranch'], 'refs/tags/'), eq(variables['CI_JOB'], 'release' ))
     inputs:
-      gitHubConnection: 'quentinlesceller2'
-      repositoryName: 'quentinlesceller/grin'
+      gitHubConnection: 'ignopeverell'
+      repositoryName: 'mimblewimble/grin'
       action: 'edit'
       target: '$(build.sourceVersion)'
       tagSource: 'manual'
