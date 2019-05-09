@@ -776,7 +776,7 @@ fn cleanup_rewind_files_test() {
 		&data_dir,
 		expected,
 		prefix_to_delete,
-		seconds_to_delete_after,
+		seconds_to_delete_after + 1,
 		expected,
 	);
 	// create some files with the save prefix that are old enough to delete, but will be saved because they don't start
