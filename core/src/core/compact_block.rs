@@ -20,9 +20,7 @@ use crate::core::block::{Block, BlockHeader, Error};
 use crate::core::hash::{DefaultHashable, Hashed};
 use crate::core::id::ShortIdentifiable;
 use crate::core::{Output, ShortId, TxKernel};
-use crate::ser::{
-	self, read_multi, ProtocolVersion, Readable, Reader, VerifySortedAndUnique, Writeable, Writer,
-};
+use crate::ser::{self, read_multi, Readable, Reader, VerifySortedAndUnique, Writeable, Writer};
 
 /// Container for full (full) outputs and kernels and kern_ids for a compact block.
 #[derive(Debug, Clone)]
