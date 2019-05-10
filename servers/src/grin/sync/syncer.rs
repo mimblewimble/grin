@@ -170,7 +170,7 @@ impl SyncRunner {
 					unwrap_or_restart_loop!(self.chain.compact());
 				}
 
-				// sllep for 10 secs but check stop signal every second
+				// sleep for 10 secs but check stop signal every second
 				for _ in 1..10 {
 					thread::sleep(time::Duration::from_secs(1));
 					if self.stop_state.is_stopped() {

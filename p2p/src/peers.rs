@@ -60,7 +60,7 @@ impl Peers {
 		let mut peers = match self.peers.try_write_for(LOCK_TIMEOUT) {
 			Some(peers) => peers,
 			None => {
-				error!("failed to get peers lock");
+				error!("add_connected: failed to get peers lock");
 				return Err(Error::Timeout);
 			}
 		};
@@ -100,7 +100,7 @@ impl Peers {
 		let peers = match self.peers.try_read_for(LOCK_TIMEOUT) {
 			Some(peers) => peers,
 			None => {
-				error!("failed to get peers lock");
+				error!("is_known: failed to get peers lock");
 				return false;
 			}
 		};
@@ -112,7 +112,7 @@ impl Peers {
 		let peers = match self.peers.try_read_for(LOCK_TIMEOUT) {
 			Some(peers) => peers,
 			None => {
-				error!("failed to get peers lock");
+				error!("connected_peers: failed to get peers lock");
 				return vec![];
 			}
 		};
@@ -137,7 +137,7 @@ impl Peers {
 		let peers = match self.peers.try_read_for(LOCK_TIMEOUT) {
 			Some(peers) => peers,
 			None => {
-				error!("failed to get peers lock");
+				error!("get_connected_peer: failed to get peers lock");
 				return None;
 			}
 		};
@@ -255,7 +255,7 @@ impl Peers {
 			let mut peers = match self.peers.try_write_for(LOCK_TIMEOUT) {
 				Some(peers) => peers,
 				None => {
-					error!("failed to get peers lock");
+					error!("ban_peer: failed to get peers lock");
 					return;
 				}
 			};
@@ -301,7 +301,7 @@ impl Peers {
 					let mut peers = match self.peers.try_write_for(LOCK_TIMEOUT) {
 						Some(peers) => peers,
 						None => {
-							error!("failed to get peers lock");
+							error!("broadcast: failed to get peers lock");
 							break;
 						}
 					};
@@ -375,7 +375,7 @@ impl Peers {
 				let mut peers = match self.peers.try_write_for(LOCK_TIMEOUT) {
 					Some(peers) => peers,
 					None => {
-						error!("failed to get peers lock");
+						error!("check_all: failed to get peers lock");
 						break;
 					}
 				};
@@ -496,7 +496,7 @@ impl Peers {
 			let mut peers = match self.peers.try_write_for(LOCK_TIMEOUT) {
 				Some(peers) => peers,
 				None => {
-					error!("failed to get peers lock");
+					error!("clean_peers: failed to get peers lock");
 					return;
 				}
 			};

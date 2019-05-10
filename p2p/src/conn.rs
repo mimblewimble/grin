@@ -210,11 +210,6 @@ impl ConnHandle {
 		let buf = write_to_buf(body, msg_type)?;
 		let buf_len = buf.len();
 		self.send_channel.try_send(buf)?;
-
-		// Increase sent bytes counter
-		//let mut sent_bytes = self.sent_bytes.write();
-		//sent_bytes.inc(buf_len as u64);
-
 		Ok(buf_len as u64)
 	}
 }

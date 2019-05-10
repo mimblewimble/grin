@@ -47,7 +47,6 @@ fn setup(dir_name: &str, genesis: Block) -> Chain {
 		pow::verify_size,
 		verifier_cache,
 		false,
-		Arc::new(StopState::new()),
 	)
 	.unwrap()
 }
@@ -565,7 +564,6 @@ fn actual_diff_iter_output() {
 		pow::verify_size,
 		verifier_cache,
 		false,
-		Arc::new(StopState::new()),
 	)
 	.unwrap();
 	let iter = chain.difficulty_iter().unwrap();

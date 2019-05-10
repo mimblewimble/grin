@@ -162,7 +162,7 @@ impl Peer {
 			}
 		}
 
-		// default to allowing peer tracker if we do not explicitly allow or deny
+		// default to allowing peer connection if we do not explicitly allow or deny
 		// the peer
 		false
 	}
@@ -219,7 +219,7 @@ impl Peer {
 		*self.state.write() = State::Banned;
 	}
 
-	/// Send a msg with given msg_type to our peer via the tracker.
+	/// Send a msg with given msg_type to our peer via the connection.
 	fn send<T: Writeable>(&self, msg: T, msg_type: Type) -> Result<(), Error> {
 		let bytes = self.send_handle.lock().send(msg, msg_type)?;
 		self.tracker.inc_sent(bytes);
