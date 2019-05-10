@@ -101,21 +101,13 @@ pub fn connect_and_monitor(
 				// with exponential backoff
 				if Utc::now() - prev > Duration::seconds(cmp::min(20, 1 << start_attempt)) {
 					// try to connect to any address sent to the channel
-					let connecting_threads = listen_for_addrs(
+					listen_for_addrs(
 						peers.clone(),
 						p2p_server.clone(),
 						capabilities,
 						&rx,
 						&mut connecting_history,
 					);
-
-					debug!("waiting for connecting requests to finish");
-					for th in connecting_threads {
-						if let Err(e) = th.join() {
-							error!("failed to join for a connecting request thread: {:?}", e);
-						}
-					}
-					debug!("done waiting for connecting requests to finish");
 
 					// monitor additional peers if we need to add more
 					monitor_peers(
@@ -296,17 +288,16 @@ fn listen_for_addrs(
 	capab: p2p::Capabilities,
 	rx: &mpsc::Receiver<PeerAddr>,
 	connecting_history: &mut HashMap<PeerAddr, DateTime<Utc>>,
-) -> Vec<thread::JoinHandle<()>> {
+) {
 	// Pull everything currently on the queue off the queue.
 	// Does not block so addrs may be empty.
 	// We will take(max_peers) from this later but we want to drain the rx queue
 	// here to prevent it backing up.
 	let addrs: Vec<PeerAddr> = rx.try_iter().collect();
-	let mut threads = vec![];
 
 	// If we have a healthy number of outbound peers then we are done here.
 	if peers.peer_count() > peers.peer_outbound_count() && peers.healthy_peers_mix() {
-		return threads;
+		return;
 	}
 
 	// Try to connect to (up to max peers) peer addresses.
@@ -334,24 +325,19 @@ fn listen_for_addrs(
 
 		let peers_c = peers.clone();
 		let p2p_c = p2p.clone();
-		threads.push(
-			thread::Builder::new()
-				.name("peer_connect".to_string())
-				.spawn(move || match p2p_c.connect(addr) {
-					Ok((p, true)) => {
-						if p.send_peer_request(capab).is_ok() {
-							let _ = peers_c.update_state(addr, p2p::State::Healthy);
-						}
+		thread::Builder::new()
+			.name("peer_connect".to_string())
+			.spawn(move || match p2p_c.connect(addr) {
+				Ok(p) => {
+					if p.send_peer_request(capab).is_ok() {
+						let _ = peers_c.update_state(addr, p2p::State::Healthy);
 					}
-					Ok((_, false)) => {
-						debug!("peer_connect: peer is already connected");
-					}
-					Err(_) => {
-						let _ = peers_c.update_state(addr, p2p::State::Defunct);
-					}
-				})
-				.expect("failed to launch peer_connect thread"),
-		);
+				}
+				Err(_) => {
+					let _ = peers_c.update_state(addr, p2p::State::Defunct);
+				}
+			})
+			.expect("failed to launch peer_connect thread");
 	}
 
 	// shrink the connecting history.
@@ -367,7 +353,6 @@ fn listen_for_addrs(
 			connecting_history.remove(&addr);
 		}
 	}
-	threads
 }
 
 pub fn dns_seeds() -> Box<dyn Fn() -> Vec<PeerAddr> + Send> {

@@ -162,13 +162,44 @@ impl<'a> Response<'a> {
 
 pub const SEND_CHANNEL_CAP: usize = 10;
 
-pub struct ConnHandle {
-	/// Channel to allow sending data through the connection
-	pub send_channel: mpsc::SyncSender<Vec<u8>>,
+pub struct StopHandle {
 	/// Channel to close the connection
 	pub close_channel: mpsc::Sender<()>,
 	// we need Option to take ownhership of the handle in stop()
 	peer_thread: Option<JoinHandle<()>>,
+}
+
+impl StopHandle {
+	/// Schedule this connection to safely close via the async close_channel.
+	pub fn stop(&self) {
+		if self.close_channel.send(()).is_err() {
+			debug!("peer's close_channel is disconnected, must be stopped already");
+			return;
+		}
+	}
+
+	pub fn stop_and_wait(&mut self) {
+		self.stop();
+		if let Some(peer_thread) = self.peer_thread.take() {
+			// wait only if other thread is calling us, eg shutdown
+			if thread::current().id() != peer_thread.thread().id() {
+				debug!("waiting for thread {:?} exit", peer_thread.thread().id());
+				if let Err(e) = peer_thread.join() {
+					error!("failed to stop peer thread: {:?}", e);
+				}
+			} else {
+				debug!(
+					"attempt to stop thread {:?} from itself",
+					peer_thread.thread().id()
+				);
+			}
+		}
+	}
+}
+
+pub struct ConnHandle {
+	/// Channel to allow sending data through the connection
+	pub send_channel: mpsc::SyncSender<Vec<u8>>,
 }
 
 impl ConnHandle {
@@ -185,28 +216,6 @@ impl ConnHandle {
 		//sent_bytes.inc(buf_len as u64);
 
 		Ok(buf_len as u64)
-	}
-
-	/// Schedule this connection to safely close via the async close_channel.
-	pub fn close(&mut self) {
-		if self.close_channel.send(()).is_err() {
-			debug!("peer's close_channel is disconnected, must be stopped already");
-			return;
-		}
-		if let Some(peer_thread) = self.peer_thread.take() {
-			// wait only if other thread is calling us, eg shutdown
-			if thread::current().id() != peer_thread.thread().id() {
-				debug!("waiting for thread {:?} exit", peer_thread.thread().id());
-				if let Err(e) = peer_thread.join() {
-					error!("failed to stop peer thread: {:?}", e);
-				}
-			} else {
-				debug!(
-					"attempt to stop thread {:?} from itself",
-					peer_thread.thread().id()
-				);
-			}
-		}
 	}
 }
 
@@ -247,7 +256,11 @@ impl Tracker {
 /// Start listening on the provided connection and wraps it. Does not hang
 /// the current thread, instead just returns a future and the Connection
 /// itself.
-pub fn listen<H>(stream: TcpStream, tracker: Arc<Tracker>, handler: H) -> io::Result<ConnHandle>
+pub fn listen<H>(
+	stream: TcpStream,
+	tracker: Arc<Tracker>,
+	handler: H,
+) -> io::Result<(ConnHandle, StopHandle)>
 where
 	H: MessageHandler,
 {
@@ -259,11 +272,15 @@ where
 		.expect("Non-blocking IO not available.");
 	let peer_thread = poll(stream, handler, send_rx, close_rx, tracker)?;
 
-	Ok(ConnHandle {
-		send_channel: send_tx,
-		close_channel: close_tx,
-		peer_thread: Some(peer_thread),
-	})
+	Ok((
+		ConnHandle {
+			send_channel: send_tx,
+		},
+		StopHandle {
+			close_channel: close_tx,
+			peer_thread: Some(peer_thread),
+		},
+	))
 }
 
 fn poll<H>(
@@ -310,7 +327,12 @@ where
 				let maybe_data = retry_send.or_else(|_| send_rx.try_recv());
 				retry_send = Err(());
 				if let Ok(data) = maybe_data {
-					let written = try_break!(writer.write_all(&data[..]).map_err(&From::from));
+					let written = try_break!(write_all(
+						&mut writer,
+						&data[..],
+						std::time::Duration::from_secs(10)
+					)
+					.map_err(&From::from));
 					if written.is_none() {
 						retry_send = Ok(data);
 					}

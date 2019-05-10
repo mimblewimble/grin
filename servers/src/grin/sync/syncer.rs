@@ -77,6 +77,9 @@ impl SyncRunner {
 		let mut n = 0;
 		const MIN_PEERS: usize = 3;
 		loop {
+			if self.stop_state.is_stopped() {
+				break;
+			}
 			let wp = self.peers.more_or_same_work_peers()?;
 			// exit loop when:
 			// * we have more than MIN_PEERS more_or_same_work peers
@@ -167,7 +170,13 @@ impl SyncRunner {
 					unwrap_or_restart_loop!(self.chain.compact());
 				}
 
-				thread::sleep(time::Duration::from_secs(10));
+				// sllep for 10 secs but check stop signal every second
+				for _ in 1..10 {
+					thread::sleep(time::Duration::from_secs(1));
+					if self.stop_state.is_stopped() {
+						break;
+					}
+				}
 				continue;
 			}
 

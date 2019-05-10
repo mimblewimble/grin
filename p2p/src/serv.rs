@@ -88,9 +88,13 @@ impl Server {
 					if self.check_undesirable(&stream) {
 						continue;
 					}
-					if let Err(e) = self.handle_new_peer(stream) {
-						debug!("Error accepting peer {}: {:?}", peer_addr.to_string(), e);
-						let _ = self.peers.add_banned(peer_addr, ReasonForBan::BadHandshake);
+					match self.handle_new_peer(stream) {
+						Err(Error::ConnectionClose) => debug!("shutting down, ignoring a new peer"),
+						Err(e) => {
+							debug!("Error accepting peer {}: {:?}", peer_addr.to_string(), e);
+							let _ = self.peers.add_banned(peer_addr, ReasonForBan::BadHandshake);
+						}
+						Ok(_) => {}
 					}
 				}
 				Err(ref e) if e.kind() == io::ErrorKind::WouldBlock => {
@@ -110,7 +114,7 @@ impl Server {
 
 	/// Asks the server to connect to a new peer. Directly returns the peer if
 	/// we're already connected to the provided address.
-	pub fn connect(&self, addr: PeerAddr) -> Result<(Arc<Peer>, bool), Error> {
+	pub fn connect(&self, addr: PeerAddr) -> Result<Arc<Peer>, Error> {
 		if self.stop_state.is_stopped() {
 			return Err(Error::ConnectionClose);
 		}
@@ -132,7 +136,7 @@ impl Server {
 		if let Some(p) = self.peers.get_connected_peer(addr) {
 			// if we're already connected to the addr, just return the peer
 			trace!("connect_peer: already connected {}", addr);
-			return Ok((p, false));
+			return Ok(p);
 		}
 
 		trace!(
@@ -156,7 +160,7 @@ impl Server {
 				)?;
 				let peer = Arc::new(peer);
 				self.peers.add_connected(peer.clone())?;
-				Ok((peer, true))
+				Ok(peer)
 			}
 			Err(e) => {
 				trace!(
@@ -172,6 +176,9 @@ impl Server {
 	}
 
 	fn handle_new_peer(&self, stream: TcpStream) -> Result<(), Error> {
+		if self.stop_state.is_stopped() {
+			return Err(Error::ConnectionClose);
+		}
 		let total_diff = self.peers.total_difficulty()?;
 
 		// accept the peer and add it to the server map

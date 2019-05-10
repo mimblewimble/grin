@@ -44,7 +44,6 @@ const MAX_PEER_MSG_PER_MIN: u64 = 500;
 enum State {
 	Connected,
 	Banned,
-	Stopping,
 }
 
 pub struct Peer {
@@ -53,7 +52,11 @@ pub struct Peer {
 	// set of all hashes known to this peer (so no need to send)
 	tracking_adapter: TrackingAdapter,
 	tracker: Arc<conn::Tracker>,
-	handle: Mutex<conn::ConnHandle>,
+	send_handle: Mutex<conn::ConnHandle>,
+	// we need a special lock for stop operation, can't reuse handle mutex for that
+	// because it may be locked by different reasons, so we should wait for that, close
+	// mutex can be taken only during shutdown, it happens once
+	stop_handle: Mutex<conn::StopHandle>,
 }
 
 impl fmt::Debug for Peer {
@@ -69,13 +72,16 @@ impl Peer {
 		let tracking_adapter = TrackingAdapter::new(adapter);
 		let handler = Protocol::new(Arc::new(tracking_adapter.clone()), info.clone());
 		let tracker = Arc::new(conn::Tracker::new());
-		let handle = Mutex::new(conn::listen(conn, tracker.clone(), handler)?);
+		let (sendh, stoph) = conn::listen(conn, tracker.clone(), handler)?;
+		let send_handle = Mutex::new(sendh);
+		let stop_handle = Mutex::new(stoph);
 		Ok(Peer {
 			info,
 			state,
 			tracking_adapter,
 			tracker,
-			handle,
+			send_handle,
+			stop_handle,
 		})
 	}
 
@@ -171,11 +177,6 @@ impl Peer {
 		State::Banned == *self.state.read()
 	}
 
-	/// Whether this peer has been stopping.
-	pub fn is_stopping(&self) -> bool {
-		State::Banned == *self.state.read()
-	}
-
 	/// Whether this peer is stuck on sync.
 	pub fn is_stuck(&self) -> (bool, Difficulty) {
 		let peer_live_info = self.info.live_info.read();
@@ -218,17 +219,9 @@ impl Peer {
 		*self.state.write() = State::Banned;
 	}
 
-	/// Set this peer status to stopping
-	pub fn set_stopping(&self) {
-		*self.state.write() = State::Stopping;
-	}
-
 	/// Send a msg with given msg_type to our peer via the tracker.
 	fn send<T: Writeable>(&self, msg: T, msg_type: Type) -> Result<(), Error> {
-		if self.is_stopping() {
-			return Err(Error::ConnectionClose);
-		}
-		let bytes = self.handle.lock().send(msg, msg_type)?;
+		let bytes = self.send_handle.lock().send(msg, msg_type)?;
 		self.tracker.inc_sent(bytes);
 		Ok(())
 	}
@@ -394,10 +387,22 @@ impl Peer {
 		)
 	}
 
-	/// Stops the peer, closing its tracker
+	/// Stops the peer
 	pub fn stop(&self) {
-		self.set_stopping();
-		self.handle.lock().close();
+		debug!("Stopping peer without waiting {:?}", self.info.addr);
+		match self.stop_handle.try_lock() {
+			Some(handle) => handle.stop(),
+			None => error!("can't get stop lock for peer"),
+		}
+	}
+
+	/// Stops the peer and wait until peer's thread exit
+	pub fn stop_and_wait(&self) {
+		debug!("Stopping peer {:?}", self.info.addr);
+		match self.stop_handle.try_lock() {
+			Some(mut handle) => handle.stop_and_wait(),
+			None => error!("can't get stop lock for peer"),
+		}
 	}
 }
 

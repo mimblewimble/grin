@@ -26,21 +26,22 @@ use crate::core::core;
 use crate::core::core::hash::{Hash, Hashed};
 use crate::core::global;
 use crate::core::pow::Difficulty;
-use chrono::prelude::*;
-use chrono::Duration;
-
 use crate::peer::Peer;
 use crate::store::{PeerData, PeerStore, State};
 use crate::types::{
 	Capabilities, ChainAdapter, Error, NetAdapter, P2PConfig, PeerAddr, PeerInfo, ReasonForBan,
 	TxHashSetRead, MAX_PEER_ADDRS,
 };
+use crate::util::StopState;
+use chrono::prelude::*;
+use chrono::Duration;
 
 pub struct Peers {
 	pub adapter: Arc<dyn ChainAdapter>,
 	store: PeerStore,
 	peers: RwLock<HashMap<PeerAddr, Arc<Peer>>>,
 	config: P2PConfig,
+	stop_state: StopState,
 }
 
 impl Peers {
@@ -50,6 +51,7 @@ impl Peers {
 			store,
 			config,
 			peers: RwLock::new(HashMap::new()),
+			stop_state: StopState::new(),
 		}
 	}
 
@@ -67,6 +69,9 @@ impl Peers {
 		};
 		debug!("Saving newly connected peer {}.", peer_data.addr);
 		self.save_peer(&peer_data)?;
+		if self.stop_state.is_stopped() {
+			return Err(Error::ConnectionClose);
+		}
 		self.peers.write().insert(peer_data.addr, peer.clone());
 
 		Ok(())
@@ -224,6 +229,9 @@ impl Peers {
 				Ok(_) => debug!("ban reason {:?} was sent to {}", ban_reason, peer_addr),
 			};
 			peer.set_banned();
+			if self.stop_state.is_stopped() {
+				return;
+			}
 			peer.stop();
 			self.peers.write().remove(&peer.info.addr);
 		}
@@ -263,8 +271,10 @@ impl Peers {
 						"Error sending {:?} to peer {:?}: {:?}",
 						obj_name, &p.info.addr, e
 					);
-					p.stop();
-					self.peers.write().remove(&p.info.addr);
+					if !self.stop_state.is_stopped() {
+						p.stop();
+						self.peers.write().remove(&p.info.addr);
+					}
 				}
 			}
 
@@ -330,8 +340,10 @@ impl Peers {
 		for p in self.connected_peers().iter() {
 			if let Err(e) = p.send_ping(total_difficulty, height) {
 				debug!("Error pinging peer {:?}: {:?}", &p.info.addr, e);
-				p.stop();
-				self.peers.write().remove(&p.info.addr);
+				if !self.stop_state.is_stopped() {
+					p.stop();
+					self.peers.write().remove(&p.info.addr);
+				}
 			}
 		}
 	}
@@ -435,6 +447,9 @@ impl Peers {
 
 		// now clean up peer map based on the list to remove
 		{
+			if self.stop_state.is_stopped() {
+				return;
+			}
 			let mut peers = self.peers.write();
 			for addr in rm {
 				let _ = peers.get(&addr).map(|peer| peer.stop());
@@ -446,7 +461,7 @@ impl Peers {
 	pub fn stop(&self) {
 		let mut peers = self.peers.write();
 		for (_, peer) in peers.drain() {
-			peer.stop();
+			peer.stop_and_wait();
 		}
 	}
 
