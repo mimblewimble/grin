@@ -379,8 +379,8 @@ impl<'a> Batch<'a> {
 		})
 	}
 
-	/// An iterator to all lived block now
-	pub fn iter_lived_blocks(&self) -> Result<SerIterator<Block>, Error> {
+	/// An iterator to all block in db
+	pub fn blocks_iter(&self) -> Result<SerIterator<Block>, Error> {
 		let key = to_key(BLOCK_PREFIX, &mut "".to_string().into_bytes());
 		self.db.iter(&key)
 	}

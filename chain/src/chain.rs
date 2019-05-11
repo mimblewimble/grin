@@ -1029,14 +1029,14 @@ impl Chain {
 		let tail_hash = txhashset.get_header_hash_by_height(head.height - horizon)?;
 		let tail = batch.get_block_header(&tail_hash)?;
 
-		// Remove old blocks and short live fork blocks
-		// here b is a lived block
-		let _ = batch.iter_lived_blocks()?.map(|(_, b)| {
+		// Remove old blocks and short lived fork blocks
+		// here b is a block
+		for (_, b) in batch.blocks_iter()? {
 			if self.is_on_current_chain(&b.header).is_err() || b.header.height < tail.height {
 				let _ = batch.delete_block(&b.hash());
 				count += 1;
 			}
-		});
+		}
 
 		batch.save_body_tail(&Tip::from_header(&tail))?;
 
