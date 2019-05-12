@@ -1029,10 +1029,10 @@ impl Chain {
 		let tail_hash = txhashset.get_header_hash_by_height(head.height - horizon)?;
 		let tail = batch.get_block_header(&tail_hash)?;
 
-		// Remove old blocks and short lived fork blocks
+		// Remove old blocks (including short lived fork blocks) which height < tail.height
 		// here b is a block
 		for (_, b) in batch.blocks_iter()? {
-			if self.is_on_current_chain(&b.header).is_err() || b.header.height < tail.height {
+			if b.header.height < tail.height {
 				let _ = batch.delete_block(&b.hash());
 				count += 1;
 			}
