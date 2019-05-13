@@ -1026,38 +1026,18 @@ impl Chain {
 		}
 
 		let mut count = 0;
-
 		let tail_hash = txhashset.get_header_hash_by_height(head.height - horizon)?;
 		let tail = batch.get_block_header(&tail_hash)?;
 
-		let current_hash = txhashset.get_header_hash_by_height(head.height - horizon - 1)?;
-		let mut current = batch.get_block_header(&current_hash)?;
-
-		loop {
-			// Go to the store directly so we can handle NotFoundErr robustly.
-			match self.store.get_block(&current.hash()) {
-				Ok(b) => {
-					batch.delete_block(&b.hash())?;
-					count += 1;
-				}
-				Err(NotFoundErr(_)) => {
-					break;
-				}
-				Err(e) => {
-					return Err(
-						ErrorKind::StoreErr(e, "retrieving block to compact".to_owned()).into(),
-					);
-				}
-			}
-			if current.height <= 1 {
-				break;
-			}
-			match batch.get_previous_header(&current) {
-				Ok(h) => current = h,
-				Err(NotFoundErr(_)) => break,
-				Err(e) => return Err(From::from(e)),
+		// Remove old blocks (including short lived fork blocks) which height < tail.height
+		// here b is a block
+		for (_, b) in batch.blocks_iter()? {
+			if b.header.height < tail.height {
+				let _ = batch.delete_block(&b.hash());
+				count += 1;
 			}
 		}
+
 		batch.save_body_tail(&Tip::from_header(&tail))?;
 
 		debug!(
