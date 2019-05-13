@@ -23,9 +23,10 @@ use self::core::core::{
 	Block, BlockHeader, BlockSums, Committed, Transaction, TxKernel, Weighting,
 };
 use self::util::RwLock;
-use crate::types::{BlockChain, PoolEntry, PoolEntryState, PoolError};
+use crate::types::{BlockChain, PoolEntry, PoolError};
 use grin_core as core;
 use grin_util as util;
+use std::cmp::Reverse;
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
@@ -116,35 +117,27 @@ impl Pool {
 
 	/// Take pool transactions, filtering and ordering them in a way that's
 	/// appropriate to put in a mined block. Aggregates chains of dependent
-	/// transactions, orders by fee over weight and ensures to total weight
-	/// doesn't exceed block limits.
+	/// transactions, orders by fee over weight and ensures the total weight
+	/// does not exceed the provided max_weight (miner defined block weight).
 	pub fn prepare_mineable_transactions(
 		&self,
 		max_weight: usize,
 	) -> Result<Vec<Transaction>, PoolError> {
-		let header = self.blockchain.chain_head()?;
-		let mut tx_buckets = self.bucket_transactions(max_weight);
+		let weighting = Weighting::AsLimitedTransaction(max_weight);
 
-		// At this point we know that all "buckets" are valid and that
-		// there are no dependencies between them.
-		// This allows us to arbitrarily sort them and filter them safely.
-
-		// Sort them by fees over weight, multiplying by 1000 to keep some precision
-		// don't think we'll ever see a >max_u64/1000 fee transaction.
-		// We want to select the txs with highest fee per unit of weight first.
-		tx_buckets.sort_unstable_by_key(|tx| tx.fee() * 1000 / tx.tx_weight() as u64);
+		// Sort the txs in the pool via the "bucket" logic to -
+		//   * maintain dependency ordering
+		//   * maximize cut-through
+		//   * maximize overall fees
+		let txs = self.bucket_transactions(weighting);
 
 		// Iteratively apply the txs to the current chain state,
 		// rejecting any that do not result in a valid state.
-		// Verify these txs produce an aggregated tx below max tx weight.
+		// Verify these txs produce an aggregated tx below max_weight.
 		// Return a vec of all the valid txs.
-		let txs = self.validate_raw_txs(
-			tx_buckets,
-			None,
-			&header,
-			Weighting::AsLimitedTransaction { max_weight },
-		)?;
-		Ok(txs)
+		let header = self.blockchain.chain_head()?;
+		let valid_txs = self.validate_raw_txs(&txs, None, &header, weighting)?;
+		Ok(valid_txs)
 	}
 
 	pub fn all_transactions(&self) -> Vec<Transaction> {
@@ -165,33 +158,6 @@ impl Pool {
 		tx.validate(Weighting::NoLimit, self.verifier_cache.clone())?;
 
 		Ok(Some(tx))
-	}
-
-	pub fn select_valid_transactions(
-		&self,
-		txs: Vec<Transaction>,
-		extra_tx: Option<Transaction>,
-		header: &BlockHeader,
-	) -> Result<Vec<Transaction>, PoolError> {
-		let valid_txs = self.validate_raw_txs(txs, extra_tx, header, Weighting::NoLimit)?;
-		Ok(valid_txs)
-	}
-
-	pub fn get_transactions_in_state(&self, state: PoolEntryState) -> Vec<Transaction> {
-		self.entries
-			.iter()
-			.filter(|x| x.state == state)
-			.map(|x| x.tx.clone())
-			.collect::<Vec<_>>()
-	}
-
-	// Transition the specified pool entries to the new state.
-	pub fn transition_to_state(&mut self, txs: &[Transaction], state: PoolEntryState) {
-		for x in &mut self.entries {
-			if txs.contains(&x.tx) {
-				x.state = state;
-			}
-		}
 	}
 
 	// Aggregate this new tx with all existing txs in the pool.
@@ -267,9 +233,9 @@ impl Pool {
 		Ok(new_sums)
 	}
 
-	fn validate_raw_txs(
+	pub fn validate_raw_txs(
 		&self,
-		txs: Vec<Transaction>,
+		txs: &[Transaction],
 		extra_tx: Option<Transaction>,
 		header: &BlockHeader,
 		weighting: Weighting,
@@ -289,7 +255,7 @@ impl Pool {
 
 			// We know the tx is valid if the entire aggregate tx is valid.
 			if self.validate_raw_tx(&agg_tx, header, weighting).is_ok() {
-				valid_txs.push(tx);
+				valid_txs.push(tx.clone());
 			}
 		}
 
@@ -337,11 +303,15 @@ impl Pool {
 		Ok(())
 	}
 
-	// Group dependent transactions in buckets (aggregated txs).
-	// Each bucket is independent from the others. Relies on the entries
-	// vector having parent transactions first (should always be the case).
-	fn bucket_transactions(&self, max_weight: usize) -> Vec<Transaction> {
-		let mut tx_buckets = vec![];
+	/// Buckets consist of a vec of txs and track the aggregate fee_to_weight.
+	/// We aggregate (cut-through) dependent transactions within a bucket *unless* adding a tx
+	/// would reduce the aggregate fee_to_weight, in which case we start a new bucket.
+	/// Note this new bucket will by definition have a lower fee_to_weight than the bucket
+	/// containing the tx it depends on.
+	/// Sorting the buckets by fee_to_weight will therefore preserve dependency ordering,
+	/// maximizing both cut-through and overall fees.
+	fn bucket_transactions(&self, weighting: Weighting) -> Vec<Transaction> {
+		let mut tx_buckets: Vec<Bucket> = Vec::new();
 		let mut output_commits = HashMap::new();
 		let mut rejected = HashSet::new();
 
@@ -385,25 +355,27 @@ impl Pool {
 					// This is the common case for non 0-conf txs in the txpool.
 					// We assume the tx is valid here as we validated it on the way into the txpool.
 					insert_pos = Some(tx_buckets.len());
-					tx_buckets.push(entry.tx.clone());
+					tx_buckets.push(Bucket::new(entry.tx.clone()));
 				}
 				Some(pos) => {
 					// We found a single parent tx, so aggregate in the bucket
 					// if the aggregate tx is a valid tx.
 					// Otherwise discard and let the next block pick this tx up.
-					let current = tx_buckets[pos].clone();
-					if let Ok(agg_tx) = transaction::aggregate(vec![current, entry.tx.clone()]) {
-						if agg_tx
-							.validate(
-								Weighting::AsLimitedTransaction { max_weight },
-								self.verifier_cache.clone(),
-							)
-							.is_ok()
-						{
-							tx_buckets[pos] = agg_tx;
+					let bucket = &tx_buckets[pos];
+
+					if let Ok(new_bucket) = bucket.aggregate_with_tx(
+						entry.tx.clone(),
+						weighting,
+						self.verifier_cache.clone(),
+					) {
+						if new_bucket.fee_to_weight >= bucket.fee_to_weight {
+							// Only aggregate if it would not reduce the fee_to_weight ratio.
+							tx_buckets[pos] = new_bucket;
 						} else {
-							// Aggregated tx is not valid so discard this new tx.
-							is_rejected = true;
+							// Otherwise put it in its own bucket at the end.
+							// Note: This bucket will have a lower fee_to_weight
+							// than the bucket it depends on.
+							tx_buckets.push(Bucket::new(entry.tx.clone()));
 						}
 					} else {
 						// Aggregation failed so discard this new tx.
@@ -424,7 +396,17 @@ impl Pool {
 				}
 			}
 		}
+
+		// Sort them by fee_to_weight (descending).
+		// Txs with no dependencies will be toward the start of the vec.
+		// Txs with a big chain of dependencies will be toward the end of the vec.
+		tx_buckets.sort_unstable_by_key(|x| Reverse(x.fee_to_weight));
+
 		tx_buckets
+			.into_iter()
+			.map(|x| x.raw_txs)
+			.flatten()
+			.collect()
 	}
 
 	pub fn find_matching_transactions(&self, kernels: &[TxKernel]) -> Vec<Transaction> {
@@ -466,5 +448,35 @@ impl Pool {
 	/// Is the pool empty?
 	pub fn is_empty(&self) -> bool {
 		self.entries.is_empty()
+	}
+}
+
+struct Bucket {
+	raw_txs: Vec<Transaction>,
+	fee_to_weight: u64,
+}
+
+impl Bucket {
+	fn new(tx: Transaction) -> Bucket {
+		Bucket {
+			fee_to_weight: tx.fee_to_weight(),
+			raw_txs: vec![tx.clone()],
+		}
+	}
+
+	fn aggregate_with_tx(
+		&self,
+		new_tx: Transaction,
+		weighting: Weighting,
+		verifier_cache: Arc<RwLock<dyn VerifierCache>>,
+	) -> Result<Bucket, PoolError> {
+		let mut raw_txs = self.raw_txs.clone();
+		raw_txs.push(new_tx);
+		let agg_tx = transaction::aggregate(raw_txs.clone())?;
+		agg_tx.validate(weighting, verifier_cache)?;
+		Ok(Bucket {
+			fee_to_weight: agg_tx.fee_to_weight(),
+			raw_txs: raw_txs,
+		})
 	}
 }

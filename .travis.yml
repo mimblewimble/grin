@@ -58,7 +58,7 @@ matrix:
     - os: linux
       env: CI_JOB="test"        CI_JOB_ARGS="pool p2p src"
     - os: linux
-      env: CI_JOB="test"        CI_JOB_ARGS="keychain wallet"
+      env: CI_JOB="test"        CI_JOB_ARGS="keychain"
     - os: linux
       env: CI_JOB="test"        CI_JOB_ARGS="api util store"
     - os: linux
@@ -81,7 +81,7 @@ deploy:
   api_key:
     secure: PBTFcoUmiQITkDdtFzrBlNR/5OgYHTCw+xVWGYu205xwTlj/ARBgw7DNt8dIdptLx+jOM2V5SbJqSFxs/CJ2ZcOHQZ6ubwpAJlRfuk3xDAi5JmuHYfcY+4SQ9l/0MgHnGfuml093xP7vTIYm2Vwwgdq8fd3jdWmvwgk9zgaGXB4UIXQA0yIs3EzxZpqiLg629Ouv7edMfyffwlG+rgQ1koe6sqeMCxIs0N3p97GCx19kNe0TV4dC7XAN74HreMdHmwxPKAK4xG/jtA1Snm0pMQ50Z0Kizt+0yrGOPMLnWwO9sS38iosBn3Vh1R8HKle2xBGflTtT/LG9lHdQZ5NF572q6681x6t7str4OjJ5bboy1PtNLFxG7RJCVIpp9gbouzdxIaJWRTxIdlk8UNQMrD8ieiNE6V1vZtbHGtJHRSJN1vO/XxsLlQDCyakLhG/nmSKXgiT9wIsu+zj/3oDe+LBt5QetEGYGBrCwUewjaQ7EP1rsT7alQrHTMad5DPjYftJuvfR+yBtz1qbzQwZVJpQC1KY1c476mXPQsaywuUrj56hH92p7P3vl6aMN2OPJZP+zENOVSURHc56KeTsDS55+KKzcRjCMA2L0LR1hP33+V5kavMHgCRrWIkxAkZ4eRqnermalzp8vlzL6EEoGm0VFLzv4mJmzrY1mC1LyCHo=
   file_glob: true
-  file: target/release/grin-*.tgz*
+  file: target/release/grin-*.*
   skip_cleanup: true
   on:
     repo: mimblewimble/grin

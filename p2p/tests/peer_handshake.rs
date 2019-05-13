@@ -15,7 +15,6 @@
 use grin_core as core;
 use grin_p2p as p2p;
 
-use grin_store as store;
 use grin_util as util;
 use grin_util::{Mutex, StopState};
 
@@ -50,10 +49,9 @@ fn peer_handshake() {
 		..p2p::P2PConfig::default()
 	};
 	let net_adapter = Arc::new(p2p::DummyAdapter {});
-	let db_env = Arc::new(store::new_env(".grin".to_string()));
 	let server = Arc::new(
 		p2p::Server::new(
-			db_env,
+			".grin",
 			p2p::Capabilities::UNKNOWN,
 			p2p_config.clone(),
 			net_adapter.clone(),
@@ -69,11 +67,11 @@ fn peer_handshake() {
 	thread::sleep(time::Duration::from_secs(1));
 
 	let addr = SocketAddr::new(p2p_config.host, p2p_config.port);
-	let mut socket = TcpStream::connect_timeout(&addr, time::Duration::from_secs(10)).unwrap();
+	let socket = TcpStream::connect_timeout(&addr, time::Duration::from_secs(10)).unwrap();
 
 	let my_addr = PeerAddr("127.0.0.1:5000".parse().unwrap());
-	let mut peer = Peer::connect(
-		&mut socket,
+	let peer = Peer::connect(
+		socket,
 		p2p::Capabilities::UNKNOWN,
 		Difficulty::min(),
 		my_addr,
@@ -84,7 +82,6 @@ fn peer_handshake() {
 
 	assert!(peer.info.user_agent.ends_with(env!("CARGO_PKG_VERSION")));
 
-	peer.start(socket);
 	thread::sleep(time::Duration::from_secs(1));
 
 	peer.send_ping(Difficulty::min(), 0).unwrap();

@@ -1,0 +1,15 @@
+diff --git a/Cargo.toml b/Cargo.toml
+index fc8615b6..5ffbf06f 100644
+--- a/Cargo.toml
++++ b/Cargo.toml
+@@ -45,8 +45,8 @@ cursive = { version = "0.11.0", default-features = false, features = ["pancurses
+ [target.'cfg(windows)'.dependencies.pancurses]
+ version = "0.16.0"
+ features = ["win32"]
+-[target.'cfg(unix)'.dependencies]
+-cursive = "0.11.0"
++#[target.'cfg(unix)'.dependencies]
++#cursive = "0.11.0"
+ 
+ [build-dependencies]
+ built = "0.3"

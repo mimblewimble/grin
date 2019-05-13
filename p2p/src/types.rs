@@ -17,6 +17,7 @@ use std::convert::From;
 use std::fs::File;
 use std::io;
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV4, SocketAddrV6};
+use std::path::PathBuf;
 
 use std::sync::mpsc;
 use std::sync::Arc;
@@ -29,6 +30,7 @@ use crate::core::core::hash::Hash;
 use crate::core::global;
 use crate::core::pow::Difficulty;
 use crate::core::ser::{self, Readable, Reader, Writeable, Writer};
+use crate::msg::ProtocolVersion;
 use grin_store;
 
 /// Maximum number of block headers a peer should ever send
@@ -48,7 +50,7 @@ pub const MAX_LOCATORS: u32 = 20;
 const BAN_WINDOW: i64 = 10800;
 
 /// The max peer count
-const PEER_MAX_COUNT: u32 = 25;
+const PEER_MAX_COUNT: u32 = 125;
 
 /// min preferred peer count
 const PEER_MIN_PREFERRED_COUNT: u32 = 8;
@@ -67,10 +69,6 @@ pub enum Error {
 	Chain(chain::Error),
 	PeerWithSelf,
 	NoDandelionRelay,
-	ProtocolMismatch {
-		us: u32,
-		peer: u32,
-	},
 	GenesisMismatch {
 		us: Hash,
 		peer: Hash,
@@ -373,7 +371,7 @@ pub struct PeerLiveInfo {
 pub struct PeerInfo {
 	pub capabilities: Capabilities,
 	pub user_agent: String,
-	pub version: u32,
+	pub version: ProtocolVersion,
 	pub addr: PeerAddr,
 	pub direction: Direction,
 	pub live_info: Arc<RwLock<PeerLiveInfo>>,
@@ -435,7 +433,7 @@ impl PeerInfo {
 pub struct PeerInfoDisplay {
 	pub capabilities: Capabilities,
 	pub user_agent: String,
-	pub version: u32,
+	pub version: ProtocolVersion,
 	pub addr: PeerAddr,
 	pub direction: Direction,
 	pub total_difficulty: Difficulty,
@@ -447,7 +445,7 @@ impl From<PeerInfo> for PeerInfoDisplay {
 		PeerInfoDisplay {
 			capabilities: info.capabilities.clone(),
 			user_agent: info.user_agent.clone(),
-			version: info.version.clone(),
+			version: info.version,
 			addr: info.addr.clone(),
 			direction: info.direction.clone(),
 			total_difficulty: info.total_difficulty(),
@@ -483,7 +481,11 @@ pub trait ChainAdapter: Sync + Send {
 
 	fn get_transaction(&self, kernel_hash: Hash) -> Option<core::Transaction>;
 
-	fn tx_kernel_received(&self, kernel_hash: Hash, addr: PeerAddr) -> Result<bool, chain::Error>;
+	fn tx_kernel_received(
+		&self,
+		kernel_hash: Hash,
+		peer_info: &PeerInfo,
+	) -> Result<bool, chain::Error>;
 
 	/// A block has been received from one of our peers. Returns true if the
 	/// block could be handled properly and is not deemed defective by the
@@ -492,17 +494,21 @@ pub trait ChainAdapter: Sync + Send {
 	fn block_received(
 		&self,
 		b: core::Block,
-		addr: PeerAddr,
+		peer_info: &PeerInfo,
 		was_requested: bool,
 	) -> Result<bool, chain::Error>;
 
 	fn compact_block_received(
 		&self,
 		cb: core::CompactBlock,
-		addr: PeerAddr,
+		peer_info: &PeerInfo,
 	) -> Result<bool, chain::Error>;
 
-	fn header_received(&self, bh: core::BlockHeader, addr: PeerAddr) -> Result<bool, chain::Error>;
+	fn header_received(
+		&self,
+		bh: core::BlockHeader,
+		peer_info: &PeerInfo,
+	) -> Result<bool, chain::Error>;
 
 	/// A set of block header has been received, typically in response to a
 	/// block
@@ -510,7 +516,7 @@ pub trait ChainAdapter: Sync + Send {
 	fn headers_received(
 		&self,
 		bh: &[core::BlockHeader],
-		addr: PeerAddr,
+		peer_info: &PeerInfo,
 	) -> Result<bool, chain::Error>;
 
 	/// Finds a list of block headers based on the provided locator. Tries to
@@ -548,8 +554,15 @@ pub trait ChainAdapter: Sync + Send {
 		&self,
 		h: Hash,
 		txhashset_data: File,
-		peer_addr: PeerAddr,
+		peer_peer_info: &PeerInfo,
 	) -> Result<bool, chain::Error>;
+
+	/// Get the Grin specific tmp dir
+	fn get_tmp_dir(&self) -> PathBuf;
+
+	/// Get a tmp file path in above specific tmp dir (create tmp dir if not exist)
+	/// Delete file if tmp file already exists
+	fn get_tmpfile_pathname(&self, tmpfile_name: String) -> PathBuf;
 }
 
 /// Additional methods required by the protocol that don't need to be

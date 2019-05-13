@@ -16,9 +16,6 @@
 //! of various subsystems
 
 use chrono::prelude::Utc;
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{mpsc, Arc};
-
 use cursive::direction::Orientation;
 use cursive::theme::BaseColor::{Black, Blue, Cyan, White};
 use cursive::theme::Color::Dark;
@@ -31,14 +28,13 @@ use cursive::traits::Identifiable;
 use cursive::utils::markup::StyledString;
 use cursive::views::{LinearLayout, Panel, StackView, TextView, ViewBox};
 use cursive::Cursive;
+use std::sync::mpsc;
 
+use crate::built_info;
 use crate::servers::Server;
-
 use crate::tui::constants::ROOT_STACK;
 use crate::tui::types::{TUIStatusListener, UIMessage};
 use crate::tui::{menu, mining, peers, status, version};
-
-use crate::built_info;
 
 pub struct UI {
 	cursive: Cursive,
@@ -88,7 +84,11 @@ impl UI {
 
 		let mut title_string = StyledString::new();
 		title_string.append(StyledString::styled(
-			format!("Grin Version {}", built_info::PKG_VERSION),
+			format!(
+				"Grin Version {} (proto: {})",
+				built_info::PKG_VERSION,
+				Server::protocol_version()
+			),
 			Color::Dark(BaseColor::Green),
 		));
 
@@ -113,7 +113,7 @@ impl UI {
 				.send(ControllerMessage::Shutdown)
 				.unwrap();
 		});
-		grin_ui.cursive.set_fps(4);
+		grin_ui.cursive.set_fps(3);
 		grin_ui
 	}
 
@@ -162,29 +162,19 @@ impl Controller {
 		let (tx, rx) = mpsc::channel::<ControllerMessage>();
 		Ok(Controller {
 			rx: rx,
-			ui: UI::new(tx.clone()),
+			ui: UI::new(tx),
 		})
 	}
 	/// Run the controller
-	pub fn run(&mut self, server: Arc<Server>, running: Arc<AtomicBool>) {
+	pub fn run(&mut self, server: Server) {
 		let stat_update_interval = 1;
 		let mut next_stat_update = Utc::now().timestamp() + stat_update_interval;
 		while self.ui.step() {
-			if !running.load(Ordering::SeqCst) {
-				warn!("Received SIGINT (Ctrl+C).");
-				server.stop();
-				self.ui.stop();
-			}
 			while let Some(message) = self.rx.try_iter().next() {
 				match message {
 					ControllerMessage::Shutdown => {
 						server.stop();
 						self.ui.stop();
-						running.store(false, Ordering::SeqCst)
-						/*self.ui
-						.ui_tx
-						.send(UIMessage::UpdateOutput("update".to_string()))
-						.unwrap();*/
 					}
 				}
 			}
@@ -195,5 +185,6 @@ impl Controller {
 				next_stat_update = Utc::now().timestamp() + stat_update_interval;
 			}
 		}
+		server.stop();
 	}
 }

@@ -14,7 +14,7 @@
 
 use crate::core::core::hash::Hash;
 use crate::core::pow::Difficulty;
-use crate::msg::{read_message, write_message, Hand, Shake, Type, PROTOCOL_VERSION, USER_AGENT};
+use crate::msg::{read_message, write_message, Hand, ProtocolVersion, Shake, Type, USER_AGENT};
 use crate::peer::Peer;
 use crate::types::{Capabilities, Direction, Error, P2PConfig, PeerAddr, PeerInfo, PeerLiveInfo};
 use crate::util::RwLock;
@@ -73,7 +73,7 @@ impl Handshake {
 		};
 
 		let hand = Hand {
-			version: PROTOCOL_VERSION,
+			version: ProtocolVersion::default(),
 			capabilities: capab,
 			nonce: nonce,
 			genesis: self.genesis,
@@ -86,12 +86,7 @@ impl Handshake {
 		// write and read the handshake response
 		write_message(conn, hand, Type::Hand)?;
 		let shake: Shake = read_message(conn, Type::Shake)?;
-		if shake.version != PROTOCOL_VERSION {
-			return Err(Error::ProtocolMismatch {
-				us: PROTOCOL_VERSION,
-				peer: shake.version,
-			});
-		} else if shake.genesis != self.genesis {
+		if shake.genesis != self.genesis {
 			return Err(Error::GenesisMismatch {
 				us: self.genesis,
 				peer: shake.genesis,
@@ -132,12 +127,7 @@ impl Handshake {
 		let hand: Hand = read_message(conn, Type::Hand)?;
 
 		// all the reasons we could refuse this connection for
-		if hand.version != PROTOCOL_VERSION {
-			return Err(Error::ProtocolMismatch {
-				us: PROTOCOL_VERSION,
-				peer: hand.version,
-			});
-		} else if hand.genesis != self.genesis {
+		if hand.genesis != self.genesis {
 			return Err(Error::GenesisMismatch {
 				us: self.genesis,
 				peer: hand.genesis,
@@ -177,7 +167,7 @@ impl Handshake {
 
 		// send our reply with our info
 		let shake = Shake {
-			version: PROTOCOL_VERSION,
+			version: ProtocolVersion::default(),
 			capabilities: capab,
 			genesis: self.genesis,
 			total_difficulty: total_difficulty,

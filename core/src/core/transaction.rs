@@ -18,6 +18,7 @@ use crate::core::hash::{DefaultHashable, Hashed};
 use crate::core::verifier_cache::VerifierCache;
 use crate::core::{committed, Committed};
 use crate::keychain::{self, BlindingFactor};
+use crate::libtx::secp_ser;
 use crate::ser::{
 	self, read_multi, FixedLength, PMMRable, Readable, Reader, VerifySortedAndUnique, Writeable,
 	Writer,
@@ -67,7 +68,7 @@ impl Readable for KernelFeatures {
 }
 
 /// Errors thrown by Transaction validation
-#[derive(Clone, Eq, Debug, PartialEq)]
+#[derive(Clone, Eq, Debug, PartialEq, Serialize, Deserialize)]
 pub enum Error {
 	/// Underlying Secp256k1 error (signature validation or invalid public key
 	/// typically)
@@ -158,16 +159,23 @@ pub struct TxKernel {
 	/// Options for a kernel's structure or use
 	pub features: KernelFeatures,
 	/// Fee originally included in the transaction this proof is for.
+	#[serde(with = "secp_ser::string_or_u64")]
 	pub fee: u64,
 	/// This kernel is not valid earlier than lock_height blocks
 	/// The max lock_height of all *inputs* to this transaction
+	#[serde(with = "secp_ser::string_or_u64")]
 	pub lock_height: u64,
 	/// Remainder of the sum of all transaction commitments. If the transaction
 	/// is well formed, amounts components should sum to zero and the excess
 	/// is hence a valid public key.
+	#[serde(
+		serialize_with = "secp_ser::as_hex",
+		deserialize_with = "secp_ser::commitment_from_hex"
+	)]
 	pub excess: Commitment,
 	/// The signature proving the excess is a valid public key, which signs
 	/// the transaction fee.
+	#[serde(with = "secp_ser::sig_serde")]
 	pub excess_sig: secp::Signature,
 }
 
@@ -379,10 +387,7 @@ pub enum Weighting {
 	AsTransaction,
 	/// Tx representing a tx with artificially limited max_weight.
 	/// This is used when selecting mineable txs from the pool.
-	AsLimitedTransaction {
-		/// The maximum (block) weight that we will allow.
-		max_weight: usize,
-	},
+	AsLimitedTransaction(usize),
 	/// Tx represents a block (max block weight).
 	AsBlock,
 	/// No max weight limit (skip the weight check).
@@ -620,7 +625,7 @@ impl TransactionBody {
 		//
 		let max_weight = match weighting {
 			Weighting::AsTransaction => global::max_block_weight().saturating_sub(coinbase_weight),
-			Weighting::AsLimitedTransaction { max_weight } => {
+			Weighting::AsLimitedTransaction(max_weight) => {
 				min(global::max_block_weight(), max_weight).saturating_sub(coinbase_weight)
 			}
 			Weighting::AsBlock => global::max_block_weight(),
@@ -757,9 +762,13 @@ impl TransactionBody {
 pub struct Transaction {
 	/// The kernel "offset" k2
 	/// excess is k1G after splitting the key k = k1 + k2
+	#[serde(
+		serialize_with = "secp_ser::as_hex",
+		deserialize_with = "secp_ser::blind_from_hex"
+	)]
 	pub offset: BlindingFactor,
 	/// The transaction body - inputs/outputs/kernels
-	body: TransactionBody,
+	pub body: TransactionBody,
 }
 
 impl DefaultHashable for Transaction {}
@@ -952,6 +961,12 @@ impl Transaction {
 		Ok(())
 	}
 
+	/// Can be used to compare txs by their fee/weight ratio.
+	/// Don't use these values for anything else though due to precision multiplier.
+	pub fn fee_to_weight(&self) -> u64 {
+		self.fee() * 1_000 / self.tx_weight() as u64
+	}
+
 	/// Calculate transaction weight
 	pub fn tx_weight(&self) -> usize {
 		self.body.body_weight()
@@ -1131,6 +1146,10 @@ pub struct Input {
 	/// We will check maturity for coinbase output.
 	pub features: OutputFeatures,
 	/// The commit referencing the output being spent.
+	#[serde(
+		serialize_with = "secp_ser::as_hex",
+		deserialize_with = "secp_ser::commitment_from_hex"
+	)]
 	pub commit: Commitment,
 }
 
@@ -1232,8 +1251,16 @@ pub struct Output {
 	/// Options for an output's structure or use
 	pub features: OutputFeatures,
 	/// The homomorphic commitment representing the output amount
+	#[serde(
+		serialize_with = "secp_ser::as_hex",
+		deserialize_with = "secp_ser::commitment_from_hex"
+	)]
 	pub commit: Commitment,
 	/// A proof that the commitment is in the right range
+	#[serde(
+		serialize_with = "secp_ser::as_hex",
+		deserialize_with = "secp_ser::rangeproof_from_hex"
+	)]
 	pub proof: RangeProof,
 }
 

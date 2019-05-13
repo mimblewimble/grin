@@ -47,12 +47,16 @@ pub trait MessageHandler: Send + 'static {
 // Macro to simplify the boilerplate around async I/O error handling,
 // especially with WouldBlock kind of errors.
 macro_rules! try_break {
-	($chan:ident, $inner:expr) => {
+	($inner:expr) => {
 		match $inner {
 			Ok(v) => Some(v),
 			Err(Error::Connection(ref e)) if e.kind() == io::ErrorKind::WouldBlock => None,
-			Err(e) => {
-				let _ = $chan.send(e);
+			Err(Error::Store(_))
+			| Err(Error::Chain(_))
+			| Err(Error::Internal)
+			| Err(Error::NoDandelionRelay) => None,
+			Err(ref e) => {
+				debug!("try_break: exit the loop: {:?}", e);
 				break;
 				}
 			}
@@ -167,8 +171,6 @@ pub struct Tracker {
 	pub send_channel: mpsc::SyncSender<Vec<u8>>,
 	/// Channel to close the connection
 	pub close_channel: mpsc::Sender<()>,
-	/// Channel to check for errors on the connection
-	pub error_channel: mpsc::Receiver<Error>,
 }
 
 impl Tracker {
@@ -186,6 +188,11 @@ impl Tracker {
 
 		Ok(())
 	}
+
+	/// Schedule this connection to safely close via the async close_channel.
+	pub fn close(&self) {
+		let _ = self.close_channel.send(());
+	}
 }
 
 /// Start listening on the provided connection and wraps it. Does not hang
@@ -197,7 +204,6 @@ where
 {
 	let (send_tx, send_rx) = mpsc::sync_channel(SEND_CHANNEL_CAP);
 	let (close_tx, close_rx) = mpsc::channel();
-	let (error_tx, error_rx) = mpsc::channel();
 
 	// Counter of number of bytes received
 	let received_bytes = Arc::new(RwLock::new(RateCounter::new()));
@@ -211,7 +217,6 @@ where
 		stream,
 		handler,
 		send_rx,
-		error_tx,
 		close_rx,
 		received_bytes.clone(),
 		sent_bytes.clone(),
@@ -222,7 +227,6 @@ where
 		received_bytes: received_bytes.clone(),
 		send_channel: send_tx,
 		close_channel: close_tx,
-		error_channel: error_rx,
 	}
 }
 
@@ -230,7 +234,6 @@ fn poll<H>(
 	conn: TcpStream,
 	handler: H,
 	send_rx: mpsc::Receiver<Vec<u8>>,
-	error_tx: mpsc::Sender<Error>,
 	close_rx: mpsc::Receiver<()>,
 	received_bytes: Arc<RwLock<RateCounter>>,
 	sent_bytes: Arc<RwLock<RateCounter>>,
@@ -244,11 +247,11 @@ fn poll<H>(
 	let _ = thread::Builder::new()
 		.name("peer".to_string())
 		.spawn(move || {
-			let sleep_time = time::Duration::from_millis(1);
+			let sleep_time = time::Duration::from_millis(5);
 			let mut retry_send = Err(());
 			loop {
 				// check the read end
-				if let Some(h) = try_break!(error_tx, read_header(&mut reader, None)) {
+				if let Some(h) = try_break!(read_header(&mut reader, None)) {
 					let msg = Message::from_header(h, &mut reader);
 
 					trace!(
@@ -265,9 +268,9 @@ fn poll<H>(
 					}
 
 					if let Some(Some(resp)) =
-						try_break!(error_tx, handler.consume(msg, &mut writer, received))
+						try_break!(handler.consume(msg, &mut writer, received))
 					{
-						try_break!(error_tx, resp.write(sent_bytes.clone()));
+						try_break!(resp.write(sent_bytes.clone()));
 					}
 				}
 
@@ -275,8 +278,7 @@ fn poll<H>(
 				let maybe_data = retry_send.or_else(|_| send_rx.try_recv());
 				retry_send = Err(());
 				if let Ok(data) = maybe_data {
-					let written =
-						try_break!(error_tx, writer.write_all(&data[..]).map_err(&From::from));
+					let written = try_break!(writer.write_all(&data[..]).map_err(&From::from));
 					if written.is_none() {
 						retry_send = Ok(data);
 					}
@@ -284,17 +286,18 @@ fn poll<H>(
 
 				// check the close channel
 				if let Ok(_) = close_rx.try_recv() {
-					debug!(
-						"Connection close with {} initiated by us",
-						conn.peer_addr()
-							.map(|a| a.to_string())
-							.unwrap_or("?".to_owned())
-					);
 					break;
 				}
 
 				thread::sleep(sleep_time);
 			}
+
+			debug!(
+				"Shutting down connection with {}",
+				conn.peer_addr()
+					.map(|a| a.to_string())
+					.unwrap_or("?".to_owned())
+			);
 			let _ = conn.shutdown(Shutdown::Both);
 		});
 }

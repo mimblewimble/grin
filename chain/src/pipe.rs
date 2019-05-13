@@ -341,7 +341,7 @@ fn validate_header(header: &BlockHeader, ctx: &mut BlockContext<'_>) -> Result<(
 	// check version, enforces scheduled hard fork
 	if !consensus::valid_header_version(header.height, header.version) {
 		error!(
-			"Invalid block header version received ({}), maybe update Grin?",
+			"Invalid block header version received ({:?}), maybe update Grin?",
 			header.version
 		);
 		return Err(ErrorKind::InvalidBlockVersion(header.version).into());

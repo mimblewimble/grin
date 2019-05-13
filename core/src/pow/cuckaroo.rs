@@ -27,6 +27,7 @@ use crate::pow::common::{CuckooParams, EdgeType};
 use crate::pow::error::{Error, ErrorKind};
 use crate::pow::siphash::siphash_block;
 use crate::pow::{PoWContext, Proof};
+use crate::global;
 
 /// Instantiate a new CuckarooContext as a PowContext. Note that this can't
 /// be moved in the PoWContext trait as this particular trait needs to be
@@ -68,6 +69,10 @@ where
 	}
 
 	fn verify(&self, proof: &Proof) -> Result<(), Error> {
+		if proof.proof_size() != global::proofsize() {
+			return Err(ErrorKind::Verification(
+				"wrong cycle length".to_owned(),))?;
+		}
 		let nonces = &proof.nonces;
 		let mut uvs = vec![0u64; 2 * proof.proof_size()];
 		let mut xor0: u64 = 0;
