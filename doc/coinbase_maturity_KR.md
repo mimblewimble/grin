@@ -122,14 +122,10 @@ A pruned node may only store the following (refer to pruning doc) -
 
 입력값은 아래와 같은 값을 반드시 포함해야 합니다.
 
-* the commitment (to lookup the output in the MMR)
-* the output features (hash in output MMR dependent on features|commitment)
-* a merkle proof showing inclusion of the output in the originating block
-* the block hash of originating blocks
-  * [tbd - maintain index based on merkle proof?]
-
-From the commitment and the features we can determine if the correct output is currently unspent.
-From the block and the output features we can determine the lock height (if any).
-
+* MMR 내에서 찾은 실행값 ( commitment)
+* 출력값 (features|commitment 에 따른 출력값 MMR 의 해시)
+* 원래 불록 내에서의 Merkle proof 를 포함하는 출력값
+* 원래 블록의 블록 해시
+  * [추후에 결정될 것 - Merkle proof 기반 인덱스를 유지할 것인가?]
 실행값(commitment)과 기능을 통해 올바른 출력이 현재 사용되지 않은지 확인할 수 있습니다.
-블록과 출력 피쳐로부터 lock height(있는 경우)를 결정할 수 있습니다.
+블록과 출력값로부터 lock height(있는 경우)를 결정할 수 있습니다.
