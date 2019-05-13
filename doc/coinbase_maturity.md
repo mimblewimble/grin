@@ -98,7 +98,7 @@ We maintain an index mapping commitment to position in the output MMR.
 
 If no entry in the index exists or no entry in the output MMR exists for a given commitment then we now the output is not spendable (either it was spent previously or it never existed).
 
-If we find an entry in the output MMR then we know a spendable output exists in the Output set *but* we do not know if this is the correct one. We do not if it is a coinbase output or not and we do not know the height of the block it originated from.
+If we find an entry in the output MMR then we know a spendable output exists in the Output set *but* we do not know if this is the correct one. We do not know if it is a coinbase output or not and we do not know the height of the block it originated from.
 
 If the hash stored in the output MMR covers both the commitment and the output features and we require an input to provide both the commitment and the feature then we can do a further validation step -
 
