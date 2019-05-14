@@ -15,6 +15,7 @@
 use crate::util::{Mutex, RwLock};
 use std::fmt;
 use std::fs::File;
+use std::io::Read;
 use std::net::{Shutdown, TcpStream};
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -26,7 +27,9 @@ use crate::core::pow::Difficulty;
 use crate::core::ser::Writeable;
 use crate::core::{core, global};
 use crate::handshake::Handshake;
-use crate::msg::{self, BanReason, GetPeerAddrs, Locator, Ping, TxHashSetRequest, Type};
+use crate::msg::{
+	self, BanReason, GetPeerAddrs, KernelDataRequest, Locator, Ping, TxHashSetRequest, Type,
+};
 use crate::protocol::Protocol;
 use crate::types::{
 	Capabilities, ChainAdapter, Error, NetAdapter, P2PConfig, PeerAddr, PeerInfo, ReasonForBan,
@@ -379,6 +382,13 @@ impl Peer {
 		)
 	}
 
+	pub fn send_kernel_data_request(&self) -> Result<(), Error> {
+		debug!("Asking {} for kernel data.", self.info.addr);
+		self.connection
+			.lock()
+			.send(&KernelDataRequest {}, msg::Type::KernelDataRequest)
+	}
+
 	/// Stops the peer, closing its connection
 	pub fn stop(&self) {
 		self.connection.lock().close();
@@ -519,6 +529,14 @@ impl ChainAdapter for TrackingAdapter {
 
 	fn get_block(&self, h: Hash) -> Option<core::Block> {
 		self.adapter.get_block(h)
+	}
+
+	fn kernel_data_read(&self) -> Result<File, chain::Error> {
+		self.adapter.kernel_data_read()
+	}
+
+	fn kernel_data_write(&self, reader: &mut Read) -> Result<bool, chain::Error> {
+		self.adapter.kernel_data_write(reader)
 	}
 
 	fn txhashset_read(&self, h: Hash) -> Option<TxHashSetRead> {

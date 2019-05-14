@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use std::fs::File;
+
 use self::core::core::hash::{DefaultHashable, Hash};
 use self::core::core::pmmr::{self, Backend};
 use self::core::core::BlockHeader;
@@ -101,6 +103,10 @@ impl<T: PMMRable> Backend<T> for VecBackend<T> {
 		let idx = pmmr::n_leaves(position);
 		let data = self.data[(idx - 1) as usize].clone();
 		Some(data.as_elmt())
+	}
+
+	fn data_as_temp_file(&self) -> Result<File, String> {
+		unimplemented!()
 	}
 
 	fn leaf_pos_iter(&self) -> Box<Iterator<Item = u64> + '_> {

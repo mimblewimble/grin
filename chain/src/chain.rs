@@ -23,6 +23,7 @@ use crate::core::core::{
 };
 use crate::core::global;
 use crate::core::pow;
+use crate::core::ser::{Readable, StreamingReader};
 use crate::error::{Error, ErrorKind};
 use crate::pipe;
 use crate::store;
@@ -36,6 +37,7 @@ use crate::util::{Mutex, RwLock, StopState};
 use grin_store::Error::NotFoundErr;
 use std::collections::HashMap;
 use std::fs::{self, File};
+use std::io::Read;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
@@ -657,6 +659,28 @@ impl Chain {
 	/// Returns current txhashset roots.
 	pub fn get_txhashset_roots(&self) -> TxHashSetRoots {
 		self.txhashset.read().roots()
+	}
+
+	/// Provides a reading view into the current kernel state.
+	pub fn kernel_data_read(&self) -> Result<File, Error> {
+		let txhashset = self.txhashset.read();
+		txhashset::rewindable_kernel_view(&txhashset, |view| view.kernel_data_read())
+	}
+
+	/// Writes kernels provided to us (via a kernel data download).
+	/// Currently does not write these to disk and simply deserializes
+	/// the provided data.
+	/// TODO - Write this data to disk and validate the rebuilt kernel MMR.
+	pub fn kernel_data_write(&self, reader: &mut Read) -> Result<(), Error> {
+		let mut count = 0;
+		let mut stream = StreamingReader::new(reader, Duration::from_secs(1));
+		while let Ok(_kernel) = TxKernelEntry::read(&mut stream) {
+			count += 1;
+		}
+
+		debug!("kernel_data_write: read {} kernels", count);
+
+		Ok(())
 	}
 
 	/// Provides a reading view into the current txhashset state as well as
