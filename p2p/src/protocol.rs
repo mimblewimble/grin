@@ -353,9 +353,8 @@ impl MessageHandler for Protocol {
 
 				Ok(None)
 			}
-
-			_ => {
-				debug!("unknown message type {:?}", msg.header.msg_type);
+			Type::Error | Type::Hand | Type::Shake => {
+				debug!("Received an unexpected msg: {:?}", msg.header.msg_type);
 				Ok(None)
 			}
 		}

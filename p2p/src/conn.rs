@@ -28,7 +28,10 @@ use std::{cmp, thread, time};
 
 use crate::core::ser;
 use crate::core::ser::FixedLength;
-use crate::msg::{read_body, read_header, read_item, write_to_buf, MsgHeader, Type};
+use crate::msg::{
+	read_body, read_discard, read_header, read_item, write_to_buf, MsgHeader, MsgHeaderWrapper,
+	Type,
+};
 use crate::types::Error;
 use crate::util::read_write::{read_exact, write_all};
 use crate::util::{RateCounter, RwLock};
@@ -251,27 +254,34 @@ fn poll<H>(
 			let mut retry_send = Err(());
 			loop {
 				// check the read end
-				if let Some(h) = try_break!(read_header(&mut reader, None)) {
-					let msg = Message::from_header(h, &mut reader);
+				match try_break!(read_header(&mut reader, None)) {
+					Some(MsgHeaderWrapper::Known(header)) => {
+						let msg = Message::from_header(header, &mut reader);
 
-					trace!(
-						"Received message header, type {:?}, len {}.",
-						msg.header.msg_type,
-						msg.header.msg_len
-					);
+						trace!(
+							"Received message header, type {:?}, len {}.",
+							msg.header.msg_type,
+							msg.header.msg_len
+						);
 
-					// Increase received bytes counter
-					let received = received_bytes.clone();
-					{
-						let mut received_bytes = received_bytes.write();
-						received_bytes.inc(MsgHeader::LEN as u64 + msg.header.msg_len);
+						// Increase received bytes counter
+						received_bytes
+							.write()
+							.inc(MsgHeader::LEN as u64 + msg.header.msg_len);
+
+						if let Some(Some(resp)) =
+							try_break!(handler.consume(msg, &mut writer, received_bytes.clone()))
+						{
+							try_break!(resp.write(sent_bytes.clone()));
+						}
 					}
+					Some(MsgHeaderWrapper::Unknown(msg_len)) => {
+						// Increase received bytes counter
+						received_bytes.write().inc(MsgHeader::LEN as u64 + msg_len);
 
-					if let Some(Some(resp)) =
-						try_break!(handler.consume(msg, &mut writer, received))
-					{
-						try_break!(resp.write(sent_bytes.clone()));
+						try_break!(read_discard(msg_len, &mut reader));
 					}
+					None => {}
 				}
 
 				// check the write end, use or_else so try_recv is lazily eval'd
