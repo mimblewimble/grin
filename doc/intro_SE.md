@@ -163,7 +163,7 @@ Det som hamnar i blockkedjan är:
     Y - Xi = (113*G + 3*H) - (28*G + 3*H) = 85*G + 0*H
     
 Nu summeras transaktionen inte längre till noll och vi har ett _överskottsbelopp_ på _G_ (85), vilket är resultatet
-av summeringen av alla bländande faktorer. Men eftersom `85*G` är en giltig publik nyckel på elliptiska kurvan _G_ vet vi
+av summeringen av alla bländande faktorer. Men eftersom `85*G` är en giltig publik nyckel på elliptiska kurvan _C_ vet vi
 att in- och utmatningarna har subtraheras till noll och transaktionen är därmed giltig.
 
 Så allt protokollet behöver göra är att kontrollera att (`Y - Xi`) är en giltig publik nyckel på _G_ och att de två parter
