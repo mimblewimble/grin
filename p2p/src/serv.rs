@@ -120,7 +120,7 @@ impl Server {
 		Ok(())
 	}
 
-  /// Setup I2P streaming listener
+	/// Setup I2P streaming listener
 	pub fn listen_i2p(&self) -> Result<(), Error> {
 		let session = self.i2p_session.as_ref().ok_or(Error::Internal)?;
 		let listener = I2pListener::bind_with_session(&session)?;
@@ -151,19 +151,19 @@ impl Server {
 				}
 			}
 		}
-    // gracefully shutdown listener streams
+		// gracefully shutdown listener streams
 		if self.stop_state.lock().is_stopped() {
-      for stream in listener.incoming() {
-        match stream {
-          Ok(stream) => {
-            let _ = stream.shutdown(std::net::Shutdown::Both)?;
-          }
-          Err(e) => {
-					  debug!("Error shutting down i2p connection: {:?}", e);
-          }
-        }
-      }
-    }
+			for stream in listener.incoming() {
+				match stream {
+					Ok(stream) => {
+						let _ = stream.shutdown(std::net::Shutdown::Both)?;
+					}
+					Err(e) => {
+						debug!("Error shutting down i2p connection: {:?}", e);
+					}
+				}
+			}
+		}
 		Ok(())
 	}
 
