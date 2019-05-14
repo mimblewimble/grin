@@ -120,12 +120,15 @@ impl Server {
 		Ok(())
 	}
 
+	/// Setup I2P streaming listener
 	pub fn listen_i2p(&self) -> Result<(), Error> {
 		let session = self.i2p_session.as_ref().ok_or(Error::Internal)?;
 		let listener = I2pListener::bind_with_session(&session)?;
 
-		// TODO break on stop_state
 		for stream in listener.incoming() {
+			if self.stop_state.lock().is_stopped() {
+				break;
+			}
 			match stream {
 				Ok(stream) => {
 					let peer_addr = PeerAddr::I2p(stream.local_addr()?);
@@ -147,6 +150,16 @@ impl Server {
 					debug!("Couldn't establish new i2p connection: {:?}", e);
 				}
 			}
+		}
+		// gracefully shutdown listener streams
+		if self.stop_state.is_stopped() {
+			let _ = self
+				.peers
+				.connected_peers()
+				.iter()
+				.filter(|x| x.info.addr.is_i2p())
+				.map(|x| x.stop())
+				.collect::<Vec<_>>();
 		}
 		Ok(())
 	}
