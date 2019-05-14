@@ -49,7 +49,7 @@ dive deeper into those assumptions, there are other opportunities to
 
 An Elliptic Curve for the purpose of cryptography is simply a large set of points that
 we will call _C_. These points can be added, subtracted, or multiplied by integers (also called scalars).
-Given an integer _k_ and
+Given such a point _H_, an integer _k_ and
 using the scalar multiplication operation we can compute `k*H`, which is also a point on
 curve _C_. Given another integer _j_ we can also calculate `(k+j)*H`, which equals
 `k*H + j*H`. The addition and scalar multiplication operations on an elliptic curve
