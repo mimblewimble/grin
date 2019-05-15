@@ -384,7 +384,6 @@ impl<'a> Batch<'a> {
 		let key = to_key(BLOCK_PREFIX, &mut "".to_string().into_bytes());
 		self.db.iter(&key)
 	}
-	
 }
 
 /// An iterator on blocks, from latest to earliest, specialized to return

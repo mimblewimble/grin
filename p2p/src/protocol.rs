@@ -12,24 +12,20 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use rand::{thread_rng, Rng};
-use std::cmp;
-use std::fs::{self, File, OpenOptions};
-use std::io::{BufWriter, Seek, SeekFrom, Write};
-use std::sync::Arc;
-
-use chrono::prelude::Utc;
-use tempfile::tempfile;
-
-use crate::conn::{Message, MessageHandler, Response};
+use crate::conn::{Message, MessageHandler, Response, Tracker};
 use crate::core::core::{self, hash::Hash, CompactBlock};
-use crate::util::{RateCounter, RwLock};
-
 use crate::msg::{
 	BanReason, GetPeerAddrs, Headers, KernelDataResponse, Locator, PeerAddrs, Ping, Pong,
 	TxHashSetArchive, TxHashSetRequest, Type,
 };
 use crate::types::{Error, NetAdapter, PeerInfo};
+use chrono::prelude::Utc;
+use rand::{thread_rng, Rng};
+use std::cmp;
+use std::fs::{self, File, OpenOptions};
+use std::io::{BufWriter, Seek, SeekFrom, Write};
+use std::sync::Arc;
+use tempfile::tempfile;
 
 pub struct Protocol {
 	adapter: Arc<dyn NetAdapter>,
@@ -47,7 +43,7 @@ impl MessageHandler for Protocol {
 		&self,
 		mut msg: Message<'a>,
 		writer: &'a mut dyn Write,
-		received_bytes: Arc<RwLock<RateCounter>>,
+		tracker: Arc<Tracker>,
 	) -> Result<Option<Response<'a>>, Error> {
 		let adapter = &self.adapter;
 
@@ -275,7 +271,7 @@ impl MessageHandler for Protocol {
 
 					// Increase received bytes quietly (without affecting the counters).
 					// Otherwise we risk banning a peer as "abusive".
-					received_bytes.write().inc_quiet(size as u64);
+					tracker.inc_quiet_received(size as u64);
 				}
 
 				// Remember to seek back to start of the file as the caller is likely
@@ -362,10 +358,7 @@ impl MessageHandler for Protocol {
 
 						// Increase received bytes quietly (without affecting the counters).
 						// Otherwise we risk banning a peer as "abusive".
-						{
-							let mut received_bytes = received_bytes.write();
-							received_bytes.inc_quiet(size as u64);
-						}
+						tracker.inc_quiet_received(size as u64)
 					}
 					tmp_zip
 						.into_inner()

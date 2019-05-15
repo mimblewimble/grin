@@ -24,7 +24,11 @@ use std::fs::File;
 use std::io::{self, Read, Write};
 use std::net::{Shutdown, TcpStream};
 use std::sync::{mpsc, Arc};
-use std::{cmp, thread, time};
+use std::{
+	cmp,
+	thread::{self, JoinHandle},
+	time,
+};
 
 use crate::core::ser;
 use crate::core::ser::FixedLength;
@@ -43,7 +47,7 @@ pub trait MessageHandler: Send + 'static {
 		&self,
 		msg: Message<'a>,
 		writer: &'a mut dyn Write,
-		received_bytes: Arc<RwLock<RateCounter>>,
+		tracker: Arc<Tracker>,
 	) -> Result<Option<Response<'a>>, Error>;
 }
 
@@ -130,15 +134,12 @@ impl<'a> Response<'a> {
 		})
 	}
 
-	fn write(mut self, sent_bytes: Arc<RwLock<RateCounter>>) -> Result<(), Error> {
+	fn write(mut self, tracker: Arc<Tracker>) -> Result<(), Error> {
 		let mut msg = ser::ser_vec(&MsgHeader::new(self.resp_type, self.body.len() as u64))?;
 		msg.append(&mut self.body);
 		write_all(&mut self.stream, &msg[..], time::Duration::from_secs(10))?;
-		// Increase sent bytes counter
-		{
-			let mut sent_bytes = sent_bytes.write();
-			sent_bytes.inc(msg.len() as u64);
-		}
+		tracker.inc_sent(msg.len() as u64);
+
 		if let Some(mut file) = self.attachment {
 			let mut buf = [0u8; 8000];
 			loop {
@@ -148,8 +149,7 @@ impl<'a> Response<'a> {
 						write_all(&mut self.stream, &buf[..n], time::Duration::from_secs(10))?;
 						// Increase sent bytes "quietly" without incrementing the counter.
 						// (In a loop here for the single attachment).
-						let mut sent_bytes = sent_bytes.write();
-						sent_bytes.inc_quiet(n as u64);
+						tracker.inc_quiet_sent(n as u64);
 					}
 					Err(e) => return Err(From::from(e)),
 				}
@@ -165,72 +165,120 @@ impl<'a> Response<'a> {
 
 pub const SEND_CHANNEL_CAP: usize = 10;
 
-pub struct Tracker {
-	/// Bytes we've sent.
-	pub sent_bytes: Arc<RwLock<RateCounter>>,
-	/// Bytes we've received.
-	pub received_bytes: Arc<RwLock<RateCounter>>,
-	/// Channel to allow sending data through the connection
-	pub send_channel: mpsc::SyncSender<Vec<u8>>,
+pub struct StopHandle {
 	/// Channel to close the connection
 	pub close_channel: mpsc::Sender<()>,
+	// we need Option to take ownhership of the handle in stop()
+	peer_thread: Option<JoinHandle<()>>,
 }
 
-impl Tracker {
-	pub fn send<T>(&self, body: T, msg_type: Type) -> Result<(), Error>
+impl StopHandle {
+	/// Schedule this connection to safely close via the async close_channel.
+	pub fn stop(&self) {
+		if self.close_channel.send(()).is_err() {
+			debug!("peer's close_channel is disconnected, must be stopped already");
+			return;
+		}
+	}
+
+	pub fn stop_and_wait(&mut self) {
+		self.stop();
+		if let Some(peer_thread) = self.peer_thread.take() {
+			// wait only if other thread is calling us, eg shutdown
+			if thread::current().id() != peer_thread.thread().id() {
+				debug!("waiting for thread {:?} exit", peer_thread.thread().id());
+				if let Err(e) = peer_thread.join() {
+					error!("failed to stop peer thread: {:?}", e);
+				}
+			} else {
+				debug!(
+					"attempt to stop thread {:?} from itself",
+					peer_thread.thread().id()
+				);
+			}
+		}
+	}
+}
+
+pub struct ConnHandle {
+	/// Channel to allow sending data through the connection
+	pub send_channel: mpsc::SyncSender<Vec<u8>>,
+}
+
+impl ConnHandle {
+	pub fn send<T>(&self, body: T, msg_type: Type) -> Result<u64, Error>
 	where
 		T: ser::Writeable,
 	{
 		let buf = write_to_buf(body, msg_type)?;
 		let buf_len = buf.len();
 		self.send_channel.try_send(buf)?;
+		Ok(buf_len as u64)
+	}
+}
 
-		// Increase sent bytes counter
-		let mut sent_bytes = self.sent_bytes.write();
-		sent_bytes.inc(buf_len as u64);
+pub struct Tracker {
+	/// Bytes we've sent.
+	pub sent_bytes: Arc<RwLock<RateCounter>>,
+	/// Bytes we've received.
+	pub received_bytes: Arc<RwLock<RateCounter>>,
+}
 
-		Ok(())
+impl Tracker {
+	pub fn new() -> Tracker {
+		let received_bytes = Arc::new(RwLock::new(RateCounter::new()));
+		let sent_bytes = Arc::new(RwLock::new(RateCounter::new()));
+		Tracker {
+			received_bytes,
+			sent_bytes,
+		}
 	}
 
-	/// Schedule this connection to safely close via the async close_channel.
-	pub fn close(&self) {
-		let _ = self.close_channel.send(());
+	pub fn inc_received(&self, size: u64) {
+		self.received_bytes.write().inc(size);
+	}
+
+	pub fn inc_sent(&self, size: u64) {
+		self.sent_bytes.write().inc(size);
+	}
+
+	pub fn inc_quiet_received(&self, size: u64) {
+		self.received_bytes.write().inc_quiet(size);
+	}
+
+	pub fn inc_quiet_sent(&self, size: u64) {
+		self.sent_bytes.write().inc_quiet(size);
 	}
 }
 
 /// Start listening on the provided connection and wraps it. Does not hang
 /// the current thread, instead just returns a future and the Connection
 /// itself.
-pub fn listen<H>(stream: TcpStream, handler: H) -> Tracker
+pub fn listen<H>(
+	stream: TcpStream,
+	tracker: Arc<Tracker>,
+	handler: H,
+) -> io::Result<(ConnHandle, StopHandle)>
 where
 	H: MessageHandler,
 {
 	let (send_tx, send_rx) = mpsc::sync_channel(SEND_CHANNEL_CAP);
 	let (close_tx, close_rx) = mpsc::channel();
 
-	// Counter of number of bytes received
-	let received_bytes = Arc::new(RwLock::new(RateCounter::new()));
-	// Counter of number of bytes sent
-	let sent_bytes = Arc::new(RwLock::new(RateCounter::new()));
-
 	stream
 		.set_nonblocking(true)
 		.expect("Non-blocking IO not available.");
-	poll(
-		stream,
-		handler,
-		send_rx,
-		close_rx,
-		received_bytes.clone(),
-		sent_bytes.clone(),
-	);
+	let peer_thread = poll(stream, handler, send_rx, close_rx, tracker)?;
 
-	Tracker {
-		sent_bytes: sent_bytes.clone(),
-		received_bytes: received_bytes.clone(),
-		send_channel: send_tx,
-		close_channel: close_tx,
-	}
+	Ok((
+		ConnHandle {
+			send_channel: send_tx,
+		},
+		StopHandle {
+			close_channel: close_tx,
+			peer_thread: Some(peer_thread),
+		},
+	))
 }
 
 fn poll<H>(
@@ -238,16 +286,16 @@ fn poll<H>(
 	handler: H,
 	send_rx: mpsc::Receiver<Vec<u8>>,
 	close_rx: mpsc::Receiver<()>,
-	received_bytes: Arc<RwLock<RateCounter>>,
-	sent_bytes: Arc<RwLock<RateCounter>>,
-) where
+	tracker: Arc<Tracker>,
+) -> io::Result<JoinHandle<()>>
+where
 	H: MessageHandler,
 {
 	// Split out tcp stream out into separate reader/writer halves.
 	let mut reader = conn.try_clone().expect("clone conn for reader failed");
 	let mut writer = conn.try_clone().expect("clone conn for writer failed");
 
-	let _ = thread::Builder::new()
+	thread::Builder::new()
 		.name("peer".to_string())
 		.spawn(move || {
 			let sleep_time = time::Duration::from_millis(5);
@@ -265,19 +313,17 @@ fn poll<H>(
 						);
 
 						// Increase received bytes counter
-						received_bytes
-							.write()
-							.inc(MsgHeader::LEN as u64 + msg.header.msg_len);
+						tracker.inc_received(MsgHeader::LEN as u64 + msg.header.msg_len);
 
 						if let Some(Some(resp)) =
-							try_break!(handler.consume(msg, &mut writer, received_bytes.clone()))
+							try_break!(handler.consume(msg, &mut writer, tracker.clone()))
 						{
-							try_break!(resp.write(sent_bytes.clone()));
+							try_break!(resp.write(tracker.clone()));
 						}
 					}
 					Some(MsgHeaderWrapper::Unknown(msg_len)) => {
 						// Increase received bytes counter
-						received_bytes.write().inc(MsgHeader::LEN as u64 + msg_len);
+						tracker.inc_received(MsgHeader::LEN as u64 + msg_len);
 
 						try_break!(read_discard(msg_len, &mut reader));
 					}
@@ -288,7 +334,12 @@ fn poll<H>(
 				let maybe_data = retry_send.or_else(|_| send_rx.try_recv());
 				retry_send = Err(());
 				if let Ok(data) = maybe_data {
-					let written = try_break!(writer.write_all(&data[..]).map_err(&From::from));
+					let written = try_break!(write_all(
+						&mut writer,
+						&data[..],
+						std::time::Duration::from_secs(10)
+					)
+					.map_err(&From::from));
 					if written.is_none() {
 						retry_send = Ok(data);
 					}
@@ -309,5 +360,5 @@ fn poll<H>(
 					.unwrap_or("?".to_owned())
 			);
 			let _ = conn.shutdown(Shutdown::Both);
-		});
+		})
 }

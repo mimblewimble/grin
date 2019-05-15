@@ -434,8 +434,7 @@ impl<'de> serde::de::Deserialize<'de> for OutputPrintable {
 				}
 
 				if output_type.is_none()
-					|| commit.is_none()
-					|| spent.is_none()
+					|| commit.is_none() || spent.is_none()
 					|| proof_hash.is_none()
 					|| mmr_index.is_none()
 				{

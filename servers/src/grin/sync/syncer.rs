@@ -24,27 +24,27 @@ use crate::grin::sync::body_sync::BodySync;
 use crate::grin::sync::header_sync::HeaderSync;
 use crate::grin::sync::state_sync::StateSync;
 use crate::p2p;
-use crate::util::{Mutex, StopState};
+use crate::util::StopState;
 
 pub fn run_sync(
 	sync_state: Arc<SyncState>,
 	peers: Arc<p2p::Peers>,
 	chain: Arc<chain::Chain>,
-	stop_state: Arc<Mutex<StopState>>,
-) {
-	let _ = thread::Builder::new()
+	stop_state: Arc<StopState>,
+) -> std::io::Result<std::thread::JoinHandle<()>> {
+	thread::Builder::new()
 		.name("sync".to_string())
 		.spawn(move || {
 			let runner = SyncRunner::new(sync_state, peers, chain, stop_state);
 			runner.sync_loop();
-		});
+		})
 }
 
 pub struct SyncRunner {
 	sync_state: Arc<SyncState>,
 	peers: Arc<p2p::Peers>,
 	chain: Arc<chain::Chain>,
-	stop_state: Arc<Mutex<StopState>>,
+	stop_state: Arc<StopState>,
 }
 
 impl SyncRunner {
@@ -52,7 +52,7 @@ impl SyncRunner {
 		sync_state: Arc<SyncState>,
 		peers: Arc<p2p::Peers>,
 		chain: Arc<chain::Chain>,
-		stop_state: Arc<Mutex<StopState>>,
+		stop_state: Arc<StopState>,
 	) -> SyncRunner {
 		SyncRunner {
 			sync_state,
@@ -77,6 +77,9 @@ impl SyncRunner {
 		let mut n = 0;
 		const MIN_PEERS: usize = 3;
 		loop {
+			if self.stop_state.is_stopped() {
+				break;
+			}
 			let wp = self.peers.more_or_same_work_peers()?;
 			// exit loop when:
 			// * we have more than MIN_PEERS more_or_same_work peers
@@ -140,7 +143,7 @@ impl SyncRunner {
 
 		// Main syncing loop
 		loop {
-			if self.stop_state.lock().is_stopped() {
+			if self.stop_state.is_stopped() {
 				break;
 			}
 
@@ -167,7 +170,13 @@ impl SyncRunner {
 					unwrap_or_restart_loop!(self.chain.compact());
 				}
 
-				thread::sleep(time::Duration::from_secs(10));
+				// sleep for 10 secs but check stop signal every second
+				for _ in 1..10 {
+					thread::sleep(time::Duration::from_secs(1));
+					if self.stop_state.is_stopped() {
+						break;
+					}
+				}
 				continue;
 			}
 

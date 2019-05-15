@@ -54,7 +54,12 @@ pub struct Peer {
 	state: Arc<RwLock<State>>,
 	// set of all hashes known to this peer (so no need to send)
 	tracking_adapter: TrackingAdapter,
-	connection: Mutex<conn::Tracker>,
+	tracker: Arc<conn::Tracker>,
+	send_handle: Mutex<conn::ConnHandle>,
+	// we need a special lock for stop operation, can't reuse handle mutex for that
+	// because it may be locked by different reasons, so we should wait for that, close
+	// mutex can be taken only during shutdown, it happens once
+	stop_handle: Mutex<conn::StopHandle>,
 }
 
 impl fmt::Debug for Peer {
@@ -65,17 +70,22 @@ impl fmt::Debug for Peer {
 
 impl Peer {
 	// Only accept and connect can be externally used to build a peer
-	fn new(info: PeerInfo, conn: TcpStream, adapter: Arc<dyn NetAdapter>) -> Peer {
+	fn new(info: PeerInfo, conn: TcpStream, adapter: Arc<dyn NetAdapter>) -> std::io::Result<Peer> {
 		let state = Arc::new(RwLock::new(State::Connected));
 		let tracking_adapter = TrackingAdapter::new(adapter);
 		let handler = Protocol::new(Arc::new(tracking_adapter.clone()), info.clone());
-		let connection = Mutex::new(conn::listen(conn, handler));
-		Peer {
+		let tracker = Arc::new(conn::Tracker::new());
+		let (sendh, stoph) = conn::listen(conn, tracker.clone(), handler)?;
+		let send_handle = Mutex::new(sendh);
+		let stop_handle = Mutex::new(stoph);
+		Ok(Peer {
 			info,
 			state,
 			tracking_adapter,
-			connection,
-		}
+			tracker,
+			send_handle,
+			stop_handle,
+		})
 	}
 
 	pub fn accept(
@@ -88,7 +98,7 @@ impl Peer {
 		debug!("accept: handshaking from {:?}", conn.peer_addr());
 		let info = hs.accept(capab, total_difficulty, &mut conn);
 		match info {
-			Ok(info) => Ok(Peer::new(info, conn, adapter)),
+			Ok(info) => Ok(Peer::new(info, conn, adapter)?),
 			Err(e) => {
 				debug!(
 					"accept: handshaking from {:?} failed with error: {:?}",
@@ -114,7 +124,7 @@ impl Peer {
 		debug!("connect: handshaking with {:?}", conn.peer_addr());
 		let info = hs.initiate(capab, total_difficulty, self_addr, &mut conn);
 		match info {
-			Ok(info) => Ok(Peer::new(info, conn, adapter)),
+			Ok(info) => Ok(Peer::new(info, conn, adapter)?),
 			Err(e) => {
 				debug!(
 					"connect: handshaking with {:?} failed with error: {:?}",
@@ -184,30 +194,26 @@ impl Peer {
 
 	/// Whether the peer is considered abusive, mostly for spammy nodes
 	pub fn is_abusive(&self) -> bool {
-		let conn = self.connection.lock();
-		let rec = conn.received_bytes.read();
-		let sent = conn.sent_bytes.read();
+		let rec = self.tracker.received_bytes.read();
+		let sent = self.tracker.sent_bytes.read();
 		rec.count_per_min() > MAX_PEER_MSG_PER_MIN || sent.count_per_min() > MAX_PEER_MSG_PER_MIN
 	}
 
 	/// Number of bytes sent to the peer
 	pub fn last_min_sent_bytes(&self) -> Option<u64> {
-		let conn = self.connection.lock();
-		let sent_bytes = conn.sent_bytes.read();
+		let sent_bytes = self.tracker.sent_bytes.read();
 		Some(sent_bytes.bytes_per_min())
 	}
 
 	/// Number of bytes received from the peer
 	pub fn last_min_received_bytes(&self) -> Option<u64> {
-		let conn = self.connection.lock();
-		let received_bytes = conn.received_bytes.read();
+		let received_bytes = self.tracker.received_bytes.read();
 		Some(received_bytes.bytes_per_min())
 	}
 
 	pub fn last_min_message_counts(&self) -> Option<(u64, u64)> {
-		let conn = self.connection.lock();
-		let received_bytes = conn.received_bytes.read();
-		let sent_bytes = conn.sent_bytes.read();
+		let received_bytes = self.tracker.received_bytes.read();
+		let sent_bytes = self.tracker.sent_bytes.read();
 		Some((sent_bytes.count_per_min(), received_bytes.count_per_min()))
 	}
 
@@ -218,7 +224,9 @@ impl Peer {
 
 	/// Send a msg with given msg_type to our peer via the connection.
 	fn send<T: Writeable>(&self, msg: T, msg_type: Type) -> Result<(), Error> {
-		self.connection.lock().send(msg, msg_type)
+		let bytes = self.send_handle.lock().send(msg, msg_type)?;
+		self.tracker.inc_sent(bytes);
+		Ok(())
 	}
 
 	/// Send a ping to the remote peer, providing our local difficulty and
@@ -384,14 +392,25 @@ impl Peer {
 
 	pub fn send_kernel_data_request(&self) -> Result<(), Error> {
 		debug!("Asking {} for kernel data.", self.info.addr);
-		self.connection
-			.lock()
-			.send(&KernelDataRequest {}, msg::Type::KernelDataRequest)
+		self.send(&KernelDataRequest {}, msg::Type::KernelDataRequest)
 	}
 
-	/// Stops the peer, closing its connection
+	/// Stops the peer
 	pub fn stop(&self) {
-		self.connection.lock().close();
+		debug!("Stopping peer without waiting {:?}", self.info.addr);
+		match self.stop_handle.try_lock() {
+			Some(handle) => handle.stop(),
+			None => error!("can't get stop lock for peer"),
+		}
+	}
+
+	/// Stops the peer and wait until peer's thread exit
+	pub fn stop_and_wait(&self) {
+		debug!("Stopping peer {:?}", self.info.addr);
+		match self.stop_handle.try_lock() {
+			Some(mut handle) => handle.stop_and_wait(),
+			None => error!("can't get stop lock for peer"),
+		}
 	}
 }
 

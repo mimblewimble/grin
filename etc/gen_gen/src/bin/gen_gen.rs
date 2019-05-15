@@ -281,7 +281,7 @@ fn setup_chain(dir_name: &str, genesis: core::core::Block) -> chain::Chain {
 		core::pow::verify_size,
 		verifier_cache,
 		false,
-		Arc::new(util::Mutex::new(util::StopState::new())),
+		Arc::new(util::StopState::new()),
 	)
 	.unwrap()
 }

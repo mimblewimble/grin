@@ -21,7 +21,7 @@ use self::core::libtx;
 use self::core::pow::{self, Difficulty};
 use self::core::{consensus, genesis};
 use self::keychain::{ExtKeychain, ExtKeychainPath, Keychain};
-use self::util::{Mutex, RwLock, StopState};
+use self::util::RwLock;
 use chrono::Duration;
 use grin_chain as chain;
 use grin_core as core;
@@ -47,7 +47,6 @@ fn setup(dir_name: &str) -> Chain {
 		pow::verify_size,
 		verifier_cache,
 		false,
-		Arc::new(Mutex::new(StopState::new())),
 	)
 	.unwrap()
 }
@@ -61,7 +60,6 @@ fn reload_chain(dir_name: &str) -> Chain {
 		pow::verify_size,
 		verifier_cache,
 		false,
-		Arc::new(Mutex::new(StopState::new())),
 	)
 	.unwrap()
 }
