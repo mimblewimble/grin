@@ -23,6 +23,7 @@ use crate::core::core::{
 };
 use crate::core::global;
 use crate::core::pow;
+use crate::core::ser::{Readable, StreamingReader};
 use crate::error::{Error, ErrorKind};
 use crate::pipe;
 use crate::store;
@@ -36,6 +37,7 @@ use crate::util::RwLock;
 use grin_store::Error::NotFoundErr;
 use std::collections::HashMap;
 use std::fs::{self, File};
+use std::io::Read;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
@@ -630,6 +632,28 @@ impl Chain {
 		self.txhashset.read().roots()
 	}
 
+	/// Provides a reading view into the current kernel state.
+	pub fn kernel_data_read(&self) -> Result<File, Error> {
+		let txhashset = self.txhashset.read();
+		txhashset::rewindable_kernel_view(&txhashset, |view| view.kernel_data_read())
+	}
+
+	/// Writes kernels provided to us (via a kernel data download).
+	/// Currently does not write these to disk and simply deserializes
+	/// the provided data.
+	/// TODO - Write this data to disk and validate the rebuilt kernel MMR.
+	pub fn kernel_data_write(&self, reader: &mut Read) -> Result<(), Error> {
+		let mut count = 0;
+		let mut stream = StreamingReader::new(reader, Duration::from_secs(1));
+		while let Ok(_kernel) = TxKernelEntry::read(&mut stream) {
+			count += 1;
+		}
+
+		debug!("kernel_data_write: read {} kernels", count);
+
+		Ok(())
+	}
+
 	/// Provides a reading view into the current txhashset state as well as
 	/// the required indexes for a consumer to rewind to a consistent state
 	/// at the provided block hash.
@@ -997,38 +1021,18 @@ impl Chain {
 		}
 
 		let mut count = 0;
-
 		let tail_hash = txhashset.get_header_hash_by_height(head.height - horizon)?;
 		let tail = batch.get_block_header(&tail_hash)?;
 
-		let current_hash = txhashset.get_header_hash_by_height(head.height - horizon - 1)?;
-		let mut current = batch.get_block_header(&current_hash)?;
-
-		loop {
-			// Go to the store directly so we can handle NotFoundErr robustly.
-			match self.store.get_block(&current.hash()) {
-				Ok(b) => {
-					batch.delete_block(&b.hash())?;
-					count += 1;
-				}
-				Err(NotFoundErr(_)) => {
-					break;
-				}
-				Err(e) => {
-					return Err(
-						ErrorKind::StoreErr(e, "retrieving block to compact".to_owned()).into(),
-					);
-				}
-			}
-			if current.height <= 1 {
-				break;
-			}
-			match batch.get_previous_header(&current) {
-				Ok(h) => current = h,
-				Err(NotFoundErr(_)) => break,
-				Err(e) => return Err(From::from(e)),
+		// Remove old blocks (including short lived fork blocks) which height < tail.height
+		// here b is a block
+		for (_, b) in batch.blocks_iter()? {
+			if b.header.height < tail.height {
+				let _ = batch.delete_block(&b.hash());
+				count += 1;
 			}
 		}
+
 		batch.save_body_tail(&Tip::from_header(&tail))?;
 
 		debug!(

@@ -333,7 +333,7 @@ impl Handler {
 		{
 			let mut writer = ser::BinWriter::new(&mut header_buf);
 			bh.write_pre_pow(&mut writer).unwrap();
-			bh.pow.write_pre_pow(bh.version, &mut writer).unwrap();
+			bh.pow.write_pre_pow(&mut writer).unwrap();
 		}
 		let pre_pow = util::to_hex(header_buf);
 		let job_template = JobTemplate {

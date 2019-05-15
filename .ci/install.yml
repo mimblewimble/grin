@@ -1,0 +1,21 @@
+steps:
+  - script: |
+      curl -sSf -o rustup-init.exe https://win.rustup.rs
+      rustup-init.exe -y
+      echo "##vso[task.setvariable variable=PATH;]%PATH%;%USERPROFILE%\.cargo\bin"
+      git apply .ci/win.patch
+      choco install -y llvm
+    displayName: Windows Install Rust
+    condition: eq( variables['Agent.OS'], 'Windows_NT' )
+  - script: |
+      curl https://sh.rustup.rs -sSf | sh -s -- -y
+      echo "##vso[task.setvariable variable=PATH;]$PATH:$HOME/.cargo/bin"
+    displayName: macOS Install Rust
+    condition: eq( variables['Agent.OS'], 'Darwin' )
+  - script: |
+      curl https://sh.rustup.rs -sSf | sh -s -- -y
+      sudo apt-get update -yqq
+      sudo apt-get install -yqq --no-install-recommends libncursesw5-dev
+      echo "##vso[task.setvariable variable=PATH;]$PATH:$HOME/.cargo/bin"
+    displayName: Linux Install Rust and Dependencies
+    condition: eq( variables['Agent.OS'], 'Linux' )

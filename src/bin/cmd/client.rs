@@ -74,7 +74,7 @@ pub fn show_status(config: &ServerConfig, api_secret: Option<String>) {
 	t.reset().unwrap();
 	match get_status_from_node(config, api_secret) {
 		Ok(status) => {
-			writeln!(e, "Protocol version: {}", status.protocol_version).unwrap();
+			writeln!(e, "Protocol version: {:?}", status.protocol_version).unwrap();
 			writeln!(e, "User agent: {}", status.user_agent).unwrap();
 			writeln!(e, "Connections: {}", status.connections).unwrap();
 			writeln!(e, "Chain height: {}", status.tip.height).unwrap();
@@ -139,7 +139,7 @@ pub fn list_connected_peers(config: &ServerConfig, api_secret: Option<String>) {
 				writeln!(e, "Peer {}:", index).unwrap();
 				writeln!(e, "Capabilities: {:?}", connected_peer.capabilities).unwrap();
 				writeln!(e, "User agent: {}", connected_peer.user_agent).unwrap();
-				writeln!(e, "Version: {}", connected_peer.version).unwrap();
+				writeln!(e, "Version: {:?}", connected_peer.version).unwrap();
 				writeln!(e, "Peer address: {}", connected_peer.addr).unwrap();
 				writeln!(e, "Height: {}", connected_peer.height).unwrap();
 				writeln!(e, "Total difficulty: {}", connected_peer.total_difficulty).unwrap();

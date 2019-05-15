@@ -138,7 +138,13 @@ impl TransactionPool {
 		}
 
 		// Do we have the capacity to accept this transaction?
-		self.is_acceptable(&tx, stem)?;
+		let acceptability = self.is_acceptable(&tx, stem);
+		let mut evict = false;
+		if !stem && acceptability.as_ref().err() == Some(&PoolError::OverCapacity) {
+			evict = true;
+		} else if acceptability.is_err() {
+			return acceptability;
+		}
 
 		// Make sure the transaction is valid before anything else.
 		// Validate tx accounting for max tx weight.
@@ -171,7 +177,34 @@ impl TransactionPool {
 			self.adapter.tx_accepted(&entry.tx);
 		}
 
+		// Transaction passed all the checks but we have to make space for it
+		if evict {
+			self.evict_from_txpool();
+		}
+
 		Ok(())
+	}
+
+	// Remove the last transaction from the flattened bucket transactions.
+	// No other tx depends on it, it has low fee_to_weight and is unlikely to participate in any cut-through.
+	pub fn evict_from_txpool(&mut self) {
+		// Get bucket transactions
+		let bucket_transactions = self.txpool.bucket_transactions(Weighting::NoLimit);
+
+		// Get last transaction and remove it
+		match bucket_transactions.last() {
+			Some(evictable_transaction) => {
+				// Remove transaction
+				self.txpool.entries = self
+					.txpool
+					.entries
+					.iter()
+					.filter(|x| x.tx != *evictable_transaction)
+					.map(|x| x.clone())
+					.collect::<Vec<_>>();
+			}
+			None => (),
+		}
 	}
 
 	// Old txs will "age out" after 30 mins.
@@ -245,11 +278,10 @@ impl TransactionPool {
 		}
 
 		// Check that the stempool can accept this transaction
-		if stem {
-			if self.stempool.size() > self.config.max_stempool_size {
-				// TODO evict old/large transactions instead
-				return Err(PoolError::OverCapacity);
-			}
+		if stem && self.stempool.size() > self.config.max_stempool_size {
+			return Err(PoolError::OverCapacity);
+		} else if self.total_size() > self.config.max_pool_size {
+			return Err(PoolError::OverCapacity);
 		}
 
 		// for a basic transaction (1 input, 2 outputs) -

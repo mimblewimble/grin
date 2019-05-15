@@ -20,6 +20,7 @@
 
 use std::cmp::{max, min};
 
+use crate::core::block::HeaderVersion;
 use crate::global;
 use crate::pow::Difficulty;
 
@@ -128,10 +129,10 @@ pub const HARD_FORK_INTERVAL: u64 = YEAR_HEIGHT / 2;
 
 /// Check whether the block version is valid at a given height, implements
 /// 6 months interval scheduled hard forks for the first 2 years.
-pub fn valid_header_version(height: u64, version: u16) -> bool {
+pub fn valid_header_version(height: u64, version: HeaderVersion) -> bool {
 	// uncomment below as we go from hard fork to hard fork
 	if height < HARD_FORK_INTERVAL {
-		version == 1
+		version == HeaderVersion::default()
 	/* } else if height < 2 * HARD_FORK_INTERVAL {
 		version == 2
 	} else if height < 3 * HARD_FORK_INTERVAL {

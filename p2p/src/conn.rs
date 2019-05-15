@@ -32,7 +32,10 @@ use std::{
 
 use crate::core::ser;
 use crate::core::ser::FixedLength;
-use crate::msg::{read_body, read_header, read_item, write_to_buf, MsgHeader, Type};
+use crate::msg::{
+	read_body, read_discard, read_header, read_item, write_to_buf, MsgHeader, MsgHeaderWrapper,
+	Type,
+};
 use crate::types::Error;
 use crate::util::read_write::{read_exact, write_all};
 use crate::util::{RateCounter, RwLock};
@@ -299,23 +302,32 @@ where
 			let mut retry_send = Err(());
 			loop {
 				// check the read end
-				if let Some(h) = try_break!(read_header(&mut reader, None)) {
-					let msg = Message::from_header(h, &mut reader);
+				match try_break!(read_header(&mut reader, None)) {
+					Some(MsgHeaderWrapper::Known(header)) => {
+						let msg = Message::from_header(header, &mut reader);
 
-					trace!(
-						"Received message header, type {:?}, len {}.",
-						msg.header.msg_type,
-						msg.header.msg_len
-					);
+						trace!(
+							"Received message header, type {:?}, len {}.",
+							msg.header.msg_type,
+							msg.header.msg_len
+						);
 
-					// Increase received bytes counter
-					tracker.inc_received(MsgHeader::LEN as u64 + msg.header.msg_len);
+						// Increase received bytes counter
+						tracker.inc_received(MsgHeader::LEN as u64 + msg.header.msg_len);
 
-					if let Some(Some(resp)) =
-						try_break!(handler.consume(msg, &mut writer, tracker.clone()))
-					{
-						try_break!(resp.write(tracker.clone()));
+						if let Some(Some(resp)) =
+							try_break!(handler.consume(msg, &mut writer, tracker.clone()))
+						{
+							try_break!(resp.write(tracker.clone()));
+						}
 					}
+					Some(MsgHeaderWrapper::Unknown(msg_len)) => {
+						// Increase received bytes counter
+						tracker.inc_received(MsgHeader::LEN as u64 + msg_len);
+
+						try_break!(read_discard(msg_len, &mut reader));
+					}
+					None => {}
 				}
 
 				// check the write end, use or_else so try_recv is lazily eval'd

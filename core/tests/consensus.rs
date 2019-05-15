@@ -15,6 +15,7 @@
 use grin_core as core;
 
 use self::core::consensus::*;
+use self::core::core::block::HeaderVersion;
 use self::core::global;
 use self::core::pow::Difficulty;
 use chrono::prelude::Utc;
@@ -617,15 +618,27 @@ fn test_secondary_pow_scale() {
 
 #[test]
 fn hard_forks() {
-	assert!(valid_header_version(0, 1));
-	assert!(valid_header_version(10, 1));
-	assert!(!valid_header_version(10, 2));
-	assert!(valid_header_version(YEAR_HEIGHT / 2 - 1, 1));
+	assert!(valid_header_version(0, HeaderVersion::new(1)));
+	assert!(valid_header_version(10, HeaderVersion::new(1)));
+	assert!(!valid_header_version(10, HeaderVersion::new(2)));
+	assert!(valid_header_version(
+		YEAR_HEIGHT / 2 - 1,
+		HeaderVersion::new(1)
+	));
 	// v2 not active yet
-	assert!(!valid_header_version(YEAR_HEIGHT / 2, 2));
-	assert!(!valid_header_version(YEAR_HEIGHT / 2, 1));
-	assert!(!valid_header_version(YEAR_HEIGHT, 1));
-	assert!(!valid_header_version(YEAR_HEIGHT / 2 + 1, 2));
+	assert!(!valid_header_version(
+		YEAR_HEIGHT / 2,
+		HeaderVersion::new(2)
+	));
+	assert!(!valid_header_version(
+		YEAR_HEIGHT / 2,
+		HeaderVersion::new(1)
+	));
+	assert!(!valid_header_version(YEAR_HEIGHT, HeaderVersion::new(1)));
+	assert!(!valid_header_version(
+		YEAR_HEIGHT / 2 + 1,
+		HeaderVersion::new(2)
+	));
 }
 
 // #[test]

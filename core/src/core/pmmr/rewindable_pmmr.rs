@@ -49,6 +49,11 @@ where
 		}
 	}
 
+	/// Reference to the underlying storage backend.
+	pub fn backend(&'a self) -> &Backend<T> {
+		self.backend
+	}
+
 	/// Build a new readonly PMMR pre-initialized to
 	/// last_pos with the provided backend.
 	pub fn at(backend: &'a B, last_pos: u64) -> RewindablePMMR<'_, T, B> {
