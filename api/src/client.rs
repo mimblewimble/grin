@@ -156,7 +156,7 @@ fn build_request<'a>(
 		})
 }
 
-fn create_post_request<IN>(
+pub fn create_post_request<IN>(
 	url: &str,
 	api_secret: Option<String>,
 	input: &IN,
@@ -223,7 +223,7 @@ fn send_request_async(req: Request<Body>) -> Box<dyn Future<Item = String, Error
 	)
 }
 
-fn send_request(req: Request<Body>) -> Result<String, Error> {
+pub fn send_request(req: Request<Body>) -> Result<String, Error> {
 	let task = send_request_async(req);
 	let mut rt =
 		Runtime::new().context(ErrorKind::Internal("can't create Tokio runtime".to_owned()))?;
