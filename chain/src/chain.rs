@@ -690,14 +690,14 @@ impl Chain {
 	/// To support the ability to download the txhashset from multiple peers in parallel,
 	/// the peers must all agree on the exact binary representation of the txhashset.
 	/// This means compacting and rewinding to the exact same header.
-	/// Since compaction is a heavy operation, peers can agree to compact every 250 blocks,
+	/// Since compaction is a heavy operation, peers can agree to compact every 12 hours,
 	/// and no longer support requesting arbitrary txhashsets.
 	/// Here we return the header of the txhashset we are currently offering to peers.
 	pub fn txhashset_archive_header(&self) -> Result<BlockHeader, Error> {
-		let horizon = global::cut_through_horizon() as u64;
+		let sync_threshold = global::state_sync_threshold() as u64;
 		let body_head = self.head()?;
 		let archive_interval = global::txhashset_archive_interval();
-		let mut txhashset_height = body_head.height.saturating_sub(horizon) + archive_interval;
+		let mut txhashset_height = body_head.height.saturating_sub(sync_threshold);
 		txhashset_height = txhashset_height.saturating_sub(txhashset_height % archive_interval);
 
 		debug!(
