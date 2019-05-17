@@ -194,7 +194,7 @@ She picks 113 say, and what ends up on the blockchain is:
 
 Now the transaction no longer sums to zero and we have an _excess value_ on _G_
 (85), which is the result of the summation of all blinding factors. But because `85*G` is
-a valid public key on the elliptic curve _G_, with private key 85,
+a valid public key on the elliptic curve _C_, with private key 85,
 for any x and y, only if `y = 0` is `x*G + y*H` a valid public key on the elliptic curve 
 using generator point _G_.
 
