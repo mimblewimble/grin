@@ -125,6 +125,7 @@ impl<T> From<mpsc::TrySendError<T>> for Error {
 /// way. Mostly boilerplate manipulating SocketAddr or I2pSocketAddr
 /// appropriately.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "peer_type", content = "peer_addr")]
 pub enum PeerAddr {
 	Socket(SocketAddr),
 	I2p(I2pSocketAddr),
@@ -173,39 +174,41 @@ impl Writeable for PeerAddr {
 
 impl Readable for PeerAddr {
 	fn read(reader: &mut dyn Reader) -> Result<PeerAddr, ser::Error> {
-		let addr_format = PeerAddrType::from_u8(reader.read_u8()?);
-		match addr_format {
-			Some(PeerAddrType::IPv4) => {
-				let ip = reader.read_fixed_bytes(4)?;
-				let port = reader.read_u16()?;
-				Ok(PeerAddr::Socket(SocketAddr::V4(SocketAddrV4::new(
-					Ipv4Addr::new(ip[0], ip[1], ip[2], ip[3]),
-					port,
-				))))
-			}
-			Some(PeerAddrType::IPv6) => {
-				let ip = try_iter_map_vec!(0..8, |_| reader.read_u16());
-				let port = reader.read_u16()?;
-				Ok(PeerAddr::Socket(SocketAddr::V6(SocketAddrV6::new(
-					Ipv6Addr::new(ip[0], ip[1], ip[2], ip[3], ip[4], ip[5], ip[6], ip[7]),
-					port,
-					0,
-					0,
-				))))
-			}
-			Some(PeerAddrType::I2p) => {
-				let addr = reader.read_bytes_len_prefix()?;
-				if addr.len() > MAX_I2P_ADDR_LENGTH {
-					return Err(ser::Error::TooLargeReadErr);
+		if let Some(addr_format) = PeerAddrType::from_u8(reader.read_u8()?) {
+			match addr_format {
+				PeerAddrType::IPv4 => {
+					let ip = reader.read_fixed_bytes(4)?;
+					let port = reader.read_u16()?;
+					Ok(PeerAddr::Socket(SocketAddr::V4(SocketAddrV4::new(
+						Ipv4Addr::new(ip[0], ip[1], ip[2], ip[3]),
+						port,
+					))))
 				}
-				let addr_str = str::from_utf8(&addr).map_err(|_| ser::Error::CorruptedData)?;
-				let port = reader.read_u16()?;
-				Ok(PeerAddr::I2p(I2pSocketAddr::new(
-					I2pAddr::new(&addr_str),
-					port,
-				)))
+				PeerAddrType::IPv6 => {
+					let ip = try_iter_map_vec!(0..8, |_| reader.read_u16());
+					let port = reader.read_u16()?;
+					Ok(PeerAddr::Socket(SocketAddr::V6(SocketAddrV6::new(
+						Ipv6Addr::new(ip[0], ip[1], ip[2], ip[3], ip[4], ip[5], ip[6], ip[7]),
+						port,
+						0,
+						0,
+					))))
+				}
+				PeerAddrType::I2p => {
+					let addr = reader.read_bytes_len_prefix()?;
+					if addr.len() > MAX_I2P_ADDR_LENGTH {
+						return Err(ser::Error::TooLargeReadErr);
+					}
+					let addr_str = str::from_utf8(&addr).map_err(|_| ser::Error::CorruptedData)?;
+					let port = reader.read_u16()?;
+					Ok(PeerAddr::I2p(I2pSocketAddr::new(
+						I2pAddr::new(&addr_str),
+						port,
+					)))
+				}
 			}
-			None => Err(ser::Error::CorruptedData),
+		} else {
+			return Err(ser::Error::CorruptedData);
 		}
 	}
 }
@@ -303,22 +306,24 @@ impl PeerAddr {
 	pub fn unwrap_i2p(self) -> Result<I2pSocketAddr, Error> {
 		if let PeerAddr::I2p(i2p_addr) = self {
 			return Ok(i2p_addr);
+		} else {
+			return Err(Error::I2p(i2p::Error::from(io::Error::new(
+				io::ErrorKind::InvalidInput,
+				"not a valid I2P address",
+			))));
 		}
-		Err(Error::I2p(i2p::Error::from(io::Error::new(
-			io::ErrorKind::InvalidInput,
-			"not a valid I2P address",
-		))))
 	}
 
 	/// Returns the underlying IP address if this is one, otherwise panics
 	pub fn unwrap_ip(self) -> Result<SocketAddr, Error> {
 		if let PeerAddr::Socket(s) = self {
 			return Ok(s);
+		} else {
+			return Err(Error::Socket(io::Error::new(
+				io::ErrorKind::InvalidInput,
+				"not a valid IP address",
+			)));
 		}
-		Err(Error::Socket(io::Error::new(
-			io::ErrorKind::InvalidInput,
-			"not a valid IP address",
-		)))
 	}
 }
 
