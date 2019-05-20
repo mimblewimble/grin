@@ -14,7 +14,9 @@
 
 use grin_p2p as p2p;
 
+use i2p::net::{I2pAddr, I2pSocketAddr};
 use num::FromPrimitive;
+use toml;
 
 // Test that Healthy == 0.
 #[test]
@@ -38,6 +40,27 @@ fn test_reason_for_ban_enum() {
 #[test]
 fn test_type_enum() {
 	assert_eq!(p2p::msg::Type::from_i32(0), Some(p2p::msg::Type::Error));
+}
+
+#[test]
+fn test_peer_addr_enum() {
+	let i2p_peer = p2p::PeerAddr::I2p(I2pSocketAddr::new(I2pAddr::new("some.i2p"), 9090));
+	let b32_peer = p2p::PeerAddr::I2p(I2pSocketAddr::new(
+		I2pAddr::new("7ygcsgwmstx4eil66vlaltb3usznxkkrd4dv425jf3qqrrflru3a.b32.i2p"),
+		9090,
+	));
+	let sock_peer = p2p::PeerAddr::Socket("127.0.0.1:9090".to_string().parse().unwrap());
+
+	let de_i2p_peer: p2p::PeerAddr =
+		toml::from_str(toml::to_string(&i2p_peer.clone()).unwrap().as_str()).unwrap();
+	let de_b32_peer: p2p::PeerAddr =
+		toml::from_str(toml::to_string(&b32_peer.clone()).unwrap().as_str()).unwrap();
+	let de_sock_peer: p2p::PeerAddr =
+		toml::from_str(toml::to_string(&sock_peer.clone()).unwrap().as_str()).unwrap();
+
+	assert_eq!(de_i2p_peer, i2p_peer);
+	assert_eq!(de_b32_peer, b32_peer);
+	assert_eq!(de_sock_peer, sock_peer);
 }
 
 #[test]
