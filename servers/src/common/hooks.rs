@@ -117,11 +117,12 @@ impl NetEvents for EventLogger {
 impl ChainEvents for EventLogger {
 	fn on_block_accepted(&self, block: &core::Block, status: &BlockStatus) {
 		match status {
-			BlockStatus::Reorg => {
+			BlockStatus::Reorg(depth) => {
 				warn!(
-					"block_accepted (REORG!): {:?} at {} (diff: {})",
+					"block_accepted (REORG!): {:?} at {} (depth: {}, diff: {})",
 					block.hash(),
 					block.header.height,
+					depth,
 					block.header.total_difficulty(),
 				);
 			}
@@ -262,7 +263,7 @@ impl WebHook {
 impl ChainEvents for WebHook {
 	fn on_block_accepted(&self, block: &core::Block, status: &BlockStatus) {
 		let status = match status {
-			BlockStatus::Reorg => "reorg",
+			BlockStatus::Reorg(_) => "reorg",
 			BlockStatus::Fork => "fork",
 			BlockStatus::Next => "head",
 		};
