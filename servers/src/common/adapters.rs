@@ -722,7 +722,11 @@ impl ChainAdapter for ChainToPoolAndNetAdapter {
 		// Reconcile the txpool against the new block *after* we have broadcast it too our peers.
 		// This may be slow and we do not want to delay block propagation.
 		// We only want to reconcile the txpool against the new block *if* total work has increased.
-		let is_reorg = if let BlockStatus::Reorg(_) = status { true } else { false };
+		let is_reorg = if let BlockStatus::Reorg(_) = status {
+			true
+		} else {
+			false
+		};
 		if status == BlockStatus::Next || is_reorg {
 			let mut tx_pool = self.tx_pool.write();
 
