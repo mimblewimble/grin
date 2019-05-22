@@ -68,7 +68,7 @@ impl TableViewItem<PeerColumn> for PeerStats {
 			PeerColumn::Address => self.addr.clone(),
 			PeerColumn::State => self.state.clone(),
 			PeerColumn::UsedBandwidth => format!(
-				"S: {}, R: {}",
+				"↑: {}, ↓: {}",
 				size_to_string(self.sent_bytes_per_sec),
 				size_to_string(self.received_bytes_per_sec),
 			)
