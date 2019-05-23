@@ -26,13 +26,13 @@ use self::keychain::{ExtKeychain, ExtKeychainPath, Keychain};
 use self::util::{RwLock, StopState};
 use chrono::Duration;
 use grin_chain as chain;
+use grin_chain::{BlockStatus, ChainAdapter, Options};
 use grin_core as core;
 use grin_keychain as keychain;
 use grin_util as util;
+use std::cell::RefCell;
 use std::fs;
 use std::sync::Arc;
-use grin_chain::{ChainAdapter, BlockStatus, Options};
-use std::cell::RefCell;
 
 fn clean_output_dir(dir_name: &str) {
 	let _ = fs::remove_dir_all(dir_name);
@@ -60,9 +60,7 @@ pub struct StatusAdapter {
 
 impl StatusAdapter {
 	pub fn new(last_status: RwLock<Option<BlockStatus>>) -> Self {
-		StatusAdapter {
-			last_status
-		}
+		StatusAdapter { last_status }
 	}
 }
 
@@ -84,7 +82,8 @@ fn setup_with_status_adapter(dir_name: &str, genesis: Block, adapter: Arc<Status
 		pow::verify_size,
 		verifier_cache,
 		false,
-	).unwrap();
+	)
+	.unwrap();
 
 	chain
 }
@@ -214,7 +213,7 @@ where
 fn mine_reorg() {
 	// Test configuration
 	const NUM_BLOCKS_MAIN: u64 = 6; // Number of blocks to mine in main chain
-	const REORG_DEPTH: u64 = 5;     // Number of blocks to be discarded from main chain after reorg
+	const REORG_DEPTH: u64 = 5; // Number of blocks to be discarded from main chain after reorg
 
 	const DIR_NAME: &str = ".grin_reorg";
 	clean_output_dir(DIR_NAME);
@@ -245,13 +244,18 @@ fn mine_reorg() {
 		let reorg_difficulty = head.total_difficulty().to_num();
 
 		// Create one block for reorg chain forking off NUM_BLOCKS_MAIN - REORG_DEPTH height
-		let fork_head = chain.get_header_by_height(NUM_BLOCKS_MAIN - REORG_DEPTH).unwrap();
+		let fork_head = chain
+			.get_header_by_height(NUM_BLOCKS_MAIN - REORG_DEPTH)
+			.unwrap();
 		let b = prepare_fork_block(&kc, &fork_head, &chain, reorg_difficulty);
 		let reorg_head = b.header.clone();
 		chain.process_block(b, chain::Options::SKIP_POW).unwrap();
 
 		// Check that reorg is correctly reported in block status
-		assert_eq!(*adapter.last_status.read(), Some(BlockStatus::Reorg(REORG_DEPTH)));
+		assert_eq!(
+			*adapter.last_status.read(),
+			Some(BlockStatus::Reorg(REORG_DEPTH))
+		);
 
 		// Chain should be switched to the reorganized chain
 		let head = chain.head_header().unwrap();
