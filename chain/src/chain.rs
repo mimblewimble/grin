@@ -259,7 +259,7 @@ impl Chain {
 			if head.prev_block_h == prev_head.last_block_h {
 				is_next_block = true;
 			} else {
-				reorg_depth = Some(prev_head.height.saturating_sub(head.height));
+				reorg_depth = Some(prev_head.height.saturating_sub(head.height) + 1);
 			}
 		}
 
