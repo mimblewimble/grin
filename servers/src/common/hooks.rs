@@ -263,9 +263,9 @@ impl WebHook {
 impl ChainEvents for WebHook {
 	fn on_block_accepted(&self, block: &core::Block, status: &BlockStatus) {
 		let status = match status {
-			BlockStatus::Reorg(_) => "reorg",
-			BlockStatus::Fork => "fork",
-			BlockStatus::Next => "head",
+			BlockStatus::Reorg(depth) => format!("reorg:{}", depth),
+			BlockStatus::Fork => "fork".to_owned(),
+			BlockStatus::Next => "head".to_owned(),
 		};
 		let payload = json!({
 			"hash": block.header.hash().to_hex(),
