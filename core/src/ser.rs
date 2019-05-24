@@ -23,12 +23,13 @@ use crate::core::hash::{DefaultHashable, Hash, Hashed};
 use crate::keychain::{BlindingFactor, Identifier, IDENTIFIER_SIZE};
 use crate::util::read_write::read_exact;
 use crate::util::secp::constants::{
-	AGG_SIGNATURE_SIZE, MAX_PROOF_SIZE, PEDERSEN_COMMITMENT_SIZE, SECRET_KEY_SIZE, COMPRESSED_PUBLIC_KEY_SIZE
+	AGG_SIGNATURE_SIZE, COMPRESSED_PUBLIC_KEY_SIZE, MAX_PROOF_SIZE, PEDERSEN_COMMITMENT_SIZE,
+	SECRET_KEY_SIZE,
 };
+use crate::util::secp::key::PublicKey;
 use crate::util::secp::pedersen::{Commitment, RangeProof};
 use crate::util::secp::Signature;
-use crate::util::secp::key::PublicKey;
-use crate::util::secp::{Secp256k1, ContextFlag};
+use crate::util::secp::{ContextFlag, Secp256k1};
 use byteorder::{BigEndian, ByteOrder, ReadBytesExt};
 use std::fmt::Debug;
 use std::io::{self, Read, Write};
@@ -555,10 +556,10 @@ impl FixedLength for PublicKey {
 impl Writeable for PublicKey {
 	// Write the public key in compressed form
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), Error> {
-        let secp = Secp256k1::with_caps(ContextFlag::None);
+		let secp = Secp256k1::with_caps(ContextFlag::None);
 		writer.write_fixed_bytes(&self.serialize_vec(&secp, true).as_ref())?;
 		Ok(())
-    }
+	}
 }
 
 impl Readable for PublicKey {
