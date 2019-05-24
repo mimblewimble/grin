@@ -262,16 +262,29 @@ impl WebHook {
 
 impl ChainEvents for WebHook {
 	fn on_block_accepted(&self, block: &core::Block, status: &BlockStatus) {
-		let status = match status {
-			BlockStatus::Reorg(depth) => format!("reorg:{}", depth),
-			BlockStatus::Fork => "fork".to_owned(),
-			BlockStatus::Next => "head".to_owned(),
+		let status_str = match status {
+			BlockStatus::Reorg(_) => "reorg",
+			BlockStatus::Fork => "fork",
+			BlockStatus::Next => "head",
 		};
-		let payload = json!({
-			"hash": block.header.hash().to_hex(),
-			"status": status,
-			"data": block
-		});
+
+		// Add additional `depth` field to the JSON in case of reorg
+		let payload = if let BlockStatus::Reorg(depth) = status {
+			json!({
+				"hash": block.header.hash().to_hex(),
+				"status": status_str,
+				"data": block,
+
+				"depth": depth
+			})
+		} else {
+			json!({
+				"hash": block.header.hash().to_hex(),
+				"status": status_str,
+				"data": block
+			})
+		};
+
 		if !self.make_request(&payload, &self.block_accepted_url) {
 			error!(
 				"Failed to serialize block {} at height {}",
