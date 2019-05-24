@@ -254,15 +254,18 @@ impl Chain {
 		let is_more_work = head.is_some();
 
 		let mut is_next_block = false;
+		let mut reorg_depth = None;
 		if let Some(head) = head {
 			if head.prev_block_h == prev_head.last_block_h {
 				is_next_block = true;
+			} else {
+				reorg_depth = Some(prev_head.height.saturating_sub(head.height) + 1);
 			}
 		}
 
 		match (is_more_work, is_next_block) {
 			(true, true) => BlockStatus::Next,
-			(true, false) => BlockStatus::Reorg,
+			(true, false) => BlockStatus::Reorg(reorg_depth.unwrap_or(0)),
 			(false, _) => BlockStatus::Fork,
 		}
 	}
