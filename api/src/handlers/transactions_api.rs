@@ -83,7 +83,7 @@ impl TxHashSetHandler {
 			outputs: outputs
 				.2
 				.iter()
-				.map(|x| OutputPrintable::from_output(x, chain.clone(), None, true))
+				.map(|x| OutputPrintable::from_output(x, chain.clone(), None, true, true))
 				.collect::<Result<Vec<_>, _>>()
 				.context(ErrorKind::Internal("cain error".to_owned()))?,
 		};

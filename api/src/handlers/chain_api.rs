@@ -138,7 +138,13 @@ impl OutputHandler {
 			.iter()
 			.filter(|output| commitments.is_empty() || commitments.contains(&output.commit))
 			.map(|output| {
-				OutputPrintable::from_output(output, chain.clone(), Some(&header), include_proof)
+				OutputPrintable::from_output(
+					output,
+					chain.clone(),
+					Some(&header),
+					include_proof,
+					true,
+				)
 			})
 			.collect::<Result<Vec<_>, _>>()
 			.context(ErrorKind::Internal("cain error".to_owned()))?;
