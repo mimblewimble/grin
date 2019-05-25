@@ -32,6 +32,7 @@ use crate::util::secp::key::{PublicKey, SecretKey};
 use crate::util::secp::pedersen::Commitment;
 use crate::util::secp::{self, Message, Secp256k1, Signature};
 use crate::util::static_secp_instance;
+use clear_on_drop::clear::Clear;
 
 use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
 
@@ -227,8 +228,14 @@ impl fmt::Display for Identifier {
 	}
 }
 
-#[derive(Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[derive(Default, Clone, PartialEq, Serialize, Deserialize)]
 pub struct BlindingFactor([u8; SECRET_KEY_SIZE]);
+
+impl Drop for BlindingFactor {
+	fn drop(&mut self) {
+		self.0.clear();
+	}
+}
 
 impl fmt::Debug for BlindingFactor {
 	fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> fmt::Result {

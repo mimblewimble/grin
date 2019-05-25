@@ -957,7 +957,7 @@ impl Transaction {
 	) -> Result<(), Error> {
 		self.body.validate(weighting, verifier)?;
 		self.body.verify_features()?;
-		self.verify_kernel_sums(self.overage(), self.offset)?;
+		self.verify_kernel_sums(self.overage(), self.offset.clone())?;
 		Ok(())
 	}
 
