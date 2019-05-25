@@ -125,8 +125,8 @@ where
 	}
 }
 
-fn build_request<'a>(
-	url: &'a str,
+fn build_request(
+	url: &str,
 	method: &str,
 	api_secret: Option<String>,
 	body: Option<String>,

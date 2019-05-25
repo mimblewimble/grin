@@ -329,7 +329,7 @@ impl TxHashSet {
 /// of blocks to the txhashset and the checking of the current tree roots.
 ///
 /// The unit of work is always discarded (always rollback) as this is read-only.
-pub fn extending_readonly<'a, F, T>(trees: &'a mut TxHashSet, inner: F) -> Result<T, Error>
+pub fn extending_readonly<F, T>(trees: &mut TxHashSet, inner: F) -> Result<T, Error>
 where
 	F: FnOnce(&mut Extension<'_>) -> Result<T, Error>,
 {
@@ -366,7 +366,7 @@ where
 
 /// Readonly view on the UTXO set.
 /// Based on the current txhashset output_pmmr.
-pub fn utxo_view<'a, F, T>(trees: &'a TxHashSet, inner: F) -> Result<T, Error>
+pub fn utxo_view<F, T>(trees: &TxHashSet, inner: F) -> Result<T, Error>
 where
 	F: FnOnce(&UTXOView<'_>) -> Result<T, Error>,
 {
@@ -391,7 +391,7 @@ where
 /// via last_pos.
 /// We create a new db batch for this view and discard it (rollback)
 /// when we are done with the view.
-pub fn rewindable_kernel_view<'a, F, T>(trees: &'a TxHashSet, inner: F) -> Result<T, Error>
+pub fn rewindable_kernel_view<F, T>(trees: &TxHashSet, inner: F) -> Result<T, Error>
 where
 	F: FnOnce(&mut RewindableKernelView<'_>) -> Result<T, Error>,
 {
