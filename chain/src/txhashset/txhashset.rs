@@ -949,7 +949,9 @@ impl<'a> Extension<'a> {
 			}
 
 			if output_pos != rproof_pos {
-				return Err(ErrorKind::Other(format!("output vs rproof MMRs different pos")).into());
+				return Err(
+					ErrorKind::Other(format!("output vs rproof MMRs different pos")).into(),
+				);
 			}
 		}
 
