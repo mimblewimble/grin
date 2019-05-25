@@ -560,8 +560,10 @@ impl Block {
 			.with_kernel(reward_kern);
 
 		// Now add the kernel offset of the previous block for a total
-		let total_kernel_offset =
-			committed::sum_kernel_offsets(vec![agg_tx.offset.clone(), prev.total_kernel_offset.clone()], vec![])?;
+		let total_kernel_offset = committed::sum_kernel_offsets(
+			vec![agg_tx.offset.clone(), prev.total_kernel_offset.clone()],
+			vec![],
+		)?;
 
 		let now = Utc::now().timestamp();
 		let timestamp = DateTime::<Utc>::from_utc(NaiveDateTime::from_timestamp(now, 0), Utc);
