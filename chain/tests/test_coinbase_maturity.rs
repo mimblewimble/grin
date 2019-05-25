@@ -20,7 +20,7 @@ use self::core::libtx::{self, build};
 use self::core::pow::Difficulty;
 use self::core::{consensus, pow};
 use self::keychain::{ExtKeychain, ExtKeychainPath, Keychain};
-use self::util::{RwLock, StopState};
+use self::util::RwLock;
 use chrono::Duration;
 use env_logger;
 use grin_chain as chain;

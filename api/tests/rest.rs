@@ -4,7 +4,7 @@ use grin_util as util;
 use crate::api::*;
 use hyper::{Body, Request, StatusCode};
 use std::net::SocketAddr;
-use std::sync::atomic::{AtomicUsize, Ordering, ATOMIC_USIZE_INIT};
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::{thread, time};
 
@@ -27,7 +27,7 @@ pub struct CounterMiddleware {
 impl CounterMiddleware {
 	fn new() -> CounterMiddleware {
 		CounterMiddleware {
-			counter: ATOMIC_USIZE_INIT,
+			counter: AtomicUsize::new(0),
 		}
 	}
 
