@@ -231,15 +231,17 @@ impl fmt::Display for Identifier {
 #[derive(Default, Clone, PartialEq, Serialize, Deserialize)]
 pub struct BlindingFactor([u8; SECRET_KEY_SIZE]);
 
+// Implement `Drop` that fills `BlindingFactor` with zeros as security measure.
 impl Drop for BlindingFactor {
 	fn drop(&mut self) {
 		self.0.clear();
 	}
 }
 
+// Intentionally empty `Default` implementation to prevent leakage.
 impl fmt::Debug for BlindingFactor {
-	fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> fmt::Result {
-		write!(f, "{}", self.to_hex())
+	fn fmt(&self, _f: &mut ::std::fmt::Formatter<'_>) -> fmt::Result {
+		Ok(())
 	}
 }
 
