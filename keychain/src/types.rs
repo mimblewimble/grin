@@ -489,8 +489,38 @@ mod test {
 	use rand::thread_rng;
 
 	use crate::types::{BlindingFactor, ExtKeychainPath, Identifier};
+	use crate::util::secp::constants::SECRET_KEY_SIZE;
 	use crate::util::secp::key::{SecretKey, ZERO_KEY};
 	use crate::util::secp::Secp256k1;
+	use std::slice::from_raw_parts;
+
+	// This tests cleaning of BlindingFactor (e.g. secret key) on Drop.
+	// To make this test fail, just remove `Drop` implementation for `BlindingFactor`.
+	#[test]
+	fn blinding_factor_clear_on_drop() {
+		// Create buffer for blinding factor filled with non-zero bytes.
+		let bf_bytes = [0xAA; SECRET_KEY_SIZE];
+		let ptr = {
+			// Fill blinding factor with some "sensitive" data
+			let bf = BlindingFactor::from_slice(&bf_bytes[..]);
+			bf.0.as_ptr()
+
+			// -- here BlindingFactor should be zeroed since it is `Drop`ed
+		};
+
+		// Unsafely get data from where BlindingFactor was in memory. Should be all zeros.
+		let bf_bytes = unsafe { from_raw_parts(ptr, SECRET_KEY_SIZE) };
+
+		// There should be all zeroes.
+		let mut all_zeros = true;
+		for b in bf_bytes {
+			if *b != 0x00 {
+				all_zeros = false;
+			}
+		}
+
+		assert!(all_zeros)
+	}
 
 	#[test]
 	fn split_blinding_factor() {
