@@ -33,12 +33,16 @@ where
 {
 	let commit = k.commit(amount, key_id)?;
 	let skey = k.derive_key(amount, key_id)?;
-	let nonce = k
-		.create_nonce(&commit)
+	let legacy = true; // TODO: set to false when ready
+	let rewind_nonce = k
+		.create_rewind_nonce(&commit, legacy)
 		.map_err(|e| ErrorKind::RangeProof(e.to_string()))?;
-	let message = ProofMessage::from_bytes(&key_id.serialize_path());
+	let private_nonce = k
+		.create_private_nonce(&commit, legacy)
+		.map_err(|e| ErrorKind::RangeProof(e.to_string()))?;
+	let message = k.create_proof_message(key_id, legacy);
 	Ok(k.secp()
-		.bullet_proof(amount, skey, nonce, extra_data, Some(message)))
+		.bullet_proof(amount, skey, rewind_nonce, private_nonce, extra_data, Some(message)))
 }
 
 /// Verify a proof
@@ -60,13 +64,14 @@ pub fn rewind<K>(
 	k: &K,
 	commit: Commitment,
 	extra_data: Option<Vec<u8>>,
+	legacy: bool,
 	proof: RangeProof,
 ) -> Result<ProofInfo, Error>
 where
 	K: Keychain,
 {
 	let nonce = k
-		.create_nonce(&commit)
+		.create_rewind_nonce(&commit, legacy)
 		.map_err(|e| ErrorKind::RangeProof(e.to_string()))?;
 	let proof_message = k
 		.secp()

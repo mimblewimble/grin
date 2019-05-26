@@ -22,7 +22,7 @@ use crate::blake2;
 use crate::extkey_bip32::{BIP32GrinHasher, ExtendedPrivKey};
 use crate::types::{BlindSum, BlindingFactor, Error, ExtKeychainPath, Identifier, Keychain};
 use crate::util::secp::key::SecretKey;
-use crate::util::secp::pedersen::Commitment;
+use crate::util::secp::pedersen::{Commitment, ProofMessage};
 use crate::util::secp::{self, Message, Secp256k1, Signature};
 
 #[derive(Clone, Debug)]
@@ -31,6 +31,45 @@ pub struct ExtKeychain {
 	master: ExtendedPrivKey,
 	use_switch_commits: bool,
 	hasher: BIP32GrinHasher,
+}
+
+impl ExtKeychain {
+	fn derive_key_internal(&self, amount: u64, id: &Identifier, switch: bool) -> Result<SecretKey, Error> {
+		let mut h = self.hasher.clone();
+		let p = id.to_path();
+		let mut ext_key = self.master;
+		for i in 0..p.depth {
+			ext_key = ext_key.ckd_priv(&self.secp, &mut h, p.path[i as usize])?;
+		}
+
+		match switch {
+			true => Ok(self.secp.blind_switch(amount, ext_key.secret_key)?),
+			false => Ok(ext_key.secret_key),
+		}
+	}
+
+	fn create_legacy_nonce(&self, commit: &Commitment) -> Result<SecretKey, Error> {
+		let root_key = self.derive_key(0, &Self::root_key_id())?;
+		let res = blake2::blake2b::blake2b(32, &commit.0, &root_key.0[..]);
+		SecretKey::from_slice(&self.secp, res.as_bytes())
+			.map_err(|e| Error::RangeProof(format!("Unable to create nonce: {:?}", e).to_string()))
+	}
+
+	pub fn view_key(&self) -> Result<Vec<u8>, Error> {
+		let mut root_key = self.derive_key(0, &Self::root_key_id())?.0.to_vec();
+		root_key.push(0);
+		let res = blake2::blake2b::blake2b(32, &[], &root_key);
+		Ok(res.as_bytes().to_vec())
+	}
+
+	fn create_nonce(&self, commit: &Commitment, extra_data: u8) -> Result<SecretKey, Error> {
+		let mut root_key = self.derive_key(0, &Self::root_key_id())?.0.to_vec();
+		root_key.push(extra_data);
+		let root_key_hash = blake2::blake2b::blake2b(32, &[], &root_key);
+		let res = blake2::blake2b::blake2b(32, &commit.0, root_key_hash.as_bytes());
+		SecretKey::from_slice(&self.secp, res.as_bytes())
+			.map_err(|e| Error::RangeProof(format!("Unable to create nonce: {:?}", e).to_string()))
+	}
 }
 
 impl Keychain for ExtKeychain {
@@ -76,17 +115,7 @@ impl Keychain for ExtKeychain {
 	}
 
 	fn derive_key(&self, amount: u64, id: &Identifier) -> Result<SecretKey, Error> {
-		let mut h = self.hasher.clone();
-		let p = id.to_path();
-		let mut ext_key = self.master;
-		for i in 0..p.depth {
-			ext_key = ext_key.ckd_priv(&self.secp, &mut h, p.path[i as usize])?;
-		}
-
-		match self.use_switch_commits {
-			true => Ok(self.secp.blind_switch(amount, ext_key.secret_key)?),
-			false => Ok(ext_key.secret_key),
-		}
+		self.derive_key_internal(amount, id, self.use_switch_commits)
 	}
 
 	fn commit(&self, amount: u64, id: &Identifier) -> Result<Commitment, Error> {
@@ -142,13 +171,70 @@ impl Keychain for ExtKeychain {
 		Ok(BlindingFactor::from_secret_key(sum))
 	}
 
-	fn create_nonce(&self, commit: &Commitment) -> Result<SecretKey, Error> {
-		// hash(commit|wallet root secret key (m)) as nonce
-		let root_key = self.derive_key(0, &Self::root_key_id())?;
-		let res = blake2::blake2b::blake2b(32, &commit.0, &root_key.0[..]);
-		let res = res.as_bytes();
-		SecretKey::from_slice(&self.secp, &res)
-			.map_err(|e| Error::RangeProof(format!("Unable to create nonce: {:?}", e).to_string()))
+	fn create_rewind_nonce(&self, commit: &Commitment, legacy: bool) -> Result<SecretKey, Error> {
+		match legacy {
+			true => self.create_legacy_nonce(commit),
+			false => self.create_nonce(commit, 0),
+		}
+	}
+
+	fn create_private_nonce(&self, commit: &Commitment, legacy: bool) -> Result<SecretKey, Error> {
+		match legacy {
+			true => self.create_legacy_nonce(commit),
+			false => self.create_nonce(commit, 1),
+		}
+	}
+
+	/// Message contents:
+	/// index  | legacy  | new
+	/// -------|---------|-------------------------
+	///  0     |  0      |  reserved for future use
+	///  1     |  0      |  reserved for future use
+	///  2     |  0      |  wallet type (0 for standard)
+	///  3     |  0      |  switch commitment type (0 for none, 1 for standard)
+	///  4-19  |  path   |  path
+	fn create_proof_message(&self, id: &Identifier, legacy: bool) -> ProofMessage {
+		let mut msg = [0; 20];
+		if !legacy {
+			msg[3] = self.use_switch_commits as u8;
+		}
+		let id_ser = id.serialize_path();
+		for i in 0..16 {
+			msg[i+4] = id_ser[i];
+		}
+		ProofMessage::from_bytes(&msg)
+	}
+
+	fn check_output(&self, commit: &Commitment, amount: u64, message: ProofMessage, legacy: bool) -> Result<Option<Identifier>, Error> {
+		if message.len() != 20 {
+			return Ok(None);
+		}
+
+		let msg = message.as_bytes();
+		let id = Identifier::from_serialized_path(3, &msg[4..]);
+		if legacy {
+			let exp: [u8; 4] = [0; 4];
+			if msg[..4] != exp {
+				return Ok(None);
+			}
+			let commit_exp = self.commit(amount, &id)?;
+			if commit != &commit_exp {
+				return Ok(None);
+			}
+		}
+		else {
+			let exp: [u8; 3] = [0; 3];
+			if msg[..3] != exp {
+				return Ok(None);
+			}
+			let switch = msg[3] == 1;
+			let commit_exp = self.secp.commit(amount, self.derive_key_internal(amount, &id, switch)?)?;
+			if commit != &commit_exp {
+				return Ok(None);
+			}
+		}
+
+		Ok(Some(id))
 	}
 
 	fn sign(&self, msg: &Message, amount: u64, id: &Identifier) -> Result<Signature, Error> {
