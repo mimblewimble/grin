@@ -401,6 +401,7 @@ impl Write for Stream {
 
 /// I2P configuration, if enabled
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(tag = "mode", content = "i2p_config")]
 pub enum I2pMode {
 	/// No I2P, only use classic TCP
 	Disabled,

@@ -64,6 +64,18 @@ fn test_peer_addr_enum() {
 }
 
 #[test]
+fn test_i2p_mode_enum() {
+  let i2p_disabled = p2p::I2pMode::Disabled;
+  let i2p_enabled = p2p::I2pMode::Enabled{ autostart: false, exclusive: true, addr: "127.0.0.1:7656".to_string() };
+
+  let de_i2p_di: p2p::I2pMode = toml::from_str(toml::to_string(&i2p_disabled.clone()).unwrap().as_str()).unwrap();
+  let de_i2p_en: p2p::I2pMode = toml::from_str(toml::to_string(&i2p_enabled.clone()).unwrap().as_str()).unwrap();
+
+  assert_eq!(de_i2p_di, i2p_disabled);
+  assert_eq!(de_i2p_en, i2p_enabled);
+}
+
+#[test]
 fn test_capabilities() {
 	assert_eq!(
 		p2p::types::Capabilities::from_bits_truncate(0b00000000 as u32),
