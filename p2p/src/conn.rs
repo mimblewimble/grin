@@ -150,7 +150,10 @@ impl<'a> Response<'a> {
 	}
 
 	fn write(mut self, tracker: Arc<Tracker>) -> Result<(), Error> {
-		let mut msg = ser::ser_vec(&MsgHeader::new(self.resp_type, self.body.len() as u64), self.version)?;
+		let mut msg = ser::ser_vec(
+			&MsgHeader::new(self.resp_type, self.body.len() as u64),
+			self.version,
+		)?;
 		msg.append(&mut self.body);
 		write_all(&mut self.stream, &msg[..], time::Duration::from_secs(10))?;
 		tracker.inc_sent(msg.len() as u64);

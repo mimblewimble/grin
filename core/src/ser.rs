@@ -365,10 +365,7 @@ pub fn serialize<W: Writeable>(
 }
 
 /// Serialize a Writeable according to our "default" protocol version rules.
-pub fn serialize_default<W: Writeable>(
-	sink: &mut dyn Write,
-	thing: &W,
-) -> Result<(), Error> {
+pub fn serialize_default<W: Writeable>(sink: &mut dyn Write, thing: &W) -> Result<(), Error> {
 	serialize(sink, ProtocolVersion::default(), thing)
 }
 

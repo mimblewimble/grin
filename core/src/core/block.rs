@@ -33,7 +33,9 @@ use crate::core::{
 use crate::global;
 use crate::keychain::{self, BlindingFactor};
 use crate::pow::{Difficulty, Proof, ProofOfWork};
-use crate::ser::{self, FixedLength, PMMRable, ProtocolVersion, Readable, Reader, Writeable, Writer};
+use crate::ser::{
+	self, FixedLength, PMMRable, ProtocolVersion, Readable, Reader, Writeable, Writer,
+};
 use crate::util::{secp, static_secp_instance};
 
 /// Errors thrown by Block validation
