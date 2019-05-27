@@ -29,7 +29,7 @@ use serde::{de, ser}; //TODO: Convert errors to use ErrorKind
 use crate::util;
 use crate::util::secp::constants::SECRET_KEY_SIZE;
 use crate::util::secp::key::{PublicKey, SecretKey};
-use crate::util::secp::pedersen::{Commitment, ProofMessage};
+use crate::util::secp::pedersen::Commitment;
 use crate::util::secp::{self, Message, Secp256k1, Signature};
 use crate::util::static_secp_instance;
 use zeroize::Zeroize;
@@ -129,9 +129,12 @@ impl Identifier {
 	}
 
 	pub fn to_value_path(&self, value: u64) -> ValueExtKeychainPath {
+		// TODO: proper support for different switch commitment schemes
+		// For now it is assumed all outputs are using the regular switch commitment scheme
 		ValueExtKeychainPath {
 			value,
 			ext_keychain_path: self.to_path(),
+			switch: SwitchCommitmentType::Regular,
 		}
 	}
 
@@ -443,11 +446,12 @@ impl ExtKeychainPath {
 	}
 }
 
-/// Wrapper for amount + path
+/// Wrapper for amount + switch + path
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Deserialize)]
 pub struct ValueExtKeychainPath {
 	pub value: u64,
 	pub ext_keychain_path: ExtKeychainPath,
+	pub switch: SwitchCommitmentType,
 }
 
 pub trait Keychain: Sync + Send + Clone {
@@ -467,26 +471,18 @@ pub trait Keychain: Sync + Send + Clone {
 	/// Derives a key id from the depth of the keychain and the values at each
 	/// depth level. See `KeychainPath` for more information.
 	fn derive_key_id(depth: u8, d1: u32, d2: u32, d3: u32, d4: u32) -> Identifier;
-	fn derive_key(&self, amount: u64, id: &Identifier) -> Result<SecretKey, Error>;
-	fn commit(&self, amount: u64, id: &Identifier) -> Result<Commitment, Error>;
+	fn derive_key(&self, amount: u64, id: &Identifier, switch: &SwitchCommitmentType) -> Result<SecretKey, Error>;
+	fn commit(&self, amount: u64, id: &Identifier, switch: &SwitchCommitmentType) -> Result<Commitment, Error>;
 	fn blind_sum(&self, blind_sum: &BlindSum) -> Result<BlindingFactor, Error>;
-
-	/// Create a BP nonce that will allow to rewind the derivation path and flags
-	fn create_rewind_nonce(&self, commit: &Commitment, legacy: bool) -> Result<SecretKey, Error>;
-
-	/// Create a BP nonce that blinds the private key
-	fn create_private_nonce(&self, commit: &Commitment, legacy: bool) -> Result<SecretKey, Error>;
-
-	/// Create a BP message
-	fn create_proof_message(&self, id: &Identifier, legacy: bool) -> ProofMessage;
-
-	/// Check if the output belongs to this keychain
-	fn check_output(&self, commit: &Commitment, amount: u64, message: ProofMessage, legacy: bool) -> Result<Option<Identifier>, Error>;
-
-	fn sign(&self, msg: &Message, amount: u64, id: &Identifier) -> Result<Signature, Error>;
+	fn sign(&self, msg: &Message, amount: u64, id: &Identifier, switch: &SwitchCommitmentType) -> Result<Signature, Error>;
 	fn sign_with_blinding(&self, _: &Message, _: &BlindingFactor) -> Result<Signature, Error>;
-	fn set_use_switch_commits(&mut self, value: bool);
 	fn secp(&self) -> &Secp256k1;
+}
+
+#[derive(PartialEq, Eq, Clone, Copy, Debug, Serialize, Deserialize)]
+pub enum SwitchCommitmentType {
+	None,
+	Regular,
 }
 
 #[cfg(test)]

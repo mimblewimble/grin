@@ -28,6 +28,8 @@
 use crate::core::{Input, Output, OutputFeatures, Transaction, TxKernel};
 use crate::keychain::{BlindSum, BlindingFactor, Identifier, Keychain};
 use crate::libtx::{aggsig, proof, Error};
+use grin_keychain::SwitchCommitmentType;
+use crate::libtx::proof::LegacyProofBuilder;
 
 /// Context information available to transaction combinators.
 pub struct Context<'a, K>
@@ -53,7 +55,7 @@ where
 {
 	Box::new(
 		move |build, (tx, kern, sum)| -> (Transaction, TxKernel, BlindSum) {
-			let commit = build.keychain.commit(value, &key_id).unwrap();
+			let commit = build.keychain.commit(value, &key_id, &SwitchCommitmentType::Regular).unwrap(); // TODO: proper support for different switch commitment schemes
 			let input = Input::new(features, commit);
 			(
 				tx.with_input(input),
@@ -94,11 +96,14 @@ where
 {
 	Box::new(
 		move |build, (tx, kern, sum)| -> (Transaction, TxKernel, BlindSum) {
-			let commit = build.keychain.commit(value, &key_id).unwrap();
+			let commit = build.keychain.commit(value, &key_id, &SwitchCommitmentType::Regular).unwrap(); // TODO: proper support for different switch commitment schemes
 
 			debug!("Building output: {}, {:?}", value, commit);
 
-			let rproof = proof::create(build.keychain, value, &key_id, commit, None).unwrap();
+			// TODO: use the new builder
+			let builder = LegacyProofBuilder::new(build.keychain);
+
+			let rproof = proof::create(build.keychain, &builder, value, &key_id, commit, None).unwrap();
 
 			(
 				tx.with_output(Output {
