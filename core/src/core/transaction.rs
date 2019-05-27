@@ -547,6 +547,19 @@ impl TransactionBody {
 		self
 	}
 
+	/// Builds a new TransactionBody with the provided outputs added. Existing
+	/// outputs, if any, are kept intact.
+	/// Sort order is maintained.
+	pub fn with_outputs(mut self, outputs: Vec<Output>) -> TransactionBody {
+		for output in outputs {
+			self.outputs
+				.binary_search(&output)
+				.err()
+				.map(|e| self.outputs.insert(e, output));
+		}
+		self
+	}
+
 	/// Builds a new TransactionBody with the provided kernel added. Existing
 	/// kernels, if any, are kept intact.
 	/// Sort order is maintained.
@@ -877,6 +890,16 @@ impl Transaction {
 	pub fn with_output(self, output: Output) -> Transaction {
 		Transaction {
 			body: self.body.with_output(output),
+			..self
+		}
+	}
+
+	/// Builds a new transaction with the provided outputs added. Existing
+	/// outputs, if any, are kept intact.
+	/// Sort order is maintained.
+	pub fn with_outputs(self, outputs: Vec<Output>) -> Transaction {
+		Transaction {
+			body: self.body.with_outputs(outputs),
 			..self
 		}
 	}
