@@ -128,9 +128,7 @@ impl Keychain for ExtKeychain {
 			.filter_map(|b| b.secret_key(&self.secp).ok().clone())
 			.collect::<Vec<SecretKey>>();
 
-		pos_keys.extend(
-			keys,
-		);
+		pos_keys.extend(keys);
 
 		let keys = blind_sum
 			.negative_blinding_factors
@@ -138,9 +136,7 @@ impl Keychain for ExtKeychain {
 			.filter_map(|b| b.secret_key(&self.secp).ok().clone())
 			.collect::<Vec<SecretKey>>();
 
-		neg_keys.extend(
-			keys,
-		);
+		neg_keys.extend(keys);
 
 		let sum = self.secp.blind_sum(pos_keys, neg_keys)?;
 		Ok(BlindingFactor::from_secret_key(sum))
