@@ -169,20 +169,6 @@ fn comments() -> HashMap<String, String> {
 	);
 
 	retval.insert(
-		"[server.p2p_config]".to_string(),
-		"#The url where a POST request will be sent when a new block is accepted by our node.
-#block_accepted_url = \"http://127.0.0.1:8080/acceptedblock\"
-#The url where a POST request will be sent when a new transaction is received by a peer.
-#tx_received_url = \"http://127.0.0.1:8080/tx\"
-#The url where a POST request will be sent when a new header is received by a peer.
-#header_received_url = \"http://127.0.0.1:8080/header\"
-#The url where a POST request will be sent when a new block is received by a peer.
-#block_received_url = \"http://127.0.0.1:8080/block\"
-"
-		.to_string(),
-	);
-
-	retval.insert(
 		"[server.dandelion_config]".to_string(),
 		"
 #########################################
