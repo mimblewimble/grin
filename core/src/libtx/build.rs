@@ -124,18 +124,21 @@ where
 	const MAX_THREADS: usize = 8;
 	Box::new(
 		move |build, (tx, kern, sum)| -> (Transaction, TxKernel, BlindSum) {
-
 			let num_outputs = amounts_and_keys.len();
-			assert!(num_outputs>0);
+			assert!(num_outputs > 0);
 
 			// Sum the blinding
-			let mut blind_sum= sum;
-			for (value,key_id) in &amounts_and_keys {
+			let mut blind_sum = sum;
+			for (value, key_id) in &amounts_and_keys {
 				blind_sum = blind_sum.add_key_id(key_id.to_value_path(*value));
 			}
 
 			// Calculate how many threads needed.
-			let num_threads = if num_outputs < MAX_THREADS { num_outputs } else { MAX_THREADS };
+			let num_threads = if num_outputs < MAX_THREADS {
+				num_outputs
+			} else {
+				MAX_THREADS
+			};
 
 			// Split for threads
 			let chunk_size = std::cmp::max(1, (num_outputs + num_threads - 1) / num_threads);
@@ -155,19 +158,19 @@ where
 							debug!("Building output: {}, {:?}", elem.0, commit);
 
 							let rproof =
-								proof::create(&keychain, elem.0, &elem.1, commit, None)
-									.unwrap();
+								proof::create(&keychain, elem.0, &elem.1, commit, None).unwrap();
 
 							let mut outputs = outputs_arc.lock();
 							outputs.push(Output {
-									features: OutputFeatures::Plain,
-									commit,
-									proof: rproof,
-								});
+								features: OutputFeatures::Plain,
+								commit,
+								proof: rproof,
+							});
 						}
 					});
 				}
-			}).expect("One of output building threads has panicked");
+			})
+			.expect("One of output building threads has panicked");
 
 			(
 				tx.with_outputs(outputs.clone().lock().to_vec()),
