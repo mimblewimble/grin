@@ -23,10 +23,13 @@ use crate::core::hash::{DefaultHashable, Hash, Hashed};
 use crate::keychain::{BlindingFactor, Identifier, IDENTIFIER_SIZE};
 use crate::util::read_write::read_exact;
 use crate::util::secp::constants::{
-	AGG_SIGNATURE_SIZE, MAX_PROOF_SIZE, PEDERSEN_COMMITMENT_SIZE, SECRET_KEY_SIZE,
+	AGG_SIGNATURE_SIZE, COMPRESSED_PUBLIC_KEY_SIZE, MAX_PROOF_SIZE, PEDERSEN_COMMITMENT_SIZE,
+	SECRET_KEY_SIZE,
 };
+use crate::util::secp::key::PublicKey;
 use crate::util::secp::pedersen::{Commitment, RangeProof};
 use crate::util::secp::Signature;
+use crate::util::secp::{ContextFlag, Secp256k1};
 use byteorder::{BigEndian, ByteOrder, ReadBytesExt};
 use std::fmt::Debug;
 use std::io::{self, Read, Write};
@@ -304,7 +307,7 @@ pub fn ser_vec<W: Writeable>(thing: &W) -> Result<Vec<u8>, Error> {
 }
 
 /// Utility to read from a binary source
-struct BinReader<'a> {
+pub struct BinReader<'a> {
 	source: &'a mut dyn Read,
 }
 
@@ -544,6 +547,29 @@ impl Writeable for Signature {
 
 impl FixedLength for Signature {
 	const LEN: usize = AGG_SIGNATURE_SIZE;
+}
+
+impl FixedLength for PublicKey {
+	const LEN: usize = COMPRESSED_PUBLIC_KEY_SIZE;
+}
+
+impl Writeable for PublicKey {
+	// Write the public key in compressed form
+	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), Error> {
+		let secp = Secp256k1::with_caps(ContextFlag::None);
+		writer.write_fixed_bytes(&self.serialize_vec(&secp, true).as_ref())?;
+		Ok(())
+	}
+}
+
+impl Readable for PublicKey {
+	// Read the public key in compressed form
+	fn read(reader: &mut dyn Reader) -> Result<Self, Error> {
+		let buf = reader.read_fixed_bytes(PublicKey::LEN)?;
+		let secp = Secp256k1::with_caps(ContextFlag::None);
+		let pk = PublicKey::from_slice(&secp, &buf).map_err(|_| Error::CorruptedData)?;
+		Ok(pk)
+	}
 }
 
 /// Collections of items must be sorted lexicographically and all unique.
