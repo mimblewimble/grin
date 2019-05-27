@@ -78,7 +78,7 @@ impl Keychain for ExtKeychain {
 	fn derive_key(&self, amount: u64, id: &Identifier) -> Result<SecretKey, Error> {
 		let mut h = self.hasher.clone();
 		let p = id.to_path();
-		let mut ext_key = self.master;
+		let mut ext_key = self.master.clone();
 		for i in 0..p.depth {
 			ext_key = ext_key.ckd_priv(&self.secp, &mut h, p.path[i as usize])?;
 		}
@@ -122,20 +122,24 @@ impl Keychain for ExtKeychain {
 			})
 			.collect();
 
+		let keys = blind_sum
+			.positive_blinding_factors
+			.iter()
+			.filter_map(|b| b.secret_key(&self.secp).ok().clone())
+			.collect::<Vec<SecretKey>>();
+
 		pos_keys.extend(
-			&blind_sum
-				.positive_blinding_factors
-				.iter()
-				.filter_map(|b| b.secret_key(&self.secp).ok())
-				.collect::<Vec<SecretKey>>(),
+			keys,
 		);
 
+		let keys = blind_sum
+			.negative_blinding_factors
+			.iter()
+			.filter_map(|b| b.secret_key(&self.secp).ok().clone())
+			.collect::<Vec<SecretKey>>();
+
 		neg_keys.extend(
-			&blind_sum
-				.negative_blinding_factors
-				.iter()
-				.filter_map(|b| b.secret_key(&self.secp).ok())
-				.collect::<Vec<SecretKey>>(),
+			keys,
 		);
 
 		let sum = self.secp.blind_sum(pos_keys, neg_keys)?;
@@ -235,9 +239,9 @@ mod test {
 
 		// create commitments for secret keys 1, 2 and 3
 		// all committing to the value 0 (which is what we do for tx_kernels)
-		let commit_1 = keychain.secp.commit(0, skey1).unwrap();
-		let commit_2 = keychain.secp.commit(0, skey2).unwrap();
-		let commit_3 = keychain.secp.commit(0, skey3).unwrap();
+		let commit_1 = keychain.secp.commit(0, skey1.clone()).unwrap();
+		let commit_2 = keychain.secp.commit(0, skey2.clone()).unwrap();
+		let commit_3 = keychain.secp.commit(0, skey3.clone()).unwrap();
 
 		// now sum commitments for keys 1 and 2
 		let sum = keychain
