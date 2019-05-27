@@ -123,6 +123,7 @@ impl<'a> Message<'a> {
 pub struct Response<'a> {
 	resp_type: Type,
 	body: Vec<u8>,
+	version: ProtocolVersion,
 	stream: &'a mut dyn Write,
 	attachment: Option<File>,
 }
@@ -133,17 +134,23 @@ impl<'a> Response<'a> {
 		body: T,
 		stream: &'a mut dyn Write,
 	) -> Result<Response<'a>, Error> {
-		let body = ser::ser_vec(&body)?;
+		// Use our local "default" version when serializing response data.
+		// TODO - Revisit this once we start supporting multiple versions.
+		// Do we need to negotiate a compatible version based on our version and the peer version?
+		let version = ProtocolVersion::default();
+
+		let body = ser::ser_vec(&body, version)?;
 		Ok(Response {
 			resp_type,
 			body,
+			version,
 			stream,
 			attachment: None,
 		})
 	}
 
 	fn write(mut self, tracker: Arc<Tracker>) -> Result<(), Error> {
-		let mut msg = ser::ser_vec(&MsgHeader::new(self.resp_type, self.body.len() as u64))?;
+		let mut msg = ser::ser_vec(&MsgHeader::new(self.resp_type, self.body.len() as u64), self.version)?;
 		msg.append(&mut self.body);
 		write_all(&mut self.stream, &msg[..], time::Duration::from_secs(10))?;
 		tracker.inc_sent(msg.len() as u64);
@@ -213,11 +220,11 @@ pub struct ConnHandle {
 }
 
 impl ConnHandle {
-	pub fn send<T>(&self, body: T, msg_type: Type) -> Result<u64, Error>
+	pub fn send<T>(&self, body: T, msg_type: Type, version: ProtocolVersion) -> Result<u64, Error>
 	where
 		T: ser::Writeable,
 	{
-		let buf = write_to_buf(body, msg_type)?;
+		let buf = write_to_buf(body, msg_type, version)?;
 		let buf_len = buf.len();
 		self.send_channel.try_send(buf)?;
 		Ok(buf_len as u64)

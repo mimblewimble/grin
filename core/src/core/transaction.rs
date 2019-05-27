@@ -185,13 +185,19 @@ hashable_ord!(TxKernel);
 impl ::std::hash::Hash for TxKernel {
 	fn hash<H: ::std::hash::Hasher>(&self, state: &mut H) {
 		let mut vec = Vec::new();
-		ser::serialize(&mut vec, &self).expect("serialization failed");
+		ser::serialize_default(&mut vec, &self).expect("serialization failed");
 		::std::hash::Hash::hash(&vec, state);
 	}
 }
 
 impl Writeable for TxKernel {
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
+		// We have access to the protocol version here.
+		// This may be a protocol version based on a peer connection
+		// or the version used locally for db storage.
+		// We can handle version specific serialization here.
+		let _version = writer.protocol_version();
+
 		self.features.write(writer)?;
 		ser_multiwrite!(writer, [write_u64, self.fee], [write_u64, self.lock_height]);
 		self.excess.write(writer)?;
@@ -1165,7 +1171,7 @@ hashable_ord!(Input);
 impl ::std::hash::Hash for Input {
 	fn hash<H: ::std::hash::Hasher>(&self, state: &mut H) {
 		let mut vec = Vec::new();
-		ser::serialize(&mut vec, &self).expect("serialization failed");
+		ser::serialize_default(&mut vec, &self).expect("serialization failed");
 		::std::hash::Hash::hash(&vec, state);
 	}
 }
@@ -1276,7 +1282,7 @@ hashable_ord!(Output);
 impl ::std::hash::Hash for Output {
 	fn hash<H: ::std::hash::Hasher>(&self, state: &mut H) {
 		let mut vec = Vec::new();
-		ser::serialize(&mut vec, &self).expect("serialization failed");
+		ser::serialize_default(&mut vec, &self).expect("serialization failed");
 		::std::hash::Hash::hash(&vec, state);
 	}
 }
@@ -1528,7 +1534,7 @@ mod test {
 		};
 
 		let mut vec = vec![];
-		ser::serialize(&mut vec, &kernel).expect("serialized failed");
+		ser::serialize_default(&mut vec, &kernel).expect("serialized failed");
 		let kernel2: TxKernel = ser::deserialize_default(&mut &vec[..]).unwrap();
 		assert_eq!(kernel2.features, KernelFeatures::Plain);
 		assert_eq!(kernel2.lock_height, 0);
@@ -1546,7 +1552,7 @@ mod test {
 		};
 
 		let mut vec = vec![];
-		ser::serialize(&mut vec, &kernel).expect("serialized failed");
+		ser::serialize_default(&mut vec, &kernel).expect("serialized failed");
 		let kernel2: TxKernel = ser::deserialize_default(&mut &vec[..]).unwrap();
 		assert_eq!(kernel2.features, KernelFeatures::HeightLocked);
 		assert_eq!(kernel2.lock_height, 100);

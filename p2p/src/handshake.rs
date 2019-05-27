@@ -88,7 +88,7 @@ impl Handshake {
 		};
 
 		// write and read the handshake response
-		write_message(conn, hand, Type::Hand)?;
+		write_message(conn, hand, Type::Hand, version)?;
 
 		// Note: We have to read the Shake message *before* we know which protocol
 		// version our peer supports (it is in the shake message itself).
@@ -175,19 +175,20 @@ impl Handshake {
 			return Err(Error::ConnectionClose);
 		}
 
+		let version = ProtocolVersion::default();
+
 		// send our reply with our info
 		let shake = Shake {
-			version: ProtocolVersion::default(),
+			version,
 			capabilities: capab,
 			genesis: self.genesis,
 			total_difficulty: total_difficulty,
 			user_agent: USER_AGENT.to_string(),
 		};
 
-		write_message(conn, shake, Type::Shake)?;
+		write_message(conn, shake, Type::Shake, version)?;
 		trace!("Success handshake with {}.", peer_info.addr);
 
-		// when more than one protocol version is supported, choosing should go here
 		Ok(peer_info)
 	}
 

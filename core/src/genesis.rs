@@ -288,13 +288,13 @@ pub fn genesis_main() -> core::Block {
 mod test {
 	use super::*;
 	use crate::core::hash::Hashed;
-	use crate::ser;
+	use crate::ser::{self, ProtocolVersion};
 
 	#[test]
 	fn floonet_genesis_hash() {
 		let gen_hash = genesis_floo().hash();
 		println!("floonet genesis hash: {}", gen_hash.to_hex());
-		let gen_bin = ser::ser_vec(&genesis_floo()).unwrap();
+		let gen_bin = ser::ser_vec(&genesis_floo(), ProtocolVersion(1)).unwrap();
 		println!("floonet genesis full hash: {}\n", gen_bin.hash().to_hex());
 		assert_eq!(
 			gen_hash.to_hex(),
@@ -310,7 +310,7 @@ mod test {
 	fn mainnet_genesis_hash() {
 		let gen_hash = genesis_main().hash();
 		println!("mainnet genesis hash: {}", gen_hash.to_hex());
-		let gen_bin = ser::ser_vec(&genesis_main()).unwrap();
+		let gen_bin = ser::ser_vec(&genesis_main(), ProtocolVersion(1)).unwrap();
 		println!("mainnet genesis full hash: {}\n", gen_bin.hash().to_hex());
 		assert_eq!(
 			gen_hash.to_hex(),

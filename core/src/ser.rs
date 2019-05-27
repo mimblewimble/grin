@@ -135,6 +135,9 @@ pub trait Writer {
 	/// The mode this serializer is writing in
 	fn serialization_mode(&self) -> SerializationMode;
 
+	/// Protocol version for version specific serialization rules.
+	fn protocol_version(&self) -> ProtocolVersion;
+
 	/// Writes a u8 as bytes
 	fn write_u8(&mut self, n: u8) -> Result<(), Error> {
 		self.write_fixed_bytes(&[n])
@@ -346,27 +349,34 @@ pub fn deserialize<T: Readable>(
 	T::read(&mut reader)
 }
 
-/// Deserialize a Readable based on our local db version protocol.
-pub fn deserialize_db<T: Readable>(source: &mut dyn Read) -> Result<T, Error> {
-	deserialize(source, ProtocolVersion::local_db())
-}
-
 /// Deserialize a Readable based on our local "default" version protocol.
 pub fn deserialize_default<T: Readable>(source: &mut dyn Read) -> Result<T, Error> {
 	deserialize(source, ProtocolVersion::default())
 }
 
 /// Serializes a Writeable into any std::io::Write implementation.
-pub fn serialize<W: Writeable>(sink: &mut dyn Write, thing: &W) -> Result<(), Error> {
-	let mut writer = BinWriter { sink };
+pub fn serialize<W: Writeable>(
+	sink: &mut dyn Write,
+	version: ProtocolVersion,
+	thing: &W,
+) -> Result<(), Error> {
+	let mut writer = BinWriter::new(sink, version);
 	thing.write(&mut writer)
+}
+
+/// Serialize a Writeable according to our "default" protocol version rules.
+pub fn serialize_default<W: Writeable>(
+	sink: &mut dyn Write,
+	thing: &W,
+) -> Result<(), Error> {
+	serialize(sink, ProtocolVersion::default(), thing)
 }
 
 /// Utility function to serialize a writeable directly in memory using a
 /// Vec<u8>.
-pub fn ser_vec<W: Writeable>(thing: &W) -> Result<Vec<u8>, Error> {
+pub fn ser_vec<W: Writeable>(thing: &W, version: ProtocolVersion) -> Result<Vec<u8>, Error> {
 	let mut vec = vec![];
-	serialize(&mut vec, thing)?;
+	serialize(&mut vec, version, thing)?;
 	Ok(vec)
 }
 
@@ -679,12 +689,13 @@ impl<T: Hashed> VerifySortedAndUnique<T> for Vec<T> {
 /// to write numbers, byte vectors, hashes, etc.
 pub struct BinWriter<'a> {
 	sink: &'a mut dyn Write,
+	version: ProtocolVersion,
 }
 
 impl<'a> BinWriter<'a> {
 	/// Wraps a standard Write in a new BinWriter
-	pub fn new(write: &'a mut dyn Write) -> BinWriter<'a> {
-		BinWriter { sink: write }
+	pub fn new(sink: &'a mut dyn Write, version: ProtocolVersion) -> BinWriter<'a> {
+		BinWriter { sink, version }
 	}
 }
 
@@ -697,6 +708,10 @@ impl<'a> Writer for BinWriter<'a> {
 		let bs = fixed.as_ref();
 		self.sink.write_all(bs)?;
 		Ok(())
+	}
+
+	fn protocol_version(&self) -> ProtocolVersion {
+		self.version
 	}
 }
 
