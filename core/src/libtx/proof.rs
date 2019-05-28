@@ -20,6 +20,7 @@ use crate::libtx::error::{Error, ErrorKind};
 use crate::util::secp::key::SecretKey;
 use crate::util::secp::pedersen::{Commitment, ProofMessage, RangeProof};
 use crate::util::secp::{self, Secp256k1};
+use std::convert::TryFrom;
 
 /// Create a bulletproof
 pub fn create<K, B>(
@@ -170,7 +171,7 @@ where
 	/// Message bytes:
 	///   0-1: reserved for future use
 	///     2: wallet type (0 for standard)
-	///     3: switch commitment type (0 for none, 1 for standard)
+	///     3: switch commitment type
 	///  4-19: derivation path
 	fn proof_message(
 		&self,
@@ -178,10 +179,7 @@ where
 		switch: &SwitchCommitmentType,
 	) -> Result<ProofMessage, Error> {
 		let mut msg = [0; 20];
-		msg[3] = match *switch {
-			SwitchCommitmentType::Regular => 1,
-			_ => 0,
-		};
+		msg[3] = u8::from(switch);
 		let id_ser = id.serialize_path();
 		for i in 0..16 {
 			msg[i + 4] = id_ser[i];
@@ -205,9 +203,9 @@ where
 		if msg[..3] != exp {
 			return Ok(None);
 		}
-		let switch = match msg[3] {
-			1 => SwitchCommitmentType::Regular,
-			_ => SwitchCommitmentType::None,
+		let switch = match SwitchCommitmentType::try_from(msg[3]) {
+			Ok(s) => s,
+			Err(_) => return Ok(None),
 		};
 
 		let commit_exp = self.keychain.commit(amount, &id, &switch)?;

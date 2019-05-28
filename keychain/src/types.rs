@@ -14,6 +14,7 @@
 
 use rand::thread_rng;
 use std::cmp::min;
+use std::convert::TryFrom;
 use std::io::Cursor;
 use std::ops::Add;
 /// Keychain trait and its main supporting types. The Identifier is a
@@ -499,6 +500,27 @@ pub trait Keychain: Sync + Send + Clone {
 pub enum SwitchCommitmentType {
 	None,
 	Regular,
+}
+
+impl TryFrom<u8> for SwitchCommitmentType {
+	type Error = ();
+
+	fn try_from(value: u8) -> Result<Self, Self::Error> {
+		match value {
+			0 => Ok(SwitchCommitmentType::None),
+			1 => Ok(SwitchCommitmentType::Regular),
+			_ => Err(()),
+		}
+	}
+}
+
+impl From<&SwitchCommitmentType> for u8 {
+	fn from(switch: &SwitchCommitmentType) -> Self {
+		match *switch {
+			SwitchCommitmentType::None => 0,
+			SwitchCommitmentType::Regular => 1,
+		}
+	}
 }
 
 #[cfg(test)]
