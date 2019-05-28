@@ -17,6 +17,7 @@ use std::sync::Arc;
 use crate::chain;
 use crate::core::core::hash::Hashed;
 use crate::core::core::merkle_proof::MerkleProof;
+use crate::core::core::KernelFeatures;
 use crate::core::{core, ser};
 use crate::p2p;
 use crate::util;
@@ -488,10 +489,17 @@ pub struct TxKernelPrintable {
 
 impl TxKernelPrintable {
 	pub fn from_txkernel(k: &core::TxKernel) -> TxKernelPrintable {
+		// TODO - How does "features" get formated here?
+		let features = format!("{:?}", k.features);
+		let fee = k.fee();
+		let lock_height = match k.features {
+			KernelFeatures::HeightLocked { lock_height, .. } => lock_height,
+			_ => 0,
+		};
 		TxKernelPrintable {
-			features: format!("{:?}", k.features),
-			fee: k.fee,
-			lock_height: k.lock_height,
+			features,
+			fee,
+			lock_height,
 			excess: util::to_hex(k.excess.0.to_vec()),
 			excess_sig: util::to_hex(k.excess_sig.to_raw_data().to_vec()),
 		}
