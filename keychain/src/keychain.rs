@@ -20,7 +20,9 @@ use rand::{thread_rng, Rng};
 use crate::blake2;
 
 use crate::extkey_bip32::{BIP32GrinHasher, ExtendedPrivKey};
-use crate::types::{BlindSum, BlindingFactor, Error, ExtKeychainPath, Identifier, Keychain, SwitchCommitmentType};
+use crate::types::{
+	BlindSum, BlindingFactor, Error, ExtKeychainPath, Identifier, Keychain, SwitchCommitmentType,
+};
 use crate::util::secp::key::SecretKey;
 use crate::util::secp::pedersen::Commitment;
 use crate::util::secp::{self, Message, Secp256k1, Signature};
@@ -30,27 +32,6 @@ pub struct ExtKeychain {
 	secp: Secp256k1,
 	master: ExtendedPrivKey,
 	hasher: BIP32GrinHasher,
-}
-
-impl ExtKeychain {
-	fn derive_key_internal(
-		&self,
-		amount: u64,
-		id: &Identifier,
-		switch: bool,
-	) -> Result<SecretKey, Error> {
-		let mut h = self.hasher.clone();
-		let p = id.to_path();
-		let mut ext_key = self.master;
-		for i in 0..p.depth {
-			ext_key = ext_key.ckd_priv(&self.secp, &mut h, p.path[i as usize])?;
-		}
-
-		match switch {
-			true => Ok(self.secp.blind_switch(amount, ext_key.secret_key)?),
-			false => Ok(ext_key.secret_key),
-		}
-	}
 }
 
 impl Keychain for ExtKeychain {
@@ -93,7 +74,12 @@ impl Keychain for ExtKeychain {
 		ExtKeychainPath::new(depth, d1, d2, d3, d4).to_identifier()
 	}
 
-	fn derive_key(&self, amount: u64, id: &Identifier, switch: &SwitchCommitmentType) -> Result<SecretKey, Error> {
+	fn derive_key(
+		&self,
+		amount: u64,
+		id: &Identifier,
+		switch: &SwitchCommitmentType,
+	) -> Result<SecretKey, Error> {
 		let mut h = self.hasher.clone();
 		let p = id.to_path();
 		let mut ext_key = self.master;
@@ -102,12 +88,19 @@ impl Keychain for ExtKeychain {
 		}
 
 		match *switch {
-			SwitchCommitmentType::Regular => Ok(self.secp.blind_switch(amount, ext_key.secret_key)?),
+			SwitchCommitmentType::Regular => {
+				Ok(self.secp.blind_switch(amount, ext_key.secret_key)?)
+			}
 			SwitchCommitmentType::None => Ok(ext_key.secret_key),
 		}
 	}
 
-	fn commit(&self, amount: u64, id: &Identifier, switch: &SwitchCommitmentType) -> Result<Commitment, Error> {
+	fn commit(
+		&self,
+		amount: u64,
+		id: &Identifier,
+		switch: &SwitchCommitmentType,
+	) -> Result<Commitment, Error> {
 		let key = self.derive_key(amount, id, switch)?;
 		let commit = self.secp.commit(amount, key)?;
 		Ok(commit)
@@ -118,7 +111,11 @@ impl Keychain for ExtKeychain {
 			.positive_key_ids
 			.iter()
 			.filter_map(|k| {
-				let res = self.derive_key(k.value, &Identifier::from_path(&k.ext_keychain_path), &k.switch);
+				let res = self.derive_key(
+					k.value,
+					&Identifier::from_path(&k.ext_keychain_path),
+					&k.switch,
+				);
 				if let Ok(s) = res {
 					Some(s)
 				} else {
@@ -131,7 +128,11 @@ impl Keychain for ExtKeychain {
 			.negative_key_ids
 			.iter()
 			.filter_map(|k| {
-				let res = self.derive_key(k.value, &Identifier::from_path(&k.ext_keychain_path), &k.switch);
+				let res = self.derive_key(
+					k.value,
+					&Identifier::from_path(&k.ext_keychain_path),
+					&k.switch,
+				);
 				if let Ok(s) = res {
 					Some(s)
 				} else {
@@ -160,7 +161,13 @@ impl Keychain for ExtKeychain {
 		Ok(BlindingFactor::from_secret_key(sum))
 	}
 
-	fn sign(&self, msg: &Message, amount: u64, id: &Identifier, switch: &SwitchCommitmentType) -> Result<Signature, Error> {
+	fn sign(
+		&self,
+		msg: &Message,
+		amount: u64,
+		id: &Identifier,
+		switch: &SwitchCommitmentType,
+	) -> Result<Signature, Error> {
 		let skey = self.derive_key(amount, id, switch)?;
 		let sig = self.secp.sign(msg, &skey)?;
 		Ok(sig)

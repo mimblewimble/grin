@@ -19,7 +19,7 @@ use crate::core::transaction::kernel_sig_msg;
 use crate::core::{KernelFeatures, Output, OutputFeatures, TxKernel};
 use crate::keychain::{Identifier, Keychain};
 use crate::libtx::error::Error;
-use crate::libtx::{aggsig, proof, proof::LegacyProofBuilder};
+use crate::libtx::{aggsig, proof};
 use crate::util::{secp, static_secp_instance};
 use grin_keychain::SwitchCommitmentType;
 
@@ -35,13 +35,12 @@ where
 {
 	let value = reward(fees);
 
-	// TODO: use the new builder
-	let builder = LegacyProofBuilder::new(keychain);
-
 	let commit = keychain.commit(value, key_id, &SwitchCommitmentType::Regular)?; // TODO: proper support for different switch commitment schemes
 
 	trace!("Block reward - Pedersen Commit is: {:?}", commit,);
 
+	// TODO: use the new builder
+	let builder = proof::LegacyProofBuilder::new(keychain);
 	let rproof = proof::create(keychain, &builder, value, key_id, commit, None)?;
 
 	let output = Output {

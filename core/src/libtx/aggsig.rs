@@ -232,15 +232,16 @@ pub fn verify_partial_sig(
 /// use core::libtx::{aggsig, proof};
 /// use core::core::transaction::{kernel_sig_msg, KernelFeatures};
 /// use core::core::{Output, OutputFeatures};
-/// use keychain::{Keychain, ExtKeychain};
+/// use keychain::{Keychain, ExtKeychain, SwitchCommitmentType};
 ///
 /// let secp = Secp256k1::with_caps(ContextFlag::Commit);
 /// let keychain = ExtKeychain::from_random_seed(false).unwrap();
 /// let fees = 10_000;
 /// let value = reward(fees);
 /// let key_id = ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
-/// let commit = keychain.commit(value, &key_id).unwrap();
-/// let rproof = proof::create(&keychain, value, &key_id, commit, None).unwrap();
+/// let commit = keychain.commit(value, &key_id, &SwitchCommitmentType::Regular).unwrap();
+/// let builder = proof::ProofBuilder::new(&keychain);
+/// let rproof = proof::create(&keychain, &builder, value, &key_id, commit, None).unwrap();
 /// let output = Output {
 ///		features: OutputFeatures::Coinbase,
 ///		commit: commit,
@@ -297,7 +298,7 @@ where
 /// use util::secp::{ContextFlag, Secp256k1};
 /// use core::core::transaction::{kernel_sig_msg, KernelFeatures};
 /// use core::core::{Output, OutputFeatures};
-/// use keychain::{Keychain, ExtKeychain};
+/// use keychain::{Keychain, ExtKeychain, SwitchCommitmentType};
 ///
 /// // Create signature
 /// let secp = Secp256k1::with_caps(ContextFlag::Commit);
@@ -305,8 +306,9 @@ where
 /// let fees = 10_000;
 /// let value = reward(fees);
 /// let key_id = ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
-/// let commit = keychain.commit(value, &key_id).unwrap();
-/// let rproof = proof::create(&keychain, value, &key_id, commit, None).unwrap();
+/// let commit = keychain.commit(value, &key_id, &SwitchCommitmentType::Regular).unwrap();
+/// let builder = proof::ProofBuilder::new(&keychain);
+/// let rproof = proof::create(&keychain, &builder, value, &key_id, commit, None).unwrap();
 /// let output = Output {
 ///		features: OutputFeatures::Coinbase,
 ///		commit: commit,

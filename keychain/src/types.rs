@@ -471,10 +471,26 @@ pub trait Keychain: Sync + Send + Clone {
 	/// Derives a key id from the depth of the keychain and the values at each
 	/// depth level. See `KeychainPath` for more information.
 	fn derive_key_id(depth: u8, d1: u32, d2: u32, d3: u32, d4: u32) -> Identifier;
-	fn derive_key(&self, amount: u64, id: &Identifier, switch: &SwitchCommitmentType) -> Result<SecretKey, Error>;
-	fn commit(&self, amount: u64, id: &Identifier, switch: &SwitchCommitmentType) -> Result<Commitment, Error>;
+	fn derive_key(
+		&self,
+		amount: u64,
+		id: &Identifier,
+		switch: &SwitchCommitmentType,
+	) -> Result<SecretKey, Error>;
+	fn commit(
+		&self,
+		amount: u64,
+		id: &Identifier,
+		switch: &SwitchCommitmentType,
+	) -> Result<Commitment, Error>;
 	fn blind_sum(&self, blind_sum: &BlindSum) -> Result<BlindingFactor, Error>;
-	fn sign(&self, msg: &Message, amount: u64, id: &Identifier, switch: &SwitchCommitmentType) -> Result<Signature, Error>;
+	fn sign(
+		&self,
+		msg: &Message,
+		amount: u64,
+		id: &Identifier,
+		switch: &SwitchCommitmentType,
+	) -> Result<Signature, Error>;
 	fn sign_with_blinding(&self, _: &Message, _: &BlindingFactor) -> Result<Signature, Error>;
 	fn secp(&self) -> &Secp256k1;
 }

@@ -75,16 +75,14 @@ fn tx_double_ser_deser() {
 #[test]
 #[should_panic(expected = "Keychain Error")]
 fn test_zero_commit_fails() {
-	let mut keychain = ExtKeychain::from_random_seed(false).unwrap();
-	keychain.set_use_switch_commits(false);
+	let keychain = ExtKeychain::from_random_seed(false).unwrap();
 	let key_id1 = ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
 
 	// blinding should fail as signing with a zero r*G shouldn't work
 	build::transaction(
 		vec![
 			input(10, key_id1.clone()),
-			output(9, key_id1.clone()),
-			with_fee(1),
+			output(10, key_id1.clone()),
 		],
 		&keychain,
 	)

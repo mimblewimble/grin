@@ -34,6 +34,6 @@ pub mod keychain;
 pub use crate::extkey_bip32::ChildNumber;
 pub use crate::keychain::ExtKeychain;
 pub use crate::types::{
-	BlindSum, BlindingFactor, Error, ExtKeychainPath, Identifier,
-	Keychain, SwitchCommitmentType, IDENTIFIER_SIZE,
+	BlindSum, BlindingFactor, Error, ExtKeychainPath, Identifier, Keychain, SwitchCommitmentType,
+	IDENTIFIER_SIZE,
 };
