@@ -33,9 +33,7 @@ use crate::core::{
 use crate::global;
 use crate::keychain::{self, BlindingFactor};
 use crate::pow::{Difficulty, Proof, ProofOfWork};
-use crate::ser::{
-	self, FixedLength, PMMRable, ProtocolVersion, Readable, Reader, Writeable, Writer,
-};
+use crate::ser::{self, FixedLength, PMMRable, Readable, Reader, Writeable, Writer};
 use crate::util::{secp, static_secp_instance};
 
 /// Errors thrown by Block validation
@@ -361,8 +359,7 @@ impl BlockHeader {
 	pub fn pre_pow(&self) -> Vec<u8> {
 		let mut header_buf = vec![];
 		{
-			let version = ProtocolVersion::default();
-			let mut writer = ser::BinWriter::new(&mut header_buf, version);
+			let mut writer = ser::BinWriter::default(&mut header_buf);
 			self.write_pre_pow(&mut writer).unwrap();
 			self.pow.write_pre_pow(&mut writer).unwrap();
 			writer.write_u64(self.pow.nonce).unwrap();

@@ -417,7 +417,7 @@ impl Server {
 
 	/// The p2p layer protocol version for this node.
 	pub fn protocol_version() -> ProtocolVersion {
-		ProtocolVersion::default()
+		ProtocolVersion::local()
 	}
 
 	/// Returns a set of stats about this server. This and the ServerStats

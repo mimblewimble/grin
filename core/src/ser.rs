@@ -20,6 +20,7 @@
 //! `serialize` or `deserialize` functions on them as appropriate.
 
 use crate::core::hash::{DefaultHashable, Hash, Hashed};
+use crate::global::PROTOCOL_VERSION;
 use crate::keychain::{BlindingFactor, Identifier, IDENTIFIER_SIZE};
 use crate::util::read_write::read_exact;
 use crate::util::secp::constants::{
@@ -289,9 +290,10 @@ where
 #[derive(Clone, Copy, Debug, Deserialize, Eq, Ord, PartialOrd, PartialEq, Serialize)]
 pub struct ProtocolVersion(pub u32);
 
-impl Default for ProtocolVersion {
-	fn default() -> ProtocolVersion {
-		ProtocolVersion(1)
+impl ProtocolVersion {
+	/// Our default "local" protocol version.
+	pub fn local() -> ProtocolVersion {
+		ProtocolVersion(PROTOCOL_VERSION)
 	}
 }
 
@@ -349,9 +351,9 @@ pub fn deserialize<T: Readable>(
 	T::read(&mut reader)
 }
 
-/// Deserialize a Readable based on our local "default" version protocol.
+/// Deserialize a Readable based on our default "local" protocol version.
 pub fn deserialize_default<T: Readable>(source: &mut dyn Read) -> Result<T, Error> {
-	deserialize(source, ProtocolVersion::default())
+	deserialize(source, ProtocolVersion::local())
 }
 
 /// Serializes a Writeable into any std::io::Write implementation.
@@ -364,9 +366,9 @@ pub fn serialize<W: Writeable>(
 	thing.write(&mut writer)
 }
 
-/// Serialize a Writeable according to our "default" protocol version rules.
+/// Serialize a Writeable according to our default "local" protocol version.
 pub fn serialize_default<W: Writeable>(sink: &mut dyn Write, thing: &W) -> Result<(), Error> {
-	serialize(sink, ProtocolVersion::default(), thing)
+	serialize(sink, ProtocolVersion::local(), thing)
 }
 
 /// Utility function to serialize a writeable directly in memory using a
@@ -693,6 +695,11 @@ impl<'a> BinWriter<'a> {
 	/// Wraps a standard Write in a new BinWriter
 	pub fn new(sink: &'a mut dyn Write, version: ProtocolVersion) -> BinWriter<'a> {
 		BinWriter { sink, version }
+	}
+
+	/// Constructor for BinWriter with default "local" protocol version.
+	pub fn default(sink: &'a mut dyn Write) -> BinWriter<'a> {
+		BinWriter::new(sink, ProtocolVersion::local())
 	}
 }
 

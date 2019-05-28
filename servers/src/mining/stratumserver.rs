@@ -38,7 +38,6 @@ use crate::common::types::{StratumServerConfig, SyncState};
 use crate::core::core::hash::Hashed;
 use crate::core::core::verifier_cache::VerifierCache;
 use crate::core::core::Block;
-use crate::core::ser::ProtocolVersion;
 use crate::core::{pow, ser};
 use crate::keychain;
 use crate::mining::mine_block;
@@ -332,8 +331,7 @@ impl Handler {
 		// Serialize the block header into pre and post nonce strings
 		let mut header_buf = vec![];
 		{
-			let version = ProtocolVersion::default();
-			let mut writer = ser::BinWriter::new(&mut header_buf, version);
+			let mut writer = ser::BinWriter::default(&mut header_buf);
 			bh.write_pre_pow(&mut writer).unwrap();
 			bh.pow.write_pre_pow(&mut writer).unwrap();
 		}

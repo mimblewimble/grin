@@ -131,14 +131,10 @@ pub struct Response<'a> {
 impl<'a> Response<'a> {
 	pub fn new<T: ser::Writeable>(
 		resp_type: Type,
+		version: ProtocolVersion,
 		body: T,
 		stream: &'a mut dyn Write,
 	) -> Result<Response<'a>, Error> {
-		// Use our local "default" version when serializing response data.
-		// TODO - Revisit this once we start supporting multiple versions.
-		// Do we need to negotiate a compatible version based on our version and the peer version?
-		let version = ProtocolVersion::default();
-
 		let body = ser::ser_vec(&body, version)?;
 		Ok(Response {
 			resp_type,

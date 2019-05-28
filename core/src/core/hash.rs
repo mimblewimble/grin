@@ -186,7 +186,6 @@ impl Default for Hash {
 /// Serializer that outputs a hash of the serialized object
 pub struct HashWriter {
 	state: Blake2b,
-	version: ProtocolVersion,
 }
 
 impl HashWriter {
@@ -209,7 +208,6 @@ impl Default for HashWriter {
 	fn default() -> HashWriter {
 		HashWriter {
 			state: Blake2b::new(32),
-			version: ProtocolVersion::default(),
 		}
 	}
 }
@@ -225,7 +223,7 @@ impl ser::Writer for HashWriter {
 	}
 
 	fn protocol_version(&self) -> ProtocolVersion {
-		self.version
+		ProtocolVersion::local()
 	}
 }
 
