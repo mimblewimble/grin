@@ -408,20 +408,24 @@ impl TxKernel {
 				let features = KernelFeatures::Plain { fee };
 				TxKernel { features, ..self }
 			}
-			_ => panic!("setting fee unsupported on this kernel"),
+			KernelFeatures::HeightLocked { lock_height, .. } => {
+				let features = KernelFeatures::HeightLocked { fee, lock_height };
+				TxKernel { features, ..self }
+			}
+			KernelFeatures::Coinbase => panic!("fee not supported on coinbase kernel"),
 		}
 	}
 
 	/// Builds a new tx kernel with the provided lock_height.
 	/// Will panic if we cannot safely do this on the existing kernel.
-	/// i.e. Do not try and set a fee on a coinbase kernel.
+	/// i.e. Do not try and set a lock_height on a coinbase kernel.
 	pub fn with_lock_height(self, lock_height: u64) -> TxKernel {
 		match self.features {
 			KernelFeatures::Plain { fee } | KernelFeatures::HeightLocked { fee, .. } => {
 				let features = KernelFeatures::HeightLocked { fee, lock_height };
 				TxKernel { features, ..self }
 			}
-			_ => panic!("setting lock_height unsupported on this kernel"),
+			KernelFeatures::Coinbase => panic!("lock_height not supported on coinbase kernel"),
 		}
 	}
 }
