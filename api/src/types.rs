@@ -491,10 +491,10 @@ impl TxKernelPrintable {
 	pub fn from_txkernel(k: &core::TxKernel) -> TxKernelPrintable {
 		// TODO - How does "features" get formated here?
 		let features = format!("{:?}", k.features);
-		let fee = k.fee();
-		let lock_height = match k.features {
-			KernelFeatures::HeightLocked { lock_height, .. } => lock_height,
-			_ => 0,
+		let (fee, lock_height) = match k.features {
+			KernelFeatures::Plain { fee } => (fee, 0),
+			KernelFeatures::Coinbase => (0, 0),
+			KernelFeatures::HeightLocked { fee, lock_height } => (fee, lock_height),
 		};
 		TxKernelPrintable {
 			features,

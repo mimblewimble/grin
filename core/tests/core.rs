@@ -124,7 +124,7 @@ fn build_tx_kernel() {
 	kern.verify().unwrap();
 
 	assert_eq!(kern.features, KernelFeatures::Plain { fee: 2 });
-	assert_eq!(kern.fee(), tx.fee());
+	assert_eq!(2, tx.fee());
 }
 
 // Combine two transactions into one big transaction (with multiple kernels)

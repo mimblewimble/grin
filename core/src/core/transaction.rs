@@ -309,19 +309,6 @@ impl PMMRable for TxKernel {
 	}
 }
 
-impl TxKernel {
-	pub fn fee(&self) -> u64 {
-		match self.features {
-			KernelFeatures::Plain { fee: x } => x,
-			KernelFeatures::HeightLocked {
-				fee: x,
-				lock_height: _,
-			} => x,
-			_ => 0,
-		}
-	}
-}
-
 impl KernelFeatures {
 	/// Is this a coinbase kernel?
 	pub fn is_coinbase(&self) -> bool {
@@ -677,11 +664,17 @@ impl TransactionBody {
 		self
 	}
 
-	/// Total fee for a TransactionBody is the sum of fees of all kernels.
-	fn fee(&self) -> u64 {
+	/// Total fee for a TransactionBody is the sum of fees of all fee carrying kernels.
+	pub fn fee(&self) -> u64 {
 		self.kernels
 			.iter()
-			.fold(0, |acc, ref x| acc.saturating_add(x.fee()))
+			.filter_map(|k| match k.features {
+				KernelFeatures::Coinbase => None,
+				KernelFeatures::Plain { fee } | KernelFeatures::HeightLocked { fee, .. } => {
+					Some(fee)
+				}
+			})
+			.fold(0, |acc, fee| acc.saturating_add(fee))
 	}
 
 	fn overage(&self) -> i64 {
@@ -1606,8 +1599,8 @@ mod test {
 		};
 
 		let mut vec = vec![];
-		ser::serialize_default(&mut vec, &kernel).expect("serialized failed");
-		let kernel2: TxKernel = ser::deserialize_default(&mut &vec[..]).unwrap();
+		ser::serialize(&mut vec, &kernel).expect("serialized failed");
+		let kernel2: TxKernel = ser::deserialize(&mut &vec[..]).unwrap();
 		assert_eq!(kernel2.features, KernelFeatures::Plain { fee: 10 });
 		assert_eq!(kernel2.excess, commit);
 		assert_eq!(kernel2.excess_sig, sig.clone());
@@ -1623,8 +1616,8 @@ mod test {
 		};
 
 		let mut vec = vec![];
-		ser::serialize_default(&mut vec, &kernel).expect("serialized failed");
-		let kernel2: TxKernel = ser::deserialize_default(&mut &vec[..]).unwrap();
+		ser::serialize(&mut vec, &kernel).expect("serialized failed");
+		let kernel2: TxKernel = ser::deserialize(&mut &vec[..]).unwrap();
 		assert_eq!(
 			kernel2.features,
 			KernelFeatures::HeightLocked {
@@ -1689,18 +1682,18 @@ mod test {
 	#[test]
 	fn kernel_features_serialization() {
 		let mut vec = vec![];
-		ser::serialize_default(&mut vec, &(0u8, 10u64, 0u64)).expect("serialized failed");
-		let features: KernelFeatures = ser::deserialize_default(&mut &vec[..]).unwrap();
+		ser::serialize(&mut vec, &(0u8, 10u64, 0u64)).expect("serialized failed");
+		let features: KernelFeatures = ser::deserialize(&mut &vec[..]).unwrap();
 		assert_eq!(features, KernelFeatures::Plain { fee: 10 });
 
 		let mut vec = vec![];
-		ser::serialize_default(&mut vec, &(1u8, 0u64, 0u64)).expect("serialized failed");
-		let features: KernelFeatures = ser::deserialize_default(&mut &vec[..]).unwrap();
+		ser::serialize(&mut vec, &(1u8, 0u64, 0u64)).expect("serialized failed");
+		let features: KernelFeatures = ser::deserialize(&mut &vec[..]).unwrap();
 		assert_eq!(features, KernelFeatures::Coinbase);
 
 		let mut vec = vec![];
-		ser::serialize_default(&mut vec, &(2u8, 10u64, 100u64)).expect("serialized failed");
-		let features: KernelFeatures = ser::deserialize_default(&mut &vec[..]).unwrap();
+		ser::serialize(&mut vec, &(2u8, 10u64, 100u64)).expect("serialized failed");
+		let features: KernelFeatures = ser::deserialize(&mut &vec[..]).unwrap();
 		assert_eq!(
 			features,
 			KernelFeatures::HeightLocked {
@@ -1710,8 +1703,8 @@ mod test {
 		);
 
 		let mut vec = vec![];
-		ser::serialize_default(&mut vec, &(3u8, 0u64, 0u64)).expect("serialized failed");
-		let res: Result<KernelFeatures, _> = ser::deserialize_default(&mut &vec[..]);
+		ser::serialize(&mut vec, &(3u8, 0u64, 0u64)).expect("serialized failed");
+		let res: Result<KernelFeatures, _> = ser::deserialize(&mut &vec[..]);
 		assert_eq!(res.err(), Some(ser::Error::CorruptedData));
 	}
 }
