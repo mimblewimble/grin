@@ -231,10 +231,10 @@ impl fmt::Display for Identifier {
 #[derive(Default, Clone, PartialEq, Serialize, Deserialize, Zeroize)]
 pub struct BlindingFactor([u8; SECRET_KEY_SIZE]);
 
-// Intentionally empty `Default` implementation to prevent leakage.
+// Dummy `Debug` implementation that prevents secret leakage.
 impl fmt::Debug for BlindingFactor {
 	fn fmt(&self, _f: &mut ::std::fmt::Formatter<'_>) -> fmt::Result {
-		Ok(())
+		write!(f, "BlindingFactor(<secret key hidden>)")
 	}
 }
 
