@@ -74,9 +74,9 @@ impl<H: Hashed> ShortIdentifiable for H {
 pub struct ShortId([u8; 6]);
 
 impl DefaultHashable for ShortId {}
-/// We want to sort short_ids in a canonical and consistent manner so we can
-/// verify sort order in the same way we do for full inputs|outputs|kernels
-/// themselves.
+// We want to sort short_ids in a canonical and consistent manner so we can
+// verify sort order in the same way we do for full inputs|outputs|kernels
+// themselves.
 hashable_ord!(ShortId);
 
 impl ::std::fmt::Debug for ShortId {
