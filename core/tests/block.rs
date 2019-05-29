@@ -21,7 +21,9 @@ use crate::core::core::id::ShortIdentifiable;
 use crate::core::core::transaction::{self, Transaction};
 use crate::core::core::verifier_cache::{LruVerifierCache, VerifierCache};
 use crate::core::core::Committed;
-use crate::core::core::{Block, BlockHeader, CompactBlock, KernelFeatures, OutputFeatures};
+use crate::core::core::{
+	Block, BlockHeader, CompactBlock, HeaderVersion, KernelFeatures, OutputFeatures,
+};
 use crate::core::libtx::build::{self, input, output, with_fee};
 use crate::core::{global, ser};
 use crate::keychain::{BlindingFactor, ExtKeychain, Keychain};
@@ -196,6 +198,23 @@ fn remove_coinbase_kernel_flag() {
 		b.validate(&BlindingFactor::zero(), verifier_cache()),
 		Err(Error::Transaction(transaction::Error::IncorrectSignature))
 	);
+}
+
+#[test]
+fn serialize_deserialize_header_version() {
+	let mut vec1 = Vec::new();
+	ser::serialize(&mut vec1, &1_u16).expect("serialization failed");
+
+	let mut vec2 = Vec::new();
+	ser::serialize(&mut vec2, &HeaderVersion::default()).expect("serialization failed");
+
+	// Check that a header_version serializes to a
+	// single u16 value with no extraneous bytes wrapping it.
+	assert_eq!(vec1, vec2);
+
+	// Check we can successfully deserialize a header_version.
+	let version: HeaderVersion = ser::deserialize(&mut &vec2[..]).unwrap();
+	assert_eq!(version.0, 1)
 }
 
 #[test]

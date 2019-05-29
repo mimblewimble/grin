@@ -1,0 +1,50 @@
+steps:
+  - script: 'cargo test --all'
+    displayName: Cargo Test All
+    condition:  and(succeeded(), contains(variables['Build.SourceBranch'], 'refs/tags/'), eq(variables['CI_JOB'], 'release' ))
+  - script: 'cargo build --release'
+    displayName: Build Release
+    condition:  and(succeeded(), contains(variables['Build.SourceBranch'], 'refs/tags/'), eq(variables['CI_JOB'], 'release' ))
+  - script: |
+      SET MY_TAG=$(Build.SourceBranch)
+      SET MY_TAG=%MY_TAG:~10%
+      echo %MY_TAG%
+      echo %PLATFORM%
+      echo ##vso[task.setvariable variable=build.my_tag]%MY_TAG%
+      echo ##vso[task.setvariable variable=build.platform]%PLATFORM%
+    displayName: "Create my tag variable"
+    condition:  and(succeeded(), contains(variables['Build.SourceBranch'], 'refs/tags/'), eq(variables['CI_JOB'], 'release' ))
+  - task: CopyFiles@2
+    displayName: Copy assets
+    condition:  and(succeeded(), contains(variables['Build.SourceBranch'], 'refs/tags/'), eq(variables['CI_JOB'], 'release' ))
+    inputs:
+      sourceFolder: '$(Build.SourcesDirectory)\target\release'
+      contents: 'grin.exe'
+      targetFolder: '$(Build.BinariesDirectory)\grin'
+  - task: ArchiveFiles@2
+    displayName: Gather assets
+    condition:  and(succeeded(), contains(variables['Build.SourceBranch'], 'refs/tags/'), eq(variables['CI_JOB'], 'release' ))
+    inputs:
+      rootFolderOrFile: '$(Build.BinariesDirectory)\grin'
+      archiveType: 'zip'
+      archiveFile: '$(Build.ArtifactStagingDirectory)\grin-$(build.my_tag)-$(build.platform).zip'
+  - script: |
+      powershell -Command "get-filehash -algorithm sha256 $(Build.ArtifactStagingDirectory)\grin-$(build.my_tag)-$(build.platform).zip | Format-List |  Out-String | ForEach-Object { $_.Trim() } > $(Build.ArtifactStagingDirectory)\grin-$(build.my_tag)-$(build.platform)-sha256sum.txt"
+    displayName: Create Checksum
+    condition:  and(succeeded(), contains(variables['Build.SourceBranch'], 'refs/tags/'), eq(variables['CI_JOB'], 'release' ))
+  - task: GithubRelease@0
+    displayName: Github release
+    condition: and(succeeded(), startsWith(variables['Build.SourceBranch'], 'refs/tags/'), eq(variables['CI_JOB'], 'release' ))
+    inputs:
+      gitHubConnection: 'ignopeverell'
+      repositoryName: 'mimblewimble/grin'
+      action: 'edit'
+      target: '$(build.sourceVersion)'
+      tagSource: 'manual'
+      tag: '$(build.my_tag)'
+      assets: |
+        $(Build.ArtifactStagingDirectory)\grin-$(build.my_tag)-$(build.platform).zip
+        $(Build.ArtifactStagingDirectory)\grin-$(build.my_tag)-$(build.platform)-sha256sum.txt
+      title: '$(build.my_tag)'
+      assetUploadMode: 'replace'
+      addChangeLog: true

@@ -344,6 +344,7 @@ pub enum SyncStatus {
 		current_height: u64,
 		highest_height: u64,
 	},
+	Shutdown,
 }
 
 /// Current sync state. Encapsulates the current SyncStatus.

@@ -17,6 +17,7 @@
 
 use crate::util::RwLock;
 use std::fs::File;
+use std::io::Read;
 use std::path::PathBuf;
 use std::sync::{Arc, Weak};
 use std::thread;
@@ -342,6 +343,16 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 			Ok(b) => Some(b),
 			_ => None,
 		}
+	}
+
+	fn kernel_data_read(&self) -> Result<File, chain::Error> {
+		self.chain().kernel_data_read()
+	}
+
+	fn kernel_data_write(&self, reader: &mut Read) -> Result<bool, chain::Error> {
+		let res = self.chain().kernel_data_write(reader)?;
+		error!("***** kernel_data_write: {:?}", res);
+		Ok(true)
 	}
 
 	/// Provides a reading view into the current txhashset state as well as
@@ -715,7 +726,12 @@ impl ChainAdapter for ChainToPoolAndNetAdapter {
 		// Reconcile the txpool against the new block *after* we have broadcast it too our peers.
 		// This may be slow and we do not want to delay block propagation.
 		// We only want to reconcile the txpool against the new block *if* total work has increased.
-		if status == BlockStatus::Next || status == BlockStatus::Reorg {
+		let is_reorg = if let BlockStatus::Reorg(_) = status {
+			true
+		} else {
+			false
+		};
+		if status == BlockStatus::Next || is_reorg {
 			let mut tx_pool = self.tx_pool.write();
 
 			let _ = tx_pool.reconcile_block(b);
@@ -725,7 +741,7 @@ impl ChainAdapter for ChainToPoolAndNetAdapter {
 			tx_pool.truncate_reorg_cache(cutoff);
 		}
 
-		if status == BlockStatus::Reorg {
+		if is_reorg {
 			let _ = self.tx_pool.write().reconcile_reorg_cache(&b.header);
 		}
 	}

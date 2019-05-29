@@ -85,7 +85,7 @@ impl UI {
 		let mut title_string = StyledString::new();
 		title_string.append(StyledString::styled(
 			format!(
-				"Grin Version {} (protocol version: {})",
+				"Grin Version {} (proto: {})",
 				built_info::PKG_VERSION,
 				Server::protocol_version()
 			),
@@ -173,8 +173,10 @@ impl Controller {
 			while let Some(message) = self.rx.try_iter().next() {
 				match message {
 					ControllerMessage::Shutdown => {
-						server.stop();
 						self.ui.stop();
+						println!("Shutdown in progress, please wait");
+						server.stop();
+						return;
 					}
 				}
 			}

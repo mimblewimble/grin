@@ -1,0 +1,10 @@
+steps:
+  - script: 'cargo test --all'
+    displayName: Windows Cargo Test
+    condition: and(eq( variables['Agent.OS'], 'Windows_NT' ), eq( variables['CI_JOB'], 'test-all' ))
+  - script: 'cargo test --all'
+    displayName: macOS Cargo Test
+    condition: and(eq( variables['Agent.OS'], 'Darwin' ), eq( variables['CI_JOB'], 'test-all' ))
+  - script: '.ci/general-jobs'
+    displayName: Linux Cargo Test
+    condition: eq( variables['Agent.OS'], 'Linux' )

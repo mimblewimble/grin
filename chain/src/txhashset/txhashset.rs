@@ -329,7 +329,7 @@ impl TxHashSet {
 /// of blocks to the txhashset and the checking of the current tree roots.
 ///
 /// The unit of work is always discarded (always rollback) as this is read-only.
-pub fn extending_readonly<'a, F, T>(trees: &'a mut TxHashSet, inner: F) -> Result<T, Error>
+pub fn extending_readonly<F, T>(trees: &mut TxHashSet, inner: F) -> Result<T, Error>
 where
 	F: FnOnce(&mut Extension<'_>) -> Result<T, Error>,
 {
@@ -366,7 +366,7 @@ where
 
 /// Readonly view on the UTXO set.
 /// Based on the current txhashset output_pmmr.
-pub fn utxo_view<'a, F, T>(trees: &'a TxHashSet, inner: F) -> Result<T, Error>
+pub fn utxo_view<F, T>(trees: &TxHashSet, inner: F) -> Result<T, Error>
 where
 	F: FnOnce(&UTXOView<'_>) -> Result<T, Error>,
 {
@@ -391,7 +391,7 @@ where
 /// via last_pos.
 /// We create a new db batch for this view and discard it (rollback)
 /// when we are done with the view.
-pub fn rewindable_kernel_view<'a, F, T>(trees: &'a TxHashSet, inner: F) -> Result<T, Error>
+pub fn rewindable_kernel_view<F, T>(trees: &TxHashSet, inner: F) -> Result<T, Error>
 where
 	F: FnOnce(&mut RewindableKernelView<'_>) -> Result<T, Error>,
 {
@@ -642,7 +642,7 @@ impl<'a> HeaderExtension<'a> {
 	/// Get the header at the specified height based on the current state of the header extension.
 	/// Derives the MMR pos from the height (insertion index) and retrieves the header hash.
 	/// Looks the header up in the db by hash.
-	pub fn get_header_by_height(&mut self, height: u64) -> Result<BlockHeader, Error> {
+	pub fn get_header_by_height(&self, height: u64) -> Result<BlockHeader, Error> {
 		let pos = pmmr::insertion_to_pmmr_index(height + 1);
 		if let Some(hash) = self.get_header_hash(pos) {
 			let header = self.batch.get_block_header(&hash)?;
@@ -654,7 +654,7 @@ impl<'a> HeaderExtension<'a> {
 
 	/// Compares the provided header to the header in the header MMR at that height.
 	/// If these match we know the header is on the current chain.
-	pub fn is_on_current_chain(&mut self, header: &BlockHeader) -> Result<(), Error> {
+	pub fn is_on_current_chain(&self, header: &BlockHeader) -> Result<(), Error> {
 		let chain_header = self.get_header_by_height(header.height)?;
 		if chain_header.hash() == header.hash() {
 			Ok(())
@@ -993,7 +993,7 @@ impl<'a> Extension<'a> {
 
 	/// Compares the provided header to the header in the header MMR at that height.
 	/// If these match we know the header is on the current chain.
-	pub fn is_on_current_chain(&mut self, header: &BlockHeader) -> Result<(), Error> {
+	pub fn is_on_current_chain(&self, header: &BlockHeader) -> Result<(), Error> {
 		let chain_header = self.get_header_by_height(header.height)?;
 		if chain_header.hash() == header.hash() {
 			Ok(())

@@ -13,13 +13,14 @@
 
 //! Common storage-related types
 use memmap;
+use tempfile::tempfile;
 
 use crate::core::ser::{
 	self, BinWriter, FixedLength, Readable, Reader, StreamingReader, Writeable, Writer,
 };
 use std::fmt::Debug;
 use std::fs::{self, File, OpenOptions};
-use std::io::{self, BufReader, BufWriter, Write};
+use std::io::{self, BufReader, BufWriter, Seek, SeekFrom, Write};
 use std::marker;
 use std::path::{Path, PathBuf};
 use std::time;
@@ -142,6 +143,13 @@ where
 	/// Path of the underlying file
 	pub fn path(&self) -> &Path {
 		self.file.path()
+	}
+
+	/// Create a new tempfile containing the contents of this data file.
+	/// This allows callers to see a consistent view of the data without
+	/// locking the data file.
+	pub fn as_temp_file(&self) -> io::Result<File> {
+		self.file.as_temp_file()
 	}
 
 	/// Drop underlying file handles
@@ -435,6 +443,22 @@ where
 		} else {
 			<&[u8]>::default()
 		}
+	}
+
+	/// Create a new tempfile containing the contents of this append only file.
+	/// This allows callers to see a consistent view of the data without
+	/// locking the append only file.
+	pub fn as_temp_file(&self) -> io::Result<File> {
+		let mut reader = BufReader::new(File::open(&self.path)?);
+		let mut writer = BufWriter::new(tempfile()?);
+		io::copy(&mut reader, &mut writer)?;
+
+		// Remember to seek back to start of the file as the caller is likely
+		// to read this file directly without reopening it.
+		writer.seek(SeekFrom::Start(0))?;
+
+		let file = writer.into_inner()?;
+		Ok(file)
 	}
 
 	/// Saves a copy of the current file content, skipping data at the provided

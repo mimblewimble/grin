@@ -117,11 +117,12 @@ impl NetEvents for EventLogger {
 impl ChainEvents for EventLogger {
 	fn on_block_accepted(&self, block: &core::Block, status: &BlockStatus) {
 		match status {
-			BlockStatus::Reorg => {
+			BlockStatus::Reorg(depth) => {
 				warn!(
-					"block_accepted (REORG!): {:?} at {} (diff: {})",
+					"block_accepted (REORG!): {:?} at {} (depth: {}, diff: {})",
 					block.hash(),
 					block.header.height,
+					depth,
 					block.header.total_difficulty(),
 				);
 			}
@@ -261,16 +262,29 @@ impl WebHook {
 
 impl ChainEvents for WebHook {
 	fn on_block_accepted(&self, block: &core::Block, status: &BlockStatus) {
-		let status = match status {
-			BlockStatus::Reorg => "reorg",
+		let status_str = match status {
+			BlockStatus::Reorg(_) => "reorg",
 			BlockStatus::Fork => "fork",
 			BlockStatus::Next => "head",
 		};
-		let payload = json!({
-			"hash": block.header.hash().to_hex(),
-			"status": status,
-			"data": block
-		});
+
+		// Add additional `depth` field to the JSON in case of reorg
+		let payload = if let BlockStatus::Reorg(depth) = status {
+			json!({
+				"hash": block.header.hash().to_hex(),
+				"status": status_str,
+				"data": block,
+
+				"depth": depth
+			})
+		} else {
+			json!({
+				"hash": block.header.hash().to_hex(),
+				"status": status_str,
+				"data": block
+			})
+		};
+
 		if !self.make_request(&payload, &self.block_accepted_url) {
 			error!(
 				"Failed to serialize block {} at height {}",

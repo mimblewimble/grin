@@ -169,5 +169,5 @@ pub enum BlockStatus {
 	Fork,
 	/// Block updates the chain head via a (potentially disruptive) "reorg".
 	/// Previous block was not our previous chain head.
-	Reorg,
+	Reorg(u64),
 }

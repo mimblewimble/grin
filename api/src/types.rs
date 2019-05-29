@@ -74,7 +74,7 @@ pub struct Status {
 impl Status {
 	pub fn from_tip_and_peers(current_tip: chain::Tip, connections: u32) -> Status {
 		Status {
-			protocol_version: p2p::msg::PROTOCOL_VERSION,
+			protocol_version: p2p::msg::ProtocolVersion::default().into(),
 			user_agent: p2p::msg::USER_AGENT.to_string(),
 			connections: connections,
 			tip: Tip::from_tip(current_tip),
@@ -434,8 +434,7 @@ impl<'de> serde::de::Deserialize<'de> for OutputPrintable {
 				}
 
 				if output_type.is_none()
-					|| commit.is_none()
-					|| spent.is_none()
+					|| commit.is_none() || spent.is_none()
 					|| proof_hash.is_none()
 					|| mmr_index.is_none()
 				{
@@ -548,7 +547,7 @@ impl BlockHeaderPrintable {
 	pub fn from_header(header: &core::BlockHeader) -> BlockHeaderPrintable {
 		BlockHeaderPrintable {
 			hash: util::to_hex(header.hash().to_vec()),
-			version: header.version,
+			version: header.version.into(),
 			height: header.height,
 			previous: util::to_hex(header.prev_hash.to_vec()),
 			prev_root: util::to_hex(header.prev_root.to_vec()),

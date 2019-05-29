@@ -22,7 +22,7 @@ use crate::types::Tip;
 use crate::util::secp::pedersen::Commitment;
 use croaring::Bitmap;
 use grin_store as store;
-use grin_store::{option_to_not_found, to_key, Error};
+use grin_store::{option_to_not_found, to_key, Error, SerIterator};
 use std::sync::Arc;
 
 const STORE_SUBPATH: &'static str = "chain";
@@ -377,6 +377,12 @@ impl<'a> Batch<'a> {
 		Ok(Batch {
 			db: self.db.child()?,
 		})
+	}
+
+	/// An iterator to all block in db
+	pub fn blocks_iter(&self) -> Result<SerIterator<Block>, Error> {
+		let key = to_key(BLOCK_PREFIX, &mut "".to_string().into_bytes());
+		self.db.iter(&key)
 	}
 }
 

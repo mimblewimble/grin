@@ -199,6 +199,7 @@ impl TUIStatusListener for TUIStatusView {
 					};
 					format!("Downloading blocks: {}%, step 4/4", percent)
 				}
+				SyncStatus::Shutdown => "Shutting down, closing connections".to_string(),
 			}
 		};
 		/*let basic_mining_config_status = {
