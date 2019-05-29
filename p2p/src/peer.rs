@@ -397,18 +397,18 @@ impl Peer {
 
 	/// Stops the peer
 	pub fn stop(&self) {
-		debug!("Stopping peer without waiting {:?}", self.info.addr);
+		debug!("Stopping peer {:?}", self.info.addr);
 		match self.stop_handle.try_lock() {
 			Some(handle) => handle.stop(),
 			None => error!("can't get stop lock for peer"),
 		}
 	}
 
-	/// Stops the peer and wait until peer's thread exit
-	pub fn stop_and_wait(&self) {
-		debug!("Stopping peer {:?}", self.info.addr);
+	/// Waits until the peer's thread exit
+	pub fn wait(&self) {
+		debug!("Waiting for peer {:?} to stop", self.info.addr);
 		match self.stop_handle.try_lock() {
-			Some(mut handle) => handle.stop_and_wait(),
+			Some(mut handle) => handle.wait(),
 			None => error!("can't get stop lock for peer"),
 		}
 	}
