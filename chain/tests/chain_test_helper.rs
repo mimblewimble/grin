@@ -23,7 +23,7 @@ use self::core::libtx::{self, reward};
 use self::core::pow::Difficulty;
 use self::core::{consensus, global, pow};
 use self::keychain::{ExtKeychainPath, Keychain};
-use self::util::{Mutex, RwLock, StopState};
+use self::util::RwLock;
 use chrono::Duration;
 use grin_chain as chain;
 use grin_core as core;
@@ -47,7 +47,6 @@ pub fn setup(dir_name: &str, genesis: Block) -> Chain {
 		pow::verify_size,
 		verifier_cache,
 		false,
-		Arc::new(Mutex::new(StopState::new())),
 	)
 	.unwrap()
 }
