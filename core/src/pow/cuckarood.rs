@@ -42,7 +42,7 @@ where
 	Ok(Box::new(CuckaroodContext { params }))
 }
 
-/// Cuckaroo cycle context. Only includes the verifier for now.
+/// Cuckarood cycle context. Only includes the verifier for now.
 pub struct CuckaroodContext<T>
 where
 	T: EdgeType,
