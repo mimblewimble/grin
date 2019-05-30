@@ -130,17 +130,17 @@ pub const HARD_FORK_INTERVAL: u64 = YEAR_HEIGHT / 2;
 /// Check whether the block version is valid at a given height, implements
 /// 6 months interval scheduled hard forks for the first 2 years.
 pub fn valid_header_version(height: u64, version: HeaderVersion) -> bool {
-	// uncomment below as we go from hard fork to hard fork
 	if height < HARD_FORK_INTERVAL {
 		version == HeaderVersion::default()
-	/* } else if height < 2 * HARD_FORK_INTERVAL {
-		version == 2
-	} else if height < 3 * HARD_FORK_INTERVAL {
-		version == 3
+	} else if height < 2 * HARD_FORK_INTERVAL {
+		version == HeaderVersion::new(2)
+	// uncomment branches one by one as we go from hard fork to hard fork
+	/* } else if height < 3 * HARD_FORK_INTERVAL {
+		version == HeaderVersion::new(3)
 	} else if height < 4 * HARD_FORK_INTERVAL {
-		version == 4
+		version == HeaderVersion::new(4)
 	} else if height >= 5 * HARD_FORK_INTERVAL {
-		version > 4 */
+		version > HeaderVersion::new(4) */
 	} else {
 		false
 	}
