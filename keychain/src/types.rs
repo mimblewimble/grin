@@ -233,7 +233,7 @@ pub struct BlindingFactor([u8; SECRET_KEY_SIZE]);
 
 // Dummy `Debug` implementation that prevents secret leakage.
 impl fmt::Debug for BlindingFactor {
-	fn fmt(&self, _f: &mut ::std::fmt::Formatter<'_>) -> fmt::Result {
+	fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> fmt::Result {
 		write!(f, "BlindingFactor(<secret key hidden>)")
 	}
 }
