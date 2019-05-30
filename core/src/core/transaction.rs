@@ -35,7 +35,7 @@ use std::cmp::{max, min};
 use std::sync::Arc;
 use std::{error, fmt};
 
-/// Enum of various supported kernel "features".
+// Enum of various supported kernel "features".
 enum_from_primitive! {
 	/// Various flavors of tx kernel.
 	#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
@@ -1214,7 +1214,7 @@ impl Input {
 	}
 }
 
-/// Enum of various supported kernel "features".
+// Enum of various supported kernel "features".
 enum_from_primitive! {
 	/// Various flavors of tx kernel.
 	#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]

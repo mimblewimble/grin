@@ -47,9 +47,9 @@ const OTHER_MAGIC: [u8; 2] = [73, 43];
 const FLOONET_MAGIC: [u8; 2] = [83, 59];
 const MAINNET_MAGIC: [u8; 2] = [97, 61];
 
-/// Types of messages.
-/// Note: Values here are *important* so we should only add new values at the
-/// end.
+// Types of messages.
+// Note: Values here are *important* so we should only add new values at the
+// end.
 enum_from_primitive! {
 	#[derive(Debug, Clone, Copy, PartialEq)]
 	pub enum Type {
