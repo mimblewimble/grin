@@ -35,15 +35,23 @@ use std::cmp::{max, min};
 use std::sync::Arc;
 use std::{error, fmt};
 
-/// Various flavors of tx kernel.
+/// Various tx kernel variants.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub enum KernelFeatures {
 	/// Plain kernel (the default for Grin txs).
-	Plain { fee: u64 },
+	Plain {
+		/// Plain kernels have fees.
+		fee: u64,
+	},
 	/// A coinbase kernel.
 	Coinbase,
-	/// A kernel with an expicit lock height.
-	HeightLocked { fee: u64, lock_height: u64 },
+	/// A kernel with an explicit lock height (and fee).
+	HeightLocked {
+		/// Height locked kernels have fees.
+		fee: u64,
+		/// Height locked kernels have lock heights.
+		lock_height: u64,
+	},
 }
 
 impl KernelFeatures {
@@ -51,6 +59,8 @@ impl KernelFeatures {
 	const COINBASE_U8: u8 = 1;
 	const HEIGHT_LOCKED_U8: u8 = 2;
 
+	/// Underlying (u8) value representing this kernel variant.
+	/// This is the first byte when we serialize/deserialize the kernel features.
 	pub fn as_u8(&self) -> u8 {
 		match self {
 			KernelFeatures::Plain { .. } => KernelFeatures::PLAIN_U8,
