@@ -66,6 +66,10 @@ fn load_keys(i2p_socket: &str, config: &ServerConfig) -> (I2pSocketAddr, String)
 	let mut i2p_pubkey = i2p_root.clone();
 	i2p_pubkey.push(PUBKEY_FILE);
 
+	if !i2p_root.exists() {
+		fs::create_dir_all(i2p_root.clone()).expect("could not create I2P keyfile directory.");
+	}
+
 	let (pubkey, privkey): (String, String) = if i2p_pubkey.as_path().exists()
 		&& i2p_privkey.as_path().exists()
 	{
