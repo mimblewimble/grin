@@ -17,7 +17,10 @@
 use std::fs;
 use std::net::SocketAddr;
 use std::path::PathBuf;
+use std::process::Command;
 use std::sync::Arc;
+
+use which;
 
 use i2p::net::{I2pAddr, I2pSocketAddr};
 use i2p::{SamConnection, Session};
@@ -53,7 +56,13 @@ pub fn init(config: &mut ServerConfig) -> Option<Arc<Session>> {
 }
 
 fn start_i2pd() {
-	unimplemented!()
+	let i2pd_path = which::which("i2pd").unwrap();
+	Command::new(i2pd_path.to_str().unwrap())
+		.arg("--daemon")
+		.spawn()
+		.expect("i2pd failed to start. Ensure i2pd is on your system path.");
+	// allow i2pd a moment to startup before attempting SAM connection
+	std::thread::sleep(std::time::Duration::from_millis(200));
 }
 
 fn load_keys(i2p_socket: &str, config: &ServerConfig) -> (I2pSocketAddr, String) {
