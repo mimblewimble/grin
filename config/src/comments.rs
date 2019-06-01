@@ -250,10 +250,39 @@ fn comments() -> HashMap<String, String> {
 	);
 
 	retval.insert(
+		"i2p_mode".to_string(),
+		"
+#Configuration for I2P support (\"Disabled\" by default)
+#I2P can be enabled by the following:
+#[server.p2p_config.i2p_mode]
+#mode = \"Enabled\"
+
+#[server.p2p_config.i2p_mode.i2p_config]
+#autostart = true/false  - start I2P automatically
+#exclusive = true/false  - exclusively connect through I2P, or also use TCP
+#addr = \"127.0.0.1:7656\"  - address of local I2P server
+"
+		.to_string(),
+	);
+
+	retval.insert(
 		"[server.p2p_config.capabilities]".to_string(),
 		"#If the seeding type is List, the list of peers to connect to can
-#be specified as follows:
-#seeds = [\"192.168.0.1:3414\",\"192.168.0.2:3414\"]
+#be specified as follows (same for other peer types):
+#For TCP addresses:
+#[[server.p2p_config.seeds]]
+#peer_type = \"Socket\"
+#peer_addr = \"192.168.0.1:3414\"
+
+#For I2P addresses:
+#[[server.p2p_config.seeds]]
+#peer_type = \"I2p\"
+
+#[server.p2p_config.seeds.peer_addr]
+#port = 3414
+
+#[server.p2p_config.seeds.peer_addr.dest]
+#inner = \"4jcuryak7cabdqrv72ytqonf4xnk3jcryfkzqz43wo67dqwlh2xa.b32.i2p\"
 
 #hardcoded peer lists for allow/deny
 #will *only* connect to peers in allow list
