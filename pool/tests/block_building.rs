@@ -47,7 +47,14 @@ fn test_transaction_pool_block_building() {
 				let height = prev_header.height + 1;
 				let key_id = ExtKeychain::derive_key_id(1, height as u32, 0, 0, 0);
 				let fee = txs.iter().map(|x| x.fee()).sum();
-				let reward = libtx::reward::output(&keychain, &key_id, fee, false).unwrap();
+				let reward = libtx::reward::output(
+					&keychain,
+					&libtx::ProofBuilder::new(&keychain),
+					&key_id,
+					fee,
+					false,
+				)
+				.unwrap();
 				let mut block = Block::new(&prev_header, txs, Difficulty::min(), reward).unwrap();
 
 				// Set the prev_root to the prev hash for testing purposes (no MMR to obtain a root from).

@@ -19,19 +19,24 @@ use crate::core::transaction::kernel_sig_msg;
 use crate::core::{KernelFeatures, Output, OutputFeatures, TxKernel};
 use crate::keychain::{Identifier, Keychain};
 use crate::libtx::error::Error;
-use crate::libtx::{aggsig, proof};
+use crate::libtx::{
+	aggsig,
+	proof::{self, ProofBuild},
+};
 use crate::util::{secp, static_secp_instance};
 use grin_keychain::SwitchCommitmentType;
 
 /// output a reward output
-pub fn output<K>(
+pub fn output<K, B>(
 	keychain: &K,
+	builder: &B,
 	key_id: &Identifier,
 	fees: u64,
 	test_mode: bool,
 ) -> Result<(Output, TxKernel), Error>
 where
 	K: Keychain,
+	B: ProofBuild,
 {
 	let value = reward(fees);
 
@@ -39,9 +44,7 @@ where
 
 	trace!("Block reward - Pedersen Commit is: {:?}", commit,);
 
-	// TODO: use the new builder
-	let builder = proof::LegacyProofBuilder::new(keychain);
-	let rproof = proof::create(keychain, &builder, value, key_id, commit, None)?;
+	let rproof = proof::create(keychain, builder, value, key_id, commit, None)?;
 
 	let output = Output {
 		features: OutputFeatures::Coinbase,
