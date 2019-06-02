@@ -130,6 +130,8 @@ where
 	K: Keychain,
 {
 	keychain: &'a K,
+	rewind_hash: Vec<u8>,
+	private_hash: Vec<u8>,
 }
 
 impl<'a, K> ProofBuilder<'a, K>
@@ -138,18 +140,37 @@ where
 {
 	/// Creates a new instance of this proof builder
 	pub fn new(keychain: &'a K) -> Self {
-		Self { keychain }
-	}
-
-	fn nonce(&self, commit: &Commitment, extra_data: u8) -> Result<SecretKey, Error> {
-		let mut root_key = self
-			.keychain
-			.derive_key(0, &K::root_key_id(), &SwitchCommitmentType::None)?
+		let mut rewind_root_key = keychain
+			.derive_key(0, &K::root_key_id(), &SwitchCommitmentType::None)
+			.unwrap()
 			.0
 			.to_vec();
-		root_key.push(extra_data);
-		let root_key_hash = blake2::blake2b::blake2b(32, &[], &root_key);
-		let res = blake2::blake2b::blake2b(32, &commit.0, root_key_hash.as_bytes());
+		let mut private_root_key = rewind_root_key.clone();
+
+		rewind_root_key.push(0);
+		private_root_key.push(1);
+
+		let rewind_hash: Vec<u8> = blake2::blake2b::blake2b(32, &[], &rewind_root_key)
+			.as_bytes()
+			.to_vec();
+		let private_hash: Vec<u8> = blake2::blake2b::blake2b(32, &[], &private_root_key)
+			.as_bytes()
+			.to_vec();
+
+		Self {
+			keychain,
+			rewind_hash,
+			private_hash,
+		}
+	}
+
+	fn nonce(&self, commit: &Commitment, private: bool) -> Result<SecretKey, Error> {
+		let hash = if private {
+			&self.private_hash
+		} else {
+			&self.rewind_hash
+		};
+		let res = blake2::blake2b::blake2b(32, &commit.0, hash);
 		SecretKey::from_slice(self.keychain.secp(), res.as_bytes()).map_err(|e| {
 			ErrorKind::RangeProof(format!("Unable to create nonce: {:?}", e).to_string()).into()
 		})
@@ -161,11 +182,11 @@ where
 	K: Keychain,
 {
 	fn rewind_nonce(&self, commit: &Commitment) -> Result<SecretKey, Error> {
-		self.nonce(commit, 0)
+		self.nonce(commit, false)
 	}
 
 	fn private_nonce(&self, commit: &Commitment) -> Result<SecretKey, Error> {
-		self.nonce(commit, 1)
+		self.nonce(commit, true)
 	}
 
 	/// Message bytes:
@@ -222,6 +243,7 @@ where
 	K: Keychain,
 {
 	keychain: &'a K,
+	root_hash: Vec<u8>,
 }
 
 impl<'a, K> LegacyProofBuilder<'a, K>
@@ -230,14 +252,18 @@ where
 {
 	/// Creates a new instance of this proof builder
 	pub fn new(keychain: &'a K) -> Self {
-		Self { keychain }
+		Self {
+			keychain,
+			root_hash: keychain
+				.derive_key(0, &K::root_key_id(), &SwitchCommitmentType::Regular)
+				.unwrap()
+				.0
+				.to_vec(),
+		}
 	}
 
 	fn nonce(&self, commit: &Commitment) -> Result<SecretKey, Error> {
-		let root_key =
-			self.keychain
-				.derive_key(0, &K::root_key_id(), &SwitchCommitmentType::Regular)?;
-		let res = blake2::blake2b::blake2b(32, &commit.0, &root_key.0[..]);
+		let res = blake2::blake2b::blake2b(32, &commit.0, &self.root_hash);
 		SecretKey::from_slice(self.keychain.secp(), res.as_bytes()).map_err(|e| {
 			ErrorKind::RangeProof(format!("Unable to create nonce: {:?}", e).to_string()).into()
 		})
