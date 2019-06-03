@@ -158,7 +158,7 @@ where
 {
 	Box::new(
 		move |_build, (tx, kern, sum)| -> (Transaction, TxKernel, BlindSum) {
-			(tx.with_offset(offset), kern, sum)
+			(tx.with_offset(offset.clone()), kern, sum)
 		},
 	)
 }
