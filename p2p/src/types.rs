@@ -333,7 +333,7 @@ bitflags! {
 	}
 }
 
-/// Types of connection
+// Types of connection
 enum_from_primitive! {
 	#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 	pub enum Direction {
@@ -342,7 +342,7 @@ enum_from_primitive! {
 	}
 }
 
-/// Ban reason
+// Ban reason
 enum_from_primitive! {
 	#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 	pub enum ReasonForBan {

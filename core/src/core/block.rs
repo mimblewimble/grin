@@ -384,7 +384,7 @@ impl BlockHeader {
 
 	/// Total kernel offset for the chain state up to and including this block.
 	pub fn total_kernel_offset(&self) -> BlindingFactor {
-		self.total_kernel_offset
+		self.total_kernel_offset.clone()
 	}
 }
 
@@ -560,8 +560,10 @@ impl Block {
 			.with_kernel(reward_kern);
 
 		// Now add the kernel offset of the previous block for a total
-		let total_kernel_offset =
-			committed::sum_kernel_offsets(vec![agg_tx.offset, prev.total_kernel_offset], vec![])?;
+		let total_kernel_offset = committed::sum_kernel_offsets(
+			vec![agg_tx.offset.clone(), prev.total_kernel_offset.clone()],
+			vec![],
+		)?;
 
 		let now = Utc::now().timestamp();
 		let timestamp = DateTime::<Utc>::from_utc(NaiveDateTime::from_timestamp(now, 0), Utc);
@@ -698,7 +700,7 @@ impl Block {
 		// verify.body.outputs and kernel sums
 		let (_utxo_sum, kernel_sum) = self.verify_kernel_sums(
 			self.header.overage(),
-			self.block_kernel_offset(*prev_kernel_offset)?,
+			self.block_kernel_offset(prev_kernel_offset.clone())?,
 		)?;
 
 		Ok(kernel_sum)

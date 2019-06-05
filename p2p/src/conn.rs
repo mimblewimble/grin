@@ -179,8 +179,7 @@ impl StopHandle {
 		self.stopped.store(true, Ordering::Relaxed);
 	}
 
-	pub fn stop_and_wait(&mut self) {
-		self.stop();
+	pub fn wait(&mut self) {
 		if let Some(reader_thread) = self.reader_thread.take() {
 			self.join_thread(reader_thread);
 		}

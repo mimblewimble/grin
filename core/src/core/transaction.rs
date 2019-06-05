@@ -35,7 +35,7 @@ use std::cmp::{max, min};
 use std::sync::Arc;
 use std::{error, fmt};
 
-/// Enum of various supported kernel "features".
+// Enum of various supported kernel "features".
 enum_from_primitive! {
 	/// Various flavors of tx kernel.
 	#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
@@ -957,7 +957,7 @@ impl Transaction {
 	) -> Result<(), Error> {
 		self.body.validate(weighting, verifier)?;
 		self.body.verify_features()?;
-		self.verify_kernel_sums(self.overage(), self.offset)?;
+		self.verify_kernel_sums(self.overage(), self.offset.clone())?;
 		Ok(())
 	}
 
@@ -1214,7 +1214,7 @@ impl Input {
 	}
 }
 
-/// Enum of various supported kernel "features".
+// Enum of various supported kernel "features".
 enum_from_primitive! {
 	/// Various flavors of tx kernel.
 	#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]

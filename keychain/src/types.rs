@@ -32,6 +32,7 @@ use crate::util::secp::key::{PublicKey, SecretKey};
 use crate::util::secp::pedersen::Commitment;
 use crate::util::secp::{self, Message, Secp256k1, Signature};
 use crate::util::static_secp_instance;
+use zeroize::Zeroize;
 
 use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
 
@@ -227,12 +228,13 @@ impl fmt::Display for Identifier {
 	}
 }
 
-#[derive(Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[derive(Default, Clone, PartialEq, Serialize, Deserialize, Zeroize)]
 pub struct BlindingFactor([u8; SECRET_KEY_SIZE]);
 
+// Dummy `Debug` implementation that prevents secret leakage.
 impl fmt::Debug for BlindingFactor {
 	fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> fmt::Result {
-		write!(f, "{}", self.to_hex())
+		write!(f, "BlindingFactor(<secret key hidden>)")
 	}
 }
 
@@ -480,8 +482,38 @@ mod test {
 	use rand::thread_rng;
 
 	use crate::types::{BlindingFactor, ExtKeychainPath, Identifier};
+	use crate::util::secp::constants::SECRET_KEY_SIZE;
 	use crate::util::secp::key::{SecretKey, ZERO_KEY};
 	use crate::util::secp::Secp256k1;
+	use std::slice::from_raw_parts;
+
+	// This tests cleaning of BlindingFactor (e.g. secret key) on Drop.
+	// To make this test fail, just remove `Zeroize` derive from `BlindingFactor` definition.
+	#[test]
+	fn blinding_factor_clear_on_drop() {
+		// Create buffer for blinding factor filled with non-zero bytes.
+		let bf_bytes = [0xAA; SECRET_KEY_SIZE];
+		let ptr = {
+			// Fill blinding factor with some "sensitive" data
+			let bf = BlindingFactor::from_slice(&bf_bytes[..]);
+			bf.0.as_ptr()
+
+			// -- after this line BlindingFactor should be zeroed
+		};
+
+		// Unsafely get data from where BlindingFactor was in memory. Should be all zeros.
+		let bf_bytes = unsafe { from_raw_parts(ptr, SECRET_KEY_SIZE) };
+
+		// There should be all zeroes.
+		let mut all_zeros = true;
+		for b in bf_bytes {
+			if *b != 0x00 {
+				all_zeros = false;
+			}
+		}
+
+		assert!(all_zeros)
+	}
 
 	#[test]
 	fn split_blinding_factor() {
