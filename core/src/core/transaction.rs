@@ -69,6 +69,15 @@ impl KernelFeatures {
 		}
 	}
 
+	/// Conversion for backward compatibility.
+	pub fn as_string(&self) -> String {
+		match self {
+			KernelFeatures::Plain { .. } => String::from("Plain"),
+			KernelFeatures::Coinbase => String::from("Coinbase"),
+			KernelFeatures::HeightLocked { .. } => String::from("HeightLocked"),
+		}
+	}
+
 	/// We cannot simply hash the features as v1 includes "optional" fields.
 	///
 	/// i.e. A coinbase kernel has a fee of 0 in v1 (but is omitted when hashing the msg).
@@ -331,7 +340,7 @@ impl KernelFeatures {
 	/// Is this a plain kernel?
 	pub fn is_plain(&self) -> bool {
 		match self {
-			KernelFeatures::Plain { fee: _ } => true,
+			KernelFeatures::Plain { .. } => true,
 			_ => false,
 		}
 	}
@@ -339,10 +348,7 @@ impl KernelFeatures {
 	/// Is this a height locked kernel?
 	pub fn is_height_locked(&self) -> bool {
 		match self {
-			KernelFeatures::HeightLocked {
-				fee: _,
-				lock_height: _,
-			} => true,
+			KernelFeatures::HeightLocked { .. } => true,
 			_ => false,
 		}
 	}

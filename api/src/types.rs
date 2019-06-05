@@ -489,8 +489,7 @@ pub struct TxKernelPrintable {
 
 impl TxKernelPrintable {
 	pub fn from_txkernel(k: &core::TxKernel) -> TxKernelPrintable {
-		// TODO - How does "features" get formated here?
-		let features = format!("{:?}", k.features);
+		let features = k.features.as_string();
 		let (fee, lock_height) = match k.features {
 			KernelFeatures::Plain { fee } => (fee, 0),
 			KernelFeatures::Coinbase => (0, 0),
