@@ -1,6 +1,10 @@
 [package]
 name = "grin"
+<<<<<<< HEAD
 version = "2.0.1-beta.1"
+=======
+version = "1.1.1-beta.1"
+>>>>>>> set version number to next (possible) 1.1.x version
 authors = ["Grin Developers <mimblewimble@lists.launchpad.net>"]
 description = "Simple, private and scalable cryptocurrency implementation based on the MimbleWimble chain format."
 license = "Apache-2.0"
@@ -32,6 +36,7 @@ term = "0.5"
 failure = "0.1"
 failure_derive = "0.1"
 
+<<<<<<< HEAD
 grin_api = { path = "./api", version = "2.0.1-beta.1" }
 grin_config = { path = "./config", version = "2.0.1-beta.1" }
 grin_core = { path = "./core", version = "2.0.1-beta.1" }
@@ -39,6 +44,15 @@ grin_keychain = { path = "./keychain", version = "2.0.1-beta.1" }
 grin_p2p = { path = "./p2p", version = "2.0.1-beta.1" }
 grin_servers = { path = "./servers", version = "2.0.1-beta.1" }
 grin_util = { path = "./util", version = "2.0.1-beta.1" }
+=======
+grin_api = { path = "./api", version = "1.1.1-beta.1" }
+grin_config = { path = "./config", version = "1.1.1-beta.1" }
+grin_core = { path = "./core", version = "1.1.1-beta.1" }
+grin_keychain = { path = "./keychain", version = "1.1.1-beta.1" }
+grin_p2p = { path = "./p2p", version = "1.1.1-beta.1" }
+grin_servers = { path = "./servers", version = "1.1.1-beta.1" }
+grin_util = { path = "./util", version = "1.1.1-beta.1" }
+>>>>>>> set version number to next (possible) 1.1.x version
 
 [target.'cfg(windows)'.dependencies]
 cursive = { version = "0.12", default-features = false, features = ["pancurses-backend"] }
@@ -52,5 +66,10 @@ cursive = "0.12"
 built = "0.3"
 
 [dev-dependencies]
+<<<<<<< HEAD
 grin_chain = { path = "./chain", version = "2.0.1-beta.1" }
 grin_store = { path = "./store", version = "2.0.1-beta.1" }
+=======
+grin_chain = { path = "./chain", version = "1.1.1-beta.1" }
+grin_store = { path = "./store", version = "1.1.1-beta.1" }
+>>>>>>> set version number to next (possible) 1.1.x version
