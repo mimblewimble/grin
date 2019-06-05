@@ -136,14 +136,14 @@ pub fn valid_header_version(height: u64, version: HeaderVersion) -> bool {
 			// uncomment below as we go from hard fork to hard fork
 			if height < HARD_FORK_INTERVAL {
 				version == HeaderVersion::default()
-			/* } else if height < 2 * HARD_FORK_INTERVAL {
-				version == 2
-			} else if height < 3 * HARD_FORK_INTERVAL {
-				version == 3
+			} else if height < 2 * HARD_FORK_INTERVAL {
+				version == HeaderVersion::new(2)
+			/*} else if height < 3 * HARD_FORK_INTERVAL {
+				version == HeaderVersion::new(3)
 			} else if height < 4 * HARD_FORK_INTERVAL {
-				version == 4
+				version == HeaderVersion::new(4)
 			} else if height >= 5 * HARD_FORK_INTERVAL {
-				version > 4 */
+				version > HeaderVersion::new(4) */
 			} else {
 				false
 			}
@@ -152,30 +152,31 @@ pub fn valid_header_version(height: u64, version: HeaderVersion) -> bool {
 			// uncomment below as we go from hard fork to hard fork
 			if height < HARD_FORK_INTERVAL - 28 * DAY_HEIGHT {
 				version == HeaderVersion::default()
-			/* } else if height < 2 * HARD_FORK_INTERVAL {
-				version == 2
-			} else if height < 3 * HARD_FORK_INTERVAL {
-				version == 3
+			} else if height < 2 * HARD_FORK_INTERVAL {
+				version == HeaderVersion::new(2)
+			/*} else if height < 3 * HARD_FORK_INTERVAL {
+				version == HeaderVersion::new(3)
 			} else if height < 4 * HARD_FORK_INTERVAL {
-				version == 4
+				version == HeaderVersion::new(4)
 			} else if height >= 5 * HARD_FORK_INTERVAL {
-				version > 4 */
+				version > HeaderVersion::new(4) */
 			} else {
 				false
 			}
 		}
+		// everything else just like mainnet
 		_ => {
 			// uncomment below as we go from hard fork to hard fork
 			if height < HARD_FORK_INTERVAL {
 				version == HeaderVersion::default()
-			/* } else if height < 2 * HARD_FORK_INTERVAL {
-				version == 2
-			} else if height < 3 * HARD_FORK_INTERVAL {
-				version == 3
+			} else if height < 2 * HARD_FORK_INTERVAL {
+				version == HeaderVersion::new(2)
+			/*} else if height < 3 * HARD_FORK_INTERVAL {
+				version == HeaderVersion::new(3)
 			} else if height < 4 * HARD_FORK_INTERVAL {
-				version == 4
+				version == HeaderVersion::new(4)
 			} else if height >= 5 * HARD_FORK_INTERVAL {
-				version > 4 */
+				version > HeaderVersion::new(4) */
 			} else {
 				false
 			}
