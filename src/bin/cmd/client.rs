@@ -18,6 +18,7 @@ use std::net::SocketAddr;
 use clap::ArgMatches;
 
 use crate::api;
+use crate::api::client::GrinClient;
 use crate::config::GlobalConfig;
 use crate::p2p;
 use crate::servers::ServerConfig;
@@ -100,7 +101,10 @@ pub fn ban_peer(config: &ServerConfig, peer_addr: &SocketAddr, api_secret: Optio
 		config.api_http_addr,
 		peer_addr.to_string()
 	);
-	match api::client::post_no_ret(url.as_str(), api_secret, &params).map_err(|e| Error::API(e)) {
+	match GrinClient::new(api_secret, None)
+		.post_no_ret(url.as_str(), &params)
+		.map_err(|e| Error::API(e))
+	{
 		Ok(_) => writeln!(e, "Successfully banned peer {}", peer_addr.to_string()).unwrap(),
 		Err(_) => writeln!(e, "Failed to ban peer {}", peer_addr).unwrap(),
 	};
@@ -116,7 +120,7 @@ pub fn unban_peer(config: &ServerConfig, peer_addr: &SocketAddr, api_secret: Opt
 		peer_addr.to_string()
 	);
 	let res: Result<(), api::Error>;
-	res = api::client::post_no_ret(url.as_str(), api_secret, &params);
+	res = GrinClient::new(api_secret, None).post_no_ret(url.as_str(), &params);
 
 	match res.map_err(|e| Error::API(e)) {
 		Ok(_) => writeln!(e, "Successfully unbanned peer {}", peer_addr).unwrap(),
@@ -130,7 +134,8 @@ pub fn list_connected_peers(config: &ServerConfig, api_secret: Option<String>) {
 	let url = format!("http://{}/v1/peers/connected", config.api_http_addr);
 	// let peers_info: Result<Vec<p2p::PeerInfoDisplay>, api::Error>;
 
-	let peers_info = api::client::get::<Vec<p2p::types::PeerInfoDisplay>>(url.as_str(), api_secret);
+	let peers_info =
+		GrinClient::new(api_secret, None).get::<Vec<p2p::types::PeerInfoDisplay>>(url.as_str());
 
 	match peers_info.map_err(|e| Error::API(e)) {
 		Ok(connected_peers) => {
@@ -159,7 +164,9 @@ fn get_status_from_node(
 	api_secret: Option<String>,
 ) -> Result<api::Status, Error> {
 	let url = format!("http://{}/v1/status", config.api_http_addr);
-	api::client::get::<api::Status>(url.as_str(), api_secret).map_err(|e| Error::API(e))
+	GrinClient::new(api_secret, None)
+		.get::<api::Status>(url.as_str())
+		.map_err(|e| Error::API(e))
 }
 
 /// Error type wrapping underlying module errors.

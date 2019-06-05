@@ -103,9 +103,10 @@ fn test_start_api_tls() {
 }
 
 fn request_with_retry(url: &str) -> Result<Vec<String>, api::Error> {
+	let client = api::client::GrinClient::default();
 	let mut tries = 0;
 	loop {
-		let res = api::client::get::<Vec<String>>(url, None);
+		let res = client.get::<Vec<String>>(url);
 		if res.is_ok() {
 			return res;
 		}
