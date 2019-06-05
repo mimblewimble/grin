@@ -257,6 +257,7 @@ impl OutputPrintable {
 		chain: Arc<chain::Chain>,
 		block_header: Option<&core::BlockHeader>,
 		include_proof: bool,
+		include_merkle_proof: bool,
 	) -> Result<OutputPrintable, chain::Error> {
 		let output_type = if output.is_coinbase() {
 			OutputType::Coinbase
@@ -282,7 +283,7 @@ impl OutputPrintable {
 		// We require the rewind() to be stable even after the PMMR is pruned and
 		// compacted so we can still recreate the necessary proof.
 		let mut merkle_proof = None;
-		if output.is_coinbase() && !spent {
+		if include_merkle_proof && output.is_coinbase() && !spent {
 			if let Some(block_header) = block_header {
 				merkle_proof = chain.get_merkle_proof(&out_id, &block_header).ok();
 			}
@@ -583,6 +584,7 @@ impl BlockPrintable {
 		block: &core::Block,
 		chain: Arc<chain::Chain>,
 		include_proof: bool,
+		include_merkle_proof: bool,
 	) -> Result<BlockPrintable, chain::Error> {
 		let inputs = block
 			.inputs()
@@ -598,6 +600,7 @@ impl BlockPrintable {
 					chain.clone(),
 					Some(&block.header),
 					include_proof,
+					include_merkle_proof,
 				)
 			})
 			.collect::<Result<Vec<_>, _>>()?;
@@ -639,7 +642,9 @@ impl CompactBlockPrintable {
 		let out_full = cb
 			.out_full()
 			.iter()
-			.map(|x| OutputPrintable::from_output(x, chain.clone(), Some(&block.header), false))
+			.map(|x| {
+				OutputPrintable::from_output(x, chain.clone(), Some(&block.header), false, true)
+			})
 			.collect::<Result<Vec<_>, _>>()?;
 		let kern_full = cb
 			.kern_full()
