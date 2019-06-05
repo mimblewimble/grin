@@ -24,7 +24,7 @@ blake2-rfc = "0.2"
 chrono = "0.4.4"
 clap = { version = "2.31", features = ["yaml"] }
 ctrlc = { version = "3.1", features = ["termination"] }
-humansize = "2.0.0-beta.1"
+humansize = "1.1.0"
 serde = "1"
 serde_json = "1"
 log = "0.4"
