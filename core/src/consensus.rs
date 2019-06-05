@@ -135,7 +135,7 @@ pub fn valid_header_version(height: u64, version: HeaderVersion) -> bool {
 		global::ChainTypes::Mainnet => {
 			// uncomment below as we go from hard fork to hard fork
 			if height < HARD_FORK_INTERVAL {
-			version == HeaderVersion::default()
+				version == HeaderVersion::default()
 			/* } else if height < 2 * HARD_FORK_INTERVAL {
 				version == 2
 			} else if height < 3 * HARD_FORK_INTERVAL {
@@ -147,11 +147,11 @@ pub fn valid_header_version(height: u64, version: HeaderVersion) -> bool {
 			} else {
 				false
 			}
-		},
+		}
 		global::ChainTypes::Floonet => {
 			// uncomment below as we go from hard fork to hard fork
-			if height < HARD_FORK_INTERVAL-28*DAY_HEIGHT {
-			version == HeaderVersion::default()
+			if height < HARD_FORK_INTERVAL - 28 * DAY_HEIGHT {
+				version == HeaderVersion::default()
 			/* } else if height < 2 * HARD_FORK_INTERVAL {
 				version == 2
 			} else if height < 3 * HARD_FORK_INTERVAL {
@@ -163,11 +163,11 @@ pub fn valid_header_version(height: u64, version: HeaderVersion) -> bool {
 			} else {
 				false
 			}
-		},
+		}
 		_ => {
 			// uncomment below as we go from hard fork to hard fork
 			if height < HARD_FORK_INTERVAL {
-			version == HeaderVersion::default()
+				version == HeaderVersion::default()
 			/* } else if height < 2 * HARD_FORK_INTERVAL {
 				version == 2
 			} else if height < 3 * HARD_FORK_INTERVAL {
