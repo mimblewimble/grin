@@ -129,10 +129,7 @@ fn magic() -> [u8; 2] {
 ///
 /// Note: We return a MsgHeaderWrapper here as we may encounter an unknown msg type.
 ///
-pub fn read_header(
-	stream: &mut dyn Read,
-	msg_type: Option<Type>,
-) -> Result<MsgHeaderWrapper, Error> {
+pub fn read_header(stream: &mut dyn Read) -> Result<MsgHeaderWrapper, Error> {
 	let mut head = vec![0u8; MsgHeader::LEN];
 	stream.read_exact(&mut head)?;
 	let header = ser::deserialize::<MsgHeaderWrapper>(&mut &head[..])?;
@@ -165,7 +162,7 @@ pub fn read_discard(msg_len: u64, stream: &mut dyn Read) -> Result<(), Error> {
 
 /// Reads a full message from the underlying stream.
 pub fn read_message<T: Readable>(stream: &mut dyn Read, msg_type: Type) -> Result<T, Error> {
-	match read_header(stream, Some(msg_type))? {
+	match read_header(stream)? {
 		MsgHeaderWrapper::Known(header) => {
 			if header.msg_type == msg_type {
 				read_body(&header, stream)

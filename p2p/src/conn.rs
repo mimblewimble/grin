@@ -312,7 +312,7 @@ where
 		.spawn(move || {
 			loop {
 				// check the read end
-				match try_break!(read_header(&mut reader, None)) {
+				match try_break!(read_header(&mut reader)) {
 					Some(MsgHeaderWrapper::Known(header)) => {
 						let msg = Message::from_header(header, &mut reader);
 
