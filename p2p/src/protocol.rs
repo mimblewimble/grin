@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 use crate::conn::{Message, MessageHandler, Response, Tracker};
 use crate::core::core::{self, hash::Hash, hash::Hashed, CompactBlock};
 
@@ -294,13 +293,13 @@ impl MessageHandler for Protocol {
 
 			Type::TxHashSetRequest => {
 				let sm_req: TxHashSetRequest = msg.body()?;
-				debug!(
-					"handle_payload: txhashset req for {} at {}",
-					sm_req.hash, sm_req.height
-				);
 
 				let txhashset_header = self.adapter.txhashset_archive_header()?;
 				let txhashset_header_hash = txhashset_header.hash();
+				debug!(
+					"handle_payload: txhashset request for {} at {}, response with {} at {}",
+					sm_req.hash, sm_req.height, txhashset_header.height, txhashset_header_hash,
+				);
 				let txhashset = self.adapter.txhashset_read(txhashset_header_hash);
 
 				if let Some(txhashset) = txhashset {
