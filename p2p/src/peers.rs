@@ -674,6 +674,10 @@ impl ChainAdapter for Peers {
 		self.adapter.txhashset_read(h)
 	}
 
+	fn txhashset_archive_header(&self) -> Result<core::BlockHeader, chain::Error> {
+		self.adapter.txhashset_archive_header()
+	}
+
 	fn txhashset_receive_ready(&self) -> bool {
 		self.adapter.txhashset_receive_ready()
 	}

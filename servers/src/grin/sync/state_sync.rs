@@ -160,6 +160,9 @@ impl StateSync {
 
 	fn request_state(&self, header_head: &chain::Tip) -> Result<Arc<Peer>, p2p::Error> {
 		let threshold = global::state_sync_threshold() as u64;
+		let archive_interval = global::txhashset_archive_interval();
+		let mut txhashset_height = header_head.height.saturating_sub(threshold);
+		txhashset_height = txhashset_height.saturating_sub(txhashset_height % archive_interval);
 
 		if let Some(peer) = self.peers.most_work_peer() {
 			// ask for txhashset at state_sync_threshold
@@ -168,18 +171,18 @@ impl StateSync {
 				.get_block_header(&header_head.prev_block_h)
 				.map_err(|e| {
 					error!(
-						"chain error dirung getting a block header {}: {:?}",
+						"chain error during getting a block header {}: {:?}",
 						&header_head.prev_block_h, e
 					);
 					p2p::Error::Internal
 				})?;
-			for _ in 0..threshold {
+			while txhashset_head.height > txhashset_height {
 				txhashset_head = self
 					.chain
 					.get_previous_header(&txhashset_head)
 					.map_err(|e| {
 						error!(
-							"chain error dirung getting a previous block header {}: {:?}",
+							"chain error during getting a previous block header {}: {:?}",
 							txhashset_head.hash(),
 							e
 						);
