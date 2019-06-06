@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 use crate::conn::{Message, MessageHandler, Response, Tracker};
 use crate::core::core::{self, hash::Hash, hash::Hashed, CompactBlock};
 
