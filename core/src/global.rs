@@ -161,9 +161,9 @@ where
 						=> new_cuckarood_ctx(edge_bits, proof_size),
 		ChainTypes::Mainnet => new_cuckaroo_ctx(edge_bits, proof_size),
 
-		// Same for Floonet, except hardfork 32 days earlier
+		// Same for Floonet
 		ChainTypes::Floonet if edge_bits > 29 => new_cuckatoo_ctx(edge_bits, proof_size, max_sols),
-		ChainTypes::Floonet if valid_header_version(height+32*DAY_HEIGHT, HeaderVersion::new(2))
+		ChainTypes::Floonet if valid_header_version(height, HeaderVersion::new(2))
 						=> new_cuckarood_ctx(edge_bits, proof_size),
 		ChainTypes::Floonet => new_cuckaroo_ctx(edge_bits, proof_size),
 
