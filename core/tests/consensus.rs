@@ -660,20 +660,20 @@ fn hard_forks() {
 		assert!(valid_header_version(10, HeaderVersion::new(1)));
 		assert!(!valid_header_version(10, HeaderVersion::new(2)));
 		assert!(valid_header_version(
-			YEAR_HEIGHT / 2 - 28 * DAY_HEIGHT - 1,
+			FLOONET_FIRST_HARD_FORK - 1,
 			HeaderVersion::new(1)
 		));
 		assert!(valid_header_version(
-			YEAR_HEIGHT / 2 - 28 * DAY_HEIGHT,
+			FLOONET_FIRST_HARD_FORK,
 			HeaderVersion::new(2)
 		));
 		assert!(!valid_header_version(
-			YEAR_HEIGHT / 2 - 28 * DAY_HEIGHT,
+			FLOONET_FIRST_HARD_FORK,
 			HeaderVersion::new(1)
 		));
 		assert!(!valid_header_version(YEAR_HEIGHT, HeaderVersion::new(1)));
 		assert!(valid_header_version(
-			YEAR_HEIGHT / 2 - 28 * DAY_HEIGHT + 1,
+			FLOONET_FIRST_HARD_FORK + 1,
 			HeaderVersion::new(2)
 		));
 		// v3 not active yet
