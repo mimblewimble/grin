@@ -14,7 +14,7 @@ The original version of Dandelion was introduced by Fanti et al. and presented a
 
 ### Motivation
 
-Dandelion was conceived as a way to mitigate against large scale deanonymization attacks on the network layer of Bitcoin, made possible by the diffusion method for propagating transactions on the network. By deploying "super-nodes" that connect to a large number of honest nodes on the network, adversaries can listen to the transactions relayed by the honest nodes as they get diffused symmetrically on the network using epidemic flooding or diffusion. By observing the spreading dynamic of a transaction, it has been proven possible to link it (and therefore also the sender's Bitcoin address) to the originating IP address with a high degree of accuracy, and as a result  deanonymize users.
+Dandelion was conceived as a way to mitigate against large scale deanonymization attacks on the network layer of Bitcoin, made possible by the diffusion method for propagating transactions on the network. By deploying "super-nodes" that connect to a large number of honest nodes on the network, adversaries can listen to the transactions relayed by the honest nodes as they get diffused symmetrically on the network using epidemic flooding or diffusion. By observing the spreading dynamic of a transaction, it has been proven possible to link it (and therefore also the sender's Bitcoin address) to the originating IP address with a high degree of accuracy, and as a result deanonymize users.
 
 ### Original Dandelion
 
@@ -41,13 +41,13 @@ The 'dandelion' name is derived from how the protocol resembles the spreading of
 In the Dandelion++ paper[1], the authors build on the original concept further, by defending against stronger adversaries that are allowed to disobey protocol. 
 
 The original paper makes three idealistic assumptions: 
-1. All nodes obey the protocol;
+1. All nodes obey protocol;
 2. Each node generates exactly one transaction; and
-3. All Bitcoin nodes run Dandelion. 
+3. All nodes on the network run Dandelion. 
 
 An adversary can violate these rules, and by doing so break some of the anonymity properties. 
 
-The modified Dandelion++ protocol makes small changes to most of the Dandelion choices, resulting in an exponentially more complex information space. This in turn makes it harder for an adversary to  deanonymize the network.
+The modified Dandelion++ protocol makes small changes to most of the Dandelion choices, resulting in an exponentially more complex information space. This in turn makes it harder for an adversary to deanonymize the network.
 
 The paper describes five types of attacks, and proposes specific updates to the original Dandelion protocol to mitigate against these, presented in Table A (here in summarized form).
 
@@ -82,13 +82,13 @@ in2        out2
 
 ***Note on using 4-regular vs 2-regular graphs***
 
-The choice between using 4-regular or 2-regular (line) graphs is not obvious. The authors note that it's difficult to construct an exact 4-regular graph within a fully-distributed network in practice. They outline a method to construct an approximate 4-regular graph in the paper. They also write:
+The choice between using 4-regular or 2-regular (line) graphs is not obvious. The authors note that it is difficult to construct an exact 4-regular graph within a fully-distributed network in practice. They outline a method to construct an approximate 4-regular graph in the paper. They also write:
 
 > [...] We recommend making the design decision between 4-regular graphs and line graphs based on the priorities of the system builders. **If linkability of transactions is a first-order concern, then line graphs may be a better choice.** Otherwise, we find that 4-regular graphs can give constant- order privacy benefits against adversaries with knowledge of the graph.
 
 ##### 2. Transaction forwarding (own)
 
-At the beginning of each epoch, `NodeX` picks one of `out1` and `out2` to use as a route to broadcast its own transactions through as a stem-phase transaction. The _same route_ is used throughout the duration epoch, and a node _always_ forwards their own transaction rather than fluffing it directly.
+At the beginning of each epoch, `NodeX` picks one of `out1` and `out2` to use as a route to broadcast its own transactions through as a stem-phase transaction. The _same route_ is used throughout the duration epoch, and `NodeX` _always_ forwards (stems) its own transaction.
 
 ##### 3. Transaction forwarding (relay)
 
@@ -127,8 +127,7 @@ the time between each hop (e.g., network and/or internal node latency), transact
 There are two main motives behind why Dandelion is included in Grin:
 
 1. **Act as a countermeasure against mass de-anonymization attacks.** Similar to Bitcoin, the Grin P2P network would be vulnerable to attackers deploying malicious "super-nodes" connecting to most peers on the network and monitoring transactions as they become diffused by their honest peers. This would allow a motivated actor to infer with a high degree of probability from which peer (IP address) transactions originate from, having negative privacy consequences.
-2. **Aggregate transactions before they are being broadcasted to the entire network.** This is a benefit to blockchains that enable non-interactive CoinJoins on the protocol level, such as Mimblewimble. Despite its good privacy features, some input and output linking is still possible in Mimblewimble and Grin.[4] If you know which input spends to which output, it is possible to construct a (very limited) transaction graph and follow a chain of transaction outputs (TXOs) as they are being spent. Aggregating transactions make this more difficult to carry out, as it becomes less clear which input spends to which output (Figure 3). In order for this to be effective though, there needs to be a large anonymity set, i.e. many transactions to aggregate a transaction with.
-   Dandelion enables this aggregation to occur before transactions are fluffed and diffused to the entire network. This adds obfuscation to the transaction graph, as a malicious observer who is not participating in the stemming or fluffing would not only need to figure out from where a transaction originated, but also which TXOs out of a larger group should be attributed to the originating transaction.
+2. **Aggregate transactions before they are being broadcasted to the entire network.** This is a benefit to blockchains that enable non-interactive CoinJoins on the protocol level, such as Mimblewimble. Despite its good privacy features, some input and output linking is still possible in Mimblewimble and Grin.[4] If you know which input spends to which output, it is possible to construct a (very limited) transaction graph and follow a chain of transaction outputs (TXOs) as they are being spent. Aggregating transactions make this more difficult to carry out, as it becomes less clear which input spends to which output (Figure 3). In order for this to be effective, there needs to be a large anonymity set, i.e. many transactions to aggregate a transaction with. Dandelion enables this aggregation to occur before transactions are fluffed and diffused to the entire network. This adds obfuscation to the transaction graph, as a malicious observer who is not participating in the stemming or fluffing would not only need to figure out from where a transaction originated, but also which TXOs out of a larger group should be attributed to the originating transaction.
 
 **Figure 3.** Aggregating transactions
 ```
@@ -160,21 +159,21 @@ TX1+2   INPUT_A ______________ OUTPUT_X
 
 Grin implements a simplified version of the Dandelion++ protocol. It's been improved several times, most recently in version 1.1.0 [5].
 
-1. `DandelionEpoch` tracks an node's current epoch. This is configurable via `epoch_secs` with default epoch set to last for 10 minutes. Epochs are set and tracked by nodes individually.
-1. At the beginning of an epoch, the node chooses a single connected peer at random to use as their outbound relay. **[IS THIS CORRECT?]**
-1. At the beginning of an epoch, the node makes a decision whether to be in stem mode or in fluff mode. This decision lasts for the duration of the epoch. By default, this is a random choice, with the probability to be in stem mode set to 90%, which implies a fluff mode probability, `q` of 10%. The probability is configurable via `DANDELION_STEM_PROBABILITY`.  The number of expected stem hops a transaction does before arriving to a fluff node is `1/q = 1/0.1 = 10`.
-1. Any transactions received from inbound connected nodes or transactions originated from the node itself (**CORRECT?**) are first added to the node's `stempool`, which is a list of stem transactions, that each node keeps track of individually. Transactions are  removed from the stempool if: 
+1. `DandelionEpoch` tracks a node's current epoch. This is configurable via `epoch_secs` with default epoch set to last for 10 minutes. Epochs are set and tracked by nodes individually.
+2. At the beginning of an epoch, the node chooses a single connected peer at random to use as their outbound relay.
+3. At the beginning of an epoch, the node makes a decision whether to be in stem mode or in fluff mode. This decision lasts for the duration of the epoch. By default, this is a random choice, with the probability to be in stem mode set to 90%, which implies a fluff mode probability, `q` of 10%. The probability is configurable via `DANDELION_STEM_PROBABILITY`.  The number of expected stem hops a transaction does before arriving to a fluff node is `1/q = 1/0.1 = 10`.
+4. Any transactions received from inbound connected nodes or transactions originated from the node itself are first added to the node's `stempool`, which is a list of stem transactions, that each node keeps track of individually. Transactions are  removed from the stempool if: 
    * The node fluffs the transaction itself.
    * The node sees the transaction in question propagated through regular diffusion, i.e. from a different peer having "fluffed" it.
    * The node receives a block containing this transaction, meaning that the transaction was propagated and included in a block.
-1. For each transaction added to the stempool, the node sets an *embargo timer*. This is set by default to 180 seconds, and is configurable via `DANDELION_EMBARGO_SECS`.
-1. Regardless of whether the node is in fluff or stem mode, any transactions generated from the node itself are forwarded onwards to their relay node as a stem transaction. **[IS THIS CORRECT?]**
-1. A `dandelion_monitor` runs every 10 seconds and handles tasks. **CONFIGURABLE?**
-1. If the node is in **stem mode**, then:
+5. For each transaction added to the stempool, the node sets an *embargo timer*. This is set by default to 180 seconds, and is configurable via `DANDELION_EMBARGO_SECS`.
+6. Regardless of whether the node is in fluff or stem mode, any transactions generated from the node itself are forwarded onwards to their relay node as a stem transaction.[6]
+7. A `dandelion_monitor` runs every 10 seconds and handles tasks.
+8. If the node is in **stem mode**, then:
    1. After being added to the stempool, received stem transactions are forwarded onto the their relay node as a stem transaction. 
-   2. As peers connect at random, it is possible they create a circular loop of connected stem mode nodes (i.e. `A -> B -> C -> A`). Therefore, if a node receives a stem transaction from an inbound node that already exists in its own stempool, it will fluff it, broadcasting it using regular diffusion. **CORRECT?**
+   2. As peers connect at random, it is possible they create a circular loop of connected stem mode nodes (i.e. `A -> B -> C -> A`). Therefore, if a node receives a stem transaction from an inbound node that already exists in its own stempool, it will fluff it, broadcasting it using regular diffusion.
    3. `dandelion_monitor` checks for transactions in the node's stempool with an expired embargo timer, and broadcast those individually.
-1. If the node is in **fluff mode**, then:
+9. If the node is in **fluff mode**, then:
    1. Transactions received from inbound nodes are kept in the stempool. 
    2. `dandelion_monitor` checks in the stempool whether any  transactions are older than 30 seconds (configurable as `DANDELION_AGGREGATION_SECS`). If so, these are aggregated and then fluffed. Otherwise no action is taken, allowing for more stem transactions to aggregate in the stempool in time for the next triggering of `dandelion_monitor`.   
    3. At the expiry of an epoch, all stem transactions remaining in the stem pool are aggregated and fluffed.    
@@ -196,4 +195,5 @@ Grin implements a simplified version of the Dandelion++ protocol. It's been impr
 * [2] (Sigmetrics 2017) [Dandelion: Redesigning the Bitcoin Network for Anonymity](https://arxiv.org/abs/1701.04439)
 * [3] [Dandelion BIP](https://github.com/dandelion-org/bips/blob/master/bip-dandelion.mediawiki)
 * [4] [Grin Privacy Primer](https://github.com/mimblewimble/docs/wiki/Grin-Privacy-Primer)
-* [5] [Dandelion++ Rewrite](https://github.com/mimblewimble/grin/pull/2628)
+* [5] [#2628: Dandelion++ Rewrite](https://github.com/mimblewimble/grin/pull/2628)
+* [6] [#2876: Always stem local txs if configured that way (unless explicitly fluffed)](https://github.com/mimblewimble/grin/pull/2876)
