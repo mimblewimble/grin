@@ -113,9 +113,7 @@ fn process_fluff_phase(
 		return Ok(());
 	}
 
-	let cutoff_secs = dandelion_config
-		.aggregation_secs
-		.expect("aggregation secs config missing");
+	let cutoff_secs = dandelion_config.aggregation_secs;
 	let cutoff_entries = select_txs_cutoff(&tx_pool.stempool, cutoff_secs);
 
 	// If epoch is expired, fluff *all* outstanding entries in stempool.
@@ -165,10 +163,7 @@ fn process_expired_entries(
 	// Take a write lock on the txpool for the duration of this processing.
 	let mut tx_pool = tx_pool.write();
 
-	let embargo_secs = dandelion_config
-		.embargo_secs
-		.expect("embargo_secs config missing")
-		+ thread_rng().gen_range(0, 31);
+	let embargo_secs = dandelion_config.embargo_secs + thread_rng().gen_range(0, 31);
 	let expired_entries = select_txs_cutoff(&tx_pool.stempool, embargo_secs);
 
 	if expired_entries.is_empty() {

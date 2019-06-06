@@ -496,8 +496,8 @@ impl DandelionEpoch {
 		match self.start_time {
 			None => true,
 			Some(start_time) => {
-				let epoch_secs = self.config.epoch_secs.expect("epoch_secs config missing") as i64;
-				Utc::now().timestamp().saturating_sub(start_time) > epoch_secs
+				let epoch_secs = self.config.epoch_secs;
+				Utc::now().timestamp().saturating_sub(start_time) > epoch_secs as i64
 			}
 		}
 	}
@@ -511,10 +511,7 @@ impl DandelionEpoch {
 
 		// If stem_probability == 90 then we stem 90% of the time.
 		let mut rng = rand::thread_rng();
-		let stem_probability = self
-			.config
-			.stem_probability
-			.expect("stem_probability config missing");
+		let stem_probability = self.config.stem_probability;
 		self.is_stem = rng.gen_range(0, 100) < stem_probability;
 
 		let addr = self.relay_peer.clone().map(|p| p.info.addr);
@@ -527,6 +524,11 @@ impl DandelionEpoch {
 	/// Are we stemming (or fluffing) transactions in this epoch?
 	pub fn is_stem(&self) -> bool {
 		self.is_stem
+	}
+
+	/// Always stem our (pushed via api) txs regardless of stem/fluff epoch?
+	pub fn always_stem_our_txs(&self) -> bool {
+		self.config.always_stem_our_txs
 	}
 
 	/// What is our current relay peer?
