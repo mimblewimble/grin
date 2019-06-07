@@ -239,9 +239,10 @@ pub fn verify_partial_sig(
 /// let fees = 10_000;
 /// let value = reward(fees);
 /// let key_id = ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
-/// let commit = keychain.commit(value, &key_id, &SwitchCommitmentType::Regular).unwrap();
+/// let switch = &SwitchCommitmentType::Regular;
+/// let commit = keychain.commit(value, &key_id, switch).unwrap();
 /// let builder = proof::ProofBuilder::new(&keychain);
-/// let rproof = proof::create(&keychain, &builder, value, &key_id, commit, None).unwrap();
+/// let rproof = proof::create(&keychain, &builder, value, &key_id, switch, commit, None).unwrap();
 /// let output = Output {
 ///		features: OutputFeatures::Coinbase,
 ///		commit: commit,
@@ -306,9 +307,10 @@ where
 /// let fees = 10_000;
 /// let value = reward(fees);
 /// let key_id = ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
-/// let commit = keychain.commit(value, &key_id, &SwitchCommitmentType::Regular).unwrap();
+/// let switch = &SwitchCommitmentType::Regular;
+/// let commit = keychain.commit(value, &key_id, switch).unwrap();
 /// let builder = proof::ProofBuilder::new(&keychain);
-/// let rproof = proof::create(&keychain, &builder, value, &key_id, commit, None).unwrap();
+/// let rproof = proof::create(&keychain, &builder, value, &key_id, switch, commit, None).unwrap();
 /// let output = Output {
 ///		features: OutputFeatures::Coinbase,
 ///		commit: commit,

@@ -28,6 +28,7 @@ pub fn create<K, B>(
 	b: &B,
 	amount: u64,
 	key_id: &Identifier,
+	switch: &SwitchCommitmentType,
 	_commit: Commitment,
 	extra_data: Option<Vec<u8>>,
 ) -> Result<RangeProof, Error>
@@ -38,8 +39,6 @@ where
 	// TODO: proper support for different switch commitment schemes
 	// The new bulletproof scheme encodes and decodes it, but
 	// it is not supported at the wallet level (yet).
-	// So for now we only build outputs with switch commitments
-	let switch = &SwitchCommitmentType::Regular;
 	let commit = k.commit(amount, key_id, switch)?;
 	let skey = k.derive_key(amount, key_id, switch)?;
 	let rewind_nonce = b.rewind_nonce(&commit)?;
@@ -323,5 +322,97 @@ where
 			true => Ok(Some((id, SwitchCommitmentType::Regular))),
 			false => Ok(None),
 		}
+	}
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+	use crate::keychain::ExtKeychain;
+	use rand::{thread_rng, Rng};
+
+	#[test]
+	fn legacy_builder() {
+		let rng = &mut thread_rng();
+		let keychain = ExtKeychain::from_random_seed(false).unwrap();
+		let builder = LegacyProofBuilder::new(&keychain);
+		let amount = rng.gen();
+		let id = ExtKeychain::derive_key_id(3, rng.gen(), rng.gen(), rng.gen(), 0);
+		let switch = SwitchCommitmentType::Regular;
+		let commit = keychain.commit(amount, &id, &switch).unwrap();
+		let proof = create(
+			&keychain,
+			&builder,
+			amount,
+			&id,
+			&switch,
+			commit.clone(),
+			None,
+		)
+		.unwrap();
+		assert!(verify(&keychain.secp(), commit.clone(), proof.clone(), None).is_ok());
+		let rewind = rewind(&keychain, &builder, commit, None, proof).unwrap();
+		assert!(rewind.is_some());
+		let (r_amount, r_id, r_switch) = rewind.unwrap();
+		assert_eq!(r_amount, amount);
+		assert_eq!(r_id, id);
+		assert_eq!(r_switch, switch);
+	}
+
+	#[test]
+	fn builder() {
+		let rng = &mut thread_rng();
+		let keychain = ExtKeychain::from_random_seed(false).unwrap();
+		let builder = ProofBuilder::new(&keychain);
+		let amount = rng.gen();
+		let id = ExtKeychain::derive_key_id(3, rng.gen(), rng.gen(), rng.gen(), 0);
+		// With switch commitment
+		let commit_a = {
+			let switch = SwitchCommitmentType::Regular;
+			let commit = keychain.commit(amount, &id, &switch).unwrap();
+			let proof = create(
+				&keychain,
+				&builder,
+				amount,
+				&id,
+				&switch,
+				commit.clone(),
+				None,
+			)
+			.unwrap();
+			assert!(verify(&keychain.secp(), commit.clone(), proof.clone(), None).is_ok());
+			let rewind = rewind(&keychain, &builder, commit.clone(), None, proof).unwrap();
+			assert!(rewind.is_some());
+			let (r_amount, r_id, r_switch) = rewind.unwrap();
+			assert_eq!(r_amount, amount);
+			assert_eq!(r_id, id);
+			assert_eq!(r_switch, switch);
+			commit
+		};
+		// Without switch commitment
+		let commit_b = {
+			let switch = SwitchCommitmentType::None;
+			let commit = keychain.commit(amount, &id, &switch).unwrap();
+			let proof = create(
+				&keychain,
+				&builder,
+				amount,
+				&id,
+				&switch,
+				commit.clone(),
+				None,
+			)
+			.unwrap();
+			assert!(verify(&keychain.secp(), commit.clone(), proof.clone(), None).is_ok());
+			let rewind = rewind(&keychain, &builder, commit.clone(), None, proof).unwrap();
+			assert!(rewind.is_some());
+			let (r_amount, r_id, r_switch) = rewind.unwrap();
+			assert_eq!(r_amount, amount);
+			assert_eq!(r_id, id);
+			assert_eq!(r_switch, switch);
+			commit
+		};
+		// The resulting pedersen commitments should be different
+		assert_ne!(commit_a, commit_b);
 	}
 }

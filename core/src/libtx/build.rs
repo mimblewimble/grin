@@ -106,15 +106,23 @@ where
 {
 	Box::new(
 		move |build, (tx, kern, sum)| -> (Transaction, TxKernel, BlindSum) {
-			let commit = build
-				.keychain
-				.commit(value, &key_id, &SwitchCommitmentType::Regular)
-				.unwrap(); // TODO: proper support for different switch commitment schemes
+			// TODO: proper support for different switch commitment schemes
+			let switch = &SwitchCommitmentType::Regular;
+
+			let commit = build.keychain.commit(value, &key_id, switch).unwrap();
 
 			debug!("Building output: {}, {:?}", value, commit);
 
-			let rproof =
-				proof::create(build.keychain, build.builder, value, &key_id, commit, None).unwrap();
+			let rproof = proof::create(
+				build.keychain,
+				build.builder,
+				value,
+				&key_id,
+				switch,
+				commit,
+				None,
+			)
+			.unwrap();
 
 			(
 				tx.with_output(Output {
