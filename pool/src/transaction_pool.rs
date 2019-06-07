@@ -108,7 +108,7 @@ impl TransactionPool {
 				tx.validate(Weighting::AsTransaction, self.verifier_cache.clone())?;
 
 				entry.tx = tx;
-				entry.src.debug_name = "deagg".to_string();
+				entry.src = TxSource::Deaggregate;
 			}
 		}
 		self.txpool.add_to_pool(entry.clone(), vec![], header)?;

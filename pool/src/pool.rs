@@ -202,10 +202,10 @@ impl Pool {
 
 	fn log_pool_add(&self, entry: &PoolEntry, header: &BlockHeader) {
 		debug!(
-			"add_to_pool [{}]: {} ({}) [in/out/kern: {}/{}/{}] pool: {} (at block {})",
+			"add_to_pool [{}]: {} ({:?}) [in/out/kern: {}/{}/{}] pool: {} (at block {})",
 			self.name,
 			entry.tx.hash(),
-			entry.src.debug_name,
+			entry.src,
 			entry.tx.inputs().len(),
 			entry.tx.outputs().len(),
 			entry.tx.kernels().len(),

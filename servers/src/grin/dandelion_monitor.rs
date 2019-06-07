@@ -147,12 +147,7 @@ fn process_fluff_phase(
 		verifier_cache.clone(),
 	)?;
 
-	let src = TxSource {
-		debug_name: "fluff".to_string(),
-		identifier: "?.?.?.?".to_string(),
-	};
-
-	tx_pool.add_to_pool(src, agg_tx, false, &header)?;
+	tx_pool.add_to_pool(TxSource::Fluff, agg_tx, false, &header)?;
 	Ok(())
 }
 
@@ -174,14 +169,9 @@ fn process_expired_entries(
 
 	let header = tx_pool.chain_head()?;
 
-	let src = TxSource {
-		debug_name: "embargo_expired".to_string(),
-		identifier: "?.?.?.?".to_string(),
-	};
-
 	for entry in expired_entries {
 		let txhash = entry.tx.hash();
-		match tx_pool.add_to_pool(src.clone(), entry.tx, false, &header) {
+		match tx_pool.add_to_pool(TxSource::EmbargoExpired, entry.tx, false, &header) {
 			Ok(_) => info!(
 				"dand_mon: embargo expired for {}, fluffed successfully.",
 				txhash

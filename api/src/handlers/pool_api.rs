@@ -82,10 +82,7 @@ impl PoolPushHandler {
 						.map_err(|e| ErrorKind::RequestError(format!("Bad request: {}", e)).into())
 				})
 				.and_then(move |tx: Transaction| {
-					let source = pool::TxSource {
-						debug_name: "push-api".to_string(),
-						identifier: "?.?.?.?".to_string(),
-					};
+					let source = pool::TxSource::PushApi;
 					info!(
 						"Pushing transaction {} to pool (inputs: {}, outputs: {}, kernels: {})",
 						tx.hash(),

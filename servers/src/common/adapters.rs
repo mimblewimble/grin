@@ -96,10 +96,7 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 			return Ok(true);
 		}
 
-		let source = pool::TxSource {
-			debug_name: "p2p".to_string(),
-			identifier: "?.?.?.?".to_string(),
-		};
+		let source = pool::TxSource::Broadcast;
 
 		let header = self.chain().head_header()?;
 

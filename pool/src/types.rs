@@ -159,27 +159,28 @@ pub struct PoolEntry {
 	pub tx: Transaction,
 }
 
-/// Placeholder: the data representing where we heard about a tx from.
-///
 /// Used to make decisions based on transaction acceptance priority from
 /// various sources. For example, a node may want to bypass pool size
 /// restrictions when accepting a transaction from a local wallet.
 ///
 /// Most likely this will evolve to contain some sort of network identifier,
 /// once we get a better sense of what transaction building might look like.
-#[derive(Clone, Debug)]
-pub struct TxSource {
-	/// Human-readable name used for logging and errors.
-	pub debug_name: String,
-	/// Unique identifier used to distinguish this peer from others.
-	pub identifier: String,
+#[derive(Clone, Debug, PartialEq)]
+pub enum TxSource {
+	PushApi,
+	Broadcast,
+	Fluff,
+	EmbargoExpired,
+	Deaggregate,
 }
 
 impl TxSource {
-	/// We should rework TxSource to be an enum for type safety.
-	/// But for now we can check if it is was pushed via api based on the debug_name...
+	/// Convenience fn for checking if this tx was sourced via the push api.
 	pub fn is_pushed(&self) -> bool {
-		self.debug_name == "push-api"
+		match self {
+			TxSource::PushApi => true,
+			_ => false,
+		}
 	}
 }
 
