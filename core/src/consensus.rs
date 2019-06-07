@@ -128,7 +128,7 @@ pub const MAX_BLOCK_WEIGHT: usize = 40_000;
 pub const HARD_FORK_INTERVAL: u64 = YEAR_HEIGHT / 2;
 
 /// Floonet first hard fork height, set to happen around 2019-06-20
-pub const FLOONET_FIRST_HARD_FORK: u64 = 180_000;
+pub const FLOONET_FIRST_HARD_FORK: u64 = 184_320;
 
 /// Check whether the block version is valid at a given height, implements
 /// 6 months interval scheduled hard forks for the first 2 years.
