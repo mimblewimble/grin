@@ -37,7 +37,7 @@ pub fn read_exact(
 	timeout: Duration,
 	block_on_empty: bool,
 ) -> io::Result<()> {
-	let sleep_time = Duration::from_micros(10);
+	let sleep_time = Duration::from_millis(5);
 	let mut count = Duration::new(0, 0);
 
 	let mut read = 0;
@@ -80,7 +80,7 @@ pub fn read_exact(
 
 /// Same as `read_exact` but for writing.
 pub fn write_all(stream: &mut dyn Write, mut buf: &[u8], timeout: Duration) -> io::Result<()> {
-	let sleep_time = Duration::from_micros(10);
+	let sleep_time = Duration::from_millis(5);
 	let mut count = Duration::new(0, 0);
 
 	while !buf.is_empty() {
