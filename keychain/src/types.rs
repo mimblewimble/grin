@@ -322,7 +322,7 @@ impl BlindingFactor {
 
 		// use blind_sum to subtract skey_1 from our key (to give k = k1 + k2)
 		let skey = self.secret_key(secp)?;
-		let skey_2 = secp.blind_sum(vec![skey], vec![skey_1])?;
+		let skey_2 = secp.blind_sum(vec![skey], vec![skey_1.clone()])?;
 
 		let blind_1 = BlindingFactor::from_secret_key(skey_1);
 		let blind_2 = BlindingFactor::from_secret_key(skey_2);
@@ -472,6 +472,10 @@ pub trait Keychain: Sync + Send + Clone {
 	/// Derives a key id from the depth of the keychain and the values at each
 	/// depth level. See `KeychainPath` for more information.
 	fn derive_key_id(depth: u8, d1: u32, d2: u32, d3: u32, d4: u32) -> Identifier;
+
+	/// The public root key
+	fn public_root_key(&self) -> PublicKey;
+
 	fn derive_key(
 		&self,
 		amount: u64,
@@ -565,7 +569,7 @@ mod test {
 	fn split_blinding_factor() {
 		let secp = Secp256k1::new();
 		let skey_in = SecretKey::new(&secp, &mut thread_rng());
-		let blind = BlindingFactor::from_secret_key(skey_in);
+		let blind = BlindingFactor::from_secret_key(skey_in.clone());
 		let split = blind.split(&secp).unwrap();
 
 		// split a key, sum the split keys and confirm the sum matches the original key

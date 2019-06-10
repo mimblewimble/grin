@@ -17,21 +17,31 @@
 use rand::distributions::Alphanumeric;
 use rand::{thread_rng, Rng};
 
-use crate::blake2;
+use crate::blake2::blake2b::blake2b;
 
-use crate::extkey_bip32::{BIP32GrinHasher, ExtendedPrivKey};
+use crate::extkey_bip32::{BIP32GrinHasher, ExtendedPrivKey, ExtendedPubKey};
 use crate::types::{
 	BlindSum, BlindingFactor, Error, ExtKeychainPath, Identifier, Keychain, SwitchCommitmentType,
 };
-use crate::util::secp::key::SecretKey;
+use crate::util::secp::key::{PublicKey, SecretKey};
 use crate::util::secp::pedersen::Commitment;
 use crate::util::secp::{self, Message, Secp256k1, Signature};
 
 #[derive(Clone, Debug)]
 pub struct ExtKeychain {
 	secp: Secp256k1,
-	master: ExtendedPrivKey,
+	pub master: ExtendedPrivKey,
 	hasher: BIP32GrinHasher,
+}
+
+impl ExtKeychain {
+	pub fn pub_root_key(&mut self) -> ExtendedPubKey {
+		ExtendedPubKey::from_private(&self.secp, &self.master, &mut self.hasher)
+	}
+
+	pub fn hasher(&self) -> BIP32GrinHasher {
+		self.hasher.clone()
+	}
 }
 
 impl Keychain for ExtKeychain {
@@ -62,7 +72,7 @@ impl Keychain for ExtKeychain {
 	/// For testing - probably not a good idea to use outside of tests.
 	fn from_random_seed(is_floo: bool) -> Result<ExtKeychain, Error> {
 		let seed: String = thread_rng().sample_iter(&Alphanumeric).take(16).collect();
-		let seed = blake2::blake2b::blake2b(32, &[], seed.as_bytes());
+		let seed = blake2b(32, &[], seed.as_bytes());
 		ExtKeychain::from_seed(seed.as_bytes(), is_floo)
 	}
 
@@ -74,6 +84,11 @@ impl Keychain for ExtKeychain {
 		ExtKeychainPath::new(depth, d1, d2, d3, d4).to_identifier()
 	}
 
+	fn public_root_key(&self) -> PublicKey {
+		let mut hasher = self.hasher.clone();
+		ExtendedPubKey::from_private(&self.secp, &self.master, &mut hasher).public_key
+	}
+
 	fn derive_key(
 		&self,
 		amount: u64,
@@ -82,7 +97,7 @@ impl Keychain for ExtKeychain {
 	) -> Result<SecretKey, Error> {
 		let mut h = self.hasher.clone();
 		let p = id.to_path();
-		let mut ext_key = self.master;
+		let mut ext_key = self.master.clone();
 		for i in 0..p.depth {
 			ext_key = ext_key.ckd_priv(&self.secp, &mut h, p.path[i as usize])?;
 		}
@@ -141,21 +156,19 @@ impl Keychain for ExtKeychain {
 			})
 			.collect();
 
-		pos_keys.extend(
-			&blind_sum
-				.positive_blinding_factors
-				.iter()
-				.filter_map(|b| b.secret_key(&self.secp).ok())
-				.collect::<Vec<SecretKey>>(),
-		);
+		let keys = blind_sum
+			.positive_blinding_factors
+			.iter()
+			.filter_map(|b| b.secret_key(&self.secp).ok().clone())
+			.collect::<Vec<SecretKey>>();
+		pos_keys.extend(keys);
 
-		neg_keys.extend(
-			&blind_sum
-				.negative_blinding_factors
-				.iter()
-				.filter_map(|b| b.secret_key(&self.secp).ok())
-				.collect::<Vec<SecretKey>>(),
-		);
+		let keys = blind_sum
+			.negative_blinding_factors
+			.iter()
+			.filter_map(|b| b.secret_key(&self.secp).ok().clone())
+			.collect::<Vec<SecretKey>>();
+		neg_keys.extend(keys);
 
 		let sum = self.secp.blind_sum(pos_keys, neg_keys)?;
 		Ok(BlindingFactor::from_secret_key(sum))
@@ -249,9 +262,9 @@ mod test {
 
 		// create commitments for secret keys 1, 2 and 3
 		// all committing to the value 0 (which is what we do for tx_kernels)
-		let commit_1 = keychain.secp.commit(0, skey1).unwrap();
-		let commit_2 = keychain.secp.commit(0, skey2).unwrap();
-		let commit_3 = keychain.secp.commit(0, skey3).unwrap();
+		let commit_1 = keychain.secp.commit(0, skey1.clone()).unwrap();
+		let commit_2 = keychain.secp.commit(0, skey2.clone()).unwrap();
+		let commit_3 = keychain.secp.commit(0, skey3.clone()).unwrap();
 
 		// now sum commitments for keys 1 and 2
 		let sum = keychain
