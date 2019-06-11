@@ -54,7 +54,7 @@ impl ViewKey {
 		let secp = keychain.secp();
 
 		let ExtendedPubKey {
-			network,
+			network: _,
 			depth,
 			parent_fingerprint,
 			child_number,
@@ -66,7 +66,7 @@ impl ViewKey {
 		switch_public_key.mul_assign(secp, &ext_key.secret_key)?;
 		let switch_public_key = Some(switch_public_key);
 
-		let rewind_hash = Self::rewind_hash(secp, hasher, keychain.public_root_key());
+		let rewind_hash = Self::rewind_hash(secp, keychain.public_root_key());
 
 		Ok(Self {
 			is_floo,
@@ -80,10 +80,7 @@ impl ViewKey {
 		})
 	}
 
-	fn rewind_hash<H>(secp: &Secp256k1, hasher: &mut H, public_root_key: PublicKey) -> Vec<u8>
-	where
-		H: BIP32Hasher,
-	{
+	fn rewind_hash(secp: &Secp256k1, public_root_key: PublicKey) -> Vec<u8> {
 		let ser = public_root_key.serialize_vec(secp, true);
 		blake2b(32, &[], &ser[..]).as_bytes().to_vec()
 	}
