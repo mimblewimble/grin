@@ -576,7 +576,7 @@ impl Block {
 
 		let mut version = prev.version;
 		if !consensus::valid_header_version(height, version) {
-			version = prev.version.next();
+			version = version.next();
 		}
 
 		let now = Utc::now().timestamp();
