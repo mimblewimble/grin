@@ -178,6 +178,13 @@ impl Default for HeaderVersion {
 	}
 }
 
+// self-conscious increment function courtesy of Jasper
+impl HeaderVersion {
+  fn next(&self) -> Self {
+    Self(self.0+1)
+  }
+}
+
 impl HeaderVersion {
 	/// Constructor taking the provided version.
 	pub fn new(version: u16) -> HeaderVersion {
@@ -569,7 +576,7 @@ impl Block {
 
 		let mut version = prev.version;
 		if !consensus::valid_header_version(height, version) {
-			version = HeaderVersion::new(u16::from(prev.version) + 1);
+			version = prev.version.next();
 		}
 
 		let now = Utc::now().timestamp();
