@@ -21,6 +21,7 @@ use crate::libtx::error::{Error, ErrorKind};
 use crate::util::secp::key::SecretKey;
 use crate::util::secp::pedersen::{Commitment, ProofMessage, RangeProof};
 use crate::util::secp::{self, Secp256k1};
+use crate::zeroize::Zeroize;
 use std::convert::TryFrom;
 
 /// Create a bulletproof
@@ -234,6 +235,25 @@ where
 	}
 }
 
+impl<'a, K> Zeroize for ProofBuilder<'a, K>
+where
+	K: Keychain,
+{
+	fn zeroize(&mut self) {
+		self.rewind_hash.zeroize();
+		self.private_hash.zeroize();
+	}
+}
+
+impl<'a, K> Drop for ProofBuilder<'a, K>
+where
+	K: Keychain,
+{
+	fn drop(&mut self) {
+		self.zeroize();
+	}
+}
+
 /// The legacy proof builder, used before the first hard fork
 pub struct LegacyProofBuilder<'a, K>
 where
@@ -322,6 +342,24 @@ where
 			true => Ok(Some((id, SwitchCommitmentType::Regular))),
 			false => Ok(None),
 		}
+	}
+}
+
+impl<'a, K> Zeroize for LegacyProofBuilder<'a, K>
+where
+	K: Keychain,
+{
+	fn zeroize(&mut self) {
+		self.root_hash.zeroize();
+	}
+}
+
+impl<'a, K> Drop for LegacyProofBuilder<'a, K>
+where
+	K: Keychain,
+{
+	fn drop(&mut self) {
+		self.zeroize();
 	}
 }
 
