@@ -32,14 +32,14 @@ macro_rules! rotl {
 /// a nonce
 pub fn siphash24(v: &[u64; 4], nonce: u64) -> u64 {
 	let mut siphash = SipHash24::new(v);
-	siphash.hash(nonce);
+	siphash.hash(nonce, 21); // 21 is standard rotation constant
 	siphash.digest()
 }
 
 /// Builds a block of siphash values by repeatedly hashing from the nonce
 /// truncated to its closest block start, up to the end of the block. Returns
 /// the resulting hash at the nonce's position.
-pub fn siphash_block(v: &[u64; 4], nonce: u64) -> u64 {
+pub fn siphash_block(v: &[u64; 4], nonce: u64, rot_e: u8) -> u64 {
 	// beginning of the block of hashes
 	let nonce0 = nonce & !SIPHASH_BLOCK_MASK;
 	let mut nonce_hash = 0;
@@ -47,7 +47,7 @@ pub fn siphash_block(v: &[u64; 4], nonce: u64) -> u64 {
 	// repeated hashing over the whole block
 	let mut siphash = SipHash24::new(v);
 	for n in nonce0..(nonce0 + SIPHASH_BLOCK_SIZE) {
-		siphash.hash(n);
+		siphash.hash(n, rot_e);
 		if n == nonce {
 			nonce_hash = siphash.digest();
 		}
@@ -80,16 +80,16 @@ impl SipHash24 {
 	}
 
 	/// One siphash24 hashing, consisting of 2 and then 4 rounds
-	pub fn hash(&mut self, nonce: u64) {
+	pub fn hash(&mut self, nonce: u64, rot_e: u8) {
 		self.3 ^= nonce;
-		self.round();
-		self.round();
+		self.round(rot_e);
+		self.round(rot_e);
 
 		self.0 ^= nonce;
 		self.2 ^= 0xff;
 
 		for _ in 0..4 {
-			self.round();
+			self.round(rot_e);
 		}
 	}
 
@@ -98,7 +98,7 @@ impl SipHash24 {
 		(self.0 ^ self.1) ^ (self.2 ^ self.3)
 	}
 
-	fn round(&mut self) {
+	fn round(&mut self, rot_e: u8) {
 		self.0 = self.0.wrapping_add(self.1);
 		self.2 = self.2.wrapping_add(self.3);
 		rotl!(self.1, 13);
@@ -109,7 +109,7 @@ impl SipHash24 {
 		self.2 = self.2.wrapping_add(self.1);
 		self.0 = self.0.wrapping_add(self.3);
 		rotl!(self.1, 17);
-		rotl!(self.3, 21);
+		rotl!(self.3, rot_e);
 		self.1 ^= self.2;
 		self.3 ^= self.0;
 		rotl!(self.2, 32);
@@ -130,8 +130,8 @@ mod test {
 
 	#[test]
 	fn hash_block() {
-		assert_eq!(siphash_block(&[1, 2, 3, 4], 10), 1182162244994096396);
-		assert_eq!(siphash_block(&[1, 2, 3, 4], 123), 11303676240481718781);
-		assert_eq!(siphash_block(&[9, 7, 6, 7], 12), 4886136884237259030);
+		assert_eq!(siphash_block(&[1, 2, 3, 4], 10, 21), 1182162244994096396);
+		assert_eq!(siphash_block(&[1, 2, 3, 4], 123, 21), 11303676240481718781);
+		assert_eq!(siphash_block(&[9, 7, 6, 7], 12, 21), 4886136884237259030);
 	}
 }
