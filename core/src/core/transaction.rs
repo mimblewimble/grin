@@ -1499,14 +1499,16 @@ mod test {
 	use super::*;
 	use crate::core::hash::Hash;
 	use crate::core::id::{ShortId, ShortIdentifiable};
-	use crate::keychain::{ExtKeychain, Keychain};
+	use crate::keychain::{ExtKeychain, Keychain, SwitchCommitmentType};
 	use crate::util::secp;
 
 	#[test]
 	fn test_kernel_ser_deser() {
 		let keychain = ExtKeychain::from_random_seed(false).unwrap();
 		let key_id = ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
-		let commit = keychain.commit(5, &key_id).unwrap();
+		let commit = keychain
+			.commit(5, &key_id, &SwitchCommitmentType::Regular)
+			.unwrap();
 
 		// just some bytes for testing ser/deser
 		let sig = secp::Signature::from_raw_data(&[0; 64]).unwrap();
@@ -1552,10 +1554,14 @@ mod test {
 		let keychain = ExtKeychain::from_seed(&[0; 32], false).unwrap();
 		let key_id = ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
 
-		let commit = keychain.commit(1003, &key_id).unwrap();
+		let commit = keychain
+			.commit(1003, &key_id, &SwitchCommitmentType::Regular)
+			.unwrap();
 		let key_id = ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
 
-		let commit_2 = keychain.commit(1003, &key_id).unwrap();
+		let commit_2 = keychain
+			.commit(1003, &key_id, &SwitchCommitmentType::Regular)
+			.unwrap();
 
 		assert!(commit == commit_2);
 	}
@@ -1564,7 +1570,9 @@ mod test {
 	fn input_short_id() {
 		let keychain = ExtKeychain::from_seed(&[0; 32], false).unwrap();
 		let key_id = ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
-		let commit = keychain.commit(5, &key_id).unwrap();
+		let commit = keychain
+			.commit(5, &key_id, &SwitchCommitmentType::Regular)
+			.unwrap();
 
 		let input = Input {
 			features: OutputFeatures::Plain,
