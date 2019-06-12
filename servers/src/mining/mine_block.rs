@@ -18,10 +18,10 @@
 use crate::util::RwLock;
 use chrono::prelude::{DateTime, NaiveDateTime, Utc};
 use rand::{thread_rng, Rng};
+use serde_json::{json, Value};
 use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
-use serde_json::{json, Value};
 
 use crate::api;
 use crate::chain;
@@ -279,7 +279,10 @@ fn create_coinbase(dest: &str, block_fees: &BlockFees) -> Result<CbData, Error> 
 	trace!("Sending build_coinbase request: {}", req_body);
 	let req = api::client::create_post_request(url.as_str(), None, &req_body)?;
 	let res: String = api::client::send_request(req).map_err(|e| {
-		let report = format!("Failed to get coinbase from {}. Is the wallet listening? {}", dest, e);
+		let report = format!(
+			"Failed to get coinbase from {}. Is the wallet listening? {}",
+			dest, e
+		);
 		error!("{}", report);
 		Error::WalletComm(report)
 	})?;
@@ -289,8 +292,7 @@ fn create_coinbase(dest: &str, block_fees: &BlockFees) -> Result<CbData, Error> 
 	if res["error"] != json!(null) {
 		let report = format!(
 			"Failed to get coinbase from {}: Error: {}, Message: {}",
-			dest,
-			res["error"]["code"], res["error"]["message"]
+			dest, res["error"]["code"], res["error"]["message"]
 		);
 		error!("{}", report);
 		return Err(Error::WalletComm(report));
@@ -308,5 +310,4 @@ fn create_coinbase(dest: &str, block_fees: &BlockFees) -> Result<CbData, Error> 
 	};
 
 	Ok(ret_val)
-
 }
