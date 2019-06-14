@@ -16,8 +16,8 @@ use crate::core::core::block::HeaderVersion;
 
 use crate::rest::*;
 use crate::router::{Handler, ResponseFuture};
-use crate::web::*;
 use crate::types::Version;
+use crate::web::*;
 use hyper::{Body, Request};
 
 const CRATE_VERSION: &'static str = env!("CARGO_PKG_VERSION");
