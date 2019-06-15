@@ -12,25 +12,32 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::core::core::block::HeaderVersion;
-
+use super::utils::w;
+use crate::chain;
 use crate::rest::*;
 use crate::router::{Handler, ResponseFuture};
 use crate::types::Version;
 use crate::web::*;
 use hyper::{Body, Request};
+use std::sync::Weak;
 
 const CRATE_VERSION: &'static str = env!("CARGO_PKG_VERSION");
 
 /// Version handler. Get running node API version
 /// GET /v1/version
-pub struct VersionHandler;
+pub struct VersionHandler {
+	pub chain: Weak<chain::Chain>,
+}
 
 impl VersionHandler {
 	fn get_version(&self) -> Result<Version, Error> {
+		let head = w(&self.chain)?
+			.head_header()
+			.map_err(|e| ErrorKind::Internal(format!("can't get head: {}", e)))?;
+
 		Ok(Version {
 			node_version: CRATE_VERSION.to_owned(),
-			block_header_version: HeaderVersion::default().into(),
+			block_header_version: head.version.into(),
 		})
 	}
 }
