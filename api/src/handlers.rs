@@ -18,8 +18,8 @@ mod peers_api;
 mod pool_api;
 mod server_api;
 mod transactions_api;
-mod version_api;
 mod utils;
+mod version_api;
 
 use self::blocks_api::BlockHandler;
 use self::blocks_api::HeaderHandler;
@@ -33,10 +33,10 @@ use self::peers_api::PeersConnectedHandler;
 use self::pool_api::PoolInfoHandler;
 use self::pool_api::PoolPushHandler;
 use self::server_api::IndexHandler;
-use self::server_api::StatusHandler;
 use self::server_api::KernelDownloadHandler;
-use self::version_api::VersionHandler;
+use self::server_api::StatusHandler;
 use self::transactions_api::TxHashSetHandler;
+use self::version_api::VersionHandler;
 use crate::auth::{BasicAuthMiddleware, GRIN_BASIC_REALM};
 use crate::chain;
 use crate::p2p;
@@ -160,7 +160,9 @@ pub fn build_router(
 	let peer_handler = PeerHandler {
 		peers: Arc::downgrade(&peers),
 	};
-	let version_handler = VersionHandler;
+	let version_handler = VersionHandler {
+		chain: Arc::downgrade(&chain),
+	};
 
 	let mut router = Router::new();
 
