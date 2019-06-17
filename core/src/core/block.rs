@@ -578,7 +578,10 @@ impl Block {
 				prev_hash: prev.hash(),
 				total_kernel_offset,
 				pow: ProofOfWork {
-					total_difficulty: difficulty + prev.pow.total_difficulty,
+					total_difficulty: match global::is_fixed_difficulty() {
+						true => Difficulty::from_num(global::get_fixed_difficulty()),
+						false => difficulty + prev.pow.total_difficulty,
+					},
 					..Default::default()
 				},
 				..Default::default()

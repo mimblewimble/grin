@@ -393,7 +393,7 @@ fn validate_header(header: &BlockHeader, ctx: &mut BlockContext<'_>) -> Result<(
 	// check the pow hash shows a difficulty at least as large
 	// as the target difficulty
 	if !ctx.opts.contains(Options::SKIP_POW) {
-		if header.total_difficulty() <= prev.total_difficulty() {
+		if (header.total_difficulty() <= prev.total_difficulty()) && !global::is_fixed_difficulty() {
 			return Err(ErrorKind::DifficultyTooLow.into());
 		}
 
@@ -409,7 +409,7 @@ fn validate_header(header: &BlockHeader, ctx: &mut BlockContext<'_>) -> Result<(
 		let child_batch = ctx.batch.child()?;
 		let diff_iter = store::DifficultyIter::from_batch(prev.hash(), child_batch);
 		let next_header_info = consensus::next_difficulty(header.height, diff_iter);
-		if target_difficulty != next_header_info.difficulty {
+		if (target_difficulty != next_header_info.difficulty) && !global::is_fixed_difficulty(){
 			info!(
 				"validate_header: header target difficulty {} != {}",
 				target_difficulty.to_num(),
@@ -545,7 +545,10 @@ fn update_head(b: &Block, ctx: &BlockContext<'_>) -> Result<Option<Tip>, Error> 
 
 // Whether the provided block totals more work than the chain tip
 fn has_more_work(header: &BlockHeader, head: &Tip) -> bool {
-	header.total_difficulty() > head.total_difficulty
+	return match global::is_fixed_difficulty() {
+		true => true,
+		false => header.total_difficulty() > head.total_difficulty,
+	};
 }
 
 /// Update the sync head so we can keep syncing from where we left off.

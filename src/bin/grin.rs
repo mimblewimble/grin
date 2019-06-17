@@ -142,7 +142,13 @@ fn real_main() -> i32 {
 		}
 		init_logger(Some(l));
 
-		global::set_mining_mode(config.members.unwrap().server.clone().chain_type);
+		let server_config = config.members.unwrap().server.clone();
+		global::set_mining_mode(server_config.chain_type.clone());
+
+		match server_config.fixed_difficulty {
+			Some(fixed_difficulty) => global::set_fixed_difficulty(fixed_difficulty),
+			None =>   global::set_fixed_difficulty(0),
+		};
 
 		if let Some(file_path) = &config.config_file_path {
 			info!(

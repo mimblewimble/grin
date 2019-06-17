@@ -303,7 +303,10 @@ where
 		CLAMP_FACTOR,
 	);
 	// minimum difficulty avoids getting stuck due to dampening
-	let difficulty = max(MIN_DIFFICULTY, diff_sum * BLOCK_TIME_SEC / adj_ts);
+	let difficulty = match global::is_fixed_difficulty() {
+		true => global::get_fixed_difficulty(),
+		false => max(MIN_DIFFICULTY, diff_sum * BLOCK_TIME_SEC / adj_ts),
+	};
 
 	HeaderInfo::from_diff_scaling(Difficulty::from_num(difficulty), sec_pow_scaling)
 }

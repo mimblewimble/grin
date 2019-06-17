@@ -142,12 +142,22 @@ lazy_static! {
 	/// PoW context type to instantiate
 	pub static ref POW_CONTEXT_TYPE: RwLock<PoWContextTypes> =
 			RwLock::new(PoWContextTypes::Cuckoo);
+
+	/// The fixed difficulty parameter
+	pub static ref FIXED_DIFFICULTY: RwLock<u64> =
+			RwLock::new(0);
 }
 
 /// Set the mining mode
 pub fn set_mining_mode(mode: ChainTypes) {
 	let mut param_ref = CHAIN_TYPE.write();
 	*param_ref = mode;
+}
+
+/// Set fixed difficulty
+pub fn set_fixed_difficulty(difficulty: u64) {
+	let mut param_ref= FIXED_DIFFICULTY.write();
+	*param_ref = difficulty;
 }
 
 /// Return either a cuckoo context or a cuckatoo context
@@ -311,6 +321,21 @@ pub fn is_floonet() -> bool {
 pub fn is_mainnet() -> bool {
 	let param_ref = CHAIN_TYPE.read();
 	ChainTypes::Mainnet == *param_ref
+}
+
+/// Are we using fixed difficulty?
+pub fn is_fixed_difficulty() -> bool {
+	let difficulty_ref = FIXED_DIFFICULTY.read();
+	return (*difficulty_ref >= 3) && is_user_testing_mode()
+}
+
+/// Get fixed difficulty value.
+pub fn get_fixed_difficulty() -> u64 {
+	let difficulty = FIXED_DIFFICULTY.read();
+	if *difficulty < 3 {
+		return 0;
+	}
+	return *difficulty
 }
 
 /// Helper function to get a nonce known to create a valid POW on

@@ -162,6 +162,9 @@ pub struct ServerConfig {
 	#[serde(default)]
 	pub chain_validation_mode: ChainValidationMode,
 
+	/// Set difficulty to a fixed value, must be 3 or bigger and works only with ChainType UserTesting.
+	pub fixed_difficulty: Option<u64>,
+
 	/// Whether this node is a full archival node or a fast-sync, pruned node
 	pub archive_mode: Option<bool>,
 
@@ -213,6 +216,7 @@ impl Default for ServerConfig {
 			chain_type: ChainTypes::default(),
 			archive_mode: Some(false),
 			chain_validation_mode: ChainValidationMode::default(),
+			fixed_difficulty: Some(0),
 			pool_config: pool::PoolConfig::default(),
 			skip_sync_wait: Some(false),
 			run_tui: Some(true),
