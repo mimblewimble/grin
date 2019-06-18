@@ -1489,10 +1489,35 @@ pub fn zip_write(
 ) -> Result<(), Error> {
 	debug!("zip_write on path: {:?}", root_dir);
 	let txhashset_path = root_dir.clone().join(TXHASHSET_SUBDIR);
-	fs::create_dir_all(txhashset_path.clone())?;
-	zip::decompress(txhashset_data, &txhashset_path, expected_file)
-		.map_err(|ze| ErrorKind::Other(ze.to_string()))?;
-	check_and_remove_files(&txhashset_path, header)
+	fs::create_dir_all(&txhashset_path)?;
+
+	// Header specific "rewound" leaf files for output and rangeproof MMR.
+	let output_leaf_file = format!("output/pmmr_leaf.bin.{}", header.hash());
+	let rangeproof_leaf_file = format!("rangeproof/pmmr_leaf.bin.{}", header.hash());
+
+	// Explicit list of files to extract from our zip archive.
+	let files = vec![
+		// kernel MMR
+		"kernel/pmmr_data.bin",
+		"kernel/pmmr_hash.bin",
+		// output MMR
+		"output/pmmr_data.bin",
+		"output/pmmr_hash.bin",
+		"output/pmmr_prun.bin",
+		output_leaf_file.as_str(),
+		// rangeproof MMR
+		"rangeproof/pmmr_data.bin",
+		"rangeproof/pmmr_hash.bin",
+		"rangeproof/pmmr_prun.bin",
+		rangeproof_leaf_file.as_str(),
+	];
+
+	// We expect to see *exactly* the paths listed above.
+	// No attempt is made to be permissive or forgiving with "alternative" paths.
+	// These are the *only* files we will attempt to extract from the zip file.
+	// If any of these are missing the zip extraction will immediately fail.
+	zip::extract_files(txhashset_data, &txhashset_path, &files)?;
+	Ok(())
 }
 
 /// Overwrite txhashset folders in "to" folder with "from" folder
@@ -1535,23 +1560,6 @@ pub fn clean_header_folder(root_dir: &PathBuf) {
 			warn!("clean_header_folder: fail on {:?}. err: {}", header_path, e);
 		}
 	}
-}
-
-fn expected_file(path: &Path) -> bool {
-	use lazy_static::lazy_static;
-	use regex::Regex;
-	let s_path = path.to_str().unwrap_or_else(|| "");
-	lazy_static! {
-		static ref RE: Regex = Regex::new(
-			format!(
-				r#"^({}|{}|{})((/|\\)pmmr_(hash|data|leaf|prun)\.bin(\.\w*)?)?$"#,
-				OUTPUT_SUBDIR, KERNEL_SUBDIR, RANGE_PROOF_SUBDIR
-			)
-			.as_str()
-		)
-		.expect("invalid txhashset regular expression");
-	}
-	RE.is_match(&s_path)
 }
 
 /// Check a txhashset directory and remove any unexpected
@@ -1693,24 +1701,4 @@ pub fn input_pos_to_rewind(
 	}
 
 	bitmap_fast_or(None, &mut block_input_bitmaps).ok_or_else(|| ErrorKind::Bitmap.into())
-}
-
-#[cfg(test)]
-mod tests {
-	use super::*;
-
-	#[test]
-	fn test_expected_files() {
-		assert!(!expected_file(Path::new("kernels")));
-		assert!(!expected_file(Path::new("xkernel")));
-		assert!(expected_file(Path::new("kernel")));
-		assert!(expected_file(Path::new("kernel\\pmmr_data.bin")));
-		assert!(expected_file(Path::new("kernel/pmmr_hash.bin")));
-		assert!(expected_file(Path::new("kernel/pmmr_leaf.bin")));
-		assert!(expected_file(Path::new("kernel/pmmr_prun.bin")));
-		assert!(expected_file(Path::new("kernel/pmmr_leaf.bin.deadbeef")));
-		assert!(!expected_file(Path::new("xkernel/pmmr_data.bin")));
-		assert!(!expected_file(Path::new("kernel/pmmrx_data.bin")));
-		assert!(!expected_file(Path::new("kernel/pmmr_data.binx")));
-	}
 }

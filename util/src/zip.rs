@@ -12,11 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::fs::{self, File};
 /// Wrappers around the `zip-rs` library to compress and decompress zip archives.
-use std::io;
-use std::panic;
-use std::path::Path;
+use std::fs::{self, File};
+use std::io::{self, BufReader, BufWriter};
+use std::path::{Path, PathBuf};
+use std::thread;
 use walkdir::WalkDir;
 
 use self::zip_rs::result::{ZipError, ZipResult};
@@ -26,6 +26,10 @@ use zip as zip_rs;
 /// Compress a source directory recursively into a zip file.
 /// Permissions are set to 644 by default to avoid any
 /// unwanted execution bits.
+///
+/// TODO - Pass in a list of files to include in the zip (similar to extract_files).
+/// We do not need (or want) to walk the dir and include everything up here.
+///
 pub fn compress(src_dir: &Path, dst_file: &File) -> ZipResult<()> {
 	if !Path::new(src_dir).is_dir() {
 		return Err(ZipError::Io(io::Error::new(
@@ -53,6 +57,7 @@ pub fn compress(src_dir: &Path, dst_file: &File) -> ZipResult<()> {
 		if path.is_file() {
 			zip.start_file(name, options)?;
 			let mut f = File::open(path)?;
+			// TODO - Use BufReader and BufWriter here.
 			io::copy(&mut f, &mut zip)?;
 		}
 	}
@@ -62,83 +67,38 @@ pub fn compress(src_dir: &Path, dst_file: &File) -> ZipResult<()> {
 	Ok(())
 }
 
-/// Decompress a source file into the provided destination path.
-pub fn decompress<R, F>(src_file: R, dest: &Path, expected: F) -> ZipResult<usize>
-where
-	R: io::Read + io::Seek + panic::UnwindSafe,
-	F: Fn(&Path) -> bool + panic::UnwindSafe,
-{
-	let mut decompressed = 0;
+/// Extract a set of files from the provided zip archive.
+pub fn extract_files(from_archive: File, dest: &Path, files: &[&str]) -> io::Result<()> {
+	let dest: PathBuf = PathBuf::from(dest);
+	let files: Vec<_> = files.iter().map(|x| x.to_string()).collect();
+	let res = thread::spawn(move || {
+		let mut archive = zip_rs::ZipArchive::new(from_archive).expect("archive file exists");
+		for x in files {
+			let file = archive.by_name(&x).expect("file exists in archive");
+			let path = dest.join(file.sanitized_name());
+			let parent_dir = path.parent().expect("valid parent dir");
+			fs::create_dir_all(&parent_dir).expect("create parent dir");
+			let outfile = fs::File::create(&path).expect("file created");
+			io::copy(&mut BufReader::new(file), &mut BufWriter::new(outfile))
+				.expect("write to file");
 
-	// catch the panic to avoid the thread quit
-	panic::set_hook(Box::new(|panic_info| {
-		error!(
-			"panic occurred: {:?}",
-			panic_info.payload().downcast_ref::<&str>().unwrap()
-		);
-	}));
-	let result = panic::catch_unwind(move || {
-		let mut archive = zip_rs::ZipArchive::new(src_file)?;
+			info!("extract_files: {:?}", path);
 
-		for i in 0..archive.len() {
-			let mut file = archive.by_index(i)?;
-			let san_name = file.sanitized_name();
-			if san_name.to_str().unwrap_or("").replace("\\", "/") != file.name().replace("\\", "/")
-				|| !expected(&san_name)
-			{
-				info!(
-					"ignoring a suspicious file: {}, got {:?}",
-					file.name(),
-					san_name.to_str()
-				);
-				continue;
-			}
-			let file_path = dest.join(san_name);
-
-			if (&*file.name()).ends_with('/') {
-				fs::create_dir_all(&file_path)?;
-			} else {
-				if let Some(p) = file_path.parent() {
-					if !p.exists() {
-						fs::create_dir_all(&p)?;
-					}
-				}
-				let res = fs::File::create(&file_path);
-				let mut outfile = match res {
-					Err(e) => {
-						error!("{:?}", e);
-						return Err(zip::result::ZipError::Io(e));
-					}
-					Ok(r) => r,
-				};
-				io::copy(&mut file, &mut outfile)?;
-				decompressed += 1;
-			}
-
-			// Get and Set permissions
+			// Set file permissions to "644" (Unix only).
 			#[cfg(unix)]
 			{
 				use std::os::unix::fs::PermissionsExt;
-				if let Some(mode) = file.unix_mode() {
-					fs::set_permissions(
-						&file_path.to_str().unwrap(),
-						PermissionsExt::from_mode(mode),
-					)?;
-				}
+				let mode = PermissionsExt::from_mode(0o644);
+				fs::set_permissions(&path, mode).expect("set file permissions");
 			}
 		}
-		Ok(decompressed)
-	});
-	match result {
-		Ok(res) => match res {
-			Err(e) => Err(e.into()),
-			Ok(_) => res,
-		},
-		Err(_) => {
-			error!("panic occurred on zip::decompress!");
-			Err(zip::result::ZipError::InvalidArchive(
-				"panic occurred on zip::decompress",
-			))
-		}
-	}
+	})
+	.join();
+
+	// If join() above is Ok then we successfully extracted the files.
+	// If the result is Err then we failed to extract the files.
+	res.map_err(|e| {
+		error!("failed to extract files from zip: {:?}", e);
+		io::Error::new(io::ErrorKind::Other, "failed to extract files from zip")
+	})
 }

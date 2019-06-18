@@ -46,14 +46,6 @@ fn zip_unzip() {
 	let lorem = root.join("to_zip/sub/lorem");
 	assert!(lorem.is_file());
 	assert!(lorem.metadata().unwrap().len() == 55);
-
-	let decompressed = zip::decompress(
-		File::open("tests/test.zip").unwrap(),
-		&root.join("./dezipped"),
-		|_| true,
-	)
-	.unwrap();
-	assert_eq!(decompressed, 1);
 }
 
 fn write_files(dir_name: String, root: &Path) -> io::Result<()> {
