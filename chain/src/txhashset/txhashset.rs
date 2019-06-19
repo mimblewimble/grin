@@ -236,7 +236,7 @@ impl TxHashSet {
 	}
 
 	/// Get all outputs MMR pos
-	pub fn get_all_output_pos(&self) -> Result<Vec<(Commitment,u64)>, Error> {
+	pub fn get_all_output_pos(&self) -> Result<Vec<(Commitment, u64)>, Error> {
 		Ok(self.commit_index.get_all_output_pos()?)
 	}
 
@@ -874,7 +874,8 @@ impl<'a> Extension<'a> {
 		for out in b.outputs() {
 			let pos = self.apply_output(out)?;
 			// Update the (output_pos,height) index for the new output.
-			self.batch.save_output_pos_height(&out.commitment(), pos, b.header.height)?;
+			self.batch
+				.save_output_pos_height(&out.commitment(), pos, b.header.height)?;
 		}
 
 		for input in b.inputs() {

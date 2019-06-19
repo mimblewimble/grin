@@ -113,7 +113,7 @@ impl ChainStore {
 	}
 
 	/// Get all outputs PMMR pos. (only for migration purpose)
-	pub fn get_all_output_pos(&self) -> Result<Vec<(Commitment,u64)>, Error> {
+	pub fn get_all_output_pos(&self) -> Result<Vec<(Commitment, u64)>, Error> {
 		let mut outputs_pos = Vec::new();
 		let key = to_key(COMMIT_POS_PREFIX, &mut "".to_string().into_bytes());
 		for (k, pos) in self.db.iter::<u64>(&key)? {
@@ -127,20 +127,27 @@ impl ChainStore {
 	/// 	- Original prefix 'COMMIT_POS_PREFIX' is not used anymore for normal case, refer to #2889 for detail.
 	///		- To be compatible with the old callers, let's keep this function name but replace with new prefix 'COMMIT_POS_HGT_PREFIX'
 	pub fn get_output_pos(&self, commit: &Commitment) -> Result<u64, Error> {
-		let res: Result<Option<(u64,u64)>, Error> = self.db
-			.get_ser(&to_key(COMMIT_POS_HGT_PREFIX, &mut commit.as_ref().to_vec()));
+		let res: Result<Option<(u64, u64)>, Error> = self.db.get_ser(&to_key(
+			COMMIT_POS_HGT_PREFIX,
+			&mut commit.as_ref().to_vec(),
+		));
 		match res {
-			Ok(None) => Err(Error::NotFoundErr(format!("Output position for: {:?}", commit))),
-			Ok(Some((pos,_height))) => Ok(pos),
+			Ok(None) => Err(Error::NotFoundErr(format!(
+				"Output position for: {:?}",
+				commit
+			))),
+			Ok(Some((pos, _height))) => Ok(pos),
 			Err(e) => Err(e),
 		}
 	}
 
 	/// Get PMMR pos and block height for the given output commitment.
-	pub fn get_output_pos_height(&self, commit: &Commitment) -> Result<(u64,u64), Error> {
+	pub fn get_output_pos_height(&self, commit: &Commitment) -> Result<(u64, u64), Error> {
 		option_to_not_found(
-			self.db
-				.get_ser(&to_key(COMMIT_POS_HGT_PREFIX, &mut commit.as_ref().to_vec())),
+			self.db.get_ser(&to_key(
+				COMMIT_POS_HGT_PREFIX,
+				&mut commit.as_ref().to_vec(),
+			)),
 			&format!("Output position for: {:?}", commit),
 		)
 	}
@@ -285,7 +292,12 @@ impl<'a> Batch<'a> {
 	}
 
 	/// Save output_pos and block height to index.
-	pub fn save_output_pos_height(&self, commit: &Commitment, pos: u64, height: u64) -> Result<(), Error> {
+	pub fn save_output_pos_height(
+		&self,
+		commit: &Commitment,
+		pos: u64,
+		height: u64,
+	) -> Result<(), Error> {
 		self.db.put_ser(
 			&to_key(COMMIT_POS_HGT_PREFIX, &mut commit.as_ref().to_vec())[..],
 			&(pos, height),
@@ -297,20 +309,27 @@ impl<'a> Batch<'a> {
 	/// 	- Original prefix 'COMMIT_POS_PREFIX' is not used for normal case anymore, refer to #2889 for detail.
 	///		- To be compatible with the old callers, let's keep this function name but replace with new prefix 'COMMIT_POS_HGT_PREFIX'
 	pub fn get_output_pos(&self, commit: &Commitment) -> Result<u64, Error> {
-		let res: Result<Option<(u64,u64)>, Error> = self.db
-			.get_ser(&to_key(COMMIT_POS_HGT_PREFIX, &mut commit.as_ref().to_vec()));
+		let res: Result<Option<(u64, u64)>, Error> = self.db.get_ser(&to_key(
+			COMMIT_POS_HGT_PREFIX,
+			&mut commit.as_ref().to_vec(),
+		));
 		match res {
-			Ok(None) => Err(Error::NotFoundErr(format!("Output position for: {:?}", commit))),
-			Ok(Some((pos,_height))) => Ok(pos),
+			Ok(None) => Err(Error::NotFoundErr(format!(
+				"Output position for: {:?}",
+				commit
+			))),
+			Ok(Some((pos, _height))) => Ok(pos),
 			Err(e) => Err(e),
 		}
 	}
 
 	/// Get output_pos and block height from index.
-	pub fn get_output_pos_height(&self, commit: &Commitment) -> Result<(u64,u64), Error> {
+	pub fn get_output_pos_height(&self, commit: &Commitment) -> Result<(u64, u64), Error> {
 		option_to_not_found(
-			self.db
-				.get_ser(&to_key(COMMIT_POS_HGT_PREFIX, &mut commit.as_ref().to_vec())),
+			self.db.get_ser(&to_key(
+				COMMIT_POS_HGT_PREFIX,
+				&mut commit.as_ref().to_vec(),
+			)),
 			&format!("Output position for commit: {:?}", commit),
 		)
 	}
@@ -327,7 +346,7 @@ impl<'a> Batch<'a> {
 	/// Clear all entries from the (output_pos,height) index (must be rebuilt after).
 	pub fn clear_output_pos_height(&self) -> Result<(), Error> {
 		let key = to_key(COMMIT_POS_HGT_PREFIX, &mut "".to_string().into_bytes());
-		for (k, _) in self.db.iter::<(u64,u64)>(&key)? {
+		for (k, _) in self.db.iter::<(u64, u64)>(&key)? {
 			self.db.delete(&k)?;
 		}
 		Ok(())
