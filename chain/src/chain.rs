@@ -1256,7 +1256,8 @@ impl Chain {
 			let h = txhashset.get_header_by_height(search_height + 1)?;
 			while i < total_outputs {
 				let (commit, pos) = outputs_pos[i];
-				if pos >= h.output_mmr_size {
+				if pos > h.output_mmr_size {
+					// Note: MMR position is 1-based and not 0-based, so here must be '>' instead of '>='
 					break;
 				}
 				batch.save_output_pos_height(&commit, pos, h.height)?;
