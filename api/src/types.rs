@@ -266,10 +266,11 @@ impl OutputPrintable {
 		};
 
 		let out_id = core::OutputIdentifier::from_output(&output);
-		let spent = chain.is_unspent(&out_id).is_err();
-		let block_height = match spent {
-			true => None,
-			false => Some(chain.get_header_for_output(&out_id)?.height),
+		let res = chain.is_unspent(&out_id);
+		let (spent, block_height) = if let Ok((_hash, _pos, height)) = res {
+			(false, Some(height))
+		} else {
+			(true, None)
 		};
 
 		let proof = if include_proof {

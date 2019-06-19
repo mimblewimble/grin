@@ -461,13 +461,9 @@ impl Chain {
 	/// spent. This querying is done in a way that is consistent with the
 	/// current chain state, specifically the current winning (valid, most
 	/// work) fork.
-	pub fn is_unspent(&self, output_ref: &OutputIdentifier) -> Result<Hash, Error> {
+	pub fn is_unspent(&self, output_ref: &OutputIdentifier) -> Result<(Hash, u64, u64), Error> {
 		let txhashset = self.txhashset.read();
-		let res = txhashset.is_unspent(output_ref);
-		match res {
-			Err(e) => Err(e),
-			Ok((h, _)) => Ok(h),
-		}
+		txhashset.is_unspent(output_ref)
 	}
 
 	/// Validate the tx against the current UTXO set.
@@ -985,6 +981,8 @@ impl Chain {
 
 		debug!("txhashset_write: replaced our txhashset with the new one");
 
+		self.rebuild_height_for_pos()?;
+
 		// Check for any orphan blocks and process them based on the new chain state.
 		self.check_orphans(header.height + 1);
 
@@ -1072,26 +1070,30 @@ impl Chain {
 			}
 		}
 
-		// Take a write lock on the txhashet and start a new writeable db batch.
-		let mut txhashset = self.txhashset.write();
-		let mut batch = self.store.batch()?;
+		{
+			// Take a write lock on the txhashet and start a new writeable db batch.
+			let mut txhashset = self.txhashset.write();
+			let mut batch = self.store.batch()?;
 
-		// Compact the txhashset itself (rewriting the pruned backend files).
-		txhashset.compact(&mut batch)?;
+			// Compact the txhashset itself (rewriting the pruned backend files).
+			txhashset.compact(&mut batch)?;
 
-		// Rebuild our output_pos index in the db based on current UTXO set.
-		txhashset::extending(&mut txhashset, &mut batch, |extension| {
-			extension.rebuild_index()?;
-			Ok(())
-		})?;
+			// Rebuild our output_pos index in the db based on current UTXO set.
+			txhashset::extending(&mut txhashset, &mut batch, |extension| {
+				extension.rebuild_index()?;
+				Ok(())
+			})?;
 
-		// If we are not in archival mode remove historical blocks from the db.
-		if !self.archive_mode {
-			self.remove_historical_blocks(&txhashset, &mut batch)?;
+			// If we are not in archival mode remove historical blocks from the db.
+			if !self.archive_mode {
+				self.remove_historical_blocks(&txhashset, &mut batch)?;
+			}
+
+			// Commit all the above db changes.
+			batch.commit()?;
 		}
 
-		// Commit all the above db changes.
-		batch.commit()?;
+		self.rebuild_height_for_pos()?;
 
 		Ok(())
 	}
@@ -1221,6 +1223,56 @@ impl Chain {
 		Ok(hash)
 	}
 
+	/// Migrate the index 'commitment -> output_pos' to index 'commitment -> (output_pos, block_height)'
+	/// Note: should only be called in two cases:
+	///     - Node start-up. For database migration from the old version.
+	/// 	- After the txhashset 'rebuild_index' when state syncing or compact.
+	pub fn rebuild_height_for_pos(&self) -> Result<(), Error> {
+		let txhashset = self.txhashset.read();
+		let mut outputs_pos = txhashset.get_all_output_pos()?;
+		let total_outputs = outputs_pos.len();
+		if total_outputs == 0 {
+			debug!("rebuild_height_for_pos: nothing to be rebuilt");
+			return Ok(());
+		} else {
+			debug!(
+				"rebuild_height_for_pos: rebuilding {} output_pos's height...",
+				total_outputs
+			);
+		}
+		outputs_pos.sort_by(|a, b| a.1.cmp(&b.1));
+
+		let max_height = {
+			let head = self.head()?;
+			head.height
+		};
+
+		let batch = self.store.batch()?;
+		// clear it before rebuilding
+		batch.clear_output_pos_height()?;
+
+		let mut i = 0;
+		for search_height in 0..max_height {
+			let h = txhashset.get_header_by_height(search_height + 1)?;
+			while i < total_outputs {
+				let (commit, pos) = outputs_pos[i];
+				if pos >= h.output_mmr_size {
+					break;
+				}
+				batch.save_output_pos_height(&commit, pos, h.height)?;
+				trace!("rebuild_height_for_pos: {:?}", (commit, pos, h.height));
+				i += 1;
+			}
+		}
+
+		// clear the output_pos since now it has been replaced by the new index
+		batch.clear_output_pos()?;
+
+		batch.commit()?;
+		debug!("rebuild_height_for_pos: done");
+		Ok(())
+	}
+
 	/// Gets the block header in which a given output appears in the txhashset.
 	pub fn get_header_for_output(
 		&self,
@@ -1228,32 +1280,20 @@ impl Chain {
 	) -> Result<BlockHeader, Error> {
 		let txhashset = self.txhashset.read();
 
-		let (_, pos) = txhashset.is_unspent(output_ref)?;
+		let (_hash, _pos, height) = txhashset.is_unspent(output_ref)?;
+		Ok(txhashset.get_header_by_height(height)?)
+	}
 
-		let mut min = 0;
-		let mut max = {
-			let head = self.head()?;
-			head.height
-		};
+	/// Gets the MMR position in which a given output appears in the txhashset,
+	/// and the block height of this output.
+	pub fn get_output_pos_height(
+		&self,
+		output_ref: &OutputIdentifier,
+	) -> Result<(u64, u64), Error> {
+		let txhashset = self.txhashset.read();
 
-		loop {
-			let search_height = max - (max - min) / 2;
-			let h = txhashset.get_header_by_height(search_height)?;
-			if search_height == 0 {
-				return Ok(h);
-			}
-			let h_prev = txhashset.get_header_by_height(search_height - 1)?;
-			if pos > h.output_mmr_size {
-				min = search_height;
-			} else if pos < h_prev.output_mmr_size {
-				max = search_height;
-			} else {
-				if pos == h_prev.output_mmr_size {
-					return Ok(h_prev);
-				}
-				return Ok(h);
-			}
-		}
+		let (_, pos, height) = txhashset.is_unspent(output_ref)?;
+		Ok((pos, height))
 	}
 
 	/// Verifies the given block header is actually on the current chain.

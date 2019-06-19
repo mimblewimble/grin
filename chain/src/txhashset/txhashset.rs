@@ -173,14 +173,14 @@ impl TxHashSet {
 	/// Check if an output is unspent.
 	/// We look in the index to find the output MMR pos.
 	/// Then we check the entry in the output MMR and confirm the hash matches.
-	pub fn is_unspent(&self, output_id: &OutputIdentifier) -> Result<(Hash, u64), Error> {
-		match self.commit_index.get_output_pos(&output_id.commit) {
-			Ok(pos) => {
+	pub fn is_unspent(&self, output_id: &OutputIdentifier) -> Result<(Hash, u64, u64), Error> {
+		match self.commit_index.get_output_pos_height(&output_id.commit) {
+			Ok((pos, block_height)) => {
 				let output_pmmr: ReadonlyPMMR<'_, Output, _> =
 					ReadonlyPMMR::at(&self.output_pmmr_h.backend, self.output_pmmr_h.last_pos);
 				if let Some(hash) = output_pmmr.get_hash(pos) {
 					if hash == output_id.hash_with_index(pos - 1) {
-						Ok((hash, pos))
+						Ok((hash, pos, block_height))
 					} else {
 						Err(ErrorKind::TxHashSetErr(format!("txhashset hash mismatch")).into())
 					}
@@ -233,6 +233,11 @@ impl TxHashSet {
 		let hash = self.get_header_hash_by_height(height)?;
 		let header = self.commit_index.get_block_header(&hash)?;
 		Ok(header)
+	}
+
+	/// Get all outputs MMR pos
+	pub fn get_all_output_pos(&self) -> Result<Vec<(Commitment,u64)>, Error> {
+		Ok(self.commit_index.get_all_output_pos()?)
 	}
 
 	/// returns outputs from the given insertion (leaf) index up to the
@@ -868,8 +873,8 @@ impl<'a> Extension<'a> {
 
 		for out in b.outputs() {
 			let pos = self.apply_output(out)?;
-			// Update the output_pos index for the new output.
-			self.batch.save_output_pos(&out.commitment(), pos)?;
+			// Update the (output_pos,height) index for the new output.
+			self.batch.save_output_pos_height(&out.commitment(), pos, b.header.height)?;
 		}
 
 		for input in b.inputs() {

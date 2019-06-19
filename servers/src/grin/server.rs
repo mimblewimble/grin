@@ -189,6 +189,9 @@ impl Server {
 			archive_mode,
 		)?);
 
+		// launching the database migration if needed
+		shared_chain.rebuild_height_for_pos()?;
+
 		pool_adapter.set_chain(shared_chain.clone());
 
 		let net_adapter = Arc::new(NetToChainAdapter::new(
