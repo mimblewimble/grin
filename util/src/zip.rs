@@ -23,7 +23,7 @@ use zip as zip_rs;
 
 /// Create a zip archive from source dir and list of relative file paths.
 /// Permissions are set to 644 by default.
-pub fn create_zip(dst_file: &File, src_dir: &Path, files: Vec<String>) -> io::Result<()> {
+pub fn create_zip(dst_file: &File, src_dir: &Path, files: Vec<PathBuf>) -> io::Result<()> {
 	let mut writer = {
 		let zip = zip_rs::ZipWriter::new(dst_file);
 		BufWriter::new(zip)
@@ -33,10 +33,9 @@ pub fn create_zip(dst_file: &File, src_dir: &Path, files: Vec<String>) -> io::Re
 		.compression_method(zip_rs::CompressionMethod::Stored)
 		.unix_permissions(0o644);
 
-	for x in files {
-		let path = Path::new(&x);
-		writer.get_mut().start_file_from_path(&path, options)?;
-		let file_path = src_dir.join(path);
+	for x in &files {
+		writer.get_mut().start_file_from_path(x, options)?;
+		let file_path = src_dir.join(x);
 		info!("compress: {:?} -> {:?}", file_path, x);
 		let file = File::open(file_path)?;
 		io::copy(&mut BufReader::new(file), &mut writer)?;
@@ -50,13 +49,15 @@ pub fn create_zip(dst_file: &File, src_dir: &Path, files: Vec<String>) -> io::Re
 }
 
 /// Extract a set of files from the provided zip archive.
-pub fn extract_files(from_archive: File, dest: &Path, files: Vec<String>) -> io::Result<()> {
+pub fn extract_files(from_archive: File, dest: &Path, files: Vec<PathBuf>) -> io::Result<()> {
 	let dest: PathBuf = PathBuf::from(dest);
-	let files: Vec<_> = files.iter().map(|x| x.to_string()).collect();
+	let files: Vec<_> = files.iter().cloned().collect();
 	let res = thread::spawn(move || {
 		let mut archive = zip_rs::ZipArchive::new(from_archive).expect("archive file exists");
 		for x in files {
-			let file = archive.by_name(&x).expect("file exists in archive");
+			let file = archive
+				.by_name(x.to_str().expect("valid path"))
+				.expect("file exists in archive");
 			let path = dest.join(file.sanitized_name());
 			let parent_dir = path.parent().expect("valid parent dir");
 			fs::create_dir_all(&parent_dir).expect("create parent dir");

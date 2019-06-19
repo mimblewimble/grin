@@ -1482,23 +1482,26 @@ pub fn zip_read(root_dir: String, header: &BlockHeader) -> Result<File, Error> {
 }
 
 // Explicit list of files to extract from our zip archive.
-// Return Vec<String> as some of these are dynamic.
-fn file_list(header: &BlockHeader) -> Vec<String> {
+// We include *only* these files when building the txhashset zip.
+// We extract *only* these files when receiving a txhashset zip.
+// Everything else will be safely ignored.
+// Return Vec<PathBuf> as some of these are dynamic (specifically the "rewound" leaf files).
+fn file_list(header: &BlockHeader) -> Vec<PathBuf> {
 	vec![
 		// kernel MMR
-		String::from("kernel/pmmr_data.bin"),
-		String::from("kernel/pmmr_hash.bin"),
+		PathBuf::from("kernel/pmmr_data.bin"),
+		PathBuf::from("kernel/pmmr_hash.bin"),
 		// output MMR
-		String::from("output/pmmr_data.bin"),
-		String::from("output/pmmr_hash.bin"),
-		String::from("output/pmmr_prun.bin"),
+		PathBuf::from("output/pmmr_data.bin"),
+		PathBuf::from("output/pmmr_hash.bin"),
+		PathBuf::from("output/pmmr_prun.bin"),
 		// rangeproof MMR
-		String::from("rangeproof/pmmr_data.bin"),
-		String::from("rangeproof/pmmr_hash.bin"),
-		String::from("rangeproof/pmmr_prun.bin"),
+		PathBuf::from("rangeproof/pmmr_data.bin"),
+		PathBuf::from("rangeproof/pmmr_hash.bin"),
+		PathBuf::from("rangeproof/pmmr_prun.bin"),
 		// Header specific "rewound" leaf files for output and rangeproof MMR.
-		format!("output/pmmr_leaf.bin.{}", header.hash()),
-		format!("rangeproof/pmmr_leaf.bin.{}", header.hash()),
+		PathBuf::from(format!("output/pmmr_leaf.bin.{}", header.hash())),
+		PathBuf::from(format!("rangeproof/pmmr_leaf.bin.{}", header.hash())),
 	]
 }
 
