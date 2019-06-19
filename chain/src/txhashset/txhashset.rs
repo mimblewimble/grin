@@ -32,8 +32,7 @@ use crate::util::secp::pedersen::{Commitment, RangeProof};
 use crate::util::{file, secp_static, zip};
 use croaring::Bitmap;
 use grin_store;
-use grin_store::pmmr::{clean_files_by_prefix, PMMRBackend, PMMR_FILES};
-use std::collections::HashSet;
+use grin_store::pmmr::{clean_files_by_prefix, PMMRBackend};
 use std::fs::{self, File};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -1457,11 +1456,13 @@ pub fn zip_read(root_dir: String, header: &BlockHeader) -> Result<File, Error> {
 		}
 		// Copy file to another dir
 		file::copy_dir_to(&txhashset_path, &temp_txhashset_path)?;
-		// Check and remove file that are not supposed to be there
-		check_and_remove_files(&temp_txhashset_path, header)?;
-		// Compress zip
-		zip::compress(&temp_txhashset_path, &File::create(zip_path.clone())?)
-			.map_err(|ze| ErrorKind::Other(ze.to_string()))?;
+
+		let zip_file = File::create(zip_path.clone())?;
+
+		// Explicit list of files to add to our zip archive.
+		let files = file_list(header);
+
+		zip::create_zip(&zip_file, &temp_txhashset_path, files)?;
 
 		temp_txhashset_path
 	};
@@ -1480,6 +1481,27 @@ pub fn zip_read(root_dir: String, header: &BlockHeader) -> Result<File, Error> {
 	Ok(zip_file)
 }
 
+// Explicit list of files to extract from our zip archive.
+// Return Vec<String> as some of these are dynamic.
+fn file_list(header: &BlockHeader) -> Vec<String> {
+	vec![
+		// kernel MMR
+		String::from("kernel/pmmr_data.bin"),
+		String::from("kernel/pmmr_hash.bin"),
+		// output MMR
+		String::from("output/pmmr_data.bin"),
+		String::from("output/pmmr_hash.bin"),
+		String::from("output/pmmr_prun.bin"),
+		// rangeproof MMR
+		String::from("rangeproof/pmmr_data.bin"),
+		String::from("rangeproof/pmmr_hash.bin"),
+		String::from("rangeproof/pmmr_prun.bin"),
+		// Header specific "rewound" leaf files for output and rangeproof MMR.
+		format!("output/pmmr_leaf.bin.{}", header.hash()),
+		format!("rangeproof/pmmr_leaf.bin.{}", header.hash()),
+	]
+}
+
 /// Extract the txhashset data from a zip file and writes the content into the
 /// txhashset storage dir
 pub fn zip_write(
@@ -1491,32 +1513,14 @@ pub fn zip_write(
 	let txhashset_path = root_dir.clone().join(TXHASHSET_SUBDIR);
 	fs::create_dir_all(&txhashset_path)?;
 
-	// Header specific "rewound" leaf files for output and rangeproof MMR.
-	let output_leaf_file = format!("output/pmmr_leaf.bin.{}", header.hash());
-	let rangeproof_leaf_file = format!("rangeproof/pmmr_leaf.bin.{}", header.hash());
-
 	// Explicit list of files to extract from our zip archive.
-	let files = vec![
-		// kernel MMR
-		"kernel/pmmr_data.bin",
-		"kernel/pmmr_hash.bin",
-		// output MMR
-		"output/pmmr_data.bin",
-		"output/pmmr_hash.bin",
-		"output/pmmr_prun.bin",
-		output_leaf_file.as_str(),
-		// rangeproof MMR
-		"rangeproof/pmmr_data.bin",
-		"rangeproof/pmmr_hash.bin",
-		"rangeproof/pmmr_prun.bin",
-		rangeproof_leaf_file.as_str(),
-	];
+	let files = file_list(header);
 
 	// We expect to see *exactly* the paths listed above.
 	// No attempt is made to be permissive or forgiving with "alternative" paths.
 	// These are the *only* files we will attempt to extract from the zip file.
 	// If any of these are missing the zip extraction will immediately fail.
-	zip::extract_files(txhashset_data, &txhashset_path, &files)?;
+	zip::extract_files(txhashset_data, &txhashset_path, files)?;
 	Ok(())
 }
 
@@ -1560,95 +1564,6 @@ pub fn clean_header_folder(root_dir: &PathBuf) {
 			warn!("clean_header_folder: fail on {:?}. err: {}", header_path, e);
 		}
 	}
-}
-
-/// Check a txhashset directory and remove any unexpected
-fn check_and_remove_files(txhashset_path: &PathBuf, header: &BlockHeader) -> Result<(), Error> {
-	// First compare the subdirectories
-	let subdirectories_expected: HashSet<_> = [OUTPUT_SUBDIR, KERNEL_SUBDIR, RANGE_PROOF_SUBDIR]
-		.iter()
-		.cloned()
-		.map(|s| String::from(s))
-		.collect();
-
-	let subdirectories_found: HashSet<_> = fs::read_dir(txhashset_path)?
-		.filter_map(|entry| {
-			entry.ok().and_then(|e| {
-				e.path()
-					.file_name()
-					.and_then(|n| n.to_str().map(|s| String::from(s)))
-			})
-		})
-		.collect();
-
-	let dir_difference: Vec<String> = subdirectories_found
-		.difference(&subdirectories_expected)
-		.cloned()
-		.collect();
-
-	// Removing unexpected directories if needed
-	if !dir_difference.is_empty() {
-		debug!("Unexpected folder(s) found in txhashset folder, removing.");
-		for diff in dir_difference {
-			let diff_path = txhashset_path.join(diff);
-			file::delete(diff_path)?;
-		}
-	}
-
-	// Then compare the files found in the subdirectories
-	let pmmr_files_expected: HashSet<_> = PMMR_FILES
-		.iter()
-		.cloned()
-		.map(|s| {
-			if s.contains("pmmr_leaf.bin") {
-				format!("{}.{}", s, header.hash())
-			} else {
-				String::from(s)
-			}
-		})
-		.collect();
-
-	let subdirectories = fs::read_dir(txhashset_path)?;
-	for subdirectory in subdirectories {
-		let subdirectory_path = subdirectory?.path();
-		let pmmr_files = fs::read_dir(&subdirectory_path)?;
-		let pmmr_files_found: HashSet<_> = pmmr_files
-			.filter_map(|entry| {
-				entry.ok().and_then(|e| {
-					e.path()
-						.file_name()
-						.and_then(|n| n.to_str().map(|s| String::from(s)))
-				})
-			})
-			.collect();
-		let difference: Vec<String> = pmmr_files_found
-			.difference(&pmmr_files_expected)
-			.cloned()
-			.collect();
-		let mut removed = 0;
-		if !difference.is_empty() {
-			for diff in &difference {
-				let diff_path = subdirectory_path.join(diff);
-				match file::delete(diff_path.clone()) {
-					Err(e) => error!(
-						"check_and_remove_files: fail to remove file '{:?}', Err: {:?}",
-						diff_path, e,
-					),
-					Ok(_) => {
-						removed += 1;
-						trace!("check_and_remove_files: file '{:?}' removed", diff_path);
-					}
-				}
-			}
-			debug!(
-				"{} tmp file(s) found in txhashset subfolder {:?}, {} removed.",
-				difference.len(),
-				&subdirectory_path,
-				removed,
-			);
-		}
-	}
-	Ok(())
 }
 
 /// Given a block header to rewind to and the block header at the
