@@ -1323,6 +1323,7 @@ impl<'a> Extension<'a> {
 
 		let mut kern_count = 0;
 		let total_kernels = pmmr::n_leaves(self.kernel_pmmr.unpruned_size());
+		let mut tx_kernels: Vec<TxKernel> = Vec::with_capacity(1_024);
 		for n in 1..self.kernel_pmmr.unpruned_size() + 1 {
 			if pmmr::is_leaf(n) {
 				let kernel = self
@@ -1330,19 +1331,29 @@ impl<'a> Extension<'a> {
 					.get_data(n)
 					.ok_or::<Error>(ErrorKind::TxKernelNotFound.into())?;
 
-				kernel.verify()?;
+				tx_kernels.push(kernel.kernel);
 				kern_count += 1;
 
-				if kern_count % 20 == 0 {
+				// batch on every 1024 kernels
+				if kern_count & 0x0400 == 0 {
+					TxKernel::batch_verify(&tx_kernels)?;
+					tx_kernels.clear();
 					status.on_validation(kern_count, total_kernels, 0, 0);
-				}
-				if kern_count % 1_000 == 0 {
-					debug!(
-						"txhashset: verify_kernel_signatures: verified {} signatures",
-						kern_count,
-					);
+					if kern_count & 0x2000 == 0 {
+						debug!(
+							"txhashset: verify_kernel_signatures: verified {} signatures",
+							kern_count,
+						);
+					}
 				}
 			}
+		}
+
+		// remaining part which not full of 1024 kernels
+		if tx_kernels.len() > 0 {
+			TxKernel::batch_verify(&tx_kernels)?;
+			tx_kernels.clear();
+			status.on_validation(kern_count, total_kernels, 0, 0);
 		}
 
 		debug!(
@@ -1358,8 +1369,8 @@ impl<'a> Extension<'a> {
 	fn verify_rangeproofs(&self, status: &dyn TxHashsetWriteStatus) -> Result<(), Error> {
 		let now = Instant::now();
 
-		let mut commits: Vec<Commitment> = vec![];
-		let mut proofs: Vec<RangeProof> = vec![];
+		let mut commits: Vec<Commitment> = Vec::with_capacity(1_000);
+		let mut proofs: Vec<RangeProof> = Vec::with_capacity(1_000);
 
 		let mut proof_count = 0;
 		let total_rproofs = pmmr::n_leaves(self.output_pmmr.unpruned_size());
@@ -1390,7 +1401,7 @@ impl<'a> Extension<'a> {
 				);
 			}
 
-			if proof_count % 20 == 0 {
+			if proof_count % 1_000 == 0 {
 				status.on_validation(0, 0, proof_count, total_rproofs);
 			}
 		}
