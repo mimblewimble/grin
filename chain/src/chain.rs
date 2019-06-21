@@ -1318,6 +1318,7 @@ fn setup_head(
 		if height > 0 {
 			let header = txhashset.get_header_by_height(height)?;
 			let head = Tip::from_header(&header);
+			batch.save_head(&head)?;
 			debug!(
 				"setup_head: proceeding with head (and corresponding header): {} at {}",
 				head.last_block_h, head.height
