@@ -34,7 +34,6 @@ use crate::types::{
 };
 use crate::util::secp::pedersen::{Commitment, RangeProof};
 use crate::util::RwLock;
-use grin_store::Error::NotFoundErr;
 use std::collections::HashMap;
 use std::fs::{self, File};
 use std::io::Read;
@@ -1300,12 +1299,40 @@ fn setup_head(
 ) -> Result<(), Error> {
 	let mut batch = store.batch()?;
 
+	// Take existing chain tip as a starting point and use it to find the first valid
+	// header in our db. Go back through the chain by height until we find a valid header.
+	// The tip for this valid header is our head.
+	// This ensures we handle the hardfork scenario where our node processed what appeared to be a
+	// valid header but post-hardfork is no longer valid (and must be rewound).
+	// Specifically the header version number relative to block height.
+	let head = if let Ok(head) = batch.head() {
+		let mut height = head.height;
+		while height > 0 && txhashset.get_header_by_height(height).is_err() {
+			error!(
+				"setup_head: failed to read header for height: {}, rewinding ...",
+				height
+			);
+			height -= 1;
+		}
+
+		if height > 0 {
+			let header = txhashset.get_header_by_height(height)?;
+			let head = Tip::from_header(&header);
+			debug!(
+				"setup_head: proceeding with head (and corresponding header): {} at {}",
+				head.last_block_h, head.height
+			);
+			Some(head)
+		} else {
+			None
+		}
+	} else {
+		None
+	};
+
 	// check if we have a head in store, otherwise the genesis block is it
-	let head_res = batch.head();
-	let mut head: Tip;
-	match head_res {
-		Ok(h) => {
-			head = h;
+	match head {
+		Some(mut head) => {
 			loop {
 				// Use current chain tip if we have one.
 				// Note: We are rewinding and validating against a writeable extension.
@@ -1378,7 +1405,7 @@ fn setup_head(
 				}
 			}
 		}
-		Err(NotFoundErr(_)) => {
+		None => {
 			let mut sums = BlockSums::default();
 
 			// Save the genesis header with a "zero" header_root.
@@ -1411,7 +1438,6 @@ fn setup_head(
 
 			info!("init: saved genesis: {:?}", genesis.hash());
 		}
-		Err(e) => return Err(ErrorKind::StoreErr(e, "chain init load head".to_owned()))?,
 	};
 
 	// Check we have the header corresponding to the header_head.
