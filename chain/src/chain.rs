@@ -34,7 +34,6 @@ use crate::types::{
 };
 use crate::util::secp::pedersen::{Commitment, RangeProof};
 use crate::util::RwLock;
-use grin_store::Error::NotFoundErr;
 use std::collections::HashMap;
 use std::fs::{self, File};
 use std::io::Read;
@@ -172,7 +171,12 @@ impl Chain {
 		// open the txhashset, creating a new one if necessary
 		let mut txhashset = txhashset::TxHashSet::open(db_root.clone(), store.clone(), None)?;
 
-		setup_head(&genesis, &store, &mut txhashset)?;
+		if store.head().is_ok() {
+			setup_head(&store, &mut txhashset)?;
+		} else {
+			setup_genesis_head(&genesis, &store, &mut txhashset)?;
+		}
+
 		Chain::log_heads(&store)?;
 
 		Ok(Chain {
@@ -764,7 +768,7 @@ impl Chain {
 		txhashset: &mut txhashset::TxHashSet,
 	) -> Result<(), Error> {
 		let mut batch = self.store.batch()?;
-		txhashset::header_extending(txhashset, &mut batch, |extension| {
+		txhashset::header_extending(txhashset, &mut batch, head, |extension| {
 			extension.rebuild(head, &self.genesis)?;
 			Ok(())
 		})?;
@@ -1278,9 +1282,13 @@ impl Chain {
 	}
 
 	/// Verifies the given block header is actually on the current chain.
-	/// Checks the header_by_height index to verify the header is where we say
-	/// it is
+	/// Checks the header_by_height index to verify the header is accurate.
 	pub fn is_on_current_chain(&self, header: &BlockHeader) -> Result<(), Error> {
+		let head = self.head()?;
+		if header.height > head.height {
+			return Err(ErrorKind::Other(format!("not on current chain")).into());
+		}
+
 		let chain_header = self.get_header_by_height(header.height)?;
 		if chain_header.hash() == header.hash() {
 			Ok(())
@@ -1315,148 +1323,135 @@ impl Chain {
 }
 
 fn setup_head(
+	store: &store::ChainStore,
+	txhashset: &mut txhashset::TxHashSet,
+) -> Result<(), Error> {
+	let mut batch = store.batch()?;
+
+	// If we cannot read the header at the tip of the header chain then
+	// we should reset it along with the main chain tip below.
+	let header_head = batch.header_head()?;
+	let must_reset_header_head = txhashset.get_header_by_height(header_head.height).is_err();
+
+	let mut head = batch.head()?;
+	let mut height = head.height;
+
+	// Use the header MMR to determine header hash at each height.
+	// If we cannot read the header from the db rewind back by height
+	// until we find one we can read.
+	let header = txhashset::extending(txhashset, &mut batch, |extension| {
+		while height > 0 && extension.get_header_by_height(height).is_err() {
+			height -= 1;
+		}
+		let header = extension.get_header_by_height(height)?;
+		extension.rewind(&header)?;
+		Ok(header)
+	})?;
+
+	head = Tip::from_header(&header);
+
+	// Reset our head to reflect our best header from above.
+	batch.save_body_head(&head)?;
+	if must_reset_header_head {
+		// Remember to reset our header_head if necessary.
+		batch.save_header_head(&head)?;
+	}
+
+	loop {
+		// Use current chain tip if we have one.
+		// Note: We are rewinding and validating against a writeable extension.
+		// If validation is successful we will truncate the backend files
+		// to match the provided block header.
+		let header = batch.get_block_header(&head.last_block_h)?;
+
+		let res = txhashset::extending(txhashset, &mut batch, |extension| {
+			extension.rewind(&header)?;
+			extension.validate_roots()?;
+
+			// now check we have the "block sums" for the block in question
+			// if we have no sums (migrating an existing node) we need to go
+			// back to the txhashset and sum the outputs and kernels
+			if header.height > 0 && extension.batch.get_block_sums(&header.hash()).is_err() {
+				// Do a full (and slow) validation of the txhashset extension
+				// to calculate the utxo_sum and kernel_sum at this block height.
+				let (utxo_sum, kernel_sum) = extension.validate_kernel_sums()?;
+
+				// Save the block_sums to the db for use later.
+				extension.batch.save_block_sums(
+					&header.hash(),
+					&BlockSums {
+						utxo_sum,
+						kernel_sum,
+					},
+				)?;
+			}
+
+			Ok(())
+		});
+
+		if res.is_ok() {
+			break;
+		} else {
+			// We may have corrupted the MMR backend files last time we stopped the
+			// node. If this appears to be the case revert the head to the previous
+			// header and try again
+			let prev_header = batch.get_block_header(&head.prev_block_h)?;
+			let _ = batch.delete_block(&header.hash());
+			head = Tip::from_header(&prev_header);
+			batch.save_body_head(&head)?;
+		}
+	}
+
+	batch.reset_sync_head()?;
+	batch.commit()?;
+
+	Ok(())
+}
+
+/// Setup our genesis block in the db along with the head and header_head ref.
+/// Build the initial block_sums for the genesis block.
+/// Apply the genesis block to the txhashset (and validate the roots and sizes).
+/// This will be called once on a fresh node at startup (head does not yet exist).
+fn setup_genesis_head(
 	genesis: &Block,
 	store: &store::ChainStore,
 	txhashset: &mut txhashset::TxHashSet,
 ) -> Result<(), Error> {
 	let mut batch = store.batch()?;
 
-	// check if we have a head in store, otherwise the genesis block is it
-	let head_res = batch.head();
-	let mut head: Tip;
-	match head_res {
-		Ok(h) => {
-			head = h;
-			loop {
-				// Use current chain tip if we have one.
-				// Note: We are rewinding and validating against a writeable extension.
-				// If validation is successful we will truncate the backend files
-				// to match the provided block header.
-				let header = batch.get_block_header(&head.last_block_h)?;
+	let mut sums = BlockSums::default();
 
-				// If we have no header MMR then rebuild as necessary.
-				// Supports old nodes with no header MMR.
-				txhashset::header_extending(txhashset, &mut batch, |extension| {
-					let needs_rebuild = match extension.get_header_by_height(head.height) {
-						Ok(header) => header.hash() != head.last_block_h,
-						Err(_) => true,
-					};
+	// Save the genesis header with a "zero" header_root.
+	// We will update this later once we have the correct header_root.
+	batch.save_block_header(&genesis.header)?;
+	batch.save_block(&genesis)?;
 
-					if needs_rebuild {
-						extension.rebuild(&head, &genesis.header)?;
-					}
+	let head = Tip::from_header(&genesis.header);
+	batch.save_head(&head)?;
 
-					Ok(())
-				})?;
-
-				let res = txhashset::extending(txhashset, &mut batch, |extension| {
-					extension.rewind(&header)?;
-					extension.validate_roots()?;
-
-					// now check we have the "block sums" for the block in question
-					// if we have no sums (migrating an existing node) we need to go
-					// back to the txhashset and sum the outputs and kernels
-					if header.height > 0 && extension.batch.get_block_sums(&header.hash()).is_err()
-					{
-						debug!(
-							"init: building (missing) block sums for {} @ {}",
-							header.height,
-							header.hash()
-						);
-
-						// Do a full (and slow) validation of the txhashset extension
-						// to calculate the utxo_sum and kernel_sum at this block height.
-						let (utxo_sum, kernel_sum) = extension.validate_kernel_sums()?;
-
-						// Save the block_sums to the db for use later.
-						extension.batch.save_block_sums(
-							&header.hash(),
-							&BlockSums {
-								utxo_sum,
-								kernel_sum,
-							},
-						)?;
-					}
-
-					debug!(
-						"init: rewinding and validating before we start... {} at {}",
-						header.hash(),
-						header.height,
-					);
-					Ok(())
-				});
-
-				if res.is_ok() {
-					break;
-				} else {
-					// We may have corrupted the MMR backend files last time we stopped the
-					// node. If this appears to be the case revert the head to the previous
-					// header and try again
-					let prev_header = batch.get_block_header(&head.prev_block_h)?;
-					let _ = batch.delete_block(&header.hash());
-					head = Tip::from_header(&prev_header);
-					batch.save_head(&head)?;
-				}
-			}
-		}
-		Err(NotFoundErr(_)) => {
-			let mut sums = BlockSums::default();
-
-			// Save the genesis header with a "zero" header_root.
-			// We will update this later once we have the correct header_root.
-			batch.save_block_header(&genesis.header)?;
-			batch.save_block(&genesis)?;
-
-			let tip = Tip::from_header(&genesis.header);
-			batch.save_head(&tip)?;
-
-			if genesis.kernels().len() > 0 {
-				let (utxo_sum, kernel_sum) = (sums, genesis as &Committed).verify_kernel_sums(
-					genesis.header.overage(),
-					genesis.header.total_kernel_offset(),
-				)?;
-				sums = BlockSums {
-					utxo_sum,
-					kernel_sum,
-				};
-			}
-			txhashset::extending(txhashset, &mut batch, |extension| {
-				extension.apply_block(&genesis)?;
-				extension.validate_roots()?;
-				extension.validate_sizes()?;
-				Ok(())
-			})?;
-
-			// Save the block_sums to the db for use later.
-			batch.save_block_sums(&genesis.hash(), &sums)?;
-
-			info!("init: saved genesis: {:?}", genesis.hash());
-		}
-		Err(e) => return Err(ErrorKind::StoreErr(e, "chain init load head".to_owned()))?,
-	};
-
-	// Check we have the header corresponding to the header_head.
-	// If not then something is corrupted and we should reset our header_head.
-	// Either way we want to reset sync_head to match header_head.
-	let head = batch.head()?;
-	let header_head = batch.header_head()?;
-	if batch.get_block_header(&header_head.last_block_h).is_ok() {
-		// Reset sync_head to be consistent with current header_head.
-		batch.reset_sync_head()?;
-	} else {
-		// Reset both header_head and sync_head to be consistent with current head.
-		warn!(
-			"setup_head: header missing for {}, {}, resetting header_head and sync_head to head: {}, {}",
-			header_head.last_block_h,
-			header_head.height,
-			head.last_block_h,
-			head.height,
-		);
-		batch.reset_header_head()?;
-		batch.reset_sync_head()?;
+	if genesis.kernels().len() > 0 {
+		let (utxo_sum, kernel_sum) = (sums, genesis as &Committed).verify_kernel_sums(
+			genesis.header.overage(),
+			genesis.header.total_kernel_offset(),
+		)?;
+		sums = BlockSums {
+			utxo_sum,
+			kernel_sum,
+		};
 	}
 
+	txhashset::extending(txhashset, &mut batch, |extension| {
+		extension.apply_block(&genesis)?;
+		extension.validate_roots()?;
+		extension.validate_sizes()?;
+		Ok(())
+	})?;
+
+	// Save the block_sums to the db for use later.
+	batch.save_block_sums(&genesis.hash(), &sums)?;
+	batch.reset_sync_head()?;
 	batch.commit()?;
 
+	info!("init: saved genesis: {:?}", genesis.hash());
 	Ok(())
 }

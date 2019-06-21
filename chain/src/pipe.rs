@@ -56,11 +56,16 @@ fn process_header_for_block(
 	is_fork: bool,
 	ctx: &mut BlockContext<'_>,
 ) -> Result<(), Error> {
-	txhashset::header_extending(&mut ctx.txhashset, &mut ctx.batch, |extension| {
+	let head = ctx.batch.head()?;
+	txhashset::header_extending(&mut ctx.txhashset, &mut ctx.batch, &head, |extension| {
 		extension.force_rollback();
 		if is_fork {
 			rewind_and_apply_header_fork(header, extension)?;
+		} else {
+			let prev_header = extension.batch.get_previous_header(&header)?;
+			extension.rewind(&prev_header)?;
 		}
+
 		extension.validate_root(header)?;
 		extension.apply_header(header)?;
 		Ok(())
@@ -68,7 +73,11 @@ fn process_header_for_block(
 
 	validate_header(header, ctx)?;
 	add_block_header(header, &ctx.batch)?;
-	update_header_head(header, ctx)?;
+
+	let header_head = ctx.batch.header_head()?;
+	if has_more_work(&header, &header_head) {
+		update_header_head(&Tip::from_header(header), ctx)?;
+	}
 
 	Ok(())
 }
@@ -131,6 +140,9 @@ pub fn process_block(b: &Block, ctx: &mut BlockContext<'_>) -> Result<Option<Tip
 	txhashset::extending(&mut ctx.txhashset, &mut ctx.batch, |mut extension| {
 		if is_fork {
 			rewind_and_apply_fork(b, extension)?;
+		} else {
+			let prev_header = extension.batch.get_previous_header(&b.header)?;
+			extension.rewind(&prev_header)?;
 		}
 
 		// Check any coinbase being spent have matured sufficiently.
@@ -177,73 +189,78 @@ pub fn process_block(b: &Block, ctx: &mut BlockContext<'_>) -> Result<Option<Tip
 	Ok(res)
 }
 
-/// Process the block header.
-/// This is only ever used during sync and uses a context based on sync_head.
+/// Handle a batch of block headers during header sync.
 pub fn sync_block_headers(
 	headers: &[BlockHeader],
 	ctx: &mut BlockContext<'_>,
 ) -> Result<Option<Tip>, Error> {
-	let first_header = match headers.first() {
-		Some(header) => {
-			debug!(
-				"pipe: sync_block_headers: {} headers from {} at {}",
-				headers.len(),
-				header.hash(),
-				header.height,
-			);
-			header
+	if headers.is_empty() {
+		return Ok(None);
+	}
+	let first_header = headers.first().expect("a first header");
+	let last_header = headers.last().expect("a last header");
+
+	debug!(
+		"sync_block_headers: {} headers from {} at {} to {} at {}",
+		headers.len(),
+		first_header.hash(),
+		first_header.height,
+		last_header.hash(),
+		last_header.height,
+	);
+
+	let sync_head = ctx.batch.get_sync_head()?;
+	let prev_header = ctx.batch.get_previous_header(&first_header)?;
+	txhashset::sync_extending(&mut ctx.txhashset, &mut ctx.batch, |extension| {
+		// Check if we have seen all these headers before?
+		if last_header.height < sync_head.height
+			&& extension.is_on_current_chain(&last_header).is_ok()
+		{
+			return Ok(());
 		}
-		None => {
-			error!("failed to get the first header");
-			return Ok(None);
-		}
-	};
 
-	let all_known = if let Some(last_header) = headers.last() {
-		ctx.batch.get_block_header(&last_header.hash()).is_ok()
-	} else {
-		false
-	};
-
-	if !all_known {
-		let prev_header = ctx.batch.get_previous_header(&first_header)?;
-		txhashset::sync_extending(&mut ctx.txhashset, &mut ctx.batch, |extension| {
-			extension.rewind(&prev_header)?;
-
-			for header in headers {
-				// Check the current root is correct.
-				extension.validate_root(header)?;
-
-				// Apply the header to the header MMR.
-				extension.apply_header(header)?;
-
-				// Save the header to the db.
-				add_block_header(header, &extension.batch)?;
-			}
-
-			Ok(())
-		})?;
-
-		// Validate all our headers now that we have added each "previous"
-		// header to the db in this batch above.
+		extension.rewind(&prev_header)?;
 		for header in headers {
-			validate_header(header, ctx)?;
+			extension.validate_root(header)?;
+			extension.apply_header(header)?;
+			add_block_header(header, &extension.batch)?;
 		}
+
+		Ok(())
+	})?;
+
+	// Validate all our headers now that we have added each "previous"
+	// header to the db in this batch above.
+	for header in headers {
+		validate_header(header, ctx)?;
 	}
 
-	// Update header_head (if most work) and sync_head (regardless) in all cases,
-	// even if we already know all the headers.
-	// This avoids the case of us getting into an infinite loop with sync_head never
-	// progressing.
-	// We only need to do this once at the end of this batch of headers.
-	if let Some(header) = headers.last() {
-		// Update sync_head regardless of total work.
-		update_sync_head(header, &mut ctx.batch)?;
+	// Update sync_head regardless of total work.
+	update_sync_head(&Tip::from_header(last_header), &mut ctx.batch)?;
 
-		// Update header_head (but only if this header increases our total known work).
-		// i.e. Only if this header is now the head of the current "most work" chain.
-		let res = update_header_head(header, ctx)?;
-		Ok(res)
+	let header_head = ctx.batch.header_head()?;
+	if has_more_work(&last_header, &header_head) {
+		txhashset::header_extending(
+			&mut ctx.txhashset,
+			&mut ctx.batch,
+			&header_head,
+			|extension| {
+				if prev_header.height == 0 {
+					extension.rewind(&prev_header)?;
+				} else {
+					// TODO - kind of janky api here, why first_header and not prev_header?
+					rewind_and_apply_header_fork(&first_header, extension)?;
+				}
+
+				for header in headers {
+					extension.validate_root(header)?;
+					extension.apply_header(header)?;
+				}
+				Ok(())
+			},
+		)?;
+		update_header_head(&Tip::from_header(last_header), ctx)?;
+		Ok(Some(Tip::from_header(last_header)))
 	} else {
 		Ok(None)
 	}
@@ -532,11 +549,7 @@ fn update_head(b: &Block, ctx: &BlockContext<'_>) -> Result<Option<Tip>, Error> 
 			.save_body_head(&tip)
 			.map_err(|e| ErrorKind::StoreErr(e, "pipe save body".to_owned()))?;
 
-		debug!(
-			"pipe: head updated to {} at {}",
-			tip.last_block_h, tip.height
-		);
-
+		debug!("head updated to {} at {}", tip.last_block_h, tip.height);
 		Ok(Some(tip))
 	} else {
 		Ok(None)
@@ -549,33 +562,27 @@ fn has_more_work(header: &BlockHeader, head: &Tip) -> bool {
 }
 
 /// Update the sync head so we can keep syncing from where we left off.
-fn update_sync_head(bh: &BlockHeader, batch: &mut store::Batch<'_>) -> Result<(), Error> {
-	let tip = Tip::from_header(bh);
+fn update_sync_head(head: &Tip, batch: &mut store::Batch<'_>) -> Result<(), Error> {
 	batch
-		.save_sync_head(&tip)
+		.save_sync_head(head)
 		.map_err(|e| ErrorKind::StoreErr(e, "pipe save sync head".to_owned()))?;
-	debug!("sync head {} @ {}", bh.hash(), bh.height);
+	debug!(
+		"sync head updated to {} at {}",
+		head.last_block_h, head.height
+	);
 	Ok(())
 }
 
 /// Update the header head if this header has most work.
-fn update_header_head(bh: &BlockHeader, ctx: &mut BlockContext<'_>) -> Result<Option<Tip>, Error> {
-	let header_head = ctx.batch.header_head()?;
-	if has_more_work(&bh, &header_head) {
-		let tip = Tip::from_header(bh);
-		ctx.batch
-			.save_header_head(&tip)
-			.map_err(|e| ErrorKind::StoreErr(e, "pipe save header head".to_owned()))?;
-
-		debug!(
-			"pipe: header_head updated to {} at {}",
-			tip.last_block_h, tip.height
-		);
-
-		Ok(Some(tip))
-	} else {
-		Ok(None)
-	}
+fn update_header_head(head: &Tip, ctx: &mut BlockContext<'_>) -> Result<(), Error> {
+	ctx.batch
+		.save_header_head(head)
+		.map_err(|e| ErrorKind::StoreErr(e, "pipe save header head".to_owned()))?;
+	debug!(
+		"header_head updated to {} at {}",
+		head.last_block_h, head.height
+	);
+	Ok(())
 }
 
 /// Rewind the header chain and reapply headers on a fork.
@@ -622,6 +629,8 @@ pub fn rewind_and_apply_fork(b: &Block, ext: &mut txhashset::Extension<'_>) -> R
 	}
 	fork_hashes.reverse();
 
+	error!("***** applying blocks during fork: {:?}", fork_hashes);
+
 	let forked_header = current;
 
 	// Rewind the txhashset state back to the block where we forked from the most work chain.
@@ -633,6 +642,12 @@ pub fn rewind_and_apply_fork(b: &Block, ext: &mut txhashset::Extension<'_>) -> R
 			.batch
 			.get_block(&h)
 			.map_err(|e| ErrorKind::StoreErr(e, format!("getting forked blocks")))?;
+
+		error!(
+			"***** applying block for fork: {:?}, {:?}",
+			fb.header.hash(),
+			fb.header.height
+		);
 
 		// Re-verify coinbase maturity along this fork.
 		verify_coinbase_maturity(&fb, ext)?;
