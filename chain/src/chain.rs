@@ -742,7 +742,7 @@ impl Chain {
 		txhashset: &mut txhashset::TxHashSet,
 	) -> Result<(), Error> {
 		let mut batch = self.store.batch()?;
-		txhashset::header_extending(txhashset, &mut batch, |extension| {
+		txhashset::header_extending(txhashset, &mut batch, head, |extension| {
 			extension.rebuild(head, &self.genesis)?;
 			Ok(())
 		})?;
@@ -1256,9 +1256,13 @@ impl Chain {
 	}
 
 	/// Verifies the given block header is actually on the current chain.
-	/// Checks the header_by_height index to verify the header is where we say
-	/// it is
+	/// Checks the header_by_height index to verify the header is accurate.
 	pub fn is_on_current_chain(&self, header: &BlockHeader) -> Result<(), Error> {
+		let head = self.head()?;
+		if header.height > head.height {
+			return Err(ErrorKind::Other(format!("not on current chain")).into());
+		}
+
 		let chain_header = self.get_header_by_height(header.height)?;
 		if chain_header.hash() == header.hash() {
 			Ok(())
@@ -1305,35 +1309,57 @@ fn setup_head(
 	// This ensures we handle the hardfork scenario where our node processed what appeared to be a
 	// valid header but post-hardfork is no longer valid (and must be rewound).
 	// Specifically the header version number relative to block height.
-	let head = if let Ok(head) = batch.head() {
-		let mut height = head.height;
-		while height > 0 && txhashset.get_header_by_height(height).is_err() {
-			error!(
-				"setup_head: failed to read header for height: {}, rewinding ...",
-				height
-			);
-			height -= 1;
-		}
+	if let Ok(header_head) = batch.header_head() {
+		let mut height = header_head.height;
 
-		if height > 0 {
-			let header = txhashset.get_header_by_height(height)?;
-			let head = Tip::from_header(&header);
-			batch.save_head(&head)?;
-			debug!(
-				"setup_head: proceeding with head (and corresponding header): {} at {}",
-				head.last_block_h, head.height
-			);
-			Some(head)
-		} else {
-			None
-		}
+		error!("***** header_head: {:?}", &header_head);
+
+		// TODO - cleanup where we log here
+		let header =
+			txhashset::header_extending(txhashset, &mut batch, &header_head, |extension| {
+				while height > 0 && extension.get_header_by_height(height).is_err() {
+					error!(
+						"setup_head: failed to read header for height: {}, rewinding ...",
+						height
+					);
+					height -= 1;
+				}
+				let header = extension.get_header_by_height(height)?;
+				extension.rewind(&header)?;
+				Ok(header)
+			})?;
+
+		let header_head = Tip::from_header(&header);
+		batch.save_header_head(&header_head)?;
+		debug!(
+			"setup_head: proceeding with head (and corresponding header): {} at {}",
+			header_head.last_block_h, header_head.height
+		);
+		Some(header_head)
 	} else {
 		None
 	};
 
+	{
+		let header_head = batch.header_head();
+		let head = batch.head();
+		error!("***** header_head: {:?}", header_head);
+		error!("***** head: {:?}", head);
+
+		// If we rewound header_head back earlier than head then
+		// set head to match.
+		if let Ok(header_head) = header_head {
+			if let Ok(head) = head {
+				if header_head.height < head.height {
+					batch.save_head(&header_head)?;
+				}
+			}
+		}
+	}
+
 	// check if we have a head in store, otherwise the genesis block is it
-	match head {
-		Some(mut head) => {
+	match batch.head() {
+		Ok(mut head) => {
 			loop {
 				// Use current chain tip if we have one.
 				// Note: We are rewinding and validating against a writeable extension.
@@ -1343,18 +1369,18 @@ fn setup_head(
 
 				// If we have no header MMR then rebuild as necessary.
 				// Supports old nodes with no header MMR.
-				txhashset::header_extending(txhashset, &mut batch, |extension| {
-					let needs_rebuild = match extension.get_header_by_height(head.height) {
-						Ok(header) => header.hash() != head.last_block_h,
-						Err(_) => true,
-					};
-
-					if needs_rebuild {
-						extension.rebuild(&head, &genesis.header)?;
-					}
-
-					Ok(())
-				})?;
+				// txhashset::header_extending(txhashset, &mut batch, |extension| {
+				// 	let needs_rebuild = match extension.get_header_by_height(head.height) {
+				// 		Ok(header) => header.hash() != head.last_block_h,
+				// 		Err(_) => true,
+				// 	};
+				//
+				// 	if needs_rebuild {
+				// 		extension.rebuild(&head, &genesis.header)?;
+				// 	}
+				//
+				// 	Ok(())
+				// })?;
 
 				let res = txhashset::extending(txhashset, &mut batch, |extension| {
 					extension.rewind(&header)?;
@@ -1406,7 +1432,7 @@ fn setup_head(
 				}
 			}
 		}
-		None => {
+		Err(_) => {
 			let mut sums = BlockSums::default();
 
 			// Save the genesis header with a "zero" header_root.
@@ -1414,8 +1440,8 @@ fn setup_head(
 			batch.save_block_header(&genesis.header)?;
 			batch.save_block(&genesis)?;
 
-			let tip = Tip::from_header(&genesis.header);
-			batch.save_head(&tip)?;
+			let head = Tip::from_header(&genesis.header);
+			batch.save_head(&head)?;
 
 			if genesis.kernels().len() > 0 {
 				let (utxo_sum, kernel_sum) = (sums, genesis as &Committed).verify_kernel_sums(

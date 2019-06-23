@@ -305,7 +305,12 @@ impl TxHashSet {
 		let horizon_hash = self.get_header_hash_by_height(horizon_height)?;
 		let horizon_header = batch.get_block_header(&horizon_hash)?;
 
-		let rewind_rm_pos = input_pos_to_rewind(&horizon_header, &head_header, batch)?;
+		let rewind_rm_pos = input_pos_to_rewind(
+			&horizon_header,
+			head_header.height,
+			batch,
+			ReadonlyPMMR::at(&self.header_pmmr_h.backend, self.header_pmmr_h.last_pos),
+		)?;
 
 		debug!("txhashset: check_compact output mmr backend...");
 		self.output_pmmr_h
@@ -338,17 +343,13 @@ where
 
 	// We want to use the current head of the most work chain unless
 	// we explicitly rewind the extension.
-	let header = batch.head_header()?;
+	let head = batch.head()?;
 
 	trace!("Starting new txhashset (readonly) extension.");
 
 	let res = {
-		let mut extension = Extension::new(trees, &batch, header);
+		let mut extension = Extension::new(trees, &batch, head);
 		extension.force_rollback();
-
-		// TODO - header_mmr may be out ahead via the header_head
-		// TODO - do we need to handle this via an explicit rewind on the header_mmr?
-
 		inner(&mut extension)
 	};
 
@@ -431,7 +432,7 @@ where
 
 	// We want to use the current head of the most work chain unless
 	// we explicitly rewind the extension.
-	let header = batch.head_header()?;
+	let head = batch.head()?;
 
 	// create a child transaction so if the state is rolled back by itself, all
 	// index saving can be undone
@@ -441,7 +442,7 @@ where
 
 		// TODO - header_mmr may be out ahead via the header_head
 		// TODO - do we need to handle this via an explicit rewind on the header_mmr?
-		let mut extension = Extension::new(trees, &child_batch, header);
+		let mut extension = Extension::new(trees, &child_batch, head);
 		res = inner(&mut extension);
 
 		rollback = extension.rollback;
@@ -502,7 +503,6 @@ where
 	// We want to use the current sync_head unless
 	// we explicitly rewind the extension.
 	let head = batch.get_sync_head()?;
-	let header = batch.get_block_header(&head.last_block_h)?;
 
 	// create a child transaction so if the state is rolled back by itself, all
 	// index saving can be undone
@@ -510,7 +510,7 @@ where
 	{
 		trace!("Starting new txhashset sync_head extension.");
 		let pmmr = PMMR::at(&mut trees.sync_pmmr_h.backend, trees.sync_pmmr_h.last_pos);
-		let mut extension = HeaderExtension::new(pmmr, &child_batch, header);
+		let mut extension = HeaderExtension::new(pmmr, &child_batch, head);
 
 		res = inner(&mut extension);
 
@@ -549,6 +549,7 @@ where
 pub fn header_extending<'a, F, T>(
 	trees: &'a mut TxHashSet,
 	batch: &'a mut Batch<'_>,
+	head: &Tip,
 	inner: F,
 ) -> Result<T, Error>
 where
@@ -558,21 +559,20 @@ where
 	let res: Result<T, Error>;
 	let rollback: bool;
 
-	// We want to use the current head of the most work chain unless
-	// we explicitly rewind the extension.
-	let head = batch.head()?;
-	let header = batch.get_block_header(&head.last_block_h)?;
-
 	// create a child transaction so if the state is rolled back by itself, all
 	// index saving can be undone
 	let child_batch = batch.child()?;
 	{
 		trace!("Starting new txhashset header extension.");
+		error!(
+			"***** starting header extension: last_pos: {}",
+			trees.header_pmmr_h.last_pos
+		);
 		let pmmr = PMMR::at(
 			&mut trees.header_pmmr_h.backend,
 			trees.header_pmmr_h.last_pos,
 		);
-		let mut extension = HeaderExtension::new(pmmr, &child_batch, header);
+		let mut extension = HeaderExtension::new(pmmr, &child_batch, head.clone());
 		res = inner(&mut extension);
 
 		rollback = extension.rollback;
@@ -607,7 +607,7 @@ where
 /// A header extension to allow the header MMR to extend beyond the other MMRs individually.
 /// This is to allow headers to be validated against the MMR before we have the full block data.
 pub struct HeaderExtension<'a> {
-	header: BlockHeader,
+	head: Tip,
 
 	pmmr: PMMR<'a, BlockHeader, PMMRBackend<BlockHeader>>,
 
@@ -624,10 +624,10 @@ impl<'a> HeaderExtension<'a> {
 	fn new(
 		pmmr: PMMR<'a, BlockHeader, PMMRBackend<BlockHeader>>,
 		batch: &'a Batch<'_>,
-		header: BlockHeader,
+		head: Tip,
 	) -> HeaderExtension<'a> {
 		HeaderExtension {
-			header,
+			head,
 			pmmr,
 			rollback: false,
 			batch,
@@ -673,7 +673,7 @@ impl<'a> HeaderExtension<'a> {
 	/// extension.
 	pub fn apply_header(&mut self, header: &BlockHeader) -> Result<Hash, Error> {
 		self.pmmr.push(header).map_err(&ErrorKind::TxHashSetErr)?;
-		self.header = header.clone();
+		self.head = Tip::from_header(header);
 		Ok(self.root())
 	}
 
@@ -691,8 +691,8 @@ impl<'a> HeaderExtension<'a> {
 			.rewind(header_pos, &Bitmap::create())
 			.map_err(&ErrorKind::TxHashSetErr)?;
 
-		// Update our header to reflect the one we rewound to.
-		self.header = header.clone();
+		// Update our head to reflect the one we rewound to.
+		self.head = Tip::from_header(header);
 
 		Ok(())
 	}
@@ -777,7 +777,7 @@ impl<'a> HeaderExtension<'a> {
 /// reversible manner within a unit of work provided by the `extending`
 /// function.
 pub struct Extension<'a> {
-	header: BlockHeader,
+	head: Tip,
 
 	header_pmmr: PMMR<'a, BlockHeader, PMMRBackend<BlockHeader>>,
 	output_pmmr: PMMR<'a, Output, PMMRBackend<Output>>,
@@ -822,9 +822,9 @@ impl<'a> Committed for Extension<'a> {
 }
 
 impl<'a> Extension<'a> {
-	fn new(trees: &'a mut TxHashSet, batch: &'a Batch<'_>, header: BlockHeader) -> Extension<'a> {
+	fn new(trees: &'a mut TxHashSet, batch: &'a Batch<'_>, head: Tip) -> Extension<'a> {
 		Extension {
-			header,
+			head,
 			header_pmmr: PMMR::at(
 				&mut trees.header_pmmr_h.backend,
 				trees.header_pmmr_h.last_pos,
@@ -880,8 +880,8 @@ impl<'a> Extension<'a> {
 			self.apply_kernel(kernel)?;
 		}
 
-		// Update the header on the extension to reflect the block we just applied.
-		self.header = b.header.clone();
+		// Update the head on the extension to reflect the block we just applied.
+		self.head = Tip::from_header(&b.header);
 
 		Ok(())
 	}
@@ -973,6 +973,12 @@ impl<'a> Extension<'a> {
 		Ok(())
 	}
 
+	fn get_block_header(&self, hash: &Hash) -> Result<BlockHeader, Error> {
+		self.batch
+			.get_block_header(hash)
+			.map_err(|e| ErrorKind::StoreErr(e, "get block header".to_string()).into())
+	}
+
 	/// Get the header hash for the specified pos from the underlying MMR backend.
 	fn get_header_hash(&self, pos: u64) -> Option<Hash> {
 		self.header_pmmr.get_data(pos).map(|x| x.hash())
@@ -1025,11 +1031,12 @@ impl<'a> Extension<'a> {
 	/// Needed for fast-sync (utxo file needs to be rewound before sending
 	/// across).
 	pub fn snapshot(&mut self) -> Result<(), Error> {
+		let header = self.get_block_header(&self.head.hash())?;
 		self.output_pmmr
-			.snapshot(&self.header)
+			.snapshot(&header)
 			.map_err(|e| ErrorKind::Other(e))?;
 		self.rproof_pmmr
-			.snapshot(&self.header)
+			.snapshot(&header)
 			.map_err(|e| ErrorKind::Other(e))?;
 		Ok(())
 	}
@@ -1037,7 +1044,7 @@ impl<'a> Extension<'a> {
 	/// Rewinds the MMRs to the provided block, rewinding to the last output pos
 	/// and last kernel pos of that block.
 	pub fn rewind(&mut self, header: &BlockHeader) -> Result<(), Error> {
-		debug!("Rewind to header {} at {}", header.hash(), header.height,);
+		debug!("Rewind to header {} at {}", header.hash(), header.height);
 
 		// We need to build bitmaps of added and removed output positions
 		// so we can correctly rewind all operations applied to the output MMR
@@ -1045,7 +1052,12 @@ impl<'a> Extension<'a> {
 		// undone during rewind).
 		// Rewound output pos will be removed from the MMR.
 		// Rewound input (spent) pos will be added back to the MMR.
-		let rewind_rm_pos = input_pos_to_rewind(header, &self.header, &self.batch)?;
+		let rewind_rm_pos = input_pos_to_rewind(
+			header,
+			self.head.height,
+			&self.batch,
+			self.header_pmmr.readonly_pmmr(),
+		)?;
 
 		let header_pos = pmmr::insertion_to_pmmr_index(header.height + 1);
 
@@ -1057,7 +1069,7 @@ impl<'a> Extension<'a> {
 		)?;
 
 		// Update our header to reflect the one we rewound to.
-		self.header = header.clone();
+		self.head = Tip::from_header(header);
 
 		Ok(())
 	}
@@ -1120,15 +1132,16 @@ impl<'a> Extension<'a> {
 	pub fn validate_roots(&self) -> Result<(), Error> {
 		// If we are validating the genesis block then we have no outputs or
 		// kernels. So we are done here.
-		if self.header.height == 0 {
+		if self.head.height == 0 {
 			return Ok(());
 		}
 
+		let header = self.get_block_header(&self.head.hash())?;
 		let roots = self.roots();
 
-		if roots.output_root != self.header.output_root
-			|| roots.rproof_root != self.header.range_proof_root
-			|| roots.kernel_root != self.header.kernel_root
+		if roots.output_root != header.output_root
+			|| roots.rproof_root != header.range_proof_root
+			|| roots.kernel_root != header.kernel_root
 		{
 			Err(ErrorKind::InvalidRoot.into())
 		} else {
@@ -1155,18 +1168,20 @@ impl<'a> Extension<'a> {
 	pub fn validate_sizes(&self) -> Result<(), Error> {
 		// If we are validating the genesis block then we have no outputs or
 		// kernels. So we are done here.
-		if self.header.height == 0 {
+		if self.head.height == 0 {
 			return Ok(());
 		}
 
 		let (header_mmr_size, output_mmr_size, rproof_mmr_size, kernel_mmr_size) = self.sizes();
-		let expected_header_mmr_size = pmmr::insertion_to_pmmr_index(self.header.height + 2) - 1;
+		let expected_header_mmr_size = pmmr::insertion_to_pmmr_index(self.head.height + 2) - 1;
+
+		let header = self.get_block_header(&self.head.hash())?;
 
 		if header_mmr_size != expected_header_mmr_size {
 			Err(ErrorKind::InvalidMMRSize.into())
-		} else if output_mmr_size != self.header.output_mmr_size {
+		} else if output_mmr_size != header.output_mmr_size {
 			Err(ErrorKind::InvalidMMRSize.into())
-		} else if kernel_mmr_size != self.header.kernel_mmr_size {
+		} else if kernel_mmr_size != header.kernel_mmr_size {
 			Err(ErrorKind::InvalidMMRSize.into())
 		} else if output_mmr_size != rproof_mmr_size {
 			Err(ErrorKind::InvalidMMRSize.into())
@@ -1211,10 +1226,11 @@ impl<'a> Extension<'a> {
 	pub fn validate_kernel_sums(&self) -> Result<((Commitment, Commitment)), Error> {
 		let now = Instant::now();
 
+		let header = self.get_block_header(&self.head.hash())?;
 		let genesis = self.get_header_by_height(0)?;
 		let (utxo_sum, kernel_sum) = self.verify_kernel_sums(
-			self.header.total_overage(genesis.kernel_mmr_size > 0),
-			self.header.total_kernel_offset(),
+			header.total_overage(genesis.kernel_mmr_size > 0),
+			header.total_kernel_offset(),
 		)?;
 
 		debug!(
@@ -1236,7 +1252,7 @@ impl<'a> Extension<'a> {
 		self.validate_roots()?;
 		self.validate_sizes()?;
 
-		if self.header.height == 0 {
+		if self.head.height == 0 {
 			let zero_commit = secp_static::commit_to_zero_value();
 			return Ok((zero_commit.clone(), zero_commit.clone()));
 		}
@@ -1650,13 +1666,14 @@ fn check_and_remove_files(txhashset_path: &PathBuf, header: &BlockHeader) -> Res
 /// the set of bitmaps together for the set of blocks being rewound.
 pub fn input_pos_to_rewind(
 	block_header: &BlockHeader,
-	head_header: &BlockHeader,
+	head_height: u64,
 	batch: &Batch<'_>,
+	header_pmmr: ReadonlyPMMR<'_, BlockHeader, PMMRBackend<BlockHeader>>,
 ) -> Result<Bitmap, Error> {
-	if head_header.height < block_header.height {
+	if head_height < block_header.height {
 		debug!(
 			"input_pos_to_rewind: {} < {}, nothing to rewind",
-			head_header.height, block_header.height
+			head_height, block_header.height
 		);
 		return Ok(Bitmap::create());
 	}
@@ -1678,18 +1695,21 @@ pub fn input_pos_to_rewind(
 
 	let mut block_input_bitmaps: Vec<Bitmap> = vec![];
 
-	let mut current = head_header.clone();
-	while current.hash() != block_header.hash() {
-		if current.height < 1 {
-			break;
+	let mut current_height = head_height;
+	while current_height > block_header.height {
+		// Read the header hash from the MMR.
+		let current_hash = {
+			let pos = pmmr::insertion_to_pmmr_index(current_height + 1);
+			header_pmmr
+				.get_data(pos)
+				.ok_or(ErrorKind::Other("failed to read MMR".to_owned()))?
 		}
+		.hash();
 
-		// I/O should be minimized or eliminated here for most
-		// rewind scenarios.
-		if let Ok(b_res) = batch.get_block_input_bitmap(&current.hash()) {
+		if let Ok(b_res) = batch.get_block_input_bitmap(&current_hash) {
 			bitmap_fast_or(Some(b_res), &mut block_input_bitmaps);
 		}
-		current = batch.get_previous_header(&current)?;
+		current_height -= 1;
 	}
 
 	bitmap_fast_or(None, &mut block_input_bitmaps).ok_or_else(|| ErrorKind::Bitmap.into())
