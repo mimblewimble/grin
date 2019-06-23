@@ -564,10 +564,6 @@ where
 	let child_batch = batch.child()?;
 	{
 		trace!("Starting new txhashset header extension.");
-		error!(
-			"***** starting header extension: last_pos: {}",
-			trees.header_pmmr_h.last_pos
-		);
 		let pmmr = PMMR::at(
 			&mut trees.header_pmmr_h.backend,
 			trees.header_pmmr_h.last_pos,
@@ -680,20 +676,12 @@ impl<'a> HeaderExtension<'a> {
 	/// Rewind the header extension to the specified header.
 	/// Note the close relationship between header height and insertion index.
 	pub fn rewind(&mut self, header: &BlockHeader) -> Result<(), Error> {
-		debug!(
-			"Rewind header extension to {} at {}",
-			header.hash(),
-			header.height
-		);
-
 		let header_pos = pmmr::insertion_to_pmmr_index(header.height + 1);
 		self.pmmr
 			.rewind(header_pos, &Bitmap::create())
 			.map_err(&ErrorKind::TxHashSetErr)?;
-
 		// Update our head to reflect the one we rewound to.
 		self.head = Tip::from_header(header);
-
 		Ok(())
 	}
 

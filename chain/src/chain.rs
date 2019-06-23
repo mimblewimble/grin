@@ -1307,34 +1307,19 @@ fn setup_head(
 ) -> Result<(), Error> {
 	let mut batch = store.batch()?;
 
-	// TODO - clean up the order of these operations and dependencies...
-
-	{
-		error!("***** head: {:?}", batch.head());
-		error!("***** header_head: {:?}", batch.header_head());
-	}
-
-	// TODO - Merge these two - single iteration back, stop if we can both read
-	// the header and chain is valid at that height.
-
 	// If we cannot read the header at the tip of the header chain then
 	// we should reset it along with the main chain tip below.
 	let header_head = batch.header_head()?;
 	let must_reset_header_head = txhashset.get_header_by_height(header_head.height).is_err();
 
-	// Find the first header back from the current head that we can read
-	// successfully (by height) from the db.
-	// Rewind the txhashset to reflect this (potentially rewound) head.
 	let mut head = batch.head()?;
 	let mut height = head.height;
 
-	// TODO - cleanup where we log here
+	// Use the header MMR to determine header hash at each height.
+	// If we cannot read the header from the db rewind back by height
+	// until we find one we can read.
 	let header = txhashset::extending(txhashset, &mut batch, |extension| {
 		while height > 0 && extension.get_header_by_height(height).is_err() {
-			error!(
-				"setup_head: failed to read header for height: {}, rewinding ...",
-				height
-			);
 			height -= 1;
 		}
 		let header = extension.get_header_by_height(height)?;
@@ -1343,21 +1328,13 @@ fn setup_head(
 	})?;
 
 	head = Tip::from_header(&header);
-	// Reset our head to reflect our best header.
+
+	// Reset our head to reflect our best header from above.
 	batch.save_body_head(&head)?;
 	if must_reset_header_head {
-		// Remember to reset our header_head as necessary.
+		// Remember to reset our header_head if necessary.
 		batch.save_header_head(&head)?;
 	}
-
-	debug!(
-		"setup_head: proceeding with head : {} at {}",
-		head.last_block_h, head.height
-	);
-	debug!(
-		"setup_head: proceeding with header_head : {} at {}",
-		header_head.last_block_h, header_head.height
-	);
 
 	loop {
 		// Use current chain tip if we have one.
@@ -1374,12 +1351,6 @@ fn setup_head(
 			// if we have no sums (migrating an existing node) we need to go
 			// back to the txhashset and sum the outputs and kernels
 			if header.height > 0 && extension.batch.get_block_sums(&header.hash()).is_err() {
-				debug!(
-					"init: building (missing) block sums for {} @ {}",
-					header.height,
-					header.hash()
-				);
-
 				// Do a full (and slow) validation of the txhashset extension
 				// to calculate the utxo_sum and kernel_sum at this block height.
 				let (utxo_sum, kernel_sum) = extension.validate_kernel_sums()?;
@@ -1394,11 +1365,6 @@ fn setup_head(
 				)?;
 			}
 
-			debug!(
-				"init: rewinding and validating before we start... {} at {}",
-				header.hash(),
-				header.height,
-			);
 			Ok(())
 		});
 
@@ -1421,6 +1387,10 @@ fn setup_head(
 	Ok(())
 }
 
+/// Setup our genesis block in the db along with the head and header_head ref.
+/// Build the initial block_sums for the genesis block.
+/// Apply the genesis block to the txhashset (and validate the roots and sizes).
+/// This will be called once on a fresh node at startup (head does not yet exist).
 fn setup_genesis_head(
 	genesis: &Block,
 	store: &store::ChainStore,

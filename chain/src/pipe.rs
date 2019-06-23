@@ -194,29 +194,31 @@ pub fn sync_block_headers(
 	headers: &[BlockHeader],
 	ctx: &mut BlockContext<'_>,
 ) -> Result<Option<Tip>, Error> {
-	let first_header = match headers.first() {
-		Some(header) => {
-			debug!(
-				"pipe: sync_block_headers: {} headers from {} at {}",
-				headers.len(),
-				header.hash(),
-				header.height,
-			);
-			header
-		}
-		None => {
-			error!("failed to get the first header");
-			return Ok(None);
-		}
-	};
+	if headers.is_empty() {
+		return Ok(None);
+	}
+	let first_header = headers.first().expect("a first header");
+	let last_header = headers.last().expect("a last header");
 
-	// TODO - check if we have seen all these before.
-	// We cannot just look in the db for this.
-	// We need to look at both the db the current sync_head and determine if they are
-	// all on the same chain (and not an alternative fork).
+	debug!(
+		"sync_block_headers: {} headers from {} at {} to {} at {}",
+		headers.len(),
+		first_header.hash(),
+		first_header.height,
+		last_header.hash(),
+		last_header.height,
+	);
 
+	let sync_head = ctx.batch.get_sync_head()?;
 	let prev_header = ctx.batch.get_previous_header(&first_header)?;
 	txhashset::sync_extending(&mut ctx.txhashset, &mut ctx.batch, |extension| {
+		// Check if we have seen all these headers before?
+		if last_header.height < sync_head.height
+			&& extension.is_on_current_chain(&last_header).is_ok()
+		{
+			return Ok(());
+		}
+
 		extension.rewind(&prev_header)?;
 		for header in headers {
 			extension.validate_root(header)?;
@@ -233,42 +235,32 @@ pub fn sync_block_headers(
 		validate_header(header, ctx)?;
 	}
 
-	if let Some(header) = headers.last() {
-		// Update sync_head regardless of total work.
-		update_sync_head(&Tip::from_header(header), &mut ctx.batch)?;
+	// Update sync_head regardless of total work.
+	update_sync_head(&Tip::from_header(last_header), &mut ctx.batch)?;
 
-		let header_head = ctx.batch.header_head()?;
-		if has_more_work(&header, &header_head) {
-			txhashset::header_extending(
-				&mut ctx.txhashset,
-				&mut ctx.batch,
-				&header_head,
-				|extension| {
-					// TODO - Safely rewind here if on a fork.
-					// Short cut this if no need to rewind (is next header)
-					error!(
-						"***** rewinding to: {} at {}",
-						&prev_header.hash(),
-						&prev_header.height
-					);
-					if prev_header.height == 0 {
-						extension.rewind(&prev_header)?;
-					} else {
-						rewind_and_apply_header_fork(&first_header, extension)?;
-					}
+	let header_head = ctx.batch.header_head()?;
+	if has_more_work(&last_header, &header_head) {
+		txhashset::header_extending(
+			&mut ctx.txhashset,
+			&mut ctx.batch,
+			&header_head,
+			|extension| {
+				if prev_header.height == 0 {
+					extension.rewind(&prev_header)?;
+				} else {
+					// TODO - kind of janky api here, why first_header and not prev_header?
+					rewind_and_apply_header_fork(&first_header, extension)?;
+				}
 
-					for header in headers {
-						extension.validate_root(header)?;
-						extension.apply_header(header)?;
-					}
-					Ok(())
-				},
-			)?;
-			update_header_head(&Tip::from_header(header), ctx)?;
-			Ok(Some(Tip::from_header(header)))
-		} else {
-			Ok(None)
-		}
+				for header in headers {
+					extension.validate_root(header)?;
+					extension.apply_header(header)?;
+				}
+				Ok(())
+			},
+		)?;
+		update_header_head(&Tip::from_header(last_header), ctx)?;
+		Ok(Some(Tip::from_header(last_header)))
 	} else {
 		Ok(None)
 	}
