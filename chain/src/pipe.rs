@@ -237,21 +237,6 @@ pub fn sync_block_headers(
 		// Update sync_head regardless of total work.
 		update_sync_head(&Tip::from_header(header), &mut ctx.batch)?;
 
-		{
-			error!(
-				"****** after updating sync head: sync_head: {:?}",
-				ctx.batch.get_sync_head()
-			);
-			error!(
-				"****** after updating sync head: header_head: {:?}",
-				ctx.batch.header_head()
-			);
-			error!(
-				"****** after updating sync head: head: {:?}",
-				ctx.batch.head()
-			);
-		}
-
 		let header_head = ctx.batch.header_head()?;
 		if has_more_work(&header, &header_head) {
 			txhashset::header_extending(
@@ -287,14 +272,6 @@ pub fn sync_block_headers(
 	} else {
 		Ok(None)
 	}
-
-	// 	// Update header_head (but only if this header increases our total known work).
-	// 	// i.e. Only if this header is now the head of the current "most work" chain.
-	// 	let res = update_header_head(header, ctx)?;
-	// 	Ok(res)
-	// } else {
-	// 	Ok(None)
-	// }
 }
 
 /// Process block header as part of "header first" block propagation.
