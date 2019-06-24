@@ -35,7 +35,8 @@ fn setup_chain(genesis: &Block, chain_store: Arc<chain::store::ChainStore>) -> R
 	batch.save_block_header(&genesis.header)?;
 	batch.save_block(&genesis)?;
 	let head = Tip::from_header(&genesis.header);
-	batch.save_head(&head)?;
+	batch.save_body_head(&head)?;
+	batch.save_header_head(&head)?;
 	batch.save_block_header(&genesis.header)?;
 	batch.commit()?;
 	Ok(())

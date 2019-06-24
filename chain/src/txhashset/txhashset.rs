@@ -344,10 +344,6 @@ where
 	let res = {
 		let mut extension = Extension::new(trees, &batch, header);
 		extension.force_rollback();
-
-		// TODO - header_mmr may be out ahead via the header_head
-		// TODO - do we need to handle this via an explicit rewind on the header_mmr?
-
 		inner(&mut extension)
 	};
 
@@ -466,11 +462,11 @@ where
 			} else {
 				trace!("Committing txhashset extension. sizes {:?}", sizes);
 				child_batch.commit()?;
-				trees.header_pmmr_h.backend.sync()?;
+				// NOTE: The header MMR is readonly for a txhashset extension.
+				trees.header_pmmr_h.backend.discard();
 				trees.output_pmmr_h.backend.sync()?;
 				trees.rproof_pmmr_h.backend.sync()?;
 				trees.kernel_pmmr_h.backend.sync()?;
-				trees.header_pmmr_h.last_pos = sizes.0;
 				trees.output_pmmr_h.last_pos = sizes.1;
 				trees.rproof_pmmr_h.last_pos = sizes.2;
 				trees.kernel_pmmr_h.last_pos = sizes.3;
@@ -763,7 +759,6 @@ impl<'a> HeaderExtension<'a> {
 		if header.height == 0 {
 			return Ok(());
 		}
-
 		if self.root() != header.prev_root {
 			Err(ErrorKind::InvalidRoot.into())
 		} else {
@@ -1122,9 +1117,7 @@ impl<'a> Extension<'a> {
 		if self.header.height == 0 {
 			return Ok(());
 		}
-
 		let roots = self.roots();
-
 		if roots.output_root != self.header.output_root
 			|| roots.rproof_root != self.header.range_proof_root
 			|| roots.kernel_root != self.header.kernel_root
@@ -1141,7 +1134,6 @@ impl<'a> Extension<'a> {
 		if header.height == 0 {
 			return Ok(());
 		}
-
 		let roots = self.roots();
 		if roots.header_root != header.prev_root {
 			Err(ErrorKind::InvalidRoot.into())

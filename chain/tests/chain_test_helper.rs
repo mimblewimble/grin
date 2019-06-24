@@ -71,9 +71,6 @@ pub fn mine_chain(dir_name: &str, chain_length: u64) -> Chain {
 	genesis = genesis.with_reward(reward.0, reward.1);
 
 	let mut chain = setup(dir_name, pow::mine_genesis_block().unwrap());
-	chain.set_txhashset_roots(&mut genesis).unwrap();
-	genesis.header.output_mmr_size = 1;
-	genesis.header.kernel_mmr_size = 1;
 
 	// get a valid PoW
 	pow::pow_size(

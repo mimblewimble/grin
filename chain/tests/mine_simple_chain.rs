@@ -117,13 +117,9 @@ fn mine_genesis_reward_chain() {
 	genesis = genesis.with_reward(reward.0, reward.1);
 
 	let tmp_chain_dir = ".grin.tmp";
-	{
-		// setup a tmp chain to hande tx hashsets
-		let tmp_chain = setup(tmp_chain_dir, pow::mine_genesis_block().unwrap());
-		tmp_chain.set_txhashset_roots(&mut genesis).unwrap();
-		genesis.header.output_mmr_size = 1;
-		genesis.header.kernel_mmr_size = 1;
-	}
+
+	// setup a tmp chain to hande tx hashsets
+	setup(tmp_chain_dir, pow::mine_genesis_block().unwrap());
 
 	// get a valid PoW
 	pow::pow_size(
@@ -294,9 +290,6 @@ fn mine_forks() {
 			let prev = chain.head_header().unwrap();
 			let b1 = prepare_block(&kc, &prev, &chain, 3 * n);
 
-			// 2nd block with higher difficulty for other branch
-			let b2 = prepare_block(&kc, &prev, &chain, 3 * n + 1);
-
 			// process the first block to extend the chain
 			let bhash = b1.hash();
 			chain.process_block(b1, chain::Options::SKIP_POW).unwrap();
@@ -306,6 +299,9 @@ fn mine_forks() {
 			assert_eq!(head.height, (n + 1) as u64);
 			assert_eq!(head.last_block_h, bhash);
 			assert_eq!(head.prev_block_h, prev.hash());
+
+			// 2nd block with higher difficulty for other branch
+			let b2 = prepare_block(&kc, &prev, &chain, 3 * n + 1);
 
 			// process the 2nd block to build a fork with more work
 			let bhash = b2.hash();
@@ -635,7 +631,7 @@ where
 	K: Keychain,
 {
 	let mut b = prepare_block_nosum(kc, prev, diff, vec![]);
-	chain.set_txhashset_roots_forked(&mut b, prev).unwrap();
+	chain.set_txhashset_roots(&mut b).unwrap();
 	b
 }
 
@@ -650,7 +646,7 @@ where
 	K: Keychain,
 {
 	let mut b = prepare_block_nosum(kc, prev, diff, txs);
-	chain.set_txhashset_roots_forked(&mut b, prev).unwrap();
+	chain.set_txhashset_roots(&mut b).unwrap();
 	b
 }
 

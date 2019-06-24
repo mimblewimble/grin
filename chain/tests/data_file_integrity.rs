@@ -136,7 +136,7 @@ fn _prepare_block_tx(
 
 fn _prepare_fork_block(kc: &ExtKeychain, prev: &BlockHeader, chain: &Chain, diff: u64) -> Block {
 	let mut b = _prepare_block_nosum(kc, prev, diff, vec![]);
-	chain.set_txhashset_roots_forked(&mut b, prev).unwrap();
+	chain.set_txhashset_roots(&mut b).unwrap();
 	b
 }
 
@@ -148,7 +148,7 @@ fn _prepare_fork_block_tx(
 	txs: Vec<&Transaction>,
 ) -> Block {
 	let mut b = _prepare_block_nosum(kc, prev, diff, txs);
-	chain.set_txhashset_roots_forked(&mut b, prev).unwrap();
+	chain.set_txhashset_roots(&mut b).unwrap();
 	b
 }
 
