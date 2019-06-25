@@ -97,6 +97,8 @@ pub fn process_block(b: &Block, ctx: &mut BlockContext<'_>) -> Result<Option<Tip
 	check_known(&b.header, ctx)?;
 
 	let head = ctx.batch.head()?;
+	let header_head = ctx.batch.header_head()?;
+
 	let is_next = b.header.prev_hash == head.last_block_h;
 
 	// Go retrieve the previous header from the db.
@@ -111,10 +113,6 @@ pub fn process_block(b: &Block, ctx: &mut BlockContext<'_>) -> Result<Option<Tip
 	}
 
 	// Check the header is valid before we proceed with the full block.
-	// TODO - EXPERIMENTAL - After processing header for block the header_head may be
-	// out beyond the rest of the MMR structures.
-	// Note: we need the header_head prior to processing the header.
-	let header_head = ctx.batch.header_head()?;
 	process_header_for_block(&b.header, ctx)?;
 
 	// Validate the block itself, make sure it is internally consistent.
@@ -212,7 +210,9 @@ pub fn sync_block_headers(
 	}
 
 	// Now do the same thing for the header MMR itself.
-	txhashset::sync_extending(&mut ctx.txhashset, &mut ctx.batch, |extension| {
+	// This allows our header MMR to extend out beyond the full txhashset
+	// and to remain consistent with our header_head at all times.
+	txhashset::header_extending(&mut ctx.txhashset, &mut ctx.batch, |extension| {
 		rewind_and_apply_header_fork(&prev_header, extension)?;
 		for header in headers {
 			extension.validate_root(header)?;
