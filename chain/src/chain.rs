@@ -350,9 +350,9 @@ impl Chain {
 	}
 
 	/// Process a block header received during "header first" propagation.
+	/// Note: This will update header MMR and corresponding header_head
+	/// if total work increases (on the header chain).
 	pub fn process_block_header(&self, bh: &BlockHeader, opts: Options) -> Result<(), Error> {
-		// We take a write lock on the txhashset and create a new batch
-		// but this is strictly readonly so we do not commit the batch.
 		let mut txhashset = self.txhashset.write();
 		let batch = self.store.batch()?;
 		let mut ctx = self.new_ctx(opts, batch, &mut txhashset)?;

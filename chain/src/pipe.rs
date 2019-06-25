@@ -46,32 +46,6 @@ pub struct BlockContext<'a> {
 	pub verifier_cache: Arc<RwLock<dyn VerifierCache>>,
 }
 
-/// Process a block header as part of processing a full block.
-/// We want to be sure the header is valid before processing the full block.
-fn process_header_for_block(header: &BlockHeader, ctx: &mut BlockContext<'_>) -> Result<(), Error> {
-	let header_head = ctx.batch.header_head()?;
-	let prev_header = ctx.batch.get_previous_header(&header)?;
-
-	txhashset::header_extending(&mut ctx.txhashset, &mut ctx.batch, |extension| {
-		rewind_and_apply_header_fork(&prev_header, extension)?;
-		extension.validate_root(header)?;
-		extension.apply_header(header)?;
-		if !has_more_work(&header, &header_head) {
-			extension.force_rollback();
-		}
-		Ok(())
-	})?;
-
-	validate_header(header, ctx)?;
-	add_block_header(header, &ctx.batch)?;
-
-	if has_more_work(&header, &header_head) {
-		update_header_head(&Tip::from_header(&header), &mut ctx.batch)?;
-	}
-
-	Ok(())
-}
-
 // Check if we already know about this block for various reasons
 // from cheapest to most expensive (delay hitting the db until last).
 fn check_known(header: &BlockHeader, ctx: &mut BlockContext<'_>) -> Result<(), Error> {
@@ -101,19 +75,18 @@ pub fn process_block(b: &Block, ctx: &mut BlockContext<'_>) -> Result<Option<Tip
 
 	let is_next = b.header.prev_hash == head.last_block_h;
 
-	// Go retrieve the previous header from the db.
-	// Treat this block as orphan if we cannot find previous header.
-	let prev = prev_header_store(&b.header, &mut ctx.batch)?;
-
 	// Block is an orphan if we do not know about the previous full block.
 	// Skip this check if we have just processed the previous block
 	// or the full txhashset state (fast sync) at the previous block height.
+	let prev = prev_header_store(&b.header, &mut ctx.batch)?;
 	if !is_next && !ctx.batch.block_exists(&prev.hash())? {
 		return Err(ErrorKind::Orphan.into());
 	}
 
-	// Check the header is valid before we proceed with the full block.
-	process_header_for_block(&b.header, ctx)?;
+	// Process the header for the block.
+	// Note: We still want to process the full block if we have seen this header before
+	// as we may have processed it "header first" and not yet processed the full block.
+	process_block_header(&b.header, ctx)?;
 
 	// Validate the block itself, make sure it is internally consistent.
 	// Use the verifier_cache for verifying rangeproofs and kernel signatures.
@@ -229,22 +202,41 @@ pub fn sync_block_headers(
 	Ok(())
 }
 
-/// Process block header as part of "header first" block propagation.
-/// We validate the header but we do not store it or update header head based
-/// on this. We will update these once we get the block back after requesting
-/// it.
+/// Process a block header. Update the header MMR and corresponding header_head if this header
+/// increases the total work relative to header_head.
+/// Note: In contrast to processing a full block we treat "already known" as success
+/// to allow processing to continue.
 pub fn process_block_header(header: &BlockHeader, ctx: &mut BlockContext<'_>) -> Result<(), Error> {
-	debug!(
-		"pipe: process_block_header: {} at {}",
-		header.hash(),
-		header.height,
-	); // keep this
+	let header_head = ctx.batch.header_head()?;
+	if header.hash() == header_head.last_block_h || header.hash() == header_head.prev_block_h {
+		return Ok(());
+	}
 
-	// Check if this header is already "known" from processing a previous block.
-	// Note: We are looking for a full block based on this header, not just the header itself.
-	check_known(header, ctx)?;
+	// If this header is "known" then stop processing the header.
+	// Do not stop processing with an error though.
+	if check_known(header, ctx).is_err() {
+		return Ok(());
+	}
+
+	let prev_header = ctx.batch.get_previous_header(&header)?;
+
+	txhashset::header_extending(&mut ctx.txhashset, &mut ctx.batch, |extension| {
+		rewind_and_apply_header_fork(&prev_header, extension)?;
+		extension.validate_root(header)?;
+		extension.apply_header(header)?;
+		if !has_more_work(&header, &header_head) {
+			extension.force_rollback();
+		}
+		Ok(())
+	})?;
 
 	validate_header(header, ctx)?;
+	add_block_header(header, &ctx.batch)?;
+
+	if has_more_work(&header, &header_head) {
+		update_header_head(&Tip::from_header(&header), &mut ctx.batch)?;
+	}
+
 	Ok(())
 }
 
