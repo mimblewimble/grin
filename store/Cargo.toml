@@ -1,6 +1,6 @@
 [package]
 name = "grin_store"
-version = "2.0.0-beta.2"
+version = "2.0.1-beta.1"
 authors = ["Grin Developers <mimblewimble@lists.launchpad.net>"]
 description = "Simple, private and scalable cryptocurrency implementation based on the MimbleWimble chain format."
 license = "Apache-2.0"
@@ -23,8 +23,8 @@ serde = "1"
 serde_derive = "1"
 log = "0.4"
 
-grin_core = { path = "../core", version = "2.0.0-beta.2" }
-grin_util = { path = "../util", version = "2.0.0-beta.2" }
+grin_core = { path = "../core", version = "2.0.1-beta.1" }
+grin_util = { path = "../util", version = "2.0.1-beta.1" }
 
 [dev-dependencies]
 chrono = "0.4.4"

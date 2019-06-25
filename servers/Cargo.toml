@@ -1,6 +1,6 @@
 [package]
 name = "grin_servers"
-version = "2.0.0-beta.2"
+version = "2.0.1-beta.1"
 authors = ["Grin Developers <mimblewimble@lists.launchpad.net>"]
 description = "Simple, private and scalable cryptocurrency implementation based on the MimbleWimble chain format."
 license = "Apache-2.0"
@@ -25,11 +25,11 @@ serde_json = "1"
 chrono = "0.4.4"
 tokio =  "0.1.11"
 
-grin_api = { path = "../api", version = "2.0.0-beta.2" }
-grin_chain = { path = "../chain", version = "2.0.0-beta.2" }
-grin_core = { path = "../core", version = "2.0.0-beta.2" }
-grin_keychain = { path = "../keychain", version = "2.0.0-beta.2" }
-grin_p2p = { path = "../p2p", version = "2.0.0-beta.2" }
-grin_pool = { path = "../pool", version = "2.0.0-beta.2" }
-grin_store = { path = "../store", version = "2.0.0-beta.2" }
-grin_util = { path = "../util", version = "2.0.0-beta.2" }
+grin_api = { path = "../api", version = "2.0.1-beta.1" }
+grin_chain = { path = "../chain", version = "2.0.1-beta.1" }
+grin_core = { path = "../core", version = "2.0.1-beta.1" }
+grin_keychain = { path = "../keychain", version = "2.0.1-beta.1" }
+grin_p2p = { path = "../p2p", version = "2.0.1-beta.1" }
+grin_pool = { path = "../pool", version = "2.0.1-beta.1" }
+grin_store = { path = "../store", version = "2.0.1-beta.1" }
+grin_util = { path = "../util", version = "2.0.1-beta.1" }
