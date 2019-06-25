@@ -32,12 +32,12 @@ use crate::util::secp::pedersen::{Commitment, RangeProof};
 use crate::util::{file, secp_static, zip};
 use croaring::Bitmap;
 use grin_store;
-use grin_store::pmmr::{PMMRBackend, PMMR_FILES};
+use grin_store::pmmr::{clean_files_by_prefix, PMMRBackend, PMMR_FILES};
 use std::collections::HashSet;
 use std::fs::{self, File};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use std::time::{Instant, SystemTime, UNIX_EPOCH};
+use std::time::Instant;
 
 const HEADERHASHSET_SUBDIR: &'static str = "header";
 const TXHASHSET_SUBDIR: &'static str = "txhashset";
@@ -62,6 +62,7 @@ impl<T: PMMRable> PMMRHandle<T> {
 		sub_dir: &str,
 		file_name: &str,
 		prunable: bool,
+		fixed_size: bool,
 		header: Option<&BlockHeader>,
 	) -> Result<PMMRHandle<T>, Error> {
 		let path = Path::new(root_dir).join(sub_dir).join(file_name);
@@ -69,7 +70,7 @@ impl<T: PMMRable> PMMRHandle<T> {
 		let path_str = path.to_str().ok_or(Error::from(ErrorKind::Other(
 			"invalid file path".to_owned(),
 		)))?;
-		let backend = PMMRBackend::new(path_str.to_string(), prunable, header)?;
+		let backend = PMMRBackend::new(path_str.to_string(), prunable, fixed_size, header)?;
 		let last_pos = backend.unpruned_size();
 		Ok(PMMRHandle { backend, last_pos })
 	}
@@ -121,6 +122,7 @@ impl TxHashSet {
 				HEADERHASHSET_SUBDIR,
 				HEADER_HEAD_SUBDIR,
 				false,
+				true,
 				None,
 			)?,
 			sync_pmmr_h: PMMRHandle::new(
@@ -128,12 +130,14 @@ impl TxHashSet {
 				HEADERHASHSET_SUBDIR,
 				SYNC_HEAD_SUBDIR,
 				false,
+				true,
 				None,
 			)?,
 			output_pmmr_h: PMMRHandle::new(
 				&root_dir,
 				TXHASHSET_SUBDIR,
 				OUTPUT_SUBDIR,
+				true,
 				true,
 				header,
 			)?,
@@ -142,13 +146,15 @@ impl TxHashSet {
 				TXHASHSET_SUBDIR,
 				RANGE_PROOF_SUBDIR,
 				true,
+				true,
 				header,
 			)?,
 			kernel_pmmr_h: PMMRHandle::new(
 				&root_dir,
 				TXHASHSET_SUBDIR,
 				KERNEL_SUBDIR,
-				false,
+				false, // not prunable
+				false, // variable size kernel data file
 				None,
 			)?,
 			commit_index,
@@ -323,7 +329,7 @@ impl TxHashSet {
 /// of blocks to the txhashset and the checking of the current tree roots.
 ///
 /// The unit of work is always discarded (always rollback) as this is read-only.
-pub fn extending_readonly<'a, F, T>(trees: &'a mut TxHashSet, inner: F) -> Result<T, Error>
+pub fn extending_readonly<F, T>(trees: &mut TxHashSet, inner: F) -> Result<T, Error>
 where
 	F: FnOnce(&mut Extension<'_>) -> Result<T, Error>,
 {
@@ -360,7 +366,7 @@ where
 
 /// Readonly view on the UTXO set.
 /// Based on the current txhashset output_pmmr.
-pub fn utxo_view<'a, F, T>(trees: &'a TxHashSet, inner: F) -> Result<T, Error>
+pub fn utxo_view<F, T>(trees: &TxHashSet, inner: F) -> Result<T, Error>
 where
 	F: FnOnce(&UTXOView<'_>) -> Result<T, Error>,
 {
@@ -385,7 +391,7 @@ where
 /// via last_pos.
 /// We create a new db batch for this view and discard it (rollback)
 /// when we are done with the view.
-pub fn rewindable_kernel_view<'a, F, T>(trees: &'a TxHashSet, inner: F) -> Result<T, Error>
+pub fn rewindable_kernel_view<F, T>(trees: &TxHashSet, inner: F) -> Result<T, Error>
 where
 	F: FnOnce(&mut RewindableKernelView<'_>) -> Result<T, Error>,
 {
@@ -636,7 +642,7 @@ impl<'a> HeaderExtension<'a> {
 	/// Get the header at the specified height based on the current state of the header extension.
 	/// Derives the MMR pos from the height (insertion index) and retrieves the header hash.
 	/// Looks the header up in the db by hash.
-	pub fn get_header_by_height(&mut self, height: u64) -> Result<BlockHeader, Error> {
+	pub fn get_header_by_height(&self, height: u64) -> Result<BlockHeader, Error> {
 		let pos = pmmr::insertion_to_pmmr_index(height + 1);
 		if let Some(hash) = self.get_header_hash(pos) {
 			let header = self.batch.get_block_header(&hash)?;
@@ -648,7 +654,7 @@ impl<'a> HeaderExtension<'a> {
 
 	/// Compares the provided header to the header in the header MMR at that height.
 	/// If these match we know the header is on the current chain.
-	pub fn is_on_current_chain(&mut self, header: &BlockHeader) -> Result<(), Error> {
+	pub fn is_on_current_chain(&self, header: &BlockHeader) -> Result<(), Error> {
 		let chain_header = self.get_header_by_height(header.height)?;
 		if chain_header.hash() == header.hash() {
 			Ok(())
@@ -696,9 +702,7 @@ impl<'a> HeaderExtension<'a> {
 	/// including the genesis block header.
 	pub fn truncate(&mut self) -> Result<(), Error> {
 		debug!("Truncating header extension.");
-		self.pmmr
-			.rewind(0, &Bitmap::create())
-			.map_err(&ErrorKind::TxHashSetErr)?;
+		self.pmmr.truncate().map_err(&ErrorKind::TxHashSetErr)?;
 		Ok(())
 	}
 
@@ -945,7 +949,9 @@ impl<'a> Extension<'a> {
 			}
 
 			if output_pos != rproof_pos {
-				return Err(ErrorKind::Other(format!("output vs rproof MMRs different pos")).into());
+				return Err(
+					ErrorKind::Other(format!("output vs rproof MMRs different pos")).into(),
+				);
 			}
 		}
 
@@ -987,7 +993,7 @@ impl<'a> Extension<'a> {
 
 	/// Compares the provided header to the header in the header MMR at that height.
 	/// If these match we know the header is on the current chain.
-	pub fn is_on_current_chain(&mut self, header: &BlockHeader) -> Result<(), Error> {
+	pub fn is_on_current_chain(&self, header: &BlockHeader) -> Result<(), Error> {
 		let chain_header = self.get_header_by_height(header.height)?;
 		if chain_header.hash() == header.hash() {
 			Ok(())
@@ -1413,22 +1419,38 @@ impl<'a> Extension<'a> {
 
 /// Packages the txhashset data files into a zip and returns a Read to the
 /// resulting file
-pub fn zip_read(root_dir: String, header: &BlockHeader, rand: Option<u32>) -> Result<File, Error> {
-	let ts = if let None = rand {
-		let now = SystemTime::now();
-		now.duration_since(UNIX_EPOCH).unwrap().subsec_micros()
-	} else {
-		rand.unwrap()
-	};
-	let txhashset_zip = format!("{}_{}.zip", TXHASHSET_ZIP, ts);
+pub fn zip_read(root_dir: String, header: &BlockHeader) -> Result<File, Error> {
+	let txhashset_zip = format!("{}_{}.zip", TXHASHSET_ZIP, header.hash().to_string());
 
 	let txhashset_path = Path::new(&root_dir).join(TXHASHSET_SUBDIR);
 	let zip_path = Path::new(&root_dir).join(txhashset_zip);
-	// create the zip archive
-	{
+
+	// if file exist, just re-use it
+	let zip_file = File::open(zip_path.clone());
+	if let Ok(zip) = zip_file {
+		return Ok(zip);
+	} else {
+		// clean up old zips.
+		// Theoretically, we only need clean-up those zip files older than STATE_SYNC_THRESHOLD.
+		// But practically, these zip files are not small ones, we just keep the zips in last one hour
+		let data_dir = Path::new(&root_dir);
+		let pattern = format!("{}_", TXHASHSET_ZIP);
+		if let Ok(n) = clean_files_by_prefix(data_dir.clone(), &pattern, 60 * 60) {
+			debug!(
+				"{} zip files have been clean up in folder: {:?}",
+				n, data_dir
+			);
+		}
+	}
+
+	// otherwise, create the zip archive
+	let path_to_be_cleanup = {
 		// Temp txhashset directory
-		let temp_txhashset_path =
-			Path::new(&root_dir).join(format!("{}_zip_{}", TXHASHSET_SUBDIR, ts));
+		let temp_txhashset_path = Path::new(&root_dir).join(format!(
+			"{}_zip_{}",
+			TXHASHSET_SUBDIR,
+			header.hash().to_string()
+		));
 		// Remove temp dir if it exist
 		if temp_txhashset_path.exists() {
 			fs::remove_dir_all(&temp_txhashset_path)?;
@@ -1440,25 +1462,79 @@ pub fn zip_read(root_dir: String, header: &BlockHeader, rand: Option<u32>) -> Re
 		// Compress zip
 		zip::compress(&temp_txhashset_path, &File::create(zip_path.clone())?)
 			.map_err(|ze| ErrorKind::Other(ze.to_string()))?;
-	}
+
+		temp_txhashset_path
+	};
 
 	// open it again to read it back
-	let zip_file = File::open(zip_path)?;
+	let zip_file = File::open(zip_path.clone())?;
+
+	// clean-up temp txhashset directory.
+	if let Err(e) = fs::remove_dir_all(&path_to_be_cleanup) {
+		warn!(
+			"txhashset zip file: {:?} fail to remove, err: {}",
+			zip_path.to_str(),
+			e
+		);
+	}
 	Ok(zip_file)
 }
 
 /// Extract the txhashset data from a zip file and writes the content into the
 /// txhashset storage dir
 pub fn zip_write(
-	root_dir: String,
+	root_dir: PathBuf,
 	txhashset_data: File,
 	header: &BlockHeader,
 ) -> Result<(), Error> {
-	let txhashset_path = Path::new(&root_dir).join(TXHASHSET_SUBDIR);
+	debug!("zip_write on path: {:?}", root_dir);
+	let txhashset_path = root_dir.clone().join(TXHASHSET_SUBDIR);
 	fs::create_dir_all(txhashset_path.clone())?;
 	zip::decompress(txhashset_data, &txhashset_path, expected_file)
 		.map_err(|ze| ErrorKind::Other(ze.to_string()))?;
 	check_and_remove_files(&txhashset_path, header)
+}
+
+/// Overwrite txhashset folders in "to" folder with "from" folder
+pub fn txhashset_replace(from: PathBuf, to: PathBuf) -> Result<(), Error> {
+	debug!("txhashset_replace: move from {:?} to {:?}", from, to);
+
+	// clean the 'to' folder firstly
+	clean_txhashset_folder(&to);
+
+	// rename the 'from' folder as the 'to' folder
+	if let Err(e) = fs::rename(
+		from.clone().join(TXHASHSET_SUBDIR),
+		to.clone().join(TXHASHSET_SUBDIR),
+	) {
+		error!("hashset_replace fail on {}. err: {}", TXHASHSET_SUBDIR, e);
+		Err(ErrorKind::TxHashSetErr(format!("txhashset replacing fail")).into())
+	} else {
+		Ok(())
+	}
+}
+
+/// Clean the txhashset folder
+pub fn clean_txhashset_folder(root_dir: &PathBuf) {
+	let txhashset_path = root_dir.clone().join(TXHASHSET_SUBDIR);
+	if txhashset_path.exists() {
+		if let Err(e) = fs::remove_dir_all(txhashset_path.clone()) {
+			warn!(
+				"clean_txhashset_folder: fail on {:?}. err: {}",
+				txhashset_path, e
+			);
+		}
+	}
+}
+
+/// Clean the header folder
+pub fn clean_header_folder(root_dir: &PathBuf) {
+	let header_path = root_dir.clone().join(HEADERHASHSET_SUBDIR);
+	if header_path.exists() {
+		if let Err(e) = fs::remove_dir_all(header_path.clone()) {
+			warn!("clean_header_folder: fail on {:?}. err: {}", header_path, e);
+		}
+	}
 }
 
 fn expected_file(path: &Path) -> bool {

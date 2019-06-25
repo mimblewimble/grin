@@ -19,7 +19,8 @@
 
 use chrono::prelude::{DateTime, Utc};
 use chrono::{Duration, MIN_DATE};
-use rand::{thread_rng, Rng};
+use rand::seq::SliceRandom;
+use rand::thread_rng;
 use std::collections::HashMap;
 use std::net::ToSocketAddrs;
 use std::sync::{mpsc, Arc};
@@ -29,8 +30,7 @@ use crate::core::global;
 use crate::p2p;
 use crate::p2p::types::PeerAddr;
 use crate::p2p::ChainAdapter;
-use crate::pool::DandelionConfig;
-use crate::util::{Mutex, StopState};
+use crate::util::StopState;
 
 // DNS Seeds with contact email associated
 const MAINNET_DNS_SEEDS: &'static [&'static str] = &[
@@ -52,12 +52,11 @@ const FLOONET_DNS_SEEDS: &'static [&'static str] = &[
 pub fn connect_and_monitor(
 	p2p_server: Arc<p2p::Server>,
 	capabilities: p2p::Capabilities,
-	dandelion_config: DandelionConfig,
 	seed_list: Box<dyn Fn() -> Vec<PeerAddr> + Send>,
 	preferred_peers: Option<Vec<PeerAddr>>,
-	stop_state: Arc<Mutex<StopState>>,
-) {
-	let _ = thread::Builder::new()
+	stop_state: Arc<StopState>,
+) -> std::io::Result<thread::JoinHandle<()>> {
+	thread::Builder::new()
 		.name("seed".to_string())
 		.spawn(move || {
 			let peers = p2p_server.peers.clone();
@@ -78,16 +77,15 @@ pub fn connect_and_monitor(
 			let mut prev_expire_check = MIN_DATE.and_hms(0, 0, 0);
 			let mut prev_ping = Utc::now();
 			let mut start_attempt = 0;
-
 			let mut connecting_history: HashMap<PeerAddr, DateTime<Utc>> = HashMap::new();
 
 			loop {
-				if stop_state.lock().is_stopped() {
+				if stop_state.is_stopped() {
 					break;
 				}
 
 				// Pause egress peer connection request. Only for tests.
-				if stop_state.lock().is_paused() {
+				if stop_state.is_paused() {
 					thread::sleep(time::Duration::from_secs(1));
 					continue;
 				}
@@ -119,8 +117,6 @@ pub fn connect_and_monitor(
 						preferred_peers.clone(),
 					);
 
-					update_dandelion_relay(peers.clone(), dandelion_config.clone());
-
 					prev = Utc::now();
 					start_attempt = cmp::min(6, start_attempt + 1);
 				}
@@ -129,13 +125,17 @@ pub fn connect_and_monitor(
 				if Utc::now() - prev_ping > Duration::seconds(10) {
 					let total_diff = peers.total_difficulty();
 					let total_height = peers.total_height();
-					peers.check_all(total_diff, total_height);
-					prev_ping = Utc::now();
+					if total_diff.is_ok() && total_height.is_ok() {
+						peers.check_all(total_diff.unwrap(), total_height.unwrap());
+						prev_ping = Utc::now();
+					} else {
+						error!("failed to get peers difficulty and/or height");
+					}
 				}
 
 				thread::sleep(time::Duration::from_secs(1));
 			}
-		});
+		})
 }
 
 fn monitor_peers(
@@ -221,7 +221,7 @@ fn monitor_peers(
 	// take a random defunct peer and mark it healthy: over a long period any
 	// peer will see another as defunct eventually, gives us a chance to retry
 	if defuncts.len() > 0 {
-		thread_rng().shuffle(&mut defuncts);
+		defuncts.shuffle(&mut thread_rng());
 		let _ = peers.update_state(defuncts[0].addr, p2p::State::Healthy);
 	}
 
@@ -241,21 +241,6 @@ fn monitor_peers(
 			p.addr,
 		);
 		tx.send(p.addr).unwrap();
-	}
-}
-
-fn update_dandelion_relay(peers: Arc<p2p::Peers>, dandelion_config: DandelionConfig) {
-	// Dandelion Relay Updater
-	let dandelion_relay = peers.get_dandelion_relay();
-	if let Some((last_added, _)) = dandelion_relay {
-		let dandelion_interval = Utc::now().timestamp() - last_added;
-		if dandelion_interval >= dandelion_config.relay_secs.unwrap() as i64 {
-			debug!("monitor_peers: updating expired dandelion relay");
-			peers.update_dandelion_relay();
-		}
-	} else {
-		debug!("monitor_peers: no dandelion relay updating");
-		peers.update_dandelion_relay();
 	}
 }
 
@@ -331,24 +316,28 @@ fn listen_for_addrs(
 				);
 				continue;
 			} else {
-				*connecting_history.get_mut(&addr).unwrap() = now;
+				if let Some(history) = connecting_history.get_mut(&addr) {
+					*history = now;
+				}
 			}
 		}
 		connecting_history.insert(addr, now);
 
 		let peers_c = peers.clone();
 		let p2p_c = p2p.clone();
-		let _ = thread::Builder::new()
+		thread::Builder::new()
 			.name("peer_connect".to_string())
 			.spawn(move || match p2p_c.connect(addr) {
 				Ok(p) => {
-					let _ = p.send_peer_request(capab);
-					let _ = peers_c.update_state(addr, p2p::State::Healthy);
+					if p.send_peer_request(capab).is_ok() {
+						let _ = peers_c.update_state(addr, p2p::State::Healthy);
+					}
 				}
 				Err(_) => {
 					let _ = peers_c.update_state(addr, p2p::State::Defunct);
 				}
-			});
+			})
+			.expect("failed to launch peer_connect thread");
 	}
 
 	// shrink the connecting history.

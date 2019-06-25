@@ -23,6 +23,7 @@
 //! In Cuckaroo, edges are calculated by repeatedly hashing the seeds to
 //! obtain blocks of values. Nodes are then extracted from those edges.
 
+use crate::global;
 use crate::pow::common::{CuckooParams, EdgeType};
 use crate::pow::error::{Error, ErrorKind};
 use crate::pow::siphash::siphash_block;
@@ -42,7 +43,7 @@ where
 	Ok(Box::new(CuckarooContext { params }))
 }
 
-/// Cuckatoo cycle context. Only includes the verifier for now.
+/// Cuckaroo cycle context. Only includes the verifier for now.
 pub struct CuckarooContext<T>
 where
 	T: EdgeType,
@@ -68,6 +69,9 @@ where
 	}
 
 	fn verify(&self, proof: &Proof) -> Result<(), Error> {
+		if proof.proof_size() != global::proofsize() {
+			return Err(ErrorKind::Verification("wrong cycle length".to_owned()))?;
+		}
 		let nonces = &proof.nonces;
 		let mut uvs = vec![0u64; 2 * proof.proof_size()];
 		let mut xor0: u64 = 0;
@@ -80,7 +84,8 @@ where
 			if n > 0 && nonces[n] <= nonces[n - 1] {
 				return Err(ErrorKind::Verification("edges not ascending".to_owned()))?;
 			}
-			let edge = to_edge!(siphash_block(&self.params.siphash_keys, nonces[n]));
+			// 21 is standard siphash rotation constant
+			let edge = to_edge!(T, siphash_block(&self.params.siphash_keys, nonces[n], 21));
 			uvs[2 * n] = to_u64!(edge & self.params.edge_mask);
 			uvs[2 * n + 1] = to_u64!((edge >> 32) & self.params.edge_mask);
 			xor0 ^= uvs[2 * n];

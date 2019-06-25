@@ -111,7 +111,7 @@ Um dies zu lösen, nutzt Carol einen privaten Schlüssel ihrer Wahl. Sie wählt 
 
     Y - Xi = (113*G + 3*H) - (28*G + 3*H) = 85*G + 0*H
 
-Nun ergibt die Transaktion nicht länger Null und wir haben einen Wertüberschuss auf _G_ (85), was das Ergebnis der Summierung aller Blinding Factors ist. Weil aber `85*G` ein gültiger öffentlicher Schlüssel auf der elliptischen Kurve _G_, mit dem privaten Schlüssel 85, für jedes x und y, ist, gilt `x*G + y*H` nur dann als gültiger öffentlicher Schlüssel auf _G_, wenn `y = 0` ist. 
+Nun ergibt die Transaktion nicht länger Null und wir haben einen Wertüberschuss auf _G_ (85), was das Ergebnis der Summierung aller Blinding Factors ist. Weil aber `85*G` ein gültiger öffentlicher Schlüssel auf der elliptischen Kurve _C_, mit dem privaten Schlüssel 85, für jedes x und y, ist, gilt `x*G + y*H` nur dann als gültiger öffentlicher Schlüssel auf _G_, wenn `y = 0` ist. 
 
 Daher muss das Protokoll lediglich verifizieren, dass (`Y - Xi`) ein gültiger öffentlicher Schlüssel auf _G_ ist, und dass die Transaktionspartner gemeinsam den privaten Schlüssel kennen (85 in unserer Transaktion mit Carol). Der einfachste Weg dies zu tun ist eine mit dem Wertüberschuss (85) erstellte Signature zu erfordern, die dann validiert, dass:
 

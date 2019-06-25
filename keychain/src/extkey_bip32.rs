@@ -149,7 +149,7 @@ impl BIP32Hasher for BIP32GrinHasher {
 }
 
 /// Extended private key
-#[derive(Copy, Clone, PartialEq, Eq, Debug)]
+#[derive(Clone, PartialEq, Eq, Debug)]
 pub struct ExtendedPrivKey {
 	/// The network this key is to be used on
 	pub network: [u8; 4],
@@ -295,7 +295,7 @@ impl serde::Serialize for ChildNumber {
 }
 
 /// A BIP32 error
-#[derive(Clone, PartialEq, Eq, Debug)]
+#[derive(Clone, PartialEq, Eq, Debug, Serialize, Deserialize)]
 pub enum Error {
 	/// A pk->pk derivation was attempted on a hardened key
 	CannotDeriveFromHardenedKey,
@@ -399,7 +399,7 @@ impl ExtendedPrivKey {
 	where
 		H: BIP32Hasher,
 	{
-		let mut sk: ExtendedPrivKey = *self;
+		let mut sk: ExtendedPrivKey = self.clone();
 		for cnum in cnums {
 			sk = sk.ckd_priv(secp, hasher, *cnum)?;
 		}

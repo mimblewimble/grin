@@ -23,10 +23,13 @@ use crate::core::hash::{DefaultHashable, Hash, Hashed};
 use crate::keychain::{BlindingFactor, Identifier, IDENTIFIER_SIZE};
 use crate::util::read_write::read_exact;
 use crate::util::secp::constants::{
-	AGG_SIGNATURE_SIZE, MAX_PROOF_SIZE, PEDERSEN_COMMITMENT_SIZE, SECRET_KEY_SIZE,
+	AGG_SIGNATURE_SIZE, COMPRESSED_PUBLIC_KEY_SIZE, MAX_PROOF_SIZE, PEDERSEN_COMMITMENT_SIZE,
+	SECRET_KEY_SIZE,
 };
+use crate::util::secp::key::PublicKey;
 use crate::util::secp::pedersen::{Commitment, RangeProof};
 use crate::util::secp::Signature;
+use crate::util::secp::{ContextFlag, Secp256k1};
 use byteorder::{BigEndian, ByteOrder, ReadBytesExt};
 use std::fmt::Debug;
 use std::io::{self, Read, Write};
@@ -35,10 +38,17 @@ use std::time::Duration;
 use std::{cmp, error, fmt};
 
 /// Possible errors deriving from serializing or deserializing.
-#[derive(Clone, Eq, PartialEq, Debug)]
+#[derive(Clone, Eq, PartialEq, Debug, Serialize, Deserialize)]
 pub enum Error {
 	/// Wraps an io error produced when reading or writing
-	IOErr(String, io::ErrorKind),
+	IOErr(
+		String,
+		#[serde(
+			serialize_with = "serialize_error_kind",
+			deserialize_with = "deserialize_error_kind"
+		)]
+		io::ErrorKind,
+	),
 	/// Expected a given value that wasn't found
 	UnexpectedData {
 		/// What we wanted
@@ -58,6 +68,8 @@ pub enum Error {
 	SortError,
 	/// Inputs/outputs/kernels must be unique.
 	DuplicateError,
+	/// Block header version (hard-fork schedule).
+	InvalidBlockVersion,
 }
 
 impl From<io::Error> for Error {
@@ -80,6 +92,7 @@ impl fmt::Display for Error {
 			Error::DuplicateError => f.write_str("duplicate"),
 			Error::TooLargeReadErr => f.write_str("too large read"),
 			Error::HexError(ref e) => write!(f, "hex error {:?}", e),
+			Error::InvalidBlockVersion => f.write_str("invalid block version"),
 		}
 	}
 }
@@ -102,6 +115,7 @@ impl error::Error for Error {
 			Error::DuplicateError => "duplicate error",
 			Error::TooLargeReadErr => "too large read",
 			Error::HexError(_) => "hex error",
+			Error::InvalidBlockVersion => "invalid block version",
 		}
 	}
 }
@@ -293,7 +307,7 @@ pub fn ser_vec<W: Writeable>(thing: &W) -> Result<Vec<u8>, Error> {
 }
 
 /// Utility to read from a binary source
-struct BinReader<'a> {
+pub struct BinReader<'a> {
 	source: &'a mut dyn Read,
 }
 
@@ -382,32 +396,32 @@ impl<'a> StreamingReader<'a> {
 impl<'a> Reader for StreamingReader<'a> {
 	fn read_u8(&mut self) -> Result<u8, Error> {
 		let buf = self.read_fixed_bytes(1)?;
-		deserialize(&mut &buf[..])
+		Ok(buf[0])
 	}
 
 	fn read_u16(&mut self) -> Result<u16, Error> {
 		let buf = self.read_fixed_bytes(2)?;
-		deserialize(&mut &buf[..])
+		Ok(BigEndian::read_u16(&buf[..]))
 	}
 
 	fn read_u32(&mut self) -> Result<u32, Error> {
 		let buf = self.read_fixed_bytes(4)?;
-		deserialize(&mut &buf[..])
+		Ok(BigEndian::read_u32(&buf[..]))
 	}
 
 	fn read_i32(&mut self) -> Result<i32, Error> {
 		let buf = self.read_fixed_bytes(4)?;
-		deserialize(&mut &buf[..])
+		Ok(BigEndian::read_i32(&buf[..]))
 	}
 
 	fn read_u64(&mut self) -> Result<u64, Error> {
 		let buf = self.read_fixed_bytes(8)?;
-		deserialize(&mut &buf[..])
+		Ok(BigEndian::read_u64(&buf[..]))
 	}
 
 	fn read_i64(&mut self) -> Result<i64, Error> {
 		let buf = self.read_fixed_bytes(8)?;
-		deserialize(&mut &buf[..])
+		Ok(BigEndian::read_i64(&buf[..]))
 	}
 
 	/// Read a variable size vector from the underlying stream. Expects a usize
@@ -533,6 +547,29 @@ impl Writeable for Signature {
 
 impl FixedLength for Signature {
 	const LEN: usize = AGG_SIGNATURE_SIZE;
+}
+
+impl FixedLength for PublicKey {
+	const LEN: usize = COMPRESSED_PUBLIC_KEY_SIZE;
+}
+
+impl Writeable for PublicKey {
+	// Write the public key in compressed form
+	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), Error> {
+		let secp = Secp256k1::with_caps(ContextFlag::None);
+		writer.write_fixed_bytes(&self.serialize_vec(&secp, true).as_ref())?;
+		Ok(())
+	}
+}
+
+impl Readable for PublicKey {
+	// Read the public key in compressed form
+	fn read(reader: &mut dyn Reader) -> Result<Self, Error> {
+		let buf = reader.read_fixed_bytes(PublicKey::LEN)?;
+		let secp = Secp256k1::with_caps(ContextFlag::None);
+		let pk = PublicKey::from_slice(&secp, &buf).map_err(|_| Error::CorruptedData)?;
+		Ok(pk)
+	}
 }
 
 /// Collections of items must be sorted lexicographically and all unique.
@@ -709,7 +746,7 @@ pub trait FixedLength {
 pub trait PMMRable: Writeable + Clone + Debug + DefaultHashable {
 	/// The type of element actually stored in the MMR data file.
 	/// This allows us to store Hash elements in the header MMR for variable size BlockHeaders.
-	type E: FixedLength + Readable + Writeable;
+	type E: FixedLength + Readable + Writeable + Debug;
 
 	/// Convert the pmmrable into the element to be stored in the MMR data file.
 	fn as_elmt(&self) -> Self::E;
@@ -812,4 +849,447 @@ impl AsFixedBytes for crate::keychain::Identifier {
 	fn len(&self) -> usize {
 		IDENTIFIER_SIZE
 	}
+}
+
+// serializer for io::Errorkind, originally auto-generated by serde-derive
+// slightly modified to handle the #[non_exhaustive] tag on io::ErrorKind
+fn serialize_error_kind<S>(
+	kind: &io::ErrorKind,
+	serializer: S,
+) -> serde::export::Result<S::Ok, S::Error>
+where
+	S: serde::Serializer,
+{
+	match *kind {
+		io::ErrorKind::NotFound => {
+			serde::Serializer::serialize_unit_variant(serializer, "ErrorKind", 0u32, "NotFound")
+		}
+		io::ErrorKind::PermissionDenied => serde::Serializer::serialize_unit_variant(
+			serializer,
+			"ErrorKind",
+			1u32,
+			"PermissionDenied",
+		),
+		io::ErrorKind::ConnectionRefused => serde::Serializer::serialize_unit_variant(
+			serializer,
+			"ErrorKind",
+			2u32,
+			"ConnectionRefused",
+		),
+		io::ErrorKind::ConnectionReset => serde::Serializer::serialize_unit_variant(
+			serializer,
+			"ErrorKind",
+			3u32,
+			"ConnectionReset",
+		),
+		io::ErrorKind::ConnectionAborted => serde::Serializer::serialize_unit_variant(
+			serializer,
+			"ErrorKind",
+			4u32,
+			"ConnectionAborted",
+		),
+		io::ErrorKind::NotConnected => {
+			serde::Serializer::serialize_unit_variant(serializer, "ErrorKind", 5u32, "NotConnected")
+		}
+		io::ErrorKind::AddrInUse => {
+			serde::Serializer::serialize_unit_variant(serializer, "ErrorKind", 6u32, "AddrInUse")
+		}
+		io::ErrorKind::AddrNotAvailable => serde::Serializer::serialize_unit_variant(
+			serializer,
+			"ErrorKind",
+			7u32,
+			"AddrNotAvailable",
+		),
+		io::ErrorKind::BrokenPipe => {
+			serde::Serializer::serialize_unit_variant(serializer, "ErrorKind", 8u32, "BrokenPipe")
+		}
+		io::ErrorKind::AlreadyExists => serde::Serializer::serialize_unit_variant(
+			serializer,
+			"ErrorKind",
+			9u32,
+			"AlreadyExists",
+		),
+		io::ErrorKind::WouldBlock => {
+			serde::Serializer::serialize_unit_variant(serializer, "ErrorKind", 10u32, "WouldBlock")
+		}
+		io::ErrorKind::InvalidInput => serde::Serializer::serialize_unit_variant(
+			serializer,
+			"ErrorKind",
+			11u32,
+			"InvalidInput",
+		),
+		io::ErrorKind::InvalidData => {
+			serde::Serializer::serialize_unit_variant(serializer, "ErrorKind", 12u32, "InvalidData")
+		}
+		io::ErrorKind::TimedOut => {
+			serde::Serializer::serialize_unit_variant(serializer, "ErrorKind", 13u32, "TimedOut")
+		}
+		io::ErrorKind::WriteZero => {
+			serde::Serializer::serialize_unit_variant(serializer, "ErrorKind", 14u32, "WriteZero")
+		}
+		io::ErrorKind::Interrupted => {
+			serde::Serializer::serialize_unit_variant(serializer, "ErrorKind", 15u32, "Interrupted")
+		}
+		io::ErrorKind::Other => {
+			serde::Serializer::serialize_unit_variant(serializer, "ErrorKind", 16u32, "Other")
+		}
+		io::ErrorKind::UnexpectedEof => serde::Serializer::serialize_unit_variant(
+			serializer,
+			"ErrorKind",
+			17u32,
+			"UnexpectedEof",
+		),
+		// #[non_exhaustive] is used on the definition of ErrorKind for future compatability
+		// That means match statements always need to match on _.
+		// The downside here is that rustc won't be able to warn us if io::ErrorKind another
+		// field is added to io::ErrorKind
+		_ => serde::Serializer::serialize_unit_variant(serializer, "ErrorKind", 16u32, "Other"),
+	}
+}
+
+// deserializer for io::Errorkind, originally auto-generated by serde-derive
+fn deserialize_error_kind<'de, D>(deserializer: D) -> serde::export::Result<io::ErrorKind, D::Error>
+where
+	D: serde::Deserializer<'de>,
+{
+	#[allow(non_camel_case_types)]
+	enum Field {
+		field0,
+		field1,
+		field2,
+		field3,
+		field4,
+		field5,
+		field6,
+		field7,
+		field8,
+		field9,
+		field10,
+		field11,
+		field12,
+		field13,
+		field14,
+		field15,
+		field16,
+		field17,
+	}
+	struct FieldVisitor;
+	impl<'de> serde::de::Visitor<'de> for FieldVisitor {
+		type Value = Field;
+		fn expecting(
+			&self,
+			formatter: &mut serde::export::Formatter,
+		) -> serde::export::fmt::Result {
+			serde::export::Formatter::write_str(formatter, "variant identifier")
+		}
+		fn visit_u64<E>(self, value: u64) -> serde::export::Result<Self::Value, E>
+		where
+			E: serde::de::Error,
+		{
+			match value {
+				0u64 => serde::export::Ok(Field::field0),
+				1u64 => serde::export::Ok(Field::field1),
+				2u64 => serde::export::Ok(Field::field2),
+				3u64 => serde::export::Ok(Field::field3),
+				4u64 => serde::export::Ok(Field::field4),
+				5u64 => serde::export::Ok(Field::field5),
+				6u64 => serde::export::Ok(Field::field6),
+				7u64 => serde::export::Ok(Field::field7),
+				8u64 => serde::export::Ok(Field::field8),
+				9u64 => serde::export::Ok(Field::field9),
+				10u64 => serde::export::Ok(Field::field10),
+				11u64 => serde::export::Ok(Field::field11),
+				12u64 => serde::export::Ok(Field::field12),
+				13u64 => serde::export::Ok(Field::field13),
+				14u64 => serde::export::Ok(Field::field14),
+				15u64 => serde::export::Ok(Field::field15),
+				16u64 => serde::export::Ok(Field::field16),
+				17u64 => serde::export::Ok(Field::field17),
+				_ => serde::export::Err(serde::de::Error::invalid_value(
+					serde::de::Unexpected::Unsigned(value),
+					&"variant index 0 <= i < 18",
+				)),
+			}
+		}
+		fn visit_str<E>(self, value: &str) -> serde::export::Result<Self::Value, E>
+		where
+			E: serde::de::Error,
+		{
+			match value {
+				"NotFound" => serde::export::Ok(Field::field0),
+				"PermissionDenied" => serde::export::Ok(Field::field1),
+				"ConnectionRefused" => serde::export::Ok(Field::field2),
+				"ConnectionReset" => serde::export::Ok(Field::field3),
+				"ConnectionAborted" => serde::export::Ok(Field::field4),
+				"NotConnected" => serde::export::Ok(Field::field5),
+				"AddrInUse" => serde::export::Ok(Field::field6),
+				"AddrNotAvailable" => serde::export::Ok(Field::field7),
+				"BrokenPipe" => serde::export::Ok(Field::field8),
+				"AlreadyExists" => serde::export::Ok(Field::field9),
+				"WouldBlock" => serde::export::Ok(Field::field10),
+				"InvalidInput" => serde::export::Ok(Field::field11),
+				"InvalidData" => serde::export::Ok(Field::field12),
+				"TimedOut" => serde::export::Ok(Field::field13),
+				"WriteZero" => serde::export::Ok(Field::field14),
+				"Interrupted" => serde::export::Ok(Field::field15),
+				"Other" => serde::export::Ok(Field::field16),
+				"UnexpectedEof" => serde::export::Ok(Field::field17),
+				_ => serde::export::Err(serde::de::Error::unknown_variant(value, VARIANTS)),
+			}
+		}
+		fn visit_bytes<E>(self, value: &[u8]) -> serde::export::Result<Self::Value, E>
+		where
+			E: serde::de::Error,
+		{
+			match value {
+				b"NotFound" => serde::export::Ok(Field::field0),
+				b"PermissionDenied" => serde::export::Ok(Field::field1),
+				b"ConnectionRefused" => serde::export::Ok(Field::field2),
+				b"ConnectionReset" => serde::export::Ok(Field::field3),
+				b"ConnectionAborted" => serde::export::Ok(Field::field4),
+				b"NotConnected" => serde::export::Ok(Field::field5),
+				b"AddrInUse" => serde::export::Ok(Field::field6),
+				b"AddrNotAvailable" => serde::export::Ok(Field::field7),
+				b"BrokenPipe" => serde::export::Ok(Field::field8),
+				b"AlreadyExists" => serde::export::Ok(Field::field9),
+				b"WouldBlock" => serde::export::Ok(Field::field10),
+				b"InvalidInput" => serde::export::Ok(Field::field11),
+				b"InvalidData" => serde::export::Ok(Field::field12),
+				b"TimedOut" => serde::export::Ok(Field::field13),
+				b"WriteZero" => serde::export::Ok(Field::field14),
+				b"Interrupted" => serde::export::Ok(Field::field15),
+				b"Other" => serde::export::Ok(Field::field16),
+				b"UnexpectedEof" => serde::export::Ok(Field::field17),
+				_ => {
+					let value = &serde::export::from_utf8_lossy(value);
+					serde::export::Err(serde::de::Error::unknown_variant(value, VARIANTS))
+				}
+			}
+		}
+	}
+	impl<'de> serde::Deserialize<'de> for Field {
+		#[inline]
+		fn deserialize<D>(deserializer: D) -> serde::export::Result<Self, D::Error>
+		where
+			D: serde::Deserializer<'de>,
+		{
+			serde::Deserializer::deserialize_identifier(deserializer, FieldVisitor)
+		}
+	}
+	struct Visitor<'de> {
+		marker: serde::export::PhantomData<io::ErrorKind>,
+		lifetime: serde::export::PhantomData<&'de ()>,
+	}
+	impl<'de> serde::de::Visitor<'de> for Visitor<'de> {
+		type Value = io::ErrorKind;
+		fn expecting(
+			&self,
+			formatter: &mut serde::export::Formatter,
+		) -> serde::export::fmt::Result {
+			serde::export::Formatter::write_str(formatter, "enum io::ErrorKind")
+		}
+		fn visit_enum<A>(self, data: A) -> serde::export::Result<Self::Value, A::Error>
+		where
+			A: serde::de::EnumAccess<'de>,
+		{
+			match match serde::de::EnumAccess::variant(data) {
+				serde::export::Ok(val) => val,
+				serde::export::Err(err) => {
+					return serde::export::Err(err);
+				}
+			} {
+				(Field::field0, variant) => {
+					match serde::de::VariantAccess::unit_variant(variant) {
+						serde::export::Ok(val) => val,
+						serde::export::Err(err) => {
+							return serde::export::Err(err);
+						}
+					};
+					serde::export::Ok(io::ErrorKind::NotFound)
+				}
+				(Field::field1, variant) => {
+					match serde::de::VariantAccess::unit_variant(variant) {
+						serde::export::Ok(val) => val,
+						serde::export::Err(err) => {
+							return serde::export::Err(err);
+						}
+					};
+					serde::export::Ok(io::ErrorKind::PermissionDenied)
+				}
+				(Field::field2, variant) => {
+					match serde::de::VariantAccess::unit_variant(variant) {
+						serde::export::Ok(val) => val,
+						serde::export::Err(err) => {
+							return serde::export::Err(err);
+						}
+					};
+					serde::export::Ok(io::ErrorKind::ConnectionRefused)
+				}
+				(Field::field3, variant) => {
+					match serde::de::VariantAccess::unit_variant(variant) {
+						serde::export::Ok(val) => val,
+						serde::export::Err(err) => {
+							return serde::export::Err(err);
+						}
+					};
+					serde::export::Ok(io::ErrorKind::ConnectionReset)
+				}
+				(Field::field4, variant) => {
+					match serde::de::VariantAccess::unit_variant(variant) {
+						serde::export::Ok(val) => val,
+						serde::export::Err(err) => {
+							return serde::export::Err(err);
+						}
+					};
+					serde::export::Ok(io::ErrorKind::ConnectionAborted)
+				}
+				(Field::field5, variant) => {
+					match serde::de::VariantAccess::unit_variant(variant) {
+						serde::export::Ok(val) => val,
+						serde::export::Err(err) => {
+							return serde::export::Err(err);
+						}
+					};
+					serde::export::Ok(io::ErrorKind::NotConnected)
+				}
+				(Field::field6, variant) => {
+					match serde::de::VariantAccess::unit_variant(variant) {
+						serde::export::Ok(val) => val,
+						serde::export::Err(err) => {
+							return serde::export::Err(err);
+						}
+					};
+					serde::export::Ok(io::ErrorKind::AddrInUse)
+				}
+				(Field::field7, variant) => {
+					match serde::de::VariantAccess::unit_variant(variant) {
+						serde::export::Ok(val) => val,
+						serde::export::Err(err) => {
+							return serde::export::Err(err);
+						}
+					};
+					serde::export::Ok(io::ErrorKind::AddrNotAvailable)
+				}
+				(Field::field8, variant) => {
+					match serde::de::VariantAccess::unit_variant(variant) {
+						serde::export::Ok(val) => val,
+						serde::export::Err(err) => {
+							return serde::export::Err(err);
+						}
+					};
+					serde::export::Ok(io::ErrorKind::BrokenPipe)
+				}
+				(Field::field9, variant) => {
+					match serde::de::VariantAccess::unit_variant(variant) {
+						serde::export::Ok(val) => val,
+						serde::export::Err(err) => {
+							return serde::export::Err(err);
+						}
+					};
+					serde::export::Ok(io::ErrorKind::AlreadyExists)
+				}
+				(Field::field10, variant) => {
+					match serde::de::VariantAccess::unit_variant(variant) {
+						serde::export::Ok(val) => val,
+						serde::export::Err(err) => {
+							return serde::export::Err(err);
+						}
+					};
+					serde::export::Ok(io::ErrorKind::WouldBlock)
+				}
+				(Field::field11, variant) => {
+					match serde::de::VariantAccess::unit_variant(variant) {
+						serde::export::Ok(val) => val,
+						serde::export::Err(err) => {
+							return serde::export::Err(err);
+						}
+					};
+					serde::export::Ok(io::ErrorKind::InvalidInput)
+				}
+				(Field::field12, variant) => {
+					match serde::de::VariantAccess::unit_variant(variant) {
+						serde::export::Ok(val) => val,
+						serde::export::Err(err) => {
+							return serde::export::Err(err);
+						}
+					};
+					serde::export::Ok(io::ErrorKind::InvalidData)
+				}
+				(Field::field13, variant) => {
+					match serde::de::VariantAccess::unit_variant(variant) {
+						serde::export::Ok(val) => val,
+						serde::export::Err(err) => {
+							return serde::export::Err(err);
+						}
+					};
+					serde::export::Ok(io::ErrorKind::TimedOut)
+				}
+				(Field::field14, variant) => {
+					match serde::de::VariantAccess::unit_variant(variant) {
+						serde::export::Ok(val) => val,
+						serde::export::Err(err) => {
+							return serde::export::Err(err);
+						}
+					};
+					serde::export::Ok(io::ErrorKind::WriteZero)
+				}
+				(Field::field15, variant) => {
+					match serde::de::VariantAccess::unit_variant(variant) {
+						serde::export::Ok(val) => val,
+						serde::export::Err(err) => {
+							return serde::export::Err(err);
+						}
+					};
+					serde::export::Ok(io::ErrorKind::Interrupted)
+				}
+				(Field::field16, variant) => {
+					match serde::de::VariantAccess::unit_variant(variant) {
+						serde::export::Ok(val) => val,
+						serde::export::Err(err) => {
+							return serde::export::Err(err);
+						}
+					};
+					serde::export::Ok(io::ErrorKind::Other)
+				}
+				(Field::field17, variant) => {
+					match serde::de::VariantAccess::unit_variant(variant) {
+						serde::export::Ok(val) => val,
+						serde::export::Err(err) => {
+							return serde::export::Err(err);
+						}
+					};
+					serde::export::Ok(io::ErrorKind::UnexpectedEof)
+				}
+			}
+		}
+	}
+	const VARIANTS: &'static [&'static str] = &[
+		"NotFound",
+		"PermissionDenied",
+		"ConnectionRefused",
+		"ConnectionReset",
+		"ConnectionAborted",
+		"NotConnected",
+		"AddrInUse",
+		"AddrNotAvailable",
+		"BrokenPipe",
+		"AlreadyExists",
+		"WouldBlock",
+		"InvalidInput",
+		"InvalidData",
+		"TimedOut",
+		"WriteZero",
+		"Interrupted",
+		"Other",
+		"UnexpectedEof",
+	];
+	serde::Deserializer::deserialize_enum(
+		deserializer,
+		"ErrorKind",
+		VARIANTS,
+		Visitor {
+			marker: serde::export::PhantomData::<io::ErrorKind>,
+			lifetime: serde::export::PhantomData,
+		},
+	)
 }

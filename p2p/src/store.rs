@@ -16,20 +16,19 @@
 
 use chrono::Utc;
 use num::FromPrimitive;
-use rand::{thread_rng, Rng};
-use std::sync::Arc;
-
-use crate::lmdb;
+use rand::seq::SliceRandom;
+use rand::thread_rng;
 
 use crate::core::ser::{self, Readable, Reader, Writeable, Writer};
 use crate::types::{Capabilities, PeerAddr, ReasonForBan};
 use grin_store::{self, option_to_not_found, to_key, Error};
 
+const DB_NAME: &'static str = "peer";
 const STORE_SUBPATH: &'static str = "peers";
 
 const PEER_PREFIX: u8 = 'P' as u8;
 
-/// Types of messages
+// Types of messages
 enum_from_primitive! {
 	#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 	pub enum State {
@@ -116,8 +115,8 @@ pub struct PeerStore {
 
 impl PeerStore {
 	/// Instantiates a new peer store under the provided root path.
-	pub fn new(db_env: Arc<lmdb::Environment>) -> Result<PeerStore, Error> {
-		let db = grin_store::Store::open(db_env, STORE_SUBPATH);
+	pub fn new(db_root: &str) -> Result<PeerStore, Error> {
+		let db = grin_store::Store::new(db_root, Some(DB_NAME), Some(STORE_SUBPATH), None)?;
 		Ok(PeerStore { db: db })
 	}
 
@@ -160,7 +159,7 @@ impl PeerStore {
 			.map(|(_, v)| v)
 			.filter(|p| p.flags == state && p.capabilities.contains(cap))
 			.collect::<Vec<_>>();
-		thread_rng().shuffle(&mut peers[..]);
+		peers[..].shuffle(&mut thread_rng());
 		Ok(peers.iter().take(count).cloned().collect())
 	}
 
@@ -168,7 +167,8 @@ impl PeerStore {
 	/// Used for /v1/peers/all api endpoint
 	pub fn all_peers(&self) -> Result<Vec<PeerData>, Error> {
 		let key = to_key(PEER_PREFIX, &mut "".to_string().into_bytes());
-		Ok(self.db
+		Ok(self
+			.db
 			.iter::<PeerData>(&key)?
 			.map(|(_, v)| v)
 			.collect::<Vec<_>>())

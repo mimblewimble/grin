@@ -12,31 +12,29 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::cmp;
-use std::env;
-use std::fs::File;
-use std::io::{BufWriter, Write};
-use std::sync::Arc;
-
-use crate::conn::{Message, MessageHandler, Response};
+use crate::conn::{Message, MessageHandler, Response, Tracker};
 use crate::core::core::{self, hash::Hash, CompactBlock};
-use crate::util::{RateCounter, RwLock};
-use chrono::prelude::Utc;
-
 use crate::msg::{
-	BanReason, GetPeerAddrs, Headers, Locator, PeerAddrs, Ping, Pong, TxHashSetArchive,
-	TxHashSetRequest, Type,
+	BanReason, GetPeerAddrs, Headers, KernelDataResponse, Locator, PeerAddrs, Ping, Pong,
+	TxHashSetArchive, TxHashSetRequest, Type,
 };
-use crate::types::{Error, NetAdapter, PeerAddr};
+use crate::types::{Error, NetAdapter, PeerInfo};
+use chrono::prelude::Utc;
+use rand::{thread_rng, Rng};
+use std::cmp;
+use std::fs::{self, File, OpenOptions};
+use std::io::{BufWriter, Seek, SeekFrom, Write};
+use std::sync::Arc;
+use tempfile::tempfile;
 
 pub struct Protocol {
 	adapter: Arc<dyn NetAdapter>,
-	addr: PeerAddr,
+	peer_info: PeerInfo,
 }
 
 impl Protocol {
-	pub fn new(adapter: Arc<dyn NetAdapter>, addr: PeerAddr) -> Protocol {
-		Protocol { adapter, addr }
+	pub fn new(adapter: Arc<dyn NetAdapter>, peer_info: PeerInfo) -> Protocol {
+		Protocol { adapter, peer_info }
 	}
 }
 
@@ -45,17 +43,17 @@ impl MessageHandler for Protocol {
 		&self,
 		mut msg: Message<'a>,
 		writer: &'a mut dyn Write,
-		received_bytes: Arc<RwLock<RateCounter>>,
+		tracker: Arc<Tracker>,
 	) -> Result<Option<Response<'a>>, Error> {
 		let adapter = &self.adapter;
 
 		// If we received a msg from a banned peer then log and drop it.
 		// If we are getting a lot of these then maybe we are not cleaning
 		// banned peers up correctly?
-		if adapter.is_banned(self.addr.clone()) {
+		if adapter.is_banned(self.peer_info.addr) {
 			debug!(
 				"handler: consume: peer {:?} banned, received: {:?}, dropping.",
-				self.addr, msg.header.msg_type,
+				self.peer_info.addr, msg.header.msg_type,
 			);
 			return Ok(None);
 		}
@@ -63,13 +61,13 @@ impl MessageHandler for Protocol {
 		match msg.header.msg_type {
 			Type::Ping => {
 				let ping: Ping = msg.body()?;
-				adapter.peer_difficulty(self.addr, ping.total_difficulty, ping.height);
+				adapter.peer_difficulty(self.peer_info.addr, ping.total_difficulty, ping.height);
 
 				Ok(Some(Response::new(
 					Type::Pong,
 					Pong {
-						total_difficulty: adapter.total_difficulty(),
-						height: adapter.total_height(),
+						total_difficulty: adapter.total_difficulty()?,
+						height: adapter.total_height()?,
 					},
 					writer,
 				)?))
@@ -77,7 +75,7 @@ impl MessageHandler for Protocol {
 
 			Type::Pong => {
 				let pong: Pong = msg.body()?;
-				adapter.peer_difficulty(self.addr, pong.total_difficulty, pong.height);
+				adapter.peer_difficulty(self.peer_info.addr, pong.total_difficulty, pong.height);
 				Ok(None)
 			}
 
@@ -93,7 +91,7 @@ impl MessageHandler for Protocol {
 					"handle_payload: received tx kernel: {}, msg_len: {}",
 					h, msg.header.msg_len
 				);
-				adapter.tx_kernel_received(h, self.addr);
+				adapter.tx_kernel_received(h, &self.peer_info)?;
 				Ok(None)
 			}
 
@@ -117,7 +115,7 @@ impl MessageHandler for Protocol {
 					msg.header.msg_len
 				);
 				let tx: core::Transaction = msg.body()?;
-				adapter.transaction_received(tx, false);
+				adapter.transaction_received(tx, false)?;
 				Ok(None)
 			}
 
@@ -127,7 +125,7 @@ impl MessageHandler for Protocol {
 					msg.header.msg_len
 				);
 				let tx: core::Transaction = msg.body()?;
-				adapter.transaction_received(tx, true);
+				adapter.transaction_received(tx, true)?;
 				Ok(None)
 			}
 
@@ -155,7 +153,7 @@ impl MessageHandler for Protocol {
 
 				// we can't know at this level whether we requested the block or not,
 				// the boolean should be properly set in higher level adapter
-				adapter.block_received(b, self.addr, false);
+				adapter.block_received(b, &self.peer_info, false)?;
 				Ok(None)
 			}
 
@@ -176,14 +174,14 @@ impl MessageHandler for Protocol {
 				);
 				let b: core::CompactBlock = msg.body()?;
 
-				adapter.compact_block_received(b, self.addr);
+				adapter.compact_block_received(b, &self.peer_info)?;
 				Ok(None)
 			}
 
 			Type::GetHeaders => {
 				// load headers from the locator
 				let loc: Locator = msg.body()?;
-				let headers = adapter.locate_headers(&loc.hashes);
+				let headers = adapter.locate_headers(&loc.hashes)?;
 
 				// serialize and send all the headers over
 				Ok(Some(Response::new(
@@ -197,7 +195,7 @@ impl MessageHandler for Protocol {
 			// we can go request it from some of our peers
 			Type::Header => {
 				let header: core::BlockHeader = msg.body()?;
-				adapter.header_received(header, self.addr);
+				adapter.header_received(header, &self.peer_info)?;
 				Ok(None)
 			}
 
@@ -217,7 +215,7 @@ impl MessageHandler for Protocol {
 						headers.push(header);
 						total_bytes_read += bytes_read;
 					}
-					adapter.headers_received(&headers, self.addr);
+					adapter.headers_received(&headers, &self.peer_info)?;
 				}
 
 				// Now check we read the correct total number of bytes off the stream.
@@ -241,6 +239,54 @@ impl MessageHandler for Protocol {
 			Type::PeerAddrs => {
 				let peer_addrs: PeerAddrs = msg.body()?;
 				adapter.peer_addrs_received(peer_addrs.peers);
+				Ok(None)
+			}
+
+			Type::KernelDataRequest => {
+				debug!("handle_payload: kernel_data_request");
+				let kernel_data = self.adapter.kernel_data_read()?;
+				let bytes = kernel_data.metadata()?.len();
+				let kernel_data_response = KernelDataResponse { bytes };
+				let mut response =
+					Response::new(Type::KernelDataResponse, &kernel_data_response, writer)?;
+				response.add_attachment(kernel_data);
+				Ok(Some(response))
+			}
+
+			Type::KernelDataResponse => {
+				let response: KernelDataResponse = msg.body()?;
+				debug!(
+					"handle_payload: kernel_data_response: bytes: {}",
+					response.bytes
+				);
+
+				let mut writer = BufWriter::new(tempfile()?);
+
+				let total_size = response.bytes as usize;
+				let mut remaining_size = total_size;
+
+				while remaining_size > 0 {
+					let size = msg.copy_attachment(remaining_size, &mut writer)?;
+					remaining_size = remaining_size.saturating_sub(size);
+
+					// Increase received bytes quietly (without affecting the counters).
+					// Otherwise we risk banning a peer as "abusive".
+					tracker.inc_quiet_received(size as u64);
+				}
+
+				// Remember to seek back to start of the file as the caller is likely
+				// to read this file directly without reopening it.
+				writer.seek(SeekFrom::Start(0))?;
+
+				let mut file = writer.into_inner().map_err(|_| Error::Internal)?;
+
+				debug!(
+					"handle_payload: kernel_data_response: file size: {}",
+					file.metadata().unwrap().len()
+				);
+
+				self.adapter.kernel_data_write(&mut file)?;
+
 				Ok(None)
 			}
 
@@ -288,10 +334,15 @@ impl MessageHandler for Protocol {
 				self.adapter
 					.txhashset_download_update(download_start_time, 0, sm_arch.bytes);
 
-				let mut tmp = env::temp_dir();
-				tmp.push("txhashset.zip");
+				let nonce: u32 = thread_rng().gen_range(0, 1_000_000);
+				let tmp = self.adapter.get_tmpfile_pathname(format!(
+					"txhashset-{}-{}.zip",
+					download_start_time.timestamp(),
+					nonce
+				));
 				let mut save_txhashset_to_file = |file| -> Result<(), Error> {
-					let mut tmp_zip = BufWriter::new(File::create(file)?);
+					let mut tmp_zip =
+						BufWriter::new(OpenOptions::new().write(true).create_new(true).open(file)?);
 					let total_size = sm_arch.bytes as usize;
 					let mut downloaded_size: usize = 0;
 					let mut request_size = cmp::min(48_000, total_size);
@@ -307,10 +358,7 @@ impl MessageHandler for Protocol {
 
 						// Increase received bytes quietly (without affecting the counters).
 						// Otherwise we risk banning a peer as "abusive".
-						{
-							let mut received_bytes = received_bytes.write();
-							received_bytes.inc_quiet(size as u64);
-						}
+						tracker.inc_quiet_received(size as u64)
 					}
 					tmp_zip
 						.into_inner()
@@ -332,21 +380,24 @@ impl MessageHandler for Protocol {
 					tmp,
 				);
 
-				let tmp_zip = File::open(tmp)?;
+				let tmp_zip = File::open(tmp.clone())?;
 				let res = self
 					.adapter
-					.txhashset_write(sm_arch.hash, tmp_zip, self.addr);
+					.txhashset_write(sm_arch.hash, tmp_zip, &self.peer_info)?;
 
 				debug!(
 					"handle_payload: txhashset archive for {} at {}, DONE. Data Ok: {}",
 					sm_arch.hash, sm_arch.height, res
 				);
 
+				if let Err(e) = fs::remove_file(tmp.clone()) {
+					warn!("fail to remove tmp file: {:?}. err: {}", tmp, e);
+				}
+
 				Ok(None)
 			}
-
-			_ => {
-				debug!("unknown message type {:?}", msg.header.msg_type);
+			Type::Error | Type::Hand | Type::Shake => {
+				debug!("Received an unexpected msg: {:?}", msg.header.msg_type);
 				Ok(None)
 			}
 		}

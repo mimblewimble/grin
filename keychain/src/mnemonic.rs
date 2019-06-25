@@ -29,7 +29,7 @@ lazy_static! {
 }
 
 /// An error that might occur during mnemonic decoding
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone, Serialize, Deserialize)]
 pub enum Error {
 	/// Invalid word encountered
 	BadWord(String),
@@ -324,10 +324,11 @@ mod tests {
 
 	#[test]
 	fn test_bip39_random() {
+		use rand::seq::SliceRandom;
 		let sizes: [usize; 5] = [16, 20, 24, 28, 32];
 
 		let mut rng = thread_rng();
-		let size = *rng.choose(&sizes).unwrap();
+		let size = *sizes.choose(&mut rng).unwrap();
 		let mut entropy: Vec<u8> = Vec::with_capacity(size);
 
 		for _ in 0..size {

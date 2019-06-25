@@ -23,8 +23,8 @@ use crate::core::core::{
 };
 use crate::core::global;
 use crate::core::pow;
+use crate::core::ser::{Readable, StreamingReader};
 use crate::error::{Error, ErrorKind};
-use crate::lmdb;
 use crate::pipe;
 use crate::store;
 use crate::txhashset;
@@ -33,10 +33,12 @@ use crate::types::{
 	BlockStatus, ChainAdapter, NoStatus, Options, Tip, TxHashSetRoots, TxHashsetWriteStatus,
 };
 use crate::util::secp::pedersen::{Commitment, RangeProof};
-use crate::util::{Mutex, RwLock, StopState};
+use crate::util::RwLock;
 use grin_store::Error::NotFoundErr;
 use std::collections::HashMap;
-use std::fs::File;
+use std::fs::{self, File};
+use std::io::Read;
+use std::path::PathBuf;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -150,7 +152,6 @@ pub struct Chain {
 	// POW verification function
 	pow_verifier: fn(&BlockHeader) -> Result<(), pow::Error>,
 	archive_mode: bool,
-	stop_state: Arc<Mutex<StopState>>,
 	genesis: BlockHeader,
 }
 
@@ -160,52 +161,31 @@ impl Chain {
 	/// based on the genesis block if necessary.
 	pub fn init(
 		db_root: String,
-		db_env: Arc<lmdb::Environment>,
 		adapter: Arc<dyn ChainAdapter + Send + Sync>,
 		genesis: Block,
 		pow_verifier: fn(&BlockHeader) -> Result<(), pow::Error>,
 		verifier_cache: Arc<RwLock<dyn VerifierCache>>,
 		archive_mode: bool,
-		stop_state: Arc<Mutex<StopState>>,
 	) -> Result<Chain, Error> {
-		let chain = {
-			// Note: We take a lock on the stop_state here and do not release it until
-			// we have finished chain initialization.
-			let stop_state_local = stop_state.clone();
-			let stop_lock = stop_state_local.lock();
-			if stop_lock.is_stopped() {
-				return Err(ErrorKind::Stopped.into());
-			}
+		let store = Arc::new(store::ChainStore::new(&db_root)?);
 
-			let store = Arc::new(store::ChainStore::new(db_env)?);
+		// open the txhashset, creating a new one if necessary
+		let mut txhashset = txhashset::TxHashSet::open(db_root.clone(), store.clone(), None)?;
 
-			// open the txhashset, creating a new one if necessary
-			let mut txhashset = txhashset::TxHashSet::open(db_root.clone(), store.clone(), None)?;
+		setup_head(&genesis, &store, &mut txhashset)?;
+		Chain::log_heads(&store)?;
 
-			setup_head(&genesis, &store, &mut txhashset)?;
-			Chain::log_heads(&store)?;
-
-			Chain {
-				db_root,
-				store,
-				adapter,
-				orphans: Arc::new(OrphanBlockPool::new()),
-				txhashset: Arc::new(RwLock::new(txhashset)),
-				pow_verifier,
-				verifier_cache,
-				archive_mode,
-				stop_state,
-				genesis: genesis.header.clone(),
-			}
-		};
-
-		// Run chain compaction. Laptops and other intermittent nodes
-		// may not run long enough to trigger daily compaction.
-		// So run it explicitly here on startup (its fast enough to do so).
-		// Note: we release the stop_lock from above as compact also requires a lock.
-		chain.compact()?;
-
-		Ok(chain)
+		Ok(Chain {
+			db_root,
+			store,
+			adapter,
+			orphans: Arc::new(OrphanBlockPool::new()),
+			txhashset: Arc::new(RwLock::new(txhashset)),
+			pow_verifier,
+			verifier_cache,
+			archive_mode,
+			genesis: genesis.header.clone(),
+		})
 	}
 
 	/// Return our shared txhashset instance.
@@ -274,15 +254,18 @@ impl Chain {
 		let is_more_work = head.is_some();
 
 		let mut is_next_block = false;
+		let mut reorg_depth = None;
 		if let Some(head) = head {
 			if head.prev_block_h == prev_head.last_block_h {
 				is_next_block = true;
+			} else {
+				reorg_depth = Some(prev_head.height.saturating_sub(head.height) + 1);
 			}
 		}
 
 		match (is_more_work, is_next_block) {
 			(true, true) => BlockStatus::Next,
-			(true, false) => BlockStatus::Reorg,
+			(true, false) => BlockStatus::Reorg(reorg_depth.unwrap_or(0)),
 			(false, _) => BlockStatus::Fork,
 		}
 	}
@@ -292,15 +275,6 @@ impl Chain {
 	/// or false if it has added to a fork (or orphan?).
 	fn process_block_single(&self, b: Block, opts: Options) -> Result<Option<Tip>, Error> {
 		let (maybe_new_head, prev_head) = {
-			// Note: We take a lock on the stop_state here and do not release it until
-			// we have finished processing this single block.
-			// We take care to write both the txhashset *and* the batch while we
-			// have the stop_state lock.
-			let stop_lock = self.stop_state.lock();
-			if stop_lock.is_stopped() {
-				return Err(ErrorKind::Stopped.into());
-			}
-
 			let mut txhashset = self.txhashset.write();
 			let batch = self.store.batch()?;
 			let mut ctx = self.new_ctx(opts, batch, &mut txhashset)?;
@@ -390,15 +364,6 @@ impl Chain {
 	/// This is only ever used during sync and is based on sync_head.
 	/// We update header_head here if our total work increases.
 	pub fn sync_block_headers(&self, headers: &[BlockHeader], opts: Options) -> Result<(), Error> {
-		// Note: We take a lock on the stop_state here and do not release it until
-		// we have finished processing this single block.
-		// We take care to write both the txhashset *and* the batch while we
-		// have the stop_state lock.
-		let stop_lock = self.stop_state.lock();
-		if stop_lock.is_stopped() {
-			return Err(ErrorKind::Stopped.into());
-		}
-
 		let mut txhashset = self.txhashset.write();
 		let batch = self.store.batch()?;
 		let mut ctx = self.new_ctx(opts, batch, &mut txhashset)?;
@@ -670,6 +635,28 @@ impl Chain {
 		self.txhashset.read().roots()
 	}
 
+	/// Provides a reading view into the current kernel state.
+	pub fn kernel_data_read(&self) -> Result<File, Error> {
+		let txhashset = self.txhashset.read();
+		txhashset::rewindable_kernel_view(&txhashset, |view| view.kernel_data_read())
+	}
+
+	/// Writes kernels provided to us (via a kernel data download).
+	/// Currently does not write these to disk and simply deserializes
+	/// the provided data.
+	/// TODO - Write this data to disk and validate the rebuilt kernel MMR.
+	pub fn kernel_data_write(&self, reader: &mut Read) -> Result<(), Error> {
+		let mut count = 0;
+		let mut stream = StreamingReader::new(reader, Duration::from_secs(1));
+		while let Ok(_kernel) = TxKernelEntry::read(&mut stream) {
+			count += 1;
+		}
+
+		debug!("kernel_data_write: read {} kernels", count);
+
+		Ok(())
+	}
+
 	/// Provides a reading view into the current txhashset state as well as
 	/// the required indexes for a consumer to rewind to a consistent state
 	/// at the provided block hash.
@@ -690,7 +677,7 @@ impl Chain {
 		}
 
 		// prepares the zip and return the corresponding Read
-		let txhashset_reader = txhashset::zip_read(self.db_root.clone(), &header, None)?;
+		let txhashset_reader = txhashset::zip_read(self.db_root.clone(), &header)?;
 		Ok((
 			header.output_mmr_size,
 			header.kernel_mmr_size,
@@ -848,6 +835,43 @@ impl Chain {
 		}
 	}
 
+	/// Clean the temporary sandbox folder
+	pub fn clean_txhashset_sandbox(&self) {
+		txhashset::clean_txhashset_folder(&self.get_tmp_dir());
+		txhashset::clean_header_folder(&self.get_tmp_dir());
+	}
+
+	/// Specific tmp dir.
+	/// Normally it's ~/.grin/main/tmp for mainnet
+	/// or ~/.grin/floo/tmp for floonet
+	pub fn get_tmp_dir(&self) -> PathBuf {
+		let mut tmp_dir = PathBuf::from(self.db_root.clone());
+		tmp_dir = tmp_dir
+			.parent()
+			.expect("fail to get parent of db_root dir")
+			.to_path_buf();
+		tmp_dir.push("tmp");
+		tmp_dir
+	}
+
+	/// Get a tmp file path in above specific tmp dir (create tmp dir if not exist)
+	/// Delete file if tmp file already exists
+	pub fn get_tmpfile_pathname(&self, tmpfile_name: String) -> PathBuf {
+		let mut tmp = self.get_tmp_dir();
+		if !tmp.exists() {
+			if let Err(e) = fs::create_dir(tmp.clone()) {
+				warn!("fail to create tmp folder on {:?}. err: {}", tmp, e);
+			}
+		}
+		tmp.push(tmpfile_name);
+		if tmp.exists() {
+			if let Err(e) = fs::remove_file(tmp.clone()) {
+				warn!("fail to clean existing tmp file: {:?}. err: {}", tmp, e);
+			}
+		}
+		tmp
+	}
+
 	/// Writes a reading view on a txhashset state that's been provided to us.
 	/// If we're willing to accept that new state, the data stream will be
 	/// read as a zip file, unzipped and the resulting state files should be
@@ -869,17 +893,20 @@ impl Chain {
 
 		let header = self.get_block_header(&h)?;
 
-		{
-			let mut txhashset_ref = self.txhashset.write();
-			// Drop file handles in underlying txhashset
-			txhashset_ref.release_backend_files();
-		}
+		// Write txhashset to sandbox (in the Grin specific tmp dir)
+		let sandbox_dir = self.get_tmp_dir();
+		txhashset::clean_txhashset_folder(&sandbox_dir);
+		txhashset::clean_header_folder(&sandbox_dir);
+		txhashset::zip_write(sandbox_dir.clone(), txhashset_data.try_clone()?, &header)?;
 
-		// Rewrite hashset
-		txhashset::zip_write(self.db_root.clone(), txhashset_data, &header)?;
-
-		let mut txhashset =
-			txhashset::TxHashSet::open(self.db_root.clone(), self.store.clone(), Some(&header))?;
+		let mut txhashset = txhashset::TxHashSet::open(
+			sandbox_dir
+				.to_str()
+				.expect("invalid sandbox folder")
+				.to_owned(),
+			self.store.clone(),
+			Some(&header),
+		)?;
 
 		// The txhashset.zip contains the output, rangeproof and kernel MMRs.
 		// We must rebuild the header MMR ourselves based on the headers in our db.
@@ -931,9 +958,28 @@ impl Chain {
 
 		debug!("txhashset_write: finished committing the batch (head etc.)");
 
-		// Replace the chain txhashset with the newly built one.
+		// Sandbox full validation ok, go to overwrite txhashset on db root
 		{
 			let mut txhashset_ref = self.txhashset.write();
+
+			// Before overwriting, drop file handlers in underlying txhashset
+			txhashset_ref.release_backend_files();
+
+			// Move sandbox to overwrite
+			txhashset.release_backend_files();
+			txhashset::txhashset_replace(sandbox_dir.clone(), PathBuf::from(self.db_root.clone()))?;
+
+			// Re-open on db root dir
+			txhashset = txhashset::TxHashSet::open(
+				self.db_root.clone(),
+				self.store.clone(),
+				Some(&header),
+			)?;
+
+			self.rebuild_header_mmr(&Tip::from_header(&header), &mut txhashset)?;
+			txhashset::clean_header_folder(&sandbox_dir);
+
+			// Replace the chain txhashset with the newly built one.
 			*txhashset_ref = txhashset;
 		}
 
@@ -978,38 +1024,18 @@ impl Chain {
 		}
 
 		let mut count = 0;
-
 		let tail_hash = txhashset.get_header_hash_by_height(head.height - horizon)?;
 		let tail = batch.get_block_header(&tail_hash)?;
 
-		let current_hash = txhashset.get_header_hash_by_height(head.height - horizon - 1)?;
-		let mut current = batch.get_block_header(&current_hash)?;
-
-		loop {
-			// Go to the store directly so we can handle NotFoundErr robustly.
-			match self.store.get_block(&current.hash()) {
-				Ok(b) => {
-					batch.delete_block(&b.hash())?;
-					count += 1;
-				}
-				Err(NotFoundErr(_)) => {
-					break;
-				}
-				Err(e) => {
-					return Err(
-						ErrorKind::StoreErr(e, "retrieving block to compact".to_owned()).into(),
-					);
-				}
-			}
-			if current.height <= 1 {
-				break;
-			}
-			match batch.get_previous_header(&current) {
-				Ok(h) => current = h,
-				Err(NotFoundErr(_)) => break,
-				Err(e) => return Err(From::from(e)),
+		// Remove old blocks (including short lived fork blocks) which height < tail.height
+		// here b is a block
+		for (_, b) in batch.blocks_iter()? {
+			if b.header.height < tail.height {
+				let _ = batch.delete_block(&b.hash());
+				count += 1;
 			}
 		}
+
 		batch.save_body_tail(&Tip::from_header(&tail))?;
 
 		debug!(
@@ -1026,12 +1052,24 @@ impl Chain {
 	/// * removes historical blocks and associated data from the db (unless archive mode)
 	///
 	pub fn compact(&self) -> Result<(), Error> {
-		// Note: We take a lock on the stop_state here and do not release it until
-		// we have finished processing this chain compaction operation.
-		// We want to avoid shutting the node down in the middle of compacting the data.
-		let stop_lock = self.stop_state.lock();
-		if stop_lock.is_stopped() {
-			return Err(ErrorKind::Stopped.into());
+		// A node may be restarted multiple times in a short period of time.
+		// We compact at most once per 60 blocks in this situation by comparing
+		// current "head" and "tail" height to our cut-through horizon and
+		// allowing an additional 60 blocks in height before allowing a further compaction.
+		if let (Ok(tail), Ok(head)) = (self.tail(), self.head()) {
+			let horizon = global::cut_through_horizon() as u64;
+			let threshold = horizon.saturating_add(60);
+			debug!(
+				"compact: head: {}, tail: {}, diff: {}, horizon: {}",
+				head.height,
+				tail.height,
+				head.height.saturating_sub(tail.height),
+				horizon
+			);
+			if tail.height.saturating_add(threshold) > head.height {
+				debug!("compact: skipping compaction - threshold is 60 blocks beyond horizon.");
+				return Ok(());
+			}
 		}
 
 		// Take a write lock on the txhashet and start a new writeable db batch.

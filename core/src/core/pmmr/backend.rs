@@ -12,12 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use std::fs::File;
+
 use croaring::Bitmap;
 
 use crate::core::hash::Hash;
 use crate::core::BlockHeader;
 use crate::ser::PMMRable;
-use std::path::Path;
 
 /// Storage backend for the MMR, just needs to be indexed by order of insertion.
 /// The PMMR itself does not need the Backend to be accurate on the existence
@@ -60,15 +61,14 @@ pub trait Backend<T: PMMRable> {
 	/// triggered removal).
 	fn remove(&mut self, position: u64) -> Result<(), String>;
 
-	/// Returns the data file path.. this is a bit of a hack now that doesn't
-	/// sit well with the design, but TxKernels have to be summed and the
-	/// fastest way to to be able to allow direct access to the file
-	fn get_data_file_path(&self) -> &Path;
+	/// Creates a temp file containing the contents of the underlying data file
+	/// from the backend storage. This allows a caller to see a consistent view
+	/// of the data without needing to lock the backend storage.
+	fn data_as_temp_file(&self) -> Result<File, String>;
 
 	/// Release underlying datafiles and locks
 	fn release_files(&mut self);
 
-	/// Also a bit of a hack...
 	/// Saves a snapshot of the rewound utxo file with the block hash as
 	/// filename suffix. We need this when sending a txhashset zip file to a
 	/// node for fast sync.

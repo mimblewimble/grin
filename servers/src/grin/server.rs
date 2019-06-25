@@ -21,7 +21,10 @@ use std::fs::File;
 use std::io::prelude::*;
 use std::path::Path;
 use std::sync::Arc;
-use std::{thread, time};
+use std::{
+	thread::{self, JoinHandle},
+	time,
+};
 
 use fs2::FileExt;
 
@@ -31,6 +34,7 @@ use crate::chain;
 use crate::common::adapters::{
 	ChainToPoolAndNetAdapter, NetToChainAdapter, PoolToChainAdapter, PoolToNetAdapter,
 };
+use crate::common::hooks::{init_chain_hooks, init_net_hooks};
 use crate::common::stats::{DiffBlock, DiffStats, PeerStats, ServerStateInfo, ServerStats};
 use crate::common::types::{Error, ServerConfig, StratumServerConfig, SyncState, SyncStatus};
 use crate::core::core::hash::{Hashed, ZERO_HASH};
@@ -42,9 +46,8 @@ use crate::mining::test_miner::Miner;
 use crate::p2p;
 use crate::p2p::types::PeerAddr;
 use crate::pool;
-use crate::store;
 use crate::util::file::get_first_line;
-use crate::util::{Mutex, RwLock, StopState};
+use crate::util::{RwLock, StopState};
 
 /// Grin server holding internal structures.
 pub struct Server {
@@ -64,9 +67,13 @@ pub struct Server {
 	/// To be passed around to collect stats and info
 	state_info: ServerStateInfo,
 	/// Stop flag
-	pub stop_state: Arc<Mutex<StopState>>,
+	pub stop_state: Arc<StopState>,
 	/// Maintain a lock_file so we do not run multiple Grin nodes from same dir.
 	lock_file: Arc<File>,
+	connect_thread: Option<JoinHandle<()>>,
+	sync_thread: JoinHandle<()>,
+	dandelion_thread: JoinHandle<()>,
+	p2p_thread: JoinHandle<()>,
 }
 
 impl Server {
@@ -75,12 +82,12 @@ impl Server {
 	/// to poll info about the server status
 	pub fn start<F>(config: ServerConfig, mut info_callback: F) -> Result<(), Error>
 	where
-		F: FnMut(Arc<Server>),
+		F: FnMut(Server),
 	{
 		let mining_config = config.stratum_mining_config.clone();
 		let enable_test_miner = config.run_test_miner;
 		let test_miner_wallet_url = config.test_miner_wallet_url.clone();
-		let serv = Arc::new(Server::new(config)?);
+		let serv = Server::new(config)?;
 
 		if let Some(c) = mining_config {
 			let enable_stratum_server = c.enable_stratum_server;
@@ -101,13 +108,8 @@ impl Server {
 			}
 		}
 
-		info_callback(serv.clone());
-		loop {
-			thread::sleep(time::Duration::from_secs(1));
-			if serv.stop_state.lock().is_stopped() {
-				return Ok(());
-			}
-		}
+		info_callback(serv);
+		Ok(())
 	}
 
 	// Exclusive (advisory) lock_file to ensure we do not run multiple
@@ -147,14 +149,14 @@ impl Server {
 			Some(b) => b,
 		};
 
-		let stop_state = Arc::new(Mutex::new(StopState::new()));
+		let stop_state = Arc::new(StopState::new());
 
 		// Shared cache for verification results.
 		// We cache rangeproof verification and kernel signature verification.
 		let verifier_cache = Arc::new(RwLock::new(LruVerifierCache::new()));
 
 		let pool_adapter = Arc::new(PoolToChainAdapter::new());
-		let pool_net_adapter = Arc::new(PoolToNetAdapter::new());
+		let pool_net_adapter = Arc::new(PoolToNetAdapter::new(config.dandelion_config.clone()));
 		let tx_pool = Arc::new(RwLock::new(pool::TransactionPool::new(
 			config.pool_config.clone(),
 			pool_adapter.clone(),
@@ -164,7 +166,10 @@ impl Server {
 
 		let sync_state = Arc::new(SyncState::new());
 
-		let chain_adapter = Arc::new(ChainToPoolAndNetAdapter::new(tx_pool.clone()));
+		let chain_adapter = Arc::new(ChainToPoolAndNetAdapter::new(
+			tx_pool.clone(),
+			init_chain_hooks(&config),
+		));
 
 		let genesis = match config.chain_type {
 			global::ChainTypes::AutomatedTesting => genesis::genesis_dev(),
@@ -175,16 +180,13 @@ impl Server {
 
 		info!("Starting server, genesis block: {}", genesis.hash());
 
-		let db_env = Arc::new(store::new_env(config.db_root.clone()));
 		let shared_chain = Arc::new(chain::Chain::init(
 			config.db_root.clone(),
-			db_env,
 			chain_adapter.clone(),
 			genesis.clone(),
 			pow::verify_size,
 			verifier_cache.clone(),
 			archive_mode,
-			stop_state.clone(),
 		)?);
 
 		pool_adapter.set_chain(shared_chain.clone());
@@ -195,24 +197,24 @@ impl Server {
 			tx_pool.clone(),
 			verifier_cache.clone(),
 			config.clone(),
+			init_net_hooks(&config),
 		));
 
-		let peer_db_env = Arc::new(store::new_named_env(
-			config.db_root.clone(),
-			"peer".into(),
-			config.p2p_config.peer_max_count,
-		));
 		let p2p_server = Arc::new(p2p::Server::new(
-			peer_db_env,
+			&config.db_root,
 			config.p2p_config.capabilities,
 			config.p2p_config.clone(),
 			net_adapter.clone(),
 			genesis.hash(),
 			stop_state.clone(),
 		)?);
+
+		// Initialize various adapters with our dynamic set of connected peers.
 		chain_adapter.init(p2p_server.peers.clone());
 		pool_net_adapter.init(p2p_server.peers.clone());
 		net_adapter.init(p2p_server.peers.clone());
+
+		let mut connect_thread = None;
 
 		if config.p2p_config.seeding_type != p2p::Seeding::Programmatic {
 			let seeder = match config.p2p_config.seeding_type {
@@ -220,21 +222,25 @@ impl Server {
 					warn!("No seed configured, will stay solo until connected to");
 					seed::predefined_seeds(vec![])
 				}
-				p2p::Seeding::List => {
-					seed::predefined_seeds(config.p2p_config.seeds.clone().unwrap())
-				}
+				p2p::Seeding::List => match &config.p2p_config.seeds {
+					Some(seeds) => seed::predefined_seeds(seeds.clone()),
+					None => {
+						return Err(Error::Configuration(
+							"Seeds must be configured for seeding type List".to_owned(),
+						));
+					}
+				},
 				p2p::Seeding::DNSSeed => seed::dns_seeds(),
 				_ => unreachable!(),
 			};
 
-			seed::connect_and_monitor(
+			connect_thread = Some(seed::connect_and_monitor(
 				p2p_server.clone(),
 				config.p2p_config.capabilities,
-				config.dandelion_config.clone(),
 				seeder,
 				config.p2p_config.peers_preferred.clone(),
 				stop_state.clone(),
-			);
+			)?);
 		}
 
 		// Defaults to None (optional) in config file.
@@ -242,17 +248,21 @@ impl Server {
 		let skip_sync_wait = config.skip_sync_wait.unwrap_or(false);
 		sync_state.update(SyncStatus::AwaitingPeers(!skip_sync_wait));
 
-		sync::run_sync(
+		let sync_thread = sync::run_sync(
 			sync_state.clone(),
 			p2p_server.peers.clone(),
 			shared_chain.clone(),
 			stop_state.clone(),
-		);
+		)?;
 
 		let p2p_inner = p2p_server.clone();
-		let _ = thread::Builder::new()
+		let p2p_thread = thread::Builder::new()
 			.name("p2p-server".to_string())
-			.spawn(move || p2p_inner.listen());
+			.spawn(move || {
+				if let Err(e) = p2p_inner.listen() {
+					error!("P2P server failed with erorr: {:?}", e);
+				}
+			})?;
 
 		info!("Starting rest apis at: {}", &config.api_http_addr);
 		let api_secret = get_first_line(config.api_secret_path.clone());
@@ -271,6 +281,7 @@ impl Server {
 			}
 		};
 
+		// TODO fix API shutdown and join this thread
 		api::start_rest_apis(
 			config.api_http_addr.clone(),
 			shared_chain.clone(),
@@ -281,12 +292,13 @@ impl Server {
 		);
 
 		info!("Starting dandelion monitor: {}", &config.api_http_addr);
-		dandelion_monitor::monitor_transactions(
+		let dandelion_thread = dandelion_monitor::monitor_transactions(
 			config.dandelion_config.clone(),
 			tx_pool.clone(),
+			pool_net_adapter.clone(),
 			verifier_cache.clone(),
 			stop_state.clone(),
-		);
+		)?;
 
 		warn!("Grin server started.");
 		Ok(Server {
@@ -301,6 +313,10 @@ impl Server {
 			},
 			stop_state,
 			lock_file,
+			connect_thread,
+			sync_thread,
+			p2p_thread,
+			dandelion_thread,
 		})
 	}
 
@@ -334,12 +350,12 @@ impl Server {
 			self.chain.clone(),
 			self.tx_pool.clone(),
 			self.verifier_cache.clone(),
+			self.state_info.stratum_stats.clone(),
 		);
-		let stratum_stats = self.state_info.stratum_stats.clone();
 		let _ = thread::Builder::new()
 			.name("stratum_server".to_string())
 			.spawn(move || {
-				stratum_server.run_loop(stratum_stats, edge_bits as u32, proof_size, sync_state);
+				stratum_server.run_loop(edge_bits as u32, proof_size, sync_state);
 			});
 	}
 
@@ -349,7 +365,7 @@ impl Server {
 	pub fn start_test_miner(
 		&self,
 		wallet_listener_url: Option<String>,
-		stop_state: Arc<Mutex<StopState>>,
+		stop_state: Arc<StopState>,
 	) {
 		info!("start_test_miner - start",);
 		let sync_state = self.sync_state.clone();
@@ -389,13 +405,18 @@ impl Server {
 	}
 
 	/// The chain head
-	pub fn head(&self) -> chain::Tip {
-		self.chain.head().unwrap()
+	pub fn head(&self) -> Result<chain::Tip, Error> {
+		self.chain.head().map_err(|e| e.into())
 	}
 
 	/// The head of the block header chain
-	pub fn header_head(&self) -> chain::Tip {
-		self.chain.header_head().unwrap()
+	pub fn header_head(&self) -> Result<chain::Tip, Error> {
+		self.chain.header_head().map_err(|e| e.into())
+	}
+
+	/// Current p2p layer protocol version.
+	pub fn protocol_version() -> p2p::msg::ProtocolVersion {
+		p2p::msg::ProtocolVersion::default()
 	}
 
 	/// Returns a set of stats about this server. This and the ServerStats
@@ -417,7 +438,7 @@ impl Server {
 					.into_iter()
 					.collect();
 
-			let tip_height = self.chain.head().unwrap().height as i64;
+			let tip_height = self.head()?.height as i64;
 			let mut height = tip_height as i64 - last_blocks.len() as i64 + 1;
 
 			let txhashset = self.chain.txhashset();
@@ -475,8 +496,8 @@ impl Server {
 			.collect();
 		Ok(ServerStats {
 			peer_count: self.peer_count(),
-			head: self.head(),
-			header_head: self.header_head(),
+			head: self.head()?,
+			header_head: self.header_head()?,
 			sync_status: self.sync_state.status(),
 			stratum_stats: stratum_stats,
 			peer_stats: peer_stats,
@@ -485,15 +506,41 @@ impl Server {
 	}
 
 	/// Stop the server.
-	pub fn stop(&self) {
+	pub fn stop(self) {
+		{
+			self.sync_state.update(SyncStatus::Shutdown);
+			self.stop_state.stop();
+
+			if let Some(connect_thread) = self.connect_thread {
+				match connect_thread.join() {
+					Err(e) => error!("failed to join to connect_and_monitor thread: {:?}", e),
+					Ok(_) => info!("connect_and_monitor thread stopped"),
+				}
+			} else {
+				info!("No active connect_and_monitor thread")
+			}
+
+			match self.sync_thread.join() {
+				Err(e) => error!("failed to join to sync thread: {:?}", e),
+				Ok(_) => info!("sync thread stopped"),
+			}
+
+			match self.dandelion_thread.join() {
+				Err(e) => error!("failed to join to dandelion_monitor thread: {:?}", e),
+				Ok(_) => info!("dandelion_monitor thread stopped"),
+			}
+		}
 		self.p2p.stop();
-		self.stop_state.lock().stop();
+		match self.p2p_thread.join() {
+			Err(e) => error!("failed to join to p2p thread: {:?}", e),
+			Ok(_) => info!("p2p thread stopped"),
+		}
 		let _ = self.lock_file.unlock();
 	}
 
 	/// Pause the p2p server.
 	pub fn pause(&self) {
-		self.stop_state.lock().pause();
+		self.stop_state.pause();
 		thread::sleep(time::Duration::from_secs(1));
 		self.p2p.pause();
 	}
@@ -501,12 +548,12 @@ impl Server {
 	/// Resume p2p server.
 	/// TODO - We appear not to resume the p2p server (peer connections) here?
 	pub fn resume(&self) {
-		self.stop_state.lock().resume();
+		self.stop_state.resume();
 	}
 
 	/// Stops the test miner without stopping the p2p layer
-	pub fn stop_test_miner(&self, stop: Arc<Mutex<StopState>>) {
-		stop.lock().stop();
+	pub fn stop_test_miner(&self, stop: Arc<StopState>) {
+		stop.stop();
 		info!("stop_test_miner - stop",);
 	}
 }

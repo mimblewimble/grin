@@ -186,7 +186,7 @@ Ze kiest laten we zeggen: 113 en wat op de blockchain belandt is:
 
 Nu de transactie niet meer op tot nul telt en we een _meerwaarde_ bij _G_
 (85) hebben, welke het resultaat is van de sommatie van alle blinding factors. Maar doordat `85*G` een
-geldige publieke sleutel is op de elliptische curve _G_, met privésleutel 85,
+geldige publieke sleutel is op de elliptische curve _C_, met privésleutel 85,
 voor elke x en y, alleen als `y = 0` is `x*G + y*H` een geldige publieke sleutel op _G_.
 
 Dus al wat het protocol nodig heeft is om te verifiëren dat (`Y - Xi`) is een geldige publieke sleutel op _G_ en dat

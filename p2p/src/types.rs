@@ -15,19 +15,22 @@
 use crate::util::RwLock;
 use std::convert::From;
 use std::fs::File;
-use std::io;
+use std::io::{self, Read};
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV4, SocketAddrV6};
+use std::path::PathBuf;
 
 use std::sync::mpsc;
 use std::sync::Arc;
 
 use chrono::prelude::*;
 
+use crate::chain;
 use crate::core::core;
 use crate::core::core::hash::Hash;
 use crate::core::global;
 use crate::core::pow::Difficulty;
 use crate::core::ser::{self, Readable, Reader, Writeable, Writer};
+use crate::msg::ProtocolVersion;
 use grin_store;
 
 /// Maximum number of block headers a peer should ever send
@@ -47,7 +50,7 @@ pub const MAX_LOCATORS: u32 = 20;
 const BAN_WINDOW: i64 = 10800;
 
 /// The max peer count
-const PEER_MAX_COUNT: u32 = 25;
+const PEER_MAX_COUNT: u32 = 125;
 
 /// min preferred peer count
 const PEER_MIN_PREFERRED_COUNT: u32 = 8;
@@ -63,12 +66,9 @@ pub enum Error {
 	ConnectionClose,
 	Timeout,
 	Store(grin_store::Error),
+	Chain(chain::Error),
 	PeerWithSelf,
 	NoDandelionRelay,
-	ProtocolMismatch {
-		us: u32,
-		peer: u32,
-	},
 	GenesisMismatch {
 		us: Hash,
 		peer: Hash,
@@ -86,6 +86,11 @@ impl From<ser::Error> for Error {
 impl From<grin_store::Error> for Error {
 	fn from(e: grin_store::Error) -> Error {
 		Error::Store(e)
+	}
+}
+impl From<chain::Error> for Error {
+	fn from(e: chain::Error) -> Error {
+		Error::Chain(e)
 	}
 }
 impl From<io::Error> for Error {
@@ -328,7 +333,7 @@ bitflags! {
 	}
 }
 
-/// Types of connection
+// Types of connection
 enum_from_primitive! {
 	#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 	pub enum Direction {
@@ -337,7 +342,7 @@ enum_from_primitive! {
 	}
 }
 
-/// Ban reason
+// Ban reason
 enum_from_primitive! {
 	#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 	pub enum ReasonForBan {
@@ -358,6 +363,7 @@ pub struct PeerLiveInfo {
 	pub height: u64,
 	pub last_seen: DateTime<Utc>,
 	pub stuck_detector: DateTime<Utc>,
+	pub first_seen: DateTime<Utc>,
 }
 
 /// General information about a connected peer that's useful to other modules.
@@ -365,10 +371,22 @@ pub struct PeerLiveInfo {
 pub struct PeerInfo {
 	pub capabilities: Capabilities,
 	pub user_agent: String,
-	pub version: u32,
+	pub version: ProtocolVersion,
 	pub addr: PeerAddr,
 	pub direction: Direction,
 	pub live_info: Arc<RwLock<PeerLiveInfo>>,
+}
+
+impl PeerLiveInfo {
+	pub fn new(difficulty: Difficulty) -> PeerLiveInfo {
+		PeerLiveInfo {
+			total_difficulty: difficulty,
+			height: 0,
+			first_seen: Utc::now(),
+			last_seen: Utc::now(),
+			stuck_detector: Utc::now(),
+		}
+	}
 }
 
 impl PeerInfo {
@@ -391,6 +409,11 @@ impl PeerInfo {
 		self.live_info.read().last_seen
 	}
 
+	/// Time of first_seen for this peer.
+	pub fn first_seen(&self) -> DateTime<Utc> {
+		self.live_info.read().first_seen
+	}
+
 	/// Update the total_difficulty, height and last_seen of the peer.
 	/// Takes a write lock on the live_info.
 	pub fn update(&self, height: u64, total_difficulty: Difficulty) {
@@ -410,7 +433,7 @@ impl PeerInfo {
 pub struct PeerInfoDisplay {
 	pub capabilities: Capabilities,
 	pub user_agent: String,
-	pub version: u32,
+	pub version: ProtocolVersion,
 	pub addr: PeerAddr,
 	pub direction: Direction,
 	pub total_difficulty: Difficulty,
@@ -422,7 +445,7 @@ impl From<PeerInfo> for PeerInfoDisplay {
 		PeerInfoDisplay {
 			capabilities: info.capabilities.clone(),
 			user_agent: info.user_agent.clone(),
-			version: info.version.clone(),
+			version: info.version,
 			addr: info.addr.clone(),
 			direction: info.direction.clone(),
 			total_difficulty: info.total_difficulty(),
@@ -447,40 +470,66 @@ pub struct TxHashSetRead {
 /// other things.
 pub trait ChainAdapter: Sync + Send {
 	/// Current total difficulty on our chain
-	fn total_difficulty(&self) -> Difficulty;
+	fn total_difficulty(&self) -> Result<Difficulty, chain::Error>;
 
 	/// Current total height
-	fn total_height(&self) -> u64;
+	fn total_height(&self) -> Result<u64, chain::Error>;
 
 	/// A valid transaction has been received from one of our peers
-	fn transaction_received(&self, tx: core::Transaction, stem: bool);
+	fn transaction_received(&self, tx: core::Transaction, stem: bool)
+		-> Result<bool, chain::Error>;
 
 	fn get_transaction(&self, kernel_hash: Hash) -> Option<core::Transaction>;
 
-	fn tx_kernel_received(&self, kernel_hash: Hash, addr: PeerAddr);
+	fn tx_kernel_received(
+		&self,
+		kernel_hash: Hash,
+		peer_info: &PeerInfo,
+	) -> Result<bool, chain::Error>;
 
 	/// A block has been received from one of our peers. Returns true if the
 	/// block could be handled properly and is not deemed defective by the
 	/// chain. Returning false means the block will never be valid and
 	/// may result in the peer being banned.
-	fn block_received(&self, b: core::Block, addr: PeerAddr, was_requested: bool) -> bool;
+	fn block_received(
+		&self,
+		b: core::Block,
+		peer_info: &PeerInfo,
+		was_requested: bool,
+	) -> Result<bool, chain::Error>;
 
-	fn compact_block_received(&self, cb: core::CompactBlock, addr: PeerAddr) -> bool;
+	fn compact_block_received(
+		&self,
+		cb: core::CompactBlock,
+		peer_info: &PeerInfo,
+	) -> Result<bool, chain::Error>;
 
-	fn header_received(&self, bh: core::BlockHeader, addr: PeerAddr) -> bool;
+	fn header_received(
+		&self,
+		bh: core::BlockHeader,
+		peer_info: &PeerInfo,
+	) -> Result<bool, chain::Error>;
 
 	/// A set of block header has been received, typically in response to a
 	/// block
 	/// header request.
-	fn headers_received(&self, bh: &[core::BlockHeader], addr: PeerAddr) -> bool;
+	fn headers_received(
+		&self,
+		bh: &[core::BlockHeader],
+		peer_info: &PeerInfo,
+	) -> Result<bool, chain::Error>;
 
 	/// Finds a list of block headers based on the provided locator. Tries to
 	/// identify the common chain and gets the headers that follow it
 	/// immediately.
-	fn locate_headers(&self, locator: &[Hash]) -> Vec<core::BlockHeader>;
+	fn locate_headers(&self, locator: &[Hash]) -> Result<Vec<core::BlockHeader>, chain::Error>;
 
 	/// Gets a full block by its hash.
 	fn get_block(&self, h: Hash) -> Option<core::Block>;
+
+	fn kernel_data_read(&self) -> Result<File, chain::Error>;
+
+	fn kernel_data_write(&self, reader: &mut Read) -> Result<bool, chain::Error>;
 
 	/// Provides a reading view into the current txhashset state as well as
 	/// the required indexes for a consumer to rewind to a consistant state
@@ -505,7 +554,19 @@ pub trait ChainAdapter: Sync + Send {
 	/// If we're willing to accept that new state, the data stream will be
 	/// read as a zip file, unzipped and the resulting state files should be
 	/// rewound to the provided indexes.
-	fn txhashset_write(&self, h: Hash, txhashset_data: File, peer_addr: PeerAddr) -> bool;
+	fn txhashset_write(
+		&self,
+		h: Hash,
+		txhashset_data: File,
+		peer_peer_info: &PeerInfo,
+	) -> Result<bool, chain::Error>;
+
+	/// Get the Grin specific tmp dir
+	fn get_tmp_dir(&self) -> PathBuf;
+
+	/// Get a tmp file path in above specific tmp dir (create tmp dir if not exist)
+	/// Delete file if tmp file already exists
+	fn get_tmpfile_pathname(&self, tmpfile_name: String) -> PathBuf;
 }
 
 /// Additional methods required by the protocol that don't need to be

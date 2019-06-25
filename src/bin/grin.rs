@@ -19,7 +19,7 @@ extern crate clap;
 
 #[macro_use]
 extern crate log;
-use crate::config::config::{SERVER_CONFIG_FILE_NAME, WALLET_CONFIG_FILE_NAME};
+use crate::config::config::SERVER_CONFIG_FILE_NAME;
 use crate::core::global;
 use crate::util::init_logger;
 use clap::App;
@@ -29,7 +29,6 @@ use grin_core as core;
 use grin_p2p as p2p;
 use grin_servers as servers;
 use grin_util as util;
-use std::process::exit;
 
 mod cmd;
 pub mod tui;
@@ -72,8 +71,21 @@ fn main() {
 fn real_main() -> i32 {
 	let yml = load_yaml!("grin.yml");
 	let args = App::from_yaml(yml).get_matches();
-	let mut wallet_config = None;
-	let mut node_config = None;
+	let node_config;
+
+	// Temporary wallet warning message
+	match args.subcommand() {
+		("wallet", _) => {
+			println!();
+			println!("As of v1.1.0, the wallet has been split into a seperate executable.");
+			println!(
+				"Please visit https://github.com/mimblewimble/grin-wallet/releases to download"
+			);
+			println!();
+			return 0;
+		}
+		_ => {}
+	}
 
 	let chain_type = if args.is_present("floonet") {
 		global::ChainTypes::Floonet
@@ -92,41 +104,11 @@ fn real_main() -> i32 {
 				return 0;
 			}
 		}
-		("wallet", Some(wallet_args)) => {
-			// wallet init command should spit out its config file then continue
-			// (if desired)
-			if let ("init", Some(init_args)) = wallet_args.subcommand() {
-				if init_args.is_present("here") {
-					cmd::config_command_wallet(&chain_type, WALLET_CONFIG_FILE_NAME);
-				}
-			}
-		}
 		_ => {}
 	}
 
 	// Load relevant config
 	match args.subcommand() {
-		// If it's a wallet command, try and load a wallet config file
-		("wallet", Some(wallet_args)) => {
-			let mut w = config::initial_setup_wallet(&chain_type).unwrap_or_else(|e| {
-				panic!("Error loading wallet configuration: {}", e);
-			});
-			if !cmd::seed_exists(w.members.as_ref().unwrap().wallet.clone()) {
-				if "init" == wallet_args.subcommand().0 || "recover" == wallet_args.subcommand().0 {
-				} else {
-					println!("Wallet seed file doesn't exist. Run `grin wallet init` first");
-					exit(1);
-				}
-			}
-			let mut l = w.members.as_mut().unwrap().logging.clone().unwrap();
-			l.tui_running = Some(false);
-			init_logger(Some(l));
-			info!(
-				"Using wallet configuration file at {}",
-				w.config_file_path.as_ref().unwrap().to_str().unwrap()
-			);
-			wallet_config = Some(w);
-		}
 		// When the subscommand is 'server' take into account the 'config_file' flag
 		("server", Some(server_args)) => {
 			if let Some(_path) = server_args.value_of("config_file") {
@@ -183,9 +165,6 @@ fn real_main() -> i32 {
 
 		// client commands and options
 		("client", Some(client_args)) => cmd::client_command(client_args, node_config.unwrap()),
-
-		// client commands and options
-		("wallet", Some(wallet_args)) => cmd::wallet_command(wallet_args, wallet_config.unwrap()),
 
 		// If nothing is specified, try to just use the config file instead
 		// this could possibly become the way to configure most things

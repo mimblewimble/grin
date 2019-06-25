@@ -23,9 +23,7 @@ use self::core::core::verifier_cache::VerifierCache;
 use self::core::core::{transaction, Block, BlockHeader, Transaction, Weighting};
 use self::util::RwLock;
 use crate::pool::Pool;
-use crate::types::{
-	BlockChain, PoolAdapter, PoolConfig, PoolEntry, PoolEntryState, PoolError, TxSource,
-};
+use crate::types::{BlockChain, PoolAdapter, PoolConfig, PoolEntry, PoolError, TxSource};
 use chrono::prelude::*;
 use grin_core as core;
 use grin_util as util;
@@ -76,13 +74,10 @@ impl TransactionPool {
 		self.blockchain.chain_head()
 	}
 
+	// Add tx to stempool (passing in all txs from txpool to validate against).
 	fn add_to_stempool(&mut self, entry: PoolEntry, header: &BlockHeader) -> Result<(), PoolError> {
-		// Add tx to stempool (passing in all txs from txpool to validate against).
 		self.stempool
 			.add_to_pool(entry, self.txpool.all_transactions(), header)?;
-
-		// Note: we do not notify the adapter here,
-		// we let the dandelion monitor handle this.
 		Ok(())
 	}
 
@@ -124,8 +119,6 @@ impl TransactionPool {
 			let txpool_tx = self.txpool.all_transactions_aggregate()?;
 			self.stempool.reconcile(txpool_tx, header)?;
 		}
-
-		self.adapter.tx_accepted(&entry.tx);
 		Ok(())
 	}
 
@@ -145,7 +138,13 @@ impl TransactionPool {
 		}
 
 		// Do we have the capacity to accept this transaction?
-		self.is_acceptable(&tx, stem)?;
+		let acceptability = self.is_acceptable(&tx, stem);
+		let mut evict = false;
+		if !stem && acceptability.as_ref().err() == Some(&PoolError::OverCapacity) {
+			evict = true;
+		} else if acceptability.is_err() {
+			return acceptability;
+		}
 
 		// Make sure the transaction is valid before anything else.
 		// Validate tx accounting for max tx weight.
@@ -159,29 +158,53 @@ impl TransactionPool {
 		self.blockchain.verify_coinbase_maturity(&tx)?;
 
 		let entry = PoolEntry {
-			state: PoolEntryState::Fresh,
 			src,
 			tx_at: Utc::now(),
 			tx,
 		};
 
-		// If we are in "stem" mode then check if this is a new tx or if we have seen it before.
-		// If new tx - add it to our stempool.
-		// If we have seen any of the kernels before then fallback to fluff,
-		// adding directly to txpool.
-		if stem
-			&& self
-				.stempool
-				.find_matching_transactions(entry.tx.kernels())
-				.is_empty()
+		// If not stem then we are fluff.
+		// If this is a stem tx then attempt to stem.
+		// Any problems during stem, fallback to fluff.
+		if !stem
+			|| self
+				.add_to_stempool(entry.clone(), header)
+				.and_then(|_| self.adapter.stem_tx_accepted(&entry.tx))
+				.is_err()
 		{
-			self.add_to_stempool(entry, header)?;
-			return Ok(());
+			self.add_to_txpool(entry.clone(), header)?;
+			self.add_to_reorg_cache(entry.clone());
+			self.adapter.tx_accepted(&entry.tx);
 		}
 
-		self.add_to_txpool(entry.clone(), header)?;
-		self.add_to_reorg_cache(entry);
+		// Transaction passed all the checks but we have to make space for it
+		if evict {
+			self.evict_from_txpool();
+		}
+
 		Ok(())
+	}
+
+	// Remove the last transaction from the flattened bucket transactions.
+	// No other tx depends on it, it has low fee_to_weight and is unlikely to participate in any cut-through.
+	pub fn evict_from_txpool(&mut self) {
+		// Get bucket transactions
+		let bucket_transactions = self.txpool.bucket_transactions(Weighting::NoLimit);
+
+		// Get last transaction and remove it
+		match bucket_transactions.last() {
+			Some(evictable_transaction) => {
+				// Remove transaction
+				self.txpool.entries = self
+					.txpool
+					.entries
+					.iter()
+					.filter(|x| x.tx != *evictable_transaction)
+					.map(|x| x.clone())
+					.collect::<Vec<_>>();
+			}
+			None => (),
+		}
 	}
 
 	// Old txs will "age out" after 30 mins.
@@ -250,16 +273,14 @@ impl TransactionPool {
 	/// full the pool is and the transaction weight.
 	fn is_acceptable(&self, tx: &Transaction, stem: bool) -> Result<(), PoolError> {
 		if self.total_size() > self.config.max_pool_size {
-			// TODO evict old/large transactions instead
 			return Err(PoolError::OverCapacity);
 		}
 
 		// Check that the stempool can accept this transaction
-		if stem {
-			if self.stempool.size() > self.config.max_stempool_size {
-				// TODO evict old/large transactions instead
-				return Err(PoolError::OverCapacity);
-			}
+		if stem && self.stempool.size() > self.config.max_stempool_size {
+			return Err(PoolError::OverCapacity);
+		} else if self.total_size() > self.config.max_pool_size {
+			return Err(PoolError::OverCapacity);
 		}
 
 		// for a basic transaction (1 input, 2 outputs) -

@@ -45,21 +45,16 @@ fn start_server_tui(config: servers::ServerConfig) {
 	// everything it might need
 	if config.run_tui.unwrap_or(false) {
 		warn!("Starting GRIN in UI mode...");
-		servers::Server::start(config, |serv: Arc<servers::Server>| {
-			let running = Arc::new(AtomicBool::new(true));
-			let _ = thread::Builder::new()
-				.name("ui".to_string())
-				.spawn(move || {
-					let mut controller = ui::Controller::new().unwrap_or_else(|e| {
-						panic!("Error loading UI controller: {}", e);
-					});
-					controller.run(serv.clone(), running);
-				});
+		servers::Server::start(config, |serv: servers::Server| {
+			let mut controller = ui::Controller::new().unwrap_or_else(|e| {
+				panic!("Error loading UI controller: {}", e);
+			});
+			controller.run(serv);
 		})
 		.unwrap();
 	} else {
 		warn!("Starting GRIN w/o UI...");
-		servers::Server::start(config, |serv: Arc<servers::Server>| {
+		servers::Server::start(config, |serv: servers::Server| {
 			let running = Arc::new(AtomicBool::new(true));
 			let r = running.clone();
 			ctrlc::set_handler(move || {

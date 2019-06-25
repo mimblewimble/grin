@@ -147,7 +147,7 @@ pub struct PeerStats {
 	/// Address
 	pub addr: String,
 	/// version running
-	pub version: u32,
+	pub version: p2p::msg::ProtocolVersion,
 	/// Peer user agent string.
 	pub user_agent: String,
 	/// difficulty reported by peer
@@ -191,7 +191,7 @@ impl PeerStats {
 		PeerStats {
 			state: state.to_string(),
 			addr: addr,
-			version: peer.info.version.clone(),
+			version: peer.info.version,
 			user_agent: peer.info.user_agent.clone(),
 			total_difficulty: peer.info.total_difficulty().to_num(),
 			height: peer.info.height(),

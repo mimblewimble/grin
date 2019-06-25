@@ -13,13 +13,14 @@
 // limitations under the License.
 
 use std::fs::File;
+use std::io::{self, Read};
 use std::net::{Shutdown, SocketAddr, TcpListener, TcpStream};
+use std::path::PathBuf;
 use std::sync::Arc;
+use std::thread;
 use std::time::Duration;
-use std::{io, thread};
 
-use crate::lmdb;
-
+use crate::chain;
 use crate::core::core;
 use crate::core::core::hash::Hash;
 use crate::core::global;
@@ -29,9 +30,10 @@ use crate::peer::Peer;
 use crate::peers::Peers;
 use crate::store::PeerStore;
 use crate::types::{
-	Capabilities, ChainAdapter, Error, NetAdapter, P2PConfig, PeerAddr, ReasonForBan, TxHashSetRead,
+	Capabilities, ChainAdapter, Error, NetAdapter, P2PConfig, PeerAddr, PeerInfo, ReasonForBan,
+	TxHashSetRead,
 };
-use crate::util::{Mutex, StopState};
+use crate::util::StopState;
 use chrono::prelude::{DateTime, Utc};
 
 /// P2P server implementation, handling bootstrapping to find and connect to
@@ -41,25 +43,25 @@ pub struct Server {
 	capabilities: Capabilities,
 	handshake: Arc<Handshake>,
 	pub peers: Arc<Peers>,
-	stop_state: Arc<Mutex<StopState>>,
+	stop_state: Arc<StopState>,
 }
 
 // TODO TLS
 impl Server {
 	/// Creates a new idle p2p server with no peers
 	pub fn new(
-		db_env: Arc<lmdb::Environment>,
+		db_root: &str,
 		capab: Capabilities,
 		config: P2PConfig,
 		adapter: Arc<dyn ChainAdapter>,
 		genesis: Hash,
-		stop_state: Arc<Mutex<StopState>>,
+		stop_state: Arc<StopState>,
 	) -> Result<Server, Error> {
 		Ok(Server {
 			config: config.clone(),
 			capabilities: capab,
 			handshake: Arc::new(Handshake::new(genesis, config.clone())),
-			peers: Arc::new(Peers::new(PeerStore::new(db_env)?, adapter, config)),
+			peers: Arc::new(Peers::new(PeerStore::new(db_root)?, adapter, config)),
 			stop_state,
 		})
 	}
@@ -72,10 +74,10 @@ impl Server {
 		let listener = TcpListener::bind(addr)?;
 		listener.set_nonblocking(true)?;
 
-		let sleep_time = Duration::from_millis(1);
+		let sleep_time = Duration::from_millis(5);
 		loop {
 			// Pause peer ingress connection request. Only for tests.
-			if self.stop_state.lock().is_paused() {
+			if self.stop_state.is_paused() {
 				thread::sleep(Duration::from_secs(1));
 				continue;
 			}
@@ -87,9 +89,13 @@ impl Server {
 					if self.check_undesirable(&stream) {
 						continue;
 					}
-					if let Err(e) = self.handle_new_peer(stream) {
-						debug!("Error accepting peer {}: {:?}", peer_addr.to_string(), e);
-						let _ = self.peers.add_banned(peer_addr, ReasonForBan::BadHandshake);
+					match self.handle_new_peer(stream) {
+						Err(Error::ConnectionClose) => debug!("shutting down, ignoring a new peer"),
+						Err(e) => {
+							debug!("Error accepting peer {}: {:?}", peer_addr.to_string(), e);
+							let _ = self.peers.add_banned(peer_addr, ReasonForBan::BadHandshake);
+						}
+						Ok(_) => {}
 					}
 				}
 				Err(ref e) if e.kind() == io::ErrorKind::WouldBlock => {
@@ -99,7 +105,7 @@ impl Server {
 					debug!("Couldn't establish new client connection: {:?}", e);
 				}
 			}
-			if self.stop_state.lock().is_stopped() {
+			if self.stop_state.is_stopped() {
 				break;
 			}
 			thread::sleep(sleep_time);
@@ -110,6 +116,10 @@ impl Server {
 	/// Asks the server to connect to a new peer. Directly returns the peer if
 	/// we're already connected to the provided address.
 	pub fn connect(&self, addr: PeerAddr) -> Result<Arc<Peer>, Error> {
+		if self.stop_state.is_stopped() {
+			return Err(Error::ConnectionClose);
+		}
+
 		if Peer::is_denied(&self.config, addr) {
 			debug!("connect_peer: peer {} denied, not connecting.", addr);
 			return Err(Error::ConnectionClose);
@@ -137,19 +147,18 @@ impl Server {
 			addr
 		);
 		match TcpStream::connect_timeout(&addr.0, Duration::from_secs(10)) {
-			Ok(mut stream) => {
+			Ok(stream) => {
 				let addr = SocketAddr::new(self.config.host, self.config.port);
-				let total_diff = self.peers.total_difficulty();
+				let total_diff = self.peers.total_difficulty()?;
 
-				let mut peer = Peer::connect(
-					&mut stream,
+				let peer = Peer::connect(
+					stream,
 					self.capabilities,
 					total_diff,
 					PeerAddr(addr),
 					&self.handshake,
 					self.peers.clone(),
 				)?;
-				peer.start(stream);
 				let peer = Arc::new(peer);
 				self.peers.add_connected(peer.clone())?;
 				Ok(peer)
@@ -167,18 +176,20 @@ impl Server {
 		}
 	}
 
-	fn handle_new_peer(&self, mut stream: TcpStream) -> Result<(), Error> {
-		let total_diff = self.peers.total_difficulty();
+	fn handle_new_peer(&self, stream: TcpStream) -> Result<(), Error> {
+		if self.stop_state.is_stopped() {
+			return Err(Error::ConnectionClose);
+		}
+		let total_diff = self.peers.total_difficulty()?;
 
 		// accept the peer and add it to the server map
-		let mut peer = Peer::accept(
-			&mut stream,
+		let peer = Peer::accept(
+			stream,
 			self.capabilities,
 			total_diff,
 			&self.handshake,
 			self.peers.clone(),
 		)?;
-		peer.start(stream);
 		self.peers.add_connected(Arc::new(peer))?;
 		Ok(())
 	}
@@ -214,7 +225,7 @@ impl Server {
 	}
 
 	pub fn stop(&self) {
-		self.stop_state.lock().stop();
+		self.stop_state.stop();
 		self.peers.stop();
 	}
 
@@ -231,34 +242,61 @@ impl Server {
 pub struct DummyAdapter {}
 
 impl ChainAdapter for DummyAdapter {
-	fn total_difficulty(&self) -> Difficulty {
-		Difficulty::min()
+	fn total_difficulty(&self) -> Result<Difficulty, chain::Error> {
+		Ok(Difficulty::min())
 	}
-	fn total_height(&self) -> u64 {
-		0
+	fn total_height(&self) -> Result<u64, chain::Error> {
+		Ok(0)
 	}
 	fn get_transaction(&self, _h: Hash) -> Option<core::Transaction> {
 		None
 	}
-	fn tx_kernel_received(&self, _h: Hash, _addr: PeerAddr) {}
-	fn transaction_received(&self, _: core::Transaction, _stem: bool) {}
-	fn compact_block_received(&self, _cb: core::CompactBlock, _addr: PeerAddr) -> bool {
-		true
+
+	fn tx_kernel_received(&self, _h: Hash, _peer_info: &PeerInfo) -> Result<bool, chain::Error> {
+		Ok(true)
 	}
-	fn header_received(&self, _bh: core::BlockHeader, _addr: PeerAddr) -> bool {
-		true
+	fn transaction_received(
+		&self,
+		_: core::Transaction,
+		_stem: bool,
+	) -> Result<bool, chain::Error> {
+		Ok(true)
 	}
-	fn block_received(&self, _: core::Block, _: PeerAddr, _: bool) -> bool {
-		true
+	fn compact_block_received(
+		&self,
+		_cb: core::CompactBlock,
+		_peer_info: &PeerInfo,
+	) -> Result<bool, chain::Error> {
+		Ok(true)
 	}
-	fn headers_received(&self, _: &[core::BlockHeader], _: PeerAddr) -> bool {
-		true
+	fn header_received(
+		&self,
+		_bh: core::BlockHeader,
+		_peer_info: &PeerInfo,
+	) -> Result<bool, chain::Error> {
+		Ok(true)
 	}
-	fn locate_headers(&self, _: &[Hash]) -> Vec<core::BlockHeader> {
-		vec![]
+	fn block_received(&self, _: core::Block, _: &PeerInfo, _: bool) -> Result<bool, chain::Error> {
+		Ok(true)
+	}
+	fn headers_received(
+		&self,
+		_: &[core::BlockHeader],
+		_: &PeerInfo,
+	) -> Result<bool, chain::Error> {
+		Ok(true)
+	}
+	fn locate_headers(&self, _: &[Hash]) -> Result<Vec<core::BlockHeader>, chain::Error> {
+		Ok(vec![])
 	}
 	fn get_block(&self, _: Hash) -> Option<core::Block> {
 		None
+	}
+	fn kernel_data_read(&self) -> Result<File, chain::Error> {
+		unimplemented!()
+	}
+	fn kernel_data_write(&self, _reader: &mut Read) -> Result<bool, chain::Error> {
+		unimplemented!()
 	}
 	fn txhashset_read(&self, _h: Hash) -> Option<TxHashSetRead> {
 		unimplemented!()
@@ -268,8 +306,13 @@ impl ChainAdapter for DummyAdapter {
 		false
 	}
 
-	fn txhashset_write(&self, _h: Hash, _txhashset_data: File, _peer_addr: PeerAddr) -> bool {
-		false
+	fn txhashset_write(
+		&self,
+		_h: Hash,
+		_txhashset_data: File,
+		_peer_info: &PeerInfo,
+	) -> Result<bool, chain::Error> {
+		Ok(false)
 	}
 
 	fn txhashset_download_update(
@@ -279,6 +322,14 @@ impl ChainAdapter for DummyAdapter {
 		_total_size: u64,
 	) -> bool {
 		false
+	}
+
+	fn get_tmp_dir(&self) -> PathBuf {
+		unimplemented!()
+	}
+
+	fn get_tmpfile_pathname(&self, _tmpfile_name: String) -> PathBuf {
+		unimplemented!()
 	}
 }
 

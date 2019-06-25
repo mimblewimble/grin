@@ -21,6 +21,7 @@ use crate::libtx::error::{Error, ErrorKind};
 use crate::util::secp::key::{PublicKey, SecretKey};
 use crate::util::secp::pedersen::Commitment;
 use crate::util::secp::{self, aggsig, Message, Secp256k1, Signature};
+use grin_keychain::SwitchCommitmentType;
 
 /// Creates a new secure nonce (as a SecretKey), guaranteed to be usable during
 /// aggsig creation.
@@ -231,15 +232,17 @@ pub fn verify_partial_sig(
 /// use core::libtx::{aggsig, proof};
 /// use core::core::transaction::{kernel_sig_msg, KernelFeatures};
 /// use core::core::{Output, OutputFeatures};
-/// use keychain::{Keychain, ExtKeychain};
+/// use keychain::{Keychain, ExtKeychain, SwitchCommitmentType};
 ///
 /// let secp = Secp256k1::with_caps(ContextFlag::Commit);
 /// let keychain = ExtKeychain::from_random_seed(false).unwrap();
 /// let fees = 10_000;
 /// let value = reward(fees);
 /// let key_id = ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
-/// let commit = keychain.commit(value, &key_id).unwrap();
-/// let rproof = proof::create(&keychain, value, &key_id, commit, None).unwrap();
+/// let switch = &SwitchCommitmentType::Regular;
+/// let commit = keychain.commit(value, &key_id, switch).unwrap();
+/// let builder = proof::ProofBuilder::new(&keychain);
+/// let rproof = proof::create(&keychain, &builder, value, &key_id, switch, commit, None).unwrap();
 /// let output = Output {
 ///		features: OutputFeatures::Coinbase,
 ///		commit: commit,
@@ -251,7 +254,7 @@ pub fn verify_partial_sig(
 /// let msg = kernel_sig_msg(0, height, KernelFeatures::HeightLocked).unwrap();
 /// let excess = secp.commit_sum(vec![out_commit], vec![over_commit]).unwrap();
 /// let pubkey = excess.to_pubkey(&secp).unwrap();
-/// let sig = aggsig::sign_from_key_id(&secp, &keychain, &msg, value, &key_id, Some(&pubkey)).unwrap();
+/// let sig = aggsig::sign_from_key_id(&secp, &keychain, &msg, value, &key_id, None, Some(&pubkey)).unwrap();
 /// ```
 
 pub fn sign_from_key_id<K>(
@@ -260,13 +263,14 @@ pub fn sign_from_key_id<K>(
 	msg: &Message,
 	value: u64,
 	key_id: &Identifier,
+	s_nonce: Option<&SecretKey>,
 	blind_sum: Option<&PublicKey>,
 ) -> Result<Signature, Error>
 where
 	K: Keychain,
 {
-	let skey = k.derive_key(value, key_id)?;
-	let sig = aggsig::sign_single(secp, &msg, &skey, None, None, None, blind_sum, None)?;
+	let skey = k.derive_key(value, key_id, &SwitchCommitmentType::Regular)?; // TODO: proper support for different switch commitment schemes
+	let sig = aggsig::sign_single(secp, &msg, &skey, s_nonce, None, None, blind_sum, None)?;
 	Ok(sig)
 }
 
@@ -295,7 +299,7 @@ where
 /// use util::secp::{ContextFlag, Secp256k1};
 /// use core::core::transaction::{kernel_sig_msg, KernelFeatures};
 /// use core::core::{Output, OutputFeatures};
-/// use keychain::{Keychain, ExtKeychain};
+/// use keychain::{Keychain, ExtKeychain, SwitchCommitmentType};
 ///
 /// // Create signature
 /// let secp = Secp256k1::with_caps(ContextFlag::Commit);
@@ -303,8 +307,10 @@ where
 /// let fees = 10_000;
 /// let value = reward(fees);
 /// let key_id = ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
-/// let commit = keychain.commit(value, &key_id).unwrap();
-/// let rproof = proof::create(&keychain, value, &key_id, commit, None).unwrap();
+/// let switch = &SwitchCommitmentType::Regular;
+/// let commit = keychain.commit(value, &key_id, switch).unwrap();
+/// let builder = proof::ProofBuilder::new(&keychain);
+/// let rproof = proof::create(&keychain, &builder, value, &key_id, switch, commit, None).unwrap();
 /// let output = Output {
 ///		features: OutputFeatures::Coinbase,
 ///		commit: commit,
@@ -316,7 +322,7 @@ where
 /// let msg = kernel_sig_msg(0, height, KernelFeatures::HeightLocked).unwrap();
 /// let excess = secp.commit_sum(vec![out_commit], vec![over_commit]).unwrap();
 /// let pubkey = excess.to_pubkey(&secp).unwrap();
-/// let sig = aggsig::sign_from_key_id(&secp, &keychain, &msg, value, &key_id, Some(&pubkey)).unwrap();
+/// let sig = aggsig::sign_from_key_id(&secp, &keychain, &msg, value, &key_id, None, Some(&pubkey)).unwrap();
 ///
 /// // Verify the signature from the excess commit
 /// let sig_verifies =
@@ -421,14 +427,15 @@ pub fn add_signatures(
 	Ok(sig)
 }
 
-/// Just a simple sig, creates its own nonce, etc
+/// Just a simple sig, creates its own nonce if not provided
 pub fn sign_single(
 	secp: &Secp256k1,
 	msg: &Message,
 	skey: &SecretKey,
+	snonce: Option<&SecretKey>,
 	pubkey_sum: Option<&PublicKey>,
 ) -> Result<Signature, Error> {
-	let sig = aggsig::sign_single(secp, &msg, skey, None, None, None, pubkey_sum, None)?;
+	let sig = aggsig::sign_single(secp, &msg, skey, snonce, None, None, pubkey_sum, None)?;
 	Ok(sig)
 }
 
