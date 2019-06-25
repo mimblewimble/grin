@@ -372,10 +372,6 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 		}
 	}
 
-	fn txhashset_archive_header(&self) -> Result<core::BlockHeader, chain::Error> {
-		self.chain().txhashset_archive_header()
-	}
-
 	fn txhashset_receive_ready(&self) -> bool {
 		match self.sync_state.status() {
 			SyncStatus::TxHashsetDownload { .. } => true,
