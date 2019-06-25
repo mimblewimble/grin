@@ -295,8 +295,8 @@ impl MessageHandler for Protocol {
 				let sm_req: TxHashSetRequest = msg.body()?;
 				debug!(
 					"handle_payload: txhashset req for {} at {}",
-						sm_req.hash, sm_req.height
-					);
+					sm_req.hash, sm_req.height
+				);
 
 				let txhashset = self.adapter.txhashset_read(sm_req.hash);
 
