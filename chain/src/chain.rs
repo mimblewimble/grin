@@ -357,6 +357,7 @@ impl Chain {
 		let batch = self.store.batch()?;
 		let mut ctx = self.new_ctx(opts, batch, &mut txhashset)?;
 		pipe::process_block_header(bh, &mut ctx)?;
+		ctx.batch.commit()?;
 		Ok(())
 	}
 
@@ -367,10 +368,8 @@ impl Chain {
 		let mut txhashset = self.txhashset.write();
 		let batch = self.store.batch()?;
 		let mut ctx = self.new_ctx(opts, batch, &mut txhashset)?;
-
 		pipe::sync_block_headers(headers, &mut ctx)?;
 		ctx.batch.commit()?;
-
 		Ok(())
 	}
 

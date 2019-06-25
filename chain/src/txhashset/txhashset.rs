@@ -1031,7 +1031,7 @@ impl<'a> Extension<'a> {
 	/// Rewinds the MMRs to the provided block, rewinding to the last output pos
 	/// and last kernel pos of that block.
 	pub fn rewind(&mut self, header: &BlockHeader) -> Result<(), Error> {
-		debug!("Rewind to header {} at {}", header.hash(), header.height,);
+		debug!("Rewind extension to {} at {}", header.hash(), header.height,);
 
 		// We need to build bitmaps of added and removed output positions
 		// so we can correctly rewind all operations applied to the output MMR
