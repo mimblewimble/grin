@@ -73,7 +73,6 @@ pub struct Server {
 	connect_thread: Option<JoinHandle<()>>,
 	sync_thread: JoinHandle<()>,
 	dandelion_thread: JoinHandle<()>,
-	p2p_thread: JoinHandle<()>,
 }
 
 impl Server {
@@ -256,7 +255,7 @@ impl Server {
 		)?;
 
 		let p2p_inner = p2p_server.clone();
-		let p2p_thread = thread::Builder::new()
+		let _ = thread::Builder::new()
 			.name("p2p-server".to_string())
 			.spawn(move || {
 				if let Err(e) = p2p_inner.listen() {
@@ -315,7 +314,6 @@ impl Server {
 			lock_file,
 			connect_thread,
 			sync_thread,
-			p2p_thread,
 			dandelion_thread,
 		})
 	}
@@ -530,11 +528,9 @@ impl Server {
 				Ok(_) => info!("dandelion_monitor thread stopped"),
 			}
 		}
+		// this call is blocking and makes sure all peers stop, however
+		// we can't be sure that we stoped a listener blocked on accept, so we don't join the p2p thread
 		self.p2p.stop();
-		match self.p2p_thread.join() {
-			Err(e) => error!("failed to join to p2p thread: {:?}", e),
-			Ok(_) => info!("p2p thread stopped"),
-		}
 		let _ = self.lock_file.unlock();
 	}
 
