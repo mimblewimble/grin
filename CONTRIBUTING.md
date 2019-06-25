@@ -24,6 +24,18 @@ If submitting a PR consisting of documentation changes only, please try to ensur
 
 The development team will be happy to help and guide you with any of these points and work with you getting your PR submitted for approval. Create a PR with [WIP] in the title and ask for specific assistance within the issue, or contact the dev team on any of the channels below.
 
+# Branching Model
+
+Grin's current branching model is as follows:
+
+`master` is used for development of the current point release. For instance, if the last released version of Grin is 1.2.0, master will contain changes intending to go into 1.2.1, 1.2.2 etc. Breaking and backwards-incompatible changes should not occur between point releases, and should not be merged into master.
+
+The repository will contain a branch from the next upcoming minor or major release. If `master` contains changes for the 1.2.x series and the next planned minor release is 1.3.0, there will be a branch called `milestones/1.3.0` into which all breaking changes intended for 1.3.0 should be merged.
+
+Periodially, (and particularly in a situation where minor/major releases are undergoing a long development cycle), changes from `master` should be commit into the current major/minor branch so as to avoid a large, messy merge before release.
+
+Just before a major or minor release, the development branch is merged back into `master`, tested, tagged and released. It then becomes the new master for point releases in the series. The previous major/minor branch is deleted, and a new branch is created with the version number of the next anticipated major/minor release.
+
 # Find Us
 
 When you are starting to contribute to grin, we really would appreciate if you come by the gitter chat channels.
