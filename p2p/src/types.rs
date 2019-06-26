@@ -536,9 +536,6 @@ pub trait ChainAdapter: Sync + Send {
 	/// at the provided block hash.
 	fn txhashset_read(&self, h: Hash) -> Option<TxHashSetRead>;
 
-	/// Header of the txhashset archive currently being served to peers.
-	fn txhashset_archive_header(&self) -> Result<core::BlockHeader, chain::Error>;
-
 	/// Whether the node is ready to accept a new txhashset. If this isn't the
 	/// case, the archive is provided without being requested and likely an
 	/// attack attempt. This should be checked *before* downloading the whole

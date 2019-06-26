@@ -302,10 +302,6 @@ impl ChainAdapter for DummyAdapter {
 		unimplemented!()
 	}
 
-	fn txhashset_archive_header(&self) -> Result<core::BlockHeader, chain::Error> {
-		unimplemented!()
-	}
-
 	fn txhashset_receive_ready(&self) -> bool {
 		false
 	}
