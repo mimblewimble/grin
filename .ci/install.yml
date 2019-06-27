@@ -1,5 +1,6 @@
 steps:
   - script: |
+      git apply .ci/win.patch
       choco install -y llvm
     displayName: Windows Install LLVM
     condition: eq( variables['Agent.OS'], 'Windows_NT' )
