@@ -388,8 +388,14 @@ mod test {
 		// 32 phaseout on hold
 		assert_eq!(graph_weight(2 * YEAR_HEIGHT + WEEK_HEIGHT, 32), 512 * 32);
 		assert_eq!(graph_weight(2 * YEAR_HEIGHT + WEEK_HEIGHT, 31), 0);
-		assert_eq!(graph_weight(2 * YEAR_HEIGHT + 30 * WEEK_HEIGHT, 32), 512 * 32);
-		assert_eq!(graph_weight(2 * YEAR_HEIGHT + 31 * WEEK_HEIGHT, 32), 512 * 32);
+		assert_eq!(
+			graph_weight(2 * YEAR_HEIGHT + 30 * WEEK_HEIGHT, 32),
+			512 * 32
+		);
+		assert_eq!(
+			graph_weight(2 * YEAR_HEIGHT + 31 * WEEK_HEIGHT, 32),
+			512 * 32
+		);
 
 		// 3 years in, nothing changes
 		assert_eq!(graph_weight(3 * YEAR_HEIGHT, 31), 0);

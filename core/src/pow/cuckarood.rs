@@ -22,11 +22,11 @@
 //! a rotation by 25, halves the number of graph nodes in each partition,
 //! and requires cycles to alternate between even- and odd-indexed edges.
 
+use crate::global;
 use crate::pow::common::{CuckooParams, EdgeType};
 use crate::pow::error::{Error, ErrorKind};
 use crate::pow::siphash::siphash_block;
 use crate::pow::{PoWContext, Proof};
-use crate::global;
 
 /// Instantiate a new CuckaroodContext as a PowContext. Note that this can't
 /// be moved in the PoWContext trait as this particular trait needs to be
@@ -69,8 +69,7 @@ where
 
 	fn verify(&self, proof: &Proof) -> Result<(), Error> {
 		if proof.proof_size() != global::proofsize() {
-			return Err(ErrorKind::Verification(
-				"wrong cycle length".to_owned(),))?;
+			return Err(ErrorKind::Verification("wrong cycle length".to_owned()))?;
 		}
 		let nonces = &proof.nonces;
 		let mut uvs = vec![0u64; 2 * proof.proof_size()];
@@ -92,10 +91,10 @@ where
 			}
 			let edge = to_edge!(T, siphash_block(&self.params.siphash_keys, nonces[n], 25));
 			let idx = 4 * ndir[dir] + 2 * dir;
-			uvs[idx  ] = to_u64!( edge        & nodemask);
-			uvs[idx+1] = to_u64!((edge >> 32) & nodemask);
-			xor0 ^= uvs[idx  ];
-			xor1 ^= uvs[idx+1];
+			uvs[idx] = to_u64!(edge & nodemask);
+			uvs[idx + 1] = to_u64!((edge >> 32) & nodemask);
+			xor0 ^= uvs[idx];
+			xor1 ^= uvs[idx + 1];
 			ndir[dir] += 1;
 		}
 		if xor0 | xor1 != 0 {
@@ -110,7 +109,8 @@ where
 			// follow cycle
 			j = i;
 			for k in (((i % 4) ^ 2)..(2 * self.params.proof_size)).step_by(4) {
-				if uvs[k] == uvs[i] { // find reverse edge endpoint identical to one at i
+				if uvs[k] == uvs[i] {
+					// find reverse edge endpoint identical to one at i
 					if j != i {
 						return Err(ErrorKind::Verification("branch in cycle".to_owned()))?;
 					}
@@ -173,11 +173,15 @@ mod test {
 	fn cuckarood19_29_vectors() {
 		let mut ctx19 = new_impl::<u64>(19, 42);
 		ctx19.params.siphash_keys = V1_19_HASH.clone();
-		assert!(ctx19.verify(&Proof::new(V1_19_SOL.to_vec().clone())).is_ok());
+		assert!(ctx19
+			.verify(&Proof::new(V1_19_SOL.to_vec().clone()))
+			.is_ok());
 		assert!(ctx19.verify(&Proof::zero(42)).is_err());
 		let mut ctx29 = new_impl::<u64>(29, 42);
 		ctx29.params.siphash_keys = V2_29_HASH.clone();
-		assert!(ctx29.verify(&Proof::new(V2_29_SOL.to_vec().clone())).is_ok());
+		assert!(ctx29
+			.verify(&Proof::new(V2_29_SOL.to_vec().clone()))
+			.is_ok());
 		assert!(ctx29.verify(&Proof::zero(42)).is_err());
 	}
 

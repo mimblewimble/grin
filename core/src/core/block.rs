@@ -180,9 +180,9 @@ impl Default for HeaderVersion {
 
 // self-conscious increment function courtesy of Jasper
 impl HeaderVersion {
-  fn next(&self) -> Self {
-    Self(self.0+1)
-  }
+	fn next(&self) -> Self {
+		Self(self.0 + 1)
+	}
 }
 
 impl HeaderVersion {
