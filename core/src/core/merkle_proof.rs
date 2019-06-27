@@ -17,7 +17,7 @@
 use crate::core::hash::Hash;
 use crate::core::pmmr;
 use crate::ser;
-use crate::ser::{PMMRIndexHashable, Readable, Reader, Writeable, Writer};
+use crate::ser::{PMMRIndexHashable, ProtocolVersion, Readable, Reader, Writeable, Writer};
 use crate::util;
 
 /// Merkle proof errors.
@@ -85,7 +85,7 @@ impl MerkleProof {
 	/// Convert hex string representation back to a Merkle proof instance
 	pub fn from_hex(hex: &str) -> Result<MerkleProof, String> {
 		let bytes = util::from_hex(hex.to_string()).unwrap();
-		let res = ser::deserialize(&mut &bytes[..])
+		let res = ser::deserialize(&mut &bytes[..], ProtocolVersion::default())
 			.map_err(|_| "failed to deserialize a Merkle Proof".to_string())?;
 		Ok(res)
 	}

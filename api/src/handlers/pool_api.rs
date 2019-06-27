@@ -15,7 +15,7 @@
 use super::utils::w;
 use crate::core::core::hash::Hashed;
 use crate::core::core::Transaction;
-use crate::core::ser;
+use crate::core::ser::{self, ProtocolVersion};
 use crate::pool;
 use crate::rest::*;
 use crate::router::{Handler, ResponseFuture};
@@ -64,7 +64,6 @@ impl PoolPushHandler {
 
 		let fluff = params.get("fluff").is_some();
 		let pool_arc = match w(&self.tx_pool) {
-			//w(&self.tx_pool).clone();
 			Ok(p) => p,
 			Err(e) => return Box::new(err(e)),
 		};
@@ -76,7 +75,10 @@ impl PoolPushHandler {
 						.map_err(|e| ErrorKind::RequestError(format!("Bad request: {}", e)).into())
 				})
 				.and_then(move |tx_bin| {
-					ser::deserialize(&mut &tx_bin[..])
+					// TODO - pass protocol version in via the api call?
+					let version = ProtocolVersion::default();
+
+					ser::deserialize(&mut &tx_bin[..], version)
 						.map_err(|e| ErrorKind::RequestError(format!("Bad request: {}", e)).into())
 				})
 				.and_then(move |tx: Transaction| {

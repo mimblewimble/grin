@@ -39,6 +39,7 @@ use crate::common::stats::{DiffBlock, DiffStats, PeerStats, ServerStateInfo, Ser
 use crate::common::types::{Error, ServerConfig, StratumServerConfig, SyncState, SyncStatus};
 use crate::core::core::hash::{Hashed, ZERO_HASH};
 use crate::core::core::verifier_cache::{LruVerifierCache, VerifierCache};
+use crate::core::ser::ProtocolVersion;
 use crate::core::{consensus, genesis, global, pow};
 use crate::grin::{dandelion_monitor, seed, sync};
 use crate::mining::stratumserver;
@@ -414,9 +415,9 @@ impl Server {
 		self.chain.header_head().map_err(|e| e.into())
 	}
 
-	/// Current p2p layer protocol version.
-	pub fn protocol_version() -> p2p::msg::ProtocolVersion {
-		p2p::msg::ProtocolVersion::default()
+	/// The p2p layer protocol version for this node.
+	pub fn protocol_version() -> ProtocolVersion {
+		ProtocolVersion::default()
 	}
 
 	/// Returns a set of stats about this server. This and the ServerStats

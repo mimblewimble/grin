@@ -202,6 +202,12 @@ impl Writeable for TxKernel {
 
 impl Readable for TxKernel {
 	fn read(reader: &mut dyn Reader) -> Result<TxKernel, ser::Error> {
+		// We have access to the protocol version here.
+		// This may be a protocol version based on a peer connection
+		// or the version used locally for db storage.
+		// We can handle version specific deserialization here.
+		let _version = reader.protocol_version();
+
 		Ok(TxKernel {
 			features: KernelFeatures::read(reader)?,
 			fee: reader.read_u64()?,
@@ -338,7 +344,7 @@ impl Writeable for TxKernelEntry {
 }
 
 impl Readable for TxKernelEntry {
-	fn read(reader: &mut Reader) -> Result<TxKernelEntry, ser::Error> {
+	fn read(reader: &mut dyn Reader) -> Result<TxKernelEntry, ser::Error> {
 		let kernel = TxKernel::read(reader)?;
 		Ok(TxKernelEntry { kernel })
 	}
@@ -1523,7 +1529,7 @@ mod test {
 
 		let mut vec = vec![];
 		ser::serialize(&mut vec, &kernel).expect("serialized failed");
-		let kernel2: TxKernel = ser::deserialize(&mut &vec[..]).unwrap();
+		let kernel2: TxKernel = ser::deserialize_default(&mut &vec[..]).unwrap();
 		assert_eq!(kernel2.features, KernelFeatures::Plain);
 		assert_eq!(kernel2.lock_height, 0);
 		assert_eq!(kernel2.excess, commit);
@@ -1541,7 +1547,7 @@ mod test {
 
 		let mut vec = vec![];
 		ser::serialize(&mut vec, &kernel).expect("serialized failed");
-		let kernel2: TxKernel = ser::deserialize(&mut &vec[..]).unwrap();
+		let kernel2: TxKernel = ser::deserialize_default(&mut &vec[..]).unwrap();
 		assert_eq!(kernel2.features, KernelFeatures::HeightLocked);
 		assert_eq!(kernel2.lock_height, 100);
 		assert_eq!(kernel2.excess, commit);

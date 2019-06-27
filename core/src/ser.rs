@@ -31,11 +31,11 @@ use crate::util::secp::pedersen::{Commitment, RangeProof};
 use crate::util::secp::Signature;
 use crate::util::secp::{ContextFlag, Secp256k1};
 use byteorder::{BigEndian, ByteOrder, ReadBytesExt};
-use std::fmt::Debug;
+use std::fmt::{self, Debug};
 use std::io::{self, Read, Write};
 use std::marker;
 use std::time::Duration;
-use std::{cmp, error, fmt};
+use std::{cmp, error};
 
 /// Possible errors deriving from serializing or deserializing.
 #[derive(Clone, Eq, PartialEq, Debug, Serialize, Deserialize)]
@@ -209,6 +209,9 @@ pub trait Reader {
 	/// Consumes a byte from the reader, producing an error if it doesn't have
 	/// the expected value
 	fn expect_u8(&mut self, val: u8) -> Result<u8, Error>;
+	/// Access to underlying protocol version to support
+	/// version specific deserialization logic.
+	fn protocol_version(&self) -> ProtocolVersion;
 }
 
 /// Trait that every type that can be serialized as binary must implement.
@@ -275,6 +278,54 @@ where
 	Ok(res)
 }
 
+/// Protocol version for serialization/deserialization.
+/// Note: This is used in various places including but limited to
+/// the p2p layer and our local db storage layer.
+/// We may speak multiple versions to various peers and a potentially *different*
+/// version for our local db.
+#[derive(Clone, Copy, Debug, Deserialize, Eq, Ord, PartialOrd, PartialEq, Serialize)]
+pub struct ProtocolVersion(pub u32);
+
+impl Default for ProtocolVersion {
+	fn default() -> ProtocolVersion {
+		ProtocolVersion(1)
+	}
+}
+
+impl fmt::Display for ProtocolVersion {
+	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+		write!(f, "{}", self.0)
+	}
+}
+
+impl ProtocolVersion {
+	/// We need to specify a protocol version for our local database.
+	/// Regardless of specific version used when sending/receiving data between peers
+	/// we need to take care with serialization/deserialization of data locally in the db.
+	pub fn local_db() -> ProtocolVersion {
+		ProtocolVersion(1)
+	}
+}
+
+impl From<ProtocolVersion> for u32 {
+	fn from(v: ProtocolVersion) -> u32 {
+		v.0
+	}
+}
+
+impl Writeable for ProtocolVersion {
+	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), Error> {
+		writer.write_u32(self.0)
+	}
+}
+
+impl Readable for ProtocolVersion {
+	fn read(reader: &mut dyn Reader) -> Result<ProtocolVersion, Error> {
+		let version = reader.read_u32()?;
+		Ok(ProtocolVersion(version))
+	}
+}
+
 /// Trait that every type that can be deserialized from binary must implement.
 /// Reads directly to a Reader, a utility type thinly wrapping an
 /// underlying Read implementation.
@@ -287,9 +338,22 @@ where
 }
 
 /// Deserializes a Readable from any std::io::Read implementation.
-pub fn deserialize<T: Readable>(source: &mut dyn Read) -> Result<T, Error> {
-	let mut reader = BinReader { source };
+pub fn deserialize<T: Readable>(
+	source: &mut dyn Read,
+	version: ProtocolVersion,
+) -> Result<T, Error> {
+	let mut reader = BinReader::new(source, version);
 	T::read(&mut reader)
+}
+
+/// Deserialize a Readable based on our local db version protocol.
+pub fn deserialize_db<T: Readable>(source: &mut dyn Read) -> Result<T, Error> {
+	deserialize(source, ProtocolVersion::local_db())
+}
+
+/// Deserialize a Readable based on our local "default" version protocol.
+pub fn deserialize_default<T: Readable>(source: &mut dyn Read) -> Result<T, Error> {
+	deserialize(source, ProtocolVersion::default())
 }
 
 /// Serializes a Writeable into any std::io::Write implementation.
@@ -309,6 +373,14 @@ pub fn ser_vec<W: Writeable>(thing: &W) -> Result<Vec<u8>, Error> {
 /// Utility to read from a binary source
 pub struct BinReader<'a> {
 	source: &'a mut dyn Read,
+	version: ProtocolVersion,
+}
+
+impl<'a> BinReader<'a> {
+	/// Constructor for a new BinReader for the provided source and protocol version.
+	pub fn new(source: &'a mut dyn Read, version: ProtocolVersion) -> BinReader<'a> {
+		BinReader { source, version }
+	}
 }
 
 fn map_io_err(err: io::Error) -> Error {
@@ -366,12 +438,17 @@ impl<'a> Reader for BinReader<'a> {
 			})
 		}
 	}
+
+	fn protocol_version(&self) -> ProtocolVersion {
+		self.version
+	}
 }
 
 /// A reader that reads straight off a stream.
 /// Tracks total bytes read so we can verify we read the right number afterwards.
 pub struct StreamingReader<'a> {
 	total_bytes_read: u64,
+	version: ProtocolVersion,
 	stream: &'a mut dyn Read,
 	timeout: Duration,
 }
@@ -379,9 +456,14 @@ pub struct StreamingReader<'a> {
 impl<'a> StreamingReader<'a> {
 	/// Create a new streaming reader with the provided underlying stream.
 	/// Also takes a duration to be used for each individual read_exact call.
-	pub fn new(stream: &'a mut dyn Read, timeout: Duration) -> StreamingReader<'a> {
+	pub fn new(
+		stream: &'a mut dyn Read,
+		version: ProtocolVersion,
+		timeout: Duration,
+	) -> StreamingReader<'a> {
 		StreamingReader {
 			total_bytes_read: 0,
+			version,
 			stream,
 			timeout,
 		}
@@ -449,6 +531,10 @@ impl<'a> Reader for StreamingReader<'a> {
 				received: vec![b],
 			})
 		}
+	}
+
+	fn protocol_version(&self) -> ProtocolVersion {
+		self.version
 	}
 }
 

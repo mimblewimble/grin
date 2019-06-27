@@ -30,8 +30,7 @@ use std::{
 	time,
 };
 
-use crate::core::ser;
-use crate::core::ser::FixedLength;
+use crate::core::ser::{self, FixedLength, ProtocolVersion};
 use crate::msg::{
 	read_body, read_discard, read_header, read_item, write_to_buf, MsgHeader, MsgHeaderWrapper,
 	Type,
@@ -75,22 +74,31 @@ macro_rules! try_break {
 pub struct Message<'a> {
 	pub header: MsgHeader,
 	stream: &'a mut dyn Read,
+	version: ProtocolVersion,
 }
 
 impl<'a> Message<'a> {
-	fn from_header(header: MsgHeader, stream: &'a mut dyn Read) -> Message<'a> {
-		Message { header, stream }
+	fn from_header(
+		header: MsgHeader,
+		stream: &'a mut dyn Read,
+		version: ProtocolVersion,
+	) -> Message<'a> {
+		Message {
+			header,
+			stream,
+			version,
+		}
 	}
 
 	/// Read the message body from the underlying connection
 	pub fn body<T: ser::Readable>(&mut self) -> Result<T, Error> {
-		read_body(&self.header, self.stream)
+		read_body(&self.header, self.stream, self.version)
 	}
 
 	/// Read a single "thing" from the underlying connection.
 	/// Return the thing and the total bytes read.
 	pub fn streaming_read<T: ser::Readable>(&mut self) -> Result<(T, u64), Error> {
-		read_item(self.stream)
+		read_item(self.stream, self.version)
 	}
 
 	pub fn copy_attachment(&mut self, len: usize, writer: &mut dyn Write) -> Result<usize, Error> {
@@ -255,6 +263,7 @@ impl Tracker {
 /// itself.
 pub fn listen<H>(
 	stream: TcpStream,
+	version: ProtocolVersion,
 	tracker: Arc<Tracker>,
 	handler: H,
 ) -> io::Result<(ConnHandle, StopHandle)>
@@ -267,7 +276,7 @@ where
 	stream
 		.set_nonblocking(true)
 		.expect("Non-blocking IO not available.");
-	let peer_thread = poll(stream, handler, send_rx, close_rx, tracker)?;
+	let peer_thread = poll(stream, version, handler, send_rx, close_rx, tracker)?;
 
 	Ok((
 		ConnHandle {
@@ -282,6 +291,7 @@ where
 
 fn poll<H>(
 	conn: TcpStream,
+	version: ProtocolVersion,
 	handler: H,
 	send_rx: mpsc::Receiver<Vec<u8>>,
 	close_rx: mpsc::Receiver<()>,
@@ -301,9 +311,9 @@ where
 			let mut retry_send = Err(());
 			loop {
 				// check the read end
-				match try_break!(read_header(&mut reader, None)) {
+				match try_break!(read_header(&mut reader, version, None)) {
 					Some(MsgHeaderWrapper::Known(header)) => {
-						let msg = Message::from_header(header, &mut reader);
+						let msg = Message::from_header(header, &mut reader, version);
 
 						trace!(
 							"Received message header, type {:?}, len {}.",

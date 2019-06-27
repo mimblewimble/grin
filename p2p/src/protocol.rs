@@ -25,6 +25,7 @@ use std::cmp;
 use std::fs::{self, File, OpenOptions};
 use std::io::{BufWriter, Seek, SeekFrom, Write};
 use std::sync::Arc;
+use std::time::Instant;
 use tempfile::tempfile;
 
 pub struct Protocol {
@@ -340,6 +341,7 @@ impl MessageHandler for Protocol {
 					download_start_time.timestamp(),
 					nonce
 				));
+				let mut now = Instant::now();
 				let mut save_txhashset_to_file = |file| -> Result<(), Error> {
 					let mut tmp_zip =
 						BufWriter::new(OpenOptions::new().write(true).create_new(true).open(file)?);
@@ -355,11 +357,21 @@ impl MessageHandler for Protocol {
 							downloaded_size as u64,
 							total_size as u64,
 						);
-
+						if now.elapsed().as_secs() > 10 {
+							now = Instant::now();
+							debug!(
+								"handle_payload: txhashset archive: {}/{}",
+								downloaded_size, total_size
+							);
+						}
 						// Increase received bytes quietly (without affecting the counters).
 						// Otherwise we risk banning a peer as "abusive".
 						tracker.inc_quiet_received(size as u64)
 					}
+					debug!(
+						"handle_payload: txhashset archive: {}/{} ... DONE",
+						downloaded_size, total_size
+					);
 					tmp_zip
 						.into_inner()
 						.map_err(|_| Error::Internal)?
