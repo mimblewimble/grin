@@ -127,22 +127,42 @@ pub const MAX_BLOCK_WEIGHT: usize = 40_000;
 /// Fork every 6 months.
 pub const HARD_FORK_INTERVAL: u64 = YEAR_HEIGHT / 2;
 
+/// Floonet first hard fork height, set to happen around 2019-06-20
+pub const FLOONET_FIRST_HARD_FORK: u64 = 185_040;
+
 /// Check whether the block version is valid at a given height, implements
 /// 6 months interval scheduled hard forks for the first 2 years.
 pub fn valid_header_version(height: u64, version: HeaderVersion) -> bool {
-	// uncomment below as we go from hard fork to hard fork
-	if height < HARD_FORK_INTERVAL {
-		version == HeaderVersion::default()
-	/* } else if height < 2 * HARD_FORK_INTERVAL {
-		version == 2
-	} else if height < 3 * HARD_FORK_INTERVAL {
-		version == 3
-	} else if height < 4 * HARD_FORK_INTERVAL {
-		version == 4
-	} else if height >= 5 * HARD_FORK_INTERVAL {
-		version > 4 */
-	} else {
-		false
+	let chain_type = global::CHAIN_TYPE.read().clone();
+	match chain_type {
+		global::ChainTypes::Floonet => {
+			if height < FLOONET_FIRST_HARD_FORK {
+				version == HeaderVersion::default()
+			// add branches one by one as we go from hard fork to hard fork
+			// } else if height < FLOONET_SECOND_HARD_FORK {
+			} else if height < 2 * HARD_FORK_INTERVAL {
+				version == HeaderVersion::new(2)
+			} else {
+				false
+			}
+		}
+		// everything else just like mainnet
+		_ => {
+			if height < HARD_FORK_INTERVAL {
+				version == HeaderVersion::default()
+			} else if height < 2 * HARD_FORK_INTERVAL {
+				version == HeaderVersion::new(2)
+			// uncomment branches one by one as we go from hard fork to hard fork
+			/*} else if height < 3 * HARD_FORK_INTERVAL {
+				version == HeaderVersion::new(3)
+			} else if height < 4 * HARD_FORK_INTERVAL {
+				version == HeaderVersion::new(4)
+			} else {
+				version > HeaderVersion::new(4) */
+			} else {
+				false
+			}
+		}
 	}
 }
 
@@ -163,14 +183,14 @@ pub const DIFFICULTY_DAMP_FACTOR: u64 = 3;
 pub const AR_SCALE_DAMP_FACTOR: u64 = 13;
 
 /// Compute weight of a graph as number of siphash bits defining the graph
-/// Must be made dependent on height to phase out smaller size over the years
-/// This can wait until end of 2019 at latest
+/// Must be made dependent on height to phase out C31 in early 2020
+/// Later phase outs are on hold for now
 pub fn graph_weight(height: u64, edge_bits: u8) -> u64 {
 	let mut xpr_edge_bits = edge_bits as u64;
 
 	let bits_over_min = edge_bits.saturating_sub(global::min_edge_bits());
 	let expiry_height = (1 << bits_over_min) * YEAR_HEIGHT;
-	if height >= expiry_height {
+	if edge_bits < 32 && height >= expiry_height {
 		xpr_edge_bits = xpr_edge_bits.saturating_sub(1 + (height - expiry_height) / WEEK_HEIGHT);
 	}
 
@@ -362,23 +382,29 @@ mod test {
 
 		// 2 years in, 31 still at 0, 32 starts decreasing
 		assert_eq!(graph_weight(2 * YEAR_HEIGHT, 31), 0);
-		assert_eq!(graph_weight(2 * YEAR_HEIGHT, 32), 512 * 31);
+		assert_eq!(graph_weight(2 * YEAR_HEIGHT, 32), 512 * 32);
 		assert_eq!(graph_weight(2 * YEAR_HEIGHT, 33), 1024 * 33);
 
-		// 32 loses one factor per week
-		assert_eq!(graph_weight(2 * YEAR_HEIGHT + WEEK_HEIGHT, 32), 512 * 30);
+		// 32 phaseout on hold
+		assert_eq!(graph_weight(2 * YEAR_HEIGHT + WEEK_HEIGHT, 32), 512 * 32);
 		assert_eq!(graph_weight(2 * YEAR_HEIGHT + WEEK_HEIGHT, 31), 0);
-		assert_eq!(graph_weight(2 * YEAR_HEIGHT + 30 * WEEK_HEIGHT, 32), 512);
-		assert_eq!(graph_weight(2 * YEAR_HEIGHT + 31 * WEEK_HEIGHT, 32), 0);
+		assert_eq!(
+			graph_weight(2 * YEAR_HEIGHT + 30 * WEEK_HEIGHT, 32),
+			512 * 32
+		);
+		assert_eq!(
+			graph_weight(2 * YEAR_HEIGHT + 31 * WEEK_HEIGHT, 32),
+			512 * 32
+		);
 
 		// 3 years in, nothing changes
 		assert_eq!(graph_weight(3 * YEAR_HEIGHT, 31), 0);
-		assert_eq!(graph_weight(3 * YEAR_HEIGHT, 32), 0);
+		assert_eq!(graph_weight(3 * YEAR_HEIGHT, 32), 512 * 32);
 		assert_eq!(graph_weight(3 * YEAR_HEIGHT, 33), 1024 * 33);
 
-		// 4 years in, 33 starts starts decreasing
+		// 4 years in, still on hold
 		assert_eq!(graph_weight(4 * YEAR_HEIGHT, 31), 0);
-		assert_eq!(graph_weight(4 * YEAR_HEIGHT, 32), 0);
-		assert_eq!(graph_weight(4 * YEAR_HEIGHT, 33), 1024 * 32);
+		assert_eq!(graph_weight(4 * YEAR_HEIGHT, 32), 512 * 32);
+		assert_eq!(graph_weight(4 * YEAR_HEIGHT, 33), 1024 * 33);
 	}
 }

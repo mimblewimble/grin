@@ -43,7 +43,7 @@ where
 	Ok(Box::new(CuckarooContext { params }))
 }
 
-/// Cuckatoo cycle context. Only includes the verifier for now.
+/// Cuckaroo cycle context. Only includes the verifier for now.
 pub struct CuckarooContext<T>
 where
 	T: EdgeType,
@@ -84,7 +84,8 @@ where
 			if n > 0 && nonces[n] <= nonces[n - 1] {
 				return Err(ErrorKind::Verification("edges not ascending".to_owned()))?;
 			}
-			let edge = to_edge!(T, siphash_block(&self.params.siphash_keys, nonces[n]));
+			// 21 is standard siphash rotation constant
+			let edge = to_edge!(T, siphash_block(&self.params.siphash_keys, nonces[n], 21));
 			uvs[2 * n] = to_u64!(edge & self.params.edge_mask);
 			uvs[2 * n + 1] = to_u64!((edge >> 32) & self.params.edge_mask);
 			xor0 ^= uvs[2 * n];

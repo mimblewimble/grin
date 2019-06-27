@@ -34,6 +34,15 @@ macro_rules! no_dup {
 	};
 }
 
+/// API Version Information
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct Version {
+	/// Current node API Version (api crate version)
+	pub node_version: String,
+	/// Block header version
+	pub block_header_version: u16,
+}
+
 /// The state of the current fork tip
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Tip {

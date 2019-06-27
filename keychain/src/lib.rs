@@ -25,14 +25,19 @@ extern crate serde_derive;
 #[macro_use]
 extern crate lazy_static;
 
+extern crate sha2;
+
 mod base58;
 pub mod extkey_bip32;
 pub mod mnemonic;
 mod types;
+pub mod view_key;
 
 pub mod keychain;
 pub use crate::extkey_bip32::ChildNumber;
 pub use crate::keychain::ExtKeychain;
 pub use crate::types::{
-	BlindSum, BlindingFactor, Error, ExtKeychainPath, Identifier, Keychain, IDENTIFIER_SIZE,
+	BlindSum, BlindingFactor, Error, ExtKeychainPath, Identifier, Keychain, SwitchCommitmentType,
+	IDENTIFIER_SIZE,
 };
+pub use crate::view_key::ViewKey;

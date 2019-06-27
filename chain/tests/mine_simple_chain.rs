@@ -19,7 +19,7 @@ use self::core::core::verifier_cache::LruVerifierCache;
 use self::core::core::{Block, BlockHeader, OutputIdentifier, Transaction};
 use self::core::genesis;
 use self::core::global::ChainTypes;
-use self::core::libtx::{self, build, reward};
+use self::core::libtx::{self, build, reward, ProofBuilder};
 use self::core::pow::Difficulty;
 use self::core::{consensus, global, pow};
 use self::keychain::{ExtKeychain, ExtKeychainPath, Keychain};
@@ -106,7 +106,14 @@ fn mine_genesis_reward_chain() {
 	let mut genesis = genesis::genesis_dev();
 	let keychain = keychain::ExtKeychain::from_random_seed(false).unwrap();
 	let key_id = keychain::ExtKeychain::derive_key_id(0, 1, 0, 0, 0);
-	let reward = reward::output(&keychain, &key_id, 0, false).unwrap();
+	let reward = reward::output(
+		&keychain,
+		&libtx::ProofBuilder::new(&keychain),
+		&key_id,
+		0,
+		false,
+	)
+	.unwrap();
 	genesis = genesis.with_reward(reward.0, reward.1);
 
 	let tmp_chain_dir = ".grin.tmp";
@@ -143,7 +150,9 @@ where
 		let prev = chain.head_header().unwrap();
 		let next_header_info = consensus::next_difficulty(1, chain.difficulty_iter().unwrap());
 		let pk = ExtKeychainPath::new(1, n as u32, 0, 0, 0).to_identifier();
-		let reward = libtx::reward::output(keychain, &pk, 0, false).unwrap();
+		let reward =
+			libtx::reward::output(keychain, &libtx::ProofBuilder::new(keychain), &pk, 0, false)
+				.unwrap();
 		let mut b =
 			core::core::Block::new(&prev, vec![], next_header_info.clone().difficulty, reward)
 				.unwrap();
@@ -401,6 +410,7 @@ fn spend_in_fork_and_compact() {
 		let chain = setup(".grin6", pow::mine_genesis_block().unwrap());
 		let prev = chain.head_header().unwrap();
 		let kc = ExtKeychain::from_random_seed(false).unwrap();
+		let pb = ProofBuilder::new(&kc);
 
 		let mut fork_head = prev;
 
@@ -434,6 +444,7 @@ fn spend_in_fork_and_compact() {
 				build::with_fee(20000),
 			],
 			&kc,
+			&pb,
 		)
 		.unwrap();
 
@@ -451,6 +462,7 @@ fn spend_in_fork_and_compact() {
 				build::with_fee(20000),
 			],
 			&kc,
+			&pb,
 		)
 		.unwrap();
 
@@ -540,7 +552,14 @@ fn output_header_mappings() {
 			let prev = chain.head_header().unwrap();
 			let next_header_info = consensus::next_difficulty(1, chain.difficulty_iter().unwrap());
 			let pk = ExtKeychainPath::new(1, n as u32, 0, 0, 0).to_identifier();
-			let reward = libtx::reward::output(&keychain, &pk, 0, false).unwrap();
+			let reward = libtx::reward::output(
+				&keychain,
+				&libtx::ProofBuilder::new(&keychain),
+				&pk,
+				0,
+				false,
+			)
+			.unwrap();
 			reward_outputs.push(reward.0.clone());
 			let mut b =
 				core::core::Block::new(&prev, vec![], next_header_info.clone().difficulty, reward)
@@ -643,7 +662,8 @@ where
 	let key_id = ExtKeychainPath::new(1, diff as u32, 0, 0, 0).to_identifier();
 
 	let fees = txs.iter().map(|tx| tx.fee()).sum();
-	let reward = libtx::reward::output(kc, &key_id, fees, false).unwrap();
+	let reward =
+		libtx::reward::output(kc, &libtx::ProofBuilder::new(kc), &key_id, fees, false).unwrap();
 	let mut b = match core::core::Block::new(
 		prev,
 		txs.into_iter().cloned().collect(),
