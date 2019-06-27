@@ -1,6 +1,6 @@
 [package]
 name = "grin_keychain"
-version = "1.1.1-beta.1"
+version = "2.0.0-beta.2"
 authors = ["Grin Developers <mimblewimble@lists.launchpad.net>"]
 description = "Chain implementation for grin, a simple, private and scalable cryptocurrency implementation based on the MimbleWimble chain format."
 license = "Apache-2.0"
@@ -19,7 +19,7 @@ serde_derive = "1"
 serde_json = "1"
 uuid = { version = "0.6", features = ["serde", "v4"] }
 lazy_static = "1"
-zeroize = "0.8.0"
+zeroize = "0.9"
 
 digest = "0.7"
 hmac = "0.6"
@@ -27,4 +27,4 @@ ripemd160 = "0.7"
 sha2 = "0.7"
 pbkdf2 = "0.2"
 
-grin_util = { path = "../util", version = "1.1.1-beta.1" }
+grin_util = { path = "../util", version = "2.0.0-beta.2" }

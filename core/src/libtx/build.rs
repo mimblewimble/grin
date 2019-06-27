@@ -27,33 +27,42 @@
 
 use crate::core::{Input, Output, OutputFeatures, Transaction, TxKernel};
 use crate::keychain::{BlindSum, BlindingFactor, Identifier, Keychain};
-use crate::libtx::{aggsig, proof, Error};
+use crate::libtx::proof::{self, ProofBuild};
+use crate::libtx::{aggsig, Error};
+use grin_keychain::SwitchCommitmentType;
 
 /// Context information available to transaction combinators.
-pub struct Context<'a, K>
+pub struct Context<'a, K, B>
 where
 	K: Keychain,
+	B: ProofBuild,
 {
 	/// The keychain used for key derivation
 	pub keychain: &'a K,
+	/// The bulletproof builder
+	pub builder: &'a B,
 }
 
 /// Function type returned by the transaction combinators. Transforms a
 /// (Transaction, BlindSum) pair into another, provided some context.
-pub type Append<K> = dyn for<'a> Fn(
-	&'a mut Context<'_, K>,
+pub type Append<K, B> = dyn for<'a> Fn(
+	&'a mut Context<'_, K, B>,
 	(Transaction, TxKernel, BlindSum),
 ) -> (Transaction, TxKernel, BlindSum);
 
 /// Adds an input with the provided value and blinding key to the transaction
 /// being built.
-fn build_input<K>(value: u64, features: OutputFeatures, key_id: Identifier) -> Box<Append<K>>
+fn build_input<K, B>(value: u64, features: OutputFeatures, key_id: Identifier) -> Box<Append<K, B>>
 where
 	K: Keychain,
+	B: ProofBuild,
 {
 	Box::new(
 		move |build, (tx, kern, sum)| -> (Transaction, TxKernel, BlindSum) {
-			let commit = build.keychain.commit(value, &key_id).unwrap();
+			let commit = build
+				.keychain
+				.commit(value, &key_id, &SwitchCommitmentType::Regular)
+				.unwrap(); // TODO: proper support for different switch commitment schemes
 			let input = Input::new(features, commit);
 			(
 				tx.with_input(input),
@@ -66,9 +75,10 @@ where
 
 /// Adds an input with the provided value and blinding key to the transaction
 /// being built.
-pub fn input<K>(value: u64, key_id: Identifier) -> Box<Append<K>>
+pub fn input<K, B>(value: u64, key_id: Identifier) -> Box<Append<K, B>>
 where
 	K: Keychain,
+	B: ProofBuild,
 {
 	debug!(
 		"Building input (spending regular output): {}, {}",
@@ -78,9 +88,10 @@ where
 }
 
 /// Adds a coinbase input spending a coinbase output.
-pub fn coinbase_input<K>(value: u64, key_id: Identifier) -> Box<Append<K>>
+pub fn coinbase_input<K, B>(value: u64, key_id: Identifier) -> Box<Append<K, B>>
 where
 	K: Keychain,
+	B: ProofBuild,
 {
 	debug!("Building input (spending coinbase): {}, {}", value, key_id);
 	build_input(value, OutputFeatures::Coinbase, key_id)
@@ -88,17 +99,30 @@ where
 
 /// Adds an output with the provided value and key identifier from the
 /// keychain.
-pub fn output<K>(value: u64, key_id: Identifier) -> Box<Append<K>>
+pub fn output<K, B>(value: u64, key_id: Identifier) -> Box<Append<K, B>>
 where
 	K: Keychain,
+	B: ProofBuild,
 {
 	Box::new(
 		move |build, (tx, kern, sum)| -> (Transaction, TxKernel, BlindSum) {
-			let commit = build.keychain.commit(value, &key_id).unwrap();
+			// TODO: proper support for different switch commitment schemes
+			let switch = &SwitchCommitmentType::Regular;
+
+			let commit = build.keychain.commit(value, &key_id, switch).unwrap();
 
 			debug!("Building output: {}, {:?}", value, commit);
 
-			let rproof = proof::create(build.keychain, value, &key_id, commit, None).unwrap();
+			let rproof = proof::create(
+				build.keychain,
+				build.builder,
+				value,
+				&key_id,
+				switch,
+				commit,
+				None,
+			)
+			.unwrap();
 
 			(
 				tx.with_output(Output {
@@ -114,9 +138,10 @@ where
 }
 
 /// Sets the fee on the transaction being built.
-pub fn with_fee<K>(fee: u64) -> Box<Append<K>>
+pub fn with_fee<K, B>(fee: u64) -> Box<Append<K, B>>
 where
 	K: Keychain,
+	B: ProofBuild,
 {
 	Box::new(
 		move |_build, (tx, kern, sum)| -> (Transaction, TxKernel, BlindSum) {
@@ -126,9 +151,10 @@ where
 }
 
 /// Sets the lock_height on the transaction being built.
-pub fn with_lock_height<K>(lock_height: u64) -> Box<Append<K>>
+pub fn with_lock_height<K, B>(lock_height: u64) -> Box<Append<K, B>>
 where
 	K: Keychain,
+	B: ProofBuild,
 {
 	Box::new(
 		move |_build, (tx, kern, sum)| -> (Transaction, TxKernel, BlindSum) {
@@ -140,9 +166,10 @@ where
 /// Adds a known excess value on the transaction being built. Usually used in
 /// combination with the initial_tx function when a new transaction is built
 /// by adding to a pre-existing one.
-pub fn with_excess<K>(excess: BlindingFactor) -> Box<Append<K>>
+pub fn with_excess<K, B>(excess: BlindingFactor) -> Box<Append<K, B>>
 where
 	K: Keychain,
+	B: ProofBuild,
 {
 	Box::new(
 		move |_build, (tx, kern, sum)| -> (Transaction, TxKernel, BlindSum) {
@@ -152,9 +179,10 @@ where
 }
 
 /// Sets a known tx "offset". Used in final step of tx construction.
-pub fn with_offset<K>(offset: BlindingFactor) -> Box<Append<K>>
+pub fn with_offset<K, B>(offset: BlindingFactor) -> Box<Append<K, B>>
 where
 	K: Keychain,
+	B: ProofBuild,
 {
 	Box::new(
 		move |_build, (tx, kern, sum)| -> (Transaction, TxKernel, BlindSum) {
@@ -166,9 +194,10 @@ where
 /// Sets an initial transaction to add to when building a new transaction.
 /// We currently only support building a tx with a single kernel with
 /// build::transaction()
-pub fn initial_tx<K>(mut tx: Transaction) -> Box<Append<K>>
+pub fn initial_tx<K, B>(mut tx: Transaction) -> Box<Append<K, B>>
 where
 	K: Keychain,
+	B: ProofBuild,
 {
 	assert_eq!(tx.kernels().len(), 1);
 	let kern = tx.kernels_mut().remove(0);
@@ -189,14 +218,16 @@ where
 /// let (tx2, _) = build::transaction(vec![initial_tx(tx1), with_excess(sum),
 ///   output_rand(2)], keychain).unwrap();
 ///
-pub fn partial_transaction<K>(
-	elems: Vec<Box<Append<K>>>,
+pub fn partial_transaction<K, B>(
+	elems: Vec<Box<Append<K, B>>>,
 	keychain: &K,
+	builder: &B,
 ) -> Result<(Transaction, BlindingFactor), Error>
 where
 	K: Keychain,
+	B: ProofBuild,
 {
-	let mut ctx = Context { keychain };
+	let mut ctx = Context { keychain, builder };
 	let (tx, kern, sum) = elems.iter().fold(
 		(Transaction::empty(), TxKernel::empty(), BlindSum::new()),
 		|acc, elem| elem(&mut ctx, acc),
@@ -212,11 +243,16 @@ where
 }
 
 /// Builds a complete transaction.
-pub fn transaction<K>(elems: Vec<Box<Append<K>>>, keychain: &K) -> Result<Transaction, Error>
+pub fn transaction<K, B>(
+	elems: Vec<Box<Append<K, B>>>,
+	keychain: &K,
+	builder: &B,
+) -> Result<Transaction, Error>
 where
 	K: Keychain,
+	B: ProofBuild,
 {
-	let mut ctx = Context { keychain };
+	let mut ctx = Context { keychain, builder };
 	let (mut tx, mut kern, sum) = elems.iter().fold(
 		(Transaction::empty(), TxKernel::empty(), BlindSum::new()),
 		|acc, elem| elem(&mut ctx, acc),
@@ -260,6 +296,7 @@ mod test {
 	use crate::core::transaction::Weighting;
 	use crate::core::verifier_cache::{LruVerifierCache, VerifierCache};
 	use crate::keychain::{ExtKeychain, ExtKeychainPath};
+	use crate::libtx::ProofBuilder;
 
 	fn verifier_cache() -> Arc<RwLock<dyn VerifierCache>> {
 		Arc::new(RwLock::new(LruVerifierCache::new()))
@@ -268,6 +305,7 @@ mod test {
 	#[test]
 	fn blind_simple_tx() {
 		let keychain = ExtKeychain::from_random_seed(false).unwrap();
+		let builder = ProofBuilder::new(&keychain);
 		let key_id1 = ExtKeychainPath::new(1, 1, 0, 0, 0).to_identifier();
 		let key_id2 = ExtKeychainPath::new(1, 2, 0, 0, 0).to_identifier();
 		let key_id3 = ExtKeychainPath::new(1, 3, 0, 0, 0).to_identifier();
@@ -282,6 +320,7 @@ mod test {
 				with_fee(2),
 			],
 			&keychain,
+			&builder,
 		)
 		.unwrap();
 
@@ -291,6 +330,7 @@ mod test {
 	#[test]
 	fn blind_simple_tx_with_offset() {
 		let keychain = ExtKeychain::from_random_seed(false).unwrap();
+		let builder = ProofBuilder::new(&keychain);
 		let key_id1 = ExtKeychainPath::new(1, 1, 0, 0, 0).to_identifier();
 		let key_id2 = ExtKeychainPath::new(1, 2, 0, 0, 0).to_identifier();
 		let key_id3 = ExtKeychainPath::new(1, 3, 0, 0, 0).to_identifier();
@@ -305,6 +345,7 @@ mod test {
 				with_fee(2),
 			],
 			&keychain,
+			&builder,
 		)
 		.unwrap();
 
@@ -314,6 +355,7 @@ mod test {
 	#[test]
 	fn blind_simpler_tx() {
 		let keychain = ExtKeychain::from_random_seed(false).unwrap();
+		let builder = ProofBuilder::new(&keychain);
 		let key_id1 = ExtKeychainPath::new(1, 1, 0, 0, 0).to_identifier();
 		let key_id2 = ExtKeychainPath::new(1, 2, 0, 0, 0).to_identifier();
 
@@ -322,6 +364,7 @@ mod test {
 		let tx = transaction(
 			vec![input(6, key_id1), output(2, key_id2), with_fee(4)],
 			&keychain,
+			&builder,
 		)
 		.unwrap();
 
