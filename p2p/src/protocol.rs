@@ -13,7 +13,7 @@
 // limitations under the License.
 
 use crate::conn::{Message, MessageHandler, Response, Tracker};
-use crate::core::core::{self, hash::Hash, hash::Hashed, CompactBlock};
+use crate::core::core::{self, hash::Hash, CompactBlock};
 
 use crate::msg::{
 	BanReason, GetPeerAddrs, Headers, KernelDataResponse, Locator, PeerAddrs, Ping, Pong,
