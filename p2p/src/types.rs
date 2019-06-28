@@ -27,7 +27,6 @@ use std::sync::Arc;
 
 use chrono::prelude::*;
 use enum_primitive::FromPrimitive;
-use i2p;
 use i2p::net::{I2pAddr, I2pSocketAddr, I2pStream};
 
 use crate::chain;
@@ -131,7 +130,6 @@ pub enum PeerAddr {
 	I2p(I2pSocketAddr),
 }
 
-/// Types of peer addreseses
 enum_from_primitive! {
 	#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
   pub enum PeerAddrType {
@@ -805,8 +803,8 @@ pub trait NetAdapter: ChainAdapter {
 	fn peer_addrs_received(&self, _: Vec<PeerAddr>);
 
 	/// Heard total_difficulty from a connected peer (via ping/pong).
-	fn peer_difficulty(&self, _: PeerAddr, _: Difficulty, _: u64);
+	fn peer_difficulty(&self, _: &PeerAddr, _: Difficulty, _: u64);
 
 	/// Is this peer currently banned?
-	fn is_banned(&self, addr: PeerAddr) -> bool;
+	fn is_banned(&self, addr: &PeerAddr) -> bool;
 }

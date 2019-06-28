@@ -74,7 +74,7 @@ pub struct Server {
 	connect_thread: Option<JoinHandle<()>>,
 	sync_thread: JoinHandle<()>,
 	dandelion_thread: JoinHandle<()>,
-	p2p_thread: JoinHandle<()>,
+	p2p_thread: JoinHandle<Result<(), grin_p2p::types::Error>>,
 }
 
 impl Server {
@@ -150,7 +150,7 @@ impl Server {
 			Some(b) => b,
 		};
 
-		let stop_state = Arc::new(Mutex::new(StopState::new()));
+		let stop_state = Arc::new(StopState::new());
 
 		// Setup i2p keys and daemon if configured
 		let i2p_session = i2p::init(&mut config);
@@ -263,13 +263,13 @@ impl Server {
 		let p2p_inner = p2p_server.clone();
 		let p2p_thread = thread::Builder::new()
 			.name("p2p-server".to_string())
-			.spawn(move || p2p_inner.listen());
+			.spawn(move || p2p_inner.listen())?;
 
 		if i2p_session.is_some() {
 			let p2p_inner = p2p_server.clone();
 			let _ = thread::Builder::new()
 				.name("p2p-server-i2p".to_string())
-				.spawn(move || p2p_inner.listen_i2p());
+				.spawn(move || p2p_inner.listen_i2p())?;
 		}
 
 		info!("Starting rest apis at: {}", &config.api_http_addr);
@@ -329,7 +329,7 @@ impl Server {
 	}
 
 	/// Asks the server to connect to a peer at the provided network address.
-	pub fn connect_peer(&self, addr: PeerAddr) -> Result<(), Error> {
+	pub fn connect_peer(&self, addr: &PeerAddr) -> Result<(), Error> {
 		self.p2p.connect(addr)?;
 		Ok(())
 	}

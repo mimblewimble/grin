@@ -197,9 +197,6 @@ pub struct ServerConfig {
 	/// Configuration for the webhooks that trigger on certain events
 	#[serde(default)]
 	pub webhook_config: WebHooksConfig,
-
-	/// Mode of use and configuration for i2p
-	pub i2pd_mode: I2pMode,
 }
 
 impl Default for ServerConfig {
@@ -520,7 +517,7 @@ impl DandelionEpoch {
 			.expect("stem_probability config missing");
 		self.is_stem = rng.gen_range(0, 100) < stem_probability;
 
-		let addr = self.relay_peer.clone().map(|p| p.info.addr);
+		let addr = self.relay_peer.clone().map(|p| p.info.addr.clone());
 		info!(
 			"DandelionEpoch: next_epoch: is_stem: {} ({}%), relay: {:?}",
 			self.is_stem, stem_probability, addr
@@ -552,7 +549,7 @@ impl DandelionEpoch {
 			self.relay_peer = peers.outgoing_connected_peers().first().cloned();
 			info!(
 				"DandelionEpoch: relay_peer: new peer chosen: {:?}",
-				self.relay_peer.clone().map(|p| p.info.addr)
+				self.relay_peer.clone().map(|p| p.info.addr.clone())
 			);
 		}
 
