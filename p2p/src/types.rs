@@ -98,8 +98,8 @@ impl From<io::Error> for Error {
 		Error::Connection(e)
 	}
 }
-impl<T> From<mpsc::TrySendError<T>> for Error {
-	fn from(e: mpsc::TrySendError<T>) -> Error {
+impl<T> From<mpsc::SendError<T>> for Error {
+	fn from(e: mpsc::SendError<T>) -> Error {
 		Error::Send(e.to_string())
 	}
 }

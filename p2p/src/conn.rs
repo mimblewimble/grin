@@ -201,7 +201,7 @@ impl StopHandle {
 
 pub struct ConnHandle {
 	/// Channel to allow sending data through the connection
-	pub send_channel: mpsc::SyncSender<Vec<u8>>,
+	pub send_channel: mpsc::Sender<Vec<u8>>,
 }
 
 impl ConnHandle {
@@ -211,7 +211,7 @@ impl ConnHandle {
 	{
 		let buf = write_to_buf(body, msg_type)?;
 		let buf_len = buf.len();
-		self.send_channel.try_send(buf)?;
+		self.send_channel.send(buf)?;
 		Ok(buf_len as u64)
 	}
 }
@@ -261,7 +261,7 @@ pub fn listen<H>(
 where
 	H: MessageHandler,
 {
-	let (send_tx, send_rx) = mpsc::sync_channel(SEND_CHANNEL_CAP);
+	let (send_tx, send_rx) = mpsc::channel();
 	let (close_tx, close_rx) = mpsc::channel();
 
 	stream
