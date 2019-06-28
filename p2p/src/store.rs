@@ -124,7 +124,7 @@ impl PeerStore {
 		debug!("save_peer: {:?} marked {:?}", p.addr, p.flags);
 
 		let batch = self.db.batch()?;
-		batch.put_ser(&peer_key(&p.addr)[..], p)?;
+		batch.put_ser(&peer_key(&p.addr.clone())[..], p)?;
 		batch.commit()
 	}
 
@@ -141,9 +141,9 @@ impl PeerStore {
 
 	/// TODO - allow below added to avoid github issue reports
 	#[allow(dead_code)]
-	pub fn delete_peer(&self, peer_addr: PeerAddr) -> Result<(), Error> {
+	pub fn delete_peer(&self, peer_addr: &PeerAddr) -> Result<(), Error> {
 		let batch = self.db.batch()?;
-		batch.delete(&peer_key(&peer_addr)[..])?;
+		batch.delete(&peer_key(peer_addr)[..])?;
 		batch.commit()
 	}
 
@@ -210,7 +210,7 @@ impl PeerStore {
 			let batch = self.db.batch()?;
 
 			for peer in to_remove {
-				batch.delete(&peer_key(&peer.addr)[..])?;
+				batch.delete(&peer_key(&peer.addr.clone())[..])?;
 			}
 
 			batch.commit()?;

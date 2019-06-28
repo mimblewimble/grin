@@ -653,7 +653,7 @@ impl NetToChainAdapter {
 	where
 		F: Fn(&p2p::Peer, Hash) -> Result<(), p2p::Error>,
 	{
-		match self.peers().get_connected_peer(peer_info.addr) {
+		match self.peers().get_connected_peer(&peer_info.addr.clone()) {
 			None => debug!(
 				"send_tx_request_to_peer: can't send request to peer {:?}, not connected",
 				peer_info.addr
@@ -671,7 +671,7 @@ impl NetToChainAdapter {
 		F: Fn(&p2p::Peer, Hash) -> Result<(), p2p::Error>,
 	{
 		match self.chain().block_exists(h) {
-			Ok(false) => match self.peers().get_connected_peer(peer_info.addr) {
+			Ok(false) => match self.peers().get_connected_peer(&peer_info.addr.clone()) {
 				None => debug!(
 					"send_block_request_to_peer: can't send request to peer {:?}, not connected",
 					peer_info.addr

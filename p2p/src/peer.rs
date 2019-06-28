@@ -16,7 +16,7 @@ use crate::util::{Mutex, RwLock};
 use std::fmt;
 use std::fs::File;
 use std::io::Read;
-use std::net::{Shutdown, TcpStream};
+use std::net::Shutdown;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
@@ -73,7 +73,7 @@ impl fmt::Debug for Peer {
 
 impl Peer {
 	// Only accept and connect can be externally used to build a peer
-	fn new(info: PeerInfo, conn: TcpStream, adapter: Arc<dyn NetAdapter>) -> std::io::Result<Peer> {
+	fn new(info: PeerInfo, conn: Stream, adapter: Arc<dyn NetAdapter>) -> std::io::Result<Peer> {
 		let state = Arc::new(RwLock::new(State::Connected));
 		let state_sync_requested = Arc::new(AtomicBool::new(false));
 		let tracking_adapter = TrackingAdapter::new(adapter);
@@ -150,15 +150,23 @@ impl Peer {
 
 	/// Main peer loop listening for messages and forwarding to the rest of the
 	/// system.
-	pub fn start(&mut self, conn: Stream) {
+	pub fn start(&mut self, conn: Stream) -> Result<(), Error> {
 		let adapter = Arc::new(self.tracking_adapter.clone());
-		let handler = Protocol::new(adapter, self.info.addr.clone());
-		self.connection = Some(Mutex::new(conn::listen(conn, handler)));
+		let handler = Protocol::new(adapter, self.info.clone());
+		let (sendh, stoph) = conn::listen(
+			conn,
+			self.info.version.clone(),
+			self.tracker.clone(),
+			handler,
+		)?;
+		self.send_handle = Mutex::new(sendh);
+		self.stop_handle = Mutex::new(stoph);
+		Ok(())
 	}
 
-	pub fn is_denied(config: &P2PConfig, peer_addr: PeerAddr) -> bool {
+	pub fn is_denied(config: &P2PConfig, peer_addr: &PeerAddr) -> bool {
 		if let Some(ref denied) = config.peers_deny {
-			if denied.contains(&peer_addr) {
+			if denied.contains(peer_addr) {
 				debug!(
 					"checking peer allowed/denied: {:?} explicitly denied",
 					peer_addr
@@ -167,7 +175,7 @@ impl Peer {
 			}
 		}
 		if let Some(ref allowed) = config.peers_allow {
-			if allowed.contains(&peer_addr) {
+			if allowed.contains(peer_addr) {
 				debug!(
 					"checking peer allowed/denied: {:?} explicitly allowed",
 					peer_addr
@@ -628,11 +636,11 @@ impl NetAdapter for TrackingAdapter {
 		self.adapter.peer_addrs_received(addrs)
 	}
 
-	fn peer_difficulty(&self, addr: PeerAddr, diff: Difficulty, height: u64) {
+	fn peer_difficulty(&self, addr: &PeerAddr, diff: Difficulty, height: u64) {
 		self.adapter.peer_difficulty(addr, diff, height)
 	}
 
-	fn is_banned(&self, addr: PeerAddr) -> bool {
+	fn is_banned(&self, addr: &PeerAddr) -> bool {
 		self.adapter.is_banned(addr)
 	}
 }

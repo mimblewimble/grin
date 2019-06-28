@@ -62,7 +62,7 @@ impl MessageHandler for Protocol {
 		// If we received a msg from a banned peer then log and drop it.
 		// If we are getting a lot of these then maybe we are not cleaning
 		// banned peers up correctly?
-		if adapter.is_banned(self.peer_info.addr) {
+		if adapter.is_banned(&self.peer_info.addr.clone()) {
 			debug!(
 				"handler: consume: peer {:?} banned, received: {:?}, dropping.",
 				self.peer_info.addr, msg.header.msg_type,
@@ -73,7 +73,11 @@ impl MessageHandler for Protocol {
 		match msg.header.msg_type {
 			Type::Ping => {
 				let ping: Ping = msg.body()?;
-				adapter.peer_difficulty(self.peer_info.addr, ping.total_difficulty, ping.height);
+				adapter.peer_difficulty(
+					&self.peer_info.addr.clone(),
+					ping.total_difficulty,
+					ping.height,
+				);
 
 				Ok(Some(Response::new(
 					Type::Pong,
@@ -88,7 +92,11 @@ impl MessageHandler for Protocol {
 
 			Type::Pong => {
 				let pong: Pong = msg.body()?;
-				adapter.peer_difficulty(self.peer_info.addr, pong.total_difficulty, pong.height);
+				adapter.peer_difficulty(
+					&self.peer_info.addr.clone(),
+					pong.total_difficulty,
+					pong.height,
+				);
 				Ok(None)
 			}
 

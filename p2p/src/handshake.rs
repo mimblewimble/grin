@@ -101,7 +101,7 @@ impl Handshake {
 		let peer_info = PeerInfo {
 			capabilities: shake.capabilities,
 			user_agent: shake.user_agent,
-			addr: peer_addr,
+			addr: peer_addr.clone(),
 			version: shake.version,
 			live_info: Arc::new(RwLock::new(PeerLiveInfo::new(shake.total_difficulty))),
 			direction: Direction::Outbound,
@@ -109,7 +109,7 @@ impl Handshake {
 
 		// If denied then we want to close the connection
 		// (without providing our peer with any details why).
-		if Peer::is_denied(&self.config, &peer_info.addr) {
+		if Peer::is_denied(&self.config, &peer_info.addr.clone()) {
 			return Err(Error::ConnectionClose);
 		}
 
@@ -171,7 +171,7 @@ impl Handshake {
 		// so check if we are configured to explicitly allow or deny it.
 		// If denied then we want to close the connection
 		// (without providing our peer with any details why).
-		if Peer::is_denied(&self.config, &peer_info.addr) {
+		if Peer::is_denied(&self.config, &peer_info.addr.clone()) {
 			return Err(Error::ConnectionClose);
 		}
 

@@ -47,7 +47,7 @@ pub struct Server {
 	handshake: Arc<Handshake>,
 	pub peers: Arc<Peers>,
 	i2p_session: Option<Arc<Session>>,
-	stop_state: Arc<Mutex<StopState>>,
+	stop_state: Arc<StopState>,
 }
 
 // TODO TLS
@@ -100,7 +100,9 @@ impl Server {
 						Err(Error::ConnectionClose) => debug!("shutting down, ignoring a new peer"),
 						Err(e) => {
 							debug!("Error accepting peer {}: {:?}", peer_addr.to_string(), e);
-							let _ = self.peers.add_banned(peer_addr, ReasonForBan::BadHandshake);
+							let _ = self
+								.peers
+								.add_banned(&peer_addr.clone(), ReasonForBan::BadHandshake);
 						}
 						Ok(_) => {}
 					}
@@ -126,7 +128,7 @@ impl Server {
 		let listener = I2pListener::bind_with_session(&session)?;
 
 		for stream in listener.incoming() {
-			if self.stop_state.lock().is_stopped() {
+			if self.stop_state.is_stopped() {
 				break;
 			}
 			match stream {
@@ -143,7 +145,9 @@ impl Server {
 							peer_addr.to_string(),
 							e
 						);
-						let _ = self.peers.add_banned(peer_addr, ReasonForBan::BadHandshake);
+						let _ = self
+							.peers
+							.add_banned(&peer_addr.clone(), ReasonForBan::BadHandshake);
 					}
 				}
 				Err(e) => {
@@ -167,12 +171,12 @@ impl Server {
 	/// Asks the server to connect to a new peer. Directly returns the peer if
 	/// we're already connected to the provided address. Optionally takes an i2p
 	/// session to be able to handle i2p client connections.
-	pub fn connect(&self, addr: PeerAddr) -> Result<Arc<Peer>, Error> {
+	pub fn connect(&self, addr: &PeerAddr) -> Result<Arc<Peer>, Error> {
 		if self.stop_state.is_stopped() {
 			return Err(Error::ConnectionClose);
 		}
 
-		if Peer::is_denied(&self.config, addr) {
+		if Peer::is_denied(&self.config, &addr.clone()) {
 			debug!("connect_peer: peer {} denied, not connecting.", addr);
 			return Err(Error::ConnectionClose);
 		}
@@ -180,13 +184,13 @@ impl Server {
 		if global::is_production_mode() {
 			let hs = self.handshake.clone();
 			let addrs = hs.addrs.read();
-			if addrs.contains(&addr) {
+			if addrs.contains(&addr.clone()) {
 				debug!("connect: ignore connecting to PeerWithSelf, addr: {}", addr);
 				return Err(Error::PeerWithSelf);
 			}
 		}
 
-		if let Some(p) = self.peers.get_connected_peer(&addr) {
+		if let Some(p) = self.peers.get_connected_peer(&addr.clone()) {
 			// if we're already connected to the addr, just return the peer
 			trace!("connect_peer: already connected {}", addr);
 			return Ok(p);
@@ -198,7 +202,7 @@ impl Server {
 			self.config.port,
 			addr
 		);
-		let (mut stream, self_addr) = match addr {
+		let (stream, self_addr) = match addr {
 			PeerAddr::Socket(addr) => {
 				let tcp_stream = TcpStream::connect_timeout(&addr, Duration::from_secs(10))
 					.map_err(|e| Error::Connection(e))?;
@@ -216,21 +220,20 @@ impl Server {
 		};
 
 		let total_diff = self.peers.total_difficulty()?;
-		let mut peer = Peer::connect(
-			&mut stream,
+		let peer = Peer::connect(
+			stream,
 			self.capabilities,
 			total_diff,
 			self_addr,
 			&self.handshake,
 			self.peers.clone(),
 		)?;
-		peer.start(stream);
 		let peer = Arc::new(peer);
 		self.peers.add_connected(peer.clone())?;
 		Ok(peer)
 	}
 
-	fn handle_new_peer(&self, mut stream: Stream) -> Result<(), Error> {
+	fn handle_new_peer(&self, stream: Stream) -> Result<(), Error> {
 		let total_diff = self.peers.total_difficulty()?;
 
 		// accept the peer and add it to the server map
@@ -256,14 +259,14 @@ impl Server {
 	/// duplicate connections, malicious or not.
 	fn check_undesirable(&self, stream: &Stream) -> bool {
 		if let Ok(peer_addr) = stream.peer_addr() {
-			if self.peers.is_banned(&peer_addr) {
+			if self.peers.is_banned(&peer_addr.clone()) {
 				debug!("Peer {} banned, refusing connection.", peer_addr);
 				if let Err(e) = stream.shutdown(Shutdown::Both) {
 					debug!("Error shutting down conn: {:?}", e);
 				}
 				return true;
 			}
-			if self.peers.is_known(&peer_addr) {
+			if self.peers.is_known(&peer_addr.clone()) {
 				debug!("Peer {} already known, refusing connection.", peer_addr);
 				if let Err(e) = stream.shutdown(Shutdown::Both) {
 					debug!("Error shutting down conn: {:?}", e);
@@ -392,8 +395,8 @@ impl NetAdapter for DummyAdapter {
 		vec![]
 	}
 	fn peer_addrs_received(&self, _: Vec<PeerAddr>) {}
-	fn peer_difficulty(&self, _: PeerAddr, _: Difficulty, _: u64) {}
-	fn is_banned(&self, _: PeerAddr) -> bool {
+	fn peer_difficulty(&self, _: &PeerAddr, _: Difficulty, _: u64) {}
+	fn is_banned(&self, _: &PeerAddr) -> bool {
 		false
 	}
 }
