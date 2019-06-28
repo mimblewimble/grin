@@ -163,7 +163,7 @@ impl<'a> Response<'a> {
 	}
 }
 
-pub const SEND_CHANNEL_CAP: usize = 10;
+pub const SEND_CHANNEL_CAP: usize = 100;
 
 pub struct StopHandle {
 	/// Channel to close the connection

@@ -106,7 +106,7 @@ impl BodySync {
 		// 10) max will be 80 if all 8 peers are advertising more work
 		// also if the chain is already saturated with orphans, throttle
 		let block_count = cmp::min(
-			cmp::min(100, peers.len() * p2p::SEND_CHANNEL_CAP),
+			cmp::min(100, peers.len() * 10),
 			chain::MAX_ORPHAN_SIZE.saturating_sub(self.chain.orphans_len()) + 1,
 		);
 
