@@ -40,7 +40,7 @@ const LOCK_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(2);
 
 pub struct Peers {
 	pub adapter: Arc<dyn ChainAdapter>,
-	store: PeerStore,
+	store: RwLock<PeerStore>,
 	peers: RwLock<HashMap<PeerAddr, Arc<Peer>>>,
 	config: P2PConfig,
 }
@@ -49,7 +49,7 @@ impl Peers {
 	pub fn new(store: PeerStore, adapter: Arc<dyn ChainAdapter>, config: P2PConfig) -> Peers {
 		Peers {
 			adapter,
-			store,
+			store: RwLock::new(store),
 			config,
 			peers: RwLock::new(HashMap::new()),
 		}
@@ -230,7 +230,7 @@ impl Peers {
 	}
 
 	pub fn is_banned(&self, peer_addr: PeerAddr) -> bool {
-		if let Ok(peer) = self.store.get_peer(peer_addr) {
+		if let Ok(peer) = self.store.read().get_peer(peer_addr) {
 			return peer.flags == State::Banned;
 		}
 		false
@@ -388,7 +388,7 @@ impl Peers {
 
 	/// All peer information we have in storage
 	pub fn all_peers(&self) -> Vec<PeerData> {
-		match self.store.all_peers() {
+		match self.store.read().all_peers() {
 			Ok(peers) => peers,
 			Err(e) => {
 				error!("all_peers failed: {:?}", e);
@@ -399,7 +399,7 @@ impl Peers {
 
 	/// Find peers in store (not necessarily connected) and return their data
 	pub fn find_peers(&self, state: State, cap: Capabilities, count: usize) -> Vec<PeerData> {
-		match self.store.find_peers(state, cap, count) {
+		match self.store.read().find_peers(state, cap, count) {
 			Ok(peers) => peers,
 			Err(e) => {
 				error!("failed to find peers: {:?}", e);
@@ -410,22 +410,23 @@ impl Peers {
 
 	/// Get peer in store by address
 	pub fn get_peer(&self, peer_addr: PeerAddr) -> Result<PeerData, Error> {
-		self.store.get_peer(peer_addr).map_err(From::from)
+		self.store.read().get_peer(peer_addr).map_err(From::from)
 	}
 
 	/// Whether we've already seen a peer with the provided address
 	pub fn exists_peer(&self, peer_addr: PeerAddr) -> Result<bool, Error> {
-		self.store.exists_peer(peer_addr).map_err(From::from)
+		self.store.read().exists_peer(peer_addr).map_err(From::from)
 	}
 
 	/// Saves updated information about a peer
 	pub fn save_peer(&self, p: &PeerData) -> Result<(), Error> {
-		self.store.save_peer(p).map_err(From::from)
+		self.store.write().save_peer(p).map_err(From::from)
 	}
 
 	/// Updates the state of a peer in store
 	pub fn update_state(&self, peer_addr: PeerAddr, new_state: State) -> Result<(), Error> {
 		self.store
+			.write()
 			.update_state(peer_addr, new_state)
 			.map_err(From::from)
 	}
@@ -533,7 +534,7 @@ impl Peers {
 		let now = Utc::now();
 
 		// Delete defunct peers from storage
-		let _ = self.store.delete_peers(|peer| {
+		let _ = self.store.write().delete_peers(|peer| {
 			let diff = now - Utc.timestamp(peer.last_connected, 0);
 
 			let should_remove = peer.flags == State::Defunct
