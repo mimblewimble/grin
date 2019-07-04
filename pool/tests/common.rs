@@ -229,10 +229,7 @@ where
 }
 
 pub fn test_source() -> TxSource {
-	TxSource {
-		debug_name: format!("test"),
-		identifier: format!("127.0.0.1"),
-	}
+	TxSource::Broadcast
 }
 
 pub fn clean_output_dir(db_root: String) {
