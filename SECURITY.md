@@ -4,11 +4,12 @@ Grin has a [code of conduct](CODE_OF_CONDUCT.md) and the handling of vulnerabili
 
 ## Responsible Disclosure
 
-For all security related issues, Grin has 3 main points of contact:
+For all security related issues, Grin has 4 main points of contact:
 
 * Daniel Lehnberg, daniel.lehnberg at protonmail.com
 * Ignotus Peverell, igno.peverell at protonmail.com
 * hashmap, hashmap.dev at protonmail.com
+* John Woeltz, joltz at protonmail.com
 
 Send all communications to all parties and expect a reply within 48h. Public keys can be found at the end of this document.
 
@@ -70,7 +71,7 @@ The Grin Team runs a chain split monitoring tool at (TBD). It is encouraged to m
 ## Public Keys
 
 ### Daniel Lehnberg
-  ````
+```
 -----BEGIN PGP PUBLIC KEY BLOCK-----
 
 mQINBFuWAuMBEACqRebggT91uazP/jzmKOD/UyVwxaXBtEcWt1/hp9fi1azLxGBn
@@ -234,5 +235,60 @@ JXtRgfeOoXe79uBZftbIKwNZRy9DAyCUTpQR7V9EGppz37b7sYswLXJGOlwE
 mie8azMPT2b90c5pBBBz9FqUkMHPLdJKR0UuaZGbGC/D2TKv928KSrymjlaQ
 cN4UNoeD4hpgWl16VHn1wtOl5AEGkg==
 =/+Vo
+-----END PGP PUBLIC KEY BLOCK-----
+```
+### John Woeltz
+```
+-----BEGIN PGP PUBLIC KEY BLOCK-----
+
+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
+OXCaSbMWSCzC0g==
+=BniA
 -----END PGP PUBLIC KEY BLOCK-----
 ```
