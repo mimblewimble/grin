@@ -75,10 +75,10 @@ fn process_header_for_block(
 
 // Check if we already know about this block for various reasons
 // from cheapest to most expensive (delay hitting the db until last).
-fn check_known(block: &Block, ctx: &mut BlockContext<'_>) -> Result<(), Error> {
-	check_known_head(&block.header, ctx)?;
-	check_known_orphans(&block.header, ctx)?;
-	check_known_store(&block.header, ctx)?;
+fn check_known(header: &BlockHeader, ctx: &mut BlockContext<'_>) -> Result<(), Error> {
+	check_known_head(header, ctx)?;
+	check_known_orphans(header, ctx)?;
+	check_known_store(header, ctx)?;
 	Ok(())
 }
 
@@ -99,7 +99,7 @@ pub fn process_block(b: &Block, ctx: &mut BlockContext<'_>) -> Result<Option<Tip
 	);
 
 	// Check if we have already processed this block previously.
-	check_known(b, ctx)?;
+	check_known(&b.header, ctx)?;
 
 	// Delay hitting the db for current chain head until we know
 	// this block is not already known.
@@ -260,19 +260,10 @@ pub fn process_block_header(header: &BlockHeader, ctx: &mut BlockContext<'_>) ->
 		header.height,
 	); // keep this
 
-	check_header_known(header, ctx)?;
-	validate_header(header, ctx)?;
-	Ok(())
-}
+	// Check if this header is already "known" from processing a previous block.
+	check_known(header, ctx)?;
 
-/// Quick in-memory check to fast-reject any block header we've already handled
-/// recently. Keeps duplicates from the network in check.
-/// ctx here is specific to the header_head (tip of the header chain)
-fn check_header_known(header: &BlockHeader, ctx: &mut BlockContext<'_>) -> Result<(), Error> {
-	let header_head = ctx.batch.header_head()?;
-	if header.hash() == header_head.last_block_h || header.hash() == header_head.prev_block_h {
-		return Err(ErrorKind::Unfit("header already known".to_string()).into());
-	}
+	validate_header(header, ctx)?;
 	Ok(())
 }
 
