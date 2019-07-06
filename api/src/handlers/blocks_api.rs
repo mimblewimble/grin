@@ -87,10 +87,15 @@ pub struct BlockHandler {
 }
 
 impl BlockHandler {
-	fn get_block(&self, h: &Hash, include_merkle_proof: bool) -> Result<BlockPrintable, Error> {
+	fn get_block(
+		&self,
+		h: &Hash,
+		include_proof: bool,
+		include_merkle_proof: bool,
+	) -> Result<BlockPrintable, Error> {
 		let chain = w(&self.chain)?;
 		let block = chain.get_block(h).context(ErrorKind::NotFound)?;
-		BlockPrintable::from_block(&block, chain, false, include_merkle_proof)
+		BlockPrintable::from_block(&block, chain, include_proof, include_merkle_proof)
 			.map_err(|_| ErrorKind::Internal("chain error".to_owned()).into())
 	}
 
@@ -144,8 +149,10 @@ impl Handler for BlockHandler {
 		if let Some(param) = req.uri().query() {
 			if param == "compact" {
 				result_to_response(self.get_compact_block(&h))
+			} else if param == "include_proof" {
+				result_to_response(self.get_block(&h, true, true))
 			} else if param == "no_merkle_proof" {
-				result_to_response(self.get_block(&h, false))
+				result_to_response(self.get_block(&h, false, false))
 			} else {
 				response(
 					StatusCode::BAD_REQUEST,
@@ -153,7 +160,7 @@ impl Handler for BlockHandler {
 				)
 			}
 		} else {
-			result_to_response(self.get_block(&h, true))
+			result_to_response(self.get_block(&h, false, true))
 		}
 	}
 }
