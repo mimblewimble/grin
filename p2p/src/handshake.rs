@@ -73,8 +73,8 @@ impl Handshake {
 			Err(e) => return Err(Error::Connection(e)),
 		};
 
-		// Using our default version here.
-		let version = ProtocolVersion::default();
+		// Using our default "local" protocol version.
+		let version = ProtocolVersion::local();
 
 		let hand = Hand {
 			version,
@@ -88,7 +88,7 @@ impl Handshake {
 		};
 
 		// write and read the handshake response
-		write_message(conn, hand, Type::Hand)?;
+		write_message(conn, hand, Type::Hand, version)?;
 
 		// Note: We have to read the Shake message *before* we know which protocol
 		// version our peer supports (it is in the shake message itself).
@@ -132,8 +132,9 @@ impl Handshake {
 		conn: &mut TcpStream,
 	) -> Result<PeerInfo, Error> {
 		// Note: We read the Hand message *before* we know which protocol version
-		// is supported by our peer (it is in the Hand message).
-		let version = ProtocolVersion::default();
+		// is supported by our peer (in the Hand message).
+		let version = ProtocolVersion::local();
+
 		let hand: Hand = read_message(conn, version, Type::Hand)?;
 
 		// all the reasons we could refuse this connection for
@@ -177,17 +178,16 @@ impl Handshake {
 
 		// send our reply with our info
 		let shake = Shake {
-			version: ProtocolVersion::default(),
+			version,
 			capabilities: capab,
 			genesis: self.genesis,
 			total_difficulty: total_difficulty,
 			user_agent: USER_AGENT.to_string(),
 		};
 
-		write_message(conn, shake, Type::Shake)?;
+		write_message(conn, shake, Type::Shake, version)?;
 		trace!("Success handshake with {}.", peer_info.addr);
 
-		// when more than one protocol version is supported, choosing should go here
 		Ok(peer_info)
 	}
 

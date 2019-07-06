@@ -76,7 +76,7 @@ impl PoolPushHandler {
 				})
 				.and_then(move |tx_bin| {
 					// TODO - pass protocol version in via the api call?
-					let version = ProtocolVersion::default();
+					let version = ProtocolVersion::local();
 
 					ser::deserialize(&mut &tx_bin[..], version)
 						.map_err(|e| ErrorKind::RequestError(format!("Bad request: {}", e)).into())

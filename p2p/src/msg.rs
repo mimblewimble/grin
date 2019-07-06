@@ -191,15 +191,19 @@ pub fn read_message<T: Readable>(
 	}
 }
 
-pub fn write_to_buf<T: Writeable>(msg: T, msg_type: Type) -> Result<Vec<u8>, Error> {
+pub fn write_to_buf<T: Writeable>(
+	msg: T,
+	msg_type: Type,
+	version: ProtocolVersion,
+) -> Result<Vec<u8>, Error> {
 	// prepare the body first so we know its serialized length
 	let mut body_buf = vec![];
-	ser::serialize(&mut body_buf, &msg)?;
+	ser::serialize(&mut body_buf, version, &msg)?;
 
 	// build and serialize the header using the body size
 	let mut msg_buf = vec![];
 	let blen = body_buf.len() as u64;
-	ser::serialize(&mut msg_buf, &MsgHeader::new(msg_type, blen))?;
+	ser::serialize(&mut msg_buf, version, &MsgHeader::new(msg_type, blen))?;
 	msg_buf.append(&mut body_buf);
 
 	Ok(msg_buf)
@@ -209,8 +213,9 @@ pub fn write_message<T: Writeable>(
 	stream: &mut dyn Write,
 	msg: T,
 	msg_type: Type,
+	version: ProtocolVersion,
 ) -> Result<(), Error> {
-	let buf = write_to_buf(msg, msg_type)?;
+	let buf = write_to_buf(msg, msg_type, version)?;
 	stream.write_all(&buf[..])?;
 	Ok(())
 }

@@ -211,10 +211,10 @@ fn remove_coinbase_kernel_flag() {
 #[test]
 fn serialize_deserialize_header_version() {
 	let mut vec1 = Vec::new();
-	ser::serialize(&mut vec1, &1_u16).expect("serialization failed");
+	ser::serialize_default(&mut vec1, &1_u16).expect("serialization failed");
 
 	let mut vec2 = Vec::new();
-	ser::serialize(&mut vec2, &HeaderVersion::default()).expect("serialization failed");
+	ser::serialize_default(&mut vec2, &HeaderVersion::default()).expect("serialization failed");
 
 	// Check that a header_version serializes to a
 	// single u16 value with no extraneous bytes wrapping it.
@@ -235,7 +235,7 @@ fn serialize_deserialize_block_header() {
 	let header1 = b.header;
 
 	let mut vec = Vec::new();
-	ser::serialize(&mut vec, &header1).expect("serialization failed");
+	ser::serialize_default(&mut vec, &header1).expect("serialization failed");
 	let header2: BlockHeader = ser::deserialize_default(&mut &vec[..]).unwrap();
 
 	assert_eq!(header1.hash(), header2.hash());
@@ -252,7 +252,7 @@ fn serialize_deserialize_block() {
 	let b = new_block(vec![&tx1], &keychain, &builder, &prev, &key_id);
 
 	let mut vec = Vec::new();
-	ser::serialize(&mut vec, &b).expect("serialization failed");
+	ser::serialize_default(&mut vec, &b).expect("serialization failed");
 	let b2: Block = ser::deserialize_default(&mut &vec[..]).unwrap();
 
 	assert_eq!(b.hash(), b2.hash());
@@ -270,7 +270,7 @@ fn empty_block_serialized_size() {
 	let key_id = ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
 	let b = new_block(vec![], &keychain, &builder, &prev, &key_id);
 	let mut vec = Vec::new();
-	ser::serialize(&mut vec, &b).expect("serialization failed");
+	ser::serialize_default(&mut vec, &b).expect("serialization failed");
 	let target_len = 1_265;
 	assert_eq!(vec.len(), target_len);
 }
@@ -284,7 +284,7 @@ fn block_single_tx_serialized_size() {
 	let key_id = ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
 	let b = new_block(vec![&tx1], &keychain, &builder, &prev, &key_id);
 	let mut vec = Vec::new();
-	ser::serialize(&mut vec, &b).expect("serialization failed");
+	ser::serialize_default(&mut vec, &b).expect("serialization failed");
 	let target_len = 2_847;
 	assert_eq!(vec.len(), target_len);
 }
@@ -298,7 +298,7 @@ fn empty_compact_block_serialized_size() {
 	let b = new_block(vec![], &keychain, &builder, &prev, &key_id);
 	let cb: CompactBlock = b.into();
 	let mut vec = Vec::new();
-	ser::serialize(&mut vec, &cb).expect("serialization failed");
+	ser::serialize_default(&mut vec, &cb).expect("serialization failed");
 	let target_len = 1_273;
 	assert_eq!(vec.len(), target_len);
 }
@@ -313,7 +313,7 @@ fn compact_block_single_tx_serialized_size() {
 	let b = new_block(vec![&tx1], &keychain, &builder, &prev, &key_id);
 	let cb: CompactBlock = b.into();
 	let mut vec = Vec::new();
-	ser::serialize(&mut vec, &cb).expect("serialization failed");
+	ser::serialize_default(&mut vec, &cb).expect("serialization failed");
 	let target_len = 1_279;
 	assert_eq!(vec.len(), target_len);
 }
@@ -333,7 +333,7 @@ fn block_10_tx_serialized_size() {
 	let key_id = ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
 	let b = new_block(txs.iter().collect(), &keychain, &builder, &prev, &key_id);
 	let mut vec = Vec::new();
-	ser::serialize(&mut vec, &b).expect("serialization failed");
+	ser::serialize_default(&mut vec, &b).expect("serialization failed");
 	let target_len = 17_085;
 	assert_eq!(vec.len(), target_len,);
 }
@@ -353,7 +353,7 @@ fn compact_block_10_tx_serialized_size() {
 	let b = new_block(txs.iter().collect(), &keychain, &builder, &prev, &key_id);
 	let cb: CompactBlock = b.into();
 	let mut vec = Vec::new();
-	ser::serialize(&mut vec, &cb).expect("serialization failed");
+	ser::serialize_default(&mut vec, &cb).expect("serialization failed");
 	let target_len = 1_333;
 	assert_eq!(vec.len(), target_len,);
 }
@@ -439,7 +439,7 @@ fn serialize_deserialize_compact_block() {
 	let mut cb1: CompactBlock = b.into();
 
 	let mut vec = Vec::new();
-	ser::serialize(&mut vec, &cb1).expect("serialization failed");
+	ser::serialize_default(&mut vec, &cb1).expect("serialization failed");
 
 	// After header serialization, timestamp will lose 'nanos' info, that's the designed behavior.
 	// To suppress 'nanos' difference caused assertion fail, we force b.header also lose 'nanos'.

@@ -39,7 +39,7 @@ use std::sync::Arc;
 fn simple_tx_ser() {
 	let tx = tx2i1o();
 	let mut vec = Vec::new();
-	ser::serialize(&mut vec, &tx).expect("serialization failed");
+	ser::serialize_default(&mut vec, &tx).expect("serialization failed");
 	let target_len = 955;
 	assert_eq!(vec.len(), target_len,);
 }
@@ -48,7 +48,7 @@ fn simple_tx_ser() {
 fn simple_tx_ser_deser() {
 	let tx = tx2i1o();
 	let mut vec = Vec::new();
-	ser::serialize(&mut vec, &tx).expect("serialization failed");
+	ser::serialize_default(&mut vec, &tx).expect("serialization failed");
 	let dtx: Transaction = ser::deserialize_default(&mut &vec[..]).unwrap();
 	assert_eq!(dtx.fee(), 2);
 	assert_eq!(dtx.inputs().len(), 2);
@@ -62,11 +62,11 @@ fn tx_double_ser_deser() {
 	let btx = tx2i1o();
 
 	let mut vec = Vec::new();
-	assert!(ser::serialize(&mut vec, &btx).is_ok());
+	assert!(ser::serialize_default(&mut vec, &btx).is_ok());
 	let dtx: Transaction = ser::deserialize_default(&mut &vec[..]).unwrap();
 
 	let mut vec2 = Vec::new();
-	assert!(ser::serialize(&mut vec2, &btx).is_ok());
+	assert!(ser::serialize_default(&mut vec2, &btx).is_ok());
 	let dtx2: Transaction = ser::deserialize_default(&mut &vec2[..]).unwrap();
 
 	assert_eq!(btx.hash(), dtx.hash());

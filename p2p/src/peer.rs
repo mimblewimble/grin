@@ -224,7 +224,10 @@ impl Peer {
 
 	/// Send a msg with given msg_type to our peer via the connection.
 	fn send<T: Writeable>(&self, msg: T, msg_type: Type) -> Result<(), Error> {
-		let bytes = self.send_handle.lock().send(msg, msg_type)?;
+		let bytes = self
+			.send_handle
+			.lock()
+			.send(msg, msg_type, self.info.version)?;
 		self.tracker.inc_sent(bytes);
 		Ok(())
 	}
