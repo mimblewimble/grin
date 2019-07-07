@@ -147,8 +147,8 @@ pub fn process_block(b: &Block, ctx: &mut BlockContext<'_>) -> Result<Option<Tip
 	}
 }
 
-/// Process the block header.
-/// This is only ever used during sync and uses a context based on sync_head.
+/// Sync a chunk of block headers.
+/// This is only used during header sync.
 pub fn sync_block_headers(
 	headers: &[BlockHeader],
 	ctx: &mut BlockContext<'_>,
@@ -161,6 +161,16 @@ pub fn sync_block_headers(
 	let last_header = headers.last().expect("last header");
 	let prev_header = ctx.batch.get_previous_header(&first_header)?;
 
+	// Check if we know about all these headers. If so we can accept them quickly.
+	// If they *do not* increase total work on the sync chain we are done.
+	// If they *do* increase total work then we should process them to update sync_head.
+	let sync_head = ctx.batch.get_sync_head()?;
+	if let Ok(existing) = ctx.batch.get_block_header(&last_header.hash()) {
+		if !has_more_work(&existing, &sync_head) {
+			return Ok(());
+		}
+	}
+
 	txhashset::sync_extending(&mut ctx.txhashset, &mut ctx.batch, |extension| {
 		rewind_and_apply_header_fork(&prev_header, extension)?;
 		for header in headers {
@@ -171,32 +181,14 @@ pub fn sync_block_headers(
 		Ok(())
 	})?;
 
-	let sync_head = ctx.batch.get_sync_head()?;
-	if has_more_work(&last_header, &sync_head) {
-		update_sync_head(&Tip::from_header(&last_header), &mut ctx.batch)?;
-	}
-
 	// Validate all our headers now that we have added each "previous"
 	// header to the db in this batch above.
 	for header in headers {
 		validate_header(header, ctx)?;
 	}
 
-	// Now do the same thing for the header MMR itself.
-	// This allows our header MMR to extend out beyond the full txhashset
-	// and to remain consistent with our header_head at all times.
-	txhashset::header_extending(&mut ctx.txhashset, &mut ctx.batch, |extension| {
-		rewind_and_apply_header_fork(&prev_header, extension)?;
-		for header in headers {
-			extension.validate_root(header)?;
-			extension.apply_header(header)?;
-		}
-		Ok(())
-	})?;
-
-	let header_head = ctx.batch.header_head()?;
-	if has_more_work(&last_header, &header_head) {
-		update_header_head(&Tip::from_header(&last_header), &mut ctx.batch)?;
+	if has_more_work(&last_header, &sync_head) {
+		update_sync_head(&Tip::from_header(&last_header), &mut ctx.batch)?;
 	}
 
 	Ok(())
@@ -205,12 +197,10 @@ pub fn sync_block_headers(
 /// Process a block header. Update the header MMR and corresponding header_head if this header
 /// increases the total work relative to header_head.
 /// Note: In contrast to processing a full block we treat "already known" as success
-/// to allow processing to continue.
+/// to allow processing to continue (for header itself).
 pub fn process_block_header(header: &BlockHeader, ctx: &mut BlockContext<'_>) -> Result<(), Error> {
-	let header_head = ctx.batch.header_head()?;
-	if header.hash() == header_head.last_block_h || header.hash() == header_head.prev_block_h {
-		return Ok(());
-	}
+	// Check this header is not an orphan, we must know about the previous header to continue.
+	let prev_header = ctx.batch.get_previous_header(&header)?;
 
 	// If this header is "known" then stop processing the header.
 	// Do not stop processing with an error though.
@@ -218,7 +208,16 @@ pub fn process_block_header(header: &BlockHeader, ctx: &mut BlockContext<'_>) ->
 		return Ok(());
 	}
 
-	let prev_header = ctx.batch.get_previous_header(&header)?;
+	// If we have not yet seen the full block then check if we have seen this header.
+	// If it does not increase total_difficulty beyond our current header_head
+	// then we can (re)accept this header and process the full block (or request it).
+	// This header is on a fork and we should still accept it as the fork may eventually win.
+	let header_head = ctx.batch.header_head()?;
+	if let Ok(existing) = ctx.batch.get_block_header(&header.hash()) {
+		if !has_more_work(&existing, &header_head) {
+			return Ok(());
+		}
+	}
 
 	txhashset::header_extending(&mut ctx.txhashset, &mut ctx.batch, |extension| {
 		rewind_and_apply_header_fork(&prev_header, extension)?;
@@ -233,6 +232,11 @@ pub fn process_block_header(header: &BlockHeader, ctx: &mut BlockContext<'_>) ->
 	validate_header(header, ctx)?;
 	add_block_header(header, &ctx.batch)?;
 
+	// Update header_head independently of chain head (full blocks).
+	// If/when we process the corresponding full block we will update the
+	// chain head to match. This allows our header chain to extend safely beyond
+	// the full chain in a fork scenario without needing excessive rewinds to handle
+	// the temporarily divergent chains.
 	if has_more_work(&header, &header_head) {
 		update_header_head(&Tip::from_header(&header), &mut ctx.batch)?;
 	}

@@ -368,7 +368,15 @@ impl Chain {
 		let mut txhashset = self.txhashset.write();
 		let batch = self.store.batch()?;
 		let mut ctx = self.new_ctx(opts, batch, &mut txhashset)?;
+
+		// Sync the chunk of block headers, updating sync_head as necessary.
 		pipe::sync_block_headers(headers, &mut ctx)?;
+
+		// Now "process" the last block header, updating header_head to match sync_head.
+		if let Some(header) = headers.last() {
+			pipe::process_block_header(header, &mut ctx)?;
+		}
+
 		ctx.batch.commit()?;
 		Ok(())
 	}
