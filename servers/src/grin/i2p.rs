@@ -1,4 +1,4 @@
-// Copyright 2018 The Grin Developers
+// Copyright 2019 The Grin Developers
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -56,7 +56,8 @@ pub fn init(config: &mut ServerConfig) -> Option<Arc<Session>> {
 }
 
 fn start_i2pd() {
-	let i2pd_path = which::which("i2pd").unwrap();
+	let i2pd_path = which::which("i2pd")
+		.expect("Failed to find i2pd binary, ensure i2pd is on your system path.");
 	Command::new(i2pd_path.to_str().unwrap())
 		.arg("--daemon")
 		.spawn()

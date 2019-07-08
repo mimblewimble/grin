@@ -647,7 +647,7 @@ impl ChainAdapter for Peers {
 		if !self.adapter.headers_received(headers, peer_info)? {
 			// if the peer sent us a block header that's intrinsically bad
 			// they are either mistaken or malevolent, both of which require a ban
-			self.ban_peer(&peer_info.addr.clone(), ReasonForBan::BadBlockHeader);
+			self.ban_peer(&peer_info.addr, ReasonForBan::BadBlockHeader);
 			Ok(false)
 		} else {
 			Ok(true)
