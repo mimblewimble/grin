@@ -52,11 +52,11 @@ fn test_peer_addr_enum() {
 	let sock_peer = p2p::PeerAddr::Socket("127.0.0.1:9090".to_string().parse().unwrap());
 
 	let de_i2p_peer: p2p::PeerAddr =
-		toml::from_str(toml::to_string(&i2p_peer.clone()).unwrap().as_str()).unwrap();
+		toml::from_str(toml::to_string(&i2p_peer).unwrap().as_str()).unwrap();
 	let de_b32_peer: p2p::PeerAddr =
-		toml::from_str(toml::to_string(&b32_peer.clone()).unwrap().as_str()).unwrap();
+		toml::from_str(toml::to_string(&b32_peer).unwrap().as_str()).unwrap();
 	let de_sock_peer: p2p::PeerAddr =
-		toml::from_str(toml::to_string(&sock_peer.clone()).unwrap().as_str()).unwrap();
+		toml::from_str(toml::to_string(&sock_peer).unwrap().as_str()).unwrap();
 
 	assert_eq!(de_i2p_peer, i2p_peer);
 	assert_eq!(de_b32_peer, b32_peer);
@@ -73,9 +73,9 @@ fn test_i2p_mode_enum() {
 	};
 
 	let de_i2p_di: p2p::I2pMode =
-		toml::from_str(toml::to_string(&i2p_disabled.clone()).unwrap().as_str()).unwrap();
+		toml::from_str(toml::to_string(&i2p_disabled).unwrap().as_str()).unwrap();
 	let de_i2p_en: p2p::I2pMode =
-		toml::from_str(toml::to_string(&i2p_enabled.clone()).unwrap().as_str()).unwrap();
+		toml::from_str(toml::to_string(&i2p_enabled).unwrap().as_str()).unwrap();
 
 	assert_eq!(de_i2p_di, i2p_disabled);
 	assert_eq!(de_i2p_en, i2p_enabled);

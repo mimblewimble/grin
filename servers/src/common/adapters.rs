@@ -653,7 +653,7 @@ impl NetToChainAdapter {
 	where
 		F: Fn(&p2p::Peer, Hash) -> Result<(), p2p::Error>,
 	{
-		match self.peers().get_connected_peer(&peer_info.addr.clone()) {
+		match self.peers().get_connected_peer(&peer_info.addr) {
 			None => debug!(
 				"send_tx_request_to_peer: can't send request to peer {:?}, not connected",
 				peer_info.addr

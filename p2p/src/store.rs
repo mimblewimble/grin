@@ -124,7 +124,7 @@ impl PeerStore {
 		debug!("save_peer: {:?} marked {:?}", p.addr, p.flags);
 
 		let batch = self.db.batch()?;
-		batch.put_ser(&peer_key(&p.addr.clone())[..], p)?;
+		batch.put_ser(&peer_key(&p.addr)[..], p)?;
 		batch.commit()
 	}
 
@@ -210,7 +210,7 @@ impl PeerStore {
 			let batch = self.db.batch()?;
 
 			for peer in to_remove {
-				batch.delete(&peer_key(&peer.addr.clone())[..])?;
+				batch.delete(&peer_key(&peer.addr)[..])?;
 			}
 
 			batch.commit()?;

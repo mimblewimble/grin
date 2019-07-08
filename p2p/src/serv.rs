@@ -102,7 +102,7 @@ impl Server {
 							debug!("Error accepting peer {}: {:?}", peer_addr.to_string(), e);
 							let _ = self
 								.peers
-								.add_banned(&peer_addr.clone(), ReasonForBan::BadHandshake);
+								.add_banned(&peer_addr, ReasonForBan::BadHandshake);
 						}
 						Ok(_) => {}
 					}
@@ -147,7 +147,7 @@ impl Server {
 						);
 						let _ = self
 							.peers
-							.add_banned(&peer_addr.clone(), ReasonForBan::BadHandshake);
+							.add_banned(&peer_addr, ReasonForBan::BadHandshake);
 					}
 				}
 				Err(e) => {
@@ -176,7 +176,7 @@ impl Server {
 			return Err(Error::ConnectionClose);
 		}
 
-		if Peer::is_denied(&self.config, &addr.clone()) {
+		if Peer::is_denied(&self.config, &addr) {
 			debug!("connect_peer: peer {} denied, not connecting.", addr);
 			return Err(Error::ConnectionClose);
 		}
@@ -184,13 +184,13 @@ impl Server {
 		if global::is_production_mode() {
 			let hs = self.handshake.clone();
 			let addrs = hs.addrs.read();
-			if addrs.contains(&addr.clone()) {
+			if addrs.contains(&addr) {
 				debug!("connect: ignore connecting to PeerWithSelf, addr: {}", addr);
 				return Err(Error::PeerWithSelf);
 			}
 		}
 
-		if let Some(p) = self.peers.get_connected_peer(&addr.clone()) {
+		if let Some(p) = self.peers.get_connected_peer(&addr) {
 			// if we're already connected to the addr, just return the peer
 			trace!("connect_peer: already connected {}", addr);
 			return Ok(p);
@@ -259,14 +259,14 @@ impl Server {
 	/// duplicate connections, malicious or not.
 	fn check_undesirable(&self, stream: &Stream) -> bool {
 		if let Ok(peer_addr) = stream.peer_addr() {
-			if self.peers.is_banned(&peer_addr.clone()) {
+			if self.peers.is_banned(&peer_addr) {
 				debug!("Peer {} banned, refusing connection.", peer_addr);
 				if let Err(e) = stream.shutdown(Shutdown::Both) {
 					debug!("Error shutting down conn: {:?}", e);
 				}
 				return true;
 			}
-			if self.peers.is_known(&peer_addr.clone()) {
+			if self.peers.is_known(&peer_addr) {
 				debug!("Peer {} already known, refusing connection.", peer_addr);
 				if let Err(e) = stream.shutdown(Shutdown::Both) {
 					debug!("Error shutting down conn: {:?}", e);

@@ -224,7 +224,7 @@ fn monitor_peers(
 	// peer will see another as defunct eventually, gives us a chance to retry
 	if defuncts.len() > 0 {
 		defuncts.shuffle(&mut thread_rng());
-		let _ = peers.update_state(&defuncts[0].addr.clone(), p2p::State::Healthy);
+		let _ = peers.update_state(&defuncts[0].addr, p2p::State::Healthy);
 	}
 
 	// find some peers from our db
@@ -235,10 +235,7 @@ fn monitor_peers(
 		config.peer_max_count() as usize,
 	);
 
-	for p in new_peers
-		.iter()
-		.filter(|p| !peers.is_known(&p.addr.clone()))
-	{
+	for p in new_peers.iter().filter(|p| !peers.is_known(&p.addr)) {
 		trace!(
 			"monitor_peers: on {}:{}, queue to soon try {}",
 			config.host,
@@ -332,7 +329,7 @@ fn listen_for_addrs(
 		let p2p_c = p2p.clone();
 		thread::Builder::new()
 			.name("peer_connect".to_string())
-			.spawn(move || match p2p_c.connect(&addr.clone()) {
+			.spawn(move || match p2p_c.connect(&addr) {
 				Ok(p) => {
 					if p.send_peer_request(capab).is_ok() {
 						let _ = peers_c.update_state(&addr, p2p::State::Healthy);
