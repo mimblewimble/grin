@@ -230,7 +230,7 @@ impl Peers {
 	}
 
 	pub fn is_banned(&self, peer_addr: &PeerAddr) -> bool {
-		if let Ok(peer) = self.store.get_peer(&peer_addr.clone()) {
+		if let Ok(peer) = self.store.get_peer(&peer_addr) {
 			return peer.flags == State::Banned;
 		}
 		false
@@ -410,14 +410,12 @@ impl Peers {
 
 	/// Get peer in store by address
 	pub fn get_peer(&self, peer_addr: &PeerAddr) -> Result<PeerData, Error> {
-		self.store.get_peer(&peer_addr.clone()).map_err(From::from)
+		self.store.get_peer(&peer_addr).map_err(From::from)
 	}
 
 	/// Whether we've already seen a peer with the provided address
 	pub fn exists_peer(&self, peer_addr: &PeerAddr) -> Result<bool, Error> {
-		self.store
-			.exists_peer(&peer_addr.clone())
-			.map_err(From::from)
+		self.store.exists_peer(&peer_addr).map_err(From::from)
 	}
 
 	/// Saves updated information about a peer
@@ -428,7 +426,7 @@ impl Peers {
 	/// Updates the state of a peer in store
 	pub fn update_state(&self, peer_addr: &PeerAddr, new_state: State) -> Result<(), Error> {
 		self.store
-			.update_state(&peer_addr.clone(), new_state)
+			.update_state(&peer_addr, new_state)
 			.map_err(From::from)
 	}
 
@@ -461,7 +459,7 @@ impl Peers {
 							peer.info.addr, counts.0, counts.1,
 						);
 					}
-					let _ = self.update_state(&peer.info.addr.clone(), State::Banned);
+					let _ = self.update_state(&peer.info.addr, State::Banned);
 					rm.push(peer.info.addr.clone());
 				} else {
 					let (stuck, diff) = peer.is_stuck();
@@ -469,7 +467,7 @@ impl Peers {
 						Ok(total_difficulty) => {
 							if stuck && diff < total_difficulty {
 								debug!("clean_peers {:?}, stuck peer", peer.info.addr);
-								let _ = self.update_state(&peer.info.addr.clone(), State::Defunct);
+								let _ = self.update_state(&peer.info.addr, State::Defunct);
 								rm.push(peer.info.addr.clone());
 							}
 						}
@@ -599,7 +597,7 @@ impl ChainAdapter for Peers {
 				"Received a bad block {} from  {}, the peer will be banned",
 				hash, peer_info.addr,
 			);
-			self.ban_peer(&peer_info.addr.clone(), ReasonForBan::BadBlock);
+			self.ban_peer(&peer_info.addr, ReasonForBan::BadBlock);
 			Ok(false)
 		} else {
 			Ok(true)
@@ -619,7 +617,7 @@ impl ChainAdapter for Peers {
 				"Received a bad compact block {} from  {}, the peer will be banned",
 				hash, peer_info.addr
 			);
-			self.ban_peer(&peer_info.addr.clone(), ReasonForBan::BadCompactBlock);
+			self.ban_peer(&peer_info.addr, ReasonForBan::BadCompactBlock);
 			Ok(false)
 		} else {
 			Ok(true)
@@ -634,7 +632,7 @@ impl ChainAdapter for Peers {
 		if !self.adapter.header_received(bh, peer_info)? {
 			// if the peer sent us a block header that's intrinsically bad
 			// they are either mistaken or malevolent, both of which require a ban
-			self.ban_peer(&peer_info.addr.clone(), ReasonForBan::BadBlockHeader);
+			self.ban_peer(&peer_info.addr, ReasonForBan::BadBlockHeader);
 			Ok(false)
 		} else {
 			Ok(true)
@@ -691,7 +689,7 @@ impl ChainAdapter for Peers {
 				"Received a bad txhashset data from {}, the peer will be banned",
 				peer_info.addr
 			);
-			self.ban_peer(&peer_info.addr.clone(), ReasonForBan::BadTxHashSet);
+			self.ban_peer(&peer_info.addr, ReasonForBan::BadTxHashSet);
 			Ok(false)
 		} else {
 			Ok(true)
@@ -730,7 +728,7 @@ impl NetAdapter for Peers {
 	fn peer_addrs_received(&self, peer_addrs: Vec<PeerAddr>) {
 		trace!("Received {} peer addrs, saving.", peer_addrs.len());
 		for pa in peer_addrs {
-			if let Ok(e) = self.exists_peer(&pa.clone()) {
+			if let Ok(e) = self.exists_peer(&pa) {
 				if e {
 					continue;
 				}

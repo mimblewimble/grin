@@ -170,7 +170,7 @@ impl Handshake {
 		// so check if we are configured to explicitly allow or deny it.
 		// If denied then we want to close the connection
 		// (without providing our peer with any details why).
-		if Peer::is_denied(&self.config, &peer_info.addr.clone()) {
+		if Peer::is_denied(&self.config, &peer_info.addr) {
 			return Err(Error::ConnectionClose);
 		}
 
@@ -205,7 +205,7 @@ impl Handshake {
 
 /// Resolve the correct peer_addr based on the connection and the advertised port.
 fn resolve_peer_addr(advertised: PeerAddr, conn: &Stream) -> PeerAddr {
-	match advertised.clone() {
+	match advertised {
 		PeerAddr::Socket(addr) => {
 			let port = addr.port();
 			if let Ok(addr) = conn.peer_addr() {
