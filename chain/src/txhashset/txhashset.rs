@@ -1522,7 +1522,7 @@ pub fn zip_write(
 	// We expect to see *exactly* the paths listed above.
 	// No attempt is made to be permissive or forgiving with "alternative" paths.
 	// These are the *only* files we will attempt to extract from the zip file.
-	// If any of these are missing the zip extraction will immediately fail.
+	// If any of these are missing we will attempt to continue as some are potentially optional.
 	zip::extract_files(txhashset_data, &txhashset_path, files)?;
 	Ok(())
 }

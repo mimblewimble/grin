@@ -34,13 +34,14 @@ pub fn create_zip(dst_file: &File, src_dir: &Path, files: Vec<PathBuf>) -> io::R
 		.unix_permissions(0o644);
 
 	for x in &files {
-		writer.get_mut().start_file_from_path(x, options)?;
 		let file_path = src_dir.join(x);
-		info!("compress: {:?} -> {:?}", file_path, x);
-		let file = File::open(file_path)?;
-		io::copy(&mut BufReader::new(file), &mut writer)?;
-		// Flush the BufWriter after each file so we start then next one correctly.
-		writer.flush()?;
+		if let Ok(file) = File::open(file_path.clone()) {
+			info!("compress: {:?} -> {:?}", file_path, x);
+			writer.get_mut().start_file_from_path(x, options)?;
+			io::copy(&mut BufReader::new(file), &mut writer)?;
+			// Flush the BufWriter after each file so we start then next one correctly.
+			writer.flush()?;
+		}
 	}
 
 	writer.get_mut().finish()?;
@@ -55,24 +56,23 @@ pub fn extract_files(from_archive: File, dest: &Path, files: Vec<PathBuf>) -> io
 	let res = thread::spawn(move || {
 		let mut archive = zip_rs::ZipArchive::new(from_archive).expect("archive file exists");
 		for x in files {
-			let file = archive
-				.by_name(x.to_str().expect("valid path"))
-				.expect("file exists in archive");
-			let path = dest.join(file.sanitized_name());
-			let parent_dir = path.parent().expect("valid parent dir");
-			fs::create_dir_all(&parent_dir).expect("create parent dir");
-			let outfile = fs::File::create(&path).expect("file created");
-			io::copy(&mut BufReader::new(file), &mut BufWriter::new(outfile))
-				.expect("write to file");
+			if let Ok(file) = archive.by_name(x.to_str().expect("valid path")) {
+				let path = dest.join(file.sanitized_name());
+				let parent_dir = path.parent().expect("valid parent dir");
+				fs::create_dir_all(&parent_dir).expect("create parent dir");
+				let outfile = fs::File::create(&path).expect("file created");
+				io::copy(&mut BufReader::new(file), &mut BufWriter::new(outfile))
+					.expect("write to file");
 
-			info!("extract_files: {:?} -> {:?}", x, path);
+				info!("extract_files: {:?} -> {:?}", x, path);
 
-			// Set file permissions to "644" (Unix only).
-			#[cfg(unix)]
-			{
-				use std::os::unix::fs::PermissionsExt;
-				let mode = PermissionsExt::from_mode(0o644);
-				fs::set_permissions(&path, mode).expect("set file permissions");
+				// Set file permissions to "644" (Unix only).
+				#[cfg(unix)]
+				{
+					use std::os::unix::fs::PermissionsExt;
+					let mode = PermissionsExt::from_mode(0o644);
+					fs::set_permissions(&path, mode).expect("set file permissions");
+				}
 			}
 		}
 	})

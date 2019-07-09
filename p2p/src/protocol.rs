@@ -364,13 +364,13 @@ impl MessageHandler for Protocol {
 					download_start_time.timestamp(),
 					nonce
 				));
+				let mut now = Instant::now();
 				let mut save_txhashset_to_file = |file| -> Result<(), Error> {
 					let mut tmp_zip =
 						BufWriter::new(OpenOptions::new().write(true).create_new(true).open(file)?);
 					let total_size = sm_arch.bytes as usize;
 					let mut downloaded_size: usize = 0;
 					let mut request_size = cmp::min(48_000, total_size);
-					let mut now = Instant::now();
 					while request_size > 0 {
 						let size = msg.copy_attachment(request_size, &mut tmp_zip)?;
 						downloaded_size += size;
