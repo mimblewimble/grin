@@ -14,7 +14,6 @@
 
 //! Implementation of the chain block acceptance (or refusal) pipeline.
 
-use crate::chain::OrphanBlockPool;
 use crate::core::consensus;
 use crate::core::core::hash::Hashed;
 use crate::core::core::verifier_cache::VerifierCache;
@@ -45,8 +44,6 @@ pub struct BlockContext<'a> {
 	pub batch: store::Batch<'a>,
 	/// The verifier cache (caching verifier for rangeproofs and kernel signatures)
 	pub verifier_cache: Arc<RwLock<dyn VerifierCache>>,
-	/// Recent orphan blocks to avoid double-processing
-	pub orphans: Arc<OrphanBlockPool>,
 }
 
 /// Process a block header as part of processing a full block.
@@ -77,7 +74,6 @@ fn process_header_for_block(
 // from cheapest to most expensive (delay hitting the db until last).
 fn check_known(header: &BlockHeader, ctx: &mut BlockContext<'_>) -> Result<(), Error> {
 	check_known_head(header, ctx)?;
-	check_known_orphans(header, ctx)?;
 	check_known_store(header, ctx)?;
 	Ok(())
 }
@@ -261,6 +257,7 @@ pub fn process_block_header(header: &BlockHeader, ctx: &mut BlockContext<'_>) ->
 	); // keep this
 
 	// Check if this header is already "known" from processing a previous block.
+	// Note: We are looking for a full block based on this header, not just the header itself.
 	check_known(header, ctx)?;
 
 	validate_header(header, ctx)?;
@@ -277,15 +274,6 @@ fn check_known_head(header: &BlockHeader, ctx: &mut BlockContext<'_>) -> Result<
 		return Err(ErrorKind::Unfit("already known in head".to_string()).into());
 	}
 	Ok(())
-}
-
-/// Check if this block is in the set of known orphans.
-fn check_known_orphans(header: &BlockHeader, ctx: &mut BlockContext<'_>) -> Result<(), Error> {
-	if ctx.orphans.contains(&header.hash()) {
-		Err(ErrorKind::Unfit("already known in orphans".to_string()).into())
-	} else {
-		Ok(())
-	}
 }
 
 // Check if this block is in the store already.

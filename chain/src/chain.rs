@@ -386,7 +386,6 @@ impl Chain {
 			verifier_cache: self.verifier_cache.clone(),
 			txhashset,
 			batch,
-			orphans: self.orphans.clone(),
 		})
 	}
 
