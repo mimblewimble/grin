@@ -325,75 +325,84 @@ impl PeerAddr {
 	}
 }
 
-/// Conveninence type that wraps I2pStream and TcpStream and allows us to
-/// handle either without duplicating code just because their types differ.
-/// Mostly a bunch of boilerplace directly delegating to the concrete stream
-/// type.
-pub enum Stream {
-	Tcp(TcpStream),
-	I2p(I2pStream),
-}
-
-impl Stream {
+/// Representation of network stream, currently implemented for  I2pStream and TcpStream
+pub trait Stream: Read + Write + Send + Sync {
 	/// Peer address this stream is connected to
-	pub fn peer_addr(&self) -> Result<PeerAddr, Error> {
-		match self {
-			Stream::Tcp(s) => Ok(PeerAddr::Socket(s.peer_addr()?)),
-			Stream::I2p(s) => Ok(PeerAddr::I2p(s.peer_addr()?)),
-		}
-	}
-
+	fn peer_addr(&self) -> Result<PeerAddr, Error>;
 	/// Our network address
-	pub fn local_addr(&self) -> Result<PeerAddr, Error> {
-		match self {
-			Stream::Tcp(s) => Ok(PeerAddr::Socket(s.local_addr()?)),
-			Stream::I2p(s) => Ok(PeerAddr::I2p(s.local_addr()?)),
-		}
+	fn local_addr(&self) -> Result<PeerAddr, Error>;
+	/// Shutdown connection
+	fn shutdown(&self, how: Shutdown) -> Result<(), Error>;
+	/// Enable non-blocking IO
+	fn set_nonblocking(&self, nonblocking: bool) -> Result<(), Error>;
+	/// Try clone stream
+	fn try_clone(&self) -> Result<Box<Stream>, Error>;
+}
+
+impl<'a, S: Stream> Stream for &'a mut S {
+	fn peer_addr(&self) -> Result<PeerAddr, Error> {
+		S::peer_addr(self)
 	}
 
-	pub fn shutdown(&self, how: Shutdown) -> Result<(), Error> {
-		match self {
-			Stream::Tcp(s) => Ok(s.shutdown(how)?),
-			Stream::I2p(s) => Ok(s.shutdown(how)?),
-		}
+	fn local_addr(&self) -> Result<PeerAddr, Error> {
+		S::local_addr(self)
 	}
 
-	pub fn set_nonblocking(&self, nonblocking: bool) -> Result<(), Error> {
-		match self {
-			Stream::Tcp(s) => Ok(s.set_nonblocking(nonblocking)?),
-			Stream::I2p(s) => Ok(s.set_nonblocking(nonblocking)?),
-		}
+	fn shutdown(&self, how: Shutdown) -> Result<(), Error> {
+		S::shutdown(self, how)
 	}
 
-	pub fn try_clone(&self) -> Result<Stream, Error> {
-		match self {
-			Stream::Tcp(s) => Ok(Stream::Tcp(s.try_clone()?)),
-			Stream::I2p(s) => Ok(Stream::I2p(s.try_clone()?)),
-		}
+	fn set_nonblocking(&self, nonblocking: bool) -> Result<(), Error> {
+		S::set_nonblocking(self, nonblocking)
+	}
+	fn try_clone(&self) -> Result<Box<Stream>, Error> {
+		S::try_clone(self)
 	}
 }
 
-impl Read for Stream {
-	fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-		match self {
-			Stream::Tcp(s) => s.read(buf),
-			Stream::I2p(s) => s.read(buf),
-		}
+impl Stream for TcpStream {
+	fn peer_addr(&self) -> Result<PeerAddr, Error> {
+		Ok(PeerAddr::Socket(self.peer_addr()?))
+	}
+
+	fn local_addr(&self) -> Result<PeerAddr, Error> {
+		Ok(PeerAddr::Socket(self.local_addr()?))
+	}
+
+	fn shutdown(&self, how: Shutdown) -> Result<(), Error> {
+		self.shutdown(how).map_err(|e| e.into())
+	}
+
+	fn set_nonblocking(&self, nonblocking: bool) -> Result<(), Error> {
+		self.set_nonblocking(nonblocking).map_err(|e| e.into())
+	}
+
+	fn try_clone(&self) -> Result<Box<Stream>, Error> {
+		let s = self.try_clone()?;
+		Ok(Box::new(s))
 	}
 }
 
-impl Write for Stream {
-	fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-		match self {
-			Stream::Tcp(s) => s.write(buf),
-			Stream::I2p(s) => s.write(buf),
-		}
+impl Stream for I2pStream {
+	fn peer_addr(&self) -> Result<PeerAddr, Error> {
+		Ok(PeerAddr::I2p(self.peer_addr()?))
 	}
-	fn flush(&mut self) -> io::Result<()> {
-		match self {
-			Stream::Tcp(s) => s.flush(),
-			Stream::I2p(s) => s.flush(),
-		}
+
+	fn local_addr(&self) -> Result<PeerAddr, Error> {
+		Ok(PeerAddr::I2p(self.local_addr()?))
+	}
+
+	fn shutdown(&self, how: Shutdown) -> Result<(), Error> {
+		self.shutdown(how).map_err(|e| e.into())
+	}
+
+	fn set_nonblocking(&self, nonblocking: bool) -> Result<(), Error> {
+		self.set_nonblocking(nonblocking).map_err(|e| e.into())
+	}
+
+	fn try_clone(&self) -> Result<Box<Stream>, Error> {
+		let s = self.try_clone()?;
+		Ok(Box::new(s))
 	}
 }
 

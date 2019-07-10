@@ -273,13 +273,14 @@ impl Tracker {
 /// Start listening on the provided connection and wraps it. Does not hang
 /// the current thread, instead just returns a future and the Connection
 /// itself.
-pub fn listen<H>(
-	stream: Stream,
+pub fn listen<S, H>(
+	stream: S,
 	version: ProtocolVersion,
 	tracker: Arc<Tracker>,
 	handler: H,
 ) -> io::Result<(ConnHandle, StopHandle)>
 where
+	S: Stream + 'static,
 	H: MessageHandler,
 {
 	let (send_tx, send_rx) = mpsc::sync_channel(SEND_CHANNEL_CAP);
@@ -308,8 +309,8 @@ where
 	))
 }
 
-fn poll<H>(
-	conn: Stream,
+fn poll<S, H>(
+	conn: S,
 	version: ProtocolVersion,
 	handler: H,
 	send_rx: mpsc::Receiver<Vec<u8>>,
@@ -317,6 +318,7 @@ fn poll<H>(
 	tracker: Arc<Tracker>,
 ) -> io::Result<(JoinHandle<()>, JoinHandle<()>)>
 where
+	S: Stream + 'static,
 	H: MessageHandler,
 {
 	// Split out tcp stream out into separate reader/writer halves.
