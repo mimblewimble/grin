@@ -91,7 +91,6 @@ impl Server {
 			match listener.accept() {
 				Ok((stream, peer_addr)) => {
 					let peer_addr = PeerAddr::Socket(peer_addr);
-					let stream = Stream::Tcp(stream);
 
 					if self.check_undesirable(&stream) {
 						continue;
@@ -134,7 +133,6 @@ impl Server {
 			match stream {
 				Ok(stream) => {
 					let peer_addr = PeerAddr::I2p(stream.local_addr()?);
-					let stream = Stream::I2p(stream);
 
 					if self.check_undesirable(&stream) {
 						continue;
@@ -205,23 +203,27 @@ impl Server {
 			self.config.port,
 			addr
 		);
-		let (stream, self_addr) = match addr {
+		match addr {
 			PeerAddr::Socket(addr) => {
-				let tcp_stream = TcpStream::connect_timeout(&addr, Duration::from_secs(10))
+				let stream = TcpStream::connect_timeout(&addr, Duration::from_secs(10))
 					.map_err(|e| Error::Connection(e))?;
 				let addr = PeerAddr::Socket(SocketAddr::new(self.config.host, self.config.port));
-				let stream = Stream::Tcp(tcp_stream);
-				(stream, addr)
+				self.new_connected_peer(stream, addr)
 			}
 			PeerAddr::I2p(i2p_addr) => {
 				let session = self.i2p_session.as_ref().ok_or(Error::Internal)?;
-				let stream =
-					Stream::I2p(I2pStream::connect_with_session(&session, i2p_addr.clone())?);
+				let stream = I2pStream::connect_with_session(&session, i2p_addr.clone())?;
 				let addr = stream.local_addr()?;
-				(stream, addr)
+				self.new_connected_peer(stream, PeerAddr::I2p(addr))
 			}
-		};
+		}
+	}
 
+	fn new_connected_peer<S: Stream + 'static>(
+		&self,
+		stream: S,
+		self_addr: PeerAddr,
+	) -> Result<Arc<Peer>, Error> {
 		let total_diff = self.peers.total_difficulty()?;
 		let peer = Peer::connect(
 			stream,
@@ -236,7 +238,7 @@ impl Server {
 		Ok(peer)
 	}
 
-	fn handle_new_peer(&self, stream: Stream) -> Result<(), Error> {
+	fn handle_new_peer<S: Stream + 'static>(&self, stream: S) -> Result<(), Error> {
 		let total_diff = self.peers.total_difficulty()?;
 
 		// accept the peer and add it to the server map
@@ -260,7 +262,7 @@ impl Server {
 	/// addresses (NAT), network distribution is improved if they choose
 	/// different sets of peers themselves. In addition, it prevent potential
 	/// duplicate connections, malicious or not.
-	fn check_undesirable(&self, stream: &Stream) -> bool {
+	fn check_undesirable<S: Stream>(&self, stream: &S) -> bool {
 		if let Ok(peer_addr) = stream.peer_addr() {
 			if self.peers.is_banned(&peer_addr) {
 				debug!("Peer {} banned, refusing connection.", peer_addr);

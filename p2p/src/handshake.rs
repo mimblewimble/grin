@@ -61,12 +61,12 @@ impl Handshake {
 		}
 	}
 
-	pub fn initiate(
+	pub fn initiate<S: Stream>(
 		&self,
 		capabilities: Capabilities,
 		total_difficulty: Difficulty,
 		self_addr: PeerAddr,
-		conn: &mut Stream,
+		conn: &mut S,
 	) -> Result<PeerInfo, Error> {
 		// prepare the first part of the handshake
 		let nonce = self.next_nonce();
@@ -124,16 +124,16 @@ impl Handshake {
 		Ok(peer_info)
 	}
 
-	pub fn accept(
+	pub fn accept<S: Stream>(
 		&self,
 		capab: Capabilities,
 		total_difficulty: Difficulty,
-		conn: &mut Stream,
+		mut conn: S,
 	) -> Result<PeerInfo, Error> {
 		// Note: We read the Hand message *before* we know which protocol version
 		// is supported by our peer (it is in the Hand message).
 		let version = ProtocolVersion::default();
-		let hand: Hand = read_message(conn, version, Type::Hand)?;
+		let hand: Hand = read_message(&mut conn, version, Type::Hand)?;
 
 		// all the reasons we could refuse this connection for
 		if hand.genesis != self.genesis {
@@ -144,7 +144,7 @@ impl Handshake {
 		} else {
 			// check the nonce to see if we are trying to connect to ourselves
 			let nonces = self.nonces.read();
-			let addr = resolve_peer_addr(hand.sender_addr.clone(), &conn);
+			let addr = resolve_peer_addr(hand.sender_addr.clone(), &mut conn);
 			if nonces.contains(&hand.nonce) {
 				// save ip addresses of ourselves
 				let mut addrs = self.addrs.write();
@@ -183,7 +183,7 @@ impl Handshake {
 			user_agent: USER_AGENT.to_string(),
 		};
 
-		write_message(conn, shake, Type::Shake)?;
+		write_message(&mut conn, shake, Type::Shake)?;
 		trace!("Success handshake with {}.", peer_info.addr);
 
 		// when more than one protocol version is supported, choosing should go here
@@ -204,7 +204,7 @@ impl Handshake {
 }
 
 /// Resolve the correct peer_addr based on the connection and the advertised port.
-fn resolve_peer_addr(advertised: PeerAddr, conn: &Stream) -> PeerAddr {
+fn resolve_peer_addr<S: Stream>(advertised: PeerAddr, conn: &S) -> PeerAddr {
 	match advertised {
 		PeerAddr::Socket(addr) => {
 			let port = addr.port();

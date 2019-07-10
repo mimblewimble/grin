@@ -70,7 +70,11 @@ impl fmt::Debug for Peer {
 
 impl Peer {
 	// Only accept and connect can be externally used to build a peer
-	fn new(info: PeerInfo, conn: Stream, adapter: Arc<dyn NetAdapter>) -> std::io::Result<Peer> {
+	fn new<S: Stream + 'static>(
+		info: PeerInfo,
+		conn: S,
+		adapter: Arc<dyn NetAdapter>,
+	) -> std::io::Result<Peer> {
 		let state = Arc::new(RwLock::new(State::Connected));
 		let tracking_adapter = TrackingAdapter::new(adapter);
 		let handler = Protocol::new(Arc::new(tracking_adapter.clone()), info.clone());
@@ -88,22 +92,22 @@ impl Peer {
 		})
 	}
 
-	pub fn accept(
-		mut conn: Stream,
+	pub fn accept<S: Stream + 'static>(
+		mut conn: S,
 		capab: Capabilities,
 		total_difficulty: Difficulty,
 		hs: &Handshake,
 		adapter: Arc<dyn NetAdapter>,
 	) -> Result<Peer, Error> {
-		debug!("accept: handshaking from {:?}", conn.peer_addr());
+		let addr = conn.peer_addr();
+		debug!("accept: handshaking from {:?}", addr);
 		let info = hs.accept(capab, total_difficulty, &mut conn);
 		match info {
 			Ok(info) => Ok(Peer::new(info, conn, adapter)?),
 			Err(e) => {
 				debug!(
 					"accept: handshaking from {:?} failed with error: {:?}",
-					conn.peer_addr(),
-					e
+					addr, e
 				);
 				if let Err(e) = conn.shutdown(Shutdown::Both) {
 					debug!("Error shutting down conn: {:?}", e);
@@ -113,8 +117,8 @@ impl Peer {
 		}
 	}
 
-	pub fn connect(
-		mut conn: Stream,
+	pub fn connect<S: Stream + 'static>(
+		mut conn: S,
 		capab: Capabilities,
 		total_difficulty: Difficulty,
 		self_addr: PeerAddr,
@@ -141,7 +145,7 @@ impl Peer {
 
 	/// Main peer loop listening for messages and forwarding to the rest of the
 	/// system.
-	pub fn start(&mut self, conn: Stream) -> Result<(), Error> {
+	pub fn start<S: Stream + 'static>(&mut self, conn: S) -> Result<(), Error> {
 		let adapter = Arc::new(self.tracking_adapter.clone());
 		let handler = Protocol::new(adapter, self.info.clone());
 		let (sendh, stoph) = conn::listen(
