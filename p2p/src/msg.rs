@@ -14,10 +14,6 @@
 
 //! Message types that transit over the network and related serialization code.
 
-use num::FromPrimitive;
-use std::io::{Read, Write};
-use std::time;
-
 use crate::core::core::hash::Hash;
 use crate::core::core::BlockHeader;
 use crate::core::pow::Difficulty;
@@ -28,7 +24,8 @@ use crate::core::{consensus, global};
 use crate::types::{
 	Capabilities, Error, PeerAddr, ReasonForBan, MAX_BLOCK_HEADERS, MAX_LOCATORS, MAX_PEER_ADDRS,
 };
-use crate::util::read_write::read_exact;
+use num::FromPrimitive;
+use std::io::{Read, Write};
 
 /// Grin's user agent with current version
 pub const USER_AGENT: &'static str = concat!("MW/Grin ", env!("CARGO_PKG_VERSION"));
@@ -126,14 +123,9 @@ fn magic() -> [u8; 2] {
 pub fn read_header(
 	stream: &mut dyn Read,
 	version: ProtocolVersion,
-	msg_type: Option<Type>,
 ) -> Result<MsgHeaderWrapper, Error> {
 	let mut head = vec![0u8; MsgHeader::LEN];
-	if Some(Type::Hand) == msg_type {
-		read_exact(stream, &mut head, time::Duration::from_millis(10), true)?;
-	} else {
-		read_exact(stream, &mut head, time::Duration::from_secs(10), false)?;
-	}
+	stream.read_exact(&mut head)?;
 	let header = ser::deserialize::<MsgHeaderWrapper>(&mut &head[..], version)?;
 	Ok(header)
 }
@@ -145,8 +137,7 @@ pub fn read_item<T: Readable>(
 	stream: &mut dyn Read,
 	version: ProtocolVersion,
 ) -> Result<(T, u64), Error> {
-	let timeout = time::Duration::from_secs(20);
-	let mut reader = StreamingReader::new(stream, version, timeout);
+	let mut reader = StreamingReader::new(stream, version);
 	let res = T::read(&mut reader)?;
 	Ok((res, reader.total_bytes_read()))
 }
@@ -159,14 +150,14 @@ pub fn read_body<T: Readable>(
 	version: ProtocolVersion,
 ) -> Result<T, Error> {
 	let mut body = vec![0u8; h.msg_len as usize];
-	read_exact(stream, &mut body, time::Duration::from_secs(20), true)?;
+	stream.read_exact(&mut body)?;
 	ser::deserialize(&mut &body[..], version).map_err(From::from)
 }
 
 /// Read (an unknown) message from the provided stream and discard it.
 pub fn read_discard(msg_len: u64, stream: &mut dyn Read) -> Result<(), Error> {
 	let mut buffer = vec![0u8; msg_len as usize];
-	read_exact(stream, &mut buffer, time::Duration::from_secs(20), true)?;
+	stream.read_exact(&mut buffer)?;
 	Ok(())
 }
 
@@ -176,7 +167,7 @@ pub fn read_message<T: Readable>(
 	version: ProtocolVersion,
 	msg_type: Type,
 ) -> Result<T, Error> {
-	match read_header(stream, version, Some(msg_type))? {
+	match read_header(stream, version)? {
 		MsgHeaderWrapper::Known(header) => {
 			if header.msg_type == msg_type {
 				read_body(&header, stream, version)

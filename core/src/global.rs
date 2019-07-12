@@ -17,13 +17,15 @@
 //! should be used sparingly.
 
 use crate::consensus::{
-	HeaderInfo, valid_header_version, graph_weight, BASE_EDGE_BITS, BLOCK_TIME_SEC,
+	graph_weight, valid_header_version, HeaderInfo, BASE_EDGE_BITS, BLOCK_TIME_SEC,
 	COINBASE_MATURITY, CUT_THROUGH_HORIZON, DAY_HEIGHT, DEFAULT_MIN_EDGE_BITS,
 	DIFFICULTY_ADJUST_WINDOW, INITIAL_DIFFICULTY, MAX_BLOCK_WEIGHT, PROOFSIZE,
 	SECOND_POW_EDGE_BITS, STATE_SYNC_THRESHOLD,
 };
 use crate::core::block::HeaderVersion;
-use crate::pow::{self, new_cuckatoo_ctx, new_cuckaroo_ctx, new_cuckarood_ctx, EdgeType, PoWContext};
+use crate::pow::{
+	self, new_cuckaroo_ctx, new_cuckarood_ctx, new_cuckatoo_ctx, EdgeType, PoWContext,
+};
 /// An enum collecting sets of parameters used throughout the
 /// code wherever mining is needed. This should allow for
 /// different sets of parameters for different purposes,
@@ -164,14 +166,16 @@ where
 	match chain_type {
 		// Mainnet has Cuckaroo(d)29 for AR and Cuckatoo31+ for AF
 		ChainTypes::Mainnet if edge_bits > 29 => new_cuckatoo_ctx(edge_bits, proof_size, max_sols),
-		ChainTypes::Mainnet if valid_header_version(height, HeaderVersion::new(2))
-						=> new_cuckarood_ctx(edge_bits, proof_size),
+		ChainTypes::Mainnet if valid_header_version(height, HeaderVersion::new(2)) => {
+			new_cuckarood_ctx(edge_bits, proof_size)
+		}
 		ChainTypes::Mainnet => new_cuckaroo_ctx(edge_bits, proof_size),
 
 		// Same for Floonet
 		ChainTypes::Floonet if edge_bits > 29 => new_cuckatoo_ctx(edge_bits, proof_size, max_sols),
-		ChainTypes::Floonet if valid_header_version(height, HeaderVersion::new(2))
-						=> new_cuckarood_ctx(edge_bits, proof_size),
+		ChainTypes::Floonet if valid_header_version(height, HeaderVersion::new(2)) => {
+			new_cuckarood_ctx(edge_bits, proof_size)
+		}
 		ChainTypes::Floonet => new_cuckaroo_ctx(edge_bits, proof_size),
 
 		// Everything else is Cuckatoo only

@@ -646,8 +646,7 @@ impl Chain {
 	/// TODO - Write this data to disk and validate the rebuilt kernel MMR.
 	pub fn kernel_data_write(&self, reader: &mut Read) -> Result<(), Error> {
 		let mut count = 0;
-		let mut stream =
-			StreamingReader::new(reader, ProtocolVersion::local(), Duration::from_secs(1));
+		let mut stream = StreamingReader::new(reader, ProtocolVersion::local());
 		while let Ok(_kernel) = TxKernelEntry::read(&mut stream) {
 			count += 1;
 		}

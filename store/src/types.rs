@@ -16,14 +16,14 @@ use memmap;
 use tempfile::tempfile;
 
 use crate::core::ser::{
-	self, BinWriter, FixedLength, ProtocolVersion, Readable, Reader, StreamingReader, Writeable, Writer,
+	self, BinWriter, FixedLength, ProtocolVersion, Readable, Reader, StreamingReader, Writeable,
+	Writer,
 };
 use std::fmt::Debug;
 use std::fs::{self, File, OpenOptions};
 use std::io::{self, BufReader, BufWriter, Seek, SeekFrom, Write};
 use std::marker;
 use std::path::{Path, PathBuf};
-use std::time;
 
 /// Represents a single entry in the size_file.
 /// Offset (in bytes) and size (in bytes) of a variable sized entry
@@ -482,8 +482,7 @@ where
 		{
 			let reader = File::open(&self.path)?;
 			let mut buf_reader = BufReader::new(reader);
-			let mut streaming_reader =
-				StreamingReader::new(&mut buf_reader, self.version, time::Duration::from_secs(1));
+			let mut streaming_reader = StreamingReader::new(&mut buf_reader, self.version);
 
 			let mut buf_writer = BufWriter::new(File::create(&tmp_path)?);
 			let mut bin_writer = BinWriter::new(&mut buf_writer, self.version);
@@ -529,11 +528,7 @@ where
 			{
 				let reader = File::open(&self.path)?;
 				let mut buf_reader = BufReader::new(reader);
-				let mut streaming_reader = StreamingReader::new(
-					&mut buf_reader,
-					self.version,
-					time::Duration::from_secs(1),
-				);
+				let mut streaming_reader = StreamingReader::new(&mut buf_reader, self.version);
 
 				let mut buf_writer = BufWriter::new(File::create(&tmp_path)?);
 				let mut bin_writer = BinWriter::new(&mut buf_writer, self.version);
