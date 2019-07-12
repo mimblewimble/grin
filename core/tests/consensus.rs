@@ -618,38 +618,75 @@ fn test_secondary_pow_scale() {
 
 #[test]
 fn hard_forks() {
-	assert!(valid_header_version(0, HeaderVersion::new(1)));
-	assert!(valid_header_version(10, HeaderVersion::new(1)));
-	assert!(!valid_header_version(10, HeaderVersion::new(2)));
-	assert!(valid_header_version(
-		YEAR_HEIGHT / 2 - 1,
-		HeaderVersion::new(1)
-	));
-	// v2 not active yet
-	assert!(!valid_header_version(
-		YEAR_HEIGHT / 2,
-		HeaderVersion::new(2)
-	));
-	assert!(!valid_header_version(
-		YEAR_HEIGHT / 2,
-		HeaderVersion::new(1)
-	));
-	assert!(!valid_header_version(YEAR_HEIGHT, HeaderVersion::new(1)));
-	assert!(!valid_header_version(
-		YEAR_HEIGHT / 2 + 1,
-		HeaderVersion::new(2)
-	));
+	// Tests for mainnet chain type.
+	{
+		global::set_mining_mode(global::ChainTypes::Mainnet);
+		assert_eq!(global::is_floonet(), false);
+		assert!(valid_header_version(0, HeaderVersion::new(1)));
+		assert!(valid_header_version(10, HeaderVersion::new(1)));
+		assert!(!valid_header_version(10, HeaderVersion::new(2)));
+		assert!(valid_header_version(
+			YEAR_HEIGHT / 2 - 1,
+			HeaderVersion::new(1)
+		));
+		assert!(valid_header_version(YEAR_HEIGHT / 2, HeaderVersion::new(2)));
+		assert!(valid_header_version(
+			YEAR_HEIGHT / 2 + 1,
+			HeaderVersion::new(2)
+		));
+		assert!(!valid_header_version(
+			YEAR_HEIGHT / 2,
+			HeaderVersion::new(1)
+		));
+		assert!(!valid_header_version(YEAR_HEIGHT, HeaderVersion::new(1)));
+		// v3 not active yet
+		assert!(!valid_header_version(YEAR_HEIGHT, HeaderVersion::new(3)));
+		assert!(!valid_header_version(YEAR_HEIGHT, HeaderVersion::new(2)));
+		assert!(!valid_header_version(YEAR_HEIGHT, HeaderVersion::new(1)));
+		assert!(!valid_header_version(
+			YEAR_HEIGHT * 3 / 2,
+			HeaderVersion::new(2)
+		));
+		assert!(!valid_header_version(
+			YEAR_HEIGHT + 1,
+			HeaderVersion::new(2)
+		));
+	}
+	// Tests for floonet chain type.
+	{
+		global::set_mining_mode(global::ChainTypes::Floonet);
+		assert_eq!(global::is_floonet(), true);
+		assert!(valid_header_version(0, HeaderVersion::new(1)));
+		assert!(valid_header_version(10, HeaderVersion::new(1)));
+		assert!(!valid_header_version(10, HeaderVersion::new(2)));
+		assert!(valid_header_version(
+			FLOONET_FIRST_HARD_FORK - 1,
+			HeaderVersion::new(1)
+		));
+		assert!(valid_header_version(
+			FLOONET_FIRST_HARD_FORK,
+			HeaderVersion::new(2)
+		));
+		assert!(valid_header_version(
+			FLOONET_FIRST_HARD_FORK + 1,
+			HeaderVersion::new(2)
+		));
+		assert!(!valid_header_version(
+			FLOONET_FIRST_HARD_FORK,
+			HeaderVersion::new(1)
+		));
+		assert!(!valid_header_version(YEAR_HEIGHT, HeaderVersion::new(1)));
+		// v3 not active yet
+		assert!(!valid_header_version(YEAR_HEIGHT, HeaderVersion::new(3)));
+		assert!(!valid_header_version(YEAR_HEIGHT, HeaderVersion::new(2)));
+		assert!(!valid_header_version(YEAR_HEIGHT, HeaderVersion::new(1)));
+		assert!(!valid_header_version(
+			YEAR_HEIGHT * 3 / 2,
+			HeaderVersion::new(2)
+		));
+		assert!(!valid_header_version(
+			YEAR_HEIGHT + 1,
+			HeaderVersion::new(2)
+		));
+	}
 }
-
-// #[test]
-// fn hard_fork_2() {
-// 	assert!(valid_header_version(0, 1));
-// 	assert!(valid_header_version(10, 1));
-// 	assert!(valid_header_version(10, 2));
-// 	assert!(valid_header_version(250_000, 1));
-// 	assert!(!valid_header_version(250_001, 1));
-// 	assert!(!valid_header_version(500_000, 1));
-// 	assert!(valid_header_version(250_001, 2));
-// 	assert!(valid_header_version(500_000, 2));
-// 	assert!(!valid_header_version(500_001, 2));
-// }

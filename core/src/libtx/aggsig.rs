@@ -21,6 +21,7 @@ use crate::libtx::error::{Error, ErrorKind};
 use crate::util::secp::key::{PublicKey, SecretKey};
 use crate::util::secp::pedersen::Commitment;
 use crate::util::secp::{self, aggsig, Message, Secp256k1, Signature};
+use grin_keychain::SwitchCommitmentType;
 
 /// Creates a new secure nonce (as a SecretKey), guaranteed to be usable during
 /// aggsig creation.
@@ -231,15 +232,17 @@ pub fn verify_partial_sig(
 /// use core::libtx::{aggsig, proof};
 /// use core::core::transaction::{kernel_sig_msg, KernelFeatures};
 /// use core::core::{Output, OutputFeatures};
-/// use keychain::{Keychain, ExtKeychain};
+/// use keychain::{Keychain, ExtKeychain, SwitchCommitmentType};
 ///
 /// let secp = Secp256k1::with_caps(ContextFlag::Commit);
 /// let keychain = ExtKeychain::from_random_seed(false).unwrap();
 /// let fees = 10_000;
 /// let value = reward(fees);
 /// let key_id = ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
-/// let commit = keychain.commit(value, &key_id).unwrap();
-/// let rproof = proof::create(&keychain, value, &key_id, commit, None).unwrap();
+/// let switch = &SwitchCommitmentType::Regular;
+/// let commit = keychain.commit(value, &key_id, switch).unwrap();
+/// let builder = proof::ProofBuilder::new(&keychain);
+/// let rproof = proof::create(&keychain, &builder, value, &key_id, switch, commit, None).unwrap();
 /// let output = Output {
 ///		features: OutputFeatures::Coinbase,
 ///		commit: commit,
@@ -266,7 +269,7 @@ pub fn sign_from_key_id<K>(
 where
 	K: Keychain,
 {
-	let skey = k.derive_key(value, key_id)?;
+	let skey = k.derive_key(value, key_id, &SwitchCommitmentType::Regular)?; // TODO: proper support for different switch commitment schemes
 	let sig = aggsig::sign_single(secp, &msg, &skey, s_nonce, None, None, blind_sum, None)?;
 	Ok(sig)
 }
@@ -296,7 +299,7 @@ where
 /// use util::secp::{ContextFlag, Secp256k1};
 /// use core::core::transaction::{kernel_sig_msg, KernelFeatures};
 /// use core::core::{Output, OutputFeatures};
-/// use keychain::{Keychain, ExtKeychain};
+/// use keychain::{Keychain, ExtKeychain, SwitchCommitmentType};
 ///
 /// // Create signature
 /// let secp = Secp256k1::with_caps(ContextFlag::Commit);
@@ -304,8 +307,10 @@ where
 /// let fees = 10_000;
 /// let value = reward(fees);
 /// let key_id = ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
-/// let commit = keychain.commit(value, &key_id).unwrap();
-/// let rproof = proof::create(&keychain, value, &key_id, commit, None).unwrap();
+/// let switch = &SwitchCommitmentType::Regular;
+/// let commit = keychain.commit(value, &key_id, switch).unwrap();
+/// let builder = proof::ProofBuilder::new(&keychain);
+/// let rproof = proof::create(&keychain, &builder, value, &key_id, switch, commit, None).unwrap();
 /// let output = Output {
 ///		features: OutputFeatures::Coinbase,
 ///		commit: commit,

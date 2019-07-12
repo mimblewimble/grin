@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! Common types and traits for cuckoo/cuckatoo family of solvers
+//! Common types and traits for cuckoo family of solvers
 
 use crate::blake2::blake2b::blake2b;
 use byteorder::{LittleEndian, ReadBytesExt, WriteBytesExt};

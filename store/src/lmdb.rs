@@ -22,7 +22,7 @@ use lmdb_zero as lmdb;
 use lmdb_zero::traits::CreateCursor;
 use lmdb_zero::LmdbResultExt;
 
-use crate::core::ser;
+use crate::core::ser::{self, ProtocolVersion};
 use crate::util::{RwLock, RwLockReadGuard};
 
 /// number of bytes to grow the database by when needed
@@ -68,6 +68,7 @@ pub struct Store {
 	env: Arc<lmdb::Environment>,
 	db: RwLock<Option<Arc<lmdb::Database<'static>>>>,
 	name: String,
+	version: ProtocolVersion,
 }
 
 impl Store {
@@ -111,6 +112,7 @@ impl Store {
 			env: Arc::new(env),
 			db: RwLock::new(None),
 			name: db_name,
+			version: ProtocolVersion(1),
 		};
 
 		{
@@ -230,7 +232,7 @@ impl Store {
 	) -> Result<Option<T>, Error> {
 		let res: lmdb::error::Result<&[u8]> = access.get(&db.as_ref().unwrap(), key);
 		match res.to_opt() {
-			Ok(Some(mut res)) => match ser::deserialize(&mut res) {
+			Ok(Some(mut res)) => match ser::deserialize(&mut res, self.version) {
 				Ok(res) => Ok(Some(res)),
 				Err(e) => Err(Error::SerErr(format!("{}", e))),
 			},
@@ -259,6 +261,7 @@ impl Store {
 			cursor,
 			seek: false,
 			prefix: from.to_vec(),
+			version: self.version,
 			_marker: marker::PhantomData,
 		})
 	}
@@ -296,7 +299,7 @@ impl<'a> Batch<'a> {
 	/// Writes a single key and its `Writeable` value to the db. Encapsulates
 	/// serialization.
 	pub fn put_ser<W: ser::Writeable>(&self, key: &[u8], value: &W) -> Result<(), Error> {
-		let ser_value = ser::ser_vec(value);
+		let ser_value = ser::ser_vec(value, self.store.version);
 		match ser_value {
 			Ok(data) => self.put(key, &data),
 			Err(err) => Err(Error::SerErr(format!("{}", err))),
@@ -360,6 +363,7 @@ where
 	cursor: Arc<lmdb::Cursor<'static, 'static>>,
 	seek: bool,
 	prefix: Vec<u8>,
+	version: ProtocolVersion,
 	_marker: marker::PhantomData<T>,
 }
 
@@ -393,7 +397,7 @@ where
 	fn deser_if_prefix_match(&self, key: &[u8], value: &[u8]) -> Option<(Vec<u8>, T)> {
 		let plen = self.prefix.len();
 		if plen == 0 || key[0..plen] == self.prefix[..] {
-			if let Ok(value) = ser::deserialize(&mut &value[..]) {
+			if let Ok(value) = ser::deserialize(&mut &value[..], self.version) {
 				Some((key.to_vec(), value))
 			} else {
 				None

@@ -37,7 +37,6 @@ use crate::core::{core, global};
 use crate::p2p;
 use crate::p2p::types::PeerInfo;
 use crate::pool;
-use crate::pool::types::DandelionConfig;
 use crate::util::OneTime;
 use chrono::prelude::*;
 use chrono::Duration;
@@ -97,10 +96,7 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 			return Ok(true);
 		}
 
-		let source = pool::TxSource {
-			debug_name: "p2p".to_string(),
-			identifier: "?.?.?.?".to_string(),
-		};
+		let source = pool::TxSource::Broadcast;
 
 		let header = self.chain().head_header()?;
 
@@ -804,11 +800,11 @@ impl DandelionAdapter for PoolToNetAdapter {
 }
 
 impl pool::PoolAdapter for PoolToNetAdapter {
-	fn tx_accepted(&self, tx: &core::Transaction) {
-		self.peers().broadcast_transaction(tx);
+	fn tx_accepted(&self, entry: &pool::PoolEntry) {
+		self.peers().broadcast_transaction(&entry.tx);
 	}
 
-	fn stem_tx_accepted(&self, tx: &core::Transaction) -> Result<(), pool::PoolError> {
+	fn stem_tx_accepted(&self, entry: &pool::PoolEntry) -> Result<(), pool::PoolError> {
 		// Take write lock on the current epoch.
 		// We need to be able to update the current relay peer if not currently connected.
 		let mut epoch = self.dandelion_epoch.write();
@@ -816,9 +812,10 @@ impl pool::PoolAdapter for PoolToNetAdapter {
 		// If "stem" epoch attempt to relay the tx to the next Dandelion relay.
 		// Fallback to immediately fluffing the tx if we cannot stem for any reason.
 		// If "fluff" epoch then nothing to do right now (fluff via Dandelion monitor).
-		if epoch.is_stem() {
+		// If node is configured to always stem our (pushed via api) txs then do so.
+		if epoch.is_stem() || (entry.src.is_pushed() && epoch.always_stem_our_txs()) {
 			if let Some(peer) = epoch.relay_peer(&self.peers()) {
-				match peer.send_stem_transaction(tx) {
+				match peer.send_stem_transaction(&entry.tx) {
 					Ok(_) => {
 						info!("Stemming this epoch, relaying to next peer.");
 						Ok(())
@@ -841,7 +838,7 @@ impl pool::PoolAdapter for PoolToNetAdapter {
 
 impl PoolToNetAdapter {
 	/// Create a new pool to net adapter
-	pub fn new(config: DandelionConfig) -> PoolToNetAdapter {
+	pub fn new(config: pool::DandelionConfig) -> PoolToNetAdapter {
 		PoolToNetAdapter {
 			peers: OneTime::new(),
 			dandelion_epoch: Arc::new(RwLock::new(DandelionEpoch::new(config))),

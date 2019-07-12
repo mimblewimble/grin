@@ -23,7 +23,7 @@ use crate::core::core::{
 };
 use crate::core::global;
 use crate::core::pow;
-use crate::core::ser::{Readable, StreamingReader};
+use crate::core::ser::{ProtocolVersion, Readable, StreamingReader};
 use crate::error::{Error, ErrorKind};
 use crate::pipe;
 use crate::store;
@@ -386,7 +386,6 @@ impl Chain {
 			verifier_cache: self.verifier_cache.clone(),
 			txhashset,
 			batch,
-			orphans: self.orphans.clone(),
 		})
 	}
 
@@ -647,7 +646,7 @@ impl Chain {
 	/// TODO - Write this data to disk and validate the rebuilt kernel MMR.
 	pub fn kernel_data_write(&self, reader: &mut Read) -> Result<(), Error> {
 		let mut count = 0;
-		let mut stream = StreamingReader::new(reader);
+		let mut stream = StreamingReader::new(reader, ProtocolVersion::local());
 		while let Ok(_kernel) = TxKernelEntry::read(&mut stream) {
 			count += 1;
 		}

@@ -21,7 +21,7 @@
 //! stream and make sure we get the right number of bytes out.
 
 use crate::core::ser;
-use crate::core::ser::FixedLength;
+use crate::core::ser::{FixedLength, ProtocolVersion};
 use crate::msg::{
 	read_body, read_discard, read_header, read_item, write_to_buf, MsgHeader, MsgHeaderWrapper,
 	Type,
@@ -80,22 +80,31 @@ macro_rules! try_break {
 pub struct Message<'a> {
 	pub header: MsgHeader,
 	stream: &'a mut dyn Read,
+	version: ProtocolVersion,
 }
 
 impl<'a> Message<'a> {
-	fn from_header(header: MsgHeader, stream: &'a mut dyn Read) -> Message<'a> {
-		Message { header, stream }
+	fn from_header(
+		header: MsgHeader,
+		stream: &'a mut dyn Read,
+		version: ProtocolVersion,
+	) -> Message<'a> {
+		Message {
+			header,
+			stream,
+			version,
+		}
 	}
 
 	/// Read the message body from the underlying connection
 	pub fn body<T: ser::Readable>(&mut self) -> Result<T, Error> {
-		read_body(&self.header, self.stream)
+		read_body(&self.header, self.stream, self.version)
 	}
 
 	/// Read a single "thing" from the underlying connection.
 	/// Return the thing and the total bytes read.
 	pub fn streaming_read<T: ser::Readable>(&mut self) -> Result<(T, u64), Error> {
-		read_item(self.stream)
+		read_item(self.stream, self.version)
 	}
 
 	pub fn copy_attachment(&mut self, len: usize, writer: &mut dyn Write) -> Result<usize, Error> {
@@ -115,6 +124,7 @@ impl<'a> Message<'a> {
 pub struct Response<'a> {
 	resp_type: Type,
 	body: Vec<u8>,
+	version: ProtocolVersion,
 	stream: &'a mut dyn Write,
 	attachment: Option<File>,
 }
@@ -122,20 +132,25 @@ pub struct Response<'a> {
 impl<'a> Response<'a> {
 	pub fn new<T: ser::Writeable>(
 		resp_type: Type,
+		version: ProtocolVersion,
 		body: T,
 		stream: &'a mut dyn Write,
 	) -> Result<Response<'a>, Error> {
-		let body = ser::ser_vec(&body)?;
+		let body = ser::ser_vec(&body, version)?;
 		Ok(Response {
 			resp_type,
 			body,
+			version,
 			stream,
 			attachment: None,
 		})
 	}
 
 	fn write(mut self, tracker: Arc<Tracker>) -> Result<(), Error> {
-		let mut msg = ser::ser_vec(&MsgHeader::new(self.resp_type, self.body.len() as u64))?;
+		let mut msg = ser::ser_vec(
+			&MsgHeader::new(self.resp_type, self.body.len() as u64),
+			self.version,
+		)?;
 		msg.append(&mut self.body);
 		self.stream.write_all(&msg[..])?;
 		tracker.inc_sent(msg.len() as u64);
@@ -210,11 +225,11 @@ pub struct ConnHandle {
 }
 
 impl ConnHandle {
-	pub fn send<T>(&self, body: T, msg_type: Type) -> Result<u64, Error>
+	pub fn send<T>(&self, body: T, msg_type: Type, version: ProtocolVersion) -> Result<u64, Error>
 	where
 		T: ser::Writeable,
 	{
-		let buf = write_to_buf(body, msg_type)?;
+		let buf = write_to_buf(body, msg_type, version)?;
 		let buf_len = buf.len();
 		self.send_channel.try_send(buf)?;
 		Ok(buf_len as u64)
@@ -260,6 +275,7 @@ impl Tracker {
 /// itself.
 pub fn listen<H>(
 	stream: TcpStream,
+	version: ProtocolVersion,
 	tracker: Arc<Tracker>,
 	handler: H,
 ) -> io::Result<(ConnHandle, StopHandle)>
@@ -277,7 +293,8 @@ where
 
 	let stopped = Arc::new(AtomicBool::new(false));
 
-	let (reader_thread, writer_thread) = poll(stream, handler, send_rx, stopped.clone(), tracker)?;
+	let (reader_thread, writer_thread) =
+		poll(stream, version, handler, send_rx, stopped.clone(), tracker)?;
 
 	Ok((
 		ConnHandle {
@@ -293,6 +310,7 @@ where
 
 fn poll<H>(
 	conn: TcpStream,
+	version: ProtocolVersion,
 	handler: H,
 	send_rx: mpsc::Receiver<Vec<u8>>,
 	stopped: Arc<AtomicBool>,
@@ -312,9 +330,9 @@ where
 		.spawn(move || {
 			loop {
 				// check the read end
-				match try_break!(read_header(&mut reader)) {
+				match try_break!(read_header(&mut reader, version)) {
 					Some(MsgHeaderWrapper::Known(header)) => {
-						let msg = Message::from_header(header, &mut reader);
+						let msg = Message::from_header(header, &mut reader, version);
 
 						trace!(
 							"Received message header, type {:?}, len {}.",

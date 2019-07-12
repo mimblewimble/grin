@@ -17,24 +17,15 @@
 use crate::core::core::hash::Hash;
 use crate::core::core::BlockHeader;
 use crate::core::pow::Difficulty;
-use crate::core::ser::{self, FixedLength, Readable, Reader, StreamingReader, Writeable, Writer};
+use crate::core::ser::{
+	self, FixedLength, ProtocolVersion, Readable, Reader, StreamingReader, Writeable, Writer,
+};
 use crate::core::{consensus, global};
 use crate::types::{
 	Capabilities, Error, PeerAddr, ReasonForBan, MAX_BLOCK_HEADERS, MAX_LOCATORS, MAX_PEER_ADDRS,
 };
 use num::FromPrimitive;
-use std::fmt;
 use std::io::{Read, Write};
-
-/// Our local node protocol version.
-/// We will increment the protocol version with every change to p2p msg serialization
-/// so we will likely connect with peers with both higher and lower protocol versions.
-/// We need to be aware that some msg formats will be potentially incompatible and handle
-/// this for each individual peer connection.
-/// Note: A peer may disconnect and reconnect with an updated protocol version. Normally
-/// the protocol version will increase but we need to handle decreasing values also
-/// as a peer may rollback to previous version of the code.
-const PROTOCOL_VERSION: u32 = 1;
 
 /// Grin's user agent with current version
 pub const USER_AGENT: &'static str = concat!("MW/Grin ", env!("CARGO_PKG_VERSION"));
@@ -129,28 +120,38 @@ fn magic() -> [u8; 2] {
 ///
 /// Note: We return a MsgHeaderWrapper here as we may encounter an unknown msg type.
 ///
-pub fn read_header(stream: &mut dyn Read) -> Result<MsgHeaderWrapper, Error> {
+pub fn read_header(
+	stream: &mut dyn Read,
+	version: ProtocolVersion,
+) -> Result<MsgHeaderWrapper, Error> {
 	let mut head = vec![0u8; MsgHeader::LEN];
 	stream.read_exact(&mut head)?;
-	let header = ser::deserialize::<MsgHeaderWrapper>(&mut &head[..])?;
+	let header = ser::deserialize::<MsgHeaderWrapper>(&mut &head[..], version)?;
 	Ok(header)
 }
 
 /// Read a single item from the provided stream, always blocking until we
 /// have a result (or timeout).
 /// Returns the item and the total bytes read.
-pub fn read_item<T: Readable>(stream: &mut dyn Read) -> Result<(T, u64), Error> {
-	let mut reader = StreamingReader::new(stream);
+pub fn read_item<T: Readable>(
+	stream: &mut dyn Read,
+	version: ProtocolVersion,
+) -> Result<(T, u64), Error> {
+	let mut reader = StreamingReader::new(stream, version);
 	let res = T::read(&mut reader)?;
 	Ok((res, reader.total_bytes_read()))
 }
 
 /// Read a message body from the provided stream, always blocking
 /// until we have a result (or timeout).
-pub fn read_body<T: Readable>(h: &MsgHeader, stream: &mut dyn Read) -> Result<T, Error> {
+pub fn read_body<T: Readable>(
+	h: &MsgHeader,
+	stream: &mut dyn Read,
+	version: ProtocolVersion,
+) -> Result<T, Error> {
 	let mut body = vec![0u8; h.msg_len as usize];
 	stream.read_exact(&mut body)?;
-	ser::deserialize(&mut &body[..]).map_err(From::from)
+	ser::deserialize(&mut &body[..], version).map_err(From::from)
 }
 
 /// Read (an unknown) message from the provided stream and discard it.
@@ -161,11 +162,15 @@ pub fn read_discard(msg_len: u64, stream: &mut dyn Read) -> Result<(), Error> {
 }
 
 /// Reads a full message from the underlying stream.
-pub fn read_message<T: Readable>(stream: &mut dyn Read, msg_type: Type) -> Result<T, Error> {
-	match read_header(stream)? {
+pub fn read_message<T: Readable>(
+	stream: &mut dyn Read,
+	version: ProtocolVersion,
+	msg_type: Type,
+) -> Result<T, Error> {
+	match read_header(stream, version)? {
 		MsgHeaderWrapper::Known(header) => {
 			if header.msg_type == msg_type {
-				read_body(&header, stream)
+				read_body(&header, stream, version)
 			} else {
 				Err(Error::BadMessage)
 			}
@@ -177,15 +182,19 @@ pub fn read_message<T: Readable>(stream: &mut dyn Read, msg_type: Type) -> Resul
 	}
 }
 
-pub fn write_to_buf<T: Writeable>(msg: T, msg_type: Type) -> Result<Vec<u8>, Error> {
+pub fn write_to_buf<T: Writeable>(
+	msg: T,
+	msg_type: Type,
+	version: ProtocolVersion,
+) -> Result<Vec<u8>, Error> {
 	// prepare the body first so we know its serialized length
 	let mut body_buf = vec![];
-	ser::serialize(&mut body_buf, &msg)?;
+	ser::serialize(&mut body_buf, version, &msg)?;
 
 	// build and serialize the header using the body size
 	let mut msg_buf = vec![];
 	let blen = body_buf.len() as u64;
-	ser::serialize(&mut msg_buf, &MsgHeader::new(msg_type, blen))?;
+	ser::serialize(&mut msg_buf, version, &MsgHeader::new(msg_type, blen))?;
 	msg_buf.append(&mut body_buf);
 
 	Ok(msg_buf)
@@ -195,8 +204,9 @@ pub fn write_message<T: Writeable>(
 	stream: &mut dyn Write,
 	msg: T,
 	msg_type: Type,
+	version: ProtocolVersion,
 ) -> Result<(), Error> {
-	let buf = write_to_buf(msg, msg_type)?;
+	let buf = write_to_buf(msg, msg_type, version)?;
 	stream.write_all(&buf[..])?;
 	Ok(())
 }
@@ -298,40 +308,6 @@ impl Readable for MsgHeaderWrapper {
 	}
 }
 
-#[derive(Clone, Copy, Debug, Deserialize, Eq, Ord, PartialOrd, PartialEq, Serialize)]
-pub struct ProtocolVersion(pub u32);
-
-impl Default for ProtocolVersion {
-	fn default() -> ProtocolVersion {
-		ProtocolVersion(PROTOCOL_VERSION)
-	}
-}
-
-impl From<ProtocolVersion> for u32 {
-	fn from(v: ProtocolVersion) -> u32 {
-		v.0
-	}
-}
-
-impl fmt::Display for ProtocolVersion {
-	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-		write!(f, "{}", self.0)
-	}
-}
-
-impl Writeable for ProtocolVersion {
-	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
-		writer.write_u32(self.0)
-	}
-}
-
-impl Readable for ProtocolVersion {
-	fn read(reader: &mut dyn Reader) -> Result<ProtocolVersion, ser::Error> {
-		let version = reader.read_u32()?;
-		Ok(ProtocolVersion(version))
-	}
-}
-
 /// First part of a handshake, sender advertises its version and
 /// characteristics.
 pub struct Hand {
@@ -425,10 +401,8 @@ impl Writeable for Shake {
 impl Readable for Shake {
 	fn read(reader: &mut dyn Reader) -> Result<Shake, ser::Error> {
 		let version = ProtocolVersion::read(reader)?;
-
 		let capab = reader.read_u32()?;
 		let capabilities = Capabilities::from_bits_truncate(capab);
-
 		let total_difficulty = Difficulty::read(reader)?;
 		let ua = reader.read_bytes_len_prefix()?;
 		let user_agent = String::from_utf8(ua).map_err(|_| ser::Error::CorruptedData)?;
