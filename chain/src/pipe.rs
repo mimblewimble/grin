@@ -429,10 +429,8 @@ fn verify_coinbase_maturity(block: &Block, ext: &txhashset::Extension<'_>) -> Re
 /// based on block_sums of previous block, accounting for the inputs|outputs|kernels
 /// of the new block.
 fn verify_block_sums(b: &Block, ext: &mut txhashset::Extension<'_>) -> Result<(), Error> {
-	// TODO - this is 2 db calls, can we optimize this?
 	// Retrieve the block_sums for the previous block.
-	let prev = ext.batch.get_previous_header(&b.header)?;
-	let block_sums = ext.batch.get_block_sums(&prev.hash())?;
+	let block_sums = ext.batch.get_block_sums(&b.header.prev_hash)?;
 
 	// Overage is based purely on the new block.
 	// Previous block_sums have taken all previous overage into account.
