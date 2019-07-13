@@ -290,10 +290,10 @@ impl PeerAddr {
 
 	/// Whether this is an i2p address
 	pub fn is_i2p(&self) -> bool {
-		if let PeerAddr::I2p(_) = self {
-			return true;
+		match self {
+			PeerAddr::I2p(_) => true,
+			_ => false,
 		}
-		false
 	}
 
 	/// Whether this is an classic IP address
@@ -301,27 +301,25 @@ impl PeerAddr {
 		!self.is_i2p()
 	}
 
-	/// Returns the underlying I2P address if this is one, otherwise panics
+	/// Returns the underlying I2P address if this is one, otherwise returns Error
 	pub fn unwrap_i2p(self) -> Result<I2pSocketAddr, Error> {
-		if let PeerAddr::I2p(i2p_addr) = self {
-			return Ok(i2p_addr);
-		} else {
-			return Err(Error::I2p(i2p::Error::from(io::Error::new(
+		match self {
+			PeerAddr::I2p(i2p_addr) => Ok(i2p_addr),
+			_ => Err(Error::I2p(i2p::Error::from(io::Error::new(
 				io::ErrorKind::InvalidInput,
 				"not a valid I2P address",
-			))));
+			)))),
 		}
 	}
 
-	/// Returns the underlying IP address if this is one, otherwise panics
+	/// Returns the underlying IP address if this is one, otherwise returns Error
 	pub fn unwrap_ip(self) -> Result<SocketAddr, Error> {
-		if let PeerAddr::Socket(s) = self {
-			return Ok(s);
-		} else {
-			return Err(Error::Socket(io::Error::new(
+		match self {
+			PeerAddr::Socket(s) => Ok(s),
+			_ => Err(Error::Socket(io::Error::new(
 				io::ErrorKind::InvalidInput,
 				"not a valid IP address",
-			)));
+			))),
 		}
 	}
 }
