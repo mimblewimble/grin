@@ -26,12 +26,12 @@ use crate::msg::{
 	read_body, read_discard, read_header, read_item, write_to_buf, MsgHeader, MsgHeaderWrapper,
 	Type,
 };
-use crate::types::Error;
+use crate::types::{Error, Stream};
 use crate::util::{RateCounter, RwLock};
 use std::fs::File;
 use std::io::{self, Read, Write};
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::net::Shutdown;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{mpsc, Arc};
 use std::time::Duration;
 use std::{
@@ -278,19 +278,15 @@ pub fn listen<S, H>(
 	version: ProtocolVersion,
 	tracker: Arc<Tracker>,
 	handler: H,
-) -> io::Result<(ConnHandle, StopHandle)>
+) -> Result<(ConnHandle, StopHandle), Error>
 where
 	S: Stream + 'static,
 	H: MessageHandler,
 {
 	let (send_tx, send_rx) = mpsc::sync_channel(SEND_CHANNEL_CAP);
 
-	stream
-		.set_read_timeout(Some(IO_TIMEOUT))
-		.expect("can't set read timeout");
-	stream
-		.set_write_timeout(Some(IO_TIMEOUT))
-		.expect("can't set read timeout");
+	stream.set_read_timeout(Some(IO_TIMEOUT))?;
+	stream.set_write_timeout(Some(IO_TIMEOUT))?;
 
 	let stopped = Arc::new(AtomicBool::new(false));
 

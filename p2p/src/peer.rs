@@ -77,7 +77,7 @@ impl Peer {
 		info: PeerInfo,
 		conn: S,
 		adapter: Arc<dyn NetAdapter>,
-	) -> std::io::Result<Peer> {
+	) -> Result<Peer, Error> {
 		let state = Arc::new(RwLock::new(State::Connected));
 		let state_sync_requested = Arc::new(AtomicBool::new(false));
 		let tracking_adapter = TrackingAdapter::new(adapter);

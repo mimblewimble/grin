@@ -21,6 +21,7 @@ use std::net::{
 };
 use std::path::PathBuf;
 use std::str;
+use std::time::Duration;
 
 use std::sync::mpsc;
 use std::sync::Arc;
@@ -337,6 +338,10 @@ pub trait Stream: Read + Write + Send + Sync {
 	fn set_nonblocking(&self, nonblocking: bool) -> Result<(), Error>;
 	/// Try clone stream
 	fn try_clone(&self) -> Result<Box<Stream>, Error>;
+	/// Set read timeout
+	fn set_read_timeout(&self, duration: Option<Duration>) -> Result<(), Error>;
+	/// Set write timeout
+	fn set_write_timeout(&self, duration: Option<Duration>) -> Result<(), Error>;
 }
 
 impl<'a, S: Stream> Stream for &'a mut S {
@@ -357,6 +362,14 @@ impl<'a, S: Stream> Stream for &'a mut S {
 	}
 	fn try_clone(&self) -> Result<Box<Stream>, Error> {
 		S::try_clone(self)
+	}
+
+	fn set_read_timeout(&self, duration: Option<Duration>) -> Result<(), Error> {
+		S::set_read_timeout(self, duration)
+	}
+
+	fn set_write_timeout(&self, duration: Option<Duration>) -> Result<(), Error> {
+		S::set_write_timeout(self, duration)
 	}
 }
 
@@ -381,6 +394,20 @@ impl Stream for TcpStream {
 		let s = self.try_clone()?;
 		Ok(Box::new(s))
 	}
+
+	fn set_read_timeout(&self, duration: Option<Duration>) -> Result<(), Error> {
+		match self.set_read_timeout(duration) {
+			Ok(t) => Ok(t),
+			Err(e) => Err(Error::Socket(e).into()),
+		}
+	}
+
+	fn set_write_timeout(&self, duration: Option<Duration>) -> Result<(), Error> {
+		match self.set_write_timeout(duration) {
+			Ok(t) => Ok(t),
+			Err(e) => Err(Error::Socket(e).into()),
+		}
+	}
 }
 
 impl Stream for I2pStream {
@@ -403,6 +430,20 @@ impl Stream for I2pStream {
 	fn try_clone(&self) -> Result<Box<Stream>, Error> {
 		let s = self.try_clone()?;
 		Ok(Box::new(s))
+	}
+
+	fn set_read_timeout(&self, duration: Option<Duration>) -> Result<(), Error> {
+		match self.set_read_timeout(duration) {
+			Ok(t) => Ok(t),
+			Err(e) => Err(Error::I2p(e).into()),
+		}
+	}
+
+	fn set_write_timeout(&self, duration: Option<Duration>) -> Result<(), Error> {
+		match self.set_write_timeout(duration) {
+			Ok(t) => Ok(t),
+			Err(e) => Err(Error::I2p(e).into()),
+		}
 	}
 }
 
