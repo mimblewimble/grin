@@ -75,6 +75,7 @@ pub struct Server {
 	sync_thread: JoinHandle<()>,
 	dandelion_thread: JoinHandle<()>,
 	p2p_thread: JoinHandle<Result<(), grin_p2p::types::Error>>,
+	i2p_thread: Option<JoinHandle<Result<(), grin_p2p::types::Error>>>,
 }
 
 impl Server {
@@ -265,11 +266,14 @@ impl Server {
 			.name("p2p-server".to_string())
 			.spawn(move || p2p_inner.listen())?;
 
+		let mut i2p_thread = None;
 		if i2p_session.is_some() {
 			let p2p_inner = p2p_server.clone();
-			let _ = thread::Builder::new()
-				.name("p2p-server-i2p".to_string())
-				.spawn(move || p2p_inner.listen_i2p())?;
+			i2p_thread = Some(
+				thread::Builder::new()
+					.name("p2p-server-i2p".to_string())
+					.spawn(move || p2p_inner.listen_i2p())?,
+			);
 		}
 
 		info!("Starting rest apis at: {}", &config.api_http_addr);
@@ -324,6 +328,7 @@ impl Server {
 			connect_thread,
 			sync_thread,
 			dandelion_thread,
+			i2p_thread,
 		})
 	}
 
@@ -532,6 +537,16 @@ impl Server {
 		// this call is blocking and makes sure all peers stop, however
 		// we can't be sure that we stoped a listener blocked on accept, so we don't join the p2p thread
 		self.p2p.stop();
+		match self.p2p_thread.join() {
+			Err(e) => error!("failed to join to p2p thread: {:?}", e),
+			Ok(_) => info!("p2p thread stopped"),
+		}
+		if let Some(i2p_thread) = self.i2p_thread {
+			match i2p_thread.join() {
+				Err(e) => error!("failed to join to i2p thread: {:?}", e),
+				Ok(_) => info!("i2p thread stopped"),
+			}
+		}
 		let _ = self.lock_file.unlock();
 	}
 
