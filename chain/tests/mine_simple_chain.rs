@@ -26,7 +26,7 @@ use self::keychain::{ExtKeychain, ExtKeychainPath, Keychain};
 use self::util::RwLock;
 use chrono::Duration;
 use grin_chain as chain;
-use grin_chain::{BlockStatus, ChainAdapter, Options};
+use grin_chain::{BlockStatus, ChainAdapter, Options, Tip};
 use grin_core as core;
 use grin_keychain as keychain;
 use grin_util as util;
@@ -606,6 +606,27 @@ fn output_header_mappings() {
 	clean_output_dir(".grin_header_for_output");
 }
 
+#[test]
+fn rebuild_chain() {
+	global::set_mining_mode(ChainTypes::AutomatedTesting);
+
+	let tmp_chain_dir = ".grin.tmp";
+
+	let chain = setup(tmp_chain_dir, pow::mine_genesis_block().unwrap());
+	let keychain = keychain::ExtKeychain::from_random_seed(false).unwrap();
+
+	let mut prev = chain.head_header().unwrap();
+	for n in 1..4 {
+		let b = prepare_block(&keychain, &prev, &chain, n);
+		prev = b.header.clone();
+		chain.process_block(b, chain::Options::SKIP_POW).unwrap();
+	}
+	chain.rebuild_sync_mmr(&chain.head().unwrap());
+	assert_eq!(chain.head().unwrap().height, 3);
+
+	// Cleanup chain directory
+	clean_output_dir(tmp_chain_dir);
+}
 fn prepare_block<K>(kc: &K, prev: &BlockHeader, chain: &Chain, diff: u64) -> Block
 where
 	K: Keychain,

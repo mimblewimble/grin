@@ -710,7 +710,6 @@ impl<'a> HeaderExtension<'a> {
 		self.pmmr.unpruned_size()
 	}
 
-	/// TODO - think about how to optimize this.
 	/// Requires *all* header hashes to be iterated over in ascending order.
 	pub fn rebuild(&mut self, head: &Tip, genesis: &BlockHeader) -> Result<(), Error> {
 		debug!(
@@ -719,31 +718,28 @@ impl<'a> HeaderExtension<'a> {
 			head.last_block_h,
 		);
 
-		let mut header_hashes = vec![];
+		let mut headers = vec![];
 		let mut current = self.batch.get_block_header(&head.last_block_h)?;
 		while current.height > 0 {
-			header_hashes.push(current.hash());
-			current = self.batch.get_previous_header(&current)?;
+			headers.push(current.clone());
+			current = self.batch.get_block_header(&current.prev_hash)?;
 		}
 
-		header_hashes.reverse();
-
-		// Trucate the extension (back to pos 0).
+		// Truncate the extension (back to pos 0).
 		self.truncate()?;
 
 		// Re-apply the genesis header after truncation.
 		self.apply_header(&genesis)?;
 
-		if header_hashes.len() > 0 {
+		if headers.len() > 0 {
 			debug!(
 				"Re-applying {} headers to extension, from {:?} to {:?}.",
-				header_hashes.len(),
-				header_hashes.first().unwrap(),
-				header_hashes.last().unwrap(),
+				headers.len(),
+				headers.last().unwrap(),
+				headers.first().unwrap(),
 			);
 
-			for h in header_hashes {
-				let header = self.batch.get_block_header(&h)?;
+			for header in headers.iter().rev() {
 				self.validate_root(&header)?;
 				self.apply_header(&header)?;
 			}
