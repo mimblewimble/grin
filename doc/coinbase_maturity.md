@@ -110,7 +110,7 @@ If the hash stored in the output MMR covers both the commitment and the output f
 With this additional step we know if the output was a coinbase output or a regular transaction output based on the provided features.
 The hash will not match unless the features in the input match the original output features.
 
-For a regular non-coinbase output we are finished to explain. We know the output is currently spendable and we do not need to check the lock height.
+For a regular non-coinbase output we are finished. We know the output is currently spendable and we do not need to check the lock height.
 
 For a coinbase output we can proceed to verify the lock height and maturity. For this we need to identify the block where the output originated.
 We cannot determine the block itself, but we can require the input to specify the block (hash) and we can then prove this is actually correct based on the merkle roots in the block header (without needing full block data).
