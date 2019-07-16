@@ -14,7 +14,6 @@
 
 //! Implementation of the chain block acceptance (or refusal) pipeline.
 
-use crate::chain::OrphanBlockPool;
 use crate::core::consensus;
 use crate::core::core::hash::Hashed;
 use crate::core::core::verifier_cache::VerifierCache;
@@ -45,8 +44,6 @@ pub struct BlockContext<'a> {
 	pub batch: store::Batch<'a>,
 	/// The verifier cache (caching verifier for rangeproofs and kernel signatures)
 	pub verifier_cache: Arc<RwLock<dyn VerifierCache>>,
-	/// Recent orphan blocks to avoid double-processing
-	pub orphans: Arc<OrphanBlockPool>,
 }
 
 /// Process a block header as part of processing a full block.
@@ -75,10 +72,9 @@ fn process_header_for_block(
 
 // Check if we already know about this block for various reasons
 // from cheapest to most expensive (delay hitting the db until last).
-fn check_known(block: &Block, ctx: &mut BlockContext<'_>) -> Result<(), Error> {
-	check_known_head(&block.header, ctx)?;
-	check_known_orphans(&block.header, ctx)?;
-	check_known_store(&block.header, ctx)?;
+fn check_known(header: &BlockHeader, ctx: &mut BlockContext<'_>) -> Result<(), Error> {
+	check_known_head(header, ctx)?;
+	check_known_store(header, ctx)?;
 	Ok(())
 }
 
@@ -99,7 +95,7 @@ pub fn process_block(b: &Block, ctx: &mut BlockContext<'_>) -> Result<Option<Tip
 	);
 
 	// Check if we have already processed this block previously.
-	check_known(b, ctx)?;
+	check_known(&b.header, ctx)?;
 
 	// Delay hitting the db for current chain head until we know
 	// this block is not already known.
@@ -260,19 +256,11 @@ pub fn process_block_header(header: &BlockHeader, ctx: &mut BlockContext<'_>) ->
 		header.height,
 	); // keep this
 
-	check_header_known(header, ctx)?;
-	validate_header(header, ctx)?;
-	Ok(())
-}
+	// Check if this header is already "known" from processing a previous block.
+	// Note: We are looking for a full block based on this header, not just the header itself.
+	check_known(header, ctx)?;
 
-/// Quick in-memory check to fast-reject any block header we've already handled
-/// recently. Keeps duplicates from the network in check.
-/// ctx here is specific to the header_head (tip of the header chain)
-fn check_header_known(header: &BlockHeader, ctx: &mut BlockContext<'_>) -> Result<(), Error> {
-	let header_head = ctx.batch.header_head()?;
-	if header.hash() == header_head.last_block_h || header.hash() == header_head.prev_block_h {
-		return Err(ErrorKind::Unfit("header already known".to_string()).into());
-	}
+	validate_header(header, ctx)?;
 	Ok(())
 }
 
@@ -286,15 +274,6 @@ fn check_known_head(header: &BlockHeader, ctx: &mut BlockContext<'_>) -> Result<
 		return Err(ErrorKind::Unfit("already known in head".to_string()).into());
 	}
 	Ok(())
-}
-
-/// Check if this block is in the set of known orphans.
-fn check_known_orphans(header: &BlockHeader, ctx: &mut BlockContext<'_>) -> Result<(), Error> {
-	if ctx.orphans.contains(&header.hash()) {
-		Err(ErrorKind::Unfit("already known in orphans".to_string()).into())
-	} else {
-		Ok(())
-	}
 }
 
 // Check if this block is in the store already.
@@ -450,10 +429,8 @@ fn verify_coinbase_maturity(block: &Block, ext: &txhashset::Extension<'_>) -> Re
 /// based on block_sums of previous block, accounting for the inputs|outputs|kernels
 /// of the new block.
 fn verify_block_sums(b: &Block, ext: &mut txhashset::Extension<'_>) -> Result<(), Error> {
-	// TODO - this is 2 db calls, can we optimize this?
 	// Retrieve the block_sums for the previous block.
-	let prev = ext.batch.get_previous_header(&b.header)?;
-	let block_sums = ext.batch.get_block_sums(&prev.hash())?;
+	let block_sums = ext.batch.get_block_sums(&b.header.prev_hash)?;
 
 	// Overage is based purely on the new block.
 	// Previous block_sums have taken all previous overage into account.

@@ -18,6 +18,7 @@
 use crate::util::RwLock;
 use chrono::prelude::{DateTime, NaiveDateTime, Utc};
 use rand::{thread_rng, Rng};
+use serde_json::{json, Value};
 use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
@@ -28,6 +29,7 @@ use crate::common::types::Error;
 use crate::core::core::verifier_cache::VerifierCache;
 use crate::core::core::{Output, TxKernel};
 use crate::core::libtx::secp_ser;
+use crate::core::libtx::ProofBuilder;
 use crate::core::{consensus, core, global};
 use crate::keychain::{ExtKeychain, Identifier, Keychain};
 use crate::pool;
@@ -223,8 +225,14 @@ fn burn_reward(block_fees: BlockFees) -> Result<(core::Output, core::TxKernel, B
 	warn!("Burning block fees: {:?}", block_fees);
 	let keychain = ExtKeychain::from_random_seed(global::is_floonet())?;
 	let key_id = ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
-	let (out, kernel) =
-		crate::core::libtx::reward::output(&keychain, &key_id, block_fees.fees, false).unwrap();
+	let (out, kernel) = crate::core::libtx::reward::output(
+		&keychain,
+		&ProofBuilder::new(&keychain),
+		&key_id,
+		block_fees.fees,
+		false,
+	)
+	.unwrap();
 	Ok((out, kernel, block_fees))
 }
 
@@ -258,15 +266,48 @@ fn get_coinbase(
 /// Call the wallet API to create a coinbase output for the given block_fees.
 /// Will retry based on default "retry forever with backoff" behavior.
 fn create_coinbase(dest: &str, block_fees: &BlockFees) -> Result<CbData, Error> {
-	let url = format!("{}/v1/wallet/foreign/build_coinbase", dest);
-	match api::client::post(&url, None, &block_fees) {
-		Err(e) => {
-			error!(
-				"Failed to get coinbase from {}. Is the wallet listening?",
-				url
-			);
-			Err(Error::WalletComm(format!("{}", e)))
+	let url = format!("{}/v2/foreign", dest);
+	let req_body = json!({
+		"jsonrpc": "2.0",
+		"method": "build_coinbase",
+		"id": 1,
+		"params": {
+			"block_fees": block_fees
 		}
-		Ok(res) => Ok(res),
+	});
+
+	trace!("Sending build_coinbase request: {}", req_body);
+	let req = api::client::create_post_request(url.as_str(), None, &req_body)?;
+	let res: String = api::client::send_request(req).map_err(|e| {
+		let report = format!(
+			"Failed to get coinbase from {}. Is the wallet listening? {}",
+			dest, e
+		);
+		error!("{}", report);
+		Error::WalletComm(report)
+	})?;
+
+	let res: Value = serde_json::from_str(&res).unwrap();
+	trace!("Response: {}", res);
+	if res["error"] != json!(null) {
+		let report = format!(
+			"Failed to get coinbase from {}: Error: {}, Message: {}",
+			dest, res["error"]["code"], res["error"]["message"]
+		);
+		error!("{}", report);
+		return Err(Error::WalletComm(report));
 	}
+
+	let cb_data = res["result"]["Ok"].clone();
+	trace!("cb_data: {}", cb_data);
+	let ret_val = match serde_json::from_value::<CbData>(cb_data) {
+		Ok(r) => r,
+		Err(e) => {
+			let report = format!("Couldn't deserialize CbData: {}", e);
+			error!("{}", report);
+			return Err(Error::WalletComm(report));
+		}
+	};
+
+	Ok(ret_val)
 }

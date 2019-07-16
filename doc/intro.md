@@ -49,7 +49,7 @@ dive deeper into those assumptions, there are other opportunities to
 
 An Elliptic Curve for the purpose of cryptography is simply a large set of points that
 we will call _C_. These points can be added, subtracted, or multiplied by integers (also called scalars).
-Given an integer _k_ and
+Given such a point _H_, an integer _k_ and
 using the scalar multiplication operation we can compute `k*H`, which is also a point on
 curve _C_. Given another integer _j_ we can also calculate `(k+j)*H`, which equals
 `k*H + j*H`. The addition and scalar multiplication operations on an elliptic curve
@@ -194,7 +194,7 @@ She picks 113 say, and what ends up on the blockchain is:
 
 Now the transaction no longer sums to zero and we have an _excess value_ on _G_
 (85), which is the result of the summation of all blinding factors. But because `85*G` is
-a valid public key on the elliptic curve _G_, with private key 85,
+a valid public key on the elliptic curve _C_, with private key 85,
 for any x and y, only if `y = 0` is `x*G + y*H` a valid public key on the elliptic curve 
 using generator point _G_.
 

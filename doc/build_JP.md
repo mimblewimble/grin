@@ -13,7 +13,7 @@ grinのプログラミング言語である`rust`はほぼ全ての環境に対�
 
 ## 要件
 
-* rust 1.31+ ([rustup]((https://www.rustup.rs/))を使えば`curl https://sh.rustup.rs -sSf | sh; source $HOME/.cargo/env`でインストール可)
+* rust 1.34+ ([rustup]((https://www.rustup.rs/))を使えば`curl https://sh.rustup.rs -sSf | sh; source $HOME/.cargo/env`でインストール可)
   * rustをインストール済みの場合は`rustup update`を実行
 * clang
 * ncursesとそのライブラリ (ncurses, ncursesw5)

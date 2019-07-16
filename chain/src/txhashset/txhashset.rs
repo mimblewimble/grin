@@ -32,8 +32,7 @@ use crate::util::secp::pedersen::{Commitment, RangeProof};
 use crate::util::{file, secp_static, zip};
 use croaring::Bitmap;
 use grin_store;
-use grin_store::pmmr::{clean_files_by_prefix, PMMRBackend, PMMR_FILES};
-use std::collections::HashSet;
+use grin_store::pmmr::{clean_files_by_prefix, PMMRBackend};
 use std::fs::{self, File};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -329,7 +328,7 @@ impl TxHashSet {
 /// of blocks to the txhashset and the checking of the current tree roots.
 ///
 /// The unit of work is always discarded (always rollback) as this is read-only.
-pub fn extending_readonly<'a, F, T>(trees: &'a mut TxHashSet, inner: F) -> Result<T, Error>
+pub fn extending_readonly<F, T>(trees: &mut TxHashSet, inner: F) -> Result<T, Error>
 where
 	F: FnOnce(&mut Extension<'_>) -> Result<T, Error>,
 {
@@ -366,7 +365,7 @@ where
 
 /// Readonly view on the UTXO set.
 /// Based on the current txhashset output_pmmr.
-pub fn utxo_view<'a, F, T>(trees: &'a TxHashSet, inner: F) -> Result<T, Error>
+pub fn utxo_view<F, T>(trees: &TxHashSet, inner: F) -> Result<T, Error>
 where
 	F: FnOnce(&UTXOView<'_>) -> Result<T, Error>,
 {
@@ -391,7 +390,7 @@ where
 /// via last_pos.
 /// We create a new db batch for this view and discard it (rollback)
 /// when we are done with the view.
-pub fn rewindable_kernel_view<'a, F, T>(trees: &'a TxHashSet, inner: F) -> Result<T, Error>
+pub fn rewindable_kernel_view<F, T>(trees: &TxHashSet, inner: F) -> Result<T, Error>
 where
 	F: FnOnce(&mut RewindableKernelView<'_>) -> Result<T, Error>,
 {
@@ -642,7 +641,7 @@ impl<'a> HeaderExtension<'a> {
 	/// Get the header at the specified height based on the current state of the header extension.
 	/// Derives the MMR pos from the height (insertion index) and retrieves the header hash.
 	/// Looks the header up in the db by hash.
-	pub fn get_header_by_height(&mut self, height: u64) -> Result<BlockHeader, Error> {
+	pub fn get_header_by_height(&self, height: u64) -> Result<BlockHeader, Error> {
 		let pos = pmmr::insertion_to_pmmr_index(height + 1);
 		if let Some(hash) = self.get_header_hash(pos) {
 			let header = self.batch.get_block_header(&hash)?;
@@ -654,7 +653,7 @@ impl<'a> HeaderExtension<'a> {
 
 	/// Compares the provided header to the header in the header MMR at that height.
 	/// If these match we know the header is on the current chain.
-	pub fn is_on_current_chain(&mut self, header: &BlockHeader) -> Result<(), Error> {
+	pub fn is_on_current_chain(&self, header: &BlockHeader) -> Result<(), Error> {
 		let chain_header = self.get_header_by_height(header.height)?;
 		if chain_header.hash() == header.hash() {
 			Ok(())
@@ -949,7 +948,9 @@ impl<'a> Extension<'a> {
 			}
 
 			if output_pos != rproof_pos {
-				return Err(ErrorKind::Other(format!("output vs rproof MMRs different pos")).into());
+				return Err(
+					ErrorKind::Other(format!("output vs rproof MMRs different pos")).into(),
+				);
 			}
 		}
 
@@ -991,7 +992,7 @@ impl<'a> Extension<'a> {
 
 	/// Compares the provided header to the header in the header MMR at that height.
 	/// If these match we know the header is on the current chain.
-	pub fn is_on_current_chain(&mut self, header: &BlockHeader) -> Result<(), Error> {
+	pub fn is_on_current_chain(&self, header: &BlockHeader) -> Result<(), Error> {
 		let chain_header = self.get_header_by_height(header.height)?;
 		if chain_header.hash() == header.hash() {
 			Ok(())
@@ -1455,11 +1456,13 @@ pub fn zip_read(root_dir: String, header: &BlockHeader) -> Result<File, Error> {
 		}
 		// Copy file to another dir
 		file::copy_dir_to(&txhashset_path, &temp_txhashset_path)?;
-		// Check and remove file that are not supposed to be there
-		check_and_remove_files(&temp_txhashset_path, header)?;
-		// Compress zip
-		zip::compress(&temp_txhashset_path, &File::create(zip_path.clone())?)
-			.map_err(|ze| ErrorKind::Other(ze.to_string()))?;
+
+		let zip_file = File::create(zip_path.clone())?;
+
+		// Explicit list of files to add to our zip archive.
+		let files = file_list(header);
+
+		zip::create_zip(&zip_file, &temp_txhashset_path, files)?;
 
 		temp_txhashset_path
 	};
@@ -1478,6 +1481,30 @@ pub fn zip_read(root_dir: String, header: &BlockHeader) -> Result<File, Error> {
 	Ok(zip_file)
 }
 
+// Explicit list of files to extract from our zip archive.
+// We include *only* these files when building the txhashset zip.
+// We extract *only* these files when receiving a txhashset zip.
+// Everything else will be safely ignored.
+// Return Vec<PathBuf> as some of these are dynamic (specifically the "rewound" leaf files).
+fn file_list(header: &BlockHeader) -> Vec<PathBuf> {
+	vec![
+		// kernel MMR
+		PathBuf::from("kernel/pmmr_data.bin"),
+		PathBuf::from("kernel/pmmr_hash.bin"),
+		// output MMR
+		PathBuf::from("output/pmmr_data.bin"),
+		PathBuf::from("output/pmmr_hash.bin"),
+		PathBuf::from("output/pmmr_prun.bin"),
+		// rangeproof MMR
+		PathBuf::from("rangeproof/pmmr_data.bin"),
+		PathBuf::from("rangeproof/pmmr_hash.bin"),
+		PathBuf::from("rangeproof/pmmr_prun.bin"),
+		// Header specific "rewound" leaf files for output and rangeproof MMR.
+		PathBuf::from(format!("output/pmmr_leaf.bin.{}", header.hash())),
+		PathBuf::from(format!("rangeproof/pmmr_leaf.bin.{}", header.hash())),
+	]
+}
+
 /// Extract the txhashset data from a zip file and writes the content into the
 /// txhashset storage dir
 pub fn zip_write(
@@ -1487,10 +1514,17 @@ pub fn zip_write(
 ) -> Result<(), Error> {
 	debug!("zip_write on path: {:?}", root_dir);
 	let txhashset_path = root_dir.clone().join(TXHASHSET_SUBDIR);
-	fs::create_dir_all(txhashset_path.clone())?;
-	zip::decompress(txhashset_data, &txhashset_path, expected_file)
-		.map_err(|ze| ErrorKind::Other(ze.to_string()))?;
-	check_and_remove_files(&txhashset_path, header)
+	fs::create_dir_all(&txhashset_path)?;
+
+	// Explicit list of files to extract from our zip archive.
+	let files = file_list(header);
+
+	// We expect to see *exactly* the paths listed above.
+	// No attempt is made to be permissive or forgiving with "alternative" paths.
+	// These are the *only* files we will attempt to extract from the zip file.
+	// If any of these are missing we will attempt to continue as some are potentially optional.
+	zip::extract_files(txhashset_data, &txhashset_path, files)?;
+	Ok(())
 }
 
 /// Overwrite txhashset folders in "to" folder with "from" folder
@@ -1533,112 +1567,6 @@ pub fn clean_header_folder(root_dir: &PathBuf) {
 			warn!("clean_header_folder: fail on {:?}. err: {}", header_path, e);
 		}
 	}
-}
-
-fn expected_file(path: &Path) -> bool {
-	use lazy_static::lazy_static;
-	use regex::Regex;
-	let s_path = path.to_str().unwrap_or_else(|| "");
-	lazy_static! {
-		static ref RE: Regex = Regex::new(
-			format!(
-				r#"^({}|{}|{})((/|\\)pmmr_(hash|data|leaf|prun)\.bin(\.\w*)?)?$"#,
-				OUTPUT_SUBDIR, KERNEL_SUBDIR, RANGE_PROOF_SUBDIR
-			)
-			.as_str()
-		)
-		.expect("invalid txhashset regular expression");
-	}
-	RE.is_match(&s_path)
-}
-
-/// Check a txhashset directory and remove any unexpected
-fn check_and_remove_files(txhashset_path: &PathBuf, header: &BlockHeader) -> Result<(), Error> {
-	// First compare the subdirectories
-	let subdirectories_expected: HashSet<_> = [OUTPUT_SUBDIR, KERNEL_SUBDIR, RANGE_PROOF_SUBDIR]
-		.iter()
-		.cloned()
-		.map(|s| String::from(s))
-		.collect();
-
-	let subdirectories_found: HashSet<_> = fs::read_dir(txhashset_path)?
-		.filter_map(|entry| {
-			entry.ok().and_then(|e| {
-				e.path()
-					.file_name()
-					.and_then(|n| n.to_str().map(|s| String::from(s)))
-			})
-		})
-		.collect();
-
-	let dir_difference: Vec<String> = subdirectories_found
-		.difference(&subdirectories_expected)
-		.cloned()
-		.collect();
-
-	// Removing unexpected directories if needed
-	if !dir_difference.is_empty() {
-		debug!("Unexpected folder(s) found in txhashset folder, removing.");
-		for diff in dir_difference {
-			let diff_path = txhashset_path.join(diff);
-			file::delete(diff_path)?;
-		}
-	}
-
-	// Then compare the files found in the subdirectories
-	let pmmr_files_expected: HashSet<_> = PMMR_FILES
-		.iter()
-		.cloned()
-		.map(|s| {
-			if s.contains("pmmr_leaf.bin") {
-				format!("{}.{}", s, header.hash())
-			} else {
-				String::from(s)
-			}
-		})
-		.collect();
-
-	let subdirectories = fs::read_dir(txhashset_path)?;
-	for subdirectory in subdirectories {
-		let subdirectory_path = subdirectory?.path();
-		let pmmr_files = fs::read_dir(&subdirectory_path)?;
-		let pmmr_files_found: HashSet<_> = pmmr_files
-			.filter_map(|entry| {
-				entry.ok().and_then(|e| {
-					e.path()
-						.file_name()
-						.and_then(|n| n.to_str().map(|s| String::from(s)))
-				})
-			})
-			.collect();
-		let difference: Vec<String> = pmmr_files_found
-			.difference(&pmmr_files_expected)
-			.cloned()
-			.collect();
-		let mut removed = 0;
-		if !difference.is_empty() {
-			for diff in &difference {
-				let diff_path = subdirectory_path.join(diff);
-				match file::delete(diff_path.clone()) {
-					Err(e) => error!(
-						"check_and_remove_files: fail to remove file '{:?}', Err: {:?}",
-						diff_path, e,
-					),
-					Ok(_) => {
-						removed += 1;
-						trace!("check_and_remove_files: file '{:?}' removed", diff_path);
-					}
-				}
-			}
-			debug!(
-				"{} tmp file(s) found in txhashset subfolder {:?}, {} removed.",
-				difference.len(),
-				&subdirectory_path,
-				removed,
-			);
-		}
-	}
-	Ok(())
 }
 
 /// Given a block header to rewind to and the block header at the
@@ -1691,24 +1619,4 @@ pub fn input_pos_to_rewind(
 	}
 
 	bitmap_fast_or(None, &mut block_input_bitmaps).ok_or_else(|| ErrorKind::Bitmap.into())
-}
-
-#[cfg(test)]
-mod tests {
-	use super::*;
-
-	#[test]
-	fn test_expected_files() {
-		assert!(!expected_file(Path::new("kernels")));
-		assert!(!expected_file(Path::new("xkernel")));
-		assert!(expected_file(Path::new("kernel")));
-		assert!(expected_file(Path::new("kernel\\pmmr_data.bin")));
-		assert!(expected_file(Path::new("kernel/pmmr_hash.bin")));
-		assert!(expected_file(Path::new("kernel/pmmr_leaf.bin")));
-		assert!(expected_file(Path::new("kernel/pmmr_prun.bin")));
-		assert!(expected_file(Path::new("kernel/pmmr_leaf.bin.deadbeef")));
-		assert!(!expected_file(Path::new("xkernel/pmmr_data.bin")));
-		assert!(!expected_file(Path::new("kernel/pmmrx_data.bin")));
-		assert!(!expected_file(Path::new("kernel/pmmr_data.binx")));
-	}
 }

@@ -17,10 +17,10 @@ use std::mem;
 use byteorder::{BigEndian, WriteBytesExt};
 use croaring::Bitmap;
 
+use crate::global;
 use crate::pow::common::{CuckooParams, EdgeType, Link};
 use crate::pow::error::{Error, ErrorKind};
 use crate::pow::{PoWContext, Proof};
-use crate::global;
 use crate::util;
 
 struct Graph<T>
@@ -85,11 +85,11 @@ where
 
 	/// Add an edge to the graph
 	pub fn add_edge(&mut self, u: T, mut v: T) -> Result<(), Error> {
-		let max_nodes_t = to_edge!(self.max_nodes);
+		let max_nodes_t = to_edge!(T, self.max_nodes);
 		if u >= max_nodes_t || v >= max_nodes_t {
 			return Err(ErrorKind::EdgeAddition)?;
 		}
-		v = v + to_edge!(self.max_nodes);
+		v = v + to_edge!(T, self.max_nodes);
 		let adj_u = self.adj_list[to_usize!(u ^ T::one())];
 		let adj_v = self.adj_list[to_usize!(v ^ T::one())];
 		if adj_u != self.nil && adj_v != self.nil {
@@ -99,7 +99,7 @@ where
 		}
 		let ulink = self.links.len();
 		let vlink = self.links.len() + 1;
-		if to_edge!(vlink) == self.nil {
+		if to_edge!(T, vlink) == self.nil {
 			return Err(ErrorKind::EdgeAddition)?;
 		}
 		self.links.push(Link {
@@ -212,7 +212,7 @@ where
 		max_sols: u32,
 	) -> Result<CuckatooContext<T>, Error> {
 		let params = CuckooParams::new(edge_bits, proof_size)?;
-		let num_edges = to_edge!(params.num_edges);
+		let num_edges = to_edge!(T, params.num_edges);
 		Ok(CuckatooContext {
 			params,
 			graph: Graph::new(num_edges, max_sols, proof_size)?,
@@ -251,7 +251,6 @@ where
 	}
 
 	/// Simple implementation of algorithm
-
 	pub fn find_cycles_iter<I>(&mut self, iter: I) -> Result<Vec<Proof>, Error>
 	where
 		I: Iterator<Item = u64>,
@@ -259,9 +258,9 @@ where
 		let mut val = vec![];
 		for n in iter {
 			val.push(n);
-			let u = self.sipnode(to_edge!(n), 0)?;
-			let v = self.sipnode(to_edge!(n), 1)?;
-			self.graph.add_edge(to_edge!(u), to_edge!(v))?;
+			let u = self.sipnode(to_edge!(T, n), 0)?;
+			let v = self.sipnode(to_edge!(T, n), 1)?;
+			self.graph.add_edge(to_edge!(T, u), to_edge!(T, v))?;
 		}
 		self.graph.solutions.pop();
 		for s in &mut self.graph.solutions {
@@ -281,10 +280,9 @@ where
 	/// Verify that given edges are ascending and form a cycle in a header-generated
 	/// graph
 	pub fn verify_impl(&self, proof: &Proof) -> Result<(), Error> {
-                if proof.proof_size() != global::proofsize() {
-                        return Err(ErrorKind::Verification( 
-                                "wrong cycle length".to_owned(),))?;
-                }
+		if proof.proof_size() != global::proofsize() {
+			return Err(ErrorKind::Verification("wrong cycle length".to_owned()))?;
+		}
 		let nonces = &proof.nonces;
 		let mut uvs = vec![0u64; 2 * proof.proof_size()];
 		let mut xor0: u64 = (self.params.proof_size as u64 / 2) & 1;
@@ -297,8 +295,8 @@ where
 			if n > 0 && nonces[n] <= nonces[n - 1] {
 				return Err(ErrorKind::Verification("edges not ascending".to_owned()))?;
 			}
-			uvs[2 * n] = to_u64!(self.sipnode(to_edge!(nonces[n]), 0)?);
-			uvs[2 * n + 1] = to_u64!(self.sipnode(to_edge!(nonces[n]), 1)?);
+			uvs[2 * n] = to_u64!(self.sipnode(to_edge!(T, nonces[n]), 0)?);
+			uvs[2 * n + 1] = to_u64!(self.sipnode(to_edge!(T, nonces[n]), 1)?);
 			xor0 ^= uvs[2 * n];
 			xor1 ^= uvs[2 * n + 1];
 		}

@@ -21,7 +21,7 @@ use self::core::libtx;
 use self::core::pow::{self, Difficulty};
 use self::core::{consensus, genesis};
 use self::keychain::{ExtKeychain, ExtKeychainPath, Keychain};
-use self::util::{Mutex, RwLock, StopState};
+use self::util::RwLock;
 use chrono::Duration;
 use grin_chain as chain;
 use grin_core as core;
@@ -47,7 +47,6 @@ fn setup(dir_name: &str) -> Chain {
 		pow::verify_size,
 		verifier_cache,
 		false,
-		Arc::new(Mutex::new(StopState::new())),
 	)
 	.unwrap()
 }
@@ -61,7 +60,6 @@ fn reload_chain(dir_name: &str) -> Chain {
 		pow::verify_size,
 		verifier_cache,
 		false,
-		Arc::new(Mutex::new(StopState::new())),
 	)
 	.unwrap()
 }
@@ -78,7 +76,14 @@ fn data_files() {
 			let prev = chain.head_header().unwrap();
 			let next_header_info = consensus::next_difficulty(1, chain.difficulty_iter().unwrap());
 			let pk = ExtKeychainPath::new(1, n as u32, 0, 0, 0).to_identifier();
-			let reward = libtx::reward::output(&keychain, &pk, 0, false).unwrap();
+			let reward = libtx::reward::output(
+				&keychain,
+				&libtx::ProofBuilder::new(&keychain),
+				&pk,
+				0,
+				false,
+			)
+			.unwrap();
 			let mut b =
 				core::core::Block::new(&prev, vec![], next_header_info.clone().difficulty, reward)
 					.unwrap();
@@ -156,7 +161,8 @@ fn _prepare_block_nosum(
 	let key_id = ExtKeychainPath::new(1, diff as u32, 0, 0, 0).to_identifier();
 
 	let fees = txs.iter().map(|tx| tx.fee()).sum();
-	let reward = libtx::reward::output(kc, &key_id, fees, false).unwrap();
+	let reward =
+		libtx::reward::output(kc, &libtx::ProofBuilder::new(kc), &key_id, fees, false).unwrap();
 	let mut b = match core::core::Block::new(
 		prev,
 		txs.into_iter().cloned().collect(),

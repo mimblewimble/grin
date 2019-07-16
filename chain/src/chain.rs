@@ -23,6 +23,7 @@ use crate::core::core::{
 };
 use crate::core::global;
 use crate::core::pow;
+use crate::core::ser::{ProtocolVersion, Readable, StreamingReader};
 use crate::error::{Error, ErrorKind};
 use crate::pipe;
 use crate::store;
@@ -32,10 +33,11 @@ use crate::types::{
 	BlockStatus, ChainAdapter, NoStatus, Options, Tip, TxHashSetRoots, TxHashsetWriteStatus,
 };
 use crate::util::secp::pedersen::{Commitment, RangeProof};
-use crate::util::{Mutex, RwLock, StopState};
+use crate::util::RwLock;
 use grin_store::Error::NotFoundErr;
 use std::collections::HashMap;
 use std::fs::{self, File};
+use std::io::Read;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
@@ -150,7 +152,6 @@ pub struct Chain {
 	// POW verification function
 	pow_verifier: fn(&BlockHeader) -> Result<(), pow::Error>,
 	archive_mode: bool,
-	stop_state: Arc<Mutex<StopState>>,
 	genesis: BlockHeader,
 }
 
@@ -165,16 +166,7 @@ impl Chain {
 		pow_verifier: fn(&BlockHeader) -> Result<(), pow::Error>,
 		verifier_cache: Arc<RwLock<dyn VerifierCache>>,
 		archive_mode: bool,
-		stop_state: Arc<Mutex<StopState>>,
 	) -> Result<Chain, Error> {
-		// Note: We take a lock on the stop_state here and do not release it until
-		// we have finished chain initialization.
-		let stop_state_local = stop_state.clone();
-		let stop_lock = stop_state_local.lock();
-		if stop_lock.is_stopped() {
-			return Err(ErrorKind::Stopped.into());
-		}
-
 		let store = Arc::new(store::ChainStore::new(&db_root)?);
 
 		// open the txhashset, creating a new one if necessary
@@ -192,7 +184,6 @@ impl Chain {
 			pow_verifier,
 			verifier_cache,
 			archive_mode,
-			stop_state,
 			genesis: genesis.header.clone(),
 		})
 	}
@@ -263,15 +254,18 @@ impl Chain {
 		let is_more_work = head.is_some();
 
 		let mut is_next_block = false;
+		let mut reorg_depth = None;
 		if let Some(head) = head {
 			if head.prev_block_h == prev_head.last_block_h {
 				is_next_block = true;
+			} else {
+				reorg_depth = Some(prev_head.height.saturating_sub(head.height) + 1);
 			}
 		}
 
 		match (is_more_work, is_next_block) {
 			(true, true) => BlockStatus::Next,
-			(true, false) => BlockStatus::Reorg,
+			(true, false) => BlockStatus::Reorg(reorg_depth.unwrap_or(0)),
 			(false, _) => BlockStatus::Fork,
 		}
 	}
@@ -281,15 +275,6 @@ impl Chain {
 	/// or false if it has added to a fork (or orphan?).
 	fn process_block_single(&self, b: Block, opts: Options) -> Result<Option<Tip>, Error> {
 		let (maybe_new_head, prev_head) = {
-			// Note: We take a lock on the stop_state here and do not release it until
-			// we have finished processing this single block.
-			// We take care to write both the txhashset *and* the batch while we
-			// have the stop_state lock.
-			let stop_lock = self.stop_state.lock();
-			if stop_lock.is_stopped() {
-				return Err(ErrorKind::Stopped.into());
-			}
-
 			let mut txhashset = self.txhashset.write();
 			let batch = self.store.batch()?;
 			let mut ctx = self.new_ctx(opts, batch, &mut txhashset)?;
@@ -379,15 +364,6 @@ impl Chain {
 	/// This is only ever used during sync and is based on sync_head.
 	/// We update header_head here if our total work increases.
 	pub fn sync_block_headers(&self, headers: &[BlockHeader], opts: Options) -> Result<(), Error> {
-		// Note: We take a lock on the stop_state here and do not release it until
-		// we have finished processing this single block.
-		// We take care to write both the txhashset *and* the batch while we
-		// have the stop_state lock.
-		let stop_lock = self.stop_state.lock();
-		if stop_lock.is_stopped() {
-			return Err(ErrorKind::Stopped.into());
-		}
-
 		let mut txhashset = self.txhashset.write();
 		let batch = self.store.batch()?;
 		let mut ctx = self.new_ctx(opts, batch, &mut txhashset)?;
@@ -410,7 +386,6 @@ impl Chain {
 			verifier_cache: self.verifier_cache.clone(),
 			txhashset,
 			batch,
-			orphans: self.orphans.clone(),
 		})
 	}
 
@@ -657,6 +632,28 @@ impl Chain {
 	/// Returns current txhashset roots.
 	pub fn get_txhashset_roots(&self) -> TxHashSetRoots {
 		self.txhashset.read().roots()
+	}
+
+	/// Provides a reading view into the current kernel state.
+	pub fn kernel_data_read(&self) -> Result<File, Error> {
+		let txhashset = self.txhashset.read();
+		txhashset::rewindable_kernel_view(&txhashset, |view| view.kernel_data_read())
+	}
+
+	/// Writes kernels provided to us (via a kernel data download).
+	/// Currently does not write these to disk and simply deserializes
+	/// the provided data.
+	/// TODO - Write this data to disk and validate the rebuilt kernel MMR.
+	pub fn kernel_data_write(&self, reader: &mut Read) -> Result<(), Error> {
+		let mut count = 0;
+		let mut stream = StreamingReader::new(reader, ProtocolVersion::local());
+		while let Ok(_kernel) = TxKernelEntry::read(&mut stream) {
+			count += 1;
+		}
+
+		debug!("kernel_data_write: read {} kernels", count);
+
+		Ok(())
 	}
 
 	/// Provides a reading view into the current txhashset state as well as
@@ -1026,38 +1023,18 @@ impl Chain {
 		}
 
 		let mut count = 0;
-
 		let tail_hash = txhashset.get_header_hash_by_height(head.height - horizon)?;
 		let tail = batch.get_block_header(&tail_hash)?;
 
-		let current_hash = txhashset.get_header_hash_by_height(head.height - horizon - 1)?;
-		let mut current = batch.get_block_header(&current_hash)?;
-
-		loop {
-			// Go to the store directly so we can handle NotFoundErr robustly.
-			match self.store.get_block(&current.hash()) {
-				Ok(b) => {
-					batch.delete_block(&b.hash())?;
-					count += 1;
-				}
-				Err(NotFoundErr(_)) => {
-					break;
-				}
-				Err(e) => {
-					return Err(
-						ErrorKind::StoreErr(e, "retrieving block to compact".to_owned()).into(),
-					);
-				}
-			}
-			if current.height <= 1 {
-				break;
-			}
-			match batch.get_previous_header(&current) {
-				Ok(h) => current = h,
-				Err(NotFoundErr(_)) => break,
-				Err(e) => return Err(From::from(e)),
+		// Remove old blocks (including short lived fork blocks) which height < tail.height
+		// here b is a block
+		for (_, b) in batch.blocks_iter()? {
+			if b.header.height < tail.height {
+				let _ = batch.delete_block(&b.hash());
+				count += 1;
 			}
 		}
+
 		batch.save_body_tail(&Tip::from_header(&tail))?;
 
 		debug!(
@@ -1092,14 +1069,6 @@ impl Chain {
 				debug!("compact: skipping compaction - threshold is 60 blocks beyond horizon.");
 				return Ok(());
 			}
-		}
-
-		// Note: We take a lock on the stop_state here and do not release it until
-		// we have finished processing this chain compaction operation.
-		// We want to avoid shutting the node down in the middle of compacting the data.
-		let stop_lock = self.stop_state.lock();
-		if stop_lock.is_stopped() {
-			return Err(ErrorKind::Stopped.into());
 		}
 
 		// Take a write lock on the txhashet and start a new writeable db batch.

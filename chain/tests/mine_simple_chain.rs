@@ -19,13 +19,14 @@ use self::core::core::verifier_cache::LruVerifierCache;
 use self::core::core::{Block, BlockHeader, OutputIdentifier, Transaction};
 use self::core::genesis;
 use self::core::global::ChainTypes;
-use self::core::libtx::{self, build, reward};
+use self::core::libtx::{self, build, reward, ProofBuilder};
 use self::core::pow::Difficulty;
 use self::core::{consensus, global, pow};
 use self::keychain::{ExtKeychain, ExtKeychainPath, Keychain};
-use self::util::{Mutex, RwLock, StopState};
+use self::util::RwLock;
 use chrono::Duration;
 use grin_chain as chain;
+use grin_chain::{BlockStatus, ChainAdapter, Options};
 use grin_core as core;
 use grin_keychain as keychain;
 use grin_util as util;
@@ -47,9 +48,43 @@ fn setup(dir_name: &str, genesis: Block) -> Chain {
 		pow::verify_size,
 		verifier_cache,
 		false,
-		Arc::new(Mutex::new(StopState::new())),
 	)
 	.unwrap()
+}
+
+/// Adapter to retrieve last status
+pub struct StatusAdapter {
+	pub last_status: RwLock<Option<BlockStatus>>,
+}
+
+impl StatusAdapter {
+	pub fn new(last_status: RwLock<Option<BlockStatus>>) -> Self {
+		StatusAdapter { last_status }
+	}
+}
+
+impl ChainAdapter for StatusAdapter {
+	fn block_accepted(&self, _b: &Block, status: BlockStatus, _opts: Options) {
+		*self.last_status.write() = Some(status);
+	}
+}
+
+/// Creates a `Chain` instance with `StatusAdapter` attached to it.
+fn setup_with_status_adapter(dir_name: &str, genesis: Block, adapter: Arc<StatusAdapter>) -> Chain {
+	util::init_test_logger();
+	clean_output_dir(dir_name);
+	let verifier_cache = Arc::new(RwLock::new(LruVerifierCache::new()));
+	let chain = chain::Chain::init(
+		dir_name.to_string(),
+		adapter,
+		genesis,
+		pow::verify_size,
+		verifier_cache,
+		false,
+	)
+	.unwrap();
+
+	chain
 }
 
 #[test]
@@ -71,7 +106,14 @@ fn mine_genesis_reward_chain() {
 	let mut genesis = genesis::genesis_dev();
 	let keychain = keychain::ExtKeychain::from_random_seed(false).unwrap();
 	let key_id = keychain::ExtKeychain::derive_key_id(0, 1, 0, 0, 0);
-	let reward = reward::output(&keychain, &key_id, 0, false).unwrap();
+	let reward = reward::output(
+		&keychain,
+		&libtx::ProofBuilder::new(&keychain),
+		&key_id,
+		0,
+		false,
+	)
+	.unwrap();
 	genesis = genesis.with_reward(reward.0, reward.1);
 
 	let tmp_chain_dir = ".grin.tmp";
@@ -108,7 +150,9 @@ where
 		let prev = chain.head_header().unwrap();
 		let next_header_info = consensus::next_difficulty(1, chain.difficulty_iter().unwrap());
 		let pk = ExtKeychainPath::new(1, n as u32, 0, 0, 0).to_identifier();
-		let reward = libtx::reward::output(keychain, &pk, 0, false).unwrap();
+		let reward =
+			libtx::reward::output(keychain, &libtx::ProofBuilder::new(keychain), &pk, 0, false)
+				.unwrap();
 		let mut b =
 			core::core::Block::new(&prev, vec![], next_header_info.clone().difficulty, reward)
 				.unwrap();
@@ -157,6 +201,78 @@ where
 
 		chain.validate(false).unwrap();
 	}
+}
+
+#[test]
+// This test creates a reorg at REORG_DEPTH by mining a block with difficulty that
+// exceeds original chain total difficulty.
+//
+// Illustration of reorg with NUM_BLOCKS_MAIN = 6 and REORG_DEPTH = 5:
+//
+// difficulty:    1        2        3        4        5        6
+//
+//                       / [ 2  ] - [ 3  ] - [ 4  ] - [ 5  ] - [ 6  ] <- original chain
+// [ Genesis ] -[ 1 ]- *
+//                     ^ \ [ 2' ] - ................................  <- reorg chain with depth 5
+//                     |
+// difficulty:    1    |   24
+//                     |
+//                     \----< Fork point and chain reorg
+fn mine_reorg() {
+	// Test configuration
+	const NUM_BLOCKS_MAIN: u64 = 6; // Number of blocks to mine in main chain
+	const REORG_DEPTH: u64 = 5; // Number of blocks to be discarded from main chain after reorg
+
+	const DIR_NAME: &str = ".grin_reorg";
+	clean_output_dir(DIR_NAME);
+
+	global::set_mining_mode(ChainTypes::AutomatedTesting);
+	let kc = ExtKeychain::from_random_seed(false).unwrap();
+
+	let genesis = pow::mine_genesis_block().unwrap();
+	{
+		// Create chain that reports last block status
+		let last_status = RwLock::new(None);
+		let adapter = Arc::new(StatusAdapter::new(last_status));
+		let chain = setup_with_status_adapter(DIR_NAME, genesis.clone(), adapter.clone());
+
+		// Add blocks to main chain with gradually increasing difficulty
+		let mut prev = chain.head_header().unwrap();
+		for n in 1..=NUM_BLOCKS_MAIN {
+			let b = prepare_block(&kc, &prev, &chain, n);
+			prev = b.header.clone();
+			chain.process_block(b, chain::Options::SKIP_POW).unwrap();
+		}
+
+		let head = chain.head_header().unwrap();
+		assert_eq!(head.height, NUM_BLOCKS_MAIN);
+		assert_eq!(head.hash(), prev.hash());
+
+		// Reorg chain should exceed main chain's total difficulty to be considered
+		let reorg_difficulty = head.total_difficulty().to_num();
+
+		// Create one block for reorg chain forking off NUM_BLOCKS_MAIN - REORG_DEPTH height
+		let fork_head = chain
+			.get_header_by_height(NUM_BLOCKS_MAIN - REORG_DEPTH)
+			.unwrap();
+		let b = prepare_fork_block(&kc, &fork_head, &chain, reorg_difficulty);
+		let reorg_head = b.header.clone();
+		chain.process_block(b, chain::Options::SKIP_POW).unwrap();
+
+		// Check that reorg is correctly reported in block status
+		assert_eq!(
+			*adapter.last_status.read(),
+			Some(BlockStatus::Reorg(REORG_DEPTH))
+		);
+
+		// Chain should be switched to the reorganized chain
+		let head = chain.head_header().unwrap();
+		assert_eq!(head.height, NUM_BLOCKS_MAIN - REORG_DEPTH + 1);
+		assert_eq!(head.hash(), reorg_head.hash());
+	}
+
+	// Cleanup chain directory
+	clean_output_dir(DIR_NAME);
 }
 
 #[test]
@@ -294,6 +410,7 @@ fn spend_in_fork_and_compact() {
 		let chain = setup(".grin6", pow::mine_genesis_block().unwrap());
 		let prev = chain.head_header().unwrap();
 		let kc = ExtKeychain::from_random_seed(false).unwrap();
+		let pb = ProofBuilder::new(&kc);
 
 		let mut fork_head = prev;
 
@@ -327,6 +444,7 @@ fn spend_in_fork_and_compact() {
 				build::with_fee(20000),
 			],
 			&kc,
+			&pb,
 		)
 		.unwrap();
 
@@ -344,6 +462,7 @@ fn spend_in_fork_and_compact() {
 				build::with_fee(20000),
 			],
 			&kc,
+			&pb,
 		)
 		.unwrap();
 
@@ -433,7 +552,14 @@ fn output_header_mappings() {
 			let prev = chain.head_header().unwrap();
 			let next_header_info = consensus::next_difficulty(1, chain.difficulty_iter().unwrap());
 			let pk = ExtKeychainPath::new(1, n as u32, 0, 0, 0).to_identifier();
-			let reward = libtx::reward::output(&keychain, &pk, 0, false).unwrap();
+			let reward = libtx::reward::output(
+				&keychain,
+				&libtx::ProofBuilder::new(&keychain),
+				&pk,
+				0,
+				false,
+			)
+			.unwrap();
 			reward_outputs.push(reward.0.clone());
 			let mut b =
 				core::core::Block::new(&prev, vec![], next_header_info.clone().difficulty, reward)
@@ -536,7 +662,8 @@ where
 	let key_id = ExtKeychainPath::new(1, diff as u32, 0, 0, 0).to_identifier();
 
 	let fees = txs.iter().map(|tx| tx.fee()).sum();
-	let reward = libtx::reward::output(kc, &key_id, fees, false).unwrap();
+	let reward =
+		libtx::reward::output(kc, &libtx::ProofBuilder::new(kc), &key_id, fees, false).unwrap();
 	let mut b = match core::core::Block::new(
 		prev,
 		txs.into_iter().cloned().collect(),
@@ -565,7 +692,6 @@ fn actual_diff_iter_output() {
 		pow::verify_size,
 		verifier_cache,
 		false,
-		Arc::new(Mutex::new(StopState::new())),
 	)
 	.unwrap();
 	let iter = chain.difficulty_iter().unwrap();

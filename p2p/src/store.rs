@@ -28,7 +28,7 @@ const STORE_SUBPATH: &'static str = "peers";
 
 const PEER_PREFIX: u8 = 'P' as u8;
 
-/// Types of messages
+// Types of messages
 enum_from_primitive! {
 	#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 	pub enum State {

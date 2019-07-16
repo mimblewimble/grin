@@ -173,8 +173,10 @@ impl Controller {
 			while let Some(message) = self.rx.try_iter().next() {
 				match message {
 					ControllerMessage::Shutdown => {
-						server.stop();
 						self.ui.stop();
+						println!("Shutdown in progress, please wait");
+						server.stop();
+						return;
 					}
 				}
 			}

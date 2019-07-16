@@ -15,6 +15,7 @@
 use crate::util::RwLock;
 use std::collections::HashMap;
 use std::fs::File;
+use std::io::Read;
 use std::path::PathBuf;
 use std::sync::Arc;
 
@@ -26,15 +27,16 @@ use crate::core::core;
 use crate::core::core::hash::{Hash, Hashed};
 use crate::core::global;
 use crate::core::pow::Difficulty;
-use chrono::prelude::*;
-use chrono::Duration;
-
 use crate::peer::Peer;
 use crate::store::{PeerData, PeerStore, State};
 use crate::types::{
 	Capabilities, ChainAdapter, Error, NetAdapter, P2PConfig, PeerAddr, PeerInfo, ReasonForBan,
 	TxHashSetRead, MAX_PEER_ADDRS,
 };
+use chrono::prelude::*;
+use chrono::Duration;
+
+const LOCK_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(2);
 
 pub struct Peers {
 	pub adapter: Arc<dyn ChainAdapter>,
@@ -56,6 +58,13 @@ impl Peers {
 	/// Adds the peer to our internal peer mapping. Note that the peer is still
 	/// returned so the server can run it.
 	pub fn add_connected(&self, peer: Arc<Peer>) -> Result<(), Error> {
+		let mut peers = match self.peers.try_write_for(LOCK_TIMEOUT) {
+			Some(peers) => peers,
+			None => {
+				error!("add_connected: failed to get peers lock");
+				return Err(Error::Timeout);
+			}
+		};
 		let peer_data = PeerData {
 			addr: peer.info.addr,
 			capabilities: peer.info.capabilities,
@@ -67,7 +76,7 @@ impl Peers {
 		};
 		debug!("Saving newly connected peer {}.", peer_data.addr);
 		self.save_peer(&peer_data)?;
-		self.peers.write().insert(peer_data.addr, peer.clone());
+		peers.insert(peer_data.addr, peer.clone());
 
 		Ok(())
 	}
@@ -89,14 +98,26 @@ impl Peers {
 	}
 
 	pub fn is_known(&self, addr: PeerAddr) -> bool {
-		self.peers.read().contains_key(&addr)
+		let peers = match self.peers.try_read_for(LOCK_TIMEOUT) {
+			Some(peers) => peers,
+			None => {
+				error!("is_known: failed to get peers lock");
+				return false;
+			}
+		};
+		peers.contains_key(&addr)
 	}
 
 	/// Get vec of peers we are currently connected to.
 	pub fn connected_peers(&self) -> Vec<Arc<Peer>> {
-		let mut res = self
-			.peers
-			.read()
+		let peers = match self.peers.try_read_for(LOCK_TIMEOUT) {
+			Some(peers) => peers,
+			None => {
+				error!("connected_peers: failed to get peers lock");
+				return vec![];
+			}
+		};
+		let mut res = peers
 			.values()
 			.filter(|p| p.is_connected())
 			.cloned()
@@ -114,7 +135,14 @@ impl Peers {
 
 	/// Get a peer we're connected to by address.
 	pub fn get_connected_peer(&self, addr: PeerAddr) -> Option<Arc<Peer>> {
-		self.peers.read().get(&addr).map(|p| p.clone())
+		let peers = match self.peers.try_read_for(LOCK_TIMEOUT) {
+			Some(peers) => peers,
+			None => {
+				error!("get_connected_peer: failed to get peers lock");
+				return None;
+			}
+		};
+		peers.get(&addr).map(|p| p.clone())
 	}
 
 	/// Number of peers currently connected to.
@@ -203,9 +231,7 @@ impl Peers {
 
 	pub fn is_banned(&self, peer_addr: PeerAddr) -> bool {
 		if let Ok(peer) = self.store.get_peer(peer_addr) {
-			if peer.flags == State::Banned {
-				return true;
-			}
+			return peer.flags == State::Banned;
 		}
 		false
 	}
@@ -214,6 +240,7 @@ impl Peers {
 	pub fn ban_peer(&self, peer_addr: PeerAddr, ban_reason: ReasonForBan) {
 		if let Err(e) = self.update_state(peer_addr, State::Banned) {
 			error!("Couldn't ban {}: {:?}", peer_addr, e);
+			return;
 		}
 
 		if let Some(peer) = self.get_connected_peer(peer_addr) {
@@ -225,7 +252,15 @@ impl Peers {
 			};
 			peer.set_banned();
 			peer.stop();
-			self.peers.write().remove(&peer.info.addr);
+
+			let mut peers = match self.peers.try_write_for(LOCK_TIMEOUT) {
+				Some(peers) => peers,
+				None => {
+					error!("ban_peer: failed to get peers lock");
+					return;
+				}
+			};
+			peers.remove(&peer.info.addr);
 		}
 	}
 
@@ -263,8 +298,16 @@ impl Peers {
 						"Error sending {:?} to peer {:?}: {:?}",
 						obj_name, &p.info.addr, e
 					);
+
+					let mut peers = match self.peers.try_write_for(LOCK_TIMEOUT) {
+						Some(peers) => peers,
+						None => {
+							error!("broadcast: failed to get peers lock");
+							break;
+						}
+					};
 					p.stop();
-					self.peers.write().remove(&p.info.addr);
+					peers.remove(&p.info.addr);
 				}
 			}
 
@@ -330,8 +373,15 @@ impl Peers {
 		for p in self.connected_peers().iter() {
 			if let Err(e) = p.send_ping(total_difficulty, height) {
 				debug!("Error pinging peer {:?}: {:?}", &p.info.addr, e);
+				let mut peers = match self.peers.try_write_for(LOCK_TIMEOUT) {
+					Some(peers) => peers,
+					None => {
+						error!("check_all: failed to get peers lock");
+						break;
+					}
+				};
 				p.stop();
-				self.peers.write().remove(&p.info.addr);
+				peers.remove(&p.info.addr);
 			}
 		}
 	}
@@ -387,33 +437,42 @@ impl Peers {
 		let mut rm = vec![];
 
 		// build a list of peers to be cleaned up
-		for peer in self.peers.read().values() {
-			if peer.is_banned() {
-				debug!("clean_peers {:?}, peer banned", peer.info.addr);
-				rm.push(peer.info.addr.clone());
-			} else if !peer.is_connected() {
-				debug!("clean_peers {:?}, not connected", peer.info.addr);
-				rm.push(peer.info.addr.clone());
-			} else if peer.is_abusive() {
-				if let Some(counts) = peer.last_min_message_counts() {
-					debug!(
-						"clean_peers {:?}, abusive ({} sent, {} recv)",
-						peer.info.addr, counts.0, counts.1,
-					);
+		{
+			let peers = match self.peers.try_read_for(LOCK_TIMEOUT) {
+				Some(peers) => peers,
+				None => {
+					error!("clean_peers: can't get peers lock");
+					return;
 				}
-				let _ = self.update_state(peer.info.addr, State::Banned);
-				rm.push(peer.info.addr.clone());
-			} else {
-				let (stuck, diff) = peer.is_stuck();
-				match self.adapter.total_difficulty() {
-					Ok(total_difficulty) => {
-						if stuck && diff < total_difficulty {
-							debug!("clean_peers {:?}, stuck peer", peer.info.addr);
-							let _ = self.update_state(peer.info.addr, State::Defunct);
-							rm.push(peer.info.addr.clone());
-						}
+			};
+			for peer in peers.values() {
+				if peer.is_banned() {
+					debug!("clean_peers {:?}, peer banned", peer.info.addr);
+					rm.push(peer.info.addr.clone());
+				} else if !peer.is_connected() {
+					debug!("clean_peers {:?}, not connected", peer.info.addr);
+					rm.push(peer.info.addr.clone());
+				} else if peer.is_abusive() {
+					if let Some(counts) = peer.last_min_message_counts() {
+						debug!(
+							"clean_peers {:?}, abusive ({} sent, {} recv)",
+							peer.info.addr, counts.0, counts.1,
+						);
 					}
-					Err(e) => error!("failed to get total difficulty: {:?}", e),
+					let _ = self.update_state(peer.info.addr, State::Banned);
+					rm.push(peer.info.addr.clone());
+				} else {
+					let (stuck, diff) = peer.is_stuck();
+					match self.adapter.total_difficulty() {
+						Ok(total_difficulty) => {
+							if stuck && diff < total_difficulty {
+								debug!("clean_peers {:?}, stuck peer", peer.info.addr);
+								let _ = self.update_state(peer.info.addr, State::Defunct);
+								rm.push(peer.info.addr.clone());
+							}
+						}
+						Err(e) => error!("failed to get total difficulty: {:?}", e),
+					}
 				}
 			}
 		}
@@ -435,7 +494,13 @@ impl Peers {
 
 		// now clean up peer map based on the list to remove
 		{
-			let mut peers = self.peers.write();
+			let mut peers = match self.peers.try_write_for(LOCK_TIMEOUT) {
+				Some(peers) => peers,
+				None => {
+					error!("clean_peers: failed to get peers lock");
+					return;
+				}
+			};
 			for addr in rm {
 				let _ = peers.get(&addr).map(|peer| peer.stop());
 				peers.remove(&addr);
@@ -445,8 +510,11 @@ impl Peers {
 
 	pub fn stop(&self) {
 		let mut peers = self.peers.write();
-		for (_, peer) in peers.drain() {
+		for peer in peers.values() {
 			peer.stop();
+		}
+		for (_, peer) in peers.drain() {
+			peer.wait();
 		}
 	}
 
@@ -592,6 +660,14 @@ impl ChainAdapter for Peers {
 
 	fn get_block(&self, h: Hash) -> Option<core::Block> {
 		self.adapter.get_block(h)
+	}
+
+	fn kernel_data_read(&self) -> Result<File, chain::Error> {
+		self.adapter.kernel_data_read()
+	}
+
+	fn kernel_data_write(&self, reader: &mut Read) -> Result<bool, chain::Error> {
+		self.adapter.kernel_data_write(reader)
 	}
 
 	fn txhashset_read(&self, h: Hash) -> Option<TxHashSetRead> {

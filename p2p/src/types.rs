@@ -15,7 +15,7 @@
 use crate::util::RwLock;
 use std::convert::From;
 use std::fs::File;
-use std::io;
+use std::io::{self, Read};
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV4, SocketAddrV6};
 use std::path::PathBuf;
 
@@ -29,8 +29,7 @@ use crate::core::core;
 use crate::core::core::hash::Hash;
 use crate::core::global;
 use crate::core::pow::Difficulty;
-use crate::core::ser::{self, Readable, Reader, Writeable, Writer};
-use crate::msg::ProtocolVersion;
+use crate::core::ser::{self, ProtocolVersion, Readable, Reader, Writeable, Writer};
 use grin_store;
 
 /// Maximum number of block headers a peer should ever send
@@ -333,7 +332,7 @@ bitflags! {
 	}
 }
 
-/// Types of connection
+// Types of connection
 enum_from_primitive! {
 	#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 	pub enum Direction {
@@ -342,7 +341,7 @@ enum_from_primitive! {
 	}
 }
 
-/// Ban reason
+// Ban reason
 enum_from_primitive! {
 	#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 	pub enum ReasonForBan {
@@ -526,6 +525,10 @@ pub trait ChainAdapter: Sync + Send {
 
 	/// Gets a full block by its hash.
 	fn get_block(&self, h: Hash) -> Option<core::Block>;
+
+	fn kernel_data_read(&self) -> Result<File, chain::Error>;
+
+	fn kernel_data_write(&self, reader: &mut Read) -> Result<bool, chain::Error>;
 
 	/// Provides a reading view into the current txhashset state as well as
 	/// the required indexes for a consumer to rewind to a consistant state

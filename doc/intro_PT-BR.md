@@ -111,7 +111,7 @@ Para resolver isso, a Carol usa uma chave privada escolhida por ela. Vamos dizer
 
     Y - Xi = (113*G + 3*H) - (28*G + 3*H) = 85*G + 0*H
 
-Agora a soma da transação não é mais zero e temos um _montante excedente_ (excess value) em _G_ (85), que é o resultado da soma de todos os fatores de cegueira. Mas, dado que `85*G` é uma chave pública válida na curva elíptica _G_, com chave privada 85, para qualquer x e y, logo `x*G + y*H` será uma chave pública válida em _G_ somente se `y = 0`.
+Agora a soma da transação não é mais zero e temos um _montante excedente_ (excess value) em _G_ (85), que é o resultado da soma de todos os fatores de cegueira. Mas, dado que `85*G` é uma chave pública válida na curva elíptica _C_, com chave privada 85, para qualquer x e y, logo `x*G + y*H` será uma chave pública válida em _G_ somente se `y = 0`.
 
 Então, tudo o que o protocolo precisa verificar é que (`Y - Xi`) é uma chave pública válida em _G_ e que as partes envolvidas na transação conhecem coletivamente a chave privada (85 em nossa transação com Carol). A maneira mais simples de fazer isso é exigir uma assinatura construída com o montante excedente (85), que por conseguinte valida que:
 

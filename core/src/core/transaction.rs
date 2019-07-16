@@ -35,7 +35,7 @@ use std::cmp::{max, min};
 use std::sync::Arc;
 use std::{error, fmt};
 
-/// Enum of various supported kernel "features".
+// Enum of various supported kernel "features".
 enum_from_primitive! {
 	/// Various flavors of tx kernel.
 	#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
@@ -185,13 +185,19 @@ hashable_ord!(TxKernel);
 impl ::std::hash::Hash for TxKernel {
 	fn hash<H: ::std::hash::Hasher>(&self, state: &mut H) {
 		let mut vec = Vec::new();
-		ser::serialize(&mut vec, &self).expect("serialization failed");
+		ser::serialize_default(&mut vec, &self).expect("serialization failed");
 		::std::hash::Hash::hash(&vec, state);
 	}
 }
 
 impl Writeable for TxKernel {
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
+		// We have access to the protocol version here.
+		// This may be a protocol version based on a peer connection
+		// or the version used locally for db storage.
+		// We can handle version specific serialization here.
+		let _version = writer.protocol_version();
+
 		self.features.write(writer)?;
 		ser_multiwrite!(writer, [write_u64, self.fee], [write_u64, self.lock_height]);
 		self.excess.write(writer)?;
@@ -202,6 +208,12 @@ impl Writeable for TxKernel {
 
 impl Readable for TxKernel {
 	fn read(reader: &mut dyn Reader) -> Result<TxKernel, ser::Error> {
+		// We have access to the protocol version here.
+		// This may be a protocol version based on a peer connection
+		// or the version used locally for db storage.
+		// We can handle version specific deserialization here.
+		let _version = reader.protocol_version();
+
 		Ok(TxKernel {
 			features: KernelFeatures::read(reader)?,
 			fee: reader.read_u64()?,
@@ -338,7 +350,7 @@ impl Writeable for TxKernelEntry {
 }
 
 impl Readable for TxKernelEntry {
-	fn read(reader: &mut Reader) -> Result<TxKernelEntry, ser::Error> {
+	fn read(reader: &mut dyn Reader) -> Result<TxKernelEntry, ser::Error> {
 		let kernel = TxKernel::read(reader)?;
 		Ok(TxKernelEntry { kernel })
 	}
@@ -957,7 +969,7 @@ impl Transaction {
 	) -> Result<(), Error> {
 		self.body.validate(weighting, verifier)?;
 		self.body.verify_features()?;
-		self.verify_kernel_sums(self.overage(), self.offset)?;
+		self.verify_kernel_sums(self.overage(), self.offset.clone())?;
 		Ok(())
 	}
 
@@ -1159,7 +1171,7 @@ hashable_ord!(Input);
 impl ::std::hash::Hash for Input {
 	fn hash<H: ::std::hash::Hasher>(&self, state: &mut H) {
 		let mut vec = Vec::new();
-		ser::serialize(&mut vec, &self).expect("serialization failed");
+		ser::serialize_default(&mut vec, &self).expect("serialization failed");
 		::std::hash::Hash::hash(&vec, state);
 	}
 }
@@ -1214,7 +1226,7 @@ impl Input {
 	}
 }
 
-/// Enum of various supported kernel "features".
+// Enum of various supported kernel "features".
 enum_from_primitive! {
 	/// Various flavors of tx kernel.
 	#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
@@ -1270,7 +1282,7 @@ hashable_ord!(Output);
 impl ::std::hash::Hash for Output {
 	fn hash<H: ::std::hash::Hasher>(&self, state: &mut H) {
 		let mut vec = Vec::new();
-		ser::serialize(&mut vec, &self).expect("serialization failed");
+		ser::serialize_default(&mut vec, &self).expect("serialization failed");
 		::std::hash::Hash::hash(&vec, state);
 	}
 }
@@ -1499,14 +1511,16 @@ mod test {
 	use super::*;
 	use crate::core::hash::Hash;
 	use crate::core::id::{ShortId, ShortIdentifiable};
-	use crate::keychain::{ExtKeychain, Keychain};
+	use crate::keychain::{ExtKeychain, Keychain, SwitchCommitmentType};
 	use crate::util::secp;
 
 	#[test]
 	fn test_kernel_ser_deser() {
 		let keychain = ExtKeychain::from_random_seed(false).unwrap();
 		let key_id = ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
-		let commit = keychain.commit(5, &key_id).unwrap();
+		let commit = keychain
+			.commit(5, &key_id, &SwitchCommitmentType::Regular)
+			.unwrap();
 
 		// just some bytes for testing ser/deser
 		let sig = secp::Signature::from_raw_data(&[0; 64]).unwrap();
@@ -1520,8 +1534,8 @@ mod test {
 		};
 
 		let mut vec = vec![];
-		ser::serialize(&mut vec, &kernel).expect("serialized failed");
-		let kernel2: TxKernel = ser::deserialize(&mut &vec[..]).unwrap();
+		ser::serialize_default(&mut vec, &kernel).expect("serialized failed");
+		let kernel2: TxKernel = ser::deserialize_default(&mut &vec[..]).unwrap();
 		assert_eq!(kernel2.features, KernelFeatures::Plain);
 		assert_eq!(kernel2.lock_height, 0);
 		assert_eq!(kernel2.excess, commit);
@@ -1538,8 +1552,8 @@ mod test {
 		};
 
 		let mut vec = vec![];
-		ser::serialize(&mut vec, &kernel).expect("serialized failed");
-		let kernel2: TxKernel = ser::deserialize(&mut &vec[..]).unwrap();
+		ser::serialize_default(&mut vec, &kernel).expect("serialized failed");
+		let kernel2: TxKernel = ser::deserialize_default(&mut &vec[..]).unwrap();
 		assert_eq!(kernel2.features, KernelFeatures::HeightLocked);
 		assert_eq!(kernel2.lock_height, 100);
 		assert_eq!(kernel2.excess, commit);
@@ -1552,10 +1566,14 @@ mod test {
 		let keychain = ExtKeychain::from_seed(&[0; 32], false).unwrap();
 		let key_id = ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
 
-		let commit = keychain.commit(1003, &key_id).unwrap();
+		let commit = keychain
+			.commit(1003, &key_id, &SwitchCommitmentType::Regular)
+			.unwrap();
 		let key_id = ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
 
-		let commit_2 = keychain.commit(1003, &key_id).unwrap();
+		let commit_2 = keychain
+			.commit(1003, &key_id, &SwitchCommitmentType::Regular)
+			.unwrap();
 
 		assert!(commit == commit_2);
 	}
@@ -1564,7 +1582,9 @@ mod test {
 	fn input_short_id() {
 		let keychain = ExtKeychain::from_seed(&[0; 32], false).unwrap();
 		let key_id = ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
-		let commit = keychain.commit(5, &key_id).unwrap();
+		let commit = keychain
+			.commit(5, &key_id, &SwitchCommitmentType::Regular)
+			.unwrap();
 
 		let input = Input {
 			features: OutputFeatures::Plain,

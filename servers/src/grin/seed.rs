@@ -30,7 +30,7 @@ use crate::core::global;
 use crate::p2p;
 use crate::p2p::types::PeerAddr;
 use crate::p2p::ChainAdapter;
-use crate::util::{Mutex, StopState};
+use crate::util::StopState;
 
 // DNS Seeds with contact email associated
 const MAINNET_DNS_SEEDS: &'static [&'static str] = &[
@@ -54,9 +54,9 @@ pub fn connect_and_monitor(
 	capabilities: p2p::Capabilities,
 	seed_list: Box<dyn Fn() -> Vec<PeerAddr> + Send>,
 	preferred_peers: Option<Vec<PeerAddr>>,
-	stop_state: Arc<Mutex<StopState>>,
-) {
-	let _ = thread::Builder::new()
+	stop_state: Arc<StopState>,
+) -> std::io::Result<thread::JoinHandle<()>> {
+	thread::Builder::new()
 		.name("seed".to_string())
 		.spawn(move || {
 			let peers = p2p_server.peers.clone();
@@ -77,16 +77,15 @@ pub fn connect_and_monitor(
 			let mut prev_expire_check = MIN_DATE.and_hms(0, 0, 0);
 			let mut prev_ping = Utc::now();
 			let mut start_attempt = 0;
-
 			let mut connecting_history: HashMap<PeerAddr, DateTime<Utc>> = HashMap::new();
 
 			loop {
-				if stop_state.lock().is_stopped() {
+				if stop_state.is_stopped() {
 					break;
 				}
 
 				// Pause egress peer connection request. Only for tests.
-				if stop_state.lock().is_paused() {
+				if stop_state.is_paused() {
 					thread::sleep(time::Duration::from_secs(1));
 					continue;
 				}
@@ -136,7 +135,7 @@ pub fn connect_and_monitor(
 
 				thread::sleep(time::Duration::from_secs(1));
 			}
-		});
+		})
 }
 
 fn monitor_peers(
@@ -326,17 +325,19 @@ fn listen_for_addrs(
 
 		let peers_c = peers.clone();
 		let p2p_c = p2p.clone();
-		let _ = thread::Builder::new()
+		thread::Builder::new()
 			.name("peer_connect".to_string())
 			.spawn(move || match p2p_c.connect(addr) {
 				Ok(p) => {
-					let _ = p.send_peer_request(capab);
-					let _ = peers_c.update_state(addr, p2p::State::Healthy);
+					if p.send_peer_request(capab).is_ok() {
+						let _ = peers_c.update_state(addr, p2p::State::Healthy);
+					}
 				}
 				Err(_) => {
 					let _ = peers_c.update_state(addr, p2p::State::Defunct);
 				}
-			});
+			})
+			.expect("failed to launch peer_connect thread");
 	}
 
 	// shrink the connecting history.

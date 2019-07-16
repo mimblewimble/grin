@@ -161,7 +161,7 @@ Ella escoge 113, y lo que termina en la cadena es:
     Y - Xi = (113*G + 3*H) - (28*G + 3*H) = 85*G + 0*H
 
 Ahora la transacción ya no suma cero y tenemos un _exceso de valor_ en _G_ (85), que es el resultado de la suma de todos los 
-factores de ocultamiento. Pero porque `85*G` es una clave pública válida en la curva elíptica _G_, con clave privada 85, para 
+factores de ocultamiento. Pero porque `85*G` es una clave pública válida en la curva elíptica _C_, con clave privada 85, para 
 cualquier x e y, sólo si `y = 0` es `x*G + y*H` una clave pública válida en _G_.
 
 Así que todo lo que el protocolo necesita verificar es que (`Y - Xi`) es una clave pública válida en _G_ y que las partes que 

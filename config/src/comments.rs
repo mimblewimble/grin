@@ -131,6 +131,44 @@ fn comments() -> HashMap<String, String> {
 	);
 
 	retval.insert(
+		"[server.webhook_config]".to_string(),
+		"
+#########################################
+### WEBHOOK CONFIGURATION             ###
+#########################################
+"
+		.to_string(),
+	);
+
+	retval.insert(
+		"nthreads".to_string(),
+		"
+#The url where a POST request will be sent when a new block is accepted by our node.
+#block_accepted_url = \"http://127.0.0.1:8080/acceptedblock\"
+
+#The url where a POST request will be sent when a new transaction is received by a peer.
+#tx_received_url = \"http://127.0.0.1:8080/tx\"
+
+#The url where a POST request will be sent when a new header is received by a peer.
+#header_received_url = \"http://127.0.0.1:8080/header\"
+
+#The url where a POST request will be sent when a new block is received by a peer.
+#block_received_url = \"http://127.0.0.1:8080/block\"
+
+#The number of worker threads that will be assigned to making the http requests.
+"
+		.to_string(),
+	);
+
+	retval.insert(
+		"timeout".to_string(),
+		"
+#The timeout of the http request in seconds.
+"
+		.to_string(),
+	);
+
+	retval.insert(
 		"[server.dandelion_config]".to_string(),
 		"
 #########################################
@@ -168,6 +206,14 @@ fn comments() -> HashMap<String, String> {
 		"stem_probability".to_string(),
 		"
 #dandelion stem probability (stem 90% of the time, fluff 10% of the time)
+"
+		.to_string(),
+	);
+
+	retval.insert(
+		"always_stem_our_txs".to_string(),
+		"
+#always stem our (pushed via api) txs regardless of stem/fluff epoch (as per Dandelion++ paper)
 "
 		.to_string(),
 	);

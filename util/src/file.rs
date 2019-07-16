@@ -44,18 +44,15 @@ pub fn copy_dir_to(src: &Path, dst: &Path) -> io::Result<u64> {
 }
 
 /// List directory
-pub fn list_files(path: String) -> Vec<String> {
-	let mut files_vec: Vec<String> = vec![];
-	for entry in WalkDir::new(Path::new(&path))
+pub fn list_files(path: &Path) -> Vec<PathBuf> {
+	WalkDir::new(path)
+		.sort_by(|a, b| a.path().cmp(b.path()))
+		.min_depth(1)
 		.into_iter()
-		.filter_map(|e| e.ok())
-	{
-		match entry.file_name().to_str() {
-			Some(path_str) => files_vec.push(path_str.to_string()),
-			None => println!("Could not read optional type"),
-		}
-	}
-	return files_vec;
+		.filter_map(|x| x.ok())
+		.filter(|x| x.file_type().is_file())
+		.filter_map(|x| x.path().strip_prefix(path).map(|x| x.to_path_buf()).ok())
+		.collect()
 }
 
 fn copy_to(src: &Path, src_type: &fs::FileType, dst: &Path) -> io::Result<u64> {

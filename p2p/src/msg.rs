@@ -14,30 +14,18 @@
 
 //! Message types that transit over the network and related serialization code.
 
-use num::FromPrimitive;
-use std::fmt;
-use std::io::{Read, Write};
-use std::time;
-
 use crate::core::core::hash::Hash;
 use crate::core::core::BlockHeader;
 use crate::core::pow::Difficulty;
-use crate::core::ser::{self, FixedLength, Readable, Reader, StreamingReader, Writeable, Writer};
+use crate::core::ser::{
+	self, FixedLength, ProtocolVersion, Readable, Reader, StreamingReader, Writeable, Writer,
+};
 use crate::core::{consensus, global};
 use crate::types::{
 	Capabilities, Error, PeerAddr, ReasonForBan, MAX_BLOCK_HEADERS, MAX_LOCATORS, MAX_PEER_ADDRS,
 };
-use crate::util::read_write::read_exact;
-
-/// Our local node protocol version.
-/// We will increment the protocol version with every change to p2p msg serialization
-/// so we will likely connect with peers with both higher and lower protocol versions.
-/// We need to be aware that some msg formats will be potentially incompatible and handle
-/// this for each individual peer connection.
-/// Note: A peer may disconnect and reconnect with an updated protocol version. Normally
-/// the protocol version will increase but we need to handle decreasing values also
-/// as a peer may rollback to previous version of the code.
-const PROTOCOL_VERSION: u32 = 1;
+use num::FromPrimitive;
+use std::io::{Read, Write};
 
 /// Grin's user agent with current version
 pub const USER_AGENT: &'static str = concat!("MW/Grin ", env!("CARGO_PKG_VERSION"));
@@ -47,9 +35,9 @@ const OTHER_MAGIC: [u8; 2] = [73, 43];
 const FLOONET_MAGIC: [u8; 2] = [83, 59];
 const MAINNET_MAGIC: [u8; 2] = [97, 61];
 
-/// Types of messages.
-/// Note: Values here are *important* so we should only add new values at the
-/// end.
+// Types of messages.
+// Note: Values here are *important* so we should only add new values at the
+// end.
 enum_from_primitive! {
 	#[derive(Debug, Clone, Copy, PartialEq)]
 	pub enum Type {
@@ -74,12 +62,19 @@ enum_from_primitive! {
 		BanReason = 18,
 		GetTransaction = 19,
 		TransactionKernel = 20,
+		KernelDataRequest = 21,
+		KernelDataResponse = 22,
 	}
 }
 
 /// Max theoretical size of a block filled with outputs.
 fn max_block_size() -> u64 {
 	(global::max_block_weight() / consensus::BLOCK_OUTPUT_WEIGHT * 708) as u64
+}
+
+// Max msg size when msg type is unknown.
+fn default_max_msg_size() -> u64 {
+	max_block_size()
 }
 
 // Max msg size for each msg type.
@@ -106,6 +101,8 @@ fn max_msg_size(msg_type: Type) -> u64 {
 		Type::BanReason => 64,
 		Type::GetTransaction => 32,
 		Type::TransactionKernel => 32,
+		Type::KernelDataRequest => 0,
+		Type::KernelDataResponse => 8,
 	}
 }
 
@@ -120,63 +117,84 @@ fn magic() -> [u8; 2] {
 /// Read a header from the provided stream without blocking if the
 /// underlying stream is async. Typically headers will be polled for, so
 /// we do not want to block.
-pub fn read_header(stream: &mut dyn Read, msg_type: Option<Type>) -> Result<MsgHeader, Error> {
+///
+/// Note: We return a MsgHeaderWrapper here as we may encounter an unknown msg type.
+///
+pub fn read_header(
+	stream: &mut dyn Read,
+	version: ProtocolVersion,
+) -> Result<MsgHeaderWrapper, Error> {
 	let mut head = vec![0u8; MsgHeader::LEN];
-	if Some(Type::Hand) == msg_type {
-		read_exact(stream, &mut head, time::Duration::from_millis(10), true)?;
-	} else {
-		read_exact(stream, &mut head, time::Duration::from_secs(10), false)?;
-	}
-	let header = ser::deserialize::<MsgHeader>(&mut &head[..])?;
-	let max_len = max_msg_size(header.msg_type);
-
-	// TODO 4x the limits for now to leave ourselves space to change things
-	if header.msg_len > max_len * 4 {
-		error!(
-			"Too large read {}, had {}, wanted {}.",
-			header.msg_type as u8, max_len, header.msg_len
-		);
-		return Err(Error::Serialization(ser::Error::TooLargeReadErr));
-	}
+	stream.read_exact(&mut head)?;
+	let header = ser::deserialize::<MsgHeaderWrapper>(&mut &head[..], version)?;
 	Ok(header)
 }
 
 /// Read a single item from the provided stream, always blocking until we
 /// have a result (or timeout).
 /// Returns the item and the total bytes read.
-pub fn read_item<T: Readable>(stream: &mut dyn Read) -> Result<(T, u64), Error> {
-	let timeout = time::Duration::from_secs(20);
-	let mut reader = StreamingReader::new(stream, timeout);
+pub fn read_item<T: Readable>(
+	stream: &mut dyn Read,
+	version: ProtocolVersion,
+) -> Result<(T, u64), Error> {
+	let mut reader = StreamingReader::new(stream, version);
 	let res = T::read(&mut reader)?;
 	Ok((res, reader.total_bytes_read()))
 }
 
 /// Read a message body from the provided stream, always blocking
 /// until we have a result (or timeout).
-pub fn read_body<T: Readable>(h: &MsgHeader, stream: &mut dyn Read) -> Result<T, Error> {
+pub fn read_body<T: Readable>(
+	h: &MsgHeader,
+	stream: &mut dyn Read,
+	version: ProtocolVersion,
+) -> Result<T, Error> {
 	let mut body = vec![0u8; h.msg_len as usize];
-	read_exact(stream, &mut body, time::Duration::from_secs(20), true)?;
-	ser::deserialize(&mut &body[..]).map_err(From::from)
+	stream.read_exact(&mut body)?;
+	ser::deserialize(&mut &body[..], version).map_err(From::from)
+}
+
+/// Read (an unknown) message from the provided stream and discard it.
+pub fn read_discard(msg_len: u64, stream: &mut dyn Read) -> Result<(), Error> {
+	let mut buffer = vec![0u8; msg_len as usize];
+	stream.read_exact(&mut buffer)?;
+	Ok(())
 }
 
 /// Reads a full message from the underlying stream.
-pub fn read_message<T: Readable>(stream: &mut dyn Read, msg_type: Type) -> Result<T, Error> {
-	let header = read_header(stream, Some(msg_type))?;
-	if header.msg_type != msg_type {
-		return Err(Error::BadMessage);
+pub fn read_message<T: Readable>(
+	stream: &mut dyn Read,
+	version: ProtocolVersion,
+	msg_type: Type,
+) -> Result<T, Error> {
+	match read_header(stream, version)? {
+		MsgHeaderWrapper::Known(header) => {
+			if header.msg_type == msg_type {
+				read_body(&header, stream, version)
+			} else {
+				Err(Error::BadMessage)
+			}
+		}
+		MsgHeaderWrapper::Unknown(msg_len) => {
+			read_discard(msg_len, stream)?;
+			Err(Error::BadMessage)
+		}
 	}
-	read_body(&header, stream)
 }
 
-pub fn write_to_buf<T: Writeable>(msg: T, msg_type: Type) -> Result<Vec<u8>, Error> {
+pub fn write_to_buf<T: Writeable>(
+	msg: T,
+	msg_type: Type,
+	version: ProtocolVersion,
+) -> Result<Vec<u8>, Error> {
 	// prepare the body first so we know its serialized length
 	let mut body_buf = vec![];
-	ser::serialize(&mut body_buf, &msg)?;
+	ser::serialize(&mut body_buf, version, &msg)?;
 
 	// build and serialize the header using the body size
 	let mut msg_buf = vec![];
 	let blen = body_buf.len() as u64;
-	ser::serialize(&mut msg_buf, &MsgHeader::new(msg_type, blen))?;
+	ser::serialize(&mut msg_buf, version, &MsgHeader::new(msg_type, blen))?;
 	msg_buf.append(&mut body_buf);
 
 	Ok(msg_buf)
@@ -186,13 +204,26 @@ pub fn write_message<T: Writeable>(
 	stream: &mut dyn Write,
 	msg: T,
 	msg_type: Type,
+	version: ProtocolVersion,
 ) -> Result<(), Error> {
-	let buf = write_to_buf(msg, msg_type)?;
+	let buf = write_to_buf(msg, msg_type, version)?;
 	stream.write_all(&buf[..])?;
 	Ok(())
 }
 
+/// A wrapper around a message header. If the header is for an unknown msg type
+/// then we will be unable to parse the msg itself (just a bunch of random bytes).
+/// But we need to know how many bytes to discard to discard the full message.
+#[derive(Clone)]
+pub enum MsgHeaderWrapper {
+	/// A "known" msg type with deserialized msg header.
+	Known(MsgHeader),
+	/// An unknown msg type with corresponding msg size in bytes.
+	Unknown(u64),
+}
+
 /// Header of any protocol message, used to identify incoming messages.
+#[derive(Clone)]
 pub struct MsgHeader {
 	magic: [u8; 2],
 	/// Type of the message.
@@ -213,7 +244,8 @@ impl MsgHeader {
 }
 
 impl FixedLength for MsgHeader {
-	const LEN: usize = 1 + 1 + 1 + 8;
+	// 2 magic bytes + 1 type byte + 8 bytes (msg_len)
+	const LEN: usize = 2 + 1 + 8;
 }
 
 impl Writeable for MsgHeader {
@@ -229,54 +261,50 @@ impl Writeable for MsgHeader {
 	}
 }
 
-impl Readable for MsgHeader {
-	fn read(reader: &mut dyn Reader) -> Result<MsgHeader, ser::Error> {
+impl Readable for MsgHeaderWrapper {
+	fn read(reader: &mut dyn Reader) -> Result<MsgHeaderWrapper, ser::Error> {
 		let m = magic();
 		reader.expect_u8(m[0])?;
 		reader.expect_u8(m[1])?;
-		let (t, len) = ser_multiread!(reader, read_u8, read_u64);
+
+		// Read the msg header.
+		// We do not yet know if the msg type is one we support locally.
+		let (t, msg_len) = ser_multiread!(reader, read_u8, read_u64);
+
+		// Attempt to convert the msg type byte into one of our known msg type enum variants.
+		// Check the msg_len while we are at it.
 		match Type::from_u8(t) {
-			Some(ty) => Ok(MsgHeader {
-				magic: m,
-				msg_type: ty,
-				msg_len: len,
-			}),
-			None => Err(ser::Error::CorruptedData),
+			Some(msg_type) => {
+				// TODO 4x the limits for now to leave ourselves space to change things.
+				let max_len = max_msg_size(msg_type) * 4;
+				if msg_len > max_len {
+					error!(
+						"Too large read {:?}, max_len: {}, msg_len: {}.",
+						msg_type, max_len, msg_len
+					);
+					return Err(ser::Error::TooLargeReadErr);
+				}
+
+				Ok(MsgHeaderWrapper::Known(MsgHeader {
+					magic: m,
+					msg_type,
+					msg_len,
+				}))
+			}
+			None => {
+				// Unknown msg type, but we still want to limit how big the msg is.
+				let max_len = default_max_msg_size() * 4;
+				if msg_len > max_len {
+					error!(
+						"Too large read (unknown msg type) {:?}, max_len: {}, msg_len: {}.",
+						t, max_len, msg_len
+					);
+					return Err(ser::Error::TooLargeReadErr);
+				}
+
+				Ok(MsgHeaderWrapper::Unknown(msg_len))
+			}
 		}
-	}
-}
-
-#[derive(Clone, Copy, Debug, Deserialize, Eq, Ord, PartialOrd, PartialEq, Serialize)]
-pub struct ProtocolVersion(pub u32);
-
-impl Default for ProtocolVersion {
-	fn default() -> ProtocolVersion {
-		ProtocolVersion(PROTOCOL_VERSION)
-	}
-}
-
-impl From<ProtocolVersion> for u32 {
-	fn from(v: ProtocolVersion) -> u32 {
-		v.0
-	}
-}
-
-impl fmt::Display for ProtocolVersion {
-	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-		write!(f, "{}", self.0)
-	}
-}
-
-impl Writeable for ProtocolVersion {
-	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
-		writer.write_u32(self.0)
-	}
-}
-
-impl Readable for ProtocolVersion {
-	fn read(reader: &mut dyn Reader) -> Result<ProtocolVersion, ser::Error> {
-		let version = reader.read_u32()?;
-		Ok(ProtocolVersion(version))
 	}
 }
 
@@ -373,10 +401,8 @@ impl Writeable for Shake {
 impl Readable for Shake {
 	fn read(reader: &mut dyn Reader) -> Result<Shake, ser::Error> {
 		let version = ProtocolVersion::read(reader)?;
-
 		let capab = reader.read_u32()?;
 		let capabilities = Capabilities::from_bits_truncate(capab);
-
 		let total_difficulty = Difficulty::read(reader)?;
 		let ua = reader.read_bytes_len_prefix()?;
 		let user_agent = String::from_utf8(ua).map_err(|_| ser::Error::CorruptedData)?;
@@ -653,5 +679,32 @@ impl Readable for TxHashSetArchive {
 			height,
 			bytes,
 		})
+	}
+}
+
+pub struct KernelDataRequest {}
+
+impl Writeable for KernelDataRequest {
+	fn write<W: Writer>(&self, _writer: &mut W) -> Result<(), ser::Error> {
+		Ok(())
+	}
+}
+
+pub struct KernelDataResponse {
+	/// Size in bytes of the attached kernel data file.
+	pub bytes: u64,
+}
+
+impl Writeable for KernelDataResponse {
+	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
+		writer.write_u64(self.bytes)?;
+		Ok(())
+	}
+}
+
+impl Readable for KernelDataResponse {
+	fn read(reader: &mut dyn Reader) -> Result<KernelDataResponse, ser::Error> {
+		let bytes = reader.read_u64()?;
+		Ok(KernelDataResponse { bytes })
 	}
 }

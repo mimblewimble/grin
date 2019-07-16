@@ -19,7 +19,7 @@ use crate::rest::*;
 use crate::router::{Handler, ResponseFuture};
 use crate::types::*;
 use crate::web::*;
-use hyper::{Body, Request};
+use hyper::{Body, Request, StatusCode};
 use std::sync::Weak;
 
 // RESTful index of available api endpoints
@@ -33,6 +33,29 @@ impl IndexHandler {}
 impl Handler for IndexHandler {
 	fn get(&self, _req: Request<Body>) -> ResponseFuture {
 		json_response_pretty(&self.list)
+	}
+}
+
+pub struct KernelDownloadHandler {
+	pub peers: Weak<p2p::Peers>,
+}
+
+impl Handler for KernelDownloadHandler {
+	fn post(&self, _req: Request<Body>) -> ResponseFuture {
+		if let Some(peer) = w_fut!(&self.peers).most_work_peer() {
+			match peer.send_kernel_data_request() {
+				Ok(_) => response(StatusCode::OK, "{}"),
+				Err(e) => response(
+					StatusCode::INTERNAL_SERVER_ERROR,
+					format!("requesting kernel data from peer failed: {:?}", e),
+				),
+			}
+		} else {
+			response(
+				StatusCode::INTERNAL_SERVER_ERROR,
+				format!("requesting kernel data from peer failed (no peers)"),
+			)
+		}
 	}
 }
 

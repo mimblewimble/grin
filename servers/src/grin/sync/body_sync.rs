@@ -141,6 +141,7 @@ impl BodySync {
 				if let Some(peer) = peers_iter.next() {
 					if let Err(e) = peer.send_block_request(*hash) {
 						debug!("Skipped request to {}: {:?}", peer.info.addr, e);
+						peer.stop();
 					} else {
 						self.blocks_requested += 1;
 					}

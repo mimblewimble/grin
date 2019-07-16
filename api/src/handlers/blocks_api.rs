@@ -79,15 +79,18 @@ impl Handler for HeaderHandler {
 ///
 /// Optionally return results as "compact blocks" by passing "?compact" query
 /// param GET /v1/blocks/<hash>?compact
+///
+/// Optionally turn off the Merkle proof extraction by passing "?no_merkle_proof" query
+/// param GET /v1/blocks/<hash>?no_merkle_proof
 pub struct BlockHandler {
 	pub chain: Weak<chain::Chain>,
 }
 
 impl BlockHandler {
-	fn get_block(&self, h: &Hash) -> Result<BlockPrintable, Error> {
+	fn get_block(&self, h: &Hash, include_merkle_proof: bool) -> Result<BlockPrintable, Error> {
 		let chain = w(&self.chain)?;
 		let block = chain.get_block(h).context(ErrorKind::NotFound)?;
-		BlockPrintable::from_block(&block, chain, false)
+		BlockPrintable::from_block(&block, chain, false, include_merkle_proof)
 			.map_err(|_| ErrorKind::Internal("chain error".to_owned()).into())
 	}
 
@@ -141,6 +144,8 @@ impl Handler for BlockHandler {
 		if let Some(param) = req.uri().query() {
 			if param == "compact" {
 				result_to_response(self.get_compact_block(&h))
+			} else if param == "no_merkle_proof" {
+				result_to_response(self.get_block(&h, false))
 			} else {
 				response(
 					StatusCode::BAD_REQUEST,
@@ -148,7 +153,7 @@ impl Handler for BlockHandler {
 				)
 			}
 		} else {
-			result_to_response(self.get_block(&h))
+			result_to_response(self.get_block(&h, true))
 		}
 	}
 }

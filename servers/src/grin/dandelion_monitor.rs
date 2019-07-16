@@ -16,14 +16,14 @@ use chrono::prelude::Utc;
 use rand::{thread_rng, Rng};
 use std::sync::Arc;
 use std::thread;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use crate::common::adapters::DandelionAdapter;
 use crate::core::core::hash::Hashed;
 use crate::core::core::transaction;
 use crate::core::core::verifier_cache::VerifierCache;
 use crate::pool::{DandelionConfig, Pool, PoolEntry, PoolError, TransactionPool, TxSource};
-use crate::util::{Mutex, RwLock, StopState};
+use crate::util::{RwLock, StopState};
 
 /// A process to monitor transactions in the stempool.
 /// With Dandelion, transaction can be broadcasted in stem or fluff phase.
@@ -38,43 +38,54 @@ pub fn monitor_transactions(
 	tx_pool: Arc<RwLock<TransactionPool>>,
 	adapter: Arc<DandelionAdapter>,
 	verifier_cache: Arc<RwLock<dyn VerifierCache>>,
-	stop_state: Arc<Mutex<StopState>>,
-) {
+	stop_state: Arc<StopState>,
+) -> std::io::Result<thread::JoinHandle<()>> {
 	debug!("Started Dandelion transaction monitor.");
 
-	let _ = thread::Builder::new()
+	thread::Builder::new()
 		.name("dandelion".to_string())
 		.spawn(move || {
+			let run_interval = Duration::from_secs(10);
+			let mut last_run = Instant::now()
+				.checked_sub(Duration::from_secs(20))
+				.unwrap_or_else(|| Instant::now());
 			loop {
 				// Halt Dandelion monitor if we have been notified that we are stopping.
-				if stop_state.lock().is_stopped() {
+				if stop_state.is_stopped() {
 					break;
 				}
 
-				if !adapter.is_stem() {
-					let _ =
-						process_fluff_phase(&dandelion_config, &tx_pool, &adapter, &verifier_cache)
-							.map_err(|e| {
-								error!("dand_mon: Problem processing fluff phase. {:?}", e);
-							});
+				if last_run.elapsed() > run_interval {
+					if !adapter.is_stem() {
+						let _ = process_fluff_phase(
+							&dandelion_config,
+							&tx_pool,
+							&adapter,
+							&verifier_cache,
+						)
+						.map_err(|e| {
+							error!("dand_mon: Problem processing fluff phase. {:?}", e);
+						});
+					}
+
+					// Now find all expired entries based on embargo timer.
+					let _ = process_expired_entries(&dandelion_config, &tx_pool).map_err(|e| {
+						error!("dand_mon: Problem processing expired entries. {:?}", e);
+					});
+
+					// Handle the tx above *before* we transition to next epoch.
+					// This gives us an opportunity to do the final "fluff" before we start
+					// stemming on the subsequent epoch.
+					if adapter.is_expired() {
+						adapter.next_epoch();
+					}
+					last_run = Instant::now();
 				}
 
-				// Now find all expired entries based on embargo timer.
-				let _ = process_expired_entries(&dandelion_config, &tx_pool).map_err(|e| {
-					error!("dand_mon: Problem processing expired entries. {:?}", e);
-				});
-
-				// Handle the tx above *before* we transition to next epoch.
-				// This gives us an opportunity to do the final "fluff" before we start
-				// stemming on the subsequent epoch.
-				if adapter.is_expired() {
-					adapter.next_epoch();
-				}
-
-				// Monitor loops every 10s.
-				thread::sleep(Duration::from_secs(10));
+				// Monitor loops every 10s, but check stop flag every second.
+				thread::sleep(Duration::from_secs(1));
 			}
-		});
+		})
 }
 
 // Query the pool for transactions older than the cutoff.
@@ -102,9 +113,7 @@ fn process_fluff_phase(
 		return Ok(());
 	}
 
-	let cutoff_secs = dandelion_config
-		.aggregation_secs
-		.expect("aggregation secs config missing");
+	let cutoff_secs = dandelion_config.aggregation_secs;
 	let cutoff_entries = select_txs_cutoff(&tx_pool.stempool, cutoff_secs);
 
 	// If epoch is expired, fluff *all* outstanding entries in stempool.
@@ -138,12 +147,7 @@ fn process_fluff_phase(
 		verifier_cache.clone(),
 	)?;
 
-	let src = TxSource {
-		debug_name: "fluff".to_string(),
-		identifier: "?.?.?.?".to_string(),
-	};
-
-	tx_pool.add_to_pool(src, agg_tx, false, &header)?;
+	tx_pool.add_to_pool(TxSource::Fluff, agg_tx, false, &header)?;
 	Ok(())
 }
 
@@ -154,10 +158,7 @@ fn process_expired_entries(
 	// Take a write lock on the txpool for the duration of this processing.
 	let mut tx_pool = tx_pool.write();
 
-	let embargo_secs = dandelion_config
-		.embargo_secs
-		.expect("embargo_secs config missing")
-		+ thread_rng().gen_range(0, 31);
+	let embargo_secs = dandelion_config.embargo_secs + thread_rng().gen_range(0, 31);
 	let expired_entries = select_txs_cutoff(&tx_pool.stempool, embargo_secs);
 
 	if expired_entries.is_empty() {
@@ -168,14 +169,9 @@ fn process_expired_entries(
 
 	let header = tx_pool.chain_head()?;
 
-	let src = TxSource {
-		debug_name: "embargo_expired".to_string(),
-		identifier: "?.?.?.?".to_string(),
-	};
-
 	for entry in expired_entries {
 		let txhash = entry.tx.hash();
-		match tx_pool.add_to_pool(src.clone(), entry.tx, false, &header) {
+		match tx_pool.add_to_pool(TxSource::EmbargoExpired, entry.tx, false, &header) {
 			Ok(_) => info!(
 				"dand_mon: embargo expired for {}, fluffed successfully.",
 				txhash
