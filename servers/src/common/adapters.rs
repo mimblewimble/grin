@@ -238,11 +238,11 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 		bh: core::BlockHeader,
 		peer_info: &PeerInfo,
 	) -> Result<bool, chain::Error> {
-		let bhash = bh.hash();
-		debug!(
-			"Received block header {} at {} from {}, going to process.",
-			bhash, bh.height, peer_info.addr,
-		);
+		if !self.sync_state.is_syncing() {
+			for hook in &self.hooks {
+				hook.on_header_received(&bh, &peer_info.addr);
+			}
+		}
 
 		// pushing the new block header through the header chain pipeline
 		// we will go ask for the block if this is a new header
@@ -251,7 +251,7 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 			.process_block_header(&bh, self.chain_opts(false));
 
 		if let Err(e) = res {
-			debug!("Block header {} refused by chain: {:?}", bhash, e.kind());
+			debug!("Block header {} refused by chain: {:?}", bh.hash(), e.kind());
 			if e.is_bad_data() {
 				return Ok(false);
 			} else {
