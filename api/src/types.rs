@@ -34,6 +34,15 @@ macro_rules! no_dup {
 	};
 }
 
+/// API Version Information
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct Version {
+	/// Current node API Version (api crate version)
+	pub node_version: String,
+	/// Block header version
+	pub block_header_version: u16,
+}
+
 /// The state of the current fork tip
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Tip {
@@ -74,7 +83,7 @@ pub struct Status {
 impl Status {
 	pub fn from_tip_and_peers(current_tip: chain::Tip, connections: u32) -> Status {
 		Status {
-			protocol_version: p2p::msg::ProtocolVersion::default().into(),
+			protocol_version: ser::ProtocolVersion::local().into(),
 			user_agent: p2p::msg::USER_AGENT.to_string(),
 			connections: connections,
 			tip: Tip::from_tip(current_tip),
@@ -257,6 +266,7 @@ impl OutputPrintable {
 		chain: Arc<chain::Chain>,
 		block_header: Option<&core::BlockHeader>,
 		include_proof: bool,
+		include_merkle_proof: bool,
 	) -> Result<OutputPrintable, chain::Error> {
 		let output_type = if output.is_coinbase() {
 			OutputType::Coinbase
@@ -282,7 +292,7 @@ impl OutputPrintable {
 		// We require the rewind() to be stable even after the PMMR is pruned and
 		// compacted so we can still recreate the necessary proof.
 		let mut merkle_proof = None;
-		if output.is_coinbase() && !spent {
+		if include_merkle_proof && output.is_coinbase() && !spent {
 			if let Some(block_header) = block_header {
 				merkle_proof = chain.get_merkle_proof(&out_id, &block_header).ok();
 			}
@@ -583,6 +593,7 @@ impl BlockPrintable {
 		block: &core::Block,
 		chain: Arc<chain::Chain>,
 		include_proof: bool,
+		include_merkle_proof: bool,
 	) -> Result<BlockPrintable, chain::Error> {
 		let inputs = block
 			.inputs()
@@ -598,6 +609,7 @@ impl BlockPrintable {
 					chain.clone(),
 					Some(&block.header),
 					include_proof,
+					include_merkle_proof,
 				)
 			})
 			.collect::<Result<Vec<_>, _>>()?;
@@ -639,7 +651,9 @@ impl CompactBlockPrintable {
 		let out_full = cb
 			.out_full()
 			.iter()
-			.map(|x| OutputPrintable::from_output(x, chain.clone(), Some(&block.header), false))
+			.map(|x| {
+				OutputPrintable::from_output(x, chain.clone(), Some(&block.header), false, true)
+			})
 			.collect::<Result<Vec<_>, _>>()?;
 		let kern_full = cb
 			.kern_full()

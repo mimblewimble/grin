@@ -211,6 +211,14 @@ fn comments() -> HashMap<String, String> {
 	);
 
 	retval.insert(
+		"always_stem_our_txs".to_string(),
+		"
+#always stem our (pushed via api) txs regardless of stem/fluff epoch (as per Dandelion++ paper)
+"
+		.to_string(),
+	);
+
+	retval.insert(
 		"[server.p2p_config]".to_string(),
 		"#test miner wallet URL (burns if this doesn't exist)
 #test_miner_wallet_url = \"http://127.0.0.1:3415\"

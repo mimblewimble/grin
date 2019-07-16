@@ -143,13 +143,10 @@ impl HeaderSync {
 				if let Some(ref stalling_ts) = self.stalling_ts {
 					if let Some(ref peer) = self.syncing_peer {
 						match self.sync_state.status() {
-							SyncStatus::HeaderSync {
-								current_height: _,
-								highest_height,
-							} => {
+							SyncStatus::HeaderSync { .. } | SyncStatus::BodySync { .. } => {
 								// Ban this fraud peer which claims a higher work but can't send us the real headers
 								if now > *stalling_ts + Duration::seconds(120)
-									&& highest_height == peer.info.height()
+									&& header_head.total_difficulty < peer.info.total_difficulty()
 								{
 									self.peers
 										.ban_peer(peer.info.addr, ReasonForBan::FraudHeight);

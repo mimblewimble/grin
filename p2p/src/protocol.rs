@@ -27,6 +27,7 @@ use std::cmp;
 use std::fs::{self, File, OpenOptions};
 use std::io::{BufWriter, Seek, SeekFrom, Write};
 use std::sync::Arc;
+use std::time::Instant;
 use tempfile::tempfile;
 
 pub struct Protocol {
@@ -67,6 +68,7 @@ impl MessageHandler for Protocol {
 
 				Ok(Some(Response::new(
 					Type::Pong,
+					self.peer_info.version,
 					Pong {
 						total_difficulty: adapter.total_difficulty()?,
 						height: adapter.total_height()?,
@@ -105,7 +107,12 @@ impl MessageHandler for Protocol {
 				);
 				let tx = adapter.get_transaction(h);
 				if let Some(tx) = tx {
-					Ok(Some(Response::new(Type::Transaction, tx, writer)?))
+					Ok(Some(Response::new(
+						Type::Transaction,
+						self.peer_info.version,
+						tx,
+						writer,
+					)?))
 				} else {
 					Ok(None)
 				}
@@ -141,7 +148,12 @@ impl MessageHandler for Protocol {
 
 				let bo = adapter.get_block(h);
 				if let Some(b) = bo {
-					return Ok(Some(Response::new(Type::Block, b, writer)?));
+					return Ok(Some(Response::new(
+						Type::Block,
+						self.peer_info.version,
+						b,
+						writer,
+					)?));
 				}
 				Ok(None)
 			}
@@ -163,7 +175,12 @@ impl MessageHandler for Protocol {
 				let h: Hash = msg.body()?;
 				if let Some(b) = adapter.get_block(h) {
 					let cb: CompactBlock = b.into();
-					Ok(Some(Response::new(Type::CompactBlock, cb, writer)?))
+					Ok(Some(Response::new(
+						Type::CompactBlock,
+						self.peer_info.version,
+						cb,
+						writer,
+					)?))
 				} else {
 					Ok(None)
 				}
@@ -188,6 +205,7 @@ impl MessageHandler for Protocol {
 				// serialize and send all the headers over
 				Ok(Some(Response::new(
 					Type::Headers,
+					self.peer_info.version,
 					Headers { headers },
 					writer,
 				)?))
@@ -233,6 +251,7 @@ impl MessageHandler for Protocol {
 				let peers = adapter.find_peer_addrs(get_peers.capabilities);
 				Ok(Some(Response::new(
 					Type::PeerAddrs,
+					self.peer_info.version,
 					PeerAddrs { peers },
 					writer,
 				)?))
@@ -249,8 +268,12 @@ impl MessageHandler for Protocol {
 				let kernel_data = self.adapter.kernel_data_read()?;
 				let bytes = kernel_data.metadata()?.len();
 				let kernel_data_response = KernelDataResponse { bytes };
-				let mut response =
-					Response::new(Type::KernelDataResponse, &kernel_data_response, writer)?;
+				let mut response = Response::new(
+					Type::KernelDataResponse,
+					self.peer_info.version,
+					&kernel_data_response,
+					writer,
+				)?;
 				response.add_attachment(kernel_data);
 				Ok(Some(response))
 			}
@@ -307,6 +330,7 @@ impl MessageHandler for Protocol {
 					let file_sz = txhashset.reader.metadata()?.len();
 					let mut resp = Response::new(
 						Type::TxHashSetArchive,
+						self.peer_info.version,
 						&TxHashSetArchive {
 							height: txhashset_header.height as u64,
 							hash: txhashset_header_hash,
@@ -344,6 +368,7 @@ impl MessageHandler for Protocol {
 					download_start_time.timestamp(),
 					nonce
 				));
+				let mut now = Instant::now();
 				let mut save_txhashset_to_file = |file| -> Result<(), Error> {
 					let mut tmp_zip =
 						BufWriter::new(OpenOptions::new().write(true).create_new(true).open(file)?);
@@ -359,11 +384,21 @@ impl MessageHandler for Protocol {
 							downloaded_size as u64,
 							total_size as u64,
 						);
-
+						if now.elapsed().as_secs() > 10 {
+							now = Instant::now();
+							debug!(
+								"handle_payload: txhashset archive: {}/{}",
+								downloaded_size, total_size
+							);
+						}
 						// Increase received bytes quietly (without affecting the counters).
 						// Otherwise we risk banning a peer as "abusive".
 						tracker.inc_quiet_received(size as u64)
 					}
+					debug!(
+						"handle_payload: txhashset archive: {}/{} ... DONE",
+						downloaded_size, total_size
+					);
 					tmp_zip
 						.into_inner()
 						.map_err(|_| Error::Internal)?

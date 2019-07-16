@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! Common types and traits for cuckoo/cuckatoo family of solvers
+//! Common types and traits for cuckoo family of solvers
 
 use crate::blake2::blake2b::blake2b;
 use byteorder::{LittleEndian, ReadBytesExt, WriteBytesExt};
@@ -127,11 +127,10 @@ macro_rules! to_usize {
 }
 
 /// Macro to clean up casting to edge type
-/// TODO: this macro uses unhygenic data T
 #[macro_export]
 macro_rules! to_edge {
-	($n:expr) => {
-		T::from($n).ok_or(ErrorKind::IntegerCast)?
+	($edge_type:ident, $n:expr) => {
+		$edge_type::from($n).ok_or(ErrorKind::IntegerCast)?
 	};
 }
 
@@ -155,7 +154,7 @@ where
 	/// Instantiates new params and calculate edge mask, etc
 	pub fn new(edge_bits: u8, proof_size: usize) -> Result<CuckooParams<T>, Error> {
 		let num_edges = (1 as u64) << edge_bits;
-		let edge_mask = to_edge!(num_edges - 1);
+		let edge_mask = to_edge!(T, num_edges - 1);
 		Ok(CuckooParams {
 			edge_bits,
 			proof_size,

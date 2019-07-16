@@ -510,8 +510,11 @@ impl Peers {
 
 	pub fn stop(&self) {
 		let mut peers = self.peers.write();
+		for peer in peers.values() {
+			peer.stop();
+		}
 		for (_, peer) in peers.drain() {
-			peer.stop_and_wait();
+			peer.wait();
 		}
 	}
 

@@ -14,6 +14,7 @@
 
 use rand::thread_rng;
 use std::cmp::min;
+use std::convert::TryFrom;
 use std::io::Cursor;
 use std::ops::Add;
 /// Keychain trait and its main supporting types. The Identifier is a
@@ -32,6 +33,7 @@ use crate::util::secp::key::{PublicKey, SecretKey};
 use crate::util::secp::pedersen::Commitment;
 use crate::util::secp::{self, Message, Secp256k1, Signature};
 use crate::util::static_secp_instance;
+use zeroize::Zeroize;
 
 use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
 
@@ -128,9 +130,12 @@ impl Identifier {
 	}
 
 	pub fn to_value_path(&self, value: u64) -> ValueExtKeychainPath {
+		// TODO: proper support for different switch commitment schemes
+		// For now it is assumed all outputs are using the regular switch commitment scheme
 		ValueExtKeychainPath {
 			value,
 			ext_keychain_path: self.to_path(),
+			switch: SwitchCommitmentType::Regular,
 		}
 	}
 
@@ -227,12 +232,14 @@ impl fmt::Display for Identifier {
 	}
 }
 
-#[derive(Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[derive(Default, Clone, PartialEq, Serialize, Deserialize, Zeroize)]
+#[zeroize(drop)]
 pub struct BlindingFactor([u8; SECRET_KEY_SIZE]);
 
+// Dummy `Debug` implementation that prevents secret leakage.
 impl fmt::Debug for BlindingFactor {
 	fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> fmt::Result {
-		write!(f, "{}", self.to_hex())
+		write!(f, "BlindingFactor(<secret key hidden>)")
 	}
 }
 
@@ -316,7 +323,7 @@ impl BlindingFactor {
 
 		// use blind_sum to subtract skey_1 from our key (to give k = k1 + k2)
 		let skey = self.secret_key(secp)?;
-		let skey_2 = secp.blind_sum(vec![skey], vec![skey_1])?;
+		let skey_2 = secp.blind_sum(vec![skey], vec![skey_1.clone()])?;
 
 		let blind_1 = BlindingFactor::from_secret_key(skey_1);
 		let blind_2 = BlindingFactor::from_secret_key(skey_2);
@@ -441,11 +448,12 @@ impl ExtKeychainPath {
 	}
 }
 
-/// Wrapper for amount + path
+/// Wrapper for amount + switch + path
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Deserialize)]
 pub struct ValueExtKeychainPath {
 	pub value: u64,
 	pub ext_keychain_path: ExtKeychainPath,
+	pub switch: SwitchCommitmentType,
 }
 
 pub trait Keychain: Sync + Send + Clone {
@@ -465,14 +473,59 @@ pub trait Keychain: Sync + Send + Clone {
 	/// Derives a key id from the depth of the keychain and the values at each
 	/// depth level. See `KeychainPath` for more information.
 	fn derive_key_id(depth: u8, d1: u32, d2: u32, d3: u32, d4: u32) -> Identifier;
-	fn derive_key(&self, amount: u64, id: &Identifier) -> Result<SecretKey, Error>;
-	fn commit(&self, amount: u64, id: &Identifier) -> Result<Commitment, Error>;
+
+	/// The public root key
+	fn public_root_key(&self) -> PublicKey;
+
+	fn derive_key(
+		&self,
+		amount: u64,
+		id: &Identifier,
+		switch: &SwitchCommitmentType,
+	) -> Result<SecretKey, Error>;
+	fn commit(
+		&self,
+		amount: u64,
+		id: &Identifier,
+		switch: &SwitchCommitmentType,
+	) -> Result<Commitment, Error>;
 	fn blind_sum(&self, blind_sum: &BlindSum) -> Result<BlindingFactor, Error>;
-	fn create_nonce(&self, commit: &Commitment) -> Result<SecretKey, Error>;
-	fn sign(&self, msg: &Message, amount: u64, id: &Identifier) -> Result<Signature, Error>;
+	fn sign(
+		&self,
+		msg: &Message,
+		amount: u64,
+		id: &Identifier,
+		switch: &SwitchCommitmentType,
+	) -> Result<Signature, Error>;
 	fn sign_with_blinding(&self, _: &Message, _: &BlindingFactor) -> Result<Signature, Error>;
-	fn set_use_switch_commits(&mut self, value: bool);
 	fn secp(&self) -> &Secp256k1;
+}
+
+#[derive(PartialEq, Eq, Clone, Copy, Debug, Serialize, Deserialize)]
+pub enum SwitchCommitmentType {
+	None,
+	Regular,
+}
+
+impl TryFrom<u8> for SwitchCommitmentType {
+	type Error = ();
+
+	fn try_from(value: u8) -> Result<Self, Self::Error> {
+		match value {
+			0 => Ok(SwitchCommitmentType::None),
+			1 => Ok(SwitchCommitmentType::Regular),
+			_ => Err(()),
+		}
+	}
+}
+
+impl From<&SwitchCommitmentType> for u8 {
+	fn from(switch: &SwitchCommitmentType) -> Self {
+		match *switch {
+			SwitchCommitmentType::None => 0,
+			SwitchCommitmentType::Regular => 1,
+		}
+	}
 }
 
 #[cfg(test)]
@@ -480,14 +533,44 @@ mod test {
 	use rand::thread_rng;
 
 	use crate::types::{BlindingFactor, ExtKeychainPath, Identifier};
+	use crate::util::secp::constants::SECRET_KEY_SIZE;
 	use crate::util::secp::key::{SecretKey, ZERO_KEY};
 	use crate::util::secp::Secp256k1;
+	use std::slice::from_raw_parts;
+
+	// This tests cleaning of BlindingFactor (e.g. secret key) on Drop.
+	// To make this test fail, just remove `Zeroize` derive from `BlindingFactor` definition.
+	#[test]
+	fn blinding_factor_clear_on_drop() {
+		// Create buffer for blinding factor filled with non-zero bytes.
+		let bf_bytes = [0xAA; SECRET_KEY_SIZE];
+		let ptr = {
+			// Fill blinding factor with some "sensitive" data
+			let bf = BlindingFactor::from_slice(&bf_bytes[..]);
+			bf.0.as_ptr()
+
+			// -- after this line BlindingFactor should be zeroed
+		};
+
+		// Unsafely get data from where BlindingFactor was in memory. Should be all zeros.
+		let bf_bytes = unsafe { from_raw_parts(ptr, SECRET_KEY_SIZE) };
+
+		// There should be all zeroes.
+		let mut all_zeros = true;
+		for b in bf_bytes {
+			if *b != 0x00 {
+				all_zeros = false;
+			}
+		}
+
+		assert!(all_zeros)
+	}
 
 	#[test]
 	fn split_blinding_factor() {
 		let secp = Secp256k1::new();
 		let skey_in = SecretKey::new(&secp, &mut thread_rng());
-		let blind = BlindingFactor::from_secret_key(skey_in);
+		let blind = BlindingFactor::from_secret_key(skey_in.clone());
 		let split = blind.split(&secp).unwrap();
 
 		// split a key, sum the split keys and confirm the sum matches the original key

@@ -60,7 +60,14 @@ fn test_various_store_indices() {
 
 	setup_chain(&genesis, chain_store.clone()).unwrap();
 
-	let reward = libtx::reward::output(&keychain, &key_id, 0, false).unwrap();
+	let reward = libtx::reward::output(
+		&keychain,
+		&libtx::ProofBuilder::new(&keychain),
+		&key_id,
+		0,
+		false,
+	)
+	.unwrap();
 	let block = Block::new(&genesis.header, vec![], Difficulty::min(), reward).unwrap();
 	let block_hash = block.hash();
 

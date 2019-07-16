@@ -75,7 +75,7 @@ impl Peer {
 		let tracking_adapter = TrackingAdapter::new(adapter);
 		let handler = Protocol::new(Arc::new(tracking_adapter.clone()), info.clone());
 		let tracker = Arc::new(conn::Tracker::new());
-		let (sendh, stoph) = conn::listen(conn, tracker.clone(), handler)?;
+		let (sendh, stoph) = conn::listen(conn, info.version, tracker.clone(), handler)?;
 		let send_handle = Mutex::new(sendh);
 		let stop_handle = Mutex::new(stoph);
 		Ok(Peer {
@@ -224,7 +224,10 @@ impl Peer {
 
 	/// Send a msg with given msg_type to our peer via the connection.
 	fn send<T: Writeable>(&self, msg: T, msg_type: Type) -> Result<(), Error> {
-		let bytes = self.send_handle.lock().send(msg, msg_type)?;
+		let bytes = self
+			.send_handle
+			.lock()
+			.send(msg, msg_type, self.info.version)?;
 		self.tracker.inc_sent(bytes);
 		Ok(())
 	}
@@ -397,18 +400,18 @@ impl Peer {
 
 	/// Stops the peer
 	pub fn stop(&self) {
-		debug!("Stopping peer without waiting {:?}", self.info.addr);
+		debug!("Stopping peer {:?}", self.info.addr);
 		match self.stop_handle.try_lock() {
 			Some(handle) => handle.stop(),
 			None => error!("can't get stop lock for peer"),
 		}
 	}
 
-	/// Stops the peer and wait until peer's thread exit
-	pub fn stop_and_wait(&self) {
-		debug!("Stopping peer {:?}", self.info.addr);
+	/// Waits until the peer's thread exit
+	pub fn wait(&self) {
+		debug!("Waiting for peer {:?} to stop", self.info.addr);
 		match self.stop_handle.try_lock() {
-			Some(mut handle) => handle.stop_and_wait(),
+			Some(mut handle) => handle.wait(),
 			None => error!("can't get stop lock for peer"),
 		}
 	}
