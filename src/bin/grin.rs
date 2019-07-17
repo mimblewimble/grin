@@ -172,8 +172,10 @@ fn real_main() -> i32 {
 		("clean", _) => {
 			let db_root_path = node_config.unwrap().members.unwrap().server.db_root;
 			println!("Cleaning chain data directory: {}", db_root_path);
-			std::fs::remove_dir_all(db_root_path).expect("Could not remove chain data.");
-			return 1;
+			match std::fs::remove_dir_all(db_root_path) {
+				Ok(_) => 0,
+				Err(_) => 1,
+			}
 		},
 
 		// If nothing is specified, try to just use the config file instead
