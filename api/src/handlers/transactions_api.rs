@@ -54,7 +54,7 @@ impl TxHashSetHandler {
 		Ok(TxHashSetNode::get_last_n_output(w(&self.chain)?, distance))
 	}
 
-	// gets last n outputs inserted in to the tree
+	// gets last n rangeproofs inserted in to the tree
 	fn get_last_n_rangeproof(&self, distance: u64) -> Result<Vec<TxHashSetNode>, Error> {
 		Ok(TxHashSetNode::get_last_n_rangeproof(
 			w(&self.chain)?,
@@ -62,7 +62,7 @@ impl TxHashSetHandler {
 		))
 	}
 
-	// gets last n outputs inserted in to the tree
+	// gets last n kernels inserted in to the tree
 	fn get_last_n_kernel(&self, distance: u64) -> Result<Vec<TxHashSetNode>, Error> {
 		Ok(TxHashSetNode::get_last_n_kernel(w(&self.chain)?, distance))
 	}
