@@ -16,14 +16,14 @@ use memmap;
 use tempfile::tempfile;
 
 use crate::core::ser::{
-	self, BinWriter, FixedLength, Readable, Reader, StreamingReader, Writeable, Writer,
+	self, BinWriter, FixedLength, ProtocolVersion, Readable, Reader, StreamingReader, Writeable,
+	Writer,
 };
 use std::fmt::Debug;
 use std::fs::{self, File, OpenOptions};
 use std::io::{self, BufReader, BufWriter, Seek, SeekFrom, Write};
 use std::marker;
 use std::path::{Path, PathBuf};
-use std::time;
 
 /// Represents a single entry in the size_file.
 /// Offset (in bytes) and size (in bytes) of a variable sized entry
@@ -78,12 +78,16 @@ where
 	T: Readable + Writeable + Debug,
 {
 	/// Open (or create) a file at the provided path on disk.
-	pub fn open<P>(path: P, size_info: SizeInfo) -> io::Result<DataFile<T>>
+	pub fn open<P>(
+		path: P,
+		size_info: SizeInfo,
+		version: ProtocolVersion,
+	) -> io::Result<DataFile<T>>
 	where
 		P: AsRef<Path> + Debug,
 	{
 		Ok(DataFile {
-			file: AppendOnlyFile::open(path, size_info)?,
+			file: AppendOnlyFile::open(path, size_info, version)?,
 		})
 	}
 
@@ -177,6 +181,7 @@ pub struct AppendOnlyFile<T> {
 	path: PathBuf,
 	file: Option<File>,
 	size_info: SizeInfo,
+	version: ProtocolVersion,
 	mmap: Option<memmap::Mmap>,
 
 	// Buffer of unsync'd bytes. These bytes will be appended to the file when flushed.
@@ -191,7 +196,11 @@ where
 	T: Debug + Readable + Writeable,
 {
 	/// Open a file (existing or not) as append-only, backed by a mmap.
-	pub fn open<P>(path: P, size_info: SizeInfo) -> io::Result<AppendOnlyFile<T>>
+	pub fn open<P>(
+		path: P,
+		size_info: SizeInfo,
+		version: ProtocolVersion,
+	) -> io::Result<AppendOnlyFile<T>>
 	where
 		P: AsRef<Path> + Debug,
 	{
@@ -199,6 +208,7 @@ where
 			file: None,
 			path: path.as_ref().to_path_buf(),
 			size_info,
+			version,
 			mmap: None,
 			buffer: vec![],
 			buffer_start_pos: 0,
@@ -268,7 +278,8 @@ where
 
 	/// Append element to append-only file by serializing it to bytes and appending the bytes.
 	fn append_elmt(&mut self, data: &T) -> io::Result<()> {
-		let mut bytes = ser::ser_vec(data).map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
+		let mut bytes = ser::ser_vec(data, self.version)
+			.map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
 		self.append(&mut bytes)?;
 		Ok(())
 	}
@@ -415,7 +426,8 @@ where
 
 	fn read_as_elmt(&self, pos: u64) -> io::Result<T> {
 		let data = self.read(pos)?;
-		ser::deserialize(&mut &data[..]).map_err(|e| io::Error::new(io::ErrorKind::Other, e))
+		ser::deserialize(&mut &data[..], self.version)
+			.map_err(|e| io::Error::new(io::ErrorKind::Other, e))
 	}
 
 	// Read length bytes starting at offset from the buffer.
@@ -470,11 +482,10 @@ where
 		{
 			let reader = File::open(&self.path)?;
 			let mut buf_reader = BufReader::new(reader);
-			let mut streaming_reader =
-				StreamingReader::new(&mut buf_reader, time::Duration::from_secs(1));
+			let mut streaming_reader = StreamingReader::new(&mut buf_reader, self.version);
 
 			let mut buf_writer = BufWriter::new(File::create(&tmp_path)?);
-			let mut bin_writer = BinWriter::new(&mut buf_writer);
+			let mut bin_writer = BinWriter::new(&mut buf_writer, self.version);
 
 			let mut current_pos = 0;
 			let mut prune_pos = prune_pos;
@@ -517,11 +528,10 @@ where
 			{
 				let reader = File::open(&self.path)?;
 				let mut buf_reader = BufReader::new(reader);
-				let mut streaming_reader =
-					StreamingReader::new(&mut buf_reader, time::Duration::from_secs(1));
+				let mut streaming_reader = StreamingReader::new(&mut buf_reader, self.version);
 
 				let mut buf_writer = BufWriter::new(File::create(&tmp_path)?);
-				let mut bin_writer = BinWriter::new(&mut buf_writer);
+				let mut bin_writer = BinWriter::new(&mut buf_writer, self.version);
 
 				let mut current_offset = 0;
 				while let Ok(_) = T::read(&mut streaming_reader) {

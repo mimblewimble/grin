@@ -31,6 +31,7 @@ pub mod secp_ser;
 use crate::consensus;
 use crate::core::Transaction;
 
+pub use self::proof::ProofBuilder;
 pub use crate::libtx::error::{Error, ErrorKind};
 
 const DEFAULT_BASE_FEE: u64 = consensus::MILLI_GRIN;

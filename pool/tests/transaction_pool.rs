@@ -19,10 +19,12 @@ use self::core::core::{transaction, Block, BlockHeader, Weighting};
 use self::core::libtx;
 use self::core::pow::Difficulty;
 use self::keychain::{ExtKeychain, Keychain};
+use self::pool::TxSource;
 use self::util::RwLock;
 use crate::common::*;
 use grin_core as core;
 use grin_keychain as keychain;
+use grin_pool as pool;
 use grin_util as util;
 use std::sync::Arc;
 
@@ -44,7 +46,14 @@ fn test_the_transaction_pool() {
 	let header = {
 		let height = 1;
 		let key_id = ExtKeychain::derive_key_id(1, height as u32, 0, 0, 0);
-		let reward = libtx::reward::output(&keychain, &key_id, 0, false).unwrap();
+		let reward = libtx::reward::output(
+			&keychain,
+			&libtx::ProofBuilder::new(&keychain),
+			&key_id,
+			0,
+			false,
+		)
+		.unwrap();
 		let block = Block::new(&BlockHeader::default(), vec![], Difficulty::min(), reward).unwrap();
 
 		chain.update_db_for_block(&block);
@@ -230,7 +239,7 @@ fn test_the_transaction_pool() {
 		assert_eq!(write_pool.total_size(), 6);
 		let entry = write_pool.txpool.entries.last().unwrap();
 		assert_eq!(entry.tx.kernels().len(), 1);
-		assert_eq!(entry.src.debug_name, "deagg");
+		assert_eq!(entry.src, TxSource::Deaggregate);
 	}
 
 	// Check we cannot "double spend" an output spent in a previous block.
@@ -246,7 +255,14 @@ fn test_the_transaction_pool() {
 		let header = {
 			let height = 1;
 			let key_id = ExtKeychain::derive_key_id(1, height as u32, 0, 0, 0);
-			let reward = libtx::reward::output(&keychain, &key_id, 0, false).unwrap();
+			let reward = libtx::reward::output(
+				&keychain,
+				&libtx::ProofBuilder::new(&keychain),
+				&key_id,
+				0,
+				false,
+			)
+			.unwrap();
 			let block =
 				Block::new(&BlockHeader::default(), vec![], Difficulty::min(), reward).unwrap();
 
@@ -433,7 +449,7 @@ fn test_the_transaction_pool() {
 			assert_eq!(write_pool.total_size(), 6);
 			let entry = write_pool.txpool.entries.last().unwrap();
 			assert_eq!(entry.tx.kernels().len(), 1);
-			assert_eq!(entry.src.debug_name, "deagg");
+			assert_eq!(entry.src, TxSource::Deaggregate);
 		}
 
 		// Check we cannot "double spend" an output spent in a previous block.

@@ -27,8 +27,10 @@ use grin_keychain as keychain;
 fn test_output_ser_deser() {
 	let keychain = ExtKeychain::from_random_seed(false).unwrap();
 	let key_id = ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
-	let commit = keychain.commit(5, &key_id).unwrap();
-	let proof = proof::create(&keychain, 5, &key_id, commit, None).unwrap();
+	let switch = &keychain::SwitchCommitmentType::Regular;
+	let commit = keychain.commit(5, &key_id, switch).unwrap();
+	let builder = proof::ProofBuilder::new(&keychain);
+	let proof = proof::create(&keychain, &builder, 5, &key_id, switch, commit, None).unwrap();
 
 	let out = Output {
 		features: OutputFeatures::Plain,
@@ -37,8 +39,8 @@ fn test_output_ser_deser() {
 	};
 
 	let mut vec = vec![];
-	ser::serialize(&mut vec, &out).expect("serialized failed");
-	let dout: Output = ser::deserialize(&mut &vec[..]).unwrap();
+	ser::serialize_default(&mut vec, &out).expect("serialized failed");
+	let dout: Output = ser::deserialize_default(&mut &vec[..]).unwrap();
 
 	assert_eq!(dout.features, OutputFeatures::Plain);
 	assert_eq!(dout.commit, out.commit);

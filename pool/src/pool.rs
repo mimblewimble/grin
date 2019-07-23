@@ -202,10 +202,10 @@ impl Pool {
 
 	fn log_pool_add(&self, entry: &PoolEntry, header: &BlockHeader) {
 		debug!(
-			"add_to_pool [{}]: {} ({}) [in/out/kern: {}/{}/{}] pool: {} (at block {})",
+			"add_to_pool [{}]: {} ({:?}) [in/out/kern: {}/{}/{}] pool: {} (at block {})",
 			self.name,
 			entry.tx.hash(),
-			entry.src.debug_name,
+			entry.src,
 			entry.tx.inputs().len(),
 			entry.tx.outputs().len(),
 			entry.tx.kernels().len(),
@@ -355,7 +355,7 @@ impl Pool {
 					// This is the common case for non 0-conf txs in the txpool.
 					// We assume the tx is valid here as we validated it on the way into the txpool.
 					insert_pos = Some(tx_buckets.len());
-					tx_buckets.push(Bucket::new(entry.tx.clone()));
+					tx_buckets.push(Bucket::new(entry.tx.clone(), tx_buckets.len()));
 				}
 				Some(pos) => {
 					// We found a single parent tx, so aggregate in the bucket
@@ -375,7 +375,7 @@ impl Pool {
 							// Otherwise put it in its own bucket at the end.
 							// Note: This bucket will have a lower fee_to_weight
 							// than the bucket it depends on.
-							tx_buckets.push(Bucket::new(entry.tx.clone()));
+							tx_buckets.push(Bucket::new(entry.tx.clone(), tx_buckets.len()));
 						}
 					} else {
 						// Aggregation failed so discard this new tx.
@@ -397,10 +397,11 @@ impl Pool {
 			}
 		}
 
-		// Sort them by fee_to_weight (descending).
-		// Txs with no dependencies will be toward the start of the vec.
-		// Txs with a big chain of dependencies will be toward the end of the vec.
-		tx_buckets.sort_unstable_by_key(|x| Reverse(x.fee_to_weight));
+		// Sort buckets by fee_to_weight (descending) and age (oldest first).
+		// Txs with highest fee_to_weight will be prioritied.
+		// Aggregation that increases the fee_to_weight of a bucket will prioritize the bucket.
+		// Oldest (based on pool insertion time) will then be prioritized.
+		tx_buckets.sort_unstable_by_key(|x| (Reverse(x.fee_to_weight), x.age_idx));
 
 		tx_buckets
 			.into_iter()
@@ -454,13 +455,19 @@ impl Pool {
 struct Bucket {
 	raw_txs: Vec<Transaction>,
 	fee_to_weight: u64,
+	age_idx: usize,
 }
 
 impl Bucket {
-	fn new(tx: Transaction) -> Bucket {
+	/// Construct a new bucket with the given tx.
+	/// also specifies an "age_idx" so we can sort buckets by age
+	/// as well as fee_to_weight. Txs are maintainedin the pool in insert order
+	/// so buckets with low age_idx contain oldest txs.
+	fn new(tx: Transaction, age_idx: usize) -> Bucket {
 		Bucket {
 			fee_to_weight: tx.fee_to_weight(),
 			raw_txs: vec![tx.clone()],
+			age_idx,
 		}
 	}
 
@@ -477,6 +484,7 @@ impl Bucket {
 		Ok(Bucket {
 			fee_to_weight: agg_tx.fee_to_weight(),
 			raw_txs: raw_txs,
+			age_idx: self.age_idx,
 		})
 	}
 }

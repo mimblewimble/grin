@@ -34,6 +34,15 @@ macro_rules! no_dup {
 	};
 }
 
+/// API Version Information
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct Version {
+	/// Current node API Version (api crate version)
+	pub node_version: String,
+	/// Block header version
+	pub block_header_version: u16,
+}
+
 /// The state of the current fork tip
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Tip {
@@ -74,7 +83,7 @@ pub struct Status {
 impl Status {
 	pub fn from_tip_and_peers(current_tip: chain::Tip, connections: u32) -> Status {
 		Status {
-			protocol_version: p2p::msg::ProtocolVersion::default().into(),
+			protocol_version: ser::ProtocolVersion::local().into(),
 			user_agent: p2p::msg::USER_AGENT.to_string(),
 			connections: connections,
 			tip: Tip::from_tip(current_tip),
