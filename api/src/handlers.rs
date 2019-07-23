@@ -61,11 +61,12 @@ pub fn start_rest_apis(
 	chain: Arc<chain::Chain>,
 	tx_pool: Arc<RwLock<pool::TransactionPool>>,
 	peers: Arc<p2p::Peers>,
+	sync_state: Arc<chain::SyncState>,
 	api_secret: Option<String>,
 	tls_config: Option<TLSConfig>,
 ) -> bool {
 	let mut apis = ApiServer::new();
-	let mut router = build_router(chain, tx_pool, peers).expect("unable to build API router");
+	let mut router = build_router(chain, tx_pool, peers, sync_state).expect("unable to build API router");
 	if let Some(api_secret) = api_secret {
 		let api_basic_auth = format!("Basic {}", util::to_base64(&format!("grin:{}", api_secret)));
 		let basic_auth_middleware =
@@ -89,6 +90,7 @@ pub fn build_router(
 	chain: Arc<chain::Chain>,
 	tx_pool: Arc<RwLock<pool::TransactionPool>>,
 	peers: Arc<p2p::Peers>,
+	sync_state: Arc<chain::SyncState>,
 ) -> Result<Router, RouterError> {
 	let route_list = vec![
 		"get blocks".to_string(),
@@ -138,6 +140,7 @@ pub fn build_router(
 	let status_handler = StatusHandler {
 		chain: Arc::downgrade(&chain),
 		peers: Arc::downgrade(&peers),
+		sync_state: Arc::downgrade(&sync_state),
 	};
 	let kernel_download_handler = KernelDownloadHandler {
 		peers: Arc::downgrade(&peers),

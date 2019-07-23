@@ -16,6 +16,7 @@
 
 use chrono::prelude::{DateTime, Utc};
 use std::sync::Arc;
+use std::fmt;
 
 use crate::core::core::hash::{Hash, Hashed, ZERO_HASH};
 use crate::core::core::{Block, BlockHeader};
@@ -82,6 +83,12 @@ pub enum SyncStatus {
 		highest_height: u64,
 	},
 	Shutdown,
+}
+
+impl fmt::Display for SyncStatus {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        fmt::Debug::fmt(self, f)
+    }
 }
 
 /// Current sync state. Encapsulates the current SyncStatus.

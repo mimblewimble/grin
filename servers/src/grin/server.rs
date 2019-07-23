@@ -288,6 +288,7 @@ impl Server {
 			shared_chain.clone(),
 			tx_pool.clone(),
 			p2p_server.peers.clone(),
+			sync_state.clone(),
 			api_secret,
 			tls_conf,
 		);

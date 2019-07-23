@@ -64,6 +64,7 @@ impl Handler for KernelDownloadHandler {
 pub struct StatusHandler {
 	pub chain: Weak<chain::Chain>,
 	pub peers: Weak<p2p::Peers>,
+	pub sync_state: Weak<chain::SyncState>,
 }
 
 impl StatusHandler {
@@ -71,9 +72,11 @@ impl StatusHandler {
 		let head = w(&self.chain)?
 			.head()
 			.map_err(|e| ErrorKind::Internal(format!("can't get head: {}", e)))?;
+		let sync_status = w(&self.sync_state)?.status();
 		Ok(Status::from_tip_and_peers(
 			head,
 			w(&self.peers)?.peer_count(),
+			sync_status,
 		))
 	}
 }
