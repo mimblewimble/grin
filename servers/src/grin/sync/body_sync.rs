@@ -17,8 +17,7 @@ use chrono::Duration;
 use std::cmp;
 use std::sync::Arc;
 
-use crate::chain;
-use crate::common::types::{SyncState, SyncStatus};
+use crate::chain::{self, SyncState, SyncStatus};
 use crate::core::core::hash::Hash;
 use crate::p2p;
 

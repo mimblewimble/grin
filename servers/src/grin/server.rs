@@ -30,13 +30,13 @@ use fs2::FileExt;
 
 use crate::api;
 use crate::api::TLSConfig;
-use crate::chain;
+use crate::chain::{self, SyncState, SyncStatus};
 use crate::common::adapters::{
 	ChainToPoolAndNetAdapter, NetToChainAdapter, PoolToChainAdapter, PoolToNetAdapter,
 };
 use crate::common::hooks::{init_chain_hooks, init_net_hooks};
 use crate::common::stats::{DiffBlock, DiffStats, PeerStats, ServerStateInfo, ServerStats};
-use crate::common::types::{Error, ServerConfig, StratumServerConfig, SyncState, SyncStatus};
+use crate::common::types::{Error, ServerConfig, StratumServerConfig};
 use crate::core::core::hash::{Hashed, ZERO_HASH};
 use crate::core::core::verifier_cache::{LruVerifierCache, VerifierCache};
 use crate::core::ser::ProtocolVersion;
