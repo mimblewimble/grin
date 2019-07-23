@@ -22,7 +22,7 @@ use chrono::prelude::Utc;
 use std::sync::Arc;
 
 use crate::chain;
-use crate::common::types::{StratumServerConfig, SyncState};
+use crate::common::types::StratumServerConfig;
 use crate::core::core::hash::{Hash, Hashed};
 use crate::core::core::verifier_cache::VerifierCache;
 use crate::core::core::{Block, BlockHeader};
@@ -30,6 +30,7 @@ use crate::core::global;
 use crate::mining::mine_block;
 use crate::pool;
 use crate::util::StopState;
+use grin_chain::SyncState;
 use std::thread;
 use std::time::Duration;
 
