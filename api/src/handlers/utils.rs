@@ -54,8 +54,11 @@ pub fn get_output(
 	for x in outputs.iter() {
 		let res = chain.is_unspent(x);
 		match res {
-			Ok((_hash, output_pos, block_height)) => {
-				return Ok((Output::new(&commit, block_height, output_pos), x.clone()));
+			Ok(output_pos) => {
+				return Ok((
+					Output::new(&commit, output_pos.height, output_pos.position),
+					x.clone(),
+				));
 			}
 			Err(e) => {
 				trace!(

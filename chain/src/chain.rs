@@ -30,7 +30,8 @@ use crate::store;
 use crate::txhashset;
 use crate::txhashset::TxHashSet;
 use crate::types::{
-	BlockStatus, ChainAdapter, NoStatus, Options, Tip, TxHashSetRoots, TxHashsetWriteStatus,
+	BlockStatus, ChainAdapter, NoStatus, Options, OutputMMRPosition, Tip, TxHashSetRoots,
+	TxHashsetWriteStatus,
 };
 use crate::util::secp::pedersen::{Commitment, RangeProof};
 use crate::util::RwLock;
@@ -461,7 +462,7 @@ impl Chain {
 	/// spent. This querying is done in a way that is consistent with the
 	/// current chain state, specifically the current winning (valid, most
 	/// work) fork.
-	pub fn is_unspent(&self, output_ref: &OutputIdentifier) -> Result<(Hash, u64, u64), Error> {
+	pub fn is_unspent(&self, output_ref: &OutputIdentifier) -> Result<OutputMMRPosition, Error> {
 		let txhashset = self.txhashset.read();
 		txhashset.is_unspent(output_ref)
 	}
@@ -1281,20 +1282,8 @@ impl Chain {
 	) -> Result<BlockHeader, Error> {
 		let txhashset = self.txhashset.read();
 
-		let (_hash, _pos, height) = txhashset.is_unspent(output_ref)?;
-		Ok(txhashset.get_header_by_height(height)?)
-	}
-
-	/// Gets the MMR position in which a given output appears in the txhashset,
-	/// and the block height of this output.
-	pub fn get_output_pos_height(
-		&self,
-		output_ref: &OutputIdentifier,
-	) -> Result<(u64, u64), Error> {
-		let txhashset = self.txhashset.read();
-
-		let (_, pos, height) = txhashset.is_unspent(output_ref)?;
-		Ok((pos, height))
+		let output_pos = txhashset.is_unspent(output_ref)?;
+		Ok(txhashset.get_header_by_height(output_pos.height)?)
 	}
 
 	/// Verifies the given block header is actually on the current chain.
