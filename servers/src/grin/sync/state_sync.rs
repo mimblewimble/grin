@@ -118,8 +118,9 @@ impl StateSync {
 			if let SyncStatus::TxHashsetDownload { .. } = self.sync_state.status() {
 				if download_timeout {
 					error!("state_sync: TxHashsetDownload status timeout in 10 minutes!");
-					self.sync_state
-						.set_sync_error(chain::ErrorKind::SyncError(format!("{:?}", p2p::Error::Timeout)).into());
+					self.sync_state.set_sync_error(
+						chain::ErrorKind::SyncError(format!("{:?}", p2p::Error::Timeout)).into(),
+					);
 				}
 			}
 
@@ -129,7 +130,9 @@ impl StateSync {
 					Ok(peer) => {
 						self.state_sync_peer = Some(peer);
 					}
-					Err(e) => self.sync_state.set_sync_error(chain::ErrorKind::SyncError(format!("{:?}", e)).into()),
+					Err(e) => self
+						.sync_state
+						.set_sync_error(chain::ErrorKind::SyncError(format!("{:?}", e)).into()),
 				}
 
 				// to avoid the confusing log,

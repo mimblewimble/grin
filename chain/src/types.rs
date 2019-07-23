@@ -38,7 +38,6 @@ bitflags! {
 	}
 }
 
-
 /// Various status sync can be in, whether it's fast sync or archival.
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
 #[allow(missing_docs)]

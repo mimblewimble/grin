@@ -32,7 +32,8 @@ use crate::api;
 use crate::api::TLSConfig;
 use crate::chain::{self, SyncState, SyncStatus};
 use crate::common::adapters::{
-	ChainToPoolAndNetAdapter, NetToChainAdapter, PoolToChainAdapter, PoolToNetAdapter};
+	ChainToPoolAndNetAdapter, NetToChainAdapter, PoolToChainAdapter, PoolToNetAdapter,
+};
 use crate::common::hooks::{init_chain_hooks, init_net_hooks};
 use crate::common::stats::{DiffBlock, DiffStats, PeerStats, ServerStateInfo, ServerStats};
 use crate::common::types::{Error, ServerConfig, StratumServerConfig};
