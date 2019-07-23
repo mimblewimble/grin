@@ -32,9 +32,9 @@ use std::sync::Arc;
 use std::time::{Duration, SystemTime};
 use std::{cmp, thread};
 
-use crate::chain;
+use crate::chain::{self, SyncState};
 use crate::common::stats::{StratumStats, WorkerStats};
-use crate::common::types::{StratumServerConfig, SyncState};
+use crate::common::types::StratumServerConfig;
 use crate::core::core::hash::Hashed;
 use crate::core::core::verifier_cache::VerifierCache;
 use crate::core::core::Block;
