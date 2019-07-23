@@ -95,8 +95,8 @@ pub const PEER_EXPIRATION_REMOVE_TIME: i64 = PEER_EXPIRATION_DAYS * 24 * 3600;
 /// For a node configured as "archival_mode = true" only the txhashset will be compacted.
 pub const COMPACTION_CHECK: u64 = DAY_HEIGHT;
 
-/// Automated testing number of blocks to reuse a txhashset zip for.
-pub const AUTOMATED_TESTING_TXHASHSET_ARCHIVE_INTERVAL: u64 = 10;
+/// Number of blocks to reuse a txhashset zip for (automated testing and user testing).
+pub const TESTING_TXHASHSET_ARCHIVE_INTERVAL: u64 = 10;
 
 /// Number of blocks to reuse a txhashset zip for.
 pub const TXHASHSET_ARCHIVE_INTERVAL: u64 = 12 * 60;
@@ -290,7 +290,8 @@ pub fn state_sync_threshold() -> u32 {
 pub fn txhashset_archive_interval() -> u64 {
 	let param_ref = CHAIN_TYPE.read();
 	match *param_ref {
-		ChainTypes::AutomatedTesting => AUTOMATED_TESTING_TXHASHSET_ARCHIVE_INTERVAL,
+		ChainTypes::AutomatedTesting => TESTING_TXHASHSET_ARCHIVE_INTERVAL,
+		ChainTypes::UserTesting => TESTING_TXHASHSET_ARCHIVE_INTERVAL,
 		_ => TXHASHSET_ARCHIVE_INTERVAL,
 	}
 }
