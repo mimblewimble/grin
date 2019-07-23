@@ -45,4 +45,6 @@ pub mod types;
 pub use crate::chain::{Chain, MAX_ORPHAN_SIZE};
 pub use crate::error::{Error, ErrorKind};
 pub use crate::store::ChainStore;
-pub use crate::types::{BlockStatus, ChainAdapter, Options, Tip, TxHashsetWriteStatus};
+pub use crate::types::{
+	BlockStatus, ChainAdapter, Options, SyncState, SyncStatus, Tip, TxHashsetWriteStatus,
+};

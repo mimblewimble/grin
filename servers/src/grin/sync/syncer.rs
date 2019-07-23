@@ -16,8 +16,7 @@ use std::sync::Arc;
 use std::thread;
 use std::time;
 
-use crate::chain;
-use crate::common::types::{SyncState, SyncStatus};
+use crate::chain::{self, SyncState, SyncStatus};
 use crate::core::global;
 use crate::core::pow::Difficulty;
 use crate::grin::sync::body_sync::BodySync;
