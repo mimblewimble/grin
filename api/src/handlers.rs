@@ -66,7 +66,8 @@ pub fn start_rest_apis(
 	tls_config: Option<TLSConfig>,
 ) -> bool {
 	let mut apis = ApiServer::new();
-	let mut router = build_router(chain, tx_pool, peers, sync_state).expect("unable to build API router");
+	let mut router =
+		build_router(chain, tx_pool, peers, sync_state).expect("unable to build API router");
 	if let Some(api_secret) = api_secret {
 		let api_basic_auth = format!("Basic {}", util::to_base64(&format!("grin:{}", api_secret)));
 		let basic_auth_middleware =
