@@ -16,8 +16,7 @@ use chrono::prelude::{DateTime, Utc};
 use chrono::Duration;
 use std::sync::Arc;
 
-use crate::chain;
-use crate::common::types::{Error, SyncState, SyncStatus};
+use crate::chain::{self, SyncState, SyncStatus};
 use crate::core::core::hash::Hashed;
 use crate::core::global;
 use crate::p2p::{self, Peer};
@@ -120,7 +119,7 @@ impl StateSync {
 				if download_timeout {
 					error!("state_sync: TxHashsetDownload status timeout in 10 minutes!");
 					self.sync_state
-						.set_sync_error(Error::P2P(p2p::Error::Timeout));
+						.set_sync_error(chain::ErrorKind::SyncError(format!("{:?}", p2p::Error::Timeout)).into());
 				}
 			}
 
@@ -130,7 +129,7 @@ impl StateSync {
 					Ok(peer) => {
 						self.state_sync_peer = Some(peer);
 					}
-					Err(e) => self.sync_state.set_sync_error(Error::P2P(e)),
+					Err(e) => self.sync_state.set_sync_error(chain::ErrorKind::SyncError(format!("{:?}", e)).into()),
 				}
 
 				// to avoid the confusing log,

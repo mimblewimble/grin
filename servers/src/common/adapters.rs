@@ -23,11 +23,9 @@ use std::sync::{Arc, Weak};
 use std::thread;
 use std::time::Instant;
 
-use crate::chain::{self, BlockStatus, ChainAdapter, Options};
+use crate::chain::{self, BlockStatus, ChainAdapter, SyncState, SyncStatus, Options};
 use crate::common::hooks::{ChainEvents, NetEvents};
-use crate::common::types::{
-	self, ChainValidationMode, DandelionEpoch, ServerConfig, SyncState, SyncStatus,
-};
+use crate::common::types::{ChainValidationMode, DandelionEpoch, ServerConfig};
 use crate::core::core::hash::{Hash, Hashed};
 use crate::core::core::transaction::Transaction;
 use crate::core::core::verifier_cache::VerifierCache;
@@ -428,7 +426,7 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 			error!("Failed to save txhashset archive: {}", e);
 
 			let is_good_data = !e.is_bad_data();
-			self.sync_state.set_sync_error(types::Error::Chain(e));
+			self.sync_state.set_sync_error(e);
 			Ok(is_good_data)
 		} else {
 			info!("Received valid txhashset data for {}.", h);
