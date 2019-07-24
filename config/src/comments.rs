@@ -96,6 +96,17 @@ fn comments() -> HashMap<String, String> {
 	);
 
 	retval.insert(
+		"fixed_difficulty".to_string(),
+		"
+#Fixed difficulty can be set when chain type is set to UserTesting to prevent
+#the mining difficulty to rise. Setting it to 0 turns the feature off.
+#Values below 3, the minimum difficulty will have no effect and will behave as if
+#it was set to 0.
+"
+			.to_string(),
+	);
+
+	retval.insert(
 		"archive_mode".to_string(),
 		"
 #run the node in \"full archive\" mode (default is fast-sync, pruned node)
