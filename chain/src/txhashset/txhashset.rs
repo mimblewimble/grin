@@ -710,6 +710,7 @@ impl<'a> HeaderExtension<'a> {
 		self.pmmr.unpruned_size()
 	}
 
+	/// TODO - think about how to optimize this.
 	/// Requires *all* header hashes to be iterated over in ascending order.
 	pub fn rebuild(&mut self, head: &Tip, genesis: &BlockHeader) -> Result<(), Error> {
 		debug!(
