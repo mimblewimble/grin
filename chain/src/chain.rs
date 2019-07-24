@@ -23,7 +23,7 @@ use crate::core::core::{
 };
 use crate::core::global;
 use crate::core::pow;
-use crate::core::ser::{Readable, StreamingReader};
+use crate::core::ser::{ProtocolVersion, Readable, StreamingReader};
 use crate::error::{Error, ErrorKind};
 use crate::pipe;
 use crate::store;
@@ -386,7 +386,6 @@ impl Chain {
 			verifier_cache: self.verifier_cache.clone(),
 			txhashset,
 			batch,
-			orphans: self.orphans.clone(),
 		})
 	}
 
@@ -647,7 +646,7 @@ impl Chain {
 	/// TODO - Write this data to disk and validate the rebuilt kernel MMR.
 	pub fn kernel_data_write(&self, reader: &mut Read) -> Result<(), Error> {
 		let mut count = 0;
-		let mut stream = StreamingReader::new(reader, Duration::from_secs(1));
+		let mut stream = StreamingReader::new(reader, ProtocolVersion::local());
 		while let Ok(_kernel) = TxKernelEntry::read(&mut stream) {
 			count += 1;
 		}
@@ -683,6 +682,27 @@ impl Chain {
 			header.kernel_mmr_size,
 			txhashset_reader,
 		))
+	}
+
+	/// To support the ability to download the txhashset from multiple peers in parallel,
+	/// the peers must all agree on the exact binary representation of the txhashset.
+	/// This means compacting and rewinding to the exact same header.
+	/// Since compaction is a heavy operation, peers can agree to compact every 12 hours,
+	/// and no longer support requesting arbitrary txhashsets.
+	/// Here we return the header of the txhashset we are currently offering to peers.
+	pub fn txhashset_archive_header(&self) -> Result<BlockHeader, Error> {
+		let sync_threshold = global::state_sync_threshold() as u64;
+		let body_head = self.head()?;
+		let archive_interval = global::txhashset_archive_interval();
+		let mut txhashset_height = body_head.height.saturating_sub(sync_threshold);
+		txhashset_height = txhashset_height.saturating_sub(txhashset_height % archive_interval);
+
+		debug!(
+			"txhashset_archive_header: body_head - {}, {}, txhashset height - {}",
+			body_head.last_block_h, body_head.height, txhashset_height,
+		);
+
+		self.get_header_by_height(txhashset_height)
 	}
 
 	// Special handling to make sure the whole kernel set matches each of its

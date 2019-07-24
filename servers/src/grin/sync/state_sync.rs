@@ -16,8 +16,7 @@ use chrono::prelude::{DateTime, Utc};
 use chrono::Duration;
 use std::sync::Arc;
 
-use crate::chain;
-use crate::common::types::{Error, SyncState, SyncStatus};
+use crate::chain::{self, SyncState, SyncStatus};
 use crate::core::core::hash::Hashed;
 use crate::core::global;
 use crate::p2p::{self, Peer};
@@ -119,8 +118,9 @@ impl StateSync {
 			if let SyncStatus::TxHashsetDownload { .. } = self.sync_state.status() {
 				if download_timeout {
 					error!("state_sync: TxHashsetDownload status timeout in 10 minutes!");
-					self.sync_state
-						.set_sync_error(Error::P2P(p2p::Error::Timeout));
+					self.sync_state.set_sync_error(
+						chain::ErrorKind::SyncError(format!("{:?}", p2p::Error::Timeout)).into(),
+					);
 				}
 			}
 
@@ -130,7 +130,9 @@ impl StateSync {
 					Ok(peer) => {
 						self.state_sync_peer = Some(peer);
 					}
-					Err(e) => self.sync_state.set_sync_error(Error::P2P(e)),
+					Err(e) => self
+						.sync_state
+						.set_sync_error(chain::ErrorKind::SyncError(format!("{:?}", e)).into()),
 				}
 
 				// to avoid the confusing log,
@@ -160,6 +162,9 @@ impl StateSync {
 
 	fn request_state(&self, header_head: &chain::Tip) -> Result<Arc<Peer>, p2p::Error> {
 		let threshold = global::state_sync_threshold() as u64;
+		let archive_interval = global::txhashset_archive_interval();
+		let mut txhashset_height = header_head.height.saturating_sub(threshold);
+		txhashset_height = txhashset_height.saturating_sub(txhashset_height % archive_interval);
 
 		if let Some(peer) = self.peers.most_work_peer() {
 			// ask for txhashset at state_sync_threshold
@@ -173,7 +178,7 @@ impl StateSync {
 					);
 					p2p::Error::Internal
 				})?;
-			for _ in 0..threshold {
+			while txhashset_head.height > txhashset_height {
 				txhashset_head = self
 					.chain
 					.get_previous_header(&txhashset_head)

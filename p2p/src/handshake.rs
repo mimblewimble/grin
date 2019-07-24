@@ -14,7 +14,8 @@
 
 use crate::core::core::hash::Hash;
 use crate::core::pow::Difficulty;
-use crate::msg::{read_message, write_message, Hand, ProtocolVersion, Shake, Type, USER_AGENT};
+use crate::core::ser::ProtocolVersion;
+use crate::msg::{read_message, write_message, Hand, Shake, Type, USER_AGENT};
 use crate::peer::Peer;
 use crate::types::{Capabilities, Direction, Error, P2PConfig, PeerAddr, PeerInfo, PeerLiveInfo};
 use crate::util::RwLock;
@@ -60,7 +61,7 @@ impl Handshake {
 
 	pub fn initiate(
 		&self,
-		capab: Capabilities,
+		capabilities: Capabilities,
 		total_difficulty: Difficulty,
 		self_addr: PeerAddr,
 		conn: &mut TcpStream,
@@ -72,20 +73,26 @@ impl Handshake {
 			Err(e) => return Err(Error::Connection(e)),
 		};
 
+		// Using our default "local" protocol version.
+		let version = ProtocolVersion::local();
+
 		let hand = Hand {
-			version: ProtocolVersion::default(),
-			capabilities: capab,
-			nonce: nonce,
+			version,
+			capabilities,
+			nonce,
 			genesis: self.genesis,
-			total_difficulty: total_difficulty,
+			total_difficulty,
 			sender_addr: self_addr,
 			receiver_addr: peer_addr,
 			user_agent: USER_AGENT.to_string(),
 		};
 
 		// write and read the handshake response
-		write_message(conn, hand, Type::Hand)?;
-		let shake: Shake = read_message(conn, Type::Shake)?;
+		write_message(conn, hand, Type::Hand, version)?;
+
+		// Note: We have to read the Shake message *before* we know which protocol
+		// version our peer supports (it is in the shake message itself).
+		let shake: Shake = read_message(conn, version, Type::Shake)?;
 		if shake.genesis != self.genesis {
 			return Err(Error::GenesisMismatch {
 				us: self.genesis,
@@ -124,7 +131,11 @@ impl Handshake {
 		total_difficulty: Difficulty,
 		conn: &mut TcpStream,
 	) -> Result<PeerInfo, Error> {
-		let hand: Hand = read_message(conn, Type::Hand)?;
+		// Note: We read the Hand message *before* we know which protocol version
+		// is supported by our peer (in the Hand message).
+		let version = ProtocolVersion::local();
+
+		let hand: Hand = read_message(conn, version, Type::Hand)?;
 
 		// all the reasons we could refuse this connection for
 		if hand.genesis != self.genesis {
@@ -167,17 +178,16 @@ impl Handshake {
 
 		// send our reply with our info
 		let shake = Shake {
-			version: ProtocolVersion::default(),
+			version,
 			capabilities: capab,
 			genesis: self.genesis,
 			total_difficulty: total_difficulty,
 			user_agent: USER_AGENT.to_string(),
 		};
 
-		write_message(conn, shake, Type::Shake)?;
+		write_message(conn, shake, Type::Shake, version)?;
 		trace!("Success handshake with {}.", peer_info.addr);
 
-		// when more than one protocol version is supported, choosing should go here
 		Ok(peer_info)
 	}
 

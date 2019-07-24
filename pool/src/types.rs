@@ -39,23 +39,32 @@ const DANDELION_AGGREGATION_SECS: u16 = 30;
 /// Dandelion stem probability (stem 90% of the time, fluff 10%).
 const DANDELION_STEM_PROBABILITY: u8 = 90;
 
+/// Always stem our (pushed via api) txs?
+/// Defaults to true to match the Dandelion++ paper.
+/// But can be overridden to allow a node to fluff our txs if desired.
+/// If set to false we will stem/fluff our txs as per current epoch.
+const DANDELION_ALWAYS_STEM_OUR_TXS: bool = true;
+
 /// Configuration for "Dandelion".
 /// Note: shared between p2p and pool.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct DandelionConfig {
 	/// Length of each "epoch".
 	#[serde(default = "default_dandelion_epoch_secs")]
-	pub epoch_secs: Option<u16>,
+	pub epoch_secs: u16,
 	/// Dandelion embargo timer. Fluff and broadcast individual txs if not seen
 	/// on network before embargo expires.
 	#[serde(default = "default_dandelion_embargo_secs")]
-	pub embargo_secs: Option<u16>,
+	pub embargo_secs: u16,
 	/// Dandelion aggregation timer.
 	#[serde(default = "default_dandelion_aggregation_secs")]
-	pub aggregation_secs: Option<u16>,
+	pub aggregation_secs: u16,
 	/// Dandelion stem probability (stem 90% of the time, fluff 10% etc.)
 	#[serde(default = "default_dandelion_stem_probability")]
-	pub stem_probability: Option<u8>,
+	pub stem_probability: u8,
+	/// Default to always stem our txs as described in Dandelion++ paper.
+	#[serde(default = "default_dandelion_always_stem_our_txs")]
+	pub always_stem_our_txs: bool,
 }
 
 impl Default for DandelionConfig {
@@ -65,24 +74,29 @@ impl Default for DandelionConfig {
 			embargo_secs: default_dandelion_embargo_secs(),
 			aggregation_secs: default_dandelion_aggregation_secs(),
 			stem_probability: default_dandelion_stem_probability(),
+			always_stem_our_txs: default_dandelion_always_stem_our_txs(),
 		}
 	}
 }
 
-fn default_dandelion_epoch_secs() -> Option<u16> {
-	Some(DANDELION_EPOCH_SECS)
+fn default_dandelion_epoch_secs() -> u16 {
+	DANDELION_EPOCH_SECS
 }
 
-fn default_dandelion_embargo_secs() -> Option<u16> {
-	Some(DANDELION_EMBARGO_SECS)
+fn default_dandelion_embargo_secs() -> u16 {
+	DANDELION_EMBARGO_SECS
 }
 
-fn default_dandelion_aggregation_secs() -> Option<u16> {
-	Some(DANDELION_AGGREGATION_SECS)
+fn default_dandelion_aggregation_secs() -> u16 {
+	DANDELION_AGGREGATION_SECS
 }
 
-fn default_dandelion_stem_probability() -> Option<u8> {
-	Some(DANDELION_STEM_PROBABILITY)
+fn default_dandelion_stem_probability() -> u8 {
+	DANDELION_STEM_PROBABILITY
+}
+
+fn default_dandelion_always_stem_our_txs() -> bool {
+	DANDELION_ALWAYS_STEM_OUR_TXS
 }
 
 /// Transaction pool configuration
@@ -145,20 +159,29 @@ pub struct PoolEntry {
 	pub tx: Transaction,
 }
 
-/// Placeholder: the data representing where we heard about a tx from.
-///
 /// Used to make decisions based on transaction acceptance priority from
 /// various sources. For example, a node may want to bypass pool size
 /// restrictions when accepting a transaction from a local wallet.
 ///
 /// Most likely this will evolve to contain some sort of network identifier,
 /// once we get a better sense of what transaction building might look like.
-#[derive(Clone, Debug)]
-pub struct TxSource {
-	/// Human-readable name used for logging and errors.
-	pub debug_name: String,
-	/// Unique identifier used to distinguish this peer from others.
-	pub identifier: String,
+#[derive(Clone, Debug, PartialEq)]
+pub enum TxSource {
+	PushApi,
+	Broadcast,
+	Fluff,
+	EmbargoExpired,
+	Deaggregate,
+}
+
+impl TxSource {
+	/// Convenience fn for checking if this tx was sourced via the push api.
+	pub fn is_pushed(&self) -> bool {
+		match self {
+			TxSource::PushApi => true,
+			_ => false,
+		}
+	}
 }
 
 /// Possible errors when interacting with the transaction pool.
@@ -250,10 +273,10 @@ pub trait BlockChain: Sync + Send {
 /// importantly the broadcasting of transactions to our peers.
 pub trait PoolAdapter: Send + Sync {
 	/// The transaction pool has accepted this transaction as valid.
-	fn tx_accepted(&self, tx: &transaction::Transaction);
+	fn tx_accepted(&self, entry: &PoolEntry);
 
 	/// The stem transaction pool has accepted this transactions as valid.
-	fn stem_tx_accepted(&self, tx: &transaction::Transaction) -> Result<(), PoolError>;
+	fn stem_tx_accepted(&self, entry: &PoolEntry) -> Result<(), PoolError>;
 }
 
 /// Dummy adapter used as a placeholder for real implementations
@@ -261,8 +284,8 @@ pub trait PoolAdapter: Send + Sync {
 pub struct NoopAdapter {}
 
 impl PoolAdapter for NoopAdapter {
-	fn tx_accepted(&self, _tx: &transaction::Transaction) {}
-	fn stem_tx_accepted(&self, _tx: &transaction::Transaction) -> Result<(), PoolError> {
+	fn tx_accepted(&self, _entry: &PoolEntry) {}
+	fn stem_tx_accepted(&self, _entry: &PoolEntry) -> Result<(), PoolError> {
 		Ok(())
 	}
 }

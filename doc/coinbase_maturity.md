@@ -1,5 +1,7 @@
 # The Coinbase Maturity Rule (aka Output Lock Heights)
 
+*Read this in other languages: [Korean](coinbase_maturity_KR.md).*
+
 Coinbase outputs (block rewards & fees) are "locked" and require 1,440 confirmations (i.e 24 hours worth of blocks added to the chain) before they mature sufficiently to be spendable. This is to reduce the risk of later txs being reversed if a chain reorganization occurs.
 
 Bitcoin does something very similar, requiring 100 confirmations (Bitcoin blocks are every 10 minutes, Grin blocks are every 60 seconds) before mining rewards can be spent.
@@ -98,7 +100,7 @@ We maintain an index mapping commitment to position in the output MMR.
 
 If no entry in the index exists or no entry in the output MMR exists for a given commitment then we now the output is not spendable (either it was spent previously or it never existed).
 
-If we find an entry in the output MMR then we know a spendable output exists in the Output set *but* we do not know if this is the correct one. We do not if it is a coinbase output or not and we do not know the height of the block it originated from.
+If we find an entry in the output MMR then we know a spendable output exists in the Output set *but* we do not know if this is the correct one. We do not know if it is a coinbase output or not and we do not know the height of the block it originated from.
 
 If the hash stored in the output MMR covers both the commitment and the output features and we require an input to provide both the commitment and the feature then we can do a further validation step -
 
