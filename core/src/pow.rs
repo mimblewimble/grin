@@ -73,7 +73,6 @@ pub fn verify_size(bh: &BlockHeader) -> Result<(), Error> {
 pub fn mine_genesis_block() -> Result<Block, Error> {
 	let mut gen = genesis::genesis_dev();
 	if global::is_user_testing_mode() || global::is_automated_testing_mode() {
-		gen = genesis::genesis_dev();
 		gen.header.timestamp = Utc::now();
 	}
 

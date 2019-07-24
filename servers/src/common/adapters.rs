@@ -23,11 +23,9 @@ use std::sync::{Arc, Weak};
 use std::thread;
 use std::time::Instant;
 
-use crate::chain::{self, BlockStatus, ChainAdapter, Options};
+use crate::chain::{self, BlockStatus, ChainAdapter, Options, SyncState, SyncStatus};
 use crate::common::hooks::{ChainEvents, NetEvents};
-use crate::common::types::{
-	self, ChainValidationMode, DandelionEpoch, ServerConfig, SyncState, SyncStatus,
-};
+use crate::common::types::{ChainValidationMode, DandelionEpoch, ServerConfig};
 use crate::core::core::hash::{Hash, Hashed};
 use crate::core::core::transaction::Transaction;
 use crate::core::core::verifier_cache::VerifierCache;
@@ -238,11 +236,11 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 		bh: core::BlockHeader,
 		peer_info: &PeerInfo,
 	) -> Result<bool, chain::Error> {
-		let bhash = bh.hash();
-		debug!(
-			"Received block header {} at {} from {}, going to process.",
-			bhash, bh.height, peer_info.addr,
-		);
+		if !self.sync_state.is_syncing() {
+			for hook in &self.hooks {
+				hook.on_header_received(&bh, &peer_info.addr);
+			}
+		}
 
 		// pushing the new block header through the header chain pipeline
 		// we will go ask for the block if this is a new header
@@ -251,7 +249,11 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 			.process_block_header(&bh, self.chain_opts(false));
 
 		if let Err(e) = res {
-			debug!("Block header {} refused by chain: {:?}", bhash, e.kind());
+			debug!(
+				"Block header {} refused by chain: {:?}",
+				bh.hash(),
+				e.kind()
+			);
 			if e.is_bad_data() {
 				return Ok(false);
 			} else {
@@ -368,6 +370,10 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 		}
 	}
 
+	fn txhashset_archive_header(&self) -> Result<core::BlockHeader, chain::Error> {
+		self.chain().txhashset_archive_header()
+	}
+
 	fn txhashset_receive_ready(&self) -> bool {
 		match self.sync_state.status() {
 			SyncStatus::TxHashsetDownload { .. } => true,
@@ -424,7 +430,7 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 			error!("Failed to save txhashset archive: {}", e);
 
 			let is_good_data = !e.is_bad_data();
-			self.sync_state.set_sync_error(types::Error::Chain(e));
+			self.sync_state.set_sync_error(e);
 			Ok(is_good_data)
 		} else {
 			info!("Received valid txhashset data for {}.", h);

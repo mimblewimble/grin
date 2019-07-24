@@ -24,7 +24,7 @@ use cursive::Cursive;
 use crate::tui::constants::VIEW_BASIC_STATUS;
 use crate::tui::types::TUIStatusListener;
 
-use crate::servers::common::types::SyncStatus;
+use crate::chain::SyncStatus;
 use crate::servers::ServerStats;
 
 const NANO_TO_MILLIS: f64 = 1.0 / 1_000_000.0;

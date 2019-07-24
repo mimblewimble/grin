@@ -32,19 +32,18 @@ use crate::util::secp;
 use crate::util::RwLock;
 use chrono::Duration;
 use grin_core as core;
+use grin_core::global::ChainTypes;
 use grin_keychain as keychain;
 use grin_util as util;
 use std::sync::Arc;
-use std::time::Instant;
 
 fn verifier_cache() -> Arc<RwLock<dyn VerifierCache>> {
 	Arc::new(RwLock::new(LruVerifierCache::new()))
 }
 
-// Too slow for now #[test]
-// TODO: make this fast enough or add similar but faster test?
-#[allow(dead_code)]
+#[test]
 fn too_large_block() {
+	global::set_mining_mode(ChainTypes::AutomatedTesting);
 	let keychain = ExtKeychain::from_random_seed(false).unwrap();
 	let builder = ProofBuilder::new(&keychain);
 	let max_out = global::max_block_weight() / BLOCK_OUTPUT_WEIGHT;
@@ -59,10 +58,8 @@ fn too_large_block() {
 		parts.push(output(5, pks.pop().unwrap()));
 	}
 
-	let now = Instant::now();
 	parts.append(&mut vec![input(500000, pks.pop().unwrap()), with_fee(2)]);
 	let tx = build::transaction(parts, &keychain, &builder).unwrap();
-	println!("Build tx: {}", now.elapsed().as_secs());
 
 	let prev = BlockHeader::default();
 	let key_id = ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
@@ -264,6 +261,7 @@ fn serialize_deserialize_block() {
 
 #[test]
 fn empty_block_serialized_size() {
+	global::set_mining_mode(ChainTypes::AutomatedTesting);
 	let keychain = ExtKeychain::from_random_seed(false).unwrap();
 	let builder = ProofBuilder::new(&keychain);
 	let prev = BlockHeader::default();
@@ -271,12 +269,13 @@ fn empty_block_serialized_size() {
 	let b = new_block(vec![], &keychain, &builder, &prev, &key_id);
 	let mut vec = Vec::new();
 	ser::serialize_default(&mut vec, &b).expect("serialization failed");
-	let target_len = 1_265;
+	let target_len = 1_107;
 	assert_eq!(vec.len(), target_len);
 }
 
 #[test]
 fn block_single_tx_serialized_size() {
+	global::set_mining_mode(ChainTypes::AutomatedTesting);
 	let keychain = ExtKeychain::from_random_seed(false).unwrap();
 	let builder = ProofBuilder::new(&keychain);
 	let tx1 = tx1i2o();
@@ -285,12 +284,13 @@ fn block_single_tx_serialized_size() {
 	let b = new_block(vec![&tx1], &keychain, &builder, &prev, &key_id);
 	let mut vec = Vec::new();
 	ser::serialize_default(&mut vec, &b).expect("serialization failed");
-	let target_len = 2_847;
+	let target_len = 2_689;
 	assert_eq!(vec.len(), target_len);
 }
 
 #[test]
 fn empty_compact_block_serialized_size() {
+	global::set_mining_mode(ChainTypes::AutomatedTesting);
 	let keychain = ExtKeychain::from_random_seed(false).unwrap();
 	let builder = ProofBuilder::new(&keychain);
 	let prev = BlockHeader::default();
@@ -299,12 +299,13 @@ fn empty_compact_block_serialized_size() {
 	let cb: CompactBlock = b.into();
 	let mut vec = Vec::new();
 	ser::serialize_default(&mut vec, &cb).expect("serialization failed");
-	let target_len = 1_273;
+	let target_len = 1_115;
 	assert_eq!(vec.len(), target_len);
 }
 
 #[test]
 fn compact_block_single_tx_serialized_size() {
+	global::set_mining_mode(ChainTypes::AutomatedTesting);
 	let keychain = ExtKeychain::from_random_seed(false).unwrap();
 	let builder = ProofBuilder::new(&keychain);
 	let tx1 = tx1i2o();
@@ -314,15 +315,15 @@ fn compact_block_single_tx_serialized_size() {
 	let cb: CompactBlock = b.into();
 	let mut vec = Vec::new();
 	ser::serialize_default(&mut vec, &cb).expect("serialization failed");
-	let target_len = 1_279;
+	let target_len = 1_121;
 	assert_eq!(vec.len(), target_len);
 }
 
 #[test]
 fn block_10_tx_serialized_size() {
+	global::set_mining_mode(global::ChainTypes::AutomatedTesting);
 	let keychain = ExtKeychain::from_random_seed(false).unwrap();
 	let builder = ProofBuilder::new(&keychain);
-	global::set_mining_mode(global::ChainTypes::Mainnet);
 
 	let mut txs = vec![];
 	for _ in 0..10 {
@@ -334,12 +335,13 @@ fn block_10_tx_serialized_size() {
 	let b = new_block(txs.iter().collect(), &keychain, &builder, &prev, &key_id);
 	let mut vec = Vec::new();
 	ser::serialize_default(&mut vec, &b).expect("serialization failed");
-	let target_len = 17_085;
+	let target_len = 16_927;
 	assert_eq!(vec.len(), target_len,);
 }
 
 #[test]
 fn compact_block_10_tx_serialized_size() {
+	global::set_mining_mode(ChainTypes::AutomatedTesting);
 	let keychain = ExtKeychain::from_random_seed(false).unwrap();
 	let builder = ProofBuilder::new(&keychain);
 
@@ -354,7 +356,7 @@ fn compact_block_10_tx_serialized_size() {
 	let cb: CompactBlock = b.into();
 	let mut vec = Vec::new();
 	ser::serialize_default(&mut vec, &cb).expect("serialization failed");
-	let target_len = 1_333;
+	let target_len = 1_175;
 	assert_eq!(vec.len(), target_len,);
 }
 

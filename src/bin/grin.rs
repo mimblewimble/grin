@@ -24,6 +24,7 @@ use crate::core::global;
 use crate::util::init_logger;
 use clap::App;
 use grin_api as api;
+use grin_chain as chain;
 use grin_config as config;
 use grin_core as core;
 use grin_p2p as p2p;
@@ -70,7 +71,9 @@ fn main() {
 
 fn real_main() -> i32 {
 	let yml = load_yaml!("grin.yml");
-	let args = App::from_yaml(yml).get_matches();
+	let args = App::from_yaml(yml)
+		.version(built_info::PKG_VERSION)
+		.get_matches();
 	let node_config;
 
 	// Temporary wallet warning message
