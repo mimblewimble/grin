@@ -13,7 +13,7 @@
 // limitations under the License.
 
 use super::utils::w;
-use crate::chain;
+use crate::chain::{Chain, SyncState, SyncStatus};
 use crate::p2p;
 use crate::rest::*;
 use crate::router::{Handler, ResponseFuture};
@@ -62,9 +62,9 @@ impl Handler for KernelDownloadHandler {
 /// Status handler. Post a summary of the server status
 /// GET /v1/status
 pub struct StatusHandler {
-	pub chain: Weak<chain::Chain>,
+	pub chain: Weak<Chain>,
 	pub peers: Weak<p2p::Peers>,
-	pub sync_state: Weak<chain::SyncState>,
+	pub sync_state: Weak<SyncState>,
 }
 
 impl StatusHandler {
@@ -72,7 +72,10 @@ impl StatusHandler {
 		let head = w(&self.chain)?
 			.head()
 			.map_err(|e| ErrorKind::Internal(format!("can't get head: {}", e)))?;
-		let sync_status = w(&self.sync_state)?.status();
+		let sync_status = match w(&self.sync_state)?.status() {
+			SyncStatus::NoSync => "no_sync".to_owned(),
+			_ => "sync".to_owned(),
+		};
 		Ok(Status::from_tip_and_peers(
 			head,
 			w(&self.peers)?.peer_count(),
