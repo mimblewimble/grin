@@ -75,7 +75,7 @@ impl Peer {
 		let tracking_adapter = TrackingAdapter::new(adapter);
 		let handler = Protocol::new(Arc::new(tracking_adapter.clone()), info.clone());
 		let tracker = Arc::new(conn::Tracker::new());
-		let (sendh, stoph) = conn::listen(conn, tracker.clone(), handler)?;
+		let (sendh, stoph) = conn::listen(conn, info.version, tracker.clone(), handler)?;
 		let send_handle = Mutex::new(sendh);
 		let stop_handle = Mutex::new(stoph);
 		Ok(Peer {
@@ -224,7 +224,10 @@ impl Peer {
 
 	/// Send a msg with given msg_type to our peer via the connection.
 	fn send<T: Writeable>(&self, msg: T, msg_type: Type) -> Result<(), Error> {
-		let bytes = self.send_handle.lock().send(msg, msg_type)?;
+		let bytes = self
+			.send_handle
+			.lock()
+			.send(msg, msg_type, self.info.version)?;
 		self.tracker.inc_sent(bytes);
 		Ok(())
 	}
@@ -560,6 +563,10 @@ impl ChainAdapter for TrackingAdapter {
 
 	fn txhashset_read(&self, h: Hash) -> Option<TxHashSetRead> {
 		self.adapter.txhashset_read(h)
+	}
+
+	fn txhashset_archive_header(&self) -> Result<core::BlockHeader, chain::Error> {
+		self.adapter.txhashset_archive_header()
 	}
 
 	fn txhashset_receive_ready(&self) -> bool {

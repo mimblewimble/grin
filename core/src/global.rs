@@ -35,6 +35,13 @@ use crate::util::RwLock;
 /// Define these here, as they should be developer-set, not really tweakable
 /// by users
 
+/// The default "local" protocol version for this node.
+/// We negotiate compatible versions with each peer via Hand/Shake.
+/// Note: We also use a specific (possible different) protocol version
+/// for both the backend database and MMR data files.
+/// This one is p2p layer specific.
+pub const PROTOCOL_VERSION: u32 = 1;
+
 /// Automated testing edge_bits
 pub const AUTOMATED_TESTING_MIN_EDGE_BITS: u8 = 9;
 
@@ -54,7 +61,10 @@ pub const AUTOMATED_TESTING_COINBASE_MATURITY: u64 = 3;
 pub const USER_TESTING_COINBASE_MATURITY: u64 = 3;
 
 /// Testing cut through horizon in blocks
-pub const TESTING_CUT_THROUGH_HORIZON: u32 = 70;
+pub const AUTOMATED_TESTING_CUT_THROUGH_HORIZON: u32 = 20;
+
+/// Testing cut through horizon in blocks
+pub const USER_TESTING_CUT_THROUGH_HORIZON: u32 = 70;
 
 /// Testing state sync threshold in blocks
 pub const TESTING_STATE_SYNC_THRESHOLD: u32 = 20;
@@ -84,6 +94,12 @@ pub const PEER_EXPIRATION_REMOVE_TIME: i64 = PEER_EXPIRATION_DAYS * 24 * 3600;
 /// Will also remove old blocks and associated data from the database.
 /// For a node configured as "archival_mode = true" only the txhashset will be compacted.
 pub const COMPACTION_CHECK: u64 = DAY_HEIGHT;
+
+/// Number of blocks to reuse a txhashset zip for (automated testing and user testing).
+pub const TESTING_TXHASHSET_ARCHIVE_INTERVAL: u64 = 10;
+
+/// Number of blocks to reuse a txhashset zip for.
+pub const TXHASHSET_ARCHIVE_INTERVAL: u64 = 12 * 60;
 
 /// Types of chain a server can run with, dictates the genesis block and
 /// and mining parameters used.
@@ -254,8 +270,8 @@ pub fn max_block_weight() -> usize {
 pub fn cut_through_horizon() -> u32 {
 	let param_ref = CHAIN_TYPE.read();
 	match *param_ref {
-		ChainTypes::AutomatedTesting => TESTING_CUT_THROUGH_HORIZON,
-		ChainTypes::UserTesting => TESTING_CUT_THROUGH_HORIZON,
+		ChainTypes::AutomatedTesting => AUTOMATED_TESTING_CUT_THROUGH_HORIZON,
+		ChainTypes::UserTesting => USER_TESTING_CUT_THROUGH_HORIZON,
 		_ => CUT_THROUGH_HORIZON,
 	}
 }
@@ -267,6 +283,16 @@ pub fn state_sync_threshold() -> u32 {
 		ChainTypes::AutomatedTesting => TESTING_STATE_SYNC_THRESHOLD,
 		ChainTypes::UserTesting => TESTING_STATE_SYNC_THRESHOLD,
 		_ => STATE_SYNC_THRESHOLD,
+	}
+}
+
+/// Number of blocks to reuse a txhashset zip for.
+pub fn txhashset_archive_interval() -> u64 {
+	let param_ref = CHAIN_TYPE.read();
+	match *param_ref {
+		ChainTypes::AutomatedTesting => TESTING_TXHASHSET_ARCHIVE_INTERVAL,
+		ChainTypes::UserTesting => TESTING_TXHASHSET_ARCHIVE_INTERVAL,
+		_ => TXHASHSET_ARCHIVE_INTERVAL,
 	}
 }
 

@@ -14,10 +14,15 @@
 
 //! Base types that the block chain pipeline requires.
 
+use chrono::prelude::{DateTime, Utc};
+use std::sync::Arc;
+
 use crate::core::core::hash::{Hash, Hashed, ZERO_HASH};
 use crate::core::core::{Block, BlockHeader};
 use crate::core::pow::Difficulty;
 use crate::core::ser;
+use crate::error::Error;
+use crate::util::RwLock;
 
 bitflags! {
 /// Options for block validation
@@ -30,6 +35,171 @@ bitflags! {
 		const SYNC = 0b00000010;
 		/// Block validation on a block we mined ourselves
 		const MINE = 0b00000100;
+	}
+}
+
+/// Various status sync can be in, whether it's fast sync or archival.
+#[derive(Debug, Clone, Copy, Eq, PartialEq)]
+#[allow(missing_docs)]
+pub enum SyncStatus {
+	/// Initial State (we do not yet know if we are/should be syncing)
+	Initial,
+	/// Not syncing
+	NoSync,
+	/// Not enough peers to do anything yet, boolean indicates whether
+	/// we should wait at all or ignore and start ASAP
+	AwaitingPeers(bool),
+	/// Downloading block headers
+	HeaderSync {
+		current_height: u64,
+		highest_height: u64,
+	},
+	/// Downloading the various txhashsets
+	TxHashsetDownload {
+		start_time: DateTime<Utc>,
+		prev_update_time: DateTime<Utc>,
+		update_time: DateTime<Utc>,
+		prev_downloaded_size: u64,
+		downloaded_size: u64,
+		total_size: u64,
+	},
+	/// Setting up before validation
+	TxHashsetSetup,
+	/// Validating the full state
+	TxHashsetValidation {
+		kernels: u64,
+		kernel_total: u64,
+		rproofs: u64,
+		rproof_total: u64,
+	},
+	/// Finalizing the new state
+	TxHashsetSave,
+	/// State sync finalized
+	TxHashsetDone,
+	/// Downloading blocks
+	BodySync {
+		current_height: u64,
+		highest_height: u64,
+	},
+	Shutdown,
+}
+
+/// Current sync state. Encapsulates the current SyncStatus.
+pub struct SyncState {
+	current: RwLock<SyncStatus>,
+	sync_error: Arc<RwLock<Option<Error>>>,
+}
+
+impl SyncState {
+	/// Return a new SyncState initialize to NoSync
+	pub fn new() -> SyncState {
+		SyncState {
+			current: RwLock::new(SyncStatus::Initial),
+			sync_error: Arc::new(RwLock::new(None)),
+		}
+	}
+
+	/// Whether the current state matches any active syncing operation.
+	/// Note: This includes our "initial" state.
+	pub fn is_syncing(&self) -> bool {
+		*self.current.read() != SyncStatus::NoSync
+	}
+
+	/// Current syncing status
+	pub fn status(&self) -> SyncStatus {
+		*self.current.read()
+	}
+
+	/// Update the syncing status
+	pub fn update(&self, new_status: SyncStatus) {
+		if self.status() == new_status {
+			return;
+		}
+
+		let mut status = self.current.write();
+
+		debug!("sync_state: sync_status: {:?} -> {:?}", *status, new_status,);
+
+		*status = new_status;
+	}
+
+	/// Update txhashset downloading progress
+	pub fn update_txhashset_download(&self, new_status: SyncStatus) -> bool {
+		if let SyncStatus::TxHashsetDownload { .. } = new_status {
+			let mut status = self.current.write();
+			*status = new_status;
+			true
+		} else {
+			false
+		}
+	}
+
+	/// Communicate sync error
+	pub fn set_sync_error(&self, error: Error) {
+		*self.sync_error.write() = Some(error);
+	}
+
+	/// Get sync error
+	pub fn sync_error(&self) -> Arc<RwLock<Option<Error>>> {
+		Arc::clone(&self.sync_error)
+	}
+
+	/// Clear sync error
+	pub fn clear_sync_error(&self) {
+		*self.sync_error.write() = None;
+	}
+}
+
+impl TxHashsetWriteStatus for SyncState {
+	fn on_setup(&self) {
+		self.update(SyncStatus::TxHashsetSetup);
+	}
+
+	fn on_validation(&self, vkernels: u64, vkernel_total: u64, vrproofs: u64, vrproof_total: u64) {
+		let mut status = self.current.write();
+		match *status {
+			SyncStatus::TxHashsetValidation {
+				kernels,
+				kernel_total,
+				rproofs,
+				rproof_total,
+			} => {
+				let ks = if vkernels > 0 { vkernels } else { kernels };
+				let kt = if vkernel_total > 0 {
+					vkernel_total
+				} else {
+					kernel_total
+				};
+				let rps = if vrproofs > 0 { vrproofs } else { rproofs };
+				let rpt = if vrproof_total > 0 {
+					vrproof_total
+				} else {
+					rproof_total
+				};
+				*status = SyncStatus::TxHashsetValidation {
+					kernels: ks,
+					kernel_total: kt,
+					rproofs: rps,
+					rproof_total: rpt,
+				};
+			}
+			_ => {
+				*status = SyncStatus::TxHashsetValidation {
+					kernels: 0,
+					kernel_total: 0,
+					rproofs: 0,
+					rproof_total: 0,
+				}
+			}
+		}
+	}
+
+	fn on_save(&self) {
+		self.update(SyncStatus::TxHashsetSave);
+	}
+
+	fn on_done(&self) {
+		self.update(SyncStatus::TxHashsetDone);
 	}
 }
 

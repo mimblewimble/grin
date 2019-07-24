@@ -39,8 +39,8 @@ fn test_output_ser_deser() {
 	};
 
 	let mut vec = vec![];
-	ser::serialize(&mut vec, &out).expect("serialized failed");
-	let dout: Output = ser::deserialize(&mut &vec[..]).unwrap();
+	ser::serialize_default(&mut vec, &out).expect("serialized failed");
+	let dout: Output = ser::deserialize_default(&mut &vec[..]).unwrap();
 
 	assert_eq!(dout.features, OutputFeatures::Plain);
 	assert_eq!(dout.commit, out.commit);

@@ -24,6 +24,7 @@ use crate::core::global;
 use crate::util::init_logger;
 use clap::App;
 use grin_api as api;
+use grin_chain as chain;
 use grin_config as config;
 use grin_core as core;
 use grin_p2p as p2p;

@@ -23,11 +23,9 @@ use std::sync::{Arc, Weak};
 use std::thread;
 use std::time::Instant;
 
-use crate::chain::{self, BlockStatus, ChainAdapter, Options};
+use crate::chain::{self, BlockStatus, ChainAdapter, Options, SyncState, SyncStatus};
 use crate::common::hooks::{ChainEvents, NetEvents};
-use crate::common::types::{
-	self, ChainValidationMode, DandelionEpoch, ServerConfig, SyncState, SyncStatus,
-};
+use crate::common::types::{ChainValidationMode, DandelionEpoch, ServerConfig};
 use crate::core::core::hash::{Hash, Hashed};
 use crate::core::core::transaction::Transaction;
 use crate::core::core::verifier_cache::VerifierCache;
@@ -37,7 +35,6 @@ use crate::core::{core, global};
 use crate::p2p;
 use crate::p2p::types::PeerInfo;
 use crate::pool;
-use crate::pool::types::DandelionConfig;
 use crate::util::OneTime;
 use chrono::prelude::*;
 use chrono::Duration;
@@ -97,10 +94,7 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 			return Ok(true);
 		}
 
-		let source = pool::TxSource {
-			debug_name: "p2p".to_string(),
-			identifier: "?.?.?.?".to_string(),
-		};
+		let source = pool::TxSource::Broadcast;
 
 		let header = self.chain().head_header()?;
 
@@ -242,11 +236,11 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 		bh: core::BlockHeader,
 		peer_info: &PeerInfo,
 	) -> Result<bool, chain::Error> {
-		let bhash = bh.hash();
-		debug!(
-			"Received block header {} at {} from {}, going to process.",
-			bhash, bh.height, peer_info.addr,
-		);
+		if !self.sync_state.is_syncing() {
+			for hook in &self.hooks {
+				hook.on_header_received(&bh, &peer_info.addr);
+			}
+		}
 
 		// pushing the new block header through the header chain pipeline
 		// we will go ask for the block if this is a new header
@@ -255,7 +249,11 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 			.process_block_header(&bh, self.chain_opts(false));
 
 		if let Err(e) = res {
-			debug!("Block header {} refused by chain: {:?}", bhash, e.kind());
+			debug!(
+				"Block header {} refused by chain: {:?}",
+				bh.hash(),
+				e.kind()
+			);
 			if e.is_bad_data() {
 				return Ok(false);
 			} else {
@@ -372,6 +370,10 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 		}
 	}
 
+	fn txhashset_archive_header(&self) -> Result<core::BlockHeader, chain::Error> {
+		self.chain().txhashset_archive_header()
+	}
+
 	fn txhashset_receive_ready(&self) -> bool {
 		match self.sync_state.status() {
 			SyncStatus::TxHashsetDownload { .. } => true,
@@ -428,7 +430,7 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 			error!("Failed to save txhashset archive: {}", e);
 
 			let is_good_data = !e.is_bad_data();
-			self.sync_state.set_sync_error(types::Error::Chain(e));
+			self.sync_state.set_sync_error(e);
 			Ok(is_good_data)
 		} else {
 			info!("Received valid txhashset data for {}.", h);
@@ -804,11 +806,11 @@ impl DandelionAdapter for PoolToNetAdapter {
 }
 
 impl pool::PoolAdapter for PoolToNetAdapter {
-	fn tx_accepted(&self, tx: &core::Transaction) {
-		self.peers().broadcast_transaction(tx);
+	fn tx_accepted(&self, entry: &pool::PoolEntry) {
+		self.peers().broadcast_transaction(&entry.tx);
 	}
 
-	fn stem_tx_accepted(&self, tx: &core::Transaction) -> Result<(), pool::PoolError> {
+	fn stem_tx_accepted(&self, entry: &pool::PoolEntry) -> Result<(), pool::PoolError> {
 		// Take write lock on the current epoch.
 		// We need to be able to update the current relay peer if not currently connected.
 		let mut epoch = self.dandelion_epoch.write();
@@ -816,9 +818,10 @@ impl pool::PoolAdapter for PoolToNetAdapter {
 		// If "stem" epoch attempt to relay the tx to the next Dandelion relay.
 		// Fallback to immediately fluffing the tx if we cannot stem for any reason.
 		// If "fluff" epoch then nothing to do right now (fluff via Dandelion monitor).
-		if epoch.is_stem() {
+		// If node is configured to always stem our (pushed via api) txs then do so.
+		if epoch.is_stem() || (entry.src.is_pushed() && epoch.always_stem_our_txs()) {
 			if let Some(peer) = epoch.relay_peer(&self.peers()) {
-				match peer.send_stem_transaction(tx) {
+				match peer.send_stem_transaction(&entry.tx) {
 					Ok(_) => {
 						info!("Stemming this epoch, relaying to next peer.");
 						Ok(())
@@ -841,7 +844,7 @@ impl pool::PoolAdapter for PoolToNetAdapter {
 
 impl PoolToNetAdapter {
 	/// Create a new pool to net adapter
-	pub fn new(config: DandelionConfig) -> PoolToNetAdapter {
+	pub fn new(config: pool::DandelionConfig) -> PoolToNetAdapter {
 		PoolToNetAdapter {
 			peers: OneTime::new(),
 			dandelion_epoch: Arc::new(RwLock::new(DandelionEpoch::new(config))),
