@@ -511,6 +511,12 @@ pub fn rewind_and_apply_header_fork(
 	header: &BlockHeader,
 	ext: &mut txhashset::HeaderExtension<'_>,
 ) -> Result<(), Error> {
+	let head = ext.head();
+	if header.hash() == head.last_block_h {
+		// Nothing to rewind and nothing to reapply. Done.
+		return Ok(());
+	}
+
 	let mut fork_hashes = vec![];
 	let mut current = header.clone();
 	while current.height > 0 && !ext.is_on_current_chain(&current).is_ok() {
@@ -537,7 +543,7 @@ pub fn rewind_and_apply_header_fork(
 }
 
 /// Utility function to handle forks. From the forked block, jump backward
-/// to find to fork root. Rewind the txhashset to the root and apply all
+/// to find to fork point. Rewind the txhashset to the fork point and apply all
 /// necessary blocks prior to the one being processed to set the txhashset in
 /// the expected state.
 pub fn rewind_and_apply_fork(
@@ -545,6 +551,9 @@ pub fn rewind_and_apply_fork(
 	header_head: &Tip,
 	ext: &mut txhashset::Extension<'_>,
 ) -> Result<(), Error> {
+	// TODO - Skip the "rewind and reapply" if everything is aligned and this is the "next" block.
+	// This will be significantly easier once we break out the header extension.
+
 	// Find the fork point where head and header_head diverge.
 	// We may need to rewind back to this fork point if they diverged
 	// prior to the fork point for the provided header.
