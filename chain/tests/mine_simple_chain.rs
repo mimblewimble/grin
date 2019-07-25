@@ -17,9 +17,8 @@ use self::chain::Chain;
 use self::core::core::hash::Hashed;
 use self::core::core::verifier_cache::LruVerifierCache;
 use self::core::core::{Block, BlockHeader, OutputIdentifier, Transaction};
-use self::core::genesis;
 use self::core::global::ChainTypes;
-use self::core::libtx::{self, build, reward, ProofBuilder};
+use self::core::libtx::{self, build, ProofBuilder};
 use self::core::pow::Difficulty;
 use self::core::{consensus, global, pow};
 use self::keychain::{ExtKeychain, ExtKeychainPath, Keychain};
@@ -30,27 +29,11 @@ use grin_chain::{BlockStatus, ChainAdapter, Options};
 use grin_core as core;
 use grin_keychain as keychain;
 use grin_util as util;
-use std::fs;
 use std::sync::Arc;
 
-fn clean_output_dir(dir_name: &str) {
-	let _ = fs::remove_dir_all(dir_name);
-}
+mod chain_test_helper;
 
-fn setup(dir_name: &str, genesis: Block) -> Chain {
-	util::init_test_logger();
-	clean_output_dir(dir_name);
-	let verifier_cache = Arc::new(RwLock::new(LruVerifierCache::new()));
-	chain::Chain::init(
-		dir_name.to_string(),
-		Arc::new(NoopAdapter {}),
-		genesis,
-		pow::verify_size,
-		verifier_cache,
-		false,
-	)
-	.unwrap()
-}
+use self::chain_test_helper::{clean_output_dir, mine_chain, setup};
 
 /// Adapter to retrieve last status
 pub struct StatusAdapter {
@@ -89,114 +72,18 @@ fn setup_with_status_adapter(dir_name: &str, genesis: Block, adapter: Arc<Status
 
 #[test]
 fn mine_empty_chain() {
-	global::set_mining_mode(ChainTypes::AutomatedTesting);
-	let keychain = keychain::ExtKeychain::from_random_seed(false).unwrap();
-	{
-		mine_some_on_top(".grin", pow::mine_genesis_block().unwrap(), &keychain);
-	}
-	// Cleanup chain directory
-	clean_output_dir(".grin");
+	let root = ".grin.empty";
+	let chain = mine_chain(root, 1);
+	assert_eq!(chain.head().unwrap().height, 0);
+	clean_output_dir(root);
 }
 
 #[test]
-fn mine_genesis_reward_chain() {
-	global::set_mining_mode(ChainTypes::AutomatedTesting);
-
-	// add coinbase data from the dev genesis block
-	let mut genesis = genesis::genesis_dev();
-	let keychain = keychain::ExtKeychain::from_random_seed(false).unwrap();
-	let key_id = keychain::ExtKeychain::derive_key_id(0, 1, 0, 0, 0);
-	let reward = reward::output(
-		&keychain,
-		&libtx::ProofBuilder::new(&keychain),
-		&key_id,
-		0,
-		false,
-	)
-	.unwrap();
-	genesis = genesis.with_reward(reward.0, reward.1);
-
-	let tmp_chain_dir = ".grin.tmp";
-
-	// setup a tmp chain to hande tx hashsets
-	setup(tmp_chain_dir, pow::mine_genesis_block().unwrap());
-
-	// get a valid PoW
-	pow::pow_size(
-		&mut genesis.header,
-		Difficulty::unit(),
-		global::proofsize(),
-		global::min_edge_bits(),
-	)
-	.unwrap();
-
-	mine_some_on_top(".grin.genesis", genesis, &keychain);
-	// Cleanup chain directories
-	clean_output_dir(tmp_chain_dir);
-	clean_output_dir(".grin.genesis");
-}
-
-fn mine_some_on_top<K>(dir: &str, genesis: Block, keychain: &K)
-where
-	K: Keychain,
-{
-	let chain = setup(dir, genesis);
-
-	for n in 1..4 {
-		let prev = chain.head_header().unwrap();
-		let next_header_info = consensus::next_difficulty(1, chain.difficulty_iter().unwrap());
-		let pk = ExtKeychainPath::new(1, n as u32, 0, 0, 0).to_identifier();
-		let reward =
-			libtx::reward::output(keychain, &libtx::ProofBuilder::new(keychain), &pk, 0, false)
-				.unwrap();
-		let mut b =
-			core::core::Block::new(&prev, vec![], next_header_info.clone().difficulty, reward)
-				.unwrap();
-		b.header.timestamp = prev.timestamp + Duration::seconds(60);
-		b.header.pow.secondary_scaling = next_header_info.secondary_scaling;
-
-		chain.set_txhashset_roots(&mut b).unwrap();
-
-		let edge_bits = if n == 2 {
-			global::min_edge_bits() + 1
-		} else {
-			global::min_edge_bits()
-		};
-		b.header.pow.proof.edge_bits = edge_bits;
-		pow::pow_size(
-			&mut b.header,
-			next_header_info.difficulty,
-			global::proofsize(),
-			edge_bits,
-		)
-		.unwrap();
-		b.header.pow.proof.edge_bits = edge_bits;
-
-		let bhash = b.hash();
-		chain.process_block(b, chain::Options::MINE).unwrap();
-
-		// checking our new head
-		let head = chain.head().unwrap();
-		assert_eq!(head.height, n);
-		assert_eq!(head.last_block_h, bhash);
-
-		// now check the block_header of the head
-		let header = chain.head_header().unwrap();
-		assert_eq!(header.height, n);
-		assert_eq!(header.hash(), bhash);
-
-		// now check the block itself
-		let block = chain.get_block(&header.hash()).unwrap();
-		assert_eq!(block.header.height, n);
-		assert_eq!(block.hash(), bhash);
-		assert_eq!(block.outputs().len(), 1);
-
-		// now check the block height index
-		let header_by_height = chain.get_header_by_height(n).unwrap();
-		assert_eq!(header_by_height.hash(), bhash);
-
-		chain.validate(false).unwrap();
-	}
+fn mine_short_chain() {
+	let root = ".grin.genesis";
+	let chain = mine_chain(root, 4);
+	assert_eq!(chain.head().unwrap().height, 3);
+	clean_output_dir(root);
 }
 
 #[test]

@@ -286,6 +286,16 @@ pub fn state_sync_threshold() -> u32 {
 	}
 }
 
+/// Number of blocks to reuse a txhashset zip for.
+pub fn txhashset_archive_interval() -> u64 {
+	let param_ref = CHAIN_TYPE.read();
+	match *param_ref {
+		ChainTypes::AutomatedTesting => TESTING_TXHASHSET_ARCHIVE_INTERVAL,
+		ChainTypes::UserTesting => TESTING_TXHASHSET_ARCHIVE_INTERVAL,
+		_ => TXHASHSET_ARCHIVE_INTERVAL,
+	}
+}
+
 /// Are we in automated testing mode?
 pub fn is_automated_testing_mode() -> bool {
 	let param_ref = CHAIN_TYPE.read();
