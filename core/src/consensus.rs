@@ -59,8 +59,8 @@ pub const YEAR_HEIGHT: u64 = 52 * WEEK_HEIGHT;
 /// Number of blocks before a coinbase matures and can be spent
 pub const COINBASE_MATURITY: u64 = DAY_HEIGHT;
 
-/// Ratio the secondary proof of work should take over the primary, as a
-/// function of block height (time). Starts at 90% losing a percent
+/// Target ratio of secondary proof of work to primary proof of work,
+/// as a function of block height (time). Starts at 90% losing a percent
 /// approximately every week. Represented as an integer between 0 and 100.
 pub fn secondary_pow_ratio(height: u64) -> u64 {
 	90u64.saturating_sub(height / (2 * YEAR_HEIGHT / 90))
