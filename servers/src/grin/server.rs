@@ -388,19 +388,12 @@ impl Server {
 			self.tx_pool.clone(),
 			self.verifier_cache.clone(),
 			stop_state,
+			sync_state,
 		);
 		miner.set_debug_output_id(format!("Port {}", self.config.p2p_config.port));
 		let _ = thread::Builder::new()
 			.name("test_miner".to_string())
-			.spawn(move || {
-				// TODO push this down in the run loop so miner gets paused anytime we
-				// decide to sync again
-				let secs_5 = time::Duration::from_secs(5);
-				while sync_state.is_syncing() {
-					thread::sleep(secs_5);
-				}
-				miner.run_loop(wallet_listener_url);
-			});
+			.spawn(move || miner.run_loop(wallet_listener_url));
 	}
 
 	/// The chain head
@@ -421,8 +414,7 @@ impl Server {
 	/// Returns a set of stats about this server. This and the ServerStats
 	/// structure
 	/// can be updated over time to include any information needed by tests or
-	/// other
-	/// consumers
+	/// other consumers
 	pub fn get_server_stats(&self) -> Result<ServerStats, Error> {
 		let stratum_stats = self.state_info.stratum_stats.read().clone();
 

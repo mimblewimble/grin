@@ -80,7 +80,7 @@ fn real_main() -> i32 {
 	match args.subcommand() {
 		("wallet", _) => {
 			println!();
-			println!("As of v1.1.0, the wallet has been split into a seperate executable.");
+			println!("As of v1.1.0, the wallet has been split into a separate executable.");
 			println!(
 				"Please visit https://github.com/mimblewimble/grin-wallet/releases to download"
 			);
