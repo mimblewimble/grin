@@ -33,7 +33,7 @@ use std::sync::Arc;
 
 mod chain_test_helper;
 
-use self::chain_test_helper::{clean_output_dir, mine_chain, setup};
+use self::chain_test_helper::{clean_output_dir, init_chain, mine_chain};
 
 /// Adapter to retrieve last status
 pub struct StatusAdapter {
@@ -72,18 +72,20 @@ fn setup_with_status_adapter(dir_name: &str, genesis: Block, adapter: Arc<Status
 
 #[test]
 fn mine_empty_chain() {
-	let root = ".grin.empty";
-	let chain = mine_chain(root, 1);
+	let chain_dir = ".grin.empty";
+	clean_output_dir(chain_dir);
+	let chain = mine_chain(chain_dir, 1);
 	assert_eq!(chain.head().unwrap().height, 0);
-	clean_output_dir(root);
+	clean_output_dir(chain_dir);
 }
 
 #[test]
 fn mine_short_chain() {
-	let root = ".grin.genesis";
-	let chain = mine_chain(root, 4);
+	let chain_dir = ".grin.genesis";
+	clean_output_dir(chain_dir);
+	let chain = mine_chain(chain_dir, 4);
 	assert_eq!(chain.head().unwrap().height, 3);
-	clean_output_dir(root);
+	clean_output_dir(chain_dir);
 }
 
 #[test]
@@ -162,7 +164,7 @@ fn mine_reorg() {
 fn mine_forks() {
 	global::set_mining_mode(ChainTypes::AutomatedTesting);
 	{
-		let chain = setup(".grin2", pow::mine_genesis_block().unwrap());
+		let chain = init_chain(".grin2", pow::mine_genesis_block().unwrap());
 		let kc = ExtKeychain::from_random_seed(false).unwrap();
 
 		// add a first block to not fork genesis
@@ -210,7 +212,7 @@ fn mine_losing_fork() {
 	global::set_mining_mode(ChainTypes::AutomatedTesting);
 	let kc = ExtKeychain::from_random_seed(false).unwrap();
 	{
-		let chain = setup(".grin3", pow::mine_genesis_block().unwrap());
+		let chain = init_chain(".grin3", pow::mine_genesis_block().unwrap());
 
 		// add a first block we'll be forking from
 		let prev = chain.head_header().unwrap();
@@ -250,7 +252,7 @@ fn longer_fork() {
 	// then send back on the 1st
 	let genesis = pow::mine_genesis_block().unwrap();
 	{
-		let chain = setup(".grin4", genesis.clone());
+		let chain = init_chain(".grin4", genesis.clone());
 
 		// add blocks to both chains, 20 on the main one, only the first 5
 		// for the forked chain
@@ -289,8 +291,11 @@ fn longer_fork() {
 fn spend_in_fork_and_compact() {
 	global::set_mining_mode(ChainTypes::AutomatedTesting);
 	util::init_test_logger();
+	// Cleanup chain directory
+	clean_output_dir(".grin6");
+
 	{
-		let chain = setup(".grin6", pow::mine_genesis_block().unwrap());
+		let chain = init_chain(".grin6", pow::mine_genesis_block().unwrap());
 		let prev = chain.head_header().unwrap();
 		let kc = ExtKeychain::from_random_seed(false).unwrap();
 		let pb = ProofBuilder::new(&kc);
@@ -424,7 +429,7 @@ fn spend_in_fork_and_compact() {
 fn output_header_mappings() {
 	global::set_mining_mode(ChainTypes::AutomatedTesting);
 	{
-		let chain = setup(
+		let chain = init_chain(
 			".grin_header_for_output",
 			pow::mine_genesis_block().unwrap(),
 		);

@@ -21,7 +21,6 @@ use self::core::core::Block;
 use self::core::genesis;
 use self::core::global::ChainTypes;
 use self::core::libtx::{self, reward};
-use self::core::pow::Difficulty;
 use self::core::{consensus, global, pow};
 use self::keychain::{ExtKeychainPath, Keychain};
 use self::util::RwLock;
@@ -37,9 +36,7 @@ pub fn clean_output_dir(dir_name: &str) {
 	let _ = fs::remove_dir_all(dir_name);
 }
 
-pub fn setup(dir_name: &str, genesis: Block) -> Chain {
-	util::init_test_logger();
-	clean_output_dir(dir_name);
+pub fn init_chain(dir_name: &str, genesis: Block) -> Chain {
 	let verifier_cache = Arc::new(RwLock::new(LruVerifierCache::new()));
 	Chain::init(
 		dir_name.to_string(),
@@ -52,36 +49,31 @@ pub fn setup(dir_name: &str, genesis: Block) -> Chain {
 	.unwrap()
 }
 
-/// Mine a chain of specified length to assist with automated tests.
-/// Must call clean_output_dir at the end of your test.
-pub fn mine_chain(dir_name: &str, chain_length: u64) -> Chain {
-	global::set_mining_mode(ChainTypes::AutomatedTesting);
-
-	// add coinbase data from the dev genesis block
-	let mut genesis = genesis::genesis_dev();
-	let keychain = keychain::ExtKeychain::from_random_seed(false).unwrap();
+/// Build genesis block with reward (non-empty, like we have in mainnet).
+fn genesis_block<K>(keychain: &K) -> Block
+where
+	K: Keychain,
+{
 	let key_id = keychain::ExtKeychain::derive_key_id(0, 1, 0, 0, 0);
 	let reward = reward::output(
-		&keychain,
-		&libtx::ProofBuilder::new(&keychain),
+		keychain,
+		&libtx::ProofBuilder::new(keychain),
 		&key_id,
 		0,
 		false,
 	)
 	.unwrap();
-	genesis = genesis.with_reward(reward.0, reward.1);
 
-	let mut chain = setup(dir_name, genesis.clone());
+	genesis::genesis_dev().with_reward(reward.0, reward.1)
+}
 
-	// get a valid PoW
-	pow::pow_size(
-		&mut genesis.header,
-		Difficulty::unit(),
-		global::proofsize(),
-		global::min_edge_bits(),
-	)
-	.unwrap();
-
+/// Mine a chain of specified length to assist with automated tests.
+/// Probably a good idea to call clean_output_dir at the beginning and end of each test.
+pub fn mine_chain(dir_name: &str, chain_length: u64) -> Chain {
+	global::set_mining_mode(ChainTypes::AutomatedTesting);
+	let keychain = keychain::ExtKeychain::from_random_seed(false).unwrap();
+	let genesis = genesis_block(&keychain);
+	let mut chain = init_chain(dir_name, genesis.clone());
 	mine_some_on_top(&mut chain, chain_length, &keychain);
 	chain
 }
