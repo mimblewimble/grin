@@ -102,7 +102,7 @@ where
 		let mut b =
 			core::core::Block::new(&prev, vec![], next_header_info.clone().difficulty, reward)
 				.unwrap();
-		b.header.timestamp = prev.timestamp + Duration::seconds(160);
+		b.header.timestamp = prev.timestamp + Duration::seconds(60);
 		b.header.pow.secondary_scaling = next_header_info.secondary_scaling;
 
 		chain.set_txhashset_roots(&mut b).unwrap();

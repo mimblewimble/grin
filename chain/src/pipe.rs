@@ -19,7 +19,6 @@ use crate::core::core::hash::Hashed;
 use crate::core::core::verifier_cache::VerifierCache;
 use crate::core::core::Committed;
 use crate::core::core::{Block, BlockHeader, BlockSums};
-use crate::core::global;
 use crate::core::pow;
 use crate::error::{Error, ErrorKind};
 use crate::store;
@@ -326,10 +325,7 @@ fn validate_header(header: &BlockHeader, ctx: &mut BlockContext<'_>) -> Result<(
 		return Err(ErrorKind::InvalidBlockVersion(header.version).into());
 	}
 
-	// TODO: remove CI check from here somehow
-	if header.timestamp > Utc::now() + Duration::seconds(12 * (consensus::BLOCK_TIME_SEC as i64))
-		&& !global::is_automated_testing_mode()
-	{
+	if header.timestamp > Utc::now() + Duration::seconds(12 * (consensus::BLOCK_TIME_SEC as i64)) {
 		// refuse blocks more than 12 blocks intervals in future (as in bitcoin)
 		// TODO add warning in p2p code if local time is too different from peers
 		return Err(ErrorKind::InvalidBlockTime.into());
@@ -358,10 +354,9 @@ fn validate_header(header: &BlockHeader, ctx: &mut BlockContext<'_>) -> Result<(
 		return Err(ErrorKind::InvalidBlockHeight.into());
 	}
 
-	// TODO - get rid of the automated testing mode check here somehow
-	if header.timestamp <= prev.timestamp && !global::is_automated_testing_mode() {
+	if header.timestamp <= prev.timestamp {
 		// prevent time warp attacks and some timestamp manipulations by forcing strict
-		// time progression (but not in CI mode)
+		// time progression
 		return Err(ErrorKind::InvalidBlockTime.into());
 	}
 

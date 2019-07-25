@@ -31,7 +31,8 @@ use crate::pow::{
 /// different sets of parameters for different purposes,
 /// e.g. CI, User testing, production values
 use crate::util::RwLock;
-
+use chrono::prelude::{TimeZone, Utc};
+use chrono::{DateTime, Duration};
 /// Define these here, as they should be developer-set, not really tweakable
 /// by users
 
@@ -296,18 +297,6 @@ pub fn txhashset_archive_interval() -> u64 {
 	}
 }
 
-/// Are we in automated testing mode?
-pub fn is_automated_testing_mode() -> bool {
-	let param_ref = CHAIN_TYPE.read();
-	ChainTypes::AutomatedTesting == *param_ref
-}
-
-/// Are we in user testing mode?
-pub fn is_user_testing_mode() -> bool {
-	let param_ref = CHAIN_TYPE.read();
-	ChainTypes::UserTesting == *param_ref
-}
-
 /// Are we in production mode?
 /// Production defined as a live public network, testnet[n] or mainnet.
 pub fn is_production_mode() -> bool {
@@ -322,12 +311,6 @@ pub fn is_production_mode() -> bool {
 pub fn is_floonet() -> bool {
 	let param_ref = CHAIN_TYPE.read();
 	ChainTypes::Floonet == *param_ref
-}
-
-/// Are we for real?
-pub fn is_mainnet() -> bool {
-	let param_ref = CHAIN_TYPE.read();
-	ChainTypes::Mainnet == *param_ref
 }
 
 /// Helper function to get a nonce known to create a valid POW on
@@ -348,10 +331,14 @@ pub fn get_genesis_nonce() -> u64 {
 	}
 }
 
-/// Short name representing the current chain type ("floo", "main", etc.)
-pub fn chain_shortname() -> String {
+/// Genesis block timestamp. Dependant on chain type.
+pub fn get_genesis_timestamp() -> DateTime<Utc> {
 	let param_ref = CHAIN_TYPE.read();
-	param_ref.shortname()
+	match *param_ref {
+		ChainTypes::UserTesting => Utc::now(),
+		ChainTypes::AutomatedTesting => Utc::now() - Duration::minutes(60),
+		_ => Utc.ymd(1997, 8, 4).and_hms(0, 0, 0),
+	}
 }
 
 /// Converts an iterator of block difficulty data to more a more manageable
