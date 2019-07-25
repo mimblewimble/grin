@@ -65,7 +65,7 @@ impl PruneList {
 		}
 	}
 
-	// Instatiate a new empty prune list.
+	/// Instatiate a new empty prune list.
 	pub fn empty() -> PruneList {
 		PruneList::new(None, Bitmap::create())
 	}
@@ -98,6 +98,7 @@ impl PruneList {
 		Ok(prune_list)
 	}
 
+	/// Init our internal shift caches.
 	pub fn init_caches(&mut self) {
 		self.build_shift_cache();
 		self.build_leaf_shift_cache();
