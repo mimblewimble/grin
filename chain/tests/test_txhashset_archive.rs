@@ -18,8 +18,10 @@ use self::chain_test_helper::{clean_output_dir, mine_chain};
 
 #[test]
 fn test() {
-	let chain = mine_chain(".txhashset_archive_test", 35);
+	let chain_dir = ".txhashset_archive_test";
+	clean_output_dir(chain_dir);
+	let chain = mine_chain(chain_dir, 35);
 	let header = chain.txhashset_archive_header().unwrap();
 	assert_eq!(10, header.height);
-	clean_output_dir(".txhashset_archive_test");
+	clean_output_dir(chain_dir);
 }
