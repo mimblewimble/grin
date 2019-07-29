@@ -881,10 +881,10 @@ impl Chain {
 
 		let header = match self.get_block_header(&h) {
 			Ok(header) => header,
-			Err(e) => {
-				warn!("txhashset_write: cannot find block header - {}", e);
+			Err(_) => {
+				warn!("txhashset_write: cannot find block header");
 				// This is a bannable reason
-				return Ok(false);
+				return Ok(true);
 			}
 		};
 
