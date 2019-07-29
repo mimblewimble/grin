@@ -24,7 +24,7 @@ grin_miner_plugin = "1.0.0"
 grin_store = { path = "../../store" }
 grin_util = { path = "../../util" }
 grin_wallet = { path = "../../wallet" }
-rpassword = "2.0.0"
+rpassword = "2.0.1-beta.1"
 serde_json = "1"
 
 [patch.crates-io]

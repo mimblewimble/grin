@@ -1,5 +1,5 @@
 name: grin
-version: "2.0.0"
+version: "2.0.1-beta.1"
 about: Lightweight implementation of the MimbleWimble protocol.
 author: The Grin Team
 
