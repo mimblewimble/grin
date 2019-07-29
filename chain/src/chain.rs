@@ -884,7 +884,7 @@ impl Chain {
 			Err(e) => {
 				warn!("txhashset_write: cannot find block header - {}", e);
 				// This is a bannable reason
-				return Ok(false)
+				return Ok(false);
 			}
 		};
 
