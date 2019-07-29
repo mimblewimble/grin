@@ -419,7 +419,7 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 		// check status again after download, in case 2 txhashsets made it somehow
 		if let SyncStatus::TxHashsetDownload { .. } = self.sync_state.status() {
 		} else {
-			return Ok(true);
+			return Ok(false);
 		}
 
 		if let Err(e) = self
@@ -429,12 +429,12 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 			self.chain().clean_txhashset_sandbox();
 			error!("Failed to save txhashset archive: {}", e);
 
-			let is_good_data = !e.is_bad_data();
+			let is_bad_data = e.is_bad_data();
 			self.sync_state.set_sync_error(e);
-			Ok(is_good_data)
+			Ok(is_bad_data)
 		} else {
 			info!("Received valid txhashset data for {}.", h);
-			Ok(true)
+			Ok(false)
 		}
 	}
 

@@ -688,15 +688,15 @@ impl ChainAdapter for Peers {
 		txhashset_data: File,
 		peer_info: &PeerInfo,
 	) -> Result<bool, chain::Error> {
-		if !self.adapter.txhashset_write(h, txhashset_data, peer_info)? {
+		if self.adapter.txhashset_write(h, txhashset_data, peer_info)? {
 			debug!(
 				"Received a bad txhashset data from {}, the peer will be banned",
 				peer_info.addr
 			);
 			self.ban_peer(peer_info.addr, ReasonForBan::BadTxHashSet);
-			Ok(false)
-		} else {
 			Ok(true)
+		} else {
+			Ok(false)
 		}
 	}
 

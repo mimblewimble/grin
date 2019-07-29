@@ -425,7 +425,7 @@ impl MessageHandler for Protocol {
 
 				debug!(
 					"handle_payload: txhashset archive for {} at {}, DONE. Data Ok: {}",
-					sm_arch.hash, sm_arch.height, res
+					sm_arch.hash, sm_arch.height, !res
 				);
 
 				if let Err(e) = fs::remove_file(tmp.clone()) {
