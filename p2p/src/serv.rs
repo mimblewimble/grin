@@ -195,15 +195,23 @@ impl Server {
 	}
 
 	/// Checks whether there's any reason we don't want to accept a peer
-	/// connection. There can be a couple of them:
-	/// 1. The peer has been previously banned and the ban period hasn't
+	/// connection. There can be a few of them:
+	/// 1. Accepting the peer connection would exceed the configured maximum
+	/// allowed peer count.
+	/// 2. The peer has been previously banned and the ban period hasn't
 	/// expired yet.
-	/// 2. We're already connected to a peer at the same IP. While there are
+	/// 3. We're already connected to a peer at the same IP. While there are
 	/// many reasons multiple peers can legitimately share identical IP
 	/// addresses (NAT), network distribution is improved if they choose
 	/// different sets of peers themselves. In addition, it prevent potential
 	/// duplicate connections, malicious or not.
 	fn check_undesirable(&self, stream: &TcpStream) -> bool {
+		if self.peers.peer_count() >= self.config.peer_max_count() {
+			if let Err(e) = stream.shutdown(Shutdown::Both) {
+				debug!("Error shutting down conn: {:?}", e);
+			}
+			return true;
+		}
 		if let Ok(peer_addr) = stream.peer_addr() {
 			let peer_addr = PeerAddr(peer_addr);
 			if self.peers.is_banned(peer_addr) {
