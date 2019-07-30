@@ -103,14 +103,15 @@ pub mod option_seckey_serde {
 	use serde::de::Error;
 
 	///
-	pub fn serialize<S>(key: &Option<secp::key::SecretKey>, serializer: S) -> Result<S::Ok, S::Error>
+	pub fn serialize<S>(
+		key: &Option<secp::key::SecretKey>,
+		serializer: S,
+	) -> Result<S::Ok, S::Error>
 	where
 		S: Serializer,
 	{
 		match key {
-			Some(key) => {
-				serializer.serialize_str(&to_hex(key.0.to_vec()))
-			}
+			Some(key) => serializer.serialize_str(&to_hex(key.0.to_vec())),
 			None => serializer.serialize_none(),
 		}
 	}
