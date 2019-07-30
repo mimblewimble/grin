@@ -20,6 +20,7 @@ use crate::msg::{
 	TxHashSetArchive, TxHashSetRequest, Type,
 };
 use crate::types::{Error, NetAdapter, PeerInfo};
+use crate::util::RwLock;
 use chrono::prelude::Utc;
 use rand::{thread_rng, Rng};
 use std::cmp;
@@ -32,11 +33,20 @@ use tempfile::tempfile;
 pub struct Protocol {
 	adapter: Arc<dyn NetAdapter>,
 	peer_info: PeerInfo,
+	state_sync_requested: Arc<RwLock<bool>>,
 }
 
 impl Protocol {
-	pub fn new(adapter: Arc<dyn NetAdapter>, peer_info: PeerInfo) -> Protocol {
-		Protocol { adapter, peer_info }
+	pub fn new(
+		adapter: Arc<dyn NetAdapter>,
+		peer_info: PeerInfo,
+		state_sync_requested: Arc<RwLock<bool>>,
+	) -> Protocol {
+		Protocol {
+			adapter,
+			peer_info,
+			state_sync_requested,
+		}
 	}
 }
 
@@ -356,6 +366,12 @@ impl MessageHandler for Protocol {
 					);
 					return Err(Error::BadMessage);
 				}
+				if !*self.state_sync_requested.read() {
+					error!("handle_payload: txhashset archive received but from the wrong peer",);
+					return Err(Error::BadMessage);
+				}
+				// Update the sync state requested status
+				*self.state_sync_requested.write() = false;
 
 				let download_start_time = Utc::now();
 				self.adapter
