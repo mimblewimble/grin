@@ -87,6 +87,10 @@ impl Server {
 					let peer_addr = PeerAddr(peer_addr);
 
 					if self.check_undesirable(&stream) {
+						// Shutdown the incoming TCP connection if it is not desired
+						if let Err(e) = stream.shutdown(Shutdown::Both) {
+							debug!("Error shutting down conn: {:?}", e);
+						}
 						continue;
 					}
 					match self.handle_new_peer(stream) {
@@ -197,7 +201,8 @@ impl Server {
 	/// Checks whether there's any reason we don't want to accept a peer
 	/// connection. There can be a few of them:
 	/// 1. Accepting the peer connection would exceed the configured maximum
-	/// allowed peer count.
+	/// allowed peer count. Note that seed nodes may wish to allow more than
+	/// the maximum configured connections to help with network bootstrapping.
 	/// 2. The peer has been previously banned and the ban period hasn't
 	/// expired yet.
 	/// 3. We're already connected to a peer at the same IP. While there are
@@ -207,25 +212,17 @@ impl Server {
 	/// duplicate connections, malicious or not.
 	fn check_undesirable(&self, stream: &TcpStream) -> bool {
 		if self.peers.peer_count() >= self.config.peer_max_count() {
-			if let Err(e) = stream.shutdown(Shutdown::Both) {
-				debug!("Error shutting down conn: {:?}", e);
-			}
+			debug!("Accepting new connection will exceed peer limit, refusing connection.");
 			return true;
 		}
 		if let Ok(peer_addr) = stream.peer_addr() {
 			let peer_addr = PeerAddr(peer_addr);
 			if self.peers.is_banned(peer_addr) {
 				debug!("Peer {} banned, refusing connection.", peer_addr);
-				if let Err(e) = stream.shutdown(Shutdown::Both) {
-					debug!("Error shutting down conn: {:?}", e);
-				}
 				return true;
 			}
 			if self.peers.is_known(peer_addr) {
 				debug!("Peer {} already known, refusing connection.", peer_addr);
-				if let Err(e) = stream.shutdown(Shutdown::Both) {
-					debug!("Error shutting down conn: {:?}", e);
-				}
 				return true;
 			}
 		}
