@@ -18,6 +18,7 @@ use std::fs::File;
 use std::io::Read;
 use std::net::{Shutdown, TcpStream};
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
 use crate::chain;
@@ -61,7 +62,7 @@ pub struct Peer {
 	// mutex can be taken only during shutdown, it happens once
 	stop_handle: Mutex<conn::StopHandle>,
 	// Whether or not we requested a txhashset from this peer
-	state_sync_requested: Arc<RwLock<bool>>,
+	state_sync_requested: Arc<AtomicBool>,
 }
 
 impl fmt::Debug for Peer {
@@ -74,7 +75,7 @@ impl Peer {
 	// Only accept and connect can be externally used to build a peer
 	fn new(info: PeerInfo, conn: TcpStream, adapter: Arc<dyn NetAdapter>) -> std::io::Result<Peer> {
 		let state = Arc::new(RwLock::new(State::Connected));
-		let state_sync_requested = Arc::new(RwLock::new(false));
+		let state_sync_requested = Arc::new(AtomicBool::new(false));
 		let tracking_adapter = TrackingAdapter::new(adapter);
 		let handler = Protocol::new(
 			Arc::new(tracking_adapter.clone()),
@@ -395,7 +396,7 @@ impl Peer {
 			"Asking {} for txhashset archive at {} {}.",
 			self.info.addr, height, hash
 		);
-		*self.state_sync_requested.write() = true;
+		self.state_sync_requested.store(true, Ordering::Relaxed);
 		self.send(
 			&TxHashSetRequest { hash, height },
 			msg::Type::TxHashSetRequest,
