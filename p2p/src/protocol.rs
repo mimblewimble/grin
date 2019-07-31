@@ -371,7 +371,7 @@ impl MessageHandler for Protocol {
 					return Err(Error::BadMessage);
 				}
 				// Update the sync state requested status
-				self.state_sync_requested.store(false,Ordering::Relaxed);
+				self.state_sync_requested.store(false, Ordering::Relaxed);
 
 				let download_start_time = Utc::now();
 				self.adapter
