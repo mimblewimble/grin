@@ -31,8 +31,6 @@ use crate::pow::{
 /// different sets of parameters for different purposes,
 /// e.g. CI, User testing, production values
 use crate::util::RwLock;
-use chrono::prelude::{TimeZone, Utc};
-use chrono::{DateTime, Duration};
 /// Define these here, as they should be developer-set, not really tweakable
 /// by users
 
@@ -311,34 +309,6 @@ pub fn is_production_mode() -> bool {
 pub fn is_floonet() -> bool {
 	let param_ref = CHAIN_TYPE.read();
 	ChainTypes::Floonet == *param_ref
-}
-
-/// Helper function to get a nonce known to create a valid POW on
-/// the genesis block, to prevent it taking ages. Should be fine for now
-/// as the genesis block POW solution turns out to be the same for every new
-/// block chain at the moment
-pub fn get_genesis_nonce() -> u64 {
-	let param_ref = CHAIN_TYPE.read();
-	match *param_ref {
-		// won't make a difference
-		ChainTypes::AutomatedTesting => 0,
-		// Magic nonce for current genesis block at cuckatoo15
-		ChainTypes::UserTesting => 27944,
-		// Placeholder, obviously not the right value
-		ChainTypes::Floonet => 0,
-		// Placeholder, obviously not the right value
-		ChainTypes::Mainnet => 0,
-	}
-}
-
-/// Genesis block timestamp. Dependant on chain type.
-pub fn get_genesis_timestamp() -> DateTime<Utc> {
-	let param_ref = CHAIN_TYPE.read();
-	match *param_ref {
-		ChainTypes::UserTesting => Utc::now(),
-		ChainTypes::AutomatedTesting => Utc::now() - Duration::minutes(60),
-		_ => Utc.ymd(1997, 8, 4).and_hms(0, 0, 0),
-	}
 }
 
 /// Converts an iterator of block difficulty data to more a more manageable

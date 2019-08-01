@@ -22,7 +22,6 @@
 use chrono::prelude::{TimeZone, Utc};
 
 use crate::core;
-use crate::global;
 use crate::pow::{Difficulty, Proof, ProofOfWork};
 use crate::util;
 use crate::util::secp::constants::SINGLE_BULLET_PROOF_SIZE;
@@ -38,10 +37,9 @@ use crate::keychain::BlindingFactor;
 pub fn genesis_dev() -> core::Block {
 	core::Block::with_header(core::BlockHeader {
 		height: 0,
-		// previous: core::hash::Hash([0xff; 32]),
-		timestamp: global::get_genesis_timestamp(),
+		timestamp: Utc.ymd(1997, 8, 4).and_hms(0, 0, 0),
 		pow: ProofOfWork {
-			nonce: global::get_genesis_nonce(),
+			nonce: 0,
 			..Default::default()
 		},
 		..Default::default()
