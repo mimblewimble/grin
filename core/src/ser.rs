@@ -293,20 +293,18 @@ impl ProtocolVersion {
 	pub fn local() -> ProtocolVersion {
 		ProtocolVersion(PROTOCOL_VERSION)
 	}
-}
 
-impl fmt::Display for ProtocolVersion {
-	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-		write!(f, "{}", self.0)
-	}
-}
-
-impl ProtocolVersion {
 	/// We need to specify a protocol version for our local database.
 	/// Regardless of specific version used when sending/receiving data between peers
 	/// we need to take care with serialization/deserialization of data locally in the db.
 	pub fn local_db() -> ProtocolVersion {
 		ProtocolVersion(1)
+	}
+}
+
+impl fmt::Display for ProtocolVersion {
+	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+		write!(f, "{}", self.0)
 	}
 }
 
