@@ -869,7 +869,7 @@ impl Chain {
 		h: Hash,
 		txhashset_data: File,
 		status: &dyn TxHashsetWriteStatus,
-	) -> Result<(), Error> {
+	) -> Result<bool, Error> {
 		status.on_setup();
 
 		// Initial check whether this txhashset is needed or not
@@ -879,7 +879,14 @@ impl Chain {
 			return Err(ErrorKind::InvalidTxHashSet("not needed".to_owned()).into());
 		}
 
-		let header = self.get_block_header(&h)?;
+		let header = match self.get_block_header(&h) {
+			Ok(header) => header,
+			Err(_) => {
+				warn!("txhashset_write: cannot find block header");
+				// This is a bannable reason
+				return Ok(true);
+			}
+		};
 
 		// Write txhashset to sandbox (in the Grin specific tmp dir)
 		let sandbox_dir = self.get_tmp_dir();
@@ -977,7 +984,7 @@ impl Chain {
 		self.check_orphans(header.height + 1);
 
 		status.on_done();
-		Ok(())
+		Ok(false)
 	}
 
 	/// Cleanup old blocks from the db.

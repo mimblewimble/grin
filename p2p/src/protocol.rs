@@ -25,6 +25,7 @@ use rand::{thread_rng, Rng};
 use std::cmp;
 use std::fs::{self, File, OpenOptions};
 use std::io::{BufWriter, Seek, SeekFrom, Write};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::Instant;
 use tempfile::tempfile;
@@ -32,11 +33,20 @@ use tempfile::tempfile;
 pub struct Protocol {
 	adapter: Arc<dyn NetAdapter>,
 	peer_info: PeerInfo,
+	state_sync_requested: Arc<AtomicBool>,
 }
 
 impl Protocol {
-	pub fn new(adapter: Arc<dyn NetAdapter>, peer_info: PeerInfo) -> Protocol {
-		Protocol { adapter, peer_info }
+	pub fn new(
+		adapter: Arc<dyn NetAdapter>,
+		peer_info: PeerInfo,
+		state_sync_requested: Arc<AtomicBool>,
+	) -> Protocol {
+		Protocol {
+			adapter,
+			peer_info,
+			state_sync_requested,
+		}
 	}
 }
 
@@ -356,6 +366,12 @@ impl MessageHandler for Protocol {
 					);
 					return Err(Error::BadMessage);
 				}
+				if !self.state_sync_requested.load(Ordering::Relaxed) {
+					error!("handle_payload: txhashset archive received but from the wrong peer",);
+					return Err(Error::BadMessage);
+				}
+				// Update the sync state requested status
+				self.state_sync_requested.store(false, Ordering::Relaxed);
 
 				let download_start_time = Utc::now();
 				self.adapter
@@ -425,7 +441,7 @@ impl MessageHandler for Protocol {
 
 				debug!(
 					"handle_payload: txhashset archive for {} at {}, DONE. Data Ok: {}",
-					sm_arch.hash, sm_arch.height, res
+					sm_arch.hash, sm_arch.height, !res
 				);
 
 				if let Err(e) = fs::remove_file(tmp.clone()) {
