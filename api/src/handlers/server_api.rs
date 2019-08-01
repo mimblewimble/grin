@@ -72,14 +72,14 @@ impl StatusHandler {
 		let head = w(&self.chain)?
 			.head()
 			.map_err(|e| ErrorKind::Internal(format!("can't get head: {}", e)))?;
-		let sync_status = match w(&self.sync_state)?.status() {
-			SyncStatus::NoSync => "no_sync".to_owned(),
-			_ => "sync".to_owned(),
+		let status = match w(&self.sync_state)?.status() {
+			SyncStatus::NoSync => "running".to_owned(),
+			_ => "syncing".to_owned(),
 		};
 		Ok(Status::from_tip_and_peers(
 			head,
 			w(&self.peers)?.peer_count(),
-			sync_status,
+			status,
 		))
 	}
 }
