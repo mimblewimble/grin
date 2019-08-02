@@ -545,12 +545,12 @@ impl Chain {
 				pipe::rewind_and_apply_fork(&previous_header, &header_head, extension)?;
 
 				// Retrieve the header root before we apply the new block
-				let prev_root = extension.header_root();
+				let prev_root = extension.header_root()?;
 
 				// Apply the latest block to the chain state via the extension.
 				extension.apply_block(b)?;
 
-				Ok((prev_root, extension.roots(), extension.sizes()))
+				Ok((prev_root, extension.roots()?, extension.sizes()))
 			})?;
 
 		// Set the prev_root on the header.
