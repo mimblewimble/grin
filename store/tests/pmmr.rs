@@ -101,7 +101,7 @@ fn pmmr_append() {
 
 		{
 			let pmmr: PMMR<'_, TestElem, _> = PMMR::at(&mut backend, mmr_size);
-			assert_eq!(pmmr.root(), (pos_14, pos_15).hash_with_index(16));
+			assert_eq!(pmmr.root().unwrap(), (pos_14, pos_15).hash_with_index(16));
 		}
 	}
 
