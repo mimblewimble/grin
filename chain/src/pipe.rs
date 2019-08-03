@@ -53,6 +53,23 @@ fn check_known(header: &BlockHeader, ctx: &mut BlockContext<'_>) -> Result<(), E
 	Ok(())
 }
 
+// Validate only the proof of work in a block header.
+// Used to cheaply validate orphans in process_block before adding them to OrphanBlockPool.
+fn validate_pow_only(header: &BlockHeader, ctx: &mut BlockContext<'_>) -> Result<(), Error> {
+	if !header.pow.is_primary() && !header.pow.is_secondary() {
+		return Err(ErrorKind::LowEdgebits.into());
+	}
+	let edge_bits = header.pow.edge_bits();
+	if !(ctx.pow_verifier)(header).is_ok() {
+		error!(
+			"pipe: error validating header with cuckoo edge_bits {}",
+			edge_bits
+		);
+		return Err(ErrorKind::InvalidPow.into());
+	}
+	Ok(())
+}
+
 /// Runs the block processing pipeline, including validation and finding a
 /// place for the new block in the chain.
 /// Returns new head if chain head updated.
@@ -79,6 +96,10 @@ pub fn process_block(b: &Block, ctx: &mut BlockContext<'_>) -> Result<Option<Tip
 	// or the full txhashset state (fast sync) at the previous block height.
 	let prev = prev_header_store(&b.header, &mut ctx.batch)?;
 	if !is_next && !ctx.batch.block_exists(&prev.hash())? {
+		// Validate the proof of work of the orphan block to prevent adding
+		// invalid blocks to OrphanBlockPool.
+		validate_pow_only(&b.header, ctx)?;
+
 		return Err(ErrorKind::Orphan.into());
 	}
 
