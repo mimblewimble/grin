@@ -262,7 +262,7 @@ impl Server {
 		)?;
 
 		let p2p_inner = p2p_server.clone();
-		let _ = thread::Builder::new()
+		let p2p_thread = thread::Builder::new()
 			.name("p2p-server".to_string())
 			.spawn(move || p2p_inner.listen())?;
 
@@ -328,6 +328,7 @@ impl Server {
 			connect_thread,
 			sync_thread,
 			dandelion_thread,
+			p2p_thread,
 			i2p_thread,
 		})
 	}

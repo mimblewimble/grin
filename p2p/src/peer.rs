@@ -156,7 +156,8 @@ impl Peer {
 	/// system.
 	pub fn start<S: Stream + 'static>(&mut self, conn: S) -> Result<(), Error> {
 		let adapter = Arc::new(self.tracking_adapter.clone());
-		let handler = Protocol::new(adapter, self.info.clone());
+		let state_sync_requested = Arc::new(AtomicBool::new(false));
+		let handler = Protocol::new(adapter, self.info.clone(), state_sync_requested);
 		let (sendh, stoph) = conn::listen(
 			conn,
 			self.info.version.clone(),

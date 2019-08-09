@@ -697,8 +697,6 @@ impl ChainAdapter for Peers {
 			Ok(false)
 		} else {
 			Ok(true)
-		} else {
-			Ok(false)
 		}
 	}
 
