@@ -670,7 +670,7 @@ impl<'a> HeaderExtension<'a> {
 	pub fn apply_header(&mut self, header: &BlockHeader) -> Result<Hash, Error> {
 		self.pmmr.push(header).map_err(&ErrorKind::TxHashSetErr)?;
 		self.head = Tip::from_header(header);
-		Ok(self.root())
+		Ok(self.root()?)
 	}
 
 	/// Rewind the header extension to the specified header.
@@ -749,8 +749,8 @@ impl<'a> HeaderExtension<'a> {
 	}
 
 	/// The root of the header MMR for convenience.
-	pub fn root(&self) -> Hash {
-		self.pmmr.root()
+	pub fn root(&self) -> Result<Hash, Error> {
+		Ok(self.pmmr.root().map_err(|_| ErrorKind::InvalidRoot)?)
 	}
 
 	/// Validate the prev_root of the header against the root of the current header MMR.
@@ -760,7 +760,7 @@ impl<'a> HeaderExtension<'a> {
 		if header.height == 0 {
 			return Ok(());
 		}
-		if self.root() != header.prev_root {
+		if self.root()? != header.prev_root {
 			Err(ErrorKind::InvalidRoot.into())
 		} else {
 			Ok(())
@@ -1095,18 +1095,33 @@ impl<'a> Extension<'a> {
 
 	/// Current root hashes and sums (if applicable) for the Output, range proof
 	/// and kernel sum trees.
-	pub fn roots(&self) -> TxHashSetRoots {
-		TxHashSetRoots {
-			header_root: self.header_pmmr.root(),
-			output_root: self.output_pmmr.root(),
-			rproof_root: self.rproof_pmmr.root(),
-			kernel_root: self.kernel_pmmr.root(),
-		}
+	pub fn roots(&self) -> Result<TxHashSetRoots, Error> {
+		Ok(TxHashSetRoots {
+			header_root: self
+				.header_pmmr
+				.root()
+				.map_err(|_| ErrorKind::InvalidRoot)?,
+			output_root: self
+				.output_pmmr
+				.root()
+				.map_err(|_| ErrorKind::InvalidRoot)?,
+			rproof_root: self
+				.rproof_pmmr
+				.root()
+				.map_err(|_| ErrorKind::InvalidRoot)?,
+			kernel_root: self
+				.kernel_pmmr
+				.root()
+				.map_err(|_| ErrorKind::InvalidRoot)?,
+		})
 	}
 
 	/// Get the root of the current header MMR.
-	pub fn header_root(&self) -> Hash {
-		self.header_pmmr.root()
+	pub fn header_root(&self) -> Result<Hash, Error> {
+		Ok(self
+			.header_pmmr
+			.root()
+			.map_err(|_| ErrorKind::InvalidRoot)?)
 	}
 
 	/// Validate the following MMR roots against the latest header applied -
@@ -1126,7 +1141,7 @@ impl<'a> Extension<'a> {
 			return Ok(());
 		}
 		let head_header = self.batch.get_block_header(&self.head.last_block_h)?;
-		let roots = self.roots();
+		let roots = self.roots()?;
 		if roots.output_root != head_header.output_root
 			|| roots.rproof_root != head_header.range_proof_root
 			|| roots.kernel_root != head_header.kernel_root
@@ -1143,7 +1158,7 @@ impl<'a> Extension<'a> {
 		if header.height == 0 {
 			return Ok(());
 		}
-		let roots = self.roots();
+		let roots = self.roots()?;
 		if roots.header_root != header.prev_root {
 			Err(ErrorKind::InvalidRoot.into())
 		} else {
