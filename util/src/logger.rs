@@ -88,14 +88,13 @@ pub fn init_logger(config: Option<LoggingConfig>) {
 
 		let level_stdout = convert_log_level(&c.stdout_log_level);
 		let level_file = convert_log_level(&c.file_log_level);
-		let level_minimum;
 
 		// Determine minimum logging level for Root logger
-		if level_stdout > level_file {
-			level_minimum = level_stdout;
+		let level_minimum = if level_stdout > level_file {
+			level_stdout
 		} else {
-			level_minimum = level_file;
-		}
+			level_file
+		};
 
 		// Start logger
 		let stdout = ConsoleAppender::builder()

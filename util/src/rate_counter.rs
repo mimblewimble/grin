@@ -77,7 +77,7 @@ impl RateCounter {
 
 	fn truncate(&mut self) {
 		let now_millis = millis_since_epoch();
-		while self.last_min_entries.len() > 0
+		while !self.last_min_entries.is_empty()
 			&& self.last_min_entries[0].timestamp + 60000 < now_millis
 		{
 			self.last_min_entries.remove(0);
@@ -106,5 +106,5 @@ fn millis_since_epoch() -> u64 {
 	let since_epoch = SystemTime::now()
 		.duration_since(SystemTime::UNIX_EPOCH)
 		.unwrap_or(Duration::new(0, 0));
-	since_epoch.as_secs() * 1000 + since_epoch.subsec_millis() as u64
+	since_epoch.as_secs() * 1000 + u64::from(since_epoch.subsec_millis())
 }
