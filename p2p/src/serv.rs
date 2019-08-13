@@ -198,11 +198,12 @@ impl Server {
 		Ok(())
 	}
 
-	/// Checks whether there's any reason we don't want to accept a peer
+	/// Checks whether there's any reason we don't want to accept an incoming peer
 	/// connection. There can be a few of them:
-	/// 1. Accepting the peer connection would exceed the configured maximum
-	/// allowed peer count. Note that seed nodes may wish to allow more than
-	/// the maximum configured connections to help with network bootstrapping.
+	/// 1. Accepting the peer connection would exceed the configured maximum allowed
+	/// inbound peer count. Note that seed nodes may wish to increase the default
+	/// value for PEER_LISTENER_BUFFER_COUNT to help with network bootstrapping.
+	/// A default buffer of 8 peers is allowed to help with network growth.
 	/// 2. The peer has been previously banned and the ban period hasn't
 	/// expired yet.
 	/// 3. We're already connected to a peer at the same IP. While there are
@@ -211,7 +212,9 @@ impl Server {
 	/// different sets of peers themselves. In addition, it prevent potential
 	/// duplicate connections, malicious or not.
 	fn check_undesirable(&self, stream: &TcpStream) -> bool {
-		if self.peers.peer_count() >= self.config.peer_max_count() {
+		if self.peers.peer_inbound_count()
+			>= self.config.peer_max_inbound_count() + self.config.peer_listener_buffer_count()
+		{
 			debug!("Accepting new connection will exceed peer limit, refusing connection.");
 			return true;
 		}

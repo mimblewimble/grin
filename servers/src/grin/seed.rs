@@ -185,7 +185,10 @@ fn monitor_peers(
 	);
 
 	// maintenance step first, clean up p2p server peers
-	peers.clean_peers(config.peer_max_count() as usize);
+	peers.clean_peers(
+		config.peer_max_inbound_count() as usize,
+		config.peer_max_outbound_count() as usize,
+	);
 
 	if peers.healthy_peers_mix() {
 		return;
