@@ -233,7 +233,7 @@ fn monitor_peers(
 	let new_peers = peers.find_peers(
 		p2p::State::Healthy,
 		p2p::Capabilities::UNKNOWN,
-		config.peer_max_count() as usize,
+		config.peer_max_outbound_count() as usize,
 	);
 
 	for p in new_peers.iter().filter(|p| !peers.is_known(p.addr)) {
@@ -303,11 +303,14 @@ fn listen_for_addrs(
 		return;
 	}
 
-	// Try to connect to (up to max peers) peer addresses.
+	// Try to connect to (up to max outbound peers) peer addresses.
 	// Note: We drained the rx queue earlier to keep it under control.
 	// Even if there are many addresses to try we will only try a bounded number of them.
 	let connect_min_interval = 30;
-	for addr in addrs.into_iter().take(p2p.config.peer_max_count() as usize) {
+	for addr in addrs
+		.into_iter()
+		.take(p2p.config.peer_max_outbound_count() as usize)
+	{
 		// ignore the duplicate connecting to same peer within 30 seconds
 		let now = Utc::now();
 		if let Some(last_connect_time) = connecting_history.get(&addr) {

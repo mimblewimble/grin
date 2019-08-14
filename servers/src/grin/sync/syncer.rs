@@ -86,7 +86,7 @@ impl SyncRunner {
 			// * timeout
 			if wp > MIN_PEERS
 				|| (wp == 0
-					&& self.peers.enough_peers()
+					&& self.peers.healthy_peers_mix()
 					&& head.total_difficulty > Difficulty::zero())
 				|| n > wait_secs
 			{

@@ -49,13 +49,10 @@ pub const MAX_LOCATORS: u32 = 20;
 const BAN_WINDOW: i64 = 10800;
 
 /// The max inbound peer count
-const PEER_MAX_INBOUND_COUNT: u32 = 117;
+const PEER_MAX_INBOUND_COUNT: u32 = 128;
 
 /// The max outbound peer count
 const PEER_MAX_OUTBOUND_COUNT: u32 = 8;
-
-/// min preferred peer count
-const PEER_MIN_PREFERRED_COUNT: u32 = 8;
 
 /// The min preferred outbound peer count
 const PEER_MIN_PREFERRED_OUTBOUND_COUNT: u32 = 8;
@@ -243,8 +240,6 @@ pub struct P2PConfig {
 
 	pub peer_max_outbound_count: Option<u32>,
 
-	pub peer_min_preferred_count: Option<u32>,
-
 	pub peer_min_preferred_outbound_count: Option<u32>,
 
 	pub peer_listener_buffer_count: Option<u32>,
@@ -268,7 +263,6 @@ impl Default for P2PConfig {
 			ban_window: None,
 			peer_max_inbound_count: None,
 			peer_max_outbound_count: None,
-			peer_min_preferred_count: None,
 			peer_min_preferred_outbound_count: None,
 			peer_listener_buffer_count: None,
 			dandelion_peer: None,
@@ -287,11 +281,6 @@ impl P2PConfig {
 		}
 	}
 
-	/// return total maximum peer count (incoming + outgoing)
-	pub fn peer_max_count(&self) -> u32 {
-		PEER_MAX_INBOUND_COUNT + PEER_MAX_OUTBOUND_COUNT
-	}
-
 	/// return maximum inbound peer connections count
 	pub fn peer_max_inbound_count(&self) -> u32 {
 		match self.peer_max_inbound_count {
@@ -305,14 +294,6 @@ impl P2PConfig {
 		match self.peer_max_outbound_count {
 			Some(n) => n,
 			None => PEER_MAX_OUTBOUND_COUNT,
-		}
-	}
-
-	/// return peer_preferred_count
-	pub fn peer_min_preferred_count(&self) -> u32 {
-		match self.peer_min_preferred_count {
-			Some(n) => n,
-			None => PEER_MIN_PREFERRED_COUNT,
 		}
 	}
 

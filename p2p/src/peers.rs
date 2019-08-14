@@ -338,7 +338,8 @@ impl Peers {
 	/// A peer implementation may drop the broadcast request
 	/// if it knows the remote peer already has the block.
 	pub fn broadcast_compact_block(&self, b: &core::CompactBlock) {
-		let num_peers = self.config.peer_max_count();
+		let num_peers =
+			self.config.peer_max_inbound_count() + self.config.peer_max_outbound_count();
 		let count = self.broadcast("compact block", num_peers, |p| p.send_compact_block(b));
 		debug!(
 			"broadcast_compact_block: {}, {} at {}, to {} peers, done.",
@@ -355,7 +356,7 @@ impl Peers {
 	/// A peer implementation may drop the broadcast request
 	/// if it knows the remote peer already has the header.
 	pub fn broadcast_header(&self, bh: &core::BlockHeader) {
-		let num_peers = self.config.peer_min_preferred_count();
+		let num_peers = self.config.peer_min_preferred_outbound_count();
 		let count = self.broadcast("header", num_peers, |p| p.send_header(bh));
 		debug!(
 			"broadcast_header: {}, {} at {}, to {} peers, done.",
@@ -372,7 +373,8 @@ impl Peers {
 	/// A peer implementation may drop the broadcast request
 	/// if it knows the remote peer already has the transaction.
 	pub fn broadcast_transaction(&self, tx: &core::Transaction) {
-		let num_peers = self.config.peer_max_count();
+		let num_peers =
+			self.config.peer_max_inbound_count() + self.config.peer_max_outbound_count();
 		let count = self.broadcast("transaction", num_peers, |p| p.send_transaction(tx));
 		debug!(
 			"broadcast_transaction: {} to {} peers, done.",
@@ -543,14 +545,9 @@ impl Peers {
 		}
 	}
 
-	pub fn enough_peers(&self) -> bool {
-		self.peer_count() >= self.config.peer_min_preferred_count()
-	}
-
 	/// We have enough peers, both total connected and outbound connected
 	pub fn healthy_peers_mix(&self) -> bool {
-		self.enough_peers()
-			&& self.peer_outbound_count() >= self.config.peer_min_preferred_outbound_count()
+		self.peer_outbound_count() >= self.config.peer_min_preferred_outbound_count()
 	}
 
 	/// Removes those peers that seem to have expired
