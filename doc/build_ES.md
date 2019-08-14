@@ -87,8 +87,8 @@ Para obtener ayuda sobre los comandos de grin y sus cambios intente:
 
 ```sh
 grin help
-grin wallet help
-grin client help
+grin wallet --help
+grin client --help
 ```
 
 ## Docker
