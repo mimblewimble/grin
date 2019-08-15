@@ -190,7 +190,7 @@ fn monitor_peers(
 		config.peer_max_outbound_count() as usize,
 	);
 
-	if peers.healthy_peers_mix() {
+	if peers.enough_outbound_peers() {
 		return;
 	}
 
@@ -299,7 +299,7 @@ fn listen_for_addrs(
 	let addrs: Vec<PeerAddr> = rx.try_iter().collect();
 
 	// If we have a healthy number of outbound peers then we are done here.
-	if peers.healthy_peers_mix() {
+	if peers.enough_outbound_peers() {
 		return;
 	}
 

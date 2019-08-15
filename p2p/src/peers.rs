@@ -545,8 +545,8 @@ impl Peers {
 		}
 	}
 
-	/// We have enough peers, both total connected and outbound connected
-	pub fn healthy_peers_mix(&self) -> bool {
+	/// We have enough outbound connected peers
+	pub fn enough_outbound_peers(&self) -> bool {
 		self.peer_outbound_count() >= self.config.peer_min_preferred_outbound_count()
 	}
 
