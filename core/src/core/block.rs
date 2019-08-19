@@ -28,8 +28,10 @@ use crate::core::compact_block::{CompactBlock, CompactBlockBody};
 use crate::core::hash::{DefaultHashable, Hash, Hashed, ZERO_HASH};
 use crate::core::verifier_cache::VerifierCache;
 use crate::core::{
-	transaction, Commitment, Input, Output, Transaction, TransactionBody, TxKernel, Weighting,
+	transaction, Commitment, Input, KernelFeatures, Output, Transaction, TransactionBody, TxKernel,
+	Weighting,
 };
+
 use crate::global;
 use crate::keychain::{self, BlindingFactor};
 use crate::pow::{Difficulty, Proof, ProofOfWork};
@@ -643,10 +645,7 @@ impl Block {
 
 	/// Sum of all fees (inputs less outputs) in the block
 	pub fn total_fees(&self) -> u64 {
-		self.body
-			.kernels
-			.iter()
-			.fold(0, |acc, ref x| acc.saturating_add(x.fee))
+		self.body.fee()
 	}
 
 	/// Matches any output with a potential spending input, eliminating them
@@ -762,8 +761,10 @@ impl Block {
 		for k in &self.body.kernels {
 			// check we have no kernels with lock_heights greater than current height
 			// no tx can be included in a block earlier than its lock_height
-			if k.lock_height > self.header.height {
-				return Err(Error::KernelLockHeight(k.lock_height));
+			if let KernelFeatures::HeightLocked { lock_height, .. } = k.features {
+				if lock_height > self.header.height {
+					return Err(Error::KernelLockHeight(lock_height));
+				}
 			}
 		}
 		Ok(())
