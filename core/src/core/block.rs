@@ -31,6 +31,7 @@ use crate::core::{
 	transaction, Commitment, Input, KernelFeatures, Output, Transaction, TransactionBody, TxKernel,
 	Weighting,
 };
+
 use crate::global;
 use crate::keychain::{self, BlindingFactor};
 use crate::pow::{Difficulty, Proof, ProofOfWork};
