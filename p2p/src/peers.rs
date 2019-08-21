@@ -126,10 +126,19 @@ impl Peers {
 		res
 	}
 
+	/// Get vec of peers we currently have an outgoing connection with.
 	pub fn outgoing_connected_peers(&self) -> Vec<Arc<Peer>> {
 		self.connected_peers()
 			.into_iter()
 			.filter(|x| x.info.is_outbound())
+			.collect()
+	}
+
+	/// Get vec of peers we currently have an incoming connection with.
+	pub fn incoming_connected_peers(&self) -> Vec<Arc<Peer>> {
+		self.connected_peers()
+			.into_iter()
+			.filter(|x| x.info.is_inbound())
 			.collect()
 	}
 
@@ -153,6 +162,11 @@ impl Peers {
 	/// Number of outbound peers currently connected to.
 	pub fn peer_outbound_count(&self) -> u32 {
 		self.outgoing_connected_peers().len() as u32
+	}
+
+	/// Number of inbound peers currently connected to.
+	pub fn peer_inbound_count(&self) -> u32 {
+		self.incoming_connected_peers().len() as u32
 	}
 
 	// Return vec of connected peers that currently advertise more work
@@ -324,7 +338,8 @@ impl Peers {
 	/// A peer implementation may drop the broadcast request
 	/// if it knows the remote peer already has the block.
 	pub fn broadcast_compact_block(&self, b: &core::CompactBlock) {
-		let num_peers = self.config.peer_max_count();
+		let num_peers =
+			self.config.peer_max_inbound_count() + self.config.peer_max_outbound_count();
 		let count = self.broadcast("compact block", num_peers, |p| p.send_compact_block(b));
 		debug!(
 			"broadcast_compact_block: {}, {} at {}, to {} peers, done.",
@@ -341,7 +356,7 @@ impl Peers {
 	/// A peer implementation may drop the broadcast request
 	/// if it knows the remote peer already has the header.
 	pub fn broadcast_header(&self, bh: &core::BlockHeader) {
-		let num_peers = self.config.peer_min_preferred_count();
+		let num_peers = self.config.peer_min_preferred_outbound_count();
 		let count = self.broadcast("header", num_peers, |p| p.send_header(bh));
 		debug!(
 			"broadcast_header: {}, {} at {}, to {} peers, done.",
@@ -358,7 +373,8 @@ impl Peers {
 	/// A peer implementation may drop the broadcast request
 	/// if it knows the remote peer already has the transaction.
 	pub fn broadcast_transaction(&self, tx: &core::Transaction) {
-		let num_peers = self.config.peer_max_count();
+		let num_peers =
+			self.config.peer_max_inbound_count() + self.config.peer_max_outbound_count();
 		let count = self.broadcast("transaction", num_peers, |p| p.send_transaction(tx));
 		debug!(
 			"broadcast_transaction: {} to {} peers, done.",
@@ -433,7 +449,7 @@ impl Peers {
 	/// Iterate over the peer list and prune all peers we have
 	/// lost connection to or have been deemed problematic.
 	/// Also avoid connected peer count getting too high.
-	pub fn clean_peers(&self, max_count: usize) {
+	pub fn clean_peers(&self, max_inbound_count: usize, max_outbound_count: usize) {
 		let mut rm = vec![];
 
 		// build a list of peers to be cleaned up
@@ -477,16 +493,27 @@ impl Peers {
 			}
 		}
 
-		// ensure we do not still have too many connected peers
-		let excess_count = (self.peer_count() as usize)
-			.saturating_sub(rm.len())
-			.saturating_sub(max_count);
-		if excess_count > 0 {
-			// map peers to addrs in a block to bound how long we keep the read lock for
+		// check here to make sure we don't have too many outgoing connections
+		let excess_outgoing_count =
+			(self.peer_outbound_count() as usize).saturating_sub(max_outbound_count);
+		if excess_outgoing_count > 0 {
 			let mut addrs = self
-				.connected_peers()
+				.outgoing_connected_peers()
 				.iter()
-				.take(excess_count)
+				.take(excess_outgoing_count)
+				.map(|x| x.info.addr.clone())
+				.collect::<Vec<_>>();
+			rm.append(&mut addrs);
+		}
+
+		// check here to make sure we don't have too many incoming connections
+		let excess_incoming_count =
+			(self.peer_inbound_count() as usize).saturating_sub(max_inbound_count);
+		if excess_incoming_count > 0 {
+			let mut addrs = self
+				.incoming_connected_peers()
+				.iter()
+				.take(excess_incoming_count)
 				.map(|x| x.info.addr.clone())
 				.collect::<Vec<_>>();
 			rm.append(&mut addrs);
@@ -518,14 +545,9 @@ impl Peers {
 		}
 	}
 
-	pub fn enough_peers(&self) -> bool {
-		self.peer_count() >= self.config.peer_min_preferred_count()
-	}
-
-	/// We have enough peers, both total connected and outbound connected
-	pub fn healthy_peers_mix(&self) -> bool {
-		self.enough_peers()
-			&& self.peer_outbound_count() >= self.config.peer_min_preferred_count() / 2
+	/// We have enough outbound connected peers
+	pub fn enough_outbound_peers(&self) -> bool {
+		self.peer_outbound_count() >= self.config.peer_min_preferred_outbound_count()
 	}
 
 	/// Removes those peers that seem to have expired
