@@ -334,13 +334,17 @@ We also know that everything remaining can be used to reconstruct the other vali
 
     (in3) -> (out2), (kern2)
 
-To mitigate this we include a _kernel offset_ with every transaction kernel. This is a public key that needs to be added to the kernel excess to ensure the commitments sum to zero:
+Remember that the kernel excess `r*G` simply is the public key of the excess value *r*. To mitigate this we redefine the kernel excess from `r*G` to `(r-kernel_offset)*G` and distribute the _kernel offset_ to be included with every transaction kernel. The kernel offset is thus a blinding factor that needs to be added to the excess value to ensure the commitments sum to zero:
 
-    sum(outputs) - sum(inputs) = kernel_excess + kernel_offset
+    sum(outputs) - sum(inputs) = r*G = (r-kernel_offset)*G + kernel_offset*G
+    
+or alternatively
 
-We "split" the key `k` into `k1 + k2` during transaction construction. We sign the transaction with `k1` and publish `k2` to create our kernel offset (`k2*G`). During block construction we can simply sum all the kernel offsets to generate a _single_ aggregate kernel offset to cover all transactions in the block. The kernel offset for any individual transaction will then be unrecoverable and the subset problem will be solved.
+    sum(outputs) - sum(inputs) = kernel_excess + kernel_offset*G
+    
+For a commitment `r*G + 0*H` with the offset `a`, the transaction is signed with `(r-a)`, and *a* is published so the miners can calculate `r*G` and verify the validity of the transaction. During block construction all kernel offsets are summed to generate a _single_ aggregate kernel offset to cover the whole block. The kernel offset for any individual transaction is then unrecoverable and the subset problem is solved.
 
-    sum(outputs) - sum(inputs) = sum(kernel_excess) + kernel_offset
+    sum(outputs) - sum(inputs) = sum(kernel_excess) + kernel_offset*G
 
 
 #### Cut-through
