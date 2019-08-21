@@ -295,14 +295,12 @@ impl Peers {
 		};
 	}
 
-	fn broadcast<F>(&self, obj_name: &str, num_peers: u32, inner: F) -> u32
+	fn broadcast<F>(&self, obj_name: &str, inner: F) -> u32
 	where
 		F: Fn(&Peer) -> Result<bool, Error>,
 	{
 		let mut count = 0;
 
-		// Iterate over our connected peers.
-		// Try our best to send to at most num_peers peers.
 		for p in self.connected_peers().iter() {
 			match inner(&p) {
 				Ok(true) => count += 1,
@@ -324,23 +322,14 @@ impl Peers {
 					peers.remove(&p.info.addr);
 				}
 			}
-
-			if count >= num_peers {
-				break;
-			}
 		}
 		count
 	}
 
-	/// Broadcasts the provided compact block to PEER_MAX_COUNT of our peers.
-	/// This is only used when initially broadcasting a newly mined block
-	/// from a mining node so we want to broadcast it far and wide.
-	/// A peer implementation may drop the broadcast request
-	/// if it knows the remote peer already has the block.
+	/// Broadcast a compact block to all our connected peers.
+	/// This is only used when initially broadcasting a newly mined block.
 	pub fn broadcast_compact_block(&self, b: &core::CompactBlock) {
-		let num_peers =
-			self.config.peer_max_inbound_count() + self.config.peer_max_outbound_count();
-		let count = self.broadcast("compact block", num_peers, |p| p.send_compact_block(b));
+		let count = self.broadcast("compact block", |p| p.send_compact_block(b));
 		debug!(
 			"broadcast_compact_block: {}, {} at {}, to {} peers, done.",
 			b.hash(),
@@ -350,14 +339,11 @@ impl Peers {
 		);
 	}
 
-	/// Broadcasts the provided header to PEER_PREFERRED_COUNT of our peers.
-	/// We may be connected to PEER_MAX_COUNT peers so we only
-	/// want to broadcast to a random subset of peers.
+	/// Broadcast a block header to all our connected peers.
 	/// A peer implementation may drop the broadcast request
 	/// if it knows the remote peer already has the header.
 	pub fn broadcast_header(&self, bh: &core::BlockHeader) {
-		let num_peers = self.config.peer_min_preferred_outbound_count();
-		let count = self.broadcast("header", num_peers, |p| p.send_header(bh));
+		let count = self.broadcast("header", |p| p.send_header(bh));
 		debug!(
 			"broadcast_header: {}, {} at {}, to {} peers, done.",
 			bh.hash(),
@@ -367,15 +353,11 @@ impl Peers {
 		);
 	}
 
-	/// Broadcasts the provided transaction to PEER_PREFERRED_COUNT of our
-	/// peers. We may be connected to PEER_MAX_COUNT peers so we only
-	/// want to broadcast to a random subset of peers.
+	/// Broadcasts the provided transaction to all our connected peers.
 	/// A peer implementation may drop the broadcast request
 	/// if it knows the remote peer already has the transaction.
 	pub fn broadcast_transaction(&self, tx: &core::Transaction) {
-		let num_peers =
-			self.config.peer_max_inbound_count() + self.config.peer_max_outbound_count();
-		let count = self.broadcast("transaction", num_peers, |p| p.send_transaction(tx));
+		let count = self.broadcast("transaction", |p| p.send_transaction(tx));
 		debug!(
 			"broadcast_transaction: {} to {} peers, done.",
 			tx.hash(),
