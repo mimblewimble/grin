@@ -59,8 +59,8 @@ pub const YEAR_HEIGHT: u64 = 52 * WEEK_HEIGHT;
 /// Number of blocks before a coinbase matures and can be spent
 pub const COINBASE_MATURITY: u64 = DAY_HEIGHT;
 
-/// Ratio the secondary proof of work should take over the primary, as a
-/// function of block height (time). Starts at 90% losing a percent
+/// Target ratio of secondary proof of work to primary proof of work,
+/// as a function of block height (time). Starts at 90% losing a percent
 /// approximately every week. Represented as an integer between 0 and 100.
 pub fn secondary_pow_ratio(height: u64) -> u64 {
 	90u64.saturating_sub(height / (2 * YEAR_HEIGHT / 90))
@@ -183,14 +183,14 @@ pub const DIFFICULTY_DAMP_FACTOR: u64 = 3;
 pub const AR_SCALE_DAMP_FACTOR: u64 = 13;
 
 /// Compute weight of a graph as number of siphash bits defining the graph
-/// Must be made dependent on height to phase out smaller size over the years
-/// This can wait until end of 2019 at latest
+/// Must be made dependent on height to phase out C31 in early 2020
+/// Later phase outs are on hold for now
 pub fn graph_weight(height: u64, edge_bits: u8) -> u64 {
 	let mut xpr_edge_bits = edge_bits as u64;
 
 	let bits_over_min = edge_bits.saturating_sub(global::min_edge_bits());
 	let expiry_height = (1 << bits_over_min) * YEAR_HEIGHT;
-	if height >= expiry_height {
+	if edge_bits < 32 && height >= expiry_height {
 		xpr_edge_bits = xpr_edge_bits.saturating_sub(1 + (height - expiry_height) / WEEK_HEIGHT);
 	}
 
@@ -382,23 +382,29 @@ mod test {
 
 		// 2 years in, 31 still at 0, 32 starts decreasing
 		assert_eq!(graph_weight(2 * YEAR_HEIGHT, 31), 0);
-		assert_eq!(graph_weight(2 * YEAR_HEIGHT, 32), 512 * 31);
+		assert_eq!(graph_weight(2 * YEAR_HEIGHT, 32), 512 * 32);
 		assert_eq!(graph_weight(2 * YEAR_HEIGHT, 33), 1024 * 33);
 
-		// 32 loses one factor per week
-		assert_eq!(graph_weight(2 * YEAR_HEIGHT + WEEK_HEIGHT, 32), 512 * 30);
+		// 32 phaseout on hold
+		assert_eq!(graph_weight(2 * YEAR_HEIGHT + WEEK_HEIGHT, 32), 512 * 32);
 		assert_eq!(graph_weight(2 * YEAR_HEIGHT + WEEK_HEIGHT, 31), 0);
-		assert_eq!(graph_weight(2 * YEAR_HEIGHT + 30 * WEEK_HEIGHT, 32), 512);
-		assert_eq!(graph_weight(2 * YEAR_HEIGHT + 31 * WEEK_HEIGHT, 32), 0);
+		assert_eq!(
+			graph_weight(2 * YEAR_HEIGHT + 30 * WEEK_HEIGHT, 32),
+			512 * 32
+		);
+		assert_eq!(
+			graph_weight(2 * YEAR_HEIGHT + 31 * WEEK_HEIGHT, 32),
+			512 * 32
+		);
 
 		// 3 years in, nothing changes
 		assert_eq!(graph_weight(3 * YEAR_HEIGHT, 31), 0);
-		assert_eq!(graph_weight(3 * YEAR_HEIGHT, 32), 0);
+		assert_eq!(graph_weight(3 * YEAR_HEIGHT, 32), 512 * 32);
 		assert_eq!(graph_weight(3 * YEAR_HEIGHT, 33), 1024 * 33);
 
-		// 4 years in, 33 starts starts decreasing
+		// 4 years in, still on hold
 		assert_eq!(graph_weight(4 * YEAR_HEIGHT, 31), 0);
-		assert_eq!(graph_weight(4 * YEAR_HEIGHT, 32), 0);
-		assert_eq!(graph_weight(4 * YEAR_HEIGHT, 33), 1024 * 32);
+		assert_eq!(graph_weight(4 * YEAR_HEIGHT, 32), 512 * 32);
+		assert_eq!(graph_weight(4 * YEAR_HEIGHT, 33), 1024 * 33);
 	}
 }

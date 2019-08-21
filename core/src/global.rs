@@ -31,7 +31,6 @@ use crate::pow::{
 /// different sets of parameters for different purposes,
 /// e.g. CI, User testing, production values
 use crate::util::RwLock;
-
 /// Define these here, as they should be developer-set, not really tweakable
 /// by users
 
@@ -296,18 +295,6 @@ pub fn txhashset_archive_interval() -> u64 {
 	}
 }
 
-/// Are we in automated testing mode?
-pub fn is_automated_testing_mode() -> bool {
-	let param_ref = CHAIN_TYPE.read();
-	ChainTypes::AutomatedTesting == *param_ref
-}
-
-/// Are we in user testing mode?
-pub fn is_user_testing_mode() -> bool {
-	let param_ref = CHAIN_TYPE.read();
-	ChainTypes::UserTesting == *param_ref
-}
-
 /// Are we in production mode?
 /// Production defined as a live public network, testnet[n] or mainnet.
 pub fn is_production_mode() -> bool {
@@ -322,36 +309,6 @@ pub fn is_production_mode() -> bool {
 pub fn is_floonet() -> bool {
 	let param_ref = CHAIN_TYPE.read();
 	ChainTypes::Floonet == *param_ref
-}
-
-/// Are we for real?
-pub fn is_mainnet() -> bool {
-	let param_ref = CHAIN_TYPE.read();
-	ChainTypes::Mainnet == *param_ref
-}
-
-/// Helper function to get a nonce known to create a valid POW on
-/// the genesis block, to prevent it taking ages. Should be fine for now
-/// as the genesis block POW solution turns out to be the same for every new
-/// block chain at the moment
-pub fn get_genesis_nonce() -> u64 {
-	let param_ref = CHAIN_TYPE.read();
-	match *param_ref {
-		// won't make a difference
-		ChainTypes::AutomatedTesting => 0,
-		// Magic nonce for current genesis block at cuckatoo15
-		ChainTypes::UserTesting => 27944,
-		// Placeholder, obviously not the right value
-		ChainTypes::Floonet => 0,
-		// Placeholder, obviously not the right value
-		ChainTypes::Mainnet => 0,
-	}
-}
-
-/// Short name representing the current chain type ("floo", "main", etc.)
-pub fn chain_shortname() -> String {
-	let param_ref = CHAIN_TYPE.read();
-	param_ref.shortname()
 }
 
 /// Converts an iterator of block difficulty data to more a more manageable

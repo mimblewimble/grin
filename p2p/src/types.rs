@@ -48,11 +48,18 @@ pub const MAX_LOCATORS: u32 = 20;
 /// How long a banned peer should be banned for
 const BAN_WINDOW: i64 = 10800;
 
-/// The max peer count
-const PEER_MAX_COUNT: u32 = 125;
+/// The max inbound peer count
+const PEER_MAX_INBOUND_COUNT: u32 = 128;
 
-/// min preferred peer count
-const PEER_MIN_PREFERRED_COUNT: u32 = 8;
+/// The max outbound peer count
+const PEER_MAX_OUTBOUND_COUNT: u32 = 8;
+
+/// The min preferred outbound peer count
+const PEER_MIN_PREFERRED_OUTBOUND_COUNT: u32 = 8;
+
+/// The peer listener buffer count. Allows temporarily accepting more connections
+/// than allowed by PEER_MAX_INBOUND_COUNT to encourage network bootstrapping.
+const PEER_LISTENER_BUFFER_COUNT: u32 = 8;
 
 #[derive(Debug)]
 pub enum Error {
@@ -229,9 +236,13 @@ pub struct P2PConfig {
 
 	pub ban_window: Option<i64>,
 
-	pub peer_max_count: Option<u32>,
+	pub peer_max_inbound_count: Option<u32>,
 
-	pub peer_min_preferred_count: Option<u32>,
+	pub peer_max_outbound_count: Option<u32>,
+
+	pub peer_min_preferred_outbound_count: Option<u32>,
+
+	pub peer_listener_buffer_count: Option<u32>,
 
 	pub dandelion_peer: Option<PeerAddr>,
 }
@@ -250,8 +261,10 @@ impl Default for P2PConfig {
 			peers_deny: None,
 			peers_preferred: None,
 			ban_window: None,
-			peer_max_count: None,
-			peer_min_preferred_count: None,
+			peer_max_inbound_count: None,
+			peer_max_outbound_count: None,
+			peer_min_preferred_outbound_count: None,
+			peer_listener_buffer_count: None,
 			dandelion_peer: None,
 		}
 	}
@@ -268,19 +281,35 @@ impl P2PConfig {
 		}
 	}
 
-	/// return peer_max_count
-	pub fn peer_max_count(&self) -> u32 {
-		match self.peer_max_count {
+	/// return maximum inbound peer connections count
+	pub fn peer_max_inbound_count(&self) -> u32 {
+		match self.peer_max_inbound_count {
 			Some(n) => n,
-			None => PEER_MAX_COUNT,
+			None => PEER_MAX_INBOUND_COUNT,
 		}
 	}
 
-	/// return peer_preferred_count
-	pub fn peer_min_preferred_count(&self) -> u32 {
-		match self.peer_min_preferred_count {
+	/// return maximum outbound peer connections count
+	pub fn peer_max_outbound_count(&self) -> u32 {
+		match self.peer_max_outbound_count {
 			Some(n) => n,
-			None => PEER_MIN_PREFERRED_COUNT,
+			None => PEER_MAX_OUTBOUND_COUNT,
+		}
+	}
+
+	/// return minimum preferred outbound peer count
+	pub fn peer_min_preferred_outbound_count(&self) -> u32 {
+		match self.peer_min_preferred_outbound_count {
+			Some(n) => n,
+			None => PEER_MIN_PREFERRED_OUTBOUND_COUNT,
+		}
+	}
+
+	/// return peer buffer count for listener
+	pub fn peer_listener_buffer_count(&self) -> u32 {
+		match self.peer_listener_buffer_count {
+			Some(n) => n,
+			None => PEER_LISTENER_BUFFER_COUNT,
 		}
 	}
 }
@@ -396,6 +425,10 @@ impl PeerInfo {
 
 	pub fn is_outbound(&self) -> bool {
 		self.direction == Direction::Outbound
+	}
+
+	pub fn is_inbound(&self) -> bool {
+		self.direction == Direction::Inbound
 	}
 
 	/// The current height of the peer.

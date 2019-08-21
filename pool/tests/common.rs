@@ -58,7 +58,8 @@ impl ChainAdapter {
 		let batch = s.batch().unwrap();
 
 		batch.save_block_header(header).unwrap();
-		batch.save_head(&tip).unwrap();
+		batch.save_body_head(&tip).unwrap();
+		batch.save_header_head(&tip).unwrap();
 
 		// Retrieve previous block_sums from the db.
 		let prev_sums = if let Ok(prev_sums) = batch.get_block_sums(&tip.prev_block_h) {

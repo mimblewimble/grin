@@ -1,5 +1,4 @@
 name: grin
-version: "2.0.0"
 about: Lightweight implementation of the MimbleWimble protocol.
 author: The Grin Team
 
@@ -13,6 +12,8 @@ args:
       long: usernet
       takes_value: false
 subcommands:
+  - clean:
+      about: Clean Grin chain data
   - wallet:
       about: As of v1.1.0, the wallet has been split into a separate executable. See https://github.com/mimblewimble/grin-wallet/releases
       usage: As of v1.1.0, the wallet has been split into a separate executable. See https://github.com/mimblewimble/grin-wallet/releases to download

@@ -69,6 +69,13 @@ impl Keychain for ExtKeychain {
 		Ok(keychain)
 	}
 
+	fn mask_master_key(&mut self, mask: &SecretKey) -> Result<(), Error> {
+		for i in 0..secp::constants::SECRET_KEY_SIZE {
+			self.master.secret_key.0[i] ^= mask.0[i];
+		}
+		Ok(())
+	}
+
 	/// For testing - probably not a good idea to use outside of tests.
 	fn from_random_seed(is_floo: bool) -> Result<ExtKeychain, Error> {
 		let seed: String = thread_rng().sample_iter(&Alphanumeric).take(16).collect();

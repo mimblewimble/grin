@@ -17,9 +17,7 @@ use grin_core as core;
 
 use grin_util as util;
 
-use std::collections::HashSet;
-use std::fs::{self, File, OpenOptions};
-use std::iter::FromIterator;
+use std::fs::{self, File};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 

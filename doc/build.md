@@ -98,8 +98,8 @@ For help on grin commands and their switches, try:
 
 ```sh
 grin help
-grin wallet help
-grin client help
+grin wallet --help
+grin client --help
 ```
 
 ## Docker

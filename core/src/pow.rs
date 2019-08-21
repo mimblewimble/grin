@@ -72,9 +72,6 @@ pub fn verify_size(bh: &BlockHeader) -> Result<(), Error> {
 /// Mines a genesis block using the internal miner
 pub fn mine_genesis_block() -> Result<Block, Error> {
 	let mut gen = genesis::genesis_dev();
-	if global::is_user_testing_mode() || global::is_automated_testing_mode() {
-		gen.header.timestamp = Utc::now();
-	}
 
 	// total_difficulty on the genesis header *is* the difficulty of that block
 	let genesis_difficulty = gen.header.pow.total_difficulty;
@@ -96,11 +93,6 @@ pub fn pow_size(
 	sz: u8,
 ) -> Result<(), Error> {
 	let start_nonce = bh.pow.nonce;
-
-	// set the nonce for faster solution finding in user testing
-	if bh.height == 0 && global::is_user_testing_mode() {
-		bh.pow.nonce = global::get_genesis_nonce();
-	}
 
 	// try to find a cuckoo cycle on that header hash
 	loop {

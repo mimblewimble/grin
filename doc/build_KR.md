@@ -94,8 +94,8 @@ Grin을 작동시키는 명령어에 대한 도움말은 다음 명령어를 실
 
 ```sh
 grin help
-grin wallet help
-grin client help
+grin wallet --help
+grin client --help
 ```
 
 ## Docker 사용하기

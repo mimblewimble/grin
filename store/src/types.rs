@@ -109,13 +109,7 @@ where
 	pub fn read(&self, position: u64) -> Option<T> {
 		match self.file.read_as_elmt(position - 1) {
 			Ok(x) => Some(x),
-			Err(e) => {
-				error!(
-					"Corrupted storage, could not read an entry from data file: {:?}",
-					e
-				);
-				None
-			}
+			Err(_) => None,
 		}
 	}
 

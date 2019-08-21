@@ -189,7 +189,7 @@ fn remove_coinbase_kernel_flag() {
 	let mut b = new_block(vec![], &keychain, &builder, &prev, &key_id);
 
 	assert!(b.kernels()[0].is_coinbase());
-	b.kernels_mut()[0].features = KernelFeatures::Plain;
+	b.kernels_mut()[0].features = KernelFeatures::Plain { fee: 0 };
 
 	// Flipping the coinbase flag results in kernels not summing correctly.
 	assert_eq!(

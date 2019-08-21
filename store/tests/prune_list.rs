@@ -15,10 +15,26 @@
 use grin_store as store;
 
 use crate::store::prune_list::PruneList;
+use croaring::Bitmap;
+
+// Prune list is 1-indexed but we implement this internally with a bitmap that supports a 0 value.
+// We need to make sure we safely handle 0 safely.
+#[test]
+fn test_zero_value() {
+	// Create a bitmap with a 0 value in it.
+	let mut bitmap = Bitmap::create();
+	bitmap.add(0);
+
+	// Instantiate a prune list from our existing bitmap.
+	let pl = PruneList::new(None, bitmap);
+
+	// Our prune list should be empty (0 filtered out during creation).
+	assert!(pl.is_empty());
+}
 
 #[test]
 fn test_is_pruned() {
-	let mut pl = PruneList::new();
+	let mut pl = PruneList::empty();
 
 	assert_eq!(pl.len(), 0);
 	assert_eq!(pl.is_pruned(1), false);
@@ -62,7 +78,7 @@ fn test_is_pruned() {
 
 #[test]
 fn test_get_leaf_shift() {
-	let mut pl = PruneList::new();
+	let mut pl = PruneList::empty();
 
 	// start with an empty prune list (nothing shifted)
 	assert_eq!(pl.len(), 0);
@@ -135,7 +151,7 @@ fn test_get_leaf_shift() {
 
 	// now check we can prune some unconnected nodes in arbitrary order
 	// and that leaf_shift is correct for various pos
-	let mut pl = PruneList::new();
+	let mut pl = PruneList::empty();
 	pl.add(5);
 	pl.add(11);
 	pl.add(12);
@@ -154,7 +170,7 @@ fn test_get_leaf_shift() {
 
 #[test]
 fn test_get_shift() {
-	let mut pl = PruneList::new();
+	let mut pl = PruneList::empty();
 	assert!(pl.is_empty());
 	assert_eq!(pl.get_shift(1), 0);
 	assert_eq!(pl.get_shift(2), 0);
@@ -231,7 +247,7 @@ fn test_get_shift() {
 	// and check we shift by a large number (hopefully the correct number...)
 	assert_eq!(pl.get_shift(1010), 996);
 
-	let mut pl = PruneList::new();
+	let mut pl = PruneList::empty();
 	pl.add(9);
 	pl.add(8);
 	pl.add(5);

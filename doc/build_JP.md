@@ -93,8 +93,8 @@ grinは気の利いたデフォルト設定で起動するようになってお�
 
 ```sh
 grin help
-grin wallet help
-grin client help
+grin wallet --help
+grin client --help
 ```
 
 ## Docker
