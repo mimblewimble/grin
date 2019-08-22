@@ -140,6 +140,9 @@ pub enum ErrorKind {
 	/// Internal Roaring Bitmap error
 	#[fail(display = "Roaring Bitmap error")]
 	Bitmap,
+	/// Error during chain sync
+	#[fail(display = "Sync error")]
+	SyncError(String),
 }
 
 impl Display for Error {

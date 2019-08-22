@@ -467,6 +467,9 @@ pub trait Keychain: Sync + Send + Clone {
 	/// Generates a keychain from a randomly generated seed. Mostly used for tests.
 	fn from_random_seed(is_floo: bool) -> Result<Self, Error>;
 
+	/// XOR masks the keychain's master key against another key
+	fn mask_master_key(&mut self, mask: &SecretKey) -> Result<(), Error>;
+
 	/// Root identifier for that keychain
 	fn root_key_id() -> Identifier;
 

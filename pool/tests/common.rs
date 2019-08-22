@@ -58,7 +58,8 @@ impl ChainAdapter {
 		let batch = s.batch().unwrap();
 
 		batch.save_block_header(header).unwrap();
-		batch.save_head(&tip).unwrap();
+		batch.save_body_head(&tip).unwrap();
+		batch.save_header_head(&tip).unwrap();
 
 		// Retrieve previous block_sums from the db.
 		let prev_sums = if let Ok(prev_sums) = batch.get_block_sums(&tip.prev_block_h) {
@@ -229,10 +230,7 @@ where
 }
 
 pub fn test_source() -> TxSource {
-	TxSource {
-		debug_name: format!("test"),
-		identifier: format!("127.0.0.1"),
-	}
+	TxSource::Broadcast
 }
 
 pub fn clean_output_dir(db_root: String) {

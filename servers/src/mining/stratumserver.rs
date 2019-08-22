@@ -32,9 +32,9 @@ use std::sync::Arc;
 use std::time::{Duration, SystemTime};
 use std::{cmp, thread};
 
-use crate::chain;
+use crate::chain::{self, SyncState};
 use crate::common::stats::{StratumStats, WorkerStats};
-use crate::common::types::{StratumServerConfig, SyncState};
+use crate::common::types::StratumServerConfig;
 use crate::core::core::hash::Hashed;
 use crate::core::core::verifier_cache::VerifierCache;
 use crate::core::core::Block;
@@ -331,7 +331,7 @@ impl Handler {
 		// Serialize the block header into pre and post nonce strings
 		let mut header_buf = vec![];
 		{
-			let mut writer = ser::BinWriter::new(&mut header_buf);
+			let mut writer = ser::BinWriter::default(&mut header_buf);
 			bh.write_pre_pow(&mut writer).unwrap();
 			bh.pow.write_pre_pow(&mut writer).unwrap();
 		}

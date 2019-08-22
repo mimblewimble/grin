@@ -13,7 +13,7 @@ edition = "2018"
 bitflags = "1"
 bytes = "0.4"
 enum_primitive = "0.1"
-i2p = { version = "0.1.0", git = "https://github.com/ignopeverell/i2p-rs"}
+i2p = { version = "0.1.0", git = "https://github.com/mimblewimble/i2p-rs" }
 net2 = "0.2"
 num = "0.1"
 rand = "0.6"

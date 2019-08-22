@@ -16,8 +16,8 @@ use chrono::prelude::{DateTime, Utc};
 use chrono::Duration;
 use std::sync::Arc;
 
-use crate::chain;
-use crate::common::types::{Error, SyncState, SyncStatus};
+use crate::chain::{self, SyncState, SyncStatus};
+use crate::common::types::Error;
 use crate::core::core::hash::{Hash, Hashed};
 use crate::p2p::{self, types::ReasonForBan, Peer};
 

@@ -21,6 +21,7 @@ use std::net::{
 };
 use std::path::PathBuf;
 use std::str;
+use std::time::Duration;
 
 use std::sync::mpsc;
 use std::sync::Arc;
@@ -289,10 +290,10 @@ impl PeerAddr {
 
 	/// Whether this is an i2p address
 	pub fn is_i2p(&self) -> bool {
-		if let PeerAddr::I2p(_) = self {
-			return true;
+		match self {
+			PeerAddr::I2p(_) => true,
+			_ => false,
 		}
-		false
 	}
 
 	/// Whether this is an classic IP address
@@ -300,27 +301,25 @@ impl PeerAddr {
 		!self.is_i2p()
 	}
 
-	/// Returns the underlying I2P address if this is one, otherwise panics
+	/// Returns the underlying I2P address if this is one, otherwise returns Error
 	pub fn unwrap_i2p(self) -> Result<I2pSocketAddr, Error> {
-		if let PeerAddr::I2p(i2p_addr) = self {
-			return Ok(i2p_addr);
-		} else {
-			return Err(Error::I2p(i2p::Error::from(io::Error::new(
+		match self {
+			PeerAddr::I2p(i2p_addr) => Ok(i2p_addr),
+			_ => Err(Error::I2p(i2p::Error::from(io::Error::new(
 				io::ErrorKind::InvalidInput,
 				"not a valid I2P address",
-			))));
+			)))),
 		}
 	}
 
-	/// Returns the underlying IP address if this is one, otherwise panics
+	/// Returns the underlying IP address if this is one, otherwise returns Error
 	pub fn unwrap_ip(self) -> Result<SocketAddr, Error> {
-		if let PeerAddr::Socket(s) = self {
-			return Ok(s);
-		} else {
-			return Err(Error::Socket(io::Error::new(
+		match self {
+			PeerAddr::Socket(s) => Ok(s),
+			_ => Err(Error::Socket(io::Error::new(
 				io::ErrorKind::InvalidInput,
 				"not a valid IP address",
-			)));
+			))),
 		}
 	}
 }
@@ -337,6 +336,10 @@ pub trait Stream: Read + Write + Send + Sync {
 	fn set_nonblocking(&self, nonblocking: bool) -> Result<(), Error>;
 	/// Try clone stream
 	fn try_clone(&self) -> Result<Box<Stream>, Error>;
+	/// Set read timeout
+	fn set_read_timeout(&self, duration: Option<Duration>) -> Result<(), Error>;
+	/// Set write timeout
+	fn set_write_timeout(&self, duration: Option<Duration>) -> Result<(), Error>;
 }
 
 impl<'a, S: Stream> Stream for &'a mut S {
@@ -357,6 +360,14 @@ impl<'a, S: Stream> Stream for &'a mut S {
 	}
 	fn try_clone(&self) -> Result<Box<Stream>, Error> {
 		S::try_clone(self)
+	}
+
+	fn set_read_timeout(&self, duration: Option<Duration>) -> Result<(), Error> {
+		S::set_read_timeout(self, duration)
+	}
+
+	fn set_write_timeout(&self, duration: Option<Duration>) -> Result<(), Error> {
+		S::set_write_timeout(self, duration)
 	}
 }
 
@@ -381,6 +392,20 @@ impl Stream for TcpStream {
 		let s = self.try_clone()?;
 		Ok(Box::new(s))
 	}
+
+	fn set_read_timeout(&self, duration: Option<Duration>) -> Result<(), Error> {
+		match self.set_read_timeout(duration) {
+			Ok(t) => Ok(t),
+			Err(e) => Err(Error::Socket(e).into()),
+		}
+	}
+
+	fn set_write_timeout(&self, duration: Option<Duration>) -> Result<(), Error> {
+		match self.set_write_timeout(duration) {
+			Ok(t) => Ok(t),
+			Err(e) => Err(Error::Socket(e).into()),
+		}
+	}
 }
 
 impl Stream for I2pStream {
@@ -403,6 +428,20 @@ impl Stream for I2pStream {
 	fn try_clone(&self) -> Result<Box<Stream>, Error> {
 		let s = self.try_clone()?;
 		Ok(Box::new(s))
+	}
+
+	fn set_read_timeout(&self, duration: Option<Duration>) -> Result<(), Error> {
+		match self.set_read_timeout(duration) {
+			Ok(t) => Ok(t),
+			Err(e) => Err(Error::I2p(e).into()),
+		}
+	}
+
+	fn set_write_timeout(&self, duration: Option<Duration>) -> Result<(), Error> {
+		match self.set_write_timeout(duration) {
+			Ok(t) => Ok(t),
+			Err(e) => Err(Error::I2p(e).into()),
+		}
 	}
 }
 
@@ -767,6 +806,9 @@ pub trait ChainAdapter: Sync + Send {
 	/// the required indexes for a consumer to rewind to a consistant state
 	/// at the provided block hash.
 	fn txhashset_read(&self, h: Hash) -> Option<TxHashSetRead>;
+
+	/// Header of the txhashset archive currently being served to peers.
+	fn txhashset_archive_header(&self) -> Result<core::BlockHeader, chain::Error>;
 
 	/// Whether the node is ready to accept a new txhashset. If this isn't the
 	/// case, the archive is provided without being requested and likely an

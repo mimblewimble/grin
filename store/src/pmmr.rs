@@ -19,7 +19,7 @@ use std::{io, time};
 use crate::core::core::hash::{Hash, Hashed};
 use crate::core::core::pmmr::{self, family, Backend};
 use crate::core::core::BlockHeader;
-use crate::core::ser::{FixedLength, PMMRable};
+use crate::core::ser::{FixedLength, PMMRable, ProtocolVersion};
 use crate::leaf_set::LeafSet;
 use crate::prune_list::PruneList;
 use crate::types::{AppendOnlyFile, DataFile, SizeEntry, SizeInfo};
@@ -206,6 +206,11 @@ impl<T: PMMRable> PMMRBackend<T> {
 		fixed_size: bool,
 		header: Option<&BlockHeader>,
 	) -> io::Result<PMMRBackend<T>> {
+		// Note: Explicit protocol version here.
+		// Regardless of our "default" protocol version we have existing MMR files
+		// and we need to be able to support these across upgrades.
+		let version = ProtocolVersion(1);
+
 		let data_dir = data_dir.as_ref();
 
 		// Are we dealing with "fixed size" data elements or "variable size" data elements
@@ -216,14 +221,15 @@ impl<T: PMMRable> PMMRBackend<T> {
 			SizeInfo::VariableSize(Box::new(AppendOnlyFile::open(
 				data_dir.join(PMMR_SIZE_FILE),
 				SizeInfo::FixedSize(SizeEntry::LEN as u16),
+				version,
 			)?))
 		};
 
 		// Hash file is always "fixed size" and we use 32 bytes per hash.
 		let hash_size_info = SizeInfo::FixedSize(Hash::LEN as u16);
 
-		let hash_file = DataFile::open(&data_dir.join(PMMR_HASH_FILE), hash_size_info)?;
-		let data_file = DataFile::open(&data_dir.join(PMMR_DATA_FILE), size_info)?;
+		let hash_file = DataFile::open(&data_dir.join(PMMR_HASH_FILE), hash_size_info, version)?;
+		let data_file = DataFile::open(&data_dir.join(PMMR_DATA_FILE), size_info, version)?;
 
 		let leaf_set_path = data_dir.join(PMMR_LEAF_FILE);
 

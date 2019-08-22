@@ -33,9 +33,9 @@ use num;
 
 #[macro_use]
 mod common;
-pub mod cuckatoo;
 pub mod cuckaroo;
 pub mod cuckarood;
+pub mod cuckatoo;
 mod error;
 #[allow(dead_code)]
 pub mod lean;
@@ -49,9 +49,9 @@ use chrono::prelude::{DateTime, NaiveDateTime, Utc};
 
 pub use self::common::EdgeType;
 pub use self::types::*;
-pub use crate::pow::cuckatoo::{new_cuckatoo_ctx, CuckatooContext};
 pub use crate::pow::cuckaroo::{new_cuckaroo_ctx, CuckarooContext};
 pub use crate::pow::cuckarood::{new_cuckarood_ctx, CuckaroodContext};
+pub use crate::pow::cuckatoo::{new_cuckatoo_ctx, CuckatooContext};
 pub use crate::pow::error::Error;
 
 const MAX_SOLS: u32 = 10;
@@ -72,10 +72,6 @@ pub fn verify_size(bh: &BlockHeader) -> Result<(), Error> {
 /// Mines a genesis block using the internal miner
 pub fn mine_genesis_block() -> Result<Block, Error> {
 	let mut gen = genesis::genesis_dev();
-	if global::is_user_testing_mode() || global::is_automated_testing_mode() {
-		gen = genesis::genesis_dev();
-		gen.header.timestamp = Utc::now();
-	}
 
 	// total_difficulty on the genesis header *is* the difficulty of that block
 	let genesis_difficulty = gen.header.pow.total_difficulty;
@@ -97,11 +93,6 @@ pub fn pow_size(
 	sz: u8,
 ) -> Result<(), Error> {
 	let start_nonce = bh.pow.nonce;
-
-	// set the nonce for faster solution finding in user testing
-	if bh.height == 0 && global::is_user_testing_mode() {
-		bh.pow.nonce = global::get_genesis_nonce();
-	}
 
 	// try to find a cuckoo cycle on that header hash
 	loop {

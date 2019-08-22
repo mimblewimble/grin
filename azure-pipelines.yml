@@ -26,7 +26,7 @@ pr:
 
 variables:
   RUST_BACKTRACE: '1'
-  RUST_FLAGS: '-C debug-assertions'
+  RUSTFLAGS: '-C debug-assertions'
 
 jobs:
 - job: linux
@@ -55,7 +55,7 @@ jobs:
     - template: '.ci/release.yml'
 - job: macos
   pool:
-    vmImage: macos-10.13
+    vmImage: macos-10.14
   strategy:
     matrix:
       test:
@@ -69,7 +69,7 @@ jobs:
     - template: '.ci/release.yml'
 - job: windows
   pool:
-    vmImage: vs2017-win2016
+    vmImage: windows-2019
   strategy:
     matrix:
       test:

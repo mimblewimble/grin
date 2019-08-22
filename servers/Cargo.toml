@@ -15,7 +15,7 @@ hyper-rustls = "0.14"
 fs2 = "0.4"
 futures = "0.1"
 http = "0.1"
-i2p = { version = "0.1.0", git = "https://github.com/ignopeverell/i2p-rs"}
+i2p = { version = "0.1.0", git = "https://github.com/mimblewimble/i2p-rs" }
 itertools = "0.7"
 lmdb-zero = "0.4.4"
 rand = "0.6"

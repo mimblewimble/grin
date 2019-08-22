@@ -76,16 +76,13 @@ impl PoolPushHandler {
 				})
 				.and_then(move |tx_bin| {
 					// TODO - pass protocol version in via the api call?
-					let version = ProtocolVersion::default();
+					let version = ProtocolVersion::local();
 
 					ser::deserialize(&mut &tx_bin[..], version)
 						.map_err(|e| ErrorKind::RequestError(format!("Bad request: {}", e)).into())
 				})
 				.and_then(move |tx: Transaction| {
-					let source = pool::TxSource {
-						debug_name: "push-api".to_string(),
-						identifier: "?.?.?.?".to_string(),
-					};
+					let source = pool::TxSource::PushApi;
 					info!(
 						"Pushing transaction {} to pool (inputs: {}, outputs: {}, kernels: {})",
 						tx.hash(),

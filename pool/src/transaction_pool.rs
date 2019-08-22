@@ -108,7 +108,7 @@ impl TransactionPool {
 				tx.validate(Weighting::AsTransaction, self.verifier_cache.clone())?;
 
 				entry.tx = tx;
-				entry.src.debug_name = "deagg".to_string();
+				entry.src = TxSource::Deaggregate;
 			}
 		}
 		self.txpool.add_to_pool(entry.clone(), vec![], header)?;
@@ -169,12 +169,12 @@ impl TransactionPool {
 		if !stem
 			|| self
 				.add_to_stempool(entry.clone(), header)
-				.and_then(|_| self.adapter.stem_tx_accepted(&entry.tx))
+				.and_then(|_| self.adapter.stem_tx_accepted(&entry))
 				.is_err()
 		{
 			self.add_to_txpool(entry.clone(), header)?;
 			self.add_to_reorg_cache(entry.clone());
-			self.adapter.tx_accepted(&entry.tx);
+			self.adapter.tx_accepted(&entry);
 		}
 
 		// Transaction passed all the checks but we have to make space for it

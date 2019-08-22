@@ -32,8 +32,7 @@ use crate::util::secp::pedersen::{Commitment, RangeProof};
 use crate::util::{file, secp_static, zip};
 use croaring::Bitmap;
 use grin_store;
-use grin_store::pmmr::{clean_files_by_prefix, PMMRBackend, PMMR_FILES};
-use std::collections::HashSet;
+use grin_store::pmmr::{clean_files_by_prefix, PMMRBackend};
 use std::fs::{self, File};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -338,17 +337,13 @@ where
 
 	// We want to use the current head of the most work chain unless
 	// we explicitly rewind the extension.
-	let header = batch.head_header()?;
+	let head = batch.head()?;
 
 	trace!("Starting new txhashset (readonly) extension.");
 
 	let res = {
-		let mut extension = Extension::new(trees, &batch, header);
+		let mut extension = Extension::new(trees, &batch, head);
 		extension.force_rollback();
-
-		// TODO - header_mmr may be out ahead via the header_head
-		// TODO - do we need to handle this via an explicit rewind on the header_mmr?
-
 		inner(&mut extension)
 	};
 
@@ -431,7 +426,7 @@ where
 
 	// We want to use the current head of the most work chain unless
 	// we explicitly rewind the extension.
-	let header = batch.head_header()?;
+	let head = batch.head()?;
 
 	// create a child transaction so if the state is rolled back by itself, all
 	// index saving can be undone
@@ -439,9 +434,7 @@ where
 	{
 		trace!("Starting new txhashset extension.");
 
-		// TODO - header_mmr may be out ahead via the header_head
-		// TODO - do we need to handle this via an explicit rewind on the header_mmr?
-		let mut extension = Extension::new(trees, &child_batch, header);
+		let mut extension = Extension::new(trees, &child_batch, head);
 		res = inner(&mut extension);
 
 		rollback = extension.rollback;
@@ -467,11 +460,11 @@ where
 			} else {
 				trace!("Committing txhashset extension. sizes {:?}", sizes);
 				child_batch.commit()?;
-				trees.header_pmmr_h.backend.sync()?;
+				// NOTE: The header MMR is readonly for a txhashset extension.
+				trees.header_pmmr_h.backend.discard();
 				trees.output_pmmr_h.backend.sync()?;
 				trees.rproof_pmmr_h.backend.sync()?;
 				trees.kernel_pmmr_h.backend.sync()?;
-				trees.header_pmmr_h.last_pos = sizes.0;
 				trees.output_pmmr_h.last_pos = sizes.1;
 				trees.rproof_pmmr_h.last_pos = sizes.2;
 				trees.kernel_pmmr_h.last_pos = sizes.3;
@@ -502,7 +495,6 @@ where
 	// We want to use the current sync_head unless
 	// we explicitly rewind the extension.
 	let head = batch.get_sync_head()?;
-	let header = batch.get_block_header(&head.last_block_h)?;
 
 	// create a child transaction so if the state is rolled back by itself, all
 	// index saving can be undone
@@ -510,7 +502,7 @@ where
 	{
 		trace!("Starting new txhashset sync_head extension.");
 		let pmmr = PMMR::at(&mut trees.sync_pmmr_h.backend, trees.sync_pmmr_h.last_pos);
-		let mut extension = HeaderExtension::new(pmmr, &child_batch, header);
+		let mut extension = HeaderExtension::new(pmmr, &child_batch, head);
 
 		res = inner(&mut extension);
 
@@ -561,7 +553,6 @@ where
 	// We want to use the current head of the most work chain unless
 	// we explicitly rewind the extension.
 	let head = batch.head()?;
-	let header = batch.get_block_header(&head.last_block_h)?;
 
 	// create a child transaction so if the state is rolled back by itself, all
 	// index saving can be undone
@@ -572,7 +563,7 @@ where
 			&mut trees.header_pmmr_h.backend,
 			trees.header_pmmr_h.last_pos,
 		);
-		let mut extension = HeaderExtension::new(pmmr, &child_batch, header);
+		let mut extension = HeaderExtension::new(pmmr, &child_batch, head);
 		res = inner(&mut extension);
 
 		rollback = extension.rollback;
@@ -607,7 +598,7 @@ where
 /// A header extension to allow the header MMR to extend beyond the other MMRs individually.
 /// This is to allow headers to be validated against the MMR before we have the full block data.
 pub struct HeaderExtension<'a> {
-	header: BlockHeader,
+	head: Tip,
 
 	pmmr: PMMR<'a, BlockHeader, PMMRBackend<BlockHeader>>,
 
@@ -624,10 +615,10 @@ impl<'a> HeaderExtension<'a> {
 	fn new(
 		pmmr: PMMR<'a, BlockHeader, PMMRBackend<BlockHeader>>,
 		batch: &'a Batch<'_>,
-		header: BlockHeader,
+		head: Tip,
 	) -> HeaderExtension<'a> {
 		HeaderExtension {
-			header,
+			head,
 			pmmr,
 			rollback: false,
 			batch,
@@ -637,6 +628,11 @@ impl<'a> HeaderExtension<'a> {
 	/// Get the header hash for the specified pos from the underlying MMR backend.
 	fn get_header_hash(&self, pos: u64) -> Option<Hash> {
 		self.pmmr.get_data(pos).map(|x| x.hash())
+	}
+
+	/// The head representing the furthest extent of the current extension.
+	pub fn head(&self) -> Tip {
+		self.head.clone()
 	}
 
 	/// Get the header at the specified height based on the current state of the header extension.
@@ -673,7 +669,7 @@ impl<'a> HeaderExtension<'a> {
 	/// extension.
 	pub fn apply_header(&mut self, header: &BlockHeader) -> Result<Hash, Error> {
 		self.pmmr.push(header).map_err(&ErrorKind::TxHashSetErr)?;
-		self.header = header.clone();
+		self.head = Tip::from_header(header);
 		Ok(self.root())
 	}
 
@@ -691,8 +687,8 @@ impl<'a> HeaderExtension<'a> {
 			.rewind(header_pos, &Bitmap::create())
 			.map_err(&ErrorKind::TxHashSetErr)?;
 
-		// Update our header to reflect the one we rewound to.
-		self.header = header.clone();
+		// Update our head to reflect the header we rewound to.
+		self.head = Tip::from_header(header);
 
 		Ok(())
 	}
@@ -764,7 +760,6 @@ impl<'a> HeaderExtension<'a> {
 		if header.height == 0 {
 			return Ok(());
 		}
-
 		if self.root() != header.prev_root {
 			Err(ErrorKind::InvalidRoot.into())
 		} else {
@@ -777,7 +772,7 @@ impl<'a> HeaderExtension<'a> {
 /// reversible manner within a unit of work provided by the `extending`
 /// function.
 pub struct Extension<'a> {
-	header: BlockHeader,
+	head: Tip,
 
 	header_pmmr: PMMR<'a, BlockHeader, PMMRBackend<BlockHeader>>,
 	output_pmmr: PMMR<'a, Output, PMMRBackend<Output>>,
@@ -822,9 +817,9 @@ impl<'a> Committed for Extension<'a> {
 }
 
 impl<'a> Extension<'a> {
-	fn new(trees: &'a mut TxHashSet, batch: &'a Batch<'_>, header: BlockHeader) -> Extension<'a> {
+	fn new(trees: &'a mut TxHashSet, batch: &'a Batch<'_>, head: Tip) -> Extension<'a> {
 		Extension {
-			header,
+			head,
 			header_pmmr: PMMR::at(
 				&mut trees.header_pmmr_h.backend,
 				trees.header_pmmr_h.last_pos,
@@ -844,6 +839,11 @@ impl<'a> Extension<'a> {
 			rollback: false,
 			batch,
 		}
+	}
+
+	/// The head representing the furthest extent of the current extension.
+	pub fn head(&self) -> Tip {
+		self.head.clone()
 	}
 
 	/// Build a view of the current UTXO set based on the output PMMR.
@@ -880,8 +880,8 @@ impl<'a> Extension<'a> {
 			self.apply_kernel(kernel)?;
 		}
 
-		// Update the header on the extension to reflect the block we just applied.
-		self.header = b.header.clone();
+		// Update the head of the extension to reflect the block we just applied.
+		self.head = Tip::from_header(&b.header);
 
 		Ok(())
 	}
@@ -1025,11 +1025,12 @@ impl<'a> Extension<'a> {
 	/// Needed for fast-sync (utxo file needs to be rewound before sending
 	/// across).
 	pub fn snapshot(&mut self) -> Result<(), Error> {
+		let header = self.batch.get_block_header(&self.head.last_block_h)?;
 		self.output_pmmr
-			.snapshot(&self.header)
+			.snapshot(&header)
 			.map_err(|e| ErrorKind::Other(e))?;
 		self.rproof_pmmr
-			.snapshot(&self.header)
+			.snapshot(&header)
 			.map_err(|e| ErrorKind::Other(e))?;
 		Ok(())
 	}
@@ -1037,7 +1038,7 @@ impl<'a> Extension<'a> {
 	/// Rewinds the MMRs to the provided block, rewinding to the last output pos
 	/// and last kernel pos of that block.
 	pub fn rewind(&mut self, header: &BlockHeader) -> Result<(), Error> {
-		debug!("Rewind to header {} at {}", header.hash(), header.height,);
+		debug!("Rewind extension to {} at {}", header.hash(), header.height,);
 
 		// We need to build bitmaps of added and removed output positions
 		// so we can correctly rewind all operations applied to the output MMR
@@ -1045,7 +1046,8 @@ impl<'a> Extension<'a> {
 		// undone during rewind).
 		// Rewound output pos will be removed from the MMR.
 		// Rewound input (spent) pos will be added back to the MMR.
-		let rewind_rm_pos = input_pos_to_rewind(header, &self.header, &self.batch)?;
+		let head_header = self.batch.get_block_header(&self.head.last_block_h)?;
+		let rewind_rm_pos = input_pos_to_rewind(header, &head_header, &self.batch)?;
 
 		let header_pos = pmmr::insertion_to_pmmr_index(header.height + 1);
 
@@ -1056,8 +1058,8 @@ impl<'a> Extension<'a> {
 			&rewind_rm_pos,
 		)?;
 
-		// Update our header to reflect the one we rewound to.
-		self.header = header.clone();
+		// Update our head to reflect the header we rewound to.
+		self.head = Tip::from_header(header);
 
 		Ok(())
 	}
@@ -1120,15 +1122,14 @@ impl<'a> Extension<'a> {
 	pub fn validate_roots(&self) -> Result<(), Error> {
 		// If we are validating the genesis block then we have no outputs or
 		// kernels. So we are done here.
-		if self.header.height == 0 {
+		if self.head.height == 0 {
 			return Ok(());
 		}
-
+		let head_header = self.batch.get_block_header(&self.head.last_block_h)?;
 		let roots = self.roots();
-
-		if roots.output_root != self.header.output_root
-			|| roots.rproof_root != self.header.range_proof_root
-			|| roots.kernel_root != self.header.kernel_root
+		if roots.output_root != head_header.output_root
+			|| roots.rproof_root != head_header.range_proof_root
+			|| roots.kernel_root != head_header.kernel_root
 		{
 			Err(ErrorKind::InvalidRoot.into())
 		} else {
@@ -1142,7 +1143,6 @@ impl<'a> Extension<'a> {
 		if header.height == 0 {
 			return Ok(());
 		}
-
 		let roots = self.roots();
 		if roots.header_root != header.prev_root {
 			Err(ErrorKind::InvalidRoot.into())
@@ -1155,18 +1155,20 @@ impl<'a> Extension<'a> {
 	pub fn validate_sizes(&self) -> Result<(), Error> {
 		// If we are validating the genesis block then we have no outputs or
 		// kernels. So we are done here.
-		if self.header.height == 0 {
+		if self.head.height == 0 {
 			return Ok(());
 		}
 
+		let head_header = self.batch.get_block_header(&self.head.last_block_h)?;
 		let (header_mmr_size, output_mmr_size, rproof_mmr_size, kernel_mmr_size) = self.sizes();
-		let expected_header_mmr_size = pmmr::insertion_to_pmmr_index(self.header.height + 2) - 1;
+		let expected_header_mmr_size =
+			pmmr::insertion_to_pmmr_index(self.head.height + 2).saturating_sub(1);
 
 		if header_mmr_size != expected_header_mmr_size {
 			Err(ErrorKind::InvalidMMRSize.into())
-		} else if output_mmr_size != self.header.output_mmr_size {
+		} else if output_mmr_size != head_header.output_mmr_size {
 			Err(ErrorKind::InvalidMMRSize.into())
-		} else if kernel_mmr_size != self.header.kernel_mmr_size {
+		} else if kernel_mmr_size != head_header.kernel_mmr_size {
 			Err(ErrorKind::InvalidMMRSize.into())
 		} else if output_mmr_size != rproof_mmr_size {
 			Err(ErrorKind::InvalidMMRSize.into())
@@ -1211,10 +1213,11 @@ impl<'a> Extension<'a> {
 	pub fn validate_kernel_sums(&self) -> Result<((Commitment, Commitment)), Error> {
 		let now = Instant::now();
 
+		let head_header = self.batch.get_block_header(&self.head.last_block_h)?;
 		let genesis = self.get_header_by_height(0)?;
 		let (utxo_sum, kernel_sum) = self.verify_kernel_sums(
-			self.header.total_overage(genesis.kernel_mmr_size > 0),
-			self.header.total_kernel_offset(),
+			head_header.total_overage(genesis.kernel_mmr_size > 0),
+			head_header.total_kernel_offset(),
 		)?;
 
 		debug!(
@@ -1236,7 +1239,7 @@ impl<'a> Extension<'a> {
 		self.validate_roots()?;
 		self.validate_sizes()?;
 
-		if self.header.height == 0 {
+		if self.head.height == 0 {
 			let zero_commit = secp_static::commit_to_zero_value();
 			return Ok((zero_commit.clone(), zero_commit.clone()));
 		}
@@ -1432,10 +1435,10 @@ pub fn zip_read(root_dir: String, header: &BlockHeader) -> Result<File, Error> {
 	} else {
 		// clean up old zips.
 		// Theoretically, we only need clean-up those zip files older than STATE_SYNC_THRESHOLD.
-		// But practically, these zip files are not small ones, we just keep the zips in last one hour
+		// But practically, these zip files are not small ones, we just keep the zips in last 24 hours
 		let data_dir = Path::new(&root_dir);
 		let pattern = format!("{}_", TXHASHSET_ZIP);
-		if let Ok(n) = clean_files_by_prefix(data_dir.clone(), &pattern, 60 * 60) {
+		if let Ok(n) = clean_files_by_prefix(data_dir.clone(), &pattern, 24 * 60 * 60) {
 			debug!(
 				"{} zip files have been clean up in folder: {:?}",
 				n, data_dir
@@ -1457,11 +1460,13 @@ pub fn zip_read(root_dir: String, header: &BlockHeader) -> Result<File, Error> {
 		}
 		// Copy file to another dir
 		file::copy_dir_to(&txhashset_path, &temp_txhashset_path)?;
-		// Check and remove file that are not supposed to be there
-		check_and_remove_files(&temp_txhashset_path, header)?;
-		// Compress zip
-		zip::compress(&temp_txhashset_path, &File::create(zip_path.clone())?)
-			.map_err(|ze| ErrorKind::Other(ze.to_string()))?;
+
+		let zip_file = File::create(zip_path.clone())?;
+
+		// Explicit list of files to add to our zip archive.
+		let files = file_list(header);
+
+		zip::create_zip(&zip_file, &temp_txhashset_path, files)?;
 
 		temp_txhashset_path
 	};
@@ -1480,6 +1485,30 @@ pub fn zip_read(root_dir: String, header: &BlockHeader) -> Result<File, Error> {
 	Ok(zip_file)
 }
 
+// Explicit list of files to extract from our zip archive.
+// We include *only* these files when building the txhashset zip.
+// We extract *only* these files when receiving a txhashset zip.
+// Everything else will be safely ignored.
+// Return Vec<PathBuf> as some of these are dynamic (specifically the "rewound" leaf files).
+fn file_list(header: &BlockHeader) -> Vec<PathBuf> {
+	vec![
+		// kernel MMR
+		PathBuf::from("kernel/pmmr_data.bin"),
+		PathBuf::from("kernel/pmmr_hash.bin"),
+		// output MMR
+		PathBuf::from("output/pmmr_data.bin"),
+		PathBuf::from("output/pmmr_hash.bin"),
+		PathBuf::from("output/pmmr_prun.bin"),
+		// rangeproof MMR
+		PathBuf::from("rangeproof/pmmr_data.bin"),
+		PathBuf::from("rangeproof/pmmr_hash.bin"),
+		PathBuf::from("rangeproof/pmmr_prun.bin"),
+		// Header specific "rewound" leaf files for output and rangeproof MMR.
+		PathBuf::from(format!("output/pmmr_leaf.bin.{}", header.hash())),
+		PathBuf::from(format!("rangeproof/pmmr_leaf.bin.{}", header.hash())),
+	]
+}
+
 /// Extract the txhashset data from a zip file and writes the content into the
 /// txhashset storage dir
 pub fn zip_write(
@@ -1489,10 +1518,17 @@ pub fn zip_write(
 ) -> Result<(), Error> {
 	debug!("zip_write on path: {:?}", root_dir);
 	let txhashset_path = root_dir.clone().join(TXHASHSET_SUBDIR);
-	fs::create_dir_all(txhashset_path.clone())?;
-	zip::decompress(txhashset_data, &txhashset_path, expected_file)
-		.map_err(|ze| ErrorKind::Other(ze.to_string()))?;
-	check_and_remove_files(&txhashset_path, header)
+	fs::create_dir_all(&txhashset_path)?;
+
+	// Explicit list of files to extract from our zip archive.
+	let files = file_list(header);
+
+	// We expect to see *exactly* the paths listed above.
+	// No attempt is made to be permissive or forgiving with "alternative" paths.
+	// These are the *only* files we will attempt to extract from the zip file.
+	// If any of these are missing we will attempt to continue as some are potentially optional.
+	zip::extract_files(txhashset_data, &txhashset_path, files)?;
+	Ok(())
 }
 
 /// Overwrite txhashset folders in "to" folder with "from" folder
@@ -1535,112 +1571,6 @@ pub fn clean_header_folder(root_dir: &PathBuf) {
 			warn!("clean_header_folder: fail on {:?}. err: {}", header_path, e);
 		}
 	}
-}
-
-fn expected_file(path: &Path) -> bool {
-	use lazy_static::lazy_static;
-	use regex::Regex;
-	let s_path = path.to_str().unwrap_or_else(|| "");
-	lazy_static! {
-		static ref RE: Regex = Regex::new(
-			format!(
-				r#"^({}|{}|{})((/|\\)pmmr_(hash|data|leaf|prun)\.bin(\.\w*)?)?$"#,
-				OUTPUT_SUBDIR, KERNEL_SUBDIR, RANGE_PROOF_SUBDIR
-			)
-			.as_str()
-		)
-		.expect("invalid txhashset regular expression");
-	}
-	RE.is_match(&s_path)
-}
-
-/// Check a txhashset directory and remove any unexpected
-fn check_and_remove_files(txhashset_path: &PathBuf, header: &BlockHeader) -> Result<(), Error> {
-	// First compare the subdirectories
-	let subdirectories_expected: HashSet<_> = [OUTPUT_SUBDIR, KERNEL_SUBDIR, RANGE_PROOF_SUBDIR]
-		.iter()
-		.cloned()
-		.map(|s| String::from(s))
-		.collect();
-
-	let subdirectories_found: HashSet<_> = fs::read_dir(txhashset_path)?
-		.filter_map(|entry| {
-			entry.ok().and_then(|e| {
-				e.path()
-					.file_name()
-					.and_then(|n| n.to_str().map(|s| String::from(s)))
-			})
-		})
-		.collect();
-
-	let dir_difference: Vec<String> = subdirectories_found
-		.difference(&subdirectories_expected)
-		.cloned()
-		.collect();
-
-	// Removing unexpected directories if needed
-	if !dir_difference.is_empty() {
-		debug!("Unexpected folder(s) found in txhashset folder, removing.");
-		for diff in dir_difference {
-			let diff_path = txhashset_path.join(diff);
-			file::delete(diff_path)?;
-		}
-	}
-
-	// Then compare the files found in the subdirectories
-	let pmmr_files_expected: HashSet<_> = PMMR_FILES
-		.iter()
-		.cloned()
-		.map(|s| {
-			if s.contains("pmmr_leaf.bin") {
-				format!("{}.{}", s, header.hash())
-			} else {
-				String::from(s)
-			}
-		})
-		.collect();
-
-	let subdirectories = fs::read_dir(txhashset_path)?;
-	for subdirectory in subdirectories {
-		let subdirectory_path = subdirectory?.path();
-		let pmmr_files = fs::read_dir(&subdirectory_path)?;
-		let pmmr_files_found: HashSet<_> = pmmr_files
-			.filter_map(|entry| {
-				entry.ok().and_then(|e| {
-					e.path()
-						.file_name()
-						.and_then(|n| n.to_str().map(|s| String::from(s)))
-				})
-			})
-			.collect();
-		let difference: Vec<String> = pmmr_files_found
-			.difference(&pmmr_files_expected)
-			.cloned()
-			.collect();
-		let mut removed = 0;
-		if !difference.is_empty() {
-			for diff in &difference {
-				let diff_path = subdirectory_path.join(diff);
-				match file::delete(diff_path.clone()) {
-					Err(e) => error!(
-						"check_and_remove_files: fail to remove file '{:?}', Err: {:?}",
-						diff_path, e,
-					),
-					Ok(_) => {
-						removed += 1;
-						trace!("check_and_remove_files: file '{:?}' removed", diff_path);
-					}
-				}
-			}
-			debug!(
-				"{} tmp file(s) found in txhashset subfolder {:?}, {} removed.",
-				difference.len(),
-				&subdirectory_path,
-				removed,
-			);
-		}
-	}
-	Ok(())
 }
 
 /// Given a block header to rewind to and the block header at the
@@ -1693,24 +1623,4 @@ pub fn input_pos_to_rewind(
 	}
 
 	bitmap_fast_or(None, &mut block_input_bitmaps).ok_or_else(|| ErrorKind::Bitmap.into())
-}
-
-#[cfg(test)]
-mod tests {
-	use super::*;
-
-	#[test]
-	fn test_expected_files() {
-		assert!(!expected_file(Path::new("kernels")));
-		assert!(!expected_file(Path::new("xkernel")));
-		assert!(expected_file(Path::new("kernel")));
-		assert!(expected_file(Path::new("kernel\\pmmr_data.bin")));
-		assert!(expected_file(Path::new("kernel/pmmr_hash.bin")));
-		assert!(expected_file(Path::new("kernel/pmmr_leaf.bin")));
-		assert!(expected_file(Path::new("kernel/pmmr_prun.bin")));
-		assert!(expected_file(Path::new("kernel/pmmr_leaf.bin.deadbeef")));
-		assert!(!expected_file(Path::new("xkernel/pmmr_data.bin")));
-		assert!(!expected_file(Path::new("kernel/pmmrx_data.bin")));
-		assert!(!expected_file(Path::new("kernel/pmmr_data.binx")));
-	}
 }

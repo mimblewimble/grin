@@ -50,7 +50,7 @@ use sha2::{Sha256, Sha512};
 
 use crate::base58;
 
-// Create alias for HMAC-SHA256
+// Create alias for HMAC-SHA512
 type HmacSha512 = Hmac<Sha512>;
 
 /// A chain code

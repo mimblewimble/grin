@@ -155,16 +155,13 @@ impl Server {
 		}
 		// gracefully shutdown listener streams
 		if self.stop_state.is_stopped() {
-			for stream in listener.incoming() {
-				match stream {
-					Ok(stream) => {
-						let _ = stream.shutdown(std::net::Shutdown::Both)?;
-					}
-					Err(e) => {
-						debug!("Error shutting down i2p connection: {:?}", e);
-					}
-				}
-			}
+			let _ = self
+				.peers
+				.connected_peers()
+				.iter()
+				.filter(|x| x.info.addr.is_i2p())
+				.map(|x| x.stop())
+				.collect::<Vec<_>>();
 		}
 		Ok(())
 	}
@@ -357,6 +354,10 @@ impl ChainAdapter for DummyAdapter {
 		unimplemented!()
 	}
 	fn txhashset_read(&self, _h: Hash) -> Option<TxHashSetRead> {
+		unimplemented!()
+	}
+
+	fn txhashset_archive_header(&self) -> Result<core::BlockHeader, chain::Error> {
 		unimplemented!()
 	}
 

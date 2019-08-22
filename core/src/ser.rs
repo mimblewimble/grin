@@ -20,8 +20,8 @@
 //! `serialize` or `deserialize` functions on them as appropriate.
 
 use crate::core::hash::{DefaultHashable, Hash, Hashed};
+use crate::global::PROTOCOL_VERSION;
 use crate::keychain::{BlindingFactor, Identifier, IDENTIFIER_SIZE};
-use crate::util::read_write::read_exact;
 use crate::util::secp::constants::{
 	AGG_SIGNATURE_SIZE, COMPRESSED_PUBLIC_KEY_SIZE, MAX_PROOF_SIZE, PEDERSEN_COMMITMENT_SIZE,
 	SECRET_KEY_SIZE,
@@ -34,7 +34,6 @@ use byteorder::{BigEndian, ByteOrder, ReadBytesExt};
 use std::fmt::{self, Debug};
 use std::io::{self, Read, Write};
 use std::marker;
-use std::time::Duration;
 use std::{cmp, error};
 
 /// Possible errors deriving from serializing or deserializing.
@@ -134,6 +133,9 @@ pub enum SerializationMode {
 pub trait Writer {
 	/// The mode this serializer is writing in
 	fn serialization_mode(&self) -> SerializationMode;
+
+	/// Protocol version for version specific serialization rules.
+	fn protocol_version(&self) -> ProtocolVersion;
 
 	/// Writes a u8 as bytes
 	fn write_u8(&mut self, n: u8) -> Result<(), Error> {
@@ -286,9 +288,10 @@ where
 #[derive(Clone, Copy, Debug, Deserialize, Eq, Ord, PartialOrd, PartialEq, Serialize)]
 pub struct ProtocolVersion(pub u32);
 
-impl Default for ProtocolVersion {
-	fn default() -> ProtocolVersion {
-		ProtocolVersion(1)
+impl ProtocolVersion {
+	/// Our default "local" protocol version.
+	pub fn local() -> ProtocolVersion {
+		ProtocolVersion(PROTOCOL_VERSION)
 	}
 }
 
@@ -346,27 +349,31 @@ pub fn deserialize<T: Readable>(
 	T::read(&mut reader)
 }
 
-/// Deserialize a Readable based on our local db version protocol.
-pub fn deserialize_db<T: Readable>(source: &mut dyn Read) -> Result<T, Error> {
-	deserialize(source, ProtocolVersion::local_db())
-}
-
-/// Deserialize a Readable based on our local "default" version protocol.
+/// Deserialize a Readable based on our default "local" protocol version.
 pub fn deserialize_default<T: Readable>(source: &mut dyn Read) -> Result<T, Error> {
-	deserialize(source, ProtocolVersion::default())
+	deserialize(source, ProtocolVersion::local())
 }
 
 /// Serializes a Writeable into any std::io::Write implementation.
-pub fn serialize<W: Writeable>(sink: &mut dyn Write, thing: &W) -> Result<(), Error> {
-	let mut writer = BinWriter { sink };
+pub fn serialize<W: Writeable>(
+	sink: &mut dyn Write,
+	version: ProtocolVersion,
+	thing: &W,
+) -> Result<(), Error> {
+	let mut writer = BinWriter::new(sink, version);
 	thing.write(&mut writer)
+}
+
+/// Serialize a Writeable according to our default "local" protocol version.
+pub fn serialize_default<W: Writeable>(sink: &mut dyn Write, thing: &W) -> Result<(), Error> {
+	serialize(sink, ProtocolVersion::local(), thing)
 }
 
 /// Utility function to serialize a writeable directly in memory using a
 /// Vec<u8>.
-pub fn ser_vec<W: Writeable>(thing: &W) -> Result<Vec<u8>, Error> {
+pub fn ser_vec<W: Writeable>(thing: &W, version: ProtocolVersion) -> Result<Vec<u8>, Error> {
 	let mut vec = vec![];
-	serialize(&mut vec, thing)?;
+	serialize(&mut vec, version, thing)?;
 	Ok(vec)
 }
 
@@ -450,22 +457,16 @@ pub struct StreamingReader<'a> {
 	total_bytes_read: u64,
 	version: ProtocolVersion,
 	stream: &'a mut dyn Read,
-	timeout: Duration,
 }
 
 impl<'a> StreamingReader<'a> {
 	/// Create a new streaming reader with the provided underlying stream.
 	/// Also takes a duration to be used for each individual read_exact call.
-	pub fn new(
-		stream: &'a mut dyn Read,
-		version: ProtocolVersion,
-		timeout: Duration,
-	) -> StreamingReader<'a> {
+	pub fn new(stream: &'a mut dyn Read, version: ProtocolVersion) -> StreamingReader<'a> {
 		StreamingReader {
 			total_bytes_read: 0,
 			version,
 			stream,
-			timeout,
 		}
 	}
 
@@ -475,32 +476,28 @@ impl<'a> StreamingReader<'a> {
 	}
 }
 
+/// Note: We use read_fixed_bytes() here to ensure our "async" I/O behaves as expected.
 impl<'a> Reader for StreamingReader<'a> {
 	fn read_u8(&mut self) -> Result<u8, Error> {
 		let buf = self.read_fixed_bytes(1)?;
 		Ok(buf[0])
 	}
-
 	fn read_u16(&mut self) -> Result<u16, Error> {
 		let buf = self.read_fixed_bytes(2)?;
 		Ok(BigEndian::read_u16(&buf[..]))
 	}
-
 	fn read_u32(&mut self) -> Result<u32, Error> {
 		let buf = self.read_fixed_bytes(4)?;
 		Ok(BigEndian::read_u32(&buf[..]))
 	}
-
 	fn read_i32(&mut self) -> Result<i32, Error> {
 		let buf = self.read_fixed_bytes(4)?;
 		Ok(BigEndian::read_i32(&buf[..]))
 	}
-
 	fn read_u64(&mut self) -> Result<u64, Error> {
 		let buf = self.read_fixed_bytes(8)?;
 		Ok(BigEndian::read_u64(&buf[..]))
 	}
-
 	fn read_i64(&mut self) -> Result<i64, Error> {
 		let buf = self.read_fixed_bytes(8)?;
 		Ok(BigEndian::read_i64(&buf[..]))
@@ -516,7 +513,7 @@ impl<'a> Reader for StreamingReader<'a> {
 	/// Read a fixed number of bytes.
 	fn read_fixed_bytes(&mut self, len: usize) -> Result<Vec<u8>, Error> {
 		let mut buf = vec![0u8; len];
-		read_exact(&mut self.stream, &mut buf, self.timeout, true)?;
+		self.stream.read_exact(&mut buf)?;
 		self.total_bytes_read += len as u64;
 		Ok(buf)
 	}
@@ -683,12 +680,18 @@ impl<T: Hashed> VerifySortedAndUnique<T> for Vec<T> {
 /// to write numbers, byte vectors, hashes, etc.
 pub struct BinWriter<'a> {
 	sink: &'a mut dyn Write,
+	version: ProtocolVersion,
 }
 
 impl<'a> BinWriter<'a> {
 	/// Wraps a standard Write in a new BinWriter
-	pub fn new(write: &'a mut dyn Write) -> BinWriter<'a> {
-		BinWriter { sink: write }
+	pub fn new(sink: &'a mut dyn Write, version: ProtocolVersion) -> BinWriter<'a> {
+		BinWriter { sink, version }
+	}
+
+	/// Constructor for BinWriter with default "local" protocol version.
+	pub fn default(sink: &'a mut dyn Write) -> BinWriter<'a> {
+		BinWriter::new(sink, ProtocolVersion::local())
 	}
 }
 
@@ -701,6 +704,10 @@ impl<'a> Writer for BinWriter<'a> {
 		let bs = fixed.as_ref();
 		self.sink.write_all(bs)?;
 		Ok(())
+	}
+
+	fn protocol_version(&self) -> ProtocolVersion {
+		self.version
 	}
 }
 
