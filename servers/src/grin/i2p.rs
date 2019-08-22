@@ -36,7 +36,7 @@ const PUBKEY_FILE: &'static str = "pub";
 /// configured to. Will fail loudly if anything isn't where it's expected to
 /// be.
 pub fn init(config: &mut ServerConfig) -> Option<Arc<Session>> {
-	match &config.p2p_config.i2p_mode {
+	match config.p2p_config.i2p_mode() {
 		p2p::I2pMode::Disabled => None,
 		p2p::I2pMode::Enabled {
 			autostart,
@@ -45,7 +45,7 @@ pub fn init(config: &mut ServerConfig) -> Option<Arc<Session>> {
 		} => {
 			// Slight override of capabilities if i2p is enabled
 			config.p2p_config.capabilities |= p2p::Capabilities::I2P_SUPPORTED;
-			if *autostart {
+			if autostart {
 				start_i2pd()
 			}
 			let (_, privkey) = load_keys(addr, config);

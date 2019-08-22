@@ -501,7 +501,7 @@ pub struct P2PConfig {
 	pub dandelion_peer: Option<PeerAddr>,
 
 	/// Mode of use and configuration for i2p
-	pub i2p_mode: I2pMode,
+	pub i2p_mode: Option<I2pMode>,
 }
 
 /// Default address for peer-to-peer connections.
@@ -521,7 +521,7 @@ impl Default for P2PConfig {
 			peer_max_count: None,
 			peer_min_preferred_count: None,
 			dandelion_peer: None,
-			i2p_mode: I2pMode::default(),
+			i2p_mode: None,
 		}
 	}
 }
@@ -550,6 +550,13 @@ impl P2PConfig {
 		match self.peer_min_preferred_count {
 			Some(n) => n,
 			None => PEER_MIN_PREFERRED_COUNT,
+		}
+	}
+
+	pub fn i2p_mode(&self) -> I2pMode {
+		match &self.i2p_mode {
+			Some(mode) => mode.clone(),
+			None => I2pMode::default(),
 		}
 	}
 }
