@@ -35,34 +35,115 @@ use std::cmp::{max, min};
 use std::sync::Arc;
 use std::{error, fmt};
 
-// Enum of various supported kernel "features".
-enum_from_primitive! {
-	/// Various flavors of tx kernel.
-	#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
-	#[repr(u8)]
-	pub enum KernelFeatures {
-		/// Plain kernel (the default for Grin txs).
-		Plain = 0,
-		/// A coinbase kernel.
-		Coinbase = 1,
-		/// A kernel with an expicit lock height.
-		HeightLocked = 2,
+/// Various tx kernel variants.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub enum KernelFeatures {
+	/// Plain kernel (the default for Grin txs).
+	Plain {
+		/// Plain kernels have fees.
+		fee: u64,
+	},
+	/// A coinbase kernel.
+	Coinbase,
+	/// A kernel with an explicit lock height (and fee).
+	HeightLocked {
+		/// Height locked kernels have fees.
+		fee: u64,
+		/// Height locked kernels have lock heights.
+		lock_height: u64,
+	},
+}
+
+impl KernelFeatures {
+	const PLAIN_U8: u8 = 0;
+	const COINBASE_U8: u8 = 1;
+	const HEIGHT_LOCKED_U8: u8 = 2;
+
+	/// Underlying (u8) value representing this kernel variant.
+	/// This is the first byte when we serialize/deserialize the kernel features.
+	pub fn as_u8(&self) -> u8 {
+		match self {
+			KernelFeatures::Plain { .. } => KernelFeatures::PLAIN_U8,
+			KernelFeatures::Coinbase => KernelFeatures::COINBASE_U8,
+			KernelFeatures::HeightLocked { .. } => KernelFeatures::HEIGHT_LOCKED_U8,
+		}
+	}
+
+	/// Conversion for backward compatibility.
+	pub fn as_string(&self) -> String {
+		match self {
+			KernelFeatures::Plain { .. } => String::from("Plain"),
+			KernelFeatures::Coinbase => String::from("Coinbase"),
+			KernelFeatures::HeightLocked { .. } => String::from("HeightLocked"),
+		}
+	}
+
+	/// msg = hash(features)                       for coinbase kernels
+	///       hash(features || fee)                for plain kernels
+	///       hash(features || fee || lock_height) for height locked kernels
+	pub fn kernel_sig_msg(&self) -> Result<secp::Message, Error> {
+		let x = self.as_u8();
+		let hash = match self {
+			KernelFeatures::Plain { fee } => (x, fee).hash(),
+			KernelFeatures::Coinbase => (x).hash(),
+			KernelFeatures::HeightLocked { fee, lock_height } => (x, fee, lock_height).hash(),
+		};
+
+		let msg = secp::Message::from_slice(&hash.as_bytes())?;
+		Ok(msg)
 	}
 }
 
-impl DefaultHashable for KernelFeatures {}
-
 impl Writeable for KernelFeatures {
+	/// Still only supporting protocol version v1 serialization.
+	/// Always include fee, defaulting to 0, and lock_height, defaulting to 0, for all feature variants.
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
-		writer.write_u8(*self as u8)?;
+		match self {
+			KernelFeatures::Plain { fee } => {
+				writer.write_u8(self.as_u8())?;
+				writer.write_u64(*fee)?;
+				writer.write_u64(0)?;
+			}
+			KernelFeatures::Coinbase => {
+				writer.write_u8(self.as_u8())?;
+				writer.write_u64(0)?;
+				writer.write_u64(0)?;
+			}
+			KernelFeatures::HeightLocked { fee, lock_height } => {
+				writer.write_u8(self.as_u8())?;
+				writer.write_u64(*fee)?;
+				writer.write_u64(*lock_height)?;
+			}
+		}
 		Ok(())
 	}
 }
 
 impl Readable for KernelFeatures {
+	/// Still only supporting protocol version v1 serialization.
+	/// Always read both fee and lock_height, regardless of feature variant.
+	/// These will be 0 values if not applicable, but bytes must still be read.
 	fn read(reader: &mut dyn Reader) -> Result<KernelFeatures, ser::Error> {
-		let features =
-			KernelFeatures::from_u8(reader.read_u8()?).ok_or(ser::Error::CorruptedData)?;
+		let features = match reader.read_u8()? {
+			KernelFeatures::PLAIN_U8 => {
+				let fee = reader.read_u64()?;
+				let _lock_height = reader.read_u64()?;
+				KernelFeatures::Plain { fee }
+			}
+			KernelFeatures::COINBASE_U8 => {
+				let _fee = reader.read_u64()?;
+				let _lock_height = reader.read_u64()?;
+				KernelFeatures::Coinbase
+			}
+			KernelFeatures::HEIGHT_LOCKED_U8 => {
+				let fee = reader.read_u64()?;
+				let lock_height = reader.read_u64()?;
+				KernelFeatures::HeightLocked { fee, lock_height }
+			}
+			_ => {
+				return Err(ser::Error::CorruptedData);
+			}
+		};
 		Ok(features)
 	}
 }
@@ -158,16 +239,9 @@ impl From<committed::Error> for Error {
 pub struct TxKernel {
 	/// Options for a kernel's structure or use
 	pub features: KernelFeatures,
-	/// Fee originally included in the transaction this proof is for.
-	#[serde(with = "secp_ser::string_or_u64")]
-	pub fee: u64,
-	/// This kernel is not valid earlier than lock_height blocks
-	/// The max lock_height of all *inputs* to this transaction
-	#[serde(with = "secp_ser::string_or_u64")]
-	pub lock_height: u64,
 	/// Remainder of the sum of all transaction commitments. If the transaction
 	/// is well formed, amounts components should sum to zero and the excess
-	/// is hence a valid public key.
+	/// is hence a valid public key (sum of the commitment public keys).
 	#[serde(
 		serialize_with = "secp_ser::as_hex",
 		deserialize_with = "secp_ser::commitment_from_hex"
@@ -199,7 +273,6 @@ impl Writeable for TxKernel {
 		let _version = writer.protocol_version();
 
 		self.features.write(writer)?;
-		ser_multiwrite!(writer, [write_u64, self.fee], [write_u64, self.lock_height]);
 		self.excess.write(writer)?;
 		self.excess_sig.write(writer)?;
 		Ok(())
@@ -216,8 +289,6 @@ impl Readable for TxKernel {
 
 		Ok(TxKernel {
 			features: KernelFeatures::read(reader)?,
-			fee: reader.read_u64()?,
-			lock_height: reader.read_u64()?,
 			excess: Commitment::read(reader)?,
 			excess_sig: secp::Signature::read(reader)?,
 		})
@@ -236,17 +307,26 @@ impl PMMRable for TxKernel {
 impl KernelFeatures {
 	/// Is this a coinbase kernel?
 	pub fn is_coinbase(&self) -> bool {
-		*self == KernelFeatures::Coinbase
+		match self {
+			KernelFeatures::Coinbase => true,
+			_ => false,
+		}
 	}
 
 	/// Is this a plain kernel?
 	pub fn is_plain(&self) -> bool {
-		*self == KernelFeatures::Plain
+		match self {
+			KernelFeatures::Plain { .. } => true,
+			_ => false,
+		}
 	}
 
 	/// Is this a height locked kernel?
 	pub fn is_height_locked(&self) -> bool {
-		*self == KernelFeatures::HeightLocked
+		match self {
+			KernelFeatures::HeightLocked { .. } => true,
+			_ => false,
+		}
 	}
 }
 
@@ -272,9 +352,9 @@ impl TxKernel {
 	}
 
 	/// The msg signed as part of the tx kernel.
-	/// Consists of the fee and the lock_height.
+	/// Based on kernel features and associated fields (fee and lock_height).
 	pub fn msg_to_sign(&self) -> Result<secp::Message, Error> {
-		let msg = kernel_sig_msg(self.fee, self.lock_height, self.features)?;
+		let msg = self.features.kernel_sig_msg()?;
 		Ok(msg)
 	}
 
@@ -282,10 +362,6 @@ impl TxKernel {
 	/// as a public key and checking the signature verifies with the fee as
 	/// message.
 	pub fn verify(&self) -> Result<(), Error> {
-		if self.is_coinbase() && self.fee != 0 || !self.is_height_locked() && self.lock_height != 0
-		{
-			return Err(Error::InvalidKernelFeatures);
-		}
 		let secp = static_secp_instance();
 		let secp = secp.lock();
 		let sig = &self.excess_sig;
@@ -309,25 +385,39 @@ impl TxKernel {
 	/// Build an empty tx kernel with zero values.
 	pub fn empty() -> TxKernel {
 		TxKernel {
-			features: KernelFeatures::Plain,
-			fee: 0,
-			lock_height: 0,
+			features: KernelFeatures::Plain { fee: 0 },
 			excess: Commitment::from_vec(vec![0; 33]),
 			excess_sig: secp::Signature::from_raw_data(&[0; 64]).unwrap(),
 		}
 	}
 
 	/// Builds a new tx kernel with the provided fee.
+	/// Will panic if we cannot safely do this on the existing kernel.
+	/// i.e. Do not try and set a fee on a coinbase kernel.
 	pub fn with_fee(self, fee: u64) -> TxKernel {
-		TxKernel { fee, ..self }
+		match self.features {
+			KernelFeatures::Plain { .. } => {
+				let features = KernelFeatures::Plain { fee };
+				TxKernel { features, ..self }
+			}
+			KernelFeatures::HeightLocked { lock_height, .. } => {
+				let features = KernelFeatures::HeightLocked { fee, lock_height };
+				TxKernel { features, ..self }
+			}
+			KernelFeatures::Coinbase => panic!("fee not supported on coinbase kernel"),
+		}
 	}
 
 	/// Builds a new tx kernel with the provided lock_height.
+	/// Will panic if we cannot safely do this on the existing kernel.
+	/// i.e. Do not try and set a lock_height on a coinbase kernel.
 	pub fn with_lock_height(self, lock_height: u64) -> TxKernel {
-		TxKernel {
-			features: kernel_features(lock_height),
-			lock_height,
-			..self
+		match self.features {
+			KernelFeatures::Plain { fee } | KernelFeatures::HeightLocked { fee, .. } => {
+				let features = KernelFeatures::HeightLocked { fee, lock_height };
+				TxKernel { features, ..self }
+			}
+			KernelFeatures::Coinbase => panic!("lock_height not supported on coinbase kernel"),
 		}
 	}
 }
@@ -570,11 +660,17 @@ impl TransactionBody {
 		self
 	}
 
-	/// Total fee for a TransactionBody is the sum of fees of all kernels.
-	fn fee(&self) -> u64 {
+	/// Total fee for a TransactionBody is the sum of fees of all fee carrying kernels.
+	pub fn fee(&self) -> u64 {
 		self.kernels
 			.iter()
-			.fold(0, |acc, ref x| acc.saturating_add(x.fee))
+			.filter_map(|k| match k.features {
+				KernelFeatures::Coinbase => None,
+				KernelFeatures::Plain { fee } | KernelFeatures::HeightLocked { fee, .. } => {
+					Some(fee)
+				}
+			})
+			.fold(0, |acc, fee| acc.saturating_add(fee))
 	}
 
 	fn overage(&self) -> i64 {
@@ -615,7 +711,10 @@ impl TransactionBody {
 	pub fn lock_height(&self) -> u64 {
 		self.kernels
 			.iter()
-			.map(|x| x.lock_height)
+			.filter_map(|x| match x.features {
+				KernelFeatures::HeightLocked { lock_height, .. } => Some(lock_height),
+				_ => None,
+			})
 			.max()
 			.unwrap_or(0)
 	}
@@ -1470,42 +1569,6 @@ impl From<Output> for OutputIdentifier {
 	}
 }
 
-/// Construct msg from tx fee, lock_height and kernel features.
-///
-/// msg = hash(features)                       for coinbase kernels
-///       hash(features || fee)                for plain kernels
-///       hash(features || fee || lock_height) for height locked kernels
-///
-pub fn kernel_sig_msg(
-	fee: u64,
-	lock_height: u64,
-	features: KernelFeatures,
-) -> Result<secp::Message, Error> {
-	let valid_features = match features {
-		KernelFeatures::Coinbase => fee == 0 && lock_height == 0,
-		KernelFeatures::Plain => lock_height == 0,
-		KernelFeatures::HeightLocked => true,
-	};
-	if !valid_features {
-		return Err(Error::InvalidKernelFeatures);
-	}
-	let hash = match features {
-		KernelFeatures::Coinbase => (features).hash(),
-		KernelFeatures::Plain => (features, fee).hash(),
-		KernelFeatures::HeightLocked => (features, fee, lock_height).hash(),
-	};
-	Ok(secp::Message::from_slice(&hash.as_bytes())?)
-}
-
-/// kernel features as determined by lock height
-pub fn kernel_features(lock_height: u64) -> KernelFeatures {
-	if lock_height > 0 {
-		KernelFeatures::HeightLocked
-	} else {
-		KernelFeatures::Plain
-	}
-}
-
 #[cfg(test)]
 mod test {
 	use super::*;
@@ -1526,39 +1589,40 @@ mod test {
 		let sig = secp::Signature::from_raw_data(&[0; 64]).unwrap();
 
 		let kernel = TxKernel {
-			features: KernelFeatures::Plain,
-			lock_height: 0,
+			features: KernelFeatures::Plain { fee: 10 },
 			excess: commit,
 			excess_sig: sig.clone(),
-			fee: 10,
 		};
 
 		let mut vec = vec![];
 		ser::serialize_default(&mut vec, &kernel).expect("serialized failed");
 		let kernel2: TxKernel = ser::deserialize_default(&mut &vec[..]).unwrap();
-		assert_eq!(kernel2.features, KernelFeatures::Plain);
-		assert_eq!(kernel2.lock_height, 0);
+		assert_eq!(kernel2.features, KernelFeatures::Plain { fee: 10 });
 		assert_eq!(kernel2.excess, commit);
 		assert_eq!(kernel2.excess_sig, sig.clone());
-		assert_eq!(kernel2.fee, 10);
 
 		// now check a kernel with lock_height serialize/deserialize correctly
 		let kernel = TxKernel {
-			features: KernelFeatures::HeightLocked,
-			lock_height: 100,
+			features: KernelFeatures::HeightLocked {
+				fee: 10,
+				lock_height: 100,
+			},
 			excess: commit,
 			excess_sig: sig.clone(),
-			fee: 10,
 		};
 
 		let mut vec = vec![];
 		ser::serialize_default(&mut vec, &kernel).expect("serialized failed");
 		let kernel2: TxKernel = ser::deserialize_default(&mut &vec[..]).unwrap();
-		assert_eq!(kernel2.features, KernelFeatures::HeightLocked);
-		assert_eq!(kernel2.lock_height, 100);
+		assert_eq!(
+			kernel2.features,
+			KernelFeatures::HeightLocked {
+				fee: 10,
+				lock_height: 100
+			}
+		);
 		assert_eq!(kernel2.excess, commit);
 		assert_eq!(kernel2.excess_sig, sig.clone());
-		assert_eq!(kernel2.fee, 10);
 	}
 
 	#[test]
@@ -1613,17 +1677,30 @@ mod test {
 
 	#[test]
 	fn kernel_features_serialization() {
-		let features = KernelFeatures::from_u8(0).unwrap();
-		assert_eq!(features, KernelFeatures::Plain);
+		let mut vec = vec![];
+		ser::serialize_default(&mut vec, &(0u8, 10u64, 0u64)).expect("serialized failed");
+		let features: KernelFeatures = ser::deserialize_default(&mut &vec[..]).unwrap();
+		assert_eq!(features, KernelFeatures::Plain { fee: 10 });
 
-		let features = KernelFeatures::from_u8(1).unwrap();
+		let mut vec = vec![];
+		ser::serialize_default(&mut vec, &(1u8, 0u64, 0u64)).expect("serialized failed");
+		let features: KernelFeatures = ser::deserialize_default(&mut &vec[..]).unwrap();
 		assert_eq!(features, KernelFeatures::Coinbase);
 
-		let features = KernelFeatures::from_u8(2).unwrap();
-		assert_eq!(features, KernelFeatures::HeightLocked);
+		let mut vec = vec![];
+		ser::serialize_default(&mut vec, &(2u8, 10u64, 100u64)).expect("serialized failed");
+		let features: KernelFeatures = ser::deserialize_default(&mut &vec[..]).unwrap();
+		assert_eq!(
+			features,
+			KernelFeatures::HeightLocked {
+				fee: 10,
+				lock_height: 100
+			}
+		);
 
-		// Verify we cannot deserialize an unexpected kernel feature
-		let features = KernelFeatures::from_u8(3);
-		assert_eq!(features, None);
+		let mut vec = vec![];
+		ser::serialize_default(&mut vec, &(3u8, 0u64, 0u64)).expect("serialized failed");
+		let res: Result<KernelFeatures, _> = ser::deserialize_default(&mut &vec[..]);
+		assert_eq!(res.err(), Some(ser::Error::CorruptedData));
 	}
 }

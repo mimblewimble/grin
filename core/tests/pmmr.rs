@@ -280,7 +280,7 @@ fn pmmr_push_root() {
 	pmmr.dump(false);
 	let pos_0 = elems[0].hash_with_index(0);
 	assert_eq!(pmmr.peaks(), vec![pos_0]);
-	assert_eq!(pmmr.root(), pos_0);
+	assert_eq!(pmmr.root().unwrap(), pos_0);
 	assert_eq!(pmmr.unpruned_size(), 1);
 
 	// two elements
@@ -289,7 +289,7 @@ fn pmmr_push_root() {
 	let pos_1 = elems[1].hash_with_index(1);
 	let pos_2 = (pos_0, pos_1).hash_with_index(2);
 	assert_eq!(pmmr.peaks(), vec![pos_2]);
-	assert_eq!(pmmr.root(), pos_2);
+	assert_eq!(pmmr.root().unwrap(), pos_2);
 	assert_eq!(pmmr.unpruned_size(), 3);
 
 	// three elements
@@ -297,7 +297,7 @@ fn pmmr_push_root() {
 	pmmr.dump(false);
 	let pos_3 = elems[2].hash_with_index(3);
 	assert_eq!(pmmr.peaks(), vec![pos_2, pos_3]);
-	assert_eq!(pmmr.root(), (pos_2, pos_3).hash_with_index(4));
+	assert_eq!(pmmr.root().unwrap(), (pos_2, pos_3).hash_with_index(4));
 	assert_eq!(pmmr.unpruned_size(), 4);
 
 	// four elements
@@ -307,7 +307,7 @@ fn pmmr_push_root() {
 	let pos_5 = (pos_3, pos_4).hash_with_index(5);
 	let pos_6 = (pos_2, pos_5).hash_with_index(6);
 	assert_eq!(pmmr.peaks(), vec![pos_6]);
-	assert_eq!(pmmr.root(), pos_6);
+	assert_eq!(pmmr.root().unwrap(), pos_6);
 	assert_eq!(pmmr.unpruned_size(), 7);
 
 	// five elements
@@ -315,7 +315,7 @@ fn pmmr_push_root() {
 	pmmr.dump(false);
 	let pos_7 = elems[4].hash_with_index(7);
 	assert_eq!(pmmr.peaks(), vec![pos_6, pos_7]);
-	assert_eq!(pmmr.root(), (pos_6, pos_7).hash_with_index(8));
+	assert_eq!(pmmr.root().unwrap(), (pos_6, pos_7).hash_with_index(8));
 	assert_eq!(pmmr.unpruned_size(), 8);
 
 	// six elements
@@ -323,7 +323,7 @@ fn pmmr_push_root() {
 	let pos_8 = elems[5].hash_with_index(8);
 	let pos_9 = (pos_7, pos_8).hash_with_index(9);
 	assert_eq!(pmmr.peaks(), vec![pos_6, pos_9]);
-	assert_eq!(pmmr.root(), (pos_6, pos_9).hash_with_index(10));
+	assert_eq!(pmmr.root().unwrap(), (pos_6, pos_9).hash_with_index(10));
 	assert_eq!(pmmr.unpruned_size(), 10);
 
 	// seven elements
@@ -331,7 +331,7 @@ fn pmmr_push_root() {
 	let pos_10 = elems[6].hash_with_index(10);
 	assert_eq!(pmmr.peaks(), vec![pos_6, pos_9, pos_10]);
 	assert_eq!(
-		pmmr.root(),
+		pmmr.root().unwrap(),
 		(pos_6, (pos_9, pos_10).hash_with_index(11)).hash_with_index(11)
 	);
 	assert_eq!(pmmr.unpruned_size(), 11);
@@ -344,14 +344,14 @@ fn pmmr_push_root() {
 	let pos_13 = (pos_9, pos_12).hash_with_index(13);
 	let pos_14 = (pos_6, pos_13).hash_with_index(14);
 	assert_eq!(pmmr.peaks(), vec![pos_14]);
-	assert_eq!(pmmr.root(), pos_14);
+	assert_eq!(pmmr.root().unwrap(), pos_14);
 	assert_eq!(pmmr.unpruned_size(), 15);
 
 	// nine elements
 	pmmr.push(&elems[8]).unwrap();
 	let pos_15 = elems[8].hash_with_index(15);
 	assert_eq!(pmmr.peaks(), vec![pos_14, pos_15]);
-	assert_eq!(pmmr.root(), (pos_14, pos_15).hash_with_index(16));
+	assert_eq!(pmmr.root().unwrap(), (pos_14, pos_15).hash_with_index(16));
 	assert_eq!(pmmr.unpruned_size(), 16);
 }
 
@@ -427,7 +427,7 @@ fn pmmr_prune() {
 		for elem in &elems[..] {
 			pmmr.push(elem).unwrap();
 		}
-		orig_root = pmmr.root();
+		orig_root = pmmr.root().unwrap();
 		sz = pmmr.unpruned_size();
 	}
 
@@ -439,7 +439,7 @@ fn pmmr_prune() {
 	{
 		let mut pmmr: PMMR<'_, TestElem, _> = PMMR::at(&mut ba, sz);
 		pmmr.prune(16).unwrap();
-		assert_eq!(orig_root, pmmr.root());
+		assert_eq!(orig_root, pmmr.root().unwrap());
 	}
 	assert_eq!(ba.hashes.len(), 16);
 	assert_eq!(ba.remove_list.len(), 1);
@@ -448,7 +448,7 @@ fn pmmr_prune() {
 	{
 		let mut pmmr: PMMR<'_, TestElem, _> = PMMR::at(&mut ba, sz);
 		pmmr.prune(2).unwrap();
-		assert_eq!(orig_root, pmmr.root());
+		assert_eq!(orig_root, pmmr.root().unwrap());
 	}
 	assert_eq!(ba.hashes.len(), 16);
 	assert_eq!(ba.remove_list.len(), 2);
@@ -456,7 +456,7 @@ fn pmmr_prune() {
 	{
 		let mut pmmr: PMMR<'_, TestElem, _> = PMMR::at(&mut ba, sz);
 		pmmr.prune(4).unwrap();
-		assert_eq!(orig_root, pmmr.root());
+		assert_eq!(orig_root, pmmr.root().unwrap());
 	}
 	assert_eq!(ba.hashes.len(), 16);
 	assert_eq!(ba.remove_list.len(), 3);
@@ -465,7 +465,7 @@ fn pmmr_prune() {
 	{
 		let mut pmmr: PMMR<'_, TestElem, _> = PMMR::at(&mut ba, sz);
 		pmmr.prune(3).unwrap_err();
-		assert_eq!(orig_root, pmmr.root());
+		assert_eq!(orig_root, pmmr.root().unwrap());
 	}
 	assert_eq!(ba.hashes.len(), 16);
 	assert_eq!(ba.remove_list.len(), 3);
@@ -474,7 +474,7 @@ fn pmmr_prune() {
 	{
 		let mut pmmr: PMMR<'_, TestElem, _> = PMMR::at(&mut ba, sz);
 		pmmr.prune(5).unwrap();
-		assert_eq!(orig_root, pmmr.root());
+		assert_eq!(orig_root, pmmr.root().unwrap());
 	}
 	assert_eq!(ba.hashes.len(), 16);
 	assert_eq!(ba.remove_list.len(), 4);
@@ -484,7 +484,7 @@ fn pmmr_prune() {
 	{
 		let mut pmmr: PMMR<'_, TestElem, _> = PMMR::at(&mut ba, sz);
 		pmmr.prune(1).unwrap();
-		assert_eq!(orig_root, pmmr.root());
+		assert_eq!(orig_root, pmmr.root().unwrap());
 	}
 	assert_eq!(ba.hashes.len(), 16);
 	assert_eq!(ba.remove_list.len(), 5);
@@ -495,7 +495,7 @@ fn pmmr_prune() {
 		for n in 1..16 {
 			let _ = pmmr.prune(n);
 		}
-		assert_eq!(orig_root, pmmr.root());
+		assert_eq!(orig_root, pmmr.root().unwrap());
 	}
 	assert_eq!(ba.hashes.len(), 16);
 	assert_eq!(ba.remove_list.len(), 9);
