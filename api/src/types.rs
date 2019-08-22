@@ -81,6 +81,9 @@ pub struct Status {
 	pub tip: Tip,
 	// The current sync status
 	pub sync_status: String,
+	// Additional sync information
+	#[serde(skip_serializing_if = "Option::is_none")]
+	pub sync_info: Option<serde_json::Value>,
 }
 
 impl Status {
@@ -88,6 +91,7 @@ impl Status {
 		current_tip: chain::Tip,
 		connections: u32,
 		sync_status: String,
+		sync_info: Option<serde_json::Value>,
 	) -> Status {
 		Status {
 			protocol_version: ser::ProtocolVersion::local().into(),
@@ -95,6 +99,7 @@ impl Status {
 			connections: connections,
 			tip: Tip::from_tip(current_tip),
 			sync_status,
+			sync_info,
 		}
 	}
 }
