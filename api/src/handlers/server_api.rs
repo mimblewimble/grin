@@ -74,7 +74,7 @@ impl StatusHandler {
 			.head()
 			.map_err(|e| ErrorKind::Internal(format!("can't get head: {}", e)))?;
 		let sync_status = w(&self.sync_state)?.status();
-		let (api_sync_status, api_sync_info) = sync_status_to_api_string(sync_status);
+		let (api_sync_status, api_sync_info) = sync_status_to_api(sync_status);
 		Ok(Status::from_tip_and_peers(
 			head,
 			w(&self.peers)?.peer_count(),
