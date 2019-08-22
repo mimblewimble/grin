@@ -100,7 +100,10 @@ fn sync_status_to_api(sync_status: SyncStatus) -> (String, Option<serde_json::Va
 		SyncStatus::HeaderSync {
 			current_height,
 			highest_height,
-		} => ("header_sync".to_string(), Some(json!({ "current_height": current_height, "highest_height": highest_height }))),
+		} => (
+			"header_sync".to_string(),
+			Some(json!({ "current_height": current_height, "highest_height": highest_height })),
+		),
 		SyncStatus::TxHashsetDownload {
 			start_time: _,
 			prev_update_time: _,
@@ -108,21 +111,31 @@ fn sync_status_to_api(sync_status: SyncStatus) -> (String, Option<serde_json::Va
 			prev_downloaded_size: _,
 			downloaded_size,
 			total_size,
-		} => ("txhashset_download".to_string(), Some(json!({ "downloaded_size": downloaded_size, "total_size": total_size }))),
-		SyncStatus::TxHashsetSetup => ("txhashset_setup".to_string(),None),
+		} => (
+			"txhashset_download".to_string(),
+			Some(json!({ "downloaded_size": downloaded_size, "total_size": total_size })),
+		),
+		SyncStatus::TxHashsetSetup => ("txhashset_setup".to_string(), None),
 		SyncStatus::TxHashsetValidation {
 			kernels,
 			kernel_total,
 			rproofs,
 			rproof_total,
 		} => (
-			"txhashset_validation".to_string(),Some(json!({ "kernels": kernels, "kernel_total": kernel_total ,"rproofs": rproofs, "rproof_total": rproof_total }))),
+			"txhashset_validation".to_string(),
+			Some(
+				json!({ "kernels": kernels, "kernel_total": kernel_total ,"rproofs": rproofs, "rproof_total": rproof_total }),
+			),
+		),
 		SyncStatus::TxHashsetSave => ("txhashset_save".to_string(), None),
 		SyncStatus::TxHashsetDone => ("txhashset_done".to_string(), None),
 		SyncStatus::BodySync {
 			current_height,
 			highest_height,
-		} => ("body_sync".to_string(),Some(json!({ "current_height": current_height, "highest_height": highest_height }))),
+		} => (
+			"body_sync".to_string(),
+			Some(json!({ "current_height": current_height, "highest_height": highest_height })),
+		),
 		SyncStatus::Shutdown => ("shutdown".to_string(), None),
 		// any other status is considered syncing (should be unreachable)
 		_ => ("syncing".to_string(), None),
