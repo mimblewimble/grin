@@ -91,10 +91,8 @@ impl Handler for StatusHandler {
 }
 
 /// Convert a SyncStatus in a readable API representation
-#[allow(unreachable_patterns)]
 fn sync_status_to_api(sync_status: SyncStatus) -> (String, Option<serde_json::Value>) {
 	match sync_status {
-		SyncStatus::Initial => ("initial".to_string(), None),
 		SyncStatus::NoSync => ("no_sync".to_string(), None),
 		SyncStatus::AwaitingPeers(_) => ("awaiting_peers".to_string(), None),
 		SyncStatus::HeaderSync {
@@ -115,7 +113,6 @@ fn sync_status_to_api(sync_status: SyncStatus) -> (String, Option<serde_json::Va
 			"txhashset_download".to_string(),
 			Some(json!({ "downloaded_size": downloaded_size, "total_size": total_size })),
 		),
-		SyncStatus::TxHashsetSetup => ("txhashset_setup".to_string(), None),
 		SyncStatus::TxHashsetValidation {
 			kernels,
 			kernel_total,
@@ -127,8 +124,6 @@ fn sync_status_to_api(sync_status: SyncStatus) -> (String, Option<serde_json::Va
 				json!({ "kernels": kernels, "kernel_total": kernel_total ,"rproofs": rproofs, "rproof_total": rproof_total }),
 			),
 		),
-		SyncStatus::TxHashsetSave => ("txhashset_save".to_string(), None),
-		SyncStatus::TxHashsetDone => ("txhashset_done".to_string(), None),
 		SyncStatus::BodySync {
 			current_height,
 			highest_height,
