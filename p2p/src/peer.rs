@@ -567,7 +567,7 @@ impl ChainAdapter for TrackingAdapter {
 		self.adapter.kernel_data_read()
 	}
 
-	fn kernel_data_write(&self, reader: &mut Read) -> Result<bool, chain::Error> {
+	fn kernel_data_write(&self, reader: &mut dyn Read) -> Result<bool, chain::Error> {
 		self.adapter.kernel_data_write(reader)
 	}
 

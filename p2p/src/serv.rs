@@ -303,7 +303,7 @@ impl ChainAdapter for DummyAdapter {
 	fn kernel_data_read(&self) -> Result<File, chain::Error> {
 		unimplemented!()
 	}
-	fn kernel_data_write(&self, _reader: &mut Read) -> Result<bool, chain::Error> {
+	fn kernel_data_write(&self, _reader: &mut dyn Read) -> Result<bool, chain::Error> {
 		unimplemented!()
 	}
 	fn txhashset_read(&self, _h: Hash) -> Option<TxHashSetRead> {

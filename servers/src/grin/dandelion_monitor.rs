@@ -36,7 +36,7 @@ use crate::util::{RwLock, StopState};
 pub fn monitor_transactions(
 	dandelion_config: DandelionConfig,
 	tx_pool: Arc<RwLock<TransactionPool>>,
-	adapter: Arc<DandelionAdapter>,
+	adapter: Arc<dyn DandelionAdapter>,
 	verifier_cache: Arc<RwLock<dyn VerifierCache>>,
 	stop_state: Arc<StopState>,
 ) -> std::io::Result<thread::JoinHandle<()>> {
@@ -102,7 +102,7 @@ fn select_txs_cutoff(pool: &Pool, cutoff_secs: u16) -> Vec<PoolEntry> {
 fn process_fluff_phase(
 	dandelion_config: &DandelionConfig,
 	tx_pool: &Arc<RwLock<TransactionPool>>,
-	adapter: &Arc<DandelionAdapter>,
+	adapter: &Arc<dyn DandelionAdapter>,
 	verifier_cache: &Arc<RwLock<dyn VerifierCache>>,
 ) -> Result<(), PoolError> {
 	// Take a write lock on the txpool for the duration of this processing.

@@ -37,7 +37,7 @@ use tokio::runtime::Runtime;
 
 /// Returns the list of event hooks that will be initialized for network events
 pub fn init_net_hooks(config: &ServerConfig) -> Vec<Box<dyn NetEvents + Send + Sync>> {
-	let mut list: Vec<Box<NetEvents + Send + Sync>> = Vec::new();
+	let mut list: Vec<Box<dyn NetEvents + Send + Sync>> = Vec::new();
 	list.push(Box::new(EventLogger));
 	if config.webhook_config.block_received_url.is_some()
 		|| config.webhook_config.tx_received_url.is_some()
@@ -50,7 +50,7 @@ pub fn init_net_hooks(config: &ServerConfig) -> Vec<Box<dyn NetEvents + Send + S
 
 /// Returns the list of event hooks that will be initialized for chain events
 pub fn init_chain_hooks(config: &ServerConfig) -> Vec<Box<dyn ChainEvents + Send + Sync>> {
-	let mut list: Vec<Box<ChainEvents + Send + Sync>> = Vec::new();
+	let mut list: Vec<Box<dyn ChainEvents + Send + Sync>> = Vec::new();
 	list.push(Box::new(EventLogger));
 	if config.webhook_config.block_accepted_url.is_some() {
 		list.push(Box::new(WebHook::from_config(&config.webhook_config)));

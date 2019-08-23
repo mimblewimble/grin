@@ -53,7 +53,7 @@ pub trait Backend<T: PMMRable> {
 	fn get_data_from_file(&self, position: u64) -> Option<T::E>;
 
 	/// Iterator over current (unpruned, unremoved) leaf positions.
-	fn leaf_pos_iter(&self) -> Box<Iterator<Item = u64> + '_>;
+	fn leaf_pos_iter(&self) -> Box<dyn Iterator<Item = u64> + '_>;
 
 	/// Remove Hash by insertion position. An index is also provided so the
 	/// underlying backend can implement some rollback of positions up to a
