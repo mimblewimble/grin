@@ -87,10 +87,15 @@ pub struct BlockHandler {
 }
 
 impl BlockHandler {
-	fn get_block(&self, h: &Hash, include_merkle_proof: bool) -> Result<BlockPrintable, Error> {
+	fn get_block(
+		&self,
+		h: &Hash,
+		include_proof: bool,
+		include_merkle_proof: bool,
+	) -> Result<BlockPrintable, Error> {
 		let chain = w(&self.chain)?;
 		let block = chain.get_block(h).context(ErrorKind::NotFound)?;
-		BlockPrintable::from_block(&block, chain, false, include_merkle_proof)
+		BlockPrintable::from_block(&block, chain, include_proof, include_merkle_proof)
 			.map_err(|_| ErrorKind::Internal("chain error".to_owned()).into())
 	}
 
@@ -141,19 +146,29 @@ impl Handler for BlockHandler {
 			Ok(h) => h,
 		};
 
-		if let Some(param) = req.uri().query() {
-			if param == "compact" {
-				result_to_response(self.get_compact_block(&h))
-			} else if param == "no_merkle_proof" {
-				result_to_response(self.get_block(&h, false))
-			} else {
-				response(
-					StatusCode::BAD_REQUEST,
-					format!("unsupported query parameter: {}", param),
-				)
+		let mut include_proof = false;
+		let mut include_merkle_proof = true;
+		if let Some(params) = req.uri().query() {
+			let query = url::form_urlencoded::parse(params.as_bytes());
+			let mut compact = false;
+			for (param, _) in query {
+				match param.as_ref() {
+					"compact" => compact = true,
+					"no_merkle_proof" => include_merkle_proof = false,
+					"include_proof" => include_proof = true,
+					_ => {
+						return response(
+							StatusCode::BAD_REQUEST,
+							format!("unsupported query parameter: {}", param),
+						)
+					}
+				}
 			}
-		} else {
-			result_to_response(self.get_block(&h, true))
+
+			if compact {
+				return result_to_response(self.get_compact_block(&h));
+			}
 		}
+		result_to_response(self.get_block(&h, include_proof, include_merkle_proof))
 	}
 }
