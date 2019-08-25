@@ -197,3 +197,68 @@ impl Handler for OutputHandler {
 		}
 	}
 }
+
+/// Kernel handler, search for a kernel by excess commitment
+/// GET /v1/chain/kernels/XXX?start_height=YYY
+pub struct KernelHandler {
+	pub chain: Weak<chain::Chain>,
+}
+
+impl KernelHandler {
+	fn get_kernel(&self, req: Request<Body>) -> Result<LocatedTxKernel, Error> {
+		let excess = req
+			.uri()
+			.path()
+			.trim_end_matches('/')
+			.rsplit('/')
+			.next()
+			.ok_or(ErrorKind::RequestError("missing excess".into()))?;
+		let excess = util::from_hex(excess.to_owned())
+			.map_err(|_| ErrorKind::RequestError("invalid excess hex".into()))?;
+		if excess.len() != 33 {
+			return Err(ErrorKind::RequestError("invalid excess length".into()).into());
+		}
+		let excess = Commitment::from_vec(excess);
+
+		let start_height: u64 = match req.uri().query() {
+			None => 0,
+			Some(q) => {
+				let params = QueryParams::from(q);
+				params
+					.get("start_height")
+					.unwrap_or(&"0".to_owned())
+					.parse()
+					.map_err(|_| ErrorKind::RequestError("invalid start height".into()))?
+			}
+		};
+
+		let chain = w(&self.chain)?;
+		let start_header = chain
+			.get_header_by_height(start_height.saturating_sub(1))
+			.map_err(|_| ErrorKind::Internal("unable to get header at start height".into()))?;
+
+		let (kernel_mmr_index, kernel) = match chain
+			.txhashset()
+			.read()
+			.find_kernel(&excess, start_header.kernel_mmr_size)
+		{
+			Some(k) => k,
+			None => return Err(ErrorKind::NotFound.into()),
+		};
+		let header = chain
+			.get_header_for_kernel_index(kernel_mmr_index, start_height)
+			.map_err(|_| ErrorKind::Internal("unable to get header".into()))?;
+
+		Ok(LocatedTxKernel {
+			tx_kernel: TxKernelPrintable::from_txkernel(&kernel),
+			height: header.height,
+			mmr_index: kernel_mmr_index,
+		})
+	}
+}
+
+impl Handler for KernelHandler {
+	fn get(&self, req: Request<Body>) -> ResponseFuture {
+		result_to_response(self.get_kernel(req))
+	}
+}

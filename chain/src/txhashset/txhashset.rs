@@ -260,6 +260,23 @@ impl TxHashSet {
 			.elements_from_insertion_index(start_index, max_count)
 	}
 
+	/// Find a kernel with a given excess
+	pub fn find_kernel(&self, excess: &Commitment, start_index: u64) -> Option<(u64, TxKernel)> {
+		let last_pos = self.kernel_pmmr_h.last_pos;
+		let pmmr = ReadonlyPMMR::at(&self.kernel_pmmr_h.backend, last_pos);
+
+		let mut index = start_index;
+		while index <= last_pos {
+			if let Some(t) = pmmr.get_data(index) {
+				if &t.kernel.excess == excess {
+					return Some((index, t.kernel));
+				}
+			}
+			index += 1;
+		}
+		None
+	}
+
 	/// Get MMR roots.
 	pub fn roots(&self) -> TxHashSetRoots {
 		let header_pmmr =

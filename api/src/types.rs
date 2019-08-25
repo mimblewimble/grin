@@ -698,6 +698,13 @@ pub struct OutputListing {
 	pub outputs: Vec<OutputPrintable>,
 }
 
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct LocatedTxKernel {
+	pub tx_kernel: TxKernelPrintable,
+	pub height: u64,
+	pub mmr_index: u64,
+}
+
 #[derive(Serialize, Deserialize)]
 pub struct PoolInfo {
 	/// Size of the pool

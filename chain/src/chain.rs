@@ -1251,6 +1251,40 @@ impl Chain {
 		}
 	}
 
+	/// Gets the block header in which a given kernel mmr index appears in the txhashset.
+	pub fn get_header_for_kernel_index(
+		&self,
+		kernel_mmr_index: u64,
+		start_height: u64,
+	) -> Result<BlockHeader, Error> {
+		let txhashset = self.txhashset.read();
+
+		let mut min = start_height;
+		let mut max = {
+			let head = self.head()?;
+			head.height
+		};
+
+		loop {
+			let search_height = max - (max - min) / 2;
+			let h = txhashset.get_header_by_height(search_height)?;
+			if search_height == 0 {
+				return Ok(h);
+			}
+			let h_prev = txhashset.get_header_by_height(search_height - 1)?;
+			if kernel_mmr_index > h.kernel_mmr_size {
+				min = search_height;
+			} else if kernel_mmr_index < h_prev.kernel_mmr_size {
+				max = search_height;
+			} else {
+				if kernel_mmr_index == h_prev.kernel_mmr_size {
+					return Ok(h_prev);
+				}
+				return Ok(h);
+			}
+		}
+	}
+
 	/// Verifies the given block header is actually on the current chain.
 	/// Checks the header_by_height index to verify the header is where we say
 	/// it is
