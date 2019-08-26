@@ -1423,9 +1423,8 @@ fn setup_head(
 			head.last_block_h,
 			head.height,
 		);
-		batch.reset_header_head()?;
-		let header_head = batch.header_head()?;
-		batch.save_sync_head(&header_head)?;
+		batch.save_header_head(&head)?;
+		batch.save_sync_head(&head)?;
 	}
 
 	batch.commit()?;

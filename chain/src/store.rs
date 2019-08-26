@@ -180,12 +180,6 @@ impl<'a> Batch<'a> {
 		self.db.put_ser(&vec![SYNC_HEAD_PREFIX], t)
 	}
 
-	/// Reset header_head to the current head of the body chain.
-	pub fn reset_header_head(&self) -> Result<(), Error> {
-		let tip = self.head()?;
-		self.save_header_head(&tip)
-	}
-
 	/// get block
 	pub fn get_block(&self, h: &Hash) -> Result<Block, Error> {
 		option_to_not_found(
