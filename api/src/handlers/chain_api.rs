@@ -252,7 +252,7 @@ impl KernelHandler {
 			.get_kernel_height(&excess, min_height, max_height)
 			.map_err(|e| ErrorKind::Internal(format!("{}", e)))?
 			.map(|(tx_kernel, height, mmr_index)| LocatedTxKernel {
-				tx_kernel: TxKernelPrintable::from_txkernel(&tx_kernel),
+				tx_kernel,
 				height,
 				mmr_index,
 			});
