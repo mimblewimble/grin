@@ -69,8 +69,6 @@ pub enum Error {
 	DuplicateError,
 	/// Block header version (hard-fork schedule).
 	InvalidBlockVersion,
-	/// Protocol version unsupported (conversion not possible).
-	UnsupportedProtocolVersion,
 }
 
 impl From<io::Error> for Error {
@@ -94,7 +92,6 @@ impl fmt::Display for Error {
 			Error::TooLargeReadErr => f.write_str("too large read"),
 			Error::HexError(ref e) => write!(f, "hex error {:?}", e),
 			Error::InvalidBlockVersion => f.write_str("invalid block version"),
-			Error::UnsupportedProtocolVersion => f.write_str("unsupported protocol version"),
 		}
 	}
 }
@@ -118,7 +115,6 @@ impl error::Error for Error {
 			Error::TooLargeReadErr => "too large read",
 			Error::HexError(_) => "hex error",
 			Error::InvalidBlockVersion => "invalid block version",
-			Error::UnsupportedProtocolVersion => "unsupported protocol version",
 		}
 	}
 }
@@ -293,6 +289,12 @@ where
 pub struct ProtocolVersion(pub u32);
 
 impl ProtocolVersion {
+	pub const MAX: u32 = std::u32::MAX;
+
+	pub fn value(&self) -> u32 {
+		self.0
+	}
+
 	/// Our default "local" protocol version.
 	pub fn local() -> ProtocolVersion {
 		ProtocolVersion(PROTOCOL_VERSION)

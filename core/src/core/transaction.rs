@@ -128,10 +128,9 @@ impl Writeable for KernelFeatures {
 	/// Protocol version may increment rapidly for other unrelated changes.
 	/// So we want to match on ranges here and not specific version values.
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
-		match writer.protocol_version() {
-			ProtocolVersion(x) if x < 2 => self.write_v1(writer),
-			ProtocolVersion(x) if x >= 2 => self.write_v2(writer),
-			_ => Err(ser::Error::UnsupportedProtocolVersion),
+		match writer.protocol_version().value() {
+			0..=1 => self.write_v1(writer),
+			2..=ProtocolVersion::MAX => self.write_v2(writer),
 		}
 	}
 }
