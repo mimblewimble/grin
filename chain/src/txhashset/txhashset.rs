@@ -260,19 +260,25 @@ impl TxHashSet {
 			.elements_from_insertion_index(start_index, max_count)
 	}
 
-	/// Find a kernel with a given excess
-	pub fn find_kernel(&self, excess: &Commitment, start_index: u64) -> Option<(u64, TxKernel)> {
-		let last_pos = self.kernel_pmmr_h.last_pos;
-		let pmmr = ReadonlyPMMR::at(&self.kernel_pmmr_h.backend, last_pos);
+	/// Find a kernel with a given excess. Work backwards from `max_index` to `min_index`
+	pub fn find_kernel(
+		&self,
+		excess: &Commitment,
+		min_index: Option<u64>,
+		max_index: Option<u64>,
+	) -> Option<(TxKernel, u64)> {
+		let min_index = min_index.unwrap_or(1);
+		let max_index = max_index.unwrap_or(self.kernel_pmmr_h.last_pos);
 
-		let mut index = start_index;
-		while index <= last_pos {
+		let pmmr = ReadonlyPMMR::at(&self.kernel_pmmr_h.backend, self.kernel_pmmr_h.last_pos);
+		let mut index = max_index + 1;
+		while index > min_index {
+			index -= 1;
 			if let Some(t) = pmmr.get_data(index) {
 				if &t.kernel.excess == excess {
-					return Some((index, t.kernel));
+					return Some((t.kernel, index));
 				}
 			}
-			index += 1;
 		}
 		None
 	}

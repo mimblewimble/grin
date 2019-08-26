@@ -220,39 +220,43 @@ impl KernelHandler {
 		}
 		let excess = Commitment::from_vec(excess);
 
-		let start_height: u64 = match req.uri().query() {
-			None => 0,
-			Some(q) => {
-				let params = QueryParams::from(q);
-				params
-					.get("start_height")
-					.unwrap_or(&"0".to_owned())
-					.parse()
-					.map_err(|_| ErrorKind::RequestError("invalid start height".into()))?
-			}
-		};
-
 		let chain = w(&self.chain)?;
-		let start_header = chain
-			.get_header_by_height(start_height.saturating_sub(1))
-			.map_err(|_| ErrorKind::Internal("unable to get header at start height".into()))?;
 
-		let (kernel_mmr_index, kernel) = match chain
-			.txhashset()
-			.read()
-			.find_kernel(&excess, start_header.kernel_mmr_size)
-		{
-			Some(k) => k,
-			None => return Err(ErrorKind::NotFound.into()),
-		};
-		let header = chain
-			.get_header_for_kernel_index(kernel_mmr_index, start_height)
-			.map_err(|_| ErrorKind::Internal("unable to get header".into()))?;
+		let mut min_height: Option<u64> = None;
+		let mut max_height: Option<u64> = None;
+
+		// Check query parameters for minimum and maximum search height
+		if let Some(q) = req.uri().query() {
+			let params = QueryParams::from(q);
+			if let Some(h) = params.get("min_height") {
+				let h = h
+					.parse()
+					.map_err(|_| ErrorKind::RequestError("invalid minimum height".into()))?;
+				// Default is genesis
+				min_height = if h == 0 { None } else { Some(h) };
+			}
+			if let Some(h) = params.get("max_height") {
+				let h = h
+					.parse()
+					.map_err(|_| ErrorKind::RequestError("invalid maximum height".into()))?;
+				// Default is current head
+				let head_height = chain
+					.head()
+					.map_err(|e| ErrorKind::Internal(format!("{}", e)))?
+					.height;
+				max_height = if h >= head_height { None } else { Some(h) };
+			}
+		}
+
+		let (tx_kernel, height, mmr_index) = chain
+			.get_kernel_height(&excess, min_height, max_height)
+			.map_err(|e| ErrorKind::Internal(format!("{}", e)))?
+			.ok_or(ErrorKind::NotFound)?;
 
 		Ok(LocatedTxKernel {
-			tx_kernel: TxKernelPrintable::from_txkernel(&kernel),
-			height: header.height,
-			mmr_index: kernel_mmr_index,
+			tx_kernel: TxKernelPrintable::from_txkernel(&tx_kernel),
+			height,
+			mmr_index,
 		})
 	}
 }
