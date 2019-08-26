@@ -207,8 +207,6 @@ impl TxHashsetWriteStatus for SyncState {
 /// readable.
 #[derive(Debug)]
 pub struct TxHashSetRoots {
-	/// Header root
-	pub header_root: Hash,
 	/// Output root
 	pub output_root: Hash,
 	/// Range Proof root

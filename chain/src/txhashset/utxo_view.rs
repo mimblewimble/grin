@@ -111,7 +111,7 @@ impl<'a> UTXOView<'a> {
 			.unwrap_or(0);
 
 		if pos > 0 {
-			// If we have not yet reached 1,000 / 1,440 blocks then
+			// If we have not yet reached 1440 blocks then
 			// we can fail immediately as coinbase cannot be mature.
 			if height < global::coinbase_maturity() {
 				return Err(ErrorKind::ImmatureCoinbase.into());
