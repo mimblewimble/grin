@@ -50,7 +50,7 @@ where
 	}
 
 	/// Reference to the underlying storage backend.
-	pub fn backend(&'a self) -> &Backend<T> {
+	pub fn backend(&'a self) -> &dyn Backend<T> {
 		self.backend
 	}
 

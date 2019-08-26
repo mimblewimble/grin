@@ -561,7 +561,7 @@ pub trait ChainAdapter: Sync + Send {
 
 	fn kernel_data_read(&self) -> Result<File, chain::Error>;
 
-	fn kernel_data_write(&self, reader: &mut Read) -> Result<bool, chain::Error>;
+	fn kernel_data_write(&self, reader: &mut dyn Read) -> Result<bool, chain::Error>;
 
 	/// Provides a reading view into the current txhashset state as well as
 	/// the required indexes for a consumer to rewind to a consistant state

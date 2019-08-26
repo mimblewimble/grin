@@ -347,7 +347,7 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 		self.chain().kernel_data_read()
 	}
 
-	fn kernel_data_write(&self, reader: &mut Read) -> Result<bool, chain::Error> {
+	fn kernel_data_write(&self, reader: &mut dyn Read) -> Result<bool, chain::Error> {
 		let res = self.chain().kernel_data_write(reader)?;
 		error!("***** kernel_data_write: {:?}", res);
 		Ok(true)

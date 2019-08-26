@@ -132,7 +132,7 @@ impl<T: PMMRable> Backend<T> for PMMRBackend<T> {
 	/// Returns an iterator over all the leaf positions.
 	/// for a prunable PMMR this is an iterator over the leaf_set bitmap.
 	/// For a non-prunable PMMR this is *all* leaves (this is not yet implemented).
-	fn leaf_pos_iter(&self) -> Box<Iterator<Item = u64> + '_> {
+	fn leaf_pos_iter(&self) -> Box<dyn Iterator<Item = u64> + '_> {
 		if self.prunable {
 			Box::new(self.leaf_set.iter())
 		} else {
@@ -472,7 +472,7 @@ pub fn clean_files_by_prefix<P: AsRef<std::path::Path>>(
 
 	let number_of_files_deleted: u32 = fs::read_dir(&path)?
 		.flat_map(
-			|possible_dir_entry| -> Result<u32, Box<std::error::Error>> {
+			|possible_dir_entry| -> Result<u32, Box<dyn std::error::Error>> {
 				// result implements iterator and so if we were to use map here
 				// we would have a list of Result<u32, Box<std::error::Error>>
 				// but because we use flat_map, the errors get "discarded" and we are
