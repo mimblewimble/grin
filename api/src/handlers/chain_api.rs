@@ -205,7 +205,7 @@ pub struct KernelHandler {
 }
 
 impl KernelHandler {
-	fn get_kernel(&self, req: Request<Body>) -> Result<LocatedTxKernel, Error> {
+	fn get_kernel(&self, req: Request<Body>) -> Result<Option<LocatedTxKernel>, Error> {
 		let excess = req
 			.uri()
 			.path()
@@ -248,16 +248,15 @@ impl KernelHandler {
 			}
 		}
 
-		let (tx_kernel, height, mmr_index) = chain
+		let kernel = chain
 			.get_kernel_height(&excess, min_height, max_height)
 			.map_err(|e| ErrorKind::Internal(format!("{}", e)))?
-			.ok_or(ErrorKind::NotFound)?;
-
-		Ok(LocatedTxKernel {
-			tx_kernel: TxKernelPrintable::from_txkernel(&tx_kernel),
-			height,
-			mmr_index,
-		})
+			.map(|(tx_kernel, height, mmr_index)| LocatedTxKernel {
+				tx_kernel: TxKernelPrintable::from_txkernel(&tx_kernel),
+				height,
+				mmr_index,
+			});
+		Ok(kernel)
 	}
 }
 
