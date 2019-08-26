@@ -73,17 +73,13 @@ impl HeaderSync {
 					header_head.height,
 				);
 
-				// Reset sync_head to header_head on transition to HeaderSync,
+				// Reset sync MMR based on current header MMR on transition to HeaderSync,
 				// but ONLY on initial transition to HeaderSync state.
 				//
 				// The header_head and sync_head may diverge here in the presence of a fork
 				// in the header chain. Ensure we track the new advertised header chain here
 				// correctly, so reset any previous (and potentially stale) sync_head to match
 				// our last known "good" header_head.
-				//
-				self.chain.reset_sync_head()?;
-
-				// Rebuild the sync MMR to match our updated sync_head.
 				self.chain.rebuild_sync_mmr(&header_head)?;
 
 				self.history_locator.retain(|&x| x.0 == 0);

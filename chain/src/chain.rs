@@ -226,18 +226,6 @@ impl Chain {
 		Ok(())
 	}
 
-	/// Reset sync_head to current header_head.
-	/// We do this when we first transition to header_sync to ensure we extend
-	/// the "sync" header MMR from a known consistent state and to ensure we track
-	/// the header chain correctly at the fork point.
-	pub fn reset_sync_head(&self) -> Result<Tip, Error> {
-		let batch = self.store.batch()?;
-		batch.reset_sync_head()?;
-		let head = batch.get_sync_head()?;
-		batch.commit()?;
-		Ok(head)
-	}
-
 	/// Processes a single block, then checks for orphans, processing
 	/// those as well if they're found
 	pub fn process_block(&self, b: Block, opts: Options) -> Result<Option<Tip>, Error> {
@@ -708,14 +696,15 @@ impl Chain {
 	/// Rebuild the sync MMR based on current header_head.
 	/// We rebuild the sync MMR when first entering sync mode so ensure we
 	/// have an MMR we can safely rewind based on the headers received from a peer.
-	/// TODO - think about how to optimize this.
 	pub fn rebuild_sync_mmr(&self, head: &Tip) -> Result<(), Error> {
 		let mut txhashset = self.txhashset.write();
 		let mut batch = self.store.batch()?;
+		let header = batch.get_block_header(&head.hash())?;
 		txhashset::sync_extending(&mut txhashset, &mut batch, |extension| {
-			extension.rebuild(head, &self.genesis)?;
+			pipe::rewind_and_apply_header_fork(&header, extension)?;
 			Ok(())
 		})?;
+		batch.save_sync_head(&head)?;
 		batch.commit()?;
 		Ok(())
 	}
@@ -724,7 +713,6 @@ impl Chain {
 	/// We rebuild the header MMR after receiving a txhashset from a peer.
 	/// The txhashset contains output, rangeproof and kernel MMRs but we construct
 	/// the header MMR locally based on headers from our db.
-	/// TODO - think about how to optimize this.
 	fn rebuild_header_mmr(
 		&self,
 		head: &Tip,
@@ -1425,7 +1413,7 @@ fn setup_head(
 	let header_head = batch.header_head()?;
 	if batch.get_block_header(&header_head.last_block_h).is_ok() {
 		// Reset sync_head to be consistent with current header_head.
-		batch.reset_sync_head()?;
+		batch.save_sync_head(&header_head)?;
 	} else {
 		// Reset both header_head and sync_head to be consistent with current head.
 		warn!(
@@ -1436,7 +1424,8 @@ fn setup_head(
 			head.height,
 		);
 		batch.reset_header_head()?;
-		batch.reset_sync_head()?;
+		let header_head = batch.header_head()?;
+		batch.save_sync_head(&header_head)?;
 	}
 
 	batch.commit()?;

@@ -176,10 +176,11 @@ pub fn sync_block_headers(
 	if headers.is_empty() {
 		return Ok(());
 	}
-
 	let first_header = headers.first().expect("first header");
 	let last_header = headers.last().expect("last header");
-	let prev_header = ctx.batch.get_previous_header(&first_header)?;
+
+	// Check these are the "next" headers, i.e. we already know about the previous one.
+	ctx.batch.get_previous_header(&first_header)?;
 
 	// Check if we know about all these headers. If so we can accept them quickly.
 	// If they *do not* increase total work on the sync chain we are done.
@@ -191,21 +192,19 @@ pub fn sync_block_headers(
 		}
 	}
 
-	txhashset::sync_extending(&mut ctx.txhashset, &mut ctx.batch, |extension| {
-		rewind_and_apply_header_fork(&prev_header, extension)?;
-		for header in headers {
-			extension.validate_root(header)?;
-			extension.apply_header(header)?;
-			add_block_header(header, &extension.batch)?;
-		}
-		Ok(())
-	})?;
-
-	// Validate all our headers now that we have added each "previous"
-	// header to the db in this batch above.
+	// Validate and add all headers in this chunk to our current batch.
+	// If anything fails to validate the entire batch will rollback.
 	for header in headers {
 		validate_header(header, ctx)?;
+		add_block_header(header, &ctx.batch)?;
 	}
+
+	// Now we can simply rewind and apply all the headers in this chunk
+	// up to and including the last header.
+	// If anything fails to validate the entire batch will rollback.
+	txhashset::sync_extending(&mut ctx.txhashset, &mut ctx.batch, |extension| {
+		rewind_and_apply_header_fork(&last_header, extension)
+	})?;
 
 	if has_more_work(&last_header, &sync_head) {
 		update_sync_head(&Tip::from_header(&last_header), &mut ctx.batch)?;
@@ -220,7 +219,7 @@ pub fn sync_block_headers(
 /// to allow processing to continue (for header itself).
 pub fn process_block_header(header: &BlockHeader, ctx: &mut BlockContext<'_>) -> Result<(), Error> {
 	// Check this header is not an orphan, we must know about the previous header to continue.
-	let prev_header = ctx.batch.get_previous_header(&header)?;
+	ctx.batch.get_previous_header(&header)?;
 
 	// If this header is "known" then stop processing the header.
 	// Do not stop processing with an error though.
@@ -239,18 +238,16 @@ pub fn process_block_header(header: &BlockHeader, ctx: &mut BlockContext<'_>) ->
 		}
 	}
 
+	validate_header(header, ctx)?;
+	add_block_header(header, &ctx.batch)?;
+
 	txhashset::header_extending(&mut ctx.txhashset, &mut ctx.batch, |extension| {
-		rewind_and_apply_header_fork(&prev_header, extension)?;
-		extension.validate_root(header)?;
-		extension.apply_header(header)?;
+		rewind_and_apply_header_fork(&header, extension)?;
 		if !has_more_work(&header, &header_head) {
 			extension.force_rollback();
 		}
 		Ok(())
 	})?;
-
-	validate_header(header, ctx)?;
-	add_block_header(header, &ctx.batch)?;
 
 	// Update header_head independently of chain head (full blocks).
 	// If/when we process the corresponding full block we will update the
@@ -527,12 +524,6 @@ pub fn rewind_and_apply_header_fork(
 	header: &BlockHeader,
 	ext: &mut txhashset::HeaderExtension<'_>,
 ) -> Result<(), Error> {
-	let head = ext.head();
-	if header.hash() == head.last_block_h {
-		// Nothing to rewind and nothing to reapply. Done.
-		return Ok(());
-	}
-
 	let mut fork_hashes = vec![];
 	let mut current = header.clone();
 	while current.height > 0 && !ext.is_on_current_chain(&current).is_ok() {
