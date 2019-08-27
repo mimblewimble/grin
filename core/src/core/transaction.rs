@@ -306,8 +306,20 @@ impl TxKernel {
 		Ok(())
 	}
 
-	/// Batch verification.
-	pub fn batch_verify(tx_kernels: &Vec<TxKernel>) -> Result<(), Error> {
+	/// Fee and lock_height verification
+	pub fn fee_height_verify(tx_kernels: &Vec<TxKernel>) -> Result<(), Error> {
+		for tx_kernel in tx_kernels {
+			if tx_kernel.is_coinbase() && tx_kernel.fee != 0
+				|| !tx_kernel.is_height_locked() && tx_kernel.lock_height != 0
+			{
+				return Err(Error::InvalidKernelFeatures);
+			}
+		}
+		Ok(())
+	}
+
+	/// Batch signature verification.
+	pub fn batch_sig_verify(tx_kernels: &Vec<TxKernel>) -> Result<(), Error> {
 		let len = tx_kernels.len();
 		let mut sigs: Vec<secp::Signature> = Vec::with_capacity(len);
 		let mut pubkeys: Vec<secp::key::PublicKey> = Vec::with_capacity(len);
@@ -317,11 +329,6 @@ impl TxKernel {
 		let secp = secp.lock();
 
 		for tx_kernel in tx_kernels {
-			if tx_kernel.is_coinbase() && tx_kernel.fee != 0
-				|| !tx_kernel.is_height_locked() && tx_kernel.lock_height != 0
-			{
-				return Err(Error::InvalidKernelFeatures);
-			}
 			sigs.push(tx_kernel.excess_sig);
 			pubkeys.push(tx_kernel.excess.to_pubkey(&secp)?);
 			msgs.push(tx_kernel.msg_to_sign()?);
@@ -781,7 +788,8 @@ impl TransactionBody {
 		};
 
 		// Verify the unverified tx kernels.
-		TxKernel::batch_verify(&kernels)?;
+		TxKernel::fee_height_verify(&kernels)?;
+		TxKernel::batch_sig_verify(&kernels)?;
 
 		// Cache the successful verification results for the new outputs and kernels.
 		{

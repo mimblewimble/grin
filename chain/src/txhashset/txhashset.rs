@@ -1320,10 +1320,11 @@ impl<'a> Extension<'a> {
 
 	fn verify_kernel_signatures(&self, status: &dyn TxHashsetWriteStatus) -> Result<(), Error> {
 		let now = Instant::now();
+		const KERNEL_BATCH_SIZE: usize = 5_000;
 
 		let mut kern_count = 0;
 		let total_kernels = pmmr::n_leaves(self.kernel_pmmr.unpruned_size());
-		let mut tx_kernels: Vec<TxKernel> = Vec::with_capacity(1_024);
+		let mut tx_kernels: Vec<TxKernel> = Vec::with_capacity(KERNEL_BATCH_SIZE);
 		for n in 1..self.kernel_pmmr.unpruned_size() + 1 {
 			if pmmr::is_leaf(n) {
 				let kernel = self
@@ -1332,28 +1333,19 @@ impl<'a> Extension<'a> {
 					.ok_or::<Error>(ErrorKind::TxKernelNotFound.into())?;
 
 				tx_kernels.push(kernel.kernel);
-				kern_count += 1;
 
-				// batch on every 1024 kernels
-				if kern_count & 0x0400 == 0 {
-					TxKernel::batch_verify(&tx_kernels)?;
+				if tx_kernels.len() >= KERNEL_BATCH_SIZE || n >= self.kernel_pmmr.unpruned_size() {
+					TxKernel::fee_height_verify(&tx_kernels)?;
+					TxKernel::batch_sig_verify(&tx_kernels)?;
+					kern_count += tx_kernels.len() as u64;
 					tx_kernels.clear();
 					status.on_validation(kern_count, total_kernels, 0, 0);
-					if kern_count & 0x2000 == 0 {
-						debug!(
-							"txhashset: verify_kernel_signatures: verified {} signatures",
-							kern_count,
-						);
-					}
+					debug!(
+						"txhashset: verify_kernel_signatures: verified {} signatures",
+						kern_count,
+					);
 				}
 			}
-		}
-
-		// remaining part which not full of 1024 kernels
-		if tx_kernels.len() > 0 {
-			TxKernel::batch_verify(&tx_kernels)?;
-			tx_kernels.clear();
-			status.on_validation(kern_count, total_kernels, 0, 0);
 		}
 
 		debug!(
