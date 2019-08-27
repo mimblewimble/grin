@@ -1086,7 +1086,7 @@ impl Chain {
 			let current_height = head_header.height;
 			let horizon_height =
 				current_height.saturating_sub(global::cut_through_horizon().into());
-			let horizon_hash = self.get_header_hash_by_height(horizon_height)?;
+			let horizon_hash = header_pmmr.get_header_hash_by_height(horizon_height)?;
 			let horizon_header = batch.get_block_header(&horizon_hash)?;
 
 			txhashset.compact(&horizon_header, &mut batch)?;

@@ -950,7 +950,7 @@ impl<'a> Extension<'a> {
 		// undone during rewind).
 		// Rewound output pos will be removed from the MMR.
 		// Rewound input (spent) pos will be added back to the MMR.
-		let head_header = self.batch.get_block_header(&self.head.last_block_h)?;
+		let head_header = self.batch.get_block_header(&self.head.hash())?;
 		let rewind_rm_pos = input_pos_to_rewind(header, &head_header, &self.batch)?;
 
 		self.rewind_to_pos(
@@ -973,10 +973,6 @@ impl<'a> Extension<'a> {
 		kernel_pos: u64,
 		rewind_rm_pos: &Bitmap,
 	) -> Result<(), Error> {
-		debug!(
-			"txhashset: rewind_to_pos: output {}, kernel {}",
-			output_pos, kernel_pos,
-		);
 		self.output_pmmr
 			.rewind(output_pos, rewind_rm_pos)
 			.map_err(&ErrorKind::TxHashSetErr)?;
@@ -1508,11 +1504,9 @@ pub fn input_pos_to_rewind(
 	head_header: &BlockHeader,
 	batch: &Batch<'_>,
 ) -> Result<Bitmap, Error> {
-	if head_header.height < block_header.height {
-		debug!(
-			"input_pos_to_rewind: {} < {}, nothing to rewind",
-			head_header.height, block_header.height
-		);
+	// NOTE: We rewind to the end of the provided header.
+	// If this matches our head then nothing to rewind.
+	if head_header.height <= block_header.height {
 		return Ok(Bitmap::create());
 	}
 
