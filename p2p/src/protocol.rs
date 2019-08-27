@@ -13,7 +13,8 @@
 // limitations under the License.
 
 use crate::conn::{Message, MessageHandler, Response, Tracker};
-use crate::core::core::{self, hash::Hash, CompactBlock};
+use crate::core::core::{self, hash::Hash, hash::Hashed, CompactBlock};
+
 use crate::msg::{
 	BanReason, GetPeerAddrs, Headers, KernelDataResponse, Locator, PeerAddrs, Ping, Pong,
 	TxHashSetArchive, TxHashSetRequest, Type,
@@ -24,6 +25,7 @@ use rand::{thread_rng, Rng};
 use std::cmp;
 use std::fs::{self, File, OpenOptions};
 use std::io::{BufWriter, Seek, SeekFrom, Write};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::Instant;
 use tempfile::tempfile;
@@ -31,11 +33,20 @@ use tempfile::tempfile;
 pub struct Protocol {
 	adapter: Arc<dyn NetAdapter>,
 	peer_info: PeerInfo,
+	state_sync_requested: Arc<AtomicBool>,
 }
 
 impl Protocol {
-	pub fn new(adapter: Arc<dyn NetAdapter>, peer_info: PeerInfo) -> Protocol {
-		Protocol { adapter, peer_info }
+	pub fn new(
+		adapter: Arc<dyn NetAdapter>,
+		peer_info: PeerInfo,
+		state_sync_requested: Arc<AtomicBool>,
+	) -> Protocol {
+		Protocol {
+			adapter,
+			peer_info,
+			state_sync_requested,
+		}
 	}
 }
 
@@ -320,7 +331,9 @@ impl MessageHandler for Protocol {
 					sm_req.hash, sm_req.height
 				);
 
-				let txhashset = self.adapter.txhashset_read(sm_req.hash);
+				let txhashset_header = self.adapter.txhashset_archive_header()?;
+				let txhashset_header_hash = txhashset_header.hash();
+				let txhashset = self.adapter.txhashset_read(txhashset_header_hash);
 
 				if let Some(txhashset) = txhashset {
 					let file_sz = txhashset.reader.metadata()?.len();
@@ -328,8 +341,8 @@ impl MessageHandler for Protocol {
 						Type::TxHashSetArchive,
 						self.peer_info.version,
 						&TxHashSetArchive {
-							height: sm_req.height as u64,
-							hash: sm_req.hash,
+							height: txhashset_header.height as u64,
+							hash: txhashset_header_hash,
 							bytes: file_sz,
 						},
 						writer,
@@ -353,6 +366,12 @@ impl MessageHandler for Protocol {
 					);
 					return Err(Error::BadMessage);
 				}
+				if !self.state_sync_requested.load(Ordering::Relaxed) {
+					error!("handle_payload: txhashset archive received but from the wrong peer",);
+					return Err(Error::BadMessage);
+				}
+				// Update the sync state requested status
+				self.state_sync_requested.store(false, Ordering::Relaxed);
 
 				let download_start_time = Utc::now();
 				self.adapter
@@ -422,7 +441,7 @@ impl MessageHandler for Protocol {
 
 				debug!(
 					"handle_payload: txhashset archive for {} at {}, DONE. Data Ok: {}",
-					sm_arch.hash, sm_arch.height, res
+					sm_arch.hash, sm_arch.height, !res
 				);
 
 				if let Err(e) = fs::remove_file(tmp.clone()) {

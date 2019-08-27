@@ -350,13 +350,14 @@ impl Chain {
 	}
 
 	/// Process a block header received during "header first" propagation.
+	/// Note: This will update header MMR and corresponding header_head
+	/// if total work increases (on the header chain).
 	pub fn process_block_header(&self, bh: &BlockHeader, opts: Options) -> Result<(), Error> {
-		// We take a write lock on the txhashset and create a new batch
-		// but this is strictly readonly so we do not commit the batch.
 		let mut txhashset = self.txhashset.write();
 		let batch = self.store.batch()?;
 		let mut ctx = self.new_ctx(opts, batch, &mut txhashset)?;
 		pipe::process_block_header(bh, &mut ctx)?;
+		ctx.batch.commit()?;
 		Ok(())
 	}
 
@@ -368,9 +369,15 @@ impl Chain {
 		let batch = self.store.batch()?;
 		let mut ctx = self.new_ctx(opts, batch, &mut txhashset)?;
 
+		// Sync the chunk of block headers, updating sync_head as necessary.
 		pipe::sync_block_headers(headers, &mut ctx)?;
-		ctx.batch.commit()?;
 
+		// Now "process" the last block header, updating header_head to match sync_head.
+		if let Some(header) = headers.last() {
+			pipe::process_block_header(header, &mut ctx)?;
+		}
+
+		ctx.batch.commit()?;
 		Ok(())
 	}
 
@@ -520,56 +527,11 @@ impl Chain {
 		// latest block header. Rewind the extension to the specified header to
 		// ensure the view is consistent.
 		txhashset::extending_readonly(&mut txhashset, |extension| {
-			extension.rewind(&header)?;
+			let header_head = extension.batch.header_head()?;
+			pipe::rewind_and_apply_fork(&header, &header_head, extension)?;
 			extension.validate(fast_validation, &NoStatus)?;
 			Ok(())
 		})
-	}
-
-	/// *** Only used in tests. ***
-	/// Convenience for setting roots on a block header when
-	/// creating a chain fork during tests.
-	pub fn set_txhashset_roots_forked(
-		&self,
-		b: &mut Block,
-		prev: &BlockHeader,
-	) -> Result<(), Error> {
-		let prev_block = self.get_block(&prev.hash())?;
-		let mut txhashset = self.txhashset.write();
-		let (prev_root, roots, sizes) =
-			txhashset::extending_readonly(&mut txhashset, |extension| {
-				// Put the txhashset in the correct state as of the previous block.
-				// We cannot use the new block to do this because we have no
-				// explicit previous linkage (and prev_root not yet setup).
-				pipe::rewind_and_apply_fork(&prev_block, extension)?;
-				extension.apply_block(&prev_block)?;
-
-				// Retrieve the header root before we apply the new block
-				let prev_root = extension.header_root();
-
-				// Apply the latest block to the chain state via the extension.
-				extension.apply_block(b)?;
-
-				Ok((prev_root, extension.roots(), extension.sizes()))
-			})?;
-
-		// Set the prev_root on the header.
-		b.header.prev_root = prev_root;
-
-		// Set the output, rangeproof and kernel MMR roots.
-		b.header.output_root = roots.output_root;
-		b.header.range_proof_root = roots.rproof_root;
-		b.header.kernel_root = roots.kernel_root;
-
-		// Set the output and kernel MMR sizes.
-		{
-			// Carefully destructure these correctly...
-			let (_, output_mmr_size, _, kernel_mmr_size) = sizes;
-			b.header.output_mmr_size = output_mmr_size;
-			b.header.kernel_mmr_size = kernel_mmr_size;
-		}
-
-		Ok(())
 	}
 
 	/// Sets the txhashset roots on a brand new block by applying the block on
@@ -578,13 +540,17 @@ impl Chain {
 		let mut txhashset = self.txhashset.write();
 		let (prev_root, roots, sizes) =
 			txhashset::extending_readonly(&mut txhashset, |extension| {
+				let previous_header = extension.batch.get_previous_header(&b.header)?;
+				let header_head = extension.batch.header_head()?;
+				pipe::rewind_and_apply_fork(&previous_header, &header_head, extension)?;
+
 				// Retrieve the header root before we apply the new block
-				let prev_root = extension.header_root();
+				let prev_root = extension.header_root()?;
 
 				// Apply the latest block to the chain state via the extension.
 				extension.apply_block(b)?;
 
-				Ok((prev_root, extension.roots(), extension.sizes()))
+				Ok((prev_root, extension.roots()?, extension.sizes()))
 			})?;
 
 		// Set the prev_root on the header.
@@ -610,12 +576,12 @@ impl Chain {
 	pub fn get_merkle_proof(
 		&self,
 		output: &OutputIdentifier,
-		block_header: &BlockHeader,
+		header: &BlockHeader,
 	) -> Result<MerkleProof, Error> {
 		let mut txhashset = self.txhashset.write();
-
 		let merkle_proof = txhashset::extending_readonly(&mut txhashset, |extension| {
-			extension.rewind(&block_header)?;
+			let header_head = extension.batch.header_head()?;
+			pipe::rewind_and_apply_fork(&header, &header_head, extension)?;
 			extension.merkle_proof(output)
 		})?;
 
@@ -644,7 +610,7 @@ impl Chain {
 	/// Currently does not write these to disk and simply deserializes
 	/// the provided data.
 	/// TODO - Write this data to disk and validate the rebuilt kernel MMR.
-	pub fn kernel_data_write(&self, reader: &mut Read) -> Result<(), Error> {
+	pub fn kernel_data_write(&self, reader: &mut dyn Read) -> Result<(), Error> {
 		let mut count = 0;
 		let mut stream = StreamingReader::new(reader, ProtocolVersion::local());
 		while let Ok(_kernel) = TxKernelEntry::read(&mut stream) {
@@ -669,7 +635,9 @@ impl Chain {
 		{
 			let mut txhashset = self.txhashset.write();
 			txhashset::extending_readonly(&mut txhashset, |extension| {
-				extension.rewind(&header)?;
+				let header_head = extension.batch.header_head()?;
+				pipe::rewind_and_apply_fork(&header, &header_head, extension)?;
+
 				extension.snapshot()?;
 				Ok(())
 			})?;
@@ -682,6 +650,27 @@ impl Chain {
 			header.kernel_mmr_size,
 			txhashset_reader,
 		))
+	}
+
+	/// To support the ability to download the txhashset from multiple peers in parallel,
+	/// the peers must all agree on the exact binary representation of the txhashset.
+	/// This means compacting and rewinding to the exact same header.
+	/// Since compaction is a heavy operation, peers can agree to compact every 12 hours,
+	/// and no longer support requesting arbitrary txhashsets.
+	/// Here we return the header of the txhashset we are currently offering to peers.
+	pub fn txhashset_archive_header(&self) -> Result<BlockHeader, Error> {
+		let sync_threshold = global::state_sync_threshold() as u64;
+		let body_head = self.head()?;
+		let archive_interval = global::txhashset_archive_interval();
+		let mut txhashset_height = body_head.height.saturating_sub(sync_threshold);
+		txhashset_height = txhashset_height.saturating_sub(txhashset_height % archive_interval);
+
+		debug!(
+			"txhashset_archive_header: body_head - {}, {}, txhashset height - {}",
+			body_head.last_block_h, body_head.height, txhashset_height,
+		);
+
+		self.get_header_by_height(txhashset_height)
 	}
 
 	// Special handling to make sure the whole kernel set matches each of its
@@ -880,7 +869,7 @@ impl Chain {
 		h: Hash,
 		txhashset_data: File,
 		status: &dyn TxHashsetWriteStatus,
-	) -> Result<(), Error> {
+	) -> Result<bool, Error> {
 		status.on_setup();
 
 		// Initial check whether this txhashset is needed or not
@@ -890,7 +879,14 @@ impl Chain {
 			return Err(ErrorKind::InvalidTxHashSet("not needed".to_owned()).into());
 		}
 
-		let header = self.get_block_header(&h)?;
+		let header = match self.get_block_header(&h) {
+			Ok(header) => header,
+			Err(_) => {
+				warn!("txhashset_write: cannot find block header");
+				// This is a bannable reason
+				return Ok(true);
+			}
+		};
 
 		// Write txhashset to sandbox (in the Grin specific tmp dir)
 		let sandbox_dir = self.get_tmp_dir();
@@ -988,7 +984,7 @@ impl Chain {
 		self.check_orphans(header.height + 1);
 
 		status.on_done();
-		Ok(())
+		Ok(false)
 	}
 
 	/// Cleanup old blocks from the db.
@@ -1328,7 +1324,8 @@ fn setup_head(
 				})?;
 
 				let res = txhashset::extending(txhashset, &mut batch, |extension| {
-					extension.rewind(&header)?;
+					let header_head = extension.batch.header_head()?;
+					pipe::rewind_and_apply_fork(&header, &header_head, extension)?;
 					extension.validate_roots()?;
 
 					// now check we have the "block sums" for the block in question
@@ -1373,7 +1370,7 @@ fn setup_head(
 					let prev_header = batch.get_block_header(&head.prev_block_h)?;
 					let _ = batch.delete_block(&header.hash());
 					head = Tip::from_header(&prev_header);
-					batch.save_head(&head)?;
+					batch.save_body_head(&head)?;
 				}
 			}
 		}
@@ -1386,10 +1383,14 @@ fn setup_head(
 			batch.save_block(&genesis)?;
 
 			let tip = Tip::from_header(&genesis.header);
-			batch.save_head(&tip)?;
+
+			// Save these ahead of time as we need head and header_head to be initialized
+			// with *something* when creating a txhashset extension below.
+			batch.save_body_head(&tip)?;
+			batch.save_header_head(&tip)?;
 
 			if genesis.kernels().len() > 0 {
-				let (utxo_sum, kernel_sum) = (sums, genesis as &Committed).verify_kernel_sums(
+				let (utxo_sum, kernel_sum) = (sums, genesis as &dyn Committed).verify_kernel_sums(
 					genesis.header.overage(),
 					genesis.header.total_kernel_offset(),
 				)?;
@@ -1398,6 +1399,10 @@ fn setup_head(
 					kernel_sum,
 				};
 			}
+			txhashset::header_extending(txhashset, &mut batch, |extension| {
+				extension.apply_header(&genesis.header)?;
+				Ok(())
+			})?;
 			txhashset::extending(txhashset, &mut batch, |extension| {
 				extension.apply_block(&genesis)?;
 				extension.validate_roots()?;

@@ -23,11 +23,9 @@ use std::sync::{Arc, Weak};
 use std::thread;
 use std::time::Instant;
 
-use crate::chain::{self, BlockStatus, ChainAdapter, Options};
+use crate::chain::{self, BlockStatus, ChainAdapter, Options, SyncState, SyncStatus};
 use crate::common::hooks::{ChainEvents, NetEvents};
-use crate::common::types::{
-	self, ChainValidationMode, DandelionEpoch, ServerConfig, SyncState, SyncStatus,
-};
+use crate::common::types::{ChainValidationMode, DandelionEpoch, ServerConfig};
 use crate::core::core::hash::{Hash, Hashed};
 use crate::core::core::transaction::Transaction;
 use crate::core::core::verifier_cache::VerifierCache;
@@ -251,7 +249,11 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 			.process_block_header(&bh, self.chain_opts(false));
 
 		if let Err(e) = res {
-			debug!("Block header {} refused by chain: {:?}", bh.hash(), e.kind());
+			debug!(
+				"Block header {} refused by chain: {:?}",
+				bh.hash(),
+				e.kind()
+			);
 			if e.is_bad_data() {
 				return Ok(false);
 			} else {
@@ -345,7 +347,7 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 		self.chain().kernel_data_read()
 	}
 
-	fn kernel_data_write(&self, reader: &mut Read) -> Result<bool, chain::Error> {
+	fn kernel_data_write(&self, reader: &mut dyn Read) -> Result<bool, chain::Error> {
 		let res = self.chain().kernel_data_write(reader)?;
 		error!("***** kernel_data_write: {:?}", res);
 		Ok(true)
@@ -366,6 +368,10 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 				None
 			}
 		}
+	}
+
+	fn txhashset_archive_header(&self) -> Result<core::BlockHeader, chain::Error> {
+		self.chain().txhashset_archive_header()
 	}
 
 	fn txhashset_receive_ready(&self) -> bool {
@@ -413,22 +419,31 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 		// check status again after download, in case 2 txhashsets made it somehow
 		if let SyncStatus::TxHashsetDownload { .. } = self.sync_state.status() {
 		} else {
-			return Ok(true);
+			return Ok(false);
 		}
 
-		if let Err(e) = self
+		match self
 			.chain()
 			.txhashset_write(h, txhashset_data, self.sync_state.as_ref())
 		{
-			self.chain().clean_txhashset_sandbox();
-			error!("Failed to save txhashset archive: {}", e);
-
-			let is_good_data = !e.is_bad_data();
-			self.sync_state.set_sync_error(types::Error::Chain(e));
-			Ok(is_good_data)
-		} else {
-			info!("Received valid txhashset data for {}.", h);
-			Ok(true)
+			Ok(is_bad_data) => {
+				if is_bad_data {
+					self.chain().clean_txhashset_sandbox();
+					error!("Failed to save txhashset archive: bad data");
+					self.sync_state.set_sync_error(
+						chain::ErrorKind::TxHashSetErr("bad txhashset data".to_string()).into(),
+					);
+				} else {
+					info!("Received valid txhashset data for {}.", h);
+				}
+				Ok(is_bad_data)
+			}
+			Err(e) => {
+				self.chain().clean_txhashset_sandbox();
+				error!("Failed to save txhashset archive: {}", e);
+				self.sync_state.set_sync_error(e);
+				Ok(false)
+			}
 		}
 	}
 

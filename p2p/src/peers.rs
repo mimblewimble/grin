@@ -126,10 +126,19 @@ impl Peers {
 		res
 	}
 
+	/// Get vec of peers we currently have an outgoing connection with.
 	pub fn outgoing_connected_peers(&self) -> Vec<Arc<Peer>> {
 		self.connected_peers()
 			.into_iter()
 			.filter(|x| x.info.is_outbound())
+			.collect()
+	}
+
+	/// Get vec of peers we currently have an incoming connection with.
+	pub fn incoming_connected_peers(&self) -> Vec<Arc<Peer>> {
+		self.connected_peers()
+			.into_iter()
+			.filter(|x| x.info.is_inbound())
 			.collect()
 	}
 
@@ -153,6 +162,11 @@ impl Peers {
 	/// Number of outbound peers currently connected to.
 	pub fn peer_outbound_count(&self) -> u32 {
 		self.outgoing_connected_peers().len() as u32
+	}
+
+	/// Number of inbound peers currently connected to.
+	pub fn peer_inbound_count(&self) -> u32 {
+		self.incoming_connected_peers().len() as u32
 	}
 
 	// Return vec of connected peers that currently advertise more work
@@ -281,14 +295,12 @@ impl Peers {
 		};
 	}
 
-	fn broadcast<F>(&self, obj_name: &str, num_peers: u32, inner: F) -> u32
+	fn broadcast<F>(&self, obj_name: &str, inner: F) -> u32
 	where
 		F: Fn(&Peer) -> Result<bool, Error>,
 	{
 		let mut count = 0;
 
-		// Iterate over our connected peers.
-		// Try our best to send to at most num_peers peers.
 		for p in self.connected_peers().iter() {
 			match inner(&p) {
 				Ok(true) => count += 1,
@@ -310,22 +322,14 @@ impl Peers {
 					peers.remove(&p.info.addr);
 				}
 			}
-
-			if count >= num_peers {
-				break;
-			}
 		}
 		count
 	}
 
-	/// Broadcasts the provided compact block to PEER_MAX_COUNT of our peers.
-	/// This is only used when initially broadcasting a newly mined block
-	/// from a mining node so we want to broadcast it far and wide.
-	/// A peer implementation may drop the broadcast request
-	/// if it knows the remote peer already has the block.
+	/// Broadcast a compact block to all our connected peers.
+	/// This is only used when initially broadcasting a newly mined block.
 	pub fn broadcast_compact_block(&self, b: &core::CompactBlock) {
-		let num_peers = self.config.peer_max_count();
-		let count = self.broadcast("compact block", num_peers, |p| p.send_compact_block(b));
+		let count = self.broadcast("compact block", |p| p.send_compact_block(b));
 		debug!(
 			"broadcast_compact_block: {}, {} at {}, to {} peers, done.",
 			b.hash(),
@@ -335,14 +339,11 @@ impl Peers {
 		);
 	}
 
-	/// Broadcasts the provided header to PEER_PREFERRED_COUNT of our peers.
-	/// We may be connected to PEER_MAX_COUNT peers so we only
-	/// want to broadcast to a random subset of peers.
+	/// Broadcast a block header to all our connected peers.
 	/// A peer implementation may drop the broadcast request
 	/// if it knows the remote peer already has the header.
 	pub fn broadcast_header(&self, bh: &core::BlockHeader) {
-		let num_peers = self.config.peer_min_preferred_count();
-		let count = self.broadcast("header", num_peers, |p| p.send_header(bh));
+		let count = self.broadcast("header", |p| p.send_header(bh));
 		debug!(
 			"broadcast_header: {}, {} at {}, to {} peers, done.",
 			bh.hash(),
@@ -352,14 +353,11 @@ impl Peers {
 		);
 	}
 
-	/// Broadcasts the provided transaction to PEER_PREFERRED_COUNT of our
-	/// peers. We may be connected to PEER_MAX_COUNT peers so we only
-	/// want to broadcast to a random subset of peers.
+	/// Broadcasts the provided transaction to all our connected peers.
 	/// A peer implementation may drop the broadcast request
 	/// if it knows the remote peer already has the transaction.
 	pub fn broadcast_transaction(&self, tx: &core::Transaction) {
-		let num_peers = self.config.peer_max_count();
-		let count = self.broadcast("transaction", num_peers, |p| p.send_transaction(tx));
+		let count = self.broadcast("transaction", |p| p.send_transaction(tx));
 		debug!(
 			"broadcast_transaction: {} to {} peers, done.",
 			tx.hash(),
@@ -433,7 +431,7 @@ impl Peers {
 	/// Iterate over the peer list and prune all peers we have
 	/// lost connection to or have been deemed problematic.
 	/// Also avoid connected peer count getting too high.
-	pub fn clean_peers(&self, max_count: usize) {
+	pub fn clean_peers(&self, max_inbound_count: usize, max_outbound_count: usize) {
 		let mut rm = vec![];
 
 		// build a list of peers to be cleaned up
@@ -477,16 +475,27 @@ impl Peers {
 			}
 		}
 
-		// ensure we do not still have too many connected peers
-		let excess_count = (self.peer_count() as usize)
-			.saturating_sub(rm.len())
-			.saturating_sub(max_count);
-		if excess_count > 0 {
-			// map peers to addrs in a block to bound how long we keep the read lock for
+		// check here to make sure we don't have too many outgoing connections
+		let excess_outgoing_count =
+			(self.peer_outbound_count() as usize).saturating_sub(max_outbound_count);
+		if excess_outgoing_count > 0 {
 			let mut addrs = self
-				.connected_peers()
+				.outgoing_connected_peers()
 				.iter()
-				.take(excess_count)
+				.take(excess_outgoing_count)
+				.map(|x| x.info.addr.clone())
+				.collect::<Vec<_>>();
+			rm.append(&mut addrs);
+		}
+
+		// check here to make sure we don't have too many incoming connections
+		let excess_incoming_count =
+			(self.peer_inbound_count() as usize).saturating_sub(max_inbound_count);
+		if excess_incoming_count > 0 {
+			let mut addrs = self
+				.incoming_connected_peers()
+				.iter()
+				.take(excess_incoming_count)
 				.map(|x| x.info.addr.clone())
 				.collect::<Vec<_>>();
 			rm.append(&mut addrs);
@@ -518,14 +527,9 @@ impl Peers {
 		}
 	}
 
-	pub fn enough_peers(&self) -> bool {
-		self.peer_count() >= self.config.peer_min_preferred_count()
-	}
-
-	/// We have enough peers, both total connected and outbound connected
-	pub fn healthy_peers_mix(&self) -> bool {
-		self.enough_peers()
-			&& self.peer_outbound_count() >= self.config.peer_min_preferred_count() / 2
+	/// We have enough outbound connected peers
+	pub fn enough_outbound_peers(&self) -> bool {
+		self.peer_outbound_count() >= self.config.peer_min_preferred_outbound_count()
 	}
 
 	/// Removes those peers that seem to have expired
@@ -666,12 +670,16 @@ impl ChainAdapter for Peers {
 		self.adapter.kernel_data_read()
 	}
 
-	fn kernel_data_write(&self, reader: &mut Read) -> Result<bool, chain::Error> {
+	fn kernel_data_write(&self, reader: &mut dyn Read) -> Result<bool, chain::Error> {
 		self.adapter.kernel_data_write(reader)
 	}
 
 	fn txhashset_read(&self, h: Hash) -> Option<TxHashSetRead> {
 		self.adapter.txhashset_read(h)
+	}
+
+	fn txhashset_archive_header(&self) -> Result<core::BlockHeader, chain::Error> {
+		self.adapter.txhashset_archive_header()
 	}
 
 	fn txhashset_receive_ready(&self) -> bool {
@@ -684,15 +692,15 @@ impl ChainAdapter for Peers {
 		txhashset_data: File,
 		peer_info: &PeerInfo,
 	) -> Result<bool, chain::Error> {
-		if !self.adapter.txhashset_write(h, txhashset_data, peer_info)? {
+		if self.adapter.txhashset_write(h, txhashset_data, peer_info)? {
 			debug!(
 				"Received a bad txhashset data from {}, the peer will be banned",
 				peer_info.addr
 			);
 			self.ban_peer(peer_info.addr, ReasonForBan::BadTxHashSet);
-			Ok(false)
-		} else {
 			Ok(true)
+		} else {
+			Ok(false)
 		}
 	}
 

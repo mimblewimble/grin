@@ -12,35 +12,16 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use self::core::genesis;
-use grin_core as core;
-use grin_util as util;
-
 mod chain_test_helper;
 
-use self::chain_test_helper::{clean_output_dir, init_chain, mine_chain};
+use self::chain_test_helper::{clean_output_dir, mine_chain};
 
 #[test]
-fn data_files() {
-	util::init_test_logger();
-
-	let chain_dir = ".grin_df";
+fn test() {
+	let chain_dir = ".txhashset_archive_test";
 	clean_output_dir(chain_dir);
-
-	// Mine a few blocks on a new chain.
-	{
-		let chain = mine_chain(chain_dir, 4);
-		chain.validate(false).unwrap();
-		assert_eq!(chain.head().unwrap().height, 3);
-	};
-
-	// Now reload the chain from existing data files and check it is valid.
-	{
-		let chain = init_chain(chain_dir, genesis::genesis_dev());
-		chain.validate(false).unwrap();
-		assert_eq!(chain.head().unwrap().height, 3);
-	}
-
-	// Cleanup chain directory
+	let chain = mine_chain(chain_dir, 35);
+	let header = chain.txhashset_archive_header().unwrap();
+	assert_eq!(10, header.height);
 	clean_output_dir(chain_dir);
 }

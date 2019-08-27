@@ -24,6 +24,7 @@ use crate::core::global;
 use crate::util::init_logger;
 use clap::App;
 use grin_api as api;
+use grin_chain as chain;
 use grin_config as config;
 use grin_core as core;
 use grin_p2p as p2p;
@@ -70,14 +71,16 @@ fn main() {
 
 fn real_main() -> i32 {
 	let yml = load_yaml!("grin.yml");
-	let args = App::from_yaml(yml).get_matches();
+	let args = App::from_yaml(yml)
+		.version(built_info::PKG_VERSION)
+		.get_matches();
 	let node_config;
 
 	// Temporary wallet warning message
 	match args.subcommand() {
 		("wallet", _) => {
 			println!();
-			println!("As of v1.1.0, the wallet has been split into a seperate executable.");
+			println!("As of v1.1.0, the wallet has been split into a separate executable.");
 			println!(
 				"Please visit https://github.com/mimblewimble/grin-wallet/releases to download"
 			);
@@ -165,6 +168,16 @@ fn real_main() -> i32 {
 
 		// client commands and options
 		("client", Some(client_args)) => cmd::client_command(client_args, node_config.unwrap()),
+
+		// clean command
+		("clean", _) => {
+			let db_root_path = node_config.unwrap().members.unwrap().server.db_root;
+			println!("Cleaning chain data directory: {}", db_root_path);
+			match std::fs::remove_dir_all(db_root_path) {
+				Ok(_) => 0,
+				Err(_) => 1,
+			}
+		},
 
 		// If nothing is specified, try to just use the config file instead
 		// this could possibly become the way to configure most things

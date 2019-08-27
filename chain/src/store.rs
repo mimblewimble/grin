@@ -160,12 +160,6 @@ impl<'a> Batch<'a> {
 		option_to_not_found(self.db.get_ser(&vec![SYNC_HEAD_PREFIX]), "SYNC_HEAD")
 	}
 
-	/// Save head to db.
-	pub fn save_head(&self, t: &Tip) -> Result<(), Error> {
-		self.db.put_ser(&vec![HEAD_PREFIX], t)?;
-		self.db.put_ser(&vec![HEADER_HEAD_PREFIX], t)
-	}
-
 	/// Save body head to db.
 	pub fn save_body_head(&self, t: &Tip) -> Result<(), Error> {
 		self.db.put_ser(&vec![HEAD_PREFIX], t)
