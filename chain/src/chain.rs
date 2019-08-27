@@ -382,19 +382,25 @@ impl Chain {
 	/// We update header_head here if our total work increases.
 	pub fn sync_block_headers(&self, headers: &[BlockHeader], opts: Options) -> Result<(), Error> {
 		let mut sync_pmmr = self.sync_pmmr.write();
+		let mut header_pmmr = self.header_pmmr.write();
 		let mut txhashset = self.txhashset.write();
-		let batch = self.store.batch()?;
-		let mut ctx = self.new_ctx(opts, batch, &mut sync_pmmr, &mut txhashset)?;
 
 		// Sync the chunk of block headers, updating sync_head as necessary.
-		pipe::sync_block_headers(headers, &mut ctx)?;
+		{
+			let batch = self.store.batch()?;
+			let mut ctx = self.new_ctx(opts, batch, &mut sync_pmmr, &mut txhashset)?;
+			pipe::sync_block_headers(headers, &mut ctx)?;
+			ctx.batch.commit()?;
+		}
 
 		// Now "process" the last block header, updating header_head to match sync_head.
 		if let Some(header) = headers.last() {
+			let batch = self.store.batch()?;
+			let mut ctx = self.new_ctx(opts, batch, &mut header_pmmr, &mut txhashset)?;
 			pipe::process_block_header(header, &mut ctx)?;
+			ctx.batch.commit()?;
 		}
 
-		ctx.batch.commit()?;
 		Ok(())
 	}
 
@@ -876,8 +882,6 @@ impl Chain {
 		txhashset_data: File,
 		status: &dyn TxHashsetWriteStatus,
 	) -> Result<bool, Error> {
-		let mut header_pmmr = self.header_pmmr.write();
-
 		status.on_setup();
 
 		// Initial check whether this txhashset is needed or not
@@ -910,10 +914,6 @@ impl Chain {
 			Some(&header),
 		)?;
 
-		// The txhashset.zip contains the output, rangeproof and kernel MMRs.
-		// We must rebuild the header MMR ourselves based on the headers in our db.
-		// self.rebuild_header_mmr(&Tip::from_header(&header), &mut txhashset)?;
-
 		// Validate the full kernel history (kernel MMR root for every block header).
 		self.validate_kernel_history(&header, &txhashset)?;
 
@@ -921,7 +921,7 @@ impl Chain {
 		debug!("txhashset_write: rewinding a 2nd time (writeable)");
 
 		let mut batch = self.store.batch()?;
-
+		let mut header_pmmr = self.header_pmmr.write();
 		txhashset::extending(&mut header_pmmr, &mut txhashset, &mut batch, |ext| {
 			let extension = &mut ext.extension;
 			extension.rewind(&header)?;
@@ -991,6 +991,7 @@ impl Chain {
 		self.check_orphans(header.height + 1);
 
 		status.on_done();
+
 		Ok(false)
 	}
 
@@ -1215,16 +1216,14 @@ impl Chain {
 	}
 
 	/// Gets the block header at the provided height.
-	/// Note: Takes a read lock on the txhashset.
-	/// Take care not to call this repeatedly in a tight loop.
+	/// Note: Takes a read lock on the header_pmmr.
 	pub fn get_header_by_height(&self, height: u64) -> Result<BlockHeader, Error> {
 		let hash = self.get_header_hash_by_height(height)?;
 		self.get_block_header(&hash)
 	}
 
 	/// Gets the header hash at the provided height.
-	/// Note: Takes a read lock on the txhashset.
-	/// Take care not to call this repeatedly in a tight loop.
+	/// Note: Takes a read lock on the header_pmmr.
 	fn get_header_hash_by_height(&self, height: u64) -> Result<Hash, Error> {
 		self.header_pmmr.read().get_header_hash_by_height(height)
 	}

@@ -13,7 +13,6 @@
 // limitations under the License.
 
 use self::core::core::hash::Hashed;
-use grin_chain as chain;
 use grin_core as core;
 use grin_util as util;
 

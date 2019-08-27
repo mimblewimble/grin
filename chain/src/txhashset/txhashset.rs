@@ -469,7 +469,6 @@ where
 			} else {
 				trace!("Committing txhashset extension. sizes {:?}", sizes);
 				child_batch.commit()?;
-				// NOTE: The header MMR is readonly for a txhashset extension.
 				trees.output_pmmr_h.backend.sync()?;
 				trees.rproof_pmmr_h.backend.sync()?;
 				trees.kernel_pmmr_h.backend.sync()?;
@@ -504,7 +503,6 @@ where
 	// index saving can be undone
 	let child_batch = batch.child()?;
 	{
-		trace!("Starting new txhashset header extension.");
 		let pmmr = PMMR::at(&mut handle.backend, handle.last_pos);
 		let mut extension = HeaderExtension::new(pmmr, &child_batch, head.clone());
 		res = inner(&mut extension);
@@ -515,24 +513,17 @@ where
 
 	match res {
 		Err(e) => {
-			debug!(
-				"Error returned, discarding txhashset header extension: {}",
-				e
-			);
 			handle.backend.discard();
 			Err(e)
 		}
 		Ok(r) => {
 			if rollback {
-				trace!("Rollbacking txhashset header extension. size {:?}", size);
 				handle.backend.discard();
 			} else {
-				trace!("Committing txhashset header extension. size {:?}", size);
 				child_batch.commit()?;
 				handle.backend.sync()?;
 				handle.last_pos = size;
 			}
-			trace!("TxHashSet header extension done.");
 			Ok(r)
 		}
 	}
@@ -594,6 +585,9 @@ impl<'a> HeaderExtension<'a> {
 	/// Compares the provided header to the header in the header MMR at that height.
 	/// If these match we know the header is on the current chain.
 	pub fn is_on_current_chain(&self, header: &BlockHeader) -> Result<(), Error> {
+		if header.height > self.head.height {
+			return Err(ErrorKind::Other(format!("not on current chain")).into());
+		}
 		let chain_header = self.get_header_by_height(header.height)?;
 		if chain_header.hash() == header.hash() {
 			Ok(())
@@ -610,10 +604,10 @@ impl<'a> HeaderExtension<'a> {
 	/// Apply a new header to the header MMR extension.
 	/// This may be either the header MMR or the sync MMR depending on the
 	/// extension.
-	pub fn apply_header(&mut self, header: &BlockHeader) -> Result<Hash, Error> {
+	pub fn apply_header(&mut self, header: &BlockHeader) -> Result<(), Error> {
 		self.pmmr.push(header).map_err(&ErrorKind::TxHashSetErr)?;
 		self.head = Tip::from_header(header);
-		Ok(self.root()?)
+		Ok(())
 	}
 
 	/// Rewind the header extension to the specified header.

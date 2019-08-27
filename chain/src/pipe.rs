@@ -194,20 +194,15 @@ pub fn sync_block_headers(
 		}
 	}
 
-	txhashset::header_extending(
-		&mut ctx.header_pmmr,
-		&sync_head,
-		&mut ctx.batch,
-		|extension| {
-			rewind_and_apply_header_fork(&prev_header, extension)?;
-			for header in headers {
-				extension.validate_root(header)?;
-				extension.apply_header(header)?;
-				add_block_header(header, &extension.batch)?;
-			}
-			Ok(())
-		},
-	)?;
+	txhashset::header_extending(&mut ctx.header_pmmr, &sync_head, &mut ctx.batch, |ext| {
+		rewind_and_apply_header_fork(&prev_header, ext)?;
+		for header in headers {
+			ext.validate_root(header)?;
+			ext.apply_header(header)?;
+			add_block_header(header, &ext.batch)?;
+		}
+		Ok(())
+	})?;
 
 	// Validate all our headers now that we have added each "previous"
 	// header to the db in this batch above.
@@ -230,8 +225,7 @@ pub fn process_block_header(header: &BlockHeader, ctx: &mut BlockContext<'_>) ->
 	// Check this header is not an orphan, we must know about the previous header to continue.
 	let prev_header = ctx.batch.get_previous_header(&header)?;
 
-	// If this header is "known" then stop processing the header.
-	// Do not stop processing with an error though.
+	// Check if we know about the full block for this header.
 	if check_known(header, ctx).is_err() {
 		return Ok(());
 	}
@@ -247,20 +241,15 @@ pub fn process_block_header(header: &BlockHeader, ctx: &mut BlockContext<'_>) ->
 		}
 	}
 
-	txhashset::header_extending(
-		&mut ctx.header_pmmr,
-		&header_head,
-		&mut ctx.batch,
-		|extension| {
-			rewind_and_apply_header_fork(&prev_header, extension)?;
-			extension.validate_root(header)?;
-			extension.apply_header(header)?;
-			if !has_more_work(&header, &header_head) {
-				extension.force_rollback();
-			}
-			Ok(())
-		},
-	)?;
+	txhashset::header_extending(&mut ctx.header_pmmr, &header_head, &mut ctx.batch, |ext| {
+		rewind_and_apply_header_fork(&prev_header, ext)?;
+		ext.validate_root(header)?;
+		ext.apply_header(header)?;
+		if !has_more_work(&header, &header_head) {
+			ext.force_rollback();
+		}
+		Ok(())
+	})?;
 
 	validate_header(header, ctx)?;
 	add_block_header(header, &ctx.batch)?;
