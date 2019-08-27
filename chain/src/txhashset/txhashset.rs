@@ -1352,17 +1352,17 @@ impl<'a> Extension<'a> {
 					.ok_or::<Error>(ErrorKind::TxKernelNotFound.into())?;
 
 				tx_kernels.push(kernel.kernel);
+			}
 
-				if tx_kernels.len() >= KERNEL_BATCH_SIZE || n >= self.kernel_pmmr.unpruned_size() {
-					TxKernel::batch_sig_verify(&tx_kernels)?;
-					kern_count += tx_kernels.len() as u64;
-					tx_kernels.clear();
-					status.on_validation(kern_count, total_kernels, 0, 0);
-					debug!(
-						"txhashset: verify_kernel_signatures: verified {} signatures",
-						kern_count,
-					);
-				}
+			if tx_kernels.len() >= KERNEL_BATCH_SIZE || n >= self.kernel_pmmr.unpruned_size() {
+				TxKernel::batch_sig_verify(&tx_kernels)?;
+				kern_count += tx_kernels.len() as u64;
+				tx_kernels.clear();
+				status.on_validation(kern_count, total_kernels, 0, 0);
+				debug!(
+					"txhashset: verify_kernel_signatures: verified {} signatures",
+					kern_count,
+				);
 			}
 		}
 
