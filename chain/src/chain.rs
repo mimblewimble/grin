@@ -198,6 +198,7 @@ impl Chain {
 		})
 	}
 
+	/// Return our shared header MMR handle.
 	pub fn header_pmmr(&self) -> Arc<RwLock<PMMRHandle<BlockHeader>>> {
 		self.header_pmmr.clone()
 	}
@@ -739,13 +740,13 @@ impl Chain {
 	/// Rebuild the sync MMR based on current header_head.
 	/// We rebuild the sync MMR when first entering sync mode so ensure we
 	/// have an MMR we can safely rewind based on the headers received from a peer.
-	/// TODO - think about how to optimize this.
 	pub fn rebuild_sync_mmr(&self, head: &Tip) -> Result<(), Error> {
 		let mut sync_pmmr = self.sync_pmmr.write();
 		let mut batch = self.store.batch()?;
 		let sync_head = batch.get_sync_head()?;
+		let header = batch.get_block_header(&head.hash())?;
 		txhashset::header_extending(&mut sync_pmmr, &sync_head, &mut batch, |extension| {
-			extension.rebuild(head, &self.genesis)?;
+			pipe::rewind_and_apply_header_fork(&header, extension)?;
 			Ok(())
 		})?;
 		batch.commit()?;
@@ -1416,21 +1417,6 @@ fn setup_head(
 				// If validation is successful we will truncate the backend files
 				// to match the provided block header.
 				let header = batch.get_block_header(&head.last_block_h)?;
-
-				// If we have no header MMR then rebuild as necessary.
-				// Supports old nodes with no header MMR.
-				txhashset::header_extending(header_pmmr, &head, &mut batch, |extension| {
-					let needs_rebuild = match extension.get_header_by_height(head.height) {
-						Ok(header) => header.hash() != head.last_block_h,
-						Err(_) => true,
-					};
-
-					if needs_rebuild {
-						extension.rebuild(&head, &genesis.header)?;
-					}
-
-					Ok(())
-				})?;
 
 				let res = txhashset::extending(header_pmmr, txhashset, &mut batch, |ext| {
 					pipe::rewind_and_apply_fork(&header, ext)?;

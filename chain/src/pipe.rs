@@ -39,6 +39,7 @@ pub struct BlockContext<'a> {
 	pub pow_verifier: fn(&BlockHeader) -> Result<(), pow::Error>,
 	/// The active txhashset (rewindable MMRs) to use for block processing.
 	pub txhashset: &'a mut txhashset::TxHashSet,
+	/// The active header MMR handle.
 	pub header_pmmr: &'a mut txhashset::PMMRHandle<BlockHeader>,
 	/// The active batch to use for block processing.
 	pub batch: store::Batch<'a>,
@@ -179,10 +180,7 @@ pub fn sync_block_headers(
 	if headers.is_empty() {
 		return Ok(());
 	}
-
-	let first_header = headers.first().expect("first header");
 	let last_header = headers.last().expect("last header");
-	let prev_header = ctx.batch.get_previous_header(&first_header)?;
 
 	// Check if we know about all these headers. If so we can accept them quickly.
 	// If they *do not* increase total work on the sync chain we are done.
@@ -194,21 +192,18 @@ pub fn sync_block_headers(
 		}
 	}
 
-	txhashset::header_extending(&mut ctx.header_pmmr, &sync_head, &mut ctx.batch, |ext| {
-		rewind_and_apply_header_fork(&prev_header, ext)?;
-		for header in headers {
-			ext.validate_root(header)?;
-			ext.apply_header(header)?;
-			add_block_header(header, &ext.batch)?;
-		}
-		Ok(())
-	})?;
-
-	// Validate all our headers now that we have added each "previous"
-	// header to the db in this batch above.
+	// Validate each header in the chunk and add to our db.
+	// Note: This batch may be rolled back later if the MMR does not validate successfully.
 	for header in headers {
 		validate_header(header, ctx)?;
+		add_block_header(header, &ctx.batch)?;
 	}
+
+	// Now apply this entire chunk of headers to the sync MMR.
+	txhashset::header_extending(&mut ctx.header_pmmr, &sync_head, &mut ctx.batch, |ext| {
+		rewind_and_apply_header_fork(&last_header, ext)?;
+		Ok(())
+	})?;
 
 	if has_more_work(&last_header, &sync_head) {
 		update_sync_head(&Tip::from_header(&last_header), &mut ctx.batch)?;
@@ -554,6 +549,7 @@ pub fn rewind_and_apply_header_fork(
 			.batch
 			.get_block_header(&h)
 			.map_err(|e| ErrorKind::StoreErr(e, format!("getting forked headers")))?;
+		ext.validate_root(&header)?;
 		ext.apply_header(&header)?;
 	}
 
