@@ -2,7 +2,37 @@
 
 Grin has a [code of conduct](CODE_OF_CONDUCT.md) and the handling of vulnerability disclosure is no exception. We are committed to conduct our security process in a professional and civil manner. Public shaming, under-reporting or misrepresentation of vulnerabilities will not be tolerated.
 
-## Responsible Disclosure
+## Responsible Disclosure Standard
+
+Grin follows a
+[community standard for responsible disclosure](https://github.com/RD-Crypto-Spec/Responsible-Disclosure/tree/82e08d2736ea9dbe43484a3317e4bce214163bd0#the-standard)
+in cryptocurrency and related software. This document is a public commitment to
+following the standard.
+
+This standard provides detailed information for:
+- [Initial Contact](https://github.com/RD-Crypto-Spec/Responsible-Disclosure/tree/82e08d2736ea9dbe43484a3317e4bce214163bd0#initial-contact):
+how the initial contact process works
+- [Giving Details](https://github.com/RD-Crypto-Spec/Responsible-Disclosure/tree/82e08d2736ea9dbe43484a3317e4bce214163bd0#giving-details):
+what details to include with your disclosure after receiving a response to your
+initial contact
+- [Setting Dates](https://github.com/RD-Crypto-Spec/Responsible-Disclosure/tree/82e08d2736ea9dbe43484a3317e4bce214163bd0#setting-dates):
+details for when to release updates and publicize details of the issue
+
+Any expected deviations and necessary clarifications around the standard are
+explained in the following sections.
+
+## Receiving Disclosures
+
+Grin is committed to working with researchers who submit security vulnerability
+notifications to us to resolve those issues on an appropriate timeline and perform
+a coordinated release, giving credit to the reporter if they would like.
+
+Please submit issues to all of the following main points of contact for
+security related issues according to the
+[initial contact](https://github.com/RD-Crypto-Spec/Responsible-Disclosure/tree/82e08d2736ea9dbe43484a3317e4bce214163bd0#initial-contact)
+and [details](https://github.com/RD-Crypto-Spec/Responsible-Disclosure/tree/82e08d2736ea9dbe43484a3317e4bce214163bd0#giving-details)
+guidelines. More information is available about the
+[expected timelines for the full disclosure cycle](https://github.com/RD-Crypto-Spec/Responsible-Disclosure/tree/82e08d2736ea9dbe43484a3317e4bce214163bd0#standard-disclosure-timelines).
 
 For all security related issues, Grin has 4 main points of contact:
 
@@ -11,62 +41,153 @@ For all security related issues, Grin has 4 main points of contact:
 * hashmap, hashmap.dev at protonmail.com
 * John Woeltz, joltz at protonmail.com
 
-Send all communications to all parties and expect a reply within 48h. Public keys can be found at the end of this document.
+Send all communications PGP encrypted to all parties.
+[PGP public keys](#public-keys) can be found at the end of this document.
 
-## Vulnerability Handling
+## Sending Disclosures
 
-Upon reception of a vulnerability disclosure, the Grin team will:
+In the case where we become aware of security issues affecting other projects
+that has never affected Grin, our intention is to inform those projects of
+security issues on a best effort basis.
 
-* Reply within a 48h window.
-* Within a week, a [CVVS v3](https://nvd.nist.gov/vuln-metrics/cvss/v3-calculator) severity score should be attributed.
-* Keep communicating regularly about the state of a fix, especially for High or Critical severity vulnerabilities.
-* Once a fix has been identified, agree on a timeline for release and public disclosure.
+In the case where we fix a security issue in Grin that also affects the
+following neighboring projects, our intention is to engage in responsible
+disclosures with them as described in the adopted
+[standard](https://github.com/RD-Crypto-Spec/Responsible-Disclosure/tree/82e08d2736ea9dbe43484a3317e4bce214163bd0#a-standard-for-responsible-disclosure-in-cryptocurrency-and-related-software),
+subject to the deviations described in the
+[deviations section](#deviations-from-the-standard) of this document.
 
-Releasing a fix should include the following steps:
+## Bilateral Responsible Disclosure Agreements
 
-* Creation of a CVE number for all Medium and above severity vulnerabilities.
-* Notify all package maintainers or distributors.
-* Inclusion of a vulnerability explanation, the CVE and the security researcher or team who found the vulnerability in release notes and project vulnerability list (link TBD).
-* Publicize the vulnerability commensurately with severity and encourage fast upgrades (possibly with additional documentation to explain who is affected, the risks and what to do about it).
-
-_Note: Before Grin mainnet is released, we will be taking some liberty in applying the above steps, notably in issuing a CVE and upgrades._
+_Grin does not currently have any established bilateral disclosure agreements._
 
 ## Recognition and Bug Bounties
 
-As of this writing, Grin is a **traditional open source project** with limited to no direct funding. As such, we have little means with which to compensate  security researchers for their contributions. We recognize this is a shame and intend to do our best to still make these worth while by:
+Grin's responsible disclosure standard includes some general language about
+[Bounty Payments](https://github.com/RD-Crypto-Spec/Responsible-Disclosure/tree/82e08d2736ea9dbe43484a3317e4bce214163bd0#bounty-payments)
+and [Acknowledgements](https://github.com/RD-Crypto-Spec/Responsible-Disclosure/tree/82e08d2736ea9dbe43484a3317e4bce214163bd0#acknowledgements).
 
-* Advertising the vulnerability, the researchers, or their team on a public page linked from our website, with a links of their choosing.
+Grin is a **traditional open source project with limited to no direct funding**.
+As such, we have little means with which to compensate security researchers for
+their contributions. We recognize this is a shame and intend to do our best to
+still make these worth while by:
+
+* Advertising the vulnerability, the researchers, or their team on a public
+page linked from our website, with a links of their choosing.
 * Acting as reference whenever this is needed.
 * Setting up retroactive bounties whenever possible.
 
-It is our hope that after mainnet release, participants in the ecosystem will be willing to more widely donate to benefit the further development of Grin. When this is the case we will:
+There is not currently a formal bug bounty program for Grin as it would require
+a high level of resources and engagement to operate in good faith. More
+[funding](https://grin-tech.org/funding) can help provide the necessary
+resources to run one in the future for the Grin community.
 
-* Setup a bounty program.
-* Decide on the amounts rewarded based on available funds and CVVS score.
+## Deviations from the Standard
 
-## Code Reviews and Audits
+Grin is a technology that provides strong privacy with zero-knowledge
+commitments and rangeproofs. Due to the nature of the cryptography used, if a
+counterfeiting bug results it could be exploited without a way to identify
+which data was corrupted. This renders rollbacks or other fork-based attempted
+fixes ineffective.
 
-While we intend to undergo more formal audits before release, continued code reviews and audits are required for security. As such, we encourage interested security researchers to:
+The standard describes reporters of vulnerabilities including full details of
+an issue, in order to reproduce it. This is necessary for instance in the case
+of an external researcher both demonstrating and proving that there really is a
+security issue, and that security issue really has the impact that they say it
+has - allowing the development team to accurately prioritize and resolve the issue.
 
-* Review our code, even if no contributions are planned.
-* Publish their findings whichever way they choose, even if no particular bug or vulnerability was found. We can all learn from new sets of eyes and benefit from increased scrutiny.
-* Audit the project publicly. While we may disagree with some small points of design or trade-offs, we will always do so respectfully.
+In the case of a counterfeiting or privacy-breaking bug, however, we might decide
+not to include those details with our reports to partners ahead of coordinated
+release, so long as we are sure that they are vulnerable.
 
-## Chain Splits
+## Canary
 
-The Grin Team runs a chain split monitoring tool at (TBD). It is encouraged to monitor it regularly and setup alerts. In case of an accidental chain split:
+```
+---===[ Grin Canary #001 ]===---
 
-* Exchanges and merchants should either cease operation or extend considerably confirmation delays.
-* Miners and mining pools should immediately consult with Grin's development team on regular channels (Grin's Gitter mainly) to diagnose the split and determine a course of events.
-* In the likely event of an emergency software patch, all actors should upgrade as soon as possible.
 
-## Useful References
+Statements
+-----------
 
-* [Reducing the Risks of Catastrophic Cryptocurrency Bugs](https://medium.com/mit-media-lab-digital-currency-initiative/reducing-the-risk-of-catastrophic-cryptocurrency-bugs-dcdd493c7569)
-* [Security Process for Open Source Projects](https://alexgaynor.net/2013/oct/19/security-process-open-source-projects/)
-* [Choose-Your-Own-Security-Disclosure-Adventure](http://hackingdistributed.com/2018/05/30/choose-your-own-security-disclosure-adventure/)
-* [CVE HOWTO](https://github.com/RedHatProductSecurity/CVE-HOWTO)
-* [National Vulnerability Database](https://nvd.nist.gov/)
+The Grin security contacts who have digitally signed this canary state the following:
+
+1. The date of issue of this canary is August 28, 2019.
+
+2. The latest Grin release is v2.0.0 `8f3be49`
+
+3. No warrants have ever been served to us with regard to the Grin
+Project (e.g. to hand out the private signing keys or to introduce
+backdoors).
+
+4. We plan to publish the next of these canary statements in the first
+two weeks of October 2019. Special note should be taken if no new canary
+is published by that time or if the list of statements changes without
+plausible explanation.
+
+Special announcements
+----------------------
+
+None.
+
+Disclaimers and notes
+----------------------
+
+This canary scheme is not infallible. Although signing the declaration
+makes it very difficult for a third party to produce arbitrary
+declarations, it does not prevent them from using force or other
+means, like blackmail or compromising the signers' laptops, to coerce
+us to produce false declarations.
+
+The block hashes quoted below (Proof of freshness) serve to demonstrate
+that this canary could not have been created prior to the date stated.
+It shows that a series of canaries was not created in advance.
+
+This declaration is merely a best effort and is provided without any
+guarantee or warranty. It is not legally binding in any way to
+anybody. None of the signers should be ever held legally responsible
+for any of the statements made here.
+
+Proof of freshness
+-------------------
+
+$ date -R -u && grin client status | grep 'Last block' | cut -c 18- && curl -s 'https://blockstream.info/api/blocks/tip/hash'; echo && curl -s 'https://api.blockcypher.com/v1/ltc/main' | grep '"hash' | cut -c 12-75 && curl -s 'https://api.blockcypher.com/v1/eth/main' | grep '"hash' | cut -c 12-75
+Wed, 28 Aug 2019 19:09:00 +0000
+0000075e57b0dc0672ed6bd6ddbeeb7071ea255cd3350659abf0ac5d29f37b2a
+0000000000000000001304fe747fbc3fdb46e258c8a0425976b404f6e9c2ec28
+a347f98f4a2ae4649a6c3c612cc12a962b5dd7738ea58d3cd08b226c7577cf50
+3560388e555c0c4a743260a376a933405ff8b5854150b34961e0795daf2cee14
+```
+Don't just trust the contents of this canary blindly! Verify the digital
+signatures and proof of freshness! The signatures below should be valid
+for the above canary message. The proof of freshness should contain valid
+block hashes on the date the canary was issued for the GRIN, BTC, LTC and ETH
+blockchains respectively.
+
+### Daniel Lehnberg
+
+### Ignotus Peverell
+
+### hashmap
+
+### John Woeltz
+```
+-----BEGIN PGP SIGNATURE-----
+
+iQIzBAABCgAdFiEEpwlDvRCYWLUDTiOsmWn1cMLvYW8FAl1m1KkACgkQmWn1cMLv
+YW9gpQ//RTStxYDnRsWiMy2XKeaDkhzwtMeG3MqyMq0XECnEiADmJKCmi4vvRwI5
+odW8prkODlcLKeFJhLOLH+hFXAJ3bK60ygU763Bhn1/scFS7MM0edM6oSq7DlFzZ
+qW/divP5JDBtIJ7fPRNpzMtxNqPKtJGBXMA15atrQJgI+QkjcTo9LEW0J4jzUh3V
+BMw9SrccZ77L8LUxXZzs41d7mM5hNE/dwSBHt9/t83m94F1929j0ylHJdaGmN+i1
+0pd8cFAGXrF4c34D0YxSRgH2VdZbRU3mkv4RgFx2stYbzF9oUt51W2ThsfnLAqaP
+AaqVSGfEQsFuNpfvMb7dfjnM/y7y7oSY65PYj1YbMM3IQ445hv8twsuOlJb4KH3z
+C+PlDo9zodGl42dIOTiEEsLBlDL6bJuZ9LWs20pzqXsNb2Abkk38UefAH3R2fZxK
+RDxpUU/o6ANt55veQTza3pL2ZzyInuYqBlfumSSpmg8TL4DE3YCplMBdIr7QNmBW
+lqCAWM9NbZkMDEF1jUx0XXvkkeuYpfOJ6bWvL2qkl4bVsg81AZa33XD5m3eewZJm
+j9kKb666TgNjoCE7xm3oc31YYte6t15BQoOkoqqUo9iRYcTtXcSfIUudzNYani3r
+YRsyXDyPkduVU0ZHkjijVSXvfVuRuK3uX/bL1e55JGGPnc2JCyA=
+=XmOX
+-----END PGP SIGNATURE-----
+```
 
 ## Public Keys
 
