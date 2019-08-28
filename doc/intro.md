@@ -342,7 +342,7 @@ or alternatively
 
     sum(outputs) - sum(inputs) = kernel_excess + kernel_offset*G
     
-For a commitment `r*G + 0*H` with the offset `a`, the transaction is signed with `(r-a)`, and *a* is published so the miners can calculate `r*G` and verify the validity of the transaction. During block construction all kernel offsets are summed to generate a _single_ aggregate kernel offset to cover the whole block. The kernel offset for any individual transaction is then unrecoverable and the subset problem is solved.
+For a commitment `r*G + 0*H` with the offset `a`, the transaction is signed with `(r-a)` and *a* is published so that `r*G` can be calculated in order to verify the validity of the transaction. During block construction all kernel offsets are summed to generate a _single_ aggregate kernel offset to cover the whole block. The kernel offset for any individual transaction is then unrecoverable and the subset problem is solved.
 
     sum(outputs) - sum(inputs) = sum(kernel_excess) + kernel_offset*G
 
