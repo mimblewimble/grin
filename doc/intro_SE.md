@@ -299,14 +299,18 @@ Det är trivialt att testa alla möjliga kombinationer och återskapa en av tran
 Vi vet också att allt som kvarstår kan användas för att rekonstruera den andra giltiga transaktionen:
 
     (input3) -> (output2), (kärna2)
-    
-För att mildra detta inkluderar vi ett _kärn-offset_ med varje transaktionskärna. Detta är en publik nyckel som måste
-tilläggas kärnöverskottet för att balansera ekvationen:
+     
+Kom ihåg att kärnöverskottet `r*G` helt enkelt är den publika nyckeln till överskottsbeloppet *r*. För att lösa detta problem omdefinierar vi kärnöverskottet från `r*G` till `(r-kärn_offset)*G` och distribuerar detta *kärn-offset* för att inkluderas i varje transktionskärna. Detta kärn-offset är således en förblindningsfaktor som måste tilläggas överskottsbeloopet för att ekvationen ska gå ihop:
 
-    (summan av outputs) - (summan av inputs) = kärnöverskott + kärn-offset
+    (summan av outputs) - (summan av inputs) = r*G = (r-kärn_offset)*G + kärn_offset*G
     
-Vi "separerar" nyckeln `k` till `k1 + k2` under transaktionsbyggandet. Vi signerar transaktionen med `k1` och publicerar `k2` för att skapa vårt kärn-offset (`k2*G`). Vid block-konstruktionen
-kan alla kärn-offset summeras för att generera ett aggregat-offset för alla transaktioner i blocket. Kärn-offset för individuella transaktioner blir därmed omöjliga att härleda från ett färdigt block och delmängdsproblemet är löst.
+eller alternativt
+
+    (summan av outputs) - (summan av inputs) = kärnöverskott + kärn_offset*G
+    
+För ett commitment `r*G + 0*H` med kärn-offset *a*, signeras transaktionen med `(r-a)` och *a* publiceras så att `r*G` kan beräknas för att kontrollera att transaktionen är giltig. Vid block-konstruktionen summeras alla kärn-offsets till ett enstaka sammanlagt offset som täcker hela blocket. Kärn-offsetet för en individuell transaktion blir därmed omöjlig att härleda och delmängdsproblemet är löst.
+
+    (summan av outputs) - (summan av inputs) = (summan av kärnöverskott) + kärn_offset*G
 
 #### Genomskärning
 
