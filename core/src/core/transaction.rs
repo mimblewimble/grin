@@ -128,18 +128,18 @@ impl Readable for KernelFeatures {
 			KernelFeatures::PLAIN_U8 => {
 				let fee = reader.read_u64()?;
 				let lock_height = reader.read_u64()?;
-				if lock_height > 0 {
+				if lock_height != 0 {
 					return Err(ser::Error::CorruptedData);
 				}
 				KernelFeatures::Plain { fee }
 			}
 			KernelFeatures::COINBASE_U8 => {
 				let fee = reader.read_u64()?;
-				if fee > 0 {
+				if fee != 0 {
 					return Err(ser::Error::CorruptedData);
 				}
 				let lock_height = reader.read_u64()?;
-				if lock_height > 0 {
+				if lock_height != 0 {
 					return Err(ser::Error::CorruptedData);
 				}
 				KernelFeatures::Coinbase
