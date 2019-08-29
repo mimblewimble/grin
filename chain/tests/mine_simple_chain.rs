@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use self::chain::types::NoopAdapter;
+use self::chain::types::{NoopAdapter, Tip};
 use self::chain::Chain;
 use self::core::core::hash::Hashed;
 use self::core::core::verifier_cache::LruVerifierCache;
@@ -89,6 +89,81 @@ fn mine_short_chain() {
 }
 
 #[test]
+fn process_headers_first_with_fork() {
+	let chain_dir = ".grin.fork_headers";
+	clean_output_dir(chain_dir);
+
+	global::set_mining_mode(ChainTypes::AutomatedTesting);
+	let kc = ExtKeychain::from_random_seed(false).unwrap();
+	let genesis = pow::mine_genesis_block().unwrap();
+
+	let last_status = RwLock::new(None);
+	let adapter = Arc::new(StatusAdapter::new(last_status));
+	let chain = setup_with_status_adapter(chain_dir, genesis.clone(), adapter.clone());
+
+	let prev = chain.head_header().unwrap();
+	assert_eq!(prev, genesis.header);
+
+	// First process the header for a block mined on top of our previous block (genesis).
+	let b1 = prepare_block(&kc, &prev, &chain, 1);
+	chain
+		.process_block_header(&b1.header, chain::Options::SKIP_POW)
+		.unwrap();
+
+	// Now mine a fork block and process this header.
+	// Note: We have not yet processed the competing full block.
+	// This header should also be accepted on the header MMR (after necessary rewind).
+	// But this should not update header_head as this is a losing fork.
+	let b2 = prepare_block(&kc, &prev, &chain, 1);
+	chain
+		.process_block_header(&b2.header, chain::Options::SKIP_POW)
+		.unwrap();
+
+	// Check our header_head reflects b1 (first one wins).
+	let head_header = chain.header_head().unwrap();
+	assert_eq!(head_header, Tip::from_header(&b1.header));
+
+	// Now process the full block for b2.
+	chain
+		.process_block(b2.clone(), chain::Options::SKIP_POW)
+		.unwrap();
+
+	// Check head reflects b2 as this is the winning full block at this height.
+	let head = chain.head().unwrap();
+	assert_eq!(head, Tip::from_header(&b2.header));
+
+	// BUT - header_head *still* references b1 (this is weird but ok).
+	let head_header = chain.header_head().unwrap();
+	assert_eq!(head_header, Tip::from_header(&b1.header));
+
+	// Now process the full block for b1.
+	chain
+		.process_block(b1.clone(), chain::Options::SKIP_POW)
+		.unwrap();
+
+	// Check head still reflects b2 as this is the winning full block at this height.
+	let head = chain.head().unwrap();
+	assert_eq!(head, Tip::from_header(&b2.header));
+
+	// Check header_head *still* references b1 (still weird but ok).
+	let head_header = chain.header_head().unwrap();
+	assert_eq!(head_header, Tip::from_header(&b1.header));
+
+	let b3 = prepare_block(&kc, &b1.header, &chain, 2);
+	chain
+		.process_block(b3.clone(), chain::Options::SKIP_POW)
+		.unwrap();
+
+	// Check head and header_head both reflect b3.
+	let head = chain.head().unwrap();
+	assert_eq!(head, Tip::from_header(&b3.header));
+	let header_head = chain.header_head().unwrap();
+	assert_eq!(header_head, Tip::from_header(&b3.header));
+
+	clean_output_dir(chain_dir);
+}
+
+#[test]
 // This test creates a reorg at REORG_DEPTH by mining a block with difficulty that
 // exceeds original chain total difficulty.
 //
@@ -140,7 +215,7 @@ fn mine_reorg() {
 		let fork_head = chain
 			.get_header_by_height(NUM_BLOCKS_MAIN - REORG_DEPTH)
 			.unwrap();
-		let b = prepare_fork_block(&kc, &fork_head, &chain, reorg_difficulty);
+		let b = prepare_block(&kc, &fork_head, &chain, reorg_difficulty);
 		let reorg_head = b.header.clone();
 		chain.process_block(b, chain::Options::SKIP_POW).unwrap();
 
@@ -271,7 +346,7 @@ fn longer_fork() {
 
 		let mut prev = forked_block;
 		for n in 0..7 {
-			let b = prepare_fork_block(&kc, &prev, &chain, 2 * n + 11);
+			let b = prepare_block(&kc, &prev, &chain, 2 * n + 11);
 			prev = b.header.clone();
 			chain.process_block(b, chain::Options::SKIP_POW).unwrap();
 		}
@@ -362,11 +437,11 @@ fn spend_in_fork_and_compact() {
 		chain.validate(false).unwrap();
 
 		// mine 2 forked blocks from the first
-		let fork = prepare_fork_block_tx(&kc, &fork_head, &chain, 6, vec![&tx1]);
+		let fork = prepare_block_tx(&kc, &fork_head, &chain, 6, vec![&tx1]);
 		let prev_fork = fork.header.clone();
 		chain.process_block(fork, chain::Options::SKIP_POW).unwrap();
 
-		let fork_next = prepare_fork_block_tx(&kc, &prev_fork, &chain, 8, vec![&tx2]);
+		let fork_next = prepare_block_tx(&kc, &prev_fork, &chain, 8, vec![&tx2]);
 		let prev_fork = fork_next.header.clone();
 		chain
 			.process_block(fork_next, chain::Options::SKIP_POW)
@@ -386,7 +461,7 @@ fn spend_in_fork_and_compact() {
 			.is_err());
 
 		// make the fork win
-		let fork_next = prepare_fork_block(&kc, &prev_fork, &chain, 10);
+		let fork_next = prepare_block(&kc, &prev_fork, &chain, 10);
 		let prev_fork = fork_next.header.clone();
 		chain
 			.process_block(fork_next, chain::Options::SKIP_POW)
@@ -504,30 +579,6 @@ where
 }
 
 fn prepare_block_tx<K>(
-	kc: &K,
-	prev: &BlockHeader,
-	chain: &Chain,
-	diff: u64,
-	txs: Vec<&Transaction>,
-) -> Block
-where
-	K: Keychain,
-{
-	let mut b = prepare_block_nosum(kc, prev, diff, txs);
-	chain.set_txhashset_roots(&mut b).unwrap();
-	b
-}
-
-fn prepare_fork_block<K>(kc: &K, prev: &BlockHeader, chain: &Chain, diff: u64) -> Block
-where
-	K: Keychain,
-{
-	let mut b = prepare_block_nosum(kc, prev, diff, vec![]);
-	chain.set_txhashset_roots(&mut b).unwrap();
-	b
-}
-
-fn prepare_fork_block_tx<K>(
 	kc: &K,
 	prev: &BlockHeader,
 	chain: &Chain,

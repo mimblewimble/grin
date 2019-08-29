@@ -550,9 +550,10 @@ where
 	let res: Result<T, Error>;
 	let rollback: bool;
 
-	// We want to use the current head of the most work chain unless
-	// we explicitly rewind the extension.
-	let head = batch.head()?;
+	// We want to use the current head of header chain here.
+	// Caller is responsible for rewinding the header MMR back
+	// to a previous header as necessary when processing a fork.
+	let head = batch.header_head()?;
 
 	// create a child transaction so if the state is rolled back by itself, all
 	// index saving can be undone
