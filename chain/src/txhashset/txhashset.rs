@@ -590,7 +590,7 @@ impl<'a> HeaderExtension<'a> {
 	/// If these match we know the header is on the current chain.
 	pub fn is_on_current_chain(&self, header: &BlockHeader) -> Result<(), Error> {
 		if header.height > self.head.height {
-			return Err(ErrorKind::Other(format!("not on current chain")).into());
+			return Err(ErrorKind::Other(format!("not on current chain, out beyond")).into());
 		}
 		let chain_header = self.get_header_by_height(header.height)?;
 		if chain_header.hash() == header.hash() {
@@ -618,9 +618,11 @@ impl<'a> HeaderExtension<'a> {
 	/// Note the close relationship between header height and insertion index.
 	pub fn rewind(&mut self, header: &BlockHeader) -> Result<(), Error> {
 		debug!(
-			"Rewind header extension to {} at {}",
+			"Rewind header extension to {} at {} from {} at {}",
 			header.hash(),
-			header.height
+			header.height,
+			self.head.hash(),
+			self.head.height,
 		);
 
 		let header_pos = pmmr::insertion_to_pmmr_index(header.height + 1);
@@ -896,7 +898,13 @@ impl<'a> Extension<'a> {
 	/// Rewinds the MMRs to the provided block, rewinding to the last output pos
 	/// and last kernel pos of that block.
 	pub fn rewind(&mut self, header: &BlockHeader) -> Result<(), Error> {
-		debug!("Rewind extension to {} at {}", header.hash(), header.height,);
+		debug!(
+			"Rewind extension to {} at {} from {} at {}",
+			header.hash(),
+			header.height,
+			self.head.hash(),
+			self.head.height
+		);
 
 		// We need to build bitmaps of added and removed output positions
 		// so we can correctly rewind all operations applied to the output MMR
@@ -1439,13 +1447,11 @@ pub fn clean_txhashset_folder(root_dir: &PathBuf) {
 /// of all inputs (spent outputs) we need to "undo" during a rewind.
 /// We do this by leveraging the "block_input_bitmap" cache and OR'ing
 /// the set of bitmaps together for the set of blocks being rewound.
-pub fn input_pos_to_rewind(
+fn input_pos_to_rewind(
 	block_header: &BlockHeader,
 	head_header: &BlockHeader,
 	batch: &Batch<'_>,
 ) -> Result<Bitmap, Error> {
-	// NOTE: We rewind to the end of the provided header.
-	// If this matches our head then nothing to rewind.
 	if head_header.height <= block_header.height {
 		return Ok(Bitmap::create());
 	}

@@ -568,27 +568,27 @@ pub fn rewind_and_apply_fork(
 	let ref mut extension = ext.extension;
 	let ref mut header_extension = ext.header_extension;
 
+	// Prepare the header MMR.
 	rewind_and_apply_header_fork(header, header_extension)?;
 
-	// Find the fork point where the provided header diverges from our main chain.
-	// Account for the header fork point. Use the earliest fork point to determine
-	// where we need to rewind to. We need to do this
-	let (forked_header, fork_hashes) = {
-		let mut fork_hashes = vec![];
-		let mut current = header.clone();
-		while current.height > 0 && !header_extension.is_on_current_chain(&current).is_ok() {
-			fork_hashes.push(current.hash());
-			current = batch.get_previous_header(&current)?;
-		}
-		fork_hashes.reverse();
+	// Rewind the txhashset extension back to common ancestor based on header MMR.
+	let mut current = batch.head_header()?;
+	while current.height > 0 && !header_extension.is_on_current_chain(&current).is_ok() {
+		current = batch.get_previous_header(&current)?;
+	}
+	let fork_point = current;
+	extension.rewind(&fork_point)?;
 
-		(current, fork_hashes)
-	};
+	// Then apply all full blocks since this common ancestor
+	// to put txhashet extension in a state to accept the new block.
+	let mut fork_hashes = vec![];
+	let mut current = header.clone();
+	while current.height > fork_point.height {
+		fork_hashes.push(current.hash());
+		current = batch.get_previous_header(&current)?;
+	}
+	fork_hashes.reverse();
 
-	// Rewind the txhashset state back to the block where we forked from the most work chain.
-	extension.rewind(&forked_header)?;
-
-	// Now re-apply all blocks on this fork.
 	for h in fork_hashes {
 		let fb = batch
 			.get_block(&h)
