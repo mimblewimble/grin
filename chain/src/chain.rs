@@ -178,7 +178,7 @@ impl Chain {
 
 		let mut header_pmmr =
 			PMMRHandle::new(&db_root, "header", "header_head", false, true, None)?;
-		let sync_pmmr = PMMRHandle::new(&db_root, "header", "header_head", false, true, None)?;
+		let sync_pmmr = PMMRHandle::new(&db_root, "header", "sync_head", false, true, None)?;
 
 		setup_head(&genesis, &store, &mut header_pmmr, &mut txhashset)?;
 		Chain::log_heads(&store)?;
@@ -1332,7 +1332,7 @@ impl Chain {
 		min_height: Option<u64>,
 		max_height: Option<u64>,
 	) -> Result<BlockHeader, Error> {
-		let txhashset = self.txhashset.read();
+		let header_pmmr = self.header_pmmr.read();
 
 		let mut min = min_height.unwrap_or(0).saturating_sub(1);
 		let mut max = match max_height {
@@ -1342,11 +1342,13 @@ impl Chain {
 
 		loop {
 			let search_height = max - (max - min) / 2;
-			let h = txhashset.get_header_by_height(search_height)?;
+			let hash = header_pmmr.get_header_hash_by_height(search_height)?;
+			let h = self.get_block_header(&hash)?;
 			if search_height == 0 {
 				return Ok(h);
 			}
-			let h_prev = txhashset.get_header_by_height(search_height - 1)?;
+			let hash_prev = header_pmmr.get_header_hash_by_height(search_height - 1)?;
+			let h_prev = self.get_block_header(&hash_prev)?;
 			if kernel_mmr_index > h.kernel_mmr_size {
 				min = search_height;
 			} else if kernel_mmr_index < h_prev.kernel_mmr_size {

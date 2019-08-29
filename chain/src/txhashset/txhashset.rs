@@ -332,15 +332,14 @@ where
 	let commit_index = trees.commit_index.clone();
 	let batch = commit_index.batch()?;
 
-	// We want to use the current head of the most work chain unless
-	// we explicitly rewind the extension.
-	let head = batch.head()?;
-
 	trace!("Starting new txhashset (readonly) extension.");
+
+	let head = batch.head()?;
+	let header_head = batch.header_head()?;
 
 	let res = {
 		let header_pmmr = PMMR::at(&mut handle.backend, handle.last_pos);
-		let mut header_extension = HeaderExtension::new(header_pmmr, &batch, head.clone());
+		let mut header_extension = HeaderExtension::new(header_pmmr, &batch, header_head);
 		let mut extension = Extension::new(trees, &batch, head);
 		let mut extension_pair = ExtensionPair {
 			header_extension: &mut header_extension,
@@ -431,9 +430,8 @@ where
 	let res: Result<T, Error>;
 	let rollback: bool;
 
-	// We want to use the current head of the most work chain unless
-	// we explicitly rewind the extension.
 	let head = batch.head()?;
+	let header_head = batch.header_head()?;
 
 	// create a child transaction so if the state is rolled back by itself, all
 	// index saving can be undone
@@ -442,7 +440,7 @@ where
 		trace!("Starting new txhashset extension.");
 
 		let pmmr = PMMR::at(&mut header_pmmr.backend, header_pmmr.last_pos);
-		let mut header_extension = HeaderExtension::new(pmmr, &child_batch, head.clone());
+		let mut header_extension = HeaderExtension::new(pmmr, &child_batch, header_head);
 		let mut extension = Extension::new(trees, &child_batch, head);
 		let mut extension_pair = ExtensionPair {
 			header_extension: &mut header_extension,
