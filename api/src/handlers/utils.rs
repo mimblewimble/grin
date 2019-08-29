@@ -51,15 +51,24 @@ pub fn get_output(
 
 	let chain = w(chain)?;
 
-	for x in outputs.iter().filter(|x| chain.is_unspent(x).is_ok()) {
-		let block_height = chain
-			.get_header_for_output(&x)
-			.context(ErrorKind::Internal(
-				"Can't get header for output".to_owned(),
-			))?
-			.height;
-		let output_pos = chain.get_output_pos(&x.commit).unwrap_or(0);
-		return Ok((Output::new(&commit, block_height, output_pos), x.clone()));
+	for x in outputs.iter() {
+		let res = chain.is_unspent(x);
+		match res {
+			Ok(output_pos) => {
+				return Ok((
+					Output::new(&commit, output_pos.height, output_pos.position),
+					x.clone(),
+				));
+			}
+			Err(e) => {
+				trace!(
+					"get_output: err: {} for commit: {:?} with feature: {:?}",
+					e.to_string(),
+					x.commit,
+					x.features
+				);
+			}
+		}
 	}
 	Err(ErrorKind::NotFound)?
 }

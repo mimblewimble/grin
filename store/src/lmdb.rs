@@ -396,7 +396,7 @@ where
 {
 	fn deser_if_prefix_match(&self, key: &[u8], value: &[u8]) -> Option<(Vec<u8>, T)> {
 		let plen = self.prefix.len();
-		if plen == 0 || key[0..plen] == self.prefix[..] {
+		if plen == 0 || (key.len() >= plen && key[0..plen] == self.prefix[..]) {
 			if let Ok(value) = ser::deserialize(&mut &value[..], self.version) {
 				Some((key.to_vec(), value))
 			} else {

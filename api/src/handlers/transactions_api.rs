@@ -70,8 +70,8 @@ impl TxHashSetHandler {
 	// allows traversal of utxo set
 	fn outputs(&self, start_index: u64, mut max: u64) -> Result<OutputListing, Error> {
 		//set a limit here
-		if max > 1000 {
-			max = 1000;
+		if max > 10_000 {
+			max = 10_000;
 		}
 		let chain = w(&self.chain)?;
 		let outputs = chain

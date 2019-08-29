@@ -217,6 +217,18 @@ pub struct TxHashSetRoots {
 	pub kernel_root: Hash,
 }
 
+/// A helper to hold the output pmmr position of the txhashset in order to keep them
+/// readable.
+#[derive(Debug)]
+pub struct OutputMMRPosition {
+	/// The hash at the output position in the MMR.
+	pub output_mmr_hash: Hash,
+	/// MMR position
+	pub position: u64,
+	/// Block height
+	pub height: u64,
+}
+
 /// The tip of a fork. A handle to the fork ancestry from its leaf in the
 /// blockchain tree. References the max height and the latest and previous
 /// blocks
