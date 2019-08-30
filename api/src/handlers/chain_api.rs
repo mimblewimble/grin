@@ -197,3 +197,72 @@ impl Handler for OutputHandler {
 		}
 	}
 }
+
+/// Kernel handler, search for a kernel by excess commitment
+/// GET /v1/chain/kernels/XXX?min_height=YYY&max_height=ZZZ
+/// The `min_height` and `max_height` parameters are optional
+pub struct KernelHandler {
+	pub chain: Weak<chain::Chain>,
+}
+
+impl KernelHandler {
+	fn get_kernel(&self, req: Request<Body>) -> Result<Option<LocatedTxKernel>, Error> {
+		let excess = req
+			.uri()
+			.path()
+			.trim_end_matches('/')
+			.rsplit('/')
+			.next()
+			.ok_or(ErrorKind::RequestError("missing excess".into()))?;
+		let excess = util::from_hex(excess.to_owned())
+			.map_err(|_| ErrorKind::RequestError("invalid excess hex".into()))?;
+		if excess.len() != 33 {
+			return Err(ErrorKind::RequestError("invalid excess length".into()).into());
+		}
+		let excess = Commitment::from_vec(excess);
+
+		let chain = w(&self.chain)?;
+
+		let mut min_height: Option<u64> = None;
+		let mut max_height: Option<u64> = None;
+
+		// Check query parameters for minimum and maximum search height
+		if let Some(q) = req.uri().query() {
+			let params = QueryParams::from(q);
+			if let Some(h) = params.get("min_height") {
+				let h = h
+					.parse()
+					.map_err(|_| ErrorKind::RequestError("invalid minimum height".into()))?;
+				// Default is genesis
+				min_height = if h == 0 { None } else { Some(h) };
+			}
+			if let Some(h) = params.get("max_height") {
+				let h = h
+					.parse()
+					.map_err(|_| ErrorKind::RequestError("invalid maximum height".into()))?;
+				// Default is current head
+				let head_height = chain
+					.head()
+					.map_err(|e| ErrorKind::Internal(format!("{}", e)))?
+					.height;
+				max_height = if h >= head_height { None } else { Some(h) };
+			}
+		}
+
+		let kernel = chain
+			.get_kernel_height(&excess, min_height, max_height)
+			.map_err(|e| ErrorKind::Internal(format!("{}", e)))?
+			.map(|(tx_kernel, height, mmr_index)| LocatedTxKernel {
+				tx_kernel,
+				height,
+				mmr_index,
+			});
+		Ok(kernel)
+	}
+}
+
+impl Handler for KernelHandler {
+	fn get(&self, req: Request<Body>) -> ResponseFuture {
+		result_to_response(self.get_kernel(req))
+	}
+}
