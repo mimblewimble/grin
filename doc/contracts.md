@@ -197,7 +197,7 @@ We can construct two txs (Tx<sub>1</sub>, Tx<sub>2</sub>) with two entangled out
 If we do this (and we can manage the keys as necessary) -
 
 * Out<sub>1</sub> + Out<sub>2</sub> can _only_ be spent as a pair using Key<sub>3</sub>
-* They can _only_ be spent after lock_height from Tx<sub>2</sub>
+* They can _only_ be spent after lock_height specified in Tx<sub>2</sub>
 
 Tx<sub>1</sub> (containing Out<sub>1</sub>) can be broadcast, accepted and confirmed on-chain immediately.
 Tx<sub>2</sub> cannot be broadcast and accepted until lock_height has passed.
