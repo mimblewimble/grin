@@ -1311,6 +1311,9 @@ impl<'a> Extension<'a> {
 
 	/// Rebuild the index of MMR positions to the corresponding UTXOs.
 	/// This is a costly operation performed only when we receive a full new chain state.
+	///
+	/// Note: only called by txhashset_write, and should be replaced by 'rebuild_height_pos_index'
+	/// in the future, after a refactoring of 'txhashset_write'.
 	pub fn rebuild_index(&self) -> Result<(), Error> {
 		let now = Instant::now();
 
@@ -1330,6 +1333,57 @@ impl<'a> Extension<'a> {
 			now.elapsed().as_secs(),
 		);
 
+		Ok(())
+	}
+
+	/// Rebuild the index of block height & MMR positions to the corresponding UTXOs.
+	/// This is a costly operation performed only when we receive a full new chain state.
+	/// Note: only called by compact.
+	pub fn rebuild_height_pos_index(&self) -> Result<(), Error> {
+		let now = Instant::now();
+
+		// clear it before rebuilding
+		self.batch.clear_output_pos_height()?;
+
+		let mut outputs_pos: Vec<(Commitment, u64)> = vec![];
+		for pos in self.output_pmmr.leaf_pos_iter() {
+			if let Some(out) = self.output_pmmr.get_data(pos) {
+				outputs_pos.push((out.commit, pos));
+			}
+		}
+		let total_outputs = outputs_pos.len();
+		if total_outputs == 0 {
+			debug!("rebuild_height_pos_index: nothing to be rebuilt");
+			return Ok(());
+		} else {
+			debug!(
+				"rebuild_height_pos_index: rebuilding {} outputs position & height...",
+				total_outputs
+			);
+		}
+
+		let max_height = self.head().height;
+
+		let mut i = 0;
+		for search_height in 0..max_height {
+			let h = self.get_header_by_height(search_height + 1)?;
+			while i < total_outputs {
+				let (commit, pos) = outputs_pos[i];
+				if pos > h.output_mmr_size {
+					// Note: MMR position is 1-based and not 0-based, so here must be '>' instead of '>='
+					break;
+				}
+				self.batch.save_output_pos_height(&commit, pos, h.height)?;
+				trace!("rebuild_height_pos_index: {:?}", (commit, pos, h.height));
+				i += 1;
+			}
+		}
+
+		debug!(
+			"txhashset: rebuild_height_pos_index: {} UTXOs, took {}s",
+			total_outputs,
+			now.elapsed().as_secs(),
+		);
 		Ok(())
 	}
 
