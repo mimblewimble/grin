@@ -172,7 +172,9 @@ impl Chain {
 	) -> Result<Chain, Error> {
 		let store = Arc::new(store::ChainStore::new(&db_root)?);
 
-		let hash = Hash::from_hex("0000018c118c48d32fecb3e586d5a053f18d82963def6a0cc7f4d1d569fa4186").unwrap();
+		let hash =
+			Hash::from_hex("0000018c118c48d32fecb3e586d5a053f18d82963def6a0cc7f4d1d569fa4186")
+				.unwrap();
 		let foo_header = store.get_block_header(&hash)?;
 		let header = Some(&foo_header);
 

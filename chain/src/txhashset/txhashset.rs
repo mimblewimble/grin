@@ -1060,7 +1060,11 @@ impl<'a> Extension<'a> {
 	/// across).
 	pub fn snapshot(&mut self) -> Result<(), Error> {
 		let header = self.batch.get_block_header(&self.head.hash())?;
-		debug!("snapshot: taking snapshot of UTXO set: {} at {}", header.hash(), header.height);
+		debug!(
+			"snapshot: taking snapshot of UTXO set: {} at {}",
+			header.hash(),
+			header.height
+		);
 		self.output_pmmr
 			.snapshot(&header)
 			.map_err(|e| ErrorKind::Other(e))?;
