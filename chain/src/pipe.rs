@@ -526,12 +526,6 @@ pub fn rewind_and_apply_header_fork(
 	header: &BlockHeader,
 	ext: &mut txhashset::HeaderExtension<'_>,
 ) -> Result<(), Error> {
-	let head = ext.head();
-	if header.hash() == head.last_block_h {
-		// Nothing to rewind and nothing to reapply. Done.
-		return Ok(());
-	}
-
 	let mut fork_hashes = vec![];
 	let mut current = header.clone();
 	while current.height > 0 && !ext.is_on_current_chain(&current).is_ok() {
