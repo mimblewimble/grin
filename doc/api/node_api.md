@@ -36,7 +36,8 @@
 ### GET Blocks
 
 Returns data about a specific block given a hash, a height or an unspent commit.
-Optionally return results as "compact blocks" by passing `?compact` query.
+
+Optionally, Merkle proofs can be excluded from the results by adding `?no_merkle_proof`, rangeproofs can be included by adding `?include_proof` or results  can be returned as "compact blocks" by adding `?compact`.
 
 * **URL**
 
