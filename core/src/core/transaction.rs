@@ -391,6 +391,29 @@ impl TxKernel {
 		Ok(())
 	}
 
+	/// Batch signature verification.
+	pub fn batch_sig_verify(tx_kernels: &Vec<TxKernel>) -> Result<(), Error> {
+		let len = tx_kernels.len();
+		let mut sigs: Vec<secp::Signature> = Vec::with_capacity(len);
+		let mut pubkeys: Vec<secp::key::PublicKey> = Vec::with_capacity(len);
+		let mut msgs: Vec<secp::Message> = Vec::with_capacity(len);
+
+		let secp = static_secp_instance();
+		let secp = secp.lock();
+
+		for tx_kernel in tx_kernels {
+			sigs.push(tx_kernel.excess_sig);
+			pubkeys.push(tx_kernel.excess.to_pubkey(&secp)?);
+			msgs.push(tx_kernel.msg_to_sign()?);
+		}
+
+		if !secp::aggsig::verify_batch(&secp, &sigs, &msgs, &pubkeys) {
+			return Err(Error::IncorrectSignature);
+		}
+
+		Ok(())
+	}
+
 	/// Build an empty tx kernel with zero values.
 	pub fn empty() -> TxKernel {
 		TxKernel {
@@ -861,11 +884,7 @@ impl TransactionBody {
 		};
 
 		// Verify the unverified tx kernels.
-		// No ability to batch verify these right now
-		// so just do them individually.
-		for x in &kernels {
-			x.verify()?;
-		}
+		TxKernel::batch_sig_verify(&kernels)?;
 
 		// Cache the successful verification results for the new outputs and kernels.
 		{
