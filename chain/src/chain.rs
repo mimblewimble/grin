@@ -165,16 +165,21 @@ impl Chain {
 		db_root: String,
 		adapter: Arc<dyn ChainAdapter + Send + Sync>,
 		genesis: Block,
+		header: Option<&BlockHeader>,
 		pow_verifier: fn(&BlockHeader) -> Result<(), pow::Error>,
 		verifier_cache: Arc<RwLock<dyn VerifierCache>>,
 		archive_mode: bool,
 	) -> Result<Chain, Error> {
 		let store = Arc::new(store::ChainStore::new(&db_root)?);
 
-		// open the txhashset, creating a new one if necessary
-		let mut txhashset = txhashset::TxHashSet::open(db_root.clone(), store.clone(), None)?;
+		let hash = Hash::from_hex("0000018c118c48d32fecb3e586d5a053f18d82963def6a0cc7f4d1d569fa4186").unwrap();
+		let foo_header = store.get_block_header(&hash)?;
+		let header = Some(&foo_header);
 
-		setup_head(&genesis, &store, &mut txhashset)?;
+		// Open the txhashset, creating a new one if necessary.
+		let mut txhashset = txhashset::TxHashSet::open(db_root.clone(), store.clone(), header)?;
+
+		setup_head(&genesis, header, &store, &mut txhashset)?;
 		Chain::log_heads(&store)?;
 
 		Ok(Chain {
@@ -528,6 +533,7 @@ impl Chain {
 			let head = extension.batch.head()?;
 			pipe::rewind_and_apply_fork(&header, &head, extension)?;
 			extension.validate(fast_validation, &NoStatus)?;
+			extension.snapshot()?;
 			Ok(())
 		})
 	}
@@ -1095,6 +1101,19 @@ impl Chain {
 		Ok(())
 	}
 
+	/// Snapshot the output and rangeproof leafset files based on current chain head.
+	/// This allows a node to (manually) recover to this header later if necessary.
+	pub fn snapshot(&self) -> Result<(), Error> {
+		let mut txhashset = self.txhashset.write();
+		let head = self.head()?;
+		let header = self.head_header()?;
+		txhashset::extending_readonly(&mut txhashset, |extension| {
+			pipe::rewind_and_apply_fork(&header, &head, extension)?;
+			extension.snapshot()?;
+			Ok(())
+		})
+	}
+
 	/// returns the last n nodes inserted into the output sum tree
 	pub fn get_last_n_output(&self, distance: u64) -> Vec<(Hash, OutputIdentifier)> {
 		self.txhashset.read().last_n_output(distance)
@@ -1387,10 +1406,24 @@ impl Chain {
 
 fn setup_head(
 	genesis: &Block,
+	header: Option<&BlockHeader>,
 	store: &store::ChainStore,
 	txhashset: &mut txhashset::TxHashSet,
 ) -> Result<(), Error> {
 	let mut batch = store.batch()?;
+
+	// If we are recovering prior chain state based on provided header
+	// then reset our db as if subsequent blocks never existed.
+	if let Some(header) = header {
+		let mut count = 0;
+		for (_, b) in batch.blocks_iter()? {
+			if b.header.height > header.height {
+				let _ = batch.delete_block(&b.hash());
+				count += 1;
+			}
+		}
+		batch.save_body_head(&Tip::from_header(header))?;
+	}
 
 	// check if we have a head in store, otherwise the genesis block is it
 	let head_res = batch.head();

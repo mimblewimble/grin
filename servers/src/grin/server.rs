@@ -184,6 +184,7 @@ impl Server {
 			config.db_root.clone(),
 			chain_adapter.clone(),
 			genesis.clone(),
+			None,
 			pow::verify_size,
 			verifier_cache.clone(),
 			archive_mode,

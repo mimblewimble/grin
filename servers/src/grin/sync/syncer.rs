@@ -163,10 +163,12 @@ impl SyncRunner {
 					self.sync_state.update(SyncStatus::NoSync);
 
 					// Initial transition out of a "syncing" state and into NoSync.
-					// This triggers a chain compaction to keep out local node tidy.
+					// This triggers a chain compaction to keep our local node tidy.
 					// Note: Chain compaction runs with an internal threshold
 					// so can be safely run even if the node is restarted frequently.
 					unwrap_or_restart_loop!(self.chain.compact());
+					// Also take a snapshot of the current UTXO set.
+					unwrap_or_restart_loop!(self.chain.snapshot());
 				}
 
 				// sleep for 10 secs but check stop signal every second

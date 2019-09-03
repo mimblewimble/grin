@@ -1059,7 +1059,8 @@ impl<'a> Extension<'a> {
 	/// Needed for fast-sync (utxo file needs to be rewound before sending
 	/// across).
 	pub fn snapshot(&mut self) -> Result<(), Error> {
-		let header = self.batch.get_block_header(&self.head.last_block_h)?;
+		let header = self.batch.get_block_header(&self.head.hash())?;
+		debug!("snapshot: taking snapshot of UTXO set: {} at {}", header.hash(), header.height);
 		self.output_pmmr
 			.snapshot(&header)
 			.map_err(|e| ErrorKind::Other(e))?;

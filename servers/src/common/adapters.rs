@@ -620,6 +620,9 @@ impl NetToChainAdapter {
 					if let Err(e) = chain.compact() {
 						error!("Could not compact chain: {:?}", e);
 					}
+					if let Err(e) = chain.snapshot() {
+						error!("Could not snapshot chain: {:?}", e);
+					}
 				});
 		}
 	}
