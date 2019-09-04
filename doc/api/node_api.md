@@ -9,7 +9,7 @@
 1. [Chain Endpoint](#chain-endpoint)
     1. [GET Chain](#get-chain)
     1. [POST Chain Compact](#post-chain-compact)
-    1. [POST Chain Validate](#post-chain-validate)
+    1. [GET Chain Validate](#get-chain-validate)
     1. [GET Chain Outputs by IDs](#get-chain-outputs-by-ids)
     1. [GET Chain Outputs by Height](#get-chain-outputs-by-height)
 1. [Status Endpoint](#status-endpoint)
@@ -36,7 +36,8 @@
 ### GET Blocks
 
 Returns data about a specific block given a hash, a height or an unspent commit.
-Optionally return results as "compact blocks" by passing `?compact` query.
+
+Optionally, Merkle proofs can be excluded from the results by adding `?no_merkle_proof`, rangeproofs can be included by adding `?include_proof` or results  can be returned as "compact blocks" by adding `?compact`.
 
 * **URL**
 
@@ -82,7 +83,7 @@ Optionally return results as "compact blocks" by passing `?compact` query.
     | - edge_bits           | number   | Size of the cuckoo graph (2_log of number of edges)                         |
     | - cuckoo_solution     | []number | The Cuckoo solution for this block                                          |
     | - total_difficulty    | number   | Total accumulated difficulty since genesis block                            |
-    | - scaling_difficulty  | number   | Difficulty scaling factor between the different proofs of work              |
+    | - secondary_scaling   | number   | Variable difficulty scaling factor for secondary proof of work              |
     | - total_kernel_offset | string   | Total kernel offset since genesis block                                     |
     | inputs                | []string | Input transactions                                                          |
     | outputs               | []object | Outputs transactions                                                        |
@@ -282,7 +283,7 @@ Trigger a compaction of the chain state to regain storage space.
     });
   ```
 
-### POST Chain Validate
+### GET Chain Validate
 
 Trigger a validation of the chain state.
 
@@ -292,7 +293,7 @@ Trigger a validation of the chain state.
 
 * **Method:**
 
-  `POST`
+  `GET`
   
 * **URL Params**
 
@@ -316,7 +317,7 @@ Trigger a validation of the chain state.
     $.ajax({
       url: "/v1/chain/validate",
       dataType: "json",
-      type : "POST",
+      type : "GET",
       success : function(r) {
         console.log(r);
       }
@@ -766,7 +767,7 @@ Build a merkle proof for a given output id and return a dummy output with merkle
 
 * **URL**
 
-  /v1/txhashset/merkleproof?n=x
+  /v1/txhashset/merkleproof?id=x
 
 * **Method:**
 
@@ -775,7 +776,7 @@ Build a merkle proof for a given output id and return a dummy output with merkle
 * **URL Params**
 
   **Required:**
-  `n=[string]`
+  `id=[string]`
 
 * **Data Params**
 
@@ -805,7 +806,7 @@ Build a merkle proof for a given output id and return a dummy output with merkle
 
   ```javascript
     $.ajax({
-      url: "/v1/txhashset/merkleproof?n=0803516094a30830ed9fedff1c63251b51703ddffbb73f944d9e33e8fa5d17444f",
+      url: "/v1/txhashset/merkleproof?id=0803516094a30830ed9fedff1c63251b51703ddffbb73f944d9e33e8fa5d17444f",
       dataType: "json",
       type : "GET",
       success : function(r) {

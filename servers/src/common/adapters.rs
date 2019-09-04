@@ -15,102 +15,134 @@
 //! Adapters connecting new block, new transaction, and accepted transaction
 //! events to consumers of those events.
 
+use crate::util::RwLock;
 use std::fs::File;
-use std::net::SocketAddr;
+use std::io::Read;
+use std::path::PathBuf;
 use std::sync::{Arc, Weak};
 use std::thread;
 use std::time::Instant;
-use util::RwLock;
 
-use chain::{self, ChainAdapter, Options};
-use chrono::prelude::{DateTime, Utc};
-use common::types::{self, ChainValidationMode, ServerConfig, SyncState, SyncStatus};
-use core::core::hash::{Hash, Hashed};
-use core::core::transaction::Transaction;
-use core::core::verifier_cache::VerifierCache;
-use core::core::{BlockHeader, BlockSums, CompactBlock};
-use core::pow::Difficulty;
-use core::{core, global};
-use p2p;
-use pool;
+use crate::chain::{self, BlockStatus, ChainAdapter, Options, SyncState, SyncStatus};
+use crate::common::hooks::{ChainEvents, NetEvents};
+use crate::common::types::{ChainValidationMode, DandelionEpoch, ServerConfig};
+use crate::core::core::hash::{Hash, Hashed};
+use crate::core::core::transaction::Transaction;
+use crate::core::core::verifier_cache::VerifierCache;
+use crate::core::core::{BlockHeader, BlockSums, CompactBlock};
+use crate::core::pow::Difficulty;
+use crate::core::{core, global};
+use crate::p2p;
+use crate::p2p::types::PeerInfo;
+use crate::pool;
+use crate::util::OneTime;
+use chrono::prelude::*;
+use chrono::Duration;
 use rand::prelude::*;
-use store;
-use util::OneTime;
 
 /// Implementation of the NetAdapter for the . Gets notified when new
 /// blocks and transactions are received and forwards to the chain and pool
 /// implementations.
 pub struct NetToChainAdapter {
 	sync_state: Arc<SyncState>,
-	archive_mode: bool,
 	chain: Weak<chain::Chain>,
 	tx_pool: Arc<RwLock<pool::TransactionPool>>,
-	verifier_cache: Arc<RwLock<VerifierCache>>,
+	verifier_cache: Arc<RwLock<dyn VerifierCache>>,
 	peers: OneTime<Weak<p2p::Peers>>,
 	config: ServerConfig,
+	hooks: Vec<Box<dyn NetEvents + Send + Sync>>,
 }
 
 impl p2p::ChainAdapter for NetToChainAdapter {
-	fn total_difficulty(&self) -> Difficulty {
-		self.chain().head().unwrap().total_difficulty
+	fn total_difficulty(&self) -> Result<Difficulty, chain::Error> {
+		Ok(self.chain().head()?.total_difficulty)
 	}
 
-	fn total_height(&self) -> u64 {
-		self.chain().head().unwrap().height
+	fn total_height(&self) -> Result<u64, chain::Error> {
+		Ok(self.chain().head()?.height)
 	}
 
-	fn transaction_received(&self, tx: core::Transaction, stem: bool) {
+	fn get_transaction(&self, kernel_hash: Hash) -> Option<core::Transaction> {
+		self.tx_pool.read().retrieve_tx_by_kernel_hash(kernel_hash)
+	}
+
+	fn tx_kernel_received(
+		&self,
+		kernel_hash: Hash,
+		peer_info: &PeerInfo,
+	) -> Result<bool, chain::Error> {
 		// nothing much we can do with a new transaction while syncing
 		if self.sync_state.is_syncing() {
-			return;
+			return Ok(true);
 		}
 
-		let source = pool::TxSource {
-			debug_name: "p2p".to_string(),
-			identifier: "?.?.?.?".to_string(),
-		};
+		let tx = self.tx_pool.read().retrieve_tx_by_kernel_hash(kernel_hash);
+
+		if tx.is_none() {
+			self.request_transaction(kernel_hash, peer_info);
+		}
+		Ok(true)
+	}
+
+	fn transaction_received(
+		&self,
+		tx: core::Transaction,
+		stem: bool,
+	) -> Result<bool, chain::Error> {
+		// nothing much we can do with a new transaction while syncing
+		if self.sync_state.is_syncing() {
+			return Ok(true);
+		}
+
+		let source = pool::TxSource::Broadcast;
+
+		let header = self.chain().head_header()?;
+
+		for hook in &self.hooks {
+			hook.on_transaction_received(&tx);
+		}
 
 		let tx_hash = tx.hash();
-		let header = self.chain().head_header().unwrap();
 
-		debug!(
-			"Received tx {}, inputs: {}, outputs: {}, kernels: {}, going to process.",
-			tx_hash,
-			tx.inputs().len(),
-			tx.outputs().len(),
-			tx.kernels().len(),
-		);
-
-		let res = {
-			let mut tx_pool = self.tx_pool.write();
-			tx_pool.add_to_pool(source, tx, stem, &header)
-		};
-
-		if let Err(e) = res {
-			debug!("Transaction {} rejected: {:?}", tx_hash, e);
+		let mut tx_pool = self.tx_pool.write();
+		match tx_pool.add_to_pool(source, tx, stem, &header) {
+			Ok(_) => Ok(true),
+			Err(e) => {
+				debug!("Transaction {} rejected: {:?}", tx_hash, e);
+				Ok(false)
+			}
 		}
 	}
 
-	fn block_received(&self, b: core::Block, addr: SocketAddr) -> bool {
+	fn block_received(
+		&self,
+		b: core::Block,
+		peer_info: &PeerInfo,
+		was_requested: bool,
+	) -> Result<bool, chain::Error> {
 		debug!(
-			"Received block {} at {} from {}, inputs: {}, outputs: {}, kernels: {}, going to process.",
+			"Received block {} at {} from {} [in/out/kern: {}/{}/{}] going to process.",
 			b.hash(),
 			b.header.height,
-			addr,
+			peer_info.addr,
 			b.inputs().len(),
 			b.outputs().len(),
 			b.kernels().len(),
 		);
-		self.process_block(b, addr)
+		self.process_block(b, peer_info, was_requested)
 	}
 
-	fn compact_block_received(&self, cb: core::CompactBlock, addr: SocketAddr) -> bool {
+	fn compact_block_received(
+		&self,
+		cb: core::CompactBlock,
+		peer_info: &PeerInfo,
+	) -> Result<bool, chain::Error> {
 		let bhash = cb.hash();
 		debug!(
-			"Received compact_block {} at {} from {}, outputs: {}, kernels: {}, kern_ids: {}, going to process.",
+			"Received compact_block {} at {} from {} [out/kern/kern_ids: {}/{}/{}] going to process.",
 			bhash,
 			cb.header.height,
-			addr,
+			peer_info.addr,
 			cb.out_full().len(),
 			cb.kern_full().len(),
 			cb.kern_ids().len(),
@@ -120,25 +152,33 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 		if cb.kern_ids().is_empty() {
 			// push the freshly hydrated block through the chain pipeline
 			match core::Block::hydrate_from(cb, vec![]) {
-				Ok(block) => self.process_block(block, addr),
+				Ok(block) => {
+					if !self.sync_state.is_syncing() {
+						for hook in &self.hooks {
+							hook.on_block_received(&block, &peer_info.addr);
+						}
+					}
+					self.process_block(block, peer_info, false)
+				}
 				Err(e) => {
-					debug!("Invalid hydrated block {}: {}", cb_hash, e);
-					return false;
+					debug!("Invalid hydrated block {}: {:?}", cb_hash, e);
+					return Ok(false);
 				}
 			}
 		} else {
 			// check at least the header is valid before hydrating
 			if let Err(e) = self
 				.chain()
-				.process_block_header(&cb.header, self.chain_opts())
+				.process_block_header(&cb.header, self.chain_opts(false))
 			{
-				debug!("Invalid compact block header {}: {}", cb_hash, e);
-				return !e.is_bad_data();
+				debug!("Invalid compact block header {}: {:?}", cb_hash, e.kind());
+				return Ok(!e.is_bad_data());
 			}
 
 			let (txs, missing_short_ids) = {
-				let tx_pool = self.tx_pool.read();
-				tx_pool.retrieve_transactions(cb.hash(), cb.nonce, cb.kern_ids())
+				self.tx_pool
+					.read()
+					.retrieve_transactions(cb.hash(), cb.nonce, cb.kern_ids())
 			};
 
 			debug!(
@@ -153,127 +193,145 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 			// 3) we hydrate an invalid block (peer sent us a "bad" compact block) - [TBD]
 
 			let block = match core::Block::hydrate_from(cb.clone(), txs) {
-				Ok(block) => block,
+				Ok(block) => {
+					if !self.sync_state.is_syncing() {
+						for hook in &self.hooks {
+							hook.on_block_received(&block, &peer_info.addr);
+						}
+					}
+					block
+				}
 				Err(e) => {
-					debug!("Invalid hydrated block {}: {}", cb.hash(), e);
-					return false;
+					debug!("Invalid hydrated block {}: {:?}", cb.hash(), e);
+					return Ok(false);
 				}
 			};
 
-			if let Ok(prev) = self.chain().get_block_header(&cb.header.previous) {
+			if let Ok(prev) = self.chain().get_previous_header(&cb.header) {
 				if block
 					.validate(&prev.total_kernel_offset, self.verifier_cache.clone())
 					.is_ok()
 				{
-					debug!("adapter: successfully hydrated block from tx pool!");
-					self.process_block(block, addr)
+					debug!("successfully hydrated block from tx pool!");
+					self.process_block(block, peer_info, false)
 				} else {
 					if self.sync_state.status() == SyncStatus::NoSync {
 						debug!("adapter: block invalid after hydration, requesting full block");
-						self.request_block(&cb.header, &addr);
-						true
+						self.request_block(&cb.header, peer_info);
+						Ok(true)
 					} else {
-						debug!(
-							"adapter: block invalid after hydration, ignoring it, cause still syncing"
-						);
-						true
+						debug!("block invalid after hydration, ignoring it, cause still syncing");
+						Ok(true)
 					}
 				}
 			} else {
-				debug!("adapter: failed to retrieve previous block header (still syncing?)");
-				true
+				debug!("failed to retrieve previous block header (still syncing?)");
+				Ok(true)
 			}
 		}
 	}
 
-	fn header_received(&self, bh: core::BlockHeader, addr: SocketAddr) -> bool {
-		let bhash = bh.hash();
-		debug!(
-			"Received block header {} at {} from {}, going to process.",
-			bhash, bh.height, addr,
-		);
+	fn header_received(
+		&self,
+		bh: core::BlockHeader,
+		peer_info: &PeerInfo,
+	) -> Result<bool, chain::Error> {
+		if !self.sync_state.is_syncing() {
+			for hook in &self.hooks {
+				hook.on_header_received(&bh, &peer_info.addr);
+			}
+		}
 
 		// pushing the new block header through the header chain pipeline
 		// we will go ask for the block if this is a new header
-		let res = self.chain().process_block_header(&bh, self.chain_opts());
+		let res = self
+			.chain()
+			.process_block_header(&bh, self.chain_opts(false));
 
-		if let &Err(ref e) = &res {
-			debug!("Block header {} refused by chain: {:?}", bhash, e.kind());
+		if let Err(e) = res {
+			debug!(
+				"Block header {} refused by chain: {:?}",
+				bh.hash(),
+				e.kind()
+			);
 			if e.is_bad_data() {
-				debug!(
-					"header_received: {} is a bad header, resetting header head",
-					bhash
-				);
-				let _ = self.chain().reset_head();
-				return false;
+				return Ok(false);
 			} else {
 				// we got an error when trying to process the block header
 				// but nothing serious enough to need to ban the peer upstream
-				return true;
+				return Err(e);
 			}
 		}
 
 		// we have successfully processed a block header
 		// so we can go request the block itself
-		self.request_compact_block(&bh, &addr);
+		self.request_compact_block(&bh, peer_info);
 
 		// done receiving the header
-		true
+		Ok(true)
 	}
 
-	fn headers_received(&self, bhs: Vec<core::BlockHeader>, addr: SocketAddr) -> bool {
+	fn headers_received(
+		&self,
+		bhs: &[core::BlockHeader],
+		peer_info: &PeerInfo,
+	) -> Result<bool, chain::Error> {
 		info!(
-			"Received block headers {:?} from {}",
-			bhs.iter().map(|x| x.hash()).collect::<Vec<_>>(),
-			addr,
+			"Received {} block headers from {}",
+			bhs.len(),
+			peer_info.addr
 		);
 
 		if bhs.len() == 0 {
-			return false;
+			return Ok(false);
 		}
 
 		// try to add headers to our header chain
-		let res = self.chain().sync_block_headers(&bhs, self.chain_opts());
-		if let &Err(ref e) = &res {
-			debug!("Block headers refused by chain: {:?}", e);
-
-			if e.is_bad_data() {
-				return false;
+		match self.chain().sync_block_headers(bhs, self.chain_opts(true)) {
+			Ok(_) => Ok(true),
+			Err(e) => {
+				debug!("Block headers refused by chain: {:?}", e);
+				if e.is_bad_data() {
+					return Ok(false);
+				} else {
+					Err(e)
+				}
 			}
 		}
-		true
 	}
 
-	fn locate_headers(&self, locator: Vec<Hash>) -> Vec<core::BlockHeader> {
-		debug!("locate_headers: {:?}", locator,);
+	fn locate_headers(&self, locator: &[Hash]) -> Result<Vec<core::BlockHeader>, chain::Error> {
+		debug!("locator: {:?}", locator);
 
 		let header = match self.find_common_header(locator) {
 			Some(header) => header,
-			None => return vec![],
+			None => return Ok(vec![]),
 		};
 
-		debug!("locate_headers: common header: {:?}", header.hash(),);
+		let max_height = self.chain().header_head()?.height;
+
+		let txhashset = self.chain().txhashset();
+		let txhashset = txhashset.read();
 
 		// looks like we know one, getting as many following headers as allowed
 		let hh = header.height;
 		let mut headers = vec![];
-		for h in (hh + 1)..(hh + (p2p::MAX_BLOCK_HEADERS as u64)) {
-			let header = self.chain().get_header_by_height(h);
-			match header {
-				Ok(head) => headers.push(head),
-				Err(e) => match e.kind() {
-					chain::ErrorKind::StoreErr(store::Error::NotFoundErr(_), _) => break,
-					_ => {
-						error!("Could not build header locator: {:?}", e);
-						return vec![];
-					}
-				},
+		for h in (hh + 1)..=(hh + (p2p::MAX_BLOCK_HEADERS as u64)) {
+			if h > max_height {
+				break;
+			}
+
+			if let Ok(header) = txhashset.get_header_by_height(h) {
+				headers.push(header);
+			} else {
+				error!("Failed to locate headers successfully.");
+				break;
 			}
 		}
 
-		debug!("locate_headers: returning headers: {}", headers.len(),);
+		debug!("returning headers: {}", headers.len());
 
-		headers
+		Ok(headers)
 	}
 
 	/// Gets a full block by its hash.
@@ -283,6 +341,16 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 			Ok(b) => Some(b),
 			_ => None,
 		}
+	}
+
+	fn kernel_data_read(&self) -> Result<File, chain::Error> {
+		self.chain().kernel_data_read()
+	}
+
+	fn kernel_data_write(&self, reader: &mut dyn Read) -> Result<bool, chain::Error> {
+		let res = self.chain().kernel_data_write(reader)?;
+		error!("***** kernel_data_write: {:?}", res);
+		Ok(true)
 	}
 
 	/// Provides a reading view into the current txhashset state as well as
@@ -302,6 +370,10 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 		}
 	}
 
+	fn txhashset_archive_header(&self) -> Result<core::BlockHeader, chain::Error> {
+		self.chain().txhashset_archive_header()
+	}
+
 	fn txhashset_receive_ready(&self) -> bool {
 		match self.sync_state.status() {
 			SyncStatus::TxHashsetDownload { .. } => true,
@@ -316,14 +388,20 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 		total_size: u64,
 	) -> bool {
 		match self.sync_state.status() {
-			SyncStatus::TxHashsetDownload { .. } => {
-				self.sync_state
-					.update_txhashset_download(SyncStatus::TxHashsetDownload {
-						start_time,
-						downloaded_size,
-						total_size,
-					})
-			}
+			SyncStatus::TxHashsetDownload {
+				update_time: old_update_time,
+				downloaded_size: old_downloaded_size,
+				..
+			} => self
+				.sync_state
+				.update_txhashset_download(SyncStatus::TxHashsetDownload {
+					start_time,
+					prev_update_time: old_update_time,
+					update_time: Utc::now(),
+					prev_downloaded_size: old_downloaded_size,
+					downloaded_size,
+					total_size,
+				}),
 			_ => false,
 		}
 	}
@@ -332,25 +410,49 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 	/// If we're willing to accept that new state, the data stream will be
 	/// read as a zip file, unzipped and the resulting state files should be
 	/// rewound to the provided indexes.
-	fn txhashset_write(&self, h: Hash, txhashset_data: File, _peer_addr: SocketAddr) -> bool {
+	fn txhashset_write(
+		&self,
+		h: Hash,
+		txhashset_data: File,
+		_peer_info: &PeerInfo,
+	) -> Result<bool, chain::Error> {
 		// check status again after download, in case 2 txhashsets made it somehow
 		if let SyncStatus::TxHashsetDownload { .. } = self.sync_state.status() {
 		} else {
-			return true;
+			return Ok(false);
 		}
 
-		if let Err(e) = self
+		match self
 			.chain()
 			.txhashset_write(h, txhashset_data, self.sync_state.as_ref())
 		{
-			error!("Failed to save txhashset archive: {}", e);
-			let is_good_data = !e.is_bad_data();
-			self.sync_state.set_sync_error(types::Error::Chain(e));
-			is_good_data
-		} else {
-			info!("Received valid txhashset data for {}.", h);
-			true
+			Ok(is_bad_data) => {
+				if is_bad_data {
+					self.chain().clean_txhashset_sandbox();
+					error!("Failed to save txhashset archive: bad data");
+					self.sync_state.set_sync_error(
+						chain::ErrorKind::TxHashSetErr("bad txhashset data".to_string()).into(),
+					);
+				} else {
+					info!("Received valid txhashset data for {}.", h);
+				}
+				Ok(is_bad_data)
+			}
+			Err(e) => {
+				self.chain().clean_txhashset_sandbox();
+				error!("Failed to save txhashset archive: {}", e);
+				self.sync_state.set_sync_error(e);
+				Ok(false)
+			}
 		}
+	}
+
+	fn get_tmp_dir(&self) -> PathBuf {
+		self.chain().get_tmp_dir()
+	}
+
+	fn get_tmpfile_pathname(&self, tmpfile_name: String) -> PathBuf {
+		self.chain().get_tmpfile_pathname(tmpfile_name)
 	}
 }
 
@@ -358,20 +460,20 @@ impl NetToChainAdapter {
 	/// Construct a new NetToChainAdapter instance
 	pub fn new(
 		sync_state: Arc<SyncState>,
-		archive_mode: bool,
 		chain: Arc<chain::Chain>,
 		tx_pool: Arc<RwLock<pool::TransactionPool>>,
-		verifier_cache: Arc<RwLock<VerifierCache>>,
+		verifier_cache: Arc<RwLock<dyn VerifierCache>>,
 		config: ServerConfig,
+		hooks: Vec<Box<dyn NetEvents + Send + Sync>>,
 	) -> NetToChainAdapter {
 		NetToChainAdapter {
 			sync_state,
-			archive_mode,
 			chain: Arc::downgrade(&chain),
 			tx_pool,
 			verifier_cache,
 			peers: OneTime::new(),
 			config,
+			hooks,
 		}
 	}
 
@@ -394,92 +496,79 @@ impl NetToChainAdapter {
 			.expect("Failed to upgrade weak ref to our chain.")
 	}
 
-	// recursively go back through the locator vector and stop when we find
-	// a header that we recognize this will be a header shared in common
-	// between us and the peer
-	fn find_common_header(&self, locator: Vec<Hash>) -> Option<BlockHeader> {
-		if locator.len() == 0 {
-			return None;
-		}
+	// Find the first locator hash that refers to a known header on our main chain.
+	fn find_common_header(&self, locator: &[Hash]) -> Option<BlockHeader> {
+		let txhashset = self.chain().txhashset();
+		let txhashset = txhashset.read();
 
-		let known = self.chain().get_block_header(&locator[0]);
-
-		match known {
-			Ok(header) => {
-				// even if we know the block, it may not be on our winning chain
-				let known_winning = self.chain().get_header_by_height(header.height);
-				if let Ok(known_winning) = known_winning {
-					if known_winning.hash() != header.hash() {
-						self.find_common_header(locator[1..].to_vec())
-					} else {
-						Some(header)
+		for hash in locator {
+			if let Ok(header) = self.chain().get_block_header(&hash) {
+				if let Ok(header_at_height) = txhashset.get_header_by_height(header.height) {
+					if header.hash() == header_at_height.hash() {
+						return Some(header);
 					}
-				} else {
-					self.find_common_header(locator[1..].to_vec())
 				}
 			}
-			Err(e) => match e.kind() {
-				chain::ErrorKind::StoreErr(store::Error::NotFoundErr(_), _) => {
-					self.find_common_header(locator[1..].to_vec())
-				}
-				_ => {
-					error!("Could not build header locator: {:?}", e);
-					None
-				}
-			},
 		}
+		None
 	}
 
 	// pushing the new block through the chain pipeline
 	// remembering to reset the head if we have a bad block
-	fn process_block(&self, b: core::Block, addr: SocketAddr) -> bool {
+	fn process_block(
+		&self,
+		b: core::Block,
+		peer_info: &PeerInfo,
+		was_requested: bool,
+	) -> Result<bool, chain::Error> {
 		// We cannot process blocks earlier than the horizon so check for this here.
 		{
-			let head = self.chain().head().unwrap();
-			let horizon = head.height.saturating_sub(global::cut_through_horizon() as u64);
+			let head = self.chain().head()?;
+			let horizon = head
+				.height
+				.saturating_sub(global::cut_through_horizon() as u64);
 			if b.header.height < horizon {
-				return true;
+				return Ok(true);
 			}
 		}
 
-		let prev_hash = b.header.previous;
 		let bhash = b.hash();
-		match self.chain().process_block(b, self.chain_opts()) {
+		let previous = self.chain().get_previous_header(&b.header);
+
+		match self
+			.chain()
+			.process_block(b, self.chain_opts(was_requested))
+		{
 			Ok(_) => {
 				self.validate_chain(bhash);
 				self.check_compact();
-				true
+				Ok(true)
 			}
 			Err(ref e) if e.is_bad_data() => {
-				debug!(
-					"adapter: process_block: {} is a bad block, resetting head",
-					bhash
-				);
-				let _ = self.chain().reset_head();
-
-				// we potentially changed the state of the system here
-				// so check everything is still ok
 				self.validate_chain(bhash);
-
-				false
+				Ok(false)
 			}
 			Err(e) => {
 				match e.kind() {
 					chain::ErrorKind::Orphan => {
-						// make sure we did not miss the parent block
-						if !self.chain().is_orphan(&prev_hash) && !self.sync_state.is_syncing() {
-							debug!("adapter: process_block: received an orphan block, checking the parent: {:}", prev_hash);
-							self.request_block_by_hash(prev_hash, &addr)
+						if let Ok(previous) = previous {
+							// make sure we did not miss the parent block
+							if !self.chain().is_orphan(&previous.hash())
+								&& !self.sync_state.is_syncing()
+							{
+								debug!("process_block: received an orphan block, checking the parent: {:}", previous.hash());
+								self.request_block_by_hash(previous.hash(), peer_info)
+							}
 						}
-						true
+						Ok(true)
 					}
 					_ => {
 						debug!(
-							"adapter: process_block: block {} refused by chain: {}",
+							"process_block: block {} refused by chain: {}",
 							bhash,
 							e.kind()
 						);
-						true
+						Ok(true)
 					}
 				}
 			}
@@ -492,14 +581,14 @@ impl NetToChainAdapter {
 		// We are out of consensus at this point and want to track the problem
 		// down as soon as possible.
 		// Skip this if we are currently syncing (too slow).
-		if self.chain().head().unwrap().height > 0
+		if self.config.chain_validation_mode == ChainValidationMode::EveryBlock
+			&& self.chain().head().unwrap().height > 0
 			&& !self.sync_state.is_syncing()
-			&& self.config.chain_validation_mode == ChainValidationMode::EveryBlock
 		{
 			let now = Instant::now();
 
 			debug!(
-				"adapter: process_block: ***** validating full chain state at {}",
+				"process_block: ***** validating full chain state at {}",
 				bhash,
 			);
 
@@ -508,15 +597,15 @@ impl NetToChainAdapter {
 				.expect("chain validation failed, hard stop");
 
 			debug!(
-				"adapter: process_block: ***** done validating full chain state, took {}s",
+				"process_block: ***** done validating full chain state, took {}s",
 				now.elapsed().as_secs(),
 			);
 		}
 	}
 
 	fn check_compact(&self) {
-		// no compaction during sync or if we're in historical mode
-		if self.archive_mode || self.sync_state.is_syncing() {
+		// Skip compaction if we are syncing.
+		if self.sync_state.is_syncing() {
 			return;
 		}
 
@@ -535,36 +624,57 @@ impl NetToChainAdapter {
 		}
 	}
 
+	fn request_transaction(&self, h: Hash, peer_info: &PeerInfo) {
+		self.send_tx_request_to_peer(h, peer_info, |peer, h| peer.send_tx_request(h))
+	}
+
 	// After receiving a compact block if we cannot successfully hydrate
 	// it into a full block then fallback to requesting the full block
 	// from the same peer that gave us the compact block
 	// consider additional peers for redundancy?
-	fn request_block(&self, bh: &BlockHeader, addr: &SocketAddr) {
-		self.request_block_by_hash(bh.hash(), addr)
+	fn request_block(&self, bh: &BlockHeader, peer_info: &PeerInfo) {
+		self.request_block_by_hash(bh.hash(), peer_info)
 	}
 
-	fn request_block_by_hash(&self, h: Hash, addr: &SocketAddr) {
-		self.send_block_request_to_peer(h, addr, |peer, h| peer.send_block_request(h))
+	fn request_block_by_hash(&self, h: Hash, peer_info: &PeerInfo) {
+		self.send_block_request_to_peer(h, peer_info, |peer, h| peer.send_block_request(h))
 	}
 
 	// After we have received a block header in "header first" propagation
 	// we need to go request the block (compact representation) from the
 	// same peer that gave us the header (unless we have already accepted the block)
-	fn request_compact_block(&self, bh: &BlockHeader, addr: &SocketAddr) {
-		self.send_block_request_to_peer(bh.hash(), addr, |peer, h| {
+	fn request_compact_block(&self, bh: &BlockHeader, peer_info: &PeerInfo) {
+		self.send_block_request_to_peer(bh.hash(), peer_info, |peer, h| {
 			peer.send_compact_block_request(h)
 		})
 	}
 
-	fn send_block_request_to_peer<F>(&self, h: Hash, addr: &SocketAddr, f: F)
+	fn send_tx_request_to_peer<F>(&self, h: Hash, peer_info: &PeerInfo, f: F)
+	where
+		F: Fn(&p2p::Peer, Hash) -> Result<(), p2p::Error>,
+	{
+		match self.peers().get_connected_peer(peer_info.addr) {
+			None => debug!(
+				"send_tx_request_to_peer: can't send request to peer {:?}, not connected",
+				peer_info.addr
+			),
+			Some(peer) => {
+				if let Err(e) = f(&peer, h) {
+					error!("send_tx_request_to_peer: failed: {:?}", e)
+				}
+			}
+		}
+	}
+
+	fn send_block_request_to_peer<F>(&self, h: Hash, peer_info: &PeerInfo, f: F)
 	where
 		F: Fn(&p2p::Peer, Hash) -> Result<(), p2p::Error>,
 	{
 		match self.chain().block_exists(h) {
-			Ok(false) => match self.peers().get_connected_peer(addr) {
+			Ok(false) => match self.peers().get_connected_peer(peer_info.addr) {
 				None => debug!(
 					"send_block_request_to_peer: can't send request to peer {:?}, not connected",
-					addr
+					peer_info.addr
 				),
 				Some(peer) => {
 					if let Err(e) = f(&peer, h) {
@@ -581,8 +691,8 @@ impl NetToChainAdapter {
 	}
 
 	/// Prepare options for the chain pipeline
-	fn chain_opts(&self) -> chain::Options {
-		let opts = if self.sync_state.is_syncing() {
+	fn chain_opts(&self, was_requested: bool) -> chain::Options {
+		let opts = if was_requested {
 			chain::Options::SYNC
 		} else {
 			chain::Options::NONE
@@ -595,37 +705,51 @@ impl NetToChainAdapter {
 ///  accepted a new block, asking the pool to update its state and
 /// the network to broadcast the block
 pub struct ChainToPoolAndNetAdapter {
-	sync_state: Arc<SyncState>,
 	tx_pool: Arc<RwLock<pool::TransactionPool>>,
 	peers: OneTime<Weak<p2p::Peers>>,
+	hooks: Vec<Box<dyn ChainEvents + Send + Sync>>,
 }
 
 impl ChainAdapter for ChainToPoolAndNetAdapter {
-	fn block_accepted(&self, b: &core::Block, opts: Options) {
-		if self.sync_state.is_syncing() {
-			return;
+	fn block_accepted(&self, b: &core::Block, status: BlockStatus, opts: Options) {
+		// not broadcasting blocks received through sync
+		if !opts.contains(chain::Options::SYNC) {
+			for hook in &self.hooks {
+				hook.on_block_accepted(b, &status);
+			}
+			// If we mined the block then we want to broadcast the compact block.
+			// If we received the block from another node then broadcast "header first"
+			// to minimize network traffic.
+			if opts.contains(Options::MINE) {
+				// propagate compact block out if we mined the block
+				let cb: CompactBlock = b.clone().into();
+				self.peers().broadcast_compact_block(&cb);
+			} else {
+				// "header first" propagation if we are not the originator of this block
+				self.peers().broadcast_header(&b.header);
+			}
 		}
 
-		debug!("adapter: block_accepted: {:?}", b.hash());
-
-		if let Err(e) = self.tx_pool.write().reconcile_block(b) {
-			error!(
-				"Pool could not update itself at block {}: {:?}",
-				b.hash(),
-				e,
-			);
-		}
-
-		// If we mined the block then we want to broadcast the compact block.
-		// If we received the block from another node then broadcast "header first"
-		// to minimize network traffic.
-		if opts.contains(Options::MINE) {
-			// propagate compact block out if we mined the block
-			let cb: CompactBlock = b.clone().into();
-			self.peers().broadcast_compact_block(&cb);
+		// Reconcile the txpool against the new block *after* we have broadcast it too our peers.
+		// This may be slow and we do not want to delay block propagation.
+		// We only want to reconcile the txpool against the new block *if* total work has increased.
+		let is_reorg = if let BlockStatus::Reorg(_) = status {
+			true
 		} else {
-			// "header first" propagation if we are not the originator of this block
-			self.peers().broadcast_header(&b.header);
+			false
+		};
+		if status == BlockStatus::Next || is_reorg {
+			let mut tx_pool = self.tx_pool.write();
+
+			let _ = tx_pool.reconcile_block(b);
+
+			// First "age out" any old txs in the reorg_cache.
+			let cutoff = Utc::now() - Duration::minutes(30);
+			tx_pool.truncate_reorg_cache(cutoff);
+		}
+
+		if is_reorg {
+			let _ = self.tx_pool.write().reconcile_reorg_cache(&b.header);
 		}
 	}
 }
@@ -633,13 +757,13 @@ impl ChainAdapter for ChainToPoolAndNetAdapter {
 impl ChainToPoolAndNetAdapter {
 	/// Construct a ChainToPoolAndNetAdapter instance.
 	pub fn new(
-		sync_state: Arc<SyncState>,
 		tx_pool: Arc<RwLock<pool::TransactionPool>>,
+		hooks: Vec<Box<dyn ChainEvents + Send + Sync>>,
 	) -> ChainToPoolAndNetAdapter {
 		ChainToPoolAndNetAdapter {
-			sync_state,
 			tx_pool,
 			peers: OneTime::new(),
+			hooks: hooks,
 		}
 	}
 
@@ -661,25 +785,78 @@ impl ChainToPoolAndNetAdapter {
 /// transactions that have been accepted.
 pub struct PoolToNetAdapter {
 	peers: OneTime<Weak<p2p::Peers>>,
+	dandelion_epoch: Arc<RwLock<DandelionEpoch>>,
+}
+
+/// Adapter between the Dandelion monitor and the current Dandelion "epoch".
+pub trait DandelionAdapter: Send + Sync {
+	/// Is the node stemming (or fluffing) transactions in the current epoch?
+	fn is_stem(&self) -> bool;
+
+	/// Is the current Dandelion epoch expired?
+	fn is_expired(&self) -> bool;
+
+	/// Transition to the next Dandelion epoch (new stem/fluff state, select new relay peer).
+	fn next_epoch(&self);
+}
+
+impl DandelionAdapter for PoolToNetAdapter {
+	fn is_stem(&self) -> bool {
+		self.dandelion_epoch.read().is_stem()
+	}
+
+	fn is_expired(&self) -> bool {
+		self.dandelion_epoch.read().is_expired()
+	}
+
+	fn next_epoch(&self) {
+		self.dandelion_epoch.write().next_epoch(&self.peers());
+	}
 }
 
 impl pool::PoolAdapter for PoolToNetAdapter {
-	fn stem_tx_accepted(&self, tx: &core::Transaction) -> Result<(), pool::PoolError> {
-		self.peers()
-			.broadcast_stem_transaction(tx)
-			.map_err(|_| pool::PoolError::DandelionError)?;
-		Ok(())
+	fn tx_accepted(&self, entry: &pool::PoolEntry) {
+		self.peers().broadcast_transaction(&entry.tx);
 	}
-	fn tx_accepted(&self, tx: &core::Transaction) {
-		self.peers().broadcast_transaction(tx);
+
+	fn stem_tx_accepted(&self, entry: &pool::PoolEntry) -> Result<(), pool::PoolError> {
+		// Take write lock on the current epoch.
+		// We need to be able to update the current relay peer if not currently connected.
+		let mut epoch = self.dandelion_epoch.write();
+
+		// If "stem" epoch attempt to relay the tx to the next Dandelion relay.
+		// Fallback to immediately fluffing the tx if we cannot stem for any reason.
+		// If "fluff" epoch then nothing to do right now (fluff via Dandelion monitor).
+		// If node is configured to always stem our (pushed via api) txs then do so.
+		if epoch.is_stem() || (entry.src.is_pushed() && epoch.always_stem_our_txs()) {
+			if let Some(peer) = epoch.relay_peer(&self.peers()) {
+				match peer.send_stem_transaction(&entry.tx) {
+					Ok(_) => {
+						info!("Stemming this epoch, relaying to next peer.");
+						Ok(())
+					}
+					Err(e) => {
+						error!("Stemming tx failed. Fluffing. {:?}", e);
+						Err(pool::PoolError::DandelionError)
+					}
+				}
+			} else {
+				error!("No relay peer. Fluffing.");
+				Err(pool::PoolError::DandelionError)
+			}
+		} else {
+			info!("Fluff epoch. Aggregating stem tx(s). Will fluff via Dandelion monitor.");
+			Ok(())
+		}
 	}
 }
 
 impl PoolToNetAdapter {
 	/// Create a new pool to net adapter
-	pub fn new() -> PoolToNetAdapter {
+	pub fn new(config: pool::DandelionConfig) -> PoolToNetAdapter {
 		PoolToNetAdapter {
 			peers: OneTime::new(),
+			dandelion_epoch: Arc::new(RwLock::new(DandelionEpoch::new(config))),
 		}
 	}
 

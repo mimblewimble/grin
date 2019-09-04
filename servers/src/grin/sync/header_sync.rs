@@ -16,18 +16,21 @@ use chrono::prelude::{DateTime, Utc};
 use chrono::Duration;
 use std::sync::Arc;
 
-use chain;
-use common::types::{Error, SyncState, SyncStatus};
-use core::core::hash::{Hash, Hashed};
-use p2p::{self, Peer};
+use crate::chain::{self, SyncState, SyncStatus};
+use crate::common::types::Error;
+use crate::core::core::hash::{Hash, Hashed};
+use crate::p2p::{self, types::ReasonForBan, Peer};
 
 pub struct HeaderSync {
 	sync_state: Arc<SyncState>,
 	peers: Arc<p2p::Peers>,
 	chain: Arc<chain::Chain>,
 
-	history_locators: Vec<(u64, Hash)>,
+	history_locator: Vec<(u64, Hash)>,
 	prev_header_sync: (DateTime<Utc>, u64, u64),
+
+	syncing_peer: Option<Arc<Peer>>,
+	stalling_ts: Option<DateTime<Utc>>,
 }
 
 impl HeaderSync {
@@ -40,39 +43,50 @@ impl HeaderSync {
 			sync_state,
 			peers,
 			chain,
-			history_locators: vec![],
+			history_locator: vec![],
 			prev_header_sync: (Utc::now(), 0, 0),
+			syncing_peer: None,
+			stalling_ts: None,
 		}
 	}
 
-	pub fn check_run(&mut self, header_head: &chain::Tip, highest_height: u64) -> bool {
+	pub fn check_run(
+		&mut self,
+		header_head: &chain::Tip,
+		highest_height: u64,
+	) -> Result<bool, chain::Error> {
 		if !self.header_sync_due(header_head) {
-			return false;
+			return Ok(false);
 		}
 
-		let status = self.sync_state.status();
-
-		let enable_header_sync = match status {
-			SyncStatus::BodySync { .. } | SyncStatus::HeaderSync { .. } => true,
+		let enable_header_sync = match self.sync_state.status() {
+			SyncStatus::BodySync { .. }
+			| SyncStatus::HeaderSync { .. }
+			| SyncStatus::TxHashsetDone => true,
 			SyncStatus::NoSync | SyncStatus::Initial | SyncStatus::AwaitingPeers(_) => {
-				// Reset sync_head to header_head on transition to HeaderSync,
-				// but ONLY on initial transition to HeaderSync state.
-				let sync_head = self.chain.get_sync_head().unwrap();
+				let sync_head = self.chain.get_sync_head()?;
 				debug!(
-					"sync: initial transition to HeaderSync. sync_head: {} at {}, reset to: {} at {}",
+					"sync: initial transition to HeaderSync. sync_head: {} at {}, resetting to: {} at {}",
 					sync_head.hash(),
 					sync_head.height,
 					header_head.hash(),
 					header_head.height,
 				);
 
-				// Reset sync_head to the same as current header_head.
-				self.chain.reset_sync_head(&header_head).unwrap();
+				// Reset sync_head to header_head on transition to HeaderSync,
+				// but ONLY on initial transition to HeaderSync state.
+				//
+				// The header_head and sync_head may diverge here in the presence of a fork
+				// in the header chain. Ensure we track the new advertised header chain here
+				// correctly, so reset any previous (and potentially stale) sync_head to match
+				// our last known "good" header_head.
+				//
+				self.chain.reset_sync_head()?;
 
-				// Rebuild the sync MMR to match our updates sync_head.
-				self.chain.rebuild_sync_mmr(&header_head).unwrap();
+				// Rebuild the sync MMR to match our updated sync_head.
+				self.chain.rebuild_sync_mmr(&header_head)?;
 
-				self.history_locators.clear();
+				self.history_locator.retain(|&x| x.0 == 0);
 				true
 			}
 			_ => false,
@@ -84,10 +98,10 @@ impl HeaderSync {
 				highest_height: highest_height,
 			});
 
-			self.header_sync();
-			return true;
+			self.syncing_peer = self.header_sync();
+			return Ok(true);
 		}
-		false
+		Ok(false)
 	}
 
 	fn header_sync_due(&mut self, header_head: &chain::Tip) -> bool {
@@ -112,6 +126,44 @@ impl HeaderSync {
 				header_head.height,
 				header_head.height,
 			);
+
+			// save the stalling start time
+			if stalling {
+				if self.stalling_ts.is_none() {
+					self.stalling_ts = Some(now);
+				}
+			} else {
+				self.stalling_ts = None;
+			}
+
+			if all_headers_received {
+				// reset the stalling start time if syncing goes well
+				self.stalling_ts = None;
+			} else {
+				if let Some(ref stalling_ts) = self.stalling_ts {
+					if let Some(ref peer) = self.syncing_peer {
+						match self.sync_state.status() {
+							SyncStatus::HeaderSync { .. } | SyncStatus::BodySync { .. } => {
+								// Ban this fraud peer which claims a higher work but can't send us the real headers
+								if now > *stalling_ts + Duration::seconds(120)
+									&& header_head.total_difficulty < peer.info.total_difficulty()
+								{
+									self.peers
+										.ban_peer(peer.info.addr, ReasonForBan::FraudHeight);
+									info!(
+										"sync: ban a fraud peer: {}, claimed height: {}, total difficulty: {}",
+										peer.info.addr,
+										peer.info.height(),
+										peer.info.total_difficulty(),
+									);
+								}
+							}
+							_ => (),
+						}
+					}
+				}
+			}
+			self.syncing_peer = None;
 			true
 		} else {
 			// resetting the timeout as long as we progress
@@ -123,20 +175,21 @@ impl HeaderSync {
 		}
 	}
 
-	fn header_sync(&mut self) {
+	fn header_sync(&mut self) -> Option<Arc<Peer>> {
 		if let Ok(header_head) = self.chain.header_head() {
 			let difficulty = header_head.total_difficulty;
 
 			if let Some(peer) = self.peers.most_work_peer() {
 				if peer.info.total_difficulty() > difficulty {
-					self.request_headers(&peer);
+					return self.request_headers(peer);
 				}
 			}
 		}
+		return None;
 	}
 
 	/// Request some block headers from a peer to advance us.
-	fn request_headers(&mut self, peer: &Peer) {
+	fn request_headers(&mut self, peer: Arc<Peer>) -> Option<Arc<Peer>> {
 		if let Ok(locator) = self.get_locator() {
 			debug!(
 				"sync: request_headers: asking {} for headers, {:?}",
@@ -144,128 +197,76 @@ impl HeaderSync {
 			);
 
 			let _ = peer.send_header_request(locator);
+			return Some(peer.clone());
 		}
+		return None;
 	}
 
 	/// We build a locator based on sync_head.
 	/// Even if sync_head is significantly out of date we will "reset" it once we
 	/// start getting headers back from a peer.
 	fn get_locator(&mut self) -> Result<Vec<Hash>, Error> {
-		let mut this_height = 0;
-
 		let tip = self.chain.get_sync_head()?;
 		let heights = get_locator_heights(tip.height);
-		let mut new_heights: Vec<u64> = vec![];
 
-		// for security, clear history_locators[] in any case of header chain rollback,
+		// for security, clear history_locator[] in any case of header chain rollback,
 		// the easiest way is to check whether the sync head and the header head are identical.
-		if self.history_locators.len() > 0 && tip.hash() != self.chain.header_head()?.hash() {
-			self.history_locators.clear();
+		if self.history_locator.len() > 0 && tip.hash() != self.chain.header_head()?.hash() {
+			self.history_locator.retain(|&x| x.0 == 0);
 		}
 
-		debug!("sync: locator heights : {:?}", heights);
-
-		let mut locator: Vec<Hash> = vec![];
-		let mut current = self.chain.get_block_header(&tip.last_block_h);
-		while let Ok(header) = current {
-			if heights.contains(&header.height) {
-				locator.push(header.hash());
-				new_heights.push(header.height);
-				if self.history_locators.len() > 0
-					&& tip.height - header.height + 1 >= p2p::MAX_BLOCK_HEADERS as u64 - 1
-				{
-					this_height = header.height;
-					break;
+		// for each height we need, we either check if something is close enough from
+		// last locator, or go to the db
+		let mut locator: Vec<(u64, Hash)> = vec![(tip.height, tip.last_block_h)];
+		for h in heights {
+			if let Some(l) = close_enough(&self.history_locator, h) {
+				locator.push(l);
+			} else {
+				// start at last known hash and go backward
+				let last_loc = locator.last().unwrap().clone();
+				let mut header_cursor = self.chain.get_block_header(&last_loc.1);
+				while let Ok(header) = header_cursor {
+					if header.height == h {
+						if header.height != last_loc.0 {
+							locator.push((header.height, header.hash()));
+						}
+						break;
+					}
+					header_cursor = self.chain.get_previous_header(&header);
 				}
-			}
-			current = self.chain.get_block_header(&header.previous);
-		}
-
-		// update history locators
-		{
-			let mut tmp: Vec<(u64, Hash)> = vec![];
-			*&mut tmp = new_heights
-				.clone()
-				.into_iter()
-				.zip(locator.clone().into_iter())
-				.collect();
-			tmp.reverse();
-			if self.history_locators.len() > 0 && tmp[0].0 == 0 {
-				tmp = tmp[1..].to_vec();
-			}
-			self.history_locators.append(&mut tmp);
-		}
-
-		// reuse remaining part of locator from history
-		if this_height > 0 {
-			let this_height_index = heights.iter().position(|&r| r == this_height).unwrap();
-			let next_height = heights[this_height_index + 1];
-
-			let reuse_index = self
-				.history_locators
-				.iter()
-				.position(|&r| r.0 >= next_height)
-				.unwrap();
-			let mut tmp = self.history_locators[..reuse_index + 1].to_vec();
-			tmp.reverse();
-			for (height, hash) in &mut tmp {
-				if *height == 0 {
-					break;
-				}
-
-				// check the locator to make sure the gap >= 2^n, where n = index of heights Vec
-				if this_height >= *height + 2u64.pow(locator.len() as u32) {
-					locator.push(hash.clone());
-					this_height = *height;
-					new_heights.push(this_height);
-				}
-				if locator.len() >= (p2p::MAX_LOCATORS as usize) - 1 {
-					break;
-				}
-			}
-
-			// push height 0 if it's not there
-			if new_heights[new_heights.len() - 1] != 0 {
-				locator.push(
-					self.history_locators[self.history_locators.len() - 1]
-						.1
-						.clone(),
-				);
-				new_heights.push(0);
 			}
 		}
+		locator.dedup_by(|a, b| a.0 == b.0);
+		debug!("sync: locator : {:?}", locator.clone());
+		self.history_locator = locator.clone();
 
-		debug!("sync: locator heights': {:?}", new_heights);
-
-		// shrink history_locators properly
-		if heights.len() > 1 {
-			let shrink_height = heights[heights.len() - 2];
-			let mut shrunk_size = 0;
-			let shrink_index = self
-				.history_locators
-				.iter()
-				.position(|&r| r.0 > shrink_height);
-			if let Some(shrink_index) = shrink_index {
-				if shrink_index > 100 {
-					// shrink but avoid trivial shrinking
-					let mut shrunk = self.history_locators[shrink_index..].to_vec();
-					shrunk_size = shrink_index;
-					self.history_locators.clear();
-					self.history_locators.push((0, locator[locator.len() - 1]));
-					self.history_locators.append(&mut shrunk);
-				}
-			}
-			debug!(
-				"sync: history locators: len={}, shrunk={}",
-				self.history_locators.len(),
-				shrunk_size
-			);
-		}
-
-		debug!("sync: locator: {:?}", locator);
-
-		Ok(locator)
+		Ok(locator.iter().map(|l| l.1).collect())
 	}
+}
+
+// Whether we have a value close enough to the provided height in the locator
+fn close_enough(locator: &Vec<(u64, Hash)>, height: u64) -> Option<(u64, Hash)> {
+	if locator.len() == 0 {
+		return None;
+	}
+	// bounds, lower that last is last
+	if locator.last().unwrap().0 >= height {
+		return locator.last().map(|l| l.clone());
+	}
+	// higher than first is first if within an acceptable gap
+	if locator[0].0 < height && height.saturating_sub(127) < locator[0].0 {
+		return Some(locator[0]);
+	}
+	for hh in locator.windows(2) {
+		if height <= hh[0].0 && height > hh[1].0 {
+			if hh[0].0 - height < height - hh[1].0 {
+				return Some(hh[0].clone());
+			} else {
+				return Some(hh[1].clone());
+			}
+		}
+	}
+	None
 }
 
 // current height back to 0 decreasing in powers of 2
@@ -287,6 +288,7 @@ fn get_locator_heights(height: u64) -> Vec<u64> {
 #[cfg(test)]
 mod test {
 	use super::*;
+	use crate::core::core::hash;
 
 	#[test]
 	fn test_get_locator_heights() {
@@ -305,6 +307,104 @@ mod test {
 		assert_eq!(
 			get_locator_heights(10000),
 			vec![10000, 9998, 9994, 9986, 9970, 9938, 9874, 9746, 9490, 8978, 7954, 5906, 1810, 0,]
+		);
+	}
+
+	#[test]
+	fn test_close_enough() {
+		let zh = hash::ZERO_HASH;
+
+		// empty check
+		assert_eq!(close_enough(&vec![], 0), None);
+
+		// just 1 locator in history
+		let heights: Vec<u64> = vec![64, 62, 58, 50, 34, 2, 0];
+		let history_locator: Vec<(u64, Hash)> = vec![(0, zh.clone())];
+		let mut locator: Vec<(u64, Hash)> = vec![];
+		for h in heights {
+			if let Some(l) = close_enough(&history_locator, h) {
+				locator.push(l);
+			}
+		}
+		assert_eq!(locator, vec![(0, zh.clone())]);
+
+		// simple dummy example
+		let locator = vec![
+			(1000, zh.clone()),
+			(500, zh.clone()),
+			(250, zh.clone()),
+			(125, zh.clone()),
+		];
+		assert_eq!(close_enough(&locator, 2000), None);
+		assert_eq!(close_enough(&locator, 1050), Some((1000, zh)));
+		assert_eq!(close_enough(&locator, 900), Some((1000, zh)));
+		assert_eq!(close_enough(&locator, 270), Some((250, zh)));
+		assert_eq!(close_enough(&locator, 20), Some((125, zh)));
+		assert_eq!(close_enough(&locator, 125), Some((125, zh)));
+		assert_eq!(close_enough(&locator, 500), Some((500, zh)));
+
+		// more realistic test with 11 history
+		let heights: Vec<u64> = vec![
+			2554, 2552, 2548, 2540, 2524, 2492, 2428, 2300, 2044, 1532, 508, 0,
+		];
+		let history_locator: Vec<(u64, Hash)> = vec![
+			(2043, zh.clone()),
+			(2041, zh.clone()),
+			(2037, zh.clone()),
+			(2029, zh.clone()),
+			(2013, zh.clone()),
+			(1981, zh.clone()),
+			(1917, zh.clone()),
+			(1789, zh.clone()),
+			(1532, zh.clone()),
+			(1021, zh.clone()),
+			(0, zh.clone()),
+		];
+		let mut locator: Vec<(u64, Hash)> = vec![];
+		for h in heights {
+			if let Some(l) = close_enough(&history_locator, h) {
+				locator.push(l);
+			}
+		}
+		locator.dedup_by(|a, b| a.0 == b.0);
+		assert_eq!(
+			locator,
+			vec![(2043, zh.clone()), (1532, zh.clone()), (0, zh.clone()),]
+		);
+
+		// more realistic test with 12 history
+		let heights: Vec<u64> = vec![
+			4598, 4596, 4592, 4584, 4568, 4536, 4472, 4344, 4088, 3576, 2552, 504, 0,
+		];
+		let history_locator: Vec<(u64, Hash)> = vec![
+			(4087, zh.clone()),
+			(4085, zh.clone()),
+			(4081, zh.clone()),
+			(4073, zh.clone()),
+			(4057, zh.clone()),
+			(4025, zh.clone()),
+			(3961, zh.clone()),
+			(3833, zh.clone()),
+			(3576, zh.clone()),
+			(3065, zh.clone()),
+			(1532, zh.clone()),
+			(0, zh.clone()),
+		];
+		let mut locator: Vec<(u64, Hash)> = vec![];
+		for h in heights {
+			if let Some(l) = close_enough(&history_locator, h) {
+				locator.push(l);
+			}
+		}
+		locator.dedup_by(|a, b| a.0 == b.0);
+		assert_eq!(
+			locator,
+			vec![
+				(4087, zh.clone()),
+				(3576, zh.clone()),
+				(3065, zh.clone()),
+				(0, zh.clone()),
+			]
 		);
 	}
 }

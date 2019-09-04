@@ -16,20 +16,30 @@
 //! having to pass them all over the place, but aren't consensus values.
 //! should be used sparingly.
 
-use consensus::HeaderInfo;
-use consensus::{
-	graph_weight, BASE_EDGE_BITS, BLOCK_TIME_SEC, COINBASE_MATURITY, CUT_THROUGH_HORIZON,
-	DAY_HEIGHT, DIFFICULTY_ADJUST_WINDOW, INITIAL_DIFFICULTY, PROOFSIZE, SECOND_POW_EDGE_BITS,
+use crate::consensus::{
+	graph_weight, valid_header_version, HeaderInfo, BASE_EDGE_BITS, BLOCK_TIME_SEC,
+	COINBASE_MATURITY, CUT_THROUGH_HORIZON, DAY_HEIGHT, DEFAULT_MIN_EDGE_BITS,
+	DIFFICULTY_ADJUST_WINDOW, INITIAL_DIFFICULTY, MAX_BLOCK_WEIGHT, PROOFSIZE,
+	SECOND_POW_EDGE_BITS, STATE_SYNC_THRESHOLD,
 };
-use pow::{self, CuckatooContext, EdgeType, PoWContext};
+use crate::core::block::HeaderVersion;
+use crate::pow::{
+	self, new_cuckaroo_ctx, new_cuckarood_ctx, new_cuckatoo_ctx, EdgeType, PoWContext,
+};
 /// An enum collecting sets of parameters used throughout the
 /// code wherever mining is needed. This should allow for
 /// different sets of parameters for different purposes,
 /// e.g. CI, User testing, production values
-use util::RwLock;
-
+use crate::util::RwLock;
 /// Define these here, as they should be developer-set, not really tweakable
 /// by users
+
+/// The default "local" protocol version for this node.
+/// We negotiate compatible versions with each peer via Hand/Shake.
+/// Note: We also use a specific (possible different) protocol version
+/// for both the backend database and MMR data files.
+/// This one is p2p layer specific.
+pub const PROTOCOL_VERSION: u32 = 1;
 
 /// Automated testing edge_bits
 pub const AUTOMATED_TESTING_MIN_EDGE_BITS: u8 = 9;
@@ -50,7 +60,13 @@ pub const AUTOMATED_TESTING_COINBASE_MATURITY: u64 = 3;
 pub const USER_TESTING_COINBASE_MATURITY: u64 = 3;
 
 /// Testing cut through horizon in blocks
-pub const TESTING_CUT_THROUGH_HORIZON: u32 = 20;
+pub const AUTOMATED_TESTING_CUT_THROUGH_HORIZON: u32 = 20;
+
+/// Testing cut through horizon in blocks
+pub const USER_TESTING_CUT_THROUGH_HORIZON: u32 = 70;
+
+/// Testing state sync threshold in blocks
+pub const TESTING_STATE_SYNC_THRESHOLD: u32 = 20;
 
 /// Testing initial graph weight
 pub const TESTING_INITIAL_GRAPH_WEIGHT: u32 = 1;
@@ -58,12 +74,8 @@ pub const TESTING_INITIAL_GRAPH_WEIGHT: u32 = 1;
 /// Testing initial block difficulty
 pub const TESTING_INITIAL_DIFFICULTY: u64 = 1;
 
-/// Testnet 2 initial block difficulty, high to see how it goes
-pub const TESTNET2_INITIAL_DIFFICULTY: u64 = 1000;
-
-/// Testnet 3 initial block difficulty, moderately high, taking into account
-/// a 30x Cuckoo adjustment factor
-pub const TESTNET3_INITIAL_DIFFICULTY: u64 = 30000;
+/// Testing max_block_weight (artifically low, just enough to support a few txs).
+pub const TESTING_MAX_BLOCK_WEIGHT: usize = 150;
 
 /// If a peer's last updated difficulty is 2 hours ago and its difficulty's lower than ours,
 /// we're sure this peer is a stuck node, and we will kick out such kind of stuck peers.
@@ -75,16 +87,18 @@ const PEER_EXPIRATION_DAYS: i64 = 7 * 2;
 /// Constant that expresses defunct peer timeout in seconds to be used in checks.
 pub const PEER_EXPIRATION_REMOVE_TIME: i64 = PEER_EXPIRATION_DAYS * 24 * 3600;
 
-/// Testnet 4 initial block difficulty
-/// 1_000 times natural scale factor for cuckatoo29
-pub const TESTNET4_INITIAL_DIFFICULTY: u64 = 1_000 * (2 << (29 - 24)) * 29;
-
 /// Trigger compaction check on average every day for all nodes.
 /// Randomized per node - roll the dice on every block to decide.
 /// Will compact the txhashset to remove pruned data.
 /// Will also remove old blocks and associated data from the database.
 /// For a node configured as "archival_mode = true" only the txhashset will be compacted.
 pub const COMPACTION_CHECK: u64 = DAY_HEIGHT;
+
+/// Number of blocks to reuse a txhashset zip for (automated testing and user testing).
+pub const TESTING_TXHASHSET_ARCHIVE_INTERVAL: u64 = 10;
+
+/// Number of blocks to reuse a txhashset zip for.
+pub const TXHASHSET_ARCHIVE_INTERVAL: u64 = 12 * 60;
 
 /// Types of chain a server can run with, dictates the genesis block and
 /// and mining parameters used.
@@ -94,21 +108,27 @@ pub enum ChainTypes {
 	AutomatedTesting,
 	/// For User testing
 	UserTesting,
-	/// First test network
-	Testnet1,
-	/// Second test network
-	Testnet2,
-	/// Third test network
-	Testnet3,
-	/// Fourth test network
-	Testnet4,
+	/// Protocol testing network
+	Floonet,
 	/// Main production network
 	Mainnet,
 }
 
+impl ChainTypes {
+	/// Short name representing the chain type ("floo", "main", etc.)
+	pub fn shortname(&self) -> String {
+		match *self {
+			ChainTypes::AutomatedTesting => "auto".to_owned(),
+			ChainTypes::UserTesting => "user".to_owned(),
+			ChainTypes::Floonet => "floo".to_owned(),
+			ChainTypes::Mainnet => "main".to_owned(),
+		}
+	}
+}
+
 impl Default for ChainTypes {
 	fn default() -> ChainTypes {
-		ChainTypes::Testnet4
+		ChainTypes::Mainnet
 	}
 }
 
@@ -117,11 +137,13 @@ impl Default for ChainTypes {
 pub enum PoWContextTypes {
 	/// Classic Cuckoo
 	Cuckoo,
-	/// Bleeding edge Cuckatoo
+	/// ASIC-friendly Cuckatoo
 	Cuckatoo,
+	/// ASIC-resistant Cuckaroo
+	Cuckaroo,
 }
 
-lazy_static!{
+lazy_static! {
 	/// The mining parameter mode
 	pub static ref CHAIN_TYPE: RwLock<ChainTypes> =
 			RwLock::new(ChainTypes::Mainnet);
@@ -140,19 +162,33 @@ pub fn set_mining_mode(mode: ChainTypes) {
 /// Return either a cuckoo context or a cuckatoo context
 /// Single change point
 pub fn create_pow_context<T>(
+	height: u64,
 	edge_bits: u8,
 	proof_size: usize,
 	max_sols: u32,
-) -> Result<Box<impl PoWContext<T>>, pow::Error>
+) -> Result<Box<dyn PoWContext<T>>, pow::Error>
 where
-	T: EdgeType,
+	T: EdgeType + 'static,
 {
-	CuckatooContext::<T>::new(edge_bits, proof_size, max_sols)
-}
+	let chain_type = CHAIN_TYPE.read().clone();
+	match chain_type {
+		// Mainnet has Cuckaroo(d)29 for AR and Cuckatoo31+ for AF
+		ChainTypes::Mainnet if edge_bits > 29 => new_cuckatoo_ctx(edge_bits, proof_size, max_sols),
+		ChainTypes::Mainnet if valid_header_version(height, HeaderVersion::new(2)) => {
+			new_cuckarood_ctx(edge_bits, proof_size)
+		}
+		ChainTypes::Mainnet => new_cuckaroo_ctx(edge_bits, proof_size),
 
-/// Return the type of the pos
-pub fn pow_type() -> PoWContextTypes {
-	PoWContextTypes::Cuckatoo
+		// Same for Floonet
+		ChainTypes::Floonet if edge_bits > 29 => new_cuckatoo_ctx(edge_bits, proof_size, max_sols),
+		ChainTypes::Floonet if valid_header_version(height, HeaderVersion::new(2)) => {
+			new_cuckarood_ctx(edge_bits, proof_size)
+		}
+		ChainTypes::Floonet => new_cuckaroo_ctx(edge_bits, proof_size),
+
+		// Everything else is Cuckatoo only
+		_ => new_cuckatoo_ctx(edge_bits, proof_size, max_sols),
+	}
 }
 
 /// The minimum acceptable edge_bits
@@ -161,8 +197,7 @@ pub fn min_edge_bits() -> u8 {
 	match *param_ref {
 		ChainTypes::AutomatedTesting => AUTOMATED_TESTING_MIN_EDGE_BITS,
 		ChainTypes::UserTesting => USER_TESTING_MIN_EDGE_BITS,
-		ChainTypes::Testnet1 => USER_TESTING_MIN_EDGE_BITS,
-		_ => SECOND_POW_EDGE_BITS,
+		_ => DEFAULT_MIN_EDGE_BITS,
 	}
 }
 
@@ -174,7 +209,6 @@ pub fn base_edge_bits() -> u8 {
 	match *param_ref {
 		ChainTypes::AutomatedTesting => AUTOMATED_TESTING_MIN_EDGE_BITS,
 		ChainTypes::UserTesting => USER_TESTING_MIN_EDGE_BITS,
-		ChainTypes::Testnet1 => USER_TESTING_MIN_EDGE_BITS,
 		_ => BASE_EDGE_BITS,
 	}
 }
@@ -205,10 +239,7 @@ pub fn initial_block_difficulty() -> u64 {
 	match *param_ref {
 		ChainTypes::AutomatedTesting => TESTING_INITIAL_DIFFICULTY,
 		ChainTypes::UserTesting => TESTING_INITIAL_DIFFICULTY,
-		ChainTypes::Testnet1 => TESTING_INITIAL_DIFFICULTY,
-		ChainTypes::Testnet2 => TESTNET2_INITIAL_DIFFICULTY,
-		ChainTypes::Testnet3 => TESTNET3_INITIAL_DIFFICULTY,
-		ChainTypes::Testnet4 => TESTNET4_INITIAL_DIFFICULTY,
+		ChainTypes::Floonet => INITIAL_DIFFICULTY,
 		ChainTypes::Mainnet => INITIAL_DIFFICULTY,
 	}
 }
@@ -218,11 +249,19 @@ pub fn initial_graph_weight() -> u32 {
 	match *param_ref {
 		ChainTypes::AutomatedTesting => TESTING_INITIAL_GRAPH_WEIGHT,
 		ChainTypes::UserTesting => TESTING_INITIAL_GRAPH_WEIGHT,
-		ChainTypes::Testnet1 => TESTING_INITIAL_GRAPH_WEIGHT,
-		ChainTypes::Testnet2 => TESTING_INITIAL_GRAPH_WEIGHT,
-		ChainTypes::Testnet3 => TESTING_INITIAL_GRAPH_WEIGHT,
-		ChainTypes::Testnet4 => graph_weight(SECOND_POW_EDGE_BITS) as u32,
-		ChainTypes::Mainnet => graph_weight(SECOND_POW_EDGE_BITS) as u32,
+		ChainTypes::Floonet => graph_weight(0, SECOND_POW_EDGE_BITS) as u32,
+		ChainTypes::Mainnet => graph_weight(0, SECOND_POW_EDGE_BITS) as u32,
+	}
+}
+
+/// Maximum allowed block weight.
+pub fn max_block_weight() -> usize {
+	let param_ref = CHAIN_TYPE.read();
+	match *param_ref {
+		ChainTypes::AutomatedTesting => TESTING_MAX_BLOCK_WEIGHT,
+		ChainTypes::UserTesting => TESTING_MAX_BLOCK_WEIGHT,
+		ChainTypes::Floonet => MAX_BLOCK_WEIGHT,
+		ChainTypes::Mainnet => MAX_BLOCK_WEIGHT,
 	}
 }
 
@@ -230,48 +269,46 @@ pub fn initial_graph_weight() -> u32 {
 pub fn cut_through_horizon() -> u32 {
 	let param_ref = CHAIN_TYPE.read();
 	match *param_ref {
-		ChainTypes::AutomatedTesting => TESTING_CUT_THROUGH_HORIZON,
-		ChainTypes::UserTesting => TESTING_CUT_THROUGH_HORIZON,
+		ChainTypes::AutomatedTesting => AUTOMATED_TESTING_CUT_THROUGH_HORIZON,
+		ChainTypes::UserTesting => USER_TESTING_CUT_THROUGH_HORIZON,
 		_ => CUT_THROUGH_HORIZON,
 	}
 }
 
-/// Are we in automated testing mode?
-pub fn is_automated_testing_mode() -> bool {
-	let param_ref = CHAIN_TYPE.read();
-	ChainTypes::AutomatedTesting == *param_ref
-}
-
-/// Are we in user testing mode?
-pub fn is_user_testing_mode() -> bool {
-	let param_ref = CHAIN_TYPE.read();
-	ChainTypes::UserTesting == *param_ref
-}
-
-/// Are we in production mode (a live public network)?
-pub fn is_production_mode() -> bool {
-	let param_ref = CHAIN_TYPE.read();
-	ChainTypes::Testnet1 == *param_ref
-		|| ChainTypes::Testnet2 == *param_ref
-		|| ChainTypes::Testnet3 == *param_ref
-		|| ChainTypes::Testnet4 == *param_ref
-		|| ChainTypes::Mainnet == *param_ref
-}
-
-/// Helper function to get a nonce known to create a valid POW on
-/// the genesis block, to prevent it taking ages. Should be fine for now
-/// as the genesis block POW solution turns out to be the same for every new
-/// block chain at the moment
-pub fn get_genesis_nonce() -> u64 {
+/// Threshold at which we can request a txhashset (and full blocks from)
+pub fn state_sync_threshold() -> u32 {
 	let param_ref = CHAIN_TYPE.read();
 	match *param_ref {
-		// won't make a difference
-		ChainTypes::AutomatedTesting => 0,
-		// Magic nonce for current genesis block at cuckatoo15
-		ChainTypes::UserTesting => 27944,
-		// Magic nonce for genesis block for testnet2 (cuckatoo29)
-		_ => panic!("Pre-set"),
+		ChainTypes::AutomatedTesting => TESTING_STATE_SYNC_THRESHOLD,
+		ChainTypes::UserTesting => TESTING_STATE_SYNC_THRESHOLD,
+		_ => STATE_SYNC_THRESHOLD,
 	}
+}
+
+/// Number of blocks to reuse a txhashset zip for.
+pub fn txhashset_archive_interval() -> u64 {
+	let param_ref = CHAIN_TYPE.read();
+	match *param_ref {
+		ChainTypes::AutomatedTesting => TESTING_TXHASHSET_ARCHIVE_INTERVAL,
+		ChainTypes::UserTesting => TESTING_TXHASHSET_ARCHIVE_INTERVAL,
+		_ => TXHASHSET_ARCHIVE_INTERVAL,
+	}
+}
+
+/// Are we in production mode?
+/// Production defined as a live public network, testnet[n] or mainnet.
+pub fn is_production_mode() -> bool {
+	let param_ref = CHAIN_TYPE.read();
+	ChainTypes::Floonet == *param_ref || ChainTypes::Mainnet == *param_ref
+}
+
+/// Are we in floonet?
+/// Note: We do not have a corresponding is_mainnet() as we want any tests to be as close
+/// as possible to "mainnet" configuration as possible.
+/// We want to avoid missing any mainnet only code paths.
+pub fn is_floonet() -> bool {
+	let param_ref = CHAIN_TYPE.read();
+	ChainTypes::Floonet == *param_ref
 }
 
 /// Converts an iterator of block difficulty data to more a more manageable
@@ -286,46 +323,25 @@ where
 	let needed_block_count = DIFFICULTY_ADJUST_WINDOW as usize + 1;
 	let mut last_n: Vec<HeaderInfo> = cursor.into_iter().take(needed_block_count).collect();
 
-	// Sort blocks from earliest to latest (to keep conceptually easier)
-	last_n.reverse();
 	// Only needed just after blockchain launch... basically ensures there's
 	// always enough data by simulating perfectly timed pre-genesis
 	// blocks at the genesis difficulty as needed.
-	let block_count_difference = needed_block_count - last_n.len();
-	if block_count_difference > 0 {
-		// Collect any real data we have
-		let mut live_intervals: Vec<HeaderInfo> = last_n
-			.iter()
-			.map(|b| HeaderInfo::from_ts_diff(b.timestamp, b.difficulty))
-			.collect();
-		for i in (1..live_intervals.len()).rev() {
-			// prevents issues with very fast automated test chains
-			if live_intervals[i - 1].timestamp > live_intervals[i].timestamp {
-				live_intervals[i].timestamp = 0;
-			} else {
-				live_intervals[i].timestamp -= live_intervals[i - 1].timestamp;
-			}
-		}
-		// Remove genesis "interval"
-		if live_intervals.len() > 1 {
-			live_intervals.remove(0);
+	let n = last_n.len();
+	if needed_block_count > n {
+		let last_ts_delta = if n > 1 {
+			last_n[0].timestamp - last_n[1].timestamp
 		} else {
-			//if it's just genesis, adjust the interval
-			live_intervals[0].timestamp = BLOCK_TIME_SEC;
-		}
-		let mut interval_index = live_intervals.len() - 1;
-		let mut last_ts = last_n.first().unwrap().timestamp;
-		let last_diff = live_intervals[live_intervals.len() - 1].difficulty;
-		// fill in simulated blocks with values from the previous real block
+			BLOCK_TIME_SEC
+		};
+		let last_diff = last_n[0].difficulty;
 
-		for _ in 0..block_count_difference {
-			last_ts = last_ts.saturating_sub(live_intervals[live_intervals.len() - 1].timestamp);
-			last_n.insert(0, HeaderInfo::from_ts_diff(last_ts, last_diff));
-			interval_index = match interval_index {
-				0 => live_intervals.len() - 1,
-				_ => interval_index - 1,
-			};
+		// fill in simulated blocks with values from the previous real block
+		let mut last_ts = last_n.last().unwrap().timestamp;
+		for _ in n..needed_block_count {
+			last_ts = last_ts.saturating_sub(last_ts_delta);
+			last_n.push(HeaderInfo::from_ts_diff(last_ts, last_diff.clone()));
 		}
 	}
+	last_n.reverse();
 	last_n
 }

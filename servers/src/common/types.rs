@@ -15,23 +15,27 @@
 //! Server types
 use std::convert::From;
 use std::sync::Arc;
-use util::RwLock;
 
-use api;
-use chain;
-use chrono::prelude::{DateTime, Utc};
-use core::global::ChainTypes;
-use core::{core, pow};
-use p2p;
-use pool;
-use store;
-use wallet;
+use chrono::prelude::Utc;
+use rand::prelude::*;
+
+use crate::api;
+use crate::chain;
+use crate::core::global::ChainTypes;
+use crate::core::{core, libtx, pow};
+use crate::keychain;
+use crate::p2p;
+use crate::pool;
+use crate::pool::types::DandelionConfig;
+use crate::store;
 
 /// Error type wrapping underlying module errors.
 #[derive(Debug)]
 pub enum Error {
 	/// Error originating from the core implementation.
 	Core(core::block::Error),
+	/// Error originating from the libtx implementation.
+	LibTx(libtx::Error),
 	/// Error originating from the db storage.
 	Store(store::Error),
 	/// Error originating from the blockchain implementation.
@@ -40,12 +44,22 @@ pub enum Error {
 	P2P(p2p::Error),
 	/// Error originating from HTTP API calls.
 	API(api::Error),
-	/// Error originating from wallet API.
-	Wallet(wallet::Error),
 	/// Error originating from the cuckoo miner
 	Cuckoo(pow::Error),
 	/// Error originating from the transaction pool.
 	Pool(pool::PoolError),
+	/// Error originating from the keychain.
+	Keychain(keychain::Error),
+	/// Invalid Arguments.
+	ArgumentError(String),
+	/// Wallet communication error
+	WalletComm(String),
+	/// Error originating from some I/O operation (likely a file on disk).
+	IOError(std::io::Error),
+	/// Configuration error
+	Configuration(String),
+	/// General error
+	General(String),
 }
 
 impl From<core::block::Error> for Error {
@@ -58,7 +72,11 @@ impl From<chain::Error> for Error {
 		Error::Chain(e)
 	}
 }
-
+impl From<std::io::Error> for Error {
+	fn from(e: std::io::Error) -> Error {
+		Error::IOError(e)
+	}
+}
 impl From<p2p::Error> for Error {
 	fn from(e: p2p::Error) -> Error {
 		Error::P2P(e)
@@ -83,15 +101,21 @@ impl From<api::Error> for Error {
 	}
 }
 
-impl From<wallet::Error> for Error {
-	fn from(e: wallet::Error) -> Error {
-		Error::Wallet(e)
-	}
-}
-
 impl From<pool::PoolError> for Error {
 	fn from(e: pool::PoolError) -> Error {
 		Error::Pool(e)
+	}
+}
+
+impl From<keychain::Error> for Error {
+	fn from(e: keychain::Error) -> Error {
+		Error::Keychain(e)
+	}
+}
+
+impl From<libtx::Error> for Error {
+	fn from(e: libtx::Error) -> Error {
+		Error::LibTx(e)
 	}
 }
 
@@ -124,6 +148,11 @@ pub struct ServerConfig {
 	/// Location of secret for basic auth on Rest API HTTP server.
 	pub api_secret_path: Option<String>,
 
+	/// TLS certificate file
+	pub tls_certificate_file: Option<String>,
+	/// TLS certificate private key file
+	pub tls_certificate_key: Option<String>,
+
 	/// Setup the server for tests, testnet or mainnet
 	#[serde(default)]
 	pub chain_type: ChainTypes,
@@ -142,9 +171,6 @@ pub struct ServerConfig {
 	/// Whether to run the TUI
 	/// if enabled, this will disable logging to stdout
 	pub run_tui: Option<bool>,
-
-	/// Whether to use the DB wallet backend implementation
-	pub use_db_wallet: Option<bool>,
 
 	/// Whether to run the test miner (internal, cuckoo 16)
 	pub run_test_miner: Option<bool>,
@@ -166,14 +192,20 @@ pub struct ServerConfig {
 	/// Configuration for the mining daemon
 	#[serde(default)]
 	pub stratum_mining_config: Option<StratumServerConfig>,
+
+	/// Configuration for the webhooks that trigger on certain events
+	#[serde(default)]
+	pub webhook_config: WebHooksConfig,
 }
 
 impl Default for ServerConfig {
 	fn default() -> ServerConfig {
 		ServerConfig {
 			db_root: "grin_chain".to_string(),
-			api_http_addr: "127.0.0.1:13413".to_string(),
+			api_http_addr: "127.0.0.1:3413".to_string(),
 			api_secret_path: Some(".api_secret".to_string()),
+			tls_certificate_file: None,
+			tls_certificate_key: None,
 			p2p_config: p2p::P2PConfig::default(),
 			dandelion_config: pool::DandelionConfig::default(),
 			stratum_mining_config: Some(StratumServerConfig::default()),
@@ -183,9 +215,9 @@ impl Default for ServerConfig {
 			pool_config: pool::PoolConfig::default(),
 			skip_sync_wait: Some(false),
 			run_tui: Some(true),
-			use_db_wallet: None,
 			run_test_miner: Some(false),
 			test_miner_wallet_url: None,
+			webhook_config: WebHooksConfig::default(),
 		}
 	}
 }
@@ -218,174 +250,145 @@ pub struct StratumServerConfig {
 impl Default for StratumServerConfig {
 	fn default() -> StratumServerConfig {
 		StratumServerConfig {
-			wallet_listener_url: "http://127.0.0.1:13415".to_string(),
+			wallet_listener_url: "http://127.0.0.1:3415".to_string(),
 			burn_reward: false,
 			attempt_time_per_block: 15,
 			minimum_share_difficulty: 1,
 			enable_stratum_server: Some(false),
-			stratum_server_addr: Some("127.0.0.1:13416".to_string()),
+			stratum_server_addr: Some("127.0.0.1:3416".to_string()),
 		}
 	}
 }
 
-/// Various status sync can be in, whether it's fast sync or archival.
-#[derive(Debug, Clone, Copy, Eq, PartialEq)]
-#[allow(missing_docs)]
-pub enum SyncStatus {
-	/// Initial State (we do not yet know if we are/should be syncing)
-	Initial,
-	/// Not syncing
-	NoSync,
-	/// Not enough peers to do anything yet, boolean indicates whether
-	/// we should wait at all or ignore and start ASAP
-	AwaitingPeers(bool),
-	/// Downloading block headers
-	HeaderSync {
-		current_height: u64,
-		highest_height: u64,
-	},
-	/// Downloading the various txhashsets
-	TxHashsetDownload {
-		start_time: DateTime<Utc>,
-		downloaded_size: u64,
-		total_size: u64,
-	},
-	/// Setting up before validation
-	TxHashsetSetup,
-	/// Validating the full state
-	TxHashsetValidation {
-		kernels: u64,
-		kernel_total: u64,
-		rproofs: u64,
-		rproof_total: u64,
-	},
-	/// Finalizing the new state
-	TxHashsetSave,
-	/// Downloading blocks
-	BodySync {
-		current_height: u64,
-		highest_height: u64,
-	},
+/// Web hooks configuration
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct WebHooksConfig {
+	/// url to POST transaction data when a new transaction arrives from a peer
+	pub tx_received_url: Option<String>,
+	/// url to POST header data when a new header arrives from a peer
+	pub header_received_url: Option<String>,
+	/// url to POST block data when a new block arrives from a peer
+	pub block_received_url: Option<String>,
+	/// url to POST block data when a new block is accepted by our node (might be a reorg or a fork)
+	pub block_accepted_url: Option<String>,
+	/// number of worker threads in the tokio runtime
+	#[serde(default = "default_nthreads")]
+	pub nthreads: u16,
+	/// timeout in seconds for the http request
+	#[serde(default = "default_timeout")]
+	pub timeout: u16,
 }
 
-/// Current sync state. Encapsulates the current SyncStatus.
-pub struct SyncState {
-	current: RwLock<SyncStatus>,
-	sync_error: Arc<RwLock<Option<Error>>>,
+fn default_timeout() -> u16 {
+	10
 }
 
-impl SyncState {
-	/// Return a new SyncState initialize to NoSync
-	pub fn new() -> SyncState {
-		SyncState {
-			current: RwLock::new(SyncStatus::Initial),
-			sync_error: Arc::new(RwLock::new(None)),
+fn default_nthreads() -> u16 {
+	4
+}
+
+impl Default for WebHooksConfig {
+	fn default() -> WebHooksConfig {
+		WebHooksConfig {
+			tx_received_url: None,
+			header_received_url: None,
+			block_received_url: None,
+			block_accepted_url: None,
+			nthreads: default_nthreads(),
+			timeout: default_timeout(),
+		}
+	}
+}
+
+/// A node is either "stem" of "fluff" for the duration of a single epoch.
+/// A node also maintains an outbound relay peer for the epoch.
+#[derive(Debug)]
+pub struct DandelionEpoch {
+	config: DandelionConfig,
+	// When did this epoch start?
+	start_time: Option<i64>,
+	// Are we in "stem" mode or "fluff" mode for this epoch?
+	is_stem: bool,
+	// Our current Dandelion relay peer (effective for this epoch).
+	relay_peer: Option<Arc<p2p::Peer>>,
+}
+
+impl DandelionEpoch {
+	/// Create a new Dandelion epoch, defaulting to "stem" and no outbound relay peer.
+	pub fn new(config: DandelionConfig) -> DandelionEpoch {
+		DandelionEpoch {
+			config,
+			start_time: None,
+			is_stem: true,
+			relay_peer: None,
 		}
 	}
 
-	/// Whether the current state matches any active syncing operation.
-	/// Note: This includes our "initial" state.
-	pub fn is_syncing(&self) -> bool {
-		*self.current.read() != SyncStatus::NoSync
-	}
-
-	/// Current syncing status
-	pub fn status(&self) -> SyncStatus {
-		*self.current.read()
-	}
-
-	/// Update the syncing status
-	pub fn update(&self, new_status: SyncStatus) {
-		if self.status() == new_status {
-			return;
+	/// Is the current Dandelion epoch expired?
+	/// It is expired if start_time is older than the configured epoch_secs.
+	pub fn is_expired(&self) -> bool {
+		match self.start_time {
+			None => true,
+			Some(start_time) => {
+				let epoch_secs = self.config.epoch_secs;
+				Utc::now().timestamp().saturating_sub(start_time) > epoch_secs as i64
+			}
 		}
-
-		let mut status = self.current.write();
-
-		debug!("sync_state: sync_status: {:?} -> {:?}", *status, new_status,);
-
-		*status = new_status;
 	}
 
-	/// Update txhashset downloading progress
-	pub fn update_txhashset_download(&self, new_status: SyncStatus) -> bool {
-		if let SyncStatus::TxHashsetDownload { .. } = new_status {
-			let mut status = self.current.write();
-			*status = new_status;
-			true
+	/// Transition to next Dandelion epoch.
+	/// Select stem/fluff based on configured stem_probability.
+	/// Choose a new outbound stem relay peer.
+	pub fn next_epoch(&mut self, peers: &Arc<p2p::Peers>) {
+		self.start_time = Some(Utc::now().timestamp());
+		self.relay_peer = peers.outgoing_connected_peers().first().cloned();
+
+		// If stem_probability == 90 then we stem 90% of the time.
+		let mut rng = rand::thread_rng();
+		let stem_probability = self.config.stem_probability;
+		self.is_stem = rng.gen_range(0, 100) < stem_probability;
+
+		let addr = self.relay_peer.clone().map(|p| p.info.addr);
+		info!(
+			"DandelionEpoch: next_epoch: is_stem: {} ({}%), relay: {:?}",
+			self.is_stem, stem_probability, addr
+		);
+	}
+
+	/// Are we stemming (or fluffing) transactions in this epoch?
+	pub fn is_stem(&self) -> bool {
+		self.is_stem
+	}
+
+	/// Always stem our (pushed via api) txs regardless of stem/fluff epoch?
+	pub fn always_stem_our_txs(&self) -> bool {
+		self.config.always_stem_our_txs
+	}
+
+	/// What is our current relay peer?
+	/// If it is not connected then choose a new one.
+	pub fn relay_peer(&mut self, peers: &Arc<p2p::Peers>) -> Option<Arc<p2p::Peer>> {
+		let mut update_relay = false;
+		if let Some(peer) = &self.relay_peer {
+			if !peer.is_connected() {
+				info!(
+					"DandelionEpoch: relay_peer: {:?} not connected, choosing a new one.",
+					peer.info.addr
+				);
+				update_relay = true;
+			}
 		} else {
-			false
+			update_relay = true;
 		}
-	}
 
-	/// Communicate sync error
-	pub fn set_sync_error(&self, error: Error) {
-		*self.sync_error.write() = Some(error);
-	}
-
-	/// Get sync error
-	pub fn sync_error(&self) -> Arc<RwLock<Option<Error>>> {
-		Arc::clone(&self.sync_error)
-	}
-
-	/// Clear sync error
-	pub fn clear_sync_error(&self) {
-		*self.sync_error.write() = None;
-	}
-}
-
-impl chain::TxHashsetWriteStatus for SyncState {
-	fn on_setup(&self) {
-		self.update(SyncStatus::TxHashsetSetup);
-	}
-
-	fn on_validation(&self, vkernels: u64, vkernel_total: u64, vrproofs: u64, vrproof_total: u64) {
-		let mut status = self.current.write();
-		match *status {
-			SyncStatus::TxHashsetValidation {
-				kernels,
-				kernel_total,
-				rproofs,
-				rproof_total,
-			} => {
-				let ks = if vkernels > 0 { vkernels } else { kernels };
-				let kt = if vkernel_total > 0 {
-					vkernel_total
-				} else {
-					kernel_total
-				};
-				let rps = if vrproofs > 0 { vrproofs } else { rproofs };
-				let rpt = if vrproof_total > 0 {
-					vrproof_total
-				} else {
-					rproof_total
-				};
-				*status = SyncStatus::TxHashsetValidation {
-					kernels: ks,
-					kernel_total: kt,
-					rproofs: rps,
-					rproof_total: rpt,
-				};
-			}
-			_ => {
-				*status = SyncStatus::TxHashsetValidation {
-					kernels: 0,
-					kernel_total: 0,
-					rproofs: 0,
-					rproof_total: 0,
-				}
-			}
+		if update_relay {
+			self.relay_peer = peers.outgoing_connected_peers().first().cloned();
+			info!(
+				"DandelionEpoch: relay_peer: new peer chosen: {:?}",
+				self.relay_peer.clone().map(|p| p.info.addr)
+			);
 		}
-	}
 
-	fn on_save(&self) {
-		self.update(SyncStatus::TxHashsetSave);
-	}
-
-	fn on_done(&self) {
-		self.update(SyncStatus::BodySync {
-			current_height: 0,
-			highest_height: 0,
-		});
+		self.relay_peer.clone()
 	}
 }

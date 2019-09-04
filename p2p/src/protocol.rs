@@ -12,47 +12,60 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::cmp;
-use std::env;
-use std::fs::File;
-use std::io::{self, BufWriter};
-use std::net::{SocketAddr, TcpStream};
-use std::sync::Arc;
-use std::time;
+use crate::conn::{Message, MessageHandler, Response, Tracker};
+use crate::core::core::{self, hash::Hash, hash::Hashed, CompactBlock};
 
-use chrono::prelude::Utc;
-use conn::{Message, MessageHandler, Response};
-use core::core::{self, hash::Hash, CompactBlock};
-use core::{global, ser};
-
-use msg::{
-	read_exact, BanReason, GetPeerAddrs, Headers, Locator, PeerAddrs, Ping, Pong, SockAddr,
+use crate::msg::{
+	BanReason, GetPeerAddrs, Headers, KernelDataResponse, Locator, PeerAddrs, Ping, Pong,
 	TxHashSetArchive, TxHashSetRequest, Type,
 };
-use types::{Error, NetAdapter};
+use crate::types::{Error, NetAdapter, PeerInfo};
+use chrono::prelude::Utc;
+use rand::{thread_rng, Rng};
+use std::cmp;
+use std::fs::{self, File, OpenOptions};
+use std::io::{BufWriter, Seek, SeekFrom, Write};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
+use std::time::Instant;
+use tempfile::tempfile;
 
 pub struct Protocol {
-	adapter: Arc<NetAdapter>,
-	addr: SocketAddr,
+	adapter: Arc<dyn NetAdapter>,
+	peer_info: PeerInfo,
+	state_sync_requested: Arc<AtomicBool>,
 }
 
 impl Protocol {
-	pub fn new(adapter: Arc<NetAdapter>, addr: SocketAddr) -> Protocol {
-		Protocol { adapter, addr }
+	pub fn new(
+		adapter: Arc<dyn NetAdapter>,
+		peer_info: PeerInfo,
+		state_sync_requested: Arc<AtomicBool>,
+	) -> Protocol {
+		Protocol {
+			adapter,
+			peer_info,
+			state_sync_requested,
+		}
 	}
 }
 
 impl MessageHandler for Protocol {
-	fn consume<'a>(&self, mut msg: Message<'a>) -> Result<Option<Response<'a>>, Error> {
+	fn consume<'a>(
+		&self,
+		mut msg: Message<'a>,
+		writer: &'a mut dyn Write,
+		tracker: Arc<Tracker>,
+	) -> Result<Option<Response<'a>>, Error> {
 		let adapter = &self.adapter;
 
 		// If we received a msg from a banned peer then log and drop it.
 		// If we are getting a lot of these then maybe we are not cleaning
 		// banned peers up correctly?
-		if adapter.is_banned(self.addr.clone()) {
+		if adapter.is_banned(self.peer_info.addr) {
 			debug!(
 				"handler: consume: peer {:?} banned, received: {:?}, dropping.",
-				self.addr, msg.header.msg_type,
+				self.peer_info.addr, msg.header.msg_type,
 			);
 			return Ok(None);
 		}
@@ -60,20 +73,22 @@ impl MessageHandler for Protocol {
 		match msg.header.msg_type {
 			Type::Ping => {
 				let ping: Ping = msg.body()?;
-				adapter.peer_difficulty(self.addr, ping.total_difficulty, ping.height);
+				adapter.peer_difficulty(self.peer_info.addr, ping.total_difficulty, ping.height);
 
-				Ok(Some(msg.respond(
+				Ok(Some(Response::new(
 					Type::Pong,
+					self.peer_info.version,
 					Pong {
-						total_difficulty: adapter.total_difficulty(),
-						height: adapter.total_height(),
+						total_difficulty: adapter.total_difficulty()?,
+						height: adapter.total_height()?,
 					},
-				)))
+					writer,
+				)?))
 			}
 
 			Type::Pong => {
 				let pong: Pong = msg.body()?;
-				adapter.peer_difficulty(self.addr, pong.total_difficulty, pong.height);
+				adapter.peer_difficulty(self.peer_info.addr, pong.total_difficulty, pong.height);
 				Ok(None)
 			}
 
@@ -83,13 +98,42 @@ impl MessageHandler for Protocol {
 				Ok(None)
 			}
 
+			Type::TransactionKernel => {
+				let h: Hash = msg.body()?;
+				debug!(
+					"handle_payload: received tx kernel: {}, msg_len: {}",
+					h, msg.header.msg_len
+				);
+				adapter.tx_kernel_received(h, &self.peer_info)?;
+				Ok(None)
+			}
+
+			Type::GetTransaction => {
+				let h: Hash = msg.body()?;
+				debug!(
+					"handle_payload: GetTransaction: {}, msg_len: {}",
+					h, msg.header.msg_len,
+				);
+				let tx = adapter.get_transaction(h);
+				if let Some(tx) = tx {
+					Ok(Some(Response::new(
+						Type::Transaction,
+						self.peer_info.version,
+						tx,
+						writer,
+					)?))
+				} else {
+					Ok(None)
+				}
+			}
+
 			Type::Transaction => {
 				debug!(
 					"handle_payload: received tx: msg_len: {}",
 					msg.header.msg_len
 				);
 				let tx: core::Transaction = msg.body()?;
-				adapter.transaction_received(tx, false);
+				adapter.transaction_received(tx, false)?;
 				Ok(None)
 			}
 
@@ -99,21 +143,26 @@ impl MessageHandler for Protocol {
 					msg.header.msg_len
 				);
 				let tx: core::Transaction = msg.body()?;
-				adapter.transaction_received(tx, true);
+				adapter.transaction_received(tx, true)?;
 				Ok(None)
 			}
 
 			Type::GetBlock => {
 				let h: Hash = msg.body()?;
 				trace!(
-					"handle_payload: Getblock: {}, msg_len: {}",
+					"handle_payload: GetBlock: {}, msg_len: {}",
 					h,
 					msg.header.msg_len,
 				);
 
 				let bo = adapter.get_block(h);
 				if let Some(b) = bo {
-					return Ok(Some(msg.respond(Type::Block, b)));
+					return Ok(Some(Response::new(
+						Type::Block,
+						self.peer_info.version,
+						b,
+						writer,
+					)?));
 				}
 				Ok(None)
 			}
@@ -125,7 +174,9 @@ impl MessageHandler for Protocol {
 				);
 				let b: core::Block = msg.body()?;
 
-				adapter.block_received(b, self.addr);
+				// we can't know at this level whether we requested the block or not,
+				// the boolean should be properly set in higher level adapter
+				adapter.block_received(b, &self.peer_info, false)?;
 				Ok(None)
 			}
 
@@ -133,7 +184,12 @@ impl MessageHandler for Protocol {
 				let h: Hash = msg.body()?;
 				if let Some(b) = adapter.get_block(h) {
 					let cb: CompactBlock = b.into();
-					Ok(Some(msg.respond(Type::CompactBlock, cb)))
+					Ok(Some(Response::new(
+						Type::CompactBlock,
+						self.peer_info.version,
+						cb,
+						writer,
+					)?))
 				} else {
 					Ok(None)
 				}
@@ -146,68 +202,125 @@ impl MessageHandler for Protocol {
 				);
 				let b: core::CompactBlock = msg.body()?;
 
-				adapter.compact_block_received(b, self.addr);
+				adapter.compact_block_received(b, &self.peer_info)?;
 				Ok(None)
 			}
 
 			Type::GetHeaders => {
 				// load headers from the locator
 				let loc: Locator = msg.body()?;
-				let headers = adapter.locate_headers(loc.hashes);
+				let headers = adapter.locate_headers(&loc.hashes)?;
 
 				// serialize and send all the headers over
-				Ok(Some(
-					msg.respond(Type::Headers, Headers { headers: headers }),
-				))
+				Ok(Some(Response::new(
+					Type::Headers,
+					self.peer_info.version,
+					Headers { headers },
+					writer,
+				)?))
 			}
 
 			// "header first" block propagation - if we have not yet seen this block
 			// we can go request it from some of our peers
 			Type::Header => {
 				let header: core::BlockHeader = msg.body()?;
-
-				adapter.header_received(header, self.addr);
-
-				// we do not return a hash here as we never request a single header
-				// a header will always arrive unsolicited
+				adapter.header_received(header, &self.peer_info)?;
 				Ok(None)
 			}
 
 			Type::Headers => {
-				let conn = &mut msg.get_conn();
+				let mut total_bytes_read = 0;
 
-				let header_size: u64 = headers_header_size(conn, msg.header.msg_len)?;
-				let mut total_read: u64 = 2;
-				let mut reserved: Vec<u8> = vec![];
+				// Read the count (u16) so we now how many headers to read.
+				let (count, bytes_read): (u16, _) = msg.streaming_read()?;
+				total_bytes_read += bytes_read;
 
-				while total_read < msg.header.msg_len || reserved.len() > 0 {
-					let headers: Headers = headers_streaming_body(
-						conn,
-						msg.header.msg_len,
-						32,
-						&mut total_read,
-						&mut reserved,
-						header_size,
-					)?;
-					adapter.headers_received(headers.headers, self.addr);
+				// Read chunks of headers off the stream and pass them off to the adapter.
+				let chunk_size = 32;
+				for chunk in (0..count).collect::<Vec<_>>().chunks(chunk_size) {
+					let mut headers = vec![];
+					for _ in chunk {
+						let (header, bytes_read) = msg.streaming_read()?;
+						headers.push(header);
+						total_bytes_read += bytes_read;
+					}
+					adapter.headers_received(&headers, &self.peer_info)?;
 				}
+
+				// Now check we read the correct total number of bytes off the stream.
+				if total_bytes_read != msg.header.msg_len {
+					return Err(Error::MsgLen);
+				}
+
 				Ok(None)
 			}
 
 			Type::GetPeerAddrs => {
 				let get_peers: GetPeerAddrs = msg.body()?;
-				let peer_addrs = adapter.find_peer_addrs(get_peers.capabilities);
-				Ok(Some(msg.respond(
+				let peers = adapter.find_peer_addrs(get_peers.capabilities);
+				Ok(Some(Response::new(
 					Type::PeerAddrs,
-					PeerAddrs {
-						peers: peer_addrs.iter().map(|sa| SockAddr(*sa)).collect(),
-					},
-				)))
+					self.peer_info.version,
+					PeerAddrs { peers },
+					writer,
+				)?))
 			}
 
 			Type::PeerAddrs => {
 				let peer_addrs: PeerAddrs = msg.body()?;
-				adapter.peer_addrs_received(peer_addrs.peers.iter().map(|pa| pa.0).collect());
+				adapter.peer_addrs_received(peer_addrs.peers);
+				Ok(None)
+			}
+
+			Type::KernelDataRequest => {
+				debug!("handle_payload: kernel_data_request");
+				let kernel_data = self.adapter.kernel_data_read()?;
+				let bytes = kernel_data.metadata()?.len();
+				let kernel_data_response = KernelDataResponse { bytes };
+				let mut response = Response::new(
+					Type::KernelDataResponse,
+					self.peer_info.version,
+					&kernel_data_response,
+					writer,
+				)?;
+				response.add_attachment(kernel_data);
+				Ok(Some(response))
+			}
+
+			Type::KernelDataResponse => {
+				let response: KernelDataResponse = msg.body()?;
+				debug!(
+					"handle_payload: kernel_data_response: bytes: {}",
+					response.bytes
+				);
+
+				let mut writer = BufWriter::new(tempfile()?);
+
+				let total_size = response.bytes as usize;
+				let mut remaining_size = total_size;
+
+				while remaining_size > 0 {
+					let size = msg.copy_attachment(remaining_size, &mut writer)?;
+					remaining_size = remaining_size.saturating_sub(size);
+
+					// Increase received bytes quietly (without affecting the counters).
+					// Otherwise we risk banning a peer as "abusive".
+					tracker.inc_quiet_received(size as u64);
+				}
+
+				// Remember to seek back to start of the file as the caller is likely
+				// to read this file directly without reopening it.
+				writer.seek(SeekFrom::Start(0))?;
+
+				let mut file = writer.into_inner().map_err(|_| Error::Internal)?;
+
+				debug!(
+					"handle_payload: kernel_data_response: file size: {}",
+					file.metadata().unwrap().len()
+				);
+
+				self.adapter.kernel_data_write(&mut file)?;
+
 				Ok(None)
 			}
 
@@ -218,18 +331,22 @@ impl MessageHandler for Protocol {
 					sm_req.hash, sm_req.height
 				);
 
-				let txhashset = self.adapter.txhashset_read(sm_req.hash);
+				let txhashset_header = self.adapter.txhashset_archive_header()?;
+				let txhashset_header_hash = txhashset_header.hash();
+				let txhashset = self.adapter.txhashset_read(txhashset_header_hash);
 
 				if let Some(txhashset) = txhashset {
 					let file_sz = txhashset.reader.metadata()?.len();
-					let mut resp = msg.respond(
+					let mut resp = Response::new(
 						Type::TxHashSetArchive,
+						self.peer_info.version,
 						&TxHashSetArchive {
-							height: sm_req.height as u64,
-							hash: sm_req.hash,
+							height: txhashset_header.height as u64,
+							hash: txhashset_header_hash,
 							bytes: file_sz,
 						},
-					);
+						writer,
+					)?;
 					resp.add_attachment(txhashset.reader);
 					Ok(Some(resp))
 				} else {
@@ -249,28 +366,58 @@ impl MessageHandler for Protocol {
 					);
 					return Err(Error::BadMessage);
 				}
+				if !self.state_sync_requested.load(Ordering::Relaxed) {
+					error!("handle_payload: txhashset archive received but from the wrong peer",);
+					return Err(Error::BadMessage);
+				}
+				// Update the sync state requested status
+				self.state_sync_requested.store(false, Ordering::Relaxed);
 
 				let download_start_time = Utc::now();
 				self.adapter
 					.txhashset_download_update(download_start_time, 0, sm_arch.bytes);
 
-				let mut tmp = env::temp_dir();
-				tmp.push("txhashset.zip");
+				let nonce: u32 = thread_rng().gen_range(0, 1_000_000);
+				let tmp = self.adapter.get_tmpfile_pathname(format!(
+					"txhashset-{}-{}.zip",
+					download_start_time.timestamp(),
+					nonce
+				));
+				let mut now = Instant::now();
 				let mut save_txhashset_to_file = |file| -> Result<(), Error> {
-					let mut tmp_zip = BufWriter::new(File::create(file)?);
+					let mut tmp_zip =
+						BufWriter::new(OpenOptions::new().write(true).create_new(true).open(file)?);
 					let total_size = sm_arch.bytes as usize;
 					let mut downloaded_size: usize = 0;
 					let mut request_size = cmp::min(48_000, total_size);
 					while request_size > 0 {
-						downloaded_size += msg.copy_attachment(request_size, &mut tmp_zip)?;
+						let size = msg.copy_attachment(request_size, &mut tmp_zip)?;
+						downloaded_size += size;
 						request_size = cmp::min(48_000, total_size - downloaded_size);
 						self.adapter.txhashset_download_update(
 							download_start_time,
 							downloaded_size as u64,
 							total_size as u64,
 						);
+						if now.elapsed().as_secs() > 10 {
+							now = Instant::now();
+							debug!(
+								"handle_payload: txhashset archive: {}/{}",
+								downloaded_size, total_size
+							);
+						}
+						// Increase received bytes quietly (without affecting the counters).
+						// Otherwise we risk banning a peer as "abusive".
+						tracker.inc_quiet_received(size as u64)
 					}
-					tmp_zip.into_inner().unwrap().sync_all()?;
+					debug!(
+						"handle_payload: txhashset archive: {}/{} ... DONE",
+						downloaded_size, total_size
+					);
+					tmp_zip
+						.into_inner()
+						.map_err(|_| Error::Internal)?
+						.sync_all()?;
 					Ok(())
 				};
 
@@ -287,117 +434,26 @@ impl MessageHandler for Protocol {
 					tmp,
 				);
 
-				let tmp_zip = File::open(tmp)?;
+				let tmp_zip = File::open(tmp.clone())?;
 				let res = self
 					.adapter
-					.txhashset_write(sm_arch.hash, tmp_zip, self.addr);
+					.txhashset_write(sm_arch.hash, tmp_zip, &self.peer_info)?;
 
 				debug!(
 					"handle_payload: txhashset archive for {} at {}, DONE. Data Ok: {}",
-					sm_arch.hash, sm_arch.height, res
+					sm_arch.hash, sm_arch.height, !res
 				);
+
+				if let Err(e) = fs::remove_file(tmp.clone()) {
+					warn!("fail to remove tmp file: {:?}. err: {}", tmp, e);
+				}
 
 				Ok(None)
 			}
-
-			_ => {
-				debug!("unknown message type {:?}", msg.header.msg_type);
+			Type::Error | Type::Hand | Type::Shake => {
+				debug!("Received an unexpected msg: {:?}", msg.header.msg_type);
 				Ok(None)
 			}
 		}
 	}
-}
-
-/// Read the Headers Vec size from the underlying connection, and calculate maximum header_size of one Header
-fn headers_header_size(conn: &mut TcpStream, msg_len: u64) -> Result<u64, Error> {
-	let mut size = vec![0u8; 2];
-	// read size of Vec<BlockHeader>
-	read_exact(conn, &mut size, time::Duration::from_millis(10), true)?;
-
-	let total_headers = size[0] as u64 * 256 + size[1] as u64;
-	if total_headers == 0 || total_headers > 10_000 {
-		return Err(Error::Connection(io::Error::new(
-			io::ErrorKind::InvalidData,
-			"headers_header_size",
-		)));
-	}
-	let average_header_size = (msg_len - 2) / total_headers;
-
-	// support size of Cuck(at)oo: from Cuck(at)oo 29 to Cuck(at)oo 35, with version 2
-	// having slightly larger headers
-	let min_size = core::serialized_size_of_header(1, global::min_edge_bits());
-	let max_size = min_size + 6;
-	if average_header_size < min_size as u64 || average_header_size > max_size as u64 {
-		debug!(
-			"headers_header_size - size of Vec: {}, average_header_size: {}, min: {}, max: {}",
-			total_headers, average_header_size, min_size, max_size,
-		);
-		return Err(Error::Connection(io::Error::new(
-			io::ErrorKind::InvalidData,
-			"headers_header_size",
-		)));
-	}
-	return Ok(max_size as u64);
-}
-
-/// Read the Headers streaming body from the underlying connection
-fn headers_streaming_body(
-	conn: &mut TcpStream,   // (i) underlying connection
-	msg_len: u64,           // (i) length of whole 'Headers'
-	headers_num: u64,       // (i) how many BlockHeader(s) do you want to read
-	total_read: &mut u64,   // (i/o) how many bytes already read on this 'Headers' message
-	reserved: &mut Vec<u8>, // (i/o) reserved part of previous read, which is not a whole header
-	max_header_size: u64,   // (i) maximum possible size of single BlockHeader
-) -> Result<Headers, Error> {
-	if headers_num == 0 || msg_len < *total_read || *total_read < 2 {
-		return Err(Error::Connection(io::Error::new(
-			io::ErrorKind::InvalidInput,
-			"headers_streaming_body",
-		)));
-	}
-
-	// Note:
-	// As we allow Cuckoo sizes greater than 30 now, the proof of work part of the header
-	// could be 30*42 bits, 31*42 bits, 32*42 bits, etc.
-	// So, for compatibility with variable size of block header, we read max possible size, for
-	// up to Cuckoo 36.
-	//
-	let mut read_size = headers_num * max_header_size - reserved.len() as u64;
-	if *total_read + read_size > msg_len {
-		read_size = msg_len - *total_read;
-	}
-
-	// 1st part
-	let mut body = vec![0u8; 2]; // for Vec<> size
-	let mut final_headers_num = (read_size + reserved.len() as u64) / max_header_size;
-	let remaining = msg_len - *total_read - read_size;
-	if final_headers_num == 0 && remaining == 0 {
-		final_headers_num = 1;
-	}
-	body[0] = (final_headers_num >> 8) as u8;
-	body[1] = (final_headers_num & 0x00ff) as u8;
-
-	// 2nd part
-	body.append(reserved);
-
-	// 3rd part
-	let mut read_body = vec![0u8; read_size as usize];
-	if read_size > 0 {
-		read_exact(conn, &mut read_body, time::Duration::from_secs(20), true)?;
-		*total_read += read_size;
-	}
-	body.append(&mut read_body);
-
-	// deserialize these assembled 3 parts
-	let result: Result<Headers, Error> = ser::deserialize(&mut &body[..]).map_err(From::from);
-	let headers = result?;
-
-	// remaining data
-	let mut deserialized_size = 2; // for Vec<> size
-	for header in &headers.headers {
-		deserialized_size += header.serialized_size();
-	}
-	*reserved = body[deserialized_size..].to_vec();
-
-	Ok(headers)
 }

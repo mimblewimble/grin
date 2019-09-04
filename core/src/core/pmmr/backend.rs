@@ -12,37 +12,24 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use std::fs::File;
+
 use croaring::Bitmap;
 
-use core::hash::Hash;
-use core::BlockHeader;
-use ser::PMMRable;
-
-/// Simple "hash only" backend (used for header MMR, headers stored in the db).
-pub trait HashOnlyBackend {
-	/// Append a vec of hashes to the backend.
-	fn append(&mut self, data: Vec<Hash>) -> Result<(), String>;
-
-	/// Rewind the backend to the specified position.
-	fn rewind(&mut self, position: u64) -> Result<(), String>;
-
-	/// Get the hash at the specified position.
-	fn get_hash(&self, position: u64) -> Option<Hash>;
-}
+use crate::core::hash::Hash;
+use crate::core::BlockHeader;
+use crate::ser::PMMRable;
 
 /// Storage backend for the MMR, just needs to be indexed by order of insertion.
 /// The PMMR itself does not need the Backend to be accurate on the existence
 /// of an element (i.e. remove could be a no-op) but layers above can
 /// depend on an accurate Backend to check existence.
-pub trait Backend<T>
-where
-	T: PMMRable,
-{
+pub trait Backend<T: PMMRable> {
 	/// Append the provided Hashes to the backend storage, and optionally an
 	/// associated data element to flatfile storage (for leaf nodes only). The
 	/// position of the first element of the Vec in the MMR is provided to
 	/// help the implementation.
-	fn append(&mut self, data: T, hashes: Vec<Hash>) -> Result<(), String>;
+	fn append(&mut self, data: &T, hashes: Vec<Hash>) -> Result<(), String>;
 
 	/// Rewind the backend state to a previous position, as if all append
 	/// operations after that had been canceled. Expects a position in the PMMR
@@ -55,7 +42,7 @@ where
 	fn get_hash(&self, position: u64) -> Option<Hash>;
 
 	/// Get underlying data by insertion position.
-	fn get_data(&self, position: u64) -> Option<T>;
+	fn get_data(&self, position: u64) -> Option<T::E>;
 
 	/// Get a Hash  by original insertion position
 	/// (ignoring the remove log).
@@ -63,7 +50,10 @@ where
 
 	/// Get a Data Element by original insertion position
 	/// (ignoring the remove log).
-	fn get_data_from_file(&self, position: u64) -> Option<T>;
+	fn get_data_from_file(&self, position: u64) -> Option<T::E>;
+
+	/// Iterator over current (unpruned, unremoved) leaf positions.
+	fn leaf_pos_iter(&self) -> Box<dyn Iterator<Item = u64> + '_>;
 
 	/// Remove Hash by insertion position. An index is also provided so the
 	/// underlying backend can implement some rollback of positions up to a
@@ -71,12 +61,14 @@ where
 	/// triggered removal).
 	fn remove(&mut self, position: u64) -> Result<(), String>;
 
-	/// Returns the data file path.. this is a bit of a hack now that doesn't
-	/// sit well with the design, but TxKernels have to be summed and the
-	/// fastest way to to be able to allow direct access to the file
-	fn get_data_file_path(&self) -> String;
+	/// Creates a temp file containing the contents of the underlying data file
+	/// from the backend storage. This allows a caller to see a consistent view
+	/// of the data without needing to lock the backend storage.
+	fn data_as_temp_file(&self) -> Result<File, String>;
 
-	/// Also a bit of a hack...
+	/// Release underlying datafiles and locks
+	fn release_files(&mut self);
+
 	/// Saves a snapshot of the rewound utxo file with the block hash as
 	/// filename suffix. We need this when sending a txhashset zip file to a
 	/// node for fast sync.

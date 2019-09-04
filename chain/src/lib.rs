@@ -22,24 +22,16 @@
 
 #[macro_use]
 extern crate bitflags;
-extern crate byteorder;
-extern crate croaring;
-extern crate lmdb_zero as lmdb;
-extern crate lru_cache;
-extern crate serde;
+
 #[macro_use]
 extern crate serde_derive;
 #[macro_use]
 extern crate log;
-extern crate chrono;
-extern crate failure;
-#[macro_use]
-extern crate failure_derive;
 
-extern crate grin_core as core;
-extern crate grin_keychain as keychain;
-extern crate grin_store;
-extern crate grin_util as util;
+use failure;
+use grin_core as core;
+use grin_keychain as keychain;
+use grin_util as util;
 
 mod chain;
 mod error;
@@ -50,7 +42,9 @@ pub mod types;
 
 // Re-export the base interface
 
-pub use chain::{Chain, MAX_ORPHAN_SIZE};
-pub use error::{Error, ErrorKind};
-pub use store::ChainStore;
-pub use types::{ChainAdapter, Options, Tip, TxHashsetWriteStatus};
+pub use crate::chain::{Chain, MAX_ORPHAN_SIZE};
+pub use crate::error::{Error, ErrorKind};
+pub use crate::store::ChainStore;
+pub use crate::types::{
+	BlockStatus, ChainAdapter, Options, SyncState, SyncStatus, Tip, TxHashsetWriteStatus,
+};

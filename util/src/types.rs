@@ -29,6 +29,9 @@ pub enum LogLevel {
 	Trace,
 }
 
+/// 32 log files to rotate over by default
+pub const DEFAULT_ROTATE_LOG_FILES: u32 = 32 as u32;
+
 /// Logging config
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct LoggingConfig {
@@ -46,6 +49,8 @@ pub struct LoggingConfig {
 	pub log_file_append: bool,
 	/// Size of the log in bytes to rotate over (optional)
 	pub log_max_size: Option<u64>,
+	/// Number of the log files to rotate over (optional)
+	pub log_max_files: Option<u32>,
 	/// Whether the tui is running (optional)
 	pub tui_running: Option<bool>,
 }
@@ -56,11 +61,44 @@ impl Default for LoggingConfig {
 			log_to_stdout: true,
 			stdout_log_level: LogLevel::Warning,
 			log_to_file: true,
-			file_log_level: LogLevel::Debug,
+			file_log_level: LogLevel::Info,
 			log_file_path: String::from("grin.log"),
 			log_file_append: true,
 			log_max_size: Some(1024 * 1024 * 16), // 16 megabytes default
+			log_max_files: Some(DEFAULT_ROTATE_LOG_FILES),
 			tui_running: None,
 		}
+	}
+}
+
+use std::ops::Deref;
+use zeroize::Zeroize;
+/// Zeroing string, mainly useful for password
+#[derive(Clone, PartialEq, PartialOrd)]
+pub struct ZeroingString(String);
+
+impl Drop for ZeroingString {
+	fn drop(&mut self) {
+		self.0.zeroize();
+	}
+}
+
+impl From<&str> for ZeroingString {
+	fn from(s: &str) -> Self {
+		ZeroingString(String::from(s))
+	}
+}
+
+impl From<String> for ZeroingString {
+	fn from(s: String) -> Self {
+		ZeroingString(s)
+	}
+}
+
+impl Deref for ZeroingString {
+	type Target = str;
+
+	fn deref(&self) -> &str {
+		&self.0
 	}
 }

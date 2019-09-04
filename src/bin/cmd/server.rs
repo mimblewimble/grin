@@ -13,7 +13,6 @@
 // limitations under the License.
 
 /// Grin server commands processing
-use std::env::current_dir;
 use std::process::exit;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
@@ -22,16 +21,15 @@ use std::time::Duration;
 
 use clap::ArgMatches;
 use ctrlc;
-use daemonize::Daemonize;
 
-use config::GlobalConfig;
-use core::global;
-use p2p::Seeding;
-use servers;
-use tui::ui;
+use crate::config::GlobalConfig;
+use crate::core::global;
+use crate::p2p::{PeerAddr, Seeding};
+use crate::servers;
+use crate::tui::ui;
 
 /// wrap below to allow UI to clean up on stop
-fn start_server(config: servers::ServerConfig) {
+pub fn start_server(config: servers::ServerConfig) {
 	start_server_tui(config);
 	// Just kill process for now, otherwise the process
 	// hangs around until sigint because the API server
@@ -45,33 +43,31 @@ fn start_server(config: servers::ServerConfig) {
 fn start_server_tui(config: servers::ServerConfig) {
 	// Run the UI controller.. here for now for simplicity to access
 	// everything it might need
-	if config.run_tui.is_some() && config.run_tui.unwrap() {
+	if config.run_tui.unwrap_or(false) {
 		warn!("Starting GRIN in UI mode...");
-		servers::Server::start(config, |serv: Arc<servers::Server>| {
-			let running = Arc::new(AtomicBool::new(true));
-			let _ = thread::Builder::new()
-				.name("ui".to_string())
-				.spawn(move || {
-					let mut controller = ui::Controller::new().unwrap_or_else(|e| {
-						panic!("Error loading UI controller: {}", e);
-					});
-					controller.run(serv.clone(), running);
-				});
-		}).unwrap();
+		servers::Server::start(config, |serv: servers::Server| {
+			let mut controller = ui::Controller::new().unwrap_or_else(|e| {
+				panic!("Error loading UI controller: {}", e);
+			});
+			controller.run(serv);
+		})
+		.unwrap();
 	} else {
 		warn!("Starting GRIN w/o UI...");
-		servers::Server::start(config, |serv: Arc<servers::Server>| {
+		servers::Server::start(config, |serv: servers::Server| {
 			let running = Arc::new(AtomicBool::new(true));
 			let r = running.clone();
 			ctrlc::set_handler(move || {
 				r.store(false, Ordering::SeqCst);
-			}).expect("Error setting handler for both SIGINT (Ctrl+C) and SIGTERM (kill)");
+			})
+			.expect("Error setting handler for both SIGINT (Ctrl+C) and SIGTERM (kill)");
 			while running.load(Ordering::SeqCst) {
 				thread::sleep(Duration::from_secs(1));
 			}
 			warn!("Received SIGINT (Ctrl+C) or SIGTERM (kill).");
 			serv.stop();
-		}).unwrap();
+		})
+		.unwrap();
 	}
 }
 
@@ -79,7 +75,10 @@ fn start_server_tui(config: servers::ServerConfig) {
 /// stopping the Grin blockchain server. Processes all the command line
 /// arguments to build a proper configuration and runs Grin with that
 /// configuration.
-pub fn server_command(server_args: Option<&ArgMatches>, mut global_config: GlobalConfig) {
+pub fn server_command(
+	server_args: Option<&ArgMatches<'_>>,
+	mut global_config: GlobalConfig,
+) -> i32 {
 	global::set_mining_mode(
 		global_config
 			.members
@@ -112,68 +111,23 @@ pub fn server_command(server_args: Option<&ArgMatches>, mut global_config: Globa
 		}
 
 		if let Some(seeds) = a.values_of("seed") {
+			let seed_addrs = seeds
+				.filter_map(|x| x.parse().ok())
+				.map(|x| PeerAddr(x))
+				.collect();
 			server_config.p2p_config.seeding_type = Seeding::List;
-			server_config.p2p_config.seeds = Some(seeds.map(|s| s.to_string()).collect());
+			server_config.p2p_config.seeds = Some(seed_addrs);
 		}
 	}
 
-	/*if let Some(true) = server_config.run_wallet_listener {
-		let mut wallet_config = global_config.members.as_ref().unwrap().wallet.clone();
-		wallet::init_wallet_seed(wallet_config.clone());
-		let wallet = wallet::instantiate_wallet(wallet_config.clone(), "");
-
-		let _ = thread::Builder::new()
-			.name("wallet_listener".to_string())
-			.spawn(move || {
-				controller::foreign_listener(wallet, &wallet_config.api_listen_addr())
-					.unwrap_or_else(|e| {
-						panic!(
-							"Error creating wallet listener: {:?} Config: {:?}",
-							e, wallet_config
-						)
-					});
-			});
-	}
-	if let Some(true) = server_config.run_wallet_owner_api {
-		let mut wallet_config = global_config.members.unwrap().wallet;
-		let wallet = wallet::instantiate_wallet(wallet_config.clone(), "");
-		wallet::init_wallet_seed(wallet_config.clone());
-
-		let _ = thread::Builder::new()
-			.name("wallet_owner_listener".to_string())
-			.spawn(move || {
-				controller::owner_listener(wallet, "127.0.0.1:13420").unwrap_or_else(|e| {
-					panic!(
-						"Error creating wallet api listener: {:?} Config: {:?}",
-						e, wallet_config
-					)
-				});
-			});
-	}*/
-
-	// start the server in the different run modes (interactive or daemon)
 	if let Some(a) = server_args {
 		match a.subcommand() {
 			("run", _) => {
 				start_server(server_config);
 			}
-			("start", _) => {
-				let daemonize = Daemonize::new()
-					.pid_file("/tmp/grin.pid")
-					.chown_pid_file(true)
-					.working_directory(current_dir().unwrap())
-					.privileged_action(move || {
-						start_server(server_config.clone());
-						loop {
-							thread::sleep(Duration::from_secs(60));
-						}
-					});
-				match daemonize.start() {
-					Ok(_) => info!("Grin server successfully started."),
-					Err(e) => error!("Error starting: {}", e),
-				}
+			("", _) => {
+				println!("Subcommand required, use 'grin help server' for details");
 			}
-			("stop", _) => println!("TODO. Just 'kill $pid' for now. Maybe /tmp/grin.pid is $pid"),
 			(cmd, _) => {
 				println!(":: {:?}", server_args);
 				panic!(
@@ -185,4 +139,5 @@ pub fn server_command(server_args: Option<&ArgMatches>, mut global_config: Globa
 	} else {
 		start_server(server_config);
 	}
+	0
 }

@@ -23,11 +23,12 @@ use std::convert::AsRef;
 use std::ops::Add;
 use std::{fmt, ops};
 
-use blake2::blake2b::Blake2b;
+use crate::blake2::blake2b::Blake2b;
 
-use consensus;
-use ser::{self, AsFixedBytes, Error, Readable, Reader, Writeable, Writer};
-use util;
+use crate::ser::{
+	self, AsFixedBytes, Error, FixedLength, ProtocolVersion, Readable, Reader, Writeable, Writer,
+};
+use crate::util;
 
 /// A hash consisting of all zeroes, used as a sentinel. No known preimage.
 pub const ZERO_HASH: Hash = Hash([0; 32]);
@@ -35,32 +36,47 @@ pub const ZERO_HASH: Hash = Hash([0; 32]);
 /// A hash to uniquely (or close enough) identify one of the main blockchain
 /// constructs. Used pervasively for blocks, transactions and outputs.
 #[derive(Copy, Clone, PartialEq, PartialOrd, Eq, Ord, Hash, Serialize, Deserialize)]
-pub struct Hash(pub [u8; 32]);
+pub struct Hash([u8; 32]);
+
+impl DefaultHashable for Hash {}
+
+impl Hash {
+	fn hash_with<T: Writeable>(&self, other: T) -> Hash {
+		let mut hasher = HashWriter::default();
+		ser::Writeable::write(self, &mut hasher).unwrap();
+		ser::Writeable::write(&other, &mut hasher).unwrap();
+		let mut ret = [0; 32];
+		hasher.finalize(&mut ret);
+		Hash(ret)
+	}
+}
 
 impl fmt::Debug for Hash {
-	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-		for i in self.0[..4].iter() {
-			write!(f, "{:02x}", i)?;
-		}
-		Ok(())
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+		let hash_hex = self.to_hex();
+		const NUM_SHOW: usize = 12;
+
+		write!(f, "{}", &hash_hex[..NUM_SHOW])
 	}
 }
 
 impl fmt::Display for Hash {
-	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
 		fmt::Debug::fmt(self, f)
 	}
 }
 
-impl Hash {
+impl FixedLength for Hash {
 	/// Size of a hash in bytes.
-	pub const SIZE: usize = 32;
+	const LEN: usize = 32;
+}
 
+impl Hash {
 	/// Builds a Hash from a byte vector. If the vector is too short, it will be
 	/// completed by zeroes. If it's too long, it will be truncated.
 	pub fn from_vec(v: &[u8]) -> Hash {
-		let mut h = [0; Hash::SIZE];
-		let copy_size = min(v.len(), Hash::SIZE);
+		let mut h = [0; Hash::LEN];
+		let copy_size = min(v.len(), Hash::LEN);
 		h[..copy_size].copy_from_slice(&v[..copy_size]);
 		Hash(h)
 	}
@@ -68,6 +84,11 @@ impl Hash {
 	/// Converts the hash to a byte vector
 	pub fn to_vec(&self) -> Vec<u8> {
 		self.0.to_vec()
+	}
+
+	/// Returns a byte slice of the hash contents.
+	pub fn as_bytes(&self) -> &[u8] {
+		&self.0
 	}
 
 	/// Convert a hash to hex string format.
@@ -135,7 +156,7 @@ impl AsRef<[u8]> for Hash {
 }
 
 impl Readable for Hash {
-	fn read(reader: &mut Reader) -> Result<Hash, ser::Error> {
+	fn read(reader: &mut dyn Reader) -> Result<Hash, ser::Error> {
 		let v = reader.read_fixed_bytes(32)?;
 		let mut a = [0; 32];
 		a.copy_from_slice(&v[..]);
@@ -200,47 +221,37 @@ impl ser::Writer for HashWriter {
 		self.state.update(b32.as_ref());
 		Ok(())
 	}
+
+	fn protocol_version(&self) -> ProtocolVersion {
+		ProtocolVersion::local()
+	}
 }
 
 /// A trait for types that have a canonical hash
 pub trait Hashed {
 	/// Obtain the hash of the object
 	fn hash(&self) -> Hash;
-	/// Hash the object together with another writeable object
-	fn hash_with<T: Writeable>(&self, other: T) -> Hash;
 }
 
-impl<W: ser::Writeable> Hashed for W {
+/// Implementing this trait enables the default
+/// hash implementation
+pub trait DefaultHashable: Writeable {}
+impl<D: DefaultHashable> Hashed for D {
 	fn hash(&self) -> Hash {
 		let mut hasher = HashWriter::default();
-		ser::Writeable::write(self, &mut hasher).unwrap();
-		let mut ret = [0; 32];
-		hasher.finalize(&mut ret);
-		Hash(ret)
-	}
-
-	fn hash_with<T: Writeable>(&self, other: T) -> Hash {
-		let mut hasher = HashWriter::default();
-		ser::Writeable::write(self, &mut hasher).unwrap();
-		ser::Writeable::write(&other, &mut hasher).unwrap();
+		Writeable::write(self, &mut hasher).unwrap();
 		let mut ret = [0; 32];
 		hasher.finalize(&mut ret);
 		Hash(ret)
 	}
 }
 
-impl<T: Writeable> consensus::VerifySortOrder<T> for Vec<T> {
-	fn verify_sort_order(&self) -> Result<(), consensus::Error> {
-		if self
-			.iter()
-			.map(|item| item.hash())
-			.collect::<Vec<_>>()
-			.windows(2)
-			.any(|pair| pair[0] > pair[1])
-		{
-			Err(consensus::Error::SortError)
-		} else {
-			Ok(())
-		}
-	}
-}
+impl<D: DefaultHashable> DefaultHashable for &D {}
+impl<D: DefaultHashable, E: DefaultHashable> DefaultHashable for (D, E) {}
+impl<D: DefaultHashable, E: DefaultHashable, F: DefaultHashable> DefaultHashable for (D, E, F) {}
+
+/// Implement Hashed trait for external types here
+impl DefaultHashable for crate::util::secp::pedersen::RangeProof {}
+impl DefaultHashable for Vec<u8> {}
+impl DefaultHashable for u8 {}
+impl DefaultHashable for u64 {}

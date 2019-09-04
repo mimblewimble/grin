@@ -14,22 +14,20 @@
 
 //! High level JSON/HTTP client API
 
+use crate::rest::{Error, ErrorKind};
+use crate::util::to_base64;
 use failure::{Fail, ResultExt};
+use futures::future::{err, ok, Either};
 use http::uri::{InvalidUri, Uri};
-use hyper::header::{ACCEPT, AUTHORIZATION, USER_AGENT};
+use hyper::header::{ACCEPT, AUTHORIZATION, CONTENT_TYPE, USER_AGENT};
 use hyper::rt::{Future, Stream};
 use hyper::{Body, Client, Request};
+use hyper_rustls;
 use serde::{Deserialize, Serialize};
 use serde_json;
-
-use futures::future::{err, ok, Either};
-use hyper_rustls;
 use tokio::runtime::Runtime;
 
-use rest::{Error, ErrorKind};
-use util::to_base64;
-
-pub type ClientResponseFuture<T> = Box<Future<Item = T, Error = Error> + Send>;
+pub type ClientResponseFuture<T> = Box<dyn Future<Item = T, Error = Error> + Send>;
 
 /// Helper function to easily issue a HTTP GET request against a given URL that
 /// returns a JSON object. Handles request building, JSON deserialization and
@@ -52,6 +50,15 @@ where
 		Ok(req) => Box::new(handle_request_async(req)),
 		Err(e) => Box::new(err(e)),
 	}
+}
+
+/// Helper function to easily issue a HTTP GET request
+/// on a given URL that returns nothing. Handles request
+/// building and response code checking.
+pub fn get_no_ret(url: &str, api_secret: Option<String>) -> Result<(), Error> {
+	let req = build_request(url, "GET", api_secret, None)?;
+	send_request(req)?;
+	Ok(())
 }
 
 /// Helper function to easily issue a HTTP POST request with the provided JSON
@@ -118,8 +125,8 @@ where
 	}
 }
 
-fn build_request<'a>(
-	url: &'a str,
+fn build_request(
+	url: &str,
 	method: &str,
 	api_secret: Option<String>,
 	body: Option<String>,
@@ -129,9 +136,8 @@ fn build_request<'a>(
 			.into()
 	})?;
 	let mut builder = Request::builder();
-	if api_secret.is_some() {
-		let basic_auth =
-			"Basic ".to_string() + &to_base64(&("grin:".to_string() + &api_secret.unwrap()));
+	if let Some(api_secret) = api_secret {
+		let basic_auth = format!("Basic {}", to_base64(&format!("grin:{}", api_secret)));
 		builder.header(AUTHORIZATION, basic_auth);
 	}
 
@@ -140,15 +146,17 @@ fn build_request<'a>(
 		.uri(uri)
 		.header(USER_AGENT, "grin-client")
 		.header(ACCEPT, "application/json")
+		.header(CONTENT_TYPE, "application/json")
 		.body(match body {
 			None => Body::empty(),
 			Some(json) => json.into(),
-		}).map_err(|e| {
+		})
+		.map_err(|e| {
 			ErrorKind::RequestError(format!("Bad request {} {}: {}", method, url, e)).into()
 		})
 }
 
-fn create_post_request<IN>(
+pub fn create_post_request<IN>(
 	url: &str,
 	api_secret: Option<String>,
 	input: &IN,
@@ -185,7 +193,7 @@ where
 	}))
 }
 
-fn send_request_async(req: Request<Body>) -> Box<Future<Item = String, Error = Error> + Send> {
+fn send_request_async(req: Request<Body>) -> Box<dyn Future<Item = String, Error = Error> + Send> {
 	let https = hyper_rustls::HttpsConnector::new(1);
 	let client = Client::builder().build::<_, Body>(https);
 	Box::new(
@@ -194,16 +202,20 @@ fn send_request_async(req: Request<Body>) -> Box<Future<Item = String, Error = E
 			.map_err(|e| ErrorKind::RequestError(format!("Cannot make request: {}", e)).into())
 			.and_then(|resp| {
 				if !resp.status().is_success() {
-					Either::A(err(ErrorKind::RequestError(
-						"Wrong response code".to_owned(),
-					).into()))
+					Either::A(err(ErrorKind::RequestError(format!(
+						"Wrong response code: {} with data {:?}",
+						resp.status(),
+						resp.body()
+					))
+					.into()))
 				} else {
 					Either::B(
 						resp.into_body()
 							.map_err(|e| {
 								ErrorKind::RequestError(format!("Cannot read response body: {}", e))
 									.into()
-							}).concat2()
+							})
+							.concat2()
 							.and_then(|ch| ok(String::from_utf8_lossy(&ch.to_vec()).to_string())),
 					)
 				}
@@ -211,8 +223,9 @@ fn send_request_async(req: Request<Body>) -> Box<Future<Item = String, Error = E
 	)
 }
 
-fn send_request(req: Request<Body>) -> Result<String, Error> {
+pub fn send_request(req: Request<Body>) -> Result<String, Error> {
 	let task = send_request_async(req);
-	let mut rt = Runtime::new().unwrap();
+	let mut rt =
+		Runtime::new().context(ErrorKind::Internal("can't create Tokio runtime".to_owned()))?;
 	Ok(rt.block_on(task)?)
 }

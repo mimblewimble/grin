@@ -1,5 +1,7 @@
 # Grin - Build, Configuration, and Running
 
+*Read this in other languages: [Español](build_ES.md), [Korean](build_KR.md), [日本語](build_JP.md).*
+
 ## Supported Platforms
 
 Longer term, most platforms will likely be supported to some extent.
@@ -7,12 +9,12 @@ Grin's programming language `rust` has build targets for most platforms.
 
 What's working so far?
 
-* Linux x86\_64 and MacOS [grin + mining + development]
+* Linux x86\_64 and macOS [grin + mining + development]
 * Not Windows 10 yet [grin kind-of builds. No mining yet. Help wanted!]
 
 ## Requirements
 
-* rust 1.26+ (use [rustup]((https://www.rustup.rs/))- i.e. `curl https://sh.rustup.rs -sSf | sh; source $HOME/.cargo/env`)
+* rust 1.34+ (use [rustup]((https://www.rustup.rs/))- i.e. `curl https://sh.rustup.rs -sSf | sh; source $HOME/.cargo/env`)
   * if rust is already installed, you can simply update version with `rustup update`
 * clang
 * ncurses and libs (ncurses, ncursesw5)
@@ -20,11 +22,21 @@ What's working so far?
 * pkg-config
 * libssl-dev
 * linux-headers (reported needed on Alpine linux)
+* llvm
 
 For Debian-based distributions (Debian, Ubuntu, Mint, etc), all in one line (except Rust):
 
 ```sh
-apt install build-essential cmake git libgit2-dev clang libncurses5-dev libncursesw5-dev zlib1g-dev pkg-config libssl-dev
+apt install build-essential cmake git libgit2-dev clang libncurses5-dev libncursesw5-dev zlib1g-dev pkg-config libssl-dev llvm
+```
+
+For Mac:
+
+```sh
+xcode-select --install
+brew install --with-toolchain llvm
+brew install pkg-config
+brew install openssl
 ```
 
 ## Build steps
@@ -49,7 +61,7 @@ A successful build gets you:
 
 All data, configuration and log files created and used by grin are located in the hidden
 `~/.grin` directory (under your user home directory) by default. You can modify all configuration
-values by editing the file `~/.grin/grin-server.toml`.
+values by editing the file `~/.grin/main/grin-server.toml`.
 
 It is also possible to have grin create its data files in the current directory. To do this, run
 
@@ -60,15 +72,15 @@ grin server config
 Which will generate a `grin-server.toml` file in the current directory, pre-configured to use
 the current directory for all of its data. Running grin from a directory that contains a
 `grin-server.toml` file will use the values in that file instead of the default
-`~/.grin/grin-server.toml`.
+`~/.grin/main/grin-server.toml`.
 
 While testing, put the grin binary on your path like this:
 
 ```sh
-export PATH=/path/to/grin/dir/target/debug:$PATH
+export PATH=`pwd`/target/release:$PATH
 ```
 
-Where path/to/grin/dir is your absolute path to the root directory of your Grin installation.
+assuming you are running from the root directory of your Grin installation.
 
 You can then run `grin` directly (try `grin help` for more options).
 
@@ -86,21 +98,24 @@ For help on grin commands and their switches, try:
 
 ```sh
 grin help
-grin wallet help
-grin client help
+grin wallet --help
+grin client --help
 ```
 
 ## Docker
 
 ```sh
-docker build -t grin .
+docker build -t grin -f etc/Dockerfile .
 ```
+For floonet, use `etc/Dockerfile.floonet` instead
 
 You can bind-mount your grin cache to run inside the container.
 
 ```sh
 docker run -it -d -v $HOME/.grin:/root/.grin grin
 ```
+If you prefer to use a docker named volume, you can pass `-v dotgrin:/root/.grin` instead.
+Using a named volume copies default configurations upon volume creation.
 
 ## Cross-platform builds
 
@@ -111,12 +126,15 @@ say, for a Raspberry Pi.
 
 ## Using grin
 
-The wiki page [How to use grin](https://github.com/mimblewimble/docs/wiki/How-to-use-grin)
+The wiki page [Wallet User Guide](https://github.com/mimblewimble/docs/wiki/Wallet-User-Guide)
 and linked pages have more information on what features we have,
 troubleshooting, etc.
 
 ## Mining in Grin
 
 Please note that all mining functions for Grin have moved into a separate, standalone package called
-[grin_miner](https://github.com/mimblewimble/grin-miner). Once your Grin code node is up and running,
+[grin-miner](https://github.com/mimblewimble/grin-miner). Once your Grin code node is up and running,
 you can start mining by building and running grin-miner against your running Grin node.
+
+For grin-miner to be able to communicate with your grin node, make sure that you have `enable_stratum_server = true`
+in your `grin-server.toml` configuration file and you have a wallet listener running (`grin wallet listen`). 

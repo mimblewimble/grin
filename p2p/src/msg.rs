@@ -14,38 +14,30 @@
 
 //! Message types that transit over the network and related serialization code.
 
+use crate::core::core::hash::Hash;
+use crate::core::core::BlockHeader;
+use crate::core::pow::Difficulty;
+use crate::core::ser::{
+	self, FixedLength, ProtocolVersion, Readable, Reader, StreamingReader, Writeable, Writer,
+};
+use crate::core::{consensus, global};
+use crate::types::{
+	Capabilities, Error, PeerAddr, ReasonForBan, MAX_BLOCK_HEADERS, MAX_LOCATORS, MAX_PEER_ADDRS,
+};
 use num::FromPrimitive;
-use std::io::{self, Read, Write};
-use std::net::{Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV4, SocketAddrV6, TcpStream};
-use std::{thread, time};
-
-use core::consensus;
-use core::core::hash::Hash;
-use core::core::BlockHeader;
-use core::pow::Difficulty;
-use core::ser::{self, Readable, Reader, Writeable, Writer};
-
-use types::{Capabilities, Error, ReasonForBan, MAX_BLOCK_HEADERS, MAX_LOCATORS, MAX_PEER_ADDRS};
-
-/// Current latest version of the protocol
-pub const PROTOCOL_VERSION: u32 = 1;
+use std::io::{Read, Write};
 
 /// Grin's user agent with current version
 pub const USER_AGENT: &'static str = concat!("MW/Grin ", env!("CARGO_PKG_VERSION"));
 
-/// Magic number expected in the header of every message
-const MAGIC: [u8; 2] = [0x54, 0x34];
+/// Magic numbers expected in the header of every message
+const OTHER_MAGIC: [u8; 2] = [73, 43];
+const FLOONET_MAGIC: [u8; 2] = [83, 59];
+const MAINNET_MAGIC: [u8; 2] = [97, 61];
 
-/// Size in bytes of a message header
-pub const HEADER_LEN: u64 = 11;
-
-/// Max theoretical size of a block filled with outputs.
-const MAX_BLOCK_SIZE: u64 =
-	(consensus::MAX_BLOCK_WEIGHT / consensus::BLOCK_OUTPUT_WEIGHT * 708) as u64;
-
-/// Types of messages.
-/// Note: Values here are *important* so we should only add new values at the
-/// end.
+// Types of messages.
+// Note: Values here are *important* so we should only add new values at the
+// end.
 enum_from_primitive! {
 	#[derive(Debug, Clone, Copy, PartialEq)]
 	pub enum Type {
@@ -68,9 +60,21 @@ enum_from_primitive! {
 		TxHashSetRequest = 16,
 		TxHashSetArchive = 17,
 		BanReason = 18,
-		// GetTransaction = 19,
-		// CompactTransaction = 20,
+		GetTransaction = 19,
+		TransactionKernel = 20,
+		KernelDataRequest = 21,
+		KernelDataResponse = 22,
 	}
+}
+
+/// Max theoretical size of a block filled with outputs.
+fn max_block_size() -> u64 {
+	(global::max_block_weight() / consensus::BLOCK_OUTPUT_WEIGHT * 708) as u64
+}
+
+// Max msg size when msg type is unknown.
+fn default_max_msg_size() -> u64 {
+	max_block_size()
 }
 
 // Max msg size for each msg type.
@@ -87,184 +91,139 @@ fn max_msg_size(msg_type: Type) -> u64 {
 		Type::Header => 365,
 		Type::Headers => 2 + 365 * MAX_BLOCK_HEADERS as u64,
 		Type::GetBlock => 32,
-		Type::Block => MAX_BLOCK_SIZE,
+		Type::Block => max_block_size(),
 		Type::GetCompactBlock => 32,
-		Type::CompactBlock => MAX_BLOCK_SIZE / 10,
-		Type::StemTransaction => MAX_BLOCK_SIZE,
-		Type::Transaction => MAX_BLOCK_SIZE,
+		Type::CompactBlock => max_block_size() / 10,
+		Type::StemTransaction => max_block_size(),
+		Type::Transaction => max_block_size(),
 		Type::TxHashSetRequest => 40,
 		Type::TxHashSetArchive => 64,
 		Type::BanReason => 64,
+		Type::GetTransaction => 32,
+		Type::TransactionKernel => 32,
+		Type::KernelDataRequest => 0,
+		Type::KernelDataResponse => 8,
 	}
 }
 
-/// The default implementation of read_exact is useless with async TcpStream as
-/// it will return as soon as something has been read, regardless of
-/// whether the buffer has been filled (and then errors). This implementation
-/// will block until it has read exactly `len` bytes and returns them as a
-/// `vec<u8>`. Except for a timeout, this implementation will never return a
-/// partially filled buffer.
-///
-/// The timeout in milliseconds aborts the read when it's met. Note that the
-/// time is not guaranteed to be exact. To support cases where we want to poll
-/// instead of blocking, a `block_on_empty` boolean, when false, ensures
-/// `read_exact` returns early with a `io::ErrorKind::WouldBlock` if nothing
-/// has been read from the socket.
-pub fn read_exact(
-	conn: &mut TcpStream,
-	mut buf: &mut [u8],
-	timeout: time::Duration,
-	block_on_empty: bool,
-) -> io::Result<()> {
-	let sleep_time = time::Duration::from_micros(10);
-	let mut count = time::Duration::new(0, 0);
-
-	let mut read = 0;
-	loop {
-		match conn.read(buf) {
-			Ok(0) => {
-				return Err(io::Error::new(
-					io::ErrorKind::ConnectionAborted,
-					"read_exact",
-				));
-			}
-			Ok(n) => {
-				let tmp = buf;
-				buf = &mut tmp[n..];
-				read += n;
-			}
-			Err(ref e) if e.kind() == io::ErrorKind::Interrupted => {}
-			Err(ref e) if e.kind() == io::ErrorKind::WouldBlock => {
-				if read == 0 && !block_on_empty {
-					return Err(io::Error::new(io::ErrorKind::WouldBlock, "read_exact"));
-				}
-			}
-			Err(e) => return Err(e),
-		}
-		if !buf.is_empty() {
-			thread::sleep(sleep_time);
-			count += sleep_time;
-		} else {
-			break;
-		}
-		if count > timeout {
-			return Err(io::Error::new(
-				io::ErrorKind::TimedOut,
-				"reading from tcp stream",
-			));
-		}
+fn magic() -> [u8; 2] {
+	match *global::CHAIN_TYPE.read() {
+		global::ChainTypes::Floonet => FLOONET_MAGIC,
+		global::ChainTypes::Mainnet => MAINNET_MAGIC,
+		_ => OTHER_MAGIC,
 	}
-	Ok(())
 }
 
-/// Same as `read_exact` but for writing.
-pub fn write_all(conn: &mut Write, mut buf: &[u8], timeout: time::Duration) -> io::Result<()> {
-	let sleep_time = time::Duration::from_micros(10);
-	let mut count = time::Duration::new(0, 0);
-
-	while !buf.is_empty() {
-		match conn.write(buf) {
-			Ok(0) => {
-				return Err(io::Error::new(
-					io::ErrorKind::WriteZero,
-					"failed to write whole buffer",
-				))
-			}
-			Ok(n) => buf = &buf[n..],
-			Err(ref e) if e.kind() == io::ErrorKind::Interrupted => {}
-			Err(ref e) if e.kind() == io::ErrorKind::WouldBlock => {}
-			Err(e) => return Err(e),
-		}
-		if !buf.is_empty() {
-			thread::sleep(sleep_time);
-			count += sleep_time;
-		} else {
-			break;
-		}
-		if count > timeout {
-			return Err(io::Error::new(
-				io::ErrorKind::TimedOut,
-				"reading from tcp stream",
-			));
-		}
-	}
-	Ok(())
-}
-
-/// Read a header from the provided connection without blocking if the
+/// Read a header from the provided stream without blocking if the
 /// underlying stream is async. Typically headers will be polled for, so
 /// we do not want to block.
-pub fn read_header(conn: &mut TcpStream, msg_type: Option<Type>) -> Result<MsgHeader, Error> {
-	let mut head = vec![0u8; HEADER_LEN as usize];
-	if Some(Type::Hand) == msg_type {
-		read_exact(conn, &mut head, time::Duration::from_millis(10), true)?;
-	} else {
-		read_exact(conn, &mut head, time::Duration::from_secs(10), false)?;
-	}
-	let header = ser::deserialize::<MsgHeader>(&mut &head[..])?;
-	let max_len = max_msg_size(header.msg_type);
-	// TODO 4x the limits for now to leave ourselves space to change things
-	if header.msg_len > max_len * 4 {
-		error!(
-			"Too large read {}, had {}, wanted {}.",
-			header.msg_type as u8, max_len, header.msg_len
-		);
-		return Err(Error::Serialization(ser::Error::TooLargeReadErr));
-	}
+///
+/// Note: We return a MsgHeaderWrapper here as we may encounter an unknown msg type.
+///
+pub fn read_header(
+	stream: &mut dyn Read,
+	version: ProtocolVersion,
+) -> Result<MsgHeaderWrapper, Error> {
+	let mut head = vec![0u8; MsgHeader::LEN];
+	stream.read_exact(&mut head)?;
+	let header = ser::deserialize::<MsgHeaderWrapper>(&mut &head[..], version)?;
 	Ok(header)
 }
 
-/// Read a message body from the provided connection, always blocking
+/// Read a single item from the provided stream, always blocking until we
+/// have a result (or timeout).
+/// Returns the item and the total bytes read.
+pub fn read_item<T: Readable>(
+	stream: &mut dyn Read,
+	version: ProtocolVersion,
+) -> Result<(T, u64), Error> {
+	let mut reader = StreamingReader::new(stream, version);
+	let res = T::read(&mut reader)?;
+	Ok((res, reader.total_bytes_read()))
+}
+
+/// Read a message body from the provided stream, always blocking
 /// until we have a result (or timeout).
-pub fn read_body<T>(h: &MsgHeader, conn: &mut TcpStream) -> Result<T, Error>
-where
-	T: Readable,
-{
+pub fn read_body<T: Readable>(
+	h: &MsgHeader,
+	stream: &mut dyn Read,
+	version: ProtocolVersion,
+) -> Result<T, Error> {
 	let mut body = vec![0u8; h.msg_len as usize];
-	read_exact(conn, &mut body, time::Duration::from_secs(20), true)?;
-	ser::deserialize(&mut &body[..]).map_err(From::from)
+	stream.read_exact(&mut body)?;
+	ser::deserialize(&mut &body[..], version).map_err(From::from)
 }
 
-/// Reads a full message from the underlying connection.
-pub fn read_message<T>(conn: &mut TcpStream, msg_type: Type) -> Result<T, Error>
-where
-	T: Readable,
-{
-	let header = read_header(conn, Some(msg_type))?;
-	if header.msg_type != msg_type {
-		return Err(Error::BadMessage);
+/// Read (an unknown) message from the provided stream and discard it.
+pub fn read_discard(msg_len: u64, stream: &mut dyn Read) -> Result<(), Error> {
+	let mut buffer = vec![0u8; msg_len as usize];
+	stream.read_exact(&mut buffer)?;
+	Ok(())
+}
+
+/// Reads a full message from the underlying stream.
+pub fn read_message<T: Readable>(
+	stream: &mut dyn Read,
+	version: ProtocolVersion,
+	msg_type: Type,
+) -> Result<T, Error> {
+	match read_header(stream, version)? {
+		MsgHeaderWrapper::Known(header) => {
+			if header.msg_type == msg_type {
+				read_body(&header, stream, version)
+			} else {
+				Err(Error::BadMessage)
+			}
+		}
+		MsgHeaderWrapper::Unknown(msg_len) => {
+			read_discard(msg_len, stream)?;
+			Err(Error::BadMessage)
+		}
 	}
-	read_body(&header, conn)
 }
 
-pub fn write_to_buf<T>(msg: T, msg_type: Type) -> Vec<u8>
-where
-	T: Writeable,
-{
+pub fn write_to_buf<T: Writeable>(
+	msg: T,
+	msg_type: Type,
+	version: ProtocolVersion,
+) -> Result<Vec<u8>, Error> {
 	// prepare the body first so we know its serialized length
 	let mut body_buf = vec![];
-	ser::serialize(&mut body_buf, &msg).unwrap();
+	ser::serialize(&mut body_buf, version, &msg)?;
 
 	// build and serialize the header using the body size
 	let mut msg_buf = vec![];
 	let blen = body_buf.len() as u64;
-	ser::serialize(&mut msg_buf, &MsgHeader::new(msg_type, blen)).unwrap();
+	ser::serialize(&mut msg_buf, version, &MsgHeader::new(msg_type, blen))?;
 	msg_buf.append(&mut body_buf);
 
-	msg_buf
+	Ok(msg_buf)
 }
 
-pub fn write_message<T>(conn: &mut TcpStream, msg: T, msg_type: Type) -> Result<(), Error>
-where
-	T: Writeable + 'static,
-{
-	let buf = write_to_buf(msg, msg_type);
-	// send the whole thing
-	conn.write_all(&buf[..])?;
+pub fn write_message<T: Writeable>(
+	stream: &mut dyn Write,
+	msg: T,
+	msg_type: Type,
+	version: ProtocolVersion,
+) -> Result<(), Error> {
+	let buf = write_to_buf(msg, msg_type, version)?;
+	stream.write_all(&buf[..])?;
 	Ok(())
 }
 
+/// A wrapper around a message header. If the header is for an unknown msg type
+/// then we will be unable to parse the msg itself (just a bunch of random bytes).
+/// But we need to know how many bytes to discard to discard the full message.
+#[derive(Clone)]
+pub enum MsgHeaderWrapper {
+	/// A "known" msg type with deserialized msg header.
+	Known(MsgHeader),
+	/// An unknown msg type with corresponding msg size in bytes.
+	Unknown(u64),
+}
+
 /// Header of any protocol message, used to identify incoming messages.
+#[derive(Clone)]
 pub struct MsgHeader {
 	magic: [u8; 2],
 	/// Type of the message.
@@ -277,16 +236,16 @@ impl MsgHeader {
 	/// Creates a new message header.
 	pub fn new(msg_type: Type, len: u64) -> MsgHeader {
 		MsgHeader {
-			magic: MAGIC,
+			magic: magic(),
 			msg_type: msg_type,
 			msg_len: len,
 		}
 	}
+}
 
-	/// Serialized length of the header in bytes
-	pub fn serialized_len(&self) -> u64 {
-		HEADER_LEN
-	}
+impl FixedLength for MsgHeader {
+	// 2 magic bytes + 1 type byte + 8 bytes (msg_len)
+	const LEN: usize = 2 + 1 + 8;
 }
 
 impl Writeable for MsgHeader {
@@ -302,18 +261,49 @@ impl Writeable for MsgHeader {
 	}
 }
 
-impl Readable for MsgHeader {
-	fn read(reader: &mut Reader) -> Result<MsgHeader, ser::Error> {
-		reader.expect_u8(MAGIC[0])?;
-		reader.expect_u8(MAGIC[1])?;
-		let (t, len) = ser_multiread!(reader, read_u8, read_u64);
+impl Readable for MsgHeaderWrapper {
+	fn read(reader: &mut dyn Reader) -> Result<MsgHeaderWrapper, ser::Error> {
+		let m = magic();
+		reader.expect_u8(m[0])?;
+		reader.expect_u8(m[1])?;
+
+		// Read the msg header.
+		// We do not yet know if the msg type is one we support locally.
+		let (t, msg_len) = ser_multiread!(reader, read_u8, read_u64);
+
+		// Attempt to convert the msg type byte into one of our known msg type enum variants.
+		// Check the msg_len while we are at it.
 		match Type::from_u8(t) {
-			Some(ty) => Ok(MsgHeader {
-				magic: MAGIC,
-				msg_type: ty,
-				msg_len: len,
-			}),
-			None => Err(ser::Error::CorruptedData),
+			Some(msg_type) => {
+				// TODO 4x the limits for now to leave ourselves space to change things.
+				let max_len = max_msg_size(msg_type) * 4;
+				if msg_len > max_len {
+					error!(
+						"Too large read {:?}, max_len: {}, msg_len: {}.",
+						msg_type, max_len, msg_len
+					);
+					return Err(ser::Error::TooLargeReadErr);
+				}
+
+				Ok(MsgHeaderWrapper::Known(MsgHeader {
+					magic: m,
+					msg_type,
+					msg_len,
+				}))
+			}
+			None => {
+				// Unknown msg type, but we still want to limit how big the msg is.
+				let max_len = default_max_msg_size() * 4;
+				if msg_len > max_len {
+					error!(
+						"Too large read (unknown msg type) {:?}, max_len: {}, msg_len: {}.",
+						t, max_len, msg_len
+					);
+					return Err(ser::Error::TooLargeReadErr);
+				}
+
+				Ok(MsgHeaderWrapper::Unknown(msg_len))
+			}
 		}
 	}
 }
@@ -322,7 +312,7 @@ impl Readable for MsgHeader {
 /// characteristics.
 pub struct Hand {
 	/// protocol version of the sender
-	pub version: u32,
+	pub version: ProtocolVersion,
 	/// capabilities of the sender
 	pub capabilities: Capabilities,
 	/// randomly generated for each handshake, helps detect self
@@ -333,49 +323,50 @@ pub struct Hand {
 	/// may be needed
 	pub total_difficulty: Difficulty,
 	/// network address of the sender
-	pub sender_addr: SockAddr,
+	pub sender_addr: PeerAddr,
 	/// network address of the receiver
-	pub receiver_addr: SockAddr,
+	pub receiver_addr: PeerAddr,
 	/// name of version of the software
 	pub user_agent: String,
 }
 
 impl Writeable for Hand {
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
+		self.version.write(writer)?;
 		ser_multiwrite!(
 			writer,
-			[write_u32, self.version],
 			[write_u32, self.capabilities.bits()],
 			[write_u64, self.nonce]
 		);
-		self.total_difficulty.write(writer).unwrap();
-		self.sender_addr.write(writer).unwrap();
-		self.receiver_addr.write(writer).unwrap();
-		writer.write_bytes(&self.user_agent).unwrap();
-		self.genesis.write(writer).unwrap();
+		self.total_difficulty.write(writer)?;
+		self.sender_addr.write(writer)?;
+		self.receiver_addr.write(writer)?;
+		writer.write_bytes(&self.user_agent)?;
+		self.genesis.write(writer)?;
 		Ok(())
 	}
 }
 
 impl Readable for Hand {
-	fn read(reader: &mut Reader) -> Result<Hand, ser::Error> {
-		let (version, capab, nonce) = ser_multiread!(reader, read_u32, read_u32, read_u64);
-		let capabilities = Capabilities::from_bits(capab).ok_or(ser::Error::CorruptedData)?;
-		let total_diff = Difficulty::read(reader)?;
-		let sender_addr = SockAddr::read(reader)?;
-		let receiver_addr = SockAddr::read(reader)?;
-		let ua = reader.read_vec()?;
+	fn read(reader: &mut dyn Reader) -> Result<Hand, ser::Error> {
+		let version = ProtocolVersion::read(reader)?;
+		let (capab, nonce) = ser_multiread!(reader, read_u32, read_u64);
+		let capabilities = Capabilities::from_bits_truncate(capab);
+		let total_difficulty = Difficulty::read(reader)?;
+		let sender_addr = PeerAddr::read(reader)?;
+		let receiver_addr = PeerAddr::read(reader)?;
+		let ua = reader.read_bytes_len_prefix()?;
 		let user_agent = String::from_utf8(ua).map_err(|_| ser::Error::CorruptedData)?;
 		let genesis = Hash::read(reader)?;
 		Ok(Hand {
-			version: version,
-			capabilities: capabilities,
-			nonce: nonce,
-			genesis: genesis,
-			total_difficulty: total_diff,
-			sender_addr: sender_addr,
-			receiver_addr: receiver_addr,
-			user_agent: user_agent,
+			version,
+			capabilities,
+			nonce,
+			genesis,
+			total_difficulty,
+			sender_addr,
+			receiver_addr,
+			user_agent,
 		})
 	}
 }
@@ -384,7 +375,7 @@ impl Readable for Hand {
 /// version and characteristics.
 pub struct Shake {
 	/// sender version
-	pub version: u32,
+	pub version: ProtocolVersion,
 	/// sender capabilities
 	pub capabilities: Capabilities,
 	/// genesis block of our chain, only connect to peers on the same chain
@@ -398,32 +389,30 @@ pub struct Shake {
 
 impl Writeable for Shake {
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
-		ser_multiwrite!(
-			writer,
-			[write_u32, self.version],
-			[write_u32, self.capabilities.bits()]
-		);
-		self.total_difficulty.write(writer).unwrap();
-		writer.write_bytes(&self.user_agent).unwrap();
-		self.genesis.write(writer).unwrap();
+		self.version.write(writer)?;
+		writer.write_u32(self.capabilities.bits())?;
+		self.total_difficulty.write(writer)?;
+		writer.write_bytes(&self.user_agent)?;
+		self.genesis.write(writer)?;
 		Ok(())
 	}
 }
 
 impl Readable for Shake {
-	fn read(reader: &mut Reader) -> Result<Shake, ser::Error> {
-		let (version, capab) = ser_multiread!(reader, read_u32, read_u32);
-		let capabilities = Capabilities::from_bits(capab).ok_or(ser::Error::CorruptedData)?;
-		let total_diff = Difficulty::read(reader)?;
-		let ua = reader.read_vec()?;
+	fn read(reader: &mut dyn Reader) -> Result<Shake, ser::Error> {
+		let version = ProtocolVersion::read(reader)?;
+		let capab = reader.read_u32()?;
+		let capabilities = Capabilities::from_bits_truncate(capab);
+		let total_difficulty = Difficulty::read(reader)?;
+		let ua = reader.read_bytes_len_prefix()?;
 		let user_agent = String::from_utf8(ua).map_err(|_| ser::Error::CorruptedData)?;
 		let genesis = Hash::read(reader)?;
 		Ok(Shake {
-			version: version,
-			capabilities: capabilities,
-			genesis: genesis,
-			total_difficulty: total_diff,
-			user_agent: user_agent,
+			version,
+			capabilities,
+			genesis,
+			total_difficulty,
+			user_agent,
 		})
 	}
 }
@@ -441,12 +430,10 @@ impl Writeable for GetPeerAddrs {
 }
 
 impl Readable for GetPeerAddrs {
-	fn read(reader: &mut Reader) -> Result<GetPeerAddrs, ser::Error> {
+	fn read(reader: &mut dyn Reader) -> Result<GetPeerAddrs, ser::Error> {
 		let capab = reader.read_u32()?;
-		let capabilities = Capabilities::from_bits(capab).ok_or(ser::Error::CorruptedData)?;
-		Ok(GetPeerAddrs {
-			capabilities: capabilities,
-		})
+		let capabilities = Capabilities::from_bits_truncate(capab);
+		Ok(GetPeerAddrs { capabilities })
 	}
 }
 
@@ -454,31 +441,30 @@ impl Readable for GetPeerAddrs {
 /// GetPeerAddrs.
 #[derive(Debug)]
 pub struct PeerAddrs {
-	pub peers: Vec<SockAddr>,
+	pub peers: Vec<PeerAddr>,
 }
 
 impl Writeable for PeerAddrs {
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
 		writer.write_u32(self.peers.len() as u32)?;
 		for p in &self.peers {
-			p.write(writer).unwrap();
+			p.write(writer)?;
 		}
 		Ok(())
 	}
 }
 
 impl Readable for PeerAddrs {
-	fn read(reader: &mut Reader) -> Result<PeerAddrs, ser::Error> {
+	fn read(reader: &mut dyn Reader) -> Result<PeerAddrs, ser::Error> {
 		let peer_count = reader.read_u32()?;
 		if peer_count > MAX_PEER_ADDRS {
 			return Err(ser::Error::TooLargeReadErr);
 		} else if peer_count == 0 {
 			return Ok(PeerAddrs { peers: vec![] });
 		}
-		// let peers = try_map_vec!([0..peer_count], |_| SockAddr::read(reader));
 		let mut peers = Vec::with_capacity(peer_count as usize);
 		for _ in 0..peer_count {
-			peers.push(SockAddr::read(reader)?);
+			peers.push(PeerAddr::read(reader)?);
 		}
 		Ok(PeerAddrs { peers: peers })
 	}
@@ -501,65 +487,14 @@ impl Writeable for PeerError {
 }
 
 impl Readable for PeerError {
-	fn read(reader: &mut Reader) -> Result<PeerError, ser::Error> {
-		let (code, msg) = ser_multiread!(reader, read_u32, read_vec);
+	fn read(reader: &mut dyn Reader) -> Result<PeerError, ser::Error> {
+		let code = reader.read_u32()?;
+		let msg = reader.read_bytes_len_prefix()?;
 		let message = String::from_utf8(msg).map_err(|_| ser::Error::CorruptedData)?;
 		Ok(PeerError {
 			code: code,
 			message: message,
 		})
-	}
-}
-
-/// Only necessary so we can implement Readable and Writeable. Rust disallows
-/// implementing traits when both types are outside of this crate (which is the
-/// case for SocketAddr and Readable/Writeable).
-#[derive(Debug)]
-pub struct SockAddr(pub SocketAddr);
-
-impl Writeable for SockAddr {
-	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
-		match self.0 {
-			SocketAddr::V4(sav4) => {
-				ser_multiwrite!(
-					writer,
-					[write_u8, 0],
-					[write_fixed_bytes, &sav4.ip().octets().to_vec()],
-					[write_u16, sav4.port()]
-				);
-			}
-			SocketAddr::V6(sav6) => {
-				writer.write_u8(1)?;
-				for seg in &sav6.ip().segments() {
-					writer.write_u16(*seg)?;
-				}
-				writer.write_u16(sav6.port())?;
-			}
-		}
-		Ok(())
-	}
-}
-
-impl Readable for SockAddr {
-	fn read(reader: &mut Reader) -> Result<SockAddr, ser::Error> {
-		let v4_or_v6 = reader.read_u8()?;
-		if v4_or_v6 == 0 {
-			let ip = reader.read_fixed_bytes(4)?;
-			let port = reader.read_u16()?;
-			Ok(SockAddr(SocketAddr::V4(SocketAddrV4::new(
-				Ipv4Addr::new(ip[0], ip[1], ip[2], ip[3]),
-				port,
-			))))
-		} else {
-			let ip = try_map_vec!([0..8], |_| reader.read_u16());
-			let port = reader.read_u16()?;
-			Ok(SockAddr(SocketAddr::V6(SocketAddrV6::new(
-				Ipv6Addr::new(ip[0], ip[1], ip[2], ip[3], ip[4], ip[5], ip[6], ip[7]),
-				port,
-				0,
-				0,
-			))))
-		}
 	}
 }
 
@@ -580,7 +515,7 @@ impl Writeable for Locator {
 }
 
 impl Readable for Locator {
-	fn read(reader: &mut Reader) -> Result<Locator, ser::Error> {
+	fn read(reader: &mut dyn Reader) -> Result<Locator, ser::Error> {
 		let len = reader.read_u8()?;
 		if len > (MAX_LOCATORS as u8) {
 			return Err(ser::Error::TooLargeReadErr);
@@ -608,24 +543,6 @@ impl Writeable for Headers {
 	}
 }
 
-impl Readable for Headers {
-	fn read(reader: &mut Reader) -> Result<Headers, ser::Error> {
-		let len = reader.read_u16()?;
-		if (len as u32) > MAX_BLOCK_HEADERS + 1 {
-			return Err(ser::Error::TooLargeReadErr);
-		}
-		let mut headers: Vec<BlockHeader> = Vec::with_capacity(len as usize);
-		for n in 0..len as usize {
-			let header = BlockHeader::read(reader)?;
-			if n > 0 && header.height != headers[n - 1].height + 1 {
-				return Err(ser::Error::CorruptedData);
-			}
-			headers.push(header);
-		}
-		Ok(Headers { headers: headers })
-	}
-}
-
 pub struct Ping {
 	/// total difficulty accumulated by the sender, used to check whether sync
 	/// may be needed
@@ -636,14 +553,14 @@ pub struct Ping {
 
 impl Writeable for Ping {
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
-		self.total_difficulty.write(writer).unwrap();
-		self.height.write(writer).unwrap();
+		self.total_difficulty.write(writer)?;
+		self.height.write(writer)?;
 		Ok(())
 	}
 }
 
 impl Readable for Ping {
-	fn read(reader: &mut Reader) -> Result<Ping, ser::Error> {
+	fn read(reader: &mut dyn Reader) -> Result<Ping, ser::Error> {
 		let total_difficulty = Difficulty::read(reader)?;
 		let height = reader.read_u64()?;
 		Ok(Ping {
@@ -663,14 +580,14 @@ pub struct Pong {
 
 impl Writeable for Pong {
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
-		self.total_difficulty.write(writer).unwrap();
-		self.height.write(writer).unwrap();
+		self.total_difficulty.write(writer)?;
+		self.height.write(writer)?;
 		Ok(())
 	}
 }
 
 impl Readable for Pong {
-	fn read(reader: &mut Reader) -> Result<Pong, ser::Error> {
+	fn read(reader: &mut dyn Reader) -> Result<Pong, ser::Error> {
 		let total_difficulty = Difficulty::read(reader)?;
 		let height = reader.read_u64()?;
 		Ok(Pong {
@@ -689,13 +606,13 @@ pub struct BanReason {
 impl Writeable for BanReason {
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
 		let ban_reason_i32 = self.ban_reason as i32;
-		ban_reason_i32.write(writer).unwrap();
+		ban_reason_i32.write(writer)?;
 		Ok(())
 	}
 }
 
 impl Readable for BanReason {
-	fn read(reader: &mut Reader) -> Result<BanReason, ser::Error> {
+	fn read(reader: &mut dyn Reader) -> Result<BanReason, ser::Error> {
 		let ban_reason_i32 = match reader.read_i32() {
 			Ok(h) => h,
 			Err(_) => 0,
@@ -725,7 +642,7 @@ impl Writeable for TxHashSetRequest {
 }
 
 impl Readable for TxHashSetRequest {
-	fn read(reader: &mut Reader) -> Result<TxHashSetRequest, ser::Error> {
+	fn read(reader: &mut dyn Reader) -> Result<TxHashSetRequest, ser::Error> {
 		Ok(TxHashSetRequest {
 			hash: Hash::read(reader)?,
 			height: reader.read_u64()?,
@@ -753,7 +670,7 @@ impl Writeable for TxHashSetArchive {
 }
 
 impl Readable for TxHashSetArchive {
-	fn read(reader: &mut Reader) -> Result<TxHashSetArchive, ser::Error> {
+	fn read(reader: &mut dyn Reader) -> Result<TxHashSetArchive, ser::Error> {
 		let hash = Hash::read(reader)?;
 		let (height, bytes) = ser_multiread!(reader, read_u64, read_u64);
 
@@ -762,5 +679,32 @@ impl Readable for TxHashSetArchive {
 			height,
 			bytes,
 		})
+	}
+}
+
+pub struct KernelDataRequest {}
+
+impl Writeable for KernelDataRequest {
+	fn write<W: Writer>(&self, _writer: &mut W) -> Result<(), ser::Error> {
+		Ok(())
+	}
+}
+
+pub struct KernelDataResponse {
+	/// Size in bytes of the attached kernel data file.
+	pub bytes: u64,
+}
+
+impl Writeable for KernelDataResponse {
+	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
+		writer.write_u64(self.bytes)?;
+		Ok(())
+	}
+}
+
+impl Readable for KernelDataResponse {
+	fn read(reader: &mut dyn Reader) -> Result<KernelDataResponse, ser::Error> {
+		let bytes = reader.read_u64()?;
+		Ok(KernelDataResponse { bytes })
 	}
 }

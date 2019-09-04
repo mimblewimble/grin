@@ -15,17 +15,19 @@
 //! Server stat collection types, to be used by tests, logging or GUI/TUI
 //! to collect information about server status
 
+use crate::util::RwLock;
 use std::sync::Arc;
 use std::time::SystemTime;
-use util::RwLock;
 
-use core::consensus::graph_weight;
+use crate::core::consensus::graph_weight;
+use crate::core::core::hash::Hash;
+use crate::core::ser::ProtocolVersion;
 
 use chrono::prelude::*;
 
-use chain;
-use common::types::SyncStatus;
-use p2p;
+use crate::chain;
+use crate::chain::SyncStatus;
+use crate::p2p;
 
 /// Server state info collection struct, to be passed around into internals
 /// and populated when required
@@ -71,6 +73,8 @@ pub struct WorkerStats {
 	pub is_connected: bool,
 	/// Timestamp of most recent communication with this worker
 	pub last_seen: SystemTime,
+	/// which block height it starts mining
+	pub initial_block_height: u64,
 	/// pow difficulty this worker is using
 	pub pow_difficulty: u64,
 	/// number of valid shares submitted
@@ -79,6 +83,8 @@ pub struct WorkerStats {
 	pub num_rejected: u64,
 	/// number of shares submitted too late
 	pub num_stale: u64,
+	/// number of valid blocks found
+	pub num_blocks_found: u64,
 }
 
 /// Struct to return relevant information about the stratum server
@@ -118,8 +124,10 @@ pub struct DiffStats {
 /// Last n blocks for difficulty calculation purposes
 #[derive(Clone, Debug)]
 pub struct DiffBlock {
-	/// Block number (can be negative for a new chain)
-	pub block_number: i64,
+	/// Block height (can be negative for a new chain)
+	pub block_height: i64,
+	/// Block hash (may be synthetic for a new chain)
+	pub block_hash: Hash,
 	/// Block network difficulty
 	pub difficulty: u64,
 	/// Time block was found (epoch seconds)
@@ -140,7 +148,9 @@ pub struct PeerStats {
 	/// Address
 	pub addr: String,
 	/// version running
-	pub version: u32,
+	pub version: ProtocolVersion,
+	/// Peer user agent string.
+	pub user_agent: String,
 	/// difficulty reported by peer
 	pub total_difficulty: u64,
 	/// height reported by peer on ping
@@ -150,15 +160,16 @@ pub struct PeerStats {
 	/// Last time we saw a ping/pong from this peer.
 	pub last_seen: DateTime<Utc>,
 	/// Number of bytes we've sent to the peer.
-	pub sent_bytes: Option<u64>,
+	pub sent_bytes_per_sec: u64,
 	/// Number of bytes we've received from the peer.
-	pub received_bytes: Option<u64>,
+	pub received_bytes_per_sec: u64,
 }
 
 impl StratumStats {
 	/// Calculate network hashrate
-	pub fn network_hashrate(&self) -> f64 {
-		42.0 * (self.network_difficulty as f64 / graph_weight(self.edge_bits as u8) as f64) / 60.0
+	pub fn network_hashrate(&self, height: u64) -> f64 {
+		42.0 * (self.network_difficulty as f64 / graph_weight(height, self.edge_bits as u8) as f64)
+			/ 60.0
 	}
 }
 
@@ -182,12 +193,13 @@ impl PeerStats {
 			state: state.to_string(),
 			addr: addr,
 			version: peer.info.version,
+			user_agent: peer.info.user_agent.clone(),
 			total_difficulty: peer.info.total_difficulty().to_num(),
 			height: peer.info.height(),
 			direction: direction.to_string(),
 			last_seen: peer.info.last_seen(),
-			sent_bytes: peer.sent_bytes(),
-			received_bytes: peer.received_bytes(),
+			sent_bytes_per_sec: peer.last_min_sent_bytes().unwrap_or(0) / 60,
+			received_bytes_per_sec: peer.last_min_received_bytes().unwrap_or(0) / 60,
 		}
 	}
 }
@@ -198,10 +210,12 @@ impl Default for WorkerStats {
 			id: String::from("unknown"),
 			is_connected: false,
 			last_seen: SystemTime::now(),
+			initial_block_height: 0,
 			pow_difficulty: 0,
 			num_accepted: 0,
 			num_rejected: 0,
 			num_stale: 0,
+			num_blocks_found: 0,
 		}
 	}
 }

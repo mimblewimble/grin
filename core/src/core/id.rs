@@ -20,9 +20,9 @@ use std::cmp::Ordering;
 use byteorder::{ByteOrder, LittleEndian};
 use siphasher::sip::SipHasher24;
 
-use core::hash::{Hash, Hashed};
-use ser::{self, Readable, Reader, Writeable, Writer};
-use util;
+use crate::core::hash::{DefaultHashable, Hash, Hashed};
+use crate::ser::{self, Readable, Reader, Writeable, Writer};
+use crate::util;
 
 /// The size of a short id used to identify inputs|outputs|kernels (6 bytes)
 pub const SHORT_ID_SIZE: usize = 6;
@@ -51,8 +51,8 @@ impl<H: Hashed> ShortIdentifiable for H {
 		use std::hash::Hasher;
 
 		// extract k0/k1 from the block_hash
-		let k0 = LittleEndian::read_u64(&hash_with_nonce.0[0..8]);
-		let k1 = LittleEndian::read_u64(&hash_with_nonce.0[8..16]);
+		let k0 = LittleEndian::read_u64(&hash_with_nonce.as_bytes()[0..8]);
+		let k1 = LittleEndian::read_u64(&hash_with_nonce.as_bytes()[8..16]);
 
 		// initialize a siphasher24 with k0/k1
 		let mut sip_hasher = SipHasher24::new_with_keys(k0, k1);
@@ -73,13 +73,14 @@ impl<H: Hashed> ShortIdentifiable for H {
 #[derive(Clone, Serialize, Deserialize, Hash)]
 pub struct ShortId([u8; 6]);
 
-/// We want to sort short_ids in a canonical and consistent manner so we can
-/// verify sort order in the same way we do for full inputs|outputs|kernels
-/// themselves.
+impl DefaultHashable for ShortId {}
+// We want to sort short_ids in a canonical and consistent manner so we can
+// verify sort order in the same way we do for full inputs|outputs|kernels
+// themselves.
 hashable_ord!(ShortId);
 
 impl ::std::fmt::Debug for ShortId {
-	fn fmt(&self, f: &mut ::std::fmt::Formatter) -> ::std::fmt::Result {
+	fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
 		write!(f, "{}(", stringify!(ShortId))?;
 		write!(f, "{}", self.to_hex())?;
 		write!(f, ")")
@@ -87,7 +88,7 @@ impl ::std::fmt::Debug for ShortId {
 }
 
 impl Readable for ShortId {
-	fn read(reader: &mut Reader) -> Result<ShortId, ser::Error> {
+	fn read(reader: &mut dyn Reader) -> Result<ShortId, ser::Error> {
 		let v = reader.read_fixed_bytes(SHORT_ID_SIZE)?;
 		let mut a = [0; SHORT_ID_SIZE];
 		a.copy_from_slice(&v[..]);
@@ -131,7 +132,7 @@ impl ShortId {
 #[cfg(test)]
 mod test {
 	use super::*;
-	use ser::{Writeable, Writer};
+	use crate::ser::{Writeable, Writer};
 
 	#[test]
 	fn short_id_ord() {
@@ -167,6 +168,8 @@ mod test {
 				Ok(())
 			}
 		}
+
+		impl DefaultHashable for Foo {}
 
 		let foo = Foo(0);
 

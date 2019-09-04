@@ -1,6 +1,6 @@
 # Introduction to MimbleWimble and Grin
 
-*Read this in other languages: [English](intro.md), [简体中文](intro.zh-cn.md), [Español](intro_ES.md).*
+*Read this in other languages: [English](intro.md), [简体中文](intro_ZH-CN.md), [Español](intro_ES.md), [Nederlands](intro_NL.md), [Русский](intro_RU.md), [日本語](intro_JP.md), [Deutsch](intro_DE.md), [Portuguese](intro_PT-BR.md), [Korean](intro_KR.md).*
 
 MimbleWimble is a blockchain format and protocol that provides
 extremely good scalability, privacy and fungibility by relying on strong
@@ -16,13 +16,14 @@ The main goal and characteristics of the Grin project are:
 * Privacy by default. This enables complete fungibility without precluding
   the ability to selectively disclose information as needed.
 * Scales mostly with the number of users and minimally with the number of
-  transactions (<100 byte `kernel), resulting in a large space saving compared
+  transactions (<100 byte `kernel`), resulting in a large space saving compared
   to other blockchains.
 * Strong and proven cryptography. MimbleWimble only relies on Elliptic Curve
   Cryptography which has been tried and tested for decades.
 * Design simplicity that makes it easy to audit and maintain over time.
-* Community driven, using an asic-resistant mining algorithm (Cuckoo Cycle)
-  encouraging mining decentralization.
+* Community driven, encouraging mining decentralization.
+
+A detailed post on the step-by-step of how Grin transactions work (with graphics) can be found [in this Medium post](https://medium.com/@brandonarvanaghi/grin-transactions-explained-step-by-step-fdceb905a853). 
 
 ## Tongue Tying for Everyone
 
@@ -48,7 +49,7 @@ dive deeper into those assumptions, there are other opportunities to
 
 An Elliptic Curve for the purpose of cryptography is simply a large set of points that
 we will call _C_. These points can be added, subtracted, or multiplied by integers (also called scalars).
-Given an integer _k_ and
+Given such a point _H_, an integer _k_ and
 using the scalar multiplication operation we can compute `k*H`, which is also a point on
 curve _C_. Given another integer _j_ we can also calculate `(k+j)*H`, which equals
 `k*H + j*H`. The addition and scalar multiplication operations on an elliptic curve
@@ -91,7 +92,7 @@ fundamental properties are achieved.
 Building upon the properties of ECC we described above, one can obscure the values
 in a transaction.
 
-If _v_ is the value of a transaction input or output and _H_ an elliptic curve, we can simply
+If _v_ is the value of a transaction input or output and _H_ a point on the elliptic curve _C_, we can simply 
 embed `v*H` instead of _v_ in a transaction. This works because using the ECC
 operations, we can still validate that the sum of the outputs of a transaction equals the
 sum of inputs:
@@ -100,11 +101,12 @@ sum of inputs:
 
 Verifying this property on every transaction allows the protocol to verify that a
 transaction doesn't create money out of thin air, without knowing what the actual
-values are. However, there are a finite number of usable values and one could try every single
+values are. However, there are a finite number of usable values (transaction amounts) and one 
+could try every single 
 one of them to guess the value of your transaction. In addition, knowing v1 (from
 a previous transaction for example) and the resulting `v1*H` reveals all outputs with
-value v1 across the blockchain. For these reasons, we introduce a second elliptic curve
-_G_ (practically _G_ is just another generator point on the same curve group as _H_) and
+value v1 across the blockchain. For these reasons, we introduce a second point _G_ on the same elliptic curve
+(practically _G_ is just another generator point on the same curve group as _H_) and
 a private key _r_ used as a *blinding factor*.
 
 An input or output value in a transaction can then be expressed as:
@@ -113,18 +115,19 @@ An input or output value in a transaction can then be expressed as:
 
 Where:
 
-* _r_ is a private key used as a blinding factor, _G_ is an elliptic curve and
-  their product `r*G` is the public key for _r_ on _G_.
-* _v_ is the value of an input or output and _H_ is another elliptic curve.
+* _r_ is a private key used as a blinding factor, _G_ is a point on the elliptic curve _C_ and
+  their product `r*G` is the public key for _r_ (using _G_ as generator point).
+* _v_ is the value of an input or output and _H_ is another point on the elliptic curve _C_,
+  together producing another public key `v*H` (using _H_ as generator point).
 
 Neither _v_ nor _r_ can be deduced, leveraging the fundamental properties of Elliptic
 Curve Cryptography. `r*G + v*H` is called a _Pedersen Commitment_.
 
-As a an example, let's assume we want to build a transaction with two inputs and one
+As an example, let's assume we want to build a transaction with two inputs and one
 output. We have (ignoring fees):
 
-* vi1 and vi2 as input values.
-* vo3 as output value.
+* `vi1` and `vi2` as input values.
+* `vo3` as output value.
 
 Such that:
 
@@ -143,9 +146,10 @@ This is the first pillar of MimbleWimble: the arithmetic required to validate a
 transaction can be done without knowing any of the values.
 
 As a final note, this idea is actually derived from Greg Maxwell's
-[Confidential Transactions](https://www.elementsproject.org/elements/confidential-transactions/),
-which is itself derived from an Adam Back proposal for homomorphic values applied
-to Bitcoin.
+[Confidential Transactions](https://elementsproject.org/features/confidential-transactions/investigation),
+which is itself derived from an 
+[Adam Back proposal for homomorphic values](https://bitcointalk.org/index.php?topic=305791.0) 
+applied to Bitcoin.
 
 #### Ownership
 
@@ -169,7 +173,7 @@ You need to build a simple transaction such that:
 
     Xi => Y
 
-Where _Xi_ is an input that spends your _X_ output and Y is Carol's output. There is no way to build
+Where _Xi_ is an input that spends your _X_ output and _Y_ is Carol's output. There is no way to build
 such a transaction and balance it without knowing your private key of 28. Indeed, if Carol
 is to balance this transaction, she needs to know both the value sent and your private key
 so that:
@@ -190,15 +194,20 @@ She picks 113 say, and what ends up on the blockchain is:
 
 Now the transaction no longer sums to zero and we have an _excess value_ on _G_
 (85), which is the result of the summation of all blinding factors. But because `85*G` is
-a valid public key on the elliptic curve _G_, with private key 85,
-for any x and y, only if `y = 0` is `x*G + y*H` a valid public key on _G_.
+a valid public key on the elliptic curve _C_, with private key 85,
+for any x and y, only if `y = 0` is `x*G + y*H` a valid public key on the elliptic curve 
+using generator point _G_.
 
-So all the protocol needs to verify is that (`Y - Xi`) is a valid public key on _G_ and that
-the transacting parties collectively know the private key (85 in our transaction with Carol). The
-simplest way to do so is to require a signature built with the excess value (85),
+So all the protocol needs to verify is that (`Y - Xi`) is a valid public key on the curve 
+and that the transacting parties collectively know the private key `x` (85 in our transaction with
+Carol) of this public key. If they can prove that they know the private key to `x*G + y*H` using
+generator point _G_ then this proves that `y` must be `0` (meaning above that the sum of all 
+inputs and outputs equals `0`).
+
+The simplest way to do so is to require a signature built with the excess value (85),
 which then validates that:
 
-* The transacting parties collectively know the private key, and
+* The transacting parties collectively know the private key (the excess value 85), and
 * The sum of the transaction outputs, minus the inputs, sum to a zero value
   (because only a valid public key, matching the private key, will check against
   the signature).
@@ -238,16 +247,23 @@ create new funds in every transaction.
 For example, one could create a transaction with an input of 2 and outputs of 5
 and -3 and still obtain a well-balanced transaction, following the definition in
 the previous sections. This can't be easily detected because even if _x_ is
-negative, the corresponding point `x.H` on the curve looks like any other.
+negative, the corresponding point `x*H` on the curve looks like any other.
 
 To solve this problem, MimbleWimble leverages another cryptographic concept (also
 coming from Confidential Transactions) called
 range proofs: a proof that a number falls within a given range, without revealing
 the number. We won't elaborate on the range proof, but you just need to know
-that for any `r.G + v.H` we can build a proof that will show that _v_ is greater than
+that for any `r*G + v*H` we can build a proof that will show that _v_ is greater than
 zero and does not overflow.
 
 It's also important to note that in order to create a valid range proof from the example above, both of the values 113 and 28 used in creating and signing for the excess value must be known. The reason for this, as well as a more detailed description of range proofs are further detailed in the [range proof paper](https://eprint.iacr.org/2017/1066.pdf).
+The requirement to know both values to generate valid rangeproofs is an important feature since it prevents a censoring attack where a third party could lock up UTXOs without knowing their private key by creating a transaction from
+
+    Carol's UTXO:       113*G + 2*H
+    Attacker's output:  (113 + 99)*G + 2*H
+    
+which can be signed by the attacker since Carols private key of 113 cancels due to the adverserial choice of keys. The new output could only be spent by both the attacker and Carol together. However, while the attacker can provide a valid signature for the transaction, it is impossible to create a valid rangeproof for the new output invalidating this attack.  
+
 
 #### Putting It All Together
 
@@ -256,7 +272,7 @@ A MimbleWimble transaction includes the following:
 * A set of inputs, that reference and spend a set of previous outputs.
 * A set of new outputs that include:
   * A value and a blinding factor (which is just a new private key) multiplied on
-  a curve and summed to be `r.G + v.H`.
+  a curve and summed to be `r*G + v*H`.
   * A range proof that shows that v is non-negative.
 * An explicit transaction fee, in clear.
 * A signature, computed by taking the excess blinding value (the sum of all

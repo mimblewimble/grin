@@ -1,0 +1,36 @@
+[package]
+name = "grin_gen_gen"
+version = "0.0.1"
+edition = "2018"
+authors = ["Grin Developers <mimblewimble@lists.launchpad.net>"]
+description = "Utility to automate the generation of Grin's genesis block"
+license = "Apache-2.0"
+repository = "https://github.com/mimblewimble/grin"
+keywords = [ "crypto", "grin", "mimblewimble" ]
+readme = "README.md"
+
+[[bin]]
+name = "gen_gen"
+path = "src/bin/gen_gen.rs"
+
+[dependencies]
+chrono = "0.4.4"
+cuckoo_miner = "1.0.0"
+curl = "0.4.19"
+grin_core = { path = "../../core" }
+grin_chain = { path = "../../chain" }
+grin_keychain = { path = "../../keychain" }
+grin_miner_plugin = "1.0.0"
+grin_store = { path = "../../store" }
+grin_util = { path = "../../util" }
+grin_wallet = { path = "../../wallet" }
+rpassword = "2.0.0"
+serde_json = "1"
+
+[patch.crates-io]
+grin_api = { path = "../../api" }
+grin_core = { path = "../../core" }
+grin_chain = { path = "../../chain" }
+grin_keychain = { path = "../../keychain" }
+grin_util = { path = "../../util" }
+grin_wallet = { path = "../../wallet" }

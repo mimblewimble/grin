@@ -12,166 +12,35 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-extern crate chrono;
-extern crate env_logger;
-extern crate grin_chain as chain;
-extern crate grin_core as core;
-extern crate grin_keychain as keychain;
-extern crate grin_store as store;
-extern crate grin_util as util;
-extern crate grin_wallet as wallet;
-extern crate rand;
+use self::core::genesis;
+use grin_core as core;
+use grin_util as util;
 
-use chrono::Duration;
-use std::fs;
-use std::sync::Arc;
-use util::RwLock;
+mod chain_test_helper;
 
-use chain::types::NoopAdapter;
-use chain::Chain;
-use core::core::verifier_cache::LruVerifierCache;
-use core::core::{Block, BlockHeader, Transaction};
-use core::global::{self, ChainTypes};
-use core::pow::{self, Difficulty};
-use core::{consensus, genesis};
-use keychain::{ExtKeychain, ExtKeychainPath, Keychain};
-use wallet::libtx;
-
-fn clean_output_dir(dir_name: &str) {
-	let _ = fs::remove_dir_all(dir_name);
-}
-
-fn setup(dir_name: &str) -> Chain {
-	util::init_test_logger();
-	clean_output_dir(dir_name);
-	global::set_mining_mode(ChainTypes::AutomatedTesting);
-	let genesis_block = pow::mine_genesis_block().unwrap();
-	let verifier_cache = Arc::new(RwLock::new(LruVerifierCache::new()));
-	let db_env = Arc::new(store::new_env(dir_name.to_string()));
-	chain::Chain::init(
-		dir_name.to_string(),
-		db_env,
-		Arc::new(NoopAdapter {}),
-		genesis_block,
-		pow::verify_size,
-		verifier_cache,
-		false,
-	).unwrap()
-}
-
-fn reload_chain(dir_name: &str) -> Chain {
-	let verifier_cache = Arc::new(RwLock::new(LruVerifierCache::new()));
-	let db_env = Arc::new(store::new_env(dir_name.to_string()));
-	chain::Chain::init(
-		dir_name.to_string(),
-		db_env,
-		Arc::new(NoopAdapter {}),
-		genesis::genesis_dev(),
-		pow::verify_size,
-		verifier_cache,
-		false,
-	).unwrap()
-}
+use self::chain_test_helper::{clean_output_dir, init_chain, mine_chain};
 
 #[test]
 fn data_files() {
+	util::init_test_logger();
+
 	let chain_dir = ".grin_df";
-	//new block so chain references should be freed
+	clean_output_dir(chain_dir);
+
+	// Mine a few blocks on a new chain.
 	{
-		let chain = setup(chain_dir);
-		let keychain = ExtKeychain::from_random_seed().unwrap();
-
-		for n in 1..4 {
-			let prev = chain.head_header().unwrap();
-			let next_header_info = consensus::next_difficulty(1, chain.difficulty_iter());
-			let pk = ExtKeychainPath::new(1, n as u32, 0, 0, 0).to_identifier();
-			let reward = libtx::reward::output(&keychain, &pk, 0, prev.height).unwrap();
-			let mut b =
-				core::core::Block::new(&prev, vec![], next_header_info.clone().difficulty, reward)
-					.unwrap();
-			b.header.timestamp = prev.timestamp + Duration::seconds(60);
-			b.header.pow.scaling_difficulty = next_header_info.secondary_scaling;
-
-			chain.set_txhashset_roots(&mut b, false).unwrap();
-
-			pow::pow_size(
-				&mut b.header,
-				next_header_info.difficulty,
-				global::proofsize(),
-				global::min_edge_bits(),
-			).unwrap();
-
-			let _bhash = b.hash();
-			chain
-				.process_block(b.clone(), chain::Options::MINE)
-				.unwrap();
-
-			chain.validate(false).unwrap();
-		}
-	}
-	// Now reload the chain, should have valid indices
-	{
-		let chain = reload_chain(chain_dir);
+		let chain = mine_chain(chain_dir, 4);
 		chain.validate(false).unwrap();
-	}
-}
-
-fn _prepare_block(kc: &ExtKeychain, prev: &BlockHeader, chain: &Chain, diff: u64) -> Block {
-	let mut b = _prepare_block_nosum(kc, prev, diff, vec![]);
-	chain.set_txhashset_roots(&mut b, false).unwrap();
-	b
-}
-
-fn _prepare_block_tx(
-	kc: &ExtKeychain,
-	prev: &BlockHeader,
-	chain: &Chain,
-	diff: u64,
-	txs: Vec<&Transaction>,
-) -> Block {
-	let mut b = _prepare_block_nosum(kc, prev, diff, txs);
-	chain.set_txhashset_roots(&mut b, false).unwrap();
-	b
-}
-
-fn _prepare_fork_block(kc: &ExtKeychain, prev: &BlockHeader, chain: &Chain, diff: u64) -> Block {
-	let mut b = _prepare_block_nosum(kc, prev, diff, vec![]);
-	chain.set_txhashset_roots(&mut b, true).unwrap();
-	b
-}
-
-fn _prepare_fork_block_tx(
-	kc: &ExtKeychain,
-	prev: &BlockHeader,
-	chain: &Chain,
-	diff: u64,
-	txs: Vec<&Transaction>,
-) -> Block {
-	let mut b = _prepare_block_nosum(kc, prev, diff, txs);
-	chain.set_txhashset_roots(&mut b, true).unwrap();
-	b
-}
-
-fn _prepare_block_nosum(
-	kc: &ExtKeychain,
-	prev: &BlockHeader,
-	diff: u64,
-	txs: Vec<&Transaction>,
-) -> Block {
-	let key_id = ExtKeychainPath::new(1, diff as u32, 0, 0, 0).to_identifier();
-
-	let fees = txs.iter().map(|tx| tx.fee()).sum();
-	let reward = libtx::reward::output(kc, &key_id, fees, prev.height).unwrap();
-	let mut b = match core::core::Block::new(
-		prev,
-		txs.into_iter().cloned().collect(),
-		Difficulty::from_num(diff),
-		reward,
-	) {
-		Err(e) => panic!("{:?}", e),
-		Ok(b) => b,
+		assert_eq!(chain.head().unwrap().height, 3);
 	};
-	b.header.timestamp = prev.timestamp + Duration::seconds(60);
-	b.header.pow.total_difficulty = Difficulty::from_num(diff);
-	b
+
+	// Now reload the chain from existing data files and check it is valid.
+	{
+		let chain = init_chain(chain_dir, genesis::genesis_dev());
+		chain.validate(false).unwrap();
+		assert_eq!(chain.head().unwrap().height, 3);
+	}
+
+	// Cleanup chain directory
+	clean_output_dir(chain_dir);
 }

@@ -16,12 +16,11 @@
 
 use rand::{thread_rng, Rng};
 
-use consensus::VerifySortOrder;
-use core::block::{Block, BlockHeader, Error};
-use core::hash::Hashed;
-use core::id::ShortIdentifiable;
-use core::{KernelFeatures, Output, OutputFeatures, ShortId, TxKernel};
-use ser::{self, read_multi, Readable, Reader, Writeable, Writer};
+use crate::core::block::{Block, BlockHeader, Error};
+use crate::core::hash::{DefaultHashable, Hashed};
+use crate::core::id::ShortIdentifiable;
+use crate::core::{Output, ShortId, TxKernel};
+use crate::ser::{self, read_multi, Readable, Reader, VerifySortedAndUnique, Writeable, Writer};
 
 /// Container for full (full) outputs and kernels and kern_ids for a compact block.
 #[derive(Debug, Clone)]
@@ -63,9 +62,9 @@ impl CompactBlockBody {
 
 	/// Sort everything.
 	fn sort(&mut self) {
-		self.out_full.sort();
-		self.kern_full.sort();
-		self.kern_ids.sort();
+		self.out_full.sort_unstable();
+		self.kern_full.sort_unstable();
+		self.kern_ids.sort_unstable();
 	}
 
 	/// "Lightweight" validation.
@@ -74,17 +73,17 @@ impl CompactBlockBody {
 		Ok(())
 	}
 
-	// Verify everything is sorted in lexicographical order.
+	// Verify everything is sorted in lexicographical order and no duplicates present.
 	fn verify_sorted(&self) -> Result<(), Error> {
-		self.out_full.verify_sort_order()?;
-		self.kern_full.verify_sort_order()?;
-		self.kern_ids.verify_sort_order()?;
+		self.out_full.verify_sorted_and_unique()?;
+		self.kern_full.verify_sorted_and_unique()?;
+		self.kern_ids.verify_sorted_and_unique()?;
 		Ok(())
 	}
 }
 
 impl Readable for CompactBlockBody {
-	fn read(reader: &mut Reader) -> Result<CompactBlockBody, ser::Error> {
+	fn read(reader: &mut dyn Reader) -> Result<CompactBlockBody, ser::Error> {
 		let (out_full_len, kern_full_len, kern_id_len) =
 			ser_multiread!(reader, read_u64, read_u64, read_u64);
 
@@ -138,6 +137,8 @@ pub struct CompactBlock {
 	body: CompactBlockBody,
 }
 
+impl DefaultHashable for CompactBlock {}
+
 impl CompactBlock {
 	/// "Lightweight" validation.
 	fn validate_read(&self) -> Result<(), Error> {
@@ -169,7 +170,7 @@ impl From<Block> for CompactBlock {
 		let out_full = block
 			.outputs()
 			.iter()
-			.filter(|x| x.features.contains(OutputFeatures::COINBASE_OUTPUT))
+			.filter(|x| x.is_coinbase())
 			.cloned()
 			.collect::<Vec<_>>();
 
@@ -177,7 +178,7 @@ impl From<Block> for CompactBlock {
 		let mut kern_ids = vec![];
 
 		for k in block.kernels() {
-			if k.features.contains(KernelFeatures::COINBASE_KERNEL) {
+			if k.is_coinbase() {
 				kern_full.push(k.clone());
 			} else {
 				kern_ids.push(k.short_id(&header.hash(), nonce));
@@ -215,7 +216,7 @@ impl Writeable for CompactBlock {
 /// Implementation of Readable for a compact block, defines how to read a
 /// compact block from a binary stream.
 impl Readable for CompactBlock {
-	fn read(reader: &mut Reader) -> Result<CompactBlock, ser::Error> {
+	fn read(reader: &mut dyn Reader) -> Result<CompactBlock, ser::Error> {
 		let header = BlockHeader::read(reader)?;
 		let nonce = reader.read_u64()?;
 		let body = CompactBlockBody::read(reader)?;

@@ -20,35 +20,28 @@
 #![deny(unused_mut)]
 #![warn(missing_docs)]
 
-extern crate byteorder;
-extern crate croaring;
-extern crate env_logger;
-extern crate libc;
-extern crate lmdb_zero;
-extern crate memmap;
-extern crate serde;
 #[macro_use]
 extern crate log;
-extern crate failure;
+use failure;
 #[macro_use]
 extern crate failure_derive;
-
 #[macro_use]
 extern crate grin_core as core;
 extern crate grin_util as util;
 
+//use grin_core as core;
+
 pub mod leaf_set;
-mod lmdb;
+pub mod lmdb;
 pub mod pmmr;
 pub mod prune_list;
-pub mod rm_log;
 pub mod types;
 
-const SEP: u8 = ':' as u8;
+const SEP: u8 = b':';
 
 use byteorder::{BigEndian, WriteBytesExt};
 
-pub use lmdb::*;
+pub use crate::lmdb::*;
 
 /// Build a db key from a prefix and a byte vector identifier.
 pub fn to_key(prefix: u8, k: &mut Vec<u8>) -> Vec<u8> {
@@ -61,7 +54,7 @@ pub fn to_key(prefix: u8, k: &mut Vec<u8>) -> Vec<u8> {
 
 /// Build a db key from a prefix and a byte vector identifier and numeric identifier
 pub fn to_key_u64(prefix: u8, k: &mut Vec<u8>, val: u64) -> Vec<u8> {
-	let mut res = vec![];
+	let mut res = Vec::with_capacity(k.len() + 10);
 	res.push(prefix);
 	res.push(SEP);
 	res.append(k);
@@ -69,10 +62,61 @@ pub fn to_key_u64(prefix: u8, k: &mut Vec<u8>, val: u64) -> Vec<u8> {
 	res
 }
 /// Build a db key from a prefix and a numeric identifier.
-pub fn u64_to_key<'a>(prefix: u8, val: u64) -> Vec<u8> {
-	let mut u64_vec = vec![];
-	u64_vec.write_u64::<BigEndian>(val).unwrap();
-	u64_vec.insert(0, SEP);
-	u64_vec.insert(0, prefix);
-	u64_vec
+pub fn u64_to_key(prefix: u8, val: u64) -> Vec<u8> {
+	let mut res = Vec::with_capacity(10);
+	res.push(prefix);
+	res.push(SEP);
+	res.write_u64::<BigEndian>(val).unwrap();
+	res
+}
+
+use std::ffi::OsStr;
+use std::fs::{remove_file, rename, File};
+use std::path::Path;
+/// Creates temporary file with name created by adding `temp_suffix` to `path`.
+/// Applies writer function to it and renames temporary file into original specified by `path`.
+pub fn save_via_temp_file<F, P, E>(
+	path: P,
+	temp_suffix: E,
+	mut writer: F,
+) -> Result<(), std::io::Error>
+where
+	F: FnMut(Box<dyn std::io::Write>) -> Result<(), std::io::Error>,
+	P: AsRef<Path>,
+	E: AsRef<OsStr>,
+{
+	let temp_suffix = temp_suffix.as_ref();
+	assert!(!temp_suffix.is_empty());
+
+	let original = path.as_ref();
+	let mut _original = original.as_os_str().to_os_string();
+	_original.push(temp_suffix);
+	// Write temporary file
+	let temp_path = Path::new(&_original);
+	if temp_path.exists() {
+		remove_file(&temp_path)?;
+	}
+
+	let file = File::create(&temp_path)?;
+	writer(Box::new(file))?;
+
+	// Move temporary file into original
+	if original.exists() {
+		remove_file(&original)?;
+	}
+
+	rename(&temp_path, &original)?;
+
+	Ok(())
+}
+
+use croaring::Bitmap;
+use std::io::{self, Read};
+/// Read Bitmap from a file
+pub fn read_bitmap<P: AsRef<Path>>(file_path: P) -> io::Result<Bitmap> {
+	let mut bitmap_file = File::open(file_path)?;
+	let f_md = bitmap_file.metadata()?;
+	let mut buffer = Vec::with_capacity(f_md.len() as usize);
+	bitmap_file.read_to_end(&mut buffer)?;
+	Ok(Bitmap::deserialize(&buffer))
 }

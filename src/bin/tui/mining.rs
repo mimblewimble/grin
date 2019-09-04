@@ -16,6 +16,7 @@
 
 use std::cmp::Ordering;
 
+use crate::tui::chrono::prelude::{DateTime, NaiveDateTime, Utc};
 use cursive::direction::Orientation;
 use cursive::event::Key;
 use cursive::traits::{Boxable, Identifiable};
@@ -25,15 +26,14 @@ use cursive::views::{
 };
 use cursive::Cursive;
 use std::time;
-use tui::chrono::prelude::{DateTime, NaiveDateTime, Utc};
 
-use tui::constants::{
+use crate::tui::constants::{
 	MAIN_MENU, SUBMENU_MINING_BUTTON, TABLE_MINING_DIFF_STATUS, TABLE_MINING_STATUS, VIEW_MINING,
 };
-use tui::types::TUIStatusListener;
+use crate::tui::types::TUIStatusListener;
 
-use servers::{DiffBlock, ServerStats, WorkerStats};
-use tui::table::{TableView, TableViewItem};
+use crate::servers::{DiffBlock, ServerStats, WorkerStats};
+use crate::tui::table::{TableView, TableViewItem};
 
 #[derive(Copy, Clone, PartialEq, Eq, Hash)]
 enum StratumWorkerColumn {
@@ -44,6 +44,7 @@ enum StratumWorkerColumn {
 	NumAccepted,
 	NumRejected,
 	NumStale,
+	NumBlocksFound,
 }
 
 impl StratumWorkerColumn {
@@ -56,6 +57,7 @@ impl StratumWorkerColumn {
 			StratumWorkerColumn::NumAccepted => "Num Accepted",
 			StratumWorkerColumn::NumRejected => "Num Rejected",
 			StratumWorkerColumn::NumStale => "Num Stale",
+			StratumWorkerColumn::NumBlocksFound => "Blocks Found",
 		}
 	}
 }
@@ -79,6 +81,7 @@ impl TableViewItem<StratumWorkerColumn> for WorkerStats {
 			StratumWorkerColumn::NumAccepted => self.num_accepted.to_string(),
 			StratumWorkerColumn::NumRejected => self.num_rejected.to_string(),
 			StratumWorkerColumn::NumStale => self.num_stale.to_string(),
+			StratumWorkerColumn::NumBlocksFound => self.num_blocks_found.to_string(),
 		}
 	}
 
@@ -94,12 +97,14 @@ impl TableViewItem<StratumWorkerColumn> for WorkerStats {
 			StratumWorkerColumn::NumAccepted => Ordering::Equal,
 			StratumWorkerColumn::NumRejected => Ordering::Equal,
 			StratumWorkerColumn::NumStale => Ordering::Equal,
+			StratumWorkerColumn::NumBlocksFound => Ordering::Equal,
 		}
 	}
 }
 #[derive(Copy, Clone, PartialEq, Eq, Hash)]
 enum DiffColumn {
-	BlockNumber,
+	Height,
+	Hash,
 	PoWType,
 	Difficulty,
 	SecondaryScaling,
@@ -110,7 +115,8 @@ enum DiffColumn {
 impl DiffColumn {
 	fn _as_str(&self) -> &str {
 		match *self {
-			DiffColumn::BlockNumber => "Block Number",
+			DiffColumn::Height => "Height",
+			DiffColumn::Hash => "Hash",
 			DiffColumn::PoWType => "Type",
 			DiffColumn::Difficulty => "Network Difficulty",
 			DiffColumn::SecondaryScaling => "Sec. Scaling",
@@ -130,7 +136,8 @@ impl TableViewItem<DiffColumn> for DiffBlock {
 		};
 
 		match column {
-			DiffColumn::BlockNumber => self.block_number.to_string(),
+			DiffColumn::Height => self.block_height.to_string(),
+			DiffColumn::Hash => self.block_hash.to_string(),
 			DiffColumn::PoWType => pow_type,
 			DiffColumn::Difficulty => self.difficulty.to_string(),
 			DiffColumn::SecondaryScaling => self.secondary_scaling.to_string(),
@@ -144,7 +151,8 @@ impl TableViewItem<DiffColumn> for DiffBlock {
 		Self: Sized,
 	{
 		match column {
-			DiffColumn::BlockNumber => Ordering::Equal,
+			DiffColumn::Height => Ordering::Equal,
+			DiffColumn::Hash => Ordering::Equal,
 			DiffColumn::PoWType => Ordering::Equal,
 			DiffColumn::Difficulty => Ordering::Equal,
 			DiffColumn::SecondaryScaling => Ordering::Equal,
@@ -158,13 +166,14 @@ pub struct TUIMiningView;
 
 impl TUIStatusListener for TUIMiningView {
 	/// Create the mining view
-	fn create() -> Box<View> {
+	fn create() -> Box<dyn View> {
 		let devices_button = Button::new_raw("Mining Server Status", |s| {
 			let _ = s.call_on_id("mining_stack_view", |sv: &mut StackView| {
 				let pos = sv.find_layer_from_id("mining_device_view").unwrap();
 				sv.move_to_front(pos);
 			});
-		}).with_id(SUBMENU_MINING_BUTTON);
+		})
+		.with_id(SUBMENU_MINING_BUTTON);
 		let difficulty_button = Button::new_raw("Difficulty", |s| {
 			let _ = s.call_on_id("mining_stack_view", |sv: &mut StackView| {
 				let pos = sv.find_layer_from_id("mining_difficulty_view").unwrap();
@@ -175,24 +184,27 @@ impl TUIStatusListener for TUIMiningView {
 			.child(Panel::new(devices_button))
 			.child(Panel::new(difficulty_button));
 
-		let mining_submenu = OnEventView::new(mining_submenu).on_pre_event(Key::Esc, move |c| {
-			let _ = c.focus_id(MAIN_MENU);
-		});
-
 		let table_view = TableView::<WorkerStats, StratumWorkerColumn>::new()
-			.column(StratumWorkerColumn::Id, "Worker ID", |c| {
+			.column(StratumWorkerColumn::Id, "Worker ID", |c| c.width_percent(8))
+			.column(StratumWorkerColumn::IsConnected, "Connected", |c| {
+				c.width_percent(8)
+			})
+			.column(StratumWorkerColumn::LastSeen, "Last Seen", |c| {
+				c.width_percent(16)
+			})
+			.column(StratumWorkerColumn::PowDifficulty, "Pow Difficulty", |c| {
+				c.width_percent(12)
+			})
+			.column(StratumWorkerColumn::NumAccepted, "Num Accepted", |c| {
 				c.width_percent(10)
-			}).column(StratumWorkerColumn::IsConnected, "Connected", |c| {
+			})
+			.column(StratumWorkerColumn::NumRejected, "Num Rejected", |c| {
 				c.width_percent(10)
-			}).column(StratumWorkerColumn::LastSeen, "Last Seen", |c| {
-				c.width_percent(20)
-			}).column(StratumWorkerColumn::PowDifficulty, "Pow Difficulty", |c| {
+			})
+			.column(StratumWorkerColumn::NumStale, "Num Stale", |c| {
 				c.width_percent(10)
-			}).column(StratumWorkerColumn::NumAccepted, "Num Accepted", |c| {
-				c.width_percent(10)
-			}).column(StratumWorkerColumn::NumRejected, "Num Rejected", |c| {
-				c.width_percent(10)
-			}).column(StratumWorkerColumn::NumStale, "Num Stale", |c| {
+			})
+			.column(StratumWorkerColumn::NumBlocksFound, "Blocks Found", |c| {
 				c.width_percent(10)
 			});
 
@@ -200,22 +212,28 @@ impl TUIStatusListener for TUIMiningView {
 			.child(
 				LinearLayout::new(Orientation::Horizontal)
 					.child(TextView::new("  ").with_id("stratum_config_status")),
-			).child(
+			)
+			.child(
 				LinearLayout::new(Orientation::Horizontal)
 					.child(TextView::new("  ").with_id("stratum_is_running_status")),
-			).child(
+			)
+			.child(
 				LinearLayout::new(Orientation::Horizontal)
 					.child(TextView::new("  ").with_id("stratum_num_workers_status")),
-			).child(
+			)
+			.child(
 				LinearLayout::new(Orientation::Horizontal)
 					.child(TextView::new("  ").with_id("stratum_block_height_status")),
-			).child(
+			)
+			.child(
 				LinearLayout::new(Orientation::Horizontal)
 					.child(TextView::new("  ").with_id("stratum_network_difficulty_status")),
-			).child(
+			)
+			.child(
 				LinearLayout::new(Orientation::Horizontal)
 					.child(TextView::new("  ").with_id("stratum_network_hashrate")),
-			).child(
+			)
+			.child(
 				LinearLayout::new(Orientation::Horizontal)
 					.child(TextView::new("  ").with_id("stratum_edge_bits_status")),
 			);
@@ -225,36 +243,42 @@ impl TUIStatusListener for TUIMiningView {
 			.child(BoxView::with_full_screen(
 				Dialog::around(table_view.with_id(TABLE_MINING_STATUS).min_size((50, 20)))
 					.title("Mining Workers"),
-			)).with_id("mining_device_view");
+			))
+			.with_id("mining_device_view");
 
 		let diff_status_view = LinearLayout::new(Orientation::Vertical)
 			.child(
 				LinearLayout::new(Orientation::Horizontal)
 					.child(TextView::new("Tip Height: "))
 					.child(TextView::new("").with_id("diff_cur_height")),
-			).child(
+			)
+			.child(
 				LinearLayout::new(Orientation::Horizontal)
 					.child(TextView::new("Difficulty Adjustment Window: "))
 					.child(TextView::new("").with_id("diff_adjust_window")),
-			).child(
+			)
+			.child(
 				LinearLayout::new(Orientation::Horizontal)
 					.child(TextView::new("Average Block Time: "))
 					.child(TextView::new("").with_id("diff_avg_block_time")),
-			).child(
+			)
+			.child(
 				LinearLayout::new(Orientation::Horizontal)
 					.child(TextView::new("Average Difficulty: "))
 					.child(TextView::new("").with_id("diff_avg_difficulty")),
 			);
 
 		let diff_table_view = TableView::<DiffBlock, DiffColumn>::new()
-			.column(DiffColumn::BlockNumber, "Block Number", |c| {
-				c.width_percent(15)
-			}).column(DiffColumn::PoWType, "Type", |c| c.width_percent(10))
+			.column(DiffColumn::Height, "Height", |c| c.width_percent(10))
+			.column(DiffColumn::Hash, "Hash", |c| c.width_percent(10))
+			.column(DiffColumn::PoWType, "Type", |c| c.width_percent(10))
 			.column(DiffColumn::Difficulty, "Network Difficulty", |c| {
 				c.width_percent(15)
-			}).column(DiffColumn::SecondaryScaling, "Sec. Scaling", |c| {
+			})
+			.column(DiffColumn::SecondaryScaling, "Sec. Scaling", |c| {
 				c.width_percent(10)
-			}).column(DiffColumn::Time, "Block Time", |c| c.width_percent(25))
+			})
+			.column(DiffColumn::Time, "Block Time", |c| c.width_percent(25))
 			.column(DiffColumn::Duration, "Duration", |c| c.width_percent(25));
 
 		let mining_difficulty_view = LinearLayout::new(Orientation::Vertical)
@@ -264,8 +288,10 @@ impl TUIStatusListener for TUIMiningView {
 					diff_table_view
 						.with_id(TABLE_MINING_DIFF_STATUS)
 						.min_size((50, 20)),
-				).title("Mining Difficulty Data"),
-			)).with_id("mining_difficulty_view");
+				)
+				.title("Mining Difficulty Data"),
+			))
+			.with_id("mining_difficulty_view");
 
 		let view_stack = StackView::new()
 			.layer(mining_difficulty_view)
@@ -275,6 +301,10 @@ impl TUIStatusListener for TUIMiningView {
 		let mining_view = LinearLayout::new(Orientation::Vertical)
 			.child(mining_submenu)
 			.child(view_stack);
+
+		let mining_view = OnEventView::new(mining_view).on_pre_event(Key::Esc, move |c| {
+			let _ = c.focus_id(MAIN_MENU);
+		});
 
 		Box::new(mining_view.with_id(VIEW_MINING))
 	}
@@ -305,18 +335,20 @@ impl TUIStatusListener for TUIMiningView {
 		);
 		let stratum_stats = stats.stratum_stats.clone();
 		let stratum_network_hashrate = format!(
-			"Network Hashrate: {:.*}",
+			"Network Hashrate:      {:.*}",
 			2,
-			stratum_stats.network_hashrate()
+			stratum_stats.network_hashrate(stratum_stats.block_height)
 		);
 		let worker_stats = stratum_stats.worker_stats;
 		let stratum_enabled = format!("Mining server enabled: {}", stratum_stats.is_enabled);
 		let stratum_is_running = format!("Mining server running: {}", stratum_stats.is_running);
-		let stratum_num_workers = format!("Number of workers: {}", stratum_stats.num_workers);
-		let stratum_block_height = format!("Solving Block Height: {}", stratum_stats.block_height);
-		let stratum_network_difficulty =
-			format!("Network Difficulty: {}", stratum_stats.network_difficulty);
-		let stratum_edge_bits = format!("Cuckoo Size: {}", stratum_stats.edge_bits);
+		let stratum_num_workers = format!("Number of workers:     {}", stratum_stats.num_workers);
+		let stratum_block_height = format!("Solving Block Height:  {}", stratum_stats.block_height);
+		let stratum_network_difficulty = format!(
+			"Network Difficulty:    {}",
+			stratum_stats.network_difficulty
+		);
+		let stratum_edge_bits = format!("Cuckoo Size:           {}", stratum_stats.edge_bits);
 
 		c.call_on_id("stratum_config_status", |t: &mut TextView| {
 			t.set_content(stratum_enabled);

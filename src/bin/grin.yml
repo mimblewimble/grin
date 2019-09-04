@@ -1,0 +1,77 @@
+name: grin
+about: Lightweight implementation of the MimbleWimble protocol.
+author: The Grin Team
+
+args:
+  - floonet:
+      help: Run grin against the Floonet (as opposed to mainnet)
+      long: floonet
+      takes_value: false
+  - usernet:
+      help: Run grin as a local-only network. Doesn't block peer connections but will not connect to any peer or seed
+      long: usernet
+      takes_value: false
+subcommands:
+  - clean:
+      about: Clean Grin chain data
+  - wallet:
+      about: As of v1.1.0, the wallet has been split into a separate executable. See https://github.com/mimblewimble/grin-wallet/releases
+      usage: As of v1.1.0, the wallet has been split into a separate executable. See https://github.com/mimblewimble/grin-wallet/releases to download
+  - server:
+      about: Control the Grin server
+      args:
+        - config_file:
+            help: Path to a grin-server.toml configuration file
+            short: c
+            long: config_file
+            takes_value: true
+        - port:
+            help: Port to start the P2P server on
+            short: p
+            long: port
+            takes_value: true
+        - api_port:
+            help: Port on which to start the api server (e.g. transaction pool api)
+            short: api
+            long: api_port
+            takes_value: true
+        - seed:
+            help: Override seed node(s) to connect to
+            short: s
+            long: seed
+            takes_value: true
+        - wallet_url:
+            help: The wallet listener to which mining rewards will be sent
+            short: w
+            long: wallet_url
+            takes_value: true
+      subcommands:
+        - config:
+            about: Generate a configuration grin-server.toml file in the current directory
+        - run:
+            about: Run the Grin server in this console
+  - client:
+      about: Communicates with the Grin server
+      subcommands:
+        - status:
+            about: Current status of the Grin chain
+        - listconnectedpeers:
+            about: Print a list of currently connected peers
+        - ban:
+            about: Ban peer
+            args:
+              - peer:
+                  help: Peer ip and port (e.g. 10.12.12.13:13414)
+                  short: p
+                  long: peer
+                  required: true
+                  takes_value: true
+        - unban:
+            about: Unban peer
+            args:
+              - peer:
+                  help: Peer ip and port (e.g. 10.12.12.13:13414)
+                  short: p
+                  long: peer
+                  required: true
+                  takes_value: true

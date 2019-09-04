@@ -13,36 +13,36 @@
 // limitations under the License.
 
 //! Transaction integration tests
-extern crate grin_core;
-extern crate grin_keychain as keychain;
-extern crate grin_util as util;
-extern crate grin_wallet as wallet;
 
 pub mod common;
 
-use grin_core::core::{Output, OutputFeatures};
-use grin_core::ser;
-use keychain::{ExtKeychain, Keychain};
-use wallet::libtx::proof;
+use self::core::core::{Output, OutputFeatures};
+use self::core::libtx::proof;
+use self::core::ser;
+use self::keychain::{ExtKeychain, Keychain};
+use grin_core as core;
+use grin_keychain as keychain;
 
 #[test]
 fn test_output_ser_deser() {
-	let keychain = ExtKeychain::from_random_seed().unwrap();
+	let keychain = ExtKeychain::from_random_seed(false).unwrap();
 	let key_id = ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
-	let commit = keychain.commit(5, &key_id).unwrap();
-	let proof = proof::create(&keychain, 5, &key_id, commit, None).unwrap();
+	let switch = &keychain::SwitchCommitmentType::Regular;
+	let commit = keychain.commit(5, &key_id, switch).unwrap();
+	let builder = proof::ProofBuilder::new(&keychain);
+	let proof = proof::create(&keychain, &builder, 5, &key_id, switch, commit, None).unwrap();
 
 	let out = Output {
-		features: OutputFeatures::DEFAULT_OUTPUT,
+		features: OutputFeatures::Plain,
 		commit: commit,
 		proof: proof,
 	};
 
 	let mut vec = vec![];
-	ser::serialize(&mut vec, &out).expect("serialized failed");
-	let dout: Output = ser::deserialize(&mut &vec[..]).unwrap();
+	ser::serialize_default(&mut vec, &out).expect("serialized failed");
+	let dout: Output = ser::deserialize_default(&mut &vec[..]).unwrap();
 
-	assert_eq!(dout.features, OutputFeatures::DEFAULT_OUTPUT);
+	assert_eq!(dout.features, OutputFeatures::Plain);
 	assert_eq!(dout.commit, out.commit);
 	assert_eq!(dout.proof, out.proof);
 }

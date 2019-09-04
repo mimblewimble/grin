@@ -14,37 +14,151 @@
 
 //! Transactions
 
-use std::cmp::max;
+use crate::core::hash::{DefaultHashable, Hashed};
+use crate::core::verifier_cache::VerifierCache;
+use crate::core::{committed, Committed};
+use crate::keychain::{self, BlindingFactor};
+use crate::libtx::secp_ser;
+use crate::ser::{
+	self, read_multi, FixedLength, PMMRable, Readable, Reader, VerifySortedAndUnique, Writeable,
+	Writer,
+};
+use crate::util;
+use crate::util::secp;
+use crate::util::secp::pedersen::{Commitment, RangeProof};
+use crate::util::static_secp_instance;
+use crate::util::RwLock;
+use crate::{consensus, global};
+use enum_primitive::FromPrimitive;
 use std::cmp::Ordering;
-use std::collections::HashSet;
+use std::cmp::{max, min};
 use std::sync::Arc;
 use std::{error, fmt};
-use util::RwLock;
 
-use consensus::{self, VerifySortOrder};
-use core::hash::Hashed;
-use core::verifier_cache::VerifierCache;
-use core::{committed, Committed};
-use keychain::{self, BlindingFactor};
-use ser::{self, read_multi, PMMRable, Readable, Reader, Writeable, Writer};
-use util;
-use util::secp::pedersen::{Commitment, RangeProof};
-use util::secp::{self, Message, Signature};
-use util::{kernel_sig_msg, static_secp_instance};
+/// Various tx kernel variants.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub enum KernelFeatures {
+	/// Plain kernel (the default for Grin txs).
+	Plain {
+		/// Plain kernels have fees.
+		fee: u64,
+	},
+	/// A coinbase kernel.
+	Coinbase,
+	/// A kernel with an explicit lock height (and fee).
+	HeightLocked {
+		/// Height locked kernels have fees.
+		fee: u64,
+		/// Height locked kernels have lock heights.
+		lock_height: u64,
+	},
+}
 
-bitflags! {
-	/// Options for a kernel's structure or use
-	#[derive(Serialize, Deserialize)]
-	pub struct KernelFeatures: u8 {
-		/// No flags
-		const DEFAULT_KERNEL = 0b00000000;
-		/// Kernel matching a coinbase output
-		const COINBASE_KERNEL = 0b00000001;
+impl KernelFeatures {
+	const PLAIN_U8: u8 = 0;
+	const COINBASE_U8: u8 = 1;
+	const HEIGHT_LOCKED_U8: u8 = 2;
+
+	/// Underlying (u8) value representing this kernel variant.
+	/// This is the first byte when we serialize/deserialize the kernel features.
+	pub fn as_u8(&self) -> u8 {
+		match self {
+			KernelFeatures::Plain { .. } => KernelFeatures::PLAIN_U8,
+			KernelFeatures::Coinbase => KernelFeatures::COINBASE_U8,
+			KernelFeatures::HeightLocked { .. } => KernelFeatures::HEIGHT_LOCKED_U8,
+		}
+	}
+
+	/// Conversion for backward compatibility.
+	pub fn as_string(&self) -> String {
+		match self {
+			KernelFeatures::Plain { .. } => String::from("Plain"),
+			KernelFeatures::Coinbase => String::from("Coinbase"),
+			KernelFeatures::HeightLocked { .. } => String::from("HeightLocked"),
+		}
+	}
+
+	/// msg = hash(features)                       for coinbase kernels
+	///       hash(features || fee)                for plain kernels
+	///       hash(features || fee || lock_height) for height locked kernels
+	pub fn kernel_sig_msg(&self) -> Result<secp::Message, Error> {
+		let x = self.as_u8();
+		let hash = match self {
+			KernelFeatures::Plain { fee } => (x, fee).hash(),
+			KernelFeatures::Coinbase => (x).hash(),
+			KernelFeatures::HeightLocked { fee, lock_height } => (x, fee, lock_height).hash(),
+		};
+
+		let msg = secp::Message::from_slice(&hash.as_bytes())?;
+		Ok(msg)
+	}
+}
+
+impl Writeable for KernelFeatures {
+	/// Still only supporting protocol version v1 serialization.
+	/// Always include fee, defaulting to 0, and lock_height, defaulting to 0, for all feature variants.
+	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
+		match self {
+			KernelFeatures::Plain { fee } => {
+				writer.write_u8(self.as_u8())?;
+				writer.write_u64(*fee)?;
+				writer.write_u64(0)?;
+			}
+			KernelFeatures::Coinbase => {
+				writer.write_u8(self.as_u8())?;
+				writer.write_u64(0)?;
+				writer.write_u64(0)?;
+			}
+			KernelFeatures::HeightLocked { fee, lock_height } => {
+				writer.write_u8(self.as_u8())?;
+				writer.write_u64(*fee)?;
+				writer.write_u64(*lock_height)?;
+			}
+		}
+		Ok(())
+	}
+}
+
+impl Readable for KernelFeatures {
+	/// Still only supporting protocol version v1 serialization.
+	/// Always read both fee and lock_height, regardless of feature variant.
+	/// These will be 0 values if not applicable, but bytes must still be read and verified.
+	fn read(reader: &mut dyn Reader) -> Result<KernelFeatures, ser::Error> {
+		let features = match reader.read_u8()? {
+			KernelFeatures::PLAIN_U8 => {
+				let fee = reader.read_u64()?;
+				let lock_height = reader.read_u64()?;
+				if lock_height != 0 {
+					return Err(ser::Error::CorruptedData);
+				}
+				KernelFeatures::Plain { fee }
+			}
+			KernelFeatures::COINBASE_U8 => {
+				let fee = reader.read_u64()?;
+				if fee != 0 {
+					return Err(ser::Error::CorruptedData);
+				}
+				let lock_height = reader.read_u64()?;
+				if lock_height != 0 {
+					return Err(ser::Error::CorruptedData);
+				}
+				KernelFeatures::Coinbase
+			}
+			KernelFeatures::HEIGHT_LOCKED_U8 => {
+				let fee = reader.read_u64()?;
+				let lock_height = reader.read_u64()?;
+				KernelFeatures::HeightLocked { fee, lock_height }
+			}
+			_ => {
+				return Err(ser::Error::CorruptedData);
+			}
+		};
+		Ok(features)
 	}
 }
 
 /// Errors thrown by Transaction validation
-#[derive(Clone, Eq, Debug, PartialEq)]
+#[derive(Clone, Eq, Debug, PartialEq, Serialize, Deserialize)]
 pub enum Error {
 	/// Underlying Secp256k1 error (signature validation or invalid public key
 	/// typically)
@@ -56,8 +170,6 @@ pub enum Error {
 	KernelSumMismatch,
 	/// Restrict tx total weight.
 	TooHeavy,
-	/// Underlying consensus error (currently for sort order)
-	ConsensusError(consensus::Error),
 	/// Error originating from an invalid lock-height
 	LockHeight(u64),
 	/// Range proof validation error
@@ -81,6 +193,10 @@ pub enum Error {
 	/// Validation error relating to kernel features.
 	/// It is invalid for a transaction to contain a coinbase kernel, for example.
 	InvalidKernelFeatures,
+	/// Signature verification error.
+	IncorrectSignature,
+	/// Underlying serialization error.
+	Serialization(ser::Error),
 }
 
 impl error::Error for Error {
@@ -92,22 +208,22 @@ impl error::Error for Error {
 }
 
 impl fmt::Display for Error {
-	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
 		match *self {
 			_ => write!(f, "some kind of keychain error"),
 		}
 	}
 }
 
-impl From<secp::Error> for Error {
-	fn from(e: secp::Error) -> Error {
-		Error::Secp(e)
+impl From<ser::Error> for Error {
+	fn from(e: ser::Error) -> Error {
+		Error::Serialization(e)
 	}
 }
 
-impl From<consensus::Error> for Error {
-	fn from(e: consensus::Error) -> Error {
-		Error::ConsensusError(e)
+impl From<secp::Error> for Error {
+	fn from(e: secp::Error) -> Error {
+		Error::Secp(e)
 	}
 }
 
@@ -132,71 +248,129 @@ impl From<committed::Error> for Error {
 pub struct TxKernel {
 	/// Options for a kernel's structure or use
 	pub features: KernelFeatures,
-	/// Fee originally included in the transaction this proof is for.
-	pub fee: u64,
-	/// This kernel is not valid earlier than lock_height blocks
-	/// The max lock_height of all *inputs* to this transaction
-	pub lock_height: u64,
 	/// Remainder of the sum of all transaction commitments. If the transaction
 	/// is well formed, amounts components should sum to zero and the excess
-	/// is hence a valid public key.
+	/// is hence a valid public key (sum of the commitment public keys).
+	#[serde(
+		serialize_with = "secp_ser::as_hex",
+		deserialize_with = "secp_ser::commitment_from_hex"
+	)]
 	pub excess: Commitment,
 	/// The signature proving the excess is a valid public key, which signs
 	/// the transaction fee.
-	pub excess_sig: Signature,
+	#[serde(with = "secp_ser::sig_serde")]
+	pub excess_sig: secp::Signature,
 }
 
+impl DefaultHashable for TxKernel {}
 hashable_ord!(TxKernel);
 
-/// TODO - no clean way to bridge core::hash::Hash and std::hash::Hash
-/// implementations?
 impl ::std::hash::Hash for TxKernel {
 	fn hash<H: ::std::hash::Hasher>(&self, state: &mut H) {
 		let mut vec = Vec::new();
-		ser::serialize(&mut vec, &self).expect("serialization failed");
+		ser::serialize_default(&mut vec, &self).expect("serialization failed");
 		::std::hash::Hash::hash(&vec, state);
 	}
 }
 
 impl Writeable for TxKernel {
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
-		ser_multiwrite!(
-			writer,
-			[write_u8, self.features.bits()],
-			[write_u64, self.fee],
-			[write_u64, self.lock_height],
-			[write_fixed_bytes, &self.excess]
-		);
+		// We have access to the protocol version here.
+		// This may be a protocol version based on a peer connection
+		// or the version used locally for db storage.
+		// We can handle version specific serialization here.
+		let _version = writer.protocol_version();
+
+		self.features.write(writer)?;
+		self.excess.write(writer)?;
 		self.excess_sig.write(writer)?;
 		Ok(())
 	}
 }
 
 impl Readable for TxKernel {
-	fn read(reader: &mut Reader) -> Result<TxKernel, ser::Error> {
-		let features =
-			KernelFeatures::from_bits(reader.read_u8()?).ok_or(ser::Error::CorruptedData)?;
+	fn read(reader: &mut dyn Reader) -> Result<TxKernel, ser::Error> {
+		// We have access to the protocol version here.
+		// This may be a protocol version based on a peer connection
+		// or the version used locally for db storage.
+		// We can handle version specific deserialization here.
+		let _version = reader.protocol_version();
+
 		Ok(TxKernel {
-			features,
-			fee: reader.read_u64()?,
-			lock_height: reader.read_u64()?,
+			features: KernelFeatures::read(reader)?,
 			excess: Commitment::read(reader)?,
-			excess_sig: Signature::read(reader)?,
+			excess_sig: secp::Signature::read(reader)?,
 		})
 	}
 }
 
+/// We store TxKernelEntry in the kernel MMR.
+impl PMMRable for TxKernel {
+	type E = TxKernelEntry;
+
+	fn as_elmt(&self) -> TxKernelEntry {
+		TxKernelEntry::from_kernel(self)
+	}
+}
+
+impl KernelFeatures {
+	/// Is this a coinbase kernel?
+	pub fn is_coinbase(&self) -> bool {
+		match self {
+			KernelFeatures::Coinbase => true,
+			_ => false,
+		}
+	}
+
+	/// Is this a plain kernel?
+	pub fn is_plain(&self) -> bool {
+		match self {
+			KernelFeatures::Plain { .. } => true,
+			_ => false,
+		}
+	}
+
+	/// Is this a height locked kernel?
+	pub fn is_height_locked(&self) -> bool {
+		match self {
+			KernelFeatures::HeightLocked { .. } => true,
+			_ => false,
+		}
+	}
+}
+
 impl TxKernel {
+	/// Is this a coinbase kernel?
+	pub fn is_coinbase(&self) -> bool {
+		self.features.is_coinbase()
+	}
+
+	/// Is this a plain kernel?
+	pub fn is_plain(&self) -> bool {
+		self.features.is_plain()
+	}
+
+	/// Is this a height locked kernel?
+	pub fn is_height_locked(&self) -> bool {
+		self.features.is_height_locked()
+	}
+
 	/// Return the excess commitment for this tx_kernel.
 	pub fn excess(&self) -> Commitment {
 		self.excess
 	}
 
+	/// The msg signed as part of the tx kernel.
+	/// Based on kernel features and associated fields (fee and lock_height).
+	pub fn msg_to_sign(&self) -> Result<secp::Message, Error> {
+		let msg = self.features.kernel_sig_msg()?;
+		Ok(msg)
+	}
+
 	/// Verify the transaction proof validity. Entails handling the commitment
 	/// as a public key and checking the signature verifies with the fee as
 	/// message.
-	pub fn verify(&self) -> Result<(), secp::Error> {
-		let msg = Message::from_slice(&kernel_sig_msg(self.fee, self.lock_height))?;
+	pub fn verify(&self) -> Result<(), Error> {
 		let secp = static_secp_instance();
 		let secp = secp.lock();
 		let sig = &self.excess_sig;
@@ -205,48 +379,153 @@ impl TxKernel {
 		if !secp::aggsig::verify_single(
 			&secp,
 			&sig,
-			&msg,
+			&self.msg_to_sign()?,
 			None,
 			&pubkey,
 			Some(&pubkey),
 			None,
 			false,
 		) {
-			return Err(secp::Error::IncorrectSignature);
+			return Err(Error::IncorrectSignature);
 		}
+		Ok(())
+	}
+
+	/// Batch signature verification.
+	pub fn batch_sig_verify(tx_kernels: &Vec<TxKernel>) -> Result<(), Error> {
+		let len = tx_kernels.len();
+		let mut sigs: Vec<secp::Signature> = Vec::with_capacity(len);
+		let mut pubkeys: Vec<secp::key::PublicKey> = Vec::with_capacity(len);
+		let mut msgs: Vec<secp::Message> = Vec::with_capacity(len);
+
+		let secp = static_secp_instance();
+		let secp = secp.lock();
+
+		for tx_kernel in tx_kernels {
+			sigs.push(tx_kernel.excess_sig);
+			pubkeys.push(tx_kernel.excess.to_pubkey(&secp)?);
+			msgs.push(tx_kernel.msg_to_sign()?);
+		}
+
+		if !secp::aggsig::verify_batch(&secp, &sigs, &msgs, &pubkeys) {
+			return Err(Error::IncorrectSignature);
+		}
+
 		Ok(())
 	}
 
 	/// Build an empty tx kernel with zero values.
 	pub fn empty() -> TxKernel {
 		TxKernel {
-			features: KernelFeatures::DEFAULT_KERNEL,
-			fee: 0,
-			lock_height: 0,
+			features: KernelFeatures::Plain { fee: 0 },
 			excess: Commitment::from_vec(vec![0; 33]),
-			excess_sig: Signature::from_raw_data(&[0; 64]).unwrap(),
+			excess_sig: secp::Signature::from_raw_data(&[0; 64]).unwrap(),
 		}
 	}
 
 	/// Builds a new tx kernel with the provided fee.
+	/// Will panic if we cannot safely do this on the existing kernel.
+	/// i.e. Do not try and set a fee on a coinbase kernel.
 	pub fn with_fee(self, fee: u64) -> TxKernel {
-		TxKernel { fee, ..self }
+		match self.features {
+			KernelFeatures::Plain { .. } => {
+				let features = KernelFeatures::Plain { fee };
+				TxKernel { features, ..self }
+			}
+			KernelFeatures::HeightLocked { lock_height, .. } => {
+				let features = KernelFeatures::HeightLocked { fee, lock_height };
+				TxKernel { features, ..self }
+			}
+			KernelFeatures::Coinbase => panic!("fee not supported on coinbase kernel"),
+		}
 	}
 
 	/// Builds a new tx kernel with the provided lock_height.
+	/// Will panic if we cannot safely do this on the existing kernel.
+	/// i.e. Do not try and set a lock_height on a coinbase kernel.
 	pub fn with_lock_height(self, lock_height: u64) -> TxKernel {
-		TxKernel {
-			lock_height,
-			..self
+		match self.features {
+			KernelFeatures::Plain { fee } | KernelFeatures::HeightLocked { fee, .. } => {
+				let features = KernelFeatures::HeightLocked { fee, lock_height };
+				TxKernel { features, ..self }
+			}
+			KernelFeatures::Coinbase => panic!("lock_height not supported on coinbase kernel"),
 		}
 	}
 }
 
-impl PMMRable for TxKernel {
-	fn len() -> usize {
-		17 + // features plus fee and lock_height
-			secp::constants::PEDERSEN_COMMITMENT_SIZE + secp::constants::AGG_SIGNATURE_SIZE
+/// Wrapper around a tx kernel used when maintaining them in the MMR.
+/// These will be useful once we implement relative lockheights via relative kernels
+/// as a kernel may have an optional rel_kernel but we will not want to store these
+/// directly in the kernel MMR.
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct TxKernelEntry {
+	/// The underlying tx kernel.
+	pub kernel: TxKernel,
+}
+
+impl Writeable for TxKernelEntry {
+	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
+		self.kernel.write(writer)?;
+		Ok(())
 	}
+}
+
+impl Readable for TxKernelEntry {
+	fn read(reader: &mut dyn Reader) -> Result<TxKernelEntry, ser::Error> {
+		let kernel = TxKernel::read(reader)?;
+		Ok(TxKernelEntry { kernel })
+	}
+}
+
+impl TxKernelEntry {
+	/// The excess on the underlying tx kernel.
+	pub fn excess(&self) -> Commitment {
+		self.kernel.excess
+	}
+
+	/// Verify the underlying tx kernel.
+	pub fn verify(&self) -> Result<(), Error> {
+		self.kernel.verify()
+	}
+
+	/// Build a new tx kernel entry from a kernel.
+	pub fn from_kernel(kernel: &TxKernel) -> TxKernelEntry {
+		TxKernelEntry {
+			kernel: kernel.clone(),
+		}
+	}
+}
+
+impl From<TxKernel> for TxKernelEntry {
+	fn from(kernel: TxKernel) -> Self {
+		TxKernelEntry { kernel }
+	}
+}
+
+impl FixedLength for TxKernelEntry {
+	const LEN: usize = 17 // features plus fee and lock_height
+		+ secp::constants::PEDERSEN_COMMITMENT_SIZE
+		+ secp::constants::AGG_SIGNATURE_SIZE;
+}
+
+/// Enum of possible tx weight verification options -
+///
+/// * As "transaction" checks tx (as block) weight does not exceed max_block_weight.
+/// * As "block" same as above but allow for additional coinbase reward (1 output, 1 kernel).
+/// * With "no limit" to skip the weight check.
+///
+#[derive(Clone, Copy)]
+pub enum Weighting {
+	/// Tx represents a tx (max block weight, accounting for additional coinbase reward).
+	AsTransaction,
+	/// Tx representing a tx with artificially limited max_weight.
+	/// This is used when selecting mineable txs from the pool.
+	AsLimitedTransaction(usize),
+	/// Tx represents a block (max block weight).
+	AsBlock,
+	/// No max weight limit (skip the weight check).
+	NoLimit,
 }
 
 /// TransactionBody is a common abstraction for transaction and block
@@ -289,13 +568,21 @@ impl Writeable for TransactionBody {
 /// Implementation of Readable for a body, defines how to read a
 /// body from a binary stream.
 impl Readable for TransactionBody {
-	fn read(reader: &mut Reader) -> Result<TransactionBody, ser::Error> {
+	fn read(reader: &mut dyn Reader) -> Result<TransactionBody, ser::Error> {
 		let (input_len, output_len, kernel_len) =
 			ser_multiread!(reader, read_u64, read_u64, read_u64);
 
-		// TODO at this point we know how many input, outputs and kernels
-		// we are about to read. We may want to call a variant of
-		// verify_weight() here as a quick early check.
+		// Quick block weight check before proceeding.
+		// Note: We use weight_as_block here (inputs have weight).
+		let tx_block_weight = TransactionBody::weight_as_block(
+			input_len as usize,
+			output_len as usize,
+			kernel_len as usize,
+		);
+
+		if tx_block_weight > global::max_block_weight() {
+			return Err(ser::Error::TooLargeReadErr);
+		}
 
 		let inputs = read_multi(reader, input_len)?;
 		let outputs = read_multi(reader, output_len)?;
@@ -341,9 +628,9 @@ impl TransactionBody {
 
 	/// Sort the inputs|outputs|kernels.
 	pub fn sort(&mut self) {
-		self.inputs.sort();
-		self.outputs.sort();
-		self.kernels.sort();
+		self.inputs.sort_unstable();
+		self.outputs.sort_unstable();
+		self.kernels.sort_unstable();
 	}
 
 	/// Creates a new transaction body initialized with
@@ -355,7 +642,7 @@ impl TransactionBody {
 		kernels: Vec<TxKernel>,
 		verify_sorted: bool,
 	) -> Result<TransactionBody, Error> {
-		let body = TransactionBody {
+		let mut body = TransactionBody {
 			inputs,
 			outputs,
 			kernels,
@@ -365,59 +652,57 @@ impl TransactionBody {
 			// If we are verifying sort order then verify and
 			// return an error if not sorted lexicographically.
 			body.verify_sorted()?;
-			Ok(body)
 		} else {
 			// If we are not verifying sort order then sort in place and return.
-			let mut body = body;
 			body.sort();
-			Ok(body)
 		}
+		Ok(body)
 	}
 
 	/// Builds a new body with the provided inputs added. Existing
 	/// inputs, if any, are kept intact.
 	/// Sort order is maintained.
-	pub fn with_input(self, input: Input) -> TransactionBody {
-		let mut new_ins = self.inputs;
-		new_ins.push(input);
-		new_ins.sort();
-		TransactionBody {
-			inputs: new_ins,
-			..self
-		}
+	pub fn with_input(mut self, input: Input) -> TransactionBody {
+		self.inputs
+			.binary_search(&input)
+			.err()
+			.map(|e| self.inputs.insert(e, input));
+		self
 	}
 
 	/// Builds a new TransactionBody with the provided output added. Existing
 	/// outputs, if any, are kept intact.
 	/// Sort order is maintained.
-	pub fn with_output(self, output: Output) -> TransactionBody {
-		let mut new_outs = self.outputs;
-		new_outs.push(output);
-		new_outs.sort();
-		TransactionBody {
-			outputs: new_outs,
-			..self
-		}
+	pub fn with_output(mut self, output: Output) -> TransactionBody {
+		self.outputs
+			.binary_search(&output)
+			.err()
+			.map(|e| self.outputs.insert(e, output));
+		self
 	}
 
 	/// Builds a new TransactionBody with the provided kernel added. Existing
 	/// kernels, if any, are kept intact.
 	/// Sort order is maintained.
-	pub fn with_kernel(self, kernel: TxKernel) -> TransactionBody {
-		let mut new_kerns = self.kernels;
-		new_kerns.push(kernel);
-		new_kerns.sort();
-		TransactionBody {
-			kernels: new_kerns,
-			..self
-		}
+	pub fn with_kernel(mut self, kernel: TxKernel) -> TransactionBody {
+		self.kernels
+			.binary_search(&kernel)
+			.err()
+			.map(|e| self.kernels.insert(e, kernel));
+		self
 	}
 
-	/// Total fee for a TransactionBody is the sum of fees of all kernels.
-	fn fee(&self) -> u64 {
+	/// Total fee for a TransactionBody is the sum of fees of all fee carrying kernels.
+	pub fn fee(&self) -> u64 {
 		self.kernels
 			.iter()
-			.fold(0, |acc, ref x| acc.saturating_add(x.fee))
+			.filter_map(|k| match k.features {
+				KernelFeatures::Coinbase => None,
+				KernelFeatures::Plain { fee } | KernelFeatures::HeightLocked { fee, .. } => {
+					Some(fee)
+				}
+			})
+			.fold(0, |acc, fee| acc.saturating_add(fee))
 	}
 
 	fn overage(&self) -> i64 {
@@ -425,72 +710,105 @@ impl TransactionBody {
 	}
 
 	/// Calculate transaction weight
-	pub fn body_weight(&self) -> u32 {
+	pub fn body_weight(&self) -> usize {
 		TransactionBody::weight(self.inputs.len(), self.outputs.len(), self.kernels.len())
 	}
 
 	/// Calculate weight of transaction using block weighing
-	pub fn body_weight_as_block(&self) -> u32 {
+	pub fn body_weight_as_block(&self) -> usize {
 		TransactionBody::weight_as_block(self.inputs.len(), self.outputs.len(), self.kernels.len())
 	}
 
-	/// Calculate transaction weight from transaction details
-	pub fn weight(input_len: usize, output_len: usize, kernel_len: usize) -> u32 {
-		let mut body_weight = -(input_len as i32) + (4 * output_len as i32) + kernel_len as i32;
-		if body_weight < 1 {
-			body_weight = 1;
-		}
-		body_weight as u32
+	/// Calculate transaction weight from transaction details. This is non
+	/// consensus critical and compared to block weight, incentivizes spending
+	/// more outputs (to lower the fee).
+	pub fn weight(input_len: usize, output_len: usize, kernel_len: usize) -> usize {
+		let body_weight = output_len
+			.saturating_mul(4)
+			.saturating_add(kernel_len)
+			.saturating_sub(input_len);
+		max(body_weight, 1)
 	}
 
-	/// Calculate transaction weight using block weighing from transaction details
-	pub fn weight_as_block(input_len: usize, output_len: usize, kernel_len: usize) -> u32 {
-		(input_len * consensus::BLOCK_INPUT_WEIGHT
-			+ output_len * consensus::BLOCK_OUTPUT_WEIGHT
-			+ kernel_len * consensus::BLOCK_KERNEL_WEIGHT) as u32
+	/// Calculate transaction weight using block weighing from transaction
+	/// details. Consensus critical and uses consensus weight values.
+	pub fn weight_as_block(input_len: usize, output_len: usize, kernel_len: usize) -> usize {
+		input_len
+			.saturating_mul(consensus::BLOCK_INPUT_WEIGHT)
+			.saturating_add(output_len.saturating_mul(consensus::BLOCK_OUTPUT_WEIGHT))
+			.saturating_add(kernel_len.saturating_mul(consensus::BLOCK_KERNEL_WEIGHT))
 	}
 
 	/// Lock height of a body is the max lock height of the kernels.
 	pub fn lock_height(&self) -> u64 {
 		self.kernels
 			.iter()
-			.fold(0, |acc, ref x| max(acc, x.lock_height))
+			.filter_map(|x| match x.features {
+				KernelFeatures::HeightLocked { lock_height, .. } => Some(lock_height),
+				_ => None,
+			})
+			.max()
+			.unwrap_or(0)
 	}
 
-	// Verify the body is not too big in terms of number of inputs|outputs|kernels.
-	fn verify_weight(&self, with_reward: bool) -> Result<(), Error> {
-		// if as_block check the body as if it was a block, with an additional output and
-		// kernel for reward
-		let reserve = if with_reward { 0 } else { 1 };
-		let tx_block_weight = TransactionBody::weight_as_block(
-			self.inputs.len(),
-			self.outputs.len() + reserve,
-			self.kernels.len() + reserve,
-		) as usize;
+	/// Verify the body is not too big in terms of number of inputs|outputs|kernels.
+	/// Weight rules vary depending on the "weight type" (block or tx or pool).
+	fn verify_weight(&self, weighting: Weighting) -> Result<(), Error> {
+		// A coinbase reward is a single output and a single kernel (for now).
+		// We need to account for this when verifying max tx weights.
+		let coinbase_weight = consensus::BLOCK_OUTPUT_WEIGHT + consensus::BLOCK_KERNEL_WEIGHT;
 
-		if tx_block_weight > consensus::MAX_BLOCK_WEIGHT {
+		// If "tx" body then remember to reduce the max_block_weight by the weight of a kernel.
+		// If "limited tx" then compare against the provided max_weight.
+		// If "block" body then verify weight based on full set of inputs|outputs|kernels.
+		// If "pool" body then skip weight verification (pool can be larger than single block).
+		//
+		// Note: Taking a max tx and building a block from it we need to allow room
+		// for the additional coinbase reward (1 output + 1 kernel).
+		//
+		let max_weight = match weighting {
+			Weighting::AsTransaction => global::max_block_weight().saturating_sub(coinbase_weight),
+			Weighting::AsLimitedTransaction(max_weight) => {
+				min(global::max_block_weight(), max_weight).saturating_sub(coinbase_weight)
+			}
+			Weighting::AsBlock => global::max_block_weight(),
+			Weighting::NoLimit => {
+				// We do not verify "tx as pool" weight so we are done here.
+				return Ok(());
+			}
+		};
+
+		if self.body_weight_as_block() > max_weight {
 			return Err(Error::TooHeavy);
 		}
 		Ok(())
 	}
 
-	// Verify that inputs|outputs|kernels are all sorted in lexicographical order.
+	// Verify that inputs|outputs|kernels are sorted in lexicographical order
+	// and that there are no duplicates (they are all unique within this transaction).
 	fn verify_sorted(&self) -> Result<(), Error> {
-		self.inputs.verify_sort_order()?;
-		self.outputs.verify_sort_order()?;
-		self.kernels.verify_sort_order()?;
+		self.inputs.verify_sorted_and_unique()?;
+		self.outputs.verify_sorted_and_unique()?;
+		self.kernels.verify_sorted_and_unique()?;
 		Ok(())
 	}
 
 	// Verify that no input is spending an output from the same block.
+	// Assumes inputs and outputs are sorted
 	fn verify_cut_through(&self) -> Result<(), Error> {
-		for inp in &self.inputs {
-			if self
-				.outputs
-				.iter()
-				.any(|out| out.commitment() == inp.commitment())
-			{
-				return Err(Error::CutThrough);
+		let mut inputs = self.inputs.iter().map(|x| x.hash()).peekable();
+		let mut outputs = self.outputs.iter().map(|x| x.hash()).peekable();
+		while let (Some(ih), Some(oh)) = (inputs.peek(), outputs.peek()) {
+			match ih.cmp(oh) {
+				Ordering::Less => {
+					inputs.next();
+				}
+				Ordering::Greater => {
+					outputs.next();
+				}
+				Ordering::Equal => {
+					return Err(Error::CutThrough);
+				}
 			}
 		}
 		Ok(())
@@ -505,25 +823,17 @@ impl TransactionBody {
 		Ok(())
 	}
 
-	// Verify we have no outputs tagged as COINBASE_OUTPUT.
+	// Verify we have no outputs tagged as COINBASE.
 	fn verify_output_features(&self) -> Result<(), Error> {
-		if self
-			.outputs
-			.iter()
-			.any(|x| x.features.contains(OutputFeatures::COINBASE_OUTPUT))
-		{
+		if self.outputs.iter().any(|x| x.is_coinbase()) {
 			return Err(Error::InvalidOutputFeatures);
 		}
 		Ok(())
 	}
 
-	// Verify we have no kernels tagged as COINBASE_KERNEL.
+	// Verify we have no kernels tagged as COINBASE.
 	fn verify_kernel_features(&self) -> Result<(), Error> {
-		if self
-			.kernels
-			.iter()
-			.any(|x| x.features.contains(KernelFeatures::COINBASE_KERNEL))
-		{
+		if self.kernels.iter().any(|x| x.is_coinbase()) {
 			return Err(Error::InvalidKernelFeatures);
 		}
 		Ok(())
@@ -533,8 +843,8 @@ impl TransactionBody {
 	/// Subset of full validation that skips expensive verification steps, specifically -
 	/// * rangeproof verification
 	/// * kernel signature verification
-	pub fn validate_read(&self, with_reward: bool) -> Result<(), Error> {
-		self.verify_weight(with_reward)?;
+	pub fn validate_read(&self, weighting: Weighting) -> Result<(), Error> {
+		self.verify_weight(weighting)?;
 		self.verify_sorted()?;
 		self.verify_cut_through()?;
 		Ok(())
@@ -545,12 +855,10 @@ impl TransactionBody {
 	/// output.
 	pub fn validate(
 		&self,
-		with_reward: bool,
-		verifier: Arc<RwLock<VerifierCache>>,
+		weighting: Weighting,
+		verifier: Arc<RwLock<dyn VerifierCache>>,
 	) -> Result<(), Error> {
-		self.verify_weight(with_reward)?;
-		self.verify_sorted()?;
-		self.verify_cut_through()?;
+		self.validate_read(weighting)?;
 
 		// Find all the outputs that have not had their rangeproofs verified.
 		let outputs = {
@@ -576,11 +884,7 @@ impl TransactionBody {
 		};
 
 		// Verify the unverified tx kernels.
-		// No ability to batch verify these right now
-		// so just do them individually.
-		for x in &kernels {
-			x.verify()?;
-		}
+		TxKernel::batch_sig_verify(&kernels)?;
 
 		// Cache the successful verification results for the new outputs and kernels.
 		{
@@ -597,10 +901,16 @@ impl TransactionBody {
 pub struct Transaction {
 	/// The kernel "offset" k2
 	/// excess is k1G after splitting the key k = k1 + k2
+	#[serde(
+		serialize_with = "secp_ser::as_hex",
+		deserialize_with = "secp_ser::blind_from_hex"
+	)]
 	pub offset: BlindingFactor,
 	/// The transaction body - inputs/outputs/kernels
-	body: TransactionBody,
+	pub body: TransactionBody,
 }
+
+impl DefaultHashable for Transaction {}
 
 /// PartialEq
 impl PartialEq for Transaction {
@@ -628,7 +938,7 @@ impl Writeable for Transaction {
 /// Implementation of Readable for a transaction, defines how to read a full
 /// transaction from a binary stream.
 impl Readable for Transaction {
-	fn read(reader: &mut Reader) -> Result<Transaction, ser::Error> {
+	fn read(reader: &mut dyn Reader) -> Result<Transaction, ser::Error> {
 		let offset = BlindingFactor::read(reader)?;
 		let body = TransactionBody::read(reader)?;
 		let tx = Transaction { offset, body };
@@ -771,7 +1081,7 @@ impl Transaction {
 	/// * kernel signature verification (on the body)
 	/// * kernel sum verification
 	pub fn validate_read(&self) -> Result<(), Error> {
-		self.body.validate_read(false)?;
+		self.body.validate_read(Weighting::AsTransaction)?;
 		self.body.verify_features()?;
 		Ok(())
 	}
@@ -779,25 +1089,35 @@ impl Transaction {
 	/// Validates all relevant parts of a fully built transaction. Checks the
 	/// excess value against the signature as well as range proofs for each
 	/// output.
-	pub fn validate(&self, verifier: Arc<RwLock<VerifierCache>>) -> Result<(), Error> {
-		self.body.validate(false, verifier)?;
+	pub fn validate(
+		&self,
+		weighting: Weighting,
+		verifier: Arc<RwLock<dyn VerifierCache>>,
+	) -> Result<(), Error> {
+		self.body.validate(weighting, verifier)?;
 		self.body.verify_features()?;
-		self.verify_kernel_sums(self.overage(), self.offset)?;
+		self.verify_kernel_sums(self.overage(), self.offset.clone())?;
 		Ok(())
 	}
 
+	/// Can be used to compare txs by their fee/weight ratio.
+	/// Don't use these values for anything else though due to precision multiplier.
+	pub fn fee_to_weight(&self) -> u64 {
+		self.fee() * 1_000 / self.tx_weight() as u64
+	}
+
 	/// Calculate transaction weight
-	pub fn tx_weight(&self) -> u32 {
+	pub fn tx_weight(&self) -> usize {
 		self.body.body_weight()
 	}
 
 	/// Calculate transaction weight as a block
-	pub fn tx_weight_as_block(&self) -> u32 {
+	pub fn tx_weight_as_block(&self) -> usize {
 		self.body.body_weight_as_block()
 	}
 
 	/// Calculate transaction weight from transaction details
-	pub fn weight(input_len: usize, output_len: usize, kernel_len: usize) -> u32 {
+	pub fn weight(input_len: usize, output_len: usize, kernel_len: usize) -> usize {
 		TransactionBody::weight(input_len, output_len, kernel_len)
 	}
 }
@@ -808,24 +1128,34 @@ impl Transaction {
 /// and outputs.
 pub fn cut_through(inputs: &mut Vec<Input>, outputs: &mut Vec<Output>) -> Result<(), Error> {
 	// assemble output commitments set, checking they're all unique
-	let mut out_set = HashSet::new();
-	let all_uniq = { outputs.iter().all(|o| out_set.insert(o.commitment())) };
-	if !all_uniq {
+	outputs.sort_unstable();
+	if outputs.windows(2).any(|pair| pair[0] == pair[1]) {
 		return Err(Error::AggregationError);
 	}
-
-	let in_set = inputs
-		.iter()
-		.map(|inp| inp.commitment())
-		.collect::<HashSet<_>>();
-
-	let to_cut_through = in_set.intersection(&out_set).collect::<HashSet<_>>();
-
-	// filter and sort
-	inputs.retain(|inp| !to_cut_through.contains(&inp.commitment()));
-	outputs.retain(|out| !to_cut_through.contains(&out.commitment()));
-	inputs.sort();
-	outputs.sort();
+	inputs.sort_unstable();
+	let mut inputs_idx = 0;
+	let mut outputs_idx = 0;
+	let mut ncut = 0;
+	while inputs_idx < inputs.len() && outputs_idx < outputs.len() {
+		match inputs[inputs_idx].hash().cmp(&outputs[outputs_idx].hash()) {
+			Ordering::Less => {
+				inputs[inputs_idx - ncut] = inputs[inputs_idx];
+				inputs_idx += 1;
+			}
+			Ordering::Greater => {
+				outputs[outputs_idx - ncut] = outputs[outputs_idx];
+				outputs_idx += 1;
+			}
+			Ordering::Equal => {
+				inputs_idx += 1;
+				outputs_idx += 1;
+				ncut += 1;
+			}
+		}
+	}
+	// Cut elements that have already been copied
+	outputs.drain(outputs_idx - ncut..outputs_idx);
+	inputs.drain(inputs_idx - ncut..inputs_idx);
 	Ok(())
 }
 
@@ -837,15 +1167,22 @@ pub fn aggregate(mut txs: Vec<Transaction>) -> Result<Transaction, Error> {
 	} else if txs.len() == 1 {
 		return Ok(txs.pop().unwrap());
 	}
+	let mut n_inputs = 0;
+	let mut n_outputs = 0;
+	let mut n_kernels = 0;
+	for tx in txs.iter() {
+		n_inputs += tx.body.inputs.len();
+		n_outputs += tx.body.outputs.len();
+		n_kernels += tx.body.kernels.len();
+	}
 
-	let mut inputs: Vec<Input> = vec![];
-	let mut outputs: Vec<Output> = vec![];
-	let mut kernels: Vec<TxKernel> = vec![];
+	let mut inputs: Vec<Input> = Vec::with_capacity(n_inputs);
+	let mut outputs: Vec<Output> = Vec::with_capacity(n_outputs);
+	let mut kernels: Vec<TxKernel> = Vec::with_capacity(n_kernels);
 
 	// we will sum these together at the end to give us the overall offset for the
 	// transaction
-	let mut kernel_offsets: Vec<BlindingFactor> = vec![];
-
+	let mut kernel_offsets: Vec<BlindingFactor> = Vec::with_capacity(txs.len());
 	for mut tx in txs {
 		// we will sum these later to give a single aggregate offset
 		kernel_offsets.push(tx.offset);
@@ -859,7 +1196,7 @@ pub fn aggregate(mut txs: Vec<Transaction>) -> Result<Transaction, Error> {
 	cut_through(&mut inputs, &mut outputs)?;
 
 	// Now sort kernels.
-	kernels.sort();
+	kernels.sort_unstable();
 
 	// now sum the kernel_offsets up to give us an aggregate offset for the
 	// transaction
@@ -910,12 +1247,12 @@ pub fn deaggregate(mk_tx: Transaction, txs: Vec<Transaction>) -> Result<Transact
 	let total_kernel_offset = {
 		let secp = static_secp_instance();
 		let secp = secp.lock();
-		let mut positive_key = vec![mk_tx.offset]
+		let positive_key = vec![mk_tx.offset]
 			.into_iter()
 			.filter(|x| *x != BlindingFactor::zero())
 			.filter_map(|x| x.secret_key(&secp).ok())
 			.collect::<Vec<_>>();
-		let mut negative_keys = kernel_offsets
+		let negative_keys = kernel_offsets
 			.into_iter()
 			.filter(|x| *x != BlindingFactor::zero())
 			.filter_map(|x| x.secret_key(&secp).ok())
@@ -930,9 +1267,9 @@ pub fn deaggregate(mk_tx: Transaction, txs: Vec<Transaction>) -> Result<Transact
 	};
 
 	// Sorting them lexicographically
-	inputs.sort();
-	outputs.sort();
-	kernels.sort();
+	inputs.sort_unstable();
+	outputs.sort_unstable();
+	kernels.sort_unstable();
 
 	// Build a new tx from the above data.
 	let tx = Transaction::new(inputs, outputs, kernels).with_offset(total_kernel_offset);
@@ -942,23 +1279,26 @@ pub fn deaggregate(mk_tx: Transaction, txs: Vec<Transaction>) -> Result<Transact
 /// A transaction input.
 ///
 /// Primarily a reference to an output being spent by the transaction.
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone, Copy)]
 pub struct Input {
 	/// The features of the output being spent.
 	/// We will check maturity for coinbase output.
 	pub features: OutputFeatures,
 	/// The commit referencing the output being spent.
+	#[serde(
+		serialize_with = "secp_ser::as_hex",
+		deserialize_with = "secp_ser::commitment_from_hex"
+	)]
 	pub commit: Commitment,
 }
 
+impl DefaultHashable for Input {}
 hashable_ord!(Input);
 
-/// TODO - no clean way to bridge core::hash::Hash and std::hash::Hash
-/// implementations?
 impl ::std::hash::Hash for Input {
 	fn hash<H: ::std::hash::Hasher>(&self, state: &mut H) {
 		let mut vec = Vec::new();
-		ser::serialize(&mut vec, &self).expect("serialization failed");
+		ser::serialize_default(&mut vec, &self).expect("serialization failed");
 		::std::hash::Hash::hash(&vec, state);
 	}
 }
@@ -967,7 +1307,7 @@ impl ::std::hash::Hash for Input {
 /// an Input as binary.
 impl Writeable for Input {
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
-		writer.write_u8(self.features.bits())?;
+		self.features.write(writer)?;
 		self.commit.write(writer)?;
 		Ok(())
 	}
@@ -976,12 +1316,9 @@ impl Writeable for Input {
 /// Implementation of Readable for a transaction Input, defines how to read
 /// an Input from a binary stream.
 impl Readable for Input {
-	fn read(reader: &mut Reader) -> Result<Input, ser::Error> {
-		let features =
-			OutputFeatures::from_bits(reader.read_u8()?).ok_or(ser::Error::CorruptedData)?;
-
+	fn read(reader: &mut dyn Reader) -> Result<Input, ser::Error> {
+		let features = OutputFeatures::read(reader)?;
 		let commit = Commitment::read(reader)?;
-
 		Ok(Input::new(features, commit))
 	}
 }
@@ -1004,44 +1341,75 @@ impl Input {
 	pub fn commitment(&self) -> Commitment {
 		self.commit
 	}
+
+	/// Is this a coinbase input?
+	pub fn is_coinbase(&self) -> bool {
+		self.features.is_coinbase()
+	}
+
+	/// Is this a plain input?
+	pub fn is_plain(&self) -> bool {
+		self.features.is_plain()
+	}
 }
 
-bitflags! {
-	/// Options for block validation
-	#[derive(Serialize, Deserialize)]
-	pub struct OutputFeatures: u8 {
-		/// No flags
-		const DEFAULT_OUTPUT = 0b00000000;
-		/// Output is a coinbase output, must not be spent until maturity
-		const COINBASE_OUTPUT = 0b00000001;
+// Enum of various supported kernel "features".
+enum_from_primitive! {
+	/// Various flavors of tx kernel.
+	#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+	#[repr(u8)]
+	pub enum OutputFeatures {
+		/// Plain output (the default for Grin txs).
+		Plain = 0,
+		/// A coinbase output.
+		Coinbase = 1,
+	}
+}
+
+impl Writeable for OutputFeatures {
+	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
+		writer.write_u8(*self as u8)?;
+		Ok(())
+	}
+}
+
+impl Readable for OutputFeatures {
+	fn read(reader: &mut dyn Reader) -> Result<OutputFeatures, ser::Error> {
+		let features =
+			OutputFeatures::from_u8(reader.read_u8()?).ok_or(ser::Error::CorruptedData)?;
+		Ok(features)
 	}
 }
 
 /// Output for a transaction, defining the new ownership of coins that are being
 /// transferred. The commitment is a blinded value for the output while the
 /// range proof guarantees the commitment includes a positive value without
-/// overflow and the ownership of the private key. The switch commitment hash
-/// provides future-proofing against quantum-based attacks, as well as providing
-/// wallet implementations with a way to identify their outputs for wallet
-/// reconstruction.
+/// overflow and the ownership of the private key.
 #[derive(Debug, Copy, Clone, Serialize, Deserialize)]
 pub struct Output {
 	/// Options for an output's structure or use
 	pub features: OutputFeatures,
 	/// The homomorphic commitment representing the output amount
+	#[serde(
+		serialize_with = "secp_ser::as_hex",
+		deserialize_with = "secp_ser::commitment_from_hex"
+	)]
 	pub commit: Commitment,
 	/// A proof that the commitment is in the right range
+	#[serde(
+		serialize_with = "secp_ser::as_hex",
+		deserialize_with = "secp_ser::rangeproof_from_hex"
+	)]
 	pub proof: RangeProof,
 }
 
+impl DefaultHashable for Output {}
 hashable_ord!(Output);
 
-/// TODO - no clean way to bridge core::hash::Hash and std::hash::Hash
-/// implementations?
 impl ::std::hash::Hash for Output {
 	fn hash<H: ::std::hash::Hasher>(&self, state: &mut H) {
 		let mut vec = Vec::new();
-		ser::serialize(&mut vec, &self).expect("serialization failed");
+		ser::serialize_default(&mut vec, &self).expect("serialization failed");
 		::std::hash::Hash::hash(&vec, state);
 	}
 }
@@ -1050,10 +1418,10 @@ impl ::std::hash::Hash for Output {
 /// an Output as binary.
 impl Writeable for Output {
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
-		writer.write_u8(self.features.bits())?;
+		self.features.write(writer)?;
 		self.commit.write(writer)?;
 		// The hash of an output doesn't include the range proof, which
-		// is commit to separately
+		// is committed to separately
 		if writer.serialization_mode() != ser::SerializationMode::Hash {
 			writer.write_bytes(&self.proof)?
 		}
@@ -1064,15 +1432,33 @@ impl Writeable for Output {
 /// Implementation of Readable for a transaction Output, defines how to read
 /// an Output from a binary stream.
 impl Readable for Output {
-	fn read(reader: &mut Reader) -> Result<Output, ser::Error> {
-		let features =
-			OutputFeatures::from_bits(reader.read_u8()?).ok_or(ser::Error::CorruptedData)?;
-
+	fn read(reader: &mut dyn Reader) -> Result<Output, ser::Error> {
 		Ok(Output {
-			features,
+			features: OutputFeatures::read(reader)?,
 			commit: Commitment::read(reader)?,
 			proof: RangeProof::read(reader)?,
 		})
+	}
+}
+
+/// We can build an Output MMR but store instances of OutputIdentifier in the MMR data file.
+impl PMMRable for Output {
+	type E = OutputIdentifier;
+
+	fn as_elmt(&self) -> OutputIdentifier {
+		OutputIdentifier::from_output(self)
+	}
+}
+
+impl OutputFeatures {
+	/// Is this a coinbase output?
+	pub fn is_coinbase(&self) -> bool {
+		*self == OutputFeatures::Coinbase
+	}
+
+	/// Is this a plain output?
+	pub fn is_plain(&self) -> bool {
+		*self == OutputFeatures::Plain
 	}
 }
 
@@ -1082,32 +1468,38 @@ impl Output {
 		self.commit
 	}
 
+	/// Is this a coinbase kernel?
+	pub fn is_coinbase(&self) -> bool {
+		self.features.is_coinbase()
+	}
+
+	/// Is this a plain kernel?
+	pub fn is_plain(&self) -> bool {
+		self.features.is_plain()
+	}
+
 	/// Range proof for the output
 	pub fn proof(&self) -> RangeProof {
 		self.proof
 	}
 
 	/// Validates the range proof using the commitment
-	pub fn verify_proof(&self) -> Result<(), secp::Error> {
+	pub fn verify_proof(&self) -> Result<(), Error> {
 		let secp = static_secp_instance();
-		let secp = secp.lock();
-		match secp.verify_bullet_proof(self.commit, self.proof, None) {
-			Ok(_) => Ok(()),
-			Err(e) => Err(e),
-		}
+		secp.lock()
+			.verify_bullet_proof(self.commit, self.proof, None)?;
+		Ok(())
 	}
 
 	/// Batch validates the range proofs using the commitments
 	pub fn batch_verify_proofs(
 		commits: &Vec<Commitment>,
 		proofs: &Vec<RangeProof>,
-	) -> Result<(), secp::Error> {
+	) -> Result<(), Error> {
 		let secp = static_secp_instance();
-		let secp = secp.lock();
-		match secp.verify_bullet_proof_multi(commits.clone(), proofs.clone(), None) {
-			Ok(_) => Ok(()),
-			Err(e) => Err(e),
-		}
+		secp.lock()
+			.verify_bullet_proof_multi(commits.clone(), proofs.clone(), None)?;
+		Ok(())
 	}
 }
 
@@ -1123,6 +1515,8 @@ pub struct OutputIdentifier {
 	/// Output commitment
 	pub commit: Commitment,
 }
+
+impl DefaultHashable for OutputIdentifier {}
 
 impl OutputIdentifier {
 	/// Build a new output_identifier.
@@ -1167,112 +1561,125 @@ impl OutputIdentifier {
 	pub fn to_hex(&self) -> String {
 		format!(
 			"{:b}{}",
-			self.features.bits(),
+			self.features as u8,
 			util::to_hex(self.commit.0.to_vec()),
 		)
 	}
 }
 
-/// Ensure this is implemented to centralize hashing with indexes
-impl PMMRable for OutputIdentifier {
-	fn len() -> usize {
-		1 + secp::constants::PEDERSEN_COMMITMENT_SIZE
-	}
+impl FixedLength for OutputIdentifier {
+	const LEN: usize = 1 + secp::constants::PEDERSEN_COMMITMENT_SIZE;
 }
 
 impl Writeable for OutputIdentifier {
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
-		writer.write_u8(self.features.bits())?;
+		self.features.write(writer)?;
 		self.commit.write(writer)?;
 		Ok(())
 	}
 }
 
 impl Readable for OutputIdentifier {
-	fn read(reader: &mut Reader) -> Result<OutputIdentifier, ser::Error> {
-		let features =
-			OutputFeatures::from_bits(reader.read_u8()?).ok_or(ser::Error::CorruptedData)?;
+	fn read(reader: &mut dyn Reader) -> Result<OutputIdentifier, ser::Error> {
 		Ok(OutputIdentifier {
-			features,
+			features: OutputFeatures::read(reader)?,
 			commit: Commitment::read(reader)?,
 		})
+	}
+}
+
+impl From<Output> for OutputIdentifier {
+	fn from(out: Output) -> Self {
+		OutputIdentifier {
+			features: out.features,
+			commit: out.commit,
+		}
 	}
 }
 
 #[cfg(test)]
 mod test {
 	use super::*;
-	use core::hash::Hash;
-	use core::id::{ShortId, ShortIdentifiable};
-	use keychain::{ExtKeychain, Keychain};
-	use util::secp;
+	use crate::core::hash::Hash;
+	use crate::core::id::{ShortId, ShortIdentifiable};
+	use crate::keychain::{ExtKeychain, Keychain, SwitchCommitmentType};
+	use crate::util::secp;
 
 	#[test]
 	fn test_kernel_ser_deser() {
-		let keychain = ExtKeychain::from_random_seed().unwrap();
+		let keychain = ExtKeychain::from_random_seed(false).unwrap();
 		let key_id = ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
-		let commit = keychain.commit(5, &key_id).unwrap();
+		let commit = keychain
+			.commit(5, &key_id, &SwitchCommitmentType::Regular)
+			.unwrap();
 
 		// just some bytes for testing ser/deser
 		let sig = secp::Signature::from_raw_data(&[0; 64]).unwrap();
 
 		let kernel = TxKernel {
-			features: KernelFeatures::DEFAULT_KERNEL,
-			lock_height: 0,
+			features: KernelFeatures::Plain { fee: 10 },
 			excess: commit,
 			excess_sig: sig.clone(),
-			fee: 10,
 		};
 
 		let mut vec = vec![];
-		ser::serialize(&mut vec, &kernel).expect("serialized failed");
-		let kernel2: TxKernel = ser::deserialize(&mut &vec[..]).unwrap();
-		assert_eq!(kernel2.features, KernelFeatures::DEFAULT_KERNEL);
-		assert_eq!(kernel2.lock_height, 0);
+		ser::serialize_default(&mut vec, &kernel).expect("serialized failed");
+		let kernel2: TxKernel = ser::deserialize_default(&mut &vec[..]).unwrap();
+		assert_eq!(kernel2.features, KernelFeatures::Plain { fee: 10 });
 		assert_eq!(kernel2.excess, commit);
 		assert_eq!(kernel2.excess_sig, sig.clone());
-		assert_eq!(kernel2.fee, 10);
 
 		// now check a kernel with lock_height serialize/deserialize correctly
 		let kernel = TxKernel {
-			features: KernelFeatures::DEFAULT_KERNEL,
-			lock_height: 100,
+			features: KernelFeatures::HeightLocked {
+				fee: 10,
+				lock_height: 100,
+			},
 			excess: commit,
 			excess_sig: sig.clone(),
-			fee: 10,
 		};
 
 		let mut vec = vec![];
-		ser::serialize(&mut vec, &kernel).expect("serialized failed");
-		let kernel2: TxKernel = ser::deserialize(&mut &vec[..]).unwrap();
-		assert_eq!(kernel2.features, KernelFeatures::DEFAULT_KERNEL);
-		assert_eq!(kernel2.lock_height, 100);
+		ser::serialize_default(&mut vec, &kernel).expect("serialized failed");
+		let kernel2: TxKernel = ser::deserialize_default(&mut &vec[..]).unwrap();
+		assert_eq!(
+			kernel2.features,
+			KernelFeatures::HeightLocked {
+				fee: 10,
+				lock_height: 100
+			}
+		);
 		assert_eq!(kernel2.excess, commit);
 		assert_eq!(kernel2.excess_sig, sig.clone());
-		assert_eq!(kernel2.fee, 10);
 	}
 
 	#[test]
 	fn commit_consistency() {
-		let keychain = ExtKeychain::from_seed(&[0; 32]).unwrap();
+		let keychain = ExtKeychain::from_seed(&[0; 32], false).unwrap();
 		let key_id = ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
 
-		let commit = keychain.commit(1003, &key_id).unwrap();
+		let commit = keychain
+			.commit(1003, &key_id, &SwitchCommitmentType::Regular)
+			.unwrap();
 		let key_id = ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
 
-		let commit_2 = keychain.commit(1003, &key_id).unwrap();
+		let commit_2 = keychain
+			.commit(1003, &key_id, &SwitchCommitmentType::Regular)
+			.unwrap();
 
 		assert!(commit == commit_2);
 	}
 
 	#[test]
 	fn input_short_id() {
-		let keychain = ExtKeychain::from_seed(&[0; 32]).unwrap();
+		let keychain = ExtKeychain::from_seed(&[0; 32], false).unwrap();
 		let key_id = ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
-		let commit = keychain.commit(5, &key_id).unwrap();
+		let commit = keychain
+			.commit(5, &key_id, &SwitchCommitmentType::Regular)
+			.unwrap();
 
 		let input = Input {
-			features: OutputFeatures::DEFAULT_OUTPUT,
+			features: OutputFeatures::Plain,
 			commit: commit,
 		};
 
@@ -1283,16 +1690,45 @@ mod test {
 		let nonce = 0;
 
 		let short_id = input.short_id(&block_hash, nonce);
-		assert_eq!(short_id, ShortId::from_hex("df31d96e3cdb").unwrap());
+		assert_eq!(short_id, ShortId::from_hex("c4b05f2ba649").unwrap());
 
 		// now generate the short_id for a *very* similar output (single feature flag
 		// different) and check it generates a different short_id
 		let input = Input {
-			features: OutputFeatures::COINBASE_OUTPUT,
+			features: OutputFeatures::Coinbase,
 			commit: commit,
 		};
 
 		let short_id = input.short_id(&block_hash, nonce);
-		assert_eq!(short_id, ShortId::from_hex("784fc5afd5d9").unwrap());
+		assert_eq!(short_id, ShortId::from_hex("3f0377c624e9").unwrap());
+	}
+
+	#[test]
+	fn kernel_features_serialization() {
+		let mut vec = vec![];
+		ser::serialize_default(&mut vec, &(0u8, 10u64, 0u64)).expect("serialized failed");
+		let features: KernelFeatures = ser::deserialize_default(&mut &vec[..]).unwrap();
+		assert_eq!(features, KernelFeatures::Plain { fee: 10 });
+
+		let mut vec = vec![];
+		ser::serialize_default(&mut vec, &(1u8, 0u64, 0u64)).expect("serialized failed");
+		let features: KernelFeatures = ser::deserialize_default(&mut &vec[..]).unwrap();
+		assert_eq!(features, KernelFeatures::Coinbase);
+
+		let mut vec = vec![];
+		ser::serialize_default(&mut vec, &(2u8, 10u64, 100u64)).expect("serialized failed");
+		let features: KernelFeatures = ser::deserialize_default(&mut &vec[..]).unwrap();
+		assert_eq!(
+			features,
+			KernelFeatures::HeightLocked {
+				fee: 10,
+				lock_height: 100
+			}
+		);
+
+		let mut vec = vec![];
+		ser::serialize_default(&mut vec, &(3u8, 0u64, 0u64)).expect("serialized failed");
+		let res: Result<KernelFeatures, _> = ser::deserialize_default(&mut &vec[..]);
+		assert_eq!(res.err(), Some(ser::Error::CorruptedData));
 	}
 }

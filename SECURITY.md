@@ -4,12 +4,14 @@ Grin has a [code of conduct](CODE_OF_CONDUCT.md) and the handling of vulnerabili
 
 ## Responsible Disclosure
 
-For all security related issues, Grin has two main points of contact:
+For all security related issues, Grin has 4 main points of contact:
 
 * Daniel Lehnberg, daniel.lehnberg at protonmail.com
-* Ignotus Peverell, igno.peverell at protonmail.net
+* Ignotus Peverell, igno.peverell at protonmail.com
+* hashmap, hashmap.dev at protonmail.com
+* John Woeltz, joltz at protonmail.com
 
-Send all communications to both parties and expect a reply within 48h. Public keys can be found at the end of this document.
+Send all communications to all parties and expect a reply within 48h. Public keys can be found at the end of this document.
 
 ## Vulnerability Handling
 
@@ -69,7 +71,7 @@ The Grin Team runs a chain split monitoring tool at (TBD). It is encouraged to m
 ## Public Keys
 
 ### Daniel Lehnberg
-  ````
+```
 -----BEGIN PGP PUBLIC KEY BLOCK-----
 
 mQINBFuWAuMBEACqRebggT91uazP/jzmKOD/UyVwxaXBtEcWt1/hp9fi1azLxGBn
@@ -123,7 +125,7 @@ Yt4GsNSSB0khmbq31wIGbll/ZGsSH60h
 =pLZJ
 -----END PGP PUBLIC KEY BLOCK-----
 
-````
+```
 ### Ignotus Peverell
 ```
 -----BEGIN PGP PUBLIC KEY BLOCK-----
@@ -176,5 +178,117 @@ nUhS7RlSYqdJ5KYL5NJkWPldSAm3EowObfqyVFgfsFYIIqDbbWC0Frh+wqBqgFqn
 J9bS6yqTXy8jZEP7k14ztcpzVaXdFGzMj3yAk6CXUXrxtJwGbkQjyOO5DaghiPZv
 VaXAUOUL1MeJOiXI96Q=
 =xdp/
+-----END PGP PUBLIC KEY BLOCK-----
+```
+### hashmap
+```
+-----BEGIN PGP PUBLIC KEY BLOCK-----
+
+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
+cN4UNoeD4hpgWl16VHn1wtOl5AEGkg==
+=/+Vo
+-----END PGP PUBLIC KEY BLOCK-----
+```
+### John Woeltz
+```
+-----BEGIN PGP PUBLIC KEY BLOCK-----
+
+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
+OXCaSbMWSCzC0g==
+=BniA
 -----END PGP PUBLIC KEY BLOCK-----
 ```

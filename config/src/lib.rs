@@ -20,20 +20,17 @@
 #![deny(unused_mut)]
 #![warn(missing_docs)]
 
-extern crate dirs;
-extern crate rand;
 #[macro_use]
 extern crate serde_derive;
-extern crate toml;
 
-extern crate grin_p2p as p2p;
-extern crate grin_servers as servers;
-extern crate grin_util as util;
-extern crate grin_wallet as wallet;
+use grin_core as core;
+use grin_p2p as p2p;
+use grin_servers as servers;
+use grin_util as util;
 
 mod comments;
 pub mod config;
 pub mod types;
 
-pub use config::{initial_setup_server, initial_setup_wallet};
-pub use types::{ConfigError, ConfigMembers, GlobalConfig, GlobalWalletConfig};
+pub use crate::config::initial_setup_server;
+pub use crate::types::{ConfigError, ConfigMembers, GlobalConfig};

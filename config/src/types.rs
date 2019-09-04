@@ -18,9 +18,8 @@ use std::fmt;
 use std::io;
 use std::path::PathBuf;
 
-use servers::ServerConfig;
-use util::LoggingConfig;
-use wallet::WalletConfig;
+use crate::servers::ServerConfig;
+use crate::util::LoggingConfig;
 
 /// Error type wrapping config errors.
 #[derive(Debug)]
@@ -39,7 +38,7 @@ pub enum ConfigError {
 }
 
 impl fmt::Display for ConfigError {
-	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
 		match *self {
 			ConfigError::ParseError(ref file_name, ref message) => write!(
 				f,
@@ -92,25 +91,6 @@ pub struct ConfigMembers {
 	/// Server config
 	#[serde(default)]
 	pub server: ServerConfig,
-	/// Logging config
-	pub logging: Option<LoggingConfig>,
-}
-
-/// Wallet should be split into a separate configuration file
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
-pub struct GlobalWalletConfig {
-	/// Keep track of the file we've read
-	pub config_file_path: Option<PathBuf>,
-	/// Wallet members
-	pub members: Option<GlobalWalletConfigMembers>,
-}
-
-/// Wallet internal members
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
-pub struct GlobalWalletConfigMembers {
-	/// Wallet configuration
-	#[serde(default)]
-	pub wallet: WalletConfig,
 	/// Logging config
 	pub logging: Option<LoggingConfig>,
 }

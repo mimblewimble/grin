@@ -1,5 +1,7 @@
 # Grin's Proof-of-Work
 
+*Read this document in other languages: [Korean](pow_KR.md).*
+
 This document is meant to outline, at a level suitable for someone without prior knowledge,
 the algorithms and processes currently involved in Grin's Proof-of-Work system. We'll start
 with a general overview of cycles in a graph and the Cuckoo Cycle algorithm which forms the
@@ -31,7 +33,7 @@ and some of the motivations behind it.
 ### Cycles in a Graph
 
 Cuckoo Cycle is an algorithm meant to detect cycles in a bipartite graph of N nodes
-and M edges. In plainer terms, a bipartite graph is one in which edges (i.e. lines connecting nodes)
+and M edges. In plain terms, a bipartite graph is one in which edges (i.e. lines connecting nodes)
 travel only between 2 separate groups of nodes. In the case of the Cuckoo hashtable in Cuckoo Cycle,
 one side of the graph is an array numbered with odd indices (up to the size of the graph), and the other is numbered with even
 indices. A node is simply a numbered 'space' on either side of the Cuckoo Table, and an Edge is a
@@ -63,7 +65,13 @@ in order for there to be a solution.
 
 Let's add a few more edges, again at random:
 
-![alt text](images/cuckoo_base_numbered_few_edges_cycle.png)
+![alt text](images/cuckoo_base_numbered_more_edges.png)
+
+*8 Nodes with 7 Edges*
+
+Where we can find a cycle:
+
+![alt text](images/cuckoo_base_numbered_more_edges_cycle.png)
 
 *Cycle Found from 0-5-4-1-0*
 

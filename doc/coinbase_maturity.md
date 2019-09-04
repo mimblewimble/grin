@@ -1,8 +1,10 @@
 # The Coinbase Maturity Rule (aka Output Lock Heights)
 
-Coinbase outputs (block rewards & fees) are "locked" and require 1,000 confirmations (blocks added to the current chain) before they mature sufficiently to be spendable. This is to reduce the risk of later txs being reversed if a chain reorganization occurs.
+*Read this in other languages: [Korean](coinbase_maturity_KR.md).*
 
-Bitcoin does something very similar, requiring 100 confirmations (Bitcoin blocks are every 10 minutes, Grin blocks every 60 seconds) before mining rewards can be spent.
+Coinbase outputs (block rewards & fees) are "locked" and require 1,440 confirmations (i.e 24 hours worth of blocks added to the chain) before they mature sufficiently to be spendable. This is to reduce the risk of later txs being reversed if a chain reorganization occurs.
+
+Bitcoin does something very similar, requiring 100 confirmations (Bitcoin blocks are every 10 minutes, Grin blocks are every 60 seconds) before mining rewards can be spent.
 
 Grin enforces coinbase maturity in both the transaction pool and the block validation pipeline. A transaction containing an input spending a coinbase output cannot be added to the transaction pool until it has sufficiently matured (based on current chain height and the height of the block producing the coinbase output).
 Similarly a block is invalid if it contains an input spending a coinbase output before it has sufficiently matured, based on the height of the block containing the input and the height of the block that originally produced the coinbase output.
@@ -98,7 +100,7 @@ We maintain an index mapping commitment to position in the output MMR.
 
 If no entry in the index exists or no entry in the output MMR exists for a given commitment then we now the output is not spendable (either it was spent previously or it never existed).
 
-If we find an entry in the output MMR then we know a spendable output exists in the Output set *but* we do not know if this is the correct one. We do not if it is a coinbase output or not and we do not know the height of the block it originated from.
+If we find an entry in the output MMR then we know a spendable output exists in the Output set *but* we do not know if this is the correct one. We do not know if it is a coinbase output or not and we do not know the height of the block it originated from.
 
 If the hash stored in the output MMR covers both the commitment and the output features and we require an input to provide both the commitment and the feature then we can do a further validation step -
 
@@ -119,9 +121,7 @@ To summarize -
 
 Output MMR stores output hashes based on `commitment|features` (the commitment itself is not sufficient).
 
-We do not need to include the range proof or the switch commitment hash in the generation of the output hash.
-
-We do not need to encode the lock height in the switch commitment hash.
+We do not need to include the range proof in the generation of the output hash.
 
 To spend an output we continue to need -
 

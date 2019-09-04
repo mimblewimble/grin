@@ -113,7 +113,7 @@ Alice wants to pay Bob in grins. She starts the transaction building process:
 1. Alice computes `e` just like Bob did and can check that
    `sr*G = kr*G + e*rr*G`.
 1. Alice sends her side of the signature `ss = ks + e * rs` to Bob.
-1. Bob validates `ss*G` just like Alice did for `sr*G` in step 5 and can
+1. Bob validates `ss*G` just like Alice did for `sr*G` in step 6 and can
    produce the final signature `s = (ss + sr, ks*G + kr*G)` as well as the final
    transaction kernel including `s` and the public key `rr*G + rs*G`.
 
@@ -135,7 +135,7 @@ spent when multiple parties approve it. This construction is very similar to
 the previous setup for trustless transactions, however in this case both the
 signature and a Pedersen Commitment need to be aggregated.
 
-This time, Alice wants to sends funds such that both Bob and her need to agree
+This time, Alice wants to send funds such that both Bob and her need to agree
 to spend. Alice builds the transaction normally and adds the multiparty output
 such that:
 

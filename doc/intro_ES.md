@@ -1,6 +1,6 @@
 # Introducción a MimbleWimble y Grin
 
-*Lea esto en otros idiomas: [English](intro.md), [简体中文](intro.zh-cn.md).*
+*Lea esto en otros idiomas: [English](intro.md), [简体中文](intro_ZH-CN.md), [Español](intro_ES.md), [Nederlands](intro_NL.md), [Русский](intro_RU.md), [日本語](intro_JP.md), [Deutsch](intro_DE.md), [Portuguese](intro_PT-BR.md), [Korean](intro_KR.md).*
 
 MimbleWimble es un formato y un protocolo de cadena de bloques que proporciona una escalabilidad, privacidad y funcionalidad 
 extremadamente buenas al basarse en fuertes algoritmos criptográficos. Aborda los vacíos existentes en casi todas las 
@@ -122,7 +122,7 @@ Este es el primer pilar de MimbleWimble: la aritmética necesaria para validar u
 ninguno de los valores.
 
 Como nota final, esta idea se deriva en realidad de Greg Maxwell's
-[Transacciones confidenciales](https://www.elementsproject.org/elements/confidential-transactions/),
+[Transacciones confidenciales](https://elementsproject.org/features/confidential-transactions/investigation),
 que a su vez se deriva de una propuesta de Adam Back para valores homomórficos aplicados a Bitcoin.
 
 #### Propiedad
@@ -161,7 +161,7 @@ Ella escoge 113, y lo que termina en la cadena es:
     Y - Xi = (113*G + 3*H) - (28*G + 3*H) = 85*G + 0*H
 
 Ahora la transacción ya no suma cero y tenemos un _exceso de valor_ en _G_ (85), que es el resultado de la suma de todos los 
-factores de ocultamiento. Pero porque `85*G` es una clave pública válida en la curva elíptica _G_, con clave privada 85, para 
+factores de ocultamiento. Pero porque `85*G` es una clave pública válida en la curva elíptica _C_, con clave privada 85, para 
 cualquier x e y, sólo si `y = 0` es `x*G + y*H` una clave pública válida en _G_.
 
 Así que todo lo que el protocolo necesita verificar es que (`Y - Xi`) es una clave pública válida en _G_ y que las partes que 

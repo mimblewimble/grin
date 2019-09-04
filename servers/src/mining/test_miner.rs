@@ -17,28 +17,30 @@
 //! header with its proof-of-work.  Any valid mined blocks are submitted to the
 //! network.
 
+use crate::util::RwLock;
 use chrono::prelude::Utc;
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
-use util::RwLock;
 
-use chain;
-use common::types::StratumServerConfig;
-use core::core::hash::{Hash, Hashed};
-use core::core::verifier_cache::VerifierCache;
-use core::core::{Block, BlockHeader};
-use core::global;
-use core::pow::PoWContext;
-use mining::mine_block;
-use pool;
+use crate::chain;
+use crate::common::types::StratumServerConfig;
+use crate::core::core::hash::{Hash, Hashed};
+use crate::core::core::verifier_cache::VerifierCache;
+use crate::core::core::{Block, BlockHeader};
+use crate::core::global;
+use crate::mining::mine_block;
+use crate::pool;
+use crate::util::StopState;
+use grin_chain::SyncState;
+use std::thread;
+use std::time::Duration;
 
 pub struct Miner {
 	config: StratumServerConfig,
 	chain: Arc<chain::Chain>,
 	tx_pool: Arc<RwLock<pool::TransactionPool>>,
-	verifier_cache: Arc<RwLock<VerifierCache>>,
-	stop: Arc<AtomicBool>,
-
+	verifier_cache: Arc<RwLock<dyn VerifierCache>>,
+	stop_state: Arc<StopState>,
+	sync_state: Arc<SyncState>,
 	// Just to hold the port we're on, so this miner can be identified
 	// while watching debug output
 	debug_output_id: String,
@@ -51,8 +53,9 @@ impl Miner {
 		config: StratumServerConfig,
 		chain: Arc<chain::Chain>,
 		tx_pool: Arc<RwLock<pool::TransactionPool>>,
-		verifier_cache: Arc<RwLock<VerifierCache>>,
-		stop: Arc<AtomicBool>,
+		verifier_cache: Arc<RwLock<dyn VerifierCache>>,
+		stop_state: Arc<StopState>,
+		sync_state: Arc<SyncState>,
 	) -> Miner {
 		Miner {
 			config,
@@ -60,7 +63,8 @@ impl Miner {
 			tx_pool,
 			verifier_cache,
 			debug_output_id: String::from("none"),
-			stop,
+			stop_state,
+			sync_state,
 		}
 	}
 
@@ -95,14 +99,18 @@ impl Miner {
 		let mut iter_count = 0;
 
 		while head.hash() == *latest_hash && Utc::now().timestamp() < deadline {
-			let mut ctx =
-				global::create_pow_context::<u32>(global::min_edge_bits(), global::proofsize(), 10)
-					.unwrap();
+			let mut ctx = global::create_pow_context::<u32>(
+				head.height,
+				global::min_edge_bits(),
+				global::proofsize(),
+				10,
+			)
+			.unwrap();
 			ctx.set_header_nonce(b.header.pre_pow(), None, true)
 				.unwrap();
 			if let Ok(proofs) = ctx.find_cycles() {
 				b.header.pow.proof = proofs[0].clone();
-				let proof_diff = b.header.pow.to_difficulty();
+				let proof_diff = b.header.pow.to_difficulty(b.header.height);
 				if proof_diff >= (b.header.total_difficulty() - head.total_difficulty()) {
 					return true;
 				}
@@ -132,7 +140,15 @@ impl Miner {
 		// nothing has changed. We only want to create a new key_id for each new block.
 		let mut key_id = None;
 
-		while !self.stop.load(Ordering::Relaxed) {
+		loop {
+			if self.stop_state.is_stopped() {
+				break;
+			}
+
+			while self.sync_state.is_syncing() {
+				thread::sleep(Duration::from_secs(5));
+			}
+
 			trace!("in miner loop. key_id: {:?}", key_id);
 
 			// get the latest chain state and build a block on top of it
@@ -157,9 +173,10 @@ impl Miner {
 			// we found a solution, push our block through the chain processing pipeline
 			if sol {
 				info!(
-					"(Server ID: {}) Found valid proof of work, adding block {}.",
+					"(Server ID: {}) Found valid proof of work, adding block {} (prev_root {}).",
 					self.debug_output_id,
-					b.hash()
+					b.hash(),
+					b.header.prev_root,
 				);
 				let res = self.chain.process_block(b, chain::Options::MINE);
 				if let Err(e) = res {

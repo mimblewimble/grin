@@ -12,18 +12,18 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! Common types and traits for cuckoo/cuckatoo family of solvers
+//! Common types and traits for cuckoo family of solvers
 
-use blake2::blake2b::blake2b;
+use crate::blake2::blake2b::blake2b;
 use byteorder::{LittleEndian, ReadBytesExt, WriteBytesExt};
 
-use pow::error::{Error, ErrorKind};
-use pow::num::{PrimInt, ToPrimitive};
-use pow::siphash::siphash24;
+use crate::pow::error::{Error, ErrorKind};
+use crate::pow::num::{PrimInt, ToPrimitive};
+use crate::pow::siphash::siphash24;
+use std::fmt;
 use std::hash::Hash;
 use std::io::Cursor;
 use std::ops::{BitOrAssign, Mul};
-use std::{fmt, mem};
 
 /// Operations needed for edge type (going to be u32 or u64)
 pub trait EdgeType: PrimInt + ToPrimitive + Mul + BitOrAssign + Hash {}
@@ -44,7 +44,7 @@ impl<T> fmt::Display for Edge<T>
 where
 	T: EdgeType,
 {
-	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
 		write!(
 			f,
 			"(u: {}, v: {})",
@@ -68,7 +68,7 @@ impl<T> fmt::Display for Link<T>
 where
 	T: EdgeType,
 {
-	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
 		write!(
 			f,
 			"(next: {}, to: {})",
@@ -82,7 +82,7 @@ pub fn set_header_nonce(header: &[u8], nonce: Option<u32>) -> Result<[u64; 4], E
 	if let Some(n) = nonce {
 		let len = header.len();
 		let mut header = header.to_owned();
-		header.truncate(len - mem::size_of::<u32>());
+		header.truncate(len - 4); // drop last 4 bytes (u32) off the end
 		header.write_u32::<LittleEndian>(n)?;
 		create_siphash_keys(&header)
 	} else {
@@ -102,7 +102,7 @@ pub fn create_siphash_keys(header: &[u8]) -> Result<[u64; 4], Error> {
 	])
 }
 
-/// Macros to clean up integer unwrapping
+/// Macro to clean up u64 unwrapping
 #[macro_export]
 macro_rules! to_u64 {
 	($n:expr) => {
@@ -110,6 +110,7 @@ macro_rules! to_u64 {
 	};
 }
 
+/// Macro to clean up u64 unwrapping as u32
 #[macro_export]
 macro_rules! to_u32 {
 	($n:expr) => {
@@ -117,6 +118,7 @@ macro_rules! to_u32 {
 	};
 }
 
+/// Macro to clean up u64 unwrapping as usize
 #[macro_export]
 macro_rules! to_usize {
 	($n:expr) => {
@@ -124,10 +126,11 @@ macro_rules! to_usize {
 	};
 }
 
+/// Macro to clean up casting to edge type
 #[macro_export]
 macro_rules! to_edge {
-	($n:expr) => {
-		T::from($n).ok_or(ErrorKind::IntegerCast)?
+	($edge_type:ident, $n:expr) => {
+		$edge_type::from($n).ok_or(ErrorKind::IntegerCast)?
 	};
 }
 
@@ -151,7 +154,7 @@ where
 	/// Instantiates new params and calculate edge mask, etc
 	pub fn new(edge_bits: u8, proof_size: usize) -> Result<CuckooParams<T>, Error> {
 		let num_edges = (1 as u64) << edge_bits;
-		let edge_mask = to_edge!(num_edges - 1);
+		let edge_mask = to_edge!(T, num_edges - 1);
 		Ok(CuckooParams {
 			edge_bits,
 			proof_size,

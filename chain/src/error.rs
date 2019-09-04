@@ -13,16 +13,15 @@
 // limitations under the License.
 
 //! Error types for chain
+use crate::core::core::{block, committed, transaction};
+use crate::core::ser;
+use crate::keychain;
+use crate::util::secp;
+use crate::util::secp::pedersen::Commitment;
 use failure::{Backtrace, Context, Fail};
+use grin_store as store;
 use std::fmt::{self, Display};
 use std::io;
-
-use core::core::{block, committed, transaction};
-use core::ser;
-use grin_store as store;
-use keychain;
-use util::secp;
-use util::secp::pedersen::Commitment;
 
 /// Error definition
 #[derive(Debug, Fail)]
@@ -90,20 +89,26 @@ pub enum ErrorKind {
 	/// Error validating a Merkle proof (coinbase output)
 	#[fail(display = "Error validating merkle proof")]
 	MerkleProof,
-	/// output not found
+	/// Output not found
 	#[fail(display = "Output not found")]
 	OutputNotFound,
+	/// Rangeproof not found
+	#[fail(display = "Rangeproof not found")]
+	RangeproofNotFound,
+	/// Tx kernel not found
+	#[fail(display = "Tx kernel not found")]
+	TxKernelNotFound,
 	/// output spent
 	#[fail(display = "Output is spent")]
 	OutputSpent,
 	/// Invalid block version, either a mistake or outdated software
-	#[fail(display = "Invalid Block Version: {}", _0)]
-	InvalidBlockVersion(u16),
+	#[fail(display = "Invalid Block Version: {:?}", _0)]
+	InvalidBlockVersion(block::HeaderVersion),
 	/// We've been provided a bad txhashset
 	#[fail(display = "Invalid TxHashSet: {}", _0)]
 	InvalidTxHashSet(String),
 	/// Internal issue when trying to save or load data from store
-	#[fail(display = "Store Error: {}", _1)]
+	#[fail(display = "Store Error: {}, reason: {}", _1, _0)]
 	StoreErr(store::Error, String),
 	/// Internal issue when trying to save or load data from append only files
 	#[fail(display = "File Read Error: {}", _0)]
@@ -121,7 +126,7 @@ pub enum ErrorKind {
 	#[fail(display = "Genesis Block Required")]
 	GenesisBlockRequired,
 	/// Error from underlying tx handling
-	#[fail(display = "Transaction Error")]
+	#[fail(display = "Transaction Validation Error: {:?}", _0)]
 	Transaction(transaction::Error),
 	/// Anything else
 	#[fail(display = "Other Error: {}", _0)]
@@ -129,10 +134,19 @@ pub enum ErrorKind {
 	/// Error from summing and verifying kernel sums via committed trait.
 	#[fail(display = "Committed Trait: Error summing and verifying kernel sums")]
 	Committed(committed::Error),
+	/// We cannot process data once the Grin server has been stopped.
+	#[fail(display = "Stopped (Grin Shutting Down)")]
+	Stopped,
+	/// Internal Roaring Bitmap error
+	#[fail(display = "Roaring Bitmap error")]
+	Bitmap,
+	/// Error during chain sync
+	#[fail(display = "Sync error")]
+	SyncError(String),
 }
 
 impl Display for Error {
-	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
 		let cause = match self.cause() {
 			Some(c) => format!("{}", c),
 			None => String::from("Unknown"),
@@ -155,7 +169,7 @@ impl Error {
 		self.inner.get_context().clone()
 	}
 	/// get cause
-	pub fn cause(&self) -> Option<&Fail> {
+	pub fn cause(&self) -> Option<&dyn Fail> {
 		self.inner.cause()
 	}
 	/// get backtrace
