@@ -83,7 +83,7 @@ _v_ を トランザクション input または output の value とし、_H_ �
 実際の value を知ることなく検証できる。しかし、使用できる value の数は有限であり、それらをすべて試すことでトランザクションの
 value を推測することは可能である。加えて、 v1 とそれから導出できる `v*H` を知っているということは、ブロックチェーン上のすべての
 value が v1 の output からわかってしまうということを意味する。これらの理由から、２つ目の楕円曲線 _G_ （実際には、 _H_ と同じ
-曲線上の他の生成元である）と秘密鍵 _r_ を *目くらまし因子（blinding factor）*として導入することにする。
+曲線上の他の生成元である）と秘密鍵 _r_ を *目くらまし因子（blinding factor）* として導入することにする。
 
 今、トランザクションの input/output value は次のように表すことができる：
 
@@ -301,7 +301,7 @@ tx outputs の和から tx inputs の和を引いて、その結果である Ped
 
     sum(outputs) - sum(inputs) = kernel_excess + kernel_offset
 
-トランザクションをブロックに集約する時、ブロックヘッダに_一つだけ_ aggregate offset を保存する。これにより、一つ一つの transaction kernel offsets に分解できない一つの offset を作ることができた。そしてトランザクションは再構成できない -
+トランザクションをブロックに集約する時、ブロックヘッダに _一つだけ_ aggregate offset を保存する。これにより、一つ一つの transaction kernel offsets に分解できない一つの offset を作ることができた。そしてトランザクションは再構成できない -
 
     sum(outputs) - sum(inputs) = sum(kernel_excess) + kernel_offset
 
