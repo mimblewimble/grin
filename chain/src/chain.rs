@@ -525,8 +525,8 @@ impl Chain {
 		// latest block header. Rewind the extension to the specified header to
 		// ensure the view is consistent.
 		txhashset::extending_readonly(&mut txhashset, |extension| {
-			let header_head = extension.batch.header_head()?;
-			pipe::rewind_and_apply_fork(&header, &header_head, extension)?;
+			let head = extension.batch.head()?;
+			pipe::rewind_and_apply_fork(&header, &head, extension)?;
 			extension.validate(fast_validation, &NoStatus)?;
 			Ok(())
 		})
@@ -539,8 +539,8 @@ impl Chain {
 		let (prev_root, roots, sizes) =
 			txhashset::extending_readonly(&mut txhashset, |extension| {
 				let previous_header = extension.batch.get_previous_header(&b.header)?;
-				let header_head = extension.batch.header_head()?;
-				pipe::rewind_and_apply_fork(&previous_header, &header_head, extension)?;
+				let head = extension.batch.head()?;
+				pipe::rewind_and_apply_fork(&previous_header, &head, extension)?;
 
 				// Retrieve the header root before we apply the new block
 				let prev_root = extension.header_root()?;
@@ -578,8 +578,8 @@ impl Chain {
 	) -> Result<MerkleProof, Error> {
 		let mut txhashset = self.txhashset.write();
 		let merkle_proof = txhashset::extending_readonly(&mut txhashset, |extension| {
-			let header_head = extension.batch.header_head()?;
-			pipe::rewind_and_apply_fork(&header, &header_head, extension)?;
+			let head = extension.batch.head()?;
+			pipe::rewind_and_apply_fork(&header, &head, extension)?;
 			extension.merkle_proof(output)
 		})?;
 
@@ -633,8 +633,8 @@ impl Chain {
 		{
 			let mut txhashset = self.txhashset.write();
 			txhashset::extending_readonly(&mut txhashset, |extension| {
-				let header_head = extension.batch.header_head()?;
-				pipe::rewind_and_apply_fork(&header, &header_head, extension)?;
+				let head = extension.batch.head()?;
+				pipe::rewind_and_apply_fork(&header, &head, extension)?;
 
 				extension.snapshot()?;
 				Ok(())
@@ -1421,8 +1421,8 @@ fn setup_head(
 				})?;
 
 				let res = txhashset::extending(txhashset, &mut batch, |extension| {
-					let header_head = extension.batch.header_head()?;
-					pipe::rewind_and_apply_fork(&header, &header_head, extension)?;
+					let head = extension.batch.head()?;
+					pipe::rewind_and_apply_fork(&header, &head, extension)?;
 					extension.validate_roots()?;
 
 					// now check we have the "block sums" for the block in question

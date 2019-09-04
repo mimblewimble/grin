@@ -88,77 +88,238 @@ fn mine_short_chain() {
 	clean_output_dir(chain_dir);
 }
 
-#[test]
-fn process_headers_first_with_fork() {
-	let chain_dir = ".grin.fork_headers";
-	clean_output_dir(chain_dir);
+// Convenience wrapper for processing a full block on the test chain.
+fn process_header(chain: &Chain, header: &BlockHeader) {
+	chain
+		.process_block_header(header, chain::Options::SKIP_POW)
+		.unwrap();
+}
 
+// Convenience wrapper for processing a block header on the test chain.
+fn process_block(chain: &Chain, block: &Block) {
+	chain
+		.process_block(block.clone(), chain::Options::SKIP_POW)
+		.unwrap();
+}
+
+//
+// a - b - c
+//  \
+//   - b'
+//
+// Process in the following order -
+// 1. block_a
+// 2. block_b
+// 3. block_b'
+// 4. header_c
+// 5. block_c
+//
+#[test]
+fn test_block_a_block_b_block_b_fork_header_c_fork_block_c() {
+	let chain_dir = ".grin.block_a_block_b_block_b_fork_header_c_fork_block_c";
+	clean_output_dir(chain_dir);
 	global::set_mining_mode(ChainTypes::AutomatedTesting);
 	let kc = ExtKeychain::from_random_seed(false).unwrap();
 	let genesis = pow::mine_genesis_block().unwrap();
-
 	let last_status = RwLock::new(None);
 	let adapter = Arc::new(StatusAdapter::new(last_status));
 	let chain = setup_with_status_adapter(chain_dir, genesis.clone(), adapter.clone());
 
-	let prev = chain.head_header().unwrap();
-	assert_eq!(prev, genesis.header);
+	let block_a = prepare_block(&kc, &chain.head_header().unwrap(), &chain, 1);
+	process_block(&chain, &block_a);
 
-	// First process the header for a block mined on top of our previous block (genesis).
-	let b1 = prepare_block(&kc, &prev, &chain, 1);
-	chain
-		.process_block_header(&b1.header, chain::Options::SKIP_POW)
-		.unwrap();
+	let block_b = prepare_block(&kc, &block_a.header, &chain, 2);
+	let block_b_fork = prepare_block(&kc, &block_a.header, &chain, 2);
 
-	// Now mine a fork block and process this header.
-	// Note: We have not yet processed the competing full block.
-	// This header should also be accepted on the header MMR (after necessary rewind).
-	// But this should not update header_head as this is a losing fork.
-	let b2 = prepare_block(&kc, &prev, &chain, 1);
-	chain
-		.process_block_header(&b2.header, chain::Options::SKIP_POW)
-		.unwrap();
+	process_block(&chain, &block_b);
+	process_block(&chain, &block_b_fork);
 
-	// Check our header_head reflects b1 (first one wins).
-	let head_header = chain.header_head().unwrap();
-	assert_eq!(head_header, Tip::from_header(&b1.header));
+	let block_c = prepare_block(&kc, &block_b.header, &chain, 3);
+	process_header(&chain, &block_c.header);
 
-	// Now process the full block for b2.
-	chain
-		.process_block(b2.clone(), chain::Options::SKIP_POW)
-		.unwrap();
+	assert_eq!(chain.head().unwrap(), Tip::from_header(&block_b.header));
+	assert_eq!(
+		chain.header_head().unwrap(),
+		Tip::from_header(&block_c.header)
+	);
 
-	// Check head reflects b2 as this is the winning full block at this height.
-	let head = chain.head().unwrap();
-	assert_eq!(head, Tip::from_header(&b2.header));
+	process_block(&chain, &block_c);
 
-	// BUT - header_head *still* references b1 (this is weird but ok).
-	let head_header = chain.header_head().unwrap();
-	assert_eq!(head_header, Tip::from_header(&b1.header));
+	assert_eq!(chain.head().unwrap(), Tip::from_header(&block_c.header));
+	assert_eq!(
+		chain.header_head().unwrap(),
+		Tip::from_header(&block_c.header)
+	);
 
-	// Now process the full block for b1.
-	chain
-		.process_block(b1.clone(), chain::Options::SKIP_POW)
-		.unwrap();
+	clean_output_dir(chain_dir);
+}
 
-	// Check head still reflects b2 as this is the winning full block at this height.
-	let head = chain.head().unwrap();
-	assert_eq!(head, Tip::from_header(&b2.header));
+//
+// a - b
+//  \
+//   - b' - c'
+//
+// Process in the following order -
+// 1. block_a
+// 2. block_b
+// 3. block_b'
+// 4. header_c'
+// 5. block_c'
+//
+#[test]
+fn test_block_a_block_b_block_b_fork_header_c_fork_block_c_fork() {
+	let chain_dir = ".grin.block_a_block_b_block_b_fork_header_c_fork_block_c_fork";
+	clean_output_dir(chain_dir);
+	global::set_mining_mode(ChainTypes::AutomatedTesting);
+	let kc = ExtKeychain::from_random_seed(false).unwrap();
+	let genesis = pow::mine_genesis_block().unwrap();
+	let last_status = RwLock::new(None);
+	let adapter = Arc::new(StatusAdapter::new(last_status));
+	let chain = setup_with_status_adapter(chain_dir, genesis.clone(), adapter.clone());
 
-	// Check header_head *still* references b1 (still weird but ok).
-	let head_header = chain.header_head().unwrap();
-	assert_eq!(head_header, Tip::from_header(&b1.header));
+	let block_a = prepare_block(&kc, &chain.head_header().unwrap(), &chain, 1);
+	process_block(&chain, &block_a);
 
-	let b3 = prepare_block(&kc, &b1.header, &chain, 2);
-	chain
-		.process_block(b3.clone(), chain::Options::SKIP_POW)
-		.unwrap();
+	let block_b = prepare_block(&kc, &block_a.header, &chain, 2);
+	let block_b_fork = prepare_block(&kc, &block_a.header, &chain, 2);
 
-	// Check head and header_head both reflect b3.
-	let head = chain.head().unwrap();
-	assert_eq!(head, Tip::from_header(&b3.header));
-	let header_head = chain.header_head().unwrap();
-	assert_eq!(header_head, Tip::from_header(&b3.header));
+	process_block(&chain, &block_b);
+	process_block(&chain, &block_b_fork);
+
+	let block_c_fork = prepare_block(&kc, &block_b_fork.header, &chain, 3);
+	process_header(&chain, &block_c_fork.header);
+
+	assert_eq!(chain.head().unwrap(), Tip::from_header(&block_b.header));
+	assert_eq!(
+		chain.header_head().unwrap(),
+		Tip::from_header(&block_c_fork.header)
+	);
+
+	process_block(&chain, &block_c_fork);
+
+	assert_eq!(
+		chain.head().unwrap(),
+		Tip::from_header(&block_c_fork.header)
+	);
+	assert_eq!(
+		chain.header_head().unwrap(),
+		Tip::from_header(&block_c_fork.header)
+	);
+
+	clean_output_dir(chain_dir);
+}
+
+//
+// a - b - c
+//  \
+//   - b'
+//
+// Process in the following order -
+// 1. block_a
+// 2. header_b
+// 3. header_b_fork
+// 4. block_b_fork
+// 5. block_b
+// 6. block_c
+//
+#[test]
+fn test_block_a_header_b_header_b_fork_block_b_fork_block_b_block_c() {
+	let chain_dir = ".grin.test_block_a_header_b_header_b_fork_block_b_fork_block_b_block_c";
+	clean_output_dir(chain_dir);
+	global::set_mining_mode(ChainTypes::AutomatedTesting);
+	let kc = ExtKeychain::from_random_seed(false).unwrap();
+	let genesis = pow::mine_genesis_block().unwrap();
+	let last_status = RwLock::new(None);
+	let adapter = Arc::new(StatusAdapter::new(last_status));
+	let chain = setup_with_status_adapter(chain_dir, genesis.clone(), adapter.clone());
+
+	let block_a = prepare_block(&kc, &chain.head_header().unwrap(), &chain, 1);
+	process_block(&chain, &block_a);
+
+	let block_b = prepare_block(&kc, &block_a.header, &chain, 2);
+	let block_b_fork = prepare_block(&kc, &block_a.header, &chain, 2);
+
+	process_header(&chain, &block_b.header);
+	process_header(&chain, &block_b_fork.header);
+	process_block(&chain, &block_b_fork);
+	process_block(&chain, &block_b);
+
+	assert_eq!(
+		chain.header_head().unwrap(),
+		Tip::from_header(&block_b.header)
+	);
+	assert_eq!(
+		chain.head().unwrap(),
+		Tip::from_header(&block_b_fork.header)
+	);
+
+	let block_c = prepare_block(&kc, &block_b.header, &chain, 3);
+	process_block(&chain, &block_c);
+
+	assert_eq!(chain.head().unwrap(), Tip::from_header(&block_c.header));
+	assert_eq!(
+		chain.header_head().unwrap(),
+		Tip::from_header(&block_c.header)
+	);
+
+	clean_output_dir(chain_dir);
+}
+
+//
+// a - b
+//  \
+//   - b' - c'
+//
+// Process in the following order -
+// 1. block_a
+// 2. header_b
+// 3. header_b_fork
+// 4. block_b_fork
+// 5. block_b
+// 6. block_c_fork
+//
+#[test]
+fn test_block_a_header_b_header_b_fork_block_b_fork_block_b_block_c_fork() {
+	let chain_dir = ".grin.test_block_a_header_b_header_b_fork_block_b_fork_block_b_block_c_fork";
+	clean_output_dir(chain_dir);
+	global::set_mining_mode(ChainTypes::AutomatedTesting);
+	let kc = ExtKeychain::from_random_seed(false).unwrap();
+	let genesis = pow::mine_genesis_block().unwrap();
+	let last_status = RwLock::new(None);
+	let adapter = Arc::new(StatusAdapter::new(last_status));
+	let chain = setup_with_status_adapter(chain_dir, genesis.clone(), adapter.clone());
+
+	let block_a = prepare_block(&kc, &chain.head_header().unwrap(), &chain, 1);
+	process_block(&chain, &block_a);
+
+	let block_b = prepare_block(&kc, &block_a.header, &chain, 2);
+	let block_b_fork = prepare_block(&kc, &block_a.header, &chain, 2);
+
+	process_header(&chain, &block_b.header);
+	process_header(&chain, &block_b_fork.header);
+	process_block(&chain, &block_b_fork);
+	process_block(&chain, &block_b);
+
+	assert_eq!(
+		chain.header_head().unwrap(),
+		Tip::from_header(&block_b.header)
+	);
+	assert_eq!(
+		chain.head().unwrap(),
+		Tip::from_header(&block_b_fork.header)
+	);
+
+	let block_c_fork = prepare_block(&kc, &block_b_fork.header, &chain, 3);
+	process_block(&chain, &block_c_fork);
+
+	assert_eq!(
+		chain.head().unwrap(),
+		Tip::from_header(&block_c_fork.header)
+	);
+	assert_eq!(
+		chain.header_head().unwrap(),
+		Tip::from_header(&block_c_fork.header)
+	);
 
 	clean_output_dir(chain_dir);
 }

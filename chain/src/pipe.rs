@@ -87,7 +87,6 @@ pub fn process_block(b: &Block, ctx: &mut BlockContext<'_>) -> Result<Option<Tip
 	check_known(&b.header, ctx)?;
 
 	let head = ctx.batch.head()?;
-	let header_head = ctx.batch.header_head()?;
 
 	let is_next = b.header.prev_hash == head.last_block_h;
 
@@ -115,7 +114,7 @@ pub fn process_block(b: &Block, ctx: &mut BlockContext<'_>) -> Result<Option<Tip
 	// Start a chain extension unit of work dependent on the success of the
 	// internal validation and saving operations
 	let block_sums = txhashset::extending(&mut ctx.txhashset, &mut ctx.batch, |mut extension| {
-		rewind_and_apply_fork(&prev, &header_head, extension)?;
+		rewind_and_apply_fork(&prev, &head, extension)?;
 
 		// Check any coinbase being spent have matured sufficiently.
 		// This needs to be done within the context of a potentially
@@ -527,12 +526,6 @@ pub fn rewind_and_apply_header_fork(
 	header: &BlockHeader,
 	ext: &mut txhashset::HeaderExtension<'_>,
 ) -> Result<(), Error> {
-	let head = ext.head();
-	if header.hash() == head.last_block_h {
-		// Nothing to rewind and nothing to reapply. Done.
-		return Ok(());
-	}
-
 	let mut fork_hashes = vec![];
 	let mut current = header.clone();
 	while current.height > 0 && !ext.is_on_current_chain(&current).is_ok() {
