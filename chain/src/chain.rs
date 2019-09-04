@@ -1077,7 +1077,7 @@ impl Chain {
 
 			// Rebuild our output_pos index in the db based on current UTXO set.
 			txhashset::extending(&mut txhashset, &mut batch, |extension| {
-				extension.rebuild_index()?;
+				extension.rebuild_height_pos_index()?;
 				Ok(())
 			})?;
 
@@ -1089,8 +1089,6 @@ impl Chain {
 			// Commit all the above db changes.
 			batch.commit()?;
 		}
-
-		self.rebuild_height_for_pos()?;
 
 		Ok(())
 	}
@@ -1223,7 +1221,7 @@ impl Chain {
 	/// Migrate the index 'commitment -> output_pos' to index 'commitment -> (output_pos, block_height)'
 	/// Note: should only be called in two cases:
 	///     - Node start-up. For database migration from the old version.
-	/// 	- After the txhashset 'rebuild_index' when state syncing or compact.
+	/// 	- After the txhashset 'rebuild_index' when state syncing.
 	pub fn rebuild_height_for_pos(&self) -> Result<(), Error> {
 		let txhashset = self.txhashset.read();
 		let mut outputs_pos = txhashset.get_all_output_pos()?;
