@@ -475,13 +475,14 @@ impl Server {
 			}
 		};
 
-		let peer_stats = self
-			.p2p
-			.peers
-			.connected_peers()
-			.into_iter()
-			.map(|p| PeerStats::from_peer(&p))
-			.collect();
+		let peer_stats = self.p2p.peers.cursor().map_or_else(
+			|| vec![],
+			|c| {
+				c.connected_peers()
+					.map(|p| PeerStats::from_peer(&p))
+					.collect()
+			},
+		);
 
 		// Updating TUI stats should not block any other processing so only attempt to
 		// acquire various read locks with a timeout.
@@ -523,7 +524,7 @@ impl Server {
 		let disk_usage_gb = format!("{:.*}", 3, (disk_usage_bytes as f64 / 1_000_000_000_f64));
 
 		Ok(ServerStats {
-			peer_count: self.peer_count(),
+			peer_count: peer_stats.len() as u32,
 			chain_stats: head_stats,
 			header_stats: header_stats,
 			sync_status: self.sync_state.status(),

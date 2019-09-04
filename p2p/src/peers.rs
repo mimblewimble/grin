@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::util::RwLock;
+use crate::util::{RwLock, RwLockReadGuard};
 use std::collections::HashMap;
 use std::fs::File;
 use std::io::Read;
@@ -106,38 +106,53 @@ impl Peers {
 		Ok(peers.contains_key(&addr))
 	}
 
+	pub fn cursor(&self) -> Option<PeersCursor> {
+		match self.peers.try_read_for(LOCK_TIMEOUT) {
+			Some(peers) => Some(PeersCursor::new(peers)),
+			None => {
+				error!("peers cursor: failed to get peers lock");
+				return None;
+			}
+		}
+	}
+
+	fn shuffle(&self, mut v: Vec<Arc<Peer>>) -> Vec<Arc<Peer>> {
+		v.shuffle(&mut thread_rng());
+		v
+	}
+
 	/// Get vec of peers we are currently connected to.
 	pub fn connected_peers(&self) -> Vec<Arc<Peer>> {
-		let peers = match self.peers.try_read_for(LOCK_TIMEOUT) {
-			Some(peers) => peers,
-			None => {
-				error!("connected_peers: failed to get peers lock");
-				return vec![];
-			}
-		};
-		let mut res = peers
-			.values()
-			.filter(|p| p.is_connected())
-			.cloned()
-			.collect::<Vec<_>>();
-		res.shuffle(&mut thread_rng());
-		res
+		self.cursor()
+			.map_or_else(|| vec![], |c| self.shuffle(c.connected_peers().collect()))
 	}
 
 	/// Get vec of peers we currently have an outgoing connection with.
 	pub fn outgoing_connected_peers(&self) -> Vec<Arc<Peer>> {
-		self.connected_peers()
-			.into_iter()
-			.filter(|x| x.info.is_outbound())
-			.collect()
+		self.cursor().map_or_else(
+			|| vec![],
+			|c| {
+				self.shuffle(
+					c.connected_peers()
+						.filter(|x| x.info.is_outbound())
+						.collect(),
+				)
+			},
+		)
 	}
 
 	/// Get vec of peers we currently have an incoming connection with.
 	pub fn incoming_connected_peers(&self) -> Vec<Arc<Peer>> {
-		self.connected_peers()
-			.into_iter()
-			.filter(|x| x.info.is_inbound())
-			.collect()
+		self.cursor().map_or_else(
+			|| vec![],
+			|c| {
+				self.shuffle(
+					c.connected_peers()
+						.filter(|x| x.info.is_inbound())
+						.collect(),
+				)
+			},
+		)
 	}
 
 	/// Get a peer we're connected to by address.
@@ -154,52 +169,51 @@ impl Peers {
 
 	/// Number of peers currently connected to.
 	pub fn peer_count(&self) -> u32 {
-		self.connected_peers().len() as u32
+		self.cursor()
+			.map_or_else(|| 0, |c| c.connected_peers().count()) as u32
 	}
 
 	/// Number of outbound peers currently connected to.
 	pub fn peer_outbound_count(&self) -> u32 {
-		self.outgoing_connected_peers().len() as u32
+		self.cursor()
+			.map_or_else(|| 0, |c| c.outgoing_connected_peers().count()) as u32
 	}
 
 	/// Number of inbound peers currently connected to.
 	pub fn peer_inbound_count(&self) -> u32 {
-		self.incoming_connected_peers().len() as u32
+		self.cursor()
+			.map_or_else(|| 0, |c| c.incoming_connected_peers().count()) as u32
 	}
 
 	// Return vec of connected peers that currently advertise more work
 	// (total_difficulty) than we do.
 	pub fn more_work_peers(&self) -> Result<Vec<Arc<Peer>>, chain::Error> {
-		let peers = self.connected_peers();
-		if peers.is_empty() {
-			return Ok(vec![]);
-		}
-
 		let total_difficulty = self.total_difficulty()?;
 
-		let mut max_peers = peers
-			.into_iter()
-			.filter(|x| x.info.total_difficulty() > total_difficulty)
-			.collect::<Vec<_>>();
-
-		max_peers.shuffle(&mut thread_rng());
-		Ok(max_peers)
+		Ok(self.cursor().map_or_else(
+			|| vec![],
+			|c| {
+				self.shuffle(
+					c.connected_peers()
+						.filter(|x| x.info.total_difficulty() > total_difficulty)
+						.collect::<Vec<_>>(),
+				)
+			},
+		))
 	}
 
 	// Return number of connected peers that currently advertise more/same work
 	// (total_difficulty) than/as we do.
 	pub fn more_or_same_work_peers(&self) -> Result<usize, chain::Error> {
-		let peers = self.connected_peers();
-		if peers.is_empty() {
-			return Ok(0);
-		}
-
 		let total_difficulty = self.total_difficulty()?;
-
-		Ok(peers
-			.iter()
-			.filter(|x| x.info.total_difficulty() >= total_difficulty)
-			.count())
+		Ok(self.cursor().map_or_else(
+			|| 0,
+			|c| {
+				c.connected_peers()
+					.filter(|x| x.info.total_difficulty() >= total_difficulty)
+					.count()
+			},
+		))
 	}
 
 	/// Returns single random peer with more work than us.
@@ -213,26 +227,33 @@ impl Peers {
 		}
 	}
 
+	pub fn max_total_difficulty(&self) -> Difficulty {
+		self.cursor().map_or_else(
+			|| Difficulty::min(),
+			|c| {
+				c.connected_peers()
+					.map(|p| p.info.total_difficulty())
+					.max()
+					.unwrap_or(Difficulty::min())
+			},
+		)
+	}
+
 	/// Return vec of connected peers that currently have the most worked
 	/// branch, showing the highest total difficulty.
 	pub fn most_work_peers(&self) -> Vec<Arc<Peer>> {
-		let peers = self.connected_peers();
-		if peers.is_empty() {
-			return vec![];
-		}
+		let max_total_difficulty = self.max_total_difficulty();
 
-		let max_total_difficulty = match peers.iter().map(|x| x.info.total_difficulty()).max() {
-			Some(v) => v,
-			None => return vec![],
-		};
-
-		let mut max_peers = peers
-			.into_iter()
-			.filter(|x| x.info.total_difficulty() == max_total_difficulty)
-			.collect::<Vec<_>>();
-
-		max_peers.shuffle(&mut thread_rng());
-		max_peers
+		self.cursor().map_or_else(
+			|| vec![],
+			|c| {
+				self.shuffle(
+					c.connected_peers()
+						.filter(|x| x.info.total_difficulty() == max_total_difficulty)
+						.collect::<Vec<_>>(),
+				)
+			},
+		)
 	}
 
 	/// Returns single random peer with the most worked branch, showing the
@@ -465,12 +486,15 @@ impl Peers {
 		let excess_outgoing_count =
 			(self.peer_outbound_count() as usize).saturating_sub(max_outbound_count);
 		if excess_outgoing_count > 0 {
-			let mut addrs = self
-				.outgoing_connected_peers()
-				.iter()
-				.take(excess_outgoing_count)
-				.map(|x| x.info.addr)
-				.collect::<Vec<_>>();
+			let mut addrs = self.cursor().map_or_else(
+				|| vec![],
+				|c| {
+					c.outgoing_connected_peers()
+						.take(excess_outgoing_count)
+						.map(|x| x.info.addr)
+						.collect::<Vec<_>>()
+				},
+			);
 			rm.append(&mut addrs);
 		}
 
@@ -478,12 +502,15 @@ impl Peers {
 		let excess_incoming_count =
 			(self.peer_inbound_count() as usize).saturating_sub(max_inbound_count);
 		if excess_incoming_count > 0 {
-			let mut addrs = self
-				.incoming_connected_peers()
-				.iter()
-				.take(excess_incoming_count)
-				.map(|x| x.info.addr)
-				.collect::<Vec<_>>();
+			let mut addrs = self.cursor().map_or_else(
+				|| vec![],
+				|c| {
+					c.incoming_connected_peers()
+						.take(excess_incoming_count)
+						.map(|x| x.info.addr.clone())
+						.collect::<Vec<_>>()
+				},
+			);
 			rm.append(&mut addrs);
 		}
 
@@ -779,5 +806,27 @@ impl NetAdapter for Peers {
 		} else {
 			false
 		}
+	}
+}
+
+pub struct PeersCursor<'a> {
+	peers: RwLockReadGuard<'a, HashMap<PeerAddr, Arc<Peer>>>,
+}
+
+impl<'a> PeersCursor<'a> {
+	pub fn new(peers: RwLockReadGuard<'a, HashMap<PeerAddr, Arc<Peer>>>) -> PeersCursor {
+		PeersCursor { peers }
+	}
+	pub fn connected_peers(&'a self) -> impl Iterator<Item = Arc<Peer>> + 'a {
+		self.peers.values().filter(|p| p.is_connected()).cloned()
+	}
+
+	pub fn outgoing_connected_peers(&'a self) -> impl Iterator<Item = Arc<Peer>> + 'a {
+		self.connected_peers().filter(|x| x.info.is_outbound())
+	}
+
+	/// Get vec of peers we currently have an incoming connection with.
+	pub fn incoming_connected_peers(&'a self) -> impl Iterator<Item = Arc<Peer>> + 'a {
+		self.connected_peers().filter(|x| x.info.is_inbound())
 	}
 }
