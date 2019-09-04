@@ -172,11 +172,13 @@ impl Chain {
 	) -> Result<Chain, Error> {
 		let store = Arc::new(store::ChainStore::new(&db_root)?);
 
+		// Just for testing - but we should verify we have the full block before
+		// attempting to restore prior state.
 		let hash =
-			Hash::from_hex("0000018c118c48d32fecb3e586d5a053f18d82963def6a0cc7f4d1d569fa4186")
+			Hash::from_hex("0000006dac19f0571111e32d354ab4bbfd7b69f08a32da8636d8c09153de044e")
 				.unwrap();
-		let foo_header = store.get_block_header(&hash)?;
-		let header = Some(&foo_header);
+		let full_block = store.get_block(&hash)?;
+		let header = Some(&full_block.header);
 
 		// Open the txhashset, creating a new one if necessary.
 		let mut txhashset = txhashset::TxHashSet::open(db_root.clone(), store.clone(), header)?;
@@ -1417,11 +1419,9 @@ fn setup_head(
 	// If we are recovering prior chain state based on provided header
 	// then reset our db as if subsequent blocks never existed.
 	if let Some(header) = header {
-		let mut count = 0;
 		for (_, b) in batch.blocks_iter()? {
 			if b.header.height > header.height {
 				let _ = batch.delete_block(&b.hash());
-				count += 1;
 			}
 		}
 		batch.save_body_head(&Tip::from_header(header))?;
