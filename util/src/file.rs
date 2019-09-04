@@ -61,10 +61,10 @@ fn copy_to(src: &Path, src_type: &fs::FileType, dst: &Path) -> io::Result<u64> {
 	} else if src_type.is_dir() {
 		copy_dir_to(src, dst)
 	} else {
-		return Err(io::Error::new(
+		Err(io::Error::new(
 			io::ErrorKind::Other,
 			format!("Could not copy: {}", src.display()),
-		));
+		))
 	}
 }
 

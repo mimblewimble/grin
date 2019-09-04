@@ -48,7 +48,7 @@ where
 
 	let output = Output {
 		features: OutputFeatures::Coinbase,
-		commit: commit,
+		commit,
 		proof: rproof,
 	};
 
@@ -81,7 +81,7 @@ where
 
 	let proof = TxKernel {
 		features: KernelFeatures::Coinbase,
-		excess: excess,
+		excess,
 		excess_sig: sig,
 	};
 	Ok((output, proof))

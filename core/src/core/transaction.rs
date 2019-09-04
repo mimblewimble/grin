@@ -1680,7 +1680,7 @@ mod test {
 
 		let input = Input {
 			features: OutputFeatures::Plain,
-			commit: commit,
+			commit,
 		};
 
 		let block_hash =
@@ -1696,7 +1696,7 @@ mod test {
 		// different) and check it generates a different short_id
 		let input = Input {
 			features: OutputFeatures::Coinbase,
-			commit: commit,
+			commit,
 		};
 
 		let short_id = input.short_id(&block_hash, nonce);

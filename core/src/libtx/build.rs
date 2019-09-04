@@ -127,7 +127,7 @@ where
 			(
 				tx.with_output(Output {
 					features: OutputFeatures::Plain,
-					commit: commit,
+					commit,
 					proof: rproof,
 				}),
 				kern,
