@@ -366,7 +366,7 @@ impl TxHashSet {
 		}
 
 		debug!(
-			"txhashset: rebuild_height_pos_index: {} UTXOs, took {}s",
+			"rebuild_height_pos_index: {} UTXOs, took {}s",
 			total_outputs,
 			now.elapsed().as_secs(),
 		);

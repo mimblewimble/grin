@@ -962,6 +962,9 @@ impl Chain {
 			batch.save_body_tail(&tip)?;
 		}
 
+		// Rebuild our output_pos index in the db based on current UTXO set.
+		txhashset.rebuild_height_pos_index(&header_pmmr, &mut batch)?;
+
 		// Commit all the changes to the db.
 		batch.commit()?;
 
@@ -990,8 +993,6 @@ impl Chain {
 		}
 
 		debug!("txhashset_write: replaced our txhashset with the new one");
-
-		self.rebuild_height_for_pos()?;
 
 		// Check for any orphan blocks and process them based on the new chain state.
 		self.check_orphans(header.height + 1);
