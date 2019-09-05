@@ -313,6 +313,65 @@ impl TxHashSet {
 
 		Ok(())
 	}
+
+	/// Rebuild the index of block height & MMR positions to the corresponding UTXOs.
+	/// This is a costly operation performed only when we receive a full new chain state.
+	/// Note: only called by compact.
+	pub fn rebuild_height_pos_index(
+		&self,
+		header_pmmr: &PMMRHandle<BlockHeader>,
+		batch: &mut Batch<'_>,
+	) -> Result<(), Error> {
+		let now = Instant::now();
+
+		let output_pmmr =
+			ReadonlyPMMR::at(&self.output_pmmr_h.backend, self.output_pmmr_h.last_pos);
+
+		// clear it before rebuilding
+		batch.clear_output_pos_height()?;
+
+		let mut outputs_pos: Vec<(Commitment, u64)> = vec![];
+		for pos in output_pmmr.leaf_pos_iter() {
+			if let Some(out) = output_pmmr.get_data(pos) {
+				outputs_pos.push((out.commit, pos));
+			}
+		}
+		let total_outputs = outputs_pos.len();
+		if total_outputs == 0 {
+			debug!("rebuild_height_pos_index: nothing to be rebuilt");
+			return Ok(());
+		} else {
+			debug!(
+				"rebuild_height_pos_index: rebuilding {} outputs position & height...",
+				total_outputs
+			);
+		}
+
+		let max_height = batch.head()?.height;
+
+		let mut i = 0;
+		for search_height in 0..max_height {
+			let hash = header_pmmr.get_header_hash_by_height(search_height + 1)?;
+			let h = batch.get_block_header(&hash)?;
+			while i < total_outputs {
+				let (commit, pos) = outputs_pos[i];
+				if pos > h.output_mmr_size {
+					// Note: MMR position is 1-based and not 0-based, so here must be '>' instead of '>='
+					break;
+				}
+				batch.save_output_pos_height(&commit, pos, h.height)?;
+				trace!("rebuild_height_pos_index: {:?}", (commit, pos, h.height));
+				i += 1;
+			}
+		}
+
+		debug!(
+			"txhashset: rebuild_height_pos_index: {} UTXOs, took {}s",
+			total_outputs,
+			now.elapsed().as_secs(),
+		);
+		Ok(())
+	}
 }
 
 /// Starts a new unit of work to extend (or rewind) the chain with additional
@@ -439,8 +498,8 @@ where
 	{
 		trace!("Starting new txhashset extension.");
 
-		let pmmr = PMMR::at(&mut header_pmmr.backend, header_pmmr.last_pos);
-		let mut header_extension = HeaderExtension::new(pmmr, &child_batch, header_head);
+		let header_pmmr = PMMR::at(&mut header_pmmr.backend, header_pmmr.last_pos);
+		let mut header_extension = HeaderExtension::new(header_pmmr, &child_batch, header_head);
 		let mut extension = Extension::new(trees, &child_batch, head);
 		let mut extension_pair = ExtensionPair {
 			header_extension: &mut header_extension,
@@ -452,7 +511,8 @@ where
 		sizes = extension_pair.extension.sizes();
 	}
 
-	// Always discard any modifications to the header PMMR backend.
+	// During an extension we do not want to modify the header_extension (and only read from it).
+	// So make sure we discard any changes to the header MMR backed.
 	header_pmmr.backend.discard();
 
 	match res {
@@ -1106,57 +1166,6 @@ impl<'a> Extension<'a> {
 			now.elapsed().as_secs(),
 		);
 
-		Ok(())
-	}
-
-	/// Rebuild the index of block height & MMR positions to the corresponding UTXOs.
-	/// This is a costly operation performed only when we receive a full new chain state.
-	/// Note: only called by compact.
-	pub fn rebuild_height_pos_index(&self) -> Result<(), Error> {
-		let now = Instant::now();
-
-		// clear it before rebuilding
-		self.batch.clear_output_pos_height()?;
-
-		let mut outputs_pos: Vec<(Commitment, u64)> = vec![];
-		for pos in self.output_pmmr.leaf_pos_iter() {
-			if let Some(out) = self.output_pmmr.get_data(pos) {
-				outputs_pos.push((out.commit, pos));
-			}
-		}
-		let total_outputs = outputs_pos.len();
-		if total_outputs == 0 {
-			debug!("rebuild_height_pos_index: nothing to be rebuilt");
-			return Ok(());
-		} else {
-			debug!(
-				"rebuild_height_pos_index: rebuilding {} outputs position & height...",
-				total_outputs
-			);
-		}
-
-		let max_height = self.head().height;
-
-		let mut i = 0;
-		for search_height in 0..max_height {
-			let h = self.get_header_by_height(search_height + 1)?;
-			while i < total_outputs {
-				let (commit, pos) = outputs_pos[i];
-				if pos > h.output_mmr_size {
-					// Note: MMR position is 1-based and not 0-based, so here must be '>' instead of '>='
-					break;
-				}
-				self.batch.save_output_pos_height(&commit, pos, h.height)?;
-				trace!("rebuild_height_pos_index: {:?}", (commit, pos, h.height));
-				i += 1;
-			}
-		}
-
-		debug!(
-			"txhashset: rebuild_height_pos_index: {} UTXOs, took {}s",
-			total_outputs,
-			now.elapsed().as_secs(),
-		);
 		Ok(())
 	}
 

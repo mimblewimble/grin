@@ -921,8 +921,8 @@ impl Chain {
 		// all good, prepare a new batch and update all the required records
 		debug!("txhashset_write: rewinding a 2nd time (writeable)");
 
-		let mut batch = self.store.batch()?;
 		let mut header_pmmr = self.header_pmmr.write();
+		let mut batch = self.store.batch()?;
 		txhashset::extending(&mut header_pmmr, &mut txhashset, &mut batch, |ext| {
 			let extension = &mut ext.extension;
 			extension.rewind(&header)?;
@@ -1077,7 +1077,7 @@ impl Chain {
 		}
 
 		// Take a write lock on the txhashet and start a new writeable db batch.
-		let mut header_pmmr = self.header_pmmr.write();
+		let header_pmmr = self.header_pmmr.read();
 		let mut txhashset = self.txhashset.write();
 		let mut batch = self.store.batch()?;
 
@@ -1094,16 +1094,15 @@ impl Chain {
 		}
 
 		// Rebuild our output_pos index in the db based on current UTXO set.
-		txhashset::extending(&mut header_pmmr, &mut txhashset, &mut batch, |ext| {
-			let ref extension = ext.extension;
-			extension.rebuild_height_pos_index()?;
-			Ok(())
-		})?;
+		txhashset.rebuild_height_pos_index(&header_pmmr, &mut batch)?;
 
 		// If we are not in archival mode remove historical blocks from the db.
 		if !self.archive_mode {
 			self.remove_historical_blocks(&header_pmmr, &mut batch)?;
 		}
+
+		// Commit all the above db changes.
+		batch.commit()?;
 
 		Ok(())
 	}
