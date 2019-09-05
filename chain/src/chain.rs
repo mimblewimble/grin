@@ -178,9 +178,15 @@ impl Chain {
 
 		let mut header_pmmr =
 			PMMRHandle::new(&db_root, "header", "header_head", false, true, None)?;
-		let sync_pmmr = PMMRHandle::new(&db_root, "header", "sync_head", false, true, None)?;
+		let mut sync_pmmr = PMMRHandle::new(&db_root, "header", "sync_head", false, true, None)?;
 
-		setup_head(&genesis, &store, &mut header_pmmr, &mut txhashset)?;
+		setup_head(
+			&genesis,
+			&store,
+			&mut header_pmmr,
+			&mut sync_pmmr,
+			&mut txhashset,
+		)?;
 		Chain::log_heads(&store)?;
 
 		Ok(Chain {
@@ -562,13 +568,12 @@ impl Chain {
 	/// Sets the txhashset roots on a brand new block by applying the block on
 	/// the current txhashset state.
 	pub fn set_txhashset_roots(&self, b: &mut Block) -> Result<(), Error> {
-		let previous_header = self.store.get_previous_header(&b.header)?;
-
 		let mut header_pmmr = self.header_pmmr.write();
 		let mut txhashset = self.txhashset.write();
 
 		let (prev_root, roots, sizes) =
 			txhashset::extending_readonly(&mut header_pmmr, &mut txhashset, |ext| {
+				let previous_header = ext.batch().get_previous_header(&b.header)?;
 				pipe::rewind_and_apply_fork(&previous_header, ext)?;
 
 				let ref mut extension = ext.extension;
@@ -1402,6 +1407,7 @@ fn setup_head(
 	genesis: &Block,
 	store: &store::ChainStore,
 	header_pmmr: &mut txhashset::PMMRHandle<BlockHeader>,
+	sync_pmmr: &mut txhashset::PMMRHandle<BlockHeader>,
 	txhashset: &mut txhashset::TxHashSet,
 ) -> Result<(), Error> {
 	let mut batch = store.batch()?;
@@ -1499,6 +1505,10 @@ fn setup_head(
 				};
 			}
 			txhashset::header_extending(header_pmmr, &tip, &mut batch, |extension| {
+				extension.apply_header(&genesis.header)?;
+				Ok(())
+			})?;
+			txhashset::header_extending(sync_pmmr, &tip, &mut batch, |extension| {
 				extension.apply_header(&genesis.header)?;
 				Ok(())
 			})?;
