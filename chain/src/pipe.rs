@@ -25,8 +25,6 @@ use crate::store;
 use crate::txhashset;
 use crate::types::{Options, Tip};
 use crate::util::RwLock;
-use chrono::prelude::Utc;
-use chrono::Duration;
 use grin_store;
 use std::sync::Arc;
 
@@ -314,35 +312,6 @@ fn prev_header_store(
 /// to make it as cheap as possible. The different validations are also
 /// arranged by order of cost to have as little DoS surface as possible.
 fn validate_header(header: &BlockHeader, ctx: &mut BlockContext<'_>) -> Result<(), Error> {
-	// check version, enforces scheduled hard fork
-	if !consensus::valid_header_version(header.height, header.version) {
-		error!(
-			"Invalid block header version received ({:?}), maybe update Grin?",
-			header.version
-		);
-		return Err(ErrorKind::InvalidBlockVersion(header.version).into());
-	}
-
-	if header.timestamp > Utc::now() + Duration::seconds(12 * (consensus::BLOCK_TIME_SEC as i64)) {
-		// refuse blocks more than 12 blocks intervals in future (as in bitcoin)
-		// TODO add warning in p2p code if local time is too different from peers
-		return Err(ErrorKind::InvalidBlockTime.into());
-	}
-
-	if !ctx.opts.contains(Options::SKIP_POW) {
-		if !header.pow.is_primary() && !header.pow.is_secondary() {
-			return Err(ErrorKind::LowEdgebits.into());
-		}
-		let edge_bits = header.pow.edge_bits();
-		if !(ctx.pow_verifier)(header).is_ok() {
-			error!(
-				"pipe: error validating header with cuckoo edge_bits {}",
-				edge_bits
-			);
-			return Err(ErrorKind::InvalidPow.into());
-		}
-	}
-
 	// First I/O cost, delayed as late as possible.
 	let prev = prev_header_store(header, &mut ctx.batch)?;
 
