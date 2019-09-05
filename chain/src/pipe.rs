@@ -413,10 +413,10 @@ fn validate_block(block: &Block, ctx: &mut BlockContext<'_>) -> Result<(), Error
 /// Verify the block is not spending coinbase outputs before they have sufficiently matured.
 fn verify_coinbase_maturity(
 	block: &Block,
-	ext: &mut txhashset::ExtensionPair<'_>,
+	ext: &txhashset::ExtensionPair<'_>,
 ) -> Result<(), Error> {
-	let ref mut extension = ext.extension;
-	let ref mut header_extension = ext.header_extension;
+	let ref extension = ext.extension;
+	let ref header_extension = ext.header_extension;
 	extension
 		.utxo_view(header_extension)
 		.verify_coinbase_maturity(&block.inputs(), block.header.height)
