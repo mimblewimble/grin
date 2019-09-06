@@ -86,6 +86,11 @@ where
 		}
 	}
 
+	/// Iterator over current (unpruned, unremoved) leaf positions.
+	pub fn leaf_pos_iter(&self) -> impl Iterator<Item = u64> + '_ {
+		self.backend.leaf_pos_iter()
+	}
+
 	/// Is the MMR empty?
 	pub fn is_empty(&self) -> bool {
 		self.last_pos == 0

@@ -84,8 +84,6 @@ fn test_unexpected_zip() {
 		);
 
 		assert!(txhashset::zip_read(db_root.clone(), &head).is_ok());
-		let txhashset_zip_path =
-			Path::new(&db_root).join(format!("txhashset_zip_{}", head.hash().to_string()));
 		let _ = fs::remove_dir_all(
 			Path::new(&db_root).join(format!("txhashset_zip_{}", head.hash().to_string())),
 		);

@@ -205,10 +205,8 @@ impl TxHashsetWriteStatus for SyncState {
 
 /// A helper to hold the roots of the txhashset in order to keep them
 /// readable.
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub struct TxHashSetRoots {
-	/// Header root
-	pub header_root: Hash,
 	/// Output root
 	pub output_root: Hash,
 	/// Range Proof root

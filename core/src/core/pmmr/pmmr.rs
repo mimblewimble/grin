@@ -216,13 +216,6 @@ where
 		Ok(())
 	}
 
-	/// Truncate the MMR by rewinding back to empty state.
-	pub fn truncate(&mut self) -> Result<(), String> {
-		self.backend.rewind(0, &Bitmap::create())?;
-		self.last_pos = 0;
-		Ok(())
-	}
-
 	/// Rewind the PMMR to a previous position, as if all push operations after
 	/// that had been canceled. Expects a position in the PMMR to rewind and
 	/// bitmaps representing the positions added and removed that we want to
