@@ -1142,33 +1142,6 @@ impl<'a> Extension<'a> {
 		Ok((output_sum, kernel_sum))
 	}
 
-	/// Rebuild the index of MMR positions to the corresponding UTXOs.
-	/// This is a costly operation performed only when we receive a full new chain state.
-	///
-	/// Note: only called by txhashset_write, and should be replaced by 'rebuild_height_pos_index'
-	/// in the future, after a refactoring of 'txhashset_write'.
-	pub fn rebuild_index(&self) -> Result<(), Error> {
-		let now = Instant::now();
-
-		self.batch.clear_output_pos()?;
-
-		let mut count = 0;
-		for pos in self.output_pmmr.leaf_pos_iter() {
-			if let Some(out) = self.output_pmmr.get_data(pos) {
-				self.batch.save_output_pos(&out.commit, pos)?;
-				count += 1;
-			}
-		}
-
-		debug!(
-			"txhashset: rebuild_index: {} UTXOs, took {}s",
-			count,
-			now.elapsed().as_secs(),
-		);
-
-		Ok(())
-	}
-
 	/// Force the rollback of this extension, no matter the result
 	pub fn force_rollback(&mut self) {
 		self.rollback = true;

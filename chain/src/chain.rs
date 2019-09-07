@@ -945,7 +945,6 @@ impl Chain {
 				},
 			)?;
 
-			extension.rebuild_index()?;
 			Ok(())
 		})?;
 
@@ -1128,7 +1127,7 @@ impl Chain {
 		self.txhashset.read().last_n_kernel(distance)
 	}
 
-	/// as above, for kernels
+	/// Return Commit's MMR position
 	pub fn get_output_pos(&self, commit: &Commitment) -> Result<u64, Error> {
 		Ok(self.txhashset.read().get_output_pos(commit)?)
 	}
@@ -1235,9 +1234,7 @@ impl Chain {
 	}
 
 	/// Migrate the index 'commitment -> output_pos' to index 'commitment -> (output_pos, block_height)'
-	/// Note: should only be called in two cases:
-	///     - Node start-up. For database migration from the old version.
-	/// 	- After the txhashset 'rebuild_index' when state syncing.
+	/// Note: should only be called when Node start-up, for database migration from the old version.
 	pub fn rebuild_height_for_pos(&self) -> Result<(), Error> {
 		let header_pmmr = self.header_pmmr.read();
 		let txhashset = self.txhashset.read();
