@@ -330,7 +330,14 @@ where
 		.spawn(move || {
 			loop {
 				// check the read end
-				match try_break!(read_header(&mut reader, version)) {
+				let res = read_header(&mut reader, version);
+				if let Err(Error::Connection(ref e)) = res {
+					if e.kind() == io::ErrorKind::WouldBlock {
+						// to avoid the heavy polling which will consume CPU 100%
+						thread::sleep(Duration::from_millis(10));
+					}
+				}
+				match try_break!(res) {
 					Some(MsgHeaderWrapper::Known(header)) => {
 						let msg = Message::from_header(header, &mut reader, version);
 
@@ -375,7 +382,7 @@ where
 		})?;
 
 	let writer_thread = thread::Builder::new()
-		.name("peer_read".to_string())
+		.name("peer_write".to_string())
 		.spawn(move || {
 			let mut retry_send = Err(());
 			loop {
