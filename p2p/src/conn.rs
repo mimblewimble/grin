@@ -58,11 +58,12 @@ macro_rules! try_break {
 	($inner:expr) => {
 		match $inner {
 			Ok(v) => Some(v),
-			Err(Error::Connection(ref e))
-				if e.kind() == io::ErrorKind::WouldBlock || e.kind() == io::ErrorKind::TimedOut =>
-				{
+			Err(Error::Connection(ref e)) if e.kind() == io::ErrorKind::TimedOut => None,
+			Err(Error::Connection(ref e)) if e.kind() == io::ErrorKind::WouldBlock => {
+				// to avoid the heavy polling which will consume CPU 100%
+				thread::sleep(Duration::from_millis(10));
 				None
-				}
+			}
 			Err(Error::Store(_))
 			| Err(Error::Chain(_))
 			| Err(Error::Internal)
@@ -330,14 +331,7 @@ where
 		.spawn(move || {
 			loop {
 				// check the read end
-				let res = read_header(&mut reader, version);
-				if let Err(Error::Connection(ref e)) = res {
-					if e.kind() == io::ErrorKind::WouldBlock {
-						// to avoid the heavy polling which will consume CPU 100%
-						thread::sleep(Duration::from_millis(10));
-					}
-				}
-				match try_break!(res) {
+				match try_break!(read_header(&mut reader, version)) {
 					Some(MsgHeaderWrapper::Known(header)) => {
 						let msg = Message::from_header(header, &mut reader, version);
 
@@ -401,7 +395,7 @@ where
 			}
 
 			debug!(
-				"Shutting down reader connection with {}",
+				"Shutting down writer connection with {}",
 				writer
 					.peer_addr()
 					.map(|a| a.to_string())
