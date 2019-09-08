@@ -176,9 +176,8 @@ impl BodySync {
 			self.prev_blocks_received = blocks_received;
 		}
 
-		// off by one to account for broadcast adding a couple orphans
-		if self.blocks_requested < 2 {
-			// no pending block requests, ask more
+		// no pending block requests, ask more
+		if self.blocks_requested == 0 {
 			debug!("body_sync: no pending block request, asking more");
 			return Ok(true);
 		}
