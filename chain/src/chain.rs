@@ -791,11 +791,12 @@ impl Chain {
 		let mut oldest_height = 0;
 		let mut oldest_hash = ZERO_HASH;
 
-		let mut current = self.get_block_header(&header_head.last_block_h);
+		// Start with body_head (head of the full block chain)
+		let mut current = self.get_block_header(&body_head.last_block_h);
 		if current.is_err() {
 			error!(
-				"{}: header_head not found in chain db: {} at {}",
-				caller, header_head.last_block_h, header_head.height,
+				"{}: body_head not found in chain db: {} at {}",
+				caller, body_head.last_block_h, body_head.height,
 			);
 			return Ok(false);
 		}
@@ -804,37 +805,48 @@ impl Chain {
 		// TODO - Investigate finding the "common header" by comparing header_mmr and
 		// sync_mmr (bytes will be identical up to the common header).
 		//
+		// Traverse back through the full block chain from body head until we find a header
+		// that "is on current chain", which is the "fork point" between existing header chain
+		// and full block chain.
 		while let Ok(header) = current {
 			// break out of the while loop when we find a header common
 			// between the header chain and the current body chain
-			if header.height <= body_head.height {
-				if let Ok(_) = self.is_on_current_chain(&header) {
-					break;
-				}
+			if let Ok(_) = self.is_on_current_chain(&header) {
+				oldest_height = header.height;
+				oldest_hash = header.hash();
+				break;
 			}
 
-			oldest_height = header.height;
-			oldest_hash = header.hash();
-			if let Some(hs) = hashes {
-				hs.push(oldest_hash);
-			}
 			current = self.get_previous_header(&header);
 		}
 
+		// Traverse back through the header chain from header_head back to this fork point.
+		// These are the blocks that we need to request in body sync (we have the header but not the full block).
+		if let Some(hs) = hashes {
+			let mut h = self.get_block_header(&header_head.last_block_h);
+			while let Ok(header) = h {
+				if header.height <= oldest_height {
+					break;
+				}
+				hs.push(header.hash());
+				h = self.get_previous_header(&header);
+			}
+		}
+
 		if oldest_height < header_head.height.saturating_sub(horizon) {
-			if oldest_height > 0 {
+			if oldest_hash != ZERO_HASH {
 				// this is the normal case. for example:
-				// body head height is 1 (and not a fork), oldest_height will be 2
-				// body head height is 0 (a typical fresh node), oldest_height will be 1
-				// body head height is 10,001 (but at a fork), oldest_height will be 10,001
-				// body head height is 10,005 (but at a fork with depth 5), oldest_height will be 10,001
+				// body head height is 1 (and not a fork), oldest_height will be 1
+				// body head height is 0 (a typical fresh node), oldest_height will be 0
+				// body head height is 10,001 (but at a fork with depth 1), oldest_height will be 10,000
+				// body head height is 10,005 (but at a fork with depth 5), oldest_height will be 10,000
 				debug!(
 					"{}: need a state sync for txhashset. oldest block which is not on local chain: {} at {}",
 					caller, oldest_hash, oldest_height,
 				);
 			} else {
-				// this is the abnormal case, when is_on_current_chain() already return Err, and even for genesis block.
-				error!("{}: corrupted storage? oldest_height is 0 when check_txhashset_needed. state sync is needed", caller);
+				// this is the abnormal case, when is_on_current_chain() always return Err, and even for genesis block.
+				error!("{}: corrupted storage? state sync is needed", caller);
 			}
 			Ok(true)
 		} else {
