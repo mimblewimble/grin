@@ -58,9 +58,10 @@ macro_rules! try_break {
 	($inner:expr) => {
 		match $inner {
 			Ok(v) => Some(v),
-			Err(Error::Connection(ref e))
-				if e.kind() == io::ErrorKind::WouldBlock || e.kind() == io::ErrorKind::TimedOut =>
-				{
+			Err(Error::Connection(ref e)) if e.kind() == io::ErrorKind::TimedOut => None,
+			Err(Error::Connection(ref e)) if e.kind() == io::ErrorKind::WouldBlock => {
+				// to avoid the heavy polling which will consume CPU 100%
+				thread::sleep(Duration::from_millis(10));
 				None
 				}
 			Err(Error::Store(_))
@@ -375,7 +376,7 @@ where
 		})?;
 
 	let writer_thread = thread::Builder::new()
-		.name("peer_read".to_string())
+		.name("peer_write".to_string())
 		.spawn(move || {
 			let mut retry_send = Err(());
 			loop {
@@ -394,7 +395,7 @@ where
 			}
 
 			debug!(
-				"Shutting down reader connection with {}",
+				"Shutting down writer connection with {}",
 				writer
 					.peer_addr()
 					.map(|a| a.to_string())
