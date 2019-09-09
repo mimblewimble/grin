@@ -277,14 +277,6 @@ impl<'a> Batch<'a> {
 		Ok(())
 	}
 
-	/// Save output_pos to index.
-	pub fn save_output_pos(&self, commit: &Commitment, pos: u64) -> Result<(), Error> {
-		self.db.put_ser(
-			&to_key(COMMIT_POS_PREFIX, &mut commit.as_ref().to_vec())[..],
-			&pos,
-		)
-	}
-
 	/// Save output_pos and block height to index.
 	pub fn save_output_pos_height(
 		&self,
@@ -328,7 +320,7 @@ impl<'a> Batch<'a> {
 		)
 	}
 
-	/// Clear all entries from the output_pos index.
+	/// Clear all entries from the output_pos index. (only for migration purpose)
 	pub fn clear_output_pos(&self) -> Result<(), Error> {
 		let key = to_key(COMMIT_POS_PREFIX, &mut "".to_string().into_bytes());
 		for (k, _) in self.db.iter::<u64>(&key)? {
