@@ -791,11 +791,11 @@ impl Chain {
 		let mut oldest_height = 0;
 		let mut oldest_hash = ZERO_HASH;
 
-		let mut current = self.get_block_header(&header_head.last_block_h);
+		let mut current = self.get_block_header(&body_head.last_block_h);
 		if current.is_err() {
 			error!(
-				"{}: header_head not found in chain db: {} at {}",
-				caller, header_head.last_block_h, header_head.height,
+				"{}: body_head not found in chain db: {} at {}",
+				caller, body_head.last_block_h, body_head.height,
 			);
 			return Ok(false);
 		}
@@ -807,34 +807,41 @@ impl Chain {
 		while let Ok(header) = current {
 			// break out of the while loop when we find a header common
 			// between the header chain and the current body chain
-			if header.height <= body_head.height {
-				if let Ok(_) = self.is_on_current_chain(&header) {
-					break;
-				}
+			if let Ok(_) = self.is_on_current_chain(&header) {
+				oldest_height = header.height;
+				oldest_hash = header.hash();
+				break;
 			}
 
-			oldest_height = header.height;
-			oldest_hash = header.hash();
-			if let Some(hs) = hashes {
-				hs.push(oldest_hash);
-			}
 			current = self.get_previous_header(&header);
 		}
 
+		// Go through the header chain reversely to get all those headers after oldest_height.
+		if let Some(hs) = hashes {
+			let mut current = self.get_block_header(&header_head.last_block_h);
+			while let Ok(header) = current {
+				if header.height <= oldest_height {
+					break;
+				}
+				hs.push(header.hash());
+				current = self.get_previous_header(&header);
+			}
+		}
+
 		if oldest_height < header_head.height.saturating_sub(horizon) {
-			if oldest_height > 0 {
+			if oldest_hash != ZERO_HASH {
 				// this is the normal case. for example:
-				// body head height is 1 (and not a fork), oldest_height will be 2
-				// body head height is 0 (a typical fresh node), oldest_height will be 1
-				// body head height is 10,001 (but at a fork), oldest_height will be 10,001
-				// body head height is 10,005 (but at a fork with depth 5), oldest_height will be 10,001
+				// body head height is 1 (and not a fork), oldest_height will be 1
+				// body head height is 0 (a typical fresh node), oldest_height will be 0
+				// body head height is 10,001 (but at a fork with depth 1), oldest_height will be 10,000
+				// body head height is 10,005 (but at a fork with depth 5), oldest_height will be 10,000
 				debug!(
 					"{}: need a state sync for txhashset. oldest block which is not on local chain: {} at {}",
 					caller, oldest_hash, oldest_height,
 				);
 			} else {
-				// this is the abnormal case, when is_on_current_chain() already return Err, and even for genesis block.
-				error!("{}: corrupted storage? oldest_height is 0 when check_txhashset_needed. state sync is needed", caller);
+				// this is the abnormal case, when is_on_current_chain() always return Err, and even for genesis block.
+				error!("{}: corrupted storage? state sync is needed", caller);
 			}
 			Ok(true)
 		} else {
