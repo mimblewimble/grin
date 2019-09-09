@@ -791,6 +791,7 @@ impl Chain {
 		let mut oldest_height = 0;
 		let mut oldest_hash = ZERO_HASH;
 
+		// Start with body_head (head of the full block chain)
 		let mut current = self.get_block_header(&body_head.last_block_h);
 		if current.is_err() {
 			error!(
@@ -804,6 +805,9 @@ impl Chain {
 		// TODO - Investigate finding the "common header" by comparing header_mmr and
 		// sync_mmr (bytes will be identical up to the common header).
 		//
+		// Traverse back through the full block chain from body head until we find a header
+		// that "is on current chain", which is the "fork point" between existing header chain
+		// and full block chain.
 		while let Ok(header) = current {
 			// break out of the while loop when we find a header common
 			// between the header chain and the current body chain
@@ -816,15 +820,16 @@ impl Chain {
 			current = self.get_previous_header(&header);
 		}
 
-		// Go through the header chain reversely to get all those headers after oldest_height.
+		// Traverse back through the header chain from header_head back to this fork point.
+		// These are the blocks that we need to request in body sync (we have the header but not the full block).
 		if let Some(hs) = hashes {
-			let mut current = self.get_block_header(&header_head.last_block_h);
-			while let Ok(header) = current {
+			let mut h = self.get_block_header(&header_head.last_block_h);
+			while let Ok(header) = h {
 				if header.height <= oldest_height {
 					break;
 				}
 				hs.push(header.hash());
-				current = self.get_previous_header(&header);
+				h = self.get_previous_header(&header);
 			}
 		}
 
