@@ -122,6 +122,59 @@ impl KernelFeatures {
 		}
 		Ok(())
 	}
+
+	// Always read feature byte, 8 bytes for fee and 8 bytes for lock height.
+	// Fee and lock height may be unused for some kernel variants but we need
+	// to read these bytes and verify they are 0 if unused.
+	fn read_v1(reader: &mut dyn Reader) -> Result<KernelFeatures, ser::Error> {
+		let feature_byte = reader.read_u8()?;
+		let fee = reader.read_u64()?;
+		let lock_height = reader.read_u64()?;
+
+		let features = match feature_byte {
+			KernelFeatures::PLAIN_U8 => {
+				if lock_height != 0 {
+					return Err(ser::Error::CorruptedData);
+				}
+				KernelFeatures::Plain { fee }
+			}
+			KernelFeatures::COINBASE_U8 => {
+				if fee != 0 {
+					return Err(ser::Error::CorruptedData);
+				}
+				if lock_height != 0 {
+					return Err(ser::Error::CorruptedData);
+				}
+				KernelFeatures::Coinbase
+			}
+			KernelFeatures::HEIGHT_LOCKED_U8 => KernelFeatures::HeightLocked { fee, lock_height },
+			_ => {
+				return Err(ser::Error::CorruptedData);
+			}
+		};
+		Ok(features)
+	}
+
+	// V2 kernels only expect bytes specific to each variant.
+	// Coinbase kernels have no associated fee and we do not serialize a fee for these.
+	fn read_v2(reader: &mut dyn Reader) -> Result<KernelFeatures, ser::Error> {
+		let features = match reader.read_u8()? {
+			KernelFeatures::PLAIN_U8 => {
+				let fee = reader.read_u64()?;
+				KernelFeatures::Plain { fee }
+			}
+			KernelFeatures::COINBASE_U8 => KernelFeatures::Coinbase,
+			KernelFeatures::HEIGHT_LOCKED_U8 => {
+				let fee = reader.read_u64()?;
+				let lock_height = reader.read_u64()?;
+				KernelFeatures::HeightLocked { fee, lock_height }
+			}
+			_ => {
+				return Err(ser::Error::CorruptedData);
+			}
+		};
+		Ok(features)
+	}
 }
 
 impl Writeable for KernelFeatures {
@@ -142,40 +195,11 @@ impl Writeable for KernelFeatures {
 }
 
 impl Readable for KernelFeatures {
-	/// Still only supporting protocol version v1 serialization.
-	/// Always read both fee and lock_height, regardless of feature variant.
-	/// These will be 0 values if not applicable, but bytes must still be read and verified.
 	fn read(reader: &mut dyn Reader) -> Result<KernelFeatures, ser::Error> {
-		let features = match reader.read_u8()? {
-			KernelFeatures::PLAIN_U8 => {
-				let fee = reader.read_u64()?;
-				let lock_height = reader.read_u64()?;
-				if lock_height != 0 {
-					return Err(ser::Error::CorruptedData);
-				}
-				KernelFeatures::Plain { fee }
-			}
-			KernelFeatures::COINBASE_U8 => {
-				let fee = reader.read_u64()?;
-				if fee != 0 {
-					return Err(ser::Error::CorruptedData);
-				}
-				let lock_height = reader.read_u64()?;
-				if lock_height != 0 {
-					return Err(ser::Error::CorruptedData);
-				}
-				KernelFeatures::Coinbase
-			}
-			KernelFeatures::HEIGHT_LOCKED_U8 => {
-				let fee = reader.read_u64()?;
-				let lock_height = reader.read_u64()?;
-				KernelFeatures::HeightLocked { fee, lock_height }
-			}
-			_ => {
-				return Err(ser::Error::CorruptedData);
-			}
-		};
-		Ok(features)
+		match reader.protocol_version().value() {
+			0..=1 => KernelFeatures::read_v1(reader),
+			2..=ProtocolVersion::MAX => KernelFeatures::read_v2(reader),
+		}
 	}
 }
 
