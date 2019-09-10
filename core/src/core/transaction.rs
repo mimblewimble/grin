@@ -126,8 +126,14 @@ impl KernelFeatures {
 
 impl Writeable for KernelFeatures {
 	/// Protocol version may increment rapidly for other unrelated changes.
-	/// So we want to match on ranges here and not specific version values.
+	/// So we match on ranges here and not specific version values.
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
+		// Care must be exercised when writing for hashing purposes.
+		// All kernels are hashed using original v1 serialization strategy.
+		if writer.serialization_mode() == ser::SerializationMode::Hash {
+			return self.write_v1(writer);
+		}
+
 		match writer.protocol_version().value() {
 			0..=1 => self.write_v1(writer),
 			2..=ProtocolVersion::MAX => self.write_v2(writer),

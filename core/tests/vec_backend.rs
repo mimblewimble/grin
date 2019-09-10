@@ -109,7 +109,7 @@ impl<T: PMMRable> Backend<T> for VecBackend<T> {
 		unimplemented!()
 	}
 
-	fn leaf_pos_iter(&self) -> Box<Iterator<Item = u64> + '_> {
+	fn leaf_pos_iter(&self) -> Box<dyn Iterator<Item = u64> + '_> {
 		unimplemented!()
 	}
 
