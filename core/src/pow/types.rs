@@ -391,6 +391,23 @@ impl Proof {
 	}
 }
 
+#[inline(always)]
+fn read_number(bits: &Vec<u8>, bit_start: usize, bit_count: usize) -> u64 {
+	if bit_count == 0 {
+		return 0;
+	}
+	let mut buf: [u8; 8] = [0; 8];
+	let mut byte_start = bit_start / 8;
+	if byte_start + 8 > bits.len() {
+		byte_start = bits.len() - 8;
+	}
+	buf.copy_from_slice(&bits[byte_start..byte_start + 8]);
+	buf.reverse();
+	let mut nonce = u64::from_be_bytes(buf);
+	nonce = nonce << 64 - (bit_start - byte_start * 8) - bit_count;
+	nonce >> 64 - bit_count
+}
+
 impl Readable for Proof {
 	fn read(reader: &mut dyn Reader) -> Result<Proof, ser::Error> {
 		let edge_bits = reader.read_u8()?;
@@ -405,24 +422,15 @@ impl Readable for Proof {
 		let bytes_len = BitVec::bytes_len(bits_len);
 		let bits = reader.read_fixed_bytes(bytes_len)?;
 
-		// set our nonces from what we read in the bitvec
-		let bitvec = BitVec { bits };
 		for n in 0..global::proofsize() {
-			let mut nonce = 0;
-			for bit in 0..nonce_bits {
-				if bitvec.bit_at(n * nonce_bits + (bit as usize)) {
-					nonce |= 1 << bit;
-				}
-			}
-			nonces.push(nonce);
+			nonces.push(read_number(&bits, n * nonce_bits, nonce_bits));
 		}
 
-		// check the last bits of the last byte are zeroed, we don't use them but
-		// still better to enforce to avoid any malleability
-		for n in bits_len..(bytes_len * 8) {
-			if bitvec.bit_at(n) {
-				return Err(ser::Error::CorruptedData);
-			}
+		//// check the last bits of the last byte are zeroed, we don't use them but
+		//// still better to enforce to avoid any malleability
+		let end_of_data = global::proofsize() * nonce_bits;
+		if read_number(&bits, end_of_data, bytes_len * 8 - end_of_data) != 0 {
+			return Err(ser::Error::CorruptedData);
 		}
 
 		Ok(Proof { edge_bits, nonces })
@@ -468,9 +476,5 @@ impl BitVec {
 
 	fn set_bit_at(&mut self, pos: usize) {
 		self.bits[pos / 8] |= 1 << (pos % 8) as u8;
-	}
-
-	fn bit_at(&self, pos: usize) -> bool {
-		self.bits[pos / 8] & (1 << (pos % 8) as u8) != 0
 	}
 }

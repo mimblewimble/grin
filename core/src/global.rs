@@ -42,10 +42,10 @@ use crate::util::RwLock;
 pub const PROTOCOL_VERSION: u32 = 1;
 
 /// Automated testing edge_bits
-pub const AUTOMATED_TESTING_MIN_EDGE_BITS: u8 = 9;
+pub const AUTOMATED_TESTING_MIN_EDGE_BITS: u8 = 10;
 
 /// Automated testing proof size
-pub const AUTOMATED_TESTING_PROOF_SIZE: usize = 4;
+pub const AUTOMATED_TESTING_PROOF_SIZE: usize = 8;
 
 /// User testing edge_bits
 pub const USER_TESTING_MIN_EDGE_BITS: u8 = 15;
