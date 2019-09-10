@@ -54,12 +54,12 @@ impl ChainStore {
 impl ChainStore {
 	/// The current chain head.
 	pub fn head(&self) -> Result<Tip, Error> {
-		option_to_not_found(self.db.get_ser(&vec![HEAD_PREFIX]), "HEAD")
+		option_to_not_found(self.db.get_ser(&vec![HEAD_PREFIX]), || "HEAD".to_owned())
 	}
 
 	/// The current chain "tail" (earliest block in the store).
 	pub fn tail(&self) -> Result<Tip, Error> {
-		option_to_not_found(self.db.get_ser(&vec![TAIL_PREFIX]), "TAIL")
+		option_to_not_found(self.db.get_ser(&vec![TAIL_PREFIX]), || "TAIL".to_owned())
 	}
 
 	/// Header of the block at the head of the block chain (not the same thing as header_head).
@@ -69,19 +69,23 @@ impl ChainStore {
 
 	/// Head of the header chain (not the same thing as head_header).
 	pub fn header_head(&self) -> Result<Tip, Error> {
-		option_to_not_found(self.db.get_ser(&vec![HEADER_HEAD_PREFIX]), "HEADER_HEAD")
+		option_to_not_found(self.db.get_ser(&vec![HEADER_HEAD_PREFIX]), || {
+			"HEADER_HEAD".to_owned()
+		})
 	}
 
 	/// The "sync" head.
 	pub fn get_sync_head(&self) -> Result<Tip, Error> {
-		option_to_not_found(self.db.get_ser(&vec![SYNC_HEAD_PREFIX]), "SYNC_HEAD")
+		option_to_not_found(self.db.get_ser(&vec![SYNC_HEAD_PREFIX]), || {
+			"SYNC_HEAD".to_owned()
+		})
 	}
 
 	/// Get full block.
 	pub fn get_block(&self, h: &Hash) -> Result<Block, Error> {
 		option_to_not_found(
 			self.db.get_ser(&to_key(BLOCK_PREFIX, &mut h.to_vec())),
-			&format!("BLOCK: {}", h),
+			|| format!("BLOCK: {}", h),
 		)
 	}
 
@@ -94,7 +98,7 @@ impl ChainStore {
 	pub fn get_block_sums(&self, h: &Hash) -> Result<BlockSums, Error> {
 		option_to_not_found(
 			self.db.get_ser(&to_key(BLOCK_SUMS_PREFIX, &mut h.to_vec())),
-			&format!("Block sums for block: {}", h),
+			|| format!("Block sums for block: {}", h),
 		)
 	}
 
@@ -108,7 +112,7 @@ impl ChainStore {
 		option_to_not_found(
 			self.db
 				.get_ser(&to_key(BLOCK_HEADER_PREFIX, &mut h.to_vec())),
-			&format!("BLOCK HEADER: {}", h),
+			|| format!("BLOCK HEADER: {}", h),
 		)
 	}
 
@@ -148,7 +152,7 @@ impl ChainStore {
 				COMMIT_POS_HGT_PREFIX,
 				&mut commit.as_ref().to_vec(),
 			)),
-			&format!("Output position for: {:?}", commit),
+			|| format!("Output position for: {:?}", commit),
 		)
 	}
 
@@ -169,12 +173,12 @@ pub struct Batch<'a> {
 impl<'a> Batch<'a> {
 	/// The head.
 	pub fn head(&self) -> Result<Tip, Error> {
-		option_to_not_found(self.db.get_ser(&vec![HEAD_PREFIX]), "HEAD")
+		option_to_not_found(self.db.get_ser(&vec![HEAD_PREFIX]), || "HEAD".to_owned())
 	}
 
 	/// The tail.
 	pub fn tail(&self) -> Result<Tip, Error> {
-		option_to_not_found(self.db.get_ser(&vec![TAIL_PREFIX]), "TAIL")
+		option_to_not_found(self.db.get_ser(&vec![TAIL_PREFIX]), || "TAIL".to_owned())
 	}
 
 	/// Header of the block at the head of the block chain (not the same thing as header_head).
@@ -184,12 +188,16 @@ impl<'a> Batch<'a> {
 
 	/// Head of the header chain (not the same thing as head_header).
 	pub fn header_head(&self) -> Result<Tip, Error> {
-		option_to_not_found(self.db.get_ser(&vec![HEADER_HEAD_PREFIX]), "HEADER_HEAD")
+		option_to_not_found(self.db.get_ser(&vec![HEADER_HEAD_PREFIX]), || {
+			"HEADER_HEAD".to_owned()
+		})
 	}
 
 	/// Get "sync" head.
 	pub fn get_sync_head(&self) -> Result<Tip, Error> {
-		option_to_not_found(self.db.get_ser(&vec![SYNC_HEAD_PREFIX]), "SYNC_HEAD")
+		option_to_not_found(self.db.get_ser(&vec![SYNC_HEAD_PREFIX]), || {
+			"SYNC_HEAD".to_owned()
+		})
 	}
 
 	/// Save body head to db.
@@ -228,7 +236,7 @@ impl<'a> Batch<'a> {
 	pub fn get_block(&self, h: &Hash) -> Result<Block, Error> {
 		option_to_not_found(
 			self.db.get_ser(&to_key(BLOCK_PREFIX, &mut h.to_vec())),
-			&format!("Block with hash: {}", h),
+			|| format!("Block with hash: {}", h),
 		)
 	}
 
@@ -316,7 +324,7 @@ impl<'a> Batch<'a> {
 				COMMIT_POS_HGT_PREFIX,
 				&mut commit.as_ref().to_vec(),
 			)),
-			&format!("Output position for commit: {:?}", commit),
+			|| format!("Output position for commit: {:?}", commit),
 		)
 	}
 
@@ -348,7 +356,7 @@ impl<'a> Batch<'a> {
 		option_to_not_found(
 			self.db
 				.get_ser(&to_key(BLOCK_HEADER_PREFIX, &mut h.to_vec())),
-			&format!("BLOCK HEADER: {}", h),
+			|| format!("BLOCK HEADER: {}", h),
 		)
 	}
 
@@ -376,7 +384,7 @@ impl<'a> Batch<'a> {
 	pub fn get_block_sums(&self, h: &Hash) -> Result<BlockSums, Error> {
 		option_to_not_found(
 			self.db.get_ser(&to_key(BLOCK_SUMS_PREFIX, &mut h.to_vec())),
-			&format!("Block sums for block: {}", h),
+			|| format!("Block sums for block: {}", h),
 		)
 	}
 

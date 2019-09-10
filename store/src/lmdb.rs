@@ -54,9 +54,12 @@ impl From<lmdb::error::Error> for Error {
 }
 
 /// unwraps the inner option by converting the none case to a not found error
-pub fn option_to_not_found<T>(res: Result<Option<T>, Error>, field_name: &str) -> Result<T, Error> {
+pub fn option_to_not_found<T, F>(res: Result<Option<T>, Error>, field_name: F) -> Result<T, Error>
+where
+	F: Fn() -> String,
+{
 	match res {
-		Ok(None) => Err(Error::NotFoundErr(field_name.to_owned())),
+		Ok(None) => Err(Error::NotFoundErr(field_name())),
 		Ok(Some(o)) => Ok(o),
 		Err(e) => Err(e),
 	}
