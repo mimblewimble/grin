@@ -129,10 +129,9 @@ impl PeerStore {
 	}
 
 	pub fn get_peer(&self, peer_addr: PeerAddr) -> Result<PeerData, Error> {
-		option_to_not_found(
-			self.db.get_ser(&peer_key(peer_addr)[..]),
-			&format!("Peer at address: {}", peer_addr),
-		)
+		option_to_not_found(self.db.get_ser(&peer_key(peer_addr)[..]), || {
+			format!("Peer at address: {}", peer_addr)
+		})
 	}
 
 	pub fn exists_peer(&self, peer_addr: PeerAddr) -> Result<bool, Error> {
@@ -179,10 +178,10 @@ impl PeerStore {
 	pub fn update_state(&self, peer_addr: PeerAddr, new_state: State) -> Result<(), Error> {
 		let batch = self.db.batch()?;
 
-		let mut peer = option_to_not_found(
-			batch.get_ser::<PeerData>(&peer_key(peer_addr)[..]),
-			&format!("Peer at address: {}", peer_addr),
-		)?;
+		let mut peer =
+			option_to_not_found(batch.get_ser::<PeerData>(&peer_key(peer_addr)[..]), || {
+				format!("Peer at address: {}", peer_addr)
+			})?;
 		peer.flags = new_state;
 		if new_state == State::Banned {
 			peer.last_banned = Utc::now().timestamp();
