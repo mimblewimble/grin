@@ -269,8 +269,7 @@ fn empty_block_serialized_size() {
 	let b = new_block(vec![], &keychain, &builder, &prev, &key_id);
 	let mut vec = Vec::new();
 	ser::serialize_default(&mut vec, &b).expect("serialization failed");
-	let target_len = 1_112;
-	assert_eq!(vec.len(), target_len);
+	assert_eq!(vec.len(), 1_096);
 }
 
 #[test]
@@ -284,8 +283,7 @@ fn block_single_tx_serialized_size() {
 	let b = new_block(vec![&tx1], &keychain, &builder, &prev, &key_id);
 	let mut vec = Vec::new();
 	ser::serialize_default(&mut vec, &b).expect("serialization failed");
-	let target_len = 2_694;
-	assert_eq!(vec.len(), target_len);
+	assert_eq!(vec.len(), 2_670);
 }
 
 #[test]
@@ -299,8 +297,7 @@ fn empty_compact_block_serialized_size() {
 	let cb: CompactBlock = b.into();
 	let mut vec = Vec::new();
 	ser::serialize_default(&mut vec, &cb).expect("serialization failed");
-	let target_len = 1_120;
-	assert_eq!(vec.len(), target_len);
+	assert_eq!(vec.len(), 1_104);
 }
 
 #[test]
@@ -315,8 +312,7 @@ fn compact_block_single_tx_serialized_size() {
 	let cb: CompactBlock = b.into();
 	let mut vec = Vec::new();
 	ser::serialize_default(&mut vec, &cb).expect("serialization failed");
-	let target_len = 1_126;
-	assert_eq!(vec.len(), target_len);
+	assert_eq!(vec.len(), 1_110);
 }
 
 #[test]
@@ -333,10 +329,27 @@ fn block_10_tx_serialized_size() {
 	let prev = BlockHeader::default();
 	let key_id = ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
 	let b = new_block(txs.iter().collect(), &keychain, &builder, &prev, &key_id);
-	let mut vec = Vec::new();
-	ser::serialize_default(&mut vec, &b).expect("serialization failed");
-	let target_len = 16_932;
-	assert_eq!(vec.len(), target_len,);
+
+	// Default protocol version.
+	{
+		let mut vec = Vec::new();
+		ser::serialize_default(&mut vec, &b).expect("serialization failed");
+		assert_eq!(vec.len(), 16_836);
+	}
+
+	// Explicit protocol version 1
+	{
+		let mut vec = Vec::new();
+		ser::serialize(&mut vec, ser::ProtocolVersion(1), &b).expect("serialization failed");
+		assert_eq!(vec.len(), 16_932);
+	}
+
+	// Explicit protocol version 2
+	{
+		let mut vec = Vec::new();
+		ser::serialize(&mut vec, ser::ProtocolVersion(2), &b).expect("serialization failed");
+		assert_eq!(vec.len(), 16_836);
+	}
 }
 
 #[test]
@@ -356,8 +369,7 @@ fn compact_block_10_tx_serialized_size() {
 	let cb: CompactBlock = b.into();
 	let mut vec = Vec::new();
 	ser::serialize_default(&mut vec, &cb).expect("serialization failed");
-	let target_len = 1_180;
-	assert_eq!(vec.len(), target_len,);
+	assert_eq!(vec.len(), 1_164);
 }
 
 #[test]
