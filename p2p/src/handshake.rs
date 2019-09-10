@@ -115,11 +115,12 @@ impl Handshake {
 		}
 
 		debug!(
-			"Connected! Cumulative {} offered from {:?} {:?} {:?}",
+			"Connected! Cumulative {} offered from {:?}, {:?}, {:?}, {:?}",
 			shake.total_difficulty.to_num(),
 			peer_info.addr,
+			peer_info.version,
 			peer_info.user_agent,
-			peer_info.capabilities
+			peer_info.capabilities,
 		);
 		// when more than one protocol version is supported, choosing should go here
 		Ok(peer_info)
