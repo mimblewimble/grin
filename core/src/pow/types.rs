@@ -477,8 +477,4 @@ impl BitVec {
 	fn set_bit_at(&mut self, pos: usize) {
 		self.bits[pos / 8] |= 1 << (pos % 8) as u8;
 	}
-
-	fn bit_at(&self, pos: usize) -> bool {
-		self.bits[pos / 8] & (1 << (pos % 8) as u8) != 0
-	}
 }
