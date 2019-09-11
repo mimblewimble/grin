@@ -70,7 +70,7 @@ pub fn start_rest_apis(
 	if let Some(api_secret) = api_secret {
 		let api_basic_auth = format!("Basic {}", util::to_base64(&format!("grin:{}", api_secret)));
 		let basic_auth_middleware =
-			Arc::new(BasicAuthMiddleware::new(api_basic_auth, &GRIN_BASIC_REALM));
+			Arc::new(BasicAuthMiddleware::new(api_basic_auth, &GRIN_BASIC_REALM, None));
 		router.add_middleware(basic_auth_middleware);
 	}
 
