@@ -32,7 +32,11 @@ pub struct BasicAuthMiddleware {
 }
 
 impl BasicAuthMiddleware {
-	pub fn new(api_basic_auth: String, basic_realm: &'static HeaderValue, ignore_uri: Option<String>) -> BasicAuthMiddleware {
+	pub fn new(
+		api_basic_auth: String,
+		basic_realm: &'static HeaderValue,
+		ignore_uri: Option<String>,
+	) -> BasicAuthMiddleware {
 		BasicAuthMiddleware {
 			api_basic_auth,
 			basic_realm,
