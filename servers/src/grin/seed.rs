@@ -239,10 +239,10 @@ fn monitor_peers(
 		max_peer_attempts as usize,
 	);
 
-	// Only queue up connectino attempts for candidate peers where we
+	// Only queue up connection attempts for candidate peers where we
 	// are confident we do not yet know about this peer.
-	// The call to is_known() may fail due to contention on the peers map
-	// so do not attempt any connection where is_known() fails like this.
+	// The call to is_known() may fail due to contention on the peers map.
+	// Do not attempt any connection where is_known() fails for any reason.
 	for p in new_peers {
 		if let Ok(false) = peers.is_known(p.addr) {
 			tx.send(p.addr).unwrap();

@@ -99,8 +99,8 @@ impl Peers {
 
 	/// Check if this peer address is already known (are we already connected to it)?
 	/// We try to get the read lock but if we experience contention
-	/// and this attempt fails then return an error ans allow the caller
-	/// to decide how to best handle this (or potentially retry).
+	/// and this attempt fails then return an error allowing the caller
+	/// to decide how best to handle this.
 	pub fn is_known(&self, addr: PeerAddr) -> Result<bool, Error> {
 		let peers = match self.peers.try_read_for(LOCK_TIMEOUT) {
 			Some(peers) => peers,
