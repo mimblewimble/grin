@@ -97,15 +97,19 @@ impl Peers {
 		self.save_peer(&peer_data)
 	}
 
-	pub fn is_known(&self, addr: PeerAddr) -> bool {
+	/// Check if this peer address is already known (are we already connected to it)?
+	/// We try to get the read lock but if we experience contention
+	/// and this attempt fails then return an error ans allow the caller
+	/// to decide how to best handle this (or potentially retry).
+	pub fn is_known(&self, addr: PeerAddr) -> Result<bool, Error> {
 		let peers = match self.peers.try_read_for(LOCK_TIMEOUT) {
 			Some(peers) => peers,
 			None => {
 				error!("is_known: failed to get peers lock");
-				return false;
+				return Err(Error::Internal);
 			}
 		};
-		peers.contains_key(&addr)
+		Ok(peers.contains_key(&addr))
 	}
 
 	/// Get vec of peers we are currently connected to.

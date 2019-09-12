@@ -224,9 +224,21 @@ impl Server {
 				debug!("Peer {} banned, refusing connection.", peer_addr);
 				return true;
 			}
-			if self.peers.is_known(peer_addr) {
-				debug!("Peer {} already known, refusing connection.", peer_addr);
-				return true;
+			// The call to is_known() can fail due to contention on the peers map.
+			// If it fails we want to default to refusing the connection.
+			match self.peers.is_known(peer_addr) {
+				Ok(true) => {
+					debug!("Peer {} already known, refusing connection.", peer_addr);
+					return true;
+				}
+				Err(_) => {
+					error!(
+						"Peer {} is_known check failed, refusing connection.",
+						peer_addr
+					);
+					return true;
+				}
+				_ => (),
 			}
 		}
 		false
