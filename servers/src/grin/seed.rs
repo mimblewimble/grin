@@ -239,14 +239,14 @@ fn monitor_peers(
 		max_peer_attempts as usize,
 	);
 
-	for p in new_peers.iter().filter(|p| !peers.is_known(p.addr)) {
-		trace!(
-			"monitor_peers: on {}:{}, queue to soon try {}",
-			config.host,
-			config.port,
-			p.addr,
-		);
-		tx.send(p.addr).unwrap();
+	// Only queue up connection attempts for candidate peers where we
+	// are confident we do not yet know about this peer.
+	// The call to is_known() may fail due to contention on the peers map.
+	// Do not attempt any connection where is_known() fails for any reason.
+	for p in new_peers {
+		if let Ok(false) = peers.is_known(p.addr) {
+			tx.send(p.addr).unwrap();
+		}
 	}
 }
 
