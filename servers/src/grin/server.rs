@@ -189,8 +189,16 @@ impl Server {
 			archive_mode,
 		)?);
 
-		// launching the database migration if needed
-		shared_chain.rebuild_height_for_pos()?;
+		// TODO - Move this to Chain::init() I think.
+		//
+		// DB migrations to be run prior to the chain being used.
+		{
+			// migrate full blocks to protocol version v2 as necessary
+			shared_chain.migrate_db_v1_v2()?;
+
+			// rebuild height_for_pos index as necessary
+			shared_chain.rebuild_height_for_pos()?;
+		}
 
 		pool_adapter.set_chain(shared_chain.clone());
 

@@ -65,11 +65,13 @@ where
 	}
 }
 
+const DEFAULT_DB_VERSION: ProtocolVersion = ProtocolVersion(2);
+
 /// LMDB-backed store facilitating data access and serialization. All writes
 /// are done through a Batch abstraction providing atomicity.
 pub struct Store {
 	env: Arc<lmdb::Environment>,
-	db: RwLock<Option<Arc<lmdb::Database<'static>>>>,
+	db: Arc<RwLock<Option<Arc<lmdb::Database<'static>>>>>,
 	name: String,
 	version: ProtocolVersion,
 }
@@ -113,9 +115,9 @@ impl Store {
 		);
 		let res = Store {
 			env: Arc::new(env),
-			db: RwLock::new(None),
+			db: Arc::new(RwLock::new(None)),
 			name: db_name,
-			version: ProtocolVersion(1),
+			version: DEFAULT_DB_VERSION,
 		};
 
 		{
@@ -127,6 +129,17 @@ impl Store {
 			)?));
 		}
 		Ok(res)
+	}
+
+	/// Construct a new store using a specific protocol version.
+	/// Permits access to the db with legacy protocol versions for db migrations.
+	pub fn with_version(&self, version: ProtocolVersion) -> Store {
+		Store {
+			env: self.env.clone(),
+			db: self.db.clone(),
+			name: self.name.clone(),
+			version: version,
+		}
 	}
 
 	/// Opens the database environment
@@ -275,11 +288,8 @@ impl Store {
 		if self.needs_resize()? {
 			self.do_resize()?;
 		}
-		let txn = lmdb::WriteTransaction::new(self.env.clone())?;
-		Ok(Batch {
-			store: self,
-			tx: txn,
-		})
+		let tx = lmdb::WriteTransaction::new(self.env.clone())?;
+		Ok(Batch { store: self, tx })
 	}
 }
 
@@ -299,10 +309,21 @@ impl<'a> Batch<'a> {
 		Ok(())
 	}
 
-	/// Writes a single key and its `Writeable` value to the db. Encapsulates
-	/// serialization.
+	/// Writes a single key and its `Writeable` value to the db.
+	/// Encapsulates serialization using the (default) version configured on the store instance.
 	pub fn put_ser<W: ser::Writeable>(&self, key: &[u8], value: &W) -> Result<(), Error> {
-		let ser_value = ser::ser_vec(value, self.store.version);
+		self.put_ser_with_version(key, value, self.store.version)
+	}
+
+	/// Writes a single key and its `Writeable` value to the db.
+	/// Encapsulates serialization using the specified protocol version.
+	pub fn put_ser_with_version<W: ser::Writeable>(
+		&self,
+		key: &[u8],
+		value: &W,
+		version: ProtocolVersion,
+	) -> Result<(), Error> {
+		let ser_value = ser::ser_vec(value, version);
 		match ser_value {
 			Ok(data) => self.put(key, &data),
 			Err(err) => Err(Error::SerErr(format!("{}", err))),
@@ -356,7 +377,7 @@ impl<'a> Batch<'a> {
 	}
 }
 
-/// An iterator thad produces Readable instances back. Wraps the lower level
+/// An iterator that produces Readable instances back. Wraps the lower level
 /// DBIterator and deserializes the returned values.
 pub struct SerIterator<T>
 where

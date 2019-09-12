@@ -18,6 +18,7 @@ use crate::core::consensus::HeaderInfo;
 use crate::core::core::hash::{Hash, Hashed};
 use crate::core::core::{Block, BlockHeader, BlockSums};
 use crate::core::pow::Difficulty;
+use crate::core::ser::ProtocolVersion;
 use crate::types::Tip;
 use crate::util::secp::pedersen::Commitment;
 use croaring::Bitmap;
@@ -48,6 +49,13 @@ impl ChainStore {
 	pub fn new(db_root: &str) -> Result<ChainStore, Error> {
 		let db = store::Store::new(db_root, None, Some(STORE_SUBPATH.clone()), None)?;
 		Ok(ChainStore { db })
+	}
+
+	pub fn with_version(&self, version: ProtocolVersion) -> ChainStore {
+		let db_with_version = self.db.with_version(version);
+		ChainStore {
+			db: db_with_version,
+		}
 	}
 }
 
@@ -255,6 +263,15 @@ impl<'a> Batch<'a> {
 		self.db
 			.put_ser(&to_key(BLOCK_PREFIX, &mut b.hash().to_vec())[..], b)?;
 
+		Ok(())
+	}
+
+	pub fn migrate_block(&self, b: &Block, version: ProtocolVersion) -> Result<(), Error> {
+		self.db.put_ser_with_version(
+			&to_key(BLOCK_PREFIX, &mut b.hash().to_vec())[..],
+			b,
+			version,
+		)?;
 		Ok(())
 	}
 

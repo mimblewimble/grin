@@ -1245,6 +1245,17 @@ impl Chain {
 		self.header_pmmr.read().get_header_hash_by_height(height)
 	}
 
+	pub fn migrate_db_v1_v2(&self) -> Result<(), Error> {
+		let store_v1 = self.store.with_version(ProtocolVersion(1));
+		let batch = store_v1.batch()?;
+		// Note: the iterator here returns None
+		for (_, block) in batch.blocks_iter()? {
+			batch.migrate_block(&block, ProtocolVersion(2))?;
+		}
+		batch.commit()?;
+		Ok(())
+	}
+
 	/// Migrate the index 'commitment -> output_pos' to index 'commitment -> (output_pos, block_height)'
 	/// Note: should only be called when Node start-up, for database migration from the old version.
 	pub fn rebuild_height_for_pos(&self) -> Result<(), Error> {
