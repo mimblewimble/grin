@@ -47,8 +47,13 @@ impl TUIStatusListener for TUIStatusView {
 						.child(TextView::new("0").with_id("connected_peers")),
 				)
 				.child(
+					LinearLayout::new(Orientation::Horizontal)
+						.child(TextView::new("Disk Usage (GB):              "))
+						.child(TextView::new("0").with_id("disk_usage")),
+				)
+				.child(
 					LinearLayout::new(Orientation::Horizontal).child(TextView::new(
-						"------------------------------------------------",
+						"--------------------------------------------------------",
 					)),
 				)
 				.child(
@@ -68,7 +73,7 @@ impl TUIStatusListener for TUIStatusView {
 				)
 				.child(
 					LinearLayout::new(Orientation::Horizontal).child(TextView::new(
-						"------------------------------------------------",
+						"--------------------------------------------------------",
 					)),
 				)
 				.child(
@@ -87,8 +92,28 @@ impl TUIStatusListener for TUIStatusView {
 						.child(TextView::new("  ").with_id("basic_total_difficulty")),
 				)
 				.child(
+					LinearLayout::new(Orientation::Horizontal)
+						.child(TextView::new("Chain Tip Timestamp:          "))
+						.child(TextView::new("  ").with_id("chain_timestamp")),
+				)
+				.child(
 					LinearLayout::new(Orientation::Horizontal).child(TextView::new(
-						"------------------------------------------------",
+						"--------------------------------------------------------",
+					)),
+				)
+				.child(
+					LinearLayout::new(Orientation::Horizontal)
+						.child(TextView::new("Transaction Pool Size:        "))
+						.child(TextView::new("  ").with_id("tx_pool_size")),
+				)
+				.child(
+					LinearLayout::new(Orientation::Horizontal)
+						.child(TextView::new("Stem Pool Size:               "))
+						.child(TextView::new("  ").with_id("stem_pool_size")),
+				)
+				.child(
+					LinearLayout::new(Orientation::Horizontal).child(TextView::new(
+						"--------------------------------------------------------",
 					)),
 				)
 				.child(
@@ -244,14 +269,20 @@ impl TUIStatusListener for TUIStatusView {
 		c.call_on_id("connected_peers", |t: &mut TextView| {
 			t.set_content(stats.peer_count.to_string());
 		});
+		c.call_on_id("disk_usage", |t: &mut TextView| {
+			t.set_content(stats.disk_usage_gb.clone());
+		});
 		c.call_on_id("tip_hash", |t: &mut TextView| {
-			t.set_content(stats.head.last_block_h.to_string() + "...");
+			t.set_content(stats.chain_stats.last_block_h.to_string() + "...");
 		});
 		c.call_on_id("chain_height", |t: &mut TextView| {
-			t.set_content(stats.head.height.to_string());
+			t.set_content(stats.chain_stats.height.to_string());
 		});
 		c.call_on_id("basic_total_difficulty", |t: &mut TextView| {
-			t.set_content(stats.head.total_difficulty.to_string());
+			t.set_content(stats.chain_stats.total_difficulty.to_string());
+		});
+		c.call_on_id("chain_timestamp", |t: &mut TextView| {
+			t.set_content(stats.chain_stats.last_block_time.to_string());
 		});
 		c.call_on_id("basic_header_tip_hash", |t: &mut TextView| {
 			t.set_content(stats.header_head.last_block_h.to_string() + "...");
@@ -261,6 +292,12 @@ impl TUIStatusListener for TUIStatusView {
 		});
 		c.call_on_id("basic_header_total_difficulty", |t: &mut TextView| {
 			t.set_content(stats.header_head.total_difficulty.to_string());
+		});
+		c.call_on_id("tx_pool_size", |t: &mut TextView| {
+			t.set_content(stats.tx_stats.tx_pool_size.to_string());
+		});
+		c.call_on_id("stem_pool_size", |t: &mut TextView| {
+			t.set_content(stats.tx_stats.stem_pool_size.to_string());
 		});
 		/*c.call_on_id("basic_mining_config_status", |t: &mut TextView| {
 			t.set_content(basic_mining_config_status);

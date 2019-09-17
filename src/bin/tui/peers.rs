@@ -166,7 +166,10 @@ impl TUIStatusListener for TUIPeerView {
 		let lp_str = match lp {
 			Some(l) => format!(
 				"{} D @ {} H vs Us: {} D @ {} H",
-				l.total_difficulty, l.height, stats.head.total_difficulty, stats.head.height
+				l.total_difficulty,
+				l.height,
+				stats.chain_stats.total_difficulty,
+				stats.chain_stats.height
 			)
 			.to_string(),
 			None => "".to_string(),

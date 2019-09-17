@@ -19,7 +19,7 @@
 use std::fs;
 use std::fs::File;
 use std::io::prelude::*;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::{
 	thread::{self, JoinHandle},
@@ -35,7 +35,9 @@ use crate::common::adapters::{
 	ChainToPoolAndNetAdapter, NetToChainAdapter, PoolToChainAdapter, PoolToNetAdapter,
 };
 use crate::common::hooks::{init_chain_hooks, init_net_hooks};
-use crate::common::stats::{DiffBlock, DiffStats, PeerStats, ServerStateInfo, ServerStats};
+use crate::common::stats::{
+	ChainStats, DiffBlock, DiffStats, PeerStats, ServerStateInfo, ServerStats, TxStats,
+};
 use crate::common::types::{Error, ServerConfig, StratumServerConfig};
 use crate::core::core::hash::{Hashed, ZERO_HASH};
 use crate::core::core::verifier_cache::{LruVerifierCache, VerifierCache};
@@ -489,14 +491,45 @@ impl Server {
 			.into_iter()
 			.map(|p| PeerStats::from_peer(&p))
 			.collect();
+
+		let tx_stats = TxStats {
+			tx_pool_size: self.tx_pool.read().txpool.entries.len(),
+			stem_pool_size: self.tx_pool.read().stempool.entries.len(),
+		};
+
+		let head = self.chain.head_header().unwrap();
+		let head_stats = ChainStats {
+			last_block_time: head.timestamp,
+			height: head.height,
+			last_block_h: head.prev_hash,
+			total_difficulty: head.total_difficulty(),
+		};
+
+		let disk_usage_gb = {
+			let mut db_path = PathBuf::from(&self.config.db_root);
+			db_path.push("lmdb/data.mdb");
+			match fs::metadata(db_path) {
+				Ok(metadata) => {
+					let disk_usage_mb = metadata.len() / 1_000_000;
+					match disk_usage_mb {
+						0...999 => "0.".to_string() + &disk_usage_mb.to_string(),
+						_ => (disk_usage_mb / 1_000).to_string(),
+					}
+				}
+				Err(_) => "Unknown".to_string(),
+			}
+		};
+
 		Ok(ServerStats {
 			peer_count: self.peer_count(),
-			head: self.head()?,
+			chain_stats: head_stats,
 			header_head: self.header_head()?,
 			sync_status: self.sync_state.status(),
+			disk_usage_gb: disk_usage_gb,
 			stratum_stats: stratum_stats,
 			peer_stats: peer_stats,
 			diff_stats: diff_stats,
+			tx_stats: tx_stats,
 		})
 	}
 
