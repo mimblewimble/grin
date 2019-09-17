@@ -13,13 +13,14 @@
 // limitations under the License.
 
 use super::utils::w;
-use crate::chain;
+use crate::chain::{Chain, SyncState, SyncStatus};
 use crate::p2p;
 use crate::rest::*;
 use crate::router::{Handler, ResponseFuture};
 use crate::types::*;
 use crate::web::*;
 use hyper::{Body, Request, StatusCode};
+use serde_json::json;
 use std::sync::Weak;
 
 // RESTful index of available api endpoints
@@ -62,8 +63,9 @@ impl Handler for KernelDownloadHandler {
 /// Status handler. Post a summary of the server status
 /// GET /v1/status
 pub struct StatusHandler {
-	pub chain: Weak<chain::Chain>,
+	pub chain: Weak<Chain>,
 	pub peers: Weak<p2p::Peers>,
+	pub sync_state: Weak<SyncState>,
 }
 
 impl StatusHandler {
@@ -71,9 +73,13 @@ impl StatusHandler {
 		let head = w(&self.chain)?
 			.head()
 			.map_err(|e| ErrorKind::Internal(format!("can't get head: {}", e)))?;
+		let sync_status = w(&self.sync_state)?.status();
+		let (api_sync_status, api_sync_info) = sync_status_to_api(sync_status);
 		Ok(Status::from_tip_and_peers(
 			head,
 			w(&self.peers)?.peer_count(),
+			api_sync_status,
+			api_sync_info,
 		))
 	}
 }
@@ -81,5 +87,52 @@ impl StatusHandler {
 impl Handler for StatusHandler {
 	fn get(&self, _req: Request<Body>) -> ResponseFuture {
 		result_to_response(self.get_status())
+	}
+}
+
+/// Convert a SyncStatus in a readable API representation
+fn sync_status_to_api(sync_status: SyncStatus) -> (String, Option<serde_json::Value>) {
+	match sync_status {
+		SyncStatus::NoSync => ("no_sync".to_string(), None),
+		SyncStatus::AwaitingPeers(_) => ("awaiting_peers".to_string(), None),
+		SyncStatus::HeaderSync {
+			current_height,
+			highest_height,
+		} => (
+			"header_sync".to_string(),
+			Some(json!({ "current_height": current_height, "highest_height": highest_height })),
+		),
+		SyncStatus::TxHashsetDownload {
+			start_time: _,
+			prev_update_time: _,
+			update_time: _,
+			prev_downloaded_size: _,
+			downloaded_size,
+			total_size,
+		} => (
+			"txhashset_download".to_string(),
+			Some(json!({ "downloaded_size": downloaded_size, "total_size": total_size })),
+		),
+		SyncStatus::TxHashsetValidation {
+			kernels,
+			kernel_total,
+			rproofs,
+			rproof_total,
+		} => (
+			"txhashset_validation".to_string(),
+			Some(
+				json!({ "kernels": kernels, "kernel_total": kernel_total ,"rproofs": rproofs, "rproof_total": rproof_total }),
+			),
+		),
+		SyncStatus::BodySync {
+			current_height,
+			highest_height,
+		} => (
+			"body_sync".to_string(),
+			Some(json!({ "current_height": current_height, "highest_height": highest_height })),
+		),
+		SyncStatus::Shutdown => ("shutdown".to_string(), None),
+		// any other status is considered syncing (should be unreachable)
+		_ => ("syncing".to_string(), None),
 	}
 }

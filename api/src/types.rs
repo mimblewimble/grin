@@ -79,15 +79,27 @@ pub struct Status {
 	pub connections: u32,
 	// The state of the current fork Tip
 	pub tip: Tip,
+	// The current sync status
+	pub sync_status: String,
+	// Additional sync information
+	#[serde(skip_serializing_if = "Option::is_none")]
+	pub sync_info: Option<serde_json::Value>,
 }
 
 impl Status {
-	pub fn from_tip_and_peers(current_tip: chain::Tip, connections: u32) -> Status {
+	pub fn from_tip_and_peers(
+		current_tip: chain::Tip,
+		connections: u32,
+		sync_status: String,
+		sync_info: Option<serde_json::Value>,
+	) -> Status {
 		Status {
 			protocol_version: ser::ProtocolVersion::local().into(),
 			user_agent: p2p::msg::USER_AGENT.to_string(),
 			connections: connections,
 			tip: Tip::from_tip(current_tip),
+			sync_status,
+			sync_info,
 		}
 	}
 }

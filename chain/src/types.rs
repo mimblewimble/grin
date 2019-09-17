@@ -39,7 +39,7 @@ bitflags! {
 }
 
 /// Various status sync can be in, whether it's fast sync or archival.
-#[derive(Debug, Clone, Copy, Eq, PartialEq)]
+#[derive(Debug, Clone, Copy, Eq, PartialEq, Deserialize, Serialize)]
 #[allow(missing_docs)]
 pub enum SyncStatus {
 	/// Initial State (we do not yet know if we are/should be syncing)
