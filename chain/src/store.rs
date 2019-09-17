@@ -51,6 +51,10 @@ impl ChainStore {
 		Ok(ChainStore { db })
 	}
 
+	/// Create a new instance of the chain store based on this instance
+	/// but with the provided protocol version. This is used when migrating
+	/// data in the db to a different protocol version, reading using one version and
+	/// writing back to the db with a different version.
 	pub fn with_version(&self, version: ProtocolVersion) -> ChainStore {
 		let db_with_version = self.db.with_version(version);
 		ChainStore {
@@ -266,6 +270,8 @@ impl<'a> Batch<'a> {
 		Ok(())
 	}
 
+	/// Migrate a block stored in the db by serializing it using the provided protocol version.
+	/// Block may have been read using a previous protocol version but we do not actually care.
 	pub fn migrate_block(&self, b: &Block, version: ProtocolVersion) -> Result<(), Error> {
 		self.db.put_ser_with_version(
 			&to_key(BLOCK_PREFIX, &mut b.hash().to_vec())[..],
