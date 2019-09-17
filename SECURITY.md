@@ -37,7 +37,6 @@ guidelines. More information is available about the
 For all security related issues, Grin has 4 main points of contact:
 
 * Daniel Lehnberg, daniel.lehnberg at protonmail.com
-* Ignotus Peverell, igno.peverell at protonmail.com
 * hashmap, hashmap.dev at protonmail.com
 * John Woeltz, joltz at protonmail.com
 
@@ -111,7 +110,7 @@ Statements
 
 The Grin security contacts who have digitally signed this canary state the following:
 
-1. The date of issue of this canary is August 28, 2019.
+1. The date of issue of this canary is September 17, 2019.
 
 2. The latest Grin release is v2.0.0 `8f3be49`
 
@@ -120,7 +119,7 @@ Project (e.g. to hand out the private signing keys or to introduce
 backdoors).
 
 4. We plan to publish the next of these canary statements in the first
-two weeks of October 2019. Special note should be taken if no new canary
+two weeks of January 2020. Special note should be taken if no new canary
 is published by that time or if the list of statements changes without
 plausible explanation.
 
@@ -151,11 +150,11 @@ Proof of freshness
 -------------------
 
 $ date -R -u && grin client status | grep 'Last block' | cut -c 18- && curl -s 'https://blockstream.info/api/blocks/tip/hash'; echo && curl -s 'https://api.blockcypher.com/v1/ltc/main' | grep '"hash' | cut -c 12-75 && curl -s 'https://api.blockcypher.com/v1/eth/main' | grep '"hash' | cut -c 12-75
-Wed, 28 Aug 2019 19:09:00 +0000
-0000075e57b0dc0672ed6bd6ddbeeb7071ea255cd3350659abf0ac5d29f37b2a
-0000000000000000001304fe747fbc3fdb46e258c8a0425976b404f6e9c2ec28
-a347f98f4a2ae4649a6c3c612cc12a962b5dd7738ea58d3cd08b226c7577cf50
-3560388e555c0c4a743260a376a933405ff8b5854150b34961e0795daf2cee14
+Tue, 17 Sep 2019 16:19:21 +0000
+0000036044b32b7805403f651ccddf634e48bf8601d8af95409871e0848f317c
+0000000000000000000fdf50819c8c280908cba1b570e614e9c970464609ec00
+2418c5b533acf4212270d5898da283256df78c8fdfb0e927a7e2854e078c18f4
+df30073244358cff78d2161f8d4465ae5210209019d0bb3ca14ce672ad8bcf5c
 ```
 Don't just trust the contents of this canary blindly! Verify the digital
 signatures and proof of freshness! The signatures below should be valid
@@ -165,27 +164,25 @@ blockchains respectively.
 
 ### Daniel Lehnberg
 
-### Ignotus Peverell
-
 ### hashmap
 
 ### John Woeltz
 ```
 -----BEGIN PGP SIGNATURE-----
 
-iQIzBAABCgAdFiEEpwlDvRCYWLUDTiOsmWn1cMLvYW8FAl1m1KkACgkQmWn1cMLv
-YW9gpQ//RTStxYDnRsWiMy2XKeaDkhzwtMeG3MqyMq0XECnEiADmJKCmi4vvRwI5
-odW8prkODlcLKeFJhLOLH+hFXAJ3bK60ygU763Bhn1/scFS7MM0edM6oSq7DlFzZ
-qW/divP5JDBtIJ7fPRNpzMtxNqPKtJGBXMA15atrQJgI+QkjcTo9LEW0J4jzUh3V
-BMw9SrccZ77L8LUxXZzs41d7mM5hNE/dwSBHt9/t83m94F1929j0ylHJdaGmN+i1
-0pd8cFAGXrF4c34D0YxSRgH2VdZbRU3mkv4RgFx2stYbzF9oUt51W2ThsfnLAqaP
-AaqVSGfEQsFuNpfvMb7dfjnM/y7y7oSY65PYj1YbMM3IQ445hv8twsuOlJb4KH3z
-C+PlDo9zodGl42dIOTiEEsLBlDL6bJuZ9LWs20pzqXsNb2Abkk38UefAH3R2fZxK
-RDxpUU/o6ANt55veQTza3pL2ZzyInuYqBlfumSSpmg8TL4DE3YCplMBdIr7QNmBW
-lqCAWM9NbZkMDEF1jUx0XXvkkeuYpfOJ6bWvL2qkl4bVsg81AZa33XD5m3eewZJm
-j9kKb666TgNjoCE7xm3oc31YYte6t15BQoOkoqqUo9iRYcTtXcSfIUudzNYani3r
-YRsyXDyPkduVU0ZHkjijVSXvfVuRuK3uX/bL1e55JGGPnc2JCyA=
-=XmOX
+iQIzBAABCgAdFiEEpwlDvRCYWLUDTiOsmWn1cMLvYW8FAl2BCFEACgkQmWn1cMLv
+YW/FLBAAkTy8mcKrb878SqAps7vBSDY/s/zsgFmeXvIAPHAVdpXnT8BvxN2MR8w4
+Z96o9rlyqw91QoB1dgO7M+ujy+heZSOCVsjhhADCos92BfeVI8qmJ9isu7uEm7Yp
+074AjvYdddtw60CX12fjmaM5vxZ/2aHUjqEooLtvlaOlap0DKW8n5Mba4X5fQLYi
+z2SX+WD7v+WCfBgalBbsrzwZrkhn24BK7Xp9VA8HzkUxOnY4KK8sPVwgJjkzXFq6
+gV7dOsgvrOTxvRJrF+7vQ0RoaAf0eRlo2lYOoGvrS5FZdLOWJmR3J83BFtkmaNkC
+JCXa3QCrJhnnGKcLVEXVvFGg8821S2JfJd/NUnazRftPcmb7h1RE1pNjh2LTuonj
+fPrFnvc1bLwKFnrnBj/eBD/YL6YWCy7jFR5Vh2c46hq+swkl8GzKA7oSoSrNNcql
+RbKuiMnmg9XJp3MqHINgEmJc1nkAC2LBP5sBu2NVD8BDUTl728OFuh2mELbLJJ0z
+0X4GA5YKSsWbhsHF6jftLf6QxrsHa/9aM3KnI3NwhhxA8P2xW4VODwwJaCDoXADT
+VW1TYnMt6TT//a+lou+brj7+Hqq2lIUmb7uveqI4YLewPdnKgeQUNJCVYcpfbi/u
+VyRZ2aJxaCvyo8BUaLRBEmErg5zeVgawhFXG30NfMLbGeCsztYY=
+=NXLF
 -----END PGP SIGNATURE-----
 ```
 
@@ -246,60 +243,6 @@ Yt4GsNSSB0khmbq31wIGbll/ZGsSH60h
 =pLZJ
 -----END PGP PUBLIC KEY BLOCK-----
 
-```
-### Ignotus Peverell
-```
------BEGIN PGP PUBLIC KEY BLOCK-----
-
-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
-VaXAUOUL1MeJOiXI96Q=
-=xdp/
------END PGP PUBLIC KEY BLOCK-----
 ```
 ### hashmap
 ```
