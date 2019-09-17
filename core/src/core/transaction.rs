@@ -93,6 +93,8 @@ impl KernelFeatures {
 		Ok(msg)
 	}
 
+	/// Write tx kernel features out in v1 protocol format.
+	/// Always include the fee and lock_height, writing 0 value if unused.
 	fn write_v1<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
 		let (fee, lock_height) = match self {
 			KernelFeatures::Plain { fee } => (*fee, 0),
@@ -105,6 +107,10 @@ impl KernelFeatures {
 		Ok(())
 	}
 
+	/// Write tx kernel features out in v2 protocol format.
+	/// These are variable sized based on feature variant.
+	/// Only write fee out for feature variants that support it.
+	/// Only write lock_height out for feature variants that support it.
 	fn write_v2<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
 		match self {
 			KernelFeatures::Plain { fee } => {
