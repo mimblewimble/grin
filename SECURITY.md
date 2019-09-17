@@ -34,7 +34,7 @@ and [details](https://github.com/RD-Crypto-Spec/Responsible-Disclosure/tree/82e0
 guidelines. More information is available about the
 [expected timelines for the full disclosure cycle](https://github.com/RD-Crypto-Spec/Responsible-Disclosure/tree/82e08d2736ea9dbe43484a3317e4bce214163bd0#standard-disclosure-timelines).
 
-For all security related issues, Grin has 4 main points of contact:
+For all security related issues, Grin has 3 main points of contact:
 
 * Daniel Lehnberg, daniel.lehnberg at protonmail.com
 * hashmap, hashmap.dev at protonmail.com
