@@ -117,7 +117,7 @@ impl StateSync {
 
 			if let SyncStatus::TxHashsetDownload { .. } = self.sync_state.status() {
 				if download_timeout {
-					error!("state_sync: TxHashsetDownload status timeout in 10 minutes!");
+					error!("state_sync: TxHashsetDownload download timed out, restarting.");
 					self.sync_state.set_sync_error(
 						chain::ErrorKind::SyncError(format!("{:?}", p2p::Error::Timeout)).into(),
 					);
@@ -219,7 +219,7 @@ impl StateSync {
 				(true, download_timeout)
 			}
 			Some(prev) => {
-				if now - prev > Duration::minutes(10) {
+				if now - prev > Duration::minutes(30) {
 					download_timeout = true;
 				}
 				(false, download_timeout)
