@@ -72,6 +72,11 @@ impl TUIStatusListener for TUIStatusView {
 						.child(TextView::new("  ").with_id("basic_header_total_difficulty")),
 				)
 				.child(
+					LinearLayout::new(Orientation::Horizontal)
+						.child(TextView::new("Header Timestamp: "))
+						.child(TextView::new("  ").with_id("basic_header_timestamp")),
+				)
+				.child(
 					LinearLayout::new(Orientation::Horizontal).child(TextView::new(
 						"--------------------------------------------------------",
 					)),
@@ -282,16 +287,19 @@ impl TUIStatusListener for TUIStatusView {
 			t.set_content(stats.chain_stats.total_difficulty.to_string());
 		});
 		c.call_on_id("chain_timestamp", |t: &mut TextView| {
-			t.set_content(stats.chain_stats.last_block_time.to_string());
+			t.set_content(stats.chain_stats.latest_timestamp.to_string());
 		});
 		c.call_on_id("basic_header_tip_hash", |t: &mut TextView| {
-			t.set_content(stats.header_head.last_block_h.to_string() + "...");
+			t.set_content(stats.header_stats.last_block_h.to_string() + "...");
 		});
 		c.call_on_id("basic_header_chain_height", |t: &mut TextView| {
-			t.set_content(stats.header_head.height.to_string());
+			t.set_content(stats.header_stats.height.to_string());
 		});
 		c.call_on_id("basic_header_total_difficulty", |t: &mut TextView| {
-			t.set_content(stats.header_head.total_difficulty.to_string());
+			t.set_content(stats.header_stats.total_difficulty.to_string());
+		});
+		c.call_on_id("basic_header_timestamp", |t: &mut TextView| {
+			t.set_content(stats.header_stats.latest_timestamp.to_string());
 		});
 		c.call_on_id("tx_pool_size", |t: &mut TextView| {
 			t.set_content(stats.tx_stats.tx_pool_size.to_string());

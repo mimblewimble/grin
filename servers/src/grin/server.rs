@@ -499,10 +499,19 @@ impl Server {
 
 		let head = self.chain.head_header().unwrap();
 		let head_stats = ChainStats {
-			last_block_time: head.timestamp,
+			latest_timestamp: head.timestamp,
 			height: head.height,
 			last_block_h: head.prev_hash,
 			total_difficulty: head.total_difficulty(),
+		};
+
+		let header_tip = self.chain.header_head().unwrap();
+		let header = self.chain.get_block_header(&header_tip.hash()).unwrap();
+		let header_stats = ChainStats {
+			latest_timestamp: header.timestamp,
+			height: header.height,
+			last_block_h: header.prev_hash,
+			total_difficulty: header.total_difficulty(),
 		};
 
 		let disk_usage_gb = {
@@ -523,7 +532,7 @@ impl Server {
 		Ok(ServerStats {
 			peer_count: self.peer_count(),
 			chain_stats: head_stats,
-			header_head: self.header_head()?,
+			header_stats: header_stats,
 			sync_status: self.sync_state.status(),
 			disk_usage_gb: disk_usage_gb,
 			stratum_stats: stratum_stats,

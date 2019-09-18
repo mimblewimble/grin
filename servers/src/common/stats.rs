@@ -25,7 +25,6 @@ use crate::core::ser::ProtocolVersion;
 
 use chrono::prelude::*;
 
-use crate::chain;
 use crate::chain::SyncStatus;
 use crate::p2p;
 use grin_core::pow::Difficulty;
@@ -54,7 +53,7 @@ pub struct ServerStats {
 	/// Chain head
 	pub chain_stats: ChainStats,
 	/// sync header head
-	pub header_head: chain::Tip,
+	pub header_stats: ChainStats,
 	/// Whether we're currently syncing
 	pub sync_status: SyncStatus,
 	/// Handle to current stratum server stats
@@ -78,8 +77,8 @@ pub struct ChainStats {
 	pub last_block_h: Hash,
 	/// Total difficulty accumulated on that fork
 	pub total_difficulty: Difficulty,
-	/// Timestamp of last block
-	pub last_block_time: DateTime<Utc>,
+	/// Timestamp of highest block or header
+	pub latest_timestamp: DateTime<Utc>,
 }
 /// Transaction Statistics
 #[derive(Clone, Serialize, Debug)]
