@@ -113,7 +113,17 @@ impl<'a> Message<'a> {
 		while written < len {
 			let read_len = cmp::min(8000, len - written);
 			let mut buf = vec![0u8; read_len];
-			self.stream.read_exact(&mut buf[..])?;
+			if let Err(e) = self.stream.read_exact(&mut buf[..]) {
+				match e.kind() {
+					io::ErrorKind::WouldBlock
+					| io::ErrorKind::TimedOut
+					| io::ErrorKind::Interrupted => {
+						thread::sleep(Duration::from_millis(10));
+						return Ok(0);
+					}
+					_ => return Err(e.into()),
+				}
+			}
 			writer.write_all(&mut buf)?;
 			written += read_len;
 		}
