@@ -19,7 +19,7 @@
 use std::fs;
 use std::fs::File;
 use std::io::prelude::*;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::sync::Arc;
 use std::{
 	thread::{self, JoinHandle},
@@ -27,6 +27,7 @@ use std::{
 };
 
 use fs2::FileExt;
+use walkdir::WalkDir;
 
 use crate::api;
 use crate::api::TLSConfig;
@@ -514,20 +515,16 @@ impl Server {
 			total_difficulty: header.total_difficulty(),
 		};
 
-		let disk_usage_gb = {
-			let mut db_path = PathBuf::from(&self.config.db_root);
-			db_path.push("lmdb/data.mdb");
-			match fs::metadata(db_path) {
-				Ok(metadata) => {
-					let disk_usage_mb = metadata.len() / 1_000_000;
-					match disk_usage_mb {
-						0...999 => "0.".to_string() + &disk_usage_mb.to_string(),
-						_ => (disk_usage_mb / 1_000).to_string(),
-					}
-				}
-				Err(_) => "Unknown".to_string(),
-			}
-		};
+		let disk_usage_bytes = WalkDir::new(&self.config.db_root)
+			.min_depth(1)
+			.max_depth(3)
+			.into_iter()
+			.filter_map(|entry| entry.ok())
+			.filter_map(|entry| entry.metadata().ok())
+			.filter(|metadata| metadata.is_file())
+			.fold(0, |acc, m| acc + m.len());
+
+		let disk_usage_gb = format!("{:.*}", 3, (disk_usage_bytes as f64 / 1_000_000_000 as f64));
 
 		Ok(ServerStats {
 			peer_count: self.peer_count(),

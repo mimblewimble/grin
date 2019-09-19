@@ -73,7 +73,7 @@ impl TUIStatusListener for TUIStatusView {
 				)
 				.child(
 					LinearLayout::new(Orientation::Horizontal)
-						.child(TextView::new("Header Timestamp: "))
+						.child(TextView::new("Header Tip Timestamp:         "))
 						.child(TextView::new("  ").with_id("basic_header_timestamp")),
 				)
 				.child(
