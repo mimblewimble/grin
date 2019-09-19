@@ -189,7 +189,7 @@ impl Chain {
 		)?;
 		Chain::log_heads(&store)?;
 
-		Ok(Chain {
+		let chain = Chain {
 			db_root,
 			store,
 			adapter,
@@ -201,7 +201,18 @@ impl Chain {
 			verifier_cache,
 			archive_mode,
 			genesis: genesis.header.clone(),
-		})
+		};
+
+		// DB migrations to be run prior to the chain being used.
+		{
+			// Migrate full blocks to protocol version v2.
+			chain.migrate_db_v1_v2()?;
+
+			// Rebuild height_for_pos index.
+			chain.rebuild_height_for_pos()?;
+		}
+
+		Ok(chain)
 	}
 
 	/// Return our shared header MMR handle.
@@ -1245,9 +1256,22 @@ impl Chain {
 		self.header_pmmr.read().get_header_hash_by_height(height)
 	}
 
+	/// Migrate our local db from v1 to v2.
+	/// This covers blocks which themselves contain transactions.
+	/// Transaction kernels changed in v2 due to "variable size kernels".
+	fn migrate_db_v1_v2(&self) -> Result<(), Error> {
+		let store_v1 = self.store.with_version(ProtocolVersion(1));
+		let batch = store_v1.batch()?;
+		for (_, block) in batch.blocks_iter()? {
+			batch.migrate_block(&block, ProtocolVersion(2))?;
+		}
+		batch.commit()?;
+		Ok(())
+	}
+
 	/// Migrate the index 'commitment -> output_pos' to index 'commitment -> (output_pos, block_height)'
 	/// Note: should only be called when Node start-up, for database migration from the old version.
-	pub fn rebuild_height_for_pos(&self) -> Result<(), Error> {
+	fn rebuild_height_for_pos(&self) -> Result<(), Error> {
 		let header_pmmr = self.header_pmmr.read();
 		let txhashset = self.txhashset.read();
 		let mut outputs_pos = txhashset.get_all_output_pos()?;
