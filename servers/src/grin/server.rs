@@ -27,6 +27,7 @@ use std::{
 };
 
 use fs2::FileExt;
+use walkdir::WalkDir;
 
 use crate::api;
 use crate::api::TLSConfig;
@@ -35,7 +36,9 @@ use crate::common::adapters::{
 	ChainToPoolAndNetAdapter, NetToChainAdapter, PoolToChainAdapter, PoolToNetAdapter,
 };
 use crate::common::hooks::{init_chain_hooks, init_net_hooks};
-use crate::common::stats::{DiffBlock, DiffStats, PeerStats, ServerStateInfo, ServerStats};
+use crate::common::stats::{
+	ChainStats, DiffBlock, DiffStats, PeerStats, ServerStateInfo, ServerStats, TxStats,
+};
 use crate::common::types::{Error, ServerConfig, StratumServerConfig};
 use crate::core::core::hash::{Hashed, ZERO_HASH};
 use crate::core::core::verifier_cache::{LruVerifierCache, VerifierCache};
@@ -489,14 +492,50 @@ impl Server {
 			.into_iter()
 			.map(|p| PeerStats::from_peer(&p))
 			.collect();
+
+		let tx_stats = TxStats {
+			tx_pool_size: self.tx_pool.read().txpool.entries.len(),
+			stem_pool_size: self.tx_pool.read().stempool.entries.len(),
+		};
+
+		let head = self.chain.head_header().unwrap();
+		let head_stats = ChainStats {
+			latest_timestamp: head.timestamp,
+			height: head.height,
+			last_block_h: head.prev_hash,
+			total_difficulty: head.total_difficulty(),
+		};
+
+		let header_tip = self.chain.header_head().unwrap();
+		let header = self.chain.get_block_header(&header_tip.hash()).unwrap();
+		let header_stats = ChainStats {
+			latest_timestamp: header.timestamp,
+			height: header.height,
+			last_block_h: header.prev_hash,
+			total_difficulty: header.total_difficulty(),
+		};
+
+		let disk_usage_bytes = WalkDir::new(&self.config.db_root)
+			.min_depth(1)
+			.max_depth(3)
+			.into_iter()
+			.filter_map(|entry| entry.ok())
+			.filter_map(|entry| entry.metadata().ok())
+			.filter(|metadata| metadata.is_file())
+			.fold(0, |acc, m| acc + m.len());
+
+		let disk_usage_gb = format!("{:.*}", 3, (disk_usage_bytes as f64 / 1_000_000_000 as f64));
+
 		Ok(ServerStats {
 			peer_count: self.peer_count(),
-			head: self.head()?,
-			header_head: self.header_head()?,
+			chain_stats: head_stats,
+			header_stats: header_stats,
 			sync_status: self.sync_state.status(),
+			disk_usage_gb: disk_usage_gb,
 			stratum_stats: stratum_stats,
 			peer_stats: peer_stats,
 			diff_stats: diff_stats,
+			tx_stats: tx_stats,
 		})
 	}
 

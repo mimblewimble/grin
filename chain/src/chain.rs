@@ -1204,7 +1204,7 @@ impl Chain {
 			.map_err(|e| ErrorKind::StoreErr(e, "chain head header".to_owned()).into())
 	}
 
-	/// Gets a block header by hash
+	/// Gets a block by hash
 	pub fn get_block(&self, h: &Hash) -> Result<Block, Error> {
 		self.store
 			.get_block(h)

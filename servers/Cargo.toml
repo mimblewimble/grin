@@ -24,6 +24,7 @@ serde_derive = "1"
 serde_json = "1"
 chrono = "0.4.4"
 tokio =  "0.1.11"
+walkdir = "2.2.9"
 
 grin_api = { path = "../api", version = "2.1.0-dev.1" }
 grin_chain = { path = "../chain", version = "2.1.0-dev.1" }
