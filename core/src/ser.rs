@@ -289,7 +289,18 @@ where
 pub struct ProtocolVersion(pub u32);
 
 impl ProtocolVersion {
+	/// The max protocol version supported.
+	pub const MAX: u32 = std::u32::MAX;
+
+	/// Protocol version as u32 to allow for convenient exhaustive matching on values.
+	pub fn value(&self) -> u32 {
+		self.0
+	}
+
 	/// Our default "local" protocol version.
+	/// This protocol version is provided to peers as part of the Hand/Shake
+	/// negotiation in the p2p layer. Connected peers will negotiate a suitable
+	/// protocol version for serialization/deserialization of p2p messages.
 	pub fn local() -> ProtocolVersion {
 		ProtocolVersion(PROTOCOL_VERSION)
 	}

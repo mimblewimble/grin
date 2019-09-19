@@ -20,8 +20,8 @@ use crate::core::{committed, Committed};
 use crate::keychain::{self, BlindingFactor};
 use crate::libtx::secp_ser;
 use crate::ser::{
-	self, read_multi, FixedLength, PMMRable, Readable, Reader, VerifySortedAndUnique, Writeable,
-	Writer,
+	self, read_multi, FixedLength, PMMRable, ProtocolVersion, Readable, Reader,
+	VerifySortedAndUnique, Writeable, Writer,
 };
 use crate::util;
 use crate::util::secp;
@@ -92,22 +92,33 @@ impl KernelFeatures {
 		let msg = secp::Message::from_slice(&hash.as_bytes())?;
 		Ok(msg)
 	}
-}
 
-impl Writeable for KernelFeatures {
-	/// Still only supporting protocol version v1 serialization.
-	/// Always include fee, defaulting to 0, and lock_height, defaulting to 0, for all feature variants.
-	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
+	/// Write tx kernel features out in v1 protocol format.
+	/// Always include the fee and lock_height, writing 0 value if unused.
+	fn write_v1<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
+		let (fee, lock_height) = match self {
+			KernelFeatures::Plain { fee } => (*fee, 0),
+			KernelFeatures::Coinbase => (0, 0),
+			KernelFeatures::HeightLocked { fee, lock_height } => (*fee, *lock_height),
+		};
+		writer.write_u8(self.as_u8())?;
+		writer.write_u64(fee)?;
+		writer.write_u64(lock_height)?;
+		Ok(())
+	}
+
+	/// Write tx kernel features out in v2 protocol format.
+	/// These are variable sized based on feature variant.
+	/// Only write fee out for feature variants that support it.
+	/// Only write lock_height out for feature variants that support it.
+	fn write_v2<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
 		match self {
 			KernelFeatures::Plain { fee } => {
 				writer.write_u8(self.as_u8())?;
 				writer.write_u64(*fee)?;
-				writer.write_u64(0)?;
 			}
 			KernelFeatures::Coinbase => {
 				writer.write_u8(self.as_u8())?;
-				writer.write_u64(0)?;
-				writer.write_u64(0)?;
 			}
 			KernelFeatures::HeightLocked { fee, lock_height } => {
 				writer.write_u8(self.as_u8())?;
@@ -117,33 +128,48 @@ impl Writeable for KernelFeatures {
 		}
 		Ok(())
 	}
-}
 
-impl Readable for KernelFeatures {
-	/// Still only supporting protocol version v1 serialization.
-	/// Always read both fee and lock_height, regardless of feature variant.
-	/// These will be 0 values if not applicable, but bytes must still be read and verified.
-	fn read(reader: &mut dyn Reader) -> Result<KernelFeatures, ser::Error> {
-		let features = match reader.read_u8()? {
+	// Always read feature byte, 8 bytes for fee and 8 bytes for lock height.
+	// Fee and lock height may be unused for some kernel variants but we need
+	// to read these bytes and verify they are 0 if unused.
+	fn read_v1(reader: &mut dyn Reader) -> Result<KernelFeatures, ser::Error> {
+		let feature_byte = reader.read_u8()?;
+		let fee = reader.read_u64()?;
+		let lock_height = reader.read_u64()?;
+
+		let features = match feature_byte {
 			KernelFeatures::PLAIN_U8 => {
-				let fee = reader.read_u64()?;
-				let lock_height = reader.read_u64()?;
 				if lock_height != 0 {
 					return Err(ser::Error::CorruptedData);
 				}
 				KernelFeatures::Plain { fee }
 			}
 			KernelFeatures::COINBASE_U8 => {
-				let fee = reader.read_u64()?;
 				if fee != 0 {
 					return Err(ser::Error::CorruptedData);
 				}
-				let lock_height = reader.read_u64()?;
 				if lock_height != 0 {
 					return Err(ser::Error::CorruptedData);
 				}
 				KernelFeatures::Coinbase
 			}
+			KernelFeatures::HEIGHT_LOCKED_U8 => KernelFeatures::HeightLocked { fee, lock_height },
+			_ => {
+				return Err(ser::Error::CorruptedData);
+			}
+		};
+		Ok(features)
+	}
+
+	// V2 kernels only expect bytes specific to each variant.
+	// Coinbase kernels have no associated fee and we do not serialize a fee for these.
+	fn read_v2(reader: &mut dyn Reader) -> Result<KernelFeatures, ser::Error> {
+		let features = match reader.read_u8()? {
+			KernelFeatures::PLAIN_U8 => {
+				let fee = reader.read_u64()?;
+				KernelFeatures::Plain { fee }
+			}
+			KernelFeatures::COINBASE_U8 => KernelFeatures::Coinbase,
 			KernelFeatures::HEIGHT_LOCKED_U8 => {
 				let fee = reader.read_u64()?;
 				let lock_height = reader.read_u64()?;
@@ -154,6 +180,32 @@ impl Readable for KernelFeatures {
 			}
 		};
 		Ok(features)
+	}
+}
+
+impl Writeable for KernelFeatures {
+	/// Protocol version may increment rapidly for other unrelated changes.
+	/// So we match on ranges here and not specific version values.
+	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
+		// Care must be exercised when writing for hashing purposes.
+		// All kernels are hashed using original v1 serialization strategy.
+		if writer.serialization_mode() == ser::SerializationMode::Hash {
+			return self.write_v1(writer);
+		}
+
+		match writer.protocol_version().value() {
+			0..=1 => self.write_v1(writer),
+			2..=ProtocolVersion::MAX => self.write_v2(writer),
+		}
+	}
+}
+
+impl Readable for KernelFeatures {
+	fn read(reader: &mut dyn Reader) -> Result<KernelFeatures, ser::Error> {
+		match reader.protocol_version().value() {
+			0..=1 => KernelFeatures::read_v1(reader),
+			2..=ProtocolVersion::MAX => KernelFeatures::read_v2(reader),
+		}
 	}
 }
 
@@ -275,12 +327,6 @@ impl ::std::hash::Hash for TxKernel {
 
 impl Writeable for TxKernel {
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
-		// We have access to the protocol version here.
-		// This may be a protocol version based on a peer connection
-		// or the version used locally for db storage.
-		// We can handle version specific serialization here.
-		let _version = writer.protocol_version();
-
 		self.features.write(writer)?;
 		self.excess.write(writer)?;
 		self.excess_sig.write(writer)?;
@@ -290,12 +336,6 @@ impl Writeable for TxKernel {
 
 impl Readable for TxKernel {
 	fn read(reader: &mut dyn Reader) -> Result<TxKernel, ser::Error> {
-		// We have access to the protocol version here.
-		// This may be a protocol version based on a peer connection
-		// or the version used locally for db storage.
-		// We can handle version specific deserialization here.
-		let _version = reader.protocol_version();
-
 		Ok(TxKernel {
 			features: KernelFeatures::read(reader)?,
 			excess: Commitment::read(reader)?,

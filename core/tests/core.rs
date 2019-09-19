@@ -38,10 +38,27 @@ use std::sync::Arc;
 #[test]
 fn simple_tx_ser() {
 	let tx = tx2i1o();
-	let mut vec = Vec::new();
-	ser::serialize_default(&mut vec, &tx).expect("serialization failed");
-	let target_len = 955;
-	assert_eq!(vec.len(), target_len,);
+
+	// Default protocol version.
+	{
+		let mut vec = Vec::new();
+		ser::serialize_default(&mut vec, &tx).expect("serialization failed");
+		assert_eq!(vec.len(), 947);
+	}
+
+	// Explicit protocol version 1.
+	{
+		let mut vec = Vec::new();
+		ser::serialize(&mut vec, ser::ProtocolVersion(1), &tx).expect("serialization failed");
+		assert_eq!(vec.len(), 955);
+	}
+
+	// Explicit protocol version 2.
+	{
+		let mut vec = Vec::new();
+		ser::serialize(&mut vec, ser::ProtocolVersion(2), &tx).expect("serialization failed");
+		assert_eq!(vec.len(), 947);
+	}
 }
 
 #[test]

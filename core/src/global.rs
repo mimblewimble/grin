@@ -38,8 +38,8 @@ use crate::util::RwLock;
 /// We negotiate compatible versions with each peer via Hand/Shake.
 /// Note: We also use a specific (possible different) protocol version
 /// for both the backend database and MMR data files.
-/// This one is p2p layer specific.
-pub const PROTOCOL_VERSION: u32 = 1;
+/// This defines the p2p layer protocol version for this node.
+pub const PROTOCOL_VERSION: u32 = 2;
 
 /// Automated testing edge_bits
 pub const AUTOMATED_TESTING_MIN_EDGE_BITS: u8 = 10;

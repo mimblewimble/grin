@@ -75,8 +75,8 @@ impl PoolPushHandler {
 						.map_err(|e| ErrorKind::RequestError(format!("Bad request: {}", e)).into())
 				})
 				.and_then(move |tx_bin| {
-					// TODO - pass protocol version in via the api call?
-					let version = ProtocolVersion::local();
+					// All wallet api interaction explicitly uses protocol version 1 for now.
+					let version = ProtocolVersion(1);
 
 					ser::deserialize(&mut &tx_bin[..], version)
 						.map_err(|e| ErrorKind::RequestError(format!("Bad request: {}", e)).into())
