@@ -204,13 +204,9 @@ impl<T: PMMRable> PMMRBackend<T> {
 		data_dir: P,
 		prunable: bool,
 		fixed_size: bool,
+		version: ProtocolVersion,
 		header: Option<&BlockHeader>,
 	) -> io::Result<PMMRBackend<T>> {
-		// Note: Explicit protocol version here.
-		// Regardless of our "default" protocol version we have existing MMR files
-		// and we need to be able to support these across upgrades.
-		let version = ProtocolVersion(1);
-
 		let data_dir = data_dir.as_ref();
 
 		// Are we dealing with "fixed size" data elements or "variable size" data elements
