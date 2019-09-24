@@ -19,10 +19,8 @@ use crate::core::core::committed::Committed;
 use crate::core::core::hash::{Hash, Hashed};
 use crate::core::core::merkle_proof::MerkleProof;
 use crate::core::core::pmmr::{self, Backend, ReadonlyPMMR, RewindablePMMR, PMMR};
-use crate::core::core::{
-	Block, BlockHeader, Input, Output, OutputIdentifier, TxKernel, TxKernelEntry,
-};
-use crate::core::ser::{PMMRIndexHashable, PMMRable};
+use crate::core::core::{Block, BlockHeader, Input, Output, OutputIdentifier, TxKernel};
+use crate::core::ser::{PMMRIndexHashable, PMMRable, ProtocolVersion};
 use crate::error::{Error, ErrorKind};
 use crate::store::{Batch, ChainStore};
 use crate::txhashset::{RewindableKernelView, UTXOView};
@@ -62,6 +60,7 @@ impl<T: PMMRable> PMMRHandle<T> {
 		file_name: &str,
 		prunable: bool,
 		fixed_size: bool,
+		version: ProtocolVersion,
 		header: Option<&BlockHeader>,
 	) -> Result<PMMRHandle<T>, Error> {
 		let path = Path::new(root_dir).join(sub_dir).join(file_name);
@@ -69,7 +68,8 @@ impl<T: PMMRable> PMMRHandle<T> {
 		let path_str = path.to_str().ok_or(Error::from(ErrorKind::Other(
 			"invalid file path".to_owned(),
 		)))?;
-		let backend = PMMRBackend::new(path_str.to_string(), prunable, fixed_size, header)?;
+		let backend =
+			PMMRBackend::new(path_str.to_string(), prunable, fixed_size, version, header)?;
 		let last_pos = backend.unpruned_size();
 		Ok(PMMRHandle { backend, last_pos })
 	}
@@ -113,33 +113,78 @@ impl TxHashSet {
 		commit_index: Arc<ChainStore>,
 		header: Option<&BlockHeader>,
 	) -> Result<TxHashSet, Error> {
-		Ok(TxHashSet {
-			output_pmmr_h: PMMRHandle::new(
-				&root_dir,
-				TXHASHSET_SUBDIR,
-				OUTPUT_SUBDIR,
-				true,
-				true,
-				header,
-			)?,
-			rproof_pmmr_h: PMMRHandle::new(
-				&root_dir,
-				TXHASHSET_SUBDIR,
-				RANGE_PROOF_SUBDIR,
-				true,
-				true,
-				header,
-			)?,
-			kernel_pmmr_h: PMMRHandle::new(
+		let output_pmmr_h = PMMRHandle::new(
+			&root_dir,
+			TXHASHSET_SUBDIR,
+			OUTPUT_SUBDIR,
+			true,
+			true,
+			ProtocolVersion(1),
+			header,
+		)?;
+
+		let rproof_pmmr_h = PMMRHandle::new(
+			&root_dir,
+			TXHASHSET_SUBDIR,
+			RANGE_PROOF_SUBDIR,
+			true,
+			true,
+			ProtocolVersion(1),
+			header,
+		)?;
+
+		let mut maybe_kernel_handle: Option<PMMRHandle<TxKernel>> = None;
+		let versions = vec![ProtocolVersion(2), ProtocolVersion(1)];
+		for version in versions {
+			let handle = PMMRHandle::new(
 				&root_dir,
 				TXHASHSET_SUBDIR,
 				KERNEL_SUBDIR,
 				false, // not prunable
 				false, // variable size kernel data file
+				version,
 				None,
-			)?,
-			commit_index,
-		})
+			)?;
+			if handle.last_pos == 0 {
+				debug!(
+					"attempting to open (empty) kernel PMMR using {:?} - SUCCESS",
+					version
+				);
+				maybe_kernel_handle = Some(handle);
+				break;
+			}
+			let kernel: Option<TxKernel> = ReadonlyPMMR::at(&handle.backend, 1).get_data(1);
+			if let Some(kernel) = kernel {
+				if kernel.verify().is_ok() {
+					debug!(
+						"attempting to open kernel PMMR using {:?} - SUCCESS",
+						version
+					);
+					maybe_kernel_handle = Some(handle);
+					break;
+				} else {
+					debug!(
+						"attempting to open kernel PMMR using {:?} - FAIL (verify failed)",
+						version
+					);
+				}
+			} else {
+				debug!(
+					"attempting to open kernel PMMR using {:?} - FAIL (read failed)",
+					version
+				);
+			}
+		}
+		if let Some(kernel_pmmr_h) = maybe_kernel_handle {
+			Ok(TxHashSet {
+				output_pmmr_h,
+				rproof_pmmr_h,
+				kernel_pmmr_h,
+				commit_index,
+			})
+		} else {
+			Err(ErrorKind::TxHashSetErr(format!("failed to open kernel PMMR")).into())
+		}
 	}
 
 	/// Close all backend file handles
@@ -192,7 +237,7 @@ impl TxHashSet {
 	}
 
 	/// as above, for kernels
-	pub fn last_n_kernel(&self, distance: u64) -> Vec<(Hash, TxKernelEntry)> {
+	pub fn last_n_kernel(&self, distance: u64) -> Vec<(Hash, TxKernel)> {
 		ReadonlyPMMR::at(&self.kernel_pmmr_h.backend, self.kernel_pmmr_h.last_pos)
 			.get_last_n_insertions(distance)
 	}
@@ -247,9 +292,9 @@ impl TxHashSet {
 		let mut index = max_index + 1;
 		while index > min_index {
 			index -= 1;
-			if let Some(t) = pmmr.get_data(index) {
-				if &t.kernel.excess == excess {
-					return Some((t.kernel, index));
+			if let Some(kernel) = pmmr.get_data(index) {
+				if &kernel.excess == excess {
+					return Some((kernel, index));
 				}
 			}
 		}
@@ -258,8 +303,6 @@ impl TxHashSet {
 
 	/// Get MMR roots.
 	pub fn roots(&self) -> TxHashSetRoots {
-		// let header_pmmr =
-		// 	ReadonlyPMMR::at(&self.header_pmmr_h.backend, self.header_pmmr_h.last_pos);
 		let output_pmmr =
 			ReadonlyPMMR::at(&self.output_pmmr_h.backend, self.output_pmmr_h.last_pos);
 		let rproof_pmmr =
@@ -268,7 +311,6 @@ impl TxHashSet {
 			ReadonlyPMMR::at(&self.kernel_pmmr_h.backend, self.kernel_pmmr_h.last_pos);
 
 		TxHashSetRoots {
-			// header_root: header_pmmr.root(),
 			output_root: output_pmmr.root(),
 			rproof_root: rproof_pmmr.root(),
 			kernel_root: kernel_pmmr.root(),
@@ -1192,8 +1234,7 @@ impl<'a> Extension<'a> {
 					.kernel_pmmr
 					.get_data(n)
 					.ok_or::<Error>(ErrorKind::TxKernelNotFound.into())?;
-
-				tx_kernels.push(kernel.kernel);
+				tx_kernels.push(kernel);
 			}
 
 			if tx_kernels.len() >= KERNEL_BATCH_SIZE || n >= self.kernel_pmmr.unpruned_size() {

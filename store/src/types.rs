@@ -185,6 +185,17 @@ pub struct AppendOnlyFile<T> {
 	_marker: marker::PhantomData<T>,
 }
 
+impl AppendOnlyFile<SizeEntry> {
+	fn sum_sizes(&self) -> io::Result<u64> {
+		let mut sum = 0;
+		for pos in 0..self.buffer_start_pos {
+			let entry = self.read_as_elmt(pos)?;
+			sum += entry.size as u64;
+		}
+		Ok(sum)
+	}
+}
+
 impl<T> AppendOnlyFile<T>
 where
 	T: Debug + Readable + Writeable,
@@ -215,8 +226,9 @@ where
 		// This will occur during "fast sync" as we do not sync the size_file
 		// and must build it locally.
 		// And we can *only* do this after init() the data file (so we know sizes).
+		let expected_size = aof.size()?;
 		if let SizeInfo::VariableSize(ref mut size_file) = &mut aof.size_info {
-			if size_file.size()? == 0 {
+			if size_file.sum_sizes()? != expected_size {
 				aof.rebuild_size_file()?;
 
 				// (Re)init the entire file as we just rebuilt the size_file
@@ -517,6 +529,7 @@ where
 		if let SizeInfo::VariableSize(ref mut size_file) = &mut self.size_info {
 			// Note: Reading from data file and writing sizes to the associated (tmp) size_file.
 			let tmp_path = size_file.path.with_extension("tmp");
+			debug!("rebuild_size_file: {:?}", tmp_path);
 
 			// Scope the reader and writer to within the block so we can safely replace files later on.
 			{
