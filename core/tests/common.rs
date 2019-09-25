@@ -15,12 +15,9 @@
 //! Common test functions
 
 use crate::keychain::{Identifier, Keychain};
-use grin_core::core::{
-	block::{Block, BlockHeader},
-	Transaction,
-};
+use grin_core::core::{Block, BlockHeader, KernelFeatures, Transaction};
 use grin_core::libtx::{
-	build::{self, input, output, with_fee},
+	build::{self, input, output, with_features},
 	proof::{ProofBuild, ProofBuilder},
 	reward,
 };
@@ -40,7 +37,7 @@ pub fn tx2i1o() -> Transaction {
 			input(10, key_id1),
 			input(11, key_id2),
 			output(19, key_id3),
-			with_fee(2),
+			with_features(KernelFeatures::Plain { fee: 2 }),
 		],
 		&keychain,
 		&builder,
@@ -56,7 +53,11 @@ pub fn tx1i1o() -> Transaction {
 	let key_id2 = keychain::ExtKeychain::derive_key_id(1, 2, 0, 0, 0);
 
 	build::transaction(
-		vec![input(5, key_id1), output(3, key_id2), with_fee(2)],
+		vec![
+			input(5, key_id1),
+			output(3, key_id2),
+			with_features(KernelFeatures::Plain { fee: 2 }),
+		],
 		&keychain,
 		&builder,
 	)
@@ -78,7 +79,7 @@ pub fn tx1i2o() -> Transaction {
 			input(6, key_id1),
 			output(3, key_id2),
 			output(1, key_id3),
-			with_fee(2),
+			with_features(KernelFeatures::Plain { fee: 2 }),
 		],
 		&keychain,
 		&builder,
@@ -124,7 +125,11 @@ where
 	B: ProofBuild,
 {
 	build::transaction(
-		vec![input(v, key_id1), output(3, key_id2), with_fee(2)],
+		vec![
+			input(v, key_id1),
+			output(3, key_id2),
+			with_features(KernelFeatures::Plain { fee: 2 }),
+		],
 		keychain,
 		builder,
 	)

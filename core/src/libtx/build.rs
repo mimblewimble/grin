@@ -22,10 +22,14 @@
 //! _transaction_ function.
 //!
 //! Example:
-//! build::transaction(vec![input_rand(75), output_rand(42), output_rand(32),
-//!   with_fee(1)])
+//! build::transaction(vec![
+//!     input_rand(75),
+//!     output_rand(42),
+//!     output_rand(32),
+//!     with_features(KernelFeatures::Plain{fee:2})
+//! ])
 
-use crate::core::{Input, Output, OutputFeatures, Transaction, TxKernel};
+use crate::core::{Input, KernelFeatures, Output, OutputFeatures, Transaction, TxKernel};
 use crate::keychain::{BlindSum, BlindingFactor, Identifier, Keychain};
 use crate::libtx::proof::{self, ProofBuild};
 use crate::libtx::{aggsig, Error};
@@ -44,11 +48,12 @@ where
 }
 
 /// Function type returned by the transaction combinators. Transforms a
-/// (Transaction, BlindSum) pair into another, provided some context.
+/// (Transaction, TxKernel, BlindSum) tuple into another, given the provided context.
+/// Will return an Err if seomthing went wrong at any point during transaction building.
 pub type Append<K, B> = dyn for<'a> Fn(
 	&'a mut Context<'_, K, B>,
-	(Transaction, TxKernel, BlindSum),
-) -> (Transaction, TxKernel, BlindSum);
+	Result<(Transaction, TxKernel, BlindSum), Error>,
+) -> Result<(Transaction, TxKernel, BlindSum), Error>;
 
 /// Adds an input with the provided value and blinding key to the transaction
 /// being built.
@@ -58,17 +63,22 @@ where
 	B: ProofBuild,
 {
 	Box::new(
-		move |build, (tx, kern, sum)| -> (Transaction, TxKernel, BlindSum) {
-			let commit = build
-				.keychain
-				.commit(value, &key_id, &SwitchCommitmentType::Regular)
-				.unwrap(); // TODO: proper support for different switch commitment schemes
-			let input = Input::new(features, commit);
-			(
-				tx.with_input(input),
-				kern,
-				sum.sub_key_id(key_id.to_value_path(value)),
-			)
+		move |build, acc| -> Result<(Transaction, TxKernel, BlindSum), Error> {
+			if let Ok((tx, kern, sum)) = acc {
+				let commit =
+					build
+						.keychain
+						.commit(value, &key_id, &SwitchCommitmentType::Regular)?;
+				// TODO: proper support for different switch commitment schemes
+				let input = Input::new(features, commit);
+				Ok((
+					tx.with_input(input),
+					kern,
+					sum.sub_key_id(key_id.to_value_path(value)),
+				))
+			} else {
+				acc
+			}
 		},
 	)
 }
@@ -105,11 +115,13 @@ where
 	B: ProofBuild,
 {
 	Box::new(
-		move |build, (tx, kern, sum)| -> (Transaction, TxKernel, BlindSum) {
+		move |build, acc| -> Result<(Transaction, TxKernel, BlindSum), Error> {
+			let (tx, kern, sum) = acc?;
+
 			// TODO: proper support for different switch commitment schemes
 			let switch = &SwitchCommitmentType::Regular;
 
-			let commit = build.keychain.commit(value, &key_id, switch).unwrap();
+			let commit = build.keychain.commit(value, &key_id, switch)?;
 
 			debug!("Building output: {}, {:?}", value, commit);
 
@@ -121,10 +133,9 @@ where
 				switch,
 				commit,
 				None,
-			)
-			.unwrap();
+			)?;
 
-			(
+			Ok((
 				tx.with_output(Output {
 					features: OutputFeatures::Plain,
 					commit,
@@ -132,33 +143,7 @@ where
 				}),
 				kern,
 				sum.add_key_id(key_id.to_value_path(value)),
-			)
-		},
-	)
-}
-
-/// Sets the fee on the transaction being built.
-pub fn with_fee<K, B>(fee: u64) -> Box<Append<K, B>>
-where
-	K: Keychain,
-	B: ProofBuild,
-{
-	Box::new(
-		move |_build, (tx, kern, sum)| -> (Transaction, TxKernel, BlindSum) {
-			(tx, kern.with_fee(fee), sum)
-		},
-	)
-}
-
-/// Sets the lock_height on the transaction being built.
-pub fn with_lock_height<K, B>(lock_height: u64) -> Box<Append<K, B>>
-where
-	K: Keychain,
-	B: ProofBuild,
-{
-	Box::new(
-		move |_build, (tx, kern, sum)| -> (Transaction, TxKernel, BlindSum) {
-			(tx, kern.with_lock_height(lock_height), sum)
+			))
 		},
 	)
 }
@@ -172,21 +157,21 @@ where
 	B: ProofBuild,
 {
 	Box::new(
-		move |_build, (tx, kern, sum)| -> (Transaction, TxKernel, BlindSum) {
-			(tx, kern, sum.add_blinding_factor(excess.clone()))
+		move |_build, acc| -> Result<(Transaction, TxKernel, BlindSum), Error> {
+			acc.map(|(tx, kern, sum)| (tx, kern, sum.add_blinding_factor(excess.clone())))
 		},
 	)
 }
 
-/// Sets a known tx "offset". Used in final step of tx construction.
-pub fn with_offset<K, B>(offset: BlindingFactor) -> Box<Append<K, B>>
+/// Sets the kernel features.
+pub fn with_features<K, B>(features: KernelFeatures) -> Box<Append<K, B>>
 where
 	K: Keychain,
 	B: ProofBuild,
 {
 	Box::new(
-		move |_build, (tx, kern, sum)| -> (Transaction, TxKernel, BlindSum) {
-			(tx.with_offset(offset.clone()), kern, sum)
+		move |_build, acc| -> Result<(Transaction, TxKernel, BlindSum), Error> {
+			acc.map(|(tx, kern, sum)| (tx, kern.with_features(features), sum))
 		},
 	)
 }
@@ -202,8 +187,8 @@ where
 	assert_eq!(tx.kernels().len(), 1);
 	let kern = tx.kernels_mut().remove(0);
 	Box::new(
-		move |_build, (_, _, sum)| -> (Transaction, TxKernel, BlindSum) {
-			(tx.clone(), kern.clone(), sum)
+		move |_build, acc| -> Result<(Transaction, TxKernel, BlindSum), Error> {
+			acc.map(|(_, _, sum)| (tx.clone(), kern.clone(), sum))
 		},
 	)
 }
@@ -214,9 +199,9 @@ where
 ///
 /// Example:
 /// let (tx1, sum) = build::transaction(vec![input_rand(4), output_rand(1),
-///   with_fee(1)], keychain).unwrap();
+///   with_features(KernelFeatures::Plain{fee: 1})], keychain)?;
 /// let (tx2, _) = build::transaction(vec![initial_tx(tx1), with_excess(sum),
-///   output_rand(2)], keychain).unwrap();
+///   output_rand(2)], keychain)?;
 ///
 pub fn partial_transaction<K, B>(
 	elems: Vec<Box<Append<K, B>>>,
@@ -229,16 +214,12 @@ where
 {
 	let mut ctx = Context { keychain, builder };
 	let (tx, kern, sum) = elems.iter().fold(
-		(Transaction::empty(), TxKernel::empty(), BlindSum::new()),
+		Ok((Transaction::empty(), TxKernel::empty(), BlindSum::new())),
 		|acc, elem| elem(&mut ctx, acc),
-	);
-	let blind_sum = ctx.keychain.blind_sum(&sum)?;
-
-	// we only support building a tx with a single kernel via build::transaction()
-	assert!(tx.kernels().is_empty());
+	)?;
 
 	let tx = tx.with_kernel(kern);
-
+	let blind_sum = ctx.keychain.blind_sum(&sum)?;
 	Ok((tx, blind_sum))
 }
 
@@ -254,9 +235,9 @@ where
 {
 	let mut ctx = Context { keychain, builder };
 	let (mut tx, mut kern, sum) = elems.iter().fold(
-		(Transaction::empty(), TxKernel::empty(), BlindSum::new()),
+		Ok((Transaction::empty(), TxKernel::empty(), BlindSum::new())),
 		|acc, elem| elem(&mut ctx, acc),
-	);
+	)?;
 	let blind_sum = ctx.keychain.blind_sum(&sum)?;
 
 	// Split the key so we can generate an offset for the tx.
@@ -271,17 +252,14 @@ where
 	let skey = k1.secret_key(&keychain.secp())?;
 	kern.excess = ctx.keychain.secp().commit(0, skey)?;
 	let pubkey = &kern.excess.to_pubkey(&keychain.secp())?;
-	kern.excess_sig =
-		aggsig::sign_with_blinding(&keychain.secp(), &msg, &k1, Some(&pubkey)).unwrap();
+	kern.excess_sig = aggsig::sign_with_blinding(&keychain.secp(), &msg, &k1, Some(&pubkey))?;
 
 	// Store the kernel offset (k2) on the tx.
 	// Commitments will sum correctly when accounting for the offset.
 	tx.offset = k2.clone();
 
 	// Set the kernel on the tx (assert this is now a single-kernel tx).
-	assert!(tx.kernels().is_empty());
 	let tx = tx.with_kernel(kern);
-	assert_eq!(tx.kernels().len(), 1);
 
 	Ok(tx)
 }
@@ -317,7 +295,7 @@ mod test {
 				input(10, key_id1),
 				input(12, key_id2),
 				output(20, key_id3),
-				with_fee(2),
+				with_features(KernelFeatures::Plain { fee: 2 }),
 			],
 			&keychain,
 			&builder,
@@ -342,7 +320,7 @@ mod test {
 				input(10, key_id1),
 				input(12, key_id2),
 				output(20, key_id3),
-				with_fee(2),
+				with_features(KernelFeatures::Plain { fee: 2 }),
 			],
 			&keychain,
 			&builder,
@@ -362,7 +340,11 @@ mod test {
 		let vc = verifier_cache();
 
 		let tx = transaction(
-			vec![input(6, key_id1), output(2, key_id2), with_fee(4)],
+			vec![
+				input(6, key_id1),
+				output(2, key_id2),
+				with_features(KernelFeatures::Plain { fee: 4 }),
+			],
 			&keychain,
 			&builder,
 		)

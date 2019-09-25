@@ -21,9 +21,7 @@ use self::core::core::block::Error::KernelLockHeight;
 use self::core::core::hash::{Hashed, ZERO_HASH};
 use self::core::core::verifier_cache::{LruVerifierCache, VerifierCache};
 use self::core::core::{aggregate, deaggregate, KernelFeatures, Output, Transaction, Weighting};
-use self::core::libtx::build::{
-	self, initial_tx, input, output, with_excess, with_fee, with_lock_height,
-};
+use self::core::libtx::build::{self, initial_tx, input, output, with_excess, with_features};
 use self::core::libtx::ProofBuilder;
 use self::core::ser;
 use self::keychain::{BlindingFactor, ExtKeychain, Keychain};
@@ -124,7 +122,7 @@ fn build_tx_kernel() {
 			input(10, key_id1),
 			output(5, key_id2),
 			output(3, key_id3),
-			with_fee(2),
+			with_features(KernelFeatures::Plain { fee: 2 }),
 		],
 		&keychain,
 		&builder,
@@ -377,7 +375,7 @@ fn hash_output() {
 			input(75, key_id1),
 			output(42, key_id2),
 			output(32, key_id3),
-			with_fee(1),
+			with_features(KernelFeatures::Plain { fee: 1 }),
 		],
 		&keychain,
 		&builder,
@@ -440,7 +438,12 @@ fn tx_build_exchange() {
 		// Alice builds her transaction, with change, which also produces the sum
 		// of blinding factors before they're obscured.
 		let (tx, sum) = build::partial_transaction(
-			vec![in1, in2, output(1, key_id3), with_fee(2)],
+			vec![
+				in1,
+				in2,
+				output(1, key_id3),
+				with_features(KernelFeatures::Plain { fee: 2 }),
+			],
 			&keychain,
 			&builder,
 		)
@@ -550,8 +553,10 @@ fn test_block_with_timelocked_tx() {
 		vec![
 			input(5, key_id1.clone()),
 			output(3, key_id2.clone()),
-			with_fee(2),
-			with_lock_height(1),
+			with_features(KernelFeatures::HeightLocked {
+				fee: 2,
+				lock_height: 1,
+			}),
 		],
 		&keychain,
 		&builder,
@@ -575,8 +580,10 @@ fn test_block_with_timelocked_tx() {
 		vec![
 			input(5, key_id1.clone()),
 			output(3, key_id2.clone()),
-			with_fee(2),
-			with_lock_height(2),
+			with_features(KernelFeatures::HeightLocked {
+				fee: 2,
+				lock_height: 2,
+			}),
 		],
 		&keychain,
 		&builder,
