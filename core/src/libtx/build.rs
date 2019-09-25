@@ -22,12 +22,14 @@
 //! _transaction_ function.
 //!
 //! Example:
-//! build::transaction(vec![
+//! build::transaction(
+//!   KernelFeatures::Plain{ fee: 2 },
+//!   vec![
 //!     input_rand(75),
 //!     output_rand(42),
 //!     output_rand(32),
-//!     with_features(KernelFeatures::Plain{fee:2})
-//! ])
+//!   ]
+//! )
 
 use crate::core::{Input, KernelFeatures, Output, OutputFeatures, Transaction, TxKernel};
 use crate::keychain::{BlindSum, BlindingFactor, Identifier, Keychain};
@@ -163,19 +165,6 @@ where
 	)
 }
 
-/// Sets the kernel features.
-pub fn with_features<K, B>(features: KernelFeatures) -> Box<Append<K, B>>
-where
-	K: Keychain,
-	B: ProofBuild,
-{
-	Box::new(
-		move |_build, acc| -> Result<(Transaction, TxKernel, BlindSum), Error> {
-			acc.map(|(tx, kern, sum)| (tx, kern.with_features(features), sum))
-		},
-	)
-}
-
 /// Sets an initial transaction to add to when building a new transaction.
 /// We currently only support building a tx with a single kernel with
 /// build::transaction()
@@ -204,6 +193,7 @@ where
 ///   output_rand(2)], keychain)?;
 ///
 pub fn partial_transaction<K, B>(
+	features: KernelFeatures,
 	elems: Vec<Box<Append<K, B>>>,
 	keychain: &K,
 	builder: &B,
@@ -214,7 +204,11 @@ where
 {
 	let mut ctx = Context { keychain, builder };
 	let (tx, kern, sum) = elems.iter().fold(
-		Ok((Transaction::empty(), TxKernel::empty(), BlindSum::new())),
+		Ok((
+			Transaction::empty(),
+			TxKernel::with_features(features),
+			BlindSum::new(),
+		)),
 		|acc, elem| elem(&mut ctx, acc),
 	)?;
 
@@ -225,6 +219,7 @@ where
 
 /// Builds a complete transaction.
 pub fn transaction<K, B>(
+	features: KernelFeatures,
 	elems: Vec<Box<Append<K, B>>>,
 	keychain: &K,
 	builder: &B,
@@ -235,7 +230,11 @@ where
 {
 	let mut ctx = Context { keychain, builder };
 	let (mut tx, mut kern, sum) = elems.iter().fold(
-		Ok((Transaction::empty(), TxKernel::empty(), BlindSum::new())),
+		Ok((
+			Transaction::empty(),
+			TxKernel::with_features(features),
+			BlindSum::new(),
+		)),
 		|acc, elem| elem(&mut ctx, acc),
 	)?;
 	let blind_sum = ctx.keychain.blind_sum(&sum)?;
@@ -291,12 +290,8 @@ mod test {
 		let vc = verifier_cache();
 
 		let tx = transaction(
-			vec![
-				input(10, key_id1),
-				input(12, key_id2),
-				output(20, key_id3),
-				with_features(KernelFeatures::Plain { fee: 2 }),
-			],
+			KernelFeatures::Plain { fee: 2 },
+			vec![input(10, key_id1), input(12, key_id2), output(20, key_id3)],
 			&keychain,
 			&builder,
 		)
@@ -316,12 +311,8 @@ mod test {
 		let vc = verifier_cache();
 
 		let tx = transaction(
-			vec![
-				input(10, key_id1),
-				input(12, key_id2),
-				output(20, key_id3),
-				with_features(KernelFeatures::Plain { fee: 2 }),
-			],
+			KernelFeatures::Plain { fee: 2 },
+			vec![input(10, key_id1), input(12, key_id2), output(20, key_id3)],
 			&keychain,
 			&builder,
 		)
@@ -340,11 +331,8 @@ mod test {
 		let vc = verifier_cache();
 
 		let tx = transaction(
-			vec![
-				input(6, key_id1),
-				output(2, key_id2),
-				with_features(KernelFeatures::Plain { fee: 4 }),
-			],
+			KernelFeatures::Plain { fee: 4 },
+			vec![input(6, key_id1), output(2, key_id2)],
 			&keychain,
 			&builder,
 		)

@@ -463,16 +463,16 @@ impl TxKernel {
 
 	/// Build an empty tx kernel with zero values.
 	pub fn empty() -> TxKernel {
+		TxKernel::with_features(KernelFeatures::Plain { fee: 0 })
+	}
+
+	/// Build an empty tx kernel with the provided kernel features.
+	pub fn with_features(features: KernelFeatures) -> TxKernel {
 		TxKernel {
-			features: KernelFeatures::Plain { fee: 0 },
+			features,
 			excess: Commitment::from_vec(vec![0; 33]),
 			excess_sig: secp::Signature::from_raw_data(&[0; 64]).unwrap(),
 		}
-	}
-
-	/// Build a new tx kernel with the provided kernel feature variant.
-	pub fn with_features(self, features: KernelFeatures) -> TxKernel {
-		TxKernel { features, ..self }
 	}
 }
 

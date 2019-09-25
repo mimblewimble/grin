@@ -21,7 +21,7 @@ use self::core::core::block::Error::KernelLockHeight;
 use self::core::core::hash::{Hashed, ZERO_HASH};
 use self::core::core::verifier_cache::{LruVerifierCache, VerifierCache};
 use self::core::core::{aggregate, deaggregate, KernelFeatures, Output, Transaction, Weighting};
-use self::core::libtx::build::{self, initial_tx, input, output, with_excess, with_features};
+use self::core::libtx::build::{self, initial_tx, input, output, with_excess};
 use self::core::libtx::ProofBuilder;
 use self::core::ser;
 use self::keychain::{BlindingFactor, ExtKeychain, Keychain};
@@ -97,6 +97,7 @@ fn test_zero_commit_fails() {
 
 	// blinding should fail as signing with a zero r*G shouldn't work
 	build::transaction(
+		KernelFeatures::Plain { fee: 0 },
 		vec![input(10, key_id1.clone()), output(10, key_id1.clone())],
 		&keychain,
 		&builder,
@@ -118,12 +119,8 @@ fn build_tx_kernel() {
 
 	// first build a valid tx with corresponding blinding factor
 	let tx = build::transaction(
-		vec![
-			input(10, key_id1),
-			output(5, key_id2),
-			output(3, key_id3),
-			with_features(KernelFeatures::Plain { fee: 2 }),
-		],
+		KernelFeatures::Plain { fee: 2 },
+		vec![input(10, key_id1), output(5, key_id2), output(3, key_id3)],
 		&keychain,
 		&builder,
 	)
@@ -371,12 +368,8 @@ fn hash_output() {
 	let key_id3 = ExtKeychain::derive_key_id(1, 3, 0, 0, 0);
 
 	let tx = build::transaction(
-		vec![
-			input(75, key_id1),
-			output(42, key_id2),
-			output(32, key_id3),
-			with_features(KernelFeatures::Plain { fee: 1 }),
-		],
+		KernelFeatures::Plain { fee: 1 },
+		vec![input(75, key_id1), output(42, key_id2), output(32, key_id3)],
 		&keychain,
 		&builder,
 	)
@@ -438,12 +431,8 @@ fn tx_build_exchange() {
 		// Alice builds her transaction, with change, which also produces the sum
 		// of blinding factors before they're obscured.
 		let (tx, sum) = build::partial_transaction(
-			vec![
-				in1,
-				in2,
-				output(1, key_id3),
-				with_features(KernelFeatures::Plain { fee: 2 }),
-			],
+			KernelFeatures::Plain { fee: 2 },
+			vec![in1, in2, output(1, key_id3)],
 			&keychain,
 			&builder,
 		)
@@ -456,6 +445,7 @@ fn tx_build_exchange() {
 	// blinding factors. He adds his output, finalizes the transaction so it's
 	// ready for broadcast.
 	let tx_final = build::transaction(
+		KernelFeatures::Plain { fee: 0 },
 		vec![
 			initial_tx(tx_alice),
 			with_excess(blind_sum),
@@ -550,14 +540,11 @@ fn test_block_with_timelocked_tx() {
 	// first check we can add a timelocked tx where lock height matches current
 	// block height and that the resulting block is valid
 	let tx1 = build::transaction(
-		vec![
-			input(5, key_id1.clone()),
-			output(3, key_id2.clone()),
-			with_features(KernelFeatures::HeightLocked {
-				fee: 2,
-				lock_height: 1,
-			}),
-		],
+		KernelFeatures::HeightLocked {
+			fee: 2,
+			lock_height: 1,
+		},
+		vec![input(5, key_id1.clone()), output(3, key_id2.clone())],
 		&keychain,
 		&builder,
 	)
@@ -577,14 +564,11 @@ fn test_block_with_timelocked_tx() {
 	// now try adding a timelocked tx where lock height is greater than current
 	// block height
 	let tx1 = build::transaction(
-		vec![
-			input(5, key_id1.clone()),
-			output(3, key_id2.clone()),
-			with_features(KernelFeatures::HeightLocked {
-				fee: 2,
-				lock_height: 2,
-			}),
-		],
+		KernelFeatures::HeightLocked {
+			fee: 2,
+			lock_height: 2,
+		},
+		vec![input(5, key_id1.clone()), output(3, key_id2.clone())],
 		&keychain,
 		&builder,
 	)
