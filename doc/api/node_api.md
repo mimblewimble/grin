@@ -1,4 +1,4 @@
-# Node API Documentation
+ # Node API Documentation
 
 ## Table of Contents
 
@@ -10,7 +10,7 @@
     1. [GET Chain](#get-chain)
     1. [POST Chain Compact](#post-chain-compact)
     1. [GET Chain Validate](#get-chain-validate)
-    1. [GET Chain Kernel by Commitment](#get-chain-kernels-by-commitment)
+    1. [GET Chain Kernel by Commitment](#get-chain-kernel-by-commitment)
     1. [GET Chain Outputs by IDs](#get-chain-outputs-by-ids)
     1. [GET Chain Outputs by Height](#get-chain-outputs-by-height)
 1. [Status Endpoint](#status-endpoint)
