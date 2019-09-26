@@ -40,7 +40,7 @@ use crate::common::stats::{
 	ChainStats, DiffBlock, DiffStats, PeerStats, ServerStateInfo, ServerStats, TxStats,
 };
 use crate::common::types::{Error, ServerConfig, StratumServerConfig};
-use crate::core::core::hash::{Hashed, ZERO_HASH};
+use crate::core::core::hash::Hashed;
 use crate::core::core::verifier_cache::{LruVerifierCache, VerifierCache};
 use crate::core::ser::ProtocolVersion;
 use crate::core::{consensus, genesis, global, pow};
@@ -436,9 +436,6 @@ impl Server {
 			let tip_height = self.head()?.height as i64;
 			let mut height = tip_height as i64 - last_blocks.len() as i64 + 1;
 
-			let header_pmmr = self.chain.header_pmmr();
-			let header_pmmr = header_pmmr.read();
-
 			let diff_entries: Vec<DiffBlock> = last_blocks
 				.windows(2)
 				.map(|pair| {
@@ -447,21 +444,9 @@ impl Server {
 
 					height += 1;
 
-					// Use header hash if real header.
-					// Default to "zero" hash if synthetic header_info.
-					let hash = if height >= 0 {
-						if let Ok(hash) = header_pmmr.get_header_hash_by_height(height as u64) {
-							hash
-						} else {
-							ZERO_HASH
-						}
-					} else {
-						ZERO_HASH
-					};
-
 					DiffBlock {
 						block_height: height,
-						block_hash: hash,
+						block_hash: next.block_hash,
 						difficulty: next.difficulty.to_num(),
 						time: next.timestamp,
 						duration: next.timestamp - prev.timestamp,

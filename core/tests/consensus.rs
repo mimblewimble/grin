@@ -86,6 +86,7 @@ fn repeat(interval: u64, diff: HeaderInfo, len: u64, cur_time: Option<u64>) -> V
 	pairs
 		.map(|(t, d)| {
 			HeaderInfo::new(
+				diff.block_hash,
 				cur_time + t as u64,
 				d.clone(),
 				diff.secondary_scaling,
