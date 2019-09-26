@@ -359,7 +359,7 @@ Look up an on-chain kernel and the height of the block it is included in. By def
     |:-------------|:-------|:--------------------------------------------------------------------------------|
     | tx_kernel    | object | Transaction Kernel                                                              |
     | - features   | object | The type of output Coinbase|Transaction                                         |
-    | - features   | object | The kernel features. Can either be `Plain`, `Coinbase` or `HeightLockedKernel`. |
+    | - features   | object | The kernel features. Can either be `Plain`, `Coinbase` or `HeightLocked`. |
     | - excess     | string | The kernel excess also called commitment                                        |
     | - excess_sig | string | The excess signature                                                            |
     | height       | string | THe height of the block this kernel is included in                              |
