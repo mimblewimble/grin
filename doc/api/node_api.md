@@ -1,4 +1,4 @@
- # Node API Documentation
+# Node API Documentation
 
 ## Table of Contents
 
