@@ -562,6 +562,7 @@ impl<'a> Iterator for DifficultyIter<'a> {
 			let scaling = header.pow.secondary_scaling;
 
 			Some(HeaderInfo::new(
+				header.hash(),
 				header.timestamp.timestamp() as u64,
 				difficulty,
 				scaling,
