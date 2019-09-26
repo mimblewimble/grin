@@ -103,6 +103,7 @@ pub fn build_router(
 		"get chain".to_string(),
 		"post chain/compact".to_string(),
 		"get chain/validate".to_string(),
+		"get chain/kernels/xxx?min_height=yyy&max_height=zzz".to_string(),
 		"get chain/outputs/byids?id=xxx,yyy,zzz".to_string(),
 		"get chain/outputs/byheight?start_height=101&end_height=200".to_string(),
 		"get status".to_string(),
