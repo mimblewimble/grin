@@ -495,7 +495,7 @@ impl Server {
 			stem_pool_size: self.tx_pool.read().stempool.entries.len(),
 		};
 
-		let head = self.chain.head_header().unwrap();
+		let head = self.chain.head_header()?;
 		let head_stats = ChainStats {
 			latest_timestamp: head.timestamp,
 			height: head.height,
@@ -503,8 +503,8 @@ impl Server {
 			total_difficulty: head.total_difficulty(),
 		};
 
-		let header_tip = self.chain.header_head().unwrap();
-		let header = self.chain.get_block_header(&header_tip.hash()).unwrap();
+		let header_tip = self.chain.header_head()?;
+		let header = self.chain.get_block_header(&header_tip.hash())?;
 		let header_stats = ChainStats {
 			latest_timestamp: header.timestamp,
 			height: header.height,
