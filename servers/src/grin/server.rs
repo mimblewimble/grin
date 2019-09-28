@@ -475,9 +475,17 @@ impl Server {
 			.map(|p| PeerStats::from_peer(&p))
 			.collect();
 
+		let (tx_pool_size, stem_pool_size) = {
+			let tx_pool_lock = self.tx_pool.try_read();
+			match tx_pool_lock {
+				Some(l) => (l.txpool.entries.len(), l.stempool.entries.len()),
+				None => (0, 0),
+			}
+		};
+
 		let tx_stats = TxStats {
-			tx_pool_size: self.tx_pool.read().txpool.entries.len(),
-			stem_pool_size: self.tx_pool.read().stempool.entries.len(),
+			tx_pool_size,
+			stem_pool_size,
 		};
 
 		let head = self.chain.head_header()?;
