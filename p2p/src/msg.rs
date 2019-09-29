@@ -14,6 +14,7 @@
 
 //! Message types that transit over the network and related serialization code.
 
+use crate::conn::Tracker;
 use crate::core::core::hash::Hash;
 use crate::core::core::BlockHeader;
 use crate::core::pow::Difficulty;
@@ -25,7 +26,9 @@ use crate::types::{
 	Capabilities, Error, PeerAddr, ReasonForBan, MAX_BLOCK_HEADERS, MAX_LOCATORS, MAX_PEER_ADDRS,
 };
 use num::FromPrimitive;
+use std::fs::File;
 use std::io::{Read, Write};
+use std::sync::Arc;
 
 /// Grin's user agent with current version
 pub const USER_AGENT: &'static str = concat!("MW/Grin ", env!("CARGO_PKG_VERSION"));
@@ -114,6 +117,33 @@ fn magic() -> [u8; 2] {
 	}
 }
 
+pub struct Msg {
+	header: MsgHeader,
+	body: Vec<u8>,
+	attachment: Option<File>,
+	version: ProtocolVersion,
+}
+
+impl Msg {
+	pub fn new<T: Writeable>(
+		msg_type: Type,
+		msg: T,
+		version: ProtocolVersion,
+	) -> Result<Msg, Error> {
+		let body = ser::ser_vec(&msg, version)?;
+		Ok(Msg {
+			header: MsgHeader::new(msg_type, body.len() as u64),
+			body,
+			attachment: None,
+			version,
+		})
+	}
+
+	pub fn add_attachment(&mut self, attachment: File) {
+		self.attachment = Some(attachment)
+	}
+}
+
 /// Read a header from the provided stream without blocking if the
 /// underlying stream is async. Typically headers will be polled for, so
 /// we do not want to block.
@@ -182,32 +212,31 @@ pub fn read_message<T: Readable>(
 	}
 }
 
-pub fn write_to_buf<T: Writeable>(
-	msg: T,
-	msg_type: Type,
-	version: ProtocolVersion,
-) -> Result<Vec<u8>, Error> {
-	// prepare the body first so we know its serialized length
-	let mut body_buf = vec![];
-	ser::serialize(&mut body_buf, version, &msg)?;
-
-	// build and serialize the header using the body size
-	let mut msg_buf = vec![];
-	let blen = body_buf.len() as u64;
-	ser::serialize(&mut msg_buf, version, &MsgHeader::new(msg_type, blen))?;
-	msg_buf.append(&mut body_buf);
-
-	Ok(msg_buf)
-}
-
-pub fn write_message<T: Writeable>(
+pub fn write_message(
 	stream: &mut dyn Write,
-	msg: T,
-	msg_type: Type,
-	version: ProtocolVersion,
+	msg: &Msg,
+	tracker: Arc<Tracker>,
 ) -> Result<(), Error> {
-	let buf = write_to_buf(msg, msg_type, version)?;
+	let mut buf = ser::ser_vec(&msg.header, msg.version)?;
+	buf.extend(&msg.body[..]);
 	stream.write_all(&buf[..])?;
+	tracker.inc_sent(buf.len() as u64);
+	if let Some(file) = &msg.attachment {
+		let mut file = file.try_clone()?;
+		let mut buf = [0u8; 8000];
+		loop {
+			match file.read(&mut buf[..]) {
+				Ok(0) => break,
+				Ok(n) => {
+					stream.write_all(&buf[..n])?;
+					// Increase sent bytes "quietly" without incrementing the counter.
+					// (In a loop here for the single attachment).
+					tracker.inc_quiet_sent(n as u64);
+				}
+				Err(e) => return Err(From::from(e)),
+			}
+		}
+	}
 	Ok(())
 }
 

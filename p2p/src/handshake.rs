@@ -12,10 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use crate::conn::Tracker;
 use crate::core::core::hash::Hash;
 use crate::core::pow::Difficulty;
 use crate::core::ser::ProtocolVersion;
-use crate::msg::{read_message, write_message, Hand, Shake, Type, USER_AGENT};
+use crate::msg::{read_message, write_message, Hand, Msg, Shake, Type, USER_AGENT};
 use crate::peer::Peer;
 use crate::types::{Capabilities, Direction, Error, P2PConfig, PeerAddr, PeerInfo, PeerLiveInfo};
 use crate::util::RwLock;
@@ -47,6 +48,7 @@ pub struct Handshake {
 	genesis: Hash,
 	config: P2PConfig,
 	protocol_version: ProtocolVersion,
+	tracker: Arc<Tracker>,
 }
 
 impl Handshake {
@@ -58,6 +60,7 @@ impl Handshake {
 			genesis,
 			config,
 			protocol_version: ProtocolVersion::local(),
+			tracker: Arc::new(Tracker::new()),
 		}
 	}
 
@@ -99,7 +102,8 @@ impl Handshake {
 		};
 
 		// write and read the handshake response
-		write_message(conn, hand, Type::Hand, self.protocol_version)?;
+		let msg = Msg::new(Type::Hand, hand, self.protocol_version)?;
+		write_message(conn, &msg, self.tracker.clone())?;
 
 		let shake: Shake = read_message(conn, self.protocol_version, Type::Shake)?;
 		if shake.genesis != self.genesis {
@@ -196,7 +200,9 @@ impl Handshake {
 			user_agent: USER_AGENT.to_string(),
 		};
 
-		write_message(conn, shake, Type::Shake, negotiated_version)?;
+		let msg = Msg::new(Type::Shake, shake, negotiated_version)?;
+		write_message(conn, &msg, self.tracker.clone())?;
+
 		trace!("Success handshake with {}.", peer_info.addr);
 
 		Ok(peer_info)

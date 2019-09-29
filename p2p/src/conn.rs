@@ -23,12 +23,11 @@
 use crate::core::ser;
 use crate::core::ser::{FixedLength, ProtocolVersion};
 use crate::msg::{
-	read_body, read_discard, read_header, read_item, write_to_buf, MsgHeader, MsgHeaderWrapper,
-	Type,
+	read_body, read_discard, read_header, read_item, write_message, Msg, MsgHeader,
+	MsgHeaderWrapper,
 };
 use crate::types::Error;
 use crate::util::{RateCounter, RwLock};
-use std::fs::File;
 use std::io::{self, Read, Write};
 use std::net::{Shutdown, TcpStream};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -44,12 +43,7 @@ const IO_TIMEOUT: Duration = Duration::from_millis(1000);
 /// A trait to be implemented in order to receive messages from the
 /// connection. Allows providing an optional response.
 pub trait MessageHandler: Send + 'static {
-	fn consume<'a>(
-		&self,
-		msg: Message<'a>,
-		writer: &'a mut dyn Write,
-		tracker: Arc<Tracker>,
-	) -> Result<Option<Response<'a>>, Error>;
+	fn consume<'a>(&self, msg: Message<'a>, tracker: Arc<Tracker>) -> Result<Option<Msg>, Error>;
 }
 
 // Macro to simplify the boilerplate around async I/O error handling,
@@ -121,64 +115,6 @@ impl<'a> Message<'a> {
 	}
 }
 
-/// Response to a `Message`.
-pub struct Response<'a> {
-	resp_type: Type,
-	body: Vec<u8>,
-	version: ProtocolVersion,
-	stream: &'a mut dyn Write,
-	attachment: Option<File>,
-}
-
-impl<'a> Response<'a> {
-	pub fn new<T: ser::Writeable>(
-		resp_type: Type,
-		version: ProtocolVersion,
-		body: T,
-		stream: &'a mut dyn Write,
-	) -> Result<Response<'a>, Error> {
-		let body = ser::ser_vec(&body, version)?;
-		Ok(Response {
-			resp_type,
-			body,
-			version,
-			stream,
-			attachment: None,
-		})
-	}
-
-	fn write(mut self, tracker: Arc<Tracker>) -> Result<(), Error> {
-		let mut msg = ser::ser_vec(
-			&MsgHeader::new(self.resp_type, self.body.len() as u64),
-			self.version,
-		)?;
-		msg.append(&mut self.body);
-		self.stream.write_all(&msg[..])?;
-		tracker.inc_sent(msg.len() as u64);
-
-		if let Some(mut file) = self.attachment {
-			let mut buf = [0u8; 8000];
-			loop {
-				match file.read(&mut buf[..]) {
-					Ok(0) => break,
-					Ok(n) => {
-						self.stream.write_all(&buf[..n])?;
-						// Increase sent bytes "quietly" without incrementing the counter.
-						// (In a loop here for the single attachment).
-						tracker.inc_quiet_sent(n as u64);
-					}
-					Err(e) => return Err(From::from(e)),
-				}
-			}
-		}
-		Ok(())
-	}
-
-	pub fn add_attachment(&mut self, file: File) {
-		self.attachment = Some(file);
-	}
-}
-
 pub const SEND_CHANNEL_CAP: usize = 100;
 
 pub struct StopHandle {
@@ -220,20 +156,16 @@ impl StopHandle {
 	}
 }
 
+#[derive(Clone)]
 pub struct ConnHandle {
 	/// Channel to allow sending data through the connection
-	pub send_channel: mpsc::SyncSender<Vec<u8>>,
+	pub send_channel: mpsc::SyncSender<Msg>,
 }
 
 impl ConnHandle {
-	pub fn send<T>(&self, body: T, msg_type: Type, version: ProtocolVersion) -> Result<u64, Error>
-	where
-		T: ser::Writeable,
-	{
-		let buf = write_to_buf(body, msg_type, version)?;
-		let buf_len = buf.len();
-		self.send_channel.try_send(buf)?;
-		Ok(buf_len as u64)
+	pub fn send(&self, msg: Msg) -> Result<(), Error> {
+		self.send_channel.try_send(msg)?;
+		Ok(())
 	}
 }
 
@@ -294,13 +226,22 @@ where
 
 	let stopped = Arc::new(AtomicBool::new(false));
 
-	let (reader_thread, writer_thread) =
-		poll(stream, version, handler, send_rx, stopped.clone(), tracker)?;
+	let conn_handle = ConnHandle {
+		send_channel: send_tx,
+	};
+
+	let (reader_thread, writer_thread) = poll(
+		stream,
+		conn_handle.clone(),
+		version,
+		handler,
+		send_rx,
+		stopped.clone(),
+		tracker,
+	)?;
 
 	Ok((
-		ConnHandle {
-			send_channel: send_tx,
-		},
+		conn_handle,
 		StopHandle {
 			stopped,
 			reader_thread: Some(reader_thread),
@@ -311,9 +252,10 @@ where
 
 fn poll<H>(
 	conn: TcpStream,
+	conn_handle: ConnHandle,
 	version: ProtocolVersion,
 	handler: H,
-	send_rx: mpsc::Receiver<Vec<u8>>,
+	send_rx: mpsc::Receiver<Msg>,
 	stopped: Arc<AtomicBool>,
 	tracker: Arc<Tracker>,
 ) -> io::Result<(JoinHandle<()>, JoinHandle<()>)>
@@ -323,8 +265,10 @@ where
 	// Split out tcp stream out into separate reader/writer halves.
 	let mut reader = conn.try_clone().expect("clone conn for reader failed");
 	let mut writer = conn.try_clone().expect("clone conn for writer failed");
-	let mut responder = conn.try_clone().expect("clone conn for writer failed");
 	let reader_stopped = stopped.clone();
+
+	let reader_tracker = tracker.clone();
+	let writer_tracker = tracker.clone();
 
 	let reader_thread = thread::Builder::new()
 		.name("peer_read".to_string())
@@ -342,17 +286,16 @@ where
 						);
 
 						// Increase received bytes counter
-						tracker.inc_received(MsgHeader::LEN as u64 + msg.header.msg_len);
+						reader_tracker.inc_received(MsgHeader::LEN as u64 + msg.header.msg_len);
 
-						if let Some(Some(resp)) =
-							try_break!(handler.consume(msg, &mut responder, tracker.clone()))
-						{
-							try_break!(resp.write(tracker.clone()));
+						let resp_msg = try_break!(handler.consume(msg, reader_tracker.clone()));
+						if let Some(Some(resp_msg)) = resp_msg {
+							try_break!(conn_handle.send(resp_msg));
 						}
 					}
 					Some(MsgHeaderWrapper::Unknown(msg_len)) => {
 						// Increase received bytes counter
-						tracker.inc_received(MsgHeader::LEN as u64 + msg_len);
+						reader_tracker.inc_received(MsgHeader::LEN as u64 + msg_len);
 
 						try_break!(read_discard(msg_len, &mut reader));
 					}
@@ -383,7 +326,8 @@ where
 				let maybe_data = retry_send.or_else(|_| send_rx.recv_timeout(IO_TIMEOUT));
 				retry_send = Err(());
 				if let Ok(data) = maybe_data {
-					let written = try_break!(writer.write_all(&data[..]).map_err(&From::from));
+					let written =
+						try_break!(write_message(&mut writer, &data, writer_tracker.clone()));
 					if written.is_none() {
 						retry_send = Ok(data);
 					}
