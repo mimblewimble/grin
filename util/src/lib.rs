@@ -42,9 +42,6 @@ pub use crate::logger::{init_logger, init_test_logger};
 pub mod secp_static;
 pub use crate::secp_static::static_secp_instance;
 
-pub mod types;
-pub use crate::types::{LogLevel, LoggingConfig, ZeroingString};
-
 pub mod macros;
 
 // other utils

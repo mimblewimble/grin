@@ -27,10 +27,12 @@ use crate::core::global;
 use crate::p2p::{PeerAddr, Seeding};
 use crate::servers;
 use crate::tui::ui;
+use grin_util::logger::LogEntry;
+use std::sync::mpsc;
 
 /// wrap below to allow UI to clean up on stop
-pub fn start_server(config: servers::ServerConfig) {
-	start_server_tui(config);
+pub fn start_server(config: servers::ServerConfig, logs_rx: mpsc::Receiver<LogEntry>) {
+	start_server_tui(config, logs_rx);
 	// Just kill process for now, otherwise the process
 	// hangs around until sigint because the API server
 	// currently has no shutdown facility
@@ -40,15 +42,15 @@ pub fn start_server(config: servers::ServerConfig) {
 	exit(0);
 }
 
-fn start_server_tui(config: servers::ServerConfig) {
+fn start_server_tui(config: servers::ServerConfig, logs_rx: mpsc::Receiver<LogEntry>) {
 	// Run the UI controller.. here for now for simplicity to access
 	// everything it might need
 	if config.run_tui.unwrap_or(false) {
 		warn!("Starting GRIN in UI mode...");
+		let mut controller = ui::Controller::new(logs_rx).unwrap_or_else(|e| {
+			panic!("Error loading UI controller: {}", e);
+		});
 		servers::Server::start(config, |serv: servers::Server| {
-			let mut controller = ui::Controller::new().unwrap_or_else(|e| {
-				panic!("Error loading UI controller: {}", e);
-			});
 			controller.run(serv);
 		})
 		.unwrap();
@@ -78,6 +80,7 @@ fn start_server_tui(config: servers::ServerConfig) {
 pub fn server_command(
 	server_args: Option<&ArgMatches<'_>>,
 	mut global_config: GlobalConfig,
+	logs_rx: mpsc::Receiver<LogEntry>,
 ) -> i32 {
 	global::set_mining_mode(
 		global_config
@@ -123,7 +126,7 @@ pub fn server_command(
 	if let Some(a) = server_args {
 		match a.subcommand() {
 			("run", _) => {
-				start_server(server_config);
+				start_server(server_config, logs_rx);
 			}
 			("", _) => {
 				println!("Subcommand required, use 'grin help server' for details");
@@ -137,7 +140,7 @@ pub fn server_command(
 			}
 		}
 	} else {
-		start_server(server_config);
+		start_server(server_config, logs_rx);
 	}
 	0
 }

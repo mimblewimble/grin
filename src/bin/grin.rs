@@ -30,6 +30,8 @@ use grin_core as core;
 use grin_p2p as p2p;
 use grin_servers as servers;
 use grin_util as util;
+use grin_util::logger::LogEntry;
+use std::sync::mpsc;
 
 mod cmd;
 pub mod tui;
@@ -136,14 +138,12 @@ fn real_main() -> i32 {
 		}
 	}
 
+	let (logs_tx, logs_rx) = mpsc::channel::<LogEntry>();
 	if let Some(mut config) = node_config.clone() {
 		let mut l = config.members.as_mut().unwrap().logging.clone().unwrap();
 		let run_tui = config.members.as_mut().unwrap().server.run_tui;
-		if let Some(true) = run_tui {
-			l.log_to_stdout = false;
-			l.tui_running = Some(true);
-		}
-		init_logger(Some(l));
+		l.tui_running = run_tui;
+		init_logger(Some(l), logs_tx);
 
 		global::set_mining_mode(config.members.unwrap().server.clone().chain_type);
 
@@ -163,7 +163,7 @@ fn real_main() -> i32 {
 	match args.subcommand() {
 		// server commands and options
 		("server", Some(server_args)) => {
-			cmd::server_command(Some(server_args), node_config.unwrap())
+			cmd::server_command(Some(server_args), node_config.unwrap(), logs_rx)
 		}
 
 		// client commands and options
@@ -177,11 +177,11 @@ fn real_main() -> i32 {
 				Ok(_) => 0,
 				Err(_) => 1,
 			}
-		},
+		}
 
 		// If nothing is specified, try to just use the config file instead
 		// this could possibly become the way to configure most things
 		// with most command line options being phased out
-		_ => cmd::server_command(None, node_config.unwrap()),
+		_ => cmd::server_command(None, node_config.unwrap(), logs_rx),
 	}
 }

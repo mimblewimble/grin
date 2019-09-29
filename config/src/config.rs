@@ -30,7 +30,7 @@ use crate::core::global;
 use crate::p2p;
 use crate::servers::ServerConfig;
 use crate::types::{ConfigError, ConfigMembers, GlobalConfig};
-use crate::util::LoggingConfig;
+use crate::util::logger::LoggingConfig;
 
 /// The default file name to use when trying to derive
 /// the node config file location

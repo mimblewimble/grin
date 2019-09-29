@@ -17,6 +17,7 @@ use chrono;
 use humansize;
 //
 mod constants;
+mod logs;
 mod menu;
 mod mining;
 mod peers;
