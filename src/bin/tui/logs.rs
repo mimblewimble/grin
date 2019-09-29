@@ -27,23 +27,25 @@ pub struct TUILogsView;
 
 impl TUILogsView {
 	pub fn create() -> Box<dyn View> {
-		let basic_status_view = BoxView::with_full_screen(BufferView::new(200).with_id("logs"));
+		let basic_status_view = BoxView::with_full_screen(LogBufferView::new(200).with_id("logs"));
 		Box::new(basic_status_view.with_id(VIEW_LOGS))
 	}
 
 	pub fn update(c: &mut Cursive, entry: LogEntry) {
-		c.call_on_id("logs", |t: &mut BufferView| {
+		c.call_on_id("logs", |t: &mut LogBufferView| {
 			t.update(entry);
 		});
 	}
 }
 
-struct BufferView {
+struct LogBufferView {
 	buffer: VecDeque<LogEntry>,
+	green: ColorStyle,
+	orange: ColorStyle,
 	red: ColorStyle,
 }
 
-impl BufferView {
+impl LogBufferView {
 	fn new(size: usize) -> Self {
 		let mut buffer = VecDeque::new();
 		buffer.resize(
@@ -54,9 +56,11 @@ impl BufferView {
 			},
 		);
 
-		BufferView {
+		LogBufferView {
 			buffer,
 			red: ColorStyle::new(Color::Rgb(254, 66, 66), Color::Rgb(0, 0, 0)),
+			orange: ColorStyle::new(Color::Rgb(255, 134, 0), Color::Rgb(0, 0, 0)),
+			green: ColorStyle::new(Color::Rgb(66, 255, 66), Color::Rgb(0, 0, 0)),
 		}
 	}
 
@@ -66,14 +70,19 @@ impl BufferView {
 	}
 }
 
-impl View for BufferView {
+impl View for LogBufferView {
 	fn draw(&self, printer: &Printer) {
-		for (i, entry) in self.buffer.iter().take(printer.size.y).enumerate() {
-			let print = |p: &Printer| p.print((0, p.size.y - 1 - i), entry.log.as_str());
-
-			match entry.level {
-				Level::Warn | Level::Error => printer.with_color(self.red, print),
-				_ => print(printer),
+		let mut i = 0;
+		for entry in self.buffer.iter().take(printer.size.y) {
+			for line in entry.log.lines().rev() {
+				let print = |p: &Printer| p.print((0, p.size.y - 1 - i), line);
+				match entry.level {
+					Level::Info => printer.with_color(self.green, print),
+					Level::Warn => printer.with_color(self.orange, print),
+					Level::Error => printer.with_color(self.red, print),
+					_ => print(printer),
+				}
+				i += 1;
 			}
 		}
 	}
