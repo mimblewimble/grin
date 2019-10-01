@@ -261,6 +261,17 @@ impl<T: PMMRable> PMMRBackend<T> {
 		})
 	}
 
+	pub fn try_clone(&self) -> io::Result<PMMRBackend<T>> {
+		Ok(PMMRBackend {
+			data_dir: self.data_dir.clone(),
+			prunable: self.prunable.clone(),
+			hash_file: self.hash_file.try_clone()?,
+			data_file: self.data_file.try_clone()?,
+			leaf_set: self.leaf_set.clone(),
+			prune_list: self.prune_list.clone(),
+		})
+	}
+
 	fn is_pruned(&self, pos: u64) -> bool {
 		self.prune_list.is_pruned(pos)
 	}

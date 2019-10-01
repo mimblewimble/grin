@@ -30,6 +30,7 @@ use std::io::{self, BufWriter, Write};
 
 /// Compact (roaring) bitmap representing the set of positions of
 /// leaves that are currently unpruned in the MMR.
+#[derive(Clone)]
 pub struct LeafSet {
 	path: PathBuf,
 	bitmap: Bitmap,

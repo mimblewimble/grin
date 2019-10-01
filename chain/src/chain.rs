@@ -553,13 +553,13 @@ impl Chain {
 			return Ok(());
 		}
 
-		let mut header_pmmr = self.header_pmmr.write();
-		let mut txhashset = self.txhashset.write();
+		let header_pmmr = self.header_pmmr.read();
+		let txhashset = self.txhashset.read();
 
 		// Now create an extension from the txhashset and validate against the
 		// latest block header. Rewind the extension to the specified header to
 		// ensure the view is consistent.
-		txhashset::extending_readonly(&mut header_pmmr, &mut txhashset, |mut ext| {
+		txhashset::extending_readonly(&header_pmmr, &txhashset, |mut ext| {
 			pipe::rewind_and_apply_fork(&header, &mut ext)?;
 			let ref mut extension = ext.extension;
 			extension.validate(&self.genesis, fast_validation, &NoStatus)?;
@@ -570,11 +570,12 @@ impl Chain {
 	/// Sets the txhashset roots on a brand new block by applying the block on
 	/// the current txhashset state.
 	pub fn set_txhashset_roots(&self, b: &mut Block) -> Result<(), Error> {
-		let mut header_pmmr = self.header_pmmr.write();
-		let mut txhashset = self.txhashset.write();
+		// TODO - Is this safe to do or do we want to take write locks here to be sure?
+		let header_pmmr = self.header_pmmr.read();
+		let txhashset = self.txhashset.read();
 
 		let (prev_root, roots, sizes) =
-			txhashset::extending_readonly(&mut header_pmmr, &mut txhashset, |ext| {
+			txhashset::extending_readonly(&header_pmmr, &txhashset, |ext| {
 				let previous_header = ext.batch().get_previous_header(&b.header)?;
 				pipe::rewind_and_apply_fork(&previous_header, ext)?;
 
@@ -615,14 +616,13 @@ impl Chain {
 		output: &OutputIdentifier,
 		header: &BlockHeader,
 	) -> Result<MerkleProof, Error> {
-		let mut header_pmmr = self.header_pmmr.write();
-		let mut txhashset = self.txhashset.write();
-		let merkle_proof =
-			txhashset::extending_readonly(&mut header_pmmr, &mut txhashset, |ext| {
-				pipe::rewind_and_apply_fork(&header, ext)?;
-				let ref mut extension = ext.extension;
-				extension.merkle_proof(output)
-			})?;
+		let header_pmmr = self.header_pmmr.read();
+		let txhashset = self.txhashset.read();
+		let merkle_proof = txhashset::extending_readonly(&header_pmmr, &txhashset, |ext| {
+			pipe::rewind_and_apply_fork(&header, ext)?;
+			let ref mut extension = ext.extension;
+			extension.merkle_proof(output)
+		})?;
 
 		Ok(merkle_proof)
 	}
@@ -672,9 +672,9 @@ impl Chain {
 		// to rewind after receiving the txhashset zip.
 		let header = self.get_block_header(&h)?;
 		{
-			let mut header_pmmr = self.header_pmmr.write();
-			let mut txhashset = self.txhashset.write();
-			txhashset::extending_readonly(&mut header_pmmr, &mut txhashset, |ext| {
+			let header_pmmr = self.header_pmmr.read();
+			let txhashset = self.txhashset.read();
+			txhashset::extending_readonly(&header_pmmr, &txhashset, |ext| {
 				pipe::rewind_and_apply_fork(&header, ext)?;
 				let ref mut extension = ext.extension;
 				extension.snapshot()?;

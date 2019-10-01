@@ -40,6 +40,7 @@ use crate::{read_bitmap, save_via_temp_file};
 /// but positions of a node within the PMMR will not match positions in the
 /// backend storage anymore. The PruneList accounts for that mismatch and does
 /// the position translation.
+#[derive(Clone)]
 pub struct PruneList {
 	path: Option<PathBuf>,
 	/// Bitmap representing pruned root node positions.

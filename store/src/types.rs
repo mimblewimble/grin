@@ -68,6 +68,19 @@ pub enum SizeInfo {
 	VariableSize(Box<AppendOnlyFile<SizeEntry>>),
 }
 
+impl SizeInfo {
+	pub fn try_clone(&self) -> io::Result<SizeInfo> {
+		let res = match self {
+			SizeInfo::FixedSize(x) => SizeInfo::FixedSize(*x),
+			SizeInfo::VariableSize(x) => {
+				let size_file = x.try_clone()?;
+				SizeInfo::VariableSize(Box::new(size_file))
+			}
+		};
+		Ok(res)
+	}
+}
+
 /// Data file (MMR) wrapper around an append-only file.
 pub struct DataFile<T> {
 	file: AppendOnlyFile<T>,
@@ -88,6 +101,12 @@ where
 	{
 		Ok(DataFile {
 			file: AppendOnlyFile::open(path, size_info, version)?,
+		})
+	}
+
+	pub fn try_clone(&self) -> io::Result<DataFile<T>> {
+		Ok(DataFile {
+			file: self.file.try_clone()?,
 		})
 	}
 
@@ -237,6 +256,26 @@ where
 			}
 		}
 
+		Ok(aof)
+	}
+
+	pub fn try_clone(&self) -> io::Result<AppendOnlyFile<T>> {
+		let file = match &self.file {
+			Some(file) => Some(file.try_clone()?),
+			None => None,
+		};
+		let mut aof = AppendOnlyFile {
+			file,
+			path: self.path.clone(),
+			size_info: self.size_info.try_clone()?,
+			version: self.version.clone(),
+			mmap: None,
+			buffer: vec![],
+			buffer_start_pos: 0,
+			buffer_start_pos_bak: 0,
+			_marker: marker::PhantomData,
+		};
+		aof.init()?;
 		Ok(aof)
 	}
 

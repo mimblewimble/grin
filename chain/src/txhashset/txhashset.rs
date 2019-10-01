@@ -73,6 +73,12 @@ impl<T: PMMRable> PMMRHandle<T> {
 		let last_pos = backend.unpruned_size();
 		Ok(PMMRHandle { backend, last_pos })
 	}
+
+	pub fn try_clone(&self) -> Result<PMMRHandle<T>, Error> {
+		let backend = self.backend.try_clone()?;
+		let last_pos = backend.unpruned_size();
+		Ok(PMMRHandle { backend, last_pos })
+	}
 }
 
 impl PMMRHandle<BlockHeader> {
@@ -200,6 +206,15 @@ impl TxHashSet {
 		} else {
 			Err(ErrorKind::TxHashSetErr(format!("failed to open kernel PMMR")).into())
 		}
+	}
+
+	pub fn try_clone(&self) -> Result<TxHashSet, Error> {
+		Ok(TxHashSet {
+			output_pmmr_h: self.output_pmmr_h.try_clone()?,
+			rproof_pmmr_h: self.rproof_pmmr_h.try_clone()?,
+			kernel_pmmr_h: self.kernel_pmmr_h.try_clone()?,
+			commit_index: self.commit_index.clone(),
+		})
 	}
 
 	/// Close all backend file handles
@@ -441,13 +456,18 @@ impl TxHashSet {
 ///
 /// The unit of work is always discarded (always rollback) as this is read-only.
 pub fn extending_readonly<F, T>(
-	handle: &mut PMMRHandle<BlockHeader>,
-	trees: &mut TxHashSet,
+	original_handle: &PMMRHandle<BlockHeader>,
+	original_trees: &TxHashSet,
 	inner: F,
 ) -> Result<T, Error>
 where
 	F: FnOnce(&mut ExtensionPair<'_>) -> Result<T, Error>,
 {
+	error!("***** about to try_clone the handle and trees");
+	let mut handle = original_handle.try_clone()?;
+	let mut trees = original_trees.try_clone()?;
+	error!("***** done try_clone the handle and trees");
+
 	let commit_index = trees.commit_index.clone();
 	let batch = commit_index.batch()?;
 
@@ -465,7 +485,7 @@ where
 	let res = {
 		let header_pmmr = PMMR::at(&mut handle.backend, handle.last_pos);
 		let mut header_extension = HeaderExtension::new(header_pmmr, &batch, header_head);
-		let mut extension = Extension::new(trees, &batch, head);
+		let mut extension = Extension::new(&mut trees, &batch, head);
 		let mut extension_pair = ExtensionPair {
 			header_extension: &mut header_extension,
 			extension: &mut extension,
