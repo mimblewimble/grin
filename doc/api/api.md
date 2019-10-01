@@ -1,6 +1,6 @@
 # Grin API Documentation
 
-This document contains the documentation for the Node Grin REST APIs.
+This document contains the documentation for the Node Grin REST API.
 
 ## Node API
 
