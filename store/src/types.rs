@@ -286,13 +286,14 @@ where
 			size_file.init()?;
 		}
 
-		self.file = Some(
-			OpenOptions::new()
-				.read(true)
-				.append(true)
-				.create(true)
-				.open(self.path.clone())?,
-		);
+		// Make sure the file exists.
+		OpenOptions::new()
+			.append(true)
+			.create(true)
+			.open(&self.path)?;
+
+		// (Re)open it read-only and update our reference to it.
+		self.file = Some(File::open(&self.path)?);
 
 		// If we have a non-empty file then mmap it.
 		if self.size()? == 0 {
@@ -386,18 +387,20 @@ where
 			size_file.flush()?
 		}
 
-		if self.buffer_start_pos_bak > 0 {
-			// Flushing a rewound state, we need to truncate via set_len() before applying.
-			// Drop and recreate, or windows throws an access error
-			self.mmap = None;
-			self.file = None;
-			{
-				let file = OpenOptions::new()
-					.read(true)
-					.create(true)
-					.write(true)
-					.open(&self.path)?;
+		// Drop and recreate, or windows throws an access error.
+		self.mmap = None;
+		self.file = None;
 
+		// Rewind and reapply new bytes to the file.
+		// We need to (re)open the file here is writeable (append) mode.
+		{
+			let mut file = OpenOptions::new()
+				.append(true)
+				.create(true)
+				.open(&self.path)?;
+
+			// Flushing a rewound state, we need to truncate via set_len() before applying.
+			if self.buffer_start_pos_bak > 0 {
 				// Set length of the file to truncate it as necessary.
 				if self.buffer_start_pos == 0 {
 					file.set_len(0)?;
@@ -407,21 +410,15 @@ where
 					file.set_len(offset + size as u64)?;
 				};
 			}
+
+			file.write_all(&self.buffer[..])?;
+			file.sync_all()?;
 		}
 
-		{
-			let file = OpenOptions::new()
-				.read(true)
-				.create(true)
-				.append(true)
-				.open(&self.path)?;
-			self.file = Some(file);
-			self.buffer_start_pos_bak = 0;
-		}
+		// Now (re)open the file read-only and update our reference to it.
+		self.file = Some(File::open(&self.path)?);
 
-		self.file.as_mut().unwrap().write_all(&self.buffer[..])?;
-		self.file.as_mut().unwrap().sync_all()?;
-
+		self.buffer_start_pos_bak = 0;
 		self.buffer.clear();
 		self.buffer_start_pos = self.size_in_elmts()?;
 
