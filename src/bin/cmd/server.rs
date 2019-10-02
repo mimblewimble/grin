@@ -41,7 +41,7 @@ pub fn start_server(config: servers::ServerConfig, logs_rx: mpsc::Receiver<LogEn
 
 fn start_server_tui(config: servers::ServerConfig, logs_rx: mpsc::Receiver<LogEntry>) {
 	// Run the UI controller.. here for now for simplicity to access
-	// everything it might nee
+	// everything it might need
 	if config.run_tui.unwrap_or(false) {
 		warn!("Starting GRIN in UI mode...");
 		let server = servers::Server::new(config).unwrap();
