@@ -463,13 +463,17 @@ pub fn extending_readonly<F, T>(
 where
 	F: FnOnce(&mut ExtensionPair<'_>) -> Result<T, Error>,
 {
-	error!("***** about to try_clone the handle and trees");
+	// Clone these here so we have mut instances for the extensions below.
+	// It would be nice not to have to do this but rewind needs mut (for now).
 	let mut handle = original_handle.try_clone()?;
 	let mut trees = original_trees.try_clone()?;
-	error!("***** done try_clone the handle and trees");
 
-	let commit_index = trees.commit_index.clone();
-	let batch = commit_index.batch()?;
+	// This is *still* effectively a global lock.
+	// Our extension implementation requires a batch and we can only have one active batch.
+	// This is due to our batch impl relying on an internal lmdb write transaction.
+	// A read only batch still acquires an lmdb write transaction, we just discard it when done.
+	let store = trees.commit_index.clone();
+	let batch = store.batch()?;
 
 	trace!("Starting new txhashset (readonly) extension.");
 
@@ -697,12 +701,9 @@ where
 /// This is to allow headers to be validated against the MMR before we have the full block data.
 pub struct HeaderExtension<'a> {
 	head: Tip,
-
 	pmmr: PMMR<'a, BlockHeader, PMMRBackend<BlockHeader>>,
-
 	/// Rollback flag.
 	rollback: bool,
-
 	/// Batch in which the extension occurs, public so it can be used within
 	/// an `extending` closure. Just be careful using it that way as it will
 	/// get rolled back with the extension (i.e on a losing fork).

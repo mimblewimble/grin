@@ -24,6 +24,7 @@ use std::fs::{self, File, OpenOptions};
 use std::io::{self, BufReader, BufWriter, Seek, SeekFrom, Write};
 use std::marker;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
 /// Represents a single entry in the size_file.
 /// Offset (in bytes) and size (in bytes) of a variable sized entry
@@ -192,10 +193,10 @@ where
 /// latter by truncating the underlying file and re-creating the mmap.
 pub struct AppendOnlyFile<T> {
 	path: PathBuf,
-	file: Option<File>,
+	file: Option<Arc<File>>,
 	size_info: SizeInfo,
 	version: ProtocolVersion,
-	mmap: Option<memmap::Mmap>,
+	mmap: Option<Arc<memmap::Mmap>>,
 
 	// Buffer of unsync'd bytes. These bytes will be appended to the file when flushed.
 	buffer: Vec<u8>,
@@ -260,23 +261,17 @@ where
 	}
 
 	pub fn try_clone(&self) -> io::Result<AppendOnlyFile<T>> {
-		let file = match &self.file {
-			Some(file) => Some(file.try_clone()?),
-			None => None,
-		};
-		let mut aof = AppendOnlyFile {
-			file,
+		Ok(AppendOnlyFile {
+			file: self.file.clone(),
 			path: self.path.clone(),
 			size_info: self.size_info.try_clone()?,
 			version: self.version.clone(),
-			mmap: None,
-			buffer: vec![],
-			buffer_start_pos: 0,
-			buffer_start_pos_bak: 0,
+			mmap: self.mmap.clone(),
+			buffer: self.buffer.clone(),
+			buffer_start_pos: self.buffer_start_pos.clone(),
+			buffer_start_pos_bak: self.buffer_start_pos_bak.clone(),
 			_marker: marker::PhantomData,
-		};
-		aof.init()?;
-		Ok(aof)
+		})
 	}
 
 	/// (Re)init an underlying file and its associated memmap.
@@ -293,13 +288,15 @@ where
 			.open(&self.path)?;
 
 		// (Re)open it read-only and update our reference to it.
-		self.file = Some(File::open(&self.path)?);
+		self.file = Some(Arc::new(File::open(&self.path)?));
 
 		// If we have a non-empty file then mmap it.
 		if self.size()? == 0 {
 			self.buffer_start_pos = 0;
 		} else {
-			self.mmap = Some(unsafe { memmap::Mmap::map(&self.file.as_ref().unwrap())? });
+			self.mmap = Some(Arc::new(unsafe {
+				memmap::Mmap::map(&self.file.as_ref().unwrap())?
+			}));
 			self.buffer_start_pos = self.size_in_elmts()?;
 		}
 
@@ -415,18 +412,21 @@ where
 			file.sync_all()?;
 		}
 
-		// Now (re)open the file read-only and update our reference to it.
-		self.file = Some(File::open(&self.path)?);
+		// Replace our file with the updated file.
+		self.file = Some(Arc::new(File::open(&self.path)?));
 
 		self.buffer_start_pos_bak = 0;
 		self.buffer.clear();
 		self.buffer_start_pos = self.size_in_elmts()?;
 
+		// Replace our mmap with the updated mmap based on the updated file.
 		// Note: file must be non-empty to memory map it
 		if self.file.as_ref().unwrap().metadata()?.len() == 0 {
 			self.mmap = None;
 		} else {
-			self.mmap = Some(unsafe { memmap::Mmap::map(&self.file.as_ref().unwrap())? });
+			self.mmap = Some(Arc::new(unsafe {
+				memmap::Mmap::map(&self.file.as_ref().unwrap())?
+			}));
 		}
 
 		Ok(())

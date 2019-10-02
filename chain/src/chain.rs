@@ -553,8 +553,7 @@ impl Chain {
 			return Ok(());
 		}
 
-		let header_pmmr = self.header_pmmr.read();
-		let txhashset = self.txhashset.read();
+		let (header_pmmr, txhashset) = self.header_pmmr_and_txhashset()?;
 
 		// Now create an extension from the txhashset and validate against the
 		// latest block header. Rewind the extension to the specified header to
@@ -567,13 +566,18 @@ impl Chain {
 		})
 	}
 
+	/// Ensure consistent view of both the header_pmmr and the txhashset by
+	/// cloning them after acquiring *both* read locks.
+	fn header_pmmr_and_txhashset(&self) -> Result<(PMMRHandle<BlockHeader>, TxHashSet), Error> {
+		let header_pmmr = self.header_pmmr.read();
+		let txhashset = self.txhashset.read();
+		Ok((header_pmmr.try_clone()?, txhashset.try_clone()?))
+	}
+
 	/// Sets the txhashset roots on a brand new block by applying the block on
 	/// the current txhashset state.
 	pub fn set_txhashset_roots(&self, b: &mut Block) -> Result<(), Error> {
-		// TODO - Is this safe to do or do we want to take write locks here to be sure?
-		let header_pmmr = self.header_pmmr.read();
-		let txhashset = self.txhashset.read();
-
+		let (header_pmmr, txhashset) = self.header_pmmr_and_txhashset()?;
 		let (prev_root, roots, sizes) =
 			txhashset::extending_readonly(&header_pmmr, &txhashset, |ext| {
 				let previous_header = ext.batch().get_previous_header(&b.header)?;
@@ -616,8 +620,7 @@ impl Chain {
 		output: &OutputIdentifier,
 		header: &BlockHeader,
 	) -> Result<MerkleProof, Error> {
-		let header_pmmr = self.header_pmmr.read();
-		let txhashset = self.txhashset.read();
+		let (header_pmmr, txhashset) = self.header_pmmr_and_txhashset()?;
 		let merkle_proof = txhashset::extending_readonly(&header_pmmr, &txhashset, |ext| {
 			pipe::rewind_and_apply_fork(&header, ext)?;
 			let ref mut extension = ext.extension;
@@ -672,8 +675,7 @@ impl Chain {
 		// to rewind after receiving the txhashset zip.
 		let header = self.get_block_header(&h)?;
 		{
-			let header_pmmr = self.header_pmmr.read();
-			let txhashset = self.txhashset.read();
+			let (header_pmmr, txhashset) = self.header_pmmr_and_txhashset()?;
 			txhashset::extending_readonly(&header_pmmr, &txhashset, |ext| {
 				pipe::rewind_and_apply_fork(&header, ext)?;
 				let ref mut extension = ext.extension;

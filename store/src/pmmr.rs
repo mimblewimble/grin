@@ -25,6 +25,7 @@ use crate::prune_list::PruneList;
 use crate::types::{AppendOnlyFile, DataFile, SizeEntry, SizeInfo};
 use croaring::Bitmap;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
 const PMMR_HASH_FILE: &str = "pmmr_hash.bin";
 const PMMR_DATA_FILE: &str = "pmmr_data.bin";
@@ -57,8 +58,15 @@ pub struct PMMRBackend<T: PMMRable> {
 	prunable: bool,
 	hash_file: DataFile<Hash>,
 	data_file: DataFile<T::E>,
+	/// The leaf set represents leaf pos that are *not* removed.
+	/// In the context of the UTXO set these represent *unspent* outputs.
+	/// This is not wrapped in an arc as this needs to mutable during rewind
+	/// to support "unspending" spent outputs.
 	leaf_set: LeafSet,
-	prune_list: PruneList,
+	/// The prune list is never written to directly is effectively immutable.
+	/// We can freely clone it (via the Arc) when creating read-only views on this backend.
+	/// We replace it entirely when compacting the backend.
+	prune_list: Arc<PruneList>,
 }
 
 impl<T: PMMRable> Backend<T> for PMMRBackend<T> {
@@ -249,7 +257,7 @@ impl<T: PMMRable> PMMRBackend<T> {
 		}
 
 		let leaf_set = LeafSet::open(&leaf_set_path)?;
-		let prune_list = PruneList::open(&data_dir.join(PMMR_PRUN_FILE))?;
+		let prune_list = Arc::new(PruneList::open(&data_dir.join(PMMR_PRUN_FILE))?);
 
 		Ok(PMMRBackend {
 			data_dir: data_dir.to_path_buf(),
@@ -375,12 +383,16 @@ impl<T: PMMRable> PMMRBackend<T> {
 			self.data_file.save_prune(&pos_to_rm)?;
 		}
 
-		// 3. Update the prune list and write to disk.
+		// 3. Write updated prune list to disk and replace our prune list with updated version.
 		{
+			let mut prune_list = PruneList::open(&self.data_dir.join(PMMR_PRUN_FILE))?;
 			for pos in leaves_removed.iter() {
-				self.prune_list.add(pos.into());
+				prune_list.add(pos.into());
 			}
-			self.prune_list.flush()?;
+			prune_list.flush()?;
+
+			// Replace our prune list with the new updated one.
+			self.prune_list = Arc::new(prune_list);
 		}
 
 		// 4. Write the leaf_set to disk.
