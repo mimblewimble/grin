@@ -36,40 +36,35 @@ pub fn start_server(config: servers::ServerConfig, logs_rx: mpsc::Receiver<LogEn
 	// Just kill process for now, otherwise the process
 	// hangs around until sigint because the API server
 	// currently has no shutdown facility
-	warn!("Shutting down...");
-	thread::sleep(Duration::from_millis(1000));
-	warn!("Shutdown complete.");
 	exit(0);
 }
 
 fn start_server_tui(config: servers::ServerConfig, logs_rx: mpsc::Receiver<LogEntry>) {
 	// Run the UI controller.. here for now for simplicity to access
-	// everything it might need
+	// everything it might nee
 	if config.run_tui.unwrap_or(false) {
 		warn!("Starting GRIN in UI mode...");
+		let server = servers::Server::new(config).unwrap();
+		servers::Server::start_ancillary(&server).unwrap();
 		let mut controller = ui::Controller::new(logs_rx).unwrap_or_else(|e| {
 			panic!("Error loading UI controller: {}", e);
 		});
-		servers::Server::start(config, |serv: servers::Server| {
-			controller.run(serv);
-		})
-		.unwrap();
+		controller.run(server);
 	} else {
 		warn!("Starting GRIN w/o UI...");
-		servers::Server::start(config, |serv: servers::Server| {
-			let running = Arc::new(AtomicBool::new(true));
-			let r = running.clone();
-			ctrlc::set_handler(move || {
-				r.store(false, Ordering::SeqCst);
-			})
-			.expect("Error setting handler for both SIGINT (Ctrl+C) and SIGTERM (kill)");
-			while running.load(Ordering::SeqCst) {
-				thread::sleep(Duration::from_secs(1));
-			}
-			warn!("Received SIGINT (Ctrl+C) or SIGTERM (kill).");
-			serv.stop();
+		let server = servers::Server::new(config).unwrap();
+		servers::Server::start_ancillary(&server).unwrap();
+		let running = Arc::new(AtomicBool::new(true));
+		let r = running.clone();
+		ctrlc::set_handler(move || {
+			r.store(false, Ordering::SeqCst);
 		})
-		.unwrap();
+		.expect("Error setting handler for both SIGINT (Ctrl+C) and SIGTERM (kill)");
+		while running.load(Ordering::SeqCst) {
+			thread::sleep(Duration::from_secs(1));
+		}
+		warn!("Received SIGINT (Ctrl+C) or SIGTERM (kill).");
+		server.stop();
 	}
 }
 

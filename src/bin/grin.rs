@@ -141,8 +141,7 @@ fn real_main() -> i32 {
 	let (logs_tx, logs_rx) = mpsc::channel::<LogEntry>();
 	if let Some(mut config) = node_config.clone() {
 		let mut l = config.members.as_mut().unwrap().logging.clone().unwrap();
-		let run_tui = config.members.as_mut().unwrap().server.run_tui;
-		l.tui_running = run_tui;
+		l.tui_running = config.members.as_mut().unwrap().server.run_tui;
 		init_logger(Some(l), logs_tx);
 
 		global::set_mining_mode(config.members.unwrap().server.clone().chain_type);

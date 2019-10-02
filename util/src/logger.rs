@@ -190,10 +190,9 @@ pub fn init_logger(config: Option<LoggingConfig>, logs_tx: mpsc::Sender<LogEntry
 			);
 			root = root.appender("tui");
 		} else if c.log_to_stdout {
-			let filter = Box::new(ThresholdFilter::new(level_stdout));
 			appenders.push(
 				Appender::builder()
-					.filter(filter)
+					.filter(Box::new(ThresholdFilter::new(level_stdout)))
 					.filter(Box::new(GrinFilter))
 					.build("stdout", Box::new(stdout)),
 			);

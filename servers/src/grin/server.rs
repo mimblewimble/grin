@@ -80,38 +80,31 @@ pub struct Server {
 }
 
 impl Server {
-	/// Instantiates and starts a new server. Optionally takes a callback
-	/// for the server to send an ARC copy of itself, to allow another process
-	/// to poll info about the server status
-	pub fn start<F>(config: ServerConfig, mut info_callback: F) -> Result<(), Error>
-	where
-		F: FnMut(Server),
-	{
-		let mining_config = config.stratum_mining_config.clone();
-		let enable_test_miner = config.run_test_miner;
-		let test_miner_wallet_url = config.test_miner_wallet_url.clone();
-		let serv = Server::new(config)?;
+	/// Start ancillary services
+	pub fn start_ancillary(&self) -> Result<(), Error> {
+		let mining_config = self.config.stratum_mining_config.clone();
+		let enable_test_miner = self.config.run_test_miner;
+		let test_miner_wallet_url = self.config.test_miner_wallet_url.clone();
 
 		if let Some(c) = mining_config {
 			let enable_stratum_server = c.enable_stratum_server;
 			if let Some(s) = enable_stratum_server {
 				if s {
 					{
-						let mut stratum_stats = serv.state_info.stratum_stats.write();
+						let mut stratum_stats = self.state_info.stratum_stats.write();
 						stratum_stats.is_enabled = true;
 					}
-					serv.start_stratum_server(c.clone());
+					self.start_stratum_server(c.clone());
 				}
 			}
 		}
 
 		if let Some(s) = enable_test_miner {
 			if s {
-				serv.start_test_miner(test_miner_wallet_url, serv.stop_state.clone());
+				self.start_test_miner(test_miner_wallet_url, self.stop_state.clone());
 			}
 		}
 
-		info_callback(serv);
 		Ok(())
 	}
 
@@ -562,9 +555,10 @@ impl Server {
 			}
 		}
 		// this call is blocking and makes sure all peers stop, however
-		// we can't be sure that we stoped a listener blocked on accept, so we don't join the p2p thread
+		// we can't be sure that we stopped a listener blocked on accept, so we don't join the p2p thread
 		self.p2p.stop();
 		let _ = self.lock_file.unlock();
+		warn!("Shutdown complete");
 	}
 
 	/// Pause the p2p server.
