@@ -35,6 +35,7 @@ mod web;
 pub mod auth;
 pub mod client;
 mod handlers;
+mod handlersv2;
 mod rest;
 mod router;
 mod types;
