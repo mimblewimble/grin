@@ -133,6 +133,27 @@ pub fn initial_setup_server(chain_type: &global::ChainTypes) -> Result<GlobalCon
 	}
 }
 
+fn comment_values(orig: String) -> String {
+	let lines: Vec<&str> = orig.split("\n").collect();
+	let mut out_lines = vec![];
+	for l in lines {
+		// Comment lines with values (not starting by #) that don't define paths
+		if l.contains("=") && !l.starts_with("#") && !l.contains("root") && !l.contains("path") {
+			let mut commented = l.to_owned();
+			commented.insert_str(0, "#");
+			out_lines.push(commented.to_owned());
+		} else {
+			out_lines.push(l.to_owned());
+		}
+		out_lines.push("\n".to_owned());
+	}
+	let mut ret_val = String::from("");
+	for l in out_lines {
+		ret_val.push_str(&l);
+	}
+	ret_val.to_owned()
+}
+
 /// Returns the defaults, as strewn throughout the code
 impl Default for ConfigMembers {
 	fn default() -> ConfigMembers {
@@ -297,6 +318,7 @@ impl GlobalConfig {
 	pub fn write_to_file(&mut self, name: &str) -> Result<(), ConfigError> {
 		let conf_out = self.ser_config()?;
 		let conf_out = insert_comments(conf_out);
+		let conf_out = comment_values(conf_out);
 		let mut file = File::create(name)?;
 		file.write_all(conf_out.as_bytes())?;
 		Ok(())
