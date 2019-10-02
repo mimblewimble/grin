@@ -138,8 +138,7 @@ fn real_main() -> i32 {
 
 	if let Some(mut config) = node_config.clone() {
 		let mut l = config.members.as_mut().unwrap().logging.clone().unwrap();
-		let run_tui = config.members.as_mut().unwrap().server.run_tui;
-		if let Some(true) = run_tui {
+		if config.members.as_mut().unwrap().server.run_tui {
 			l.log_to_stdout = false;
 			l.tui_running = Some(true);
 		}

@@ -43,7 +43,7 @@ pub fn start_server(config: servers::ServerConfig) {
 fn start_server_tui(config: servers::ServerConfig) {
 	// Run the UI controller.. here for now for simplicity to access
 	// everything it might need
-	if config.run_tui.unwrap_or(false) {
+	if config.run_tui {
 		warn!("Starting GRIN in UI mode...");
 		servers::Server::start(config, |serv: servers::Server| {
 			let mut controller = ui::Controller::new().unwrap_or_else(|e| {

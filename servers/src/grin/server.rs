@@ -105,10 +105,8 @@ impl Server {
 			}
 		}
 
-		if let Some(s) = enable_test_miner {
-			if s {
+		if enable_test_miner {
 				serv.start_test_miner(test_miner_wallet_url, serv.stop_state.clone());
-			}
 		}
 
 		info_callback(serv);
@@ -144,13 +142,6 @@ impl Server {
 	pub fn new(config: ServerConfig) -> Result<Server, Error> {
 		// Obtain our lock_file or fail immediately with an error.
 		let lock_file = Server::one_grin_at_a_time(&config)?;
-
-		// Defaults to None (optional) in config file.
-		// This translates to false here.
-		let archive_mode = match config.archive_mode {
-			None => false,
-			Some(b) => b,
-		};
 
 		let stop_state = Arc::new(StopState::new());
 
@@ -189,7 +180,7 @@ impl Server {
 			genesis.clone(),
 			pow::verify_size,
 			verifier_cache.clone(),
-			archive_mode,
+			config.archive_mode,
 		)?);
 
 		pool_adapter.set_chain(shared_chain.clone());
@@ -246,10 +237,7 @@ impl Server {
 			)?);
 		}
 
-		// Defaults to None (optional) in config file.
-		// This translates to false here so we do not skip by default.
-		let skip_sync_wait = config.skip_sync_wait.unwrap_or(false);
-		sync_state.update(SyncStatus::AwaitingPeers(!skip_sync_wait));
+		sync_state.update(SyncStatus::AwaitingPeers(!config.skip_sync_wait));
 
 		let sync_thread = sync::run_sync(
 			sync_state.clone(),
