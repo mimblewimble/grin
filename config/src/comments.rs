@@ -258,8 +258,58 @@ fn comments() -> HashMap<String, String> {
 	);
 
 	retval.insert(
-		"[server.p2p_config.capabilities]".to_string(),
-		"#If the seeding type is List, the list of peers to connect to can
+		"ban_window".to_string(),
+		"
+#how long a banned peer should stay banned
+"
+		.to_string(),
+	);
+
+	retval.insert(
+		"peer_max_inbound_count".to_string(),
+		"
+#maximum number of inbound peer connections
+"
+		.to_string(),
+	);
+
+	retval.insert(
+		"peer_max_outbound_count".to_string(),
+		"
+#maximum number of outbound peer connections
+"
+		.to_string(),
+	);
+
+	retval.insert(
+		"peer_min_preferred_outbound_count".to_string(),
+		"
+#preferred minimum number of outbound peers (we'll actively keep trying to add peers
+#until we get to at least this number)
+"
+		.to_string(),
+	);
+
+	retval.insert(
+		"peer_listener_buffer_count".to_string(),
+		"
+#amount of incoming connections temporarily allowed to exceed peer_max_inbound_count
+"
+		.to_string(),
+	);
+
+	retval.insert(
+		"dandelion_peer".to_string(),
+		"
+# A preferred dandelion_peer, mainly used for testing dandelion
+"
+		.to_string(),
+	);
+
+	retval.insert(
+		"capabilities".to_string(),
+		"
+#If the seeding type is List, the list of peers to connect to can
 #be specified as follows:
 #seeds = [\"192.168.0.1:3414\",\"192.168.0.2:3414\"]
 
@@ -271,28 +321,8 @@ fn comments() -> HashMap<String, String> {
 #a list of preferred peers to connect to
 #peers_preferred = [\"192.168.0.1:3414\",\"192.168.0.2:3414\"]
 
-#how long a banned peer should stay banned
-#ban_window = 10800
-
-#maximum number of inbound peer connections
-#peer_max_inbound_count = 128
-
-#maximum number of outbound peer connections
-#peer_max_outbound_count = 8
-
-#preferred minimum number of outbound peers (we'll actively keep trying to add peers
-#until we get to at least this number)
-#peer_min_preferred_outbound_count = 8
-
-#amount of incoming connections temporarily allowed to exceed peer_max_inbound_count
-#peer_listener_buffer_count = 8
-
 # 15 = Bit flags for FULL_NODE
 #This structure needs to be changed internally, to make it more configurable
-
-# A preferred dandelion_peer, mainly used for testing dandelion
-# dandelion_peer = \"10.0.0.1:13144\"
-
 "
 		.to_string(),
 	);
