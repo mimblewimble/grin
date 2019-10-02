@@ -18,7 +18,7 @@ use std::ops::Deref;
 use backtrace::Backtrace;
 use std::{panic, thread};
 
-use crate::types::{self, LogLevel, LoggingConfig};
+use crate::types::{LogLevel, LoggingConfig};
 
 use log::{LevelFilter, Record};
 use log4rs;

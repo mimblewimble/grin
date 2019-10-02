@@ -106,7 +106,7 @@ impl Server {
 		}
 
 		if enable_test_miner {
-				serv.start_test_miner(test_miner_wallet_url, serv.stop_state.clone());
+			serv.start_test_miner(test_miner_wallet_url, serv.stop_state.clone());
 		}
 
 		info_callback(serv);

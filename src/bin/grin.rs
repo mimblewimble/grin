@@ -176,7 +176,7 @@ fn real_main() -> i32 {
 				Ok(_) => 0,
 				Err(_) => 1,
 			}
-		},
+		}
 
 		// If nothing is specified, try to just use the config file instead
 		// this could possibly become the way to configure most things
