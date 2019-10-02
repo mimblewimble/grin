@@ -1,4 +1,4 @@
-// Copyright 2018 The Grin Developers
+// Copyright 2019 The Grin Developers
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -40,7 +40,7 @@ use crate::common::stats::{
 	ChainStats, DiffBlock, DiffStats, PeerStats, ServerStateInfo, ServerStats, TxStats,
 };
 use crate::common::types::{Error, ServerConfig, StratumServerConfig};
-use crate::core::core::hash::{Hashed, ZERO_HASH};
+use crate::core::core::hash::Hashed;
 use crate::core::core::verifier_cache::{LruVerifierCache, VerifierCache};
 use crate::core::ser::ProtocolVersion;
 use crate::core::{consensus, genesis, global, pow};
@@ -429,9 +429,6 @@ impl Server {
 			let tip_height = self.head()?.height as i64;
 			let mut height = tip_height as i64 - last_blocks.len() as i64 + 1;
 
-			let header_pmmr = self.chain.header_pmmr();
-			let header_pmmr = header_pmmr.read();
-
 			let diff_entries: Vec<DiffBlock> = last_blocks
 				.windows(2)
 				.map(|pair| {
@@ -440,21 +437,9 @@ impl Server {
 
 					height += 1;
 
-					// Use header hash if real header.
-					// Default to "zero" hash if synthetic header_info.
-					let hash = if height >= 0 {
-						if let Ok(hash) = header_pmmr.get_header_hash_by_height(height as u64) {
-							hash
-						} else {
-							ZERO_HASH
-						}
-					} else {
-						ZERO_HASH
-					};
-
 					DiffBlock {
 						block_height: height,
-						block_hash: hash,
+						block_hash: next.block_hash,
 						difficulty: next.difficulty.to_num(),
 						time: next.timestamp,
 						duration: next.timestamp - prev.timestamp,
@@ -483,12 +468,20 @@ impl Server {
 			.map(|p| PeerStats::from_peer(&p))
 			.collect();
 
-		let tx_stats = TxStats {
-			tx_pool_size: self.tx_pool.read().txpool.entries.len(),
-			stem_pool_size: self.tx_pool.read().stempool.entries.len(),
+		let (tx_pool_size, stem_pool_size) = {
+			let tx_pool_lock = self.tx_pool.try_read();
+			match tx_pool_lock {
+				Some(l) => (l.txpool.entries.len(), l.stempool.entries.len()),
+				None => (0, 0),
+			}
 		};
 
-		let head = self.chain.head_header().unwrap();
+		let tx_stats = TxStats {
+			tx_pool_size,
+			stem_pool_size,
+		};
+
+		let head = self.chain.head_header()?;
 		let head_stats = ChainStats {
 			latest_timestamp: head.timestamp,
 			height: head.height,
@@ -496,8 +489,8 @@ impl Server {
 			total_difficulty: head.total_difficulty(),
 		};
 
-		let header_tip = self.chain.header_head().unwrap();
-		let header = self.chain.get_block_header(&header_tip.hash()).unwrap();
+		let header_tip = self.chain.header_head()?;
+		let header = self.chain.get_block_header(&header_tip.hash())?;
 		let header_stats = ChainStats {
 			latest_timestamp: header.timestamp,
 			height: header.height,

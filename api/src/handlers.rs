@@ -1,4 +1,4 @@
-// Copyright 2018 The Grin Developers
+// Copyright 2019 The Grin Developers
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -103,6 +103,7 @@ pub fn build_router(
 		"get chain".to_string(),
 		"post chain/compact".to_string(),
 		"get chain/validate".to_string(),
+		"get chain/kernels/xxx?min_height=yyy&max_height=zzz".to_string(),
 		"get chain/outputs/byids?id=xxx,yyy,zzz".to_string(),
 		"get chain/outputs/byheight?start_height=101&end_height=200".to_string(),
 		"get status".to_string(),
