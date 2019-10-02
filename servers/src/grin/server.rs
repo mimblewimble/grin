@@ -285,14 +285,14 @@ impl Server {
 		};
 
 		// TODO fix API shutdown and join this thread
-		api::start_rest_apis(
-			config.api_http_addr.clone(),
+		api::node_api(
+			&config.api_http_addr,
 			shared_chain.clone(),
 			tx_pool.clone(),
 			p2p_server.peers.clone(),
 			sync_state.clone(),
-			api_secret,
-			tls_conf,
+			api_secret.clone(),
+			tls_conf.clone(),
 		);
 
 		info!("Starting dandelion monitor: {}", &config.api_http_addr);

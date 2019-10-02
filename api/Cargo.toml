@@ -10,6 +10,7 @@ workspace = ".."
 edition = "2018"
 
 [dependencies]
+easy-jsonrpc-mw = "0.5.3"
 failure = "0.1.1"
 failure_derive = "0.1.1"
 hyper = "0.12"

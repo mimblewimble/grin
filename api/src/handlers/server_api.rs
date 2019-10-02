@@ -91,7 +91,7 @@ impl Handler for StatusHandler {
 }
 
 /// Convert a SyncStatus in a readable API representation
-fn sync_status_to_api(sync_status: SyncStatus) -> (String, Option<serde_json::Value>) {
+pub fn sync_status_to_api(sync_status: SyncStatus) -> (String, Option<serde_json::Value>) {
 	match sync_status {
 		SyncStatus::NoSync => ("no_sync".to_string(), None),
 		SyncStatus::AwaitingPeers(_) => ("awaiting_peers".to_string(), None),

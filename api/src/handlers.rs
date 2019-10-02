@@ -16,9 +16,9 @@ mod blocks_api;
 mod chain_api;
 mod peers_api;
 mod pool_api;
-mod server_api;
+pub mod server_api;
 mod transactions_api;
-mod utils;
+pub mod utils;
 mod version_api;
 
 use self::blocks_api::BlockHandler;

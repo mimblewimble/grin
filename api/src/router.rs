@@ -85,7 +85,7 @@ pub trait Handler {
 	}
 }
 
-#[derive(Clone, Fail, Eq, Debug, PartialEq)]
+#[derive(Clone, Fail, Eq, Debug, PartialEq, Serialize, Deserialize)]
 pub enum RouterError {
 	#[fail(display = "Route already exists")]
 	RouteAlreadyExists,
