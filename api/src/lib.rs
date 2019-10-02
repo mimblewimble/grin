@@ -35,7 +35,6 @@ mod web;
 pub mod auth;
 pub mod client;
 mod handlers;
-mod handlersv2;
 mod node;
 mod node_rpc;
 mod rest;
@@ -43,7 +42,7 @@ mod router;
 mod types;
 
 pub use crate::auth::{BasicAuthMiddleware, GRIN_BASIC_REALM};
-pub use crate::handlersv2::node_api;
+pub use crate::handlers::node_api;
 pub use crate::rest::*;
 pub use crate::router::*;
 pub use crate::types::*;
