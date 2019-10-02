@@ -13,6 +13,8 @@
 // limitations under the License.
 
 use crate::util::RwLock;
+use serde::ser::{Serialize, Serializer};
+use serde::{Deserialize, Deserializer};
 use std::convert::From;
 use std::fs::File;
 use std::io::{self, Read};
@@ -337,7 +339,6 @@ impl Default for Seeding {
 
 bitflags! {
 	/// Options for what type of interaction a peer supports
-	#[derive(Serialize, Deserialize)]
 	pub struct Capabilities: u32 {
 		/// We don't know (yet) what the peer can do.
 		const UNKNOWN = 0b00000000;
@@ -360,6 +361,28 @@ bitflags! {
 			| Capabilities::TXHASHSET_HIST.bits
 			| Capabilities::PEER_LIST.bits
 			| Capabilities::TX_KERNEL_HASH.bits;
+	}
+}
+
+impl Serialize for Capabilities {
+	fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+	where
+		S: Serializer,
+	{
+		self.bits().serialize(serializer)
+	}
+}
+
+impl<'de> Deserialize<'de> for Capabilities {
+	fn deserialize<D>(deserializer: D) -> Result<Capabilities, D::Error>
+	where
+		D: Deserializer<'de>,
+	{
+		let value = <_ as Deserialize<'de>>::deserialize(deserializer)?;
+
+		Capabilities::from_bits(value).ok_or_else(|| {
+			serde::de::Error::custom(format!("Invalid bits {:#X} for Capabilities", value))
+		})
 	}
 }
 
