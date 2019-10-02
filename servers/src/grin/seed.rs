@@ -156,7 +156,7 @@ fn monitor_peers(
 			p2p::State::Banned => {
 				let interval = Utc::now().timestamp() - x.last_banned;
 				// Unban peer
-				if interval >= config.ban_window() {
+				if interval >= config.ban_window {
 					if let Err(e) = peers.unban_peer(x.addr) {
 						error!("failed to unban peer {}: {:?}", x.addr, e);
 					}
@@ -188,8 +188,8 @@ fn monitor_peers(
 
 	// maintenance step first, clean up p2p server peers
 	peers.clean_peers(
-		config.peer_max_inbound_count() as usize,
-		config.peer_max_outbound_count() as usize,
+		config.peer_max_inbound_count as usize,
+		config.peer_max_outbound_count as usize,
 	);
 
 	if peers.enough_outbound_peers() {

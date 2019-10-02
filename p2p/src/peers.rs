@@ -515,7 +515,7 @@ impl Peers {
 
 	/// We have enough outbound connected peers
 	pub fn enough_outbound_peers(&self) -> bool {
-		self.peer_outbound_count() >= self.config.peer_min_preferred_outbound_count()
+		self.peer_outbound_count() >= self.config.peer_min_preferred_outbound_count
 	}
 
 	/// Removes those peers that seem to have expired

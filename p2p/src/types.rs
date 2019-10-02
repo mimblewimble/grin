@@ -63,6 +63,15 @@ const PEER_MIN_PREFERRED_OUTBOUND_COUNT: u32 = 8;
 /// than allowed by PEER_MAX_INBOUND_COUNT to encourage network bootstrapping.
 const PEER_LISTENER_BUFFER_COUNT: u32 = 8;
 
+/// Default bind IP address
+const P2P_DEFAULT_IP: &str = "0.0.0.0";
+
+/// Default port
+const P2P_DEFAULT_PORT: u16 = 3414;
+
+/// Default dandelion peer
+const P2P_DEFAULT_DANDELION_PEER: &str = "10.0.0.1:13144";
+
 #[derive(Debug)]
 pub enum Error {
 	Serialization(ser::Error),
@@ -217,7 +226,9 @@ impl PeerAddr {
 /// Configuration for the peer-to-peer server.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct P2PConfig {
+	#[serde(default = "default_p2p_ipaddr")]
 	pub host: IpAddr,
+	#[serde(default = "default_p2p_port")]
 	pub port: u16,
 
 	/// Method used to get the list of seed nodes for initial bootstrap.
@@ -225,97 +236,111 @@ pub struct P2PConfig {
 	pub seeding_type: Seeding,
 
 	/// The list of seed nodes, if using Seeding as a seed type
+	#[serde(default = "default_p2p_seeds")]
 	pub seeds: Option<Vec<PeerAddr>>,
 
-	/// Capabilities expose by this node, also conditions which other peers this
-	/// node will have an affinity toward when connection.
-	pub capabilities: Capabilities,
-
+	#[serde(default = "default_p2p_peers_allow")]
 	pub peers_allow: Option<Vec<PeerAddr>>,
 
+	#[serde(default = "default_p2p_peers_deny")]
 	pub peers_deny: Option<Vec<PeerAddr>>,
 
 	/// The list of preferred peers that we will try to connect to
+	#[serde(default = "default_p2p_peers_preferred")]
 	pub peers_preferred: Option<Vec<PeerAddr>>,
 
-	pub ban_window: Option<i64>,
+	#[serde(default = "default_p2p_banwindow")]
+	pub ban_window: i64,
 
-	pub peer_max_inbound_count: Option<u32>,
+	#[serde(default = "default_p2p_peer_max_inbound_count")]
+	pub peer_max_inbound_count: u32,
 
-	pub peer_max_outbound_count: Option<u32>,
+	#[serde(default = "default_p2p_peer_max_outbound_count")]
+	pub peer_max_outbound_count: u32,
 
-	pub peer_min_preferred_outbound_count: Option<u32>,
+	#[serde(default = "default_p2p_peer_min_preferred_outbound_count")]
+	pub peer_min_preferred_outbound_count: u32,
 
-	pub peer_listener_buffer_count: Option<u32>,
+	#[serde(default = "default_p2p_peer_listener_buffer_count")]
+	pub peer_listener_buffer_count: u32,
 
-	pub dandelion_peer: Option<PeerAddr>,
+	#[serde(default = "default_p2p_dandelion_peer")]
+	pub dandelion_peer: PeerAddr,
+
+	/// Capabilities expose by this node, also conditions which other peers this
+	/// node will have an affinity toward when connection.
+	#[serde(default)]
+	pub capabilities: Capabilities,
 }
 
 /// Default address for peer-to-peer connections.
 impl Default for P2PConfig {
 	fn default() -> P2PConfig {
-		let ipaddr = "0.0.0.0".parse().unwrap();
 		P2PConfig {
-			host: ipaddr,
-			port: 3414,
-			capabilities: Capabilities::FULL_NODE,
+			host: default_p2p_ipaddr(),
+			port: default_p2p_port(),
+			capabilities: Capabilities::default(),
 			seeding_type: Seeding::default(),
-			seeds: None,
-			peers_allow: None,
-			peers_deny: None,
-			peers_preferred: None,
-			ban_window: None,
-			peer_max_inbound_count: None,
-			peer_max_outbound_count: None,
-			peer_min_preferred_outbound_count: None,
-			peer_listener_buffer_count: None,
-			dandelion_peer: None,
+			seeds: default_p2p_seeds(),
+			peers_allow: default_p2p_peers_allow(),
+			peers_deny: default_p2p_peers_deny(),
+			peers_preferred: default_p2p_peers_preferred(),
+			ban_window: default_p2p_banwindow(),
+			peer_max_inbound_count: default_p2p_peer_max_inbound_count(),
+			peer_max_outbound_count: default_p2p_peer_max_outbound_count(),
+			peer_min_preferred_outbound_count: default_p2p_peer_min_preferred_outbound_count(),
+			peer_listener_buffer_count: default_p2p_peer_listener_buffer_count(),
+			dandelion_peer: default_p2p_dandelion_peer(),
 		}
 	}
 }
 
-/// Note certain fields are options just so they don't have to be
-/// included in grin-server.toml, but we don't want them to ever return none
-impl P2PConfig {
-	/// return ban window
-	pub fn ban_window(&self) -> i64 {
-		match self.ban_window {
-			Some(n) => n,
-			None => BAN_WINDOW,
-		}
-	}
+fn default_p2p_ipaddr() -> IpAddr {
+	P2P_DEFAULT_IP.parse().unwrap()
+}
 
-	/// return maximum inbound peer connections count
-	pub fn peer_max_inbound_count(&self) -> u32 {
-		match self.peer_max_inbound_count {
-			Some(n) => n,
-			None => PEER_MAX_INBOUND_COUNT,
-		}
-	}
+fn default_p2p_port() -> u16 {
+	P2P_DEFAULT_PORT
+}
 
-	/// return maximum outbound peer connections count
-	pub fn peer_max_outbound_count(&self) -> u32 {
-		match self.peer_max_outbound_count {
-			Some(n) => n,
-			None => PEER_MAX_OUTBOUND_COUNT,
-		}
-	}
+fn default_p2p_seeds() -> Option<Vec<PeerAddr>> {
+	None
+}
 
-	/// return minimum preferred outbound peer count
-	pub fn peer_min_preferred_outbound_count(&self) -> u32 {
-		match self.peer_min_preferred_outbound_count {
-			Some(n) => n,
-			None => PEER_MIN_PREFERRED_OUTBOUND_COUNT,
-		}
-	}
+fn default_p2p_peers_allow() -> Option<Vec<PeerAddr>> {
+	None
+}
 
-	/// return peer buffer count for listener
-	pub fn peer_listener_buffer_count(&self) -> u32 {
-		match self.peer_listener_buffer_count {
-			Some(n) => n,
-			None => PEER_LISTENER_BUFFER_COUNT,
-		}
-	}
+fn default_p2p_peers_deny() -> Option<Vec<PeerAddr>> {
+	None
+}
+
+fn default_p2p_peers_preferred() -> Option<Vec<PeerAddr>> {
+	None
+}
+
+fn default_p2p_banwindow() -> i64 {
+	BAN_WINDOW
+}
+
+fn default_p2p_peer_max_inbound_count() -> u32 {
+	PEER_MAX_INBOUND_COUNT
+}
+
+fn default_p2p_peer_max_outbound_count() -> u32 {
+	PEER_MAX_OUTBOUND_COUNT
+}
+
+fn default_p2p_peer_min_preferred_outbound_count() -> u32 {
+	PEER_MIN_PREFERRED_OUTBOUND_COUNT
+}
+
+fn default_p2p_peer_listener_buffer_count() -> u32 {
+	PEER_LISTENER_BUFFER_COUNT
+}
+
+fn default_p2p_dandelion_peer() -> PeerAddr {
+	PeerAddr(P2P_DEFAULT_DANDELION_PEER.parse().unwrap())
 }
 
 /// Type of seeding the server will use to find other peers on the network.
@@ -383,6 +408,12 @@ impl<'de> Deserialize<'de> for Capabilities {
 		Capabilities::from_bits(value).ok_or_else(|| {
 			serde::de::Error::custom(format!("Invalid bits {:#X} for Capabilities", value))
 		})
+	}
+}
+
+impl Default for Capabilities {
+	fn default() -> Capabilities {
+		Capabilities::FULL_NODE
 	}
 }
 
