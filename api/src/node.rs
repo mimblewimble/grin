@@ -14,60 +14,53 @@
 
 //! Node API External Definition
 
-use crate::handlers::server_api::sync_status_to_api;
-
 use crate::chain::{Chain, SyncState};
-use crate::handlers::utils::w;
+use crate::handlers::server_api::StatusHandler;
 use crate::p2p;
+use crate::pool;
 use crate::rest::*;
 use crate::types::Status;
+use crate::util::RwLock;
 use std::sync::Weak;
 
 /// Main interface into all node API functions.
 /// Node API functionality are in the ['Node'](struct.Node.html)
-///
-/// * The 'Owner' API is intended to expose methods that are to be
-/// used by the wallet owner only. It is vital that this API is not
-/// exposed to anyone other than the owner of the wallet (i.e. the
-/// person with access to the seed and password.
 ///
 /// Methods in this API are intended to be 'single use'.
 ///
 
 pub struct Node {
 	pub chain: Weak<Chain>,
+	pub tx_pool: Weak<RwLock<pool::TransactionPool>>,
 	pub peers: Weak<p2p::Peers>,
 	pub sync_state: Weak<SyncState>,
 }
 
 impl Node {
-	pub fn new(chain: Weak<Chain>, peers: Weak<p2p::Peers>, sync_state: Weak<SyncState>) -> Self {
+	pub fn new(
+		chain: Weak<Chain>,
+		tx_pool: Weak<RwLock<pool::TransactionPool>>,
+		peers: Weak<p2p::Peers>,
+		sync_state: Weak<SyncState>,
+	) -> Self {
 		Node {
 			chain,
+			tx_pool,
 			peers,
 			sync_state,
 		}
 	}
 
-	/// Returns summary information from the active account in the wallet.
-	///
-	/// # Arguments
-	/// * `keychain_mask` - Wallet secret mask to XOR against the stored wallet seed before using, if
-	/// being used.
-	/// * `refresh_from_node` - If true, the wallet will attempt to contact
-	/// a node (via the [`NodeClient`](../grin_wallet_libwallet/types/trait.NodeClient.html)
-	/// provided during wallet instantiation). If `false`, the results will
-	/// contain transaction information that may be out-of-date (from the last time
-	/// the wallet's output set was refreshed against the node).
-	/// * `minimum_confirmations` - The minimum number of confirmations an output
-	/// should have before it's included in the 'amount_currently_spendable' total
+	/// UNFINISHED
+	/// Returns various information about the node, the network and the current sync status.
 	///
 	/// # Returns
-	/// * (`bool`, [`WalletInfo`](../grin_wallet_libwallet/types/struct.WalletInfo.html)) - A tuple:
+	/// * a result containing:
+	/// * The current status [Status](../grin/slate/struct.Slate.html),
 	/// * The first `bool` element indicates whether the data was successfully
 	/// refreshed from the node (note this may be false even if the `refresh_from_node`
 	/// argument was set to `true`.
-	/// * The second element contains the Summary [`WalletInfo`](../grin_wallet_libwallet/types/struct.WalletInfo.html)
+	/// * or [`libwallet::Error`](../grin_wallet_libwallet/struct.Error.html) if an error is encountered.
 	///
 	/// # Example
 	/// Set up as in [`new`](struct.Owner.html#method.new) method above.
@@ -86,16 +79,11 @@ impl Node {
 	/// }
 	/// ```
 	pub fn get_status(&self) -> Result<Status, Error> {
-		let head = w(&self.chain)?
-			.head()
-			.map_err(|e| ErrorKind::Internal(format!("can't get head: {}", e)))?;
-		let sync_status = w(&self.sync_state)?.status();
-		let (api_sync_status, api_sync_info) = sync_status_to_api(sync_status);
-		Ok(Status::from_tip_and_peers(
-			head,
-			w(&self.peers)?.peer_count(),
-			api_sync_status,
-			api_sync_info,
-		))
+		let status_handler = StatusHandler {
+			chain: self.chain.clone(),
+			peers: self.peers.clone(),
+			sync_state: self.sync_state.clone(),
+		};
+		status_handler.get_status()
 	}
 }

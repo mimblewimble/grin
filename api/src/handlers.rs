@@ -38,58 +38,12 @@ use self::server_api::KernelDownloadHandler;
 use self::server_api::StatusHandler;
 use self::transactions_api::TxHashSetHandler;
 use self::version_api::VersionHandler;
-use crate::auth::{BasicAuthMiddleware, GRIN_BASIC_REALM};
 use crate::chain;
 use crate::p2p;
 use crate::pool;
-use crate::rest::*;
 use crate::router::{Router, RouterError};
-use crate::util;
 use crate::util::RwLock;
-use std::net::SocketAddr;
 use std::sync::Arc;
-
-/// Start all server HTTP handlers. Register all of them with Router
-/// and runs the corresponding HTTP server.
-///
-/// Hyper currently has a bug that prevents clean shutdown. In order
-/// to avoid having references kept forever by handlers, we only pass
-/// weak references. Note that this likely means a crash if the handlers are
-/// used after a server shutdown (which should normally never happen,
-/// except during tests).
-pub fn start_rest_apis(
-	addr: String,
-	chain: Arc<chain::Chain>,
-	tx_pool: Arc<RwLock<pool::TransactionPool>>,
-	peers: Arc<p2p::Peers>,
-	sync_state: Arc<chain::SyncState>,
-	api_secret: Option<String>,
-	tls_config: Option<TLSConfig>,
-) -> bool {
-	let mut apis = ApiServer::new();
-	let mut router =
-		build_router(chain, tx_pool, peers, sync_state).expect("unable to build API router");
-	if let Some(api_secret) = api_secret {
-		let api_basic_auth = format!("Basic {}", util::to_base64(&format!("grin:{}", api_secret)));
-		let basic_auth_middleware = Arc::new(BasicAuthMiddleware::new(
-			api_basic_auth,
-			&GRIN_BASIC_REALM,
-			None,
-		));
-		router.add_middleware(basic_auth_middleware);
-	}
-
-	info!("Starting HTTP API server at {}.", addr);
-	let socket_addr: SocketAddr = addr.parse().expect("unable to parse socket address");
-	let res = apis.start(socket_addr, router, tls_config);
-	match res {
-		Ok(_) => true,
-		Err(e) => {
-			error!("HTTP API server failed to start. Err: {}", e);
-			false
-		}
-	}
-}
 
 pub fn build_router(
 	chain: Arc<chain::Chain>,

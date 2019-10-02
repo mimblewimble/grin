@@ -69,6 +69,7 @@ pub fn node_api(
 
 	let api_handler_v2 = NodeAPIHandlerV2::new(
 		Arc::downgrade(&chain),
+		Arc::downgrade(&tx_pool),
 		Arc::downgrade(&peers),
 		Arc::downgrade(&sync_state),
 	);
@@ -101,15 +102,22 @@ type NodeResponseFuture = Box<dyn Future<Item = Response<Body>, Error = Error> +
 /// V2 API Handler/Wrapper for owner functions
 pub struct NodeAPIHandlerV2 {
 	pub chain: Weak<Chain>,
+	pub tx_pool: Weak<RwLock<pool::TransactionPool>>,
 	pub peers: Weak<p2p::Peers>,
 	pub sync_state: Weak<SyncState>,
 }
 
 impl NodeAPIHandlerV2 {
 	/// Create a new owner API handler for GET methods
-	pub fn new(chain: Weak<Chain>, peers: Weak<p2p::Peers>, sync_state: Weak<SyncState>) -> Self {
+	pub fn new(
+		chain: Weak<Chain>,
+		tx_pool: Weak<RwLock<pool::TransactionPool>>,
+		peers: Weak<p2p::Peers>,
+		sync_state: Weak<SyncState>,
+	) -> Self {
 		NodeAPIHandlerV2 {
 			chain,
+			tx_pool,
 			peers,
 			sync_state,
 		}
@@ -137,6 +145,7 @@ impl NodeAPIHandlerV2 {
 	fn handle_post_request(&self, req: Request<Body>) -> NodeResponseFuture {
 		let api = Node::new(
 			self.chain.clone(),
+			self.tx_pool.clone(),
 			self.peers.clone(),
 			self.sync_state.clone(),
 		);
