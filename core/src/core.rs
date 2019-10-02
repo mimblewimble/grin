@@ -1,4 +1,4 @@
-// Copyright 2018 The Grin Developers
+// Copyright 2019 The Grin Developers
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -136,5 +136,4 @@ mod test {
 		assert!("5000000000.0" == amount_to_hr_string(5_000_000_000_000_000_000, true));
 		assert!("66.6" == amount_to_hr_string(66600000000, true));
 	}
-
 }
