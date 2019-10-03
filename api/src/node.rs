@@ -18,6 +18,7 @@ use crate::chain::{Chain, SyncState};
 use crate::core::core::hash::Hash;
 use crate::handlers::blocks_api::{BlockHandler, HeaderHandler};
 use crate::handlers::chain_api::{ChainCompactHandler, ChainHandler, ChainValidationHandler};
+use crate::handlers::peers_api::PeerHandler;
 use crate::handlers::server_api::StatusHandler;
 use crate::handlers::version_api::VersionHandler;
 use crate::p2p;
@@ -25,6 +26,7 @@ use crate::pool;
 use crate::rest::*;
 use crate::types::{BlockHeaderPrintable, BlockPrintable, Status, Tip, Version};
 use crate::util::RwLock;
+use std::net::SocketAddr;
 use std::sync::Weak;
 
 /// Main interface into all node API functions.
@@ -142,5 +144,19 @@ impl Node {
 			chain: self.chain.clone(),
 		};
 		chain_compact_handler.compact_chain()
+	}
+
+	pub fn ban_peer(&self, addr: SocketAddr) -> Result<(), Error> {
+		let peer_handler = PeerHandler {
+			peers: self.peers.clone(),
+		};
+		peer_handler.ban_peer(addr)
+	}
+
+	pub fn unban_peer(&self, addr: SocketAddr) -> Result<(), Error> {
+		let peer_handler = PeerHandler {
+			peers: self.peers.clone(),
+		};
+		peer_handler.unban_peer(addr)
 	}
 }

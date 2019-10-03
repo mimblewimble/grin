@@ -14,7 +14,7 @@
 
 pub mod blocks_api;
 pub mod chain_api;
-mod peers_api;
+pub mod peers_api;
 mod pool_api;
 pub mod server_api;
 mod transactions_api;

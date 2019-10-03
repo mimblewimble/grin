@@ -81,6 +81,8 @@ pub enum Error {
 	},
 	Send(String),
 	PeerException,
+	PeerNotFound,
+	PeerAlreadyBanned,
 	Internal,
 }
 

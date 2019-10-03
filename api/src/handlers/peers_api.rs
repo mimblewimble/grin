@@ -15,9 +15,11 @@
 use super::utils::w;
 use crate::p2p;
 use crate::p2p::types::{PeerAddr, PeerInfoDisplay, ReasonForBan};
+use crate::rest::*;
 use crate::router::{Handler, ResponseFuture};
 use crate::web::*;
 use hyper::{Body, Request, StatusCode};
+use std::net::SocketAddr;
 use std::sync::Weak;
 
 pub struct PeersAllHandler {
@@ -52,6 +54,22 @@ impl Handler for PeersConnectedHandler {
 /// POST /v1/peers/10.12.12.13/unban
 pub struct PeerHandler {
 	pub peers: Weak<p2p::Peers>,
+}
+
+impl PeerHandler {
+	pub fn ban_peer(&self, addr: SocketAddr) -> Result<(), Error> {
+		let peer_addr = PeerAddr(addr);
+		w(&self.peers)?
+			.ban_peer(peer_addr, ReasonForBan::ManualBan)
+			.map_err(|_| ErrorKind::Internal("peers error".to_owned()).into())
+	}
+
+	pub fn unban_peer(&self, addr: SocketAddr) -> Result<(), Error> {
+		let peer_addr = PeerAddr(addr);
+		w(&self.peers)?
+			.unban_peer(peer_addr)
+			.map_err(|_| ErrorKind::Internal("peers error".to_owned()).into())
+	}
 }
 
 impl Handler for PeerHandler {
