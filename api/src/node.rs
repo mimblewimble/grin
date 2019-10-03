@@ -18,10 +18,11 @@ use crate::chain::{Chain, SyncState};
 use crate::core::core::hash::Hash;
 use crate::handlers::blocks_api::{BlockHandler, HeaderHandler};
 use crate::handlers::chain_api::{ChainCompactHandler, ChainHandler, ChainValidationHandler};
-use crate::handlers::peers_api::PeerHandler;
+use crate::handlers::peers_api::{PeerHandler, PeersConnectedHandler};
 use crate::handlers::server_api::StatusHandler;
 use crate::handlers::version_api::VersionHandler;
-use crate::p2p;
+use crate::p2p::types::PeerInfoDisplay;
+use crate::p2p::{self, PeerData};
 use crate::pool;
 use crate::rest::*;
 use crate::types::{BlockHeaderPrintable, BlockPrintable, Status, Tip, Version};
@@ -144,6 +145,20 @@ impl Node {
 			chain: self.chain.clone(),
 		};
 		chain_compact_handler.compact_chain()
+	}
+
+	pub fn get_peers(&self, addr: Option<SocketAddr>) -> Result<Vec<PeerData>, Error> {
+		let peer_handler = PeerHandler {
+			peers: self.peers.clone(),
+		};
+		peer_handler.get_peers(addr)
+	}
+
+	pub fn get_connected_peers(&self) -> Result<Vec<PeerInfoDisplay>, Error> {
+		let peers_connected_handler = PeersConnectedHandler {
+			peers: self.peers.clone(),
+		};
+		peers_connected_handler.get_connected_peers()
 	}
 
 	pub fn ban_peer(&self, addr: SocketAddr) -> Result<(), Error> {

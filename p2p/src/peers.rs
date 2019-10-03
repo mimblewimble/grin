@@ -289,7 +289,7 @@ impl Peers {
 			Ok(())
 		} else {
 			error!("Couldn't unban {}: peer is not banned", peer_addr);
-			return Err(Error::PeerAlreadyBanned);
+			return Err(Error::PeerNotBanned);
 		}
 	}
 

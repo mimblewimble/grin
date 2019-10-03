@@ -16,6 +16,8 @@
 
 use crate::core::core::hash::Hash;
 use crate::node::Node;
+use crate::p2p::types::PeerInfoDisplay;
+use crate::p2p::PeerData;
 use crate::rest::ErrorKind;
 use crate::types::{BlockHeaderPrintable, BlockPrintable, Status, Tip, Version};
 use crate::util;
@@ -44,7 +46,8 @@ pub trait NodeRpc: Sync + Send {
 	fn get_tip(&self) -> Result<Tip, ErrorKind>;
 	fn validate_chain(&self) -> Result<(), ErrorKind>;
 	fn compact_chain(&self) -> Result<(), ErrorKind>;
-	//fn get_peers(&self, connected: bool, peer_addr: Option<SocketAddr>);
+	fn get_peers(&self, peer_addr: Option<SocketAddr>) -> Result<Vec<PeerData>, ErrorKind>;
+	fn get_connected_peers(&self) -> Result<Vec<PeerInfoDisplay>, ErrorKind>;
 	fn ban_peer(&self, peer_addr: SocketAddr) -> Result<(), ErrorKind>;
 	fn unban_peer(&self, peer_addr: SocketAddr) -> Result<(), ErrorKind>;
 }
@@ -96,6 +99,14 @@ impl NodeRpc for Node {
 
 	fn compact_chain(&self) -> Result<(), ErrorKind> {
 		Node::compact_chain(self).map_err(|e| e.kind().clone())
+	}
+
+	fn get_peers(&self, addr: Option<SocketAddr>) -> Result<Vec<PeerData>, ErrorKind> {
+		Node::get_peers(self, addr).map_err(|e| e.kind().clone())
+	}
+
+	fn get_connected_peers(&self) -> Result<Vec<PeerInfoDisplay>, ErrorKind> {
+		Node::get_connected_peers(self).map_err(|e| e.kind().clone())
 	}
 
 	fn ban_peer(&self, addr: SocketAddr) -> Result<(), ErrorKind> {
