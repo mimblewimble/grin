@@ -172,6 +172,38 @@ pub mod sig_serde {
 	}
 }
 
+/// Serializes an Option<secp::Commitment> to and from hex
+pub mod option_commitment_serde {
+	use crate::serde::{Deserialize, Deserializer, Serializer};
+	use crate::util::secp::pedersen::Commitment;
+	use crate::util::{from_hex, to_hex};
+	use serde::de::Error;
+
+	///
+	pub fn serialize<S>(commit: &Option<Commitment>, serializer: S) -> Result<S::Ok, S::Error>
+	where
+		S: Serializer,
+	{
+		match commit {
+			Some(c) => serializer.serialize_str(&to_hex(c.0.to_vec())),
+			None => serializer.serialize_none(),
+		}
+	}
+
+	///
+	pub fn deserialize<'de, D>(deserializer: D) -> Result<Option<Commitment>, D::Error>
+	where
+		D: Deserializer<'de>,
+	{
+		Option::<String>::deserialize(deserializer).and_then(|res| match res {
+			Some(string) => from_hex(string.to_string())
+				.map_err(|err| Error::custom(err.to_string()))
+				.and_then(|bytes: Vec<u8>| Ok(Some(Commitment::from_vec(bytes.to_vec())))),
+			None => Ok(None),
+		})
+	}
+
+}
 /// Creates a BlindingFactor from a hex string
 pub fn blind_from_hex<'de, D>(deserializer: D) -> Result<BlindingFactor, D::Error>
 where
@@ -334,6 +366,8 @@ mod test {
 		pub pub_key: PublicKey,
 		#[serde(with = "option_sig_serde")]
 		pub opt_sig: Option<Signature>,
+		#[serde(with = "option_commitment_serde")]
+		pub opt_commit: Option<Commitment>,
 		#[serde(with = "sig_serde")]
 		pub sig: Signature,
 		#[serde(with = "string_or_u64")]
@@ -351,10 +385,15 @@ mod test {
 			thread_rng().fill(&mut msg);
 			let msg = Message::from_slice(&msg).unwrap();
 			let sig = aggsig::sign_single(&secp, &msg, &sk, None, None).unwrap();
+			let mut commit = [0u8; 33];
+			commit[0] = 0x09;
+			thread_rng().fill(&mut commit[1..]);
+			let commit = Commitment::from_vec(commit.to_vec());
 			SerTest {
 				opt_skey: Some(sk.clone()),
 				pub_key: PublicKey::from_secret_key(&secp, &sk).unwrap(),
 				opt_sig: Some(sig.clone()),
+				opt_commit: Some(commit),
 				sig: sig.clone(),
 				num: 30,
 				opt_num: Some(33),
