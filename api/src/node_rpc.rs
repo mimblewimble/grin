@@ -17,7 +17,7 @@
 use crate::core::core::hash::Hash;
 use crate::node::Node;
 use crate::rest::ErrorKind;
-use crate::types::{BlockHeaderPrintable, BlockPrintable, Status, Version};
+use crate::types::{BlockHeaderPrintable, BlockPrintable, Status, Tip, Version};
 use crate::util;
 
 /// Public definition used to generate Node jsonrpc api.
@@ -40,6 +40,12 @@ pub trait NodeRpc: Sync + Send {
 	) -> Result<BlockPrintable, ErrorKind>;
 	fn get_status(&self) -> Result<Status, ErrorKind>;
 	fn get_version(&self) -> Result<Version, ErrorKind>;
+	fn get_tip(&self) -> Result<Tip, ErrorKind>;
+	fn validate_chain(&self) -> Result<(), ErrorKind>;
+	fn compact_chain(&self) -> Result<(), ErrorKind>;
+	/*fn get_peers(&self, connected: bool, peer_addr: Option<SocketAddr>);
+	fn ban_peer(&self, peer_addr: Option<SocketAddr>) -> Result<(), ErrorKind>;
+	fn unban_peer(&self, peer_addr: Option<SocketAddr>) -> Result<(), ErrorKind>;*/
 }
 
 impl NodeRpc for Node {
@@ -77,5 +83,17 @@ impl NodeRpc for Node {
 
 	fn get_version(&self) -> Result<Version, ErrorKind> {
 		Node::get_version(self).map_err(|e| e.kind().clone())
+	}
+
+	fn get_tip(&self) -> Result<Tip, ErrorKind> {
+		Node::get_tip(self).map_err(|e| e.kind().clone())
+	}
+
+	fn validate_chain(&self) -> Result<(), ErrorKind> {
+		Node::validate_chain(self).map_err(|e| e.kind().clone())
+	}
+
+	fn compact_chain(&self) -> Result<(), ErrorKind> {
+		Node::compact_chain(self).map_err(|e| e.kind().clone())
 	}
 }

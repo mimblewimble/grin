@@ -13,7 +13,7 @@
 // limitations under the License.
 
 pub mod blocks_api;
-mod chain_api;
+pub mod chain_api;
 mod peers_api;
 mod pool_api;
 pub mod server_api;

@@ -32,7 +32,7 @@ pub struct ChainHandler {
 }
 
 impl ChainHandler {
-	fn get_tip(&self) -> Result<Tip, Error> {
+	pub fn get_tip(&self) -> Result<Tip, Error> {
 		let head = w(&self.chain)?
 			.head()
 			.map_err(|e| ErrorKind::Internal(format!("can't get head: {}", e)))?;
@@ -52,6 +52,14 @@ pub struct ChainValidationHandler {
 	pub chain: Weak<chain::Chain>,
 }
 
+impl ChainValidationHandler {
+	pub fn validate_chain(&self) -> Result<(), Error> {
+		w(&self.chain)?
+			.validate(true)
+			.map_err(|_| ErrorKind::Internal("chain error".to_owned()).into())
+	}
+}
+
 impl Handler for ChainValidationHandler {
 	fn get(&self, _req: Request<Body>) -> ResponseFuture {
 		match w_fut!(&self.chain).validate(true) {
@@ -69,6 +77,14 @@ impl Handler for ChainValidationHandler {
 /// POST /v1/chain/compact
 pub struct ChainCompactHandler {
 	pub chain: Weak<chain::Chain>,
+}
+
+impl ChainCompactHandler {
+	pub fn compact_chain(&self) -> Result<(), Error> {
+		w(&self.chain)?
+			.compact()
+			.map_err(|_| ErrorKind::Internal("chain error".to_owned()).into())
+	}
 }
 
 impl Handler for ChainCompactHandler {

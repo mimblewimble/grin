@@ -17,12 +17,13 @@
 use crate::chain::{Chain, SyncState};
 use crate::core::core::hash::Hash;
 use crate::handlers::blocks_api::{BlockHandler, HeaderHandler};
+use crate::handlers::chain_api::{ChainCompactHandler, ChainHandler, ChainValidationHandler};
 use crate::handlers::server_api::StatusHandler;
 use crate::handlers::version_api::VersionHandler;
 use crate::p2p;
 use crate::pool;
 use crate::rest::*;
-use crate::types::{BlockHeaderPrintable, BlockPrintable, Status, Version};
+use crate::types::{BlockHeaderPrintable, BlockPrintable, Status, Tip, Version};
 use crate::util::RwLock;
 use std::sync::Weak;
 
@@ -121,5 +122,25 @@ impl Node {
 			chain: self.chain.clone(),
 		};
 		version_handler.get_version()
+	}
+
+	pub fn get_tip(&self) -> Result<Tip, Error> {
+		let chain_handler = ChainHandler {
+			chain: self.chain.clone(),
+		};
+		chain_handler.get_tip()
+	}
+	pub fn validate_chain(&self) -> Result<(), Error> {
+		let chain_validation_handler = ChainValidationHandler {
+			chain: self.chain.clone(),
+		};
+		chain_validation_handler.validate_chain()
+	}
+
+	pub fn compact_chain(&self) -> Result<(), Error> {
+		let chain_compact_handler = ChainCompactHandler {
+			chain: self.chain.clone(),
+		};
+		chain_compact_handler.compact_chain()
 	}
 }
