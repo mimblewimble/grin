@@ -175,8 +175,8 @@ pub mod sig_serde {
 /// Serializes an Option<secp::Commitment> to and from hex
 pub mod option_commitment_serde {
 	use crate::serde::{Deserialize, Deserializer, Serializer};
-	use crate::util::{from_hex, to_hex};
 	use crate::util::secp::pedersen::Commitment;
+	use crate::util::{from_hex, to_hex};
 	use serde::de::Error;
 
 	///
@@ -185,9 +185,7 @@ pub mod option_commitment_serde {
 		S: Serializer,
 	{
 		match commit {
-			Some(c) => {
-				serializer.serialize_str(&to_hex(c.0.to_vec()))
-			}
+			Some(c) => serializer.serialize_str(&to_hex(c.0.to_vec())),
 			None => serializer.serialize_none(),
 		}
 	}
@@ -200,9 +198,7 @@ pub mod option_commitment_serde {
 		Option::<String>::deserialize(deserializer).and_then(|res| match res {
 			Some(string) => from_hex(string.to_string())
 				.map_err(|err| Error::custom(err.to_string()))
-				.and_then(|bytes: Vec<u8>| {
-					Ok(Some(Commitment::from_vec(bytes.to_vec())))
-				}),
+				.and_then(|bytes: Vec<u8>| Ok(Some(Commitment::from_vec(bytes.to_vec())))),
 			None => Ok(None),
 		})
 	}
