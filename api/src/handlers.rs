@@ -12,14 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-mod blocks_api;
+pub mod blocks_api;
 mod chain_api;
 mod peers_api;
 mod pool_api;
 pub mod server_api;
 mod transactions_api;
 pub mod utils;
-mod version_api;
+pub mod version_api;
 
 use self::blocks_api::BlockHandler;
 use self::blocks_api::HeaderHandler;

@@ -15,11 +15,14 @@
 //! Node API External Definition
 
 use crate::chain::{Chain, SyncState};
+use crate::core::core::hash::Hash;
+use crate::handlers::blocks_api::BlockHandler;
 use crate::handlers::server_api::StatusHandler;
+use crate::handlers::version_api::VersionHandler;
 use crate::p2p;
 use crate::pool;
 use crate::rest::*;
-use crate::types::Status;
+use crate::types::{BlockPrintable, Status, Version};
 use crate::util::RwLock;
 use std::sync::Weak;
 
@@ -49,6 +52,19 @@ impl Node {
 			peers,
 			sync_state,
 		}
+	}
+
+	pub fn get_block(
+		&self,
+		height: Option<u64>,
+		hash: Option<Hash>,
+		commit: Option<String>,
+	) -> Result<BlockPrintable, Error> {
+		let block_handler = BlockHandler {
+			chain: self.chain.clone(),
+		};
+		let hash = block_handler.parse_inputs(height, hash, commit)?;
+		block_handler.get_block(&hash, true, true)
 	}
 
 	/// UNFINISHED
@@ -85,5 +101,12 @@ impl Node {
 			sync_state: self.sync_state.clone(),
 		};
 		status_handler.get_status()
+	}
+
+	pub fn get_version(&self) -> Result<Version, Error> {
+		let version_handler = VersionHandler {
+			chain: self.chain.clone(),
+		};
+		version_handler.get_version()
 	}
 }

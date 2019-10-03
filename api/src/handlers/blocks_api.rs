@@ -87,7 +87,7 @@ pub struct BlockHandler {
 }
 
 impl BlockHandler {
-	fn get_block(
+	pub fn get_block(
 		&self,
 		h: &Hash,
 		include_proof: bool,
@@ -118,6 +118,34 @@ impl BlockHandler {
 		let vec = util::from_hex(input)
 			.map_err(|e| ErrorKind::Argument(format!("invalid input: {}", e)))?;
 		Ok(Hash::from_vec(&vec))
+	}
+
+	// Try to get hash from height or hash
+	pub fn parse_inputs(
+		&self,
+		height: Option<u64>,
+		hash: Option<Hash>,
+		commit: Option<String>,
+	) -> Result<Hash, Error> {
+		if let Some(height) = height {
+			match w(&self.chain)?.get_header_by_height(height) {
+				Ok(header) => return Ok(header.hash()),
+				Err(_) => return Err(ErrorKind::NotFound)?,
+			}
+		}
+		if let Some(hash) = hash {
+			return Ok(hash);
+		}
+		if let Some(commit) = commit {
+			let oid = get_output(&self.chain, &commit)?.1;
+			match w(&self.chain)?.get_header_for_output(&oid) {
+				Ok(header) => return Ok(header.hash()),
+				Err(_) => return Err(ErrorKind::NotFound)?,
+			}
+		}
+		return Err(ErrorKind::Argument(
+			"not a valid hash, height or output commit".to_owned(),
+		))?;
 	}
 }
 

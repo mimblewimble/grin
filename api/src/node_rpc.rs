@@ -14,9 +14,11 @@
 
 //! JSON-RPC Stub generation for the Node API
 
+use crate::core::core::hash::Hash;
 use crate::node::Node;
 use crate::rest::ErrorKind;
-use crate::types::Status;
+use crate::types::{BlockPrintable, Status, Version};
+use crate::util;
 
 /// Public definition used to generate Node jsonrpc api.
 /// * When running `grin` with defaults, the V2 api is available at
@@ -24,11 +26,36 @@ use crate::types::Status;
 /// * The endpoint only supports POST operations, with the json-rpc request as the body
 #[easy_jsonrpc_mw::rpc]
 pub trait NodeRpc: Sync + Send {
+	fn get_block(
+		&self,
+		height: Option<u64>,
+		hash: Option<String>,
+		commit: Option<String>,
+	) -> Result<BlockPrintable, ErrorKind>;
 	fn get_status(&self) -> Result<Status, ErrorKind>;
+	fn get_version(&self) -> Result<Version, ErrorKind>;
 }
 
 impl NodeRpc for Node {
+	fn get_block(
+		&self,
+		height: Option<u64>,
+		hash: Option<String>,
+		commit: Option<String>,
+	) -> Result<BlockPrintable, ErrorKind> {
+		let mut parsed_hash: Option<Hash> = None;
+		if let Some(hash) = hash {
+			let vec = util::from_hex(hash)
+				.map_err(|e| ErrorKind::Argument(format!("invalid block hash: {}", e)))?;
+			parsed_hash = Some(Hash::from_vec(&vec));
+		}
+		Node::get_block(self, height, parsed_hash, commit).map_err(|e| e.kind().clone())
+	}
 	fn get_status(&self) -> Result<Status, ErrorKind> {
 		Node::get_status(self).map_err(|e| e.kind().clone())
+	}
+
+	fn get_version(&self) -> Result<Version, ErrorKind> {
+		Node::get_version(self).map_err(|e| e.kind().clone())
 	}
 }
