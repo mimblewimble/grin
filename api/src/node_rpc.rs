@@ -17,7 +17,7 @@
 use crate::core::core::hash::Hash;
 use crate::node::Node;
 use crate::rest::ErrorKind;
-use crate::types::{BlockPrintable, Status, Version};
+use crate::types::{BlockHeaderPrintable, BlockPrintable, Status, Version};
 use crate::util;
 
 /// Public definition used to generate Node jsonrpc api.
@@ -26,6 +26,12 @@ use crate::util;
 /// * The endpoint only supports POST operations, with the json-rpc request as the body
 #[easy_jsonrpc_mw::rpc]
 pub trait NodeRpc: Sync + Send {
+	fn get_header(
+		&self,
+		height: Option<u64>,
+		hash: Option<String>,
+		commit: Option<String>,
+	) -> Result<BlockHeaderPrintable, ErrorKind>;
 	fn get_block(
 		&self,
 		height: Option<u64>,
@@ -37,6 +43,20 @@ pub trait NodeRpc: Sync + Send {
 }
 
 impl NodeRpc for Node {
+	fn get_header(
+		&self,
+		height: Option<u64>,
+		hash: Option<String>,
+		commit: Option<String>,
+	) -> Result<BlockHeaderPrintable, ErrorKind> {
+		let mut parsed_hash: Option<Hash> = None;
+		if let Some(hash) = hash {
+			let vec = util::from_hex(hash)
+				.map_err(|e| ErrorKind::Argument(format!("invalid block hash: {}", e)))?;
+			parsed_hash = Some(Hash::from_vec(&vec));
+		}
+		Node::get_header(self, height, parsed_hash, commit).map_err(|e| e.kind().clone())
+	}
 	fn get_block(
 		&self,
 		height: Option<u64>,

@@ -16,13 +16,13 @@
 
 use crate::chain::{Chain, SyncState};
 use crate::core::core::hash::Hash;
-use crate::handlers::blocks_api::BlockHandler;
+use crate::handlers::blocks_api::{BlockHandler, HeaderHandler};
 use crate::handlers::server_api::StatusHandler;
 use crate::handlers::version_api::VersionHandler;
 use crate::p2p;
 use crate::pool;
 use crate::rest::*;
-use crate::types::{BlockPrintable, Status, Version};
+use crate::types::{BlockHeaderPrintable, BlockPrintable, Status, Version};
 use crate::util::RwLock;
 use std::sync::Weak;
 
@@ -52,6 +52,19 @@ impl Node {
 			peers,
 			sync_state,
 		}
+	}
+
+	pub fn get_header(
+		&self,
+		height: Option<u64>,
+		hash: Option<Hash>,
+		commit: Option<String>,
+	) -> Result<BlockHeaderPrintable, Error> {
+		let header_handler = HeaderHandler {
+			chain: self.chain.clone(),
+		};
+		let hash = header_handler.parse_inputs(height, hash, commit)?;
+		header_handler.get_header_v2(&hash)
 	}
 
 	pub fn get_block(
