@@ -92,19 +92,19 @@ pub struct OutputHandler {
 }
 
 impl OutputHandler {
-	fn get_output(&self, id: &str) -> Result<Output, Error> {
+	fn get_output(&self, id: &str) -> Result<OutputPrintable, Error> {
 		let res = get_output(&self.chain, id)?;
 		Ok(res.0)
 	}
 
-	fn outputs_by_ids(&self, req: &Request<Body>) -> Result<Vec<Output>, Error> {
+	fn outputs_by_ids(&self, req: &Request<Body>) -> Result<Vec<OutputPrintable>, Error> {
 		let mut commitments: Vec<String> = vec![];
 
 		let query = must_get_query!(req);
 		let params = QueryParams::from(query);
 		params.process_multival_param("id", |id| commitments.push(id.to_owned()));
 
-		let mut outputs: Vec<Output> = vec![];
+		let mut outputs: Vec<OutputPrintable> = vec![];
 		for x in commitments {
 			match self.get_output(&x) {
 				Ok(output) => outputs.push(output),

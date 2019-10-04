@@ -33,7 +33,7 @@ pub fn w<T>(weak: &Weak<T>) -> Result<Arc<T>, Error> {
 pub fn get_output(
 	chain: &Weak<chain::Chain>,
 	id: &str,
-) -> Result<(Output, OutputIdentifier), Error> {
+) -> Result<(OutputPrintable, OutputIdentifier), Error> {
 	let c = util::from_hex(String::from(id)).context(ErrorKind::Argument(format!(
 		"Not a valid commitment: {}",
 		id
@@ -54,12 +54,22 @@ pub fn get_output(
 	for x in outputs.iter() {
 		let res = chain.is_unspent(x);
 		match res {
-			Ok(output_pos) => {
-				return Ok((
-					Output::new(&commit, output_pos.height, output_pos.position),
-					x.clone(),
-				));
-			}
+			Ok(output_pos) => match chain.get_unspent_output_at(output_pos.position) {
+				Ok(output) => {
+					match OutputPrintable::from_output(&output, chain.clone(), None, true, true) {
+						Ok(output_printable) => return Ok((output_printable, x.clone())),
+						Err(e) => {
+							trace!(
+								"get_output: err: {} for commit: {:?} with feature: {:?}",
+								e.to_string(),
+								x.commit,
+								x.features
+							);
+						}
+					}
+				}
+				Err(_) => return Err(ErrorKind::NotFound)?,
+			},
 			Err(e) => {
 				trace!(
 					"get_output: err: {} for commit: {:?} with feature: {:?}",

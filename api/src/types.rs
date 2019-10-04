@@ -175,28 +175,6 @@ pub enum OutputType {
 	Transaction,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct Output {
-	/// The output commitment representing the amount
-	pub commit: PrintableCommitment,
-	/// Height of the block which contains the output
-	pub height: u64,
-	/// MMR Index of output
-	pub mmr_index: u64,
-}
-
-impl Output {
-	pub fn new(commit: &pedersen::Commitment, height: u64, mmr_index: u64) -> Output {
-		Output {
-			commit: PrintableCommitment {
-				commit: commit.clone(),
-			},
-			height: height,
-			mmr_index: mmr_index,
-		}
-	}
-}
-
 #[derive(Debug, Clone)]
 pub struct PrintableCommitment {
 	pub commit: pedersen::Commitment,
