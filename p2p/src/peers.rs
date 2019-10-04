@@ -58,13 +58,10 @@ impl Peers {
 	/// Adds the peer to our internal peer mapping. Note that the peer is still
 	/// returned so the server can run it.
 	pub fn add_connected(&self, peer: Arc<Peer>) -> Result<(), Error> {
-		let mut peers = match self.peers.try_write_for(LOCK_TIMEOUT) {
-			Some(peers) => peers,
-			None => {
-				error!("add_connected: failed to get peers lock");
-				return Err(Error::Timeout);
-			}
-		};
+		let mut peers = self.peers.try_write_for(LOCK_TIMEOUT).ok_or_else(|| {
+			error!("add_connected: failed to get peers lock");
+			Error::Timeout
+		})?;
 		let peer_data = PeerData {
 			addr: peer.info.addr,
 			capabilities: peer.info.capabilities,
@@ -102,13 +99,10 @@ impl Peers {
 	/// and this attempt fails then return an error allowing the caller
 	/// to decide how best to handle this.
 	pub fn is_known(&self, addr: PeerAddr) -> Result<bool, Error> {
-		let peers = match self.peers.try_read_for(LOCK_TIMEOUT) {
-			Some(peers) => peers,
-			None => {
-				error!("is_known: failed to get peers lock");
-				return Err(Error::Internal);
-			}
-		};
+		let peers = self.peers.try_read_for(LOCK_TIMEOUT).ok_or_else(|| {
+			error!("is_known: failed to get peers lock");
+			Error::Internal
+		})?;
 		Ok(peers.contains_key(&addr))
 	}
 
@@ -264,13 +258,10 @@ impl Peers {
 				peer.send_ban_reason(ban_reason)?;
 				peer.set_banned();
 				peer.stop();
-				let mut peers = match self.peers.try_write_for(LOCK_TIMEOUT) {
-					Some(peers) => peers,
-					None => {
-						error!("ban_peer: failed to get peers lock");
-						return Err(Error::PeerException);
-					}
-				};
+				let mut peers = self.peers.try_write_for(LOCK_TIMEOUT).ok_or_else(|| {
+					error!("ban_peer: failed to get peers lock");
+					Error::PeerException
+				})?;
 				peers.remove(&peer.info.addr);
 				Ok(())
 			}
@@ -284,10 +275,8 @@ impl Peers {
 		// check if peer exist
 		self.get_peer(peer_addr)?;
 		if self.is_banned(peer_addr) {
-			self.update_state(peer_addr, State::Healthy)?;
-			Ok(())
+			return self.update_state(peer_addr, State::Healthy);
 		} else {
-			error!("Couldn't unban {}: peer is not banned", peer_addr);
 			return Err(Error::PeerNotBanned);
 		}
 	}
