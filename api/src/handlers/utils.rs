@@ -26,13 +26,14 @@ use std::sync::{Arc, Weak};
 // boilerplate of dealing with `Weak`.
 pub fn w<T>(weak: &Weak<T>) -> Result<Arc<T>, Error> {
 	weak.upgrade()
-		.ok_or_else(|| ErrorKind::Internal("failed to upgrade weak refernce".to_owned()).into())
+		.ok_or_else(|| ErrorKind::Internal("failed to upgrade weak reference".to_owned()).into())
 }
 
 /// Retrieves an output from the chain given a commit id (a tiny bit iteratively)
 pub fn get_output(
 	chain: &Weak<chain::Chain>,
 	id: &str,
+	include_proof: bool,
 ) -> Result<(OutputPrintable, OutputIdentifier), Error> {
 	let c = util::from_hex(String::from(id)).context(ErrorKind::Argument(format!(
 		"Not a valid commitment: {}",
@@ -56,7 +57,13 @@ pub fn get_output(
 		match res {
 			Ok(output_pos) => match chain.get_unspent_output_at(output_pos.position) {
 				Ok(output) => {
-					match OutputPrintable::from_output(&output, chain.clone(), None, true, true) {
+					match OutputPrintable::from_output(
+						&output,
+						chain.clone(),
+						None,
+						include_proof,
+						false,
+					) {
 						Ok(output_printable) => return Ok((output_printable, x.clone())),
 						Err(e) => {
 							trace!(
@@ -68,7 +75,7 @@ pub fn get_output(
 						}
 					}
 				}
-				Err(e) => return Err(ErrorKind::NotFound)?,
+				Err(_) => return Err(ErrorKind::NotFound)?,
 			},
 			Err(e) => {
 				trace!(

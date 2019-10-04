@@ -102,6 +102,7 @@ impl<'a> UTXOView<'a> {
 		Ok(())
 	}
 
+	/// Retrieves an unspent output using its PMMR position
 	pub fn get_unspent_output_at(&self, pos: u64) -> Result<Output, Error> {
 		match self.output_pmmr.get_data(pos) {
 			Some(output_id) => match self.rproof_pmmr.get_data(pos) {

@@ -108,7 +108,7 @@ impl TxHashSetHandler {
 			spent: false,
 			proof: None,
 			proof_hash: "".to_string(),
-			block_height: None,
+			block_height: 0,
 			merkle_proof: Some(merkle_proof),
 			mmr_index: output_pos,
 		})

@@ -159,7 +159,8 @@ impl Node {
 		let output_handler = OutputHandler {
 			chain: self.chain.clone(),
 		};
-		output_handler.get_outputs(commits, start_height, end_height)
+		return Err(ErrorKind::NotFound.into());
+		//output_handler.get_outputs(commits, start_height, end_height)
 	}
 
 	pub fn validate_chain(&self) -> Result<(), Error> {
