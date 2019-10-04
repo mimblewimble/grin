@@ -175,60 +175,6 @@ pub enum OutputType {
 	Transaction,
 }
 
-#[derive(Debug, Clone)]
-pub struct PrintableCommitment {
-	pub commit: pedersen::Commitment,
-}
-
-impl PrintableCommitment {
-	pub fn commit(&self) -> pedersen::Commitment {
-		self.commit.clone()
-	}
-
-	pub fn to_vec(&self) -> Vec<u8> {
-		self.commit.0.to_vec()
-	}
-}
-
-impl serde::ser::Serialize for PrintableCommitment {
-	fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-	where
-		S: serde::ser::Serializer,
-	{
-		serializer.serialize_str(&util::to_hex(self.to_vec()))
-	}
-}
-
-impl<'de> serde::de::Deserialize<'de> for PrintableCommitment {
-	fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-	where
-		D: serde::de::Deserializer<'de>,
-	{
-		deserializer.deserialize_str(PrintableCommitmentVisitor)
-	}
-}
-
-struct PrintableCommitmentVisitor;
-
-impl<'de> serde::de::Visitor<'de> for PrintableCommitmentVisitor {
-	type Value = PrintableCommitment;
-
-	fn expecting(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-		formatter.write_str("a Pedersen commitment")
-	}
-
-	fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
-	where
-		E: serde::de::Error,
-	{
-		Ok(PrintableCommitment {
-			commit: pedersen::Commitment::from_vec(
-				util::from_hex(String::from(v)).map_err(serde::de::Error::custom)?,
-			),
-		})
-	}
-}
-
 // As above, except formatted a bit better for human viewing
 #[derive(Debug, Clone)]
 pub struct OutputPrintable {
@@ -244,7 +190,7 @@ pub struct OutputPrintable {
 	/// Rangeproof hash (as hex string)
 	pub proof_hash: String,
 	/// Block height at which the output is found
-	pub block_height: Option<u64>,
+	pub block_height: u64,
 	/// Merkle Proof
 	pub merkle_proof: Option<MerkleProof>,
 	/// MMR Position
@@ -268,9 +214,9 @@ impl OutputPrintable {
 		let out_id = core::OutputIdentifier::from_output(&output);
 		let res = chain.is_unspent(&out_id);
 		let (spent, block_height) = if let Ok(output_pos) = res {
-			(false, Some(output_pos.height))
+			(false, output_pos.height)
 		} else {
-			(true, None)
+			(true, 0)
 		};
 
 		let proof = if include_proof {
@@ -315,7 +261,7 @@ impl OutputPrintable {
 		};
 
 		let p_vec = util::from_hex(proof_str)
-			.map_err(|_| ser::Error::HexError(format!("invalud output range_proof")))?;
+			.map_err(|_| ser::Error::HexError(format!("invalid output range_proof")))?;
 		let mut p_bytes = [0; util::secp::constants::MAX_PROOF_SIZE];
 		for i in 0..p_bytes.len() {
 			p_bytes[i] = p_vec[i];
@@ -449,7 +395,7 @@ impl<'de> serde::de::Deserialize<'de> for OutputPrintable {
 					spent: spent.unwrap(),
 					proof: proof,
 					proof_hash: proof_hash.unwrap(),
-					block_height: block_height,
+					block_height: block_height.unwrap(),
 					merkle_proof: merkle_proof,
 					mmr_index: mmr_index.unwrap(),
 				})
@@ -723,18 +669,5 @@ mod test {
 		let deserialized: OutputPrintable = serde_json::from_str(&hex_output).unwrap();
 		let serialized = serde_json::to_string(&deserialized).unwrap();
 		assert_eq!(serialized, hex_output);
-	}
-
-	#[test]
-	fn serialize_output() {
-		let hex_commit =
-			"{\
-			 \"commit\":\"083eafae5d61a85ab07b12e1a51b3918d8e6de11fc6cde641d54af53608aa77b9f\",\
-			 \"height\":0,\
-			 \"mmr_index\":0\
-			 }";
-		let deserialized: Output = serde_json::from_str(&hex_commit).unwrap();
-		let serialized = serde_json::to_string(&deserialized).unwrap();
-		assert_eq!(serialized, hex_commit);
 	}
 }
