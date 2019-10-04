@@ -157,7 +157,9 @@ fn monitor_peers(
 				let interval = Utc::now().timestamp() - x.last_banned;
 				// Unban peer
 				if interval >= config.ban_window() {
-					peers.unban_peer(x.addr);
+					if let Err(e) = peers.unban_peer(x.addr) {
+						error!("failed to unban peer {}: {:?}", x.addr, e);
+					}
 					debug!(
 						"monitor_peers: unbanned {} after {} seconds",
 						x.addr, interval
