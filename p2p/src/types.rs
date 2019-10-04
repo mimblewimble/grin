@@ -80,6 +80,8 @@ pub enum Error {
 		peer: Hash,
 	},
 	Send(String),
+	PeerNotFound,
+	PeerNotBanned,
 	PeerException,
 	Internal,
 }

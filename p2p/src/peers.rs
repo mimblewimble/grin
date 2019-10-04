@@ -58,13 +58,10 @@ impl Peers {
 	/// Adds the peer to our internal peer mapping. Note that the peer is still
 	/// returned so the server can run it.
 	pub fn add_connected(&self, peer: Arc<Peer>) -> Result<(), Error> {
-		let mut peers = match self.peers.try_write_for(LOCK_TIMEOUT) {
-			Some(peers) => peers,
-			None => {
-				error!("add_connected: failed to get peers lock");
-				return Err(Error::Timeout);
-			}
-		};
+		let mut peers = self.peers.try_write_for(LOCK_TIMEOUT).ok_or_else(|| {
+			error!("add_connected: failed to get peers lock");
+			Error::Timeout
+		})?;
 		let peer_data = PeerData {
 			addr: peer.info.addr,
 			capabilities: peer.info.capabilities,
@@ -102,13 +99,10 @@ impl Peers {
 	/// and this attempt fails then return an error allowing the caller
 	/// to decide how best to handle this.
 	pub fn is_known(&self, addr: PeerAddr) -> Result<bool, Error> {
-		let peers = match self.peers.try_read_for(LOCK_TIMEOUT) {
-			Some(peers) => peers,
-			None => {
-				error!("is_known: failed to get peers lock");
-				return Err(Error::Internal);
-			}
-		};
+		let peers = self.peers.try_read_for(LOCK_TIMEOUT).ok_or_else(|| {
+			error!("is_known: failed to get peers lock");
+			Error::Internal
+		})?;
 		Ok(peers.contains_key(&addr))
 	}
 
@@ -253,50 +247,38 @@ impl Peers {
 		}
 		false
 	}
-
 	/// Ban a peer, disconnecting it if we're currently connected
-	pub fn ban_peer(&self, peer_addr: PeerAddr, ban_reason: ReasonForBan) {
-		if let Err(e) = self.update_state(peer_addr, State::Banned) {
-			error!("Couldn't ban {}: {:?}", peer_addr, e);
-			return;
-		}
+	pub fn ban_peer(&self, peer_addr: PeerAddr, ban_reason: ReasonForBan) -> Result<(), Error> {
+		self.update_state(peer_addr, State::Banned)?;
 
-		if let Some(peer) = self.get_connected_peer(peer_addr) {
-			debug!("Banning peer {}", peer_addr);
-			// setting peer status will get it removed at the next clean_peer
-			match peer.send_ban_reason(ban_reason) {
-				Err(e) => error!("failed to send a ban reason to{}: {:?}", peer_addr, e),
-				Ok(_) => debug!("ban reason {:?} was sent to {}", ban_reason, peer_addr),
-			};
-			peer.set_banned();
-			peer.stop();
-
-			let mut peers = match self.peers.try_write_for(LOCK_TIMEOUT) {
-				Some(peers) => peers,
-				None => {
+		match self.get_connected_peer(peer_addr) {
+			Some(peer) => {
+				debug!("Banning peer {}", peer_addr);
+				// setting peer status will get it removed at the next clean_peer
+				peer.send_ban_reason(ban_reason)?;
+				peer.set_banned();
+				peer.stop();
+				let mut peers = self.peers.try_write_for(LOCK_TIMEOUT).ok_or_else(|| {
 					error!("ban_peer: failed to get peers lock");
-					return;
-				}
-			};
-			peers.remove(&peer.info.addr);
+					Error::PeerException
+				})?;
+				peers.remove(&peer.info.addr);
+				Ok(())
+			}
+			None => return Err(Error::PeerNotFound),
 		}
 	}
 
 	/// Unban a peer, checks if it exists and banned then unban
-	pub fn unban_peer(&self, peer_addr: PeerAddr) {
+	pub fn unban_peer(&self, peer_addr: PeerAddr) -> Result<(), Error> {
 		debug!("unban_peer: peer {}", peer_addr);
-		match self.get_peer(peer_addr) {
-			Ok(_) => {
-				if self.is_banned(peer_addr) {
-					if let Err(e) = self.update_state(peer_addr, State::Healthy) {
-						error!("Couldn't unban {}: {:?}", peer_addr, e);
-					}
-				} else {
-					error!("Couldn't unban {}: peer is not banned", peer_addr);
-				}
-			}
-			Err(e) => error!("Couldn't unban {}: {:?}", peer_addr, e),
-		};
+		// check if peer exist
+		self.get_peer(peer_addr)?;
+		if self.is_banned(peer_addr) {
+			return self.update_state(peer_addr, State::Healthy);
+		} else {
+			return Err(Error::PeerNotBanned);
+		}
 	}
 
 	fn broadcast<F>(&self, obj_name: &str, inner: F) -> u32
@@ -605,7 +587,12 @@ impl ChainAdapter for Peers {
 				"Received a bad block {} from  {}, the peer will be banned",
 				hash, peer_info.addr,
 			);
-			self.ban_peer(peer_info.addr, ReasonForBan::BadBlock);
+			self.ban_peer(peer_info.addr, ReasonForBan::BadBlock)
+				.map_err(|e| {
+					let err: chain::Error =
+						chain::ErrorKind::Other(format!("ban peer error :{:?}", e)).into();
+					err
+				})?;
 			Ok(false)
 		} else {
 			Ok(true)
@@ -625,7 +612,12 @@ impl ChainAdapter for Peers {
 				"Received a bad compact block {} from  {}, the peer will be banned",
 				hash, peer_info.addr
 			);
-			self.ban_peer(peer_info.addr, ReasonForBan::BadCompactBlock);
+			self.ban_peer(peer_info.addr, ReasonForBan::BadCompactBlock)
+				.map_err(|e| {
+					let err: chain::Error =
+						chain::ErrorKind::Other(format!("ban peer error :{:?}", e)).into();
+					err
+				})?;
 			Ok(false)
 		} else {
 			Ok(true)
@@ -640,7 +632,12 @@ impl ChainAdapter for Peers {
 		if !self.adapter.header_received(bh, peer_info)? {
 			// if the peer sent us a block header that's intrinsically bad
 			// they are either mistaken or malevolent, both of which require a ban
-			self.ban_peer(peer_info.addr, ReasonForBan::BadBlockHeader);
+			self.ban_peer(peer_info.addr, ReasonForBan::BadBlockHeader)
+				.map_err(|e| {
+					let err: chain::Error =
+						chain::ErrorKind::Other(format!("ban peer error :{:?}", e)).into();
+					err
+				})?;
 			Ok(false)
 		} else {
 			Ok(true)
@@ -655,7 +652,12 @@ impl ChainAdapter for Peers {
 		if !self.adapter.headers_received(headers, peer_info)? {
 			// if the peer sent us a block header that's intrinsically bad
 			// they are either mistaken or malevolent, both of which require a ban
-			self.ban_peer(peer_info.addr, ReasonForBan::BadBlockHeader);
+			self.ban_peer(peer_info.addr, ReasonForBan::BadBlockHeader)
+				.map_err(|e| {
+					let err: chain::Error =
+						chain::ErrorKind::Other(format!("ban peer error :{:?}", e)).into();
+					err
+				})?;
 			Ok(false)
 		} else {
 			Ok(true)
@@ -701,7 +703,12 @@ impl ChainAdapter for Peers {
 				"Received a bad txhashset data from {}, the peer will be banned",
 				peer_info.addr
 			);
-			self.ban_peer(peer_info.addr, ReasonForBan::BadTxHashSet);
+			self.ban_peer(peer_info.addr, ReasonForBan::BadTxHashSet)
+				.map_err(|e| {
+					let err: chain::Error =
+						chain::ErrorKind::Other(format!("ban peer error :{:?}", e)).into();
+					err
+				})?;
 			Ok(true)
 		} else {
 			Ok(false)

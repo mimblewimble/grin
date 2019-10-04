@@ -101,8 +101,20 @@ impl Handler for PeerHandler {
 		};
 
 		match command {
-			"ban" => w_fut!(&self.peers).ban_peer(addr, ReasonForBan::ManualBan),
-			"unban" => w_fut!(&self.peers).unban_peer(addr),
+			"ban" => match w_fut!(&self.peers).ban_peer(addr, ReasonForBan::ManualBan) {
+				Ok(_) => response(StatusCode::OK, "{}"),
+				Err(e) => response(
+					StatusCode::INTERNAL_SERVER_ERROR,
+					format!("ban failed: {:?}", e),
+				),
+			},
+			"unban" => match w_fut!(&self.peers).unban_peer(addr) {
+				Ok(_) => response(StatusCode::OK, "{}"),
+				Err(e) => response(
+					StatusCode::INTERNAL_SERVER_ERROR,
+					format!("unban failed: {:?}", e),
+				),
+			},
 			_ => return response(StatusCode::BAD_REQUEST, "invalid command"),
 		};
 
