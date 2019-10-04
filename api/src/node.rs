@@ -17,7 +17,9 @@
 use crate::chain::{Chain, SyncState};
 use crate::core::core::hash::Hash;
 use crate::handlers::blocks_api::{BlockHandler, HeaderHandler};
-use crate::handlers::chain_api::{ChainCompactHandler, ChainHandler, ChainValidationHandler};
+use crate::handlers::chain_api::{
+	ChainCompactHandler, ChainHandler, ChainValidationHandler, KernelHandler, OutputHandler,
+};
 use crate::handlers::peers_api::{PeerHandler, PeersConnectedHandler};
 use crate::handlers::server_api::StatusHandler;
 use crate::handlers::version_api::VersionHandler;
@@ -25,7 +27,9 @@ use crate::p2p::types::PeerInfoDisplay;
 use crate::p2p::{self, PeerData};
 use crate::pool;
 use crate::rest::*;
-use crate::types::{BlockHeaderPrintable, BlockPrintable, Status, Tip, Version};
+use crate::types::{
+	BlockHeaderPrintable, BlockPrintable, LocatedTxKernel, OutputPrintable, Status, Tip, Version,
+};
 use crate::util::RwLock;
 use std::net::SocketAddr;
 use std::sync::Weak;
@@ -133,6 +137,31 @@ impl Node {
 		};
 		chain_handler.get_tip()
 	}
+
+	pub fn get_kernel(
+		&self,
+		excess: String,
+		min_height: Option<u64>,
+		max_height: Option<u64>,
+	) -> Result<LocatedTxKernel, Error> {
+		let kernel_handler = KernelHandler {
+			chain: self.chain.clone(),
+		};
+		kernel_handler.get_kernel_v2(excess, min_height, max_height)
+	}
+
+	pub fn get_outputs(
+		&self,
+		commits: Option<Vec<String>>,
+		start_height: Option<u64>,
+		end_height: Option<u64>,
+	) -> Result<Vec<OutputPrintable>, Error> {
+		let output_handler = OutputHandler {
+			chain: self.chain.clone(),
+		};
+		output_handler.get_outputs(commits, start_height, end_height)
+	}
+
 	pub fn validate_chain(&self) -> Result<(), Error> {
 		let chain_validation_handler = ChainValidationHandler {
 			chain: self.chain.clone(),

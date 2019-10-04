@@ -19,7 +19,9 @@ use crate::node::Node;
 use crate::p2p::types::PeerInfoDisplay;
 use crate::p2p::PeerData;
 use crate::rest::ErrorKind;
-use crate::types::{BlockHeaderPrintable, BlockPrintable, Status, Tip, Version};
+use crate::types::{
+	BlockHeaderPrintable, BlockPrintable, LocatedTxKernel, OutputPrintable, Status, Tip, Version,
+};
 use crate::util;
 use std::net::SocketAddr;
 
@@ -44,6 +46,18 @@ pub trait NodeRpc: Sync + Send {
 	fn get_status(&self) -> Result<Status, ErrorKind>;
 	fn get_version(&self) -> Result<Version, ErrorKind>;
 	fn get_tip(&self) -> Result<Tip, ErrorKind>;
+	fn get_kernel(
+		&self,
+		excess: String,
+		min_height: Option<u64>,
+		max_height: Option<u64>,
+	) -> Result<LocatedTxKernel, ErrorKind>;
+	fn get_outputs(
+		&self,
+		commits: Option<Vec<String>>,
+		start_height: Option<u64>,
+		end_height: Option<u64>,
+	) -> Result<Vec<OutputPrintable>, ErrorKind>;
 	fn validate_chain(&self) -> Result<(), ErrorKind>;
 	fn compact_chain(&self) -> Result<(), ErrorKind>;
 	fn get_peers(&self, peer_addr: Option<SocketAddr>) -> Result<Vec<PeerData>, ErrorKind>;
@@ -91,6 +105,24 @@ impl NodeRpc for Node {
 
 	fn get_tip(&self) -> Result<Tip, ErrorKind> {
 		Node::get_tip(self).map_err(|e| e.kind().clone())
+	}
+
+	fn get_kernel(
+		&self,
+		excess: String,
+		min_height: Option<u64>,
+		max_height: Option<u64>,
+	) -> Result<LocatedTxKernel, ErrorKind> {
+		Node::get_kernel(self, excess, min_height, max_height).map_err(|e| e.kind().clone())
+	}
+
+	fn get_outputs(
+		&self,
+		commits: Option<Vec<String>>,
+		start_height: Option<u64>,
+		end_height: Option<u64>,
+	) -> Result<Vec<OutputPrintable>, ErrorKind> {
+		Node::get_outputs(self, commits, start_height, end_height).map_err(|e| e.kind().clone())
 	}
 
 	fn validate_chain(&self) -> Result<(), ErrorKind> {

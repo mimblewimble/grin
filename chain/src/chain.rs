@@ -1346,6 +1346,14 @@ impl Chain {
 		Ok(self.get_block_header(&hash)?)
 	}
 
+	pub fn get_unspent_output_at(&self, pos: u64) -> Result<Output, Error> {
+		let header_pmmr = self.header_pmmr.read();
+		let txhashset = self.txhashset.read();
+		txhashset::utxo_view(&header_pmmr, &txhashset, |utxo| {
+			utxo.get_unspent_output_at(pos)
+		})
+	}
+
 	/// Gets the kernel with a given excess and the block height it is included in.
 	pub fn get_kernel_height(
 		&self,

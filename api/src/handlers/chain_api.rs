@@ -108,19 +108,64 @@ pub struct OutputHandler {
 }
 
 impl OutputHandler {
-	fn get_output(&self, id: &str) -> Result<Output, Error> {
+	pub fn get_outputs(
+		&self,
+		commits: Option<Vec<String>>,
+		start_height: Option<u64>,
+		end_height: Option<u64>,
+	) -> Result<Vec<OutputPrintable>, Error> {
+		/*let mut outputs: Vec<OutputPrintable> = vec![];
+		if let Some(commits) = commits {
+			// First check the commits length
+			for commit in &commits {
+				if commit.len() != 66 {
+					return Err(ErrorKind::RequestError("invalid commit length".into()).into());
+				}
+			}
+			for commit in commits {
+				match self.get_output(&commit) {
+					Ok(output) => {
+						let output_printable = OutputPrintable::from_output(
+							&output,
+							self.chain.clone(),
+							None,
+							true,
+							true,
+						)?;
+						outputs.push(output_printable)
+					}
+					// do not crash here simply do not retrieve this output
+					Err(e) => error!(
+						"Failure to get output for commitment {} with error {}",
+						commit, e
+					),
+				};
+			}
+		}
+		// cannot chain to let Some() for now  see https://github.com/rust-lang/rust/issues/53667
+		if let Some(start_height) = start_height {
+			if let Some(end_height) = end_height {
+				let block_output_batch = self.outputs_block_batch_v2(start_height, end_height)?;
+				[&outputs[..], &block_output_batch[..]].concat();
+			}
+		}
+		return Ok(outputs);*/
+		return Err(ErrorKind::NotFound.into());
+	}
+
+	fn get_output(&self, id: &str) -> Result<OutputPrintable, Error> {
 		let res = get_output(&self.chain, id)?;
 		Ok(res.0)
 	}
 
-	fn outputs_by_ids(&self, req: &Request<Body>) -> Result<Vec<Output>, Error> {
+	fn outputs_by_ids(&self, req: &Request<Body>) -> Result<Vec<OutputPrintable>, Error> {
 		let mut commitments: Vec<String> = vec![];
 
 		let query = must_get_query!(req);
 		let params = QueryParams::from(query);
 		params.process_multival_param("id", |id| commitments.push(id.to_owned()));
 
-		let mut outputs: Vec<Output> = vec![];
+		let mut outputs: Vec<OutputPrintable> = vec![];
 		for x in commitments {
 			match self.get_output(&x) {
 				Ok(output) => outputs.push(output),
@@ -171,6 +216,34 @@ impl OutputHandler {
 		})
 	}
 
+	fn outputs_at_height_v2(
+		&self,
+		block_height: u64,
+		commitments: Vec<Commitment>,
+	) -> Result<Vec<OutputPrintable>, Error> {
+		let header = w(&self.chain)?
+			.get_header_by_height(block_height)
+			.map_err(|_| ErrorKind::NotFound)?;
+
+		// TODO - possible to compact away blocks we care about
+		// in the period between accepting the block and refreshing the wallet
+		let chain = w(&self.chain)?;
+		let block = chain
+			.get_block(&header.hash())
+			.map_err(|_| ErrorKind::NotFound)?;
+		let outputs = block
+			.outputs()
+			.iter()
+			.filter(|output| commitments.is_empty() || commitments.contains(&output.commit))
+			.map(|output| {
+				OutputPrintable::from_output(output, chain.clone(), Some(&header), true, true)
+			})
+			.collect::<Result<Vec<_>, _>>()
+			.context(ErrorKind::Internal("cain error".to_owned()))?;
+
+		Ok(outputs)
+	}
+
 	// returns outputs for a specified range of blocks
 	fn outputs_block_batch(&self, req: &Request<Body>) -> Result<Vec<BlockOutputs>, Error> {
 		let mut commitments: Vec<Commitment> = vec![];
@@ -202,6 +275,31 @@ impl OutputHandler {
 
 		Ok(return_vec)
 	}
+
+	// returns outputs for a specified range of blocks
+	fn outputs_block_batch_v2(
+		&self,
+		start_height: u64,
+		end_height: u64,
+	) -> Result<Vec<OutputPrintable>, Error> {
+		let mut commitments: Vec<Commitment> = vec![];
+
+		debug!(
+			"outputs_block_batch: {}-{}, {:?}",
+			start_height, end_height, commitments,
+		);
+
+		let mut return_vec: Vec<OutputPrintable> = vec![];
+		for i in (start_height..=end_height).rev() {
+			if let Ok(res) = self.outputs_at_height_v2(i, commitments.clone()) {
+				if res.len() > 0 {
+					[&return_vec[..], &res[..]].concat();
+				}
+			}
+		}
+
+		Ok(return_vec)
+	}
 }
 
 impl Handler for OutputHandler {
@@ -222,7 +320,7 @@ pub struct KernelHandler {
 }
 
 impl KernelHandler {
-	fn get_kernel(&self, req: Request<Body>) -> Result<Option<LocatedTxKernel>, Error> {
+	pub fn get_kernel(&self, req: Request<Body>) -> Result<Option<LocatedTxKernel>, Error> {
 		let excess = req
 			.uri()
 			.path()
@@ -274,6 +372,34 @@ impl KernelHandler {
 				mmr_index,
 			});
 		Ok(kernel)
+	}
+
+	pub fn get_kernel_v2(
+		&self,
+		excess: String,
+		min_height: Option<u64>,
+		max_height: Option<u64>,
+	) -> Result<LocatedTxKernel, Error> {
+		let excess = util::from_hex(excess.to_owned())
+			.map_err(|_| ErrorKind::RequestError("invalid excess hex".into()))?;
+		if excess.len() != 33 {
+			return Err(ErrorKind::RequestError("invalid excess length".into()).into());
+		}
+		let excess = Commitment::from_vec(excess);
+
+		let chain = w(&self.chain)?;
+		let kernel = chain
+			.get_kernel_height(&excess, min_height, max_height)
+			.map_err(|e| ErrorKind::Internal(format!("{}", e)))?
+			.map(|(tx_kernel, height, mmr_index)| LocatedTxKernel {
+				tx_kernel,
+				height,
+				mmr_index,
+			});
+		match kernel {
+			Some(kernel) => Ok(kernel),
+			None => Err(ErrorKind::NotFound.into()),
+		}
 	}
 }
 
