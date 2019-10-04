@@ -57,6 +57,8 @@ pub trait NodeRpc: Sync + Send {
 		commits: Option<Vec<String>>,
 		start_height: Option<u64>,
 		end_height: Option<u64>,
+		include_proof: Option<bool>,
+		include_merkle_proof: Option<bool>,
 	) -> Result<Vec<OutputPrintable>, ErrorKind>;
 	fn validate_chain(&self) -> Result<(), ErrorKind>;
 	fn compact_chain(&self) -> Result<(), ErrorKind>;
@@ -121,8 +123,18 @@ impl NodeRpc for Node {
 		commits: Option<Vec<String>>,
 		start_height: Option<u64>,
 		end_height: Option<u64>,
+		include_proof: Option<bool>,
+		include_merkle_proof: Option<bool>,
 	) -> Result<Vec<OutputPrintable>, ErrorKind> {
-		Node::get_outputs(self, commits, start_height, end_height).map_err(|e| e.kind().clone())
+		Node::get_outputs(
+			self,
+			commits,
+			start_height,
+			end_height,
+			include_proof,
+			include_merkle_proof,
+		)
+		.map_err(|e| e.kind().clone())
 	}
 
 	fn validate_chain(&self) -> Result<(), ErrorKind> {

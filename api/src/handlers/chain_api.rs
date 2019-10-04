@@ -108,6 +108,54 @@ pub struct OutputHandler {
 }
 
 impl OutputHandler {
+	pub fn get_outputs(
+		&self,
+		commits: Option<Vec<String>>,
+		start_height: Option<u64>,
+		end_height: Option<u64>,
+		include_proof: Option<bool>,
+		include_merkle_proof: Option<bool>,
+	) -> Result<Vec<OutputPrintable>, Error> {
+		//let include_rproof = include_proof.get_or_insert(false);
+
+		let mut outputs: Vec<OutputPrintable> = vec![];
+		if let Some(commits) = commits {
+			// First check the commits length
+			for commit in &commits {
+				if commit.len() != 66 {
+					return Err(ErrorKind::RequestError(format!(
+						"invalid commit length for {}",
+						commit
+					))
+					.into());
+				}
+			}
+			for commit in commits {
+				match self.get_output(&commit, include_proof.unwrap_or(false)) {
+					Ok(output) => outputs.push(output),
+					// do not crash here simply do not retrieve this output
+					Err(e) => error!(
+						"Failure to get output for commitment {} with error {}",
+						commit, e
+					),
+				};
+			}
+		}
+		// cannot chain to let Some() for now  see https://github.com/rust-lang/rust/issues/53667
+		if let Some(start_height) = start_height {
+			if let Some(end_height) = end_height {
+				let block_output_batch = self.outputs_block_batch_v2(
+					start_height,
+					end_height,
+					include_proof.unwrap_or(false),
+					include_merkle_proof.unwrap_or(false),
+				)?;
+				outputs = [&outputs[..], &block_output_batch[..]].concat();
+			}
+		}
+		return Ok(outputs);
+	}
+
 	fn get_output(&self, id: &str, include_proof: bool) -> Result<OutputPrintable, Error> {
 		let res = get_output(&self.chain, id, include_proof)?;
 		Ok(res.0)
@@ -178,6 +226,8 @@ impl OutputHandler {
 		&self,
 		block_height: u64,
 		commitments: Vec<Commitment>,
+		include_rproof: bool,
+		include_merkle_proof: bool,
 	) -> Result<Vec<OutputPrintable>, Error> {
 		let header = w(&self.chain)?
 			.get_header_by_height(block_height)
@@ -194,7 +244,13 @@ impl OutputHandler {
 			.iter()
 			.filter(|output| commitments.is_empty() || commitments.contains(&output.commit))
 			.map(|output| {
-				OutputPrintable::from_output(output, chain.clone(), Some(&header), true, true)
+				OutputPrintable::from_output(
+					output,
+					chain.clone(),
+					Some(&header),
+					include_rproof,
+					include_merkle_proof,
+				)
 			})
 			.collect::<Result<Vec<_>, _>>()
 			.context(ErrorKind::Internal("cain error".to_owned()))?;
@@ -242,19 +298,26 @@ impl OutputHandler {
 		&self,
 		start_height: u64,
 		end_height: u64,
+		include_rproof: bool,
+		include_merkle_proof: bool,
 	) -> Result<Vec<OutputPrintable>, Error> {
-		let mut commitments: Vec<Commitment> = vec![];
+		let commitments: Vec<Commitment> = vec![];
 
 		debug!(
-			"outputs_block_batch: {}-{}, {:?}",
-			start_height, end_height, commitments,
+			"outputs_block_batch: {}-{}, {}, {}",
+			start_height, end_height, include_rproof, include_merkle_proof,
 		);
 
 		let mut return_vec: Vec<OutputPrintable> = vec![];
 		for i in (start_height..=end_height).rev() {
-			if let Ok(res) = self.outputs_at_height_v2(i, commitments.clone()) {
+			if let Ok(res) = self.outputs_at_height_v2(
+				i,
+				commitments.clone(),
+				include_rproof,
+				include_merkle_proof,
+			) {
 				if res.len() > 0 {
-					[&return_vec[..], &res[..]].concat();
+					return_vec = [&return_vec[..], &res[..]].concat();
 				}
 			}
 		}

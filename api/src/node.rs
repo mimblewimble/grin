@@ -155,12 +155,19 @@ impl Node {
 		commits: Option<Vec<String>>,
 		start_height: Option<u64>,
 		end_height: Option<u64>,
+		include_proof: Option<bool>,
+		include_merkle_proof: Option<bool>,
 	) -> Result<Vec<OutputPrintable>, Error> {
 		let output_handler = OutputHandler {
 			chain: self.chain.clone(),
 		};
-		return Err(ErrorKind::NotFound.into());
-		//output_handler.get_outputs(commits, start_height, end_height)
+		output_handler.get_outputs(
+			commits,
+			start_height,
+			end_height,
+			include_proof,
+			include_merkle_proof,
+		)
 	}
 
 	pub fn validate_chain(&self) -> Result<(), Error> {
