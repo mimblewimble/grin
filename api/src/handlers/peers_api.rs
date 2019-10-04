@@ -105,14 +105,14 @@ impl Handler for PeerHandler {
 				Ok(_) => response(StatusCode::OK, "{}"),
 				Err(e) => response(
 					StatusCode::INTERNAL_SERVER_ERROR,
-					format!("validate failed: {:?}", e),
+					format!("ban failed: {:?}", e),
 				),
 			},
 			"unban" => match w_fut!(&self.peers).unban_peer(addr) {
 				Ok(_) => response(StatusCode::OK, "{}"),
 				Err(e) => response(
 					StatusCode::INTERNAL_SERVER_ERROR,
-					format!("validate failed: {:?}", e),
+					format!("unban failed: {:?}", e),
 				),
 			},
 			_ => return response(StatusCode::BAD_REQUEST, "invalid command"),
