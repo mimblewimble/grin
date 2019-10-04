@@ -158,7 +158,7 @@ fn monitor_peers(
 				// Unban peer
 				if interval >= config.ban_window() {
 					if let Err(e) = peers.unban_peer(x.addr) {
-						error!("failed to  unban peer {}: {:?}", x.addr, e);
+						error!("failed to unban peer {}: {:?}", x.addr, e);
 					}
 					debug!(
 						"monitor_peers: unbanned {} after {} seconds",
