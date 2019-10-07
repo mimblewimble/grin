@@ -116,8 +116,6 @@ impl OutputHandler {
 		include_proof: Option<bool>,
 		include_merkle_proof: Option<bool>,
 	) -> Result<Vec<OutputPrintable>, Error> {
-		//let include_rproof = include_proof.get_or_insert(false);
-
 		let mut outputs: Vec<OutputPrintable> = vec![];
 		if let Some(commits) = commits {
 			// First check the commits length
@@ -131,7 +129,11 @@ impl OutputHandler {
 				}
 			}
 			for commit in commits {
-				match self.get_output(&commit, include_proof.unwrap_or(false)) {
+				match self.get_output(
+					&commit,
+					include_proof.unwrap_or(false),
+					include_merkle_proof.unwrap_or(false),
+				) {
 					Ok(output) => outputs.push(output),
 					// do not crash here simply do not retrieve this output
 					Err(e) => error!(
@@ -156,8 +158,13 @@ impl OutputHandler {
 		return Ok(outputs);
 	}
 
-	fn get_output(&self, id: &str, include_proof: bool) -> Result<OutputPrintable, Error> {
-		let res = get_output(&self.chain, id, include_proof)?;
+	fn get_output(
+		&self,
+		id: &str,
+		include_proof: bool,
+		include_merkle_proof: bool,
+	) -> Result<OutputPrintable, Error> {
+		let res = get_output(&self.chain, id, include_proof, include_merkle_proof)?;
 		Ok(res.0)
 	}
 
@@ -169,10 +176,11 @@ impl OutputHandler {
 		params.process_multival_param("id", |id| commitments.push(id.to_owned()));
 
 		let include_proof = params.get("include_rp").is_some();
+		let include_merkle_proof = params.get("include_mp").is_some();
 
 		let mut outputs: Vec<OutputPrintable> = vec![];
 		for x in commitments {
-			match self.get_output(&x, include_proof) {
+			match self.get_output(&x, include_proof, include_merkle_proof) {
 				Ok(output) => outputs.push(output),
 				Err(e) => error!(
 					"Failure to get output for commitment {} with error {}",

@@ -34,6 +34,7 @@ pub fn get_output(
 	chain: &Weak<chain::Chain>,
 	id: &str,
 	include_proof: bool,
+	include_merkle_proof: bool,
 ) -> Result<(OutputPrintable, OutputIdentifier), Error> {
 	let c = util::from_hex(String::from(id)).context(ErrorKind::Argument(format!(
 		"Not a valid commitment: {}",
@@ -57,12 +58,16 @@ pub fn get_output(
 		match res {
 			Ok(output_pos) => match chain.get_unspent_output_at(output_pos.position) {
 				Ok(output) => {
+					let mut header = None;
+					if include_merkle_proof && output.is_coinbase() {
+						header = chain.get_header_by_height(output_pos.height).ok();
+					}
 					match OutputPrintable::from_output(
 						&output,
 						chain.clone(),
-						None,
+						header.as_ref(),
 						include_proof,
-						false,
+						include_merkle_proof,
 					) {
 						Ok(output_printable) => return Ok((output_printable, x.clone())),
 						Err(e) => {
