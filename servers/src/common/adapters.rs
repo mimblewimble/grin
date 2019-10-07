@@ -189,15 +189,16 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 			};
 
 			debug!(
-				"adapter: txs from tx pool - {}, (unknown kern_ids: {})",
+				"compact_block_received: txs from tx pool - {}, (unknown kern_ids: {})",
 				txs.len(),
 				missing_short_ids.len(),
 			);
 
-			// TODO - 3 scenarios here -
-			// 1) we hydrate a valid block (good to go)
-			// 2) we hydrate an invalid block (txs legit missing from our pool)
-			// 3) we hydrate an invalid block (peer sent us a "bad" compact block) - [TBD]
+			// If we have missing kernels then we know we cannot hydrate this compact block.
+			if missing_short_ids.len() > 0 {
+				self.request_block(&cb.header, peer_info, chain::Options::NONE);
+				return Ok(true);
+			}
 
 			let block = match core::Block::hydrate_from(cb.clone(), txs) {
 				Ok(block) => {
