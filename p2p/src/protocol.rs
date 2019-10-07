@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use crate::chain;
 use crate::conn::{Message, MessageHandler, Tracker};
 use crate::core::core::{self, hash::Hash, hash::Hashed, CompactBlock};
 
@@ -162,9 +163,11 @@ impl MessageHandler for Protocol {
 				);
 				let b: core::Block = msg.body()?;
 
-				// we can't know at this level whether we requested the block or not,
-				// the boolean should be properly set in higher level adapter
-				adapter.block_received(b, &self.peer_info, false)?;
+				// We default to NONE opts here as we do not know know yet why this block was
+				// received.
+				// If we requested this block from a peer due to our node syncing then
+				// the peer adapter will override opts to reflect this.
+				adapter.block_received(b, &self.peer_info, chain::Options::NONE)?;
 				Ok(None)
 			}
 
