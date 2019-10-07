@@ -16,19 +16,22 @@
 
 use crate::chain::{Chain, SyncState};
 use crate::core::core::hash::Hash;
+use crate::core::core::transaction::Transaction;
 use crate::handlers::blocks_api::{BlockHandler, HeaderHandler};
 use crate::handlers::chain_api::{
 	ChainCompactHandler, ChainHandler, ChainValidationHandler, KernelHandler, OutputHandler,
 };
 use crate::handlers::peers_api::{PeerHandler, PeersConnectedHandler};
+use crate::handlers::pool_api::PoolHandler;
 use crate::handlers::server_api::StatusHandler;
 use crate::handlers::version_api::VersionHandler;
 use crate::p2p::types::PeerInfoDisplay;
 use crate::p2p::{self, PeerData};
-use crate::pool;
+use crate::pool::{self, PoolEntry};
 use crate::rest::*;
 use crate::types::{
-	BlockHeaderPrintable, BlockPrintable, LocatedTxKernel, OutputPrintable, Status, Tip, Version,
+	BlockHeaderPrintable, BlockPrintable, LocatedTxKernel, OutputListing, OutputPrintable, Status,
+	Tip, Version,
 };
 use crate::util::RwLock;
 use std::net::SocketAddr;
@@ -170,6 +173,18 @@ impl Node {
 		)
 	}
 
+	pub fn get_unspent_outputs(
+		&self,
+		start_index: u64,
+		max: u64,
+		include_proof: Option<bool>,
+	) -> Result<OutputListing, Error> {
+		let output_handler = OutputHandler {
+			chain: self.chain.clone(),
+		};
+		output_handler.get_unspent_outputs(start_index, max, include_proof)
+	}
+
 	pub fn validate_chain(&self) -> Result<(), Error> {
 		let chain_validation_handler = ChainValidationHandler {
 			chain: self.chain.clone(),
@@ -210,5 +225,31 @@ impl Node {
 			peers: self.peers.clone(),
 		};
 		peer_handler.unban_peer(addr)
+	}
+
+	pub fn get_pool_size(&self) -> Result<usize, Error> {
+		let pool_handler = PoolHandler {
+			tx_pool: self.tx_pool.clone(),
+		};
+		pool_handler.get_pool_size()
+	}
+
+	pub fn get_stempool_size(&self) -> Result<usize, Error> {
+		let pool_handler = PoolHandler {
+			tx_pool: self.tx_pool.clone(),
+		};
+		pool_handler.get_stempool_size()
+	}
+	pub fn get_unconfirmed_transactions(&self) -> Result<Vec<PoolEntry>, Error> {
+		let pool_handler = PoolHandler {
+			tx_pool: self.tx_pool.clone(),
+		};
+		pool_handler.get_unconfirmed_transactions()
+	}
+	pub fn push_transaction(&self, tx: Transaction, fluff: Option<bool>) -> Result<(), Error> {
+		let pool_handler = PoolHandler {
+			tx_pool: self.tx_pool.clone(),
+		};
+		pool_handler.push_transaction(tx, fluff)
 	}
 }

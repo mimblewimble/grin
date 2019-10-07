@@ -158,6 +158,42 @@ impl OutputHandler {
 		return Ok(outputs);
 	}
 
+	// allows traversal of utxo set
+	pub fn get_unspent_outputs(
+		&self,
+		start_index: u64,
+		mut max: u64,
+		include_proof: Option<bool>,
+	) -> Result<OutputListing, Error> {
+		//set a limit here
+		if max > 10_000 {
+			max = 10_000;
+		}
+		let chain = w(&self.chain)?;
+		let outputs = chain
+			.unspent_outputs_by_insertion_index(start_index, max)
+			.context(ErrorKind::NotFound)?;
+		let out = OutputListing {
+			last_retrieved_index: outputs.0,
+			highest_index: outputs.1,
+			outputs: outputs
+				.2
+				.iter()
+				.map(|x| {
+					OutputPrintable::from_output(
+						x,
+						chain.clone(),
+						None,
+						include_proof.unwrap_or(false),
+						false,
+					)
+				})
+				.collect::<Result<Vec<_>, _>>()
+				.context(ErrorKind::Internal("chain error".to_owned()))?,
+		};
+		Ok(out)
+	}
+
 	fn get_output(
 		&self,
 		id: &str,

@@ -15,12 +15,15 @@
 //! JSON-RPC Stub generation for the Node API
 
 use crate::core::core::hash::Hash;
+use crate::core::core::transaction::Transaction;
 use crate::node::Node;
 use crate::p2p::types::PeerInfoDisplay;
 use crate::p2p::PeerData;
+use crate::pool::PoolEntry;
 use crate::rest::ErrorKind;
 use crate::types::{
-	BlockHeaderPrintable, BlockPrintable, LocatedTxKernel, OutputPrintable, Status, Tip, Version,
+	BlockHeaderPrintable, BlockPrintable, LocatedTxKernel, OutputListing, OutputPrintable, Status,
+	Tip, Version,
 };
 use crate::util;
 use std::net::SocketAddr;
@@ -60,12 +63,22 @@ pub trait NodeRpc: Sync + Send {
 		include_proof: Option<bool>,
 		include_merkle_proof: Option<bool>,
 	) -> Result<Vec<OutputPrintable>, ErrorKind>;
+	fn get_unspent_outputs(
+		&self,
+		start_index: u64,
+		max: u64,
+		include_proof: Option<bool>,
+	) -> Result<OutputListing, ErrorKind>;
 	fn validate_chain(&self) -> Result<(), ErrorKind>;
 	fn compact_chain(&self) -> Result<(), ErrorKind>;
 	fn get_peers(&self, peer_addr: Option<SocketAddr>) -> Result<Vec<PeerData>, ErrorKind>;
 	fn get_connected_peers(&self) -> Result<Vec<PeerInfoDisplay>, ErrorKind>;
 	fn ban_peer(&self, peer_addr: SocketAddr) -> Result<(), ErrorKind>;
 	fn unban_peer(&self, peer_addr: SocketAddr) -> Result<(), ErrorKind>;
+	fn get_pool_size(&self) -> Result<usize, ErrorKind>;
+	fn get_stempool_size(&self) -> Result<usize, ErrorKind>;
+	fn get_unconfirmed_transactions(&self) -> Result<Vec<PoolEntry>, ErrorKind>;
+	fn push_transaction(&self, tx: Transaction, fluff: Option<bool>) -> Result<(), ErrorKind>;
 }
 
 impl NodeRpc for Node {
@@ -137,6 +150,16 @@ impl NodeRpc for Node {
 		.map_err(|e| e.kind().clone())
 	}
 
+	fn get_unspent_outputs(
+		&self,
+		start_index: u64,
+		max: u64,
+		include_proof: Option<bool>,
+	) -> Result<OutputListing, ErrorKind> {
+		Node::get_unspent_outputs(self, start_index, max, include_proof)
+			.map_err(|e| e.kind().clone())
+	}
+
 	fn validate_chain(&self) -> Result<(), ErrorKind> {
 		Node::validate_chain(self).map_err(|e| e.kind().clone())
 	}
@@ -159,5 +182,20 @@ impl NodeRpc for Node {
 
 	fn unban_peer(&self, addr: SocketAddr) -> Result<(), ErrorKind> {
 		Node::unban_peer(self, addr).map_err(|e| e.kind().clone())
+	}
+
+	fn get_pool_size(&self) -> Result<usize, ErrorKind> {
+		Node::get_pool_size(self).map_err(|e| e.kind().clone())
+	}
+
+	fn get_stempool_size(&self) -> Result<usize, ErrorKind> {
+		Node::get_stempool_size(self).map_err(|e| e.kind().clone())
+	}
+
+	fn get_unconfirmed_transactions(&self) -> Result<Vec<PoolEntry>, ErrorKind> {
+		Node::get_unconfirmed_transactions(self).map_err(|e| e.kind().clone())
+	}
+	fn push_transaction(&self, tx: Transaction, fluff: Option<bool>) -> Result<(), ErrorKind> {
+		Node::push_transaction(self, tx, fluff).map_err(|e| e.kind().clone())
 	}
 }
