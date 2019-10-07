@@ -29,7 +29,7 @@ use crate::core::ser::Writeable;
 use crate::core::{core, global};
 use crate::handshake::Handshake;
 use crate::msg::{
-	self, BanReason, GetPeerAddrs, KernelDataRequest, Locator, Ping, TxHashSetRequest, Type,
+	self, BanReason, GetPeerAddrs, KernelDataRequest, Locator, Msg, Ping, TxHashSetRequest, Type,
 };
 use crate::protocol::Protocol;
 use crate::types::{
@@ -233,12 +233,8 @@ impl Peer {
 
 	/// Send a msg with given msg_type to our peer via the connection.
 	fn send<T: Writeable>(&self, msg: T, msg_type: Type) -> Result<(), Error> {
-		let bytes = self
-			.send_handle
-			.lock()
-			.send(msg, msg_type, self.info.version)?;
-		self.tracker.inc_sent(bytes);
-		Ok(())
+		let msg = Msg::new(msg_type, msg, self.info.version)?;
+		self.send_handle.lock().send(msg)
 	}
 
 	/// Send a ping to the remote peer, providing our local difficulty and
