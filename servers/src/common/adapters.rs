@@ -120,6 +120,9 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 		peer_info: &PeerInfo,
 		was_requested: bool,
 	) -> Result<bool, chain::Error> {
+		if self.chain().block_exists(b.hash())? {
+			return Ok(true);
+		}
 		debug!(
 			"Received block {} at {} from {} [in/out/kern: {}/{}/{}] going to process.",
 			b.hash(),
@@ -137,6 +140,10 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 		cb: core::CompactBlock,
 		peer_info: &PeerInfo,
 	) -> Result<bool, chain::Error> {
+		// No need to process this compact block if we have previously accepted the _full block_.
+		if self.chain().block_exists(cb.hash())? {
+			return Ok(true);
+		}
 		let bhash = cb.hash();
 		debug!(
 			"Received compact_block {} at {} from {} [out/kern/kern_ids: {}/{}/{}] going to process.",
@@ -236,6 +243,10 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 		bh: core::BlockHeader,
 		peer_info: &PeerInfo,
 	) -> Result<bool, chain::Error> {
+		// No need to process this header if we have previously accepted the _full block_.
+		if self.chain().block_exists(bh.hash())? {
+			return Ok(true);
+		}
 		if !self.sync_state.is_syncing() {
 			for hook in &self.hooks {
 				hook.on_header_received(&bh, &peer_info.addr);
