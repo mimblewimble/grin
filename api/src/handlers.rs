@@ -86,7 +86,7 @@ pub fn node_api(
 		let basic_auth_middleware = Arc::new(BasicAuthMiddleware::new(
 			api_basic_auth,
 			&GRIN_BASIC_REALM,
-			Some("/v2".into()),
+			None,
 		));
 		router.add_middleware(basic_auth_middleware);
 	}
