@@ -38,7 +38,6 @@ use std::net::SocketAddr;
 use std::sync::Weak;
 
 /// Main interface into all node API functions.
-/// Node API functionality are in the ['Node'](struct.Node.html)
 ///
 /// Methods in this API are intended to be 'single use'.
 ///
@@ -55,10 +54,10 @@ impl Node {
 	/// API calls will operate on this instance of node API.
 	///
 	/// # Arguments
-	/// * `chain` - A non-owning reference of the chain `Weak<Chain>`.
-	/// * `tx_pool` - A non-owning reference of the transaction pool `Weak<pool:TransactionPool>`.
-	/// * `peers` - A non-owning reference of the peers `Weak<p2p::Peers>`.
-	/// * `sync_state` - A non-owning reference of the sync_state `Weak<SyncState>`.
+	/// * `chain` - A non-owning reference of the chain.
+	/// * `tx_pool` - A non-owning reference of the transaction pool.
+	/// * `peers` - A non-owning reference of the peers.
+	/// * `sync_state` - A non-owning reference of the `sync_state`.
 	///
 	/// # Returns
 	/// * An instance of the Node holding references to the current chain, transaction pool, peers and sync_state.
@@ -88,8 +87,8 @@ impl Node {
 	///
 	/// # Returns
 	/// * Result Containing:
-	/// * A [`BlockHeaderPrintable`](../grin_api/types/struct.BlockHeaderPrintable.html)
-	/// * or [`Error`](../grin_api/struct.Error.html) if an error is encountered.
+	/// * A [`BlockHeaderPrintable`](types/struct.BlockHeaderPrintable.html)
+	/// * or [`Error`](struct.Error.html) if an error is encountered.
 	///
 
 	pub fn get_header(
@@ -115,8 +114,8 @@ impl Node {
 	///
 	/// # Returns
 	/// * Result Containing:
-	/// * A [`BlockPrintable`](../grin_api/types/struct.BlockPrintable.html)
-	/// * or [`Error`](../grin_api/struct.Error.html) if an error is encountered.
+	/// * A [`BlockPrintable`](types/struct.BlockPrintable.html)
+	/// * or [`Error`](struct.Error.html) if an error is encountered.
 	///
 
 	pub fn get_block(
@@ -136,8 +135,8 @@ impl Node {
 	///
 	/// # Returns
 	/// * Result Containing:
-	/// * A [`Status`](../grin_api/types/struct.Status.html)
-	/// * or [`Error`](../grin_api/struct.Error.html) if an error is encountered.
+	/// * A [`Status`](types/struct.Status.html)
+	/// * or [`Error`](struct.Error.html) if an error is encountered.
 	///
 
 	pub fn get_status(&self) -> Result<Status, Error> {
@@ -153,8 +152,8 @@ impl Node {
 	///
 	/// # Returns
 	/// * Result Containing:
-	/// * A [`Version`](../grin_api/types/struct.Version.html)
-	/// * or [`Error`](../grin_api/struct.Error.html) if an error is encountered.
+	/// * A [`Version`](types/struct.Version.html)
+	/// * or [`Error`](struct.Error.html) if an error is encountered.
 	///
 
 	pub fn get_version(&self) -> Result<Version, Error> {
@@ -168,8 +167,8 @@ impl Node {
 	///
 	/// # Returns
 	/// * Result Containing:
-	/// * A [`Tip`](../grin_api/types/struct.Tip.html)
-	/// * or [`Error`](../grin_api/struct.Error.html) if an error is encountered.
+	/// * A [`Tip`](types/struct.Tip.html)
+	/// * or [`Error`](struct.Error.html) if an error is encountered.
 	///
 
 	pub fn get_tip(&self) -> Result<Tip, Error> {
@@ -179,7 +178,7 @@ impl Node {
 		chain_handler.get_tip()
 	}
 
-	/// Returns a [`LocatedTxKernel`](../grin_api/types/struct.LocatedTxKernel.html) based on the kernel excess.
+	/// Returns a [`LocatedTxKernel`](types/struct.LocatedTxKernel.html) based on the kernel excess.
 	/// The `min_height` and `max_height` parameters are both optional.
 	/// If not supplied, `min_height` will be set to 0 and `max_height` will be set to the head of the chain.
 	/// The method will start at the block height `max_height` and traverse the kernel MMR backwards,
@@ -192,8 +191,8 @@ impl Node {
 	///
 	/// # Returns
 	/// * Result Containing:
-	/// * A [`LocatedTxKernel`](../grin_api/types/struct.LocatedTxKernel.html)
-	/// * or [`Error`](../grin_api/struct.Error.html) if an error is encountered.
+	/// * A [`LocatedTxKernel`](types/struct.LocatedTxKernel.html)
+	/// * or [`Error`](struct.Error.html) if an error is encountered.
 	///
 
 	pub fn get_kernel(
@@ -220,8 +219,8 @@ impl Node {
 	///
 	/// # Returns
 	/// * Result Containing:
-	/// * An [`OutputPrintable`](../grin_api/types/struct.OutputPrintable.html)
-	/// * or [`Error`](../grin_api/struct.Error.html) if an error is encountered.
+	/// * An [`OutputPrintable`](types/struct.OutputPrintable.html)
+	/// * or [`Error`](struct.Error.html) if an error is encountered.
 	///
 
 	pub fn get_outputs(
@@ -253,8 +252,8 @@ impl Node {
 	///
 	/// # Returns
 	/// * Result Containing:
-	/// * An [`OutputListing`](../grin_api/types/struct.OutputListing.html)
-	/// * or [`Error`](../grin_api/struct.Error.html) if an error is encountered.
+	/// * An [`OutputListing`](types/struct.OutputListing.html)
+	/// * or [`Error`](struct.Error.html) if an error is encountered.
 	///
 
 	pub fn get_unspent_outputs(
@@ -274,7 +273,7 @@ impl Node {
 	/// # Returns
 	/// * Result Containing:
 	/// * `Ok(())` if the validation was done successfully
-	/// * or [`Error`](../grin_api/struct.Error.html) if an error is encountered.
+	/// * or [`Error`](struct.Error.html) if an error is encountered.
 	///
 
 	pub fn validate_chain(&self) -> Result<(), Error> {
@@ -289,7 +288,7 @@ impl Node {
 	/// # Returns
 	/// * Result Containing:
 	/// * `Ok(())` if the compaction was done successfully
-	/// * or [`Error`](../grin_api/struct.Error.html) if an error is encountered.
+	/// * or [`Error`](struct.Error.html) if an error is encountered.
 	///
 
 	pub fn compact_chain(&self) -> Result<(), Error> {
@@ -303,12 +302,12 @@ impl Node {
 	/// If `None` is provided, will list all stored peers.
 	///
 	/// # Arguments
-	/// * `addr` - a SocketAddr missing link.
+	/// * `addr` - the ip:port of the peer to get.
 	///
 	/// # Returns
 	/// * Result Containing:
-	/// * A vector of [`PeerData`](../grin_api/types/struct.PeerData.html)
-	/// * or [`Error`](../grin_api/struct.Error.html) if an error is encountered.
+	/// * A vector of [`PeerData`](types/struct.PeerData.html)
+	/// * or [`Error`](struct.Error.html) if an error is encountered.
 	///
 
 	pub fn get_peers(&self, addr: Option<SocketAddr>) -> Result<Vec<PeerData>, Error> {
@@ -322,8 +321,8 @@ impl Node {
 	///
 	/// # Returns
 	/// * Result Containing:
-	/// * A vector of [`PeerInfoDisplay`](../grin_api/types/struct.PeerInfoDisplay.html)
-	/// * or [`Error`](../grin_api/struct.Error.html) if an error is encountered.
+	/// * A vector of [`PeerInfoDisplay`](types/struct.PeerInfoDisplay.html)
+	/// * or [`Error`](struct.Error.html) if an error is encountered.
 	///
 
 	pub fn get_connected_peers(&self) -> Result<Vec<PeerInfoDisplay>, Error> {
@@ -336,12 +335,12 @@ impl Node {
 	/// Bans a specific peer.
 	///
 	/// # Arguments
-	/// * `addr` - a SocketAddr missing link.
+	/// * `addr` - the ip:port of the peer to ban.
 	///
 	/// # Returns
 	/// * Result Containing:
 	/// * `Ok(())` if the path was correctly set
-	/// * or [`Error`](../grin_api/struct.Error.html) if an error is encountered.
+	/// * or [`Error`](struct.Error.html) if an error is encountered.
 	///
 
 	pub fn ban_peer(&self, addr: SocketAddr) -> Result<(), Error> {
@@ -354,12 +353,12 @@ impl Node {
 	/// Unbans a specific peer.
 	///
 	/// # Arguments
-	/// * `addr` - a SocketAddr missing link.
+	/// * `addr` -  the ip:port of the peer to unban.
 	///
 	/// # Returns
 	/// * Result Containing:
 	/// * `Ok(())` if the unban was done successfully
-	/// * or [`Error`](../grin_api/struct.Error.html) if an error is encountered.
+	/// * or [`Error`](struct.Error.html) if an error is encountered.
 	///
 
 	pub fn unban_peer(&self, addr: SocketAddr) -> Result<(), Error> {
@@ -374,7 +373,7 @@ impl Node {
 	/// # Returns
 	/// * Result Containing:
 	/// * `usize`
-	/// * or [`Error`](../grin_api/struct.Error.html) if an error is encountered.
+	/// * or [`Error`](struct.Error.html) if an error is encountered.
 	///
 
 	pub fn get_pool_size(&self) -> Result<usize, Error> {
@@ -389,7 +388,7 @@ impl Node {
 	/// # Returns
 	/// * Result Containing:
 	/// * `usize`
-	/// * or [`Error`](../grin_api/struct.Error.html) if an error is encountered.
+	/// * or [`Error`](struct.Error.html) if an error is encountered.
 	///
 
 	pub fn get_stempool_size(&self) -> Result<usize, Error> {
@@ -404,8 +403,8 @@ impl Node {
 	///
 	/// # Returns
 	/// * Result Containing:
-	/// * A vector of [`PoolEntry`](../grin_api/types/struct.PoolEntry.html)
-	/// * or [`Error`](../grin_api/struct.Error.html) if an error is encountered.
+	/// * A vector of [`PoolEntry`](types/struct.PoolEntry.html)
+	/// * or [`Error`](struct.Error.html) if an error is encountered.
 	///
 
 	pub fn get_unconfirmed_transactions(&self) -> Result<Vec<PoolEntry>, Error> {
@@ -418,13 +417,13 @@ impl Node {
 	/// Push new transaction to our local transaction pool.
 	///
 	/// # Arguments
-	/// * `tx` - a Transaction missing link.
+	/// * `tx` - the Grin transaction to push.
 	/// * `fluff` - boolean to bypass Dandelion relay.
 	///
 	/// # Returns
 	/// * Result Containing:
 	/// * `Ok(())` if the transaction was pushed successfully
-	/// * or [`Error`](../grin_api/struct.Error.html) if an error is encountered.
+	/// * or [`Error`](struct.Error.html) if an error is encountered.
 	///
 	pub fn push_transaction(&self, tx: Transaction, fluff: Option<bool>) -> Result<(), Error> {
 		let pool_handler = PoolHandler {
