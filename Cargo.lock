@@ -718,6 +718,7 @@ dependencies = [
  "grin_core 3.0.0-alpha.1",
  "grin_p2p 3.0.0-alpha.1",
  "grin_pool 3.0.0-alpha.1",
+ "grin_servers 3.0.0-alpha.1",
  "grin_store 3.0.0-alpha.1",
  "grin_util 3.0.0-alpha.1",
  "http 0.1.17 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -732,6 +733,7 @@ dependencies = [
  "serde 1.0.93 (registry+https://github.com/rust-lang/crates.io-index)",
  "serde_derive 1.0.93 (registry+https://github.com/rust-lang/crates.io-index)",
  "serde_json 1.0.39 (registry+https://github.com/rust-lang/crates.io-index)",
+ "tempfile 3.0.8 (registry+https://github.com/rust-lang/crates.io-index)",
  "tokio 0.1.21 (registry+https://github.com/rust-lang/crates.io-index)",
  "tokio-core 0.1.17 (registry+https://github.com/rust-lang/crates.io-index)",
  "tokio-rustls 0.7.2 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -889,6 +891,7 @@ name = "grin_servers"
 version = "3.0.0-alpha.1"
 dependencies = [
  "chrono 0.4.7 (registry+https://github.com/rust-lang/crates.io-index)",
+ "easy-jsonrpc-mw 0.5.3 (registry+https://github.com/rust-lang/crates.io-index)",
  "fs2 0.4.3 (registry+https://github.com/rust-lang/crates.io-index)",
  "futures 0.1.28 (registry+https://github.com/rust-lang/crates.io-index)",
  "grin_api 3.0.0-alpha.1",

@@ -38,6 +38,8 @@ use grin_util as util;
 pub mod common;
 mod grin;
 mod mining;
+#[doc(hidden)]
+pub mod test_framework;
 
 pub use crate::common::stats::{DiffBlock, PeerStats, ServerStats, StratumStats, WorkerStats};
 pub use crate::common::types::{ServerConfig, StratumServerConfig};

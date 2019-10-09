@@ -38,3 +38,8 @@ grin_p2p = { path = "../p2p", version = "3.0.0-alpha.1" }
 grin_pool = { path = "../pool", version = "3.0.0-alpha.1" }
 grin_store = { path = "../store", version = "3.0.0-alpha.1" }
 grin_util = { path = "../util", version = "3.0.0-alpha.1" }
+
+[dev-dependencies]
+serde_json = "1"
+tempfile = "3.0.7"
+grin_servers = { path = "../servers", version = "3.0.0-alpha.1" }

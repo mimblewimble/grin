@@ -91,33 +91,6 @@ impl Node {
 		block_handler.get_block(&hash, true, true)
 	}
 
-	/// UNFINISHED
-	/// Returns various information about the node, the network and the current sync status.
-	///
-	/// # Returns
-	/// * a result containing:
-	/// * The current status [Status](../grin/slate/struct.Slate.html),
-	/// * The first `bool` element indicates whether the data was successfully
-	/// refreshed from the node (note this may be false even if the `refresh_from_node`
-	/// argument was set to `true`.
-	/// * or [`libwallet::Error`](../grin_wallet_libwallet/struct.Error.html) if an error is encountered.
-	///
-	/// # Example
-	/// Set up as in [`new`](struct.Owner.html#method.new) method above.
-	/// ```
-	/// # grin_wallet_api::doctest_helper_setup_doc_env!(wallet, wallet_config);
-	///
-	/// let mut api_owner = Owner::new(wallet.clone());
-	/// let update_from_node = true;
-	/// let minimum_confirmations=10;
-	///
-	/// // Return summary info for active account
-	/// let result = api_owner.retrieve_summary_info(None, update_from_node, minimum_confirmations);
-	///
-	/// if let Ok((was_updated, summary_info)) = result {
-	///		//...
-	/// }
-	/// ```
 	pub fn get_status(&self) -> Result<Status, Error> {
 		let status_handler = StatusHandler {
 			chain: self.chain.clone(),
