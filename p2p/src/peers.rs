@@ -577,10 +577,10 @@ impl ChainAdapter for Peers {
 		&self,
 		b: core::Block,
 		peer_info: &PeerInfo,
-		was_requested: bool,
+		opts: chain::Options,
 	) -> Result<bool, chain::Error> {
 		let hash = b.hash();
-		if !self.adapter.block_received(b, peer_info, was_requested)? {
+		if !self.adapter.block_received(b, peer_info, opts)? {
 			// if the peer sent us a block that's intrinsically bad
 			// they are either mistaken or malevolent, both of which require a ban
 			debug!(
