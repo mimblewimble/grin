@@ -10,6 +10,7 @@ workspace = ".."
 edition = "2018"
 
 [dependencies]
+bit-vec = "0.6"
 byteorder = "1"
 croaring = "0.3.9"
 env_logger = "0.5"

@@ -860,8 +860,14 @@ pub trait AsFixedBytes: Sized + AsRef<[u8]> {
 	/// The length in bytes
 	fn len(&self) -> usize;
 }
-
-impl<'a> AsFixedBytes for &'a [u8] {
+// impl<'a> AsFixedBytes for &'a [u8] {
+// 	// TODO - This does not feel right?
+// 	fn len(&self) -> usize {
+// 		1
+// 	}
+// }
+impl AsFixedBytes for &[u8] {
+	// TODO - This does not feel right?
 	fn len(&self) -> usize {
 		1
 	}

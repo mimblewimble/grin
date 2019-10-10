@@ -84,6 +84,11 @@ where
 		self.backend.n_unpruned_leaves()
 	}
 
+	/// Iterator over current (unpruned, unremoved) leaf insertion indices.
+	pub fn leaf_idx_iter(&self, from_idx: u64) -> impl Iterator<Item = u64> + '_ {
+		self.backend.leaf_idx_iter(from_idx)
+	}
+
 	/// Returns a vec of the peaks of this MMR.
 	pub fn peaks(&self) -> Vec<Hash> {
 		let peaks_pos = peaks(self.last_pos);

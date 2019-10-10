@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-pub mod common;
+mod common;
 use crate::common::{new_block, tx1i2o, tx2i1o, txspend1i1o};
 use crate::core::consensus::BLOCK_OUTPUT_WEIGHT;
 use crate::core::core::block::Error;
