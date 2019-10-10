@@ -107,11 +107,6 @@ pub fn node_api(
 
 	warn!("HTTP Node listener started.");
 
-	// FIX THIS: Do not lock here when using the command below
-	/*api_thread
-	.join()
-	.map_err(|e| ErrorKind::Internal(format!("API thread panicked :{:?}", e)).into())
-	*/
 	match api_thread {
 		Ok(_) => Ok(()),
 		Err(e) => {

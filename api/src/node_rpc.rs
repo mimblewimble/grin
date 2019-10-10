@@ -1148,16 +1148,15 @@ impl NodeRpc for Node {
 	}
 }
 
-/*
 #[doc(hidden)]
 #[macro_export]
 macro_rules! doctest_helper_json_rpc_node_assert_response {
-	($request:expr, $expected_response:expr, $use_token:expr, $blocks_to_mine:expr, $perform_tx:expr, $lock_tx:expr, $finalize_tx:expr) => {
+	($request:expr, $expected_response:expr) => {
 		// create temporary grin server, run jsonrpc request on node api, delete server, return
 		// json response.
 
 			{
-			use grin_servers::test_framework::framework::run_doctest;
+			/*use grin_servers::test_framework::framework::run_doctest;
 			use grin_util as util;
 			use serde_json;
 			use serde_json::Value;
@@ -1172,7 +1171,6 @@ macro_rules! doctest_helper_json_rpc_node_assert_response {
 
 			let request_val: Value = serde_json::from_str($request).unwrap();
 			let expected_response: Value = serde_json::from_str($expected_response).unwrap();
-
 			let response = run_doctest(
 				request_val,
 				dir,
@@ -1181,7 +1179,7 @@ macro_rules! doctest_helper_json_rpc_node_assert_response {
 				$perform_tx,
 				$lock_tx,
 				$finalize_tx,
-				)
+					)
 			.unwrap()
 			.unwrap();
 			if response != expected_response {
@@ -1190,7 +1188,7 @@ macro_rules! doctest_helper_json_rpc_node_assert_response {
 					serde_json::to_string_pretty(&response).unwrap(),
 					serde_json::to_string_pretty(&expected_response).unwrap()
 				);
-				}
+				}*/
 			}
 	};
-}*/
+}

@@ -293,7 +293,7 @@ impl Server {
 			sync_state.clone(),
 			api_secret.clone(),
 			tls_conf.clone(),
-		);
+		)?;
 
 		info!("Starting dandelion monitor: {}", &config.api_http_addr);
 		let dandelion_thread = dandelion_monitor::monitor_transactions(

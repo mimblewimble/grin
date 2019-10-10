@@ -194,24 +194,3 @@ pub fn clean_test_dir(test_name_dir: &str) {
 		println!("can't remove output from previous test :{}, may be ok", e);
 	}
 }
-
-/// Testing the frameworks by starting a fresh server, creating a genesis
-/// Block and mining into a wallet for a bit
-#[test]
-fn test_fun() {
-	let api_server_one_dir = "api_server_one";
-	let mut server_config = TestServerConfig::default();
-	server_config.name = String::from(api_server_one_dir);
-	server_config.p2p_server_port = 40000;
-	server_config.api_server_port = 40001;
-	server_config.start_miner = true;
-
-	String::from(format!("http://{}:{}", server_config.base_addr, 50002));
-	let mut server_one = TestServer::new(server_config.clone()).unwrap();
-
-	// Spawn server and let it run for a bit
-	let _ = server_one.start();
-	thread::sleep(time::Duration::from_millis(20000));
-	clean_test_dir(api_server_one_dir);
-	assert!(false);
-}
