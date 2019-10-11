@@ -72,3 +72,69 @@ pub fn get_output(
 	}
 	Err(ErrorKind::NotFound)?
 }
+
+/// Retrieves an output from the chain given a commit id (a tiny bit iteratively)
+pub fn get_output_v2(
+	chain: &Weak<chain::Chain>,
+	id: &str,
+	include_proof: bool,
+	include_merkle_proof: bool,
+) -> Result<(OutputPrintable, OutputIdentifier), Error> {
+	let c = util::from_hex(String::from(id)).context(ErrorKind::Argument(format!(
+		"Not a valid commitment: {}",
+		id
+	)))?;
+	let commit = Commitment::from_vec(c);
+
+	// We need the features here to be able to generate the necessary hash
+	// to compare against the hash in the output MMR.
+	// For now we can just try both (but this probably needs to be part of the api
+	// params)
+	let outputs = [
+		OutputIdentifier::new(OutputFeatures::Plain, &commit),
+		OutputIdentifier::new(OutputFeatures::Coinbase, &commit),
+	];
+
+	let chain = w(chain)?;
+
+	for x in outputs.iter() {
+		let res = chain.is_unspent(x);
+		match res {
+			Ok(output_pos) => match chain.get_unspent_output_at(output_pos.position) {
+				Ok(output) => {
+					let mut header = None;
+					if include_merkle_proof && output.is_coinbase() {
+						header = chain.get_header_by_height(output_pos.height).ok();
+					}
+					match OutputPrintable::from_output(
+						&output,
+						chain.clone(),
+						header.as_ref(),
+						include_proof,
+						include_merkle_proof,
+					) {
+						Ok(output_printable) => return Ok((output_printable, x.clone())),
+						Err(e) => {
+							trace!(
+								"get_output: err: {} for commit: {:?} with feature: {:?}",
+								e.to_string(),
+								x.commit,
+								x.features
+							);
+						}
+					}
+				}
+				Err(_) => return Err(ErrorKind::NotFound)?,
+			},
+			Err(e) => {
+				trace!(
+					"get_output: err: {} for commit: {:?} with feature: {:?}",
+					e.to_string(),
+					x.commit,
+					x.features
+				);
+			}
+		}
+	}
+	Err(ErrorKind::NotFound)?
+}

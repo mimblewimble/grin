@@ -69,7 +69,7 @@ pub struct StatusHandler {
 }
 
 impl StatusHandler {
-	fn get_status(&self) -> Result<Status, Error> {
+	pub fn get_status(&self) -> Result<Status, Error> {
 		let head = w(&self.chain)?
 			.head()
 			.map_err(|e| ErrorKind::Internal(format!("can't get head: {}", e)))?;

@@ -266,7 +266,7 @@ pub struct OutputPrintable {
 	/// Rangeproof hash (as hex string)
 	pub proof_hash: String,
 	/// Block height at which the output is found
-	pub block_height: Option<u64>,
+	pub block_height: u64,
 	/// Merkle Proof
 	pub merkle_proof: Option<MerkleProof>,
 	/// MMR Position
@@ -290,9 +290,9 @@ impl OutputPrintable {
 		let out_id = core::OutputIdentifier::from_output(&output);
 		let res = chain.is_unspent(&out_id);
 		let (spent, block_height) = if let Ok(output_pos) = res {
-			(false, Some(output_pos.height))
+			(false, output_pos.height)
 		} else {
-			(true, None)
+			(true, 0)
 		};
 
 		let proof = if include_proof {
@@ -337,7 +337,7 @@ impl OutputPrintable {
 		};
 
 		let p_vec = util::from_hex(proof_str)
-			.map_err(|_| ser::Error::HexError(format!("invalud output range_proof")))?;
+			.map_err(|_| ser::Error::HexError(format!("invalid output range_proof")))?;
 		let mut p_bytes = [0; util::secp::constants::MAX_PROOF_SIZE];
 		for i in 0..p_bytes.len() {
 			p_bytes[i] = p_vec[i];
@@ -471,7 +471,7 @@ impl<'de> serde::de::Deserialize<'de> for OutputPrintable {
 					spent: spent.unwrap(),
 					proof: proof,
 					proof_hash: proof_hash.unwrap(),
-					block_height: block_height,
+					block_height: block_height.unwrap(),
 					merkle_proof: merkle_proof,
 					mmr_index: mmr_index.unwrap(),
 				})

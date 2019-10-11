@@ -42,6 +42,8 @@ where
 			ErrorKind::ResponseError(msg) => {
 				response(StatusCode::INTERNAL_SERVER_ERROR, msg.clone())
 			}
+			// place holder
+			ErrorKind::Router(_) => response(StatusCode::INTERNAL_SERVER_ERROR, ""),
 		},
 	}
 }
