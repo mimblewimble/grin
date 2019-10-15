@@ -118,8 +118,11 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 		&self,
 		b: core::Block,
 		peer_info: &PeerInfo,
-		was_requested: bool,
+		opts: chain::Options,
 	) -> Result<bool, chain::Error> {
+		if self.chain().block_exists(b.hash())? {
+			return Ok(true);
+		}
 		debug!(
 			"Received block {} at {} from {} [in/out/kern: {}/{}/{}] going to process.",
 			b.hash(),
@@ -129,7 +132,7 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 			b.outputs().len(),
 			b.kernels().len(),
 		);
-		self.process_block(b, peer_info, was_requested)
+		self.process_block(b, peer_info, opts)
 	}
 
 	fn compact_block_received(
@@ -137,6 +140,10 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 		cb: core::CompactBlock,
 		peer_info: &PeerInfo,
 	) -> Result<bool, chain::Error> {
+		// No need to process this compact block if we have previously accepted the _full block_.
+		if self.chain().block_exists(cb.hash())? {
+			return Ok(true);
+		}
 		let bhash = cb.hash();
 		debug!(
 			"Received compact_block {} at {} from {} [out/kern/kern_ids: {}/{}/{}] going to process.",
@@ -158,7 +165,7 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 							hook.on_block_received(&block, &peer_info.addr);
 						}
 					}
-					self.process_block(block, peer_info, false)
+					self.process_block(block, peer_info, chain::Options::NONE)
 				}
 				Err(e) => {
 					debug!("Invalid hydrated block {}: {:?}", cb_hash, e);
@@ -169,7 +176,7 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 			// check at least the header is valid before hydrating
 			if let Err(e) = self
 				.chain()
-				.process_block_header(&cb.header, self.chain_opts(false))
+				.process_block_header(&cb.header, chain::Options::NONE)
 			{
 				debug!("Invalid compact block header {}: {:?}", cb_hash, e.kind());
 				return Ok(!e.is_bad_data());
@@ -182,15 +189,16 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 			};
 
 			debug!(
-				"adapter: txs from tx pool - {}, (unknown kern_ids: {})",
+				"compact_block_received: txs from tx pool - {}, (unknown kern_ids: {})",
 				txs.len(),
 				missing_short_ids.len(),
 			);
 
-			// TODO - 3 scenarios here -
-			// 1) we hydrate a valid block (good to go)
-			// 2) we hydrate an invalid block (txs legit missing from our pool)
-			// 3) we hydrate an invalid block (peer sent us a "bad" compact block) - [TBD]
+			// If we have missing kernels then we know we cannot hydrate this compact block.
+			if missing_short_ids.len() > 0 {
+				self.request_block(&cb.header, peer_info, chain::Options::NONE);
+				return Ok(true);
+			}
 
 			let block = match core::Block::hydrate_from(cb.clone(), txs) {
 				Ok(block) => {
@@ -213,11 +221,11 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 					.is_ok()
 				{
 					debug!("successfully hydrated block from tx pool!");
-					self.process_block(block, peer_info, false)
+					self.process_block(block, peer_info, chain::Options::NONE)
 				} else {
 					if self.sync_state.status() == SyncStatus::NoSync {
 						debug!("adapter: block invalid after hydration, requesting full block");
-						self.request_block(&cb.header, peer_info);
+						self.request_block(&cb.header, peer_info, chain::Options::NONE);
 						Ok(true)
 					} else {
 						debug!("block invalid after hydration, ignoring it, cause still syncing");
@@ -236,6 +244,10 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 		bh: core::BlockHeader,
 		peer_info: &PeerInfo,
 	) -> Result<bool, chain::Error> {
+		// No need to process this header if we have previously accepted the _full block_.
+		if self.chain().block_exists(bh.hash())? {
+			return Ok(true);
+		}
 		if !self.sync_state.is_syncing() {
 			for hook in &self.hooks {
 				hook.on_header_received(&bh, &peer_info.addr);
@@ -244,9 +256,7 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 
 		// pushing the new block header through the header chain pipeline
 		// we will go ask for the block if this is a new header
-		let res = self
-			.chain()
-			.process_block_header(&bh, self.chain_opts(false));
+		let res = self.chain().process_block_header(&bh, chain::Options::NONE);
 
 		if let Err(e) = res {
 			debug!(
@@ -287,7 +297,7 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 		}
 
 		// try to add headers to our header chain
-		match self.chain().sync_block_headers(bhs, self.chain_opts(true)) {
+		match self.chain().sync_block_headers(bhs, chain::Options::SYNC) {
 			Ok(_) => Ok(true),
 			Err(e) => {
 				debug!("Block headers refused by chain: {:?}", e);
@@ -522,7 +532,7 @@ impl NetToChainAdapter {
 		&self,
 		b: core::Block,
 		peer_info: &PeerInfo,
-		was_requested: bool,
+		opts: chain::Options,
 	) -> Result<bool, chain::Error> {
 		// We cannot process blocks earlier than the horizon so check for this here.
 		{
@@ -538,10 +548,7 @@ impl NetToChainAdapter {
 		let bhash = b.hash();
 		let previous = self.chain().get_previous_header(&b.header);
 
-		match self
-			.chain()
-			.process_block(b, self.chain_opts(was_requested))
-		{
+		match self.chain().process_block(b, opts) {
 			Ok(_) => {
 				self.validate_chain(bhash);
 				self.check_compact();
@@ -560,7 +567,7 @@ impl NetToChainAdapter {
 								&& !self.sync_state.is_syncing()
 							{
 								debug!("process_block: received an orphan block, checking the parent: {:}", previous.hash());
-								self.request_block_by_hash(previous.hash(), peer_info)
+								self.request_block(&previous, peer_info, chain::Options::NONE)
 							}
 						}
 						Ok(true)
@@ -635,12 +642,10 @@ impl NetToChainAdapter {
 	// it into a full block then fallback to requesting the full block
 	// from the same peer that gave us the compact block
 	// consider additional peers for redundancy?
-	fn request_block(&self, bh: &BlockHeader, peer_info: &PeerInfo) {
-		self.request_block_by_hash(bh.hash(), peer_info)
-	}
-
-	fn request_block_by_hash(&self, h: Hash, peer_info: &PeerInfo) {
-		self.send_block_request_to_peer(h, peer_info, |peer, h| peer.send_block_request(h))
+	fn request_block(&self, bh: &BlockHeader, peer_info: &PeerInfo, opts: Options) {
+		self.send_block_request_to_peer(bh.hash(), peer_info, |peer, h| {
+			peer.send_block_request(h, opts)
+		})
 	}
 
 	// After we have received a block header in "header first" propagation
@@ -691,16 +696,6 @@ impl NetToChainAdapter {
 				e
 			),
 		}
-	}
-
-	/// Prepare options for the chain pipeline
-	fn chain_opts(&self, was_requested: bool) -> chain::Options {
-		let opts = if was_requested {
-			chain::Options::SYNC
-		} else {
-			chain::Options::NONE
-		};
-		opts
 	}
 }
 

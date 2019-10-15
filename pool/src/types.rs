@@ -105,21 +105,21 @@ pub struct PoolConfig {
 	/// Base fee for a transaction to be accepted by the pool. The transaction
 	/// weight is computed from its number of inputs, outputs and kernels and
 	/// multiplied by the base fee to compare to the actual transaction fee.
-	#[serde = "default_accept_fee_base"]
+	#[serde(default = "default_accept_fee_base")]
 	pub accept_fee_base: u64,
 
 	/// Maximum capacity of the pool in number of transactions
-	#[serde = "default_max_pool_size"]
+	#[serde(default = "default_max_pool_size")]
 	pub max_pool_size: usize,
 
 	/// Maximum capacity of the pool in number of transactions
-	#[serde = "default_max_stempool_size"]
+	#[serde(default = "default_max_stempool_size")]
 	pub max_stempool_size: usize,
 
 	/// Maximum total weight of transactions that can get selected to build a
 	/// block from. Allows miners to restrict the maximum weight of their
 	/// blocks.
-	#[serde = "default_mineable_max_weight"]
+	#[serde(default = "default_mineable_max_weight")]
 	pub mineable_max_weight: usize,
 }
 

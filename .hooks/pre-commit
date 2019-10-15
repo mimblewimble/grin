@@ -22,38 +22,29 @@ if [ $? != 0 ]; then
 	exit 1
 fi
 
-result=0
 problem_files=()
 
-printf "[pre_commit] rustfmt "
-
+# first collect all the files that need reformatting
 for file in $(git diff --name-only --cached); do
 	if [ ${file: -3} == ".rs" ]; then
-		# first collect all the files that need reformatting
 		rustfmt --check $file &>/dev/null
 		if [ $? != 0 ]; then
 			problem_files+=($file)
-			result=1
 		fi
 	fi
 done
 
-# now reformat all the files that need reformatting
-for file in ${problem_files[@]}; do
-	rustfmt $file
-done
-
-# and let the user know what just happened (and which files were affected)
-printf "\033[0;32mok\033[0m \n"
-if [ $result != 0 ]; then
-	# printf "\033[0;31mrustfmt\033[0m \n"
-	printf "[pre_commit] the following files were rustfmt'd (not yet committed): \n"
-
-	for file in ${problem_files[@]}; do
-		printf "\033[0;31m    $file\033[0m \n"
-	done
+if [ ${#problem_files[@]} == 0 ]; then
+  # nothing to do
+  printf "[pre_commit] rustfmt \033[0;32mok\033[0m \n"
+else
+  # reformat the files that need it and re-stage them.
+	printf "[pre_commit] the following files were rustfmt'd before commit: \n"
+  for file in ${problem_files[@]}; do
+    rustfmt $file
+    git add $file
+		printf "\033[0;32m    $file\033[0m \n"
+  done
 fi
 
 exit 0
-# to actually fail the build on rustfmt failure -
-# exit $result

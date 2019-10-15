@@ -80,6 +80,8 @@ pub enum Error {
 		peer: Hash,
 	},
 	Send(String),
+	PeerNotFound,
+	PeerNotBanned,
 	PeerException,
 	Internal,
 }
@@ -527,7 +529,7 @@ pub trait ChainAdapter: Sync + Send {
 		&self,
 		b: core::Block,
 		peer_info: &PeerInfo,
-		was_requested: bool,
+		opts: chain::Options,
 	) -> Result<bool, chain::Error>;
 
 	fn compact_block_received(

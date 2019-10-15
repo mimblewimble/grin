@@ -21,6 +21,8 @@ use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
+use lru_cache::LruCache;
+
 use crate::chain;
 use crate::conn;
 use crate::core::core::hash::{Hash, Hashed};
@@ -29,7 +31,7 @@ use crate::core::ser::Writeable;
 use crate::core::{core, global};
 use crate::handshake::Handshake;
 use crate::msg::{
-	self, BanReason, GetPeerAddrs, KernelDataRequest, Locator, Ping, TxHashSetRequest, Type,
+	self, BanReason, GetPeerAddrs, KernelDataRequest, Locator, Msg, Ping, TxHashSetRequest, Type,
 };
 use crate::protocol::Protocol;
 use crate::types::{
@@ -233,12 +235,8 @@ impl Peer {
 
 	/// Send a msg with given msg_type to our peer via the connection.
 	fn send<T: Writeable>(&self, msg: T, msg_type: Type) -> Result<(), Error> {
-		let bytes = self
-			.send_handle
-			.lock()
-			.send(msg, msg_type, self.info.version)?;
-		self.tracker.inc_sent(bytes);
-		Ok(())
+		let msg = Msg::new(msg_type, msg, self.info.version)?;
+		self.send_handle.lock().send(msg)
 	}
 
 	/// Send a ping to the remote peer, providing our local difficulty and
@@ -368,10 +366,11 @@ impl Peer {
 		self.send(&h, msg::Type::GetTransaction)
 	}
 
-	/// Sends a request for a specific block by hash
-	pub fn send_block_request(&self, h: Hash) -> Result<(), Error> {
+	/// Sends a request for a specific block by hash.
+	/// Takes opts so we can track if this request was due to our node syncing or otherwise.
+	pub fn send_block_request(&self, h: Hash, opts: chain::Options) -> Result<(), Error> {
 		debug!("Requesting block {} from peer {}.", h, self.info.addr);
-		self.tracking_adapter.push_req(h);
+		self.tracking_adapter.push_req(h, opts);
 		self.send(&h, msg::Type::GetBlock)
 	}
 
@@ -433,51 +432,35 @@ impl Peer {
 #[derive(Clone)]
 struct TrackingAdapter {
 	adapter: Arc<dyn NetAdapter>,
-	known: Arc<RwLock<Vec<Hash>>>,
-	requested: Arc<RwLock<Vec<Hash>>>,
+	received: Arc<RwLock<LruCache<Hash, ()>>>,
+	requested: Arc<RwLock<LruCache<Hash, chain::Options>>>,
 }
 
 impl TrackingAdapter {
 	fn new(adapter: Arc<dyn NetAdapter>) -> TrackingAdapter {
 		TrackingAdapter {
 			adapter: adapter,
-			known: Arc::new(RwLock::new(Vec::with_capacity(MAX_TRACK_SIZE))),
-			requested: Arc::new(RwLock::new(Vec::with_capacity(MAX_TRACK_SIZE))),
+			received: Arc::new(RwLock::new(LruCache::new(MAX_TRACK_SIZE))),
+			requested: Arc::new(RwLock::new(LruCache::new(MAX_TRACK_SIZE))),
 		}
 	}
 
 	fn has_recv(&self, hash: Hash) -> bool {
-		let known = self.known.read();
-		// may become too slow, an ordered set (by timestamp for eviction) may
-		// end up being a better choice
-		known.contains(&hash)
+		self.received.write().contains_key(&hash)
 	}
 
 	fn push_recv(&self, hash: Hash) {
-		let mut known = self.known.write();
-		if known.len() > MAX_TRACK_SIZE {
-			known.truncate(MAX_TRACK_SIZE);
-		}
-		if !known.contains(&hash) {
-			known.insert(0, hash);
-		}
+		self.received.write().insert(hash, ());
 	}
 
-	fn has_req(&self, hash: Hash) -> bool {
-		let requested = self.requested.read();
-		// may become too slow, an ordered set (by timestamp for eviction) may
-		// end up being a better choice
-		requested.contains(&hash)
+	/// Track a block or transaction hash requested by us.
+	/// Track the opts alongside the hash so we know if this was due to us syncing or not.
+	fn push_req(&self, hash: Hash, opts: chain::Options) {
+		self.requested.write().insert(hash, opts);
 	}
 
-	fn push_req(&self, hash: Hash) {
-		let mut requested = self.requested.write();
-		if requested.len() > MAX_TRACK_SIZE {
-			requested.truncate(MAX_TRACK_SIZE);
-		}
-		if !requested.contains(&hash) {
-			requested.insert(0, hash);
-		}
+	fn req_opts(&self, hash: Hash) -> Option<chain::Options> {
+		self.requested.write().get_mut(&hash).cloned()
 	}
 }
 
@@ -522,11 +505,17 @@ impl ChainAdapter for TrackingAdapter {
 		&self,
 		b: core::Block,
 		peer_info: &PeerInfo,
-		_was_requested: bool,
+		opts: chain::Options,
 	) -> Result<bool, chain::Error> {
 		let bh = b.hash();
 		self.push_recv(bh);
-		self.adapter.block_received(b, peer_info, self.has_req(bh))
+
+		// If we are currently tracking a request for this block then
+		// use the opts specified when we made the request.
+		// If we requested this block as part of sync then we want to
+		// let our adapter know this when we receive it.
+		let req_opts = self.req_opts(bh).unwrap_or(opts);
+		self.adapter.block_received(b, peer_info, req_opts)
 	}
 
 	fn compact_block_received(

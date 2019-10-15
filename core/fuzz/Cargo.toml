@@ -18,17 +18,29 @@ git = "https://github.com/rust-fuzz/libfuzzer-sys.git"
 members = ["."]
 
 [[bin]]
-name = "transaction_read"
-path = "fuzz_targets/transaction_read.rs"
+name = "transaction_read_v1"
+path = "fuzz_targets/transaction_read_v1.rs"
+
+[[bin]]
+name = "transaction_read_v2"
+path = "fuzz_targets/transaction_read_v2.rs"
 
 [[bin]]
 name = "gen-corpus"
 path = "src/main.rs"
 
 [[bin]]
-name = "block_read"
-path = "fuzz_targets/block_read.rs"
+name = "block_read_v1"
+path = "fuzz_targets/block_read_v2.rs"
 
 [[bin]]
-name = "compact_block_read"
-path = "fuzz_targets/compact_block_read.rs"
+name = "block_read_v2"
+path = "fuzz_targets/block_read_v2.rs"
+
+[[bin]]
+name = "compact_block_read_v1"
+path = "fuzz_targets/compact_block_read_v1.rs"
+
+[[bin]]
+name = "compact_block_read_v2"
+path = "fuzz_targets/compact_block_read_v2.rs"
