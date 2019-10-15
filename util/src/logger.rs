@@ -35,7 +35,7 @@ use log4rs::encode::Encode;
 use log4rs::filter::{threshold::ThresholdFilter, Filter, Response};
 use std::error::Error;
 use std::sync::mpsc;
-use std::sync::mpsc::Sender;
+use std::sync::mpsc::SyncSender;
 
 lazy_static! {
 	/// Flag to observe whether logging was explicitly initialised (don't output otherwise)
@@ -119,7 +119,7 @@ impl Filter for GrinFilter {
 
 #[derive(Debug)]
 struct ChannelAppender {
-	output: Mutex<Sender<LogEntry>>,
+	output: Mutex<SyncSender<LogEntry>>,
 	encoder: Box<dyn Encode>,
 }
 
@@ -132,7 +132,7 @@ impl Append for ChannelAppender {
 
 		self.output
 			.lock()
-			.send(LogEntry {
+			.try_send(LogEntry {
 				log,
 				level: record.level(),
 			})
@@ -145,7 +145,7 @@ impl Append for ChannelAppender {
 }
 
 /// Initialize the logger with the given configuration
-pub fn init_logger(config: Option<LoggingConfig>, logs_tx: mpsc::Sender<LogEntry>) {
+pub fn init_logger(config: Option<LoggingConfig>, logs_tx: mpsc::SyncSender<LogEntry>) {
 	if let Some(c) = config {
 		let tui_running = c.tui_running.unwrap_or(false);
 		if tui_running {

@@ -138,7 +138,7 @@ fn real_main() -> i32 {
 		}
 	}
 
-	let (logs_tx, logs_rx) = mpsc::channel::<LogEntry>();
+	let (logs_tx, logs_rx) = mpsc::sync_channel::<LogEntry>(200);
 	if let Some(mut config) = node_config.clone() {
 		let mut l = config.members.as_mut().unwrap().logging.clone().unwrap();
 		l.tui_running = config.members.as_mut().unwrap().server.run_tui;

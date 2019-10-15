@@ -27,8 +27,8 @@ pub struct TUILogsView;
 
 impl TUILogsView {
 	pub fn create() -> Box<dyn View> {
-		let basic_status_view = BoxView::with_full_screen(LogBufferView::new(200).with_id("logs"));
-		Box::new(basic_status_view.with_id(VIEW_LOGS))
+		let logs_view = BoxView::with_full_screen(LogBufferView::new(200).with_id("logs"));
+		Box::new(logs_view.with_id(VIEW_LOGS))
 	}
 
 	pub fn update(c: &mut Cursive, entry: LogEntry) {
