@@ -130,7 +130,7 @@ impl Append for ChannelAppender {
 
 		let log = String::from_utf8_lossy(writer.0.as_slice()).to_string();
 
-		self.output.lock().try_send(LogEntry {
+		let _ = self.output.lock().try_send(LogEntry {
 			log,
 			level: record.level(),
 		});
