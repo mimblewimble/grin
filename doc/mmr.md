@@ -1,6 +1,6 @@
 # Merkle Mountain Ranges
 
-*Read this in other languages:[Korean](mmr_KR.md)
+*Read this in other languages: [English](mmr.md), [简体中文](mmr_ZH-CN.md), [Korean](mmr_KR.md)*
 
 ## Structure
 
@@ -103,7 +103,7 @@ until we have a node that exists in our MMR. Once we find that next peak,
 keep repeating the process until we're at the last node.
 
 All these operations are very simple. Jumping to the right sibling of a node at
-height `h` is adding `2^(h+1) - 1` to its position. Taking its left sibling is
+height `h` is adding `2^(h+1) - 1` to its position. Taking its left child is
 subtracting `2^h`.
 
 Finally, once all the positions of the peaks are known, "bagging" the peaks
