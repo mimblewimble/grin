@@ -288,14 +288,21 @@ impl TUIStatusListener for TUIStatusView {
 }
 
 #[test]
-fn test_status_txhashset() {
-	let status = SyncStatus::TxHashsetValidation {
+fn test_status_txhashset_kernels() {
+	let status = SyncStatus::TxHashsetKernelsValidation {
 		kernels: 201,
-		kernel_total: 5000,
-		rproofs: 643,
-		rproof_total: 1000,
+		kernels_total: 5000,
 	};
 	let basic_status = TUIStatusView::update_sync_status(status);
-	assert!(basic_status.contains("Kernels: 4%"), basic_status);
-	assert!(basic_status.contains("Range proofs: 64%"), basic_status);
+	assert!(basic_status.contains("4%"), basic_status);
+}
+
+#[test]
+fn test_status_txhashset_rproofs() {
+	let status = SyncStatus::TxHashsetRangeProofsValidation {
+		rproofs: 643,
+		rproofs_total: 1000,
+	};
+	let basic_status = TUIStatusView::update_sync_status(status);
+	assert!(basic_status.contains("64%"), basic_status);
 }
