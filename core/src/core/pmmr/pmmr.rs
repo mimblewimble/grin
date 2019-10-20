@@ -79,6 +79,11 @@ where
 		self.backend.leaf_pos_iter()
 	}
 
+	/// Number of leafs in the MMR
+	pub fn n_leafs(&self) -> u64 {
+		self.backend.n_leafs()
+	}
+
 	/// Returns a vec of the peaks of this MMR.
 	pub fn peaks(&self) -> Vec<Hash> {
 		let peaks_pos = peaks(self.last_pos);

@@ -140,6 +140,10 @@ impl<T: PMMRable> Backend<T> for PMMRBackend<T> {
 		}
 	}
 
+	fn n_leafs(&self) -> u64 {
+		self.leaf_set.len() as u64
+	}
+
 	fn data_as_temp_file(&self) -> Result<File, String> {
 		self.data_file
 			.as_temp_file()
