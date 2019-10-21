@@ -122,7 +122,7 @@ impl BIP32Hasher for BIP32GrinHasher {
 		b"IamVoldemort".to_owned()
 	}
 	fn init_sha512(&mut self, seed: &[u8]) {
-		self.hmac_sha512 = HmacSha512::new_varkey(seed).expect("HMAC can take key of any size");;
+		self.hmac_sha512 = HmacSha512::new_varkey(seed).expect("HMAC can take key of any size");
 	}
 	fn append_sha512(&mut self, value: &[u8]) {
 		self.hmac_sha512.input(value);
@@ -385,7 +385,7 @@ impl ExtendedPrivKey {
 			Err(e) => return Err(Error::MnemonicError(e)),
 		};
 		let mut hasher = BIP32GrinHasher::new(is_floo);
-		let key = r#try!(ExtendedPrivKey::new_master(secp, &mut hasher, &seed));
+		let key = ExtendedPrivKey::new_master(secp, &mut hasher, &seed)?;
 		Ok(key)
 	}
 
@@ -716,7 +716,7 @@ mod tests {
 			b"Bitcoin seed".to_owned()
 		}
 		fn init_sha512(&mut self, seed: &[u8]) {
-			self.hmac_sha512 = HmacSha512::new_varkey(seed).expect("HMAC can take key of any size");;
+			self.hmac_sha512 = HmacSha512::new_varkey(seed).expect("HMAC can take key of any size");
 		}
 		fn append_sha512(&mut self, value: &[u8]) {
 			self.hmac_sha512.input(value);
@@ -900,5 +900,4 @@ mod tests {
 		serde_round_trip!(ChildNumber::from_hardened_idx(1));
 		serde_round_trip!(ChildNumber::from_hardened_idx((1 << 31) - 1));
 	}
-
 }

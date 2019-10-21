@@ -220,8 +220,8 @@ impl AsRef<[u8]> for Identifier {
 
 impl ::std::fmt::Debug for Identifier {
 	fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
-		r#try!(write!(f, "{}(", stringify!(Identifier)));
-		r#try!(write!(f, "{}", self.to_hex()));
+		write!(f, "{}(", stringify!(Identifier))?;
+		write!(f, "{}", self.to_hex())?;
 		write!(f, ")")
 	}
 }
