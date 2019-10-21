@@ -308,20 +308,6 @@ fn read_block_header(reader: &mut dyn Reader) -> Result<BlockHeader, ser::Error>
 	let (output_mmr_size, kernel_mmr_size) = ser_multiread!(reader, read_u64, read_u64);
 	let pow = ProofOfWork::read(reader)?;
 
-	if timestamp > MAX_DATE.and_hms(0, 0, 0).timestamp()
-		|| timestamp < MIN_DATE.and_hms(0, 0, 0).timestamp()
-	{
-		return Err(ser::Error::CorruptedData);
-	}
-
-	// Check the block version before proceeding any further.
-	// We want to do this here because blocks can be pretty large
-	// and we want to halt processing as early as possible.
-	// If we receive an invalid block version then the peer is not on our hard-fork.
-	if !consensus::valid_header_version(height, version) {
-		return Err(ser::Error::InvalidBlockVersion);
-	}
-
 	Ok(BlockHeader {
 		version,
 		height,
@@ -432,6 +418,20 @@ impl Readable for UntrustedBlockHeader {
 				header.hash()
 			);
 			return Err(ser::Error::CorruptedData);
+		}
+
+		if header.timestamp.timestamp() > MAX_DATE.and_hms(0, 0, 0).timestamp()
+			|| header.timestamp.timestamp() < MIN_DATE.and_hms(0, 0, 0).timestamp()
+		{
+			return Err(ser::Error::CorruptedData);
+		}
+
+		// Check the block version before proceeding any further.
+		// We want to do this here because blocks can be pretty large
+		// and we want to halt processing as early as possible.
+		// If we receive an invalid block version then the peer is not on our hard-fork.
+		if !consensus::valid_header_version(header.height, header.version) {
+			return Err(ser::Error::InvalidBlockVersion);
 		}
 
 		if !header.pow.is_primary() && !header.pow.is_secondary() {
