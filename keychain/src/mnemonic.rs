@@ -72,7 +72,10 @@ pub fn to_entropy(mnemonic: &str) -> Result<Vec<u8>, Error> {
 	}
 
 	// u11 vector of indexes for each word
-	let mut indexes: Vec<u16> = r#try!(words.iter().map(|x| search(x)).collect());
+	let mut indexes: Vec<u16> = words
+		.iter()
+		.map(|x| search(x))
+		.collect::<Result<Vec<_>, _>>()?;
 	let checksum_bits = words.len() / 3;
 	let mask = ((1 << checksum_bits) - 1) as u8;
 	let last = indexes.pop().unwrap();
@@ -155,7 +158,7 @@ where
 	Option<&'a str>: From<T>,
 {
 	// make sure the mnemonic is valid
-	r#try!(to_entropy(mnemonic));
+	to_entropy(mnemonic)?;
 
 	let salt = ("mnemonic".to_owned() + Option::from(passphrase).unwrap_or("")).into_bytes();
 	let data = mnemonic.as_bytes();
