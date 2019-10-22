@@ -190,9 +190,9 @@ impl MessageHandler for Protocol {
 					"handle_payload: received compact block: msg_len: {}",
 					msg.header.msg_len
 				);
-				let b: core::CompactBlock = msg.body()?;
+				let b: core::UntrustedCompactBlock = msg.body()?;
 
-				adapter.compact_block_received(b, &self.peer_info)?;
+				adapter.compact_block_received(b.into(), &self.peer_info)?;
 				Ok(None)
 			}
 

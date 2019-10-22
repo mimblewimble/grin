@@ -308,6 +308,12 @@ fn read_block_header(reader: &mut dyn Reader) -> Result<BlockHeader, ser::Error>
 	let (output_mmr_size, kernel_mmr_size) = ser_multiread!(reader, read_u64, read_u64);
 	let pow = ProofOfWork::read(reader)?;
 
+	if timestamp > MAX_DATE.and_hms(0, 0, 0).timestamp()
+		|| timestamp < MIN_DATE.and_hms(0, 0, 0).timestamp()
+	{
+		return Err(ser::Error::CorruptedData);
+	}
+
 	Ok(BlockHeader {
 		version,
 		height,
@@ -417,12 +423,6 @@ impl Readable for UntrustedBlockHeader {
 				"block header {} validation error: block time is more than 12 blocks in future",
 				header.hash()
 			);
-			return Err(ser::Error::CorruptedData);
-		}
-
-		if header.timestamp.timestamp() > MAX_DATE.and_hms(0, 0, 0).timestamp()
-			|| header.timestamp.timestamp() < MIN_DATE.and_hms(0, 0, 0).timestamp()
-		{
 			return Err(ser::Error::CorruptedData);
 		}
 
