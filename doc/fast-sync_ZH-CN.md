@@ -1,0 +1,15 @@
+# 快速同步
+
+*Read this in other languages: [English](fast-sync.md), [Español](fast-sync_ES.md), [简体中文](fast-sync_ZH-CN.md), [Korean](fast-sync_KR.md).*
+
+在 Grin 中，我们把同步一个新节点或一段时间未跟上链的节点，并将其升级到最新的已知工作量最大的块的过程称为“同步”（"sync"）。 初始块下载（或 IBD）通常被其他区块链中被采用，但这对 Grin 来说是有问题的，因为它通常不下载完整的块。
+
+简而言之，在 Grin 中的快速同步会执行以下操作：
+
+1. 按照其他节点的建议，在最有效的链上按块下载所有块头（block header）。
+2. 找到距链头（chain head）足够靠后的一个头（header）。这称为节点视界（node horizon），因为它是节点可以在不触发另一个新的完整同步的情况下在新分支上重组其链的最远位置。
+3. 下载处于视界的完整状态，包括未花费（unspent）状态输出，范围证明（range proof）和内核数据（kernel data），以及所有相应的 MMR。这是其实只是一个大的 zip 文件。
+4. 验证完整状态。
+5. 从视界开始下载完整的块直到链头。
+
+在本节的其余部分，我们将详细阐述每个步骤。
