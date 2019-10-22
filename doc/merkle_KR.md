@@ -1,5 +1,7 @@
 # 머클의 구조
 
+*Read this in other languages: [English](merkle.md), [简体中文](merkle_ZH-CN.md), [Korean](merkle_KR.md).*
+
 MimbleWimble은 Pruning 데이터만 있는 시스템의 상태를 사용자가 증명하도록 설계되었습니다. 이러한 목표를 달성하기 위해 모든 트랜잭션 데이터는 pruning 된 경우라도 효율적인 업데이트와 serialization을 지원하는 Merkle 트리를 사용하여 블록 체인에 커밋됩니다.
 
 또한 거의 모든 거래 데이터 (입력, 출력, Excess 및 Excess proof)는 어떤 방식으로 합산 될 수 있으므로 Merkle sum 트리를 기본 옵션으로 처리하고 여기에서 합계를 처리하는 것이 좋습니다.

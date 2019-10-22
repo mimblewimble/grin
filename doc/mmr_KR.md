@@ -1,5 +1,7 @@
 # Merkle Mountain Ranges
 
+*Read this in other languages: [English](mmr.md), [简体中文](mmr_ZH-CN.md), [Korean](mmr_KR.md)*
+
 ## MMR의 구조
 
 Merkle Mountain Ranges [1]은 Merkle trees [2]의 대안입니다. 후자는 완벽하게 균형 잡힌 이진 트리를 사용하지만 전자는 완벽하게 균형잡힌 binary tree list 거나 오른쪽 상단에서 잘린 single binary tree로 볼 수 있습니다. Merkle Mountain Range (MMR)는 엄격하게 append 에서만 사용됩니다. 원소는 왼쪽에서 오른쪽으로 추가되고, 두 하위 원소가 있는 즉시 부모를 추가하여 그에 따라 범위를 채웁니다.
