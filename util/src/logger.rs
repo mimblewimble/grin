@@ -142,7 +142,7 @@ impl Append for ChannelAppender {
 }
 
 /// Initialize the logger with the given configuration
-pub fn init_logger(config: Option<LoggingConfig>, logs_tx: mpsc::SyncSender<LogEntry>) {
+pub fn init_logger(config: Option<LoggingConfig>, logs_tx: Option<mpsc::SyncSender<LogEntry>>) {
 	if let Some(c) = config {
 		let tui_running = c.tui_running.unwrap_or(false);
 		if tui_running {
@@ -176,7 +176,7 @@ pub fn init_logger(config: Option<LoggingConfig>, logs_tx: mpsc::SyncSender<LogE
 		if tui_running {
 			let channel_appender = ChannelAppender {
 				encoder: Box::new(PatternEncoder::new(&LOGGING_PATTERN)),
-				output: Mutex::new(logs_tx),
+				output: Mutex::new(logs_tx.unwrap()),
 			};
 
 			appenders.push(

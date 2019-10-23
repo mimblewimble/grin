@@ -189,6 +189,7 @@ impl Controller {
 					ControllerMessage::Shutdown => {
 						warn!("Shutdown in progress, please wait");
 						self.ui.stop();
+						println!("Shutdown in progress, please wait");
 						server.stop();
 						return;
 					}

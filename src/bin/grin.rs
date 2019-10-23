@@ -138,23 +138,28 @@ fn real_main() -> i32 {
 		}
 	}
 
-	let (logs_tx, logs_rx) = mpsc::sync_channel::<LogEntry>(200);
-	if let Some(mut config) = node_config.clone() {
-		let mut l = config.members.as_mut().unwrap().logging.clone().unwrap();
-		l.tui_running = config.members.as_mut().unwrap().server.run_tui;
-		init_logger(Some(l), logs_tx);
+	let mut config = node_config.clone().unwrap();
+	let mut logging_config = config.members.as_mut().unwrap().logging.clone().unwrap();
+	logging_config.tui_running = config.members.as_mut().unwrap().server.run_tui;
 
-		global::set_mining_mode(config.members.unwrap().server.clone().chain_type);
+	let (logs_tx, logs_rx) = if logging_config.tui_running.unwrap() {
+		let (logs_tx, logs_rx) = mpsc::sync_channel::<LogEntry>(200);
+		(Some(logs_tx), Some(logs_rx))
+	} else {
+		(None, None)
+	};
+	init_logger(Some(logging_config), logs_tx);
 
-		if let Some(file_path) = &config.config_file_path {
-			info!(
-				"Using configuration file at {}",
-				file_path.to_str().unwrap()
-			);
-		} else {
-			info!("Node configuration file not found, using default");
-		}
-	}
+	global::set_mining_mode(config.members.unwrap().server.clone().chain_type);
+
+	if let Some(file_path) = &config.config_file_path {
+		info!(
+			"Using configuration file at {}",
+			file_path.to_str().unwrap()
+		);
+	} else {
+		info!("Node configuration file not found, using default");
+	};
 
 	log_build_info();
 

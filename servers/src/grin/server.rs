@@ -20,7 +20,7 @@ use std::fs;
 use std::fs::File;
 use std::io::prelude::*;
 use std::path::Path;
-use std::sync::Arc;
+use std::sync::{mpsc, Arc};
 use std::{
 	thread::{self, JoinHandle},
 	time,
@@ -52,6 +52,7 @@ use crate::p2p::types::PeerAddr;
 use crate::pool;
 use crate::util::file::get_first_line;
 use crate::util::{RwLock, StopState};
+use grin_util::logger::LogEntry;
 
 /// Grin server holding internal structures.
 pub struct Server {
@@ -80,31 +81,42 @@ pub struct Server {
 }
 
 impl Server {
-	/// Start ancillary services
-	pub fn start_ancillary(&self) -> Result<(), Error> {
-		let mining_config = self.config.stratum_mining_config.clone();
-		let enable_test_miner = self.config.run_test_miner;
-		let test_miner_wallet_url = self.config.test_miner_wallet_url.clone();
+	/// Instantiates and starts a new server. Optionally takes a callback
+	/// for the server to send an ARC copy of itself, to allow another process
+	/// to poll info about the server status
+	pub fn start<F>(
+		config: ServerConfig,
+		logs_rx: Option<mpsc::Receiver<LogEntry>>,
+		mut info_callback: F,
+	) -> Result<(), Error>
+	where
+		F: FnMut(Server, Option<mpsc::Receiver<LogEntry>>),
+	{
+		let mining_config = config.stratum_mining_config.clone();
+		let enable_test_miner = config.run_test_miner;
+		let test_miner_wallet_url = config.test_miner_wallet_url.clone();
+		let serv = Server::new(config)?;
 
 		if let Some(c) = mining_config {
 			let enable_stratum_server = c.enable_stratum_server;
 			if let Some(s) = enable_stratum_server {
 				if s {
 					{
-						let mut stratum_stats = self.state_info.stratum_stats.write();
+						let mut stratum_stats = serv.state_info.stratum_stats.write();
 						stratum_stats.is_enabled = true;
 					}
-					self.start_stratum_server(c.clone());
+					serv.start_stratum_server(c.clone());
 				}
 			}
 		}
 
 		if let Some(s) = enable_test_miner {
 			if s {
-				self.start_test_miner(test_miner_wallet_url, self.stop_state.clone());
+				serv.start_test_miner(test_miner_wallet_url, serv.stop_state.clone());
 			}
 		}
 
+		info_callback(serv, logs_rx);
 		Ok(())
 	}
 
