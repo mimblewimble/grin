@@ -1,5 +1,7 @@
 # 블록체인 데이터 프루닝(가지치기)에 대해
 
+*Read this in other languages: [English](pruning.md), [简体中文](pruning_ZH-CN.md), [Korean](pruning_KR.md)*
+
 MimbleWimble의 주된 매력 중 하나는 이론적인 공간효율성 입니다. 실제로 신뢰 할수 있거나 또는 사전에 입증된 전체 블록체인 스테이트는 아주 작을수도 있는 UTXO(unspent transaction outputs)만 나타냅니다.
 
 Grin의 블록체인에는 다음 유형의 데이터가 포함됩니다 (MimbleWimble 프로토콜에 대한 사전 지식이 있다고 가정합니다).
