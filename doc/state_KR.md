@@ -1,5 +1,7 @@
 # 상태와 스토리지
 
+*다른 언어로 Intro를 읽으시려면: [English](state.md), [日本語](state_JP.md), [简体中文](state_ZH-CN.md).*
+
 ## Grin의 상태
 
 ### 구조
