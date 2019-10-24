@@ -275,8 +275,8 @@ Bezug nehmend auf den vorherigen Beispielblock, müssen die Outputs x1 und x2, a
 Verallgemeinernd können wir schlussfolgern, dass der Chainstate (ausgenommen Header) zu jedem Zeitpunkt durch lediglich die folgenden Informationsstücke zusammengefasst werden kann:
 
 1. Die Gesamtanzahl an Coins, die durch Mining in der Chain erstellt wurden.
-2. Das komplette Set nicht verwendeter Outputs.
-3. Die Transaktionskernel für jede Transaktion.
+1. Das komplette Set nicht verwendeter Outputs.
+1. Die Transaktionskernel für jede Transaktion.
 
 Das erste Informationsstück kann nur mittels der Blockhöhe (seiner Distanz zum Genesisblock), abgeleitet werden. Beide nicht verwendeten Outputs und die Transaktionskernel sind höchst kompakt. Dies hat 2 wichtige Konsequenzen:
 

@@ -374,8 +374,8 @@ Concluimos que, generalizando, el estado de la cadena (excluyendo las cabeceras)
 por estas piezas de información:
 
 1. La cantidad total de monedas creadas por la minería en la cadena.
-2. El conjunto completo de resultados no utilizados.
-3. Los núcleos de transacciones para cada transacción.
+1. El conjunto completo de resultados no utilizados.
+1. Los núcleos de transacciones para cada transacción.
 
 La primera información se puede deducir simplemente usando la altura del bloque (su distancia del bloque génesis). Y tanto 
 las salidas no utilizadas como los núcleos de transacción son extremadamente compactos. Esto tiene dos consecuencias 

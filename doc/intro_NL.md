@@ -390,8 +390,8 @@ Veralgemeend, concluderen we dat de ketenstatus (met uitzondering van headers) o
 samengevat kunnen worden door alleen deze stukjes informatie:
 
 1. Het totale aantal munten gecreëerd door mining in de keten.
-2. De volledige verzameling aan niet-bestede uitgaven.
-3. De transactiekernels voor elke transactie.
+1. De volledige verzameling aan niet-bestede uitgaven.
+1. De transactiekernels voor elke transactie.
 
 Het eerste stuk informatie kan afgeleid worden door alleen de blokhoogte 
 (de afstand tot het genesisblok) te gebruiken. En zowel de niet-bestede uitgaven als de

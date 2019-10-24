@@ -275,8 +275,8 @@ Voltando ao bloco do exemplo anterior, as saídas x1 e x2, gastas por I1 e I2, d
 Generalizando, concluímos que o estado da cadeia (excluindo cabeçalhos) a qualquer momento pode ser resumido simplesmente pelas seguintes informações:
 
 1. A quantidade total de moedas criadas pela mineração na cadeia.
-2. O conjunto completo de saídas não gastas.
-3. Os núcleos de transações para cada transação.
+1. O conjunto completo de saídas não gastas.
+1. Os núcleos de transações para cada transação.
 
 A primeira informação pode ser deduzida usando apenas a altura do bloco (sua distância do bloco de gênese). E tanto as saídas não gastas quanto os núcleos de transação são extremamente compactos. Isso tem 2 consequências importantes:
 

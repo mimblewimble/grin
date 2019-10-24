@@ -7,8 +7,8 @@
 There are 3 main properties of Grin transactions that make them private:
 
 1. There are no addresses.
-2. There are no amounts.
-3. 2 transactions, one spending the other, can be merged in a block to form only one, removing all intermediary information.
+1. There are no amounts.
+1. 2 transactions, one spending the other, can be merged in a block to form only one, removing all intermediary information.
 
 The 2 first properties mean that all transactions are indistinguishable from one another. Unless you directly participated in the transaction, all inputs and outputs look like random pieces of data (in lingo, they're all random curve points).
 

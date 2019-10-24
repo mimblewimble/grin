@@ -424,8 +424,8 @@ Generalizing, we conclude that the chain state (excluding headers) at any point
 in time can be summarized by just these pieces of information:
 
 1. The total amount of coins created by mining in the chain.
-2. The complete set of unspent outputs.
-3. The transactions kernels for each transaction.
+1. The complete set of unspent outputs.
+1. The transactions kernels for each transaction.
 
 The first piece of information can be deduced just using the block
 height (its distance from the genesis block). And both the unspent outputs and the

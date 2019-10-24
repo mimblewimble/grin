@@ -369,8 +369,8 @@ I1 och I2 alla tas bort från blockkedjan eftersom de nu är mellanliggande tran
 Vi slutleder att kedjetillståndet kan (bortsett från block headers) vid varje tidspunkt sammanfattas med endast dessa tre ting:
 
 1. Den totala mängden mynt skapade genom mining.
-2. Den kompletta mängden av UTXOs.
-3. Transaktionskärnorna för varje transaktion.
+1. Den kompletta mängden av UTXOs.
+1. Transaktionskärnorna för varje transaktion.
 
 Det första kan härledas genom att endast observera blockhöjden.
 

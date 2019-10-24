@@ -10,12 +10,12 @@ En resumen, una sincronización rápida en Grin hace lo siguiente:
 
 1. Descargar todas las cabeceras de los bloques, por trozos, en la cadena más utilizada, 
    tal y como lo anuncian otros nodos.
-2. Encuentre una cabecera suficientemente alejada del encabezado de la cadena. Esto se denomina horizonte de nodo, ya que es lo 
+1. Encuentre una cabecera suficientemente alejada del encabezado de la cadena. Esto se denomina horizonte de nodo, ya que es lo 
    más lejos que un nodo puede reorganizar su cadena en una nueva bifurcación en caso de que ocurriera sin activar otra nueva 
    sincronización completa.
-3. Descargue el estado completo tal y como estaba en el horizonte, incluyendo los datos de salida no utilizados, los datos de 
+1. Descargue el estado completo tal y como estaba en el horizonte, incluyendo los datos de salida no utilizados, los datos de 
    pruebas de rango y del núcleo, así como todos los MMR correspondientes. Este es sólo un gran archivo zip.
-4. Validar el estado total.
-5. Descarga bloques completos desde el horizonte para llegar a la cabeza de la cadena.
+1. Validar el estado total.
+1. Descarga bloques completos desde el horizonte para llegar a la cabeza de la cadena.
 
 En el resto de esta sección, nos detendremos en cada uno de estos pasos.
