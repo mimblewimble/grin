@@ -1,6 +1,6 @@
 # Merkle Mountain Ranges
 
-*다른 언어로 Intro를 읽으시려면: [English](mmr.md), [简体中文](mmr_ZH-CN.md).*
+*다른 언어로 되어있는 문서를 읽으려면: [English](mmr.md), [简体中文](mmr_ZH-CN.md).*
 
 ## MMR의 구조
 
