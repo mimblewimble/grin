@@ -1,6 +1,6 @@
 # MimbleWimble 과 Grin 에 대한 소개
 
-*다른 언어로 Intro를 읽으시려면: [English](intro.md), [简体中文](intro.zh-cn.md), [Español](intro_ES.md), [Русский](intro.ru.md), [日本語](intro.jp.md).*
+*다른 언어로 Intro를 읽으시려면: [English](intro.md), [Español](intro_ES.md), [Русский](intro.ru.md), [日本語](intro.jp.md), [简体中文](intro.zh-cn.md).*
 
 MimbleWimlbe은 블록체인 포맷이면서 프로토콜 입니다.
 MimbleWimble은 암호학적 기반에 의해서 극대화된 좋은 확장성, 프라이버시, 그리고 대체가능성을 제공합니다. 이러한 특성은 지금 현존하는 모든 블록체인 구현체에 존재하는 문제점들을 처리합니다.
