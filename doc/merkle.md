@@ -1,6 +1,6 @@
 # Merkle Structures
 
-*Read this in other languages: [English](merkle.md), [简体中文](merkle_ZH-CN.md), [Korean](merkle_KR.md).*
+*Read this in other languages: [Korean](merkle_KR.md), [简体中文](merkle_ZH-CN.md).*
 
 MimbleWimble is designed for users to verify the state of the system given
 only pruned data. To achieve this goal, all transaction data is committed
