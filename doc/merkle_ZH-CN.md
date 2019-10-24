@@ -1,6 +1,6 @@
 # Merkle Structures
 
-*Read this in other languages: [English](merkle.md), [简体中文](merkle_ZH-CN.md), [Korean](merkle_KR.md).*
+*阅读其它语言版本: [English](merkle.md), [Korean](merkle_KR.md).*
 
 MimbleWimble 是设计给用户在仅给出修剪后的数据的情况下也能验证系统状态。
 为了实现此目标，所有交易数据都通过 Merkle trees 提交给了区块链，该 Merkle trees 即使在被修剪后也需要在更新和序列化操作上有良好的效率。

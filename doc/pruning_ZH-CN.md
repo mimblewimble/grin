@@ -1,6 +1,6 @@
 # 修剪区块链数据
 
-*Read this in other languages: [English](pruning.md), [简体中文](pruning_ZH-CN.md), [Korean](pruning_KR.md)*
+*阅读其它语言版本: [English](pruning.md), [Korean](pruning_KR.md).*
 
 MimbleWimble 的主要吸引力之一是其理论空间效率。确实，一个受信任或预先验证的完整区块链状态仅需要未花费的交易输出，它可以非常小。
 

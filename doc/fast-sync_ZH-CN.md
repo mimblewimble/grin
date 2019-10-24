@@ -1,6 +1,6 @@
 # 快速同步
 
-*Read this in other languages: [English](fast-sync.md), [Español](fast-sync_ES.md), [简体中文](fast-sync_ZH-CN.md), [Korean](fast-sync_KR.md).*
+*阅读其它语言版本: [English](fast-sync.md), [Español](fast-sync_ES.md), [Korean](fast-sync_KR.md).*
 
 在 Grin 中，我们把同步一个新节点或一段时间未跟上链的节点，并将其升级到最新的已知工作量最大的块的过程称为“同步”（"sync"）。 初始块下载（或 IBD）通常被其他区块链中被采用，但这对 Grin 来说是有问题的，因为它通常不下载完整的块。
 

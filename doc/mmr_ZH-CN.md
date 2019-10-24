@@ -1,6 +1,6 @@
 # Merkle Mountain Ranges
 
-*Read this in other languages: [English](mmr.md), [简体中文](mmr_ZH-CN.md), [Korean](mmr_KR.md)*
+*阅读其它语言版本: [English](mmr.md), [Korean](mmr_KR.md).*
 
 ## 结构
 
