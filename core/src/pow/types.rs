@@ -429,7 +429,7 @@ fn read_number(bits: &Vec<u8>, bit_start: usize, bit_count: usize) -> u64 {
 impl Readable for Proof {
 	fn read(reader: &mut dyn Reader) -> Result<Proof, ser::Error> {
 		let edge_bits = reader.read_u8()?;
-		if edge_bits == 0 || edge_bits > 64 {
+		if edge_bits == 0 || edge_bits > 63 {
 			return Err(ser::Error::CorruptedData);
 		}
 
@@ -509,7 +509,7 @@ mod tests {
 
 	#[test]
 	fn test_proof_rw() {
-		for edge_bits in 10..64 {
+		for edge_bits in 10..63 {
 			let mut proof = Proof::new(gen_proof(edge_bits as u32));
 			proof.edge_bits = edge_bits;
 			let mut buf = Cursor::new(Vec::new());
@@ -541,5 +541,4 @@ mod tests {
 		}
 		v
 	}
-
 }

@@ -161,13 +161,13 @@ impl MessageHandler for Protocol {
 					"handle_payload: received block: msg_len: {}",
 					msg.header.msg_len
 				);
-				let b: core::Block = msg.body()?;
+				let b: core::UntrustedBlock = msg.body()?;
 
 				// We default to NONE opts here as we do not know know yet why this block was
 				// received.
 				// If we requested this block from a peer due to our node syncing then
 				// the peer adapter will override opts to reflect this.
-				adapter.block_received(b, &self.peer_info, chain::Options::NONE)?;
+				adapter.block_received(b.into(), &self.peer_info, chain::Options::NONE)?;
 				Ok(None)
 			}
 
@@ -190,9 +190,9 @@ impl MessageHandler for Protocol {
 					"handle_payload: received compact block: msg_len: {}",
 					msg.header.msg_len
 				);
-				let b: core::CompactBlock = msg.body()?;
+				let b: core::UntrustedCompactBlock = msg.body()?;
 
-				adapter.compact_block_received(b, &self.peer_info)?;
+				adapter.compact_block_received(b.into(), &self.peer_info)?;
 				Ok(None)
 			}
 
@@ -212,8 +212,8 @@ impl MessageHandler for Protocol {
 			// "header first" block propagation - if we have not yet seen this block
 			// we can go request it from some of our peers
 			Type::Header => {
-				let header: core::BlockHeader = msg.body()?;
-				adapter.header_received(header, &self.peer_info)?;
+				let header: core::UntrustedBlockHeader = msg.body()?;
+				adapter.header_received(header.into(), &self.peer_info)?;
 				Ok(None)
 			}
 
@@ -229,8 +229,9 @@ impl MessageHandler for Protocol {
 				for chunk in (0..count).collect::<Vec<_>>().chunks(chunk_size) {
 					let mut headers = vec![];
 					for _ in chunk {
-						let (header, bytes_read) = msg.streaming_read()?;
-						headers.push(header);
+						let (header, bytes_read) =
+							msg.streaming_read::<core::UntrustedBlockHeader>()?;
+						headers.push(header.into());
 						total_bytes_read += bytes_read;
 					}
 					adapter.headers_received(&headers, &self.peer_info)?;
