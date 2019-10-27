@@ -1266,7 +1266,7 @@ impl<'a> Extension<'a> {
 		let mut proofs: Vec<RangeProof> = Vec::with_capacity(1_000);
 
 		let mut proof_count = 0;
-		let total_rproofs = self.output_pmmr.n_leafs();
+		let total_rproofs = self.output_pmmr.n_unpruned_leaves();
 
 		for pos in self.output_pmmr.leaf_pos_iter() {
 			let output = self.output_pmmr.get_data(pos);

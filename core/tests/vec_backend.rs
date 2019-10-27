@@ -113,7 +113,7 @@ impl<T: PMMRable> Backend<T> for VecBackend<T> {
 		unimplemented!()
 	}
 
-	fn n_leafs(&self) -> u64 {
+	fn n_unpruned_leaves(&self) -> u64 {
 		unimplemented!()
 	}
 

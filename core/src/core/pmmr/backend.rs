@@ -56,7 +56,7 @@ pub trait Backend<T: PMMRable> {
 	fn leaf_pos_iter(&self) -> Box<dyn Iterator<Item = u64> + '_>;
 
 	/// Number of leaves
-	fn n_leafs(&self) -> u64;
+	fn n_unpruned_leaves(&self) -> u64;
 
 	/// Remove Hash by insertion position. An index is also provided so the
 	/// underlying backend can implement some rollback of positions up to a

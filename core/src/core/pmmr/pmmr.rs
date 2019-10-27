@@ -80,8 +80,8 @@ where
 	}
 
 	/// Number of leafs in the MMR
-	pub fn n_leafs(&self) -> u64 {
-		self.backend.n_leafs()
+	pub fn n_unpruned_leaves(&self) -> u64 {
+		self.backend.n_unpruned_leaves()
 	}
 
 	/// Returns a vec of the peaks of this MMR.
@@ -494,7 +494,6 @@ pub fn peak_map_height(mut pos: u64) -> (u64, u64) {
 /// The height of a node in a full binary tree from its postorder traversal
 /// index. This function is the base on which all others, as well as the MMR,
 /// are built.
-
 pub fn bintree_postorder_height(num: u64) -> u64 {
 	if num == 0 {
 		return 0;

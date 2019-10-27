@@ -34,7 +34,7 @@ fn pmmr_append() {
 	{
 		let mut backend = store::pmmr::PMMRBackend::new(
 			data_dir.to_string(),
-			true,
+			false,
 			false,
 			ProtocolVersion(1),
 			None,
@@ -53,6 +53,7 @@ fn pmmr_append() {
 			// Note: 1-indexed PMMR API
 			let pmmr: PMMR<'_, TestElem, _> = PMMR::at(&mut backend, mmr_size);
 
+			assert_eq!(pmmr.n_unpruned_leaves(), 4);
 			assert_eq!(pmmr.get_data(1), Some(elems[0]));
 			assert_eq!(pmmr.get_data(2), Some(elems[1]));
 
@@ -87,6 +88,8 @@ fn pmmr_append() {
 		{
 			// Note: 1-indexed PMMR API
 			let pmmr: PMMR<'_, TestElem, _> = PMMR::at(&mut backend, mmr_size);
+
+			assert_eq!(pmmr.n_unpruned_leaves(), 9);
 
 			// First pair of leaves.
 			assert_eq!(pmmr.get_data(1), Some(elems[0]));
@@ -132,6 +135,7 @@ fn pmmr_compact_leaf_sibling() {
 		let mmr_size = load(0, &elems[..], &mut backend);
 		backend.sync().unwrap();
 
+		assert_eq!(backend.n_unpruned_leaves(), 19);
 		// On far left of the MMR -
 		// pos 1 and 2 are leaves (and siblings)
 		// the parent is pos 3
@@ -158,6 +162,8 @@ fn pmmr_compact_leaf_sibling() {
 		// // check pos 1, 2, 3 are in the state we expect after pruning
 		{
 			let pmmr = PMMR::at(&mut backend, mmr_size);
+
+			assert_eq!(pmmr.n_unpruned_leaves(), 17);
 
 			// check that pos 1 is "removed"
 			assert_eq!(pmmr.get_hash(1), None);
