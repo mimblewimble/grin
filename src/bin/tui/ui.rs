@@ -26,7 +26,7 @@ use cursive::theme::{BaseColor, BorderStyle, Color, Theme};
 use cursive::traits::Boxable;
 use cursive::traits::Identifiable;
 use cursive::utils::markup::StyledString;
-use cursive::views::{LinearLayout, Panel, StackView, TextView, ViewBox};
+use cursive::views::{CircularFocus, Dialog, LinearLayout, Panel, StackView, TextView, ViewBox};
 use cursive::Cursive;
 use std::sync::mpsc;
 
@@ -108,7 +108,11 @@ impl UI {
 
 		// Configure a callback (shutdown, for the first test)
 		let controller_tx_clone = grin_ui.controller_tx.clone();
-		grin_ui.cursive.add_global_callback('q', move |_| {
+		grin_ui.cursive.add_global_callback('q', move |c| {
+			let content = StyledString::styled("Shutting down...", Color::Light(BaseColor::Yellow));
+			c.add_layer(CircularFocus::wrap_tab(Dialog::around(TextView::new(
+				content,
+			))));
 			controller_tx_clone
 				.send(ControllerMessage::Shutdown)
 				.unwrap();
@@ -174,7 +178,6 @@ impl Controller {
 				match message {
 					ControllerMessage::Shutdown => {
 						self.ui.stop();
-						println!("Shutdown in progress, please wait");
 						server.stop();
 						return;
 					}
