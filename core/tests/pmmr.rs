@@ -521,14 +521,18 @@ fn check_elements_from_insertion_index() {
 		pmmr.push(&TestElem([0, 0, 0, x])).unwrap();
 	}
 	// Normal case
-	let res = pmmr.readonly_pmmr().elements_from_insertion_index(1, 100);
+	let res = pmmr
+		.readonly_pmmr()
+		.elements_from_insertion_index(1, 100, None);
 	assert_eq!(res.0, 100);
 	assert_eq!(res.1.len(), 100);
 	assert_eq!(res.1[0].0[3], 1);
 	assert_eq!(res.1[99].0[3], 100);
 
 	// middle of pack
-	let res = pmmr.readonly_pmmr().elements_from_insertion_index(351, 70);
+	let res = pmmr
+		.readonly_pmmr()
+		.elements_from_insertion_index(351, 70, None);
 	assert_eq!(res.0, 420);
 	assert_eq!(res.1.len(), 70);
 	assert_eq!(res.1[0].0[3], 351);
@@ -537,11 +541,19 @@ fn check_elements_from_insertion_index() {
 	// past the end
 	let res = pmmr
 		.readonly_pmmr()
-		.elements_from_insertion_index(650, 1000);
+		.elements_from_insertion_index(650, 1000, None);
 	assert_eq!(res.0, 999);
 	assert_eq!(res.1.len(), 350);
 	assert_eq!(res.1[0].0[3], 650);
 	assert_eq!(res.1[349].0[3], 999);
+
+	// Bounded
+	let res = pmmr
+		.readonly_pmmr()
+		.elements_from_insertion_index(1, 100, Some(7));
+	assert_eq!(res.0, 4);
+	assert_eq!(res.1.len(), 4);
+	assert_eq!(res.1[0].0[3], 1);
 
 	// pruning a few nodes should get consistent results
 	pmmr.prune(pmmr::insertion_to_pmmr_index(650)).unwrap();
@@ -551,7 +563,7 @@ fn check_elements_from_insertion_index() {
 	pmmr.prune(pmmr::insertion_to_pmmr_index(998)).unwrap();
 	let res = pmmr
 		.readonly_pmmr()
-		.elements_from_insertion_index(650, 1000);
+		.elements_from_insertion_index(650, 1000, None);
 	assert_eq!(res.0, 999);
 	assert_eq!(res.1.len(), 345);
 	assert_eq!(res.1[0].0[3], 652);

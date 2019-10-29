@@ -258,9 +258,10 @@ impl TxHashSet {
 		&self,
 		start_index: u64,
 		max_count: u64,
+		max_index: Option<u64>,
 	) -> (u64, Vec<OutputIdentifier>) {
 		ReadonlyPMMR::at(&self.output_pmmr_h.backend, self.output_pmmr_h.last_pos)
-			.elements_from_insertion_index(start_index, max_count)
+			.elements_from_insertion_index(start_index, max_count, max_index)
 	}
 
 	/// highest output insertion index available
@@ -273,9 +274,10 @@ impl TxHashSet {
 		&self,
 		start_index: u64,
 		max_count: u64,
+		max_index: Option<u64>,
 	) -> (u64, Vec<RangeProof>) {
 		ReadonlyPMMR::at(&self.rproof_pmmr_h.backend, self.rproof_pmmr_h.last_pos)
-			.elements_from_insertion_index(start_index, max_count)
+			.elements_from_insertion_index(start_index, max_count, max_index)
 	}
 
 	/// Find a kernel with a given excess. Work backwards from `max_index` to `min_index`

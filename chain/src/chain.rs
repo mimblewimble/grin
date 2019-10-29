@@ -1173,12 +1173,17 @@ impl Chain {
 	pub fn unspent_outputs_by_insertion_index(
 		&self,
 		start_index: u64,
-		max: u64,
+		max_count: u64,
+		max_index: Option<u64>,
 	) -> Result<(u64, u64, Vec<Output>), Error> {
 		let txhashset = self.txhashset.read();
-		let max_index = txhashset.highest_output_insertion_index();
-		let outputs = txhashset.outputs_by_insertion_index(start_index, max);
-		let rangeproofs = txhashset.rangeproofs_by_insertion_index(start_index, max);
+		let last_index = match max_index {
+			Some(i) => i,
+			None => txhashset.highest_output_insertion_index(),
+		};
+		let outputs = txhashset.outputs_by_insertion_index(start_index, max_count, max_index);
+		let rangeproofs =
+			txhashset.rangeproofs_by_insertion_index(start_index, max_count, max_index);
 		if outputs.0 != rangeproofs.0 || outputs.1.len() != rangeproofs.1.len() {
 			return Err(ErrorKind::TxHashSetErr(String::from(
 				"Output and rangeproof sets don't match",
@@ -1193,7 +1198,31 @@ impl Chain {
 				proof: y,
 			});
 		}
-		Ok((outputs.0, max_index, output_vec))
+		Ok((outputs.0, last_index, output_vec))
+	}
+
+	/// Return unspent outputs as above, but bounded between a particular range of blocks
+	pub fn unspent_outputs_by_block_height(
+		&self,
+		start_block_height: u64,
+		end_block_height: Option<u64>,
+		max_count: u64,
+	) -> Result<(u64, u64, Vec<Output>), Error> {
+		let end_block_height = match end_block_height {
+			Some(h) => h,
+			None => {
+				let txhashset = self.txhashset.read();
+				txhashset.highest_output_insertion_index()
+			}
+		};
+		// Return headers at the given heights
+		let start_header = self.get_header_by_height(start_block_height)?;
+		let prev_to_start_header =
+			self.get_header_by_height(start_block_height.saturating_sub(1))?;
+		let end_header = self.get_header_by_height(end_block_height)?;
+		let start_pmmr_index = start_header.output_mmr_size - prev_to_start_header.output_mmr_size;
+		let end_pmmr_index = end_header.output_mmr_size;
+		self.unspent_outputs_by_insertion_index(start_pmmr_index, max_count, Some(end_pmmr_index))
 	}
 
 	/// Orphans pool size

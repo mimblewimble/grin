@@ -35,6 +35,7 @@ use std::sync::Weak;
 
 // UTXO traversal::
 // GET /v1/txhashset/outputs?start_index=1&max=100
+// GET /v1/txhashset/outputsbyheight?start_height=1&end_height=1000&max=100
 //
 // Build a merkle proof for a given pos
 // GET /v1/txhashset/merkleproof?n=1
@@ -75,7 +76,35 @@ impl TxHashSetHandler {
 		}
 		let chain = w(&self.chain)?;
 		let outputs = chain
-			.unspent_outputs_by_insertion_index(start_index, max)
+			.unspent_outputs_by_insertion_index(start_index, max, None)
+			.context(ErrorKind::NotFound)?;
+		let out = OutputListing {
+			last_retrieved_index: outputs.0,
+			highest_index: outputs.1,
+			outputs: outputs
+				.2
+				.iter()
+				.map(|x| OutputPrintable::from_output(x, chain.clone(), None, true, true))
+				.collect::<Result<Vec<_>, _>>()
+				.context(ErrorKind::Internal("cain error".to_owned()))?,
+		};
+		Ok(out)
+	}
+
+	// allows traversal of utxo set bounded within a block range
+	fn outputs_within_height_range(
+		&self,
+		start_block_height: u64,
+		end_block_height: Option<u64>,
+		mut max: u64,
+	) -> Result<OutputListing, Error> {
+		//set a limit here
+		if max > 10_000 {
+			max = 10_000;
+		}
+		let chain = w(&self.chain)?;
+		let outputs = chain
+			.unspent_outputs_by_block_height(start_block_height, end_block_height, max)
 			.context(ErrorKind::NotFound)?;
 		let out = OutputListing {
 			last_retrieved_index: outputs.0,
@@ -123,6 +152,11 @@ impl Handler for TxHashSetHandler {
 		let start_index = parse_param_no_err!(params, "start_index", 1);
 		let max = parse_param_no_err!(params, "max", 100);
 		let id = parse_param_no_err!(params, "id", "".to_owned());
+		let start_height = parse_param_no_err!(params, "start_height", 1);
+		let end_height = match parse_param_no_err!(params, "end_height", 0) {
+			0 => None,
+			h => Some(h),
+		};
 
 		match right_path_element!(req) {
 			"roots" => result_to_response(self.get_roots()),
@@ -130,6 +164,9 @@ impl Handler for TxHashSetHandler {
 			"lastrangeproofs" => result_to_response(self.get_last_n_rangeproof(last_n)),
 			"lastkernels" => result_to_response(self.get_last_n_kernel(last_n)),
 			"outputs" => result_to_response(self.outputs(start_index, max)),
+			"outputsbyheight" => {
+				result_to_response(self.outputs_within_height_range(start_height, end_height, max))
+			}
 			"merkleproof" => result_to_response(self.get_merkle_proof_for_output(&id)),
 			_ => response(StatusCode::BAD_REQUEST, ""),
 		}

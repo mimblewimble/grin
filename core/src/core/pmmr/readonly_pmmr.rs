@@ -138,14 +138,19 @@ where
 		&self,
 		mut index: u64,
 		max_count: u64,
+		max_pos: Option<u64>,
 	) -> (u64, Vec<T::E>) {
 		let mut return_vec = vec![];
+		let last_pos = match max_pos {
+			Some(p) => p,
+			None => self.last_pos,
+		};
 		if index == 0 {
 			index = 1;
 		}
 		let mut return_index = index;
 		let mut pmmr_index = insertion_to_pmmr_index(index);
-		while return_vec.len() < max_count as usize && pmmr_index <= self.last_pos {
+		while return_vec.len() < max_count as usize && pmmr_index <= last_pos {
 			if let Some(t) = self.get_data(pmmr_index) {
 				return_vec.push(t);
 				return_index = index;
