@@ -39,13 +39,6 @@
 
 ## 状态存储
 
-Data storage for outputs, range proofs and kernels in Grin is simple: a plain
-append-only file that's memory-mapped for data access. As outputs get spent,
-a remove log maintains which positions can be removed. Those positions nicely
-match MMR node positions as they're all inserted in the same order. When the
-remove log gets large, corresponding files can be occasionally compacted by
-rewriting them without the removed pieces (also append-only) and the remove
-log can be emptied. As for MMRs, we need to add a little more complexity.
 Grin 中的输出，范围证明和内核的数据存储很简单：一个 append-only 的文件，通过内存映射来访问数据。
 随着输出被花费，删除日志将维护可以删除的职位。这些位置与 MMR 节点位置完全匹配，因为它们均以相同顺序插入。
 当删除日志变大时，可以偶尔通过重写相应文件来压缩这些文件，而无需删除它们（同样也是 append-only），并且可以清空删除日志。
