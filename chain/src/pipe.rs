@@ -183,7 +183,12 @@ pub fn sync_block_headers(
 	// Check if we know about all these headers. If so we can accept them quickly.
 	// If they *do not* increase total work on the sync chain we are done.
 	// If they *do* increase total work then we should process them to update sync_head.
-	let sync_head = ctx.batch.get_sync_head()?;
+	let sync_head = {
+		let hash = ctx.header_pmmr.head_hash()?;
+		let header = ctx.batch.get_block_header(&hash)?;
+		Tip::from_header(&header)
+	};
+
 	if let Ok(existing) = ctx.batch.get_block_header(&last_header.hash()) {
 		if !has_more_work(&existing, &sync_head) {
 			return Ok(());
@@ -197,15 +202,11 @@ pub fn sync_block_headers(
 		add_block_header(header, &ctx.batch)?;
 	}
 
-	// Now apply this entire chunk of headers to the sync MMR.
-	txhashset::header_extending(&mut ctx.header_pmmr, &sync_head, &mut ctx.batch, |ext| {
+	// Now apply this entire chunk of headers to the sync MMR (ctx is sync MMR specific).
+	txhashset::header_extending(&mut ctx.header_pmmr, &mut ctx.batch, |ext| {
 		rewind_and_apply_header_fork(&last_header, ext)?;
 		Ok(())
 	})?;
-
-	if has_more_work(&last_header, &sync_head) {
-		update_sync_head(&Tip::from_header(&last_header), &mut ctx.batch)?;
-	}
 
 	Ok(())
 }
@@ -227,14 +228,19 @@ pub fn process_block_header(header: &BlockHeader, ctx: &mut BlockContext<'_>) ->
 	// If it does not increase total_difficulty beyond our current header_head
 	// then we can (re)accept this header and process the full block (or request it).
 	// This header is on a fork and we should still accept it as the fork may eventually win.
-	let header_head = ctx.batch.header_head()?;
+	let header_head = {
+		let hash = ctx.header_pmmr.head_hash()?;
+		let header = ctx.batch.get_block_header(&hash)?;
+		Tip::from_header(&header)
+	};
+
 	if let Ok(existing) = ctx.batch.get_block_header(&header.hash()) {
 		if !has_more_work(&existing, &header_head) {
 			return Ok(());
 		}
 	}
 
-	txhashset::header_extending(&mut ctx.header_pmmr, &header_head, &mut ctx.batch, |ext| {
+	txhashset::header_extending(&mut ctx.header_pmmr, &mut ctx.batch, |ext| {
 		rewind_and_apply_header_fork(&prev_header, ext)?;
 		ext.validate_root(header)?;
 		ext.apply_header(header)?;
@@ -246,15 +252,6 @@ pub fn process_block_header(header: &BlockHeader, ctx: &mut BlockContext<'_>) ->
 
 	validate_header(header, ctx)?;
 	add_block_header(header, &ctx.batch)?;
-
-	// Update header_head independently of chain head (full blocks).
-	// If/when we process the corresponding full block we will update the
-	// chain head to match. This allows our header chain to extend safely beyond
-	// the full chain in a fork scenario without needing excessive rewinds to handle
-	// the temporarily divergent chains.
-	if has_more_work(&header, &header_head) {
-		update_header_head(&Tip::from_header(&header), &mut ctx.batch)?;
-	}
 
 	Ok(())
 }
@@ -468,30 +465,6 @@ fn update_head(head: &Tip, batch: &mut store::Batch<'_>) -> Result<(), Error> {
 // Whether the provided block totals more work than the chain tip
 fn has_more_work(header: &BlockHeader, head: &Tip) -> bool {
 	header.total_difficulty() > head.total_difficulty
-}
-
-/// Update the sync head so we can keep syncing from where we left off.
-fn update_sync_head(head: &Tip, batch: &mut store::Batch<'_>) -> Result<(), Error> {
-	batch
-		.save_sync_head(&head)
-		.map_err(|e| ErrorKind::StoreErr(e, "pipe save sync head".to_owned()))?;
-	debug!(
-		"sync_head updated to {} at {}",
-		head.last_block_h, head.height
-	);
-	Ok(())
-}
-
-/// Update the header_head.
-fn update_header_head(head: &Tip, batch: &mut store::Batch<'_>) -> Result<(), Error> {
-	batch
-		.save_header_head(&head)
-		.map_err(|e| ErrorKind::StoreErr(e, "pipe save header head".to_owned()))?;
-	debug!(
-		"header_head updated to {} at {}",
-		head.last_block_h, head.height
-	);
-	Ok(())
 }
 
 /// Rewind the header chain and reapply headers on a fork.

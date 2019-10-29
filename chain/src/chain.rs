@@ -201,7 +201,6 @@ impl Chain {
 			&mut sync_pmmr,
 			&mut txhashset,
 		)?;
-		Chain::log_heads(&store)?;
 
 		let chain = Chain {
 			db_root,
@@ -226,6 +225,8 @@ impl Chain {
 			chain.rebuild_height_for_pos()?;
 		}
 
+		chain.log_heads()?;
+
 		Ok(chain)
 	}
 
@@ -244,44 +245,20 @@ impl Chain {
 		self.store.clone()
 	}
 
-	fn log_heads(store: &store::ChainStore) -> Result<(), Error> {
-		let head = store.head()?;
-		debug!(
-			"init: head: {} @ {} [{}]",
-			head.total_difficulty.to_num(),
-			head.height,
-			head.last_block_h,
-		);
-
-		let header_head = store.header_head()?;
-		debug!(
-			"init: header_head: {} @ {} [{}]",
-			header_head.total_difficulty.to_num(),
-			header_head.height,
-			header_head.last_block_h,
-		);
-
-		let sync_head = store.get_sync_head()?;
-		debug!(
-			"init: sync_head: {} @ {} [{}]",
-			sync_head.total_difficulty.to_num(),
-			sync_head.height,
-			sync_head.last_block_h,
-		);
-
+	fn log_heads(&self) -> Result<(), Error> {
+		let log_head = |name, head: Tip| {
+			debug!(
+				"{}: {} @ {} [{}]",
+				name,
+				head.total_difficulty.to_num(),
+				head.height,
+				head.hash(),
+			);
+		};
+		log_head("head", self.head()?);
+		log_head("header_head", self.header_head()?);
+		log_head("sync_head", self.get_sync_head()?);
 		Ok(())
-	}
-
-	/// Reset sync_head to current header_head.
-	/// We do this when we first transition to header_sync to ensure we extend
-	/// the "sync" header MMR from a known consistent state and to ensure we track
-	/// the header chain correctly at the fork point.
-	pub fn reset_sync_head(&self) -> Result<Tip, Error> {
-		let batch = self.store.batch()?;
-		batch.reset_sync_head()?;
-		let head = batch.get_sync_head()?;
-		batch.commit()?;
-		Ok(head)
 	}
 
 	/// Processes a single block, then checks for orphans, processing
@@ -773,9 +750,8 @@ impl Chain {
 	pub fn rebuild_sync_mmr(&self, head: &Tip) -> Result<(), Error> {
 		let mut sync_pmmr = self.sync_pmmr.write();
 		let mut batch = self.store.batch()?;
-		let sync_head = batch.get_sync_head()?;
 		let header = batch.get_block_header(&head.hash())?;
-		txhashset::header_extending(&mut sync_pmmr, &sync_head, &mut batch, |extension| {
+		txhashset::header_extending(&mut sync_pmmr, &mut batch, |extension| {
 			pipe::rewind_and_apply_header_fork(&header, extension)?;
 			Ok(())
 		})?;
@@ -1217,9 +1193,9 @@ impl Chain {
 
 	/// Tip (head) of the header chain.
 	pub fn header_head(&self) -> Result<Tip, Error> {
-		self.store
-			.header_head()
-			.map_err(|e| ErrorKind::StoreErr(e, "chain header head".to_owned()).into())
+		let hash = self.header_pmmr.read().head_hash()?;
+		let header = self.store.get_block_header(&hash)?;
+		Ok(Tip::from_header(&header))
 	}
 
 	/// Block header for the chain head
@@ -1429,9 +1405,9 @@ impl Chain {
 	/// Get the tip of the current "sync" header chain.
 	/// This may be significantly different to current header chain.
 	pub fn get_sync_head(&self) -> Result<Tip, Error> {
-		self.store
-			.get_sync_head()
-			.map_err(|e| ErrorKind::StoreErr(e, "chain get sync head".to_owned()).into())
+		let hash = self.sync_pmmr.read().head_hash()?;
+		let header = self.store.get_block_header(&hash)?;
+		Ok(Tip::from_header(&header))
 	}
 
 	/// Builds an iterator on blocks starting from the current chain head and
@@ -1459,6 +1435,22 @@ fn setup_head(
 	txhashset: &mut txhashset::TxHashSet,
 ) -> Result<(), Error> {
 	let mut batch = store.batch()?;
+
+	// Apply the genesis header to header and sync MMRs to ensure they are non-empty.
+	// We read header_head and sync_head directly from the MMR and assume they are non-empty.
+	{
+		if header_pmmr.last_pos == 0 {
+			txhashset::header_extending(header_pmmr, &mut batch, |extension| {
+				extension.apply_header(&genesis.header)
+			})?;
+		}
+
+		if sync_pmmr.last_pos == 0 {
+			txhashset::header_extending(sync_pmmr, &mut batch, |extension| {
+				extension.apply_header(&genesis.header)
+			})?;
+		}
+	}
 
 	// check if we have a head in store, otherwise the genesis block is it
 	let head_res = batch.head();
@@ -1534,13 +1526,7 @@ fn setup_head(
 			// We will update this later once we have the correct header_root.
 			batch.save_block_header(&genesis.header)?;
 			batch.save_block(&genesis)?;
-
-			let tip = Tip::from_header(&genesis.header);
-
-			// Save these ahead of time as we need head and header_head to be initialized
-			// with *something* when creating a txhashset extension below.
-			batch.save_body_head(&tip)?;
-			batch.save_header_head(&tip)?;
+			batch.save_body_head(&Tip::from_header(&genesis.header))?;
 
 			if genesis.kernels().len() > 0 {
 				let (utxo_sum, kernel_sum) = (sums, genesis as &dyn Committed).verify_kernel_sums(
@@ -1552,14 +1538,6 @@ fn setup_head(
 					kernel_sum,
 				};
 			}
-			txhashset::header_extending(header_pmmr, &tip, &mut batch, |extension| {
-				extension.apply_header(&genesis.header)?;
-				Ok(())
-			})?;
-			txhashset::header_extending(sync_pmmr, &tip, &mut batch, |extension| {
-				extension.apply_header(&genesis.header)?;
-				Ok(())
-			})?;
 			txhashset::extending(header_pmmr, txhashset, &mut batch, |ext| {
 				let ref mut extension = ext.extension;
 				extension.apply_block(&genesis)?;
@@ -1575,29 +1553,6 @@ fn setup_head(
 		}
 		Err(e) => return Err(ErrorKind::StoreErr(e, "chain init load head".to_owned()))?,
 	};
-
-	// Check we have the header corresponding to the header_head.
-	// If not then something is corrupted and we should reset our header_head.
-	// Either way we want to reset sync_head to match header_head.
-	let head = batch.head()?;
-	let header_head = batch.header_head()?;
-	if batch.get_block_header(&header_head.last_block_h).is_ok() {
-		// Reset sync_head to be consistent with current header_head.
-		batch.reset_sync_head()?;
-	} else {
-		// Reset both header_head and sync_head to be consistent with current head.
-		warn!(
-			"setup_head: header missing for {}, {}, resetting header_head and sync_head to head: {}, {}",
-			header_head.last_block_h,
-			header_head.height,
-			head.last_block_h,
-			head.height,
-		);
-		batch.reset_header_head()?;
-		batch.reset_sync_head()?;
-	}
-
 	batch.commit()?;
-
 	Ok(())
 }
