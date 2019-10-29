@@ -1,6 +1,6 @@
 # Grin - Build, Configuration, and Running
 
-*다른 언어로 되어있는 문서를 읽으려면:[에스파냐어](build_ES.md).
+*다른 언어로 되어있는 문서를 읽으려면: [English](build.md), [Español](build_ES.md), [日本語](build_JP.md), [简体中文](build_ZH-CN.md).*
 
 ## 지원하는 플랫폼들에 대해서
 
