@@ -86,7 +86,7 @@ impl TxHashSetHandler {
 				.iter()
 				.map(|x| OutputPrintable::from_output(x, chain.clone(), None, true, true))
 				.collect::<Result<Vec<_>, _>>()
-				.context(ErrorKind::Internal("cain error".to_owned()))?,
+				.context(ErrorKind::Internal("chain error".to_owned()))?,
 		};
 		Ok(out)
 	}
@@ -114,7 +114,7 @@ impl TxHashSetHandler {
 				.iter()
 				.map(|x| OutputPrintable::from_output(x, chain.clone(), None, true, true))
 				.collect::<Result<Vec<_>, _>>()
-				.context(ErrorKind::Internal("cain error".to_owned()))?,
+				.context(ErrorKind::Internal("chain error".to_owned()))?,
 		};
 		Ok(out)
 	}
