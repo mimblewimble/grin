@@ -99,10 +99,11 @@ where
 			.filter(|x| *x < peak_pos)
 			.filter_map(|x| self.backend.get_from_file(x))
 			.collect::<Vec<_>>();
-		res.reverse();
 		if let Some(rhs) = rhs {
-			res.insert(0, rhs);
+			res.push(rhs);
 		}
+		res.reverse();
+
 		res
 	}
 
@@ -118,10 +119,10 @@ where
 			.collect::<Vec<_>>();
 
 		let mut res = None;
-		for peak in rhs.iter().rev() {
+		for peak in rhs.into_iter().rev() {
 			res = match res {
-				None => Some(*peak),
-				Some(rhash) => Some((*peak, rhash).hash_with_index(self.unpruned_size())),
+				None => Some(peak),
+				Some(rhash) => Some((peak, rhash).hash_with_index(self.unpruned_size())),
 			}
 		}
 		res
@@ -134,10 +135,10 @@ where
 			return Ok(ZERO_HASH);
 		}
 		let mut res = None;
-		for peak in self.peaks().iter().rev() {
+		for peak in self.peaks().into_iter().rev() {
 			res = match res {
-				None => Some(*peak),
-				Some(rhash) => Some((*peak, rhash).hash_with_index(self.unpruned_size())),
+				None => Some(peak),
+				Some(rhash) => Some((peak, rhash).hash_with_index(self.unpruned_size())),
 			}
 		}
 		res.ok_or_else(|| "no root, invalid tree".to_owned())
@@ -418,7 +419,7 @@ pub fn peaks(num: u64) -> Vec<u64> {
 /// The number of leaves in a MMR of the provided size.
 pub fn n_leaves(size: u64) -> u64 {
 	let (sizes, height) = peak_sizes_height(size);
-	let nleaves = sizes.iter().map(|n| (n + 1) / 2 as u64).sum();
+	let nleaves = sizes.into_iter().map(|n| (n + 1) / 2 as u64).sum();
 	if height == 0 {
 		nleaves
 	} else {
