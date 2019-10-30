@@ -50,12 +50,12 @@ where
 }
 
 /// Function type returned by the transaction combinators. Transforms a
-/// (Transaction, TxKernel, BlindSum) tuple into another, given the provided context.
+/// (Transaction, BlindSum) tuple into another, given the provided context.
 /// Will return an Err if seomthing went wrong at any point during transaction building.
 pub type Append<K, B> = dyn for<'a> Fn(
 	&'a mut Context<'_, K, B>,
-	Result<(Transaction, TxKernel, BlindSum), Error>,
-) -> Result<(Transaction, TxKernel, BlindSum), Error>;
+	Result<(Transaction, BlindSum), Error>,
+) -> Result<(Transaction, BlindSum), Error>;
 
 /// Adds an input with the provided value and blinding key to the transaction
 /// being built.
@@ -65,8 +65,8 @@ where
 	B: ProofBuild,
 {
 	Box::new(
-		move |build, acc| -> Result<(Transaction, TxKernel, BlindSum), Error> {
-			if let Ok((tx, kern, sum)) = acc {
+		move |build, acc| -> Result<(Transaction, BlindSum), Error> {
+			if let Ok((tx, sum)) = acc {
 				let commit =
 					build
 						.keychain
@@ -75,7 +75,6 @@ where
 				let input = Input::new(features, commit);
 				Ok((
 					tx.with_input(input),
-					kern,
 					sum.sub_key_id(key_id.to_value_path(value)),
 				))
 			} else {
@@ -117,8 +116,8 @@ where
 	B: ProofBuild,
 {
 	Box::new(
-		move |build, acc| -> Result<(Transaction, TxKernel, BlindSum), Error> {
-			let (tx, kern, sum) = acc?;
+		move |build, acc| -> Result<(Transaction, BlindSum), Error> {
+			let (tx, sum) = acc?;
 
 			// TODO: proper support for different switch commitment schemes
 			let switch = &SwitchCommitmentType::Regular;
@@ -143,7 +142,6 @@ where
 					commit,
 					proof: rproof,
 				}),
-				kern,
 				sum.add_key_id(key_id.to_value_path(value)),
 			))
 		},
@@ -159,25 +157,22 @@ where
 	B: ProofBuild,
 {
 	Box::new(
-		move |_build, acc| -> Result<(Transaction, TxKernel, BlindSum), Error> {
-			acc.map(|(tx, kern, sum)| (tx, kern, sum.add_blinding_factor(excess.clone())))
+		move |_build, acc| -> Result<(Transaction, BlindSum), Error> {
+			acc.map(|(tx, sum)| (tx, sum.add_blinding_factor(excess.clone())))
 		},
 	)
 }
 
 /// Sets an initial transaction to add to when building a new transaction.
-/// We currently only support building a tx with a single kernel with
-/// build::transaction()
-pub fn initial_tx<K, B>(mut tx: Transaction) -> Box<Append<K, B>>
+pub fn initial_tx<K, B>(tx: Transaction) -> Box<Append<K, B>>
 where
 	K: Keychain,
 	B: ProofBuild,
 {
 	assert_eq!(tx.kernels().len(), 1);
-	let kern = tx.kernels_mut().remove(0);
 	Box::new(
-		move |_build, acc| -> Result<(Transaction, TxKernel, BlindSum), Error> {
-			acc.map(|(_, _, sum)| (tx.clone(), kern.clone(), sum))
+		move |_build, acc| -> Result<(Transaction, BlindSum), Error> {
+			acc.map(|(_, sum)| (tx.clone(), sum))
 		},
 	)
 }
@@ -203,16 +198,14 @@ where
 	B: ProofBuild,
 {
 	let mut ctx = Context { keychain, builder };
-	let (tx, kern, sum) = elems.iter().fold(
-		Ok((
-			Transaction::empty(),
-			TxKernel::with_features(features),
-			BlindSum::new(),
-		)),
-		|acc, elem| elem(&mut ctx, acc),
-	)?;
+	let (tx, sum) = elems
+		.iter()
+		.fold(Ok((Transaction::empty(), BlindSum::new())), |acc, elem| {
+			elem(&mut ctx, acc)
+		})?;
 
-	let tx = tx.with_kernel(kern);
+	let kern = TxKernel::with_features(features);
+	let tx = tx.replace_kernel(kern);
 	let blind_sum = ctx.keychain.blind_sum(&sum)?;
 	Ok((tx, blind_sum))
 }
@@ -229,20 +222,19 @@ where
 	B: ProofBuild,
 {
 	let mut ctx = Context { keychain, builder };
-	let (mut tx, mut kern, sum) = elems.iter().fold(
-		Ok((
-			Transaction::empty(),
-			TxKernel::with_features(features),
-			BlindSum::new(),
-		)),
-		|acc, elem| elem(&mut ctx, acc),
-	)?;
+	let (mut tx, sum) = elems
+		.iter()
+		.fold(Ok((Transaction::empty(), BlindSum::new())), |acc, elem| {
+			elem(&mut ctx, acc)
+		})?;
 	let blind_sum = ctx.keychain.blind_sum(&sum)?;
 
 	// Split the key so we can generate an offset for the tx.
 	let split = blind_sum.split(&keychain.secp())?;
 	let k1 = split.blind_1;
 	let k2 = split.blind_2;
+
+	let mut kern = TxKernel::with_features(features);
 
 	// Construct the message to be signed.
 	let msg = kern.msg_to_sign()?;
@@ -257,8 +249,8 @@ where
 	// Commitments will sum correctly when accounting for the offset.
 	tx.offset = k2.clone();
 
-	// Set the kernel on the tx (assert this is now a single-kernel tx).
-	let tx = tx.with_kernel(kern);
+	// Set the kernel on the tx.
+	let tx = tx.replace_kernel(kern);
 
 	Ok(tx)
 }

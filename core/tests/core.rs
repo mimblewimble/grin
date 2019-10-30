@@ -445,7 +445,7 @@ fn tx_build_exchange() {
 	// blinding factors. He adds his output, finalizes the transaction so it's
 	// ready for broadcast.
 	let tx_final = build::transaction(
-		KernelFeatures::Plain { fee: 0 },
+		KernelFeatures::Plain { fee: 2 },
 		vec![
 			initial_tx(tx_alice),
 			with_excess(blind_sum),

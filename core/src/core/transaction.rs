@@ -659,6 +659,13 @@ impl TransactionBody {
 		self
 	}
 
+	/// Builds a new TransactionBody replacing any existing kernels with the provided kernel.
+	pub fn replace_kernel(mut self, kernel: TxKernel) -> TransactionBody {
+		self.kernels.clear();
+		self.kernels.push(kernel);
+		self
+	}
+
 	/// Total fee for a TransactionBody is the sum of fees of all fee carrying kernels.
 	pub fn fee(&self) -> u64 {
 		self.kernels
@@ -987,12 +994,20 @@ impl Transaction {
 		}
 	}
 
-	/// Builds a new transaction with the provided output added. Existing
-	/// outputs, if any, are kept intact.
+	/// Builds a new transaction with the provided kernel added. Existing
+	/// kernels, if any, are kept intact.
 	/// Sort order is maintained.
 	pub fn with_kernel(self, kernel: TxKernel) -> Transaction {
 		Transaction {
 			body: self.body.with_kernel(kernel),
+			..self
+		}
+	}
+
+	/// Builds a new transaction replacing any existing kernels with the provided kernel.
+	pub fn replace_kernel(self, kernel: TxKernel) -> Transaction {
+		Transaction {
+			body: self.body.replace_kernel(kernel),
 			..self
 		}
 	}
