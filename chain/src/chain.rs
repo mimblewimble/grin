@@ -1202,12 +1202,11 @@ impl Chain {
 	}
 
 	/// Return unspent outputs as above, but bounded between a particular range of blocks
-	pub fn unspent_outputs_by_block_height(
+	pub fn block_height_range_to_pmmr_indices(
 		&self,
 		start_block_height: u64,
 		end_block_height: Option<u64>,
-		max_count: u64,
-	) -> Result<(u64, u64, Vec<Output>), Error> {
+	) -> Result<(u64, u64), Error> {
 		let end_block_height = match end_block_height {
 			Some(h) => h,
 			None => {
@@ -1222,7 +1221,7 @@ impl Chain {
 		let end_header = self.get_header_by_height(end_block_height)?;
 		let start_pmmr_index = start_header.output_mmr_size - prev_to_start_header.output_mmr_size;
 		let end_pmmr_index = end_header.output_mmr_size;
-		self.unspent_outputs_by_insertion_index(start_pmmr_index, max_count, Some(end_pmmr_index))
+		Ok((start_pmmr_index, end_pmmr_index))
 	}
 
 	/// Orphans pool size

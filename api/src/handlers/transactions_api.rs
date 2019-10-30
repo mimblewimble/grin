@@ -69,14 +69,19 @@ impl TxHashSetHandler {
 	}
 
 	// allows traversal of utxo set
-	fn outputs(&self, start_index: u64, mut max: u64) -> Result<OutputListing, Error> {
+	fn outputs(
+		&self,
+		start_index: u64,
+		end_index: Option<u64>,
+		mut max: u64,
+	) -> Result<OutputListing, Error> {
 		//set a limit here
 		if max > 10_000 {
 			max = 10_000;
 		}
 		let chain = w(&self.chain)?;
 		let outputs = chain
-			.unspent_outputs_by_insertion_index(start_index, max, None)
+			.unspent_outputs_by_insertion_index(start_index, max, end_index)
 			.context(ErrorKind::NotFound)?;
 		let out = OutputListing {
 			last_retrieved_index: outputs.0,
@@ -92,29 +97,19 @@ impl TxHashSetHandler {
 	}
 
 	// allows traversal of utxo set bounded within a block range
-	fn outputs_within_height_range(
+	fn block_height_range_to_pmmr_indices(
 		&self,
 		start_block_height: u64,
 		end_block_height: Option<u64>,
-		mut max: u64,
 	) -> Result<OutputListing, Error> {
-		//set a limit here
-		if max > 10_000 {
-			max = 10_000;
-		}
 		let chain = w(&self.chain)?;
-		let outputs = chain
-			.unspent_outputs_by_block_height(start_block_height, end_block_height, max)
+		let range = chain
+			.block_height_range_to_pmmr_indices(start_block_height, end_block_height)
 			.context(ErrorKind::NotFound)?;
 		let out = OutputListing {
-			last_retrieved_index: outputs.0,
-			highest_index: outputs.1,
-			outputs: outputs
-				.2
-				.iter()
-				.map(|x| OutputPrintable::from_output(x, chain.clone(), None, true, true))
-				.collect::<Result<Vec<_>, _>>()
-				.context(ErrorKind::Internal("chain error".to_owned()))?,
+			last_retrieved_index: range.0,
+			highest_index: range.1,
+			outputs: vec![],
 		};
 		Ok(out)
 	}
@@ -150,6 +145,10 @@ impl Handler for TxHashSetHandler {
 		let params = QueryParams::from(req.uri().query());
 		let last_n = parse_param_no_err!(params, "n", 10);
 		let start_index = parse_param_no_err!(params, "start_index", 1);
+		let end_index = match parse_param_no_err!(params, "end_index", 0) {
+			0 => None,
+			i => Some(i),
+		};
 		let max = parse_param_no_err!(params, "max", 100);
 		let id = parse_param_no_err!(params, "id", "".to_owned());
 		let start_height = parse_param_no_err!(params, "start_height", 1);
@@ -163,10 +162,10 @@ impl Handler for TxHashSetHandler {
 			"lastoutputs" => result_to_response(self.get_last_n_output(last_n)),
 			"lastrangeproofs" => result_to_response(self.get_last_n_rangeproof(last_n)),
 			"lastkernels" => result_to_response(self.get_last_n_kernel(last_n)),
-			"outputs" => result_to_response(self.outputs(start_index, max)),
-			"outputsbyheight" => {
-				result_to_response(self.outputs_within_height_range(start_height, end_height, max))
-			}
+			"outputs" => result_to_response(self.outputs(start_index, end_index, max)),
+			"heightstopmmr" => result_to_response(
+				self.block_height_range_to_pmmr_indices(start_height, end_height),
+			),
 			"merkleproof" => result_to_response(self.get_merkle_proof_for_output(&id)),
 			_ => response(StatusCode::BAD_REQUEST, ""),
 		}
