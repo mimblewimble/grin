@@ -12,13 +12,15 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use cursive::theme::{Color, ColorStyle};
+use cursive::theme::{BaseColor, Color, ColorStyle};
 use cursive::traits::Identifiable;
 use cursive::view::View;
 use cursive::views::BoxView;
 use cursive::{Cursive, Printer};
 
 use crate::tui::constants::VIEW_LOGS;
+use cursive::utils::lines::spans::{LinesIterator, Row};
+use cursive::utils::markup::StyledString;
 use grin_util::logger::LogEntry;
 use log::Level;
 use std::collections::VecDeque;
@@ -40,9 +42,6 @@ impl TUILogsView {
 
 struct LogBufferView {
 	buffer: VecDeque<LogEntry>,
-	green: ColorStyle,
-	orange: ColorStyle,
-	red: ColorStyle,
 }
 
 impl LogBufferView {
@@ -56,17 +55,28 @@ impl LogBufferView {
 			},
 		);
 
-		LogBufferView {
-			buffer,
-			red: ColorStyle::new(Color::Rgb(254, 66, 66), Color::Rgb(0, 0, 0)),
-			orange: ColorStyle::new(Color::Rgb(255, 134, 0), Color::Rgb(0, 0, 0)),
-			green: ColorStyle::new(Color::Rgb(66, 255, 66), Color::Rgb(0, 0, 0)),
-		}
+		LogBufferView { buffer }
 	}
 
 	fn update(&mut self, entry: LogEntry) {
 		self.buffer.push_front(entry);
 		self.buffer.pop_back();
+	}
+
+	fn color(level: Level) -> ColorStyle {
+		match level {
+			Level::Warn => ColorStyle::new(
+				Color::Light(BaseColor::Yellow),
+				Color::Dark(BaseColor::Black),
+			),
+			Level::Error => {
+				ColorStyle::new(Color::Light(BaseColor::Red), Color::Dark(BaseColor::Black))
+			}
+			_ => ColorStyle::new(
+				Color::Light(BaseColor::Green),
+				Color::Dark(BaseColor::Black),
+			),
+		}
 	}
 }
 
@@ -74,16 +84,17 @@ impl View for LogBufferView {
 	fn draw(&self, printer: &Printer) {
 		let mut i = 0;
 		for entry in self.buffer.iter().take(printer.size.y) {
-			for line in entry.log.lines().rev() {
-				let print = |p: &Printer| p.print((0, p.size.y - 1 - i), line);
-				match entry.level {
-					Level::Info => printer.with_color(self.green, print),
-					Level::Warn => printer.with_color(self.orange, print),
-					Level::Error => printer.with_color(self.red, print),
-					_ => print(printer),
+			printer.with_color(LogBufferView::color(entry.level), |p| {
+				let log_message = StyledString::plain(&entry.log);
+				let mut rows: Vec<Row> = LinesIterator::new(&log_message, printer.size.x).collect();
+				rows.reverse(); // So stack traces are in the right order.
+				for row in rows {
+					for span in row.resolve(&log_message) {
+						p.print((0, p.size.y - 1 - i), span.content);
+						i += 1;
+					}
 				}
-				i += 1;
-			}
+			});
 		}
 	}
 }
