@@ -262,7 +262,7 @@ The requirement to know both values to generate valid rangeproofs is an importan
     Carol's UTXO:       113*G + 2*H
     Attacker's output:  (113 + 99)*G + 2*H
     
-which can be signed by the attacker since Carols private key of 113 cancels due to the adverserial choice of keys. The new output could only be spent by both the attacker and Carol together. However, while the attacker can provide a valid signature for the transaction, it is impossible to create a valid rangeproof for the new output invalidating this attack.  
+which can be signed by the attacker since Carols private key of 113 cancels due to the adversarial choice of keys. The new output could only be spent by both the attacker and Carol together. However, while the attacker can provide a valid signature for the transaction, it is impossible to create a valid rangeproof for the new output invalidating this attack.  
 
 
 #### Putting It All Together
