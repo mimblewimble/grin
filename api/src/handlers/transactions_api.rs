@@ -35,7 +35,7 @@ use std::sync::Weak;
 
 // UTXO traversal::
 // GET /v1/txhashset/outputs?start_index=1&max=100
-// GET /v1/txhashset/outputsbyheight?start_height=1&end_height=1000&max=100
+// GET /v1/txhashset/heightstopmmr?start_height=1&end_height=1000
 //
 // Build a merkle proof for a given pos
 // GET /v1/txhashset/merkleproof?n=1
@@ -81,7 +81,7 @@ impl TxHashSetHandler {
 		}
 		let chain = w(&self.chain)?;
 		let outputs = chain
-			.unspent_outputs_by_insertion_index(start_index, max, end_index)
+			.unspent_outputs_by_pmmr_index(start_index, max, end_index)
 			.context(ErrorKind::NotFound)?;
 		let out = OutputListing {
 			last_retrieved_index: outputs.0,
