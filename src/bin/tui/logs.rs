@@ -65,6 +65,10 @@ impl LogBufferView {
 
 	fn color(level: Level) -> ColorStyle {
 		match level {
+			Level::Info => ColorStyle::new(
+				Color::Light(BaseColor::Green),
+				Color::Dark(BaseColor::Black),
+			),
 			Level::Warn => ColorStyle::new(
 				Color::Light(BaseColor::Yellow),
 				Color::Dark(BaseColor::Black),
@@ -73,7 +77,7 @@ impl LogBufferView {
 				ColorStyle::new(Color::Light(BaseColor::Red), Color::Dark(BaseColor::Black))
 			}
 			_ => ColorStyle::new(
-				Color::Light(BaseColor::Green),
+				Color::Light(BaseColor::White),
 				Color::Dark(BaseColor::Black),
 			),
 		}
