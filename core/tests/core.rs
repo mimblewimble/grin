@@ -20,7 +20,9 @@ use self::core::core::block::BlockHeader;
 use self::core::core::block::Error::KernelLockHeight;
 use self::core::core::hash::{Hashed, ZERO_HASH};
 use self::core::core::verifier_cache::{LruVerifierCache, VerifierCache};
-use self::core::core::{aggregate, deaggregate, KernelFeatures, Output, Transaction, Weighting};
+use self::core::core::{
+	aggregate, deaggregate, KernelFeatures, Output, Transaction, TxKernel, Weighting,
+};
 use self::core::libtx::build::{self, initial_tx, input, output, with_excess};
 use self::core::libtx::ProofBuilder;
 use self::core::ser;
@@ -430,13 +432,11 @@ fn tx_build_exchange() {
 
 		// Alice builds her transaction, with change, which also produces the sum
 		// of blinding factors before they're obscured.
-		let (tx, sum) = build::partial_transaction(
-			KernelFeatures::Plain { fee: 2 },
-			vec![in1, in2, output(1, key_id3)],
-			&keychain,
-			&builder,
-		)
-		.unwrap();
+		let tx = Transaction::empty()
+			.with_kernel(TxKernel::with_features(KernelFeatures::Plain { fee: 2 }));
+		let (tx, sum) =
+			build::partial_transaction(tx, vec![in1, in2, output(1, key_id3)], &keychain, &builder)
+				.unwrap();
 
 		(tx, sum)
 	};

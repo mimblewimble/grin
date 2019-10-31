@@ -169,7 +169,6 @@ where
 	K: Keychain,
 	B: ProofBuild,
 {
-	assert_eq!(tx.kernels().len(), 1);
 	Box::new(
 		move |_build, acc| -> Result<(Transaction, BlindSum), Error> {
 			acc.map(|(_, sum)| (tx.clone(), sum))
@@ -177,18 +176,13 @@ where
 	)
 }
 
-/// Builds a new transaction by combining all the combinators provided in a
-/// Vector. Transactions can either be built "from scratch" with a list of
-/// inputs or outputs or from a pre-existing transaction that gets added to.
+/// Takes an existing transaction and partially builds on it.
 ///
 /// Example:
-/// let (tx1, sum) = build::transaction(vec![input_rand(4), output_rand(1),
-///   with_features(KernelFeatures::Plain{fee: 1})], keychain)?;
-/// let (tx2, _) = build::transaction(vec![initial_tx(tx1), with_excess(sum),
-///   output_rand(2)], keychain)?;
+/// let (tx, sum) = build::transaction(tx, vec![input_rand(4), output_rand(1))], keychain)?;
 ///
 pub fn partial_transaction<K, B>(
-	features: KernelFeatures,
+	tx: Transaction,
 	elems: Vec<Box<Append<K, B>>>,
 	keychain: &K,
 	builder: &B,
@@ -200,12 +194,7 @@ where
 	let mut ctx = Context { keychain, builder };
 	let (tx, sum) = elems
 		.iter()
-		.fold(Ok((Transaction::empty(), BlindSum::new())), |acc, elem| {
-			elem(&mut ctx, acc)
-		})?;
-
-	let kern = TxKernel::with_features(features);
-	let tx = tx.replace_kernel(kern);
+		.fold(Ok((tx, BlindSum::new())), |acc, elem| elem(&mut ctx, acc))?;
 	let blind_sum = ctx.keychain.blind_sum(&sum)?;
 	Ok((tx, blind_sum))
 }
