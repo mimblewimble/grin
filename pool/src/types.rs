@@ -45,6 +45,15 @@ const DANDELION_STEM_PROBABILITY: u8 = 90;
 /// If set to false we will stem/fluff our txs as per current epoch.
 const DANDELION_ALWAYS_STEM_OUR_TXS: bool = true;
 
+/// Default Base fee for a transaction to be accepted by the pool
+const POOL_ACCEPT_FEE_BASE: u64 = consensus::MILLI_GRIN;
+
+/// Maximum capacity of the pool in number of transactions
+const POOL_MAX_POOL_SIZE: usize = 50_000;
+
+/// Maximum capacity of the Dandelion stempool in number of transactions
+const POOL_MAX_STEMPOOL_SIZE: usize = 50_000;
+
 /// Configuration for "Dandelion".
 /// Note: shared between p2p and pool.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -135,13 +144,13 @@ impl Default for PoolConfig {
 }
 
 fn default_accept_fee_base() -> u64 {
-	consensus::MILLI_GRIN
+	POOL_ACCEPT_FEE_BASE
 }
 fn default_max_pool_size() -> usize {
-	50_000
+	POOL_MAX_POOL_SIZE
 }
 fn default_max_stempool_size() -> usize {
-	50_000
+	POOL_MAX_STEMPOOL_SIZE
 }
 fn default_mineable_max_weight() -> usize {
 	global::max_block_weight()
