@@ -18,7 +18,7 @@ use self::chain::store::ChainStore;
 use self::chain::types::Tip;
 use self::core::core::hash::{Hash, Hashed};
 use self::core::core::verifier_cache::VerifierCache;
-use self::core::core::{Block, BlockHeader, BlockSums, Committed, Transaction};
+use self::core::core::{Block, BlockHeader, BlockSums, Committed, KernelFeatures, Transaction};
 use self::core::libtx;
 use self::keychain::{ExtKeychain, Keychain};
 use self::pool::types::*;
@@ -193,9 +193,13 @@ where
 		tx_elements.push(libtx::build::output(output_value, key_id));
 	}
 
-	tx_elements.push(libtx::build::with_fee(fees as u64));
-
-	libtx::build::transaction(tx_elements, keychain, &libtx::ProofBuilder::new(keychain)).unwrap()
+	libtx::build::transaction(
+		KernelFeatures::Plain { fee: fees as u64 },
+		tx_elements,
+		keychain,
+		&libtx::ProofBuilder::new(keychain),
+	)
+	.unwrap()
 }
 
 pub fn test_transaction<K>(
@@ -223,9 +227,14 @@ where
 		let key_id = ExtKeychain::derive_key_id(1, output_value as u32, 0, 0, 0);
 		tx_elements.push(libtx::build::output(output_value, key_id));
 	}
-	tx_elements.push(libtx::build::with_fee(fees as u64));
 
-	libtx::build::transaction(tx_elements, keychain, &libtx::ProofBuilder::new(keychain)).unwrap()
+	libtx::build::transaction(
+		KernelFeatures::Plain { fee: fees as u64 },
+		tx_elements,
+		keychain,
+		&libtx::ProofBuilder::new(keychain),
+	)
+	.unwrap()
 }
 
 pub fn test_source() -> TxSource {

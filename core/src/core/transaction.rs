@@ -463,40 +463,15 @@ impl TxKernel {
 
 	/// Build an empty tx kernel with zero values.
 	pub fn empty() -> TxKernel {
+		TxKernel::with_features(KernelFeatures::Plain { fee: 0 })
+	}
+
+	/// Build an empty tx kernel with the provided kernel features.
+	pub fn with_features(features: KernelFeatures) -> TxKernel {
 		TxKernel {
-			features: KernelFeatures::Plain { fee: 0 },
+			features,
 			excess: Commitment::from_vec(vec![0; 33]),
 			excess_sig: secp::Signature::from_raw_data(&[0; 64]).unwrap(),
-		}
-	}
-
-	/// Builds a new tx kernel with the provided fee.
-	/// Will panic if we cannot safely do this on the existing kernel.
-	/// i.e. Do not try and set a fee on a coinbase kernel.
-	pub fn with_fee(self, fee: u64) -> TxKernel {
-		match self.features {
-			KernelFeatures::Plain { .. } => {
-				let features = KernelFeatures::Plain { fee };
-				TxKernel { features, ..self }
-			}
-			KernelFeatures::HeightLocked { lock_height, .. } => {
-				let features = KernelFeatures::HeightLocked { fee, lock_height };
-				TxKernel { features, ..self }
-			}
-			KernelFeatures::Coinbase => panic!("fee not supported on coinbase kernel"),
-		}
-	}
-
-	/// Builds a new tx kernel with the provided lock_height.
-	/// Will panic if we cannot safely do this on the existing kernel.
-	/// i.e. Do not try and set a lock_height on a coinbase kernel.
-	pub fn with_lock_height(self, lock_height: u64) -> TxKernel {
-		match self.features {
-			KernelFeatures::Plain { fee } | KernelFeatures::HeightLocked { fee, .. } => {
-				let features = KernelFeatures::HeightLocked { fee, lock_height };
-				TxKernel { features, ..self }
-			}
-			KernelFeatures::Coinbase => panic!("lock_height not supported on coinbase kernel"),
 		}
 	}
 }
@@ -681,6 +656,13 @@ impl TransactionBody {
 			.binary_search(&kernel)
 			.err()
 			.map(|e| self.kernels.insert(e, kernel));
+		self
+	}
+
+	/// Builds a new TransactionBody replacing any existing kernels with the provided kernel.
+	pub fn replace_kernel(mut self, kernel: TxKernel) -> TransactionBody {
+		self.kernels.clear();
+		self.kernels.push(kernel);
 		self
 	}
 
@@ -1012,12 +994,20 @@ impl Transaction {
 		}
 	}
 
-	/// Builds a new transaction with the provided output added. Existing
-	/// outputs, if any, are kept intact.
+	/// Builds a new transaction with the provided kernel added. Existing
+	/// kernels, if any, are kept intact.
 	/// Sort order is maintained.
 	pub fn with_kernel(self, kernel: TxKernel) -> Transaction {
 		Transaction {
 			body: self.body.with_kernel(kernel),
+			..self
+		}
+	}
+
+	/// Builds a new transaction replacing any existing kernels with the provided kernel.
+	pub fn replace_kernel(self, kernel: TxKernel) -> Transaction {
+		Transaction {
+			body: self.body.replace_kernel(kernel),
 			..self
 		}
 	}

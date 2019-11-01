@@ -44,6 +44,9 @@ pub enum ErrorKind {
 	/// Rangeproof error
 	#[fail(display = "Rangeproof Error")]
 	RangeProof(String),
+	/// Other error
+	#[fail(display = "Other Error")]
+	Other(String),
 }
 
 impl Fail for Error {

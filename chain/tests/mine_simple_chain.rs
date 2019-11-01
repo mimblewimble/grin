@@ -16,7 +16,7 @@ use self::chain::types::{NoopAdapter, Tip};
 use self::chain::Chain;
 use self::core::core::hash::Hashed;
 use self::core::core::verifier_cache::LruVerifierCache;
-use self::core::core::{Block, BlockHeader, OutputIdentifier, Transaction};
+use self::core::core::{Block, BlockHeader, KernelFeatures, OutputIdentifier, Transaction};
 use self::core::global::ChainTypes;
 use self::core::libtx::{self, build, ProofBuilder};
 use self::core::pow::Difficulty;
@@ -562,10 +562,10 @@ fn spend_in_fork_and_compact() {
 		let key_id31 = ExtKeychainPath::new(1, 31, 0, 0, 0).to_identifier();
 
 		let tx1 = build::transaction(
+			KernelFeatures::Plain { fee: 20000 },
 			vec![
 				build::coinbase_input(consensus::REWARD, key_id2.clone()),
 				build::output(consensus::REWARD - 20000, key_id30.clone()),
-				build::with_fee(20000),
 			],
 			&kc,
 			&pb,
@@ -580,10 +580,10 @@ fn spend_in_fork_and_compact() {
 		chain.validate(false).unwrap();
 
 		let tx2 = build::transaction(
+			KernelFeatures::Plain { fee: 20000 },
 			vec![
 				build::input(consensus::REWARD - 20000, key_id30.clone()),
 				build::output(consensus::REWARD - 40000, key_id31.clone()),
-				build::with_fee(20000),
 			],
 			&kc,
 			&pb,
