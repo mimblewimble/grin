@@ -15,7 +15,6 @@
 mod common;
 
 use self::core::core::pmmr::{VecBackend, PMMR};
-use self::core::ser::PMMRIndexHashable;
 use crate::common::TestElem;
 use grin_core as core;
 
@@ -35,7 +34,7 @@ fn leaf_pos_and_idx_iter_test() {
 	}
 	assert_eq!(
 		vec![0, 1, 2, 3, 4],
-		pmmr.leaf_idx_iter().collect::<Vec<_>>()
+		pmmr.leaf_idx_iter(0).collect::<Vec<_>>()
 	);
 	assert_eq!(
 		vec![1, 2, 4, 5, 8],
@@ -59,7 +58,7 @@ fn leaf_pos_and_idx_iter_hash_only_test() {
 	}
 	assert_eq!(
 		vec![0, 1, 2, 3, 4],
-		pmmr.leaf_idx_iter().collect::<Vec<_>>()
+		pmmr.leaf_idx_iter(0).collect::<Vec<_>>()
 	);
 	assert_eq!(
 		vec![1, 2, 4, 5, 8],
