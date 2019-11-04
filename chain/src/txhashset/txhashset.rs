@@ -267,15 +267,17 @@ impl TxHashSet {
 		Ok(self.commit_index.get_all_output_pos()?)
 	}
 
-	/// returns outputs from the given insertion (leaf) index up to the
+	/// returns outputs from the given pmmr index up to the
 	/// specified limit. Also returns the last index actually populated
-	pub fn outputs_by_insertion_index(
+	/// max index is the last PMMR index to consider, not leaf index
+	pub fn outputs_by_pmmr_index(
 		&self,
 		start_index: u64,
 		max_count: u64,
+		max_index: Option<u64>,
 	) -> (u64, Vec<OutputIdentifier>) {
 		ReadonlyPMMR::at(&self.output_pmmr_h.backend, self.output_pmmr_h.last_pos)
-			.elements_from_insertion_index(start_index, max_count)
+			.elements_from_pmmr_index(start_index, max_count, max_index)
 	}
 
 	/// highest output insertion index available
@@ -284,13 +286,14 @@ impl TxHashSet {
 	}
 
 	/// As above, for rangeproofs
-	pub fn rangeproofs_by_insertion_index(
+	pub fn rangeproofs_by_pmmr_index(
 		&self,
 		start_index: u64,
 		max_count: u64,
+		max_index: Option<u64>,
 	) -> (u64, Vec<RangeProof>) {
 		ReadonlyPMMR::at(&self.rproof_pmmr_h.backend, self.rproof_pmmr_h.last_pos)
-			.elements_from_insertion_index(start_index, max_count)
+			.elements_from_pmmr_index(start_index, max_count, max_index)
 	}
 
 	/// Find a kernel with a given excess. Work backwards from `max_index` to `min_index`
