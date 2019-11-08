@@ -20,7 +20,9 @@ use croaring::Bitmap;
 
 use crate::core::core::hash::{DefaultHashable, Hash};
 use crate::core::core::pmmr::{self, ReadonlyPMMR, VecBackend, PMMR};
-use crate::core::ser::{self, FixedLength, PMMRable, Readable, Reader, Writeable, Writer};
+use crate::core::ser::{
+	self, FixedLength, PMMRIndexHashable, PMMRable, Readable, Reader, Writeable, Writer,
+};
 use crate::error::{Error, ErrorKind};
 
 /// The "bitmap accumulator" allows us to commit to a specific bitmap by splitting it into
@@ -83,7 +85,7 @@ impl BitmapAccumulator {
 				chunk = BitmapChunk::new();
 			}
 		}
-		if !chunk.is_empty() {
+		if chunk.any() {
 			self.append_chunk(chunk)?;
 		}
 		debug!(
@@ -105,16 +107,20 @@ impl BitmapAccumulator {
 		T: IntoIterator<Item = u64>,
 		U: IntoIterator<Item = u64>,
 	{
-		// We may invalidate 1,000s of outputs but these may correspond to a relatively
-		// small number of chunks.
-		let mut chunk_idx: Vec<_> = invalidated_idx.into_iter().map(|x| x / 1024).collect();
-		chunk_idx.sort_unstable();
-		chunk_idx.dedup();
-
-		if let Some(first_chunk_idx) = chunk_idx.first() {
-			self.rewind_prior(*first_chunk_idx)?;
-			self.apply_from(new_idx, *first_chunk_idx)?;
+		// Determine the earliest chunk by looking at the min invalidated idx (assume sorted).
+		// Rewind prior to this and reapply new_idx.
+		// Note: We rebuild everything after rewind point but much of the bitmap may be
+		// unchanged. This can be further optimized by only rebuilding necessary chunks and
+		// rehashing.
+		if let Some(first_chunk_idx) = invalidated_idx.into_iter().next().map(|x| x / 1024) {
+			self.rewind_prior(first_chunk_idx)?;
+			self.pad_left(first_chunk_idx)?;
+			self.apply_from(new_idx, first_chunk_idx)?;
 		}
+
+		// Trim any "empty" chunks from the right to keep everything consistent.
+		self.trim_right()?;
+
 		Ok(())
 	}
 
@@ -128,6 +134,37 @@ impl BitmapAccumulator {
 		pmmr.rewind(rewind_pos, &Bitmap::create())
 			.map_err(|e| ErrorKind::Other(e))?;
 		Ok(())
+	}
+
+	/// Make sure we append empty chunks to fill in any gap before we append the chunk
+	/// we actually care about. This effectively pads the bitmap with 1024 chunks of 0s
+	/// as necessary to put the new chunk at the correct place.
+	fn pad_left(&mut self, chunk_idx: u64) -> Result<(), Error> {
+		let last_pos = self.backend.size();
+		let chunk_pos = pmmr::insertion_to_pmmr_index(chunk_idx);
+		for _ in last_pos..chunk_pos {
+			self.append_chunk(BitmapChunk::new())?;
+		}
+		Ok(())
+	}
+
+	/// Recursively trim the last chunk if empty. Stop when rightmost chunk is non-empty
+	/// or the accumulator itself is empty.
+	fn trim_right(&mut self) -> Result<(), Error> {
+		let last_pos = self.backend.size();
+		if last_pos == 0 {
+			return Ok(());
+		}
+		let mut pmmr = PMMR::at(&mut self.backend, last_pos);
+		if pmmr.get_hash(last_pos)
+			== Some(BitmapChunk::new().hash_with_index(last_pos.saturating_sub(1)))
+		{
+			pmmr.rewind(last_pos.saturating_sub(1), &Bitmap::create())
+				.map_err(|e| ErrorKind::Other(e))?;
+			self.trim_right()
+		} else {
+			Ok(())
+		}
 	}
 
 	/// Append a new chunk to the BitmapAccumulator.
@@ -168,9 +205,9 @@ impl BitmapChunk {
 		}
 	}
 
-	/// Is this bitmap chunk empty?
-	pub fn is_empty(&self) -> bool {
-		self.0.is_empty()
+	/// Does this bitmap chunk have any bits set to 1?
+	pub fn any(&self) -> bool {
+		self.0.any()
 	}
 }
 

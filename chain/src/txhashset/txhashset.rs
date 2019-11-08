@@ -948,11 +948,12 @@ impl<'a> Extension<'a> {
 	}
 
 	fn apply_to_bitmap_accumulator(&mut self, output_pos: &[u64]) -> Result<(), Error> {
-		let output_idx: Vec<_> = output_pos
+		let mut output_idx: Vec<_> = output_pos
 			.iter()
 			.map(|x| pmmr::n_leaves(*x).saturating_sub(1))
 			.collect();
-		let min_idx = output_idx.iter().min().unwrap_or(&0);
+		output_idx.sort_unstable();
+		let min_idx = output_idx.first().unwrap_or(&0);
 		let chunk_start_idx = (min_idx / 1024) * 1024;
 		self.bitmap_accumulator
 			.apply(output_idx, self.output_pmmr.leaf_idx_iter(chunk_start_idx))
@@ -1126,7 +1127,6 @@ impl<'a> Extension<'a> {
 		let mut affected_pos: Vec<_> = rewind_rm_pos.iter().map(|x| x as u64).collect();
 		affected_pos.push(output_pos);
 		self.apply_to_bitmap_accumulator(&affected_pos)?;
-
 		Ok(())
 	}
 
