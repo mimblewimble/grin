@@ -17,6 +17,12 @@ parts:
       - clang
       - libncurses5-dev
       - libncursesw5-dev
+  wallet:
+    plugin: rust
+    source: https://github.com/mimblewimble/grin-wallet.git
+    source-tag: v2.1.0
+    build-packages:
+      - clang
 
 apps:
   grin:
@@ -24,4 +30,7 @@ apps:
       LC_ALL: C.UTF-8
       LANG: C.UTF-8
     command: bin/grin
+    plugs: [network, network-bind]
+  wallet:
+    command: bin/grin-wallet
     plugs: [network, network-bind]
