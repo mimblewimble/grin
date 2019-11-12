@@ -13,7 +13,7 @@
 // limitations under the License.
 
 use self::chain::txhashset::BitmapAccumulator;
-use self::core::core::hash;
+use self::core::core::hash::Hash;
 use self::core::ser::PMMRIndexHashable;
 use bit_vec::BitVec;
 use grin_chain as chain;
@@ -26,7 +26,7 @@ fn test_bitmap_accumulator() {
 
 	let mut bit_vec = BitVec::from_elem(1024, false);
 	let mut accumulator = BitmapAccumulator::new();
-	assert_eq!(accumulator.root(), hash::ZERO_HASH);
+	assert_eq!(accumulator.root(), Hash::default());
 
 	// 1000... (rebuild from 0, setting [0] true)
 	accumulator.apply(vec![0], vec![0]).unwrap();
@@ -38,7 +38,7 @@ fn test_bitmap_accumulator() {
 	// Check that removing the last bit in a chunk removes the now empty chunk
 	// if it is the rightmost chunk.
 	accumulator.apply(vec![0], vec![]).unwrap();
-	assert_eq!(accumulator.root(), hash::ZERO_HASH);
+	assert_eq!(accumulator.root(), Hash::default());
 
 	// 1100... (rebuild from 0, setting [0, 1] true)
 	accumulator.apply(vec![0], vec![0, 1]).unwrap();
@@ -126,7 +126,7 @@ fn test_bitmap_accumulator() {
 	// Here we trim all the "empty" chunks leaving an empty accumulator.
 	// 0000...0000, 0000...0000 (rebuild from 1025, setting [] true)
 	accumulator.apply(vec![1025], vec![]).unwrap();
-	assert_eq!(accumulator.root(), hash::ZERO_HASH);
+	assert_eq!(accumulator.root(), Hash::default());
 
 	// Make sure we pad appropriately with 0s if we set a distant bit to 1.
 	// 0000...0000, 0100...0000 (rebuild from 1025, setting [1025] true)

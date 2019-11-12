@@ -25,7 +25,7 @@ use crate::error::{Error, ErrorKind};
 use crate::store::{Batch, ChainStore};
 use crate::txhashset::bitmap_accumulator::BitmapAccumulator;
 use crate::txhashset::{RewindableKernelView, UTXOView};
-use crate::types::{OutputMMRPosition, Tip, TxHashSetRoots, TxHashsetWriteStatus};
+use crate::types::{OutputMMRPosition, OutputRoots, Tip, TxHashSetRoots, TxHashsetWriteStatus};
 use crate::util::secp::pedersen::{Commitment, RangeProof};
 use crate::util::{file, secp_static, zip};
 use croaring::Bitmap;
@@ -340,7 +340,10 @@ impl TxHashSet {
 			ReadonlyPMMR::at(&self.kernel_pmmr_h.backend, self.kernel_pmmr_h.last_pos);
 
 		TxHashSetRoots {
-			output_root: output_pmmr.root(),
+			output_roots: OutputRoots {
+				pmmr_root: output_pmmr.root(),
+				bitmap_root: self.bitmap_accumulator.root(),
+			},
 			rproof_root: rproof_pmmr.root(),
 			kernel_root: kernel_pmmr.root(),
 		}
@@ -1134,10 +1137,13 @@ impl<'a> Extension<'a> {
 	/// and kernel sum trees.
 	pub fn roots(&self) -> Result<TxHashSetRoots, Error> {
 		Ok(TxHashSetRoots {
-			output_root: self
-				.output_pmmr
-				.root()
-				.map_err(|_| ErrorKind::InvalidRoot)?,
+			output_roots: OutputRoots {
+				pmmr_root: self
+					.output_pmmr
+					.root()
+					.map_err(|_| ErrorKind::InvalidRoot)?,
+				bitmap_root: self.bitmap_accumulator.root(),
+			},
 			rproof_root: self
 				.rproof_pmmr
 				.root()
@@ -1155,26 +1161,7 @@ impl<'a> Extension<'a> {
 			return Ok(());
 		}
 		let head_header = self.batch.get_block_header(&self.head.hash())?;
-		let header_roots = TxHashSetRoots {
-			output_root: head_header.output_root,
-			rproof_root: head_header.range_proof_root,
-			kernel_root: head_header.kernel_root,
-		};
-		if header_roots != self.roots()? {
-			Err(ErrorKind::InvalidRoot.into())
-		} else {
-			// TODO - just log this for now.
-			// We eventually want to build a combined root
-			// for the output MMR and the bitmnap accumulator.
-			debug!(
-				"{} at {}, bitmap accumulator root: {:?}",
-				head_header.hash(),
-				head_header.height,
-				self.bitmap_accumulator.root(),
-			);
-
-			Ok(())
-		}
+		self.roots()?.validate(&head_header)
 	}
 
 	/// Validate the header, output and kernel MMR sizes against the block header.

@@ -594,7 +594,7 @@ impl Chain {
 		b.header.prev_root = prev_root;
 
 		// Set the output, rangeproof and kernel MMR roots.
-		b.header.output_root = roots.output_root;
+		b.header.output_root = roots.output_root();
 		b.header.range_proof_root = roots.rproof_root;
 		b.header.kernel_root = roots.kernel_root;
 
