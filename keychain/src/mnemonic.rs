@@ -29,7 +29,7 @@ lazy_static! {
 }
 
 /// An error that might occur during mnemonic decoding
-#[derive(Debug, PartialEq, Eq, Clone, Serialize, Deserialize)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub enum Error {
 	/// Invalid word encountered
 	BadWord(String),

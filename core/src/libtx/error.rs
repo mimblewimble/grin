@@ -26,7 +26,7 @@ pub struct Error {
 	inner: Context<ErrorKind>,
 }
 
-#[derive(Clone, Debug, Eq, Fail, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Eq, Fail, PartialEq)]
 /// Libwallet error types
 pub enum ErrorKind {
 	/// SECP error
