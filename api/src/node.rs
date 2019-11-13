@@ -24,6 +24,7 @@ use crate::handlers::chain_api::{
 use crate::handlers::peers_api::{PeerHandler, PeersConnectedHandler};
 use crate::handlers::pool_api::PoolHandler;
 use crate::handlers::server_api::StatusHandler;
+use crate::handlers::transactions_api::TxHashSetHandler;
 use crate::handlers::version_api::VersionHandler;
 use crate::p2p::types::PeerInfoDisplay;
 use crate::p2p::{self, PeerData};
@@ -247,6 +248,7 @@ impl Node {
 	///
 	/// # Arguments
 	/// * `start_index` - start index in the MMR.
+	/// * `end_index` - optional index so stop in the MMR.
 	/// * `max` - max index in the MMR.
 	/// * `include_proof` - whether or not to include the range proof in the response.
 	///
@@ -259,13 +261,37 @@ impl Node {
 	pub fn get_unspent_outputs(
 		&self,
 		start_index: u64,
+		end_index: Option<u64>,
 		max: u64,
 		include_proof: Option<bool>,
 	) -> Result<OutputListing, Error> {
 		let output_handler = OutputHandler {
 			chain: self.chain.clone(),
 		};
-		output_handler.get_unspent_outputs(start_index, max, include_proof)
+		output_handler.get_unspent_outputs(start_index, end_index, max, include_proof)
+	}
+
+	/// Retrieves the PMMR indices based on the provided block height(s).
+	///
+	/// # Arguments
+	/// * `start_block_height` - start index in the MMR.
+	/// * `end_block_height` - optional index so stop in the MMR.
+	///
+	/// # Returns
+	/// * Result Containing:
+	/// * An [`OutputListing`](types/struct.OutputListing.html)
+	/// * or [`Error`](struct.Error.html) if an error is encountered.
+	///
+
+	pub fn get_pmmr_indices(
+		&self,
+		start_block_height: u64,
+		end_block_height: Option<u64>,
+	) -> Result<OutputListing, Error> {
+		let txhashset_handler = TxHashSetHandler {
+			chain: self.chain.clone(),
+		};
+		txhashset_handler.block_height_range_to_pmmr_indices(start_block_height, end_block_height)
 	}
 
 	/// Trigger a validation of the chain state.

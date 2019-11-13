@@ -177,6 +177,7 @@ impl OutputHandler {
 	pub fn get_unspent_outputs(
 		&self,
 		start_index: u64,
+		end_index: Option<u64>,
 		mut max: u64,
 		include_proof: Option<bool>,
 	) -> Result<OutputListing, Error> {
@@ -186,7 +187,7 @@ impl OutputHandler {
 		}
 		let chain = w(&self.chain)?;
 		let outputs = chain
-			.unspent_outputs_by_insertion_index(start_index, max)
+			.unspent_outputs_by_pmmr_index(start_index, max, end_index)
 			.context(ErrorKind::NotFound)?;
 		let out = OutputListing {
 			last_retrieved_index: outputs.0,

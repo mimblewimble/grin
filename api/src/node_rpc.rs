@@ -500,7 +500,7 @@ pub trait NodeRpc: Sync + Send {
 	{
 		"jsonrpc": "2.0",
 		"method": "get_unspent_outputs",
-		"params": [1, 2, true],
+		"params": [1, 2, null, true],
 		"id": 1
 	}
 	# "#
@@ -545,8 +545,46 @@ pub trait NodeRpc: Sync + Send {
 	fn get_unspent_outputs(
 		&self,
 		start_index: u64,
+		end_index: Option<u64>,
 		max: u64,
 		include_proof: Option<bool>,
+	) -> Result<OutputListing, ErrorKind>;
+
+	/**
+	Networked version of [Node::get_pmmr_indices](struct.Node.html#method.get_pmmr_indices).
+
+	# Json rpc example
+
+	```
+	# grin_api::doctest_helper_json_rpc_node_assert_response!(
+	# r#"
+	{
+		"jsonrpc": "2.0",
+		"method": "get_pmmr_indices",
+		"params": [0, 100],
+		"id": 1
+	}
+	# "#
+	# ,
+	# r#"
+	{
+		"id": 1,
+		"jsonrpc": "2.0",
+		  "result": {
+			"Ok": {
+				  "highest_index": 398,
+				  "last_retrieved_index": 2,
+				  "outputs": []
+			}
+	}
+	# "#
+	# );
+	```
+	 */
+	fn get_pmmr_indices(
+		&self,
+		start_block_height: u64,
+		end_block_height: Option<u64>,
 	) -> Result<OutputListing, ErrorKind>;
 
 	/**
@@ -1101,10 +1139,20 @@ impl NodeRpc for Node {
 	fn get_unspent_outputs(
 		&self,
 		start_index: u64,
+		end_index: Option<u64>,
 		max: u64,
 		include_proof: Option<bool>,
 	) -> Result<OutputListing, ErrorKind> {
-		Node::get_unspent_outputs(self, start_index, max, include_proof)
+		Node::get_unspent_outputs(self, start_index, end_index, max, include_proof)
+			.map_err(|e| e.kind().clone())
+	}
+
+	fn get_pmmr_indices(
+		&self,
+		start_block_height: u64,
+		end_block_height: Option<u64>,
+	) -> Result<OutputListing, ErrorKind> {
+		Node::get_pmmr_indices(self, start_block_height, end_block_height)
 			.map_err(|e| e.kind().clone())
 	}
 

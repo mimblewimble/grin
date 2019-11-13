@@ -17,7 +17,7 @@ pub mod chain_api;
 pub mod peers_api;
 pub mod pool_api;
 pub mod server_api;
-mod transactions_api;
+pub mod transactions_api;
 pub mod utils;
 pub mod version_api;
 
