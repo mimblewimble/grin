@@ -1,6 +1,6 @@
-# Grin/MimbleWimble for Bitcoiners
+# Grin/MimbleWimble 致比特币用户
 
-*Read this in other languages:[Korean](grin4bitcoiners_KR.md)
+*阅读其他语言版本：[Korean](grin4bitcoiners_KR.md),[简体中文](grin4bitcoiners_ZH-CN.md)
 
 ## Privacy and Fungibility
 
