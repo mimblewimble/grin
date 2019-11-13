@@ -1,14 +1,14 @@
 # Grin/MimbleWimble 致比特币用户
 
-*阅读其他语言版本：[Korean](grin4bitcoiners_KR.md),[简体中文](grin4bitcoiners_ZH-CN.md)
+*阅读其他语言版本：[Korean](grin4bitcoiners_KR.md),[English](grin4bitcoiners.md)
 
-## Privacy and Fungibility
+## 隐私和可互换性
 
-There are 3 main properties of Grin transactions that make them private:
+Grin 链上交易有三个隐私特性：
 
-1. There are no addresses.
-2. There are no amounts.
-3. 2 transactions, one spending the other, can be merged in a block to form only one, removing all intermediary information.
+1. 没有交易地址；
+2. 没有交易金额；
+3. 两笔交易，一笔输入是另一笔输出，可以在一个区块中混合成为一笔交易，移除所有中间信息。
 
 The 2 first properties mean that all transactions are indistinguishable from one another. Unless you directly participated in the transaction, all inputs and outputs look like random pieces of data (in lingo, they're all random curve points).
 
