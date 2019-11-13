@@ -47,7 +47,7 @@ fn pmmr_leaf_idx_iter() {
 
 		{
 			let pmmr: PMMR<'_, TestElem, _> = PMMR::at(&mut backend, mmr_size);
-			let leaf_idx = pmmr.leaf_idx_iter().collect::<Vec<_>>();
+			let leaf_idx = pmmr.leaf_idx_iter(0).collect::<Vec<_>>();
 			let leaf_pos = pmmr.leaf_pos_iter().collect::<Vec<_>>();
 
 			// The first 5 leaves [0,1,2,3,4] are at pos [1,2,4,5,8] in the MMR.
