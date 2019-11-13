@@ -247,7 +247,7 @@ impl ApiServer {
 			// TODO re-enable stop after investigation
 			//let tx = mem::replace(&mut self.shutdown_sender, None).unwrap();
 			//tx.send(()).expect("Failed to stop API server");
-			info!("API server has been stoped");
+			info!("API server has been stopped");
 			true
 		} else {
 			error!("Can't stop API server, it's not running or doesn't spport stop operation");

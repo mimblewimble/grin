@@ -17,7 +17,7 @@
 use std::marker;
 
 use crate::core::hash::{Hash, ZERO_HASH};
-use crate::core::pmmr::pmmr::{bintree_rightmost, insertion_to_pmmr_index, peaks};
+use crate::core::pmmr::pmmr::{bintree_rightmost, peaks};
 use crate::core::pmmr::{is_leaf, Backend};
 use crate::ser::{PMMRIndexHashable, PMMRable};
 
@@ -133,27 +133,28 @@ where
 
 	/// Helper function which returns un-pruned nodes from the insertion index
 	/// forward
-	/// returns last insertion index returned along with data
-	pub fn elements_from_insertion_index(
+	/// returns last pmmr index returned along with data
+	pub fn elements_from_pmmr_index(
 		&self,
-		mut index: u64,
+		mut pmmr_index: u64,
 		max_count: u64,
+		max_pmmr_pos: Option<u64>,
 	) -> (u64, Vec<T::E>) {
 		let mut return_vec = vec![];
-		if index == 0 {
-			index = 1;
+		let last_pos = match max_pmmr_pos {
+			Some(p) => p,
+			None => self.last_pos,
+		};
+		if pmmr_index == 0 {
+			pmmr_index = 1;
 		}
-		let mut return_index = index;
-		let mut pmmr_index = insertion_to_pmmr_index(index);
-		while return_vec.len() < max_count as usize && pmmr_index <= self.last_pos {
+		while return_vec.len() < max_count as usize && pmmr_index <= last_pos {
 			if let Some(t) = self.get_data(pmmr_index) {
 				return_vec.push(t);
-				return_index = index;
 			}
-			index += 1;
-			pmmr_index = insertion_to_pmmr_index(index);
+			pmmr_index += 1;
 		}
-		(return_index, return_vec)
+		(pmmr_index.saturating_sub(1), return_vec)
 	}
 
 	/// Helper function to get the last N nodes inserted, i.e. the last

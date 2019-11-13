@@ -25,8 +25,8 @@ use cursive::views::{
 use cursive::Cursive;
 
 use crate::tui::constants::{
-	MAIN_MENU, ROOT_STACK, SUBMENU_MINING_BUTTON, VIEW_BASIC_STATUS, VIEW_MINING, VIEW_PEER_SYNC,
-	VIEW_VERSION,
+	MAIN_MENU, ROOT_STACK, SUBMENU_MINING_BUTTON, VIEW_BASIC_STATUS, VIEW_LOGS, VIEW_MINING,
+	VIEW_PEER_SYNC, VIEW_VERSION,
 };
 
 pub fn create() -> Box<dyn View> {
@@ -38,6 +38,7 @@ pub fn create() -> Box<dyn View> {
 		.get_mut()
 		.add_item("Peers and Sync", VIEW_PEER_SYNC);
 	main_menu.get_mut().add_item("Mining", VIEW_MINING);
+	main_menu.get_mut().add_item("Logs", VIEW_LOGS);
 	main_menu.get_mut().add_item("Version Info", VIEW_VERSION);
 	let change_view = |s: &mut Cursive, v: &&str| {
 		if *v == "" {
