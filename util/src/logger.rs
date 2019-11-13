@@ -18,9 +18,7 @@ use std::ops::Deref;
 use backtrace::Backtrace;
 use std::{panic, thread};
 
-use crate::types::{self, LogLevel, LoggingConfig};
-
-use log::{LevelFilter, Record};
+use log::{Level, Record};
 use log4rs;
 use log4rs::append::console::ConsoleAppender;
 use log4rs::append::file::FileAppender;
@@ -32,17 +30,12 @@ use log4rs::append::rolling_file::{
 use log4rs::append::Append;
 use log4rs::config::{Appender, Config, Root};
 use log4rs::encode::pattern::PatternEncoder;
+use log4rs::encode::writer::simple::SimpleWriter;
+use log4rs::encode::Encode;
 use log4rs::filter::{threshold::ThresholdFilter, Filter, Response};
-
-fn convert_log_level(in_level: &LogLevel) -> LevelFilter {
-	match *in_level {
-		LogLevel::Info => LevelFilter::Info,
-		LogLevel::Warning => LevelFilter::Warn,
-		LogLevel::Debug => LevelFilter::Debug,
-		LogLevel::Trace => LevelFilter::Trace,
-		LogLevel::Error => LevelFilter::Error,
-	}
-}
+use std::error::Error;
+use std::sync::mpsc;
+use std::sync::mpsc::SyncSender;
 
 lazy_static! {
 	/// Flag to observe whether logging was explicitly initialised (don't output otherwise)
@@ -55,6 +48,57 @@ lazy_static! {
 }
 
 const LOGGING_PATTERN: &str = "{d(%Y%m%d %H:%M:%S%.3f)} {h({l})} {M} - {m}{n}";
+
+/// 32 log files to rotate over by default
+const DEFAULT_ROTATE_LOG_FILES: u32 = 32 as u32;
+
+/// Log Entry
+#[derive(Clone, Serialize, Debug)]
+pub struct LogEntry {
+	/// The log message
+	pub log: String,
+	/// The log levelO
+	pub level: Level,
+}
+
+/// Logging config
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct LoggingConfig {
+	/// whether to log to stdout
+	pub log_to_stdout: bool,
+	/// logging level for stdout
+	pub stdout_log_level: Level,
+	/// whether to log to file
+	pub log_to_file: bool,
+	/// log file level
+	pub file_log_level: Level,
+	/// Log file path
+	pub log_file_path: String,
+	/// Whether to append to log or replace
+	pub log_file_append: bool,
+	/// Size of the log in bytes to rotate over (optional)
+	pub log_max_size: Option<u64>,
+	/// Number of the log files to rotate over (optional)
+	pub log_max_files: Option<u32>,
+	/// Whether the tui is running (optional)
+	pub tui_running: Option<bool>,
+}
+
+impl Default for LoggingConfig {
+	fn default() -> LoggingConfig {
+		LoggingConfig {
+			log_to_stdout: true,
+			stdout_log_level: Level::Warn,
+			log_to_file: true,
+			file_log_level: Level::Info,
+			log_file_path: String::from("grin.log"),
+			log_file_append: true,
+			log_max_size: Some(1024 * 1024 * 16), // 16 megabytes default
+			log_max_files: Some(DEFAULT_ROTATE_LOG_FILES),
+			tui_running: None,
+		}
+	}
+}
 
 /// This filter is rejecting messages that doesn't start with "grin"
 /// in order to save log space for only Grin-related records
@@ -73,8 +117,32 @@ impl Filter for GrinFilter {
 	}
 }
 
+#[derive(Debug)]
+struct ChannelAppender {
+	output: Mutex<SyncSender<LogEntry>>,
+	encoder: Box<dyn Encode>,
+}
+
+impl Append for ChannelAppender {
+	fn append(&self, record: &Record) -> Result<(), Box<dyn Error + Sync + Send>> {
+		let mut writer = SimpleWriter(Vec::new());
+		self.encoder.encode(&mut writer, record)?;
+
+		let log = String::from_utf8_lossy(writer.0.as_slice()).to_string();
+
+		let _ = self.output.lock().try_send(LogEntry {
+			log,
+			level: record.level(),
+		});
+
+		Ok(())
+	}
+
+	fn flush(&self) {}
+}
+
 /// Initialize the logger with the given configuration
-pub fn init_logger(config: Option<LoggingConfig>) {
+pub fn init_logger(config: Option<LoggingConfig>, logs_tx: Option<mpsc::SyncSender<LogEntry>>) {
 	if let Some(c) = config {
 		let tui_running = c.tui_running.unwrap_or(false);
 		if tui_running {
@@ -86,8 +154,8 @@ pub fn init_logger(config: Option<LoggingConfig>) {
 		let mut config_ref = LOGGING_CONFIG.lock();
 		*config_ref = c.clone();
 
-		let level_stdout = convert_log_level(&c.stdout_log_level);
-		let level_file = convert_log_level(&c.file_log_level);
+		let level_stdout = c.stdout_log_level.to_level_filter();
+		let level_file = c.file_log_level.to_level_filter();
 
 		// Determine minimum logging level for Root logger
 		let level_minimum = if level_stdout > level_file {
@@ -105,15 +173,26 @@ pub fn init_logger(config: Option<LoggingConfig>) {
 
 		let mut appenders = vec![];
 
-		if c.log_to_stdout && !tui_running {
-			let filter = Box::new(ThresholdFilter::new(level_stdout));
+		if tui_running {
+			let channel_appender = ChannelAppender {
+				encoder: Box::new(PatternEncoder::new(&LOGGING_PATTERN)),
+				output: Mutex::new(logs_tx.unwrap()),
+			};
+
 			appenders.push(
 				Appender::builder()
-					.filter(filter)
+					.filter(Box::new(ThresholdFilter::new(level_stdout)))
+					.filter(Box::new(GrinFilter))
+					.build("tui", Box::new(channel_appender)),
+			);
+			root = root.appender("tui");
+		} else if c.log_to_stdout {
+			appenders.push(
+				Appender::builder()
+					.filter(Box::new(ThresholdFilter::new(level_stdout)))
 					.filter(Box::new(GrinFilter))
 					.build("stdout", Box::new(stdout)),
 			);
-
 			root = root.appender("stdout");
 		}
 
@@ -123,9 +202,7 @@ pub fn init_logger(config: Option<LoggingConfig>) {
 			let filter = Box::new(ThresholdFilter::new(level_file));
 			let file: Box<dyn Append> = {
 				if let Some(size) = c.log_max_size {
-					let count = c
-						.log_max_files
-						.unwrap_or_else(|| types::DEFAULT_ROTATE_LOG_FILES);
+					let count = c.log_max_files.unwrap_or_else(|| DEFAULT_ROTATE_LOG_FILES);
 					let roller = FixedWindowRoller::builder()
 						.build(&format!("{}.{{}}.gz", c.log_file_path), count)
 						.unwrap();
@@ -188,13 +265,13 @@ pub fn init_test_logger() {
 	}
 	let mut logger = LoggingConfig::default();
 	logger.log_to_file = false;
-	logger.stdout_log_level = LogLevel::Debug;
+	logger.stdout_log_level = Level::Debug;
 
 	// Save current logging configuration
 	let mut config_ref = LOGGING_CONFIG.lock();
 	*config_ref = logger;
 
-	let level_stdout = convert_log_level(&config_ref.stdout_log_level);
+	let level_stdout = config_ref.stdout_log_level.to_level_filter();
 	let level_minimum = level_stdout; // minimum logging level for Root logger
 
 	// Start logger

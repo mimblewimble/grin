@@ -19,7 +19,7 @@ use std::io;
 use std::path::PathBuf;
 
 use crate::servers::ServerConfig;
-use crate::util::LoggingConfig;
+use crate::util::logger::LoggingConfig;
 
 /// Error type wrapping config errors.
 #[derive(Debug)]

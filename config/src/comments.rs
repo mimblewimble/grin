@@ -114,8 +114,7 @@ fn comments() -> HashMap<String, String> {
 	retval.insert(
 		"run_tui".to_string(),
 		"
-#whether to run the ncurses TUI. Ncurses must be installed and this
-#will also disable logging to stdout
+#whether to run the ncurses TUI (Ncurses must be installed)
 "
 		.to_string(),
 	);
