@@ -17,23 +17,23 @@
 use crate::core::hash::{DefaultHashable, Hashed};
 use crate::core::verifier_cache::VerifierCache;
 use crate::core::{committed, Committed};
-use crate::keychain::{self, BlindingFactor};
 use crate::libtx::secp_ser;
 use crate::ser::{
 	self, read_multi, FixedLength, PMMRable, ProtocolVersion, Readable, Reader,
 	VerifySortedAndUnique, Writeable, Writer,
 };
-use crate::util;
-use crate::util::secp;
-use crate::util::secp::pedersen::{Commitment, RangeProof};
-use crate::util::static_secp_instance;
-use crate::util::RwLock;
 use crate::{consensus, global};
 use enum_primitive::FromPrimitive;
+use keychain::{self, BlindingFactor};
 use std::cmp::Ordering;
 use std::cmp::{max, min};
 use std::sync::Arc;
 use std::{error, fmt};
+use util;
+use util::secp;
+use util::secp::pedersen::{Commitment, RangeProof};
+use util::static_secp_instance;
+use util::RwLock;
 
 /// Various tx kernel variants.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
@@ -1584,8 +1584,8 @@ mod test {
 	use super::*;
 	use crate::core::hash::Hash;
 	use crate::core::id::{ShortId, ShortIdentifiable};
-	use crate::keychain::{ExtKeychain, Keychain, SwitchCommitmentType};
-	use crate::util::secp;
+	use keychain::{ExtKeychain, Keychain, SwitchCommitmentType};
+	use util::secp;
 
 	#[test]
 	fn test_kernel_ser_deser() {

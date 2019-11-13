@@ -14,7 +14,6 @@
 
 //! Common test functions
 
-use crate::keychain::{Identifier, Keychain};
 use grin_core::core::{Block, BlockHeader, KernelFeatures, Transaction};
 use grin_core::libtx::{
 	build::{self, input, output},
@@ -22,7 +21,7 @@ use grin_core::libtx::{
 	reward,
 };
 use grin_core::pow::Difficulty;
-use grin_keychain as keychain;
+use keychain::{Identifier, Keychain};
 
 // utility producing a transaction with 2 inputs and a single outputs
 pub fn tx2i1o() -> Transaction {

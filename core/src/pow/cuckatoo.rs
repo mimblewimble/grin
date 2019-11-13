@@ -12,16 +12,14 @@
 // limitations under the License.
 
 //! Implementation of Cuckatoo Cycle designed by John Tromp.
-use std::mem;
-
-use byteorder::{BigEndian, WriteBytesExt};
-use croaring::Bitmap;
-
 use crate::global;
 use crate::pow::common::{CuckooParams, EdgeType, Link};
 use crate::pow::error::{Error, ErrorKind};
 use crate::pow::{PoWContext, Proof};
-use crate::util;
+use byteorder::{BigEndian, WriteBytesExt};
+use croaring::Bitmap;
+use std::mem;
+use util;
 
 struct Graph<T>
 where

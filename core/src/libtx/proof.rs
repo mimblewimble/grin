@@ -14,15 +14,15 @@
 
 //! Rangeproof library functions
 
-use crate::blake2::blake2b::blake2b;
-use crate::keychain::extkey_bip32::BIP32GrinHasher;
-use crate::keychain::{Identifier, Keychain, SwitchCommitmentType, ViewKey};
 use crate::libtx::error::{Error, ErrorKind};
-use crate::util::secp::key::SecretKey;
-use crate::util::secp::pedersen::{Commitment, ProofMessage, RangeProof};
-use crate::util::secp::{self, Secp256k1};
-use crate::zeroize::Zeroize;
+use blake2::blake2b::blake2b;
+use keychain::extkey_bip32::BIP32GrinHasher;
+use keychain::{Identifier, Keychain, SwitchCommitmentType, ViewKey};
 use std::convert::TryFrom;
+use util::secp::key::SecretKey;
+use util::secp::pedersen::{Commitment, ProofMessage, RangeProof};
+use util::secp::{self, Secp256k1};
+use zeroize::Zeroize;
 
 /// Create a bulletproof
 pub fn create<K, B>(
@@ -440,8 +440,8 @@ impl ProofBuild for ViewKey {
 #[cfg(test)]
 mod tests {
 	use super::*;
-	use crate::keychain::ExtKeychain;
-	use grin_keychain::ChildNumber;
+	use keychain::ChildNumber;
+	use keychain::ExtKeychain;
 	use rand::{thread_rng, Rng};
 
 	#[test]
