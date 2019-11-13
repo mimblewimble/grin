@@ -446,6 +446,12 @@ impl Pool {
 		self.entries.len()
 	}
 
+	/// Number of transaction kernels in the pool.
+	/// This may differ from the size (number of transactions) due to tx aggregation.
+	pub fn kernel_count(&self) -> usize {
+		self.entries.iter().map(|x| x.tx.kernels().len()).sum()
+	}
+
 	/// Is the pool empty?
 	pub fn is_empty(&self) -> bool {
 		self.entries.is_empty()
