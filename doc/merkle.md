@@ -1,6 +1,6 @@
 # Merkle Structures
 
-*Read this in other languages:[Korean](merkle_KR.md)
+*Read this in other languages:[Korean](merkle_KR.md)*
 
 MimbleWimble is designed for users to verify the state of the system given
 only pruned data. To achieve this goal, all transaction data is committed
@@ -66,7 +66,9 @@ The root sum should be equal to the sum of excesses for this block. See the
 next section.
 
 In general, validators will see either 100% of this Merkle tree or 0% of it,
-so it is compatible with any design. Design requirements:
+so it is compatible with any design. 
+
+Design requirements:
 
 1. Efficient inclusion proofs, for proof-of-publication.
 

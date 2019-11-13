@@ -26,7 +26,7 @@ pub struct Error {
 	inner: Context<ErrorKind>,
 }
 
-#[derive(Clone, Debug, Eq, Fail, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Eq, Fail, PartialEq)]
 /// Libwallet error types
 pub enum ErrorKind {
 	/// SECP error
@@ -44,6 +44,9 @@ pub enum ErrorKind {
 	/// Rangeproof error
 	#[fail(display = "Rangeproof Error")]
 	RangeProof(String),
+	/// Other error
+	#[fail(display = "Other Error")]
+	Other(String),
 }
 
 impl Fail for Error {

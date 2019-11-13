@@ -365,7 +365,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 
 [[package]]
 name = "grin_core"
-version = "2.1.0-beta.1"
+version = "3.0.0-alpha.1"
 dependencies = [
  "blake2-rfc 0.2.18 (registry+https://github.com/rust-lang/crates.io-index)",
  "byteorder 1.3.1 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -374,8 +374,8 @@ dependencies = [
  "enum_primitive 0.1.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "failure 0.1.5 (registry+https://github.com/rust-lang/crates.io-index)",
  "failure_derive 0.1.5 (registry+https://github.com/rust-lang/crates.io-index)",
- "grin_keychain 2.1.0-beta.1",
- "grin_util 2.1.0-beta.1",
+ "grin_keychain 3.0.0-alpha.1",
+ "grin_util 3.0.0-alpha.1",
  "lazy_static 1.3.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "log 0.4.6 (registry+https://github.com/rust-lang/crates.io-index)",
  "lru-cache 0.1.1 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -393,19 +393,19 @@ dependencies = [
 name = "grin_core-fuzz"
 version = "0.0.3"
 dependencies = [
- "grin_core 2.1.0-beta.1",
- "grin_keychain 2.1.0-beta.1",
+ "grin_core 3.0.0-alpha.1",
+ "grin_keychain 3.0.0-alpha.1",
  "libfuzzer-sys 0.1.0 (git+https://github.com/rust-fuzz/libfuzzer-sys.git)",
 ]
 
 [[package]]
 name = "grin_keychain"
-version = "2.1.0-beta.1"
+version = "3.0.0-alpha.1"
 dependencies = [
  "blake2-rfc 0.2.18 (registry+https://github.com/rust-lang/crates.io-index)",
  "byteorder 1.3.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "digest 0.7.6 (registry+https://github.com/rust-lang/crates.io-index)",
- "grin_util 2.1.0-beta.1",
+ "grin_util 3.0.0-alpha.1",
  "hmac 0.6.3 (registry+https://github.com/rust-lang/crates.io-index)",
  "lazy_static 1.3.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "log 0.4.6 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -437,7 +437,7 @@ dependencies = [
 
 [[package]]
 name = "grin_util"
-version = "2.1.0-beta.1"
+version = "3.0.0-alpha.1"
 dependencies = [
  "backtrace 0.3.14 (registry+https://github.com/rust-lang/crates.io-index)",
  "base64 0.9.3 (registry+https://github.com/rust-lang/crates.io-index)",

@@ -26,7 +26,7 @@ use cursive::theme::{BaseColor, BorderStyle, Color, Theme};
 use cursive::traits::Boxable;
 use cursive::traits::Identifiable;
 use cursive::utils::markup::StyledString;
-use cursive::views::{LinearLayout, Panel, StackView, TextView, ViewBox};
+use cursive::views::{CircularFocus, Dialog, LinearLayout, Panel, StackView, TextView, ViewBox};
 use cursive::Cursive;
 use std::sync::mpsc;
 
@@ -34,13 +34,15 @@ use crate::built_info;
 use crate::servers::Server;
 use crate::tui::constants::ROOT_STACK;
 use crate::tui::types::{TUIStatusListener, UIMessage};
-use crate::tui::{menu, mining, peers, status, version};
+use crate::tui::{logs, menu, mining, peers, status, version};
+use grin_util::logger::LogEntry;
 
 pub struct UI {
 	cursive: Cursive,
 	ui_rx: mpsc::Receiver<UIMessage>,
 	ui_tx: mpsc::Sender<UIMessage>,
 	controller_tx: mpsc::Sender<ControllerMessage>,
+	logs_rx: mpsc::Receiver<LogEntry>,
 }
 
 fn modify_theme(theme: &mut Theme) {
@@ -57,19 +59,25 @@ fn modify_theme(theme: &mut Theme) {
 
 impl UI {
 	/// Create a new UI
-	pub fn new(controller_tx: mpsc::Sender<ControllerMessage>) -> UI {
+	pub fn new(
+		controller_tx: mpsc::Sender<ControllerMessage>,
+		logs_rx: mpsc::Receiver<LogEntry>,
+	) -> UI {
 		let (ui_tx, ui_rx) = mpsc::channel::<UIMessage>();
+
 		let mut grin_ui = UI {
 			cursive: Cursive::default(),
-			ui_tx: ui_tx,
-			ui_rx: ui_rx,
-			controller_tx: controller_tx,
+			ui_tx,
+			ui_rx,
+			controller_tx,
+			logs_rx,
 		};
 
 		// Create UI objects, etc
 		let status_view = status::TUIStatusView::create();
 		let mining_view = mining::TUIMiningView::create();
 		let peer_view = peers::TUIPeerView::create();
+		let logs_view = logs::TUILogsView::create();
 		let version_view = version::TUIVersionView::create();
 
 		let main_menu = menu::create();
@@ -78,6 +86,7 @@ impl UI {
 			.layer(version_view)
 			.layer(mining_view)
 			.layer(peer_view)
+			.layer(logs_view)
 			.layer(status_view)
 			.with_id(ROOT_STACK)
 			.full_height();
@@ -108,7 +117,11 @@ impl UI {
 
 		// Configure a callback (shutdown, for the first test)
 		let controller_tx_clone = grin_ui.controller_tx.clone();
-		grin_ui.cursive.add_global_callback('q', move |_| {
+		grin_ui.cursive.add_global_callback('q', move |c| {
+			let content = StyledString::styled("Shutting down...", Color::Light(BaseColor::Yellow));
+			c.add_layer(CircularFocus::wrap_tab(Dialog::around(TextView::new(
+				content,
+			))));
 			controller_tx_clone
 				.send(ControllerMessage::Shutdown)
 				.unwrap();
@@ -122,6 +135,10 @@ impl UI {
 	pub fn step(&mut self) -> bool {
 		if !self.cursive.is_running() {
 			return false;
+		}
+
+		while let Some(message) = self.logs_rx.try_iter().next() {
+			logs::TUILogsView::update(&mut self.cursive, message);
 		}
 
 		// Process any pending UI messages
@@ -158,13 +175,14 @@ pub enum ControllerMessage {
 
 impl Controller {
 	/// Create a new controller
-	pub fn new() -> Result<Controller, String> {
+	pub fn new(logs_rx: mpsc::Receiver<LogEntry>) -> Result<Controller, String> {
 		let (tx, rx) = mpsc::channel::<ControllerMessage>();
 		Ok(Controller {
-			rx: rx,
-			ui: UI::new(tx),
+			rx,
+			ui: UI::new(tx, logs_rx),
 		})
 	}
+
 	/// Run the controller
 	pub fn run(&mut self, server: Server) {
 		let stat_update_interval = 1;
@@ -173,8 +191,8 @@ impl Controller {
 			while let Some(message) = self.rx.try_iter().next() {
 				match message {
 					ControllerMessage::Shutdown => {
+						warn!("Shutdown in progress, please wait");
 						self.ui.stop();
-						println!("Shutdown in progress, please wait");
 						server.stop();
 						return;
 					}

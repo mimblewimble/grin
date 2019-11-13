@@ -35,6 +35,7 @@ use std::sync::Weak;
 
 // UTXO traversal::
 // GET /v1/txhashset/outputs?start_index=1&max=100
+// GET /v1/txhashset/heightstopmmr?start_height=1&end_height=1000
 //
 // Build a merkle proof for a given pos
 // GET /v1/txhashset/merkleproof?n=1
@@ -68,14 +69,19 @@ impl TxHashSetHandler {
 	}
 
 	// allows traversal of utxo set
-	fn outputs(&self, start_index: u64, mut max: u64) -> Result<OutputListing, Error> {
+	fn outputs(
+		&self,
+		start_index: u64,
+		end_index: Option<u64>,
+		mut max: u64,
+	) -> Result<OutputListing, Error> {
 		//set a limit here
 		if max > 10_000 {
 			max = 10_000;
 		}
 		let chain = w(&self.chain)?;
 		let outputs = chain
-			.unspent_outputs_by_insertion_index(start_index, max)
+			.unspent_outputs_by_pmmr_index(start_index, max, end_index)
 			.context(ErrorKind::NotFound)?;
 		let out = OutputListing {
 			last_retrieved_index: outputs.0,
@@ -85,7 +91,25 @@ impl TxHashSetHandler {
 				.iter()
 				.map(|x| OutputPrintable::from_output(x, chain.clone(), None, true, true))
 				.collect::<Result<Vec<_>, _>>()
-				.context(ErrorKind::Internal("cain error".to_owned()))?,
+				.context(ErrorKind::Internal("chain error".to_owned()))?,
+		};
+		Ok(out)
+	}
+
+	// allows traversal of utxo set bounded within a block range
+	fn block_height_range_to_pmmr_indices(
+		&self,
+		start_block_height: u64,
+		end_block_height: Option<u64>,
+	) -> Result<OutputListing, Error> {
+		let chain = w(&self.chain)?;
+		let range = chain
+			.block_height_range_to_pmmr_indices(start_block_height, end_block_height)
+			.context(ErrorKind::NotFound)?;
+		let out = OutputListing {
+			last_retrieved_index: range.0,
+			highest_index: range.1,
+			outputs: vec![],
 		};
 		Ok(out)
 	}
@@ -121,15 +145,27 @@ impl Handler for TxHashSetHandler {
 		let params = QueryParams::from(req.uri().query());
 		let last_n = parse_param_no_err!(params, "n", 10);
 		let start_index = parse_param_no_err!(params, "start_index", 1);
+		let end_index = match parse_param_no_err!(params, "end_index", 0) {
+			0 => None,
+			i => Some(i),
+		};
 		let max = parse_param_no_err!(params, "max", 100);
 		let id = parse_param_no_err!(params, "id", "".to_owned());
+		let start_height = parse_param_no_err!(params, "start_height", 1);
+		let end_height = match parse_param_no_err!(params, "end_height", 0) {
+			0 => None,
+			h => Some(h),
+		};
 
 		match right_path_element!(req) {
 			"roots" => result_to_response(self.get_roots()),
 			"lastoutputs" => result_to_response(self.get_last_n_output(last_n)),
 			"lastrangeproofs" => result_to_response(self.get_last_n_rangeproof(last_n)),
 			"lastkernels" => result_to_response(self.get_last_n_kernel(last_n)),
-			"outputs" => result_to_response(self.outputs(start_index, max)),
+			"outputs" => result_to_response(self.outputs(start_index, end_index, max)),
+			"heightstopmmr" => result_to_response(
+				self.block_height_range_to_pmmr_indices(start_height, end_height),
+			),
 			"merkleproof" => result_to_response(self.get_merkle_proof_for_output(&id)),
 			_ => response(StatusCode::BAD_REQUEST, ""),
 		}

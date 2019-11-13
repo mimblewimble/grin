@@ -24,7 +24,7 @@ use crate::core::core::Committed;
 use crate::core::core::{
 	Block, BlockHeader, CompactBlock, HeaderVersion, KernelFeatures, OutputFeatures,
 };
-use crate::core::libtx::build::{self, input, output, with_fee};
+use crate::core::libtx::build::{self, input, output};
 use crate::core::libtx::ProofBuilder;
 use crate::core::{global, ser};
 use crate::keychain::{BlindingFactor, ExtKeychain, Keychain};
@@ -58,8 +58,9 @@ fn too_large_block() {
 		parts.push(output(5, pks.pop().unwrap()));
 	}
 
-	parts.append(&mut vec![input(500000, pks.pop().unwrap()), with_fee(2)]);
-	let tx = build::transaction(parts, &keychain, &builder).unwrap();
+	parts.append(&mut vec![input(500000, pks.pop().unwrap())]);
+	let tx =
+		build::transaction(KernelFeatures::Plain { fee: 2 }, parts, &keychain, &builder).unwrap();
 
 	let prev = BlockHeader::default();
 	let key_id = ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
@@ -92,7 +93,8 @@ fn block_with_cut_through() {
 
 	let mut btx1 = tx2i1o();
 	let mut btx2 = build::transaction(
-		vec![input(7, key_id1), output(5, key_id2.clone()), with_fee(2)],
+		KernelFeatures::Plain { fee: 2 },
+		vec![input(7, key_id1), output(5, key_id2.clone())],
 		&keychain,
 		&builder,
 	)
@@ -477,12 +479,8 @@ fn same_amount_outputs_copy_range_proof() {
 	let key_id3 = keychain::ExtKeychain::derive_key_id(1, 3, 0, 0, 0);
 
 	let tx = build::transaction(
-		vec![
-			input(7, key_id1),
-			output(3, key_id2),
-			output(3, key_id3),
-			with_fee(1),
-		],
+		KernelFeatures::Plain { fee: 1 },
+		vec![input(7, key_id1), output(3, key_id2), output(3, key_id3)],
 		&keychain,
 		&builder,
 	)
@@ -527,23 +525,19 @@ fn wrong_amount_range_proof() {
 	let key_id3 = keychain::ExtKeychain::derive_key_id(1, 3, 0, 0, 0);
 
 	let tx1 = build::transaction(
+		KernelFeatures::Plain { fee: 1 },
 		vec![
 			input(7, key_id1.clone()),
 			output(3, key_id2.clone()),
 			output(3, key_id3.clone()),
-			with_fee(1),
 		],
 		&keychain,
 		&builder,
 	)
 	.unwrap();
 	let tx2 = build::transaction(
-		vec![
-			input(7, key_id1),
-			output(2, key_id2),
-			output(4, key_id3),
-			with_fee(1),
-		],
+		KernelFeatures::Plain { fee: 1 },
+		vec![input(7, key_id1), output(2, key_id2), output(4, key_id3)],
 		&keychain,
 		&builder,
 	)

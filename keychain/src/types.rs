@@ -40,7 +40,7 @@ use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
 // Size of an identifier in bytes
 pub const IDENTIFIER_SIZE: usize = 17;
 
-#[derive(PartialEq, Eq, Clone, Debug, Serialize, Deserialize)]
+#[derive(PartialEq, Eq, Clone, Debug)]
 pub enum Error {
 	Secp(secp::Error),
 	KeyDerivation(extkey_bip32::Error),
@@ -220,8 +220,8 @@ impl AsRef<[u8]> for Identifier {
 
 impl ::std::fmt::Debug for Identifier {
 	fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
-		r#try!(write!(f, "{}(", stringify!(Identifier)));
-		r#try!(write!(f, "{}", self.to_hex()));
+		write!(f, "{}(", stringify!(Identifier))?;
+		write!(f, "{}", self.to_hex())?;
 		write!(f, ")")
 	}
 }
