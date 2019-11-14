@@ -108,7 +108,7 @@ impl TUIStatusListener for TUIStatusView {
 				)
 				.child(
 					LinearLayout::new(Orientation::Horizontal)
-						.child(TextView::new("Transaction Pool Size:         "))
+						.child(TextView::new("Transaction Pool Size:        "))
 						.child(TextView::new("0").with_id("tx_pool_size"))
 						.child(TextView::new(" ("))
 						.child(TextView::new("0").with_id("tx_pool_kernels"))
