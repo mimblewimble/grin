@@ -85,8 +85,12 @@ pub struct ChainStats {
 pub struct TxStats {
 	/// Number of transactions in the transaction pool
 	pub tx_pool_size: usize,
+	/// Number of transaction kernels in the transaction pool
+	pub tx_pool_kernels: usize,
 	/// Number of transactions in the stem pool
 	pub stem_pool_size: usize,
+	/// Number of transaction kernels in the stem pool
+	pub stem_pool_kernels: usize,
 }
 /// Struct to return relevant information about stratum workers
 #[derive(Clone, Serialize, Debug)]

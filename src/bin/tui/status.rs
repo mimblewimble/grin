@@ -109,12 +109,18 @@ impl TUIStatusListener for TUIStatusView {
 				.child(
 					LinearLayout::new(Orientation::Horizontal)
 						.child(TextView::new("Transaction Pool Size:        "))
-						.child(TextView::new("  ").with_id("tx_pool_size")),
+						.child(TextView::new("0").with_id("tx_pool_size"))
+						.child(TextView::new(" ("))
+						.child(TextView::new("0").with_id("tx_pool_kernels"))
+						.child(TextView::new(")")),
 				)
 				.child(
 					LinearLayout::new(Orientation::Horizontal)
 						.child(TextView::new("Stem Pool Size:               "))
-						.child(TextView::new("  ").with_id("stem_pool_size")),
+						.child(TextView::new("0").with_id("stem_pool_size"))
+						.child(TextView::new(" ("))
+						.child(TextView::new("0").with_id("stem_pool_kernels"))
+						.child(TextView::new(")")),
 				)
 				.child(
 					LinearLayout::new(Orientation::Horizontal).child(TextView::new(
@@ -306,6 +312,12 @@ impl TUIStatusListener for TUIStatusView {
 		});
 		c.call_on_id("stem_pool_size", |t: &mut TextView| {
 			t.set_content(stats.tx_stats.stem_pool_size.to_string());
+		});
+		c.call_on_id("tx_pool_kernels", |t: &mut TextView| {
+			t.set_content(stats.tx_stats.tx_pool_kernels.to_string());
+		});
+		c.call_on_id("stem_pool_kernels", |t: &mut TextView| {
+			t.set_content(stats.tx_stats.stem_pool_kernels.to_string());
 		});
 		/*c.call_on_id("basic_mining_config_status", |t: &mut TextView| {
 			t.set_content(basic_mining_config_status);
