@@ -1332,10 +1332,9 @@ impl<'a> Extension<'a> {
 					"txhashset: verify_rangeproofs: verified {} rangeproofs",
 					proof_count,
 				);
-			}
-
-			if proof_count % 1_000 == 0 {
-				status.on_validation_rproofs(proof_count, total_rproofs);
+				if proof_count % 1_000 == 0 {
+					status.on_validation_rproofs(proof_count, total_rproofs);
+				}
 			}
 		}
 
