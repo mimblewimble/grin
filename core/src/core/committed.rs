@@ -14,13 +14,12 @@
 
 //! The Committed trait and associated errors.
 
-use crate::keychain;
-use crate::keychain::BlindingFactor;
-
-use crate::util::secp::key::SecretKey;
-use crate::util::secp::pedersen::Commitment;
-use crate::util::{secp, secp_static, static_secp_instance};
 use failure::Fail;
+use keychain;
+use keychain::BlindingFactor;
+use util::secp::key::SecretKey;
+use util::secp::pedersen::Commitment;
+use util::{secp, secp_static, static_secp_instance};
 
 /// Errors from summing and verifying kernel excesses via committed trait.
 #[derive(Debug, Clone, PartialEq, Eq, Fail)]

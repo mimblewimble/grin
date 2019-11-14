@@ -19,9 +19,8 @@ pub mod common;
 use self::core::core::{Output, OutputFeatures};
 use self::core::libtx::proof;
 use self::core::ser;
-use self::keychain::{ExtKeychain, Keychain};
 use grin_core as core;
-use grin_keychain as keychain;
+use keychain::{ExtKeychain, Keychain};
 
 #[test]
 fn test_output_ser_deser() {

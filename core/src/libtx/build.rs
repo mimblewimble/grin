@@ -32,10 +32,9 @@
 //! )
 
 use crate::core::{Input, KernelFeatures, Output, OutputFeatures, Transaction, TxKernel};
-use crate::keychain::{BlindSum, BlindingFactor, Identifier, Keychain};
 use crate::libtx::proof::{self, ProofBuild};
 use crate::libtx::{aggsig, Error};
-use grin_keychain::SwitchCommitmentType;
+use keychain::{BlindSum, BlindingFactor, Identifier, Keychain, SwitchCommitmentType};
 
 /// Context information available to transaction combinators.
 pub struct Context<'a, K, B>
@@ -247,14 +246,14 @@ where
 // Just a simple test, most exhaustive tests in the core.
 #[cfg(test)]
 mod test {
-	use crate::util::RwLock;
 	use std::sync::Arc;
+	use util::RwLock;
 
 	use super::*;
 	use crate::core::transaction::Weighting;
 	use crate::core::verifier_cache::{LruVerifierCache, VerifierCache};
-	use crate::keychain::{ExtKeychain, ExtKeychainPath};
 	use crate::libtx::ProofBuilder;
+	use keychain::{ExtKeychain, ExtKeychainPath};
 
 	fn verifier_cache() -> Arc<RwLock<dyn VerifierCache>> {
 		Arc::new(RwLock::new(LruVerifierCache::new()))

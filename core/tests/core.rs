@@ -26,14 +26,12 @@ use self::core::core::{
 use self::core::libtx::build::{self, initial_tx, input, output, with_excess};
 use self::core::libtx::ProofBuilder;
 use self::core::ser;
-use self::keychain::{BlindingFactor, ExtKeychain, Keychain};
-use self::util::static_secp_instance;
-use self::util::RwLock;
 use crate::common::{new_block, tx1i1o, tx1i2o, tx2i1o};
 use grin_core as core;
-use grin_keychain as keychain;
-use grin_util as util;
+use keychain::{BlindingFactor, ExtKeychain, Keychain};
 use std::sync::Arc;
+use util::static_secp_instance;
+use util::RwLock;
 
 #[test]
 fn simple_tx_ser() {
