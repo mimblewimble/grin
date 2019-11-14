@@ -8,17 +8,17 @@
 
 # Grin
 
-Grin is an in-progress implementation of the MimbleWimble protocol. Many characteristics are still undefined but the following constitutes a first set of choices:
+Grin is an in-progress implementation of the Mimblewimble protocol. Many characteristics are still undefined but the following constitutes a first set of choices:
 
   * Clean and minimal implementation, and aiming to stay as such.
-  * Follows the MimbleWimble protocol, which provides great anonymity and scaling characteristics.
+  * Follows the Mimblewimble protocol, which provides great anonymity and scaling characteristics.
   * Cuckoo Cycle proof of work in two variants named Cuckaroo (ASIC-resistant) and Cuckatoo (ASIC-targeted).
   * Relatively fast block time: one minute.
   * Fixed block reward over time with a decreasing dilution.
   * Transaction fees are based on the number of Outputs created/destroyed and total transaction size.
   * Smooth curve for difficulty adjustments.
 
-To learn more, read our [introduction to MimbleWimble and Grin](doc/intro.md).
+To learn more, read our [introduction to Mimblewimble and Grin](doc/intro.md).
 
 ## Status
 
@@ -31,7 +31,7 @@ To get involved, read our [contributing docs](CONTRIBUTING.md).
 Find us:
 
 * Chat: [Gitter](https://gitter.im/grin_community/Lobby).
-* Mailing list: join the [~MimbleWimble team](https://launchpad.net/~mimblewimble) and subscribe on Launchpad.
+* Mailing list: join the [~Mimblewimble team](https://launchpad.net/~mimblewimble) and subscribe on Launchpad.
 * Twitter for the Grin council: [@grincouncil](https://twitter.com/grincouncil)
 
 ## Getting Started
@@ -48,7 +48,7 @@ We believe in pull requests, data and scientific research. We do not believe in 
 
 ## Credits
 
-Tom Elvis Jedusor for the first formulation of MimbleWimble.
+Tom Elvis Jedusor for the first formulation of Mimblewimble.
 
 Andrew Poelstra for his related work and improvements.
 

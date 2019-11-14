@@ -1,4 +1,4 @@
-# Grin/MimbleWimble for Bitcoiners
+# Grin/Mimblewimble for Bitcoiners
 
 *Read this in other languages:[Korean](grin4bitcoiners_KR.md)
 
@@ -16,7 +16,7 @@ Moreover, there are no more transactions in a block. A Grin block looks just lik
 
 ## Scalability
 
-As explained in the previous section, thanks to the MimbleWimble transaction and block format we can merge transactions when an output is directly spent by the input of another. It's as if when Alice gives money to Bob, and then Bob gives it all to Carol, Bob was never involved and his transaction is actually never even seen on the blockchain.
+As explained in the previous section, thanks to the Mimblewimble transaction and block format we can merge transactions when an output is directly spent by the input of another. It's as if when Alice gives money to Bob, and then Bob gives it all to Carol, Bob was never involved and his transaction is actually never even seen on the blockchain.
 
 Pushing that further, between blocks, most outputs end up being spent sooner or later by another input. So *all spent outputs can be safely removed*. And the whole blockchain can be stored, downloaded and fully verified in just a few gigabytes or less (assuming a number of transactions similar to bitcoin).
 
@@ -24,7 +24,7 @@ This means that the Grin blockchain scales with the number of users (unspent out
 
 ## Scripting
 
-Maybe you've heard that MimbleWimble doesn't support scripts. And in some way, that's true. But thanks to cryptographic trickery, many contracts that in Bitcoin would require a script can be achieved with Grin using properties of Elliptic Curve Cryptography. So far, we know how to do:
+Maybe you've heard that Mimblewimble doesn't support scripts. And in some way, that's true. But thanks to cryptographic trickery, many contracts that in Bitcoin would require a script can be achieved with Grin using properties of Elliptic Curve Cryptography. So far, we know how to do:
 
 * Multi-signature transactions.
 * Atomic swaps.
@@ -43,7 +43,7 @@ Nope, no address. All outputs in Grin are unique and have no common data with an
 
 ### If transaction information gets removed, can I just cheat and create money?
 
-No, and this is where MimbleWimble and Grin shine. Confidential transactions are a form of [homomorphic encryption](https://en.wikipedia.org/wiki/Homomorphic_encryption). Without revealing any amount, Grin can verify that the sum of all transaction inputs equal the sum of transaction outputs, plus the fee. Going even further, comparing the sum of all money created by mining with the total sum of money that's being held, Grin nodes can check the correctness of the total money supply.
+No, and this is where Mimblewimble and Grin shine. Confidential transactions are a form of [homomorphic encryption](https://en.wikipedia.org/wiki/Homomorphic_encryption). Without revealing any amount, Grin can verify that the sum of all transaction inputs equal the sum of transaction outputs, plus the fee. Going even further, comparing the sum of all money created by mining with the total sum of money that's being held, Grin nodes can check the correctness of the total money supply.
 
 ### If I listen to transaction relay, can't I just figure out who they belong to before being cut-through?
 

@@ -451,7 +451,7 @@ impl Readable for UntrustedBlockHeader {
 	}
 }
 
-/// A block as expressed in the MimbleWimble protocol. The reward is
+/// A block as expressed in the Mimblewimble protocol. The reward is
 /// non-explicit, assumed to be deducible from block height (similar to
 /// bitcoin's schedule) and expressed as a global transaction fee (added v.H),
 /// additive to the total of fees ever collected.

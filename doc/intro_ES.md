@@ -1,12 +1,12 @@
-# Introducción a MimbleWimble y Grin
+# Introducción a Mimblewimble y Grin
 
 *Lea esto en otros idiomas: [English](intro.md), [简体中文](intro_ZH-CN.md), [Español](intro_ES.md), [Nederlands](intro_NL.md), [Русский](intro_RU.md), [日本語](intro_JP.md), [Deutsch](intro_DE.md), [Portuguese](intro_PT-BR.md), [Korean](intro_KR.md).*
 
-MimbleWimble es un formato y un protocolo de cadena de bloques que proporciona una escalabilidad, privacidad y funcionalidad 
+Mimblewimble es un formato y un protocolo de cadena de bloques que proporciona una escalabilidad, privacidad y funcionalidad 
 extremadamente buenas al basarse en fuertes algoritmos criptográficos. Aborda los vacíos existentes en casi todas las 
 implementaciones actuales de cadenas de bloques.
 
-Grin es un proyecto de software de código abierto que implementa una cadena de bloques MimbleWimble y rellena los espacios 
+Grin es un proyecto de software de código abierto que implementa una cadena de bloques Mimblewimble y rellena los espacios 
 necesarios para una implementación completa de la cadena de bloques y moneda criptográfica.
 
 El objetivo principal y las características del proyecto Grin son:
@@ -15,7 +15,7 @@ El objetivo principal y las características del proyecto Grin son:
   selectiva cuando sea necesario.
 * Se escala principalmente con el número de usuarios y mínimamente con el número de transacciones (`<100 bytes kernel`), lo 
   que resulta en un gran ahorro de espacio en comparación con otras cadenas de bloques.
-* Criptografía robusta y probada. MimbleWimble sólo se basa en la criptografía de curvas elípticas que ha sido probada y 
+* Criptografía robusta y probada. Mimblewimble sólo se basa en la criptografía de curvas elípticas que ha sido probada y 
   comprobada durante décadas.
 * Simplicidad de diseño que facilita la auditoría y el mantenimiento a lo largo del tiempo.
 * Dirigido por la comunidad, utilizando un algoritmo de minería resistente a la ASICs (Cuckoo Cycle) que fomenta la 
@@ -24,19 +24,19 @@ El objetivo principal y las características del proyecto Grin son:
 ## Tongue Tying para todos
 
 Este documento está dirigido a lectores con un buen conocimiento de cadenas de bloques y de la criptografía básica. Con 
-esto en mente, tratamos de explicar el desarrollo técnico de MimbleWimble y cómo se aplica en Grin. Esperamos que este 
+esto en mente, tratamos de explicar el desarrollo técnico de Mimblewimble y cómo se aplica en Grin. Esperamos que este 
 documento sea comprensible para la mayoría de los lectores con visión técnica. Nuestro objetivo es animarles a interesarse en 
 Grin y contribuir de cualquier manera posible.
 
 Para lograr este objetivo, presentaremos los principales conceptos necesarios para una buena comprensión de Grin como 
-implementación de MimbleWimble. Comenzaremos con una breve descripción de algunas propiedades relevantes de la Criptografía 
+implementación de Mimblewimble. Comenzaremos con una breve descripción de algunas propiedades relevantes de la Criptografía 
 de Curva Elíptica (ECC) para sentar las bases sobre las que se basa Grin y luego describir todos los elementos clave de las 
-transacciones y bloques de una cadena de bloques MimbleWimble.
+transacciones y bloques de una cadena de bloques Mimblewimble.
 
 ### Pequeños Bits de Curvas Elípticas
 
 Comenzamos con una breve introducción a la Criptografía de Curva Elíptica, revisando sólo las propiedades necesarias para 
-entender cómo funciona MimbleWimbleWimble y sin profundizar demasiado en las complejidades de ECC. Para los lectores que 
+entender cómo funciona MimblewimbleWimble y sin profundizar demasiado en las complejidades de ECC. Para los lectores que 
 deseen profundizar en estos supuestos, existen otras opciones para [aprender más](http://andrea.corbellini.name/2015/05/17/elliptic-curve-cryptography-a-gentle-introduction/).
 
 Una curva elíptica con el objetivo de criptografía es simplemente un gran conjunto de puntos que llamaremos _C_. Estos puntos 
@@ -54,14 +54,14 @@ la multiplicación es trivial, la "división" por puntos de curva es extremadame
 La fórmula anterior `(k+j)*H = k*H + j*H`, con _k_ y _j_ ambas claves privadas, demuestra que una clave pública obtenida de 
 la adición de dos claves privadas (`(k+j)*H`) es idéntica a la adición de las claves públicas para cada una de esas dos 
 claves privadas (`k*H + j*H`). En la cadena de bloques Bitcoin, las carteras jerárquicas deterministas se basan en gran 
-medida en este principio. MimbleWimble y la implementación de Grin también lo hacen.
+medida en este principio. Mimblewimble y la implementación de Grin también lo hacen.
 
-### Transacciones con MimbleWimble
+### Transacciones con Mimblewimble
 
-La estructura de las transacciones demuestra un principio crucial de MimbleWimble:
+La estructura de las transacciones demuestra un principio crucial de Mimblewimble:
 fuertes garantías de privacidad y confidencialidad.
 
-La validación de las transacciones de MimbleWimbleWimble se basa en dos propiedades básicas:
+La validación de las transacciones de MimblewimbleWimble se basa en dos propiedades básicas:
 
 * **Verificación de importes nulos.** La suma de las salidas menos las entradas siempre es igual a cero, lo que demuestra que 
   la transacción no creó nuevos fondos, _sin revelar los importes reales_.
@@ -118,7 +118,7 @@ Lo cual, requiere como consecuencia que:
 
     ri1 + ri2 = ro3
 
-Este es el primer pilar de MimbleWimble: la aritmética necesaria para validar una transacción se puede hacer sin conocer 
+Este es el primer pilar de Mimblewimble: la aritmética necesaria para validar una transacción se puede hacer sin conocer 
 ninguno de los valores.
 
 Como nota final, esta idea se deriva en realidad de Greg Maxwell's
@@ -128,7 +128,7 @@ que a su vez se deriva de una propuesta de Adam Back para valores homomórficos 
 #### Propiedad
 
 En la sección anterior introducimos una clave privada como factor de ocultación para cubrir los valores de la transacción. La 
-segunda idea de MimbleWimble es que esta clave privada puede ser utilizada para probar la propiedad del valor.
+segunda idea de Mimblewimble es que esta clave privada puede ser utilizada para probar la propiedad del valor.
 
 Alice te envía 3 monedas y para ocultar esa cantidad, elegiste 28 como tu factor de ocultación (nota que en la práctica, 
 siendo el factor de ocultación una llave privada, es un número extremadamente grande). En algún lugar de la cadena de 
@@ -177,7 +177,7 @@ denomina  _transacción de kernel_ y es comprobada por todos los validadores.
 
 #### Algunos puntos más precisos
 
-Esta sección explica con más detalle la creación de transacciones discutiendo cómo se introduce el cambio y el requisito de pruebas de rango para que se demuestre que todos los valores no son negativos. Ninguno de los dos es absolutamente necesario para entender MimbleWimbleWimble y Grin, así que si tienes prisa, no dudes en ir directamente a
+Esta sección explica con más detalle la creación de transacciones discutiendo cómo se introduce el cambio y el requisito de pruebas de rango para que se demuestre que todos los valores no son negativos. Ninguno de los dos es absolutamente necesario para entender MimblewimbleWimble y Grin, así que si tienes prisa, no dudes en ir directamente a
 [Poniendo todo junto](https://github.com/wimel/grin/blob/master/doc/intro.md#putting-it-all-together).
 
 ##### Cambio
@@ -203,7 +203,7 @@ Por ejemplo, se podría crear una transacción con una entrada de 2 y salidas de
 equilibrada, siguiendo la definición de las secciones anteriores. Esto no puede ser fácilmente detectado porque incluso si 
 _x_ es negativo, el punto correspondiente `x.H` en la curva se ve como cualquier otro.
 
-Para resolver este problema, MimbleWimble utiliza otro concepto criptográfico (también procedente de Transacciones 
+Para resolver este problema, Mimblewimble utiliza otro concepto criptográfico (también procedente de Transacciones 
 Confidenciales) llamado pruebas de rango: una prueba de que un número está dentro de un rango dado, sin revelar el número. No 
 daremos más detalles sobre la prueba de rango, pero sólo necesitas saber que para cualquier `r.G + v.H` podemos construir una 
 prueba que demuestre que _v_ es mayor que cero y no se sobrecarga.
@@ -214,7 +214,7 @@ descripción más detallada de las pruebas de rango, se detallan en la sección 
 
 #### Poniendo todo junto
 
-Una transacción MimbleWimble incluye lo siguiente:
+Una transacción Mimblewimble incluye lo siguiente:
 
 * Un conjunto de entradas, que hacen referencia y consumen un conjunto de salidas anteriores.
 * Un conjunto de nuevos resultados que incluyen:
@@ -227,11 +227,11 @@ Una transacción MimbleWimble incluye lo siguiente:
 
 ### Bloques y estado de la cadena
 
-Hemos explicado anteriormente cómo las transacciones de MimbleWimble pueden proporcionar fuertes garantías de anonimato a la 
+Hemos explicado anteriormente cómo las transacciones de Mimblewimble pueden proporcionar fuertes garantías de anonimato a la 
 vez que mantienen las propiedades requeridas para una cadena de bloques válida, es decir, una transacción no crea dinero y la 
 prueba de la propiedad se establece a través de claves privadas.
 
-El formato de bloques MimbleWimble se basa en esto introduciendo un concepto adicional: _cut-through_. Con esta incorporación, una cadena MimbleWimble gana:
+El formato de bloques Mimblewimble se basa en esto introduciendo un concepto adicional: _cut-through_. Con esta incorporación, una cadena Mimblewimble gana:
 
 * Extremadamente buena escalabilidad, ya que la gran mayoría de los datos de las transacciones pueden ser eliminados con el 
   tiempo, sin comprometer la seguridad.
@@ -264,12 +264,12 @@ compromiso resultante de Pedersen con la suma de los excesos del núcleo. -
 
     sum(outputs) - sum(inputs) = sum(kernel_excess)
 
-Simplificando un poco, (de nuevo ignorando las tarifas de transacción) podemos decir que los bloques MimbleWimble pueden ser 
-tratados exactamente como transacciones MimbleWimble.
+Simplificando un poco, (de nuevo ignorando las tarifas de transacción) podemos decir que los bloques Mimblewimble pueden ser 
+tratados exactamente como transacciones Mimblewimble.
 
 #### Kernel Offsets
 
-Hay un problema leve con los bloques y las transacciones de MimbleWimble como se describe anteriormente. Es posible (y en 
+Hay un problema leve con los bloques y las transacciones de Mimblewimble como se describe anteriormente. Es posible (y en 
 algunos casos trivial) reconstruir las transacciones constituyentes en un bloque. Esto es claramente malo para la privacidad. 
 Este es el problema del "subconjunto" - dado un conjunto de entradas, salidas y núcleos de transacción, un subconjunto de 
 estos se recombinará para reconstruir una transacción válida.
@@ -354,7 +354,7 @@ Un bloque se contruye simplemente a partir de:
   * Las firmas creadas utilizando el exceso de valor.
   * La tasa minera.
 
-Con esta estructura, un bloque MimbleWimble ofrece unas garantías de privacidad muy buenas:
+Con esta estructura, un bloque Mimblewimble ofrece unas garantías de privacidad muy buenas:
 
 * Las transacciones intermedias (cut-through) estarán representadas únicamente por sus núcleos de transacciones.
 * Todas las salidas se ven iguales: sólo números muy grandes que son imposibles de diferenciar entre sí. Si uno quisiera 
@@ -381,9 +381,9 @@ La primera información se puede deducir simplemente usando la altura del bloque
 las salidas no utilizadas como los núcleos de transacción son extremadamente compactos. Esto tiene dos consecuencias 
 importantes:
 
-* El estado que un nodo dado en una cadena de bloques MimbleWimble necesita mantener es muy pequeño (del orden de unos pocos 
+* El estado que un nodo dado en una cadena de bloques Mimblewimble necesita mantener es muy pequeño (del orden de unos pocos 
   gigabytes para una cadena del tamaño de Bitcoin, y potencialmente configurable a unos pocos centenares de megabytes).
-* Cuando un nuevo nodo se une a una red formando una cadena MimbleWimble, la cantidad de información que necesita ser 
+* Cuando un nuevo nodo se une a una red formando una cadena Mimblewimble, la cantidad de información que necesita ser 
   transferida es también muy pequeña..
 
 Además, el conjunto completo de resultados no utilizados no puede ser alterado, ni siquiera añadiendo o quitando un 
@@ -392,7 +392,7 @@ suma de la ocultación, factores que influyen en los resultados.
 
 ### Conclusión
 
-En este documento tratamos los principios básicos que subyacen a una cadena de bloques MimbleWimble. Utilizando las 
+En este documento tratamos los principios básicos que subyacen a una cadena de bloques Mimblewimble. Utilizando las 
 propiedades de suma de la Criptografía de Curva Elíptica, somos capaces de construir transacciones que son completamente 
 opacas pero que todavía pueden ser validadas adecuadamente. Y al generalizar esas propiedades a bloques, podemos eliminar una 
 gran cantidad de datos de la cadena de bloques, lo que permite una gran escalabilidad y una sincronización rápida de nuevos 

@@ -2,7 +2,7 @@
 
 *Read this in other languages:[Korean](merkle_KR.md)*
 
-MimbleWimble is designed for users to verify the state of the system given
+Mimblewimble is designed for users to verify the state of the system given
 only pruned data. To achieve this goal, all transaction data is committed
 to the blockchain by means of Merkle trees which should support efficient
 updates and serialization even when pruned.
@@ -12,7 +12,7 @@ proofs) have the ability to be summed in some way, so it makes sense to
 treat Merkle sum trees as the default option, and address the sums here.
 
 A design goal of Grin is that all structures be as easy to implement and
-as simple as possible. MimbleWimble introduces a lot of new cryptography
+as simple as possible. Mimblewimble introduces a lot of new cryptography
 so it should be made as easy to understand as possible. Its validation rules
 are simple to specify (no scripts) and Grin is written in a language with
 very explicit semantics, so simplicity is also good to achieve well-understood

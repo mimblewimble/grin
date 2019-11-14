@@ -1,12 +1,12 @@
-# Introduktion till MimbleWimble och Grin
+# Introduktion till Mimblewimble och Grin
 
 *Läs detta på andra språk: [English](intro.md), [简体中文](intro_ZH-CN.md), [Español](intro_ES.md), [Nederlands](intro_NL.md), [Русский](intro_RU.md), [日本語](intro_JP.md), [Deutsch](intro_DE.md), [Portuguese](intro_PT-BR.md), [Korean](intro_KR.md).*
 
-MimbleWimble är ett blockkedjeformat och protokoll som erbjuder extremt bra
+Mimblewimble är ett blockkedjeformat och protokoll som erbjuder extremt bra
 skalbarhet, integritet, och fungibilitet genom starka kryptografiska primitiver.
 Den angriper brister som existerar i nästan alla nuvarande blockkedjeimplementationer.
 
-Grin är ett mjukvaruprojekt med öppen källkod som implementerar en MimbleWimble-blockkedja
+Grin är ett mjukvaruprojekt med öppen källkod som implementerar en Mimblewimble-blockkedja
 och fyller igen luckorna för att skapa en fullständig blockkedja och kryptovaluta.
 
 Grin-projektets huvudsakliga mål och kännetecken är:
@@ -15,7 +15,7 @@ Grin-projektets huvudsakliga mål och kännetecken är:
 förhindra förmågan att selektivt uppdaga information efter behov.
 * Växer mestadels med antal användare och minimalt med antal transaktioner (< 100 bytes transaktionskärna), 
 vilket resulterar i stora utrymmesbesparingar i jämförelse med andra blockkedjor.
-* Stark och bevisad kryptografi. MimbleWimble förlitar sig endast på kryptografi med 
+* Stark och bevisad kryptografi. Mimblewimble förlitar sig endast på kryptografi med 
 elliptiska kurvor (ECC) vilket har beprövats i decennier.
 * Simplistik design som gör det enkelt att granska och underhålla på lång sikt.
 * Gemenskapsdriven, uppmuntrar mining och decentralisering.
@@ -23,20 +23,20 @@ elliptiska kurvor (ECC) vilket har beprövats i decennier.
 ## Tungknytande för alla
 
 Detta dokument är riktat mot läsare med en bra förståelse för blockkedjor och grundläggande kryptografi.
-Med det i åtanke försöker vi förklara den tekniska uppbyggnaden av MimbleWimble och hur det appliceras i Grin.
+Med det i åtanke försöker vi förklara den tekniska uppbyggnaden av Mimblewimble och hur det appliceras i Grin.
 Vi hoppas att detta dokument är föreståeligt för de flesta tekniskt inriktade läsare. Vårt mål är att
 uppmuntra er att bli intresserade i Grin och bidra på något möjligt sätt.
 
 För att uppnå detta mål kommer vi att introducera de huvudsakliga begrepp som krävs för en
-bra förståelse för Grin som en  MimbleWimble-implementation. Vi kommer att börja med en kort
+bra förståelse för Grin som en  Mimblewimble-implementation. Vi kommer att börja med en kort
 beskrivning av några av elliptiska kurvornas relevanta egenskaper för att lägga grunden som Grin
-är baserat på och därefter beskriva alla viktiga element i en MimbleWimble-blockkedjas
+är baserat på och därefter beskriva alla viktiga element i en Mimblewimble-blockkedjas
 transaktioner och block.
 
 ### Småbitar av elliptiska kurvor
 
 Vi börjar med en kort undervisning i kryptografi med elliptiska kurvor (ECC) där vi endast
-går igenom de nödvändiga egenskaper för att förstå hur MimbleWimble fungerar utan att
+går igenom de nödvändiga egenskaper för att förstå hur Mimblewimble fungerar utan att
 gå djupt in på dess krångligheter. För läsare som vill fördjupa sig i detta finns andra
 möjligheter att [lära sig mer](http://andrea.corbellini.name/2015/05/17/elliptic-curve-cryptography-a-gentle-introduction/).
 
@@ -55,14 +55,14 @@ multiplikation med kurvpunkter är trivialt är "division" extremt svårt).
 Den föregående formeln `(k+j)*H = k*H + j*H`, med _k_ och _j_ båda som privata nycklar, demonstrerar att en publik nyckel
 erhållen av att ha adderat de två privata nycklarna är identisk med de två privata nycklarnas respektive
 publika nycklar adderade (`k*H + j*H`). I Bitcoin-blockkedjan använder hierarkiska deterministiska plånböcker (HD wallets)
-sig flitigt av denna princip. MimbleWimble och Grin-implementationer gör det också.
+sig flitigt av denna princip. Mimblewimble och Grin-implementationer gör det också.
 
-### Transaktioner med MimbleWimble
+### Transaktioner med Mimblewimble
 
-Transaktionernas struktur demonstrerar en av MimbleWimbles kritiska grundsatser:
+Transaktionernas struktur demonstrerar en av Mimblewimbles kritiska grundsatser:
 starka garantier av integritet och konfidentialitet.
 
-Valideringen av MimbleWimble-transaktioner använder sig av två grundläggande egenskaper:
+Valideringen av Mimblewimble-transaktioner använder sig av två grundläggande egenskaper:
 
 * **Kontroll av nollsummor.** Summan av outputs minus inputs är alltid lika med noll, vilket bevisar—utan att 
 avslöja beloppen—att transaktionen inte skapade nya pengar.
@@ -120,7 +120,7 @@ Vilket som följd kräver att:
 
     ri1 + ri2 = ro3
     
-Detta är MimbleWimbles första pelare: de beräkningar som är nödvändiga för att validera en transaktion
+Detta är Mimblewimbles första pelare: de beräkningar som är nödvändiga för att validera en transaktion
 kan göras utan att veta några belopp.
 
 Denna idé härstammar faktiskt från Greg Maxwells
@@ -130,7 +130,7 @@ som i sin tur härstammar från ett förslag av Adam Back för homomorfiska belo
 #### Ägande
 
 I föregående stycke introducerade vi en privat nyckel som en förblindningsfaktor för att dölja transaktionens belopp.
-MimbleWimbles andra insikt är att denna privata nyckel kan användas för att bevisa ägande av beloppet.
+Mimblewimbles andra insikt är att denna privata nyckel kan användas för att bevisa ägande av beloppet.
 
 Alice skickar 3 mynt till dig och för att dölja beloppet väljer du 28 som din förblindningsfaktor (notera att förblindningsfaktorn i praktiken
 är ett extremt stort tal). Någonstans i blockkedjan dyker följande output upp och ska endast kunna spenderas av dig:
@@ -178,7 +178,7 @@ för _transaktionskärna_ och kontrolleras av alla validerare.
 #### Några finare punkter
 
 Detta stycke detaljerar byggandet av transaktioner genom att diskutera hur växel införs och kravet för "range proofs"
-så att alla belopp är bevisade att vara icke-negativa. Inget av detta är absolut nödvändigt för att förstå MimbleWimble
+så att alla belopp är bevisade att vara icke-negativa. Inget av detta är absolut nödvändigt för att förstå Mimblewimble
 och Grin, så om du har bråttom känn dig fri att hoppa direkt till [Sammanställningen av allt](#sammanställningen-av-allt).
 
 #### Växel
@@ -204,7 +204,7 @@ Till exempel skulle man kunna skapa en transaktion med input-belopp 2 och output
 ha en balanserad transaktion. Detta kan inte upptäcklas enkelt eftersom punkten `x*H` ser ut som vilken annan punkt
 som helst på kurvan även om _x_ är negativt.
 
-För att lösa detta problem använder MimbleWimble sig av ett kryptografiskt koncept som kallas "range proofs" (som också härstammar
+För att lösa detta problem använder Mimblewimble sig av ett kryptografiskt koncept som kallas "range proofs" (som också härstammar
 från Confidential Transactions): ett bevis på att ett tal befinner sig inom ett visst intervall utan att avsölja talet.
 Vi kommer inte att förklara range proofs; du behöver endast veta att vi för varje `r*G + v*H` kan skapa ett bevis som visar
 att _v_ är större än noll och inte orsakar overflow.
@@ -223,7 +223,7 @@ Denna output (`(113 + 99)*G + 2*H`) kräver att både talen 113 och 99 är känd
 
 #### Sammanställningen av allt
 
-En MimbleWimble-transaktion inkluderar följande:
+En Mimblewimble-transaktion inkluderar följande:
 
 * En mängd inputs som refererar till och spenderar en mängd föregående outputs.
 * En mängd nya outputs som inkluderar:
@@ -236,12 +236,12 @@ avgiften minus inputs).
 
 ### Block och kedjetillstånd
 
-Vi förklarade ovan hur MimbleWimble-transaktioner kan erbjuda starka anonymitetsgarantier samtidigt som de
+Vi förklarade ovan hur Mimblewimble-transaktioner kan erbjuda starka anonymitetsgarantier samtidigt som de
 upprätthåller egenskaperna för en giltig blockkedja, d v s att en transaktion inte skapar pengar och att ägandebevis
 fastställs med privata nycklar.
 
-MimbleWimble-blockformatet bygger på detta genom att introducera ett till koncept: _cut-through_. Med detta
-får en MimbleWimble-kedja: 
+Mimblewimble-blockformatet bygger på detta genom att introducera ett till koncept: _cut-through_. Med detta
+får en Mimblewimble-kedja: 
 
 * Extremt bra skalbarhet då den stora majoriteten av transaktionsinformation kan elimineras på lång sikt utan att
 kompromissa säkerhet.
@@ -273,12 +273,12 @@ transaktionskärnor. Vi kan summera alla outputs, subtrahera det med summan av a
     (summan av outputs) - (summan av inputs) = (summan av kärnöverskott)
     
     
-Något förenklat (återigen utan hänsyn till transaktionsavgifter) kan vi säga att MimbleWimble-block kan betraktas precis som
-MimbleWimble-transaktioner.
+Något förenklat (återigen utan hänsyn till transaktionsavgifter) kan vi säga att Mimblewimble-block kan betraktas precis som
+Mimblewimble-transaktioner.
 
 ##### Kärn-offset
 
-Det finns ett subtilt problem med MimbleWimble-block och transaktioner som beskrivet ovan. Det är möjligt (och i vissa fall
+Det finns ett subtilt problem med Mimblewimble-block och transaktioner som beskrivet ovan. Det är möjligt (och i vissa fall
 trivialt) att rekonstruera de konstituerande transaktionerna i ett block. Detta är naturligtvis dåligt för integriteten.
 Detta kallas för "delmängdsproblemet": givet en mängd inputs, outputs, och transaktionskärnor kommer någon delmängd av detta
 kunna kombineras för att rekonstruera en giltig transaktion.
@@ -351,7 +351,7 @@ Ett block består av:
   * Signaturen genererad av överskottsbeloppet.
   * Mining-avgiften
   
-Med denna struktur erbjuder ett MimbleWimble-block extremt bra integritetsgarantier:
+Med denna struktur erbjuder ett Mimblewimble-block extremt bra integritetsgarantier:
 
 * Mellanliggande (genomskurna) transaktioner är endast representerade av sina transaktionskärnor.
 * Alla outputs ser likadana ut: väldigt stora tal som inte går att skilja åt på något meningsfullt sätt.
@@ -376,14 +376,14 @@ Det första kan härledas genom att endast observera blockhöjden.
 
 Både mängden av UTXOs och transaktionskärnorna är extremt kompakta. Detta har två följder:
 
-* En nod i en MimbleWimble-blockkedja får en väldigt liten kedja att behöva ta vara på.
+* En nod i en Mimblewimble-blockkedja får en väldigt liten kedja att behöva ta vara på.
 * När en ny nod ansluter sig till nätverket krävs det väldigt lite information för att den ska bygga kedjan.
 
 Dessutom kan man inte manipulera mängden av UTXOs. Tar man bort ett element ändras summan av transaktionerna och är längre inte lika med noll.
 
 ### Slutsats
 
-I detta dokument gick vi igenom de grundläggande principerna för en MimbleWimble-blockkedja. Genom att använda egenskaperna
+I detta dokument gick vi igenom de grundläggande principerna för en Mimblewimble-blockkedja. Genom att använda egenskaperna
 för addition i kryptografi med elliptiska kurvor kan vi skapa fullständigt förmörkade transaktioner som ändå kan valideras.
 Genom att generalisera dessa egenskaper till block kan vi eliminera en stor mängd blockkedjeinformation vilket medför
 väldigt bra skalbarhet.
