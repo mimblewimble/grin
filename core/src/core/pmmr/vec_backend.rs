@@ -79,6 +79,11 @@ impl<T: PMMRable> Backend<T> for VecBackend<T> {
 		unimplemented!()
 	}
 
+	/// Number of leaves in the MMR
+	fn n_unpruned_leaves(&self) -> u64 {
+		panic!("not yet implemented")
+	}
+
 	fn leaf_pos_iter(&self) -> Box<dyn Iterator<Item = u64> + '_> {
 		Box::new(
 			self.hashes
