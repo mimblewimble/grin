@@ -65,11 +65,12 @@ pub enum SyncStatus {
 	},
 	/// Setting up before validation
 	TxHashsetSetup,
-	/// Validating the full state
+	/// Validating the kernels
 	TxHashsetKernelsValidation {
 		kernels: u64,
 		kernels_total: u64,
 	},
+	/// Validating the proofs
 	TxHashsetRangeProofsValidation {
 		rproofs: u64,
 		rproofs_total: u64,

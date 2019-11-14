@@ -88,8 +88,6 @@ impl TUIStatusView {
 				kernels,
 				kernels_total,
 			} => {
-				// 10% of overall progress is attributed to kernel validation
-				// 90% to range proofs (which are much longer)
 				let k_percent = if kernels_total > 0 {
 					(kernels * 100) / kernels_total
 				} else {
