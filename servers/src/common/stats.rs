@@ -53,7 +53,7 @@ pub struct ServerStats {
 	/// Chain head
 	pub chain_stats: ChainStats,
 	/// sync header head
-	pub header_stats: ChainStats,
+	pub header_stats: Option<ChainStats>,
 	/// Whether we're currently syncing
 	pub sync_status: SyncStatus,
 	/// Handle to current stratum server stats

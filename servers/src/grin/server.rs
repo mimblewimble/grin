@@ -506,13 +506,17 @@ impl Server {
 			total_difficulty: head.total_difficulty(),
 		};
 
-		let header_tip = self.chain.header_head()?;
-		let header = self.chain.get_block_header(&header_tip.hash())?;
-		let header_stats = ChainStats {
-			latest_timestamp: header.timestamp,
-			height: header.height,
-			last_block_h: header.prev_hash,
-			total_difficulty: header.total_difficulty(),
+		let header_stats = match self.chain.try_header_head()? {
+			Some(tip) => {
+				let header = self.chain.get_block_header(&tip.hash())?;
+				Some(ChainStats {
+					latest_timestamp: header.timestamp,
+					height: header.height,
+					last_block_h: header.prev_hash,
+					total_difficulty: header.total_difficulty(),
+				})
+			}
+			_ => None,
 		};
 
 		let disk_usage_bytes = WalkDir::new(&self.config.db_root)

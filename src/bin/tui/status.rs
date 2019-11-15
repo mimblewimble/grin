@@ -295,18 +295,20 @@ impl TUIStatusListener for TUIStatusView {
 		c.call_on_id("chain_timestamp", |t: &mut TextView| {
 			t.set_content(stats.chain_stats.latest_timestamp.to_string());
 		});
-		c.call_on_id("basic_header_tip_hash", |t: &mut TextView| {
-			t.set_content(stats.header_stats.last_block_h.to_string() + "...");
-		});
-		c.call_on_id("basic_header_chain_height", |t: &mut TextView| {
-			t.set_content(stats.header_stats.height.to_string());
-		});
-		c.call_on_id("basic_header_total_difficulty", |t: &mut TextView| {
-			t.set_content(stats.header_stats.total_difficulty.to_string());
-		});
-		c.call_on_id("basic_header_timestamp", |t: &mut TextView| {
-			t.set_content(stats.header_stats.latest_timestamp.to_string());
-		});
+		if let Some(header_stats) = &stats.header_stats {
+			c.call_on_id("basic_header_tip_hash", |t: &mut TextView| {
+				t.set_content(header_stats.last_block_h.to_string() + "...");
+			});
+			c.call_on_id("basic_header_chain_height", |t: &mut TextView| {
+				t.set_content(header_stats.height.to_string());
+			});
+			c.call_on_id("basic_header_total_difficulty", |t: &mut TextView| {
+				t.set_content(header_stats.total_difficulty.to_string());
+			});
+			c.call_on_id("basic_header_timestamp", |t: &mut TextView| {
+				t.set_content(header_stats.latest_timestamp.to_string());
+			});
+		}
 		c.call_on_id("tx_pool_size", |t: &mut TextView| {
 			t.set_content(stats.tx_stats.tx_pool_size.to_string());
 		});
