@@ -16,12 +16,11 @@
 //! This module interfaces into the underlying
 //! [Rust Aggsig library](https://github.com/mimblewimble/rust-secp256k1-zkp/blob/master/src/aggsig.rs)
 
-use crate::keychain::{BlindingFactor, Identifier, Keychain};
 use crate::libtx::error::{Error, ErrorKind};
-use crate::util::secp::key::{PublicKey, SecretKey};
-use crate::util::secp::pedersen::Commitment;
-use crate::util::secp::{self, aggsig, Message, Secp256k1, Signature};
-use grin_keychain::SwitchCommitmentType;
+use keychain::{BlindingFactor, Identifier, Keychain, SwitchCommitmentType};
+use util::secp::key::{PublicKey, SecretKey};
+use util::secp::pedersen::Commitment;
+use util::secp::{self, aggsig, Message, Secp256k1, Signature};
 
 /// Creates a new secure nonce (as a SecretKey), guaranteed to be usable during
 /// aggsig creation.
@@ -34,7 +33,6 @@ use grin_keychain::SwitchCommitmentType;
 ///
 /// ```
 /// # extern crate grin_core as core;
-/// # extern crate grin_util as util;
 /// use core::libtx::aggsig;
 /// use util::secp::{ContextFlag, Secp256k1};
 /// let secp = Secp256k1::with_caps(ContextFlag::SignOnly);
@@ -68,7 +66,6 @@ pub fn create_secnonce(secp: &Secp256k1) -> Result<SecretKey, Error> {
 ///
 /// ```
 /// # extern crate grin_core as core;
-/// # extern crate grin_util as util;
 /// # extern crate rand;
 /// use rand::thread_rng;
 /// use core::libtx::aggsig;
@@ -139,7 +136,6 @@ pub fn calculate_partial_sig(
 ///
 /// ```
 /// # extern crate grin_core as core;
-/// # extern crate grin_util as util;
 /// # extern crate rand;
 /// use rand::thread_rng;
 /// use core::libtx::aggsig;
@@ -223,9 +219,7 @@ pub fn verify_partial_sig(
 /// # Example
 ///
 /// ```
-/// # extern crate grin_util as util;
 /// # extern crate grin_core as core;
-/// # extern crate grin_keychain as keychain;
 /// use core::consensus::reward;
 /// use util::secp::key::{PublicKey, SecretKey};
 /// use util::secp::{ContextFlag, Secp256k1};
@@ -291,9 +285,7 @@ where
 /// # Example
 ///
 /// ```
-/// # extern crate grin_util as util;
 /// # extern crate grin_core as core;
-/// # extern crate grin_keychain as keychain;
 /// use core::consensus::reward;
 /// use core::libtx::{aggsig, proof};
 /// use util::secp::key::{PublicKey, SecretKey};
@@ -367,7 +359,6 @@ pub fn verify_single_from_commit(
 ///
 /// ```
 /// # extern crate grin_core as core;
-/// # extern crate grin_util as util;
 /// # extern crate rand;
 /// use rand::thread_rng;
 /// use core::libtx::aggsig;

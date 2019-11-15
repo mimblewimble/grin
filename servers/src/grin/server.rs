@@ -480,17 +480,22 @@ impl Server {
 			.map(|p| PeerStats::from_peer(&p))
 			.collect();
 
-		let (tx_pool_size, stem_pool_size) = {
-			let tx_pool_lock = self.tx_pool.try_read();
-			match tx_pool_lock {
-				Some(l) => (l.txpool.entries.len(), l.stempool.entries.len()),
-				None => (0, 0),
+		let tx_stats = {
+			let pool = self.tx_pool.try_read();
+			match pool {
+				Some(pool) => TxStats {
+					tx_pool_size: pool.txpool.size(),
+					tx_pool_kernels: pool.txpool.kernel_count(),
+					stem_pool_size: pool.stempool.size(),
+					stem_pool_kernels: pool.stempool.kernel_count(),
+				},
+				None => TxStats {
+					tx_pool_size: 0,
+					tx_pool_kernels: 0,
+					stem_pool_size: 0,
+					stem_pool_kernels: 0,
+				},
 			}
-		};
-
-		let tx_stats = TxStats {
-			tx_pool_size,
-			stem_pool_size,
 		};
 
 		let head = self.chain.head_header()?;
@@ -501,13 +506,17 @@ impl Server {
 			total_difficulty: head.total_difficulty(),
 		};
 
-		let header_tip = self.chain.header_head()?;
-		let header = self.chain.get_block_header(&header_tip.hash())?;
-		let header_stats = ChainStats {
-			latest_timestamp: header.timestamp,
-			height: header.height,
-			last_block_h: header.prev_hash,
-			total_difficulty: header.total_difficulty(),
+		let header_stats = match self.chain.try_header_head()? {
+			Some(tip) => {
+				let header = self.chain.get_block_header(&tip.hash())?;
+				Some(ChainStats {
+					latest_timestamp: header.timestamp,
+					height: header.height,
+					last_block_h: header.prev_hash,
+					total_difficulty: header.total_difficulty(),
+				})
+			}
+			_ => None,
 		};
 
 		let disk_usage_bytes = WalkDir::new(&self.config.db_root)

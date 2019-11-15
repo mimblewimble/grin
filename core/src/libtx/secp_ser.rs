@@ -14,16 +14,16 @@
 
 //! Sane serialization & deserialization of cryptographic structs into hex
 
-use crate::keychain::BlindingFactor;
-use crate::serde::{Deserialize, Deserializer, Serializer};
-use crate::util::secp::pedersen::{Commitment, RangeProof};
-use crate::util::{from_hex, to_hex};
+use keychain::BlindingFactor;
+use serde::{Deserialize, Deserializer, Serializer};
+use util::secp::pedersen::{Commitment, RangeProof};
+use util::{from_hex, to_hex};
 
 /// Serializes a secp PublicKey to and from hex
 pub mod pubkey_serde {
-	use crate::serde::{Deserialize, Deserializer, Serializer};
-	use crate::util::secp::key::PublicKey;
-	use crate::util::{from_hex, static_secp_instance, to_hex};
+	use serde::{Deserialize, Deserializer, Serializer};
+	use util::secp::key::PublicKey;
+	use util::{from_hex, static_secp_instance, to_hex};
 
 	///
 	pub fn serialize<S>(key: &PublicKey, serializer: S) -> Result<S::Ok, S::Error>
@@ -55,8 +55,8 @@ pub mod pubkey_serde {
 /// Serializes an Option<secp::Signature> to and from hex
 pub mod option_sig_serde {
 	use crate::serde::{Deserialize, Deserializer, Serializer};
-	use crate::util::{from_hex, secp, static_secp_instance, to_hex};
 	use serde::de::Error;
+	use util::{from_hex, secp, static_secp_instance, to_hex};
 
 	///
 	pub fn serialize<S>(sig: &Option<secp::Signature>, serializer: S) -> Result<S::Ok, S::Error>
@@ -93,14 +93,13 @@ pub mod option_sig_serde {
 			None => Ok(None),
 		})
 	}
-
 }
 
 /// Serializes an Option<secp::SecretKey> to and from hex
 pub mod option_seckey_serde {
 	use crate::serde::{Deserialize, Deserializer, Serializer};
-	use crate::util::{from_hex, secp, static_secp_instance, to_hex};
 	use serde::de::Error;
+	use util::{from_hex, secp, static_secp_instance, to_hex};
 
 	///
 	pub fn serialize<S>(
@@ -141,8 +140,8 @@ pub mod option_seckey_serde {
 /// Serializes a secp::Signature to and from hex
 pub mod sig_serde {
 	use crate::serde::{Deserialize, Deserializer, Serializer};
-	use crate::util::{from_hex, secp, static_secp_instance, to_hex};
 	use serde::de::Error;
+	use util::{from_hex, secp, static_secp_instance, to_hex};
 
 	///
 	pub fn serialize<S>(sig: &secp::Signature, serializer: S) -> Result<S::Ok, S::Error>
@@ -175,9 +174,9 @@ pub mod sig_serde {
 /// Serializes an Option<secp::Commitment> to and from hex
 pub mod option_commitment_serde {
 	use crate::serde::{Deserialize, Deserializer, Serializer};
-	use crate::util::secp::pedersen::Commitment;
-	use crate::util::{from_hex, to_hex};
 	use serde::de::Error;
+	use util::secp::pedersen::Commitment;
+	use util::{from_hex, to_hex};
 
 	///
 	pub fn serialize<S>(commit: &Option<Commitment>, serializer: S) -> Result<S::Ok, S::Error>
@@ -202,7 +201,6 @@ pub mod option_commitment_serde {
 			None => Ok(None),
 		})
 	}
-
 }
 /// Creates a BlindingFactor from a hex string
 pub fn blind_from_hex<'de, D>(deserializer: D) -> Result<BlindingFactor, D::Error>
@@ -350,9 +348,9 @@ pub mod opt_string_or_u64 {
 mod test {
 	use super::*;
 	use crate::libtx::aggsig;
-	use crate::util::secp::key::{PublicKey, SecretKey};
-	use crate::util::secp::{Message, Signature};
-	use crate::util::static_secp_instance;
+	use util::secp::key::{PublicKey, SecretKey};
+	use util::secp::{Message, Signature};
+	use util::static_secp_instance;
 
 	use serde_json;
 

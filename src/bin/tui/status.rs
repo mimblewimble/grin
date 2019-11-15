@@ -212,12 +212,18 @@ impl TUIStatusListener for TUIStatusView {
 				.child(
 					LinearLayout::new(Orientation::Horizontal)
 						.child(TextView::new("Transaction Pool Size:        "))
-						.child(TextView::new("  ").with_id("tx_pool_size")),
+						.child(TextView::new("0").with_id("tx_pool_size"))
+						.child(TextView::new(" ("))
+						.child(TextView::new("0").with_id("tx_pool_kernels"))
+						.child(TextView::new(")")),
 				)
 				.child(
 					LinearLayout::new(Orientation::Horizontal)
 						.child(TextView::new("Stem Pool Size:               "))
-						.child(TextView::new("  ").with_id("stem_pool_size")),
+						.child(TextView::new("0").with_id("stem_pool_size"))
+						.child(TextView::new(" ("))
+						.child(TextView::new("0").with_id("stem_pool_kernels"))
+						.child(TextView::new(")")),
 				)
 				.child(
 					LinearLayout::new(Orientation::Horizontal).child(TextView::new(
@@ -264,23 +270,31 @@ impl TUIStatusListener for TUIStatusView {
 		c.call_on_id("chain_timestamp", |t: &mut TextView| {
 			t.set_content(stats.chain_stats.latest_timestamp.to_string());
 		});
-		c.call_on_id("basic_header_tip_hash", |t: &mut TextView| {
-			t.set_content(stats.header_stats.last_block_h.to_string() + "...");
-		});
-		c.call_on_id("basic_header_chain_height", |t: &mut TextView| {
-			t.set_content(stats.header_stats.height.to_string());
-		});
-		c.call_on_id("basic_header_total_difficulty", |t: &mut TextView| {
-			t.set_content(stats.header_stats.total_difficulty.to_string());
-		});
-		c.call_on_id("basic_header_timestamp", |t: &mut TextView| {
-			t.set_content(stats.header_stats.latest_timestamp.to_string());
-		});
+		if let Some(header_stats) = &stats.header_stats {
+			c.call_on_id("basic_header_tip_hash", |t: &mut TextView| {
+				t.set_content(header_stats.last_block_h.to_string() + "...");
+			});
+			c.call_on_id("basic_header_chain_height", |t: &mut TextView| {
+				t.set_content(header_stats.height.to_string());
+			});
+			c.call_on_id("basic_header_total_difficulty", |t: &mut TextView| {
+				t.set_content(header_stats.total_difficulty.to_string());
+			});
+			c.call_on_id("basic_header_timestamp", |t: &mut TextView| {
+				t.set_content(header_stats.latest_timestamp.to_string());
+			});
+		}
 		c.call_on_id("tx_pool_size", |t: &mut TextView| {
 			t.set_content(stats.tx_stats.tx_pool_size.to_string());
 		});
 		c.call_on_id("stem_pool_size", |t: &mut TextView| {
 			t.set_content(stats.tx_stats.stem_pool_size.to_string());
+		});
+		c.call_on_id("tx_pool_kernels", |t: &mut TextView| {
+			t.set_content(stats.tx_stats.tx_pool_kernels.to_string());
+		});
+		c.call_on_id("stem_pool_kernels", |t: &mut TextView| {
+			t.set_content(stats.tx_stats.stem_pool_kernels.to_string());
 		});
 	}
 }
