@@ -70,7 +70,7 @@ pub enum SyncStatus {
 		kernels: u64,
 		kernels_total: u64,
 	},
-	/// Validating the proofs
+	/// Validating the range proofs
 	TxHashsetRangeProofsValidation {
 		rproofs: u64,
 		rproofs_total: u64,

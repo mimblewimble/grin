@@ -117,7 +117,7 @@ fn sync_status_to_api(sync_status: SyncStatus) -> (String, Option<serde_json::Va
 			rproofs,
 			rproofs_total,
 		} => (
-			"txhashset_rangeproof_validation".to_string(),
+			"txhashset_rangeproofs_validation".to_string(),
 			Some(json!({ "rproofs": rproofs, "rproofs_total": rproofs_total })),
 		),
 		SyncStatus::TxHashsetKernelsValidation {
