@@ -159,17 +159,17 @@ impl TxHashsetWriteStatus for SyncState {
 	}
 
 	fn on_validation_kernels(&self, kernels: u64, kernels_total: u64) {
-		*self.current.write() = SyncStatus::TxHashsetKernelsValidation {
+		self.update(SyncStatus::TxHashsetKernelsValidation {
 			kernels,
 			kernels_total,
-		};
+		});
 	}
 
 	fn on_validation_rproofs(&self, rproofs: u64, rproofs_total: u64) {
-		*self.current.write() = SyncStatus::TxHashsetRangeProofsValidation {
+		self.update(SyncStatus::TxHashsetRangeProofsValidation {
 			rproofs,
 			rproofs_total,
-		};
+		});
 	}
 
 	fn on_save(&self) {

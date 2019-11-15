@@ -46,7 +46,7 @@ impl TUIStatusView {
 				} else {
 					current_height * 100 / highest_height
 				};
-				format!("Sync step 1/7 - Downloading headers: {}%", percent)
+				format!("Sync step 1/7: Downloading headers: {}%", percent)
 			}
 			SyncStatus::TxHashsetDownload {
 				start_time,
@@ -66,7 +66,7 @@ impl TUIStatusView {
 					let fin = Utc::now().timestamp_nanos();
 					let dur_ms = (fin - start) as f64 * NANO_TO_MILLIS;
 
-					format!("Sync step 2/7 - Downloading {}(MB) chain state for state sync: {}% at {:.1?}(kB/s)",
+					format!("Sync step 2/7: Downloading {}(MB) chain state for state sync: {}% at {:.1?}(kB/s)",
 							total_size / 1_000_000,
 							percent,
 							if dur_ms > 1.0f64 { (downloaded_size - prev_downloaded_size) as f64 / dur_ms as f64 } else { 0f64 },
@@ -76,27 +76,13 @@ impl TUIStatusView {
 					let fin = Utc::now().timestamp_millis();
 					let dur_secs = (fin - start) / 1000;
 
-					format!("Sync step 2/7 - Downloading chain state for state sync. Waiting remote peer to start: {}s",
+					format!("Sync step 2/7: Downloading chain state for state sync. Waiting remote peer to start: {}s",
 							dur_secs,
 					)
 				}
 			}
 			SyncStatus::TxHashsetSetup => {
-				"Sync step 3/7 - Preparing chain state for validation".to_string()
-			}
-			SyncStatus::TxHashsetKernelsValidation {
-				kernels,
-				kernels_total,
-			} => {
-				let k_percent = if kernels_total > 0 {
-					(kernels * 100) / kernels_total
-				} else {
-					0
-				};
-				format!(
-					"Sync step 4/7 - Validating chain state - kernels: {}%",
-					k_percent
-				)
+				"Sync step 3/7: Preparing chain state for validation".to_string()
 			}
 			SyncStatus::TxHashsetRangeProofsValidation {
 				rproofs,
@@ -108,15 +94,29 @@ impl TUIStatusView {
 					0
 				};
 				format!(
-					"Sync step 5/7 - Validating chain state - range proofs: {}%",
+					"Sync step 4/7: Validating chain state - range proofs: {}%",
 					r_percent
 				)
 			}
+			SyncStatus::TxHashsetKernelsValidation {
+				kernels,
+				kernels_total,
+			} => {
+				let k_percent = if kernels_total > 0 {
+					(kernels * 100) / kernels_total
+				} else {
+					0
+				};
+				format!(
+					"Sync step 5/7: Validating chain state - kernels: {}%",
+					k_percent
+				)
+			}
 			SyncStatus::TxHashsetSave => {
-				"Sync step 6/7 - Finalizing chain state for state sync".to_string()
+				"Sync step 6/7: Finalizing chain state for state sync".to_string()
 			}
 			SyncStatus::TxHashsetDone => {
-				"Sync step 6/7 - Finalized chain state for state sync".to_string()
+				"Sync step 6/7: Finalized chain state for state sync".to_string()
 			}
 			SyncStatus::BodySync {
 				current_height,
@@ -127,7 +127,7 @@ impl TUIStatusView {
 				} else {
 					current_height * 100 / highest_height
 				};
-				format!("Sync step 7/7 - Downloading blocks: {}%", percent)
+				format!("Sync step 7/7: Downloading blocks: {}%", percent)
 			}
 			SyncStatus::Shutdown => "Shutting down, closing connections".to_string(),
 		}
