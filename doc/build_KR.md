@@ -94,7 +94,7 @@ Grin을 작동시키는 명령어에 대한 도움말은 다음 명령어를 실
 
 ```sh
 grin help
-grin wallet --help
+grin server --help
 grin client --help
 ```
 
@@ -128,4 +128,4 @@ Rust(Cargo)는 여러 플랫폼에서 Grin을 빌드 할 수 있습니다. 그�
 Grin의 모든 마이닝 기능은 분리된 독랍형 패키지인 [grin-miner](https://github.com/mimblewimble/grin-miner)로 옮겨졌습니다.
 일단 Grin 노드가 실행되면 실행중인 노드에 대해 grin-miner를 빌드하고 실행하여 마이닝을 시작할 수 있습니다.
 
-grin-miner가 grin 노드와 통신 할 수 있게 하려면, `grin-server.toml` 설정 파일에서`enable_stratum_server = true`가 설정되어 있는지 확인하세요. 그 다음 Wallet listener인 `grin wallet listen` 명령어를 실행하세요 .
+grin-miner가 grin 노드와 통신 할 수 있게 하려면, `grin-server.toml` 설정 파일에서`enable_stratum_server = true`가 설정되어 있는지 확인하세요. 그 다음 Wallet listener인 `grin-wallet listen` 명령어를 실행하세요 .
