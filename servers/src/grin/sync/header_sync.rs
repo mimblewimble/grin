@@ -142,7 +142,7 @@ impl HeaderSync {
 						match self.sync_state.status() {
 							SyncStatus::HeaderSync { .. } | SyncStatus::BodySync { .. } => {
 								// Ban this fraud peer which claims a higher work but can't send us the real headers
-								if now > *stalling_ts + Duration::seconds(120)
+								if now > *stalling_ts + Duration::seconds(60)
 									&& header_head.total_difficulty < peer.info.total_difficulty()
 								{
 									if let Err(e) = self
@@ -157,6 +157,7 @@ impl HeaderSync {
 										peer.info.height(),
 										peer.info.total_difficulty(),
 									);
+									self.syncing_peer = None;
 								}
 							}
 							_ => (),
@@ -164,7 +165,6 @@ impl HeaderSync {
 					}
 				}
 			}
-			self.syncing_peer = None;
 			true
 		} else {
 			// resetting the timeout as long as we progress
@@ -180,6 +180,11 @@ impl HeaderSync {
 		if let Ok(header_head) = self.chain.header_head() {
 			let difficulty = header_head.total_difficulty;
 
+			if let Some(peer) = self.syncing_peer.clone() {
+				if peer.info.total_difficulty() > difficulty {
+					return self.request_headers(peer);
+				}
+			}
 			if let Some(peer) = self.peers.most_work_peer() {
 				if peer.info.total_difficulty() > difficulty {
 					return self.request_headers(peer);
