@@ -113,6 +113,10 @@ impl<T: PMMRable> Backend<T> for VecBackend<T> {
 		unimplemented!()
 	}
 
+	fn n_unpruned_leaves(&self) -> u64 {
+		unimplemented!()
+	}
+
 	fn remove(&mut self, position: u64) -> Result<(), String> {
 		self.remove_list.push(position);
 		Ok(())

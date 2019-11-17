@@ -31,6 +31,109 @@ const NANO_TO_MILLIS: f64 = 1.0 / 1_000_000.0;
 
 pub struct TUIStatusView;
 
+impl TUIStatusView {
+	fn update_sync_status(sync_status: SyncStatus) -> String {
+		match sync_status {
+			SyncStatus::Initial => "Initializing".to_string(),
+			SyncStatus::NoSync => "Running".to_string(),
+			SyncStatus::AwaitingPeers(_) => "Waiting for peers".to_string(),
+			SyncStatus::HeaderSync {
+				current_height,
+				highest_height,
+			} => {
+				let percent = if highest_height == 0 {
+					0
+				} else {
+					current_height * 100 / highest_height
+				};
+				format!("Sync step 1/7: Downloading headers: {}%", percent)
+			}
+			SyncStatus::TxHashsetDownload {
+				start_time,
+				prev_update_time,
+				update_time: _,
+				prev_downloaded_size,
+				downloaded_size,
+				total_size,
+			} => {
+				if total_size > 0 {
+					let percent = if total_size > 0 {
+						downloaded_size * 100 / total_size
+					} else {
+						0
+					};
+					let start = prev_update_time.timestamp_nanos();
+					let fin = Utc::now().timestamp_nanos();
+					let dur_ms = (fin - start) as f64 * NANO_TO_MILLIS;
+
+					format!("Sync step 2/7: Downloading {}(MB) chain state for state sync: {}% at {:.1?}(kB/s)",
+							total_size / 1_000_000,
+							percent,
+							if dur_ms > 1.0f64 { (downloaded_size - prev_downloaded_size) as f64 / dur_ms as f64 } else { 0f64 },
+					)
+				} else {
+					let start = start_time.timestamp_millis();
+					let fin = Utc::now().timestamp_millis();
+					let dur_secs = (fin - start) / 1000;
+
+					format!("Sync step 2/7: Downloading chain state for state sync. Waiting remote peer to start: {}s",
+							dur_secs,
+					)
+				}
+			}
+			SyncStatus::TxHashsetSetup => {
+				"Sync step 3/7: Preparing chain state for validation".to_string()
+			}
+			SyncStatus::TxHashsetRangeProofsValidation {
+				rproofs,
+				rproofs_total,
+			} => {
+				let r_percent = if rproofs_total > 0 {
+					(rproofs * 100) / rproofs_total
+				} else {
+					0
+				};
+				format!(
+					"Sync step 4/7: Validating chain state - range proofs: {}%",
+					r_percent
+				)
+			}
+			SyncStatus::TxHashsetKernelsValidation {
+				kernels,
+				kernels_total,
+			} => {
+				let k_percent = if kernels_total > 0 {
+					(kernels * 100) / kernels_total
+				} else {
+					0
+				};
+				format!(
+					"Sync step 5/7: Validating chain state - kernels: {}%",
+					k_percent
+				)
+			}
+			SyncStatus::TxHashsetSave => {
+				"Sync step 6/7: Finalizing chain state for state sync".to_string()
+			}
+			SyncStatus::TxHashsetDone => {
+				"Sync step 6/7: Finalized chain state for state sync".to_string()
+			}
+			SyncStatus::BodySync {
+				current_height,
+				highest_height,
+			} => {
+				let percent = if highest_height == 0 {
+					0
+				} else {
+					current_height * 100 / highest_height
+				};
+				format!("Sync step 7/7: Downloading blocks: {}%", percent)
+			}
+			SyncStatus::Shutdown => "Shutting down, closing connections".to_string(),
+		}
+	}
+}
+
 impl TUIStatusListener for TUIStatusView {
 	/// Create basic status view
 	fn create() -> Box<dyn View> {
@@ -143,137 +246,9 @@ impl TUIStatusListener for TUIStatusView {
 		Box::new(basic_status_view.with_id(VIEW_BASIC_STATUS))
 	}
 
-	/// update
 	fn update(c: &mut Cursive, stats: &ServerStats) {
-		//find and update here as needed
-		let basic_status = {
-			match stats.sync_status {
-				SyncStatus::Initial => "Initializing".to_string(),
-				SyncStatus::NoSync => "Running".to_string(),
-				SyncStatus::AwaitingPeers(_) => "Waiting for peers".to_string(),
-				SyncStatus::HeaderSync {
-					current_height,
-					highest_height,
-				} => {
-					let percent = if highest_height == 0 {
-						0
-					} else {
-						current_height * 100 / highest_height
-					};
-					format!("Downloading headers: {}%, step 1/4", percent)
-				}
-				SyncStatus::TxHashsetDownload {
-					start_time,
-					prev_update_time,
-					update_time: _,
-					prev_downloaded_size,
-					downloaded_size,
-					total_size,
-				} => {
-					if total_size > 0 {
-						let percent = if total_size > 0 {
-							downloaded_size * 100 / total_size
-						} else {
-							0
-						};
-						let start = prev_update_time.timestamp_nanos();
-						let fin = Utc::now().timestamp_nanos();
-						let dur_ms = (fin - start) as f64 * NANO_TO_MILLIS;
+		let basic_status = TUIStatusView::update_sync_status(stats.sync_status);
 
-						format!("Downloading {}(MB) chain state for state sync: {}% at {:.1?}(kB/s), step 2/4",
-						total_size / 1_000_000,
-						percent,
-						if dur_ms > 1.0f64 { (downloaded_size - prev_downloaded_size) as f64 / dur_ms as f64 } else { 0f64 },
-						)
-					} else {
-						let start = start_time.timestamp_millis();
-						let fin = Utc::now().timestamp_millis();
-						let dur_secs = (fin - start) / 1000;
-
-						format!("Downloading chain state for state sync. Waiting remote peer to start: {}s, step 2/4",
-										dur_secs,
-										)
-					}
-				}
-				SyncStatus::TxHashsetSetup => {
-					"Preparing chain state for validation, step 3/4".to_string()
-				}
-				SyncStatus::TxHashsetValidation {
-					kernels,
-					kernel_total,
-					rproofs,
-					rproof_total,
-				} => {
-					// 10% of overall progress is attributed to kernel validation
-					// 90% to range proofs (which are much longer)
-					let mut percent = if kernel_total > 0 {
-						kernels * 10 / kernel_total
-					} else {
-						0
-					};
-					percent += if rproof_total > 0 {
-						rproofs * 90 / rproof_total
-					} else {
-						0
-					};
-					format!("Validating chain state: {}%, step 3/4", percent)
-				}
-				SyncStatus::TxHashsetSave => {
-					"Finalizing chain state for state sync, step 3/4".to_string()
-				}
-				SyncStatus::TxHashsetDone => {
-					"Finalized chain state for state sync, step 3/4".to_string()
-				}
-				SyncStatus::BodySync {
-					current_height,
-					highest_height,
-				} => {
-					let percent = if highest_height == 0 {
-						0
-					} else {
-						current_height * 100 / highest_height
-					};
-					format!("Downloading blocks: {}%, step 4/4", percent)
-				}
-				SyncStatus::Shutdown => "Shutting down, closing connections".to_string(),
-			}
-		};
-		/*let basic_mining_config_status = {
-			if stats.mining_stats.is_enabled {
-				"Configured as mining node"
-			} else {
-				"Configured as validating node only (not mining)"
-			}
-		};
-		let (basic_mining_status, basic_network_info) = {
-			if stats.mining_stats.is_enabled {
-				if stats.is_syncing {
-					(
-						"Mining Status: Paused while syncing".to_string(),
-						" ".to_string(),
-					)
-				} else if stats.mining_stats.combined_gps == 0.0 {
-					(
-						"Mining Status: Starting miner and awaiting first solution...".to_string(),
-						" ".to_string(),
-					)
-				} else {
-					(
-						format!(
-							"Mining Status: Mining at height {} at {:.*} GPS",
-							stats.mining_stats.block_height, 4, stats.mining_stats.combined_gps
-						),
-						format!(
-							"Cuckoo {} - Network Difficulty {}",
-							stats.mining_stats.edge_bits,
-							stats.mining_stats.network_difficulty.to_string()
-						),
-					)
-				}
-			} else {
-				(" ".to_string(), " ".to_string())
-			}
-		};*/
 		c.call_on_id("basic_current_status", |t: &mut TextView| {
 			t.set_content(basic_status);
 		});
@@ -321,14 +296,25 @@ impl TUIStatusListener for TUIStatusView {
 		c.call_on_id("stem_pool_kernels", |t: &mut TextView| {
 			t.set_content(stats.tx_stats.stem_pool_kernels.to_string());
 		});
-		/*c.call_on_id("basic_mining_config_status", |t: &mut TextView| {
-			t.set_content(basic_mining_config_status);
-		});
-		c.call_on_id("basic_mining_status", |t: &mut TextView| {
-			t.set_content(basic_mining_status);
-		});
-		c.call_on_id("basic_network_info", |t: &mut TextView| {
-			t.set_content(basic_network_info);
-		});*/
 	}
+}
+
+#[test]
+fn test_status_txhashset_kernels() {
+	let status = SyncStatus::TxHashsetKernelsValidation {
+		kernels: 201,
+		kernels_total: 5000,
+	};
+	let basic_status = TUIStatusView::update_sync_status(status);
+	assert!(basic_status.contains("4%"), basic_status);
+}
+
+#[test]
+fn test_status_txhashset_rproofs() {
+	let status = SyncStatus::TxHashsetRangeProofsValidation {
+		rproofs: 643,
+		rproofs_total: 1000,
+	};
+	let basic_status = TUIStatusView::update_sync_status(status);
+	assert!(basic_status.contains("64%"), basic_status);
 }
