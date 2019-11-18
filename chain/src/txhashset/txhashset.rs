@@ -957,7 +957,7 @@ impl<'a> Extension<'a> {
 			.collect();
 		output_idx.sort_unstable();
 		let min_idx = output_idx.first().unwrap_or(&0);
-		let chunk_start_idx = (min_idx / 1024) * 1024;
+		let chunk_start_idx = min_idx & !0x3ff; // zero last 10 bits (each chunk is 1024 bits)
 		self.bitmap_accumulator
 			.apply(output_idx, self.output_pmmr.leaf_idx_iter(chunk_start_idx))
 	}

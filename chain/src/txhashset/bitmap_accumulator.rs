@@ -198,11 +198,11 @@ impl BitmapChunk {
 
 	/// Set a single bit in this chunk.
 	/// 0-indexed from start of chunk.
+	/// Panics if idx is outside the valid range of bits in a chunk.
 	pub fn set(&mut self, idx: u64, value: bool) {
 		let idx = usize::try_from(idx).expect("usize from u64");
-		if idx < Self::LEN_BITS {
-			self.0.set(idx, value)
-		}
+		assert!(idx < Self::LEN_BITS);
+		self.0.set(idx, value)
 	}
 
 	/// Does this bitmap chunk have any bits set to 1?
