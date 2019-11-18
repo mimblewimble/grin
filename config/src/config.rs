@@ -221,7 +221,8 @@ impl GlobalConfig {
 		let mut file = File::open(self.config_file_path.as_mut().unwrap())?;
 		let mut contents = String::new();
 		file.read_to_string(&mut contents)?;
-		let decoded: Result<ConfigMembers, toml::de::Error> = toml::from_str(&contents);
+		let fixed = GlobalConfig::fix_warning_level(contents);
+		let decoded: Result<ConfigMembers, toml::de::Error> = toml::from_str(&fixed);
 		match decoded {
 			Ok(gc) => {
 				self.members = Some(gc);
@@ -296,9 +297,38 @@ impl GlobalConfig {
 	/// Write configuration to a file
 	pub fn write_to_file(&mut self, name: &str) -> Result<(), ConfigError> {
 		let conf_out = self.ser_config()?;
-		let conf_out = insert_comments(conf_out);
+		let fixed_config = GlobalConfig::fix_log_level(conf_out);
+		let commented_config = insert_comments(fixed_config);
 		let mut file = File::create(name)?;
-		file.write_all(conf_out.as_bytes())?;
+		file.write_all(commented_config.as_bytes())?;
 		Ok(())
 	}
+
+	// For forwards compatibility old config needs `Warning` log level changed to standard log::Level `WARN`
+	fn fix_warning_level(conf: String) -> String {
+		conf.replace("Warning", "WARN")
+	}
+
+	// For backwards compatibility only first letter of log level should be capitalised.
+	fn fix_log_level(conf: String) -> String {
+		conf.replace("TRACE", "Trace")
+			.replace("DEBUG", "Debug")
+			.replace("INFO", "Info")
+			.replace("WARN", "Warning")
+			.replace("ERROR", "Error")
+	}
+}
+
+#[test]
+fn test_fix_log_level() {
+	let config = "TRACE DEBUG INFO WARN ERROR".to_string();
+	let fixed_config = GlobalConfig::fix_log_level(config);
+	assert_eq!(fixed_config, "Trace Debug Info Warning Error");
+}
+
+#[test]
+fn test_fix_warning_level() {
+	let config = "Warning".to_string();
+	let fixed_config = GlobalConfig::fix_warning_level(config);
+	assert_eq!(fixed_config, "WARN");
 }
