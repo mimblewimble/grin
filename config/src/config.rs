@@ -296,9 +296,27 @@ impl GlobalConfig {
 	/// Write configuration to a file
 	pub fn write_to_file(&mut self, name: &str) -> Result<(), ConfigError> {
 		let conf_out = self.ser_config()?;
-		let conf_out = insert_comments(conf_out);
+		let fixed_config = GlobalConfig::fix_log_level(conf_out);
+		let conf_out = insert_comments(fixed_config);
 		let mut file = File::create(name)?;
 		file.write_all(conf_out.as_bytes())?;
 		Ok(())
 	}
+
+	// For backwards compatibility only first letter of log level should be capitalised.
+	fn fix_log_level(conf: String) -> String {
+		conf.replace("OFF", "Off")
+			.replace("TRACE", "Trace")
+			.replace("DEBUG", "Debug")
+			.replace("INFO", "Info")
+			.replace("WARN", "Warn")
+			.replace("ERROR", "Error")
+	}
+}
+
+#[test]
+fn test_fix_log_level() {
+	let config = "OFF TRACE DEBUG INFO WARN ERROR".to_string();
+	let fixed_config = GlobalConfig::fix_log_level(config);
+	assert_eq!(fixed_config, "Off Trace Debug Info Warn Error");
 }
