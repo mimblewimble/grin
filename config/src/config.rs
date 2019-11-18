@@ -298,9 +298,9 @@ impl GlobalConfig {
 	pub fn write_to_file(&mut self, name: &str) -> Result<(), ConfigError> {
 		let conf_out = self.ser_config()?;
 		let fixed_config = GlobalConfig::fix_log_level(conf_out);
-		let conf_out = insert_comments(fixed_config);
+		let commented_config = insert_comments(fixed_config);
 		let mut file = File::create(name)?;
-		file.write_all(conf_out.as_bytes())?;
+		file.write_all(commented_config.as_bytes())?;
 		Ok(())
 	}
 
