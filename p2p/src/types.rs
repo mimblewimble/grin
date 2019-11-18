@@ -223,18 +223,18 @@ pub struct P2PConfig {
 	pub seeding_type: Seeding,
 
 	/// The list of seed nodes, if using Seeding as a seed type
-	pub seeds: Option<Vec<PeerAddr>>,
+	pub seeds: Option<Vec<String>>,
 
 	/// Capabilities expose by this node, also conditions which other peers this
 	/// node will have an affinity toward when connection.
 	pub capabilities: Capabilities,
 
-	pub peers_allow: Option<Vec<PeerAddr>>,
+	pub peers_allow: Option<Vec<String>>,
 
-	pub peers_deny: Option<Vec<PeerAddr>>,
+	pub peers_deny: Option<Vec<String>>,
 
 	/// The list of preferred peers that we will try to connect to
-	pub peers_preferred: Option<Vec<PeerAddr>>,
+	pub peers_preferred: Option<Vec<String>>,
 
 	pub ban_window: Option<i64>,
 
@@ -321,7 +321,7 @@ impl P2PConfig {
 pub enum Seeding {
 	/// No seeding, mostly for tests that programmatically connect
 	None,
-	/// A list of seed addresses provided to the server
+	/// A list of seeds provided to the server (can be addresses or DNS names)
 	List,
 	/// Automatically get a list of seeds from multiple DNS
 	DNSSeed,

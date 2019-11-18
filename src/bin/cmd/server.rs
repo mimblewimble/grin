@@ -24,7 +24,7 @@ use ctrlc;
 
 use crate::config::GlobalConfig;
 use crate::core::global;
-use crate::p2p::{PeerAddr, Seeding};
+use crate::p2p::Seeding;
 use crate::servers;
 use crate::tui::ui;
 use grin_util::logger::LogEntry;
@@ -119,10 +119,7 @@ pub fn server_command(
 		}
 
 		if let Some(seeds) = a.values_of("seed") {
-			let seed_addrs = seeds
-				.filter_map(|x| x.parse().ok())
-				.map(|x| PeerAddr(x))
-				.collect();
+			let seed_addrs = seeds.filter_map(|x| x.parse().ok()).collect();
 			server_config.p2p_config.seeding_type = Seeding::List;
 			server_config.p2p_config.seeds = Some(seed_addrs);
 		}
