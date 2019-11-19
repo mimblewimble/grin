@@ -361,14 +361,14 @@ fn listen_for_addrs(
 	}
 }
 
-pub fn dns_seeds() -> Box<dyn Fn() -> Vec<PeerAddr> + Send> {
+pub fn default_dns_seeds() -> Box<dyn Fn() -> Vec<PeerAddr> + Send> {
 	Box::new(|| {
 		let net_seeds = if global::is_floonet() {
 			FLOONET_DNS_SEEDS
 		} else {
 			MAINNET_DNS_SEEDS
 		};
-		dns_to_addr(
+		resolve_dns_to_addrs(
 			&net_seeds
 				.iter()
 				.map(|s| {
@@ -384,7 +384,7 @@ pub fn dns_seeds() -> Box<dyn Fn() -> Vec<PeerAddr> + Send> {
 	})
 }
 
-pub fn dns_to_addr(dns_records: &Vec<String>) -> Vec<PeerAddr> {
+pub fn resolve_dns_to_addrs(dns_records: &Vec<String>) -> Vec<PeerAddr> {
 	let mut addresses: Vec<PeerAddr> = vec![];
 	for dns in dns_records {
 		debug!("Retrieving addresses from dns {}", dns);

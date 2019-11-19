@@ -232,7 +232,7 @@ impl Server {
 				}
 				p2p::Seeding::List => match &config.p2p_config.seeds {
 					Some(seeds) => {
-						let seed_addrs = seed::dns_to_addr(seeds);
+						let seed_addrs = seed::resolve_dns_to_addrs(seeds);
 						seed::predefined_seeds(seed_addrs)
 					}
 					None => {
@@ -241,7 +241,7 @@ impl Server {
 						));
 					}
 				},
-				p2p::Seeding::DNSSeed => seed::dns_seeds(),
+				p2p::Seeding::DNSSeed => seed::default_dns_seeds(),
 				_ => unreachable!(),
 			};
 
@@ -249,7 +249,7 @@ impl Server {
 				.p2p_config
 				.peers_preferred
 				.clone()
-				.map(|p| seed::dns_to_addr(&p));
+				.map(|p| seed::resolve_dns_to_addrs(&p));
 
 			connect_thread = Some(seed::connect_and_monitor(
 				p2p_server.clone(),
