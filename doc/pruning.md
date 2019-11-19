@@ -2,12 +2,12 @@
 
 *Read this in other languages: [Korean](pruning_KR.md).*
 
-One of the principal attractions of MimbleWimble is its theoretical space
+One of the principal attractions of Mimblewimble is its theoretical space
 efficiency. Indeed, a trusted or pre-validated full blockchain state only
 requires unspent transaction outputs, which could be tiny.
 
 The grin blockchain includes the following types of data (we assume prior
-understanding of the MimbleWimble protocol):
+understanding of the Mimblewimble protocol):
 
 1. Transaction outputs, which include for each output:
     1. A Pedersen commitment (33 bytes).
@@ -47,7 +47,7 @@ There may be several contexts in which data can be pruned:
 ## Validation of Fully Pruned State
 
 Pruning needs to remove as much data as possible while keeping all the
-guarantees of a full MimbleWimble-style validation. This is necessary to keep
+guarantees of a full Mimblewimble-style validation. This is necessary to keep
 a pruning node state's sane, but also on first fast sync, where only the
 minimum amount of data is sent to a new node.
 
