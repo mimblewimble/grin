@@ -24,8 +24,7 @@ use croaring::Bitmap;
 use crate::core::core::hash::DefaultHashable;
 use crate::core::core::pmmr::{Backend, PMMR};
 use crate::core::ser::{
-	Error, FixedLength, PMMRIndexHashable, PMMRable, ProtocolVersion, Readable, Reader, Writeable,
-	Writer,
+	Error, PMMRIndexHashable, PMMRable, ProtocolVersion, Readable, Reader, Writeable, Writer,
 };
 
 #[test]
@@ -1008,15 +1007,15 @@ struct TestElem(u32);
 
 impl DefaultHashable for TestElem {}
 
-impl FixedLength for TestElem {
-	const LEN: usize = 4;
-}
-
 impl PMMRable for TestElem {
 	type E = Self;
 
 	fn as_elmt(&self) -> Self::E {
 		self.clone()
+	}
+
+	fn elmt_size() -> Option<u16> {
+		Some(4)
 	}
 }
 

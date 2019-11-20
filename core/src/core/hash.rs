@@ -17,7 +17,7 @@
 //! Primary hash function used in the protocol
 //!
 
-use crate::ser::{self, Error, FixedLength, ProtocolVersion, Readable, Reader, Writeable, Writer};
+use crate::ser::{self, Error, ProtocolVersion, Readable, Reader, Writeable, Writer};
 use blake2::blake2b::Blake2b;
 use byteorder::{BigEndian, ByteOrder};
 use std::cmp::min;
@@ -50,17 +50,12 @@ impl fmt::Display for Hash {
 	}
 }
 
-impl FixedLength for Hash {
-	/// Size of a hash in bytes.
-	const LEN: usize = 32;
-}
-
 impl Hash {
 	/// Builds a Hash from a byte vector. If the vector is too short, it will be
 	/// completed by zeroes. If it's too long, it will be truncated.
 	pub fn from_vec(v: &[u8]) -> Hash {
-		let mut h = [0; Hash::LEN];
-		let copy_size = min(v.len(), Hash::LEN);
+		let mut h = [0; 32];
+		let copy_size = min(v.len(), 32);
 		h[..copy_size].copy_from_slice(&v[..copy_size]);
 		Hash(h)
 	}

@@ -26,7 +26,7 @@ use crate::core::{
 use crate::global;
 use crate::pow::{verify_size, Difficulty, Proof, ProofOfWork};
 use crate::ser::{
-	self, deserialize_default, serialize_default, FixedLength, PMMRable, Readable, Reader,
+	self, deserialize_default, serialize_default, PMMRable, Readable, Reader,
 	Writeable, Writer,
 };
 use chrono::naive::{MAX_DATE, MIN_DATE};
@@ -168,8 +168,9 @@ impl Writeable for HeaderEntry {
 	}
 }
 
-impl FixedLength for HeaderEntry {
-	const LEN: usize = Hash::LEN + 8 + Difficulty::LEN + 4 + 1;
+impl HeaderEntry {
+	/// Length of a HeaderEntry in bytes.
+	pub const LEN: u16 = 32 + 8 + Difficulty::LEN + 4 + 1;
 }
 
 impl Hashed for HeaderEntry {
@@ -264,6 +265,10 @@ impl PMMRable for BlockHeader {
 			secondary_scaling: self.pow.secondary_scaling,
 			is_secondary: self.pow.is_secondary(),
 		}
+	}
+
+	fn elmt_size() -> Option<u16> {
+		Some(HeaderEntry::LEN)
 	}
 }
 

@@ -179,7 +179,6 @@ impl Chain {
 			"header",
 			"header_head",
 			false,
-			true,
 			ProtocolVersion(1),
 			None,
 		)?;
@@ -188,7 +187,6 @@ impl Chain {
 			"header",
 			"sync_head",
 			false,
-			true,
 			ProtocolVersion(1),
 			None,
 		)?;

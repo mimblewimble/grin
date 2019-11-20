@@ -16,8 +16,7 @@ use memmap;
 use tempfile::tempfile;
 
 use crate::core::ser::{
-	self, BinWriter, FixedLength, ProtocolVersion, Readable, Reader, StreamingReader, Writeable,
-	Writer,
+	self, BinWriter, ProtocolVersion, Readable, Reader, StreamingReader, Writeable, Writer,
 };
 use std::fmt::Debug;
 use std::fs::{self, File, OpenOptions};
@@ -39,8 +38,9 @@ pub struct SizeEntry {
 	pub size: u16,
 }
 
-impl FixedLength for SizeEntry {
-	const LEN: usize = 8 + 2;
+impl SizeEntry {
+	/// Length of a size entry (8 + 2 bytes) for convenience.
+	pub const LEN: u16 = 8 + 2;
 }
 
 impl Readable for SizeEntry {
