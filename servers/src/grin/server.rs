@@ -23,7 +23,7 @@ use std::path::Path;
 use std::sync::{mpsc, Arc};
 use std::{
 	thread::{self, JoinHandle},
-	time,
+	time::{self, Duration},
 };
 
 use fs2::FileExt;
@@ -480,23 +480,15 @@ impl Server {
 			.map(|p| PeerStats::from_peer(&p))
 			.collect();
 
-		let tx_stats = {
-			let pool = self.tx_pool.try_read();
-			match pool {
-				Some(pool) => TxStats {
-					tx_pool_size: pool.txpool.size(),
-					tx_pool_kernels: pool.txpool.kernel_count(),
-					stem_pool_size: pool.stempool.size(),
-					stem_pool_kernels: pool.stempool.kernel_count(),
-				},
-				None => TxStats {
-					tx_pool_size: 0,
-					tx_pool_kernels: 0,
-					stem_pool_size: 0,
-					stem_pool_kernels: 0,
-				},
-			}
-		};
+		let tx_stats = self
+			.tx_pool
+			.try_read_for(Duration::from_millis(500))
+			.map(|pool| TxStats {
+				tx_pool_size: pool.txpool.size(),
+				tx_pool_kernels: pool.txpool.kernel_count(),
+				stem_pool_size: pool.stempool.size(),
+				stem_pool_kernels: pool.stempool.kernel_count(),
+			});
 
 		let head = self.chain.head_header()?;
 		let head_stats = ChainStats {
@@ -506,17 +498,16 @@ impl Server {
 			total_difficulty: head.total_difficulty(),
 		};
 
-		let header_stats = match self.chain.try_header_head()? {
-			Some(tip) => {
-				let header = self.chain.get_block_header(&tip.hash())?;
-				Some(ChainStats {
-					latest_timestamp: header.timestamp,
-					height: header.height,
-					last_block_h: header.prev_hash,
-					total_difficulty: header.total_difficulty(),
-				})
-			}
-			_ => None,
+		let header_stats = if let Some(head) = self.chain.try_header_head()? {
+			let header = self.chain.get_block_header(&head.hash())?;
+			Some(ChainStats {
+				latest_timestamp: header.timestamp,
+				height: header.height,
+				last_block_h: header.prev_hash,
+				total_difficulty: header.total_difficulty(),
+			})
+		} else {
+			None
 		};
 
 		let disk_usage_bytes = WalkDir::new(&self.config.db_root)

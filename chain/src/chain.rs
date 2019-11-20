@@ -1216,15 +1216,15 @@ impl Chain {
 			.map_err(|e| ErrorKind::StoreErr(e, "chain tail".to_owned()).into())
 	}
 
-	/// Tip (head) of the header chain if read lock can be acquired right now.
+	/// Tip (head) of the header chain if read lock can be acquired reasonably quickly.
+	/// Used by the TUI when updating stats to avoid locking the TUI up.
 	pub fn try_header_head(&self) -> Result<Option<Tip>, Error> {
-		match self.header_pmmr.try_read() {
-			Some(lock) => {
-				let hash = lock.head_hash()?;
-				let header = self.store.get_block_header(&hash)?;
-				Ok(Some(Tip::from_header(&header)))
-			}
-			None => Ok(None),
+		if let Some(pmmr) = self.header_pmmr.try_read_for(Duration::from_millis(500)) {
+			let hash = pmmr.head_hash()?;
+			let header = self.store.get_block_header(&hash)?;
+			Ok(Some(Tip::from_header(&header)))
+		} else {
+			Ok(None)
 		}
 	}
 
