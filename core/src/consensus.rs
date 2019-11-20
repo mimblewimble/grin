@@ -130,6 +130,9 @@ pub const HARD_FORK_INTERVAL: u64 = YEAR_HEIGHT / 2;
 /// Floonet first hard fork height, set to happen around 2019-06-20
 pub const FLOONET_FIRST_HARD_FORK: u64 = 185_040;
 
+/// Floonet second hard fork height, set to happen around 2019-12-19
+pub const FLOONET_SECOND_HARD_FORK: u64 = 303_696;
+
 /// Check whether the block version is valid at a given height, implements
 /// 6 months interval scheduled hard forks for the first 2 years.
 pub fn valid_header_version(height: u64, version: HeaderVersion) -> bool {
@@ -138,10 +141,12 @@ pub fn valid_header_version(height: u64, version: HeaderVersion) -> bool {
 		global::ChainTypes::Floonet => {
 			if height < FLOONET_FIRST_HARD_FORK {
 				version == HeaderVersion::default()
-			// add branches one by one as we go from hard fork to hard fork
-			// } else if height < FLOONET_SECOND_HARD_FORK {
-			} else if height < 2 * HARD_FORK_INTERVAL {
+			} else if height < FLOONET_SECOND_HARD_FORK {
 				version == HeaderVersion::new(2)
+			// add branches one by one as we go from hard fork to hard fork
+			// } else if height < FLOONET_THIRD_HARD_FORK {
+			} else if height < 3 * HARD_FORK_INTERVAL {
+				version == HeaderVersion::new(3)
 			} else {
 				false
 			}
@@ -152,10 +157,10 @@ pub fn valid_header_version(height: u64, version: HeaderVersion) -> bool {
 				version == HeaderVersion::default()
 			} else if height < 2 * HARD_FORK_INTERVAL {
 				version == HeaderVersion::new(2)
-			// uncomment branches one by one as we go from hard fork to hard fork
-			/*} else if height < 3 * HARD_FORK_INTERVAL {
+			} else if height < 3 * HARD_FORK_INTERVAL {
 				version == HeaderVersion::new(3)
-			} else if height < 4 * HARD_FORK_INTERVAL {
+			// uncomment branches one by one as we go from hard fork to hard fork
+			/*} } else if height < 4 * HARD_FORK_INTERVAL {
 				version == HeaderVersion::new(4)
 			} else {
 				version > HeaderVersion::new(4) */
