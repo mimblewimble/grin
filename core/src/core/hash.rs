@@ -17,9 +17,7 @@
 //! Primary hash function used in the protocol
 //!
 
-use crate::ser::{
-	self, AsFixedBytes, Error, FixedLength, ProtocolVersion, Readable, Reader, Writeable, Writer,
-};
+use crate::ser::{self, Error, FixedLength, ProtocolVersion, Readable, Reader, Writeable, Writer};
 use blake2::blake2b::Blake2b;
 use byteorder::{BigEndian, ByteOrder};
 use std::cmp::min;
@@ -196,8 +194,8 @@ impl ser::Writer for HashWriter {
 		ser::SerializationMode::Hash
 	}
 
-	fn write_fixed_bytes<T: AsFixedBytes>(&mut self, b32: &T) -> Result<(), ser::Error> {
-		self.state.update(b32.as_ref());
+	fn write_fixed_bytes<T: AsRef<[u8]>>(&mut self, bytes: T) -> Result<(), ser::Error> {
+		self.state.update(bytes.as_ref());
 		Ok(())
 	}
 
