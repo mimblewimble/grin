@@ -231,10 +231,7 @@ impl Server {
 					seed::predefined_seeds(vec![])
 				}
 				p2p::Seeding::List => match &config.p2p_config.seeds {
-					Some(seeds) => {
-						let seed_addrs = seed::resolve_dns_to_addrs(seeds);
-						seed::predefined_seeds(seed_addrs)
-					}
+					Some(seeds) => seed::predefined_seeds(seeds.peers.clone()),
 					None => {
 						return Err(Error::Configuration(
 							"Seeds must be configured for seeding type List".to_owned(),
@@ -245,11 +242,7 @@ impl Server {
 				_ => unreachable!(),
 			};
 
-			let preferred_peers = config
-				.p2p_config
-				.peers_preferred
-				.clone()
-				.map(|p| seed::resolve_dns_to_addrs(&p));
+			let preferred_peers = config.p2p_config.peers_preferred.clone().map(|p| p.peers);
 
 			connect_thread = Some(seed::connect_and_monitor(
 				p2p_server.clone(),

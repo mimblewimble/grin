@@ -152,7 +152,7 @@ impl Peer {
 
 	pub fn is_denied(config: &P2PConfig, peer_addr: PeerAddr) -> bool {
 		if let Some(ref denied) = config.peers_deny {
-			if denied.contains(&peer_addr.as_key()) {
+			if denied.peers.contains(&peer_addr) {
 				debug!(
 					"checking peer allowed/denied: {:?} explicitly denied",
 					peer_addr
@@ -161,7 +161,7 @@ impl Peer {
 			}
 		}
 		if let Some(ref allowed) = config.peers_allow {
-			if allowed.contains(&peer_addr.as_key()) {
+			if allowed.peers.contains(&peer_addr) {
 				debug!(
 					"checking peer allowed/denied: {:?} explicitly allowed",
 					peer_addr
@@ -615,54 +615,5 @@ impl NetAdapter for TrackingAdapter {
 
 	fn is_banned(&self, addr: PeerAddr) -> bool {
 		self.adapter.is_banned(addr)
-	}
-}
-
-#[cfg(test)]
-mod test {
-	use crate::{P2PConfig, Peer, PeerAddr};
-	use std::net::{IpAddr, Ipv4Addr, SocketAddr};
-
-	#[test]
-	fn test_peer_is_allowed_by_default() {
-		let config = P2PConfig::default();
-		let peer = PeerAddr(SocketAddr::new(
-			IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)),
-			3414,
-		));
-		assert!(!Peer::is_denied(&config, peer));
-	}
-
-	#[test]
-	fn test_peer_is_denied() {
-		let mut config = P2PConfig::default();
-		config.peers_deny = Some(vec!["127.0.0.1:3414".to_string()]);
-		let peer = PeerAddr(SocketAddr::new(
-			IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)),
-			3414,
-		));
-		assert!(Peer::is_denied(&config, peer));
-	}
-
-	#[test]
-	fn test_peer_with_different_port_is_not_denied() {
-		let mut config = P2PConfig::default();
-		config.peers_deny = Some(vec!["127.0.0.1:3414".to_string()]);
-		let peer = PeerAddr(SocketAddr::new(
-			IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)),
-			3415,
-		));
-		assert!(!Peer::is_denied(&config, peer));
-	}
-
-	#[test]
-	fn test_peer_is_allowed() {
-		let mut config = P2PConfig::default();
-		config.peers_allow = Some(vec!["127.0.0.1:3414".to_string()]);
-		let peer = PeerAddr(SocketAddr::new(
-			IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)),
-			3414,
-		));
-		assert!(!Peer::is_denied(&config, peer));
 	}
 }

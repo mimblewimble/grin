@@ -27,6 +27,8 @@ use crate::core::global;
 use crate::p2p::Seeding;
 use crate::servers;
 use crate::tui::ui;
+use grin_p2p::msg::PeerAddrs;
+use grin_p2p::PeerAddr;
 use grin_util::logger::LogEntry;
 use std::sync::mpsc;
 
@@ -119,9 +121,12 @@ pub fn server_command(
 		}
 
 		if let Some(seeds) = a.values_of("seed") {
-			let seed_addrs = seeds.filter_map(|s| s.parse().ok()).collect();
+			let peer = seeds
+				.filter_map(|s| s.parse().ok())
+				.map(|sa| PeerAddr(sa))
+				.collect();
 			server_config.p2p_config.seeding_type = Seeding::List;
-			server_config.p2p_config.seeds = Some(seed_addrs);
+			server_config.p2p_config.seeds = Some(PeerAddrs { peers });
 		}
 	}
 
