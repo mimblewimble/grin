@@ -1218,19 +1218,21 @@ impl Chain {
 
 	/// Tip (head) of the header chain if read lock can be acquired reasonably quickly.
 	/// Used by the TUI when updating stats to avoid locking the TUI up.
-	pub fn try_header_head(&self) -> Result<Option<Tip>, Error> {
-		if let Some(pmmr) = self.header_pmmr.try_read_for(Duration::from_millis(500)) {
-			let hash = pmmr.head_hash()?;
-			let header = self.store.get_block_header(&hash)?;
-			Ok(Some(Tip::from_header(&header)))
-		} else {
-			Ok(None)
-		}
+	pub fn try_header_head(&self, timeout: Duration) -> Result<Option<Tip>, Error> {
+		self.header_pmmr
+			.try_read_for(timeout)
+			.map(|ref pmmr| self.read_header_head(pmmr).map(|x| Some(x)))
+			.unwrap_or(Ok(None))
 	}
 
 	/// Tip (head) of the header chain.
 	pub fn header_head(&self) -> Result<Tip, Error> {
-		let hash = self.header_pmmr.read().head_hash()?;
+		self.read_header_head(&self.header_pmmr.read())
+	}
+
+	/// Read head from the provided PMMR handle.
+	fn read_header_head(&self, pmmr: &txhashset::PMMRHandle<BlockHeader>) -> Result<Tip, Error> {
+		let hash = pmmr.head_hash()?;
 		let header = self.store.get_block_header(&hash)?;
 		Ok(Tip::from_header(&header))
 	}
