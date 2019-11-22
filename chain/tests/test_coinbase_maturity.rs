@@ -15,6 +15,7 @@
 use self::chain::types::NoopAdapter;
 use self::chain::ErrorKind;
 use self::core::core::verifier_cache::LruVerifierCache;
+use self::core::core::KernelFeatures;
 use self::core::global::{self, ChainTypes};
 use self::core::libtx::{self, build, ProofBuilder};
 use self::core::pow::Difficulty;
@@ -99,10 +100,10 @@ fn test_coinbase_maturity() {
 		// here we build a tx that attempts to spend the earlier coinbase output
 		// this is not a valid tx as the coinbase output cannot be spent yet
 		let coinbase_txn = build::transaction(
+			KernelFeatures::Plain { fee: 2 },
 			vec![
 				build::coinbase_input(amount, key_id1.clone()),
 				build::output(amount - 2, key_id2.clone()),
-				build::with_fee(2),
 			],
 			&keychain,
 			&builder,
@@ -182,10 +183,10 @@ fn test_coinbase_maturity() {
 			// here we build a tx that attempts to spend the earlier coinbase output
 			// this is not a valid tx as the coinbase output cannot be spent yet
 			let coinbase_txn = build::transaction(
+				KernelFeatures::Plain { fee: 2 },
 				vec![
 					build::coinbase_input(amount, key_id1.clone()),
 					build::output(amount - 2, key_id2.clone()),
-					build::with_fee(2),
 				],
 				&keychain,
 				&builder,

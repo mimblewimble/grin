@@ -248,7 +248,7 @@ changes (as does the nonce). Because it depends on the other party's nonce,
 this might require an additional round of interaction per channel update.
 
 Note also that nothing I've said depends at all on what's being signed. This
-means this works just as well for MimbleWimble as it would for Bitcoin+Schnorr
+means this works just as well for Mimblewimble as it would for Bitcoin+Schnorr
 as it would for Monero (with a multisig ring-CT construction) as it would
 for Ethereum+Schnorr. Further, it can link transactions across chains."  - Andrew Poelstra
 - https://lists.launchpad.net/mimblewimble/msg00086.html

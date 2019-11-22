@@ -20,7 +20,7 @@ use std::fs;
 use std::fs::File;
 use std::io::prelude::*;
 use std::path::Path;
-use std::sync::Arc;
+use std::sync::{mpsc, Arc};
 use std::{
 	thread::{self, JoinHandle},
 	time,
@@ -52,6 +52,7 @@ use crate::p2p::types::PeerAddr;
 use crate::pool;
 use crate::util::file::get_first_line;
 use crate::util::{RwLock, StopState};
+use grin_util::logger::LogEntry;
 
 /// Grin server holding internal structures.
 pub struct Server {
@@ -83,9 +84,13 @@ impl Server {
 	/// Instantiates and starts a new server. Optionally takes a callback
 	/// for the server to send an ARC copy of itself, to allow another process
 	/// to poll info about the server status
-	pub fn start<F>(config: ServerConfig, mut info_callback: F) -> Result<(), Error>
+	pub fn start<F>(
+		config: ServerConfig,
+		logs_rx: Option<mpsc::Receiver<LogEntry>>,
+		mut info_callback: F,
+	) -> Result<(), Error>
 	where
-		F: FnMut(Server),
+		F: FnMut(Server, Option<mpsc::Receiver<LogEntry>>),
 	{
 		let mining_config = config.stratum_mining_config.clone();
 		let enable_test_miner = config.run_test_miner;
@@ -111,7 +116,7 @@ impl Server {
 			}
 		}
 
-		info_callback(serv);
+		info_callback(serv, logs_rx);
 		Ok(())
 	}
 
@@ -475,17 +480,22 @@ impl Server {
 			.map(|p| PeerStats::from_peer(&p))
 			.collect();
 
-		let (tx_pool_size, stem_pool_size) = {
-			let tx_pool_lock = self.tx_pool.try_read();
-			match tx_pool_lock {
-				Some(l) => (l.txpool.entries.len(), l.stempool.entries.len()),
-				None => (0, 0),
+		let tx_stats = {
+			let pool = self.tx_pool.try_read();
+			match pool {
+				Some(pool) => TxStats {
+					tx_pool_size: pool.txpool.size(),
+					tx_pool_kernels: pool.txpool.kernel_count(),
+					stem_pool_size: pool.stempool.size(),
+					stem_pool_kernels: pool.stempool.kernel_count(),
+				},
+				None => TxStats {
+					tx_pool_size: 0,
+					tx_pool_kernels: 0,
+					stem_pool_size: 0,
+					stem_pool_kernels: 0,
+				},
 			}
-		};
-
-		let tx_stats = TxStats {
-			tx_pool_size,
-			stem_pool_size,
 		};
 
 		let head = self.chain.head_header()?;
@@ -496,13 +506,17 @@ impl Server {
 			total_difficulty: head.total_difficulty(),
 		};
 
-		let header_tip = self.chain.header_head()?;
-		let header = self.chain.get_block_header(&header_tip.hash())?;
-		let header_stats = ChainStats {
-			latest_timestamp: header.timestamp,
-			height: header.height,
-			last_block_h: header.prev_hash,
-			total_difficulty: header.total_difficulty(),
+		let header_stats = match self.chain.try_header_head()? {
+			Some(tip) => {
+				let header = self.chain.get_block_header(&tip.hash())?;
+				Some(ChainStats {
+					latest_timestamp: header.timestamp,
+					height: header.height,
+					last_block_h: header.prev_hash,
+					total_difficulty: header.total_difficulty(),
+				})
+			}
+			_ => None,
 		};
 
 		let disk_usage_bytes = WalkDir::new(&self.config.db_root)
@@ -555,9 +569,10 @@ impl Server {
 			}
 		}
 		// this call is blocking and makes sure all peers stop, however
-		// we can't be sure that we stoped a listener blocked on accept, so we don't join the p2p thread
+		// we can't be sure that we stopped a listener blocked on accept, so we don't join the p2p thread
 		self.p2p.stop();
 		let _ = self.lock_file.unlock();
+		warn!("Shutdown complete");
 	}
 
 	/// Pause the p2p server.

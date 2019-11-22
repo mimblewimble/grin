@@ -27,46 +27,53 @@ use crate::core::global;
 use crate::p2p::{PeerAddr, Seeding};
 use crate::servers;
 use crate::tui::ui;
+use grin_util::logger::LogEntry;
+use std::sync::mpsc;
 
 /// wrap below to allow UI to clean up on stop
-pub fn start_server(config: servers::ServerConfig) {
-	start_server_tui(config);
+pub fn start_server(config: servers::ServerConfig, logs_rx: Option<mpsc::Receiver<LogEntry>>) {
+	start_server_tui(config, logs_rx);
 	// Just kill process for now, otherwise the process
 	// hangs around until sigint because the API server
 	// currently has no shutdown facility
-	warn!("Shutting down...");
-	thread::sleep(Duration::from_millis(1000));
-	warn!("Shutdown complete.");
 	exit(0);
 }
 
-fn start_server_tui(config: servers::ServerConfig) {
+fn start_server_tui(config: servers::ServerConfig, logs_rx: Option<mpsc::Receiver<LogEntry>>) {
 	// Run the UI controller.. here for now for simplicity to access
 	// everything it might need
 	if config.run_tui.unwrap_or(false) {
 		warn!("Starting GRIN in UI mode...");
-		servers::Server::start(config, |serv: servers::Server| {
-			let mut controller = ui::Controller::new().unwrap_or_else(|e| {
-				panic!("Error loading UI controller: {}", e);
-			});
-			controller.run(serv);
-		})
+		servers::Server::start(
+			config,
+			logs_rx,
+			|serv: servers::Server, logs_rx: Option<mpsc::Receiver<LogEntry>>| {
+				let mut controller = ui::Controller::new(logs_rx.unwrap()).unwrap_or_else(|e| {
+					panic!("Error loading UI controller: {}", e);
+				});
+				controller.run(serv);
+			},
+		)
 		.unwrap();
 	} else {
 		warn!("Starting GRIN w/o UI...");
-		servers::Server::start(config, |serv: servers::Server| {
-			let running = Arc::new(AtomicBool::new(true));
-			let r = running.clone();
-			ctrlc::set_handler(move || {
-				r.store(false, Ordering::SeqCst);
-			})
-			.expect("Error setting handler for both SIGINT (Ctrl+C) and SIGTERM (kill)");
-			while running.load(Ordering::SeqCst) {
-				thread::sleep(Duration::from_secs(1));
-			}
-			warn!("Received SIGINT (Ctrl+C) or SIGTERM (kill).");
-			serv.stop();
-		})
+		servers::Server::start(
+			config,
+			logs_rx,
+			|serv: servers::Server, _: Option<mpsc::Receiver<LogEntry>>| {
+				let running = Arc::new(AtomicBool::new(true));
+				let r = running.clone();
+				ctrlc::set_handler(move || {
+					r.store(false, Ordering::SeqCst);
+				})
+				.expect("Error setting handler for both SIGINT (Ctrl+C) and SIGTERM (kill)");
+				while running.load(Ordering::SeqCst) {
+					thread::sleep(Duration::from_secs(1));
+				}
+				warn!("Received SIGINT (Ctrl+C) or SIGTERM (kill).");
+				serv.stop();
+			},
+		)
 		.unwrap();
 	}
 }
@@ -78,6 +85,7 @@ fn start_server_tui(config: servers::ServerConfig) {
 pub fn server_command(
 	server_args: Option<&ArgMatches<'_>>,
 	mut global_config: GlobalConfig,
+	logs_rx: Option<mpsc::Receiver<LogEntry>>,
 ) -> i32 {
 	global::set_mining_mode(
 		global_config
@@ -123,7 +131,7 @@ pub fn server_command(
 	if let Some(a) = server_args {
 		match a.subcommand() {
 			("run", _) => {
-				start_server(server_config);
+				start_server(server_config, logs_rx);
 			}
 			("", _) => {
 				println!("Subcommand required, use 'grin help server' for details");
@@ -137,7 +145,7 @@ pub fn server_command(
 			}
 		}
 	} else {
-		start_server(server_config);
+		start_server(server_config, logs_rx);
 	}
 	0
 }

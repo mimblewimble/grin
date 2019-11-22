@@ -38,7 +38,7 @@ use std::{
 	thread::{self, JoinHandle},
 };
 
-const IO_TIMEOUT: Duration = Duration::from_millis(1000);
+const IO_TIMEOUT: Duration = Duration::from_millis(10000);
 
 /// A trait to be implemented in order to receive messages from the
 /// connection. Allows providing an optional response.

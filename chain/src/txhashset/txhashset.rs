@@ -267,15 +267,17 @@ impl TxHashSet {
 		Ok(self.commit_index.get_all_output_pos()?)
 	}
 
-	/// returns outputs from the given insertion (leaf) index up to the
+	/// returns outputs from the given pmmr index up to the
 	/// specified limit. Also returns the last index actually populated
-	pub fn outputs_by_insertion_index(
+	/// max index is the last PMMR index to consider, not leaf index
+	pub fn outputs_by_pmmr_index(
 		&self,
 		start_index: u64,
 		max_count: u64,
+		max_index: Option<u64>,
 	) -> (u64, Vec<OutputIdentifier>) {
 		ReadonlyPMMR::at(&self.output_pmmr_h.backend, self.output_pmmr_h.last_pos)
-			.elements_from_insertion_index(start_index, max_count)
+			.elements_from_pmmr_index(start_index, max_count, max_index)
 	}
 
 	/// highest output insertion index available
@@ -284,13 +286,14 @@ impl TxHashSet {
 	}
 
 	/// As above, for rangeproofs
-	pub fn rangeproofs_by_insertion_index(
+	pub fn rangeproofs_by_pmmr_index(
 		&self,
 		start_index: u64,
 		max_count: u64,
+		max_index: Option<u64>,
 	) -> (u64, Vec<RangeProof>) {
 		ReadonlyPMMR::at(&self.rproof_pmmr_h.backend, self.rproof_pmmr_h.last_pos)
-			.elements_from_insertion_index(start_index, max_count)
+			.elements_from_pmmr_index(start_index, max_count, max_index)
 	}
 
 	/// Find a kernel with a given excess. Work backwards from `max_index` to `min_index`
@@ -1277,7 +1280,7 @@ impl<'a> Extension<'a> {
 				TxKernel::batch_sig_verify(&tx_kernels)?;
 				kern_count += tx_kernels.len() as u64;
 				tx_kernels.clear();
-				status.on_validation(kern_count, total_kernels, 0, 0);
+				status.on_validation_kernels(kern_count, total_kernels);
 				debug!(
 					"txhashset: verify_kernel_signatures: verified {} signatures",
 					kern_count,
@@ -1302,7 +1305,8 @@ impl<'a> Extension<'a> {
 		let mut proofs: Vec<RangeProof> = Vec::with_capacity(1_000);
 
 		let mut proof_count = 0;
-		let total_rproofs = pmmr::n_leaves(self.output_pmmr.unpruned_size());
+		let total_rproofs = self.output_pmmr.n_unpruned_leaves();
+
 		for pos in self.output_pmmr.leaf_pos_iter() {
 			let output = self.output_pmmr.get_data(pos);
 			let proof = self.rproof_pmmr.get_data(pos);
@@ -1328,10 +1332,9 @@ impl<'a> Extension<'a> {
 					"txhashset: verify_rangeproofs: verified {} rangeproofs",
 					proof_count,
 				);
-			}
-
-			if proof_count % 1_000 == 0 {
-				status.on_validation(0, 0, proof_count, total_rproofs);
+				if proof_count % 1_000 == 0 {
+					status.on_validation_rproofs(proof_count, total_rproofs);
+				}
 			}
 		}
 

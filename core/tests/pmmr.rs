@@ -514,46 +514,48 @@ fn check_insertion_to_pmmr_index() {
 }
 
 #[test]
-fn check_elements_from_insertion_index() {
+fn check_elements_from_pmmr_index() {
 	let mut ba = VecBackend::new();
 	let mut pmmr = PMMR::new(&mut ba);
-	for x in 1..1000 {
+	// 20 elements should give max index 38
+	for x in 1..21 {
 		pmmr.push(&TestElem([0, 0, 0, x])).unwrap();
 	}
+
 	// Normal case
-	let res = pmmr.readonly_pmmr().elements_from_insertion_index(1, 100);
-	assert_eq!(res.0, 100);
-	assert_eq!(res.1.len(), 100);
+	let res = pmmr.readonly_pmmr().elements_from_pmmr_index(1, 1000, None);
+	assert_eq!(res.0, 38);
+	assert_eq!(res.1.len(), 20);
 	assert_eq!(res.1[0].0[3], 1);
-	assert_eq!(res.1[99].0[3], 100);
+	assert_eq!(res.1[19].0[3], 20);
 
 	// middle of pack
-	let res = pmmr.readonly_pmmr().elements_from_insertion_index(351, 70);
-	assert_eq!(res.0, 420);
-	assert_eq!(res.1.len(), 70);
-	assert_eq!(res.1[0].0[3], 351);
-	assert_eq!(res.1[69].0[3], 420);
-
-	// past the end
 	let res = pmmr
 		.readonly_pmmr()
-		.elements_from_insertion_index(650, 1000);
-	assert_eq!(res.0, 999);
-	assert_eq!(res.1.len(), 350);
-	assert_eq!(res.1[0].0[3], 650);
-	assert_eq!(res.1[349].0[3], 999);
+		.elements_from_pmmr_index(8, 1000, Some(34));
+	assert_eq!(res.0, 34);
+	assert_eq!(res.1.len(), 14);
+	assert_eq!(res.1[0].0[3], 5);
+	assert_eq!(res.1[13].0[3], 18);
+
+	// bounded
+	let res = pmmr
+		.readonly_pmmr()
+		.elements_from_pmmr_index(8, 7, Some(34));
+	assert_eq!(res.0, 19);
+	assert_eq!(res.1.len(), 7);
+	assert_eq!(res.1[0].0[3], 5);
+	assert_eq!(res.1[6].0[3], 11);
 
 	// pruning a few nodes should get consistent results
-	pmmr.prune(pmmr::insertion_to_pmmr_index(650)).unwrap();
-	pmmr.prune(pmmr::insertion_to_pmmr_index(651)).unwrap();
-	pmmr.prune(pmmr::insertion_to_pmmr_index(800)).unwrap();
-	pmmr.prune(pmmr::insertion_to_pmmr_index(900)).unwrap();
-	pmmr.prune(pmmr::insertion_to_pmmr_index(998)).unwrap();
+	pmmr.prune(pmmr::insertion_to_pmmr_index(5)).unwrap();
+	pmmr.prune(pmmr::insertion_to_pmmr_index(20)).unwrap();
+
 	let res = pmmr
 		.readonly_pmmr()
-		.elements_from_insertion_index(650, 1000);
-	assert_eq!(res.0, 999);
-	assert_eq!(res.1.len(), 345);
-	assert_eq!(res.1[0].0[3], 652);
-	assert_eq!(res.1[344].0[3], 999);
+		.elements_from_pmmr_index(8, 7, Some(34));
+	assert_eq!(res.0, 20);
+	assert_eq!(res.1.len(), 7);
+	assert_eq!(res.1[0].0[3], 6);
+	assert_eq!(res.1[6].0[3], 12);
 }

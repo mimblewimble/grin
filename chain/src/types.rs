@@ -65,12 +65,15 @@ pub enum SyncStatus {
 	},
 	/// Setting up before validation
 	TxHashsetSetup,
-	/// Validating the full state
-	TxHashsetValidation {
+	/// Validating the kernels
+	TxHashsetKernelsValidation {
 		kernels: u64,
-		kernel_total: u64,
+		kernels_total: u64,
+	},
+	/// Validating the range proofs
+	TxHashsetRangeProofsValidation {
 		rproofs: u64,
-		rproof_total: u64,
+		rproofs_total: u64,
 	},
 	/// Finalizing the new state
 	TxHashsetSave,
@@ -155,43 +158,18 @@ impl TxHashsetWriteStatus for SyncState {
 		self.update(SyncStatus::TxHashsetSetup);
 	}
 
-	fn on_validation(&self, vkernels: u64, vkernel_total: u64, vrproofs: u64, vrproof_total: u64) {
-		let mut status = self.current.write();
-		match *status {
-			SyncStatus::TxHashsetValidation {
-				kernels,
-				kernel_total,
-				rproofs,
-				rproof_total,
-			} => {
-				let ks = if vkernels > 0 { vkernels } else { kernels };
-				let kt = if vkernel_total > 0 {
-					vkernel_total
-				} else {
-					kernel_total
-				};
-				let rps = if vrproofs > 0 { vrproofs } else { rproofs };
-				let rpt = if vrproof_total > 0 {
-					vrproof_total
-				} else {
-					rproof_total
-				};
-				*status = SyncStatus::TxHashsetValidation {
-					kernels: ks,
-					kernel_total: kt,
-					rproofs: rps,
-					rproof_total: rpt,
-				};
-			}
-			_ => {
-				*status = SyncStatus::TxHashsetValidation {
-					kernels: 0,
-					kernel_total: 0,
-					rproofs: 0,
-					rproof_total: 0,
-				}
-			}
-		}
+	fn on_validation_kernels(&self, kernels: u64, kernels_total: u64) {
+		self.update(SyncStatus::TxHashsetKernelsValidation {
+			kernels,
+			kernels_total,
+		});
+	}
+
+	fn on_validation_rproofs(&self, rproofs: u64, rproofs_total: u64) {
+		self.update(SyncStatus::TxHashsetRangeProofsValidation {
+			rproofs,
+			rproofs_total,
+		});
 	}
 
 	fn on_save(&self) {
@@ -315,8 +293,10 @@ pub trait ChainAdapter {
 pub trait TxHashsetWriteStatus {
 	/// First setup of the txhashset
 	fn on_setup(&self);
-	/// Starting validation
-	fn on_validation(&self, kernels: u64, kernel_total: u64, rproofs: u64, rproof_total: u64);
+	/// Starting kernel validation
+	fn on_validation_kernels(&self, kernels: u64, kernel_total: u64);
+	/// Starting rproof validation
+	fn on_validation_rproofs(&self, rproofs: u64, rproof_total: u64);
 	/// Starting to save the txhashset and related data
 	fn on_save(&self);
 	/// Done writing a new txhashset
@@ -328,7 +308,8 @@ pub struct NoStatus;
 
 impl TxHashsetWriteStatus for NoStatus {
 	fn on_setup(&self) {}
-	fn on_validation(&self, _ks: u64, _kts: u64, _rs: u64, _rt: u64) {}
+	fn on_validation_kernels(&self, _ks: u64, _kts: u64) {}
+	fn on_validation_rproofs(&self, _rs: u64, _rt: u64) {}
 	fn on_save(&self) {}
 	fn on_done(&self) {}
 }

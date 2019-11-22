@@ -2,7 +2,7 @@
 name = "grin_store"
 version = "3.0.0-alpha.1"
 authors = ["Grin Developers <mimblewimble@lists.launchpad.net>"]
-description = "Simple, private and scalable cryptocurrency implementation based on the MimbleWimble chain format."
+description = "Simple, private and scalable cryptocurrency implementation based on the Mimblewimble chain format."
 license = "Apache-2.0"
 repository = "https://github.com/mimblewimble/grin"
 keywords = [ "crypto", "grin", "mimblewimble" ]

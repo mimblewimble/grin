@@ -16,14 +16,13 @@
 //! reward.
 use crate::consensus::reward;
 use crate::core::{KernelFeatures, Output, OutputFeatures, TxKernel};
-use crate::keychain::{Identifier, Keychain};
 use crate::libtx::error::Error;
 use crate::libtx::{
 	aggsig,
 	proof::{self, ProofBuild},
 };
-use crate::util::{secp, static_secp_instance};
-use grin_keychain::SwitchCommitmentType;
+use keychain::{Identifier, Keychain, SwitchCommitmentType};
+use util::{secp, static_secp_instance};
 
 /// output a reward output
 pub fn output<K, B>(

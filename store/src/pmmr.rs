@@ -140,6 +140,14 @@ impl<T: PMMRable> Backend<T> for PMMRBackend<T> {
 		}
 	}
 
+	fn n_unpruned_leaves(&self) -> u64 {
+		if self.prunable {
+			self.leaf_set.len() as u64
+		} else {
+			pmmr::n_leaves(self.unpruned_size())
+		}
+	}
+
 	fn data_as_temp_file(&self) -> Result<File, String> {
 		self.data_file
 			.as_temp_file()
