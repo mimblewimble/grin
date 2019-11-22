@@ -284,18 +284,20 @@ impl TUIStatusListener for TUIStatusView {
 				t.set_content(header_stats.latest_timestamp.to_string());
 			});
 		}
-		c.call_on_id("tx_pool_size", |t: &mut TextView| {
-			t.set_content(stats.tx_stats.tx_pool_size.to_string());
-		});
-		c.call_on_id("stem_pool_size", |t: &mut TextView| {
-			t.set_content(stats.tx_stats.stem_pool_size.to_string());
-		});
-		c.call_on_id("tx_pool_kernels", |t: &mut TextView| {
-			t.set_content(stats.tx_stats.tx_pool_kernels.to_string());
-		});
-		c.call_on_id("stem_pool_kernels", |t: &mut TextView| {
-			t.set_content(stats.tx_stats.stem_pool_kernels.to_string());
-		});
+		if let Some(tx_stats) = &stats.tx_stats {
+			c.call_on_id("tx_pool_size", |t: &mut TextView| {
+				t.set_content(tx_stats.tx_pool_size.to_string());
+			});
+			c.call_on_id("stem_pool_size", |t: &mut TextView| {
+				t.set_content(tx_stats.stem_pool_size.to_string());
+			});
+			c.call_on_id("tx_pool_kernels", |t: &mut TextView| {
+				t.set_content(tx_stats.tx_pool_kernels.to_string());
+			});
+			c.call_on_id("stem_pool_kernels", |t: &mut TextView| {
+				t.set_content(tx_stats.stem_pool_kernels.to_string());
+			});
+		}
 	}
 }
 
