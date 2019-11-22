@@ -2,12 +2,12 @@
 
 *阅读其它语言版本: [English](merkle.md), [Korean](merkle_KR.md).*
 
-MimbleWimble 是设计给用户在仅给出修剪后的数据的情况下也能验证系统状态。
+Mimblewimble 是设计给用户在仅给出修剪后的数据的情况下也能验证系统状态。
 为了实现此目标，所有交易数据都通过 Merkle trees 提交给了区块链，该 Merkle trees 即使在被修剪后也需要在更新和序列化操作上有良好的效率。
 
 同样，几乎所有交易数据（输入（inputs），输出（outputs），超额（excesses） 和 超额证明（excess proofs））都可以某种方式进行求和，因此将 Merkle sum trees 作为默认选项并在这里处理总和是完全合理的。
 
-Grin 的设计目标是使所有结构都易于实现尽可能的简单。MimbleWimble 引入了许多新的加密技术，应该会使其更易于理解。
+Grin 的设计目标是使所有结构都易于实现尽可能的简单。Mimblewimble 引入了许多新的加密技术，应该会使其更易于理解。
 它的验证规则很容易指定（没有脚本），并且 Grin 是用一种具有非常明确的语义的语言编写的，因此简单性也有助于达成易于理解的共识规则。
 
 ## Merkle Trees
