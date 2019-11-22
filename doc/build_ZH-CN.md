@@ -6,10 +6,10 @@
 
 从长远来看，大多数平台都可能会得到一定程度的支持。Grin 的编写语言 `rust` 已为大多数平台建立了目标。
 
-What's working so far?
+到目前为止进度：
 
-* Linux x86\_64 and macOS [grin + mining + development]
-* Not Windows 10 yet [grin kind-of builds. No mining yet. Help wanted!]
+* Linux x86\_64 and macOS [grin + 挖矿 + 部署]
+* 暂时不支持 Windows 10 [部分 grin。暂时不支持挖矿。希望得到帮助！]
 
 ## 要求
 
