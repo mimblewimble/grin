@@ -78,7 +78,7 @@ pub const PROOFSIZE: usize = 42;
 /// Default Cuckatoo Cycle edge_bits, used for mining and validating.
 pub const DEFAULT_MIN_EDGE_BITS: u8 = 31;
 
-/// Cuckaroo proof-of-work edge_bits, meant to be ASIC resistant.
+/// Cuckaroo* proof-of-work edge_bits, meant to be ASIC resistant.
 pub const SECOND_POW_EDGE_BITS: u8 = 29;
 
 /// Original reference edge_bits to compute difficulty factors for higher
@@ -193,13 +193,14 @@ pub const AR_SCALE_DAMP_FACTOR: u64 = 13;
 pub fn graph_weight(height: u64, edge_bits: u8) -> u64 {
 	let mut xpr_edge_bits = edge_bits as u64;
 
-	let bits_over_min = edge_bits.saturating_sub(global::min_edge_bits());
-	let expiry_height = (1 << bits_over_min) * YEAR_HEIGHT;
-	if edge_bits < 32 && height >= expiry_height {
+	let expiry_height = YEAR_HEIGHT;
+	if edge_bits == 31 && height >= expiry_height {
 		xpr_edge_bits = xpr_edge_bits.saturating_sub(1 + (height - expiry_height) / WEEK_HEIGHT);
 	}
+	// For C31 xpr_edge_bits reaches 0 at height YEAR_HEIGHT + 30 * WEEK_HEIGHT
+	// 30 weeks after Jan 15, 2020 would be Aug 12, 2020
 
-	(2 << (edge_bits - global::base_edge_bits()) as u64) * xpr_edge_bits
+	(2u64 << (edge_bits - global::base_edge_bits()) as u64) * xpr_edge_bits
 }
 
 /// Minimum difficulty, enforced in diff retargetting
