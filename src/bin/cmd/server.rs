@@ -121,7 +121,7 @@ pub fn server_command(
 		}
 
 		if let Some(seeds) = a.values_of("seed") {
-			let peer = seeds
+			let peers = seeds
 				.filter_map(|s| s.parse().ok())
 				.map(|sa| PeerAddr(sa))
 				.collect();
