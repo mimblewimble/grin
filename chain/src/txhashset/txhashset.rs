@@ -15,6 +15,7 @@
 //! Utility structs to handle the 3 MMRs (output, rangeproof,
 //! kernel) along the overall header MMR conveniently and transactionally.
 
+use crate::chain::Chain;
 use crate::core::core::committed::Committed;
 use crate::core::core::hash::{Hash, Hashed};
 use crate::core::core::merkle_proof::MerkleProof;
@@ -455,23 +456,17 @@ impl TxHashSet {
 /// of blocks to the txhashset and the checking of the current tree roots.
 ///
 /// The unit of work is always discarded (always rollback) as this is read-only.
-pub fn extending_readonly<F, T>(
-	original_handle: &PMMRHandle<BlockHeader>,
-	original_trees: &TxHashSet,
-	inner: F,
-) -> Result<T, Error>
+pub fn extending_readonly<F, T>(chain: &Chain, inner: F) -> Result<T, Error>
 where
 	F: FnOnce(&mut ExtensionPair<'_>) -> Result<T, Error>,
 {
-	// Clone these here so we have mut instances for the extensions below.
-	// It would be nice not to have to do this but rewind needs mut (for now).
-	let mut handle = original_handle.try_clone()?;
-	let mut trees = original_trees.try_clone()?;
+	// Clone the PMMR handle and the txhashset.
+	let mut handle = chain.header_pmmr_cloned()?;
+	let mut trees = chain.txhashset_cloned()?;
 
-	// This is *still* effectively a global lock.
-	// Our extension implementation requires a batch and we can only have one active batch.
-	// This is due to our batch impl relying on an internal lmdb write transaction.
-	// A read only batch still acquires an lmdb write transaction, we just discard it when done.
+	// TODO - This *still* effectively limits us a global lock.
+	// We need a solution here to provide a "read" batch that does not take a global lock.
+	// See related "optimistic" batch work.
 	let store = trees.commit_index.clone();
 	let batch = store.batch()?;
 
@@ -480,34 +475,18 @@ where
 	let head = batch.head()?;
 
 	// Find header head based on current header MMR (the rightmost leaf node in the MMR).
-	let header_head = {
-		let hash = handle.head_hash()?;
-		let header = batch.get_block_header(&hash)?;
-		Tip::from_header(&header)
+	let hash = handle.head_hash()?;
+	let header = batch.get_block_header(&hash)?;
+	let header_head = Tip::from_header(&header);
+
+	let header_pmmr = PMMR::at(&mut handle.backend, handle.last_pos);
+	let mut header_extension = HeaderExtension::new(header_pmmr, &batch, header_head);
+	let mut extension = Extension::new(&mut trees, &batch, head);
+	let mut extension_pair = ExtensionPair {
+		header_extension: &mut header_extension,
+		extension: &mut extension,
 	};
-
-	let res = {
-		let header_pmmr = PMMR::at(&mut handle.backend, handle.last_pos);
-		let mut header_extension = HeaderExtension::new(header_pmmr, &batch, header_head);
-		let mut extension = Extension::new(&mut trees, &batch, head);
-		let mut extension_pair = ExtensionPair {
-			header_extension: &mut header_extension,
-			extension: &mut extension,
-		};
-		inner(&mut extension_pair)
-	};
-
-	trace!("Rollbacking txhashset (readonly) extension.");
-
-	handle.backend.discard();
-
-	trees.output_pmmr_h.backend.discard();
-	trees.rproof_pmmr_h.backend.discard();
-	trees.kernel_pmmr_h.backend.discard();
-
-	trace!("TxHashSet (readonly) extension done.");
-
-	res
+	inner(&mut extension_pair)
 }
 
 /// Readonly view on the UTXO set.

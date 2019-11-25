@@ -259,7 +259,7 @@ pub fn process_block_header(header: &BlockHeader, ctx: &mut BlockContext<'_>) ->
 /// Quick in-memory check to fast-reject any block handled recently.
 /// Keeps duplicates from the network in check.
 /// Checks against the last_block_h and prev_block_h of the chain head.
-fn check_known_head(header: &BlockHeader, ctx: &mut BlockContext<'_>) -> Result<(), Error> {
+fn check_known_head(header: &BlockHeader, ctx: &BlockContext<'_>) -> Result<(), Error> {
 	let head = ctx.batch.head()?;
 	let bh = header.hash();
 	if bh == head.last_block_h || bh == head.prev_block_h {
@@ -269,7 +269,7 @@ fn check_known_head(header: &BlockHeader, ctx: &mut BlockContext<'_>) -> Result<
 }
 
 // Check if this block is in the store already.
-fn check_known_store(header: &BlockHeader, ctx: &mut BlockContext<'_>) -> Result<(), Error> {
+fn check_known_store(header: &BlockHeader, ctx: &BlockContext<'_>) -> Result<(), Error> {
 	match ctx.batch.block_exists(&header.hash()) {
 		Ok(true) => {
 			let head = ctx.batch.head()?;
@@ -294,10 +294,7 @@ fn check_known_store(header: &BlockHeader, ctx: &mut BlockContext<'_>) -> Result
 
 // Find the previous header from the store.
 // Return an Orphan error if we cannot find the previous header.
-fn prev_header_store(
-	header: &BlockHeader,
-	batch: &mut store::Batch<'_>,
-) -> Result<BlockHeader, Error> {
+fn prev_header_store(header: &BlockHeader, batch: &store::Batch<'_>) -> Result<BlockHeader, Error> {
 	let prev = batch.get_previous_header(&header).map_err(|e| match e {
 		grin_store::Error::NotFoundErr(_) => ErrorKind::Orphan,
 		_ => ErrorKind::StoreErr(e, "check prev header".into()),
@@ -310,7 +307,7 @@ fn prev_header_store(
 /// arranged by order of cost to have as little DoS surface as possible.
 fn validate_header(header: &BlockHeader, ctx: &mut BlockContext<'_>) -> Result<(), Error> {
 	// First I/O cost, delayed as late as possible.
-	let prev = prev_header_store(header, &mut ctx.batch)?;
+	let prev = prev_header_store(header, &ctx.batch)?;
 
 	// make sure this header has a height exactly one higher than the previous
 	// header
@@ -368,7 +365,7 @@ fn validate_header(header: &BlockHeader, ctx: &mut BlockContext<'_>) -> Result<(
 	Ok(())
 }
 
-fn validate_block(block: &Block, ctx: &mut BlockContext<'_>) -> Result<(), Error> {
+fn validate_block(block: &Block, ctx: &BlockContext<'_>) -> Result<(), Error> {
 	let prev = ctx.batch.get_previous_header(&block.header)?;
 	block
 		.validate(&prev.total_kernel_offset, ctx.verifier_cache.clone())
@@ -549,8 +546,8 @@ pub fn rewind_and_apply_fork(
 	Ok(())
 }
 
-fn validate_utxo(block: &Block, ext: &mut txhashset::ExtensionPair<'_>) -> Result<(), Error> {
-	let ref mut extension = ext.extension;
-	let ref mut header_extension = ext.header_extension;
-	extension.utxo_view(header_extension).validate_block(block)
+fn validate_utxo(block: &Block, ext: &txhashset::ExtensionPair<'_>) -> Result<(), Error> {
+	ext.extension
+		.utxo_view(ext.header_extension)
+		.validate_block(block)
 }

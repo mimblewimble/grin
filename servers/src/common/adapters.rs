@@ -313,15 +313,14 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 	fn locate_headers(&self, locator: &[Hash]) -> Result<Vec<core::BlockHeader>, chain::Error> {
 		debug!("locator: {:?}", locator);
 
-		let header = match self.find_common_header(locator) {
+		let header = match self.find_common_header(locator)? {
 			Some(header) => header,
 			None => return Ok(vec![]),
 		};
 
 		let max_height = self.chain().header_head()?.height;
 
-		let header_pmmr = self.chain().header_pmmr();
-		let header_pmmr = header_pmmr.read();
+		let header_pmmr = self.chain().header_pmmr_cloned()?;
 
 		// looks like we know one, getting as many following headers as allowed
 		let hh = header.height;
@@ -508,22 +507,20 @@ impl NetToChainAdapter {
 	}
 
 	// Find the first locator hash that refers to a known header on our main chain.
-	fn find_common_header(&self, locator: &[Hash]) -> Option<BlockHeader> {
-		let header_pmmr = self.chain().header_pmmr();
-		let header_pmmr = header_pmmr.read();
-
+	fn find_common_header(&self, locator: &[Hash]) -> Result<Option<BlockHeader>, chain::Error> {
+		let header_pmmr = self.chain().header_pmmr_cloned()?;
 		for hash in locator {
 			if let Ok(header) = self.chain().get_block_header(&hash) {
 				if let Ok(hash_at_height) = header_pmmr.get_header_hash_by_height(header.height) {
 					if let Ok(header_at_height) = self.chain().get_block_header(&hash_at_height) {
 						if header.hash() == header_at_height.hash() {
-							return Some(header);
+							return Ok(Some(header));
 						}
 					}
 				}
 			}
 		}
-		None
+		Ok(None)
 	}
 
 	// pushing the new block through the chain pipeline

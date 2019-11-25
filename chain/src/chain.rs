@@ -230,14 +230,12 @@ impl Chain {
 		Ok(chain)
 	}
 
-	/// Return our shared header MMR handle.
-	pub fn header_pmmr(&self) -> Arc<RwLock<PMMRHandle<BlockHeader>>> {
-		self.header_pmmr.clone()
+	pub fn header_pmmr_cloned(&self) -> Result<PMMRHandle<BlockHeader>, Error> {
+		self.header_pmmr.read().try_clone()
 	}
 
-	/// Return our shared txhashset instance.
-	pub fn txhashset(&self) -> Arc<RwLock<TxHashSet>> {
-		self.txhashset.clone()
+	pub fn txhashset_cloned(&self) -> Result<TxHashSet, Error> {
+		self.txhashset.read().try_clone()
 	}
 
 	/// Shared store instance.
@@ -553,47 +551,35 @@ impl Chain {
 			return Ok(());
 		}
 
-		let (header_pmmr, txhashset) = self.header_pmmr_and_txhashset()?;
-
 		// Now create an extension from the txhashset and validate against the
 		// latest block header. Rewind the extension to the specified header to
 		// ensure the view is consistent.
-		txhashset::extending_readonly(&header_pmmr, &txhashset, |mut ext| {
+		txhashset::extending_readonly(&self, |mut ext| {
 			pipe::rewind_and_apply_fork(&header, &mut ext)?;
-			let ref mut extension = ext.extension;
-			extension.validate(&self.genesis, fast_validation, &NoStatus)?;
+			ext.extension
+				.validate(&self.genesis, fast_validation, &NoStatus)?;
 			Ok(())
 		})
-	}
-
-	/// Ensure consistent view of both the header_pmmr and the txhashset by
-	/// cloning them after acquiring *both* read locks.
-	fn header_pmmr_and_txhashset(&self) -> Result<(PMMRHandle<BlockHeader>, TxHashSet), Error> {
-		let header_pmmr = self.header_pmmr.read();
-		let txhashset = self.txhashset.read();
-		Ok((header_pmmr.try_clone()?, txhashset.try_clone()?))
 	}
 
 	/// Sets the txhashset roots on a brand new block by applying the block on
 	/// the current txhashset state.
 	pub fn set_txhashset_roots(&self, b: &mut Block) -> Result<(), Error> {
-		let (header_pmmr, txhashset) = self.header_pmmr_and_txhashset()?;
-		let (prev_root, roots, sizes) =
-			txhashset::extending_readonly(&header_pmmr, &txhashset, |ext| {
-				let previous_header = ext.batch().get_previous_header(&b.header)?;
-				pipe::rewind_and_apply_fork(&previous_header, ext)?;
+		let (prev_root, roots, sizes) = txhashset::extending_readonly(&self, |ext| {
+			let previous_header = ext.batch().get_previous_header(&b.header)?;
+			pipe::rewind_and_apply_fork(&previous_header, ext)?;
 
-				let ref mut extension = ext.extension;
-				let ref mut header_extension = ext.header_extension;
+			let ref mut extension = ext.extension;
+			let ref mut header_extension = ext.header_extension;
 
-				// Retrieve the header root before we apply the new block
-				let prev_root = header_extension.root()?;
+			// Retrieve the header root before we apply the new block
+			let prev_root = header_extension.root()?;
 
-				// Apply the latest block to the chain state via the extension.
-				extension.apply_block(b)?;
+			// Apply the latest block to the chain state via the extension.
+			extension.apply_block(b)?;
 
-				Ok((prev_root, extension.roots()?, extension.sizes()))
-			})?;
+			Ok((prev_root, extension.roots()?, extension.sizes()))
+		})?;
 
 		// Set the prev_root on the header.
 		b.header.prev_root = prev_root;
@@ -620,11 +606,9 @@ impl Chain {
 		output: &OutputIdentifier,
 		header: &BlockHeader,
 	) -> Result<MerkleProof, Error> {
-		let (header_pmmr, txhashset) = self.header_pmmr_and_txhashset()?;
-		let merkle_proof = txhashset::extending_readonly(&header_pmmr, &txhashset, |ext| {
+		let merkle_proof = txhashset::extending_readonly(&self, |ext| {
 			pipe::rewind_and_apply_fork(&header, ext)?;
-			let ref mut extension = ext.extension;
-			extension.merkle_proof(output)
+			ext.extension.merkle_proof(output)
 		})?;
 
 		Ok(merkle_proof)
@@ -675,11 +659,9 @@ impl Chain {
 		// to rewind after receiving the txhashset zip.
 		let header = self.get_block_header(&h)?;
 		{
-			let (header_pmmr, txhashset) = self.header_pmmr_and_txhashset()?;
-			txhashset::extending_readonly(&header_pmmr, &txhashset, |ext| {
+			txhashset::extending_readonly(&self, |ext| {
 				pipe::rewind_and_apply_fork(&header, ext)?;
-				let ref mut extension = ext.extension;
-				extension.snapshot()?;
+				ext.extension.snapshot()?;
 				Ok(())
 			})?;
 		}
