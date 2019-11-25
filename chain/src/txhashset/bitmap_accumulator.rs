@@ -20,9 +20,7 @@ use croaring::Bitmap;
 
 use crate::core::core::hash::{DefaultHashable, Hash};
 use crate::core::core::pmmr::{self, ReadonlyPMMR, VecBackend, PMMR};
-use crate::core::ser::{
-	self, FixedLength, PMMRIndexHashable, PMMRable, Readable, Reader, Writeable, Writer,
-};
+use crate::core::ser::{self, FixedLength, PMMRable, Readable, Reader, Writeable, Writer};
 use crate::error::{Error, ErrorKind};
 
 /// The "bitmap accumulator" allows us to commit to a specific bitmap by splitting it into
@@ -57,27 +55,44 @@ impl BitmapAccumulator {
 	}
 
 	/// Initialize a bitmap accumulator given the provided idx iterator.
-	pub fn init<T: IntoIterator<Item = u64>>(&mut self, idx: T) -> Result<(), Error> {
-		self.apply_from(idx, 0)
+	pub fn init<T: IntoIterator<Item = u64>>(&mut self, idx: T, size: u64) -> Result<(), Error> {
+		self.apply_from(idx, 0, size)
 	}
 
-	/// Apply the provided idx iterator starting at the provided chunk idx.
-	fn apply_from<T>(&mut self, idx: T, from_chunk_idx: u64) -> Result<(), Error>
+	/// Find the start of the first "chunk" of 1024 bits from the provided idx.
+	/// Zero the last 10 bits to round down to multiple of 1024.
+	pub fn chunk_start_idx(idx: u64) -> u64 {
+		idx & !0x3ff
+	}
+
+	/// The first 1024 belong to chunk 0, the next 1024 to chunk 1 etc.
+	fn chunk_idx(idx: u64) -> u64 {
+		idx / 1024
+	}
+
+	/// Apply the provided idx iterator to our bitmap accumulator.
+	/// We start at the chunk containing from_idx and rebuild chunks as necessary
+	/// for the bitmap, limiting it to size (in bits).
+	/// If from_idx is 1023 and size is 1024 then we rebuild a single chunk.
+	fn apply_from<T>(&mut self, idx: T, from_idx: u64, size: u64) -> Result<(), Error>
 	where
 		T: IntoIterator<Item = u64>,
 	{
 		let now = Instant::now();
 
+		// Find the (1024 bit chunk) chunk_idx for the (individual bit) from_idx.
+		let from_chunk_idx = BitmapAccumulator::chunk_idx(from_idx);
 		let mut chunk_idx = from_chunk_idx;
+
 		let mut chunk = BitmapChunk::new();
 
-		let mut leaves = idx.into_iter().peekable();
-		while let Some(x) = leaves.peek() {
+		let mut idx_iter = idx.into_iter().filter(|&x| x < size).peekable();
+		while let Some(x) = idx_iter.peek() {
 			if *x < chunk_idx * 1024 {
 				// skip until we reach our first chunk
-				leaves.next();
+				idx_iter.next();
 			} else if *x < (chunk_idx + 1) * 1024 {
-				let idx = leaves.next().expect("next after peek");
+				let idx = idx_iter.next().expect("next after peek");
 				chunk.set(idx % 1024, true);
 			} else {
 				self.append_chunk(chunk)?;
@@ -99,10 +114,14 @@ impl BitmapAccumulator {
 	}
 
 	/// Apply updates to the bitmap accumulator given an iterator of invalidated idx and
-	/// an additional iterator of new idx to be added.
+	/// an iterator of idx to be set to true.
 	/// We determine the existing chunks to be rebuilt given the invalidated idx.
-	/// We then add new idx, extending the accumulator with new chunk(s) as necessary.
-	pub fn apply<T, U>(&mut self, invalidated_idx: T, new_idx: U) -> Result<(), Error>
+	/// We then rebuild given idx, extending the accumulator with new chunk(s) as necessary.
+	/// Resulting bitmap accumulator will contain sufficient bitmap chunks to cover size.
+	/// If size is 1 then we will have a single chunk.
+	/// If size is 1023 then we will have a single chunk (bits 0 to 1023 inclusive).
+	/// If the size is 1024 then we will have two chunks.
+	pub fn apply<T, U>(&mut self, invalidated_idx: T, idx: U, size: u64) -> Result<(), Error>
 	where
 		T: IntoIterator<Item = u64>,
 		U: IntoIterator<Item = u64>,
@@ -112,21 +131,19 @@ impl BitmapAccumulator {
 		// Note: We rebuild everything after rewind point but much of the bitmap may be
 		// unchanged. This can be further optimized by only rebuilding necessary chunks and
 		// rehashing.
-		if let Some(first_chunk_idx) = invalidated_idx.into_iter().next().map(|x| x / 1024) {
-			self.rewind_prior(first_chunk_idx)?;
-			self.pad_left(first_chunk_idx)?;
-			self.apply_from(new_idx, first_chunk_idx)?;
+		if let Some(from_idx) = invalidated_idx.into_iter().next() {
+			self.rewind_prior(from_idx)?;
+			self.pad_left(from_idx)?;
+			self.apply_from(idx, from_idx, size)?;
 		}
-
-		// Trim any "empty" chunks from the right to keep everything consistent.
-		self.trim_right()?;
 
 		Ok(())
 	}
 
-	/// Given the provided chunk idx rewind the bitmap accumulator to the end of the
+	/// Given the provided (bit) idx rewind the bitmap accumulator to the end of the
 	/// previous chunk ready for the updated chunk to be appended.
-	fn rewind_prior(&mut self, chunk_idx: u64) -> Result<(), Error> {
+	fn rewind_prior(&mut self, from_idx: u64) -> Result<(), Error> {
+		let chunk_idx = BitmapAccumulator::chunk_idx(from_idx);
 		let last_pos = self.backend.size();
 		let mut pmmr = PMMR::at(&mut self.backend, last_pos);
 		let chunk_pos = pmmr::insertion_to_pmmr_index(chunk_idx + 1);
@@ -139,32 +156,13 @@ impl BitmapAccumulator {
 	/// Make sure we append empty chunks to fill in any gap before we append the chunk
 	/// we actually care about. This effectively pads the bitmap with 1024 chunks of 0s
 	/// as necessary to put the new chunk at the correct place.
-	fn pad_left(&mut self, chunk_idx: u64) -> Result<(), Error> {
-		let last_pos = self.backend.size();
-		let chunk_pos = pmmr::insertion_to_pmmr_index(chunk_idx);
-		for _ in last_pos..chunk_pos {
+	fn pad_left(&mut self, from_idx: u64) -> Result<(), Error> {
+		let chunk_idx = BitmapAccumulator::chunk_idx(from_idx);
+		let current_chunk_idx = pmmr::n_leaves(self.backend.size());
+		for _ in current_chunk_idx..chunk_idx {
 			self.append_chunk(BitmapChunk::new())?;
 		}
 		Ok(())
-	}
-
-	/// Recursively trim the last chunk if empty. Stop when rightmost chunk is non-empty
-	/// or the accumulator itself is empty.
-	fn trim_right(&mut self) -> Result<(), Error> {
-		let last_pos = self.backend.size();
-		if last_pos == 0 {
-			return Ok(());
-		}
-		let mut pmmr = PMMR::at(&mut self.backend, last_pos);
-		if pmmr.get_hash(last_pos)
-			== Some(BitmapChunk::new().hash_with_index(last_pos.saturating_sub(1)))
-		{
-			pmmr.rewind(last_pos.saturating_sub(1), &Bitmap::create())
-				.map_err(|e| ErrorKind::Other(e))?;
-			self.trim_right()
-		} else {
-			Ok(())
-		}
 	}
 
 	/// Append a new chunk to the BitmapAccumulator.

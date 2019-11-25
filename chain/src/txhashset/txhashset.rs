@@ -151,12 +151,8 @@ impl TxHashSet {
 			header,
 		)?;
 
-		let bitmap_accumulator = {
-			let output_pmmr = ReadonlyPMMR::at(&output_pmmr_h.backend, output_pmmr_h.last_pos);
-			let mut bitmap_accumulator = BitmapAccumulator::new();
-			bitmap_accumulator.init(&mut output_pmmr.leaf_idx_iter(0))?;
-			bitmap_accumulator
-		};
+		// Initialize the bitmap accumulator from the current output PMMR.
+		let bitmap_accumulator = TxHashSet::bitmap_accumulator(&output_pmmr_h)?;
 
 		let mut maybe_kernel_handle: Option<PMMRHandle<TxKernel>> = None;
 		let versions = vec![ProtocolVersion(2), ProtocolVersion(1)];
@@ -211,6 +207,15 @@ impl TxHashSet {
 		} else {
 			Err(ErrorKind::TxHashSetErr(format!("failed to open kernel PMMR")).into())
 		}
+	}
+
+	// Build a new bitmap accumulator for the provided output PMMR.
+	fn bitmap_accumulator(pmmr_h: &PMMRHandle<Output>) -> Result<BitmapAccumulator, Error> {
+		let pmmr = ReadonlyPMMR::at(&pmmr_h.backend, pmmr_h.last_pos);
+		let size = pmmr::n_leaves(pmmr_h.last_pos);
+		let mut bitmap_accumulator = BitmapAccumulator::new();
+		bitmap_accumulator.init(&mut pmmr.leaf_idx_iter(0), size)?;
+		Ok(bitmap_accumulator)
 	}
 
 	/// Close all backend file handles
@@ -951,15 +956,22 @@ impl<'a> Extension<'a> {
 	}
 
 	fn apply_to_bitmap_accumulator(&mut self, output_pos: &[u64]) -> Result<(), Error> {
+		// if self.output_pmmr.is_empty() || output_pos.is_empty() {
+		// 	return Ok(());
+		// }
 		let mut output_idx: Vec<_> = output_pos
 			.iter()
 			.map(|x| pmmr::n_leaves(*x).saturating_sub(1))
 			.collect();
 		output_idx.sort_unstable();
-		let min_idx = output_idx.first().unwrap_or(&0);
-		let chunk_start_idx = min_idx & !0x3ff; // zero last 10 bits (each chunk is 1024 bits)
-		self.bitmap_accumulator
-			.apply(output_idx, self.output_pmmr.leaf_idx_iter(chunk_start_idx))
+		let min_idx = output_idx.first().cloned().unwrap_or(0);
+		let size = pmmr::n_leaves(self.output_pmmr.last_pos);
+		self.bitmap_accumulator.apply(
+			output_idx,
+			self.output_pmmr
+				.leaf_idx_iter(BitmapAccumulator::chunk_start_idx(min_idx)),
+			size,
+		)
 	}
 
 	fn apply_input(&mut self, input: &Input) -> Result<u64, Error> {
