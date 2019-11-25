@@ -89,7 +89,10 @@ where
 			if n > 0 && nonces[n] <= nonces[n - 1] {
 				return Err(ErrorKind::Verification("edges not ascending".to_owned()))?;
 			}
-			let edge = to_edge!(T, siphash_block(&self.params.siphash_keys, nonces[n], 25));
+			let edge = to_edge!(
+				T,
+				siphash_block(&self.params.siphash_keys, nonces[n], 25, false)
+			);
 			let idx = 4 * ndir[dir] + 2 * dir;
 			uvs[idx] = to_u64!(edge & nodemask);
 			uvs[idx + 1] = to_u64!((edge >> 32) & nodemask);

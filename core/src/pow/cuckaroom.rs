@@ -86,7 +86,10 @@ where
 			if n > 0 && nonces[n] <= nonces[n - 1] {
 				return Err(ErrorKind::Verification("edges not ascending".to_owned()))?;
 			}
-			let edge = to_edge!(T, siphash_block(&self.params.siphash_keys, nonces[n], 21));
+			let edge = to_edge!(
+				T,
+				siphash_block(&self.params.siphash_keys, nonces[n], 21, true)
+			);
 			from[n] = to_u32!(edge & nodemask);
 			xor_from ^= from[n];
 			to[n] = to_u32!((edge >> 32) & nodemask);

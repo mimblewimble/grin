@@ -131,7 +131,7 @@ pub const HARD_FORK_INTERVAL: u64 = YEAR_HEIGHT / 2;
 pub const FLOONET_FIRST_HARD_FORK: u64 = 185_040;
 
 /// Floonet second hard fork height, set to happen around 2019-12-19
-pub const FLOONET_SECOND_HARD_FORK: u64 = 303_696;
+pub const FLOONET_SECOND_HARD_FORK: u64 = 298_080;
 
 /// Check whether the block version is valid at a given height, implements
 /// 6 months interval scheduled hard forks for the first 2 years.
