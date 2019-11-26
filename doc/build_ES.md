@@ -87,7 +87,7 @@ Para obtener ayuda sobre los comandos de grin y sus cambios intente:
 
 ```sh
 grin help
-grin wallet --help
+grin server --help
 grin client --help
 ```
 
