@@ -1423,6 +1423,12 @@ pub fn zip_read(root_dir: String, header: &BlockHeader) -> Result<File, Error> {
 	// if file exist, just re-use it
 	let zip_file = File::open(zip_path.clone());
 	if let Ok(zip) = zip_file {
+		debug!(
+			"zip_read: {} at {}: reusing existing zip file: {:?}",
+			header.hash(),
+			header.height,
+			zip_path
+		);
 		return Ok(zip);
 	} else {
 		// clean up old zips.
@@ -1462,6 +1468,13 @@ pub fn zip_read(root_dir: String, header: &BlockHeader) -> Result<File, Error> {
 
 		temp_txhashset_path
 	};
+
+	debug!(
+		"zip_read: {} at {}: created zip file: {:?}",
+		header.hash(),
+		header.height,
+		zip_path
+	);
 
 	// open it again to read it back
 	let zip_file = File::open(zip_path.clone())?;
