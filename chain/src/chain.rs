@@ -671,24 +671,17 @@ impl Chain {
 		// The fast sync client does *not* have the necessary data
 		// to rewind after receiving the txhashset zip.
 		let header = self.get_block_header(&h)?;
-		{
-			let mut header_pmmr = self.header_pmmr.write();
-			let mut txhashset = self.txhashset.write();
-			txhashset::extending_readonly(&mut header_pmmr, &mut txhashset, |ext| {
-				pipe::rewind_and_apply_fork(&header, ext)?;
-				let ref mut extension = ext.extension;
-				extension.snapshot()?;
-				Ok(())
-			})?;
-		}
 
-		// prepares the zip and return the corresponding Read
-		let txhashset_reader = txhashset::zip_read(self.db_root.clone(), &header)?;
-		Ok((
-			header.output_mmr_size,
-			header.kernel_mmr_size,
-			txhashset_reader,
-		))
+		let mut header_pmmr = self.header_pmmr.write();
+		let mut txhashset = self.txhashset.write();
+		txhashset::extending_readonly(&mut header_pmmr, &mut txhashset, |ext| {
+			pipe::rewind_and_apply_fork(&header, ext)?;
+			ext.extension.snapshot()?;
+
+			// prepare the zip
+			txhashset::zip_read(self.db_root.clone(), &header)
+				.map(|file| (header.output_mmr_size, header.kernel_mmr_size, file))
+		})
 	}
 
 	/// To support the ability to download the txhashset from multiple peers in parallel,
