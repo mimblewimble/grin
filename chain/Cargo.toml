@@ -10,6 +10,7 @@ workspace = ".."
 edition = "2018"
 
 [dependencies]
+bit-vec = "0.6"
 bitflags = "1"
 byteorder = "1"
 failure = "0.1"

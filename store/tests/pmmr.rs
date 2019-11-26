@@ -29,6 +29,36 @@ use crate::core::ser::{
 };
 
 #[test]
+fn pmmr_leaf_idx_iter() {
+	let (data_dir, elems) = setup("leaf_idx_iter");
+	{
+		let mut backend = store::pmmr::PMMRBackend::new(
+			data_dir.to_string(),
+			true,
+			false,
+			ProtocolVersion(1),
+			None,
+		)
+		.unwrap();
+
+		// adding first set of 4 elements and sync
+		let mmr_size = load(0, &elems[0..5], &mut backend);
+		backend.sync().unwrap();
+
+		{
+			let pmmr: PMMR<'_, TestElem, _> = PMMR::at(&mut backend, mmr_size);
+			let leaf_idx = pmmr.leaf_idx_iter(0).collect::<Vec<_>>();
+			let leaf_pos = pmmr.leaf_pos_iter().collect::<Vec<_>>();
+
+			// The first 5 leaves [0,1,2,3,4] are at pos [1,2,4,5,8] in the MMR.
+			assert_eq!(leaf_idx, vec![0, 1, 2, 3, 4]);
+			assert_eq!(leaf_pos, vec![1, 2, 4, 5, 8]);
+		}
+	}
+	teardown(data_dir);
+}
+
+#[test]
 fn pmmr_append() {
 	let (data_dir, elems) = setup("append");
 	{

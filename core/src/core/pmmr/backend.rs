@@ -58,6 +58,10 @@ pub trait Backend<T: PMMRable> {
 	/// Number of leaves
 	fn n_unpruned_leaves(&self) -> u64;
 
+	/// Iterator over current (unpruned, unremoved) leaf insertion index.
+	/// Note: This differs from underlying MMR pos - [0, 1, 2, 3, 4] vs. [1, 2, 4, 5, 8].
+	fn leaf_idx_iter(&self, from_idx: u64) -> Box<dyn Iterator<Item = u64> + '_>;
+
 	/// Remove Hash by insertion position. An index is also provided so the
 	/// underlying backend can implement some rollback of positions up to a
 	/// given index (practically the index is the height of a block that
