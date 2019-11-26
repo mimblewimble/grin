@@ -1,6 +1,6 @@
 # Einführung in Mimblewimble und Grin
 
-*In anderen Sprachen lesen: [English](intro.md), [简体中文](intro_ZH-CN.md), [Español](intro_ES.md), [Nederlands](intro_NL.md), [Русский](intro_RU.md), [日本語](intro_JP.md), [Deutsch](intro_DE.md), [Portuguese](intro_PT-BR.md), [Korean](intro_KR.md)*
+*In anderen Sprachen lesen: [English](intro.md), [Español](intro_ES.md), [Nederlands](intro_NL.md), [Русский](intro_RU.md), [日本語](intro_JP.md), [Deutsch](intro_DE.md), [Portuguese](intro_PT-BR.md), [Korean](intro_KR.md), [简体中文](intro_ZH-CN.md)*
 
 Mimblewimble ist ein Blockchain-Format und Protokoll, welches auf starke kryptographische Primitiven setzt und dadurch äußerst gute Skalierbarkeit, Privatsphäre und Fungibilität bietet. Es befasst sich mit Lücken, die in fast allen gegenwärtigen Blockchainimplementierungen existieren.
 
@@ -275,8 +275,8 @@ Bezug nehmend auf den vorherigen Beispielblock, müssen die Outputs x1 und x2, a
 Verallgemeinernd können wir schlussfolgern, dass der Chainstate (ausgenommen Header) zu jedem Zeitpunkt durch lediglich die folgenden Informationsstücke zusammengefasst werden kann:
 
 1. Die Gesamtanzahl an Coins, die durch Mining in der Chain erstellt wurden.
-2. Das komplette Set nicht verwendeter Outputs.
-3. Die Transaktionskernel für jede Transaktion.
+1. Das komplette Set nicht verwendeter Outputs.
+1. Die Transaktionskernel für jede Transaktion.
 
 Das erste Informationsstück kann nur mittels der Blockhöhe (seiner Distanz zum Genesisblock), abgeleitet werden. Beide nicht verwendeten Outputs und die Transaktionskernel sind höchst kompakt. Dies hat 2 wichtige Konsequenzen:
 

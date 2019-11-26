@@ -1,6 +1,6 @@
 # Pruning Blockchain Data
 
-*Read this in other languages: [Korean](pruning_KR.md).*
+*Read this in other languages: [Korean](pruning_KR.md), [简体中文](pruning_ZH-CN.md).*
 
 One of the principal attractions of Mimblewimble is its theoretical space
 efficiency. Indeed, a trusted or pre-validated full blockchain state only
@@ -11,12 +11,12 @@ understanding of the Mimblewimble protocol):
 
 1. Transaction outputs, which include for each output:
     1. A Pedersen commitment (33 bytes).
-    2. A range proof (over 5KB at this time).
-2. Transaction inputs, which are just output references (32 bytes).
-3. Transaction "proofs", which include for each transaction:
+    1. A range proof (over 5KB at this time).
+1. Transaction inputs, which are just output references (32 bytes).
+1. Transaction "proofs", which include for each transaction:
     1. The excess commitment sum for the transaction (33 bytes).
-    2. A signature generated with the excess (71 bytes average).
-4. A block header includes Merkle trees and proof of work (about 250 bytes).
+    1. A signature generated with the excess (71 bytes average).
+1. A block header includes Merkle trees and proof of work (about 250 bytes).
 
 Assuming a blockchain of a million blocks, 10 million transactions (2 inputs, 2.5
 outputs average) and 100,000 unspent outputs, we get the following approximate

@@ -1,6 +1,6 @@
 # Inleiding tot Mimblewimble en Grin
 
-*Lees dit in andere talen: [English](intro.md), [简体中文](intro_ZH-CN.md), [Español](intro_ES.md), [Nederlands](intro_NL.md), [Русский](intro_RU.md), [日本語](intro_JP.md), [Deutsch](intro_DE.md), [Portuguese](intro_PT-BR.md), [Korean](intro_KR.md).*
+*Lees dit in andere talen: [English](intro.md), [Español](intro_ES.md), [Nederlands](intro_NL.md), [Русский](intro_RU.md), [日本語](intro_JP.md), [Deutsch](intro_DE.md), [Portuguese](intro_PT-BR.md), [Korean](intro_KR.md), [简体中文](intro_ZH-CN.md).*
 
 Mimblewimble is een blockchain formaat en protocol die extreem goede schaalbaarheid, privacy en fungibiliteit biedt door zich te berusten op sterke cryptografische primiteven. Het adresseert de lacunes die in bijna alle huidige blockchain-implementaties bestaan.
 
@@ -390,8 +390,8 @@ Veralgemeend, concluderen we dat de ketenstatus (met uitzondering van headers) o
 samengevat kunnen worden door alleen deze stukjes informatie:
 
 1. Het totale aantal munten gecreëerd door mining in de keten.
-2. De volledige verzameling aan niet-bestede uitgaven.
-3. De transactiekernels voor elke transactie.
+1. De volledige verzameling aan niet-bestede uitgaven.
+1. De transactiekernels voor elke transactie.
 
 Het eerste stuk informatie kan afgeleid worden door alleen de blokhoogte 
 (de afstand tot het genesisblok) te gebruiken. En zowel de niet-bestede uitgaven als de

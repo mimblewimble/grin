@@ -1,6 +1,6 @@
 # Mimblewimble 과 Grin 에 대한 소개
 
-*다른 언어로 Intro를 읽으시려면: [English](intro.md), [简体中文](intro.zh-cn.md), [Español](intro_ES.md), [Русский](intro.ru.md), [日本語](intro.jp.md).*
+*다른 언어로 되어있는 문서를 읽으려면: [English](intro.md), [Español](intro_ES.md), [Русский](intro.ru.md), [日本語](intro.jp.md), [简体中文](intro.zh-cn.md).*
 
 MimbleWimlbe은 블록체인 포맷이면서 프로토콜 입니다.
 Mimblewimble은 암호학적 기반에 의해서 극대화된 좋은 확장성, 프라이버시, 그리고 대체가능성을 제공합니다. 이러한 특성은 지금 현존하는 모든 블록체인 구현체에 존재하는 문제점들을 처리합니다.
@@ -302,8 +302,8 @@ Signature 공개키로서 트랜잭션의 합이 0임을 증명하는 _kernel ex
 
 
 1. 체인안에서 채굴에 의해서 만들어진 코인의 총량
-2. 쓰지 않은 출력값의 모든 세트
-3. 각 트랜잭션의 트랜잭션 kernel
+1. 쓰지 않은 출력값의 모든 세트
+1. 각 트랜잭션의 트랜잭션 kernel
 
 첫번째 정보는 Genesis 블록으로부터의 거리인 블록 높이를 가지고 유추 될 수 있습니다. 그리고 쓰지 않는 출력값과 트랜잭션 kernel은 매우 작습니다. 이것에는 아래와 같이 2가지 중요한 결과를 가지고 있습니다.
 

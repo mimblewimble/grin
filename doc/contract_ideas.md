@@ -15,7 +15,7 @@ Note that this requires both chains to support hash preimages: all Bitcoin scrip
 
 (So far this is the same as the classic Bitcoin atomic swap by Tier Nolan [3]; the difference in locktimes is because during part of the protocol Igno can take his coins but I can't yet take mine, so I want to be sure he can't do this and simultaneously back out. This way ff he takes the coins, I can take mine, but if he backs out then I've long since backed out, and these are his only possibilities.)
 
-  2. Igno and I construct transactions that move the locked coins to their final destinations. We agree on the kernels and signature nonces, and in particular on signature challenges e and e'.
+2. Igno and I construct transactions that move the locked coins to their final destinations. We agree on the kernels and signature nonces, and in particular on signature challenges e and e'.
 
 3. Igno sends me a "conversion" keys sconv which satisfies
 

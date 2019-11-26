@@ -1,6 +1,6 @@
 # Introdução ao Mimblewimble e ao Grin
 
-*Leia isto em outros idiomas: [English](intro.md), [简体中文](intro_ZH-CN.md), [Español](intro_ES.md), [Nederlands](intro_NL.md), [Русский](intro_RU.md), [日本語](intro_JP.md), [Deutsch](intro_DE.md), [Portuguese](intro_PT-BR.md), [Korean](intro_KR.md).*
+*Leia isto em outros idiomas: [English](intro.md), [Español](intro_ES.md), [Nederlands](intro_NL.md), [Русский](intro_RU.md), [日本語](intro_JP.md), [Deutsch](intro_DE.md), [Portuguese](intro_PT-BR.md), [Korean](intro_KR.md), [简体中文](intro_ZH-CN.md).*
 
 O Mimblewimble é um formato e protocolo blockchain que fornece ótima escalabilidade, privacidade e fungibilidade, para isso contando com primitivas criptográficas fortes. Ele aborda as lacunas existentes em quase todos as implementações blockchain atuais.
 
@@ -275,8 +275,8 @@ Voltando ao bloco do exemplo anterior, as saídas x1 e x2, gastas por I1 e I2, d
 Generalizando, concluímos que o estado da cadeia (excluindo cabeçalhos) a qualquer momento pode ser resumido simplesmente pelas seguintes informações:
 
 1. A quantidade total de moedas criadas pela mineração na cadeia.
-2. O conjunto completo de saídas não gastas.
-3. Os núcleos de transações para cada transação.
+1. O conjunto completo de saídas não gastas.
+1. Os núcleos de transações para cada transação.
 
 A primeira informação pode ser deduzida usando apenas a altura do bloco (sua distância do bloco de gênese). E tanto as saídas não gastas quanto os núcleos de transação são extremamente compactos. Isso tem 2 consequências importantes:
 

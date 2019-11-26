@@ -1,6 +1,6 @@
 # Merkle Structures
 
-*Read this in other languages:[Korean](merkle_KR.md)*
+*Read this in other languages: [Korean](merkle_KR.md), [简体中文](merkle_ZH-CN.md).*
 
 Mimblewimble is designed for users to verify the state of the system given
 only pruned data. To achieve this goal, all transaction data is committed
@@ -34,12 +34,12 @@ The root sum should be equal to the sum of all excesses since the genesis.
 Design requirements:
 
 1. Efficient additions and updating from unspent to spent.
-2. Efficient proofs that a specific output was spent.
-3. Efficient storage of diffs between UTXO roots.
-4. Efficient tree storage even with missing data, even with millions of entries.
-5. If a node commits to NULL, it has no unspent children and its data should
+1. Efficient proofs that a specific output was spent.
+1. Efficient storage of diffs between UTXO roots.
+1. Efficient tree storage even with missing data, even with millions of entries.
+1. If a node commits to NULL, it has no unspent children and its data should
    eventually be able to be dropped forever.
-6. Support for serialization and efficient merging of pruned trees from partial archival nodes.
+1. Support for serialization and efficient merging of pruned trees from partial archival nodes.
 
 ### Output witnesses
 

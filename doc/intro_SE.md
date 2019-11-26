@@ -1,6 +1,6 @@
 # Introduktion till Mimblewimble och Grin
 
-*Läs detta på andra språk: [English](intro.md), [简体中文](intro_ZH-CN.md), [Español](intro_ES.md), [Nederlands](intro_NL.md), [Русский](intro_RU.md), [日本語](intro_JP.md), [Deutsch](intro_DE.md), [Portuguese](intro_PT-BR.md), [Korean](intro_KR.md).*
+*Läs detta på andra språk: [English](intro.md), [Español](intro_ES.md), [Nederlands](intro_NL.md), [Русский](intro_RU.md), [日本語](intro_JP.md), [Deutsch](intro_DE.md), [Portuguese](intro_PT-BR.md), [Korean](intro_KR.md), [简体中文](intro_ZH-CN.md).*
 
 Mimblewimble är ett blockkedjeformat och protokoll som erbjuder extremt bra
 skalbarhet, integritet, och fungibilitet genom starka kryptografiska primitiver.
@@ -369,8 +369,8 @@ I1 och I2 alla tas bort från blockkedjan eftersom de nu är mellanliggande tran
 Vi slutleder att kedjetillståndet kan (bortsett från block headers) vid varje tidspunkt sammanfattas med endast dessa tre ting:
 
 1. Den totala mängden mynt skapade genom mining.
-2. Den kompletta mängden av UTXOs.
-3. Transaktionskärnorna för varje transaktion.
+1. Den kompletta mängden av UTXOs.
+1. Transaktionskärnorna för varje transaktion.
 
 Det första kan härledas genom att endast observera blockhöjden.
 
