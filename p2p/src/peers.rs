@@ -214,7 +214,7 @@ impl Peers {
 	}
 
 	/// Return vec of connected peers that currently have the most worked
-	/// branch, showing the highest total difficulty.
+	/// branch, showing the highest total difficulty, ordered by bytes received in the last minute.
 	pub fn most_work_peers(&self) -> Vec<Arc<Peer>> {
 		let peers = self.connected_peers();
 		if peers.len() == 0 {
@@ -238,8 +238,7 @@ impl Peers {
 		max_peers
 	}
 
-	/// Returns single random peer with the most worked branch, showing the
-	/// highest total difficulty.
+	/// Returns single peer with the highest total difficulty and highest bytes received in the last minute.
 	pub fn most_work_peer(&self) -> Option<Arc<Peer>> {
 		self.most_work_peers().pop()
 	}
