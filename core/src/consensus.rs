@@ -133,12 +133,16 @@ pub const FLOONET_FIRST_HARD_FORK: u64 = 185_040;
 /// Floonet second hard fork height, set to happen around 2019-12-19
 pub const FLOONET_SECOND_HARD_FORK: u64 = 298_080;
 
+pub const TESTING_FIRST_HARD_FORK: u64 = 3;
+pub const TESTING_SECOND_HARD_FORK: u64 = 6;
+
 /// Compute possible block version at a given height, implements
 /// 6 months interval scheduled hard forks for the first 2 years.
 pub fn header_version(height: u64) -> HeaderVersion {
 	let chain_type = global::CHAIN_TYPE.read().clone();
 	let hf_interval = (1 + height / HARD_FORK_INTERVAL) as u16;
 	match chain_type {
+		global::ChainTypes::Mainnet => HeaderVersion(hf_interval),
 		global::ChainTypes::Floonet => {
 			if height < FLOONET_FIRST_HARD_FORK {
 				(HeaderVersion(1))
@@ -149,9 +153,18 @@ pub fn header_version(height: u64) -> HeaderVersion {
 			} else {
 				HeaderVersion(hf_interval)
 			}
-		}
-		// everything else just like mainnet
-		_ => HeaderVersion(hf_interval),
+		},
+		global::ChainTypes::AutomatedTesting | global::ChainTypes::UserTesting => {
+			if height < TESTING_FIRST_HARD_FORK {
+				(HeaderVersion(1))
+			} else if height < TESTING_SECOND_HARD_FORK {
+				(HeaderVersion(2))
+			} else if height < 3 * HARD_FORK_INTERVAL {
+				(HeaderVersion(3))
+			} else {
+				HeaderVersion(hf_interval)
+			}
+		},
 	}
 }
 

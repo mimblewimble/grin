@@ -116,13 +116,13 @@ pub struct TxHashSet {
 }
 
 impl TxHashSet {
-	pub fn from_head(head: Arc<chain::Chain>) -> TxHashSet {
-		let roots = head.get_txhashset_roots();
-		TxHashSet {
-			output_root_hash: roots.output_root().to_hex(),
+	pub fn from_head(chain: Arc<chain::Chain>) -> Result<TxHashSet, chain::Error> {
+		let (roots, header) = chain.get_txhashset_roots()?;
+		Ok(TxHashSet {
+			output_root_hash: roots.output_root(&header)?.to_hex(),
 			range_proof_root_hash: roots.rproof_root.to_hex(),
 			kernel_root_hash: roots.kernel_root.to_hex(),
-		}
+		})
 	}
 }
 

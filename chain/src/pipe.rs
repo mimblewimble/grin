@@ -312,10 +312,14 @@ fn validate_header(header: &BlockHeader, ctx: &mut BlockContext<'_>) -> Result<(
 	// First I/O cost, delayed as late as possible.
 	let prev = prev_header_store(header, &mut ctx.batch)?;
 
-	// make sure this header has a height exactly one higher than the previous
-	// header
+	// This header height must increase the height from the previous header by exactly 1.
 	if header.height != prev.height + 1 {
 		return Err(ErrorKind::InvalidBlockHeight.into());
+	}
+
+	// This header must have a valid header version for its height.
+	if !consensus::valid_header_version(header.height, header.version) {
+		return Err(ErrorKind::InvalidBlockVersion(header.version).into());
 	}
 
 	if header.timestamp <= prev.timestamp {
