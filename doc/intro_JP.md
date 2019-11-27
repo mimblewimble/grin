@@ -1,6 +1,6 @@
 # Mimblewimble と Grin 概論
 
-*この文章を他の言語で読む： [English](intro.md), [简体中文](intro_ZH-CN.md), [Español](intro_ES.md), [Nederlands](intro_NL.md), [Русский](intro_RU.md), [日本語](intro_JP.md), [Deutsch](intro_DE.md), [Portuguese](intro_PT-BR.md), [Korean](intro_KR.md).*
+*この文章を他の言語で読む： [English](intro.md), [Español](intro_ES.md), [Nederlands](intro_NL.md), [Русский](intro_RU.md), [日本語](intro_JP.md), [Deutsch](intro_DE.md), [Portuguese](intro_PT-BR.md), [Korean](intro_KR.md), [简体中文](intro_ZH-CN.md).*
 
 Mimblewimble は、極めてよいスケーラビリティ、プライバシー、そして代替可能性（fungibility）の解決法を提供
 するブロックチェーンのフォーマット・プロトコルである。Mimblewimble は、ほとんどすべてのブロックチェーンの
@@ -372,8 +372,8 @@ inputs はそれらが使用する outputs への参照である。以前のブ�
 一般化すると、任意の時点において（ヘッダーを除いて）チェーンの状態は以下の情報によって要約される：
 
 1. マイニングによって作られたコインの総額
-2. utxo の完全な集合
-3. それぞれのトランザクションに対する transaction kernel
+1. utxo の完全な集合
+1. それぞれのトランザクションに対する transaction kernel
 
 はじめの情報はブロック高（ジェネシスブロックからの距離）から推定することができる。
 そして、utxo と transaction kernel は共に極めてコンパクトだ。これは２つの重要な結果を持っている：

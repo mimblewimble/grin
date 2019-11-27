@@ -14,13 +14,12 @@
 
 //! Compact Blocks.
 
-use rand::{thread_rng, Rng};
-
 use crate::core::block::{Block, BlockHeader, Error, UntrustedBlockHeader};
 use crate::core::hash::{DefaultHashable, Hashed};
 use crate::core::id::ShortIdentifiable;
 use crate::core::{Output, ShortId, TxKernel};
 use crate::ser::{self, read_multi, Readable, Reader, VerifySortedAndUnique, Writeable, Writer};
+use rand::{thread_rng, Rng};
 
 /// Container for full (full) outputs and kernels and kern_ids for a compact block.
 #[derive(Debug, Clone)]

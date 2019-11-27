@@ -18,7 +18,7 @@ use crate::core::hash::Hash;
 use crate::core::pmmr;
 use crate::ser;
 use crate::ser::{PMMRIndexHashable, Readable, Reader, Writeable, Writer};
-use crate::util;
+use util;
 
 /// Merkle proof errors.
 #[derive(Clone, Debug, PartialEq)]

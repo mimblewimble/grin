@@ -23,7 +23,7 @@ use std::path::Path;
 use std::sync::{mpsc, Arc};
 use std::{
 	thread::{self, JoinHandle},
-	time,
+	time::{self, Duration},
 };
 
 use fs2::FileExt;
@@ -480,18 +480,16 @@ impl Server {
 			.map(|p| PeerStats::from_peer(&p))
 			.collect();
 
-		let (tx_pool_size, stem_pool_size) = {
-			let tx_pool_lock = self.tx_pool.try_read();
-			match tx_pool_lock {
-				Some(l) => (l.txpool.entries.len(), l.stempool.entries.len()),
-				None => (0, 0),
-			}
-		};
+		// Updating TUI stats should not block any other processing so only attempt to
+		// acquire various read locks with a timeout.
+		let read_timeout = Duration::from_millis(500);
 
-		let tx_stats = TxStats {
-			tx_pool_size,
-			stem_pool_size,
-		};
+		let tx_stats = self.tx_pool.try_read_for(read_timeout).map(|pool| TxStats {
+			tx_pool_size: pool.txpool.size(),
+			tx_pool_kernels: pool.txpool.kernel_count(),
+			stem_pool_size: pool.stempool.size(),
+			stem_pool_kernels: pool.stempool.kernel_count(),
+		});
 
 		let head = self.chain.head_header()?;
 		let head_stats = ChainStats {
@@ -501,13 +499,16 @@ impl Server {
 			total_difficulty: head.total_difficulty(),
 		};
 
-		let header_tip = self.chain.header_head()?;
-		let header = self.chain.get_block_header(&header_tip.hash())?;
-		let header_stats = ChainStats {
-			latest_timestamp: header.timestamp,
-			height: header.height,
-			last_block_h: header.prev_hash,
-			total_difficulty: header.total_difficulty(),
+		let header_stats = match self.chain.try_header_head(read_timeout)? {
+			Some(head) => self.chain.get_block_header(&head.hash()).map(|header| {
+				Some(ChainStats {
+					latest_timestamp: header.timestamp,
+					height: header.height,
+					last_block_h: header.prev_hash,
+					total_difficulty: header.total_difficulty(),
+				})
+			})?,
+			_ => None,
 		};
 
 		let disk_usage_bytes = WalkDir::new(&self.config.db_root)

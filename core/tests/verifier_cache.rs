@@ -17,12 +17,10 @@ pub mod common;
 use self::core::core::verifier_cache::{LruVerifierCache, VerifierCache};
 use self::core::core::{Output, OutputFeatures};
 use self::core::libtx::proof;
-use self::keychain::{ExtKeychain, Keychain, SwitchCommitmentType};
-use self::util::RwLock;
 use grin_core as core;
-use grin_keychain as keychain;
-use grin_util as util;
+use keychain::{ExtKeychain, Keychain, SwitchCommitmentType};
 use std::sync::Arc;
+use util::RwLock;
 
 fn verifier_cache() -> Arc<RwLock<dyn VerifierCache>> {
 	Arc::new(RwLock::new(LruVerifierCache::new()))
