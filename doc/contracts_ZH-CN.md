@@ -1,270 +1,173 @@
-# Contracts
+# 合约
 
-This document describes smart contracts that can be setup using Grin even
-though the Grin chain does not support scripting. All these contracts rely
-on a few basic features that are built in the chain and compose them in
-increasingly clever ways.
+本文说明使用 Grin 设置智能合约。尽管 Grin 链上不支持脚本，依靠一些链上内置基本功能，即可实现这些智能合约，而且编辑方式也会越来越巧妙。
 
-None of those constructs are fully original or invented by the authors of this
-document or the Grin development team. Most of the credit should be attributed
-to a long list of cryptographers and researchers. To name just a few: Torben
-Pryds Pedersen, Gregory Maxwell, Andrew Poelstra, John Tromp, Claus Peter
-Schnorr. We apologize in advance for all those we couldn't name and recognize
-that most computer science discoveries are incremental.
+这些构建方式并非本文作者或 Grin 开发团队原创。主要都是众多密码学家和研究者的结晶。其中包括：Torben
+Pryds Pedersen、Gregory Maxwell、Andrew Poelstra、John Tromp、Claus Peter
+Schnorr。在此对未能列出名字的贡献者致歉，我们认可多数计算机科学发现都意义非凡。
 
-## Built-Ins
+## 内置功能
 
-This section is meant as a reminder of some crucial features of the Grin chain.
-We assume some prior reading as to how these are constructed and used.
+本节提及 Grin 区块链的一些重要功能。我们需要预习一些知识，才能构建和使用这些功能。
 
 ### Pedersen Commitments
 
-All outputs include a Pedersen commitment of the form `r*G + v*H` with `r`
-the blinding factor, `v` the value, and G and H two distinct generator points
-on the same curve group.
+所有输出包括`r*G + v*H`公式的 Pedersen commitment。`r`是盲因子，`v`是值，`G`和 `H` 是相同曲线组上两个不同的生成器点。
 
-### Aggregate Signatures (a.k.a. Schnorr, MuSig)
+### 聚合签名（即 Schnorr 签名，多签）
 
-We suppose we have the SHA256 hash function and the same G curve as above. In
-its simplest form, an aggregate signature is built from:
+我们假设有 SHA256 哈希函数和与上述相同的 G 曲线。最简单公式中，聚合签名构建需要以下条件：
 
-* the message `M` to sign, in our case the transaction fee
-* a private key `x`, with its matching public key `x*G`
-* a nonce `k` just used for the purpose of building the signature
+* 待签名信息 `M`，本例中是交易费
+* 私钥 `X`，对应公钥 `x*G`
+* 随机数 `K`，仅用于构建签名
 
-We build the challenge `e = SHA256(M | k*G | x*G)`, and the scalar
-`s = k + e * x`. The full aggregate signature is then the pair `(s, k*G)`.
+我们构建一个挑战 `e = SHA256(M | k*G | x*G)` 和标量 `s = k + e * x`。完整的聚合签名就为 `(s, k*G)`。
 
-The signature can be checked using the public key `x*G`, re-calculating `e`
-using M and `k*G` from the 2nd part of the signature pair and by verifying
-that `s`, the first part of the signature pair, satisfies:
+检查签名可使用公钥 `x*G` ，使用签名对后半部分 M 和 `k*G` 重新计算 `e`，验证签名对第一部分 `s` 满足：
 
 ```
 s*G = k*G + e * x*G
 ```
 
-In this simple case of someone sending a transaction to a receiver they trust
-(see later for the trustless case), an aggregate signature can be directly
-built for a Grin transaction by taking the above private key `x` to be the sum
-of output blinding factors minus the sum of input blinding factors. The resulting
-kernel is assembled from the aggregate signature generated using `r` and the
-public key `r*G`, and allows to verify non-inflation for all Grin transactions
-(and signs the fees).
+简单示例，甲给信任乙，给对方发起一笔转账（稍后举例无需信任的情况）。使用上述私钥 `X` 计算输出盲因子之和减去输入盲因子之和，可直接为 Grin 构建聚合签名。使用 `r` 和公钥 `r*G` 产生的聚合签名生成最终的交易核，允许验证所有 Grin 交易没有非法造币（并且给交易费签名）。
 
-Because these signatures are built simply from a scalar and a public key, they
-can be used to construct a variety of contracts using "simple" arithmetic.
+仅使用标量和公钥即可构建签名，那也可使用简单的数理构建不同的合约。
 
-### (Absolute) Timelocked Transactions
+### （绝对）限时锁定交易
 
-Analogous to Bitcoin [nLockTime](https://en.bitcoin.it/wiki/Timelock#nLockTime).
+类似于比特币 [nLockTime](https://en.bitcoin.it/wiki/Timelock#nLockTime)。
 
-A transaction can be time-locked with a few simple modifications:
+仅需简单修改即可对交易进行限时锁定：
 
-* the message `M` to sign becomes the lock_height `h` at which the transaction
-  becomes spendable appended to the fee
+* 待签名信息 `M` 锁定在高度 (lock_height) `h`，交易即可花费，并添加交易费
   * `M = fee | h`
-* the lock height `h` is included in the transaction kernel
-* a block with a kernel that includes a lock height greater than the current
-  block height is rejected
+* 锁定高度 `h` 写入交易核
+* 锁定高度大于目前区块高度的交易核区块会被拒绝
 
-### (Relative) Timelocked Transactions
+### （相对）限时锁定交易
 
-We can extend the concept of an absolute locktime on a tx by including a (kernel) commitment that we can define the lock_height relative to.
+纳入可以确定相关锁定高度的（交易核）commitment，就可以延伸交易的绝对限时锁定概念。
 
-The lock_height would be relative to the block height where the referenced kernel was first included in the chain state.
+只要参照交易内核首先加入到链上状态，锁定高度就与区块高度关联。
 
-Tx2 can then be restricted such that it would only be valid to include it in a block once `h` blocks have passed after first seeing Tx1 (via the referenced kernel commitment).
+只要（通过参照交易内核 commitment）首先查看 Tx1 后 `h` 区块通过，可以限制 Tx2，只有纳入一个区块后方可有效。
 
-* the message `M` to sign would need to include the following -
-  * the `fee` as before
-  * the lock_height `h` (as before but interpreted as a relative value)
-  * a referenced kernel commitment `C`
+* 待签名信息 `M` 需要包含以下信息 -
+  * 与之前一样的 `fee`
+  * lock_height `h` （与之前一样，只是解释为相对值）
+  * 参照交易内核 commitment `C`
   * M = `fee | h | C`
 
-For Tx2 to be accepted it would also need to include a Merkle proof identifying the block including `C` from Tx1. This proves the relative lock_height requirement has been met.
+要让 Tx2 接受，就需要包含 Merkle 证明，验证区块包含 Tx1 的 `C`。这就证明已满足相对 lock_height 要求。
 
-## Derived Contracts
+## 衍生合约
 
-### Trustless Transactions
+### 无需信任交易
 
-An aggregate (Schnorr) signature involving a single party is relatively simple
-but does not demonstrate the full flexibility of the construction. We show
-here how to generalize it for use in outputs involving multiple parties.
+涉及一方的聚合 (Schnorr) 签名相对简单，但没有展现架构的全部灵活性。下面我们来展示如何用于多方输出。
 
-As constructed in section 1.2, an aggregate signature requires trusting the
-receiving party. As Grin outputs are completely obscured by Pedersen
-Commitments, one cannot prove money was actually sent to the right party,
-hence a receiver could claim not having received anything. To solve this
-issue, we require the receiver to collaborate with the sender in building a
-transaction and specifically its kernel signature.
+如 1.2 节所示，聚合签名需要信任收款方。由于 Grin 的输出完全通过 Pedersen Commitment 隐藏，付款方无法证明钱真正发给确定一方，因此收款方可以说自己没有收到钱。为了解决这个问题，我们需要收款方与付款方交互进行交易，特别是对交易内核签名。
 
-Alice wants to pay Bob in grins. She starts the transaction building process:
+Alice 想要给 Bob 支付 Grin. Alice 开始交易构建流程：
 
-1. Alice selects her inputs and builds her change output. The sum of all
-   blinding factors (change output minus inputs) is `rs`.
-1. Alice picks a random nonce ks and sends her partial transaction, `ks*G` and
-   `rs*G` to Bob.
-1. Bob picks his own random nonce `kr` and the blinding factor for his output
-   `rr`. Using `rr`, Bob adds his output to the transaction.
-1. Bob computes the message `M = fee | lock_height`, the Schnorr challenge
-   `e = SHA256(M | kr*G + ks*G | rr*G + rs*G)` and finally his side of the
-   signature `sr = kr + e * rr`.
-1. Bob sends `sr`, `kr*G` and `rr*G` to Alice.
-1. Alice computes `e` just like Bob did and can check that
-   `sr*G = kr*G + e*rr*G`.
-1. Alice sends her side of the signature `ss = ks + e * rs` to Bob.
-1. Bob validates `ss*G` just like Alice did for `sr*G` in step 6 and can
-   produce the final signature `s = (ss + sr, ks*G + kr*G)` as well as the final
-   transaction kernel including `s` and the public key `rr*G + rs*G`.
+1. Alice 选择输入值，建立找零输出。所有盲因子之和（找零输出减去输入）为 `rs`。
+1. Alice 选择一个随机数 ks，发送她这部分交易 `ks*G` 和 `rs*G` 给 Bob。
+1. Bob 选出自己的随机数 `kr` 和输出盲因子 `rr`，Bob 使用 `rr` 将自己的输出添加到交易。
+1. Bob 算出信息 `M = fee | lock_height`，Schnorr 挑战 `e = SHA256(M | kr*G + ks*G | rr*G + rs*G)` 以及最后他这边的签名 `sr = kr + e * rr`。
+1. Bob 将 `sr`, `kr*G` 和 `rr*G` 发给 Alice。 
+1. Alice 像 Bob 一样算出 `e`，然后检查 `sr*G = kr*G + e*rr*G`。
+1. Alice 将她的签名 `ss = ks + e * rs` 发给 Bob。
+1. Bob 按第六步 Alice 验证 `sr*G` 一样来验证 `ss*G`，并生成最终签名 `s = (ss + sr, ks*G + kr*G)` 和包含 `s` 与公钥 `rr*G + rs*G` 的最终交易内核。
 
-This protocol requires 3 data exchanges (Alice to Bob, Bob back to Alice,
-and finally Alice to Bob) and is therefore said to be interactive. However
-the interaction can be done over any medium and in any period of time,
-including the pony express over 2 weeks.
+协议需要三步数据交换（Alice 发送交易文件给 Bob，Bob 再发送给 Alice，最后 Alice 再发送给 Bob），也就是上述所讲的交互。但交互也可以在特定时间内通过媒介来完成，包括两周时间的“慢速邮递”（pony express）。
 
-This protocol can also be generalized to any number `i` of parties. On the
-first round, all the `ki*G` and `ri*G` are shared. On the 2nd round, everyone
-can compute `e = SHA256(M | sum(ki*G) | sum(ri*G))` and their own signature
-`si`. Finally, a finalizing party can then gather all the partial signatures
-`si`, validate them and produce `s = (sum(si), sum(ki*G))`.
+本协议也可归纳为双方的任意数字 `i`。第一轮交互中，`ki*G` 和 `ri*G` 共享。第二轮中，双方都可以计算 `e = SHA256(M | sum(ki*G) | sum(ri*G))` 和自己的签名 `si`。最后确认方可以搜集全部分散签名 `si`，验证并生成 `s = (sum(si), sum(ki*G))`。
 
-### Multiparty Outputs (multisig)
+### 多方输出（多签）
 
-We describe here a way to build a transaction with an output that can only be
-spent when multiple parties approve it. This construction is very similar to
-the previous setup for trustless transactions, however in this case both the
-signature and a Pedersen Commitment need to be aggregated.
+本节说明建立只有多方同意才能花费的交易。此构建与之前的无需信任交易类似，但本例中需要聚合签名和 Pedersen Commitment。
 
-This time, Alice wants to send funds such that both Bob and her need to agree
-to spend. Alice builds the transaction normally and adds the multiparty output
-such that:
+这次，Alice 发起交易需要获得  Bob 和自己同意才能花费。Alice 正常发起交易，并以下列方式添加多方输出：
 
-1. Bob picks a blinding factor `rb` and sends `rb*G` to Alice.
-1. Alice picks a blinding factor `ra` and builds the commitment
-   `C = ra*G + rb*G + v*H`. She sends the commitment to Bob.
-1. Bob creates a range proof for `v` using `C` and `rb` and sends it to Alice.
-1. Alice generates her own range proof, aggregates it with Bob, finalizing
-   the multiparty output `Oab`.
-1. The kernel is built following the same procedure as for Trustless
-   Transactions.
+1. Bob 选出盲因子 `rb` 并发送 `rb*G` 给 Alice。
+1. Alice 选出盲因子 `ra` 并建立密诺 (commitment) `C = ra*G + rb*G + v*H`，并将密诺发送给 Bob。
+1. Bob 用 `C` 和 `rb` 建立 `v` 的范围证明 (range proof)，并发送给 Alice。
+1. Alice 生成自己的范围证明，并将其与 Bob 的聚合，确认多方输出 `Oab`。
+1. 之后与的操作“无需信任交易”一样。
 
-We observe that for that new output `Oab`, neither party know the whole
-blinding factor. To be able to build a transaction spending Oab, someone would
-need to know `ra + rb` to produce a kernel signature. To produce that spending
-kernel, Alice and Bob need to collaborate. This, again, is done using a
-protocol very close to Trustless Transactions.
+我们注意到，双方都不知道新输出 `Oab` 的全部盲因子。要发起花费 Oab 的交易，就有人得知道 `ra + rb` 来生成交易核签名。Alice 和 Bob 需要合作才能要生成交易核。这又是利用与“无需信任交易”类似的协议完成。
 
-### Multiparty Timelocks
+### 多方限时锁定
 
-This contract is a building block for multiple other contracts. Here, Alice
-agrees to lock some funds to start a financial interaction with Bob and prove
-to Bob she has funds. The setup is the following:
+本合约是其他多种合约的基础。本例中，Alice 同意锁定一些基金，用于与 Bob 进行财务往来，并向 Bob 证明自己资金充足。合约设定如下：
 
-* Alice builds a a 2-of-2 multiparty transaction with an output she shares with
-  Bob, however she does not participate in building the kernel signature yet.
-* Bob builds a refund transaction with Alice that sends the funds back to Alice
-  using a timelock (for example 1440 blocks ahead, about 24h).
-* Alice and Bob finish the 2-of-2 transaction by building the corresponding
-  kernel and broadcast it.
+* Alice 用与 Bob 分享的输出发起两人签名两份私钥多方交易，但他不参与发起交易内核签名。
+* Bob 用限时锁定（1440 区块之后约 24 小时）发起给 Alice 的退款交易。
+* Alice 和 Bob 发起相应的交易内核完成两人签名交易，并向全网广播。
 
-Now Alice and Bob are free to build additional transactions distributing the
-funds locked in the 2-of-2 output in any way they see fit. If Bob refuses to
-cooperate, Alice just needs to broadcast her refund transaction after the time
-lock expires.
+现在 Alice 和 Bob 可以用两人签名输出随意发起其他交易。如果 Bob 拒绝，Alice 只需要在锁定到期后向全网广播退款交易。
 
-This contract can be trivially used for unidirectional payment channels.
+此合约一般可用于单向支付通道。
 
-### Conditional Output Timelocks
+### 限定条件输出限时锁定
 
-Analogous to Bitcoin [CheckLockTimeVerify](https://en.bitcoin.it/wiki/Timelock#CheckLockTimeVerify).
+类似于比特币的 [CheckLockTimeVerify](https://en.bitcoin.it/wiki/Timelock#CheckLockTimeVerify)。
 
-We currently have _unconditional_ lock_heights on txs (tx is not valid and will not be accepted until lock_height has passed).
+我们目前交易中有限定条件 lock_heights （超过 lock_height 后交易无效且不会被接收）
 
-Private keys can be summed together.
-Key<sub>3</sub> = Key<sub>1</sub> + Key<sub>2</sub>
+私钥可相加。Key<sub>3</sub> = Key<sub>1</sub> + Key<sub>2</sub>
 
-Commitments can be summed together.
-C<sub>3</sub> = C<sub>1</sub> + C<sub>2</sub>
+Commitments 可相加。C<sub>3</sub> = C<sub>1</sub> + C<sub>2</sub>
 
-Given _unconditional locktimes on txs_ we can leverage these to give us _conditional locktimes on outputs_ by "entangling" two outputs on two related txs together.
+关于_交易限定条件限时锁定_ ，我们可以利用这些特性，将两笔相关交易的两笔输出关联，来获得_输出限定条件限时锁定_。 
 
-We can construct two txs (Tx<sub>1</sub>, Tx<sub>2</sub>) with two entangled outputs Out<sub>1</sub> and Out<sub>2</sub> such that -
+我们可以以两笔关联的输出 Out<sub>1</sub> 和 Out<sub>2</sub> 构建两笔交易 (Tx<sub>1</sub>, Tx<sub>2</sub>)，例如-
 
-* Out<sub>1</sub> (commitment C<sub>1</sub>) is from Tx<sub>1</sub> and built using Key<sub>1</sub>
-* Out<sub>2</sub> (commitment C<sub>2</sub>) is from Tx<sub>2</sub> and built using Key<sub>2</sub>
-* Tx<sub>2</sub> has an _unconditional_ lock_height on it
+* 输出 Out<sub>1</sub> (commitment C<sub>1</sub>) 来自 Tx<sub>1</sub>，使用密钥 Key<sub>1</sub> 构建
+* 输出 Out<sub>2</sub> (commitment C<sub>2</sub>) 来自 Tx<sub>2</sub>，使用 Key<sub>2</sub> 构建
+* 交易 Tx<sub>2</sub> 有_限定条件_  lock_height
 
-If we do this (and we can manage the keys as necessary) -
+如果我们这样做（并按照需要管理密钥） -
 
-* Out<sub>1</sub> + Out<sub>2</sub> can _only_ be spent as a pair using Key<sub>3</sub>
-* They can _only_ be spent after lock_height from Tx<sub>2</sub>
+* Out<sub>1</sub> + Out<sub>2</sub> _只能_ 使用密钥 Key<sub>3</sub> 匹配花费
+* _只能_ 在 lock_height 后从 Tx<sub>2</sub> 花费
 
-Tx<sub>1</sub> (containing Out<sub>1</sub>) can be broadcast, accepted and confirmed on-chain immediately.
-Tx<sub>2</sub> cannot be broadcast and accepted until lock_height has passed.
+Tx<sub>1</sub> (包含 Out<sub>1</sub>) 可以立即广播到全网，接收并在链上确认。Tx<sub>2</sub> 只有在超过 lock_height 后才能全网广播和接收。
 
-So if Alice only knows K<sub>3</sub> and does not know Key<sub>1</sub> or Key<sub>2</sub>, then Out<sub>1</sub> can only be spent by Alice after lock_height has passed.
-If Bob on the other hand knows Key<sub>2</sub> then Out<sub>1</sub> can be spent by Bob immediately.
+如果 Alice 只知道 K<sub>3</sub>，不知道 Key<sub>1</sub> 或 Key<sub>2</sub>，那么在超过 lock_height 之后，Alice 才能花费 输出 Out<sub>1</sub>。如果 Bob 知道 Key<sub>2</sub>，那么 Bob 可以立即花费输出 Out<sub>1</sub>。
 
-We have a _conditional_ timelock on Out<sub>1</sub> (confirmed, on-chain)
-where it can be spent either with Key<sub>3</sub> (after lock_height), _or_ Key<sub>2</sub> immediately.
+我们对输出 Out<sub>1</sub> 有_限定条件_限时锁定（已在链上确认），可以l使用私钥 Key<sub>3</sub> (lock_height 后) 或私钥 Key<sub>2</sub> 立即花费。
 
-### (Relative) Conditional Output Timelocks
+### （相对）限定条件输出限时锁定
 
-Analogous to Bitcoin [CheckSequenceVerify](https://en.bitcoin.it/wiki/Timelock#CheckSequenceVerify).
+类似于比特币的 [CheckSequenceVerify](https://en.bitcoin.it/wiki/Timelock#CheckSequenceVerify).
 
-By combining "Conditional Timelock on Output" with "(Relative) Timelocked Transactions" we can encumber a confirmed output with a relative timelock (relative to a related tx kernel).
+将“限定条件输出限时锁定”与“（相对）限定条件输出限时锁定”混合，我们可以得出有相对限时锁定的确认输出（相对于相关的交易内核）。
 
-Tx<sub>1</sub> (containing Out<sub>1</sub>) can be broadcast, accepted and confirmed on-chain immediately.
-Tx<sub>2</sub> cannot be broadcast and accepted until the _relative_ lock_height has passed, relative to the referenced kernel from the earlier Tx<sub>1</sub>.
+可立即全网广播、接受并链上确认交易 Tx<sub>1</sub> (包含输出 Out<sub>1</sub>)。 相对于之前交易 Tx<sub>1</sub> 的参照交易内核，只有超过_相对_ lock_height，才能广播和接受交易 Tx<sub>2</sub>。
 
-### Atomic Swap
+### 原子互换
 
-This setup can work on Bitcoin, Ethereum and likely other chains. It relies
-on a time locked contract combined with a check for 2 public keys. On Bitcoin
-this would be a 2-of-2 multisig, one public key being Alice's, the second
-being the hash of a preimage that Bob has to reveal. In this setup, we consider
-public key derivation `x*G` to be the hash function and by Bob revealing `x`,
-Alice can then produce an adequate signature proving she knows `x` (in
-addition to her own private key).
+原子互换可以在比特币、以太坊及其他可行的链上部署。这一功能依赖于限时锁定合约，外加检查两个公钥。比特币上这需要两份私钥两人签名，一份公钥是 Alice 的，一份是 Bob 必须公开的原像 (preimage) 哈希值。本设置中，我们要考虑公钥衍生 `x*G` 为哈希函数。而且 Bob 公开 `x`，Alice 可提供完整签名证明她知道 `x`（除了自己的私钥）。
 
-Alice has grins and Bob has bitcoin. They would like to swap. We assume Bob
-created an output on the Bitcoin blockchain that allows spending either by
-Alice if she learns a hash pre-image `x`, or by Bob after time `Tb`. Alice is
-ready to send her grins to Bob if he reveals `x`.
+Alice 有 Grin，Bob 有比特币。他们要互换。我们假设 Bob 在比特币链上创建一个输出，允许 Alice 知道原像 `x` 后花费，或 Bob 在限定时间 `Tb` 到期后花费。Alice 准备在 Bob 公开 `x` 后将她的 Grin 发送给 Bob。
 
-First, Alice sends her grins to a multiparty timelock contract with a refund
-time `Ta < Tb`. To send the 2-of-2 output to Bob and execute the swap, Alice
-and Bob start as if they were building a normal trustless transaction as
-specified in section 2.1.
+首先 Alice 要把她的 Grin 发送到一个多方限时锁定合约中，设定退款时间 `Ta < Tb`。若要将两人签名两份私钥输出发送给 Bob 并执行互换，Alice 和 Bob 开始要按第 2.1 节所示发起正常无需信任交易。
 
-1. Alice picks a random nonce `ks` and her blinding sum `rs` and sends `ks*G`
-   and `rs*G` to Bob.
-1. Bob picks a random blinding factor `rr` and a random nonce `kr`. However
-   this time, instead of simply sending `sr = kr + e * rr` with his `rr*G` and
-   `kr*G`, Bob sends `sr' = kr + x + e * rr` as well as `x*G`.
-1. Alice can validate that `sr'*G = kr*G + x*G + rr*G`. She can also check
-   that Bob has money locked with `x*G` on the other chain.
-1. Alice sends back her `ss = ks + e * xs` as she normally would, now that she
-   can also compute `e = SHA256(M | ks*G + kr*G)`.
-1. To complete the signature, Bob computes `sr = kr + e * rr` and the final
-   signature is `(sr + ss, kr*G + ks*G)`.
-1. As soon as Bob broadcasts the final transaction to get his new grins, Alice
-   can compute `sr' - sr` to get `x`.
+1. Alice 挑选一个随机数 `ks` 和盲因子之和 `rs`，并发送 `ks*G` 和 `rs*G` 给 Bob。
+1. Bob 挑选一个随机盲因子 `rr` 和随机数 `kr`。但这次 Bob 不再是仅仅发送 `sr = kr + e * rr` 和他的 `rr*G` 与 `kr*G`，而是发送 `sr' = kr + x + e * rr` 与 `x*G`。
+1. Alice 可验证 `sr'*G = kr*G + x*G + rr*G`。她也可以检查 Bob 在其他链用 `x*G` 锁定钱。
+1. 既然 Alice 也可以计算 `e = SHA256(M | ks*G + kr*G)`，Alice 按正常操作将 `ss = ks + e * xs` 发送回给 Bob。
+1. 要完成签名，需要 Bob 计算 `sr = kr + e * rr`，最后的签名是 `(sr + ss, kr*G + ks*G)`。
+1. 只要 Bob 一广播最后的交易获得了他的 Grin，Alice 就可计算 `sr' - sr` 获得 `x`。
 
-#### Notes on the Bitcoin setup
+#### 比特币设置事项
 
-Prior to completing the atomic swap, Bob needs to know Alice's public key. Bob
-would then create an output on the Bitcoin blockchain with a 2-of-2 multisig
-similar to `alice_pubkey secret_pubkey 2 OP_CHECKMULTISIG`. This should be
-wrapped in an `OP_IF` so Bob can get his money back after an agreed-upon time
-and all of this can even be wrapped in a P2SH. Here `secret_pubkey` is `x*G`
-from the previous section.
+在完成原子互换之前，Bob 需要知道 Alice 的公钥。Bob 之后会在比特币链上创建一个输出，用类似 `alice_pubkey secret_pubkey 2 OP_CHECKMULTISIG` 的双私钥多签。输出会写入 `OP_IF`，这样在双方同意的时间内 Bob 可以拿回钱。而且所有甚至都可以写入 P2SH。此处 `secret_pubkey` 就是上节的 `x*G`。
 
-To verify the output, Alice would take `x*G`, recreate the bitcoin script, hash
-it and check that her hash matches what's in the P2SH (step 2 in previous
-section). Once she gets `x` (step 6), she can build the 2 signatures necessary
-to spend the 2-of-2, having both private keys, and get her bitcoin.
+要验证输出，Alice 需要接收 `x*G`，创建比特币脚本，算出哈希值，查看 P2SH 中的哈希匹配（上节第二步）。Alice 得到 `x`（第六步）后，即可建立花费双私钥多签输出的两个签名，获得两个私钥，最后获得比特币。
 
-### Hashed Timelocks (Lightning Network)
+### 哈希限时锁定（闪电网络）
 
-TODO relative lock times
+相对锁定时间待开发
