@@ -39,26 +39,29 @@ pub fn siphash24(v: &[u64; 4], nonce: u64) -> u64 {
 /// Builds a block of siphash values by repeatedly hashing from the nonce
 /// truncated to its closest block start, up to the end of the block. Returns
 /// the resulting hash at the nonce's position.
-pub fn siphash_block(v: &[u64; 4], nonce: u64, rot_e: u8) -> u64 {
+pub fn siphash_block(v: &[u64; 4], nonce: u64, rot_e: u8, xor_all: bool) -> u64 {
 	// beginning of the block of hashes
 	let nonce0 = nonce & !SIPHASH_BLOCK_MASK;
-	let mut nonce_hash = 0;
+	let nonce_i = nonce & SIPHASH_BLOCK_MASK;
+	let mut nonce_hash = vec![0u64; SIPHASH_BLOCK_SIZE as usize];
 
 	// repeated hashing over the whole block
 	let mut siphash = SipHash24::new(v);
-	for n in nonce0..(nonce0 + SIPHASH_BLOCK_SIZE) {
-		siphash.hash(n, rot_e);
-		if n == nonce {
-			nonce_hash = siphash.digest();
-		}
+	for i in 0..SIPHASH_BLOCK_SIZE {
+		siphash.hash(nonce0 + i, rot_e);
+		nonce_hash[i as usize] = siphash.digest();
 	}
-	// xor the nonce with the last hash to force hashing the whole block
-	// unless the nonce is last in the block
-	if nonce == nonce0 + SIPHASH_BLOCK_MASK {
-		return siphash.digest();
+	// xor the hash at nonce_i < SIPHASH_BLOCK_MASK with some or all later hashes to force hashing the whole block
+	let mut xor: u64 = nonce_hash[nonce_i as usize];
+	let xor_from = if xor_all || nonce_i == SIPHASH_BLOCK_MASK {
+		nonce_i + 1
 	} else {
-		return nonce_hash ^ siphash.digest();
+		SIPHASH_BLOCK_MASK
+	};
+	for i in xor_from..SIPHASH_BLOCK_SIZE {
+		xor ^= nonce_hash[i as usize];
 	}
+	return xor;
 }
 
 /// Implements siphash 2-4 specialized for a 4 u64 array key and a u64 nonce
@@ -130,8 +133,17 @@ mod test {
 
 	#[test]
 	fn hash_block() {
-		assert_eq!(siphash_block(&[1, 2, 3, 4], 10, 21), 1182162244994096396);
-		assert_eq!(siphash_block(&[1, 2, 3, 4], 123, 21), 11303676240481718781);
-		assert_eq!(siphash_block(&[9, 7, 6, 7], 12, 21), 4886136884237259030);
+		assert_eq!(
+			siphash_block(&[1, 2, 3, 4], 10, 21, false),
+			1182162244994096396
+		);
+		assert_eq!(
+			siphash_block(&[1, 2, 3, 4], 123, 21, false),
+			11303676240481718781
+		);
+		assert_eq!(
+			siphash_block(&[9, 7, 6, 7], 12, 21, false),
+			4886136884237259030
+		);
 	}
 }

@@ -640,17 +640,39 @@ fn hard_forks() {
 			HeaderVersion::new(1)
 		));
 		assert!(!valid_header_version(YEAR_HEIGHT, HeaderVersion::new(1)));
-		// v3 not active yet
-		assert!(!valid_header_version(YEAR_HEIGHT, HeaderVersion::new(3)));
+
+		assert!(valid_header_version(YEAR_HEIGHT - 1, HeaderVersion::new(2)));
+		assert!(valid_header_version(YEAR_HEIGHT, HeaderVersion::new(3)));
+		assert!(valid_header_version(YEAR_HEIGHT + 1, HeaderVersion::new(3)));
 		assert!(!valid_header_version(YEAR_HEIGHT, HeaderVersion::new(2)));
-		assert!(!valid_header_version(YEAR_HEIGHT, HeaderVersion::new(1)));
+		assert!(!valid_header_version(
+			YEAR_HEIGHT * 3 / 2,
+			HeaderVersion::new(2)
+		));
+		// v4 not active yet
+		assert!(!valid_header_version(
+			YEAR_HEIGHT * 3 / 2,
+			HeaderVersion::new(4)
+		));
+		assert!(!valid_header_version(
+			YEAR_HEIGHT * 3 / 2,
+			HeaderVersion::new(3)
+		));
 		assert!(!valid_header_version(
 			YEAR_HEIGHT * 3 / 2,
 			HeaderVersion::new(2)
 		));
 		assert!(!valid_header_version(
-			YEAR_HEIGHT + 1,
-			HeaderVersion::new(2)
+			YEAR_HEIGHT * 3 / 2,
+			HeaderVersion::new(1)
+		));
+		assert!(!valid_header_version(
+			YEAR_HEIGHT * 2,
+			HeaderVersion::new(3)
+		));
+		assert!(!valid_header_version(
+			YEAR_HEIGHT * 3 / 2 + 1,
+			HeaderVersion::new(3)
 		));
 	}
 	// Tests for floonet chain type.
@@ -677,17 +699,58 @@ fn hard_forks() {
 			HeaderVersion::new(1)
 		));
 		assert!(!valid_header_version(YEAR_HEIGHT, HeaderVersion::new(1)));
-		// v3 not active yet
-		assert!(!valid_header_version(YEAR_HEIGHT, HeaderVersion::new(3)));
-		assert!(!valid_header_version(YEAR_HEIGHT, HeaderVersion::new(2)));
-		assert!(!valid_header_version(YEAR_HEIGHT, HeaderVersion::new(1)));
+		assert!(valid_header_version(
+			FLOONET_SECOND_HARD_FORK - 1,
+			HeaderVersion::new(2)
+		));
+		assert!(valid_header_version(
+			FLOONET_SECOND_HARD_FORK,
+			HeaderVersion::new(3)
+		));
+		assert!(valid_header_version(
+			FLOONET_SECOND_HARD_FORK + 1,
+			HeaderVersion::new(3)
+		));
+		assert!(!valid_header_version(
+			FLOONET_SECOND_HARD_FORK,
+			HeaderVersion::new(2)
+		));
+		assert!(!valid_header_version(
+			FLOONET_SECOND_HARD_FORK,
+			HeaderVersion::new(1)
+		));
+
+		assert!(!valid_header_version(
+			YEAR_HEIGHT - 1,
+			HeaderVersion::new(2)
+		));
+		assert!(valid_header_version(YEAR_HEIGHT - 1, HeaderVersion::new(3)));
+		assert!(valid_header_version(YEAR_HEIGHT, HeaderVersion::new(3)));
+		assert!(valid_header_version(YEAR_HEIGHT + 1, HeaderVersion::new(3)));
+		// v4 not active yet
+		assert!(!valid_header_version(
+			YEAR_HEIGHT * 3 / 2,
+			HeaderVersion::new(4)
+		));
+		assert!(!valid_header_version(
+			YEAR_HEIGHT * 3 / 2,
+			HeaderVersion::new(3)
+		));
 		assert!(!valid_header_version(
 			YEAR_HEIGHT * 3 / 2,
 			HeaderVersion::new(2)
 		));
 		assert!(!valid_header_version(
-			YEAR_HEIGHT + 1,
-			HeaderVersion::new(2)
+			YEAR_HEIGHT * 3 / 2,
+			HeaderVersion::new(1)
+		));
+		assert!(!valid_header_version(
+			YEAR_HEIGHT * 2,
+			HeaderVersion::new(3)
+		));
+		assert!(!valid_header_version(
+			YEAR_HEIGHT * 3 / 2 + 1,
+			HeaderVersion::new(3)
 		));
 	}
 }
