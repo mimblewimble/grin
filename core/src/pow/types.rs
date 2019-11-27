@@ -12,22 +12,19 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use crate::consensus::{graph_weight, MIN_DIFFICULTY, SECOND_POW_EDGE_BITS};
+use crate::core::hash::{DefaultHashable, Hashed};
+use crate::global;
+use crate::pow::common::EdgeType;
+use crate::pow::error::Error;
+use crate::ser::{self, FixedLength, Readable, Reader, Writeable, Writer};
+use rand::{thread_rng, Rng};
+use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
 /// Types for a Cuck(at)oo proof of work and its encapsulation as a fully usable
 /// proof of work within a block header.
 use std::cmp::{max, min};
 use std::ops::{Add, Div, Mul, Sub};
 use std::{fmt, iter};
-
-use rand::{thread_rng, Rng};
-use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
-
-use crate::consensus::{graph_weight, MIN_DIFFICULTY, SECOND_POW_EDGE_BITS};
-use crate::core::hash::{DefaultHashable, Hashed};
-use crate::global;
-use crate::ser::{self, FixedLength, Readable, Reader, Writeable, Writer};
-
-use crate::pow::common::EdgeType;
-use crate::pow::error::Error;
 
 /// Generic trait for a solver/verifier providing common interface into Cuckoo-family PoW
 /// Mostly used for verification, but also for test mining if necessary

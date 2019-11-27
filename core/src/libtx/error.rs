@@ -13,12 +13,11 @@
 // limitations under the License.
 
 //! libtx specific errors
-use failure::{Backtrace, Context, Fail};
-use std::fmt::{self, Display};
-
 use crate::core::transaction;
-use crate::keychain;
-use crate::util::secp;
+use failure::{Backtrace, Context, Fail};
+use keychain;
+use std::fmt::{self, Display};
+use util::secp;
 
 /// Lib tx error definition
 #[derive(Debug)]

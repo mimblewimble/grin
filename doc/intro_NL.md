@@ -1,10 +1,10 @@
-# Inleiding tot MimbleWimble en Grin
+# Inleiding tot Mimblewimble en Grin
 
-*Lees dit in andere talen: [English](intro.md), [简体中文](intro_ZH-CN.md), [Español](intro_ES.md), [Nederlands](intro_NL.md), [Русский](intro_RU.md), [日本語](intro_JP.md), [Deutsch](intro_DE.md), [Portuguese](intro_PT-BR.md), [Korean](intro_KR.md).*
+*Lees dit in andere talen: [English](intro.md), [Español](intro_ES.md), [Nederlands](intro_NL.md), [Русский](intro_RU.md), [日本語](intro_JP.md), [Deutsch](intro_DE.md), [Portuguese](intro_PT-BR.md), [Korean](intro_KR.md), [简体中文](intro_ZH-CN.md).*
 
-MimbleWimble is een blockchain formaat en protocol die extreem goede schaalbaarheid, privacy en fungibiliteit biedt door zich te berusten op sterke cryptografische primiteven. Het adresseert de lacunes die in bijna alle huidige blockchain-implementaties bestaan.
+Mimblewimble is een blockchain formaat en protocol die extreem goede schaalbaarheid, privacy en fungibiliteit biedt door zich te berusten op sterke cryptografische primiteven. Het adresseert de lacunes die in bijna alle huidige blockchain-implementaties bestaan.
 
-Grin is een open source softwareproject dat een MimbleWimble blockchain
+Grin is een open source softwareproject dat een Mimblewimble blockchain
 implementeert en de lacunes vult die nodig zijn voor een
 volledige blockchain en
 cryptovaluta inzet
@@ -16,7 +16,7 @@ Het belangrijkste doel en eigenschappen van het Grin project zijn:
 * Schaalt meestal met het aantal gebruikers en minimaal met het aantal transacties
   (<100 byte `kernel), wat resulteert in een grotere ruimtebesparing
   vergeleken met andere blockchains.
-* Sterk en bewezen cryptografie. MimbleWimble rust enkel op Elliptic Curve
+* Sterk en bewezen cryptografie. Mimblewimble rust enkel op Elliptic Curve
   Cryptografie die al decennia beproefd en getest wordt.
 * Eenvoud van het ontwerp die het makkelijk maakt om na verloop van tijd te
   controleren en onderhouden.
@@ -27,22 +27,22 @@ Het belangrijkste doel en eigenschappen van het Grin project zijn:
 
 Dit document is bedoeld voor lezers met een sterke achtergrond
 van blockchains en elementaire cryptografie. Met dat in ons achterhoofd, proberen we
-de technische opbouw van MimbleWimble en hoe het in Grin is toegepast uit te leggen.
+de technische opbouw van Mimblewimble en hoe het in Grin is toegepast uit te leggen.
 We hopen dat dit document verstaanbaar is voor de meeste technische lezers
 Ons doel is om u aan te moedigen geïnteresseerd te raken in Grin en
 op welke manier mogelijk dan ook bij te dragen.
 
 Om dit doel te bereiken, zullen we de belangrijkste concepten introduceren die vereist
-zijn voor een goed begrip van Grin als een MimbleWimble-implementatie. We beginnen met een beknopte beschrijving
+zijn voor een goed begrip van Grin als een Mimblewimble-implementatie. We beginnen met een beknopte beschrijving
 van enkele relevante eigenschappen van Elliptic Curve Cryptografie (ECC) om de basis
 waarop Grin gebaseerd is en vervolgens alle belangrijke elementen van
-MimbleWimble blockchain's transacties en -blokken te beschrijven.
+Mimblewimble blockchain's transacties en -blokken te beschrijven.
 
 ### Minuscule Databits van Elliptic Curves
 
 We beginnen met een korte inleiding van Elliptic Curve Cryptografie, waarbij we alleen
 de eigenschappen evalueren die nodig zijn om om te begrijpen hoe
-MimbleWimble werkt zonder te diep op de complexiteit van ECC in te gaan.
+Mimblewimble werkt zonder te diep op de complexiteit van ECC in te gaan.
 Voor lezer die dat wel zouden willen, zijn er andere mogelijkheden om
 [er meer over te weten te komen](http://andrea.corbellini.name/2015/05/17/elliptic-curve-cryptography-a-gentle-introduction/).
 
@@ -67,14 +67,14 @@ demonstreert dat een openbare sleutel verkregen is door de toevoeging van
 twee privésleutels (`(k+j)*H`) zijn identiek aan de toevoeging van de
 openbare sleutels voor elk van die twee privésleutels (`k*H + j*H`). 
 In de Bitcoin blockchain, zijn Hiërarchische Deterministische portefeuilles 
-sterk afhankelijk van dit principe. Alsook MimbleWimble en de Grin-implementatie.
+sterk afhankelijk van dit principe. Alsook Mimblewimble en de Grin-implementatie.
 
-### Transacties met MimbleWimble
+### Transacties met Mimblewimble
 
-De structuur van transacties toont een cruciaal principe van MimbleWimble:
+De structuur van transacties toont een cruciaal principe van Mimblewimble:
 sterke privacy- en vertrouwelijkheidsgaranties.
 
-De validatie van MimbleWimble transacties zijn gebaseerd op twee basiseigenschappen:
+De validatie van Mimblewimble transacties zijn gebaseerd op twee basiseigenschappen:
 
 * **Verificatie van zero sums.** De som van de uitkomsten min de ingaven is altijd
   gelijk aan nul, welke bewijst dat de transactie geen nieuw geld gecreëerd heeft, _zonder de werkelijke bedragen te onthullen_.
@@ -140,7 +140,7 @@ Wat als gevolg vereist dat:
 
     ri1 + ri2 = ro3
 
-Dit is de eerste pijler van MimbleWimble: de arithmetische vereist om een transactie te valideren gedaan kan worden
+Dit is de eerste pijler van Mimblewimble: de arithmetische vereist om een transactie te valideren gedaan kan worden
 zonder dat één van de waarden gekend is.
 
 Tot slot, is dit idee eigenlijk afgeleid van Greg Maxwell's
@@ -151,7 +151,7 @@ aan Bitcoin.
 #### Eigendom
 
 In het vorige gedeelte hebben we een privésleutel geïntroduceerd als een blinding factor om de transactiewaarden te verdoezelen.
-Het tweede inzicht van MimbleWimble is dat deze privésleutel
+Het tweede inzicht van Mimblewimble is dat deze privésleutel
 gebruikt kan worden om het eigendom van de waarde aan te tonen.
 
 Alice stuurt je 3 munten en om dat bedrag te verdoezelen, kies je 28 als jouw
@@ -205,7 +205,7 @@ mining fees), wordt een _transaction kernel_ genoemd en wordt gecontroleerd door
 
 Dit gedeelte gaat in op het maken van transacties door te bespreken hoe verandering geïntroduceerd is
 en de vereiste voor range proofs zodat alle waarden bewezen zijn als niet-negatieve.
-Geen van beide zijn absoluut vereist om MimbleWimble en
+Geen van beide zijn absoluut vereist om Mimblewimble en
 Grin te begrijpen, dus als je gehaast bent, voel je virj om meteen over te gaan naar
 [Alles bij elkaar samenbrengen](#putting-it-all-together).
 
@@ -234,7 +234,7 @@ Bijvoorbeeld, kan iemand een transactie creëren met een invoer van 2 en uitvoer
 en -3 en nog steeds een goed gebalanceerde transactie krijgen, volgens de definitie in de vorige secties. Dit kan niet makkelijk gedetecteerd worden, zelfs als _x_
 negatief is, het overeenkomstige punt `x.H` op de curve lijkt op een ander.
 
-Om dit te probleem te verhelpen, maakt MimbleWimble gebruik van een ander cryptografisch concept (ook afkomstig
+Om dit te probleem te verhelpen, maakt Mimblewimble gebruik van een ander cryptografisch concept (ook afkomstig
 vanuit Confidential Transactions) genaamd
 range proofs: een bewijs dat een getal binnen een gegeven bereik valt, zonder het nummer te onthullen.
 We gaan niet uitweiden op de range proof, maar u moet gewoon weten
@@ -245,7 +245,7 @@ Het is ook belangrijk om op te merken dat om een geldige range proof te maken ui
 
 #### Alles bij elkaar samenbrengen
 
-Een MimbleWimble transactie omvat het volgende:
+Een Mimblewimble transactie omvat het volgende:
 
 * Een reeks invoeren, die verwijzen naar en een vorige reeks aan uitvoeren spendeert. 
 * Een reeks van nieuwe uitvoeren met:
@@ -257,11 +257,11 @@ Een MimbleWimble transactie omvat het volgende:
 
 ### Blocks en Chain State
 
-We hebben hierboven uitgelegd hoe MimbleWimble transacties sterke anonimiteit kunnen garanderen terwijl de eigenschappen die vereist zijn voor een geldige blockchain handhaaft,
+We hebben hierboven uitgelegd hoe Mimblewimble transacties sterke anonimiteit kunnen garanderen terwijl de eigenschappen die vereist zijn voor een geldige blockchain handhaaft,
 d.w.z. een transactie creëert geen geld en een bewijs van eigendom wordt vastgelegd met privésleutels.
 
-Het MimbleWimble blockformaat bouwt hierop voort door een aanvullend concept te introduceren: _cut-through_.
-Met deze aanvulling, verkrijgt een MimbleWimble chain:
+Het Mimblewimble blockformaat bouwt hierop voort door een aanvullend concept te introduceren: _cut-through_.
+Met deze aanvulling, verkrijgt een Mimblewimble chain:
 
 * Zeer goede schaalbaarheid, zoals de grote meerderheid van transactiegegevens geëlimineerd kunnen worden met de tijd,
 zonder de beveiliging in gevaar te brengen.
@@ -292,11 +292,11 @@ Hetzelfde geldt voor blokken zelf als we eenmaal realiseren dat een blok eenvoud
 
     som(uitvoeren) - som(invoeren) = sum(kernel_excess)
 
-Enigszins vereenvoudigd, (wederom negeren we de transactiekosten) kunnen we zeggen dat MimbleWimble-blokken behandeld kunnen worden als MimbleWimble-transacties.
+Enigszins vereenvoudigd, (wederom negeren we de transactiekosten) kunnen we zeggen dat Mimblewimble-blokken behandeld kunnen worden als Mimblewimble-transacties.
 
 ##### Kernel Offsets
 
-Er is een subtiel probleem met MimbleWimble-blokken en transacties zoals hierboven beschreven. Het is mogelijk (en in sommige gevallen triviaal) om de constituerende transacties in een blok te reconstrueren. Dit is duidelijk slecht voor privacy. Dit is een "subset" probleem - gegeven een verzameling van invoeren, uitvoeren en transactiekernels zal een subnet van dit formaat recombineren om een geldige transactie te reconstrueren.
+Er is een subtiel probleem met Mimblewimble-blokken en transacties zoals hierboven beschreven. Het is mogelijk (en in sommige gevallen triviaal) om de constituerende transacties in een blok te reconstrueren. Dit is duidelijk slecht voor privacy. Dit is een "subset" probleem - gegeven een verzameling van invoeren, uitvoeren en transactiekernels zal een subnet van dit formaat recombineren om een geldige transactie te reconstrueren.
 
 Bijvoorbeeld, gegeven zijn de volgende twee transacties -
 
@@ -370,7 +370,7 @@ Een blok is eenvoudigweg opgebouwd uit:
   * De handtekeningen gegenereerd door middel van de overtollige waarde.
   * De miningkost.
 
-Wanneer het op deze manier geconstructureerd wordt, biedt een MimbleWimble-blok buitengewoon goede privacygaranties:
+Wanneer het op deze manier geconstructureerd wordt, biedt een Mimblewimble-blok buitengewoon goede privacygaranties:
 
 * Intermediaire (cut-through) transacties worden alleen weergegeven door hun transactiekernels.
 * Alle uitvoeren zien er hetzelfde uit: gewoon hele grote getallen die onmogelijk van elkaar te differentiëren zijn.
@@ -390,17 +390,17 @@ Veralgemeend, concluderen we dat de ketenstatus (met uitzondering van headers) o
 samengevat kunnen worden door alleen deze stukjes informatie:
 
 1. Het totale aantal munten gecreëerd door mining in de keten.
-2. De volledige verzameling aan niet-bestede uitgaven.
-3. De transactiekernels voor elke transactie.
+1. De volledige verzameling aan niet-bestede uitgaven.
+1. De transactiekernels voor elke transactie.
 
 Het eerste stuk informatie kan afgeleid worden door alleen de blokhoogte 
 (de afstand tot het genesisblok) te gebruiken. En zowel de niet-bestede uitgaven als de
 transactiekernels zijn ontzettend compact. Dit heeft 2 belangrijke gevolgen:
 
-* De stand die een bepaalde node in een MimbleWimble blockchain moet behouden    blijven is zeer klein
+* De stand die een bepaalde node in een Mimblewimble blockchain moet behouden    blijven is zeer klein
   (in de volgorde van enkele gigabytes voor een bitcoin-sized blockchain en
   potentieel optimaliseerbaar tot enkele honderden megabytes).
-* Wanneer een nieuwe node zich aansluit bij een netwerk ter bijdrage aan de MimbleWimble chain, is het aantal informatie die overdragen moet worden ook enorm klein.
+* Wanneer een nieuwe node zich aansluit bij een netwerk ter bijdrage aan de Mimblewimble chain, is het aantal informatie die overdragen moet worden ook enorm klein.
 
 Bovendien kan er niet met de gehele verzameling aan ongebruikte uitgaven gesjoemeld worden, zelfs
 niet door een uitgave toe te voegen of te verwijderen. Daarmee zou de sommatie van alle
@@ -409,7 +409,7 @@ factors in de uitgaven.
 
 ### Conclusie
 
-In dit document hebben we de basisprincipes behandeld die ten grondslag liggen van een MimbleWimble
+In dit document hebben we de basisprincipes behandeld die ten grondslag liggen van een Mimblewimble
 blockchain. Door de aanvullende eigenschappen te gebruiken van Elliptic Curve Cryptografie, zijn
 we in staat om transacties te bouwen die geheel ondoorzichtig zijn maar nog steeds goed gevalideerd kunnen worden.
 En door deze eigenschappen te generaliseren naar blokken, kunnen we een grote hoeveelheid aan blockchaingegevens elimineren,

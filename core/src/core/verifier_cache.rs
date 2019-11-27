@@ -15,10 +15,9 @@
 //! VerifierCache trait for batch verifying outputs and kernels.
 //! We pass a "caching verifier" into the block validation processing with this.
 
-use lru_cache::LruCache;
-
 use crate::core::hash::{Hash, Hashed};
 use crate::core::{Output, TxKernel};
+use lru_cache::LruCache;
 
 /// Verifier cache for caching expensive verification results.
 /// Specifically the following -

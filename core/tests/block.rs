@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-pub mod common;
+mod common;
 use crate::common::{new_block, tx1i2o, tx2i1o, txspend1i1o};
 use crate::core::consensus::BLOCK_OUTPUT_WEIGHT;
 use crate::core::core::block::Error;
@@ -27,15 +27,13 @@ use crate::core::core::{
 use crate::core::libtx::build::{self, input, output};
 use crate::core::libtx::ProofBuilder;
 use crate::core::{global, ser};
-use crate::keychain::{BlindingFactor, ExtKeychain, Keychain};
-use crate::util::secp;
-use crate::util::RwLock;
 use chrono::Duration;
 use grin_core as core;
 use grin_core::global::ChainTypes;
-use grin_keychain as keychain;
-use grin_util as util;
+use keychain::{BlindingFactor, ExtKeychain, Keychain};
 use std::sync::Arc;
+use util::secp;
+use util::RwLock;
 
 fn verifier_cache() -> Arc<RwLock<dyn VerifierCache>> {
 	Arc::new(RwLock::new(LruVerifierCache::new()))

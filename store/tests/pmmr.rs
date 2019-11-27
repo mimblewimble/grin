@@ -29,12 +29,42 @@ use crate::core::ser::{
 };
 
 #[test]
+fn pmmr_leaf_idx_iter() {
+	let (data_dir, elems) = setup("leaf_idx_iter");
+	{
+		let mut backend = store::pmmr::PMMRBackend::new(
+			data_dir.to_string(),
+			true,
+			false,
+			ProtocolVersion(1),
+			None,
+		)
+		.unwrap();
+
+		// adding first set of 4 elements and sync
+		let mmr_size = load(0, &elems[0..5], &mut backend);
+		backend.sync().unwrap();
+
+		{
+			let pmmr: PMMR<'_, TestElem, _> = PMMR::at(&mut backend, mmr_size);
+			let leaf_idx = pmmr.leaf_idx_iter(0).collect::<Vec<_>>();
+			let leaf_pos = pmmr.leaf_pos_iter().collect::<Vec<_>>();
+
+			// The first 5 leaves [0,1,2,3,4] are at pos [1,2,4,5,8] in the MMR.
+			assert_eq!(leaf_idx, vec![0, 1, 2, 3, 4]);
+			assert_eq!(leaf_pos, vec![1, 2, 4, 5, 8]);
+		}
+	}
+	teardown(data_dir);
+}
+
+#[test]
 fn pmmr_append() {
 	let (data_dir, elems) = setup("append");
 	{
 		let mut backend = store::pmmr::PMMRBackend::new(
 			data_dir.to_string(),
-			true,
+			false,
 			false,
 			ProtocolVersion(1),
 			None,
@@ -53,6 +83,7 @@ fn pmmr_append() {
 			// Note: 1-indexed PMMR API
 			let pmmr: PMMR<'_, TestElem, _> = PMMR::at(&mut backend, mmr_size);
 
+			assert_eq!(pmmr.n_unpruned_leaves(), 4);
 			assert_eq!(pmmr.get_data(1), Some(elems[0]));
 			assert_eq!(pmmr.get_data(2), Some(elems[1]));
 
@@ -87,6 +118,8 @@ fn pmmr_append() {
 		{
 			// Note: 1-indexed PMMR API
 			let pmmr: PMMR<'_, TestElem, _> = PMMR::at(&mut backend, mmr_size);
+
+			assert_eq!(pmmr.n_unpruned_leaves(), 9);
 
 			// First pair of leaves.
 			assert_eq!(pmmr.get_data(1), Some(elems[0]));
@@ -132,6 +165,7 @@ fn pmmr_compact_leaf_sibling() {
 		let mmr_size = load(0, &elems[..], &mut backend);
 		backend.sync().unwrap();
 
+		assert_eq!(backend.n_unpruned_leaves(), 19);
 		// On far left of the MMR -
 		// pos 1 and 2 are leaves (and siblings)
 		// the parent is pos 3
@@ -158,6 +192,8 @@ fn pmmr_compact_leaf_sibling() {
 		// // check pos 1, 2, 3 are in the state we expect after pruning
 		{
 			let pmmr = PMMR::at(&mut backend, mmr_size);
+
+			assert_eq!(pmmr.n_unpruned_leaves(), 17);
 
 			// check that pos 1 is "removed"
 			assert_eq!(pmmr.get_hash(1), None);

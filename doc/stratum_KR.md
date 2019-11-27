@@ -6,14 +6,14 @@
 
 1. [Messages](#메세지_들)
     1. [getjobtemplate](#getjobtemplate)
-    2. [job](#job)
-    3. [keepalive](#keepalive)
-    4. [login](#login)
-    5. [status](#status)
-    6. [submit](#submit)
-2. [에러 메시지들](#error-messages)
-3. [채굴자의 행동양식](#miner-behavior)
-4. [참고 구현체](#reference-implementation)
+    1. [job](#job)
+    1. [keepalive](#keepalive)
+    1. [login](#login)
+    1. [status](#status)
+    1. [submit](#submit)
+1. [에러 메시지들](#error-messages)
+1. [채굴자의 행동양식](#miner-behavior)
+1. [참고 구현체](#reference-implementation)
 
 ## 메세지 들
 

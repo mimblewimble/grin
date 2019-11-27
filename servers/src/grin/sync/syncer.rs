@@ -192,7 +192,8 @@ impl SyncRunner {
 			match self.sync_state.status() {
 				SyncStatus::TxHashsetDownload { .. }
 				| SyncStatus::TxHashsetSetup
-				| SyncStatus::TxHashsetValidation { .. }
+				| SyncStatus::TxHashsetRangeProofsValidation { .. }
+				| SyncStatus::TxHashsetKernelsValidation { .. }
 				| SyncStatus::TxHashsetSave
 				| SyncStatus::TxHashsetDone => check_state_sync = true,
 				_ => {

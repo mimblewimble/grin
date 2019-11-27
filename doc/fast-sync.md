@@ -1,6 +1,6 @@
 # Fast Sync
 
-*Read this in other languages: [Español](fast-sync_ES.md), [Korean](fast-sync_KR.md).*
+*Read this in other languages: [Español](fast-sync_ES.md), [Korean](fast-sync_KR.md), [简体中文](fast-sync_ZH-CN.md).*
 
 In Grin, we call "sync" the process of synchronizing a new node or a node that
 hasn't been keeping up with the chain for a while, and bringing it up to the

@@ -79,6 +79,16 @@ where
 		self.backend.leaf_pos_iter()
 	}
 
+	/// Number of leafs in the MMR
+	pub fn n_unpruned_leaves(&self) -> u64 {
+		self.backend.n_unpruned_leaves()
+	}
+
+	/// Iterator over current (unpruned, unremoved) leaf insertion indices.
+	pub fn leaf_idx_iter(&self, from_idx: u64) -> impl Iterator<Item = u64> + '_ {
+		self.backend.leaf_idx_iter(from_idx)
+	}
+
 	/// Returns a vec of the peaks of this MMR.
 	pub fn peaks(&self) -> Vec<Hash> {
 		let peaks_pos = peaks(self.last_pos);
@@ -490,7 +500,6 @@ pub fn peak_map_height(mut pos: u64) -> (u64, u64) {
 /// The height of a node in a full binary tree from its postorder traversal
 /// index. This function is the base on which all others, as well as the MMR,
 /// are built.
-
 pub fn bintree_postorder_height(num: u64) -> u64 {
 	if num == 0 {
 		return 0;

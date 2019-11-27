@@ -91,6 +91,11 @@ where
 		self.backend.leaf_pos_iter()
 	}
 
+	/// Iterator over current (unpruned, unremoved) leaf insertion indices.
+	pub fn leaf_idx_iter(&self, from_idx: u64) -> impl Iterator<Item = u64> + '_ {
+		self.backend.leaf_idx_iter(from_idx)
+	}
+
 	/// Is the MMR empty?
 	pub fn is_empty(&self) -> bool {
 		self.last_pos == 0

@@ -1,6 +1,6 @@
 # Merkle Mountain Ranges
 
-*Read this in other languages: [English](mmr.md), [简体中文](mmr_ZH-CN.md), [Korean](mmr_KR.md)*
+*Read this in other languages: [Korean](mmr_KR.md), [简体中文](mmr_ZH-CN.md).*
 
 ## Structure
 
@@ -128,8 +128,8 @@ Pruning a MMR relies on a simple iterative process. `X` is first initialized as
 the leaf we wish to prune.
 
 1. Prune `X`.
-2. If `X` has a sibling, stop here.
-3. If 'X' has no sibling, assign the parent of `X` as `X`.
+1. If `X` has a sibling, stop here.
+1. If 'X' has no sibling, assign the parent of `X` as `X`.
 
 To visualize the result, starting from our first MMR example and removing leaves
 [0, 3, 4, 8, 16] leads to the following pruned MMR:
