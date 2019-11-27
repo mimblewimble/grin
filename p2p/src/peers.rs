@@ -231,7 +231,10 @@ impl Peers {
 			.filter(|x| x.info.total_difficulty() == max_total_difficulty)
 			.collect::<Vec<_>>();
 
-		max_peers.shuffle(&mut thread_rng());
+		max_peers.sort_unstable_by(|p, q| {
+			p.last_min_received_bytes()
+				.cmp(&q.last_min_received_bytes())
+		});
 		max_peers
 	}
 
