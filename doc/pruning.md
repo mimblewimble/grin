@@ -1,22 +1,22 @@
 # Pruning Blockchain Data
 
-*Read this in other languages: [Korean](pruning_KR.md).*
+*Read this in other languages: [Korean](pruning_KR.md), [简体中文](pruning_ZH-CN.md).*
 
-One of the principal attractions of MimbleWimble is its theoretical space
+One of the principal attractions of Mimblewimble is its theoretical space
 efficiency. Indeed, a trusted or pre-validated full blockchain state only
 requires unspent transaction outputs, which could be tiny.
 
 The grin blockchain includes the following types of data (we assume prior
-understanding of the MimbleWimble protocol):
+understanding of the Mimblewimble protocol):
 
 1. Transaction outputs, which include for each output:
     1. A Pedersen commitment (33 bytes).
-    2. A range proof (over 5KB at this time).
-2. Transaction inputs, which are just output references (32 bytes).
-3. Transaction "proofs", which include for each transaction:
+    1. A range proof (over 5KB at this time).
+1. Transaction inputs, which are just output references (32 bytes).
+1. Transaction "proofs", which include for each transaction:
     1. The excess commitment sum for the transaction (33 bytes).
-    2. A signature generated with the excess (71 bytes average).
-4. A block header includes Merkle trees and proof of work (about 250 bytes).
+    1. A signature generated with the excess (71 bytes average).
+1. A block header includes Merkle trees and proof of work (about 250 bytes).
 
 Assuming a blockchain of a million blocks, 10 million transactions (2 inputs, 2.5
 outputs average) and 100,000 unspent outputs, we get the following approximate
@@ -47,7 +47,7 @@ There may be several contexts in which data can be pruned:
 ## Validation of Fully Pruned State
 
 Pruning needs to remove as much data as possible while keeping all the
-guarantees of a full MimbleWimble-style validation. This is necessary to keep
+guarantees of a full Mimblewimble-style validation. This is necessary to keep
 a pruning node state's sane, but also on first fast sync, where only the
 minimum amount of data is sent to a new node.
 

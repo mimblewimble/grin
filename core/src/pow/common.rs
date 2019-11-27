@@ -14,12 +14,11 @@
 
 //! Common types and traits for cuckoo family of solvers
 
-use crate::blake2::blake2b::blake2b;
-use byteorder::{LittleEndian, ReadBytesExt, WriteBytesExt};
-
 use crate::pow::error::{Error, ErrorKind};
 use crate::pow::num::{PrimInt, ToPrimitive};
 use crate::pow::siphash::siphash24;
+use blake2::blake2b::blake2b;
+use byteorder::{LittleEndian, ReadBytesExt, WriteBytesExt};
 use std::fmt;
 use std::hash::Hash;
 use std::io::Cursor;

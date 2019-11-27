@@ -1,6 +1,6 @@
 # 빠른 동기화
 
-*이 문서를 다른 언어로 읽으시려면: [에스파냐어](fast-sync_ES.md).*
+*다른 언어로 되어있는 문서를 읽으려면: [English](fast-sync.md), [Español](fast-sync_ES.md), [简体中文](fast-sync_ZH-CN.md).*
 
 Grin에서는 새로 네트워크에 참여하는 노드나 얼마 동안 체인을 따라 잡지 않은 노드(의 상태)를 알려진 최신 블록으로( 원문에서는 most-worked block 이라고 표현- 역자 주 ) 가져 오는 프로세스를 "동기화"라고 부릅니다. Initial Block Download (또는 IBD)는 다른 블록 체인에서 자주 사용되지만 빠른 동기화를 사용하는 Grin에서는 일반적으로 전체 블록을 다운로드하지 않으므로 문제가 됩니다.
 

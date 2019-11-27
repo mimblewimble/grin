@@ -25,8 +25,6 @@ extern crate serde_derive;
 #[macro_use]
 extern crate lazy_static;
 
-extern crate sha2;
-
 mod base58;
 pub mod extkey_bip32;
 pub mod mnemonic;

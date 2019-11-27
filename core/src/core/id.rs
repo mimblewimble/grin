@@ -14,15 +14,12 @@
 
 //! short ids for compact blocks
 
-use std::cmp::min;
-use std::cmp::Ordering;
-
-use byteorder::{ByteOrder, LittleEndian};
-use siphasher::sip::SipHasher24;
-
 use crate::core::hash::{DefaultHashable, Hash, Hashed};
 use crate::ser::{self, Readable, Reader, Writeable, Writer};
-use crate::util;
+use byteorder::{ByteOrder, LittleEndian};
+use siphasher::sip::SipHasher24;
+use std::cmp::{min, Ordering};
+use util;
 
 /// The size of a short id used to identify inputs|outputs|kernels (6 bytes)
 pub const SHORT_ID_SIZE: usize = 6;

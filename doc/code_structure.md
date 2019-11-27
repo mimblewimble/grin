@@ -1,5 +1,7 @@
 # Grin code structure
 
+*Read this in other languages: [简体中文](code_structure_ZH-CN.md).*
+
 Grin is built in [Rust](https://www.rust-lang.org/), a memory safe, compiled language. Performance critical parts like the Cuckoo mining algorithm are built as plugins, making it easy to swap between algorithm implementations for various hardware. Grin comes with CPU and experimental GPU support.
 
 ## Files in project root

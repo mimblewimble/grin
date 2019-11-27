@@ -19,17 +19,15 @@
 
 #![cfg_attr(feature = "cargo-clippy", allow(clippy::unreadable_literal))]
 
-use chrono::prelude::{TimeZone, Utc};
-
 use crate::core;
-use crate::pow::{Difficulty, Proof, ProofOfWork};
-use crate::util;
-use crate::util::secp::constants::SINGLE_BULLET_PROOF_SIZE;
-use crate::util::secp::pedersen::{Commitment, RangeProof};
-use crate::util::secp::Signature;
-
 use crate::core::hash::Hash;
-use crate::keychain::BlindingFactor;
+use crate::pow::{Difficulty, Proof, ProofOfWork};
+use chrono::prelude::{TimeZone, Utc};
+use keychain::BlindingFactor;
+use util;
+use util::secp::constants::SINGLE_BULLET_PROOF_SIZE;
+use util::secp::pedersen::{Commitment, RangeProof};
+use util::secp::Signature;
 
 /// Genesis block definition for development networks. The proof of work size
 /// is small enough to mine it on the fly, so it does not contain its own

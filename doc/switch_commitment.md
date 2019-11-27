@@ -38,7 +38,7 @@ did not change the secret number during the game.
 
 ### Pedersen Commitment
 
-Other, more advanced commitment schemes can have additional properties. For example MimbleWimble
+Other, more advanced commitment schemes can have additional properties. For example Mimblewimble
 and Confidential Transactions (CT) make heavy use of
 _[Pedersen Commitments](https://link.springer.com/content/pdf/10.1007/3-540-46766-1_9.pdf)_,
 which are _homomorphic_ commitments. Homomorphic in this context means that (speaking in the
@@ -51,7 +51,7 @@ from _box1_ and _box2_.
 While this "box" metaphor no longer seems to be reasonable in the real-world this
 is perfectly possible using the properties of operations on elliptic curves.   
 
-Look into [Introduction to MimbleWimble](intro.md) for further details on Pedersen Commitments
+Look into [Introduction to Mimblewimble](intro.md) for further details on Pedersen Commitments
 and how they are used in Grin.
 
 
