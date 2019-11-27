@@ -94,7 +94,7 @@ impl View for LogBufferView {
 				rows.reverse(); // So stack traces are in the right order.
 				for row in rows {
 					for span in row.resolve(&log_message) {
-						p.print((0, p.size.y - 1 - i), span.content);
+						p.print((0, p.size.y.saturating_sub(i + 1)), span.content);
 						i += 1;
 					}
 				}

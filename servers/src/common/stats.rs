@@ -63,7 +63,7 @@ pub struct ServerStats {
 	/// Difficulty calculation statistics
 	pub diff_stats: DiffStats,
 	/// Transaction pool statistics
-	pub tx_stats: TxStats,
+	pub tx_stats: Option<TxStats>,
 	/// Disk usage in GB
 	pub disk_usage_gb: String,
 }

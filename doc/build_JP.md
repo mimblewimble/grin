@@ -1,6 +1,6 @@
 # grin - ビルド、設定、動作確認
 
-*Read this in other languages: [Español](build_ES.md), [Korean](build_KR.md), [日本語](build_JP.md).*
+*この文章を他の言語で読む: [English](build.md), [Español](build_ES.md), [Korean](build_KR.md), [简体中文](build_ZH-CN.md).*
 
 ## 動作環境
 
@@ -93,7 +93,7 @@ grinは気の利いたデフォルト設定で起動するようになってお�
 
 ```sh
 grin help
-grin wallet --help
+grin server --help
 grin client --help
 ```
 
@@ -126,4 +126,4 @@ x86のLinux上で`grin`をクロスコンパイルしARMバイナリを作成し
 
 grinのマイニングに関する全ての機能は[grin-miner](https://github.com/mimblewimble/grin-miner)と呼ばれるスタンドアローンなパッケージに分離されていることに注意。
 
-grin-minerをgrinノードと通信させるためには、`grin-server.toml`の設定ファイルで`enable_stratum_server = true`と設定し、ウォレットリスナーを起動(`grin wallet listen`)しておく必要がある。
+grin-minerをgrinノードと通信させるためには、`grin-server.toml`の設定ファイルで`enable_stratum_server = true`と設定し、ウォレットリスナーを起動(`grin-wallet listen`)しておく必要がある。

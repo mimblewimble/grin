@@ -15,15 +15,18 @@
 //! Common test functions
 
 use grin_core::core::{Block, BlockHeader, KernelFeatures, Transaction};
+use grin_core::core::hash::DefaultHashable;
 use grin_core::libtx::{
 	build::{self, input, output},
 	proof::{ProofBuild, ProofBuilder},
 	reward,
 };
 use grin_core::pow::Difficulty;
+use grin_core::ser::{self, FixedLength, PMMRable, Readable, Reader, Writeable, Writer};
 use keychain::{Identifier, Keychain};
 
 // utility producing a transaction with 2 inputs and a single outputs
+#[allow(dead_code)]
 pub fn tx2i1o() -> Transaction {
 	let keychain = keychain::ExtKeychain::from_random_seed(false).unwrap();
 	let builder = ProofBuilder::new(&keychain);
@@ -41,6 +44,7 @@ pub fn tx2i1o() -> Transaction {
 }
 
 // utility producing a transaction with a single input and output
+#[allow(dead_code)]
 pub fn tx1i1o() -> Transaction {
 	let keychain = keychain::ExtKeychain::from_random_seed(false).unwrap();
 	let builder = ProofBuilder::new(&keychain);
@@ -59,6 +63,7 @@ pub fn tx1i1o() -> Transaction {
 // utility producing a transaction with a single input
 // and two outputs (one change output)
 // Note: this tx has an "offset" kernel
+#[allow(dead_code)]
 pub fn tx1i2o() -> Transaction {
 	let keychain = keychain::ExtKeychain::from_random_seed(false).unwrap();
 	let builder = ProofBuilder::new(&keychain);
@@ -77,6 +82,7 @@ pub fn tx1i2o() -> Transaction {
 
 // utility to create a block without worrying about the key or previous
 // header
+#[allow(dead_code)]
 pub fn new_block<K, B>(
 	txs: Vec<&Transaction>,
 	keychain: &K,
@@ -101,6 +107,7 @@ where
 
 // utility producing a transaction that spends an output with the provided
 // value and blinding key
+#[allow(dead_code)]
 pub fn txspend1i1o<K, B>(
 	v: u64,
 	keychain: &K,
@@ -119,4 +126,41 @@ where
 		builder,
 	)
 	.unwrap()
+}
+
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub struct TestElem(pub [u32; 4]);
+
+impl DefaultHashable for TestElem {}
+
+impl FixedLength for TestElem {
+	const LEN: usize = 16;
+}
+
+impl PMMRable for TestElem {
+	type E = Self;
+
+	fn as_elmt(&self) -> Self::E {
+		self.clone()
+	}
+}
+
+impl Writeable for TestElem {
+	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
+		r#try!(writer.write_u32(self.0[0]));
+		r#try!(writer.write_u32(self.0[1]));
+		r#try!(writer.write_u32(self.0[2]));
+		writer.write_u32(self.0[3])
+	}
+}
+
+impl Readable for TestElem {
+	fn read(reader: &mut dyn Reader) -> Result<TestElem, ser::Error> {
+		Ok(TestElem([
+			reader.read_u32()?,
+			reader.read_u32()?,
+			reader.read_u32()?,
+			reader.read_u32()?,
+		]))
+	}
 }

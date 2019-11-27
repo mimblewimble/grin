@@ -1,5 +1,7 @@
 # Merkle Mountain Ranges
 
+*다른 언어로 되어있는 문서를 읽으려면: [English](mmr.md), [简体中文](mmr_ZH-CN.md).*
+
 ## MMR의 구조
 
 Merkle Mountain Ranges [1]은 Merkle trees [2]의 대안입니다. 후자는 완벽하게 균형 잡힌 이진 트리를 사용하지만 전자는 완벽하게 균형잡힌 binary tree list 거나 오른쪽 상단에서 잘린 single binary tree로 볼 수 있습니다. Merkle Mountain Range (MMR)는 엄격하게 append 에서만 사용됩니다. 원소는 왼쪽에서 오른쪽으로 추가되고, 두 하위 원소가 있는 즉시 부모를 추가하여 그에 따라 범위를 채웁니다.
@@ -91,8 +93,8 @@ Grin에서는 해시되고 MMR에 저장되는 많은 데이터가 결국 제거
 MMR의 pruning은 간단한 반복 프로세스에 의존합니다. `X`는 우선 첫번째 제거할 리프로 초기화됩니다.
 
 1. `X`를 Pruning 한다.
-2. 만약 `x`가 형제 노드가 있다면 여기서 prunging을 중단한다.
-3. 만약 `X`가 형제 노드가 없다면 `X`의 부모 노드는 `X`라고 배정된다.
+1. 만약 `x`가 형제 노드가 있다면 여기서 prunging을 중단한다.
+1. 만약 `X`가 형제 노드가 없다면 `X`의 부모 노드는 `X`라고 배정된다.
 
 결과를 시각화하기 위해 첫 번째 MMR 예시에서 시작하여 리프[0, 3, 4, 8, 16]을 제거하면 다음과 같은 pruning MMR이 발생합니다.
 

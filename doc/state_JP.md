@@ -1,6 +1,6 @@
 # 状態とストレージ
 
-*別の言語で読む: [Korean](state_KR.md), [日本語](state_JP.md).*
+*別の言語で読む: [English](state.md), [Korean](state_KR.md), [简体中文](state_ZH-CN.md).*
 
 ## Grinの状態
 
