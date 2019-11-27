@@ -4,7 +4,7 @@
 
 这些构建方式并非本文作者或 Grin 开发团队原创。主要都是众多密码学家和研究者的结晶。其中包括：Torben
 Pryds Pedersen、Gregory Maxwell、Andrew Poelstra、John Tromp、Claus Peter
-Schnorr。在此对未能列出名字的贡献者致歉，我们认可多数计算机科学发现都意义非凡。
+Schnorr。特此对未能列出名字的贡献者致歉，我们认可多数计算机科学发现都意义非凡。
 
 ## 内置功能
 
