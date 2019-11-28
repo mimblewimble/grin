@@ -12,30 +12,27 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! JSON-RPC Stub generation for the Node API
+//! JSON-RPC Stub generation for the Foreign API
 
 use crate::core::core::hash::Hash;
 use crate::core::core::transaction::Transaction;
-use crate::node::Node;
-use crate::p2p::types::PeerInfoDisplay;
-use crate::p2p::PeerData;
+use crate::foreign::Foreign;
 use crate::pool::PoolEntry;
 use crate::rest::ErrorKind;
 use crate::types::{
-	BlockHeaderPrintable, BlockPrintable, LocatedTxKernel, OutputListing, OutputPrintable, Status,
-	Tip, Version,
+	BlockHeaderPrintable, BlockPrintable, LocatedTxKernel, OutputListing, OutputPrintable, Tip,
+	Version,
 };
 use crate::util;
-use std::net::SocketAddr;
 
 /// Public definition used to generate Node jsonrpc api.
 /// * When running `grin` with defaults, the V2 api is available at
-/// `localhost:3413/v2`
+/// `localhost:3413/v2/foreign`
 /// * The endpoint only supports POST operations, with the json-rpc request as the body
 #[easy_jsonrpc_mw::rpc]
-pub trait NodeRpc: Sync + Send {
+pub trait ForeignRpc: Sync + Send {
 	/**
-	Networked version of [Node::get_header](struct.Node.html#method.get_header).
+	Networked version of [Foreign::get_header](struct.Node.html#method.get_header).
 
 	# Json rpc example
 
@@ -129,7 +126,7 @@ pub trait NodeRpc: Sync + Send {
 	) -> Result<BlockHeaderPrintable, ErrorKind>;
 
 	/**
-	Networked version of [Node::get_block](struct.Node.html#method.get_block).
+	Networked version of [Foreign::get_block](struct.Node.html#method.get_block).
 
 	# Json rpc example
 
@@ -247,52 +244,7 @@ pub trait NodeRpc: Sync + Send {
 	) -> Result<BlockPrintable, ErrorKind>;
 
 	/**
-	Networked version of [Node::get_status](struct.Node.html#method.get_status).
-
-	# Json rpc example
-
-	```
-	# grin_api::doctest_helper_json_rpc_node_assert_response!(
-	# r#"
-	{
-		"jsonrpc": "2.0",
-		"method": "get_status",
-		"params": [],
-		"id": 1
-	}
-	# "#
-	# ,
-	# r#"
-	{
-		"id": 1,
-		"jsonrpc": "2.0",
-		"result": {
-			"Ok": {
-			"protocol_version": "2",
-			"user_agent": "MW/Grin 2.x.x",
-			"connections": "8",
-			"tip": {
-				"height": 371553,
-				"last_block_pushed": "00001d1623db988d7ed10c5b6319360a52f20c89b4710474145806ba0e8455ec",
-				"prev_block_to_last": "0000029f51bacee81c49a27b4bc9c6c446e03183867c922890f90bb17108d89f",
-				"total_difficulty": 1127628411943045
-			},
-			"sync_status": "header_sync",
-			"sync_info": {
-				"current_height": 371553,
-				"highest_height": 0
-			}
-			}
-		}
-	}
-	# "#
-	# );
-	```
-	 */
-	fn get_status(&self) -> Result<Status, ErrorKind>;
-
-	/**
-	Networked version of [Node::get_version](struct.Node.html#method.get_version).
+	Networked version of [Foreign::get_version](struct.Node.html#method.get_version).
 
 	# Json rpc example
 
@@ -325,7 +277,7 @@ pub trait NodeRpc: Sync + Send {
 	fn get_version(&self) -> Result<Version, ErrorKind>;
 
 	/**
-	Networked version of [Node::get_tip](struct.Node.html#method.get_tip).
+	Networked version of [Foreign::get_tip](struct.Node.html#method.get_tip).
 
 	# Json rpc example
 
@@ -360,7 +312,7 @@ pub trait NodeRpc: Sync + Send {
 	fn get_tip(&self) -> Result<Tip, ErrorKind>;
 
 	/**
-	Networked version of [Node::get_kernel](struct.Node.html#method.get_kernel).
+	Networked version of [Foreign::get_kernel](struct.Node.html#method.get_kernel).
 
 	# Json rpc example
 
@@ -403,7 +355,7 @@ pub trait NodeRpc: Sync + Send {
 	) -> Result<LocatedTxKernel, ErrorKind>;
 
 	/**
-	Networked version of [Node::get_outputs](struct.Node.html#method.get_outputs).
+	Networked version of [Foreign::get_outputs](struct.Node.html#method.get_outputs).
 
 	# Json rpc example
 
@@ -490,7 +442,7 @@ pub trait NodeRpc: Sync + Send {
 	) -> Result<Vec<OutputPrintable>, ErrorKind>;
 
 	/**
-	Networked version of [Node::get_unspent_outputs](struct.Node.html#method.get_unspent_outputs).
+	Networked version of [Foreign::get_unspent_outputs](struct.Node.html#method.get_unspent_outputs).
 
 	# Json rpc example
 
@@ -551,7 +503,7 @@ pub trait NodeRpc: Sync + Send {
 	) -> Result<OutputListing, ErrorKind>;
 
 	/**
-	Networked version of [Node::get_pmmr_indices](struct.Node.html#method.get_pmmr_indices).
+	Networked version of [Foreign::get_pmmr_indices](struct.Node.html#method.get_pmmr_indices).
 
 	# Json rpc example
 
@@ -588,288 +540,7 @@ pub trait NodeRpc: Sync + Send {
 	) -> Result<OutputListing, ErrorKind>;
 
 	/**
-	Networked version of [Node::validate_chain](struct.Node.html#method.validate_chain).
-
-	# Json rpc example
-
-	```
-	# grin_api::doctest_helper_json_rpc_node_assert_response!(
-	# r#"
-	{
-		"jsonrpc": "2.0",
-		"method": "validate_chain",
-		"params": [],
-		"id": 1
-	}
-	# "#
-	# ,
-	# r#"
-	{
-		"id": 1,
-		"jsonrpc": "2.0",
-		"result": {
-			"Ok": null
-		}
-	}
-	# "#
-	# );
-	```
-	 */
-	fn validate_chain(&self) -> Result<(), ErrorKind>;
-
-	/**
-	Networked version of [Node::compact_chain](struct.Node.html#method.compact_chain).
-
-	# Json rpc example
-
-	```
-	# grin_api::doctest_helper_json_rpc_node_assert_response!(
-	# r#"
-	{
-		"jsonrpc": "2.0",
-		"method": "compact_chain",
-		"params": [],
-		"id": 1
-	}
-	# "#
-	# ,
-	# r#"
-	{
-		"id": 1,
-		"jsonrpc": "2.0",
-		"result": {
-			"Ok": null
-		}
-	}
-	# "#
-	# );
-	```
-	 */
-	fn compact_chain(&self) -> Result<(), ErrorKind>;
-
-	/**
-	Networked version of [Node::get_peers](struct.Node.html#method.get_peers).
-
-	# Json rpc example
-
-	```
-	# grin_api::doctest_helper_json_rpc_node_assert_response!(
-	# r#"
-	{
-		"jsonrpc": "2.0",
-		"method": "get_peers",
-		"params": ["70.50.33.130:3414"],
-		"id": 1
-	}
-	# "#
-	# ,
-	# r#"
-	{
-		"id": 1,
-		"jsonrpc": "2.0",
-		"result": {
-			"Ok": [
-			{
-				"addr": "70.50.33.130:3414",
-				"ban_reason": "None",
-				"capabilities": {
-				"bits": 15
-				},
-				"flags": "Defunct",
-				"last_banned": 0,
-				"last_connected": 1570129317,
-				"user_agent": "MW/Grin 2.0.0"
-			}
-			]
-		}
-	}
-	# "#
-	# );
-	```
-	 */
-	fn get_peers(&self, peer_addr: Option<SocketAddr>) -> Result<Vec<PeerData>, ErrorKind>;
-
-	/**
-	Networked version of [Node::get_connected_peers](struct.Node.html#method.get_connected_peers).
-
-	# Json rpc example
-
-	```
-	# grin_api::doctest_helper_json_rpc_node_assert_response!(
-	# r#"
-	{
-		"jsonrpc": "2.0",
-		"method": "get_connected_peers",
-		"params": [],
-		"id": 1
-	}
-	# "#
-	# ,
-	# r#"
-	{
-		"id": 1,
-		"jsonrpc": "2.0",
-		"result": {
-			"Ok": [
-			{
-				"addr": "35.176.195.242:3414",
-				"capabilities": {
-				"bits": 15
-				},
-				"direction": "Outbound",
-				"height": 374510,
-				"total_difficulty": 1133954621205750,
-				"user_agent": "MW/Grin 2.0.0",
-				"version": 1
-			},
-			{
-				"addr": "47.97.198.21:3414",
-				"capabilities": {
-				"bits": 15
-				},
-				"direction": "Outbound",
-				"height": 374510,
-				"total_difficulty": 1133954621205750,
-				"user_agent": "MW/Grin 2.0.0",
-				"version": 1
-			},
-			{
-				"addr": "148.251.16.13:3414",
-				"capabilities": {
-				"bits": 15
-				},
-				"direction": "Outbound",
-				"height": 374510,
-				"total_difficulty": 1133954621205750,
-				"user_agent": "MW/Grin 2.0.0",
-				"version": 1
-			},
-			{
-				"addr": "68.195.18.155:3414",
-				"capabilities": {
-				"bits": 15
-				},
-				"direction": "Outbound",
-				"height": 374510,
-				"total_difficulty": 1133954621205750,
-				"user_agent": "MW/Grin 2.0.0",
-				"version": 1
-			},
-			{
-				"addr": "52.53.221.15:3414",
-				"capabilities": {
-				"bits": 15
-				},
-				"direction": "Outbound",
-				"height": 0,
-				"total_difficulty": 1133954621205750,
-				"user_agent": "MW/Grin 2.0.0",
-				"version": 1
-			},
-			{
-				"addr": "109.74.202.16:3414",
-				"capabilities": {
-				"bits": 15
-				},
-				"direction": "Outbound",
-				"height": 374510,
-				"total_difficulty": 1133954621205750,
-				"user_agent": "MW/Grin 2.0.0",
-				"version": 1
-			},
-			{
-				"addr": "121.43.183.180:3414",
-				"capabilities": {
-				"bits": 15
-				},
-				"direction": "Outbound",
-				"height": 374510,
-				"total_difficulty": 1133954621205750,
-				"user_agent": "MW/Grin 2.0.0",
-				"version": 1
-			},
-			{
-				"addr": "35.157.247.209:23414",
-				"capabilities": {
-				"bits": 15
-				},
-				"direction": "Outbound",
-				"height": 374510,
-				"total_difficulty": 1133954621205750,
-				"user_agent": "MW/Grin 2.0.0",
-				"version": 1
-			}
-			]
-		}
-	}
-	# "#
-	# );
-	```
-	 */
-	fn get_connected_peers(&self) -> Result<Vec<PeerInfoDisplay>, ErrorKind>;
-
-	/**
-	Networked version of [Node::ban_peer](struct.Node.html#method.ban_peer).
-
-	# Json rpc example
-
-	```
-	# grin_api::doctest_helper_json_rpc_node_assert_response!(
-	# r#"
-	{
-		"jsonrpc": "2.0",
-		"method": "ban_peer",
-		"params": ["70.50.33.130:3414"],
-		"id": 1
-	}
-	# "#
-	# ,
-	# r#"
-	{
-		"id": 1,
-		"jsonrpc": "2.0",
-		"result": {
-			"Ok": null
-		}
-	}
-	# "#
-	# );
-	```
-	 */
-	fn ban_peer(&self, peer_addr: SocketAddr) -> Result<(), ErrorKind>;
-
-	/**
-	Networked version of [Node::unban_peer](struct.Node.html#method.unban_peer).
-
-	# Json rpc example
-
-	```
-	# grin_api::doctest_helper_json_rpc_node_assert_response!(
-	# r#"
-	{
-		"jsonrpc": "2.0",
-		"method": "unban_peer",
-		"params": ["70.50.33.130:3414"],
-		"id": 1
-	}
-	# "#
-	# ,
-	# r#"
-	{
-		"id": 1,
-		"jsonrpc": "2.0",
-		"result": {
-			"Ok": null
-		}
-	}
-	# "#
-	# );
-	```
-	 */
-	fn unban_peer(&self, peer_addr: SocketAddr) -> Result<(), ErrorKind>;
-
-	/**
-	Networked version of [Node::get_pool_size](struct.Node.html#method.get_pool_size).
+	Networked version of [Foreign::get_pool_size](struct.Node.html#method.get_pool_size).
 
 	# Json rpc example
 
@@ -899,7 +570,7 @@ pub trait NodeRpc: Sync + Send {
 	fn get_pool_size(&self) -> Result<usize, ErrorKind>;
 
 	/**
-	Networked version of [Node::get_stempool_size](struct.Node.html#method.get_stempool_size).
+	Networked version of [Foreign::get_stempool_size](struct.Node.html#method.get_stempool_size).
 
 	# Json rpc example
 
@@ -929,7 +600,7 @@ pub trait NodeRpc: Sync + Send {
 	fn get_stempool_size(&self) -> Result<usize, ErrorKind>;
 
 	/**
-	Networked version of [Node::get_unconfirmed_transactions](struct.Node.html#method.get_unconfirmed_transactions).
+	Networked version of [Foreign::get_unconfirmed_transactions](struct.Node.html#method.get_unconfirmed_transactions).
 
 	# Json rpc example
 
@@ -1002,7 +673,7 @@ pub trait NodeRpc: Sync + Send {
 	fn get_unconfirmed_transactions(&self) -> Result<Vec<PoolEntry>, ErrorKind>;
 
 	/**
-	Networked version of [Node::push_transaction](struct.Node.html#method.push_transaction).
+	Networked version of [Foreign::push_transaction](struct.Node.html#method.push_transaction).
 
 	# Json rpc example
 
@@ -1067,7 +738,7 @@ pub trait NodeRpc: Sync + Send {
 	fn push_transaction(&self, tx: Transaction, fluff: Option<bool>) -> Result<(), ErrorKind>;
 }
 
-impl NodeRpc for Node {
+impl ForeignRpc for Foreign {
 	fn get_header(
 		&self,
 		height: Option<u64>,
@@ -1080,7 +751,7 @@ impl NodeRpc for Node {
 				.map_err(|e| ErrorKind::Argument(format!("invalid block hash: {}", e)))?;
 			parsed_hash = Some(Hash::from_vec(&vec));
 		}
-		Node::get_header(self, height, parsed_hash, commit).map_err(|e| e.kind().clone())
+		Foreign::get_header(self, height, parsed_hash, commit).map_err(|e| e.kind().clone())
 	}
 	fn get_block(
 		&self,
@@ -1094,18 +765,15 @@ impl NodeRpc for Node {
 				.map_err(|e| ErrorKind::Argument(format!("invalid block hash: {}", e)))?;
 			parsed_hash = Some(Hash::from_vec(&vec));
 		}
-		Node::get_block(self, height, parsed_hash, commit).map_err(|e| e.kind().clone())
-	}
-	fn get_status(&self) -> Result<Status, ErrorKind> {
-		Node::get_status(self).map_err(|e| e.kind().clone())
+		Foreign::get_block(self, height, parsed_hash, commit).map_err(|e| e.kind().clone())
 	}
 
 	fn get_version(&self) -> Result<Version, ErrorKind> {
-		Node::get_version(self).map_err(|e| e.kind().clone())
+		Foreign::get_version(self).map_err(|e| e.kind().clone())
 	}
 
 	fn get_tip(&self) -> Result<Tip, ErrorKind> {
-		Node::get_tip(self).map_err(|e| e.kind().clone())
+		Foreign::get_tip(self).map_err(|e| e.kind().clone())
 	}
 
 	fn get_kernel(
@@ -1114,7 +782,7 @@ impl NodeRpc for Node {
 		min_height: Option<u64>,
 		max_height: Option<u64>,
 	) -> Result<LocatedTxKernel, ErrorKind> {
-		Node::get_kernel(self, excess, min_height, max_height).map_err(|e| e.kind().clone())
+		Foreign::get_kernel(self, excess, min_height, max_height).map_err(|e| e.kind().clone())
 	}
 
 	fn get_outputs(
@@ -1125,7 +793,7 @@ impl NodeRpc for Node {
 		include_proof: Option<bool>,
 		include_merkle_proof: Option<bool>,
 	) -> Result<Vec<OutputPrintable>, ErrorKind> {
-		Node::get_outputs(
+		Foreign::get_outputs(
 			self,
 			commits,
 			start_height,
@@ -1143,7 +811,7 @@ impl NodeRpc for Node {
 		max: u64,
 		include_proof: Option<bool>,
 	) -> Result<OutputListing, ErrorKind> {
-		Node::get_unspent_outputs(self, start_index, end_index, max, include_proof)
+		Foreign::get_unspent_outputs(self, start_index, end_index, max, include_proof)
 			.map_err(|e| e.kind().clone())
 	}
 
@@ -1152,53 +820,29 @@ impl NodeRpc for Node {
 		start_block_height: u64,
 		end_block_height: Option<u64>,
 	) -> Result<OutputListing, ErrorKind> {
-		Node::get_pmmr_indices(self, start_block_height, end_block_height)
+		Foreign::get_pmmr_indices(self, start_block_height, end_block_height)
 			.map_err(|e| e.kind().clone())
 	}
 
-	fn validate_chain(&self) -> Result<(), ErrorKind> {
-		Node::validate_chain(self).map_err(|e| e.kind().clone())
-	}
-
-	fn compact_chain(&self) -> Result<(), ErrorKind> {
-		Node::compact_chain(self).map_err(|e| e.kind().clone())
-	}
-
-	fn get_peers(&self, addr: Option<SocketAddr>) -> Result<Vec<PeerData>, ErrorKind> {
-		Node::get_peers(self, addr).map_err(|e| e.kind().clone())
-	}
-
-	fn get_connected_peers(&self) -> Result<Vec<PeerInfoDisplay>, ErrorKind> {
-		Node::get_connected_peers(self).map_err(|e| e.kind().clone())
-	}
-
-	fn ban_peer(&self, addr: SocketAddr) -> Result<(), ErrorKind> {
-		Node::ban_peer(self, addr).map_err(|e| e.kind().clone())
-	}
-
-	fn unban_peer(&self, addr: SocketAddr) -> Result<(), ErrorKind> {
-		Node::unban_peer(self, addr).map_err(|e| e.kind().clone())
-	}
-
 	fn get_pool_size(&self) -> Result<usize, ErrorKind> {
-		Node::get_pool_size(self).map_err(|e| e.kind().clone())
+		Foreign::get_pool_size(self).map_err(|e| e.kind().clone())
 	}
 
 	fn get_stempool_size(&self) -> Result<usize, ErrorKind> {
-		Node::get_stempool_size(self).map_err(|e| e.kind().clone())
+		Foreign::get_stempool_size(self).map_err(|e| e.kind().clone())
 	}
 
 	fn get_unconfirmed_transactions(&self) -> Result<Vec<PoolEntry>, ErrorKind> {
-		Node::get_unconfirmed_transactions(self).map_err(|e| e.kind().clone())
+		Foreign::get_unconfirmed_transactions(self).map_err(|e| e.kind().clone())
 	}
 	fn push_transaction(&self, tx: Transaction, fluff: Option<bool>) -> Result<(), ErrorKind> {
-		Node::push_transaction(self, tx, fluff).map_err(|e| e.kind().clone())
+		Foreign::push_transaction(self, tx, fluff).map_err(|e| e.kind().clone())
 	}
 }
 
 #[doc(hidden)]
 #[macro_export]
-macro_rules! doctest_helper_json_rpc_node_assert_response {
+macro_rules! doctest_helper_json_rpc_foreign_assert_response {
 	($request:expr, $expected_response:expr) => {
 		// create temporary grin server, run jsonrpc request on node api, delete server, return
 		// json response.

@@ -35,17 +35,23 @@ extern crate log;
 mod web;
 pub mod auth;
 pub mod client;
+mod foreign;
+mod foreign_rpc;
 mod handlers;
-mod node;
-mod node_rpc;
+mod owner;
+mod owner_rpc;
 mod rest;
 mod router;
 mod types;
 
-pub use crate::auth::{BasicAuthMiddleware, GRIN_BASIC_REALM};
-pub use crate::handlers::node_api;
-pub use crate::node::Node;
-pub use crate::node_rpc::NodeRpc;
+pub use crate::auth::{
+	BasicAuthMiddleware, BasicAuthURIMiddleware, GRIN_BASIC_REALM, GRIN_FOREIGN_BASIC_REALM,
+};
+pub use crate::foreign::Foreign;
+pub use crate::foreign_rpc::ForeignRpc;
+pub use crate::handlers::node_apis;
+pub use crate::owner::Owner;
+pub use crate::owner_rpc::OwnerRpc;
 pub use crate::rest::*;
 pub use crate::router::*;
 pub use crate::types::*;

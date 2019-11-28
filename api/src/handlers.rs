@@ -38,11 +38,15 @@ use self::server_api::KernelDownloadHandler;
 use self::server_api::StatusHandler;
 use self::transactions_api::TxHashSetHandler;
 use self::version_api::VersionHandler;
-use crate::auth::{BasicAuthMiddleware, GRIN_BASIC_REALM};
+use crate::auth::{
+	BasicAuthMiddleware, BasicAuthURIMiddleware, GRIN_BASIC_REALM, GRIN_FOREIGN_BASIC_REALM,
+};
 use crate::chain;
 use crate::chain::{Chain, SyncState};
-use crate::node::Node;
-use crate::node_rpc::NodeRpc;
+use crate::foreign::Foreign;
+use crate::foreign_rpc::ForeignRpc;
+use crate::owner::Owner;
+use crate::owner_rpc::OwnerRpc;
 use crate::p2p;
 use crate::pool;
 use crate::rest::{ApiServer, Error, TLSConfig};
@@ -61,13 +65,14 @@ use std::sync::{Arc, Weak};
 
 /// Listener version, providing same API but listening for requests on a
 /// port and wrapping the calls
-pub fn node_api(
+pub fn node_apis(
 	addr: &str,
 	chain: Arc<chain::Chain>,
 	tx_pool: Arc<RwLock<pool::TransactionPool>>,
 	peers: Arc<p2p::Peers>,
 	sync_state: Arc<chain::SyncState>,
 	api_secret: Option<String>,
+	foreign_api_secret: Option<String>,
 	tls_config: Option<TLSConfig>,
 ) -> Result<(), Error> {
 	// Manually build router when getting rid of v1
@@ -80,28 +85,46 @@ pub fn node_api(
 	)
 	.expect("unable to build API router");
 
+	// Add basic auth to v1 API and owner v2 API
 	if let Some(api_secret) = api_secret {
 		let api_basic_auth =
 			"Basic ".to_string() + &to_base64(&("grin:".to_string() + &api_secret));
 		let basic_auth_middleware = Arc::new(BasicAuthMiddleware::new(
 			api_basic_auth,
 			&GRIN_BASIC_REALM,
-			None,
+			Some("/v2/foreign".into()),
 		));
 		router.add_middleware(basic_auth_middleware);
 	}
 
-	let api_handler_v2 = NodeAPIHandlerV2::new(
+	let api_handler_v2 = OwnerAPIHandlerV2::new(
 		Arc::downgrade(&chain),
-		Arc::downgrade(&tx_pool),
 		Arc::downgrade(&peers),
 		Arc::downgrade(&sync_state),
 	);
+	router.add_route("/v2/owner", Arc::new(api_handler_v2))?;
 
-	router.add_route("/v2", Arc::new(api_handler_v2))?;
+	// Add basic auth to v2 foreign API only
+	if let Some(api_secret) = foreign_api_secret {
+		let api_basic_auth =
+			"Basic ".to_string() + &to_base64(&("grin:".to_string() + &api_secret));
+		let basic_auth_middleware = Arc::new(BasicAuthURIMiddleware::new(
+			api_basic_auth,
+			&GRIN_FOREIGN_BASIC_REALM,
+			"/v2/foreign".into(),
+		));
+		router.add_middleware(basic_auth_middleware);
+	}
+
+	let api_handler_v2 = ForeignAPIHandlerV2::new(
+		Arc::downgrade(&chain),
+		Arc::downgrade(&tx_pool),
+		Arc::downgrade(&sync_state),
+	);
+	router.add_route("/v2/foreign", Arc::new(api_handler_v2))?;
 
 	let mut apis = ApiServer::new();
-	warn!("Starting HTTP Node API server at {}.", addr);
+	warn!("Starting HTTP Node APIs server at {}.", addr);
 	let socket_addr: SocketAddr = addr.parse().expect("unable to parse socket address");
 	let api_thread = apis.start(socket_addr, router, tls_config);
 
@@ -119,24 +142,17 @@ pub fn node_api(
 type NodeResponseFuture = Box<dyn Future<Item = Response<Body>, Error = Error> + Send>;
 
 /// V2 API Handler/Wrapper for owner functions
-pub struct NodeAPIHandlerV2 {
+pub struct OwnerAPIHandlerV2 {
 	pub chain: Weak<Chain>,
-	pub tx_pool: Weak<RwLock<pool::TransactionPool>>,
 	pub peers: Weak<p2p::Peers>,
 	pub sync_state: Weak<SyncState>,
 }
 
-impl NodeAPIHandlerV2 {
+impl OwnerAPIHandlerV2 {
 	/// Create a new owner API handler for GET methods
-	pub fn new(
-		chain: Weak<Chain>,
-		tx_pool: Weak<RwLock<pool::TransactionPool>>,
-		peers: Weak<p2p::Peers>,
-		sync_state: Weak<SyncState>,
-	) -> Self {
-		NodeAPIHandlerV2 {
+	pub fn new(chain: Weak<Chain>, peers: Weak<p2p::Peers>, sync_state: Weak<SyncState>) -> Self {
+		OwnerAPIHandlerV2 {
 			chain,
-			tx_pool,
 			peers,
 			sync_state,
 		}
@@ -145,11 +161,11 @@ impl NodeAPIHandlerV2 {
 	fn call_api(
 		&self,
 		req: Request<Body>,
-		api: Node,
+		api: Owner,
 	) -> Box<dyn Future<Item = serde_json::Value, Error = Error> + Send> {
 		Box::new(parse_body(req).and_then(move |val: serde_json::Value| {
-			let node_api = &api as &dyn NodeRpc;
-			match node_api.handle_request(val) {
+			let owner_api = &api as &dyn OwnerRpc;
+			match owner_api.handle_request(val) {
 				MaybeReply::Reply(r) => ok(r),
 				MaybeReply::DontReply => {
 					// Since it's http, we need to return something. We return [] because jsonrpc
@@ -161,9 +177,8 @@ impl NodeAPIHandlerV2 {
 	}
 
 	fn handle_post_request(&self, req: Request<Body>) -> NodeResponseFuture {
-		let api = Node::new(
+		let api = Owner::new(
 			self.chain.clone(),
-			self.tx_pool.clone(),
 			self.peers.clone(),
 			self.sync_state.clone(),
 		);
@@ -174,7 +189,76 @@ impl NodeAPIHandlerV2 {
 	}
 }
 
-impl crate::router::Handler for NodeAPIHandlerV2 {
+impl crate::router::Handler for OwnerAPIHandlerV2 {
+	fn post(&self, req: Request<Body>) -> ResponseFuture {
+		Box::new(
+			self.handle_post_request(req)
+				.and_then(|r| ok(r))
+				.or_else(|e| {
+					error!("Request Error: {:?}", e);
+					ok(create_error_response(e))
+				}),
+		)
+	}
+
+	fn options(&self, _req: Request<Body>) -> ResponseFuture {
+		Box::new(ok(create_ok_response("{}")))
+	}
+}
+
+/// V2 API Handler/Wrapper for foreign functions
+pub struct ForeignAPIHandlerV2 {
+	pub chain: Weak<Chain>,
+	pub tx_pool: Weak<RwLock<pool::TransactionPool>>,
+	pub sync_state: Weak<SyncState>,
+}
+
+impl ForeignAPIHandlerV2 {
+	/// Create a new foreign API handler for GET methods
+	pub fn new(
+		chain: Weak<Chain>,
+		tx_pool: Weak<RwLock<pool::TransactionPool>>,
+		sync_state: Weak<SyncState>,
+	) -> Self {
+		ForeignAPIHandlerV2 {
+			chain,
+			tx_pool,
+			sync_state,
+		}
+	}
+
+	fn call_api(
+		&self,
+		req: Request<Body>,
+		api: Foreign,
+	) -> Box<dyn Future<Item = serde_json::Value, Error = Error> + Send> {
+		Box::new(parse_body(req).and_then(move |val: serde_json::Value| {
+			let foreign_api = &api as &dyn ForeignRpc;
+			match foreign_api.handle_request(val) {
+				MaybeReply::Reply(r) => ok(r),
+				MaybeReply::DontReply => {
+					// Since it's http, we need to return something. We return [] because jsonrpc
+					// clients will parse it as an empty batch response.
+					ok(serde_json::json!([]))
+				}
+			}
+		}))
+	}
+
+	fn handle_post_request(&self, req: Request<Body>) -> NodeResponseFuture {
+		let api = Foreign::new(
+			self.chain.clone(),
+			self.tx_pool.clone(),
+			self.sync_state.clone(),
+		);
+		Box::new(
+			self.call_api(req, api)
+				.and_then(|resp| ok(json_response_pretty(&resp))),
+		)
+	}
+}
+
+impl crate::router::Handler for ForeignAPIHandlerV2 {
 	fn post(&self, req: Request<Body>) -> ResponseFuture {
 		Box::new(
 			self.handle_post_request(req)

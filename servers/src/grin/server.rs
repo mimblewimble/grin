@@ -274,7 +274,7 @@ impl Server {
 
 		info!("Starting rest apis at: {}", &config.api_http_addr);
 		let api_secret = get_first_line(config.api_secret_path.clone());
-
+		let foreign_api_secret = get_first_line(config.foreign_api_secret_path.clone());
 		let tls_conf = match config.tls_certificate_file.clone() {
 			None => None,
 			Some(file) => {
@@ -290,13 +290,14 @@ impl Server {
 		};
 
 		// TODO fix API shutdown and join this thread
-		api::node_api(
+		api::node_apis(
 			&config.api_http_addr,
 			shared_chain.clone(),
 			tx_pool.clone(),
 			p2p_server.peers.clone(),
 			sync_state.clone(),
 			api_secret.clone(),
+			foreign_api_secret.clone(),
 			tls_conf.clone(),
 		)?;
 
