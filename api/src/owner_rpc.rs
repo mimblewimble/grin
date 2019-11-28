@@ -33,7 +33,7 @@ pub trait OwnerRpc: Sync + Send {
 	# Json rpc example
 
 	```
-	# grin_api::doctest_helper_json_rpc_node_assert_response!(
+	# grin_api::doctest_helper_json_rpc_owner_assert_response!(
 	# r#"
 	{
 		"jsonrpc": "2.0",
@@ -78,7 +78,7 @@ pub trait OwnerRpc: Sync + Send {
 	# Json rpc example
 
 	```
-	# grin_api::doctest_helper_json_rpc_node_assert_response!(
+	# grin_api::doctest_helper_json_rpc_owner_assert_response!(
 	# r#"
 	{
 		"jsonrpc": "2.0",
@@ -108,7 +108,7 @@ pub trait OwnerRpc: Sync + Send {
 	# Json rpc example
 
 	```
-	# grin_api::doctest_helper_json_rpc_node_assert_response!(
+	# grin_api::doctest_helper_json_rpc_owner_assert_response!(
 	# r#"
 	{
 		"jsonrpc": "2.0",
@@ -138,7 +138,7 @@ pub trait OwnerRpc: Sync + Send {
 	# Json rpc example
 
 	```
-	# grin_api::doctest_helper_json_rpc_node_assert_response!(
+	# grin_api::doctest_helper_json_rpc_owner_assert_response!(
 	# r#"
 	{
 		"jsonrpc": "2.0",
@@ -180,7 +180,7 @@ pub trait OwnerRpc: Sync + Send {
 	# Json rpc example
 
 	```
-	# grin_api::doctest_helper_json_rpc_node_assert_response!(
+	# grin_api::doctest_helper_json_rpc_owner_assert_response!(
 	# r#"
 	{
 		"jsonrpc": "2.0",
@@ -299,7 +299,7 @@ pub trait OwnerRpc: Sync + Send {
 	# Json rpc example
 
 	```
-	# grin_api::doctest_helper_json_rpc_node_assert_response!(
+	# grin_api::doctest_helper_json_rpc_owner_assert_response!(
 	# r#"
 	{
 		"jsonrpc": "2.0",
@@ -329,7 +329,7 @@ pub trait OwnerRpc: Sync + Send {
 	# Json rpc example
 
 	```
-	# grin_api::doctest_helper_json_rpc_node_assert_response!(
+	# grin_api::doctest_helper_json_rpc_owner_assert_response!(
 	# r#"
 	{
 		"jsonrpc": "2.0",
