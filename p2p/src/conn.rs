@@ -39,6 +39,7 @@ use std::{
 };
 
 const HEADER_IO_TIMEOUT: Duration = Duration::from_millis(2000);
+const CHANNEL_TIMEOUT: Duration = Duration::from_millis(1000);
 const BODY_IO_TIMEOUT: Duration = Duration::from_millis(60000);
 
 /// A trait to be implemented in order to receive messages from the
@@ -335,7 +336,7 @@ where
 				.set_write_timeout(Some(BODY_IO_TIMEOUT))
 				.expect("set timeout");
 			loop {
-				let maybe_data = retry_send.or_else(|_| send_rx.recv_timeout(HEADER_IO_TIMEOUT));
+				let maybe_data = retry_send.or_else(|_| send_rx.recv_timeout(CHANNEL_TIMEOUT));
 				retry_send = Err(());
 				if let Ok(data) = maybe_data {
 					let written =
