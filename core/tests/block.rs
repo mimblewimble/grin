@@ -211,7 +211,7 @@ fn serialize_deserialize_header_version() {
 	ser::serialize_default(&mut vec1, &1_u16).expect("serialization failed");
 
 	let mut vec2 = Vec::new();
-	ser::serialize_default(&mut vec2, &HeaderVersion::default()).expect("serialization failed");
+	ser::serialize_default(&mut vec2, &HeaderVersion(1)).expect("serialization failed");
 
 	// Check that a header_version serializes to a
 	// single u16 value with no extraneous bytes wrapping it.
