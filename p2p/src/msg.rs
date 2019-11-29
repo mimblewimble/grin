@@ -139,6 +139,14 @@ impl Msg {
 		})
 	}
 
+	// Is it safe to retry sending this message?
+	// We do not want to retry sending a message if it includes an attachment.
+	// We may encounter an exception part way through sending the (potentially large) attachment.
+	// We do not want to retry in this case, we simply want to close the connection.
+	pub fn can_retry_send(&self) -> bool {
+		self.attachment.is_none()
+	}
+
 	pub fn add_attachment(&mut self, attachment: File) {
 		self.attachment = Some(attachment)
 	}

@@ -325,15 +325,35 @@ where
 	let writer_thread = thread::Builder::new()
 		.name("peer_write".to_string())
 		.spawn(move || {
-			let mut retry_send = Err(());
+			let mut retry_msg = None;
 			loop {
-				let maybe_data = retry_send.or_else(|_| send_rx.recv_timeout(IO_TIMEOUT));
-				retry_send = Err(());
-				if let Ok(data) = maybe_data {
-					let written =
-						try_break!(write_message(&mut writer, &data, writer_tracker.clone()));
-					if written.is_none() {
-						retry_send = Ok(data);
+				let maybe_msg = retry_msg.or_else(|| send_rx.recv_timeout(IO_TIMEOUT).ok());
+				retry_msg = None;
+				if let Some(msg) = maybe_msg {
+					if msg.can_retry_send() {
+						// The msg can be retried. Wrap in try_break! and retry if None returned.
+						// Note: try_break! will squash various errors including
+						// TimedOut and WouldBlock, returning None and causing the msg to
+						// be retried.
+						let res =
+							try_break!(write_message(&mut writer, &msg, writer_tracker.clone()));
+						if res.is_none() {
+							retry_msg = Some(msg);
+						}
+					} else {
+						// If the msg cannot be retried then close the connection on
+						// *any* exception. This is particularly important if we are part way
+						// through sending a large txhashset as a msg attachment and we
+						// encounter an exception. We do not want to silently retry without
+						// the recipient knowing that we are sending all the bytes across a
+						// second time.
+						if let Err(e) = write_message(&mut writer, &msg, writer_tracker.clone()) {
+							error!(
+								"write_message failed on msg that cannot be retried: {:?}",
+								e
+							);
+							break;
+						}
 					}
 				}
 				// check the close channel
