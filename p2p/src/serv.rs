@@ -84,6 +84,14 @@ impl Server {
 
 			match listener.accept() {
 				Ok((stream, peer_addr)) => {
+					// We want out TCP stream to be in blocking mode.
+					// The TCP listener is in nonblocking mode so we *must* explicitly
+					// move the accepted TCP stream into blocking mode (or all kinds of
+					// bad things can and will happen).
+					// A nonblocking TCP listener will accept nonblocking TCP streams which
+					// we do not want.
+					stream.set_nonblocking(false)?;
+
 					let peer_addr = PeerAddr(peer_addr);
 
 					if self.check_undesirable(&stream) {
