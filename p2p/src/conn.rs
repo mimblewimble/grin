@@ -293,7 +293,11 @@ where
 							try_break!(conn_handle.send(resp_msg));
 						}
 					}
-					Some(MsgHeaderWrapper::Unknown(msg_len)) => {
+					Some(MsgHeaderWrapper::Unknown(msg_len, type_byte)) => {
+						debug!(
+							"Received unknown message header, type {:?}, len {}.",
+							type_byte, msg_len
+						);
 						// Increase received bytes counter
 						reader_tracker.inc_received(MsgHeader::LEN as u64 + msg_len);
 
