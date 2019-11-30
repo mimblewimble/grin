@@ -141,17 +141,17 @@ pub fn header_version(height: u64) -> HeaderVersion {
 	match chain_type {
 		global::ChainTypes::Floonet => {
 			if height < FLOONET_FIRST_HARD_FORK {
-				(HeaderVersion::new(1))
+				(HeaderVersion(1))
 			} else if height < FLOONET_SECOND_HARD_FORK {
-				(HeaderVersion::new(2))
+				(HeaderVersion(2))
 			} else if height < 3 * HARD_FORK_INTERVAL {
-				(HeaderVersion::new(3))
+				(HeaderVersion(3))
 			} else {
-				HeaderVersion::new(hf_interval)
+				HeaderVersion(hf_interval)
 			}
 		}
 		// everything else just like mainnet
-		_ => HeaderVersion::new(hf_interval),
+		_ => HeaderVersion(hf_interval),
 	}
 }
 
