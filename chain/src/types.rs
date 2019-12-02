@@ -238,7 +238,7 @@ impl OutputRoots {
 	pub fn root(&self, header: &BlockHeader) -> Result<Hash, Error> {
 		if !consensus::valid_header_version(header.height, header.version) {
 			Err(ErrorKind::InvalidBlockVersion(header.version).into())
-		} else if header.version < HeaderVersion::new(3) {
+		} else if header.version < HeaderVersion(3) {
 			Ok(self.output_root())
 		} else {
 			Ok(self.merged_root(header))
