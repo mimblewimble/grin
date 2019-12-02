@@ -179,12 +179,6 @@ impl Hashed for HeaderEntry {
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
 pub struct HeaderVersion(pub u16);
 
-impl Default for HeaderVersion {
-	fn default() -> HeaderVersion {
-		HeaderVersion(1)
-	}
-}
-
 impl From<HeaderVersion> for u16 {
 	fn from(v: HeaderVersion) -> u16 {
 		v.0
@@ -239,7 +233,7 @@ impl DefaultHashable for BlockHeader {}
 impl Default for BlockHeader {
 	fn default() -> BlockHeader {
 		BlockHeader {
-			version: HeaderVersion::default(),
+			version: HeaderVersion(1),
 			height: 0,
 			timestamp: DateTime::<Utc>::from_utc(NaiveDateTime::from_timestamp(0, 0), Utc),
 			prev_hash: ZERO_HASH,
