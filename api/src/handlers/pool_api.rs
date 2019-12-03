@@ -53,7 +53,7 @@ struct TxWrapper {
 }
 
 /// Push new transaction to our local transaction pool.
-/// POST /v1/pool/push_tx
+/// POST /v1/pool/push
 pub struct PoolPushHandler {
 	pub tx_pool: Weak<RwLock<pool::TransactionPool>>,
 }

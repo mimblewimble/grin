@@ -114,7 +114,7 @@ pub fn build_router(
 		"get txhashset/outputs?start_index=1&max=100".to_string(),
 		"get txhashset/merkleproof?n=1".to_string(),
 		"get pool".to_string(),
-		"post pool/push_tx".to_string(),
+		"post pool/push".to_string(),
 		"post peers/a.b.c.d:p/ban".to_string(),
 		"post peers/a.b.c.d:p/unban".to_string(),
 		"get peers/all".to_string(),
@@ -189,7 +189,7 @@ pub fn build_router(
 	router.add_route("/v1/status", Arc::new(status_handler))?;
 	router.add_route("/v1/kerneldownload", Arc::new(kernel_download_handler))?;
 	router.add_route("/v1/pool", Arc::new(pool_info_handler))?;
-	router.add_route("/v1/pool/push_tx", Arc::new(pool_push_handler))?;
+	router.add_route("/v1/pool/push", Arc::new(pool_push_handler))?;
 	router.add_route("/v1/peers/all", Arc::new(peers_all_handler))?;
 	router.add_route("/v1/peers/connected", Arc::new(peers_connected_handler))?;
 	router.add_route("/v1/peers/**", Arc::new(peer_handler))?;
