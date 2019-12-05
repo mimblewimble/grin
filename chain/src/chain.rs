@@ -30,8 +30,7 @@ use crate::store;
 use crate::txhashset;
 use crate::txhashset::{PMMRHandle, TxHashSet};
 use crate::types::{
-	BlockStatus, ChainAdapter, NoStatus, Options, OutputMMRPosition, Tip, TxHashSetRoots,
-	TxHashsetWriteStatus,
+	BlockStatus, ChainAdapter, NoStatus, Options, OutputMMRPosition, Tip, TxHashsetWriteStatus,
 };
 use crate::util::secp::pedersen::{Commitment, RangeProof};
 use crate::util::RwLock;
@@ -604,7 +603,7 @@ impl Chain {
 		b.header.prev_root = prev_root;
 
 		// Set the output, rangeproof and kernel MMR roots.
-		b.header.output_root = roots.output_root(&b.header)?;
+		b.header.output_root = roots.output_root(&b.header);
 		b.header.range_proof_root = roots.rproof_root;
 		b.header.kernel_root = roots.kernel_root;
 
@@ -634,12 +633,6 @@ impl Chain {
 	pub fn get_merkle_proof_for_pos(&self, commit: Commitment) -> Result<MerkleProof, Error> {
 		let mut txhashset = self.txhashset.write();
 		txhashset.merkle_proof(commit)
-	}
-
-	/// Returns current txhashset roots along with current head header.
-	pub fn get_txhashset_roots(&self) -> Result<(TxHashSetRoots, BlockHeader), Error> {
-		let txhashset = self.txhashset.read();
-		Ok((txhashset.roots(), self.head_header()?))
 	}
 
 	/// Provides a reading view into the current kernel state.

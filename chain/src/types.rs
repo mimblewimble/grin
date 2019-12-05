@@ -17,7 +17,6 @@
 use chrono::prelude::{DateTime, Utc};
 use std::sync::Arc;
 
-use crate::core::consensus;
 use crate::core::core::hash::{Hash, Hashed, ZERO_HASH};
 use crate::core::core::{Block, BlockHeader, HeaderVersion};
 use crate::core::pow::Difficulty;
@@ -195,7 +194,9 @@ pub struct TxHashSetRoots {
 
 impl TxHashSetRoots {
 	/// Accessor for the output PMMR root (rules here are block height dependent).
-	pub fn output_root(&self, header: &BlockHeader) -> Result<Hash, Error> {
+	/// We assume the header version is consistent with the block height and that this
+	/// has been validated elsewhere.
+	pub fn output_root(&self, header: &BlockHeader) -> Hash {
 		self.output_roots.root(header)
 	}
 
@@ -206,12 +207,12 @@ impl TxHashSetRoots {
 			header.hash(),
 			header.height,
 			header.output_root,
-			self.output_root(header)?,
+			self.output_root(header),
 			self.output_roots.pmmr_root,
 			self.output_roots.merged_root(header),
 		);
 
-		if header.output_root != self.output_root(header)? {
+		if header.output_root != self.output_root(header) {
 			Err(ErrorKind::InvalidRoot.into())
 		} else if header.range_proof_root != self.rproof_root {
 			Err(ErrorKind::InvalidRoot.into())
@@ -235,13 +236,13 @@ pub struct OutputRoots {
 impl OutputRoots {
 	/// The root of our output PMMR. The rules here are block height specific.
 	/// We use the merged root here for header version 3 and later.
-	pub fn root(&self, header: &BlockHeader) -> Result<Hash, Error> {
-		if !consensus::valid_header_version(header.height, header.version) {
-			Err(ErrorKind::InvalidBlockVersion(header.version).into())
-		} else if header.version < HeaderVersion(3) {
-			Ok(self.output_root())
+	/// We assume the header version is consistent with the block height and that this
+	/// has been validated elsewhere.
+	pub fn root(&self, header: &BlockHeader) -> Hash {
+		if header.version < HeaderVersion(3) {
+			self.output_root()
 		} else {
-			Ok(self.merged_root(header))
+			self.merged_root(header)
 		}
 	}
 
