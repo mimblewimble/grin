@@ -36,6 +36,7 @@ use crate::tui::types::TUIStatusListener;
 enum PeerColumn {
 	Address,
 	State,
+	Ping,
 	UsedBandwidth,
 	TotalDifficulty,
 	Direction,
@@ -48,6 +49,7 @@ impl PeerColumn {
 		match *self {
 			PeerColumn::Address => "Address",
 			PeerColumn::State => "State",
+			PeerColumn::Ping => "Ping",
 			PeerColumn::UsedBandwidth => "Used bandwidth",
 			PeerColumn::Version => "Version",
 			PeerColumn::TotalDifficulty => "Total Difficulty",
@@ -67,6 +69,13 @@ impl TableViewItem<PeerColumn> for PeerStats {
 		match column {
 			PeerColumn::Address => self.addr.clone(),
 			PeerColumn::State => self.state.clone(),
+			PeerColumn::Ping => {
+				if self.ping_duration_millis == 0 {
+					"?".to_string()
+				} else {
+					format!("{} ms", self.ping_duration_millis)
+				}
+			}
 			PeerColumn::UsedBandwidth => format!(
 				"↑: {}, ↓: {}",
 				size_to_string(self.sent_bytes_per_sec),
@@ -106,6 +115,7 @@ impl TableViewItem<PeerColumn> for PeerStats {
 		match column {
 			PeerColumn::Address => self.addr.cmp(&other.addr),
 			PeerColumn::State => self.state.cmp(&other.state),
+			PeerColumn::Ping => self.ping_duration_millis.cmp(&other.ping_duration_millis),
 			PeerColumn::UsedBandwidth => cmp_used_bandwidth(&self, &other),
 			PeerColumn::TotalDifficulty => self.total_difficulty.cmp(&other.total_difficulty),
 			PeerColumn::Direction => self.direction.cmp(&other.direction),
@@ -122,6 +132,7 @@ impl TUIStatusListener for TUIPeerView {
 		let table_view = TableView::<PeerStats, PeerColumn>::new()
 			.column(PeerColumn::Address, "Address", |c| c.width_percent(16))
 			.column(PeerColumn::State, "State", |c| c.width_percent(8))
+			.column(PeerColumn::Ping, "Ping", |c| c.width_percent(4))
 			.column(PeerColumn::UsedBandwidth, "Used bandwidth", |c| {
 				c.width_percent(16)
 			})

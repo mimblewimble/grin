@@ -69,7 +69,12 @@ impl MessageHandler for Protocol {
 		match msg.header.msg_type {
 			Type::Ping => {
 				let ping: Ping = msg.body()?;
-				adapter.peer_difficulty(self.peer_info.addr, ping.total_difficulty, ping.height);
+				adapter.peer_difficulty(
+					self.peer_info.addr,
+					ping.total_difficulty,
+					ping.height,
+					false,
+				);
 
 				Ok(Some(Msg::new(
 					Type::Pong,
@@ -83,7 +88,12 @@ impl MessageHandler for Protocol {
 
 			Type::Pong => {
 				let pong: Pong = msg.body()?;
-				adapter.peer_difficulty(self.peer_info.addr, pong.total_difficulty, pong.height);
+				adapter.peer_difficulty(
+					self.peer_info.addr,
+					pong.total_difficulty,
+					pong.height,
+					true,
+				);
 				Ok(None)
 			}
 

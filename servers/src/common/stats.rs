@@ -175,6 +175,8 @@ pub struct PeerStats {
 	pub state: String,
 	/// Address
 	pub addr: String,
+	/// Ping duration
+	pub ping_duration_millis: u64,
 	/// version running
 	pub version: ProtocolVersion,
 	/// Peer user agent string.
@@ -203,7 +205,7 @@ impl StratumStats {
 
 impl PeerStats {
 	/// Convert from a peer directly
-	pub fn from_peer(peer: &p2p::Peer) -> PeerStats {
+	pub fn from_peer(peer: &dyn p2p::ConnectedPeer) -> PeerStats {
 		// State
 		let mut state = "Disconnected";
 		if peer.is_connected() {
@@ -212,20 +214,26 @@ impl PeerStats {
 		if peer.is_banned() {
 			state = "Banned";
 		}
-		let addr = peer.info.addr.to_string();
-		let direction = match peer.info.direction {
+		let addr = peer.info().addr.to_string();
+		let direction = match peer.info().direction {
 			p2p::types::Direction::Inbound => "Inbound",
 			p2p::types::Direction::Outbound => "Outbound",
 		};
+		let ping_duration = if peer.info().ping_duration().is_some() {
+			peer.info().ping_duration().unwrap().as_millis() as u64
+		} else {
+			0
+		};
 		PeerStats {
 			state: state.to_string(),
-			addr: addr,
-			version: peer.info.version,
-			user_agent: peer.info.user_agent.clone(),
-			total_difficulty: peer.info.total_difficulty().to_num(),
-			height: peer.info.height(),
+			addr,
+			ping_duration_millis: ping_duration,
+			version: peer.info().version,
+			user_agent: peer.info().user_agent.clone(),
+			total_difficulty: peer.info().total_difficulty().to_num(),
+			height: peer.info().height(),
 			direction: direction.to_string(),
-			last_seen: peer.info.last_seen(),
+			last_seen: peer.info().last_seen(),
 			sent_bytes_per_sec: peer.last_min_sent_bytes().unwrap_or(0) / 60,
 			received_bytes_per_sec: peer.last_min_received_bytes().unwrap_or(0) / 60,
 		}

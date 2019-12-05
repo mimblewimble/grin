@@ -310,7 +310,7 @@ pub struct DandelionEpoch {
 	// Are we in "stem" mode or "fluff" mode for this epoch?
 	is_stem: bool,
 	// Our current Dandelion relay peer (effective for this epoch).
-	relay_peer: Option<Arc<p2p::Peer>>,
+	relay_peer: Option<Arc<dyn p2p::ConnectedPeer>>,
 }
 
 impl DandelionEpoch {
@@ -348,7 +348,7 @@ impl DandelionEpoch {
 		let stem_probability = self.config.stem_probability;
 		self.is_stem = rng.gen_range(0, 100) < stem_probability;
 
-		let addr = self.relay_peer.clone().map(|p| p.info.addr);
+		let addr = self.relay_peer.clone().map(|p| p.info().addr);
 		info!(
 			"DandelionEpoch: next_epoch: is_stem: {} ({}%), relay: {:?}",
 			self.is_stem, stem_probability, addr
@@ -367,13 +367,13 @@ impl DandelionEpoch {
 
 	/// What is our current relay peer?
 	/// If it is not connected then choose a new one.
-	pub fn relay_peer(&mut self, peers: &Arc<p2p::Peers>) -> Option<Arc<p2p::Peer>> {
+	pub fn relay_peer(&mut self, peers: &Arc<p2p::Peers>) -> Option<Arc<dyn p2p::ConnectedPeer>> {
 		let mut update_relay = false;
 		if let Some(peer) = &self.relay_peer {
 			if !peer.is_connected() {
 				info!(
 					"DandelionEpoch: relay_peer: {:?} not connected, choosing a new one.",
-					peer.info.addr
+					peer.info().addr
 				);
 				update_relay = true;
 			}
@@ -385,7 +385,7 @@ impl DandelionEpoch {
 			self.relay_peer = peers.outgoing_connected_peers().first().cloned();
 			info!(
 				"DandelionEpoch: relay_peer: new peer chosen: {:?}",
-				self.relay_peer.clone().map(|p| p.info.addr)
+				self.relay_peer.clone().map(|p| p.info().addr)
 			);
 		}
 

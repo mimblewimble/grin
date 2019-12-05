@@ -26,6 +26,7 @@ use crate::core::core::hash::Hash;
 use crate::core::pow::Difficulty;
 use crate::p2p::types::PeerAddr;
 use crate::p2p::Peer;
+use grin_p2p::ConnectedPeer;
 
 fn open_port() -> u16 {
 	// use port 0 to allow the OS to assign an open port
@@ -88,6 +89,6 @@ fn peer_handshake() {
 	thread::sleep(time::Duration::from_secs(1));
 
 	let server_peer = server.peers.get_connected_peer(my_addr).unwrap();
-	assert_eq!(server_peer.info.total_difficulty(), Difficulty::min());
+	assert_eq!(server_peer.info().total_difficulty(), Difficulty::min());
 	assert!(server.peers.peer_count() > 0);
 }

@@ -19,7 +19,8 @@ use std::sync::Arc;
 use crate::chain::{self, SyncState, SyncStatus};
 use crate::core::core::hash::Hashed;
 use crate::core::global;
-use crate::p2p::{self, Peer};
+use crate::p2p::{self};
+use grin_p2p::ConnectedPeer;
 
 /// Fast sync has 3 "states":
 /// * syncing headers
@@ -33,7 +34,7 @@ pub struct StateSync {
 	chain: Arc<chain::Chain>,
 
 	prev_state_sync: Option<DateTime<Utc>>,
-	state_sync_peer: Option<Arc<Peer>>,
+	state_sync_peer: Option<Arc<dyn ConnectedPeer>>,
 }
 
 impl StateSync {
@@ -84,7 +85,7 @@ impl StateSync {
 					sync_need_restart = true;
 					info!(
 						"state_sync: peer connection lost: {:?}. restart",
-						peer.info.addr,
+						peer.info().addr,
 					);
 				}
 			}
@@ -160,7 +161,10 @@ impl StateSync {
 		true
 	}
 
-	fn request_state(&self, header_head: &chain::Tip) -> Result<Arc<Peer>, p2p::Error> {
+	fn request_state(
+		&self,
+		header_head: &chain::Tip,
+	) -> Result<Arc<dyn ConnectedPeer>, p2p::Error> {
 		let threshold = global::state_sync_threshold() as u64;
 		let archive_interval = global::txhashset_archive_interval();
 		let mut txhashset_height = header_head.height.saturating_sub(threshold);

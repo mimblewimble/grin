@@ -139,7 +139,7 @@ impl BodySync {
 			for hash in hashes_to_get.clone() {
 				if let Some(peer) = peers_iter.next() {
 					if let Err(e) = peer.send_block_request(*hash, chain::Options::SYNC) {
-						debug!("Skipped request to {}: {:?}", peer.info.addr, e);
+						debug!("Skipped request to {}: {:?}", peer.info().addr, e);
 						peer.stop();
 					} else {
 						self.blocks_requested += 1;

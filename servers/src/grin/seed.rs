@@ -202,10 +202,10 @@ fn monitor_peers(
 			"monitor_peers: {}:{} ask {} for more peers",
 			config.host,
 			config.port,
-			p.info.addr,
+			p.info().addr,
 		);
 		let _ = p.send_peer_request(p2p::Capabilities::PEER_LIST);
-		connected_peers.push(p.info.addr)
+		connected_peers.push(p.info().addr)
 	}
 
 	// Attempt to connect to preferred peers if there is some

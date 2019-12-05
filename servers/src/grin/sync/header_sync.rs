@@ -19,7 +19,8 @@ use std::sync::Arc;
 use crate::chain::{self, SyncState, SyncStatus};
 use crate::common::types::Error;
 use crate::core::core::hash::{Hash, Hashed};
-use crate::p2p::{self, types::ReasonForBan, Peer};
+use crate::p2p::{self, types::ReasonForBan};
+use grin_p2p::ConnectedPeer;
 
 pub struct HeaderSync {
 	sync_state: Arc<SyncState>,
@@ -29,7 +30,7 @@ pub struct HeaderSync {
 	history_locator: Vec<(u64, Hash)>,
 	prev_header_sync: (DateTime<Utc>, u64, u64),
 
-	syncing_peer: Option<Arc<Peer>>,
+	syncing_peer: Option<Arc<dyn ConnectedPeer>>,
 	stalling_ts: Option<DateTime<Utc>>,
 }
 
@@ -143,20 +144,21 @@ impl HeaderSync {
 							SyncStatus::HeaderSync { .. } | SyncStatus::BodySync { .. } => {
 								// Ban this fraud peer which claims a higher work but can't send us the real headers
 								if now > *stalling_ts + Duration::seconds(20)
-									&& header_head.total_difficulty < peer.info.total_difficulty()
+									&& header_head.total_difficulty < peer.info().total_difficulty()
 								{
 									if let Err(e) = self
 										.peers
-										.ban_peer(peer.info.addr, ReasonForBan::FraudHeight)
+										.ban_peer(peer.info().addr, ReasonForBan::FraudHeight)
 									{
-										error!("failed to ban peer {}: {:?}", peer.info.addr, e);
+										error!("failed to ban peer {}: {:?}", peer.info().addr, e);
 									}
 									info!(
 										"sync: ban a fraud peer: {}, claimed height: {}, total difficulty: {}",
-										peer.info.addr,
-										peer.info.height(),
-										peer.info.total_difficulty(),
+										peer.info().addr,
+										peer.info().height(),
+										peer.info().total_difficulty(),
 									);
+									self.syncing_peer = None
 								}
 							}
 							_ => (),
@@ -164,7 +166,6 @@ impl HeaderSync {
 					}
 				}
 			}
-			self.syncing_peer = None;
 			true
 		} else {
 			// resetting the timeout as long as we progress
@@ -176,12 +177,22 @@ impl HeaderSync {
 		}
 	}
 
-	fn header_sync(&mut self) -> Option<Arc<Peer>> {
+	fn header_sync(&mut self) -> Option<Arc<dyn ConnectedPeer>> {
 		if let Ok(header_head) = self.chain.header_head() {
 			let difficulty = header_head.total_difficulty;
 
+			if let Some(peer) = self.syncing_peer.clone() {
+				return self.request_headers(peer);
+			}
 			if let Some(peer) = self.peers.most_work_peer() {
-				if peer.info.total_difficulty() > difficulty {
+				if peer.info().total_difficulty() > difficulty
+					&& peer.info().ping_duration().is_some()
+				{
+					info!(
+						"Requesting headers from peer: {:?} ping: {:?}",
+						peer.info().addr.0.ip(),
+						peer.info().ping_duration().unwrap().as_millis()
+					);
 					return self.request_headers(peer);
 				}
 			}
@@ -190,11 +201,12 @@ impl HeaderSync {
 	}
 
 	/// Request some block headers from a peer to advance us.
-	fn request_headers(&mut self, peer: Arc<Peer>) -> Option<Arc<Peer>> {
+	fn request_headers(&mut self, peer: Arc<dyn ConnectedPeer>) -> Option<Arc<dyn ConnectedPeer>> {
 		if let Ok(locator) = self.get_locator() {
 			debug!(
 				"sync: request_headers: asking {} for headers, {:?}",
-				peer.info.addr, locator,
+				peer.info().addr,
+				locator,
 			);
 
 			let _ = peer.send_header_request(locator);

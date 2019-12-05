@@ -230,7 +230,7 @@ impl SyncRunner {
 		let peer = self.peers.most_work_peer();
 
 		let peer_info = if let Some(p) = peer {
-			p.info.clone()
+			p.info().clone()
 		} else {
 			warn!("sync: no peers available, disabling sync");
 			return Ok((false, 0));
