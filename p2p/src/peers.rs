@@ -22,16 +22,17 @@ use std::sync::Arc;
 use rand::seq::SliceRandom;
 use rand::thread_rng;
 
+use crate::chain;
 use crate::core::core;
 use crate::core::core::hash::{Hash, Hashed};
 use crate::core::global;
 use crate::core::pow::Difficulty;
+use crate::peer::Peer;
 use crate::store::{PeerData, PeerStore, State};
 use crate::types::{
 	Capabilities, ChainAdapter, Error, NetAdapter, P2PConfig, PeerAddr, PeerInfo, ReasonForBan,
 	TxHashSetRead, MAX_PEER_ADDRS,
 };
-use crate::{chain, Peer};
 use chrono::prelude::*;
 use chrono::Duration;
 use std::cmp::Ordering;
@@ -287,7 +288,7 @@ impl Peers {
 		let mut count = 0;
 
 		for p in self.connected_peers().iter() {
-			match inner(p.as_ref()) {
+			match inner(&p) {
 				Ok(true) => count += 1,
 				Ok(false) => (),
 				Err(e) => {

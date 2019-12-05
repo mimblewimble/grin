@@ -667,7 +667,7 @@ impl NetToChainAdapter {
 				peer_info.addr
 			),
 			Some(peer) => {
-				if let Err(e) = f(peer.as_ref(), h) {
+				if let Err(e) = f(&peer, h) {
 					error!("send_tx_request_to_peer: failed: {:?}", e)
 				}
 			}
@@ -685,7 +685,7 @@ impl NetToChainAdapter {
 					peer_info.addr
 				),
 				Some(peer) => {
-					if let Err(e) = f(peer.as_ref(), h) {
+					if let Err(e) = f(&peer, h) {
 						error!("send_block_request_to_peer: failed: {:?}", e)
 					}
 				}

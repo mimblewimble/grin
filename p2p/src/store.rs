@@ -113,23 +113,6 @@ pub struct PeerStore {
 	db: grin_store::Store,
 }
 
-trait PeerStoreTrait {
-	fn new(db_root: &str) -> Result<PeerStore, Error>;
-	fn save_peer(&self, p: &PeerData) -> Result<(), Error>;
-	fn get_peer(&self, peer_addr: PeerAddr) -> Result<PeerData, Error>;
-	fn exists_peer(&self, peer_addr: PeerAddr) -> Result<bool, Error>;
-	fn delete_peer(&self, peer_addr: PeerAddr) -> Result<(), Error>;
-	fn find_peers(
-		&self,
-		state: State,
-		cap: Capabilities,
-		count: usize,
-	) -> Result<Vec<PeerData>, Error>;
-	fn all_peers(&self) -> Result<Vec<PeerData>, Error>;
-	fn update_state(&self, peer_addr: PeerAddr, new_state: State) -> Result<(), Error>;
-	fn delete_peers<F>(&self, predicate: F) -> Result<(), Error>;
-}
-
 impl PeerStore {
 	/// Instantiates a new peer store under the provided root path.
 	pub fn new(db_root: &str) -> Result<PeerStore, Error> {

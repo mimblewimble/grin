@@ -477,7 +477,7 @@ impl Server {
 			.peers
 			.connected_peers()
 			.into_iter()
-			.map(|p| PeerStats::from_peer(p.as_ref()))
+			.map(|p| PeerStats::from_peer(&p))
 			.collect();
 
 		// Updating TUI stats should not block any other processing so only attempt to
