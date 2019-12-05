@@ -194,8 +194,8 @@ pub struct TxHashSetRoots {
 
 impl TxHashSetRoots {
 	/// Accessor for the output PMMR root (rules here are block height dependent).
-	/// We assume the header version is consistent with the block height and that this
-	/// has been validated elsewhere.
+	/// We assume the header version is consistent with the block height, validated
+	/// as part of pipe::validate_header().
 	pub fn output_root(&self, header: &BlockHeader) -> Hash {
 		self.output_roots.root(header)
 	}
@@ -236,8 +236,8 @@ pub struct OutputRoots {
 impl OutputRoots {
 	/// The root of our output PMMR. The rules here are block height specific.
 	/// We use the merged root here for header version 3 and later.
-	/// We assume the header version is consistent with the block height and that this
-	/// has been validated elsewhere.
+	/// We assume the header version is consistent with the block height, validated
+	/// as part of pipe::validate_header().
 	pub fn root(&self, header: &BlockHeader) -> Hash {
 		if header.version < HeaderVersion(3) {
 			self.output_root()
