@@ -441,7 +441,7 @@ impl Chain {
 	}
 
 	/// Check for orphans, once a block is successfully added
-	pub fn check_orphans(&self, mut height: u64) {
+	fn check_orphans(&self, mut height: u64) {
 		let initial_height = height;
 
 		// Is there an orphan in our orphans that we can now process?
@@ -998,9 +998,6 @@ impl Chain {
 		}
 
 		debug!("txhashset_write: replaced our txhashset with the new one");
-
-		// Check for any orphan blocks and process them based on the new chain state.
-		self.check_orphans(header.height + 1);
 
 		status.on_done();
 
