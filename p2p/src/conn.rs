@@ -45,7 +45,12 @@ const BODY_IO_TIMEOUT: Duration = Duration::from_millis(60000);
 /// A trait to be implemented in order to receive messages from the
 /// connection. Allows providing an optional response.
 pub trait MessageHandler: Send + 'static {
-	fn consume<'a>(&self, msg: Message<'a>, tracker: Arc<Tracker>) -> Result<Option<Msg>, Error>;
+	fn consume<'a>(
+		&self,
+		msg: Message<'a>,
+		stopped: Arc<AtomicBool>,
+		tracker: Arc<Tracker>,
+	) -> Result<Option<Msg>, Error>;
 }
 
 // Macro to simplify the boilerplate around I/O and Grin error handling
@@ -294,7 +299,11 @@ where
 						// Increase received bytes counter
 						reader_tracker.inc_received(MsgHeader::LEN as u64 + msg.header.msg_len);
 
-						let resp_msg = try_break!(handler.consume(msg, reader_tracker.clone()));
+						let resp_msg = try_break!(handler.consume(
+							msg,
+							reader_stopped.clone(),
+							reader_tracker.clone()
+						));
 						if let Some(Some(resp_msg)) = resp_msg {
 							try_break!(conn_handle.send(resp_msg));
 						}
