@@ -73,41 +73,6 @@ impl fmt::Debug for Peer {
 	}
 }
 
-impl fmt::Debug for dyn ConnectedPeer {
-	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-		write!(f, "ConnectedPeer({:?})", &self.info())
-	}
-}
-
-pub trait ConnectedPeer: Sync + Send {
-	fn info(&self) -> &PeerInfo;
-	fn is_connected(&self) -> bool;
-	fn is_banned(&self) -> bool;
-	fn is_stuck(&self) -> (bool, Difficulty);
-	fn is_abusive(&self) -> bool;
-	fn last_min_sent_bytes(&self) -> Option<u64>;
-	fn last_min_received_bytes(&self) -> Option<u64>;
-	fn last_min_message_counts(&self) -> Option<(u64, u64)>;
-	fn set_banned(&self);
-	fn send_ping(&self, total_difficulty: Difficulty, height: u64) -> Result<(), Error>;
-	fn send_ban_reason(&self, ban_reason: ReasonForBan) -> Result<(), Error>;
-	fn send_block(&self, b: &core::Block) -> Result<bool, Error>;
-	fn send_compact_block(&self, b: &core::CompactBlock) -> Result<bool, Error>;
-	fn send_header(&self, bh: &core::BlockHeader) -> Result<bool, Error>;
-	fn send_tx_kernel_hash(&self, h: Hash) -> Result<bool, Error>;
-	fn send_transaction(&self, tx: &core::Transaction) -> Result<bool, Error>;
-	fn send_stem_transaction(&self, tx: &core::Transaction) -> Result<(), Error>;
-	fn send_header_request(&self, locator: Vec<Hash>) -> Result<(), Error>;
-	fn send_tx_request(&self, h: Hash) -> Result<(), Error>;
-	fn send_block_request(&self, h: Hash, opts: chain::Options) -> Result<(), Error>;
-	fn send_compact_block_request(&self, h: Hash) -> Result<(), Error>;
-	fn send_peer_request(&self, capab: Capabilities) -> Result<(), Error>;
-	fn send_txhashset_request(&self, height: u64, hash: Hash) -> Result<(), Error>;
-	fn send_kernel_data_request(&self) -> Result<(), Error>;
-	fn stop(&self);
-	fn wait(&self);
-}
-
 impl Peer {
 	// Only accept and connect can be externally used to build a peer
 	fn new(info: PeerInfo, conn: TcpStream, adapter: Arc<dyn NetAdapter>) -> std::io::Result<Peer> {
@@ -216,30 +181,18 @@ impl Peer {
 		false
 	}
 
-	/// Send a msg with given msg_type to our peer via the connection.
-	fn send<T: Writeable>(&self, msg: T, msg_type: Type) -> Result<(), Error> {
-		let msg = Msg::new(msg_type, msg, self.info.version)?;
-		self.send_handle.lock().send(msg)
-	}
-}
-
-impl ConnectedPeer for Peer {
-	fn info(&self) -> &PeerInfo {
-		&self.info
-	}
-
 	/// Whether this peer is currently connected.
-	fn is_connected(&self) -> bool {
+	pub fn is_connected(&self) -> bool {
 		State::Connected == *self.state.read()
 	}
 
 	/// Whether this peer has been banned.
-	fn is_banned(&self) -> bool {
+	pub fn is_banned(&self) -> bool {
 		State::Banned == *self.state.read()
 	}
 
 	/// Whether this peer is stuck on sync.
-	fn is_stuck(&self) -> (bool, Difficulty) {
+	pub fn is_stuck(&self) -> (bool, Difficulty) {
 		let peer_live_info = self.info.live_info.read();
 		let now = Utc::now().timestamp_millis();
 		// if last updated difficulty is 2 hours ago, we're sure this peer is a stuck node.
@@ -251,38 +204,44 @@ impl ConnectedPeer for Peer {
 	}
 
 	/// Whether the peer is considered abusive, mostly for spammy nodes
-	fn is_abusive(&self) -> bool {
+	pub fn is_abusive(&self) -> bool {
 		let rec = self.tracker.received_bytes.read();
 		let sent = self.tracker.sent_bytes.read();
 		rec.count_per_min() > MAX_PEER_MSG_PER_MIN || sent.count_per_min() > MAX_PEER_MSG_PER_MIN
 	}
 
 	/// Number of bytes sent to the peer
-	fn last_min_sent_bytes(&self) -> Option<u64> {
+	pub fn last_min_sent_bytes(&self) -> Option<u64> {
 		let sent_bytes = self.tracker.sent_bytes.read();
 		Some(sent_bytes.bytes_per_min())
 	}
 
 	/// Number of bytes received from the peer
-	fn last_min_received_bytes(&self) -> Option<u64> {
+	pub fn last_min_received_bytes(&self) -> Option<u64> {
 		let received_bytes = self.tracker.received_bytes.read();
 		Some(received_bytes.bytes_per_min())
 	}
 
-	fn last_min_message_counts(&self) -> Option<(u64, u64)> {
+	pub fn last_min_message_counts(&self) -> Option<(u64, u64)> {
 		let received_bytes = self.tracker.received_bytes.read();
 		let sent_bytes = self.tracker.sent_bytes.read();
 		Some((sent_bytes.count_per_min(), received_bytes.count_per_min()))
 	}
 
 	/// Set this peer status to banned
-	fn set_banned(&self) {
+	pub fn set_banned(&self) {
 		*self.state.write() = State::Banned;
+	}
+
+	/// Send a msg with given msg_type to our peer via the connection.
+	fn send<T: Writeable>(&self, msg: T, msg_type: Type) -> Result<(), Error> {
+		let msg = Msg::new(msg_type, msg, self.info.version)?;
+		self.send_handle.lock().send(msg)
 	}
 
 	/// Send a ping to the remote peer, providing our local difficulty and
 	/// height
-	fn send_ping(&self, total_difficulty: Difficulty, height: u64) -> Result<(), Error> {
+	pub fn send_ping(&self, total_difficulty: Difficulty, height: u64) -> Result<(), Error> {
 		let ping_msg = Ping {
 			total_difficulty,
 			height,
@@ -292,14 +251,14 @@ impl ConnectedPeer for Peer {
 	}
 
 	/// Send the ban reason before banning
-	fn send_ban_reason(&self, ban_reason: ReasonForBan) -> Result<(), Error> {
+	pub fn send_ban_reason(&self, ban_reason: ReasonForBan) -> Result<(), Error> {
 		let ban_reason_msg = BanReason { ban_reason };
 		self.send(ban_reason_msg, msg::Type::BanReason).map(|_| ())
 	}
 
 	/// Sends the provided block to the remote peer. The request may be dropped
 	/// if the remote peer is known to already have the block.
-	fn send_block(&self, b: &core::Block) -> Result<bool, Error> {
+	pub fn send_block(&self, b: &core::Block) -> Result<bool, Error> {
 		if !self.tracking_adapter.has_recv(b.hash()) {
 			trace!("Send block {} to {}", b.hash(), self.info.addr);
 			self.send(b, msg::Type::Block)?;
@@ -314,7 +273,7 @@ impl ConnectedPeer for Peer {
 		}
 	}
 
-	fn send_compact_block(&self, b: &core::CompactBlock) -> Result<bool, Error> {
+	pub fn send_compact_block(&self, b: &core::CompactBlock) -> Result<bool, Error> {
 		if !self.tracking_adapter.has_recv(b.hash()) {
 			trace!("Send compact block {} to {}", b.hash(), self.info.addr);
 			self.send(b, msg::Type::CompactBlock)?;
@@ -329,7 +288,7 @@ impl ConnectedPeer for Peer {
 		}
 	}
 
-	fn send_header(&self, bh: &core::BlockHeader) -> Result<bool, Error> {
+	pub fn send_header(&self, bh: &core::BlockHeader) -> Result<bool, Error> {
 		if !self.tracking_adapter.has_recv(bh.hash()) {
 			debug!("Send header {} to {}", bh.hash(), self.info.addr);
 			self.send(bh, msg::Type::Header)?;
@@ -344,7 +303,7 @@ impl ConnectedPeer for Peer {
 		}
 	}
 
-	fn send_tx_kernel_hash(&self, h: Hash) -> Result<bool, Error> {
+	pub fn send_tx_kernel_hash(&self, h: Hash) -> Result<bool, Error> {
 		if !self.tracking_adapter.has_recv(h) {
 			debug!("Send tx kernel hash {} to {}", h, self.info.addr);
 			self.send(h, msg::Type::TransactionKernel)?;
@@ -362,7 +321,7 @@ impl ConnectedPeer for Peer {
 	/// dropped if the remote peer is known to already have the transaction.
 	/// We support broadcast of lightweight tx kernel hash
 	/// so track known txs by kernel hash.
-	fn send_transaction(&self, tx: &core::Transaction) -> Result<bool, Error> {
+	pub fn send_transaction(&self, tx: &core::Transaction) -> Result<bool, Error> {
 		let kernel = &tx.kernels()[0];
 
 		if self
@@ -390,17 +349,17 @@ impl ConnectedPeer for Peer {
 	/// Sends the provided stem transaction to the remote peer.
 	/// Note: tracking adapter is ignored for stem transactions (while under
 	/// embargo).
-	fn send_stem_transaction(&self, tx: &core::Transaction) -> Result<(), Error> {
+	pub fn send_stem_transaction(&self, tx: &core::Transaction) -> Result<(), Error> {
 		debug!("Send (stem) tx {} to {}", tx.hash(), self.info.addr);
 		self.send(tx, msg::Type::StemTransaction)
 	}
 
 	/// Sends a request for block headers from the provided block locator
-	fn send_header_request(&self, locator: Vec<Hash>) -> Result<(), Error> {
+	pub fn send_header_request(&self, locator: Vec<Hash>) -> Result<(), Error> {
 		self.send(&Locator { hashes: locator }, msg::Type::GetHeaders)
 	}
 
-	fn send_tx_request(&self, h: Hash) -> Result<(), Error> {
+	pub fn send_tx_request(&self, h: Hash) -> Result<(), Error> {
 		debug!(
 			"Requesting tx (kernel hash) {} from peer {}.",
 			h, self.info.addr
@@ -410,19 +369,19 @@ impl ConnectedPeer for Peer {
 
 	/// Sends a request for a specific block by hash.
 	/// Takes opts so we can track if this request was due to our node syncing or otherwise.
-	fn send_block_request(&self, h: Hash, opts: chain::Options) -> Result<(), Error> {
+	pub fn send_block_request(&self, h: Hash, opts: chain::Options) -> Result<(), Error> {
 		debug!("Requesting block {} from peer {}.", h, self.info.addr);
 		self.tracking_adapter.push_req(h, opts);
 		self.send(&h, msg::Type::GetBlock)
 	}
 
 	/// Sends a request for a specific compact block by hash
-	fn send_compact_block_request(&self, h: Hash) -> Result<(), Error> {
+	pub fn send_compact_block_request(&self, h: Hash) -> Result<(), Error> {
 		debug!("Requesting compact block {} from {}", h, self.info.addr);
 		self.send(&h, msg::Type::GetCompactBlock)
 	}
 
-	fn send_peer_request(&self, capab: Capabilities) -> Result<(), Error> {
+	pub fn send_peer_request(&self, capab: Capabilities) -> Result<(), Error> {
 		trace!("Asking {} for more peers {:?}", self.info.addr, capab);
 		self.send(
 			&GetPeerAddrs {
@@ -432,7 +391,7 @@ impl ConnectedPeer for Peer {
 		)
 	}
 
-	fn send_txhashset_request(&self, height: u64, hash: Hash) -> Result<(), Error> {
+	pub fn send_txhashset_request(&self, height: u64, hash: Hash) -> Result<(), Error> {
 		debug!(
 			"Asking {} for txhashset archive at {} {}.",
 			self.info.addr, height, hash
@@ -444,13 +403,13 @@ impl ConnectedPeer for Peer {
 		)
 	}
 
-	fn send_kernel_data_request(&self) -> Result<(), Error> {
+	pub fn send_kernel_data_request(&self) -> Result<(), Error> {
 		debug!("Asking {} for kernel data.", self.info.addr);
 		self.send(&KernelDataRequest {}, msg::Type::KernelDataRequest)
 	}
 
 	/// Stops the peer
-	fn stop(&self) {
+	pub fn stop(&self) {
 		debug!("Stopping peer {:?}", self.info.addr);
 		match self.stop_handle.try_lock() {
 			Some(handle) => handle.stop(),
@@ -459,7 +418,7 @@ impl ConnectedPeer for Peer {
 	}
 
 	/// Waits until the peer's thread exit
-	fn wait(&self) {
+	pub fn wait(&self) {
 		debug!("Waiting for peer {:?} to stop", self.info.addr);
 		match self.stop_handle.try_lock() {
 			Some(mut handle) => handle.wait(),

@@ -26,7 +26,45 @@ use crate::core::core::hash::Hash;
 use crate::core::pow::Difficulty;
 use crate::p2p::types::PeerAddr;
 use crate::p2p::Peer;
-use grin_p2p::ConnectedPeer;
+use grin_p2p::{DummyAdapter, P2PConfig, Server};
+
+// Starts a server and connects a client peer to it to check handshake,
+// followed by a ping/pong exchange to make sure the connection is live.
+#[test]
+fn peer_handshake() {
+	util::init_test_logger();
+
+	let (p2p_config, net_adapter, server) = setup_server();
+
+	let peer1_addr = add_peer(&p2p_config, &net_adapter, "127.0.0.1:5000");
+	let peer2_addr = add_peer(&p2p_config, &net_adapter, "127.0.0.1:5001");
+
+	thread::sleep(time::Duration::from_secs(1));
+
+	assert_eq!(server.peers.peer_count(), 2);
+
+	// Send pings to all connected peers
+	server.peers.check_all(Difficulty::min(), 0);
+	thread::sleep(time::Duration::from_secs(1));
+
+	let server_peer1 = server.peers.get_connected_peer(peer1_addr).unwrap();
+	let server_peer2 = server.peers.get_connected_peer(peer2_addr).unwrap();
+
+	assert!(server_peer1.info.ping_duration().is_some());
+	assert!(server_peer2.info.ping_duration().is_some());
+
+	// Make sure peer1 is always the slowest
+	server_peer1.info.update_pinged();
+	thread::sleep(time::Duration::from_millis(10));
+	server_peer1.info.update(0, Difficulty::min(), true);
+
+	assert_eq!(server_peer1.info.total_difficulty(), Difficulty::min());
+	assert_eq!(
+		server.peers.closest_most_work_peer().unwrap().info.addr,
+		peer2_addr,
+		"peer2 should be fastest"
+	);
+}
 
 fn open_port() -> u16 {
 	// use port 0 to allow the OS to assign an open port
@@ -36,12 +74,7 @@ fn open_port() -> u16 {
 	listener.local_addr().unwrap().port()
 }
 
-// Starts a server and connects a client peer to it to check handshake,
-// followed by a ping/pong exchange to make sure the connection is live.
-#[test]
-fn peer_handshake() {
-	util::init_test_logger();
-
+fn setup_server() -> (P2PConfig, Arc<DummyAdapter>, Arc<Server>) {
 	let p2p_config = p2p::P2PConfig {
 		host: "127.0.0.1".parse().unwrap(),
 		port: open_port(),
@@ -66,29 +99,23 @@ fn peer_handshake() {
 	let _ = thread::spawn(move || p2p_inner.listen());
 
 	thread::sleep(time::Duration::from_secs(1));
+	(p2p_config, net_adapter, server)
+}
 
+fn add_peer(p2p_config: &P2PConfig, net_adapter: &Arc<DummyAdapter>, peer_addr: &str) -> PeerAddr {
 	let addr = SocketAddr::new(p2p_config.host, p2p_config.port);
 	let socket = TcpStream::connect_timeout(&addr, time::Duration::from_secs(10)).unwrap();
-
-	let my_addr = PeerAddr("127.0.0.1:5000".parse().unwrap());
+	let self_addr = PeerAddr(peer_addr.parse().unwrap());
 	let peer = Peer::connect(
 		socket,
 		p2p::Capabilities::UNKNOWN,
 		Difficulty::min(),
-		my_addr,
+		self_addr,
 		&p2p::handshake::Handshake::new(Hash::from_vec(&vec![]), p2p_config.clone()),
-		net_adapter,
+		net_adapter.clone(),
 	)
 	.unwrap();
 
 	assert!(peer.info.user_agent.ends_with(env!("CARGO_PKG_VERSION")));
-
-	thread::sleep(time::Duration::from_secs(1));
-
-	peer.send_ping(Difficulty::min(), 0).unwrap();
-	thread::sleep(time::Duration::from_secs(1));
-
-	let server_peer = server.peers.get_connected_peer(my_addr).unwrap();
-	assert_eq!(server_peer.info().total_difficulty(), Difficulty::min());
-	assert!(server.peers.peer_count() > 0);
+	self_addr
 }

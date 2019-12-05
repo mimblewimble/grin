@@ -40,7 +40,7 @@ impl Handler for PeersConnectedHandler {
 		let peers: Vec<PeerInfoDisplay> = w_fut!(&self.peers)
 			.connected_peers()
 			.iter()
-			.map(|p| p.info().clone().into())
+			.map(|p| p.info.clone().into())
 			.collect();
 		json_response(&peers)
 	}

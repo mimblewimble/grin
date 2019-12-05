@@ -47,7 +47,6 @@ mod store;
 pub mod types;
 
 pub use crate::conn::SEND_CHANNEL_CAP;
-pub use crate::peer::ConnectedPeer;
 pub use crate::peer::Peer;
 pub use crate::peers::Peers;
 pub use crate::serv::{DummyAdapter, Server};

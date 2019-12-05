@@ -26,7 +26,7 @@ use crate::core::core::hash::Hash;
 use crate::core::global;
 use crate::core::pow::Difficulty;
 use crate::handshake::Handshake;
-use crate::peer::{ConnectedPeer, Peer};
+use crate::peer::Peer;
 use crate::peers::Peers;
 use crate::store::PeerStore;
 use crate::types::{
@@ -119,7 +119,7 @@ impl Server {
 
 	/// Asks the server to connect to a new peer. Directly returns the peer if
 	/// we're already connected to the provided address.
-	pub fn connect(&self, addr: PeerAddr) -> Result<Arc<dyn ConnectedPeer>, Error> {
+	pub fn connect(&self, addr: PeerAddr) -> Result<Arc<Peer>, Error> {
 		if self.stop_state.is_stopped() {
 			return Err(Error::ConnectionClose);
 		}

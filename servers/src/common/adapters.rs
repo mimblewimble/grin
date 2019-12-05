@@ -659,7 +659,7 @@ impl NetToChainAdapter {
 
 	fn send_tx_request_to_peer<F>(&self, h: Hash, peer_info: &PeerInfo, f: F)
 	where
-		F: Fn(&dyn p2p::ConnectedPeer, Hash) -> Result<(), p2p::Error>,
+		F: Fn(&p2p::Peer, Hash) -> Result<(), p2p::Error>,
 	{
 		match self.peers().get_connected_peer(peer_info.addr) {
 			None => debug!(
@@ -676,7 +676,7 @@ impl NetToChainAdapter {
 
 	fn send_block_request_to_peer<F>(&self, h: Hash, peer_info: &PeerInfo, f: F)
 	where
-		F: Fn(&dyn p2p::ConnectedPeer, Hash) -> Result<(), p2p::Error>,
+		F: Fn(&p2p::Peer, Hash) -> Result<(), p2p::Error>,
 	{
 		match self.chain().block_exists(h) {
 			Ok(false) => match self.peers().get_connected_peer(peer_info.addr) {
