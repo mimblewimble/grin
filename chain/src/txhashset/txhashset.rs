@@ -520,11 +520,13 @@ where
 		let output_pmmr =
 			ReadonlyPMMR::at(&trees.output_pmmr_h.backend, trees.output_pmmr_h.last_pos);
 		let header_pmmr = ReadonlyPMMR::at(&handle.backend, handle.last_pos);
+		let rproof_pmmr =
+			ReadonlyPMMR::at(&trees.rproof_pmmr_h.backend, trees.rproof_pmmr_h.last_pos);
 
 		// Create a new batch here to pass into the utxo_view.
 		// Discard it (rollback) after we finish with the utxo_view.
 		let batch = trees.commit_index.batch()?;
-		let utxo = UTXOView::new(output_pmmr, header_pmmr, &batch);
+		let utxo = UTXOView::new(output_pmmr, header_pmmr, rproof_pmmr, &batch);
 		res = inner(&utxo);
 	}
 	res
@@ -922,6 +924,7 @@ impl<'a> Extension<'a> {
 		UTXOView::new(
 			self.output_pmmr.readonly_pmmr(),
 			header_ext.pmmr.readonly_pmmr(),
+			self.rproof_pmmr.readonly_pmmr(),
 			self.batch,
 		)
 	}

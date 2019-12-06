@@ -21,12 +21,14 @@ use crate::core::global;
 use crate::core::ser::PMMRIndexHashable;
 use crate::error::{Error, ErrorKind};
 use crate::store::Batch;
+use crate::util::secp::pedersen::RangeProof;
 use grin_store::pmmr::PMMRBackend;
 
 /// Readonly view of the UTXO set (based on output MMR).
 pub struct UTXOView<'a> {
 	output_pmmr: ReadonlyPMMR<'a, Output, PMMRBackend<Output>>,
 	header_pmmr: ReadonlyPMMR<'a, BlockHeader, PMMRBackend<BlockHeader>>,
+	rproof_pmmr: ReadonlyPMMR<'a, RangeProof, PMMRBackend<RangeProof>>,
 	batch: &'a Batch<'a>,
 }
 
@@ -35,11 +37,13 @@ impl<'a> UTXOView<'a> {
 	pub fn new(
 		output_pmmr: ReadonlyPMMR<'a, Output, PMMRBackend<Output>>,
 		header_pmmr: ReadonlyPMMR<'a, BlockHeader, PMMRBackend<BlockHeader>>,
+		rproof_pmmr: ReadonlyPMMR<'a, RangeProof, PMMRBackend<RangeProof>>,
 		batch: &'a Batch<'_>,
 	) -> UTXOView<'a> {
 		UTXOView {
 			output_pmmr,
 			header_pmmr,
+			rproof_pmmr,
 			batch,
 		}
 	}
@@ -96,6 +100,17 @@ impl<'a> UTXOView<'a> {
 			}
 		}
 		Ok(())
+	}
+
+	/// Retrieves an unspent output using its PMMR position
+	pub fn get_unspent_output_at(&self, pos: u64) -> Result<Output, Error> {
+		match self.output_pmmr.get_data(pos) {
+			Some(output_id) => match self.rproof_pmmr.get_data(pos) {
+				Some(rproof) => Ok(output_id.into_output(rproof)),
+				None => Err(ErrorKind::RangeproofNotFound.into()),
+			},
+			None => Err(ErrorKind::OutputNotFound.into()),
+		}
 	}
 
 	/// Verify we are not attempting to spend any coinbase outputs

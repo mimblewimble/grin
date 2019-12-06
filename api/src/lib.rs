@@ -27,6 +27,7 @@ extern crate lazy_static;
 
 #[macro_use]
 extern crate serde_derive;
+extern crate serde_json;
 #[macro_use]
 extern crate log;
 
@@ -34,13 +35,23 @@ extern crate log;
 mod web;
 pub mod auth;
 pub mod client;
+mod foreign;
+mod foreign_rpc;
 mod handlers;
+mod owner;
+mod owner_rpc;
 mod rest;
 mod router;
 mod types;
 
-pub use crate::auth::{BasicAuthMiddleware, GRIN_BASIC_REALM};
-pub use crate::handlers::start_rest_apis;
+pub use crate::auth::{
+	BasicAuthMiddleware, BasicAuthURIMiddleware, GRIN_BASIC_REALM, GRIN_FOREIGN_BASIC_REALM,
+};
+pub use crate::foreign::Foreign;
+pub use crate::foreign_rpc::ForeignRpc;
+pub use crate::handlers::node_apis;
+pub use crate::owner::Owner;
+pub use crate::owner_rpc::OwnerRpc;
 pub use crate::rest::*;
 pub use crate::router::*;
 pub use crate::types::*;

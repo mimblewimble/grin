@@ -340,7 +340,7 @@ impl OutputPrintable {
 		};
 
 		let p_vec = util::from_hex(proof_str)
-			.map_err(|_| ser::Error::HexError(format!("invalud output range_proof")))?;
+			.map_err(|_| ser::Error::HexError(format!("invalid output range_proof")))?;
 		let mut p_bytes = [0; util::secp::constants::MAX_PROOF_SIZE];
 		for i in 0..p_bytes.len() {
 			p_bytes[i] = p_vec[i];
@@ -474,7 +474,7 @@ impl<'de> serde::de::Deserialize<'de> for OutputPrintable {
 					spent: spent.unwrap(),
 					proof: proof,
 					proof_hash: proof_hash.unwrap(),
-					block_height: block_height,
+					block_height: block_height.unwrap(),
 					merkle_proof: merkle_proof,
 					mmr_index: mmr_index.unwrap(),
 				})

@@ -505,6 +505,15 @@ impl Chain {
 		txhashset.is_unspent(output_ref)
 	}
 
+	/// Retrieves an unspent output using its PMMR position
+	pub fn get_unspent_output_at(&self, pos: u64) -> Result<Output, Error> {
+		let header_pmmr = self.header_pmmr.read();
+		let txhashset = self.txhashset.read();
+		txhashset::utxo_view(&header_pmmr, &txhashset, |utxo| {
+			utxo.get_unspent_output_at(pos)
+		})
+	}
+
 	/// Validate the tx against the current UTXO set.
 	pub fn validate_tx(&self, tx: &Transaction) -> Result<(), Error> {
 		let header_pmmr = self.header_pmmr.read();
@@ -1377,7 +1386,6 @@ impl Chain {
 
 		Ok(Some((kernel, header.height, mmr_index)))
 	}
-
 	/// Gets the block header in which a given kernel mmr index appears in the txhashset.
 	pub fn get_header_for_kernel_index(
 		&self,
