@@ -492,7 +492,7 @@ impl<T: TableViewItem<H>, H: Eq + Hash + Copy + Clone + 'static> TableView<T, H>
 	/// Returns the index of the currently selected item within the underlying
 	/// storage vector.
 	pub fn item(&self) -> Option<usize> {
-		if self.items.is_empty() {
+		if self.items.is_empty() || self.focus > self.rows_to_items.len() {
 			None
 		} else {
 			Some(self.rows_to_items[self.focus])
@@ -604,7 +604,7 @@ impl<T: TableViewItem<H>, H: Eq + Hash + Copy + Clone + 'static> TableView<T, H>
 
 	fn sort_items(&mut self, column: H, order: Ordering) {
 		if !self.is_empty() {
-			let old_item = self.item().unwrap();
+			let old_item = self.item();
 
 			let mut rows_to_items = self.rows_to_items.clone();
 			rows_to_items.sort_by(|a, b| {
@@ -616,7 +616,7 @@ impl<T: TableViewItem<H>, H: Eq + Hash + Copy + Clone + 'static> TableView<T, H>
 			});
 			self.rows_to_items = rows_to_items;
 
-			self.set_selected_item(old_item);
+			old_item.map(|o| self.set_selected_item(o));
 		}
 	}
 
