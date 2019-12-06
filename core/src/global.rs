@@ -24,7 +24,8 @@ use crate::consensus::{
 };
 use crate::core::block::HeaderVersion;
 use crate::pow::{
-	self, new_cuckaroo_ctx, new_cuckarood_ctx, new_cuckatoo_ctx, EdgeType, PoWContext,
+	self, new_cuckaroo_ctx, new_cuckarood_ctx, new_cuckaroom_ctx, new_cuckatoo_ctx, EdgeType,
+	PoWContext,
 };
 use util::RwLock;
 
@@ -175,14 +176,20 @@ where
 	match chain_type {
 		// Mainnet has Cuckaroo(d)29 for AR and Cuckatoo31+ for AF
 		ChainTypes::Mainnet if edge_bits > 29 => new_cuckatoo_ctx(edge_bits, proof_size, max_sols),
-		ChainTypes::Mainnet if valid_header_version(height, HeaderVersion::new(2)) => {
+		ChainTypes::Mainnet if valid_header_version(height, HeaderVersion(3)) => {
+			new_cuckaroom_ctx(edge_bits, proof_size)
+		}
+		ChainTypes::Mainnet if valid_header_version(height, HeaderVersion(2)) => {
 			new_cuckarood_ctx(edge_bits, proof_size)
 		}
 		ChainTypes::Mainnet => new_cuckaroo_ctx(edge_bits, proof_size),
 
 		// Same for Floonet
 		ChainTypes::Floonet if edge_bits > 29 => new_cuckatoo_ctx(edge_bits, proof_size, max_sols),
-		ChainTypes::Floonet if valid_header_version(height, HeaderVersion::new(2)) => {
+		ChainTypes::Floonet if valid_header_version(height, HeaderVersion(3)) => {
+			new_cuckaroom_ctx(edge_bits, proof_size)
+		}
+		ChainTypes::Floonet if valid_header_version(height, HeaderVersion(2)) => {
 			new_cuckarood_ctx(edge_bits, proof_size)
 		}
 		ChainTypes::Floonet => new_cuckaroo_ctx(edge_bits, proof_size),

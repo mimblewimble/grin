@@ -47,7 +47,10 @@ pub struct TxHashSetHandler {
 impl TxHashSetHandler {
 	// gets roots
 	fn get_roots(&self) -> Result<TxHashSet, Error> {
-		Ok(TxHashSet::from_head(w(&self.chain)?))
+		let res = TxHashSet::from_head(w(&self.chain)?).context(ErrorKind::Internal(
+			"failed to read roots from txhashset".to_owned(),
+		))?;
+		Ok(res)
 	}
 
 	// gets last n outputs inserted in to the tree

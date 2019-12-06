@@ -18,7 +18,7 @@ use chrono::prelude::{DateTime, Utc};
 use std::sync::Arc;
 
 use crate::core::core::hash::{Hash, Hashed, ZERO_HASH};
-use crate::core::core::{Block, BlockHeader};
+use crate::core::core::{Block, BlockHeader, HeaderVersion};
 use crate::core::pow::Difficulty;
 use crate::core::ser::{self, PMMRIndexHashable};
 use crate::error::{Error, ErrorKind};
@@ -193,24 +193,26 @@ pub struct TxHashSetRoots {
 }
 
 impl TxHashSetRoots {
-	/// Accessor for the underlying output PMMR root
-	pub fn output_root(&self) -> Hash {
-		self.output_roots.output_root()
+	/// Accessor for the output PMMR root (rules here are block height dependent).
+	/// We assume the header version is consistent with the block height, validated
+	/// as part of pipe::validate_header().
+	pub fn output_root(&self, header: &BlockHeader) -> Hash {
+		self.output_roots.root(header)
 	}
 
 	/// Validate roots against the provided block header.
 	pub fn validate(&self, header: &BlockHeader) -> Result<(), Error> {
 		debug!(
-			"validate roots: {} at {}, output_root: {}, output pmmr: {} (bitmap: {}, merged: {})",
+			"validate roots: {} at {}, {} vs. {} (original: {}, merged: {})",
 			header.hash(),
 			header.height,
 			header.output_root,
-			self.output_roots.output_root(),
-			self.output_roots.bitmap_root,
+			self.output_root(header),
+			self.output_roots.pmmr_root,
 			self.output_roots.merged_root(header),
 		);
 
-		if header.output_root != self.output_roots.pmmr_root {
+		if header.output_root != self.output_root(header) {
 			Err(ErrorKind::InvalidRoot.into())
 		} else if header.range_proof_root != self.rproof_root {
 			Err(ErrorKind::InvalidRoot.into())
@@ -232,15 +234,27 @@ pub struct OutputRoots {
 }
 
 impl OutputRoots {
+	/// The root of our output PMMR. The rules here are block height specific.
+	/// We use the merged root here for header version 3 and later.
+	/// We assume the header version is consistent with the block height, validated
+	/// as part of pipe::validate_header().
+	pub fn root(&self, header: &BlockHeader) -> Hash {
+		if header.version < HeaderVersion(3) {
+			self.output_root()
+		} else {
+			self.merged_root(header)
+		}
+	}
+
 	/// The root of the underlying output PMMR.
-	pub fn output_root(&self) -> Hash {
+	fn output_root(&self) -> Hash {
 		self.pmmr_root
 	}
 
 	/// Hash the root of the output PMMR and the root of the bitmap accumulator
 	/// together with the size of the output PMMR (for consistency with existing PMMR impl).
 	/// H(pmmr_size | pmmr_root | bitmap_root)
-	pub fn merged_root(&self, header: &BlockHeader) -> Hash {
+	fn merged_root(&self, header: &BlockHeader) -> Hash {
 		(self.pmmr_root, self.bitmap_root).hash_with_index(header.output_mmr_size)
 	}
 }

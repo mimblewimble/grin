@@ -205,7 +205,7 @@ pub fn read_message<T: Readable>(
 				Err(Error::BadMessage)
 			}
 		}
-		MsgHeaderWrapper::Unknown(msg_len) => {
+		MsgHeaderWrapper::Unknown(msg_len, _) => {
 			read_discard(msg_len, stream)?;
 			Err(Error::BadMessage)
 		}
@@ -248,7 +248,7 @@ pub enum MsgHeaderWrapper {
 	/// A "known" msg type with deserialized msg header.
 	Known(MsgHeader),
 	/// An unknown msg type with corresponding msg size in bytes.
-	Unknown(u64),
+	Unknown(u64, u8),
 }
 
 /// Header of any protocol message, used to identify incoming messages.
@@ -331,7 +331,7 @@ impl Readable for MsgHeaderWrapper {
 					return Err(ser::Error::TooLargeReadErr);
 				}
 
-				Ok(MsgHeaderWrapper::Unknown(msg_len))
+				Ok(MsgHeaderWrapper::Unknown(msg_len, t))
 			}
 		}
 	}

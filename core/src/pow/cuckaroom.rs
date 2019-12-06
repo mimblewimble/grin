@@ -12,15 +12,15 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! Implementation of Cuckarood Cycle, based on Cuckoo Cycle designed by
+//! Implementation of Cuckaroom Cycle, based on Cuckoo Cycle designed by
 //! John Tromp. Ported to Rust from https://github.com/tromp/cuckoo.
 //!
-//! Cuckarood is a variation of Cuckaroo that's tweaked at the first HardFork
+//! Cuckaroom is a variation of Cuckaroo that's tweaked at the second HardFork
 //! to maintain ASIC-Resistance, as introduced in
-//! https://www.grin-forum.org/t/mid-july-pow-hardfork-cuckaroo29-cuckarood29
-//! It uses a tweaked siphash round in which the rotation by 21 is replaced by
-//! a rotation by 25, halves the number of graph nodes in each partition,
-//! and requires cycles to alternate between even- and odd-indexed edges.
+//! https://www.grin-forum.org/t/mid-december-pow-hardfork-cuckarood29-cuckaroom29
+//! It uses a tweaked edge block generation where states are xored with all later
+//! states, reverts to standard siphash, and most importantly, identifies cycles
+//! in a mono-partite graph, from which it derives the letter 'm'.
 
 use crate::global;
 use crate::pow::common::{CuckooParams, EdgeType};
@@ -28,10 +28,10 @@ use crate::pow::error::{Error, ErrorKind};
 use crate::pow::siphash::siphash_block;
 use crate::pow::{PoWContext, Proof};
 
-/// Instantiate a new CuckaroodContext as a PowContext. Note that this can't
+/// Instantiate a new CuckaroomContext as a PowContext. Note that this can't
 /// be moved in the PoWContext trait as this particular trait needs to be
 /// convertible to an object trait.
-pub fn new_cuckarood_ctx<T>(
+pub fn new_cuckaroom_ctx<T>(
 	edge_bits: u8,
 	proof_size: usize,
 ) -> Result<Box<dyn PoWContext<T>>, Error>
@@ -39,18 +39,18 @@ where
 	T: EdgeType + 'static,
 {
 	let params = CuckooParams::new(edge_bits, proof_size)?;
-	Ok(Box::new(CuckaroodContext { params }))
+	Ok(Box::new(CuckaroomContext { params }))
 }
 
-/// Cuckarood cycle context. Only includes the verifier for now.
-pub struct CuckaroodContext<T>
+/// Cuckaroom cycle context. Only includes the verifier for now.
+pub struct CuckaroomContext<T>
 where
 	T: EdgeType,
 {
 	params: CuckooParams<T>,
 }
 
-impl<T> PoWContext<T> for CuckaroodContext<T>
+impl<T> PoWContext<T> for CuckaroomContext<T>
 where
 	T: EdgeType,
 {
@@ -68,21 +68,18 @@ where
 	}
 
 	fn verify(&self, proof: &Proof) -> Result<(), Error> {
-		if proof.proof_size() != global::proofsize() {
+		let proofsize = proof.proof_size();
+		if proofsize != global::proofsize() {
 			return Err(ErrorKind::Verification("wrong cycle length".to_owned()))?;
 		}
 		let nonces = &proof.nonces;
-		let mut uvs = vec![0u64; 2 * proof.proof_size()];
-		let mut ndir = vec![0usize; 2];
-		let mut xor0: u64 = 0;
-		let mut xor1: u64 = 0;
+		let mut from = vec![0u32; proofsize];
+		let mut to = vec![0u32; proofsize];
+		let mut xor_from: u32 = 0;
+		let mut xor_to: u32 = 0;
 		let nodemask = self.params.edge_mask >> 1;
 
-		for n in 0..proof.proof_size() {
-			let dir = (nonces[n] & 1) as usize;
-			if ndir[dir] >= proof.proof_size() / 2 {
-				return Err(ErrorKind::Verification("edges not balanced".to_owned()))?;
-			}
+		for n in 0..proofsize {
 			if nonces[n] > to_u64!(self.params.edge_mask) {
 				return Err(ErrorKind::Verification("edge too big".to_owned()))?;
 			}
@@ -91,45 +88,42 @@ where
 			}
 			let edge = to_edge!(
 				T,
-				siphash_block(&self.params.siphash_keys, nonces[n], 25, false)
+				siphash_block(&self.params.siphash_keys, nonces[n], 21, true)
 			);
-			let idx = 4 * ndir[dir] + 2 * dir;
-			uvs[idx] = to_u64!(edge & nodemask);
-			uvs[idx + 1] = to_u64!((edge >> 32) & nodemask);
-			xor0 ^= uvs[idx];
-			xor1 ^= uvs[idx + 1];
-			ndir[dir] += 1;
+			from[n] = to_u32!(edge & nodemask);
+			xor_from ^= from[n];
+			to[n] = to_u32!((edge >> 32) & nodemask);
+			xor_to ^= to[n];
 		}
-		if xor0 | xor1 != 0 {
+		if xor_from != xor_to {
 			return Err(ErrorKind::Verification(
 				"endpoints don't match up".to_owned(),
 			))?;
 		}
+		let mut visited = vec![false; proofsize];
 		let mut n = 0;
 		let mut i = 0;
-		let mut j;
 		loop {
 			// follow cycle
-			j = i;
-			for k in (((i % 4) ^ 2)..(2 * self.params.proof_size)).step_by(4) {
-				if uvs[k] == uvs[i] {
-					// find reverse edge endpoint identical to one at i
-					if j != i {
-						return Err(ErrorKind::Verification("branch in cycle".to_owned()))?;
-					}
-					j = k;
+			if visited[i] {
+				return Err(ErrorKind::Verification("branch in cycle".to_owned()))?;
+			}
+			visited[i] = true;
+			let mut nexti = 0;
+			while from[nexti] != to[i] {
+				nexti += 1;
+				if nexti == proofsize {
+					return Err(ErrorKind::Verification("cycle dead ends".to_owned()))?;
 				}
 			}
-			if j == i {
-				return Err(ErrorKind::Verification("cycle dead ends".to_owned()))?;
-			}
-			i = j ^ 1;
+			i = nexti;
 			n += 1;
 			if i == 0 {
+				// must cycle back to start or find branch
 				break;
 			}
 		}
-		if n == self.params.proof_size {
+		if n == proofsize {
 			Ok(())
 		} else {
 			Err(ErrorKind::Verification("cycle too short".to_owned()))?
@@ -143,37 +137,37 @@ mod test {
 
 	// empty header, nonce 64
 	static V1_19_HASH: [u64; 4] = [
-		0x89f81d7da5e674df,
-		0x7586b93105a5fd13,
-		0x6fbe212dd4e8c001,
-		0x8800c93a8431f938,
+		0xdb7896f799c76dab,
+		0x352e8bf25df7a723,
+		0xf0aa29cbb1150ea6,
+		0x3206c2759f41cbd5,
 	];
 	static V1_19_SOL: [u64; 42] = [
-		0xa00, 0x3ffb, 0xa474, 0xdc27, 0x182e6, 0x242cc, 0x24de4, 0x270a2, 0x28356, 0x2951f,
-		0x2a6ae, 0x2c889, 0x355c7, 0x3863b, 0x3bd7e, 0x3cdbc, 0x3ff95, 0x430b6, 0x4ba1a, 0x4bd7e,
-		0x4c59f, 0x4f76d, 0x52064, 0x5378c, 0x540a3, 0x5af6b, 0x5b041, 0x5e9d3, 0x64ec7, 0x6564b,
-		0x66763, 0x66899, 0x66e80, 0x68e4e, 0x69133, 0x6b20a, 0x6c2d7, 0x6fd3b, 0x79a8a, 0x79e29,
-		0x7ae52, 0x7defe,
+		0x0413c, 0x05121, 0x0546e, 0x1293a, 0x1dd27, 0x1e13e, 0x1e1d2, 0x22870, 0x24642, 0x24833,
+		0x29190, 0x2a732, 0x2ccf6, 0x302cf, 0x32d9a, 0x33700, 0x33a20, 0x351d9, 0x3554b, 0x35a70,
+		0x376c1, 0x398c6, 0x3f404, 0x3ff0c, 0x48b26, 0x49a03, 0x4c555, 0x4dcda, 0x4dfcd, 0x4fbb6,
+		0x50275, 0x584a8, 0x5da0d, 0x5dbf1, 0x6038f, 0x66540, 0x72bbd, 0x77323, 0x77424, 0x77a14,
+		0x77dc9, 0x7d9dc,
 	];
 
 	// empty header, nonce 15
 	static V2_29_HASH: [u64; 4] = [
-		0xe2f917b2d79492ed,
-		0xf51088eaaa3a07a0,
-		0xaf4d4288d36a4fa8,
-		0xc8cdfd30a54e0581,
+		0xe4b4a751f2eac47d,
+		0x3115d47edfb69267,
+		0x87de84146d9d609e,
+		0x7deb20eab6d976a1,
 	];
 	static V2_29_SOL: [u64; 42] = [
-		0x1a9629, 0x1fb257, 0x5dc22a, 0xf3d0b0, 0x200c474, 0x24bd68f, 0x48ad104, 0x4a17170,
-		0x4ca9a41, 0x55f983f, 0x6076c91, 0x6256ffc, 0x63b60a1, 0x7fd5b16, 0x985bff8, 0xaae71f3,
-		0xb71f7b4, 0xb989679, 0xc09b7b8, 0xd7601da, 0xd7ab1b6, 0xef1c727, 0xf1e702b, 0xfd6d961,
-		0xfdf0007, 0x10248134, 0x114657f6, 0x11f52612, 0x12887251, 0x13596b4b, 0x15e8d831,
-		0x16b4c9e5, 0x17097420, 0x1718afca, 0x187fc40c, 0x19359788, 0x1b41d3f1, 0x1bea25a7,
-		0x1d28df0f, 0x1ea6c4a0, 0x1f9bf79f, 0x1fa005c6,
+		0x04acd28, 0x29ccf71, 0x2a5572b, 0x2f31c2c, 0x2f60c37, 0x317fe1d, 0x32f6d4c, 0x3f51227,
+		0x45ee1dc, 0x535eeb8, 0x5e135d5, 0x6184e3d, 0x6b1b8e0, 0x6f857a9, 0x8916a0f, 0x9beb5f8,
+		0xa3c8dc9, 0xa886d94, 0xaab6a57, 0xd6df8f8, 0xe4d630f, 0xe6ae422, 0xea2d658, 0xf7f369b,
+		0x10c465d8, 0x1130471e, 0x12049efb, 0x12f43bc5, 0x15b493a6, 0x16899354, 0x1915dfca,
+		0x195c3dac, 0x19b09ab6, 0x1a1a8ed7, 0x1bba748f, 0x1bdbf777, 0x1c806542, 0x1d201b53,
+		0x1d9e6af7, 0x1e99885e, 0x1f255834, 0x1f9c383b,
 	];
 
 	#[test]
-	fn cuckarood19_29_vectors() {
+	fn cuckaroom19_29_vectors() {
 		let mut ctx19 = new_impl::<u64>(19, 42);
 		ctx19.params.siphash_keys = V1_19_HASH.clone();
 		assert!(ctx19
@@ -188,11 +182,11 @@ mod test {
 		assert!(ctx29.verify(&Proof::zero(42)).is_err());
 	}
 
-	fn new_impl<T>(edge_bits: u8, proof_size: usize) -> CuckaroodContext<T>
+	fn new_impl<T>(edge_bits: u8, proof_size: usize) -> CuckaroomContext<T>
 	where
 		T: EdgeType,
 	{
 		let params = CuckooParams::new(edge_bits, proof_size).unwrap();
-		CuckaroodContext { params }
+		CuckaroomContext { params }
 	}
 }
