@@ -269,7 +269,7 @@ pub struct OutputPrintable {
 	/// Rangeproof hash (as hex string)
 	pub proof_hash: String,
 	/// Block height at which the output is found
-	pub block_height: u64,
+	pub block_height: Option<u64>,
 	/// Merkle Proof
 	pub merkle_proof: Option<MerkleProof>,
 	/// MMR Position
@@ -293,9 +293,9 @@ impl OutputPrintable {
 		let out_id = core::OutputIdentifier::from_output(&output);
 		let res = chain.is_unspent(&out_id);
 		let (spent, block_height) = if let Ok(output_pos) = res {
-			(false, output_pos.height)
+			(false, Some(output_pos.height))
 		} else {
-			(true, 0)
+			(true, None)
 		};
 
 		let proof = if include_proof {
