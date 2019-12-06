@@ -69,13 +69,10 @@ impl TableViewItem<PeerColumn> for PeerStats {
 		match column {
 			PeerColumn::Address => self.addr.clone(),
 			PeerColumn::State => self.state.clone(),
-			PeerColumn::Ping => {
-				if self.ping_duration_millis == 0 {
-					"?".to_string()
-				} else {
-					format!("{} ms", self.ping_duration_millis)
-				}
-			}
+			PeerColumn::Ping => match self.ping_duration {
+				Some(duration) => format!("{} ms", duration.as_millis()),
+				_ => "?".to_string(),
+			},
 			PeerColumn::UsedBandwidth => format!(
 				"↑: {}, ↓: {}",
 				size_to_string(self.sent_bytes_per_sec),
@@ -115,7 +112,7 @@ impl TableViewItem<PeerColumn> for PeerStats {
 		match column {
 			PeerColumn::Address => self.addr.cmp(&other.addr),
 			PeerColumn::State => self.state.cmp(&other.state),
-			PeerColumn::Ping => self.ping_duration_millis.cmp(&other.ping_duration_millis),
+			PeerColumn::Ping => self.ping_duration.cmp(&other.ping_duration),
 			PeerColumn::UsedBandwidth => cmp_used_bandwidth(&self, &other),
 			PeerColumn::TotalDifficulty => self.total_difficulty.cmp(&other.total_difficulty),
 			PeerColumn::Direction => self.direction.cmp(&other.direction),

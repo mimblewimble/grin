@@ -221,14 +221,10 @@ impl Peers {
 			.filter(|x| x.info.total_difficulty() == max_total_difficulty)
 			.collect::<Vec<_>>();
 
-		// Sort by ping duration ascending then ip addr (
+		// Sort by ping duration ascending
 		max_peers.sort_unstable_by(|p, q| {
-			if p.info.ping_duration().is_some() && q.info.ping_duration().is_some() {
-				let ping_order = q.info.ping_duration().cmp(&p.info.ping_duration()); // lowest first
-				match ping_order {
-					Ordering::Equal => p.info.addr.0.ip().cmp(&q.info.addr.0.ip()),
-					_ => ping_order,
-				}
+			if let (Some(pd), Some(qd)) = (p.info.ping_duration(), q.info.ping_duration()) {
+				pd.cmp(&qd) // lowest first
 			} else {
 				Ordering::Equal
 			}

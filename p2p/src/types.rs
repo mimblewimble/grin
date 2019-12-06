@@ -477,7 +477,7 @@ impl PeerInfo {
 						.to_std()
 						.unwrap(),
 				);
-				live_info.last_ping = None
+				live_info.last_ping = None;
 			}
 		}
 	}

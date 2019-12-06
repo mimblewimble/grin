@@ -183,8 +183,7 @@ impl HeaderSync {
 
 			if let Some(peer) = self.syncing_peer.clone() {
 				return self.request_headers(peer);
-			}
-			if let Some(peer) = self.peers.closest_most_work_peer() {
+			} else if let Some(peer) = self.peers.closest_most_work_peer() {
 				if peer.info.total_difficulty() > difficulty && peer.info.ping_duration().is_some()
 				{
 					info!(
