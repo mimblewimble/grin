@@ -38,8 +38,10 @@ pub const SERVER_CONFIG_FILE_NAME: &'static str = "grin-server.toml";
 const SERVER_LOG_FILE_NAME: &'static str = "grin-server.log";
 const GRIN_HOME: &'static str = ".grin";
 const GRIN_CHAIN_DIR: &'static str = "chain_data";
-/// Node API secret
+/// Node Rest API and V2 Owner API secret
 pub const API_SECRET_FILE_NAME: &'static str = ".api_secret";
+/// Foreign API secret
+pub const FOREIGN_API_SECRET_FILE_NAME: &'static str = ".foreign_api_secret";
 
 fn get_grin_path(chain_type: &global::ChainTypes) -> Result<PathBuf, ConfigError> {
 	// Check if grin dir exists
@@ -95,11 +97,14 @@ pub fn check_api_secret(api_secret_path: &PathBuf) -> Result<(), ConfigError> {
 	Ok(())
 }
 
-/// Check that the api secret file exists and is valid
-fn check_api_secret_file(chain_type: &global::ChainTypes) -> Result<(), ConfigError> {
+/// Check that the api secret files exist and are valid
+fn check_api_secret_files(
+	chain_type: &global::ChainTypes,
+	secret_file_name: &str,
+) -> Result<(), ConfigError> {
 	let grin_path = get_grin_path(chain_type)?;
 	let mut api_secret_path = grin_path.clone();
-	api_secret_path.push(API_SECRET_FILE_NAME);
+	api_secret_path.push(secret_file_name);
 	if !api_secret_path.exists() {
 		init_api_secret(&api_secret_path)
 	} else {
@@ -109,7 +114,8 @@ fn check_api_secret_file(chain_type: &global::ChainTypes) -> Result<(), ConfigEr
 
 /// Handles setup and detection of paths for node
 pub fn initial_setup_server(chain_type: &global::ChainTypes) -> Result<GlobalConfig, ConfigError> {
-	check_api_secret_file(chain_type)?;
+	check_api_secret_files(chain_type, API_SECRET_FILE_NAME)?;
+	check_api_secret_files(chain_type, FOREIGN_API_SECRET_FILE_NAME)?;
 	// Use config file if current directory if it exists, .grin home otherwise
 	if let Some(p) = check_config_current_dir(SERVER_CONFIG_FILE_NAME) {
 		GlobalConfig::new(p.to_str().unwrap())

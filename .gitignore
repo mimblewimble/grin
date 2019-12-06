@@ -1,7 +1,6 @@
 *.swp
 .DS_Store
 .grin*
-node*
 !node_clients
 !node_clients.rs
 target

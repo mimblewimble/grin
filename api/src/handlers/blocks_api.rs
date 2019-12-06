@@ -11,7 +11,7 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-use super::utils::{get_output, w};
+use super::utils::{get_output, get_output_v2, w};
 use crate::chain;
 use crate::core::core::hash::Hash;
 use crate::core::core::hash::Hashed;
@@ -63,6 +63,40 @@ impl HeaderHandler {
 			Err(_) => Err(ErrorKind::NotFound)?,
 		}
 	}
+
+	pub fn get_header_v2(&self, h: &Hash) -> Result<BlockHeaderPrintable, Error> {
+		let chain = w(&self.chain)?;
+		let header = chain.get_block_header(h).context(ErrorKind::NotFound)?;
+		return Ok(BlockHeaderPrintable::from_header(&header));
+	}
+
+	// Try to get hash from height, hash or output commit
+	pub fn parse_inputs(
+		&self,
+		height: Option<u64>,
+		hash: Option<Hash>,
+		commit: Option<String>,
+	) -> Result<Hash, Error> {
+		if let Some(height) = height {
+			match w(&self.chain)?.get_header_by_height(height) {
+				Ok(header) => return Ok(header.hash()),
+				Err(_) => return Err(ErrorKind::NotFound)?,
+			}
+		}
+		if let Some(hash) = hash {
+			return Ok(hash);
+		}
+		if let Some(commit) = commit {
+			let oid = get_output_v2(&self.chain, &commit, false, false)?.1;
+			match w(&self.chain)?.get_header_for_output(&oid) {
+				Ok(header) => return Ok(header.hash()),
+				Err(_) => return Err(ErrorKind::NotFound)?,
+			}
+		}
+		return Err(ErrorKind::Argument(
+			"not a valid hash, height or output commit".to_owned(),
+		))?;
+	}
 }
 
 impl Handler for HeaderHandler {
@@ -87,7 +121,7 @@ pub struct BlockHandler {
 }
 
 impl BlockHandler {
-	fn get_block(
+	pub fn get_block(
 		&self,
 		h: &Hash,
 		include_proof: bool,
@@ -118,6 +152,34 @@ impl BlockHandler {
 		let vec = util::from_hex(input)
 			.map_err(|e| ErrorKind::Argument(format!("invalid input: {}", e)))?;
 		Ok(Hash::from_vec(&vec))
+	}
+
+	// Try to get hash from height, hash or output commit
+	pub fn parse_inputs(
+		&self,
+		height: Option<u64>,
+		hash: Option<Hash>,
+		commit: Option<String>,
+	) -> Result<Hash, Error> {
+		if let Some(height) = height {
+			match w(&self.chain)?.get_header_by_height(height) {
+				Ok(header) => return Ok(header.hash()),
+				Err(_) => return Err(ErrorKind::NotFound)?,
+			}
+		}
+		if let Some(hash) = hash {
+			return Ok(hash);
+		}
+		if let Some(commit) = commit {
+			let oid = get_output_v2(&self.chain, &commit, false, false)?.1;
+			match w(&self.chain)?.get_header_for_output(&oid) {
+				Ok(header) => return Ok(header.hash()),
+				Err(_) => return Err(ErrorKind::NotFound)?,
+			}
+		}
+		return Err(ErrorKind::Argument(
+			"not a valid hash, height or output commit".to_owned(),
+		))?;
 	}
 }
 
