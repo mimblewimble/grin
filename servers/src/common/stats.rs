@@ -193,6 +193,24 @@ pub struct PeerStats {
 	pub received_bytes_per_sec: u64,
 }
 
+impl PartialEq for PeerStats {
+	fn eq(&self, other: &PeerStats) -> bool {
+		*self.addr == other.addr
+	}
+}
+
+impl PartialEq for WorkerStats {
+	fn eq(&self, other: &WorkerStats) -> bool {
+		*self.id == other.id
+	}
+}
+
+impl PartialEq for DiffBlock {
+	fn eq(&self, other: &DiffBlock) -> bool {
+		self.block_height == other.block_height
+	}
+}
+
 impl StratumStats {
 	/// Calculate network hashrate
 	pub fn network_hashrate(&self, height: u64) -> f64 {
