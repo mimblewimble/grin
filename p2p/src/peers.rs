@@ -224,7 +224,7 @@ impl Peers {
 		// Sort by ping duration ascending
 		max_peers.sort_unstable_by(|p, q| {
 			if let (Some(pd), Some(qd)) = (p.info.ping_duration(), q.info.ping_duration()) {
-				pd.cmp(&qd) // lowest first
+				qd.cmp(&pd) // lowest first
 			} else {
 				Ordering::Equal
 			}
