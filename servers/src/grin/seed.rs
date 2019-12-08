@@ -384,12 +384,17 @@ pub fn default_dns_seeds() -> Box<dyn Fn() -> Vec<PeerAddr> + Send> {
 	})
 }
 
-pub fn resolve_dns_to_addrs(dns_records: &Vec<String>) -> Vec<PeerAddr> {
+fn resolve_dns_to_addrs(dns_records: &Vec<String>) -> Vec<PeerAddr> {
 	let mut addresses: Vec<PeerAddr> = vec![];
 	for dns in dns_records {
 		debug!("Retrieving addresses from dns {}", dns);
 		match dns.to_socket_addrs() {
-			Ok(addrs) => addresses.append(&mut addrs.map(|addr| PeerAddr(addr)).collect()),
+			Ok(addrs) => addresses.append(
+				&mut addrs
+					.map(|addr| PeerAddr(addr))
+					.filter(|addr| !addresses.contains(addr))
+					.collect(),
+			),
 			Err(e) => debug!("Failed to resolve dns {:?} got error {:?}", dns, e),
 		};
 	}
