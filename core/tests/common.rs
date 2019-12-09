@@ -14,8 +14,8 @@
 
 //! Common test functions
 
-use grin_core::core::{Block, BlockHeader, KernelFeatures, Transaction};
 use grin_core::core::hash::DefaultHashable;
+use grin_core::core::{Block, BlockHeader, KernelFeatures, Transaction};
 use grin_core::libtx::{
 	build::{self, input, output},
 	proof::{ProofBuild, ProofBuilder},
@@ -147,9 +147,9 @@ impl PMMRable for TestElem {
 
 impl Writeable for TestElem {
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
-		r#try!(writer.write_u32(self.0[0]));
-		r#try!(writer.write_u32(self.0[1]));
-		r#try!(writer.write_u32(self.0[2]));
+		writer.write_u32(self.0[0])?;
+		writer.write_u32(self.0[1])?;
+		writer.write_u32(self.0[2])?;
 		writer.write_u32(self.0[3])
 	}
 }
