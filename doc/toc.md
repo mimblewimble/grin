@@ -6,7 +6,7 @@ This should get progressively filled up, until we're ready to advertize it
 more widely.
 
 * What is Grin?
-* [Introduction to MimbleWimble](intro.md)
+* [Introduction to Mimblewimble](intro.md)
 * Cryptographic Primitives
   * Pedersen Commitments
   * Aggregate (Schnorr) Signatures

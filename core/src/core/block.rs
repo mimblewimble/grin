@@ -176,28 +176,8 @@ impl Hashed for HeaderEntry {
 }
 
 /// Some type safety around header versioning.
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, PartialOrd, Serialize)]
 pub struct HeaderVersion(pub u16);
-
-impl Default for HeaderVersion {
-	fn default() -> HeaderVersion {
-		HeaderVersion(1)
-	}
-}
-
-// self-conscious increment function courtesy of Jasper
-impl HeaderVersion {
-	fn next(&self) -> Self {
-		Self(self.0 + 1)
-	}
-}
-
-impl HeaderVersion {
-	/// Constructor taking the provided version.
-	pub fn new(version: u16) -> HeaderVersion {
-		HeaderVersion(version)
-	}
-}
 
 impl From<HeaderVersion> for u16 {
 	fn from(v: HeaderVersion) -> u16 {
@@ -253,7 +233,7 @@ impl DefaultHashable for BlockHeader {}
 impl Default for BlockHeader {
 	fn default() -> BlockHeader {
 		BlockHeader {
-			version: HeaderVersion::default(),
+			version: HeaderVersion(1),
 			height: 0,
 			timestamp: DateTime::<Utc>::from_utc(NaiveDateTime::from_timestamp(0, 0), Utc),
 			prev_hash: ZERO_HASH,
@@ -451,7 +431,7 @@ impl Readable for UntrustedBlockHeader {
 	}
 }
 
-/// A block as expressed in the MimbleWimble protocol. The reward is
+/// A block as expressed in the Mimblewimble protocol. The reward is
 /// non-explicit, assumed to be deducible from block height (similar to
 /// bitcoin's schedule) and expressed as a global transaction fee (added v.H),
 /// additive to the total of fees ever collected.
@@ -619,12 +599,9 @@ impl Block {
 			vec![],
 		)?;
 
+		// Determine the height and associated version for the new header.
 		let height = prev.height + 1;
-
-		let mut version = prev.version;
-		if !consensus::valid_header_version(height, version) {
-			version = version.next();
-		}
+		let version = consensus::header_version(height);
 
 		let now = Utc::now().timestamp();
 		let timestamp = DateTime::<Utc>::from_utc(NaiveDateTime::from_timestamp(now, 0), Utc);

@@ -23,7 +23,7 @@ use std::path::Path;
 use std::sync::{mpsc, Arc};
 use std::{
 	thread::{self, JoinHandle},
-	time,
+	time::{self, Duration},
 };
 
 use fs2::FileExt;
@@ -63,12 +63,12 @@ pub struct Server {
 	/// data store access
 	pub chain: Arc<chain::Chain>,
 	/// in-memory transaction pool
-	tx_pool: Arc<RwLock<pool::TransactionPool>>,
+	pub tx_pool: Arc<RwLock<pool::TransactionPool>>,
 	/// Shared cache for verification results when
 	/// verifying rangeproof and kernel signatures.
 	verifier_cache: Arc<RwLock<dyn VerifierCache>>,
 	/// Whether we're currently syncing
-	sync_state: Arc<SyncState>,
+	pub sync_state: Arc<SyncState>,
 	/// To be passed around to collect stats and info
 	state_info: ServerStateInfo,
 	/// Stop flag
@@ -276,7 +276,7 @@ impl Server {
 
 		info!("Starting rest apis at: {}", &config.api_http_addr);
 		let api_secret = get_first_line(config.api_secret_path.clone());
-
+		let foreign_api_secret = get_first_line(config.foreign_api_secret_path.clone());
 		let tls_conf = match config.tls_certificate_file.clone() {
 			None => None,
 			Some(file) => {
@@ -292,15 +292,16 @@ impl Server {
 		};
 
 		// TODO fix API shutdown and join this thread
-		api::start_rest_apis(
-			config.api_http_addr.clone(),
+		api::node_apis(
+			&config.api_http_addr,
 			shared_chain.clone(),
 			tx_pool.clone(),
 			p2p_server.peers.clone(),
 			sync_state.clone(),
-			api_secret,
-			tls_conf,
-		);
+			api_secret.clone(),
+			foreign_api_secret.clone(),
+			tls_conf.clone(),
+		)?;
 
 		info!("Starting dandelion monitor: {}", &config.api_http_addr);
 		let dandelion_thread = dandelion_monitor::monitor_transactions(
@@ -482,23 +483,16 @@ impl Server {
 			.map(|p| PeerStats::from_peer(&p))
 			.collect();
 
-		let tx_stats = {
-			let pool = self.tx_pool.try_read();
-			match pool {
-				Some(pool) => TxStats {
-					tx_pool_size: pool.txpool.size(),
-					tx_pool_kernels: pool.txpool.kernel_count(),
-					stem_pool_size: pool.stempool.size(),
-					stem_pool_kernels: pool.stempool.kernel_count(),
-				},
-				None => TxStats {
-					tx_pool_size: 0,
-					tx_pool_kernels: 0,
-					stem_pool_size: 0,
-					stem_pool_kernels: 0,
-				},
-			}
-		};
+		// Updating TUI stats should not block any other processing so only attempt to
+		// acquire various read locks with a timeout.
+		let read_timeout = Duration::from_millis(500);
+
+		let tx_stats = self.tx_pool.try_read_for(read_timeout).map(|pool| TxStats {
+			tx_pool_size: pool.txpool.size(),
+			tx_pool_kernels: pool.txpool.kernel_count(),
+			stem_pool_size: pool.stempool.size(),
+			stem_pool_kernels: pool.stempool.kernel_count(),
+		});
 
 		let head = self.chain.head_header()?;
 		let head_stats = ChainStats {
@@ -508,16 +502,15 @@ impl Server {
 			total_difficulty: head.total_difficulty(),
 		};
 
-		let header_stats = match self.chain.try_header_head()? {
-			Some(tip) => {
-				let header = self.chain.get_block_header(&tip.hash())?;
+		let header_stats = match self.chain.try_header_head(read_timeout)? {
+			Some(head) => self.chain.get_block_header(&head.hash()).map(|header| {
 				Some(ChainStats {
 					latest_timestamp: header.timestamp,
 					height: header.height,
 					last_block_h: header.prev_hash,
 					total_difficulty: header.total_difficulty(),
 				})
-			}
+			})?,
 			_ => None,
 		};
 

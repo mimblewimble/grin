@@ -210,7 +210,7 @@ impl Readable for KernelFeatures {
 }
 
 /// Errors thrown by Transaction validation
-#[derive(Clone, Eq, Debug, PartialEq)]
+#[derive(Clone, Eq, Debug, PartialEq, Serialize, Deserialize)]
 pub enum Error {
 	/// Underlying Secp256k1 error (signature validation or invalid public key
 	/// typically)

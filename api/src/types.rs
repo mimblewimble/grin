@@ -116,13 +116,16 @@ pub struct TxHashSet {
 }
 
 impl TxHashSet {
-	pub fn from_head(head: Arc<chain::Chain>) -> TxHashSet {
-		let roots = head.get_txhashset_roots();
-		TxHashSet {
-			output_root_hash: roots.output_root.to_hex(),
-			range_proof_root_hash: roots.rproof_root.to_hex(),
-			kernel_root_hash: roots.kernel_root.to_hex(),
-		}
+	/// A TxHashSet in the context of the api is simply the collection of PMMR roots.
+	/// We can obtain these in a lightweight way by reading them from the head of the chain.
+	/// We will have validated the roots on this header against the roots of the txhashset.
+	pub fn from_head(chain: Arc<chain::Chain>) -> Result<TxHashSet, chain::Error> {
+		let header = chain.head_header()?;
+		Ok(TxHashSet {
+			output_root_hash: header.output_root.to_hex(),
+			range_proof_root_hash: header.range_proof_root.to_hex(),
+			kernel_root_hash: header.kernel_root.to_hex(),
+		})
 	}
 }
 
@@ -337,7 +340,7 @@ impl OutputPrintable {
 		};
 
 		let p_vec = util::from_hex(proof_str)
-			.map_err(|_| ser::Error::HexError(format!("invalud output range_proof")))?;
+			.map_err(|_| ser::Error::HexError(format!("invalid output range_proof")))?;
 		let mut p_bytes = [0; util::secp::constants::MAX_PROOF_SIZE];
 		for i in 0..p_bytes.len() {
 			p_bytes[i] = p_vec[i];
@@ -471,7 +474,7 @@ impl<'de> serde::de::Deserialize<'de> for OutputPrintable {
 					spent: spent.unwrap(),
 					proof: proof,
 					proof_hash: proof_hash.unwrap(),
-					block_height: block_height,
+					block_height: block_height.unwrap(),
 					merkle_proof: merkle_proof,
 					mmr_index: mmr_index.unwrap(),
 				})

@@ -30,7 +30,7 @@ pub struct VersionHandler {
 }
 
 impl VersionHandler {
-	fn get_version(&self) -> Result<Version, Error> {
+	pub fn get_version(&self) -> Result<Version, Error> {
 		let head = w(&self.chain)?
 			.head_header()
 			.map_err(|e| ErrorKind::Internal(format!("can't get head: {}", e)))?;

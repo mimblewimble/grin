@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! Implementation of the MimbleWimble paper.
+//! Implementation of the Mimblewimble paper.
 //! https://download.wpsoftware.net/bitcoin/wizardry/mimblewimble.txt
 
 #![deny(non_upper_case_globals)]

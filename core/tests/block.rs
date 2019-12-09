@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-pub mod common;
+mod common;
 use crate::common::{new_block, tx1i2o, tx2i1o, txspend1i1o};
 use crate::core::consensus::BLOCK_OUTPUT_WEIGHT;
 use crate::core::core::block::Error;
@@ -211,7 +211,7 @@ fn serialize_deserialize_header_version() {
 	ser::serialize_default(&mut vec1, &1_u16).expect("serialization failed");
 
 	let mut vec2 = Vec::new();
-	ser::serialize_default(&mut vec2, &HeaderVersion::default()).expect("serialization failed");
+	ser::serialize_default(&mut vec2, &HeaderVersion(1)).expect("serialization failed");
 
 	// Check that a header_version serializes to a
 	// single u16 value with no extraneous bytes wrapping it.

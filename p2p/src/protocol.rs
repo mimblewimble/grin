@@ -52,7 +52,12 @@ impl Protocol {
 }
 
 impl MessageHandler for Protocol {
-	fn consume(&self, mut msg: Message, tracker: Arc<Tracker>) -> Result<Option<Msg>, Error> {
+	fn consume(
+		&self,
+		mut msg: Message,
+		stopped: Arc<AtomicBool>,
+		tracker: Arc<Tracker>,
+	) -> Result<Option<Msg>, Error> {
 		let adapter = &self.adapter;
 
 		// If we received a msg from a banned peer then log and drop it.
@@ -395,7 +400,13 @@ impl MessageHandler for Protocol {
 						}
 						// Increase received bytes quietly (without affecting the counters).
 						// Otherwise we risk banning a peer as "abusive".
-						tracker.inc_quiet_received(size as u64)
+						tracker.inc_quiet_received(size as u64);
+
+						// check the close channel
+						if stopped.load(Ordering::Relaxed) {
+							debug!("stopping txhashset download early");
+							return Err(Error::ConnectionClose);
+						}
 					}
 					debug!(
 						"handle_payload: txhashset archive: {}/{} ... DONE",

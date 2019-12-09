@@ -1,6 +1,6 @@
 # Grin - Build, Configuration, and Running
 
-*Read this in other languages: [Español](build_ES.md), [Korean](build_KR.md), [日本語](build_JP.md).*
+*Read this in other languages: [Español](build_ES.md), [Korean](build_KR.md), [日本語](build_JP.md), [简体中文](build_ZH-CN.md).*
 
 ## Supported Platforms
 
@@ -98,7 +98,7 @@ For help on grin commands and their switches, try:
 
 ```sh
 grin help
-grin wallet --help
+grin server --help
 grin client --help
 ```
 
@@ -137,4 +137,4 @@ Please note that all mining functions for Grin have moved into a separate, stand
 you can start mining by building and running grin-miner against your running Grin node.
 
 For grin-miner to be able to communicate with your grin node, make sure that you have `enable_stratum_server = true`
-in your `grin-server.toml` configuration file and you have a wallet listener running (`grin wallet listen`). 
+in your `grin-server.toml` configuration file and you have a wallet listener running (`grin-wallet listen`). 

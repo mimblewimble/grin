@@ -40,6 +40,7 @@ use num;
 mod common;
 pub mod cuckaroo;
 pub mod cuckarood;
+pub mod cuckaroom;
 pub mod cuckatoo;
 mod error;
 #[allow(dead_code)]
@@ -49,6 +50,7 @@ mod types;
 
 pub use crate::pow::cuckaroo::{new_cuckaroo_ctx, CuckarooContext};
 pub use crate::pow::cuckarood::{new_cuckarood_ctx, CuckaroodContext};
+pub use crate::pow::cuckaroom::{new_cuckaroom_ctx, CuckaroomContext};
 pub use crate::pow::cuckatoo::{new_cuckatoo_ctx, CuckatooContext};
 pub use crate::pow::error::Error;
 use chrono::prelude::{DateTime, NaiveDateTime, Utc};

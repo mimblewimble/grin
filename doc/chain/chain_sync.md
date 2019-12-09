@@ -4,7 +4,7 @@
 
 We describe here the different methods used by a new node when joining the network
 to catch up with the latest chain state. We start with reminding the reader of the
-following assumptions, which are all characteristics of Grin or MimbleWimble:
+following assumptions, which are all characteristics of Grin or Mimblewimble:
 
 * All block headers include the root hash of all unspent outputs in the chain at
   the time of that block.
@@ -27,7 +27,7 @@ its peers.
 
 The security model here is similar to bitcoin. We're able to verify the whole
 chain, the total work, the validity of each block, their full content, etc.
-In addition, with MimbleWimble and full UTXO set commitments, even more integrity
+In addition, with Mimblewimble and full UTXO set commitments, even more integrity
 validation can be performed.
 
 We do not try to do any space or bandwidth optimization in this mode (for example,

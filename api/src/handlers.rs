@@ -12,14 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-mod blocks_api;
-mod chain_api;
-mod peers_api;
-mod pool_api;
-mod server_api;
-mod transactions_api;
-mod utils;
-mod version_api;
+pub mod blocks_api;
+pub mod chain_api;
+pub mod peers_api;
+pub mod pool_api;
+pub mod server_api;
+pub mod transactions_api;
+pub mod utils;
+pub mod version_api;
 
 use self::blocks_api::BlockHandler;
 use self::blocks_api::HeaderHandler;
@@ -38,59 +38,302 @@ use self::server_api::KernelDownloadHandler;
 use self::server_api::StatusHandler;
 use self::transactions_api::TxHashSetHandler;
 use self::version_api::VersionHandler;
-use crate::auth::{BasicAuthMiddleware, GRIN_BASIC_REALM};
+use crate::auth::{
+	BasicAuthMiddleware, BasicAuthURIMiddleware, GRIN_BASIC_REALM, GRIN_FOREIGN_BASIC_REALM,
+};
 use crate::chain;
+use crate::chain::{Chain, SyncState};
+use crate::foreign::Foreign;
+use crate::foreign_rpc::ForeignRpc;
+use crate::owner::Owner;
+use crate::owner_rpc::OwnerRpc;
 use crate::p2p;
 use crate::pool;
-use crate::rest::*;
+use crate::rest::{ApiServer, Error, TLSConfig};
+use crate::router::ResponseFuture;
 use crate::router::{Router, RouterError};
-use crate::util;
+use crate::util::to_base64;
 use crate::util::RwLock;
+use crate::web::*;
+use easy_jsonrpc_mw::{Handler, MaybeReply};
+use futures::future::ok;
+use futures::Future;
+use hyper::{Body, Request, Response, StatusCode};
+use serde::Serialize;
 use std::net::SocketAddr;
-use std::sync::Arc;
+use std::sync::{Arc, Weak};
 
-/// Start all server HTTP handlers. Register all of them with Router
-/// and runs the corresponding HTTP server.
-///
-/// Hyper currently has a bug that prevents clean shutdown. In order
-/// to avoid having references kept forever by handlers, we only pass
-/// weak references. Note that this likely means a crash if the handlers are
-/// used after a server shutdown (which should normally never happen,
-/// except during tests).
-pub fn start_rest_apis(
-	addr: String,
+/// Listener version, providing same API but listening for requests on a
+/// port and wrapping the calls
+pub fn node_apis(
+	addr: &str,
 	chain: Arc<chain::Chain>,
 	tx_pool: Arc<RwLock<pool::TransactionPool>>,
 	peers: Arc<p2p::Peers>,
 	sync_state: Arc<chain::SyncState>,
 	api_secret: Option<String>,
+	foreign_api_secret: Option<String>,
 	tls_config: Option<TLSConfig>,
-) -> bool {
-	let mut apis = ApiServer::new();
-	let mut router =
-		build_router(chain, tx_pool, peers, sync_state).expect("unable to build API router");
+) -> Result<(), Error> {
+	// Manually build router when getting rid of v1
+	//let mut router = Router::new();
+	let mut router = build_router(
+		chain.clone(),
+		tx_pool.clone(),
+		peers.clone(),
+		sync_state.clone(),
+	)
+	.expect("unable to build API router");
+
+	// Add basic auth to v1 API and owner v2 API
 	if let Some(api_secret) = api_secret {
-		let api_basic_auth = format!("Basic {}", util::to_base64(&format!("grin:{}", api_secret)));
+		let api_basic_auth =
+			"Basic ".to_string() + &to_base64(&("grin:".to_string() + &api_secret));
 		let basic_auth_middleware = Arc::new(BasicAuthMiddleware::new(
 			api_basic_auth,
 			&GRIN_BASIC_REALM,
-			None,
+			Some("/v2/foreign".into()),
 		));
 		router.add_middleware(basic_auth_middleware);
 	}
 
-	info!("Starting HTTP API server at {}.", addr);
+	let api_handler_v2 = OwnerAPIHandlerV2::new(
+		Arc::downgrade(&chain),
+		Arc::downgrade(&peers),
+		Arc::downgrade(&sync_state),
+	);
+	router.add_route("/v2/owner", Arc::new(api_handler_v2))?;
+
+	// Add basic auth to v2 foreign API only
+	if let Some(api_secret) = foreign_api_secret {
+		let api_basic_auth =
+			"Basic ".to_string() + &to_base64(&("grin:".to_string() + &api_secret));
+		let basic_auth_middleware = Arc::new(BasicAuthURIMiddleware::new(
+			api_basic_auth,
+			&GRIN_FOREIGN_BASIC_REALM,
+			"/v2/foreign".into(),
+		));
+		router.add_middleware(basic_auth_middleware);
+	}
+
+	let api_handler_v2 = ForeignAPIHandlerV2::new(
+		Arc::downgrade(&chain),
+		Arc::downgrade(&tx_pool),
+		Arc::downgrade(&sync_state),
+	);
+	router.add_route("/v2/foreign", Arc::new(api_handler_v2))?;
+
+	let mut apis = ApiServer::new();
+	warn!("Starting HTTP Node APIs server at {}.", addr);
 	let socket_addr: SocketAddr = addr.parse().expect("unable to parse socket address");
-	let res = apis.start(socket_addr, router, tls_config);
-	match res {
-		Ok(_) => true,
+	let api_thread = apis.start(socket_addr, router, tls_config);
+
+	warn!("HTTP Node listener started.");
+
+	match api_thread {
+		Ok(_) => Ok(()),
 		Err(e) => {
 			error!("HTTP API server failed to start. Err: {}", e);
-			false
+			Err(e)
 		}
 	}
 }
 
+type NodeResponseFuture = Box<dyn Future<Item = Response<Body>, Error = Error> + Send>;
+
+/// V2 API Handler/Wrapper for owner functions
+pub struct OwnerAPIHandlerV2 {
+	pub chain: Weak<Chain>,
+	pub peers: Weak<p2p::Peers>,
+	pub sync_state: Weak<SyncState>,
+}
+
+impl OwnerAPIHandlerV2 {
+	/// Create a new owner API handler for GET methods
+	pub fn new(chain: Weak<Chain>, peers: Weak<p2p::Peers>, sync_state: Weak<SyncState>) -> Self {
+		OwnerAPIHandlerV2 {
+			chain,
+			peers,
+			sync_state,
+		}
+	}
+
+	fn call_api(
+		&self,
+		req: Request<Body>,
+		api: Owner,
+	) -> Box<dyn Future<Item = serde_json::Value, Error = Error> + Send> {
+		Box::new(parse_body(req).and_then(move |val: serde_json::Value| {
+			let owner_api = &api as &dyn OwnerRpc;
+			match owner_api.handle_request(val) {
+				MaybeReply::Reply(r) => ok(r),
+				MaybeReply::DontReply => {
+					// Since it's http, we need to return something. We return [] because jsonrpc
+					// clients will parse it as an empty batch response.
+					ok(serde_json::json!([]))
+				}
+			}
+		}))
+	}
+
+	fn handle_post_request(&self, req: Request<Body>) -> NodeResponseFuture {
+		let api = Owner::new(
+			self.chain.clone(),
+			self.peers.clone(),
+			self.sync_state.clone(),
+		);
+		Box::new(
+			self.call_api(req, api)
+				.and_then(|resp| ok(json_response_pretty(&resp))),
+		)
+	}
+}
+
+impl crate::router::Handler for OwnerAPIHandlerV2 {
+	fn post(&self, req: Request<Body>) -> ResponseFuture {
+		Box::new(
+			self.handle_post_request(req)
+				.and_then(|r| ok(r))
+				.or_else(|e| {
+					error!("Request Error: {:?}", e);
+					ok(create_error_response(e))
+				}),
+		)
+	}
+
+	fn options(&self, _req: Request<Body>) -> ResponseFuture {
+		Box::new(ok(create_ok_response("{}")))
+	}
+}
+
+/// V2 API Handler/Wrapper for foreign functions
+pub struct ForeignAPIHandlerV2 {
+	pub chain: Weak<Chain>,
+	pub tx_pool: Weak<RwLock<pool::TransactionPool>>,
+	pub sync_state: Weak<SyncState>,
+}
+
+impl ForeignAPIHandlerV2 {
+	/// Create a new foreign API handler for GET methods
+	pub fn new(
+		chain: Weak<Chain>,
+		tx_pool: Weak<RwLock<pool::TransactionPool>>,
+		sync_state: Weak<SyncState>,
+	) -> Self {
+		ForeignAPIHandlerV2 {
+			chain,
+			tx_pool,
+			sync_state,
+		}
+	}
+
+	fn call_api(
+		&self,
+		req: Request<Body>,
+		api: Foreign,
+	) -> Box<dyn Future<Item = serde_json::Value, Error = Error> + Send> {
+		Box::new(parse_body(req).and_then(move |val: serde_json::Value| {
+			let foreign_api = &api as &dyn ForeignRpc;
+			match foreign_api.handle_request(val) {
+				MaybeReply::Reply(r) => ok(r),
+				MaybeReply::DontReply => {
+					// Since it's http, we need to return something. We return [] because jsonrpc
+					// clients will parse it as an empty batch response.
+					ok(serde_json::json!([]))
+				}
+			}
+		}))
+	}
+
+	fn handle_post_request(&self, req: Request<Body>) -> NodeResponseFuture {
+		let api = Foreign::new(
+			self.chain.clone(),
+			self.tx_pool.clone(),
+			self.sync_state.clone(),
+		);
+		Box::new(
+			self.call_api(req, api)
+				.and_then(|resp| ok(json_response_pretty(&resp))),
+		)
+	}
+}
+
+impl crate::router::Handler for ForeignAPIHandlerV2 {
+	fn post(&self, req: Request<Body>) -> ResponseFuture {
+		Box::new(
+			self.handle_post_request(req)
+				.and_then(|r| ok(r))
+				.or_else(|e| {
+					error!("Request Error: {:?}", e);
+					ok(create_error_response(e))
+				}),
+		)
+	}
+
+	fn options(&self, _req: Request<Body>) -> ResponseFuture {
+		Box::new(ok(create_ok_response("{}")))
+	}
+}
+
+// pretty-printed version of above
+fn json_response_pretty<T>(s: &T) -> Response<Body>
+where
+	T: Serialize,
+{
+	match serde_json::to_string_pretty(s) {
+		Ok(json) => response(StatusCode::OK, json),
+		Err(_) => response(StatusCode::INTERNAL_SERVER_ERROR, ""),
+	}
+}
+
+fn create_error_response(e: Error) -> Response<Body> {
+	Response::builder()
+		.status(StatusCode::INTERNAL_SERVER_ERROR)
+		.header("access-control-allow-origin", "*")
+		.header(
+			"access-control-allow-headers",
+			"Content-Type, Authorization",
+		)
+		.body(format!("{}", e).into())
+		.unwrap()
+}
+
+fn create_ok_response(json: &str) -> Response<Body> {
+	Response::builder()
+		.status(StatusCode::OK)
+		.header("access-control-allow-origin", "*")
+		.header(
+			"access-control-allow-headers",
+			"Content-Type, Authorization",
+		)
+		.header(hyper::header::CONTENT_TYPE, "application/json")
+		.body(json.to_string().into())
+		.unwrap()
+}
+
+/// Build a new hyper Response with the status code and body provided.
+///
+/// Whenever the status code is `StatusCode::OK` the text parameter should be
+/// valid JSON as the content type header will be set to `application/json'
+fn response<T: Into<Body>>(status: StatusCode, text: T) -> Response<Body> {
+	let mut builder = &mut Response::builder();
+
+	builder = builder
+		.status(status)
+		.header("access-control-allow-origin", "*")
+		.header(
+			"access-control-allow-headers",
+			"Content-Type, Authorization",
+		);
+
+	if status == StatusCode::OK {
+		builder = builder.header(hyper::header::CONTENT_TYPE, "application/json");
+	}
+
+	builder.body(text.into()).unwrap()
+}
+
+// Legacy V1 router
 pub fn build_router(
 	chain: Arc<chain::Chain>,
 	tx_pool: Arc<RwLock<pool::TransactionPool>>,

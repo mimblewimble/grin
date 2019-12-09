@@ -30,8 +30,7 @@ use crate::store;
 use crate::txhashset;
 use crate::txhashset::{PMMRHandle, TxHashSet};
 use crate::types::{
-	BlockStatus, ChainAdapter, NoStatus, Options, OutputMMRPosition, Tip, TxHashSetRoots,
-	TxHashsetWriteStatus,
+	BlockStatus, ChainAdapter, NoStatus, Options, OutputMMRPosition, Tip, TxHashsetWriteStatus,
 };
 use crate::util::secp::pedersen::{Commitment, RangeProof};
 use crate::util::RwLock;
@@ -441,7 +440,7 @@ impl Chain {
 	}
 
 	/// Check for orphans, once a block is successfully added
-	pub fn check_orphans(&self, mut height: u64) {
+	fn check_orphans(&self, mut height: u64) {
 		let initial_height = height;
 
 		// Is there an orphan in our orphans that we can now process?
@@ -504,6 +503,15 @@ impl Chain {
 	pub fn is_unspent(&self, output_ref: &OutputIdentifier) -> Result<OutputMMRPosition, Error> {
 		let txhashset = self.txhashset.read();
 		txhashset.is_unspent(output_ref)
+	}
+
+	/// Retrieves an unspent output using its PMMR position
+	pub fn get_unspent_output_at(&self, pos: u64) -> Result<Output, Error> {
+		let header_pmmr = self.header_pmmr.read();
+		let txhashset = self.txhashset.read();
+		txhashset::utxo_view(&header_pmmr, &txhashset, |utxo| {
+			utxo.get_unspent_output_at(pos)
+		})
 	}
 
 	/// Validate the tx against the current UTXO set.
@@ -590,21 +598,23 @@ impl Chain {
 				Ok((prev_root, extension.roots()?, extension.sizes()))
 			})?;
 
-		// Set the prev_root on the header.
-		b.header.prev_root = prev_root;
-
-		// Set the output, rangeproof and kernel MMR roots.
-		b.header.output_root = roots.output_root;
-		b.header.range_proof_root = roots.rproof_root;
-		b.header.kernel_root = roots.kernel_root;
-
 		// Set the output and kernel MMR sizes.
+		// Note: We need to do this *before* calculating the roots as the output_root
+		// depends on the output_mmr_size
 		{
 			// Carefully destructure these correctly...
 			let (output_mmr_size, _, kernel_mmr_size) = sizes;
 			b.header.output_mmr_size = output_mmr_size;
 			b.header.kernel_mmr_size = kernel_mmr_size;
 		}
+
+		// Set the prev_root on the header.
+		b.header.prev_root = prev_root;
+
+		// Set the output, rangeproof and kernel MMR roots.
+		b.header.output_root = roots.output_root(&b.header);
+		b.header.range_proof_root = roots.rproof_root;
+		b.header.kernel_root = roots.kernel_root;
 
 		Ok(())
 	}
@@ -632,11 +642,6 @@ impl Chain {
 	pub fn get_merkle_proof_for_pos(&self, commit: Commitment) -> Result<MerkleProof, Error> {
 		let mut txhashset = self.txhashset.write();
 		txhashset.merkle_proof(commit)
-	}
-
-	/// Returns current txhashset roots.
-	pub fn get_txhashset_roots(&self) -> TxHashSetRoots {
-		self.txhashset.read().roots()
 	}
 
 	/// Provides a reading view into the current kernel state.
@@ -671,24 +676,17 @@ impl Chain {
 		// The fast sync client does *not* have the necessary data
 		// to rewind after receiving the txhashset zip.
 		let header = self.get_block_header(&h)?;
-		{
-			let mut header_pmmr = self.header_pmmr.write();
-			let mut txhashset = self.txhashset.write();
-			txhashset::extending_readonly(&mut header_pmmr, &mut txhashset, |ext| {
-				pipe::rewind_and_apply_fork(&header, ext)?;
-				let ref mut extension = ext.extension;
-				extension.snapshot()?;
-				Ok(())
-			})?;
-		}
 
-		// prepares the zip and return the corresponding Read
-		let txhashset_reader = txhashset::zip_read(self.db_root.clone(), &header)?;
-		Ok((
-			header.output_mmr_size,
-			header.kernel_mmr_size,
-			txhashset_reader,
-		))
+		let mut header_pmmr = self.header_pmmr.write();
+		let mut txhashset = self.txhashset.write();
+		txhashset::extending_readonly(&mut header_pmmr, &mut txhashset, |ext| {
+			pipe::rewind_and_apply_fork(&header, ext)?;
+			ext.extension.snapshot()?;
+
+			// prepare the zip
+			txhashset::zip_read(self.db_root.clone(), &header)
+				.map(|file| (header.output_mmr_size, header.kernel_mmr_size, file))
+		})
 	}
 
 	/// To support the ability to download the txhashset from multiple peers in parallel,
@@ -1006,9 +1004,6 @@ impl Chain {
 
 		debug!("txhashset_write: replaced our txhashset with the new one");
 
-		// Check for any orphan blocks and process them based on the new chain state.
-		self.check_orphans(header.height + 1);
-
 		status.on_done();
 
 		Ok(false)
@@ -1216,21 +1211,23 @@ impl Chain {
 			.map_err(|e| ErrorKind::StoreErr(e, "chain tail".to_owned()).into())
 	}
 
-	/// Tip (head) of the header chain if read lock can be acquired right now.
-	pub fn try_header_head(&self) -> Result<Option<Tip>, Error> {
-		match self.header_pmmr.try_read() {
-			Some(lock) => {
-				let hash = lock.head_hash()?;
-				let header = self.store.get_block_header(&hash)?;
-				Ok(Some(Tip::from_header(&header)))
-			}
-			None => Ok(None),
-		}
+	/// Tip (head) of the header chain if read lock can be acquired reasonably quickly.
+	/// Used by the TUI when updating stats to avoid locking the TUI up.
+	pub fn try_header_head(&self, timeout: Duration) -> Result<Option<Tip>, Error> {
+		self.header_pmmr
+			.try_read_for(timeout)
+			.map(|ref pmmr| self.read_header_head(pmmr).map(|x| Some(x)))
+			.unwrap_or(Ok(None))
 	}
 
 	/// Tip (head) of the header chain.
 	pub fn header_head(&self) -> Result<Tip, Error> {
-		let hash = self.header_pmmr.read().head_hash()?;
+		self.read_header_head(&self.header_pmmr.read())
+	}
+
+	/// Read head from the provided PMMR handle.
+	fn read_header_head(&self, pmmr: &txhashset::PMMRHandle<BlockHeader>) -> Result<Tip, Error> {
+		let hash = pmmr.head_hash()?;
 		let header = self.store.get_block_header(&hash)?;
 		Ok(Tip::from_header(&header))
 	}
@@ -1389,7 +1386,6 @@ impl Chain {
 
 		Ok(Some((kernel, header.height, mmr_index)))
 	}
-
 	/// Gets the block header in which a given kernel mmr index appears in the txhashset.
 	pub fn get_header_for_kernel_index(
 		&self,

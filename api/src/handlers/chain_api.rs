@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use super::utils::{get_output, w};
+use super::utils::{get_output, get_output_v2, w};
 use crate::chain;
 use crate::core::core::hash::Hashed;
 use crate::rest::*;
@@ -32,7 +32,7 @@ pub struct ChainHandler {
 }
 
 impl ChainHandler {
-	fn get_tip(&self) -> Result<Tip, Error> {
+	pub fn get_tip(&self) -> Result<Tip, Error> {
 		let head = w(&self.chain)?
 			.head()
 			.map_err(|e| ErrorKind::Internal(format!("can't get head: {}", e)))?;
@@ -52,6 +52,14 @@ pub struct ChainValidationHandler {
 	pub chain: Weak<chain::Chain>,
 }
 
+impl ChainValidationHandler {
+	pub fn validate_chain(&self) -> Result<(), Error> {
+		w(&self.chain)?
+			.validate(true)
+			.map_err(|_| ErrorKind::Internal("chain error".to_owned()).into())
+	}
+}
+
 impl Handler for ChainValidationHandler {
 	fn get(&self, _req: Request<Body>) -> ResponseFuture {
 		match w_fut!(&self.chain).validate(true) {
@@ -69,6 +77,14 @@ impl Handler for ChainValidationHandler {
 /// POST /v1/chain/compact
 pub struct ChainCompactHandler {
 	pub chain: Weak<chain::Chain>,
+}
+
+impl ChainCompactHandler {
+	pub fn compact_chain(&self) -> Result<(), Error> {
+		w(&self.chain)?
+			.compact()
+			.map_err(|_| ErrorKind::Internal("chain error".to_owned()).into())
+	}
 }
 
 impl Handler for ChainCompactHandler {
@@ -95,6 +111,103 @@ impl OutputHandler {
 	fn get_output(&self, id: &str) -> Result<Output, Error> {
 		let res = get_output(&self.chain, id)?;
 		Ok(res.0)
+	}
+
+	fn get_output_v2(
+		&self,
+		id: &str,
+		include_proof: bool,
+		include_merkle_proof: bool,
+	) -> Result<OutputPrintable, Error> {
+		let res = get_output_v2(&self.chain, id, include_proof, include_merkle_proof)?;
+		Ok(res.0)
+	}
+
+	pub fn get_outputs_v2(
+		&self,
+		commits: Option<Vec<String>>,
+		start_height: Option<u64>,
+		end_height: Option<u64>,
+		include_proof: Option<bool>,
+		include_merkle_proof: Option<bool>,
+	) -> Result<Vec<OutputPrintable>, Error> {
+		let mut outputs: Vec<OutputPrintable> = vec![];
+		if let Some(commits) = commits {
+			// First check the commits length
+			for commit in &commits {
+				if commit.len() != 66 {
+					return Err(ErrorKind::RequestError(format!(
+						"invalid commit length for {}",
+						commit
+					))
+					.into());
+				}
+			}
+			for commit in commits {
+				match self.get_output_v2(
+					&commit,
+					include_proof.unwrap_or(false),
+					include_merkle_proof.unwrap_or(false),
+				) {
+					Ok(output) => outputs.push(output),
+					// do not crash here simply do not retrieve this output
+					Err(e) => error!(
+						"Failure to get output for commitment {} with error {}",
+						commit, e
+					),
+				};
+			}
+		}
+		// cannot chain to let Some() for now  see https://github.com/rust-lang/rust/issues/53667
+		if let Some(start_height) = start_height {
+			if let Some(end_height) = end_height {
+				let block_output_batch = self.outputs_block_batch_v2(
+					start_height,
+					end_height,
+					include_proof.unwrap_or(false),
+					include_merkle_proof.unwrap_or(false),
+				)?;
+				outputs = [&outputs[..], &block_output_batch[..]].concat();
+			}
+		}
+		return Ok(outputs);
+	}
+
+	// allows traversal of utxo set
+	pub fn get_unspent_outputs(
+		&self,
+		start_index: u64,
+		end_index: Option<u64>,
+		mut max: u64,
+		include_proof: Option<bool>,
+	) -> Result<OutputListing, Error> {
+		//set a limit here
+		if max > 10_000 {
+			max = 10_000;
+		}
+		let chain = w(&self.chain)?;
+		let outputs = chain
+			.unspent_outputs_by_pmmr_index(start_index, max, end_index)
+			.context(ErrorKind::NotFound)?;
+		let out = OutputListing {
+			last_retrieved_index: outputs.0,
+			highest_index: outputs.1,
+			outputs: outputs
+				.2
+				.iter()
+				.map(|x| {
+					OutputPrintable::from_output(
+						x,
+						chain.clone(),
+						None,
+						include_proof.unwrap_or(false),
+						false,
+					)
+				})
+				.collect::<Result<Vec<_>, _>>()
+				.context(ErrorKind::Internal("chain error".to_owned()))?,
+		};
+		Ok(out)
 	}
 
 	fn outputs_by_ids(&self, req: &Request<Body>) -> Result<Vec<Output>, Error> {
@@ -155,6 +268,42 @@ impl OutputHandler {
 		})
 	}
 
+	fn outputs_at_height_v2(
+		&self,
+		block_height: u64,
+		commitments: Vec<Commitment>,
+		include_rproof: bool,
+		include_merkle_proof: bool,
+	) -> Result<Vec<OutputPrintable>, Error> {
+		let header = w(&self.chain)?
+			.get_header_by_height(block_height)
+			.map_err(|_| ErrorKind::NotFound)?;
+
+		// TODO - possible to compact away blocks we care about
+		// in the period between accepting the block and refreshing the wallet
+		let chain = w(&self.chain)?;
+		let block = chain
+			.get_block(&header.hash())
+			.map_err(|_| ErrorKind::NotFound)?;
+		let outputs = block
+			.outputs()
+			.iter()
+			.filter(|output| commitments.is_empty() || commitments.contains(&output.commit))
+			.map(|output| {
+				OutputPrintable::from_output(
+					output,
+					chain.clone(),
+					Some(&header),
+					include_rproof,
+					include_merkle_proof,
+				)
+			})
+			.collect::<Result<Vec<_>, _>>()
+			.context(ErrorKind::Internal("cain error".to_owned()))?;
+
+		Ok(outputs)
+	}
+
 	// returns outputs for a specified range of blocks
 	fn outputs_block_batch(&self, req: &Request<Body>) -> Result<Vec<BlockOutputs>, Error> {
 		let mut commitments: Vec<Commitment> = vec![];
@@ -180,6 +329,38 @@ impl OutputHandler {
 			if let Ok(res) = self.outputs_at_height(i, commitments.clone(), include_rp) {
 				if res.outputs.len() > 0 {
 					return_vec.push(res);
+				}
+			}
+		}
+
+		Ok(return_vec)
+	}
+
+	// returns outputs for a specified range of blocks
+	fn outputs_block_batch_v2(
+		&self,
+		start_height: u64,
+		end_height: u64,
+		include_rproof: bool,
+		include_merkle_proof: bool,
+	) -> Result<Vec<OutputPrintable>, Error> {
+		let commitments: Vec<Commitment> = vec![];
+
+		debug!(
+			"outputs_block_batch: {}-{}, {}, {}",
+			start_height, end_height, include_rproof, include_merkle_proof,
+		);
+
+		let mut return_vec: Vec<OutputPrintable> = vec![];
+		for i in (start_height..=end_height).rev() {
+			if let Ok(res) = self.outputs_at_height_v2(
+				i,
+				commitments.clone(),
+				include_rproof,
+				include_merkle_proof,
+			) {
+				if res.len() > 0 {
+					return_vec = [&return_vec[..], &res[..]].concat();
 				}
 			}
 		}
@@ -258,6 +439,34 @@ impl KernelHandler {
 				mmr_index,
 			});
 		Ok(kernel)
+	}
+
+	pub fn get_kernel_v2(
+		&self,
+		excess: String,
+		min_height: Option<u64>,
+		max_height: Option<u64>,
+	) -> Result<LocatedTxKernel, Error> {
+		let excess = util::from_hex(excess.to_owned())
+			.map_err(|_| ErrorKind::RequestError("invalid excess hex".into()))?;
+		if excess.len() != 33 {
+			return Err(ErrorKind::RequestError("invalid excess length".into()).into());
+		}
+		let excess = Commitment::from_vec(excess);
+
+		let chain = w(&self.chain)?;
+		let kernel = chain
+			.get_kernel_height(&excess, min_height, max_height)
+			.map_err(|e| ErrorKind::Internal(format!("{}", e)))?
+			.map(|(tx_kernel, height, mmr_index)| LocatedTxKernel {
+				tx_kernel,
+				height,
+				mmr_index,
+			});
+		match kernel {
+			Some(kernel) => Ok(kernel),
+			None => Err(ErrorKind::NotFound.into()),
+		}
 	}
 }
 

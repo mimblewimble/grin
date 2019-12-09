@@ -47,7 +47,10 @@ pub struct TxHashSetHandler {
 impl TxHashSetHandler {
 	// gets roots
 	fn get_roots(&self) -> Result<TxHashSet, Error> {
-		Ok(TxHashSet::from_head(w(&self.chain)?))
+		let res = TxHashSet::from_head(w(&self.chain)?).context(ErrorKind::Internal(
+			"failed to read roots from txhashset".to_owned(),
+		))?;
+		Ok(res)
 	}
 
 	// gets last n outputs inserted in to the tree
@@ -97,7 +100,7 @@ impl TxHashSetHandler {
 	}
 
 	// allows traversal of utxo set bounded within a block range
-	fn block_height_range_to_pmmr_indices(
+	pub fn block_height_range_to_pmmr_indices(
 		&self,
 		start_block_height: u64,
 		end_block_height: Option<u64>,

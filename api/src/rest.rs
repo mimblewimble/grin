@@ -18,7 +18,7 @@
 //! To use it, just have your service(s) implement the ApiEndpoint trait and
 //! register them on a ApiServer.
 
-use crate::router::{Handler, HandlerObj, ResponseFuture, Router};
+use crate::router::{Handler, HandlerObj, ResponseFuture, Router, RouterError};
 use crate::web::response;
 use failure::{Backtrace, Context, Fail, ResultExt};
 use futures::sync::oneshot;
@@ -41,7 +41,7 @@ pub struct Error {
 	inner: Context<ErrorKind>,
 }
 
-#[derive(Clone, Eq, PartialEq, Debug, Fail)]
+#[derive(Clone, Eq, PartialEq, Debug, Fail, Serialize, Deserialize)]
 pub enum ErrorKind {
 	#[fail(display = "Internal error: {}", _0)]
 	Internal(String),
@@ -53,6 +53,8 @@ pub enum ErrorKind {
 	RequestError(String),
 	#[fail(display = "ResponseError error: {}", _0)]
 	ResponseError(String),
+	#[fail(display = "Router error: {}", _0)]
+	Router(RouterError),
 }
 
 impl Fail for Error {
@@ -88,6 +90,14 @@ impl From<ErrorKind> for Error {
 impl From<Context<ErrorKind>> for Error {
 	fn from(inner: Context<ErrorKind>) -> Error {
 		Error { inner: inner }
+	}
+}
+
+impl From<RouterError> for Error {
+	fn from(error: RouterError) -> Error {
+		Error {
+			inner: Context::new(ErrorKind::Router(error)),
+		}
 	}
 }
 
