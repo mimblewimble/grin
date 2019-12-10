@@ -33,7 +33,7 @@ use crate::tui::table::{TableView, TableViewItem};
 use crate::tui::types::TUIStatusListener;
 
 #[derive(Copy, Clone, PartialEq, Eq, Hash)]
-enum PeerColumn {
+pub enum PeerColumn {
 	Address,
 	State,
 	UsedBandwidth,

@@ -145,7 +145,7 @@ where
 ///                      .default_column(BasicColumn::Name);
 /// # }
 /// ```
-pub struct TableView<T: TableViewItem<H>, H: Eq + Hash + Copy + Clone + 'static> {
+pub struct TableView<T: TableViewItem<H> + PartialEq, H: Eq + Hash + Copy + Clone + 'static> {
 	enabled: bool,
 	scrollbase: ScrollBase,
 	last_size: Vec2,
@@ -165,7 +165,7 @@ pub struct TableView<T: TableViewItem<H>, H: Eq + Hash + Copy + Clone + 'static>
 	on_select: Option<Rc<dyn Fn(&mut Cursive, usize, usize)>>,
 }
 
-impl<T: TableViewItem<H>, H: Eq + Hash + Copy + Clone + 'static> TableView<T, H> {
+impl<T: TableViewItem<H> + PartialEq, H: Eq + Hash + Copy + Clone + 'static> TableView<T, H> {
 	/// Creates a new empty `TableView` without any columns.
 	///
 	/// A TableView should be accompanied by a enum of type `H` representing
@@ -233,8 +233,7 @@ impl<T: TableViewItem<H>, H: Eq + Hash + Copy + Clone + 'static> TableView<T, H>
 	pub fn sort_by(&mut self, column: H, order: Ordering) {
 		if self.column_indices.contains_key(&column) {
 			for c in &mut self.columns {
-				c.selected = c.column == column;
-				if c.selected {
+				if c.column == column {
 					c.order = order;
 				} else {
 					c.order = Ordering::Equal;
@@ -437,8 +436,19 @@ impl<T: TableViewItem<H>, H: Eq + Hash + Copy + Clone + 'static> TableView<T, H>
 	/// Sets the contained items of the table.
 	///
 	/// The currently active sort order is preserved and will be applied to all
-	/// items.
+	/// items. The selected item will also be preserved.
 	pub fn set_items(&mut self, items: Vec<T>) {
+		let mut new_location = 0;
+		if let Some(old_item_location) = self.item() {
+			let old_item = self.items.get(old_item_location).unwrap();
+			for (i, new_item) in items.iter().enumerate() {
+				if old_item == new_item {
+					new_location = i;
+					break;
+				}
+			}
+		}
+
 		self.items = items;
 		self.rows_to_items = Vec::with_capacity(self.items.len());
 
@@ -453,7 +463,7 @@ impl<T: TableViewItem<H>, H: Eq + Hash + Copy + Clone + 'static> TableView<T, H>
 		self.scrollbase
 			.set_heights(self.last_size.y.saturating_sub(2), self.rows_to_items.len());
 
-		self.set_selected_row(0);
+		self.set_selected_item(new_location);
 	}
 
 	/// Sets the contained items of the table.
@@ -580,7 +590,7 @@ impl<T: TableViewItem<H>, H: Eq + Hash + Copy + Clone + 'static> TableView<T, H>
 	}
 }
 
-impl<T: TableViewItem<H>, H: Eq + Hash + Copy + Clone + 'static> TableView<T, H> {
+impl<T: TableViewItem<H> + PartialEq, H: Eq + Hash + Copy + Clone + 'static> TableView<T, H> {
 	fn draw_columns<C: Fn(&Printer<'_, '_>, &TableColumn<H>)>(
 		&self,
 		printer: &Printer<'_, '_>,
@@ -689,7 +699,7 @@ impl<T: TableViewItem<H>, H: Eq + Hash + Copy + Clone + 'static> TableView<T, H>
 	}
 }
 
-impl<T: TableViewItem<H> + 'static, H: Eq + Hash + Copy + Clone + 'static> View
+impl<T: TableViewItem<H> + PartialEq + 'static, H: Eq + Hash + Copy + Clone + 'static> View
 	for TableView<T, H>
 {
 	fn draw(&self, printer: &Printer<'_, '_>) {
@@ -979,5 +989,77 @@ impl<H: Copy + Clone + 'static> TableColumn<H> {
 			HAlign::Center => format!("{:^width$} ", value, width = self.width),
 		};
 		printer.print((0, 0), value.as_str());
+	}
+}
+
+#[cfg(test)]
+mod test {
+	use crate::tui::peers::PeerColumn;
+	use crate::tui::table::TableView;
+	use chrono::Utc;
+	use grin_core::ser::ProtocolVersion;
+	use grin_servers::PeerStats;
+	use std::cmp::Ordering;
+
+	#[test]
+	pub fn test_set_items_preserves_selected_item() {
+		let mut table = TableView::<PeerStats, PeerColumn>::new();
+		let ps1 = PeerStats {
+			addr: "123.0.0.1".to_string(),
+			..TestPeerStats::default()
+		};
+		let ps2 = PeerStats {
+			addr: "123.0.0.2".to_string(),
+			..TestPeerStats::default()
+		};
+
+		let mut items = vec![ps1, ps2];
+		table.set_items(items.clone());
+		assert_eq!(table.item().unwrap(), 0);
+
+		items.reverse();
+		table.set_items(items);
+		assert_eq!(table.item().unwrap(), 1);
+	}
+
+	#[test]
+	pub fn test_set_items_preserves_order() {
+		let mut table = TableView::<PeerStats, PeerColumn>::new();
+		let ps1 = PeerStats {
+			addr: "123.0.0.1".to_string(),
+			received_bytes_per_sec: 10,
+			..TestPeerStats::default()
+		};
+		let ps2 = PeerStats {
+			addr: "123.0.0.2".to_string(),
+			received_bytes_per_sec: 80,
+			..TestPeerStats::default()
+		};
+
+		let items = vec![ps1, ps2];
+		table.set_items(items);
+		assert_eq!(table.rows_to_items[0], 0);
+		table.sort_by(PeerColumn::UsedBandwidth, Ordering::Greater);
+
+		assert_eq!(table.rows_to_items[0], 1);
+	}
+
+	struct TestPeerStats(PeerStats);
+
+	impl TestPeerStats {
+		fn default() -> PeerStats {
+			PeerStats {
+				state: "Connected".to_string(),
+				addr: "127.0.0.1".to_string(),
+				version: ProtocolVersion::local(),
+				user_agent: "".to_string(),
+				total_difficulty: 0,
+				height: 0,
+				direction: "Outbound".to_string(),
+				last_seen: Utc::now(),
+				sent_bytes_per_sec: 0,
+				received_bytes_per_sec: 0,
+			}
+		}
 	}
 }
