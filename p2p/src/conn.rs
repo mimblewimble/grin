@@ -38,6 +38,8 @@ use std::{
 	thread::{self, JoinHandle},
 };
 
+pub const SEND_CHANNEL_CAP: usize = 100;
+
 const HEADER_IO_TIMEOUT: Duration = Duration::from_millis(2000);
 const CHANNEL_TIMEOUT: Duration = Duration::from_millis(1000);
 const BODY_IO_TIMEOUT: Duration = Duration::from_millis(60000);
@@ -130,8 +132,6 @@ impl<'a> Message<'a> {
 	}
 }
 
-pub const SEND_CHANNEL_CAP: usize = 100;
-
 pub struct StopHandle {
 	/// Channel to close the connection
 	stopped: Arc<AtomicBool>,
@@ -178,9 +178,24 @@ pub struct ConnHandle {
 }
 
 impl ConnHandle {
+	/// Send msg via the synchronous, bounded channel (sync_sender).
+	/// Two possible failure cases -
+	/// * Disconnected: Propagate this up to the caller so the peer connection can be closed.
+	/// * Full: Our internal msg buffer is full. This is not a problem with the peer connection
+	/// and we do not want to close the connection. We drop the msg rather than blocking here.
+	/// If the buffer is full because there is an underlying issue with the peer
+	/// and potentially the peer connection. We assume this will be handled at the peer level.
 	pub fn send(&self, msg: Msg) -> Result<(), Error> {
-		self.send_channel.try_send(msg)?;
-		Ok(())
+		match self.send_channel.try_send(msg) {
+			Ok(()) => Ok(()),
+			Err(mpsc::TrySendError::Disconnected(_)) => {
+				Err(Error::Send("try_send disconnected".to_owned()))
+			}
+			Err(mpsc::TrySendError::Full(_)) => {
+				debug!("conn_handle: try_send but buffer is full, dropping msg");
+				Ok(())
+			}
+		}
 	}
 }
 
