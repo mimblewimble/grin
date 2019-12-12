@@ -502,7 +502,7 @@ impl<T: TableViewItem<H> + PartialEq, H: Eq + Hash + Copy + Clone + 'static> Tab
 	/// Returns the index of the currently selected item within the underlying
 	/// storage vector.
 	pub fn item(&self) -> Option<usize> {
-		if self.items.is_empty() || self.focus > self.rows_to_items.len() {
+		if self.items.is_empty() || self.focus >= self.rows_to_items.len() {
 			None
 		} else {
 			Some(self.rows_to_items[self.focus])
