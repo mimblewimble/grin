@@ -1,139 +1,131 @@
-# The Coinbase Maturity Rule (aka Output Lock Heights)
+# Coinbase 期限规则（亦即"输出锁定高度"）
 
-*Read this in other languages: [Korean](coinbase_maturity_KR.md).*
+*阅读其它语言版本: [English](coinbase_maturity.md), [Korean](coinbase_maturity_KR.md).*
 
-Coinbase outputs (block rewards & fees) are "locked" and require 1,440 confirmations (i.e 24 hours worth of blocks added to the chain) before they mature sufficiently to be spendable. This is to reduce the risk of later txs being reversed if a chain reorganization occurs.
+coinbase 输出（区块奖励和手续费）为“锁定”，需要有 1440 个确认（也就是经过约 24 小时在链上加上区块）才能到期花费。这是为了防止之后如果出现链上回滚的情况下，降低撤销之后交易的风险。
 
-Bitcoin does something very similar, requiring 100 confirmations (Bitcoin blocks are every 10 minutes, Grin blocks are every 60 seconds) before mining rewards can be spent.
+比特币也有类似设计，挖矿奖励需要经过 100 个确认（比特币出块时间为十分钟，Grin 出块时间为 60 秒）方可花费。
 
-Grin enforces coinbase maturity in both the transaction pool and the block validation pipeline. A transaction containing an input spending a coinbase output cannot be added to the transaction pool until it has sufficiently matured (based on current chain height and the height of the block producing the coinbase output).
-Similarly a block is invalid if it contains an input spending a coinbase output before it has sufficiently matured, based on the height of the block containing the input and the height of the block that originally produced the coinbase output.
+Grin 在交易池和区块验证管道中强行使用 coinbase 期限。包含花费 coinbase 输出的输入交易只有在 coinbase 完全到期（根据目前链高度和生成 coinbase 输出区块的高度）后才可以添加到交易池。同理，如果区块中包含花费 coinbase 输出的输入交易，根据含有输入的区块高度和最初生成 coinbase 输出区块的高度，若 coinbase 未到期，则区块无效。
 
-The maturity rule *only* applies to coinbase outputs, regular transaction outputs have an effective lock height of zero.
+期限规则*仅*适用于 coinbase 输出。普通交易输出的有效锁定高度为零。
 
-An output consists of -
+输出包括 -
 
-* features (currently coinbase vs. non-coinbase)
+* 特征（目前为 coinbase 和 非 coinbase）
 * commitment `rG+vH`
-* rangeproof
+* 范围证明
 
-To spend a regular transaction output two conditions must be met. We need to show the output has not been previously spent and we need to prove ownership of the output.
+若要花费普通交易输出，需要满足两个条件。我们需要证明此输出之前并未花费，并证明输出所有权。
 
-A Grin transaction consists of the following -
+Grin 交易包含下列信息 -
 
-* A set of inputs, each referencing a previous output being spent.
-* A set of new outputs that include -
-  * A value `v` and a blinding factor (private key) `r` multiplied on a curve and summed to be `rG+vH`
-  * A range proof that shows that v is non-negative.
-* An explicit transaction fee in the clear.
-* A signature, computed by taking the excess blinding value (the sum of all outputs plus the fee, minus the inputs) and using it as the private key.
+* 一组输入。每个输入对应一个之前花费的输出。
+* 一组新的输出包括 -
+  * 值 `v` 和盲因子（密钥） `r` 以曲线相乘，并算出总和 `rG+vH`。
+  * 表明 `v` 并非为负数的范围证明。
+* 公开的明确交易费。
+* 一个签名。用额外盲因子值（全部输出加交易费减去输出）并将其用作私钥来计算。
 
-We can show the output is unspent by looking for the commitment in the current Output set. The Output set is authoritative; if the output exists in the Output set we know it has not yet been spent. If an output does not exist in the Output set we know it has either never existed, or that it previously existed and has been spent (we will not necessarily know which).
+我们可以寻找目前输出组中的 commitment 来证明输出未花费。输出组具有权威性；若某个输出存在于输出组中，我们便知晓其并未花费。若某输出在输出组中不存在，我们便知道这一输出要么不存在，要么就是之前存在但现在已被花费（我们不会知道是哪种情况）。
 
-To prove ownership we can verify the transaction signature. We can *only* have signed the transaction if the transaction sums to zero *and* we know both `v` and `r`.
+可通过验证交易签名来证明所有权。*只有*交易之和为零*且*知道 `v` 和 `r` 的情况下方可对交易签名。
 
-Knowing `v` and `r` we can uniquely identify the output (via its commitment) *and* we can prove ownership of the output by validating the signature on the original coinbase transaction.
+知道 `v` 和 `r` 便可（通过 commitment）特别确认输出。而且可以通过验证原始 coinbase 交易上的签名来证明输出所有权。
 
-Grin does not permit duplicate commitments to exist in the Output set at the same time.
-But once an output is spent it is removed from the Output set and a duplicate commitment can be added back into the Output set.
-This is not necessarily recommended but Grin must handle this situation in a way that does not break consensus across the network.
+Grin 不允许在输出组中重复的 commitment 同时存在。但只要输出被花费，就会从输出组中移除，且将复制的 commitment 重新添加到输出组。不推荐这一操作，但 Grin 必须在不违反网络共识的情况下解决这一问题。
 
-Several things complicate this situation -
+几个因素会让这一情况变复杂 -
 
-1. It is possible for two blocks to have identical rewards, particularly for the case of empty blocks, but also possible for non-empty blocks with transaction fees.
-1. It is possible for a non-coinbase output to have the same value as a coinbase output.
-1. It is possible (but not recommended) for a miner to reuse private keys.
+1. 两个区块可获得相同奖励，尤其是空块的情况下，但有转账费的非空块也有可能。
+1. 非 coinbase 输出可与 coinbase 有相同值。
+1. 矿工可重复使用私钥（但不建议）。
 
-Grin does not allow duplicate commitments to exist in the Output set simultaneously.
-But the Output set is specific to the state of a particular chain fork. It *is* possible for duplicate *identical* commitments to exist simultaneously on different concurrent forks.
-And these duplicate commitments may have different "lock heights" at which they mature and become spendable on the different forks.
+Grin 不允许在输出组中重复的 commitment 同时存在。但输出组特指特别的链分叉。有可能在不同并发分叉同时存在重复的*类似的* commitment。这些重复的 commitment 可能到期“锁定高度”不同，且在不同分叉中可花费。
 
-* Output O<sub>1</sub> from block B<sub>1</sub> spendable at height h<sub>1</sub> (on fork f<sub>1</sub>)
-* Output O<sub>1</sub>' from block B<sub>2</sub> spendable at height h<sub>2</sub> (on fork f<sub>2</sub>)
+* 区块 B<sub>1</sub> 上确认的输出 O<sub>1</sub>，在高度 h<sub>1</sub>（分叉 f<sub>1</sub> 上）可花费
+* 区块 B<sub>2</sub> 上确认的输出 O<sub>1</sub>'，在高度 h<sub>2</sub>（分叉 f<sub>2</sub> 上）可花费
 
-The complication here is that input I<sub>1</sub> will spend either O<sub>1</sub> or O<sub>1</sub>' depending on which fork the block containing I<sub>1</sub> exists on. And crucially I<sub>1</sub> may be valid at a particular block height on one fork but not the other.
+复杂之处是根据分叉链上区块含有输入 I<sub>1</sub>，I<sub>1</sub> 就可花费 O<sub>1</sub> 或 O<sub>1</sub>'。特别是 I<sub>1</sub> 有可能在一条分叉上而不是在另一个分叉上的特定区块高度有效。
 
-Said another way - a commitment may refer to multiple outputs, all of which may have different lock heights. And we *must* ensure we correctly identify which output is actually being spent and that the coinbase maturity rules are correctly enforced based on the current chain state.
+换言之，一个 commitment 有可能指向多个输出，所有输出可能有不同区块高度。我们*还得*必须确保正确识别确实花费了哪个输出，还有根据目前的链状态正确执行 coinbase 到期规则。
 
-A coinbase output, locked with the coinbase maturity rule at a specific lock height, *cannot* be uniquely identified, and *cannot* be safely spent by their commitment alone. To spend a coinbase output we need to know one additional piece of information -
+按 coinbase 到期规则在指定区块高度锁定的 coinbase 输出无法独自识别，无法以 commitment 单独安全花费 -
 
-* The block the coinbase output originated from
+* coinbase 输出的来源区块
 
-Given this, we can verify the height of the block and derive the "lock height" of the output (+ 1,000 blocks).
+鉴于此，我们可验证区块高度，并推理出输出的“锁定高度”（1000 以上区块）。
 
-## Full Archival Node
+## 全存档节点
 
-Given a full archival node it is a simple task to identify which block the output originated from.
-A full archival node stores the following -
+全存档节点就是个简单任务，用来识别输出来自哪个区块。全存档节点储存以下数据 -
 
-* full block data of all blocks in the chain
-* full output data for all outputs in these blocks
+* 链上所有区块的全区块数据
+* 区块所有输出数据
 
-We can simply look back though all the blocks on the chain and find the block containing the output we care about.
+我们可以轻易查看链上所有区块，找到含有自己关注的输出区块。
 
-The problem is when we need to account nodes that may not have full block data (pruned nodes, non-archival nodes).
-[what kind of nodes?]
+问题是我们需要用没有全区块数据的节点怎么办（修剪节点、非全存档节点）。[哪种节点？]
 
-How do we verify coinbase maturity if we do not have full block data?
+如果我们没有全区块数据怎么杨正 coinbase 期限？
 
-## Non-Archival Node
+## 非存档节点
 
-[terminology? what are these nodes called?]
+[术语？这些节点术语是什么？]
 
-A node may not have full block data.
-A pruned node may only store the following (refer to pruning doc) -
+节点不一定有全区块数据。修剪节点或许只储存以下数据（请参考修剪文档）-
 
-* Block headers chain.
-* All transaction kernels.
-* All unspent outputs.
-* The output MMR and the range proof MMR
+* 区块头部链。
+* 所有交易内核。
+* 所有未花费输出。
+* 输出 MMR 和范围证明 MMR
 
-Given this minimal set of data how do we know which block an output originated from?
+数据组经过极简处理，那么如何知道一个输出来自哪个区块？
 
-And given we now know multiple outputs (multiple forks, potentially different lock heights) can all have the *same* commitment, what additional information do we need to provide in the input to uniquely identify the output being spent?
+我们知道了多个输出（多个分叉、潜在不同锁定高度）可以有*相同* commitment，为具体识别花费的输出还需要在输出中提供哪些额外信息？
 
-And to take it a step further - can we do all this without relying on having access to full output data? Can we use just the output MMR?
+进一步讲 - 我们是否可以在不存取所有输出数据的情况下完成识别？是否可以只使用输出 MMR？
 
-### Proposed Approach
+### 推荐方法
 
-We maintain an index mapping commitment to position in the output MMR.
+维护一个索引映射 commitment 来定位输出 MMR。
 
-If no entry in the index exists or no entry in the output MMR exists for a given commitment then we now the output is not spendable (either it was spent previously or it never existed).
+如果对指定的 commitment 索引中没有项目，或在输出 MMR 中没有项目，即可知道输出不可花费（要么之前已花费或从未存在）。
 
-If we find an entry in the output MMR then we know a spendable output exists in the Output set *but* we do not know if this is the correct one. We do not know if it is a coinbase output or not and we do not know the height of the block it originated from.
+如果在输出 MMR 中找到一个项目，便知道在输出组中有可花费输出存在，但我们不知道是否正确。我们不知道其是否为 coinbase 输出，以及区块来源高度。
 
-If the hash stored in the output MMR covers both the commitment and the output features and we require an input to provide both the commitment and the feature then we can do a further validation step -
+如果输出 MMR 中保存的哈希值包括 commitment 和输出特征，而且我们需要输入提供 commitment 和特征，那便可进行下步验证 -
 
-* output exists in the output MMR (based on commitment), and
-* the hash in the MMR matches the output data included in the input
+* output exists in the output MMR (based on commitment), and输出 MMR 中存在输出（根据 commitment），和
+* the hash in the MMR matches the output data included in the input MMR中的哈希值与输入中的输出数据匹配
 
 With this additional step we know if the output was a coinbase output or a regular transaction output based on the provided features.
 The hash will not match unless the features in the input match the original output features.
+有了这一步就可以知道输出是否为 coinbase 输出，还是基于指定功能的普通交易输出。除非输入特征与原始输出特征匹配，否则哈希值会不匹配。
 
-For a regular non-coinbase output we are finished. We know the output is currently spendable and we do not need to check the lock height.
 
-For a coinbase output we can proceed to verify the lock height and maturity. For this we need to identify the block where the output originated.
-We cannot determine the block itself, but we can require the input to specify the block (hash) and we can then prove this is actually correct based on the merkle roots in the block header (without needing full block data).
+For a regular non-coinbase output we are finished. We know the output is currently spendable and we do not need to check the lock height.普通的非 coinbase 输出就到此为止。我们知道输出目前可花费，无需再查看锁定高度。
 
-[tbd - overview of merkle proofs and how we will use these to prove inclusion based on merkle root in the block header]
+对于 coinbase 输出，可以继续验证区块高度和期限。验证过程需要确认产生输出的区块。我们无法确定区块本身，但需要输入来指定区块（哈希值），之后可以根据区块头部的默克尔根证明区块完全准确。
 
-To summarize -
+[待确定 - 默克尔证明概览及如何根据区块头部默克尔根利用这些证明包容性]
 
-Output MMR stores output hashes based on `commitment|features` (the commitment itself is not sufficient).
+总结 -
 
-We do not need to include the range proof in the generation of the output hash.
+输出 MMR 根据 `commitment|特征`（只有 commitment 不够）储存输出哈希值。
 
-To spend an output we continue to need -
+不需要在生成输出哈希值中包含范围证明。
 
-* `r` and `v` to build the commitment and to prove ownership
+若要花费输出，我们需要 -
 
-An input must provide -
+* `r` 和 `v` 构建 commitment 和证明所有权
 
-* the commitment (to lookup the output in the MMR)
-* the output features (hash in output MMR dependent on features|commitment)
-* a merkle proof showing inclusion of the output in the originating block
-* the block hash of originating blocks
-  * [tbd - maintain index based on merkle proof?]
+输出必须提供 -
 
-From the commitment and the features we can determine if the correct output is currently unspent.
-From the block and the output features we can determine the lock height (if any).
+* commitment（查询 MMR 中的输出）
+* 输出特征（依赖 特征|commitment 的输出 MMR 哈希值）
+* 在原始区块中显示包含输出的默克尔证明
+* 原始区块的区块哈希
+  * [待确定 - 根据默克尔证明维护索引？]
+
+通过 commitment 和特征确定正确的输出目前是否未花费。通过区块和输出特征确定锁定高度（如有）。
