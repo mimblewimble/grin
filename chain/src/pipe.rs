@@ -54,16 +54,19 @@ fn check_known(header: &BlockHeader, ctx: &mut BlockContext<'_>) -> Result<(), E
 }
 
 // Validate only the proof of work in a block header.
-// Used to cheaply validate orphans in process_block before adding them to OrphanBlockPool.
+// Used to cheaply validate pow before checking if orphan or continuing block validation.
 fn validate_pow_only(header: &BlockHeader, ctx: &mut BlockContext<'_>) -> Result<(), Error> {
+	if ctx.opts.contains(Options::SKIP_POW) {
+		// Some of our tests require this check to be skipped (we should revisit this).
+		return Ok(());
+	}
 	if !header.pow.is_primary() && !header.pow.is_secondary() {
 		return Err(ErrorKind::LowEdgebits.into());
 	}
-	let edge_bits = header.pow.edge_bits();
 	if !(ctx.pow_verifier)(header).is_ok() {
 		error!(
 			"pipe: error validating header with cuckoo edge_bits {}",
-			edge_bits
+			header.pow.edge_bits(),
 		);
 		return Err(ErrorKind::InvalidPow.into());
 	}
@@ -86,20 +89,22 @@ pub fn process_block(b: &Block, ctx: &mut BlockContext<'_>) -> Result<Option<Tip
 	// Check if we have already processed this block previously.
 	check_known(&b.header, ctx)?;
 
-	let head = ctx.batch.head()?;
+	// Quick pow validation. No point proceeding if this is invalid.
+	// We want to do this before we add the block to the orphan pool so we
+	// want to do this now and not later during header validation.
+	validate_pow_only(&b.header, ctx)?;
 
-	let is_next = b.header.prev_hash == head.last_block_h;
+	let head = ctx.batch.head()?;
+	let prev = prev_header_store(&b.header, &mut ctx.batch)?;
 
 	// Block is an orphan if we do not know about the previous full block.
 	// Skip this check if we have just processed the previous block
 	// or the full txhashset state (fast sync) at the previous block height.
-	let prev = prev_header_store(&b.header, &mut ctx.batch)?;
-	if !is_next && !ctx.batch.block_exists(&prev.hash())? {
-		// Validate the proof of work of the orphan block to prevent adding
-		// invalid blocks to OrphanBlockPool.
-		validate_pow_only(&b.header, ctx)?;
-
-		return Err(ErrorKind::Orphan.into());
+	{
+		let is_next = b.header.prev_hash == head.last_block_h;
+		if !is_next && !ctx.batch.block_exists(&prev.hash())? {
+			return Err(ErrorKind::Orphan.into());
+		}
 	}
 
 	// Process the header for the block.
@@ -335,6 +340,10 @@ fn validate_header(header: &BlockHeader, ctx: &mut BlockContext<'_>) -> Result<(
 	// check the pow hash shows a difficulty at least as large
 	// as the target difficulty
 	if !ctx.opts.contains(Options::SKIP_POW) {
+		// Quick check of this header in isolation. No point proceeding if this fails.
+		// We can do this without needing to iterate over previous headers.
+		validate_pow_only(header, ctx)?;
+
 		if header.total_difficulty() <= prev.total_difficulty() {
 			return Err(ErrorKind::DifficultyTooLow.into());
 		}
