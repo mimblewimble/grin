@@ -1,292 +1,162 @@
-# Introduction to Switch Commitments
+# 密诺切换简介
 
-## General introduction
-
-In cryptography a _Commitment_ (or _commitment scheme_) refers to a concept which can be imagined
-like a box with a lock. You can put something into the box (for example a piece of a paper with a
-secret number written on it), lock it and give it to another person (or the public).
-
-The other person doesn't know yet what's the secret number in the box, but if you decide to publish
-your secret number later in time and want to prove that this really is the secret which you came
-up with in the first place (and not a different one) you can prove this simply by giving the
-key of the box to the other person.
-
-They can unlock the box, compare the secret within the box with the secret you just published
-and can be sure that you didn't change your secret since you locked it. You "**committed**"
-to the secret number beforehand, meaning you cannot change it between the time of
-commitment and the time of revealing.
+## 概述
 
 
-## Examples
+密码学中，_密诺_ （或_密诺方案_）这个概念可以想像成一个加锁的盒子。可以在盒子里放东西（例如一张写着密码的纸），把盒子锁起来，再交给另一个人（或公示）。
 
-### Hash Commitment
+另一个方不知道盒子里的密码，但是如果你决定之后按约定公开密码，并要证明这确实是最初你放在盒子里的密码（并未篡改），你仅把盒子钥匙交给另一个人即可证明。
 
-A simple commitment scheme can be realized with a cryptographic hash function. For example: Alice and Bob
-want to play _"Guess my number"_ and Alice comes up with with her really secret number `29` which
-Bob has to guess in the game, then before the game starts, Alice calculates:
+另一个人可以打开盒子，对比盒子里的密码和你刚刚公开的密码，就可以确定盒子上锁后密码没有变更。你提前"**承诺**"密码，意味着在密诺生成和公开之间，你不可以对其做任何修改。
+
+
+## 范例
+
+### 密诺哈希计算
+
+使用密码学哈希函数即可实现简单的密诺方案 (commitment scheme)。例如，Alice 和 Bob 想要玩“猜数游戏”。Alice 想出自己的密数 `29`，由 Bob 来猜。在游戏开始前，Alice 做如下计算：
 
     hash( 29 + r )
 
-and publishes the result to Bob. The `r` is a randomly chosen  _Blinding Factor_ which is
-needed because otherwise Bob could just try hashing all the possible numbers for the game and
-compare the hashes.
+并把结果告诉给 Bob。`r` 是随机选择的_“致盲因子 (Blinding Factor)”_。之所以需要致盲因子是因为如果没有，Bob 就可以尝试所有可能数字的哈希值，来对比原哈希值。
 
-When the game is finished, Alice simply needs to publish her secret number `29` and the
-blinding factor `r` and Bob can calculate the hash himself and easily verify that Alice
-did not change the secret number during the game.
+游戏结束时，Alice 仅需公开自己的密数 `29` 和盲因子 `r`。Bob 自己哈希计算结果，即可验证 Alice 在游戏过程中是否更改过密数。
 
 
 ### Pedersen Commitment
 
-Other, more advanced commitment schemes can have additional properties. For example MimbleWimble
-and Confidential Transactions (CT) make heavy use of
-_[Pedersen Commitments](https://link.springer.com/content/pdf/10.1007/3-540-46766-1_9.pdf)_,
-which are _homomorphic_ commitments. Homomorphic in this context means that (speaking in the
-"box" metaphor from above) you can take two of these locked boxes (_box1_ and _box2_) and
-somehow "_add_" them together, so that you
-get a single box as result (which still is locked), and if you open this single box later
-(like in the examples before) the secret it contains, is the sum of the secrets
-from _box1_ and _box2_.
+另外，高阶密诺方案还有其他特性。例如 Mimblewimble 和机密交易 (Confidential Transactions，CT) 大量使用_同态 (homomorphic)_ 密诺的 _[Pedersen Commitments](https://link.springer.com/content/pdf/10.1007/3-540-46766-1_9.pdf)_。这里的“同态”是指，引用上述“盒子”的比喻，可以使用两个加锁盒子（_盒子  1_ 和_盒子 2_），而且可以将其_“合并”_一起。这样你就得到一个大盒子（仍旧加锁），如果之后打开这个含有密数的大盒子（如上述范例），最终的结果就是_盒子  1_ 和_盒子 2_ 的密数总和。
 
-While this "box" metaphor no longer seems to be reasonable in the real-world this
-is perfectly possible using the properties of operations on elliptic curves.   
+这个“盒子”的比喻在现实世界中看似不合理，但对椭圆曲线原理无可挑剔。
 
-Look into [Introduction to MimbleWimble](intro.md) for further details on Pedersen Commitments
-and how they are used in Grin.
+如需了解关于 Pedersen Commitment 的详情，请参阅[《Mimblewimble 和 Grin 简介》](intro_ZH-CN.md) 
 
 
-## Properties of commitment schemes:
+## 密诺方案特性：
 
-In general for any commitment scheme we can identify two important properties
-which can be weaker or stronger, depending on the type of commitment scheme:
+一般而言，密诺有两大特性，强弱变化视密诺方案类型而变。
 
-- **Hidingness (or Confidentiality):** How good is the commitment scheme protecting the secret
-  commitment. Or speaking in terms of our example from above: what would an attacker need to
-  open the box (and learn the secret number) without having the key to unlock it?
- 
-- **Bindingness:** Is it possible at all (or how hard would it be) for an attacker to somehow
-  find a different secret, which would produce the same commitment, so that the attacker could
-  later open the commitment to a different secret, thus breaking the _binding_ of the
-  commitment.
- 
-### Security of these properties:
+- **隐匿性（或机密性）：**密诺方案保护密诺的强度。或依上述范例：攻击者没有钥匙怎么能打开盒子（知道密数）？
+  
+- **绑定性：**攻击者是否可以找到匹配同一密诺的不同密数，攻击者之后通过密诺打开的就是不同密诺。这样密诺的_致盲性_就被破解。
 
-For these two properties different security levels can be identified.
+### 两种特性的安全性：
 
-The two most important combinations of these are
+对于这两种特性，可以确认不同安全级别。
 
-- **perfectly binding** and **computationally hiding** commitment schemes and
-- **computationally binding** and **perfectly hiding** commitment schemes
+两种特性最重要的混合使用方式为
 
-"_Computationally_" binding or hiding means that the property (bindingness/hidingness)
-is secured by the fact that the underlying mathematical problem is too hard to be solved
-with existing computing power in reasonable time (i.e. not breakable today as computational
-resources are bound in the real world).
+- **完美绑定**和**计算隐匿**密诺方案，和
+- **计算绑定**和**完美隐匿**
 
-"_Perfectly_" binding or hiding means that even with infinite computing power
-it would be impossible to break the property (bindingness/hidingness).
+“_计算_”绑定或隐匿的基础数学难度很高，以现有计算能力在合理时间内难以破解（即以世界上的现有计算资源今天不可破解），因此意味着这种特性（绑定性／隐匿性）安全。
+
+“_完美_”绑定或隐匿意味着即使有无限计算资源，也不可能破解这一特性（绑定性／隐匿性）
 
 
 
-### Mutual exclusivity:
+### 互不相容：
 
-It is important to realize that it's **impossible** that any commitment scheme can be
-_perfectly binding_ **and** _perfectly hiding_ at the same time. This can be easily shown
-with a thought experiment: Imagine an attacker having infinite computing power, he could
-simply generate a commitment for all possible values (and blinding factors) until finding a
-pair that outputs the same commitment. If we further assume the commitment scheme is
-_perfectly binding_ (meaning there cannot be two different values leading to the same
-commitment) this uniquely would identify the value within the commitment, thus
-breaking the hidingness.
+需要意识到重要的一点，密诺方案**不可能**同时兼备_完美绑定_**和**_完美隐匿_。一个思想实验就可以明白：假设攻击者有无限算力，他可以对任意数值生成密诺（和致盲因子），直到碰撞找到匹配原始密诺的输出数值。进一步假设密诺方案为_完美绑定_（意味着不可能两个不同的数值生成相同密诺），匹配密诺的数值独一无二，那这样就会破坏隐匿性。
 
-The same is true the other way around. If a commitment scheme is _perfectly hiding_
-there must exist several input values resulting in the same commitment (otherwise an
-attacker with infinite computing power could just try all possible values as
-described above). This concludes that the commitment scheme cannot be _perfectly
-binding_.
+反之亦然。如果一个密诺方案为_完美隐匿_，那必然会有多个输入值生成相同密诺（否则有无限算力的攻击者只需如上所示计算任意数值）。结果就是，这一密诺方案不可能是_完美绑定_。
 
-#### Always a compromise
+#### 有所取舍
 
-The key take-away point is this: it's **always a compromise**, you can never have both
-properties (_hidingness_ and _bindingness_) with _perfect_ security. If one is _perfectly_
-secure then the other can be at most _computationally_ secure
-(and the other way around).
+此处的要点就是：**总要有所取舍**，无法兼备两种特性（_隐匿性_和_绑定性_）的_完美_安全性。如果一种是_完美_安全，那另一种至多就是_计算_安全（反之亦然）。
 
 
-### Considerations for cryptocurrencies
+### 加密货币中的应用考虑
 
-Which roles do these properties play in the design of cryptocurrencies?
+在设计加密货币时，这些特性扮演了哪些作用？
 
-**Hidingness**:
-In privacy oriented cryptocurrencies like Grin, commitment schemes are used to secure
-the contents of transactions. The sender commits to an amount of coins he sends, but for
-the general public the concrete amount should remain private (protected by the _hidingness_ property of the commitment scheme).
+**隐匿性**：
+对于 Grin 这类注重隐私的加密货币，密诺方案用以保护交易数据。发送者执行发送一定数量的币，但对于他人具体金额保密（密诺方案中的_隐匿性_特性）。
 
-**Bindingness**:
-At the same time no transaction creator should ever be able to change his commitment
-to a different transaction amount later in time. If this would be possible, an attacker
-could spend more coins than previously committed to in an UTXO (unspent transaction
-output) and therefore inflate coins out of thin air. Even worse, as the amounts are
-hidden, this could go undetected.
+**绑定性**
+同时，交易发起者之后也无法更改密诺为不同的交易金额。如果更改密诺成功，攻击者就可以花费比之前在一个 UTXO 生成的币多的金额，这样就凭空造出“假币”。更糟的是，由于金额隐藏，这种情况有可能无法被发现。
 
-So there is a valid interest in having both of these properties always secured and
-never be violated.
+所以保持两种特性安全可靠是根本所在。
 
-Even with the intent being that both of these properties will hold for the lifetime
-of a cryptocurrency, still a choice has to be made about which commitment scheme to use.
+只要一个加密货币始终维持这两种特性，就得选择使用哪种密诺方案。
 
 
-#### A hard choice?
+#### 难以选择？
 
-Which one of these two properties needs to be _perfectly_ safe
-and for which one it would be sufficient to be _computationally_ safe?
-Or in other words: in case of a disaster, if the commitment scheme unexpectedly
-gets broken, which one of the two properties should be valued higher?
-Economical soundness (no hidden inflation possible) or ensured privacy (privacy will
-be preserved)?
+哪种特性需要_完美_安全，哪种足以_计算性_安全？换句话说：如果密诺方案被意外攻破，应该提高哪种特性安全级别？是经济稳定性（无通胀可能）还是保证隐私性（隐私不被侵犯）？
 
-This seems like a hard to choice to make.
+这似乎是个难题。
 
+深入了解，我们意识到密诺方案被攻破时需要_完美_绑定。那时候即使只有_计算_绑定也会安全。
 
-If we look closer into this we realize that the commitment scheme only needs to be
-_perfectly_ binding at the point in time when the scheme actually gets broken. Until
-then it will be safe even if it's only _computationally_ binding.
+同时隐私加密货币需要**永远**保证_隐匿性_。_绑定_特性只有在创建交易且不会影响过去交易的情况下才重要。不同的是，需要始终保持_隐匿性_。否则遇到意外密诺方案被攻破的情况下，攻击者会链上回滚，解绑历史交易，进而破坏隐私性。
 
-At the same time a privacy-oriented cryptocurrency needs to ensure the _hidingness_
-property **forever**. Unlike the _binding_ property, which only is important at the
-time when a transaction is created and will not affect past transactions, the _hidingness_
-property must be ensured at all times. Otherwise, in the unfortunate case should the
-commitment scheme be broken, an attacker could go back in the chain and unblind
-past transactions, thus break the privacy property retroactively.
+## Pedersen Commitments 特性
+
+Pedersen Commitments 是**计算绑定**和**完美隐匿**。预设密诺值为 `v`: `v*H + r*G`，会存在一组不同的值 `r1` 和 `v1` 其和与预设密诺值相同。即使有无限算力可以尝试所有可能的值，攻击者也无法分辨哪一个是原始密诺（因而是_完美隐匿_）。
 
 
-## Properties of Pedersen Commitments
+## 密诺切换简介
 
-Pedersen Commitments are **computationally binding** and **perfectly hiding** as for a given
-commitment to the value `v`: `v*H + r*G` there may exist a pair of different values `r1`
-and `v1` such that the sum will be the same. Even if you have infinite computing power
-and could try all possible values, you would not be able to tell which one is the original one
-(thus _perfectly hiding_).
+如果 Pedersen Commitment 的绑定性被意外破解那会发生什么？
 
+一般而言，加密货币的密诺方案被破解，就会更改加密方案。但问题是更改加密方案就需要使用新的方案创建新的交易输出，来保证资金安全。这就需要每位持币者将币转到新的交易输出。如果没有转币到新交易输出，那就不会受到新密诺方案的保护。而且一定要在就方案被大规模攻破**之前**转币，否则现有 UTXO 不会记录正确的交易值。
 
-## Introducing Switch Commitments
-
-So what can be done if the bindingness of the Pedersen Commitment unexpectedly gets broken?
-
-In general a cryptocurrency confronted with a broken commitment scheme could choose to
-change the scheme in use, but the problem with this approach would be that it requires to
-create new transaction outputs using the new scheme to make funds secure again. This would
-require every coin holder to move his coins into new transaction outputs.
-If coins are not moved into new outputs, they will not profit from the
-security of the new commitment scheme. Also, this has to happen **before** the scheme gets
-actually broken in the wild, otherwise the existing UTXOs no longer can be assumed
-to contain correct values.
-
-In this situation [_Switch Commitments_](https://eprint.iacr.org/2017/237.pdf) offer a neat 
-solution. These type of commitments allow changing the properties of the commitments just
-by changing the revealing / validating procedure without changing the way commitments
-are created. (You "_switch_" to a new validation scheme which is backwards
-compatible with commitments created long before the actual "_switch_").
+遇到这种情况，[_Switch Commitments_](https://eprint.iacr.org/2017/237.pdf) 给出了简洁的解决方案。这种密诺仅靠更改公开／验证程序来变更密诺特性，而无须变更密诺创建方式。（“_切换_”到新验证方案，可与在“_切换_”倩生成的密诺兼容。）
 
 
-### How does this work in detail
+### How does this work in detail工作方案
 
-First let's introduce a new commitment scheme: The **ElGamal commitment** scheme is a commitment
-scheme similiar to Pedersen Commitments and it's _perfectly binding_ (but only _computationally
-hiding_ as we can never have both).
-It looks very similar to a Pedersen Commitment, with the addition of a new
-element, calculated by multiplying the blinding factor `r` with another generator point `J`:
+首先来介绍新的密诺方案：**ElGamal commitment** 方案。其为_完美绑定_（由于不能二者兼具所以是_计算隐匿_）。其特征与 Pedersen Commitments 极其类似，只是添加了新元素，致盲因子 `r` 与 `J` 相乘计算得出：
 
     v*H + r*G ,  r*J
 
-So if we store the additional field `r*J` and ignore it for now, we can treat it like
-Pedersen Commitments, until we decide to also validate the full ElGamal
-commitment at some time in future. This is exactly what was implemented in an
-[earlier version of Grin](https://github.com/mimblewimble/grin/blob/5a47a1710112153fb38e4406251c9874c366f1c0/core/src/core/transaction.rs#L812),
-before mainnet was launched. In detail: the hashed value of `r*J`
-(_switch\_commit\_hash_) was added to the transaction output, but this came with
-the burden of increasing the size of each output by 32 bytes.
+如果我们储存额外的域 `r*J`，并且暂时忽略，我们可以将其视作 Pedersen Commitments 对待，未来随时可以激活完整 ElGamal commitment。主网上线前，[Grin 早期版本](https://github.com/mimblewimble/grin/blob/5a47a1710112153fb38e4406251c9874c366f1c0/core/src/core/transaction.rs#L812)就是这样部署。详情为：哈希值 `r*J`
+(_switch\_commit\_hash_) 添加到交易输出，但造成每个输出大小增加 32 字节。
 
-Fortunately, later on the Mimblewimble mailinglist Tim Ruffing came up with a really
-[beautiful idea](https://lists.launchpad.net/mimblewimble/msg00479.html)
-(initially suggested by Pieter Wuille), which offers the same advantages but doesn't
-need this extra storage of an additional element per transaction output:
+幸运的是，之后 Mimblewimble 邮件列表成员 Tim Ruffing 提出一个[绝妙的解决方案](https://lists.launchpad.net/mimblewimble/msg00479.html)（最初是 Pieter Wuille 所建议）。这一方案保持了相同优势，但不会对交易输出造成额外体积负担。
 
-The idea is the following:
+方案内容如下：
 
-A normal Pedersen commitment looks like this:
+普通的 Pedersen Commitment 是这样：
 
     v*H + r*G
 
-(`v` is value of the input/output, `r` is a truly random blinding factor, and `H` and `G` are
-two generator points on the elliptic curve).
+（`v` 是输入／输出值，`r` 是随机致盲因子，`H` 和 `G` 是椭圆曲线上的两个生成点）。
 
-If we adapt this by having `r` not being random itself, but using another random number `r'`
-and create the Pedersen Commitment:
+如果加以更改，让 `r` 变为非随机数，但使用另一个随机数 `r`，来创建 Pedersen Commitment：
 
     v*H + r*G
 
-such that:
+例如：
 
     r = r' + hash( v*H + r'*G  ,  r'*J )
-   
-(using the additional third generation point `J` on the curve) then `r` still is perfectly
-valid as a blinding factor, as it's still randomly distributed, but now we see
-that the part within the brackets of the hash function (`v*H + r'*G  ,  r'*J`) is an
-**ElGamal commitment**.
 
-This neat idea lead to the removal of the switch commitment hash from the outputs in this
-(and following) [pull requests](https://github.com/mimblewimble/grin/issues/998) as now it
-could be easily included into the Pedersen Commitments.
+（使用椭圆曲线上的另外第三生成点 `J`），然后 `r` 因为仍旧随机分布，所以作为致盲因子仍完美有效，但我们现在看到的括号内哈希函数 (`v*H + r'*G  ,  r'*J`) 是 **ElGamal commitment**。
 
+这一绝妙的方案就从输出中移除了密诺切换哈希（详情请参阅 [pull requests](https://github.com/mimblewimble/grin/issues/998)），这样就可以轻松纳入 Pedersen Commitment。
 
-This is how it is currently implemented in Grin. Pedersen commitments are
-used for the Confidential Transaction but instead of choosing the blinding factor `r`
-only by random, it is calculated by adding the hash of an ElGamal commitment to a random `r'`
-(see here in [main_impl.h#L267](https://github.com/mimblewimble/secp256k1-zkp/blob/73617d0fcc4f51896cce4f9a1a6977a6958297f8/src/modules/commitment/main_impl.h#L267)).
+这就是 Grin 目前的密诺部署方案。Pedersen Commitment 用作机密交易 (Confidential Transaction)，但没有单纯随机选择致盲因子 `r`，而是在一个随机数 `r` 添加 ElGamal commitment 函数来计算（详情请参阅 [main_impl.h#L267](https://github.com/mimblewimble/secp256k1-zkp/blob/73617d0fcc4f51896cce4f9a1a6977a6958297f8/src/modules/commitment/main_impl.h#L267)）。
 
-
-In general switch commitments were first described in the paper
-["Switch Commitments: A Safety Switch for Confidential Transactions"](https://eprint.iacr.org/2017/237.pdf)).
-The **"switch"** in the name comes from the fact that you can virtually flip a "switch" in
-the future and simply by changing the validation procedure you can change the strength of
-the bindingness and hidingness property of your commitments and this even works in a
-backwards compatible way with commitments created today.
+总之，密诺切换是在论文[《密诺切换：安全切换机密交易》](https://eprint.iacr.org/2017/237.pdf)中首次提出。“切换”一词来源于未来可以随意“扳动开关”这一想法。仅仅变更验证程序就可以更改密诺绑定性和隐匿性特性强弱，未来的更改甚至可与创建的历史密诺兼容。
 
 
 
-## Conclusion
+## 结语
 
-Grin uses Pedersen Commitments - like other privacy cryptocurrencies do as well - with
-the only difference that the random blinding factor `r` is created using the ElGamal
-commitment scheme.
+Grin 和其他加密货币一样，都使用 Pedersen Commitments。唯一的区别就是随机致盲因子 `r` 是利用 ElGamal
+commitment 方案生成。
 
-This might not seem like a big change on a first look, but it provides an
-important safety measure:
+这种方案看上去没有差别，但有重要的安全措施：
 
-Pedersen Commitments are already _perfectly hiding_ so whatever happens, privacy will
-never be at risk without requiring any action from users. But in case of a disaster if the
-bindingness of the commitment scheme gets broken, then switch commitments can be enabled 
-(via a soft fork) requiring that all new transactions prove that their commitment is not
-breaking the bindingness by validating the full ElGamal commitment. 
+Pedersen Commitments 已经是_完美绑定_。所以无论发生什么，无需用户任何操作就可保证无隐私泄露风险。若遇到意外，密诺方案的绑定性被破解，需要所有新交易通过验证所有 ElGamal 密诺，证明他们的密诺没有破解绑定性，就可以启用密诺切换（通过软分叉）。
 
-But in this case users would still have a choice:
+但这种情况下用户仍有选择：
 
-- they can decide to continue to create new transactions, even if this might compromise
-  their privacy (only on their **last** UTXOs) as the ElGamal commitment scheme is 
-  only computationally hiding, but at least they would still have access to their coins
-
-- or users can decide to just leave the money alone, walk away and make no more transactions
-  (but preserve their privacy, as their old transactions only validated the Pedersen commitment
-  which is perfectly hiding)
+- 用户可决定继续创建新交易。即使因为 ElGamal 密诺方案仅为计算隐匿，有可能破坏隐私性（只对**上一个** UTXO），但用户至少仍旧可以存取自己的币。
   
-There are many cases where a privacy leak is much more dangerous to one's life than
-some cryptocurrency might be worth. But this is a decision that should be left up to
-the individual user and switch commitments enable this type of choice.
+- 或者用户可决定不用管钱，不做任何交易（但是保留隐私性，因为他们的交易仅验证有完美隐匿性的 Pedersen 密诺）
 
-It should be made clear that this is a safety measure meant to be enabled in case of a
-disaster. If advances in computing would put the hardness of the discrete log problem
-in question, a lot of other cryptographic systems, including other cryptocurrencies,
-will be in urgent need of updating their primitives to a future-proof system. The switch
-commitments just provide an additional layer of security if the bindingness of Pedersen
-commitments ever breaks unexpectedly.
+有些情况下，隐私泄露对某个人的生命安全威胁要高过一定加密货币的损失。但决策权应该留给个人用户，密诺切换就实现了这种选择。
+
+需要明确的是，这一安全措施只有在遇到意外灾难的情况下才会启用。若计算有所进步，离散对数难题受到质疑，那包括加密货币在内的众多其他加密系统都需要紧急更新原语，经受未来潜在威胁。密诺切换只是在 Pedersen Commitments 被意外破解情况下，提供额外的安全保护方案。
