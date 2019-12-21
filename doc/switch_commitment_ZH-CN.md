@@ -1,5 +1,7 @@
 # 密诺切换简介
 
+*阅读其它语言版本: [English](switch_commitment.md)*
+
 ## 概述
 
 
