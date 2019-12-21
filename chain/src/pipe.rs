@@ -432,10 +432,9 @@ fn apply_block_to_txhashset(
 	ext: &mut txhashset::ExtensionPair<'_>,
 	batch: &store::Batch<'_>,
 ) -> Result<(), Error> {
-	let ref mut extension = ext.extension;
-	extension.apply_block(block, batch)?;
-	extension.validate_roots(batch)?;
-	extension.validate_sizes(batch)?;
+	ext.extension.apply_block(block, batch)?;
+	ext.extension.validate_roots(&block.header)?;
+	ext.extension.validate_sizes(&block.header)?;
 	Ok(())
 }
 

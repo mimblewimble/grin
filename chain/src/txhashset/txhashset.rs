@@ -1161,24 +1161,22 @@ impl<'a> Extension<'a> {
 	}
 
 	/// Validate the MMR (output, rangeproof, kernel) roots against the latest header.
-	pub fn validate_roots(&self, batch: &Batch<'_>) -> Result<(), Error> {
-		if self.head.height == 0 {
+	pub fn validate_roots(&self, header: &BlockHeader) -> Result<(), Error> {
+		if header.height == 0 {
 			return Ok(());
 		}
-		let head_header = batch.get_block_header(&self.head.hash())?;
-		self.roots()?.validate(&head_header)
+		self.roots()?.validate(header)
 	}
 
 	/// Validate the header, output and kernel MMR sizes against the block header.
-	pub fn validate_sizes(&self, batch: &Batch<'_>) -> Result<(), Error> {
-		if self.head.height == 0 {
+	pub fn validate_sizes(&self, header: &BlockHeader) -> Result<(), Error> {
+		if header.height == 0 {
 			return Ok(());
 		}
-		let head_header = batch.get_block_header(&self.head.last_block_h)?;
 		if (
-			head_header.output_mmr_size,
-			head_header.output_mmr_size,
-			head_header.kernel_mmr_size,
+			header.output_mmr_size,
+			header.output_mmr_size,
+			header.kernel_mmr_size,
 		) != self.sizes()
 		{
 			Err(ErrorKind::InvalidMMRSize.into())
@@ -1219,14 +1217,13 @@ impl<'a> Extension<'a> {
 	pub fn validate_kernel_sums(
 		&self,
 		genesis: &BlockHeader,
-		batch: &Batch<'_>,
+		header: &BlockHeader,
 	) -> Result<(Commitment, Commitment), Error> {
 		let now = Instant::now();
 
-		let head_header = batch.get_block_header(&self.head.last_block_h)?;
 		let (utxo_sum, kernel_sum) = self.verify_kernel_sums(
-			head_header.total_overage(genesis.kernel_mmr_size > 0),
-			head_header.total_kernel_offset(),
+			header.total_overage(genesis.kernel_mmr_size > 0),
+			header.total_kernel_offset(),
 		)?;
 
 		debug!(
@@ -1244,11 +1241,11 @@ impl<'a> Extension<'a> {
 		genesis: &BlockHeader,
 		fast_validation: bool,
 		status: &dyn TxHashsetWriteStatus,
-		batch: &Batch<'_>,
+		header: &BlockHeader,
 	) -> Result<(Commitment, Commitment), Error> {
 		self.validate_mmrs()?;
-		self.validate_roots(batch)?;
-		self.validate_sizes(batch)?;
+		self.validate_roots(header)?;
+		self.validate_sizes(header)?;
 
 		if self.head.height == 0 {
 			let zero_commit = secp_static::commit_to_zero_value();
@@ -1257,7 +1254,7 @@ impl<'a> Extension<'a> {
 
 		// The real magicking happens here. Sum of kernel excesses should equal
 		// sum of unspent outputs minus total supply.
-		let (output_sum, kernel_sum) = self.validate_kernel_sums(genesis, batch)?;
+		let (output_sum, kernel_sum) = self.validate_kernel_sums(genesis, header)?;
 
 		// These are expensive verification step (skipped for "fast validation").
 		if !fast_validation {

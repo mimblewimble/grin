@@ -570,7 +570,7 @@ impl Chain {
 		txhashset::extending_readonly(&mut header_pmmr, &mut txhashset, |ext, batch| {
 			pipe::rewind_and_apply_fork(&header, ext, batch)?;
 			ext.extension
-				.validate(&self.genesis, fast_validation, &NoStatus, batch)?;
+				.validate(&self.genesis, fast_validation, &NoStatus, &header)?;
 			Ok(())
 		})
 	}
@@ -949,7 +949,7 @@ impl Chain {
 				// Validate the extension, generating the utxo_sum and kernel_sum.
 				// Full validation, including rangeproofs and kernel signature verification.
 				let (utxo_sum, kernel_sum) =
-					extension.validate(&self.genesis, false, status, batch)?;
+					extension.validate(&self.genesis, false, status, &header)?;
 
 				// Save the block_sums (utxo_sum, kernel_sum) to the db for use later.
 				batch.save_block_sums(
@@ -1508,7 +1508,7 @@ fn setup_head(
 
 					let ref mut extension = ext.extension;
 
-					extension.validate_roots(batch)?;
+					extension.validate_roots(&header)?;
 
 					// now check we have the "block sums" for the block in question
 					// if we have no sums (migrating an existing node) we need to go
@@ -1523,7 +1523,7 @@ fn setup_head(
 						// Do a full (and slow) validation of the txhashset extension
 						// to calculate the utxo_sum and kernel_sum at this block height.
 						let (utxo_sum, kernel_sum) =
-							extension.validate_kernel_sums(&genesis.header, batch)?;
+							extension.validate_kernel_sums(&genesis.header, &header)?;
 
 						// Save the block_sums to the db for use later.
 						batch.save_block_sums(
@@ -1576,11 +1576,7 @@ fn setup_head(
 				};
 			}
 			txhashset::extending(header_pmmr, txhashset, &mut batch, |ext, batch| {
-				let ref mut extension = ext.extension;
-				extension.apply_block(&genesis, batch)?;
-				extension.validate_roots(batch)?;
-				extension.validate_sizes(batch)?;
-				Ok(())
+				ext.extension.apply_block(&genesis, batch)
 			})?;
 
 			// Save the block_sums to the db for use later.
