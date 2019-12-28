@@ -26,7 +26,7 @@ use crate::core::{
 use crate::global;
 use crate::pow::{verify_size, Difficulty, Proof, ProofOfWork};
 use crate::ser::{self, FixedLength, PMMRable, Readable, Reader, Writeable, Writer};
-use crate::ser::{deserialize, ser_vec, ProtocolVersion};
+use crate::ser::{deserialize_default, serialize_default, ProtocolVersion};
 use chrono::naive::{MAX_DATE, MIN_DATE};
 use chrono::prelude::{DateTime, NaiveDateTime, Utc};
 use chrono::Duration;
@@ -364,18 +364,14 @@ impl BlockHeader {
 		nonce: u64,
 		proof: Proof,
 	) -> Result<Self, Error> {
-		// Generate nonce and proof bytes
-		let mut nonce_bytes = ser_vec(&nonce, ProtocolVersion::local())?;
-		let mut proof_bytes = ser_vec(&proof, ProtocolVersion::local())?;
-
-		// let mut header_bytes = pre_pow.clone();
+		// Convert hex pre pow string
 		let mut header_bytes = from_hex(pre_pow)?;
-		header_bytes.append(&mut nonce_bytes);
-		header_bytes.append(&mut proof_bytes);
-		Ok(deserialize(
-			&mut &header_bytes[..],
-			ProtocolVersion::local(),
-		)?)
+		// Serialize and append serialized nonce and proof
+		serialize_default(&mut header_bytes, &nonce);
+		serialize_default(&mut header_bytes, &proof);
+
+		// Deserialize header from constructed bytes
+		Ok(deserialize_default(&mut &header_bytes[..])?)
 	}
 
 	/// Total difficulty accumulated by the proof of work on this header
