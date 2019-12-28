@@ -26,6 +26,7 @@ use crate::core::{
 use crate::global;
 use crate::pow::{verify_size, Difficulty, Proof, ProofOfWork};
 use crate::ser::{self, FixedLength, PMMRable, Readable, Reader, Writeable, Writer};
+use crate::ser::{deserialize, ser_vec, ProtocolVersion};
 use chrono::naive::{MAX_DATE, MIN_DATE};
 use chrono::prelude::{DateTime, NaiveDateTime, Utc};
 use chrono::Duration;
@@ -34,6 +35,7 @@ use std::collections::HashSet;
 use std::fmt;
 use std::iter::FromIterator;
 use std::sync::Arc;
+use util::from_hex;
 use util::RwLock;
 use util::{secp, static_secp_instance};
 
@@ -106,6 +108,12 @@ impl From<secp::Error> for Error {
 impl From<keychain::Error> for Error {
 	fn from(e: keychain::Error) -> Error {
 		Error::Keychain(e)
+	}
+}
+
+impl From<std::num::ParseIntError> for Error {
+	fn from(e: std::num::ParseIntError) -> Error {
+		Error::Serialization(ser::Error::HexError(e.to_string()))
 	}
 }
 
@@ -348,6 +356,26 @@ impl BlockHeader {
 			writer.write_u64(self.pow.nonce).unwrap();
 		}
 		header_buf
+	}
+
+	/// Constructs a header given pre_pow string, nonce, and proof
+	pub fn from_pre_pow_and_proof(
+		pre_pow: String,
+		nonce: u64,
+		proof: Proof,
+	) -> Result<Self, Error> {
+		// Generate nonce and proof bytes
+		let mut nonce_bytes = ser_vec(&nonce, ProtocolVersion::local())?;
+		let mut proof_bytes = ser_vec(&proof, ProtocolVersion::local())?;
+
+		// let mut header_bytes = pre_pow.clone();
+		let mut header_bytes = from_hex(pre_pow)?;
+		header_bytes.append(&mut nonce_bytes);
+		header_bytes.append(&mut proof_bytes);
+		Ok(deserialize(
+			&mut &header_bytes[..],
+			ProtocolVersion::local(),
+		)?)
 	}
 
 	/// Total difficulty accumulated by the proof of work on this header
