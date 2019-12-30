@@ -91,7 +91,7 @@ Alice 想要给 Bob 支付 Grin. Alice 开始交易构建流程：
 这次，Alice 发起交易需要获得  Bob 和自己同意才能花费。Alice 正常发起交易，并以下列方式添加多方输出：
 
 1. Bob 选出盲因子 `rb` 并发送 `rb*G` 给 Alice。
-1. Alice 选出盲因子 `ra` 并建立密诺 (commitment) `C = ra*G + rb*G + v*H`，并将密诺发送给 Bob。
+1. Alice 选出盲因子 `ra` 并建立秘诺 (commitment) `C = ra*G + rb*G + v*H`，并将秘诺发送给 Bob。
 1. Bob 用 `C` 和 `rb` 建立 `v` 的范围证明 (range proof)，并发送给 Alice。
 1. Alice 生成自己的范围证明，并将其与 Bob 的聚合，确认多方输出 `Oab`。
 1. 之后与的操作“无需信任交易”一样。
