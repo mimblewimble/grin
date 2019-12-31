@@ -367,8 +367,8 @@ impl BlockHeader {
 		// Convert hex pre pow string
 		let mut header_bytes = from_hex(pre_pow)?;
 		// Serialize and append serialized nonce and proof
-		serialize_default(&mut header_bytes, &nonce);
-		serialize_default(&mut header_bytes, &proof);
+		serialize_default(&mut header_bytes, &nonce)?;
+		serialize_default(&mut header_bytes, &proof)?;
 
 		// Deserialize header from constructed bytes
 		Ok(deserialize_default(&mut &header_bytes[..])?)

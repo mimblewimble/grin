@@ -26,6 +26,7 @@ use crate::core::core::{
 };
 use crate::core::libtx::build::{self, input, output};
 use crate::core::libtx::ProofBuilder;
+use crate::core::pow::Proof;
 use crate::core::{global, ser};
 use chrono::Duration;
 use grin_core as core;
@@ -593,4 +594,12 @@ fn validate_header_proof() {
 	)
 	.unwrap();
 	assert_eq!(reconstructed, b.header);
+
+	// assert invalid pre_pow returns error
+	assert!(BlockHeader::from_pre_pow_and_proof(
+		"0xaf1678".to_string(),
+		b.header.pow.nonce,
+		b.header.pow.proof.clone(),
+	)
+	.is_err());
 }
