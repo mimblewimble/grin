@@ -110,7 +110,7 @@ impl<T: PMMRable> Backend<T> for PMMRBackend<T> {
 	/// Get the hash at pos.
 	/// Return None if pos is a leaf and it has been removed (or pruned or
 	/// compacted).
-	fn get_hash(&self, pos: u64) -> Option<(Hash)> {
+	fn get_hash(&self, pos: u64) -> Option<Hash> {
 		if self.prunable && pmmr::is_leaf(pos) && !self.leaf_set.includes(pos) {
 			return None;
 		}
@@ -119,7 +119,7 @@ impl<T: PMMRable> Backend<T> for PMMRBackend<T> {
 
 	/// Get the data at pos.
 	/// Return None if it has been removed or if pos is not a leaf node.
-	fn get_data(&self, pos: u64) -> Option<(T::E)> {
+	fn get_data(&self, pos: u64) -> Option<T::E> {
 		if !pmmr::is_leaf(pos) {
 			return None;
 		}
