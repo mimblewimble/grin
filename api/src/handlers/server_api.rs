@@ -43,7 +43,7 @@ pub struct KernelDownloadHandler {
 
 impl Handler for KernelDownloadHandler {
 	fn post(&self, _req: Request<Body>) -> ResponseFuture {
-		if let Some(peer) = w_fut!(&self.peers).most_work_peer() {
+		if let Some(peer) = w_fut!(&self.peers).closest_most_work_peer() {
 			match peer.send_kernel_data_request() {
 				Ok(_) => response(StatusCode::OK, "{}"),
 				Err(e) => response(

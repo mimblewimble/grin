@@ -246,6 +246,7 @@ impl Peer {
 			total_difficulty,
 			height,
 		};
+		self.info.update_pinged();
 		self.send(ping_msg, msg::Type::Ping)
 	}
 
@@ -609,8 +610,8 @@ impl NetAdapter for TrackingAdapter {
 		self.adapter.peer_addrs_received(addrs)
 	}
 
-	fn peer_difficulty(&self, addr: PeerAddr, diff: Difficulty, height: u64) {
-		self.adapter.peer_difficulty(addr, diff, height)
+	fn peer_difficulty(&self, addr: PeerAddr, diff: Difficulty, height: u64, is_pong: bool) {
+		self.adapter.peer_difficulty(addr, diff, height, is_pong)
 	}
 
 	fn is_banned(&self, addr: PeerAddr) -> bool {

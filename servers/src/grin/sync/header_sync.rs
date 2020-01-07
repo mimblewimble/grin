@@ -19,7 +19,8 @@ use std::sync::Arc;
 use crate::chain::{self, SyncState, SyncStatus};
 use crate::common::types::Error;
 use crate::core::core::hash::{Hash, Hashed};
-use crate::p2p::{self, types::ReasonForBan, Peer};
+use crate::p2p::{self, types::ReasonForBan};
+use grin_p2p::Peer;
 
 pub struct HeaderSync {
 	sync_state: Arc<SyncState>,
@@ -142,7 +143,7 @@ impl HeaderSync {
 						match self.sync_state.status() {
 							SyncStatus::HeaderSync { .. } | SyncStatus::BodySync { .. } => {
 								// Ban this fraud peer which claims a higher work but can't send us the real headers
-								if now > *stalling_ts + Duration::seconds(120)
+								if now > *stalling_ts + Duration::seconds(20)
 									&& header_head.total_difficulty < peer.info.total_difficulty()
 								{
 									if let Err(e) = self
@@ -157,6 +158,7 @@ impl HeaderSync {
 										peer.info.height(),
 										peer.info.total_difficulty(),
 									);
+									self.syncing_peer = None
 								}
 							}
 							_ => (),
@@ -164,7 +166,6 @@ impl HeaderSync {
 					}
 				}
 			}
-			self.syncing_peer = None;
 			true
 		} else {
 			// resetting the timeout as long as we progress
@@ -180,8 +181,16 @@ impl HeaderSync {
 		if let Ok(header_head) = self.chain.header_head() {
 			let difficulty = header_head.total_difficulty;
 
-			if let Some(peer) = self.peers.most_work_peer() {
-				if peer.info.total_difficulty() > difficulty {
+			if let Some(peer) = self.syncing_peer.clone() {
+				return self.request_headers(peer);
+			} else if let Some(peer) = self.peers.closest_most_work_peer() {
+				if peer.info.total_difficulty() > difficulty && peer.info.ping_duration().is_some()
+				{
+					info!(
+						"Requesting headers from peer: {:?} ping: {:?}",
+						peer.info.addr.0.ip(),
+						peer.info.ping_duration().unwrap().as_millis()
+					);
 					return self.request_headers(peer);
 				}
 			}

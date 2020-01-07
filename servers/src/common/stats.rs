@@ -17,7 +17,7 @@
 
 use crate::util::RwLock;
 use std::sync::Arc;
-use std::time::SystemTime;
+use std::time::{Duration, SystemTime};
 
 use crate::core::consensus::graph_weight;
 use crate::core::core::hash::Hash;
@@ -175,6 +175,8 @@ pub struct PeerStats {
 	pub state: String,
 	/// Address
 	pub addr: String,
+	/// Ping duration
+	pub ping_duration: Option<Duration>,
 	/// version running
 	pub version: ProtocolVersion,
 	/// Peer user agent string.
@@ -235,9 +237,11 @@ impl PeerStats {
 			p2p::types::Direction::Inbound => "Inbound",
 			p2p::types::Direction::Outbound => "Outbound",
 		};
+
 		PeerStats {
 			state: state.to_string(),
-			addr: addr,
+			addr,
+			ping_duration: peer.info.ping_duration(),
 			version: peer.info.version,
 			user_agent: peer.info.user_agent.clone(),
 			total_difficulty: peer.info.total_difficulty().to_num(),

@@ -375,7 +375,7 @@ impl NetAdapter for DummyAdapter {
 		vec![]
 	}
 	fn peer_addrs_received(&self, _: Vec<PeerAddr>) {}
-	fn peer_difficulty(&self, _: PeerAddr, _: Difficulty, _: u64) {}
+	fn peer_difficulty(&self, _: PeerAddr, _: Difficulty, _: u64, _: bool) {}
 	fn is_banned(&self, _: PeerAddr) -> bool {
 		false
 	}

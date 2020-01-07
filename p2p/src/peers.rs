@@ -35,6 +35,7 @@ use crate::types::{
 };
 use chrono::prelude::*;
 use chrono::Duration;
+use std::cmp::Ordering;
 
 const LOCK_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(2);
 
@@ -202,19 +203,8 @@ impl Peers {
 			.count())
 	}
 
-	/// Returns single random peer with more work than us.
-	pub fn more_work_peer(&self) -> Option<Arc<Peer>> {
-		match self.more_work_peers() {
-			Ok(mut peers) => peers.pop(),
-			Err(e) => {
-				error!("failed to get more work peers: {:?}", e);
-				None
-			}
-		}
-	}
-
 	/// Return vec of connected peers that currently have the most worked
-	/// branch, showing the highest total difficulty.
+	/// branch, showing the highest total difficulty, ordered by shortest ping duration.
 	pub fn most_work_peers(&self) -> Vec<Arc<Peer>> {
 		let peers = self.connected_peers();
 		if peers.len() == 0 {
@@ -231,13 +221,19 @@ impl Peers {
 			.filter(|x| x.info.total_difficulty() == max_total_difficulty)
 			.collect::<Vec<_>>();
 
-		max_peers.shuffle(&mut thread_rng());
+		// Sort by ping duration ascending
+		max_peers.sort_unstable_by(|p, q| {
+			if let (Some(pd), Some(qd)) = (p.info.ping_duration(), q.info.ping_duration()) {
+				qd.cmp(&pd) // lowest first
+			} else {
+				Ordering::Equal
+			}
+		});
 		max_peers
 	}
 
-	/// Returns single random peer with the most worked branch, showing the
-	/// highest total difficulty.
-	pub fn most_work_peer(&self) -> Option<Arc<Peer>> {
+	/// Returns single peer with the highest total difficulty and lowest ping duration.
+	pub fn closest_most_work_peer(&self) -> Option<Arc<Peer>> {
 		self.most_work_peers().pop()
 	}
 
@@ -767,9 +763,9 @@ impl NetAdapter for Peers {
 		}
 	}
 
-	fn peer_difficulty(&self, addr: PeerAddr, diff: Difficulty, height: u64) {
+	fn peer_difficulty(&self, addr: PeerAddr, diff: Difficulty, height: u64, is_pong: bool) {
 		if let Some(peer) = self.get_connected_peer(addr) {
-			peer.info.update(height, diff);
+			peer.info.update(height, diff, is_pong);
 		}
 	}
 
