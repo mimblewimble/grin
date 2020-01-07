@@ -1,0 +1,179 @@
+name: Release
+
+on:
+  push:
+    tags:
+    - 'v*'
+
+env:
+  RUST_BACKTRACE: '1'
+  RUSTFLAGS: '-C debug-assertions'
+
+jobs:
+
+  ubuntu-build:
+    name: Ubuntu Build Release
+    runs-on: ubuntu-latest
+    env:
+      PLATFORM: linux-amd64
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v2
+    - name: Install dependencies
+      run:  sudo apt-get update -yqq && sudo apt-get install -yqq --no-install-recommends libncursesw5-dev
+    - name: Tests
+      run: cargo test --release --all
+    - name: Build
+      run: cargo build --release
+    - name: Set release version
+      run: echo ::set-env name=RELEASE_VERSION::$(echo ${GITHUB_REF:10})
+    - name: Create archive
+      run: tar -czvf grin-$RELEASE_VERSION-$PLATFORM.tar.gz target/release/grin
+    - name: Debug
+      run: ls -a -l
+    - name: Upload artifact 
+      uses: actions/upload-artifact@v1
+      with:
+        name: grin-${{ env.RELEASE_VERSION }}-${{ env.PLATFORM }}
+        path: grin-${{ env.RELEASE_VERSION }}-${{ env.PLATFORM }}.tar.gz
+
+  macos-build:
+    name: macOS Build Release
+    runs-on: macos-latest
+    env:
+      PLATFORM: macos
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v2
+    - name: Install Rust
+      uses: actions-rs/toolchain@v1
+      with:
+        profile: minimal
+        toolchain: stable
+    - name: Tests
+      run: cargo test --release --all
+    - name: Build
+      run: cargo build --release
+    - name: Set release version
+      run: echo ::set-env name=RELEASE_VERSION::$(echo ${GITHUB_REF:10})
+    - name: Create archive
+      run: tar -czvf grin-$RELEASE_VERSION-$PLATFORM.tar.gz target/release/grin
+    - name: Upload artifact 
+      uses: actions/upload-artifact@v1
+      with:
+        name: grin-${{ env.RELEASE_VERSION }}-${{ env.PLATFORM }}
+        path: grin-${{ env.RELEASE_VERSION }}-${{ env.PLATFORM }}.tar.gz
+
+  windows-build:
+    name: Windows Build Release
+    runs-on: windows-latest
+    env:
+      PLATFORM: win-x64
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v2
+    - name: Patch Grin ncurses
+      run: git apply .ci/win.patch
+    - name: Install LLVM
+      run:  choco install -y llvm
+    - name: Tests
+      run: cargo test --release --all
+    - name: Build
+      run: cargo build --release
+    - name: Set release version
+      run: |
+        echo ::set-env name=RELEASE_VERSION::$(echo ${GITHUB_REF:10})
+      shell: bash
+    - name: Create archive
+      run: |
+        /c/Program\ Files/7-Zip/7z.exe a grin-$RELEASE_VERSION-$PLATFORM.zip target/release/grin.exe
+      shell: bash
+    - name: Upload artifact 
+      uses: actions/upload-artifact@v1
+      with:
+        name: grin-${{ env.RELEASE_VERSION }}-${{ env.PLATFORM }}
+        path: grin-${{ env.RELEASE_VERSION }}-${{ env.PLATFORM }}.zip
+
+  release:
+    name: Release
+    runs-on: ubuntu-latest
+    needs: [ubuntu-build, macos-build, windows-build]
+    env:
+      PLATFORM: linux-amd64
+    steps:
+    - name: Set release version
+      run: echo ::set-env name=RELEASE_VERSION::$(echo ${GITHUB_REF:10})
+    - name: Download Ubuntu artificact
+      uses: actions/download-artifact@v1
+      with:
+        name: grin-${{ env.RELEASE_VERSION }}-linux-amd64
+    - name: Download macOS artificact
+      uses: actions/download-artifact@v1
+      with:
+        name: grin-${{ env.RELEASE_VERSION }}-macos
+    - name: Download Windows artificact
+      uses: actions/download-artifact@v1
+      with:
+        name: grin-${{ env.RELEASE_VERSION }}-win-x64
+    - name: Create checksums
+      run: |
+        openssl sha256 grin-$RELEASE_VERSION-linux-amd64/grin-$RELEASE_VERSION-linux-amd64.tar.gz > grin-$RELEASE_VERSION-linux-amd64-sha256sum.txt
+        openssl sha256 grin-$RELEASE_VERSION-macos/grin-$RELEASE_VERSION-macos.tar.gz > grin-$RELEASE_VERSION-macos-sha256sum.txt
+        openssl sha256 grin-$RELEASE_VERSION-win-x64/grin-$RELEASE_VERSION-win-x64.zip > grin-$RELEASE_VERSION-win-x64-sha256sum.txt
+    - name: Create Release
+      uses: softprops/action-gh-release@v1
+      with:
+        files: |
+          grin-$RELEASE_VERSION-linux-amd64/grin-${{ env.RELEASE_VERSION }}-linux-amd64.tar.gz
+          grin-${{ env.RELEASE_VERSION }}-linux-amd64-sha256sum.txt
+          grin-${{ env.RELEASE_VERSION }}-macos/grin-${{ env.RELEASE_VERSION }}-macos.tar.gz
+          grin-${{ env.RELEASE_VERSION }}-macos-sha256sum.txt
+          grin-${{ env.RELEASE_VERSION }}-win-x64/grin-${{ env.RELEASE_VERSION }}-win-x64.zip
+          grin-${{ env.RELEASE_VERSION }}-win-x64-sha256sum.txt
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    - name: Checkout
+      uses: actions/checkout@v2
+    - name: Set up Ruby 2.6
+      uses: actions/setup-ruby@v1
+      with:
+        ruby-version: 2.6.x
+    - name: Update Changelog
+      run: |
+        readonly REPO_TAG="$(git describe --tags --exact-match 2> /dev/null || git symbolic-ref -q --short HEAD)"
+        readonly REPO_SLUG="quentinlesceller/grin"
+        readonly REPO_BRANCH="$(git symbolic-ref -q --short HEAD)"
+        readonly REPO_PREV_RELEASE_TAG="$(git describe --abbrev=0 --tags "$(git rev-list --tags --skip=0 --max-count=1)")"
+
+        gem install github_changelog_generator
+
+        github_changelog_generator \
+          --user "$(cut -d "/" -f1 <<< ${REPO_SLUG})" \
+          --project "$(cut -d "/" -f2 <<< ${REPO_SLUG})" \
+          --since-tag "${REPO_PREV_RELEASE_TAG}"
+
+        readonly CHANGELOG_CONTENT="$(<CHANGELOG.md)"
+
+        jq --null-input \
+          --arg body "${CHANGELOG_CONTENT}" \
+          --arg name "${REPO_TAG}" \
+          --arg tag_name "${REPO_TAG}" \
+          --arg target_commitish "${REPO_BRANCH}" \
+          '{
+            body: $body,
+            name: $name,
+            tag_name: $tag_name,
+            target_commitish: $target_commitish,
+            draft: false,
+            prerelease: false
+          }' > CHANGELOG.md
+
+        readonly HEADERS="Authorization: token $GITHUB_TOKEN"
+        readonly RELEASE_URL="https://api.github.com/repos/${REPO_SLUG}/releases"
+        readonly RELEASE_ID="$(curl -0 --request GET -H "${HEADERS}" "${RELEASE_URL}/tags/${REPO_TAG}" 2> /dev/null | grep id | head -n 1 | sed 's/ *"id": *\(.*\),/\1/')"
+
+        printf "updating release changelog %s for repo: %s, branch: %s, release id: %s\n" "${REPO_TAG}" "${REPO_SLUG}" "${REPO_BRANCH}" "${RELEASE_ID}"
+        curl -H "${HEADERS}" --request PATCH --data @CHANGELOG.md "${RELEASE_URL}/${RELEASE_ID}"
+        printf "changelog uploaded.\n"
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

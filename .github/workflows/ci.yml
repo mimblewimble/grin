@@ -1,0 +1,55 @@
+name: Continuous Integration
+
+on: [pull_request]
+
+env:
+  RUST_BACKTRACE: '1'
+  RUSTFLAGS: '-C debug-assertions'
+
+jobs:
+
+  ubuntu:
+    name: Ubuntu CI
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        job_args: [ 'servers', 'chain core keychain', 'pool p2p src', 'api util store' ]
+    steps:
+    - name: Echo
+      run: echo ${GITHUB_REF}
+    - name: Checkout
+      uses: actions/checkout@v2
+    - name: Install dependencies
+      run:  sudo apt-get update -yqq && sudo apt-get install -yqq --no-install-recommends libncursesw5-dev
+    - name: Test ${{ matrix.job_args }}
+      env:
+        CI_JOB: test
+        CI_JOB_ARGS: ${{ matrix.job_args }}
+      run: .ci/general-jobs
+
+  macos:
+    name: macOS CI
+    runs-on: macos-latest
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v2
+    - name: Install Rust
+      uses: actions-rs/toolchain@v1
+      with:
+        profile: minimal
+        toolchain: stable
+    - name: Tests
+      run: cargo test --release --all
+
+  windows:
+    name: Windows CI
+    runs-on: windows-latest
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v2
+    - name: Patch Grin ncurses
+      run:  git apply .ci/win.patch
+    - name: Install LLVM
+      run:  choco install -y llvm
+    - name: Tests
+      run: cargo test --release --all
