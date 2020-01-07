@@ -29,3 +29,4 @@ grin_util = { path = "../util", version = "3.1.0-beta.1" }
 chrono = "0.4.4"
 rand = "0.6"
 filetime = "0.2"
+env_logger = "0.5"
