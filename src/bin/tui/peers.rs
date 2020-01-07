@@ -103,14 +103,33 @@ impl TableViewItem<PeerColumn> for PeerStats {
 			curr_sum.cmp(&other_sum)
 		};
 
+		fn cmp_order_alternative(order: Ordering, curr: &PeerStats, other: &PeerStats) -> Ordering {
+			if order == Ordering::Equal {
+				return curr.addr.cmp(&other.addr);
+			}
+			order
+		}
+
 		match column {
 			PeerColumn::Address => self.addr.cmp(&other.addr),
-			PeerColumn::State => self.state.cmp(&other.state),
-			PeerColumn::UsedBandwidth => cmp_used_bandwidth(&self, &other),
-			PeerColumn::TotalDifficulty => self.total_difficulty.cmp(&other.total_difficulty),
-			PeerColumn::Direction => self.direction.cmp(&other.direction),
-			PeerColumn::Version => self.version.cmp(&other.version),
-			PeerColumn::UserAgent => self.user_agent.cmp(&other.user_agent),
+			PeerColumn::State => cmp_order_alternative(self.state.cmp(&other.state), &self, &other),
+			PeerColumn::UsedBandwidth => {
+				cmp_order_alternative(cmp_used_bandwidth(&self, &other), &self, &other)
+			}
+			PeerColumn::TotalDifficulty => cmp_order_alternative(
+				self.total_difficulty.cmp(&other.total_difficulty),
+				&self,
+				&other,
+			),
+			PeerColumn::Direction => {
+				cmp_order_alternative(self.direction.cmp(&other.direction), &self, &other)
+			}
+			PeerColumn::Version => {
+				cmp_order_alternative(self.version.cmp(&other.version), &self, &other)
+			}
+			PeerColumn::UserAgent => {
+				cmp_order_alternative(self.user_agent.cmp(&other.user_agent), &self, &other)
+			}
 		}
 	}
 }
