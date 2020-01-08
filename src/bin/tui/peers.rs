@@ -103,14 +103,19 @@ impl TableViewItem<PeerColumn> for PeerStats {
 			curr_sum.cmp(&other_sum)
 		};
 
+		let sort_by_addr = || self.addr.cmp(&other.addr);
+
 		match column {
-			PeerColumn::Address => self.addr.cmp(&other.addr),
-			PeerColumn::State => self.state.cmp(&other.state),
-			PeerColumn::UsedBandwidth => cmp_used_bandwidth(&self, &other),
-			PeerColumn::TotalDifficulty => self.total_difficulty.cmp(&other.total_difficulty),
-			PeerColumn::Direction => self.direction.cmp(&other.direction),
-			PeerColumn::Version => self.version.cmp(&other.version),
-			PeerColumn::UserAgent => self.user_agent.cmp(&other.user_agent),
+			PeerColumn::Address => sort_by_addr(),
+			PeerColumn::State => self.state.cmp(&other.state).then(sort_by_addr()),
+			PeerColumn::UsedBandwidth => cmp_used_bandwidth(&self, &other).then(sort_by_addr()),
+			PeerColumn::TotalDifficulty => self
+				.total_difficulty
+				.cmp(&other.total_difficulty)
+				.then(sort_by_addr()),
+			PeerColumn::Direction => self.direction.cmp(&other.direction).then(sort_by_addr()),
+			PeerColumn::Version => self.version.cmp(&other.version).then(sort_by_addr()),
+			PeerColumn::UserAgent => self.user_agent.cmp(&other.user_agent).then(sort_by_addr()),
 		}
 	}
 }
