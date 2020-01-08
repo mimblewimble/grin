@@ -1,36 +1,36 @@
-# Grin Stratum RPC Protocol
+# Grin Stratum RPC 协议
 
-*Read this in other languages: [Korean](stratum_KR.md), [简体中文](stratum_ZH-CN.md).*
+*阅读其它语言版本: [Korean](stratum_KR.md)，[English](stratum.md).*
 
-This document describes the current Stratum RPC protocol implemented in Grin.
+本文说明在 Grin 部署目前的 Stratum RPC 协议。
 
-## Table of Contents
+## 目录
 
-1. [Messages](#messages)
-    1. [getjobtemplate](#getjobtemplate)
-    1. [job](#job)
-    1. [keepalive](#keepalive)
-    1. [login](#login)
-    1. [status](#status)
-    1. [submit](#submit)
-1. [Error Messages](#error-messages)
-1. [Miner Behavior](#miner-behavior)
-1. [Reference Implementation](#reference-implementation)
+1. [信息](#messages)
+    1. [获得工作模板](#getjobtemplate)
+    1. [工作](#job)
+    1. [保持在线](#keepalive)
+    1. [登录](#login)
+    1. [状态](#status)
+    1. [提交](#submit)
+1. [错误信息](#error-messages)
+1. [矿工行为](#miner-behavior)
+1. [参考部署](#reference-implementation)
 
-## Messages
+## 信息
 
-In this section, we detail each message and the potential response.
+本节我们讨论每种信息和可能的回复。
 
-At any point, if miner the tries to do one of the following request (except login) and login is required, the miner will receive the following error message.
+如果矿工随时最初以下请求（登录除外），且需要登录，矿工会收到以下错误信息。
 
-| Field         | Content                                 |
-| :------------ | :-------------------------------------- |
-| id            | ID of the request                       |
-| jsonrpc       | "2.0"                                   |
-| method        | method sent by the miner                |
-| error         | {"code":-32500,"message":"login first"} |
+| 栏位    | 内容                                     |
+| :------ | :--------------------------------------- |
+| id      | ID of the request（提出请求的 ID）       |
+| jsonrpc | "2.0"                                    |
+| method  | method sent by the miner（矿工发送方法） |
+| error   | {"code":-32500,"message":"login first"}  |
 
-Example:
+范例：
 
 ```JSON
 {  
@@ -44,16 +44,16 @@ Example:
 }
 ```
 
-if the request is not one of the following, the stratum server will give this error response:
+如果不是如下请求，stratum 服务器会返回错误回复：
 
-| Field         | Content                                      |
-| :------------ | :------------------------------------------- |
-| id            | ID of the request                            |
-| jsonrpc       | "2.0"                                        |
-| method        | method sent by the miner                     |
-| error         | {"code":-32601,"message":"Method not found"} |
+| Field   | Content                                      |
+| :------ | :------------------------------------------- |
+| id      | ID of the request                            |
+| jsonrpc | "2.0"                                        |
+| method  | method sent by the miner                     |
+| error   | {"code":-32601,"message":"Method not found"} |
 
-Example:
+范例：
 
 ```JSON
 {  
@@ -69,19 +69,19 @@ Example:
 
 ### `getjobtemplate`
 
-A message initiated by the miner.
-Miner can request a job with this message.
+矿工发起的信息。
+矿工可以这一信息申请工作。
 
-#### Request
+#### 请求
 
-| Field         | Content                        |
-| :------------ | :----------------------------- |
-| id            | ID of the request              |
-| jsonrpc       | "2.0"                          |
-| method        | "getjobtemplate"               |
-| params        | null                           |
+| Field栏位 | Content           |
+| :-------- | :---------------- |
+| id        | ID of the request |
+| jsonrpc   | "2.0"             |
+| method    | "getjobtemplate"  |
+| params    | null              |
 
-Example:
+范例：
 
 ``` JSON
 {  
@@ -92,13 +92,13 @@ Example:
 }
 ```
 
-#### Response
+#### 回复
 
-The response can be of two types:
+回复可分为两种类型：
 
-##### OK response
+##### 确认回复
 
-Example:
+范例：
 
 ``` JSON
 {  
@@ -114,9 +114,9 @@ Example:
 }
 ```
 
-##### Error response
+##### 错误回复
 
-If the node is syncing, it will send the following message:
+如果节点在同步，会发送如下信息：
 
 | Field         | Content                                                   |
 | :------------ | :-------------------------------------------------------- |
@@ -125,7 +125,7 @@ If the node is syncing, it will send the following message:
 | method        | "getjobtemplate"                                          |
 | error         | {"code":-32701,"message":"Node is syncing - Please wait"} |
 
-Example:
+范例：
 
 ```JSON
 {  
@@ -139,13 +139,11 @@ Example:
 }
 ```
 
-### `job`
+### 工作
 
-A message initiated by the Stratum server.
-Stratum server will send job automatically to connected miners.
-The miner SHOULD interrupt current job if job_id = 0, and SHOULD replace the current job with this one after the current graph is complete.
+Stratum 服务器发起新消息。Stratum 服务器会自动发送工作给连接的矿工。如果 `job_id = 0` 矿工应该切断目前的工作，并且目前的图形完成后用这一个代替现有工作。
 
-#### Request
+#### 请求
 
 | Field         | Content                                                                   |
 | :------------ | :------------------------------------------------------------------------- |
@@ -154,7 +152,7 @@ The miner SHOULD interrupt current job if job_id = 0, and SHOULD replace the cur
 | method        | "job"                                                                     |
 | params        | Int `difficulty`, `height`, `job_id` and string `pre_pow` |
 
-Example:
+范例：
 
 ``` JSON
 {  
@@ -170,15 +168,15 @@ Example:
 }
 ```
 
-#### Response
+#### 回复
 
-No response is required for this message.
+本消息不需要回复
 
-### `keepalive`
+### 保持在线
 
-A message initiated by the miner in order to keep the connection alive.
+为保持在线，矿工发起消息。
 
-#### Request
+#### 请求
 
 | Field         | Content                |
 | :------------ | :--------------------- |
@@ -187,7 +185,7 @@ A message initiated by the miner in order to keep the connection alive.
 | method        | "keepalive"            |
 | params        | null                   |
 
-Example:
+范例：
 
 ``` JSON
 {  
@@ -198,7 +196,7 @@ Example:
 }
 ```
 
-#### Response
+#### 回复
 
 | Field         | Content                        |
 | :------------ | :----------------------------- |
@@ -208,7 +206,7 @@ Example:
 | result        | "ok"                           |
 | error         | null                           |
 
-Example:
+范例：
 
 ``` JSON
 {  
@@ -220,14 +218,13 @@ Example:
 }
 ```
 
-### `login`
+### 登录
 
 ***
 
-A message initiated by the miner.
-Miner can log in on a Grin Stratum server with a login, password and agent (usually statically set by the miner program).
+矿工发起消息。矿工用用户名、密码和代理（通常由矿工程序设置）登录 Grin Stratum 服务器。
 
-#### Request
+#### 请求
 
 | Field         | Content                        |
 | :------------ | :----------------------------- |
@@ -236,7 +233,7 @@ Miner can log in on a Grin Stratum server with a login, password and agent (usua
 | method        | "login"                        |
 | params        | Strings: login, pass and agent |
 
-Example:
+范例：
 
 ``` JSON
 
@@ -252,11 +249,11 @@ Example:
 }
 
 ```
-#### Response
+#### 回复
 
-The response can be of two types:
+回复可为两种类型：
 
-##### OK response
+##### 确认回复
 
 | Field         | Content                        |
 | :------------ | :----------------------------- |
@@ -266,7 +263,7 @@ The response can be of two types:
 | result        | "ok"                           |
 | error         | null                           |
 
-Example:
+范例：
 
 ``` JSON
 {  
@@ -278,16 +275,15 @@ Example:
 }
 ```
 
-##### Error response
+##### 错误回复
 
-Not yet implemented. Should return error -32500 "Login first" when login is required.
+未部署。应该返回`error -32500`，若需要登录，“首先登录”。
 
-### `status`
+### 状态
 
-A message initiated by the miner.
-This message allows a miner to get the status of its current worker and the network.
+矿工发起消息。本消息允许矿工获得目前矿工和网络状态。
 
-#### Request
+#### 请求
 
 | Field         | Content                |
 | :------------ | :--------------------- |
@@ -296,7 +292,7 @@ This message allows a miner to get the status of its current worker and the netw
 | method        | "status"               |
 | params        | null                   |
 
-Example:
+范例：
 
 ``` JSON
 {  
@@ -307,9 +303,9 @@ Example:
 }
 ```
 
-#### Response
+#### 回复
 
-The response is the following:
+回复如下
 
 | Field         | Content                                                                                                  |
 | :------------ | :------------------------------------------------------------------------------------------------------- |
@@ -319,7 +315,7 @@ The response is the following:
 | result        | String `id`. Integers `height`, `difficulty`, `accepted`, `rejected` and `stale` |
 | error         | null                                                                                                     |
 
-Example:
+范例：
 
 ```JSON
 {  
@@ -338,14 +334,13 @@ Example:
 }
 ```
 
-### `submit`
+### 提交
 
-A message initiated by the miner.
-When a miner find a share, it will submit it to the node.
+矿工发起消息。矿工挖到一份，会提交给节点。
 
-#### Request
+#### 请求
 
-The miner submit a solution to a job to the Stratum server.
+矿工向 Stratum 服务器提交工作解决方案。
 
 | Field         | Content                                                                     |
 | :------------ | :-------------------------------------------------------------------------- |
@@ -354,7 +349,7 @@ The miner submit a solution to a job to the Stratum server.
 | method        | "submit"                                                                    |
 | params        | Int `edge_bits`,`nonce`, `height`, `job_id` and array of integers `pow` |
 
-Example:
+范例：
 
 ``` JSON
 {
@@ -373,13 +368,13 @@ Example:
 }
 ```
 
-#### Response
+#### 回复
 
-The response can be of three types.
+回复可为三种类型。
 
-##### OK response
+##### 确认回复
 
-The share is accepted by the Stratum but is not a valid cuck(at)oo solution at the network target difficulty.
+Stratum 接受份额，但不是目前网络目标难度的有效 cuck(at)oo 解决方案。
 
 | Field         | Content                        |
 | :------------ | :----------------------------- |
@@ -389,7 +384,7 @@ The share is accepted by the Stratum but is not a valid cuck(at)oo solution at t
 | result        | "ok"                           |
 | error         | null                           |
 
-Example:
+范例：
 
 ``` JSON
 {  
@@ -401,9 +396,9 @@ Example:
 }
 ```
 
-##### Blockfound response
+##### 发现区块回复
 
-The share is accepted by the Stratum and is a valid cuck(at)oo solution at the network target difficulty.
+份额被 Stratum 接受，是目前网络目标难度的有效 cuck(at)oo 解决方案。
 
 | Field         | Content                        |
 | :------------ | :----------------------------- |
@@ -413,7 +408,7 @@ The share is accepted by the Stratum and is a valid cuck(at)oo solution at the n
 | result        | "block - " + hash of the block |
 | error         | null                           |
 
-Example:
+范例：
 
 ``` JSON
 {  
@@ -425,13 +420,13 @@ Example:
 }
 ```
 
-##### Error response
+##### 错误回复
 
-The error response can be of two types: stale and rejected.
+错误回复有两种类型：过期和被拒绝。
 
-##### Stale share error response
+##### 过期份额错误回复
 
-The share is a valid solution to a previous job not the current one.
+份额是上一工作而不是目前工作的有效解决方案。
 
 | Field         | Content                                                   |
 | :------------ | :-------------------------------------------------------- |
@@ -440,7 +435,7 @@ The share is a valid solution to a previous job not the current one.
 | method        | "submit"                                          |
 | error         | {"code":-32503,"message":"Solution submitted too late"} |
 
-Example:
+范例：
 
 ```JSON
 {  
@@ -454,13 +449,13 @@ Example:
 }
 ```
 
-##### Rejected share error responses
+##### 拒绝份额错误回复
 
-Two possibilities: the solution cannot be validated or the solution is of too low difficulty.
+两种可能：解决方案无效或解决方案难度太低。
 
-###### Failed to validate solution error
+###### 未能验证解决方案错误
 
-The submitted solution cannot be validated.
+提交的解决方案无法验证。
 
 | Field         | Content                                                   |
 | :------------ | :-------------------------------------------------------- |
@@ -469,7 +464,7 @@ The submitted solution cannot be validated.
 | method        | "submit"                                          |
 | error         | {"code":-32502,"message":"Failed to validate solution"} |
 
-Example:
+范例：
 
 ```JSON
 {  
@@ -483,9 +478,9 @@ Example:
 }
 ```
 
-###### Share rejected due to low difficulty error
+###### 因低难度错误份额拒绝
 
-The submitted solution is of too low difficulty.
+提交的解决方案难度太低。
 
 | Field         | Content                                                          |
 | :------------ | :--------------------------------------------------------------- |
@@ -494,7 +489,7 @@ The submitted solution is of too low difficulty.
 | method        | "submit"                                                         |
 | error         | {"code":-32501,"message":"Share rejected due to low difficulty"} |
 
-Example:
+范例：
 
 ```JSON
 {  
@@ -508,9 +503,9 @@ Example:
 }
 ```
 
-## Error Messages
+## 错误信息
 
-Grin Stratum protocol implementation contains the following error message:
+Grin Stratum 协议部署包含以下错误信息：
 
 | Error code  | Error Message                          |
 | :---------- | :------------------------------------- |
@@ -522,18 +517,18 @@ Grin Stratum protocol implementation contains the following error message:
 | -32600      | Invalid Request                        |
 | -32601      | Method not found                       |
 
-## Miner behavior
+## 矿工行为准则
 
-Miners SHOULD, MAY or MUST respect the following rules:
+矿工须遵守以下规则：
 
-- Miners SHOULD randomize the job nonce before starting
-- Miners MUST continue mining the same job until the server sends a new one, though a miner MAY request a new job at any time
-- Miners MUST NOT send an rpc response to a job request from the server
-- Miners MAY set the RPC "id" and expect responses to have that same id
-- Miners MAY send a keepalive message
-- Miners MAY send a login request (to identify which miner finds shares / solutions in the logs), the login request MUST have all 3 params.
-- Miners MUST return the supplied job_id with submit messages.
+- 矿工开始挖矿前需要随机算工作随机数
+- 矿工必须一直进行相同工作，直到服务器发送新的，尽管矿工有可能随时申请工作
+- 矿工不得从服务器给工作请求发送 RPC 回复
+- 矿工可设置 RPC "id" 并获得回复
+- 矿工可发送保持在线信息
+- 矿工可发送登录请求（确认哪个矿工在历史记录发现份额 / 解决方案），登录请求必须有三个参数
+- 矿工提交信息必须提供 job_id
 
-## Reference Implementation
+## 部署参考
 
-The current reference implementation is available at [mimblewimble/grin-miner](https://github.com/mimblewimble/grin-miner/blob/master/src/bin/client.rs).
+挖矿部署请参阅：[mimblewimble/grin-miner](https://github.com/mimblewimble/grin-miner/blob/master/src/bin/client.rs)
