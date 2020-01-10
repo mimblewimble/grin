@@ -73,7 +73,7 @@ jobs:
     - name: Checkout
       uses: actions/checkout@v2
     - name: Patch Grin ncurses
-      run: git apply .ci/win.patch
+      run: git apply .github/workflows/win.patch
     - name: Install LLVM
       run:  choco install -y llvm
     - name: Tests

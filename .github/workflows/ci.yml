@@ -23,9 +23,15 @@ jobs:
       run:  sudo apt-get update -yqq && sudo apt-get install -yqq --no-install-recommends libncursesw5-dev
     - name: Test ${{ matrix.job_args }}
       env:
-        CI_JOB: test
         CI_JOB_ARGS: ${{ matrix.job_args }}
-      run: .ci/general-jobs
+      run: |
+        for dir in ${CI_JOB_ARGS}; do
+          printf "executing tests in directory \`%s\`...\n" "${dir}"
+          cd "${dir}" && \
+          cargo test --release && \
+          cd - > /dev/null || exit 1
+          done
+          ;;
 
   macos:
     name: macOS CI
@@ -48,7 +54,7 @@ jobs:
     - name: Checkout
       uses: actions/checkout@v2
     - name: Patch Grin ncurses
-      run:  git apply .ci/win.patch
+      run: git apply .github/workflows/win.patch
     - name: Install LLVM
       run:  choco install -y llvm
     - name: Tests
