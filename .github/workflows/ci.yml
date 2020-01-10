@@ -30,8 +30,7 @@ jobs:
           cd "${dir}" && \
           cargo test --release && \
           cd - > /dev/null || exit 1
-          done
-          ;;
+        done
 
   macos:
     name: macOS CI
