@@ -16,8 +16,7 @@
 //! John Tromp. Ported to Rust from https://github.com/tromp/cuckoo.
 //!
 //! Cuckaroom is a variation of Cuckaroo that's tweaked at the second HardFork
-//! to maintain ASIC-Resistance, as introduced in
-//! https://www.grin-forum.org/t/mid-december-pow-hardfork-cuckarood29-cuckaroom29
+//! to maintain ASIC-Resistance.
 //! It uses a tweaked edge block generation where states are xored with all later
 //! states, reverts to standard siphash, and most importantly, identifies cycles
 //! in a mono-partite graph, from which it derives the letter 'm'.
