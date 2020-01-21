@@ -157,9 +157,7 @@ impl Handler for PeerHandler {
 					format!("unban failed: {:?}", e),
 				),
 			},
-			_ => return response(StatusCode::BAD_REQUEST, "invalid command"),
-		};
-
-		response(StatusCode::OK, "{}")
+			_ => response(StatusCode::BAD_REQUEST, "invalid command"),
+		}
 	}
 }
