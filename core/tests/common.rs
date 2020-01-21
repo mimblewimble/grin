@@ -22,7 +22,7 @@ use grin_core::libtx::{
 	reward,
 };
 use grin_core::pow::Difficulty;
-use grin_core::ser::{self, FixedLength, PMMRable, Readable, Reader, Writeable, Writer};
+use grin_core::ser::{self, PMMRable, Readable, Reader, Writeable, Writer};
 use keychain::{Identifier, Keychain};
 
 // utility producing a transaction with 2 inputs and a single outputs
@@ -133,15 +133,15 @@ pub struct TestElem(pub [u32; 4]);
 
 impl DefaultHashable for TestElem {}
 
-impl FixedLength for TestElem {
-	const LEN: usize = 16;
-}
-
 impl PMMRable for TestElem {
 	type E = Self;
 
 	fn as_elmt(&self) -> Self::E {
 		self.clone()
+	}
+
+	fn elmt_size() -> Option<u16> {
+		Some(16)
 	}
 }
 

@@ -20,7 +20,7 @@ use croaring::Bitmap;
 
 use crate::core::core::hash::{DefaultHashable, Hash};
 use crate::core::core::pmmr::{self, ReadonlyPMMR, VecBackend, PMMR};
-use crate::core::ser::{self, FixedLength, PMMRable, Readable, Reader, Writeable, Writer};
+use crate::core::ser::{self, PMMRable, Readable, Reader, Writeable, Writer};
 use crate::error::{Error, ErrorKind};
 
 /// The "bitmap accumulator" allows us to commit to a specific bitmap by splitting it into
@@ -215,10 +215,10 @@ impl PMMRable for BitmapChunk {
 	fn as_elmt(&self) -> Self::E {
 		self.clone()
 	}
-}
 
-impl FixedLength for BitmapChunk {
-	const LEN: usize = Self::LEN_BYTES;
+	fn elmt_size() -> Option<u16> {
+		Some(Self::LEN_BYTES as u16)
+	}
 }
 
 impl DefaultHashable for BitmapChunk {}
