@@ -298,7 +298,7 @@ impl TxHashSet {
 
 	/// highest output insertion index available
 	pub fn highest_output_insertion_index(&self) -> u64 {
-		pmmr::n_leaves(self.output_pmmr_h.last_pos)
+		self.output_pmmr_h.last_pos
 	}
 
 	/// As above, for rangeproofs
