@@ -111,12 +111,6 @@ impl From<keychain::Error> for Error {
 	}
 }
 
-impl From<std::num::ParseIntError> for Error {
-	fn from(e: std::num::ParseIntError) -> Error {
-		Error::Serialization(ser::Error::HexError(e.to_string()))
-	}
-}
-
 impl fmt::Display for Error {
 	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
 		write!(f, "Block Error (display needs implementation")
@@ -365,7 +359,8 @@ impl BlockHeader {
 		proof: Proof,
 	) -> Result<Self, Error> {
 		// Convert hex pre pow string
-		let mut header_bytes = from_hex(pre_pow)?;
+		let mut header_bytes = from_hex(pre_pow)
+			.map_err(|e| Error::Serialization(ser::Error::HexError(e.to_string())))?;
 		// Serialize and append serialized nonce and proof
 		serialize_default(&mut header_bytes, &nonce)?;
 		serialize_default(&mut header_bytes, &proof)?;
