@@ -1,4 +1,4 @@
-// Copyright 2019 The Grin Developers
+// Copyright 2020 The Grin Developers
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -502,7 +502,7 @@ impl<T: TableViewItem<H> + PartialEq, H: Eq + Hash + Copy + Clone + 'static> Tab
 	/// Returns the index of the currently selected item within the underlying
 	/// storage vector.
 	pub fn item(&self) -> Option<usize> {
-		if self.items.is_empty() || self.focus > self.rows_to_items.len() {
+		if self.items.is_empty() || self.focus >= self.rows_to_items.len() {
 			None
 		} else {
 			Some(self.rows_to_items[self.focus])

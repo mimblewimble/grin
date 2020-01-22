@@ -1,4 +1,4 @@
-// Copyright 2019 The Grin Developers
+// Copyright 2020 The Grin Developers
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -298,7 +298,7 @@ impl TxHashSet {
 
 	/// highest output insertion index available
 	pub fn highest_output_insertion_index(&self) -> u64 {
-		pmmr::n_leaves(self.output_pmmr_h.last_pos)
+		self.output_pmmr_h.last_pos
 	}
 
 	/// As above, for rangeproofs
@@ -1008,7 +1008,7 @@ impl<'a> Extension<'a> {
 		}
 	}
 
-	fn apply_output(&mut self, out: &Output) -> Result<(u64), Error> {
+	fn apply_output(&mut self, out: &Output) -> Result<u64, Error> {
 		let commit = out.commitment();
 
 		if let Ok(pos) = self.batch.get_output_pos(&commit) {
@@ -1229,7 +1229,7 @@ impl<'a> Extension<'a> {
 	pub fn validate_kernel_sums(
 		&self,
 		genesis: &BlockHeader,
-	) -> Result<((Commitment, Commitment)), Error> {
+	) -> Result<(Commitment, Commitment), Error> {
 		let now = Instant::now();
 
 		let head_header = self.batch.get_block_header(&self.head.last_block_h)?;
@@ -1253,7 +1253,7 @@ impl<'a> Extension<'a> {
 		genesis: &BlockHeader,
 		fast_validation: bool,
 		status: &dyn TxHashsetWriteStatus,
-	) -> Result<((Commitment, Commitment)), Error> {
+	) -> Result<(Commitment, Commitment), Error> {
 		self.validate_mmrs()?;
 		self.validate_roots()?;
 		self.validate_sizes()?;
