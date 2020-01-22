@@ -1,4 +1,4 @@
-// Copyright 2019 The Grin Developers
+// Copyright 2020 The Grin Developers
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -191,6 +191,24 @@ pub struct PeerStats {
 	pub sent_bytes_per_sec: u64,
 	/// Number of bytes we've received from the peer.
 	pub received_bytes_per_sec: u64,
+}
+
+impl PartialEq for PeerStats {
+	fn eq(&self, other: &PeerStats) -> bool {
+		*self.addr == other.addr
+	}
+}
+
+impl PartialEq for WorkerStats {
+	fn eq(&self, other: &WorkerStats) -> bool {
+		*self.id == other.id
+	}
+}
+
+impl PartialEq for DiffBlock {
+	fn eq(&self, other: &DiffBlock) -> bool {
+		self.block_height == other.block_height
+	}
 }
 
 impl StratumStats {

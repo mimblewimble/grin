@@ -1,6 +1,6 @@
 # Documentation structure
 
-*Read this in other languages: [Korean](table_of_contents_KR.md).*
+*Read this in other languages: [Korean](table_of_contents_KR.md), [简体中文](table_of_contents_ZH-CN.md).*
 
 ## Explaining grin
 
