@@ -31,7 +31,7 @@ path = "src/main.rs"
 
 [[bin]]
 name = "block_read_v1"
-path = "fuzz_targets/block_read_v2.rs"
+path = "fuzz_targets/block_read_v1.rs"
 
 [[bin]]
 name = "block_read_v2"

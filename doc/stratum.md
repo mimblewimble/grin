@@ -1,6 +1,6 @@
 # Grin Stratum RPC Protocol
 
-*Read this in other languages: [Korean](stratum_KR.md).*
+*Read this in other languages: [Korean](stratum_KR.md), [简体中文](stratum_ZH-CN.md).*
 
 This document describes the current Stratum RPC protocol implemented in Grin.
 

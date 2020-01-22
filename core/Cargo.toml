@@ -24,7 +24,6 @@ rand = "0.6"
 serde = "1"
 serde_derive = "1"
 siphasher = "0.2"
-uuid = { version = "0.6", features = ["serde", "v4"] }
 log = "0.4"
 chrono = { version = "0.4.4", features = ["serde"] }
 zeroize = "0.9"

@@ -1,4 +1,4 @@
-// Copyright 2019 The Grin Developers
+// Copyright 2020 The Grin Developers
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -89,7 +89,7 @@ impl View for LogBufferView {
 		let mut i = 0;
 		for entry in self.buffer.iter().take(printer.size.y) {
 			printer.with_color(LogBufferView::color(entry.level), |p| {
-				let log_message = StyledString::plain(&entry.log);
+				let log_message = StyledString::plain(entry.log.as_str());
 				let mut rows: Vec<Row> = LinesIterator::new(&log_message, printer.size.x).collect();
 				rows.reverse(); // So stack traces are in the right order.
 				for row in rows {
