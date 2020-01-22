@@ -34,7 +34,7 @@ fn pmmr_leaf_idx_iter() {
 		let mut backend = store::pmmr::PMMRBackend::new(
 			data_dir.to_string(),
 			true,
-			false,
+			// false,
 			ProtocolVersion(1),
 			None,
 		)
