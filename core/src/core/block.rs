@@ -25,8 +25,10 @@ use crate::core::{
 };
 use crate::global;
 use crate::pow::{verify_size, Difficulty, Proof, ProofOfWork};
-use crate::ser::{self, FixedLength, PMMRable, Readable, Reader, Writeable, Writer};
-use crate::ser::{deserialize_default, serialize_default, ProtocolVersion};
+use crate::ser::{
+	self, deserialize_default, serialize_default, FixedLength, PMMRable, Readable, Reader,
+	Writeable, Writer,
+};
 use chrono::naive::{MAX_DATE, MIN_DATE};
 use chrono::prelude::{DateTime, NaiveDateTime, Utc};
 use chrono::Duration;
