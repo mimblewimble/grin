@@ -26,6 +26,7 @@ use crate::core::core::{
 };
 use crate::core::libtx::build::{self, input, output};
 use crate::core::libtx::ProofBuilder;
+use crate::core::pow::Proof;
 use crate::core::{global, ser};
 use chrono::Duration;
 use grin_core as core;
@@ -568,4 +569,37 @@ fn wrong_amount_range_proof() {
 		Err(Error::Transaction(transaction::Error::Secp(secp::Error::InvalidRangeProof))) => {}
 		_ => panic!("Bad range proof should be invalid"),
 	}
+}
+
+#[test]
+fn validate_header_proof() {
+	let keychain = ExtKeychain::from_random_seed(false).unwrap();
+	let builder = ProofBuilder::new(&keychain);
+	let prev = BlockHeader::default();
+	let key_id = ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
+	let b = new_block(vec![], &keychain, &builder, &prev, &key_id);
+
+	let mut header_buf = vec![];
+	{
+		let mut writer = ser::BinWriter::default(&mut header_buf);
+		b.header.write_pre_pow(&mut writer).unwrap();
+		b.header.pow.write_pre_pow(&mut writer).unwrap();
+	}
+	let pre_pow = util::to_hex(header_buf);
+
+	let reconstructed = BlockHeader::from_pre_pow_and_proof(
+		pre_pow,
+		b.header.pow.nonce,
+		b.header.pow.proof.clone(),
+	)
+	.unwrap();
+	assert_eq!(reconstructed, b.header);
+
+	// assert invalid pre_pow returns error
+	assert!(BlockHeader::from_pre_pow_and_proof(
+		"0xaf1678".to_string(),
+		b.header.pow.nonce,
+		b.header.pow.proof.clone(),
+	)
+	.is_err());
 }

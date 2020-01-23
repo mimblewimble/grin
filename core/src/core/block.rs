@@ -25,7 +25,10 @@ use crate::core::{
 };
 use crate::global;
 use crate::pow::{verify_size, Difficulty, Proof, ProofOfWork};
-use crate::ser::{self, FixedLength, PMMRable, Readable, Reader, Writeable, Writer};
+use crate::ser::{
+	self, deserialize_default, serialize_default, FixedLength, PMMRable, Readable, Reader,
+	Writeable, Writer,
+};
 use chrono::naive::{MAX_DATE, MIN_DATE};
 use chrono::prelude::{DateTime, NaiveDateTime, Utc};
 use chrono::Duration;
@@ -34,6 +37,7 @@ use std::collections::HashSet;
 use std::fmt;
 use std::iter::FromIterator;
 use std::sync::Arc;
+use util::from_hex;
 use util::RwLock;
 use util::{secp, static_secp_instance};
 
@@ -348,6 +352,23 @@ impl BlockHeader {
 			writer.write_u64(self.pow.nonce).unwrap();
 		}
 		header_buf
+	}
+
+	/// Constructs a header given pre_pow string, nonce, and proof
+	pub fn from_pre_pow_and_proof(
+		pre_pow: String,
+		nonce: u64,
+		proof: Proof,
+	) -> Result<Self, Error> {
+		// Convert hex pre pow string
+		let mut header_bytes = from_hex(pre_pow)
+			.map_err(|e| Error::Serialization(ser::Error::HexError(e.to_string())))?;
+		// Serialize and append serialized nonce and proof
+		serialize_default(&mut header_bytes, &nonce)?;
+		serialize_default(&mut header_bytes, &proof)?;
+
+		// Deserialize header from constructed bytes
+		Ok(deserialize_default(&mut &header_bytes[..])?)
 	}
 
 	/// Total difficulty accumulated by the proof of work on this header
