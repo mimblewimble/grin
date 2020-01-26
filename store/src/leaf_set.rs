@@ -96,8 +96,7 @@ impl LeafSet {
 	/// Only applicable for the output MMR.
 	fn unpruned_pre_cutoff(&self, cutoff_pos: u64, prune_list: &PruneList) -> Bitmap {
 		(1..=cutoff_pos)
-			.filter(|&x| pmmr::is_leaf(x))
-			.filter(|&x| !prune_list.is_pruned(x))
+			.filter(|&x| pmmr::is_leaf(x) && !prune_list.is_pruned(x))
 			.map(|x| x as u32)
 			.collect()
 	}

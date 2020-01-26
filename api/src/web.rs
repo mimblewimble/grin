@@ -105,10 +105,7 @@ impl QueryParams {
 	}
 
 	pub fn get(&self, name: &str) -> Option<&String> {
-		match self.params.get(name) {
-			None => None,
-			Some(v) => v.first(),
-		}
+		self.params.get(name).and_then(|v| v.first())
 	}
 }
 

@@ -130,9 +130,10 @@ impl TableViewItem<DiffColumn> for DiffBlock {
 	fn to_column(&self, column: DiffColumn) -> String {
 		let naive_datetime = NaiveDateTime::from_timestamp(self.time as i64, 0);
 		let datetime: DateTime<Utc> = DateTime::from_utc(naive_datetime, Utc);
-		let pow_type = match self.is_secondary {
-			true => String::from("Secondary"),
-			false => String::from("Primary"),
+		let pow_type = if self.is_secondary {
+			String::from("Secondary")
+		} else {
+			String::from("Primary")
 		};
 
 		match column {

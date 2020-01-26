@@ -107,10 +107,7 @@ where
 	/// Elements can be of variable size (handled internally in the append-only file impl).
 	///
 	pub fn read(&self, position: u64) -> Option<T> {
-		match self.file.read_as_elmt(position - 1) {
-			Ok(x) => Some(x),
-			Err(_) => None,
-		}
+		self.file.read_as_elmt(position - 1).ok()
 	}
 
 	/// Rewind the backend file to the specified position.
