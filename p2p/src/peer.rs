@@ -14,7 +14,6 @@
 
 use crate::codec::Codec;
 use crate::util::Mutex;
-use async_std::sync::RwLock;
 use futures::executor::block_on;
 use std::fmt;
 use std::fs::File;
@@ -24,6 +23,7 @@ use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use tokio::net::TcpStream;
+use tokio::sync::RwLock;
 use tokio_util::codec::Framed;
 
 use lru_cache::LruCache;

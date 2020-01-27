@@ -20,13 +20,13 @@ use crate::core::ser::ProtocolVersion;
 use crate::msg::{read_maybe_message, write_message, Hand, Msg, Shake, Type, USER_AGENT};
 use crate::peer::Peer;
 use crate::types::{Capabilities, Direction, Error, P2PConfig, PeerAddr, PeerInfo, PeerLiveInfo};
-use async_std::sync::RwLock;
 use futures::StreamExt;
 use rand::{thread_rng, Rng};
 use std::collections::VecDeque;
 use std::net::SocketAddr;
 use std::sync::Arc;
 use tokio::net::TcpStream;
+use tokio::sync::RwLock;
 use tokio_util::codec::Framed;
 
 /// Local generated nonce for peer connecting.

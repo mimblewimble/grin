@@ -29,7 +29,6 @@ use crate::msg::{
 };
 use crate::types::Error;
 use crate::util::RateCounter;
-use async_std::sync::RwLock;
 use bytes::Bytes;
 use futures::channel::{mpsc, oneshot};
 use futures::stream::{select, SplitSink, SplitStream};
@@ -40,6 +39,7 @@ use std::net::Shutdown;
 use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 use tokio::net::TcpStream;
+use tokio::sync::RwLock;
 use tokio::task::JoinHandle;
 use tokio_util::codec::Framed;
 

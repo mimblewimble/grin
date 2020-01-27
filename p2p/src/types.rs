@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use async_std::sync::RwLock;
 use futures::executor::block_on;
 use std::convert::From;
 use std::fs::File;
@@ -20,6 +19,7 @@ use std::io::{self, Read};
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV4, SocketAddrV6};
 use std::path::PathBuf;
 use std::sync::Arc;
+use tokio::sync::RwLock;
 
 use chrono::prelude::*;
 

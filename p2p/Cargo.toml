@@ -10,7 +10,6 @@ workspace = ".."
 edition = "2018"
 
 [dependencies]
-async-std = "1.4.0"
 bitflags = "1"
 bytes = "0.5"
 chrono = { version = "0.4.4", features = ["serde"] }
@@ -24,7 +23,7 @@ rand = "0.6"
 serde = "1"
 serde_derive = "1"
 tempfile = "3.0.5"
-tokio = { version = "0.2.6", features = ["full"] }
+tokio = { version = "0.2.10", features = ["full"] }
 tokio-util = { version = "0.2", features = ["codec"] }
 
 grin_core = { path = "../core", version = "3.1.0-beta.1" }
