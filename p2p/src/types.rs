@@ -292,7 +292,7 @@ pub struct P2PConfig {
 /// Default address for peer-to-peer connections.
 impl Default for P2PConfig {
 	fn default() -> P2PConfig {
-		let ipaddr = "0.0.0.0".parse().unwrap();
+		let ipaddr = "::".parse().unwrap();
 		P2PConfig {
 			host: ipaddr,
 			port: 3414,
