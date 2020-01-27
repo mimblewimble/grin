@@ -16,6 +16,7 @@
 //! to collect information about server status
 
 use crate::util::RwLock;
+use futures3::executor::block_on;
 use std::sync::Arc;
 use std::time::SystemTime;
 
@@ -224,10 +225,10 @@ impl PeerStats {
 	pub fn from_peer(peer: &p2p::Peer) -> PeerStats {
 		// State
 		let mut state = "Disconnected";
-		if peer.is_connected() {
+		if block_on(peer.is_connected()) {
 			state = "Connected";
 		}
-		if peer.is_banned() {
+		if block_on(peer.is_banned()) {
 			state = "Banned";
 		}
 		let addr = peer.info.addr.to_string();
@@ -244,8 +245,8 @@ impl PeerStats {
 			height: peer.info.height(),
 			direction: direction.to_string(),
 			last_seen: peer.info.last_seen(),
-			sent_bytes_per_sec: peer.last_min_sent_bytes().unwrap_or(0) / 60,
-			received_bytes_per_sec: peer.last_min_received_bytes().unwrap_or(0) / 60,
+			sent_bytes_per_sec: block_on(peer.last_min_sent_bytes()).unwrap_or(0) / 60,
+			received_bytes_per_sec: block_on(peer.last_min_received_bytes()).unwrap_or(0) / 60,
 		}
 	}
 }

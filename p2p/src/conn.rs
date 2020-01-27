@@ -20,29 +20,35 @@
 //! forces us to go through some additional gymnastic to loop over the async
 //! stream and make sure we get the right number of bytes out.
 
+use crate::codec::Codec;
 use crate::core::ser;
 use crate::core::ser::{FixedLength, ProtocolVersion};
 use crate::msg::{
-	read_body, read_discard, read_header, read_item, write_message, Msg, MsgHeader,
-	MsgHeaderWrapper,
+	read_body, read_item, write_message, Msg, MsgHeader,
+	MsgWrapper::{self, *},
 };
 use crate::types::Error;
-use crate::util::{RateCounter, RwLock};
-use std::io::{self, Read, Write};
-use std::net::{Shutdown, TcpStream};
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{mpsc, Arc};
-use std::time::Duration;
-use std::{
-	cmp,
-	thread::{self, JoinHandle},
-};
+use crate::util::RateCounter;
+use async_std::sync::RwLock;
+use bytes::Bytes;
+use futures::channel::{mpsc, oneshot};
+use futures::stream::{select, SplitSink, SplitStream};
+use futures::{FutureExt, SinkExt, StreamExt};
+use std::cmp;
+use std::io::{self, Cursor, Read, Write};
+use std::net::Shutdown;
+use std::sync::atomic::AtomicBool;
+use std::sync::Arc;
+use tokio::net::TcpStream;
+use tokio::task::JoinHandle;
+use tokio_util::codec::Framed;
 
 pub const SEND_CHANNEL_CAP: usize = 100;
 
-const HEADER_IO_TIMEOUT: Duration = Duration::from_millis(2000);
-const CHANNEL_TIMEOUT: Duration = Duration::from_millis(1000);
-const BODY_IO_TIMEOUT: Duration = Duration::from_millis(60000);
+type StopTx = oneshot::Sender<()>;
+type StopRx = oneshot::Receiver<()>;
+type Reader = SplitStream<Framed<TcpStream, Codec>>;
+type Writer = SplitSink<Framed<TcpStream, Codec>, Bytes>;
 
 /// A trait to be implemented in order to receive messages from the
 /// connection. Allows providing an optional response.
@@ -60,12 +66,6 @@ macro_rules! try_break {
 	($inner:expr) => {
 		match $inner {
 			Ok(v) => Some(v),
-			Err(Error::Connection(ref e)) if e.kind() == io::ErrorKind::TimedOut => None,
-			Err(Error::Connection(ref e)) if e.kind() == io::ErrorKind::WouldBlock => {
-				// to avoid the heavy polling which will consume CPU 100%
-				thread::sleep(Duration::from_millis(10));
-				None
-				}
 			Err(Error::Store(_))
 			| Err(Error::Chain(_))
 			| Err(Error::Internal)
@@ -78,13 +78,13 @@ macro_rules! try_break {
 	};
 }
 
-macro_rules! try_header {
-	($res:expr, $conn: expr) => {{
-		$conn
-			.set_read_timeout(Some(HEADER_IO_TIMEOUT))
-			.expect("set timeout");
-		try_break!($res)
-		}};
+macro_rules! try_next {
+	($inner:expr) => {
+		match $inner {
+			Some(v) => try_break!(v),
+			None => break,
+			}
+	};
 }
 
 /// A message as received by the connection. Provides access to the message
@@ -134,39 +134,30 @@ impl<'a> Message<'a> {
 
 pub struct StopHandle {
 	/// Channel to close the connection
-	stopped: Arc<AtomicBool>,
-	// we need Option to take ownhership of the handle in stop()
-	reader_thread: Option<JoinHandle<()>>,
-	writer_thread: Option<JoinHandle<()>>,
+	stop: Option<(StopTx, StopTx)>,
+	join: Option<(JoinHandle<Reader>, JoinHandle<Writer>)>,
 }
 
 impl StopHandle {
 	/// Schedule this connection to safely close via the async close_channel.
-	pub fn stop(&self) {
-		self.stopped.store(true, Ordering::Relaxed);
+	pub fn stop(&mut self) -> Result<(), ()> {
+		if let Some((r, w)) = self.stop.take() {
+			let _ = r.send(());
+			let _ = w.send(());
+		}
+		Ok(())
 	}
 
-	pub fn wait(&mut self) {
-		if let Some(reader_thread) = self.reader_thread.take() {
-			self.join_thread(reader_thread);
-		}
-		if let Some(writer_thread) = self.writer_thread.take() {
-			self.join_thread(writer_thread);
-		}
-	}
-
-	fn join_thread(&self, peer_thread: JoinHandle<()>) {
-		// wait only if other thread is calling us, eg shutdown
-		if thread::current().id() != peer_thread.thread().id() {
-			debug!("waiting for thread {:?} exit", peer_thread.thread().id());
-			if let Err(e) = peer_thread.join() {
-				error!("failed to stop peer thread: {:?}", e);
+	pub async fn wait(&mut self) {
+		if let Some((r, w)) = self.join.take() {
+			match (r.await, w.await) {
+				(Ok(r), Ok(w)) => {
+					// TODO: do we need this for graceful shutdown?
+					let stream = r.reunite(w).expect("Unable to reunite stream").into_inner();
+					let _ = stream.shutdown(Shutdown::Both);
+				}
+				_ => {}
 			}
-		} else {
-			debug!(
-				"attempt to stop thread {:?} from itself",
-				peer_thread.thread().id()
-			);
 		}
 	}
 }
@@ -174,7 +165,7 @@ impl StopHandle {
 #[derive(Clone)]
 pub struct ConnHandle {
 	/// Channel to allow sending data through the connection
-	pub send_channel: mpsc::SyncSender<Msg>,
+	pub send_channel: mpsc::Sender<Msg>,
 }
 
 impl ConnHandle {
@@ -185,15 +176,16 @@ impl ConnHandle {
 	/// and we do not want to close the connection. We drop the msg rather than blocking here.
 	/// If the buffer is full because there is an underlying issue with the peer
 	/// and potentially the peer connection. We assume this will be handled at the peer level.
-	pub fn send(&self, msg: Msg) -> Result<(), Error> {
+	pub fn send(&mut self, msg: Msg) -> Result<(), Error> {
 		match self.send_channel.try_send(msg) {
 			Ok(()) => Ok(()),
-			Err(mpsc::TrySendError::Disconnected(_)) => {
-				Err(Error::Send("try_send disconnected".to_owned()))
-			}
-			Err(mpsc::TrySendError::Full(_)) => {
-				debug!("conn_handle: try_send but buffer is full, dropping msg");
-				Ok(())
+			Err(e) => {
+				if e.is_disconnected() {
+					Err(Error::Send("try_send disconnected".to_owned()))
+				} else {
+					debug!("conn_handle: try_send but buffer is full, dropping msg");
+					Ok(())
+				}
 			}
 		}
 	}
@@ -216,28 +208,28 @@ impl Tracker {
 		}
 	}
 
-	pub fn inc_received(&self, size: u64) {
-		self.received_bytes.write().inc(size);
+	pub async fn inc_received(&self, size: u64) {
+		self.received_bytes.write().await.inc(size);
 	}
 
-	pub fn inc_sent(&self, size: u64) {
-		self.sent_bytes.write().inc(size);
+	pub async fn inc_sent(&self, size: u64) {
+		self.sent_bytes.write().await.inc(size);
 	}
 
-	pub fn inc_quiet_received(&self, size: u64) {
-		self.received_bytes.write().inc_quiet(size);
+	pub async fn inc_quiet_received(&self, size: u64) {
+		self.received_bytes.write().await.inc_quiet(size);
 	}
 
-	pub fn inc_quiet_sent(&self, size: u64) {
-		self.sent_bytes.write().inc_quiet(size);
+	pub async fn inc_quiet_sent(&self, size: u64) {
+		self.sent_bytes.write().await.inc_quiet(size);
 	}
 }
 
 /// Start listening on the provided connection and wraps it. Does not hang
 /// the current thread, instead just returns a future and the Connection
 /// itself.
-pub fn listen<H>(
-	stream: TcpStream,
+pub async fn listen<H>(
+	framed: Framed<TcpStream, Codec>,
 	version: ProtocolVersion,
 	tracker: Arc<Tracker>,
 	handler: H,
@@ -245,143 +237,200 @@ pub fn listen<H>(
 where
 	H: MessageHandler,
 {
-	let (send_tx, send_rx) = mpsc::sync_channel(SEND_CHANNEL_CAP);
-
-	let stopped = Arc::new(AtomicBool::new(false));
+	let (send_tx, send_rx) = mpsc::channel(SEND_CHANNEL_CAP);
 
 	let conn_handle = ConnHandle {
 		send_channel: send_tx,
 	};
 
-	let (reader_thread, writer_thread) = poll(
-		stream,
+	let (stop_read, stop_write, join_read, join_write) = poll(
+		framed,
 		conn_handle.clone(),
 		version,
 		handler,
 		send_rx,
-		stopped.clone(),
 		tracker,
 	)?;
 
 	Ok((
 		conn_handle,
 		StopHandle {
-			stopped,
-			reader_thread: Some(reader_thread),
-			writer_thread: Some(writer_thread),
+			stop: Some((stop_read, stop_write)),
+			join: Some((join_read, join_write)),
 		},
 	))
 }
 
 fn poll<H>(
-	conn: TcpStream,
+	framed: Framed<TcpStream, Codec>,
 	conn_handle: ConnHandle,
 	version: ProtocolVersion,
 	handler: H,
 	send_rx: mpsc::Receiver<Msg>,
-	stopped: Arc<AtomicBool>,
 	tracker: Arc<Tracker>,
-) -> io::Result<(JoinHandle<()>, JoinHandle<()>)>
+) -> io::Result<(StopTx, StopTx, JoinHandle<Reader>, JoinHandle<Writer>)>
 where
 	H: MessageHandler,
 {
+	let peer_address = framed
+		.get_ref()
+		.peer_addr()
+		.map(|a| a.to_string())
+		.unwrap_or("?".to_owned());
+
 	// Split out tcp stream out into separate reader/writer halves.
-	let mut reader = conn.try_clone().expect("clone conn for reader failed");
-	let mut writer = conn.try_clone().expect("clone conn for writer failed");
-	let reader_stopped = stopped.clone();
+	let (writer, reader) = framed.split();
 
-	let reader_tracker = tracker.clone();
-	let writer_tracker = tracker.clone();
+	let (stop_read_tx, stop_read_rx) = oneshot::channel();
+	let (stop_write_tx, stop_write_rx) = oneshot::channel();
 
-	let reader_thread = thread::Builder::new()
-		.name("peer_read".to_string())
-		.spawn(move || {
-			loop {
-				// check the read end
-				match try_header!(read_header(&mut reader, version), &mut reader) {
-					Some(MsgHeaderWrapper::Known(header)) => {
-						reader
-							.set_read_timeout(Some(BODY_IO_TIMEOUT))
-							.expect("set timeout");
-						let msg = Message::from_header(header, &mut reader, version);
+	let read_handle = tokio::spawn(read(
+		reader,
+		conn_handle,
+		stop_read_rx,
+		version,
+		handler,
+		tracker.clone(),
+		peer_address.clone(),
+	));
+	let write_handle = tokio::spawn(write(
+		writer,
+		send_rx,
+		stop_write_rx,
+		version,
+		tracker,
+		peer_address,
+	));
 
-						trace!(
-							"Received message header, type {:?}, len {}.",
-							msg.header.msg_type,
-							msg.header.msg_len
-						);
+	Ok((stop_read_tx, stop_write_tx, read_handle, write_handle))
+}
 
-						// Increase received bytes counter
-						reader_tracker.inc_received(MsgHeader::LEN as u64 + msg.header.msg_len);
+async fn read<H>(
+	reader: Reader,
+	mut conn_handle: ConnHandle,
+	stop: StopRx,
+	version: ProtocolVersion,
+	handler: H,
+	tracker: Arc<Tracker>,
+	peer_address: String,
+) -> Reader
+where
+	H: MessageHandler,
+{
+	enum Reading {
+		Message(MsgWrapper),
+		Stop,
+	}
+	use self::Message as Wrapper;
+	use Reading::*;
 
-						let resp_msg = try_break!(handler.consume(
-							msg,
-							reader_stopped.clone(),
-							reader_tracker.clone()
-						));
-						if let Some(Some(resp_msg)) = resp_msg {
-							try_break!(conn_handle.send(resp_msg));
-						}
-					}
-					Some(MsgHeaderWrapper::Unknown(msg_len, type_byte)) => {
-						debug!(
-							"Received unknown message header, type {:?}, len {}.",
-							type_byte, msg_len
-						);
-						// Increase received bytes counter
-						reader_tracker.inc_received(MsgHeader::LEN as u64 + msg_len);
+	let reader = reader.map(|msg| msg.map(|m| Message(m)));
+	let stop = stop.into_stream().map(|_| Ok(Stop));
+	let mut select = select(reader, stop);
+	let atomic = Arc::new(AtomicBool::new(false));
+	loop {
+		let atomic = atomic.clone();
+		let tracker = tracker.clone();
+		match try_next!(select.next().await) {
+			Some(Message(Known(msg))) => {
+				trace!(
+					"Received message header, type {:?}, len {}.",
+					msg.header.msg_type,
+					msg.header.msg_len
+				);
 
-						try_break!(read_discard(msg_len, &mut reader));
-					}
-					None => {}
-				}
+				// Increase received bytes counter
+				tracker
+					.inc_received(MsgHeader::LEN as u64 + msg.header.msg_len)
+					.await;
 
-				// check the close channel
-				if reader_stopped.load(Ordering::Relaxed) {
-					break;
+				let (header, body, version) = msg.parts();
+				let mut cursor = Cursor::new(body);
+				let wrap = Wrapper::from_header(header, &mut cursor, version);
+				// TODO: non-blocking handler
+				let block = tokio::task::block_in_place(|| handler.consume(wrap, atomic, tracker));
+				if let Some(Some(resp_msg)) = try_break!(block) {
+					try_break!(conn_handle.send(resp_msg));
 				}
 			}
+			Some(Message(Unknown(len, type_byte))) => {
+				debug!(
+					"Received unknown message header, type {:?}, len {}.",
+					type_byte, len
+				);
+				// Increase received bytes counter
+				tracker.inc_received(MsgHeader::LEN as u64 + len).await;
+			}
+			Some(Stop) => {
+				// Receive stop signal
+				break;
+			}
+			None => {}
+		}
+	}
 
-			debug!(
-				"Shutting down reader connection with {}",
-				reader
-					.peer_addr()
-					.map(|a| a.to_string())
-					.unwrap_or("?".to_owned())
-			);
-			let _ = reader.shutdown(Shutdown::Both);
-		})?;
+	debug!("Shutting down reader connection with {}", peer_address);
+	let (reader, _) = select.into_inner();
+	reader.into_inner()
+}
 
-	let writer_thread = thread::Builder::new()
-		.name("peer_write".to_string())
-		.spawn(move || {
-			let mut retry_send = Err(());
+async fn write(
+	mut writer: Writer,
+	rx: mpsc::Receiver<Msg>,
+	stop: StopRx,
+	version: ProtocolVersion,
+	tracker: Arc<Tracker>,
+	peer_address: String,
+) -> Writer {
+	enum Writing {
+		Message(Msg),
+		Stop,
+	}
+	use Writing::*;
+
+	let rx = rx.map(|m| Message(m));
+	let stop = stop.into_stream().map(|_| Stop);
+	let mut select = select(rx, stop);
+	while let Some(item) = select.next().await {
+		match item {
+			Message(msg) => {
+				try_break!(write_message(&mut writer, &msg, tracker.clone()).await);
+			}
+			Stop => break,
+		}
+	}
+
+	writer
+
+	/*let writer_thread = thread::Builder::new()
+	.name("peer_write".to_string())
+	.spawn(move || {
+		let mut retry_send = Err(());
+		writer
+			.set_write_timeout(Some(BODY_IO_TIMEOUT))
+			.expect("set timeout");
+		loop {
+			let maybe_data = retry_send.or_else(|_| send_rx.recv_timeout(CHANNEL_TIMEOUT));
+			retry_send = Err(());
+			if let Ok(data) = maybe_data {
+				let written =
+					try_break!(write_message(&mut writer, &data, writer_tracker.clone()));
+				if written.is_none() {
+					retry_send = Ok(data);
+				}
+			}
+			// check the close channel
+			if stopped.load(Ordering::Relaxed) {
+				break;
+			}
+		}
+
+		debug!(
+			"Shutting down writer connection with {}",
 			writer
-				.set_write_timeout(Some(BODY_IO_TIMEOUT))
-				.expect("set timeout");
-			loop {
-				let maybe_data = retry_send.or_else(|_| send_rx.recv_timeout(CHANNEL_TIMEOUT));
-				retry_send = Err(());
-				if let Ok(data) = maybe_data {
-					let written =
-						try_break!(write_message(&mut writer, &data, writer_tracker.clone()));
-					if written.is_none() {
-						retry_send = Ok(data);
-					}
-				}
-				// check the close channel
-				if stopped.load(Ordering::Relaxed) {
-					break;
-				}
-			}
-
-			debug!(
-				"Shutting down writer connection with {}",
-				writer
-					.peer_addr()
-					.map(|a| a.to_string())
-					.unwrap_or("?".to_owned())
-			);
-		})?;
-	Ok((reader_thread, writer_thread))
+				.peer_addr()
+				.map(|a| a.to_string())
+				.unwrap_or("?".to_owned())
+		);
+	})?;*/
 }

@@ -12,7 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::util::RwLock;
+use async_std::sync::RwLock;
+use futures::executor::block_on;
 use std::convert::From;
 use std::fs::File;
 use std::io::{self, Read};
@@ -102,6 +103,11 @@ impl From<chain::Error> for Error {
 impl From<io::Error> for Error {
 	fn from(e: io::Error) -> Error {
 		Error::Connection(e)
+	}
+}
+impl From<io::ErrorKind> for Error {
+	fn from(e: io::ErrorKind) -> Error {
+		Error::Connection(io::Error::from(e))
 	}
 }
 
@@ -415,7 +421,7 @@ impl PeerLiveInfo {
 impl PeerInfo {
 	/// The current total_difficulty of the peer.
 	pub fn total_difficulty(&self) -> Difficulty {
-		self.live_info.read().total_difficulty
+		block_on(self.live_info.read()).total_difficulty
 	}
 
 	pub fn is_outbound(&self) -> bool {
@@ -428,23 +434,23 @@ impl PeerInfo {
 
 	/// The current height of the peer.
 	pub fn height(&self) -> u64 {
-		self.live_info.read().height
+		block_on(self.live_info.read()).height
 	}
 
 	/// Time of last_seen for this peer (via ping/pong).
 	pub fn last_seen(&self) -> DateTime<Utc> {
-		self.live_info.read().last_seen
+		block_on(self.live_info.read()).last_seen
 	}
 
 	/// Time of first_seen for this peer.
 	pub fn first_seen(&self) -> DateTime<Utc> {
-		self.live_info.read().first_seen
+		block_on(self.live_info.read()).first_seen
 	}
 
 	/// Update the total_difficulty, height and last_seen of the peer.
 	/// Takes a write lock on the live_info.
 	pub fn update(&self, height: u64, total_difficulty: Difficulty) {
-		let mut live_info = self.live_info.write();
+		let mut live_info = block_on(self.live_info.write());
 		if total_difficulty != live_info.total_difficulty {
 			live_info.stuck_detector = Utc::now();
 		}

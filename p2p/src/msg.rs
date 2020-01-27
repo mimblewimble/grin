@@ -19,16 +19,21 @@ use crate::core::core::hash::Hash;
 use crate::core::core::BlockHeader;
 use crate::core::pow::Difficulty;
 use crate::core::ser::{
-	self, FixedLength, ProtocolVersion, Readable, Reader, StreamingReader, Writeable, Writer,
+	self, BufReader, FixedLength, ProtocolVersion, Readable, Reader, StreamingReader, Writeable,
+	Writer,
 };
 use crate::core::{consensus, global};
 use crate::types::{
 	Capabilities, Error, PeerAddr, ReasonForBan, MAX_BLOCK_HEADERS, MAX_LOCATORS, MAX_PEER_ADDRS,
 };
+use bytes::{BufMut, Bytes, BytesMut};
+use futures::executor::block_on;
+use futures::{Sink, SinkExt};
 use num::FromPrimitive;
-use std::fs::File;
-use std::io::{Read, Write};
+use std::io::{Cursor, Read, Write};
 use std::sync::Arc;
+use tokio::fs::File;
+use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 
 /// Grin's user agent with current version
 pub const USER_AGENT: &'static str = concat!("MW/Grin ", env!("CARGO_PKG_VERSION"));
@@ -118,8 +123,8 @@ fn magic() -> [u8; 2] {
 }
 
 pub struct Msg {
-	header: MsgHeader,
-	body: Vec<u8>,
+	pub header: MsgHeader,
+	body: Bytes,
 	attachment: Option<File>,
 	version: ProtocolVersion,
 }
@@ -130,7 +135,7 @@ impl Msg {
 		msg: T,
 		version: ProtocolVersion,
 	) -> Result<Msg, Error> {
-		let body = ser::ser_vec(&msg, version)?;
+		let body = Bytes::from(ser::ser_vec(&msg, version)?);
 		Ok(Msg {
 			header: MsgHeader::new(msg_type, body.len() as u64),
 			body,
@@ -139,23 +144,39 @@ impl Msg {
 		})
 	}
 
+	/// Deconstruct a message into its constituent parts
+	pub fn parts(self) -> (MsgHeader, Bytes, ProtocolVersion) {
+		(self.header, self.body, self.version)
+	}
+
+	pub fn from_bytes(header: MsgHeader, body: Bytes, version: ProtocolVersion) -> Msg {
+		Msg {
+			header,
+			body,
+			attachment: None,
+			version,
+		}
+	}
+
 	pub fn add_attachment(&mut self, attachment: File) {
 		self.attachment = Some(attachment)
 	}
 }
 
-/// Read a header from the provided stream without blocking if the
-/// underlying stream is async. Typically headers will be polled for, so
-/// we do not want to block.
-///
+pub enum MsgWrapper {
+	Known(Msg),
+	Unknown(u64, u8),
+}
+
+/// Read a header from the provided stream in an async way
 /// Note: We return a MsgHeaderWrapper here as we may encounter an unknown msg type.
 ///
-pub fn read_header(
-	stream: &mut dyn Read,
+pub async fn read_header<R: AsyncRead + Unpin>(
+	stream: &mut R,
 	version: ProtocolVersion,
 ) -> Result<MsgHeaderWrapper, Error> {
 	let mut head = vec![0u8; MsgHeader::LEN];
-	stream.read_exact(&mut head)?;
+	stream.read_exact(&mut head).await?;
 	let header = ser::deserialize::<MsgHeaderWrapper>(&mut &head[..], version)?;
 	Ok(header)
 }
@@ -184,54 +205,73 @@ pub fn read_body<T: Readable>(
 	ser::deserialize(&mut &body[..], version).map_err(From::from)
 }
 
-/// Read (an unknown) message from the provided stream and discard it.
-pub fn read_discard(msg_len: u64, stream: &mut dyn Read) -> Result<(), Error> {
-	let mut buffer = vec![0u8; msg_len as usize];
-	stream.read_exact(&mut buffer)?;
-	Ok(())
-}
-
-/// Reads a full message from the underlying stream.
-pub fn read_message<T: Readable>(
-	stream: &mut dyn Read,
+/// Convenience function to read something that could be a message
+pub fn read_maybe_message<T: Readable, E: Into<Error>>(
+	wrapper: Option<Result<MsgWrapper, E>>,
 	version: ProtocolVersion,
 	msg_type: Type,
 ) -> Result<T, Error> {
-	match read_header(stream, version)? {
-		MsgHeaderWrapper::Known(header) => {
+	match wrapper {
+		Some(Ok(w)) => read_message(w, version, msg_type),
+		Some(Err(e)) => Err(e.into()),
+		None => Err(std::io::ErrorKind::UnexpectedEof.into()),
+	}
+}
+
+/// Reads a full message of a specific type
+pub fn read_message<T: Readable>(
+	wrapper: MsgWrapper,
+	version: ProtocolVersion,
+	msg_type: Type,
+) -> Result<T, Error> {
+	match wrapper {
+		MsgWrapper::Known(msg) => {
+			let (header, mut body, version) = msg.parts();
+
 			if header.msg_type == msg_type {
-				read_body(&header, stream, version)
+				let mut reader = BufReader::new(&mut body, version);
+				T::read(&mut reader).map_err(|e| e.into())
 			} else {
 				Err(Error::BadMessage)
 			}
 		}
-		MsgHeaderWrapper::Unknown(msg_len, _) => {
-			read_discard(msg_len, stream)?;
-			Err(Error::BadMessage)
-		}
+		MsgWrapper::Unknown(_, _) => Err(Error::BadMessage),
 	}
 }
 
-pub fn write_message(
-	stream: &mut dyn Write,
+/// Write a message into a `Sink`
+pub async fn write_message<W, E>(
+	sink: &mut W,
 	msg: &Msg,
 	tracker: Arc<Tracker>,
-) -> Result<(), Error> {
-	let mut buf = ser::ser_vec(&msg.header, msg.version)?;
-	buf.extend(&msg.body[..]);
-	stream.write_all(&buf[..])?;
-	tracker.inc_sent(buf.len() as u64);
+) -> Result<(), Error>
+where
+	W: Sink<Bytes, Error = E> + Unpin + Send,
+	E: Into<Error>,
+{
+	let mut buf = BytesMut::with_capacity(MsgHeader::LEN + msg.body.len());
+	let header = ser::ser_vec(&msg.header, msg.version)?;
+	buf.extend_from_slice(&header);
+	buf.extend_from_slice(&msg.body);
+
+	let split = buf.split().freeze();
+	let len = split.len() as u64;
+	sink.send(split).await.map_err(|e| e.into())?;
+	tracker.inc_sent(len).await;
+
 	if let Some(file) = &msg.attachment {
-		let mut file = file.try_clone()?;
-		let mut buf = [0u8; 8000];
+		let mut file = file.try_clone().await?;
 		loop {
-			match file.read(&mut buf[..]) {
+			buf.reserve(8 * 1024);
+			match file.read(&mut buf[..]).await {
 				Ok(0) => break,
 				Ok(n) => {
-					stream.write_all(&buf[..n])?;
+					sink.send(buf.split().freeze())
+						.await
+						.map_err(|e| e.into())?;
 					// Increase sent bytes "quietly" without incrementing the counter.
 					// (In a loop here for the single attachment).
-					tracker.inc_quiet_sent(n as u64);
+					tracker.inc_quiet_sent(n as u64).await;
 				}
 				Err(e) => return Err(From::from(e)),
 			}

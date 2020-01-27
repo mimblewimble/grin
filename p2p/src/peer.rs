@@ -12,14 +12,19 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::util::{Mutex, RwLock};
+use crate::codec::Codec;
+use crate::util::Mutex;
+use async_std::sync::RwLock;
+use futures::executor::block_on;
 use std::fmt;
 use std::fs::File;
 use std::io::Read;
-use std::net::{Shutdown, TcpStream};
+use std::net::Shutdown;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use tokio::net::TcpStream;
+use tokio_util::codec::Framed;
 
 use lru_cache::LruCache;
 
@@ -75,7 +80,11 @@ impl fmt::Debug for Peer {
 
 impl Peer {
 	// Only accept and connect can be externally used to build a peer
-	fn new(info: PeerInfo, conn: TcpStream, adapter: Arc<dyn NetAdapter>) -> std::io::Result<Peer> {
+	async fn new(
+		info: PeerInfo,
+		framed: Framed<TcpStream, Codec>,
+		adapter: Arc<dyn NetAdapter>,
+	) -> std::io::Result<Peer> {
 		let state = Arc::new(RwLock::new(State::Connected));
 		let state_sync_requested = Arc::new(AtomicBool::new(false));
 		let tracking_adapter = TrackingAdapter::new(adapter);
@@ -85,7 +94,7 @@ impl Peer {
 			state_sync_requested.clone(),
 		);
 		let tracker = Arc::new(conn::Tracker::new());
-		let (sendh, stoph) = conn::listen(conn, info.version, tracker.clone(), handler)?;
+		let (sendh, stoph) = conn::listen(framed, info.version, tracker.clone(), handler).await?;
 		let send_handle = Mutex::new(sendh);
 		let stop_handle = Mutex::new(stoph);
 		Ok(Peer {
@@ -99,18 +108,20 @@ impl Peer {
 		})
 	}
 
-	pub fn accept(
-		mut conn: TcpStream,
+	pub async fn accept(
+		conn: TcpStream,
 		capab: Capabilities,
 		total_difficulty: Difficulty,
 		hs: &Handshake,
 		adapter: Arc<dyn NetAdapter>,
 	) -> Result<Peer, Error> {
 		debug!("accept: handshaking from {:?}", conn.peer_addr());
-		let info = hs.accept(capab, total_difficulty, &mut conn);
+		let mut framed = Framed::new(conn, Codec::new(hs.protocol_version()));
+		let info = hs.accept(capab, total_difficulty, &mut framed).await;
 		match info {
-			Ok(info) => Ok(Peer::new(info, conn, adapter)?),
+			Ok(info) => Ok(Peer::new(info, framed, adapter).await?),
 			Err(e) => {
+				let conn = framed.get_ref();
 				debug!(
 					"accept: handshaking from {:?} failed with error: {:?}",
 					conn.peer_addr(),
@@ -124,8 +135,8 @@ impl Peer {
 		}
 	}
 
-	pub fn connect(
-		mut conn: TcpStream,
+	pub async fn connect(
+		conn: TcpStream,
 		capab: Capabilities,
 		total_difficulty: Difficulty,
 		self_addr: PeerAddr,
@@ -133,10 +144,14 @@ impl Peer {
 		adapter: Arc<dyn NetAdapter>,
 	) -> Result<Peer, Error> {
 		debug!("connect: handshaking with {:?}", conn.peer_addr());
-		let info = hs.initiate(capab, total_difficulty, self_addr, &mut conn);
+		let mut framed = Framed::new(conn, Codec::new(hs.protocol_version()));
+		let info = hs
+			.initiate(capab, total_difficulty, self_addr, &mut framed)
+			.await;
 		match info {
-			Ok(info) => Ok(Peer::new(info, conn, adapter)?),
+			Ok(info) => Ok(Peer::new(info, framed, adapter).await?),
 			Err(e) => {
+				let conn = framed.get_ref();
 				debug!(
 					"connect: handshaking with {:?} failed with error: {:?}",
 					conn.peer_addr(),
@@ -182,18 +197,18 @@ impl Peer {
 	}
 
 	/// Whether this peer is currently connected.
-	pub fn is_connected(&self) -> bool {
-		State::Connected == *self.state.read()
+	pub async fn is_connected(&self) -> bool {
+		State::Connected == *self.state.read().await
 	}
 
 	/// Whether this peer has been banned.
-	pub fn is_banned(&self) -> bool {
-		State::Banned == *self.state.read()
+	pub async fn is_banned(&self) -> bool {
+		State::Banned == *self.state.read().await
 	}
 
 	/// Whether this peer is stuck on sync.
-	pub fn is_stuck(&self) -> (bool, Difficulty) {
-		let peer_live_info = self.info.live_info.read();
+	pub async fn is_stuck(&self) -> (bool, Difficulty) {
+		let peer_live_info = self.info.live_info.read().await;
 		let now = Utc::now().timestamp_millis();
 		// if last updated difficulty is 2 hours ago, we're sure this peer is a stuck node.
 		if now > peer_live_info.stuck_detector.timestamp_millis() + global::STUCK_PEER_KICK_TIME {
@@ -204,33 +219,33 @@ impl Peer {
 	}
 
 	/// Whether the peer is considered abusive, mostly for spammy nodes
-	pub fn is_abusive(&self) -> bool {
-		let rec = self.tracker.received_bytes.read();
-		let sent = self.tracker.sent_bytes.read();
+	pub async fn is_abusive(&self) -> bool {
+		let rec = self.tracker.received_bytes.read().await;
+		let sent = self.tracker.sent_bytes.read().await;
 		rec.count_per_min() > MAX_PEER_MSG_PER_MIN || sent.count_per_min() > MAX_PEER_MSG_PER_MIN
 	}
 
 	/// Number of bytes sent to the peer
-	pub fn last_min_sent_bytes(&self) -> Option<u64> {
-		let sent_bytes = self.tracker.sent_bytes.read();
+	pub async fn last_min_sent_bytes(&self) -> Option<u64> {
+		let sent_bytes = self.tracker.sent_bytes.read().await;
 		Some(sent_bytes.bytes_per_min())
 	}
 
 	/// Number of bytes received from the peer
-	pub fn last_min_received_bytes(&self) -> Option<u64> {
-		let received_bytes = self.tracker.received_bytes.read();
+	pub async fn last_min_received_bytes(&self) -> Option<u64> {
+		let received_bytes = self.tracker.received_bytes.read().await;
 		Some(received_bytes.bytes_per_min())
 	}
 
-	pub fn last_min_message_counts(&self) -> Option<(u64, u64)> {
-		let received_bytes = self.tracker.received_bytes.read();
-		let sent_bytes = self.tracker.sent_bytes.read();
+	pub async fn last_min_message_counts(&self) -> Option<(u64, u64)> {
+		let received_bytes = self.tracker.received_bytes.read().await;
+		let sent_bytes = self.tracker.sent_bytes.read().await;
 		Some((sent_bytes.count_per_min(), received_bytes.count_per_min()))
 	}
 
 	/// Set this peer status to banned
-	pub fn set_banned(&self) {
-		*self.state.write() = State::Banned;
+	pub async fn set_banned(&self) {
+		*self.state.write().await = State::Banned;
 	}
 
 	/// Send a msg with given msg_type to our peer via the connection.
@@ -411,16 +426,18 @@ impl Peer {
 	pub fn stop(&self) {
 		debug!("Stopping peer {:?}", self.info.addr);
 		match self.stop_handle.try_lock() {
-			Some(handle) => handle.stop(),
+			Some(mut handle) => {
+				let _ = handle.stop();
+			}
 			None => error!("can't get stop lock for peer"),
 		}
 	}
 
 	/// Waits until the peer's thread exit
-	pub fn wait(&self) {
+	pub async fn wait(&self) {
 		debug!("Waiting for peer {:?} to stop", self.info.addr);
 		match self.stop_handle.try_lock() {
-			Some(mut handle) => handle.wait(),
+			Some(mut handle) => handle.wait().await,
 			None => error!("can't get stop lock for peer"),
 		}
 	}
@@ -446,21 +463,21 @@ impl TrackingAdapter {
 	}
 
 	fn has_recv(&self, hash: Hash) -> bool {
-		self.received.write().contains_key(&hash)
+		block_on(self.received.write()).contains_key(&hash)
 	}
 
 	fn push_recv(&self, hash: Hash) {
-		self.received.write().insert(hash, ());
+		block_on(self.received.write()).insert(hash, ());
 	}
 
 	/// Track a block or transaction hash requested by us.
 	/// Track the opts alongside the hash so we know if this was due to us syncing or not.
 	fn push_req(&self, hash: Hash, opts: chain::Options) {
-		self.requested.write().insert(hash, opts);
+		block_on(self.requested.write()).insert(hash, opts);
 	}
 
 	fn req_opts(&self, hash: Hash) -> Option<chain::Options> {
-		self.requested.write().get_mut(&hash).cloned()
+		block_on(self.requested.write()).get_mut(&hash).cloned()
 	}
 }
 

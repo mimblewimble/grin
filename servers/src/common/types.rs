@@ -17,6 +17,7 @@ use std::convert::From;
 use std::sync::Arc;
 
 use chrono::prelude::Utc;
+use futures3::executor::block_on;
 use rand::prelude::*;
 
 use crate::api;
@@ -374,7 +375,7 @@ impl DandelionEpoch {
 	pub fn relay_peer(&mut self, peers: &Arc<p2p::Peers>) -> Option<Arc<p2p::Peer>> {
 		let mut update_relay = false;
 		if let Some(peer) = &self.relay_peer {
-			if !peer.is_connected() {
+			if !block_on(peer.is_connected()) {
 				info!(
 					"DandelionEpoch: relay_peer: {:?} not connected, choosing a new one.",
 					peer.info.addr

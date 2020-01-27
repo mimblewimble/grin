@@ -12,13 +12,15 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use futures::channel::oneshot;
+use futures::prelude::*;
+use futures::stream::select;
 use std::fs::File;
-use std::io::{self, Read};
-use std::net::{Shutdown, SocketAddr, TcpListener, TcpStream};
+use std::io::Read;
+use std::net::{Shutdown, SocketAddr};
 use std::path::PathBuf;
 use std::sync::Arc;
-use std::thread;
-use std::time::Duration;
+use tokio::net::{TcpListener, TcpStream};
 
 use crate::chain;
 use crate::core::core;
@@ -36,6 +38,9 @@ use crate::types::{
 use crate::util::StopState;
 use chrono::prelude::{DateTime, Utc};
 
+type StopTx = oneshot::Sender<()>;
+type StopRx = oneshot::Receiver<()>;
+
 /// P2P server implementation, handling bootstrapping to find and connect to
 /// peers, receiving connections from other peers and keep track of all of them.
 pub struct Server {
@@ -44,6 +49,12 @@ pub struct Server {
 	handshake: Arc<Handshake>,
 	pub peers: Arc<Peers>,
 	stop_state: Arc<StopState>,
+	stop_tx: StopTx,
+}
+
+enum Listen {
+	Stream(Result<tokio::net::TcpStream, std::io::Error>),
+	Stop,
 }
 
 // TODO TLS
@@ -56,6 +67,7 @@ impl Server {
 		adapter: Arc<dyn ChainAdapter>,
 		genesis: Hash,
 		stop_state: Arc<StopState>,
+		stop_tx: StopTx,
 	) -> Result<Server, Error> {
 		Ok(Server {
 			config: config.clone(),
@@ -63,71 +75,13 @@ impl Server {
 			handshake: Arc::new(Handshake::new(genesis, config.clone())),
 			peers: Arc::new(Peers::new(PeerStore::new(db_root)?, adapter, config)),
 			stop_state,
+			stop_tx,
 		})
-	}
-
-	/// Starts a new TCP server and listen to incoming connections. This is a
-	/// blocking call until the TCP server stops.
-	pub fn listen(&self) -> Result<(), Error> {
-		// start TCP listener and handle incoming connections
-		let addr = SocketAddr::new(self.config.host, self.config.port);
-		let listener = TcpListener::bind(addr)?;
-		listener.set_nonblocking(true)?;
-
-		let sleep_time = Duration::from_millis(5);
-		loop {
-			// Pause peer ingress connection request. Only for tests.
-			if self.stop_state.is_paused() {
-				thread::sleep(Duration::from_secs(1));
-				continue;
-			}
-
-			match listener.accept() {
-				Ok((stream, peer_addr)) => {
-					// We want out TCP stream to be in blocking mode.
-					// The TCP listener is in nonblocking mode so we *must* explicitly
-					// move the accepted TCP stream into blocking mode (or all kinds of
-					// bad things can and will happen).
-					// A nonblocking TCP listener will accept nonblocking TCP streams which
-					// we do not want.
-					stream.set_nonblocking(false)?;
-
-					let peer_addr = PeerAddr(peer_addr);
-
-					if self.check_undesirable(&stream) {
-						// Shutdown the incoming TCP connection if it is not desired
-						if let Err(e) = stream.shutdown(Shutdown::Both) {
-							debug!("Error shutting down conn: {:?}", e);
-						}
-						continue;
-					}
-					match self.handle_new_peer(stream) {
-						Err(Error::ConnectionClose) => debug!("shutting down, ignoring a new peer"),
-						Err(e) => {
-							debug!("Error accepting peer {}: {:?}", peer_addr.to_string(), e);
-							let _ = self.peers.add_banned(peer_addr, ReasonForBan::BadHandshake);
-						}
-						Ok(_) => {}
-					}
-				}
-				Err(ref e) if e.kind() == io::ErrorKind::WouldBlock => {
-					// nothing to do, will retry in next iteration
-				}
-				Err(e) => {
-					debug!("Couldn't establish new client connection: {:?}", e);
-				}
-			}
-			if self.stop_state.is_stopped() {
-				break;
-			}
-			thread::sleep(sleep_time);
-		}
-		Ok(())
 	}
 
 	/// Asks the server to connect to a new peer. Directly returns the peer if
 	/// we're already connected to the provided address.
-	pub fn connect(&self, addr: PeerAddr) -> Result<Arc<Peer>, Error> {
+	pub async fn connect(&self, addr: PeerAddr) -> Result<Arc<Peer>, Error> {
 		if self.stop_state.is_stopped() {
 			return Err(Error::ConnectionClose);
 		}
@@ -139,7 +93,7 @@ impl Server {
 
 		if global::is_production_mode() {
 			let hs = self.handshake.clone();
-			let addrs = hs.addrs.read();
+			let addrs = hs.addrs.read().await;
 			if addrs.contains(&addr) {
 				debug!("connect: ignore connecting to PeerWithSelf, addr: {}", addr);
 				return Err(Error::PeerWithSelf);
@@ -158,7 +112,7 @@ impl Server {
 			self.config.port,
 			addr
 		);
-		match TcpStream::connect_timeout(&addr.0, Duration::from_secs(10)) {
+		match TcpStream::connect(&addr.0).await {
 			Ok(stream) => {
 				let addr = SocketAddr::new(self.config.host, self.config.port);
 				let total_diff = self.peers.total_difficulty()?;
@@ -170,7 +124,8 @@ impl Server {
 					PeerAddr(addr),
 					&self.handshake,
 					self.peers.clone(),
-				)?;
+				)
+				.await?;
 				let peer = Arc::new(peer);
 				self.peers.add_connected(peer.clone())?;
 				Ok(peer)
@@ -188,7 +143,17 @@ impl Server {
 		}
 	}
 
-	fn handle_new_peer(&self, stream: TcpStream) -> Result<(), Error> {
+	async fn handle_new_peer(&self, stream: tokio::net::TcpStream) -> Result<(), Error> {
+		let peer_addr = PeerAddr(stream.peer_addr()?);
+		if self.check_undesirable(peer_addr) {
+			// TODO: async
+			// Shutdown the incoming TCP connection if it is not desired
+			if let Err(e) = stream.shutdown(Shutdown::Both) {
+				debug!("Error shutting down conn: {:?}", e);
+			}
+			return Ok(());
+		}
+
 		if self.stop_state.is_stopped() {
 			return Err(Error::ConnectionClose);
 		}
@@ -201,8 +166,12 @@ impl Server {
 			total_diff,
 			&self.handshake,
 			self.peers.clone(),
-		)?;
-		self.peers.add_connected(Arc::new(peer))?;
+		)
+		.await?;
+		let peers_inner = self.peers.clone();
+		tokio::task::spawn_blocking(move || peers_inner.add_connected(Arc::new(peer)))
+			.await
+			.unwrap()?;
 		Ok(())
 	}
 
@@ -219,37 +188,35 @@ impl Server {
 	/// addresses (NAT), network distribution is improved if they choose
 	/// different sets of peers themselves. In addition, it prevent potential
 	/// duplicate connections, malicious or not.
-	fn check_undesirable(&self, stream: &TcpStream) -> bool {
+	fn check_undesirable(&self, peer_addr: PeerAddr) -> bool {
 		if self.peers.peer_inbound_count()
 			>= self.config.peer_max_inbound_count() + self.config.peer_listener_buffer_count()
 		{
 			debug!("Accepting new connection will exceed peer limit, refusing connection.");
 			return true;
 		}
-		if let Ok(peer_addr) = stream.peer_addr() {
-			let peer_addr = PeerAddr(peer_addr);
-			if self.peers.is_banned(peer_addr) {
-				debug!("Peer {} banned, refusing connection.", peer_addr);
-				return true;
-			}
-			// The call to is_known() can fail due to contention on the peers map.
-			// If it fails we want to default to refusing the connection.
-			match self.peers.is_known(peer_addr) {
-				Ok(true) => {
-					debug!("Peer {} already known, refusing connection.", peer_addr);
-					return true;
-				}
-				Err(_) => {
-					error!(
-						"Peer {} is_known check failed, refusing connection.",
-						peer_addr
-					);
-					return true;
-				}
-				_ => (),
-			}
+
+		if self.peers.is_banned(peer_addr) {
+			debug!("Peer {} banned, refusing connection.", peer_addr);
+			return true;
 		}
-		false
+
+		// The call to is_known() can fail due to contention on the peers map.
+		// If it fails we want to default to refusing the connection.
+		match self.peers.is_known(peer_addr) {
+			Ok(true) => {
+				debug!("Peer {} already known, refusing connection.", peer_addr);
+				true
+			}
+			Err(_) => {
+				error!(
+					"Peer {} is_known check failed, refusing connection.",
+					peer_addr
+				);
+				true
+			}
+			_ => false,
+		}
 	}
 
 	pub fn stop(&self) {
@@ -379,4 +346,41 @@ impl NetAdapter for DummyAdapter {
 	fn is_banned(&self, _: PeerAddr) -> bool {
 		false
 	}
+}
+
+/// Starts a new TCP server and listen to incoming connections
+pub async fn listen(server: Arc<Server>, stop_rx: StopRx) -> Result<(), Error> {
+	// start TCP listener and handle incoming connections
+	let addr = SocketAddr::new(server.config.host, server.config.port);
+	let mut listener = TcpListener::bind(addr).await?;
+	let incoming = listener.incoming().map(|s| Listen::Stream(s));
+	let stop = stop_rx.into_stream().map(|_| Listen::Stop);
+	let mut select = select(incoming, stop);
+
+	while let Some(next) = select.next().await {
+		match next {
+			Listen::Stream(Ok(stream)) => {
+				// Spawn a new task to handle the incoming connection
+				let server_inner = server.clone();
+				tokio::spawn(async move {
+					let server = server_inner;
+					let peer_addr = match stream.peer_addr() {
+						Ok(a) => PeerAddr(a),
+						Err(_) => return,
+					};
+
+					if let Err(e) = server.handle_new_peer(stream).await {
+						debug!("Error accepting peer {}: {:?}", peer_addr.to_string(), e);
+						let _ = server
+							.peers
+							.add_banned(peer_addr, ReasonForBan::BadHandshake);
+					}
+				});
+			}
+			Listen::Stream(Err(e)) => debug!("Error accepting peer: {:?}", e),
+			Listen::Stop => break,
+		}
+	}
+
+	Ok(())
 }

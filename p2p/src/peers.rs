@@ -13,6 +13,7 @@
 // limitations under the License.
 
 use crate::util::RwLock;
+use futures::executor::block_on;
 use std::collections::HashMap;
 use std::fs::File;
 use std::io::Read;
@@ -117,7 +118,7 @@ impl Peers {
 		};
 		let mut res = peers
 			.values()
-			.filter(|p| p.is_connected())
+			.filter(|p| block_on(p.is_connected()))
 			.cloned()
 			.collect::<Vec<_>>();
 		res.shuffle(&mut thread_rng());
@@ -256,7 +257,7 @@ impl Peers {
 				debug!("Banning peer {}", peer_addr);
 				// setting peer status will get it removed at the next clean_peer
 				peer.send_ban_reason(ban_reason)?;
-				peer.set_banned();
+				block_on(peer.set_banned());
 				peer.stop();
 				let mut peers = self.peers.try_write_for(LOCK_TIMEOUT).ok_or_else(|| {
 					error!("ban_peer: failed to get peers lock");
@@ -430,14 +431,14 @@ impl Peers {
 				}
 			};
 			for peer in peers.values() {
-				if peer.is_banned() {
+				if block_on(peer.is_banned()) {
 					debug!("clean_peers {:?}, peer banned", peer.info.addr);
 					rm.push(peer.info.addr.clone());
-				} else if !peer.is_connected() {
+				} else if !block_on(peer.is_connected()) {
 					debug!("clean_peers {:?}, not connected", peer.info.addr);
 					rm.push(peer.info.addr.clone());
-				} else if peer.is_abusive() {
-					if let Some(counts) = peer.last_min_message_counts() {
+				} else if block_on(peer.is_abusive()) {
+					if let Some(counts) = block_on(peer.last_min_message_counts()) {
 						debug!(
 							"clean_peers {:?}, abusive ({} sent, {} recv)",
 							peer.info.addr, counts.0, counts.1,
@@ -446,7 +447,7 @@ impl Peers {
 					let _ = self.update_state(peer.info.addr, State::Banned);
 					rm.push(peer.info.addr.clone());
 				} else {
-					let (stuck, diff) = peer.is_stuck();
+					let (stuck, diff) = block_on(peer.is_stuck());
 					match self.adapter.total_difficulty() {
 						Ok(total_difficulty) => {
 							if stuck && diff < total_difficulty {
@@ -509,7 +510,7 @@ impl Peers {
 			peer.stop();
 		}
 		for (_, peer) in peers.drain() {
-			peer.wait();
+			block_on(peer.wait());
 		}
 	}
 

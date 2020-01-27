@@ -22,14 +22,16 @@ use crate::msg::{
 };
 use crate::types::{Error, NetAdapter, PeerInfo};
 use chrono::prelude::Utc;
+use futures::executor::block_on;
 use rand::{thread_rng, Rng};
 use std::cmp;
-use std::fs::{self, File, OpenOptions};
+use std::fs::{self, OpenOptions};
 use std::io::{BufWriter, Seek, SeekFrom};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::Instant;
 use tempfile::tempfile;
+use tokio::fs::File;
 
 pub struct Protocol {
 	adapter: Arc<dyn NetAdapter>,
@@ -276,7 +278,7 @@ impl MessageHandler for Protocol {
 					&kernel_data_response,
 					self.peer_info.version,
 				)?;
-				response.add_attachment(kernel_data);
+				response.add_attachment(File::from_std(kernel_data));
 				Ok(Some(response))
 			}
 
@@ -298,7 +300,7 @@ impl MessageHandler for Protocol {
 
 					// Increase received bytes quietly (without affecting the counters).
 					// Otherwise we risk banning a peer as "abusive".
-					tracker.inc_quiet_received(size as u64);
+					block_on(tracker.inc_quiet_received(size as u64));
 				}
 
 				// Remember to seek back to start of the file as the caller is likely
@@ -339,7 +341,7 @@ impl MessageHandler for Protocol {
 						},
 						self.peer_info.version,
 					)?;
-					resp.add_attachment(txhashset.reader);
+					resp.add_attachment(File::from_std(txhashset.reader));
 					Ok(Some(resp))
 				} else {
 					Ok(None)
@@ -400,7 +402,7 @@ impl MessageHandler for Protocol {
 						}
 						// Increase received bytes quietly (without affecting the counters).
 						// Otherwise we risk banning a peer as "abusive".
-						tracker.inc_quiet_received(size as u64);
+						block_on(tracker.inc_quiet_received(size as u64));
 
 						// check the close channel
 						if stopped.load(Ordering::Relaxed) {
@@ -432,7 +434,7 @@ impl MessageHandler for Protocol {
 					tmp,
 				);
 
-				let tmp_zip = File::open(tmp.clone())?;
+				let tmp_zip = fs::File::open(tmp.clone())?;
 				let res = self
 					.adapter
 					.txhashset_write(sm_arch.hash, tmp_zip, &self.peer_info)?;

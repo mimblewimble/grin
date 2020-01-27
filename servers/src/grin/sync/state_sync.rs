@@ -14,6 +14,7 @@
 
 use chrono::prelude::{DateTime, Utc};
 use chrono::Duration;
+use futures3::executor::block_on;
 use std::sync::Arc;
 
 use crate::chain::{self, SyncState, SyncStatus};
@@ -80,7 +81,7 @@ impl StateSync {
 		// check peer connection status of this sync
 		if let Some(ref peer) = self.state_sync_peer {
 			if let SyncStatus::TxHashsetDownload { .. } = self.sync_state.status() {
-				if !peer.is_connected() {
+				if !block_on(peer.is_connected()) {
 					sync_need_restart = true;
 					info!(
 						"state_sync: peer connection lost: {:?}. restart",

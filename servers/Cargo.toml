@@ -14,6 +14,7 @@ hyper = "0.12"
 hyper-rustls = "0.14"
 fs2 = "0.4"
 futures = "0.1"
+futures3 = { version = "0.3.0", package = "futures" }
 http = "0.1"
 itertools = "0.7"
 lmdb-zero = "0.4.4"
@@ -24,6 +25,7 @@ serde_derive = "1"
 serde_json = "1"
 chrono = "0.4.4"
 tokio =  "0.1.11"
+tokio2 = { version = "0.2.6", package = "tokio" }
 walkdir = "2.2.9"
 
 grin_api = { path = "../api", version = "3.1.0-beta.1" }

@@ -16,6 +16,7 @@
 //! the peer-to-peer server, the blockchain and the transaction pool) and acts
 //! as a facade.
 
+use futures3::executor::block_on;
 use std::fs;
 use std::fs::File;
 use std::io::prelude::*;
@@ -52,6 +53,7 @@ use crate::p2p::types::PeerAddr;
 use crate::pool;
 use crate::util::file::get_first_line;
 use crate::util::{RwLock, StopState};
+use grin_p2p::listen;
 use grin_util::logger::LogEntry;
 
 /// Grin server holding internal structures.
@@ -158,6 +160,7 @@ impl Server {
 		};
 
 		let stop_state = Arc::new(StopState::new());
+		let (stop_tx, stop_rx) = futures3::channel::oneshot::channel();
 
 		// Shared cache for verification results.
 		// We cache rangeproof verification and kernel signature verification.
@@ -215,6 +218,7 @@ impl Server {
 			net_adapter.clone(),
 			genesis.hash(),
 			stop_state.clone(),
+			stop_tx,
 		)?);
 
 		// Initialize various adapters with our dynamic set of connected peers.
@@ -267,7 +271,13 @@ impl Server {
 		let _ = thread::Builder::new()
 			.name("p2p-server".to_string())
 			.spawn(move || {
-				if let Err(e) = p2p_inner.listen() {
+				let mut rt = tokio2::runtime::Builder::new()
+					.threaded_scheduler()
+					.build()
+					.unwrap();
+
+				let res = rt.block_on(listen(p2p_inner, stop_rx));
+				if let Err(e) = res {
 					error!("P2P server failed with erorr: {:?}", e);
 				}
 			})?;
@@ -331,7 +341,7 @@ impl Server {
 
 	/// Asks the server to connect to a peer at the provided network address.
 	pub fn connect_peer(&self, addr: PeerAddr) -> Result<(), Error> {
-		self.p2p.connect(addr)?;
+		block_on(self.p2p.connect(addr))?;
 		Ok(())
 	}
 

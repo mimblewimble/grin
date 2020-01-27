@@ -36,6 +36,7 @@ extern crate serde_derive;
 #[macro_use]
 extern crate log;
 
+mod codec;
 mod conn;
 pub mod handshake;
 pub mod msg;
@@ -49,7 +50,7 @@ pub mod types;
 pub use crate::conn::SEND_CHANNEL_CAP;
 pub use crate::peer::Peer;
 pub use crate::peers::Peers;
-pub use crate::serv::{DummyAdapter, Server};
+pub use crate::serv::{listen, DummyAdapter, Server};
 pub use crate::store::{PeerData, State};
 pub use crate::types::{
 	Capabilities, ChainAdapter, Direction, Error, P2PConfig, PeerAddr, PeerInfo, ReasonForBan,

@@ -12,18 +12,22 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use crate::codec::Codec;
 use crate::conn::Tracker;
 use crate::core::core::hash::Hash;
 use crate::core::pow::Difficulty;
 use crate::core::ser::ProtocolVersion;
-use crate::msg::{read_message, write_message, Hand, Msg, Shake, Type, USER_AGENT};
+use crate::msg::{read_maybe_message, write_message, Hand, Msg, Shake, Type, USER_AGENT};
 use crate::peer::Peer;
 use crate::types::{Capabilities, Direction, Error, P2PConfig, PeerAddr, PeerInfo, PeerLiveInfo};
-use crate::util::RwLock;
+use async_std::sync::RwLock;
+use futures::StreamExt;
 use rand::{thread_rng, Rng};
 use std::collections::VecDeque;
-use std::net::{SocketAddr, TcpStream};
+use std::net::SocketAddr;
 use std::sync::Arc;
+use tokio::net::TcpStream;
+use tokio_util::codec::Framed;
 
 /// Local generated nonce for peer connecting.
 /// Used for self-connecting detection (on receiver side),
@@ -64,6 +68,10 @@ impl Handshake {
 		}
 	}
 
+	pub fn protocol_version(&self) -> ProtocolVersion {
+		self.protocol_version
+	}
+
 	/// Select a protocol version here that we know is supported by both us and the remote peer.
 	///
 	/// Current strategy is to simply use `min(local, remote)`.
@@ -76,16 +84,16 @@ impl Handshake {
 		Ok(version)
 	}
 
-	pub fn initiate(
+	pub async fn initiate(
 		&self,
 		capabilities: Capabilities,
 		total_difficulty: Difficulty,
 		self_addr: PeerAddr,
-		conn: &mut TcpStream,
+		framed: &mut Framed<TcpStream, Codec>,
 	) -> Result<PeerInfo, Error> {
 		// prepare the first part of the handshake
-		let nonce = self.next_nonce();
-		let peer_addr = match conn.peer_addr() {
+		let nonce = self.next_nonce().await;
+		let peer_addr = match framed.get_ref().peer_addr() {
 			Ok(pa) => PeerAddr(pa),
 			Err(e) => return Err(Error::Connection(e)),
 		};
@@ -103,9 +111,9 @@ impl Handshake {
 
 		// write and read the handshake response
 		let msg = Msg::new(Type::Hand, hand, self.protocol_version)?;
-		write_message(conn, &msg, self.tracker.clone())?;
-
-		let shake: Shake = read_message(conn, self.protocol_version, Type::Shake)?;
+		write_message(framed, &msg, self.tracker.clone()).await?;
+		let shake: Shake =
+			read_maybe_message(framed.next().await, self.protocol_version, Type::Shake)?;
 		if shake.genesis != self.genesis {
 			return Err(Error::GenesisMismatch {
 				us: self.genesis,
@@ -114,6 +122,7 @@ impl Handshake {
 		}
 
 		let negotiated_version = self.negotiate_protocol_version(shake.version)?;
+		framed.codec_mut().version = negotiated_version;
 
 		let peer_info = PeerInfo {
 			capabilities: shake.capabilities,
@@ -142,13 +151,14 @@ impl Handshake {
 		Ok(peer_info)
 	}
 
-	pub fn accept(
+	pub async fn accept(
 		&self,
 		capab: Capabilities,
 		total_difficulty: Difficulty,
-		conn: &mut TcpStream,
+		framed: &mut Framed<TcpStream, Codec>,
 	) -> Result<PeerInfo, Error> {
-		let hand: Hand = read_message(conn, self.protocol_version, Type::Hand)?;
+		let hand: Hand =
+			read_maybe_message(framed.next().await, self.protocol_version, Type::Hand)?;
 
 		// all the reasons we could refuse this connection for
 		if hand.genesis != self.genesis {
@@ -158,11 +168,11 @@ impl Handshake {
 			});
 		} else {
 			// check the nonce to see if we are trying to connect to ourselves
-			let nonces = self.nonces.read();
-			let addr = resolve_peer_addr(hand.sender_addr, &conn);
+			let nonces = self.nonces.read().await;
+			let addr = resolve_peer_addr(hand.sender_addr, framed.get_ref());
 			if nonces.contains(&hand.nonce) {
 				// save ip addresses of ourselves
-				let mut addrs = self.addrs.write();
+				let mut addrs = self.addrs.write().await;
 				addrs.push_back(addr);
 				if addrs.len() >= ADDRS_CAP {
 					addrs.pop_front();
@@ -172,12 +182,13 @@ impl Handshake {
 		}
 
 		let negotiated_version = self.negotiate_protocol_version(hand.version)?;
+		framed.codec_mut().version = negotiated_version;
 
 		// all good, keep peer info
 		let peer_info = PeerInfo {
 			capabilities: hand.capabilities,
 			user_agent: hand.user_agent,
-			addr: resolve_peer_addr(hand.sender_addr, &conn),
+			addr: resolve_peer_addr(hand.sender_addr, framed.get_ref()),
 			version: negotiated_version,
 			live_info: Arc::new(RwLock::new(PeerLiveInfo::new(hand.total_difficulty))),
 			direction: Direction::Inbound,
@@ -201,7 +212,7 @@ impl Handshake {
 		};
 
 		let msg = Msg::new(Type::Shake, shake, negotiated_version)?;
-		write_message(conn, &msg, self.tracker.clone())?;
+		write_message(framed, &msg, self.tracker.clone()).await?;
 
 		trace!("Success handshake with {}.", peer_info.addr);
 
@@ -209,10 +220,10 @@ impl Handshake {
 	}
 
 	/// Generate a new random nonce and store it in our ring buffer
-	fn next_nonce(&self) -> u64 {
+	async fn next_nonce(&self) -> u64 {
 		let nonce = thread_rng().gen();
 
-		let mut nonces = self.nonces.write();
+		let mut nonces = self.nonces.write().await;
 		nonces.push_back(nonce);
 		if nonces.len() >= NONCES_CAP {
 			nonces.pop_front();
