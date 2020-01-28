@@ -31,14 +31,9 @@ use crate::core::ser::{
 fn pmmr_leaf_idx_iter() {
 	let (data_dir, elems) = setup("leaf_idx_iter");
 	{
-		let mut backend = store::pmmr::PMMRBackend::new(
-			data_dir.to_string(),
-			true,
-			// false,
-			ProtocolVersion(1),
-			None,
-		)
-		.unwrap();
+		let mut backend =
+			store::pmmr::PMMRBackend::new(data_dir.to_string(), true, ProtocolVersion(1), None)
+				.unwrap();
 
 		// adding first set of 4 elements and sync
 		let mmr_size = load(0, &elems[0..5], &mut backend);
