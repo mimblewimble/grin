@@ -26,7 +26,6 @@ use crate::core::core::{
 };
 use crate::core::libtx::build::{self, input, output};
 use crate::core::libtx::ProofBuilder;
-use crate::core::pow::Proof;
 use crate::core::{global, ser};
 use chrono::Duration;
 use grin_core as core;
