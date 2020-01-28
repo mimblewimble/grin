@@ -345,7 +345,7 @@ impl Readable for TxKernel {
 }
 
 /// We store kernels in the kernel MMR.
-/// Note: These are "variable size" to support different kernel featuere variants.
+/// Note: These are "variable size" to support different kernel feature variants.
 impl PMMRable for TxKernel {
 	type E = Self;
 

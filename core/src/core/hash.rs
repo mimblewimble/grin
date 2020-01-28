@@ -24,7 +24,6 @@ use blake2::blake2b::Blake2b;
 use byteorder::{BigEndian, ByteOrder};
 use std::cmp::min;
 use std::convert::AsRef;
-use std::ops::Add;
 use std::{fmt, ops};
 use util;
 
@@ -37,17 +36,6 @@ pub const ZERO_HASH: Hash = Hash([0; 32]);
 pub struct Hash([u8; 32]);
 
 impl DefaultHashable for Hash {}
-
-impl Hash {
-	fn hash_with<T: Writeable>(&self, other: T) -> Hash {
-		let mut hasher = HashWriter::default();
-		ser::Writeable::write(self, &mut hasher).unwrap();
-		ser::Writeable::write(&other, &mut hasher).unwrap();
-		let mut ret = [0; 32];
-		hasher.finalize(&mut ret);
-		Hash(ret)
-	}
-}
 
 impl fmt::Debug for Hash {
 	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -168,13 +156,6 @@ impl Writeable for Hash {
 	}
 }
 
-impl Add for Hash {
-	type Output = Hash;
-	fn add(self, other: Hash) -> Hash {
-		self.hash_with(other)
-	}
-}
-
 impl Default for Hash {
 	fn default() -> Hash {
 		ZERO_HASH
@@ -234,6 +215,7 @@ pub trait Hashed {
 /// Implementing this trait enables the default
 /// hash implementation
 pub trait DefaultHashable: Writeable {}
+
 impl<D: DefaultHashable> Hashed for D {
 	fn hash(&self) -> Hash {
 		let mut hasher = HashWriter::default();
