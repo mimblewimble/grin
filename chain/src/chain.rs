@@ -509,7 +509,7 @@ impl Chain {
 	pub fn get_unspent_output_at(&self, pos: u64) -> Result<Output, Error> {
 		let header_pmmr = self.header_pmmr.read();
 		let txhashset = self.txhashset.read();
-		txhashset::utxo_view(&header_pmmr, &txhashset, |utxo| {
+		txhashset::utxo_view(&header_pmmr, &txhashset, |utxo, _| {
 			utxo.get_unspent_output_at(pos)
 		})
 	}
@@ -518,8 +518,8 @@ impl Chain {
 	pub fn validate_tx(&self, tx: &Transaction) -> Result<(), Error> {
 		let header_pmmr = self.header_pmmr.read();
 		let txhashset = self.txhashset.read();
-		txhashset::utxo_view(&header_pmmr, &txhashset, |utxo| {
-			utxo.validate_tx(tx)?;
+		txhashset::utxo_view(&header_pmmr, &txhashset, |utxo, batch| {
+			utxo.validate_tx(tx, batch)?;
 			Ok(())
 		})
 	}
@@ -535,8 +535,8 @@ impl Chain {
 		let height = self.next_block_height()?;
 		let header_pmmr = self.header_pmmr.read();
 		let txhashset = self.txhashset.read();
-		txhashset::utxo_view(&header_pmmr, &txhashset, |utxo| {
-			utxo.verify_coinbase_maturity(&tx.inputs(), height)?;
+		txhashset::utxo_view(&header_pmmr, &txhashset, |utxo, batch| {
+			utxo.verify_coinbase_maturity(&tx.inputs(), height, batch)?;
 			Ok(())
 		})
 	}
@@ -567,10 +567,10 @@ impl Chain {
 		// Now create an extension from the txhashset and validate against the
 		// latest block header. Rewind the extension to the specified header to
 		// ensure the view is consistent.
-		txhashset::extending_readonly(&mut header_pmmr, &mut txhashset, |mut ext| {
-			pipe::rewind_and_apply_fork(&header, &mut ext)?;
-			let ref mut extension = ext.extension;
-			extension.validate(&self.genesis, fast_validation, &NoStatus)?;
+		txhashset::extending_readonly(&mut header_pmmr, &mut txhashset, |ext, batch| {
+			pipe::rewind_and_apply_fork(&header, ext, batch)?;
+			ext.extension
+				.validate(&self.genesis, fast_validation, &NoStatus, &header)?;
 			Ok(())
 		})
 	}
@@ -582,9 +582,9 @@ impl Chain {
 		let mut txhashset = self.txhashset.write();
 
 		let (prev_root, roots, sizes) =
-			txhashset::extending_readonly(&mut header_pmmr, &mut txhashset, |ext| {
-				let previous_header = ext.batch().get_previous_header(&b.header)?;
-				pipe::rewind_and_apply_fork(&previous_header, ext)?;
+			txhashset::extending_readonly(&mut header_pmmr, &mut txhashset, |ext, batch| {
+				let previous_header = batch.get_previous_header(&b.header)?;
+				pipe::rewind_and_apply_fork(&previous_header, ext, batch)?;
 
 				let ref mut extension = ext.extension;
 				let ref mut header_extension = ext.header_extension;
@@ -593,7 +593,7 @@ impl Chain {
 				let prev_root = header_extension.root()?;
 
 				// Apply the latest block to the chain state via the extension.
-				extension.apply_block(b)?;
+				extension.apply_block(b, batch)?;
 
 				Ok((prev_root, extension.roots()?, extension.sizes()))
 			})?;
@@ -628,10 +628,9 @@ impl Chain {
 		let mut header_pmmr = self.header_pmmr.write();
 		let mut txhashset = self.txhashset.write();
 		let merkle_proof =
-			txhashset::extending_readonly(&mut header_pmmr, &mut txhashset, |ext| {
-				pipe::rewind_and_apply_fork(&header, ext)?;
-				let ref mut extension = ext.extension;
-				extension.merkle_proof(output)
+			txhashset::extending_readonly(&mut header_pmmr, &mut txhashset, |ext, batch| {
+				pipe::rewind_and_apply_fork(&header, ext, batch)?;
+				ext.extension.merkle_proof(output, batch)
 			})?;
 
 		Ok(merkle_proof)
@@ -647,7 +646,7 @@ impl Chain {
 	/// Provides a reading view into the current kernel state.
 	pub fn kernel_data_read(&self) -> Result<File, Error> {
 		let txhashset = self.txhashset.read();
-		txhashset::rewindable_kernel_view(&txhashset, |view| view.kernel_data_read())
+		txhashset::rewindable_kernel_view(&txhashset, |view, _| view.kernel_data_read())
 	}
 
 	/// Writes kernels provided to us (via a kernel data download).
@@ -679,9 +678,9 @@ impl Chain {
 
 		let mut header_pmmr = self.header_pmmr.write();
 		let mut txhashset = self.txhashset.write();
-		txhashset::extending_readonly(&mut header_pmmr, &mut txhashset, |ext| {
-			pipe::rewind_and_apply_fork(&header, ext)?;
-			ext.extension.snapshot()?;
+		txhashset::extending_readonly(&mut header_pmmr, &mut txhashset, |ext, batch| {
+			pipe::rewind_and_apply_fork(&header, ext, batch)?;
+			ext.extension.snapshot(batch)?;
 
 			// prepare the zip
 			txhashset::zip_read(self.db_root.clone(), &header)
@@ -724,11 +723,11 @@ impl Chain {
 
 		let mut count = 0;
 		let mut current = header.clone();
-		txhashset::rewindable_kernel_view(&txhashset, |view| {
+		txhashset::rewindable_kernel_view(&txhashset, |view, batch| {
 			while current.height > 0 {
 				view.rewind(&current)?;
 				view.validate_root()?;
-				current = view.batch().get_previous_header(&current)?;
+				current = batch.get_previous_header(&current)?;
 				count += 1;
 			}
 			Ok(())
@@ -749,8 +748,8 @@ impl Chain {
 		let mut sync_pmmr = self.sync_pmmr.write();
 		let mut batch = self.store.batch()?;
 		let header = batch.get_block_header(&head.hash())?;
-		txhashset::header_extending(&mut sync_pmmr, &mut batch, |extension| {
-			pipe::rewind_and_apply_header_fork(&header, extension)?;
+		txhashset::header_extending(&mut sync_pmmr, &mut batch, |ext, batch| {
+			pipe::rewind_and_apply_header_fork(&header, ext, batch)?;
 			Ok(())
 		})?;
 		batch.commit()?;
@@ -939,25 +938,31 @@ impl Chain {
 
 		let mut header_pmmr = self.header_pmmr.write();
 		let mut batch = self.store.batch()?;
-		txhashset::extending(&mut header_pmmr, &mut txhashset, &mut batch, |ext| {
-			let extension = &mut ext.extension;
-			extension.rewind(&header)?;
+		txhashset::extending(
+			&mut header_pmmr,
+			&mut txhashset,
+			&mut batch,
+			|ext, batch| {
+				let extension = &mut ext.extension;
+				extension.rewind(&header, batch)?;
 
-			// Validate the extension, generating the utxo_sum and kernel_sum.
-			// Full validation, including rangeproofs and kernel signature verification.
-			let (utxo_sum, kernel_sum) = extension.validate(&self.genesis, false, status)?;
+				// Validate the extension, generating the utxo_sum and kernel_sum.
+				// Full validation, including rangeproofs and kernel signature verification.
+				let (utxo_sum, kernel_sum) =
+					extension.validate(&self.genesis, false, status, &header)?;
 
-			// Save the block_sums (utxo_sum, kernel_sum) to the db for use later.
-			extension.batch.save_block_sums(
-				&header.hash(),
-				&BlockSums {
-					utxo_sum,
-					kernel_sum,
-				},
-			)?;
+				// Save the block_sums (utxo_sum, kernel_sum) to the db for use later.
+				batch.save_block_sums(
+					&header.hash(),
+					&BlockSums {
+						utxo_sum,
+						kernel_sum,
+					},
+				)?;
 
-			Ok(())
-		})?;
+				Ok(())
+			},
+		)?;
 
 		debug!("txhashset_write: finished validating and rebuilding");
 
@@ -1473,14 +1478,14 @@ fn setup_head(
 	// We read header_head and sync_head directly from the MMR and assume they are non-empty.
 	{
 		if header_pmmr.last_pos == 0 {
-			txhashset::header_extending(header_pmmr, &mut batch, |extension| {
-				extension.apply_header(&genesis.header)
+			txhashset::header_extending(header_pmmr, &mut batch, |ext, _| {
+				ext.apply_header(&genesis.header)
 			})?;
 		}
 
 		if sync_pmmr.last_pos == 0 {
-			txhashset::header_extending(sync_pmmr, &mut batch, |extension| {
-				extension.apply_header(&genesis.header)
+			txhashset::header_extending(sync_pmmr, &mut batch, |ext, _| {
+				ext.apply_header(&genesis.header)
 			})?;
 		}
 	}
@@ -1498,18 +1503,17 @@ fn setup_head(
 				// to match the provided block header.
 				let header = batch.get_block_header(&head.last_block_h)?;
 
-				let res = txhashset::extending(header_pmmr, txhashset, &mut batch, |ext| {
-					pipe::rewind_and_apply_fork(&header, ext)?;
+				let res = txhashset::extending(header_pmmr, txhashset, &mut batch, |ext, batch| {
+					pipe::rewind_and_apply_fork(&header, ext, batch)?;
 
 					let ref mut extension = ext.extension;
 
-					extension.validate_roots()?;
+					extension.validate_roots(&header)?;
 
 					// now check we have the "block sums" for the block in question
 					// if we have no sums (migrating an existing node) we need to go
 					// back to the txhashset and sum the outputs and kernels
-					if header.height > 0 && extension.batch.get_block_sums(&header.hash()).is_err()
-					{
+					if header.height > 0 && batch.get_block_sums(&header.hash()).is_err() {
 						debug!(
 							"init: building (missing) block sums for {} @ {}",
 							header.height,
@@ -1519,10 +1523,10 @@ fn setup_head(
 						// Do a full (and slow) validation of the txhashset extension
 						// to calculate the utxo_sum and kernel_sum at this block height.
 						let (utxo_sum, kernel_sum) =
-							extension.validate_kernel_sums(&genesis.header)?;
+							extension.validate_kernel_sums(&genesis.header, &header)?;
 
 						// Save the block_sums to the db for use later.
-						extension.batch.save_block_sums(
+						batch.save_block_sums(
 							&header.hash(),
 							&BlockSums {
 								utxo_sum,
@@ -1571,12 +1575,8 @@ fn setup_head(
 					kernel_sum,
 				};
 			}
-			txhashset::extending(header_pmmr, txhashset, &mut batch, |ext| {
-				let ref mut extension = ext.extension;
-				extension.apply_block(&genesis)?;
-				extension.validate_roots()?;
-				extension.validate_sizes()?;
-				Ok(())
+			txhashset::extending(header_pmmr, txhashset, &mut batch, |ext, batch| {
+				ext.extension.apply_block(&genesis, batch)
 			})?;
 
 			// Save the block_sums to the db for use later.
