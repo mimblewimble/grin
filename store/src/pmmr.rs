@@ -24,6 +24,7 @@ use crate::leaf_set::LeafSet;
 use crate::prune_list::PruneList;
 use crate::types::{AppendOnlyFile, DataFile, SizeEntry, SizeInfo};
 use croaring::Bitmap;
+use std::convert::TryInto;
 use std::path::{Path, PathBuf};
 
 const PMMR_HASH_FILE: &str = "pmmr_hash.bin";
@@ -252,7 +253,7 @@ impl<T: PMMRable> PMMRBackend<T> {
 		};
 
 		// Hash file is always "fixed size" and we use 32 bytes per hash.
-		let hash_size_info = SizeInfo::FixedSize(32);
+		let hash_size_info = SizeInfo::FixedSize(Hash::LEN.try_into().unwrap());
 
 		let hash_file = DataFile::open(&data_dir.join(PMMR_HASH_FILE), hash_size_info, version)?;
 		let data_file = DataFile::open(&data_dir.join(PMMR_DATA_FILE), size_info, version)?;

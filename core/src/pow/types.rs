@@ -157,8 +157,8 @@ impl Readable for Difficulty {
 }
 
 impl Difficulty {
-	/// Length of a Difficulty in bytes for serialization purposes.
-	pub const LEN: u16 = 8;
+	/// Difficulty is 8 bytes.
+	pub const LEN: usize = 8;
 }
 
 impl Serialize for Difficulty {

@@ -611,6 +611,7 @@ impl PMMRable for RangeProof {
 		self.clone()
 	}
 
+	// Size is length prefix (8 bytes for u64) + MAX_PROOF_SIZE.
 	fn elmt_size() -> Option<u16> {
 		Some((8 + MAX_PROOF_SIZE).try_into().unwrap())
 	}

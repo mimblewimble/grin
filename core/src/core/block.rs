@@ -26,14 +26,14 @@ use crate::core::{
 use crate::global;
 use crate::pow::{verify_size, Difficulty, Proof, ProofOfWork};
 use crate::ser::{
-	self, deserialize_default, serialize_default, PMMRable, Readable, Reader,
-	Writeable, Writer,
+	self, deserialize_default, serialize_default, PMMRable, Readable, Reader, Writeable, Writer,
 };
 use chrono::naive::{MAX_DATE, MIN_DATE};
 use chrono::prelude::{DateTime, NaiveDateTime, Utc};
 use chrono::Duration;
 use keychain::{self, BlindingFactor};
 use std::collections::HashSet;
+use std::convert::TryInto;
 use std::fmt;
 use std::iter::FromIterator;
 use std::sync::Arc;
@@ -168,11 +168,6 @@ impl Writeable for HeaderEntry {
 	}
 }
 
-impl HeaderEntry {
-	/// Length of a HeaderEntry in bytes.
-	pub const LEN: u16 = 32 + 8 + Difficulty::LEN + 4 + 1;
-}
-
 impl Hashed for HeaderEntry {
 	/// The hash of the underlying block.
 	fn hash(&self) -> Hash {
@@ -267,8 +262,10 @@ impl PMMRable for BlockHeader {
 		}
 	}
 
+	// Size is hash + u64 + difficulty + u32 + u8.
 	fn elmt_size() -> Option<u16> {
-		Some(HeaderEntry::LEN)
+		const LEN: usize = Hash::LEN + 8 + Difficulty::LEN + 4 + 1;
+		Some(LEN.try_into().unwrap())
 	}
 }
 
