@@ -19,14 +19,15 @@ use crate::core::verifier_cache::VerifierCache;
 use crate::core::{committed, Committed};
 use crate::libtx::secp_ser;
 use crate::ser::{
-	self, read_multi, FixedLength, PMMRable, ProtocolVersion, Readable, Reader,
-	VerifySortedAndUnique, Writeable, Writer,
+	self, read_multi, PMMRable, ProtocolVersion, Readable, Reader, VerifySortedAndUnique,
+	Writeable, Writer,
 };
 use crate::{consensus, global};
 use enum_primitive::FromPrimitive;
 use keychain::{self, BlindingFactor};
 use std::cmp::Ordering;
 use std::cmp::{max, min};
+use std::convert::TryInto;
 use std::sync::Arc;
 use std::{error, fmt};
 use util;
@@ -352,12 +353,10 @@ impl PMMRable for TxKernel {
 	fn as_elmt(&self) -> Self::E {
 		self.clone()
 	}
-}
 
-/// Kernels are "variable size" but we need to implement FixedLength for legacy reasons.
-/// At some point we will refactor the MMR backend so this is no longer required.
-impl FixedLength for TxKernel {
-	const LEN: usize = 0;
+	fn elmt_size() -> Option<u16> {
+		None
+	}
 }
 
 impl KernelFeatures {
@@ -1430,6 +1429,14 @@ impl PMMRable for Output {
 	fn as_elmt(&self) -> OutputIdentifier {
 		OutputIdentifier::from_output(self)
 	}
+
+	fn elmt_size() -> Option<u16> {
+		Some(
+			(1 + secp::constants::PEDERSEN_COMMITMENT_SIZE)
+				.try_into()
+				.unwrap(),
+		)
+	}
 }
 
 impl OutputFeatures {
@@ -1547,10 +1554,6 @@ impl OutputIdentifier {
 			util::to_hex(self.commit.0.to_vec()),
 		)
 	}
-}
-
-impl FixedLength for OutputIdentifier {
-	const LEN: usize = 1 + secp::constants::PEDERSEN_COMMITMENT_SIZE;
 }
 
 impl Writeable for OutputIdentifier {

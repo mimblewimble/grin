@@ -60,7 +60,6 @@ impl<T: PMMRable> PMMRHandle<T> {
 		sub_dir: &str,
 		file_name: &str,
 		prunable: bool,
-		fixed_size: bool,
 		version: ProtocolVersion,
 		header: Option<&BlockHeader>,
 	) -> Result<PMMRHandle<T>, Error> {
@@ -69,8 +68,7 @@ impl<T: PMMRable> PMMRHandle<T> {
 		let path_str = path.to_str().ok_or(Error::from(ErrorKind::Other(
 			"invalid file path".to_owned(),
 		)))?;
-		let backend =
-			PMMRBackend::new(path_str.to_string(), prunable, fixed_size, version, header)?;
+		let backend = PMMRBackend::new(path_str.to_string(), prunable, version, header)?;
 		let last_pos = backend.unpruned_size();
 		Ok(PMMRHandle { backend, last_pos })
 	}
@@ -136,7 +134,6 @@ impl TxHashSet {
 			TXHASHSET_SUBDIR,
 			OUTPUT_SUBDIR,
 			true,
-			true,
 			ProtocolVersion(1),
 			header,
 		)?;
@@ -145,7 +142,6 @@ impl TxHashSet {
 			&root_dir,
 			TXHASHSET_SUBDIR,
 			RANGE_PROOF_SUBDIR,
-			true,
 			true,
 			ProtocolVersion(1),
 			header,
@@ -162,7 +158,6 @@ impl TxHashSet {
 				TXHASHSET_SUBDIR,
 				KERNEL_SUBDIR,
 				false, // not prunable
-				false, // variable size kernel data file
 				version,
 				None,
 			)?;

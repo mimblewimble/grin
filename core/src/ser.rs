@@ -23,10 +23,10 @@ use crate::core::hash::{DefaultHashable, Hash, Hashed};
 use crate::global::PROTOCOL_VERSION;
 use byteorder::{BigEndian, ByteOrder, ReadBytesExt};
 use keychain::{BlindingFactor, Identifier, IDENTIFIER_SIZE};
+use std::convert::TryInto;
 use std::fmt::{self, Debug};
 use std::io::{self, Read, Write};
-use std::marker;
-use std::{cmp, error};
+use std::{cmp, error, marker};
 use util::secp::constants::{
 	AGG_SIGNATURE_SIZE, COMPRESSED_PUBLIC_KEY_SIZE, MAX_PROOF_SIZE, PEDERSEN_COMMITMENT_SIZE,
 	SECRET_KEY_SIZE,
@@ -179,14 +179,13 @@ pub trait Writer {
 
 	/// Writes a variable number of bytes. The length is encoded as a 64-bit
 	/// prefix.
-	fn write_bytes<T: AsFixedBytes>(&mut self, bytes: &T) -> Result<(), Error> {
+	fn write_bytes<T: AsRef<[u8]>>(&mut self, bytes: T) -> Result<(), Error> {
 		self.write_u64(bytes.as_ref().len() as u64)?;
 		self.write_fixed_bytes(bytes)
 	}
 
-	/// Writes a fixed number of bytes from something that can turn itself into
-	/// a `&[u8]`. The reader is expected to know the actual length on read.
-	fn write_fixed_bytes<T: AsFixedBytes>(&mut self, fixed: &T) -> Result<(), Error>;
+	/// Writes a fixed number of bytes. The reader is expected to know the actual length on read.
+	fn write_fixed_bytes<T: AsRef<[u8]>>(&mut self, bytes: T) -> Result<(), Error>;
 }
 
 /// Implementations defined how different numbers and binary structures are
@@ -567,13 +566,9 @@ impl Writeable for BlindingFactor {
 
 impl Readable for BlindingFactor {
 	fn read(reader: &mut dyn Reader) -> Result<BlindingFactor, Error> {
-		let bytes = reader.read_fixed_bytes(BlindingFactor::LEN)?;
+		let bytes = reader.read_fixed_bytes(SECRET_KEY_SIZE)?;
 		Ok(BlindingFactor::from_slice(&bytes))
 	}
-}
-
-impl FixedLength for BlindingFactor {
-	const LEN: usize = SECRET_KEY_SIZE;
 }
 
 impl Writeable for Identifier {
@@ -609,24 +604,24 @@ impl Readable for RangeProof {
 	}
 }
 
-impl FixedLength for RangeProof {
-	const LEN: usize = 8 // length prefix
-		+ MAX_PROOF_SIZE;
-}
-
 impl PMMRable for RangeProof {
 	type E = Self;
 
 	fn as_elmt(&self) -> Self::E {
 		self.clone()
 	}
+
+	// Size is length prefix (8 bytes for u64) + MAX_PROOF_SIZE.
+	fn elmt_size() -> Option<u16> {
+		Some((8 + MAX_PROOF_SIZE).try_into().unwrap())
+	}
 }
 
 impl Readable for Signature {
 	fn read(reader: &mut dyn Reader) -> Result<Signature, Error> {
-		let a = reader.read_fixed_bytes(Signature::LEN)?;
-		let mut c = [0; Signature::LEN];
-		c[..Signature::LEN].clone_from_slice(&a[..Signature::LEN]);
+		let a = reader.read_fixed_bytes(AGG_SIGNATURE_SIZE)?;
+		let mut c = [0; AGG_SIGNATURE_SIZE];
+		c[..AGG_SIGNATURE_SIZE].clone_from_slice(&a[..AGG_SIGNATURE_SIZE]);
 		Ok(Signature::from_raw_data(&c).unwrap())
 	}
 }
@@ -637,19 +632,11 @@ impl Writeable for Signature {
 	}
 }
 
-impl FixedLength for Signature {
-	const LEN: usize = AGG_SIGNATURE_SIZE;
-}
-
-impl FixedLength for PublicKey {
-	const LEN: usize = COMPRESSED_PUBLIC_KEY_SIZE;
-}
-
 impl Writeable for PublicKey {
 	// Write the public key in compressed form
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), Error> {
 		let secp = Secp256k1::with_caps(ContextFlag::None);
-		writer.write_fixed_bytes(&self.serialize_vec(&secp, true).as_ref())?;
+		writer.write_fixed_bytes(self.serialize_vec(&secp, true))?;
 		Ok(())
 	}
 }
@@ -657,7 +644,7 @@ impl Writeable for PublicKey {
 impl Readable for PublicKey {
 	// Read the public key in compressed form
 	fn read(reader: &mut dyn Reader) -> Result<Self, Error> {
-		let buf = reader.read_fixed_bytes(PublicKey::LEN)?;
+		let buf = reader.read_fixed_bytes(COMPRESSED_PUBLIC_KEY_SIZE)?;
 		let secp = Secp256k1::with_caps(ContextFlag::None);
 		let pk = PublicKey::from_slice(&secp, &buf).map_err(|_| Error::CorruptedData)?;
 		Ok(pk)
@@ -709,9 +696,8 @@ impl<'a> Writer for BinWriter<'a> {
 		SerializationMode::Full
 	}
 
-	fn write_fixed_bytes<T: AsFixedBytes>(&mut self, fixed: &T) -> Result<(), Error> {
-		let bs = fixed.as_ref();
-		self.sink.write_all(bs)?;
+	fn write_fixed_bytes<T: AsRef<[u8]>>(&mut self, bytes: T) -> Result<(), Error> {
+		self.sink.write_all(bytes.as_ref())?;
 		Ok(())
 	}
 
@@ -838,20 +824,17 @@ impl Writeable for [u8; 4] {
 	}
 }
 
-/// Trait for types that serialize to a known fixed length.
-pub trait FixedLength {
-	/// The length in bytes
-	const LEN: usize;
-}
-
 /// Trait for types that can be added to a PMMR.
 pub trait PMMRable: Writeable + Clone + Debug + DefaultHashable {
 	/// The type of element actually stored in the MMR data file.
 	/// This allows us to store Hash elements in the header MMR for variable size BlockHeaders.
-	type E: FixedLength + Readable + Writeable + Debug;
+	type E: Readable + Writeable + Debug;
 
 	/// Convert the pmmrable into the element to be stored in the MMR data file.
 	fn as_elmt(&self) -> Self::E;
+
+	/// Size of each element if "fixed" size. Elements are "variable" size if None.
+	fn elmt_size() -> Option<u16>;
 }
 
 /// Generic trait to ensure PMMR elements can be hashed with an index
@@ -863,93 +846,6 @@ pub trait PMMRIndexHashable {
 impl<T: DefaultHashable> PMMRIndexHashable for T {
 	fn hash_with_index(&self, index: u64) -> Hash {
 		(index, self).hash()
-	}
-}
-
-/// Useful marker trait on types that can be sized byte slices
-pub trait AsFixedBytes: Sized + AsRef<[u8]> {
-	/// The length in bytes
-	fn len(&self) -> usize;
-}
-
-impl<'a> AsFixedBytes for &'a [u8] {
-	fn len(&self) -> usize {
-		1
-	}
-}
-impl AsFixedBytes for Vec<u8> {
-	fn len(&self) -> usize {
-		self.len()
-	}
-}
-impl AsFixedBytes for [u8; 1] {
-	fn len(&self) -> usize {
-		1
-	}
-}
-impl AsFixedBytes for [u8; 2] {
-	fn len(&self) -> usize {
-		2
-	}
-}
-impl AsFixedBytes for [u8; 4] {
-	fn len(&self) -> usize {
-		4
-	}
-}
-impl AsFixedBytes for [u8; 6] {
-	fn len(&self) -> usize {
-		6
-	}
-}
-impl AsFixedBytes for [u8; 8] {
-	fn len(&self) -> usize {
-		8
-	}
-}
-impl AsFixedBytes for [u8; 20] {
-	fn len(&self) -> usize {
-		20
-	}
-}
-impl AsFixedBytes for [u8; 32] {
-	fn len(&self) -> usize {
-		32
-	}
-}
-impl AsFixedBytes for String {
-	fn len(&self) -> usize {
-		self.len()
-	}
-}
-impl AsFixedBytes for crate::core::hash::Hash {
-	fn len(&self) -> usize {
-		32
-	}
-}
-impl AsFixedBytes for util::secp::pedersen::RangeProof {
-	fn len(&self) -> usize {
-		self.plen
-	}
-}
-impl AsFixedBytes for util::secp::Signature {
-	fn len(&self) -> usize {
-		64
-	}
-}
-impl AsFixedBytes for util::secp::pedersen::Commitment {
-	fn len(&self) -> usize {
-		PEDERSEN_COMMITMENT_SIZE
-	}
-}
-impl AsFixedBytes for BlindingFactor {
-	fn len(&self) -> usize {
-		SECRET_KEY_SIZE
-	}
-}
-impl AsFixedBytes for keychain::Identifier {
-	fn len(&self) -> usize {
-		IDENTIFIER_SIZE
 	}
 }
 

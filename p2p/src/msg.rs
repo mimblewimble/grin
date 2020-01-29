@@ -19,7 +19,7 @@ use crate::core::core::hash::Hash;
 use crate::core::core::BlockHeader;
 use crate::core::pow::Difficulty;
 use crate::core::ser::{
-	self, FixedLength, ProtocolVersion, Readable, Reader, StreamingReader, Writeable, Writer,
+	self, ProtocolVersion, Readable, Reader, StreamingReader, Writeable, Writer,
 };
 use crate::core::{consensus, global};
 use crate::types::{
@@ -262,6 +262,9 @@ pub struct MsgHeader {
 }
 
 impl MsgHeader {
+	// 2 magic bytes + 1 type byte + 8 bytes (msg_len)
+	pub const LEN: usize = 2 + 1 + 8;
+
 	/// Creates a new message header.
 	pub fn new(msg_type: Type, len: u64) -> MsgHeader {
 		MsgHeader {
@@ -270,11 +273,6 @@ impl MsgHeader {
 			msg_len: len,
 		}
 	}
-}
-
-impl FixedLength for MsgHeader {
-	// 2 magic bytes + 1 type byte + 8 bytes (msg_len)
-	const LEN: usize = 2 + 1 + 8;
 }
 
 impl Writeable for MsgHeader {

@@ -21,7 +21,7 @@
 //! stream and make sure we get the right number of bytes out.
 
 use crate::core::ser;
-use crate::core::ser::{FixedLength, ProtocolVersion};
+use crate::core::ser::ProtocolVersion;
 use crate::msg::{
 	read_body, read_discard, read_header, read_item, write_message, Msg, MsgHeader,
 	MsgHeaderWrapper,

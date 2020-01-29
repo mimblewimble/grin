@@ -17,9 +17,7 @@
 //! Primary hash function used in the protocol
 //!
 
-use crate::ser::{
-	self, AsFixedBytes, Error, FixedLength, ProtocolVersion, Readable, Reader, Writeable, Writer,
-};
+use crate::ser::{self, Error, ProtocolVersion, Readable, Reader, Writeable, Writer};
 use blake2::blake2b::Blake2b;
 use byteorder::{BigEndian, ByteOrder};
 use std::cmp::min;
@@ -52,12 +50,10 @@ impl fmt::Display for Hash {
 	}
 }
 
-impl FixedLength for Hash {
-	/// Size of a hash in bytes.
-	const LEN: usize = 32;
-}
-
 impl Hash {
+	/// A hash is 32 bytes.
+	pub const LEN: usize = 32;
+
 	/// Builds a Hash from a byte vector. If the vector is too short, it will be
 	/// completed by zeroes. If it's too long, it will be truncated.
 	pub fn from_vec(v: &[u8]) -> Hash {
@@ -196,8 +192,8 @@ impl ser::Writer for HashWriter {
 		ser::SerializationMode::Hash
 	}
 
-	fn write_fixed_bytes<T: AsFixedBytes>(&mut self, b32: &T) -> Result<(), ser::Error> {
-		self.state.update(b32.as_ref());
+	fn write_fixed_bytes<T: AsRef<[u8]>>(&mut self, bytes: T) -> Result<(), ser::Error> {
+		self.state.update(bytes.as_ref());
 		Ok(())
 	}
 

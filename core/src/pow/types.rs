@@ -17,7 +17,7 @@ use crate::core::hash::{DefaultHashable, Hashed};
 use crate::global;
 use crate::pow::common::EdgeType;
 use crate::pow::error::Error;
-use crate::ser::{self, FixedLength, Readable, Reader, Writeable, Writer};
+use crate::ser::{self, Readable, Reader, Writeable, Writer};
 use rand::{thread_rng, Rng};
 use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
 /// Types for a Cuck(at)oo proof of work and its encapsulation as a fully usable
@@ -156,8 +156,9 @@ impl Readable for Difficulty {
 	}
 }
 
-impl FixedLength for Difficulty {
-	const LEN: usize = 8;
+impl Difficulty {
+	/// Difficulty is 8 bytes.
+	pub const LEN: usize = 8;
 }
 
 impl Serialize for Difficulty {
