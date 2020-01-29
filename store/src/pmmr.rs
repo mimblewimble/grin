@@ -1,4 +1,4 @@
-// Copyright 2019 The Grin Developers
+// Copyright 2020 The Grin Developers
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
@@ -19,11 +19,12 @@ use std::{io, time};
 use crate::core::core::hash::{Hash, Hashed};
 use crate::core::core::pmmr::{self, family, Backend};
 use crate::core::core::BlockHeader;
-use crate::core::ser::{FixedLength, PMMRable, ProtocolVersion};
+use crate::core::ser::{PMMRable, ProtocolVersion};
 use crate::leaf_set::LeafSet;
 use crate::prune_list::PruneList;
 use crate::types::{AppendOnlyFile, DataFile, SizeEntry, SizeInfo};
 use croaring::Bitmap;
+use std::convert::TryInto;
 use std::path::{Path, PathBuf};
 
 const PMMR_HASH_FILE: &str = "pmmr_hash.bin";
@@ -110,7 +111,7 @@ impl<T: PMMRable> Backend<T> for PMMRBackend<T> {
 	/// Get the hash at pos.
 	/// Return None if pos is a leaf and it has been removed (or pruned or
 	/// compacted).
-	fn get_hash(&self, pos: u64) -> Option<(Hash)> {
+	fn get_hash(&self, pos: u64) -> Option<Hash> {
 		if self.prunable && pmmr::is_leaf(pos) && !self.leaf_set.includes(pos) {
 			return None;
 		}
@@ -119,7 +120,7 @@ impl<T: PMMRable> Backend<T> for PMMRBackend<T> {
 
 	/// Get the data at pos.
 	/// Return None if it has been removed or if pos is not a leaf node.
-	fn get_data(&self, pos: u64) -> Option<(T::E)> {
+	fn get_data(&self, pos: u64) -> Option<T::E> {
 		if !pmmr::is_leaf(pos) {
 			return None;
 		}
@@ -229,11 +230,11 @@ impl<T: PMMRable> Backend<T> for PMMRBackend<T> {
 
 impl<T: PMMRable> PMMRBackend<T> {
 	/// Instantiates a new PMMR backend.
+	/// If optional size is provided then treat as "fixed" size otherwise "variable" size backend.
 	/// Use the provided dir to store its files.
 	pub fn new<P: AsRef<Path>>(
 		data_dir: P,
 		prunable: bool,
-		fixed_size: bool,
 		version: ProtocolVersion,
 		header: Option<&BlockHeader>,
 	) -> io::Result<PMMRBackend<T>> {
@@ -241,8 +242,8 @@ impl<T: PMMRable> PMMRBackend<T> {
 
 		// Are we dealing with "fixed size" data elements or "variable size" data elements
 		// maintained in an associated size file?
-		let size_info = if fixed_size {
-			SizeInfo::FixedSize(T::E::LEN as u16)
+		let size_info = if let Some(fixed_size) = T::elmt_size() {
+			SizeInfo::FixedSize(fixed_size)
 		} else {
 			SizeInfo::VariableSize(Box::new(AppendOnlyFile::open(
 				data_dir.join(PMMR_SIZE_FILE),
@@ -252,7 +253,7 @@ impl<T: PMMRable> PMMRBackend<T> {
 		};
 
 		// Hash file is always "fixed size" and we use 32 bytes per hash.
-		let hash_size_info = SizeInfo::FixedSize(Hash::LEN as u16);
+		let hash_size_info = SizeInfo::FixedSize(Hash::LEN.try_into().unwrap());
 
 		let hash_file = DataFile::open(&data_dir.join(PMMR_HASH_FILE), hash_size_info, version)?;
 		let data_file = DataFile::open(&data_dir.join(PMMR_DATA_FILE), size_info, version)?;

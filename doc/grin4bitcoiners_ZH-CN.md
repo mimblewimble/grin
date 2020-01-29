@@ -1,3 +1,4 @@
+
 # Grin/Mimblewimble 致比特币持有者
 
 * 阅读其他语言版本：[Korean](grin4bitcoiners_KR.md)、 [English](grin4bitcoiners.md)
@@ -23,6 +24,7 @@ Grin 链上交易有三个隐私特性：
 这就意味着 Grin 区块链可扩展用户数量，而不是交易数量。目前有个问题是：每笔交易需要保留小量数据（“内核”，大约 100 字节）。但开发团队在努力优化。
 
 ## 脚本
+
 
 或许你听说过 Mimblewimble 协议不支持脚本 (Script)。某种程度上这是事实。但利用密码学方法，许多需要脚本的比特币合约在 Grin 上可以使用椭圆曲线密码学 (Elliptic Curve Cryptography) 实现。迄今为止已知的方法有：
 

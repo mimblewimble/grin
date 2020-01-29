@@ -1,4 +1,4 @@
-// Copyright 2019 The Grin Developers
+// Copyright 2020 The Grin Developers
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -22,7 +22,7 @@
 
 use crate::codec::Codec;
 use crate::core::ser;
-use crate::core::ser::{FixedLength, ProtocolVersion};
+use crate::core::ser::ProtocolVersion;
 use crate::msg::{
 	read_body, read_item, write_message, Msg, MsgHeader,
 	MsgWrapper::{self, *},

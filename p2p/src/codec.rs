@@ -1,4 +1,4 @@
-use crate::core::ser::{self, BufReader, FixedLength, ProtocolVersion, Readable, Reader};
+use crate::core::ser::{self, BufReader, ProtocolVersion, Readable, Reader};
 use crate::msg::{Msg, MsgHeader, MsgHeaderWrapper, MsgWrapper};
 use crate::types::Error;
 use bytes::{BufMut, Bytes, BytesMut};

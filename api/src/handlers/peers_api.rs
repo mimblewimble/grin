@@ -1,4 +1,4 @@
-// Copyright 2019 The Grin Developers
+// Copyright 2020 The Grin Developers
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -157,9 +157,7 @@ impl Handler for PeerHandler {
 					format!("unban failed: {:?}", e),
 				),
 			},
-			_ => return response(StatusCode::BAD_REQUEST, "invalid command"),
-		};
-
-		response(StatusCode::OK, "{}")
+			_ => response(StatusCode::BAD_REQUEST, "invalid command"),
+		}
 	}
 }

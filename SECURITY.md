@@ -77,7 +77,7 @@ page linked from our website, with a links of their choosing.
 
 There is not currently a formal bug bounty program for Grin as it would require
 a high level of resources and engagement to operate in good faith. More
-[funding](https://grin-tech.org/funding) can help provide the necessary
+[funding](https://grin.mw/fund) can help provide the necessary
 resources to run one in the future for the Grin community.
 
 ## Deviations from the Standard

@@ -1,4 +1,4 @@
-// Copyright 2019 The Grin Developers
+// Copyright 2020 The Grin Developers
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -17,7 +17,7 @@
 //!
 //! Cuckarood is a variation of Cuckaroo that's tweaked at the first HardFork
 //! to maintain ASIC-Resistance, as introduced in
-//! https://www.grin-forum.org/t/mid-july-pow-hardfork-cuckaroo29-cuckarood29
+//! https://forum.grin.mw/t/mid-july-pow-hardfork-cuckaroo29-cuckarood29
 //! It uses a tweaked siphash round in which the rotation by 21 is replaced by
 //! a rotation by 25, halves the number of graph nodes in each partition,
 //! and requires cycles to alternate between even- and odd-indexed edges.

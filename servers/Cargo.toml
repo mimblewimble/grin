@@ -16,7 +16,6 @@ fs2 = "0.4"
 futures = "0.1"
 futures3 = { version = "0.3.0", package = "futures" }
 http = "0.1"
-itertools = "0.7"
 lmdb-zero = "0.4.4"
 rand = "0.6"
 serde = "1"
