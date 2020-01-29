@@ -107,15 +107,17 @@ impl BIP32GrinHasher {
 
 impl BIP32Hasher for BIP32GrinHasher {
 	fn network_priv(&self) -> [u8; 4] {
-		match self.is_floo {
-			true => [0x03, 0x27, 0x3A, 0x10],  // fprv
-			false => [0x03, 0x3C, 0x04, 0xA4], // gprv
+		if self.is_floo {
+			[0x03, 0x27, 0x3A, 0x10]
+		} else {
+			[0x03, 0x3C, 0x04, 0xA4]
 		}
 	}
 	fn network_pub(&self) -> [u8; 4] {
-		match self.is_floo {
-			true => [0x03, 0x27, 0x3E, 0x4B],  // fpub
-			false => [0x03, 0x3C, 0x08, 0xDF], // gpub
+		if self.is_floo {
+			[0x03, 0x27, 0x3E, 0x4B]
+		} else {
+			[0x03, 0x3C, 0x08, 0xDF]
 		}
 	}
 	fn master_seed() -> [u8; 12] {
@@ -380,10 +382,7 @@ impl ExtendedPrivKey {
 		passphrase: &str,
 		is_floo: bool,
 	) -> Result<ExtendedPrivKey, Error> {
-		let seed = match mnemonic::to_seed(mnemonic, passphrase) {
-			Ok(s) => s,
-			Err(e) => return Err(Error::MnemonicError(e)),
-		};
+		let seed = mnemonic::to_seed(mnemonic, passphrase).map_err(|e| Error::MnemonicError(e))?;
 		let mut hasher = BIP32GrinHasher::new(is_floo);
 		let key = ExtendedPrivKey::new_master(secp, &mut hasher, &seed)?;
 		Ok(key)

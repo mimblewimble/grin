@@ -463,10 +463,7 @@ impl KernelHandler {
 				height,
 				mmr_index,
 			});
-		match kernel {
-			Some(kernel) => Ok(kernel),
-			None => Err(ErrorKind::NotFound.into()),
-		}
+		kernel.ok_or_else(|| ErrorKind::NotFound.into())
 	}
 }
 

@@ -65,10 +65,7 @@ pub fn verify(
 	extra_data: Option<Vec<u8>>,
 ) -> Result<(), secp::Error> {
 	let result = secp.verify_bullet_proof(commit, proof, extra_data);
-	match result {
-		Ok(_) => Ok(()),
-		Err(e) => Err(e),
-	}
+	result.map(|_| ())
 }
 
 /// Rewind a rangeproof to retrieve the amount, derivation path and switch commitment type
@@ -228,9 +225,10 @@ where
 		let id = Identifier::from_serialized_path(depth, &msg[4..]);
 
 		let commit_exp = self.keychain.commit(amount, &id, &switch)?;
-		match commit == &commit_exp {
-			true => Ok(Some((id, switch))),
-			false => Ok(None),
+		if commit == &commit_exp {
+			Ok(Some((id, switch)))
+		} else {
+			Ok(None)
 		}
 	}
 }
@@ -338,9 +336,10 @@ where
 		let commit_exp = self
 			.keychain
 			.commit(amount, &id, &SwitchCommitmentType::Regular)?;
-		match commit == &commit_exp {
-			true => Ok(Some((id, SwitchCommitmentType::Regular))),
-			false => Ok(None),
+		if commit == &commit_exp {
+			Ok(Some((id, SwitchCommitmentType::Regular)))
+		} else {
+			Ok(None)
 		}
 	}
 }
