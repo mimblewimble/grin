@@ -52,17 +52,26 @@ type Tx = mpsc::UnboundedSender<String>;
 // http://www.jsonrpc.org/specification
 // RPC Methods
 
-#[derive(Serialize, Deserialize, Debug)]
+/// Represents a compliant JSON RPC 2.0 id.
+/// Valid id: Integer, String.
+#[derive(Serialize, Deserialize, Debug, PartialEq)]
+#[serde(untagged)]
+enum JsonId {
+	IntId(u32),
+	StrId(String),
+}
+
+#[derive(Serialize, Deserialize, Debug, PartialEq)]
 struct RpcRequest {
-	id: String,
+	id: JsonId,
 	jsonrpc: String,
 	method: String,
 	params: Option<Value>,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, PartialEq)]
 struct RpcResponse {
-	id: String,
+	id: JsonId,
 	jsonrpc: String,
 	method: String,
 	result: Option<Value>,
@@ -501,7 +510,7 @@ impl Handler {
 		// Issue #1159 - use a serde_json Value type to avoid extra quoting
 		let job_template_value: Value = serde_json::from_str(&job_template_json).unwrap();
 		let job_request = RpcRequest {
-			id: String::from("Stratum"),
+			id: JsonId::StrId(String::from("Stratum")),
 			jsonrpc: String::from("2.0"),
 			method: String::from("job"),
 			params: Some(job_template_value),
@@ -864,4 +873,149 @@ where
 	params
 		.and_then(|v| serde_json::from_value(v).ok())
 		.ok_or(RpcError::invalid_request())
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+
+	/// Tests deserializing an `RpcRequest` given a String as the id.
+	#[test]
+	fn test_request_deserialize_str() {
+		let expected = RpcRequest {
+			id: JsonId::StrId(String::from("1")),
+			method: String::from("login"),
+			jsonrpc: String::from("2.0"),
+			params: None,
+		};
+		let json = r#"{"id":"1","method":"login","jsonrpc":"2.0","params":null}"#;
+		let serialized: RpcRequest = serde_json::from_str(json).unwrap();
+
+		assert_eq!(expected, serialized);
+	}
+
+	/// Tests serializing an `RpcRequest` given a String as the id.
+	/// The extra step of deserializing again is due to associative structures not maintaining order.
+	#[test]
+	fn test_request_serialize_str() {
+		let expected = r#"{"id":"1","method":"login","jsonrpc":"2.0","params":null}"#;
+		let rpc = RpcRequest {
+			id: JsonId::StrId(String::from("1")),
+			method: String::from("login"),
+			jsonrpc: String::from("2.0"),
+			params: None,
+		};
+		let json_actual = serde_json::to_string(&rpc).unwrap();
+
+		let expected_deserialized: RpcRequest = serde_json::from_str(expected).unwrap();
+		let actual_deserialized: RpcRequest = serde_json::from_str(&json_actual).unwrap();
+
+		assert_eq!(expected_deserialized, actual_deserialized);
+	}
+
+	/// Tests deserializing an `RpcResponse` given a String as the id.
+	#[test]
+	fn test_response_deserialize_str() {
+		let expected = RpcResponse {
+			id: JsonId::StrId(String::from("1")),
+			method: String::from("login"),
+			jsonrpc: String::from("2.0"),
+			result: None,
+			error: None,
+		};
+		let json = r#"{"id":"1","method":"login","jsonrpc":"2.0","params":null}"#;
+		let serialized: RpcResponse = serde_json::from_str(json).unwrap();
+
+		assert_eq!(expected, serialized);
+	}
+
+	/// Tests serializing an `RpcResponse` given a String as the id.
+	/// The extra step of deserializing again is due to associative structures not maintaining order.
+	#[test]
+	fn test_response_serialize_str() {
+		let expected = r#"{"id":"1","method":"login","jsonrpc":"2.0","params":null}"#;
+		let rpc = RpcResponse {
+			id: JsonId::StrId(String::from("1")),
+			method: String::from("login"),
+			jsonrpc: String::from("2.0"),
+			result: None,
+			error: None,
+		};
+		let json_actual = serde_json::to_string(&rpc).unwrap();
+
+		let expected_deserialized: RpcResponse = serde_json::from_str(expected).unwrap();
+		let actual_deserialized: RpcResponse = serde_json::from_str(&json_actual).unwrap();
+
+		assert_eq!(expected_deserialized, actual_deserialized);
+	}
+
+	/// Tests deserializing an `RpcRequest` given an integer as the id.
+	#[test]
+	fn test_request_deserialize_int() {
+		let expected = RpcRequest {
+			id: JsonId::IntId(1),
+			method: String::from("login"),
+			jsonrpc: String::from("2.0"),
+			params: None,
+		};
+		let json = r#"{"id":1,"method":"login","jsonrpc":"2.0","params":null}"#;
+		let serialized: RpcRequest = serde_json::from_str(json).unwrap();
+
+		assert_eq!(expected, serialized);
+	}
+
+	/// Tests serializing an `RpcRequest` given an integer as the id.
+	/// The extra step of deserializing again is due to associative structures not maintaining order.
+	#[test]
+	fn test_request_serialize_int() {
+		let expected = r#"{"id":1,"method":"login","jsonrpc":"2.0","params":null}"#;
+		let rpc = RpcRequest {
+			id: JsonId::IntId(1),
+			method: String::from("login"),
+			jsonrpc: String::from("2.0"),
+			params: None,
+		};
+		let json_actual = serde_json::to_string(&rpc).unwrap();
+
+		let expected_deserialized: RpcRequest = serde_json::from_str(expected).unwrap();
+		let actual_deserialized: RpcRequest = serde_json::from_str(&json_actual).unwrap();
+
+		assert_eq!(expected_deserialized, actual_deserialized);
+	}
+
+	/// Tests deserializing an `RpcResponse` given an integer as the id.
+	#[test]
+	fn test_response_deserialize_int() {
+		let expected = RpcResponse {
+			id: JsonId::IntId(1),
+			method: String::from("login"),
+			jsonrpc: String::from("2.0"),
+			result: None,
+			error: None,
+		};
+		let json = r#"{"id":1,"method":"login","jsonrpc":"2.0","params":null}"#;
+		let serialized: RpcResponse = serde_json::from_str(json).unwrap();
+
+		assert_eq!(expected, serialized);
+	}
+
+	/// Tests serializing an `RpcResponse` given an integer as the id.
+	/// The extra step of deserializing again is due to associative structures not maintaining order.
+	#[test]
+	fn test_response_serialize_int() {
+		let expected = r#"{"id":1,"method":"login","jsonrpc":"2.0","params":null}"#;
+		let rpc = RpcResponse {
+			id: JsonId::IntId(1),
+			method: String::from("login"),
+			jsonrpc: String::from("2.0"),
+			result: None,
+			error: None,
+		};
+		let json_actual = serde_json::to_string(&rpc).unwrap();
+
+		let expected_deserialized: RpcResponse = serde_json::from_str(expected).unwrap();
+		let actual_deserialized: RpcResponse = serde_json::from_str(&json_actual).unwrap();
+
+		assert_eq!(expected_deserialized, actual_deserialized);
+	}
 }
