@@ -1,4 +1,4 @@
-// Copyright 2018 The Grin Developers
+// Copyright 2020 The Grin Developers
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
@@ -96,8 +96,7 @@ impl LeafSet {
 	/// Only applicable for the output MMR.
 	fn unpruned_pre_cutoff(&self, cutoff_pos: u64, prune_list: &PruneList) -> Bitmap {
 		(1..=cutoff_pos)
-			.filter(|&x| pmmr::is_leaf(x))
-			.filter(|&x| !prune_list.is_pruned(x))
+			.filter(|&x| pmmr::is_leaf(x) && !prune_list.is_pruned(x))
 			.map(|x| x as u32)
 			.collect()
 	}
@@ -115,10 +114,8 @@ impl LeafSet {
 
 		// First remove pos from leaf_set that were
 		// added after the point we are rewinding to.
-		let marker_from = cutoff_pos;
-		let marker_to = self.bitmap.maximum() as u64;
-		let rewind_add_pos: Bitmap = ((marker_from + 1)..=marker_to).map(|x| x as u32).collect();
-		bitmap.andnot_inplace(&rewind_add_pos);
+		let to_remove = ((cutoff_pos + 1) as u32)..bitmap.maximum();
+		bitmap.remove_range_closed(to_remove);
 
 		// Then add back output pos to the leaf_set
 		// that were removed.
@@ -136,10 +133,8 @@ impl LeafSet {
 	pub fn rewind(&mut self, cutoff_pos: u64, rewind_rm_pos: &Bitmap) {
 		// First remove pos from leaf_set that were
 		// added after the point we are rewinding to.
-		let marker_from = cutoff_pos;
-		let marker_to = self.bitmap.maximum() as u64;
-		let rewind_add_pos: Bitmap = ((marker_from + 1)..=marker_to).map(|x| x as u32).collect();
-		self.bitmap.andnot_inplace(&rewind_add_pos);
+		let to_remove = ((cutoff_pos + 1) as u32)..self.bitmap.maximum();
+		self.bitmap.remove_range_closed(to_remove);
 
 		// Then add back output pos to the leaf_set
 		// that were removed.

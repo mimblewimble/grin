@@ -1,4 +1,4 @@
-// Copyright 2018 The Grin Developers
+// Copyright 2020 The Grin Developers
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -14,13 +14,12 @@
 
 //! Compact Blocks.
 
-use rand::{thread_rng, Rng};
-
-use crate::core::block::{Block, BlockHeader, Error};
+use crate::core::block::{Block, BlockHeader, Error, UntrustedBlockHeader};
 use crate::core::hash::{DefaultHashable, Hashed};
 use crate::core::id::ShortIdentifiable;
 use crate::core::{Output, ShortId, TxKernel};
 use crate::ser::{self, read_multi, Readable, Reader, VerifySortedAndUnique, Writeable, Writer};
+use rand::{thread_rng, Rng};
 
 /// Container for full (full) outputs and kernels and kern_ids for a compact block.
 #[derive(Debug, Clone)]
@@ -221,8 +220,34 @@ impl Readable for CompactBlock {
 		let nonce = reader.read_u64()?;
 		let body = CompactBlockBody::read(reader)?;
 
-		let cb = CompactBlock {
+		Ok(CompactBlock {
 			header,
+			nonce,
+			body,
+		})
+	}
+}
+
+impl From<UntrustedCompactBlock> for CompactBlock {
+	fn from(ucb: UntrustedCompactBlock) -> Self {
+		ucb.0
+	}
+}
+
+/// Compackt block which does lightweight validation as part of deserialization,
+/// it supposed to be used when we can't trust the channel (eg network)
+pub struct UntrustedCompactBlock(CompactBlock);
+
+/// Implementation of Readable for an untrusted compact block, defines how to read a
+/// compact block from a binary stream.
+impl Readable for UntrustedCompactBlock {
+	fn read(reader: &mut dyn Reader) -> Result<UntrustedCompactBlock, ser::Error> {
+		let header = UntrustedBlockHeader::read(reader)?;
+		let nonce = reader.read_u64()?;
+		let body = CompactBlockBody::read(reader)?;
+
+		let cb = CompactBlock {
+			header: header.into(),
 			nonce,
 			body,
 		};
@@ -230,6 +255,6 @@ impl Readable for CompactBlock {
 		// Now validate the compact block and treat any validation error as corrupted data.
 		cb.validate_read().map_err(|_| ser::Error::CorruptedData)?;
 
-		Ok(cb)
+		Ok(UntrustedCompactBlock(cb))
 	}
 }

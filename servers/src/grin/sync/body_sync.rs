@@ -1,4 +1,4 @@
-// Copyright 2018 The Grin Developers
+// Copyright 2020 The Grin Developers
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -138,7 +138,7 @@ impl BodySync {
 			let mut peers_iter = peers.iter().cycle();
 			for hash in hashes_to_get.clone() {
 				if let Some(peer) = peers_iter.next() {
-					if let Err(e) = peer.send_block_request(*hash) {
+					if let Err(e) = peer.send_block_request(*hash, chain::Options::SYNC) {
 						debug!("Skipped request to {}: {:?}", peer.info.addr, e);
 						peer.stop();
 					} else {

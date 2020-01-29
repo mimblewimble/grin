@@ -1,4 +1,4 @@
-// Copyright 2018 The Grin Developers
+// Copyright 2020 The Grin Developers
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -12,14 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use self::chain::types::NoopAdapter;
+use self::chain::types::{NoopAdapter, Tip};
 use self::chain::Chain;
 use self::core::core::hash::Hashed;
 use self::core::core::verifier_cache::LruVerifierCache;
-use self::core::core::{Block, BlockHeader, OutputIdentifier, Transaction};
-use self::core::genesis;
+use self::core::core::{Block, BlockHeader, KernelFeatures, OutputIdentifier, Transaction};
 use self::core::global::ChainTypes;
-use self::core::libtx::{self, build, reward, ProofBuilder};
+use self::core::libtx::{self, build, ProofBuilder};
 use self::core::pow::Difficulty;
 use self::core::{consensus, global, pow};
 use self::keychain::{ExtKeychain, ExtKeychainPath, Keychain};
@@ -30,27 +29,11 @@ use grin_chain::{BlockStatus, ChainAdapter, Options};
 use grin_core as core;
 use grin_keychain as keychain;
 use grin_util as util;
-use std::fs;
 use std::sync::Arc;
 
-fn clean_output_dir(dir_name: &str) {
-	let _ = fs::remove_dir_all(dir_name);
-}
+mod chain_test_helper;
 
-fn setup(dir_name: &str, genesis: Block) -> Chain {
-	util::init_test_logger();
-	clean_output_dir(dir_name);
-	let verifier_cache = Arc::new(RwLock::new(LruVerifierCache::new()));
-	chain::Chain::init(
-		dir_name.to_string(),
-		Arc::new(NoopAdapter {}),
-		genesis,
-		pow::verify_size,
-		verifier_cache,
-		false,
-	)
-	.unwrap()
-}
+use self::chain_test_helper::{clean_output_dir, init_chain, mine_chain};
 
 /// Adapter to retrieve last status
 pub struct StatusAdapter {
@@ -89,118 +72,256 @@ fn setup_with_status_adapter(dir_name: &str, genesis: Block, adapter: Arc<Status
 
 #[test]
 fn mine_empty_chain() {
-	global::set_mining_mode(ChainTypes::AutomatedTesting);
-	let keychain = keychain::ExtKeychain::from_random_seed(false).unwrap();
-	{
-		mine_some_on_top(".grin", pow::mine_genesis_block().unwrap(), &keychain);
-	}
-	// Cleanup chain directory
-	clean_output_dir(".grin");
+	let chain_dir = ".grin.empty";
+	clean_output_dir(chain_dir);
+	let chain = mine_chain(chain_dir, 1);
+	assert_eq!(chain.head().unwrap().height, 0);
+	clean_output_dir(chain_dir);
 }
 
 #[test]
-fn mine_genesis_reward_chain() {
-	global::set_mining_mode(ChainTypes::AutomatedTesting);
-
-	// add coinbase data from the dev genesis block
-	let mut genesis = genesis::genesis_dev();
-	let keychain = keychain::ExtKeychain::from_random_seed(false).unwrap();
-	let key_id = keychain::ExtKeychain::derive_key_id(0, 1, 0, 0, 0);
-	let reward = reward::output(
-		&keychain,
-		&libtx::ProofBuilder::new(&keychain),
-		&key_id,
-		0,
-		false,
-	)
-	.unwrap();
-	genesis = genesis.with_reward(reward.0, reward.1);
-
-	let tmp_chain_dir = ".grin.tmp";
-	{
-		// setup a tmp chain to hande tx hashsets
-		let tmp_chain = setup(tmp_chain_dir, pow::mine_genesis_block().unwrap());
-		tmp_chain.set_txhashset_roots(&mut genesis).unwrap();
-		genesis.header.output_mmr_size = 1;
-		genesis.header.kernel_mmr_size = 1;
-	}
-
-	// get a valid PoW
-	pow::pow_size(
-		&mut genesis.header,
-		Difficulty::unit(),
-		global::proofsize(),
-		global::min_edge_bits(),
-	)
-	.unwrap();
-
-	mine_some_on_top(".grin.genesis", genesis, &keychain);
-	// Cleanup chain directories
-	clean_output_dir(tmp_chain_dir);
-	clean_output_dir(".grin.genesis");
+fn mine_short_chain() {
+	let chain_dir = ".grin.genesis";
+	clean_output_dir(chain_dir);
+	let chain = mine_chain(chain_dir, 4);
+	assert_eq!(chain.head().unwrap().height, 3);
+	clean_output_dir(chain_dir);
 }
 
-fn mine_some_on_top<K>(dir: &str, genesis: Block, keychain: &K)
-where
-	K: Keychain,
-{
-	let chain = setup(dir, genesis);
-
-	for n in 1..4 {
-		let prev = chain.head_header().unwrap();
-		let next_header_info = consensus::next_difficulty(1, chain.difficulty_iter().unwrap());
-		let pk = ExtKeychainPath::new(1, n as u32, 0, 0, 0).to_identifier();
-		let reward =
-			libtx::reward::output(keychain, &libtx::ProofBuilder::new(keychain), &pk, 0, false)
-				.unwrap();
-		let mut b =
-			core::core::Block::new(&prev, vec![], next_header_info.clone().difficulty, reward)
-				.unwrap();
-		b.header.timestamp = prev.timestamp + Duration::seconds(60);
-		b.header.pow.secondary_scaling = next_header_info.secondary_scaling;
-
-		chain.set_txhashset_roots(&mut b).unwrap();
-
-		let edge_bits = if n == 2 {
-			global::min_edge_bits() + 1
-		} else {
-			global::min_edge_bits()
-		};
-		b.header.pow.proof.edge_bits = edge_bits;
-		pow::pow_size(
-			&mut b.header,
-			next_header_info.difficulty,
-			global::proofsize(),
-			edge_bits,
-		)
+// Convenience wrapper for processing a full block on the test chain.
+fn process_header(chain: &Chain, header: &BlockHeader) {
+	chain
+		.process_block_header(header, chain::Options::SKIP_POW)
 		.unwrap();
-		b.header.pow.proof.edge_bits = edge_bits;
+}
 
-		let bhash = b.hash();
-		chain.process_block(b, chain::Options::MINE).unwrap();
+// Convenience wrapper for processing a block header on the test chain.
+fn process_block(chain: &Chain, block: &Block) {
+	chain
+		.process_block(block.clone(), chain::Options::SKIP_POW)
+		.unwrap();
+}
 
-		// checking our new head
-		let head = chain.head().unwrap();
-		assert_eq!(head.height, n);
-		assert_eq!(head.last_block_h, bhash);
+//
+// a - b - c
+//  \
+//   - b'
+//
+// Process in the following order -
+// 1. block_a
+// 2. block_b
+// 3. block_b'
+// 4. header_c
+// 5. block_c
+//
+#[test]
+fn test_block_a_block_b_block_b_fork_header_c_fork_block_c() {
+	let chain_dir = ".grin.block_a_block_b_block_b_fork_header_c_fork_block_c";
+	clean_output_dir(chain_dir);
+	global::set_mining_mode(ChainTypes::AutomatedTesting);
+	let kc = ExtKeychain::from_random_seed(false).unwrap();
+	let genesis = pow::mine_genesis_block().unwrap();
+	let last_status = RwLock::new(None);
+	let adapter = Arc::new(StatusAdapter::new(last_status));
+	let chain = setup_with_status_adapter(chain_dir, genesis.clone(), adapter.clone());
 
-		// now check the block_header of the head
-		let header = chain.head_header().unwrap();
-		assert_eq!(header.height, n);
-		assert_eq!(header.hash(), bhash);
+	let block_a = prepare_block(&kc, &chain.head_header().unwrap(), &chain, 1);
+	process_block(&chain, &block_a);
 
-		// now check the block itself
-		let block = chain.get_block(&header.hash()).unwrap();
-		assert_eq!(block.header.height, n);
-		assert_eq!(block.hash(), bhash);
-		assert_eq!(block.outputs().len(), 1);
+	let block_b = prepare_block(&kc, &block_a.header, &chain, 2);
+	let block_b_fork = prepare_block(&kc, &block_a.header, &chain, 2);
 
-		// now check the block height index
-		let header_by_height = chain.get_header_by_height(n).unwrap();
-		assert_eq!(header_by_height.hash(), bhash);
+	process_block(&chain, &block_b);
+	process_block(&chain, &block_b_fork);
 
-		chain.validate(false).unwrap();
-	}
+	let block_c = prepare_block(&kc, &block_b.header, &chain, 3);
+	process_header(&chain, &block_c.header);
+
+	assert_eq!(chain.head().unwrap(), Tip::from_header(&block_b.header));
+	assert_eq!(
+		chain.header_head().unwrap(),
+		Tip::from_header(&block_c.header)
+	);
+
+	process_block(&chain, &block_c);
+
+	assert_eq!(chain.head().unwrap(), Tip::from_header(&block_c.header));
+	assert_eq!(
+		chain.header_head().unwrap(),
+		Tip::from_header(&block_c.header)
+	);
+
+	clean_output_dir(chain_dir);
+}
+
+//
+// a - b
+//  \
+//   - b' - c'
+//
+// Process in the following order -
+// 1. block_a
+// 2. block_b
+// 3. block_b'
+// 4. header_c'
+// 5. block_c'
+//
+#[test]
+fn test_block_a_block_b_block_b_fork_header_c_fork_block_c_fork() {
+	let chain_dir = ".grin.block_a_block_b_block_b_fork_header_c_fork_block_c_fork";
+	clean_output_dir(chain_dir);
+	global::set_mining_mode(ChainTypes::AutomatedTesting);
+	let kc = ExtKeychain::from_random_seed(false).unwrap();
+	let genesis = pow::mine_genesis_block().unwrap();
+	let last_status = RwLock::new(None);
+	let adapter = Arc::new(StatusAdapter::new(last_status));
+	let chain = setup_with_status_adapter(chain_dir, genesis.clone(), adapter.clone());
+
+	let block_a = prepare_block(&kc, &chain.head_header().unwrap(), &chain, 1);
+	process_block(&chain, &block_a);
+
+	let block_b = prepare_block(&kc, &block_a.header, &chain, 2);
+	let block_b_fork = prepare_block(&kc, &block_a.header, &chain, 2);
+
+	process_block(&chain, &block_b);
+	process_block(&chain, &block_b_fork);
+
+	let block_c_fork = prepare_block(&kc, &block_b_fork.header, &chain, 3);
+	process_header(&chain, &block_c_fork.header);
+
+	assert_eq!(chain.head().unwrap(), Tip::from_header(&block_b.header));
+	assert_eq!(
+		chain.header_head().unwrap(),
+		Tip::from_header(&block_c_fork.header)
+	);
+
+	process_block(&chain, &block_c_fork);
+
+	assert_eq!(
+		chain.head().unwrap(),
+		Tip::from_header(&block_c_fork.header)
+	);
+	assert_eq!(
+		chain.header_head().unwrap(),
+		Tip::from_header(&block_c_fork.header)
+	);
+
+	clean_output_dir(chain_dir);
+}
+
+//
+// a - b - c
+//  \
+//   - b'
+//
+// Process in the following order -
+// 1. block_a
+// 2. header_b
+// 3. header_b_fork
+// 4. block_b_fork
+// 5. block_b
+// 6. block_c
+//
+#[test]
+fn test_block_a_header_b_header_b_fork_block_b_fork_block_b_block_c() {
+	let chain_dir = ".grin.test_block_a_header_b_header_b_fork_block_b_fork_block_b_block_c";
+	clean_output_dir(chain_dir);
+	global::set_mining_mode(ChainTypes::AutomatedTesting);
+	let kc = ExtKeychain::from_random_seed(false).unwrap();
+	let genesis = pow::mine_genesis_block().unwrap();
+	let last_status = RwLock::new(None);
+	let adapter = Arc::new(StatusAdapter::new(last_status));
+	let chain = setup_with_status_adapter(chain_dir, genesis.clone(), adapter.clone());
+
+	let block_a = prepare_block(&kc, &chain.head_header().unwrap(), &chain, 1);
+	process_block(&chain, &block_a);
+
+	let block_b = prepare_block(&kc, &block_a.header, &chain, 2);
+	let block_b_fork = prepare_block(&kc, &block_a.header, &chain, 2);
+
+	process_header(&chain, &block_b.header);
+	process_header(&chain, &block_b_fork.header);
+	process_block(&chain, &block_b_fork);
+	process_block(&chain, &block_b);
+
+	assert_eq!(
+		chain.header_head().unwrap(),
+		Tip::from_header(&block_b.header)
+	);
+	assert_eq!(
+		chain.head().unwrap(),
+		Tip::from_header(&block_b_fork.header)
+	);
+
+	let block_c = prepare_block(&kc, &block_b.header, &chain, 3);
+	process_block(&chain, &block_c);
+
+	assert_eq!(chain.head().unwrap(), Tip::from_header(&block_c.header));
+	assert_eq!(
+		chain.header_head().unwrap(),
+		Tip::from_header(&block_c.header)
+	);
+
+	clean_output_dir(chain_dir);
+}
+
+//
+// a - b
+//  \
+//   - b' - c'
+//
+// Process in the following order -
+// 1. block_a
+// 2. header_b
+// 3. header_b_fork
+// 4. block_b_fork
+// 5. block_b
+// 6. block_c_fork
+//
+#[test]
+fn test_block_a_header_b_header_b_fork_block_b_fork_block_b_block_c_fork() {
+	let chain_dir = ".grin.test_block_a_header_b_header_b_fork_block_b_fork_block_b_block_c_fork";
+	clean_output_dir(chain_dir);
+	global::set_mining_mode(ChainTypes::AutomatedTesting);
+	let kc = ExtKeychain::from_random_seed(false).unwrap();
+	let genesis = pow::mine_genesis_block().unwrap();
+	let last_status = RwLock::new(None);
+	let adapter = Arc::new(StatusAdapter::new(last_status));
+	let chain = setup_with_status_adapter(chain_dir, genesis.clone(), adapter.clone());
+
+	let block_a = prepare_block(&kc, &chain.head_header().unwrap(), &chain, 1);
+	process_block(&chain, &block_a);
+
+	let block_b = prepare_block(&kc, &block_a.header, &chain, 2);
+	let block_b_fork = prepare_block(&kc, &block_a.header, &chain, 2);
+
+	process_header(&chain, &block_b.header);
+	process_header(&chain, &block_b_fork.header);
+	process_block(&chain, &block_b_fork);
+	process_block(&chain, &block_b);
+
+	assert_eq!(
+		chain.header_head().unwrap(),
+		Tip::from_header(&block_b.header)
+	);
+	assert_eq!(
+		chain.head().unwrap(),
+		Tip::from_header(&block_b_fork.header)
+	);
+
+	let block_c_fork = prepare_block(&kc, &block_b_fork.header, &chain, 3);
+	process_block(&chain, &block_c_fork);
+
+	assert_eq!(
+		chain.head().unwrap(),
+		Tip::from_header(&block_c_fork.header)
+	);
+	assert_eq!(
+		chain.header_head().unwrap(),
+		Tip::from_header(&block_c_fork.header)
+	);
+
+	clean_output_dir(chain_dir);
 }
 
 #[test]
@@ -255,7 +376,7 @@ fn mine_reorg() {
 		let fork_head = chain
 			.get_header_by_height(NUM_BLOCKS_MAIN - REORG_DEPTH)
 			.unwrap();
-		let b = prepare_fork_block(&kc, &fork_head, &chain, reorg_difficulty);
+		let b = prepare_block(&kc, &fork_head, &chain, reorg_difficulty);
 		let reorg_head = b.header.clone();
 		chain.process_block(b, chain::Options::SKIP_POW).unwrap();
 
@@ -279,7 +400,7 @@ fn mine_reorg() {
 fn mine_forks() {
 	global::set_mining_mode(ChainTypes::AutomatedTesting);
 	{
-		let chain = setup(".grin2", pow::mine_genesis_block().unwrap());
+		let chain = init_chain(".grin2", pow::mine_genesis_block().unwrap());
 		let kc = ExtKeychain::from_random_seed(false).unwrap();
 
 		// add a first block to not fork genesis
@@ -294,9 +415,6 @@ fn mine_forks() {
 			let prev = chain.head_header().unwrap();
 			let b1 = prepare_block(&kc, &prev, &chain, 3 * n);
 
-			// 2nd block with higher difficulty for other branch
-			let b2 = prepare_block(&kc, &prev, &chain, 3 * n + 1);
-
 			// process the first block to extend the chain
 			let bhash = b1.hash();
 			chain.process_block(b1, chain::Options::SKIP_POW).unwrap();
@@ -306,6 +424,9 @@ fn mine_forks() {
 			assert_eq!(head.height, (n + 1) as u64);
 			assert_eq!(head.last_block_h, bhash);
 			assert_eq!(head.prev_block_h, prev.hash());
+
+			// 2nd block with higher difficulty for other branch
+			let b2 = prepare_block(&kc, &prev, &chain, 3 * n + 1);
 
 			// process the 2nd block to build a fork with more work
 			let bhash = b2.hash();
@@ -327,7 +448,7 @@ fn mine_losing_fork() {
 	global::set_mining_mode(ChainTypes::AutomatedTesting);
 	let kc = ExtKeychain::from_random_seed(false).unwrap();
 	{
-		let chain = setup(".grin3", pow::mine_genesis_block().unwrap());
+		let chain = init_chain(".grin3", pow::mine_genesis_block().unwrap());
 
 		// add a first block we'll be forking from
 		let prev = chain.head_header().unwrap();
@@ -367,7 +488,7 @@ fn longer_fork() {
 	// then send back on the 1st
 	let genesis = pow::mine_genesis_block().unwrap();
 	{
-		let chain = setup(".grin4", genesis.clone());
+		let chain = init_chain(".grin4", genesis.clone());
 
 		// add blocks to both chains, 20 on the main one, only the first 5
 		// for the forked chain
@@ -386,7 +507,7 @@ fn longer_fork() {
 
 		let mut prev = forked_block;
 		for n in 0..7 {
-			let b = prepare_fork_block(&kc, &prev, &chain, 2 * n + 11);
+			let b = prepare_block(&kc, &prev, &chain, 2 * n + 11);
 			prev = b.header.clone();
 			chain.process_block(b, chain::Options::SKIP_POW).unwrap();
 		}
@@ -406,8 +527,11 @@ fn longer_fork() {
 fn spend_in_fork_and_compact() {
 	global::set_mining_mode(ChainTypes::AutomatedTesting);
 	util::init_test_logger();
+	// Cleanup chain directory
+	clean_output_dir(".grin6");
+
 	{
-		let chain = setup(".grin6", pow::mine_genesis_block().unwrap());
+		let chain = init_chain(".grin6", pow::mine_genesis_block().unwrap());
 		let prev = chain.head_header().unwrap();
 		let kc = ExtKeychain::from_random_seed(false).unwrap();
 		let pb = ProofBuilder::new(&kc);
@@ -438,10 +562,10 @@ fn spend_in_fork_and_compact() {
 		let key_id31 = ExtKeychainPath::new(1, 31, 0, 0, 0).to_identifier();
 
 		let tx1 = build::transaction(
+			KernelFeatures::Plain { fee: 20000 },
 			vec![
 				build::coinbase_input(consensus::REWARD, key_id2.clone()),
 				build::output(consensus::REWARD - 20000, key_id30.clone()),
-				build::with_fee(20000),
 			],
 			&kc,
 			&pb,
@@ -456,10 +580,10 @@ fn spend_in_fork_and_compact() {
 		chain.validate(false).unwrap();
 
 		let tx2 = build::transaction(
+			KernelFeatures::Plain { fee: 20000 },
 			vec![
 				build::input(consensus::REWARD - 20000, key_id30.clone()),
 				build::output(consensus::REWARD - 40000, key_id31.clone()),
-				build::with_fee(20000),
 			],
 			&kc,
 			&pb,
@@ -474,11 +598,11 @@ fn spend_in_fork_and_compact() {
 		chain.validate(false).unwrap();
 
 		// mine 2 forked blocks from the first
-		let fork = prepare_fork_block_tx(&kc, &fork_head, &chain, 6, vec![&tx1]);
+		let fork = prepare_block_tx(&kc, &fork_head, &chain, 6, vec![&tx1]);
 		let prev_fork = fork.header.clone();
 		chain.process_block(fork, chain::Options::SKIP_POW).unwrap();
 
-		let fork_next = prepare_fork_block_tx(&kc, &prev_fork, &chain, 8, vec![&tx2]);
+		let fork_next = prepare_block_tx(&kc, &prev_fork, &chain, 8, vec![&tx2]);
 		let prev_fork = fork_next.header.clone();
 		chain
 			.process_block(fork_next, chain::Options::SKIP_POW)
@@ -498,7 +622,7 @@ fn spend_in_fork_and_compact() {
 			.is_err());
 
 		// make the fork win
-		let fork_next = prepare_fork_block(&kc, &prev_fork, &chain, 10);
+		let fork_next = prepare_block(&kc, &prev_fork, &chain, 10);
 		let prev_fork = fork_next.header.clone();
 		chain
 			.process_block(fork_next, chain::Options::SKIP_POW)
@@ -541,7 +665,7 @@ fn spend_in_fork_and_compact() {
 fn output_header_mappings() {
 	global::set_mining_mode(ChainTypes::AutomatedTesting);
 	{
-		let chain = setup(
+		let chain = init_chain(
 			".grin_header_for_output",
 			pow::mine_genesis_block().unwrap(),
 		);
@@ -627,30 +751,6 @@ where
 {
 	let mut b = prepare_block_nosum(kc, prev, diff, txs);
 	chain.set_txhashset_roots(&mut b).unwrap();
-	b
-}
-
-fn prepare_fork_block<K>(kc: &K, prev: &BlockHeader, chain: &Chain, diff: u64) -> Block
-where
-	K: Keychain,
-{
-	let mut b = prepare_block_nosum(kc, prev, diff, vec![]);
-	chain.set_txhashset_roots_forked(&mut b, prev).unwrap();
-	b
-}
-
-fn prepare_fork_block_tx<K>(
-	kc: &K,
-	prev: &BlockHeader,
-	chain: &Chain,
-	diff: u64,
-	txs: Vec<&Transaction>,
-) -> Block
-where
-	K: Keychain,
-{
-	let mut b = prepare_block_nosum(kc, prev, diff, txs);
-	chain.set_txhashset_roots_forked(&mut b, prev).unwrap();
 	b
 }
 

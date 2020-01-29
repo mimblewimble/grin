@@ -1,4 +1,4 @@
-// Copyright 2018 The Grin Developers
+// Copyright 2020 The Grin Developers
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -11,7 +11,7 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-use super::utils::{get_output, w};
+use super::utils::{get_output, get_output_v2, w};
 use crate::chain;
 use crate::core::core::hash::Hash;
 use crate::core::core::hash::Hashed;
@@ -63,6 +63,40 @@ impl HeaderHandler {
 			Err(_) => Err(ErrorKind::NotFound)?,
 		}
 	}
+
+	pub fn get_header_v2(&self, h: &Hash) -> Result<BlockHeaderPrintable, Error> {
+		let chain = w(&self.chain)?;
+		let header = chain.get_block_header(h).context(ErrorKind::NotFound)?;
+		return Ok(BlockHeaderPrintable::from_header(&header));
+	}
+
+	// Try to get hash from height, hash or output commit
+	pub fn parse_inputs(
+		&self,
+		height: Option<u64>,
+		hash: Option<Hash>,
+		commit: Option<String>,
+	) -> Result<Hash, Error> {
+		if let Some(height) = height {
+			match w(&self.chain)?.get_header_by_height(height) {
+				Ok(header) => return Ok(header.hash()),
+				Err(_) => return Err(ErrorKind::NotFound)?,
+			}
+		}
+		if let Some(hash) = hash {
+			return Ok(hash);
+		}
+		if let Some(commit) = commit {
+			let oid = get_output_v2(&self.chain, &commit, false, false)?.1;
+			match w(&self.chain)?.get_header_for_output(&oid) {
+				Ok(header) => return Ok(header.hash()),
+				Err(_) => return Err(ErrorKind::NotFound)?,
+			}
+		}
+		return Err(ErrorKind::Argument(
+			"not a valid hash, height or output commit".to_owned(),
+		))?;
+	}
 }
 
 impl Handler for HeaderHandler {
@@ -87,10 +121,15 @@ pub struct BlockHandler {
 }
 
 impl BlockHandler {
-	fn get_block(&self, h: &Hash, include_merkle_proof: bool) -> Result<BlockPrintable, Error> {
+	pub fn get_block(
+		&self,
+		h: &Hash,
+		include_proof: bool,
+		include_merkle_proof: bool,
+	) -> Result<BlockPrintable, Error> {
 		let chain = w(&self.chain)?;
 		let block = chain.get_block(h).context(ErrorKind::NotFound)?;
-		BlockPrintable::from_block(&block, chain, false, include_merkle_proof)
+		BlockPrintable::from_block(&block, chain, include_proof, include_merkle_proof)
 			.map_err(|_| ErrorKind::Internal("chain error".to_owned()).into())
 	}
 
@@ -113,6 +152,34 @@ impl BlockHandler {
 		let vec = util::from_hex(input)
 			.map_err(|e| ErrorKind::Argument(format!("invalid input: {}", e)))?;
 		Ok(Hash::from_vec(&vec))
+	}
+
+	// Try to get hash from height, hash or output commit
+	pub fn parse_inputs(
+		&self,
+		height: Option<u64>,
+		hash: Option<Hash>,
+		commit: Option<String>,
+	) -> Result<Hash, Error> {
+		if let Some(height) = height {
+			match w(&self.chain)?.get_header_by_height(height) {
+				Ok(header) => return Ok(header.hash()),
+				Err(_) => return Err(ErrorKind::NotFound)?,
+			}
+		}
+		if let Some(hash) = hash {
+			return Ok(hash);
+		}
+		if let Some(commit) = commit {
+			let oid = get_output_v2(&self.chain, &commit, false, false)?.1;
+			match w(&self.chain)?.get_header_for_output(&oid) {
+				Ok(header) => return Ok(header.hash()),
+				Err(_) => return Err(ErrorKind::NotFound)?,
+			}
+		}
+		return Err(ErrorKind::Argument(
+			"not a valid hash, height or output commit".to_owned(),
+		))?;
 	}
 }
 
@@ -141,19 +208,29 @@ impl Handler for BlockHandler {
 			Ok(h) => h,
 		};
 
-		if let Some(param) = req.uri().query() {
-			if param == "compact" {
-				result_to_response(self.get_compact_block(&h))
-			} else if param == "no_merkle_proof" {
-				result_to_response(self.get_block(&h, false))
-			} else {
-				response(
-					StatusCode::BAD_REQUEST,
-					format!("unsupported query parameter: {}", param),
-				)
+		let mut include_proof = false;
+		let mut include_merkle_proof = true;
+		if let Some(params) = req.uri().query() {
+			let query = url::form_urlencoded::parse(params.as_bytes());
+			let mut compact = false;
+			for (param, _) in query {
+				match param.as_ref() {
+					"compact" => compact = true,
+					"no_merkle_proof" => include_merkle_proof = false,
+					"include_proof" => include_proof = true,
+					_ => {
+						return response(
+							StatusCode::BAD_REQUEST,
+							format!("unsupported query parameter: {}", param),
+						)
+					}
+				}
 			}
-		} else {
-			result_to_response(self.get_block(&h, true))
+
+			if compact {
+				return result_to_response(self.get_compact_block(&h));
+			}
 		}
+		result_to_response(self.get_block(&h, include_proof, include_merkle_proof))
 	}
 }

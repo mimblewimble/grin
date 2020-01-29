@@ -1,4 +1,4 @@
-// Copyright 2018 The Grin Developers
+// Copyright 2020 The Grin Developers
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -17,6 +17,7 @@ use std::sync::Arc;
 use crate::chain;
 use crate::core::core::hash::Hashed;
 use crate::core::core::merkle_proof::MerkleProof;
+use crate::core::core::{KernelFeatures, TxKernel};
 use crate::core::{core, ser};
 use crate::p2p;
 use crate::util;
@@ -78,15 +79,27 @@ pub struct Status {
 	pub connections: u32,
 	// The state of the current fork Tip
 	pub tip: Tip,
+	// The current sync status
+	pub sync_status: String,
+	// Additional sync information
+	#[serde(skip_serializing_if = "Option::is_none")]
+	pub sync_info: Option<serde_json::Value>,
 }
 
 impl Status {
-	pub fn from_tip_and_peers(current_tip: chain::Tip, connections: u32) -> Status {
+	pub fn from_tip_and_peers(
+		current_tip: chain::Tip,
+		connections: u32,
+		sync_status: String,
+		sync_info: Option<serde_json::Value>,
+	) -> Status {
 		Status {
 			protocol_version: ser::ProtocolVersion::local().into(),
 			user_agent: p2p::msg::USER_AGENT.to_string(),
 			connections: connections,
 			tip: Tip::from_tip(current_tip),
+			sync_status,
+			sync_info,
 		}
 	}
 }
@@ -103,13 +116,16 @@ pub struct TxHashSet {
 }
 
 impl TxHashSet {
-	pub fn from_head(head: Arc<chain::Chain>) -> TxHashSet {
-		let roots = head.get_txhashset_roots();
-		TxHashSet {
-			output_root_hash: roots.output_root.to_hex(),
-			range_proof_root_hash: roots.rproof_root.to_hex(),
-			kernel_root_hash: roots.kernel_root.to_hex(),
-		}
+	/// A TxHashSet in the context of the api is simply the collection of PMMR roots.
+	/// We can obtain these in a lightweight way by reading them from the head of the chain.
+	/// We will have validated the roots on this header against the roots of the txhashset.
+	pub fn from_head(chain: Arc<chain::Chain>) -> Result<TxHashSet, chain::Error> {
+		let header = chain.head_header()?;
+		Ok(TxHashSet {
+			output_root_hash: header.output_root.to_hex(),
+			range_proof_root_hash: header.range_proof_root.to_hex(),
+			kernel_root_hash: header.kernel_root.to_hex(),
+		})
 	}
 }
 
@@ -275,10 +291,11 @@ impl OutputPrintable {
 		};
 
 		let out_id = core::OutputIdentifier::from_output(&output);
-		let spent = chain.is_unspent(&out_id).is_err();
-		let block_height = match spent {
-			true => None,
-			false => Some(chain.get_header_for_output(&out_id)?.height),
+		let res = chain.is_unspent(&out_id);
+		let (spent, block_height) = if let Ok(output_pos) = res {
+			(false, Some(output_pos.height))
+		} else {
+			(true, None)
 		};
 
 		let proof = if include_proof {
@@ -317,13 +334,13 @@ impl OutputPrintable {
 	}
 
 	pub fn range_proof(&self) -> Result<pedersen::RangeProof, ser::Error> {
-		let proof_str = match self.proof.clone() {
-			Some(p) => p,
-			None => return Err(ser::Error::HexError(format!("output range_proof missing"))),
-		};
+		let proof_str = self
+			.proof
+			.clone()
+			.ok_or_else(|| ser::Error::HexError(format!("output range_proof missing")))?;
 
 		let p_vec = util::from_hex(proof_str)
-			.map_err(|_| ser::Error::HexError(format!("invalud output range_proof")))?;
+			.map_err(|_| ser::Error::HexError(format!("invalid output range_proof")))?;
 		let mut p_bytes = [0; util::secp::constants::MAX_PROOF_SIZE];
 		for i in 0..p_bytes.len() {
 			p_bytes[i] = p_vec[i];
@@ -457,7 +474,7 @@ impl<'de> serde::de::Deserialize<'de> for OutputPrintable {
 					spent: spent.unwrap(),
 					proof: proof,
 					proof_hash: proof_hash.unwrap(),
-					block_height: block_height,
+					block_height: block_height.unwrap(),
 					merkle_proof: merkle_proof,
 					mmr_index: mmr_index.unwrap(),
 				})
@@ -488,10 +505,16 @@ pub struct TxKernelPrintable {
 
 impl TxKernelPrintable {
 	pub fn from_txkernel(k: &core::TxKernel) -> TxKernelPrintable {
+		let features = k.features.as_string();
+		let (fee, lock_height) = match k.features {
+			KernelFeatures::Plain { fee } => (fee, 0),
+			KernelFeatures::Coinbase => (0, 0),
+			KernelFeatures::HeightLocked { fee, lock_height } => (fee, lock_height),
+		};
 		TxKernelPrintable {
-			features: format!("{:?}", k.features),
-			fee: k.fee,
-			lock_height: k.lock_height,
+			features,
+			fee,
+			lock_height,
 			excess: util::to_hex(k.excess.0.to_vec()),
 			excess_sig: util::to_hex(k.excess_sig.to_raw_data().to_vec()),
 		}
@@ -689,6 +712,13 @@ pub struct OutputListing {
 	pub last_retrieved_index: u64,
 	/// A printable version of the outputs
 	pub outputs: Vec<OutputPrintable>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct LocatedTxKernel {
+	pub tx_kernel: TxKernel,
+	pub height: u64,
+	pub mmr_index: u64,
 }
 
 #[derive(Serialize, Deserialize)]

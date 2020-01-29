@@ -1,4 +1,4 @@
-// Copyright 2018 The Grin Developers
+// Copyright 2020 The Grin Developers
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -14,15 +14,15 @@
 
 //! Rangeproof library functions
 
-use crate::blake2::blake2b::blake2b;
-use crate::keychain::extkey_bip32::BIP32GrinHasher;
-use crate::keychain::{Identifier, Keychain, SwitchCommitmentType, ViewKey};
 use crate::libtx::error::{Error, ErrorKind};
-use crate::util::secp::key::SecretKey;
-use crate::util::secp::pedersen::{Commitment, ProofMessage, RangeProof};
-use crate::util::secp::{self, Secp256k1};
-use crate::zeroize::Zeroize;
+use blake2::blake2b::blake2b;
+use keychain::extkey_bip32::BIP32GrinHasher;
+use keychain::{Identifier, Keychain, SwitchCommitmentType, ViewKey};
 use std::convert::TryFrom;
+use util::secp::key::SecretKey;
+use util::secp::pedersen::{Commitment, ProofMessage, RangeProof};
+use util::secp::{self, Secp256k1};
+use zeroize::Zeroize;
 
 /// Create a bulletproof
 pub fn create<K, B>(
@@ -65,10 +65,7 @@ pub fn verify(
 	extra_data: Option<Vec<u8>>,
 ) -> Result<(), secp::Error> {
 	let result = secp.verify_bullet_proof(commit, proof, extra_data);
-	match result {
-		Ok(_) => Ok(()),
-		Err(e) => Err(e),
-	}
+	result.map(|_| ())
 }
 
 /// Rewind a rangeproof to retrieve the amount, derivation path and switch commitment type
@@ -228,9 +225,10 @@ where
 		let id = Identifier::from_serialized_path(depth, &msg[4..]);
 
 		let commit_exp = self.keychain.commit(amount, &id, &switch)?;
-		match commit == &commit_exp {
-			true => Ok(Some((id, switch))),
-			false => Ok(None),
+		if commit == &commit_exp {
+			Ok(Some((id, switch)))
+		} else {
+			Ok(None)
 		}
 	}
 }
@@ -338,9 +336,10 @@ where
 		let commit_exp = self
 			.keychain
 			.commit(amount, &id, &SwitchCommitmentType::Regular)?;
-		match commit == &commit_exp {
-			true => Ok(Some((id, SwitchCommitmentType::Regular))),
-			false => Ok(None),
+		if commit == &commit_exp {
+			Ok(Some((id, SwitchCommitmentType::Regular)))
+		} else {
+			Ok(None)
 		}
 	}
 }
@@ -440,8 +439,8 @@ impl ProofBuild for ViewKey {
 #[cfg(test)]
 mod tests {
 	use super::*;
-	use crate::keychain::ExtKeychain;
-	use grin_keychain::ChildNumber;
+	use keychain::ChildNumber;
+	use keychain::ExtKeychain;
 	use rand::{thread_rng, Rng};
 
 	#[test]

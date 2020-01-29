@@ -1,4 +1,4 @@
-// Copyright 2018 The Grin Developers
+// Copyright 2020 The Grin Developers
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -19,9 +19,8 @@ pub mod common;
 use self::core::core::{Output, OutputFeatures};
 use self::core::libtx::proof;
 use self::core::ser;
-use self::keychain::{ExtKeychain, Keychain};
 use grin_core as core;
-use grin_keychain as keychain;
+use keychain::{ExtKeychain, Keychain};
 
 #[test]
 fn test_output_ser_deser() {

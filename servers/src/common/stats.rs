@@ -1,4 +1,4 @@
-// Copyright 2018 The Grin Developers
+// Copyright 2020 The Grin Developers
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -25,9 +25,9 @@ use crate::core::ser::ProtocolVersion;
 
 use chrono::prelude::*;
 
-use crate::chain;
 use crate::chain::SyncStatus;
 use crate::p2p;
+use grin_core::pow::Difficulty;
 
 /// Server state info collection struct, to be passed around into internals
 /// and populated when required
@@ -51,9 +51,9 @@ pub struct ServerStats {
 	/// Number of peers
 	pub peer_count: u32,
 	/// Chain head
-	pub head: chain::Tip,
+	pub chain_stats: ChainStats,
 	/// sync header head
-	pub header_head: chain::Tip,
+	pub header_stats: Option<ChainStats>,
 	/// Whether we're currently syncing
 	pub sync_status: SyncStatus,
 	/// Handle to current stratum server stats
@@ -62,8 +62,36 @@ pub struct ServerStats {
 	pub peer_stats: Vec<PeerStats>,
 	/// Difficulty calculation statistics
 	pub diff_stats: DiffStats,
+	/// Transaction pool statistics
+	pub tx_stats: Option<TxStats>,
+	/// Disk usage in GB
+	pub disk_usage_gb: String,
 }
 
+/// Chain Statistics
+#[derive(Clone, Serialize, Debug)]
+pub struct ChainStats {
+	/// Height of the tip (max height of the fork)
+	pub height: u64,
+	/// Last block pushed to the fork
+	pub last_block_h: Hash,
+	/// Total difficulty accumulated on that fork
+	pub total_difficulty: Difficulty,
+	/// Timestamp of highest block or header
+	pub latest_timestamp: DateTime<Utc>,
+}
+/// Transaction Statistics
+#[derive(Clone, Serialize, Debug)]
+pub struct TxStats {
+	/// Number of transactions in the transaction pool
+	pub tx_pool_size: usize,
+	/// Number of transaction kernels in the transaction pool
+	pub tx_pool_kernels: usize,
+	/// Number of transactions in the stem pool
+	pub stem_pool_size: usize,
+	/// Number of transaction kernels in the stem pool
+	pub stem_pool_kernels: usize,
+}
 /// Struct to return relevant information about stratum workers
 #[derive(Clone, Serialize, Debug)]
 pub struct WorkerStats {
@@ -163,6 +191,24 @@ pub struct PeerStats {
 	pub sent_bytes_per_sec: u64,
 	/// Number of bytes we've received from the peer.
 	pub received_bytes_per_sec: u64,
+}
+
+impl PartialEq for PeerStats {
+	fn eq(&self, other: &PeerStats) -> bool {
+		*self.addr == other.addr
+	}
+}
+
+impl PartialEq for WorkerStats {
+	fn eq(&self, other: &WorkerStats) -> bool {
+		*self.id == other.id
+	}
+}
+
+impl PartialEq for DiffBlock {
+	fn eq(&self, other: &DiffBlock) -> bool {
+		self.block_height == other.block_height
+	}
 }
 
 impl StratumStats {

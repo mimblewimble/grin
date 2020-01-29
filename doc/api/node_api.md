@@ -10,6 +10,7 @@
     1. [GET Chain](#get-chain)
     1. [POST Chain Compact](#post-chain-compact)
     1. [GET Chain Validate](#get-chain-validate)
+    1. [GET Chain Kernel by Commitment](#get-chain-kernel-by-commitment)
     1. [GET Chain Outputs by IDs](#get-chain-outputs-by-ids)
     1. [GET Chain Outputs by Height](#get-chain-outputs-by-height)
 1. [Status Endpoint](#status-endpoint)
@@ -36,7 +37,8 @@
 ### GET Blocks
 
 Returns data about a specific block given a hash, a height or an unspent commit.
-Optionally return results as "compact blocks" by passing `?compact` query.
+
+Optionally, Merkle proofs can be excluded from the results by adding `?no_merkle_proof`, rangeproofs can be included by adding `?include_proof` or results  can be returned as "compact blocks" by adding `?compact`.
 
 * **URL**
 
@@ -323,6 +325,64 @@ Trigger a validation of the chain state.
     });
   ```
 
+### GET Chain Kernel By Commitment
+
+Look up an on-chain kernel and the height of the block it is included in. By default `min_height` is 0.
+
+* **URL**
+
+  * /v1/chain/kernels/xxx?min_height=yyy&max_height=zzz
+
+* **Method:**
+
+  `GET`
+  
+* **URL Params**
+
+  **Required:**
+  `commitment=[string]`
+
+  **Optional:**
+  `min_height=[number]`
+  `max_height=[number]`
+
+* **Data Params**
+
+  None
+
+* **Success Response:**
+
+  * **Code:** 200
+  * **Content:**
+
+    | Field        | Type   | Description                                                                     |
+    |:-------------|:-------|:--------------------------------------------------------------------------------|
+    | tx_kernel    | object | Transaction Kernel                                                              |
+    | - features   | object | The type of output Coinbase|Transaction                                         |
+    | - features   | object | The kernel features. Can either be `Plain`, `Coinbase` or `HeightLocked`. |
+    | - excess     | string | The kernel excess also called commitment                                        |
+    | - excess_sig | string | The excess signature                                                            |
+    | height       | string | THe height of the block this kernel is included in                              |
+    | mmr_height   | string | Position in the MMR                                                             |
+
+* **Error Response:**
+
+  * **Code:** 404 or 500
+  * **Content:** `[]`
+
+* **Sample Call:**
+
+  ```javascript
+    $.ajax({
+      url: "/v1/chain/kernels/0939fe3dc6a35350da91c6288138b7a257e0c0322eae30bda3938229d649e2e642?max_height=324300",
+      dataType: "json",
+      type : "GET",
+      success : function(r) {
+        console.log(r);
+      }
+    });
+  ```
+
 ### GET Chain Outputs By IDs
 
 Retrieves details about specifics outputs. Supports retrieval of multiple outputs in a single request.
@@ -477,6 +537,8 @@ Returns various information about the node and the network
     | last_block_pushed  | string   | Last block pushed to the fork                                 |
     | prev_block_to_last | string   | Block previous to last                                        |
     | total_difficulty   | number   | Total difficulty accumulated on that fork since genesis block |
+    | sync_status        | string   | The current sync status                                       |
+    | sync_info          | object   | Additional sync information. This field is optional.          |
 
 * **Error Response:**
 

@@ -1,4 +1,4 @@
-// Copyright 2018 The Grin Developers
+// Copyright 2020 The Grin Developers
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -24,15 +24,41 @@ use croaring::Bitmap;
 use crate::core::core::hash::DefaultHashable;
 use crate::core::core::pmmr::{Backend, PMMR};
 use crate::core::ser::{
-	Error, FixedLength, PMMRIndexHashable, PMMRable, Readable, Reader, Writeable, Writer,
+	Error, PMMRIndexHashable, PMMRable, ProtocolVersion, Readable, Reader, Writeable, Writer,
 };
+
+#[test]
+fn pmmr_leaf_idx_iter() {
+	let (data_dir, elems) = setup("leaf_idx_iter");
+	{
+		let mut backend =
+			store::pmmr::PMMRBackend::new(data_dir.to_string(), true, ProtocolVersion(1), None)
+				.unwrap();
+
+		// adding first set of 4 elements and sync
+		let mmr_size = load(0, &elems[0..5], &mut backend);
+		backend.sync().unwrap();
+
+		{
+			let pmmr: PMMR<'_, TestElem, _> = PMMR::at(&mut backend, mmr_size);
+			let leaf_idx = pmmr.leaf_idx_iter(0).collect::<Vec<_>>();
+			let leaf_pos = pmmr.leaf_pos_iter().collect::<Vec<_>>();
+
+			// The first 5 leaves [0,1,2,3,4] are at pos [1,2,4,5,8] in the MMR.
+			assert_eq!(leaf_idx, vec![0, 1, 2, 3, 4]);
+			assert_eq!(leaf_pos, vec![1, 2, 4, 5, 8]);
+		}
+	}
+	teardown(data_dir);
+}
 
 #[test]
 fn pmmr_append() {
 	let (data_dir, elems) = setup("append");
 	{
 		let mut backend =
-			store::pmmr::PMMRBackend::new(data_dir.to_string(), true, false, None).unwrap();
+			store::pmmr::PMMRBackend::new(data_dir.to_string(), false, ProtocolVersion(1), None)
+				.unwrap();
 
 		// adding first set of 4 elements and sync
 		let mut mmr_size = load(0, &elems[0..4], &mut backend);
@@ -46,6 +72,7 @@ fn pmmr_append() {
 			// Note: 1-indexed PMMR API
 			let pmmr: PMMR<'_, TestElem, _> = PMMR::at(&mut backend, mmr_size);
 
+			assert_eq!(pmmr.n_unpruned_leaves(), 4);
 			assert_eq!(pmmr.get_data(1), Some(elems[0]));
 			assert_eq!(pmmr.get_data(2), Some(elems[1]));
 
@@ -81,6 +108,8 @@ fn pmmr_append() {
 			// Note: 1-indexed PMMR API
 			let pmmr: PMMR<'_, TestElem, _> = PMMR::at(&mut backend, mmr_size);
 
+			assert_eq!(pmmr.n_unpruned_leaves(), 9);
+
 			// First pair of leaves.
 			assert_eq!(pmmr.get_data(1), Some(elems[0]));
 			assert_eq!(pmmr.get_data(2), Some(elems[1]));
@@ -101,7 +130,7 @@ fn pmmr_append() {
 
 		{
 			let pmmr: PMMR<'_, TestElem, _> = PMMR::at(&mut backend, mmr_size);
-			assert_eq!(pmmr.root(), (pos_14, pos_15).hash_with_index(16));
+			assert_eq!(pmmr.root().unwrap(), (pos_14, pos_15).hash_with_index(16));
 		}
 	}
 
@@ -115,10 +144,12 @@ fn pmmr_compact_leaf_sibling() {
 	// setup the mmr store with all elements
 	{
 		let mut backend =
-			store::pmmr::PMMRBackend::new(data_dir.to_string(), true, false, None).unwrap();
+			store::pmmr::PMMRBackend::new(data_dir.to_string(), true, ProtocolVersion(1), None)
+				.unwrap();
 		let mmr_size = load(0, &elems[..], &mut backend);
 		backend.sync().unwrap();
 
+		assert_eq!(backend.n_unpruned_leaves(), 19);
 		// On far left of the MMR -
 		// pos 1 and 2 are leaves (and siblings)
 		// the parent is pos 3
@@ -145,6 +176,8 @@ fn pmmr_compact_leaf_sibling() {
 		// // check pos 1, 2, 3 are in the state we expect after pruning
 		{
 			let pmmr = PMMR::at(&mut backend, mmr_size);
+
+			assert_eq!(pmmr.n_unpruned_leaves(), 17);
 
 			// check that pos 1 is "removed"
 			assert_eq!(pmmr.get_hash(1), None);
@@ -188,14 +221,15 @@ fn pmmr_prune_compact() {
 	// setup the mmr store with all elements
 	{
 		let mut backend =
-			store::pmmr::PMMRBackend::new(data_dir.to_string(), true, false, None).unwrap();
+			store::pmmr::PMMRBackend::new(data_dir.to_string(), true, ProtocolVersion(1), None)
+				.unwrap();
 		let mmr_size = load(0, &elems[..], &mut backend);
 		backend.sync().unwrap();
 
 		// save the root
 		let root = {
 			let pmmr: PMMR<'_, TestElem, _> = PMMR::at(&mut backend, mmr_size);
-			pmmr.root()
+			pmmr.root().unwrap()
 		};
 
 		// pruning some choice nodes
@@ -210,7 +244,7 @@ fn pmmr_prune_compact() {
 		// check the root and stored data
 		{
 			let pmmr: PMMR<'_, TestElem, _> = PMMR::at(&mut backend, mmr_size);
-			assert_eq!(root, pmmr.root());
+			assert_eq!(root, pmmr.root().unwrap());
 			// check we can still retrieve same element from leaf index 2
 			assert_eq!(pmmr.get_data(2).unwrap(), TestElem(2));
 			// and the same for leaf index 7
@@ -223,7 +257,7 @@ fn pmmr_prune_compact() {
 		// recheck the root and stored data
 		{
 			let pmmr: PMMR<'_, TestElem, _> = PMMR::at(&mut backend, mmr_size);
-			assert_eq!(root, pmmr.root());
+			assert_eq!(root, pmmr.root().unwrap());
 			assert_eq!(pmmr.get_data(2).unwrap(), TestElem(2));
 			assert_eq!(pmmr.get_data(11).unwrap(), TestElem(7));
 		}
@@ -239,7 +273,8 @@ fn pmmr_reload() {
 	// set everything up with an initial backend
 	{
 		let mut backend =
-			store::pmmr::PMMRBackend::new(data_dir.to_string(), true, false, None).unwrap();
+			store::pmmr::PMMRBackend::new(data_dir.to_string(), true, ProtocolVersion(1), None)
+				.unwrap();
 
 		let mmr_size = load(0, &elems[..], &mut backend);
 
@@ -251,7 +286,7 @@ fn pmmr_reload() {
 		// save the root
 		let root = {
 			let pmmr: PMMR<'_, TestElem, _> = PMMR::at(&mut backend, mmr_size);
-			pmmr.root()
+			pmmr.root().unwrap()
 		};
 
 		{
@@ -299,11 +334,12 @@ fn pmmr_reload() {
 		// and check everything still works as expected
 		{
 			let mut backend =
-				store::pmmr::PMMRBackend::new(data_dir.to_string(), true, false, None).unwrap();
+				store::pmmr::PMMRBackend::new(data_dir.to_string(), true, ProtocolVersion(1), None)
+					.unwrap();
 			assert_eq!(backend.unpruned_size(), mmr_size);
 			{
 				let pmmr: PMMR<'_, TestElem, _> = PMMR::at(&mut backend, mmr_size);
-				assert_eq!(root, pmmr.root());
+				assert_eq!(root, pmmr.root().unwrap());
 			}
 
 			// pos 1 and pos 2 are both removed (via parent pos 3 in prune list)
@@ -340,14 +376,15 @@ fn pmmr_rewind() {
 	let (data_dir, elems) = setup("rewind");
 	{
 		let mut backend =
-			store::pmmr::PMMRBackend::new(data_dir.clone(), true, false, None).unwrap();
+			store::pmmr::PMMRBackend::new(data_dir.clone(), true, ProtocolVersion(1), None)
+				.unwrap();
 
 		// adding elements and keeping the corresponding root
 		let mut mmr_size = load(0, &elems[0..4], &mut backend);
 		backend.sync().unwrap();
 		let root1 = {
 			let pmmr: PMMR<'_, TestElem, _> = PMMR::at(&mut backend, mmr_size);
-			pmmr.root()
+			pmmr.root().unwrap()
 		};
 
 		mmr_size = load(mmr_size, &elems[4..6], &mut backend);
@@ -355,7 +392,7 @@ fn pmmr_rewind() {
 		let root2 = {
 			let pmmr: PMMR<'_, TestElem, _> = PMMR::at(&mut backend, mmr_size);
 			assert_eq!(pmmr.unpruned_size(), 10);
-			pmmr.root()
+			pmmr.root().unwrap()
 		};
 
 		mmr_size = load(mmr_size, &elems[6..9], &mut backend);
@@ -363,7 +400,7 @@ fn pmmr_rewind() {
 		let root3 = {
 			let pmmr: PMMR<'_, TestElem, _> = PMMR::at(&mut backend, mmr_size);
 			assert_eq!(pmmr.unpruned_size(), 16);
-			pmmr.root()
+			pmmr.root().unwrap()
 		};
 
 		// prune the first 4 elements (leaves at pos 1, 2, 4, 5)
@@ -388,14 +425,14 @@ fn pmmr_rewind() {
 			pmmr.rewind(9, &Bitmap::of(&vec![11, 12, 16])).unwrap();
 			assert_eq!(pmmr.unpruned_size(), 10);
 
-			assert_eq!(pmmr.root(), root2);
+			assert_eq!(pmmr.root().unwrap(), root2);
 		}
 
 		backend.sync().unwrap();
 
 		{
 			let pmmr: PMMR<'_, TestElem, _> = PMMR::at(&mut backend, 10);
-			assert_eq!(pmmr.root(), root2);
+			assert_eq!(pmmr.root().unwrap(), root2);
 		}
 
 		// Also check the data file looks correct.
@@ -423,13 +460,13 @@ fn pmmr_rewind() {
 		{
 			let mut pmmr: PMMR<'_, TestElem, _> = PMMR::at(&mut backend, 10);
 			pmmr.rewind(5, &Bitmap::create()).unwrap();
-			assert_eq!(pmmr.root(), root1);
+			assert_eq!(pmmr.root().unwrap(), root1);
 		}
 		backend.sync().unwrap();
 
 		{
 			let pmmr: PMMR<'_, TestElem, _> = PMMR::at(&mut backend, 7);
-			assert_eq!(pmmr.root(), root1);
+			assert_eq!(pmmr.root().unwrap(), root1);
 		}
 
 		// also check the data file looks correct
@@ -456,7 +493,8 @@ fn pmmr_compact_single_leaves() {
 	let (data_dir, elems) = setup("compact_single_leaves");
 	{
 		let mut backend =
-			store::pmmr::PMMRBackend::new(data_dir.clone(), true, false, None).unwrap();
+			store::pmmr::PMMRBackend::new(data_dir.clone(), true, ProtocolVersion(1), None)
+				.unwrap();
 		let mmr_size = load(0, &elems[0..5], &mut backend);
 		backend.sync().unwrap();
 
@@ -491,7 +529,8 @@ fn pmmr_compact_entire_peak() {
 	let (data_dir, elems) = setup("compact_entire_peak");
 	{
 		let mut backend =
-			store::pmmr::PMMRBackend::new(data_dir.clone(), true, false, None).unwrap();
+			store::pmmr::PMMRBackend::new(data_dir.clone(), true, ProtocolVersion(1), None)
+				.unwrap();
 		let mmr_size = load(0, &elems[0..5], &mut backend);
 		backend.sync().unwrap();
 
@@ -547,7 +586,8 @@ fn pmmr_compact_horizon() {
 		let mmr_size;
 		{
 			let mut backend =
-				store::pmmr::PMMRBackend::new(data_dir.clone(), true, false, None).unwrap();
+				store::pmmr::PMMRBackend::new(data_dir.clone(), true, ProtocolVersion(1), None)
+					.unwrap();
 			mmr_size = load(0, &elems[..], &mut backend);
 			backend.sync().unwrap();
 
@@ -626,9 +666,13 @@ fn pmmr_compact_horizon() {
 		// recheck stored data
 		{
 			// recreate backend
-			let backend =
-				store::pmmr::PMMRBackend::<TestElem>::new(data_dir.to_string(), true, false, None)
-					.unwrap();
+			let backend = store::pmmr::PMMRBackend::<TestElem>::new(
+				data_dir.to_string(),
+				true,
+				ProtocolVersion(1),
+				None,
+			)
+			.unwrap();
 
 			assert_eq!(backend.data_size(), 19);
 			assert_eq!(backend.hash_size(), 35);
@@ -642,9 +686,13 @@ fn pmmr_compact_horizon() {
 		}
 
 		{
-			let mut backend =
-				store::pmmr::PMMRBackend::<TestElem>::new(data_dir.to_string(), true, false, None)
-					.unwrap();
+			let mut backend = store::pmmr::PMMRBackend::<TestElem>::new(
+				data_dir.to_string(),
+				true,
+				ProtocolVersion(1),
+				None,
+			)
+			.unwrap();
 
 			{
 				let mut pmmr: PMMR<'_, TestElem, _> = PMMR::at(&mut backend, mmr_size);
@@ -660,9 +708,13 @@ fn pmmr_compact_horizon() {
 		// recheck stored data
 		{
 			// recreate backend
-			let backend =
-				store::pmmr::PMMRBackend::<TestElem>::new(data_dir.to_string(), true, false, None)
-					.unwrap();
+			let backend = store::pmmr::PMMRBackend::<TestElem>::new(
+				data_dir.to_string(),
+				true,
+				ProtocolVersion(1),
+				None,
+			)
+			.unwrap();
 
 			// 0010012001001230
 
@@ -692,14 +744,15 @@ fn compact_twice() {
 	// Scoped to allow Windows to teardown
 	{
 		let mut backend =
-			store::pmmr::PMMRBackend::new(data_dir.to_string(), true, false, None).unwrap();
+			store::pmmr::PMMRBackend::new(data_dir.to_string(), true, ProtocolVersion(1), None)
+				.unwrap();
 		let mmr_size = load(0, &elems[..], &mut backend);
 		backend.sync().unwrap();
 
 		// save the root
 		let root = {
 			let pmmr: PMMR<'_, TestElem, _> = PMMR::at(&mut backend, mmr_size);
-			pmmr.root()
+			pmmr.root().unwrap()
 		};
 
 		// pruning some choice nodes
@@ -714,7 +767,7 @@ fn compact_twice() {
 		// check the root and stored data
 		{
 			let pmmr: PMMR<'_, TestElem, _> = PMMR::at(&mut backend, mmr_size);
-			assert_eq!(root, pmmr.root());
+			assert_eq!(root, pmmr.root().unwrap());
 			assert_eq!(pmmr.get_data(5).unwrap(), TestElem(4));
 			assert_eq!(pmmr.get_data(11).unwrap(), TestElem(7));
 		}
@@ -725,7 +778,7 @@ fn compact_twice() {
 		// recheck the root and stored data
 		{
 			let pmmr: PMMR<'_, TestElem, _> = PMMR::at(&mut backend, mmr_size);
-			assert_eq!(root, pmmr.root());
+			assert_eq!(root, pmmr.root().unwrap());
 			assert_eq!(pmmr.get_data(5).unwrap(), TestElem(4));
 			assert_eq!(pmmr.get_data(11).unwrap(), TestElem(7));
 		}
@@ -742,7 +795,7 @@ fn compact_twice() {
 		// recheck the root and stored data
 		{
 			let pmmr: PMMR<'_, TestElem, _> = PMMR::at(&mut backend, mmr_size);
-			assert_eq!(root, pmmr.root());
+			assert_eq!(root, pmmr.root().unwrap());
 			assert_eq!(pmmr.get_data(11).unwrap(), TestElem(7));
 		}
 
@@ -752,7 +805,7 @@ fn compact_twice() {
 		// recheck the root and stored data
 		{
 			let pmmr: PMMR<'_, TestElem, _> = PMMR::at(&mut backend, mmr_size);
-			assert_eq!(root, pmmr.root());
+			assert_eq!(root, pmmr.root().unwrap());
 			assert_eq!(pmmr.get_data(11).unwrap(), TestElem(7));
 		}
 	}
@@ -911,15 +964,15 @@ struct TestElem(u32);
 
 impl DefaultHashable for TestElem {}
 
-impl FixedLength for TestElem {
-	const LEN: usize = 4;
-}
-
 impl PMMRable for TestElem {
 	type E = Self;
 
 	fn as_elmt(&self) -> Self::E {
 		self.clone()
+	}
+
+	fn elmt_size() -> Option<u16> {
+		Some(4)
 	}
 }
 

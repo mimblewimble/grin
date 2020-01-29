@@ -1,4 +1,4 @@
-// Copyright 2018 The Grin Developers
+// Copyright 2020 The Grin Developers
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -18,8 +18,6 @@ use std::fs::File;
 use std::io::{self, Read};
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV4, SocketAddrV6};
 use std::path::PathBuf;
-
-use std::sync::mpsc;
 use std::sync::Arc;
 
 use chrono::prelude::*;
@@ -48,11 +46,18 @@ pub const MAX_LOCATORS: u32 = 20;
 /// How long a banned peer should be banned for
 const BAN_WINDOW: i64 = 10800;
 
-/// The max peer count
-const PEER_MAX_COUNT: u32 = 125;
+/// The max inbound peer count
+const PEER_MAX_INBOUND_COUNT: u32 = 128;
 
-/// min preferred peer count
-const PEER_MIN_PREFERRED_COUNT: u32 = 8;
+/// The max outbound peer count
+const PEER_MAX_OUTBOUND_COUNT: u32 = 8;
+
+/// The min preferred outbound peer count
+const PEER_MIN_PREFERRED_OUTBOUND_COUNT: u32 = 8;
+
+/// The peer listener buffer count. Allows temporarily accepting more connections
+/// than allowed by PEER_MAX_INBOUND_COUNT to encourage network bootstrapping.
+const PEER_LISTENER_BUFFER_COUNT: u32 = 8;
 
 #[derive(Debug)]
 pub enum Error {
@@ -73,6 +78,8 @@ pub enum Error {
 		peer: Hash,
 	},
 	Send(String),
+	PeerNotFound,
+	PeerNotBanned,
 	PeerException,
 	Internal,
 }
@@ -95,11 +102,6 @@ impl From<chain::Error> for Error {
 impl From<io::Error> for Error {
 	fn from(e: io::Error) -> Error {
 		Error::Connection(e)
-	}
-}
-impl<T> From<mpsc::TrySendError<T>> for Error {
-	fn from(e: mpsc::TrySendError<T>) -> Error {
-		Error::Send(e.to_string())
 	}
 }
 
@@ -229,9 +231,13 @@ pub struct P2PConfig {
 
 	pub ban_window: Option<i64>,
 
-	pub peer_max_count: Option<u32>,
+	pub peer_max_inbound_count: Option<u32>,
 
-	pub peer_min_preferred_count: Option<u32>,
+	pub peer_max_outbound_count: Option<u32>,
+
+	pub peer_min_preferred_outbound_count: Option<u32>,
+
+	pub peer_listener_buffer_count: Option<u32>,
 
 	pub dandelion_peer: Option<PeerAddr>,
 }
@@ -250,8 +256,10 @@ impl Default for P2PConfig {
 			peers_deny: None,
 			peers_preferred: None,
 			ban_window: None,
-			peer_max_count: None,
-			peer_min_preferred_count: None,
+			peer_max_inbound_count: None,
+			peer_max_outbound_count: None,
+			peer_min_preferred_outbound_count: None,
+			peer_listener_buffer_count: None,
 			dandelion_peer: None,
 		}
 	}
@@ -268,19 +276,35 @@ impl P2PConfig {
 		}
 	}
 
-	/// return peer_max_count
-	pub fn peer_max_count(&self) -> u32 {
-		match self.peer_max_count {
+	/// return maximum inbound peer connections count
+	pub fn peer_max_inbound_count(&self) -> u32 {
+		match self.peer_max_inbound_count {
 			Some(n) => n,
-			None => PEER_MAX_COUNT,
+			None => PEER_MAX_INBOUND_COUNT,
 		}
 	}
 
-	/// return peer_preferred_count
-	pub fn peer_min_preferred_count(&self) -> u32 {
-		match self.peer_min_preferred_count {
+	/// return maximum outbound peer connections count
+	pub fn peer_max_outbound_count(&self) -> u32 {
+		match self.peer_max_outbound_count {
 			Some(n) => n,
-			None => PEER_MIN_PREFERRED_COUNT,
+			None => PEER_MAX_OUTBOUND_COUNT,
+		}
+	}
+
+	/// return minimum preferred outbound peer count
+	pub fn peer_min_preferred_outbound_count(&self) -> u32 {
+		match self.peer_min_preferred_outbound_count {
+			Some(n) => n,
+			None => PEER_MIN_PREFERRED_OUTBOUND_COUNT,
+		}
+	}
+
+	/// return peer buffer count for listener
+	pub fn peer_listener_buffer_count(&self) -> u32 {
+		match self.peer_listener_buffer_count {
+			Some(n) => n,
+			None => PEER_LISTENER_BUFFER_COUNT,
 		}
 	}
 }
@@ -398,6 +422,10 @@ impl PeerInfo {
 		self.direction == Direction::Outbound
 	}
 
+	pub fn is_inbound(&self) -> bool {
+		self.direction == Direction::Inbound
+	}
+
 	/// The current height of the peer.
 	pub fn height(&self) -> u64 {
 		self.live_info.read().height
@@ -494,7 +522,7 @@ pub trait ChainAdapter: Sync + Send {
 		&self,
 		b: core::Block,
 		peer_info: &PeerInfo,
-		was_requested: bool,
+		opts: chain::Options,
 	) -> Result<bool, chain::Error>;
 
 	fn compact_block_received(
@@ -528,7 +556,7 @@ pub trait ChainAdapter: Sync + Send {
 
 	fn kernel_data_read(&self) -> Result<File, chain::Error>;
 
-	fn kernel_data_write(&self, reader: &mut Read) -> Result<bool, chain::Error>;
+	fn kernel_data_write(&self, reader: &mut dyn Read) -> Result<bool, chain::Error>;
 
 	/// Provides a reading view into the current txhashset state as well as
 	/// the required indexes for a consumer to rewind to a consistant state

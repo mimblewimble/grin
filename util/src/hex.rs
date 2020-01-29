@@ -1,4 +1,4 @@
-// Copyright 2018 The Grin Developers
+// Copyright 2020 The Grin Developers
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -49,7 +49,7 @@ pub fn from_hex(hex_str: String) -> Result<Vec<u8>, num::ParseIntError> {
 }
 
 fn split_n(s: &str, n: usize) -> Vec<&str> {
-	(0..(s.len() - n + 1) / 2 + 1)
+	(0..=(s.len() - n + 1) / 2)
 		.map(|i| &s[2 * i..2 * i + n])
 		.collect()
 }

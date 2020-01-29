@@ -1,4 +1,4 @@
-// Copyright 2018 The Grin Developers
+// Copyright 2020 The Grin Developers
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -58,13 +58,10 @@ impl Peers {
 	/// Adds the peer to our internal peer mapping. Note that the peer is still
 	/// returned so the server can run it.
 	pub fn add_connected(&self, peer: Arc<Peer>) -> Result<(), Error> {
-		let mut peers = match self.peers.try_write_for(LOCK_TIMEOUT) {
-			Some(peers) => peers,
-			None => {
-				error!("add_connected: failed to get peers lock");
-				return Err(Error::Timeout);
-			}
-		};
+		let mut peers = self.peers.try_write_for(LOCK_TIMEOUT).ok_or_else(|| {
+			error!("add_connected: failed to get peers lock");
+			Error::Timeout
+		})?;
 		let peer_data = PeerData {
 			addr: peer.info.addr,
 			capabilities: peer.info.capabilities,
@@ -97,15 +94,16 @@ impl Peers {
 		self.save_peer(&peer_data)
 	}
 
-	pub fn is_known(&self, addr: PeerAddr) -> bool {
-		let peers = match self.peers.try_read_for(LOCK_TIMEOUT) {
-			Some(peers) => peers,
-			None => {
-				error!("is_known: failed to get peers lock");
-				return false;
-			}
-		};
-		peers.contains_key(&addr)
+	/// Check if this peer address is already known (are we already connected to it)?
+	/// We try to get the read lock but if we experience contention
+	/// and this attempt fails then return an error allowing the caller
+	/// to decide how best to handle this.
+	pub fn is_known(&self, addr: PeerAddr) -> Result<bool, Error> {
+		let peers = self.peers.try_read_for(LOCK_TIMEOUT).ok_or_else(|| {
+			error!("is_known: failed to get peers lock");
+			Error::Internal
+		})?;
+		Ok(peers.contains_key(&addr))
 	}
 
 	/// Get vec of peers we are currently connected to.
@@ -126,10 +124,19 @@ impl Peers {
 		res
 	}
 
+	/// Get vec of peers we currently have an outgoing connection with.
 	pub fn outgoing_connected_peers(&self) -> Vec<Arc<Peer>> {
 		self.connected_peers()
 			.into_iter()
 			.filter(|x| x.info.is_outbound())
+			.collect()
+	}
+
+	/// Get vec of peers we currently have an incoming connection with.
+	pub fn incoming_connected_peers(&self) -> Vec<Arc<Peer>> {
+		self.connected_peers()
+			.into_iter()
+			.filter(|x| x.info.is_inbound())
 			.collect()
 	}
 
@@ -153,6 +160,11 @@ impl Peers {
 	/// Number of outbound peers currently connected to.
 	pub fn peer_outbound_count(&self) -> u32 {
 		self.outgoing_connected_peers().len() as u32
+	}
+
+	/// Number of inbound peers currently connected to.
+	pub fn peer_inbound_count(&self) -> u32 {
+		self.incoming_connected_peers().len() as u32
 	}
 
 	// Return vec of connected peers that currently advertise more work
@@ -235,60 +247,46 @@ impl Peers {
 		}
 		false
 	}
-
 	/// Ban a peer, disconnecting it if we're currently connected
-	pub fn ban_peer(&self, peer_addr: PeerAddr, ban_reason: ReasonForBan) {
-		if let Err(e) = self.update_state(peer_addr, State::Banned) {
-			error!("Couldn't ban {}: {:?}", peer_addr, e);
-			return;
-		}
+	pub fn ban_peer(&self, peer_addr: PeerAddr, ban_reason: ReasonForBan) -> Result<(), Error> {
+		self.update_state(peer_addr, State::Banned)?;
 
-		if let Some(peer) = self.get_connected_peer(peer_addr) {
-			debug!("Banning peer {}", peer_addr);
-			// setting peer status will get it removed at the next clean_peer
-			match peer.send_ban_reason(ban_reason) {
-				Err(e) => error!("failed to send a ban reason to{}: {:?}", peer_addr, e),
-				Ok(_) => debug!("ban reason {:?} was sent to {}", ban_reason, peer_addr),
-			};
-			peer.set_banned();
-			peer.stop();
-
-			let mut peers = match self.peers.try_write_for(LOCK_TIMEOUT) {
-				Some(peers) => peers,
-				None => {
+		match self.get_connected_peer(peer_addr) {
+			Some(peer) => {
+				debug!("Banning peer {}", peer_addr);
+				// setting peer status will get it removed at the next clean_peer
+				peer.send_ban_reason(ban_reason)?;
+				peer.set_banned();
+				peer.stop();
+				let mut peers = self.peers.try_write_for(LOCK_TIMEOUT).ok_or_else(|| {
 					error!("ban_peer: failed to get peers lock");
-					return;
-				}
-			};
-			peers.remove(&peer.info.addr);
+					Error::PeerException
+				})?;
+				peers.remove(&peer.info.addr);
+				Ok(())
+			}
+			None => return Err(Error::PeerNotFound),
 		}
 	}
 
 	/// Unban a peer, checks if it exists and banned then unban
-	pub fn unban_peer(&self, peer_addr: PeerAddr) {
+	pub fn unban_peer(&self, peer_addr: PeerAddr) -> Result<(), Error> {
 		debug!("unban_peer: peer {}", peer_addr);
-		match self.get_peer(peer_addr) {
-			Ok(_) => {
-				if self.is_banned(peer_addr) {
-					if let Err(e) = self.update_state(peer_addr, State::Healthy) {
-						error!("Couldn't unban {}: {:?}", peer_addr, e);
-					}
-				} else {
-					error!("Couldn't unban {}: peer is not banned", peer_addr);
-				}
-			}
-			Err(e) => error!("Couldn't unban {}: {:?}", peer_addr, e),
-		};
+		// check if peer exist
+		self.get_peer(peer_addr)?;
+		if self.is_banned(peer_addr) {
+			return self.update_state(peer_addr, State::Healthy);
+		} else {
+			return Err(Error::PeerNotBanned);
+		}
 	}
 
-	fn broadcast<F>(&self, obj_name: &str, num_peers: u32, inner: F) -> u32
+	fn broadcast<F>(&self, obj_name: &str, inner: F) -> u32
 	where
 		F: Fn(&Peer) -> Result<bool, Error>,
 	{
 		let mut count = 0;
 
-		// Iterate over our connected peers.
-		// Try our best to send to at most num_peers peers.
 		for p in self.connected_peers().iter() {
 			match inner(&p) {
 				Ok(true) => count += 1,
@@ -310,22 +308,14 @@ impl Peers {
 					peers.remove(&p.info.addr);
 				}
 			}
-
-			if count >= num_peers {
-				break;
-			}
 		}
 		count
 	}
 
-	/// Broadcasts the provided compact block to PEER_MAX_COUNT of our peers.
-	/// This is only used when initially broadcasting a newly mined block
-	/// from a mining node so we want to broadcast it far and wide.
-	/// A peer implementation may drop the broadcast request
-	/// if it knows the remote peer already has the block.
+	/// Broadcast a compact block to all our connected peers.
+	/// This is only used when initially broadcasting a newly mined block.
 	pub fn broadcast_compact_block(&self, b: &core::CompactBlock) {
-		let num_peers = self.config.peer_max_count();
-		let count = self.broadcast("compact block", num_peers, |p| p.send_compact_block(b));
+		let count = self.broadcast("compact block", |p| p.send_compact_block(b));
 		debug!(
 			"broadcast_compact_block: {}, {} at {}, to {} peers, done.",
 			b.hash(),
@@ -335,14 +325,11 @@ impl Peers {
 		);
 	}
 
-	/// Broadcasts the provided header to PEER_PREFERRED_COUNT of our peers.
-	/// We may be connected to PEER_MAX_COUNT peers so we only
-	/// want to broadcast to a random subset of peers.
+	/// Broadcast a block header to all our connected peers.
 	/// A peer implementation may drop the broadcast request
 	/// if it knows the remote peer already has the header.
 	pub fn broadcast_header(&self, bh: &core::BlockHeader) {
-		let num_peers = self.config.peer_min_preferred_count();
-		let count = self.broadcast("header", num_peers, |p| p.send_header(bh));
+		let count = self.broadcast("header", |p| p.send_header(bh));
 		debug!(
 			"broadcast_header: {}, {} at {}, to {} peers, done.",
 			bh.hash(),
@@ -352,14 +339,11 @@ impl Peers {
 		);
 	}
 
-	/// Broadcasts the provided transaction to PEER_PREFERRED_COUNT of our
-	/// peers. We may be connected to PEER_MAX_COUNT peers so we only
-	/// want to broadcast to a random subset of peers.
+	/// Broadcasts the provided transaction to all our connected peers.
 	/// A peer implementation may drop the broadcast request
 	/// if it knows the remote peer already has the transaction.
 	pub fn broadcast_transaction(&self, tx: &core::Transaction) {
-		let num_peers = self.config.peer_max_count();
-		let count = self.broadcast("transaction", num_peers, |p| p.send_transaction(tx));
+		let count = self.broadcast("transaction", |p| p.send_transaction(tx));
 		debug!(
 			"broadcast_transaction: {} to {} peers, done.",
 			tx.hash(),
@@ -433,7 +417,7 @@ impl Peers {
 	/// Iterate over the peer list and prune all peers we have
 	/// lost connection to or have been deemed problematic.
 	/// Also avoid connected peer count getting too high.
-	pub fn clean_peers(&self, max_count: usize) {
+	pub fn clean_peers(&self, max_inbound_count: usize, max_outbound_count: usize) {
 		let mut rm = vec![];
 
 		// build a list of peers to be cleaned up
@@ -477,16 +461,27 @@ impl Peers {
 			}
 		}
 
-		// ensure we do not still have too many connected peers
-		let excess_count = (self.peer_count() as usize)
-			.saturating_sub(rm.len())
-			.saturating_sub(max_count);
-		if excess_count > 0 {
-			// map peers to addrs in a block to bound how long we keep the read lock for
+		// check here to make sure we don't have too many outgoing connections
+		let excess_outgoing_count =
+			(self.peer_outbound_count() as usize).saturating_sub(max_outbound_count);
+		if excess_outgoing_count > 0 {
 			let mut addrs = self
-				.connected_peers()
+				.outgoing_connected_peers()
 				.iter()
-				.take(excess_count)
+				.take(excess_outgoing_count)
+				.map(|x| x.info.addr.clone())
+				.collect::<Vec<_>>();
+			rm.append(&mut addrs);
+		}
+
+		// check here to make sure we don't have too many incoming connections
+		let excess_incoming_count =
+			(self.peer_inbound_count() as usize).saturating_sub(max_inbound_count);
+		if excess_incoming_count > 0 {
+			let mut addrs = self
+				.incoming_connected_peers()
+				.iter()
+				.take(excess_incoming_count)
 				.map(|x| x.info.addr.clone())
 				.collect::<Vec<_>>();
 			rm.append(&mut addrs);
@@ -518,14 +513,9 @@ impl Peers {
 		}
 	}
 
-	pub fn enough_peers(&self) -> bool {
-		self.peer_count() >= self.config.peer_min_preferred_count()
-	}
-
-	/// We have enough peers, both total connected and outbound connected
-	pub fn healthy_peers_mix(&self) -> bool {
-		self.enough_peers()
-			&& self.peer_outbound_count() >= self.config.peer_min_preferred_count() / 2
+	/// We have enough outbound connected peers
+	pub fn enough_outbound_peers(&self) -> bool {
+		self.peer_outbound_count() >= self.config.peer_min_preferred_outbound_count()
 	}
 
 	/// Removes those peers that seem to have expired
@@ -587,17 +577,22 @@ impl ChainAdapter for Peers {
 		&self,
 		b: core::Block,
 		peer_info: &PeerInfo,
-		was_requested: bool,
+		opts: chain::Options,
 	) -> Result<bool, chain::Error> {
 		let hash = b.hash();
-		if !self.adapter.block_received(b, peer_info, was_requested)? {
+		if !self.adapter.block_received(b, peer_info, opts)? {
 			// if the peer sent us a block that's intrinsically bad
 			// they are either mistaken or malevolent, both of which require a ban
 			debug!(
 				"Received a bad block {} from  {}, the peer will be banned",
 				hash, peer_info.addr,
 			);
-			self.ban_peer(peer_info.addr, ReasonForBan::BadBlock);
+			self.ban_peer(peer_info.addr, ReasonForBan::BadBlock)
+				.map_err(|e| {
+					let err: chain::Error =
+						chain::ErrorKind::Other(format!("ban peer error :{:?}", e)).into();
+					err
+				})?;
 			Ok(false)
 		} else {
 			Ok(true)
@@ -617,7 +612,12 @@ impl ChainAdapter for Peers {
 				"Received a bad compact block {} from  {}, the peer will be banned",
 				hash, peer_info.addr
 			);
-			self.ban_peer(peer_info.addr, ReasonForBan::BadCompactBlock);
+			self.ban_peer(peer_info.addr, ReasonForBan::BadCompactBlock)
+				.map_err(|e| {
+					let err: chain::Error =
+						chain::ErrorKind::Other(format!("ban peer error :{:?}", e)).into();
+					err
+				})?;
 			Ok(false)
 		} else {
 			Ok(true)
@@ -632,7 +632,12 @@ impl ChainAdapter for Peers {
 		if !self.adapter.header_received(bh, peer_info)? {
 			// if the peer sent us a block header that's intrinsically bad
 			// they are either mistaken or malevolent, both of which require a ban
-			self.ban_peer(peer_info.addr, ReasonForBan::BadBlockHeader);
+			self.ban_peer(peer_info.addr, ReasonForBan::BadBlockHeader)
+				.map_err(|e| {
+					let err: chain::Error =
+						chain::ErrorKind::Other(format!("ban peer error :{:?}", e)).into();
+					err
+				})?;
 			Ok(false)
 		} else {
 			Ok(true)
@@ -647,7 +652,12 @@ impl ChainAdapter for Peers {
 		if !self.adapter.headers_received(headers, peer_info)? {
 			// if the peer sent us a block header that's intrinsically bad
 			// they are either mistaken or malevolent, both of which require a ban
-			self.ban_peer(peer_info.addr, ReasonForBan::BadBlockHeader);
+			self.ban_peer(peer_info.addr, ReasonForBan::BadBlockHeader)
+				.map_err(|e| {
+					let err: chain::Error =
+						chain::ErrorKind::Other(format!("ban peer error :{:?}", e)).into();
+					err
+				})?;
 			Ok(false)
 		} else {
 			Ok(true)
@@ -666,7 +676,7 @@ impl ChainAdapter for Peers {
 		self.adapter.kernel_data_read()
 	}
 
-	fn kernel_data_write(&self, reader: &mut Read) -> Result<bool, chain::Error> {
+	fn kernel_data_write(&self, reader: &mut dyn Read) -> Result<bool, chain::Error> {
 		self.adapter.kernel_data_write(reader)
 	}
 
@@ -688,15 +698,20 @@ impl ChainAdapter for Peers {
 		txhashset_data: File,
 		peer_info: &PeerInfo,
 	) -> Result<bool, chain::Error> {
-		if !self.adapter.txhashset_write(h, txhashset_data, peer_info)? {
+		if self.adapter.txhashset_write(h, txhashset_data, peer_info)? {
 			debug!(
 				"Received a bad txhashset data from {}, the peer will be banned",
 				peer_info.addr
 			);
-			self.ban_peer(peer_info.addr, ReasonForBan::BadTxHashSet);
-			Ok(false)
-		} else {
+			self.ban_peer(peer_info.addr, ReasonForBan::BadTxHashSet)
+				.map_err(|e| {
+					let err: chain::Error =
+						chain::ErrorKind::Other(format!("ban peer error :{:?}", e)).into();
+					err
+				})?;
 			Ok(true)
+		} else {
+			Ok(false)
 		}
 	}
 

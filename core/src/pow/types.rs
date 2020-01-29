@@ -1,4 +1,4 @@
-// Copyright 2018 The Grin Developers
+// Copyright 2020 The Grin Developers
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -12,22 +12,19 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use crate::consensus::{graph_weight, MIN_DIFFICULTY, SECOND_POW_EDGE_BITS};
+use crate::core::hash::{DefaultHashable, Hashed};
+use crate::global;
+use crate::pow::common::EdgeType;
+use crate::pow::error::Error;
+use crate::ser::{self, Readable, Reader, Writeable, Writer};
+use rand::{thread_rng, Rng};
+use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
 /// Types for a Cuck(at)oo proof of work and its encapsulation as a fully usable
 /// proof of work within a block header.
 use std::cmp::{max, min};
 use std::ops::{Add, Div, Mul, Sub};
 use std::{fmt, iter};
-
-use rand::{thread_rng, Rng};
-use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
-
-use crate::consensus::{graph_weight, MIN_DIFFICULTY, SECOND_POW_EDGE_BITS};
-use crate::core::hash::{DefaultHashable, Hashed};
-use crate::global;
-use crate::ser::{self, FixedLength, Readable, Reader, Writeable, Writer};
-
-use crate::pow::common::EdgeType;
-use crate::pow::error::Error;
 
 /// Generic trait for a solver/verifier providing common interface into Cuckoo-family PoW
 /// Mostly used for verification, but also for test mining if necessary
@@ -159,8 +156,9 @@ impl Readable for Difficulty {
 	}
 }
 
-impl FixedLength for Difficulty {
-	const LEN: usize = 8;
+impl Difficulty {
+	/// Difficulty is 8 bytes.
+	pub const LEN: usize = 8;
 }
 
 impl Serialize for Difficulty {
@@ -391,10 +389,45 @@ impl Proof {
 	}
 }
 
+fn extract_bits(bits: &Vec<u8>, bit_start: usize, bit_count: usize, read_from: usize) -> u64 {
+	let mut buf: [u8; 8] = [0; 8];
+	buf.copy_from_slice(&bits[read_from..read_from + 8]);
+	if bit_count == 64 {
+		return u64::from_le_bytes(buf);
+	}
+	let skip_bits = bit_start - read_from * 8;
+	let bit_mask = (1 << bit_count) - 1;
+	u64::from_le_bytes(buf) >> skip_bits & bit_mask
+}
+
+fn read_number(bits: &Vec<u8>, bit_start: usize, bit_count: usize) -> u64 {
+	if bit_count == 0 {
+		return 0;
+	}
+	// find where the first byte to read starts
+	let mut read_from = bit_start / 8;
+	// move back if we are too close to the end of bits
+	if read_from + 8 > bits.len() {
+		read_from = bits.len() - 8;
+	}
+	// calculate max bit we can read up to (+64 bits from the start)
+	let max_bit_end = (read_from + 8) * 8;
+	// calculate max bit we want to read
+	let max_pos = bit_start + bit_count;
+	// check if we can read it all at once
+	if max_pos <= max_bit_end {
+		extract_bits(bits, bit_start, bit_count, read_from)
+	} else {
+		let low = extract_bits(bits, bit_start, 8, read_from);
+		let high = extract_bits(bits, bit_start + 8, bit_count - 8, read_from + 1);
+		(high << 8) + low
+	}
+}
+
 impl Readable for Proof {
 	fn read(reader: &mut dyn Reader) -> Result<Proof, ser::Error> {
 		let edge_bits = reader.read_u8()?;
-		if edge_bits == 0 || edge_bits > 64 {
+		if edge_bits == 0 || edge_bits > 63 {
 			return Err(ser::Error::CorruptedData);
 		}
 
@@ -403,26 +436,20 @@ impl Readable for Proof {
 		let nonce_bits = edge_bits as usize;
 		let bits_len = nonce_bits * global::proofsize();
 		let bytes_len = BitVec::bytes_len(bits_len);
+		if bytes_len < 8 {
+			return Err(ser::Error::CorruptedData);
+		}
 		let bits = reader.read_fixed_bytes(bytes_len)?;
 
-		// set our nonces from what we read in the bitvec
-		let bitvec = BitVec { bits };
 		for n in 0..global::proofsize() {
-			let mut nonce = 0;
-			for bit in 0..nonce_bits {
-				if bitvec.bit_at(n * nonce_bits + (bit as usize)) {
-					nonce |= 1 << bit;
-				}
-			}
-			nonces.push(nonce);
+			nonces.push(read_number(&bits, n * nonce_bits, nonce_bits));
 		}
 
-		// check the last bits of the last byte are zeroed, we don't use them but
-		// still better to enforce to avoid any malleability
-		for n in bits_len..(bytes_len * 8) {
-			if bitvec.bit_at(n) {
-				return Err(ser::Error::CorruptedData);
-			}
+		//// check the last bits of the last byte are zeroed, we don't use them but
+		//// still better to enforce to avoid any malleability
+		let end_of_data = global::proofsize() * nonce_bits;
+		if read_number(&bits, end_of_data, bytes_len * 8 - end_of_data) != 0 {
+			return Err(ser::Error::CorruptedData);
 		}
 
 		Ok(Proof { edge_bits, nonces })
@@ -469,8 +496,47 @@ impl BitVec {
 	fn set_bit_at(&mut self, pos: usize) {
 		self.bits[pos / 8] |= 1 << (pos % 8) as u8;
 	}
+}
 
-	fn bit_at(&self, pos: usize) -> bool {
-		self.bits[pos / 8] & (1 << (pos % 8) as u8) != 0
+#[cfg(test)]
+mod tests {
+	use super::*;
+	use crate::ser::{BinReader, BinWriter, ProtocolVersion};
+	use rand::Rng;
+	use std::io::Cursor;
+
+	#[test]
+	fn test_proof_rw() {
+		for edge_bits in 10..63 {
+			let mut proof = Proof::new(gen_proof(edge_bits as u32));
+			proof.edge_bits = edge_bits;
+			let mut buf = Cursor::new(Vec::new());
+			let mut w = BinWriter::new(&mut buf, ProtocolVersion::local());
+			if let Err(e) = proof.write(&mut w) {
+				panic!("failed to write proof {:?}", e);
+			}
+			buf.set_position(0);
+			let mut r = BinReader::new(&mut buf, ProtocolVersion::local());
+			match Proof::read(&mut r) {
+				Err(e) => panic!("failed to read proof: {:?}", e),
+				Ok(p) => assert_eq!(p, proof),
+			}
+		}
+	}
+
+	fn gen_proof(bits: u32) -> Vec<u64> {
+		let mut rng = rand::thread_rng();
+		let mut v = Vec::with_capacity(42);
+		for _ in 0..42 {
+			v.push(rng.gen_range(
+				u64::pow(2, bits - 1),
+				if bits == 64 {
+					std::u64::MAX
+				} else {
+					u64::pow(2, bits)
+				},
+			))
+		}
+		v
 	}
 }

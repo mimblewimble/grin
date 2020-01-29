@@ -1,5 +1,7 @@
 # Introduction to Switch Commitments
 
+*Read this in other languages: [简体中文](switch_commitment_ZH-CN.md).*
+
 ## General introduction
 
 In cryptography a _Commitment_ (or _commitment scheme_) refers to a concept which can be imagined
@@ -38,7 +40,7 @@ did not change the secret number during the game.
 
 ### Pedersen Commitment
 
-Other, more advanced commitment schemes can have additional properties. For example MimbleWimble
+Other, more advanced commitment schemes can have additional properties. For example Mimblewimble
 and Confidential Transactions (CT) make heavy use of
 _[Pedersen Commitments](https://link.springer.com/content/pdf/10.1007/3-540-46766-1_9.pdf)_,
 which are _homomorphic_ commitments. Homomorphic in this context means that (speaking in the
@@ -51,7 +53,7 @@ from _box1_ and _box2_.
 While this "box" metaphor no longer seems to be reasonable in the real-world this
 is perfectly possible using the properties of operations on elliptic curves.   
 
-Look into [Introduction to MimbleWimble](intro.md) for further details on Pedersen Commitments
+Look into [Introduction to Mimblewimble](intro.md) for further details on Pedersen Commitments
 and how they are used in Grin.
 
 
@@ -63,12 +65,12 @@ which can be weaker or stronger, depending on the type of commitment scheme:
 - **Hidingness (or Confidentiality):** How good is the commitment scheme protecting the secret
   commitment. Or speaking in terms of our example from above: what would an attacker need to
   open the box (and learn the secret number) without having the key to unlock it?
- 
+
 - **Bindingness:** Is it possible at all (or how hard would it be) for an attacker to somehow
   find a different secret, which would produce the same commitment, so that the attacker could
   later open the commitment to a different secret, thus breaking the _binding_ of the
   commitment.
- 
+
 ### Security of these properties:
 
 For these two properties different security levels can be identified.
@@ -229,7 +231,7 @@ and create the Pedersen Commitment:
 such that:
 
     r = r' + hash( v*H + r'*G  ,  r'*J )
-   
+
 (using the additional third generation point `J` on the curve) then `r` still is perfectly
 valid as a blinding factor, as it's still randomly distributed, but now we see
 that the part within the brackets of the hash function (`v*H + r'*G  ,  r'*J`) is an
@@ -280,6 +282,7 @@ But in this case users would still have a choice:
   (but preserve their privacy, as their old transactions only validated the Pedersen commitment
   which is perfectly hiding)
   
+
 There are many cases where a privacy leak is much more dangerous to one's life than
 some cryptocurrency might be worth. But this is a decision that should be left up to
 the individual user and switch commitments enable this type of choice.

@@ -1,8 +1,8 @@
 [package]
 name = "grin_p2p"
-version = "2.0.1-beta.1"
+version = "3.1.0-beta.1"
 authors = ["Grin Developers <mimblewimble@lists.launchpad.net>"]
-description = "Chain implementation for grin, a simple, private and scalable cryptocurrency implementation based on the MimbleWimble chain format."
+description = "Chain implementation for grin, a simple, private and scalable cryptocurrency implementation based on the Mimblewimble chain format."
 license = "Apache-2.0"
 repository = "https://github.com/mimblewimble/grin"
 keywords = [ "crypto", "grin", "mimblewimble" ]
@@ -11,9 +11,8 @@ edition = "2018"
 
 [dependencies]
 bitflags = "1"
-bytes = "0.4"
 enum_primitive = "0.1"
-net2 = "0.2"
+lru-cache = "0.1"
 num = "0.1"
 rand = "0.6"
 serde = "1"
@@ -22,10 +21,10 @@ tempfile = "3.0.5"
 log = "0.4"
 chrono = { version = "0.4.4", features = ["serde"] }
 
-grin_core = { path = "../core", version = "2.0.1-beta.1" }
-grin_store = { path = "../store", version = "2.0.1-beta.1" }
-grin_util = { path = "../util", version = "2.0.1-beta.1" }
-grin_chain = { path = "../chain", version = "2.0.1-beta.1" }
+grin_core = { path = "../core", version = "3.1.0-beta.1" }
+grin_store = { path = "../store", version = "3.1.0-beta.1" }
+grin_util = { path = "../util", version = "3.1.0-beta.1" }
+grin_chain = { path = "../chain", version = "3.1.0-beta.1" }
 
 [dev-dependencies]
-grin_pool = { path = "../pool", version = "2.0.1-beta.1" }
+grin_pool = { path = "../pool", version = "3.1.0-beta.1" }

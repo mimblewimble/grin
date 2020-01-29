@@ -1,4 +1,4 @@
-// Copyright 2018 The Grin Developers
+// Copyright 2020 The Grin Developers
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
@@ -19,11 +19,12 @@ use std::{io, time};
 use crate::core::core::hash::{Hash, Hashed};
 use crate::core::core::pmmr::{self, family, Backend};
 use crate::core::core::BlockHeader;
-use crate::core::ser::{FixedLength, PMMRable, ProtocolVersion};
+use crate::core::ser::{PMMRable, ProtocolVersion};
 use crate::leaf_set::LeafSet;
 use crate::prune_list::PruneList;
 use crate::types::{AppendOnlyFile, DataFile, SizeEntry, SizeInfo};
 use croaring::Bitmap;
+use std::convert::TryInto;
 use std::path::{Path, PathBuf};
 
 const PMMR_HASH_FILE: &str = "pmmr_hash.bin";
@@ -110,7 +111,7 @@ impl<T: PMMRable> Backend<T> for PMMRBackend<T> {
 	/// Get the hash at pos.
 	/// Return None if pos is a leaf and it has been removed (or pruned or
 	/// compacted).
-	fn get_hash(&self, pos: u64) -> Option<(Hash)> {
+	fn get_hash(&self, pos: u64) -> Option<Hash> {
 		if self.prunable && pmmr::is_leaf(pos) && !self.leaf_set.includes(pos) {
 			return None;
 		}
@@ -119,7 +120,7 @@ impl<T: PMMRable> Backend<T> for PMMRBackend<T> {
 
 	/// Get the data at pos.
 	/// Return None if it has been removed or if pos is not a leaf node.
-	fn get_data(&self, pos: u64) -> Option<(T::E)> {
+	fn get_data(&self, pos: u64) -> Option<T::E> {
 		if !pmmr::is_leaf(pos) {
 			return None;
 		}
@@ -132,11 +133,41 @@ impl<T: PMMRable> Backend<T> for PMMRBackend<T> {
 	/// Returns an iterator over all the leaf positions.
 	/// for a prunable PMMR this is an iterator over the leaf_set bitmap.
 	/// For a non-prunable PMMR this is *all* leaves (this is not yet implemented).
-	fn leaf_pos_iter(&self) -> Box<Iterator<Item = u64> + '_> {
+	fn leaf_pos_iter(&self) -> Box<dyn Iterator<Item = u64> + '_> {
 		if self.prunable {
 			Box::new(self.leaf_set.iter())
 		} else {
 			panic!("leaf_pos_iter not implemented for non-prunable PMMR")
+		}
+	}
+
+	fn n_unpruned_leaves(&self) -> u64 {
+		if self.prunable {
+			self.leaf_set.len() as u64
+		} else {
+			pmmr::n_leaves(self.unpruned_size())
+		}
+	}
+
+	/// Returns an iterator over all the leaf insertion indices (0-indexed).
+	/// If our pos are [1,2,4,5,8] (first 5 leaf pos) then our insertion indices are [0,1,2,3,4]
+	fn leaf_idx_iter(&self, from_idx: u64) -> Box<dyn Iterator<Item = u64> + '_> {
+		// pass from_idx in as param
+		// convert this to pos
+		// iterate, skipping everything prior to this
+		// pass in from_idx=0 then we want to convert to pos=1
+
+		let from_pos = pmmr::insertion_to_pmmr_index(from_idx + 1);
+
+		if self.prunable {
+			Box::new(
+				self.leaf_set
+					.iter()
+					.skip_while(move |x| *x < from_pos)
+					.map(|x| pmmr::n_leaves(x).saturating_sub(1)),
+			)
+		} else {
+			panic!("leaf_idx_iter not implemented for non-prunable PMMR")
 		}
 	}
 
@@ -199,24 +230,20 @@ impl<T: PMMRable> Backend<T> for PMMRBackend<T> {
 
 impl<T: PMMRable> PMMRBackend<T> {
 	/// Instantiates a new PMMR backend.
+	/// If optional size is provided then treat as "fixed" size otherwise "variable" size backend.
 	/// Use the provided dir to store its files.
 	pub fn new<P: AsRef<Path>>(
 		data_dir: P,
 		prunable: bool,
-		fixed_size: bool,
+		version: ProtocolVersion,
 		header: Option<&BlockHeader>,
 	) -> io::Result<PMMRBackend<T>> {
-		// Note: Explicit protocol version here.
-		// Regardless of our "default" protocol version we have existing MMR files
-		// and we need to be able to support these across upgrades.
-		let version = ProtocolVersion(1);
-
 		let data_dir = data_dir.as_ref();
 
 		// Are we dealing with "fixed size" data elements or "variable size" data elements
 		// maintained in an associated size file?
-		let size_info = if fixed_size {
-			SizeInfo::FixedSize(T::E::LEN as u16)
+		let size_info = if let Some(fixed_size) = T::elmt_size() {
+			SizeInfo::FixedSize(fixed_size)
 		} else {
 			SizeInfo::VariableSize(Box::new(AppendOnlyFile::open(
 				data_dir.join(PMMR_SIZE_FILE),
@@ -226,7 +253,7 @@ impl<T: PMMRable> PMMRBackend<T> {
 		};
 
 		// Hash file is always "fixed size" and we use 32 bytes per hash.
-		let hash_size_info = SizeInfo::FixedSize(Hash::LEN as u16);
+		let hash_size_info = SizeInfo::FixedSize(Hash::LEN.try_into().unwrap());
 
 		let hash_file = DataFile::open(&data_dir.join(PMMR_HASH_FILE), hash_size_info, version)?;
 		let data_file = DataFile::open(&data_dir.join(PMMR_DATA_FILE), size_info, version)?;
@@ -472,7 +499,7 @@ pub fn clean_files_by_prefix<P: AsRef<std::path::Path>>(
 
 	let number_of_files_deleted: u32 = fs::read_dir(&path)?
 		.flat_map(
-			|possible_dir_entry| -> Result<u32, Box<std::error::Error>> {
+			|possible_dir_entry| -> Result<u32, Box<dyn std::error::Error>> {
 				// result implements iterator and so if we were to use map here
 				// we would have a list of Result<u32, Box<std::error::Error>>
 				// but because we use flat_map, the errors get "discarded" and we are

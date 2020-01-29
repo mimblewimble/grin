@@ -1,4 +1,4 @@
-// Copyright 2018 The Grin Developers
+// Copyright 2020 The Grin Developers
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -24,8 +24,6 @@ extern crate serde_derive;
 
 #[macro_use]
 extern crate lazy_static;
-
-extern crate sha2;
 
 mod base58;
 pub mod extkey_bip32;

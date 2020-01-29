@@ -1,4 +1,4 @@
-// Copyright 2018 The Grin Developers
+// Copyright 2020 The Grin Developers
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -17,9 +17,7 @@ use grin_core as core;
 
 use grin_util as util;
 
-use std::collections::HashSet;
-use std::fs::{self, File, OpenOptions};
-use std::iter::FromIterator;
+use std::fs::{self, File};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
@@ -86,8 +84,6 @@ fn test_unexpected_zip() {
 		);
 
 		assert!(txhashset::zip_read(db_root.clone(), &head).is_ok());
-		let txhashset_zip_path =
-			Path::new(&db_root).join(format!("txhashset_zip_{}", head.hash().to_string()));
 		let _ = fs::remove_dir_all(
 			Path::new(&db_root).join(format!("txhashset_zip_{}", head.hash().to_string())),
 		);

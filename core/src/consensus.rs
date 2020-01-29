@@ -1,4 +1,4 @@
-// Copyright 2018 The Grin Developers
+// Copyright 2020 The Grin Developers
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
@@ -18,11 +18,11 @@
 //! enough, consensus-relevant constants and short functions should be kept
 //! here.
 
-use std::cmp::{max, min};
-
 use crate::core::block::HeaderVersion;
+use crate::core::hash::{Hash, ZERO_HASH};
 use crate::global;
 use crate::pow::Difficulty;
+use std::cmp::{max, min};
 
 /// A grin is divisible to 10^9, following the SI prefixes
 pub const GRIN_BASE: u64 = 1_000_000_000;
@@ -59,8 +59,8 @@ pub const YEAR_HEIGHT: u64 = 52 * WEEK_HEIGHT;
 /// Number of blocks before a coinbase matures and can be spent
 pub const COINBASE_MATURITY: u64 = DAY_HEIGHT;
 
-/// Ratio the secondary proof of work should take over the primary, as a
-/// function of block height (time). Starts at 90% losing a percent
+/// Target ratio of secondary proof of work to primary proof of work,
+/// as a function of block height (time). Starts at 90% losing a percent
 /// approximately every week. Represented as an integer between 0 and 100.
 pub fn secondary_pow_ratio(height: u64) -> u64 {
 	90u64.saturating_sub(height / (2 * YEAR_HEIGHT / 90))
@@ -78,7 +78,7 @@ pub const PROOFSIZE: usize = 42;
 /// Default Cuckatoo Cycle edge_bits, used for mining and validating.
 pub const DEFAULT_MIN_EDGE_BITS: u8 = 31;
 
-/// Cuckaroo proof-of-work edge_bits, meant to be ASIC resistant.
+/// Cuckaroo* proof-of-work edge_bits, meant to be ASIC resistant.
 pub const SECOND_POW_EDGE_BITS: u8 = 29;
 
 /// Original reference edge_bits to compute difficulty factors for higher
@@ -130,40 +130,51 @@ pub const HARD_FORK_INTERVAL: u64 = YEAR_HEIGHT / 2;
 /// Floonet first hard fork height, set to happen around 2019-06-20
 pub const FLOONET_FIRST_HARD_FORK: u64 = 185_040;
 
-/// Check whether the block version is valid at a given height, implements
+/// Floonet second hard fork height, set to happen around 2019-12-19
+pub const FLOONET_SECOND_HARD_FORK: u64 = 298_080;
+
+/// AutomatedTesting and UserTesting first hard fork height.
+pub const TESTING_FIRST_HARD_FORK: u64 = 3;
+
+/// AutomatedTesting and UserTesting second hard fork height.
+pub const TESTING_SECOND_HARD_FORK: u64 = 6;
+
+/// Compute possible block version at a given height, implements
 /// 6 months interval scheduled hard forks for the first 2 years.
-pub fn valid_header_version(height: u64, version: HeaderVersion) -> bool {
+pub fn header_version(height: u64) -> HeaderVersion {
 	let chain_type = global::CHAIN_TYPE.read().clone();
+	let hf_interval = (1 + height / HARD_FORK_INTERVAL) as u16;
 	match chain_type {
+		global::ChainTypes::Mainnet => HeaderVersion(hf_interval),
 		global::ChainTypes::Floonet => {
 			if height < FLOONET_FIRST_HARD_FORK {
-				version == HeaderVersion::default()
-			// add branches one by one as we go from hard fork to hard fork
-			// } else if height < FLOONET_SECOND_HARD_FORK {
-			} else if height < 2 * HARD_FORK_INTERVAL {
-				version == HeaderVersion::new(2)
+				(HeaderVersion(1))
+			} else if height < FLOONET_SECOND_HARD_FORK {
+				(HeaderVersion(2))
+			} else if height < 3 * HARD_FORK_INTERVAL {
+				(HeaderVersion(3))
 			} else {
-				false
+				HeaderVersion(hf_interval)
 			}
 		}
-		// everything else just like mainnet
-		_ => {
-			if height < HARD_FORK_INTERVAL {
-				version == HeaderVersion::default()
-			} else if height < 2 * HARD_FORK_INTERVAL {
-				version == HeaderVersion::new(2)
-			// uncomment branches one by one as we go from hard fork to hard fork
-			/*} else if height < 3 * HARD_FORK_INTERVAL {
-				version == HeaderVersion::new(3)
-			} else if height < 4 * HARD_FORK_INTERVAL {
-				version == HeaderVersion::new(4)
+		global::ChainTypes::AutomatedTesting | global::ChainTypes::UserTesting => {
+			if height < TESTING_FIRST_HARD_FORK {
+				(HeaderVersion(1))
+			} else if height < TESTING_SECOND_HARD_FORK {
+				(HeaderVersion(2))
+			} else if height < 3 * HARD_FORK_INTERVAL {
+				(HeaderVersion(3))
 			} else {
-				version > HeaderVersion::new(4) */
-			} else {
-				false
+				HeaderVersion(hf_interval)
 			}
 		}
 	}
+}
+
+/// Check whether the block version is valid at a given height, implements
+/// 6 months interval scheduled hard forks for the first 2 years.
+pub fn valid_header_version(height: u64, version: HeaderVersion) -> bool {
+	return height < 3 * HARD_FORK_INTERVAL && version == header_version(height);
 }
 
 /// Number of blocks used to calculate difficulty adjustments
@@ -188,13 +199,14 @@ pub const AR_SCALE_DAMP_FACTOR: u64 = 13;
 pub fn graph_weight(height: u64, edge_bits: u8) -> u64 {
 	let mut xpr_edge_bits = edge_bits as u64;
 
-	let bits_over_min = edge_bits.saturating_sub(global::min_edge_bits());
-	let expiry_height = (1 << bits_over_min) * YEAR_HEIGHT;
-	if edge_bits < 32 && height >= expiry_height {
+	let expiry_height = YEAR_HEIGHT;
+	if edge_bits == 31 && height >= expiry_height {
 		xpr_edge_bits = xpr_edge_bits.saturating_sub(1 + (height - expiry_height) / WEEK_HEIGHT);
 	}
+	// For C31 xpr_edge_bits reaches 0 at height YEAR_HEIGHT + 30 * WEEK_HEIGHT
+	// 30 weeks after Jan 15, 2020 would be Aug 12, 2020
 
-	(2 << (edge_bits - global::base_edge_bits()) as u64) * xpr_edge_bits
+	(2u64 << (edge_bits - global::base_edge_bits()) as u64) * xpr_edge_bits
 }
 
 /// Minimum difficulty, enforced in diff retargetting
@@ -219,6 +231,8 @@ pub const INITIAL_DIFFICULTY: u64 = 1_000_000 * UNIT_DIFFICULTY;
 /// take place
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct HeaderInfo {
+	/// Block hash, ZERO_HASH when this is a sythetic entry.
+	pub block_hash: Hash,
 	/// Timestamp of the header, 1 when not used (returned info)
 	pub timestamp: u64,
 	/// Network difficulty or next difficulty to use
@@ -232,12 +246,14 @@ pub struct HeaderInfo {
 impl HeaderInfo {
 	/// Default constructor
 	pub fn new(
+		block_hash: Hash,
 		timestamp: u64,
 		difficulty: Difficulty,
 		secondary_scaling: u32,
 		is_secondary: bool,
 	) -> HeaderInfo {
 		HeaderInfo {
+			block_hash,
 			timestamp,
 			difficulty,
 			secondary_scaling,
@@ -249,6 +265,7 @@ impl HeaderInfo {
 	/// PoW factor
 	pub fn from_ts_diff(timestamp: u64, difficulty: Difficulty) -> HeaderInfo {
 		HeaderInfo {
+			block_hash: ZERO_HASH,
 			timestamp,
 			difficulty,
 			secondary_scaling: global::initial_graph_weight(),
@@ -261,6 +278,7 @@ impl HeaderInfo {
 	/// timestamp
 	pub fn from_diff_scaling(difficulty: Difficulty, secondary_scaling: u32) -> HeaderInfo {
 		HeaderInfo {
+			block_hash: ZERO_HASH,
 			timestamp: 1,
 			difficulty,
 			secondary_scaling,

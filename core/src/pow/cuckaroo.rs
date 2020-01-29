@@ -1,4 +1,4 @@
-// Copyright 2018 The Grin Developers
+// Copyright 2020 The Grin Developers
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -85,7 +85,10 @@ where
 				return Err(ErrorKind::Verification("edges not ascending".to_owned()))?;
 			}
 			// 21 is standard siphash rotation constant
-			let edge = to_edge!(T, siphash_block(&self.params.siphash_keys, nonces[n], 21));
+			let edge = to_edge!(
+				T,
+				siphash_block(&self.params.siphash_keys, nonces[n], 21, false)
+			);
 			uvs[2 * n] = to_u64!(edge & self.params.edge_mask);
 			uvs[2 * n + 1] = to_u64!((edge >> 32) & self.params.edge_mask);
 			xor0 ^= uvs[2 * n];

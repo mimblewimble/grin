@@ -1,4 +1,4 @@
-// Copyright 2018 The Grin Developers
+// Copyright 2020 The Grin Developers
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -81,9 +81,6 @@ impl HeaderSync {
 				// correctly, so reset any previous (and potentially stale) sync_head to match
 				// our last known "good" header_head.
 				//
-				self.chain.reset_sync_head()?;
-
-				// Rebuild the sync MMR to match our updated sync_head.
 				self.chain.rebuild_sync_mmr(&header_head)?;
 
 				self.history_locator.retain(|&x| x.0 == 0);
@@ -148,8 +145,12 @@ impl HeaderSync {
 								if now > *stalling_ts + Duration::seconds(120)
 									&& header_head.total_difficulty < peer.info.total_difficulty()
 								{
-									self.peers
-										.ban_peer(peer.info.addr, ReasonForBan::FraudHeight);
+									if let Err(e) = self
+										.peers
+										.ban_peer(peer.info.addr, ReasonForBan::FraudHeight)
+									{
+										error!("failed to ban peer {}: {:?}", peer.info.addr, e);
+									}
 									info!(
 										"sync: ban a fraud peer: {}, claimed height: {}, total difficulty: {}",
 										peer.info.addr,

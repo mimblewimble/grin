@@ -1,4 +1,4 @@
-// Copyright 2018 The Grin Developers
+// Copyright 2020 The Grin Developers
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -15,10 +15,9 @@
 //! VerifierCache trait for batch verifying outputs and kernels.
 //! We pass a "caching verifier" into the block validation processing with this.
 
-use lru_cache::LruCache;
-
 use crate::core::hash::{Hash, Hashed};
 use crate::core::{Output, TxKernel};
+use lru_cache::LruCache;
 
 /// Verifier cache for caching expensive verification results.
 /// Specifically the following -

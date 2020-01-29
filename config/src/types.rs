@@ -1,4 +1,4 @@
-// Copyright 2018 The Grin Developers
+// Copyright 2020 The Grin Developers
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -19,7 +19,7 @@ use std::io;
 use std::path::PathBuf;
 
 use crate::servers::ServerConfig;
-use crate::util::LoggingConfig;
+use crate::util::logger::LoggingConfig;
 
 /// Error type wrapping config errors.
 #[derive(Debug)]

@@ -1,4 +1,4 @@
-// Copyright 2018 The Grin Developers
+// Copyright 2020 The Grin Developers
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -30,7 +30,7 @@ pub struct VersionHandler {
 }
 
 impl VersionHandler {
-	fn get_version(&self) -> Result<Version, Error> {
+	pub fn get_version(&self) -> Result<Version, Error> {
 		let head = w(&self.chain)?
 			.head_header()
 			.map_err(|e| ErrorKind::Internal(format!("can't get head: {}", e)))?;

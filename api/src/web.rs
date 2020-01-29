@@ -42,6 +42,8 @@ where
 			ErrorKind::ResponseError(msg) => {
 				response(StatusCode::INTERNAL_SERVER_ERROR, msg.clone())
 			}
+			// place holder
+			ErrorKind::Router(_) => response(StatusCode::INTERNAL_SERVER_ERROR, ""),
 		},
 	}
 }
@@ -103,10 +105,7 @@ impl QueryParams {
 	}
 
 	pub fn get(&self, name: &str) -> Option<&String> {
-		match self.params.get(name) {
-			None => None,
-			Some(v) => v.first(),
-		}
+		self.params.get(name).and_then(|v| v.first())
 	}
 }
 

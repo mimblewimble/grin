@@ -1,4 +1,4 @@
-// Copyright 2018 The Grin Developers
+// Copyright 2020 The Grin Developers
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -105,21 +105,21 @@ pub struct PoolConfig {
 	/// Base fee for a transaction to be accepted by the pool. The transaction
 	/// weight is computed from its number of inputs, outputs and kernels and
 	/// multiplied by the base fee to compare to the actual transaction fee.
-	#[serde = "default_accept_fee_base"]
+	#[serde(default = "default_accept_fee_base")]
 	pub accept_fee_base: u64,
 
 	/// Maximum capacity of the pool in number of transactions
-	#[serde = "default_max_pool_size"]
+	#[serde(default = "default_max_pool_size")]
 	pub max_pool_size: usize,
 
 	/// Maximum capacity of the pool in number of transactions
-	#[serde = "default_max_stempool_size"]
+	#[serde(default = "default_max_stempool_size")]
 	pub max_stempool_size: usize,
 
 	/// Maximum total weight of transactions that can get selected to build a
 	/// block from. Allows miners to restrict the maximum weight of their
 	/// blocks.
-	#[serde = "default_mineable_max_weight"]
+	#[serde(default = "default_mineable_max_weight")]
 	pub mineable_max_weight: usize,
 }
 
@@ -149,7 +149,7 @@ fn default_mineable_max_weight() -> usize {
 
 /// Represents a single entry in the pool.
 /// A single (possibly aggregated) transaction.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct PoolEntry {
 	/// Info on where this tx originated from.
 	pub src: TxSource,
@@ -165,7 +165,7 @@ pub struct PoolEntry {
 ///
 /// Most likely this will evolve to contain some sort of network identifier,
 /// once we get a better sense of what transaction building might look like.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub enum TxSource {
 	PushApi,
 	Broadcast,

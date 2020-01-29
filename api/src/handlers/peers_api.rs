@@ -1,4 +1,4 @@
-// Copyright 2018 The Grin Developers
+// Copyright 2020 The Grin Developers
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -13,11 +13,13 @@
 // limitations under the License.
 
 use super::utils::w;
-use crate::p2p;
 use crate::p2p::types::{PeerAddr, PeerInfoDisplay, ReasonForBan};
+use crate::p2p::{self, PeerData};
+use crate::rest::*;
 use crate::router::{Handler, ResponseFuture};
 use crate::web::*;
 use hyper::{Body, Request, StatusCode};
+use std::net::SocketAddr;
 use std::sync::Weak;
 
 pub struct PeersAllHandler {
@@ -33,6 +35,17 @@ impl Handler for PeersAllHandler {
 
 pub struct PeersConnectedHandler {
 	pub peers: Weak<p2p::Peers>,
+}
+
+impl PeersConnectedHandler {
+	pub fn get_connected_peers(&self) -> Result<Vec<PeerInfoDisplay>, Error> {
+		let peers = w(&self.peers)?
+			.connected_peers()
+			.iter()
+			.map(|p| p.info.clone().into())
+			.collect::<Vec<PeerInfoDisplay>>();
+		Ok(peers)
+	}
 }
 
 impl Handler for PeersConnectedHandler {
@@ -52,6 +65,35 @@ impl Handler for PeersConnectedHandler {
 /// POST /v1/peers/10.12.12.13/unban
 pub struct PeerHandler {
 	pub peers: Weak<p2p::Peers>,
+}
+
+impl PeerHandler {
+	pub fn get_peers(&self, addr: Option<SocketAddr>) -> Result<Vec<PeerData>, Error> {
+		if let Some(addr) = addr {
+			let peer_addr = PeerAddr(addr);
+			let peer_data: PeerData = w(&self.peers)?.get_peer(peer_addr).map_err(|e| {
+				let e: Error = ErrorKind::Internal(format!("get peer error: {:?}", e)).into();
+				e
+			})?;
+			return Ok(vec![peer_data]);
+		}
+		let peers = w(&self.peers)?.all_peers();
+		Ok(peers)
+	}
+
+	pub fn ban_peer(&self, addr: SocketAddr) -> Result<(), Error> {
+		let peer_addr = PeerAddr(addr);
+		w(&self.peers)?
+			.ban_peer(peer_addr, ReasonForBan::ManualBan)
+			.map_err(|e| ErrorKind::Internal(format!("ban peer error: {:?}", e)).into())
+	}
+
+	pub fn unban_peer(&self, addr: SocketAddr) -> Result<(), Error> {
+		let peer_addr = PeerAddr(addr);
+		w(&self.peers)?
+			.unban_peer(peer_addr)
+			.map_err(|e| ErrorKind::Internal(format!("unban peer error: {:?}", e)).into())
+	}
 }
 
 impl Handler for PeerHandler {
@@ -101,11 +143,21 @@ impl Handler for PeerHandler {
 		};
 
 		match command {
-			"ban" => w_fut!(&self.peers).ban_peer(addr, ReasonForBan::ManualBan),
-			"unban" => w_fut!(&self.peers).unban_peer(addr),
-			_ => return response(StatusCode::BAD_REQUEST, "invalid command"),
-		};
-
-		response(StatusCode::OK, "{}")
+			"ban" => match w_fut!(&self.peers).ban_peer(addr, ReasonForBan::ManualBan) {
+				Ok(_) => response(StatusCode::OK, "{}"),
+				Err(e) => response(
+					StatusCode::INTERNAL_SERVER_ERROR,
+					format!("ban failed: {:?}", e),
+				),
+			},
+			"unban" => match w_fut!(&self.peers).unban_peer(addr) {
+				Ok(_) => response(StatusCode::OK, "{}"),
+				Err(e) => response(
+					StatusCode::INTERNAL_SERVER_ERROR,
+					format!("unban failed: {:?}", e),
+				),
+			},
+			_ => response(StatusCode::BAD_REQUEST, "invalid command"),
+		}
 	}
 }

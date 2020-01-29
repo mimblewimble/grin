@@ -1,6 +1,6 @@
 # Merkle Mountain Ranges
 
-*Read this in other languages:[Korean](mmr_KR.md)
+*Read this in other languages: [Korean](mmr_KR.md), [简体中文](mmr_ZH-CN.md).*
 
 ## Structure
 
@@ -94,6 +94,8 @@ total size). We process iteratively for a MMR of size 11:
 2^4 - 1 = 15, and 15 is not < 11
 ```
 
+(This can also be calculated non-iteratively as `2^(binary logarithm of size + 1) - 1`
+
 Therefore the first peak is 7. To find the next peak, we then need to "jump" to
 its right sibling. If that node is not in the MMR (and it won't), take its left
 child. If that child is not in the MMR either, keep taking its left child
@@ -101,7 +103,7 @@ until we have a node that exists in our MMR. Once we find that next peak,
 keep repeating the process until we're at the last node.
 
 All these operations are very simple. Jumping to the right sibling of a node at
-height `h` is adding `2^(h+1) - 1` to its position. Taking its left sibling is
+height `h` is adding `2^(h+1) - 1` to its position. Taking its left child is
 subtracting `2^h`.
 
 Finally, once all the positions of the peaks are known, "bagging" the peaks
@@ -126,8 +128,8 @@ Pruning a MMR relies on a simple iterative process. `X` is first initialized as
 the leaf we wish to prune.
 
 1. Prune `X`.
-2. If `X` has a sibling, stop here.
-3. If 'X' has no sibling, assign the parent of `X` as `X`.
+1. If `X` has a sibling, stop here.
+1. If 'X' has no sibling, assign the parent of `X` as `X`.
 
 To visualize the result, starting from our first MMR example and removing leaves
 [0, 3, 4, 8, 16] leads to the following pruned MMR:

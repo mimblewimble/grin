@@ -1,5 +1,7 @@
 # Contracts
 
+*Read this in other languages: [简体中文]( contracts_ZH-CN.md)*
+
 This document describes smart contracts that can be setup using Grin even
 though the Grin chain does not support scripting. All these contracts rely
 on a few basic features that are built in the chain and compose them in
@@ -113,7 +115,7 @@ Alice wants to pay Bob in grins. She starts the transaction building process:
 1. Alice computes `e` just like Bob did and can check that
    `sr*G = kr*G + e*rr*G`.
 1. Alice sends her side of the signature `ss = ks + e * rs` to Bob.
-1. Bob validates `ss*G` just like Alice did for `sr*G` in step 5 and can
+1. Bob validates `ss*G` just like Alice did for `sr*G` in step 6 and can
    produce the final signature `s = (ss + sr, ks*G + kr*G)` as well as the final
    transaction kernel including `s` and the public key `rr*G + rs*G`.
 

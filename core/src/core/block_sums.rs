@@ -1,4 +1,4 @@
-// Copyright 2018 The Grin Developers
+// Copyright 2020 The Grin Developers
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -17,8 +17,8 @@
 
 use crate::core::committed::Committed;
 use crate::ser::{self, Readable, Reader, Writeable, Writer};
-use crate::util::secp::pedersen::Commitment;
-use crate::util::secp_static;
+use util::secp::pedersen::Commitment;
+use util::secp_static;
 
 /// The output_sum and kernel_sum for a given block.
 /// This is used to validate the next block being processed by applying

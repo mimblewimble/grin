@@ -1,4 +1,4 @@
-// Copyright 2018 The Grin Developers
+// Copyright 2020 The Grin Developers
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -67,6 +67,13 @@ impl Keychain for ExtKeychain {
 			hasher: h,
 		};
 		Ok(keychain)
+	}
+
+	fn mask_master_key(&mut self, mask: &SecretKey) -> Result<(), Error> {
+		for i in 0..secp::constants::SECRET_KEY_SIZE {
+			self.master.secret_key.0[i] ^= mask.0[i];
+		}
+		Ok(())
 	}
 
 	/// For testing - probably not a good idea to use outside of tests.

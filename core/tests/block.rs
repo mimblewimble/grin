@@ -1,4 +1,4 @@
-// Copyright 2018 The Grin Developers
+// Copyright 2020 The Grin Developers
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-pub mod common;
+mod common;
 use crate::common::{new_block, tx1i2o, tx2i1o, txspend1i1o};
 use crate::core::consensus::BLOCK_OUTPUT_WEIGHT;
 use crate::core::core::block::Error;
@@ -24,18 +24,16 @@ use crate::core::core::Committed;
 use crate::core::core::{
 	Block, BlockHeader, CompactBlock, HeaderVersion, KernelFeatures, OutputFeatures,
 };
-use crate::core::libtx::build::{self, input, output, with_fee};
+use crate::core::libtx::build::{self, input, output};
 use crate::core::libtx::ProofBuilder;
 use crate::core::{global, ser};
-use crate::keychain::{BlindingFactor, ExtKeychain, Keychain};
-use crate::util::secp;
-use crate::util::RwLock;
 use chrono::Duration;
 use grin_core as core;
 use grin_core::global::ChainTypes;
-use grin_keychain as keychain;
-use grin_util as util;
+use keychain::{BlindingFactor, ExtKeychain, Keychain};
 use std::sync::Arc;
+use util::secp;
+use util::RwLock;
 
 fn verifier_cache() -> Arc<RwLock<dyn VerifierCache>> {
 	Arc::new(RwLock::new(LruVerifierCache::new()))
@@ -58,8 +56,9 @@ fn too_large_block() {
 		parts.push(output(5, pks.pop().unwrap()));
 	}
 
-	parts.append(&mut vec![input(500000, pks.pop().unwrap()), with_fee(2)]);
-	let tx = build::transaction(parts, &keychain, &builder).unwrap();
+	parts.append(&mut vec![input(500000, pks.pop().unwrap())]);
+	let tx =
+		build::transaction(KernelFeatures::Plain { fee: 2 }, parts, &keychain, &builder).unwrap();
 
 	let prev = BlockHeader::default();
 	let key_id = ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
@@ -92,7 +91,8 @@ fn block_with_cut_through() {
 
 	let mut btx1 = tx2i1o();
 	let mut btx2 = build::transaction(
-		vec![input(7, key_id1), output(5, key_id2.clone()), with_fee(2)],
+		KernelFeatures::Plain { fee: 2 },
+		vec![input(7, key_id1), output(5, key_id2.clone())],
 		&keychain,
 		&builder,
 	)
@@ -189,7 +189,7 @@ fn remove_coinbase_kernel_flag() {
 	let mut b = new_block(vec![], &keychain, &builder, &prev, &key_id);
 
 	assert!(b.kernels()[0].is_coinbase());
-	b.kernels_mut()[0].features = KernelFeatures::Plain;
+	b.kernels_mut()[0].features = KernelFeatures::Plain { fee: 0 };
 
 	// Flipping the coinbase flag results in kernels not summing correctly.
 	assert_eq!(
@@ -211,7 +211,7 @@ fn serialize_deserialize_header_version() {
 	ser::serialize_default(&mut vec1, &1_u16).expect("serialization failed");
 
 	let mut vec2 = Vec::new();
-	ser::serialize_default(&mut vec2, &HeaderVersion::default()).expect("serialization failed");
+	ser::serialize_default(&mut vec2, &HeaderVersion(1)).expect("serialization failed");
 
 	// Check that a header_version serializes to a
 	// single u16 value with no extraneous bytes wrapping it.
@@ -269,8 +269,7 @@ fn empty_block_serialized_size() {
 	let b = new_block(vec![], &keychain, &builder, &prev, &key_id);
 	let mut vec = Vec::new();
 	ser::serialize_default(&mut vec, &b).expect("serialization failed");
-	let target_len = 1_107;
-	assert_eq!(vec.len(), target_len);
+	assert_eq!(vec.len(), 1_096);
 }
 
 #[test]
@@ -284,8 +283,7 @@ fn block_single_tx_serialized_size() {
 	let b = new_block(vec![&tx1], &keychain, &builder, &prev, &key_id);
 	let mut vec = Vec::new();
 	ser::serialize_default(&mut vec, &b).expect("serialization failed");
-	let target_len = 2_689;
-	assert_eq!(vec.len(), target_len);
+	assert_eq!(vec.len(), 2_670);
 }
 
 #[test]
@@ -299,8 +297,7 @@ fn empty_compact_block_serialized_size() {
 	let cb: CompactBlock = b.into();
 	let mut vec = Vec::new();
 	ser::serialize_default(&mut vec, &cb).expect("serialization failed");
-	let target_len = 1_115;
-	assert_eq!(vec.len(), target_len);
+	assert_eq!(vec.len(), 1_104);
 }
 
 #[test]
@@ -315,8 +312,7 @@ fn compact_block_single_tx_serialized_size() {
 	let cb: CompactBlock = b.into();
 	let mut vec = Vec::new();
 	ser::serialize_default(&mut vec, &cb).expect("serialization failed");
-	let target_len = 1_121;
-	assert_eq!(vec.len(), target_len);
+	assert_eq!(vec.len(), 1_110);
 }
 
 #[test]
@@ -333,10 +329,27 @@ fn block_10_tx_serialized_size() {
 	let prev = BlockHeader::default();
 	let key_id = ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
 	let b = new_block(txs.iter().collect(), &keychain, &builder, &prev, &key_id);
-	let mut vec = Vec::new();
-	ser::serialize_default(&mut vec, &b).expect("serialization failed");
-	let target_len = 16_927;
-	assert_eq!(vec.len(), target_len,);
+
+	// Default protocol version.
+	{
+		let mut vec = Vec::new();
+		ser::serialize_default(&mut vec, &b).expect("serialization failed");
+		assert_eq!(vec.len(), 16_836);
+	}
+
+	// Explicit protocol version 1
+	{
+		let mut vec = Vec::new();
+		ser::serialize(&mut vec, ser::ProtocolVersion(1), &b).expect("serialization failed");
+		assert_eq!(vec.len(), 16_932);
+	}
+
+	// Explicit protocol version 2
+	{
+		let mut vec = Vec::new();
+		ser::serialize(&mut vec, ser::ProtocolVersion(2), &b).expect("serialization failed");
+		assert_eq!(vec.len(), 16_836);
+	}
 }
 
 #[test]
@@ -356,8 +369,7 @@ fn compact_block_10_tx_serialized_size() {
 	let cb: CompactBlock = b.into();
 	let mut vec = Vec::new();
 	ser::serialize_default(&mut vec, &cb).expect("serialization failed");
-	let target_len = 1_175;
-	assert_eq!(vec.len(), target_len,);
+	assert_eq!(vec.len(), 1_164);
 }
 
 #[test]
@@ -465,12 +477,8 @@ fn same_amount_outputs_copy_range_proof() {
 	let key_id3 = keychain::ExtKeychain::derive_key_id(1, 3, 0, 0, 0);
 
 	let tx = build::transaction(
-		vec![
-			input(7, key_id1),
-			output(3, key_id2),
-			output(3, key_id3),
-			with_fee(1),
-		],
+		KernelFeatures::Plain { fee: 1 },
+		vec![input(7, key_id1), output(3, key_id2), output(3, key_id3)],
 		&keychain,
 		&builder,
 	)
@@ -515,23 +523,19 @@ fn wrong_amount_range_proof() {
 	let key_id3 = keychain::ExtKeychain::derive_key_id(1, 3, 0, 0, 0);
 
 	let tx1 = build::transaction(
+		KernelFeatures::Plain { fee: 1 },
 		vec![
 			input(7, key_id1.clone()),
 			output(3, key_id2.clone()),
 			output(3, key_id3.clone()),
-			with_fee(1),
 		],
 		&keychain,
 		&builder,
 	)
 	.unwrap();
 	let tx2 = build::transaction(
-		vec![
-			input(7, key_id1),
-			output(2, key_id2),
-			output(4, key_id3),
-			with_fee(1),
-		],
+		KernelFeatures::Plain { fee: 1 },
+		vec![input(7, key_id1), output(2, key_id2), output(4, key_id3)],
 		&keychain,
 		&builder,
 	)
@@ -564,4 +568,37 @@ fn wrong_amount_range_proof() {
 		Err(Error::Transaction(transaction::Error::Secp(secp::Error::InvalidRangeProof))) => {}
 		_ => panic!("Bad range proof should be invalid"),
 	}
+}
+
+#[test]
+fn validate_header_proof() {
+	let keychain = ExtKeychain::from_random_seed(false).unwrap();
+	let builder = ProofBuilder::new(&keychain);
+	let prev = BlockHeader::default();
+	let key_id = ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
+	let b = new_block(vec![], &keychain, &builder, &prev, &key_id);
+
+	let mut header_buf = vec![];
+	{
+		let mut writer = ser::BinWriter::default(&mut header_buf);
+		b.header.write_pre_pow(&mut writer).unwrap();
+		b.header.pow.write_pre_pow(&mut writer).unwrap();
+	}
+	let pre_pow = util::to_hex(header_buf);
+
+	let reconstructed = BlockHeader::from_pre_pow_and_proof(
+		pre_pow,
+		b.header.pow.nonce,
+		b.header.pow.proof.clone(),
+	)
+	.unwrap();
+	assert_eq!(reconstructed, b.header);
+
+	// assert invalid pre_pow returns error
+	assert!(BlockHeader::from_pre_pow_and_proof(
+		"0xaf1678".to_string(),
+		b.header.pow.nonce,
+		b.header.pow.proof.clone(),
+	)
+	.is_err());
 }

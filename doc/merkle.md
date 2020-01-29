@@ -1,8 +1,8 @@
 # Merkle Structures
 
-*Read this in other languages:[Korean](merkle_KR.md)
+*Read this in other languages: [Korean](merkle_KR.md), [简体中文](merkle_ZH-CN.md).*
 
-MimbleWimble is designed for users to verify the state of the system given
+Mimblewimble is designed for users to verify the state of the system given
 only pruned data. To achieve this goal, all transaction data is committed
 to the blockchain by means of Merkle trees which should support efficient
 updates and serialization even when pruned.
@@ -12,7 +12,7 @@ proofs) have the ability to be summed in some way, so it makes sense to
 treat Merkle sum trees as the default option, and address the sums here.
 
 A design goal of Grin is that all structures be as easy to implement and
-as simple as possible. MimbleWimble introduces a lot of new cryptography
+as simple as possible. Mimblewimble introduces a lot of new cryptography
 so it should be made as easy to understand as possible. Its validation rules
 are simple to specify (no scripts) and Grin is written in a language with
 very explicit semantics, so simplicity is also good to achieve well-understood
@@ -34,12 +34,12 @@ The root sum should be equal to the sum of all excesses since the genesis.
 Design requirements:
 
 1. Efficient additions and updating from unspent to spent.
-2. Efficient proofs that a specific output was spent.
-3. Efficient storage of diffs between UTXO roots.
-4. Efficient tree storage even with missing data, even with millions of entries.
-5. If a node commits to NULL, it has no unspent children and its data should
+1. Efficient proofs that a specific output was spent.
+1. Efficient storage of diffs between UTXO roots.
+1. Efficient tree storage even with missing data, even with millions of entries.
+1. If a node commits to NULL, it has no unspent children and its data should
    eventually be able to be dropped forever.
-6. Support for serialization and efficient merging of pruned trees from partial archival nodes.
+1. Support for serialization and efficient merging of pruned trees from partial archival nodes.
 
 ### Output witnesses
 
@@ -66,7 +66,9 @@ The root sum should be equal to the sum of excesses for this block. See the
 next section.
 
 In general, validators will see either 100% of this Merkle tree or 0% of it,
-so it is compatible with any design. Design requirements:
+so it is compatible with any design. 
+
+Design requirements:
 
 1. Efficient inclusion proofs, for proof-of-publication.
 

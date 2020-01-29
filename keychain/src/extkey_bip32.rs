@@ -1,4 +1,4 @@
-// Copyright 2018 The Grin Developers
+// Copyright 2020 The Grin Developers
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -50,7 +50,7 @@ use sha2::{Sha256, Sha512};
 
 use crate::base58;
 
-// Create alias for HMAC-SHA256
+// Create alias for HMAC-SHA512
 type HmacSha512 = Hmac<Sha512>;
 
 /// A chain code
@@ -107,22 +107,24 @@ impl BIP32GrinHasher {
 
 impl BIP32Hasher for BIP32GrinHasher {
 	fn network_priv(&self) -> [u8; 4] {
-		match self.is_floo {
-			true => [0x03, 0x27, 0x3A, 0x10],  // fprv
-			false => [0x03, 0x3C, 0x04, 0xA4], // gprv
+		if self.is_floo {
+			[0x03, 0x27, 0x3A, 0x10]
+		} else {
+			[0x03, 0x3C, 0x04, 0xA4]
 		}
 	}
 	fn network_pub(&self) -> [u8; 4] {
-		match self.is_floo {
-			true => [0x03, 0x27, 0x3E, 0x4B],  // fpub
-			false => [0x03, 0x3C, 0x08, 0xDF], // gpub
+		if self.is_floo {
+			[0x03, 0x27, 0x3E, 0x4B]
+		} else {
+			[0x03, 0x3C, 0x08, 0xDF]
 		}
 	}
 	fn master_seed() -> [u8; 12] {
 		b"IamVoldemort".to_owned()
 	}
 	fn init_sha512(&mut self, seed: &[u8]) {
-		self.hmac_sha512 = HmacSha512::new_varkey(seed).expect("HMAC can take key of any size");;
+		self.hmac_sha512 = HmacSha512::new_varkey(seed).expect("HMAC can take key of any size");
 	}
 	fn append_sha512(&mut self, value: &[u8]) {
 		self.hmac_sha512.input(value);
@@ -380,12 +382,9 @@ impl ExtendedPrivKey {
 		passphrase: &str,
 		is_floo: bool,
 	) -> Result<ExtendedPrivKey, Error> {
-		let seed = match mnemonic::to_seed(mnemonic, passphrase) {
-			Ok(s) => s,
-			Err(e) => return Err(Error::MnemonicError(e)),
-		};
+		let seed = mnemonic::to_seed(mnemonic, passphrase).map_err(|e| Error::MnemonicError(e))?;
 		let mut hasher = BIP32GrinHasher::new(is_floo);
-		let key = r#try!(ExtendedPrivKey::new_master(secp, &mut hasher, &seed));
+		let key = ExtendedPrivKey::new_master(secp, &mut hasher, &seed)?;
 		Ok(key)
 	}
 
@@ -716,7 +715,7 @@ mod tests {
 			b"Bitcoin seed".to_owned()
 		}
 		fn init_sha512(&mut self, seed: &[u8]) {
-			self.hmac_sha512 = HmacSha512::new_varkey(seed).expect("HMAC can take key of any size");;
+			self.hmac_sha512 = HmacSha512::new_varkey(seed).expect("HMAC can take key of any size");
 		}
 		fn append_sha512(&mut self, value: &[u8]) {
 			self.hmac_sha512.input(value);
@@ -900,5 +899,4 @@ mod tests {
 		serde_round_trip!(ChildNumber::from_hardened_idx(1));
 		serde_round_trip!(ChildNumber::from_hardened_idx((1 << 31) - 1));
 	}
-
 }

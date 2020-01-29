@@ -1,4 +1,4 @@
-// Copyright 2018 The Grin Developers
+// Copyright 2020 The Grin Developers
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -14,13 +14,12 @@
 
 //! The Committed trait and associated errors.
 
-use crate::keychain;
-use crate::keychain::BlindingFactor;
-
-use crate::util::secp::key::SecretKey;
-use crate::util::secp::pedersen::Commitment;
-use crate::util::{secp, secp_static, static_secp_instance};
 use failure::Fail;
+use keychain;
+use keychain::BlindingFactor;
+use util::secp::key::SecretKey;
+use util::secp::pedersen::Commitment;
+use util::{secp, secp_static, static_secp_instance};
 
 /// Errors from summing and verifying kernel excesses via committed trait.
 #[derive(Debug, Clone, PartialEq, Eq, Fail, Serialize, Deserialize)]
@@ -125,7 +124,7 @@ pub trait Committed {
 		&self,
 		overage: i64,
 		kernel_offset: BlindingFactor,
-	) -> Result<((Commitment, Commitment)), Error> {
+	) -> Result<(Commitment, Commitment), Error> {
 		// Sum all input|output|overage commitments.
 		let utxo_sum = self.sum_commitments(overage)?;
 

@@ -1,4 +1,4 @@
-// Copyright 2018 The Grin Developers
+// Copyright 2020 The Grin Developers
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -79,6 +79,16 @@ where
 		self.backend.leaf_pos_iter()
 	}
 
+	/// Number of leafs in the MMR
+	pub fn n_unpruned_leaves(&self) -> u64 {
+		self.backend.n_unpruned_leaves()
+	}
+
+	/// Iterator over current (unpruned, unremoved) leaf insertion indices.
+	pub fn leaf_idx_iter(&self, from_idx: u64) -> impl Iterator<Item = u64> + '_ {
+		self.backend.leaf_idx_iter(from_idx)
+	}
+
 	/// Returns a vec of the peaks of this MMR.
 	pub fn peaks(&self) -> Vec<Hash> {
 		let peaks_pos = peaks(self.last_pos);
@@ -99,10 +109,11 @@ where
 			.filter(|x| *x < peak_pos)
 			.filter_map(|x| self.backend.get_from_file(x))
 			.collect::<Vec<_>>();
-		res.reverse();
 		if let Some(rhs) = rhs {
-			res.insert(0, rhs);
+			res.push(rhs);
 		}
+		res.reverse();
+
 		res
 	}
 
@@ -118,10 +129,10 @@ where
 			.collect::<Vec<_>>();
 
 		let mut res = None;
-		for peak in rhs.iter().rev() {
+		for peak in rhs.into_iter().rev() {
 			res = match res {
-				None => Some(*peak),
-				Some(rhash) => Some((*peak, rhash).hash_with_index(self.unpruned_size())),
+				None => Some(peak),
+				Some(rhash) => Some((peak, rhash).hash_with_index(self.unpruned_size())),
 			}
 		}
 		res
@@ -129,18 +140,18 @@ where
 
 	/// Computes the root of the MMR. Find all the peaks in the current
 	/// tree and "bags" them to get a single peak.
-	pub fn root(&self) -> Hash {
+	pub fn root(&self) -> Result<Hash, String> {
 		if self.is_empty() {
-			return ZERO_HASH;
+			return Ok(ZERO_HASH);
 		}
 		let mut res = None;
-		for peak in self.peaks().iter().rev() {
+		for peak in self.peaks().into_iter().rev() {
 			res = match res {
-				None => Some(*peak),
-				Some(rhash) => Some((*peak, rhash).hash_with_index(self.unpruned_size())),
+				None => Some(peak),
+				Some(rhash) => Some((peak, rhash).hash_with_index(self.unpruned_size())),
 			}
 		}
-		res.expect("no root, invalid tree")
+		res.ok_or_else(|| "no root, invalid tree".to_owned())
 	}
 
 	/// Build a Merkle proof for the element at the given position.
@@ -213,13 +224,6 @@ where
 	/// sending the txhashset zip file to another node for fast-sync.
 	pub fn snapshot(&mut self, header: &BlockHeader) -> Result<(), String> {
 		self.backend.snapshot(header)?;
-		Ok(())
-	}
-
-	/// Truncate the MMR by rewinding back to empty state.
-	pub fn truncate(&mut self) -> Result<(), String> {
-		self.backend.rewind(0, &Bitmap::create())?;
-		self.last_pos = 0;
 		Ok(())
 	}
 
@@ -425,7 +429,7 @@ pub fn peaks(num: u64) -> Vec<u64> {
 /// The number of leaves in a MMR of the provided size.
 pub fn n_leaves(size: u64) -> u64 {
 	let (sizes, height) = peak_sizes_height(size);
-	let nleaves = sizes.iter().map(|n| (n + 1) / 2 as u64).sum();
+	let nleaves = sizes.into_iter().map(|n| (n + 1) / 2 as u64).sum();
 	if height == 0 {
 		nleaves
 	} else {
@@ -496,7 +500,6 @@ pub fn peak_map_height(mut pos: u64) -> (u64, u64) {
 /// The height of a node in a full binary tree from its postorder traversal
 /// index. This function is the base on which all others, as well as the MMR,
 /// are built.
-
 pub fn bintree_postorder_height(num: u64) -> u64 {
 	if num == 0 {
 		return 0;

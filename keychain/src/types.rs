@@ -1,4 +1,4 @@
-// Copyright 2018 The Grin Developers
+// Copyright 2020 The Grin Developers
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -220,8 +220,8 @@ impl AsRef<[u8]> for Identifier {
 
 impl ::std::fmt::Debug for Identifier {
 	fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
-		r#try!(write!(f, "{}(", stringify!(Identifier)));
-		r#try!(write!(f, "{}", self.to_hex()));
+		write!(f, "{}(", stringify!(Identifier))?;
+		write!(f, "{}", self.to_hex())?;
 		write!(f, ")")
 	}
 }
@@ -466,6 +466,9 @@ pub trait Keychain: Sync + Send + Clone {
 
 	/// Generates a keychain from a randomly generated seed. Mostly used for tests.
 	fn from_random_seed(is_floo: bool) -> Result<Self, Error>;
+
+	/// XOR masks the keychain's master key against another key
+	fn mask_master_key(&mut self, mask: &SecretKey) -> Result<(), Error>;
 
 	/// Root identifier for that keychain
 	fn root_key_id() -> Identifier;

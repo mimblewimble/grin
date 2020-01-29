@@ -1,4 +1,4 @@
-// Copyright 2018 The Grin Developers
+// Copyright 2020 The Grin Developers
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! Implementation of the MimbleWimble paper.
+//! Implementation of the Mimblewimble paper.
 //! https://download.wpsoftware.net/bitcoin/wizardry/mimblewimble.txt
 
 #![deny(non_upper_case_globals)]
@@ -21,22 +21,18 @@
 #![deny(unused_mut)]
 #![warn(missing_docs)]
 
-use blake2_rfc as blake2;
 #[macro_use]
 extern crate enum_primitive;
-use grin_keychain as keychain;
-use grin_util as util;
 #[macro_use]
 extern crate lazy_static;
 #[macro_use]
 extern crate serde_derive;
-extern crate serde;
+use serde;
 #[macro_use]
 extern crate log;
 use failure;
 #[macro_use]
 extern crate failure_derive;
-extern crate zeroize;
 #[macro_use]
 pub mod macros;
 

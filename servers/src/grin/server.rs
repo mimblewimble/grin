@@ -1,4 +1,4 @@
-// Copyright 2018 The Grin Developers
+// Copyright 2020 The Grin Developers
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -20,13 +20,14 @@ use std::fs;
 use std::fs::File;
 use std::io::prelude::*;
 use std::path::Path;
-use std::sync::Arc;
+use std::sync::{mpsc, Arc};
 use std::{
 	thread::{self, JoinHandle},
-	time,
+	time::{self, Duration},
 };
 
 use fs2::FileExt;
+use walkdir::WalkDir;
 
 use crate::api;
 use crate::api::TLSConfig;
@@ -35,9 +36,11 @@ use crate::common::adapters::{
 	ChainToPoolAndNetAdapter, NetToChainAdapter, PoolToChainAdapter, PoolToNetAdapter,
 };
 use crate::common::hooks::{init_chain_hooks, init_net_hooks};
-use crate::common::stats::{DiffBlock, DiffStats, PeerStats, ServerStateInfo, ServerStats};
+use crate::common::stats::{
+	ChainStats, DiffBlock, DiffStats, PeerStats, ServerStateInfo, ServerStats, TxStats,
+};
 use crate::common::types::{Error, ServerConfig, StratumServerConfig};
-use crate::core::core::hash::{Hashed, ZERO_HASH};
+use crate::core::core::hash::Hashed;
 use crate::core::core::verifier_cache::{LruVerifierCache, VerifierCache};
 use crate::core::ser::ProtocolVersion;
 use crate::core::{consensus, genesis, global, pow};
@@ -49,6 +52,7 @@ use crate::p2p::types::PeerAddr;
 use crate::pool;
 use crate::util::file::get_first_line;
 use crate::util::{RwLock, StopState};
+use grin_util::logger::LogEntry;
 
 /// Grin server holding internal structures.
 pub struct Server {
@@ -59,12 +63,12 @@ pub struct Server {
 	/// data store access
 	pub chain: Arc<chain::Chain>,
 	/// in-memory transaction pool
-	tx_pool: Arc<RwLock<pool::TransactionPool>>,
+	pub tx_pool: Arc<RwLock<pool::TransactionPool>>,
 	/// Shared cache for verification results when
 	/// verifying rangeproof and kernel signatures.
 	verifier_cache: Arc<RwLock<dyn VerifierCache>>,
 	/// Whether we're currently syncing
-	sync_state: Arc<SyncState>,
+	pub sync_state: Arc<SyncState>,
 	/// To be passed around to collect stats and info
 	state_info: ServerStateInfo,
 	/// Stop flag
@@ -80,9 +84,13 @@ impl Server {
 	/// Instantiates and starts a new server. Optionally takes a callback
 	/// for the server to send an ARC copy of itself, to allow another process
 	/// to poll info about the server status
-	pub fn start<F>(config: ServerConfig, mut info_callback: F) -> Result<(), Error>
+	pub fn start<F>(
+		config: ServerConfig,
+		logs_rx: Option<mpsc::Receiver<LogEntry>>,
+		mut info_callback: F,
+	) -> Result<(), Error>
 	where
-		F: FnMut(Server),
+		F: FnMut(Server, Option<mpsc::Receiver<LogEntry>>),
 	{
 		let mining_config = config.stratum_mining_config.clone();
 		let enable_test_miner = config.run_test_miner;
@@ -108,7 +116,7 @@ impl Server {
 			}
 		}
 
-		info_callback(serv);
+		info_callback(serv, logs_rx);
 		Ok(())
 	}
 
@@ -172,8 +180,8 @@ impl Server {
 		));
 
 		let genesis = match config.chain_type {
-			global::ChainTypes::AutomatedTesting => genesis::genesis_dev(),
-			global::ChainTypes::UserTesting => genesis::genesis_dev(),
+			global::ChainTypes::AutomatedTesting => pow::mine_genesis_block().unwrap(),
+			global::ChainTypes::UserTesting => pow::mine_genesis_block().unwrap(),
 			global::ChainTypes::Floonet => genesis::genesis_floo(),
 			global::ChainTypes::Mainnet => genesis::genesis_main(),
 		};
@@ -266,7 +274,7 @@ impl Server {
 
 		info!("Starting rest apis at: {}", &config.api_http_addr);
 		let api_secret = get_first_line(config.api_secret_path.clone());
-
+		let foreign_api_secret = get_first_line(config.foreign_api_secret_path.clone());
 		let tls_conf = match config.tls_certificate_file.clone() {
 			None => None,
 			Some(file) => {
@@ -282,14 +290,16 @@ impl Server {
 		};
 
 		// TODO fix API shutdown and join this thread
-		api::start_rest_apis(
-			config.api_http_addr.clone(),
+		api::node_apis(
+			&config.api_http_addr,
 			shared_chain.clone(),
 			tx_pool.clone(),
 			p2p_server.peers.clone(),
-			api_secret,
-			tls_conf,
-		);
+			sync_state.clone(),
+			api_secret.clone(),
+			foreign_api_secret.clone(),
+			tls_conf.clone(),
+		)?;
 
 		info!("Starting dandelion monitor: {}", &config.api_http_addr);
 		let dandelion_thread = dandelion_monitor::monitor_transactions(
@@ -388,19 +398,12 @@ impl Server {
 			self.tx_pool.clone(),
 			self.verifier_cache.clone(),
 			stop_state,
+			sync_state,
 		);
 		miner.set_debug_output_id(format!("Port {}", self.config.p2p_config.port));
 		let _ = thread::Builder::new()
 			.name("test_miner".to_string())
-			.spawn(move || {
-				// TODO push this down in the run loop so miner gets paused anytime we
-				// decide to sync again
-				let secs_5 = time::Duration::from_secs(5);
-				while sync_state.is_syncing() {
-					thread::sleep(secs_5);
-				}
-				miner.run_loop(wallet_listener_url);
-			});
+			.spawn(move || miner.run_loop(wallet_listener_url));
 	}
 
 	/// The chain head
@@ -421,8 +424,7 @@ impl Server {
 	/// Returns a set of stats about this server. This and the ServerStats
 	/// structure
 	/// can be updated over time to include any information needed by tests or
-	/// other
-	/// consumers
+	/// other consumers
 	pub fn get_server_stats(&self) -> Result<ServerStats, Error> {
 		let stratum_stats = self.state_info.stratum_stats.read().clone();
 
@@ -440,9 +442,6 @@ impl Server {
 			let tip_height = self.head()?.height as i64;
 			let mut height = tip_height as i64 - last_blocks.len() as i64 + 1;
 
-			let txhashset = self.chain.txhashset();
-			let txhashset = txhashset.read();
-
 			let diff_entries: Vec<DiffBlock> = last_blocks
 				.windows(2)
 				.map(|pair| {
@@ -451,21 +450,9 @@ impl Server {
 
 					height += 1;
 
-					// Use header hash if real header.
-					// Default to "zero" hash if synthetic header_info.
-					let hash = if height >= 0 {
-						if let Ok(header) = txhashset.get_header_by_height(height as u64) {
-							header.hash()
-						} else {
-							ZERO_HASH
-						}
-					} else {
-						ZERO_HASH
-					};
-
 					DiffBlock {
 						block_height: height,
-						block_hash: hash,
+						block_hash: next.block_hash,
 						difficulty: next.difficulty.to_num(),
 						time: next.timestamp,
 						duration: next.timestamp - prev.timestamp,
@@ -493,14 +480,59 @@ impl Server {
 			.into_iter()
 			.map(|p| PeerStats::from_peer(&p))
 			.collect();
+
+		// Updating TUI stats should not block any other processing so only attempt to
+		// acquire various read locks with a timeout.
+		let read_timeout = Duration::from_millis(500);
+
+		let tx_stats = self.tx_pool.try_read_for(read_timeout).map(|pool| TxStats {
+			tx_pool_size: pool.txpool.size(),
+			tx_pool_kernels: pool.txpool.kernel_count(),
+			stem_pool_size: pool.stempool.size(),
+			stem_pool_kernels: pool.stempool.kernel_count(),
+		});
+
+		let head = self.chain.head_header()?;
+		let head_stats = ChainStats {
+			latest_timestamp: head.timestamp,
+			height: head.height,
+			last_block_h: head.prev_hash,
+			total_difficulty: head.total_difficulty(),
+		};
+
+		let header_stats = match self.chain.try_header_head(read_timeout)? {
+			Some(head) => self.chain.get_block_header(&head.hash()).map(|header| {
+				Some(ChainStats {
+					latest_timestamp: header.timestamp,
+					height: header.height,
+					last_block_h: header.prev_hash,
+					total_difficulty: header.total_difficulty(),
+				})
+			})?,
+			_ => None,
+		};
+
+		let disk_usage_bytes = WalkDir::new(&self.config.db_root)
+			.min_depth(1)
+			.max_depth(3)
+			.into_iter()
+			.filter_map(|entry| entry.ok())
+			.filter_map(|entry| entry.metadata().ok())
+			.filter(|metadata| metadata.is_file())
+			.fold(0, |acc, m| acc + m.len());
+
+		let disk_usage_gb = format!("{:.*}", 3, (disk_usage_bytes as f64 / 1_000_000_000 as f64));
+
 		Ok(ServerStats {
 			peer_count: self.peer_count(),
-			head: self.head()?,
-			header_head: self.header_head()?,
+			chain_stats: head_stats,
+			header_stats: header_stats,
 			sync_status: self.sync_state.status(),
+			disk_usage_gb: disk_usage_gb,
 			stratum_stats: stratum_stats,
 			peer_stats: peer_stats,
 			diff_stats: diff_stats,
+			tx_stats: tx_stats,
 		})
 	}
 
@@ -530,9 +562,10 @@ impl Server {
 			}
 		}
 		// this call is blocking and makes sure all peers stop, however
-		// we can't be sure that we stoped a listener blocked on accept, so we don't join the p2p thread
+		// we can't be sure that we stopped a listener blocked on accept, so we don't join the p2p thread
 		self.p2p.stop();
 		let _ = self.lock_file.unlock();
+		warn!("Shutdown complete");
 	}
 
 	/// Pause the p2p server.

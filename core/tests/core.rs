@@ -1,4 +1,4 @@
-// Copyright 2018 The Grin Developers
+// Copyright 2020 The Grin Developers
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -20,28 +20,43 @@ use self::core::core::block::BlockHeader;
 use self::core::core::block::Error::KernelLockHeight;
 use self::core::core::hash::{Hashed, ZERO_HASH};
 use self::core::core::verifier_cache::{LruVerifierCache, VerifierCache};
-use self::core::core::{aggregate, deaggregate, KernelFeatures, Output, Transaction, Weighting};
-use self::core::libtx::build::{
-	self, initial_tx, input, output, with_excess, with_fee, with_lock_height,
+use self::core::core::{
+	aggregate, deaggregate, KernelFeatures, Output, Transaction, TxKernel, Weighting,
 };
+use self::core::libtx::build::{self, initial_tx, input, output, with_excess};
 use self::core::libtx::ProofBuilder;
 use self::core::ser;
-use self::keychain::{BlindingFactor, ExtKeychain, Keychain};
-use self::util::static_secp_instance;
-use self::util::RwLock;
 use crate::common::{new_block, tx1i1o, tx1i2o, tx2i1o};
 use grin_core as core;
-use grin_keychain as keychain;
-use grin_util as util;
+use keychain::{BlindingFactor, ExtKeychain, Keychain};
 use std::sync::Arc;
+use util::static_secp_instance;
+use util::RwLock;
 
 #[test]
 fn simple_tx_ser() {
 	let tx = tx2i1o();
-	let mut vec = Vec::new();
-	ser::serialize_default(&mut vec, &tx).expect("serialization failed");
-	let target_len = 955;
-	assert_eq!(vec.len(), target_len,);
+
+	// Default protocol version.
+	{
+		let mut vec = Vec::new();
+		ser::serialize_default(&mut vec, &tx).expect("serialization failed");
+		assert_eq!(vec.len(), 947);
+	}
+
+	// Explicit protocol version 1.
+	{
+		let mut vec = Vec::new();
+		ser::serialize(&mut vec, ser::ProtocolVersion(1), &tx).expect("serialization failed");
+		assert_eq!(vec.len(), 955);
+	}
+
+	// Explicit protocol version 2.
+	{
+		let mut vec = Vec::new();
+		ser::serialize(&mut vec, ser::ProtocolVersion(2), &tx).expect("serialization failed");
+		assert_eq!(vec.len(), 947);
+	}
 }
 
 #[test]
@@ -82,6 +97,7 @@ fn test_zero_commit_fails() {
 
 	// blinding should fail as signing with a zero r*G shouldn't work
 	build::transaction(
+		KernelFeatures::Plain { fee: 0 },
 		vec![input(10, key_id1.clone()), output(10, key_id1.clone())],
 		&keychain,
 		&builder,
@@ -103,12 +119,8 @@ fn build_tx_kernel() {
 
 	// first build a valid tx with corresponding blinding factor
 	let tx = build::transaction(
-		vec![
-			input(10, key_id1),
-			output(5, key_id2),
-			output(3, key_id3),
-			with_fee(2),
-		],
+		KernelFeatures::Plain { fee: 2 },
+		vec![input(10, key_id1), output(5, key_id2), output(3, key_id3)],
 		&keychain,
 		&builder,
 	)
@@ -123,8 +135,8 @@ fn build_tx_kernel() {
 	let kern = &tx.kernels()[0];
 	kern.verify().unwrap();
 
-	assert_eq!(kern.features, KernelFeatures::Plain);
-	assert_eq!(kern.fee, tx.fee());
+	assert_eq!(kern.features, KernelFeatures::Plain { fee: 2 });
+	assert_eq!(2, tx.fee());
 }
 
 // Combine two transactions into one big transaction (with multiple kernels)
@@ -356,12 +368,8 @@ fn hash_output() {
 	let key_id3 = ExtKeychain::derive_key_id(1, 3, 0, 0, 0);
 
 	let tx = build::transaction(
-		vec![
-			input(75, key_id1),
-			output(42, key_id2),
-			output(32, key_id3),
-			with_fee(1),
-		],
+		KernelFeatures::Plain { fee: 1 },
+		vec![input(75, key_id1), output(42, key_id2), output(32, key_id3)],
 		&keychain,
 		&builder,
 	)
@@ -422,12 +430,11 @@ fn tx_build_exchange() {
 
 		// Alice builds her transaction, with change, which also produces the sum
 		// of blinding factors before they're obscured.
-		let (tx, sum) = build::partial_transaction(
-			vec![in1, in2, output(1, key_id3), with_fee(2)],
-			&keychain,
-			&builder,
-		)
-		.unwrap();
+		let tx = Transaction::empty()
+			.with_kernel(TxKernel::with_features(KernelFeatures::Plain { fee: 2 }));
+		let (tx, sum) =
+			build::partial_transaction(tx, vec![in1, in2, output(1, key_id3)], &keychain, &builder)
+				.unwrap();
 
 		(tx, sum)
 	};
@@ -436,6 +443,7 @@ fn tx_build_exchange() {
 	// blinding factors. He adds his output, finalizes the transaction so it's
 	// ready for broadcast.
 	let tx_final = build::transaction(
+		KernelFeatures::Plain { fee: 2 },
 		vec![
 			initial_tx(tx_alice),
 			with_excess(blind_sum),
@@ -530,12 +538,11 @@ fn test_block_with_timelocked_tx() {
 	// first check we can add a timelocked tx where lock height matches current
 	// block height and that the resulting block is valid
 	let tx1 = build::transaction(
-		vec![
-			input(5, key_id1.clone()),
-			output(3, key_id2.clone()),
-			with_fee(2),
-			with_lock_height(1),
-		],
+		KernelFeatures::HeightLocked {
+			fee: 2,
+			lock_height: 1,
+		},
+		vec![input(5, key_id1.clone()), output(3, key_id2.clone())],
 		&keychain,
 		&builder,
 	)
@@ -555,12 +562,11 @@ fn test_block_with_timelocked_tx() {
 	// now try adding a timelocked tx where lock height is greater than current
 	// block height
 	let tx1 = build::transaction(
-		vec![
-			input(5, key_id1.clone()),
-			output(3, key_id2.clone()),
-			with_fee(2),
-			with_lock_height(2),
-		],
+		KernelFeatures::HeightLocked {
+			fee: 2,
+			lock_height: 2,
+		},
+		vec![input(5, key_id1.clone()), output(3, key_id2.clone())],
 		&keychain,
 		&builder,
 	)

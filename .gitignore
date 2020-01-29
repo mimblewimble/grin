@@ -1,7 +1,6 @@
 *.swp
 .DS_Store
 .grin*
-node*
 !node_clients
 !node_clients.rs
 target
@@ -13,3 +12,4 @@ test_output
 wallet_data
 wallet/db
 .idea/
+/node*

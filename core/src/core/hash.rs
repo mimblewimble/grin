@@ -1,4 +1,4 @@
-// Copyright 2018 The Grin Developers
+// Copyright 2020 The Grin Developers
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -17,18 +17,13 @@
 //! Primary hash function used in the protocol
 //!
 
+use crate::ser::{self, Error, ProtocolVersion, Readable, Reader, Writeable, Writer};
+use blake2::blake2b::Blake2b;
 use byteorder::{BigEndian, ByteOrder};
 use std::cmp::min;
 use std::convert::AsRef;
-use std::ops::Add;
 use std::{fmt, ops};
-
-use crate::blake2::blake2b::Blake2b;
-
-use crate::ser::{
-	self, AsFixedBytes, Error, FixedLength, ProtocolVersion, Readable, Reader, Writeable, Writer,
-};
-use crate::util;
+use util;
 
 /// A hash consisting of all zeroes, used as a sentinel. No known preimage.
 pub const ZERO_HASH: Hash = Hash([0; 32]);
@@ -39,17 +34,6 @@ pub const ZERO_HASH: Hash = Hash([0; 32]);
 pub struct Hash([u8; 32]);
 
 impl DefaultHashable for Hash {}
-
-impl Hash {
-	fn hash_with<T: Writeable>(&self, other: T) -> Hash {
-		let mut hasher = HashWriter::default();
-		ser::Writeable::write(self, &mut hasher).unwrap();
-		ser::Writeable::write(&other, &mut hasher).unwrap();
-		let mut ret = [0; 32];
-		hasher.finalize(&mut ret);
-		Hash(ret)
-	}
-}
 
 impl fmt::Debug for Hash {
 	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -66,12 +50,10 @@ impl fmt::Display for Hash {
 	}
 }
 
-impl FixedLength for Hash {
-	/// Size of a hash in bytes.
-	const LEN: usize = 32;
-}
-
 impl Hash {
+	/// A hash is 32 bytes.
+	pub const LEN: usize = 32;
+
 	/// Builds a Hash from a byte vector. If the vector is too short, it will be
 	/// completed by zeroes. If it's too long, it will be truncated.
 	pub fn from_vec(v: &[u8]) -> Hash {
@@ -170,13 +152,6 @@ impl Writeable for Hash {
 	}
 }
 
-impl Add for Hash {
-	type Output = Hash;
-	fn add(self, other: Hash) -> Hash {
-		self.hash_with(other)
-	}
-}
-
 impl Default for Hash {
 	fn default() -> Hash {
 		ZERO_HASH
@@ -217,8 +192,8 @@ impl ser::Writer for HashWriter {
 		ser::SerializationMode::Hash
 	}
 
-	fn write_fixed_bytes<T: AsFixedBytes>(&mut self, b32: &T) -> Result<(), ser::Error> {
-		self.state.update(b32.as_ref());
+	fn write_fixed_bytes<T: AsRef<[u8]>>(&mut self, bytes: T) -> Result<(), ser::Error> {
+		self.state.update(bytes.as_ref());
 		Ok(())
 	}
 
@@ -236,6 +211,7 @@ pub trait Hashed {
 /// Implementing this trait enables the default
 /// hash implementation
 pub trait DefaultHashable: Writeable {}
+
 impl<D: DefaultHashable> Hashed for D {
 	fn hash(&self) -> Hash {
 		let mut hasher = HashWriter::default();
@@ -251,6 +227,7 @@ impl<D: DefaultHashable, E: DefaultHashable> DefaultHashable for (D, E) {}
 impl<D: DefaultHashable, E: DefaultHashable, F: DefaultHashable> DefaultHashable for (D, E, F) {}
 
 /// Implement Hashed trait for external types here
-impl DefaultHashable for crate::util::secp::pedersen::RangeProof {}
+impl DefaultHashable for util::secp::pedersen::RangeProof {}
 impl DefaultHashable for Vec<u8> {}
+impl DefaultHashable for u8 {}
 impl DefaultHashable for u64 {}

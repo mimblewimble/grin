@@ -1,4 +1,4 @@
-// Copyright 2018 The Grin Developers
+// Copyright 2020 The Grin Developers
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -13,12 +13,11 @@
 // limitations under the License.
 
 //! libtx specific errors
-use failure::{Backtrace, Context, Fail};
-use std::fmt::{self, Display};
-
 use crate::core::transaction;
-use crate::keychain;
-use crate::util::secp;
+use failure::{Backtrace, Context, Fail};
+use keychain;
+use std::fmt::{self, Display};
+use util::secp;
 
 /// Lib tx error definition
 #[derive(Debug)]
@@ -44,6 +43,9 @@ pub enum ErrorKind {
 	/// Rangeproof error
 	#[fail(display = "Rangeproof Error")]
 	RangeProof(String),
+	/// Other error
+	#[fail(display = "Other Error")]
+	Other(String),
 }
 
 impl Fail for Error {
@@ -79,7 +81,7 @@ impl From<ErrorKind> for Error {
 
 impl From<Context<ErrorKind>> for Error {
 	fn from(inner: Context<ErrorKind>) -> Error {
-		Error { inner: inner }
+		Error { inner }
 	}
 }
 

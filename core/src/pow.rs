@@ -1,4 +1,4 @@
-// Copyright 2018 The Grin Developers
+// Copyright 2020 The Grin Developers
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -28,6 +28,11 @@
 #![deny(unused_mut)]
 #![warn(missing_docs)]
 
+pub use self::common::EdgeType;
+pub use self::types::*;
+use crate::core::{Block, BlockHeader};
+use crate::genesis;
+use crate::global;
 use chrono;
 use num;
 
@@ -35,6 +40,7 @@ use num;
 mod common;
 pub mod cuckaroo;
 pub mod cuckarood;
+pub mod cuckaroom;
 pub mod cuckatoo;
 mod error;
 #[allow(dead_code)]
@@ -42,17 +48,12 @@ pub mod lean;
 mod siphash;
 mod types;
 
-use crate::core::{Block, BlockHeader};
-use crate::genesis;
-use crate::global;
-use chrono::prelude::{DateTime, NaiveDateTime, Utc};
-
-pub use self::common::EdgeType;
-pub use self::types::*;
 pub use crate::pow::cuckaroo::{new_cuckaroo_ctx, CuckarooContext};
 pub use crate::pow::cuckarood::{new_cuckarood_ctx, CuckaroodContext};
+pub use crate::pow::cuckaroom::{new_cuckaroom_ctx, CuckaroomContext};
 pub use crate::pow::cuckatoo::{new_cuckatoo_ctx, CuckatooContext};
 pub use crate::pow::error::Error;
+use chrono::prelude::{DateTime, NaiveDateTime, Utc};
 
 const MAX_SOLS: u32 = 10;
 
@@ -72,9 +73,6 @@ pub fn verify_size(bh: &BlockHeader) -> Result<(), Error> {
 /// Mines a genesis block using the internal miner
 pub fn mine_genesis_block() -> Result<Block, Error> {
 	let mut gen = genesis::genesis_dev();
-	if global::is_user_testing_mode() || global::is_automated_testing_mode() {
-		gen.header.timestamp = Utc::now();
-	}
 
 	// total_difficulty on the genesis header *is* the difficulty of that block
 	let genesis_difficulty = gen.header.pow.total_difficulty;
@@ -96,11 +94,6 @@ pub fn pow_size(
 	sz: u8,
 ) -> Result<(), Error> {
 	let start_nonce = bh.pow.nonce;
-
-	// set the nonce for faster solution finding in user testing
-	if bh.height == 0 && global::is_user_testing_mode() {
-		bh.pow.nonce = global::get_genesis_nonce();
-	}
 
 	// try to find a cuckoo cycle on that header hash
 	loop {

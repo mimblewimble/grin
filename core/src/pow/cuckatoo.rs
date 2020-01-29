@@ -12,16 +12,14 @@
 // limitations under the License.
 
 //! Implementation of Cuckatoo Cycle designed by John Tromp.
-use std::mem;
-
-use byteorder::{BigEndian, WriteBytesExt};
-use croaring::Bitmap;
-
 use crate::global;
 use crate::pow::common::{CuckooParams, EdgeType, Link};
 use crate::pow::error::{Error, ErrorKind};
 use crate::pow::{PoWContext, Proof};
-use crate::util;
+use byteorder::{BigEndian, WriteBytesExt};
+use croaring::Bitmap;
+use std::mem;
+use util;
 
 struct Graph<T>
 where
@@ -53,6 +51,9 @@ where
 {
 	/// Create a new graph with given parameters
 	pub fn new(max_edges: T, max_sols: u32, proof_size: usize) -> Result<Graph<T>, Error> {
+		if to_u64!(max_edges) >= u64::max_value() / 2 {
+			return Err(ErrorKind::Verification(format!("graph is to big to build")))?;
+		}
 		let max_nodes = 2 * to_u64!(max_edges);
 		Ok(Graph {
 			max_edges,
@@ -483,5 +484,4 @@ mod test {
 		}
 		Ok(())
 	}
-
 }
