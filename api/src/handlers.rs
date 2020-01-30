@@ -56,11 +56,11 @@ use crate::util::to_base64;
 use crate::util::RwLock;
 use crate::web::*;
 use easy_jsonrpc_mw::{Handler, MaybeReply};
-use futures::future::ok;
 use futures::Future;
 use hyper::{Body, Request, Response, StatusCode};
 use serde::Serialize;
 use std::net::SocketAddr;
+use std::pin::Pin;
 use std::sync::{Arc, Weak};
 
 /// Listener version, providing same API but listening for requests on a
@@ -139,7 +139,7 @@ pub fn node_apis(
 	}
 }
 
-type NodeResponseFuture = Box<dyn Future<Item = Response<Body>, Error = Error> + Send>;
+type NodeResponseFuture = Pin<Box<dyn Future<Output = Result<Response<Body>, Error>> + Send>>;
 
 /// V2 API Handler/Wrapper for owner functions
 pub struct OwnerAPIHandlerV2 {
@@ -157,52 +157,40 @@ impl OwnerAPIHandlerV2 {
 			sync_state,
 		}
 	}
+}
 
-	fn call_api(
-		&self,
-		req: Request<Body>,
-		api: Owner,
-	) -> Box<dyn Future<Item = serde_json::Value, Error = Error> + Send> {
-		Box::new(parse_body(req).and_then(move |val: serde_json::Value| {
-			let owner_api = &api as &dyn OwnerRpc;
-			match owner_api.handle_request(val) {
-				MaybeReply::Reply(r) => ok(r),
-				MaybeReply::DontReply => {
-					// Since it's http, we need to return something. We return [] because jsonrpc
-					// clients will parse it as an empty batch response.
-					ok(serde_json::json!([]))
-				}
-			}
-		}))
-	}
-
-	fn handle_post_request(&self, req: Request<Body>) -> NodeResponseFuture {
+impl crate::router::Handler for OwnerAPIHandlerV2 {
+	fn post(&self, req: Request<Body>) -> ResponseFuture {
 		let api = Owner::new(
 			self.chain.clone(),
 			self.peers.clone(),
 			self.sync_state.clone(),
 		);
-		Box::new(
-			self.call_api(req, api)
-				.and_then(|resp| ok(json_response_pretty(&resp))),
-		)
-	}
-}
 
-impl crate::router::Handler for OwnerAPIHandlerV2 {
-	fn post(&self, req: Request<Body>) -> ResponseFuture {
-		Box::new(
-			self.handle_post_request(req)
-				.and_then(|r| ok(r))
-				.or_else(|e| {
+		Box::pin(async move {
+			match parse_body(req).await {
+				Ok(val) => {
+					let owner_api = &api as &dyn OwnerRpc;
+					let res = match owner_api.handle_request(val) {
+						MaybeReply::Reply(r) => r,
+						MaybeReply::DontReply => {
+							// Since it's http, we need to return something. We return [] because jsonrpc
+							// clients will parse it as an empty batch response.
+							serde_json::json!([])
+						}
+					};
+					Ok(json_response_pretty(&res))
+				}
+				Err(e) => {
 					error!("Request Error: {:?}", e);
-					ok(create_error_response(e))
-				}),
-		)
+					Ok(create_error_response(e))
+				}
+			}
+		})
 	}
 
 	fn options(&self, _req: Request<Body>) -> ResponseFuture {
-		Box::new(ok(create_ok_response("{}")))
+		Box::pin(async { Ok(create_ok_response("{}")) })
 	}
 }
 
@@ -226,52 +214,40 @@ impl ForeignAPIHandlerV2 {
 			sync_state,
 		}
 	}
+}
 
-	fn call_api(
-		&self,
-		req: Request<Body>,
-		api: Foreign,
-	) -> Box<dyn Future<Item = serde_json::Value, Error = Error> + Send> {
-		Box::new(parse_body(req).and_then(move |val: serde_json::Value| {
-			let foreign_api = &api as &dyn ForeignRpc;
-			match foreign_api.handle_request(val) {
-				MaybeReply::Reply(r) => ok(r),
-				MaybeReply::DontReply => {
-					// Since it's http, we need to return something. We return [] because jsonrpc
-					// clients will parse it as an empty batch response.
-					ok(serde_json::json!([]))
-				}
-			}
-		}))
-	}
-
-	fn handle_post_request(&self, req: Request<Body>) -> NodeResponseFuture {
+impl crate::router::Handler for ForeignAPIHandlerV2 {
+	fn post(&self, req: Request<Body>) -> ResponseFuture {
 		let api = Foreign::new(
 			self.chain.clone(),
 			self.tx_pool.clone(),
 			self.sync_state.clone(),
 		);
-		Box::new(
-			self.call_api(req, api)
-				.and_then(|resp| ok(json_response_pretty(&resp))),
-		)
-	}
-}
 
-impl crate::router::Handler for ForeignAPIHandlerV2 {
-	fn post(&self, req: Request<Body>) -> ResponseFuture {
-		Box::new(
-			self.handle_post_request(req)
-				.and_then(|r| ok(r))
-				.or_else(|e| {
+		Box::pin(async move {
+			match parse_body(req).await {
+				Ok(val) => {
+					let foreign_api = &api as &dyn ForeignRpc;
+					let res = match foreign_api.handle_request(val) {
+						MaybeReply::Reply(r) => r,
+						MaybeReply::DontReply => {
+							// Since it's http, we need to return something. We return [] because jsonrpc
+							// clients will parse it as an empty batch response.
+							serde_json::json!([])
+						}
+					};
+					Ok(json_response_pretty(&res))
+				}
+				Err(e) => {
 					error!("Request Error: {:?}", e);
-					ok(create_error_response(e))
-				}),
-		)
+					Ok(create_error_response(e))
+				}
+			}
+		})
 	}
 
 	fn options(&self, _req: Request<Body>) -> ResponseFuture {
-		Box::new(ok(create_ok_response("{}")))
+		Box::pin(async { Ok(create_ok_response("{}")) })
 	}
 }
 
@@ -316,7 +292,7 @@ fn create_ok_response(json: &str) -> Response<Body> {
 /// Whenever the status code is `StatusCode::OK` the text parameter should be
 /// valid JSON as the content type header will be set to `application/json'
 fn response<T: Into<Body>>(status: StatusCode, text: T) -> Response<Body> {
-	let mut builder = &mut Response::builder();
+	let mut builder = Response::builder();
 
 	builder = builder
 		.status(status)
