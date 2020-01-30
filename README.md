@@ -30,7 +30,7 @@ To get involved, read our [contributing docs](CONTRIBUTING.md).
 
 Find us:
 
-* Chat: [Gitter](https://gitter.im/grin_community/Lobby).
+* Chat: [Keybase](https://keybase.io/team/grincoin), more instructions on how to join [here](https://grin.mw/community).
 * Mailing list: join the [~Mimblewimble team](https://launchpad.net/~mimblewimble) and subscribe on Launchpad.
 * Twitter for the Grin council: [@grincouncil](https://twitter.com/grincouncil)
 
