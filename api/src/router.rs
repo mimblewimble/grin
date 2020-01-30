@@ -298,19 +298,20 @@ fn collect_node_middleware(handlers: &mut Vec<HandlerObj>, node: &Node) {
 mod tests {
 
 	use super::*;
-	use tokio::prelude::future::ok;
-	use tokio_core::reactor::Core;
+	use futures::executor::block_on;
 
 	struct HandlerImpl(u16);
 
 	impl Handler for HandlerImpl {
 		fn get(&self, _req: Request<Body>) -> ResponseFuture {
-			Box::pin(future::ok(
-				Response::builder()
-					.status(self.0)
+			let code = self.0;
+			Box::pin(async move {
+				let res = Response::builder()
+					.status(code)
 					.body(Body::default())
-					.unwrap(),
-			))
+					.unwrap();
+				Ok(res)
+			})
 		}
 	}
 
@@ -351,15 +352,18 @@ mod tests {
 			.unwrap();
 
 		let call_handler = |url| {
-			let mut event_loop = Core::new().unwrap();
-			let task = routes
-				.get(url)
-				.unwrap()
-				.next()
-				.unwrap()
-				.get(Request::new(Body::default()))
-				.and_then(|resp| ok(resp.status().as_u16()));
-			event_loop.run(task).unwrap()
+			let task = async {
+				let resp = routes
+					.get(url)
+					.unwrap()
+					.next()
+					.unwrap()
+					.get(Request::new(Body::default()))
+					.await
+					.unwrap();
+				resp.status().as_u16()
+			};
+			block_on(task)
 		};
 
 		assert_eq!(call_handler("/v1/users"), 101);
