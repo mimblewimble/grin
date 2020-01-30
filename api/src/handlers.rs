@@ -56,11 +56,9 @@ use crate::util::to_base64;
 use crate::util::RwLock;
 use crate::web::*;
 use easy_jsonrpc_mw::{Handler, MaybeReply};
-use futures::Future;
 use hyper::{Body, Request, Response, StatusCode};
 use serde::Serialize;
 use std::net::SocketAddr;
-use std::pin::Pin;
 use std::sync::{Arc, Weak};
 
 /// Listener version, providing same API but listening for requests on a
@@ -138,8 +136,6 @@ pub fn node_apis(
 		}
 	}
 }
-
-type NodeResponseFuture = Pin<Box<dyn Future<Output = Result<Response<Body>, Error>> + Send>>;
 
 /// V2 API Handler/Wrapper for owner functions
 pub struct OwnerAPIHandlerV2 {

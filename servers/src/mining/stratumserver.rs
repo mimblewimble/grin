@@ -14,11 +14,12 @@
 
 //! Mining Stratum Server
 
-use futures::future::Future;
-use futures::stream::Stream;
-use tokio::io::AsyncRead;
-use tokio::io::{lines, write_all};
+use futures::channel::mpsc;
+use futures::pin_mut;
+use futures::{SinkExt, StreamExt, TryStreamExt};
 use tokio::net::TcpListener;
+use tokio::runtime::Runtime;
+use tokio_util::codec::{Framed, LinesCodec};
 
 use crate::util::RwLock;
 use chrono::prelude::Utc;
@@ -26,7 +27,6 @@ use serde;
 use serde_json;
 use serde_json::Value;
 use std::collections::HashMap;
-use std::io::BufReader;
 use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::{Duration, SystemTime};
@@ -43,8 +43,6 @@ use crate::keychain;
 use crate::mining::mine_block;
 use crate::pool;
 use crate::util;
-
-use futures::sync::mpsc;
 
 type Tx = mpsc::UnboundedSender<String>;
 
@@ -600,53 +598,68 @@ impl Handler {
 // Worker Factory Thread Function
 fn accept_connections(listen_addr: SocketAddr, handler: Arc<Handler>) {
 	info!("Start tokio stratum server");
-	let listener = TcpListener::bind(&listen_addr).expect(&format!(
-		"Stratum: Failed to bind to listen address {}",
-		listen_addr
-	));
-	let server = listener
-		.incoming()
-		.for_each(move |socket| {
-			// Spawn a task to process the connection
-			let (tx, rx) = mpsc::unbounded();
+	let task = async move {
+		let mut listener = TcpListener::bind(&listen_addr).await.expect(&format!(
+			"Stratum: Failed to bind to listen address {}",
+			listen_addr
+		));
+		let server = listener
+			.incoming()
+			.filter_map(|s| async { s.map_err(|e| error!("accept error = {:?}", e)).ok() })
+			.for_each(move |socket| {
+				let handler = handler.clone();
+				async move {
+					// Spawn a task to process the connection
+					let (tx, mut rx) = mpsc::unbounded();
 
-			let worker_id = handler.workers.add_worker(tx);
-			info!("Worker {} connected", worker_id);
+					let worker_id = handler.workers.add_worker(tx);
+					info!("Worker {} connected", worker_id);
 
-			let (reader, writer) = socket.split();
-			let reader = BufReader::new(reader);
-			let h = handler.clone();
-			let workers = h.workers.clone();
-			let input = lines(reader)
-				.for_each(move |line| {
-					let request = serde_json::from_str(&line)?;
-					let resp = h.handle_rpc_requests(request, worker_id);
-					workers.send_to(worker_id, resp);
-					Ok(())
-				})
-				.map_err(|e| error!("error {}", e));
+					let framed = Framed::new(socket, LinesCodec::new());
+					let (mut writer, mut reader) = framed.split();
 
-			let output = rx.fold(writer, |writer, s| {
-				let s2 = s + "\n";
-				write_all(writer, s2.into_bytes())
-					.map(|(writer, _)| writer)
-					.map_err(|e| error!("cannot send {}", e))
+					let h = handler.clone();
+					let read = async move {
+						while let Some(line) = reader
+							.try_next()
+							.await
+							.map_err(|e| error!("error reading line: {}", e))?
+						{
+							let request = serde_json::from_str(&line)
+								.map_err(|e| error!("error serializing line: {}", e))?;
+							let resp = h.handle_rpc_requests(request, worker_id);
+							h.workers.send_to(worker_id, resp);
+						}
+
+						Result::<_, ()>::Ok(())
+					};
+
+					let write = async move {
+						while let Some(line) = rx.next().await {
+							let line = line + "\n";
+							writer
+								.send(line)
+								.await
+								.map_err(|e| error!("error writing line: {}", e))?;
+						}
+
+						Result::<_, ()>::Ok(())
+					};
+
+					let task = async move {
+						pin_mut!(read, write);
+						futures::future::select(read, write).await;
+						handler.workers.remove_worker(worker_id);
+						info!("Worker {} disconnected", worker_id);
+					};
+					tokio::spawn(task);
+				}
 			});
+		server.await
+	};
 
-			let workers = handler.workers.clone();
-			let both = output.map(|_| ()).select(input);
-			tokio::spawn(both.then(move |_| {
-				workers.remove_worker(worker_id);
-				info!("Worker {} disconnected", worker_id);
-				Ok(())
-			}));
-
-			Ok(())
-		})
-		.map_err(|err| {
-			error!("accept error = {:?}", err);
-		});
-	tokio::run(server.map(|_| ()).map_err(|_| ()));
+	let mut rt = Runtime::new().unwrap();
+	rt.block_on(task);
 }
 
 // ----------------------------------------
