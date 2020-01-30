@@ -212,5 +212,5 @@ pub fn send_request(req: Request<Body>) -> Result<String, Error> {
 		.basic_scheduler()
 		.build()
 		.map_err(|e| ErrorKind::RequestError(format!("{}", e)))?;
-	rt.block_on(send_request_async(req))
+	rt.block_on(async { send_request_async(req).await })
 }
