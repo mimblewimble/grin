@@ -403,11 +403,7 @@ impl Pool {
 		// Oldest (based on pool insertion time) will then be prioritized.
 		tx_buckets.sort_unstable_by_key(|x| (Reverse(x.fee_to_weight), x.age_idx));
 
-		tx_buckets
-			.into_iter()
-			.map(|x| x.raw_txs)
-			.flatten()
-			.collect()
+		tx_buckets.into_iter().flat_map(|x| x.raw_txs).collect()
 	}
 
 	pub fn find_matching_transactions(&self, kernels: &[TxKernel]) -> Vec<Transaction> {

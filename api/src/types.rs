@@ -334,10 +334,10 @@ impl OutputPrintable {
 	}
 
 	pub fn range_proof(&self) -> Result<pedersen::RangeProof, ser::Error> {
-		let proof_str = match self.proof.clone() {
-			Some(p) => p,
-			None => return Err(ser::Error::HexError(format!("output range_proof missing"))),
-		};
+		let proof_str = self
+			.proof
+			.clone()
+			.ok_or_else(|| ser::Error::HexError(format!("output range_proof missing")))?;
 
 		let p_vec = util::from_hex(proof_str)
 			.map_err(|_| ser::Error::HexError(format!("invalid output range_proof")))?;
