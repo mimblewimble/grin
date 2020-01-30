@@ -30,6 +30,9 @@ use tokio::runtime::Builder;
 /// Helper function to easily issue a HTTP GET request against a given URL that
 /// returns a JSON object. Handles request building, JSON deserialization and
 /// response code checking.
+/// This function spawns a new Tokio runtime, which means it is pretty inefficient for multiple
+/// requests. In those situations you are probably better off creating a runtime once and spawning
+/// `get_async` tasks on it
 pub fn get<'a, T>(url: &'a str, api_secret: Option<String>) -> Result<T, Error>
 where
 	for<'de> T: Deserialize<'de>,
@@ -204,9 +207,6 @@ async fn send_request_async(req: Request<Body>) -> Result<String, Error> {
 	Ok(String::from_utf8_lossy(&raw).to_string())
 }
 
-/// This function spawns a new Tokio runtime, which means it is pretty inefficient for multiple
-/// requests. In those situations you are probably better off creating a runtime once and spawning
-/// `send_request_async` tasks on it
 pub fn send_request(req: Request<Body>) -> Result<String, Error> {
 	let mut rt = Builder::new()
 		.basic_scheduler()
