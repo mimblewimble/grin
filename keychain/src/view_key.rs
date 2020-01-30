@@ -123,7 +123,7 @@ impl ViewKey {
 	{
 		let (secret_key, chain_code) = self.ckd_pub_tweak(secp, hasher, i)?;
 
-		let mut public_key = self.public_key.clone();
+		let mut public_key = self.public_key;
 		public_key.add_exp_assign(secp, &secret_key)?;
 
 		let switch_public_key = match &self.switch_public_key {

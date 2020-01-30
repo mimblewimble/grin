@@ -302,7 +302,7 @@ where
 	/// Walks all unpruned nodes in the MMR and revalidate all parent hashes
 	pub fn validate(&self) -> Result<(), String> {
 		// iterate on all parent nodes
-		for n in 1..(self.last_pos + 1) {
+		for n in 1..=self.last_pos {
 			let height = bintree_postorder_height(n);
 			if height > 0 {
 				if let Some(hash) = self.get_hash(n) {
@@ -346,7 +346,7 @@ where
 			return;
 		}
 		let start = if short && sz > 7 { sz / 8 - 1 } else { 0 };
-		for n in start..(sz / 8 + 1) {
+		for n in start..=sz / 8 {
 			let mut idx = "".to_owned();
 			let mut hashes = "".to_owned();
 			for m in (n * 8)..(n + 1) * 8 {
@@ -380,7 +380,7 @@ where
 			return;
 		}
 		let start = if short && sz > 7 { sz / 8 - 1 } else { 0 };
-		for n in start..(sz / 8 + 1) {
+		for n in start..=sz / 8 {
 			let mut idx = "".to_owned();
 			let mut hashes = "".to_owned();
 			for m in (n * 8)..(n + 1) * 8 {

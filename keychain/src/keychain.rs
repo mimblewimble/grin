@@ -166,14 +166,14 @@ impl Keychain for ExtKeychain {
 		let keys = blind_sum
 			.positive_blinding_factors
 			.iter()
-			.filter_map(|b| b.secret_key(&self.secp).ok().clone())
+			.filter_map(|b| b.secret_key(&self.secp).ok())
 			.collect::<Vec<SecretKey>>();
 		pos_keys.extend(keys);
 
 		let keys = blind_sum
 			.negative_blinding_factors
 			.iter()
-			.filter_map(|b| b.secret_key(&self.secp).ok().clone())
+			.filter_map(|b| b.secret_key(&self.secp).ok())
 			.collect::<Vec<SecretKey>>();
 		neg_keys.extend(keys);
 
@@ -265,7 +265,7 @@ mod test {
 
 		// adding secret keys 1 and 2 to give secret key 3
 		let mut skey3 = skey1.clone();
-		let _ = skey3.add_assign(&keychain.secp, &skey2).unwrap();
+		skey3.add_assign(&keychain.secp, &skey2).unwrap();
 
 		// create commitments for secret keys 1, 2 and 3
 		// all committing to the value 0 (which is what we do for tx_kernels)
@@ -276,7 +276,7 @@ mod test {
 		// now sum commitments for keys 1 and 2
 		let sum = keychain
 			.secp
-			.commit_sum(vec![commit_1.clone(), commit_2.clone()], vec![])
+			.commit_sum(vec![commit_1, commit_2], vec![])
 			.unwrap();
 
 		// confirm the commitment for key 3 matches the sum of the commitments 1 and 2

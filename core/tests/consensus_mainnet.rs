@@ -193,7 +193,7 @@ fn add_block_repeated(
 	chain_sim: Vec<(HeaderInfo, DiffStats)>,
 	iterations: usize,
 ) -> Vec<(HeaderInfo, DiffStats)> {
-	let mut return_chain = chain_sim.clone();
+	let mut return_chain = chain_sim;
 	for _ in 0..iterations {
 		return_chain = add_block(interval, return_chain.clone());
 	}
@@ -203,7 +203,7 @@ fn add_block_repeated(
 // Prints the contents of the iterator and its difficulties.. useful for
 // tweaking
 fn print_chain_sim(chain_sim: Vec<(HeaderInfo, DiffStats)>) {
-	let mut chain_sim = chain_sim.clone();
+	let mut chain_sim = chain_sim;
 	chain_sim.reverse();
 	let mut last_time = 0;
 	let mut first = true;
@@ -233,7 +233,7 @@ fn print_chain_sim(chain_sim: Vec<(HeaderInfo, DiffStats)>) {
 			stats.earliest_ts,
 			stats.ts_delta,
 		);
-		let mut sb = stats.last_blocks.clone();
+		let mut sb = stats.last_blocks;
 		sb.reverse();
 		for i in sb {
 			println!("   {}", i);
@@ -282,7 +282,7 @@ fn adjustment_scenarios() {
 	let chain_sim = add_block_repeated(60, chain_sim, just_enough as usize);
 	let chain_sim = add_block_repeated(600, chain_sim, 60);
 
-	println!("");
+	println!();
 	println!("*********************************************************");
 	println!("Scenario 3) Sudden drop in hashpower");
 	println!("*********************************************************");
@@ -294,7 +294,7 @@ fn adjustment_scenarios() {
 	let chain_sim = add_block_repeated(60, chain_sim, just_enough as usize);
 	let chain_sim = add_block_repeated(10, chain_sim, 10);
 
-	println!("");
+	println!();
 	println!("*********************************************************");
 	println!("Scenario 4) Sudden increase in hashpower");
 	println!("*********************************************************");
@@ -308,7 +308,7 @@ fn adjustment_scenarios() {
 	let chain_sim = add_block_repeated(60, chain_sim, 20);
 	let chain_sim = add_block_repeated(10, chain_sim, 10);
 
-	println!("");
+	println!();
 	println!("*********************************************************");
 	println!("Scenario 5) Oscillations in hashpower");
 	println!("*********************************************************");

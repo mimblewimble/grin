@@ -61,7 +61,7 @@ pub fn siphash_block(v: &[u64; 4], nonce: u64, rot_e: u8, xor_all: bool) -> u64 
 	for i in xor_from..SIPHASH_BLOCK_SIZE {
 		xor ^= nonce_hash[i as usize];
 	}
-	return xor;
+	xor
 }
 
 /// Implements siphash 2-4 specialized for a 4 u64 array key and a u64 nonce
