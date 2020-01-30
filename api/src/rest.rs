@@ -203,12 +203,16 @@ impl ApiServer {
 		thread::Builder::new()
 			.name("apis".to_string())
 			.spawn(move || {
-				let server = Server::bind(&addr).serve(make_service_fn(move |_| {
-					let router = router.clone();
-					async move { Ok::<_, Infallible>(router) }
-				}));
-				// TODO graceful shutdown is unstable, investigate
-				//.with_graceful_shutdown(rx)
+				let server = async move {
+					let server = Server::bind(&addr).serve(make_service_fn(move |_| {
+						let router = router.clone();
+						async move { Ok::<_, Infallible>(router) }
+					}));
+					// TODO graceful shutdown is unstable, investigate
+					//.with_graceful_shutdown(rx)
+
+					server.await
+				};
 
 				let mut rt = Runtime::new()
 					.map_err(|e| eprintln!("HTTP API server error: {}", e))

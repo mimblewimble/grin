@@ -17,7 +17,6 @@
 use crate::rest::{Error, ErrorKind};
 use crate::util::to_base64;
 use failure::{Fail, ResultExt};
-use futures::executor::block_on;
 use hyper::body;
 use hyper::header::{ACCEPT, AUTHORIZATION, CONTENT_TYPE, USER_AGENT};
 use hyper::{Body, Client, Request};
@@ -26,6 +25,7 @@ use hyper_timeout::TimeoutConnector;
 use serde::{Deserialize, Serialize};
 use serde_json;
 use std::time::Duration;
+use tokio::runtime::Builder;
 
 /// Helper function to easily issue a HTTP GET request against a given URL that
 /// returns a JSON object. Handles request building, JSON deserialization and
@@ -204,6 +204,13 @@ async fn send_request_async(req: Request<Body>) -> Result<String, Error> {
 	Ok(String::from_utf8_lossy(&raw).to_string())
 }
 
+/// This function spawns a new Tokio runtime, which means it is pretty inefficient for multiple
+/// requests. In those situations you are probably better off creating a runtime once and spawning
+/// `send_request_async` tasks on it
 pub fn send_request(req: Request<Body>) -> Result<String, Error> {
-	block_on(send_request_async(req))
+	let mut rt = Builder::new()
+		.basic_scheduler()
+		.build()
+		.map_err(|e| ErrorKind::RequestError(format!("{}", e)))?;
+	rt.block_on(send_request_async(req))
 }
