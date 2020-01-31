@@ -151,11 +151,11 @@ impl ViewKey {
 		&self,
 		secp: &Secp256k1,
 		amount: u64,
-		switch: &SwitchCommitmentType,
+		switch: SwitchCommitmentType,
 	) -> Result<PublicKey, Error> {
 		let value_key = secp.commit_value(amount)?.to_pubkey(secp)?;
 		let pub_key = PublicKey::from_combination(secp, vec![&self.public_key, &value_key])?;
-		match *switch {
+		match switch {
 			SwitchCommitmentType::None => Ok(pub_key),
 			SwitchCommitmentType::Regular => {
 				// TODO: replace this whole block by a libsecp function

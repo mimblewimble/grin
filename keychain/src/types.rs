@@ -484,13 +484,13 @@ pub trait Keychain: Sync + Send + Clone {
 		&self,
 		amount: u64,
 		id: &Identifier,
-		switch: &SwitchCommitmentType,
+		switch: SwitchCommitmentType,
 	) -> Result<SecretKey, Error>;
 	fn commit(
 		&self,
 		amount: u64,
 		id: &Identifier,
-		switch: &SwitchCommitmentType,
+		switch: SwitchCommitmentType,
 	) -> Result<Commitment, Error>;
 	fn blind_sum(&self, blind_sum: &BlindSum) -> Result<BlindingFactor, Error>;
 	fn sign(
@@ -498,7 +498,7 @@ pub trait Keychain: Sync + Send + Clone {
 		msg: &Message,
 		amount: u64,
 		id: &Identifier,
-		switch: &SwitchCommitmentType,
+		switch: SwitchCommitmentType,
 	) -> Result<Signature, Error>;
 	fn sign_with_blinding(&self, _: &Message, _: &BlindingFactor) -> Result<Signature, Error>;
 	fn secp(&self) -> &Secp256k1;
@@ -522,9 +522,9 @@ impl TryFrom<u8> for SwitchCommitmentType {
 	}
 }
 
-impl From<&SwitchCommitmentType> for u8 {
-	fn from(switch: &SwitchCommitmentType) -> Self {
-		match *switch {
+impl From<SwitchCommitmentType> for u8 {
+	fn from(switch: SwitchCommitmentType) -> Self {
+		match switch {
 			SwitchCommitmentType::None => 0,
 			SwitchCommitmentType::Regular => 1,
 		}
