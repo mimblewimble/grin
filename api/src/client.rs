@@ -25,7 +25,7 @@ use hyper_timeout::TimeoutConnector;
 use serde::{Deserialize, Serialize};
 use serde_json;
 use std::time::Duration;
-use tokio::runtime::Runtime;
+use tokio::runtime::Builder;
 
 /// Helper function to easily issue a HTTP GET request against a given URL that
 /// returns a JSON object. Handles request building, JSON deserialization and
@@ -208,6 +208,10 @@ async fn send_request_async(req: Request<Body>) -> Result<String, Error> {
 }
 
 pub fn send_request(req: Request<Body>) -> Result<String, Error> {
-	let mut rt = Runtime::new().map_err(|e| ErrorKind::RequestError(format!("{}", e)))?;
+	let mut rt = Builder::new()
+		.basic_scheduler()
+		.enable_all()
+		.build()
+		.map_err(|e| ErrorKind::RequestError(format!("{}", e)))?;
 	rt.block_on(send_request_async(req))
 }
