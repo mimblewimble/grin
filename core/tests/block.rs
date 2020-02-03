@@ -47,7 +47,7 @@ fn too_large_block() {
 	let max_out = global::max_block_weight() / BLOCK_OUTPUT_WEIGHT;
 
 	let mut pks = vec![];
-	for n in 0..=max_out {
+	for n in 0..(max_out + 1) {
 		pks.push(ExtKeychain::derive_key_id(1, n as u32, 0, 0, 0));
 	}
 

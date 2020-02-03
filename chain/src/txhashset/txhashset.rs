@@ -67,7 +67,7 @@ impl<T: PMMRable> PMMRHandle<T> {
 		fs::create_dir_all(path.clone())?;
 		let path_str = path
 			.to_str()
-			.ok_or_else(|| Error::from(ErrorKind::Other("invalid file path".to_owned())))?;
+			.ok_or_else(|| ErrorKind::Other("invalid file path".to_owned()))?;
 		let backend = PMMRBackend::new(path_str.to_string(), prunable, version, header)?;
 		let last_pos = backend.unpruned_size();
 		Ok(PMMRHandle { backend, last_pos })
@@ -864,7 +864,7 @@ impl<'a> Committed for Extension<'a> {
 
 	fn kernels_committed(&self) -> Vec<Commitment> {
 		let mut commitments = vec![];
-		for n in 1..=self.kernel_pmmr.unpruned_size() {
+		for n in 1..self.kernel_pmmr.unpruned_size() + 1 {
 			if pmmr::is_leaf(n) {
 				if let Some(kernel) = self.kernel_pmmr.get_data(n) {
 					commitments.push(kernel.excess());
@@ -1307,12 +1307,12 @@ impl<'a> Extension<'a> {
 		let mut kern_count = 0;
 		let total_kernels = pmmr::n_leaves(self.kernel_pmmr.unpruned_size());
 		let mut tx_kernels: Vec<TxKernel> = Vec::with_capacity(KERNEL_BATCH_SIZE);
-		for n in 1..=self.kernel_pmmr.unpruned_size() {
+		for n in 1..self.kernel_pmmr.unpruned_size() + 1 {
 			if pmmr::is_leaf(n) {
 				let kernel = self
 					.kernel_pmmr
 					.get_data(n)
-					.ok_or_else(|| Error::from(ErrorKind::TxKernelNotFound))?;
+					.ok_or_else(|| ErrorKind::TxKernelNotFound)?;
 				tx_kernels.push(kernel);
 			}
 
