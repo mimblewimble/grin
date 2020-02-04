@@ -12,8 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use std::convert::TryInto;
 /// Utility to track the rate of data transfers
-use std::time::{Duration, SystemTime};
+use std::time::SystemTime;
 
 struct Entry {
 	bytes: u64,
@@ -103,8 +104,8 @@ impl RateCounter {
 // turns out getting the millisecs since epoch in Rust isn't as easy as it
 // could be
 fn millis_since_epoch() -> u64 {
-	let since_epoch = SystemTime::now()
-		.duration_since(SystemTime::UNIX_EPOCH)
-		.unwrap_or_else(|_| Duration::new(0, 0));
-	since_epoch.as_secs() * 1000 + u64::from(since_epoch.subsec_millis())
+	match SystemTime::now().duration_since(SystemTime::UNIX_EPOCH) {
+		Ok(since_epoch) => since_epoch.as_millis().try_into().unwrap_or(0),
+		Err(_) => 0,
+	}
 }
