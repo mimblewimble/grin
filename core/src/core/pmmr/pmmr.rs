@@ -302,7 +302,7 @@ where
 	/// Walks all unpruned nodes in the MMR and revalidate all parent hashes
 	pub fn validate(&self) -> Result<(), String> {
 		// iterate on all parent nodes
-		for n in 1..self.last_pos + 1 {
+		for n in 1..(self.last_pos + 1) {
 			let height = bintree_postorder_height(n);
 			if height > 0 {
 				if let Some(hash) = self.get_hash(n) {
