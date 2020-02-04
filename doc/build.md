@@ -14,8 +14,9 @@ What's working so far?
 
 ## Requirements
 
-* rust 1.34+ (use [rustup]((https://www.rustup.rs/))- i.e. `curl https://sh.rustup.rs -sSf | sh; source $HOME/.cargo/env`)
-  * if rust is already installed, you can simply update version with `rustup update`
+* rust: Install using rustup: https://rustup.rs
+  * Grin currently does not support a minimum version of Rust, it is recommended to build using the latest version.
+  * If rust is already installed, you can update to the latest version by running `rustup update`.
 * clang
 * ncurses and libs (ncurses, ncursesw5)
 * zlib libs (zlib1g-dev or zlib-devel)
