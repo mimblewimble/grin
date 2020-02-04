@@ -104,8 +104,9 @@ impl RateCounter {
 // turns out getting the millisecs since epoch in Rust isn't as easy as it
 // could be
 fn millis_since_epoch() -> u64 {
-	match SystemTime::now().duration_since(SystemTime::UNIX_EPOCH) {
-		Ok(since_epoch) => since_epoch.as_millis().try_into().unwrap_or(0),
-		Err(_) => 0,
-	}
+	SystemTime::now()
+		.duration_since(SystemTime::UNIX_EPOCH)
+		.map_or(0, |since_epoch| {
+			since_epoch.as_millis().try_into().unwrap_or(0)
+		})
 }
