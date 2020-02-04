@@ -5,11 +5,6 @@ steps:
     displayName: Windows Install LLVM
     condition: eq( variables['Agent.OS'], 'Windows_NT' )
   - script: |
-      curl https://sh.rustup.rs -sSf | sh -s -- -y
-      echo "##vso[task.setvariable variable=PATH;]$PATH:$HOME/.cargo/bin"
-    displayName: macOS Install Rust
-    condition: eq( variables['Agent.OS'], 'Darwin' )
-  - script: |
       sudo apt-get update -yqq
       sudo apt-get install -yqq --no-install-recommends libncursesw5-dev
     displayName: Linux Install Dependencies
