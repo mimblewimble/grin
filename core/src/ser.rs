@@ -818,12 +818,6 @@ impl<A: Readable, B: Readable, C: Readable, D: Readable> Readable for (A, B, C, 
 	}
 }
 
-impl Writeable for [u8; 4] {
-	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), Error> {
-		writer.write_bytes(self)
-	}
-}
-
 /// Trait for types that can be added to a PMMR.
 pub trait PMMRable: Writeable + Clone + Debug + DefaultHashable {
 	/// The type of element actually stored in the MMR data file.
