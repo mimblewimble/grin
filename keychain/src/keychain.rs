@@ -100,7 +100,7 @@ impl Keychain for ExtKeychain {
 		&self,
 		amount: u64,
 		id: &Identifier,
-		switch: &SwitchCommitmentType,
+		switch: SwitchCommitmentType,
 	) -> Result<SecretKey, Error> {
 		let mut h = self.hasher.clone();
 		let p = id.to_path();
@@ -109,7 +109,7 @@ impl Keychain for ExtKeychain {
 			ext_key = ext_key.ckd_priv(&self.secp, &mut h, p.path[i as usize])?;
 		}
 
-		match *switch {
+		match switch {
 			SwitchCommitmentType::Regular => {
 				Ok(self.secp.blind_switch(amount, ext_key.secret_key)?)
 			}
@@ -121,7 +121,7 @@ impl Keychain for ExtKeychain {
 		&self,
 		amount: u64,
 		id: &Identifier,
-		switch: &SwitchCommitmentType,
+		switch: SwitchCommitmentType,
 	) -> Result<Commitment, Error> {
 		let key = self.derive_key(amount, id, switch)?;
 		let commit = self.secp.commit(amount, key)?;
@@ -136,7 +136,7 @@ impl Keychain for ExtKeychain {
 				let res = self.derive_key(
 					k.value,
 					&Identifier::from_path(&k.ext_keychain_path),
-					&k.switch,
+					k.switch,
 				);
 				if let Ok(s) = res {
 					Some(s)
@@ -153,7 +153,7 @@ impl Keychain for ExtKeychain {
 				let res = self.derive_key(
 					k.value,
 					&Identifier::from_path(&k.ext_keychain_path),
-					&k.switch,
+					k.switch,
 				);
 				if let Ok(s) = res {
 					Some(s)
@@ -186,7 +186,7 @@ impl Keychain for ExtKeychain {
 		msg: &Message,
 		amount: u64,
 		id: &Identifier,
-		switch: &SwitchCommitmentType,
+		switch: SwitchCommitmentType,
 	) -> Result<Signature, Error> {
 		let skey = self.derive_key(amount, id, switch)?;
 		let sig = self.secp.sign(msg, &skey)?;
@@ -220,7 +220,7 @@ mod test {
 	fn test_key_derivation() {
 		let keychain = ExtKeychain::from_random_seed(false).unwrap();
 		let secp = keychain.secp();
-		let switch = &SwitchCommitmentType::None;
+		let switch = SwitchCommitmentType::None;
 
 		let path = ExtKeychainPath::new(1, 1, 0, 0, 0);
 		let key_id = path.to_identifier();
