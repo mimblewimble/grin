@@ -106,7 +106,6 @@ impl RateCounter {
 fn millis_since_epoch() -> u64 {
 	SystemTime::now()
 		.duration_since(SystemTime::UNIX_EPOCH)
-		.map_or(0, |since_epoch| {
-			since_epoch.as_millis().try_into().unwrap_or(0)
-		})
+		.map(|since_epoch| since_epoch.as_millis().try_into().unwrap_or(0))
+		.unwrap_or(0)
 }
