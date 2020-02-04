@@ -668,7 +668,7 @@ mod tests {
 			let commit = keychain.commit(amount, &id, switch).unwrap();
 
 			// Generate proof with ProofBuilder..
-			let proof = create(&keychain, &builder, amount, &id, &switch, commit, None).unwrap();
+			let proof = create(&keychain, &builder, amount, &id, switch, commit, None).unwrap();
 			// ..and rewind with child ViewKey
 			let rewind = rewind(keychain.secp(), &child_view_key, commit, None, proof);
 
