@@ -163,9 +163,8 @@ where
 			&self.rewind_hash
 		};
 		let res = blake2b(32, &commit.0, hash);
-		SecretKey::from_slice(self.keychain.secp(), res.as_bytes()).map_err(|e| {
-			ErrorKind::RangeProof(format!("Unable to create nonce: {:?}", e).to_string()).into()
-		})
+		SecretKey::from_slice(self.keychain.secp(), res.as_bytes())
+			.map_err(|e| ErrorKind::RangeProof(format!("Unable to create nonce: {:?}", e)).into())
 	}
 }
 
@@ -279,9 +278,8 @@ where
 
 	fn nonce(&self, commit: &Commitment) -> Result<SecretKey, Error> {
 		let res = blake2b(32, &commit.0, &self.root_hash);
-		SecretKey::from_slice(self.keychain.secp(), res.as_bytes()).map_err(|e| {
-			ErrorKind::RangeProof(format!("Unable to create nonce: {:?}", e).to_string()).into()
-		})
+		SecretKey::from_slice(self.keychain.secp(), res.as_bytes())
+			.map_err(|e| ErrorKind::RangeProof(format!("Unable to create nonce: {:?}", e)).into())
 	}
 }
 
@@ -365,9 +363,8 @@ where
 impl ProofBuild for ViewKey {
 	fn rewind_nonce(&self, secp: &Secp256k1, commit: &Commitment) -> Result<SecretKey, Error> {
 		let res = blake2b(32, &commit.0, &self.rewind_hash);
-		SecretKey::from_slice(secp, res.as_bytes()).map_err(|e| {
-			ErrorKind::RangeProof(format!("Unable to create nonce: {:?}", e).to_string()).into()
-		})
+		SecretKey::from_slice(secp, res.as_bytes())
+			.map_err(|e| ErrorKind::RangeProof(format!("Unable to create nonce: {:?}", e)).into())
 	}
 
 	fn private_nonce(&self, _secp: &Secp256k1, _commit: &Commitment) -> Result<SecretKey, Error> {
@@ -452,17 +449,8 @@ mod tests {
 		let id = ExtKeychain::derive_key_id(3, rng.gen(), rng.gen(), rng.gen(), 0);
 		let switch = SwitchCommitmentType::Regular;
 		let commit = keychain.commit(amount, &id, switch).unwrap();
-		let proof = create(
-			&keychain,
-			&builder,
-			amount,
-			&id,
-			switch,
-			commit.clone(),
-			None,
-		)
-		.unwrap();
-		assert!(verify(&keychain.secp(), commit.clone(), proof.clone(), None).is_ok());
+		let proof = create(&keychain, &builder, amount, &id, switch, commit, None).unwrap();
+		assert!(verify(&keychain.secp(), commit, proof, None).is_ok());
 		let rewind = rewind(keychain.secp(), &builder, commit, None, proof).unwrap();
 		assert!(rewind.is_some());
 		let (r_amount, r_id, r_switch) = rewind.unwrap();
@@ -482,18 +470,9 @@ mod tests {
 		let commit_a = {
 			let switch = SwitchCommitmentType::Regular;
 			let commit = keychain.commit(amount, &id, switch).unwrap();
-			let proof = create(
-				&keychain,
-				&builder,
-				amount,
-				&id,
-				switch,
-				commit.clone(),
-				None,
-			)
-			.unwrap();
-			assert!(verify(&keychain.secp(), commit.clone(), proof.clone(), None).is_ok());
-			let rewind = rewind(keychain.secp(), &builder, commit.clone(), None, proof).unwrap();
+			let proof = create(&keychain, &builder, amount, &id, switch, commit, None).unwrap();
+			assert!(verify(&keychain.secp(), commit, proof, None).is_ok());
+			let rewind = rewind(keychain.secp(), &builder, commit, None, proof).unwrap();
 			assert!(rewind.is_some());
 			let (r_amount, r_id, r_switch) = rewind.unwrap();
 			assert_eq!(r_amount, amount);
@@ -505,18 +484,9 @@ mod tests {
 		let commit_b = {
 			let switch = SwitchCommitmentType::None;
 			let commit = keychain.commit(amount, &id, switch).unwrap();
-			let proof = create(
-				&keychain,
-				&builder,
-				amount,
-				&id,
-				switch,
-				commit.clone(),
-				None,
-			)
-			.unwrap();
-			assert!(verify(&keychain.secp(), commit.clone(), proof.clone(), None).is_ok());
-			let rewind = rewind(keychain.secp(), &builder, commit.clone(), None, proof).unwrap();
+			let proof = create(&keychain, &builder, amount, &id, switch, commit, None).unwrap();
+			assert!(verify(&keychain.secp(), commit, proof, None).is_ok());
+			let rewind = rewind(keychain.secp(), &builder, commit, None, proof).unwrap();
 			assert!(rewind.is_some());
 			let (r_amount, r_id, r_switch) = rewind.unwrap();
 			assert_eq!(r_amount, amount);
@@ -583,18 +553,9 @@ mod tests {
 		let commit = keychain.commit(amount, &id, switch).unwrap();
 
 		// Generate proof with ProofBuilder..
-		let proof = create(
-			&keychain,
-			&builder,
-			amount,
-			&id,
-			switch,
-			commit.clone(),
-			None,
-		)
-		.unwrap();
+		let proof = create(&keychain, &builder, amount, &id, switch, commit, None).unwrap();
 		// ..and rewind with ViewKey
-		let rewind = rewind(keychain.secp(), &view_key, commit.clone(), None, proof);
+		let rewind = rewind(keychain.secp(), &view_key, commit, None, proof);
 
 		assert!(rewind.is_ok());
 		let rewind = rewind.unwrap();
@@ -628,18 +589,9 @@ mod tests {
 		let commit = keychain.commit(amount, &id, switch).unwrap();
 
 		// Generate proof with ProofBuilder..
-		let proof = create(
-			&keychain,
-			&builder,
-			amount,
-			&id,
-			switch,
-			commit.clone(),
-			None,
-		)
-		.unwrap();
+		let proof = create(&keychain, &builder, amount, &id, switch, commit, None).unwrap();
 		// ..and rewind with ViewKey
-		let rewind = rewind(keychain.secp(), &view_key, commit.clone(), None, proof);
+		let rewind = rewind(keychain.secp(), &view_key, commit, None, proof);
 
 		assert!(rewind.is_ok());
 		let rewind = rewind.unwrap();
@@ -680,24 +632,9 @@ mod tests {
 			let commit = keychain.commit(amount, &id, switch).unwrap();
 
 			// Generate proof with ProofBuilder..
-			let proof = create(
-				&keychain,
-				&builder,
-				amount,
-				&id,
-				switch,
-				commit.clone(),
-				None,
-			)
-			.unwrap();
+			let proof = create(&keychain, &builder, amount, &id, switch, commit, None).unwrap();
 			// ..and rewind with child ViewKey
-			let rewind = rewind(
-				keychain.secp(),
-				&child_view_key,
-				commit.clone(),
-				None,
-				proof,
-			);
+			let rewind = rewind(keychain.secp(), &child_view_key, commit, None, proof);
 
 			assert!(rewind.is_ok());
 			let rewind = rewind.unwrap();
@@ -731,24 +668,9 @@ mod tests {
 			let commit = keychain.commit(amount, &id, switch).unwrap();
 
 			// Generate proof with ProofBuilder..
-			let proof = create(
-				&keychain,
-				&builder,
-				amount,
-				&id,
-				switch,
-				commit.clone(),
-				None,
-			)
-			.unwrap();
+			let proof = create(&keychain, &builder, amount, &id, switch, commit, None).unwrap();
 			// ..and rewind with child ViewKey
-			let rewind = rewind(
-				keychain.secp(),
-				&child_view_key,
-				commit.clone(),
-				None,
-				proof,
-			);
+			let rewind = rewind(keychain.secp(), &child_view_key, commit, None, proof);
 
 			assert!(rewind.is_ok());
 			let rewind = rewind.unwrap();

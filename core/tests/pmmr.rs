@@ -41,7 +41,7 @@ fn some_peak_map() {
 fn bench_peak_map() {
 	let nano_to_millis = 1.0 / 1_000_000.0;
 
-	let increments = vec![1000_000u64, 10_000_000u64, 100_000_000u64];
+	let increments = vec![1_000_000u64, 10_000_000u64, 100_000_000u64];
 
 	for v in increments {
 		let start = Utc::now().timestamp_nanos();
@@ -374,7 +374,7 @@ fn pmmr_get_last_n_insertions() {
 
 	// test when empty
 	let res = pmmr.readonly_pmmr().get_last_n_insertions(19);
-	assert!(res.len() == 0);
+	assert!(res.is_empty());
 
 	pmmr.push(&elems[0]).unwrap();
 	let res = pmmr.readonly_pmmr().get_last_n_insertions(19);

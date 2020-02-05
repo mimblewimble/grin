@@ -175,16 +175,12 @@ mod test {
 	#[test]
 	fn cuckarood19_29_vectors() {
 		let mut ctx19 = new_impl::<u64>(19, 42);
-		ctx19.params.siphash_keys = V1_19_HASH.clone();
-		assert!(ctx19
-			.verify(&Proof::new(V1_19_SOL.to_vec().clone()))
-			.is_ok());
+		ctx19.params.siphash_keys = V1_19_HASH;
+		assert!(ctx19.verify(&Proof::new(V1_19_SOL.to_vec())).is_ok());
 		assert!(ctx19.verify(&Proof::zero(42)).is_err());
 		let mut ctx29 = new_impl::<u64>(29, 42);
-		ctx29.params.siphash_keys = V2_29_HASH.clone();
-		assert!(ctx29
-			.verify(&Proof::new(V2_29_SOL.to_vec().clone()))
-			.is_ok());
+		ctx29.params.siphash_keys = V2_29_HASH;
+		assert!(ctx29.verify(&Proof::new(V2_29_SOL.to_vec())).is_ok());
 		assert!(ctx29.verify(&Proof::zero(42)).is_err());
 	}
 

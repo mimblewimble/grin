@@ -26,7 +26,7 @@ use grin_store as store;
 use grin_store::{option_to_not_found, to_key, Error, SerIterator};
 use std::sync::Arc;
 
-const STORE_SUBPATH: &'static str = "chain";
+const STORE_SUBPATH: &str = "chain";
 
 const BLOCK_HEADER_PREFIX: u8 = 'h' as u8;
 const BLOCK_PREFIX: u8 = 'b' as u8;

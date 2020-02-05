@@ -210,7 +210,7 @@ impl Chain {
 			pow_verifier,
 			verifier_cache,
 			archive_mode,
-			genesis: genesis.header.clone(),
+			genesis: genesis.header,
 		};
 
 		// DB migrations to be run prior to the chain being used.
@@ -308,7 +308,7 @@ impl Chain {
 			// but not yet committed the batch.
 			// A node shutdown at this point can be catastrophic...
 			// We prevent this via the stop_lock (see above).
-			if let Ok(_) = maybe_new_head {
+			if maybe_new_head.is_ok() {
 				ctx.batch.commit()?;
 			}
 
@@ -334,7 +334,7 @@ impl Chain {
 						added: Instant::now(),
 					};
 
-					&self.orphans.add(orphan);
+					self.orphans.add(orphan);
 
 					debug!(
 						"process_block: orphan: {:?}, # orphans {}{}",
@@ -364,7 +364,7 @@ impl Chain {
 						b.header.height,
 						e
 					);
-					Err(ErrorKind::Other(format!("{:?}", e).to_owned()).into())
+					Err(ErrorKind::Other(format!("{:?}", e)).into())
 				}
 			},
 		}
@@ -807,7 +807,7 @@ impl Chain {
 		while let Ok(header) = current {
 			// break out of the while loop when we find a header common
 			// between the header chain and the current body chain
-			if let Ok(_) = self.is_on_current_chain(&header) {
+			if self.is_on_current_chain(&header).is_ok() {
 				oldest_height = header.height;
 				oldest_hash = header.hash();
 				break;
@@ -992,7 +992,7 @@ impl Chain {
 
 			// Move sandbox to overwrite
 			txhashset.release_backend_files();
-			txhashset::txhashset_replace(sandbox_dir.clone(), PathBuf::from(self.db_root.clone()))?;
+			txhashset::txhashset_replace(sandbox_dir, PathBuf::from(self.db_root.clone()))?;
 
 			// Re-open on db root dir
 			txhashset = txhashset::TxHashSet::open(
@@ -1434,7 +1434,7 @@ impl Chain {
 		if chain_header.hash() == header.hash() {
 			Ok(())
 		} else {
-			Err(ErrorKind::Other(format!("not on current chain")).into())
+			Err(ErrorKind::Other("not on current chain".to_string()).into())
 		}
 	}
 

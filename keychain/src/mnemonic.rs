@@ -112,7 +112,7 @@ pub fn to_entropy(mnemonic: &str) -> Result<Vec<u8>, Error> {
 }
 
 /// Converts entropy to a mnemonic
-pub fn from_entropy(entropy: &Vec<u8>) -> Result<String, Error> {
+pub fn from_entropy(entropy: &[u8]) -> Result<String, Error> {
 	let sizes: [usize; 5] = [16, 20, 24, 28, 32];
 	let length = entropy.len();
 	if !sizes.contains(&length) {
@@ -124,7 +124,7 @@ pub fn from_entropy(entropy: &Vec<u8>) -> Result<String, Error> {
 
 	let mut hash = [0; 32];
 	let mut sha2sum = Sha256::default();
-	sha2sum.input(&entropy.clone());
+	sha2sum.input(entropy);
 	hash.copy_from_slice(sha2sum.result().as_slice());
 
 	let checksum = (hash[0] >> 8 - checksum_bits) & mask;
@@ -149,7 +149,7 @@ pub fn from_entropy(entropy: &Vec<u8>) -> Result<String, Error> {
 
 	let words: Vec<String> = indexes.iter().map(|x| WORDS[*x as usize].clone()).collect();
 	let mnemonic = words.join(" ");
-	Ok(mnemonic.to_owned())
+	Ok(mnemonic)
 }
 
 /// Converts a nemonic and a passphrase into a seed

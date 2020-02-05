@@ -382,7 +382,7 @@ impl ExtendedPrivKey {
 		passphrase: &str,
 		is_floo: bool,
 	) -> Result<ExtendedPrivKey, Error> {
-		let seed = mnemonic::to_seed(mnemonic, passphrase).map_err(|e| Error::MnemonicError(e))?;
+		let seed = mnemonic::to_seed(mnemonic, passphrase).map_err(Error::MnemonicError)?;
 		let mut hasher = BIP32GrinHasher::new(is_floo);
 		let key = ExtendedPrivKey::new_master(secp, &mut hasher, &seed)?;
 		Ok(key)
@@ -460,9 +460,7 @@ impl ExtendedPrivKey {
 		// Do SHA256 of just the ECDSA pubkey
 		let sha2_res = hasher.sha_256(&pk.public_key.serialize_vec(&secp, true)[..]);
 		// do RIPEMD160
-		let ripemd_res = hasher.ripemd_160(&sha2_res);
-		// Return
-		ripemd_res
+		hasher.ripemd_160(&sha2_res)
 	}
 
 	/// Returns the first four bytes of the identifier
@@ -567,9 +565,7 @@ impl ExtendedPubKey {
 		// Do SHA256 of just the ECDSA pubkey
 		let sha2_res = hasher.sha_256(&self.public_key.serialize_vec(secp, true)[..]);
 		// do RIPEMD160
-		let ripemd_res = hasher.ripemd_160(&sha2_res);
-		// Return
-		ripemd_res
+		hasher.ripemd_160(&sha2_res)
 	}
 
 	/// Returns the first four bytes of the identifier

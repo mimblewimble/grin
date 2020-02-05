@@ -46,7 +46,7 @@ fn test_verifier_cache_rangeproofs() {
 	// Check our output is not verified according to the cache.
 	{
 		let mut cache = cache.write();
-		let unverified = cache.filter_rangeproof_unverified(&vec![out]);
+		let unverified = cache.filter_rangeproof_unverified(&[out]);
 		assert_eq!(unverified, vec![out]);
 	}
 
@@ -59,7 +59,7 @@ fn test_verifier_cache_rangeproofs() {
 	// Check it shows as verified according to the cache.
 	{
 		let mut cache = cache.write();
-		let unverified = cache.filter_rangeproof_unverified(&vec![out]);
+		let unverified = cache.filter_rangeproof_unverified(&[out]);
 		assert_eq!(unverified, vec![]);
 	}
 }

@@ -174,7 +174,7 @@ pub fn header_version(height: u64) -> HeaderVersion {
 /// Check whether the block version is valid at a given height, implements
 /// 6 months interval scheduled hard forks for the first 2 years.
 pub fn valid_header_version(height: u64, version: HeaderVersion) -> bool {
-	return height < 3 * HARD_FORK_INTERVAL && version == header_version(height);
+	height < 3 * HARD_FORK_INTERVAL && version == header_version(height)
 }
 
 /// Number of blocks used to calculate difficulty adjustments

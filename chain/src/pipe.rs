@@ -63,7 +63,7 @@ fn validate_pow_only(header: &BlockHeader, ctx: &mut BlockContext<'_>) -> Result
 	if !header.pow.is_primary() && !header.pow.is_secondary() {
 		return Err(ErrorKind::LowEdgebits.into());
 	}
-	if !(ctx.pow_verifier)(header).is_ok() {
+	if (ctx.pow_verifier)(header).is_err() {
 		error!(
 			"pipe: error validating header with cuckoo edge_bits {}",
 			header.pow.edge_bits(),
@@ -385,7 +385,7 @@ fn validate_block(block: &Block, ctx: &mut BlockContext<'_>) -> Result<(), Error
 	let prev = ctx.batch.get_previous_header(&block.header)?;
 	block
 		.validate(&prev.total_kernel_offset, ctx.verifier_cache.clone())
-		.map_err(|e| ErrorKind::InvalidBlockProof(e))?;
+		.map_err(ErrorKind::InvalidBlockProof)?;
 	Ok(())
 }
 
@@ -489,7 +489,7 @@ pub fn rewind_and_apply_header_fork(
 ) -> Result<(), Error> {
 	let mut fork_hashes = vec![];
 	let mut current = header.clone();
-	while current.height > 0 && !ext.is_on_current_chain(&current, batch).is_ok() {
+	while current.height > 0 && ext.is_on_current_chain(&current, batch).is_err() {
 		fork_hashes.push(current.hash());
 		current = batch.get_previous_header(&current)?;
 	}
@@ -530,9 +530,9 @@ pub fn rewind_and_apply_fork(
 	// Rewind the txhashset extension back to common ancestor based on header MMR.
 	let mut current = batch.head_header()?;
 	while current.height > 0
-		&& !header_extension
+		&& header_extension
 			.is_on_current_chain(&current, batch)
-			.is_ok()
+			.is_err()
 	{
 		current = batch.get_previous_header(&current)?;
 	}
@@ -552,7 +552,7 @@ pub fn rewind_and_apply_fork(
 	for h in fork_hashes {
 		let fb = batch
 			.get_block(&h)
-			.map_err(|e| ErrorKind::StoreErr(e, format!("getting forked blocks")))?;
+			.map_err(|e| ErrorKind::StoreErr(e, "getting forked blocks".to_string()))?;
 
 		// Re-verify coinbase maturity along this fork.
 		verify_coinbase_maturity(&fb, ext, batch)?;

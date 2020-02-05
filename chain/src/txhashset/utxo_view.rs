@@ -136,7 +136,7 @@ impl<'a> UTXOView<'a> {
 
 			// Find the "cutoff" pos in the output MMR based on the
 			// header from 1,000 blocks ago.
-			let cutoff_height = height.checked_sub(global::coinbase_maturity()).unwrap_or(0);
+			let cutoff_height = height.saturating_sub(global::coinbase_maturity());
 			let cutoff_header = self.get_header_by_height(cutoff_height, batch)?;
 			let cutoff_pos = cutoff_header.output_mmr_size;
 
@@ -168,7 +168,7 @@ impl<'a> UTXOView<'a> {
 			let header = batch.get_block_header(&hash)?;
 			Ok(header)
 		} else {
-			Err(ErrorKind::Other(format!("get header by height")).into())
+			Err(ErrorKind::Other("get header by height".to_string()).into())
 		}
 	}
 }

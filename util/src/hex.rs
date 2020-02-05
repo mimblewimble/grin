@@ -40,7 +40,7 @@ pub fn from_hex(hex_str: String) -> Result<Vec<u8>, num::ParseIntError> {
 	let hex_trim = if &hex_str[..2] == "0x" {
 		hex_str[2..].to_owned()
 	} else {
-		hex_str.clone()
+		hex_str
 	};
 	split_n(&hex_trim.trim()[..], 2)
 		.iter()

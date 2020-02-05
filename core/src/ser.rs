@@ -1255,7 +1255,7 @@ where
 			}
 		}
 	}
-	const VARIANTS: &'static [&'static str] = &[
+	const VARIANTS: &'static [&str] = &[
 		"NotFound",
 		"PermissionDenied",
 		"ConnectionRefused",
