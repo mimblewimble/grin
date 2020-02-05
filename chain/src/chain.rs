@@ -90,7 +90,7 @@ impl OrphanBlockPool {
 		{
 			let height_hashes = height_idx
 				.entry(orphan.block.header.height)
-				.or_insert(vec![]);
+				.or_insert_with(|| vec![]);
 			height_hashes.push(orphan.block.hash());
 			orphans.insert(orphan.block.hash(), orphan);
 		}
@@ -125,11 +125,11 @@ impl OrphanBlockPool {
 
 	/// Get an orphan from the pool indexed by the hash of its parent, removing
 	/// it at the same time, preventing clone
-	fn remove_by_height(&self, height: &u64) -> Option<Vec<Orphan>> {
+	fn remove_by_height(&self, height: u64) -> Option<Vec<Orphan>> {
 		let mut orphans = self.orphans.write();
 		let mut height_idx = self.height_idx.write();
 		height_idx
-			.remove(height)
+			.remove(&height)
 			.map(|hs| hs.iter().filter_map(|h| orphans.remove(h)).collect())
 	}
 
@@ -452,7 +452,7 @@ impl Chain {
 			let mut orphan_accepted = false;
 			let mut height_accepted = height;
 
-			if let Some(orphans) = self.orphans.remove_by_height(&height) {
+			if let Some(orphans) = self.orphans.remove_by_height(height) {
 				let orphans_len = orphans.len();
 				for (i, orphan) in orphans.into_iter().enumerate() {
 					debug!(
@@ -1219,7 +1219,7 @@ impl Chain {
 	pub fn try_header_head(&self, timeout: Duration) -> Result<Option<Tip>, Error> {
 		self.header_pmmr
 			.try_read_for(timeout)
-			.map(|ref pmmr| self.read_header_head(pmmr).map(|x| Some(x)))
+			.map(|ref pmmr| self.read_header_head(pmmr).map(Some))
 			.unwrap_or(Ok(None))
 	}
 
@@ -1563,7 +1563,7 @@ fn setup_head(
 			batch.save_block(&genesis)?;
 			batch.save_body_head(&Tip::from_header(&genesis.header))?;
 
-			if genesis.kernels().len() > 0 {
+			if !genesis.kernels().is_empty() {
 				let (utxo_sum, kernel_sum) = (sums, genesis as &dyn Committed).verify_kernel_sums(
 					genesis.header.overage(),
 					genesis.header.total_kernel_offset(),
@@ -1582,7 +1582,7 @@ fn setup_head(
 
 			info!("init: saved genesis: {:?}", genesis.hash());
 		}
-		Err(e) => return Err(ErrorKind::StoreErr(e, "chain init load head".to_owned()))?,
+		Err(e) => return Err(ErrorKind::StoreErr(e, "chain init load head".to_owned()).into()),
 	};
 	batch.commit()?;
 	Ok(())
