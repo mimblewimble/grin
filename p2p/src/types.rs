@@ -333,17 +333,17 @@ bitflags! {
 	#[derive(Serialize, Deserialize)]
 	pub struct Capabilities: u32 {
 		/// We don't know (yet) what the peer can do.
-		const UNKNOWN = 0b00000000;
+		const UNKNOWN = 0b0000_0000;
 		/// Can provide full history of headers back to genesis
 		/// (for at least one arbitrary fork).
-		const HEADER_HIST = 0b00000001;
+		const HEADER_HIST = 0b0000_0001;
 		/// Can provide block headers and the TxHashSet for some recent-enough
 		/// height.
-		const TXHASHSET_HIST = 0b00000010;
+		const TXHASHSET_HIST = 0b0000_0010;
 		/// Can provide a list of healthy peers
-		const PEER_LIST = 0b00000100;
+		const PEER_LIST = 0b0000_0100;
 		/// Can broadcast and request txs by kernel hash.
-		const TX_KERNEL_HASH = 0b00001000;
+		const TX_KERNEL_HASH = 0b0000_1000;
 
 		/// All nodes right now are "full nodes".
 		/// Some nodes internally may maintain longer block histories (archival_mode)
@@ -470,11 +470,11 @@ pub struct PeerInfoDisplay {
 impl From<PeerInfo> for PeerInfoDisplay {
 	fn from(info: PeerInfo) -> PeerInfoDisplay {
 		PeerInfoDisplay {
-			capabilities: info.capabilities.clone(),
+			capabilities: info.capabilities,
 			user_agent: info.user_agent.clone(),
 			version: info.version,
-			addr: info.addr.clone(),
-			direction: info.direction.clone(),
+			addr: info.addr,
+			direction: info.direction,
 			total_difficulty: info.total_difficulty(),
 			height: info.height(),
 		}
