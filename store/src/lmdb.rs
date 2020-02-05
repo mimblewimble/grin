@@ -95,7 +95,7 @@ impl Store {
 			Some(n) => n.to_owned(),
 			None => "lmdb".to_owned(),
 		};
-		let full_path = [root_path.to_owned(), name.clone()].join("/");
+		let full_path = [root_path.to_owned(), name].join("/");
 		fs::create_dir_all(&full_path)
 			.expect("Unable to create directory 'db_root' to store chain_data");
 
