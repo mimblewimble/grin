@@ -70,7 +70,7 @@ pub fn get_output(
 			}
 		}
 	}
-	Err(ErrorKind::NotFound)?
+	Err(ErrorKind::NotFound.into())
 }
 
 /// Retrieves an output from the chain given a commit id (a tiny bit iteratively)
@@ -102,10 +102,11 @@ pub fn get_output_v2(
 		match res {
 			Ok(output_pos) => match chain.get_unspent_output_at(output_pos.position) {
 				Ok(output) => {
-					let mut header = None;
-					if include_merkle_proof && output.is_coinbase() {
-						header = chain.get_header_by_height(output_pos.height).ok();
-					}
+					let header = if include_merkle_proof && output.is_coinbase() {
+						chain.get_header_by_height(output_pos.height).ok()
+					} else {
+						None
+					};
 					match OutputPrintable::from_output(
 						&output,
 						chain.clone(),
@@ -124,7 +125,7 @@ pub fn get_output_v2(
 						}
 					}
 				}
-				Err(_) => return Err(ErrorKind::NotFound)?,
+				Err(_) => return Err(ErrorKind::NotFound.into()),
 			},
 			Err(e) => {
 				trace!(
@@ -136,5 +137,5 @@ pub fn get_output_v2(
 			}
 		}
 	}
-	Err(ErrorKind::NotFound)?
+	Err(ErrorKind::NotFound.into())
 }

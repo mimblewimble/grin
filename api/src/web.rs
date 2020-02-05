@@ -114,7 +114,7 @@ impl From<&str> for QueryParams {
 		let params = form_urlencoded::parse(query_string.as_bytes())
 			.into_owned()
 			.fold(HashMap::new(), |mut hm, (k, v)| {
-				hm.entry(k).or_insert(vec![]).push(v);
+				hm.entry(k).or_insert_with(|| vec![]).push(v);
 				hm
 			});
 		QueryParams { params }
@@ -152,7 +152,7 @@ macro_rules! must_get_query(
 	($req: expr) =>(
 		match $req.uri().query() {
 			Some(q) => q,
-			None => return Err(ErrorKind::RequestError("no query string".to_owned()))?,
+			None => return Err(ErrorKind::RequestError("no query string".to_owned()).into()),
 		}
 	));
 
@@ -163,7 +163,7 @@ macro_rules! parse_param(
 		None => $default,
 		Some(val) =>  match val.parse() {
 			Ok(val) => val,
-			Err(_) => return Err(ErrorKind::RequestError(format!("invalid value of parameter {}", $name)))?,
+			Err(_) => return Err(ErrorKind::RequestError(format!("invalid value of parameter {}", $name)).into()),
 		}
 	}
 	));

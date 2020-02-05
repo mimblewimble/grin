@@ -137,9 +137,7 @@ impl TLSConfig {
 		let keys = pemfile::pkcs8_private_keys(&mut reader)
 			.map_err(|_| ErrorKind::Internal("failed to load private key".to_string()))?;
 		if keys.len() != 1 {
-			return Err(ErrorKind::Internal(
-				"expected a single private key".to_string(),
-			))?;
+			return Err(ErrorKind::Internal("expected a single private key".to_string()).into());
 		}
 		Ok(keys[0].clone())
 	}
@@ -193,7 +191,8 @@ impl ApiServer {
 		if self.shutdown_sender.is_some() {
 			return Err(ErrorKind::Internal(
 				"Can't start HTTP API server, it's running already".to_string(),
-			))?;
+			)
+			.into());
 		}
 		let (tx, _rx) = oneshot::channel::<()>();
 		self.shutdown_sender = Some(tx);
@@ -222,7 +221,8 @@ impl ApiServer {
 		if self.shutdown_sender.is_some() {
 			return Err(ErrorKind::Internal(
 				"Can't start HTTPS API server, it's running already".to_string(),
-			))?;
+			)
+			.into());
 		}
 
 		let tls_conf = conf.build_server_config()?;

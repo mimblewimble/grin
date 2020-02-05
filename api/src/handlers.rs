@@ -191,14 +191,10 @@ impl OwnerAPIHandlerV2 {
 
 impl crate::router::Handler for OwnerAPIHandlerV2 {
 	fn post(&self, req: Request<Body>) -> ResponseFuture {
-		Box::new(
-			self.handle_post_request(req)
-				.and_then(|r| ok(r))
-				.or_else(|e| {
-					error!("Request Error: {:?}", e);
-					ok(create_error_response(e))
-				}),
-		)
+		Box::new(self.handle_post_request(req).and_then(ok).or_else(|e| {
+			error!("Request Error: {:?}", e);
+			ok(create_error_response(e))
+		}))
 	}
 
 	fn options(&self, _req: Request<Body>) -> ResponseFuture {
@@ -260,14 +256,10 @@ impl ForeignAPIHandlerV2 {
 
 impl crate::router::Handler for ForeignAPIHandlerV2 {
 	fn post(&self, req: Request<Body>) -> ResponseFuture {
-		Box::new(
-			self.handle_post_request(req)
-				.and_then(|r| ok(r))
-				.or_else(|e| {
-					error!("Request Error: {:?}", e);
-					ok(create_error_response(e))
-				}),
-		)
+		Box::new(self.handle_post_request(req).and_then(ok).or_else(|e| {
+			error!("Request Error: {:?}", e);
+			ok(create_error_response(e))
+		}))
 	}
 
 	fn options(&self, _req: Request<Body>) -> ResponseFuture {

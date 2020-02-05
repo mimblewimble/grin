@@ -170,7 +170,7 @@ impl OutputHandler {
 				outputs = [&outputs[..], &block_output_batch[..]].concat();
 			}
 		}
-		return Ok(outputs);
+		Ok(outputs)
 	}
 
 	// allows traversal of utxo set
@@ -327,7 +327,7 @@ impl OutputHandler {
 		let mut return_vec = vec![];
 		for i in (start_height..=end_height).rev() {
 			if let Ok(res) = self.outputs_at_height(i, commitments.clone(), include_rp) {
-				if res.outputs.len() > 0 {
+				if !res.outputs.is_empty() {
 					return_vec.push(res);
 				}
 			}
@@ -359,7 +359,7 @@ impl OutputHandler {
 				include_rproof,
 				include_merkle_proof,
 			) {
-				if res.len() > 0 {
+				if !res.is_empty() {
 					return_vec = [&return_vec[..], &res[..]].concat();
 				}
 			}
@@ -394,7 +394,7 @@ impl KernelHandler {
 			.trim_end_matches('/')
 			.rsplit('/')
 			.next()
-			.ok_or(ErrorKind::RequestError("missing excess".into()))?;
+			.ok_or_else(|| ErrorKind::RequestError("missing excess".into()))?;
 		let excess = util::from_hex(excess.to_owned())
 			.map_err(|_| ErrorKind::RequestError("invalid excess hex".into()))?;
 		if excess.len() != 33 {
@@ -447,7 +447,7 @@ impl KernelHandler {
 		min_height: Option<u64>,
 		max_height: Option<u64>,
 	) -> Result<LocatedTxKernel, Error> {
-		let excess = util::from_hex(excess.to_owned())
+		let excess = util::from_hex(excess)
 			.map_err(|_| ErrorKind::RequestError("invalid excess hex".into()))?;
 		if excess.len() != 33 {
 			return Err(ErrorKind::RequestError("invalid excess length".into()).into());

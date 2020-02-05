@@ -34,7 +34,7 @@ pub type ClientResponseFuture<T> = Box<dyn Future<Item = T, Error = Error> + Sen
 /// Helper function to easily issue a HTTP GET request against a given URL that
 /// returns a JSON object. Handles request building, JSON deserialization and
 /// response code checking.
-pub fn get<'a, T>(url: &'a str, api_secret: Option<String>) -> Result<T, Error>
+pub fn get<T>(url: &str, api_secret: Option<String>) -> Result<T, Error>
 where
 	for<'de> T: Deserialize<'de>,
 {
@@ -44,7 +44,7 @@ where
 /// Helper function to easily issue an async HTTP GET request against a given
 /// URL that returns a future. Handles request building, JSON deserialization
 /// and response code checking.
-pub fn get_async<'a, T>(url: &'a str, api_secret: Option<String>) -> ClientResponseFuture<T>
+pub fn get_async<T>(url: &str, api_secret: Option<String>) -> ClientResponseFuture<T>
 where
 	for<'de> T: Deserialize<'de> + Send + 'static,
 {
