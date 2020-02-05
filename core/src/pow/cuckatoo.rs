@@ -52,7 +52,7 @@ where
 	/// Create a new graph with given parameters
 	pub fn new(max_edges: T, max_sols: u32, proof_size: usize) -> Result<Graph<T>, Error> {
 		if to_u64!(max_edges) >= u64::max_value() / 2 {
-			return Err(ErrorKind::Verification(format!("graph is to big to build")))?;
+			return Err(ErrorKind::Verification("graph is to big to build".to_string()).into());
 		}
 		let max_nodes = 2 * to_u64!(max_edges);
 		Ok(Graph {
@@ -88,7 +88,7 @@ where
 	pub fn add_edge(&mut self, u: T, mut v: T) -> Result<(), Error> {
 		let max_nodes_t = to_edge!(T, self.max_nodes);
 		if u >= max_nodes_t || v >= max_nodes_t {
-			return Err(ErrorKind::EdgeAddition)?;
+			return Err(ErrorKind::EdgeAddition.into());
 		}
 		v = v + to_edge!(T, self.max_nodes);
 		let adj_u = self.adj_list[to_usize!(u ^ T::one())];
@@ -101,7 +101,7 @@ where
 		let ulink = self.links.len();
 		let vlink = self.links.len() + 1;
 		if to_edge!(T, vlink) == self.nil {
-			return Err(ErrorKind::EdgeAddition)?;
+			return Err(ErrorKind::EdgeAddition.into());
 		}
 		self.links.push(Link {
 			next: self.adj_list[to_usize!(u)],
@@ -272,7 +272,7 @@ where
 			self.verify_impl(&s)?;
 		}
 		if self.graph.solutions.is_empty() {
-			Err(ErrorKind::NoSolution)?
+			Err(ErrorKind::NoSolution.into())
 		} else {
 			Ok(self.graph.solutions.clone())
 		}
@@ -282,7 +282,7 @@ where
 	/// graph
 	pub fn verify_impl(&self, proof: &Proof) -> Result<(), Error> {
 		if proof.proof_size() != global::proofsize() {
-			return Err(ErrorKind::Verification("wrong cycle length".to_owned()))?;
+			return Err(ErrorKind::Verification("wrong cycle length".to_owned()).into());
 		}
 		let nonces = &proof.nonces;
 		let mut uvs = vec![0u64; 2 * proof.proof_size()];
@@ -291,10 +291,10 @@ where
 
 		for n in 0..proof.proof_size() {
 			if nonces[n] > to_u64!(self.params.edge_mask) {
-				return Err(ErrorKind::Verification("edge too big".to_owned()))?;
+				return Err(ErrorKind::Verification("edge too big".to_owned()).into());
 			}
 			if n > 0 && nonces[n] <= nonces[n - 1] {
-				return Err(ErrorKind::Verification("edges not ascending".to_owned()))?;
+				return Err(ErrorKind::Verification("edges not ascending".to_owned()).into());
 			}
 			uvs[2 * n] = to_u64!(self.sipnode(to_edge!(T, nonces[n]), 0)?);
 			uvs[2 * n + 1] = to_u64!(self.sipnode(to_edge!(T, nonces[n]), 1)?);
@@ -302,9 +302,7 @@ where
 			xor1 ^= uvs[2 * n + 1];
 		}
 		if xor0 | xor1 != 0 {
-			return Err(ErrorKind::Verification(
-				"endpoints don't match up".to_owned(),
-			))?;
+			return Err(ErrorKind::Verification("endpoints don't match up".to_owned()).into());
 		}
 		let mut n = 0;
 		let mut i = 0;
@@ -321,13 +319,13 @@ where
 				if uvs[k] >> 1 == uvs[i] >> 1 {
 					// find other edge endpoint matching one at i
 					if j != i {
-						return Err(ErrorKind::Verification("branch in cycle".to_owned()))?;
+						return Err(ErrorKind::Verification("branch in cycle".to_owned()).into());
 					}
 					j = k;
 				}
 			}
 			if j == i || uvs[j] == uvs[i] {
-				return Err(ErrorKind::Verification("cycle dead ends".to_owned()))?;
+				return Err(ErrorKind::Verification("cycle dead ends".to_owned()).into());
 			}
 			i = j ^ 1;
 			n += 1;
@@ -338,7 +336,7 @@ where
 		if n == self.params.proof_size {
 			Ok(())
 		} else {
-			Err(ErrorKind::Verification("cycle too short".to_owned()))?
+			Err(ErrorKind::Verification("cycle too short".to_owned()).into())
 		}
 	}
 }

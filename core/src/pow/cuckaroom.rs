@@ -69,7 +69,7 @@ where
 	fn verify(&self, proof: &Proof) -> Result<(), Error> {
 		let proofsize = proof.proof_size();
 		if proofsize != global::proofsize() {
-			return Err(ErrorKind::Verification("wrong cycle length".to_owned()))?;
+			return Err(ErrorKind::Verification("wrong cycle length".to_owned()).into());
 		}
 		let nonces = &proof.nonces;
 		let mut from = vec![0u32; proofsize];
@@ -80,10 +80,10 @@ where
 
 		for n in 0..proofsize {
 			if nonces[n] > to_u64!(self.params.edge_mask) {
-				return Err(ErrorKind::Verification("edge too big".to_owned()))?;
+				return Err(ErrorKind::Verification("edge too big".to_owned()).into());
 			}
 			if n > 0 && nonces[n] <= nonces[n - 1] {
-				return Err(ErrorKind::Verification("edges not ascending".to_owned()))?;
+				return Err(ErrorKind::Verification("edges not ascending".to_owned()).into());
 			}
 			let edge = to_edge!(
 				T,
@@ -95,9 +95,7 @@ where
 			xor_to ^= to[n];
 		}
 		if xor_from != xor_to {
-			return Err(ErrorKind::Verification(
-				"endpoints don't match up".to_owned(),
-			))?;
+			return Err(ErrorKind::Verification("endpoints don't match up".to_owned()).into());
 		}
 		let mut visited = vec![false; proofsize];
 		let mut n = 0;
@@ -105,14 +103,14 @@ where
 		loop {
 			// follow cycle
 			if visited[i] {
-				return Err(ErrorKind::Verification("branch in cycle".to_owned()))?;
+				return Err(ErrorKind::Verification("branch in cycle".to_owned()).into());
 			}
 			visited[i] = true;
 			let mut nexti = 0;
 			while from[nexti] != to[i] {
 				nexti += 1;
 				if nexti == proofsize {
-					return Err(ErrorKind::Verification("cycle dead ends".to_owned()))?;
+					return Err(ErrorKind::Verification("cycle dead ends".to_owned()).into());
 				}
 			}
 			i = nexti;
@@ -125,7 +123,7 @@ where
 		if n == proofsize {
 			Ok(())
 		} else {
-			Err(ErrorKind::Verification("cycle too short".to_owned()))?
+			Err(ErrorKind::Verification("cycle too short".to_owned()).into())
 		}
 	}
 }
