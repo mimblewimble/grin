@@ -152,9 +152,7 @@ impl Identifier {
 	pub fn from_serialized_path(len: u8, p: &[u8]) -> Identifier {
 		let mut id = [0; IDENTIFIER_SIZE];
 		id[0] = len;
-		for i in 1..IDENTIFIER_SIZE {
-			id[i] = p[i - 1];
-		}
+		id[1..IDENTIFIER_SIZE].clone_from_slice(&p[0..(IDENTIFIER_SIZE - 1)]);
 		Identifier(id)
 	}
 
@@ -169,9 +167,8 @@ impl Identifier {
 	}
 	pub fn from_bytes(bytes: &[u8]) -> Identifier {
 		let mut identifier = [0; IDENTIFIER_SIZE];
-		for i in 0..min(IDENTIFIER_SIZE, bytes.len()) {
-			identifier[i] = bytes[i];
-		}
+		identifier[..min(IDENTIFIER_SIZE, bytes.len())]
+			.clone_from_slice(&bytes[..min(IDENTIFIER_SIZE, bytes.len())]);
 		Identifier(identifier)
 	}
 
@@ -282,9 +279,8 @@ impl BlindingFactor {
 
 	pub fn from_slice(data: &[u8]) -> BlindingFactor {
 		let mut blind = [0; SECRET_KEY_SIZE];
-		for i in 0..min(SECRET_KEY_SIZE, data.len()) {
-			blind[i] = data[i];
-		}
+		blind[..min(SECRET_KEY_SIZE, data.len())]
+			.clone_from_slice(&data[..min(SECRET_KEY_SIZE, data.len())]);
 		BlindingFactor(blind)
 	}
 
