@@ -289,8 +289,8 @@ where
 		}
 	}
 
-	/// Get the hash from the underlying MMR file
-	/// (ignores the remove log).
+	/// Get the hash from the underlying MMR file, ignoring the leafset.
+	/// Some entries may have been removed from the leafset but not yet pruned from the file.
 	fn get_from_file(&self, pos: u64) -> Option<Hash> {
 		if pos > self.last_pos {
 			None

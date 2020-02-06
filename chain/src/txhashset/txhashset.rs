@@ -273,11 +273,6 @@ impl TxHashSet {
 		Ok(self.commit_index.get_block_header(&hash)?)
 	}
 
-	/// Get all outputs MMR pos
-	pub fn get_all_output_pos(&self) -> Result<Vec<(Commitment, u64)>, Error> {
-		Ok(self.commit_index.get_all_output_pos()?)
-	}
-
 	/// returns outputs from the given pmmr index up to the
 	/// specified limit. Also returns the last index actually populated
 	/// max index is the last PMMR index to consider, not leaf index
@@ -368,42 +363,64 @@ impl TxHashSet {
 		horizon_header: &BlockHeader,
 		batch: &mut Batch<'_>,
 	) -> Result<(), Error> {
-		debug!("txhashset: starting compaction...");
+		debug!("starting compaction...");
 
 		let head_header = batch.head_header()?;
 		let rewind_rm_pos = input_pos_to_rewind(&horizon_header, &head_header, batch)?;
 
-		debug!("txhashset: check_compact output mmr backend...");
+		debug!("check_compact output mmr backend...");
 		self.output_pmmr_h
 			.backend
 			.check_compact(horizon_header.output_mmr_size, &rewind_rm_pos)?;
 
-		debug!("txhashset: check_compact rangeproof mmr backend...");
+		debug!("check_compact rangeproof mmr backend...");
 		self.rproof_pmmr_h
 			.backend
 			.check_compact(horizon_header.output_mmr_size, &rewind_rm_pos)?;
 
-		debug!("txhashset: ... compaction finished");
+		debug!("compacting output_pos index...");
+		self.compact_output_pos_index(batch)?;
 
+		debug!("...compaction finished");
 		Ok(())
 	}
 
-	/// Rebuild the index of block height & MMR positions to the corresponding UTXOs.
-	/// This is a costly operation performed only when we receive a full new chain state.
-	/// Note: only called by compact.
-	pub fn rebuild_height_pos_index(
+	fn compact_output_pos_index(&self, batch: &Batch<'_>) -> Result<usize, Error> {
+		let now = Instant::now();
+		let output_pmmr =
+			ReadonlyPMMR::at(&self.output_pmmr_h.backend, self.output_pmmr_h.last_pos);
+		let last_pos = output_pmmr.unpruned_size();
+
+		let deleted = batch
+			.output_pos_iter()?
+			.filter(|(_, (pos, _))| {
+				// Note we use get_from_file() here as we want to ensure we have an entry
+				// in the index for *every* output still in the file, not just the "unspent"
+				// outputs. This is because we need to support rewind to handle fork/reorg.
+				// Rewind may "unspend" recently spent, but not yet pruned, outputs and the
+				// index must be consistent in this situation.
+				*pos <= last_pos && output_pmmr.get_from_file(*pos).is_none()
+			})
+			.map(|(key, _)| batch.delete(&key))
+			.count();
+		debug!(
+			"compact_output_pos_index: deleted {} entries from the index, took {}s",
+			deleted,
+			now.elapsed().as_secs(),
+		);
+		Ok(deleted)
+	}
+
+	/// Initialize the output_pos index based on current UTXO.
+	/// This is a costly operation and is only run when receiving a new chain state during sync.
+	pub fn init_output_pos_index(
 		&self,
 		header_pmmr: &PMMRHandle<BlockHeader>,
 		batch: &mut Batch<'_>,
 	) -> Result<(), Error> {
 		let now = Instant::now();
-
 		let output_pmmr =
 			ReadonlyPMMR::at(&self.output_pmmr_h.backend, self.output_pmmr_h.last_pos);
-
-		// clear it before rebuilding
-		batch.clear_output_pos_height()?;
-
 		let mut outputs_pos: Vec<(Commitment, u64)> = vec![];
 		for pos in output_pmmr.leaf_pos_iter() {
 			if let Some(out) = output_pmmr.get_data(pos) {
@@ -411,18 +428,7 @@ impl TxHashSet {
 			}
 		}
 		let total_outputs = outputs_pos.len();
-		if total_outputs == 0 {
-			debug!("rebuild_height_pos_index: nothing to be rebuilt");
-			return Ok(());
-		} else {
-			debug!(
-				"rebuild_height_pos_index: rebuilding {} outputs position & height...",
-				total_outputs
-			);
-		}
-
 		let max_height = batch.head()?.height;
-
 		let mut i = 0;
 		for search_height in 0..max_height {
 			let hash = header_pmmr.get_header_hash_by_height(search_height + 1)?;
@@ -434,13 +440,12 @@ impl TxHashSet {
 					break;
 				}
 				batch.save_output_pos_height(&commit, pos, h.height)?;
-				trace!("rebuild_height_pos_index: {:?}", (commit, pos, h.height));
 				i += 1;
 			}
 		}
 
 		debug!(
-			"rebuild_height_pos_index: {} UTXOs, took {}s",
+			"init_output_pos_idx: {} UTXO index entries, took {}s",
 			total_outputs,
 			now.elapsed().as_secs(),
 		);
