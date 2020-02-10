@@ -1082,8 +1082,11 @@ impl Chain {
 		// current "head" and "tail" height to our cut-through horizon and
 		// allowing an additional 60 blocks in height before allowing a further compaction.
 		if let (Ok(tail), Ok(head)) = (self.tail(), self.head()) {
-			let horizon = global::cut_through_horizon() as u64;
-			let threshold = horizon.saturating_add(60);
+			let threshold = if global::is_production_mode() {
+				global::cut_through_horizon().saturating_add(60)
+			} else {
+				global::cut_through_horizon()
+			};
 			let next_compact = tail.height.saturating_add(threshold);
 			if next_compact > head.height {
 				debug!(
@@ -1099,6 +1102,11 @@ impl Chain {
 		let mut txhashset = self.txhashset.write();
 		let batch = self.store.batch()?;
 
+		// Remove historical blocks from the db unless we are running in archive mode.
+		if !self.archive_mode {
+			self.remove_historical_blocks(&header_pmmr, &mut batch)?;
+		}
+
 		// Compact the txhashset itself (rewriting the pruned backend files).
 		{
 			let head_header = batch.head_header()?;
@@ -1109,11 +1117,6 @@ impl Chain {
 			let horizon_header = batch.get_block_header(&horizon_hash)?;
 
 			txhashset.compact(&horizon_header, &batch)?;
-		}
-
-		// If we are not in archival mode remove historical blocks from the db.
-		if !self.archive_mode {
-			self.remove_historical_blocks(&header_pmmr, &batch)?;
 		}
 
 		// Make sure our output_pos index is consistent with the UTXO set.
@@ -1143,6 +1146,12 @@ impl Chain {
 	/// Return Commit's MMR position
 	pub fn get_output_pos(&self, commit: &Commitment) -> Result<u64, Error> {
 		Ok(self.txhashset.read().get_output_pos(commit)?)
+	}
+
+	/// Get the position of the kernel if it exists in the kernel_pos index.
+	/// The index is limited to 7 days of recent kernels.
+	pub fn get_kernel_pos(&self, excess: Commitment) -> Result<u64, Error> {
+		Ok(self.txhashset.read().get_kernel_pos(excess)?)
 	}
 
 	/// outputs by insertion index

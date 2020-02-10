@@ -346,6 +346,16 @@ impl TxHashSet {
 		Ok(self.commit_index.get_output_pos(&commit)?)
 	}
 
+	/// Get the position of the kernel if it exists in the kernel_pos index.
+	/// The index is limited to 7 days of recent kernels.
+	pub fn get_kernel_pos(&self, excess: Commitment) -> Result<u64, Error> {
+		let pos = self
+			.commit_index
+			.get_kernel_pos_height(&excess)
+			.map(|(pos, _)| pos)?;
+		Ok(pos)
+	}
+
 	/// build a new merkle proof for the given position.
 	pub fn merkle_proof(&mut self, commit: Commitment) -> Result<MerkleProof, Error> {
 		let pos = self.commit_index.get_output_pos(&commit)?;

@@ -131,6 +131,15 @@ impl ChainStore {
 			.get_ser(&to_key(OUTPUT_POS_PREFIX, &mut commit.as_ref().to_vec()))
 	}
 
+	/// Get kernel_pos and block height from index.
+	pub fn get_kernel_pos_height(&self, excess: &Commitment) -> Result<(u64, u64), Error> {
+		option_to_not_found(
+			self.db
+				.get_ser(&to_key(KERNEL_POS_PREFIX, &mut excess.as_ref().to_vec())),
+			|| format!("Kernel pos for excess commit: {:?}", excess),
+		)
+	}
+
 	/// Builds a new batch to be used with this store.
 	pub fn batch(&self) -> Result<Batch<'_>, Error> {
 		Ok(Batch {

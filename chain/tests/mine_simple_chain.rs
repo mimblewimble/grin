@@ -732,12 +732,42 @@ fn spend_in_fork_and_compact() {
 		}
 
 		chain.validate(false).unwrap();
-		if let Err(e) = chain.compact() {
-			panic!("Error compacting chain: {:?}", e);
+
+		{
+			let head = chain.head().unwrap();
+			let header_at_horizon = chain
+				.get_header_by_height(
+					head.height
+						.saturating_sub(global::cut_through_horizon() as u64),
+				)
+				.unwrap();
+			let block_at_horizon = chain.get_block(&header_at_horizon.hash()).unwrap();
+			let block_pre_horizon = chain.get_block(&header_at_horizon.prev_hash).unwrap();
+
+			// Chain compaction will remove all blocks earlier than the horizon.
+			chain.compact().expect("chain compaction error");
+
+			// Check the full block at the horizon is in the db but the previous block
+			// has been removed from the db as expected.
+			chain
+				.get_block(&block_at_horizon.hash())
+				.expect("block at horizon in db");
+			chain
+				.get_block(&block_pre_horizon.hash())
+				.expect_err("block pre horizon not in db");
+
+			// Check the kernels for the block still in the db are in the kernel_pos index.
+			let kernel = block_at_horizon.kernels().first().unwrap();
+			chain.get_kernel_pos(kernel.excess).unwrap();
+
+			// Check the kernels for the removed block are no longer in the kernel_pos index.
+			let kernel = block_pre_horizon.kernels().first().unwrap();
+			chain
+				.get_kernel_pos(kernel.excess)
+				.expect_err("kernel_pos should be compacted");
 		}
-		if let Err(e) = chain.validate(false) {
-			panic!("Validation error after compacting chain: {:?}", e);
-		}
+
+		chain.validate(false).expect("chain validation error");
 	}
 	// Cleanup chain directory
 	clean_output_dir(".grin6");
