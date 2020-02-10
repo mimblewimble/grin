@@ -376,6 +376,12 @@ impl TxHashSet {
 			.backend
 			.check_compact(horizon_header.output_mmr_size, &rewind_rm_pos)?;
 
+		// TODO - Does this actually belong here?
+		// Note: We have not yet updated chain "tail" (updated when we remove old blocks from db).
+		// So technically we leave too many entries in the kernel_pos index?
+		debug!("txhashset: compact kernel_pos index...");
+		self.compact_kernel_pos_index(batch)?;
+
 		debug!("txhashset: ... compaction finished");
 
 		Ok(())
@@ -461,6 +467,23 @@ impl TxHashSet {
 		debug!(
 			"init_height_pos_index: added entries for {} utxos, took {}s",
 			total_outputs,
+			now.elapsed().as_secs(),
+		);
+		Ok(())
+	}
+
+	// TODO - Does this belong here?
+	fn compact_kernel_pos_index(&self, batch: &Batch<'_>) -> Result<(), Error> {
+		let now = Instant::now();
+		let tail = batch.tail()?;
+		let deleted = batch
+			.kernel_pos_iter()?
+			.filter(|(_, (_, height))| *height < tail.height)
+			.map(|(key, _)| batch.delete(&key))
+			.count();
+		debug!(
+			"compact_kernel_pos_index: deleted {} entries from the index, took {}s",
+			deleted,
 			now.elapsed().as_secs(),
 		);
 		Ok(())
@@ -958,7 +981,8 @@ impl<'a> Extension<'a> {
 		batch.save_spent_index(&b.hash(), &spent)?;
 
 		for kernel in b.kernels() {
-			self.apply_kernel(kernel)?;
+			let pos = self.apply_kernel(kernel)?;
+			batch.save_kernel_pos_height(&kernel.excess(), pos, b.header.height)?;
 		}
 
 		// Update our BitmapAccumulator based on affected outputs (both spent and created).
@@ -1055,11 +1079,12 @@ impl<'a> Extension<'a> {
 	}
 
 	/// Push kernel onto MMR (hash and data files).
-	fn apply_kernel(&mut self, kernel: &TxKernel) -> Result<(), Error> {
-		self.kernel_pmmr
+	fn apply_kernel(&mut self, kernel: &TxKernel) -> Result<u64, Error> {
+		let pos = self
+			.kernel_pmmr
 			.push(kernel)
-			.map_err(&ErrorKind::TxHashSetErr)?;
-		Ok(())
+			.map_err(ErrorKind::TxHashSetErr)?;
+		Ok(pos)
 	}
 
 	/// Build a Merkle proof for the given output and the block

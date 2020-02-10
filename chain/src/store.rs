@@ -34,6 +34,7 @@ const BLOCK_PREFIX: u8 = b'b';
 const HEAD_PREFIX: u8 = b'H';
 const TAIL_PREFIX: u8 = b'T';
 const OUTPUT_POS_PREFIX: u8 = b'p';
+const KERNEL_POS_PREFIX: u8 = b'k';
 const BLOCK_INPUT_BITMAP_PREFIX: u8 = b'B';
 const BLOCK_SUMS_PREFIX: u8 = b'M';
 const BLOCK_SPENT_PREFIX: u8 = b'S';
@@ -273,6 +274,34 @@ impl<'a> Batch<'a> {
 	pub fn output_pos_iter(&self) -> Result<SerIterator<(u64, u64)>, Error> {
 		let key = to_key(OUTPUT_POS_PREFIX, &mut "".to_string().into_bytes());
 		self.db.iter(&key)
+	}
+
+	/// Save kernel_pos and block height to index.
+	pub fn save_kernel_pos_height(
+		&self,
+		excess: &Commitment,
+		pos: u64,
+		height: u64,
+	) -> Result<(), Error> {
+		self.db.put_ser(
+			&to_key(KERNEL_POS_PREFIX, &mut excess.as_ref().to_vec())[..],
+			&(pos, height),
+		)
+	}
+
+	/// Iterator over the kernel_pos index.
+	pub fn kernel_pos_iter(&self) -> Result<SerIterator<(u64, u64)>, Error> {
+		let key = to_key(KERNEL_POS_PREFIX, &mut "".to_string().into_bytes());
+		self.db.iter(&key)
+	}
+
+	/// Get kernel_pos and block height from index.
+	pub fn get_kernel_pos_height(&self, excess: &Commitment) -> Result<(u64, u64), Error> {
+		option_to_not_found(
+			self.db
+				.get_ser(&to_key(KERNEL_POS_PREFIX, &mut excess.as_ref().to_vec())),
+			|| format!("Kernel pos for excess commit: {:?}", excess),
+		)
 	}
 
 	/// Get output_pos from index.
