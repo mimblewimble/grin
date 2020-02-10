@@ -1109,9 +1109,6 @@ impl Chain {
 			txhashset.compact(&horizon_header, &mut batch)?;
 		}
 
-		// Rebuild our output_pos index in the db based on current UTXO set.
-		txhashset.rebuild_height_pos_index(&header_pmmr, &mut batch)?;
-
 		// If we are not in archival mode remove historical blocks from the db.
 		if !self.archive_mode {
 			self.remove_historical_blocks(&header_pmmr, &mut batch)?;

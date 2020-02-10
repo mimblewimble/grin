@@ -229,6 +229,11 @@ impl<'a> Batch<'a> {
 		Ok(())
 	}
 
+	/// Low level function to delete directly by raw key.
+	pub fn delete(&self, key: &[u8]) -> Result<(), Error> {
+		self.db.delete(key)
+	}
+
 	/// Delete a full block. Does not delete any record associated with a block
 	/// header.
 	pub fn delete_block(&self, bh: &Hash) -> Result<(), Error> {
@@ -267,6 +272,12 @@ impl<'a> Batch<'a> {
 			&to_key(COMMIT_POS_HGT_PREFIX, &mut commit.as_ref().to_vec())[..],
 			&(pos, height),
 		)
+	}
+
+	/// Iterator over the output_pos index.
+	pub fn output_pos_iter(&self) -> Result<SerIterator<(u64, u64)>, Error> {
+		let key = to_key(COMMIT_POS_HGT_PREFIX, &mut "".to_string().into_bytes());
+		self.db.iter(&key)
 	}
 
 	/// Get output_pos from index.

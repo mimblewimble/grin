@@ -86,6 +86,16 @@ where
 		}
 	}
 
+	/// Get the hash from the underlying MMR file, ignoring the leafset.
+	/// Some entries may have been removed from the leafset but not yet pruned from the file.
+	pub fn get_from_file(&self, pos: u64) -> Option<Hash> {
+		if pos > self.last_pos {
+			None
+		} else {
+			self.backend.get_from_file(pos)
+		}
+	}
+
 	/// Iterator over current (unpruned, unremoved) leaf positions.
 	pub fn leaf_pos_iter(&self) -> impl Iterator<Item = u64> + '_ {
 		self.backend.leaf_pos_iter()
