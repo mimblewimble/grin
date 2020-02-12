@@ -980,8 +980,11 @@ impl Chain {
 			batch.save_body_tail(&tip)?;
 		}
 
-		// Rebuild our output_pos index in the db based on fresh UTXO set.
+		// Initialize output_pos index in the db based on current UTXO set.
 		txhashset.init_output_pos_index(&header_pmmr, &batch)?;
+
+		// Initialize the kernel_pos index for recent kernel history.
+		txhashset.init_kernel_pos_index(&header_pmmr, &batch)?;
 
 		// Commit all the changes to the db.
 		batch.commit()?;

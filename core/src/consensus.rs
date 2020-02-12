@@ -93,6 +93,11 @@ pub const BASE_EDGE_BITS: u8 = 24;
 /// easier to reason about.
 pub const CUT_THROUGH_HORIZON: u32 = WEEK_HEIGHT as u32;
 
+/// A relative kernel lock is only applicable within a limited number of recent blocks.
+/// This is consensus critical as the lock condition will be met once this number of blocks
+/// has been exceeded and the referenced kernel "ages out".
+pub const KERNEL_RELATIVE_HEIGHT_LIMIT: u32 = WEEK_HEIGHT as u32;
+
 /// Default number of blocks in the past to determine the height where we request
 /// a txhashset (and full blocks from). Needs to be long enough to not overlap with
 /// a long reorg.

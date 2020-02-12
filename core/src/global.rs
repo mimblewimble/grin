@@ -19,8 +19,8 @@
 use crate::consensus::{
 	graph_weight, valid_header_version, HeaderInfo, BASE_EDGE_BITS, BLOCK_TIME_SEC,
 	COINBASE_MATURITY, CUT_THROUGH_HORIZON, DAY_HEIGHT, DEFAULT_MIN_EDGE_BITS,
-	DIFFICULTY_ADJUST_WINDOW, INITIAL_DIFFICULTY, MAX_BLOCK_WEIGHT, PROOFSIZE,
-	SECOND_POW_EDGE_BITS, STATE_SYNC_THRESHOLD,
+	DIFFICULTY_ADJUST_WINDOW, INITIAL_DIFFICULTY, KERNEL_RELATIVE_HEIGHT_LIMIT, MAX_BLOCK_WEIGHT,
+	PROOFSIZE, SECOND_POW_EDGE_BITS, STATE_SYNC_THRESHOLD,
 };
 use crate::core::block::HeaderVersion;
 use crate::pow::{
@@ -66,6 +66,12 @@ pub const AUTOMATED_TESTING_CUT_THROUGH_HORIZON: u32 = 20;
 
 /// Testing cut through horizon in blocks
 pub const USER_TESTING_CUT_THROUGH_HORIZON: u32 = 70;
+
+/// Kernel index horizon for automated tests
+pub const AUTOMATED_TESTING_KERNEL_INDEX_HORIZON: u32 = 25;
+
+/// Kernel index horizon for user testing
+pub const USER_TESTING_KERNEL_INDEX_HORIZON: u32 = 2 * USER_TESTING_CUT_THROUGH_HORIZON;
 
 /// Testing state sync threshold in blocks
 pub const TESTING_STATE_SYNC_THRESHOLD: u32 = 20;
@@ -280,6 +286,17 @@ pub fn cut_through_horizon() -> u32 {
 		ChainTypes::AutomatedTesting => AUTOMATED_TESTING_CUT_THROUGH_HORIZON,
 		ChainTypes::UserTesting => USER_TESTING_CUT_THROUGH_HORIZON,
 		_ => CUT_THROUGH_HORIZON,
+	}
+}
+
+/// We maintain an index of "recent" kernels back to this horizon.
+/// This must be sufficient for validating an NSKR lock under rewind scenario.
+pub fn kernel_index_horizon() -> u32 {
+	let param_ref = CHAIN_TYPE.read();
+	match *param_ref {
+		ChainTypes::AutomatedTesting => AUTOMATED_TESTING_KERNEL_INDEX_HORIZON,
+		ChainTypes::UserTesting => USER_TESTING_KERNEL_INDEX_HORIZON,
+		_ => KERNEL_RELATIVE_HEIGHT_LIMIT + CUT_THROUGH_HORIZON,
 	}
 }
 

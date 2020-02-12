@@ -20,6 +20,7 @@ use crate::core::core::hash::{Hash, Hashed};
 use crate::core::core::merkle_proof::MerkleProof;
 use crate::core::core::pmmr::{self, Backend, ReadonlyPMMR, RewindablePMMR, PMMR};
 use crate::core::core::{Block, BlockHeader, Input, Output, OutputIdentifier, TxKernel};
+use crate::core::global;
 use crate::core::ser::{PMMRable, ProtocolVersion};
 use crate::error::{Error, ErrorKind};
 use crate::store::{Batch, ChainStore};
@@ -482,13 +483,54 @@ impl TxHashSet {
 		Ok(())
 	}
 
-	// TODO - Does this belong here?
+	pub fn init_kernel_pos_index(
+		&self,
+		header_pmmr: &PMMRHandle<BlockHeader>,
+		batch: &Batch<'_>,
+	) -> Result<(), Error> {
+		let now = Instant::now();
+		let head_header = batch.head_header()?;
+		let cutoff_height = head_header
+			.height
+			.saturating_sub(global::kernel_index_horizon().into());
+		let cutoff_hash = header_pmmr.get_header_hash_by_height(cutoff_height)?;
+		let cutoff_header = batch.get_block_header(&cutoff_hash)?;
+		let cutoff_pos = if cutoff_header.height == 0 {
+			1
+		} else {
+			batch.get_previous_header(&cutoff_header)?.kernel_mmr_size + 1
+		};
+		let mut kernel_count = 0;
+		let mut current_header = cutoff_header;
+		for pos in cutoff_pos..=self.kernel_pmmr_h.last_pos {
+			while pos > current_header.kernel_mmr_size {
+				let next_hash = header_pmmr.get_header_hash_by_height(current_header.height + 1)?;
+				current_header = batch.get_block_header(&next_hash)?;
+			}
+			if pmmr::is_leaf(pos) {
+				if let Some(kernel) = self.kernel_pmmr_h.backend.get_data(pos) {
+					batch.save_kernel_pos_height(&kernel.excess, pos, current_header.height)?;
+					kernel_count += 1;
+				}
+			}
+		}
+		debug!(
+			"init_kernel_pos_index: {} kernels, took {}s",
+			kernel_count,
+			now.elapsed().as_secs()
+		);
+		Ok(())
+	}
+
 	fn compact_kernel_pos_index(&self, batch: &Batch<'_>) -> Result<(), Error> {
 		let now = Instant::now();
-		let tail = batch.tail()?;
+		let head_header = batch.head_header()?;
+		let cutoff_height = head_header
+			.height
+			.saturating_sub(global::kernel_index_horizon().into());
 		let deleted = batch
 			.kernel_pos_iter()?
-			.filter(|(_, (_, height))| *height < tail.height)
+			.filter(|(_, (_, height))| *height < cutoff_height)
 			.map(|(key, _)| batch.delete(&key))
 			.count();
 		debug!(
