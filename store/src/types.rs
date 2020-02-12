@@ -155,7 +155,7 @@ where
 	/// Write the file out to disk, pruning removed elements.
 	pub fn save_prune(&mut self, prune_pos: &[u64]) -> io::Result<()> {
 		// Need to convert from 1-index to 0-index (don't ask).
-		let prune_idx: Vec<_> = prune_pos.into_iter().map(|x| x - 1).collect();
+		let prune_idx: Vec<_> = prune_pos.iter().map(|x| x - 1).collect();
 		self.file.save_prune(prune_idx.as_slice())
 	}
 }

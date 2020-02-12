@@ -231,15 +231,15 @@ impl ChildNumber {
 	/// Returns `true` if the child number is a [`Normal`] value.
 	///
 	/// [`Normal`]: #variant.Normal
-	pub fn is_normal(&self) -> bool {
+	pub fn is_normal(self) -> bool {
 		!self.is_hardened()
 	}
 
 	/// Returns `true` if the child number is a [`Hardened`] value.
 	///
 	/// [`Hardened`]: #variant.Hardened
-	pub fn is_hardened(&self) -> bool {
-		match *self {
+	pub fn is_hardened(self) -> bool {
+		match self {
 			ChildNumber::Hardened { .. } => true,
 			ChildNumber::Normal { .. } => false,
 		}
@@ -544,7 +544,7 @@ impl ExtendedPubKey {
 		H: BIP32Hasher,
 	{
 		let (sk, chain_code) = self.ckd_pub_tweak(secp, hasher, i)?;
-		let mut pk = self.public_key.clone();
+		let mut pk = self.public_key;
 		pk.add_exp_assign(secp, &sk).map_err(Error::Ecdsa)?;
 
 		Ok(ExtendedPubKey {

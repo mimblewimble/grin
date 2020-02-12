@@ -28,13 +28,13 @@ bitflags! {
 /// Options for block validation
 	pub struct Options: u32 {
 		/// No flags
-		const NONE = 0b00000000;
+		const NONE = 0b0000_0000;
 		/// Runs without checking the Proof of Work, mostly to make testing easier.
-		const SKIP_POW = 0b00000001;
+		const SKIP_POW = 0b0000_0001;
 		/// Adds block while in syncing mode.
-		const SYNC = 0b00000010;
+		const SYNC = 0b0000_0010;
 		/// Block validation on a block we mined ourselves
-		const MINE = 0b00000100;
+		const MINE = 0b0000_0100;
 	}
 }
 
@@ -212,11 +212,10 @@ impl TxHashSetRoots {
 			self.output_roots.merged_root(header),
 		);
 
-		if header.output_root != self.output_root(header) {
-			Err(ErrorKind::InvalidRoot.into())
-		} else if header.range_proof_root != self.rproof_root {
-			Err(ErrorKind::InvalidRoot.into())
-		} else if header.kernel_root != self.kernel_root {
+		if header.output_root != self.output_root(header)
+			|| header.range_proof_root != self.rproof_root
+			|| header.kernel_root != self.kernel_root
+		{
 			Err(ErrorKind::InvalidRoot.into())
 		} else {
 			Ok(())

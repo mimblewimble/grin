@@ -340,7 +340,7 @@ fn send_panic_to_log() {
 			None => error!("thread '{}' panicked at '{}'{:?}", thread, msg, backtrace),
 		}
 		//also print to stderr
-		let tui_running = TUI_RUNNING.lock().clone();
+		let tui_running = *TUI_RUNNING.lock();
 		if !tui_running {
 			let config = LOGGING_CONFIG.lock();
 

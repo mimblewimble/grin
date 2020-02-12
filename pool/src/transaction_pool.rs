@@ -192,19 +192,12 @@ impl TransactionPool {
 		let bucket_transactions = self.txpool.bucket_transactions(Weighting::NoLimit);
 
 		// Get last transaction and remove it
-		match bucket_transactions.last() {
-			Some(evictable_transaction) => {
-				// Remove transaction
-				self.txpool.entries = self
-					.txpool
-					.entries
-					.iter()
-					.filter(|x| x.tx != *evictable_transaction)
-					.map(|x| x.clone())
-					.collect::<Vec<_>>();
-			}
-			None => (),
-		}
+		if let Some(evictable_transaction) = bucket_transactions.last() {
+			// Remove transaction
+			self.txpool
+				.entries
+				.retain(|x| x.tx != *evictable_transaction);
+		};
 	}
 
 	// Old txs will "age out" after 30 mins.
@@ -277,9 +270,9 @@ impl TransactionPool {
 		}
 
 		// Check that the stempool can accept this transaction
-		if stem && self.stempool.size() > self.config.max_stempool_size {
-			return Err(PoolError::OverCapacity);
-		} else if self.total_size() > self.config.max_pool_size {
+		if stem && self.stempool.size() > self.config.max_stempool_size
+			|| self.total_size() > self.config.max_pool_size
+		{
 			return Err(PoolError::OverCapacity);
 		}
 

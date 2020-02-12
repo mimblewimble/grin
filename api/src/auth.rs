@@ -128,7 +128,7 @@ impl Handler for BasicAuthURIMiddleware {
 				unauthorized_response(&self.basic_realm)
 			}
 		} else {
-			return next_handler.call(req, handlers);
+			next_handler.call(req, handlers)
 		}
 	}
 }

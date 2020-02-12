@@ -84,10 +84,10 @@ impl PoolHandler {
 			.blockchain
 			.chain_head()
 			.context(ErrorKind::Internal("Failed to get chain head".to_owned()))?;
-		let res = tx_pool
+		tx_pool
 			.add_to_pool(source, tx, !fluff.unwrap_or(false), &header)
 			.context(ErrorKind::Internal("Failed to update pool".to_owned()))?;
-		Ok(res)
+		Ok(())
 	}
 }
 /// Dummy wrapper for the hex-encoded serialized transaction.
@@ -141,10 +141,10 @@ impl PoolPushHandler {
 						.blockchain
 						.chain_head()
 						.context(ErrorKind::Internal("Failed to get chain head".to_owned()))?;
-					let res = tx_pool
+					tx_pool
 						.add_to_pool(source, tx, !fluff, &header)
 						.context(ErrorKind::Internal("Failed to update pool".to_owned()))?;
-					Ok(res)
+					Ok(())
 				}),
 		)
 	}

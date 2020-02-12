@@ -114,7 +114,7 @@ impl<'a> UTXOView<'a> {
 	/// that have not sufficiently matured.
 	pub fn verify_coinbase_maturity(
 		&self,
-		inputs: &Vec<Input>,
+		inputs: &[Input],
 		height: u64,
 		batch: &Batch<'_>,
 	) -> Result<(), Error> {

@@ -70,16 +70,16 @@ pub trait Handler {
 		req: Request<Body>,
 		mut _handlers: Box<dyn Iterator<Item = HandlerObj>>,
 	) -> ResponseFuture {
-		match req.method() {
-			&Method::GET => self.get(req),
-			&Method::POST => self.post(req),
-			&Method::PUT => self.put(req),
-			&Method::DELETE => self.delete(req),
-			&Method::PATCH => self.patch(req),
-			&Method::OPTIONS => self.options(req),
-			&Method::CONNECT => self.connect(req),
-			&Method::TRACE => self.trace(req),
-			&Method::HEAD => self.head(req),
+		match *req.method() {
+			Method::GET => self.get(req),
+			Method::POST => self.post(req),
+			Method::PUT => self.put(req),
+			Method::DELETE => self.delete(req),
+			Method::PATCH => self.patch(req),
+			Method::OPTIONS => self.options(req),
+			Method::CONNECT => self.connect(req),
+			Method::TRACE => self.trace(req),
+			Method::HEAD => self.head(req),
 			_ => not_found(),
 		}
 	}

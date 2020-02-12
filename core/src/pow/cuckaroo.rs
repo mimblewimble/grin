@@ -70,7 +70,7 @@ where
 
 	fn verify(&self, proof: &Proof) -> Result<(), Error> {
 		if proof.proof_size() != global::proofsize() {
-			return Err(ErrorKind::Verification("wrong cycle length".to_owned()))?;
+			return Err(ErrorKind::Verification("wrong cycle length".to_owned()).into());
 		}
 		let nonces = &proof.nonces;
 		let mut uvs = vec![0u64; 2 * proof.proof_size()];
@@ -79,10 +79,10 @@ where
 
 		for n in 0..proof.proof_size() {
 			if nonces[n] > to_u64!(self.params.edge_mask) {
-				return Err(ErrorKind::Verification("edge too big".to_owned()))?;
+				return Err(ErrorKind::Verification("edge too big".to_owned()).into());
 			}
 			if n > 0 && nonces[n] <= nonces[n - 1] {
-				return Err(ErrorKind::Verification("edges not ascending".to_owned()))?;
+				return Err(ErrorKind::Verification("edges not ascending".to_owned()).into());
 			}
 			// 21 is standard siphash rotation constant
 			let edge = to_edge!(
@@ -95,9 +95,7 @@ where
 			xor1 ^= uvs[2 * n + 1];
 		}
 		if xor0 | xor1 != 0 {
-			return Err(ErrorKind::Verification(
-				"endpoints don't match up".to_owned(),
-			))?;
+			return Err(ErrorKind::Verification("endpoints don't match up".to_owned()).into());
 		}
 		let mut n = 0;
 		let mut i = 0;
@@ -114,13 +112,13 @@ where
 				if uvs[k] == uvs[i] {
 					// find other edge endpoint matching one at i
 					if j != i {
-						return Err(ErrorKind::Verification("branch in cycle".to_owned()))?;
+						return Err(ErrorKind::Verification("branch in cycle".to_owned()).into());
 					}
 					j = k;
 				}
 			}
 			if j == i {
-				return Err(ErrorKind::Verification("cycle dead ends".to_owned()))?;
+				return Err(ErrorKind::Verification("cycle dead ends".to_owned()).into());
 			}
 			i = j ^ 1;
 			n += 1;
@@ -131,7 +129,7 @@ where
 		if n == self.params.proof_size {
 			Ok(())
 		} else {
-			Err(ErrorKind::Verification("cycle too short".to_owned()))?
+			Err(ErrorKind::Verification("cycle too short".to_owned()).into())
 		}
 	}
 }

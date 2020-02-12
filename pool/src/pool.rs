@@ -108,7 +108,7 @@ impl Pool {
 		(
 			txs,
 			kern_ids
-				.into_iter()
+				.iter()
 				.filter(|id| !found_ids.contains(id))
 				.cloned()
 				.collect(),
@@ -412,7 +412,7 @@ impl Pool {
 		let mut found_txs = vec![];
 
 		// Gather all the kernels of the multi-kernel transaction in one set
-		let kernel_set = kernels.into_iter().collect::<HashSet<_>>();
+		let kernel_set = kernels.iter().collect::<HashSet<_>>();
 
 		// Check each transaction in the pool
 		for entry in &self.entries {
@@ -468,7 +468,7 @@ impl Bucket {
 	fn new(tx: Transaction, age_idx: usize) -> Bucket {
 		Bucket {
 			fee_to_weight: tx.fee_to_weight(),
-			raw_txs: vec![tx.clone()],
+			raw_txs: vec![tx],
 			age_idx,
 		}
 	}

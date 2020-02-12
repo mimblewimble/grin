@@ -195,9 +195,7 @@ where
 		let mut msg = [0; 20];
 		msg[2] = switch as u8;
 		let id_bytes = id.to_bytes();
-		for i in 0..17 {
-			msg[i + 3] = id_bytes[i];
-		}
+		msg[3..20].clone_from_slice(&id_bytes[..17]);
 		Ok(ProofMessage::from_bytes(&msg))
 	}
 
@@ -307,9 +305,7 @@ where
 	) -> Result<ProofMessage, Error> {
 		let mut msg = [0; 20];
 		let id_ser = id.serialize_path();
-		for i in 0..16 {
-			msg[i + 4] = id_ser[i];
-		}
+		msg[4..20].clone_from_slice(&id_ser[..16]);
 		Ok(ProofMessage::from_bytes(&msg))
 	}
 

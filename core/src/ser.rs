@@ -292,7 +292,7 @@ impl ProtocolVersion {
 	pub const MAX: u32 = std::u32::MAX;
 
 	/// Protocol version as u32 to allow for convenient exhaustive matching on values.
-	pub fn value(&self) -> u32 {
+	pub fn value(self) -> u32 {
 		self.0
 	}
 
@@ -608,7 +608,7 @@ impl PMMRable for RangeProof {
 	type E = Self;
 
 	fn as_elmt(&self) -> Self::E {
-		self.clone()
+		*self
 	}
 
 	// Size is length prefix (8 bytes for u64) + MAX_PROOF_SIZE.
@@ -1255,7 +1255,7 @@ where
 			}
 		}
 	}
-	const VARIANTS: &'static [&str] = &[
+	const VARIANTS: &[&str] = &[
 		"NotFound",
 		"PermissionDenied",
 		"ConnectionRefused",

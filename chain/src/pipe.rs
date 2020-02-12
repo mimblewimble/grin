@@ -291,9 +291,7 @@ fn check_known_store(header: &BlockHeader, ctx: &mut BlockContext<'_>) -> Result
 			// Not yet processed this block, we can proceed.
 			Ok(())
 		}
-		Err(e) => {
-			return Err(ErrorKind::StoreErr(e, "pipe get this block".to_owned()).into());
-		}
+		Err(e) => Err(ErrorKind::StoreErr(e, "pipe get this block".to_owned()).into()),
 	}
 }
 
@@ -504,7 +502,7 @@ pub fn rewind_and_apply_header_fork(
 	for h in fork_hashes {
 		let header = batch
 			.get_block_header(&h)
-			.map_err(|e| ErrorKind::StoreErr(e, format!("getting forked headers")))?;
+			.map_err(|e| ErrorKind::StoreErr(e, "getting forked headers".to_string()))?;
 		ext.validate_root(&header)?;
 		ext.apply_header(&header)?;
 	}

@@ -54,7 +54,7 @@ impl Handler for KernelDownloadHandler {
 		} else {
 			response(
 				StatusCode::INTERNAL_SERVER_ERROR,
-				format!("requesting kernel data from peer failed (no peers)"),
+				"requesting kernel data from peer failed (no peers)".to_string(),
 			)
 		}
 	}
