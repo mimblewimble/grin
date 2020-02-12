@@ -629,7 +629,7 @@ impl TransactionBody {
 	/// inputs, if any, are kept intact.
 	/// Sort order is maintained.
 	pub fn with_input(mut self, input: Input) -> TransactionBody {
-		if let Some(e) = self.inputs.binary_search(&input).err() {
+		if let Err(e) = self.inputs.binary_search(&input) {
 			self.inputs.insert(e, input)
 		};
 		self
@@ -639,7 +639,7 @@ impl TransactionBody {
 	/// outputs, if any, are kept intact.
 	/// Sort order is maintained.
 	pub fn with_output(mut self, output: Output) -> TransactionBody {
-		if let Some(e) = self.outputs.binary_search(&output).err() {
+		if let Err(e) = self.outputs.binary_search(&output) {
 			self.outputs.insert(e, output)
 		};
 		self
@@ -649,7 +649,7 @@ impl TransactionBody {
 	/// kernels, if any, are kept intact.
 	/// Sort order is maintained.
 	pub fn with_kernel(mut self, kernel: TxKernel) -> TransactionBody {
-		if let Some(e) = self.kernels.binary_search(&kernel).err() {
+		if let Err(e) = self.kernels.binary_search(&kernel) {
 			self.kernels.insert(e, kernel)
 		};
 		self

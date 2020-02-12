@@ -194,14 +194,10 @@ impl TransactionPool {
 		// Get last transaction and remove it
 		if let Some(evictable_transaction) = bucket_transactions.last() {
 			// Remove transaction
-			self.txpool.entries = self
-				.txpool
+			self.txpool
 				.entries
-				.iter()
-				.filter(|x| x.tx != *evictable_transaction)
-				.cloned()
-				.collect::<Vec<_>>();
-		}
+				.retain(|x| x.tx != *evictable_transaction);
+		};
 	}
 
 	// Old txs will "age out" after 30 mins.
