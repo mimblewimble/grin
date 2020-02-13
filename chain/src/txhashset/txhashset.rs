@@ -383,6 +383,9 @@ impl TxHashSet {
 			.backend
 			.check_compact(horizon_header.output_mmr_size, &rewind_rm_pos)?;
 
+		debug!("txhashset: compact height pos index...");
+		self.compact_height_pos_index(batch)?;
+
 		debug!("txhashset: ... compaction finished");
 
 		Ok(())
@@ -390,7 +393,6 @@ impl TxHashSet {
 
 	/// Rebuild the index of block height & MMR positions to the corresponding UTXOs.
 	/// This is a costly operation performed only when we receive a full new chain state.
-	/// Note: only called by compact.
 	pub fn rebuild_height_pos_index(
 		&self,
 		header_pmmr: &PMMRHandle<BlockHeader>,
@@ -442,6 +444,32 @@ impl TxHashSet {
 		debug!(
 			"rebuild_height_pos_index: {} UTXOs, took {}s",
 			total_outputs,
+			now.elapsed().as_secs(),
+		);
+		Ok(())
+	}
+
+	fn compact_height_pos_index(&self, batch: &Batch<'_>) -> Result<(), Error> {
+		let now = Instant::now();
+		let output_pmmr =
+			ReadonlyPMMR::at(&self.output_pmmr_h.backend, self.output_pmmr_h.last_pos);
+		let last_pos = output_pmmr.unpruned_size();
+
+		let deleted = batch
+			.output_pos_iter()?
+			.filter(|(_, (pos, _))| {
+				// Note we use get_from_file() here as we want to ensure we have an entry
+				// in the index for *every* output still in the file, not just the "unspent"
+				// outputs. This is because we need to support rewind to handle fork/reorg.
+				// Rewind may "unspend" recently spent, but not yet pruned outputs, and the
+				// index must be consistent in this situation.
+				*pos <= last_pos && output_pmmr.get_from_file(*pos).is_none()
+			})
+			.map(|(key, _)| batch.delete(&key))
+			.count();
+		debug!(
+			"compact_output_pos_index: deleted {} entries from the index, took {}s",
+			deleted,
 			now.elapsed().as_secs(),
 		);
 		Ok(())
