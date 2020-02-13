@@ -5,8 +5,9 @@ steps:
     displayName: Windows Install LLVM
     condition: eq( variables['Agent.OS'], 'Windows_NT' )
   - script: |
-      brew install --with-toolchain llvm
-    displayName: Windows Install LLVM
+      brew uninstall llvm
+      brew list -l
+    displayName: macOS Uninstall LLVM
     condition: eq( variables['Agent.OS'], 'Darwin' )
   - script: |
       sudo apt-get update -yqq
