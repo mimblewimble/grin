@@ -5,8 +5,8 @@ steps:
     displayName: Windows Install LLVM
     condition: eq( variables['Agent.OS'], 'Windows_NT' )
   - script: |
-      sudo xcode-select --switch /Applications/Xcode.app
-    displayName: macOS Switch Xcode
+      brew install llvm
+    displayName: macOS Install LLVM
     condition: eq( variables['Agent.OS'], 'Darwin' )
   - script: |
       sudo apt-get update -yqq
