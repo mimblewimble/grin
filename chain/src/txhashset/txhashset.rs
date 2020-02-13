@@ -483,6 +483,9 @@ impl TxHashSet {
 		Ok(())
 	}
 
+	/// Initialize the kernel_pos index.
+	/// Find the block header at the kernel index horizon (14 days of history).
+	/// Then iterate over all kernels since then and add to the index.
 	pub fn init_kernel_pos_index(
 		&self,
 		header_pmmr: &PMMRHandle<BlockHeader>,
@@ -522,6 +525,8 @@ impl TxHashSet {
 		Ok(())
 	}
 
+	/// Compact the kernel_pos index by removing any entries older than the kernel index horizon.
+	/// This will ensure we always have 14 days of kernel history in the index.
 	fn compact_kernel_pos_index(&self, batch: &Batch<'_>) -> Result<(), Error> {
 		let now = Instant::now();
 		let head_header = batch.head_header()?;
