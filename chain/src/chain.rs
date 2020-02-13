@@ -1542,12 +1542,21 @@ fn setup_head(
 					break;
 				} else {
 					// We may have corrupted the MMR backend files last time we stopped the
-					// node. If this appears to be the case revert the head to the previous
-					// header and try again
+					// node. If this happens we rewind to the previous header,
+					// delete the "bad" block and try again.
 					let prev_header = batch.get_block_header(&head.prev_block_h)?;
-					let _ = batch.delete_block(&header.hash());
-					head = Tip::from_header(&prev_header);
-					batch.save_body_head(&head)?;
+
+					txhashset::extending(header_pmmr, txhashset, &mut batch, |ext, batch| {
+						pipe::rewind_and_apply_fork(&prev_header, ext, batch)
+					})?;
+
+					// Now "undo" the latest block and forget it ever existed.
+					// We will request it from a peer during sync as necessary.
+					{
+						let _ = batch.delete_block(&header.hash());
+						head = Tip::from_header(&prev_header);
+						batch.save_body_head(&head)?;
+					}
 				}
 			}
 		}
