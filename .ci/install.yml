@@ -5,10 +5,6 @@ steps:
     displayName: Windows Install LLVM
     condition: eq( variables['Agent.OS'], 'Windows_NT' )
   - script: |
-      brew uninstall llvm
-    displayName: macOS Uninstall LLVM
-    condition: eq( variables['Agent.OS'], 'Darwin' )
-  - script: |
       sudo apt-get update -yqq
       sudo apt-get install -yqq --no-install-recommends libncursesw5-dev
     displayName: Linux Install Dependencies
