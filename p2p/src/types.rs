@@ -143,13 +143,15 @@ impl Readable for PeerAddr {
 			))))
 		} else {
 			let ip = try_iter_map_vec!(0..8, |_| reader.read_u16());
+			let ipv6 = Ipv6Addr::new(ip[0], ip[1], ip[2], ip[3], ip[4], ip[5], ip[6], ip[7]);
 			let port = reader.read_u16()?;
-			Ok(PeerAddr(SocketAddr::V6(SocketAddrV6::new(
-				Ipv6Addr::new(ip[0], ip[1], ip[2], ip[3], ip[4], ip[5], ip[6], ip[7]),
-				port,
-				0,
-				0,
-			))))
+			if let Some(ipv4) = ipv6.to_ipv4() {
+				Ok(PeerAddr(SocketAddr::V4(SocketAddrV4::new(ipv4, port))))
+			} else {
+				Ok(PeerAddr(SocketAddr::V6(SocketAddrV6::new(
+					ipv6, port, 0, 0,
+				))))
+			}
 		}
 	}
 }
