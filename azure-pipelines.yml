@@ -55,7 +55,7 @@ jobs:
     - template: '.ci/release.yml'
 - job: macos
   pool:
-    vmImage: macos-10.14
+    vmImage: macOS-10.14
   strategy:
     matrix:
       test:
