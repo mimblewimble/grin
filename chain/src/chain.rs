@@ -217,9 +217,6 @@ impl Chain {
 		{
 			// Migrate full blocks to protocol version v2.
 			chain.migrate_db_v1_v2()?;
-
-			// Rebuild height_for_pos index.
-			chain.rebuild_height_for_pos()?;
 		}
 
 		chain.log_heads()?;
@@ -975,8 +972,8 @@ impl Chain {
 			batch.save_body_tail(&tip)?;
 		}
 
-		// Rebuild our output_pos index in the db based on current UTXO set.
-		txhashset.rebuild_height_pos_index(&header_pmmr, &mut batch)?;
+		// Rebuild our output_pos index in the db based on fresh UTXO set.
+		txhashset.init_output_pos_index(&header_pmmr, &mut batch)?;
 
 		// Commit all the changes to the db.
 		batch.commit()?;
@@ -1079,15 +1076,12 @@ impl Chain {
 		if let (Ok(tail), Ok(head)) = (self.tail(), self.head()) {
 			let horizon = global::cut_through_horizon() as u64;
 			let threshold = horizon.saturating_add(60);
-			debug!(
-				"compact: head: {}, tail: {}, diff: {}, horizon: {}",
-				head.height,
-				tail.height,
-				head.height.saturating_sub(tail.height),
-				horizon
-			);
-			if tail.height.saturating_add(threshold) > head.height {
-				debug!("compact: skipping compaction - threshold is 60 blocks beyond horizon.");
+			let next_compact = tail.height.saturating_add(threshold);
+			if next_compact > head.height {
+				debug!(
+					"compact: skipping startup compaction (next at {})",
+					next_compact
+				);
 				return Ok(());
 			}
 		}
@@ -1290,57 +1284,6 @@ impl Chain {
 			batch.migrate_block(&block, ProtocolVersion(2))?;
 		}
 		batch.commit()?;
-		Ok(())
-	}
-
-	/// Migrate the index 'commitment -> output_pos' to index 'commitment -> (output_pos, block_height)'
-	/// Note: should only be called when Node start-up, for database migration from the old version.
-	fn rebuild_height_for_pos(&self) -> Result<(), Error> {
-		let header_pmmr = self.header_pmmr.read();
-		let txhashset = self.txhashset.read();
-		let mut outputs_pos = txhashset.get_all_output_pos()?;
-		let total_outputs = outputs_pos.len();
-		if total_outputs == 0 {
-			debug!("rebuild_height_for_pos: nothing to be rebuilt");
-			return Ok(());
-		} else {
-			debug!(
-				"rebuild_height_for_pos: rebuilding {} output_pos's height...",
-				total_outputs
-			);
-		}
-		outputs_pos.sort_by(|a, b| a.1.cmp(&b.1));
-
-		let max_height = {
-			let head = self.head()?;
-			head.height
-		};
-
-		let batch = self.store.batch()?;
-		// clear it before rebuilding
-		batch.clear_output_pos_height()?;
-
-		let mut i = 0;
-		for search_height in 0..max_height {
-			let hash = header_pmmr.get_header_hash_by_height(search_height + 1)?;
-			let h = batch.get_block_header(&hash)?;
-			while i < total_outputs {
-				let (commit, pos) = outputs_pos[i];
-				if pos > h.output_mmr_size {
-					// Note: MMR position is 1-based and not 0-based, so here must be '>' instead of '>='
-					break;
-				}
-				batch.save_output_pos_height(&commit, pos, h.height)?;
-				trace!("rebuild_height_for_pos: {:?}", (commit, pos, h.height));
-				i += 1;
-			}
-		}
-
-		// clear the output_pos since now it has been replaced by the new index
-		batch.clear_output_pos()?;
-
-		batch.commit()?;
-		debug!("rebuild_height_for_pos: done");
 		Ok(())
 	}
 

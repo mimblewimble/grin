@@ -32,8 +32,7 @@ const BLOCK_HEADER_PREFIX: u8 = b'h';
 const BLOCK_PREFIX: u8 = b'b';
 const HEAD_PREFIX: u8 = b'H';
 const TAIL_PREFIX: u8 = b'T';
-const COMMIT_POS_PREFIX: u8 = b'c';
-const COMMIT_POS_HGT_PREFIX: u8 = b'p';
+const OUTPUT_POS_PREFIX: u8 = b'p';
 const BLOCK_INPUT_BITMAP_PREFIX: u8 = b'B';
 const BLOCK_SUMS_PREFIX: u8 = b'M';
 
@@ -112,42 +111,16 @@ impl ChainStore {
 		)
 	}
 
-	/// Get all outputs PMMR pos. (only for migration purpose)
-	pub fn get_all_output_pos(&self) -> Result<Vec<(Commitment, u64)>, Error> {
-		let mut outputs_pos = Vec::new();
-		let key = to_key(COMMIT_POS_PREFIX, &mut "".to_string().into_bytes());
-		for (k, pos) in self.db.iter::<u64>(&key)? {
-			outputs_pos.push((Commitment::from_vec(k[2..].to_vec()), pos));
-		}
-		Ok(outputs_pos)
-	}
-
 	/// Get PMMR pos for the given output commitment.
-	/// Note:
-	///     - Original prefix 'COMMIT_POS_PREFIX' is not used anymore for normal case, refer to #2889 for detail.
-	///     - To be compatible with the old callers, let's keep this function name but replace with new prefix 'COMMIT_POS_HGT_PREFIX'
 	pub fn get_output_pos(&self, commit: &Commitment) -> Result<u64, Error> {
-		let res: Result<Option<(u64, u64)>, Error> = self.db.get_ser(&to_key(
-			COMMIT_POS_HGT_PREFIX,
-			&mut commit.as_ref().to_vec(),
-		));
-		match res {
-			Ok(None) => Err(Error::NotFoundErr(format!(
-				"Output position for: {:?}",
-				commit
-			))),
-			Ok(Some((pos, _height))) => Ok(pos),
-			Err(e) => Err(e),
-		}
+		self.get_output_pos_height(commit).map(|(pos, _)| pos)
 	}
 
 	/// Get PMMR pos and block height for the given output commitment.
 	pub fn get_output_pos_height(&self, commit: &Commitment) -> Result<(u64, u64), Error> {
 		option_to_not_found(
-			self.db.get_ser(&to_key(
-				COMMIT_POS_HGT_PREFIX,
-				&mut commit.as_ref().to_vec(),
-			)),
+			self.db
+				.get_ser(&to_key(OUTPUT_POS_PREFIX, &mut commit.as_ref().to_vec())),
 			|| format!("Output position for: {:?}", commit),
 		)
 	}
@@ -269,63 +242,29 @@ impl<'a> Batch<'a> {
 		height: u64,
 	) -> Result<(), Error> {
 		self.db.put_ser(
-			&to_key(COMMIT_POS_HGT_PREFIX, &mut commit.as_ref().to_vec())[..],
+			&to_key(OUTPUT_POS_PREFIX, &mut commit.as_ref().to_vec())[..],
 			&(pos, height),
 		)
 	}
 
 	/// Iterator over the output_pos index.
 	pub fn output_pos_iter(&self) -> Result<SerIterator<(u64, u64)>, Error> {
-		let key = to_key(COMMIT_POS_HGT_PREFIX, &mut "".to_string().into_bytes());
+		let key = to_key(OUTPUT_POS_PREFIX, &mut "".to_string().into_bytes());
 		self.db.iter(&key)
 	}
 
 	/// Get output_pos from index.
-	/// Note:
-	///     - Original prefix 'COMMIT_POS_PREFIX' is not used for normal case anymore, refer to #2889 for detail.
-	///     - To be compatible with the old callers, let's keep this function name but replace with new prefix 'COMMIT_POS_HGT_PREFIX'
 	pub fn get_output_pos(&self, commit: &Commitment) -> Result<u64, Error> {
-		let res: Result<Option<(u64, u64)>, Error> = self.db.get_ser(&to_key(
-			COMMIT_POS_HGT_PREFIX,
-			&mut commit.as_ref().to_vec(),
-		));
-		match res {
-			Ok(None) => Err(Error::NotFoundErr(format!(
-				"Output position for: {:?}",
-				commit
-			))),
-			Ok(Some((pos, _height))) => Ok(pos),
-			Err(e) => Err(e),
-		}
+		self.get_output_pos_height(commit).map(|(pos, _)| pos)
 	}
 
 	/// Get output_pos and block height from index.
 	pub fn get_output_pos_height(&self, commit: &Commitment) -> Result<(u64, u64), Error> {
 		option_to_not_found(
-			self.db.get_ser(&to_key(
-				COMMIT_POS_HGT_PREFIX,
-				&mut commit.as_ref().to_vec(),
-			)),
+			self.db
+				.get_ser(&to_key(OUTPUT_POS_PREFIX, &mut commit.as_ref().to_vec())),
 			|| format!("Output position for commit: {:?}", commit),
 		)
-	}
-
-	/// Clear all entries from the output_pos index. (only for migration purpose)
-	pub fn clear_output_pos(&self) -> Result<(), Error> {
-		let key = to_key(COMMIT_POS_PREFIX, &mut "".to_string().into_bytes());
-		for (k, _) in self.db.iter::<u64>(&key)? {
-			self.db.delete(&k)?;
-		}
-		Ok(())
-	}
-
-	/// Clear all entries from the (output_pos,height) index (must be rebuilt after).
-	pub fn clear_output_pos_height(&self) -> Result<(), Error> {
-		let key = to_key(COMMIT_POS_HGT_PREFIX, &mut "".to_string().into_bytes());
-		for (k, _) in self.db.iter::<(u64, u64)>(&key)? {
-			self.db.delete(&k)?;
-		}
-		Ok(())
 	}
 
 	/// Get the previous header.

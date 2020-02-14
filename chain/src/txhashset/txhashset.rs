@@ -273,11 +273,6 @@ impl TxHashSet {
 		Ok(self.commit_index.get_block_header(&hash)?)
 	}
 
-	/// Get all outputs MMR pos
-	pub fn get_all_output_pos(&self) -> Result<Vec<(Commitment, u64)>, Error> {
-		Ok(self.commit_index.get_all_output_pos()?)
-	}
-
 	/// returns outputs from the given pmmr index up to the
 	/// specified limit. Also returns the last index actually populated
 	/// max index is the last PMMR index to consider, not leaf index
@@ -391,9 +386,9 @@ impl TxHashSet {
 		Ok(())
 	}
 
-	/// Rebuild the index of block height & MMR positions to the corresponding UTXOs.
+	/// Initialize the output pos index based on current UTXO set.
 	/// This is a costly operation performed only when we receive a full new chain state.
-	pub fn rebuild_height_pos_index(
+	pub fn init_output_pos_index(
 		&self,
 		header_pmmr: &PMMRHandle<BlockHeader>,
 		batch: &mut Batch<'_>,
@@ -403,26 +398,16 @@ impl TxHashSet {
 		let output_pmmr =
 			ReadonlyPMMR::at(&self.output_pmmr_h.backend, self.output_pmmr_h.last_pos);
 
-		// clear it before rebuilding
-		batch.clear_output_pos_height()?;
-
 		let mut outputs_pos: Vec<(Commitment, u64)> = vec![];
 		for pos in output_pmmr.leaf_pos_iter() {
 			if let Some(out) = output_pmmr.get_data(pos) {
 				outputs_pos.push((out.commit, pos));
 			}
 		}
-		let total_outputs = outputs_pos.len();
-		if total_outputs == 0 {
-			debug!("rebuild_height_pos_index: nothing to be rebuilt");
+		if outputs_pos.is_empty() {
 			return Ok(());
-		} else {
-			debug!(
-				"rebuild_height_pos_index: rebuilding {} outputs position & height...",
-				total_outputs
-			);
 		}
-
+		let total_outputs = outputs_pos.len();
 		let max_height = batch.head()?.height;
 
 		let mut i = 0;
@@ -436,13 +421,11 @@ impl TxHashSet {
 					break;
 				}
 				batch.save_output_pos_height(&commit, pos, h.height)?;
-				trace!("rebuild_height_pos_index: {:?}", (commit, pos, h.height));
 				i += 1;
 			}
 		}
-
 		debug!(
-			"rebuild_height_pos_index: {} UTXOs, took {}s",
+			"init_height_pos_index: {} UTXOs, took {}s",
 			total_outputs,
 			now.elapsed().as_secs(),
 		);
