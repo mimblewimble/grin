@@ -12,15 +12,20 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::util::RwLock;
 use std::convert::From;
+use std::fmt;
 use std::fs::File;
 use std::io::{self, Read};
-use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV4, SocketAddrV6};
+use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV4, SocketAddrV6, ToSocketAddrs};
 use std::path::PathBuf;
+use std::str::FromStr;
 use std::sync::Arc;
 
 use chrono::prelude::*;
+use serde::de::{SeqAccess, Visitor};
+use serde::{Deserialize, Deserializer};
+
+use grin_store;
 
 use crate::chain;
 use crate::core::core;
@@ -28,7 +33,8 @@ use crate::core::core::hash::Hash;
 use crate::core::global;
 use crate::core::pow::Difficulty;
 use crate::core::ser::{self, ProtocolVersion, Readable, Reader, Writeable, Writer};
-use grin_store;
+use crate::msg::PeerAddrs;
+use crate::util::RwLock;
 
 /// Maximum number of block headers a peer should ever send
 pub const MAX_BLOCK_HEADERS: u32 = 512;
@@ -156,6 +162,45 @@ impl Readable for PeerAddr {
 	}
 }
 
+impl<'de> Visitor<'de> for PeerAddrs {
+	type Value = PeerAddrs;
+
+	fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+		formatter.write_str("an array of dns names or IP addresses")
+	}
+
+	fn visit_seq<M>(self, mut access: M) -> Result<Self::Value, M::Error>
+	where
+		M: SeqAccess<'de>,
+	{
+		let mut peers = Vec::with_capacity(access.size_hint().unwrap_or(0));
+
+		while let Some(entry) = access.next_element::<&str>()? {
+			match SocketAddr::from_str(entry) {
+				// Try to parse IP address first
+				Ok(ip) => peers.push(PeerAddr(ip)),
+				// If that fails it's probably a DNS record
+				Err(_) => {
+					let socket_addrs = entry
+						.to_socket_addrs()
+						.expect(format!("Unable to resolve DNS: {}", entry).as_str());
+					peers.append(&mut socket_addrs.map(|addr| PeerAddr(addr)).collect());
+				}
+			}
+		}
+		Ok(PeerAddrs { peers })
+	}
+}
+
+impl<'de> Deserialize<'de> for PeerAddrs {
+	fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+	where
+		D: Deserializer<'de>,
+	{
+		deserializer.deserialize_seq(PeerAddrs { peers: vec![] })
+	}
+}
+
 impl std::hash::Hash for PeerAddr {
 	/// If loopback address then we care about ip and port.
 	/// If regular address then we only care about the ip and ignore the port.
@@ -218,18 +263,18 @@ pub struct P2PConfig {
 	pub seeding_type: Seeding,
 
 	/// The list of seed nodes, if using Seeding as a seed type
-	pub seeds: Option<Vec<PeerAddr>>,
+	pub seeds: Option<PeerAddrs>,
 
 	/// Capabilities expose by this node, also conditions which other peers this
 	/// node will have an affinity toward when connection.
 	pub capabilities: Capabilities,
 
-	pub peers_allow: Option<Vec<PeerAddr>>,
+	pub peers_allow: Option<PeerAddrs>,
 
-	pub peers_deny: Option<Vec<PeerAddr>>,
+	pub peers_deny: Option<PeerAddrs>,
 
 	/// The list of preferred peers that we will try to connect to
-	pub peers_preferred: Option<Vec<PeerAddr>>,
+	pub peers_preferred: Option<PeerAddrs>,
 
 	pub ban_window: Option<i64>,
 
@@ -316,7 +361,7 @@ impl P2PConfig {
 pub enum Seeding {
 	/// No seeding, mostly for tests that programmatically connect
 	None,
-	/// A list of seed addresses provided to the server
+	/// A list of seeds provided to the server (can be addresses or DNS names)
 	List,
 	/// Automatically get a list of seeds from multiple DNS
 	DNSSeed,

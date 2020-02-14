@@ -260,6 +260,7 @@ fn comments() -> HashMap<String, String> {
 	retval.insert(
 		"seeding_type".to_string(),
 		"
+#All seeds/peers can be either IP address or DNS names. Port number must always be specified
 #how to seed this server, can be None, List or DNSSeed
 "
 		.to_string(),

@@ -361,33 +361,45 @@ fn listen_for_addrs(
 	}
 }
 
-pub fn dns_seeds() -> Box<dyn Fn() -> Vec<PeerAddr> + Send> {
+pub fn default_dns_seeds() -> Box<dyn Fn() -> Vec<PeerAddr> + Send> {
 	Box::new(|| {
-		let mut addresses: Vec<PeerAddr> = vec![];
 		let net_seeds = if global::is_floonet() {
 			FLOONET_DNS_SEEDS
 		} else {
 			MAINNET_DNS_SEEDS
 		};
-		for dns_seed in net_seeds {
-			let temp_addresses = addresses.clone();
-			debug!("Retrieving seed nodes from dns {}", dns_seed);
-			match (dns_seed.to_owned(), 0).to_socket_addrs() {
-				Ok(addrs) => addresses.append(
-					&mut (addrs
-						.map(|mut addr| {
-							addr.set_port(if global::is_floonet() { 13414 } else { 3414 });
-							PeerAddr(addr)
-						})
-						.filter(|addr| !temp_addresses.contains(addr))
-						.collect()),
-				),
-				Err(e) => debug!("Failed to resolve seed {:?} got error {:?}", dns_seed, e),
-			}
-		}
-		debug!("Retrieved seed addresses: {:?}", addresses);
-		addresses
+		resolve_dns_to_addrs(
+			&net_seeds
+				.iter()
+				.map(|s| {
+					s.to_string()
+						+ if global::is_floonet() {
+							":13414"
+						} else {
+							":3414"
+						}
+				})
+				.collect(),
+		)
 	})
+}
+
+fn resolve_dns_to_addrs(dns_records: &Vec<String>) -> Vec<PeerAddr> {
+	let mut addresses: Vec<PeerAddr> = vec![];
+	for dns in dns_records {
+		debug!("Retrieving addresses from dns {}", dns);
+		match dns.to_socket_addrs() {
+			Ok(addrs) => addresses.append(
+				&mut addrs
+					.map(|addr| PeerAddr(addr))
+					.filter(|addr| !addresses.contains(addr))
+					.collect(),
+			),
+			Err(e) => debug!("Failed to resolve dns {:?} got error {:?}", dns, e),
+		};
+	}
+	debug!("Resolved addresses: {:?}", addresses);
+	addresses
 }
 
 /// Convenience function when the seed list is immediately known. Mostly used
