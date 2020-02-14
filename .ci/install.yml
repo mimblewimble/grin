@@ -5,9 +5,9 @@ steps:
     displayName: Windows Install LLVM
     condition: eq( variables['Agent.OS'], 'Windows_NT' )
   - script: |
-      llvm --version
+      clang --version
       brew uninstall llvm
-      llvm --version
+      clang --version
     displayName: macOS Uninstall LLVM
     condition: eq( variables['Agent.OS'], 'Darwin' )
   - script: |
