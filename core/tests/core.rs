@@ -98,7 +98,7 @@ fn test_zero_commit_fails() {
 	// blinding should fail as signing with a zero r*G shouldn't work
 	build::transaction(
 		KernelFeatures::Plain { fee: 0 },
-		vec![input(10, key_id1.clone()), output(10, key_id1.clone())],
+		vec![input(10, key_id1.clone()), output(10, key_id1)],
 		&keychain,
 		&builder,
 	)
@@ -177,8 +177,8 @@ fn multi_kernel_transaction_deaggregation() {
 	assert!(tx4.validate(Weighting::AsTransaction, vc.clone()).is_ok());
 
 	let tx1234 = aggregate(vec![tx1.clone(), tx2.clone(), tx3.clone(), tx4.clone()]).unwrap();
-	let tx12 = aggregate(vec![tx1.clone(), tx2.clone()]).unwrap();
-	let tx34 = aggregate(vec![tx3.clone(), tx4.clone()]).unwrap();
+	let tx12 = aggregate(vec![tx1, tx2]).unwrap();
+	let tx34 = aggregate(vec![tx3, tx4]).unwrap();
 
 	assert!(tx1234
 		.validate(Weighting::AsTransaction, vc.clone())
@@ -192,7 +192,7 @@ fn multi_kernel_transaction_deaggregation() {
 		.is_ok());
 	assert_eq!(tx34, deaggregated_tx34);
 
-	let deaggregated_tx12 = deaggregate(tx1234.clone(), vec![tx34.clone()]).unwrap();
+	let deaggregated_tx12 = deaggregate(tx1234, vec![tx34]).unwrap();
 
 	assert!(deaggregated_tx12
 		.validate(Weighting::AsTransaction, vc.clone())
@@ -213,12 +213,12 @@ fn multi_kernel_transaction_deaggregation_2() {
 	assert!(tx3.validate(Weighting::AsTransaction, vc.clone()).is_ok());
 
 	let tx123 = aggregate(vec![tx1.clone(), tx2.clone(), tx3.clone()]).unwrap();
-	let tx12 = aggregate(vec![tx1.clone(), tx2.clone()]).unwrap();
+	let tx12 = aggregate(vec![tx1, tx2]).unwrap();
 
 	assert!(tx123.validate(Weighting::AsTransaction, vc.clone()).is_ok());
 	assert!(tx12.validate(Weighting::AsTransaction, vc.clone()).is_ok());
 
-	let deaggregated_tx3 = deaggregate(tx123.clone(), vec![tx12.clone()]).unwrap();
+	let deaggregated_tx3 = deaggregate(tx123, vec![tx12]).unwrap();
 	assert!(deaggregated_tx3
 		.validate(Weighting::AsTransaction, vc.clone())
 		.is_ok());
@@ -238,13 +238,13 @@ fn multi_kernel_transaction_deaggregation_3() {
 	assert!(tx3.validate(Weighting::AsTransaction, vc.clone()).is_ok());
 
 	let tx123 = aggregate(vec![tx1.clone(), tx2.clone(), tx3.clone()]).unwrap();
-	let tx13 = aggregate(vec![tx1.clone(), tx3.clone()]).unwrap();
-	let tx2 = aggregate(vec![tx2.clone()]).unwrap();
+	let tx13 = aggregate(vec![tx1, tx3]).unwrap();
+	let tx2 = aggregate(vec![tx2]).unwrap();
 
 	assert!(tx123.validate(Weighting::AsTransaction, vc.clone()).is_ok());
 	assert!(tx2.validate(Weighting::AsTransaction, vc.clone()).is_ok());
 
-	let deaggregated_tx13 = deaggregate(tx123.clone(), vec![tx2.clone()]).unwrap();
+	let deaggregated_tx13 = deaggregate(tx123, vec![tx2]).unwrap();
 	assert!(deaggregated_tx13
 		.validate(Weighting::AsTransaction, vc.clone())
 		.is_ok());
@@ -279,11 +279,7 @@ fn multi_kernel_transaction_deaggregation_4() {
 		.validate(Weighting::AsTransaction, vc.clone())
 		.is_ok());
 
-	let deaggregated_tx5 = deaggregate(
-		tx12345.clone(),
-		vec![tx1.clone(), tx2.clone(), tx3.clone(), tx4.clone()],
-	)
-	.unwrap();
+	let deaggregated_tx5 = deaggregate(tx12345, vec![tx1, tx2, tx3, tx4]).unwrap();
 	assert!(deaggregated_tx5
 		.validate(Weighting::AsTransaction, vc.clone())
 		.is_ok());
@@ -314,14 +310,14 @@ fn multi_kernel_transaction_deaggregation_5() {
 		tx5.clone(),
 	])
 	.unwrap();
-	let tx12 = aggregate(vec![tx1.clone(), tx2.clone()]).unwrap();
-	let tx34 = aggregate(vec![tx3.clone(), tx4.clone()]).unwrap();
+	let tx12 = aggregate(vec![tx1, tx2]).unwrap();
+	let tx34 = aggregate(vec![tx3, tx4]).unwrap();
 
 	assert!(tx12345
 		.validate(Weighting::AsTransaction, vc.clone())
 		.is_ok());
 
-	let deaggregated_tx5 = deaggregate(tx12345.clone(), vec![tx12.clone(), tx34.clone()]).unwrap();
+	let deaggregated_tx5 = deaggregate(tx12345, vec![tx12, tx34]).unwrap();
 	assert!(deaggregated_tx5
 		.validate(Weighting::AsTransaction, vc.clone())
 		.is_ok());
@@ -351,7 +347,7 @@ fn basic_transaction_deaggregation() {
 		.is_ok());
 	assert_eq!(tx1, deaggregated_tx1);
 
-	let deaggregated_tx2 = deaggregate(tx3.clone(), vec![tx1.clone()]).unwrap();
+	let deaggregated_tx2 = deaggregate(tx3, vec![tx1]).unwrap();
 
 	assert!(deaggregated_tx2
 		.validate(Weighting::AsTransaction, vc.clone())
@@ -566,20 +562,14 @@ fn test_block_with_timelocked_tx() {
 			fee: 2,
 			lock_height: 2,
 		},
-		vec![input(5, key_id1.clone()), output(3, key_id2.clone())],
+		vec![input(5, key_id1), output(3, key_id2)],
 		&keychain,
 		&builder,
 	)
 	.unwrap();
 
 	let previous_header = BlockHeader::default();
-	let b = new_block(
-		vec![&tx1],
-		&keychain,
-		&builder,
-		&previous_header,
-		&key_id3.clone(),
-	);
+	let b = new_block(vec![&tx1], &keychain, &builder, &previous_header, &key_id3);
 
 	match b.validate(&BlindingFactor::zero(), vc.clone()) {
 		Err(KernelLockHeight(height)) => {

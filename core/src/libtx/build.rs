@@ -69,7 +69,7 @@ where
 				let commit =
 					build
 						.keychain
-						.commit(value, &key_id, &SwitchCommitmentType::Regular)?;
+						.commit(value, &key_id, SwitchCommitmentType::Regular)?;
 				// TODO: proper support for different switch commitment schemes
 				let input = Input::new(features, commit);
 				Ok((
@@ -119,7 +119,7 @@ where
 			let (tx, sum) = acc?;
 
 			// TODO: proper support for different switch commitment schemes
-			let switch = &SwitchCommitmentType::Regular;
+			let switch = SwitchCommitmentType::Regular;
 
 			let commit = build.keychain.commit(value, &key_id, switch)?;
 
@@ -235,7 +235,7 @@ where
 
 	// Store the kernel offset (k2) on the tx.
 	// Commitments will sum correctly when accounting for the offset.
-	tx.offset = k2.clone();
+	tx.offset = k2;
 
 	// Set the kernel on the tx.
 	let tx = tx.replace_kernel(kern);

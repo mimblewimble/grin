@@ -125,7 +125,7 @@ impl<'a> Message<'a> {
 			let read_len = cmp::min(8000, len - written);
 			let mut buf = vec![0u8; read_len];
 			self.stream.read_exact(&mut buf[..])?;
-			writer.write_all(&mut buf)?;
+			writer.write_all(&buf)?;
 			written += read_len;
 		}
 		Ok(written)
@@ -291,14 +291,14 @@ where
 	let reader_stopped = stopped.clone();
 
 	let reader_tracker = tracker.clone();
-	let writer_tracker = tracker.clone();
+	let writer_tracker = tracker;
 
 	let reader_thread = thread::Builder::new()
 		.name("peer_read".to_string())
 		.spawn(move || {
 			loop {
 				// check the read end
-				match try_header!(read_header(&mut reader, version), &mut reader) {
+				match try_header!(read_header(&mut reader, version), &reader) {
 					Some(MsgHeaderWrapper::Known(header)) => {
 						reader
 							.set_read_timeout(Some(BODY_IO_TIMEOUT))
@@ -347,7 +347,7 @@ where
 				reader
 					.peer_addr()
 					.map(|a| a.to_string())
-					.unwrap_or("?".to_owned())
+					.unwrap_or_else(|_| "?".to_owned())
 			);
 			let _ = reader.shutdown(Shutdown::Both);
 		})?;
@@ -380,7 +380,7 @@ where
 				writer
 					.peer_addr()
 					.map(|a| a.to_string())
-					.unwrap_or("?".to_owned())
+					.unwrap_or_else(|_| "?".to_owned())
 			);
 		})?;
 	Ok((reader_thread, writer_thread))

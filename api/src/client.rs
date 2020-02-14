@@ -33,7 +33,7 @@ use tokio::runtime::Builder;
 /// This function spawns a new Tokio runtime, which means it is pretty inefficient for multiple
 /// requests. In those situations you are probably better off creating a runtime once and spawning
 /// `get_async` tasks on it
-pub fn get<'a, T>(url: &'a str, api_secret: Option<String>) -> Result<T, Error>
+pub fn get<T>(url: &str, api_secret: Option<String>) -> Result<T, Error>
 where
 	for<'de> T: Deserialize<'de>,
 {
@@ -43,7 +43,7 @@ where
 /// Helper function to easily issue an async HTTP GET request against a given
 /// URL that returns a future. Handles request building, JSON deserialization
 /// and response code checking.
-pub async fn get_async<'a, T>(url: &'a str, api_secret: Option<String>) -> Result<T, Error>
+pub async fn get_async<T>(url: &str, api_secret: Option<String>) -> Result<T, Error>
 where
 	for<'de> T: Deserialize<'de> + Send + 'static,
 {

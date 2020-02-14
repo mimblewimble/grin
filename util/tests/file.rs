@@ -39,7 +39,7 @@ fn write_files(dir_name: String, root: &Path) -> io::Result<()> {
 	file.write_all(b"Hello, world!")?;
 	let mut file = File::create(root.join(dir_name.clone() + "/bar.txt"))?;
 	file.write_all(b"Goodbye, world!")?;
-	let mut file = File::create(root.join(dir_name.clone() + "/sub/lorem"))?;
+	let mut file = File::create(root.join(dir_name + "/sub/lorem"))?;
 	file.write_all(b"Lorem ipsum dolor sit amet, consectetur adipiscing elit")?;
 	Ok(())
 }

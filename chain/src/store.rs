@@ -26,16 +26,15 @@ use grin_store as store;
 use grin_store::{option_to_not_found, to_key, Error, SerIterator};
 use std::sync::Arc;
 
-const STORE_SUBPATH: &'static str = "chain";
+const STORE_SUBPATH: &str = "chain";
 
-const BLOCK_HEADER_PREFIX: u8 = 'h' as u8;
-const BLOCK_PREFIX: u8 = 'b' as u8;
-const HEAD_PREFIX: u8 = 'H' as u8;
-const TAIL_PREFIX: u8 = 'T' as u8;
-const COMMIT_POS_PREFIX: u8 = 'c' as u8;
-const COMMIT_POS_HGT_PREFIX: u8 = 'p' as u8;
-const BLOCK_INPUT_BITMAP_PREFIX: u8 = 'B' as u8;
-const BLOCK_SUMS_PREFIX: u8 = 'M' as u8;
+const BLOCK_HEADER_PREFIX: u8 = b'h';
+const BLOCK_PREFIX: u8 = b'b';
+const HEAD_PREFIX: u8 = b'H';
+const TAIL_PREFIX: u8 = b'T';
+const OUTPUT_POS_PREFIX: u8 = b'p';
+const BLOCK_INPUT_BITMAP_PREFIX: u8 = b'B';
+const BLOCK_SUMS_PREFIX: u8 = b'M';
 
 /// All chain-related database operations
 pub struct ChainStore {
@@ -45,7 +44,7 @@ pub struct ChainStore {
 impl ChainStore {
 	/// Create new chain store
 	pub fn new(db_root: &str) -> Result<ChainStore, Error> {
-		let db = store::Store::new(db_root, None, Some(STORE_SUBPATH.clone()), None)?;
+		let db = store::Store::new(db_root, None, Some(STORE_SUBPATH), None)?;
 		Ok(ChainStore { db })
 	}
 
@@ -64,12 +63,12 @@ impl ChainStore {
 impl ChainStore {
 	/// The current chain head.
 	pub fn head(&self) -> Result<Tip, Error> {
-		option_to_not_found(self.db.get_ser(&vec![HEAD_PREFIX]), || "HEAD".to_owned())
+		option_to_not_found(self.db.get_ser(&[HEAD_PREFIX]), || "HEAD".to_owned())
 	}
 
 	/// The current chain "tail" (earliest block in the store).
 	pub fn tail(&self) -> Result<Tip, Error> {
-		option_to_not_found(self.db.get_ser(&vec![TAIL_PREFIX]), || "TAIL".to_owned())
+		option_to_not_found(self.db.get_ser(&[TAIL_PREFIX]), || "TAIL".to_owned())
 	}
 
 	/// Header of the block at the head of the block chain (not the same thing as header_head).
@@ -112,42 +111,16 @@ impl ChainStore {
 		)
 	}
 
-	/// Get all outputs PMMR pos. (only for migration purpose)
-	pub fn get_all_output_pos(&self) -> Result<Vec<(Commitment, u64)>, Error> {
-		let mut outputs_pos = Vec::new();
-		let key = to_key(COMMIT_POS_PREFIX, &mut "".to_string().into_bytes());
-		for (k, pos) in self.db.iter::<u64>(&key)? {
-			outputs_pos.push((Commitment::from_vec(k[2..].to_vec()), pos));
-		}
-		Ok(outputs_pos)
-	}
-
 	/// Get PMMR pos for the given output commitment.
-	/// Note:
-	/// 	- Original prefix 'COMMIT_POS_PREFIX' is not used anymore for normal case, refer to #2889 for detail.
-	///		- To be compatible with the old callers, let's keep this function name but replace with new prefix 'COMMIT_POS_HGT_PREFIX'
 	pub fn get_output_pos(&self, commit: &Commitment) -> Result<u64, Error> {
-		let res: Result<Option<(u64, u64)>, Error> = self.db.get_ser(&to_key(
-			COMMIT_POS_HGT_PREFIX,
-			&mut commit.as_ref().to_vec(),
-		));
-		match res {
-			Ok(None) => Err(Error::NotFoundErr(format!(
-				"Output position for: {:?}",
-				commit
-			))),
-			Ok(Some((pos, _height))) => Ok(pos),
-			Err(e) => Err(e),
-		}
+		self.get_output_pos_height(commit).map(|(pos, _)| pos)
 	}
 
 	/// Get PMMR pos and block height for the given output commitment.
 	pub fn get_output_pos_height(&self, commit: &Commitment) -> Result<(u64, u64), Error> {
 		option_to_not_found(
-			self.db.get_ser(&to_key(
-				COMMIT_POS_HGT_PREFIX,
-				&mut commit.as_ref().to_vec(),
-			)),
+			self.db
+				.get_ser(&to_key(OUTPUT_POS_PREFIX, &mut commit.as_ref().to_vec())),
 			|| format!("Output position for: {:?}", commit),
 		)
 	}
@@ -169,12 +142,12 @@ pub struct Batch<'a> {
 impl<'a> Batch<'a> {
 	/// The head.
 	pub fn head(&self) -> Result<Tip, Error> {
-		option_to_not_found(self.db.get_ser(&vec![HEAD_PREFIX]), || "HEAD".to_owned())
+		option_to_not_found(self.db.get_ser(&[HEAD_PREFIX]), || "HEAD".to_owned())
 	}
 
 	/// The tail.
 	pub fn tail(&self) -> Result<Tip, Error> {
-		option_to_not_found(self.db.get_ser(&vec![TAIL_PREFIX]), || "TAIL".to_owned())
+		option_to_not_found(self.db.get_ser(&[TAIL_PREFIX]), || "TAIL".to_owned())
 	}
 
 	/// Header of the block at the head of the block chain (not the same thing as header_head).
@@ -184,12 +157,12 @@ impl<'a> Batch<'a> {
 
 	/// Save body head to db.
 	pub fn save_body_head(&self, t: &Tip) -> Result<(), Error> {
-		self.db.put_ser(&vec![HEAD_PREFIX], t)
+		self.db.put_ser(&[HEAD_PREFIX], t)
 	}
 
 	/// Save body "tail" to db.
 	pub fn save_body_tail(&self, t: &Tip) -> Result<(), Error> {
-		self.db.put_ser(&vec![TAIL_PREFIX], t)
+		self.db.put_ser(&[TAIL_PREFIX], t)
 	}
 
 	/// get block
@@ -229,6 +202,11 @@ impl<'a> Batch<'a> {
 		Ok(())
 	}
 
+	/// Low level function to delete directly by raw key.
+	pub fn delete(&self, key: &[u8]) -> Result<(), Error> {
+		self.db.delete(key)
+	}
+
 	/// Delete a full block. Does not delete any record associated with a block
 	/// header.
 	pub fn delete_block(&self, bh: &Hash) -> Result<(), Error> {
@@ -264,57 +242,29 @@ impl<'a> Batch<'a> {
 		height: u64,
 	) -> Result<(), Error> {
 		self.db.put_ser(
-			&to_key(COMMIT_POS_HGT_PREFIX, &mut commit.as_ref().to_vec())[..],
+			&to_key(OUTPUT_POS_PREFIX, &mut commit.as_ref().to_vec())[..],
 			&(pos, height),
 		)
 	}
 
+	/// Iterator over the output_pos index.
+	pub fn output_pos_iter(&self) -> Result<SerIterator<(u64, u64)>, Error> {
+		let key = to_key(OUTPUT_POS_PREFIX, &mut "".to_string().into_bytes());
+		self.db.iter(&key)
+	}
+
 	/// Get output_pos from index.
-	/// Note:
-	/// 	- Original prefix 'COMMIT_POS_PREFIX' is not used for normal case anymore, refer to #2889 for detail.
-	///		- To be compatible with the old callers, let's keep this function name but replace with new prefix 'COMMIT_POS_HGT_PREFIX'
 	pub fn get_output_pos(&self, commit: &Commitment) -> Result<u64, Error> {
-		let res: Result<Option<(u64, u64)>, Error> = self.db.get_ser(&to_key(
-			COMMIT_POS_HGT_PREFIX,
-			&mut commit.as_ref().to_vec(),
-		));
-		match res {
-			Ok(None) => Err(Error::NotFoundErr(format!(
-				"Output position for: {:?}",
-				commit
-			))),
-			Ok(Some((pos, _height))) => Ok(pos),
-			Err(e) => Err(e),
-		}
+		self.get_output_pos_height(commit).map(|(pos, _)| pos)
 	}
 
 	/// Get output_pos and block height from index.
 	pub fn get_output_pos_height(&self, commit: &Commitment) -> Result<(u64, u64), Error> {
 		option_to_not_found(
-			self.db.get_ser(&to_key(
-				COMMIT_POS_HGT_PREFIX,
-				&mut commit.as_ref().to_vec(),
-			)),
+			self.db
+				.get_ser(&to_key(OUTPUT_POS_PREFIX, &mut commit.as_ref().to_vec())),
 			|| format!("Output position for commit: {:?}", commit),
 		)
-	}
-
-	/// Clear all entries from the output_pos index. (only for migration purpose)
-	pub fn clear_output_pos(&self) -> Result<(), Error> {
-		let key = to_key(COMMIT_POS_PREFIX, &mut "".to_string().into_bytes());
-		for (k, _) in self.db.iter::<u64>(&key)? {
-			self.db.delete(&k)?;
-		}
-		Ok(())
-	}
-
-	/// Clear all entries from the (output_pos,height) index (must be rebuilt after).
-	pub fn clear_output_pos_height(&self) -> Result<(), Error> {
-		let key = to_key(COMMIT_POS_HGT_PREFIX, &mut "".to_string().into_bytes());
-		for (k, _) in self.db.iter::<(u64, u64)>(&key)? {
-			self.db.delete(&k)?;
-		}
-		Ok(())
 	}
 
 	/// Get the previous header.
@@ -478,12 +428,10 @@ impl<'a> Iterator for DifficultyIter<'a> {
 		self.header = if self.header.is_none() {
 			if let Some(ref batch) = self.batch {
 				batch.get_block_header(&self.start).ok()
+			} else if let Some(ref store) = self.store {
+				store.get_block_header(&self.start).ok()
 			} else {
-				if let Some(ref store) = self.store {
-					store.get_block_header(&self.start).ok()
-				} else {
-					None
-				}
+				None
 			}
 		} else {
 			self.prev_header.clone()
@@ -494,12 +442,10 @@ impl<'a> Iterator for DifficultyIter<'a> {
 		if let Some(header) = self.header.clone() {
 			if let Some(ref batch) = self.batch {
 				self.prev_header = batch.get_previous_header(&header).ok();
+			} else if let Some(ref store) = self.store {
+				self.prev_header = store.get_previous_header(&header).ok();
 			} else {
-				if let Some(ref store) = self.store {
-					self.prev_header = store.get_previous_header(&header).ok();
-				} else {
-					self.prev_header = None;
-				}
+				self.prev_header = None;
 			}
 
 			let prev_difficulty = self
@@ -517,7 +463,7 @@ impl<'a> Iterator for DifficultyIter<'a> {
 				header.pow.is_secondary(),
 			))
 		} else {
-			return None;
+			None
 		}
 	}
 }

@@ -36,13 +36,13 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Instant;
 
-const TXHASHSET_SUBDIR: &'static str = "txhashset";
+const TXHASHSET_SUBDIR: &str = "txhashset";
 
-const OUTPUT_SUBDIR: &'static str = "output";
-const RANGE_PROOF_SUBDIR: &'static str = "rangeproof";
-const KERNEL_SUBDIR: &'static str = "kernel";
+const OUTPUT_SUBDIR: &str = "output";
+const RANGE_PROOF_SUBDIR: &str = "rangeproof";
+const KERNEL_SUBDIR: &str = "kernel";
 
-const TXHASHSET_ZIP: &'static str = "txhashset_snapshot";
+const TXHASHSET_ZIP: &str = "txhashset_snapshot";
 
 /// Convenience wrapper around a single prunable MMR backend.
 pub struct PMMRHandle<T: PMMRable> {
@@ -65,9 +65,9 @@ impl<T: PMMRable> PMMRHandle<T> {
 	) -> Result<PMMRHandle<T>, Error> {
 		let path = Path::new(root_dir).join(sub_dir).join(file_name);
 		fs::create_dir_all(path.clone())?;
-		let path_str = path.to_str().ok_or(Error::from(ErrorKind::Other(
-			"invalid file path".to_owned(),
-		)))?;
+		let path_str = path
+			.to_str()
+			.ok_or_else(|| ErrorKind::Other("invalid file path".to_owned()))?;
 		let backend = PMMRBackend::new(path_str.to_string(), prunable, version, header)?;
 		let last_pos = backend.unpruned_size();
 		Ok(PMMRHandle { backend, last_pos })
@@ -82,7 +82,7 @@ impl PMMRHandle<BlockHeader> {
 		if let Some(entry) = header_pmmr.get_data(pos) {
 			Ok(entry.hash())
 		} else {
-			Err(ErrorKind::Other(format!("get header hash by height")).into())
+			Err(ErrorKind::Other("get header hash by height".to_string()).into())
 		}
 	}
 
@@ -90,14 +90,14 @@ impl PMMRHandle<BlockHeader> {
 	/// Find the last leaf pos based on MMR size and return its header hash.
 	pub fn head_hash(&self) -> Result<Hash, Error> {
 		if self.last_pos == 0 {
-			return Err(ErrorKind::Other(format!("MMR empty, no head")).into());
+			return Err(ErrorKind::Other("MMR empty, no head".to_string()).into());
 		}
 		let header_pmmr = ReadonlyPMMR::at(&self.backend, self.last_pos);
 		let leaf_pos = pmmr::bintree_rightmost(self.last_pos);
 		if let Some(entry) = header_pmmr.get_data(leaf_pos) {
 			Ok(entry.hash())
 		} else {
-			Err(ErrorKind::Other(format!("failed to find head hash")).into())
+			Err(ErrorKind::Other("failed to find head hash".to_string()).into())
 		}
 	}
 }
@@ -200,7 +200,7 @@ impl TxHashSet {
 				commit_index,
 			})
 		} else {
-			Err(ErrorKind::TxHashSetErr(format!("failed to open kernel PMMR")).into())
+			Err(ErrorKind::TxHashSetErr("failed to open kernel PMMR".to_string()).into())
 		}
 	}
 
@@ -236,14 +236,14 @@ impl TxHashSet {
 							height: block_height,
 						})
 					} else {
-						Err(ErrorKind::TxHashSetErr(format!("txhashset hash mismatch")).into())
+						Err(ErrorKind::TxHashSetErr("txhashset hash mismatch".to_string()).into())
 					}
 				} else {
 					Err(ErrorKind::OutputNotFound.into())
 				}
 			}
 			Err(grin_store::Error::NotFoundErr(_)) => Err(ErrorKind::OutputNotFound.into()),
-			Err(e) => Err(ErrorKind::StoreErr(e, format!("txhashset unspent check")).into()),
+			Err(e) => Err(ErrorKind::StoreErr(e, "txhashset unspent check".to_string()).into()),
 		}
 	}
 
@@ -271,11 +271,6 @@ impl TxHashSet {
 	/// Convenience function to query the db for a header by its hash.
 	pub fn get_block_header(&self, hash: &Hash) -> Result<BlockHeader, Error> {
 		Ok(self.commit_index.get_block_header(&hash)?)
-	}
-
-	/// Get all outputs MMR pos
-	pub fn get_all_output_pos(&self) -> Result<Vec<(Commitment, u64)>, Error> {
-		Ok(self.commit_index.get_all_output_pos()?)
 	}
 
 	/// returns outputs from the given pmmr index up to the
@@ -383,15 +378,17 @@ impl TxHashSet {
 			.backend
 			.check_compact(horizon_header.output_mmr_size, &rewind_rm_pos)?;
 
+		debug!("txhashset: compact height pos index...");
+		self.compact_height_pos_index(batch)?;
+
 		debug!("txhashset: ... compaction finished");
 
 		Ok(())
 	}
 
-	/// Rebuild the index of block height & MMR positions to the corresponding UTXOs.
+	/// Initialize the output pos index based on current UTXO set.
 	/// This is a costly operation performed only when we receive a full new chain state.
-	/// Note: only called by compact.
-	pub fn rebuild_height_pos_index(
+	pub fn init_output_pos_index(
 		&self,
 		header_pmmr: &PMMRHandle<BlockHeader>,
 		batch: &mut Batch<'_>,
@@ -401,26 +398,16 @@ impl TxHashSet {
 		let output_pmmr =
 			ReadonlyPMMR::at(&self.output_pmmr_h.backend, self.output_pmmr_h.last_pos);
 
-		// clear it before rebuilding
-		batch.clear_output_pos_height()?;
-
 		let mut outputs_pos: Vec<(Commitment, u64)> = vec![];
 		for pos in output_pmmr.leaf_pos_iter() {
 			if let Some(out) = output_pmmr.get_data(pos) {
 				outputs_pos.push((out.commit, pos));
 			}
 		}
-		let total_outputs = outputs_pos.len();
-		if total_outputs == 0 {
-			debug!("rebuild_height_pos_index: nothing to be rebuilt");
+		if outputs_pos.is_empty() {
 			return Ok(());
-		} else {
-			debug!(
-				"rebuild_height_pos_index: rebuilding {} outputs position & height...",
-				total_outputs
-			);
 		}
-
+		let total_outputs = outputs_pos.len();
 		let max_height = batch.head()?.height;
 
 		let mut i = 0;
@@ -434,14 +421,38 @@ impl TxHashSet {
 					break;
 				}
 				batch.save_output_pos_height(&commit, pos, h.height)?;
-				trace!("rebuild_height_pos_index: {:?}", (commit, pos, h.height));
 				i += 1;
 			}
 		}
-
 		debug!(
-			"rebuild_height_pos_index: {} UTXOs, took {}s",
+			"init_height_pos_index: {} UTXOs, took {}s",
 			total_outputs,
+			now.elapsed().as_secs(),
+		);
+		Ok(())
+	}
+
+	fn compact_height_pos_index(&self, batch: &Batch<'_>) -> Result<(), Error> {
+		let now = Instant::now();
+		let output_pmmr =
+			ReadonlyPMMR::at(&self.output_pmmr_h.backend, self.output_pmmr_h.last_pos);
+		let last_pos = output_pmmr.unpruned_size();
+
+		let deleted = batch
+			.output_pos_iter()?
+			.filter(|(_, (pos, _))| {
+				// Note we use get_from_file() here as we want to ensure we have an entry
+				// in the index for *every* output still in the file, not just the "unspent"
+				// outputs. This is because we need to support rewind to handle fork/reorg.
+				// Rewind may "unspend" recently spent, but not yet pruned outputs, and the
+				// index must be consistent in this situation.
+				*pos <= last_pos && output_pmmr.get_from_file(*pos).is_none()
+			})
+			.map(|(key, _)| batch.delete(&key))
+			.count();
+		debug!(
+			"compact_output_pos_index: deleted {} entries from the index, took {}s",
+			deleted,
 			now.elapsed().as_secs(),
 		);
 		Ok(())
@@ -739,7 +750,7 @@ impl<'a> HeaderExtension<'a> {
 		if let Some(hash) = self.get_header_hash(pos) {
 			Ok(batch.get_block_header(&hash)?)
 		} else {
-			Err(ErrorKind::Other(format!("get header by height")).into())
+			Err(ErrorKind::Other("get header by height".to_string()).into())
 		}
 	}
 
@@ -751,13 +762,13 @@ impl<'a> HeaderExtension<'a> {
 		batch: &Batch<'_>,
 	) -> Result<(), Error> {
 		if header.height > self.head.height {
-			return Err(ErrorKind::Other(format!("not on current chain, out beyond")).into());
+			return Err(ErrorKind::Other("not on current chain, out beyond".to_string()).into());
 		}
 		let chain_header = self.get_header_by_height(header.height, batch)?;
 		if chain_header.hash() == header.hash() {
 			Ok(())
 		} else {
-			Err(ErrorKind::Other(format!("not on current chain")).into())
+			Err(ErrorKind::Other("not on current chain".to_string()).into())
 		}
 	}
 
@@ -966,7 +977,7 @@ impl<'a> Extension<'a> {
 			if let Some(hash) = self.output_pmmr.get_hash(pos) {
 				if hash != input.hash_with_index(pos - 1) {
 					return Err(
-						ErrorKind::TxHashSetErr(format!("output pmmr hash mismatch")).into(),
+						ErrorKind::TxHashSetErr("output pmmr hash mismatch".to_string()).into(),
 					);
 				}
 			}
@@ -978,7 +989,7 @@ impl<'a> Extension<'a> {
 				Ok(true) => {
 					self.rproof_pmmr
 						.prune(pos)
-						.map_err(|e| ErrorKind::TxHashSetErr(e))?;
+						.map_err(ErrorKind::TxHashSetErr)?;
 					Ok(pos)
 				}
 				Ok(false) => Err(ErrorKind::AlreadySpent(commit).into()),
@@ -1016,13 +1027,13 @@ impl<'a> Extension<'a> {
 		{
 			if self.output_pmmr.unpruned_size() != self.rproof_pmmr.unpruned_size() {
 				return Err(
-					ErrorKind::Other(format!("output vs rproof MMRs different sizes")).into(),
+					ErrorKind::Other("output vs rproof MMRs different sizes".to_string()).into(),
 				);
 			}
 
 			if output_pos != rproof_pos {
 				return Err(
-					ErrorKind::Other(format!("output vs rproof MMRs different pos")).into(),
+					ErrorKind::Other("output vs rproof MMRs different pos".to_string()).into(),
 				);
 			}
 		}
@@ -1067,10 +1078,10 @@ impl<'a> Extension<'a> {
 		let header = batch.get_block_header(&self.head.last_block_h)?;
 		self.output_pmmr
 			.snapshot(&header)
-			.map_err(|e| ErrorKind::Other(e))?;
+			.map_err(ErrorKind::Other)?;
 		self.rproof_pmmr
 			.snapshot(&header)
-			.map_err(|e| ErrorKind::Other(e))?;
+			.map_err(ErrorKind::Other)?;
 		Ok(())
 	}
 
@@ -1244,7 +1255,7 @@ impl<'a> Extension<'a> {
 
 		if self.head.height == 0 {
 			let zero_commit = secp_static::commit_to_zero_value();
-			return Ok((zero_commit.clone(), zero_commit.clone()));
+			return Ok((zero_commit, zero_commit));
 		}
 
 		// The real magicking happens here. Sum of kernel excesses should equal
@@ -1312,7 +1323,7 @@ impl<'a> Extension<'a> {
 				let kernel = self
 					.kernel_pmmr
 					.get_data(n)
-					.ok_or::<Error>(ErrorKind::TxKernelNotFound.into())?;
+					.ok_or_else(|| ErrorKind::TxKernelNotFound)?;
 				tx_kernels.push(kernel);
 			}
 
@@ -1379,7 +1390,7 @@ impl<'a> Extension<'a> {
 		}
 
 		// remaining part which not full of 1000 range proofs
-		if proofs.len() > 0 {
+		if !proofs.is_empty() {
 			Output::batch_verify_proofs(&commits, &proofs)?;
 			commits.clear();
 			proofs.clear();
@@ -1423,7 +1434,7 @@ pub fn zip_read(root_dir: String, header: &BlockHeader) -> Result<File, Error> {
 		// But practically, these zip files are not small ones, we just keep the zips in last 24 hours
 		let data_dir = Path::new(&root_dir);
 		let pattern = format!("{}_", TXHASHSET_ZIP);
-		if let Ok(n) = clean_files_by_prefix(data_dir.clone(), &pattern, 24 * 60 * 60) {
+		if let Ok(n) = clean_files_by_prefix(data_dir, &pattern, 24 * 60 * 60) {
 			debug!(
 				"{} zip files have been clean up in folder: {:?}",
 				n, data_dir
@@ -1509,7 +1520,7 @@ pub fn zip_write(
 	header: &BlockHeader,
 ) -> Result<(), Error> {
 	debug!("zip_write on path: {:?}", root_dir);
-	let txhashset_path = root_dir.clone().join(TXHASHSET_SUBDIR);
+	let txhashset_path = root_dir.join(TXHASHSET_SUBDIR);
 	fs::create_dir_all(&txhashset_path)?;
 
 	// Explicit list of files to extract from our zip archive.
@@ -1531,12 +1542,9 @@ pub fn txhashset_replace(from: PathBuf, to: PathBuf) -> Result<(), Error> {
 	clean_txhashset_folder(&to);
 
 	// rename the 'from' folder as the 'to' folder
-	if let Err(e) = fs::rename(
-		from.clone().join(TXHASHSET_SUBDIR),
-		to.clone().join(TXHASHSET_SUBDIR),
-	) {
+	if let Err(e) = fs::rename(from.join(TXHASHSET_SUBDIR), to.join(TXHASHSET_SUBDIR)) {
 		error!("hashset_replace fail on {}. err: {}", TXHASHSET_SUBDIR, e);
-		Err(ErrorKind::TxHashSetErr(format!("txhashset replacing fail")).into())
+		Err(ErrorKind::TxHashSetErr("txhashset replacing fail".to_string()).into())
 	} else {
 		Ok(())
 	}

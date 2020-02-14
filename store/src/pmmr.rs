@@ -174,7 +174,7 @@ impl<T: PMMRable> Backend<T> for PMMRBackend<T> {
 	fn data_as_temp_file(&self) -> Result<File, String> {
 		self.data_file
 			.as_temp_file()
-			.map_err(|_| format!("Failed to build temp data file"))
+			.map_err(|_| "Failed to build temp data file".to_string())
 	}
 
 	/// Rewind the PMMR backend to the given position.

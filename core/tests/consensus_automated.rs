@@ -118,7 +118,7 @@ fn next_target_adjustment() {
 	// We should never drop below minimum
 	hi.difficulty = Difficulty::zero();
 	assert_eq!(
-		next_difficulty(1, repeat(90, hi.clone(), just_enough, None)).difficulty,
+		next_difficulty(1, repeat(90, hi, just_enough, None)).difficulty,
 		Difficulty::min()
 	);
 }
@@ -132,7 +132,7 @@ fn repeat(interval: u64, diff: HeaderInfo, len: u64, cur_time: Option<u64>) -> V
 	};
 	// watch overflow here, length shouldn't be ridiculous anyhow
 	assert!(len < std::usize::MAX as u64);
-	let diffs = vec![diff.difficulty.clone(); len as usize];
+	let diffs = vec![diff.difficulty; len as usize];
 	let times = (0..(len as usize)).map(|n| n * interval as usize).rev();
 	let pairs = times.zip(diffs.iter());
 	pairs
@@ -140,7 +140,7 @@ fn repeat(interval: u64, diff: HeaderInfo, len: u64, cur_time: Option<u64>) -> V
 			HeaderInfo::new(
 				diff.block_hash,
 				cur_time + t as u64,
-				d.clone(),
+				*d,
 				diff.secondary_scaling,
 				diff.is_secondary,
 			)

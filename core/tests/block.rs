@@ -100,7 +100,7 @@ fn block_with_cut_through() {
 
 	// spending tx2 - reuse key_id2
 
-	let mut btx3 = txspend1i1o(5, &keychain, &builder, key_id2.clone(), key_id3);
+	let mut btx3 = txspend1i1o(5, &keychain, &builder, key_id2, key_id3);
 	let prev = BlockHeader::default();
 	let key_id = ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
 	let b = new_block(
@@ -135,7 +135,7 @@ fn empty_block_with_coinbase_is_valid() {
 		.outputs()
 		.iter()
 		.filter(|out| out.is_coinbase())
-		.map(|o| o.clone())
+		.cloned()
 		.collect::<Vec<_>>();
 	assert_eq!(coinbase_outputs.len(), 1);
 
@@ -143,7 +143,7 @@ fn empty_block_with_coinbase_is_valid() {
 		.kernels()
 		.iter()
 		.filter(|out| out.is_coinbase())
-		.map(|o| o.clone())
+		.cloned()
 		.collect::<Vec<_>>();
 	assert_eq!(coinbase_kernels.len(), 1);
 
@@ -494,11 +494,7 @@ fn same_amount_outputs_copy_range_proof() {
 	let key_id = keychain::ExtKeychain::derive_key_id(1, 4, 0, 0, 0);
 	let prev = BlockHeader::default();
 	let b = new_block(
-		vec![&mut Transaction::new(
-			ins.clone(),
-			outs.clone(),
-			kernels.clone(),
-		)],
+		vec![&mut Transaction::new(ins.clone(), outs, kernels.clone())],
 		&keychain,
 		&builder,
 		&prev,
@@ -551,11 +547,7 @@ fn wrong_amount_range_proof() {
 	let key_id = keychain::ExtKeychain::derive_key_id(1, 4, 0, 0, 0);
 	let prev = BlockHeader::default();
 	let b = new_block(
-		vec![&mut Transaction::new(
-			ins.clone(),
-			outs.clone(),
-			kernels.clone(),
-		)],
+		vec![&mut Transaction::new(ins.clone(), outs, kernels.clone())],
 		&keychain,
 		&builder,
 		&prev,
@@ -598,7 +590,7 @@ fn validate_header_proof() {
 	assert!(BlockHeader::from_pre_pow_and_proof(
 		"0xaf1678".to_string(),
 		b.header.pow.nonce,
-		b.header.pow.proof.clone(),
+		b.header.pow.proof,
 	)
 	.is_err());
 }
