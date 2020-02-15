@@ -300,6 +300,7 @@ impl TxHashSet {
 			.elements_from_pmmr_index(start_index, max_count, max_index)
 	}
 
+	/// TODO - Leverage the kernel_pos as a quick way of achieving this for recent kernels.
 	/// Find a kernel with a given excess. Work backwards from `max_index` to `min_index`
 	pub fn find_kernel(
 		&self,
@@ -347,13 +348,19 @@ impl TxHashSet {
 		Ok(self.commit_index.get_output_pos(&commit)?)
 	}
 
+	/// TODO - This needs to be a multi-step process.
+	/// TODO - Rename this.
+	/// First we need to look the entry up in the index.
+	/// This entry will be a vec of (pos, height).
+	/// The entry may be an empty vec.
+	/// We then need to filter this vec by height (discounting anything beyond current head)
+	/// and then actually look the kernels up, filtering out any that do not align with the index.
+	///
 	/// Get the position of the kernel if it exists in the kernel_pos index.
-	/// The index is limited to 7 days of recent kernels.
-	pub fn get_kernel_pos(&self, excess: Commitment) -> Result<u64, Error> {
-		let pos = self
-			.commit_index
-			.get_kernel_pos_height(&excess)
-			.map(|(pos, _)| pos)?;
+	/// The index is limited to 14 days of recent kernels.
+	pub fn get_kernel_pos(&self, excess: Commitment) -> Result<Vec<(TxKernel, u64)>, Error> {
+		let pos = self.commit_index.get_kernel_pos_height(&excess);
+		// .map(|entry| entry)?;
 		Ok(pos)
 	}
 

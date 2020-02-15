@@ -1090,7 +1090,7 @@ impl Chain {
 			} else {
 				global::cut_through_horizon()
 			};
-			let next_compact = tail.height.saturating_add(threshold);
+			let next_compact = tail.height.saturating_add(threshold.into());
 			if next_compact > head.height {
 				debug!(
 					"compact: skipping startup compaction (next at {})",
@@ -1152,7 +1152,7 @@ impl Chain {
 	}
 
 	/// Get the position of the kernel if it exists in the kernel_pos index.
-	/// The index is limited to 7 days of recent kernels.
+	/// The index is limited to 14 days of recent kernels.
 	pub fn get_kernel_pos(&self, excess: Commitment) -> Result<u64, Error> {
 		Ok(self.txhashset.read().get_kernel_pos(excess)?)
 	}

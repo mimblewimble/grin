@@ -132,12 +132,12 @@ impl ChainStore {
 	}
 
 	/// Get kernel_pos and block height from index.
-	pub fn get_kernel_pos_height(&self, excess: &Commitment) -> Result<(u64, u64), Error> {
-		option_to_not_found(
-			self.db
-				.get_ser(&to_key(KERNEL_POS_PREFIX, &mut excess.as_ref().to_vec())),
-			|| format!("Kernel pos for excess commit: {:?}", excess),
-		)
+	/// Returns a vec of possible (pos, height) entries in the MMR.
+	/// Returns an empty vec if no entries found.
+	pub fn get_kernel_pos_height(&self, excess: &Commitment) -> Result<Vec<(u64, u64)>, Error> {
+		self.db
+			.get_ser(&to_key(KERNEL_POS_PREFIX, &mut excess.as_ref().to_vec()))
+			.map(|x| x.unwrap_or(vec![]))
 	}
 
 	/// Builds a new batch to be used with this store.
@@ -292,25 +292,29 @@ impl<'a> Batch<'a> {
 		pos: u64,
 		height: u64,
 	) -> Result<(), Error> {
+		let new_value = (pos, height);
+		let mut entry = self.get_kernel_pos_height(excess)?;
+		let idx = entry.binary_search(&new_value).unwrap_or_else(|x| x);
+		entry.insert(idx, new_value);
 		self.db.put_ser(
 			&to_key(KERNEL_POS_PREFIX, &mut excess.as_ref().to_vec())[..],
-			&(pos, height),
+			&entry,
 		)
 	}
 
 	/// Iterator over the kernel_pos index.
-	pub fn kernel_pos_iter(&self) -> Result<SerIterator<(u64, u64)>, Error> {
+	pub fn kernel_pos_iter(&self) -> Result<SerIterator<Vec<(u64, u64)>>, Error> {
 		let key = to_key(KERNEL_POS_PREFIX, &mut "".to_string().into_bytes());
 		self.db.iter(&key)
 	}
 
 	/// Get kernel_pos and block height from index.
-	pub fn get_kernel_pos_height(&self, excess: &Commitment) -> Result<(u64, u64), Error> {
-		option_to_not_found(
-			self.db
-				.get_ser(&to_key(KERNEL_POS_PREFIX, &mut excess.as_ref().to_vec())),
-			|| format!("Kernel pos for excess commit: {:?}", excess),
-		)
+	/// Returns a vec of possible (pos, height) entries in the MMR.
+	/// Returns an empty vec if no entries found.
+	pub fn get_kernel_pos_height(&self, excess: &Commitment) -> Result<Vec<(u64, u64)>, Error> {
+		self.db
+			.get_ser(&to_key(KERNEL_POS_PREFIX, &mut excess.as_ref().to_vec()))
+			.map(|x| x.unwrap_or(vec![]))
 	}
 
 	/// Get output_pos from index.
