@@ -366,6 +366,8 @@ impl TxHashSet {
 		debug!("txhashset: starting compaction...");
 
 		let head_header = batch.head_header()?;
+
+		// TODO - What to do with this?
 		let rewind_rm_pos = input_pos_to_rewind(&horizon_header, &head_header, batch)?;
 
 		debug!("txhashset: check_compact output mmr backend...");
@@ -1103,13 +1105,22 @@ impl<'a> Extension<'a> {
 		// Rewound output pos will be removed from the MMR.
 		// Rewound input (spent) pos will be added back to the MMR.
 		let head_header = batch.get_block_header(&self.head.hash())?;
-		let rewind_rm_pos = input_pos_to_rewind(header, &head_header, batch)?;
 
-		self.rewind_to_pos(
-			header.output_mmr_size,
-			header.kernel_mmr_size,
-			&rewind_rm_pos,
-		)?;
+		if head_header.height <= header.height {
+			// Nothing to rewind but we do want to truncate the MMRs at header for consistency.
+			self.rewind_mmrs_to_pos(
+				header.output_mmr_size,
+				header.kernel_mmr_size,
+				&Bitmap::create(),
+			)?;
+			self.apply_to_bitmap_accumulator(&[header.output_mmr_size])?;
+		} else {
+			let mut current = head_header;
+			while header.height < current.height {
+				self.rewind_single_block(&current, batch)?;
+				current = batch.get_previous_header(&current)?;
+			}
+		}
 
 		// Update our head to reflect the header we rewound to.
 		self.head = Tip::from_header(header);
@@ -1117,9 +1128,40 @@ impl<'a> Extension<'a> {
 		Ok(())
 	}
 
+	// TODO - We need to "undo" the output_pos index changes here for each block
+	// that we rewind.
+	// If an output becomes unspent we must ensure it is back in the output_pos index
+	// with the correct pos.
+	// This is crucial for output commitments that have been reused.
+	fn rewind_single_block(
+		&mut self,
+		header: &BlockHeader,
+		batch: &Batch<'_>,
+	) -> Result<(), Error> {
+		let input_bitmap = batch.get_block_input_bitmap(&header.hash())?;
+
+		if header.height == 0 {
+			self.rewind_mmrs_to_pos(0, 0, &Bitmap::create())?;
+		} else {
+			let prev = batch.get_previous_header(&header)?;
+			self.rewind_mmrs_to_pos(prev.output_mmr_size, prev.kernel_mmr_size, &input_bitmap)?;
+		}
+
+		// Update our BitmapAccumulator based on affected outputs.
+		// We want to "unspend" every rewound spent output.
+		// Treat last_pos as an affected output to ensure we rebuild far enough back.
+		let mut affected_pos: Vec<_> = input_bitmap.iter().map(|x| x.into()).collect();
+		affected_pos.push(self.output_pmmr.last_pos);
+		self.apply_to_bitmap_accumulator(&affected_pos)?;
+
+		// TODO - we need to update the output_pos index here to reflect rewound state.
+
+		Ok(())
+	}
+
 	/// Rewinds the MMRs to the provided positions, given the output and
-	/// kernel we want to rewind to.
-	fn rewind_to_pos(
+	/// kernel pos we want to rewind to.
+	fn rewind_mmrs_to_pos(
 		&mut self,
 		output_pos: u64,
 		kernel_pos: u64,
@@ -1134,13 +1176,6 @@ impl<'a> Extension<'a> {
 		self.kernel_pmmr
 			.rewind(kernel_pos, &Bitmap::create())
 			.map_err(&ErrorKind::TxHashSetErr)?;
-
-		// Update our BitmapAccumulator based on affected outputs.
-		// We want to "unspend" every rewound spent output.
-		// Treat output_pos as an affected output to ensure we rebuild far enough back.
-		let mut affected_pos: Vec<_> = rewind_rm_pos.iter().map(|x| x as u64).collect();
-		affected_pos.push(output_pos);
-		self.apply_to_bitmap_accumulator(&affected_pos)?;
 		Ok(())
 	}
 
@@ -1563,6 +1598,8 @@ pub fn clean_txhashset_folder(root_dir: &PathBuf) {
 	}
 }
 
+/// TODO - suspect this can be simplified *significantly*.
+///
 /// Given a block header to rewind to and the block header at the
 /// head of the current chain state, we need to calculate the positions
 /// of all inputs (spent outputs) we need to "undo" during a rewind.

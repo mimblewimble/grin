@@ -182,7 +182,8 @@ impl<'a> Batch<'a> {
 	/// Note: the block header is not saved to the db here, assumes this has already been done.
 	pub fn save_block(&self, b: &Block) -> Result<(), Error> {
 		// Build the "input bitmap" for this new block and store it in the db.
-		self.build_and_store_block_input_bitmap(&b)?;
+		let bitmap = self.build_block_input_bitmap(b);
+		self.save_block_input_bitmap(&b.hash(), &bitmap)?;
 
 		// Save the block itself to the db.
 		self.db
@@ -315,27 +316,20 @@ impl<'a> Batch<'a> {
 	}
 
 	/// Build the input bitmap for the given block.
-	fn build_block_input_bitmap(&self, block: &Block) -> Result<Bitmap, Error> {
-		let bitmap = block
+	fn build_block_input_bitmap(&self, block: &Block) -> Bitmap {
+		block
 			.inputs()
 			.iter()
 			.filter_map(|x| self.get_output_pos(&x.commitment()).ok())
 			.map(|x| x as u32)
-			.collect();
-		Ok(bitmap)
+			.collect()
 	}
 
-	/// Build and store the input bitmap for the given block.
-	fn build_and_store_block_input_bitmap(&self, block: &Block) -> Result<Bitmap, Error> {
-		// Build the bitmap.
-		let bitmap = self.build_block_input_bitmap(block)?;
-
-		// Save the bitmap to the db (via the batch).
-		self.save_block_input_bitmap(&block.hash(), &bitmap)?;
-
-		Ok(bitmap)
-	}
-
+	/// TODO - This should return a Vec<(u64, u64, Commitment)> for spent outputs.
+	/// TODO - So we can "undo" a block easily in the output_pos.
+	/// Index needs pos and height for each commitment and we need to add these back in
+	/// as necessary.
+	///
 	/// Get the block input bitmap from the db or build the bitmap from
 	/// the full block from the db (if the block is found).
 	pub fn get_block_input_bitmap(&self, bh: &Hash) -> Result<Bitmap, Error> {
@@ -345,13 +339,7 @@ impl<'a> Batch<'a> {
 		{
 			Ok(Bitmap::deserialize(&bytes))
 		} else {
-			match self.get_block(bh) {
-				Ok(block) => {
-					let bitmap = self.build_and_store_block_input_bitmap(&block)?;
-					Ok(bitmap)
-				}
-				Err(e) => Err(e),
-			}
+			panic!("should never happen, but fixme");
 		}
 	}
 
