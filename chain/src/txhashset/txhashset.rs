@@ -1599,8 +1599,6 @@ pub fn clean_txhashset_folder(root_dir: &PathBuf) {
 	}
 }
 
-/// TODO - suspect this can be simplified *significantly*.
-///
 /// Given a block header to rewind to and the block header at the
 /// head of the current chain state, we need to calculate the positions
 /// of all inputs (spent outputs) we need to "undo" during a rewind.
@@ -1614,7 +1612,6 @@ fn input_pos_to_rewind(
 	let mut bitmap = Bitmap::create();
 	let mut current = head_header.clone();
 	while current.height > block_header.height {
-		// TODO - read the spent index here and explicitly fallback to input bitmap.
 		if let Ok(block_bitmap) = batch.get_block_input_bitmap(&current.hash()) {
 			bitmap.or_inplace(&block_bitmap);
 		}
