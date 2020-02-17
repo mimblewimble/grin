@@ -398,6 +398,7 @@ fn mine_reorg() {
 
 #[test]
 fn mine_forks() {
+	clean_output_dir(".grin2");
 	global::set_mining_mode(ChainTypes::AutomatedTesting);
 	{
 		let chain = init_chain(".grin2", pow::mine_genesis_block().unwrap());
@@ -445,6 +446,7 @@ fn mine_forks() {
 
 #[test]
 fn mine_losing_fork() {
+	clean_output_dir(".grin3");
 	global::set_mining_mode(ChainTypes::AutomatedTesting);
 	let kc = ExtKeychain::from_random_seed(false).unwrap();
 	{
@@ -481,6 +483,7 @@ fn mine_losing_fork() {
 
 #[test]
 fn longer_fork() {
+	clean_output_dir(".grin4");
 	global::set_mining_mode(ChainTypes::AutomatedTesting);
 	let kc = ExtKeychain::from_random_seed(false).unwrap();
 	// to make it easier to compute the txhashset roots in the test, we
@@ -525,11 +528,9 @@ fn longer_fork() {
 
 #[test]
 fn spend_in_fork_and_compact() {
+	clean_output_dir(".grin6");
 	global::set_mining_mode(ChainTypes::AutomatedTesting);
 	util::init_test_logger();
-	// Cleanup chain directory
-	clean_output_dir(".grin6");
-
 	{
 		let chain = init_chain(".grin6", pow::mine_genesis_block().unwrap());
 		let prev = chain.head_header().unwrap();

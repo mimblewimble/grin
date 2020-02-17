@@ -30,7 +30,7 @@ use crate::store;
 use crate::txhashset;
 use crate::txhashset::{PMMRHandle, TxHashSet};
 use crate::types::{
-	BlockStatus, ChainAdapter, NoStatus, Options, OutputMMRPosition, Tip, TxHashsetWriteStatus,
+	BlockStatus, ChainAdapter, NoStatus, Options, OutputPos, Tip, TxHashsetWriteStatus,
 };
 use crate::util::secp::pedersen::{Commitment, RangeProof};
 use crate::util::RwLock;
@@ -495,9 +495,8 @@ impl Chain {
 	/// spent. This querying is done in a way that is consistent with the
 	/// current chain state, specifically the current winning (valid, most
 	/// work) fork.
-	pub fn is_unspent(&self, output_ref: &OutputIdentifier) -> Result<OutputMMRPosition, Error> {
-		let txhashset = self.txhashset.read();
-		txhashset.is_unspent(output_ref)
+	pub fn is_unspent(&self, output_ref: &OutputIdentifier) -> Result<OutputPos, Error> {
+		self.txhashset.read().is_unspent(output_ref)
 	}
 
 	/// Retrieves an unspent output using its PMMR position
@@ -1510,6 +1509,7 @@ fn setup_head(
 			// We will update this later once we have the correct header_root.
 			batch.save_block_header(&genesis.header)?;
 			batch.save_block(&genesis)?;
+			batch.save_spent_index(&genesis.hash(), &vec![])?;
 			batch.save_body_head(&Tip::from_header(&genesis.header))?;
 
 			if !genesis.kernels().is_empty() {

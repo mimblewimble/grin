@@ -56,7 +56,7 @@ pub fn get_output(
 		match res {
 			Ok(output_pos) => {
 				return Ok((
-					Output::new(&commit, output_pos.height, output_pos.position),
+					Output::new(&commit, output_pos.height, output_pos.pos),
 					x.clone(),
 				));
 			}
@@ -100,7 +100,7 @@ pub fn get_output_v2(
 	for x in outputs.iter() {
 		let res = chain.is_unspent(x);
 		match res {
-			Ok(output_pos) => match chain.get_unspent_output_at(output_pos.position) {
+			Ok(output_pos) => match chain.get_unspent_output_at(output_pos.pos) {
 				Ok(output) => {
 					let header = if include_merkle_proof && output.is_coinbase() {
 						chain.get_header_by_height(output_pos.height).ok()

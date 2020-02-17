@@ -25,7 +25,7 @@ use crate::error::{Error, ErrorKind};
 use crate::store::{Batch, ChainStore};
 use crate::txhashset::bitmap_accumulator::BitmapAccumulator;
 use crate::txhashset::{RewindableKernelView, UTXOView};
-use crate::types::{OutputMMRPosition, OutputRoots, Tip, TxHashSetRoots, TxHashsetWriteStatus};
+use crate::types::{OutputPos, OutputRoots, Tip, TxHashSetRoots, TxHashsetWriteStatus};
 use crate::util::secp::pedersen::{Commitment, RangeProof};
 use crate::util::{file, secp_static, zip};
 use croaring::Bitmap;
@@ -223,17 +223,18 @@ impl TxHashSet {
 	/// Check if an output is unspent.
 	/// We look in the index to find the output MMR pos.
 	/// Then we check the entry in the output MMR and confirm the hash matches.
-	pub fn is_unspent(&self, output_id: &OutputIdentifier) -> Result<OutputMMRPosition, Error> {
-		match self.commit_index.get_output_pos_height(&output_id.commit) {
-			Ok((pos, block_height)) => {
+	pub fn is_unspent(&self, output_id: &OutputIdentifier) -> Result<OutputPos, Error> {
+		let commit = output_id.commit;
+		match self.commit_index.get_output_pos_height(&commit) {
+			Ok((pos, height)) => {
 				let output_pmmr: ReadonlyPMMR<'_, Output, _> =
 					ReadonlyPMMR::at(&self.output_pmmr_h.backend, self.output_pmmr_h.last_pos);
 				if let Some(hash) = output_pmmr.get_hash(pos) {
 					if hash == output_id.hash_with_index(pos - 1) {
-						Ok(OutputMMRPosition {
-							output_mmr_hash: hash,
-							position: pos,
-							height: block_height,
+						Ok(OutputPos {
+							pos,
+							height,
+							commit,
 						})
 					} else {
 						Err(ErrorKind::TxHashSetErr("txhashset hash mismatch".to_string()).into())
@@ -367,7 +368,6 @@ impl TxHashSet {
 
 		let head_header = batch.head_header()?;
 
-		// TODO - What to do with this?
 		let rewind_rm_pos = input_pos_to_rewind(&horizon_header, &head_header, batch)?;
 
 		debug!("txhashset: check_compact output mmr backend...");
@@ -379,9 +379,6 @@ impl TxHashSet {
 		self.rproof_pmmr_h
 			.backend
 			.check_compact(horizon_header.output_mmr_size, &rewind_rm_pos)?;
-
-		debug!("txhashset: compact height pos index...");
-		self.compact_height_pos_index(batch)?;
 
 		debug!("txhashset: ... compaction finished");
 
@@ -429,32 +426,6 @@ impl TxHashSet {
 		debug!(
 			"init_height_pos_index: {} UTXOs, took {}s",
 			total_outputs,
-			now.elapsed().as_secs(),
-		);
-		Ok(())
-	}
-
-	fn compact_height_pos_index(&self, batch: &Batch<'_>) -> Result<(), Error> {
-		let now = Instant::now();
-		let output_pmmr =
-			ReadonlyPMMR::at(&self.output_pmmr_h.backend, self.output_pmmr_h.last_pos);
-		let last_pos = output_pmmr.unpruned_size();
-
-		let deleted = batch
-			.output_pos_iter()?
-			.filter(|(_, (pos, _))| {
-				// Note we use get_from_file() here as we want to ensure we have an entry
-				// in the index for *every* output still in the file, not just the "unspent"
-				// outputs. This is because we need to support rewind to handle fork/reorg.
-				// Rewind may "unspend" recently spent, but not yet pruned outputs, and the
-				// index must be consistent in this situation.
-				*pos <= last_pos && output_pmmr.get_from_file(*pos).is_none()
-			})
-			.map(|(key, _)| batch.delete(&key))
-			.count();
-		debug!(
-			"compact_output_pos_index: deleted {} entries from the index, took {}s",
-			deleted,
 			now.elapsed().as_secs(),
 		);
 		Ok(())
@@ -925,18 +896,28 @@ impl<'a> Extension<'a> {
 	}
 
 	/// Apply a new block to the current txhashet extension (output, rangeproof, kernel MMRs).
-	pub fn apply_block(&mut self, b: &Block, batch: &Batch<'_>) -> Result<(), Error> {
+	pub fn apply_block(&mut self, b: &Block, batch: &Batch<'_>) -> Result<Vec<OutputPos>, Error> {
 		let mut affected_pos = vec![];
+		let mut spent = vec![];
 
 		for out in b.outputs() {
 			let pos = self.apply_output(out, batch)?;
 			affected_pos.push(pos);
+
+			// TODO - we do *not* want to actually add to batch here?
+			// if we are processing a fork we want this batch to rollback.
 			batch.save_output_pos_height(&out.commitment(), pos, b.header.height)?;
 		}
 
 		for input in b.inputs() {
-			let pos = self.apply_input(input, batch)?;
-			affected_pos.push(pos);
+			let spent_pos = self.apply_input(input, batch)?;
+			affected_pos.push(spent_pos.pos);
+
+			// TODO - we do *not* want to actually add to batch here?
+			// if processing a fork we want this batch to rollback.
+			batch.delete_output_pos_height(&spent_pos.commit)?;
+
+			spent.push(spent_pos);
 		}
 
 		for kernel in b.kernels() {
@@ -949,7 +930,7 @@ impl<'a> Extension<'a> {
 		// Update the head of the extension to reflect the block we just applied.
 		self.head = Tip::from_header(&b.header);
 
-		Ok(())
+		Ok(spent)
 	}
 
 	fn apply_to_bitmap_accumulator(&mut self, output_pos: &[u64]) -> Result<(), Error> {
@@ -971,10 +952,9 @@ impl<'a> Extension<'a> {
 		)
 	}
 
-	fn apply_input(&mut self, input: &Input, batch: &Batch<'_>) -> Result<u64, Error> {
+	fn apply_input(&mut self, input: &Input, batch: &Batch<'_>) -> Result<OutputPos, Error> {
 		let commit = input.commitment();
-		let pos_res = batch.get_output_pos(&commit);
-		if let Ok(pos) = pos_res {
+		if let Ok((pos, height)) = batch.get_output_pos_height(&commit) {
 			// First check this input corresponds to an existing entry in the output MMR.
 			if let Some(hash) = self.output_pmmr.get_hash(pos) {
 				if hash != input.hash_with_index(pos - 1) {
@@ -992,7 +972,11 @@ impl<'a> Extension<'a> {
 					self.rproof_pmmr
 						.prune(pos)
 						.map_err(ErrorKind::TxHashSetErr)?;
-					Ok(pos)
+					Ok(OutputPos {
+						pos,
+						height,
+						commit,
+					})
 				}
 				Ok(false) => Err(ErrorKind::AlreadySpent(commit).into()),
 				Err(e) => Err(ErrorKind::TxHashSetErr(e).into()),
@@ -1108,11 +1092,7 @@ impl<'a> Extension<'a> {
 
 		if head_header.height <= header.height {
 			// Nothing to rewind but we do want to truncate the MMRs at header for consistency.
-			self.rewind_mmrs_to_pos(
-				header.output_mmr_size,
-				header.kernel_mmr_size,
-				&Bitmap::create(),
-			)?;
+			self.rewind_mmrs_to_pos(header.output_mmr_size, header.kernel_mmr_size, &vec![])?;
 			self.apply_to_bitmap_accumulator(&[header.output_mmr_size])?;
 		} else {
 			let mut current = head_header;
@@ -1138,23 +1118,43 @@ impl<'a> Extension<'a> {
 		header: &BlockHeader,
 		batch: &Batch<'_>,
 	) -> Result<(), Error> {
-		let input_bitmap = batch.get_block_input_bitmap(&header.hash())?;
+		let spent = batch.get_spent_index(&header.hash());
+
+		let spent_pos: Vec<_> = if let Ok(ref spent) = spent {
+			spent.iter().map(|x| x.pos).collect()
+		} else {
+			warn!(
+				"rewind_single_block: fallback to legacy input bitmap for block {} at {}",
+				header.hash(),
+				header.height
+			);
+			let bitmap = batch.get_block_input_bitmap(&header.hash())?;
+			bitmap.iter().map(|x| x.into()).collect()
+		};
 
 		if header.height == 0 {
-			self.rewind_mmrs_to_pos(0, 0, &Bitmap::create())?;
+			self.rewind_mmrs_to_pos(0, 0, &spent_pos)?;
 		} else {
 			let prev = batch.get_previous_header(&header)?;
-			self.rewind_mmrs_to_pos(prev.output_mmr_size, prev.kernel_mmr_size, &input_bitmap)?;
+			self.rewind_mmrs_to_pos(prev.output_mmr_size, prev.kernel_mmr_size, &spent_pos)?;
 		}
 
 		// Update our BitmapAccumulator based on affected outputs.
 		// We want to "unspend" every rewound spent output.
 		// Treat last_pos as an affected output to ensure we rebuild far enough back.
-		let mut affected_pos: Vec<_> = input_bitmap.iter().map(|x| x.into()).collect();
+		let mut affected_pos = spent_pos.clone();
 		affected_pos.push(self.output_pmmr.last_pos);
 		self.apply_to_bitmap_accumulator(&affected_pos)?;
 
-		// TODO - we need to update the output_pos index here to reflect rewound state.
+		// Update output_pos based on "unspending" all spent pos from this block.
+		// This is necessary to ensure the output_pos index correclty reflects a
+		// reused output commitment. For example an output at pos 1, spent, reused at pos 2.
+		// The output_pos index should be updated to reflect the old pos 1 when unspent.
+		if let Ok(spent) = spent {
+			for x in spent {
+				batch.save_output_pos_height(&x.commit, x.pos, x.height)?;
+			}
+		}
 
 		Ok(())
 	}
@@ -1165,13 +1165,14 @@ impl<'a> Extension<'a> {
 		&mut self,
 		output_pos: u64,
 		kernel_pos: u64,
-		rewind_rm_pos: &Bitmap,
+		spent_pos: &[u64],
 	) -> Result<(), Error> {
+		let bitmap: Bitmap = spent_pos.into_iter().map(|x| *x as u32).collect();
 		self.output_pmmr
-			.rewind(output_pos, rewind_rm_pos)
+			.rewind(output_pos, &bitmap)
 			.map_err(&ErrorKind::TxHashSetErr)?;
 		self.rproof_pmmr
-			.rewind(output_pos, rewind_rm_pos)
+			.rewind(output_pos, &bitmap)
 			.map_err(&ErrorKind::TxHashSetErr)?;
 		self.kernel_pmmr
 			.rewind(kernel_pos, &Bitmap::create())
@@ -1610,40 +1611,14 @@ fn input_pos_to_rewind(
 	head_header: &BlockHeader,
 	batch: &Batch<'_>,
 ) -> Result<Bitmap, Error> {
-	if head_header.height <= block_header.height {
-		return Ok(Bitmap::create());
-	}
-
-	// Batching up the block input bitmaps, and running fast_or() on every batch of 256 bitmaps.
-	// so to avoid maintaining a huge vec of bitmaps.
-	let bitmap_fast_or = |b_res, block_input_bitmaps: &mut Vec<Bitmap>| -> Option<Bitmap> {
-		if let Some(b) = b_res {
-			block_input_bitmaps.push(b);
-			if block_input_bitmaps.len() < 256 {
-				return None;
-			}
-		}
-		let bitmap = Bitmap::fast_or(&block_input_bitmaps.iter().collect::<Vec<&Bitmap>>());
-		block_input_bitmaps.clear();
-		block_input_bitmaps.push(bitmap.clone());
-		Some(bitmap)
-	};
-
-	let mut block_input_bitmaps: Vec<Bitmap> = vec![];
-
+	let mut bitmap = Bitmap::create();
 	let mut current = head_header.clone();
-	while current.hash() != block_header.hash() {
-		if current.height < 1 {
-			break;
-		}
-
-		// I/O should be minimized or eliminated here for most
-		// rewind scenarios.
-		if let Ok(b_res) = batch.get_block_input_bitmap(&current.hash()) {
-			bitmap_fast_or(Some(b_res), &mut block_input_bitmaps);
+	while current.height > block_header.height {
+		// TODO - read the spent index here and explicitly fallback to input bitmap.
+		if let Ok(block_bitmap) = batch.get_block_input_bitmap(&current.hash()) {
+			bitmap.or_inplace(&block_bitmap);
 		}
 		current = batch.get_previous_header(&current)?;
 	}
-
-	bitmap_fast_or(None, &mut block_input_bitmaps).ok_or_else(|| ErrorKind::Bitmap.into())
+	Ok(bitmap)
 }

@@ -20,8 +20,9 @@ use std::sync::Arc;
 use crate::core::core::hash::{Hash, Hashed, ZERO_HASH};
 use crate::core::core::{Block, BlockHeader, HeaderVersion};
 use crate::core::pow::Difficulty;
-use crate::core::ser::{self, PMMRIndexHashable};
+use crate::core::ser::{self, PMMRIndexHashable, Readable, Reader, Writeable, Writer};
 use crate::error::{Error, ErrorKind};
+use crate::util::secp::pedersen::Commitment;
 use crate::util::RwLock;
 
 bitflags! {
@@ -258,16 +259,38 @@ impl OutputRoots {
 	}
 }
 
-/// A helper to hold the output pmmr position of the txhashset in order to keep them
-/// readable.
+/// Minimal struct representing an output commitment at a known position (and block height)
+/// in an MMR.
 #[derive(Debug)]
-pub struct OutputMMRPosition {
-	/// The hash at the output position in the MMR.
-	pub output_mmr_hash: Hash,
+pub struct OutputPos {
 	/// MMR position
-	pub position: u64,
+	pub pos: u64,
 	/// Block height
 	pub height: u64,
+	/// Output commitment
+	pub commit: Commitment,
+}
+
+impl Readable for OutputPos {
+	fn read(reader: &mut dyn Reader) -> Result<OutputPos, ser::Error> {
+		let pos = reader.read_u64()?;
+		let height = reader.read_u64()?;
+		let commit = Commitment::read(reader)?;
+		Ok(OutputPos {
+			pos,
+			height,
+			commit,
+		})
+	}
+}
+
+impl Writeable for OutputPos {
+	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
+		writer.write_u64(self.pos)?;
+		writer.write_u64(self.height)?;
+		self.commit.write(writer)?;
+		Ok(())
+	}
 }
 
 /// The tip of a fork. A handle to the fork ancestry from its leaf in the
