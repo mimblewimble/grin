@@ -362,7 +362,7 @@ impl TxHashSet {
 	pub fn compact(
 		&mut self,
 		horizon_header: &BlockHeader,
-		batch: &mut Batch<'_>,
+		batch: &Batch<'_>,
 	) -> Result<(), Error> {
 		debug!("txhashset: starting compaction...");
 
@@ -385,17 +385,37 @@ impl TxHashSet {
 		Ok(())
 	}
 
-	/// Initialize the output pos index based on current UTXO set.
-	/// This is a costly operation performed only when we receive a full new chain state.
+	/// (Re)build the output_pos index to be consistent with the current UTXO set.
+	/// Remove any "stale" index entries that do not correspond to outputs in the UTXO set.
+	/// Add any missing index entries based on UTXO set.
 	pub fn init_output_pos_index(
 		&self,
 		header_pmmr: &PMMRHandle<BlockHeader>,
-		batch: &mut Batch<'_>,
+		batch: &Batch<'_>,
 	) -> Result<(), Error> {
 		let now = Instant::now();
 
 		let output_pmmr =
 			ReadonlyPMMR::at(&self.output_pmmr_h.backend, self.output_pmmr_h.last_pos);
+
+		// Iterate over the current output_pos index, removing any entries that
+		// do not point to to the correct output.
+		let mut removed_count = 0;
+		for (key, (pos, _)) in batch.output_pos_iter()? {
+			if let Some(out) = output_pmmr.get_data(pos) {
+				if let Ok(pos_via_mmr) = batch.get_output_pos(&out.commitment()) {
+					if pos == pos_via_mmr {
+						continue;
+					}
+				}
+			}
+			batch.delete(&key)?;
+			removed_count += 1;
+		}
+		debug!(
+			"init_output_pos_index: removed {} stale index entries",
+			removed_count
+		);
 
 		let mut outputs_pos: Vec<(Commitment, u64)> = vec![];
 		for pos in output_pmmr.leaf_pos_iter() {
@@ -403,9 +423,20 @@ impl TxHashSet {
 				outputs_pos.push((out.commit, pos));
 			}
 		}
+
+		debug!("init_output_pos_index: {} utxos", outputs_pos.len());
+
+		outputs_pos.retain(|x| batch.get_output_pos_height(&x.0).is_err());
+
+		debug!(
+			"init_output_pos_index: {} utxos with missing index entries",
+			outputs_pos.len()
+		);
+
 		if outputs_pos.is_empty() {
 			return Ok(());
 		}
+
 		let total_outputs = outputs_pos.len();
 		let max_height = batch.head()?.height;
 
@@ -424,7 +455,7 @@ impl TxHashSet {
 			}
 		}
 		debug!(
-			"init_height_pos_index: {} UTXOs, took {}s",
+			"init_height_pos_index: added entries for {} utxos, took {}s",
 			total_outputs,
 			now.elapsed().as_secs(),
 		);
