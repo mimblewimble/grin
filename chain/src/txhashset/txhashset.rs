@@ -1139,16 +1139,13 @@ impl<'a> Extension<'a> {
 		Ok(())
 	}
 
-	// TODO - We need to "undo" the output_pos index changes here for each block
-	// that we rewind.
-	// If an output becomes unspent we must ensure it is back in the output_pos index
-	// with the correct pos.
-	// This is crucial for output commitments that have been reused.
+	// Rewind the MMRs, the bitmap accumulator and the output_pos index.
 	fn rewind_single_block(
 		&mut self,
 		header: &BlockHeader,
 		batch: &Batch<'_>,
 	) -> Result<(), Error> {
+		// The spent index allows us to conveniently "unspend" everything in a block.
 		let spent = batch.get_spent_index(&header.hash());
 
 		let spent_pos: Vec<_> = if let Ok(ref spent) = spent {
@@ -1176,6 +1173,12 @@ impl<'a> Extension<'a> {
 		let mut affected_pos = spent_pos.clone();
 		affected_pos.push(self.output_pmmr.last_pos);
 		self.apply_to_bitmap_accumulator(&affected_pos)?;
+
+		// Remove any entries from the output_pos created by the block being rewound.
+		let block = batch.get_block(&header.hash())?;
+		for out in block.outputs() {
+			batch.delete_output_pos_height(&out.commitment())?;
+		}
 
 		// Update output_pos based on "unspending" all spent pos from this block.
 		// This is necessary to ensure the output_pos index correclty reflects a
