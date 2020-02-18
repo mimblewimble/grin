@@ -21,19 +21,22 @@
 use crate::router::{Handler, HandlerObj, ResponseFuture, Router, RouterError};
 use crate::web::response;
 use failure::{Backtrace, Context, Fail, ResultExt};
-use futures::sync::oneshot;
-use futures::Stream;
-use hyper::rt::Future;
-use hyper::{rt, Body, Request, Server, StatusCode};
+use futures::channel::oneshot;
+use futures::TryStreamExt;
+use hyper::server::accept;
+use hyper::service::make_service_fn;
+use hyper::{Body, Request, Server, StatusCode};
 use rustls;
 use rustls::internal::pemfile;
+use std::convert::Infallible;
 use std::fmt::{self, Display};
 use std::fs::File;
 use std::net::SocketAddr;
 use std::sync::Arc;
 use std::{io, thread};
-use tokio_rustls::ServerConfigExt;
-use tokio_tcp;
+use tokio::net::TcpListener;
+use tokio::runtime::Runtime;
+use tokio_rustls::TlsAcceptor;
 
 /// Errors that can be returned by an ApiEndpoint implementation.
 #[derive(Debug)]
@@ -199,13 +202,23 @@ impl ApiServer {
 		thread::Builder::new()
 			.name("apis".to_string())
 			.spawn(move || {
-				let server = Server::bind(&addr)
-					.serve(router)
+				let server = async move {
+					let server = Server::bind(&addr).serve(make_service_fn(move |_| {
+						let router = router.clone();
+						async move { Ok::<_, Infallible>(router) }
+					}));
 					// TODO graceful shutdown is unstable, investigate
 					//.with_graceful_shutdown(rx)
-					.map_err(|e| eprintln!("HTTP API server error: {}", e));
 
-				rt::run(server);
+					server.await
+				};
+
+				let mut rt = Runtime::new()
+					.map_err(|e| eprintln!("HTTP API server error: {}", e))
+					.unwrap();
+				if let Err(e) = rt.block_on(server) {
+					eprintln!("HTTP API server error: {}", e)
+				}
 			})
 			.map_err(|_| ErrorKind::Internal("failed to spawn API thread".to_string()).into())
 	}
@@ -225,28 +238,31 @@ impl ApiServer {
 			.into());
 		}
 
-		let tls_conf = conf.build_server_config()?;
+		let acceptor = TlsAcceptor::from(conf.build_server_config()?);
 
 		thread::Builder::new()
 			.name("apis".to_string())
 			.spawn(move || {
-				let listener = tokio_tcp::TcpListener::bind(&addr).expect("failed to bind");
-				let tls = listener
-					.incoming()
-					.and_then(move |s| tls_conf.accept_async(s))
-					.then(|r| match r {
-						Ok(x) => Ok::<_, io::Error>(Some(x)),
-						Err(e) => {
-							error!("accept_async failed: {}", e);
-							Ok(None)
-						}
-					})
-					.filter_map(|x| x);
-				let server = Server::builder(tls)
-					.serve(router)
-					.map_err(|e| eprintln!("HTTP API server error: {}", e));
+				let server = async move {
+					let mut listener = TcpListener::bind(&addr).await.expect("failed to bind");
+					let listener = listener.incoming().and_then(move |s| acceptor.accept(s));
 
-				rt::run(server);
+					let server = Server::builder(accept::from_stream(listener)).serve(
+						make_service_fn(move |_| {
+							let router = router.clone();
+							async move { Ok::<_, Infallible>(router) }
+						}),
+					);
+
+					server.await
+				};
+
+				let mut rt = Runtime::new()
+					.map_err(|e| eprintln!("HTTP API server error: {}", e))
+					.unwrap();
+				if let Err(e) = rt.block_on(server) {
+					eprintln!("HTTP API server error: {}", e)
+				}
 			})
 			.map_err(|_| ErrorKind::Internal("failed to spawn API thread".to_string()).into())
 	}

@@ -139,5 +139,5 @@ fn unauthorized_response(basic_realm: &HeaderValue) -> ResponseFuture {
 		.header(WWW_AUTHENTICATE, basic_realm)
 		.body(Body::empty())
 		.unwrap();
-	Box::new(ok(response))
+	Box::pin(ok(response))
 }
