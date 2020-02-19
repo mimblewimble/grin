@@ -30,7 +30,7 @@ use crate::store;
 use crate::txhashset;
 use crate::txhashset::{PMMRHandle, TxHashSet};
 use crate::types::{
-	BlockStatus, ChainAdapter, NoStatus, Options, OutputPos, Tip, TxHashsetWriteStatus,
+	BlockStatus, ChainAdapter, CommitPos, NoStatus, Options, Tip, TxHashsetWriteStatus,
 };
 use crate::util::secp::pedersen::{Commitment, RangeProof};
 use crate::util::RwLock;
@@ -504,7 +504,7 @@ impl Chain {
 	/// spent. This querying is done in a way that is consistent with the
 	/// current chain state, specifically the current winning (valid, most
 	/// work) fork.
-	pub fn is_unspent(&self, output_ref: &OutputIdentifier) -> Result<OutputPos, Error> {
+	pub fn is_unspent(&self, output_ref: &OutputIdentifier) -> Result<CommitPos, Error> {
 		self.txhashset.read().is_unspent(output_ref)
 	}
 

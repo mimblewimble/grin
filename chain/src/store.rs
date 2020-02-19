@@ -19,7 +19,7 @@ use crate::core::core::hash::{Hash, Hashed};
 use crate::core::core::{Block, BlockHeader, BlockSums};
 use crate::core::pow::Difficulty;
 use crate::core::ser::ProtocolVersion;
-use crate::types::{OutputPos, Tip};
+use crate::types::{CommitPos, Tip};
 use crate::util::secp::pedersen::Commitment;
 use croaring::Bitmap;
 use grin_store as store;
@@ -190,7 +190,7 @@ impl<'a> Batch<'a> {
 
 	/// We maintain a "spent" index for each full block to allow the output_pos
 	/// to be easily reverted during rewind.
-	pub fn save_spent_index(&self, h: &Hash, spent: &Vec<OutputPos>) -> Result<(), Error> {
+	pub fn save_spent_index(&self, h: &Hash, spent: &Vec<CommitPos>) -> Result<(), Error> {
 		self.db
 			.put_ser(&to_key(BLOCK_SPENT_PREFIX, &mut h.to_vec())[..], spent)?;
 		Ok(())
@@ -349,7 +349,7 @@ impl<'a> Batch<'a> {
 
 	/// Get the "spent index" from the db for the specified block.
 	/// If we need to rewind a block then we use this to "unspend" the spent outputs.
-	pub fn get_spent_index(&self, bh: &Hash) -> Result<Vec<OutputPos>, Error> {
+	pub fn get_spent_index(&self, bh: &Hash) -> Result<Vec<CommitPos>, Error> {
 		option_to_not_found(
 			self.db
 				.get_ser(&to_key(BLOCK_SPENT_PREFIX, &mut bh.to_vec())),

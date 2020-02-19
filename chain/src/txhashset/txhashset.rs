@@ -25,7 +25,7 @@ use crate::error::{Error, ErrorKind};
 use crate::store::{Batch, ChainStore};
 use crate::txhashset::bitmap_accumulator::BitmapAccumulator;
 use crate::txhashset::{RewindableKernelView, UTXOView};
-use crate::types::{OutputPos, OutputRoots, Tip, TxHashSetRoots, TxHashsetWriteStatus};
+use crate::types::{CommitPos, OutputRoots, Tip, TxHashSetRoots, TxHashsetWriteStatus};
 use crate::util::secp::pedersen::{Commitment, RangeProof};
 use crate::util::{file, secp_static, zip};
 use croaring::Bitmap;
@@ -223,7 +223,7 @@ impl TxHashSet {
 	/// Check if an output is unspent.
 	/// We look in the index to find the output MMR pos.
 	/// Then we check the entry in the output MMR and confirm the hash matches.
-	pub fn is_unspent(&self, output_id: &OutputIdentifier) -> Result<OutputPos, Error> {
+	pub fn is_unspent(&self, output_id: &OutputIdentifier) -> Result<CommitPos, Error> {
 		let commit = output_id.commit;
 		match self.commit_index.get_output_pos_height(&commit) {
 			Ok((pos, height)) => {
@@ -231,11 +231,7 @@ impl TxHashSet {
 					ReadonlyPMMR::at(&self.output_pmmr_h.backend, self.output_pmmr_h.last_pos);
 				if let Some(hash) = output_pmmr.get_hash(pos) {
 					if hash == output_id.hash_with_index(pos - 1) {
-						Ok(OutputPos {
-							pos,
-							height,
-							commit,
-						})
+						Ok(CommitPos { pos, height })
 					} else {
 						Err(ErrorKind::TxHashSetErr("txhashset hash mismatch".to_string()).into())
 					}
@@ -927,27 +923,28 @@ impl<'a> Extension<'a> {
 	}
 
 	/// Apply a new block to the current txhashet extension (output, rangeproof, kernel MMRs).
-	pub fn apply_block(&mut self, b: &Block, batch: &Batch<'_>) -> Result<Vec<OutputPos>, Error> {
+	/// Returns a vec of commit_pos representing the pos and height of the outputs spent
+	/// by this block.
+	pub fn apply_block(&mut self, b: &Block, batch: &Batch<'_>) -> Result<Vec<CommitPos>, Error> {
 		let mut affected_pos = vec![];
 		let mut spent = vec![];
 
+		// Apply the output to the output and rangeproof MMRs.
+		// Add pos to affected_pos to update the accumulator later on.
+		// Add the new output to the output_pos index.
 		for out in b.outputs() {
 			let pos = self.apply_output(out, batch)?;
 			affected_pos.push(pos);
-
-			// TODO - we do *not* want to actually add to batch here?
-			// if we are processing a fork we want this batch to rollback.
 			batch.save_output_pos_height(&out.commitment(), pos, b.header.height)?;
 		}
 
+		// Remove the output from the output and rangeproof MMRs.
+		// Add spent_pos to affected_pos to update the accumulator later on.
+		// Remove the spent output from the output_pos index.
 		for input in b.inputs() {
 			let spent_pos = self.apply_input(input, batch)?;
 			affected_pos.push(spent_pos.pos);
-
-			// TODO - we do *not* want to actually add to batch here?
-			// if processing a fork we want this batch to rollback.
-			batch.delete_output_pos_height(&spent_pos.commit)?;
-
+			batch.delete_output_pos_height(&input.commitment())?;
 			spent.push(spent_pos);
 		}
 
@@ -965,9 +962,6 @@ impl<'a> Extension<'a> {
 	}
 
 	fn apply_to_bitmap_accumulator(&mut self, output_pos: &[u64]) -> Result<(), Error> {
-		// if self.output_pmmr.is_empty() || output_pos.is_empty() {
-		// 	return Ok(());
-		// }
 		let mut output_idx: Vec<_> = output_pos
 			.iter()
 			.map(|x| pmmr::n_leaves(*x).saturating_sub(1))
@@ -983,7 +977,7 @@ impl<'a> Extension<'a> {
 		)
 	}
 
-	fn apply_input(&mut self, input: &Input, batch: &Batch<'_>) -> Result<OutputPos, Error> {
+	fn apply_input(&mut self, input: &Input, batch: &Batch<'_>) -> Result<CommitPos, Error> {
 		let commit = input.commitment();
 		if let Ok((pos, height)) = batch.get_output_pos_height(&commit) {
 			// First check this input corresponds to an existing entry in the output MMR.
@@ -1003,11 +997,7 @@ impl<'a> Extension<'a> {
 					self.rproof_pmmr
 						.prune(pos)
 						.map_err(ErrorKind::TxHashSetErr)?;
-					Ok(OutputPos {
-						pos,
-						height,
-						commit,
-					})
+					Ok(CommitPos { pos, height })
 				}
 				Ok(false) => Err(ErrorKind::AlreadySpent(commit).into()),
 				Err(e) => Err(ErrorKind::TxHashSetErr(e).into()),
@@ -1185,8 +1175,8 @@ impl<'a> Extension<'a> {
 		// reused output commitment. For example an output at pos 1, spent, reused at pos 2.
 		// The output_pos index should be updated to reflect the old pos 1 when unspent.
 		if let Ok(spent) = spent {
-			for x in spent {
-				batch.save_output_pos_height(&x.commit, x.pos, x.height)?;
+			for (x, y) in block.inputs().into_iter().zip(spent) {
+				batch.save_output_pos_height(&x.commitment(), y.pos, y.height)?;
 			}
 		}
 

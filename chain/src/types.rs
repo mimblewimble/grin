@@ -271,24 +271,27 @@ pub struct OutputPos {
 	pub commit: Commitment,
 }
 
-impl Readable for OutputPos {
-	fn read(reader: &mut dyn Reader) -> Result<OutputPos, ser::Error> {
+/// Minimal struct representing a known MMR position and associated block height.
+#[derive(Debug)]
+pub struct CommitPos {
+	/// MMR position
+	pub pos: u64,
+	/// Block height
+	pub height: u64,
+}
+
+impl Readable for CommitPos {
+	fn read(reader: &mut dyn Reader) -> Result<CommitPos, ser::Error> {
 		let pos = reader.read_u64()?;
 		let height = reader.read_u64()?;
-		let commit = Commitment::read(reader)?;
-		Ok(OutputPos {
-			pos,
-			height,
-			commit,
-		})
+		Ok(CommitPos { pos, height })
 	}
 }
 
-impl Writeable for OutputPos {
+impl Writeable for CommitPos {
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
 		writer.write_u64(self.pos)?;
 		writer.write_u64(self.height)?;
-		self.commit.write(writer)?;
 		Ok(())
 	}
 }

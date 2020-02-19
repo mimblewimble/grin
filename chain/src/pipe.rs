@@ -23,7 +23,7 @@ use crate::core::pow;
 use crate::error::{Error, ErrorKind};
 use crate::store;
 use crate::txhashset;
-use crate::types::{Options, OutputPos, Tip};
+use crate::types::{CommitPos, Options, Tip};
 use crate::util::RwLock;
 use grin_store;
 use std::sync::Arc;
@@ -431,7 +431,7 @@ fn apply_block_to_txhashset(
 	block: &Block,
 	ext: &mut txhashset::ExtensionPair<'_>,
 	batch: &store::Batch<'_>,
-) -> Result<Vec<OutputPos>, Error> {
+) -> Result<Vec<CommitPos>, Error> {
 	let spent = ext.extension.apply_block(block, batch)?;
 	ext.extension.validate_roots(&block.header)?;
 	ext.extension.validate_sizes(&block.header)?;
@@ -444,7 +444,7 @@ fn apply_block_to_txhashset(
 fn add_block(
 	b: &Block,
 	block_sums: &BlockSums,
-	spent: &Vec<OutputPos>,
+	spent: &Vec<CommitPos>,
 	batch: &store::Batch<'_>,
 ) -> Result<(), Error> {
 	batch.save_block(b)?;
