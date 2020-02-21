@@ -12,6 +12,6 @@ steps:
     condition: eq( variables['Agent.OS'], 'Darwin' )
   - script: |
       sudo apt-get update -yqq
-      sudo apt-get install -yqq --no-install-recommends libncursesw5-dev
+      sudo apt-get install -yqq --no-install-recommends libncursesw5-dev libclang-dev clang
     displayName: Linux Install Dependencies
     condition: eq( variables['Agent.OS'], 'Linux' )
