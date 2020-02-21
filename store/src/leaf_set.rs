@@ -114,7 +114,7 @@ impl LeafSet {
 
 		// First remove pos from leaf_set that were
 		// added after the point we are rewinding to.
-		let to_remove = ((cutoff_pos + 1) as u32)..bitmap.maximum();
+		let to_remove = ((cutoff_pos + 1) as u32)..bitmap.maximum().unwrap_or(0);
 		bitmap.remove_range_closed(to_remove);
 
 		// Then add back output pos to the leaf_set
@@ -133,7 +133,7 @@ impl LeafSet {
 	pub fn rewind(&mut self, cutoff_pos: u64, rewind_rm_pos: &Bitmap) {
 		// First remove pos from leaf_set that were
 		// added after the point we are rewinding to.
-		let to_remove = ((cutoff_pos + 1) as u32)..self.bitmap.maximum();
+		let to_remove = ((cutoff_pos + 1) as u32)..self.bitmap.maximum().unwrap_or(0);
 		self.bitmap.remove_range_closed(to_remove);
 
 		// Then add back output pos to the leaf_set
