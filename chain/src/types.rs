@@ -259,18 +259,6 @@ impl OutputRoots {
 	}
 }
 
-/// Minimal struct representing an output commitment at a known position (and block height)
-/// in an MMR.
-#[derive(Debug)]
-pub struct OutputPos {
-	/// MMR position
-	pub pos: u64,
-	/// Block height
-	pub height: u64,
-	/// Output commitment
-	pub commit: Commitment,
-}
-
 /// Minimal struct representing a known MMR position and associated block height.
 #[derive(Debug)]
 pub struct CommitPos {
