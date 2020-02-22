@@ -258,6 +258,14 @@ impl<'a> Batch<'a> {
 			.delete(&to_key(OUTPUT_POS_PREFIX, &mut commit.as_ref().to_vec()))
 	}
 
+	/// When using the output_pos iterator we have access to the index keys but not the
+	/// original commitment that the key is constructed from. So we need a way of comparing
+	/// a key with another commitment without reconstructing the commitment from the key bytes.
+	pub fn is_match_output_pos_key(&self, key: &[u8], commit: &Commitment) -> bool {
+		let commit_key = to_key(OUTPUT_POS_PREFIX, &mut commit.as_ref().to_vec());
+		commit_key == key
+	}
+
 	/// Iterator over the output_pos index.
 	pub fn output_pos_iter(&self) -> Result<SerIterator<(u64, u64)>, Error> {
 		let key = to_key(OUTPUT_POS_PREFIX, &mut "".to_string().into_bytes());

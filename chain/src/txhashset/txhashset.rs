@@ -395,12 +395,15 @@ impl TxHashSet {
 			ReadonlyPMMR::at(&self.output_pmmr_h.backend, self.output_pmmr_h.last_pos);
 
 		// Iterate over the current output_pos index, removing any entries that
-		// do not point to to the correct output.
+		// do not point to to the expected output.
 		let mut removed_count = 0;
 		for (key, (pos, _)) in batch.output_pos_iter()? {
 			if let Some(out) = output_pmmr.get_data(pos) {
 				if let Ok(pos_via_mmr) = batch.get_output_pos(&out.commitment()) {
-					if pos == pos_via_mmr {
+					// If the pos matches and the index key matches the commitment
+					// then keep the entry, other we want to clean it up.
+					if pos == pos_via_mmr && batch.is_match_output_pos_key(&key, &out.commitment())
+					{
 						continue;
 					}
 				}
