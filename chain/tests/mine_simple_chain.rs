@@ -398,6 +398,7 @@ fn mine_reorg() {
 
 #[test]
 fn mine_forks() {
+	clean_output_dir(".grin2");
 	global::set_mining_mode(ChainTypes::AutomatedTesting);
 	{
 		let chain = init_chain(".grin2", pow::mine_genesis_block().unwrap());
@@ -445,6 +446,7 @@ fn mine_forks() {
 
 #[test]
 fn mine_losing_fork() {
+	clean_output_dir(".grin3");
 	global::set_mining_mode(ChainTypes::AutomatedTesting);
 	let kc = ExtKeychain::from_random_seed(false).unwrap();
 	{
@@ -481,6 +483,7 @@ fn mine_losing_fork() {
 
 #[test]
 fn longer_fork() {
+	clean_output_dir(".grin4");
 	global::set_mining_mode(ChainTypes::AutomatedTesting);
 	let kc = ExtKeychain::from_random_seed(false).unwrap();
 	// to make it easier to compute the txhashset roots in the test, we
@@ -524,12 +527,88 @@ fn longer_fork() {
 }
 
 #[test]
-fn spend_in_fork_and_compact() {
+fn spend_rewind_spend() {
 	global::set_mining_mode(ChainTypes::AutomatedTesting);
 	util::init_test_logger();
-	// Cleanup chain directory
-	clean_output_dir(".grin6");
+	clean_output_dir(".grin_spend_rewind_spend");
 
+	{
+		let chain = init_chain(
+			".grin_spend_rewind_spend",
+			pow::mine_genesis_block().unwrap(),
+		);
+		let prev = chain.head_header().unwrap();
+		let kc = ExtKeychain::from_random_seed(false).unwrap();
+		let pb = ProofBuilder::new(&kc);
+
+		let mut head = prev;
+
+		// mine the first block and keep track of the block_hash
+		// so we can spend the coinbase later
+		let b = prepare_block_key_idx(&kc, &head, &chain, 2, 1);
+		let out_id = OutputIdentifier::from_output(&b.outputs()[0]);
+		assert!(out_id.features.is_coinbase());
+		head = b.header.clone();
+		chain
+			.process_block(b.clone(), chain::Options::SKIP_POW)
+			.unwrap();
+
+		// now mine three further blocks
+		for n in 3..6 {
+			let b = prepare_block(&kc, &head, &chain, n);
+			head = b.header.clone();
+			chain.process_block(b, chain::Options::SKIP_POW).unwrap();
+		}
+
+		// Make a note of this header as we will rewind back to here later.
+		let rewind_to = head.clone();
+
+		let key_id_coinbase = ExtKeychainPath::new(1, 1, 0, 0, 0).to_identifier();
+		let key_id30 = ExtKeychainPath::new(1, 30, 0, 0, 0).to_identifier();
+
+		let tx1 = build::transaction(
+			KernelFeatures::Plain { fee: 20000 },
+			vec![
+				build::coinbase_input(consensus::REWARD, key_id_coinbase.clone()),
+				build::output(consensus::REWARD - 20000, key_id30.clone()),
+			],
+			&kc,
+			&pb,
+		)
+		.unwrap();
+
+		let b = prepare_block_tx(&kc, &head, &chain, 6, vec![&tx1]);
+		head = b.header.clone();
+		chain
+			.process_block(b.clone(), chain::Options::SKIP_POW)
+			.unwrap();
+		chain.validate(false).unwrap();
+
+		// Now mine another block, reusing the private key for the coinbase we just spent.
+		{
+			let b = prepare_block_key_idx(&kc, &head, &chain, 7, 1);
+			chain.process_block(b, chain::Options::SKIP_POW).unwrap();
+		}
+
+		// Now mine a competing block also spending the same coinbase output from earlier.
+		// Rewind back prior to the tx that spends it to "unspend" it.
+		{
+			let b = prepare_block_tx(&kc, &rewind_to, &chain, 6, vec![&tx1]);
+			chain
+				.process_block(b.clone(), chain::Options::SKIP_POW)
+				.unwrap();
+			chain.validate(false).unwrap();
+		}
+	}
+
+	clean_output_dir(".grin_spend_rewind_spend");
+}
+
+#[test]
+fn spend_in_fork_and_compact() {
+	clean_output_dir(".grin6");
+	global::set_mining_mode(ChainTypes::AutomatedTesting);
+	util::init_test_logger();
 	{
 		let chain = init_chain(".grin6", pow::mine_genesis_block().unwrap());
 		let prev = chain.head_header().unwrap();
@@ -730,15 +809,31 @@ fn output_header_mappings() {
 	clean_output_dir(".grin_header_for_output");
 }
 
+// Use diff as both diff *and* key_idx for convenience (deterministic private key for test blocks)
 fn prepare_block<K>(kc: &K, prev: &BlockHeader, chain: &Chain, diff: u64) -> Block
 where
 	K: Keychain,
 {
-	let mut b = prepare_block_nosum(kc, prev, diff, vec![]);
+	let key_idx = diff as u32;
+	prepare_block_key_idx(kc, prev, chain, diff, key_idx)
+}
+
+fn prepare_block_key_idx<K>(
+	kc: &K,
+	prev: &BlockHeader,
+	chain: &Chain,
+	diff: u64,
+	key_idx: u32,
+) -> Block
+where
+	K: Keychain,
+{
+	let mut b = prepare_block_nosum(kc, prev, diff, key_idx, vec![]);
 	chain.set_txhashset_roots(&mut b).unwrap();
 	b
 }
 
+// Use diff as both diff *and* key_idx for convenience (deterministic private key for test blocks)
 fn prepare_block_tx<K>(
 	kc: &K,
 	prev: &BlockHeader,
@@ -749,17 +844,38 @@ fn prepare_block_tx<K>(
 where
 	K: Keychain,
 {
-	let mut b = prepare_block_nosum(kc, prev, diff, txs);
+	let key_idx = diff as u32;
+	prepare_block_tx_key_idx(kc, prev, chain, diff, key_idx, txs)
+}
+
+fn prepare_block_tx_key_idx<K>(
+	kc: &K,
+	prev: &BlockHeader,
+	chain: &Chain,
+	diff: u64,
+	key_idx: u32,
+	txs: Vec<&Transaction>,
+) -> Block
+where
+	K: Keychain,
+{
+	let mut b = prepare_block_nosum(kc, prev, diff, key_idx, txs);
 	chain.set_txhashset_roots(&mut b).unwrap();
 	b
 }
 
-fn prepare_block_nosum<K>(kc: &K, prev: &BlockHeader, diff: u64, txs: Vec<&Transaction>) -> Block
+fn prepare_block_nosum<K>(
+	kc: &K,
+	prev: &BlockHeader,
+	diff: u64,
+	key_idx: u32,
+	txs: Vec<&Transaction>,
+) -> Block
 where
 	K: Keychain,
 {
 	let proof_size = global::proofsize();
-	let key_id = ExtKeychainPath::new(1, diff as u32, 0, 0, 0).to_identifier();
+	let key_id = ExtKeychainPath::new(1, key_idx, 0, 0, 0).to_identifier();
 
 	let fees = txs.iter().map(|tx| tx.fee()).sum();
 	let reward =

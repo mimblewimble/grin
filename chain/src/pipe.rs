@@ -23,7 +23,7 @@ use crate::core::pow;
 use crate::error::{Error, ErrorKind};
 use crate::store;
 use crate::txhashset;
-use crate::types::{Options, Tip};
+use crate::types::{CommitPos, Options, Tip};
 use crate::util::RwLock;
 use grin_store;
 use std::sync::Arc;
@@ -121,7 +121,7 @@ pub fn process_block(b: &Block, ctx: &mut BlockContext<'_>) -> Result<Option<Tip
 	let ref mut header_pmmr = &mut ctx.header_pmmr;
 	let ref mut txhashset = &mut ctx.txhashset;
 	let ref mut batch = &mut ctx.batch;
-	let block_sums = txhashset::extending(header_pmmr, txhashset, batch, |ext, batch| {
+	let (block_sums, spent) = txhashset::extending(header_pmmr, txhashset, batch, |ext, batch| {
 		rewind_and_apply_fork(&prev, ext, batch)?;
 
 		// Check any coinbase being spent have matured sufficiently.
@@ -143,22 +143,24 @@ pub fn process_block(b: &Block, ctx: &mut BlockContext<'_>) -> Result<Option<Tip
 		// Apply the block to the txhashset state.
 		// Validate the txhashset roots and sizes against the block header.
 		// Block is invalid if there are any discrepencies.
-		apply_block_to_txhashset(b, ext, batch)?;
+		let spent = apply_block_to_txhashset(b, ext, batch)?;
 
 		// If applying this block does not increase the work on the chain then
 		// we know we have not yet updated the chain to produce a new chain head.
+		// We discard the "child" batch used in this extension (original ctx batch still active).
+		// We discard any MMR modifications applied in this extension.
 		let head = batch.head()?;
 		if !has_more_work(&b.header, &head) {
 			ext.extension.force_rollback();
 		}
 
-		Ok(block_sums)
+		Ok((block_sums, spent))
 	})?;
 
 	// Add the validated block to the db along with the corresponding block_sums.
 	// We do this even if we have not increased the total cumulative work
 	// so we can maintain multiple (in progress) forks.
-	add_block(b, &block_sums, &ctx.batch)?;
+	add_block(b, &block_sums, &spent, &ctx.batch)?;
 
 	// If we have no "tail" then set it now.
 	if ctx.batch.tail().is_err() {
@@ -429,20 +431,25 @@ fn apply_block_to_txhashset(
 	block: &Block,
 	ext: &mut txhashset::ExtensionPair<'_>,
 	batch: &store::Batch<'_>,
-) -> Result<(), Error> {
-	ext.extension.apply_block(block, batch)?;
+) -> Result<Vec<CommitPos>, Error> {
+	let spent = ext.extension.apply_block(block, batch)?;
 	ext.extension.validate_roots(&block.header)?;
 	ext.extension.validate_sizes(&block.header)?;
-	Ok(())
+	Ok(spent)
 }
 
-/// Officially adds the block to our chain.
+/// Officially adds the block to our chain (possibly on a losing fork).
+/// Adds the associated block_sums and spent_index as well.
 /// Header must be added separately (assume this has been done previously).
-fn add_block(b: &Block, block_sums: &BlockSums, batch: &store::Batch<'_>) -> Result<(), Error> {
-	batch
-		.save_block(b)
-		.map_err(|e| ErrorKind::StoreErr(e, "pipe save block".to_owned()))?;
+fn add_block(
+	b: &Block,
+	block_sums: &BlockSums,
+	spent: &Vec<CommitPos>,
+	batch: &store::Batch<'_>,
+) -> Result<(), Error> {
+	batch.save_block(b)?;
 	batch.save_block_sums(&b.hash(), block_sums)?;
+	batch.save_spent_index(&b.hash(), spent)?;
 	Ok(())
 }
 

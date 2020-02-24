@@ -30,7 +30,7 @@ use crate::store;
 use crate::txhashset;
 use crate::txhashset::{PMMRHandle, TxHashSet};
 use crate::types::{
-	BlockStatus, ChainAdapter, NoStatus, Options, OutputMMRPosition, Tip, TxHashsetWriteStatus,
+	BlockStatus, ChainAdapter, CommitPos, NoStatus, Options, Tip, TxHashsetWriteStatus,
 };
 use crate::util::secp::pedersen::{Commitment, RangeProof};
 use crate::util::RwLock;
@@ -198,6 +198,15 @@ impl Chain {
 			&mut sync_pmmr,
 			&mut txhashset,
 		)?;
+
+		// Initialize the output_pos index based on UTXO set.
+		// This is fast as we only look for stale and missing entries
+		// and do not need to rebuild the entire index.
+		{
+			let batch = store.batch()?;
+			txhashset.init_output_pos_index(&header_pmmr, &batch)?;
+			batch.commit()?;
+		}
 
 		let chain = Chain {
 			db_root,
@@ -495,9 +504,8 @@ impl Chain {
 	/// spent. This querying is done in a way that is consistent with the
 	/// current chain state, specifically the current winning (valid, most
 	/// work) fork.
-	pub fn is_unspent(&self, output_ref: &OutputIdentifier) -> Result<OutputMMRPosition, Error> {
-		let txhashset = self.txhashset.read();
-		txhashset.is_unspent(output_ref)
+	pub fn is_unspent(&self, output_ref: &OutputIdentifier) -> Result<CommitPos, Error> {
+		self.txhashset.read().is_unspent(output_ref)
 	}
 
 	/// Retrieves an unspent output using its PMMR position
@@ -973,7 +981,7 @@ impl Chain {
 		}
 
 		// Rebuild our output_pos index in the db based on fresh UTXO set.
-		txhashset.init_output_pos_index(&header_pmmr, &mut batch)?;
+		txhashset.init_output_pos_index(&header_pmmr, &batch)?;
 
 		// Commit all the changes to the db.
 		batch.commit()?;
@@ -1015,7 +1023,7 @@ impl Chain {
 	fn remove_historical_blocks(
 		&self,
 		header_pmmr: &txhashset::PMMRHandle<BlockHeader>,
-		batch: &mut store::Batch<'_>,
+		batch: &store::Batch<'_>,
 	) -> Result<(), Error> {
 		if self.archive_mode {
 			return Ok(());
@@ -1089,7 +1097,7 @@ impl Chain {
 		// Take a write lock on the txhashet and start a new writeable db batch.
 		let header_pmmr = self.header_pmmr.read();
 		let mut txhashset = self.txhashset.write();
-		let mut batch = self.store.batch()?;
+		let batch = self.store.batch()?;
 
 		// Compact the txhashset itself (rewriting the pruned backend files).
 		{
@@ -1100,13 +1108,16 @@ impl Chain {
 			let horizon_hash = header_pmmr.get_header_hash_by_height(horizon_height)?;
 			let horizon_header = batch.get_block_header(&horizon_hash)?;
 
-			txhashset.compact(&horizon_header, &mut batch)?;
+			txhashset.compact(&horizon_header, &batch)?;
 		}
 
 		// If we are not in archival mode remove historical blocks from the db.
 		if !self.archive_mode {
-			self.remove_historical_blocks(&header_pmmr, &mut batch)?;
+			self.remove_historical_blocks(&header_pmmr, &batch)?;
 		}
+
+		// Make sure our output_pos index is consistent with the UTXO set.
+		txhashset.init_output_pos_index(&header_pmmr, &batch)?;
 
 		// Commit all the above db changes.
 		batch.commit()?;
@@ -1510,6 +1521,7 @@ fn setup_head(
 			// We will update this later once we have the correct header_root.
 			batch.save_block_header(&genesis.header)?;
 			batch.save_block(&genesis)?;
+			batch.save_spent_index(&genesis.hash(), &vec![])?;
 			batch.save_body_head(&Tip::from_header(&genesis.header))?;
 
 			if !genesis.kernels().is_empty() {
