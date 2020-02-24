@@ -22,7 +22,6 @@ use crate::core::core::{Block, BlockHeader, HeaderVersion};
 use crate::core::pow::Difficulty;
 use crate::core::ser::{self, PMMRIndexHashable, Readable, Reader, Writeable, Writer};
 use crate::error::{Error, ErrorKind};
-use crate::util::secp::pedersen::Commitment;
 use crate::util::RwLock;
 
 bitflags! {
