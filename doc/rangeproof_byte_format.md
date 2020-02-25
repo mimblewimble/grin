@@ -53,7 +53,7 @@ length two instead of length one. This is because every round creates two commit
 
 `ed9e1ee8cb2db1e71311cacd9e1d0b6dbf6cfab15723ec3cac4cc52154fc9d53 (107477520278964342277912932357487306000871347661927764278313323679782451060051)` b2
 
-And last we have the commitments Li and Ri of every round. In Grin we have 64-bit range proofs. This means we have six rounds (log(64) = 6); however, since we stop early, we only do five rounds, so 10 points instead of 12. The implementation always computes L before R. (*inner_product_impl.h 627*)
+And last we have the commitments Li and Ri of every round. In Grin we create range proofs with a range of 0 to (2^64 -1). This means we have six rounds (log(64) = 6); however, since we stop early, we only do five rounds, so 10 points instead of 12. The implementation always computes L before R. (*inner_product_impl.h 627*)
 Again we have an offset in which we specify how to recover y values. Now since we have more than eight points we need two bytes offset. We start reading at the LSB of the first byte and then go to the LSB of the second byte. (*inner_product_impl.h 839*)
 
 `2202` offset
