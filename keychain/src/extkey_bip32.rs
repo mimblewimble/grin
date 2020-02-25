@@ -333,16 +333,6 @@ impl error::Error for Error {
 			None
 		}
 	}
-
-	fn description(&self) -> &str {
-		match *self {
-			Error::CannotDeriveFromHardenedKey => "cannot derive hardened key from public key",
-			Error::Ecdsa(ref e) => error::Error::description(e),
-			Error::InvalidChildNumber(_) => "child number is invalid",
-			Error::RngError(_) => "rng error",
-			Error::MnemonicError(_) => "mnemonic error",
-		}
-	}
 }
 
 impl From<secp::Error> for Error {
