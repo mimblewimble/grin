@@ -373,7 +373,7 @@ where
 					}
 					Err(RecvTimeoutError::Disconnected) => {
 						debug!("peer_write: mpsc channel disconnected during recv_timeout");
-						stop_handle.stop();
+						break;
 					}
 					Err(RecvTimeoutError::Timeout) => {}
 				}
