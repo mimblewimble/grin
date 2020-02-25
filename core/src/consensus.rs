@@ -148,22 +148,22 @@ pub fn header_version(height: u64) -> HeaderVersion {
 		global::ChainTypes::Mainnet => HeaderVersion(hf_interval),
 		global::ChainTypes::Floonet => {
 			if height < FLOONET_FIRST_HARD_FORK {
-				(HeaderVersion(1))
+				HeaderVersion(1)
 			} else if height < FLOONET_SECOND_HARD_FORK {
-				(HeaderVersion(2))
+				HeaderVersion(2)
 			} else if height < 3 * HARD_FORK_INTERVAL {
-				(HeaderVersion(3))
+				HeaderVersion(3)
 			} else {
 				HeaderVersion(hf_interval)
 			}
 		}
 		global::ChainTypes::AutomatedTesting | global::ChainTypes::UserTesting => {
 			if height < TESTING_FIRST_HARD_FORK {
-				(HeaderVersion(1))
+				HeaderVersion(1)
 			} else if height < TESTING_SECOND_HARD_FORK {
-				(HeaderVersion(2))
+				HeaderVersion(2)
 			} else if height < 3 * HARD_FORK_INTERVAL {
-				(HeaderVersion(3))
+				HeaderVersion(3)
 			} else {
 				HeaderVersion(hf_interval)
 			}
