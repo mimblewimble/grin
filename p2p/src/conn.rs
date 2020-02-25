@@ -81,9 +81,7 @@ macro_rules! try_break {
 
 macro_rules! try_header {
 	($res:expr, $conn: expr) => {{
-		$conn
-			.set_read_timeout(Some(HEADER_IO_TIMEOUT))
-			.expect("set timeout");
+		let _ = $conn.set_read_timeout(Some(HEADER_IO_TIMEOUT));
 		try_break!($res)
 		}};
 }
@@ -301,9 +299,7 @@ where
 				// check the read end
 				match try_header!(read_header(&mut reader, version), &reader) {
 					Some(MsgHeaderWrapper::Known(header)) => {
-						reader
-							.set_read_timeout(Some(BODY_IO_TIMEOUT))
-							.expect("set timeout");
+						let _ = reader.set_read_timeout(Some(BODY_IO_TIMEOUT));
 						let msg = Message::from_header(header, &mut reader, version);
 
 						trace!(
@@ -357,9 +353,7 @@ where
 		.name("peer_write".to_string())
 		.spawn(move || {
 			let mut retry_send = Err(());
-			writer
-				.set_write_timeout(Some(BODY_IO_TIMEOUT))
-				.expect("set timeout");
+			let _ = writer.set_write_timeout(Some(BODY_IO_TIMEOUT));
 			loop {
 				let maybe_data = retry_send.or_else(|_| send_rx.recv_timeout(CHANNEL_TIMEOUT));
 				retry_send = Err(());
