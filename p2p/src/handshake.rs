@@ -24,6 +24,7 @@ use rand::{thread_rng, Rng};
 use std::collections::VecDeque;
 use std::net::{SocketAddr, TcpStream};
 use std::sync::Arc;
+use std::time::Duration;
 
 /// Local generated nonce for peer connecting.
 /// Used for self-connecting detection (on receiver side),
@@ -33,6 +34,9 @@ const NONCES_CAP: usize = 100;
 /// Used in connecting request to avoid self-connecting request,
 /// 10 should be enough since most of servers don't have more than 10 IP addresses.
 const ADDRS_CAP: usize = 10;
+
+/// The read_timeout and write_timeout for initial hand/shake messages.
+const HANDSHAKE_TIMEOUT: Duration = Duration::from_millis(2_000);
 
 /// Handles the handshake negotiation when two peers connect and decides on
 /// protocol.
@@ -83,6 +87,11 @@ impl Handshake {
 		self_addr: PeerAddr,
 		conn: &mut TcpStream,
 	) -> Result<PeerInfo, Error> {
+		// Set explicit timeouts on the tcp stream for hand/shake messages.
+		// Once the peer is up and running we will set new values for these.
+		let _ = conn.set_read_timeout(Some(HANDSHAKE_TIMEOUT));
+		let _ = conn.set_write_timeout(Some(HANDSHAKE_TIMEOUT));
+
 		// prepare the first part of the handshake
 		let nonce = self.next_nonce();
 		let peer_addr = match conn.peer_addr() {
@@ -148,6 +157,11 @@ impl Handshake {
 		total_difficulty: Difficulty,
 		conn: &mut TcpStream,
 	) -> Result<PeerInfo, Error> {
+		// Set explicit timeouts on the tcp stream for hand/shake messages.
+		// Once the peer is up and running we will set new values for these.
+		let _ = conn.set_read_timeout(Some(HANDSHAKE_TIMEOUT));
+		let _ = conn.set_write_timeout(Some(HANDSHAKE_TIMEOUT));
+
 		let hand: Hand = read_message(conn, self.protocol_version, Type::Hand)?;
 
 		// all the reasons we could refuse this connection for
