@@ -24,6 +24,7 @@ use rand::{thread_rng, Rng};
 use std::collections::VecDeque;
 use std::net::{SocketAddr, TcpStream};
 use std::sync::Arc;
+use std::time::Duration;
 
 /// Local generated nonce for peer connecting.
 /// Used for self-connecting detection (on receiver side),
@@ -33,6 +34,21 @@ const NONCES_CAP: usize = 100;
 /// Used in connecting request to avoid self-connecting request,
 /// 10 should be enough since most of servers don't have more than 10 IP addresses.
 const ADDRS_CAP: usize = 10;
+
+/// The initial Hand message should come in immediately after the connection is initiated.
+/// But for consistency use the same timeout for reading both Hand and Shake messages.
+const HAND_READ_TIMEOUT: Duration = Duration::from_millis(10_000);
+
+/// We need to allow time for the peer to receive our Hand message and send back a Shake reply.
+const SHAKE_READ_TIMEOUT: Duration = Duration::from_millis(10_000);
+
+/// Fail fast when trying to write a Hand message to the tcp stream.
+/// If we cannot write it within a couple of seconds then something has likely gone wrong.
+const HAND_WRITE_TIMEOUT: Duration = Duration::from_millis(2_000);
+
+/// Fail fast when trying to write a Shake message to the tcp stream.
+/// If we cannot write it within a couple of seconds then something has likely gone wrong.
+const SHAKE_WRITE_TIMEOUT: Duration = Duration::from_millis(2_000);
 
 /// Handles the handshake negotiation when two peers connect and decides on
 /// protocol.
@@ -83,6 +99,12 @@ impl Handshake {
 		self_addr: PeerAddr,
 		conn: &mut TcpStream,
 	) -> Result<PeerInfo, Error> {
+		// Set explicit timeouts on the tcp stream for hand/shake messages.
+		// Once the peer is up and running we will set new values for these.
+		// We initiate this connection, writing a Hand message and read a Shake reply.
+		let _ = conn.set_write_timeout(Some(HAND_WRITE_TIMEOUT));
+		let _ = conn.set_read_timeout(Some(SHAKE_READ_TIMEOUT));
+
 		// prepare the first part of the handshake
 		let nonce = self.next_nonce();
 		let peer_addr = match conn.peer_addr() {
@@ -148,6 +170,12 @@ impl Handshake {
 		total_difficulty: Difficulty,
 		conn: &mut TcpStream,
 	) -> Result<PeerInfo, Error> {
+		// Set explicit timeouts on the tcp stream for hand/shake messages.
+		// Once the peer is up and running we will set new values for these.
+		// We accept an inbound connection, reading a Hand then writing a Shake reply.
+		let _ = conn.set_read_timeout(Some(HAND_READ_TIMEOUT));
+		let _ = conn.set_write_timeout(Some(SHAKE_WRITE_TIMEOUT));
+
 		let hand: Hand = read_message(conn, self.protocol_version, Type::Hand)?;
 
 		// all the reasons we could refuse this connection for
