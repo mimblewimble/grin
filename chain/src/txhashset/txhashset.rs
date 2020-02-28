@@ -1174,8 +1174,19 @@ impl<'a> Extension<'a> {
 
 		// Remove any entries from the output_pos created by the block being rewound.
 		let block = batch.get_block(&header.hash())?;
+		let mut missing_count = 0;
 		for out in block.outputs() {
-			batch.delete_output_pos_height(&out.commitment())?;
+			if batch.delete_output_pos_height(&out.commitment()).is_err() {
+				missing_count += 1;
+			}
+		}
+		if missing_count > 0 {
+			warn!(
+				"rewind_single_block: {} output_pos entries missing for: {} at {}",
+				missing_count,
+				header.hash(),
+				header.height,
+			);
 		}
 
 		// Update output_pos based on "unspending" all spent pos from this block.
