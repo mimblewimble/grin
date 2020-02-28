@@ -26,21 +26,21 @@ use grin_store::pmmr::PMMRBackend;
 
 /// Readonly view of the UTXO set (based on output MMR).
 pub struct UTXOView<'a> {
-	output_pmmr: ReadonlyPMMR<'a, Output, PMMRBackend<Output>>,
 	header_pmmr: ReadonlyPMMR<'a, BlockHeader, PMMRBackend<BlockHeader>>,
+	output_pmmr: ReadonlyPMMR<'a, Output, PMMRBackend<Output>>,
 	rproof_pmmr: ReadonlyPMMR<'a, RangeProof, PMMRBackend<RangeProof>>,
 }
 
 impl<'a> UTXOView<'a> {
 	/// Build a new UTXO view.
 	pub fn new(
-		output_pmmr: ReadonlyPMMR<'a, Output, PMMRBackend<Output>>,
 		header_pmmr: ReadonlyPMMR<'a, BlockHeader, PMMRBackend<BlockHeader>>,
+		output_pmmr: ReadonlyPMMR<'a, Output, PMMRBackend<Output>>,
 		rproof_pmmr: ReadonlyPMMR<'a, RangeProof, PMMRBackend<RangeProof>>,
 	) -> UTXOView<'a> {
 		UTXOView {
-			output_pmmr,
 			header_pmmr,
+			output_pmmr,
 			rproof_pmmr,
 		}
 	}
