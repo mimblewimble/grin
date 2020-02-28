@@ -933,9 +933,8 @@ impl<'a> Extension<'a> {
 	/// Apply a new block to the current txhashet extension (output, rangeproof, kernel MMRs).
 	/// Returns a vec of commit_pos representing the pos and height of the outputs spent
 	/// by this block.
-	pub fn apply_block(&mut self, b: &Block, batch: &Batch<'_>) -> Result<Vec<CommitPos>, Error> {
+	pub fn apply_block(&mut self, b: &Block, batch: &Batch<'_>) -> Result<(), Error> {
 		let mut affected_pos = vec![];
-		let mut spent = vec![];
 
 		// Apply the output to the output and rangeproof MMRs.
 		// Add pos to affected_pos to update the accumulator later on.
@@ -949,12 +948,14 @@ impl<'a> Extension<'a> {
 		// Remove the output from the output and rangeproof MMRs.
 		// Add spent_pos to affected_pos to update the accumulator later on.
 		// Remove the spent output from the output_pos index.
+		let mut spent = vec![];
 		for input in b.inputs() {
 			let spent_pos = self.apply_input(input, batch)?;
 			affected_pos.push(spent_pos.pos);
 			batch.delete_output_pos_height(&input.commitment())?;
 			spent.push(spent_pos);
 		}
+		batch.save_spent_index(&b.hash(), &spent)?;
 
 		for kernel in b.kernels() {
 			self.apply_kernel(kernel)?;
@@ -966,7 +967,7 @@ impl<'a> Extension<'a> {
 		// Update the head of the extension to reflect the block we just applied.
 		self.head = Tip::from_header(&b.header);
 
-		Ok(spent)
+		Ok(())
 	}
 
 	fn apply_to_bitmap_accumulator(&mut self, output_pos: &[u64]) -> Result<(), Error> {
