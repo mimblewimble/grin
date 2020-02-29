@@ -695,10 +695,12 @@ fn spend_in_fork_and_compact() {
 		assert_eq!(head.hash(), prev_main.hash());
 		assert!(chain
 			.is_unspent(&OutputIdentifier::from_output(&tx2.outputs()[0]))
-			.is_ok());
+			.unwrap()
+			.is_some());
 		assert!(chain
 			.is_unspent(&OutputIdentifier::from_output(&tx1.outputs()[0]))
-			.is_err());
+			.unwrap()
+			.is_none());
 
 		// make the fork win
 		let fork_next = prepare_block(&kc, &prev_fork, &chain, 10);
@@ -714,10 +716,12 @@ fn spend_in_fork_and_compact() {
 		assert_eq!(head.hash(), prev_fork.hash());
 		assert!(chain
 			.is_unspent(&OutputIdentifier::from_output(&tx2.outputs()[0]))
-			.is_ok());
+			.unwrap()
+			.is_some());
 		assert!(chain
 			.is_unspent(&OutputIdentifier::from_output(&tx1.outputs()[0]))
-			.is_err());
+			.unwrap()
+			.is_none());
 
 		// add 20 blocks to go past the test horizon
 		let mut prev = prev_fork;

@@ -57,7 +57,10 @@ impl HeaderHandler {
 	}
 
 	fn get_header_for_output(&self, commit_id: String) -> Result<BlockHeaderPrintable, Error> {
-		let oid = get_output(&self.chain, &commit_id)?.1;
+		let oid = match get_output(&self.chain, &commit_id)? {
+			Some((_, o)) => o,
+			None => return Err(ErrorKind::NotFound.into()),
+		};
 		match w(&self.chain)?.get_header_for_output(&oid) {
 			Ok(header) => Ok(BlockHeaderPrintable::from_header(&header)),
 			Err(_) => Err(ErrorKind::NotFound.into()),
@@ -87,7 +90,10 @@ impl HeaderHandler {
 			return Ok(hash);
 		}
 		if let Some(commit) = commit {
-			let oid = get_output_v2(&self.chain, &commit, false, false)?.1;
+			let oid = match get_output_v2(&self.chain, &commit, false, false)? {
+				Some((_, o)) => o,
+				None => return Err(ErrorKind::NotFound.into()),
+			};
 			match w(&self.chain)?.get_header_for_output(&oid) {
 				Ok(header) => return Ok(header.hash()),
 				Err(_) => return Err(ErrorKind::NotFound.into()),
@@ -169,7 +175,10 @@ impl BlockHandler {
 			return Ok(hash);
 		}
 		if let Some(commit) = commit {
-			let oid = get_output_v2(&self.chain, &commit, false, false)?.1;
+			let oid = match get_output_v2(&self.chain, &commit, false, false)? {
+				Some((_, o)) => o,
+				None => return Err(ErrorKind::NotFound.into()),
+			};
 			match w(&self.chain)?.get_header_for_output(&oid) {
 				Ok(header) => return Ok(header.hash()),
 				Err(_) => return Err(ErrorKind::NotFound.into()),

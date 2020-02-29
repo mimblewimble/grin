@@ -115,16 +115,20 @@ impl ChainStore {
 
 	/// Get PMMR pos for the given output commitment.
 	pub fn get_output_pos(&self, commit: &Commitment) -> Result<u64, Error> {
-		self.get_output_pos_height(commit).map(|(pos, _)| pos)
+		match self.get_output_pos_height(commit) {
+			Ok(Some((pos, _))) => Ok(pos),
+			Ok(None) => Err(Error::NotFoundErr(format!(
+				"Output position for: {:?}",
+				commit
+			))),
+			Err(e) => Err(e),
+		}
 	}
 
 	/// Get PMMR pos and block height for the given output commitment.
-	pub fn get_output_pos_height(&self, commit: &Commitment) -> Result<(u64, u64), Error> {
-		option_to_not_found(
-			self.db
-				.get_ser(&to_key(OUTPUT_POS_PREFIX, &mut commit.as_ref().to_vec())),
-			|| format!("Output position for: {:?}", commit),
-		)
+	pub fn get_output_pos_height(&self, commit: &Commitment) -> Result<Option<(u64, u64)>, Error> {
+		self.db
+			.get_ser(&to_key(OUTPUT_POS_PREFIX, &mut commit.as_ref().to_vec()))
 	}
 
 	/// Builds a new batch to be used with this store.

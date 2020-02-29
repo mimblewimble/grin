@@ -223,23 +223,23 @@ impl TxHashSet {
 	/// Check if an output is unspent.
 	/// We look in the index to find the output MMR pos.
 	/// Then we check the entry in the output MMR and confirm the hash matches.
-	pub fn is_unspent(&self, output_id: &OutputIdentifier) -> Result<CommitPos, Error> {
+	pub fn is_unspent(&self, output_id: &OutputIdentifier) -> Result<Option<CommitPos>, Error> {
 		let commit = output_id.commit;
 		match self.commit_index.get_output_pos_height(&commit) {
-			Ok((pos, height)) => {
+			Ok(Some((pos, height))) => {
 				let output_pmmr: ReadonlyPMMR<'_, Output, _> =
 					ReadonlyPMMR::at(&self.output_pmmr_h.backend, self.output_pmmr_h.last_pos);
 				if let Some(hash) = output_pmmr.get_hash(pos) {
 					if hash == output_id.hash_with_index(pos - 1) {
-						Ok(CommitPos { pos, height })
+						Ok(Some(CommitPos { pos, height }))
 					} else {
-						Err(ErrorKind::TxHashSetErr("txhashset hash mismatch".to_string()).into())
+						Ok(None)
 					}
 				} else {
-					Err(ErrorKind::OutputNotFound.into())
+					Ok(None)
 				}
 			}
-			Err(grin_store::Error::NotFoundErr(_)) => Err(ErrorKind::OutputNotFound.into()),
+			Ok(None) => Ok(None),
 			Err(e) => Err(ErrorKind::StoreErr(e, "txhashset unspent check".to_string()).into()),
 		}
 	}
