@@ -1424,7 +1424,7 @@ impl PMMRable for Output {
 	type E = OutputIdentifier;
 
 	fn as_elmt(&self) -> OutputIdentifier {
-		OutputIdentifier::from_output(self)
+		OutputIdentifier::from(*self)
 	}
 
 	fn elmt_size() -> Option<u16> {
@@ -1515,28 +1515,12 @@ impl OutputIdentifier {
 		self.commit
 	}
 
-	/// Build an output_identifier from an existing output.
-	pub fn from_output(output: &Output) -> OutputIdentifier {
-		OutputIdentifier {
-			features: output.features,
-			commit: output.commit,
-		}
-	}
-
 	/// Converts this identifier to a full output, provided a RangeProof
 	pub fn into_output(self, proof: RangeProof) -> Output {
 		Output {
 			proof,
 			features: self.features,
 			commit: self.commit,
-		}
-	}
-
-	/// Build an output_identifier from an existing input.
-	pub fn from_input(input: &Input) -> OutputIdentifier {
-		OutputIdentifier {
-			features: input.features,
-			commit: input.commit,
 		}
 	}
 
@@ -1572,6 +1556,15 @@ impl From<Output> for OutputIdentifier {
 		OutputIdentifier {
 			features: out.features,
 			commit: out.commit,
+		}
+	}
+}
+
+impl From<Input> for OutputIdentifier {
+	fn from(input: Input) -> Self {
+		OutputIdentifier {
+			features: input.features,
+			commit: input.commit,
 		}
 	}
 }

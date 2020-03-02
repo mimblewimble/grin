@@ -984,11 +984,9 @@ impl<'a> Extension<'a> {
 		let commit = input.commitment();
 		if let Ok((pos, height)) = batch.get_output_pos_height(&commit) {
 			// First check this input corresponds to an existing entry in the output MMR.
-			if let Some(hash) = self.output_pmmr.get_hash(pos) {
-				if hash != input.hash_with_index(pos - 1) {
-					return Err(
-						ErrorKind::TxHashSetErr("output pmmr hash mismatch".to_string()).into(),
-					);
+			if let Some(out) = self.output_pmmr.get_data(pos) {
+				if OutputIdentifier::from(*input) != out {
+					return Err(ErrorKind::TxHashSetErr("output pmmr mismatch".to_string()).into());
 				}
 			}
 
