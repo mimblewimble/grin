@@ -694,11 +694,11 @@ fn spend_in_fork_and_compact() {
 		assert_eq!(head.height, 6);
 		assert_eq!(head.hash(), prev_main.hash());
 		assert!(chain
-			.is_unspent(&OutputIdentifier::from_output(&tx2.outputs()[0]))
+			.get_unspent(&OutputIdentifier::from_output(&tx2.outputs()[0]))
 			.unwrap()
 			.is_some());
 		assert!(chain
-			.is_unspent(&OutputIdentifier::from_output(&tx1.outputs()[0]))
+			.get_unspent(&OutputIdentifier::from_output(&tx1.outputs()[0]))
 			.unwrap()
 			.is_none());
 
@@ -715,11 +715,11 @@ fn spend_in_fork_and_compact() {
 		assert_eq!(head.height, 7);
 		assert_eq!(head.hash(), prev_fork.hash());
 		assert!(chain
-			.is_unspent(&OutputIdentifier::from_output(&tx2.outputs()[0]))
+			.get_unspent(&OutputIdentifier::from_output(&tx2.outputs()[0]))
 			.unwrap()
 			.is_some());
 		assert!(chain
-			.is_unspent(&OutputIdentifier::from_output(&tx1.outputs()[0]))
+			.get_unspent(&OutputIdentifier::from_output(&tx1.outputs()[0]))
 			.unwrap()
 			.is_none());
 

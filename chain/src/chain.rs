@@ -504,8 +504,8 @@ impl Chain {
 	/// spent. This querying is done in a way that is consistent with the
 	/// current chain state, specifically the current winning (valid, most
 	/// work) fork.
-	pub fn is_unspent(&self, output_ref: &OutputIdentifier) -> Result<Option<CommitPos>, Error> {
-		self.txhashset.read().is_unspent(output_ref)
+	pub fn get_unspent(&self, output_ref: &OutputIdentifier) -> Result<Option<CommitPos>, Error> {
+		self.txhashset.read().get_unspent(output_ref)
 	}
 
 	/// Retrieves an unspent output using its PMMR position
@@ -1305,7 +1305,7 @@ impl Chain {
 	) -> Result<BlockHeader, Error> {
 		let header_pmmr = self.header_pmmr.read();
 		let txhashset = self.txhashset.read();
-		let output_pos = match txhashset.is_unspent(output_ref)? {
+		let output_pos = match txhashset.get_unspent(output_ref)? {
 			Some(o) => o,
 			None => return Err(ErrorKind::OutputNotFound.into()),
 		};

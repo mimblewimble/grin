@@ -31,10 +31,10 @@ pub fn w<T>(weak: &Weak<T>) -> Result<Arc<T>, Error> {
 }
 
 /// Internal function to retrieves an output by a given commitment
-fn retrieve_output(
+fn get_unspent(
 	chain: &Arc<chain::Chain>,
 	id: &str,
-) -> Result<Option<(Commitment, CommitPos, OutputIdentifier)>, Error> {
+) -> Result<Option<(CommitPos, OutputIdentifier)>, Error> {
 	let c = util::from_hex(String::from(id)).context(ErrorKind::Argument(format!(
 		"Not a valid commitment: {}",
 		id
@@ -51,9 +51,8 @@ fn retrieve_output(
 	];
 
 	for x in outputs.iter() {
-		match chain.is_unspent(x)? {
-			Some(output_pos) => return Ok(Some((commit, output_pos, x.clone()))),
-			None => {}
+		if let Some(output_pos) = chain.get_unspent(x)? {
+			return Ok(Some((output_pos, x.clone())));
 		}
 	}
 	Ok(None)
@@ -65,13 +64,13 @@ pub fn get_output(
 	id: &str,
 ) -> Result<Option<(Output, OutputIdentifier)>, Error> {
 	let chain = w(chain)?;
-	let (commit, output_pos, identifier) = match retrieve_output(&chain, id)? {
+	let (output_pos, identifier) = match get_unspent(&chain, id)? {
 		Some(x) => x,
 		None => return Ok(None),
 	};
 
 	Ok(Some((
-		Output::new(&commit, output_pos.height, output_pos.pos),
+		Output::new(&identifier.commit, output_pos.height, output_pos.pos),
 		identifier,
 	)))
 }
@@ -84,7 +83,7 @@ pub fn get_output_v2(
 	include_merkle_proof: bool,
 ) -> Result<Option<(OutputPrintable, OutputIdentifier)>, Error> {
 	let chain = w(chain)?;
-	let (_, output_pos, identifier) = match retrieve_output(&chain, id)? {
+	let (output_pos, identifier) = match get_unspent(&chain, id)? {
 		Some(x) => x,
 		None => return Ok(None),
 	};
