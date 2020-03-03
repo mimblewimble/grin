@@ -1424,7 +1424,7 @@ impl PMMRable for Output {
 	type E = OutputIdentifier;
 
 	fn as_elmt(&self) -> OutputIdentifier {
-		OutputIdentifier::from(*self)
+		OutputIdentifier::from(self)
 	}
 
 	fn elmt_size() -> Option<u16> {
@@ -1551,8 +1551,8 @@ impl Readable for OutputIdentifier {
 	}
 }
 
-impl From<Output> for OutputIdentifier {
-	fn from(out: Output) -> Self {
+impl From<&Output> for OutputIdentifier {
+	fn from(out: &Output) -> Self {
 		OutputIdentifier {
 			features: out.features,
 			commit: out.commit,
@@ -1560,8 +1560,8 @@ impl From<Output> for OutputIdentifier {
 	}
 }
 
-impl From<Input> for OutputIdentifier {
-	fn from(input: Input) -> Self {
+impl From<&Input> for OutputIdentifier {
+	fn from(input: &Input) -> Self {
 		OutputIdentifier {
 			features: input.features,
 			commit: input.commit,

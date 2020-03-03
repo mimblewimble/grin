@@ -78,7 +78,7 @@ impl<'a> UTXOView<'a> {
 	fn validate_input(&self, input: &Input, batch: &Batch<'_>) -> Result<(), Error> {
 		if let Ok(pos) = batch.get_output_pos(&input.commitment()) {
 			if let Some(out) = self.output_pmmr.get_data(pos) {
-				if OutputIdentifier::from(*input) == out {
+				if OutputIdentifier::from(input) == out {
 					return Ok(());
 				}
 			}
