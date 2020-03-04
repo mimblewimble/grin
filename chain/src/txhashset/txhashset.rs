@@ -20,7 +20,7 @@ use crate::core::core::hash::{Hash, Hashed};
 use crate::core::core::merkle_proof::MerkleProof;
 use crate::core::core::pmmr::{self, Backend, ReadonlyPMMR, RewindablePMMR, PMMR};
 use crate::core::core::{Block, BlockHeader, Input, Output, OutputIdentifier, TxKernel};
-use crate::core::ser::{PMMRIndexHashable, PMMRable, ProtocolVersion};
+use crate::core::ser::{PMMRable, ProtocolVersion};
 use crate::error::{Error, ErrorKind};
 use crate::store::{Batch, ChainStore};
 use crate::txhashset::bitmap_accumulator::BitmapAccumulator;
@@ -229,8 +229,8 @@ impl TxHashSet {
 			Ok(Some((pos, height))) => {
 				let output_pmmr: ReadonlyPMMR<'_, Output, _> =
 					ReadonlyPMMR::at(&self.output_pmmr_h.backend, self.output_pmmr_h.last_pos);
-				if let Some(hash) = output_pmmr.get_hash(pos) {
-					if hash == output_id.hash_with_index(pos - 1) {
+				if let Some(out) = output_pmmr.get_data(pos) {
+					if OutputIdentifier::from(out) == *output_id {
 						Ok(Some(CommitPos { pos, height }))
 					} else {
 						Ok(None)
@@ -526,16 +526,16 @@ where
 {
 	let res: Result<T, Error>;
 	{
+		let header_pmmr = ReadonlyPMMR::at(&handle.backend, handle.last_pos);
 		let output_pmmr =
 			ReadonlyPMMR::at(&trees.output_pmmr_h.backend, trees.output_pmmr_h.last_pos);
-		let header_pmmr = ReadonlyPMMR::at(&handle.backend, handle.last_pos);
 		let rproof_pmmr =
 			ReadonlyPMMR::at(&trees.rproof_pmmr_h.backend, trees.rproof_pmmr_h.last_pos);
 
 		// Create a new batch here to pass into the utxo_view.
 		// Discard it (rollback) after we finish with the utxo_view.
 		let batch = trees.commit_index.batch()?;
-		let utxo = UTXOView::new(output_pmmr, header_pmmr, rproof_pmmr);
+		let utxo = UTXOView::new(header_pmmr, output_pmmr, rproof_pmmr);
 		res = inner(&utxo, &batch);
 	}
 	res
@@ -919,8 +919,8 @@ impl<'a> Extension<'a> {
 	/// and the provided header extension.
 	pub fn utxo_view(&'a self, header_ext: &'a HeaderExtension<'a>) -> UTXOView<'a> {
 		UTXOView::new(
-			self.output_pmmr.readonly_pmmr(),
 			header_ext.pmmr.readonly_pmmr(),
+			self.output_pmmr.readonly_pmmr(),
 			self.rproof_pmmr.readonly_pmmr(),
 		)
 	}
@@ -984,11 +984,9 @@ impl<'a> Extension<'a> {
 		let commit = input.commitment();
 		if let Ok((pos, height)) = batch.get_output_pos_height(&commit) {
 			// First check this input corresponds to an existing entry in the output MMR.
-			if let Some(hash) = self.output_pmmr.get_hash(pos) {
-				if hash != input.hash_with_index(pos - 1) {
-					return Err(
-						ErrorKind::TxHashSetErr("output pmmr hash mismatch".to_string()).into(),
-					);
+			if let Some(out) = self.output_pmmr.get_data(pos) {
+				if OutputIdentifier::from(input) != out {
+					return Err(ErrorKind::TxHashSetErr("output pmmr mismatch".to_string()).into());
 				}
 			}
 
