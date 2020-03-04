@@ -505,7 +505,7 @@ impl TxHashSet {
 		};
 		let mut kernel_count = 0;
 		let mut current_header = cutoff_header;
-		for pos in cutoff_pos..=self.kernel_pmmr_h.last_pos {
+		for pos in cutoff_pos..(self.kernel_pmmr_h.last_pos + 1) {
 			while pos > current_header.kernel_mmr_size {
 				let next_hash = header_pmmr.get_header_hash_by_height(current_header.height + 1)?;
 				current_header = batch.get_block_header(&next_hash)?;
