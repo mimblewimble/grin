@@ -1107,7 +1107,7 @@ impl Chain {
 
 		// Remove historical blocks from the db unless we are running in archive mode.
 		if !self.archive_mode {
-			self.remove_historical_blocks(&header_pmmr, &mut batch)?;
+			self.remove_historical_blocks(&header_pmmr, &batch)?;
 		}
 
 		// Compact the txhashset itself (rewriting the pruned backend files).
@@ -1154,7 +1154,7 @@ impl Chain {
 	/// Get the position of the kernel if it exists in the kernel_pos index.
 	/// The index is limited to 14 days of recent kernels.
 	pub fn get_kernel_pos(&self, excess: Commitment) -> Result<u64, Error> {
-		Ok(self.txhashset.read().get_kernel_pos(excess)?)
+		self.txhashset.read().get_kernel_pos(excess)
 	}
 
 	/// outputs by insertion index

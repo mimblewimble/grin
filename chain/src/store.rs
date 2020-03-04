@@ -38,6 +38,7 @@ const KERNEL_POS_PREFIX: u8 = b'k';
 const BLOCK_INPUT_BITMAP_PREFIX: u8 = b'B';
 const BLOCK_SUMS_PREFIX: u8 = b'M';
 const BLOCK_SPENT_PREFIX: u8 = b'S';
+const BLOCK_KERNEL_UNDO_PREFIX: u8 = b'U';
 
 /// All chain-related database operations
 pub struct ChainStore {
@@ -208,6 +209,16 @@ impl<'a> Batch<'a> {
 	pub fn save_spent_index(&self, h: &Hash, spent: &Vec<CommitPos>) -> Result<(), Error> {
 		self.db
 			.put_ser(&to_key(BLOCK_SPENT_PREFIX, &mut h.to_vec())[..], spent)?;
+		Ok(())
+	}
+
+	/// We maintain an "undo" index for each full block to allow the kernel_pos
+	/// to be easily reverted during rewind.
+	/// We allow duplicate kernels so we need to know what to revert the kernel_pos
+	/// index to if we "undo" a kernel when rewinding a block.
+	pub fn save_kernel_undo_index(&self, h: &Hash, pos: &Vec<CommitPos>) -> Result<(), Error> {
+		self.db
+			.put_ser(&to_key(BLOCK_KERNEL_UNDO_PREFIX, &mut h.to_vec())[..], pos)?;
 		Ok(())
 	}
 
