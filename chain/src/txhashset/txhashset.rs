@@ -425,7 +425,12 @@ impl TxHashSet {
 
 		debug!("init_output_pos_index: {} utxos", outputs_pos.len());
 
-		outputs_pos.retain(|x| batch.get_output_pos_height(&x.0).is_err());
+		outputs_pos.retain(|x| {
+			batch
+				.get_output_pos_height(&x.0)
+				.map(|p| p.is_none())
+				.unwrap_or(true)
+		});
 
 		debug!(
 			"init_output_pos_index: {} utxos with missing index entries",
@@ -982,7 +987,7 @@ impl<'a> Extension<'a> {
 
 	fn apply_input(&mut self, input: &Input, batch: &Batch<'_>) -> Result<CommitPos, Error> {
 		let commit = input.commitment();
-		if let Ok((pos, height)) = batch.get_output_pos_height(&commit) {
+		if let Some((pos, height)) = batch.get_output_pos_height(&commit)? {
 			// First check this input corresponds to an existing entry in the output MMR.
 			if let Some(out) = self.output_pmmr.get_data(pos) {
 				if OutputIdentifier::from(input) != out {
