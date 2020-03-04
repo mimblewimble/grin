@@ -16,9 +16,8 @@
 
 use crate::core::core::hash::{Hash, Hashed};
 use crate::core::core::pmmr::{self, ReadonlyPMMR};
-use crate::core::core::{Block, BlockHeader, Input, Output, Transaction};
+use crate::core::core::{Block, BlockHeader, Input, Output, OutputIdentifier, Transaction};
 use crate::core::global;
-use crate::core::ser::PMMRIndexHashable;
 use crate::error::{Error, ErrorKind};
 use crate::store::Batch;
 use crate::util::secp::pedersen::RangeProof;
@@ -75,11 +74,11 @@ impl<'a> UTXOView<'a> {
 
 	// Input is valid if it is spending an (unspent) output
 	// that currently exists in the output MMR.
-	// Compare the hash in the output MMR at the expected pos.
+	// Compare against the entry in output MMR at the expected pos.
 	fn validate_input(&self, input: &Input, batch: &Batch<'_>) -> Result<(), Error> {
 		if let Ok(pos) = batch.get_output_pos(&input.commitment()) {
-			if let Some(hash) = self.output_pmmr.get_hash(pos) {
-				if hash == input.hash_with_index(pos - 1) {
+			if let Some(out) = self.output_pmmr.get_data(pos) {
+				if OutputIdentifier::from(input) == out {
 					return Ok(());
 				}
 			}

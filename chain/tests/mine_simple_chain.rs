@@ -546,7 +546,7 @@ fn spend_rewind_spend() {
 		// mine the first block and keep track of the block_hash
 		// so we can spend the coinbase later
 		let b = prepare_block_key_idx(&kc, &head, &chain, 2, 1);
-		let out_id = OutputIdentifier::from_output(&b.outputs()[0]);
+		let out_id = OutputIdentifier::from(&b.outputs()[0]);
 		assert!(out_id.features.is_coinbase());
 		head = b.header.clone();
 		chain
@@ -620,7 +620,7 @@ fn spend_in_fork_and_compact() {
 		// mine the first block and keep track of the block_hash
 		// so we can spend the coinbase later
 		let b = prepare_block(&kc, &fork_head, &chain, 2);
-		let out_id = OutputIdentifier::from_output(&b.outputs()[0]);
+		let out_id = OutputIdentifier::from(&b.outputs()[0]);
 		assert!(out_id.features.is_coinbase());
 		fork_head = b.header.clone();
 		chain
@@ -694,10 +694,10 @@ fn spend_in_fork_and_compact() {
 		assert_eq!(head.height, 6);
 		assert_eq!(head.hash(), prev_main.hash());
 		assert!(chain
-			.is_unspent(&OutputIdentifier::from_output(&tx2.outputs()[0]))
+			.is_unspent(&OutputIdentifier::from(&tx2.outputs()[0]))
 			.is_ok());
 		assert!(chain
-			.is_unspent(&OutputIdentifier::from_output(&tx1.outputs()[0]))
+			.is_unspent(&OutputIdentifier::from(&tx1.outputs()[0]))
 			.is_err());
 
 		// make the fork win
@@ -713,10 +713,10 @@ fn spend_in_fork_and_compact() {
 		assert_eq!(head.height, 7);
 		assert_eq!(head.hash(), prev_fork.hash());
 		assert!(chain
-			.is_unspent(&OutputIdentifier::from_output(&tx2.outputs()[0]))
+			.is_unspent(&OutputIdentifier::from(&tx2.outputs()[0]))
 			.is_ok());
 		assert!(chain
-			.is_unspent(&OutputIdentifier::from_output(&tx1.outputs()[0]))
+			.is_unspent(&OutputIdentifier::from(&tx1.outputs()[0]))
 			.is_err());
 
 		// add 20 blocks to go past the test horizon
@@ -790,7 +790,7 @@ fn output_header_mappings() {
 			chain.process_block(b, chain::Options::MINE).unwrap();
 
 			let header_for_output = chain
-				.get_header_for_output(&OutputIdentifier::from_output(&reward_outputs[n - 1]))
+				.get_header_for_output(&OutputIdentifier::from(&reward_outputs[n - 1]))
 				.unwrap();
 			assert_eq!(header_for_output.height, n as u64);
 
@@ -800,7 +800,7 @@ fn output_header_mappings() {
 		// Check all output positions are as expected
 		for n in 1..15 {
 			let header_for_output = chain
-				.get_header_for_output(&OutputIdentifier::from_output(&reward_outputs[n - 1]))
+				.get_header_for_output(&OutputIdentifier::from(&reward_outputs[n - 1]))
 				.unwrap();
 			assert_eq!(header_for_output.height, n as u64);
 		}

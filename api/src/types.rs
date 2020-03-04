@@ -288,7 +288,7 @@ impl OutputPrintable {
 			OutputType::Transaction
 		};
 
-		let out_id = core::OutputIdentifier::from_output(&output);
+		let out_id = core::OutputIdentifier::from(output);
 		let res = chain.is_unspent(&out_id);
 		let (spent, block_height) = if let Ok(output_pos) = res {
 			(false, Some(output_pos.height))
