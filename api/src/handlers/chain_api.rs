@@ -108,21 +108,6 @@ pub struct OutputHandler {
 }
 
 impl OutputHandler {
-	fn get_output(&self, id: &str) -> Result<Output, Error> {
-		let res = get_output(&self.chain, id)?;
-		Ok(res.0)
-	}
-
-	fn get_output_v2(
-		&self,
-		id: &str,
-		include_proof: bool,
-		include_merkle_proof: bool,
-	) -> Result<OutputPrintable, Error> {
-		let res = get_output_v2(&self.chain, id, include_proof, include_merkle_proof)?;
-		Ok(res.0)
-	}
-
 	pub fn get_outputs_v2(
 		&self,
 		commits: Option<Vec<String>>,
@@ -144,17 +129,23 @@ impl OutputHandler {
 				}
 			}
 			for commit in commits {
-				match self.get_output_v2(
+				match get_output_v2(
+					&self.chain,
 					&commit,
 					include_proof.unwrap_or(false),
 					include_merkle_proof.unwrap_or(false),
 				) {
-					Ok(output) => outputs.push(output),
-					// do not crash here simply do not retrieve this output
-					Err(e) => error!(
-						"Failure to get output for commitment {} with error {}",
-						commit, e
-					),
+					Ok(Some((output, _))) => outputs.push(output),
+					Ok(None) => {
+						// Ignore outputs that are not found
+					}
+					Err(e) => {
+						error!(
+							"Failure to get output for commitment {} with error {}",
+							commit, e
+						);
+						return Err(e.into());
+					}
 				};
 			}
 		}
@@ -219,12 +210,18 @@ impl OutputHandler {
 
 		let mut outputs: Vec<Output> = vec![];
 		for x in commitments {
-			match self.get_output(&x) {
-				Ok(output) => outputs.push(output),
-				Err(e) => error!(
-					"Failure to get output for commitment {} with error {}",
-					x, e
-				),
+			match get_output(&self.chain, &x) {
+				Ok(Some((output, _))) => outputs.push(output),
+				Ok(None) => {
+					// Ignore outputs that are not found
+				}
+				Err(e) => {
+					error!(
+						"Failure to get output for commitment {} with error {}",
+						x, e
+					);
+					return Err(e.into());
+				}
 			};
 		}
 		Ok(outputs)

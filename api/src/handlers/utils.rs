@@ -13,6 +13,7 @@
 // limitations under the License.
 
 use crate::chain;
+use crate::chain::types::CommitPos;
 use crate::core::core::{OutputFeatures, OutputIdentifier};
 use crate::rest::*;
 use crate::types::*;
@@ -29,11 +30,11 @@ pub fn w<T>(weak: &Weak<T>) -> Result<Arc<T>, Error> {
 		.ok_or_else(|| ErrorKind::Internal("failed to upgrade weak refernce".to_owned()).into())
 }
 
-/// Retrieves an output from the chain given a commit id (a tiny bit iteratively)
-pub fn get_output(
-	chain: &Weak<chain::Chain>,
+/// Internal function to retrieves an output by a given commitment
+fn get_unspent(
+	chain: &Arc<chain::Chain>,
 	id: &str,
-) -> Result<(Output, OutputIdentifier), Error> {
+) -> Result<Option<(CommitPos, OutputIdentifier)>, Error> {
 	let c = util::from_hex(String::from(id)).context(ErrorKind::Argument(format!(
 		"Not a valid commitment: {}",
 		id
@@ -49,28 +50,29 @@ pub fn get_output(
 		OutputIdentifier::new(OutputFeatures::Coinbase, &commit),
 	];
 
-	let chain = w(chain)?;
-
 	for x in outputs.iter() {
-		let res = chain.is_unspent(x);
-		match res {
-			Ok(output_pos) => {
-				return Ok((
-					Output::new(&commit, output_pos.height, output_pos.pos),
-					x.clone(),
-				));
-			}
-			Err(e) => {
-				trace!(
-					"get_output: err: {} for commit: {:?} with feature: {:?}",
-					e.to_string(),
-					x.commit,
-					x.features
-				);
-			}
+		if let Some(output_pos) = chain.get_unspent(x)? {
+			return Ok(Some((output_pos, x.clone())));
 		}
 	}
-	Err(ErrorKind::NotFound.into())
+	Ok(None)
+}
+
+/// Retrieves an output from the chain given a commit id (a tiny bit iteratively)
+pub fn get_output(
+	chain: &Weak<chain::Chain>,
+	id: &str,
+) -> Result<Option<(Output, OutputIdentifier)>, Error> {
+	let chain = w(chain)?;
+	let (output_pos, identifier) = match get_unspent(&chain, id)? {
+		Some(x) => x,
+		None => return Ok(None),
+	};
+
+	Ok(Some((
+		Output::new(&identifier.commit, output_pos.height, output_pos.pos),
+		identifier,
+	)))
 }
 
 /// Retrieves an output from the chain given a commit id (a tiny bit iteratively)
@@ -79,63 +81,27 @@ pub fn get_output_v2(
 	id: &str,
 	include_proof: bool,
 	include_merkle_proof: bool,
-) -> Result<(OutputPrintable, OutputIdentifier), Error> {
-	let c = util::from_hex(String::from(id)).context(ErrorKind::Argument(format!(
-		"Not a valid commitment: {}",
-		id
-	)))?;
-	let commit = Commitment::from_vec(c);
-
-	// We need the features here to be able to generate the necessary hash
-	// to compare against the hash in the output MMR.
-	// For now we can just try both (but this probably needs to be part of the api
-	// params)
-	let outputs = [
-		OutputIdentifier::new(OutputFeatures::Plain, &commit),
-		OutputIdentifier::new(OutputFeatures::Coinbase, &commit),
-	];
-
+) -> Result<Option<(OutputPrintable, OutputIdentifier)>, Error> {
 	let chain = w(chain)?;
+	let (output_pos, identifier) = match get_unspent(&chain, id)? {
+		Some(x) => x,
+		None => return Ok(None),
+	};
 
-	for x in outputs.iter() {
-		let res = chain.is_unspent(x);
-		match res {
-			Ok(output_pos) => match chain.get_unspent_output_at(output_pos.pos) {
-				Ok(output) => {
-					let header = if include_merkle_proof && output.is_coinbase() {
-						chain.get_header_by_height(output_pos.height).ok()
-					} else {
-						None
-					};
-					match OutputPrintable::from_output(
-						&output,
-						chain.clone(),
-						header.as_ref(),
-						include_proof,
-						include_merkle_proof,
-					) {
-						Ok(output_printable) => return Ok((output_printable, x.clone())),
-						Err(e) => {
-							trace!(
-								"get_output: err: {} for commit: {:?} with feature: {:?}",
-								e.to_string(),
-								x.commit,
-								x.features
-							);
-						}
-					}
-				}
-				Err(_) => return Err(ErrorKind::NotFound.into()),
-			},
-			Err(e) => {
-				trace!(
-					"get_output: err: {} for commit: {:?} with feature: {:?}",
-					e.to_string(),
-					x.commit,
-					x.features
-				);
-			}
-		}
-	}
-	Err(ErrorKind::NotFound.into())
+	let output = chain.get_unspent_output_at(output_pos.pos)?;
+	let header = if include_merkle_proof && output.is_coinbase() {
+		chain.get_header_by_height(output_pos.height).ok()
+	} else {
+		None
+	};
+
+	let output_printable = OutputPrintable::from_output(
+		&output,
+		chain.clone(),
+		header.as_ref(),
+		include_proof,
+		include_merkle_proof,
+	)?;
+
+	Ok(Some((output_printable, identifier)))
 }

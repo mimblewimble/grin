@@ -289,8 +289,8 @@ impl OutputPrintable {
 		};
 
 		let out_id = core::OutputIdentifier::from(output);
-		let res = chain.is_unspent(&out_id);
-		let (spent, block_height) = if let Ok(output_pos) = res {
+		let res = chain.get_unspent(&out_id)?;
+		let (spent, block_height) = if let Some(output_pos) = res {
 			(false, Some(output_pos.height))
 		} else {
 			(true, None)
