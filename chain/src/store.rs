@@ -118,7 +118,7 @@ impl ChainStore {
 	/// Get PMMR pos for the given output commitment.
 	pub fn get_output_pos(&self, commit: &Commitment) -> Result<u64, Error> {
 		match self.get_output_pos_height(commit)? {
-			Some((pos, _)) => Ok(pos),
+			Some(pos) => Ok(pos.pos),
 			None => Err(Error::NotFoundErr(format!(
 				"Output position for: {:?}",
 				commit
@@ -127,15 +127,14 @@ impl ChainStore {
 	}
 
 	/// Get PMMR pos and block height for the given output commitment.
-	pub fn get_output_pos_height(&self, commit: &Commitment) -> Result<Option<(u64, u64)>, Error> {
-		self.db
-			.get_ser(&to_key(OUTPUT_POS_PREFIX, &mut commit.as_ref().to_vec()))
+	pub fn get_output_pos_height(&self, commit: &Commitment) -> Result<Option<CommitPos>, Error> {
+		self.db.get_ser(&to_key(OUTPUT_POS_PREFIX, &mut commit.as_ref().to_vec()))
 	}
 
 	/// Get kernel_pos and block height from index.
 	/// Returns a vec of possible (pos, height) entries in the MMR.
 	/// Returns an empty vec if no entries found.
-	pub fn get_kernel_pos_height(&self, excess: &Commitment) -> Result<(u64, u64), Error> {
+	pub fn get_kernel_pos_height(&self, excess: &Commitment) -> Result<CommitPos, Error> {
 		option_to_not_found(
 			self.db
 				.get_ser(&to_key(KERNEL_POS_PREFIX, &mut excess.as_ref().to_vec())),
@@ -249,6 +248,7 @@ impl<'a> Batch<'a> {
 		{
 			let _ = self.delete_block_sums(bh);
 			let _ = self.delete_spent_index(bh);
+			let _ = self.delete_kernel_undo_index(bh);
 		}
 
 		Ok(())
@@ -266,15 +266,10 @@ impl<'a> Batch<'a> {
 	}
 
 	/// Save output_pos and block height to index.
-	pub fn save_output_pos_height(
-		&self,
-		commit: &Commitment,
-		pos: u64,
-		height: u64,
-	) -> Result<(), Error> {
+	pub fn save_output_pos_height(&self, commit: &Commitment, pos: CommitPos) -> Result<(), Error> {
 		self.db.put_ser(
 			&to_key(OUTPUT_POS_PREFIX, &mut commit.as_ref().to_vec())[..],
-			&(pos, height),
+			&pos,
 		)
 	}
 
@@ -293,32 +288,27 @@ impl<'a> Batch<'a> {
 	}
 
 	/// Iterator over the output_pos index.
-	pub fn output_pos_iter(&self) -> Result<SerIterator<(u64, u64)>, Error> {
+	pub fn output_pos_iter(&self) -> Result<SerIterator<CommitPos>, Error> {
 		let key = to_key(OUTPUT_POS_PREFIX, &mut "".to_string().into_bytes());
 		self.db.iter(&key)
 	}
 
 	/// Save kernel_pos and block height to index.
-	pub fn save_kernel_pos_height(
-		&self,
-		excess: &Commitment,
-		pos: u64,
-		height: u64,
-	) -> Result<(), Error> {
+	pub fn save_kernel_pos_height(&self, excess: &Commitment, pos: CommitPos) -> Result<(), Error> {
 		self.db.put_ser(
 			&to_key(KERNEL_POS_PREFIX, &mut excess.as_ref().to_vec())[..],
-			&(pos, height),
+			&pos,
 		)
 	}
 
 	/// Iterator over the kernel_pos index.
-	pub fn kernel_pos_iter(&self) -> Result<SerIterator<(u64, u64)>, Error> {
+	pub fn kernel_pos_iter(&self) -> Result<SerIterator<CommitPos>, Error> {
 		let key = to_key(KERNEL_POS_PREFIX, &mut "".to_string().into_bytes());
 		self.db.iter(&key)
 	}
 
 	/// Get kernel_pos and block height from index.
-	pub fn get_kernel_pos_height(&self, excess: &Commitment) -> Result<(u64, u64), Error> {
+	pub fn get_kernel_pos_height(&self, excess: &Commitment) -> Result<CommitPos, Error> {
 		option_to_not_found(
 			self.db
 				.get_ser(&to_key(KERNEL_POS_PREFIX, &mut excess.as_ref().to_vec())),
@@ -326,10 +316,10 @@ impl<'a> Batch<'a> {
 		)
 	}
 
-	/// Get output_pos from index.
+	/// Get PMMR pos for the given output commitment.
 	pub fn get_output_pos(&self, commit: &Commitment) -> Result<u64, Error> {
 		match self.get_output_pos_height(commit)? {
-			Some((pos, _)) => Ok(pos),
+			Some(pos) => Ok(pos.pos),
 			None => Err(Error::NotFoundErr(format!(
 				"Output position for: {:?}",
 				commit
@@ -337,10 +327,9 @@ impl<'a> Batch<'a> {
 		}
 	}
 
-	/// Get output_pos and block height from index.
-	pub fn get_output_pos_height(&self, commit: &Commitment) -> Result<Option<(u64, u64)>, Error> {
-		self.db
-			.get_ser(&to_key(OUTPUT_POS_PREFIX, &mut commit.as_ref().to_vec()))
+	/// Get PMMR pos and block height for the given output commitment.
+	pub fn get_output_pos_height(&self, commit: &Commitment) -> Result<Option<CommitPos>, Error> {
+		self.db.get_ser(&to_key(OUTPUT_POS_PREFIX, &mut commit.as_ref().to_vec()))
 	}
 
 	/// Get the previous header.
@@ -366,6 +355,11 @@ impl<'a> Batch<'a> {
 
 		self.db
 			.delete(&to_key(BLOCK_SPENT_PREFIX, &mut bh.to_vec()))
+	}
+
+	fn delete_kernel_undo_index(&self, bh: &Hash) -> Result<(), Error> {
+		self.db
+			.delete(&to_key(BLOCK_KERNEL_UNDO_PREFIX, &mut bh.to_vec()))
 	}
 
 	/// Save block_sums for the block.
