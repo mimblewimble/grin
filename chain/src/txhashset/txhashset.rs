@@ -1040,12 +1040,12 @@ impl<'a> Extension<'a> {
 		let mut kernel_undo_list = vec![];
 		for kernel in b.kernels() {
 			if let Ok(prev_pos) = batch.get_kernel_pos_height(&kernel.excess) {
-				kernel_undo_list.push(prev_pos);
+				kernel_undo_list.push((kernel.excess, prev_pos));
 			}
 			let pos = self.apply_kernel(kernel)?;
 			batch.save_kernel_pos_height(&kernel.excess(), CommitPos { pos, height })?;
 		}
-		batch.save_kernel_undo_index(&b.hash(), &kernel_undo_list)?;
+		batch.save_kernel_undo_list(&b.hash(), &kernel_undo_list)?;
 
 		// Update our BitmapAccumulator based on affected outputs (both spent and created).
 		self.apply_to_bitmap_accumulator(&affected_pos)?;
@@ -1235,6 +1235,9 @@ impl<'a> Extension<'a> {
 		header: &BlockHeader,
 		batch: &Batch<'_>,
 	) -> Result<Vec<u64>, Error> {
+		// Look the full block up in the db. We can only rewind full blocks.
+		let block = batch.get_block(&header.hash())?;
+
 		// The spent index allows us to conveniently "unspend" everything in a block.
 		let spent = batch.get_spent_index(&header.hash());
 
@@ -1263,25 +1266,13 @@ impl<'a> Extension<'a> {
 		let mut affected_pos = spent_pos.clone();
 		affected_pos.push(self.output_pmmr.last_pos);
 
-		// Remove any entries from the output_pos created by the block being rewound.
-		let block = batch.get_block(&header.hash())?;
-		let mut missing_count = 0;
+		// Remove any output_pos entries created by the block being rewound.
 		for out in block.outputs() {
-			if batch.delete_output_pos_height(&out.commitment()).is_err() {
-				missing_count += 1;
-			}
-		}
-		if missing_count > 0 {
-			warn!(
-				"rewind_single_block: {} output_pos entries missing for: {} at {}",
-				missing_count,
-				header.hash(),
-				header.height,
-			);
+			let _ = batch.delete_output_pos_height(&out.commitment());
 		}
 
 		// Update output_pos based on "unspending" all spent pos from this block.
-		// This is necessary to ensure the output_pos index correclty reflects a
+		// This is necessary to ensure the output_pos index correctly reflects a
 		// reused output commitment. For example an output at pos 1, spent, reused at pos 2.
 		// The output_pos index should be updated to reflect the old pos 1 when unspent.
 		if let Ok(spent) = spent {
@@ -1290,7 +1281,26 @@ impl<'a> Extension<'a> {
 			}
 		}
 
+		// Update the kernel_pos index for the block being rewound.
+		self.rewind_single_block_kernels(&block, batch)?;
+
 		Ok(affected_pos)
+	}
+
+	fn rewind_single_block_kernels(&self, block: &Block, batch: &Batch<'_>) -> Result<(), Error> {
+		// Remove any kernel_pos entries created by the block being rewound.
+		for kern in block.kernels() {
+			let _ = batch.delete_kernel_pos_height(&kern.excess());
+		}
+
+		// Add back any previous kernel instances replaced by the block being rewound.
+		if let Ok(undo_list) = batch.get_kernel_undo_list(&block.hash()) {
+			for (excess, pos) in undo_list {
+				batch.save_kernel_pos_height(&excess, pos)?;
+			}
+		}
+
+		Ok(())
 	}
 
 	/// Rewinds the MMRs to the provided positions, given the output and

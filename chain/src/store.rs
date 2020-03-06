@@ -215,7 +215,11 @@ impl<'a> Batch<'a> {
 	/// to be easily reverted during rewind.
 	/// We allow duplicate kernels so we need to know what to revert the kernel_pos
 	/// index to if we "undo" a kernel when rewinding a block.
-	pub fn save_kernel_undo_index(&self, h: &Hash, pos: &Vec<CommitPos>) -> Result<(), Error> {
+	pub fn save_kernel_undo_list(
+		&self,
+		h: &Hash,
+		pos: &Vec<(Commitment, CommitPos)>,
+	) -> Result<(), Error> {
 		self.db
 			.put_ser(&to_key(BLOCK_KERNEL_UNDO_PREFIX, &mut h.to_vec())[..], pos)?;
 		Ok(())
@@ -248,7 +252,7 @@ impl<'a> Batch<'a> {
 		{
 			let _ = self.delete_block_sums(bh);
 			let _ = self.delete_spent_index(bh);
-			let _ = self.delete_kernel_undo_index(bh);
+			let _ = self.delete_kernel_undo_list(bh);
 		}
 
 		Ok(())
@@ -273,10 +277,16 @@ impl<'a> Batch<'a> {
 		)
 	}
 
-	/// Delete the output_pos index entry for a spent output.
+	/// Delete a output_pos index entry.
 	pub fn delete_output_pos_height(&self, commit: &Commitment) -> Result<(), Error> {
 		self.db
 			.delete(&to_key(OUTPUT_POS_PREFIX, &mut commit.as_ref().to_vec()))
+	}
+
+	/// Delete a kernel_pos index entry
+	pub fn delete_kernel_pos_height(&self, excess: &Commitment) -> Result<(), Error> {
+		self.db
+			.delete(&to_key(KERNEL_POS_PREFIX, &mut excess.as_ref().to_vec()))
 	}
 
 	/// When using the output_pos iterator we have access to the index keys but not the
@@ -357,7 +367,7 @@ impl<'a> Batch<'a> {
 			.delete(&to_key(BLOCK_SPENT_PREFIX, &mut bh.to_vec()))
 	}
 
-	fn delete_kernel_undo_index(&self, bh: &Hash) -> Result<(), Error> {
+	fn delete_kernel_undo_list(&self, bh: &Hash) -> Result<(), Error> {
 		self.db
 			.delete(&to_key(BLOCK_KERNEL_UNDO_PREFIX, &mut bh.to_vec()))
 	}
@@ -413,6 +423,17 @@ impl<'a> Batch<'a> {
 			self.db
 				.get_ser(&to_key(BLOCK_SPENT_PREFIX, &mut bh.to_vec())),
 			|| format!("spent index: {}", bh),
+		)
+	}
+
+	/// Get the kernel "undo list" from the db for the specified block.
+	/// If we need to rewind a block then we use this to revert the index to previous kernel pos
+	/// in the case of duplicates.
+	pub fn get_kernel_undo_list(&self, bh: &Hash) -> Result<Vec<(Commitment, CommitPos)>, Error> {
+		option_to_not_found(
+			self.db
+				.get_ser(&to_key(BLOCK_KERNEL_UNDO_PREFIX, &mut bh.to_vec())),
+			|| format!("kernel undo list: {}", bh),
 		)
 	}
 
