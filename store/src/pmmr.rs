@@ -316,10 +316,12 @@ impl<T: PMMRable> PMMRBackend<T> {
 
 	/// Syncs all files to disk. A call to sync is required to ensure all the
 	/// data has been successfully written to disk.
+	/// Flush the data file before the hash file to ensure we always have data where
+	/// we expect it as unpruned_size is based off hash size.
 	pub fn sync(&mut self) -> io::Result<()> {
 		Ok(())
-			.and(self.hash_file.flush())
 			.and(self.data_file.flush())
+			.and(self.hash_file.flush())
 			.and(self.sync_leaf_set())
 			.map_err(|e| {
 				io::Error::new(

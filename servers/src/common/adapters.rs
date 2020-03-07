@@ -320,8 +320,8 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 
 		let max_height = self.chain().header_head()?.height;
 
-		let header_pmmr = self.chain().header_pmmr();
-		let header_pmmr = header_pmmr.read();
+		let header_pmmr = self.chain().header_pmmr()?;
+		// let header_pmmr = header_pmmr.read();
 
 		// looks like we know one, getting as many following headers as allowed
 		let hh = header.height;
@@ -509,8 +509,8 @@ impl NetToChainAdapter {
 
 	// Find the first locator hash that refers to a known header on our main chain.
 	fn find_common_header(&self, locator: &[Hash]) -> Option<BlockHeader> {
-		let header_pmmr = self.chain().header_pmmr();
-		let header_pmmr = header_pmmr.read();
+		let header_pmmr = self.chain().header_pmmr().unwrap();
+		// let header_pmmr = header_pmmr.read();
 
 		for hash in locator {
 			if let Ok(header) = self.chain().get_block_header(&hash) {

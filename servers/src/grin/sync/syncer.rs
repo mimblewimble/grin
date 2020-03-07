@@ -189,11 +189,10 @@ impl SyncRunner {
 			// Does not appear to be deadlock as it does resolve itself eventually.
 			// So as a workaround we try_header_head with a relatively short timeout and simply
 			// retry the syncer loop.
-			let maybe_header_head =
-				unwrap_or_restart_loop!(self.chain.try_header_head(time::Duration::from_secs(1)));
-			let header_head = unwrap_or_restart_loop!(
-				maybe_header_head.ok_or("failed to obtain lock for try_header_head")
-			);
+			let header_head = unwrap_or_restart_loop!(self.chain.header_head());
+			// let header_head = unwrap_or_restart_loop!(
+			// 	maybe_header_head.ok_or("failed to obtain lock for try_header_head")
+			// );
 
 			// run each sync stage, each of them deciding whether they're needed
 			// except for state sync that only runs if body sync return true (means txhashset is needed)

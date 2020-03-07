@@ -148,8 +148,8 @@ pub struct Chain {
 	adapter: Arc<dyn ChainAdapter + Send + Sync>,
 	orphans: Arc<OrphanBlockPool>,
 	txhashset: Arc<RwLock<txhashset::TxHashSet>>,
-	header_pmmr: Arc<RwLock<txhashset::PMMRHandle<BlockHeader>>>,
-	sync_pmmr: Arc<RwLock<txhashset::PMMRHandle<BlockHeader>>>,
+	// header_pmmr: Arc<RwLock<txhashset::PMMRHandle<BlockHeader>>>,
+	// sync_pmmr: Arc<RwLock<txhashset::PMMRHandle<BlockHeader>>>,
 	verifier_cache: Arc<RwLock<dyn VerifierCache>>,
 	// POW verification function
 	pow_verifier: fn(&BlockHeader) -> Result<(), pow::Error>,
@@ -174,22 +174,25 @@ impl Chain {
 		// open the txhashset, creating a new one if necessary
 		let mut txhashset = txhashset::TxHashSet::open(db_root.clone(), store.clone(), None)?;
 
-		let mut header_pmmr = PMMRHandle::new(
-			&db_root,
-			"header",
-			"header_head",
-			false,
-			ProtocolVersion(1),
-			None,
-		)?;
-		let mut sync_pmmr = PMMRHandle::new(
-			&db_root,
-			"header",
-			"sync_head",
-			false,
-			ProtocolVersion(1),
-			None,
-		)?;
+		// let mut header_pmmr = PMMRHandle::new(
+		// 	&db_root,
+		// 	"header",
+		// 	"header_head",
+		// 	false,
+		// 	ProtocolVersion(1),
+		// 	None,
+		// )?;
+		// let mut sync_pmmr = PMMRHandle::new(
+		// 	&db_root,
+		// 	"header",
+		// 	"sync_head",
+		// 	false,
+		// 	ProtocolVersion(1),
+		// 	None,
+		// )?;
+
+		let mut header_pmmr = Chain::open_header_pmmr(&db_root)?;
+		let mut sync_pmmr = Chain::open_sync_pmmr(&db_root)?;
 
 		setup_head(
 			&genesis,
@@ -214,8 +217,8 @@ impl Chain {
 			adapter,
 			orphans: Arc::new(OrphanBlockPool::new()),
 			txhashset: Arc::new(RwLock::new(txhashset)),
-			header_pmmr: Arc::new(RwLock::new(header_pmmr)),
-			sync_pmmr: Arc::new(RwLock::new(sync_pmmr)),
+			// header_pmmr: Arc::new(RwLock::new(header_pmmr)),
+			// sync_pmmr: Arc::new(RwLock::new(sync_pmmr)),
 			pow_verifier,
 			verifier_cache,
 			archive_mode,
@@ -233,9 +236,31 @@ impl Chain {
 		Ok(chain)
 	}
 
+	pub fn open_header_pmmr(db_root: &str) -> Result<PMMRHandle<BlockHeader>, Error> {
+		Ok(PMMRHandle::new(
+			db_root,
+			"header",
+			"header_head",
+			false,
+			ProtocolVersion(1),
+			None,
+		)?)
+	}
+
+	pub fn open_sync_pmmr(db_root: &str) -> Result<PMMRHandle<BlockHeader>, Error> {
+		Ok(PMMRHandle::new(
+			db_root,
+			"header",
+			"sync_head",
+			false,
+			ProtocolVersion(1),
+			None,
+		)?)
+	}
+
 	/// Return our shared header MMR handle.
-	pub fn header_pmmr(&self) -> Arc<RwLock<PMMRHandle<BlockHeader>>> {
-		self.header_pmmr.clone()
+	pub fn header_pmmr(&self) -> Result<PMMRHandle<BlockHeader>, Error> {
+		Chain::open_header_pmmr(&self.db_root)
 	}
 
 	/// Return our shared txhashset instance.
@@ -301,7 +326,7 @@ impl Chain {
 	/// or false if it has added to a fork (or orphan?).
 	fn process_block_single(&self, b: Block, opts: Options) -> Result<Option<Tip>, Error> {
 		let (maybe_new_head, prev_head) = {
-			let mut header_pmmr = self.header_pmmr.write();
+			let mut header_pmmr = Chain::open_header_pmmr(&self.db_root)?;
 			let mut txhashset = self.txhashset.write();
 			let batch = self.store.batch()?;
 			let mut ctx = self.new_ctx(opts, batch, &mut header_pmmr, &mut txhashset)?;
@@ -380,7 +405,7 @@ impl Chain {
 	/// Note: This will update header MMR and corresponding header_head
 	/// if total work increases (on the header chain).
 	pub fn process_block_header(&self, bh: &BlockHeader, opts: Options) -> Result<(), Error> {
-		let mut header_pmmr = self.header_pmmr.write();
+		let mut header_pmmr = Chain::open_header_pmmr(&self.db_root)?;
 		let mut txhashset = self.txhashset.write();
 		let batch = self.store.batch()?;
 		let mut ctx = self.new_ctx(opts, batch, &mut header_pmmr, &mut txhashset)?;
@@ -393,8 +418,8 @@ impl Chain {
 	/// This is only ever used during sync and is based on sync_head.
 	/// We update header_head here if our total work increases.
 	pub fn sync_block_headers(&self, headers: &[BlockHeader], opts: Options) -> Result<(), Error> {
-		let mut sync_pmmr = self.sync_pmmr.write();
-		let mut header_pmmr = self.header_pmmr.write();
+		let mut sync_pmmr = Chain::open_sync_pmmr(&self.db_root)?;
+		let mut header_pmmr = Chain::open_header_pmmr(&self.db_root)?;
 		let mut txhashset = self.txhashset.write();
 
 		// Sync the chunk of block headers, updating sync_head as necessary.
@@ -510,7 +535,7 @@ impl Chain {
 
 	/// Retrieves an unspent output using its PMMR position
 	pub fn get_unspent_output_at(&self, pos: u64) -> Result<Output, Error> {
-		let header_pmmr = self.header_pmmr.read();
+		let header_pmmr = Chain::open_header_pmmr(&self.db_root)?;
 		let txhashset = self.txhashset.read();
 		txhashset::utxo_view(&header_pmmr, &txhashset, |utxo, _| {
 			utxo.get_unspent_output_at(pos)
@@ -519,7 +544,7 @@ impl Chain {
 
 	/// Validate the tx against the current UTXO set.
 	pub fn validate_tx(&self, tx: &Transaction) -> Result<(), Error> {
-		let header_pmmr = self.header_pmmr.read();
+		let header_pmmr = Chain::open_header_pmmr(&self.db_root)?;
 		let txhashset = self.txhashset.read();
 		txhashset::utxo_view(&header_pmmr, &txhashset, |utxo, batch| {
 			utxo.validate_tx(tx, batch)?;
@@ -536,7 +561,7 @@ impl Chain {
 	/// that has not yet sufficiently matured.
 	pub fn verify_coinbase_maturity(&self, tx: &Transaction) -> Result<(), Error> {
 		let height = self.next_block_height()?;
-		let header_pmmr = self.header_pmmr.read();
+		let header_pmmr = Chain::open_header_pmmr(&self.db_root)?;
 		let txhashset = self.txhashset.read();
 		txhashset::utxo_view(&header_pmmr, &txhashset, |utxo, batch| {
 			utxo.verify_coinbase_maturity(&tx.inputs(), height, batch)?;
@@ -564,7 +589,7 @@ impl Chain {
 			return Ok(());
 		}
 
-		let mut header_pmmr = self.header_pmmr.write();
+		let mut header_pmmr = Chain::open_header_pmmr(&self.db_root)?;
 		let mut txhashset = self.txhashset.write();
 
 		// Now create an extension from the txhashset and validate against the
@@ -581,7 +606,7 @@ impl Chain {
 	/// Sets the txhashset roots on a brand new block by applying the block on
 	/// the current txhashset state.
 	pub fn set_txhashset_roots(&self, b: &mut Block) -> Result<(), Error> {
-		let mut header_pmmr = self.header_pmmr.write();
+		let mut header_pmmr = Chain::open_header_pmmr(&self.db_root)?;
 		let mut txhashset = self.txhashset.write();
 
 		let (prev_root, roots, sizes) =
@@ -628,7 +653,7 @@ impl Chain {
 		output: &OutputIdentifier,
 		header: &BlockHeader,
 	) -> Result<MerkleProof, Error> {
-		let mut header_pmmr = self.header_pmmr.write();
+		let mut header_pmmr = Chain::open_header_pmmr(&self.db_root)?;
 		let mut txhashset = self.txhashset.write();
 		let merkle_proof =
 			txhashset::extending_readonly(&mut header_pmmr, &mut txhashset, |ext, batch| {
@@ -679,7 +704,7 @@ impl Chain {
 		// to rewind after receiving the txhashset zip.
 		let header = self.get_block_header(&h)?;
 
-		let mut header_pmmr = self.header_pmmr.write();
+		let mut header_pmmr = Chain::open_header_pmmr(&self.db_root)?;
 		let mut txhashset = self.txhashset.write();
 		txhashset::extending_readonly(&mut header_pmmr, &mut txhashset, |ext, batch| {
 			pipe::rewind_and_apply_fork(&header, ext, batch)?;
@@ -748,7 +773,7 @@ impl Chain {
 	/// We rebuild the sync MMR when first entering sync mode so ensure we
 	/// have an MMR we can safely rewind based on the headers received from a peer.
 	pub fn rebuild_sync_mmr(&self, head: &Tip) -> Result<(), Error> {
-		let mut sync_pmmr = self.sync_pmmr.write();
+		let mut sync_pmmr = Chain::open_sync_pmmr(&self.db_root)?;
 		let mut batch = self.store.batch()?;
 		let header = batch.get_block_header(&head.hash())?;
 		txhashset::header_extending(&mut sync_pmmr, &mut batch, |ext, batch| {
@@ -939,7 +964,7 @@ impl Chain {
 		// all good, prepare a new batch and update all the required records
 		debug!("txhashset_write: rewinding a 2nd time (writeable)");
 
-		let mut header_pmmr = self.header_pmmr.write();
+		let mut header_pmmr = Chain::open_header_pmmr(&self.db_root)?;
 		let mut batch = self.store.batch()?;
 		txhashset::extending(
 			&mut header_pmmr,
@@ -1095,7 +1120,7 @@ impl Chain {
 		}
 
 		// Take a write lock on the txhashet and start a new writeable db batch.
-		let header_pmmr = self.header_pmmr.read();
+		let header_pmmr = Chain::open_header_pmmr(&self.db_root)?;
 		let mut txhashset = self.txhashset.write();
 		let batch = self.store.batch()?;
 
@@ -1216,26 +1241,31 @@ impl Chain {
 			.map_err(|e| ErrorKind::StoreErr(e, "chain tail".to_owned()).into())
 	}
 
-	/// Tip (head) of the header chain if read lock can be acquired reasonably quickly.
-	/// Used by the TUI when updating stats to avoid locking the TUI up.
-	pub fn try_header_head(&self, timeout: Duration) -> Result<Option<Tip>, Error> {
-		self.header_pmmr
-			.try_read_for(timeout)
-			.map(|ref pmmr| self.read_header_head(pmmr).map(Some))
-			.unwrap_or(Ok(None))
-	}
+	// /// Tip (head) of the header chain if read lock can be acquired reasonably quickly.
+	// /// Used by the TUI when updating stats to avoid locking the TUI up.
+	// pub fn try_header_head(&self, timeout: Duration) -> Result<Option<Tip>, Error> {
+	// 	self.header_pmmr
+	// 		.try_read_for(timeout)
+	// 		.map(|ref pmmr| self.read_header_head(pmmr).map(Some))
+	// 		.unwrap_or(Ok(None))
+	// }
 
 	/// Tip (head) of the header chain.
 	pub fn header_head(&self) -> Result<Tip, Error> {
-		self.read_header_head(&self.header_pmmr.read())
-	}
+		// self.read_header_head(&self.header_pmmr.read())
 
-	/// Read head from the provided PMMR handle.
-	fn read_header_head(&self, pmmr: &txhashset::PMMRHandle<BlockHeader>) -> Result<Tip, Error> {
-		let hash = pmmr.head_hash()?;
+		let header_pmmr = Chain::open_header_pmmr(&self.db_root)?;
+		let hash = header_pmmr.head_hash()?;
 		let header = self.store.get_block_header(&hash)?;
 		Ok(Tip::from_header(&header))
 	}
+
+	// /// Read head from the provided PMMR handle.
+	// fn read_header_head(&self, pmmr: &txhashset::PMMRHandle<BlockHeader>) -> Result<Tip, Error> {
+	// 	let hash = pmmr.head_hash()?;
+	// 	let header = self.store.get_block_header(&hash)?;
+	// 	Ok(Tip::from_header(&header))
+	// }
 
 	/// Block header for the chain head
 	pub fn head_header(&self) -> Result<BlockHeader, Error> {
@@ -1282,7 +1312,8 @@ impl Chain {
 	/// Gets the header hash at the provided height.
 	/// Note: Takes a read lock on the header_pmmr.
 	fn get_header_hash_by_height(&self, height: u64) -> Result<Hash, Error> {
-		self.header_pmmr.read().get_header_hash_by_height(height)
+		let header_pmmr = Chain::open_header_pmmr(&self.db_root)?;
+		header_pmmr.get_header_hash_by_height(height)
 	}
 
 	/// Migrate our local db from v1 to v2.
@@ -1303,7 +1334,7 @@ impl Chain {
 		&self,
 		output_ref: &OutputIdentifier,
 	) -> Result<BlockHeader, Error> {
-		let header_pmmr = self.header_pmmr.read();
+		let header_pmmr = Chain::open_header_pmmr(&self.db_root)?;
 		let txhashset = self.txhashset.read();
 		let output_pos = match txhashset.get_unspent(output_ref)? {
 			Some(o) => o,
@@ -1350,7 +1381,7 @@ impl Chain {
 		min_height: Option<u64>,
 		max_height: Option<u64>,
 	) -> Result<BlockHeader, Error> {
-		let header_pmmr = self.header_pmmr.read();
+		let header_pmmr = Chain::open_header_pmmr(&self.db_root)?;
 
 		let mut min = min_height.unwrap_or(0).saturating_sub(1);
 		let mut max = match max_height {
@@ -1395,7 +1426,8 @@ impl Chain {
 	/// Get the tip of the current "sync" header chain.
 	/// This may be significantly different to current header chain.
 	pub fn get_sync_head(&self) -> Result<Tip, Error> {
-		let hash = self.sync_pmmr.read().head_hash()?;
+		let sync_pmmr = Chain::open_sync_pmmr(&self.db_root)?;
+		let hash = sync_pmmr.head_hash()?;
 		let header = self.store.get_block_header(&hash)?;
 		Ok(Tip::from_header(&header))
 	}

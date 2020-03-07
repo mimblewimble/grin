@@ -502,8 +502,8 @@ impl Server {
 			total_difficulty: head.total_difficulty(),
 		};
 
-		let header_stats = match self.chain.try_header_head(read_timeout)? {
-			Some(head) => self.chain.get_block_header(&head.hash()).map(|header| {
+		let header_stats = match self.chain.header_head() {
+			Ok(head) => self.chain.get_block_header(&head.hash()).map(|header| {
 				Some(ChainStats {
 					latest_timestamp: header.timestamp,
 					height: header.height,
