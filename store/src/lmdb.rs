@@ -38,9 +38,8 @@ pub enum Error {
 	/// Couldn't find what we were looking for
 	#[fail(display = "DB Not Found Error: {}", _0)]
 	NotFoundErr(String),
-	/// Wraps an error originating from RocksDB (which unfortunately returns
-	/// string errors).
-	#[fail(display = "LMDB error")]
+	/// Wraps an error originating from LMDB
+	#[fail(display = "LMDB error: {} ", _0)]
 	LmdbErr(lmdb::error::Error),
 	/// Wraps a serialization error for Writeable or Readable
 	#[fail(display = "Serialization Error")]
