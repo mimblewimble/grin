@@ -20,7 +20,7 @@ use grin_core::ser::{self, Readable, Reader, Writeable, Writer};
 use std::fs;
 
 const WRITE_CHUNK_SIZE: usize = 20;
-const TEST_ALLOC_SIZE: usize = store::lmdb::ALLOC_CHUNK_SIZE / 8 / WRITE_CHUNK_SIZE;
+const TEST_ALLOC_SIZE: usize = store::lmdb::ALLOC_CHUNK_SIZE_DEFAULT / 8 / WRITE_CHUNK_SIZE;
 
 #[derive(Clone)]
 struct PhatChunkStruct {
@@ -70,7 +70,7 @@ fn lmdb_allocate() -> Result<(), store::Error> {
 	// Allocate more than the initial chunk, ensuring
 	// the DB resizes underneath
 	{
-		let store = store::Store::new(test_dir, Some("test1"), None, None)?;
+		let store = store::Store::new(test_dir, Some("test1"), None, None, None)?;
 
 		for i in 0..WRITE_CHUNK_SIZE * 2 {
 			println!("Allocating chunk: {}", i);
@@ -87,7 +87,7 @@ fn lmdb_allocate() -> Result<(), store::Error> {
 	println!("***********************************");
 	// Open env again and keep adding
 	{
-		let store = store::Store::new(test_dir, Some("test1"), None, None)?;
+		let store = store::Store::new(test_dir, Some("test1"), None, None, None)?;
 		for i in 0..WRITE_CHUNK_SIZE * 2 {
 			println!("Allocating chunk: {}", i);
 			let chunk = PhatChunkStruct::new();

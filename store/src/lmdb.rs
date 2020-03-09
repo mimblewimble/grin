@@ -26,7 +26,7 @@ use crate::core::ser::{self, ProtocolVersion};
 use crate::util::{RwLock, RwLockReadGuard};
 
 /// number of bytes to grow the database by when needed
-pub const ALLOC_CHUNK_SIZE: usize = 134_217_728; //128 MB
+pub const ALLOC_CHUNK_SIZE_DEFAULT: usize = 134_217_728; //128 MB
 const RESIZE_PERCENT: f32 = 0.9;
 /// Want to ensure that each resize gives us at least this %
 /// of total space free
@@ -73,6 +73,7 @@ pub struct Store {
 	db: Arc<RwLock<Option<Arc<lmdb::Database<'static>>>>>,
 	name: String,
 	version: ProtocolVersion,
+	alloc_chunk_size: usize,
 }
 
 impl Store {
@@ -85,6 +86,7 @@ impl Store {
 		env_name: Option<&str>,
 		db_name: Option<&str>,
 		max_readers: Option<u32>,
+		alloc_chunk_size: Option<usize>,
 	) -> Result<Store, Error> {
 		let name = match env_name {
 			Some(n) => n.to_owned(),
@@ -105,6 +107,11 @@ impl Store {
 			env_builder.set_maxreaders(max_readers)?;
 		}
 
+		let alloc_chunk_size = match alloc_chunk_size {
+			Some(s) => s,
+			None => ALLOC_CHUNK_SIZE_DEFAULT,
+		};
+
 		let env = unsafe { env_builder.open(&full_path, lmdb::open::NOTLS, 0o600)? };
 
 		debug!(
@@ -117,6 +124,7 @@ impl Store {
 			db: Arc::new(RwLock::new(None)),
 			name: db_name,
 			version: DEFAULT_DB_VERSION,
+			alloc_chunk_size,
 		};
 
 		{
@@ -138,6 +146,7 @@ impl Store {
 			db: self.db.clone(),
 			name: self.name.clone(),
 			version: version,
+			alloc_chunk_size: ALLOC_CHUNK_SIZE_DEFAULT,
 		}
 	}
 
@@ -171,7 +180,7 @@ impl Store {
 		);
 
 		if size_used as f32 / env_info.mapsize as f32 > resize_percent
-			|| env_info.mapsize < ALLOC_CHUNK_SIZE
+			|| env_info.mapsize < self.alloc_chunk_size
 		{
 			trace!("Resize threshold met (percent-based)");
 			Ok(true)
@@ -188,12 +197,12 @@ impl Store {
 		let stat = self.env.stat()?;
 		let size_used = stat.psize as usize * env_info.last_pgno;
 
-		let new_mapsize = if env_info.mapsize < ALLOC_CHUNK_SIZE {
-			ALLOC_CHUNK_SIZE
+		let new_mapsize = if env_info.mapsize < self.alloc_chunk_size {
+			self.alloc_chunk_size
 		} else {
 			let mut tot = env_info.mapsize;
 			while size_used as f32 / tot as f32 > RESIZE_MIN_TARGET_PERCENT {
-				tot += ALLOC_CHUNK_SIZE;
+				tot += self.alloc_chunk_size;
 			}
 			tot
 		};
