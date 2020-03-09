@@ -44,7 +44,7 @@ pub mod pubkey_serde {
 		let static_secp = static_secp_instance();
 		let static_secp = static_secp.lock();
 		String::deserialize(deserializer)
-			.and_then(|string| from_hex(string).map_err(|err| Error::custom(err.to_string())))
+			.and_then(|string| from_hex(&string).map_err(|err| Error::custom(err.to_string())))
 			.and_then(|bytes: Vec<u8>| {
 				PublicKey::from_slice(&static_secp, &bytes)
 					.map_err(|err| Error::custom(err.to_string()))
@@ -81,7 +81,7 @@ pub mod option_sig_serde {
 		let static_secp = static_secp_instance();
 		let static_secp = static_secp.lock();
 		Option::<String>::deserialize(deserializer).and_then(|res| match res {
-			Some(string) => from_hex(string)
+			Some(string) => from_hex(&string)
 				.map_err(|err| Error::custom(err.to_string()))
 				.and_then(|bytes: Vec<u8>| {
 					let mut b = [0u8; 64];
@@ -123,7 +123,7 @@ pub mod option_seckey_serde {
 		let static_secp = static_secp_instance();
 		let static_secp = static_secp.lock();
 		Option::<String>::deserialize(deserializer).and_then(|res| match res {
-			Some(string) => from_hex(string)
+			Some(string) => from_hex(&string)
 				.map_err(|err| Error::custom(err.to_string()))
 				.and_then(|bytes: Vec<u8>| {
 					let mut b = [0u8; 32];
@@ -161,7 +161,7 @@ pub mod sig_serde {
 		let static_secp = static_secp_instance();
 		let static_secp = static_secp.lock();
 		String::deserialize(deserializer)
-			.and_then(|string| from_hex(string).map_err(|err| Error::custom(err.to_string())))
+			.and_then(|string| from_hex(&string).map_err(|err| Error::custom(err.to_string())))
 			.and_then(|bytes: Vec<u8>| {
 				let mut b = [0u8; 64];
 				b.copy_from_slice(&bytes[0..64]);
@@ -195,7 +195,7 @@ pub mod option_commitment_serde {
 		D: Deserializer<'de>,
 	{
 		Option::<String>::deserialize(deserializer).and_then(|res| match res {
-			Some(string) => from_hex(string)
+			Some(string) => from_hex(&string)
 				.map_err(|err| Error::custom(err.to_string()))
 				.and_then(|bytes: Vec<u8>| Ok(Some(Commitment::from_vec(bytes.to_vec())))),
 			None => Ok(None),
@@ -221,7 +221,7 @@ where
 	use serde::de::{Error, IntoDeserializer};
 
 	let val = String::deserialize(deserializer)
-		.and_then(|string| from_hex(string).map_err(|err| Error::custom(err.to_string())))?;
+		.and_then(|string| from_hex(&string).map_err(|err| Error::custom(err.to_string())))?;
 	RangeProof::deserialize(val.into_deserializer())
 }
 
@@ -232,7 +232,7 @@ where
 {
 	use serde::de::Error;
 	String::deserialize(deserializer)
-		.and_then(|string| from_hex(string).map_err(|err| Error::custom(err.to_string())))
+		.and_then(|string| from_hex(&string).map_err(|err| Error::custom(err.to_string())))
 		.and_then(|bytes: Vec<u8>| Ok(Commitment::from_vec(bytes.to_vec())))
 }
 

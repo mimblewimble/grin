@@ -19,7 +19,6 @@ use crate::rest::*;
 use crate::types::*;
 use crate::util;
 use crate::util::secp::pedersen::Commitment;
-use failure::ResultExt;
 use std::sync::{Arc, Weak};
 
 // All handlers use `Weak` references instead of `Arc` to avoid cycles that
@@ -35,10 +34,8 @@ fn get_unspent(
 	chain: &Arc<chain::Chain>,
 	id: &str,
 ) -> Result<Option<(CommitPos, OutputIdentifier)>, Error> {
-	let c = util::from_hex(String::from(id)).context(ErrorKind::Argument(format!(
-		"Not a valid commitment: {}",
-		id
-	)))?;
+	let c = util::from_hex(id)
+		.map_err(|_| ErrorKind::Argument(format!("Not a valid commitment: {}", id)))?;
 	let commit = Commitment::from_vec(c);
 
 	// We need the features here to be able to generate the necessary hash

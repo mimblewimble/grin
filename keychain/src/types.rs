@@ -191,7 +191,7 @@ impl Identifier {
 	}
 
 	pub fn from_hex(hex: &str) -> Result<Identifier, Error> {
-		let bytes = util::from_hex(hex.to_string()).unwrap();
+		let bytes = util::from_hex(hex).unwrap();
 		Ok(Identifier::from_bytes(&bytes))
 	}
 
@@ -293,7 +293,7 @@ impl BlindingFactor {
 	}
 
 	pub fn from_hex(hex: &str) -> Result<BlindingFactor, Error> {
-		let bytes = util::from_hex(hex.to_string()).unwrap();
+		let bytes = util::from_hex(hex).unwrap();
 		Ok(BlindingFactor::from_slice(&bytes))
 	}
 

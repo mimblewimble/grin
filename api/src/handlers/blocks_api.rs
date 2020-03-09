@@ -47,7 +47,7 @@ impl HeaderHandler {
 			}
 		}
 		check_block_param(&input)?;
-		let vec = util::from_hex(input)
+		let vec = util::from_hex(&input)
 			.map_err(|e| ErrorKind::Argument(format!("invalid input: {}", e)))?;
 		let h = Hash::from_vec(&vec);
 		let header = w(&self.chain)?
@@ -153,7 +153,7 @@ impl BlockHandler {
 			}
 		}
 		check_block_param(&input)?;
-		let vec = util::from_hex(input)
+		let vec = util::from_hex(&input)
 			.map_err(|e| ErrorKind::Argument(format!("invalid input: {}", e)))?;
 		Ok(Hash::from_vec(&vec))
 	}
