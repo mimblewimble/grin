@@ -96,6 +96,47 @@ impl PMMRHandle<BlockHeader> {
 	}
 }
 
+#[derive(Clone, Copy, Debug)]
+struct Checkpoint {
+	last_good_header: Option<Hash>,
+}
+
+impl Checkpoint {
+	const FILENAME: &'static str = "grin.checkpoint";
+
+	// Attempt to read the "last_good_header" hash from the checkpoint file.
+	fn open(root: &str) -> Checkpoint {
+		let path: PathBuf = [root, Checkpoint::FILENAME].iter().collect();
+		if let Ok(hex) = fs::read_to_string(path) {
+			if let Ok(hash) = Hash::from_hex(&hex) {
+				return Checkpoint {
+					last_good_header: Some(hash),
+				};
+			}
+		}
+		Checkpoint::new()
+	}
+
+	fn new() -> Checkpoint {
+		Checkpoint {
+			last_good_header: None,
+		}
+	}
+
+	fn update(&mut self, hash: Hash) {
+		self.last_good_header = Some(hash)
+	}
+
+	fn sync(&self, root: &str) -> Result<(), Error> {
+		if let Some(hash) = self.last_good_header {
+			let path: PathBuf = [root, Checkpoint::FILENAME].iter().collect();
+			fs::write(path, hash.to_hex())?;
+			debug!("checkpoint: successful sync: {:?}", self);
+		}
+		Ok(())
+	}
+}
+
 /// An easy to manipulate structure holding the 3 MMRs necessary to
 /// validate blocks and capturing the output set, associated rangeproofs and the
 /// kernels. Also handles the index of Commitments to positions in the
@@ -106,6 +147,7 @@ impl PMMRHandle<BlockHeader> {
 /// may have commitments that have already been spent, even with
 /// pruning enabled.
 pub struct TxHashSet {
+	root_dir: String,
 	output_pmmr_h: PMMRHandle<Output>,
 	rproof_pmmr_h: PMMRHandle<RangeProof>,
 	kernel_pmmr_h: PMMRHandle<TxKernel>,
@@ -187,6 +229,7 @@ impl TxHashSet {
 		}
 		if let Some(kernel_pmmr_h) = maybe_kernel_handle {
 			Ok(TxHashSet {
+				root_dir,
 				output_pmmr_h,
 				rproof_pmmr_h,
 				kernel_pmmr_h,
@@ -196,6 +239,17 @@ impl TxHashSet {
 		} else {
 			Err(ErrorKind::TxHashSetErr("failed to open kernel PMMR".to_string()).into())
 		}
+	}
+
+	pub fn last_checkpoint(&self) -> Option<BlockHeader> {
+		let checkpoint = Checkpoint::open(&self.root_dir);
+		if let Some(hash) = checkpoint.last_good_header {
+			if let Ok(header) = self.commit_index.get_block_header(&hash) {
+				debug!("last_checkpoint: {} at {}", header.hash(), header.height);
+				return Some(header);
+			}
+		}
+		None
 	}
 
 	// Build a new bitmap accumulator for the provided output PMMR.
@@ -578,7 +632,7 @@ where
 	let res: Result<T, Error>;
 	let rollback: bool;
 	let bitmap_accumulator: BitmapAccumulator;
-
+	let checkpoint: Checkpoint;
 	let head = batch.head()?;
 	let header_head = batch.header_head()?;
 
@@ -600,6 +654,7 @@ where
 		rollback = extension_pair.extension.rollback;
 		sizes = extension_pair.extension.sizes();
 		bitmap_accumulator = extension_pair.extension.bitmap_accumulator.clone();
+		checkpoint = extension_pair.extension.checkpoint;
 	}
 
 	// During an extension we do not want to modify the header_extension (and only read from it).
@@ -623,6 +678,12 @@ where
 			} else {
 				trace!("Committing txhashset extension. sizes {:?}", sizes);
 				child_batch.commit()?;
+
+				// Write the "rewound" header hash to the grin.checkpoint file.
+				// This allows us to subsequently recover at this point after
+				// restart if necessary.
+				checkpoint.sync(&trees.root_dir)?;
+
 				trees.output_pmmr_h.backend.sync()?;
 				trees.rproof_pmmr_h.backend.sync()?;
 				trees.kernel_pmmr_h.backend.sync()?;
@@ -838,6 +899,7 @@ pub struct ExtensionPair<'a> {
 /// function.
 pub struct Extension<'a> {
 	head: Tip,
+	checkpoint: Checkpoint,
 
 	output_pmmr: PMMR<'a, Output, PMMRBackend<Output>>,
 	rproof_pmmr: PMMR<'a, RangeProof, PMMRBackend<RangeProof>>,
@@ -881,6 +943,7 @@ impl<'a> Extension<'a> {
 	fn new(trees: &'a mut TxHashSet, head: Tip) -> Extension<'a> {
 		Extension {
 			head,
+			checkpoint: Checkpoint::new(),
 			output_pmmr: PMMR::at(
 				&mut trees.output_pmmr_h.backend,
 				trees.output_pmmr_h.last_pos,
@@ -1092,6 +1155,10 @@ impl<'a> Extension<'a> {
 			self.head.hash(),
 			self.head.height
 		);
+
+		// Checkpoint the "rewound" block header. We guarantee data in the backend files
+		// will not be touched prior to this point (based on sizes from the header).
+		self.checkpoint.update(header.hash());
 
 		// We need to build bitmaps of added and removed output positions
 		// so we can correctly rewind all operations applied to the output MMR

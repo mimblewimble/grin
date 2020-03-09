@@ -1406,6 +1406,8 @@ fn setup_head(
 	sync_pmmr: &mut txhashset::PMMRHandle<BlockHeader>,
 	txhashset: &mut txhashset::TxHashSet,
 ) -> Result<(), Error> {
+	let checkpoint = txhashset.last_checkpoint();
+
 	let mut batch = store.batch()?;
 
 	// Apply the genesis header to header and sync MMRs.
@@ -1427,89 +1429,9 @@ fn setup_head(
 		}
 	}
 
-	// Setup our header_head if we do not already have one.
-	// Migrating back to header_head in db and some nodes may note have one.
-	if batch.header_head().is_err() {
-		let hash = header_pmmr.head_hash()?;
-		let header = batch.get_block_header(&hash)?;
-		batch.save_header_head(&Tip::from_header(&header))?;
-	}
-
-	// check if we have a head in store, otherwise the genesis block is it
-	let head_res = batch.head();
-	let mut head: Tip;
-	match head_res {
-		Ok(h) => {
-			head = h;
-			loop {
-				// Use current chain tip if we have one.
-				// Note: We are rewinding and validating against a writeable extension.
-				// If validation is successful we will truncate the backend files
-				// to match the provided block header.
-				let header = batch.get_block_header(&head.last_block_h)?;
-
-				let res = txhashset::extending(header_pmmr, txhashset, &mut batch, |ext, batch| {
-					pipe::rewind_and_apply_fork(&header, ext, batch)?;
-
-					let ref mut extension = ext.extension;
-
-					extension.validate_roots(&header)?;
-
-					// now check we have the "block sums" for the block in question
-					// if we have no sums (migrating an existing node) we need to go
-					// back to the txhashset and sum the outputs and kernels
-					if header.height > 0 && batch.get_block_sums(&header.hash()).is_err() {
-						debug!(
-							"init: building (missing) block sums for {} @ {}",
-							header.height,
-							header.hash()
-						);
-
-						// Do a full (and slow) validation of the txhashset extension
-						// to calculate the utxo_sum and kernel_sum at this block height.
-						let (utxo_sum, kernel_sum) =
-							extension.validate_kernel_sums(&genesis.header, &header)?;
-
-						// Save the block_sums to the db for use later.
-						batch.save_block_sums(
-							&header.hash(),
-							BlockSums {
-								utxo_sum,
-								kernel_sum,
-							},
-						)?;
-					}
-
-					debug!(
-						"init: rewinding and validating before we start... {} at {}",
-						header.hash(),
-						header.height,
-					);
-					Ok(())
-				});
-
-				if res.is_ok() {
-					break;
-				} else {
-					// We may have corrupted the MMR backend files last time we stopped the
-					// node. If this happens we rewind to the previous header,
-					// delete the "bad" block and try again.
-					let prev_header = batch.get_block_header(&head.prev_block_h)?;
-
-					txhashset::extending(header_pmmr, txhashset, &mut batch, |ext, batch| {
-						pipe::rewind_and_apply_fork(&prev_header, ext, batch)
-					})?;
-
-					// Now "undo" the latest block and forget it ever existed.
-					// We will request it from a peer during sync as necessary.
-					{
-						let _ = batch.delete_block(&header.hash());
-						head = Tip::from_header(&prev_header);
-						batch.save_body_head(&head)?;
-					}
-				}
-			}
-		}
+	// Initialize with genesis if we have no chain head yet.
+	match batch.head() {
+		Ok(_) => {}
 		Err(NotFoundErr(_)) => {
 			let mut sums = BlockSums::default();
 
@@ -1540,6 +1462,30 @@ fn setup_head(
 		}
 		Err(e) => return Err(ErrorKind::StoreErr(e, "chain init load head".to_owned()).into()),
 	};
+
+	let latest = batch.head_header()?;
+
+	// If we have a txhashset checkpoint on disk then rewind and init from there.
+	if let Some(checkpoint) = checkpoint {
+		txhashset::extending(header_pmmr, txhashset, &mut batch, |ext, batch| {
+			pipe::rewind_and_apply_fork(&checkpoint, ext, batch)?;
+			ext.extension.validate_roots(&checkpoint)?;
+			ext.extension.validate_sizes(&checkpoint)?;
+
+			// Update "head" here to our checkpoint header.
+			batch.save_body_head(&Tip::from_header(&checkpoint))?;
+
+			Ok(())
+		})?;
+	}
+
+	// Now reapply "latest" block to checkpointed txhashset to ensure consistent state.
+	txhashset::extending(header_pmmr, txhashset, &mut batch, |ext, batch| {
+		pipe::rewind_and_apply_fork(&latest, ext, batch)?;
+		batch.save_body_head(&Tip::from_header(&latest))?;
+		Ok(())
+	})?;
+
 	batch.commit()?;
 	Ok(())
 }
