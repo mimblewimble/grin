@@ -22,11 +22,14 @@ use lmdb_zero as lmdb;
 use lmdb_zero::traits::CreateCursor;
 use lmdb_zero::LmdbResultExt;
 
+use crate::core::global;
 use crate::core::ser::{self, ProtocolVersion};
 use crate::util::{RwLock, RwLockReadGuard};
 
 /// number of bytes to grow the database by when needed
 pub const ALLOC_CHUNK_SIZE_DEFAULT: usize = 134_217_728; //128 MB
+/// And for test mode, to avoid too much disk allocation on windows
+pub const ALLOC_CHUNK_SIZE_DEFAULT_TEST: usize = 1_048_576; //1 MB
 const RESIZE_PERCENT: f32 = 0.9;
 /// Want to ensure that each resize gives us at least this %
 /// of total space free
@@ -86,7 +89,6 @@ impl Store {
 		env_name: Option<&str>,
 		db_name: Option<&str>,
 		max_readers: Option<u32>,
-		alloc_chunk_size: Option<usize>,
 	) -> Result<Store, Error> {
 		let name = match env_name {
 			Some(n) => n.to_owned(),
@@ -107,9 +109,9 @@ impl Store {
 			env_builder.set_maxreaders(max_readers)?;
 		}
 
-		let alloc_chunk_size = match alloc_chunk_size {
-			Some(s) => s,
-			None => ALLOC_CHUNK_SIZE_DEFAULT,
+		let alloc_chunk_size = match global::is_production_mode() {
+			true => ALLOC_CHUNK_SIZE_DEFAULT,
+			false => ALLOC_CHUNK_SIZE_DEFAULT_TEST,
 		};
 
 		let env = unsafe { env_builder.open(&full_path, lmdb::open::NOTLS, 0o600)? };
@@ -141,12 +143,16 @@ impl Store {
 	/// Construct a new store using a specific protocol version.
 	/// Permits access to the db with legacy protocol versions for db migrations.
 	pub fn with_version(&self, version: ProtocolVersion) -> Store {
+		let alloc_chunk_size = match global::is_production_mode() {
+			true => ALLOC_CHUNK_SIZE_DEFAULT,
+			false => ALLOC_CHUNK_SIZE_DEFAULT_TEST,
+		};
 		Store {
 			env: self.env.clone(),
 			db: self.db.clone(),
 			name: self.name.clone(),
 			version: version,
-			alloc_chunk_size: ALLOC_CHUNK_SIZE_DEFAULT,
+			alloc_chunk_size,
 		}
 	}
 
