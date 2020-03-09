@@ -1406,8 +1406,6 @@ fn setup_head(
 	sync_pmmr: &mut txhashset::PMMRHandle<BlockHeader>,
 	txhashset: &mut txhashset::TxHashSet,
 ) -> Result<(), Error> {
-	let checkpoint = txhashset.last_checkpoint();
-
 	let mut batch = store.batch()?;
 
 	// Apply the genesis header to header and sync MMRs.
@@ -1463,16 +1461,17 @@ fn setup_head(
 		Err(e) => return Err(ErrorKind::StoreErr(e, "chain init load head".to_owned()).into()),
 	};
 
+	// Read the chain head from the db, may be genesis block from above.
 	let latest = batch.head_header()?;
 
 	// If we have a txhashset checkpoint on disk then rewind and init from there.
-	if let Some(checkpoint) = checkpoint {
+	if let Some(checkpoint) = txhashset.last_checkpoint() {
 		txhashset::extending(header_pmmr, txhashset, &mut batch, |ext, batch| {
 			pipe::rewind_and_apply_fork(&checkpoint, ext, batch)?;
 			ext.extension.validate_roots(&checkpoint)?;
 			ext.extension.validate_sizes(&checkpoint)?;
 
-			// Update "head" here to our checkpoint header.
+			// Update "head" here to our checkpoint header, a known good state.
 			batch.save_body_head(&Tip::from_header(&checkpoint))?;
 
 			Ok(())

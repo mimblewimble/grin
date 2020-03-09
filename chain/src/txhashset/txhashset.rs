@@ -241,6 +241,7 @@ impl TxHashSet {
 		}
 	}
 
+	/// Attempt to find the header based on the hash stored in grin.checkpoint file.
 	pub fn last_checkpoint(&self) -> Option<BlockHeader> {
 		let checkpoint = Checkpoint::open(&self.root_dir);
 		if let Some(hash) = checkpoint.last_good_header {
