@@ -53,12 +53,13 @@ mod test {
 
 	#[test]
 	fn test_from_hex() {
+		assert_eq!(from_hex(""), Ok(vec![]));
 		assert_eq!(from_hex("00000000"), Ok(vec![0, 0, 0, 0]));
 		assert_eq!(from_hex("0a0b0c0d"), Ok(vec![10, 11, 12, 13]));
 		assert_eq!(from_hex("000000ff"), Ok(vec![0, 0, 0, 255]));
 		assert_eq!(from_hex("0x000000ff"), Ok(vec![0, 0, 0, 255]));
 		assert_eq!(from_hex("0x000000fF"), Ok(vec![0, 0, 0, 255]));
-		assert_eq!(from_hex("0x000000fg"), Err("0x000000fg".to_string()));
+		assert_eq!(from_hex("0x000000fg"), Err("000000fg".to_string()));
 		assert_eq!(
 			from_hex("not a hex string"),
 			Err("not a hex string".to_string())
