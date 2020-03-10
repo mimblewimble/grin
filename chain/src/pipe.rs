@@ -156,9 +156,10 @@ pub fn process_block(b: &Block, ctx: &mut BlockContext<'_>) -> Result<Option<Tip
 		Ok(())
 	})?;
 
-	// Add the validated block to the db along with the corresponding block_sums.
-	// We do this even if we have not increased the total cumulative work
-	// so we can maintain multiple (in progress) forks.
+	// Add the validated block to the db.
+	// Note we do this in the outer batch, not the child batch from the extension
+	// as we only commit the child batch if the extension increases total work.
+	// We want to save the block to the db regardless.
 	add_block(b, &ctx.batch)?;
 
 	// If we have no "tail" then set it now.
