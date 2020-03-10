@@ -957,7 +957,7 @@ impl Chain {
 				// Save the block_sums (utxo_sum, kernel_sum) to the db for use later.
 				batch.save_block_sums(
 					&header.hash(),
-					&BlockSums {
+					BlockSums {
 						utxo_sum,
 						kernel_sum,
 					},
@@ -1480,7 +1480,7 @@ fn setup_head(
 						// Save the block_sums to the db for use later.
 						batch.save_block_sums(
 							&header.hash(),
-							&BlockSums {
+							BlockSums {
 								utxo_sum,
 								kernel_sum,
 							},
@@ -1542,7 +1542,7 @@ fn setup_head(
 			})?;
 
 			// Save the block_sums to the db for use later.
-			batch.save_block_sums(&genesis.hash(), &sums)?;
+			batch.save_block_sums(&genesis.hash(), sums)?;
 
 			info!("init: saved genesis: {:?}", genesis.hash());
 		}

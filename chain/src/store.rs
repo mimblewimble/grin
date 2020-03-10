@@ -318,7 +318,7 @@ impl<'a> Batch<'a> {
 	}
 
 	/// Save block_sums for the block.
-	pub fn save_block_sums(&self, h: &Hash, sums: &BlockSums) -> Result<(), Error> {
+	pub fn save_block_sums(&self, h: &Hash, sums: BlockSums) -> Result<(), Error> {
 		self.db
 			.put_ser(&to_key(BLOCK_SUMS_PREFIX, &mut h.to_vec())[..], &sums)
 	}
