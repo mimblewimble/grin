@@ -308,7 +308,7 @@ impl OutputHandler {
 		let query = must_get_query!(req);
 		let params = QueryParams::from(query);
 		params.process_multival_param("id", |id| {
-			if let Ok(x) = util::from_hex(String::from(id)) {
+			if let Ok(x) = util::from_hex(id) {
 				commitments.push(Commitment::from_vec(x));
 			}
 		});
@@ -392,7 +392,7 @@ impl KernelHandler {
 			.rsplit('/')
 			.next()
 			.ok_or_else(|| ErrorKind::RequestError("missing excess".into()))?;
-		let excess = util::from_hex(excess.to_owned())
+		let excess = util::from_hex(excess)
 			.map_err(|_| ErrorKind::RequestError("invalid excess hex".into()))?;
 		if excess.len() != 33 {
 			return Err(ErrorKind::RequestError("invalid excess length".into()).into());
@@ -444,7 +444,7 @@ impl KernelHandler {
 		min_height: Option<u64>,
 		max_height: Option<u64>,
 	) -> Result<LocatedTxKernel, Error> {
-		let excess = util::from_hex(excess)
+		let excess = util::from_hex(&excess)
 			.map_err(|_| ErrorKind::RequestError("invalid excess hex".into()))?;
 		if excess.len() != 33 {
 			return Err(ErrorKind::RequestError("invalid excess length".into()).into());

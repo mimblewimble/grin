@@ -246,7 +246,7 @@ impl<'de> serde::de::Visitor<'de> for PrintableCommitmentVisitor {
 	{
 		Ok(PrintableCommitment {
 			commit: pedersen::Commitment::from_vec(
-				util::from_hex(String::from(v)).map_err(serde::de::Error::custom)?,
+				util::from_hex(v).map_err(serde::de::Error::custom)?,
 			),
 		})
 	}
@@ -337,7 +337,7 @@ impl OutputPrintable {
 			.clone()
 			.ok_or_else(|| ser::Error::HexError("output range_proof missing".to_string()))?;
 
-		let p_vec = util::from_hex(proof_str)
+		let p_vec = util::from_hex(&proof_str)
 			.map_err(|_| ser::Error::HexError("invalid output range_proof".to_string()))?;
 		let mut p_bytes = [0; util::secp::constants::MAX_PROOF_SIZE];
 		for i in 0..p_bytes.len() {
@@ -421,8 +421,7 @@ impl<'de> serde::de::Deserialize<'de> for OutputPrintable {
 							no_dup!(commit);
 
 							let val: String = map.next_value()?;
-							let vec =
-								util::from_hex(val.clone()).map_err(serde::de::Error::custom)?;
+							let vec = util::from_hex(&val).map_err(serde::de::Error::custom)?;
 							commit = Some(pedersen::Commitment::from_vec(vec));
 						}
 						Field::Spent => {

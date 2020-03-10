@@ -17,7 +17,6 @@
 /// provide easy hex encoding, hex is a bit in limbo right now in Rust-
 /// land. It's simple enough that we can just have our own.
 use std::fmt::Write;
-use std::num;
 
 /// Encode the provided bytes into a hex string
 pub fn to_hex(bytes: Vec<u8>) -> String {
@@ -29,29 +28,16 @@ pub fn to_hex(bytes: Vec<u8>) -> String {
 }
 
 /// Decode a hex string into bytes.
-pub fn from_hex(hex_str: String) -> Result<Vec<u8>, num::ParseIntError> {
-	if hex_str.len() % 2 == 1 {
-		// TODO: other way to instantiate a ParseIntError?
-		let err = ("QQQ").parse::<u64>();
-		if let Err(e) = err {
-			return Err(e);
-		}
-	}
-	let hex_trim = if &hex_str[..2] == "0x" {
-		hex_str[2..].to_owned()
+pub fn from_hex(hex: &str) -> Result<Vec<u8>, String> {
+	let hex = hex.trim().trim_start_matches("0x");
+	if hex.len() % 2 != 0 {
+		Err(hex.to_string())
 	} else {
-		hex_str
-	};
-	split_n(&hex_trim.trim()[..], 2)
-		.iter()
-		.map(|b| u8::from_str_radix(b, 16))
-		.collect::<Result<Vec<u8>, _>>()
-}
-
-fn split_n(s: &str, n: usize) -> Vec<&str> {
-	(0..=(s.len() - n + 1) / 2)
-		.map(|i| &s[2 * i..2 * i + n])
-		.collect()
+		(0..hex.len())
+			.step_by(2)
+			.map(|i| u8::from_str_radix(&hex[i..i + 2], 16).map_err(|_| hex.to_string()))
+			.collect()
+	}
 }
 
 #[cfg(test)]
@@ -67,14 +53,17 @@ mod test {
 
 	#[test]
 	fn test_from_hex() {
-		assert_eq!(from_hex("00000000".to_string()).unwrap(), vec![0, 0, 0, 0]);
+		assert_eq!(from_hex(""), Ok(vec![]));
+		assert_eq!(from_hex("00000000"), Ok(vec![0, 0, 0, 0]));
+		assert_eq!(from_hex("0a0b0c0d"), Ok(vec![10, 11, 12, 13]));
+		assert_eq!(from_hex("000000ff"), Ok(vec![0, 0, 0, 255]));
+		assert_eq!(from_hex("0x000000ff"), Ok(vec![0, 0, 0, 255]));
+		assert_eq!(from_hex("0x000000fF"), Ok(vec![0, 0, 0, 255]));
+		assert_eq!(from_hex("0x000000fg"), Err("000000fg".to_string()));
 		assert_eq!(
-			from_hex("0a0b0c0d".to_string()).unwrap(),
-			vec![10, 11, 12, 13]
+			from_hex("not a hex string"),
+			Err("not a hex string".to_string())
 		);
-		assert_eq!(
-			from_hex("000000ff".to_string()).unwrap(),
-			vec![0, 0, 0, 255]
-		);
+		assert_eq!(from_hex("0"), Err("0".to_string()));
 	}
 }

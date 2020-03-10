@@ -316,10 +316,10 @@ mod tests {
 			);
 			assert_eq!(
 				to_entropy(t.mnemonic).unwrap().to_vec(),
-				from_hex(t.entropy.to_string()).unwrap()
+				from_hex(t.entropy).unwrap()
 			);
 			assert_eq!(
-				from_entropy(&from_hex(t.entropy.to_string()).unwrap()).unwrap(),
+				from_entropy(&from_hex(t.entropy).unwrap()).unwrap(),
 				t.mnemonic
 			);
 		}
