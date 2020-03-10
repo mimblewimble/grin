@@ -1461,30 +1461,37 @@ fn setup_head(
 		Err(e) => return Err(ErrorKind::StoreErr(e, "chain init load head".to_owned()).into()),
 	};
 
-	// Read the chain head from the db, may be genesis block from above.
+	// Read latest block based on chain head (do this before we rewind to checkpoint).
 	let latest = batch.head_header()?;
 
-	// If we have a txhashset checkpoint on disk then rewind and init from there.
-	if let Some(checkpoint) = txhashset.last_checkpoint() {
+	// If we have a txhashset checkpoint on disk then rewind to checkpoint header
+	// and reapply subsequent blocks to latest state.
+	if let Some(checkpoint) = txhashset
+		.last_checkpoint()
+		.or(batch.get_previous_header(&latest).ok())
+	{
+		debug!(
+			"setup_head: rewinding to checkpoint: {} at {}, reapplying to latest: {} at {}",
+			checkpoint.hash(),
+			checkpoint.height,
+			latest.hash(),
+			latest.height,
+		);
+
 		txhashset::extending(header_pmmr, txhashset, &mut batch, |ext, batch| {
+			// Rewind chain head to our checkpoint header, a known good state.
 			pipe::rewind_and_apply_fork(&checkpoint, ext, batch)?;
 			ext.extension.validate_roots(&checkpoint)?;
 			ext.extension.validate_sizes(&checkpoint)?;
-
-			// Update "head" here to our checkpoint header, a known good state.
 			batch.save_body_head(&Tip::from_header(&checkpoint))?;
+
+			// Reapply all blocks from checkpoint, up to and including latest block.
+			pipe::rewind_and_apply_fork(&latest, ext, batch)?;
+			batch.save_body_head(&Tip::from_header(&latest))?;
 
 			Ok(())
 		})?;
 	}
-
-	// Now reapply "latest" block to checkpointed txhashset to ensure consistent state.
-	txhashset::extending(header_pmmr, txhashset, &mut batch, |ext, batch| {
-		pipe::rewind_and_apply_fork(&latest, ext, batch)?;
-		batch.save_body_head(&Tip::from_header(&latest))?;
-		Ok(())
-	})?;
-
 	batch.commit()?;
 	Ok(())
 }

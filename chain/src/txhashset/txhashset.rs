@@ -243,10 +243,8 @@ impl TxHashSet {
 
 	/// Attempt to find the header based on the hash stored in grin.checkpoint file.
 	pub fn last_checkpoint(&self) -> Option<BlockHeader> {
-		let checkpoint = Checkpoint::open(&self.root_dir);
-		if let Some(hash) = checkpoint.last_good_header {
+		if let Some(hash) = Checkpoint::open(&self.root_dir).last_good_header {
 			if let Ok(header) = self.commit_index.get_block_header(&hash) {
-				debug!("last_checkpoint: {} at {}", header.hash(), header.height);
 				return Some(header);
 			}
 		}
