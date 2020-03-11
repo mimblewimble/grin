@@ -240,12 +240,7 @@ pub fn process_block_header(header: &BlockHeader, ctx: &mut BlockContext<'_>) ->
 	// If it does not increase total_difficulty beyond our current header_head
 	// then we can (re)accept this header and process the full block (or request it).
 	// This header is on a fork and we should still accept it as the fork may eventually win.
-	let header_head = {
-		let hash = ctx.header_pmmr.head_hash()?;
-		let header = ctx.batch.get_block_header(&hash)?;
-		Tip::from_header(&header)
-	};
-
+	let header_head = ctx.batch.header_head()?;
 	if let Ok(existing) = ctx.batch.get_block_header(&header.hash()) {
 		if !has_more_work(&existing, &header_head) {
 			return Ok(());
