@@ -1212,25 +1212,11 @@ impl Chain {
 			.map_err(|e| ErrorKind::StoreErr(e, "chain tail".to_owned()).into())
 	}
 
-	/// Tip (head) of the header chain if read lock can be acquired reasonably quickly.
-	/// Used by the TUI when updating stats to avoid locking the TUI up.
-	pub fn try_header_head(&self, timeout: Duration) -> Result<Option<Tip>, Error> {
-		self.header_pmmr
-			.try_read_for(timeout)
-			.map(|ref pmmr| self.read_header_head(pmmr).map(Some))
-			.unwrap_or(Ok(None))
-	}
-
 	/// Tip (head) of the header chain.
 	pub fn header_head(&self) -> Result<Tip, Error> {
-		self.read_header_head(&self.header_pmmr.read())
-	}
-
-	/// Read head from the provided PMMR handle.
-	fn read_header_head(&self, pmmr: &txhashset::PMMRHandle<BlockHeader>) -> Result<Tip, Error> {
-		let hash = pmmr.head_hash()?;
-		let header = self.store.get_block_header(&hash)?;
-		Ok(Tip::from_header(&header))
+		self.store
+			.header_head()
+			.map_err(|e| ErrorKind::StoreErr(e, "header head".to_owned()).into())
 	}
 
 	/// Block header for the chain head
@@ -1422,9 +1408,12 @@ fn setup_head(
 ) -> Result<(), Error> {
 	let mut batch = store.batch()?;
 
-	// Apply the genesis header to header and sync MMRs to ensure they are non-empty.
-	// We read header_head and sync_head directly from the MMR and assume they are non-empty.
+	// Apply the genesis header to header and sync MMRs.
 	{
+		if batch.get_block_header(&genesis.hash()).is_err() {
+			batch.save_block_header(&genesis.header)?;
+		}
+
 		if header_pmmr.last_pos == 0 {
 			txhashset::header_extending(header_pmmr, &mut batch, |ext, _| {
 				ext.apply_header(&genesis.header)
@@ -1436,6 +1425,14 @@ fn setup_head(
 				ext.apply_header(&genesis.header)
 			})?;
 		}
+	}
+
+	// Setup our header_head if we do not already have one.
+	// Migrating back to header_head in db and some nodes may note have one.
+	if batch.header_head().is_err() {
+		let hash = header_pmmr.head_hash()?;
+		let header = batch.get_block_header(&hash)?;
+		batch.save_header_head(&Tip::from_header(&header))?;
 	}
 
 	// check if we have a head in store, otherwise the genesis block is it
@@ -1518,7 +1515,6 @@ fn setup_head(
 
 			// Save the genesis header with a "zero" header_root.
 			// We will update this later once we have the correct header_root.
-			batch.save_block_header(&genesis.header)?;
 			batch.save_block(&genesis)?;
 			batch.save_spent_index(&genesis.hash(), &vec![])?;
 			batch.save_body_head(&Tip::from_header(&genesis.header))?;

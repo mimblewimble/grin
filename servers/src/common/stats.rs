@@ -52,8 +52,8 @@ pub struct ServerStats {
 	pub peer_count: u32,
 	/// Chain head
 	pub chain_stats: ChainStats,
-	/// sync header head
-	pub header_stats: Option<ChainStats>,
+	/// Header head (may differ from chain head)
+	pub header_stats: ChainStats,
 	/// Whether we're currently syncing
 	pub sync_status: SyncStatus,
 	/// Handle to current stratum server stats
