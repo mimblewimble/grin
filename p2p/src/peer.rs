@@ -30,9 +30,7 @@ use crate::core::pow::Difficulty;
 use crate::core::ser::Writeable;
 use crate::core::{core, global};
 use crate::handshake::Handshake;
-use crate::msg::{
-	self, BanReason, GetPeerAddrs, KernelDataRequest, Locator, Msg, Ping, TxHashSetRequest, Type,
-};
+use crate::msg::{self, BanReason, GetPeerAddrs, Locator, Msg, Ping, TxHashSetRequest, Type};
 use crate::protocol::Protocol;
 use crate::types::{
 	Capabilities, ChainAdapter, Error, NetAdapter, P2PConfig, PeerAddr, PeerInfo, ReasonForBan,
@@ -400,11 +398,6 @@ impl Peer {
 			&TxHashSetRequest { hash, height },
 			msg::Type::TxHashSetRequest,
 		)
-	}
-
-	pub fn send_kernel_data_request(&self) -> Result<(), Error> {
-		debug!("Asking {} for kernel data.", self.info.addr);
-		self.send(&KernelDataRequest {}, msg::Type::KernelDataRequest)
 	}
 
 	/// Stops the peer

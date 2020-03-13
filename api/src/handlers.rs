@@ -34,7 +34,6 @@ use self::peers_api::PeersConnectedHandler;
 use self::pool_api::PoolInfoHandler;
 use self::pool_api::PoolPushHandler;
 use self::server_api::IndexHandler;
-use self::server_api::KernelDownloadHandler;
 use self::server_api::StatusHandler;
 use self::transactions_api::TxHashSetHandler;
 use self::version_api::VersionHandler;
@@ -365,9 +364,6 @@ pub fn build_router(
 		peers: Arc::downgrade(&peers),
 		sync_state: Arc::downgrade(&sync_state),
 	};
-	let kernel_download_handler = KernelDownloadHandler {
-		peers: Arc::downgrade(&peers),
-	};
 	let txhashset_handler = TxHashSetHandler {
 		chain: Arc::downgrade(&chain),
 	};
@@ -402,7 +398,6 @@ pub fn build_router(
 	router.add_route("/v1/chain/validate", Arc::new(chain_validation_handler))?;
 	router.add_route("/v1/txhashset/*", Arc::new(txhashset_handler))?;
 	router.add_route("/v1/status", Arc::new(status_handler))?;
-	router.add_route("/v1/kerneldownload", Arc::new(kernel_download_handler))?;
 	router.add_route("/v1/pool", Arc::new(pool_info_handler))?;
 	router.add_route("/v1/pool/push_tx", Arc::new(pool_push_handler))?;
 	router.add_route("/v1/peers/all", Arc::new(peers_all_handler))?;
