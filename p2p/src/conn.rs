@@ -20,45 +20,45 @@
 //! forces us to go through some additional gymnastic to loop over the async
 //! stream and make sure we get the right number of bytes out.
 
-use crate::codec::Codec;
+use crate::codec::{Codec, Output};
 use crate::core::ser;
 use crate::core::ser::ProtocolVersion;
 use crate::msg::{
-	read_body, read_item, write_message, Msg, MsgHeader,
+	write_message, Consume, Consumed, Msg, MsgHeader,
 	MsgWrapper::{self, *},
 };
-use crate::types::Error;
+use crate::types::{AttachmentMeta, Error};
 use crate::util::RateCounter;
 use bytes::Bytes;
+use chrono::{DateTime, Utc};
 use futures::channel::{mpsc, oneshot};
+use futures::executor::block_on;
 use futures::stream::{select, SplitSink, SplitStream};
 use futures::{FutureExt, SinkExt, StreamExt};
 use std::cmp;
-use std::io::{self, Cursor, Read, Write};
+use std::fmt;
+use std::io::{self, Cursor, Read};
 use std::net::Shutdown;
+use std::path::PathBuf;
 use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
+use tokio::fs::File;
+use tokio::io::AsyncWriteExt;
+use tokio::net::tcp::{ReadHalf, WriteHalf};
 use tokio::net::TcpStream;
 use tokio::sync::RwLock;
 use tokio::task::JoinHandle;
-use tokio_util::codec::Framed;
+use tokio_util::codec::FramedRead;
 
 pub const SEND_CHANNEL_CAP: usize = 100;
 
 type StopTx = oneshot::Sender<()>;
 type StopRx = oneshot::Receiver<()>;
-type Reader = SplitStream<Framed<TcpStream, Codec>>;
-type Writer = SplitSink<Framed<TcpStream, Codec>, Bytes>;
 
 /// A trait to be implemented in order to receive messages from the
 /// connection. Allows providing an optional response.
 pub trait MessageHandler: Send + 'static {
-	fn consume<'a>(
-		&self,
-		msg: Message<'a>,
-		stopped: Arc<AtomicBool>,
-		tracker: Arc<Tracker>,
-	) -> Result<Option<Msg>, Error>;
+	fn consume(&self, input: Consume, tracker: Arc<Tracker>) -> Result<Consumed, Error>;
 }
 
 // Macro to simplify the boilerplate around I/O and Grin error handling
@@ -87,77 +87,25 @@ macro_rules! try_next {
 	};
 }
 
-/// A message as received by the connection. Provides access to the message
-/// header lazily consumes the message body, handling its deserialization.
-pub struct Message<'a> {
-	pub header: MsgHeader,
-	stream: &'a mut dyn Read,
-	version: ProtocolVersion,
-}
-
-impl<'a> Message<'a> {
-	fn from_header(
-		header: MsgHeader,
-		stream: &'a mut dyn Read,
-		version: ProtocolVersion,
-	) -> Message<'a> {
-		Message {
-			header,
-			stream,
-			version,
-		}
-	}
-
-	/// Read the message body from the underlying connection
-	pub fn body<T: ser::Readable>(&mut self) -> Result<T, Error> {
-		read_body(&self.header, self.stream, self.version)
-	}
-
-	/// Read a single "thing" from the underlying connection.
-	/// Return the thing and the total bytes read.
-	pub fn streaming_read<T: ser::Readable>(&mut self) -> Result<(T, u64), Error> {
-		read_item(self.stream, self.version)
-	}
-
-	pub fn copy_attachment(&mut self, len: usize, writer: &mut dyn Write) -> Result<usize, Error> {
-		let mut written = 0;
-		while written < len {
-			let read_len = cmp::min(8000, len - written);
-			let mut buf = vec![0u8; read_len];
-			self.stream.read_exact(&mut buf[..])?;
-			writer.write_all(&mut buf)?;
-			written += read_len;
-		}
-		Ok(written)
-	}
-}
-
 pub struct StopHandle {
 	/// Channel to close the connection
-	stop: Option<(StopTx, StopTx)>,
-	join: Option<(JoinHandle<Reader>, JoinHandle<Writer>)>,
+	stop: Option<(StopTx, JoinHandle<()>)>,
 }
 
 impl StopHandle {
 	/// Schedule this connection to safely close via the async close_channel.
 	pub fn stop(&mut self) -> Result<(), ()> {
-		if let Some((r, w)) = self.stop.take() {
-			let _ = r.send(());
-			let _ = w.send(());
+		if let Some((t, h)) = self.stop.take() {
+			let _ = t.send(());
+			block_on(h);
 		}
 		Ok(())
 	}
 
 	pub async fn wait(&mut self) {
-		if let Some((r, w)) = self.join.take() {
-			match (r.await, w.await) {
-				(Ok(r), Ok(w)) => {
-					// TODO: do we need this for graceful shutdown?
-					let stream = r.reunite(w).expect("Unable to reunite stream").into_inner();
-					let _ = stream.shutdown(Shutdown::Both);
-				}
-				_ => {}
-			}
+		if let Some((t, h)) = self.stop.take() {
+			let _ = t.send(());
+			h.await;
 		}
 	}
 }
@@ -229,7 +177,7 @@ impl Tracker {
 /// the current thread, instead just returns a future and the Connection
 /// itself.
 pub async fn listen<H>(
-	framed: Framed<TcpStream, Codec>,
+	conn: TcpStream,
 	version: ProtocolVersion,
 	tracker: Arc<Tracker>,
 	handler: H,
@@ -243,194 +191,141 @@ where
 		send_channel: send_tx,
 	};
 
-	let (stop_read, stop_write, join_read, join_write) = poll(
-		framed,
+	let (stop_tx, join) = poll(
+		conn,
 		conn_handle.clone(),
 		version,
 		handler,
 		send_rx,
 		tracker,
-	)?;
+	);
 
 	Ok((
 		conn_handle,
 		StopHandle {
-			stop: Some((stop_read, stop_write)),
-			join: Some((join_read, join_write)),
+			stop: Some((stop_tx, join)),
 		},
 	))
 }
 
 fn poll<H>(
-	framed: Framed<TcpStream, Codec>,
+	mut conn: TcpStream,
 	conn_handle: ConnHandle,
 	version: ProtocolVersion,
 	handler: H,
 	send_rx: mpsc::Receiver<Msg>,
 	tracker: Arc<Tracker>,
-) -> io::Result<(StopTx, StopTx, JoinHandle<Reader>, JoinHandle<Writer>)>
+) -> (StopTx, JoinHandle<()>)
 where
 	H: MessageHandler,
 {
-	let peer_address = framed
-		.get_ref()
+	let peer_address = conn
 		.peer_addr()
 		.map(|a| a.to_string())
 		.unwrap_or("?".to_owned());
 
 	// Split out tcp stream out into separate reader/writer halves.
-	let (writer, reader) = framed.split();
+	let (stop_tx, stop_rx) = oneshot::channel();
 
-	let (stop_read_tx, stop_read_rx) = oneshot::channel();
-	let (stop_write_tx, stop_write_rx) = oneshot::channel();
+	let join = tokio::spawn(async move {
+		let (reader, writer) = conn.split();
+		let reader = read(reader, conn_handle, version, handler, tracker.clone());
+		let writer = write(writer, send_rx, tracker);
 
-	let read_handle = tokio::spawn(read(
-		reader,
-		conn_handle,
-		stop_read_rx,
-		version,
-		handler,
-		tracker.clone(),
-		peer_address.clone(),
-	));
-	let write_handle = tokio::spawn(write(
-		writer,
-		send_rx,
-		stop_write_rx,
-		version,
-		tracker,
-		peer_address,
-	));
+		tokio::select! {
+			_ = reader => debug!("Reader connection with {} closed", peer_address),
+			_ = writer => debug!("Writer connection with {} closed", peer_address),
+			_ = stop_rx => {}
+		};
 
-	Ok((stop_read_tx, stop_write_tx, read_handle, write_handle))
+		let _ = conn.shutdown(Shutdown::Both);
+
+		debug!("Shutting down connection with {}", peer_address);
+	});
+
+	(stop_tx, join)
 }
 
 async fn read<H>(
-	reader: Reader,
+	reader: ReadHalf<'_>,
 	mut conn_handle: ConnHandle,
-	stop: StopRx,
 	version: ProtocolVersion,
 	handler: H,
 	tracker: Arc<Tracker>,
-	peer_address: String,
-) -> Reader
+) -> io::Result<()>
 where
 	H: MessageHandler,
 {
-	enum Reading {
-		Message(MsgWrapper),
-		Stop,
-	}
-	use self::Message as Wrapper;
-	use Reading::*;
-
-	let reader = reader.map(|msg| msg.map(|m| Message(m)));
-	let stop = stop.into_stream().map(|_| Ok(Stop));
-	let mut select = select(reader, stop);
-	let atomic = Arc::new(AtomicBool::new(false));
+	let mut framed = FramedRead::new(reader, Codec::new(version));
+	let mut attachment: Option<File> = None;
 	loop {
-		let atomic = atomic.clone();
 		let tracker = tracker.clone();
-		match try_next!(select.next().await) {
-			Some(Message(Known(msg))) => {
+		let consume = match try_next!(framed.next().await) {
+			Some(Output::Known(header, mut body)) => {
 				trace!(
 					"Received message header, type {:?}, len {}.",
-					msg.header.msg_type,
-					msg.header.msg_len
+					header.msg_type,
+					header.msg_len
 				);
 
 				// Increase received bytes counter
 				tracker
-					.inc_received(MsgHeader::LEN as u64 + msg.header.msg_len)
+					.inc_received(MsgHeader::LEN as u64 + header.msg_len)
 					.await;
 
-				let (header, body, version) = msg.parts();
-				let mut cursor = Cursor::new(body);
-				let wrap = Wrapper::from_header(header, &mut cursor, version);
-				// TODO: non-blocking handler
-				let block = tokio::task::block_in_place(|| handler.consume(wrap, atomic, tracker));
-				if let Some(Some(resp_msg)) = try_break!(block) {
-					try_break!(conn_handle.send(resp_msg));
-				}
+				Consume::Message(header, ser::BufReader::new(&mut body, version))
 			}
-			Some(Message(Unknown(len, type_byte))) => {
+			Some(Output::Unknown(len, type_byte)) => {
 				debug!(
 					"Received unknown message header, type {:?}, len {}.",
 					type_byte, len
 				);
+
 				// Increase received bytes counter
 				tracker.inc_received(MsgHeader::LEN as u64 + len).await;
+
+				continue;
 			}
-			Some(Stop) => {
-				// Receive stop signal
-				break;
+			Some(Output::Attachment(update, bytes)) => {
+				let a = match &mut attachment {
+					Some(a) => a,
+					None => break,
+				};
+
+				a.write_all(&bytes).await?;
+				if update.left == 0 {
+					a.sync_all().await?;
+					attachment = None;
+				}
+
+				Consume::Attachment(update)
 			}
-			None => {}
+			None => continue,
+		};
+
+		// TODO: non-blocking handler
+		let block = tokio::task::block_in_place(|| handler.consume(consume, tracker));
+		if let Some(consumed) = try_break!(block) {
+			match consumed {
+				Consumed::Response(resp_msg) => {
+					try_break!(conn_handle.send(resp_msg));
+				}
+				Consumed::Attachment(meta, file) => {
+					// Start attachment
+					framed.decoder_mut().expect_attachment(meta);
+					attachment = Some(file);
+				}
+				Consumed::Disconnect => break,
+				Consumed::None => {}
+			}
 		}
 	}
 
-	debug!("Shutting down reader connection with {}", peer_address);
-	let (reader, _) = select.into_inner();
-	reader.into_inner()
+	Ok(())
 }
 
-async fn write(
-	mut writer: Writer,
-	rx: mpsc::Receiver<Msg>,
-	stop: StopRx,
-	version: ProtocolVersion,
-	tracker: Arc<Tracker>,
-	peer_address: String,
-) -> Writer {
-	enum Writing {
-		Message(Msg),
-		Stop,
+async fn write(mut writer: WriteHalf<'_>, mut rx: mpsc::Receiver<Msg>, tracker: Arc<Tracker>) {
+	while let Some(msg) = rx.next().await {
+		try_break!(write_message(&mut writer, &msg, tracker.clone()).await);
 	}
-	use Writing::*;
-
-	let rx = rx.map(|m| Message(m));
-	let stop = stop.into_stream().map(|_| Stop);
-	let mut select = select(rx, stop);
-	while let Some(item) = select.next().await {
-		match item {
-			Message(msg) => {
-				try_break!(write_message(&mut writer, &msg, tracker.clone()).await);
-			}
-			Stop => break,
-		}
-	}
-
-	writer
-
-	/*let writer_thread = thread::Builder::new()
-	.name("peer_write".to_string())
-	.spawn(move || {
-		let mut retry_send = Err(());
-		writer
-			.set_write_timeout(Some(BODY_IO_TIMEOUT))
-			.expect("set timeout");
-		loop {
-			let maybe_data = retry_send.or_else(|_| send_rx.recv_timeout(CHANNEL_TIMEOUT));
-			retry_send = Err(());
-			if let Ok(data) = maybe_data {
-				let written =
-					try_break!(write_message(&mut writer, &data, writer_tracker.clone()));
-				if written.is_none() {
-					retry_send = Ok(data);
-				}
-			}
-			// check the close channel
-			if stopped.load(Ordering::Relaxed) {
-				break;
-			}
-		}
-
-		debug!(
-			"Shutting down writer connection with {}",
-			writer
-				.peer_addr()
-				.map(|a| a.to_string())
-				.unwrap_or("?".to_owned())
-		);
-	})?;*/
 }

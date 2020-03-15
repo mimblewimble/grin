@@ -52,11 +52,6 @@ pub struct Server {
 	stop_tx: StopTx,
 }
 
-enum Listen {
-	Stream(Result<tokio::net::TcpStream, std::io::Error>),
-	Stop,
-}
-
 // TODO TLS
 impl Server {
 	/// Creates a new idle p2p server with no peers
@@ -158,6 +153,7 @@ impl Server {
 			return Err(Error::ConnectionClose);
 		}
 		let total_diff = self.peers.total_difficulty()?;
+		let peers = self.peers.clone();
 
 		// accept the peer and add it to the server map
 		let peer = Peer::accept(
@@ -168,8 +164,8 @@ impl Server {
 			self.peers.clone(),
 		)
 		.await?;
-		let peers_inner = self.peers.clone();
-		tokio::task::spawn_blocking(move || peers_inner.add_connected(Arc::new(peer)))
+
+		tokio::task::spawn_blocking(move || peers.add_connected(Arc::new(peer)))
 			.await
 			.unwrap()?;
 		Ok(())
@@ -350,6 +346,12 @@ impl NetAdapter for DummyAdapter {
 
 /// Starts a new TCP server and listen to incoming connections
 pub async fn listen(server: Arc<Server>, stop_rx: StopRx) -> Result<(), Error> {
+	enum Listen {
+		Stream(Result<tokio::net::TcpStream, std::io::Error>),
+		Stop,
+	}
+	use Listen::*;
+
 	// start TCP listener and handle incoming connections
 	let addr = SocketAddr::new(server.config.host, server.config.port);
 	let mut listener = TcpListener::bind(addr).await?;
@@ -359,7 +361,7 @@ pub async fn listen(server: Arc<Server>, stop_rx: StopRx) -> Result<(), Error> {
 
 	while let Some(next) = select.next().await {
 		match next {
-			Listen::Stream(Ok(stream)) => {
+			Stream(Ok(stream)) => {
 				// Spawn a new task to handle the incoming connection
 				let server_inner = server.clone();
 				tokio::spawn(async move {
@@ -377,8 +379,8 @@ pub async fn listen(server: Arc<Server>, stop_rx: StopRx) -> Result<(), Error> {
 					}
 				});
 			}
-			Listen::Stream(Err(e)) => debug!("Error accepting peer: {:?}", e),
-			Listen::Stop => break,
+			Stream(Err(e)) => debug!("Error accepting peer: {:?}", e),
+			Stop => break,
 		}
 	}
 

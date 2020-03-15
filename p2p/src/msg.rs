@@ -19,16 +19,19 @@ use crate::core::core::hash::Hash;
 use crate::core::core::BlockHeader;
 use crate::core::pow::Difficulty;
 use crate::core::ser::{
-	self, BufReader, ProtocolVersion, Readable, Reader, StreamingReader, Writeable, Writer,
+	self, BufReader, BufWriter, ProtocolVersion, Readable, Reader, StreamingReader, Writeable,
+	Writer,
 };
 use crate::core::{consensus, global};
 use crate::types::{
-	Capabilities, Error, PeerAddr, ReasonForBan, MAX_BLOCK_HEADERS, MAX_LOCATORS, MAX_PEER_ADDRS,
+	AttachmentMeta, AttachmentUpdate, Capabilities, Error, PeerAddr, ReasonForBan,
+	MAX_BLOCK_HEADERS, MAX_LOCATORS, MAX_PEER_ADDRS,
 };
 use bytes::{BufMut, Bytes, BytesMut};
 use futures::executor::block_on;
 use futures::{Sink, SinkExt};
 use num::FromPrimitive;
+use std::fmt;
 use std::io::{Cursor, Read, Write};
 use std::sync::Arc;
 use tokio::fs::File;
@@ -144,11 +147,11 @@ impl Msg {
 	}
 
 	/// Deconstruct a message into its constituent parts
-	pub fn parts(self) -> (MsgHeader, Bytes, ProtocolVersion) {
+	pub fn into_parts(self) -> (MsgHeader, Bytes, ProtocolVersion) {
 		(self.header, self.body, self.version)
 	}
 
-	pub fn from_bytes(header: MsgHeader, body: Bytes, version: ProtocolVersion) -> Msg {
+	pub fn from_parts(header: MsgHeader, body: Bytes, version: ProtocolVersion) -> Msg {
 		Msg {
 			header,
 			body,
@@ -167,112 +170,118 @@ pub enum MsgWrapper {
 	Unknown(u64, u8),
 }
 
-/// Read a header from the provided stream in an async way
+/// Read a header from the provided stream
 /// Note: We return a MsgHeaderWrapper here as we may encounter an unknown msg type.
-///
-pub async fn read_header<R: AsyncRead + Unpin>(
+async fn read_header<R: AsyncRead + Unpin>(
 	stream: &mut R,
+	buf: &mut BytesMut,
 	version: ProtocolVersion,
 ) -> Result<MsgHeaderWrapper, Error> {
-	let mut head = vec![0u8; MsgHeader::LEN];
-	stream.read_exact(&mut head).await?;
-	let header = ser::deserialize::<MsgHeaderWrapper>(&mut &head[..], version)?;
-	Ok(header)
+	buf.resize(MsgHeader::LEN, 0);
+	stream.read_exact(buf).await?;
+	let mut buf = buf.split().freeze();
+	let mut reader = BufReader::new(&mut buf, version);
+	let wrapper = MsgHeaderWrapper::read(&mut reader)?;
+	Ok(wrapper)
 }
 
-/// Read a single item from the provided stream, always blocking until we
-/// have a result (or timeout).
-/// Returns the item and the total bytes read.
-pub fn read_item<T: Readable>(
-	stream: &mut dyn Read,
+/// Read a header of a specific type from the provided stream
+async fn read_expected_header<R: AsyncRead + Unpin>(
+	stream: &mut R,
+	buf: &mut BytesMut,
 	version: ProtocolVersion,
-) -> Result<(T, u64), Error> {
-	let mut reader = StreamingReader::new(stream, version);
-	let res = T::read(&mut reader)?;
-	Ok((res, reader.total_bytes_read()))
-}
-
-/// Read a message body from the provided stream, always blocking
-/// until we have a result (or timeout).
-pub fn read_body<T: Readable>(
-	h: &MsgHeader,
-	stream: &mut dyn Read,
-	version: ProtocolVersion,
-) -> Result<T, Error> {
-	let mut body = vec![0u8; h.msg_len as usize];
-	stream.read_exact(&mut body)?;
-	ser::deserialize(&mut &body[..], version).map_err(From::from)
-}
-
-/// Convenience function to read something that could be a message
-pub fn read_maybe_message<T: Readable, E: Into<Error>>(
-	wrapper: Option<Result<MsgWrapper, E>>,
-	version: ProtocolVersion,
-	msg_type: Type,
-) -> Result<T, Error> {
-	match wrapper {
-		Some(Ok(w)) => read_message(w, version, msg_type),
-		Some(Err(e)) => Err(e.into()),
-		None => Err(std::io::ErrorKind::UnexpectedEof.into()),
+	header_type: Type,
+) -> Result<MsgHeader, Error> {
+	match read_header(stream, buf, version).await? {
+		MsgHeaderWrapper::Known(h) if h.msg_type == header_type => Ok(h),
+		_ => Err(Error::BadMessage),
 	}
 }
 
-/// Reads a full message of a specific type
-pub fn read_message<T: Readable>(
-	wrapper: MsgWrapper,
+/// Read a message body from the provided stream
+async fn read_body<R: AsyncRead + Unpin, T: Readable>(
+	stream: &mut R,
+	buf: &mut BytesMut,
+	version: ProtocolVersion,
+	len: usize,
+) -> Result<T, Error> {
+	buf.resize(len, 0);
+	stream.read_exact(buf).await?;
+	let mut buf = buf.split().freeze();
+	let mut reader = BufReader::new(&mut buf, version);
+	let body = T::read(&mut reader)?;
+	Ok(body)
+}
+
+/// Reads a full message of a specific type from the provided stream
+pub async fn read_message<R: AsyncRead + Unpin, T: Readable>(
+	stream: &mut R,
 	version: ProtocolVersion,
 	msg_type: Type,
 ) -> Result<T, Error> {
-	match wrapper {
-		MsgWrapper::Known(msg) => {
-			let (header, mut body, version) = msg.parts();
-
-			if header.msg_type == msg_type {
-				let mut reader = BufReader::new(&mut body, version);
-				T::read(&mut reader).map_err(|e| e.into())
-			} else {
-				Err(Error::BadMessage)
-			}
-		}
-		MsgWrapper::Unknown(_, _) => Err(Error::BadMessage),
-	}
+	let mut buf = BytesMut::with_capacity(MsgHeader::LEN);
+	let header = read_expected_header(stream, &mut buf, version, msg_type).await?;
+	read_body(stream, &mut buf, version, header.msg_len as usize).await
 }
 
-/// Write a message into a `Sink`
-pub async fn write_message<W, E>(
-	sink: &mut W,
+/// Writes a header and a body
+pub async fn write_header_body<W: AsyncWrite + Unpin, T: Writeable>(
+	stream: &mut W,
+	version: ProtocolVersion,
+	msg_type: Type,
+	body: &T,
+	tracker: Arc<Tracker>,
+) -> std::io::Result<()> {
+	// First write the body to a buffer
+	let mut buf = BytesMut::with_capacity(MsgHeader::LEN);
+	let mut writer = BufWriter::new(&mut buf, version);
+	body.write(&mut writer);
+	let body = buf.split().freeze();
+
+	// Then write the header to a buffer
+	let header = MsgHeader::new(msg_type, body.len() as u64);
+	header.write(&mut writer);
+	let header = buf.split().freeze();
+
+	// Finally write them to the stream in reverse order
+	stream.write_all(&header).await?;
+	stream.write_all(&body).await?;
+	tracker.inc_sent((MsgHeader::LEN + body.len()) as u64);
+
+	Ok(())
+}
+
+/// Write a message
+pub async fn write_message<W: AsyncWrite + Unpin + Send>(
+	stream: &mut W,
 	msg: &Msg,
 	tracker: Arc<Tracker>,
-) -> Result<(), Error>
-where
-	W: Sink<Bytes, Error = E> + Unpin + Send,
-	E: Into<Error>,
-{
-	let mut buf = BytesMut::with_capacity(MsgHeader::LEN + msg.body.len());
-	let header = ser::ser_vec(&msg.header, msg.version)?;
-	buf.extend_from_slice(&header);
+) -> Result<(), Error> {
+	let len = MsgHeader::LEN + msg.body.len();
+	let mut buf = BytesMut::with_capacity(len);
+	let mut writer = BufWriter::new(&mut buf, msg.version);
+	msg.header.write(&mut writer)?;
 	buf.extend_from_slice(&msg.body);
 
 	let split = buf.split().freeze();
-	let len = split.len() as u64;
-	sink.send(split).await.map_err(|e| e.into())?;
-	tracker.inc_sent(len).await;
+	stream.write_all(&split).await?;
+	tracker.inc_sent(len as u64).await;
 
 	if let Some(file) = &msg.attachment {
 		let mut file = file.try_clone().await?;
 		loop {
-			buf.reserve(8 * 1024);
-			match file.read(&mut buf[..]).await {
-				Ok(0) => break,
-				Ok(n) => {
-					sink.send(buf.split().freeze())
-						.await
-						.map_err(|e| e.into())?;
+			// TODO: can we avoid zeroing?
+			buf.resize(8 * 1024, 0);
+			match file.read(&mut buf).await? {
+				0 => break,
+				n => {
+					buf.truncate(n);
+					let split = buf.split().freeze();
+					stream.write_all(&split).await?;
 					// Increase sent bytes "quietly" without incrementing the counter.
 					// (In a loop here for the single attachment).
 					tracker.inc_quiet_sent(n as u64).await;
 				}
-				Err(e) => return Err(From::from(e)),
 			}
 		}
 	}
@@ -746,6 +755,27 @@ impl Readable for TxHashSetArchive {
 			bytes,
 		})
 	}
+}
+
+pub enum Consume<'a> {
+	Message(MsgHeader, ser::BufReader<'a, Bytes>),
+	Attachment(AttachmentUpdate),
+}
+
+impl fmt::Display for Consume<'_> {
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+		match self {
+			Consume::Message(h, _) => write!(f, "{:?}", h.msg_type),
+			Consume::Attachment { .. } => write!(f, "attachment"),
+		}
+	}
+}
+
+pub enum Consumed {
+	Response(Msg),
+	Attachment(AttachmentMeta, File),
+	None,
+	Disconnect,
 }
 
 pub struct KernelDataRequest {}

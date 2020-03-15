@@ -22,7 +22,7 @@
 use crate::core::hash::{DefaultHashable, Hash, Hashed};
 use crate::global::PROTOCOL_VERSION;
 use byteorder::{BigEndian, ByteOrder, ReadBytesExt};
-use bytes::Buf;
+use bytes::{Buf, BufMut};
 use keychain::{BlindingFactor, Identifier, IDENTIFIER_SIZE};
 use std::convert::TryInto;
 use std::fmt::{self, Debug};
@@ -75,6 +75,12 @@ pub enum Error {
 impl From<io::Error> for Error {
 	fn from(e: io::Error) -> Error {
 		Error::IOErr(format!("{}", e), e.kind())
+	}
+}
+
+impl From<io::ErrorKind> for Error {
+	fn from(e: io::ErrorKind) -> Error {
+		Error::IOErr(format!("{}", io::Error::from(e)), e)
 	}
 }
 
@@ -548,6 +554,7 @@ impl<'a> Reader for StreamingReader<'a> {
 pub struct BufReader<'a, B: Buf> {
 	inner: &'a mut B,
 	version: ProtocolVersion,
+	bytes_read: usize,
 }
 
 impl<'a, B: Buf> BufReader<'a, B> {
@@ -555,15 +562,25 @@ impl<'a, B: Buf> BufReader<'a, B> {
 		Self {
 			inner: buf,
 			version,
+			bytes_read: 0,
 		}
 	}
 
-	fn has_remaining(&self, len: usize) -> Result<(), Error> {
+	fn has_remaining(&mut self, len: usize) -> Result<(), Error> {
 		if self.inner.remaining() >= len {
+			self.bytes_read += len;
 			Ok(())
 		} else {
-			Err(io::Error::from(io::ErrorKind::UnexpectedEof).into())
+			Err(io::ErrorKind::UnexpectedEof.into())
 		}
+	}
+
+	pub fn bytes_read(&self) -> u64 {
+		self.bytes_read as u64
+	}
+
+	pub fn body<T: Readable>(&mut self) -> Result<T, Error> {
+		T::read(self)
 	}
 }
 
@@ -629,6 +646,82 @@ impl<'a, B: Buf> Reader for BufReader<'a, B> {
 
 	fn protocol_version(&self) -> ProtocolVersion {
 		self.version
+	}
+}
+
+/// Protocol version-aware wrapper around a `BufMut` impl
+pub struct BufWriter<'a, B: BufMut> {
+	inner: &'a mut B,
+	version: ProtocolVersion,
+}
+
+impl<'a, B: BufMut> BufWriter<'a, B> {
+	pub fn new(buf: &'a mut B, version: ProtocolVersion) -> Self {
+		Self {
+			inner: buf,
+			version,
+		}
+	}
+
+	fn has_remaining(&self, len: usize) -> Result<(), Error> {
+		if self.inner.remaining_mut() >= len {
+			Ok(())
+		} else {
+			Err(io::ErrorKind::WriteZero.into())
+		}
+	}
+}
+
+impl<'a, B: BufMut> Writer for BufWriter<'a, B> {
+	fn serialization_mode(&self) -> SerializationMode {
+		SerializationMode::Full
+	}
+
+	fn protocol_version(&self) -> ProtocolVersion {
+		self.version
+	}
+
+	fn write_u8(&mut self, n: u8) -> Result<(), Error> {
+		self.has_remaining(1)?;
+		self.inner.put_u8(n);
+		Ok(())
+	}
+
+	fn write_u16(&mut self, n: u16) -> Result<(), Error> {
+		self.has_remaining(2)?;
+		self.inner.put_u16(n);
+		Ok(())
+	}
+
+	fn write_u32(&mut self, n: u32) -> Result<(), Error> {
+		self.has_remaining(4)?;
+		self.inner.put_u32(n);
+		Ok(())
+	}
+
+	fn write_i32(&mut self, n: i32) -> Result<(), Error> {
+		self.has_remaining(4)?;
+		self.inner.put_i32(n);
+		Ok(())
+	}
+
+	fn write_u64(&mut self, n: u64) -> Result<(), Error> {
+		self.has_remaining(8)?;
+		self.inner.put_u64(n);
+		Ok(())
+	}
+
+	fn write_i64(&mut self, n: i64) -> Result<(), Error> {
+		self.has_remaining(8)?;
+		self.inner.put_i64(n);
+		Ok(())
+	}
+
+	fn write_fixed_bytes<T: AsRef<[u8]>>(&mut self, bytes: T) -> Result<(), Error> {
+		let slice = bytes.as_ref();
+		self.has_remaining(slice.len())?;
+		self.inner.put_slice(slice);
+		Ok(())
 	}
 }
 

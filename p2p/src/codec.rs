@@ -1,13 +1,29 @@
 use crate::core::ser::{self, BufReader, ProtocolVersion, Readable, Reader};
-use crate::msg::{Msg, MsgHeader, MsgHeaderWrapper, MsgWrapper};
-use crate::types::Error;
+use crate::msg::{Consume, Msg, MsgHeader, MsgHeaderWrapper, MsgWrapper};
+use crate::types::{AttachmentMeta, AttachmentUpdate, Error};
 use bytes::{BufMut, Bytes, BytesMut};
+use chrono::{DateTime, Utc};
+use std::cmp::min;
+use std::path::PathBuf;
+use std::time::Instant;
 use tokio_util::codec::{Decoder, Encoder};
 use MsgHeaderWrapper::*;
+use State::*;
+
+enum State {
+	Header(MsgHeaderWrapper),
+	Attachment(usize, AttachmentMeta, Instant),
+}
+
+pub enum Output {
+	Known(MsgHeader, Bytes),
+	Unknown(u64, u8),
+	Attachment(AttachmentUpdate, Bytes),
+}
 
 pub struct Codec {
 	pub version: ProtocolVersion,
-	state: Option<MsgHeaderWrapper>,
+	state: Option<State>,
 }
 
 impl Codec {
@@ -18,18 +34,26 @@ impl Codec {
 		}
 	}
 
-	/// Length of the next item we are expecting, could either be a header or a body
+	/// Inform codec next `len` bytes are an attachment
+	/// Panics if already reading a body
+	pub fn expect_attachment(&mut self, meta: AttachmentMeta) {
+		assert!(self.state.is_none());
+		self.state = Some(Attachment(meta.size, meta, Instant::now()));
+	}
+
+	/// Length of the next item we are expecting, could be header, body or attachment chunk
 	fn next_len(&self) -> usize {
 		match &self.state {
 			None => MsgHeader::LEN,
-			Some(Known(header)) => header.msg_len as usize,
-			Some(Unknown(len, _)) => *len as usize,
+			Some(Header(Known(header))) => header.msg_len as usize,
+			Some(Header(Unknown(len, _))) => *len as usize,
+			Some(Attachment(left, _, _)) => min(*left, 48_000),
 		}
 	}
 }
 
 impl Decoder for Codec {
-	type Item = MsgWrapper;
+	type Item = Output;
 	type Error = Error;
 
 	fn decode(&mut self, src: &mut BytesMut) -> Result<Option<Self::Item>, Self::Error> {
@@ -43,19 +67,33 @@ impl Decoder for Codec {
 						// Parse header and keep reading
 						let mut reader = BufReader::new(&mut raw, self.version);
 						let header = MsgHeaderWrapper::read(&mut reader)?;
-						self.state = Some(header);
+						self.state = Some(Header(header));
 					}
-					Some(Known(header)) => {
+					Some(Header(Known(header))) => {
 						// Return message
-						return Ok(Some(MsgWrapper::Known(Msg::from_bytes(
-							header,
-							raw,
-							self.version,
-						))));
+						return Ok(Some(Output::Known(header, raw)));
 					}
-					Some(Unknown(len, type_byte)) => {
-						// Discard body and keep reading
-						return Ok(Some(MsgWrapper::Unknown(len, type_byte)));
+					Some(Header(Unknown(len, msg_type))) => {
+						// Discard body and return
+						return Ok(Some(Output::Unknown(len, msg_type)));
+					}
+					Some(Attachment(mut left, meta, mut now)) => {
+						left -= next_len;
+						if now.elapsed().as_secs() > 10 {
+							now = Instant::now();
+							debug!("attachment: {}/{}", meta.size - left, meta.size);
+						}
+						let update = AttachmentUpdate {
+							read: next_len,
+							left,
+							meta: meta.clone(),
+						};
+						if left > 0 {
+							self.state = Some(Attachment(left, meta, now));
+						} else {
+							debug!("attachment: DONE");
+						}
+						return Ok(Some(Output::Attachment(update, raw)));
 					}
 				}
 			} else {

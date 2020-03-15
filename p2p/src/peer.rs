@@ -82,7 +82,7 @@ impl Peer {
 	// Only accept and connect can be externally used to build a peer
 	async fn new(
 		info: PeerInfo,
-		framed: Framed<TcpStream, Codec>,
+		conn: TcpStream,
 		adapter: Arc<dyn NetAdapter>,
 	) -> std::io::Result<Peer> {
 		let state = Arc::new(RwLock::new(State::Connected));
@@ -94,7 +94,7 @@ impl Peer {
 			state_sync_requested.clone(),
 		);
 		let tracker = Arc::new(conn::Tracker::new());
-		let (sendh, stoph) = conn::listen(framed, info.version, tracker.clone(), handler).await?;
+		let (sendh, stoph) = conn::listen(conn, info.version, tracker.clone(), handler).await?;
 		let send_handle = Mutex::new(sendh);
 		let stop_handle = Mutex::new(stoph);
 		Ok(Peer {
@@ -109,19 +109,16 @@ impl Peer {
 	}
 
 	pub async fn accept(
-		conn: TcpStream,
+		mut conn: TcpStream,
 		capab: Capabilities,
 		total_difficulty: Difficulty,
 		hs: &Handshake,
 		adapter: Arc<dyn NetAdapter>,
 	) -> Result<Peer, Error> {
 		debug!("accept: handshaking from {:?}", conn.peer_addr());
-		let mut framed = Framed::new(conn, Codec::new(hs.protocol_version()));
-		let info = hs.accept(capab, total_difficulty, &mut framed).await;
-		match info {
-			Ok(info) => Ok(Peer::new(info, framed, adapter).await?),
+		match hs.accept(capab, total_difficulty, &mut conn).await {
+			Ok(info) => Ok(Peer::new(info, conn, adapter).await?),
 			Err(e) => {
-				let conn = framed.get_ref();
 				debug!(
 					"accept: handshaking from {:?} failed with error: {:?}",
 					conn.peer_addr(),
@@ -136,7 +133,7 @@ impl Peer {
 	}
 
 	pub async fn connect(
-		conn: TcpStream,
+		mut conn: TcpStream,
 		capab: Capabilities,
 		total_difficulty: Difficulty,
 		self_addr: PeerAddr,
@@ -144,14 +141,12 @@ impl Peer {
 		adapter: Arc<dyn NetAdapter>,
 	) -> Result<Peer, Error> {
 		debug!("connect: handshaking with {:?}", conn.peer_addr());
-		let mut framed = Framed::new(conn, Codec::new(hs.protocol_version()));
 		let info = hs
-			.initiate(capab, total_difficulty, self_addr, &mut framed)
+			.initiate(capab, total_difficulty, self_addr, &mut conn)
 			.await;
 		match info {
-			Ok(info) => Ok(Peer::new(info, framed, adapter).await?),
+			Ok(info) => Ok(Peer::new(info, conn, adapter).await?),
 			Err(e) => {
-				let conn = framed.get_ref();
 				debug!(
 					"connect: handshaking with {:?} failed with error: {:?}",
 					conn.peer_addr(),
