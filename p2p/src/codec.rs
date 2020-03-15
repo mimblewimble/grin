@@ -1,10 +1,8 @@
-use crate::core::ser::{self, BufReader, ProtocolVersion, Readable, Reader};
-use crate::msg::{Consume, Msg, MsgHeader, MsgHeaderWrapper, MsgWrapper};
+use crate::core::ser::{BufReader, ProtocolVersion, Readable};
+use crate::msg::{MsgHeader, MsgHeaderWrapper};
 use crate::types::{AttachmentMeta, AttachmentUpdate, Error};
 use bytes::{BufMut, Bytes, BytesMut};
-use chrono::{DateTime, Utc};
 use std::cmp::min;
-use std::path::PathBuf;
 use std::time::Instant;
 use tokio_util::codec::{Decoder, Encoder};
 use MsgHeaderWrapper::*;

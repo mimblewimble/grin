@@ -24,13 +24,9 @@ use crate::types::{AttachmentMeta, Error, NetAdapter, PeerInfo};
 use chrono::prelude::Utc;
 use futures::executor::block_on;
 use rand::{thread_rng, Rng};
-use std::cmp;
 use std::fs;
-use std::io::{BufWriter, Seek, SeekFrom};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
-use std::time::Instant;
-use tempfile::tempfile;
 use tokio::fs::File;
 
 pub struct Protocol {
@@ -81,7 +77,7 @@ impl MessageHandler for Protocol {
 				block_on(tracker.inc_quiet_received(update.read as u64));
 
 				if update.left == 0 {
-					let meta = update.meta;
+					let meta = &update.meta;
 					trace!(
 						"handle_payload: txhashset archive save to file {:?} success",
 						meta.path,

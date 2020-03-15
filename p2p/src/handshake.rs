@@ -12,18 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::codec::Codec;
 use crate::conn::Tracker;
 use crate::core::core::hash::Hash;
 use crate::core::pow::Difficulty;
 use crate::core::ser::ProtocolVersion;
-use crate::msg::{
-	read_message, write_header_body, Hand, Msg, MsgHeaderWrapper, Shake, Type, USER_AGENT,
-};
+use crate::msg::{read_message, write_header_body, Hand, Shake, Type, USER_AGENT};
 use crate::peer::Peer;
 use crate::types::{Capabilities, Direction, Error, P2PConfig, PeerAddr, PeerInfo, PeerLiveInfo};
-use bytes::Bytes;
-use futures::StreamExt;
 use rand::{thread_rng, Rng};
 use std::collections::VecDeque;
 use std::net::SocketAddr;
@@ -112,15 +107,15 @@ impl Handshake {
 		};
 
 		// write and read the handshake response
-		let msg = Msg::new(Type::Hand, hand, self.protocol_version)?;
 		write_header_body(
 			conn,
-			self.protocol_version,
 			Type::Hand,
-			&hand,
+			hand,
+			self.protocol_version,
 			self.tracker.clone(),
 		)
 		.await?;
+
 		let shake: Shake = read_message(conn, self.protocol_version, Type::Shake).await?;
 		if shake.genesis != self.genesis {
 			return Err(Error::GenesisMismatch {
@@ -218,9 +213,9 @@ impl Handshake {
 
 		write_header_body(
 			conn,
-			negotiated_version,
 			Type::Shake,
-			&shake,
+			shake,
+			self.protocol_version,
 			self.tracker.clone(),
 		)
 		.await?;

@@ -23,24 +23,14 @@
 use crate::codec::{Codec, Output};
 use crate::core::ser;
 use crate::core::ser::ProtocolVersion;
-use crate::msg::{
-	write_message, Consume, Consumed, Msg, MsgHeader,
-	MsgWrapper::{self, *},
-};
-use crate::types::{AttachmentMeta, Error};
+use crate::msg::{write_message, Consume, Consumed, Msg, MsgHeader};
+use crate::types::Error;
 use crate::util::RateCounter;
-use bytes::Bytes;
-use chrono::{DateTime, Utc};
 use futures::channel::{mpsc, oneshot};
 use futures::executor::block_on;
-use futures::stream::{select, SplitSink, SplitStream};
-use futures::{FutureExt, SinkExt, StreamExt};
-use std::cmp;
-use std::fmt;
-use std::io::{self, Cursor, Read};
+use futures::StreamExt;
+use std::io;
 use std::net::Shutdown;
-use std::path::PathBuf;
-use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 use tokio::fs::File;
 use tokio::io::AsyncWriteExt;
@@ -53,7 +43,6 @@ use tokio_util::codec::FramedRead;
 pub const SEND_CHANNEL_CAP: usize = 100;
 
 type StopTx = oneshot::Sender<()>;
-type StopRx = oneshot::Receiver<()>;
 
 /// A trait to be implemented in order to receive messages from the
 /// connection. Allows providing an optional response.
@@ -97,7 +86,7 @@ impl StopHandle {
 	pub fn stop(&mut self) -> Result<(), ()> {
 		if let Some((t, h)) = self.stop.take() {
 			let _ = t.send(());
-			block_on(h);
+			let _ = block_on(h);
 		}
 		Ok(())
 	}
@@ -105,7 +94,7 @@ impl StopHandle {
 	pub async fn wait(&mut self) {
 		if let Some((t, h)) = self.stop.take() {
 			let _ = t.send(());
-			h.await;
+			let _ = h.await;
 		}
 	}
 }
@@ -260,8 +249,9 @@ where
 	let mut attachment: Option<File> = None;
 	loop {
 		let tracker = tracker.clone();
-		let consume = match try_next!(framed.next().await) {
-			Some(Output::Known(header, mut body)) => {
+		let mut next = try_next!(framed.next().await);
+		let consume = match &mut next {
+			Some(Output::Known(header, body)) => {
 				trace!(
 					"Received message header, type {:?}, len {}.",
 					header.msg_type,
@@ -273,7 +263,7 @@ where
 					.inc_received(MsgHeader::LEN as u64 + header.msg_len)
 					.await;
 
-				Consume::Message(header, ser::BufReader::new(&mut body, version))
+				Consume::Message(header, ser::BufReader::new(body, version))
 			}
 			Some(Output::Unknown(len, type_byte)) => {
 				debug!(
@@ -282,7 +272,7 @@ where
 				);
 
 				// Increase received bytes counter
-				tracker.inc_received(MsgHeader::LEN as u64 + len).await;
+				tracker.inc_received(MsgHeader::LEN as u64 + *len).await;
 
 				continue;
 			}

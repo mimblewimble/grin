@@ -19,20 +19,16 @@ use crate::core::core::hash::Hash;
 use crate::core::core::BlockHeader;
 use crate::core::pow::Difficulty;
 use crate::core::ser::{
-	self, BufReader, BufWriter, ProtocolVersion, Readable, Reader, StreamingReader, Writeable,
-	Writer,
+	self, BufReader, BufWriter, ProtocolVersion, Readable, Reader, Writeable, Writer,
 };
 use crate::core::{consensus, global};
 use crate::types::{
 	AttachmentMeta, AttachmentUpdate, Capabilities, Error, PeerAddr, ReasonForBan,
 	MAX_BLOCK_HEADERS, MAX_LOCATORS, MAX_PEER_ADDRS,
 };
-use bytes::{BufMut, Bytes, BytesMut};
-use futures::executor::block_on;
-use futures::{Sink, SinkExt};
+use bytes::{Bytes, BytesMut};
 use num::FromPrimitive;
 use std::fmt;
-use std::io::{Cursor, Read, Write};
 use std::sync::Arc;
 use tokio::fs::File;
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
@@ -224,31 +220,20 @@ pub async fn read_message<R: AsyncRead + Unpin, T: Readable>(
 	read_body(stream, &mut buf, version, header.msg_len as usize).await
 }
 
-/// Writes a header and a body
-pub async fn write_header_body<W: AsyncWrite + Unpin, T: Writeable>(
+/// Write a header and a body
+pub async fn write_header_body<T, W>(
 	stream: &mut W,
-	version: ProtocolVersion,
 	msg_type: Type,
-	body: &T,
+	msg: T,
+	version: ProtocolVersion,
 	tracker: Arc<Tracker>,
-) -> std::io::Result<()> {
-	// First write the body to a buffer
-	let mut buf = BytesMut::with_capacity(MsgHeader::LEN);
-	let mut writer = BufWriter::new(&mut buf, version);
-	body.write(&mut writer);
-	let body = buf.split().freeze();
-
-	// Then write the header to a buffer
-	let header = MsgHeader::new(msg_type, body.len() as u64);
-	header.write(&mut writer);
-	let header = buf.split().freeze();
-
-	// Finally write them to the stream in reverse order
-	stream.write_all(&header).await?;
-	stream.write_all(&body).await?;
-	tracker.inc_sent((MsgHeader::LEN + body.len()) as u64);
-
-	Ok(())
+) -> Result<(), Error>
+where
+	T: Writeable,
+	W: AsyncWrite + Unpin + Send,
+{
+	let msg = Msg::new(msg_type, msg, version)?;
+	write_message(stream, &msg, tracker).await
 }
 
 /// Write a message
@@ -758,8 +743,8 @@ impl Readable for TxHashSetArchive {
 }
 
 pub enum Consume<'a> {
-	Message(MsgHeader, ser::BufReader<'a, Bytes>),
-	Attachment(AttachmentUpdate),
+	Message(&'a MsgHeader, ser::BufReader<'a, Bytes>),
+	Attachment(&'a AttachmentUpdate),
 }
 
 impl fmt::Display for Consume<'_> {

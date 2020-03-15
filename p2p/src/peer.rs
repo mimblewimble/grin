@@ -12,22 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::codec::Codec;
-use crate::util::Mutex;
-use futures::executor::block_on;
-use std::fmt;
-use std::fs::File;
-use std::io::Read;
-use std::net::Shutdown;
-use std::path::PathBuf;
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Arc;
-use tokio::net::TcpStream;
-use tokio::sync::RwLock;
-use tokio_util::codec::Framed;
-
-use lru_cache::LruCache;
-
 use crate::chain;
 use crate::conn;
 use crate::core::core::hash::{Hash, Hashed};
@@ -43,7 +27,19 @@ use crate::types::{
 	Capabilities, ChainAdapter, Error, NetAdapter, P2PConfig, PeerAddr, PeerInfo, ReasonForBan,
 	TxHashSetRead,
 };
+use crate::util::Mutex;
 use chrono::prelude::{DateTime, Utc};
+use futures::executor::block_on;
+use lru_cache::LruCache;
+use std::fmt;
+use std::fs::File;
+use std::io::Read;
+use std::net::Shutdown;
+use std::path::PathBuf;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
+use tokio::net::TcpStream;
+use tokio::sync::RwLock;
 
 const MAX_TRACK_SIZE: usize = 30;
 const MAX_PEER_MSG_PER_MIN: u64 = 500;
