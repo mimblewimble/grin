@@ -438,7 +438,7 @@ impl TxKernel {
 	}
 
 	/// Batch signature verification.
-	pub fn batch_sig_verify(tx_kernels: &Vec<TxKernel>) -> Result<(), Error> {
+	pub fn batch_sig_verify(tx_kernels: &[TxKernel]) -> Result<(), Error> {
 		let len = tx_kernels.len();
 		let mut sigs: Vec<secp::Signature> = Vec::with_capacity(len);
 		let mut pubkeys: Vec<secp::key::PublicKey> = Vec::with_capacity(len);
@@ -629,10 +629,9 @@ impl TransactionBody {
 	/// inputs, if any, are kept intact.
 	/// Sort order is maintained.
 	pub fn with_input(mut self, input: Input) -> TransactionBody {
-		self.inputs
-			.binary_search(&input)
-			.err()
-			.map(|e| self.inputs.insert(e, input));
+		if let Err(e) = self.inputs.binary_search(&input) {
+			self.inputs.insert(e, input)
+		};
 		self
 	}
 
@@ -640,10 +639,9 @@ impl TransactionBody {
 	/// outputs, if any, are kept intact.
 	/// Sort order is maintained.
 	pub fn with_output(mut self, output: Output) -> TransactionBody {
-		self.outputs
-			.binary_search(&output)
-			.err()
-			.map(|e| self.outputs.insert(e, output));
+		if let Err(e) = self.outputs.binary_search(&output) {
+			self.outputs.insert(e, output)
+		};
 		self
 	}
 
@@ -651,10 +649,9 @@ impl TransactionBody {
 	/// kernels, if any, are kept intact.
 	/// Sort order is maintained.
 	pub fn with_kernel(mut self, kernel: TxKernel) -> TransactionBody {
-		self.kernels
-			.binary_search(&kernel)
-			.err()
-			.map(|e| self.kernels.insert(e, kernel));
+		if let Err(e) = self.kernels.binary_search(&kernel) {
+			self.kernels.insert(e, kernel)
+		};
 		self
 	}
 
@@ -1427,7 +1424,7 @@ impl PMMRable for Output {
 	type E = OutputIdentifier;
 
 	fn as_elmt(&self) -> OutputIdentifier {
-		OutputIdentifier::from_output(self)
+		OutputIdentifier::from(self)
 	}
 
 	fn elmt_size() -> Option<u16> {
@@ -1441,13 +1438,13 @@ impl PMMRable for Output {
 
 impl OutputFeatures {
 	/// Is this a coinbase output?
-	pub fn is_coinbase(&self) -> bool {
-		*self == OutputFeatures::Coinbase
+	pub fn is_coinbase(self) -> bool {
+		self == OutputFeatures::Coinbase
 	}
 
 	/// Is this a plain output?
-	pub fn is_plain(&self) -> bool {
-		*self == OutputFeatures::Plain
+	pub fn is_plain(self) -> bool {
+		self == OutputFeatures::Plain
 	}
 }
 
@@ -1481,13 +1478,10 @@ impl Output {
 	}
 
 	/// Batch validates the range proofs using the commitments
-	pub fn batch_verify_proofs(
-		commits: &Vec<Commitment>,
-		proofs: &Vec<RangeProof>,
-	) -> Result<(), Error> {
+	pub fn batch_verify_proofs(commits: &[Commitment], proofs: &[RangeProof]) -> Result<(), Error> {
 		let secp = static_secp_instance();
 		secp.lock()
-			.verify_bullet_proof_multi(commits.clone(), proofs.clone(), None)?;
+			.verify_bullet_proof_multi(commits.to_vec(), proofs.to_vec(), None)?;
 		Ok(())
 	}
 }
@@ -1521,28 +1515,12 @@ impl OutputIdentifier {
 		self.commit
 	}
 
-	/// Build an output_identifier from an existing output.
-	pub fn from_output(output: &Output) -> OutputIdentifier {
-		OutputIdentifier {
-			features: output.features,
-			commit: output.commit,
-		}
-	}
-
 	/// Converts this identifier to a full output, provided a RangeProof
 	pub fn into_output(self, proof: RangeProof) -> Output {
 		Output {
 			proof,
 			features: self.features,
 			commit: self.commit,
-		}
-	}
-
-	/// Build an output_identifier from an existing input.
-	pub fn from_input(input: &Input) -> OutputIdentifier {
-		OutputIdentifier {
-			features: input.features,
-			commit: input.commit,
 		}
 	}
 
@@ -1573,11 +1551,20 @@ impl Readable for OutputIdentifier {
 	}
 }
 
-impl From<Output> for OutputIdentifier {
-	fn from(out: Output) -> Self {
+impl From<&Output> for OutputIdentifier {
+	fn from(out: &Output) -> Self {
 		OutputIdentifier {
 			features: out.features,
 			commit: out.commit,
+		}
+	}
+}
+
+impl From<&Input> for OutputIdentifier {
+	fn from(input: &Input) -> Self {
+		OutputIdentifier {
+			features: input.features,
+			commit: input.commit,
 		}
 	}
 }
@@ -1595,7 +1582,7 @@ mod test {
 		let keychain = ExtKeychain::from_random_seed(false).unwrap();
 		let key_id = ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
 		let commit = keychain
-			.commit(5, &key_id, &SwitchCommitmentType::Regular)
+			.commit(5, &key_id, SwitchCommitmentType::Regular)
 			.unwrap();
 
 		// just some bytes for testing ser/deser
@@ -1644,12 +1631,12 @@ mod test {
 		let key_id = ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
 
 		let commit = keychain
-			.commit(1003, &key_id, &SwitchCommitmentType::Regular)
+			.commit(1003, &key_id, SwitchCommitmentType::Regular)
 			.unwrap();
 		let key_id = ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
 
 		let commit_2 = keychain
-			.commit(1003, &key_id, &SwitchCommitmentType::Regular)
+			.commit(1003, &key_id, SwitchCommitmentType::Regular)
 			.unwrap();
 
 		assert!(commit == commit_2);
@@ -1660,7 +1647,7 @@ mod test {
 		let keychain = ExtKeychain::from_seed(&[0; 32], false).unwrap();
 		let key_id = ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
 		let commit = keychain
-			.commit(5, &key_id, &SwitchCommitmentType::Regular)
+			.commit(5, &key_id, SwitchCommitmentType::Regular)
 			.unwrap();
 
 		let input = Input {

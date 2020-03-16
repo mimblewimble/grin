@@ -37,7 +37,7 @@ pub fn copy_dir_to(src: &Path, dst: &Path) -> io::Result<u64> {
 	for entry_result in src.read_dir()? {
 		let entry = entry_result?;
 		let file_type = entry.file_type()?;
-		let count = copy_to(&entry.path(), &file_type, &dst.join(entry.file_name()))?;
+		let count = copy_to(&entry.path(), file_type, &dst.join(entry.file_name()))?;
 		counter += count;
 	}
 	Ok(counter)
@@ -55,7 +55,7 @@ pub fn list_files(path: &Path) -> Vec<PathBuf> {
 		.collect()
 }
 
-fn copy_to(src: &Path, src_type: &fs::FileType, dst: &Path) -> io::Result<u64> {
+fn copy_to(src: &Path, src_type: fs::FileType, dst: &Path) -> io::Result<u64> {
 	if src_type.is_file() {
 		fs::copy(src, dst)
 	} else if src_type.is_dir() {
@@ -70,15 +70,12 @@ fn copy_to(src: &Path, src_type: &fs::FileType, dst: &Path) -> io::Result<u64> {
 
 /// Retrieve first line from file
 pub fn get_first_line(file_path: Option<String>) -> Option<String> {
-	match file_path {
-		Some(path) => match fs::File::open(path) {
-			Ok(file) => {
-				let buf_reader = io::BufReader::new(file);
-				let mut lines_iter = buf_reader.lines().map(|l| l.unwrap());
-				lines_iter.next()
-			}
-			Err(_) => None,
-		},
-		None => None,
-	}
+	file_path.and_then(|path| match fs::File::open(path) {
+		Ok(file) => {
+			let buf_reader = io::BufReader::new(file);
+			let mut lines_iter = buf_reader.lines().map(|l| l.unwrap());
+			lines_iter.next()
+		}
+		Err(_) => None,
+	})
 }

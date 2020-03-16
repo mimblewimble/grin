@@ -21,7 +21,7 @@ use crate::web::*;
 use hyper::{Body, Request};
 use std::sync::Weak;
 
-const CRATE_VERSION: &'static str = env!("CARGO_PKG_VERSION");
+const CRATE_VERSION: &str = env!("CARGO_PKG_VERSION");
 
 /// Version handler. Get running node API version
 /// GET /v1/version

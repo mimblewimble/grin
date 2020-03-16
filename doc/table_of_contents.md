@@ -20,6 +20,7 @@
 - [pruning](pruning.md) - Technical explanation of pruning
 - [stratum](stratum.md) - Technical explanation of Grin Stratum RPC protocol
 - [transaction UML](https://github.com/mimblewimble/grin-wallet/blob/master/doc/transaction/basic-transaction-wf.png) - UML of an interactive transaction (aggregating transaction without `lock_height`)
+- [rangeproof output format](rangeproof_byte_format.md) - Explanation of the byte output of a range proof in a Grin transaction
 
 ## Build and use
 

@@ -14,7 +14,7 @@
 
 use chrono::prelude::{DateTime, Utc};
 use chrono::Duration;
-use futures3::executor::block_on;
+use futures::executor::block_on;
 use std::sync::Arc;
 
 use crate::chain::{self, SyncState, SyncStatus};

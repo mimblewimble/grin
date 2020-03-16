@@ -16,7 +16,7 @@
 //! to collect information about server status
 
 use crate::util::RwLock;
-use futures3::executor::block_on;
+use futures::executor::block_on;
 use std::sync::Arc;
 use std::time::SystemTime;
 

@@ -34,7 +34,7 @@ use tokio::fs::File;
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 
 /// Grin's user agent with current version
-pub const USER_AGENT: &'static str = concat!("MW/Grin ", env!("CARGO_PKG_VERSION"));
+pub const USER_AGENT: &str = concat!("MW/Grin ", env!("CARGO_PKG_VERSION"));
 
 /// Magic numbers expected in the header of every message
 const OTHER_MAGIC: [u8; 2] = [73, 43];
@@ -68,8 +68,6 @@ enum_from_primitive! {
 		BanReason = 18,
 		GetTransaction = 19,
 		TransactionKernel = 20,
-		KernelDataRequest = 21,
-		KernelDataResponse = 22,
 	}
 }
 
@@ -107,8 +105,6 @@ fn max_msg_size(msg_type: Type) -> u64 {
 		Type::BanReason => 64,
 		Type::GetTransaction => 32,
 		Type::TransactionKernel => 32,
-		Type::KernelDataRequest => 0,
-		Type::KernelDataResponse => 8,
 	}
 }
 
@@ -499,7 +495,7 @@ impl Readable for GetPeerAddrs {
 
 /// Peer addresses we know of that are fresh enough, in response to
 /// GetPeerAddrs.
-#[derive(Debug)]
+#[derive(Debug, Clone, Serialize, PartialEq)]
 pub struct PeerAddrs {
 	pub peers: Vec<PeerAddr>,
 }
@@ -526,7 +522,7 @@ impl Readable for PeerAddrs {
 		for _ in 0..peer_count {
 			peers.push(PeerAddr::read(reader)?);
 		}
-		Ok(PeerAddrs { peers: peers })
+		Ok(PeerAddrs { peers })
 	}
 }
 
@@ -777,32 +773,5 @@ impl fmt::Debug for Consumed {
 			Consumed::None => write!(f, "Consumed::None"),
 			Consumed::Disconnect => write!(f, "Consumed::Disconnect"),
 		}
-	}
-}
-
-pub struct KernelDataRequest {}
-
-impl Writeable for KernelDataRequest {
-	fn write<W: Writer>(&self, _writer: &mut W) -> Result<(), ser::Error> {
-		Ok(())
-	}
-}
-
-pub struct KernelDataResponse {
-	/// Size in bytes of the attached kernel data file.
-	pub bytes: u64,
-}
-
-impl Writeable for KernelDataResponse {
-	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
-		writer.write_u64(self.bytes)?;
-		Ok(())
-	}
-}
-
-impl Readable for KernelDataResponse {
-	fn read(reader: &mut dyn Reader) -> Result<KernelDataResponse, ser::Error> {
-		let bytes = reader.read_u64()?;
-		Ok(KernelDataResponse { bytes })
 	}
 }

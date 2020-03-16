@@ -347,7 +347,7 @@ where
 		let mut last_ts = last_n.last().unwrap().timestamp;
 		for _ in n..needed_block_count {
 			last_ts = last_ts.saturating_sub(last_ts_delta);
-			last_n.push(HeaderInfo::from_ts_diff(last_ts, last_diff.clone()));
+			last_n.push(HeaderInfo::from_ts_diff(last_ts, last_diff));
 		}
 	}
 	last_n.reverse();

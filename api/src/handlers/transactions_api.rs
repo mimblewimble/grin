@@ -120,10 +120,8 @@ impl TxHashSetHandler {
 	// return a dummy output with merkle proof for position filled out
 	// (to avoid having to create a new type to pass around)
 	fn get_merkle_proof_for_output(&self, id: &str) -> Result<OutputPrintable, Error> {
-		let c = util::from_hex(String::from(id)).context(ErrorKind::Argument(format!(
-			"Not a valid commitment: {}",
-			id
-		)))?;
+		let c = util::from_hex(id)
+			.map_err(|_| ErrorKind::Argument(format!("Not a valid commitment: {}", id)))?;
 		let commit = Commitment::from_vec(c);
 		let chain = w(&self.chain)?;
 		let output_pos = chain.get_output_pos(&commit).context(ErrorKind::NotFound)?;

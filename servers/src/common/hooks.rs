@@ -24,7 +24,7 @@ use crate::common::types::{ServerConfig, WebHooksConfig};
 use crate::core::core;
 use crate::core::core::hash::Hashed;
 use crate::p2p::types::PeerAddr;
-use futures::future::Future;
+use futures::TryFutureExt;
 use hyper::client::HttpConnector;
 use hyper::header::HeaderValue;
 use hyper::Client;
@@ -33,7 +33,7 @@ use hyper_rustls::HttpsConnector;
 use serde::Serialize;
 use serde_json::{json, to_string};
 use std::time::Duration;
-use tokio::runtime::Runtime;
+use tokio::runtime::{Builder, Runtime};
 
 /// Returns the list of event hooks that will be initialized for network events
 pub fn init_net_hooks(config: &ServerConfig) -> Vec<Box<dyn NetEvents + Send + Sync>> {
@@ -153,7 +153,7 @@ fn parse_url(value: &Option<String>) -> Option<hyper::Uri> {
 				Ok(value) => value,
 				Err(_) => panic!("Invalid url : {}", url),
 			};
-			let scheme = uri.scheme_part().map(|s| s.as_str());
+			let scheme = uri.scheme().map(|s| s.as_str());
 			if (scheme != Some("http")) && (scheme != Some("https")) {
 				panic!(
 					"Invalid url scheme {}, expected one of ['http', https']",
@@ -199,7 +199,7 @@ impl WebHook {
 			nthreads, timeout
 		);
 
-		let https = HttpsConnector::new(nthreads as usize);
+		let https = HttpsConnector::new();
 		let client = Client::builder()
 			.keep_alive_timeout(keep_alive)
 			.build::<_, hyper::Body>(https);
@@ -210,7 +210,12 @@ impl WebHook {
 			header_received_url,
 			block_accepted_url,
 			client,
-			runtime: Runtime::new().unwrap(),
+			runtime: Builder::new()
+				.threaded_scheduler()
+				.enable_all()
+				.core_threads(nthreads as usize)
+				.build()
+				.unwrap(),
 		}
 	}
 
@@ -235,16 +240,11 @@ impl WebHook {
 			HeaderValue::from_static("application/json"),
 		);
 
-		let future = self
-			.client
-			.request(req)
-			.map(|_res| {})
-			.map_err(move |_res| {
-				warn!("Error sending POST request to {}", url);
-			});
+		let future = self.client.request(req).map_err(move |_res| {
+			warn!("Error sending POST request to {}", url);
+		});
 
-		let handle = self.runtime.executor();
-		handle.spawn(future);
+		self.runtime.spawn(future);
 	}
 	fn make_request<T: Serialize>(&self, payload: &T, uri: &Option<hyper::Uri>) -> bool {
 		if let Some(url) = uri {

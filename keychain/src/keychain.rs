@@ -100,7 +100,7 @@ impl Keychain for ExtKeychain {
 		&self,
 		amount: u64,
 		id: &Identifier,
-		switch: &SwitchCommitmentType,
+		switch: SwitchCommitmentType,
 	) -> Result<SecretKey, Error> {
 		let mut h = self.hasher.clone();
 		let p = id.to_path();
@@ -109,7 +109,7 @@ impl Keychain for ExtKeychain {
 			ext_key = ext_key.ckd_priv(&self.secp, &mut h, p.path[i as usize])?;
 		}
 
-		match *switch {
+		match switch {
 			SwitchCommitmentType::Regular => {
 				Ok(self.secp.blind_switch(amount, ext_key.secret_key)?)
 			}
@@ -121,7 +121,7 @@ impl Keychain for ExtKeychain {
 		&self,
 		amount: u64,
 		id: &Identifier,
-		switch: &SwitchCommitmentType,
+		switch: SwitchCommitmentType,
 	) -> Result<Commitment, Error> {
 		let key = self.derive_key(amount, id, switch)?;
 		let commit = self.secp.commit(amount, key)?;
@@ -136,7 +136,7 @@ impl Keychain for ExtKeychain {
 				let res = self.derive_key(
 					k.value,
 					&Identifier::from_path(&k.ext_keychain_path),
-					&k.switch,
+					k.switch,
 				);
 				if let Ok(s) = res {
 					Some(s)
@@ -153,7 +153,7 @@ impl Keychain for ExtKeychain {
 				let res = self.derive_key(
 					k.value,
 					&Identifier::from_path(&k.ext_keychain_path),
-					&k.switch,
+					k.switch,
 				);
 				if let Ok(s) = res {
 					Some(s)
@@ -166,14 +166,14 @@ impl Keychain for ExtKeychain {
 		let keys = blind_sum
 			.positive_blinding_factors
 			.iter()
-			.filter_map(|b| b.secret_key(&self.secp).ok().clone())
+			.filter_map(|b| b.secret_key(&self.secp).ok())
 			.collect::<Vec<SecretKey>>();
 		pos_keys.extend(keys);
 
 		let keys = blind_sum
 			.negative_blinding_factors
 			.iter()
-			.filter_map(|b| b.secret_key(&self.secp).ok().clone())
+			.filter_map(|b| b.secret_key(&self.secp).ok())
 			.collect::<Vec<SecretKey>>();
 		neg_keys.extend(keys);
 
@@ -186,7 +186,7 @@ impl Keychain for ExtKeychain {
 		msg: &Message,
 		amount: u64,
 		id: &Identifier,
-		switch: &SwitchCommitmentType,
+		switch: SwitchCommitmentType,
 	) -> Result<Signature, Error> {
 		let skey = self.derive_key(amount, id, switch)?;
 		let sig = self.secp.sign(msg, &skey)?;
@@ -220,7 +220,7 @@ mod test {
 	fn test_key_derivation() {
 		let keychain = ExtKeychain::from_random_seed(false).unwrap();
 		let secp = keychain.secp();
-		let switch = &SwitchCommitmentType::None;
+		let switch = SwitchCommitmentType::None;
 
 		let path = ExtKeychainPath::new(1, 1, 0, 0, 0);
 		let key_id = path.to_identifier();
@@ -265,7 +265,7 @@ mod test {
 
 		// adding secret keys 1 and 2 to give secret key 3
 		let mut skey3 = skey1.clone();
-		let _ = skey3.add_assign(&keychain.secp, &skey2).unwrap();
+		skey3.add_assign(&keychain.secp, &skey2).unwrap();
 
 		// create commitments for secret keys 1, 2 and 3
 		// all committing to the value 0 (which is what we do for tx_kernels)
@@ -276,7 +276,7 @@ mod test {
 		// now sum commitments for keys 1 and 2
 		let sum = keychain
 			.secp
-			.commit_sum(vec![commit_1.clone(), commit_2.clone()], vec![])
+			.commit_sum(vec![commit_1, commit_2], vec![])
 			.unwrap();
 
 		// confirm the commitment for key 3 matches the sum of the commitments 1 and 2

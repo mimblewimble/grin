@@ -123,7 +123,7 @@ impl ViewKey {
 	{
 		let (secret_key, chain_code) = self.ckd_pub_tweak(secp, hasher, i)?;
 
-		let mut public_key = self.public_key.clone();
+		let mut public_key = self.public_key;
 		public_key.add_exp_assign(secp, &secret_key)?;
 
 		let switch_public_key = match &self.switch_public_key {
@@ -151,11 +151,11 @@ impl ViewKey {
 		&self,
 		secp: &Secp256k1,
 		amount: u64,
-		switch: &SwitchCommitmentType,
+		switch: SwitchCommitmentType,
 	) -> Result<PublicKey, Error> {
 		let value_key = secp.commit_value(amount)?.to_pubkey(secp)?;
 		let pub_key = PublicKey::from_combination(secp, vec![&self.public_key, &value_key])?;
-		match *switch {
+		match switch {
 			SwitchCommitmentType::None => Ok(pub_key),
 			SwitchCommitmentType::Regular => {
 				// TODO: replace this whole block by a libsecp function

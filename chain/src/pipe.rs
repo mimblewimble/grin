@@ -63,7 +63,7 @@ fn validate_pow_only(header: &BlockHeader, ctx: &mut BlockContext<'_>) -> Result
 	if !header.pow.is_primary() && !header.pow.is_secondary() {
 		return Err(ErrorKind::LowEdgebits.into());
 	}
-	if !(ctx.pow_verifier)(header).is_ok() {
+	if (ctx.pow_verifier)(header).is_err() {
 		error!(
 			"pipe: error validating header with cuckoo edge_bits {}",
 			header.pow.edge_bits(),
@@ -121,7 +121,7 @@ pub fn process_block(b: &Block, ctx: &mut BlockContext<'_>) -> Result<Option<Tip
 	let ref mut header_pmmr = &mut ctx.header_pmmr;
 	let ref mut txhashset = &mut ctx.txhashset;
 	let ref mut batch = &mut ctx.batch;
-	let block_sums = txhashset::extending(header_pmmr, txhashset, batch, |ext, batch| {
+	txhashset::extending(header_pmmr, txhashset, batch, |ext, batch| {
 		rewind_and_apply_fork(&prev, ext, batch)?;
 
 		// Check any coinbase being spent have matured sufficiently.
@@ -137,8 +137,7 @@ pub fn process_block(b: &Block, ctx: &mut BlockContext<'_>) -> Result<Option<Tip
 		// we can verify_kernel_sums across the full UTXO sum and full kernel sum
 		// accounting for inputs/outputs/kernels in this new block.
 		// We know there are no double-spends etc. if this verifies successfully.
-		// Remember to save these to the db later on (regardless of extension rollback)
-		let block_sums = verify_block_sums(b, batch)?;
+		verify_block_sums(b, batch)?;
 
 		// Apply the block to the txhashset state.
 		// Validate the txhashset roots and sizes against the block header.
@@ -147,18 +146,21 @@ pub fn process_block(b: &Block, ctx: &mut BlockContext<'_>) -> Result<Option<Tip
 
 		// If applying this block does not increase the work on the chain then
 		// we know we have not yet updated the chain to produce a new chain head.
+		// We discard the "child" batch used in this extension (original ctx batch still active).
+		// We discard any MMR modifications applied in this extension.
 		let head = batch.head()?;
 		if !has_more_work(&b.header, &head) {
 			ext.extension.force_rollback();
 		}
 
-		Ok(block_sums)
+		Ok(())
 	})?;
 
-	// Add the validated block to the db along with the corresponding block_sums.
-	// We do this even if we have not increased the total cumulative work
-	// so we can maintain multiple (in progress) forks.
-	add_block(b, &block_sums, &ctx.batch)?;
+	// Add the validated block to the db.
+	// Note we do this in the outer batch, not the child batch from the extension
+	// as we only commit the child batch if the extension increases total work.
+	// We want to save the block to the db regardless.
+	add_block(b, &ctx.batch)?;
 
 	// If we have no "tail" then set it now.
 	if ctx.batch.tail().is_err() {
@@ -291,9 +293,7 @@ fn check_known_store(header: &BlockHeader, ctx: &mut BlockContext<'_>) -> Result
 			// Not yet processed this block, we can proceed.
 			Ok(())
 		}
-		Err(e) => {
-			return Err(ErrorKind::StoreErr(e, "pipe get this block".to_owned()).into());
-		}
+		Err(e) => Err(ErrorKind::StoreErr(e, "pipe get this block".to_owned()).into()),
 	}
 }
 
@@ -385,7 +385,7 @@ fn validate_block(block: &Block, ctx: &mut BlockContext<'_>) -> Result<(), Error
 	let prev = ctx.batch.get_previous_header(&block.header)?;
 	block
 		.validate(&prev.total_kernel_offset, ctx.verifier_cache.clone())
-		.map_err(|e| ErrorKind::InvalidBlockProof(e))?;
+		.map_err(ErrorKind::InvalidBlockProof)?;
 	Ok(())
 }
 
@@ -404,7 +404,8 @@ fn verify_coinbase_maturity(
 
 /// Verify kernel sums across the full utxo and kernel sets based on block_sums
 /// of previous block accounting for the inputs|outputs|kernels of the new block.
-fn verify_block_sums(b: &Block, batch: &store::Batch<'_>) -> Result<BlockSums, Error> {
+/// Saves the new block_sums to the db via the current batch if successful.
+fn verify_block_sums(b: &Block, batch: &store::Batch<'_>) -> Result<(), Error> {
 	// Retrieve the block_sums for the previous block.
 	let block_sums = batch.get_block_sums(&b.header.prev_hash)?;
 
@@ -419,10 +420,15 @@ fn verify_block_sums(b: &Block, batch: &store::Batch<'_>) -> Result<BlockSums, E
 	let (utxo_sum, kernel_sum) =
 		(block_sums, b as &dyn Committed).verify_kernel_sums(overage, offset)?;
 
-	Ok(BlockSums {
-		utxo_sum,
-		kernel_sum,
-	})
+	batch.save_block_sums(
+		&b.hash(),
+		BlockSums {
+			utxo_sum,
+			kernel_sum,
+		},
+	)?;
+
+	Ok(())
 }
 
 /// Fully validate the block by applying it to the txhashset extension.
@@ -438,13 +444,10 @@ fn apply_block_to_txhashset(
 	Ok(())
 }
 
-/// Officially adds the block to our chain.
+/// Officially adds the block to our chain (possibly on a losing fork).
 /// Header must be added separately (assume this has been done previously).
-fn add_block(b: &Block, block_sums: &BlockSums, batch: &store::Batch<'_>) -> Result<(), Error> {
-	batch
-		.save_block(b)
-		.map_err(|e| ErrorKind::StoreErr(e, "pipe save block".to_owned()))?;
-	batch.save_block_sums(&b.hash(), block_sums)?;
+fn add_block(b: &Block, batch: &store::Batch<'_>) -> Result<(), Error> {
+	batch.save_block(b)?;
 	Ok(())
 }
 
@@ -489,7 +492,7 @@ pub fn rewind_and_apply_header_fork(
 ) -> Result<(), Error> {
 	let mut fork_hashes = vec![];
 	let mut current = header.clone();
-	while current.height > 0 && !ext.is_on_current_chain(&current, batch).is_ok() {
+	while current.height > 0 && ext.is_on_current_chain(&current, batch).is_err() {
 		fork_hashes.push(current.hash());
 		current = batch.get_previous_header(&current)?;
 	}
@@ -504,7 +507,7 @@ pub fn rewind_and_apply_header_fork(
 	for h in fork_hashes {
 		let header = batch
 			.get_block_header(&h)
-			.map_err(|e| ErrorKind::StoreErr(e, format!("getting forked headers")))?;
+			.map_err(|e| ErrorKind::StoreErr(e, "getting forked headers".to_string()))?;
 		ext.validate_root(&header)?;
 		ext.apply_header(&header)?;
 	}
@@ -530,9 +533,9 @@ pub fn rewind_and_apply_fork(
 	// Rewind the txhashset extension back to common ancestor based on header MMR.
 	let mut current = batch.head_header()?;
 	while current.height > 0
-		&& !header_extension
+		&& header_extension
 			.is_on_current_chain(&current, batch)
-			.is_ok()
+			.is_err()
 	{
 		current = batch.get_previous_header(&current)?;
 	}
@@ -552,7 +555,7 @@ pub fn rewind_and_apply_fork(
 	for h in fork_hashes {
 		let fb = batch
 			.get_block(&h)
-			.map_err(|e| ErrorKind::StoreErr(e, format!("getting forked blocks")))?;
+			.map_err(|e| ErrorKind::StoreErr(e, "getting forked blocks".to_string()))?;
 
 		// Re-verify coinbase maturity along this fork.
 		verify_coinbase_maturity(&fb, ext, batch)?;

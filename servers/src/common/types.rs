@@ -17,7 +17,7 @@ use std::convert::From;
 use std::sync::Arc;
 
 use chrono::prelude::Utc;
-use futures3::executor::block_on;
+use futures::executor::block_on;
 use rand::prelude::*;
 
 use crate::api;

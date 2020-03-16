@@ -84,7 +84,7 @@ impl MerkleProof {
 
 	/// Convert hex string representation back to a Merkle proof instance
 	pub fn from_hex(hex: &str) -> Result<MerkleProof, String> {
-		let bytes = util::from_hex(hex.to_string()).unwrap();
+		let bytes = util::from_hex(hex).unwrap();
 		let res = ser::deserialize_default(&mut &bytes[..])
 			.map_err(|_| "failed to deserialize a Merkle Proof".to_string())?;
 		Ok(res)

@@ -20,7 +20,7 @@ use std::sync::Arc;
 use crate::core::core::hash::{Hash, Hashed, ZERO_HASH};
 use crate::core::core::{Block, BlockHeader, HeaderVersion};
 use crate::core::pow::Difficulty;
-use crate::core::ser::{self, PMMRIndexHashable};
+use crate::core::ser::{self, PMMRIndexHashable, Readable, Reader, Writeable, Writer};
 use crate::error::{Error, ErrorKind};
 use crate::util::RwLock;
 
@@ -28,13 +28,13 @@ bitflags! {
 /// Options for block validation
 	pub struct Options: u32 {
 		/// No flags
-		const NONE = 0b00000000;
+		const NONE = 0b0000_0000;
 		/// Runs without checking the Proof of Work, mostly to make testing easier.
-		const SKIP_POW = 0b00000001;
+		const SKIP_POW = 0b0000_0001;
 		/// Adds block while in syncing mode.
-		const SYNC = 0b00000010;
+		const SYNC = 0b0000_0010;
 		/// Block validation on a block we mined ourselves
-		const MINE = 0b00000100;
+		const MINE = 0b0000_0100;
 	}
 }
 
@@ -212,11 +212,10 @@ impl TxHashSetRoots {
 			self.output_roots.merged_root(header),
 		);
 
-		if header.output_root != self.output_root(header) {
-			Err(ErrorKind::InvalidRoot.into())
-		} else if header.range_proof_root != self.rproof_root {
-			Err(ErrorKind::InvalidRoot.into())
-		} else if header.kernel_root != self.kernel_root {
+		if header.output_root != self.output_root(header)
+			|| header.range_proof_root != self.rproof_root
+			|| header.kernel_root != self.kernel_root
+		{
 			Err(ErrorKind::InvalidRoot.into())
 		} else {
 			Ok(())
@@ -259,16 +258,29 @@ impl OutputRoots {
 	}
 }
 
-/// A helper to hold the output pmmr position of the txhashset in order to keep them
-/// readable.
+/// Minimal struct representing a known MMR position and associated block height.
 #[derive(Debug)]
-pub struct OutputMMRPosition {
-	/// The hash at the output position in the MMR.
-	pub output_mmr_hash: Hash,
+pub struct CommitPos {
 	/// MMR position
-	pub position: u64,
+	pub pos: u64,
 	/// Block height
 	pub height: u64,
+}
+
+impl Readable for CommitPos {
+	fn read(reader: &mut dyn Reader) -> Result<CommitPos, ser::Error> {
+		let pos = reader.read_u64()?;
+		let height = reader.read_u64()?;
+		Ok(CommitPos { pos, height })
+	}
+}
+
+impl Writeable for CommitPos {
+	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
+		writer.write_u64(self.pos)?;
+		writer.write_u64(self.height)?;
+		Ok(())
+	}
 }
 
 /// The tip of a fork. A handle to the fork ancestry from its leaf in the

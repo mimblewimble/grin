@@ -67,7 +67,7 @@ impl<H: Hashed> ShortIdentifiable for H {
 }
 
 /// Short id for identifying inputs/outputs/kernels
-#[derive(Clone, Serialize, Deserialize, Hash)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct ShortId([u8; 6]);
 
 impl DefaultHashable for ShortId {}
@@ -115,7 +115,7 @@ impl ShortId {
 
 	/// Reconstructs a switch commit hash from a hex string.
 	pub fn from_hex(hex: &str) -> Result<ShortId, ser::Error> {
-		let bytes = util::from_hex(hex.to_string())
+		let bytes = util::from_hex(hex)
 			.map_err(|_| ser::Error::HexError("short_id from_hex error".to_string()))?;
 		Ok(ShortId::from_bytes(&bytes))
 	}

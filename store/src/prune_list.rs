@@ -131,13 +131,13 @@ impl PruneList {
 	/// Return the total shift from all entries in the prune_list.
 	/// This is the shift we need to account for when adding new entries to our PMMR.
 	pub fn get_total_shift(&self) -> u64 {
-		self.get_shift(self.bitmap.maximum() as u64)
+		self.get_shift(self.bitmap.maximum().unwrap_or(0) as u64)
 	}
 
 	/// Return the total leaf_shift from all entries in the prune_list.
 	/// This is the leaf_shift we need to account for when adding new entries to our PMMR.
 	pub fn get_total_leaf_shift(&self) -> u64 {
-		self.get_leaf_shift(self.bitmap.maximum() as u64)
+		self.get_leaf_shift(self.bitmap.maximum().unwrap_or(0) as u64)
 	}
 
 	/// Computes by how many positions a node at pos should be shifted given the
@@ -276,9 +276,10 @@ impl PruneList {
 		if self.bitmap.is_empty() {
 			return;
 		}
-		self.pruned_cache = Bitmap::create_with_capacity(self.bitmap.maximum());
-		for pos in 1..=self.bitmap.maximum() {
-			let path = path(pos as u64, self.bitmap.maximum() as u64);
+		let maximum = self.bitmap.maximum().unwrap_or(0);
+		self.pruned_cache = Bitmap::create_with_capacity(maximum);
+		for pos in 1..(maximum + 1) {
+			let path = path(pos as u64, maximum as u64);
 			let pruned = path.into_iter().any(|x| self.bitmap.contains(x as u32));
 			if pruned {
 				self.pruned_cache.add(pos as u32)

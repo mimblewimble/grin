@@ -32,7 +32,7 @@ fn test_verifier_cache_rangeproofs() {
 
 	let keychain = ExtKeychain::from_random_seed(false).unwrap();
 	let key_id = ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
-	let switch = &SwitchCommitmentType::Regular;
+	let switch = SwitchCommitmentType::Regular;
 	let commit = keychain.commit(5, &key_id, switch).unwrap();
 	let builder = proof::ProofBuilder::new(&keychain);
 	let proof = proof::create(&keychain, &builder, 5, &key_id, switch, commit, None).unwrap();
@@ -46,7 +46,7 @@ fn test_verifier_cache_rangeproofs() {
 	// Check our output is not verified according to the cache.
 	{
 		let mut cache = cache.write();
-		let unverified = cache.filter_rangeproof_unverified(&vec![out]);
+		let unverified = cache.filter_rangeproof_unverified(&[out]);
 		assert_eq!(unverified, vec![out]);
 	}
 
@@ -59,7 +59,7 @@ fn test_verifier_cache_rangeproofs() {
 	// Check it shows as verified according to the cache.
 	{
 		let mut cache = cache.write();
-		let unverified = cache.filter_rangeproof_unverified(&vec![out]);
+		let unverified = cache.filter_rangeproof_unverified(&[out]);
 		assert_eq!(unverified, vec![]);
 	}
 }

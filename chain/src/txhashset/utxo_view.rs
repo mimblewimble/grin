@@ -16,9 +16,8 @@
 
 use crate::core::core::hash::{Hash, Hashed};
 use crate::core::core::pmmr::{self, ReadonlyPMMR};
-use crate::core::core::{Block, BlockHeader, Input, Output, Transaction};
+use crate::core::core::{Block, BlockHeader, Input, Output, OutputIdentifier, Transaction};
 use crate::core::global;
-use crate::core::ser::PMMRIndexHashable;
 use crate::error::{Error, ErrorKind};
 use crate::store::Batch;
 use crate::util::secp::pedersen::RangeProof;
@@ -26,21 +25,21 @@ use grin_store::pmmr::PMMRBackend;
 
 /// Readonly view of the UTXO set (based on output MMR).
 pub struct UTXOView<'a> {
-	output_pmmr: ReadonlyPMMR<'a, Output, PMMRBackend<Output>>,
 	header_pmmr: ReadonlyPMMR<'a, BlockHeader, PMMRBackend<BlockHeader>>,
+	output_pmmr: ReadonlyPMMR<'a, Output, PMMRBackend<Output>>,
 	rproof_pmmr: ReadonlyPMMR<'a, RangeProof, PMMRBackend<RangeProof>>,
 }
 
 impl<'a> UTXOView<'a> {
 	/// Build a new UTXO view.
 	pub fn new(
-		output_pmmr: ReadonlyPMMR<'a, Output, PMMRBackend<Output>>,
 		header_pmmr: ReadonlyPMMR<'a, BlockHeader, PMMRBackend<BlockHeader>>,
+		output_pmmr: ReadonlyPMMR<'a, Output, PMMRBackend<Output>>,
 		rproof_pmmr: ReadonlyPMMR<'a, RangeProof, PMMRBackend<RangeProof>>,
 	) -> UTXOView<'a> {
 		UTXOView {
-			output_pmmr,
 			header_pmmr,
+			output_pmmr,
 			rproof_pmmr,
 		}
 	}
@@ -75,11 +74,11 @@ impl<'a> UTXOView<'a> {
 
 	// Input is valid if it is spending an (unspent) output
 	// that currently exists in the output MMR.
-	// Compare the hash in the output MMR at the expected pos.
+	// Compare against the entry in output MMR at the expected pos.
 	fn validate_input(&self, input: &Input, batch: &Batch<'_>) -> Result<(), Error> {
 		if let Ok(pos) = batch.get_output_pos(&input.commitment()) {
-			if let Some(hash) = self.output_pmmr.get_hash(pos) {
-				if hash == input.hash_with_index(pos - 1) {
+			if let Some(out) = self.output_pmmr.get_data(pos) {
+				if OutputIdentifier::from(input) == out {
 					return Ok(());
 				}
 			}
@@ -114,7 +113,7 @@ impl<'a> UTXOView<'a> {
 	/// that have not sufficiently matured.
 	pub fn verify_coinbase_maturity(
 		&self,
-		inputs: &Vec<Input>,
+		inputs: &[Input],
 		height: u64,
 		batch: &Batch<'_>,
 	) -> Result<(), Error> {
@@ -136,7 +135,7 @@ impl<'a> UTXOView<'a> {
 
 			// Find the "cutoff" pos in the output MMR based on the
 			// header from 1,000 blocks ago.
-			let cutoff_height = height.checked_sub(global::coinbase_maturity()).unwrap_or(0);
+			let cutoff_height = height.saturating_sub(global::coinbase_maturity());
 			let cutoff_header = self.get_header_by_height(cutoff_height, batch)?;
 			let cutoff_pos = cutoff_header.output_mmr_size;
 
@@ -168,7 +167,7 @@ impl<'a> UTXOView<'a> {
 			let header = batch.get_block_header(&hash)?;
 			Ok(header)
 		} else {
-			Err(ErrorKind::Other(format!("get header by height")).into())
+			Err(ErrorKind::Other("get header by height".to_string()).into())
 		}
 	}
 }

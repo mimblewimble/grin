@@ -107,15 +107,17 @@ impl BIP32GrinHasher {
 
 impl BIP32Hasher for BIP32GrinHasher {
 	fn network_priv(&self) -> [u8; 4] {
-		match self.is_floo {
-			true => [0x03, 0x27, 0x3A, 0x10],  // fprv
-			false => [0x03, 0x3C, 0x04, 0xA4], // gprv
+		if self.is_floo {
+			[0x03, 0x27, 0x3A, 0x10]
+		} else {
+			[0x03, 0x3C, 0x04, 0xA4]
 		}
 	}
 	fn network_pub(&self) -> [u8; 4] {
-		match self.is_floo {
-			true => [0x03, 0x27, 0x3E, 0x4B],  // fpub
-			false => [0x03, 0x3C, 0x08, 0xDF], // gpub
+		if self.is_floo {
+			[0x03, 0x27, 0x3E, 0x4B]
+		} else {
+			[0x03, 0x3C, 0x08, 0xDF]
 		}
 	}
 	fn master_seed() -> [u8; 12] {
@@ -229,15 +231,15 @@ impl ChildNumber {
 	/// Returns `true` if the child number is a [`Normal`] value.
 	///
 	/// [`Normal`]: #variant.Normal
-	pub fn is_normal(&self) -> bool {
+	pub fn is_normal(self) -> bool {
 		!self.is_hardened()
 	}
 
 	/// Returns `true` if the child number is a [`Hardened`] value.
 	///
 	/// [`Hardened`]: #variant.Hardened
-	pub fn is_hardened(&self) -> bool {
-		match *self {
+	pub fn is_hardened(self) -> bool {
+		match self {
 			ChildNumber::Hardened { .. } => true,
 			ChildNumber::Normal { .. } => false,
 		}
@@ -331,16 +333,6 @@ impl error::Error for Error {
 			None
 		}
 	}
-
-	fn description(&self) -> &str {
-		match *self {
-			Error::CannotDeriveFromHardenedKey => "cannot derive hardened key from public key",
-			Error::Ecdsa(ref e) => error::Error::description(e),
-			Error::InvalidChildNumber(_) => "child number is invalid",
-			Error::RngError(_) => "rng error",
-			Error::MnemonicError(_) => "mnemonic error",
-		}
-	}
 }
 
 impl From<secp::Error> for Error {
@@ -380,10 +372,7 @@ impl ExtendedPrivKey {
 		passphrase: &str,
 		is_floo: bool,
 	) -> Result<ExtendedPrivKey, Error> {
-		let seed = match mnemonic::to_seed(mnemonic, passphrase) {
-			Ok(s) => s,
-			Err(e) => return Err(Error::MnemonicError(e)),
-		};
+		let seed = mnemonic::to_seed(mnemonic, passphrase).map_err(Error::MnemonicError)?;
 		let mut hasher = BIP32GrinHasher::new(is_floo);
 		let key = ExtendedPrivKey::new_master(secp, &mut hasher, &seed)?;
 		Ok(key)
@@ -461,9 +450,7 @@ impl ExtendedPrivKey {
 		// Do SHA256 of just the ECDSA pubkey
 		let sha2_res = hasher.sha_256(&pk.public_key.serialize_vec(&secp, true)[..]);
 		// do RIPEMD160
-		let ripemd_res = hasher.ripemd_160(&sha2_res);
-		// Return
-		ripemd_res
+		hasher.ripemd_160(&sha2_res)
 	}
 
 	/// Returns the first four bytes of the identifier
@@ -547,7 +534,7 @@ impl ExtendedPubKey {
 		H: BIP32Hasher,
 	{
 		let (sk, chain_code) = self.ckd_pub_tweak(secp, hasher, i)?;
-		let mut pk = self.public_key.clone();
+		let mut pk = self.public_key;
 		pk.add_exp_assign(secp, &sk).map_err(Error::Ecdsa)?;
 
 		Ok(ExtendedPubKey {
@@ -568,9 +555,7 @@ impl ExtendedPubKey {
 		// Do SHA256 of just the ECDSA pubkey
 		let sha2_res = hasher.sha_256(&self.public_key.serialize_vec(secp, true)[..]);
 		// do RIPEMD160
-		let ripemd_res = hasher.ripemd_160(&sha2_res);
-		// Return
-		ripemd_res
+		hasher.ripemd_160(&sha2_res)
 	}
 
 	/// Returns the first four bytes of the identifier
@@ -805,7 +790,7 @@ mod tests {
 	#[test]
 	fn test_vector_1() {
 		let secp = Secp256k1::new();
-		let seed = from_hex("000102030405060708090a0b0c0d0e0f".to_owned()).unwrap();
+		let seed = from_hex("000102030405060708090a0b0c0d0e0f").unwrap();
 
 		// m
 		test_path(&secp, &seed, &[],
@@ -841,7 +826,7 @@ mod tests {
 	#[test]
 	fn test_vector_2() {
 		let secp = Secp256k1::new();
-		let seed = from_hex("fffcf9f6f3f0edeae7e4e1dedbd8d5d2cfccc9c6c3c0bdbab7b4b1aeaba8a5a29f9c999693908d8a8784817e7b7875726f6c696663605d5a5754514e4b484542".to_owned()).unwrap();
+		let seed = from_hex("fffcf9f6f3f0edeae7e4e1dedbd8d5d2cfccc9c6c3c0bdbab7b4b1aeaba8a5a29f9c999693908d8a8784817e7b7875726f6c696663605d5a5754514e4b484542").unwrap();
 
 		// m
 		test_path(&secp, &seed, &[],
@@ -877,7 +862,7 @@ mod tests {
 	#[test]
 	fn test_vector_3() {
 		let secp = Secp256k1::new();
-		let seed = from_hex("4b381541583be4423346c643850da4b320e46a87ae3d2a4e6da11eba819cd4acba45d239319ac14f863b8d5ab5a0d0c64d2e8a1e7d1457df2e5a3c51c73235be".to_owned()).unwrap();
+		let seed = from_hex("4b381541583be4423346c643850da4b320e46a87ae3d2a4e6da11eba819cd4acba45d239319ac14f863b8d5ab5a0d0c64d2e8a1e7d1457df2e5a3c51c73235be").unwrap();
 
 		// m
 		test_path(&secp, &seed, &[],

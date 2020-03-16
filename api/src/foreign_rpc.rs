@@ -747,7 +747,7 @@ impl ForeignRpc for Foreign {
 	) -> Result<BlockHeaderPrintable, ErrorKind> {
 		let mut parsed_hash: Option<Hash> = None;
 		if let Some(hash) = hash {
-			let vec = util::from_hex(hash)
+			let vec = util::from_hex(&hash)
 				.map_err(|e| ErrorKind::Argument(format!("invalid block hash: {}", e)))?;
 			parsed_hash = Some(Hash::from_vec(&vec));
 		}
@@ -761,7 +761,7 @@ impl ForeignRpc for Foreign {
 	) -> Result<BlockPrintable, ErrorKind> {
 		let mut parsed_hash: Option<Hash> = None;
 		if let Some(hash) = hash {
-			let vec = util::from_hex(hash)
+			let vec = util::from_hex(&hash)
 				.map_err(|e| ErrorKind::Argument(format!("invalid block hash: {}", e)))?;
 			parsed_hash = Some(Hash::from_vec(&vec));
 		}

@@ -108,7 +108,7 @@ impl Pool {
 		(
 			txs,
 			kern_ids
-				.into_iter()
+				.iter()
 				.filter(|id| !found_ids.contains(id))
 				.cloned()
 				.collect(),
@@ -403,11 +403,7 @@ impl Pool {
 		// Oldest (based on pool insertion time) will then be prioritized.
 		tx_buckets.sort_unstable_by_key(|x| (Reverse(x.fee_to_weight), x.age_idx));
 
-		tx_buckets
-			.into_iter()
-			.map(|x| x.raw_txs)
-			.flatten()
-			.collect()
+		tx_buckets.into_iter().flat_map(|x| x.raw_txs).collect()
 	}
 
 	pub fn find_matching_transactions(&self, kernels: &[TxKernel]) -> Vec<Transaction> {
@@ -416,7 +412,7 @@ impl Pool {
 		let mut found_txs = vec![];
 
 		// Gather all the kernels of the multi-kernel transaction in one set
-		let kernel_set = kernels.into_iter().collect::<HashSet<_>>();
+		let kernel_set = kernels.iter().collect::<HashSet<_>>();
 
 		// Check each transaction in the pool
 		for entry in &self.entries {
@@ -472,7 +468,7 @@ impl Bucket {
 	fn new(tx: Transaction, age_idx: usize) -> Bucket {
 		Bucket {
 			fee_to_weight: tx.fee_to_weight(),
-			raw_txs: vec![tx.clone()],
+			raw_txs: vec![tx],
 			age_idx,
 		}
 	}

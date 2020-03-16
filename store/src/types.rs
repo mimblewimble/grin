@@ -107,10 +107,7 @@ where
 	/// Elements can be of variable size (handled internally in the append-only file impl).
 	///
 	pub fn read(&self, position: u64) -> Option<T> {
-		match self.file.read_as_elmt(position - 1) {
-			Ok(x) => Some(x),
-			Err(_) => None,
-		}
+		self.file.read_as_elmt(position - 1).ok()
 	}
 
 	/// Rewind the backend file to the specified position.
@@ -158,7 +155,7 @@ where
 	/// Write the file out to disk, pruning removed elements.
 	pub fn save_prune(&mut self, prune_pos: &[u64]) -> io::Result<()> {
 		// Need to convert from 1-index to 0-index (don't ask).
-		let prune_idx: Vec<_> = prune_pos.into_iter().map(|x| x - 1).collect();
+		let prune_idx: Vec<_> = prune_pos.iter().map(|x| x - 1).collect();
 		self.file.save_prune(prune_idx.as_slice())
 	}
 }

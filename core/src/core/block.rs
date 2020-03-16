@@ -363,7 +363,7 @@ impl BlockHeader {
 		proof: Proof,
 	) -> Result<Self, Error> {
 		// Convert hex pre pow string
-		let mut header_bytes = from_hex(pre_pow)
+		let mut header_bytes = from_hex(&pre_pow)
 			.map_err(|e| Error::Serialization(ser::Error::HexError(e.to_string())))?;
 		// Serialize and append serialized nonce and proof
 		serialize_default(&mut header_bytes, &nonce)?;

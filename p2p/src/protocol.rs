@@ -17,8 +17,8 @@ use crate::conn::{MessageHandler, Tracker};
 use crate::core::core::{self, hash::Hash, hash::Hashed, CompactBlock};
 use crate::core::ser::Reader;
 use crate::msg::{
-	BanReason, Consume, Consumed, GetPeerAddrs, Headers, KernelDataResponse, Locator, Msg,
-	PeerAddrs, Ping, Pong, TxHashSetArchive, TxHashSetRequest, Type,
+	BanReason, Consume, Consumed, GetPeerAddrs, Headers, Locator, Msg, PeerAddrs, Ping, Pong,
+	TxHashSetArchive, TxHashSetRequest, Type,
 };
 use crate::types::{AttachmentMeta, Error, NetAdapter, PeerInfo};
 use chrono::prelude::Utc;
@@ -294,10 +294,6 @@ impl MessageHandler for Protocol {
 				adapter.peer_addrs_received(peer_addrs.peers);
 				Ok(Consumed::None)
 			}
-
-			Type::KernelDataRequest => Ok(Consumed::None),
-
-			Type::KernelDataResponse => Ok(Consumed::None),
 
 			Type::TxHashSetRequest => {
 				let sm_req: TxHashSetRequest = msg.body()?;

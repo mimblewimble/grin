@@ -20,12 +20,12 @@ use crate::core::core::hash::{Hash, Hashed};
 use crate::core::core::merkle_proof::MerkleProof;
 use crate::core::core::pmmr::{self, Backend, ReadonlyPMMR, RewindablePMMR, PMMR};
 use crate::core::core::{Block, BlockHeader, Input, Output, OutputIdentifier, TxKernel};
-use crate::core::ser::{PMMRIndexHashable, PMMRable, ProtocolVersion};
+use crate::core::ser::{PMMRable, ProtocolVersion};
 use crate::error::{Error, ErrorKind};
 use crate::store::{Batch, ChainStore};
 use crate::txhashset::bitmap_accumulator::BitmapAccumulator;
 use crate::txhashset::{RewindableKernelView, UTXOView};
-use crate::types::{OutputMMRPosition, OutputRoots, Tip, TxHashSetRoots, TxHashsetWriteStatus};
+use crate::types::{CommitPos, OutputRoots, Tip, TxHashSetRoots, TxHashsetWriteStatus};
 use crate::util::secp::pedersen::{Commitment, RangeProof};
 use crate::util::{file, secp_static, zip};
 use croaring::Bitmap;
@@ -36,13 +36,13 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Instant;
 
-const TXHASHSET_SUBDIR: &'static str = "txhashset";
+const TXHASHSET_SUBDIR: &str = "txhashset";
 
-const OUTPUT_SUBDIR: &'static str = "output";
-const RANGE_PROOF_SUBDIR: &'static str = "rangeproof";
-const KERNEL_SUBDIR: &'static str = "kernel";
+const OUTPUT_SUBDIR: &str = "output";
+const RANGE_PROOF_SUBDIR: &str = "rangeproof";
+const KERNEL_SUBDIR: &str = "kernel";
 
-const TXHASHSET_ZIP: &'static str = "txhashset_snapshot";
+const TXHASHSET_ZIP: &str = "txhashset_snapshot";
 
 /// Convenience wrapper around a single prunable MMR backend.
 pub struct PMMRHandle<T: PMMRable> {
@@ -65,9 +65,9 @@ impl<T: PMMRable> PMMRHandle<T> {
 	) -> Result<PMMRHandle<T>, Error> {
 		let path = Path::new(root_dir).join(sub_dir).join(file_name);
 		fs::create_dir_all(path.clone())?;
-		let path_str = path.to_str().ok_or(Error::from(ErrorKind::Other(
-			"invalid file path".to_owned(),
-		)))?;
+		let path_str = path
+			.to_str()
+			.ok_or_else(|| ErrorKind::Other("invalid file path".to_owned()))?;
 		let backend = PMMRBackend::new(path_str.to_string(), prunable, version, header)?;
 		let last_pos = backend.unpruned_size();
 		Ok(PMMRHandle { backend, last_pos })
@@ -82,7 +82,7 @@ impl PMMRHandle<BlockHeader> {
 		if let Some(entry) = header_pmmr.get_data(pos) {
 			Ok(entry.hash())
 		} else {
-			Err(ErrorKind::Other(format!("get header hash by height")).into())
+			Err(ErrorKind::Other("get header hash by height".to_string()).into())
 		}
 	}
 
@@ -90,14 +90,14 @@ impl PMMRHandle<BlockHeader> {
 	/// Find the last leaf pos based on MMR size and return its header hash.
 	pub fn head_hash(&self) -> Result<Hash, Error> {
 		if self.last_pos == 0 {
-			return Err(ErrorKind::Other(format!("MMR empty, no head")).into());
+			return Err(ErrorKind::Other("MMR empty, no head".to_string()).into());
 		}
 		let header_pmmr = ReadonlyPMMR::at(&self.backend, self.last_pos);
 		let leaf_pos = pmmr::bintree_rightmost(self.last_pos);
 		if let Some(entry) = header_pmmr.get_data(leaf_pos) {
 			Ok(entry.hash())
 		} else {
-			Err(ErrorKind::Other(format!("failed to find head hash")).into())
+			Err(ErrorKind::Other("failed to find head hash".to_string()).into())
 		}
 	}
 }
@@ -200,7 +200,7 @@ impl TxHashSet {
 				commit_index,
 			})
 		} else {
-			Err(ErrorKind::TxHashSetErr(format!("failed to open kernel PMMR")).into())
+			Err(ErrorKind::TxHashSetErr("failed to open kernel PMMR".to_string()).into())
 		}
 	}
 
@@ -223,27 +223,24 @@ impl TxHashSet {
 	/// Check if an output is unspent.
 	/// We look in the index to find the output MMR pos.
 	/// Then we check the entry in the output MMR and confirm the hash matches.
-	pub fn is_unspent(&self, output_id: &OutputIdentifier) -> Result<OutputMMRPosition, Error> {
-		match self.commit_index.get_output_pos_height(&output_id.commit) {
-			Ok((pos, block_height)) => {
+	pub fn get_unspent(&self, output_id: &OutputIdentifier) -> Result<Option<CommitPos>, Error> {
+		let commit = output_id.commit;
+		match self.commit_index.get_output_pos_height(&commit) {
+			Ok(Some((pos, height))) => {
 				let output_pmmr: ReadonlyPMMR<'_, Output, _> =
 					ReadonlyPMMR::at(&self.output_pmmr_h.backend, self.output_pmmr_h.last_pos);
-				if let Some(hash) = output_pmmr.get_hash(pos) {
-					if hash == output_id.hash_with_index(pos - 1) {
-						Ok(OutputMMRPosition {
-							output_mmr_hash: hash,
-							position: pos,
-							height: block_height,
-						})
+				if let Some(out) = output_pmmr.get_data(pos) {
+					if OutputIdentifier::from(out) == *output_id {
+						Ok(Some(CommitPos { pos, height }))
 					} else {
-						Err(ErrorKind::TxHashSetErr(format!("txhashset hash mismatch")).into())
+						Ok(None)
 					}
 				} else {
-					Err(ErrorKind::OutputNotFound.into())
+					Ok(None)
 				}
 			}
-			Err(grin_store::Error::NotFoundErr(_)) => Err(ErrorKind::OutputNotFound.into()),
-			Err(e) => Err(ErrorKind::StoreErr(e, format!("txhashset unspent check")).into()),
+			Ok(None) => Ok(None),
+			Err(e) => Err(ErrorKind::StoreErr(e, "txhashset unspent check".to_string()).into()),
 		}
 	}
 
@@ -271,11 +268,6 @@ impl TxHashSet {
 	/// Convenience function to query the db for a header by its hash.
 	pub fn get_block_header(&self, hash: &Hash) -> Result<BlockHeader, Error> {
 		Ok(self.commit_index.get_block_header(&hash)?)
-	}
-
-	/// Get all outputs MMR pos
-	pub fn get_all_output_pos(&self) -> Result<Vec<(Commitment, u64)>, Error> {
-		Ok(self.commit_index.get_all_output_pos()?)
 	}
 
 	/// returns outputs from the given pmmr index up to the
@@ -366,11 +358,12 @@ impl TxHashSet {
 	pub fn compact(
 		&mut self,
 		horizon_header: &BlockHeader,
-		batch: &mut Batch<'_>,
+		batch: &Batch<'_>,
 	) -> Result<(), Error> {
 		debug!("txhashset: starting compaction...");
 
 		let head_header = batch.head_header()?;
+
 		let rewind_rm_pos = input_pos_to_rewind(&horizon_header, &head_header, batch)?;
 
 		debug!("txhashset: check_compact output mmr backend...");
@@ -388,21 +381,40 @@ impl TxHashSet {
 		Ok(())
 	}
 
-	/// Rebuild the index of block height & MMR positions to the corresponding UTXOs.
-	/// This is a costly operation performed only when we receive a full new chain state.
-	/// Note: only called by compact.
-	pub fn rebuild_height_pos_index(
+	/// (Re)build the output_pos index to be consistent with the current UTXO set.
+	/// Remove any "stale" index entries that do not correspond to outputs in the UTXO set.
+	/// Add any missing index entries based on UTXO set.
+	pub fn init_output_pos_index(
 		&self,
 		header_pmmr: &PMMRHandle<BlockHeader>,
-		batch: &mut Batch<'_>,
+		batch: &Batch<'_>,
 	) -> Result<(), Error> {
 		let now = Instant::now();
 
 		let output_pmmr =
 			ReadonlyPMMR::at(&self.output_pmmr_h.backend, self.output_pmmr_h.last_pos);
 
-		// clear it before rebuilding
-		batch.clear_output_pos_height()?;
+		// Iterate over the current output_pos index, removing any entries that
+		// do not point to to the expected output.
+		let mut removed_count = 0;
+		for (key, (pos, _)) in batch.output_pos_iter()? {
+			if let Some(out) = output_pmmr.get_data(pos) {
+				if let Ok(pos_via_mmr) = batch.get_output_pos(&out.commitment()) {
+					// If the pos matches and the index key matches the commitment
+					// then keep the entry, other we want to clean it up.
+					if pos == pos_via_mmr && batch.is_match_output_pos_key(&key, &out.commitment())
+					{
+						continue;
+					}
+				}
+			}
+			batch.delete(&key)?;
+			removed_count += 1;
+		}
+		debug!(
+			"init_output_pos_index: removed {} stale index entries",
+			removed_count
+		);
 
 		let mut outputs_pos: Vec<(Commitment, u64)> = vec![];
 		for pos in output_pmmr.leaf_pos_iter() {
@@ -410,17 +422,26 @@ impl TxHashSet {
 				outputs_pos.push((out.commit, pos));
 			}
 		}
-		let total_outputs = outputs_pos.len();
-		if total_outputs == 0 {
-			debug!("rebuild_height_pos_index: nothing to be rebuilt");
+
+		debug!("init_output_pos_index: {} utxos", outputs_pos.len());
+
+		outputs_pos.retain(|x| {
+			batch
+				.get_output_pos_height(&x.0)
+				.map(|p| p.is_none())
+				.unwrap_or(true)
+		});
+
+		debug!(
+			"init_output_pos_index: {} utxos with missing index entries",
+			outputs_pos.len()
+		);
+
+		if outputs_pos.is_empty() {
 			return Ok(());
-		} else {
-			debug!(
-				"rebuild_height_pos_index: rebuilding {} outputs position & height...",
-				total_outputs
-			);
 		}
 
+		let total_outputs = outputs_pos.len();
 		let max_height = batch.head()?.height;
 
 		let mut i = 0;
@@ -434,13 +455,11 @@ impl TxHashSet {
 					break;
 				}
 				batch.save_output_pos_height(&commit, pos, h.height)?;
-				trace!("rebuild_height_pos_index: {:?}", (commit, pos, h.height));
 				i += 1;
 			}
 		}
-
 		debug!(
-			"rebuild_height_pos_index: {} UTXOs, took {}s",
+			"init_height_pos_index: added entries for {} utxos, took {}s",
 			total_outputs,
 			now.elapsed().as_secs(),
 		);
@@ -512,16 +531,16 @@ where
 {
 	let res: Result<T, Error>;
 	{
+		let header_pmmr = ReadonlyPMMR::at(&handle.backend, handle.last_pos);
 		let output_pmmr =
 			ReadonlyPMMR::at(&trees.output_pmmr_h.backend, trees.output_pmmr_h.last_pos);
-		let header_pmmr = ReadonlyPMMR::at(&handle.backend, handle.last_pos);
 		let rproof_pmmr =
 			ReadonlyPMMR::at(&trees.rproof_pmmr_h.backend, trees.rproof_pmmr_h.last_pos);
 
 		// Create a new batch here to pass into the utxo_view.
 		// Discard it (rollback) after we finish with the utxo_view.
 		let batch = trees.commit_index.batch()?;
-		let utxo = UTXOView::new(output_pmmr, header_pmmr, rproof_pmmr);
+		let utxo = UTXOView::new(header_pmmr, output_pmmr, rproof_pmmr);
 		res = inner(&utxo, &batch);
 	}
 	res
@@ -739,7 +758,7 @@ impl<'a> HeaderExtension<'a> {
 		if let Some(hash) = self.get_header_hash(pos) {
 			Ok(batch.get_block_header(&hash)?)
 		} else {
-			Err(ErrorKind::Other(format!("get header by height")).into())
+			Err(ErrorKind::Other("get header by height".to_string()).into())
 		}
 	}
 
@@ -751,13 +770,13 @@ impl<'a> HeaderExtension<'a> {
 		batch: &Batch<'_>,
 	) -> Result<(), Error> {
 		if header.height > self.head.height {
-			return Err(ErrorKind::Other(format!("not on current chain, out beyond")).into());
+			return Err(ErrorKind::Other("not on current chain, out beyond".to_string()).into());
 		}
 		let chain_header = self.get_header_by_height(header.height, batch)?;
 		if chain_header.hash() == header.hash() {
 			Ok(())
 		} else {
-			Err(ErrorKind::Other(format!("not on current chain")).into())
+			Err(ErrorKind::Other("not on current chain".to_string()).into())
 		}
 	}
 
@@ -905,26 +924,38 @@ impl<'a> Extension<'a> {
 	/// and the provided header extension.
 	pub fn utxo_view(&'a self, header_ext: &'a HeaderExtension<'a>) -> UTXOView<'a> {
 		UTXOView::new(
-			self.output_pmmr.readonly_pmmr(),
 			header_ext.pmmr.readonly_pmmr(),
+			self.output_pmmr.readonly_pmmr(),
 			self.rproof_pmmr.readonly_pmmr(),
 		)
 	}
 
 	/// Apply a new block to the current txhashet extension (output, rangeproof, kernel MMRs).
+	/// Returns a vec of commit_pos representing the pos and height of the outputs spent
+	/// by this block.
 	pub fn apply_block(&mut self, b: &Block, batch: &Batch<'_>) -> Result<(), Error> {
 		let mut affected_pos = vec![];
 
+		// Apply the output to the output and rangeproof MMRs.
+		// Add pos to affected_pos to update the accumulator later on.
+		// Add the new output to the output_pos index.
 		for out in b.outputs() {
 			let pos = self.apply_output(out, batch)?;
 			affected_pos.push(pos);
 			batch.save_output_pos_height(&out.commitment(), pos, b.header.height)?;
 		}
 
+		// Remove the output from the output and rangeproof MMRs.
+		// Add spent_pos to affected_pos to update the accumulator later on.
+		// Remove the spent output from the output_pos index.
+		let mut spent = vec![];
 		for input in b.inputs() {
-			let pos = self.apply_input(input, batch)?;
-			affected_pos.push(pos);
+			let spent_pos = self.apply_input(input, batch)?;
+			affected_pos.push(spent_pos.pos);
+			batch.delete_output_pos_height(&input.commitment())?;
+			spent.push(spent_pos);
 		}
+		batch.save_spent_index(&b.hash(), &spent)?;
 
 		for kernel in b.kernels() {
 			self.apply_kernel(kernel)?;
@@ -940,9 +971,6 @@ impl<'a> Extension<'a> {
 	}
 
 	fn apply_to_bitmap_accumulator(&mut self, output_pos: &[u64]) -> Result<(), Error> {
-		// if self.output_pmmr.is_empty() || output_pos.is_empty() {
-		// 	return Ok(());
-		// }
 		let mut output_idx: Vec<_> = output_pos
 			.iter()
 			.map(|x| pmmr::n_leaves(*x).saturating_sub(1))
@@ -958,16 +986,13 @@ impl<'a> Extension<'a> {
 		)
 	}
 
-	fn apply_input(&mut self, input: &Input, batch: &Batch<'_>) -> Result<u64, Error> {
+	fn apply_input(&mut self, input: &Input, batch: &Batch<'_>) -> Result<CommitPos, Error> {
 		let commit = input.commitment();
-		let pos_res = batch.get_output_pos(&commit);
-		if let Ok(pos) = pos_res {
+		if let Some((pos, height)) = batch.get_output_pos_height(&commit)? {
 			// First check this input corresponds to an existing entry in the output MMR.
-			if let Some(hash) = self.output_pmmr.get_hash(pos) {
-				if hash != input.hash_with_index(pos - 1) {
-					return Err(
-						ErrorKind::TxHashSetErr(format!("output pmmr hash mismatch")).into(),
-					);
+			if let Some(out) = self.output_pmmr.get_data(pos) {
+				if OutputIdentifier::from(input) != out {
+					return Err(ErrorKind::TxHashSetErr("output pmmr mismatch".to_string()).into());
 				}
 			}
 
@@ -978,8 +1003,8 @@ impl<'a> Extension<'a> {
 				Ok(true) => {
 					self.rproof_pmmr
 						.prune(pos)
-						.map_err(|e| ErrorKind::TxHashSetErr(e))?;
-					Ok(pos)
+						.map_err(ErrorKind::TxHashSetErr)?;
+					Ok(CommitPos { pos, height })
 				}
 				Ok(false) => Err(ErrorKind::AlreadySpent(commit).into()),
 				Err(e) => Err(ErrorKind::TxHashSetErr(e).into()),
@@ -1016,13 +1041,13 @@ impl<'a> Extension<'a> {
 		{
 			if self.output_pmmr.unpruned_size() != self.rproof_pmmr.unpruned_size() {
 				return Err(
-					ErrorKind::Other(format!("output vs rproof MMRs different sizes")).into(),
+					ErrorKind::Other("output vs rproof MMRs different sizes".to_string()).into(),
 				);
 			}
 
 			if output_pos != rproof_pos {
 				return Err(
-					ErrorKind::Other(format!("output vs rproof MMRs different pos")).into(),
+					ErrorKind::Other("output vs rproof MMRs different pos".to_string()).into(),
 				);
 			}
 		}
@@ -1067,10 +1092,10 @@ impl<'a> Extension<'a> {
 		let header = batch.get_block_header(&self.head.last_block_h)?;
 		self.output_pmmr
 			.snapshot(&header)
-			.map_err(|e| ErrorKind::Other(e))?;
+			.map_err(ErrorKind::Other)?;
 		self.rproof_pmmr
 			.snapshot(&header)
-			.map_err(|e| ErrorKind::Other(e))?;
+			.map_err(ErrorKind::Other)?;
 		Ok(())
 	}
 
@@ -1092,13 +1117,22 @@ impl<'a> Extension<'a> {
 		// Rewound output pos will be removed from the MMR.
 		// Rewound input (spent) pos will be added back to the MMR.
 		let head_header = batch.get_block_header(&self.head.hash())?;
-		let rewind_rm_pos = input_pos_to_rewind(header, &head_header, batch)?;
 
-		self.rewind_to_pos(
-			header.output_mmr_size,
-			header.kernel_mmr_size,
-			&rewind_rm_pos,
-		)?;
+		if head_header.height <= header.height {
+			// Nothing to rewind but we do want to truncate the MMRs at header for consistency.
+			self.rewind_mmrs_to_pos(header.output_mmr_size, header.kernel_mmr_size, &vec![])?;
+			self.apply_to_bitmap_accumulator(&[header.output_mmr_size])?;
+		} else {
+			let mut affected_pos = vec![];
+			let mut current = head_header;
+			while header.height < current.height {
+				let mut affected_pos_single_block = self.rewind_single_block(&current, batch)?;
+				affected_pos.append(&mut affected_pos_single_block);
+				current = batch.get_previous_header(&current)?;
+			}
+			// Now apply a single aggregate "affected_pos" to our bitmap accumulator.
+			self.apply_to_bitmap_accumulator(&affected_pos)?;
+		}
 
 		// Update our head to reflect the header we rewound to.
 		self.head = Tip::from_header(header);
@@ -1106,30 +1140,90 @@ impl<'a> Extension<'a> {
 		Ok(())
 	}
 
+	// Rewind the MMRs and the output_pos index.
+	// Returns a vec of "affected_pos" so we can apply the necessary updates to the bitmap
+	// accumulator in a single pass for all rewound blocks.
+	fn rewind_single_block(
+		&mut self,
+		header: &BlockHeader,
+		batch: &Batch<'_>,
+	) -> Result<Vec<u64>, Error> {
+		// The spent index allows us to conveniently "unspend" everything in a block.
+		let spent = batch.get_spent_index(&header.hash());
+
+		let spent_pos: Vec<_> = if let Ok(ref spent) = spent {
+			spent.iter().map(|x| x.pos).collect()
+		} else {
+			warn!(
+				"rewind_single_block: fallback to legacy input bitmap for block {} at {}",
+				header.hash(),
+				header.height
+			);
+			let bitmap = batch.get_block_input_bitmap(&header.hash())?;
+			bitmap.iter().map(|x| x.into()).collect()
+		};
+
+		if header.height == 0 {
+			self.rewind_mmrs_to_pos(0, 0, &spent_pos)?;
+		} else {
+			let prev = batch.get_previous_header(&header)?;
+			self.rewind_mmrs_to_pos(prev.output_mmr_size, prev.kernel_mmr_size, &spent_pos)?;
+		}
+
+		// Update our BitmapAccumulator based on affected outputs.
+		// We want to "unspend" every rewound spent output.
+		// Treat last_pos as an affected output to ensure we rebuild far enough back.
+		let mut affected_pos = spent_pos.clone();
+		affected_pos.push(self.output_pmmr.last_pos);
+
+		// Remove any entries from the output_pos created by the block being rewound.
+		let block = batch.get_block(&header.hash())?;
+		let mut missing_count = 0;
+		for out in block.outputs() {
+			if batch.delete_output_pos_height(&out.commitment()).is_err() {
+				missing_count += 1;
+			}
+		}
+		if missing_count > 0 {
+			warn!(
+				"rewind_single_block: {} output_pos entries missing for: {} at {}",
+				missing_count,
+				header.hash(),
+				header.height,
+			);
+		}
+
+		// Update output_pos based on "unspending" all spent pos from this block.
+		// This is necessary to ensure the output_pos index correclty reflects a
+		// reused output commitment. For example an output at pos 1, spent, reused at pos 2.
+		// The output_pos index should be updated to reflect the old pos 1 when unspent.
+		if let Ok(spent) = spent {
+			for (x, y) in block.inputs().into_iter().zip(spent) {
+				batch.save_output_pos_height(&x.commitment(), y.pos, y.height)?;
+			}
+		}
+
+		Ok(affected_pos)
+	}
+
 	/// Rewinds the MMRs to the provided positions, given the output and
-	/// kernel we want to rewind to.
-	fn rewind_to_pos(
+	/// kernel pos we want to rewind to.
+	fn rewind_mmrs_to_pos(
 		&mut self,
 		output_pos: u64,
 		kernel_pos: u64,
-		rewind_rm_pos: &Bitmap,
+		spent_pos: &[u64],
 	) -> Result<(), Error> {
+		let bitmap: Bitmap = spent_pos.into_iter().map(|x| *x as u32).collect();
 		self.output_pmmr
-			.rewind(output_pos, rewind_rm_pos)
+			.rewind(output_pos, &bitmap)
 			.map_err(&ErrorKind::TxHashSetErr)?;
 		self.rproof_pmmr
-			.rewind(output_pos, rewind_rm_pos)
+			.rewind(output_pos, &bitmap)
 			.map_err(&ErrorKind::TxHashSetErr)?;
 		self.kernel_pmmr
 			.rewind(kernel_pos, &Bitmap::create())
 			.map_err(&ErrorKind::TxHashSetErr)?;
-
-		// Update our BitmapAccumulator based on affected outputs.
-		// We want to "unspend" every rewound spent output.
-		// Treat output_pos as an affected output to ensure we rebuild far enough back.
-		let mut affected_pos: Vec<_> = rewind_rm_pos.iter().map(|x| x as u64).collect();
-		affected_pos.push(output_pos);
-		self.apply_to_bitmap_accumulator(&affected_pos)?;
 		Ok(())
 	}
 
@@ -1244,7 +1338,7 @@ impl<'a> Extension<'a> {
 
 		if self.head.height == 0 {
 			let zero_commit = secp_static::commit_to_zero_value();
-			return Ok((zero_commit.clone(), zero_commit.clone()));
+			return Ok((zero_commit, zero_commit));
 		}
 
 		// The real magicking happens here. Sum of kernel excesses should equal
@@ -1312,7 +1406,7 @@ impl<'a> Extension<'a> {
 				let kernel = self
 					.kernel_pmmr
 					.get_data(n)
-					.ok_or::<Error>(ErrorKind::TxKernelNotFound.into())?;
+					.ok_or_else(|| ErrorKind::TxKernelNotFound)?;
 				tx_kernels.push(kernel);
 			}
 
@@ -1379,7 +1473,7 @@ impl<'a> Extension<'a> {
 		}
 
 		// remaining part which not full of 1000 range proofs
-		if proofs.len() > 0 {
+		if !proofs.is_empty() {
 			Output::batch_verify_proofs(&commits, &proofs)?;
 			commits.clear();
 			proofs.clear();
@@ -1423,7 +1517,7 @@ pub fn zip_read(root_dir: String, header: &BlockHeader) -> Result<File, Error> {
 		// But practically, these zip files are not small ones, we just keep the zips in last 24 hours
 		let data_dir = Path::new(&root_dir);
 		let pattern = format!("{}_", TXHASHSET_ZIP);
-		if let Ok(n) = clean_files_by_prefix(data_dir.clone(), &pattern, 24 * 60 * 60) {
+		if let Ok(n) = clean_files_by_prefix(data_dir, &pattern, 24 * 60 * 60) {
 			debug!(
 				"{} zip files have been clean up in folder: {:?}",
 				n, data_dir
@@ -1509,7 +1603,7 @@ pub fn zip_write(
 	header: &BlockHeader,
 ) -> Result<(), Error> {
 	debug!("zip_write on path: {:?}", root_dir);
-	let txhashset_path = root_dir.clone().join(TXHASHSET_SUBDIR);
+	let txhashset_path = root_dir.join(TXHASHSET_SUBDIR);
 	fs::create_dir_all(&txhashset_path)?;
 
 	// Explicit list of files to extract from our zip archive.
@@ -1531,12 +1625,9 @@ pub fn txhashset_replace(from: PathBuf, to: PathBuf) -> Result<(), Error> {
 	clean_txhashset_folder(&to);
 
 	// rename the 'from' folder as the 'to' folder
-	if let Err(e) = fs::rename(
-		from.clone().join(TXHASHSET_SUBDIR),
-		to.clone().join(TXHASHSET_SUBDIR),
-	) {
+	if let Err(e) = fs::rename(from.join(TXHASHSET_SUBDIR), to.join(TXHASHSET_SUBDIR)) {
 		error!("hashset_replace fail on {}. err: {}", TXHASHSET_SUBDIR, e);
-		Err(ErrorKind::TxHashSetErr(format!("txhashset replacing fail")).into())
+		Err(ErrorKind::TxHashSetErr("txhashset replacing fail".to_string()).into())
 	} else {
 		Ok(())
 	}
@@ -1565,40 +1656,13 @@ fn input_pos_to_rewind(
 	head_header: &BlockHeader,
 	batch: &Batch<'_>,
 ) -> Result<Bitmap, Error> {
-	if head_header.height <= block_header.height {
-		return Ok(Bitmap::create());
-	}
-
-	// Batching up the block input bitmaps, and running fast_or() on every batch of 256 bitmaps.
-	// so to avoid maintaining a huge vec of bitmaps.
-	let bitmap_fast_or = |b_res, block_input_bitmaps: &mut Vec<Bitmap>| -> Option<Bitmap> {
-		if let Some(b) = b_res {
-			block_input_bitmaps.push(b);
-			if block_input_bitmaps.len() < 256 {
-				return None;
-			}
-		}
-		let bitmap = Bitmap::fast_or(&block_input_bitmaps.iter().collect::<Vec<&Bitmap>>());
-		block_input_bitmaps.clear();
-		block_input_bitmaps.push(bitmap.clone());
-		Some(bitmap)
-	};
-
-	let mut block_input_bitmaps: Vec<Bitmap> = vec![];
-
+	let mut bitmap = Bitmap::create();
 	let mut current = head_header.clone();
-	while current.hash() != block_header.hash() {
-		if current.height < 1 {
-			break;
-		}
-
-		// I/O should be minimized or eliminated here for most
-		// rewind scenarios.
-		if let Ok(b_res) = batch.get_block_input_bitmap(&current.hash()) {
-			bitmap_fast_or(Some(b_res), &mut block_input_bitmaps);
+	while current.height > block_header.height {
+		if let Ok(block_bitmap) = batch.get_block_input_bitmap(&current.hash()) {
+			bitmap.or_inplace(&block_bitmap);
 		}
 		current = batch.get_previous_header(&current)?;
 	}
-
-	bitmap_fast_or(None, &mut block_input_bitmaps).ok_or_else(|| ErrorKind::Bitmap.into())
+	Ok(bitmap)
 }

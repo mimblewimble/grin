@@ -20,7 +20,7 @@ use grin_core::ser::{self, Readable, Reader, Writeable, Writer};
 use std::fs;
 
 const WRITE_CHUNK_SIZE: usize = 20;
-const TEST_ALLOC_SIZE: usize = store::lmdb::ALLOC_CHUNK_SIZE / 8 / WRITE_CHUNK_SIZE;
+const TEST_ALLOC_SIZE: usize = store::lmdb::ALLOC_CHUNK_SIZE_DEFAULT / 8 / WRITE_CHUNK_SIZE;
 
 #[derive(Clone)]
 struct PhatChunkStruct {
