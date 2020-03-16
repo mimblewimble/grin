@@ -16,20 +16,6 @@
 //! the peer-to-peer server, the blockchain and the transaction pool) and acts
 //! as a facade.
 
-use futures3::executor::block_on;
-use std::fs;
-use std::fs::File;
-use std::io::prelude::*;
-use std::path::Path;
-use std::sync::{mpsc, Arc};
-use std::{
-	thread::{self, JoinHandle},
-	time::{self, Duration},
-};
-
-use fs2::FileExt;
-use walkdir::WalkDir;
-
 use crate::api;
 use crate::api::TLSConfig;
 use crate::chain::{self, SyncState, SyncStatus};
@@ -53,8 +39,20 @@ use crate::p2p::types::PeerAddr;
 use crate::pool;
 use crate::util::file::get_first_line;
 use crate::util::{RwLock, StopState};
+use fs2::FileExt;
 use grin_p2p::listen;
 use grin_util::logger::LogEntry;
+use std::fs;
+use std::fs::File;
+use std::io::prelude::*;
+use std::path::Path;
+use std::sync::{mpsc, Arc};
+use std::{
+	thread::{self, JoinHandle},
+	time::{self, Duration},
+};
+use tokio2::select;
+use walkdir::WalkDir;
 
 /// Grin server holding internal structures.
 pub struct Server {
@@ -268,19 +266,14 @@ impl Server {
 		)?;
 
 		let p2p_inner = p2p_server.clone();
-		let _ = thread::Builder::new()
-			.name("p2p-server".to_string())
-			.spawn(move || {
-				let mut rt = tokio2::runtime::Builder::new()
-					.threaded_scheduler()
-					.build()
-					.unwrap();
 
-				let res = rt.block_on(listen(p2p_inner, stop_rx));
-				if let Err(e) = res {
-					error!("P2P server failed with erorr: {:?}", e);
-				}
-			})?;
+		p2p_server.runtime.lock().spawn(async {
+			let listen = listen(p2p_inner);
+			select! {
+				_ = listen => debug!("Listener shutdown"),
+				_ = stop_rx => debug!("Listener received stop signal"),
+			};
+		});
 
 		info!("Starting rest apis at: {}", &config.api_http_addr);
 		let api_secret = get_first_line(config.api_secret_path.clone());
@@ -341,7 +334,7 @@ impl Server {
 
 	/// Asks the server to connect to a peer at the provided network address.
 	pub fn connect_peer(&self, addr: PeerAddr) -> Result<(), Error> {
-		block_on(self.p2p.connect(addr))?;
+		self.p2p.connect_block(addr)?;
 		Ok(())
 	}
 

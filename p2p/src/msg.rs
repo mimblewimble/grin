@@ -756,11 +756,28 @@ impl fmt::Display for Consume<'_> {
 	}
 }
 
+impl fmt::Debug for Consume<'_> {
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+		write!(f, "Consume({})", self)
+	}
+}
+
 pub enum Consumed {
 	Response(Msg),
 	Attachment(AttachmentMeta, File),
 	None,
 	Disconnect,
+}
+
+impl fmt::Debug for Consumed {
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+		match self {
+			Consumed::Response(msg) => write!(f, "Consumed::Response({:?})", msg.header.msg_type),
+			Consumed::Attachment(meta, _) => write!(f, "Consumed::Attachment({:?})", meta.size),
+			Consumed::None => write!(f, "Consumed::None"),
+			Consumed::Disconnect => write!(f, "Consumed::Disconnect"),
+		}
+	}
 }
 
 pub struct KernelDataRequest {}

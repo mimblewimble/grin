@@ -12,16 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use futures::channel::oneshot;
-use futures::prelude::*;
-use futures::stream::select;
-use std::fs::File;
-use std::io::Read;
-use std::net::{Shutdown, SocketAddr};
-use std::path::PathBuf;
-use std::sync::Arc;
-use tokio::net::{TcpListener, TcpStream};
-
 use crate::chain;
 use crate::core::core;
 use crate::core::core::hash::Hash;
@@ -35,21 +25,28 @@ use crate::types::{
 	Capabilities, ChainAdapter, Error, NetAdapter, P2PConfig, PeerAddr, PeerInfo, ReasonForBan,
 	TxHashSetRead,
 };
-use crate::util::StopState;
+use crate::util::{Mutex, StopState};
 use chrono::prelude::{DateTime, Utc};
-
-type StopTx = oneshot::Sender<()>;
-type StopRx = oneshot::Receiver<()>;
+use futures::channel::oneshot;
+use futures::prelude::*;
+use std::fs::File;
+use std::io::Read;
+use std::net::{Shutdown, SocketAddr};
+use std::path::PathBuf;
+use std::sync::Arc;
+use tokio::net::{TcpListener, TcpStream};
+use tokio::runtime::Runtime;
 
 /// P2P server implementation, handling bootstrapping to find and connect to
 /// peers, receiving connections from other peers and keep track of all of them.
 pub struct Server {
 	pub config: P2PConfig,
+	pub runtime: Mutex<Runtime>,
 	capabilities: Capabilities,
 	handshake: Arc<Handshake>,
 	pub peers: Arc<Peers>,
 	stop_state: Arc<StopState>,
-	stop_tx: StopTx,
+	stop_tx: Mutex<Option<oneshot::Sender<()>>>,
 }
 
 // TODO TLS
@@ -62,16 +59,26 @@ impl Server {
 		adapter: Arc<dyn ChainAdapter>,
 		genesis: Hash,
 		stop_state: Arc<StopState>,
-		stop_tx: StopTx,
+		stop_tx: oneshot::Sender<()>,
 	) -> Result<Server, Error> {
+		let runtime = tokio::runtime::Builder::new()
+			.threaded_scheduler()
+			.enable_all()
+			.build()?;
+
 		Ok(Server {
 			config: config.clone(),
+			runtime: Mutex::new(runtime),
 			capabilities: capab,
 			handshake: Arc::new(Handshake::new(genesis, config.clone())),
 			peers: Arc::new(Peers::new(PeerStore::new(db_root)?, adapter, config)),
 			stop_state,
-			stop_tx,
+			stop_tx: Mutex::new(Some(stop_tx)),
 		})
+	}
+
+	pub fn connect_block(&self, addr: PeerAddr) -> Result<Arc<Peer>, Error> {
+		self.runtime.lock().block_on(self.connect(addr))
 	}
 
 	/// Asks the server to connect to a new peer. Directly returns the peer if
@@ -217,6 +224,9 @@ impl Server {
 
 	pub fn stop(&self) {
 		self.stop_state.stop();
+		if let Some(stop_tx) = self.stop_tx.lock().take() {
+			let _ = stop_tx.send(());
+		}
 		self.peers.stop();
 	}
 
@@ -345,43 +355,28 @@ impl NetAdapter for DummyAdapter {
 }
 
 /// Starts a new TCP server and listen to incoming connections
-pub async fn listen(server: Arc<Server>, stop_rx: StopRx) -> Result<(), Error> {
-	enum Listen {
-		Stream(Result<tokio::net::TcpStream, std::io::Error>),
-		Stop,
-	}
-	use Listen::*;
-
-	// start TCP listener and handle incoming connections
+pub async fn listen(server: Arc<Server>) -> Result<(), Error> {
 	let addr = SocketAddr::new(server.config.host, server.config.port);
 	let mut listener = TcpListener::bind(addr).await?;
-	let incoming = listener.incoming().map(|s| Listen::Stream(s));
-	let stop = stop_rx.into_stream().map(|_| Listen::Stop);
-	let mut select = select(incoming, stop);
+	let mut incoming = listener.incoming();
 
-	while let Some(next) = select.next().await {
-		match next {
-			Stream(Ok(stream)) => {
-				// Spawn a new task to handle the incoming connection
-				let server_inner = server.clone();
-				tokio::spawn(async move {
-					let server = server_inner;
-					let peer_addr = match stream.peer_addr() {
-						Ok(a) => PeerAddr(a),
-						Err(_) => return,
-					};
+	while let Some(stream) = incoming.next().await.transpose()? {
+		// Spawn a new task to handle the incoming connection
+		let server_inner = server.clone();
+		tokio::spawn(async move {
+			let server = server_inner;
+			let peer_addr = match stream.peer_addr() {
+				Ok(a) => PeerAddr(a),
+				Err(_) => return,
+			};
 
-					if let Err(e) = server.handle_new_peer(stream).await {
-						debug!("Error accepting peer {}: {:?}", peer_addr.to_string(), e);
-						let _ = server
-							.peers
-							.add_banned(peer_addr, ReasonForBan::BadHandshake);
-					}
-				});
+			if let Err(e) = server.handle_new_peer(stream).await {
+				debug!("Error accepting peer {}: {:?}", peer_addr.to_string(), e);
+				let _ = server
+					.peers
+					.add_banned(peer_addr, ReasonForBan::BadHandshake);
 			}
-			Stream(Err(e)) => debug!("Error accepting peer: {:?}", e),
-			Stop => break,
-		}
+		});
 	}
 
 	Ok(())

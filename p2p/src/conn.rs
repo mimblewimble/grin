@@ -58,7 +58,10 @@ macro_rules! try_break {
 			Err(Error::Store(_))
 			| Err(Error::Chain(_))
 			| Err(Error::Internal)
-			| Err(Error::NoDandelionRelay) => None,
+			| Err(Error::NoDandelionRelay) => {
+				debug!("error to none");
+				None
+				}
 			Err(ref e) => {
 				debug!("try_break: exit the loop: {:?}", e);
 				break;
@@ -222,7 +225,14 @@ where
 		let writer = write(writer, send_rx, tracker);
 
 		tokio::select! {
-			_ = reader => debug!("Reader connection with {} closed", peer_address),
+			res = reader => {
+				if let Err(e) = res {
+					debug!("Reader connection with {} closed: {}", peer_address, e);
+				}
+				else {
+					debug!("Reader connection with {} closed", peer_address);
+				}
+			}
 			_ = writer => debug!("Writer connection with {} closed", peer_address),
 			_ = stop_rx => {}
 		};
@@ -292,10 +302,12 @@ where
 			}
 			None => continue,
 		};
+		debug!("Consume: {:?}", consume);
 
 		// TODO: non-blocking handler
 		let block = tokio::task::block_in_place(|| handler.consume(consume, tracker));
 		if let Some(consumed) = try_break!(block) {
+			debug!("Consumed: {:?}", consumed);
 			match consumed {
 				Consumed::Response(resp_msg) => {
 					try_break!(conn_handle.send(resp_msg));

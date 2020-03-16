@@ -19,7 +19,6 @@
 
 use chrono::prelude::{DateTime, Utc};
 use chrono::{Duration, MIN_DATE};
-use futures3::executor::block_on;
 use rand::seq::SliceRandom;
 use rand::thread_rng;
 use std::collections::HashMap;
@@ -332,9 +331,10 @@ fn listen_for_addrs(
 
 		let peers_c = peers.clone();
 		let p2p_c = p2p.clone();
+
 		thread::Builder::new()
 			.name("peer_connect".to_string())
-			.spawn(move || match block_on(p2p_c.connect(addr)) {
+			.spawn(move || match p2p_c.connect_block(addr) {
 				Ok(p) => {
 					if p.send_peer_request(capab).is_ok() {
 						let _ = peers_c.update_state(addr, p2p::State::Healthy);
