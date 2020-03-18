@@ -18,10 +18,11 @@ use crate::core::consensus::HeaderInfo;
 use crate::core::core::hash::{Hash, Hashed};
 use crate::core::core::{Block, BlockHeader, BlockSums};
 use crate::core::pow::Difficulty;
-use crate::core::ser::ProtocolVersion;
+use crate::core::ser::{self, ProtocolVersion, Readable, Reader, Writeable, Writer};
 use crate::types::{CommitPos, Tip};
 use crate::util::secp::pedersen::Commitment;
 use croaring::Bitmap;
+use enum_primitive::FromPrimitive;
 use grin_store as store;
 use grin_store::{option_to_not_found, to_key, Error, SerIterator};
 use std::convert::TryInto;
@@ -409,6 +410,101 @@ impl<'a> Batch<'a> {
 	pub fn blocks_iter(&self) -> Result<SerIterator<Block>, Error> {
 		let key = to_key(BLOCK_PREFIX, &mut "".to_string().into_bytes());
 		self.db.iter(&key)
+	}
+}
+
+enum_from_primitive! {
+	#[derive(Copy, Clone, Debug, PartialEq)]
+	enum OutputPosVariant {
+		Unique = 0,
+		Head = 1,
+		Tail = 2,
+		Middle = 3,
+	}
+}
+
+impl Writeable for OutputPosVariant {
+	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
+		writer.write_u8(*self as u8)
+	}
+}
+
+impl Readable for OutputPosVariant {
+	fn read(reader: &mut dyn Reader) -> Result<OutputPosVariant, ser::Error> {
+		OutputPosVariant::from_u8(reader.read_u8()?).ok_or(ser::Error::CorruptedData)
+	}
+}
+
+pub enum OutputPosEntry {
+	Unique {
+		pos: CommitPos,
+	},
+	Head {
+		pos: CommitPos,
+		next: Vec<u8>,
+	},
+	Tail {
+		pos: CommitPos,
+		prev: Vec<u8>,
+	},
+	Middle {
+		pos: CommitPos,
+		next: Vec<u8>,
+		prev: Vec<u8>,
+	},
+}
+
+impl Writeable for OutputPosEntry {
+	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
+		match self {
+			Self::Unique { pos } => {
+				OutputPosVariant::Unique.write(writer)?;
+				pos.write(writer)?;
+			}
+			Self::Head { pos, next } => {
+				OutputPosVariant::Head.write(writer)?;
+				pos.write(writer)?;
+				next.write(writer)?;
+			}
+			Self::Tail { pos, prev } => {
+				OutputPosVariant::Tail.write(writer)?;
+				pos.write(writer)?;
+				prev.write(writer)?;
+			}
+			Self::Middle { pos, next, prev } => {
+				OutputPosVariant::Middle.write(writer)?;
+				pos.write(writer)?;
+				next.write(writer)?;
+				prev.write(writer)?;
+			}
+		}
+		Ok(())
+	}
+}
+
+impl Readable for OutputPosEntry {
+	fn read(reader: &mut dyn Reader) -> Result<OutputPosEntry, ser::Error> {
+		let variant = OutputPosVariant::read(reader)?;
+		let entry = match variant {
+			OutputPosVariant::Unique => Self::Unique {
+				pos: CommitPos::read(reader)?,
+			},
+			OutputPosVariant::Head => Self::Head {
+				pos: CommitPos::read(reader)?,
+				next: Vec::<u8>::read(reader)?,
+			},
+			OutputPosVariant::Tail => Self::Tail {
+				pos: CommitPos::read(reader)?,
+				prev: Vec::<u8>::read(reader)?,
+			},
+			OutputPosVariant::Middle => Self::Middle {
+				pos: CommitPos::read(reader)?,
+				next: Vec::<u8>::read(reader)?,
+				prev: Vec::<u8>::read(reader)?,
+			},
+		};
+
+		Ok(entry)
 	}
 }
 

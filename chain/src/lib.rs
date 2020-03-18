@@ -24,6 +24,9 @@
 extern crate bitflags;
 
 #[macro_use]
+extern crate enum_primitive;
+
+#[macro_use]
 extern crate serde_derive;
 #[macro_use]
 extern crate log;
