@@ -455,6 +455,7 @@ pub enum OutputPosEntry {
 }
 
 impl Writeable for OutputPosEntry {
+	/// Write first byte representing the variant, followed by variant specific data.
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
 		match self {
 			Self::Unique { pos } => {
@@ -483,6 +484,7 @@ impl Writeable for OutputPosEntry {
 }
 
 impl Readable for OutputPosEntry {
+	/// Read the first byte to determine what needs to be read beyond that.
 	fn read(reader: &mut dyn Reader) -> Result<OutputPosEntry, ser::Error> {
 		let variant = OutputPosVariant::read(reader)?;
 		let entry = match variant {
@@ -505,6 +507,18 @@ impl Readable for OutputPosEntry {
 		};
 
 		Ok(entry)
+	}
+}
+
+impl OutputPosEntry {
+	/// Read the common pos from the various enum variants.
+	fn get_pos(&self) -> CommitPos {
+		match self {
+			Self::Unique { pos } => *pos,
+			Self::Head { pos, .. } => *pos,
+			Self::Tail { pos, .. } => *pos,
+			Self::Middle { pos, .. } => *pos,
+		}
 	}
 }
 
