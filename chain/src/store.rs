@@ -19,7 +19,7 @@ use crate::core::core::hash::{Hash, Hashed};
 use crate::core::core::{Block, BlockHeader, BlockSums};
 use crate::core::pow::Difficulty;
 use crate::core::ser::{self, ProtocolVersion, Readable, Reader, Writeable, Writer};
-use crate::types::{CommitPos, Tip};
+use crate::types::{OutputPos, Tip};
 use crate::util::secp::pedersen::Commitment;
 use croaring::Bitmap;
 use enum_primitive::FromPrimitive;
@@ -216,7 +216,7 @@ impl<'a> Batch<'a> {
 
 	/// We maintain a "spent" index for each full block to allow the output_pos
 	/// to be easily reverted during rewind.
-	pub fn save_spent_index(&self, h: &Hash, spent: &Vec<CommitPos>) -> Result<(), Error> {
+	pub fn save_spent_index(&self, h: &Hash, spent: &Vec<OutputPos>) -> Result<(), Error> {
 		self.db
 			.put_ser(&to_key(BLOCK_SPENT_PREFIX, &mut h.to_vec())[..], spent)?;
 		Ok(())
@@ -386,7 +386,7 @@ impl<'a> Batch<'a> {
 
 	/// Get the "spent index" from the db for the specified block.
 	/// If we need to rewind a block then we use this to "unspend" the spent outputs.
-	pub fn get_spent_index(&self, bh: &Hash) -> Result<Vec<CommitPos>, Error> {
+	pub fn get_spent_index(&self, bh: &Hash) -> Result<Vec<OutputPos>, Error> {
 		option_to_not_found(
 			self.db
 				.get_ser(&to_key(BLOCK_SPENT_PREFIX, &mut bh.to_vec())),
@@ -457,7 +457,7 @@ impl Readable for OutputPosEntryVariant {
 }
 
 pub enum OutputPosList {
-	Unique { pos: CommitPos },
+	Unique { pos: OutputPos },
 	Multi { head: u64, tail: u64 },
 }
 
@@ -486,7 +486,7 @@ impl Readable for OutputPosList {
 	fn read(reader: &mut dyn Reader) -> Result<OutputPosList, ser::Error> {
 		let entry = match OutputPosListVariant::read(reader)? {
 			OutputPosListVariant::Unique => OutputPosList::Unique {
-				pos: CommitPos::read(reader)?,
+				pos: OutputPos::read(reader)?,
 			},
 			OutputPosListVariant::Multi => OutputPosList::Multi {
 				head: reader.read_u64()?,
@@ -522,40 +522,49 @@ impl OutputPosList {
 		))
 	}
 
-	// pub fn push_entry(batch: &Batch<'_>, commit: Commitment, new_pos: CommitPos) -> Result<(), Error> {
-	// 	let current = OutputPosList::get_list(batch, commit)?;
-	//
-	// 	// turn current into old_current here, if head then create a middle etc.
-	// 	// let updated_current =
-	// 	match current {
-	// 		None => None,
-	// 		Some(OutputPosEntry::Unique{ pos }) => {
-	// 			OutputPosEntry::Tail{ pos,  }
-	// 		},
-	// 		Some(OutputPosEntry::Head{ pos, next, tail }) => {
-	//
-	// 			// let new_head = OutputPosEntry::Head {
-	// 			// 	pos: new_pos,
-	// 			// 	next: foo,
-	// 			// };
-	// 		},
-	// 		Some(_) => { panic!("should never happen"); }
-	// 	}
-	// 	Ok(())
-	// }
+	pub fn push_entry(
+		batch: &Batch<'_>,
+		commit: Commitment,
+		new_pos: OutputPos,
+	) -> Result<(), Error> {
+		match OutputPosList::get_list(batch, commit)? {
+			None => {
+				// create new "unique" and save to db
+			}
+			Some(OutputPosList::Unique { pos }) => {
+				// create tail based on current unique pos
+				// save tail to db
+				// create head based on new_pos
+				// save head to db
+				// save list itself with head and tail references
+			}
+			Some(OutputPosList::Multi { head, tail }) => {
+				// lookup entry for current head
+				// create new middle based on current head
+				// save new middle to db
+				// create new head based on new_pos
+				// save updated head to db
+				// save list itself with head and tail references
+			}
+		}
+		Ok(())
+	}
 }
 
+///
+/// TODO - OutputPos needs an OutputFeatures so we can reason about coinbase maturity.
+///
 pub enum OutputPosEntry {
 	Head {
-		pos: CommitPos,
+		pos: OutputPos,
 		next: u64,
 	},
 	Tail {
-		pos: CommitPos,
+		pos: OutputPos,
 		prev: u64,
 	},
 	Middle {
-		pos: CommitPos,
+		pos: OutputPos,
 		next: u64,
 		prev: u64,
 	},
@@ -591,15 +600,15 @@ impl Readable for OutputPosEntry {
 	fn read(reader: &mut dyn Reader) -> Result<OutputPosEntry, ser::Error> {
 		let entry = match OutputPosEntryVariant::read(reader)? {
 			OutputPosEntryVariant::Head => OutputPosEntry::Head {
-				pos: CommitPos::read(reader)?,
+				pos: OutputPos::read(reader)?,
 				next: reader.read_u64()?,
 			},
 			OutputPosEntryVariant::Tail => OutputPosEntry::Tail {
-				pos: CommitPos::read(reader)?,
+				pos: OutputPos::read(reader)?,
 				prev: reader.read_u64()?,
 			},
 			OutputPosEntryVariant::Middle => OutputPosEntry::Middle {
-				pos: CommitPos::read(reader)?,
+				pos: OutputPos::read(reader)?,
 				next: reader.read_u64()?,
 				prev: reader.read_u64()?,
 			},
@@ -610,7 +619,7 @@ impl Readable for OutputPosEntry {
 
 impl OutputPosEntry {
 	/// Read the common pos from the various enum variants.
-	fn get_pos(&self) -> CommitPos {
+	fn get_pos(&self) -> OutputPos {
 		match self {
 			Self::Head { pos, .. } => *pos,
 			Self::Tail { pos, .. } => *pos,

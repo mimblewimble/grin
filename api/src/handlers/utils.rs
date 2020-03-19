@@ -13,7 +13,7 @@
 // limitations under the License.
 
 use crate::chain;
-use crate::chain::types::CommitPos;
+use crate::chain::types::OutputPos;
 use crate::core::core::{OutputFeatures, OutputIdentifier};
 use crate::rest::*;
 use crate::types::*;
@@ -26,14 +26,14 @@ use std::sync::{Arc, Weak};
 // boilerplate of dealing with `Weak`.
 pub fn w<T>(weak: &Weak<T>) -> Result<Arc<T>, Error> {
 	weak.upgrade()
-		.ok_or_else(|| ErrorKind::Internal("failed to upgrade weak refernce".to_owned()).into())
+		.ok_or_else(|| ErrorKind::Internal("failed to upgrade weak reference".to_owned()).into())
 }
 
 /// Internal function to retrieves an output by a given commitment
 fn get_unspent(
 	chain: &Arc<chain::Chain>,
 	id: &str,
-) -> Result<Option<(CommitPos, OutputIdentifier)>, Error> {
+) -> Result<Option<(OutputPos, OutputIdentifier)>, Error> {
 	let c = util::from_hex(id)
 		.map_err(|_| ErrorKind::Argument(format!("Not a valid commitment: {}", id)))?;
 	let commit = Commitment::from_vec(c);

@@ -18,7 +18,7 @@ use chrono::prelude::{DateTime, Utc};
 use std::sync::Arc;
 
 use crate::core::core::hash::{Hash, Hashed, ZERO_HASH};
-use crate::core::core::{Block, BlockHeader, HeaderVersion};
+use crate::core::core::{Block, BlockHeader, HeaderVersion, OutputFeatures};
 use crate::core::pow::Difficulty;
 use crate::core::ser::{self, PMMRIndexHashable, Readable, Reader, Writeable, Writer};
 use crate::error::{Error, ErrorKind};
@@ -279,6 +279,38 @@ impl Writeable for CommitPos {
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
 		writer.write_u64(self.pos)?;
 		writer.write_u64(self.height)?;
+		Ok(())
+	}
+}
+
+#[derive(Clone, Copy, Debug)]
+pub struct OutputPos {
+	/// MMR position
+	pub pos: u64,
+	/// Block height
+	pub height: u64,
+	/// Features
+	pub features: OutputFeatures,
+}
+
+impl Readable for OutputPos {
+	fn read(reader: &mut dyn Reader) -> Result<OutputPos, ser::Error> {
+		let pos = reader.read_u64()?;
+		let height = reader.read_u64()?;
+		let features = OutputFeatures::read(reader)?;
+		Ok(OutputPos {
+			pos,
+			height,
+			features,
+		})
+	}
+}
+
+impl Writeable for OutputPos {
+	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
+		writer.write_u64(self.pos)?;
+		writer.write_u64(self.height)?;
+		self.features.write(writer)?;
 		Ok(())
 	}
 }
