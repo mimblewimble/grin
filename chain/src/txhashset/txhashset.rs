@@ -25,7 +25,7 @@ use crate::error::{Error, ErrorKind};
 use crate::store::{Batch, ChainStore};
 use crate::txhashset::bitmap_accumulator::BitmapAccumulator;
 use crate::txhashset::{RewindableKernelView, UTXOView};
-use crate::types::{CommitPos, OutputRoots, Tip, TxHashSetRoots, TxHashsetWriteStatus};
+use crate::types::{OutputPos, OutputRoots, Tip, TxHashSetRoots, TxHashsetWriteStatus};
 use crate::util::secp::pedersen::{Commitment, RangeProof};
 use crate::util::{file, secp_static, zip};
 use croaring::Bitmap;
@@ -217,7 +217,7 @@ impl TxHashSet {
 	/// Check if an output is unspent.
 	/// We look in the index to find the output MMR pos.
 	/// Then we check the entry in the output MMR and confirm the hash matches.
-	pub fn get_unspent(&self, output_id: &OutputIdentifier) -> Result<Option<CommitPos>, Error> {
+	pub fn get_unspent(&self, output_id: &OutputIdentifier) -> Result<Option<OutputPos>, Error> {
 		let commit = output_id.commit;
 		match self.commit_index.get_output_pos_height(&commit) {
 			Ok(Some((pos, height))) => {
@@ -225,7 +225,11 @@ impl TxHashSet {
 					ReadonlyPMMR::at(&self.output_pmmr_h.backend, self.output_pmmr_h.last_pos);
 				if let Some(out) = output_pmmr.get_data(pos) {
 					if out == *output_id {
-						Ok(Some(CommitPos { pos, height }))
+						Ok(Some(OutputPos {
+							pos,
+							height,
+							features: output_id.features,
+						}))
 					} else {
 						Ok(None)
 					}
@@ -969,7 +973,7 @@ impl<'a> Extension<'a> {
 		)
 	}
 
-	fn apply_input(&mut self, input: &Input, batch: &Batch<'_>) -> Result<CommitPos, Error> {
+	fn apply_input(&mut self, input: &Input, batch: &Batch<'_>) -> Result<OutputPos, Error> {
 		let commit = input.commitment();
 		if let Some((pos, height)) = batch.get_output_pos_height(&commit)? {
 			// First check this input corresponds to an existing entry in the output MMR.
@@ -987,7 +991,11 @@ impl<'a> Extension<'a> {
 					self.rproof_pmmr
 						.prune(pos)
 						.map_err(ErrorKind::TxHashSetErr)?;
-					Ok(CommitPos { pos, height })
+					Ok(OutputPos {
+						pos,
+						height,
+						features: input.features,
+					})
 				}
 				Ok(false) => Err(ErrorKind::AlreadySpent(commit).into()),
 				Err(e) => Err(ErrorKind::TxHashSetErr(e).into()),
