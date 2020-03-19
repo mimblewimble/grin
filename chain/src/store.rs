@@ -24,7 +24,7 @@ use crate::util::secp::pedersen::Commitment;
 use croaring::Bitmap;
 use enum_primitive::FromPrimitive;
 use grin_store as store;
-use grin_store::{option_to_not_found, to_key, Error, SerIterator};
+use grin_store::{option_to_not_found, to_key, to_key_u64, Error, SerIterator};
 use std::convert::TryInto;
 use std::sync::Arc;
 
@@ -36,6 +36,8 @@ const HEAD_PREFIX: u8 = b'H';
 const TAIL_PREFIX: u8 = b'T';
 const HEADER_HEAD_PREFIX: u8 = b'G';
 const OUTPUT_POS_PREFIX: u8 = b'p';
+const NEW_OUTPUT_POS_PREFIX: u8 = b'P';
+
 const BLOCK_INPUT_BITMAP_PREFIX: u8 = b'B';
 const BLOCK_SUMS_PREFIX: u8 = b'M';
 const BLOCK_SPENT_PREFIX: u8 = b'S';
@@ -387,42 +389,147 @@ impl<'a> Batch<'a> {
 
 enum_from_primitive! {
 	#[derive(Copy, Clone, Debug, PartialEq)]
-	enum OutputPosVariant {
+	enum OutputPosListVariant {
 		Unique = 0,
-		Head = 1,
-		Tail = 2,
-		Middle = 3,
+		Multi = 1,
 	}
 }
 
-impl Writeable for OutputPosVariant {
+impl Writeable for OutputPosListVariant {
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
 		writer.write_u8(*self as u8)
 	}
 }
 
-impl Readable for OutputPosVariant {
-	fn read(reader: &mut dyn Reader) -> Result<OutputPosVariant, ser::Error> {
-		OutputPosVariant::from_u8(reader.read_u8()?).ok_or(ser::Error::CorruptedData)
+impl Readable for OutputPosListVariant {
+	fn read(reader: &mut dyn Reader) -> Result<OutputPosListVariant, ser::Error> {
+		OutputPosListVariant::from_u8(reader.read_u8()?).ok_or(ser::Error::CorruptedData)
 	}
 }
 
+enum_from_primitive! {
+	#[derive(Copy, Clone, Debug, PartialEq)]
+	enum OutputPosEntryVariant {
+		Head = 2,
+		Tail = 3,
+		Middle = 4,
+	}
+}
+
+impl Writeable for OutputPosEntryVariant {
+	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
+		writer.write_u8(*self as u8)
+	}
+}
+
+impl Readable for OutputPosEntryVariant {
+	fn read(reader: &mut dyn Reader) -> Result<OutputPosEntryVariant, ser::Error> {
+		OutputPosEntryVariant::from_u8(reader.read_u8()?).ok_or(ser::Error::CorruptedData)
+	}
+}
+
+pub enum OutputPosList {
+	Unique { pos: CommitPos },
+	Multi { head: u64, tail: u64 },
+}
+
+impl Writeable for OutputPosList {
+	/// Write first byte representing the variant, followed by variant specific data.
+	/// "Unique" is optimized with embedded "pos".
+	/// "Multi" has references to "head" and "tail".
+	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
+		match self {
+			OutputPosList::Unique { pos } => {
+				OutputPosListVariant::Unique.write(writer)?;
+				pos.write(writer)?;
+			}
+			OutputPosList::Multi { head, tail } => {
+				OutputPosListVariant::Multi.write(writer)?;
+				writer.write_u64(*head)?;
+				writer.write_u64(*tail)?;
+			}
+		}
+		Ok(())
+	}
+}
+
+impl Readable for OutputPosList {
+	/// Read the first byte to determine what needs to be read beyond that.
+	fn read(reader: &mut dyn Reader) -> Result<OutputPosList, ser::Error> {
+		let entry = match OutputPosListVariant::read(reader)? {
+			OutputPosListVariant::Unique => OutputPosList::Unique {
+				pos: CommitPos::read(reader)?,
+			},
+			OutputPosListVariant::Multi => OutputPosList::Multi {
+				head: reader.read_u64()?,
+				tail: reader.read_u64()?,
+			},
+		};
+		Ok(entry)
+	}
+}
+
+impl OutputPosList {
+	/// Returns either a "unique" with embedded "pos" or a "list" with "head" and "tail".
+	/// Key is "prefix|commit".
+	/// Note the key for an individual entry in the list is "prefix|commit|pos".
+	pub fn get_list(batch: &Batch<'_>, commit: Commitment) -> Result<Option<OutputPosList>, Error> {
+		batch.db.get_ser(&to_key(
+			NEW_OUTPUT_POS_PREFIX,
+			&mut commit.as_ref().to_vec(),
+		))
+	}
+
+	/// Returns one of "head", "tail" or "middle" entry variants.
+	/// Key is "prefix|commit|pos".
+	pub fn get_entry(
+		batch: &Batch<'_>,
+		commit: Commitment,
+		pos: u64,
+	) -> Result<Option<OutputPosEntry>, Error> {
+		batch.db.get_ser(&to_key_u64(
+			NEW_OUTPUT_POS_PREFIX,
+			&mut commit.as_ref().to_vec(),
+			pos,
+		))
+	}
+
+	// pub fn push_entry(batch: &Batch<'_>, commit: Commitment, new_pos: CommitPos) -> Result<(), Error> {
+	// 	let current = OutputPosList::get_list(batch, commit)?;
+	//
+	// 	// turn current into old_current here, if head then create a middle etc.
+	// 	// let updated_current =
+	// 	match current {
+	// 		None => None,
+	// 		Some(OutputPosEntry::Unique{ pos }) => {
+	// 			OutputPosEntry::Tail{ pos,  }
+	// 		},
+	// 		Some(OutputPosEntry::Head{ pos, next, tail }) => {
+	//
+	// 			// let new_head = OutputPosEntry::Head {
+	// 			// 	pos: new_pos,
+	// 			// 	next: foo,
+	// 			// };
+	// 		},
+	// 		Some(_) => { panic!("should never happen"); }
+	// 	}
+	// 	Ok(())
+	// }
+}
+
 pub enum OutputPosEntry {
-	Unique {
-		pos: CommitPos,
-	},
 	Head {
 		pos: CommitPos,
-		next: Vec<u8>,
+		next: u64,
 	},
 	Tail {
 		pos: CommitPos,
-		prev: Vec<u8>,
+		prev: u64,
 	},
 	Middle {
 		pos: CommitPos,
-		next: Vec<u8>,
-		prev: Vec<u8>,
+		next: u64,
+		prev: u64,
 	},
 }
 
@@ -430,25 +537,21 @@ impl Writeable for OutputPosEntry {
 	/// Write first byte representing the variant, followed by variant specific data.
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
 		match self {
-			Self::Unique { pos } => {
-				OutputPosVariant::Unique.write(writer)?;
+			OutputPosEntry::Head { pos, next } => {
+				OutputPosEntryVariant::Head.write(writer)?;
 				pos.write(writer)?;
+				writer.write_u64(*next)?;
 			}
-			Self::Head { pos, next } => {
-				OutputPosVariant::Head.write(writer)?;
+			OutputPosEntry::Tail { pos, prev } => {
+				OutputPosEntryVariant::Tail.write(writer)?;
 				pos.write(writer)?;
-				next.write(writer)?;
+				writer.write_u64(*prev)?;
 			}
-			Self::Tail { pos, prev } => {
-				OutputPosVariant::Tail.write(writer)?;
+			OutputPosEntry::Middle { pos, next, prev } => {
+				OutputPosEntryVariant::Middle.write(writer)?;
 				pos.write(writer)?;
-				prev.write(writer)?;
-			}
-			Self::Middle { pos, next, prev } => {
-				OutputPosVariant::Middle.write(writer)?;
-				pos.write(writer)?;
-				next.write(writer)?;
-				prev.write(writer)?;
+				writer.write_u64(*next)?;
+				writer.write_u64(*prev)?;
 			}
 		}
 		Ok(())
@@ -458,26 +561,21 @@ impl Writeable for OutputPosEntry {
 impl Readable for OutputPosEntry {
 	/// Read the first byte to determine what needs to be read beyond that.
 	fn read(reader: &mut dyn Reader) -> Result<OutputPosEntry, ser::Error> {
-		let variant = OutputPosVariant::read(reader)?;
-		let entry = match variant {
-			OutputPosVariant::Unique => Self::Unique {
+		let entry = match OutputPosEntryVariant::read(reader)? {
+			OutputPosEntryVariant::Head => OutputPosEntry::Head {
 				pos: CommitPos::read(reader)?,
+				next: reader.read_u64()?,
 			},
-			OutputPosVariant::Head => Self::Head {
+			OutputPosEntryVariant::Tail => OutputPosEntry::Tail {
 				pos: CommitPos::read(reader)?,
-				next: Vec::<u8>::read(reader)?,
+				prev: reader.read_u64()?,
 			},
-			OutputPosVariant::Tail => Self::Tail {
+			OutputPosEntryVariant::Middle => OutputPosEntry::Middle {
 				pos: CommitPos::read(reader)?,
-				prev: Vec::<u8>::read(reader)?,
-			},
-			OutputPosVariant::Middle => Self::Middle {
-				pos: CommitPos::read(reader)?,
-				next: Vec::<u8>::read(reader)?,
-				prev: Vec::<u8>::read(reader)?,
+				next: reader.read_u64()?,
+				prev: reader.read_u64()?,
 			},
 		};
-
 		Ok(entry)
 	}
 }
@@ -486,7 +584,6 @@ impl OutputPosEntry {
 	/// Read the common pos from the various enum variants.
 	fn get_pos(&self) -> CommitPos {
 		match self {
-			Self::Unique { pos } => *pos,
 			Self::Head { pos, .. } => *pos,
 			Self::Tail { pos, .. } => *pos,
 			Self::Middle { pos, .. } => *pos,
