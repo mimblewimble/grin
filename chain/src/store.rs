@@ -508,6 +508,20 @@ impl OutputPosList {
 		))
 	}
 
+	/// Oldest spendable instance if multiple duplicate unspent outputs exist.
+	/// Takes current height for coinbase maturity check.
+	/// A plain output is always spendable.
+	/// A coinbase output must have matured to be spendable.
+	/// This will normally be the "tail" of the output_pos list but not in all cases.
+	/// An plain output will take precedence over an older yet immature coinbase output.
+	pub fn get_spendable(
+		batch: &Batch<'_>,
+		commit: Commitment,
+		height: u64,
+	) -> Result<Option<OutputPosEntry>, Error> {
+		panic!("not yet implemented");
+	}
+
 	/// Returns one of "head", "tail" or "middle" entry variants.
 	/// Key is "prefix|commit|pos".
 	pub fn get_entry(
@@ -515,11 +529,15 @@ impl OutputPosList {
 		commit: Commitment,
 		pos: u64,
 	) -> Result<Option<OutputPosEntry>, Error> {
-		batch.db.get_ser(&to_key_u64(
-			NEW_OUTPUT_POS_PREFIX,
-			&mut commit.as_ref().to_vec(),
-			pos,
-		))
+		batch.db.get_ser(&Self::entry_key(commit, pos))
+	}
+
+	fn list_key(commit: Commitment) -> Vec<u8> {
+		to_key(NEW_OUTPUT_POS_PREFIX, &mut commit.as_ref().to_vec())
+	}
+
+	fn entry_key(commit: Commitment, pos: u64) -> Vec<u8> {
+		to_key_u64(NEW_OUTPUT_POS_PREFIX, &mut commit.as_ref().to_vec(), pos)
 	}
 
 	pub fn push_entry(
@@ -527,16 +545,31 @@ impl OutputPosList {
 		commit: Commitment,
 		new_pos: OutputPos,
 	) -> Result<(), Error> {
-		match OutputPosList::get_list(batch, commit)? {
+		match Self::get_list(batch, commit)? {
 			None => {
-				// create new "unique" and save to db
+				let list = Self::Unique { pos: new_pos };
+				batch.db.put_ser(&Self::list_key(commit), &list)?;
 			}
-			Some(OutputPosList::Unique { pos }) => {
-				// create tail based on current unique pos
-				// save tail to db
-				// create head based on new_pos
-				// save head to db
-				// save list itself with head and tail references
+			Some(OutputPosList::Unique { pos: current_pos }) => {
+				let head = OutputPosEntry::Head {
+					pos: new_pos,
+					next: current_pos.pos,
+				};
+				let tail = OutputPosEntry::Tail {
+					pos: current_pos,
+					prev: new_pos.pos,
+				};
+				let list = OutputPosList::Multi {
+					head: new_pos.pos,
+					tail: current_pos.pos,
+				};
+				batch
+					.db
+					.put_ser(&Self::entry_key(commit, new_pos.pos), &head)?;
+				batch
+					.db
+					.put_ser(&Self::entry_key(commit, current_pos.pos), &tail)?;
+				batch.db.put_ser(&Self::list_key(commit), &list)?;
 			}
 			Some(OutputPosList::Multi { head, tail }) => {
 				// lookup entry for current head
@@ -551,9 +584,6 @@ impl OutputPosList {
 	}
 }
 
-///
-/// TODO - OutputPos needs an OutputFeatures so we can reason about coinbase maturity.
-///
 pub enum OutputPosEntry {
 	Head {
 		pos: OutputPos,
