@@ -64,9 +64,7 @@ impl ChainStore {
 			db: db_with_version,
 		}
 	}
-}
 
-impl ChainStore {
 	/// The current chain head.
 	pub fn head(&self) -> Result<Tip, Error> {
 		option_to_not_found(self.db.get_ser(&[HEAD_PREFIX]), || "HEAD".to_owned())
@@ -428,6 +426,7 @@ impl Readable for OutputPosEntryVariant {
 	}
 }
 
+#[derive(Copy, Clone, Debug, PartialEq)]
 pub enum OutputPosList {
 	Unique { pos: OutputPos },
 	Multi { head: u64, tail: u64 },
@@ -544,12 +543,34 @@ impl OutputPosList {
 				batch.db.put_ser(&Self::list_key(commit), &list)?;
 			}
 			Some(OutputPosList::Multi { head, tail }) => {
-				// lookup entry for current head
-				// create new middle based on current head
-				// save new middle to db
-				// create new head based on new_pos
-				// save updated head to db
-				// save list itself with head and tail references
+				if let Some(OutputPosEntry::Head {
+					pos: current_pos,
+					next: current_next,
+				}) = Self::get_entry(batch, commit, head)?
+				{
+					let head = OutputPosEntry::Head {
+						pos: new_pos,
+						next: current_pos.pos,
+					};
+					let middle = OutputPosEntry::Middle {
+						pos: current_pos,
+						next: current_next,
+						prev: new_pos.pos,
+					};
+					let list = OutputPosList::Multi {
+						head: new_pos.pos,
+						tail,
+					};
+					batch
+						.db
+						.put_ser(&Self::entry_key(commit, new_pos.pos), &head)?;
+					batch
+						.db
+						.put_ser(&Self::entry_key(commit, current_pos.pos), &middle)?;
+					batch.db.put_ser(&Self::list_key(commit), &list)?;
+				} else {
+					return Err(Error::OtherErr("expected head to be head variant".into()));
+				}
 			}
 		}
 		Ok(())
