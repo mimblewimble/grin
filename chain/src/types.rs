@@ -283,7 +283,7 @@ impl Writeable for CommitPos {
 	}
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub struct OutputPos {
 	/// MMR position
 	pub pos: u64,
