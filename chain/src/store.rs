@@ -603,6 +603,28 @@ impl OutputPosList {
 		}
 		Ok(())
 	}
+
+	/// Pop the head of the list.
+	/// Returns the output_pos.
+	/// Returns None if list was empty.
+	pub fn pop_entry(batch: &Batch<'_>, commit: Commitment) -> Result<Option<OutputPos>, Error> {
+		match Self::get_list(batch, commit)? {
+			None => Ok(None),
+			Some(OutputPosList::Unique { pos }) => {
+				// TODO - delete the list itself.
+
+				Ok(Some(pos))
+			}
+			Some(OutputPosList::Multi { head, tail }) => {
+				// read head from db
+				// read next one
+				// update next to a head if it was a middle
+				// update list head
+				// update list to a unique if next is a tail
+				Ok(None)
+			}
+		}
+	}
 }
 
 pub enum OutputPosEntry {
