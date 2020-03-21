@@ -232,7 +232,7 @@ impl TxHashSet {
 					ReadonlyPMMR::at(&self.output_pmmr_h.backend, self.output_pmmr_h.last_pos);
 				if let Some(out) = output_pmmr.get_data(pos.pos) {
 					if OutputIdentifier::from(out) == *output_id {
-						Ok(Some(CommitPos { pos, height }))
+						Ok(Some(pos))
 					} else {
 						Ok(None)
 					}
@@ -416,7 +416,7 @@ impl TxHashSet {
 		let mut removed_count = 0;
 		for (key, pos) in batch.output_pos_iter()? {
 			if let Some(out) = output_pmmr.get_data(pos.pos) {
-				if let Ok(pos_via_mmr) = batch.get_output_pos_height(&out.commitment())? {
+				if let Some(pos_via_mmr) = batch.get_output_pos_height(&out.commitment())? {
 					// If the pos matches and the index key matches the commitment
 					// then keep the entry, other we want to clean it up.
 					if pos == pos_via_mmr && batch.is_match_output_pos_key(&key, &out.commitment())
@@ -1014,6 +1014,7 @@ impl<'a> Extension<'a> {
 
 	/// Apply a new block to the current txhashet extension (output, rangeproof, kernel MMRs).
 	pub fn apply_block(&mut self, b: &Block, batch: &Batch<'_>) -> Result<(), Error> {
+		let height = b.header.height;
 		let mut affected_pos = vec![];
 
 		// Apply the output to the output and rangeproof MMRs.
@@ -1037,6 +1038,9 @@ impl<'a> Extension<'a> {
 		}
 		batch.save_spent_index(&b.hash(), &spent)?;
 
+		// Apply each kernel.
+		// Update the kernel_pos index to reflect the new kernels.
+		// Build the kernel "undo list" for this block.
 		let mut kernel_undo_list = vec![];
 		for kernel in b.kernels() {
 			if let Ok(prev_pos) = batch.get_kernel_pos_height(&kernel.excess) {
