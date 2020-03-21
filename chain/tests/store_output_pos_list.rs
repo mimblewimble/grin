@@ -99,6 +99,20 @@ fn test_store_output_pos_list() {
 		Ok(Some(OutputPosList::Multi { head: 3, tail: 1 })),
 	);
 
+	assert_eq!(
+		OutputPosList::pop_entry(&batch, commit,),
+		Ok(Some(OutputPos {
+			pos: 3,
+			height: 3,
+			features: OutputFeatures::Plain,
+		})),
+	);
+
+	assert_eq!(
+		OutputPosList::get_list(&batch, commit),
+		Ok(Some(OutputPosList::Multi { head: 2, tail: 1 })),
+	);
+
 	// Cleanup chain directory
 	clean_output_dir(chain_dir);
 }
