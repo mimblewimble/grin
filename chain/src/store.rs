@@ -36,7 +36,8 @@ const HEAD_PREFIX: u8 = b'H';
 const TAIL_PREFIX: u8 = b'T';
 const HEADER_HEAD_PREFIX: u8 = b'G';
 const OUTPUT_POS_PREFIX: u8 = b'p';
-const NEW_OUTPUT_POS_PREFIX: u8 = b'P';
+const NEW_PLAIN_OUTPUT_POS_PREFIX: u8 = b'P';
+const NEW_COINBASE_OUTPUT_POS_PREFIX: u8 = b'C';
 
 const BLOCK_INPUT_BITMAP_PREFIX: u8 = b'B';
 const BLOCK_SUMS_PREFIX: u8 = b'M';
@@ -426,45 +427,44 @@ impl Readable for ListEntryVariant {
 	}
 }
 
-trait FooLinkedList {
+pub trait FooLinkedList {
 	/// List type
 	type List: Readable + Writeable;
 
 	/// List entry type
 	type Entry: FooListEntry;
 
-	fn list_key(commit: Commitment) -> Vec<u8> {
-		to_key(NEW_OUTPUT_POS_PREFIX, &mut commit.as_ref().to_vec())
-	}
+	fn list_key(&self, commit: Commitment) -> Vec<u8>;
 
-	fn entry_key(commit: Commitment, pos: u64) -> Vec<u8> {
-		to_key_u64(NEW_OUTPUT_POS_PREFIX, &mut commit.as_ref().to_vec(), pos)
-	}
+	fn entry_key(&self, commit: Commitment, pos: u64) -> Vec<u8>;
 
 	/// Returns either a "unique" with embedded "pos" or a "list" with "head" and "tail".
 	/// Key is "prefix|commit".
 	/// Note the key for an individual entry in the list is "prefix|commit|pos".
-	fn get_list(batch: &Batch<'_>, commit: Commitment) -> Result<Option<Self::List>, Error> {
-		batch.db.get_ser(&Self::list_key(commit))
+	fn get_list(&self, batch: &Batch<'_>, commit: Commitment) -> Result<Option<Self::List>, Error> {
+		batch.db.get_ser(&self.list_key(commit))
 	}
 
 	/// Returns one of "head", "tail" or "middle" entry variants.
 	/// Key is "prefix|commit|pos".
 	fn get_entry(
+		&self,
 		batch: &Batch<'_>,
 		commit: Commitment,
 		pos: u64,
 	) -> Result<Option<Self::Entry>, Error> {
-		batch.db.get_ser(&Self::entry_key(commit, pos))
+		batch.db.get_ser(&self.entry_key(commit, pos))
 	}
 
 	fn push_entry(
+		&self,
 		batch: &Batch<'_>,
 		commit: Commitment,
 		new_pos: <Self::Entry as FooListEntry>::Pos,
 	) -> Result<(), Error>;
 
 	fn pop_entry(
+		&self,
 		batch: &Batch<'_>,
 		commit: Commitment,
 	) -> Result<Option<<Self::Entry as FooListEntry>::Pos>, Error>;
@@ -518,18 +518,46 @@ where
 	}
 }
 
-impl<T> FooLinkedList for LinkedList<T>
+pub struct MyLinkedList<T> {
+	phantom: std::marker::PhantomData<*const T>,
+	prefix: u8,
+}
+
+pub fn output_plain_index() -> MyLinkedList<OutputPos> {
+	MyLinkedList {
+		phantom: std::marker::PhantomData,
+		prefix: NEW_PLAIN_OUTPUT_POS_PREFIX,
+	}
+}
+
+pub fn output_coinbase_index() -> MyLinkedList<OutputPos> {
+	MyLinkedList {
+		phantom: std::marker::PhantomData,
+		prefix: NEW_COINBASE_OUTPUT_POS_PREFIX,
+	}
+}
+
+// TODO - We need a struct *and* an enum. The struct will handle the specific key prefixes etc.
+impl<T> FooLinkedList for MyLinkedList<T>
 where
 	T: PosEntry,
 {
 	type List = LinkedList<T>;
 	type Entry = ListEntry<T>;
 
+	fn list_key(&self, commit: Commitment) -> Vec<u8> {
+		to_key(self.prefix, &mut commit.as_ref().to_vec())
+	}
+
+	fn entry_key(&self, commit: Commitment, pos: u64) -> Vec<u8> {
+		to_key_u64(self.prefix, &mut commit.as_ref().to_vec(), pos)
+	}
+
 	/// Pop the head of the list.
 	/// Returns the output_pos.
 	/// Returns None if list was empty.
-	fn pop_entry(batch: &Batch<'_>, commit: Commitment) -> Result<Option<T>, Error> {
-		match Self::get_list(batch, commit)? {
+	fn pop_entry(&self, batch: &Batch<'_>, commit: Commitment) -> Result<Option<T>, Error> {
+		match self.get_list(batch, commit)? {
 			None => Ok(None),
 			Some(LinkedList::Unique { pos }) => {
 				// TODO - delete the list itself.
@@ -547,11 +575,11 @@ where
 		}
 	}
 
-	fn push_entry(batch: &Batch<'_>, commit: Commitment, new_pos: T) -> Result<(), Error> {
-		match Self::get_list(batch, commit)? {
+	fn push_entry(&self, batch: &Batch<'_>, commit: Commitment, new_pos: T) -> Result<(), Error> {
+		match self.get_list(batch, commit)? {
 			None => {
-				let list = Self::Unique { pos: new_pos };
-				batch.db.put_ser(&Self::list_key(commit), &list)?;
+				let list = LinkedList::Unique { pos: new_pos };
+				batch.db.put_ser(&self.list_key(commit), &list)?;
 			}
 			Some(LinkedList::Unique { pos: current_pos }) => {
 				let head = ListEntry::Head {
@@ -568,17 +596,17 @@ where
 				};
 				batch
 					.db
-					.put_ser(&Self::entry_key(commit, new_pos.pos()), &head)?;
+					.put_ser(&self.entry_key(commit, new_pos.pos()), &head)?;
 				batch
 					.db
-					.put_ser(&Self::entry_key(commit, current_pos.pos()), &tail)?;
-				batch.db.put_ser(&Self::list_key(commit), &list)?;
+					.put_ser(&self.entry_key(commit, current_pos.pos()), &tail)?;
+				batch.db.put_ser(&self.list_key(commit), &list)?;
 			}
 			Some(LinkedList::Multi { head, tail }) => {
 				if let Some(ListEntry::Head {
 					pos: current_pos,
 					next: current_next,
-				}) = Self::get_entry(batch, commit, head)?
+				}) = self.get_entry(batch, commit, head)?
 				{
 					let head = ListEntry::Head {
 						pos: new_pos,
@@ -595,11 +623,11 @@ where
 					};
 					batch
 						.db
-						.put_ser(&Self::entry_key(commit, new_pos.pos()), &head)?;
+						.put_ser(&self.entry_key(commit, new_pos.pos()), &head)?;
 					batch
 						.db
-						.put_ser(&Self::entry_key(commit, current_pos.pos()), &middle)?;
-					batch.db.put_ser(&Self::list_key(commit), &list)?;
+						.put_ser(&self.entry_key(commit, current_pos.pos()), &middle)?;
+					batch.db.put_ser(&self.list_key(commit), &list)?;
 				} else {
 					return Err(Error::OtherErr("expected head to be head variant".into()));
 				}
@@ -609,7 +637,7 @@ where
 	}
 }
 
-trait PosEntry: Readable + Writeable + Copy {
+pub trait PosEntry: Readable + Writeable + Copy {
 	fn pos(&self) -> u64;
 }
 
@@ -619,7 +647,7 @@ impl PosEntry for OutputPos {
 	}
 }
 
-trait FooListEntry: Readable + Writeable {
+pub trait FooListEntry: Readable + Writeable {
 	type Pos: PosEntry;
 
 	fn get_pos(&self) -> Self::Pos;
