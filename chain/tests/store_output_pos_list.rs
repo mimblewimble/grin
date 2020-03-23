@@ -16,7 +16,8 @@ use grin_chain as chain;
 use grin_core as core;
 use grin_util as util;
 
-use crate::chain::store::{self, ChainStore, FooLinkedList, LinkedList};
+use crate::chain::linked_list::{self, FooLinkedList, LinkedList};
+use crate::chain::store::{self, ChainStore};
 use crate::chain::types::{CommitPos, OutputPos};
 use crate::core::core::OutputFeatures;
 use crate::util::secp::pedersen::Commitment;
@@ -37,7 +38,7 @@ fn test_store_output_pos_list() {
 
 	let commit = Commitment::from_vec(vec![]);
 
-	let index = store::output_plain_index();
+	let index = linked_list::output_plain_index();
 
 	assert_eq!(index.get_list(&batch, commit), Ok(None));
 
