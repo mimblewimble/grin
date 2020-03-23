@@ -19,7 +19,7 @@ use crate::core::core::hash::{Hash, Hashed};
 use crate::core::core::{Block, BlockHeader, BlockSums};
 use crate::core::pow::Difficulty;
 use crate::core::ser::{self, ProtocolVersion, Readable, Reader, Writeable, Writer};
-use crate::types::{OutputPos, Tip};
+use crate::types::{CommitPos, OutputPos, Tip};
 use crate::util::secp::pedersen::Commitment;
 use croaring::Bitmap;
 use enum_primitive::FromPrimitive;
@@ -38,6 +38,8 @@ const HEADER_HEAD_PREFIX: u8 = b'G';
 const OUTPUT_POS_PREFIX: u8 = b'p';
 const NEW_PLAIN_OUTPUT_POS_PREFIX: u8 = b'P';
 const NEW_COINBASE_OUTPUT_POS_PREFIX: u8 = b'C';
+
+const KERNEL_POS_PREFIX: u8 = b'K';
 
 const BLOCK_INPUT_BITMAP_PREFIX: u8 = b'B';
 const BLOCK_SUMS_PREFIX: u8 = b'M';
@@ -537,7 +539,13 @@ pub fn output_coinbase_index() -> MyLinkedList<OutputPos> {
 	}
 }
 
-// TODO - We need a struct *and* an enum. The struct will handle the specific key prefixes etc.
+pub fn kernel_index() -> MyLinkedList<CommitPos> {
+	MyLinkedList {
+		phantom: std::marker::PhantomData,
+		prefix: KERNEL_POS_PREFIX,
+	}
+}
+
 impl<T> FooLinkedList for MyLinkedList<T>
 where
 	T: PosEntry,
