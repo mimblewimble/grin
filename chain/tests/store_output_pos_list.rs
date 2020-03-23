@@ -16,8 +16,8 @@ use grin_chain as chain;
 use grin_core as core;
 use grin_util as util;
 
-use crate::chain::store::{ChainStore, OutputPosList};
-use crate::chain::types::OutputPos;
+use crate::chain::store::{self, ChainStore, FooLinkedList, LinkedList};
+use crate::chain::types::{CommitPos, OutputPos};
 use crate::core::core::OutputFeatures;
 use crate::util::secp::pedersen::Commitment;
 mod chain_test_helper;
@@ -37,10 +37,12 @@ fn test_store_output_pos_list() {
 
 	let commit = Commitment::from_vec(vec![]);
 
-	assert_eq!(OutputPosList::get_list(&batch, commit), Ok(None));
+	let index = store::output_plain_index();
+
+	assert_eq!(index.get_list(&batch, commit), Ok(None));
 
 	assert_eq!(
-		OutputPosList::push_entry(
+		index.push_entry(
 			&batch,
 			commit,
 			OutputPos {
@@ -53,8 +55,8 @@ fn test_store_output_pos_list() {
 	);
 
 	assert_eq!(
-		OutputPosList::get_list(&batch, commit),
-		Ok(Some(OutputPosList::Unique {
+		index.get_list(&batch, commit),
+		Ok(Some(LinkedList::Unique {
 			pos: OutputPos {
 				pos: 1,
 				height: 1,
@@ -64,7 +66,7 @@ fn test_store_output_pos_list() {
 	);
 
 	assert_eq!(
-		OutputPosList::push_entry(
+		index.push_entry(
 			&batch,
 			commit,
 			OutputPos {
@@ -77,12 +79,12 @@ fn test_store_output_pos_list() {
 	);
 
 	assert_eq!(
-		OutputPosList::get_list(&batch, commit),
-		Ok(Some(OutputPosList::Multi { head: 2, tail: 1 })),
+		index.get_list(&batch, commit),
+		Ok(Some(LinkedList::Multi { head: 2, tail: 1 })),
 	);
 
 	assert_eq!(
-		OutputPosList::push_entry(
+		index.push_entry(
 			&batch,
 			commit,
 			OutputPos {
@@ -95,12 +97,12 @@ fn test_store_output_pos_list() {
 	);
 
 	assert_eq!(
-		OutputPosList::get_list(&batch, commit),
-		Ok(Some(OutputPosList::Multi { head: 3, tail: 1 })),
+		index.get_list(&batch, commit),
+		Ok(Some(LinkedList::Multi { head: 3, tail: 1 })),
 	);
 
 	assert_eq!(
-		OutputPosList::pop_entry(&batch, commit,),
+		index.pop_entry(&batch, commit,),
 		Ok(Some(OutputPos {
 			pos: 3,
 			height: 3,
@@ -109,8 +111,8 @@ fn test_store_output_pos_list() {
 	);
 
 	assert_eq!(
-		OutputPosList::get_list(&batch, commit),
-		Ok(Some(OutputPosList::Multi { head: 2, tail: 1 })),
+		index.get_list(&batch, commit),
+		Ok(Some(LinkedList::Multi { head: 2, tail: 1 })),
 	);
 
 	// Cleanup chain directory
