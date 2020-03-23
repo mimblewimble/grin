@@ -415,121 +415,51 @@ impl<'a> Batch<'a> {
 
 enum_from_primitive! {
 	#[derive(Copy, Clone, Debug, PartialEq)]
-	enum OutputPosListVariant {
+	enum LinkedListVariant {
 		Unique = 0,
 		Multi = 1,
 	}
 }
 
-impl Writeable for OutputPosListVariant {
+impl Writeable for LinkedListVariant {
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
 		writer.write_u8(*self as u8)
 	}
 }
 
-impl Readable for OutputPosListVariant {
-	fn read(reader: &mut dyn Reader) -> Result<OutputPosListVariant, ser::Error> {
-		OutputPosListVariant::from_u8(reader.read_u8()?).ok_or(ser::Error::CorruptedData)
+impl Readable for LinkedListVariant {
+	fn read(reader: &mut dyn Reader) -> Result<LinkedListVariant, ser::Error> {
+		LinkedListVariant::from_u8(reader.read_u8()?).ok_or(ser::Error::CorruptedData)
 	}
 }
 
 enum_from_primitive! {
 	#[derive(Copy, Clone, Debug, PartialEq)]
-	enum OutputPosEntryVariant {
+	enum ListEntryVariant {
 		Head = 2,
 		Tail = 3,
 		Middle = 4,
 	}
 }
 
-impl Writeable for OutputPosEntryVariant {
+impl Writeable for ListEntryVariant {
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
 		writer.write_u8(*self as u8)
 	}
 }
 
-impl Readable for OutputPosEntryVariant {
-	fn read(reader: &mut dyn Reader) -> Result<OutputPosEntryVariant, ser::Error> {
-		OutputPosEntryVariant::from_u8(reader.read_u8()?).ok_or(ser::Error::CorruptedData)
+impl Readable for ListEntryVariant {
+	fn read(reader: &mut dyn Reader) -> Result<ListEntryVariant, ser::Error> {
+		ListEntryVariant::from_u8(reader.read_u8()?).ok_or(ser::Error::CorruptedData)
 	}
 }
 
-#[derive(Copy, Clone, Debug, PartialEq)]
-pub enum OutputPosList {
-	Unique { pos: OutputPos },
-	Multi { head: u64, tail: u64 },
-}
+trait FooLinkedList {
+	/// List type
+	type List: Readable + Writeable;
 
-impl Writeable for OutputPosList {
-	/// Write first byte representing the variant, followed by variant specific data.
-	/// "Unique" is optimized with embedded "pos".
-	/// "Multi" has references to "head" and "tail".
-	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
-		match self {
-			OutputPosList::Unique { pos } => {
-				OutputPosListVariant::Unique.write(writer)?;
-				pos.write(writer)?;
-			}
-			OutputPosList::Multi { head, tail } => {
-				OutputPosListVariant::Multi.write(writer)?;
-				writer.write_u64(*head)?;
-				writer.write_u64(*tail)?;
-			}
-		}
-		Ok(())
-	}
-}
-
-impl Readable for OutputPosList {
-	/// Read the first byte to determine what needs to be read beyond that.
-	fn read(reader: &mut dyn Reader) -> Result<OutputPosList, ser::Error> {
-		let entry = match OutputPosListVariant::read(reader)? {
-			OutputPosListVariant::Unique => OutputPosList::Unique {
-				pos: OutputPos::read(reader)?,
-			},
-			OutputPosListVariant::Multi => OutputPosList::Multi {
-				head: reader.read_u64()?,
-				tail: reader.read_u64()?,
-			},
-		};
-		Ok(entry)
-	}
-}
-
-impl OutputPosList {
-	/// Returns either a "unique" with embedded "pos" or a "list" with "head" and "tail".
-	/// Key is "prefix|commit".
-	/// Note the key for an individual entry in the list is "prefix|commit|pos".
-	pub fn get_list(batch: &Batch<'_>, commit: Commitment) -> Result<Option<OutputPosList>, Error> {
-		batch.db.get_ser(&to_key(
-			NEW_OUTPUT_POS_PREFIX,
-			&mut commit.as_ref().to_vec(),
-		))
-	}
-
-	/// Oldest spendable instance if multiple duplicate unspent outputs exist.
-	/// Takes current height for coinbase maturity check.
-	/// A plain output is always spendable.
-	/// A coinbase output must have matured to be spendable.
-	/// This will normally be the "tail" of the output_pos list but not in all cases.
-	/// An plain output will take precedence over an older yet immature coinbase output.
-	pub fn get_spendable(
-		batch: &Batch<'_>,
-		commit: Commitment,
-		height: u64,
-	) -> Result<Option<OutputPosEntry>, Error> {
-		panic!("not yet implemented");
-	}
-
-	/// Returns one of "head", "tail" or "middle" entry variants.
-	/// Key is "prefix|commit|pos".
-	pub fn get_entry(
-		batch: &Batch<'_>,
-		commit: Commitment,
-		pos: u64,
-	) -> Result<Option<OutputPosEntry>, Error> {
-		batch.db.get_ser(&Self::entry_key(commit, pos))
-	}
+	/// List entry type
+	type Entry: FooListEntry;
 
 	fn list_key(commit: Commitment) -> Vec<u8> {
 		to_key(NEW_OUTPUT_POS_PREFIX, &mut commit.as_ref().to_vec())
@@ -539,83 +469,102 @@ impl OutputPosList {
 		to_key_u64(NEW_OUTPUT_POS_PREFIX, &mut commit.as_ref().to_vec(), pos)
 	}
 
-	pub fn push_entry(
+	/// Returns either a "unique" with embedded "pos" or a "list" with "head" and "tail".
+	/// Key is "prefix|commit".
+	/// Note the key for an individual entry in the list is "prefix|commit|pos".
+	fn get_list(batch: &Batch<'_>, commit: Commitment) -> Result<Option<Self::List>, Error> {
+		batch.db.get_ser(&Self::list_key(commit))
+	}
+
+	/// Returns one of "head", "tail" or "middle" entry variants.
+	/// Key is "prefix|commit|pos".
+	fn get_entry(
 		batch: &Batch<'_>,
 		commit: Commitment,
-		new_pos: OutputPos,
-	) -> Result<(), Error> {
-		match Self::get_list(batch, commit)? {
-			None => {
-				let list = Self::Unique { pos: new_pos };
-				batch.db.put_ser(&Self::list_key(commit), &list)?;
+		pos: u64,
+	) -> Result<Option<Self::Entry>, Error> {
+		batch.db.get_ser(&Self::entry_key(commit, pos))
+	}
+
+	fn push_entry(
+		batch: &Batch<'_>,
+		commit: Commitment,
+		new_pos: <Self::Entry as FooListEntry>::Pos,
+	) -> Result<(), Error>;
+
+	fn pop_entry(
+		batch: &Batch<'_>,
+		commit: Commitment,
+	) -> Result<Option<<Self::Entry as FooListEntry>::Pos>, Error>;
+}
+
+#[derive(Copy, Clone, Debug, PartialEq)]
+pub enum LinkedList<T> {
+	Unique { pos: T },
+	Multi { head: u64, tail: u64 },
+}
+
+impl<T> Writeable for LinkedList<T>
+where
+	T: Writeable,
+{
+	/// Write first byte representing the variant, followed by variant specific data.
+	/// "Unique" is optimized with embedded "pos".
+	/// "Multi" has references to "head" and "tail".
+	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
+		match self {
+			LinkedList::Unique { pos } => {
+				LinkedListVariant::Unique.write(writer)?;
+				pos.write(writer)?;
 			}
-			Some(OutputPosList::Unique { pos: current_pos }) => {
-				let head = OutputPosEntry::Head {
-					pos: new_pos,
-					next: current_pos.pos,
-				};
-				let tail = OutputPosEntry::Tail {
-					pos: current_pos,
-					prev: new_pos.pos,
-				};
-				let list = OutputPosList::Multi {
-					head: new_pos.pos,
-					tail: current_pos.pos,
-				};
-				batch
-					.db
-					.put_ser(&Self::entry_key(commit, new_pos.pos), &head)?;
-				batch
-					.db
-					.put_ser(&Self::entry_key(commit, current_pos.pos), &tail)?;
-				batch.db.put_ser(&Self::list_key(commit), &list)?;
-			}
-			Some(OutputPosList::Multi { head, tail }) => {
-				if let Some(OutputPosEntry::Head {
-					pos: current_pos,
-					next: current_next,
-				}) = Self::get_entry(batch, commit, head)?
-				{
-					let head = OutputPosEntry::Head {
-						pos: new_pos,
-						next: current_pos.pos,
-					};
-					let middle = OutputPosEntry::Middle {
-						pos: current_pos,
-						next: current_next,
-						prev: new_pos.pos,
-					};
-					let list = OutputPosList::Multi {
-						head: new_pos.pos,
-						tail,
-					};
-					batch
-						.db
-						.put_ser(&Self::entry_key(commit, new_pos.pos), &head)?;
-					batch
-						.db
-						.put_ser(&Self::entry_key(commit, current_pos.pos), &middle)?;
-					batch.db.put_ser(&Self::list_key(commit), &list)?;
-				} else {
-					return Err(Error::OtherErr("expected head to be head variant".into()));
-				}
+			LinkedList::Multi { head, tail } => {
+				LinkedListVariant::Multi.write(writer)?;
+				writer.write_u64(*head)?;
+				writer.write_u64(*tail)?;
 			}
 		}
 		Ok(())
 	}
+}
+
+impl<T> Readable for LinkedList<T>
+where
+	T: Readable,
+{
+	/// Read the first byte to determine what needs to be read beyond that.
+	fn read(reader: &mut dyn Reader) -> Result<LinkedList<T>, ser::Error> {
+		let entry = match LinkedListVariant::read(reader)? {
+			LinkedListVariant::Unique => LinkedList::Unique {
+				pos: T::read(reader)?,
+			},
+			LinkedListVariant::Multi => LinkedList::Multi {
+				head: reader.read_u64()?,
+				tail: reader.read_u64()?,
+			},
+		};
+		Ok(entry)
+	}
+}
+
+impl<T> FooLinkedList for LinkedList<T>
+where
+	T: PosEntry,
+{
+	type List = LinkedList<T>;
+	type Entry = ListEntry<T>;
 
 	/// Pop the head of the list.
 	/// Returns the output_pos.
 	/// Returns None if list was empty.
-	pub fn pop_entry(batch: &Batch<'_>, commit: Commitment) -> Result<Option<OutputPos>, Error> {
+	fn pop_entry(batch: &Batch<'_>, commit: Commitment) -> Result<Option<T>, Error> {
 		match Self::get_list(batch, commit)? {
 			None => Ok(None),
-			Some(OutputPosList::Unique { pos }) => {
+			Some(LinkedList::Unique { pos }) => {
 				// TODO - delete the list itself.
 
 				Ok(Some(pos))
 			}
-			Some(OutputPosList::Multi { head, tail }) => {
+			Some(LinkedList::Multi { head, tail }) => {
 				// read head from db
 				// read next one
 				// update next to a head if it was a middle
@@ -625,40 +574,126 @@ impl OutputPosList {
 			}
 		}
 	}
+
+	fn push_entry(batch: &Batch<'_>, commit: Commitment, new_pos: T) -> Result<(), Error> {
+		match Self::get_list(batch, commit)? {
+			None => {
+				let list = Self::Unique { pos: new_pos };
+				batch.db.put_ser(&Self::list_key(commit), &list)?;
+			}
+			Some(LinkedList::Unique { pos: current_pos }) => {
+				let head = ListEntry::Head {
+					pos: new_pos,
+					next: current_pos.pos(),
+				};
+				let tail = ListEntry::Tail {
+					pos: current_pos,
+					prev: new_pos.pos(),
+				};
+				let list: LinkedList<T> = LinkedList::Multi {
+					head: new_pos.pos(),
+					tail: current_pos.pos(),
+				};
+				batch
+					.db
+					.put_ser(&Self::entry_key(commit, new_pos.pos()), &head)?;
+				batch
+					.db
+					.put_ser(&Self::entry_key(commit, current_pos.pos()), &tail)?;
+				batch.db.put_ser(&Self::list_key(commit), &list)?;
+			}
+			Some(LinkedList::Multi { head, tail }) => {
+				if let Some(ListEntry::Head {
+					pos: current_pos,
+					next: current_next,
+				}) = Self::get_entry(batch, commit, head)?
+				{
+					let head = ListEntry::Head {
+						pos: new_pos,
+						next: current_pos.pos(),
+					};
+					let middle = ListEntry::Middle {
+						pos: current_pos,
+						next: current_next,
+						prev: new_pos.pos(),
+					};
+					let list: LinkedList<T> = LinkedList::Multi {
+						head: new_pos.pos(),
+						tail,
+					};
+					batch
+						.db
+						.put_ser(&Self::entry_key(commit, new_pos.pos()), &head)?;
+					batch
+						.db
+						.put_ser(&Self::entry_key(commit, current_pos.pos()), &middle)?;
+					batch.db.put_ser(&Self::list_key(commit), &list)?;
+				} else {
+					return Err(Error::OtherErr("expected head to be head variant".into()));
+				}
+			}
+		}
+		Ok(())
+	}
 }
 
-pub enum OutputPosEntry {
-	Head {
-		pos: OutputPos,
-		next: u64,
-	},
-	Tail {
-		pos: OutputPos,
-		prev: u64,
-	},
-	Middle {
-		pos: OutputPos,
-		next: u64,
-		prev: u64,
-	},
+trait PosEntry: Readable + Writeable + Copy {
+	fn pos(&self) -> u64;
 }
 
-impl Writeable for OutputPosEntry {
+impl PosEntry for OutputPos {
+	fn pos(&self) -> u64 {
+		self.pos
+	}
+}
+
+trait FooListEntry: Readable + Writeable {
+	type Pos: PosEntry;
+
+	fn get_pos(&self) -> Self::Pos;
+}
+
+impl<T> FooListEntry for ListEntry<T>
+where
+	T: PosEntry,
+{
+	type Pos = T;
+
+	/// Read the common pos from the various enum variants.
+	fn get_pos(&self) -> Self::Pos {
+		match self {
+			Self::Head { pos, .. } => *pos,
+			Self::Tail { pos, .. } => *pos,
+			Self::Middle { pos, .. } => *pos,
+		}
+	}
+}
+
+pub enum ListEntry<T> {
+	Head { pos: T, next: u64 },
+	Tail { pos: T, prev: u64 },
+	Middle { pos: T, next: u64, prev: u64 },
+}
+
+impl<T> Writeable for ListEntry<T>
+where
+	T: Writeable,
+{
 	/// Write first byte representing the variant, followed by variant specific data.
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
 		match self {
-			OutputPosEntry::Head { pos, next } => {
-				OutputPosEntryVariant::Head.write(writer)?;
+			ListEntry::Head { pos, next } => {
+				ListEntryVariant::Head.write(writer)?;
 				pos.write(writer)?;
 				writer.write_u64(*next)?;
 			}
-			OutputPosEntry::Tail { pos, prev } => {
-				OutputPosEntryVariant::Tail.write(writer)?;
+			ListEntry::Tail { pos, prev } => {
+				ListEntryVariant::Tail.write(writer)?;
 				pos.write(writer)?;
 				writer.write_u64(*prev)?;
 			}
-			OutputPosEntry::Middle { pos, next, prev } => {
-				OutputPosEntryVariant::Middle.write(writer)?;
+			ListEntry::Middle { pos, next, prev } => {
+				ListEntryVariant::Middle.write(writer)?;
 				pos.write(writer)?;
 				writer.write_u64(*next)?;
 				writer.write_u64(*prev)?;
@@ -668,36 +703,28 @@ impl Writeable for OutputPosEntry {
 	}
 }
 
-impl Readable for OutputPosEntry {
+impl<T> Readable for ListEntry<T>
+where
+	T: Readable,
+{
 	/// Read the first byte to determine what needs to be read beyond that.
-	fn read(reader: &mut dyn Reader) -> Result<OutputPosEntry, ser::Error> {
-		let entry = match OutputPosEntryVariant::read(reader)? {
-			OutputPosEntryVariant::Head => OutputPosEntry::Head {
-				pos: OutputPos::read(reader)?,
+	fn read(reader: &mut dyn Reader) -> Result<ListEntry<T>, ser::Error> {
+		let entry = match ListEntryVariant::read(reader)? {
+			ListEntryVariant::Head => ListEntry::Head {
+				pos: T::read(reader)?,
 				next: reader.read_u64()?,
 			},
-			OutputPosEntryVariant::Tail => OutputPosEntry::Tail {
-				pos: OutputPos::read(reader)?,
+			ListEntryVariant::Tail => ListEntry::Tail {
+				pos: T::read(reader)?,
 				prev: reader.read_u64()?,
 			},
-			OutputPosEntryVariant::Middle => OutputPosEntry::Middle {
-				pos: OutputPos::read(reader)?,
+			ListEntryVariant::Middle => ListEntry::Middle {
+				pos: T::read(reader)?,
 				next: reader.read_u64()?,
 				prev: reader.read_u64()?,
 			},
 		};
 		Ok(entry)
-	}
-}
-
-impl OutputPosEntry {
-	/// Read the common pos from the various enum variants.
-	fn get_pos(&self) -> OutputPos {
-		match self {
-			Self::Head { pos, .. } => *pos,
-			Self::Tail { pos, .. } => *pos,
-			Self::Middle { pos, .. } => *pos,
-		}
 	}
 }
 
