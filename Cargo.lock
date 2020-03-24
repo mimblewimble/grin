@@ -333,18 +333,18 @@ dependencies = [
 ]
 
 [[package]]
-name = "croaring"
-version = "0.4.4"
+name = "croaring-mw"
+version = "0.4.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 dependencies = [
  "byteorder 1.3.2 (registry+https://github.com/rust-lang/crates.io-index)",
- "croaring-sys 0.4.4 (registry+https://github.com/rust-lang/crates.io-index)",
+ "croaring-sys-mw 0.4.5 (registry+https://github.com/rust-lang/crates.io-index)",
  "libc 0.2.66 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
-name = "croaring-sys"
-version = "0.4.4"
+name = "croaring-sys-mw"
+version = "0.4.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 dependencies = [
  "bindgen 0.52.0 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -860,7 +860,7 @@ dependencies = [
  "bitflags 1.2.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "byteorder 1.3.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "chrono 0.4.10 (registry+https://github.com/rust-lang/crates.io-index)",
- "croaring 0.4.4 (registry+https://github.com/rust-lang/crates.io-index)",
+ "croaring-mw 0.4.5 (registry+https://github.com/rust-lang/crates.io-index)",
  "env_logger 0.5.13 (registry+https://github.com/rust-lang/crates.io-index)",
  "failure 0.1.6 (registry+https://github.com/rust-lang/crates.io-index)",
  "failure_derive 0.1.6 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -899,7 +899,7 @@ dependencies = [
  "blake2-rfc 0.2.18 (registry+https://github.com/rust-lang/crates.io-index)",
  "byteorder 1.3.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "chrono 0.4.10 (registry+https://github.com/rust-lang/crates.io-index)",
- "croaring 0.4.4 (registry+https://github.com/rust-lang/crates.io-index)",
+ "croaring-mw 0.4.5 (registry+https://github.com/rust-lang/crates.io-index)",
  "enum_primitive 0.1.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "failure 0.1.6 (registry+https://github.com/rust-lang/crates.io-index)",
  "failure_derive 0.1.6 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -1028,7 +1028,7 @@ version = "3.1.1-beta.1"
 dependencies = [
  "byteorder 1.3.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "chrono 0.4.10 (registry+https://github.com/rust-lang/crates.io-index)",
- "croaring 0.4.4 (registry+https://github.com/rust-lang/crates.io-index)",
+ "croaring-mw 0.4.5 (registry+https://github.com/rust-lang/crates.io-index)",
  "env_logger 0.5.13 (registry+https://github.com/rust-lang/crates.io-index)",
  "failure 0.1.6 (registry+https://github.com/rust-lang/crates.io-index)",
  "failure_derive 0.1.6 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -3007,8 +3007,8 @@ dependencies = [
 "checksum core-foundation 0.6.4 (registry+https://github.com/rust-lang/crates.io-index)" = "25b9e03f145fd4f2bf705e07b900cd41fc636598fe5dc452fd0db1441c3f496d"
 "checksum core-foundation-sys 0.6.2 (registry+https://github.com/rust-lang/crates.io-index)" = "e7ca8a5221364ef15ce201e8ed2f609fc312682a8f4e0e3d4aa5879764e0fa3b"
 "checksum crc32fast 1.2.0 (registry+https://github.com/rust-lang/crates.io-index)" = "ba125de2af0df55319f41944744ad91c71113bf74a4646efff39afe1f6842db1"
-"checksum croaring 0.4.4 (registry+https://github.com/rust-lang/crates.io-index)" = "52e9057c1caf8e9debd6f938a12ff24028f3c7f85d24f502f46f3c9601905464"
-"checksum croaring-sys 0.4.4 (registry+https://github.com/rust-lang/crates.io-index)" = "b7d3b66d75dc466ec547604de0517eb4e1a51fd79a83eaff4409f81167dacdc8"
+"checksum croaring-mw 0.4.5 (registry+https://github.com/rust-lang/crates.io-index)" = "bcdee571ce4bf3e49c382de29c38bd33b9fa871e1358c7749b9dcc5dc2776221"
+"checksum croaring-sys-mw 0.4.5 (registry+https://github.com/rust-lang/crates.io-index)" = "ea52c177269fa54c526b054dac8e623721de18143ebfd2ea84ffc023d6c271ee"
 "checksum crossbeam-channel 0.3.9 (registry+https://github.com/rust-lang/crates.io-index)" = "c8ec7fcd21571dc78f96cc96243cab8d8f035247c3efd16c687be154c3fa9efa"
 "checksum crossbeam-utils 0.6.6 (registry+https://github.com/rust-lang/crates.io-index)" = "04973fa96e96579258a5091af6003abde64af786b860f18622b82e026cca60e6"
 "checksum crypto-mac 0.6.2 (registry+https://github.com/rust-lang/crates.io-index)" = "7afa06d05a046c7a47c3a849907ec303504608c927f4e85f7bfff22b7180d971"
