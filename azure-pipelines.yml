@@ -50,6 +50,10 @@ jobs:
         CI_JOB: release
         PLATFORM: linux-amd64
   steps:
+    - script: |
+        sudo apt-get update -yqq
+        sudo apt-get install -yqq --no-install-recommends libncursesw5-dev
+    - displayName: Linux Install Dependencies
     - template: '.ci/test.yml'
     - template: '.ci/release.yml'
 - job: macos
