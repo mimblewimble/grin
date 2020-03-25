@@ -50,7 +50,6 @@ jobs:
         CI_JOB: release
         PLATFORM: linux-amd64
   steps:
-    - template: '.ci/install.yml'
     - template: '.ci/test.yml'
     - template: '.ci/release.yml'
 - job: macos
@@ -64,7 +63,9 @@ jobs:
         CI_JOB: release
         PLATFORM: macos
   steps:
-    - template: '.ci/install.yml'
+    - script: |
+        brew uninstall llvm
+      displayName: macOS Uninstall LLVM
     - template: '.ci/test.yml'
     - template: '.ci/release.yml'
 - job: windows
@@ -78,6 +79,9 @@ jobs:
         CI_JOB: release
         PLATFORM: win-x64
   steps:
-    - template: '.ci/install.yml'
+    - script: |
+        git apply .ci/win.patch
+        choco install -y llvm
+      displayName: Windows Install Dependencies
     - template: '.ci/test.yml'
     - template: '.ci/windows-release.yml'

@@ -1,9 +1,0 @@
-steps:
-  - script: |
-      git apply .ci/win.patch
-    displayName: Windows Apply Patch
-    condition: eq( variables['Agent.OS'], 'Windows_NT' )
-  - script: |
-      brew uninstall llvm
-    displayName: macOS Uninstall LLVM
-    condition: eq( variables['Agent.OS'], 'Darwin' )
