@@ -80,7 +80,6 @@ jobs:
         PLATFORM: win-x64
   steps:
     - script: |
-        git apply .ci/win.patch
         choco install -y llvm
       displayName: Windows Install Dependencies
     - template: '.ci/test.yml'
