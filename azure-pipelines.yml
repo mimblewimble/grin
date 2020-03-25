@@ -53,7 +53,7 @@ jobs:
     - script: |
         sudo apt-get update -yqq
         sudo apt-get install -yqq --no-install-recommends libncursesw5-dev
-    - displayName: Linux Install Dependencies
+      displayName: Linux Install Dependencies
     - template: '.ci/test.yml'
     - template: '.ci/release.yml'
 - job: macos
