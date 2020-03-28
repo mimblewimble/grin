@@ -48,7 +48,7 @@ dive deeper into those assumptions, there are other opportunities to
 [learn more](http://andrea.corbellini.name/2015/05/17/elliptic-curve-cryptography-a-gentle-introduction/).
 
 An elliptic curve for the purpose of cryptography is simply a large set of points that
-we will call _C_. These points can be added and subtracted, and the result is a point on the curve _C_. Furthermore, a point can be successively added to itself, which is represented as point multiplication by integers (also called scalars) .
+we will call _C_. These points can be added and subtracted, and the result is a point on the curve _C_. Furthermore, a point can be successively added to itself, which is represented as point multiplication by integers (also called scalars).
 Given such a point _H_, an integer _k_ and
 using the scalar multiplication operation we can compute `k*H`, which is also a point on
 curve _C_. Given another integer _j_ we can also calculate `(k+j)*H`, which equals
@@ -264,7 +264,7 @@ A Mimblewimble transaction includes the following:
   * A blinding factor *r* and a value *v* used for scalar multiplication for the curve 
   points G,H correspondingly, and subsequently summed to be `r*G + v*H`.
   * A range proof that among other things shows that *v* is non-negative.
-* n transaction fee in cleartext.
+* A transaction fee in cleartext.
 * A signature its private key is formed by computing the excess value (the sum of all
   output values plus the fee, minus the input values).
 
