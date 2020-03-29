@@ -333,8 +333,6 @@ or alternatively
 For a commitment `r*G + 0*H` with the offset `a`, the transaction is signed with `(r-a)` and *a* is published so that `(r-a)*G` could be computed in order to verify the validity of the transaction. Given `r*G` and *a*, one computes `a*G` and obtains `(r-a)*G = r*G - a*G`.
 During block construction all kernel offsets are summed to generate a _single_ aggregate kernel offset to cover the whole block. The kernel offset for any individual transaction is then unrecoverable and the subset problem is solved.
 
-    sum(outputs) - sum(inputs) = sum(kernel_excess) + kernel_offset*G
-
 
 #### Cut-through
 
