@@ -380,7 +380,7 @@ A block is simply built from:
 * The list of outputs remaining after cut-through.
 * A single kernel offset to cover the full block.
 * The transaction kernels containing, for each transaction:
-  * The public key `r*G` obtained from the summation of all inputs and outputs.
+  * The public key `(r-a)*G`.
   * The signatures generated using the excess value.
   * The mining fee.
 
