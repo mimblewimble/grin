@@ -237,8 +237,7 @@ To solve this problem, Mimblewimble leverages another cryptographic concept (als
 coming from Confidential Transactions) called
 range proofs: a proof that a number falls within a given range, without revealing
 the number. We won't elaborate on the range proof, but you just need to know
-that for any `r*G + v*H` we can build a proof that shows that _v_ is greater than
-zero and does not overflow.
+that for any `r*G + v*H` we can build a proof that shows that _v_ is non-negative and does not overflow.
 
 It's also important to note that range proofs for both the blinding factor and the values are needed. The reason for this
 is that it prevents a censoring attack where a third party would be able to lock UTXOs without knowing their private keys
@@ -265,8 +264,8 @@ A Mimblewimble transaction includes the following:
   points G,H correspondingly, and subsequently summed to be `r*G + v*H`.
   * A range proof that among other things shows that *v* is non-negative.
 * A transaction fee in cleartext.
-* A signature its private key is formed by computing the excess value (the sum of all
-  output values plus the fee, minus the input values).
+* A signature signed with the excess value (the sum of all
+  output values and the fee minus the input values) as the private key.
 
 ### Blocks and Chain State
 
