@@ -53,7 +53,7 @@ Given such a point _H_, an integer _k_ and
 using the scalar multiplication operation we can compute `k*H`, which is also a point on
 curve _C_. Given another integer _j_ we can also calculate `(k+j)*H`, which equals
 `k*H + j*H`. The addition and scalar multiplication operations on an elliptic curve
-maintain the distributivite property of addition and multiplication:
+maintain the distributive property of addition and multiplication:
 
     (k+j)*H = k*H + j*H
 
@@ -191,7 +191,7 @@ She picks 113 say, and what ends up on the blockchain is:
 
 Now the transaction no longer sums to zero and we have an _excess value_ (85), which is the result of the summation (and correspondingly subtraction) of all blinding factors. Note that `85*G` is a valid public key for the generator point _G_.
 
-Therefoe, the protocol needs to verify that the transacting parties collectively can produce the private key (85 in the above example) for the resulting point `Y - Xi` (this should be the corresponding public key, for generator point _G_; `85*G` in the above example).
+Therefore, the protocol needs to verify that the transacting parties collectively can produce the private key (85 in the above example) for the resulting point `Y - Xi` (this should be the corresponding public key, for generator point _G_; `85*G` in the above example).
 A simple way of doing so is by using the public key `Y - Xi` (`85*G`) to verify a signature, that was signed using the excess value (85). This ensures that:
 
 * The transacting parties collectively can produce the private key (the excess value) for the public key (`Y - Xi`).
@@ -311,7 +311,7 @@ Consider the following two transactions:
     (in1, in2) -> (out1), (kern1)
     (in3) -> (out2), (kern2)
 
-We can aggregate them into the following block (or aggregated transaction):
+We can aggregate them into the following block (or aggregate transaction):
 
     (in1, in2, in3) -> (out1, out2), (kern1, kern2)
 
@@ -371,7 +371,7 @@ sum cancels out. Which leads to the following, much more compact block:
     I2(x2) | O4
            | O5
 
-Note that all the transaction structure has been eliminated and the order of inputs and
+Note that all transaction structure has been eliminated and the order of inputs and
 outputs does not matter anymore. However, the sum of all inputs and outputs is still guaranteed to be zero.
 
 A block is simply built from:
@@ -392,7 +392,7 @@ guarantees:
 * All outputs look the same: very large numbers that are impossible to
   meaningfully differentiate from one another. If someone wants to exclude a specific output, they'd have
   to exclude all.
-* All the transaction structure has been removed, making it impossible to tell which inputs and outputs match.
+* All transaction structure has been removed, making it impossible to tell which inputs and outputs match.
 
 And yet, it all still validates!
 
