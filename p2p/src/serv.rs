@@ -26,6 +26,7 @@ use crate::types::{
 	TxHashSetRead,
 };
 use crate::util::{Mutex, StopState};
+use crate::State;
 use chrono::prelude::{DateTime, Utc};
 use futures::channel::oneshot;
 use futures::prelude::*;
@@ -41,7 +42,7 @@ use tokio::runtime::Runtime;
 /// peers, receiving connections from other peers and keep track of all of them.
 pub struct Server {
 	pub config: P2PConfig,
-	pub runtime: Mutex<Runtime>,
+	pub runtime: Arc<Runtime>,
 	capabilities: Capabilities,
 	handshake: Arc<Handshake>,
 	pub peers: Arc<Peers>,
@@ -68,114 +69,13 @@ impl Server {
 
 		Ok(Server {
 			config: config.clone(),
-			runtime: Mutex::new(runtime),
+			runtime: Arc::new(runtime),
 			capabilities: capab,
 			handshake: Arc::new(Handshake::new(genesis, config.clone())),
 			peers: Arc::new(Peers::new(PeerStore::new(db_root)?, adapter, config)),
 			stop_state,
 			stop_tx: Mutex::new(Some(stop_tx)),
 		})
-	}
-
-	pub fn connect_block(&self, addr: PeerAddr) -> Result<Arc<Peer>, Error> {
-		self.runtime.lock().block_on(self.connect(addr))
-	}
-
-	/// Asks the server to connect to a new peer. Directly returns the peer if
-	/// we're already connected to the provided address.
-	pub async fn connect(&self, addr: PeerAddr) -> Result<Arc<Peer>, Error> {
-		if self.stop_state.is_stopped() {
-			return Err(Error::ConnectionClose);
-		}
-
-		if Peer::is_denied(&self.config, addr) {
-			debug!("connect_peer: peer {} denied, not connecting.", addr);
-			return Err(Error::ConnectionClose);
-		}
-
-		if global::is_production_mode() {
-			let hs = self.handshake.clone();
-			let addrs = hs.addrs.read().await;
-			if addrs.contains(&addr) {
-				debug!("connect: ignore connecting to PeerWithSelf, addr: {}", addr);
-				return Err(Error::PeerWithSelf);
-			}
-		}
-
-		if let Some(p) = self.peers.get_connected_peer(addr) {
-			// if we're already connected to the addr, just return the peer
-			trace!("connect_peer: already connected {}", addr);
-			return Ok(p);
-		}
-
-		trace!(
-			"connect_peer: on {}:{}. connecting to {}",
-			self.config.host,
-			self.config.port,
-			addr
-		);
-		match TcpStream::connect(&addr.0).await {
-			Ok(stream) => {
-				let addr = SocketAddr::new(self.config.host, self.config.port);
-				let total_diff = self.peers.total_difficulty()?;
-
-				let peer = Peer::connect(
-					stream,
-					self.capabilities,
-					total_diff,
-					PeerAddr(addr),
-					&self.handshake,
-					self.peers.clone(),
-				)
-				.await?;
-				let peer = Arc::new(peer);
-				self.peers.add_connected(peer.clone())?;
-				Ok(peer)
-			}
-			Err(e) => {
-				trace!(
-					"connect_peer: on {}:{}. Could not connect to {}: {:?}",
-					self.config.host,
-					self.config.port,
-					addr,
-					e
-				);
-				Err(Error::Connection(e))
-			}
-		}
-	}
-
-	async fn handle_new_peer(&self, stream: tokio::net::TcpStream) -> Result<(), Error> {
-		let peer_addr = PeerAddr(stream.peer_addr()?);
-		if self.check_undesirable(peer_addr) {
-			// TODO: async
-			// Shutdown the incoming TCP connection if it is not desired
-			if let Err(e) = stream.shutdown(Shutdown::Both) {
-				debug!("Error shutting down conn: {:?}", e);
-			}
-			return Ok(());
-		}
-
-		if self.stop_state.is_stopped() {
-			return Err(Error::ConnectionClose);
-		}
-		let total_diff = self.peers.total_difficulty()?;
-		let peers = self.peers.clone();
-
-		// accept the peer and add it to the server map
-		let peer = Peer::accept(
-			stream,
-			self.capabilities,
-			total_diff,
-			&self.handshake,
-			self.peers.clone(),
-		)
-		.await?;
-
-		tokio::task::spawn_blocking(move || peers.add_connected(Arc::new(peer)))
-			.await
-			.unwrap()?;
-		Ok(())
 	}
 
 	/// Checks whether there's any reason we don't want to accept an incoming peer
@@ -354,6 +254,36 @@ impl NetAdapter for DummyAdapter {
 	}
 }
 
+async fn handle_new_peer(server: &Server, stream: tokio::net::TcpStream) -> Result<(), Error> {
+	let peer_addr = PeerAddr(stream.peer_addr()?);
+	if server.check_undesirable(peer_addr) {
+		// TODO: async
+		// Shutdown the incoming TCP connection if it is not desired
+		if let Err(e) = stream.shutdown(Shutdown::Both) {
+			debug!("Error shutting down conn: {:?}", e);
+		}
+		return Ok(());
+	}
+
+	if server.stop_state.is_stopped() {
+		return Err(Error::ConnectionClose);
+	}
+	let total_diff = server.peers.total_difficulty()?;
+
+	// accept the peer and add it to the server map
+	let peer = Peer::accept(
+		stream,
+		server.capabilities,
+		total_diff,
+		&server.handshake,
+		server.peers.clone(),
+	)
+	.await?;
+
+	server.peers.add_connected(Arc::new(peer))?;
+	Ok(())
+}
+
 /// Starts a new TCP server and listen to incoming connections
 pub async fn listen(server: Arc<Server>) -> Result<(), Error> {
 	let addr = SocketAddr::new(server.config.host, server.config.port);
@@ -370,7 +300,7 @@ pub async fn listen(server: Arc<Server>) -> Result<(), Error> {
 				Err(_) => return,
 			};
 
-			if let Err(e) = server.handle_new_peer(stream).await {
+			if let Err(e) = handle_new_peer(&server, stream).await {
 				debug!("Error accepting peer {}: {:?}", peer_addr.to_string(), e);
 				let _ = server
 					.peers
@@ -380,4 +310,80 @@ pub async fn listen(server: Arc<Server>) -> Result<(), Error> {
 	}
 
 	Ok(())
+}
+
+async fn connect_internal(server: &Server, addr: PeerAddr) -> Result<Arc<Peer>, Error> {
+	if server.stop_state.is_stopped() {
+		return Err(Error::ConnectionClose);
+	}
+
+	if Peer::is_denied(&server.config, addr) {
+		debug!("connect_peer: peer {} denied, not connecting.", addr);
+		return Err(Error::ConnectionClose);
+	}
+
+	if global::is_production_mode() {
+		let hs = server.handshake.clone();
+		let addrs = hs.addrs.read().await;
+		if addrs.contains(&addr) {
+			debug!("connect: ignore connecting to PeerWithSelf, addr: {}", addr);
+			return Err(Error::PeerWithSelf);
+		}
+	}
+
+	if let Some(p) = server.peers.get_connected_peer(addr) {
+		// if we're already connected to the addr, just return the peer
+		trace!("connect_peer: already connected {}", addr);
+		return Ok(p);
+	}
+
+	trace!(
+		"connect_peer: on {}:{}. connecting to {}",
+		server.config.host,
+		server.config.port,
+		addr
+	);
+	match TcpStream::connect(&addr.0).await {
+		Ok(stream) => {
+			let addr = SocketAddr::new(server.config.host, server.config.port);
+			let total_diff = server.peers.total_difficulty()?;
+
+			let peer = Peer::connect(
+				stream,
+				server.capabilities,
+				total_diff,
+				PeerAddr(addr),
+				&server.handshake,
+				server.peers.clone(),
+			)
+			.await?;
+			let peer = Arc::new(peer);
+			server.peers.add_connected(peer.clone())?;
+			Ok(peer)
+		}
+		Err(e) => {
+			trace!(
+				"connect_peer: on {}:{}. Could not connect to {}: {:?}",
+				server.config.host,
+				server.config.port,
+				addr,
+				e
+			);
+			Err(Error::Connection(e))
+		}
+	}
+}
+
+/// Attempt to connect to a peer
+pub async fn connect(server: Arc<Server>, addr: PeerAddr) {
+	match connect_internal(&server, addr).await {
+		Ok(peer) => {
+			if peer.send_peer_request(server.capabilities.clone()).is_ok() {
+				let _ = server.peers.update_state(addr, State::Healthy);
+			}
+		}
+		Err(_) => {
+			let _ = server.peers.update_state(addr, State::Defunct);
+		}
+	}
 }

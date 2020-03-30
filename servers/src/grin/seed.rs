@@ -49,7 +49,6 @@ const FLOONET_DNS_SEEDS: &'static [&'static str] = &[
 
 pub fn connect_and_monitor(
 	p2p_server: Arc<p2p::Server>,
-	capabilities: p2p::Capabilities,
 	seed_list: Box<dyn Fn() -> Vec<PeerAddr> + Send>,
 	preferred_peers: Option<Vec<PeerAddr>>,
 	stop_state: Arc<StopState>,
@@ -99,13 +98,7 @@ pub fn connect_and_monitor(
 				// with exponential backoff
 				if Utc::now() - prev > Duration::seconds(cmp::min(20, 1 << start_attempt)) {
 					// try to connect to any address sent to the channel
-					listen_for_addrs(
-						peers.clone(),
-						p2p_server.clone(),
-						capabilities,
-						&rx,
-						&mut connecting_history,
-					);
+					listen_for_addrs(p2p_server.clone(), &rx, &mut connecting_history);
 
 					// monitor additional peers if we need to add more
 					monitor_peers(
@@ -289,9 +282,7 @@ fn connect_to_seeds_and_preferred_peers(
 /// connection if the max peer count isn't exceeded. A request for more
 /// peers is also automatically sent after connection.
 fn listen_for_addrs(
-	peers: Arc<p2p::Peers>,
 	p2p: Arc<p2p::Server>,
-	capab: p2p::Capabilities,
 	rx: &mpsc::Receiver<PeerAddr>,
 	connecting_history: &mut HashMap<PeerAddr, DateTime<Utc>>,
 ) {
@@ -302,9 +293,11 @@ fn listen_for_addrs(
 	let addrs: Vec<PeerAddr> = rx.try_iter().collect();
 
 	// If we have a healthy number of outbound peers then we are done here.
-	if peers.enough_outbound_peers() {
+	if p2p.peers.enough_outbound_peers() {
 		return;
 	}
+
+	let runtime = p2p.runtime.clone();
 
 	// Note: We drained the rx queue earlier to keep it under control.
 	// Even if there are many addresses to try we will only try a bounded number of them for safety.
@@ -329,22 +322,7 @@ fn listen_for_addrs(
 		}
 		connecting_history.insert(addr, now);
 
-		let peers_c = peers.clone();
-		let p2p_c = p2p.clone();
-
-		thread::Builder::new()
-			.name("peer_connect".to_string())
-			.spawn(move || match p2p_c.connect_block(addr) {
-				Ok(p) => {
-					if p.send_peer_request(capab).is_ok() {
-						let _ = peers_c.update_state(addr, p2p::State::Healthy);
-					}
-				}
-				Err(_) => {
-					let _ = peers_c.update_state(addr, p2p::State::Defunct);
-				}
-			})
-			.expect("failed to launch peer_connect thread");
+		runtime.spawn(p2p::connect(p2p.clone(), addr));
 	}
 
 	// shrink the connecting history.

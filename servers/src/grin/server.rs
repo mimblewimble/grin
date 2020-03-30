@@ -35,7 +35,6 @@ use crate::grin::{dandelion_monitor, seed, sync};
 use crate::mining::stratumserver;
 use crate::mining::test_miner::Miner;
 use crate::p2p;
-use crate::p2p::types::PeerAddr;
 use crate::pool;
 use crate::util::file::get_first_line;
 use crate::util::{RwLock, StopState};
@@ -248,7 +247,6 @@ impl Server {
 
 			connect_thread = Some(seed::connect_and_monitor(
 				p2p_server.clone(),
-				config.p2p_config.capabilities,
 				seeder,
 				preferred_peers,
 				stop_state.clone(),
@@ -269,7 +267,7 @@ impl Server {
 
 		let p2p_inner = p2p_server.clone();
 
-		p2p_server.runtime.lock().spawn(async {
+		p2p_server.runtime.spawn(async {
 			let listen = listen(p2p_inner);
 			select! {
 				_ = listen => debug!("Listener shutdown"),
@@ -332,12 +330,6 @@ impl Server {
 			sync_thread,
 			dandelion_thread,
 		})
-	}
-
-	/// Asks the server to connect to a peer at the provided network address.
-	pub fn connect_peer(&self, addr: PeerAddr) -> Result<(), Error> {
-		self.p2p.connect_block(addr)?;
-		Ok(())
 	}
 
 	/// Ping all peers, mostly useful for tests to have connected peers share

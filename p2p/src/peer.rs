@@ -57,7 +57,7 @@ pub struct Peer {
 	// set of all hashes known to this peer (so no need to send)
 	tracking_adapter: TrackingAdapter,
 	tracker: Arc<conn::Tracker>,
-	send_handle: Mutex<conn::ConnHandle>,
+	send_handle: conn::ConnHandle,
 	// we need a special lock for stop operation, can't reuse handle mutex for that
 	// because it may be locked by different reasons, so we should wait for that, close
 	// mutex can be taken only during shutdown, it happens once
@@ -88,9 +88,9 @@ impl Peer {
 			state_sync_requested.clone(),
 		);
 		let tracker = Arc::new(conn::Tracker::new());
-		let (sendh, stoph) = conn::listen(conn, info.version, tracker.clone(), handler).await?;
-		let send_handle = Mutex::new(sendh);
-		let stop_handle = Mutex::new(stoph);
+		let (send_handle, stop_handle) =
+			conn::listen(conn, info.version, tracker.clone(), handler).await?;
+		let stop_handle = Mutex::new(stop_handle);
 		Ok(Peer {
 			info,
 			state,
@@ -240,7 +240,8 @@ impl Peer {
 	/// Send a msg with given msg_type to our peer via the connection.
 	fn send<T: Writeable>(&self, msg: T, msg_type: Type) -> Result<(), Error> {
 		let msg = Msg::new(msg_type, msg, self.info.version)?;
-		self.send_handle.lock().send(msg)
+		let mut handle = self.send_handle.clone();
+		handle.send(msg)
 	}
 
 	/// Send a ping to the remote peer, providing our local difficulty and
