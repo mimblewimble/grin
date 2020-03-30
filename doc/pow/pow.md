@@ -25,7 +25,7 @@ can be found in [his github repository](https://github.com/tromp/cuckoo). The
 [white paper](https://github.com/tromp/cuckoo/blob/master/doc/cuckoo.pdf) is the best source of
 further technical details.
 
-There is also a [podcast with Mike from Monero Monitor](https://moneromonitor.com/episodes/2017-09-26-Episode-014.html)
+There is also a [podcast with Mike from Monero Monitor](https://moneromonitor.libsyn.com/e14-john-tromp-on-cuckoo-cycle-pow-john-mcafee-on-monero)
 in which John Tromp talks at length about Cuckoo Cycle; recommended listening for anyone wanting
 more background on Cuckoo Cycle, including more technical detail, the history of the algorithm's development
 and some of the motivations behind it.
