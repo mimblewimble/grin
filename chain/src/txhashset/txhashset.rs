@@ -55,20 +55,14 @@ pub struct PMMRHandle<T: PMMRable> {
 impl<T: PMMRable> PMMRHandle<T> {
 	/// Constructor to create a PMMR handle from an existing directory structure on disk.
 	/// Creates the backend files as necessary if they do not already exist.
-	pub fn new(
-		root_dir: &str,
-		sub_dir: &str,
-		file_name: &str,
+	pub fn new<P: AsRef<Path>>(
+		path: P,
 		prunable: bool,
 		version: ProtocolVersion,
 		header: Option<&BlockHeader>,
 	) -> Result<PMMRHandle<T>, Error> {
-		let path = Path::new(root_dir).join(sub_dir).join(file_name);
-		fs::create_dir_all(path.clone())?;
-		let path_str = path
-			.to_str()
-			.ok_or_else(|| ErrorKind::Other("invalid file path".to_owned()))?;
-		let backend = PMMRBackend::new(path_str.to_string(), prunable, version, header)?;
+		fs::create_dir_all(&path)?;
+		let backend = PMMRBackend::new(&path, prunable, version, header)?;
 		let last_pos = backend.unpruned_size();
 		Ok(PMMRHandle { backend, last_pos })
 	}
@@ -130,18 +124,18 @@ impl TxHashSet {
 		header: Option<&BlockHeader>,
 	) -> Result<TxHashSet, Error> {
 		let output_pmmr_h = PMMRHandle::new(
-			&root_dir,
-			TXHASHSET_SUBDIR,
-			OUTPUT_SUBDIR,
+			Path::new(&root_dir)
+				.join(TXHASHSET_SUBDIR)
+				.join(OUTPUT_SUBDIR),
 			true,
 			ProtocolVersion(1),
 			header,
 		)?;
 
 		let rproof_pmmr_h = PMMRHandle::new(
-			&root_dir,
-			TXHASHSET_SUBDIR,
-			RANGE_PROOF_SUBDIR,
+			Path::new(&root_dir)
+				.join(TXHASHSET_SUBDIR)
+				.join(RANGE_PROOF_SUBDIR),
 			true,
 			ProtocolVersion(1),
 			header,
@@ -154,9 +148,9 @@ impl TxHashSet {
 		let versions = vec![ProtocolVersion(2), ProtocolVersion(1)];
 		for version in versions {
 			let handle = PMMRHandle::new(
-				&root_dir,
-				TXHASHSET_SUBDIR,
-				KERNEL_SUBDIR,
+				Path::new(&root_dir)
+					.join(TXHASHSET_SUBDIR)
+					.join(KERNEL_SUBDIR),
 				false, // not prunable
 				version,
 				None,
