@@ -38,7 +38,7 @@ use grin_store::Error::NotFoundErr;
 use std::collections::HashMap;
 use std::fs::{self, File};
 use std::io::Read;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -175,17 +175,13 @@ impl Chain {
 		let mut txhashset = txhashset::TxHashSet::open(db_root.clone(), store.clone(), None)?;
 
 		let mut header_pmmr = PMMRHandle::new(
-			&db_root,
-			"header",
-			"header_head",
+			Path::new(&db_root).join("header").join("header_head"),
 			false,
 			ProtocolVersion(1),
 			None,
 		)?;
 		let mut sync_pmmr = PMMRHandle::new(
-			&db_root,
-			"header",
-			"sync_head",
+			Path::new(&db_root).join("header").join("sync_head"),
 			false,
 			ProtocolVersion(1),
 			None,
