@@ -333,8 +333,6 @@ or alternatively
 For a commitment `r*G + 0*H` with the offset `a`, the transaction is signed with `(r-a)` and *a* is published so that `(r-a)*G` could be computed in order to verify the validity of the transaction. Given `r*G` and *a*, one computes `a*G` and obtains `(r-a)*G = r*G - a*G`.
 During block construction all kernel offsets are summed to generate a _single_ aggregate kernel offset to cover the whole block. The kernel offset for any individual transaction is then unrecoverable and the subset problem is solved.
 
-sum(outputs) - sum(inputs) = sum(kernel_excess) + sum(kernel_offset)*G
-
 
 #### Cut-through
 
@@ -378,11 +376,15 @@ A block is simply built from:
 * A block header.
 * The list of inputs remaining after cut-through.
 * The list of outputs remaining after cut-through.
-* A single kernel offset to cover the full block.
+* A single kernel offset (sum of all kernel offsets) to cover the full block.
 * The transaction kernels containing, for each transaction:
-  * The public key `(r-a)*G`.
-  * The signatures generated using the excess value.
+  * The public key `(r-a)*G`, which is the (modified) kernel excess.
+  * The signatures generated using the (modified) excess value `(r-a)` as the private (signing) key.
   * The mining fee.
+
+The block contents satisfy: 
+
+sum(outputs) - sum(inputs) = sum(kernel_excess) + kernel_offset*G
 
 When structured this way, a Mimblewimble block offers extremely good privacy
 guarantees:
