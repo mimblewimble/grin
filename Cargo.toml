@@ -44,7 +44,7 @@ grin_util = { path = "./util", version = "4.0.0-alpha.1" }
 [dependencies.cursive]
 version = "0.14"
 default-features = false
-features = ["crossterm-backend"]
+features = ["pancurses-backend"]
 
 [build-dependencies]
 built = "0.3"
