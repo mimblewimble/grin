@@ -26,7 +26,7 @@ use cursive::theme::{BaseColor, BorderStyle, Color, Theme};
 use cursive::traits::Boxable;
 use cursive::traits::Identifiable;
 use cursive::utils::markup::StyledString;
-use cursive::views::{CircularFocus, Dialog, LinearLayout, Panel, StackView, TextView, ViewBox};
+use cursive::views::{BoxedView, CircularFocus, Dialog, LinearLayout, Panel, StackView, TextView};
 use cursive::Cursive;
 use std::sync::mpsc;
 
@@ -88,7 +88,7 @@ impl UI {
 			.layer(peer_view)
 			.layer(logs_view)
 			.layer(status_view)
-			.with_id(ROOT_STACK)
+			.with_name(ROOT_STACK)
 			.full_height();
 
 		let mut title_string = StyledString::new();
@@ -105,7 +105,7 @@ impl UI {
 			.child(Panel::new(TextView::new(title_string).full_width()))
 			.child(
 				LinearLayout::new(Orientation::Horizontal)
-					.child(Panel::new(ViewBox::new(main_menu)))
+					.child(Panel::new(BoxedView::new(main_menu)))
 					.child(Panel::new(root_stack)),
 			);
 

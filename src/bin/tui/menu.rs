@@ -20,7 +20,7 @@ use cursive::event::{EventResult, Key};
 use cursive::view::Identifiable;
 use cursive::view::View;
 use cursive::views::{
-	BoxView, LinearLayout, OnEventView, SelectView, StackView, TextView, ViewRef,
+	LinearLayout, OnEventView, ResizedView, SelectView, StackView, TextView, ViewRef,
 };
 use cursive::Cursive;
 
@@ -30,7 +30,7 @@ use crate::tui::constants::{
 };
 
 pub fn create() -> Box<dyn View> {
-	let mut main_menu = SelectView::new().h_align(HAlign::Left).with_id(MAIN_MENU);
+	let mut main_menu = SelectView::new().h_align(HAlign::Left).with_name(MAIN_MENU);
 	main_menu
 		.get_mut()
 		.add_item("Basic Status", VIEW_BASIC_STATUS);
@@ -45,8 +45,8 @@ pub fn create() -> Box<dyn View> {
 			return;
 		}
 
-		let _ = s.call_on_id(ROOT_STACK, |sv: &mut StackView| {
-			let pos = sv.find_layer_from_id(v).unwrap();
+		let _ = s.call_on_name(ROOT_STACK, |sv: &mut StackView| {
+			let pos = sv.find_layer_from_name(v).unwrap();
 			sv.move_to_front(pos);
 		});
 	};
@@ -56,22 +56,22 @@ pub fn create() -> Box<dyn View> {
 		.get_mut()
 		.set_on_submit(|c: &mut Cursive, v: &str| {
 			if v == VIEW_MINING {
-				let _ = c.focus_id(SUBMENU_MINING_BUTTON);
+				let _ = c.focus_name(SUBMENU_MINING_BUTTON);
 			}
 		});
 	let main_menu = OnEventView::new(main_menu)
 		.on_pre_event('j', move |c| {
-			let mut s: ViewRef<SelectView<&str>> = c.find_id(MAIN_MENU).unwrap();
+			let mut s: ViewRef<SelectView<&str>> = c.find_name(MAIN_MENU).unwrap();
 			s.select_down(1)(c);
 			Some(EventResult::Consumed(None));
 		})
 		.on_pre_event('k', move |c| {
-			let mut s: ViewRef<SelectView<&str>> = c.find_id(MAIN_MENU).unwrap();
+			let mut s: ViewRef<SelectView<&str>> = c.find_name(MAIN_MENU).unwrap();
 			s.select_up(1)(c);
 			Some(EventResult::Consumed(None));
 		})
 		.on_pre_event(Key::Tab, move |c| {
-			let mut s: ViewRef<SelectView<&str>> = c.find_id(MAIN_MENU).unwrap();
+			let mut s: ViewRef<SelectView<&str>> = c.find_name(MAIN_MENU).unwrap();
 			if s.selected_id().unwrap() == s.len() - 1 {
 				s.set_selection(0)(c);
 			} else {
@@ -80,7 +80,7 @@ pub fn create() -> Box<dyn View> {
 			Some(EventResult::Consumed(None));
 		});
 	let main_menu = LinearLayout::new(Orientation::Vertical)
-		.child(BoxView::with_full_height(main_menu))
+		.child(ResizedView::with_full_height(main_menu))
 		.child(TextView::new("------------------"))
 		.child(TextView::new("Tab/Arrow : Cycle "))
 		.child(TextView::new("Enter     : Select"))

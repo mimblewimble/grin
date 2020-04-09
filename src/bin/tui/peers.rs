@@ -25,7 +25,7 @@ use cursive::direction::Orientation;
 use cursive::event::Key;
 use cursive::traits::{Boxable, Identifiable};
 use cursive::view::View;
-use cursive::views::{BoxView, Dialog, LinearLayout, OnEventView, TextView};
+use cursive::views::{Dialog, LinearLayout, OnEventView, ResizedView, TextView};
 use cursive::Cursive;
 
 use crate::tui::constants::{MAIN_MENU, TABLE_PEER_STATUS, VIEW_PEER_SYNC};
@@ -136,28 +136,28 @@ impl TUIStatusListener for TUIPeerView {
 			})
 			.column(PeerColumn::Version, "Proto", |c| c.width_percent(6))
 			.column(PeerColumn::UserAgent, "User Agent", |c| c.width_percent(18));
-		let peer_status_view = BoxView::with_full_screen(
+		let peer_status_view = ResizedView::with_full_screen(
 			LinearLayout::new(Orientation::Vertical)
 				.child(
 					LinearLayout::new(Orientation::Horizontal)
-						.child(TextView::new("  ").with_id("peers_total")),
+						.child(TextView::new("  ").with_name("peers_total")),
 				)
 				.child(
 					LinearLayout::new(Orientation::Horizontal)
 						.child(TextView::new("Longest Chain: "))
-						.child(TextView::new("  ").with_id("longest_work_peer")),
+						.child(TextView::new("  ").with_name("longest_work_peer")),
 				)
 				.child(TextView::new("   "))
 				.child(
-					Dialog::around(table_view.with_id(TABLE_PEER_STATUS).min_size((50, 20)))
+					Dialog::around(table_view.with_name(TABLE_PEER_STATUS).min_size((50, 20)))
 						.title("Connected Peers"),
 				),
 		)
-		.with_id(VIEW_PEER_SYNC);
+		.with_name(VIEW_PEER_SYNC);
 
 		let peer_status_view =
 			OnEventView::new(peer_status_view).on_pre_event(Key::Esc, move |c| {
-				let _ = c.focus_id(MAIN_MENU);
+				let _ = c.focus_name(MAIN_MENU);
 			});
 
 		Box::new(peer_status_view)
@@ -179,13 +179,13 @@ impl TUIStatusListener for TUIPeerView {
 			.to_string(),
 			None => "".to_string(),
 		};
-		let _ = c.call_on_id(
+		let _ = c.call_on_name(
 			TABLE_PEER_STATUS,
 			|t: &mut TableView<PeerStats, PeerColumn>| {
 				t.set_items(stats.peer_stats.clone());
 			},
 		);
-		let _ = c.call_on_id("peers_total", |t: &mut TextView| {
+		let _ = c.call_on_name("peers_total", |t: &mut TextView| {
 			t.set_content(format!(
 				"Total Peers: {} (Outbound: {})",
 				stats.peer_stats.len(),
@@ -196,7 +196,7 @@ impl TUIStatusListener for TUIPeerView {
 					.count(),
 			));
 		});
-		let _ = c.call_on_id("longest_work_peer", |t: &mut TextView| {
+		let _ = c.call_on_name("longest_work_peer", |t: &mut TextView| {
 			t.set_content(lp_str);
 		});
 	}

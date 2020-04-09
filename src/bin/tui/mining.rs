@@ -22,7 +22,7 @@ use cursive::event::Key;
 use cursive::traits::{Boxable, Identifiable};
 use cursive::view::View;
 use cursive::views::{
-	BoxView, Button, Dialog, LinearLayout, OnEventView, Panel, StackView, TextView,
+	Button, Dialog, LinearLayout, OnEventView, Panel, ResizedView, StackView, TextView,
 };
 use cursive::Cursive;
 use std::time;
@@ -169,15 +169,15 @@ impl TUIStatusListener for TUIMiningView {
 	/// Create the mining view
 	fn create() -> Box<dyn View> {
 		let devices_button = Button::new_raw("Mining Server Status", |s| {
-			let _ = s.call_on_id("mining_stack_view", |sv: &mut StackView| {
-				let pos = sv.find_layer_from_id("mining_device_view").unwrap();
+			let _ = s.call_on_name("mining_stack_view", |sv: &mut StackView| {
+				let pos = sv.find_layer_from_name("mining_device_view").unwrap();
 				sv.move_to_front(pos);
 			});
 		})
-		.with_id(SUBMENU_MINING_BUTTON);
+		.with_name(SUBMENU_MINING_BUTTON);
 		let difficulty_button = Button::new_raw("Difficulty", |s| {
-			let _ = s.call_on_id("mining_stack_view", |sv: &mut StackView| {
-				let pos = sv.find_layer_from_id("mining_difficulty_view").unwrap();
+			let _ = s.call_on_name("mining_stack_view", |sv: &mut StackView| {
+				let pos = sv.find_layer_from_name("mining_difficulty_view").unwrap();
 				sv.move_to_front(pos);
 			});
 		});
@@ -212,61 +212,61 @@ impl TUIStatusListener for TUIMiningView {
 		let status_view = LinearLayout::new(Orientation::Vertical)
 			.child(
 				LinearLayout::new(Orientation::Horizontal)
-					.child(TextView::new("  ").with_id("stratum_config_status")),
+					.child(TextView::new("  ").with_name("stratum_config_status")),
 			)
 			.child(
 				LinearLayout::new(Orientation::Horizontal)
-					.child(TextView::new("  ").with_id("stratum_is_running_status")),
+					.child(TextView::new("  ").with_name("stratum_is_running_status")),
 			)
 			.child(
 				LinearLayout::new(Orientation::Horizontal)
-					.child(TextView::new("  ").with_id("stratum_num_workers_status")),
+					.child(TextView::new("  ").with_name("stratum_num_workers_status")),
 			)
 			.child(
 				LinearLayout::new(Orientation::Horizontal)
-					.child(TextView::new("  ").with_id("stratum_block_height_status")),
+					.child(TextView::new("  ").with_name("stratum_block_height_status")),
 			)
 			.child(
 				LinearLayout::new(Orientation::Horizontal)
-					.child(TextView::new("  ").with_id("stratum_network_difficulty_status")),
+					.child(TextView::new("  ").with_name("stratum_network_difficulty_status")),
 			)
 			.child(
 				LinearLayout::new(Orientation::Horizontal)
-					.child(TextView::new("  ").with_id("stratum_network_hashrate")),
+					.child(TextView::new("  ").with_name("stratum_network_hashrate")),
 			)
 			.child(
 				LinearLayout::new(Orientation::Horizontal)
-					.child(TextView::new("  ").with_id("stratum_edge_bits_status")),
+					.child(TextView::new("  ").with_name("stratum_edge_bits_status")),
 			);
 
 		let mining_device_view = LinearLayout::new(Orientation::Vertical)
 			.child(status_view)
-			.child(BoxView::with_full_screen(
-				Dialog::around(table_view.with_id(TABLE_MINING_STATUS).min_size((50, 20)))
+			.child(ResizedView::with_full_screen(
+				Dialog::around(table_view.with_name(TABLE_MINING_STATUS).min_size((50, 20)))
 					.title("Mining Workers"),
 			))
-			.with_id("mining_device_view");
+			.with_name("mining_device_view");
 
 		let diff_status_view = LinearLayout::new(Orientation::Vertical)
 			.child(
 				LinearLayout::new(Orientation::Horizontal)
 					.child(TextView::new("Tip Height: "))
-					.child(TextView::new("").with_id("diff_cur_height")),
+					.child(TextView::new("").with_name("diff_cur_height")),
 			)
 			.child(
 				LinearLayout::new(Orientation::Horizontal)
 					.child(TextView::new("Difficulty Adjustment Window: "))
-					.child(TextView::new("").with_id("diff_adjust_window")),
+					.child(TextView::new("").with_name("diff_adjust_window")),
 			)
 			.child(
 				LinearLayout::new(Orientation::Horizontal)
 					.child(TextView::new("Average Block Time: "))
-					.child(TextView::new("").with_id("diff_avg_block_time")),
+					.child(TextView::new("").with_name("diff_avg_block_time")),
 			)
 			.child(
 				LinearLayout::new(Orientation::Horizontal)
 					.child(TextView::new("Average Difficulty: "))
-					.child(TextView::new("").with_id("diff_avg_difficulty")),
+					.child(TextView::new("").with_name("diff_avg_difficulty")),
 			);
 
 		let diff_table_view = TableView::<DiffBlock, DiffColumn>::new()
@@ -284,51 +284,51 @@ impl TUIStatusListener for TUIMiningView {
 
 		let mining_difficulty_view = LinearLayout::new(Orientation::Vertical)
 			.child(diff_status_view)
-			.child(BoxView::with_full_screen(
+			.child(ResizedView::with_full_screen(
 				Dialog::around(
 					diff_table_view
-						.with_id(TABLE_MINING_DIFF_STATUS)
+						.with_name(TABLE_MINING_DIFF_STATUS)
 						.min_size((50, 20)),
 				)
 				.title("Mining Difficulty Data"),
 			))
-			.with_id("mining_difficulty_view");
+			.with_name("mining_difficulty_view");
 
 		let view_stack = StackView::new()
 			.layer(mining_difficulty_view)
 			.layer(mining_device_view)
-			.with_id("mining_stack_view");
+			.with_name("mining_stack_view");
 
 		let mining_view = LinearLayout::new(Orientation::Vertical)
 			.child(mining_submenu)
 			.child(view_stack);
 
 		let mining_view = OnEventView::new(mining_view).on_pre_event(Key::Esc, move |c| {
-			let _ = c.focus_id(MAIN_MENU);
+			let _ = c.focus_name(MAIN_MENU);
 		});
 
-		Box::new(mining_view.with_id(VIEW_MINING))
+		Box::new(mining_view.with_name(VIEW_MINING))
 	}
 
 	/// update
 	fn update(c: &mut Cursive, stats: &ServerStats) {
-		c.call_on_id("diff_cur_height", |t: &mut TextView| {
+		c.call_on_name("diff_cur_height", |t: &mut TextView| {
 			t.set_content(stats.diff_stats.height.to_string());
 		});
-		c.call_on_id("diff_adjust_window", |t: &mut TextView| {
+		c.call_on_name("diff_adjust_window", |t: &mut TextView| {
 			t.set_content(stats.diff_stats.window_size.to_string());
 		});
 		let dur = time::Duration::from_secs(stats.diff_stats.average_block_time);
-		c.call_on_id("diff_avg_block_time", |t: &mut TextView| {
+		c.call_on_name("diff_avg_block_time", |t: &mut TextView| {
 			t.set_content(format!("{} Secs", dur.as_secs()).to_string());
 		});
-		c.call_on_id("diff_avg_difficulty", |t: &mut TextView| {
+		c.call_on_name("diff_avg_difficulty", |t: &mut TextView| {
 			t.set_content(stats.diff_stats.average_difficulty.to_string());
 		});
 
 		let mut diff_stats = stats.diff_stats.last_blocks.clone();
 		diff_stats.reverse();
-		let _ = c.call_on_id(
+		let _ = c.call_on_name(
 			TABLE_MINING_DIFF_STATUS,
 			|t: &mut TableView<DiffBlock, DiffColumn>| {
 				t.set_items(diff_stats);
@@ -351,28 +351,28 @@ impl TUIStatusListener for TUIMiningView {
 		);
 		let stratum_edge_bits = format!("Cuckoo Size:           {}", stratum_stats.edge_bits);
 
-		c.call_on_id("stratum_config_status", |t: &mut TextView| {
+		c.call_on_name("stratum_config_status", |t: &mut TextView| {
 			t.set_content(stratum_enabled);
 		});
-		c.call_on_id("stratum_is_running_status", |t: &mut TextView| {
+		c.call_on_name("stratum_is_running_status", |t: &mut TextView| {
 			t.set_content(stratum_is_running);
 		});
-		c.call_on_id("stratum_num_workers_status", |t: &mut TextView| {
+		c.call_on_name("stratum_num_workers_status", |t: &mut TextView| {
 			t.set_content(stratum_num_workers);
 		});
-		c.call_on_id("stratum_block_height_status", |t: &mut TextView| {
+		c.call_on_name("stratum_block_height_status", |t: &mut TextView| {
 			t.set_content(stratum_block_height);
 		});
-		c.call_on_id("stratum_network_difficulty_status", |t: &mut TextView| {
+		c.call_on_name("stratum_network_difficulty_status", |t: &mut TextView| {
 			t.set_content(stratum_network_difficulty);
 		});
-		c.call_on_id("stratum_network_hashrate", |t: &mut TextView| {
+		c.call_on_name("stratum_network_hashrate", |t: &mut TextView| {
 			t.set_content(stratum_network_hashrate);
 		});
-		c.call_on_id("stratum_edge_bits_status", |t: &mut TextView| {
+		c.call_on_name("stratum_edge_bits_status", |t: &mut TextView| {
 			t.set_content(stratum_edge_bits);
 		});
-		let _ = c.call_on_id(
+		let _ = c.call_on_name(
 			TABLE_MINING_STATUS,
 			|t: &mut TableView<WorkerStats, StratumWorkerColumn>| {
 				t.set_items(worker_stats);
