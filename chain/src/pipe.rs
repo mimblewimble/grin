@@ -215,6 +215,11 @@ pub fn sync_block_headers(
 		Ok(())
 	})?;
 
+	let header_head = ctx.batch.header_head()?;
+	if has_more_work(last_header, &header_head) {
+		update_header_head(&Tip::from_header(last_header), &mut ctx.batch)?;
+	}
+
 	Ok(())
 }
 
@@ -235,12 +240,7 @@ pub fn process_block_header(header: &BlockHeader, ctx: &mut BlockContext<'_>) ->
 	// If it does not increase total_difficulty beyond our current header_head
 	// then we can (re)accept this header and process the full block (or request it).
 	// This header is on a fork and we should still accept it as the fork may eventually win.
-	let header_head = {
-		let hash = ctx.header_pmmr.head_hash()?;
-		let header = ctx.batch.get_block_header(&hash)?;
-		Tip::from_header(&header)
-	};
-
+	let header_head = ctx.batch.header_head()?;
 	if let Ok(existing) = ctx.batch.get_block_header(&header.hash()) {
 		if !has_more_work(&existing, &header_head) {
 			return Ok(());
@@ -259,6 +259,10 @@ pub fn process_block_header(header: &BlockHeader, ctx: &mut BlockContext<'_>) ->
 
 	validate_header(header, ctx)?;
 	add_block_header(header, &ctx.batch)?;
+
+	if has_more_work(header, &header_head) {
+		update_header_head(&Tip::from_header(header), &mut ctx.batch)?;
+	}
 
 	Ok(())
 }
@@ -466,6 +470,19 @@ fn add_block_header(bh: &BlockHeader, batch: &store::Batch<'_>) -> Result<(), Er
 	batch
 		.save_block_header(bh)
 		.map_err(|e| ErrorKind::StoreErr(e, "pipe save header".to_owned()))?;
+	Ok(())
+}
+
+fn update_header_head(head: &Tip, batch: &mut store::Batch<'_>) -> Result<(), Error> {
+	batch
+		.save_header_head(&head)
+		.map_err(|e| ErrorKind::StoreErr(e, "pipe save header head".to_owned()))?;
+
+	debug!(
+		"header head updated to {} at {}",
+		head.last_block_h, head.height
+	);
+
 	Ok(())
 }
 
