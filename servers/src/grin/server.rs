@@ -502,16 +502,13 @@ impl Server {
 			total_difficulty: head.total_difficulty(),
 		};
 
-		let header_stats = match self.chain.try_header_head(read_timeout)? {
-			Some(head) => self.chain.get_block_header(&head.hash()).map(|header| {
-				Some(ChainStats {
-					latest_timestamp: header.timestamp,
-					height: header.height,
-					last_block_h: header.prev_hash,
-					total_difficulty: header.total_difficulty(),
-				})
-			})?,
-			_ => None,
+		let header_head = self.chain.header_head()?;
+		let header = self.chain.get_block_header(&header_head.hash())?;
+		let header_stats = ChainStats {
+			latest_timestamp: header.timestamp,
+			height: header.height,
+			last_block_h: header.prev_hash,
+			total_difficulty: header.total_difficulty(),
 		};
 
 		let disk_usage_bytes = WalkDir::new(&self.config.db_root)

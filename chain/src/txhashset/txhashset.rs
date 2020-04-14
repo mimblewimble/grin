@@ -481,13 +481,7 @@ where
 	trace!("Starting new txhashset (readonly) extension.");
 
 	let head = batch.head()?;
-
-	// Find header head based on current header MMR (the rightmost leaf node in the MMR).
-	let header_head = {
-		let hash = handle.head_hash()?;
-		let header = batch.get_block_header(&hash)?;
-		Tip::from_header(&header)
-	};
+	let header_head = batch.header_head()?;
 
 	let res = {
 		let header_pmmr = PMMR::at(&mut handle.backend, handle.last_pos);
@@ -586,13 +580,7 @@ where
 	let bitmap_accumulator: BitmapAccumulator;
 
 	let head = batch.head()?;
-
-	// Find header head based on current header MMR (the rightmost leaf node in the MMR).
-	let header_head = {
-		let hash = header_pmmr.head_hash()?;
-		let header = batch.get_block_header(&hash)?;
-		Tip::from_header(&header)
-	};
+	let header_head = batch.header_head()?;
 
 	// create a child transaction so if the state is rolled back by itself, all
 	// index saving can be undone
@@ -671,7 +659,8 @@ where
 	// index saving can be undone
 	let child_batch = batch.child()?;
 
-	// Find chain head based on current MMR (the rightmost leaf node in the MMR).
+	// Note: Extending either the sync_head or header_head MMR here.
+	// Use underlying MMR to determine the "head".
 	let head = match handle.head_hash() {
 		Ok(hash) => {
 			let header = child_batch.get_block_header(&hash)?;

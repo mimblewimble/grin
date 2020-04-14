@@ -31,7 +31,7 @@ variables:
 jobs:
 - job: linux
   pool:
-    vmImage: ubuntu-16.04
+    vmImage: ubuntu-latest
   strategy:
     matrix:
       servers:
@@ -50,12 +50,15 @@ jobs:
         CI_JOB: release
         PLATFORM: linux-amd64
   steps:
-    - template: '.ci/install.yml'
+    - script: |
+        sudo apt-get update -yqq
+        sudo apt-get install -yqq --no-install-recommends libncursesw5-dev
+      displayName: Linux Install Dependencies
     - template: '.ci/test.yml'
     - template: '.ci/release.yml'
 - job: macos
   pool:
-    vmImage: macos-10.14
+    vmImage: macos-latest
   strategy:
     matrix:
       test:
@@ -64,12 +67,14 @@ jobs:
         CI_JOB: release
         PLATFORM: macos
   steps:
-    - template: '.ci/install.yml'
+    - script: |
+        brew uninstall llvm
+      displayName: macOS Uninstall LLVM
     - template: '.ci/test.yml'
     - template: '.ci/release.yml'
 - job: windows
   pool:
-    vmImage: windows-2019
+    vmImage: windows-latest
   strategy:
     matrix:
       test:
@@ -78,6 +83,9 @@ jobs:
         CI_JOB: release
         PLATFORM: win-x64
   steps:
-    - template: '.ci/install.yml'
+    - script: |
+        git apply .ci/win.patch
+        choco install -y llvm
+      displayName: Windows Install Dependencies
     - template: '.ci/test.yml'
     - template: '.ci/windows-release.yml'
