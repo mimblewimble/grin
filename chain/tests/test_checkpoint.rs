@@ -27,26 +27,33 @@ fn init_from_checkpoint() {
 
 	// mine some blocks
 	// assert the checkpoint is *previous* block based on chain head
-	let chain = mine_chain(chain_dir, 3);
-	let genesis = chain
-		.get_block(&chain.get_header_by_height(0).unwrap().hash())
-		.unwrap();
-	let head = chain.head().unwrap();
-	let checkpoint = chain.txhashset().read().last_checkpoint().unwrap();
-	assert_eq!(head.prev_block_h, checkpoint.hash());
-	let head_orig = head.clone();
+	let (orig_head, checkpoint, genesis) = {
+		let chain = mine_chain(chain_dir, 3);
+		let genesis = chain
+			.get_block(&chain.get_header_by_height(0).unwrap().hash())
+			.unwrap();
+		let head = chain.head().unwrap();
+		let checkpoint = chain.txhashset().read().last_checkpoint().unwrap();
+		assert_eq!(head.prev_block_h, checkpoint.hash());
+
+		(head, checkpoint, genesis)
+	};
 
 	// re-init chain from disk
 	// using the checkpoint written previously
-	let chain = init_chain(chain_dir, genesis.clone());
-	let head = chain.head().unwrap();
-	assert_eq!(head.prev_block_h, checkpoint.hash());
-	assert_eq!(head_orig, head);
+	let latest_block = {
+		let chain = init_chain(chain_dir, genesis.clone());
+		let head = chain.head().unwrap();
+		assert_eq!(head.prev_block_h, checkpoint.hash());
+		assert_eq!(orig_head, head);
+
+		chain.get_block(&head.last_block_h).unwrap()
+	};
 
 	// reset chain head to earlier state and forget about "latest" block
 	// chain head now matches checkpoint
-	let latest_block = chain.get_block(&head.last_block_h).unwrap();
 	{
+		let chain = init_chain(chain_dir, genesis.clone());
 		let store = chain.store();
 		let batch = store.batch().unwrap();
 		batch
@@ -58,17 +65,19 @@ fn init_from_checkpoint() {
 
 	// re-init chain from disk
 	// assert the chain head corresponds to the checkpoint itself
-	let chain = init_chain(chain_dir, genesis.clone());
-	let head = chain.head().unwrap();
-	assert_eq!(head.last_block_h, checkpoint.hash());
+	{
+		let chain = init_chain(chain_dir, genesis.clone());
+		let head = chain.head().unwrap();
+		assert_eq!(head.last_block_h, checkpoint.hash());
 
-	// reprocess the "latest" block
-	// assert we are back to "latest" at head
-	let head = chain
-		.process_block(latest_block, chain::Options::NONE)
-		.unwrap()
-		.unwrap();
-	assert_eq!(head, head_orig);
+		// reprocess the "latest" block
+		// assert we are back to "latest" at head
+		let head = chain
+			.process_block(latest_block, chain::Options::NONE)
+			.unwrap()
+			.unwrap();
+		assert_eq!(orig_head, head);
+	}
 
 	clean_output_dir(chain_dir);
 }
