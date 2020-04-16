@@ -68,13 +68,9 @@ impl StateSync {
 		let mut sync_need_restart = false;
 
 		// check sync error
-		{
-			let clone = self.sync_state.sync_error();
-			if let Some(ref sync_error) = *clone.read() {
-				error!("state_sync: error = {:?}. restart fast sync", sync_error);
-				sync_need_restart = true;
-			}
-			drop(clone);
+		if let Some(ref sync_error) = *self.sync_state.sync_error() {
+			error!("state_sync: error = {:?}. restart fast sync", sync_error);
+			sync_need_restart = true;
 		}
 
 		// check peer connection status of this sync
@@ -147,14 +143,8 @@ impl StateSync {
 					}
 				}
 
-				self.sync_state.update(SyncStatus::TxHashsetDownload {
-					start_time: Utc::now(),
-					prev_update_time: Utc::now(),
-					update_time: Utc::now(),
-					prev_downloaded_size: 0,
-					downloaded_size: 0,
-					total_size: 0,
-				});
+				self.sync_state
+					.update(SyncStatus::TxHashsetDownload(Default::default()));
 			}
 		}
 		true

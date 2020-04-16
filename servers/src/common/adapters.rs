@@ -23,7 +23,9 @@ use std::sync::{Arc, Weak};
 use std::thread;
 use std::time::Instant;
 
-use crate::chain::{self, BlockStatus, ChainAdapter, Options, SyncState, SyncStatus};
+use crate::chain::{
+	self, BlockStatus, ChainAdapter, Options, SyncState, SyncStatus, TxHashsetDownloadStats,
+};
 use crate::common::hooks::{ChainEvents, NetEvents};
 use crate::common::types::{ChainValidationMode, DandelionEpoch, ServerConfig};
 use crate::core::core::hash::{Hash, Hashed};
@@ -399,20 +401,18 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 		total_size: u64,
 	) -> bool {
 		match self.sync_state.status() {
-			SyncStatus::TxHashsetDownload {
-				update_time: old_update_time,
-				downloaded_size: old_downloaded_size,
-				..
-			} => self
-				.sync_state
-				.update_txhashset_download(SyncStatus::TxHashsetDownload {
-					start_time,
-					prev_update_time: old_update_time,
-					update_time: Utc::now(),
-					prev_downloaded_size: old_downloaded_size,
-					downloaded_size,
-					total_size,
-				}),
+			SyncStatus::TxHashsetDownload(prev) => {
+				self.sync_state
+					.update_txhashset_download(TxHashsetDownloadStats {
+						start_time,
+						prev_update_time: prev.update_time,
+						update_time: Utc::now(),
+						prev_downloaded_size: prev.downloaded_size,
+						downloaded_size,
+						total_size,
+					});
+				true
+			}
 			_ => false,
 		}
 	}
