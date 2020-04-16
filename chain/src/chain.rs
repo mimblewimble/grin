@@ -1427,6 +1427,18 @@ fn setup_head(
 		}
 	}
 
+	// Setup our header_head if we do not already have one.
+	// Migrating back to header_head in db and some nodes may not have one.
+	match batch.header_head() {
+		Ok(_) => {}
+		Err(NotFoundErr(_)) => {
+			let hash = header_pmmr.head_hash()?;
+			let header = batch.get_block_header(&hash)?;
+			batch.save_header_head(&Tip::from_header(&header))?;
+		}
+		Err(e) => return Err(ErrorKind::StoreErr(e, "chain init header_head".to_owned()).into()),
+	}
+
 	// Initialize with genesis if we have no chain head yet.
 	match batch.head() {
 		Ok(_) => {}
