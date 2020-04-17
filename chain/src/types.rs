@@ -21,7 +21,7 @@ use crate::core::core::{Block, BlockHeader, HeaderVersion};
 use crate::core::pow::Difficulty;
 use crate::core::ser::{self, PMMRIndexHashable, Readable, Reader, Writeable, Writer};
 use crate::error::{Error, ErrorKind};
-use crate::util::{RwLock, RwLockReadGuard};
+use crate::util::{RwLock, RwLockWriteGuard};
 
 bitflags! {
 /// Options for block validation
@@ -144,14 +144,36 @@ impl SyncState {
 	}
 
 	/// Update the syncing status
-	pub fn update(&self, new_status: SyncStatus) {
-		if self.status() == new_status {
-			return;
+	pub fn update(&self, new_status: SyncStatus) -> bool {
+		let status = self.current.write();
+		self.update_with_guard(new_status, status)
+	}
+
+	fn update_with_guard(
+		&self,
+		new_status: SyncStatus,
+		mut status: RwLockWriteGuard<SyncStatus>,
+	) -> bool {
+		if *status == new_status {
+			return false;
 		}
 
-		let mut status = self.current.write();
 		debug!("sync_state: sync_status: {:?} -> {:?}", *status, new_status,);
 		*status = new_status;
+		true
+	}
+
+	/// Update the syncing status if predicate f is satisfied
+	pub fn update_if<F>(&self, new_status: SyncStatus, f: F) -> bool
+	where
+		F: Fn(SyncStatus) -> bool,
+	{
+		let status = self.current.write();
+		if f(*status) {
+			self.update_with_guard(new_status, status)
+		} else {
+			false
+		}
 	}
 
 	/// Update txhashset downloading progress
@@ -165,8 +187,11 @@ impl SyncState {
 	}
 
 	/// Get sync error
-	pub fn sync_error(&self) -> RwLockReadGuard<Option<Error>> {
-		self.sync_error.read()
+	pub fn sync_error(&self) -> Option<String> {
+		self.sync_error
+			.read()
+			.as_ref()
+			.and_then(|e| Some(e.to_string()))
 	}
 
 	/// Clear sync error
