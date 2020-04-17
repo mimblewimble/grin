@@ -17,7 +17,6 @@ use std::thread;
 use std::time;
 
 use crate::chain::{self, SyncState, SyncStatus};
-use crate::core::global;
 use crate::core::pow::Difficulty;
 use crate::grin::sync::body_sync::BodySync;
 use crate::grin::sync::header_sync::HeaderSync;
@@ -71,31 +70,12 @@ impl SyncRunner {
 			3
 		};
 
-		let head = self.chain.head()?;
-
-		let mut n = 0;
 		const MIN_PEERS: usize = 3;
-		loop {
-			if self.stop_state.is_stopped() {
+		for _i in 0..wait_secs {
+			if self.stop_state.is_stopped() || self.peers.more_or_same_work_peers()? > MIN_PEERS {
 				break;
 			}
-			let wp = self.peers.more_or_same_work_peers()?;
-			// exit loop when:
-			// * we have more than MIN_PEERS more_or_same_work peers
-			// * we are synced already, e.g. grin was quickly restarted
-			// * timeout
-			if wp > MIN_PEERS
-				|| (wp == 0
-					&& self.peers.enough_outbound_peers()
-					&& head.total_difficulty > Difficulty::zero())
-				|| n > wait_secs
-			{
-				if wp > 0 || !global::is_production_mode() {
-					break;
-				}
-			}
 			thread::sleep(time::Duration::from_secs(1));
-			n += 1;
 		}
 		Ok(())
 	}
@@ -136,10 +116,6 @@ impl SyncRunner {
 			self.chain.clone(),
 		);
 
-		// Highest height seen on the network, generally useful for a fast test on
-		// whether some sync is needed
-		let mut highest_height = 0;
-
 		// Main syncing loop
 		loop {
 			if self.stop_state.is_stopped() {
@@ -149,13 +125,8 @@ impl SyncRunner {
 			thread::sleep(time::Duration::from_millis(10));
 
 			let currently_syncing = self.sync_state.is_syncing();
-
 			// check whether syncing is generally needed, when we compare our state with others
-			let (needs_syncing, most_work_height) = unwrap_or_restart_loop!(self.needs_syncing());
-			if most_work_height > 0 {
-				// we can occasionally get a most work height of 0 if read locks fail
-				highest_height = most_work_height;
-			}
+			let (needs_syncing, highest_height) = unwrap_or_restart_loop!(self.needs_syncing());
 
 			// quick short-circuit (and a decent sleep) if no syncing is needed
 			if !needs_syncing {
@@ -227,15 +198,12 @@ impl SyncRunner {
 	fn needs_syncing(&self) -> Result<(bool, u64), chain::Error> {
 		let local_diff = self.chain.head()?.total_difficulty;
 		let mut is_syncing = self.sync_state.is_syncing();
-		let peer = self.peers.most_work_peer();
 
-		let peer_info = if let Some(p) = peer {
-			p.info.clone()
-		} else {
-			warn!("sync: no peers available, disabling sync");
-			return Ok((false, 0));
-		};
-
+		let peer_info = self
+			.peers
+			.most_work_peer()
+			.ok_or_else(|| chain::ErrorKind::Other("no peers available".to_string()))
+			.map(|p| p.info.clone())?;
 		// if we're already syncing, we're caught up if no peer has a higher
 		// difficulty than us
 		if is_syncing {
@@ -251,23 +219,15 @@ impl SyncRunner {
 			}
 		} else {
 			// sum the last 5 difficulties to give us the threshold
-			let threshold = {
-				let diff_iter = match self.chain.difficulty_iter() {
-					Ok(v) => v,
-					Err(e) => {
-						error!("failed to get difficulty iterator: {:?}", e);
-						// we handle 0 height in the caller
-						return Ok((false, 0));
-					}
-				};
-				diff_iter
-					.map(|x| x.difficulty)
-					.take(5)
-					.fold(Difficulty::zero(), |sum, val| sum + val)
-			};
+			let threshold = self
+				.chain
+				.difficulty_iter()?
+				.map(|x| x.difficulty)
+				.take(5)
+				.fold(Difficulty::zero(), |sum, val| sum + val);
 
 			let peer_diff = peer_info.total_difficulty();
-			if peer_diff > local_diff.clone() + threshold.clone() {
+			if peer_diff > local_diff + threshold {
 				info!(
 					"sync: total_difficulty {}, peer_difficulty {}, threshold {} (last 5 blocks), enabling sync",
 					local_diff,
