@@ -303,7 +303,7 @@ impl OutputRoots {
 }
 
 /// Minimal struct representing a known MMR position and associated block height.
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub struct CommitPos {
 	/// MMR position
 	pub pos: u64,

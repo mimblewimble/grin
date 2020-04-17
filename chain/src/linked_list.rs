@@ -14,41 +14,32 @@
 
 //! Implements storage primitives required by the chain
 
-use crate::core::consensus::HeaderInfo;
-use crate::core::core::hash::{Hash, Hashed};
-use crate::core::core::{Block, BlockHeader, BlockSums};
-use crate::core::pow::Difficulty;
-use crate::core::ser::{self, ProtocolVersion, Readable, Reader, Writeable, Writer};
-use crate::store::{
-	Batch, KERNEL_POS_PREFIX, NEW_COINBASE_OUTPUT_POS_PREFIX, NEW_PLAIN_OUTPUT_POS_PREFIX,
-};
-use crate::types::{CommitPos, OutputPos, Tip};
+use crate::core::ser::{self, Readable, Reader, Writeable, Writer};
+use crate::store::{Batch, COINBASE_KERNEL_POS_PREFIX};
+use crate::types::{CommitPos, OutputPos};
 use crate::util::secp::pedersen::Commitment;
-use croaring::Bitmap;
 use enum_primitive::FromPrimitive;
 use grin_store as store;
-use grin_store::{option_to_not_found, to_key, to_key_u64, Error, SerIterator};
-use std::convert::TryInto;
 use std::marker::PhantomData;
-use std::sync::Arc;
+use store::{to_key, to_key_u64, Error};
 
 enum_from_primitive! {
 	#[derive(Copy, Clone, Debug, PartialEq)]
-	enum LinkedListVariant {
+	enum ListWrapperVariant {
 		Unique = 0,
 		Multi = 1,
 	}
 }
 
-impl Writeable for LinkedListVariant {
+impl Writeable for ListWrapperVariant {
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
 		writer.write_u8(*self as u8)
 	}
 }
 
-impl Readable for LinkedListVariant {
-	fn read(reader: &mut dyn Reader) -> Result<LinkedListVariant, ser::Error> {
-		LinkedListVariant::from_u8(reader.read_u8()?).ok_or(ser::Error::CorruptedData)
+impl Readable for ListWrapperVariant {
+	fn read(reader: &mut dyn Reader) -> Result<ListWrapperVariant, ser::Error> {
+		ListWrapperVariant::from_u8(reader.read_u8()?).ok_or(ser::Error::CorruptedData)
 	}
 }
 
@@ -73,7 +64,7 @@ impl Readable for ListEntryVariant {
 	}
 }
 
-pub trait FooLinkedList {
+pub trait ListIndex {
 	/// List type
 	type List: Readable + Writeable;
 
@@ -117,12 +108,12 @@ pub trait FooLinkedList {
 }
 
 #[derive(Copy, Clone, Debug, PartialEq)]
-pub enum LinkedList<T> {
+pub enum ListWrapper<T> {
 	Unique { pos: T },
 	Multi { head: u64, tail: u64 },
 }
 
-impl<T> Writeable for LinkedList<T>
+impl<T> Writeable for ListWrapper<T>
 where
 	T: Writeable,
 {
@@ -131,12 +122,12 @@ where
 	/// "Multi" has references to "head" and "tail".
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
 		match self {
-			LinkedList::Unique { pos } => {
-				LinkedListVariant::Unique.write(writer)?;
+			ListWrapper::Unique { pos } => {
+				ListWrapperVariant::Unique.write(writer)?;
 				pos.write(writer)?;
 			}
-			LinkedList::Multi { head, tail } => {
-				LinkedListVariant::Multi.write(writer)?;
+			ListWrapper::Multi { head, tail } => {
+				ListWrapperVariant::Multi.write(writer)?;
 				writer.write_u64(*head)?;
 				writer.write_u64(*tail)?;
 			}
@@ -145,17 +136,17 @@ where
 	}
 }
 
-impl<T> Readable for LinkedList<T>
+impl<T> Readable for ListWrapper<T>
 where
 	T: Readable,
 {
 	/// Read the first byte to determine what needs to be read beyond that.
-	fn read(reader: &mut dyn Reader) -> Result<LinkedList<T>, ser::Error> {
-		let entry = match LinkedListVariant::read(reader)? {
-			LinkedListVariant::Unique => LinkedList::Unique {
+	fn read(reader: &mut dyn Reader) -> Result<ListWrapper<T>, ser::Error> {
+		let entry = match ListWrapperVariant::read(reader)? {
+			ListWrapperVariant::Unique => ListWrapper::Unique {
 				pos: T::read(reader)?,
 			},
-			LinkedListVariant::Multi => LinkedList::Multi {
+			ListWrapperVariant::Multi => ListWrapper::Multi {
 				head: reader.read_u64()?,
 				tail: reader.read_u64()?,
 			},
@@ -164,37 +155,25 @@ where
 	}
 }
 
-pub struct MyLinkedList<T> {
+pub struct MultiIndex<T> {
 	phantom: PhantomData<*const T>,
 	prefix: u8,
 }
 
-pub fn output_plain_index() -> MyLinkedList<OutputPos> {
-	MyLinkedList {
-		phantom: PhantomData,
-		prefix: NEW_PLAIN_OUTPUT_POS_PREFIX,
+impl<T> MultiIndex<T> {
+	pub fn init(prefix: u8) -> MultiIndex<T> {
+		MultiIndex {
+			phantom: PhantomData,
+			prefix,
+		}
 	}
 }
 
-pub fn output_coinbase_index() -> MyLinkedList<OutputPos> {
-	MyLinkedList {
-		phantom: PhantomData,
-		prefix: NEW_COINBASE_OUTPUT_POS_PREFIX,
-	}
-}
-
-pub fn kernel_index() -> MyLinkedList<CommitPos> {
-	MyLinkedList {
-		phantom: PhantomData,
-		prefix: KERNEL_POS_PREFIX,
-	}
-}
-
-impl<T> FooLinkedList for MyLinkedList<T>
+impl<T> ListIndex for MultiIndex<T>
 where
 	T: PosEntry,
 {
-	type List = LinkedList<T>;
+	type List = ListWrapper<T>;
 	type Entry = ListEntry<T>;
 
 	fn list_key(&self, commit: Commitment) -> Vec<u8> {
@@ -211,12 +190,12 @@ where
 	fn pop_entry(&self, batch: &Batch<'_>, commit: Commitment) -> Result<Option<T>, Error> {
 		match self.get_list(batch, commit)? {
 			None => Ok(None),
-			Some(LinkedList::Unique { pos }) => {
+			Some(ListWrapper::Unique { pos }) => {
 				// TODO - delete the list itself.
 
 				Ok(Some(pos))
 			}
-			Some(LinkedList::Multi { head, tail }) => {
+			Some(ListWrapper::Multi { head, tail }) => {
 				// read head from db
 				// read next one
 				// update next to a head if it was a middle
@@ -230,10 +209,10 @@ where
 	fn push_entry(&self, batch: &Batch<'_>, commit: Commitment, new_pos: T) -> Result<(), Error> {
 		match self.get_list(batch, commit)? {
 			None => {
-				let list = LinkedList::Unique { pos: new_pos };
+				let list = ListWrapper::Unique { pos: new_pos };
 				batch.db.put_ser(&self.list_key(commit), &list)?;
 			}
-			Some(LinkedList::Unique { pos: current_pos }) => {
+			Some(ListWrapper::Unique { pos: current_pos }) => {
 				let head = ListEntry::Head {
 					pos: new_pos,
 					next: current_pos.pos(),
@@ -242,7 +221,7 @@ where
 					pos: current_pos,
 					prev: new_pos.pos(),
 				};
-				let list: LinkedList<T> = LinkedList::Multi {
+				let list: ListWrapper<T> = ListWrapper::Multi {
 					head: new_pos.pos(),
 					tail: current_pos.pos(),
 				};
@@ -254,7 +233,7 @@ where
 					.put_ser(&self.entry_key(commit, current_pos.pos()), &tail)?;
 				batch.db.put_ser(&self.list_key(commit), &list)?;
 			}
-			Some(LinkedList::Multi { head, tail }) => {
+			Some(ListWrapper::Multi { head, tail }) => {
 				if let Some(ListEntry::Head {
 					pos: current_pos,
 					next: current_next,
@@ -269,7 +248,7 @@ where
 						next: current_next,
 						prev: new_pos.pos(),
 					};
-					let list: LinkedList<T> = LinkedList::Multi {
+					let list: ListWrapper<T> = ListWrapper::Multi {
 						head: new_pos.pos(),
 						tail,
 					};
@@ -293,7 +272,7 @@ pub trait PosEntry: Readable + Writeable + Copy {
 	fn pos(&self) -> u64;
 }
 
-impl PosEntry for OutputPos {
+impl PosEntry for CommitPos {
 	fn pos(&self) -> u64 {
 		self.pos
 	}
