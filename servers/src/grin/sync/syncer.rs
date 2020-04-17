@@ -202,14 +202,8 @@ impl SyncRunner {
 						continue;
 					}
 
-					let check_run = match body_sync.check_run(&head, highest_height) {
-						Ok(v) => v,
-						Err(e) => {
-							error!("check_run failed: {:?}", e);
-							continue;
-						}
-					};
-
+					let check_run =
+						unwrap_or_restart_loop!(body_sync.check_run(&head, highest_height));
 					if check_run {
 						check_state_sync = true;
 					}
