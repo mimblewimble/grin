@@ -17,7 +17,7 @@
 use cursive::direction::Orientation;
 use cursive::traits::Identifiable;
 use cursive::view::View;
-use cursive::views::{BoxView, LinearLayout, TextView};
+use cursive::views::{LinearLayout, ResizedView, TextView};
 use cursive::Cursive;
 
 use crate::tui::constants::VIEW_VERSION;
@@ -32,13 +32,13 @@ impl TUIStatusListener for TUIVersionView {
 	/// Create basic status view
 	fn create() -> Box<dyn View> {
 		let (basic_info, detailed_info) = info_strings();
-		let basic_status_view = BoxView::with_full_screen(
+		let basic_status_view = ResizedView::with_full_screen(
 			LinearLayout::new(Orientation::Vertical)
 				.child(TextView::new(basic_info))
 				.child(TextView::new(" "))
 				.child(TextView::new(detailed_info)),
 		);
-		Box::new(basic_status_view.with_id(VIEW_VERSION))
+		Box::new(basic_status_view.with_name(VIEW_VERSION))
 	}
 
 	/// update

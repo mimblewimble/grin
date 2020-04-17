@@ -18,7 +18,7 @@ use chrono::prelude::Utc;
 use cursive::direction::Orientation;
 use cursive::traits::Identifiable;
 use cursive::view::View;
-use cursive::views::{BoxView, LinearLayout, TextView};
+use cursive::views::{LinearLayout, ResizedView, TextView};
 use cursive::Cursive;
 
 use crate::tui::constants::VIEW_BASIC_STATUS;
@@ -137,22 +137,22 @@ impl TUIStatusView {
 impl TUIStatusListener for TUIStatusView {
 	/// Create basic status view
 	fn create() -> Box<dyn View> {
-		let basic_status_view = BoxView::with_full_screen(
+		let basic_status_view = ResizedView::with_full_screen(
 			LinearLayout::new(Orientation::Vertical)
 				.child(
 					LinearLayout::new(Orientation::Horizontal)
 						.child(TextView::new("Current Status:               "))
-						.child(TextView::new("Starting").with_id("basic_current_status")),
+						.child(TextView::new("Starting").with_name("basic_current_status")),
 				)
 				.child(
 					LinearLayout::new(Orientation::Horizontal)
 						.child(TextView::new("Connected Peers:              "))
-						.child(TextView::new("0").with_id("connected_peers")),
+						.child(TextView::new("0").with_name("connected_peers")),
 				)
 				.child(
 					LinearLayout::new(Orientation::Horizontal)
 						.child(TextView::new("Disk Usage (GB):              "))
-						.child(TextView::new("0").with_id("disk_usage")),
+						.child(TextView::new("0").with_name("disk_usage")),
 				)
 				.child(
 					LinearLayout::new(Orientation::Horizontal).child(TextView::new(
@@ -162,22 +162,22 @@ impl TUIStatusListener for TUIStatusView {
 				.child(
 					LinearLayout::new(Orientation::Horizontal)
 						.child(TextView::new("Header Tip Hash:              "))
-						.child(TextView::new("  ").with_id("basic_header_tip_hash")),
+						.child(TextView::new("  ").with_name("basic_header_tip_hash")),
 				)
 				.child(
 					LinearLayout::new(Orientation::Horizontal)
 						.child(TextView::new("Header Chain Height:          "))
-						.child(TextView::new("  ").with_id("basic_header_chain_height")),
+						.child(TextView::new("  ").with_name("basic_header_chain_height")),
 				)
 				.child(
 					LinearLayout::new(Orientation::Horizontal)
 						.child(TextView::new("Header Cumulative Difficulty: "))
-						.child(TextView::new("  ").with_id("basic_header_total_difficulty")),
+						.child(TextView::new("  ").with_name("basic_header_total_difficulty")),
 				)
 				.child(
 					LinearLayout::new(Orientation::Horizontal)
 						.child(TextView::new("Header Tip Timestamp:         "))
-						.child(TextView::new("  ").with_id("basic_header_timestamp")),
+						.child(TextView::new("  ").with_name("basic_header_timestamp")),
 				)
 				.child(
 					LinearLayout::new(Orientation::Horizontal).child(TextView::new(
@@ -187,22 +187,22 @@ impl TUIStatusListener for TUIStatusView {
 				.child(
 					LinearLayout::new(Orientation::Horizontal)
 						.child(TextView::new("Chain Tip Hash:               "))
-						.child(TextView::new("  ").with_id("tip_hash")),
+						.child(TextView::new("  ").with_name("tip_hash")),
 				)
 				.child(
 					LinearLayout::new(Orientation::Horizontal)
 						.child(TextView::new("Chain Height:                 "))
-						.child(TextView::new("  ").with_id("chain_height")),
+						.child(TextView::new("  ").with_name("chain_height")),
 				)
 				.child(
 					LinearLayout::new(Orientation::Horizontal)
 						.child(TextView::new("Chain Cumulative Difficulty:  "))
-						.child(TextView::new("  ").with_id("basic_total_difficulty")),
+						.child(TextView::new("  ").with_name("basic_total_difficulty")),
 				)
 				.child(
 					LinearLayout::new(Orientation::Horizontal)
 						.child(TextView::new("Chain Tip Timestamp:          "))
-						.child(TextView::new("  ").with_id("chain_timestamp")),
+						.child(TextView::new("  ").with_name("chain_timestamp")),
 				)
 				.child(
 					LinearLayout::new(Orientation::Horizontal).child(TextView::new(
@@ -212,17 +212,17 @@ impl TUIStatusListener for TUIStatusView {
 				.child(
 					LinearLayout::new(Orientation::Horizontal)
 						.child(TextView::new("Transaction Pool Size:        "))
-						.child(TextView::new("0").with_id("tx_pool_size"))
+						.child(TextView::new("0").with_name("tx_pool_size"))
 						.child(TextView::new(" ("))
-						.child(TextView::new("0").with_id("tx_pool_kernels"))
+						.child(TextView::new("0").with_name("tx_pool_kernels"))
 						.child(TextView::new(")")),
 				)
 				.child(
 					LinearLayout::new(Orientation::Horizontal)
 						.child(TextView::new("Stem Pool Size:               "))
-						.child(TextView::new("0").with_id("stem_pool_size"))
+						.child(TextView::new("0").with_name("stem_pool_size"))
 						.child(TextView::new(" ("))
-						.child(TextView::new("0").with_id("stem_pool_kernels"))
+						.child(TextView::new("0").with_name("stem_pool_kernels"))
 						.child(TextView::new(")")),
 				)
 				.child(
@@ -232,67 +232,67 @@ impl TUIStatusListener for TUIStatusView {
 				)
 				.child(
 					LinearLayout::new(Orientation::Horizontal)
-						.child(TextView::new("  ").with_id("basic_mining_config_status")),
+						.child(TextView::new("  ").with_name("basic_mining_config_status")),
 				)
 				.child(
 					LinearLayout::new(Orientation::Horizontal)
-						.child(TextView::new("  ").with_id("basic_mining_status")),
+						.child(TextView::new("  ").with_name("basic_mining_status")),
 				)
 				.child(
 					LinearLayout::new(Orientation::Horizontal)
-						.child(TextView::new("  ").with_id("basic_network_info")),
+						.child(TextView::new("  ").with_name("basic_network_info")),
 				), //.child(logo_view)
 		);
-		Box::new(basic_status_view.with_id(VIEW_BASIC_STATUS))
+		Box::new(basic_status_view.with_name(VIEW_BASIC_STATUS))
 	}
 
 	fn update(c: &mut Cursive, stats: &ServerStats) {
 		let basic_status = TUIStatusView::update_sync_status(stats.sync_status);
 
-		c.call_on_id("basic_current_status", |t: &mut TextView| {
+		c.call_on_name("basic_current_status", |t: &mut TextView| {
 			t.set_content(basic_status);
 		});
-		c.call_on_id("connected_peers", |t: &mut TextView| {
+		c.call_on_name("connected_peers", |t: &mut TextView| {
 			t.set_content(stats.peer_count.to_string());
 		});
-		c.call_on_id("disk_usage", |t: &mut TextView| {
+		c.call_on_name("disk_usage", |t: &mut TextView| {
 			t.set_content(stats.disk_usage_gb.clone());
 		});
-		c.call_on_id("tip_hash", |t: &mut TextView| {
+		c.call_on_name("tip_hash", |t: &mut TextView| {
 			t.set_content(stats.chain_stats.last_block_h.to_string() + "...");
 		});
-		c.call_on_id("chain_height", |t: &mut TextView| {
+		c.call_on_name("chain_height", |t: &mut TextView| {
 			t.set_content(stats.chain_stats.height.to_string());
 		});
-		c.call_on_id("basic_total_difficulty", |t: &mut TextView| {
+		c.call_on_name("basic_total_difficulty", |t: &mut TextView| {
 			t.set_content(stats.chain_stats.total_difficulty.to_string());
 		});
-		c.call_on_id("chain_timestamp", |t: &mut TextView| {
+		c.call_on_name("chain_timestamp", |t: &mut TextView| {
 			t.set_content(stats.chain_stats.latest_timestamp.to_string());
 		});
-		c.call_on_id("basic_header_tip_hash", |t: &mut TextView| {
+		c.call_on_name("basic_header_tip_hash", |t: &mut TextView| {
 			t.set_content(stats.header_stats.last_block_h.to_string() + "...");
 		});
-		c.call_on_id("basic_header_chain_height", |t: &mut TextView| {
+		c.call_on_name("basic_header_chain_height", |t: &mut TextView| {
 			t.set_content(stats.header_stats.height.to_string());
 		});
-		c.call_on_id("basic_header_total_difficulty", |t: &mut TextView| {
+		c.call_on_name("basic_header_total_difficulty", |t: &mut TextView| {
 			t.set_content(stats.header_stats.total_difficulty.to_string());
 		});
-		c.call_on_id("basic_header_timestamp", |t: &mut TextView| {
+		c.call_on_name("basic_header_timestamp", |t: &mut TextView| {
 			t.set_content(stats.header_stats.latest_timestamp.to_string());
 		});
 		if let Some(tx_stats) = &stats.tx_stats {
-			c.call_on_id("tx_pool_size", |t: &mut TextView| {
+			c.call_on_name("tx_pool_size", |t: &mut TextView| {
 				t.set_content(tx_stats.tx_pool_size.to_string());
 			});
-			c.call_on_id("stem_pool_size", |t: &mut TextView| {
+			c.call_on_name("stem_pool_size", |t: &mut TextView| {
 				t.set_content(tx_stats.stem_pool_size.to_string());
 			});
-			c.call_on_id("tx_pool_kernels", |t: &mut TextView| {
+			c.call_on_name("tx_pool_kernels", |t: &mut TextView| {
 				t.set_content(tx_stats.tx_pool_kernels.to_string());
 			});
-			c.call_on_id("stem_pool_kernels", |t: &mut TextView| {
+			c.call_on_name("stem_pool_kernels", |t: &mut TextView| {
 				t.set_content(tx_stats.stem_pool_kernels.to_string());
 			});
 		}

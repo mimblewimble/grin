@@ -41,13 +41,10 @@ grin_p2p = { path = "./p2p", version = "4.0.0-alpha.1" }
 grin_servers = { path = "./servers", version = "4.0.0-alpha.1" }
 grin_util = { path = "./util", version = "4.0.0-alpha.1" }
 
-[target.'cfg(windows)'.dependencies]
-cursive = { version = "0.12", default-features = false, features = ["pancurses-backend"] }
-[target.'cfg(windows)'.dependencies.pancurses]
-version = "0.16.0"
-features = ["win32"]
-[target.'cfg(unix)'.dependencies]
-cursive = "0.12"
+[dependencies.cursive]
+version = "0.14"
+default-features = false
+features = ["pancurses-backend"]
 
 [build-dependencies]
 built = "0.3"

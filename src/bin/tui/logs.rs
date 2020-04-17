@@ -15,7 +15,7 @@
 use cursive::theme::{BaseColor, Color, ColorStyle};
 use cursive::traits::Identifiable;
 use cursive::view::View;
-use cursive::views::BoxView;
+use cursive::views::ResizedView;
 use cursive::{Cursive, Printer};
 
 use crate::tui::constants::VIEW_LOGS;
@@ -29,12 +29,12 @@ pub struct TUILogsView;
 
 impl TUILogsView {
 	pub fn create() -> Box<dyn View> {
-		let logs_view = BoxView::with_full_screen(LogBufferView::new(200).with_id("logs"));
-		Box::new(logs_view.with_id(VIEW_LOGS))
+		let logs_view = ResizedView::with_full_screen(LogBufferView::new(200).with_name("logs"));
+		Box::new(logs_view.with_name(VIEW_LOGS))
 	}
 
 	pub fn update(c: &mut Cursive, entry: LogEntry) {
-		c.call_on_id("logs", |t: &mut LogBufferView| {
+		c.call_on_name("logs", |t: &mut LogBufferView| {
 			t.update(entry);
 		});
 	}
