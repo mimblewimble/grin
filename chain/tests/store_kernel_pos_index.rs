@@ -16,7 +16,7 @@ use grin_chain as chain;
 use grin_core as core;
 use grin_util as util;
 
-use crate::chain::linked_list::{self, FooLinkedList, LinkedList};
+use crate::chain::linked_list::{self, ListIndex, ListWrapper};
 use crate::chain::store::{self, ChainStore};
 use crate::chain::types::{CommitPos, OutputPos};
 use crate::core::core::OutputFeatures;
@@ -26,7 +26,7 @@ mod chain_test_helper;
 use self::chain_test_helper::clean_output_dir;
 
 #[test]
-fn test_store_output_pos_list() {
+fn test_store_kernel_index() {
 	util::init_test_logger();
 
 	let chain_dir = ".grin_idx_1";
@@ -38,82 +38,50 @@ fn test_store_output_pos_list() {
 
 	let commit = Commitment::from_vec(vec![]);
 
-	let index = linked_list::output_plain_index();
+	let index = store::coinbase_kernel_index();
 
 	assert_eq!(index.get_list(&batch, commit), Ok(None));
 
 	assert_eq!(
-		index.push_entry(
-			&batch,
-			commit,
-			OutputPos {
-				pos: 1,
-				height: 1,
-				features: OutputFeatures::Plain,
-			},
-		),
+		index.push_entry(&batch, commit, CommitPos { pos: 1, height: 1 },),
 		Ok(()),
 	);
 
 	assert_eq!(
 		index.get_list(&batch, commit),
-		Ok(Some(LinkedList::Unique {
-			pos: OutputPos {
-				pos: 1,
-				height: 1,
-				features: OutputFeatures::Plain
-			}
+		Ok(Some(ListWrapper::Unique {
+			pos: CommitPos { pos: 1, height: 1 }
 		})),
 	);
 
 	assert_eq!(
-		index.push_entry(
-			&batch,
-			commit,
-			OutputPos {
-				pos: 2,
-				height: 2,
-				features: OutputFeatures::Plain,
-			},
-		),
+		index.push_entry(&batch, commit, CommitPos { pos: 2, height: 2 },),
 		Ok(()),
 	);
 
 	assert_eq!(
 		index.get_list(&batch, commit),
-		Ok(Some(LinkedList::Multi { head: 2, tail: 1 })),
+		Ok(Some(ListWrapper::Multi { head: 2, tail: 1 })),
 	);
 
 	assert_eq!(
-		index.push_entry(
-			&batch,
-			commit,
-			OutputPos {
-				pos: 3,
-				height: 3,
-				features: OutputFeatures::Plain,
-			},
-		),
+		index.push_entry(&batch, commit, CommitPos { pos: 3, height: 3 },),
 		Ok(()),
 	);
 
 	assert_eq!(
 		index.get_list(&batch, commit),
-		Ok(Some(LinkedList::Multi { head: 3, tail: 1 })),
+		Ok(Some(ListWrapper::Multi { head: 3, tail: 1 })),
 	);
 
 	assert_eq!(
 		index.pop_entry(&batch, commit,),
-		Ok(Some(OutputPos {
-			pos: 3,
-			height: 3,
-			features: OutputFeatures::Plain,
-		})),
+		Ok(Some(CommitPos { pos: 3, height: 3 })),
 	);
 
 	assert_eq!(
 		index.get_list(&batch, commit),
-		Ok(Some(LinkedList::Multi { head: 2, tail: 1 })),
+		Ok(Some(ListWrapper::Multi { head: 2, tail: 1 })),
 	);
 
 	// Cleanup chain directory
