@@ -19,13 +19,16 @@ use crate::core::core::committed::Committed;
 use crate::core::core::hash::{Hash, Hashed};
 use crate::core::core::merkle_proof::MerkleProof;
 use crate::core::core::pmmr::{self, Backend, ReadonlyPMMR, RewindablePMMR, PMMR};
-use crate::core::core::{Block, BlockHeader, Input, Output, OutputIdentifier, TxKernel};
+use crate::core::core::{
+	Block, BlockHeader, Input, KernelFeatures, Output, OutputIdentifier, TxKernel,
+};
 use crate::core::ser::{PMMRable, ProtocolVersion};
 use crate::error::{Error, ErrorKind};
-use crate::store::{Batch, ChainStore};
+use crate::linked_list::ListIndex;
+use crate::store::{self, Batch, ChainStore};
 use crate::txhashset::bitmap_accumulator::BitmapAccumulator;
 use crate::txhashset::{RewindableKernelView, UTXOView};
-use crate::types::{OutputPos, OutputRoots, Tip, TxHashSetRoots, TxHashsetWriteStatus};
+use crate::types::{CommitPos, OutputRoots, Tip, TxHashSetRoots, TxHashsetWriteStatus};
 use crate::util::secp::pedersen::{Commitment, RangeProof};
 use crate::util::{file, secp_static, zip};
 use croaring::Bitmap;
@@ -217,7 +220,7 @@ impl TxHashSet {
 	/// Check if an output is unspent.
 	/// We look in the index to find the output MMR pos.
 	/// Then we check the entry in the output MMR and confirm the hash matches.
-	pub fn get_unspent(&self, output_id: &OutputIdentifier) -> Result<Option<OutputPos>, Error> {
+	pub fn get_unspent(&self, output_id: &OutputIdentifier) -> Result<Option<CommitPos>, Error> {
 		let commit = output_id.commit;
 		match self.commit_index.get_output_pos_height(&commit) {
 			Ok(Some((pos, height))) => {
@@ -225,11 +228,7 @@ impl TxHashSet {
 					ReadonlyPMMR::at(&self.output_pmmr_h.backend, self.output_pmmr_h.last_pos);
 				if let Some(out) = output_pmmr.get_data(pos) {
 					if OutputIdentifier::from(out) == *output_id {
-						Ok(Some(OutputPos {
-							pos,
-							height,
-							features: output_id.features,
-						}))
+						Ok(Some(CommitPos { pos, height }))
 					} else {
 						Ok(None)
 					}
@@ -457,7 +456,7 @@ impl TxHashSet {
 			}
 		}
 		debug!(
-			"init_height_pos_index: added entries for {} utxos, took {}s",
+			"init_output_pos_index: added entries for {} utxos, took {}s",
 			total_outputs,
 			now.elapsed().as_secs(),
 		);
@@ -937,15 +936,26 @@ impl<'a> Extension<'a> {
 		// Remove the spent output from the output_pos index.
 		let mut spent = vec![];
 		for input in b.inputs() {
-			let spent_pos = self.apply_input(input, batch)?;
-			affected_pos.push(spent_pos.pos);
+			let pos = self.apply_input(input, batch)?;
+			affected_pos.push(pos.pos);
 			batch.delete_output_pos_height(&input.commitment())?;
-			spent.push(spent_pos);
+			spent.push(pos);
 		}
 		batch.save_spent_index(&b.hash(), &spent)?;
 
+		let coinbase_kernel_index = store::coinbase_kernel_index();
 		for kernel in b.kernels() {
-			self.apply_kernel(kernel)?;
+			let pos = self.apply_kernel(kernel)?;
+			if let KernelFeatures::Coinbase = kernel.features {
+				coinbase_kernel_index.push_pos(
+					batch,
+					kernel.excess(),
+					CommitPos {
+						pos,
+						height: b.header.height,
+					},
+				)?;
+			}
 		}
 
 		// Update our BitmapAccumulator based on affected outputs (both spent and created).
@@ -973,7 +983,7 @@ impl<'a> Extension<'a> {
 		)
 	}
 
-	fn apply_input(&mut self, input: &Input, batch: &Batch<'_>) -> Result<OutputPos, Error> {
+	fn apply_input(&mut self, input: &Input, batch: &Batch<'_>) -> Result<CommitPos, Error> {
 		let commit = input.commitment();
 		if let Some((pos, height)) = batch.get_output_pos_height(&commit)? {
 			// First check this input corresponds to an existing entry in the output MMR.
@@ -991,11 +1001,7 @@ impl<'a> Extension<'a> {
 					self.rproof_pmmr
 						.prune(pos)
 						.map_err(ErrorKind::TxHashSetErr)?;
-					Ok(OutputPos {
-						pos,
-						height,
-						features: input.features,
-					})
+					Ok(CommitPos { pos, height })
 				}
 				Ok(false) => Err(ErrorKind::AlreadySpent(commit).into()),
 				Err(e) => Err(ErrorKind::TxHashSetErr(e).into()),
@@ -1046,11 +1052,12 @@ impl<'a> Extension<'a> {
 	}
 
 	/// Push kernel onto MMR (hash and data files).
-	fn apply_kernel(&mut self, kernel: &TxKernel) -> Result<(), Error> {
-		self.kernel_pmmr
+	fn apply_kernel(&mut self, kernel: &TxKernel) -> Result<u64, Error> {
+		let pos = self
+			.kernel_pmmr
 			.push(kernel)
 			.map_err(&ErrorKind::TxHashSetErr)?;
-		Ok(())
+		Ok(pos)
 	}
 
 	/// Build a Merkle proof for the given output and the block

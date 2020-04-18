@@ -13,7 +13,7 @@
 // limitations under the License.
 
 use crate::chain;
-use crate::chain::types::OutputPos;
+use crate::chain::types::CommitPos;
 use crate::core::core::{OutputFeatures, OutputIdentifier};
 use crate::rest::*;
 use crate::types::*;
@@ -33,7 +33,7 @@ pub fn w<T>(weak: &Weak<T>) -> Result<Arc<T>, Error> {
 fn get_unspent(
 	chain: &Arc<chain::Chain>,
 	id: &str,
-) -> Result<Option<(OutputPos, OutputIdentifier)>, Error> {
+) -> Result<Option<(CommitPos, OutputIdentifier)>, Error> {
 	let c = util::from_hex(id)
 		.map_err(|_| ErrorKind::Argument(format!("Not a valid commitment: {}", id)))?;
 	let commit = Commitment::from_vec(c);
