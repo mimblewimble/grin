@@ -15,8 +15,8 @@
 //! Implements storage primitives required by the chain
 
 use crate::core::ser::{self, Readable, Reader, Writeable, Writer};
-use crate::store::{Batch, COINBASE_KERNEL_POS_PREFIX};
-use crate::types::{CommitPos, OutputPos};
+use crate::store::Batch;
+use crate::types::CommitPos;
 use crate::util::secp::pedersen::Commitment;
 use enum_primitive::FromPrimitive;
 use grin_store as store;
@@ -64,6 +64,8 @@ impl Readable for ListEntryVariant {
 	}
 }
 
+/// Index supporting a list of (duplicate) entries per commitment.
+/// Each entry will be at a unique MMR pos.
 pub trait ListIndex {
 	/// List type
 	type List: Readable + Writeable;
@@ -71,8 +73,10 @@ pub trait ListIndex {
 	/// List entry type
 	type Entry: ListIndexEntry;
 
+	/// Construct a key for the list.
 	fn list_key(&self, commit: Commitment) -> Vec<u8>;
 
+	/// Construct a key for an individual entry in the list.
 	fn entry_key(&self, commit: Commitment, pos: u64) -> Vec<u8>;
 
 	/// Returns either a "Single" with embedded "pos" or a "list" with "head" and "tail".
@@ -93,6 +97,7 @@ pub trait ListIndex {
 		batch.db.get_ser(&self.entry_key(commit, pos))
 	}
 
+	/// Push a pos onto the list for the specified commitment.
 	fn push_pos(
 		&self,
 		batch: &Batch<'_>,
@@ -100,12 +105,14 @@ pub trait ListIndex {
 		new_pos: <Self::Entry as ListIndexEntry>::Pos,
 	) -> Result<(), Error>;
 
+	/// Pop a pos off the list for the specified commitment.
 	fn pop_pos(
 		&self,
 		batch: &Batch<'_>,
 		commit: Commitment,
 	) -> Result<Option<<Self::Entry as ListIndexEntry>::Pos>, Error>;
 
+	/// Peek the head of the list for the specified commitment.
 	fn peek_pos(
 		&self,
 		batch: &Batch<'_>,
@@ -113,10 +120,24 @@ pub trait ListIndex {
 	) -> Result<Option<<Self::Entry as ListIndexEntry>::Pos>, Error>;
 }
 
+/// Wrapper for the list to handle either `Single` or `Multi` entries.
+/// Optimized for the common case where we have a single entry in the list.
 #[derive(Copy, Clone, Debug, PartialEq)]
 pub enum ListWrapper<T> {
-	Single { pos: T },
-	Multi { head: u64, tail: u64 },
+	/// List with a single entry.
+	/// Allows direct access to the pos.
+	Single {
+		/// The MMR pos where this single entry is located.
+		pos: T,
+	},
+	/// List with multiple entries.
+	/// Maintains head and tail of the underlying linked list.
+	Multi {
+		/// Head of the linked list.
+		head: u64,
+		/// Tail of the linked list.
+		tail: u64,
+	},
 }
 
 impl<T> Writeable for ListWrapper<T>
@@ -161,6 +182,7 @@ where
 	}
 }
 
+/// Index supporting multiple duplicate entries.
 pub struct MultiIndex<T> {
 	phantom: PhantomData<*const T>,
 	prefix: u8,
@@ -194,7 +216,7 @@ where
 		match self.get_list(batch, commit)? {
 			None => Ok(None),
 			Some(ListWrapper::Single { pos }) => Ok(Some(pos)),
-			Some(ListWrapper::Multi { head, tail }) => {
+			Some(ListWrapper::Multi { head, .. }) => {
 				if let Some(ListEntry::Head { pos, .. }) = self.get_entry(batch, commit, head)? {
 					Ok(Some(pos))
 				} else {
@@ -221,7 +243,7 @@ where
 				}) = self.get_entry(batch, commit, head)?
 				{
 					match self.get_entry(batch, commit, current_next)? {
-						Some(ListEntry::Middle { pos, next, prev }) => {
+						Some(ListEntry::Middle { pos, next, .. }) => {
 							let head = ListEntry::Head { pos, next };
 							let list: ListWrapper<T> = ListWrapper::Multi {
 								head: pos.pos(),
@@ -234,7 +256,7 @@ where
 							batch.db.put_ser(&self.list_key(commit), &list)?;
 							Ok(Some(current_pos))
 						}
-						Some(ListEntry::Tail { pos, prev }) => {
+						Some(ListEntry::Tail { pos, .. }) => {
 							let list = ListWrapper::Single { pos };
 							batch.delete(&self.entry_key(commit, current_pos.pos()))?;
 							batch.db.put_ser(&self.list_key(commit), &list)?;

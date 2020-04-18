@@ -19,7 +19,7 @@ use crate::core::core::hash::{Hash, Hashed};
 use crate::core::core::{Block, BlockHeader, BlockSums};
 use crate::core::pow::Difficulty;
 use crate::core::ser::ProtocolVersion;
-use crate::linked_list::{ListIndex, MultiIndex};
+use crate::linked_list::MultiIndex;
 use crate::types::{CommitPos, OutputPos, Tip};
 use crate::util::secp::pedersen::Commitment;
 use croaring::Bitmap;
