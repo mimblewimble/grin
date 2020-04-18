@@ -93,14 +93,20 @@ pub trait ListIndex {
 		batch.db.get_ser(&self.entry_key(commit, pos))
 	}
 
-	fn push_entry(
+	fn push_pos(
 		&self,
 		batch: &Batch<'_>,
 		commit: Commitment,
 		new_pos: <Self::Entry as ListIndexEntry>::Pos,
 	) -> Result<(), Error>;
 
-	fn pop_entry(
+	fn pop_pos(
+		&self,
+		batch: &Batch<'_>,
+		commit: Commitment,
+	) -> Result<Option<<Self::Entry as ListIndexEntry>::Pos>, Error>;
+
+	fn peek_pos(
 		&self,
 		batch: &Batch<'_>,
 		commit: Commitment,
@@ -184,10 +190,24 @@ where
 		to_key_u64(self.prefix, &mut commit.as_ref().to_vec(), pos)
 	}
 
+	fn peek_pos(&self, batch: &Batch<'_>, commit: Commitment) -> Result<Option<T>, Error> {
+		match self.get_list(batch, commit)? {
+			None => Ok(None),
+			Some(ListWrapper::Unique { pos }) => Ok(Some(pos)),
+			Some(ListWrapper::Multi { head, tail }) => {
+				if let Some(ListEntry::Head { pos, .. }) = self.get_entry(batch, commit, head)? {
+					Ok(Some(pos))
+				} else {
+					Err(Error::OtherErr("expected head to be head variant".into()))
+				}
+			}
+		}
+	}
+
 	/// Pop the head of the list.
 	/// Returns the output_pos.
 	/// Returns None if list was empty.
-	fn pop_entry(&self, batch: &Batch<'_>, commit: Commitment) -> Result<Option<T>, Error> {
+	fn pop_pos(&self, batch: &Batch<'_>, commit: Commitment) -> Result<Option<T>, Error> {
 		match self.get_list(batch, commit)? {
 			None => Ok(None),
 			Some(ListWrapper::Unique { pos }) => {
@@ -201,12 +221,23 @@ where
 				// update next to a head if it was a middle
 				// update list head
 				// update list to a unique if next is a tail
+
+				if let Some(ListEntry::Head {
+					pos: current_pos,
+					next: current_next,
+				}) = self.get_entry(batch, commit, head)?
+				{
+					foo
+				} else {
+					Err(Error::OtherErr("expected head to be head variant".into()))
+				}
+
 				Ok(None)
 			}
 		}
 	}
 
-	fn push_entry(&self, batch: &Batch<'_>, commit: Commitment, new_pos: T) -> Result<(), Error> {
+	fn push_pos(&self, batch: &Batch<'_>, commit: Commitment, new_pos: T) -> Result<(), Error> {
 		match self.get_list(batch, commit)? {
 			None => {
 				let list = ListWrapper::Unique { pos: new_pos };
