@@ -53,7 +53,7 @@ fn test_store_kernel_index() {
 
 	assert_eq!(
 		index.get_list(&batch, commit),
-		Ok(Some(ListWrapper::Unique {
+		Ok(Some(ListWrapper::Single {
 			pos: CommitPos { pos: 1, height: 1 }
 		})),
 	);
@@ -89,7 +89,7 @@ fn test_store_kernel_index() {
 	);
 
 	assert_eq!(
-		index.pop_pos(&batch, commit,),
+		index.pop_pos(&batch, commit),
 		Ok(Some(CommitPos { pos: 3, height: 3 })),
 	);
 
@@ -102,6 +102,32 @@ fn test_store_kernel_index() {
 		index.get_list(&batch, commit),
 		Ok(Some(ListWrapper::Multi { head: 2, tail: 1 })),
 	);
+
+	assert_eq!(
+		index.pop_pos(&batch, commit),
+		Ok(Some(CommitPos { pos: 2, height: 2 })),
+	);
+
+	assert_eq!(
+		index.peek_pos(&batch, commit),
+		Ok(Some(CommitPos { pos: 1, height: 1 })),
+	);
+
+	assert_eq!(
+		index.get_list(&batch, commit),
+		Ok(Some(ListWrapper::Single {
+			pos: CommitPos { pos: 1, height: 1 }
+		})),
+	);
+
+	assert_eq!(
+		index.pop_pos(&batch, commit),
+		Ok(Some(CommitPos { pos: 1, height: 1 })),
+	);
+
+	assert_eq!(index.peek_pos(&batch, commit), Ok(None),);
+
+	assert_eq!(index.get_list(&batch, commit), Ok(None),);
 
 	// Cleanup chain directory
 	clean_output_dir(chain_dir);
