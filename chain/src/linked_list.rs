@@ -69,7 +69,7 @@ pub trait ListIndex {
 	type List: Readable + Writeable;
 
 	/// List entry type
-	type Entry: FooListEntry;
+	type Entry: ListIndexEntry;
 
 	fn list_key(&self, commit: Commitment) -> Vec<u8>;
 
@@ -97,14 +97,14 @@ pub trait ListIndex {
 		&self,
 		batch: &Batch<'_>,
 		commit: Commitment,
-		new_pos: <Self::Entry as FooListEntry>::Pos,
+		new_pos: <Self::Entry as ListIndexEntry>::Pos,
 	) -> Result<(), Error>;
 
 	fn pop_entry(
 		&self,
 		batch: &Batch<'_>,
 		commit: Commitment,
-	) -> Result<Option<<Self::Entry as FooListEntry>::Pos>, Error>;
+	) -> Result<Option<<Self::Entry as ListIndexEntry>::Pos>, Error>;
 }
 
 #[derive(Copy, Clone, Debug, PartialEq)]
@@ -278,13 +278,13 @@ impl PosEntry for CommitPos {
 	}
 }
 
-pub trait FooListEntry: Readable + Writeable {
+pub trait ListIndexEntry: Readable + Writeable {
 	type Pos: PosEntry;
 
 	fn get_pos(&self) -> Self::Pos;
 }
 
-impl<T> FooListEntry for ListEntry<T>
+impl<T> ListIndexEntry for ListEntry<T>
 where
 	T: PosEntry,
 {
