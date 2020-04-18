@@ -20,7 +20,7 @@ use crate::core::core::{Block, BlockHeader, BlockSums};
 use crate::core::pow::Difficulty;
 use crate::core::ser::ProtocolVersion;
 use crate::linked_list::MultiIndex;
-use crate::types::{CommitPos, OutputPos, Tip};
+use crate::types::{CommitPos, Tip};
 use crate::util::secp::pedersen::Commitment;
 use croaring::Bitmap;
 use grin_store as store;
@@ -147,6 +147,7 @@ impl ChainStore {
 /// An atomic batch in which all changes can be committed all at once or
 /// discarded on error.
 pub struct Batch<'a> {
+	/// The underlying db instance.
 	pub db: store::Batch<'a>,
 }
 
@@ -209,7 +210,7 @@ impl<'a> Batch<'a> {
 
 	/// We maintain a "spent" index for each full block to allow the output_pos
 	/// to be easily reverted during rewind.
-	pub fn save_spent_index(&self, h: &Hash, spent: &Vec<OutputPos>) -> Result<(), Error> {
+	pub fn save_spent_index(&self, h: &Hash, spent: &Vec<CommitPos>) -> Result<(), Error> {
 		self.db.put_ser(&to_key(BLOCK_SPENT_PREFIX, h)[..], spent)?;
 		Ok(())
 	}
@@ -360,7 +361,7 @@ impl<'a> Batch<'a> {
 
 	/// Get the "spent index" from the db for the specified block.
 	/// If we need to rewind a block then we use this to "unspend" the spent outputs.
-	pub fn get_spent_index(&self, bh: &Hash) -> Result<Vec<OutputPos>, Error> {
+	pub fn get_spent_index(&self, bh: &Hash) -> Result<Vec<CommitPos>, Error> {
 		option_to_not_found(self.db.get_ser(&to_key(BLOCK_SPENT_PREFIX, bh)), || {
 			format!("spent index: {}", bh)
 		})
@@ -479,6 +480,8 @@ impl<'a> Iterator for DifficultyIter<'a> {
 	}
 }
 
+/// Init the coinbase kernel index backed by the underlying db.
+/// This index supports multiple entries per key and cannot be used via db directly.
 pub fn coinbase_kernel_index() -> MultiIndex<CommitPos> {
 	MultiIndex::init(COINBASE_KERNEL_POS_PREFIX)
 }

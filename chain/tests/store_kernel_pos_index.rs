@@ -18,7 +18,7 @@ use grin_util as util;
 
 use crate::chain::linked_list::{self, ListIndex, ListWrapper};
 use crate::chain::store::{self, ChainStore};
-use crate::chain::types::{CommitPos, OutputPos};
+use crate::chain::types::{CommitPos, CommitPos};
 use crate::core::core::OutputFeatures;
 use crate::util::secp::pedersen::Commitment;
 mod chain_test_helper;
