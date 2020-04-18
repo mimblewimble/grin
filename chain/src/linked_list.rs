@@ -26,7 +26,7 @@ use store::{to_key, to_key_u64, Error};
 enum_from_primitive! {
 	#[derive(Copy, Clone, Debug, PartialEq)]
 	enum ListWrapperVariant {
-		Unique = 0,
+		Single = 0,
 		Multi = 1,
 	}
 }
@@ -75,7 +75,7 @@ pub trait ListIndex {
 
 	fn entry_key(&self, commit: Commitment, pos: u64) -> Vec<u8>;
 
-	/// Returns either a "unique" with embedded "pos" or a "list" with "head" and "tail".
+	/// Returns either a "Single" with embedded "pos" or a "list" with "head" and "tail".
 	/// Key is "prefix|commit".
 	/// Note the key for an individual entry in the list is "prefix|commit|pos".
 	fn get_list(&self, batch: &Batch<'_>, commit: Commitment) -> Result<Option<Self::List>, Error> {
@@ -115,7 +115,7 @@ pub trait ListIndex {
 
 #[derive(Copy, Clone, Debug, PartialEq)]
 pub enum ListWrapper<T> {
-	Unique { pos: T },
+	Single { pos: T },
 	Multi { head: u64, tail: u64 },
 }
 
@@ -124,12 +124,12 @@ where
 	T: Writeable,
 {
 	/// Write first byte representing the variant, followed by variant specific data.
-	/// "Unique" is optimized with embedded "pos".
+	/// "Single" is optimized with embedded "pos".
 	/// "Multi" has references to "head" and "tail".
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
 		match self {
-			ListWrapper::Unique { pos } => {
-				ListWrapperVariant::Unique.write(writer)?;
+			ListWrapper::Single { pos } => {
+				ListWrapperVariant::Single.write(writer)?;
 				pos.write(writer)?;
 			}
 			ListWrapper::Multi { head, tail } => {
@@ -149,7 +149,7 @@ where
 	/// Read the first byte to determine what needs to be read beyond that.
 	fn read(reader: &mut dyn Reader) -> Result<ListWrapper<T>, ser::Error> {
 		let entry = match ListWrapperVariant::read(reader)? {
-			ListWrapperVariant::Unique => ListWrapper::Unique {
+			ListWrapperVariant::Single => ListWrapper::Single {
 				pos: T::read(reader)?,
 			},
 			ListWrapperVariant::Multi => ListWrapper::Multi {
@@ -193,7 +193,7 @@ where
 	fn peek_pos(&self, batch: &Batch<'_>, commit: Commitment) -> Result<Option<T>, Error> {
 		match self.get_list(batch, commit)? {
 			None => Ok(None),
-			Some(ListWrapper::Unique { pos }) => Ok(Some(pos)),
+			Some(ListWrapper::Single { pos }) => Ok(Some(pos)),
 			Some(ListWrapper::Multi { head, tail }) => {
 				if let Some(ListEntry::Head { pos, .. }) = self.get_entry(batch, commit, head)? {
 					Ok(Some(pos))
@@ -210,29 +210,42 @@ where
 	fn pop_pos(&self, batch: &Batch<'_>, commit: Commitment) -> Result<Option<T>, Error> {
 		match self.get_list(batch, commit)? {
 			None => Ok(None),
-			Some(ListWrapper::Unique { pos }) => {
-				// TODO - delete the list itself.
-
+			Some(ListWrapper::Single { pos }) => {
+				batch.delete(&self.list_key(commit))?;
 				Ok(Some(pos))
 			}
 			Some(ListWrapper::Multi { head, tail }) => {
-				// read head from db
-				// read next one
-				// update next to a head if it was a middle
-				// update list head
-				// update list to a unique if next is a tail
-
 				if let Some(ListEntry::Head {
 					pos: current_pos,
 					next: current_next,
 				}) = self.get_entry(batch, commit, head)?
 				{
-					foo
+					match self.get_entry(batch, commit, current_next)? {
+						Some(ListEntry::Middle { pos, next, prev }) => {
+							let head = ListEntry::Head { pos, next };
+							let list: ListWrapper<T> = ListWrapper::Multi {
+								head: pos.pos(),
+								tail,
+							};
+							batch.delete(&self.entry_key(commit, current_pos.pos()))?;
+							batch
+								.db
+								.put_ser(&self.entry_key(commit, pos.pos()), &head)?;
+							batch.db.put_ser(&self.list_key(commit), &list)?;
+							Ok(Some(current_pos))
+						}
+						Some(ListEntry::Tail { pos, prev }) => {
+							let list = ListWrapper::Single { pos };
+							batch.delete(&self.entry_key(commit, current_pos.pos()))?;
+							batch.db.put_ser(&self.list_key(commit), &list)?;
+							Ok(Some(current_pos))
+						}
+						Some(_) => Err(Error::OtherErr("next was unexpected".into())),
+						None => Err(Error::OtherErr("next missing".into())),
+					}
 				} else {
 					Err(Error::OtherErr("expected head to be head variant".into()))
 				}
-
-				Ok(None)
 			}
 		}
 	}
@@ -240,10 +253,10 @@ where
 	fn push_pos(&self, batch: &Batch<'_>, commit: Commitment, new_pos: T) -> Result<(), Error> {
 		match self.get_list(batch, commit)? {
 			None => {
-				let list = ListWrapper::Unique { pos: new_pos };
+				let list = ListWrapper::Single { pos: new_pos };
 				batch.db.put_ser(&self.list_key(commit), &list)?;
 			}
-			Some(ListWrapper::Unique { pos: current_pos }) => {
+			Some(ListWrapper::Single { pos: current_pos }) => {
 				let head = ListEntry::Head {
 					pos: new_pos,
 					next: current_pos.pos(),
