@@ -48,31 +48,20 @@ impl TUIStatusView {
 				};
 				format!("Sync step 1/7: Downloading headers: {}%", percent)
 			}
-			SyncStatus::TxHashsetDownload {
-				start_time,
-				prev_update_time,
-				update_time: _,
-				prev_downloaded_size,
-				downloaded_size,
-				total_size,
-			} => {
-				if total_size > 0 {
-					let percent = if total_size > 0 {
-						downloaded_size * 100 / total_size
-					} else {
-						0
-					};
-					let start = prev_update_time.timestamp_nanos();
+			SyncStatus::TxHashsetDownload(stat) => {
+				if stat.total_size > 0 {
+					let percent = stat.downloaded_size * 100 / stat.total_size;
+					let start = stat.prev_update_time.timestamp_nanos();
 					let fin = Utc::now().timestamp_nanos();
 					let dur_ms = (fin - start) as f64 * NANO_TO_MILLIS;
 
 					format!("Sync step 2/7: Downloading {}(MB) chain state for state sync: {}% at {:.1?}(kB/s)",
-							total_size / 1_000_000,
+							stat.total_size / 1_000_000,
 							percent,
-							if dur_ms > 1.0f64 { downloaded_size.saturating_sub(prev_downloaded_size) as f64 / dur_ms as f64 } else { 0f64 },
+							if dur_ms > 1.0f64 { stat.downloaded_size.saturating_sub(stat.prev_downloaded_size) as f64 / dur_ms as f64 } else { 0f64 },
 					)
 				} else {
-					let start = start_time.timestamp_millis();
+					let start = stat.start_time.timestamp_millis();
 					let fin = Utc::now().timestamp_millis();
 					let dur_secs = (fin - start) / 1000;
 
