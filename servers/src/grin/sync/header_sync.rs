@@ -136,31 +136,29 @@ impl HeaderSync {
 			if all_headers_received {
 				// reset the stalling start time if syncing goes well
 				self.stalling_ts = None;
-			} else {
-				if let Some(ref stalling_ts) = self.stalling_ts {
-					if let Some(ref peer) = self.syncing_peer {
-						match self.sync_state.status() {
-							SyncStatus::HeaderSync { .. } | SyncStatus::BodySync { .. } => {
-								// Ban this fraud peer which claims a higher work but can't send us the real headers
-								if now > *stalling_ts + Duration::seconds(120)
-									&& header_head.total_difficulty < peer.info.total_difficulty()
+			} else if let Some(ref stalling_ts) = self.stalling_ts {
+				if let Some(ref peer) = self.syncing_peer {
+					match self.sync_state.status() {
+						SyncStatus::HeaderSync { .. } | SyncStatus::BodySync { .. } => {
+							// Ban this fraud peer which claims a higher work but can't send us the real headers
+							if now > *stalling_ts + Duration::seconds(120)
+								&& header_head.total_difficulty < peer.info.total_difficulty()
+							{
+								if let Err(e) = self
+									.peers
+									.ban_peer(peer.info.addr, ReasonForBan::FraudHeight)
 								{
-									if let Err(e) = self
-										.peers
-										.ban_peer(peer.info.addr, ReasonForBan::FraudHeight)
-									{
-										error!("failed to ban peer {}: {:?}", peer.info.addr, e);
-									}
-									info!(
+									error!("failed to ban peer {}: {:?}", peer.info.addr, e);
+								}
+								info!(
 										"sync: ban a fraud peer: {}, claimed height: {}, total difficulty: {}",
 										peer.info.addr,
 										peer.info.height(),
 										peer.info.total_difficulty(),
 									);
-								}
 							}
-							_ => (),
 						}
+						_ => (),
 					}
 				}
 			}
@@ -198,7 +196,7 @@ impl HeaderSync {
 			);
 
 			let _ = peer.send_header_request(locator);
-			return Some(peer.clone());
+			return Some(peer);
 		}
 		return None;
 	}
@@ -212,7 +210,7 @@ impl HeaderSync {
 
 		// for security, clear history_locator[] in any case of header chain rollback,
 		// the easiest way is to check whether the sync head and the header head are identical.
-		if self.history_locator.len() > 0 && tip.hash() != self.chain.header_head()?.hash() {
+		if !self.history_locator.is_empty() && tip.hash() != self.chain.header_head()?.hash() {
 			self.history_locator.retain(|&x| x.0 == 0);
 		}
 
@@ -224,7 +222,7 @@ impl HeaderSync {
 				locator.push(l);
 			} else {
 				// start at last known hash and go backward
-				let last_loc = locator.last().unwrap().clone();
+				let last_loc = locator.last().unwrap();
 				let mut header_cursor = self.chain.get_block_header(&last_loc.1);
 				while let Ok(header) = header_cursor {
 					if header.height == h {
@@ -246,13 +244,13 @@ impl HeaderSync {
 }
 
 // Whether we have a value close enough to the provided height in the locator
-fn close_enough(locator: &Vec<(u64, Hash)>, height: u64) -> Option<(u64, Hash)> {
-	if locator.len() == 0 {
+fn close_enough(locator: &[(u64, Hash)], height: u64) -> Option<(u64, Hash)> {
+	if locator.is_empty() {
 		return None;
 	}
 	// bounds, lower that last is last
 	if locator.last().unwrap().0 >= height {
-		return locator.last().map(|l| l.clone());
+		return locator.last().copied();
 	}
 	// higher than first is first if within an acceptable gap
 	if locator[0].0 < height && height.saturating_sub(127) < locator[0].0 {
@@ -261,9 +259,9 @@ fn close_enough(locator: &Vec<(u64, Hash)>, height: u64) -> Option<(u64, Hash)> 
 	for hh in locator.windows(2) {
 		if height <= hh[0].0 && height > hh[1].0 {
 			if hh[0].0 - height < height - hh[1].0 {
-				return Some(hh[0].clone());
+				return Some(hh[0]);
 			} else {
-				return Some(hh[1].clone());
+				return Some(hh[1]);
 			}
 		}
 	}

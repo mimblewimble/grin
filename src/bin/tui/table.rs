@@ -625,8 +625,9 @@ impl<T: TableViewItem<H> + PartialEq, H: Eq + Hash + Copy + Clone + 'static> Tab
 				}
 			});
 			self.rows_to_items = rows_to_items;
-
-			old_item.map(|o| self.set_selected_item(o));
+			if let Some(o) = old_item {
+				self.set_selected_item(o)
+			}
 		}
 	}
 

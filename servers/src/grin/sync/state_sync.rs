@@ -195,7 +195,7 @@ impl StateSync {
 				error!("state_sync: send_txhashset_request err! {:?}", e);
 				return Err(e);
 			}
-			return Ok(peer.clone());
+			return Ok(peer);
 		}
 		Err(p2p::Error::PeerException)
 	}

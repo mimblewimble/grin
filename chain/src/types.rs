@@ -188,10 +188,7 @@ impl SyncState {
 
 	/// Get sync error
 	pub fn sync_error(&self) -> Option<String> {
-		self.sync_error
-			.read()
-			.as_ref()
-			.and_then(|e| Some(e.to_string()))
+		self.sync_error.read().as_ref().map(|e| e.to_string())
 	}
 
 	/// Clear sync error

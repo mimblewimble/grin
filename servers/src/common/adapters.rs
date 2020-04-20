@@ -224,15 +224,13 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 				{
 					debug!("successfully hydrated block from tx pool!");
 					self.process_block(block, peer_info, chain::Options::NONE)
+				} else if self.sync_state.status() == SyncStatus::NoSync {
+					debug!("adapter: block invalid after hydration, requesting full block");
+					self.request_block(&cb.header, peer_info, chain::Options::NONE);
+					Ok(true)
 				} else {
-					if self.sync_state.status() == SyncStatus::NoSync {
-						debug!("adapter: block invalid after hydration, requesting full block");
-						self.request_block(&cb.header, peer_info, chain::Options::NONE);
-						Ok(true)
-					} else {
-						debug!("block invalid after hydration, ignoring it, cause still syncing");
-						Ok(true)
-					}
+					debug!("block invalid after hydration, ignoring it, cause still syncing");
+					Ok(true)
 				}
 			} else {
 				debug!("failed to retrieve previous block header (still syncing?)");
@@ -361,8 +359,7 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 	}
 
 	fn kernel_data_write(&self, reader: &mut dyn Read) -> Result<bool, chain::Error> {
-		let res = self.chain().kernel_data_write(reader)?;
-		error!("***** kernel_data_write: {:?}", res);
+		self.chain().kernel_data_write(reader)?;
 		Ok(true)
 	}
 

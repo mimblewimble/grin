@@ -188,7 +188,7 @@ impl Controller {
 		let stat_update_interval = 1;
 		let mut next_stat_update = Utc::now().timestamp() + stat_update_interval;
 		while self.ui.step() {
-			while let Some(message) = self.rx.try_iter().next() {
+			if let Some(message) = self.rx.try_iter().next() {
 				match message {
 					ControllerMessage::Shutdown => {
 						warn!("Shutdown in progress, please wait");

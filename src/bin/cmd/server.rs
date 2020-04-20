@@ -121,10 +121,7 @@ pub fn server_command(
 		}
 
 		if let Some(seeds) = a.values_of("seed") {
-			let peers = seeds
-				.filter_map(|s| s.parse().ok())
-				.map(|sa| PeerAddr(sa))
-				.collect();
+			let peers = seeds.filter_map(|s| s.parse().ok()).map(PeerAddr).collect();
 			server_config.p2p_config.seeding_type = Seeding::List;
 			server_config.p2p_config.seeds = Some(PeerAddrs { peers });
 		}
