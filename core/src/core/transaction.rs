@@ -53,12 +53,17 @@ pub enum KernelFeatures {
 		/// Height locked kernels have lock heights.
 		lock_height: u64,
 	},
+	NoRecentDuplicate {
+		fee: u64,
+		relative_height: u16,
+	},
 }
 
 impl KernelFeatures {
 	const PLAIN_U8: u8 = 0;
 	const COINBASE_U8: u8 = 1;
 	const HEIGHT_LOCKED_U8: u8 = 2;
+	const NO_RECENT_DUPLICATE_U8: u8 = 3;
 
 	/// Underlying (u8) value representing this kernel variant.
 	/// This is the first byte when we serialize/deserialize the kernel features.
@@ -67,6 +72,7 @@ impl KernelFeatures {
 			KernelFeatures::Plain { .. } => KernelFeatures::PLAIN_U8,
 			KernelFeatures::Coinbase => KernelFeatures::COINBASE_U8,
 			KernelFeatures::HeightLocked { .. } => KernelFeatures::HEIGHT_LOCKED_U8,
+			KernelFeatures::NoRecentDuplicate { .. } => KernelFeatures::NO_RECENT_DUPLICATE_U8,
 		}
 	}
 
@@ -76,18 +82,24 @@ impl KernelFeatures {
 			KernelFeatures::Plain { .. } => String::from("Plain"),
 			KernelFeatures::Coinbase => String::from("Coinbase"),
 			KernelFeatures::HeightLocked { .. } => String::from("HeightLocked"),
+			KernelFeatures::NoRecentDuplicate { .. } => String::from("NoRecentDuplicate"),
 		}
 	}
 
-	/// msg = hash(features)                       for coinbase kernels
-	///       hash(features || fee)                for plain kernels
-	///       hash(features || fee || lock_height) for height locked kernels
+	/// msg = hash(features)                           for coinbase kernels
+	///       hash(features || fee)                    for plain kernels
+	///       hash(features || fee || lock_height)     for height locked kernels
+	///       hash(features || fee || relative_height) for height locked kernels
 	pub fn kernel_sig_msg(&self) -> Result<secp::Message, Error> {
 		let x = self.as_u8();
 		let hash = match self {
 			KernelFeatures::Plain { fee } => (x, fee).hash(),
-			KernelFeatures::Coinbase => (x).hash(),
+			KernelFeatures::Coinbase => x.hash(),
 			KernelFeatures::HeightLocked { fee, lock_height } => (x, fee, lock_height).hash(),
+			KernelFeatures::NoRecentDuplicate {
+				fee,
+				relative_height,
+			} => (x, fee, relative_height).hash(),
 		};
 
 		let msg = secp::Message::from_slice(&hash.as_bytes())?;
@@ -97,14 +109,18 @@ impl KernelFeatures {
 	/// Write tx kernel features out in v1 protocol format.
 	/// Always include the fee and lock_height, writing 0 value if unused.
 	fn write_v1<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
-		let (fee, lock_height) = match self {
+		let (fee, height) = match self {
 			KernelFeatures::Plain { fee } => (*fee, 0),
 			KernelFeatures::Coinbase => (0, 0),
 			KernelFeatures::HeightLocked { fee, lock_height } => (*fee, *lock_height),
+			KernelFeatures::NoRecentDuplicate {
+				fee,
+				relative_height,
+			} => (*fee, (*relative_height).into()),
 		};
 		writer.write_u8(self.as_u8())?;
 		writer.write_u64(fee)?;
-		writer.write_u64(lock_height)?;
+		writer.write_u64(height)?;
 		Ok(())
 	}
 
@@ -125,6 +141,14 @@ impl KernelFeatures {
 				writer.write_u8(self.as_u8())?;
 				writer.write_u64(*fee)?;
 				writer.write_u64(*lock_height)?;
+			}
+			KernelFeatures::NoRecentDuplicate {
+				fee,
+				relative_height,
+			} => {
+				writer.write_u8(self.as_u8())?;
+				writer.write_u64(*fee)?;
+				writer.write_u64((*relative_height).into())?;
 			}
 		}
 		Ok(())
