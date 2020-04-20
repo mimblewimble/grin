@@ -118,9 +118,9 @@ pub fn process_block(b: &Block, ctx: &mut BlockContext<'_>) -> Result<Option<Tip
 
 	// Start a chain extension unit of work dependent on the success of the
 	// internal validation and saving operations
-	let ref mut header_pmmr = &mut ctx.header_pmmr;
-	let ref mut txhashset = &mut ctx.txhashset;
-	let ref mut batch = &mut ctx.batch;
+	let header_pmmr = &mut ctx.header_pmmr;
+	let txhashset = &mut ctx.txhashset;
+	let batch = &mut ctx.batch;
 	txhashset::extending(header_pmmr, txhashset, batch, |ext, batch| {
 		rewind_and_apply_fork(&prev, ext, batch)?;
 
@@ -399,8 +399,8 @@ fn verify_coinbase_maturity(
 	ext: &txhashset::ExtensionPair<'_>,
 	batch: &store::Batch<'_>,
 ) -> Result<(), Error> {
-	let ref extension = ext.extension;
-	let ref header_extension = ext.header_extension;
+	let extension = &ext.extension;
+	let header_extension = &ext.header_extension;
 	extension
 		.utxo_view(header_extension)
 		.verify_coinbase_maturity(&block.inputs(), block.header.height, batch)
@@ -541,8 +541,8 @@ pub fn rewind_and_apply_fork(
 	ext: &mut txhashset::ExtensionPair<'_>,
 	batch: &store::Batch<'_>,
 ) -> Result<(), Error> {
-	let ref mut extension = ext.extension;
-	let ref mut header_extension = ext.header_extension;
+	let extension = &mut ext.extension;
+	let header_extension = &mut ext.header_extension;
 
 	// Prepare the header MMR.
 	rewind_and_apply_header_fork(header, header_extension, batch)?;
@@ -592,8 +592,8 @@ fn validate_utxo(
 	ext: &mut txhashset::ExtensionPair<'_>,
 	batch: &store::Batch<'_>,
 ) -> Result<(), Error> {
-	let ref mut extension = ext.extension;
-	let ref mut header_extension = ext.header_extension;
+	let extension = &ext.extension;
+	let header_extension = &ext.header_extension;
 	extension
 		.utxo_view(header_extension)
 		.validate_block(block, batch)

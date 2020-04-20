@@ -377,7 +377,7 @@ impl<'a> Batch<'a> {
 		{
 			Ok(Bitmap::deserialize(&bytes))
 		} else {
-			Err(Error::NotFoundErr("legacy block input bitmap".to_string()).into())
+			Err(Error::NotFoundErr("legacy block input bitmap".to_string()))
 		}
 	}
 

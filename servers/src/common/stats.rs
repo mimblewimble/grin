@@ -223,13 +223,13 @@ impl PeerStats {
 	/// Convert from a peer directly
 	pub fn from_peer(peer: &p2p::Peer) -> PeerStats {
 		// State
-		let mut state = "Disconnected";
-		if peer.is_connected() {
-			state = "Connected";
-		}
-		if peer.is_banned() {
-			state = "Banned";
-		}
+		let state = if peer.is_banned() {
+			"Banned"
+		} else if peer.is_connected() {
+			"Connected"
+		} else {
+			"Disconnected"
+		};
 		let addr = peer.info.addr.to_string();
 		let direction = match peer.info.direction {
 			p2p::types::Direction::Inbound => "Inbound",

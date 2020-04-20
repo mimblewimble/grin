@@ -585,8 +585,8 @@ impl Chain {
 				let previous_header = batch.get_previous_header(&b.header)?;
 				pipe::rewind_and_apply_fork(&previous_header, ext, batch)?;
 
-				let ref mut extension = ext.extension;
-				let ref mut header_extension = ext.header_extension;
+				let extension = &mut ext.extension;
+				let header_extension = &mut ext.header_extension;
 
 				// Retrieve the header root before we apply the new block
 				let prev_root = header_extension.root()?;
@@ -1451,7 +1451,7 @@ fn setup_head(
 				let res = txhashset::extending(header_pmmr, txhashset, &mut batch, |ext, batch| {
 					pipe::rewind_and_apply_fork(&header, ext, batch)?;
 
-					let ref mut extension = ext.extension;
+					let extension = &mut ext.extension;
 
 					extension.validate_roots(&header)?;
 

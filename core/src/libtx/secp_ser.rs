@@ -44,10 +44,9 @@ pub mod pubkey_serde {
 		let static_secp = static_secp_instance();
 		let static_secp = static_secp.lock();
 		String::deserialize(deserializer)
-			.and_then(|string| from_hex(&string).map_err(|err| Error::custom(err.to_string())))
+			.and_then(|string| from_hex(&string).map_err(|err| Error::custom(err)))
 			.and_then(|bytes: Vec<u8>| {
-				PublicKey::from_slice(&static_secp, &bytes)
-					.map_err(|err| Error::custom(err.to_string()))
+				PublicKey::from_slice(&static_secp, &bytes).map_err(|err| Error::custom(err))
 			})
 	}
 }
@@ -82,13 +81,13 @@ pub mod option_sig_serde {
 		let static_secp = static_secp.lock();
 		Option::<String>::deserialize(deserializer).and_then(|res| match res {
 			Some(string) => from_hex(&string)
-				.map_err(|err| Error::custom(err.to_string()))
+				.map_err(|err| Error::custom(err))
 				.and_then(|bytes: Vec<u8>| {
 					let mut b = [0u8; 64];
 					b.copy_from_slice(&bytes[0..64]);
 					secp::Signature::from_compact(&static_secp, &b)
 						.map(Some)
-						.map_err(|err| Error::custom(err.to_string()))
+						.map_err(|err| Error::custom(err))
 				}),
 			None => Ok(None),
 		})
@@ -124,13 +123,13 @@ pub mod option_seckey_serde {
 		let static_secp = static_secp.lock();
 		Option::<String>::deserialize(deserializer).and_then(|res| match res {
 			Some(string) => from_hex(&string)
-				.map_err(|err| Error::custom(err.to_string()))
+				.map_err(|err| Error::custom(err))
 				.and_then(|bytes: Vec<u8>| {
 					let mut b = [0u8; 32];
 					b.copy_from_slice(&bytes[0..32]);
 					secp::key::SecretKey::from_slice(&static_secp, &b)
 						.map(Some)
-						.map_err(|err| Error::custom(err.to_string()))
+						.map_err(|err| Error::custom(err))
 				}),
 			None => Ok(None),
 		})
@@ -161,12 +160,11 @@ pub mod sig_serde {
 		let static_secp = static_secp_instance();
 		let static_secp = static_secp.lock();
 		String::deserialize(deserializer)
-			.and_then(|string| from_hex(&string).map_err(|err| Error::custom(err.to_string())))
+			.and_then(|string| from_hex(&string).map_err(|err| Error::custom(err)))
 			.and_then(|bytes: Vec<u8>| {
 				let mut b = [0u8; 64];
 				b.copy_from_slice(&bytes[0..64]);
-				secp::Signature::from_compact(&static_secp, &b)
-					.map_err(|err| Error::custom(err.to_string()))
+				secp::Signature::from_compact(&static_secp, &b).map_err(|err| Error::custom(err))
 			})
 	}
 }
@@ -196,7 +194,7 @@ pub mod option_commitment_serde {
 	{
 		Option::<String>::deserialize(deserializer).and_then(|res| match res {
 			Some(string) => from_hex(&string)
-				.map_err(|err| Error::custom(err.to_string()))
+				.map_err(|err| Error::custom(err))
 				.and_then(|bytes: Vec<u8>| Ok(Some(Commitment::from_vec(bytes.to_vec())))),
 			None => Ok(None),
 		})
@@ -208,9 +206,8 @@ where
 	D: Deserializer<'de>,
 {
 	use serde::de::Error;
-	String::deserialize(deserializer).and_then(|string| {
-		BlindingFactor::from_hex(&string).map_err(|err| Error::custom(err.to_string()))
-	})
+	String::deserialize(deserializer)
+		.and_then(|string| BlindingFactor::from_hex(&string).map_err(|err| Error::custom(err)))
 }
 
 /// Creates a RangeProof from a hex string
@@ -221,7 +218,7 @@ where
 	use serde::de::{Error, IntoDeserializer};
 
 	let val = String::deserialize(deserializer)
-		.and_then(|string| from_hex(&string).map_err(|err| Error::custom(err.to_string())))?;
+		.and_then(|string| from_hex(&string).map_err(|err| Error::custom(err)))?;
 	RangeProof::deserialize(val.into_deserializer())
 }
 
@@ -232,7 +229,7 @@ where
 {
 	use serde::de::Error;
 	String::deserialize(deserializer)
-		.and_then(|string| from_hex(&string).map_err(|err| Error::custom(err.to_string())))
+		.and_then(|string| from_hex(&string).map_err(|err| Error::custom(err)))
 		.and_then(|bytes: Vec<u8>| Ok(Commitment::from_vec(bytes.to_vec())))
 }
 
