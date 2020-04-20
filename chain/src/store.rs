@@ -37,8 +37,8 @@ const TAIL_PREFIX: u8 = b'T';
 const HEADER_HEAD_PREFIX: u8 = b'G';
 const OUTPUT_POS_PREFIX: u8 = b'p';
 
-// Proof of concept until we support NRD kernels.
-pub const COINBASE_KERNEL_POS_PREFIX: u8 = b'K';
+pub const COINBASE_KERNEL_LIST_PREFIX: u8 = b'K';
+pub const COINBASE_KERNEL_ENTRY_PREFIX: u8 = b'k';
 
 const BLOCK_INPUT_BITMAP_PREFIX: u8 = b'B';
 const BLOCK_SUMS_PREFIX: u8 = b'M';
@@ -483,5 +483,5 @@ impl<'a> Iterator for DifficultyIter<'a> {
 /// Init the coinbase kernel index backed by the underlying db.
 /// This index supports multiple entries per key and cannot be used via db directly.
 pub fn coinbase_kernel_index() -> MultiIndex<CommitPos> {
-	MultiIndex::init(COINBASE_KERNEL_POS_PREFIX)
+	MultiIndex::init(COINBASE_KERNEL_LIST_PREFIX, COINBASE_KERNEL_ENTRY_PREFIX)
 }

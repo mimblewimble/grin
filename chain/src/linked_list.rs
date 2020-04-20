@@ -185,14 +185,16 @@ where
 /// Index supporting multiple duplicate entries.
 pub struct MultiIndex<T> {
 	phantom: PhantomData<*const T>,
-	prefix: u8,
+	list_prefix: u8,
+	entry_prefix: u8,
 }
 
 impl<T> MultiIndex<T> {
-	pub fn init(prefix: u8) -> MultiIndex<T> {
+	pub fn init(list_prefix: u8, entry_prefix: u8) -> MultiIndex<T> {
 		MultiIndex {
 			phantom: PhantomData,
-			prefix,
+			list_prefix,
+			entry_prefix,
 		}
 	}
 }
@@ -205,11 +207,11 @@ where
 	type Entry = ListEntry<T>;
 
 	fn list_key(&self, commit: Commitment) -> Vec<u8> {
-		to_key(self.prefix, &mut commit.as_ref().to_vec())
+		to_key(self.list_prefix, &mut commit.as_ref().to_vec())
 	}
 
 	fn entry_key(&self, commit: Commitment, pos: u64) -> Vec<u8> {
-		to_key_u64(self.prefix, &mut commit.as_ref().to_vec(), pos)
+		to_key_u64(self.entry_prefix, &mut commit.as_ref().to_vec(), pos)
 	}
 
 	fn peek_pos(&self, batch: &Batch<'_>, commit: Commitment) -> Result<Option<T>, Error> {
