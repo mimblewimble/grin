@@ -137,23 +137,22 @@ where
 	K: Keychain,
 {
 	/// Creates a new instance of this proof builder
-	pub fn new(keychain: &'a K) -> Self {
-		let private_root_key = keychain
-			.derive_key(0, &K::root_key_id(), SwitchCommitmentType::None)
-			.unwrap();
+	pub fn new(keychain: &'a K) -> Result<Self, Error> {
+		let private_root_key =
+			keychain.derive_key(0, &K::root_key_id(), SwitchCommitmentType::None)?;
 
 		let private_hash = blake2b(32, &[], &private_root_key.0).as_bytes().to_vec();
 
 		let public_root_key = keychain
-			.public_root_key()
+			.public_root_key()?
 			.serialize_vec(keychain.secp(), true);
 		let rewind_hash = blake2b(32, &[], &public_root_key[..]).as_bytes().to_vec();
 
-		Self {
+		Ok(Self {
 			keychain,
 			rewind_hash,
 			private_hash,
-		}
+		})
 	}
 
 	fn nonce(&self, commit: &Commitment, private: bool) -> Result<SecretKey, Error> {
@@ -459,7 +458,7 @@ mod tests {
 	fn builder() {
 		let rng = &mut thread_rng();
 		let keychain = ExtKeychain::from_random_seed(false).unwrap();
-		let builder = ProofBuilder::new(&keychain);
+		let builder = ProofBuilder::new(&keychain).expect("new proof builder");
 		let amount = rng.gen();
 		let id = ExtKeychain::derive_key_id(3, rng.gen(), rng.gen(), rng.gen(), 0);
 		// With switch commitment
@@ -500,7 +499,7 @@ mod tests {
 		/*let rng = &mut thread_rng();
 		let keychain = ExtKeychain::from_random_seed(false).unwrap();
 
-		let builder = ProofBuilder::new(&keychain);
+		let builder = ProofBuilder::new(&keychain).expect("new proof builder");
 		let mut hasher = keychain.hasher();
 		let view_key = ViewKey::create(&keychain, keychain.master.clone(), &mut hasher, false).unwrap();
 		assert_eq!(builder.rewind_hash, view_key.rewind_hash);
@@ -531,7 +530,7 @@ mod tests {
 		let rng = &mut thread_rng();
 		let keychain = ExtKeychain::from_random_seed(false).unwrap();
 
-		let builder = ProofBuilder::new(&keychain);
+		let builder = ProofBuilder::new(&keychain).expect("new proof builder");
 		let mut hasher = keychain.hasher();
 		let view_key =
 			ViewKey::create(&keychain, keychain.master.clone(), &mut hasher, false).unwrap();
@@ -567,7 +566,7 @@ mod tests {
 		let rng = &mut thread_rng();
 		let keychain = ExtKeychain::from_random_seed(false).unwrap();
 
-		let builder = ProofBuilder::new(&keychain);
+		let builder = ProofBuilder::new(&keychain).expect("new proof builder");
 		let mut hasher = keychain.hasher();
 		let view_key =
 			ViewKey::create(&keychain, keychain.master.clone(), &mut hasher, false).unwrap();
@@ -599,7 +598,7 @@ mod tests {
 		let rng = &mut thread_rng();
 		let keychain = ExtKeychain::from_random_seed(false).unwrap();
 
-		let builder = ProofBuilder::new(&keychain);
+		let builder = ProofBuilder::new(&keychain).expect("new proof builder");
 		let mut hasher = keychain.hasher();
 		let view_key =
 			ViewKey::create(&keychain, keychain.master.clone(), &mut hasher, false).unwrap();

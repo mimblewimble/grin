@@ -233,7 +233,7 @@ pub fn verify_partial_sig(
 /// let key_id = ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
 /// let switch = SwitchCommitmentType::Regular;
 /// let commit = keychain.commit(value, &key_id, switch).unwrap();
-/// let builder = proof::ProofBuilder::new(&keychain);
+/// let builder = proof::ProofBuilder::new(&keychain).expect("new proof builder");
 /// let rproof = proof::create(&keychain, &builder, value, &key_id, switch, commit, None).unwrap();
 /// let output = Output {
 ///     features: OutputFeatures::Coinbase,
@@ -300,7 +300,7 @@ where
 /// let key_id = ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
 /// let switch = SwitchCommitmentType::Regular;
 /// let commit = keychain.commit(value, &key_id, switch).unwrap();
-/// let builder = proof::ProofBuilder::new(&keychain);
+/// let builder = proof::ProofBuilder::new(&keychain).expect("new proof builder");
 /// let rproof = proof::create(&keychain, &builder, value, &key_id, switch, commit, None).unwrap();
 /// let output = Output {
 ///     features: OutputFeatures::Coinbase,

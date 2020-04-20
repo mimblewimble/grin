@@ -53,7 +53,7 @@ fn test_block_building_max_weight() {
 				let fee = txs.iter().map(|x| x.fee()).sum();
 				let reward = libtx::reward::output(
 					&keychain,
-					&libtx::ProofBuilder::new(&keychain),
+					&libtx::ProofBuilder::new(&keychain).expect("new proof builder"),
 					&key_id,
 					fee,
 					false,

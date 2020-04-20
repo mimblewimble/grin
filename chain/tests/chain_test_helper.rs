@@ -57,7 +57,7 @@ where
 	let key_id = keychain::ExtKeychain::derive_key_id(0, 1, 0, 0, 0);
 	let reward = reward::output(
 		keychain,
-		&libtx::ProofBuilder::new(keychain),
+		&libtx::ProofBuilder::new(keychain).expect("new proof builder"),
 		&key_id,
 		0,
 		false,
@@ -86,9 +86,14 @@ where
 		let prev = chain.head_header().unwrap();
 		let next_header_info = consensus::next_difficulty(1, chain.difficulty_iter().unwrap());
 		let pk = ExtKeychainPath::new(1, n as u32, 0, 0, 0).to_identifier();
-		let reward =
-			libtx::reward::output(keychain, &libtx::ProofBuilder::new(keychain), &pk, 0, false)
-				.unwrap();
+		let reward = libtx::reward::output(
+			keychain,
+			&libtx::ProofBuilder::new(keychain).expect("new proof builder"),
+			&pk,
+			0,
+			false,
+		)
+		.unwrap();
 		let mut b =
 			core::core::Block::new(&prev, vec![], next_header_info.clone().difficulty, reward)
 				.unwrap();

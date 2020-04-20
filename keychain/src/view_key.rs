@@ -60,13 +60,13 @@ impl ViewKey {
 			child_number,
 			public_key,
 			chain_code,
-		} = ExtendedPubKey::from_private(secp, &ext_key, hasher);
+		} = ExtendedPubKey::from_private(secp, &ext_key, hasher)?;
 
 		let mut switch_public_key = PublicKey(ffi::PublicKey(GENERATOR_PUB_J_RAW));
 		switch_public_key.mul_assign(secp, &ext_key.secret_key)?;
 		let switch_public_key = Some(switch_public_key);
 
-		let rewind_hash = Self::rewind_hash(secp, keychain.public_root_key());
+		let rewind_hash = Self::rewind_hash(secp, keychain.public_root_key()?);
 
 		Ok(Self {
 			is_floo,

@@ -474,7 +474,7 @@ pub trait Keychain: Sync + Send + Clone {
 	fn derive_key_id(depth: u8, d1: u32, d2: u32, d3: u32, d4: u32) -> Identifier;
 
 	/// The public root key
-	fn public_root_key(&self) -> PublicKey;
+	fn public_root_key(&self) -> Result<PublicKey, Error>;
 
 	fn derive_key(
 		&self,

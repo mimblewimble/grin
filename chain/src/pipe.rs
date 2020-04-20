@@ -185,7 +185,9 @@ pub fn sync_block_headers(
 	if headers.is_empty() {
 		return Ok(());
 	}
-	let last_header = headers.last().expect("last header");
+	let last_header = headers
+		.last()
+		.ok_or_else(|| ErrorKind::SyncError("empty headers".to_string()))?;
 
 	// Check if we know about all these headers. If so we can accept them quickly.
 	// If they *do not* increase total work on the sync chain we are done.

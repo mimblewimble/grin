@@ -29,7 +29,7 @@ use keychain::{Identifier, Keychain};
 #[allow(dead_code)]
 pub fn tx2i1o() -> Transaction {
 	let keychain = keychain::ExtKeychain::from_random_seed(false).unwrap();
-	let builder = ProofBuilder::new(&keychain);
+	let builder = ProofBuilder::new(&keychain).expect("new proof builder");
 	let key_id1 = keychain::ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
 	let key_id2 = keychain::ExtKeychain::derive_key_id(1, 2, 0, 0, 0);
 	let key_id3 = keychain::ExtKeychain::derive_key_id(1, 3, 0, 0, 0);
@@ -47,7 +47,7 @@ pub fn tx2i1o() -> Transaction {
 #[allow(dead_code)]
 pub fn tx1i1o() -> Transaction {
 	let keychain = keychain::ExtKeychain::from_random_seed(false).unwrap();
-	let builder = ProofBuilder::new(&keychain);
+	let builder = ProofBuilder::new(&keychain).expect("new proof builder");
 	let key_id1 = keychain::ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
 	let key_id2 = keychain::ExtKeychain::derive_key_id(1, 2, 0, 0, 0);
 
@@ -66,7 +66,7 @@ pub fn tx1i1o() -> Transaction {
 #[allow(dead_code)]
 pub fn tx1i2o() -> Transaction {
 	let keychain = keychain::ExtKeychain::from_random_seed(false).unwrap();
-	let builder = ProofBuilder::new(&keychain);
+	let builder = ProofBuilder::new(&keychain).expect("new proof builder");
 	let key_id1 = keychain::ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
 	let key_id2 = keychain::ExtKeychain::derive_key_id(1, 2, 0, 0, 0);
 	let key_id3 = keychain::ExtKeychain::derive_key_id(1, 3, 0, 0, 0);

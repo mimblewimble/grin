@@ -60,7 +60,7 @@ fn test_coinbase_maturity() {
 		let prev = chain.head_header().unwrap();
 
 		let keychain = ExtKeychain::from_random_seed(false).unwrap();
-		let builder = ProofBuilder::new(&keychain);
+		let builder = ProofBuilder::new(&keychain).expect("new proof builder");
 		let key_id1 = ExtKeychainPath::new(1, 1, 0, 0, 0).to_identifier();
 		let key_id2 = ExtKeychainPath::new(1, 2, 0, 0, 0).to_identifier();
 		let key_id3 = ExtKeychainPath::new(1, 3, 0, 0, 0).to_identifier();
@@ -144,7 +144,7 @@ fn test_coinbase_maturity() {
 			let prev = chain.head_header().unwrap();
 
 			let keychain = ExtKeychain::from_random_seed(false).unwrap();
-			let builder = ProofBuilder::new(&keychain);
+			let builder = ProofBuilder::new(&keychain).expect("new proof builder");
 			let key_id1 = ExtKeychainPath::new(1, 1, 0, 0, 0).to_identifier();
 
 			let next_header_info = consensus::next_difficulty(1, chain.difficulty_iter().unwrap());
@@ -227,7 +227,7 @@ fn test_coinbase_maturity() {
 				let prev = chain.head_header().unwrap();
 
 				let keychain = ExtKeychain::from_random_seed(false).unwrap();
-				let builder = ProofBuilder::new(&keychain);
+				let builder = ProofBuilder::new(&keychain).expect("new proof builder");
 				let pk = ExtKeychainPath::new(1, 1, 0, 0, 0).to_identifier();
 
 				let reward = libtx::reward::output(&keychain, &builder, &pk, 0, false).unwrap();

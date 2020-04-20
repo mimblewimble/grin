@@ -49,7 +49,7 @@ fn test_transaction_pool_block_building() {
 				let fee = txs.iter().map(|x| x.fee()).sum();
 				let reward = libtx::reward::output(
 					&keychain,
-					&libtx::ProofBuilder::new(&keychain),
+					&libtx::ProofBuilder::new(&keychain).expect("new proof builder"),
 					&key_id,
 					fee,
 					false,

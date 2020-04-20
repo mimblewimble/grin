@@ -360,11 +360,11 @@ impl<'a> Batch<'a> {
 	/// Fallback to legacy block input bitmap from the db.
 	pub fn get_block_input_bitmap(&self, bh: &Hash) -> Result<Bitmap, Error> {
 		if let Ok(spent) = self.get_spent_index(bh) {
-			let bitmap = spent
+			spent
 				.into_iter()
-				.map(|x| x.pos.try_into().unwrap())
-				.collect();
-			Ok(bitmap)
+				.map(|x| x.pos.try_into())
+				.collect::<Result<Bitmap, _>>()
+				.map_err(|e| Error::SerErr(format!("Invalid spent index: {}", e)))
 		} else {
 			self.get_legacy_input_bitmap(bh)
 		}
