@@ -37,12 +37,11 @@ fn open_port() -> u16 {
 
 // Starts a server and connects a client peer to it to check handshake,
 // followed by a ping/pong exchange to make sure the connection is live.
-#[test]
-fn peer_handshake() {
+fn peer_handshake_aux(server_ip: &str, client_addr: &str) {
 	util::init_test_logger();
 
 	let p2p_config = p2p::P2PConfig {
-		host: "127.0.0.1".parse().unwrap(),
+		host: server_ip.parse().unwrap(),
 		port: open_port(),
 		peers_allow: None,
 		peers_deny: None,
@@ -69,7 +68,7 @@ fn peer_handshake() {
 	let addr = SocketAddr::new(p2p_config.host, p2p_config.port);
 	let socket = TcpStream::connect_timeout(&addr, time::Duration::from_secs(10)).unwrap();
 
-	let my_addr = PeerAddr("127.0.0.1:5000".parse().unwrap());
+	let my_addr = PeerAddr(client_addr.parse().unwrap());
 	let peer = Peer::connect(
 		socket,
 		p2p::Capabilities::UNKNOWN,
@@ -90,4 +89,14 @@ fn peer_handshake() {
 	let server_peer = server.peers.get_connected_peer(my_addr).unwrap();
 	assert_eq!(server_peer.info.total_difficulty(), Difficulty::min());
 	assert!(server.peers.peer_count() > 0);
+}
+
+#[test]
+fn peer_handshake_ipv4() {
+	peer_handshake_aux("127.0.0.1", "127.0.0.1:5000");
+}
+
+#[test]
+fn peer_handshake_ipv6() {
+	peer_handshake_aux("::1", "[::1]:5000");
 }
