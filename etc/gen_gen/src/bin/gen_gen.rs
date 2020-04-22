@@ -29,7 +29,7 @@ use grin_chain as chain;
 use grin_core as core;
 use grin_miner_plugin as plugin;
 use grin_store as store;
-use grin_util as util;
+use grin_util::{self as util, ToHex};
 use grin_wallet as wallet;
 
 use grin_core::core::hash::Hashed;
@@ -216,7 +216,7 @@ fn update_genesis_rs(gen: &core::core::Block) {
 		"excess".to_string(),
 		format!(
 			"Commitment::from_vec(util::from_hex({:x?}.to_string()).unwrap())",
-			util::to_hex(gen.kernels()[0].excess.0.to_vec())
+			gen.kernels()[0].excess.to_hex())
 		),
 	));
 	replacements.push((

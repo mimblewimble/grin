@@ -19,7 +19,7 @@ use crate::pow::{PoWContext, Proof};
 use byteorder::{BigEndian, WriteBytesExt};
 use croaring::Bitmap;
 use std::mem;
-use util;
+use util::ToHex;
 
 struct Graph<T>
 where
@@ -224,7 +224,7 @@ where
 	pub fn sipkey_hex(&self, index: usize) -> Result<String, Error> {
 		let mut rdr = vec![];
 		rdr.write_u64::<BigEndian>(self.params.siphash_keys[index])?;
-		Ok(util::to_hex(rdr))
+		Ok(rdr.to_hex())
 	}
 
 	/// Return number of bytes used by the graph

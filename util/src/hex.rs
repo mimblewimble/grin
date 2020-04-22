@@ -19,12 +19,24 @@
 use std::fmt::Write;
 
 /// Encode the provided bytes into a hex string
-pub fn to_hex(bytes: Vec<u8>) -> String {
-	let mut s = String::new();
+fn to_hex(bytes: &[u8]) -> String {
+	let mut s = String::with_capacity(bytes.len() * 2);
 	for byte in bytes {
-		write!(&mut s, "{:02x}", byte).expect("Unable to write");
+		write!(&mut s, "{:02x}", byte).expect("Unable to write hex");
 	}
 	s
+}
+
+/// Convert to hex
+pub trait ToHex {
+	/// convert to hex
+	fn to_hex(&self) -> String;
+}
+
+impl<T: AsRef<[u8]>> ToHex for T {
+	fn to_hex(&self) -> String {
+		to_hex(self.as_ref())
+	}
 }
 
 /// Decode a hex string into bytes.
@@ -46,9 +58,16 @@ mod test {
 
 	#[test]
 	fn test_to_hex() {
-		assert_eq!(to_hex(vec![0, 0, 0, 0]), "00000000");
-		assert_eq!(to_hex(vec![10, 11, 12, 13]), "0a0b0c0d");
-		assert_eq!(to_hex(vec![0, 0, 0, 255]), "000000ff");
+		assert_eq!(vec![0, 0, 0, 0].to_hex(), "00000000");
+		assert_eq!(vec![10, 11, 12, 13].to_hex(), "0a0b0c0d");
+		assert_eq!([0, 0, 0, 255].to_hex(), "000000ff");
+	}
+
+	#[test]
+	fn test_to_hex_trait() {
+		assert_eq!(vec![0, 0, 0, 0].to_hex(), "00000000");
+		assert_eq!(vec![10, 11, 12, 13].to_hex(), "0a0b0c0d");
+		assert_eq!([0, 0, 0, 255].to_hex(), "000000ff");
 	}
 
 	#[test]

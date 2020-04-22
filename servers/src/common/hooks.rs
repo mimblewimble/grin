@@ -25,6 +25,7 @@ use crate::core::core;
 use crate::core::core::hash::Hashed;
 use crate::p2p::types::PeerAddr;
 use futures::TryFutureExt;
+use grin_util::ToHex;
 use hyper::client::HttpConnector;
 use hyper::header::HeaderValue;
 use hyper::Client;
