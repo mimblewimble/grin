@@ -509,6 +509,10 @@ impl TxKernelPrintable {
 			KernelFeatures::Plain { fee } => (fee, 0),
 			KernelFeatures::Coinbase => (0, 0),
 			KernelFeatures::HeightLocked { fee, lock_height } => (fee, lock_height),
+			KernelFeatures::NoRecentDuplicate {
+				fee,
+				relative_height,
+			} => (fee, relative_height.into()),
 		};
 		TxKernelPrintable {
 			features,

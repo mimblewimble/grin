@@ -53,8 +53,11 @@ pub enum KernelFeatures {
 		/// Height locked kernels have lock heights.
 		lock_height: u64,
 	},
+	/// "No Recent Duplicate" (NRD) kernels enforcing relative lock height between instances.
 	NoRecentDuplicate {
+		/// These have fees.
 		fee: u64,
+		/// Relative lock height.
 		relative_height: u16,
 	},
 }
@@ -692,9 +695,9 @@ impl TransactionBody {
 			.iter()
 			.filter_map(|k| match k.features {
 				KernelFeatures::Coinbase => None,
-				KernelFeatures::Plain { fee } | KernelFeatures::HeightLocked { fee, .. } => {
-					Some(fee)
-				}
+				KernelFeatures::Plain { fee } => Some(fee),
+				KernelFeatures::HeightLocked { fee, .. } => Some(fee),
+				KernelFeatures::NoRecentDuplicate { fee, .. } => Some(fee),
 			})
 			.fold(0, |acc, fee| acc.saturating_add(fee))
 	}
