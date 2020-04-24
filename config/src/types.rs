@@ -62,7 +62,7 @@ impl From<io::Error> for ConfigError {
 	fn from(error: io::Error) -> ConfigError {
 		ConfigError::FileIOError(
 			String::from(""),
-			String::from(format!("Error loading config file: {}", error)),
+			format!("Error loading config file: {}", error),
 		)
 	}
 }

@@ -344,9 +344,7 @@ impl OutputPrintable {
 		let p_vec = util::from_hex(&proof_str)
 			.map_err(|_| ser::Error::HexError("invalid output range_proof".to_string()))?;
 		let mut p_bytes = [0; util::secp::constants::MAX_PROOF_SIZE];
-		for i in 0..p_bytes.len() {
-			p_bytes[i] = p_vec[i];
-		}
+		p_bytes.clone_from_slice(&p_vec[..util::secp::constants::MAX_PROOF_SIZE]);
 		Ok(pedersen::RangeProof {
 			proof: p_bytes,
 			plen: p_bytes.len(),

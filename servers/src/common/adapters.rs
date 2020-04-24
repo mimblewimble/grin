@@ -197,7 +197,7 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 			);
 
 			// If we have missing kernels then we know we cannot hydrate this compact block.
-			if missing_short_ids.len() > 0 {
+			if !missing_short_ids.is_empty() {
 				self.request_block(&cb.header, peer_info, chain::Options::NONE);
 				return Ok(true);
 			}
@@ -224,15 +224,13 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 				{
 					debug!("successfully hydrated block from tx pool!");
 					self.process_block(block, peer_info, chain::Options::NONE)
+				} else if self.sync_state.status() == SyncStatus::NoSync {
+					debug!("adapter: block invalid after hydration, requesting full block");
+					self.request_block(&cb.header, peer_info, chain::Options::NONE);
+					Ok(true)
 				} else {
-					if self.sync_state.status() == SyncStatus::NoSync {
-						debug!("adapter: block invalid after hydration, requesting full block");
-						self.request_block(&cb.header, peer_info, chain::Options::NONE);
-						Ok(true)
-					} else {
-						debug!("block invalid after hydration, ignoring it, cause still syncing");
-						Ok(true)
-					}
+					debug!("block invalid after hydration, ignoring it, cause still syncing");
+					Ok(true)
 				}
 			} else {
 				debug!("failed to retrieve previous block header (still syncing?)");
@@ -294,7 +292,7 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 			peer_info.addr
 		);
 
-		if bhs.len() == 0 {
+		if bhs.is_empty() {
 			return Ok(false);
 		}
 
@@ -304,7 +302,7 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 			Err(e) => {
 				debug!("Block headers refused by chain: {:?}", e);
 				if e.is_bad_data() {
-					return Ok(false);
+					Ok(false)
 				} else {
 					Err(e)
 				}
@@ -361,8 +359,7 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 	}
 
 	fn kernel_data_write(&self, reader: &mut dyn Read) -> Result<bool, chain::Error> {
-		let res = self.chain().kernel_data_write(reader)?;
-		error!("***** kernel_data_write: {:?}", res);
+		self.chain().kernel_data_write(reader)?;
 		Ok(true)
 	}
 
@@ -623,7 +620,7 @@ impl NetToChainAdapter {
 		// uses a different thread to avoid blocking the caller thread (likely a peer)
 		let mut rng = thread_rng();
 		if 0 == rng.gen_range(0, global::COMPACTION_CHECK) {
-			let chain = self.chain().clone();
+			let chain = self.chain();
 			let _ = thread::Builder::new()
 				.name("compactor".to_string())
 				.spawn(move || {
@@ -904,25 +901,25 @@ impl pool::BlockChain for PoolToChainAdapter {
 	fn chain_head(&self) -> Result<BlockHeader, pool::PoolError> {
 		self.chain()
 			.head_header()
-			.map_err(|_| pool::PoolError::Other(format!("failed to get head_header")))
+			.map_err(|_| pool::PoolError::Other("failed to get head_header".to_string()))
 	}
 
 	fn get_block_header(&self, hash: &Hash) -> Result<BlockHeader, pool::PoolError> {
 		self.chain()
 			.get_block_header(hash)
-			.map_err(|_| pool::PoolError::Other(format!("failed to get block_header")))
+			.map_err(|_| pool::PoolError::Other("failed to get block_header".to_string()))
 	}
 
 	fn get_block_sums(&self, hash: &Hash) -> Result<BlockSums, pool::PoolError> {
 		self.chain()
 			.get_block_sums(hash)
-			.map_err(|_| pool::PoolError::Other(format!("failed to get block_sums")))
+			.map_err(|_| pool::PoolError::Other("failed to get block_sums".to_string()))
 	}
 
 	fn validate_tx(&self, tx: &Transaction) -> Result<(), pool::PoolError> {
 		self.chain()
 			.validate_tx(tx)
-			.map_err(|_| pool::PoolError::Other(format!("failed to validate tx")))
+			.map_err(|_| pool::PoolError::Other("failed to validate tx".to_string()))
 	}
 
 	fn verify_coinbase_maturity(&self, tx: &Transaction) -> Result<(), pool::PoolError> {

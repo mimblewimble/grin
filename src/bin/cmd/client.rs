@@ -61,7 +61,7 @@ pub fn client_command(client_args: &ArgMatches<'_>, global_config: GlobalConfig)
 
 pub fn show_status(config: &ServerConfig, api_secret: Option<String>) {
 	println!();
-	let title = format!("Grin Server Status");
+	let title = "Grin Server Status".to_string();
 	if term::stdout().is_none() {
 		println!("Could not open terminal");
 		return;
@@ -100,7 +100,7 @@ pub fn ban_peer(config: &ServerConfig, peer_addr: &SocketAddr, api_secret: Optio
 		config.api_http_addr,
 		peer_addr.to_string()
 	);
-	match api::client::post_no_ret(url.as_str(), api_secret, &params).map_err(|e| Error::API(e)) {
+	match api::client::post_no_ret(url.as_str(), api_secret, &params).map_err(Error::API) {
 		Ok(_) => writeln!(e, "Successfully banned peer {}", peer_addr.to_string()).unwrap(),
 		Err(_) => writeln!(e, "Failed to ban peer {}", peer_addr).unwrap(),
 	};
@@ -118,7 +118,7 @@ pub fn unban_peer(config: &ServerConfig, peer_addr: &SocketAddr, api_secret: Opt
 	let res: Result<(), api::Error>;
 	res = api::client::post_no_ret(url.as_str(), api_secret, &params);
 
-	match res.map_err(|e| Error::API(e)) {
+	match res.map_err(Error::API) {
 		Ok(_) => writeln!(e, "Successfully unbanned peer {}", peer_addr).unwrap(),
 		Err(_) => writeln!(e, "Failed to unban peer {}", peer_addr).unwrap(),
 	};
@@ -132,10 +132,9 @@ pub fn list_connected_peers(config: &ServerConfig, api_secret: Option<String>) {
 
 	let peers_info = api::client::get::<Vec<p2p::types::PeerInfoDisplay>>(url.as_str(), api_secret);
 
-	match peers_info.map_err(|e| Error::API(e)) {
+	match peers_info.map_err(Error::API) {
 		Ok(connected_peers) => {
-			let mut index = 0;
-			for connected_peer in connected_peers {
+			for (index, connected_peer) in connected_peers.into_iter().enumerate() {
 				writeln!(e, "Peer {}:", index).unwrap();
 				writeln!(e, "Capabilities: {:?}", connected_peer.capabilities).unwrap();
 				writeln!(e, "User agent: {}", connected_peer.user_agent).unwrap();
@@ -145,7 +144,6 @@ pub fn list_connected_peers(config: &ServerConfig, api_secret: Option<String>) {
 				writeln!(e, "Total difficulty: {}", connected_peer.total_difficulty).unwrap();
 				writeln!(e, "Direction: {:?}", connected_peer.direction).unwrap();
 				println!();
-				index = index + 1;
 			}
 		}
 		Err(_) => writeln!(e, "Failed to get connected peers").unwrap(),
@@ -159,7 +157,7 @@ fn get_status_from_node(
 	api_secret: Option<String>,
 ) -> Result<api::Status, Error> {
 	let url = format!("http://{}/v1/status", config.api_http_addr);
-	api::client::get::<api::Status>(url.as_str(), api_secret).map_err(|e| Error::API(e))
+	api::client::get::<api::Status>(url.as_str(), api_secret).map_err(Error::API)
 }
 
 /// Error type wrapping underlying module errors.

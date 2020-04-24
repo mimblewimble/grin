@@ -218,7 +218,7 @@ impl Handler {
 	) -> Self {
 		Handler {
 			id: id,
-			workers: Arc::new(WorkersList::new(stratum_stats.clone())),
+			workers: Arc::new(WorkersList::new(stratum_stats)),
 			sync_state: sync_state,
 			chain: chain,
 			current_state: Arc::new(RwLock::new(State::new(minimum_share_difficulty))),
@@ -450,7 +450,7 @@ impl Handler {
 		} else {
 			// Do some validation but dont submit
 			let res = pow::verify_size(&b.header);
-			if !res.is_ok() {
+			if res.is_err() {
 				// Return error status
 				error!(
 						"(Server ID: {}) Failed to validate share at height {}, hash {}, edge_bits {}, nonce {}, job_id {}. {:?}",
@@ -471,7 +471,7 @@ impl Handler {
 		let worker = self.workers.get_worker(worker_id)?;
 		let submitted_by = match worker.login {
 			None => worker.id.to_string(),
-			Some(login) => login.clone(),
+			Some(login) => login,
 		};
 
 		info!(
@@ -488,12 +488,11 @@ impl Handler {
 			);
 		self.workers
 			.update_stats(worker_id, |worker_stats| worker_stats.num_accepted += 1);
-		let submit_response;
-		if share_is_block {
-			submit_response = format!("blockfound - {}", b.hash().to_hex());
+		let submit_response = if share_is_block {
+			format!("blockfound - {}", b.hash().to_hex())
 		} else {
-			submit_response = "ok".to_string();
-		}
+			"ok".to_string()
+		};
 		return Ok((
 			serde_json::to_value(submit_response).unwrap(),
 			share_is_block,
@@ -518,7 +517,7 @@ impl Handler {
 			"(Server ID: {}) sending block {} with id {} to stratum clients",
 			self.id, job_template.height, job_template.job_id,
 		);
-		self.workers.broadcast(job_request_json.clone());
+		self.workers.broadcast(job_request_json);
 	}
 
 	pub fn run(
@@ -546,10 +545,11 @@ impl Handler {
 				{
 					debug!("resend updated block");
 					let mut state = self.current_state.write();
-					let mut wallet_listener_url: Option<String> = None;
-					if !config.burn_reward {
-						wallet_listener_url = Some(config.wallet_listener_url.clone());
-					}
+					let wallet_listener_url = if !config.burn_reward {
+						Some(config.wallet_listener_url.clone())
+					} else {
+						None
+					};
 					// If this is a new block, clear the current_block version history
 					let clear_blocks = current_hash != latest_hash;
 
@@ -599,10 +599,9 @@ impl Handler {
 fn accept_connections(listen_addr: SocketAddr, handler: Arc<Handler>) {
 	info!("Start tokio stratum server");
 	let task = async move {
-		let mut listener = TcpListener::bind(&listen_addr).await.expect(&format!(
-			"Stratum: Failed to bind to listen address {}",
-			listen_addr
-		));
+		let mut listener = TcpListener::bind(&listen_addr).await.unwrap_or_else(|_| {
+			panic!("Stratum: Failed to bind to listen address {}", listen_addr)
+		});
 		let server = listener
 			.incoming()
 			.filter_map(|s| async { s.map_err(|e| error!("accept error = {:?}", e)).ok() })
@@ -726,7 +725,9 @@ impl WorkersList {
 
 	pub fn login(&self, worker_id: usize, login: String, agent: String) -> Result<(), RpcError> {
 		let mut wl = self.workers_list.write();
-		let mut worker = wl.get_mut(&worker_id).ok_or(RpcError::internal_error())?;
+		let mut worker = wl
+			.get_mut(&worker_id)
+			.ok_or_else(RpcError::internal_error)?;
 		worker.login = Some(login);
 		// XXX TODO Future - Validate password?
 		worker.agent = agent;
@@ -750,7 +751,7 @@ impl WorkersList {
 			.read()
 			.worker_stats
 			.get(worker_id)
-			.ok_or(RpcError::internal_error())
+			.ok_or_else(RpcError::internal_error)
 			.map(|ws| ws.clone())
 	}
 
@@ -885,7 +886,7 @@ where
 {
 	params
 		.and_then(|v| serde_json::from_value(v).ok())
-		.ok_or(RpcError::invalid_request())
+		.ok_or_else(RpcError::invalid_request)
 }
 
 #[cfg(test)]

@@ -49,14 +49,12 @@ pub fn info_strings() -> (String, String) {
 			built_info::GIT_VERSION.map_or_else(|| "".to_owned(), |v| format!(" (git {})", v)),
 			built_info::TARGET,
 			built_info::RUSTC_VERSION,
-		)
-		.to_string(),
+		),
 		format!(
 			"Built with profile \"{}\", features \"{}\".",
 			built_info::PROFILE,
 			built_info::FEATURES_STR,
-		)
-		.to_string(),
+		),
 	)
 }
 
@@ -79,17 +77,12 @@ fn real_main() -> i32 {
 	let node_config;
 
 	// Temporary wallet warning message
-	match args.subcommand() {
-		("wallet", _) => {
-			println!();
-			println!("As of v1.1.0, the wallet has been split into a separate executable.");
-			println!(
-				"Please visit https://github.com/mimblewimble/grin-wallet/releases to download"
-			);
-			println!();
-			return 0;
-		}
-		_ => {}
+	if let ("wallet", _) = args.subcommand() {
+		println!();
+		println!("As of v1.1.0, the wallet has been split into a separate executable.");
+		println!("Please visit https://github.com/mimblewimble/grin-wallet/releases to download");
+		println!();
+		return 0;
 	}
 
 	let chain_type = if args.is_present("floonet") {
@@ -101,15 +94,12 @@ fn real_main() -> i32 {
 	};
 
 	// Deal with configuration file creation
-	match args.subcommand() {
-		("server", Some(server_args)) => {
-			// If it's just a server config command, do it and exit
-			if let ("config", Some(_)) = server_args.subcommand() {
-				cmd::config_command_server(&chain_type, SERVER_CONFIG_FILE_NAME);
-				return 0;
-			}
+	if let ("server", Some(server_args)) = args.subcommand() {
+		// If it's just a server config command, do it and exit
+		if let ("config", Some(_)) = server_args.subcommand() {
+			cmd::config_command_server(&chain_type, SERVER_CONFIG_FILE_NAME);
+			return 0;
 		}
-		_ => {}
 	}
 
 	// Load relevant config
@@ -150,7 +140,7 @@ fn real_main() -> i32 {
 	};
 	init_logger(Some(logging_config), logs_tx);
 
-	global::set_mining_mode(config.members.unwrap().server.clone().chain_type);
+	global::set_mining_mode(config.members.unwrap().server.chain_type);
 
 	if let Some(file_path) = &config.config_file_path {
 		info!(

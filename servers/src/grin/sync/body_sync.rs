@@ -104,12 +104,12 @@ impl BodySync {
 			.filter(|x| {
 				// only ask for blocks that we have not yet processed
 				// either successfully stored or in our orphan list
-				!self.chain.get_block(x).is_ok() && !self.chain.is_orphan(x)
+				self.chain.get_block(x).is_err() && !self.chain.is_orphan(x)
 			})
 			.take(block_count)
 			.collect::<Vec<_>>();
 
-		if hashes_to_get.len() > 0 {
+		if !hashes_to_get.is_empty() {
 			let body_head = self.chain.head()?;
 			let header_head = self.chain.header_head()?;
 

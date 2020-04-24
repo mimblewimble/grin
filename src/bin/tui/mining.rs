@@ -142,8 +142,8 @@ impl TableViewItem<DiffColumn> for DiffBlock {
 			DiffColumn::PoWType => pow_type,
 			DiffColumn::Difficulty => self.difficulty.to_string(),
 			DiffColumn::SecondaryScaling => self.secondary_scaling.to_string(),
-			DiffColumn::Time => format!("{}", datetime).to_string(),
-			DiffColumn::Duration => format!("{}s", self.duration).to_string(),
+			DiffColumn::Time => format!("{}", datetime),
+			DiffColumn::Duration => format!("{}s", self.duration),
 		}
 	}
 
@@ -320,7 +320,7 @@ impl TUIStatusListener for TUIMiningView {
 		});
 		let dur = time::Duration::from_secs(stats.diff_stats.average_block_time);
 		c.call_on_name("diff_avg_block_time", |t: &mut TextView| {
-			t.set_content(format!("{} Secs", dur.as_secs()).to_string());
+			t.set_content(format!("{} Secs", dur.as_secs()));
 		});
 		c.call_on_name("diff_avg_difficulty", |t: &mut TextView| {
 			t.set_content(stats.diff_stats.average_difficulty.to_string());

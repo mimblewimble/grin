@@ -224,7 +224,7 @@ impl TxHashSet {
 				let output_pmmr: ReadonlyPMMR<'_, Output, _> =
 					ReadonlyPMMR::at(&self.output_pmmr_h.backend, self.output_pmmr_h.last_pos);
 				if let Some(out) = output_pmmr.get_data(pos) {
-					if OutputIdentifier::from(out) == *output_id {
+					if out == *output_id {
 						Ok(Some(CommitPos { pos, height }))
 					} else {
 						Ok(None)
@@ -1103,7 +1103,7 @@ impl<'a> Extension<'a> {
 
 		if head_header.height <= header.height {
 			// Nothing to rewind but we do want to truncate the MMRs at header for consistency.
-			self.rewind_mmrs_to_pos(header.output_mmr_size, header.kernel_mmr_size, &vec![])?;
+			self.rewind_mmrs_to_pos(header.output_mmr_size, header.kernel_mmr_size, &[])?;
 			self.apply_to_bitmap_accumulator(&[header.output_mmr_size])?;
 		} else {
 			let mut affected_pos = vec![];
@@ -1156,7 +1156,7 @@ impl<'a> Extension<'a> {
 		// Update our BitmapAccumulator based on affected outputs.
 		// We want to "unspend" every rewound spent output.
 		// Treat last_pos as an affected output to ensure we rebuild far enough back.
-		let mut affected_pos = spent_pos.clone();
+		let mut affected_pos = spent_pos;
 		affected_pos.push(self.output_pmmr.last_pos);
 
 		// Remove any entries from the output_pos created by the block being rewound.
@@ -1181,7 +1181,7 @@ impl<'a> Extension<'a> {
 		// reused output commitment. For example an output at pos 1, spent, reused at pos 2.
 		// The output_pos index should be updated to reflect the old pos 1 when unspent.
 		if let Ok(spent) = spent {
-			for (x, y) in block.inputs().into_iter().zip(spent) {
+			for (x, y) in block.inputs().iter().zip(spent) {
 				batch.save_output_pos_height(&x.commitment(), y.pos, y.height)?;
 			}
 		}
@@ -1197,7 +1197,7 @@ impl<'a> Extension<'a> {
 		kernel_pos: u64,
 		spent_pos: &[u64],
 	) -> Result<(), Error> {
-		let bitmap: Bitmap = spent_pos.into_iter().map(|x| *x as u32).collect();
+		let bitmap: Bitmap = spent_pos.iter().map(|x| *x as u32).collect();
 		self.output_pmmr
 			.rewind(output_pos, &bitmap)
 			.map_err(&ErrorKind::TxHashSetErr)?;

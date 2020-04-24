@@ -183,8 +183,8 @@ impl<'de> Visitor<'de> for PeerAddrs {
 				Err(_) => {
 					let socket_addrs = entry
 						.to_socket_addrs()
-						.expect(format!("Unable to resolve DNS: {}", entry).as_str());
-					peers.append(&mut socket_addrs.map(|addr| PeerAddr(addr)).collect());
+						.unwrap_or_else(|_| panic!("Unable to resolve DNS: {}", entry));
+					peers.append(&mut socket_addrs.map(PeerAddr).collect());
 				}
 			}
 		}

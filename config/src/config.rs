@@ -34,14 +34,14 @@ use crate::util::logger::LoggingConfig;
 
 /// The default file name to use when trying to derive
 /// the node config file location
-pub const SERVER_CONFIG_FILE_NAME: &'static str = "grin-server.toml";
-const SERVER_LOG_FILE_NAME: &'static str = "grin-server.log";
-const GRIN_HOME: &'static str = ".grin";
-const GRIN_CHAIN_DIR: &'static str = "chain_data";
+pub const SERVER_CONFIG_FILE_NAME: &str = "grin-server.toml";
+const SERVER_LOG_FILE_NAME: &str = "grin-server.log";
+const GRIN_HOME: &str = ".grin";
+const GRIN_CHAIN_DIR: &str = "chain_data";
 /// Node Rest API and V2 Owner API secret
-pub const API_SECRET_FILE_NAME: &'static str = ".api_secret";
+pub const API_SECRET_FILE_NAME: &str = ".api_secret";
 /// Foreign API secret
-pub const FOREIGN_API_SECRET_FILE_NAME: &'static str = ".foreign_api_secret";
+pub const FOREIGN_API_SECRET_FILE_NAME: &str = ".foreign_api_secret";
 
 fn get_grin_path(chain_type: &global::ChainTypes) -> Result<PathBuf, ConfigError> {
 	// Check if grin dir exists
@@ -103,7 +103,7 @@ fn check_api_secret_files(
 	secret_file_name: &str,
 ) -> Result<(), ConfigError> {
 	let grin_path = get_grin_path(chain_type)?;
-	let mut api_secret_path = grin_path.clone();
+	let mut api_secret_path = grin_path;
 	api_secret_path.push(secret_file_name);
 	if !api_secret_path.exists() {
 		init_api_secret(&api_secret_path)
@@ -236,15 +236,8 @@ impl GlobalConfig {
 			}
 			Err(e) => {
 				return Err(ConfigError::ParseError(
-					String::from(
-						self.config_file_path
-							.as_mut()
-							.unwrap()
-							.to_str()
-							.unwrap()
-							.clone(),
-					),
-					String::from(format!("{}", e)),
+					self.config_file_path.unwrap().to_str().unwrap().to_string(),
+					format!("{}", e),
 				));
 			}
 		}
@@ -292,10 +285,7 @@ impl GlobalConfig {
 		match encoded {
 			Ok(enc) => return Ok(enc),
 			Err(e) => {
-				return Err(ConfigError::SerializationError(String::from(format!(
-					"{}",
-					e
-				))));
+				return Err(ConfigError::SerializationError(format!("{}", e)));
 			}
 		}
 	}

@@ -61,7 +61,8 @@ impl TableViewItem<PeerColumn> for PeerStats {
 	fn to_column(&self, column: PeerColumn) -> String {
 		// Converts optional size to human readable size
 		fn size_to_string(size: u64) -> String {
-			size.file_size(CONVENTIONAL).unwrap_or("-".to_string())
+			size.file_size(CONVENTIONAL)
+				.unwrap_or_else(|_| "-".to_string())
 		}
 
 		match column {
@@ -71,15 +72,13 @@ impl TableViewItem<PeerColumn> for PeerStats {
 				"↑: {}, ↓: {}",
 				size_to_string(self.sent_bytes_per_sec),
 				size_to_string(self.received_bytes_per_sec),
-			)
-			.to_string(),
+			),
 			PeerColumn::TotalDifficulty => format!(
 				"{} D @ {} H ({}s)",
 				self.total_difficulty,
 				self.height,
 				(Utc::now() - self.last_seen).num_seconds(),
-			)
-			.to_string(),
+			),
 			PeerColumn::Direction => self.direction.clone(),
 			PeerColumn::Version => format!("{}", self.version),
 			PeerColumn::UserAgent => self.user_agent.clone(),
@@ -175,8 +174,7 @@ impl TUIStatusListener for TUIPeerView {
 				l.height,
 				stats.chain_stats.total_difficulty,
 				stats.chain_stats.height
-			)
-			.to_string(),
+			),
 			None => "".to_string(),
 		};
 		let _ = c.call_on_name(

@@ -94,7 +94,7 @@ pub fn get_output_v2(
 
 	let output_printable = OutputPrintable::from_output(
 		&output,
-		chain.clone(),
+		chain,
 		header.as_ref(),
 		include_proof,
 		include_merkle_proof,

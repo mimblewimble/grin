@@ -48,7 +48,7 @@ pub fn monitor_transactions(
 			let run_interval = Duration::from_secs(10);
 			let mut last_run = Instant::now()
 				.checked_sub(Duration::from_secs(20))
-				.unwrap_or_else(|| Instant::now());
+				.unwrap_or_else(Instant::now);
 			loop {
 				// Halt Dandelion monitor if we have been notified that we are stopping.
 				if stop_state.is_stopped() {
