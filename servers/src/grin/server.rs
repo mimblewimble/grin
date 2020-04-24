@@ -41,7 +41,7 @@ use crate::common::stats::{
 };
 use crate::common::types::{Error, ServerConfig, StratumServerConfig};
 use crate::core::core::hash::Hashed;
-use crate::core::core::verifier_cache::{LruVerifierCache, VerifierCache};
+use crate::core::core::verifier_cache::LruVerifierCache;
 use crate::core::ser::ProtocolVersion;
 use crate::core::{consensus, genesis, global, pow};
 use crate::grin::{dandelion_monitor, seed, sync};
@@ -54,6 +54,12 @@ use crate::util::file::get_first_line;
 use crate::util::{RwLock, StopState};
 use grin_util::logger::LogEntry;
 
+/// Arcified  thread-safe TransactionPool with type parameters used by server components
+pub type ServerTxPool =
+	Arc<RwLock<pool::TransactionPool<PoolToChainAdapter, PoolToNetAdapter, LruVerifierCache>>>;
+/// Arcified thread-safe LruVerifierCache
+pub type ServerVerifierCache = Arc<RwLock<LruVerifierCache>>;
+
 /// Grin server holding internal structures.
 pub struct Server {
 	/// server config
@@ -63,10 +69,10 @@ pub struct Server {
 	/// data store access
 	pub chain: Arc<chain::Chain>,
 	/// in-memory transaction pool
-	pub tx_pool: Arc<RwLock<pool::TransactionPool>>,
+	pub tx_pool: ServerTxPool,
 	/// Shared cache for verification results when
 	/// verifying rangeproof and kernel signatures.
-	verifier_cache: Arc<RwLock<dyn VerifierCache>>,
+	verifier_cache: ServerVerifierCache,
 	/// Whether we're currently syncing
 	pub sync_state: Arc<SyncState>,
 	/// To be passed around to collect stats and info

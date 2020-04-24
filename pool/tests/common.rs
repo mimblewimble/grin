@@ -148,10 +148,14 @@ impl BlockChain for ChainAdapter {
 	}
 }
 
-pub fn test_setup(
-	chain: Arc<dyn BlockChain>,
-	verifier_cache: Arc<RwLock<dyn VerifierCache>>,
-) -> TransactionPool {
+pub fn test_setup<B, V>(
+	chain: Arc<B>,
+	verifier_cache: Arc<RwLock<V>>,
+) -> TransactionPool<B, NoopAdapter, V>
+where
+	B: BlockChain,
+	V: VerifierCache + 'static,
+{
 	TransactionPool::new(
 		PoolConfig {
 			accept_fee_base: 0,

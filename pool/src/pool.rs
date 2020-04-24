@@ -30,21 +30,25 @@ use std::cmp::Reverse;
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
-pub struct Pool {
+pub struct Pool<B, V>
+where
+	B: BlockChain,
+	V: VerifierCache,
+{
 	/// Entries in the pool (tx + info + timer) in simple insertion order.
 	pub entries: Vec<PoolEntry>,
 	/// The blockchain
-	pub blockchain: Arc<dyn BlockChain>,
-	pub verifier_cache: Arc<RwLock<dyn VerifierCache>>,
+	pub blockchain: Arc<B>,
+	pub verifier_cache: Arc<RwLock<V>>,
 	pub name: String,
 }
 
-impl Pool {
-	pub fn new(
-		chain: Arc<dyn BlockChain>,
-		verifier_cache: Arc<RwLock<dyn VerifierCache>>,
-		name: String,
-	) -> Pool {
+impl<B, V> Pool<B, V>
+where
+	B: BlockChain,
+	V: VerifierCache + 'static,
+{
+	pub fn new(chain: Arc<B>, verifier_cache: Arc<RwLock<V>>, name: String) -> Self {
 		Pool {
 			entries: vec![],
 			blockchain: chain,
