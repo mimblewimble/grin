@@ -30,7 +30,6 @@ pub struct HeaderSync {
 	prev_header_sync: (DateTime<Utc>, u64, u64),
 
 	syncing_peer: Option<Arc<Peer>>,
-	stalling_ts: Option<DateTime<Utc>>,
 }
 
 impl HeaderSync {
@@ -46,7 +45,6 @@ impl HeaderSync {
 			history_locator: vec![],
 			prev_header_sync: (Utc::now(), 0, 0),
 			syncing_peer: None,
-			stalling_ts: None,
 		}
 	}
 
@@ -124,43 +122,30 @@ impl HeaderSync {
 				header_head.height,
 			);
 
-			// save the stalling start time
 			if stalling {
-				if self.stalling_ts.is_none() {
-					self.stalling_ts = Some(now);
-				}
-			} else {
-				self.stalling_ts = None;
-			}
-
-			if all_headers_received {
-				// reset the stalling start time if syncing goes well
-				self.stalling_ts = None;
-			} else {
-				if let Some(ref stalling_ts) = self.stalling_ts {
-					if let Some(ref peer) = self.syncing_peer {
-						match self.sync_state.status() {
-							SyncStatus::HeaderSync { .. } | SyncStatus::BodySync { .. } => {
-								// Ban this fraud peer which claims a higher work but can't send us the real headers
-								if now > *stalling_ts + Duration::seconds(120)
-									&& header_head.total_difficulty < peer.info.total_difficulty()
+				if let Some(ref peer) = self.syncing_peer {
+					match self.sync_state.status() {
+						SyncStatus::HeaderSync { .. } | SyncStatus::BodySync { .. } => {
+							// Ban this fraud peer which claims a higher work but can't send us the real headers
+							if header_head.total_difficulty < peer.info.total_difficulty() {
+								if let Err(e) = self
+									.peers
+									.ban_peer(peer.info.addr, ReasonForBan::FraudHeight)
 								{
-									if let Err(e) = self
-										.peers
-										.ban_peer(peer.info.addr, ReasonForBan::FraudHeight)
-									{
-										error!("failed to ban peer {}: {:?}", peer.info.addr, e);
-									}
+									error!("failed to ban peer {}: {:?}", peer.info.addr, e);
+								} else {
 									info!(
-										"sync: ban a fraud peer: {}, claimed height: {}, total difficulty: {}",
+										"sync: ban a fraud peer: {}, claimed height: {}, total difficulty: {}, user agent {}, protocol version {}",
 										peer.info.addr,
 										peer.info.height(),
 										peer.info.total_difficulty(),
+										peer.info.user_agent,
+										peer.info.version,
 									);
 								}
 							}
-							_ => (),
 						}
+						_ => (),
 					}
 				}
 			}
