@@ -20,8 +20,8 @@ use crate::core::core::merkle_proof::MerkleProof;
 use crate::core::core::{KernelFeatures, TxKernel};
 use crate::core::{core, ser};
 use crate::p2p;
-use crate::util;
 use crate::util::secp::pedersen;
+use crate::util::{self, ToHex};
 use serde;
 use serde::de::MapAccess;
 use serde::ser::SerializeStruct;
@@ -61,8 +61,8 @@ impl Tip {
 	pub fn from_tip(tip: chain::Tip) -> Tip {
 		Tip {
 			height: tip.height,
-			last_block_pushed: util::to_hex(tip.last_block_h.to_vec()),
-			prev_block_to_last: util::to_hex(tip.prev_block_h.to_vec()),
+			last_block_pushed: tip.last_block_h.to_hex(),
+			prev_block_to_last: tip.prev_block_h.to_hex(),
 			total_difficulty: tip.total_difficulty.to_num(),
 		}
 	}
@@ -142,9 +142,7 @@ impl TxHashSetNode {
 		let mut return_vec = Vec::new();
 		let last_n = chain.get_last_n_output(distance);
 		for x in last_n {
-			return_vec.push(TxHashSetNode {
-				hash: util::to_hex(x.0.to_vec()),
-			});
+			return_vec.push(TxHashSetNode { hash: x.0.to_hex() });
 		}
 		return_vec
 	}
@@ -154,7 +152,7 @@ impl TxHashSetNode {
 		let last_n = head.get_last_n_rangeproof(distance);
 		for elem in last_n {
 			return_vec.push(TxHashSetNode {
-				hash: util::to_hex(elem.0.to_vec()),
+				hash: elem.0.to_hex(),
 			});
 		}
 		return_vec
@@ -165,7 +163,7 @@ impl TxHashSetNode {
 		let last_n = head.get_last_n_kernel(distance);
 		for elem in last_n {
 			return_vec.push(TxHashSetNode {
-				hash: util::to_hex(elem.0.to_vec()),
+				hash: elem.0.to_hex(),
 			});
 		}
 		return_vec
@@ -213,12 +211,18 @@ impl PrintableCommitment {
 	}
 }
 
+impl AsRef<[u8]> for PrintableCommitment {
+	fn as_ref(&self) -> &[u8] {
+		&self.commit.0
+	}
+}
+
 impl serde::ser::Serialize for PrintableCommitment {
 	fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
 	where
 		S: serde::ser::Serializer,
 	{
-		serializer.serialize_str(&util::to_hex(self.to_vec()))
+		serializer.serialize_str(&self.to_hex())
 	}
 }
 
@@ -297,7 +301,7 @@ impl OutputPrintable {
 		};
 
 		let proof = if include_proof {
-			Some(util::to_hex(output.proof.proof.to_vec()))
+			Some(output.proof_bytes().to_hex())
 		} else {
 			None
 		};
@@ -320,7 +324,7 @@ impl OutputPrintable {
 			commit: output.commit,
 			spent,
 			proof,
-			proof_hash: util::to_hex(output.proof.hash().to_vec()),
+			proof_hash: output.proof.hash().to_hex(),
 			block_height,
 			merkle_proof,
 			mmr_index: output_pos,
@@ -357,7 +361,7 @@ impl serde::ser::Serialize for OutputPrintable {
 	{
 		let mut state = serializer.serialize_struct("OutputPrintable", 7)?;
 		state.serialize_field("output_type", &self.output_type)?;
-		state.serialize_field("commit", &util::to_hex(self.commit.0.to_vec()))?;
+		state.serialize_field("commit", &self.commit.to_hex())?;
 		state.serialize_field("spent", &self.spent)?;
 		state.serialize_field("proof", &self.proof)?;
 		state.serialize_field("proof_hash", &self.proof_hash)?;
@@ -512,8 +516,8 @@ impl TxKernelPrintable {
 			features,
 			fee,
 			lock_height,
-			excess: util::to_hex(k.excess.0.to_vec()),
-			excess_sig: util::to_hex(k.excess_sig.to_raw_data().to_vec()),
+			excess: k.excess.to_hex(),
+			excess_sig: (&k.excess_sig.to_raw_data()[..]).to_hex(),
 		}
 	}
 }
@@ -532,9 +536,9 @@ pub struct BlockHeaderInfo {
 impl BlockHeaderInfo {
 	pub fn from_header(header: &core::BlockHeader) -> BlockHeaderInfo {
 		BlockHeaderInfo {
-			hash: util::to_hex(header.hash().to_vec()),
+			hash: header.hash().to_hex(),
 			height: header.height,
-			previous: util::to_hex(header.prev_hash.to_vec()),
+			previous: header.prev_hash.to_hex(),
 		}
 	}
 }
@@ -576,15 +580,15 @@ pub struct BlockHeaderPrintable {
 impl BlockHeaderPrintable {
 	pub fn from_header(header: &core::BlockHeader) -> BlockHeaderPrintable {
 		BlockHeaderPrintable {
-			hash: util::to_hex(header.hash().to_vec()),
+			hash: header.hash().to_hex(),
 			version: header.version.into(),
 			height: header.height,
-			previous: util::to_hex(header.prev_hash.to_vec()),
-			prev_root: util::to_hex(header.prev_root.to_vec()),
+			previous: header.prev_hash.to_hex(),
+			prev_root: header.prev_root.to_hex(),
 			timestamp: header.timestamp.to_rfc3339(),
-			output_root: util::to_hex(header.output_root.to_vec()),
-			range_proof_root: util::to_hex(header.range_proof_root.to_vec()),
-			kernel_root: util::to_hex(header.kernel_root.to_vec()),
+			output_root: header.output_root.to_hex(),
+			range_proof_root: header.range_proof_root.to_hex(),
+			kernel_root: header.kernel_root.to_hex(),
 			nonce: header.pow.nonce,
 			edge_bits: header.pow.edge_bits(),
 			cuckoo_solution: header.pow.proof.nonces.clone(),
@@ -618,7 +622,7 @@ impl BlockPrintable {
 		let inputs = block
 			.inputs()
 			.iter()
-			.map(|x| util::to_hex(x.commitment().0.to_vec()))
+			.map(|x| x.commitment().to_hex())
 			.collect();
 		let outputs = block
 			.outputs()

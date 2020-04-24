@@ -17,13 +17,13 @@
 use keychain::BlindingFactor;
 use serde::{Deserialize, Deserializer, Serializer};
 use util::secp::pedersen::{Commitment, RangeProof};
-use util::{from_hex, to_hex};
+use util::{from_hex, ToHex};
 
 /// Serializes a secp PublicKey to and from hex
 pub mod pubkey_serde {
 	use serde::{Deserialize, Deserializer, Serializer};
 	use util::secp::key::PublicKey;
-	use util::{from_hex, static_secp_instance, to_hex};
+	use util::{from_hex, static_secp_instance, ToHex};
 
 	///
 	pub fn serialize<S>(key: &PublicKey, serializer: S) -> Result<S::Ok, S::Error>
@@ -32,7 +32,7 @@ pub mod pubkey_serde {
 	{
 		let static_secp = static_secp_instance();
 		let static_secp = static_secp.lock();
-		serializer.serialize_str(&to_hex(key.serialize_vec(&static_secp, true).to_vec()))
+		serializer.serialize_str(&key.serialize_vec(&static_secp, true).to_hex())
 	}
 
 	///
@@ -56,7 +56,7 @@ pub mod pubkey_serde {
 pub mod option_sig_serde {
 	use crate::serde::{Deserialize, Deserializer, Serializer};
 	use serde::de::Error;
-	use util::{from_hex, secp, static_secp_instance, to_hex};
+	use util::{from_hex, secp, static_secp_instance, ToHex};
 
 	///
 	pub fn serialize<S>(sig: &Option<secp::Signature>, serializer: S) -> Result<S::Ok, S::Error>
@@ -67,7 +67,7 @@ pub mod option_sig_serde {
 		let static_secp = static_secp.lock();
 		match sig {
 			Some(sig) => {
-				serializer.serialize_str(&to_hex(sig.serialize_compact(&static_secp).to_vec()))
+				serializer.serialize_str(&(&sig.serialize_compact(&static_secp)[..]).to_hex())
 			}
 			None => serializer.serialize_none(),
 		}
@@ -99,7 +99,7 @@ pub mod option_sig_serde {
 pub mod option_seckey_serde {
 	use crate::serde::{Deserialize, Deserializer, Serializer};
 	use serde::de::Error;
-	use util::{from_hex, secp, static_secp_instance, to_hex};
+	use util::{from_hex, secp, static_secp_instance, ToHex};
 
 	///
 	pub fn serialize<S>(
@@ -110,7 +110,7 @@ pub mod option_seckey_serde {
 		S: Serializer,
 	{
 		match key {
-			Some(key) => serializer.serialize_str(&to_hex(key.0.to_vec())),
+			Some(key) => serializer.serialize_str(&key.0.to_hex()),
 			None => serializer.serialize_none(),
 		}
 	}
@@ -141,7 +141,7 @@ pub mod option_seckey_serde {
 pub mod sig_serde {
 	use crate::serde::{Deserialize, Deserializer, Serializer};
 	use serde::de::Error;
-	use util::{from_hex, secp, static_secp_instance, to_hex};
+	use util::{from_hex, secp, static_secp_instance, ToHex};
 
 	///
 	pub fn serialize<S>(sig: &secp::Signature, serializer: S) -> Result<S::Ok, S::Error>
@@ -150,7 +150,7 @@ pub mod sig_serde {
 	{
 		let static_secp = static_secp_instance();
 		let static_secp = static_secp.lock();
-		serializer.serialize_str(&to_hex(sig.serialize_compact(&static_secp).to_vec()))
+		serializer.serialize_str(&(&sig.serialize_compact(&static_secp)[..]).to_hex())
 	}
 
 	///
@@ -176,7 +176,7 @@ pub mod option_commitment_serde {
 	use crate::serde::{Deserialize, Deserializer, Serializer};
 	use serde::de::Error;
 	use util::secp::pedersen::Commitment;
-	use util::{from_hex, to_hex};
+	use util::{from_hex, ToHex};
 
 	///
 	pub fn serialize<S>(commit: &Option<Commitment>, serializer: S) -> Result<S::Ok, S::Error>
@@ -184,7 +184,7 @@ pub mod option_commitment_serde {
 		S: Serializer,
 	{
 		match commit {
-			Some(c) => serializer.serialize_str(&to_hex(c.0.to_vec())),
+			Some(c) => serializer.serialize_str(&c.to_hex()),
 			None => serializer.serialize_none(),
 		}
 	}
@@ -242,7 +242,7 @@ where
 	T: AsRef<[u8]>,
 	S: Serializer,
 {
-	serializer.serialize_str(&to_hex(bytes.as_ref().to_vec()))
+	serializer.serialize_str(&bytes.to_hex())
 }
 
 /// Used to ensure u64s are serialised in json

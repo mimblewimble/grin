@@ -172,7 +172,7 @@ where
 #[cfg(test)]
 mod tests {
 	use super::{from_entropy, to_entropy, to_seed};
-	use crate::util::{from_hex, to_hex};
+	use crate::util::{from_hex, ToHex};
 	use rand::{thread_rng, Rng};
 
 	struct Test<'a> {
@@ -311,7 +311,7 @@ mod tests {
 		let tests = tests();
 		for t in tests.iter() {
 			assert_eq!(
-				to_hex(to_seed(t.mnemonic, "TREZOR").unwrap().to_vec()),
+				(&to_seed(t.mnemonic, "TREZOR").unwrap()[..]).to_hex(),
 				t.seed.to_string()
 			);
 			assert_eq!(

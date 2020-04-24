@@ -273,6 +273,7 @@ mod test {
 	use super::*;
 	use crate::core::hash::Hashed;
 	use crate::ser::{self, ProtocolVersion};
+	use util::ToHex;
 
 	#[test]
 	fn floonet_genesis_hash() {

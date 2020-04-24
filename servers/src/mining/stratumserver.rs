@@ -42,7 +42,7 @@ use crate::core::{pow, ser};
 use crate::keychain;
 use crate::mining::mine_block;
 use crate::pool;
-use crate::util;
+use crate::util::ToHex;
 
 type Tx = mpsc::UnboundedSender<String>;
 
@@ -342,7 +342,7 @@ impl Handler {
 			bh.write_pre_pow(&mut writer).unwrap();
 			bh.pow.write_pre_pow(&mut writer).unwrap();
 		}
-		let pre_pow = util::to_hex(header_buf);
+		let pre_pow = header_buf.to_hex();
 		let job_template = JobTemplate {
 			height: bh.height,
 			job_id: (self.current_state.read().current_block_versions.len() - 1) as u64,

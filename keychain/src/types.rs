@@ -27,12 +27,12 @@ use crate::blake2::blake2b::blake2b;
 use crate::extkey_bip32::{self, ChildNumber};
 use serde::{de, ser}; //TODO: Convert errors to use ErrorKind
 
-use crate::util;
 use crate::util::secp::constants::SECRET_KEY_SIZE;
 use crate::util::secp::key::{PublicKey, SecretKey};
 use crate::util::secp::pedersen::Commitment;
 use crate::util::secp::{self, Message, Secp256k1, Signature};
 use crate::util::static_secp_instance;
+use crate::util::ToHex;
 use zeroize::Zeroize;
 
 use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
@@ -195,10 +195,6 @@ impl Identifier {
 		Ok(Identifier::from_bytes(&bytes))
 	}
 
-	pub fn to_hex(&self) -> String {
-		util::to_hex(self.0.to_vec())
-	}
-
 	pub fn to_bip_32_string(&self) -> String {
 		let p = ExtKeychainPath::from_identifier(&self);
 		let mut retval = String::from("m");
@@ -286,10 +282,6 @@ impl BlindingFactor {
 
 	pub fn zero() -> BlindingFactor {
 		BlindingFactor::from_secret_key(secp::key::ZERO_KEY)
-	}
-
-	pub fn to_hex(&self) -> String {
-		util::to_hex(self.0.to_vec())
 	}
 
 	pub fn from_hex(hex: &str) -> Result<BlindingFactor, Error> {

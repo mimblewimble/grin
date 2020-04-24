@@ -32,8 +32,7 @@ use grin_core as core;
 use grin_core::global::ChainTypes;
 use keychain::{BlindingFactor, ExtKeychain, Keychain};
 use std::sync::Arc;
-use util::secp;
-use util::RwLock;
+use util::{secp, RwLock, ToHex};
 
 fn verifier_cache() -> Arc<RwLock<dyn VerifierCache>> {
 	Arc::new(RwLock::new(LruVerifierCache::new()))
@@ -576,7 +575,7 @@ fn validate_header_proof() {
 		b.header.write_pre_pow(&mut writer).unwrap();
 		b.header.pow.write_pre_pow(&mut writer).unwrap();
 	}
-	let pre_pow = util::to_hex(header_buf);
+	let pre_pow = header_buf.to_hex();
 
 	let reconstructed = BlockHeader::from_pre_pow_and_proof(
 		pre_pow,

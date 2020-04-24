@@ -30,11 +30,11 @@ use std::cmp::{max, min};
 use std::convert::TryInto;
 use std::sync::Arc;
 use std::{error, fmt};
-use util;
 use util::secp;
 use util::secp::pedersen::{Commitment, RangeProof};
 use util::static_secp_instance;
 use util::RwLock;
+use util::ToHex;
 
 /// Various tx kernel variants.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
@@ -1469,6 +1469,11 @@ impl Output {
 		self.proof
 	}
 
+	/// Get range proof as byte slice
+	pub fn proof_bytes(&self) -> &[u8] {
+		&self.proof.proof[..]
+	}
+
 	/// Validates the range proof using the commitment
 	pub fn verify_proof(&self) -> Result<(), Error> {
 		let secp = static_secp_instance();
@@ -1523,14 +1528,11 @@ impl OutputIdentifier {
 			commit: self.commit,
 		}
 	}
+}
 
-	/// convert an output_identifier to hex string format.
-	pub fn to_hex(&self) -> String {
-		format!(
-			"{:b}{}",
-			self.features as u8,
-			util::to_hex(self.commit.0.to_vec()),
-		)
+impl ToHex for OutputIdentifier {
+	fn to_hex(&self) -> String {
+		format!("{:b}{}", self.features as u8, self.commit.to_hex())
 	}
 }
 
