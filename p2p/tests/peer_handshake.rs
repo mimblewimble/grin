@@ -18,6 +18,8 @@ use grin_p2p as p2p;
 use grin_util as util;
 use grin_util::StopState;
 
+use std::collections::hash_map::DefaultHasher;
+use std::hash::Hasher;
 use std::net::{SocketAddr, TcpListener, TcpStream};
 use std::sync::Arc;
 use std::{thread, time};
@@ -48,9 +50,13 @@ fn peer_handshake_aux(server_ip: &str, client_addr: &str) {
 		..p2p::P2PConfig::default()
 	};
 	let net_adapter = Arc::new(p2p::DummyAdapter {});
+	let mut hasher = DefaultHasher::new();
+	hasher.write(server_ip.as_bytes());
+	hasher.write(client_addr.as_bytes());
+	let data_folder = format!("{:x}", hasher.finish());
 	let server = Arc::new(
 		p2p::Server::new(
-			".grin",
+			data_folder.as_str(),
 			p2p::Capabilities::UNKNOWN,
 			p2p_config.clone(),
 			net_adapter.clone(),
