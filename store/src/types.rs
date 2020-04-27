@@ -44,7 +44,7 @@ impl SizeEntry {
 }
 
 impl Readable for SizeEntry {
-	fn read(reader: &mut dyn Reader) -> Result<SizeEntry, ser::Error> {
+	fn read<R: Reader>(reader: &mut R) -> Result<SizeEntry, ser::Error> {
 		Ok(SizeEntry {
 			offset: reader.read_u64()?,
 			size: reader.read_u16()?,

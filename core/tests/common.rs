@@ -155,7 +155,7 @@ impl Writeable for TestElem {
 }
 
 impl Readable for TestElem {
-	fn read(reader: &mut dyn Reader) -> Result<TestElem, ser::Error> {
+	fn read<R: Reader>(reader: &mut R) -> Result<TestElem, ser::Error> {
 		Ok(TestElem([
 			reader.read_u32()?,
 			reader.read_u32()?,

@@ -85,7 +85,7 @@ impl ::std::fmt::Debug for ShortId {
 }
 
 impl Readable for ShortId {
-	fn read(reader: &mut dyn Reader) -> Result<ShortId, ser::Error> {
+	fn read<R: Reader>(reader: &mut R) -> Result<ShortId, ser::Error> {
 		let v = reader.read_fixed_bytes(SHORT_ID_SIZE)?;
 		let mut a = [0; SHORT_ID_SIZE];
 		a.copy_from_slice(&v[..]);

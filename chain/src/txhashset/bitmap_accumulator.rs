@@ -233,7 +233,7 @@ impl Readable for BitmapChunk {
 	/// Reading is not currently supported, just return an empty one for now.
 	/// We store the underlying roaring bitmap externally for the bitmap accumulator
 	/// and the "hash only" backend means we never actually read these chunks.
-	fn read(_reader: &mut dyn Reader) -> Result<BitmapChunk, ser::Error> {
+	fn read<R: Reader>(_reader: &mut R) -> Result<BitmapChunk, ser::Error> {
 		Ok(BitmapChunk::new())
 	}
 }

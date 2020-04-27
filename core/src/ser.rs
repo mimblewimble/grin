@@ -224,17 +224,17 @@ pub trait Writeable {
 }
 
 /// Reader that exposes an Iterator interface.
-pub struct IteratingReader<'a, T> {
+pub struct IteratingReader<'a, T, R: Reader> {
 	count: u64,
 	curr: u64,
-	reader: &'a mut dyn Reader,
+	reader: &'a mut R,
 	_marker: marker::PhantomData<T>,
 }
 
-impl<'a, T> IteratingReader<'a, T> {
+impl<'a, T, R: Reader> IteratingReader<'a, T, R> {
 	/// Constructor to create a new iterating reader for the provided underlying reader.
 	/// Takes a count so we know how many to iterate over.
-	pub fn new(reader: &'a mut dyn Reader, count: u64) -> IteratingReader<'a, T> {
+	pub fn new(reader: &'a mut R, count: u64) -> Self {
 		let curr = 0;
 		IteratingReader {
 			count,
@@ -245,9 +245,10 @@ impl<'a, T> IteratingReader<'a, T> {
 	}
 }
 
-impl<'a, T> Iterator for IteratingReader<'a, T>
+impl<'a, T, R> Iterator for IteratingReader<'a, T, R>
 where
 	T: Readable,
+	R: Reader,
 {
 	type Item = T;
 
@@ -261,9 +262,10 @@ where
 }
 
 /// Reads multiple serialized items into a Vec.
-pub fn read_multi<T>(reader: &mut dyn Reader, count: u64) -> Result<Vec<T>, Error>
+pub fn read_multi<T, R>(reader: &mut R, count: u64) -> Result<Vec<T>, Error>
 where
 	T: Readable,
+	R: Reader,
 {
 	// Very rudimentary check to ensure we do not overflow anything
 	// attempting to read huge amounts of data.
@@ -331,7 +333,7 @@ impl Writeable for ProtocolVersion {
 }
 
 impl Readable for ProtocolVersion {
-	fn read(reader: &mut dyn Reader) -> Result<ProtocolVersion, Error> {
+	fn read<R: Reader>(reader: &mut R) -> Result<ProtocolVersion, Error> {
 		let version = reader.read_u32()?;
 		Ok(ProtocolVersion(version))
 	}
@@ -345,12 +347,12 @@ where
 	Self: Sized,
 {
 	/// Reads the data necessary to this Readable from the provided reader
-	fn read(reader: &mut dyn Reader) -> Result<Self, Error>;
+	fn read<R: Reader>(reader: &mut R) -> Result<Self, Error>;
 }
 
 /// Deserializes a Readable from any std::io::Read implementation.
-pub fn deserialize<T: Readable>(
-	source: &mut dyn Read,
+pub fn deserialize<T: Readable, R: Read>(
+	source: &mut R,
 	version: ProtocolVersion,
 ) -> Result<T, Error> {
 	let mut reader = BinReader::new(source, version);
@@ -358,7 +360,7 @@ pub fn deserialize<T: Readable>(
 }
 
 /// Deserialize a Readable based on our default "local" protocol version.
-pub fn deserialize_default<T: Readable>(source: &mut dyn Read) -> Result<T, Error> {
+pub fn deserialize_default<T: Readable, R: Read>(source: &mut R) -> Result<T, Error> {
 	deserialize(source, ProtocolVersion::local())
 }
 
@@ -386,14 +388,14 @@ pub fn ser_vec<W: Writeable>(thing: &W, version: ProtocolVersion) -> Result<Vec<
 }
 
 /// Utility to read from a binary source
-pub struct BinReader<'a> {
-	source: &'a mut dyn Read,
+pub struct BinReader<'a, R: Read> {
+	source: &'a mut R,
 	version: ProtocolVersion,
 }
 
-impl<'a> BinReader<'a> {
+impl<'a, R: Read> BinReader<'a, R> {
 	/// Constructor for a new BinReader for the provided source and protocol version.
-	pub fn new(source: &'a mut dyn Read, version: ProtocolVersion) -> BinReader<'a> {
+	pub fn new(source: &'a mut R, version: ProtocolVersion) -> Self {
 		BinReader { source, version }
 	}
 }
@@ -404,7 +406,7 @@ fn map_io_err(err: io::Error) -> Error {
 
 /// Utility wrapper for an underlying byte Reader. Defines higher level methods
 /// to read numbers, byte vectors, hashes, etc.
-impl<'a> Reader for BinReader<'a> {
+impl<'a, R: Read> Reader for BinReader<'a, R> {
 	fn read_u8(&mut self) -> Result<u8, Error> {
 		self.source.read_u8().map_err(map_io_err)
 	}
@@ -544,7 +546,7 @@ impl<'a> Reader for StreamingReader<'a> {
 }
 
 impl Readable for Commitment {
-	fn read(reader: &mut dyn Reader) -> Result<Commitment, Error> {
+	fn read<R: Reader>(reader: &mut R) -> Result<Commitment, Error> {
 		let a = reader.read_fixed_bytes(PEDERSEN_COMMITMENT_SIZE)?;
 		let mut c = [0; PEDERSEN_COMMITMENT_SIZE];
 		c[..PEDERSEN_COMMITMENT_SIZE].clone_from_slice(&a[..PEDERSEN_COMMITMENT_SIZE]);
@@ -565,7 +567,7 @@ impl Writeable for BlindingFactor {
 }
 
 impl Readable for BlindingFactor {
-	fn read(reader: &mut dyn Reader) -> Result<BlindingFactor, Error> {
+	fn read<R: Reader>(reader: &mut R) -> Result<BlindingFactor, Error> {
 		let bytes = reader.read_fixed_bytes(SECRET_KEY_SIZE)?;
 		Ok(BlindingFactor::from_slice(&bytes))
 	}
@@ -578,7 +580,7 @@ impl Writeable for Identifier {
 }
 
 impl Readable for Identifier {
-	fn read(reader: &mut dyn Reader) -> Result<Identifier, Error> {
+	fn read<R: Reader>(reader: &mut R) -> Result<Identifier, Error> {
 		let bytes = reader.read_fixed_bytes(IDENTIFIER_SIZE)?;
 		Ok(Identifier::from_bytes(&bytes))
 	}
@@ -591,7 +593,7 @@ impl Writeable for RangeProof {
 }
 
 impl Readable for RangeProof {
-	fn read(reader: &mut dyn Reader) -> Result<RangeProof, Error> {
+	fn read<R: Reader>(reader: &mut R) -> Result<RangeProof, Error> {
 		let len = reader.read_u64()?;
 		let max_len = cmp::min(len as usize, MAX_PROOF_SIZE);
 		let p = reader.read_fixed_bytes(max_len)?;
@@ -618,7 +620,7 @@ impl PMMRable for RangeProof {
 }
 
 impl Readable for Signature {
-	fn read(reader: &mut dyn Reader) -> Result<Signature, Error> {
+	fn read<R: Reader>(reader: &mut R) -> Result<Signature, Error> {
 		let a = reader.read_fixed_bytes(AGG_SIGNATURE_SIZE)?;
 		let mut c = [0; AGG_SIGNATURE_SIZE];
 		c[..AGG_SIGNATURE_SIZE].clone_from_slice(&a[..AGG_SIGNATURE_SIZE]);
@@ -643,7 +645,7 @@ impl Writeable for PublicKey {
 
 impl Readable for PublicKey {
 	// Read the public key in compressed form
-	fn read(reader: &mut dyn Reader) -> Result<Self, Error> {
+	fn read<R: Reader>(reader: &mut R) -> Result<Self, Error> {
 		let buf = reader.read_fixed_bytes(COMPRESSED_PUBLIC_KEY_SIZE)?;
 		let secp = Secp256k1::with_caps(ContextFlag::None);
 		let pk = PublicKey::from_slice(&secp, &buf).map_err(|_| Error::CorruptedData)?;
@@ -715,7 +717,7 @@ macro_rules! impl_int {
 		}
 
 		impl Readable for $int {
-			fn read(reader: &mut dyn Reader) -> Result<$int, Error> {
+			fn read<R: Reader>(reader: &mut R) -> Result<$int, Error> {
 				reader.$r_fn()
 			}
 		}
@@ -733,7 +735,7 @@ impl<T> Readable for Vec<T>
 where
 	T: Readable,
 {
-	fn read(reader: &mut dyn Reader) -> Result<Vec<T>, Error> {
+	fn read<R: Reader>(reader: &mut R) -> Result<Vec<T>, Error> {
 		let mut buf = Vec::new();
 		loop {
 			let elem = T::read(reader);
@@ -775,7 +777,7 @@ impl<A: Writeable, B: Writeable> Writeable for (A, B) {
 }
 
 impl<A: Readable, B: Readable> Readable for (A, B) {
-	fn read(reader: &mut dyn Reader) -> Result<(A, B), Error> {
+	fn read<R: Reader>(reader: &mut R) -> Result<(A, B), Error> {
 		Ok((Readable::read(reader)?, Readable::read(reader)?))
 	}
 }
@@ -798,7 +800,7 @@ impl<A: Writeable, B: Writeable, C: Writeable, D: Writeable> Writeable for (A, B
 }
 
 impl<A: Readable, B: Readable, C: Readable> Readable for (A, B, C) {
-	fn read(reader: &mut dyn Reader) -> Result<(A, B, C), Error> {
+	fn read<R: Reader>(reader: &mut R) -> Result<(A, B, C), Error> {
 		Ok((
 			Readable::read(reader)?,
 			Readable::read(reader)?,
@@ -808,7 +810,7 @@ impl<A: Readable, B: Readable, C: Readable> Readable for (A, B, C) {
 }
 
 impl<A: Readable, B: Readable, C: Readable, D: Readable> Readable for (A, B, C, D) {
-	fn read(reader: &mut dyn Reader) -> Result<(A, B, C, D), Error> {
+	fn read<R: Reader>(reader: &mut R) -> Result<(A, B, C, D), Error> {
 		Ok((
 			Readable::read(reader)?,
 			Readable::read(reader)?,

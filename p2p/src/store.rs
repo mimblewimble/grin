@@ -75,7 +75,7 @@ impl Writeable for PeerData {
 }
 
 impl Readable for PeerData {
-	fn read(reader: &mut dyn Reader) -> Result<PeerData, ser::Error> {
+	fn read<R: Reader>(reader: &mut R) -> Result<PeerData, ser::Error> {
 		let addr = PeerAddr::read(reader)?;
 		let capab = reader.read_u32()?;
 		let ua = reader.read_bytes_len_prefix()?;

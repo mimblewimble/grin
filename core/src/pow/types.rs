@@ -150,7 +150,7 @@ impl Writeable for Difficulty {
 }
 
 impl Readable for Difficulty {
-	fn read(reader: &mut dyn Reader) -> Result<Difficulty, ser::Error> {
+	fn read<R: Reader>(reader: &mut R) -> Result<Difficulty, ser::Error> {
 		let data = reader.read_u64()?;
 		Ok(Difficulty { num: data })
 	}
@@ -249,7 +249,7 @@ impl Writeable for ProofOfWork {
 }
 
 impl Readable for ProofOfWork {
-	fn read(reader: &mut dyn Reader) -> Result<ProofOfWork, ser::Error> {
+	fn read<R: Reader>(reader: &mut R) -> Result<ProofOfWork, ser::Error> {
 		let total_difficulty = Difficulty::read(reader)?;
 		let secondary_scaling = reader.read_u32()?;
 		let nonce = reader.read_u64()?;
@@ -425,7 +425,7 @@ fn read_number(bits: &[u8], bit_start: usize, bit_count: usize) -> u64 {
 }
 
 impl Readable for Proof {
-	fn read(reader: &mut dyn Reader) -> Result<Proof, ser::Error> {
+	fn read<R: Reader>(reader: &mut R) -> Result<Proof, ser::Error> {
 		let edge_bits = reader.read_u8()?;
 		if edge_bits == 0 || edge_bits > 63 {
 			return Err(ser::Error::CorruptedData);
