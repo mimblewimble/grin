@@ -305,6 +305,10 @@ fn response<T: Into<Body>>(status: StatusCode, text: T) -> Response<Body> {
 }
 
 // Legacy V1 router
+#[deprecated(
+	since = "4.0.0",
+	note = "The V1 Node API will be removed in grin 5.0.0. Please migrate to the V2 API as soon as possible."
+)]
 pub fn build_router(
 	chain: Arc<chain::Chain>,
 	tx_pool: Arc<RwLock<pool::TransactionPool>>,
