@@ -106,3 +106,8 @@ fn peer_handshake_ipv4() {
 fn peer_handshake_ipv6() {
 	peer_handshake_aux("::1", "[::1]:5000");
 }
+
+#[test]
+fn peer_handshake_mixed() {
+	peer_handshake_aux("::", "127.0.0.1:5000");
+}
