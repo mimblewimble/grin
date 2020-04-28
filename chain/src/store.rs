@@ -348,11 +348,11 @@ impl<'a> Batch<'a> {
 	}
 
 	fn get_legacy_input_bitmap(&self, bh: &Hash) -> Result<Bitmap, Error> {
-		if let Ok(Some(bytes)) = self.db.get(&to_key(BLOCK_INPUT_BITMAP_PREFIX, bh)) {
-			Ok(Bitmap::deserialize(&bytes))
-		} else {
-			Err(Error::NotFoundErr("legacy block input bitmap".to_string()))
-		}
+		option_to_not_found(
+			self.db
+				.get_with(&to_key(BLOCK_INPUT_BITMAP_PREFIX, bh), Bitmap::deserialize),
+			|| "legacy block input bitmap".to_string(),
+		)
 	}
 
 	/// Get the "spent index" from the db for the specified block.

@@ -235,14 +235,15 @@ impl Store {
 	}
 
 	/// Gets a value from the db, provided its key
-	pub fn get(&self, key: &[u8]) -> Result<Option<Vec<u8>>, Error> {
+	pub fn get_with<T, F>(&self, key: &[u8], f: F) -> Result<Option<T>, Error>
+	where
+		F: Fn(&[u8]) -> T,
+	{
 		let db = self.db.read();
 		let txn = lmdb::ReadTransaction::new(self.env.clone())?;
 		let access = txn.access();
 		let res = access.get(&db.as_ref().unwrap(), key);
-		res.map(|res: &[u8]| res.to_vec())
-			.to_opt()
-			.map_err(From::from)
+		res.map(f).to_opt().map_err(From::from)
 	}
 
 	/// Gets a `Readable` value from the db, provided its key. Encapsulates
@@ -345,8 +346,11 @@ impl<'a> Batch<'a> {
 	}
 
 	/// gets a value from the db, provided its key
-	pub fn get(&self, key: &[u8]) -> Result<Option<Vec<u8>>, Error> {
-		self.store.get(key)
+	pub fn get_with<T, F>(&self, key: &[u8], f: F) -> Result<Option<T>, Error>
+	where
+		F: Fn(&[u8]) -> T,
+	{
+		self.store.get_with(key, f)
 	}
 
 	/// Whether the provided key exists
