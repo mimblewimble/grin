@@ -14,6 +14,7 @@
 
 //! Storage of core types using LMDB.
 
+use std::collections::HashMap;
 use std::fs;
 use std::marker;
 use std::sync::Arc;
@@ -73,8 +74,7 @@ const DEFAULT_DB_VERSION: ProtocolVersion = ProtocolVersion(2);
 /// are done through a Batch abstraction providing atomicity.
 pub struct Store {
 	env: Arc<lmdb::Environment>,
-	db: Arc<RwLock<Option<Arc<lmdb::Database<'static>>>>>,
-	name: String,
+	dbs: Arc<HashMap<String, RwLock<Arc<lmdb::Database<'static>>>>>,
 	version: ProtocolVersion,
 	alloc_chunk_size: usize,
 }
@@ -87,14 +87,10 @@ impl Store {
 	pub fn new(
 		root_path: &str,
 		env_name: Option<&str>,
-		db_name: Option<&str>,
+		db_names: Vec<&str>,
 		max_readers: Option<u32>,
 	) -> Result<Store, Error> {
 		let name = match env_name {
-			Some(n) => n.to_owned(),
-			None => "lmdb".to_owned(),
-		};
-		let db_name = match db_name {
 			Some(n) => n.to_owned(),
 			None => "lmdb".to_owned(),
 		};
@@ -103,7 +99,7 @@ impl Store {
 			.expect("Unable to create directory 'db_root' to store chain_data");
 
 		let mut env_builder = lmdb::EnvBuilder::new().unwrap();
-		env_builder.set_maxdbs(8)?;
+		env_builder.set_maxdbs(16)?;
 
 		if let Some(max_readers) = max_readers {
 			env_builder.set_maxreaders(max_readers)?;
@@ -114,30 +110,40 @@ impl Store {
 			false => ALLOC_CHUNK_SIZE_DEFAULT_TEST,
 		};
 
-		let env = unsafe { env_builder.open(&full_path, lmdb::open::NOTLS, 0o600)? };
+		let env = unsafe { Arc::new(env_builder.open(&full_path, lmdb::open::NOTLS, 0o600)?) };
 
 		debug!(
 			"DB Mapsize for {} is {}",
 			full_path,
 			env.info().as_ref().unwrap().mapsize
 		);
+		let mut dbs = HashMap::with_capacity(db_names.len());
+		for db_name in db_names {
+			dbs.insert(
+				db_name.to_owned(),
+				RwLock::new(Arc::new(lmdb::Database::open(
+					env.clone(),
+					Some(db_name),
+					&lmdb::DatabaseOptions::new(lmdb::db::CREATE),
+				)?)),
+			);
+		}
+
 		let res = Store {
-			env: Arc::new(env),
-			db: Arc::new(RwLock::new(None)),
-			name: db_name,
+			env,
+			dbs: Arc::new(dbs),
 			version: DEFAULT_DB_VERSION,
 			alloc_chunk_size,
 		};
 
-		{
-			let mut w = res.db.write();
-			*w = Some(Arc::new(lmdb::Database::open(
-				res.env.clone(),
-				Some(&res.name),
-				&lmdb::DatabaseOptions::new(lmdb::db::CREATE),
-			)?));
-		}
 		Ok(res)
+	}
+
+	/// Get db by name
+	pub fn db(&self, name: &str) -> Result<&RwLock<Arc<lmdb::Database<'static>>>, Error> {
+		self.dbs
+			.get(name)
+			.ok_or_else(|| Error::NotFoundErr(format!("db {} does not exist", name)))
 	}
 
 	/// Construct a new store using a specific protocol version.
@@ -149,22 +155,10 @@ impl Store {
 		};
 		Store {
 			env: self.env.clone(),
-			db: self.db.clone(),
-			name: self.name.clone(),
+			dbs: self.dbs.clone(),
 			version: version,
 			alloc_chunk_size,
 		}
-	}
-
-	/// Opens the database environment
-	pub fn open(&self) -> Result<(), Error> {
-		let mut w = self.db.write();
-		*w = Some(Arc::new(lmdb::Database::open(
-			self.env.clone(),
-			Some(&self.name),
-			&lmdb::DatabaseOptions::new(lmdb::db::CREATE),
-		)?));
-		Ok(())
 	}
 
 	/// Determines whether the environment needs a resize based on a simple percentage threshold
@@ -213,19 +207,9 @@ impl Store {
 			tot
 		};
 
-		// close
-		let mut w = self.db.write();
-		*w = None;
-
 		unsafe {
 			self.env.set_mapsize(new_mapsize)?;
 		}
-
-		*w = Some(Arc::new(lmdb::Database::open(
-			self.env.clone(),
-			Some(&self.name),
-			&lmdb::DatabaseOptions::new(lmdb::db::CREATE),
-		)?));
 
 		info!(
 			"Resized database from {} to {}",
@@ -239,17 +223,17 @@ impl Store {
 	where
 		F: Fn(&[u8]) -> T,
 	{
-		let db = self.db.read();
+		let db = self.db(db)?.read();
 		let txn = lmdb::ReadTransaction::new(self.env.clone())?;
 		let access = txn.access();
-		let res = access.get(&db.as_ref().unwrap(), key);
+		let res = access.get(&db, key);
 		res.map(f).to_opt().map_err(From::from)
 	}
 
 	/// Gets a `Readable` value from the db, provided its key. Encapsulates
 	/// serialization.
-	pub fn get_ser<T: ser::Readable>(&self, key: &[u8]) -> Result<Option<T>, Error> {
-		let db = self.db.read();
+	pub fn get_ser<T: ser::Readable>(&self, db: &str, key: &[u8]) -> Result<Option<T>, Error> {
+		let db = self.db(db)?.read();
 		let txn = lmdb::ReadTransaction::new(self.env.clone())?;
 		let access = txn.access();
 		self.get_ser_access(key, &access, db)
@@ -259,9 +243,9 @@ impl Store {
 		&self,
 		key: &[u8],
 		access: &lmdb::ConstAccessor<'_>,
-		db: RwLockReadGuard<'_, Option<Arc<lmdb::Database<'static>>>>,
+		db: RwLockReadGuard<'_, Arc<lmdb::Database<'static>>>,
 	) -> Result<Option<T>, Error> {
-		let res: lmdb::error::Result<&[u8]> = access.get(&db.as_ref().unwrap(), key);
+		let res: lmdb::error::Result<&[u8]> = access.get(&db, key);
 		match res.to_opt() {
 			Ok(Some(mut res)) => match ser::deserialize(&mut res, self.version) {
 				Ok(res) => Ok(Some(res)),
@@ -273,20 +257,20 @@ impl Store {
 	}
 
 	/// Whether the provided key exists
-	pub fn exists(&self, key: &[u8]) -> Result<bool, Error> {
-		let db = self.db.read();
+	pub fn exists(&self, db: &str, key: &[u8]) -> Result<bool, Error> {
+		let db = self.db(db)?.read();
 		let txn = lmdb::ReadTransaction::new(self.env.clone())?;
 		let access = txn.access();
-		let res: lmdb::error::Result<&lmdb::Ignore> = access.get(&db.as_ref().unwrap(), key);
+		let res: lmdb::error::Result<&lmdb::Ignore> = access.get(&db, key);
 		res.to_opt().map(|r| r.is_some()).map_err(From::from)
 	}
 
 	/// Produces an iterator of (key, value) pairs, where values are `Readable` types
 	/// moving forward from the provided key.
-	pub fn iter<T: ser::Readable>(&self, from: &[u8]) -> Result<SerIterator<T>, Error> {
-		let db = self.db.read();
+	pub fn iter<T: ser::Readable>(&self, db: &str, from: &[u8]) -> Result<SerIterator<T>, Error> {
+		let db = self.db(db)?.read();
 		let tx = Arc::new(lmdb::ReadTransaction::new(self.env.clone())?);
-		let cursor = Arc::new(tx.cursor(db.as_ref().unwrap().clone()).unwrap());
+		let cursor = Arc::new(tx.cursor(db.clone())?);
 		Ok(SerIterator {
 			tx,
 			cursor,
@@ -316,66 +300,67 @@ pub struct Batch<'a> {
 
 impl<'a> Batch<'a> {
 	/// Writes a single key/value pair to the db
-	pub fn put(&self, key: &[u8], value: &[u8]) -> Result<(), Error> {
-		let db = self.store.db.read();
+	pub fn put(&self, db: &str, key: &[u8], value: &[u8]) -> Result<(), Error> {
+		let db = self.store.db(db)?.read();
 		self.tx
 			.access()
-			.put(&db.as_ref().unwrap(), key, value, lmdb::put::Flags::empty())?;
+			.put(&db, key, value, lmdb::put::Flags::empty())?;
 		Ok(())
 	}
 
 	/// Writes a single key and its `Writeable` value to the db.
 	/// Encapsulates serialization using the (default) version configured on the store instance.
-	pub fn put_ser<W: ser::Writeable>(&self, key: &[u8], value: &W) -> Result<(), Error> {
-		self.put_ser_with_version(key, value, self.store.version)
+	pub fn put_ser<W: ser::Writeable>(&self, db: &str, key: &[u8], value: &W) -> Result<(), Error> {
+		self.put_ser_with_version(db, key, value, self.store.version)
 	}
 
 	/// Writes a single key and its `Writeable` value to the db.
 	/// Encapsulates serialization using the specified protocol version.
 	pub fn put_ser_with_version<W: ser::Writeable>(
 		&self,
+		db: &str,
 		key: &[u8],
 		value: &W,
 		version: ProtocolVersion,
 	) -> Result<(), Error> {
 		let ser_value = ser::ser_vec(value, version);
 		match ser_value {
-			Ok(data) => self.put(key, &data),
+			Ok(data) => self.put(db, key, &data),
 			Err(err) => Err(Error::SerErr(format!("{}", err))),
 		}
 	}
 
 	/// gets a value from the db, provided its key
-	pub fn get_with<T, F>(&self, key: &[u8], f: F) -> Result<Option<T>, Error>
+	pub fn get_with<T, F>(&self, db: &str, key: &[u8], f: F) -> Result<Option<T>, Error>
 	where
 		F: Fn(&[u8]) -> T,
 	{
-		self.store.get_with(key, f)
+		self.store.get_with(db, key, f)
 	}
 
 	/// Whether the provided key exists
-	pub fn exists(&self, key: &[u8]) -> Result<bool, Error> {
-		self.store.exists(key)
+	pub fn exists(&self, db: &str, key: &[u8]) -> Result<bool, Error> {
+		self.store.exists(db, key)
 	}
 
 	/// Produces an iterator of `Readable` types moving forward from the
 	/// provided key.
-	pub fn iter<T: ser::Readable>(&self, from: &[u8]) -> Result<SerIterator<T>, Error> {
-		self.store.iter(from)
+	pub fn iter<T: ser::Readable>(&self, db: &str, from: &[u8]) -> Result<SerIterator<T>, Error> {
+		self.store.iter(db, from)
 	}
 
 	/// Gets a `Readable` value from the db, provided its key, taking the
 	/// content of the current batch into account.
-	pub fn get_ser<T: ser::Readable>(&self, key: &[u8]) -> Result<Option<T>, Error> {
+	pub fn get_ser<T: ser::Readable>(&self, db: &str, key: &[u8]) -> Result<Option<T>, Error> {
 		let access = self.tx.access();
-		let db = self.store.db.read();
+		let db = self.store.db(db)?.read();
 		self.store.get_ser_access(key, &access, db)
 	}
 
 	/// Deletes a key/value pair from the db
-	pub fn delete(&self, key: &[u8]) -> Result<(), Error> {
-		let db = self.store.db.read();
-		self.tx.access().del_key(&db.as_ref().unwrap(), key)?;
+	pub fn delete(&self, db: &str, key: &[u8]) -> Result<(), Error> {
+		let db = self.store.db(db)?.read();
+		self.tx.access().del_key(&db, key)?;
 		Ok(())
 	}
 

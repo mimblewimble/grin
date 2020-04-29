@@ -23,10 +23,8 @@ use crate::core::ser::{self, Readable, Reader, Writeable, Writer};
 use crate::types::{Capabilities, PeerAddr, ReasonForBan};
 use grin_store::{self, option_to_not_found, to_key, Error};
 
-const DB_NAME: &str = "peer";
-const STORE_SUBPATH: &str = "peers";
-
-const PEER_PREFIX: u8 = b'P';
+const ENV_NAME: &str = "peer";
+const PEER: &str = "peers";
 
 // Types of messages
 enum_from_primitive! {
@@ -116,7 +114,7 @@ pub struct PeerStore {
 impl PeerStore {
 	/// Instantiates a new peer store under the provided root path.
 	pub fn new(db_root: &str) -> Result<PeerStore, Error> {
-		let db = grin_store::Store::new(db_root, Some(DB_NAME), Some(STORE_SUBPATH), None)?;
+		let db = grin_store::Store::new(db_root, Some(ENV_NAME), vec![PEER], None)?;
 		Ok(PeerStore { db: db })
 	}
 
@@ -124,25 +122,25 @@ impl PeerStore {
 		debug!("save_peer: {:?} marked {:?}", p.addr, p.flags);
 
 		let batch = self.db.batch()?;
-		batch.put_ser(&peer_key(p.addr)[..], p)?;
+		batch.put_ser(PEER, &peer_key(p.addr)[..], p)?;
 		batch.commit()
 	}
 
 	pub fn get_peer(&self, peer_addr: PeerAddr) -> Result<PeerData, Error> {
-		option_to_not_found(self.db.get_ser(&peer_key(peer_addr)[..]), || {
+		option_to_not_found(self.db.get_ser(PEER, &peer_key(peer_addr)[..]), || {
 			format!("Peer at address: {}", peer_addr)
 		})
 	}
 
 	pub fn exists_peer(&self, peer_addr: PeerAddr) -> Result<bool, Error> {
-		self.db.exists(&peer_key(peer_addr)[..])
+		self.db.exists(PEER, &peer_key(peer_addr)[..])
 	}
 
 	/// TODO - allow below added to avoid github issue reports
 	#[allow(dead_code)]
 	pub fn delete_peer(&self, peer_addr: PeerAddr) -> Result<(), Error> {
 		let batch = self.db.batch()?;
-		batch.delete(&peer_key(peer_addr)[..])?;
+		batch.delete(PEER, &peer_key(peer_addr)[..])?;
 		batch.commit()
 	}
 
@@ -154,7 +152,7 @@ impl PeerStore {
 	) -> Result<Vec<PeerData>, Error> {
 		let mut peers = self
 			.db
-			.iter::<PeerData>(&to_key(PEER_PREFIX, ""))?
+			.iter::<PeerData>(PEER, b"")?
 			.map(|(_, v)| v)
 			.filter(|p| p.flags == state && p.capabilities.contains(cap))
 			.collect::<Vec<_>>();
@@ -165,10 +163,9 @@ impl PeerStore {
 	/// List all known peers
 	/// Used for /v1/peers/all api endpoint
 	pub fn all_peers(&self) -> Result<Vec<PeerData>, Error> {
-		let key = to_key(PEER_PREFIX, "");
 		Ok(self
 			.db
-			.iter::<PeerData>(&key)?
+			.iter::<PeerData>(PEER, b"")?
 			.map(|(_, v)| v)
 			.collect::<Vec<_>>())
 	}
@@ -178,16 +175,16 @@ impl PeerStore {
 	pub fn update_state(&self, peer_addr: PeerAddr, new_state: State) -> Result<(), Error> {
 		let batch = self.db.batch()?;
 
-		let mut peer =
-			option_to_not_found(batch.get_ser::<PeerData>(&peer_key(peer_addr)[..]), || {
-				format!("Peer at address: {}", peer_addr)
-			})?;
+		let mut peer = option_to_not_found(
+			batch.get_ser::<PeerData>(PEER, &peer_key(peer_addr)[..]),
+			|| format!("Peer at address: {}", peer_addr),
+		)?;
 		peer.flags = new_state;
 		if new_state == State::Banned {
 			peer.last_banned = Utc::now().timestamp();
 		}
 
-		batch.put_ser(&peer_key(peer_addr)[..], &peer)?;
+		batch.put_ser(PEER, &peer_key(peer_addr)[..], &peer)?;
 		batch.commit()
 	}
 
@@ -209,7 +206,7 @@ impl PeerStore {
 			let batch = self.db.batch()?;
 
 			for peer in to_remove {
-				batch.delete(&peer_key(peer.addr)[..])?;
+				batch.delete(PEER, &peer_key(peer.addr)[..])?;
 			}
 
 			batch.commit()?;
@@ -221,5 +218,5 @@ impl PeerStore {
 
 // Ignore the port unless ip is loopback address.
 fn peer_key(peer_addr: PeerAddr) -> Vec<u8> {
-	to_key(PEER_PREFIX, &peer_addr.as_key())
+	peer_addr.as_key().into_bytes()
 }
