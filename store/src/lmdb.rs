@@ -24,7 +24,7 @@ use lmdb_zero::LmdbResultExt;
 
 use crate::core::global;
 use crate::core::ser::{self, ProtocolVersion};
-use crate::util::{RwLock, RwLockReadGuard};
+use crate::util::RwLock;
 
 /// number of bytes to grow the database by when needed
 pub const ALLOC_CHUNK_SIZE_DEFAULT: usize = 134_217_728; //128 MB
@@ -102,7 +102,7 @@ impl Store {
 		fs::create_dir_all(&full_path)
 			.expect("Unable to create directory 'db_root' to store chain_data");
 
-		let mut env_builder = lmdb::EnvBuilder::new().unwrap();
+		let mut env_builder = lmdb::EnvBuilder::new()?;
 		env_builder.set_maxdbs(8)?;
 
 		if let Some(max_readers) = max_readers {
@@ -116,11 +116,7 @@ impl Store {
 
 		let env = unsafe { env_builder.open(&full_path, lmdb::open::NOTLS, 0o600)? };
 
-		debug!(
-			"DB Mapsize for {} is {}",
-			full_path,
-			env.info().as_ref().unwrap().mapsize
-		);
+		debug!("DB Mapsize for {} is {}", full_path, env.info()?.mapsize);
 		let res = Store {
 			env: Arc::new(env),
 			db: Arc::new(RwLock::new(None)),
@@ -239,29 +235,35 @@ impl Store {
 	where
 		F: Fn(&[u8]) -> T,
 	{
-		let db = self.db.read();
+		let lock = self.db.read();
+		let db = lock
+			.as_ref()
+			.ok_or_else(|| Error::NotFoundErr("chain db is None".to_string()))?;
 		let txn = lmdb::ReadTransaction::new(self.env.clone())?;
 		let access = txn.access();
-		let res = access.get(&db.as_ref().unwrap(), key);
+		let res = access.get(db, key);
 		res.map(f).to_opt().map_err(From::from)
 	}
 
 	/// Gets a `Readable` value from the db, provided its key. Encapsulates
 	/// serialization.
 	pub fn get_ser<T: ser::Readable>(&self, key: &[u8]) -> Result<Option<T>, Error> {
-		let db = self.db.read();
+		let lock = self.db.read();
+		let db = lock
+			.as_ref()
+			.ok_or_else(|| Error::NotFoundErr("chain db is None".to_string()))?;
 		let txn = lmdb::ReadTransaction::new(self.env.clone())?;
 		let access = txn.access();
-		self.get_ser_access(key, &access, db)
+		self.get_ser_access(key, &access, db.clone())
 	}
 
 	fn get_ser_access<T: ser::Readable>(
 		&self,
 		key: &[u8],
 		access: &lmdb::ConstAccessor<'_>,
-		db: RwLockReadGuard<'_, Option<Arc<lmdb::Database<'static>>>>,
+		db: Arc<lmdb::Database<'static>>,
 	) -> Result<Option<T>, Error> {
-		let res: lmdb::error::Result<&[u8]> = access.get(&db.as_ref().unwrap(), key);
+		let res: lmdb::error::Result<&[u8]> = access.get(&db, key);
 		match res.to_opt() {
 			Ok(Some(mut res)) => match ser::deserialize(&mut res, self.version) {
 				Ok(res) => Ok(Some(res)),
@@ -274,19 +276,25 @@ impl Store {
 
 	/// Whether the provided key exists
 	pub fn exists(&self, key: &[u8]) -> Result<bool, Error> {
-		let db = self.db.read();
+		let lock = self.db.read();
+		let db = lock
+			.as_ref()
+			.ok_or_else(|| Error::NotFoundErr("chain db is None".to_string()))?;
 		let txn = lmdb::ReadTransaction::new(self.env.clone())?;
 		let access = txn.access();
-		let res: lmdb::error::Result<&lmdb::Ignore> = access.get(&db.as_ref().unwrap(), key);
+		let res: lmdb::error::Result<&lmdb::Ignore> = access.get(db, key);
 		res.to_opt().map(|r| r.is_some()).map_err(From::from)
 	}
 
 	/// Produces an iterator of (key, value) pairs, where values are `Readable` types
 	/// moving forward from the provided key.
 	pub fn iter<T: ser::Readable>(&self, from: &[u8]) -> Result<SerIterator<T>, Error> {
-		let db = self.db.read();
+		let lock = self.db.read();
+		let db = lock
+			.as_ref()
+			.ok_or_else(|| Error::NotFoundErr("chain db is None".to_string()))?;
 		let tx = Arc::new(lmdb::ReadTransaction::new(self.env.clone())?);
-		let cursor = Arc::new(tx.cursor(db.as_ref().unwrap().clone()).unwrap());
+		let cursor = Arc::new(tx.cursor(db.clone())?);
 		Ok(SerIterator {
 			tx,
 			cursor,
@@ -317,10 +325,13 @@ pub struct Batch<'a> {
 impl<'a> Batch<'a> {
 	/// Writes a single key/value pair to the db
 	pub fn put(&self, key: &[u8], value: &[u8]) -> Result<(), Error> {
-		let db = self.store.db.read();
+		let lock = self.store.db.read();
+		let db = lock
+			.as_ref()
+			.ok_or_else(|| Error::NotFoundErr("chain db is None".to_string()))?;
 		self.tx
 			.access()
-			.put(&db.as_ref().unwrap(), key, value, lmdb::put::Flags::empty())?;
+			.put(db, key, value, lmdb::put::Flags::empty())?;
 		Ok(())
 	}
 
@@ -368,14 +379,22 @@ impl<'a> Batch<'a> {
 	/// content of the current batch into account.
 	pub fn get_ser<T: ser::Readable>(&self, key: &[u8]) -> Result<Option<T>, Error> {
 		let access = self.tx.access();
-		let db = self.store.db.read();
-		self.store.get_ser_access(key, &access, db)
+
+		let lock = self.store.db.read();
+		let db = lock
+			.as_ref()
+			.ok_or_else(|| Error::NotFoundErr("chain db is None".to_string()))?;
+
+		self.store.get_ser_access(key, &access, db.clone())
 	}
 
 	/// Deletes a key/value pair from the db
 	pub fn delete(&self, key: &[u8]) -> Result<(), Error> {
-		let db = self.store.db.read();
-		self.tx.access().del_key(&db.as_ref().unwrap(), key)?;
+		let lock = self.store.db.read();
+		let db = lock
+			.as_ref()
+			.ok_or_else(|| Error::NotFoundErr("chain db is None".to_string()))?;
+		self.tx.access().del_key(db, key)?;
 		Ok(())
 	}
 
