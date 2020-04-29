@@ -74,7 +74,7 @@ const DEFAULT_DB_VERSION: ProtocolVersion = ProtocolVersion(2);
 /// are done through a Batch abstraction providing atomicity.
 pub struct Store {
 	env: Arc<lmdb::Environment>,
-	dbs: Arc<HashMap<String, RwLock<Arc<lmdb::Database<'static>>>>>,
+	dbs: Arc<HashMap<String, RwLock<Option<Arc<lmdb::Database<'static>>>>>>,
 	version: ProtocolVersion,
 	alloc_chunk_size: usize,
 }
@@ -121,11 +121,11 @@ impl Store {
 		for db_name in db_names {
 			dbs.insert(
 				db_name.to_owned(),
-				RwLock::new(Arc::new(lmdb::Database::open(
+				RwLock::new(Some(Arc::new(lmdb::Database::open(
 					env.clone(),
 					Some(db_name),
 					&lmdb::DatabaseOptions::new(lmdb::db::CREATE),
-				)?)),
+				)?))),
 			);
 		}
 
@@ -140,7 +140,7 @@ impl Store {
 	}
 
 	/// Get db by name
-	pub fn db(&self, name: &str) -> Result<&RwLock<Arc<lmdb::Database<'static>>>, Error> {
+	pub fn db(&self, name: &str) -> Result<&RwLock<Option<Arc<lmdb::Database<'static>>>>, Error> {
 		self.dbs
 			.get(name)
 			.ok_or_else(|| Error::NotFoundErr(format!("db {} does not exist", name)))
@@ -207,8 +207,20 @@ impl Store {
 			tot
 		};
 
+		let db_names: Vec<String> = self.dbs.keys().cloned().collect();
+		self.dbs.clear();
 		unsafe {
 			self.env.set_mapsize(new_mapsize)?;
+		}
+		for db_name in db_names {
+			self.dbs.insert(
+				db_name.to_owned(),
+				RwLock::new(Arc::new(lmdb::Database::open(
+					self.env.clone(),
+					Some(&db_name),
+					&lmdb::DatabaseOptions::new(lmdb::db::CREATE),
+				)?)),
+			);
 		}
 
 		info!(
@@ -219,11 +231,19 @@ impl Store {
 	}
 
 	/// Gets a value from the db, provided its key
+<<<<<<< HEAD
 	pub fn get_with<T, F>(&self, key: &[u8], f: F) -> Result<Option<T>, Error>
 	where
 		F: Fn(&[u8]) -> T,
 	{
 		let db = self.db(db)?.read();
+=======
+	pub fn get(&self, db: &str, key: &[u8]) -> Result<Option<Vec<u8>>, Error> {
+		let lock = self.db(db)?.read();
+		let db = lock
+			.as_ref()
+			.ok_or_else(|| Error::NotFoundErr(format!("db {} is None", db)))?;
+>>>>>>> small fixes
 		let txn = lmdb::ReadTransaction::new(self.env.clone())?;
 		let access = txn.access();
 		let res = access.get(&db, key);
@@ -233,17 +253,20 @@ impl Store {
 	/// Gets a `Readable` value from the db, provided its key. Encapsulates
 	/// serialization.
 	pub fn get_ser<T: ser::Readable>(&self, db: &str, key: &[u8]) -> Result<Option<T>, Error> {
-		let db = self.db(db)?.read();
+		let lock = self.db(db)?.read();
+		let db = lock
+			.as_ref()
+			.ok_or_else(|| Error::NotFoundErr(format!("db {} is None", db)))?;
 		let txn = lmdb::ReadTransaction::new(self.env.clone())?;
 		let access = txn.access();
-		self.get_ser_access(key, &access, db)
+		self.get_ser_access(key, &access, *db)
 	}
 
 	fn get_ser_access<T: ser::Readable>(
 		&self,
 		key: &[u8],
 		access: &lmdb::ConstAccessor<'_>,
-		db: RwLockReadGuard<'_, Arc<lmdb::Database<'static>>>,
+		db: Arc<lmdb::Database<'static>>,
 	) -> Result<Option<T>, Error> {
 		let res: lmdb::error::Result<&[u8]> = access.get(&db, key);
 		match res.to_opt() {
