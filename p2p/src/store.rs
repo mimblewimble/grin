@@ -154,7 +154,7 @@ impl PeerStore {
 	) -> Result<Vec<PeerData>, Error> {
 		let mut peers = self
 			.db
-			.iter::<PeerData>(&to_key(PEER_PREFIX, &mut "".to_string().into_bytes()))?
+			.iter::<PeerData>(&to_key(PEER_PREFIX, ""))?
 			.map(|(_, v)| v)
 			.filter(|p| p.flags == state && p.capabilities.contains(cap))
 			.collect::<Vec<_>>();
@@ -165,7 +165,7 @@ impl PeerStore {
 	/// List all known peers
 	/// Used for /v1/peers/all api endpoint
 	pub fn all_peers(&self) -> Result<Vec<PeerData>, Error> {
-		let key = to_key(PEER_PREFIX, &mut "".to_string().into_bytes());
+		let key = to_key(PEER_PREFIX, "");
 		Ok(self
 			.db
 			.iter::<PeerData>(&key)?
@@ -221,5 +221,5 @@ impl PeerStore {
 
 // Ignore the port unless ip is loopback address.
 fn peer_key(peer_addr: PeerAddr) -> Vec<u8> {
-	to_key(PEER_PREFIX, &mut peer_addr.as_key().into_bytes())
+	to_key(PEER_PREFIX, &peer_addr.as_key())
 }
