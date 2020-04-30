@@ -132,7 +132,7 @@ pub struct HeaderEntry {
 }
 
 impl Readable for HeaderEntry {
-	fn read(reader: &mut dyn Reader) -> Result<HeaderEntry, ser::Error> {
+	fn read<R: Reader>(reader: &mut R) -> Result<HeaderEntry, ser::Error> {
 		let hash = Hash::read(reader)?;
 		let timestamp = reader.read_u64()?;
 		let total_difficulty = Difficulty::read(reader)?;
@@ -192,7 +192,7 @@ impl Writeable for HeaderVersion {
 }
 
 impl Readable for HeaderVersion {
-	fn read(reader: &mut dyn Reader) -> Result<HeaderVersion, ser::Error> {
+	fn read<R: Reader>(reader: &mut R) -> Result<HeaderVersion, ser::Error> {
 		let version = reader.read_u16()?;
 		Ok(HeaderVersion(version))
 	}
@@ -280,7 +280,7 @@ impl Writeable for BlockHeader {
 	}
 }
 
-fn read_block_header(reader: &mut dyn Reader) -> Result<BlockHeader, ser::Error> {
+fn read_block_header<R: Reader>(reader: &mut R) -> Result<BlockHeader, ser::Error> {
 	let version = HeaderVersion::read(reader)?;
 	let (height, timestamp) = ser_multiread!(reader, read_u64, read_i64);
 	let prev_hash = Hash::read(reader)?;
@@ -316,7 +316,7 @@ fn read_block_header(reader: &mut dyn Reader) -> Result<BlockHeader, ser::Error>
 
 /// Deserialization of a block header
 impl Readable for BlockHeader {
-	fn read(reader: &mut dyn Reader) -> Result<BlockHeader, ser::Error> {
+	fn read<R: Reader>(reader: &mut R) -> Result<BlockHeader, ser::Error> {
 		read_block_header(reader)
 	}
 }
@@ -413,7 +413,7 @@ pub struct UntrustedBlockHeader(BlockHeader);
 
 /// Deserialization of an untrusted block header
 impl Readable for UntrustedBlockHeader {
-	fn read(reader: &mut dyn Reader) -> Result<UntrustedBlockHeader, ser::Error> {
+	fn read<R: Reader>(reader: &mut R) -> Result<UntrustedBlockHeader, ser::Error> {
 		let header = read_block_header(reader)?;
 		if header.timestamp
 			> Utc::now() + Duration::seconds(12 * (consensus::BLOCK_TIME_SEC as i64))
@@ -490,7 +490,7 @@ impl Writeable for Block {
 /// Implementation of Readable for a block, defines how to read a full block
 /// from a binary stream.
 impl Readable for Block {
-	fn read(reader: &mut dyn Reader) -> Result<Block, ser::Error> {
+	fn read<R: Reader>(reader: &mut R) -> Result<Block, ser::Error> {
 		let header = BlockHeader::read(reader)?;
 		let body = TransactionBody::read(reader)?;
 		Ok(Block { header, body })
@@ -828,7 +828,7 @@ pub struct UntrustedBlock(Block);
 
 /// Deserialization of an untrusted block header
 impl Readable for UntrustedBlock {
-	fn read(reader: &mut dyn Reader) -> Result<UntrustedBlock, ser::Error> {
+	fn read<R: Reader>(reader: &mut R) -> Result<UntrustedBlock, ser::Error> {
 		// we validate header here before parsing the body
 		let header = UntrustedBlockHeader::read(reader)?;
 		let body = TransactionBody::read(reader)?;

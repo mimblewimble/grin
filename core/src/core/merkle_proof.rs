@@ -47,7 +47,7 @@ impl Writeable for MerkleProof {
 }
 
 impl Readable for MerkleProof {
-	fn read(reader: &mut dyn Reader) -> Result<MerkleProof, ser::Error> {
+	fn read<R: Reader>(reader: &mut R) -> Result<MerkleProof, ser::Error> {
 		let mmr_size = reader.read_u64()?;
 		let path_len = reader.read_u64()?;
 		let mut path = Vec::with_capacity(path_len as usize);

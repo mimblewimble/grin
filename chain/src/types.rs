@@ -312,7 +312,7 @@ pub struct CommitPos {
 }
 
 impl Readable for CommitPos {
-	fn read(reader: &mut dyn Reader) -> Result<CommitPos, ser::Error> {
+	fn read<R: Reader>(reader: &mut R) -> Result<CommitPos, ser::Error> {
 		let pos = reader.read_u64()?;
 		let height = reader.read_u64()?;
 		Ok(CommitPos { pos, height })
@@ -384,7 +384,7 @@ impl ser::Writeable for Tip {
 }
 
 impl ser::Readable for Tip {
-	fn read(reader: &mut dyn ser::Reader) -> Result<Tip, ser::Error> {
+	fn read<R: ser::Reader>(reader: &mut R) -> Result<Tip, ser::Error> {
 		let height = reader.read_u64()?;
 		let last = Hash::read(reader)?;
 		let prev = Hash::read(reader)?;

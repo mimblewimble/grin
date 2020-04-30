@@ -25,7 +25,7 @@ use chrono::prelude::Utc;
 use rand::{thread_rng, Rng};
 use std::cmp;
 use std::fs::{self, File, OpenOptions};
-use std::io::BufWriter;
+use std::io::{BufWriter, Read};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::Instant;
@@ -51,9 +51,9 @@ impl Protocol {
 }
 
 impl MessageHandler for Protocol {
-	fn consume(
+	fn consume<R: Read>(
 		&self,
-		mut msg: Message,
+		mut msg: Message<R>,
 		stopped: Arc<AtomicBool>,
 		tracker: Arc<Tracker>,
 	) -> Result<Option<Msg>, Error> {

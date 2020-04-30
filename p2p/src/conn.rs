@@ -48,9 +48,9 @@ const BODY_IO_TIMEOUT: Duration = Duration::from_millis(60000);
 /// A trait to be implemented in order to receive messages from the
 /// connection. Allows providing an optional response.
 pub trait MessageHandler: Send + 'static {
-	fn consume<'a>(
+	fn consume<'a, R: Read>(
 		&self,
-		msg: Message<'a>,
+		msg: Message<'a, R>,
 		stopped: Arc<AtomicBool>,
 		tracker: Arc<Tracker>,
 	) -> Result<Option<Msg>, Error>;
@@ -88,18 +88,14 @@ macro_rules! try_header {
 
 /// A message as received by the connection. Provides access to the message
 /// header lazily consumes the message body, handling its deserialization.
-pub struct Message<'a> {
+pub struct Message<'a, R: Read> {
 	pub header: MsgHeader,
-	stream: &'a mut dyn Read,
+	stream: &'a mut R,
 	version: ProtocolVersion,
 }
 
-impl<'a> Message<'a> {
-	fn from_header(
-		header: MsgHeader,
-		stream: &'a mut dyn Read,
-		version: ProtocolVersion,
-	) -> Message<'a> {
+impl<'a, R: Read> Message<'a, R> {
+	fn from_header(header: MsgHeader, stream: &'a mut R, version: ProtocolVersion) -> Self {
 		Message {
 			header,
 			stream,

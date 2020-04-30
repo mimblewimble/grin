@@ -131,7 +131,7 @@ impl AsRef<[u8]> for Hash {
 }
 
 impl Readable for Hash {
-	fn read(reader: &mut dyn Reader) -> Result<Hash, ser::Error> {
+	fn read<R: Reader>(reader: &mut R) -> Result<Hash, ser::Error> {
 		let v = reader.read_fixed_bytes(32)?;
 		let mut a = [0; 32];
 		a.copy_from_slice(&v[..]);
