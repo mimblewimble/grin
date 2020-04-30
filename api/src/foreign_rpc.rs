@@ -16,8 +16,10 @@
 
 use crate::core::core::hash::Hash;
 use crate::core::core::transaction::Transaction;
+use crate::core::core::verifier_cache::VerifierCache;
 use crate::foreign::Foreign;
 use crate::pool::PoolEntry;
+use crate::pool::{BlockChain, PoolAdapter};
 use crate::rest::ErrorKind;
 use crate::types::{
 	BlockHeaderPrintable, BlockPrintable, LocatedTxKernel, OutputListing, OutputPrintable, Tip,
@@ -738,7 +740,12 @@ pub trait ForeignRpc: Sync + Send {
 	fn push_transaction(&self, tx: Transaction, fluff: Option<bool>) -> Result<(), ErrorKind>;
 }
 
-impl ForeignRpc for Foreign {
+impl<B, P, V> ForeignRpc for Foreign<B, P, V>
+where
+	B: BlockChain,
+	P: PoolAdapter,
+	V: VerifierCache + 'static,
+{
 	fn get_header(
 		&self,
 		height: Option<u64>,

@@ -36,13 +36,12 @@ use crate::chain::{self, SyncState};
 use crate::common::stats::{StratumStats, WorkerStats};
 use crate::common::types::StratumServerConfig;
 use crate::core::core::hash::Hashed;
-use crate::core::core::verifier_cache::VerifierCache;
 use crate::core::core::Block;
 use crate::core::{pow, ser};
 use crate::keychain;
 use crate::mining::mine_block;
-use crate::pool;
 use crate::util::ToHex;
+use crate::{ServerTxPool, ServerVerifierCache};
 
 type Tx = mpsc::UnboundedSender<String>;
 
@@ -523,8 +522,8 @@ impl Handler {
 	pub fn run(
 		&self,
 		config: &StratumServerConfig,
-		tx_pool: &Arc<RwLock<pool::TransactionPool>>,
-		verifier_cache: Arc<RwLock<dyn VerifierCache>>,
+		tx_pool: &ServerTxPool,
+		verifier_cache: ServerVerifierCache,
 	) {
 		debug!("Run main loop");
 		let mut deadline: i64 = 0;
@@ -803,8 +802,8 @@ pub struct StratumServer {
 	id: String,
 	config: StratumServerConfig,
 	chain: Arc<chain::Chain>,
-	tx_pool: Arc<RwLock<pool::TransactionPool>>,
-	verifier_cache: Arc<RwLock<dyn VerifierCache>>,
+	pub tx_pool: ServerTxPool,
+	verifier_cache: ServerVerifierCache,
 	sync_state: Arc<SyncState>,
 	stratum_stats: Arc<RwLock<StratumStats>>,
 }
@@ -814,8 +813,8 @@ impl StratumServer {
 	pub fn new(
 		config: StratumServerConfig,
 		chain: Arc<chain::Chain>,
-		tx_pool: Arc<RwLock<pool::TransactionPool>>,
-		verifier_cache: Arc<RwLock<dyn VerifierCache>>,
+		tx_pool: ServerTxPool,
+		verifier_cache: ServerVerifierCache,
 		stratum_stats: Arc<RwLock<StratumStats>>,
 	) -> StratumServer {
 		StratumServer {

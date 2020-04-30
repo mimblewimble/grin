@@ -42,12 +42,14 @@ use crate::auth::{
 };
 use crate::chain;
 use crate::chain::{Chain, SyncState};
+use crate::core::core::verifier_cache::VerifierCache;
 use crate::foreign::Foreign;
 use crate::foreign_rpc::ForeignRpc;
 use crate::owner::Owner;
 use crate::owner_rpc::OwnerRpc;
 use crate::p2p;
 use crate::pool;
+use crate::pool::{BlockChain, PoolAdapter};
 use crate::rest::{ApiServer, Error, TLSConfig};
 use crate::router::ResponseFuture;
 use crate::router::{Router, RouterError};
@@ -62,16 +64,21 @@ use std::sync::{Arc, Weak};
 
 /// Listener version, providing same API but listening for requests on a
 /// port and wrapping the calls
-pub fn node_apis(
+pub fn node_apis<B, P, V>(
 	addr: &str,
 	chain: Arc<chain::Chain>,
-	tx_pool: Arc<RwLock<pool::TransactionPool>>,
+	tx_pool: Arc<RwLock<pool::TransactionPool<B, P, V>>>,
 	peers: Arc<p2p::Peers>,
 	sync_state: Arc<chain::SyncState>,
 	api_secret: Option<String>,
 	foreign_api_secret: Option<String>,
 	tls_config: Option<TLSConfig>,
-) -> Result<(), Error> {
+) -> Result<(), Error>
+where
+	B: BlockChain + 'static,
+	P: PoolAdapter + 'static,
+	V: VerifierCache + 'static,
+{
 	// Manually build router when getting rid of v1
 	//let mut router = Router::new();
 	let mut router = build_router(
@@ -190,17 +197,27 @@ impl crate::router::Handler for OwnerAPIHandlerV2 {
 }
 
 /// V2 API Handler/Wrapper for foreign functions
-pub struct ForeignAPIHandlerV2 {
+pub struct ForeignAPIHandlerV2<B, P, V>
+where
+	B: BlockChain,
+	P: PoolAdapter,
+	V: VerifierCache + 'static,
+{
 	pub chain: Weak<Chain>,
-	pub tx_pool: Weak<RwLock<pool::TransactionPool>>,
+	pub tx_pool: Weak<RwLock<pool::TransactionPool<B, P, V>>>,
 	pub sync_state: Weak<SyncState>,
 }
 
-impl ForeignAPIHandlerV2 {
+impl<B, P, V> ForeignAPIHandlerV2<B, P, V>
+where
+	B: BlockChain,
+	P: PoolAdapter,
+	V: VerifierCache + 'static,
+{
 	/// Create a new foreign API handler for GET methods
 	pub fn new(
 		chain: Weak<Chain>,
-		tx_pool: Weak<RwLock<pool::TransactionPool>>,
+		tx_pool: Weak<RwLock<pool::TransactionPool<B, P, V>>>,
 		sync_state: Weak<SyncState>,
 	) -> Self {
 		ForeignAPIHandlerV2 {
@@ -211,7 +228,12 @@ impl ForeignAPIHandlerV2 {
 	}
 }
 
-impl crate::router::Handler for ForeignAPIHandlerV2 {
+impl<B, P, V> crate::router::Handler for ForeignAPIHandlerV2<B, P, V>
+where
+	B: BlockChain + 'static,
+	P: PoolAdapter + 'static,
+	V: VerifierCache + 'static,
+{
 	fn post(&self, req: Request<Body>) -> ResponseFuture {
 		let api = Foreign::new(
 			self.chain.clone(),
@@ -309,12 +331,17 @@ fn response<T: Into<Body>>(status: StatusCode, text: T) -> Response<Body> {
 	since = "4.0.0",
 	note = "The V1 Node API will be removed in grin 5.0.0. Please migrate to the V2 API as soon as possible."
 )]
-pub fn build_router(
+pub fn build_router<B, P, V>(
 	chain: Arc<chain::Chain>,
-	tx_pool: Arc<RwLock<pool::TransactionPool>>,
+	tx_pool: Arc<RwLock<pool::TransactionPool<B, P, V>>>,
 	peers: Arc<p2p::Peers>,
 	sync_state: Arc<chain::SyncState>,
-) -> Result<Router, RouterError> {
+) -> Result<Router, RouterError>
+where
+	B: BlockChain + 'static,
+	P: PoolAdapter + 'static,
+	V: VerifierCache + 'static,
+{
 	let route_list = vec![
 		"get blocks".to_string(),
 		"get headers".to_string(),
