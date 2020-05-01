@@ -63,6 +63,8 @@ pub enum Error {
 	InvalidPow,
 	/// Kernel not valid due to lock_height exceeding block header height
 	KernelLockHeight(u64),
+	/// NRD kernels are not valid prior to HF3.
+	NRDKernelPreHF3,
 	/// Underlying tx related error
 	Transaction(transaction::Error),
 	/// Underlying Secp256k1 error (signature validation or invalid public key
@@ -753,6 +755,7 @@ impl Block {
 		self.body.validate(Weighting::AsBlock, verifier)?;
 
 		self.verify_kernel_lock_heights()?;
+		self.verify_nrd_kernels_for_header_version()?;
 		self.verify_coinbase()?;
 
 		// take the kernel offset for this block (block offset minus previous) and
@@ -802,6 +805,7 @@ impl Block {
 		Ok(())
 	}
 
+	// Verify any absolute kernel lock heights.
 	fn verify_kernel_lock_heights(&self) -> Result<(), Error> {
 		for k in &self.body.kernels {
 			// check we have no kernels with lock_heights greater than current height
@@ -810,6 +814,17 @@ impl Block {
 				if lock_height > self.header.height {
 					return Err(Error::KernelLockHeight(lock_height));
 				}
+			}
+		}
+		Ok(())
+	}
+
+	// NRD kernels were introduced in HF3 and are only valid for block version > 3.
+	// A block earlier than HF3 containing any NRD kernel is invalid.
+	fn verify_nrd_kernels_for_header_version(&self) -> Result<(), Error> {
+		if self.header.version <= HeaderVersion(3) {
+			if self.body.kernels.iter().any(|k| k.is_nrd()) {
+				return Err(Error::NRDKernelPreHF3);
 			}
 		}
 		Ok(())

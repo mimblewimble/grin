@@ -410,6 +410,14 @@ impl KernelFeatures {
 			_ => false,
 		}
 	}
+
+	/// Is this an NRD kernel?
+	pub fn is_nrd(&self) -> bool {
+		match self {
+			KernelFeatures::NoRecentDuplicate { .. } => true,
+			_ => false,
+		}
+	}
 }
 
 impl TxKernel {
@@ -426,6 +434,11 @@ impl TxKernel {
 	/// Is this a height locked kernel?
 	pub fn is_height_locked(&self) -> bool {
 		self.features.is_height_locked()
+	}
+
+	/// Is this an NRD kernel?
+	pub fn is_nrd(&self) -> bool {
+		self.features.is_nrd()
 	}
 
 	/// Return the excess commitment for this tx_kernel.
