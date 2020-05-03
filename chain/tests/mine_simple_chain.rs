@@ -81,7 +81,7 @@ fn mine_empty_chain() {
 
 #[test]
 fn mine_short_chain() {
-	let chain_dir = ".grin.genesis";
+	let chain_dir = ".grin.short";
 	clean_output_dir(chain_dir);
 	let chain = mine_chain(chain_dir, 4);
 	assert_eq!(chain.head().unwrap().height, 3);
