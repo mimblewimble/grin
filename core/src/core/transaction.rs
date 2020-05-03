@@ -56,6 +56,8 @@ impl Readable for NRDRelativeHeight {
 	}
 }
 
+/// Conversion from a u16 to a valid NRDRelativeHeight.
+/// Valid height is between 1 and WEEK_HEIGHT inclusive.
 impl TryFrom<u16> for NRDRelativeHeight {
 	type Error = Error;
 
