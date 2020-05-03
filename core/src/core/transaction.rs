@@ -27,7 +27,7 @@ use enum_primitive::FromPrimitive;
 use keychain::{self, BlindingFactor};
 use std::cmp::Ordering;
 use std::cmp::{max, min};
-use std::convert::TryInto;
+use std::convert::{TryFrom, TryInto};
 use std::sync::Arc;
 use std::{error, fmt};
 use util::secp;
@@ -35,6 +35,50 @@ use util::secp::pedersen::{Commitment, RangeProof};
 use util::static_secp_instance;
 use util::RwLock;
 use util::ToHex;
+
+/// Relative height field on NRD kernel variant.
+/// u16 representing a height between 1 and MAX (consensus::WEEK_HEIGHT).
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub struct NRDRelativeHeight(u16);
+
+impl DefaultHashable for NRDRelativeHeight {}
+
+impl Writeable for NRDRelativeHeight {
+	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
+		writer.write_u16(self.0)
+	}
+}
+
+impl Readable for NRDRelativeHeight {
+	fn read(reader: &mut dyn Reader) -> Result<Self, ser::Error> {
+		let x = reader.read_u16()?;
+		NRDRelativeHeight::try_from(x).map_err(|_| ser::Error::CorruptedData)
+	}
+}
+
+impl TryFrom<u16> for NRDRelativeHeight {
+	type Error = Error;
+
+	fn try_from(height: u16) -> Result<Self, Self::Error> {
+		if height == 0 {
+			Err(Error::InvalidNRDRelativeHeight)
+		} else if height as u64 > NRDRelativeHeight::MAX {
+			Err(Error::InvalidNRDRelativeHeight)
+		} else {
+			Ok(Self(height))
+		}
+	}
+}
+
+impl NRDRelativeHeight {
+	const MAX: u64 = consensus::WEEK_HEIGHT;
+
+	/// Create a new NRDRelativeHeight from the provided height.
+	/// Checks height is valid (between 1 and WEEK_HEIGHT inclusive).
+	pub fn new(height: u16) -> Result<Self, Error> {
+		NRDRelativeHeight::try_from(height)
+	}
+}
 
 /// Various tx kernel variants.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
@@ -58,7 +102,7 @@ pub enum KernelFeatures {
 		/// These have fees.
 		fee: u64,
 		/// Relative lock height.
-		relative_height: u16,
+		relative_height: NRDRelativeHeight,
 	},
 }
 
@@ -112,18 +156,28 @@ impl KernelFeatures {
 	/// Write tx kernel features out in v1 protocol format.
 	/// Always include the fee and lock_height, writing 0 value if unused.
 	fn write_v1<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
-		let (fee, height) = match self {
-			KernelFeatures::Plain { fee } => (*fee, 0),
-			KernelFeatures::Coinbase => (0, 0),
-			KernelFeatures::HeightLocked { fee, lock_height } => (*fee, *lock_height),
+		writer.write_u8(self.as_u8())?;
+		match self {
+			KernelFeatures::Plain { fee } => {
+				writer.write_u64(*fee)?;
+				writer.write_empty_bytes(8)?;
+			}
+			KernelFeatures::Coinbase => {
+				writer.write_empty_bytes(16)?;
+			}
+			KernelFeatures::HeightLocked { fee, lock_height } => {
+				writer.write_u64(*fee)?;
+				writer.write_u64(*lock_height)?;
+			}
 			KernelFeatures::NoRecentDuplicate {
 				fee,
 				relative_height,
-			} => (*fee, (*relative_height).into()),
+			} => {
+				writer.write_u64(*fee)?;
+				writer.write_empty_bytes(6)?;
+				relative_height.write(writer)?;
+			}
 		};
-		writer.write_u8(self.as_u8())?;
-		writer.write_u64(fee)?;
-		writer.write_u64(height)?;
 		Ok(())
 	}
 
@@ -132,16 +186,15 @@ impl KernelFeatures {
 	/// Only write fee out for feature variants that support it.
 	/// Only write lock_height out for feature variants that support it.
 	fn write_v2<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
+		writer.write_u8(self.as_u8())?;
 		match self {
 			KernelFeatures::Plain { fee } => {
-				writer.write_u8(self.as_u8())?;
 				writer.write_u64(*fee)?;
 			}
 			KernelFeatures::Coinbase => {
-				writer.write_u8(self.as_u8())?;
+				// no additional data
 			}
 			KernelFeatures::HeightLocked { fee, lock_height } => {
-				writer.write_u8(self.as_u8())?;
 				writer.write_u64(*fee)?;
 				writer.write_u64(*lock_height)?;
 			}
@@ -149,9 +202,8 @@ impl KernelFeatures {
 				fee,
 				relative_height,
 			} => {
-				writer.write_u8(self.as_u8())?;
 				writer.write_u64(*fee)?;
-				writer.write_u16((*relative_height).into())?;
+				relative_height.write(writer)?;
 			}
 		}
 		Ok(())
@@ -163,33 +215,25 @@ impl KernelFeatures {
 	// to read these bytes and verify they are 0 if unused.
 	fn read_v1<R: Reader>(reader: &mut R) -> Result<KernelFeatures, ser::Error> {
 		let feature_byte = reader.read_u8()?;
-		let fee = reader.read_u64()?;
-		let additional_data = reader.read_u64()?;
-
 		let features = match feature_byte {
 			KernelFeatures::PLAIN_U8 => {
-				if additional_data != 0 {
-					return Err(ser::Error::CorruptedData);
-				}
+				let fee = reader.read_u64()?;
+				reader.read_empty_bytes(8)?;
 				KernelFeatures::Plain { fee }
 			}
 			KernelFeatures::COINBASE_U8 => {
-				if fee != 0 {
-					return Err(ser::Error::CorruptedData);
-				}
-				if additional_data != 0 {
-					return Err(ser::Error::CorruptedData);
-				}
+				reader.read_empty_bytes(16)?;
 				KernelFeatures::Coinbase
 			}
 			KernelFeatures::HEIGHT_LOCKED_U8 => {
-				let lock_height = additional_data;
+				let fee = reader.read_u64()?;
+				let lock_height = reader.read_u64()?;
 				KernelFeatures::HeightLocked { fee, lock_height }
 			}
 			KernelFeatures::NO_RECENT_DUPLICATE_U8 => {
-				let relative_height = additional_data
-					.try_into()
-					.map_err(|_| ser::Error::CorruptedData)?;
+				let fee = reader.read_u64()?;
+				reader.read_empty_bytes(6)?;
+				let relative_height = NRDRelativeHeight::read(reader)?;
 				KernelFeatures::NoRecentDuplicate {
 					fee,
 					relative_height,
@@ -218,7 +262,7 @@ impl KernelFeatures {
 			}
 			KernelFeatures::NO_RECENT_DUPLICATE_U8 => {
 				let fee = reader.read_u64()?;
-				let relative_height = reader.read_u16()?;
+				let relative_height = NRDRelativeHeight::read(reader)?;
 				KernelFeatures::NoRecentDuplicate {
 					fee,
 					relative_height,
@@ -294,6 +338,8 @@ pub enum Error {
 	/// Validation error relating to kernel features.
 	/// It is invalid for a transaction to contain a coinbase kernel, for example.
 	InvalidKernelFeatures,
+	/// NRD kernel relative height is limited to 1 week duration.
+	InvalidNRDRelativeHeight,
 	/// Signature verification error.
 	IncorrectSignature,
 	/// Underlying serialization error.
@@ -1743,7 +1789,7 @@ mod test {
 		let kernel = TxKernel {
 			features: KernelFeatures::NoRecentDuplicate {
 				fee: 10,
-				relative_height: 100,
+				relative_height: NRDRelativeHeight(100),
 			},
 			excess: commit,
 			excess_sig: sig.clone(),
@@ -1758,7 +1804,7 @@ mod test {
 				kernel2.features,
 				KernelFeatures::NoRecentDuplicate {
 					fee: 10,
-					relative_height: 100
+					relative_height: NRDRelativeHeight(100)
 				}
 			);
 			assert_eq!(kernel2.excess, commit);
@@ -1773,7 +1819,7 @@ mod test {
 			kernel2.features,
 			KernelFeatures::NoRecentDuplicate {
 				fee: 10,
-				relative_height: 100
+				relative_height: NRDRelativeHeight(100)
 			}
 		);
 		assert_eq!(kernel2.excess, commit);
@@ -1860,7 +1906,7 @@ mod test {
 			features,
 			KernelFeatures::NoRecentDuplicate {
 				fee: 10,
-				relative_height: 100
+				relative_height: NRDRelativeHeight(100)
 			}
 		);
 

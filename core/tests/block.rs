@@ -15,21 +15,21 @@
 mod common;
 use crate::common::{new_block, tx1i2o, tx2i1o, txspend1i1o};
 use crate::core::consensus::{self, BLOCK_OUTPUT_WEIGHT, TESTING_THIRD_HARD_FORK};
-use crate::core::core::block::Error;
+use crate::core::core::block::{Block, BlockHeader, Error, HeaderVersion};
 use crate::core::core::hash::Hashed;
 use crate::core::core::id::ShortIdentifiable;
-use crate::core::core::transaction::{self, Transaction};
-use crate::core::core::verifier_cache::{LruVerifierCache, VerifierCache};
-use crate::core::core::Committed;
-use crate::core::core::{
-	Block, BlockHeader, CompactBlock, HeaderVersion, KernelFeatures, OutputFeatures,
+use crate::core::core::transaction::{
+	self, KernelFeatures, NRDRelativeHeight, OutputFeatures, Transaction,
 };
+use crate::core::core::verifier_cache::{LruVerifierCache, VerifierCache};
+use crate::core::core::{Committed, CompactBlock};
 use crate::core::libtx::build::{self, input, output};
 use crate::core::libtx::ProofBuilder;
 use crate::core::{global, ser};
 use chrono::Duration;
 use grin_core as core;
 use keychain::{BlindingFactor, ExtKeychain, Keychain};
+use std::convert::TryFrom;
 use std::sync::Arc;
 use util::{secp, RwLock, ToHex};
 
@@ -95,7 +95,7 @@ fn block_with_nrd_kernel_pre_post_hf3() {
 	let mut tx = build::transaction(
 		KernelFeatures::NoRecentDuplicate {
 			fee: 2,
-			relative_height: 1440,
+			relative_height: NRDRelativeHeight::new(1440).unwrap(),
 		},
 		vec![input(7, key_id1), output(5, key_id2)],
 		&keychain,

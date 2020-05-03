@@ -223,5 +223,4 @@ impl<D: DefaultHashable, E: DefaultHashable, F: DefaultHashable> DefaultHashable
 impl DefaultHashable for util::secp::pedersen::RangeProof {}
 impl DefaultHashable for Vec<u8> {}
 impl DefaultHashable for u8 {}
-impl DefaultHashable for u16 {}
 impl DefaultHashable for u64 {}
