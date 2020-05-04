@@ -941,6 +941,10 @@ impl<'a> Extension<'a> {
 		batch.save_spent_index(&b.hash(), &spent)?;
 
 		for kernel in b.kernels() {
+			if kernel.is_nrd() {
+				warn!("applying NRD kernel");
+			}
+
 			self.apply_kernel(kernel)?;
 		}
 

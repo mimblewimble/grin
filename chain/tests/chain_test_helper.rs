@@ -50,7 +50,7 @@ pub fn init_chain(dir_name: &str, genesis: Block) -> Chain {
 }
 
 /// Build genesis block with reward (non-empty, like we have in mainnet).
-fn genesis_block<K>(keychain: &K) -> Block
+pub fn genesis_block<K>(keychain: &K) -> Block
 where
 	K: Keychain,
 {
