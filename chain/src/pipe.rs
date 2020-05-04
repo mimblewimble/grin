@@ -49,13 +49,11 @@ pub struct BlockContext<'a> {
 // If it matches current chain head (latest or previous hash) then we know about it.
 // If it exists in the local db then we know about it.
 fn check_known(header: &BlockHeader, head: &Tip, ctx: &BlockContext<'_>) -> Result<(), Error> {
-	if header.total_difficulty() > head.total_difficulty {
-		Ok(())
-	} else {
+	if header.total_difficulty() <= head.total_difficulty {
 		check_known_head(header, head)?;
 		check_known_store(header, head, ctx)?;
-		Ok(())
 	}
+	Ok(())
 }
 
 // Validate only the proof of work in a block header.
