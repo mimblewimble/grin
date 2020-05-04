@@ -17,7 +17,7 @@
 use crate::core::hash::{DefaultHashable, Hashed};
 use crate::core::verifier_cache::VerifierCache;
 use crate::core::{committed, Committed};
-use crate::libtx::secp_ser;
+use crate::libtx::{aggsig, secp_ser};
 use crate::ser::{
 	self, read_multi, PMMRable, ProtocolVersion, Readable, Reader, VerifySortedAndUnique,
 	Writeable, Writer,
@@ -531,14 +531,13 @@ impl TxKernel {
 		let sig = &self.excess_sig;
 		// Verify aggsig directly in libsecp
 		let pubkey = &self.excess.to_pubkey(&secp)?;
-		if !secp::aggsig::verify_single(
+		if !aggsig::verify_single(
 			&secp,
 			&sig,
 			&self.msg_to_sign()?,
 			None,
 			&pubkey,
 			Some(&pubkey),
-			None,
 			false,
 		) {
 			return Err(Error::IncorrectSignature);
@@ -549,9 +548,9 @@ impl TxKernel {
 	/// Batch signature verification.
 	pub fn batch_sig_verify(tx_kernels: &[TxKernel]) -> Result<(), Error> {
 		let len = tx_kernels.len();
-		let mut sigs: Vec<secp::Signature> = Vec::with_capacity(len);
-		let mut pubkeys: Vec<secp::key::PublicKey> = Vec::with_capacity(len);
-		let mut msgs: Vec<secp::Message> = Vec::with_capacity(len);
+		let mut sigs = Vec::with_capacity(len);
+		let mut pubkeys = Vec::with_capacity(len);
+		let mut msgs = Vec::with_capacity(len);
 
 		let secp = static_secp_instance();
 		let secp = secp.lock();
@@ -562,7 +561,7 @@ impl TxKernel {
 			msgs.push(tx_kernel.msg_to_sign()?);
 		}
 
-		if !secp::aggsig::verify_batch(&secp, &sigs, &msgs, &pubkeys) {
+		if !aggsig::verify_batch(&secp, &sigs, &msgs, &pubkeys) {
 			return Err(Error::IncorrectSignature);
 		}
 
@@ -1686,7 +1685,6 @@ mod test {
 	use crate::core::hash::Hash;
 	use crate::core::id::{ShortId, ShortIdentifiable};
 	use keychain::{ExtKeychain, Keychain, SwitchCommitmentType};
-	use util::secp;
 
 	#[test]
 	fn test_plain_kernel_ser_deser() {
@@ -1826,6 +1824,62 @@ mod test {
 		);
 		assert_eq!(kernel2.excess, commit);
 		assert_eq!(kernel2.excess_sig, sig.clone());
+	}
+
+	#[test]
+	fn nrd_kernel_verify_sig() {
+		let keychain = ExtKeychain::from_random_seed(false).unwrap();
+		let key_id = ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
+
+		let mut kernel = TxKernel::with_features(KernelFeatures::NoRecentDuplicate {
+			fee: 10,
+			relative_height: NRDRelativeHeight(100),
+		});
+
+		// Construct the message to be signed.
+		let msg = kernel.msg_to_sign().unwrap();
+
+		let excess = keychain
+			.commit(0, &key_id, SwitchCommitmentType::Regular)
+			.unwrap();
+		let skey = keychain
+			.derive_key(0, &key_id, SwitchCommitmentType::Regular)
+			.unwrap();
+		let pubkey = excess.to_pubkey(&keychain.secp()).unwrap();
+
+		let excess_sig =
+			aggsig::sign_single(&keychain.secp(), &msg, &skey, None, Some(&pubkey)).unwrap();
+
+		kernel.excess = excess;
+		kernel.excess_sig = excess_sig;
+
+		// Check the signature verifies.
+		assert_eq!(kernel.verify(), Ok(()));
+
+		// Modify the fee and check signature no longer verifies.
+		kernel.features = KernelFeatures::NoRecentDuplicate {
+			fee: 9,
+			relative_height: NRDRelativeHeight(100),
+		};
+		assert_eq!(kernel.verify(), Err(Error::IncorrectSignature));
+
+		// Modify the relative_height and check signature no longer verifies.
+		kernel.features = KernelFeatures::NoRecentDuplicate {
+			fee: 10,
+			relative_height: NRDRelativeHeight(101),
+		};
+		assert_eq!(kernel.verify(), Err(Error::IncorrectSignature));
+
+		// Swap the features out for something different and check signature no longer verifies.
+		kernel.features = KernelFeatures::Plain { fee: 10 };
+		assert_eq!(kernel.verify(), Err(Error::IncorrectSignature));
+
+		// Check signature verifies if we use the original features.
+		kernel.features = KernelFeatures::NoRecentDuplicate {
+			fee: 10,
+			relative_height: NRDRelativeHeight(100),
+		};
+		assert_eq!(kernel.verify(), Ok(()));
 	}
 
 	#[test]
