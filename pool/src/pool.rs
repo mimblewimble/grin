@@ -20,7 +20,7 @@ use self::core::core::id::{ShortId, ShortIdentifiable};
 use self::core::core::transaction;
 use self::core::core::verifier_cache::VerifierCache;
 use self::core::core::{
-	Block, BlockHeader, BlockSums, Committed, Transaction, TxKernel, Weighting,
+	Block, BlockHeader, BlockSums, Committed, KernelFeatures, Transaction, TxKernel, Weighting,
 };
 use self::util::RwLock;
 use crate::types::{BlockChain, PoolEntry, PoolError};
@@ -133,7 +133,18 @@ where
 		//   * maintain dependency ordering
 		//   * maximize cut-through
 		//   * maximize overall fees
-		let txs = self.bucket_transactions(weighting);
+		//
+		// Filter the buckets based on supported kernel variants.
+		//
+		let txs = self.bucket_transactions(weighting, |tx| {
+			// Filter txs against explicit list of supported kernel feature variants.
+			// After HF3 we will support additional features - NoRecentDuplicate
+			tx.kernels().iter().all(|x| match x.features {
+				KernelFeatures::Plain { .. } => true,
+				KernelFeatures::HeightLocked { .. } => true,
+				_ => false,
+			})
+		});
 
 		// Iteratively apply the txs to the current chain state,
 		// rejecting any that do not result in a valid state.
@@ -314,7 +325,10 @@ where
 	/// containing the tx it depends on.
 	/// Sorting the buckets by fee_to_weight will therefore preserve dependency ordering,
 	/// maximizing both cut-through and overall fees.
-	pub fn bucket_transactions(&self, weighting: Weighting) -> Vec<Transaction> {
+	pub fn bucket_transactions<F>(&self, weighting: Weighting, tx_filter: F) -> Vec<Transaction>
+	where
+		F: Fn(&Transaction) -> bool,
+	{
 		let mut tx_buckets: Vec<Bucket> = Vec::new();
 		let mut output_commits = HashMap::new();
 		let mut rejected = HashSet::new();
@@ -407,7 +421,14 @@ where
 		// Oldest (based on pool insertion time) will then be prioritized.
 		tx_buckets.sort_unstable_by_key(|x| (Reverse(x.fee_to_weight), x.age_idx));
 
-		tx_buckets.into_iter().flat_map(|x| x.raw_txs).collect()
+		// Filter out any buckets that contain txs where tx_filter returns false.
+		// We need to do this at the bucket level to correctly filter out dependent txs also.
+		// Finally flatten the buckets to return a single vec of transactions.
+		tx_buckets
+			.into_iter()
+			.filter(|x| x.raw_txs.iter().all(|tx| tx_filter(tx)))
+			.flat_map(|x| x.raw_txs)
+			.collect()
 	}
 
 	pub fn find_matching_transactions(&self, kernels: &[TxKernel]) -> Vec<Transaction> {

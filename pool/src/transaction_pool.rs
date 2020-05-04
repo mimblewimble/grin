@@ -198,12 +198,13 @@ where
 	// Remove the last transaction from the flattened bucket transactions.
 	// No other tx depends on it, it has low fee_to_weight and is unlikely to participate in any cut-through.
 	pub fn evict_from_txpool(&mut self) {
-		// Get bucket transactions
-		let bucket_transactions = self.txpool.bucket_transactions(Weighting::NoLimit);
+		// All transactions are eligible for eviction.
+		let bucket_transactions = self
+			.txpool
+			.bucket_transactions(Weighting::NoLimit, |_| true);
 
 		// Get last transaction and remove it
 		if let Some(evictable_transaction) = bucket_transactions.last() {
-			// Remove transaction
 			self.txpool
 				.entries
 				.retain(|x| x.tx != *evictable_transaction);
