@@ -142,7 +142,8 @@ where
 			tx.kernels().iter().all(|x| match x.features {
 				KernelFeatures::Plain { .. } => true,
 				KernelFeatures::HeightLocked { .. } => true,
-				_ => false,
+				// Coinbase should never be present in txpool but filter them out regardless.
+				KernelFeatures::Coinbase => false,
 			})
 		});
 
