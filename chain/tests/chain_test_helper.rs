@@ -97,11 +97,7 @@ where
 
 		chain.set_txhashset_roots(&mut b).unwrap();
 
-		let edge_bits = if n == 2 {
-			global::min_edge_bits() + 1
-		} else {
-			global::min_edge_bits()
-		};
+		let edge_bits = global::min_edge_bits();
 		b.header.pow.proof.edge_bits = edge_bits;
 		pow::pow_size(
 			&mut b.header,
@@ -110,7 +106,6 @@ where
 			edge_bits,
 		)
 		.unwrap();
-		b.header.pow.proof.edge_bits = edge_bits;
 
 		let bhash = b.hash();
 		chain.process_block(b, Options::MINE).unwrap();
