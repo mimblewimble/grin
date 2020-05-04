@@ -339,21 +339,26 @@ where
 			// if single parent then we are good, we can bucket it with its parent
 			// if multiple parents then we need to combine buckets, but for now simply reject it (rare case)
 			let mut insert_pos = None;
-			let mut is_rejected = false;
 
-			for input in entry.tx.inputs() {
-				if rejected.contains(&input.commitment()) {
-					// Depends on a rejected tx, so reject this one.
-					is_rejected = true;
-					continue;
-				} else if let Some(pos) = output_commits.get(&input.commitment()) {
-					if insert_pos.is_some() {
-						// Multiple dependencies so reject this tx (pick it up in next block).
+			// use tx_filter to determine if it should be rejected
+			let mut is_rejected = !tx_filter(&entry.tx);
+
+			// now check inputs/outputs to see if tx should be rejected
+			if !is_rejected {
+				for input in entry.tx.inputs() {
+					if rejected.contains(&input.commitment()) {
+						// Depends on a rejected tx, so reject this one.
 						is_rejected = true;
 						continue;
-					} else {
-						// Track the pos of the bucket we fall into.
-						insert_pos = Some(*pos);
+					} else if let Some(pos) = output_commits.get(&input.commitment()) {
+						if insert_pos.is_some() {
+							// Multiple dependencies so reject this tx (pick it up in next block).
+							is_rejected = true;
+							continue;
+						} else {
+							// Track the pos of the bucket we fall into.
+							insert_pos = Some(*pos);
+						}
 					}
 				}
 			}
@@ -422,14 +427,7 @@ where
 		// Oldest (based on pool insertion time) will then be prioritized.
 		tx_buckets.sort_unstable_by_key(|x| (Reverse(x.fee_to_weight), x.age_idx));
 
-		// Filter out any buckets that contain txs where tx_filter returns false.
-		// We need to do this at the bucket level to correctly filter out dependent txs also.
-		// Finally flatten the buckets to return a single vec of transactions.
-		tx_buckets
-			.into_iter()
-			.filter(|x| x.raw_txs.iter().all(|tx| tx_filter(tx)))
-			.flat_map(|x| x.raw_txs)
-			.collect()
+		tx_buckets.into_iter().flat_map(|x| x.raw_txs).collect()
 	}
 
 	pub fn find_matching_transactions(&self, kernels: &[TxKernel]) -> Vec<Transaction> {
