@@ -310,7 +310,7 @@ impl BlindingFactor {
 		// use blind_sum to subtract skey_1 from our key such that skey = skey_1 + skey_2
 		let skey = self.secret_key(secp)?;
 		let skey_1 = blind_1.secret_key(secp)?;
-		let skey_2 = secp.blind_sum(vec![skey], vec![skey_1.clone()])?;
+		let skey_2 = secp.blind_sum(vec![skey], vec![skey_1])?;
 		Ok(BlindingFactor::from_secret_key(skey_2))
 	}
 }
