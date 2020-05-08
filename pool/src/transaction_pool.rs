@@ -20,7 +20,9 @@
 use self::core::core::hash::{Hash, Hashed};
 use self::core::core::id::ShortId;
 use self::core::core::verifier_cache::VerifierCache;
-use self::core::core::{transaction, Block, BlockHeader, Transaction, Weighting};
+use self::core::core::{
+	transaction, Block, BlockHeader, HeaderVersion, KernelFeatures, Transaction, Weighting,
+};
 use self::util::RwLock;
 use crate::pool::Pool;
 use crate::types::{BlockChain, PoolAdapter, PoolConfig, PoolEntry, PoolError, TxSource};
@@ -132,6 +134,23 @@ where
 		Ok(())
 	}
 
+	/// Verify the tx kernel variants and ensure they can all be accepted to the txpool/stempool
+	/// with respect to current header version.
+	fn verify_kernel_variants(
+		&self,
+		tx: &Transaction,
+		header: &BlockHeader,
+	) -> Result<(), PoolError> {
+		for k in tx.kernels() {
+			if header.version < HeaderVersion(4) {
+				if let KernelFeatures::NoRecentDuplicate { .. } = k.features {
+					return Err(PoolError::NRDKernelPreHF3);
+				}
+			}
+		}
+		Ok(())
+	}
+
 	/// Add the given tx to the pool, directing it to either the stempool or
 	/// txpool based on stem flag provided.
 	pub fn add_to_pool(
@@ -146,6 +165,9 @@ where
 		if !stem && self.txpool.contains_tx(tx.hash()) {
 			return Err(PoolError::DuplicateTx);
 		}
+
+		// Check this tx is valid based on current header version.
+		self.verify_kernel_variants(&tx, header)?;
 
 		// Do we have the capacity to accept this transaction?
 		let acceptability = self.is_acceptable(&tx, stem);

@@ -221,6 +221,9 @@ pub enum PoolError {
 	/// Attempt to add a duplicate tx to the pool.
 	#[fail(display = "Duplicate tx")]
 	DuplicateTx,
+	/// NRD kernels will not be accepted by the txpool/stempool pre-HF3.
+	#[fail(display = "NRD kernel pre-HF3")]
+	NRDKernelPreHF3,
 	/// Other kinds of error (not yet pulled out into meaningful errors).
 	#[fail(display = "General pool error {}", _0)]
 	Other(String),
