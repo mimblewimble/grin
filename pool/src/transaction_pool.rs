@@ -20,9 +20,7 @@
 use self::core::core::hash::{Hash, Hashed};
 use self::core::core::id::ShortId;
 use self::core::core::verifier_cache::VerifierCache;
-use self::core::core::{
-	transaction, Block, BlockHeader, HeaderVersion, KernelFeatures, Transaction, Weighting,
-};
+use self::core::core::{transaction, Block, BlockHeader, HeaderVersion, Transaction, Weighting};
 use self::util::RwLock;
 use crate::pool::Pool;
 use crate::types::{BlockChain, PoolAdapter, PoolConfig, PoolEntry, PoolError, TxSource};
@@ -142,10 +140,8 @@ where
 		header: &BlockHeader,
 	) -> Result<(), PoolError> {
 		for k in tx.kernels() {
-			if header.version < HeaderVersion(4) {
-				if let KernelFeatures::NoRecentDuplicate { .. } = k.features {
-					return Err(PoolError::NRDKernelPreHF3);
-				}
+			if k.is_nrd() && header.version < HeaderVersion(4) {
+				return Err(PoolError::NRDKernelPreHF3);
 			}
 		}
 		Ok(())
