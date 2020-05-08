@@ -21,7 +21,7 @@ use rand::thread_rng;
 
 use crate::core::ser::{self, Readable, Reader, Writeable, Writer};
 use crate::types::{Capabilities, PeerAddr, ReasonForBan};
-use grin_store::{self, option_to_not_found, to_key, Error};
+use grin_store::{self, option_to_not_found, Error};
 
 const ENV_NAME: &str = "peer";
 const PEER: &str = "peers";
@@ -152,7 +152,7 @@ impl PeerStore {
 	) -> Result<Vec<PeerData>, Error> {
 		let mut peers = self
 			.db
-			.iter::<PeerData>(PEER, b"")?
+			.iter::<_, PeerData>(PEER, &[b' '])?
 			.map(|(_, v)| v)
 			.filter(|p| p.flags == state && p.capabilities.contains(cap))
 			.collect::<Vec<_>>();
@@ -165,7 +165,7 @@ impl PeerStore {
 	pub fn all_peers(&self) -> Result<Vec<PeerData>, Error> {
 		Ok(self
 			.db
-			.iter::<PeerData>(PEER, b"")?
+			.iter::<_, PeerData>(PEER, &[b' '])?
 			.map(|(_, v)| v)
 			.collect::<Vec<_>>())
 	}
@@ -176,7 +176,7 @@ impl PeerStore {
 		let batch = self.db.batch()?;
 
 		let mut peer = option_to_not_found(
-			batch.get_ser::<PeerData>(PEER, &peer_key(peer_addr)[..]),
+			batch.get_ser::<_, PeerData>(PEER, &peer_key(peer_addr)[..]),
 			|| format!("Peer at address: {}", peer_addr),
 		)?;
 		peer.flags = new_state;

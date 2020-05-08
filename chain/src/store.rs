@@ -29,18 +29,34 @@ use std::sync::Arc;
 
 const STORE_SUBPATH: &str = "chain";
 
-pub const SINGLE_KEY: &[u8] = b"K";
+/// Tables (dbs) names
+pub mod table {
+	/// Headers db name
+	pub const BLOCK_HEADERS: &str = "headers";
+	/// Blocks db name
+	pub const BLOCKS: &str = "blocks";
+	/// Db name for singleton values (like head, tail etc)
+	pub const VALUES: &str = "values";
 
-pub const BLOCK_HEADER: &str = "headers";
-pub const BLOCK: &str = "blocks";
-pub const HEAD: &str = "head";
-pub const TAIL: &str = "tail";
-pub const HEADER_HEAD: &str = "hhead";
-pub const OUTPUT_POS: &str = "outpos";
-pub const BLOCK_INPUT_BITMAP: &str = "bitmap";
-pub const BLOCK_SUMS: &str = "sums";
-pub const BLOCK_SPENT: &str = "spent";
+	/// Output positions db name
+	pub const OUTPUT_POSITIONS: &str = "output_pos";
+	/// Block input bitmap db name
+	pub const BLOCK_INPUT_BITMAPS: &str = "bitmaps";
+	/// Block sums db name
+	pub const BLOCK_SUMS: &str = "sums";
+	/// Spent blocks db name
+	pub const BLOCKS_SPENT: &str = "blocks_spent";
+}
 
+/// Key for singleton values
+pub mod row_key {
+	/// Header head db name
+	pub const HEAD: &str = "H";
+	/// Tail db name
+	pub const TAIL: &str = "T";
+	/// Header head db name
+	pub const HEADER_HEAD: &str = "D";
+}
 /// All chain-related database operations
 pub struct ChainStore {
 	db: store::Store,
@@ -53,15 +69,13 @@ impl ChainStore {
 			db_root,
 			Some(STORE_SUBPATH),
 			vec![
-				BLOCK_HEADER,
-				BLOCK,
-				HEAD,
-				TAIL,
-				HEADER_HEAD,
-				OUTPUT_POS,
-				BLOCK_INPUT_BITMAP,
-				BLOCK_SUMS,
-				BLOCK_SPENT,
+				table::BLOCK_HEADERS,
+				table::BLOCKS,
+				table::VALUES,
+				table::OUTPUT_POSITIONS,
+				table::BLOCK_INPUT_BITMAPS,
+				table::BLOCK_SUMS,
+				table::BLOCKS_SPENT,
 			],
 			None,
 		)?;
@@ -83,19 +97,23 @@ impl ChainStore {
 impl ChainStore {
 	/// The current chain head.
 	pub fn head(&self) -> Result<Tip, Error> {
-		option_to_not_found(self.db.get_ser(HEAD, SINGLE_KEY), || "HEAD".to_owned())
+		option_to_not_found(self.db.get_ser(table::VALUES, row_key::HEAD), || {
+			"HEAD".to_owned()
+		})
 	}
 
 	/// The current header head (may differ from chain head).
 	pub fn header_head(&self) -> Result<Tip, Error> {
-		option_to_not_found(self.db.get_ser(HEADER_HEAD, SINGLE_KEY), || {
+		option_to_not_found(self.db.get_ser(table::VALUES, row_key::HEADER_HEAD), || {
 			"HEADER_HEAD".to_owned()
 		})
 	}
 
 	/// The current chain "tail" (earliest block in the store).
 	pub fn tail(&self) -> Result<Tip, Error> {
-		option_to_not_found(self.db.get_ser(TAIL, SINGLE_KEY), || "TAIL".to_owned())
+		option_to_not_found(self.db.get_ser(table::VALUES, row_key::TAIL), || {
+			"TAIL".to_owned()
+		})
 	}
 
 	/// Header of the block at the head of the block chain (not the same thing as header_head).
@@ -105,17 +123,19 @@ impl ChainStore {
 
 	/// Get full block.
 	pub fn get_block(&self, h: &Hash) -> Result<Block, Error> {
-		option_to_not_found(self.db.get_ser(BLOCK, h), || format!("BLOCK: {}", h))
+		option_to_not_found(self.db.get_ser(table::BLOCKS, *h), || {
+			format!("BLOCK: {}", h)
+		})
 	}
 
 	/// Does this full block exist?
 	pub fn block_exists(&self, h: &Hash) -> Result<bool, Error> {
-		self.db.exists(BLOCK, h)
+		self.db.exists(table::BLOCKS, h)
 	}
 
 	/// Get block_sums for the block hash.
 	pub fn get_block_sums(&self, h: &Hash) -> Result<BlockSums, Error> {
-		option_to_not_found(self.db.get_ser(BLOCK_SUMS, h), || {
+		option_to_not_found(self.db.get_ser(table::BLOCK_SUMS, h), || {
 			format!("Block sums for block: {}", h)
 		})
 	}
@@ -127,7 +147,7 @@ impl ChainStore {
 
 	/// Get block header.
 	pub fn get_block_header(&self, h: &Hash) -> Result<BlockHeader, Error> {
-		option_to_not_found(self.db.get_ser(BLOCK_HEADER, h), || {
+		option_to_not_found(self.db.get_ser(table::BLOCK_HEADERS, h), || {
 			format!("BLOCK HEADER: {}", h)
 		})
 	}
@@ -145,7 +165,7 @@ impl ChainStore {
 
 	/// Get PMMR pos and block height for the given output commitment.
 	pub fn get_output_pos_height(&self, commit: &Commitment) -> Result<Option<(u64, u64)>, Error> {
-		self.db.get_ser(OUTPUT_POS, commit)
+		self.db.get_ser(table::OUTPUT_POSITIONS, commit)
 	}
 
 	/// Builds a new batch to be used with this store.
@@ -165,17 +185,21 @@ pub struct Batch<'a> {
 impl<'a> Batch<'a> {
 	/// The head.
 	pub fn head(&self) -> Result<Tip, Error> {
-		option_to_not_found(self.db.get_ser(HEAD, SINGLE_KEY), || "HEAD".to_owned())
+		option_to_not_found(self.db.get_ser(table::VALUES, row_key::HEAD), || {
+			"HEAD".to_owned()
+		})
 	}
 
 	/// The tail.
 	pub fn tail(&self) -> Result<Tip, Error> {
-		option_to_not_found(self.db.get_ser(TAIL, SINGLE_KEY), || "TAIL".to_owned())
+		option_to_not_found(self.db.get_ser(table::VALUES, row_key::TAIL), || {
+			"TAIL".to_owned()
+		})
 	}
 
 	/// The current header head (may differ from chain head).
 	pub fn header_head(&self) -> Result<Tip, Error> {
-		option_to_not_found(self.db.get_ser(HEADER_HEAD, SINGLE_KEY), || {
+		option_to_not_found(self.db.get_ser(table::VALUES, row_key::HEADER_HEAD), || {
 			"HEADER_HEAD".to_owned()
 		})
 	}
@@ -187,49 +211,50 @@ impl<'a> Batch<'a> {
 
 	/// Save body head to db.
 	pub fn save_body_head(&self, t: &Tip) -> Result<(), Error> {
-		self.db.put_ser(HEAD, SINGLE_KEY, t)
+		self.db.put_ser(table::VALUES, row_key::HEAD, t)
 	}
 
 	/// Save body "tail" to db.
 	pub fn save_body_tail(&self, t: &Tip) -> Result<(), Error> {
-		self.db.put_ser(TAIL, SINGLE_KEY, t)
+		self.db.put_ser(table::VALUES, row_key::TAIL, t)
 	}
 
 	/// Save header head to db.
 	pub fn save_header_head(&self, t: &Tip) -> Result<(), Error> {
-		self.db.put_ser(HEADER_HEAD, SINGLE_KEY, t)
+		self.db.put_ser(table::VALUES, row_key::HEADER_HEAD, t)
 	}
 
 	/// get block
 	pub fn get_block(&self, h: &Hash) -> Result<Block, Error> {
-		option_to_not_found(self.db.get_ser(BLOCK, h), || {
+		option_to_not_found(self.db.get_ser(table::BLOCKS, h), || {
 			format!("Block with hash: {}", h)
 		})
 	}
 
 	/// Does the block exist?
 	pub fn block_exists(&self, h: &Hash) -> Result<bool, Error> {
-		self.db.exists(BLOCK, h)
+		self.db.exists(table::BLOCKS, h)
 	}
 
 	/// Save the block to the db.
 	/// Note: the block header is not saved to the db here, assumes this has already been done.
 	pub fn save_block(&self, b: &Block) -> Result<(), Error> {
-		self.db.put_ser(BLOCK, b.hash(), b)?;
+		self.db.put_ser(table::BLOCKS, b.hash(), b)?;
 		Ok(())
 	}
 
 	/// We maintain a "spent" index for each full block to allow the output_pos
 	/// to be easily reverted during rewind.
 	pub fn save_spent_index(&self, h: &Hash, spent: &Vec<CommitPos>) -> Result<(), Error> {
-		self.db.put_ser(BLOCK_SPENT, h, spent)?;
+		self.db.put_ser(table::BLOCKS_SPENT, h, spent)?;
 		Ok(())
 	}
 
 	/// Migrate a block stored in the db by serializing it using the provided protocol version.
 	/// Block may have been read using a previous protocol version but we do not actually care.
 	pub fn migrate_block(&self, b: &Block, version: ProtocolVersion) -> Result<(), Error> {
-		self.db.put_ser_with_version(BLOCK, b.hash(), b, version)?;
+		self.db
+			.put_ser_with_version(table::BLOCKS, b.hash(), b, version)?;
 		Ok(())
 	}
 
@@ -241,7 +266,7 @@ impl<'a> Batch<'a> {
 	/// Delete a full block. Does not delete any record associated with a block
 	/// header.
 	pub fn delete_block(&self, bh: &Hash) -> Result<(), Error> {
-		self.db.delete(BLOCK, bh)?;
+		self.db.delete(table::BLOCKS, bh)?;
 
 		// Best effort at deleting associated data for this block.
 		// Not an error if these fail.
@@ -258,7 +283,7 @@ impl<'a> Batch<'a> {
 		let hash = header.hash();
 
 		// Store the header itself indexed by hash.
-		self.db.put_ser(BLOCK_HEADER, hash, header)?;
+		self.db.put_ser(table::BLOCK_HEADERS, hash, header)?;
 		Ok(())
 	}
 
@@ -269,12 +294,13 @@ impl<'a> Batch<'a> {
 		pos: u64,
 		height: u64,
 	) -> Result<(), Error> {
-		self.db.put_ser(OUTPUT_POS, commit, &(pos, height))
+		self.db
+			.put_ser(table::OUTPUT_POSITIONS, commit, &(pos, height))
 	}
 
 	/// Delete the output_pos index entry for a spent output.
 	pub fn delete_output_pos_height(&self, commit: &Commitment) -> Result<(), Error> {
-		self.db.delete(OUTPUT_POS, commit)
+		self.db.delete(table::OUTPUT_POSITIONS, commit)
 	}
 
 	/// When using the output_pos iterator we have access to the index keys but not the
@@ -286,7 +312,7 @@ impl<'a> Batch<'a> {
 
 	/// Iterator over the output_pos index.
 	pub fn output_pos_iter(&self) -> Result<SerIterator<(u64, u64)>, Error> {
-		self.db.iter(OUTPUT_POS, SINGLE_KEY)
+		self.db.iter(table::OUTPUT_POSITIONS, &[b' '])
 	}
 
 	/// Get output_pos from index.
@@ -302,7 +328,7 @@ impl<'a> Batch<'a> {
 
 	/// Get output_pos and block height from index.
 	pub fn get_output_pos_height(&self, commit: &Commitment) -> Result<Option<(u64, u64)>, Error> {
-		self.db.get_ser(OUTPUT_POS, commit)
+		self.db.get_ser(table::OUTPUT_POSITIONS, commit)
 	}
 
 	/// Get the previous header.
@@ -312,7 +338,7 @@ impl<'a> Batch<'a> {
 
 	/// Get block header.
 	pub fn get_block_header(&self, h: &Hash) -> Result<BlockHeader, Error> {
-		option_to_not_found(self.db.get_ser(BLOCK_HEADER, h), || {
+		option_to_not_found(self.db.get_ser(table::BLOCK_HEADERS, h), || {
 			format!("BLOCK HEADER: {}", h)
 		})
 	}
@@ -320,25 +346,25 @@ impl<'a> Batch<'a> {
 	/// Delete the block spent index.
 	fn delete_spent_index(&self, bh: &Hash) -> Result<(), Error> {
 		// Clean up the legacy input bitmap as well.
-		let _ = self.db.delete(BLOCK_INPUT_BITMAP, bh);
-		self.db.delete(BLOCK_SPENT, bh)
+		let _ = self.db.delete(table::BLOCK_INPUT_BITMAPS, bh);
+		self.db.delete(table::BLOCKS_SPENT, bh)
 	}
 
 	/// Save block_sums for the block.
 	pub fn save_block_sums(&self, h: &Hash, sums: BlockSums) -> Result<(), Error> {
-		self.db.put_ser(BLOCK_SUMS, h, &sums)
+		self.db.put_ser(table::BLOCK_SUMS, h, &sums)
 	}
 
 	/// Get block_sums for the block.
 	pub fn get_block_sums(&self, h: &Hash) -> Result<BlockSums, Error> {
-		option_to_not_found(self.db.get_ser(BLOCK_SUMS, h), || {
+		option_to_not_found(self.db.get_ser(table::BLOCK_SUMS, h), || {
 			format!("Block sums for block: {}", h)
 		})
 	}
 
 	/// Delete the block_sums for the block.
 	fn delete_block_sums(&self, bh: &Hash) -> Result<(), Error> {
-		self.db.delete(BLOCK_SUMS, bh)
+		self.db.delete(table::BLOCK_SUMS, bh)
 	}
 
 	/// Get the block input bitmap based on our spent index.
@@ -358,7 +384,7 @@ impl<'a> Batch<'a> {
 	fn get_legacy_input_bitmap(&self, bh: &Hash) -> Result<Bitmap, Error> {
 		option_to_not_found(
 			self.db
-				.get_with(BLOCK_INPUT_BITMAP, bh, Bitmap::deserialize),
+				.get_with(table::BLOCK_INPUT_BITMAPS, bh, Bitmap::deserialize),
 			|| "legacy block input bitmap".to_string(),
 		)
 	}
@@ -366,7 +392,7 @@ impl<'a> Batch<'a> {
 	/// Get the "spent index" from the db for the specified block.
 	/// If we need to rewind a block then we use this to "unspend" the spent outputs.
 	pub fn get_spent_index(&self, bh: &Hash) -> Result<Vec<CommitPos>, Error> {
-		option_to_not_found(self.db.get_ser(BLOCK_SPENT, bh), || {
+		option_to_not_found(self.db.get_ser(table::BLOCKS_SPENT, bh), || {
 			format!("spent index: {}", bh)
 		})
 	}
@@ -387,7 +413,7 @@ impl<'a> Batch<'a> {
 
 	/// An iterator to all block in db
 	pub fn blocks_iter(&self) -> Result<SerIterator<Block>, Error> {
-		self.db.iter(BLOCK, SINGLE_KEY)
+		self.db.iter(table::BLOCKS, &[b' '])
 	}
 }
 

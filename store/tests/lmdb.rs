@@ -67,18 +67,18 @@ fn setup(test_dir: &str) {
 fn lmdb_allocate() -> Result<(), store::Error> {
 	let test_dir = "test_output/lmdb_allocate";
 	setup(test_dir);
+	let db = "test";
 	// Allocate more than the initial chunk, ensuring
 	// the DB resizes underneath
 	{
-		let store = store::Store::new(test_dir, Some("test1"), None, None)?;
+		let store = store::Store::new(test_dir, Some("test1"), vec![db], None)?;
 
 		for i in 0..WRITE_CHUNK_SIZE * 2 {
 			println!("Allocating chunk: {}", i);
 			let chunk = PhatChunkStruct::new();
-			let key_val = format!("phat_chunk_set_1_{}", i);
+			let key = format!("phat_chunk_set_1_{}", i);
 			let batch = store.batch()?;
-			let key = store::to_key(b'P', &key_val);
-			batch.put_ser(&key, &chunk)?;
+			batch.put_ser(db, &key, &chunk)?;
 			batch.commit()?;
 		}
 	}
@@ -87,14 +87,13 @@ fn lmdb_allocate() -> Result<(), store::Error> {
 	println!("***********************************");
 	// Open env again and keep adding
 	{
-		let store = store::Store::new(test_dir, Some("test1"), None, None)?;
+		let store = store::Store::new(test_dir, Some("test1"), vec![db], None)?;
 		for i in 0..WRITE_CHUNK_SIZE * 2 {
 			println!("Allocating chunk: {}", i);
 			let chunk = PhatChunkStruct::new();
-			let key_val = format!("phat_chunk_set_2_{}", i);
+			let key = format!("phat_chunk_set_2_{}", i);
 			let batch = store.batch()?;
-			let key = store::to_key(b'P', &key_val);
-			batch.put_ser(&key, &chunk)?;
+			batch.put_ser(db, &key, &chunk)?;
 			batch.commit()?;
 		}
 	}

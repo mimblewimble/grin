@@ -22,7 +22,7 @@ use crate::core::core::pmmr::{self, Backend, ReadonlyPMMR, RewindablePMMR, PMMR}
 use crate::core::core::{Block, BlockHeader, Input, Output, OutputIdentifier, TxKernel};
 use crate::core::ser::{PMMRable, ProtocolVersion};
 use crate::error::{Error, ErrorKind};
-use crate::store::{Batch, ChainStore, OUTPUT_POS};
+use crate::store::{table, Batch, ChainStore};
 use crate::txhashset::bitmap_accumulator::BitmapAccumulator;
 use crate::txhashset::{RewindableKernelView, UTXOView};
 use crate::types::{CommitPos, OutputRoots, Tip, TxHashSetRoots, TxHashsetWriteStatus};
@@ -402,7 +402,7 @@ impl TxHashSet {
 					}
 				}
 			}
-			batch.delete(OUTPUT_POS, &key)?;
+			batch.delete(table::OUTPUT_POSITIONS, &key)?;
 			removed_count += 1;
 		}
 		debug!(
