@@ -72,6 +72,12 @@ impl TryFrom<u16> for NRDRelativeHeight {
 	}
 }
 
+impl From<NRDRelativeHeight> for u64 {
+	fn from(height: NRDRelativeHeight) -> Self {
+		height.0 as u64
+	}
+}
+
 impl NRDRelativeHeight {
 	const MAX: u64 = consensus::WEEK_HEIGHT;
 
