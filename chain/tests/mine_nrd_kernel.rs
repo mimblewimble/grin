@@ -21,7 +21,6 @@ use grin_util as util;
 
 use self::chain_test_helper::{clean_output_dir, genesis_block, init_chain};
 use crate::chain::{Chain, Options};
-use crate::core::core::hash::Hashed;
 use crate::core::core::{Block, KernelFeatures, NRDRelativeHeight, Transaction};
 use crate::core::libtx::{build, reward, ProofBuilder};
 use crate::core::{consensus, global, pow};

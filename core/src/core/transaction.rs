@@ -50,7 +50,7 @@ impl Writeable for NRDRelativeHeight {
 }
 
 impl Readable for NRDRelativeHeight {
-	fn read(reader: &mut dyn Reader) -> Result<Self, ser::Error> {
+	fn read<R: Reader>(reader: &mut R) -> Result<Self, ser::Error> {
 		let x = reader.read_u16()?;
 		NRDRelativeHeight::try_from(x).map_err(|_| ser::Error::CorruptedData)
 	}
