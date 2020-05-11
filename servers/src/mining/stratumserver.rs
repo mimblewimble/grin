@@ -568,8 +568,7 @@ impl Handler {
 
 					current_hash = latest_hash;
 					// set the minimum acceptable share difficulty for this block
-					state.minimum_share_difficulty =
-						cmp::min(config.minimum_share_difficulty, state.current_difficulty);
+					state.minimum_share_difficulty = config.minimum_share_difficulty;
 
 					// set a new deadline for rebuilding with fresh transactions
 					deadline = Utc::now().timestamp() + config.attempt_time_per_block as i64;
