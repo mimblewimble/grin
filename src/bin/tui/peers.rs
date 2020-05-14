@@ -121,8 +121,8 @@ impl TableViewItem<PeerColumn> for PeerStats {
 
 pub struct TUIPeerView;
 
-impl TUIStatusListener for TUIPeerView {
-	fn create() -> Box<dyn View> {
+impl TUIPeerView {
+	pub fn create() -> impl View {
 		let table_view = TableView::<PeerStats, PeerColumn>::new()
 			.column(PeerColumn::Address, "Address", |c| c.width_percent(16))
 			.column(PeerColumn::State, "State", |c| c.width_percent(8))
@@ -159,9 +159,11 @@ impl TUIStatusListener for TUIPeerView {
 				let _ = c.focus_name(MAIN_MENU);
 			});
 
-		Box::new(peer_status_view)
+		peer_status_view
 	}
+}
 
+impl TUIStatusListener for TUIPeerView {
 	fn update(c: &mut Cursive, stats: &ServerStats) {
 		let lp = stats
 			.peer_stats
