@@ -29,6 +29,7 @@ use cursive::utils::markup::StyledString;
 use cursive::views::{BoxedView, CircularFocus, Dialog, LinearLayout, Panel, StackView, TextView};
 use cursive::Cursive;
 use std::sync::mpsc;
+use std::{thread, time};
 
 use crate::built_info;
 use crate::servers::Server;
@@ -187,6 +188,7 @@ impl Controller {
 	pub fn run(&mut self, server: Server) {
 		let stat_update_interval = 1;
 		let mut next_stat_update = Utc::now().timestamp() + stat_update_interval;
+		let delay = time::Duration::from_millis(50);
 		while self.ui.step() {
 			if let Some(message) = self.rx.try_iter().next() {
 				match message {
@@ -205,6 +207,7 @@ impl Controller {
 					self.ui.ui_tx.send(UIMessage::UpdateStatus(stats)).unwrap();
 				}
 			}
+			thread::sleep(delay);
 		}
 		server.stop();
 	}
