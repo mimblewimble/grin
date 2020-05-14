@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! Implements storage primitives required by the chain
+//! Implements "linked list" storage primitive for lmdb index supporting multiple entries.
 
 use crate::core::ser::{self, Readable, Reader, Writeable, Writer};
 use crate::store::Batch;
@@ -38,7 +38,7 @@ impl Writeable for ListWrapperVariant {
 }
 
 impl Readable for ListWrapperVariant {
-	fn read(reader: &mut dyn Reader) -> Result<ListWrapperVariant, ser::Error> {
+	fn read<R: Reader>(reader: &mut R) -> Result<ListWrapperVariant, ser::Error> {
 		ListWrapperVariant::from_u8(reader.read_u8()?).ok_or(ser::Error::CorruptedData)
 	}
 }
@@ -46,6 +46,7 @@ impl Readable for ListWrapperVariant {
 enum_from_primitive! {
 	#[derive(Copy, Clone, Debug, PartialEq)]
 	enum ListEntryVariant {
+		// Start at 2 here to differentiate from ListWrapperVariant above.
 		Head = 2,
 		Tail = 3,
 		Middle = 4,
@@ -59,7 +60,7 @@ impl Writeable for ListEntryVariant {
 }
 
 impl Readable for ListEntryVariant {
-	fn read(reader: &mut dyn Reader) -> Result<ListEntryVariant, ser::Error> {
+	fn read<R: Reader>(reader: &mut R) -> Result<ListEntryVariant, ser::Error> {
 		ListEntryVariant::from_u8(reader.read_u8()?).ok_or(ser::Error::CorruptedData)
 	}
 }
@@ -97,6 +98,13 @@ pub trait ListIndex {
 		batch.db.get_ser(&self.entry_key(commit, pos))
 	}
 
+	/// Peek the head of the list for the specified commitment.
+	fn peek_pos(
+		&self,
+		batch: &Batch<'_>,
+		commit: Commitment,
+	) -> Result<Option<<Self::Entry as ListIndexEntry>::Pos>, Error>;
+
 	/// Push a pos onto the list for the specified commitment.
 	fn push_pos(
 		&self,
@@ -112,8 +120,9 @@ pub trait ListIndex {
 		commit: Commitment,
 	) -> Result<Option<<Self::Entry as ListIndexEntry>::Pos>, Error>;
 
-	/// Peek the head of the list for the specified commitment.
-	fn peek_pos(
+	/// Pop a pos off the end of the list for the specified commitment.
+	/// This is used when pruning old data.
+	fn pop_back(
 		&self,
 		batch: &Batch<'_>,
 		commit: Commitment,
@@ -168,7 +177,7 @@ where
 	T: Readable,
 {
 	/// Read the first byte to determine what needs to be read beyond that.
-	fn read(reader: &mut dyn Reader) -> Result<ListWrapper<T>, ser::Error> {
+	fn read<R: Reader>(reader: &mut R) -> Result<ListWrapper<T>, ser::Error> {
 		let entry = match ListWrapperVariant::read(reader)? {
 			ListWrapperVariant::Single => ListWrapper::Single {
 				pos: T::read(reader)?,
@@ -221,52 +230,6 @@ where
 			Some(ListWrapper::Multi { head, .. }) => {
 				if let Some(ListEntry::Head { pos, .. }) = self.get_entry(batch, commit, head)? {
 					Ok(Some(pos))
-				} else {
-					Err(Error::OtherErr("expected head to be head variant".into()))
-				}
-			}
-		}
-	}
-
-	/// Pop the head of the list.
-	/// Returns the output_pos.
-	/// Returns None if list was empty.
-	fn pop_pos(&self, batch: &Batch<'_>, commit: Commitment) -> Result<Option<T>, Error> {
-		match self.get_list(batch, commit)? {
-			None => Ok(None),
-			Some(ListWrapper::Single { pos }) => {
-				batch.delete(&self.list_key(commit))?;
-				Ok(Some(pos))
-			}
-			Some(ListWrapper::Multi { head, tail }) => {
-				if let Some(ListEntry::Head {
-					pos: current_pos,
-					next: current_next,
-				}) = self.get_entry(batch, commit, head)?
-				{
-					match self.get_entry(batch, commit, current_next)? {
-						Some(ListEntry::Middle { pos, next, .. }) => {
-							let head = ListEntry::Head { pos, next };
-							let list: ListWrapper<T> = ListWrapper::Multi {
-								head: pos.pos(),
-								tail,
-							};
-							batch.delete(&self.entry_key(commit, current_pos.pos()))?;
-							batch
-								.db
-								.put_ser(&self.entry_key(commit, pos.pos()), &head)?;
-							batch.db.put_ser(&self.list_key(commit), &list)?;
-							Ok(Some(current_pos))
-						}
-						Some(ListEntry::Tail { pos, .. }) => {
-							let list = ListWrapper::Single { pos };
-							batch.delete(&self.entry_key(commit, current_pos.pos()))?;
-							batch.db.put_ser(&self.list_key(commit), &list)?;
-							Ok(Some(current_pos))
-						}
-						Some(_) => Err(Error::OtherErr("next was unexpected".into())),
-						None => Err(Error::OtherErr("next missing".into())),
-					}
 				} else {
 					Err(Error::OtherErr("expected head to be head variant".into()))
 				}
@@ -333,6 +296,60 @@ where
 			}
 		}
 		Ok(())
+	}
+
+	/// Pop the head of the list.
+	/// Returns the output_pos.
+	/// Returns None if list was empty.
+	fn pop_pos(&self, batch: &Batch<'_>, commit: Commitment) -> Result<Option<T>, Error> {
+		match self.get_list(batch, commit)? {
+			None => Ok(None),
+			Some(ListWrapper::Single { pos }) => {
+				batch.delete(&self.list_key(commit))?;
+				Ok(Some(pos))
+			}
+			Some(ListWrapper::Multi { head, tail }) => {
+				if let Some(ListEntry::Head {
+					pos: current_pos,
+					next: current_next,
+				}) = self.get_entry(batch, commit, head)?
+				{
+					match self.get_entry(batch, commit, current_next)? {
+						Some(ListEntry::Middle { pos, next, .. }) => {
+							let head = ListEntry::Head { pos, next };
+							let list: ListWrapper<T> = ListWrapper::Multi {
+								head: pos.pos(),
+								tail,
+							};
+							batch.delete(&self.entry_key(commit, current_pos.pos()))?;
+							batch
+								.db
+								.put_ser(&self.entry_key(commit, pos.pos()), &head)?;
+							batch.db.put_ser(&self.list_key(commit), &list)?;
+							Ok(Some(current_pos))
+						}
+						Some(ListEntry::Tail { pos, .. }) => {
+							let list = ListWrapper::Single { pos };
+							batch.delete(&self.entry_key(commit, current_pos.pos()))?;
+							batch.db.put_ser(&self.list_key(commit), &list)?;
+							Ok(Some(current_pos))
+						}
+						Some(_) => Err(Error::OtherErr("next was unexpected".into())),
+						None => Err(Error::OtherErr("next missing".into())),
+					}
+				} else {
+					Err(Error::OtherErr("expected head to be head variant".into()))
+				}
+			}
+		}
+	}
+
+	fn pop_back(
+		&self,
+		batch: &Batch<'_>,
+		commit: Commitment,
+	) -> Result<Option<<Self::Entry as ListIndexEntry>::Pos>, Error> {
+		panic!("not yet implemented!")
 	}
 }
 
@@ -407,7 +424,7 @@ where
 	T: Readable,
 {
 	/// Read the first byte to determine what needs to be read beyond that.
-	fn read(reader: &mut dyn Reader) -> Result<ListEntry<T>, ser::Error> {
+	fn read<R: Reader>(reader: &mut R) -> Result<ListEntry<T>, ser::Error> {
 		let entry = match ListEntryVariant::read(reader)? {
 			ListEntryVariant::Head => ListEntry::Head {
 				pos: T::read(reader)?,
