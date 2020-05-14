@@ -122,7 +122,7 @@ pub trait ListIndex {
 
 	/// Pop a pos off the end of the list for the specified commitment.
 	/// This is used when pruning old data.
-	fn pop_back(
+	fn pop_pos_back(
 		&self,
 		batch: &Batch<'_>,
 		commit: Commitment,
@@ -344,12 +344,51 @@ where
 		}
 	}
 
-	fn pop_back(
+	fn pop_pos_back(
 		&self,
 		batch: &Batch<'_>,
 		commit: Commitment,
 	) -> Result<Option<<Self::Entry as ListIndexEntry>::Pos>, Error> {
-		panic!("not yet implemented!")
+		match self.get_list(batch, commit)? {
+			None => Ok(None),
+			Some(ListWrapper::Single { pos }) => {
+				batch.delete(&self.list_key(commit))?;
+				Ok(Some(pos))
+			}
+			Some(ListWrapper::Multi { head, tail }) => {
+				if let Some(ListEntry::Tail {
+					pos: current_pos,
+					prev: current_prev,
+				}) = self.get_entry(batch, commit, tail)?
+				{
+					match self.get_entry(batch, commit, current_prev)? {
+						Some(ListEntry::Middle { pos, prev, .. }) => {
+							let tail = ListEntry::Tail { pos, prev };
+							let list: ListWrapper<T> = ListWrapper::Multi {
+								head,
+								tail: pos.pos(),
+							};
+							batch.delete(&self.entry_key(commit, current_pos.pos()))?;
+							batch
+								.db
+								.put_ser(&self.entry_key(commit, pos.pos()), &tail)?;
+							batch.db.put_ser(&self.list_key(commit), &list)?;
+							Ok(Some(current_pos))
+						}
+						Some(ListEntry::Head { pos, .. }) => {
+							let list = ListWrapper::Single { pos };
+							batch.delete(&self.entry_key(commit, current_pos.pos()))?;
+							batch.db.put_ser(&self.list_key(commit), &list)?;
+							Ok(Some(current_pos))
+						}
+						Some(_) => Err(Error::OtherErr("prev was unexpected".into())),
+						None => Err(Error::OtherErr("prev missing".into())),
+					}
+				} else {
+					Err(Error::OtherErr("expected tail to be tail variant".into()))
+				}
+			}
+		}
 	}
 }
 
