@@ -163,7 +163,7 @@ fn test_store_kernel_idx() {
 }
 
 #[test]
-fn test_store_kernel_idx_pruning() {
+fn test_store_kernel_idx_pop_back() {
 	util::init_test_logger();
 
 	let chain_dir = ".grin_idx_2";

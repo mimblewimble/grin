@@ -120,13 +120,18 @@ pub trait ListIndex {
 		commit: Commitment,
 	) -> Result<Option<<Self::Entry as ListIndexEntry>::Pos>, Error>;
 
-	/// Pop a pos off the end of the list for the specified commitment.
-	/// This is used when pruning old data.
+	/// Pop a pos off the back of the list (used for pruning old data).
 	fn pop_pos_back(
 		&self,
 		batch: &Batch<'_>,
 		commit: Commitment,
 	) -> Result<Option<<Self::Entry as ListIndexEntry>::Pos>, Error>;
+
+	///
+	/// TODO - pass a cutoff in here and conditionally prune everything prior to this.
+	/// Loop internally to prune everything or just one at a time?
+	///
+	fn prune(&self, batch: &Batch<'_>, commit: Commitment, cutoff_pos: u64) -> Result<(), Error>;
 }
 
 /// Wrapper for the list to handle either `Single` or `Multi` entries.
@@ -344,6 +349,8 @@ where
 		}
 	}
 
+	/// Pop off the back/tail of the linked list.
+	/// Used when pruning old data.
 	fn pop_pos_back(
 		&self,
 		batch: &Batch<'_>,
@@ -392,6 +399,7 @@ where
 	}
 }
 
+/// Something that tracks pos (in an MMR).
 pub trait PosEntry: Readable + Writeable + Copy {
 	fn pos(&self) -> u64;
 }
