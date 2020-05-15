@@ -23,7 +23,6 @@ use clap::ArgMatches;
 use ctrlc;
 
 use crate::config::GlobalConfig;
-use crate::core::global;
 use crate::p2p::Seeding;
 use crate::servers;
 use crate::tui::ui;
@@ -86,7 +85,7 @@ fn start_server_tui(config: servers::ServerConfig, logs_rx: Option<mpsc::Receive
 /// configuration.
 pub fn server_command(
 	server_args: Option<&ArgMatches<'_>>,
-	mut global_config: GlobalConfig,
+	global_config: GlobalConfig,
 	logs_rx: Option<mpsc::Receiver<LogEntry>>,
 ) -> i32 {
 	// just get defaults from the global config

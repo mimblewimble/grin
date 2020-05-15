@@ -33,7 +33,7 @@ use std::sync::Arc;
 #[test]
 fn test_block_building_max_weight() {
 	util::init_test_logger();
-	global::set_mining_mode(global::ChainTypes::AutomatedTesting);
+	global::set_local_chain_type(global::ChainTypes::AutomatedTesting);
 
 	let keychain: ExtKeychain = Keychain::from_random_seed(false).unwrap();
 

@@ -147,13 +147,8 @@ thread_local! {
 	pub static CHAIN_TYPE: Cell<Option<ChainTypes>> = Cell::new(None);
 }
 
-/// Set the mining mode (aka chain_type).
-pub fn set_mining_mode(mode: ChainTypes) {
-	set_chain_type(mode)
-}
-
 /// Set the chain type on a per-thread basis via thread_local storage.
-pub fn set_chain_type(new_type: ChainTypes) {
+pub fn set_local_chain_type(new_type: ChainTypes) {
 	CHAIN_TYPE.with(|chain_type| chain_type.set(Some(new_type)))
 }
 
@@ -163,10 +158,10 @@ pub fn get_chain_type() -> ChainTypes {
 		None => {
 			if GLOBAL_CHAIN_TYPE.is_init() {
 				let chain_type = GLOBAL_CHAIN_TYPE.borrow();
-				set_chain_type(chain_type);
+				set_local_chain_type(chain_type);
 				chain_type
 			} else {
-				panic!("GLOBAL_CHAIN_TYPE and CHAIN_TYPE unset. Consider using set_chain_type() if in a test.");
+				panic!("GLOBAL_CHAIN_TYPE and CHAIN_TYPE unset. Consider set_local_chain_type() in tests.");
 			}
 		}
 		Some(chain_type) => chain_type,

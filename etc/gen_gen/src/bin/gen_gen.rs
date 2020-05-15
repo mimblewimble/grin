@@ -92,7 +92,7 @@ fn main() {
 
 	{
 		// setup a tmp chain to set block header roots
-		core::global::set_mining_mode(core::global::ChainTypes::UserTesting);
+		core::global::set_local_chain_type(core::global::ChainTypes::UserTesting);
 		let tmp_chain = setup_chain(".grin.tmp", core::pow::mine_genesis_block().unwrap());
 		tmp_chain.set_txhashset_roots(&mut gen).unwrap();
 	}
@@ -103,7 +103,7 @@ fn main() {
 	gen.header.prev_root = core::core::hash::Hash::from_hex(&h1).unwrap();
 
 	// mine a Cuckaroo29 block
-	core::global::set_mining_mode(core::global::ChainTypes::Mainnet);
+	core::global::set_local_chain_type(core::global::ChainTypes::Mainnet);
 	let plugin_lib = cuckoo::PluginLibrary::new(PLUGIN_PATH).unwrap();
 	let mut params = plugin_lib.get_default_params();
 	params.mutate_nonce = false;

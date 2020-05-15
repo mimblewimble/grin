@@ -70,7 +70,7 @@ where
 /// Mine a chain of specified length to assist with automated tests.
 /// Probably a good idea to call clean_output_dir at the beginning and end of each test.
 pub fn mine_chain(dir_name: &str, chain_length: u64) -> Chain {
-	global::set_mining_mode(ChainTypes::AutomatedTesting);
+	global::set_local_chain_type(ChainTypes::AutomatedTesting);
 	let keychain = keychain::ExtKeychain::from_random_seed(false).unwrap();
 	let genesis = genesis_block(&keychain);
 	let mut chain = init_chain(dir_name, genesis.clone());

@@ -383,7 +383,7 @@ mod test {
 
 	#[test]
 	fn test_graph_weight() {
-		global::set_chain_type(global::ChainTypes::Mainnet);
+		global::set_local_chain_type(global::ChainTypes::Mainnet);
 
 		// initial weights
 		assert_eq!(graph_weight(1, 31), 256 * 31);
