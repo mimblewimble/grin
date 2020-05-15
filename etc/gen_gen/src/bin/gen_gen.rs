@@ -216,7 +216,7 @@ fn update_genesis_rs(gen: &core::core::Block) {
 		"excess".to_string(),
 		format!(
 			"Commitment::from_vec(util::from_hex({:x?}.to_string()).unwrap())",
-			gen.kernels()[0].excess.to_hex())
+			gen.kernels()[0].excess.to_hex()
 		),
 	));
 	replacements.push((
