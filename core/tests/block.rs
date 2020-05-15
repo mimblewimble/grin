@@ -85,7 +85,93 @@ fn very_empty_block() {
 
 #[test]
 fn block_with_nrd_kernel_pre_post_hf3() {
+	// automated testing - HF{1|2|3} at block heights {3, 6, 9}
 	global::set_mining_mode(ChainTypes::AutomatedTesting);
+	// Enable the global NRD feature flag. NRD kernels valid at HF3 at height 9.
+	global::enable_nrd_feature();
+
+	let keychain = ExtKeychain::from_random_seed(false).unwrap();
+	let builder = ProofBuilder::new(&keychain);
+	let key_id1 = ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
+	let key_id2 = ExtKeychain::derive_key_id(1, 2, 0, 0, 0);
+
+	let mut tx = build::transaction(
+		KernelFeatures::NoRecentDuplicate {
+			fee: 2,
+			relative_height: NRDRelativeHeight::new(1440).unwrap(),
+		},
+		vec![input(7, key_id1), output(5, key_id2)],
+		&keychain,
+		&builder,
+	)
+	.unwrap();
+
+	let prev_height = TESTING_THIRD_HARD_FORK - 2;
+	let prev = BlockHeader {
+		height: prev_height,
+		version: consensus::header_version(prev_height),
+		..BlockHeader::default()
+	};
+	let b = new_block(
+		vec![&mut tx],
+		&keychain,
+		&builder,
+		&prev,
+		&ExtKeychain::derive_key_id(1, 1, 0, 0, 0),
+	);
+
+	// Block is invalid at header version 3 if it contains an NRD kernel.
+	assert_eq!(b.header.version, HeaderVersion(3));
+	assert_eq!(
+		b.validate(&BlindingFactor::zero(), verifier_cache()),
+		Err(Error::NRDKernelPreHF3)
+	);
+
+	let prev_height = TESTING_THIRD_HARD_FORK - 1;
+	let prev = BlockHeader {
+		height: prev_height,
+		version: consensus::header_version(prev_height),
+		..BlockHeader::default()
+	};
+	let b = new_block(
+		vec![&mut tx],
+		&keychain,
+		&builder,
+		&prev,
+		&ExtKeychain::derive_key_id(1, 1, 0, 0, 0),
+	);
+	// Block is invalid at header version 4 (at HF height) if it contains an NRD kernel.
+	assert_eq!(b.header.height, TESTING_THIRD_HARD_FORK);
+	assert_eq!(b.header.version, HeaderVersion(4));
+	assert!(b
+		.validate(&BlindingFactor::zero(), verifier_cache())
+		.is_ok());
+
+	let prev_height = TESTING_THIRD_HARD_FORK;
+	let prev = BlockHeader {
+		height: prev_height,
+		version: consensus::header_version(prev_height),
+		..BlockHeader::default()
+	};
+	let b = new_block(
+		vec![&mut tx],
+		&keychain,
+		&builder,
+		&prev,
+		&ExtKeychain::derive_key_id(1, 1, 0, 0, 0),
+	);
+	// Block is invalid at header version 4 if it contains an NRD kernel.
+	assert_eq!(b.header.version, HeaderVersion(4));
+	assert!(b
+		.validate(&BlindingFactor::zero(), verifier_cache())
+		.is_ok());
+}
+
+#[test]
+fn block_with_nrd_kernel_nrd_not_enabled() {
+	// automated testing - HF{1|2|3} at block heights {3, 6, 9}
+	global::set_mining_mode(ChainTypes::AutomatedTesting);
+
 	let keychain = ExtKeychain::from_random_seed(false).unwrap();
 	let builder = ProofBuilder::new(&keychain);
 	let key_id1 = ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
