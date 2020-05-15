@@ -65,6 +65,8 @@ pub enum Error {
 	KernelLockHeight(u64),
 	/// NRD kernels are not valid prior to HF3.
 	NRDKernelPreHF3,
+	/// NRD kernels are not valid if disabled locally via "feature flag".
+	NRDKernelNotEnabled,
 	/// Underlying tx related error
 	Transaction(transaction::Error),
 	/// Underlying Secp256k1 error (signature validation or invalid public key
@@ -819,11 +821,15 @@ impl Block {
 		Ok(())
 	}
 
-	// NRD kernels were introduced in HF3 and are only valid for block version > 3.
-	// A block earlier than HF3 containing any NRD kernel is invalid.
+	// NRD kernels are not valid if the global feature flag is disabled.
+	// NRD kernels were introduced in HF3 and are not valid for block version < 4.
+	// Blocks prior to HF3 containing any NRD kernel(s) are invalid.
 	fn verify_nrd_kernels_for_header_version(&self) -> Result<(), Error> {
-		if self.header.version <= HeaderVersion(3) {
-			if self.body.kernels.iter().any(|k| k.is_nrd()) {
+		if self.body.kernels.iter().any(|k| k.is_nrd()) {
+			if !global::is_nrd_enabled() {
+				return Err(Error::NRDKernelNotEnabled);
+			}
+			if self.header.version < HeaderVersion(4) {
 				return Err(Error::NRDKernelPreHF3);
 			}
 		}

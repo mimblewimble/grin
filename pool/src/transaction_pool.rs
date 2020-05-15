@@ -21,6 +21,7 @@ use self::core::core::hash::{Hash, Hashed};
 use self::core::core::id::ShortId;
 use self::core::core::verifier_cache::VerifierCache;
 use self::core::core::{transaction, Block, BlockHeader, HeaderVersion, Transaction, Weighting};
+use self::core::global;
 use self::util::RwLock;
 use crate::pool::Pool;
 use crate::types::{BlockChain, PoolAdapter, PoolConfig, PoolEntry, PoolError, TxSource};
@@ -139,8 +140,11 @@ where
 		tx: &Transaction,
 		header: &BlockHeader,
 	) -> Result<(), PoolError> {
-		for k in tx.kernels() {
-			if k.is_nrd() && header.version < HeaderVersion(4) {
+		if tx.kernels().iter().any(|k| k.is_nrd()) {
+			if !global::is_nrd_enabled() {
+				return Err(PoolError::NRDKernelNotEnabled);
+			}
+			if header.version < HeaderVersion(4) {
 				return Err(PoolError::NRDKernelPreHF3);
 			}
 		}

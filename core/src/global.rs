@@ -168,10 +168,26 @@ pub fn get_chain_type() -> ChainTypes {
 	})
 }
 
+/// Global feature flag for NRD kernel support.
+/// If enabled NRD kernels are treated as valid after HF3 (based on header version).
+/// If disabled NRD kernels are invalid regardless of header version or block height.
+pub static ref NRD_FEATURE_ENABLED: AtomicBool = AtomicBool::new(false);
+
+
 /// One time initialization of the global chain_type.
 /// Will panic if we attempt to re-initialize this (via OneTime).
 pub fn init_global_chain_type(new_type: ChainTypes) {
 	GLOBAL_CHAIN_TYPE.init(new_type)
+}
+
+/// Explicitly enable the NRD global feature flag.
+pub fn enable_nrd_feature() {
+	NRD_FEATURE_ENABLED.store(true, Ordering::Relaxed);
+}
+
+/// Is the NRD feature flag enabled?
+pub fn is_nrd_enabled() -> bool {
+	NRD_FEATURE_ENABLED.load(Ordering::Relaxed)
 }
 
 /// Return either a cuckoo context or a cuckatoo context
