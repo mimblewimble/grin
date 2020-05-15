@@ -89,16 +89,6 @@ pub fn server_command(
 	mut global_config: GlobalConfig,
 	logs_rx: Option<mpsc::Receiver<LogEntry>>,
 ) -> i32 {
-	global::set_mining_mode(
-		global_config
-			.members
-			.as_mut()
-			.unwrap()
-			.server
-			.clone()
-			.chain_type,
-	);
-
 	// just get defaults from the global config
 	let mut server_config = global_config.members.as_ref().unwrap().server.clone();
 

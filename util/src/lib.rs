@@ -100,6 +100,11 @@ where
 			.clone()
 			.expect("Cannot borrow one_time before initialization.")
 	}
+
+	/// Has this OneTime been initialized?
+	pub fn is_init(&self) -> bool {
+		self.inner.read().is_some()
+	}
 }
 
 /// Encode an utf8 string to a base64 string

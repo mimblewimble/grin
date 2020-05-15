@@ -140,7 +140,8 @@ fn real_main() -> i32 {
 	};
 	init_logger(Some(logging_config), logs_tx);
 
-	global::set_mining_mode(config.members.unwrap().server.chain_type);
+	// One time initialization of the global chain_type.
+	global::init_global_chain_type(config.members.unwrap().server.chain_type);
 
 	if let Some(file_path) = &config.config_file_path {
 		info!(
