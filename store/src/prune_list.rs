@@ -279,8 +279,7 @@ impl PruneList {
 		let maximum = self.bitmap.maximum().unwrap_or(0);
 		self.pruned_cache = Bitmap::create_with_capacity(maximum);
 		for pos in 1..(maximum + 1) {
-			let path = path(pos as u64, maximum as u64);
-			let pruned = path.into_iter().any(|x| self.bitmap.contains(x as u32));
+			let pruned = path(pos as u64, maximum as u64).any(|x| self.bitmap.contains(x as u32));
 			if pruned {
 				self.pruned_cache.add(pos as u32)
 			}
