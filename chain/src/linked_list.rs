@@ -126,7 +126,9 @@ pub trait ListIndex {
 		batch: &Batch<'_>,
 		commit: Commitment,
 	) -> Result<Option<<Self::Entry as ListIndexEntry>::Pos>, Error>;
+}
 
+pub trait PruneableListIndex {
 	///
 	/// TODO - pass a cutoff in here and conditionally prune everything prior to this.
 	/// Loop internally to prune everything or just one at a time?
@@ -249,6 +251,10 @@ where
 				batch.db.put_ser(&self.list_key(commit), &list)?;
 			}
 			Some(ListWrapper::Single { pos: current_pos }) => {
+				if new_pos.pos() <= current_pos.pos() {
+					return Err(Error::OtherErr("pos must be increasing".into()));
+				}
+
 				let head = ListEntry::Head {
 					pos: new_pos,
 					next: current_pos.pos(),
@@ -270,6 +276,10 @@ where
 				batch.db.put_ser(&self.list_key(commit), &list)?;
 			}
 			Some(ListWrapper::Multi { head, tail }) => {
+				if new_pos.pos() <= head {
+					return Err(Error::OtherErr("pos must be increasing".into()));
+				}
+
 				if let Some(ListEntry::Head {
 					pos: current_pos,
 					next: current_next,
@@ -396,6 +406,15 @@ where
 				}
 			}
 		}
+	}
+}
+
+impl<T> PruneableListIndex for MultiIndex<T>
+where
+	T: PosEntry,
+{
+	fn prune(&self, batch: &Batch<'_>, commit: Commitment, cutoff_pos: u64) -> Result<(), Error> {
+		panic!("wat");
 	}
 }
 

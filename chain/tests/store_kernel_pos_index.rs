@@ -12,18 +12,18 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use grin_chain as chain;
-use grin_core as core;
-use grin_util as util;
-
 use crate::chain::linked_list::{self, ListIndex, ListWrapper};
 use crate::chain::store::{self, ChainStore};
 use crate::chain::types::CommitPos;
 use crate::core::core::OutputFeatures;
 use crate::util::secp::pedersen::Commitment;
+use grin_chain as chain;
+use grin_core as core;
+use grin_store;
+use grin_util as util;
 mod chain_test_helper;
-
 use self::chain_test_helper::clean_output_dir;
+use crate::grin_store::Error;
 
 #[test]
 fn test_store_kernel_idx() {
@@ -71,6 +71,17 @@ fn test_store_kernel_idx() {
 	assert_eq!(
 		index.get_list(&batch, commit),
 		Ok(Some(ListWrapper::Multi { head: 2, tail: 1 })),
+	);
+
+	// Pos must always increase.
+	assert_eq!(
+		index.push_pos(&batch, commit, CommitPos { pos: 1, height: 1 }),
+		Err(Error::OtherErr("pos must be increasing".into())),
+	);
+
+	assert_eq!(
+		index.push_pos(&batch, commit, CommitPos { pos: 2, height: 2 }),
+		Err(Error::OtherErr("pos must be increasing".into())),
 	);
 
 	assert_eq!(
