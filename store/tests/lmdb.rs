@@ -12,11 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use grin_core as core;
 use grin_store as store;
 use grin_util as util;
 
-use grin_core::ser::{self, Readable, Reader, Writeable, Writer};
-
+use crate::core::global;
+use crate::core::ser::{self, Readable, Reader, Writeable, Writer};
 use std::fs;
 
 const WRITE_CHUNK_SIZE: usize = 20;
@@ -59,6 +60,7 @@ fn clean_output_dir(test_dir: &str) {
 }
 
 fn setup(test_dir: &str) {
+	global::set_local_chain_type(global::ChainTypes::Mainnet);
 	util::init_test_logger();
 	clean_output_dir(test_dir);
 }
