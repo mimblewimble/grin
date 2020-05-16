@@ -279,3 +279,13 @@ fn test_store_kernel_idx_pop_back() {
 	assert_eq!(index.peek_pos(&batch, commit), Ok(None));
 	assert_eq!(index.get_list(&batch, commit), Ok(None));
 }
+
+#[test]
+fn test_store_kernel_idx_rewind() {
+	util::init_test_logger();
+
+	let chain_dir = ".grin_idx_3";
+	clean_output_dir(chain_dir);
+
+	panic!("to be continued");
+}

@@ -128,6 +128,11 @@ pub trait ListIndex {
 	) -> Result<Option<<Self::Entry as ListIndexEntry>::Pos>, Error>;
 }
 
+/// Supports "rewind" given the provided commit and a pos to rewind back to.
+pub trait RewindableListIndex {
+	fn rewind(&self, batch: &Batch<'_>, commit: Commitment, rewind_pos: u64) -> Result<(), Error>;
+}
+
 /// A pruneable list index supports pruning of old data from the index lists.
 /// This allows us to efficiently maintain an index of "recent" kernel data.
 /// We can maintain a window of 2 weeks of recent data, discarding anything older than this.
@@ -408,10 +413,21 @@ where
 	}
 }
 
-impl<T> PruneableListIndex for MultiIndex<T>
-where
-	T: PosEntry,
-{
+/// List index that supports rewind.
+impl<T: PosEntry> RewindableListIndex for MultiIndex<T> {
+	fn rewind(&self, batch: &Batch<'_>, commit: Commitment, rewind_pos: u64) -> Result<(), Error> {
+		while self
+			.peek_pos(batch, commit)?
+			.map(|x| x.pos() > rewind_pos)
+			.unwrap_or(false)
+		{
+			self.pop_pos(batch, commit)?;
+		}
+		Ok(())
+	}
+}
+
+impl<T: PosEntry> PruneableListIndex for MultiIndex<T> {
 	fn prune(&self, batch: &Batch<'_>, commit: Commitment, cutoff_pos: u64) -> Result<(), Error> {
 		panic!("wat");
 	}

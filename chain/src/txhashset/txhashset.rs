@@ -24,7 +24,7 @@ use crate::core::core::{
 };
 use crate::core::ser::{PMMRable, ProtocolVersion};
 use crate::error::{Error, ErrorKind};
-use crate::linked_list::ListIndex;
+use crate::linked_list::{ListIndex, RewindableListIndex};
 use crate::store::{self, Batch, ChainStore};
 use crate::txhashset::bitmap_accumulator::BitmapAccumulator;
 use crate::txhashset::{RewindableKernelView, UTXOView};
@@ -1144,6 +1144,7 @@ impl<'a> Extension<'a> {
 	// accumulator in a single pass for all rewound blocks.
 	fn rewind_single_block(&mut self, block: &Block, batch: &Batch<'_>) -> Result<Vec<u64>, Error> {
 		let header = &block.header;
+		let prev_header = batch.get_previous_header(&header)?;
 
 		// The spent index allows us to conveniently "unspend" everything in a block.
 		let spent = batch.get_spent_index(&header.hash());
@@ -1190,16 +1191,14 @@ impl<'a> Extension<'a> {
 		}
 
 		// Now rewind the kernel_pos index based on kernels in the block being rewound.
-		// Pop every rewound kernel off the appropriate index list.
 		let coinbase_kernel_index = store::coinbase_kernel_index();
 		for kernel in block.kernels() {
 			if let KernelFeatures::Coinbase = kernel.features {
-				let res = coinbase_kernel_index.pop_pos(batch, kernel.excess());
-				debug!(
-					"rewind_single_block: popped kernel_pos_idx: {:?}, {:?}",
-					res,
-					kernel.excess()
-				);
+				coinbase_kernel_index.rewind(
+					batch,
+					kernel.excess(),
+					prev_header.kernel_mmr_size,
+				)?;
 			}
 		}
 
