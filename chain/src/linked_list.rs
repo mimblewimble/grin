@@ -128,11 +128,10 @@ pub trait ListIndex {
 	) -> Result<Option<<Self::Entry as ListIndexEntry>::Pos>, Error>;
 }
 
+/// A pruneable list index supports pruning of old data from the index lists.
+/// This allows us to efficiently maintain an index of "recent" kernel data.
+/// We can maintain a window of 2 weeks of recent data, discarding anything older than this.
 pub trait PruneableListIndex {
-	///
-	/// TODO - pass a cutoff in here and conditionally prune everything prior to this.
-	/// Loop internally to prune everything or just one at a time?
-	///
 	fn prune(&self, batch: &Batch<'_>, commit: Commitment, cutoff_pos: u64) -> Result<(), Error>;
 }
 
@@ -451,10 +450,31 @@ where
 	}
 }
 
+/// Head|Middle|Tail variants for the linked list entries.
 pub enum ListEntry<T> {
-	Head { pos: T, next: u64 },
-	Tail { pos: T, prev: u64 },
-	Middle { pos: T, next: u64, prev: u64 },
+	/// Head of ther list.
+	Head {
+		/// The thing in the list.
+		pos: T,
+		/// The next entry in the list.
+		next: u64,
+	},
+	/// Tail of the list.
+	Tail {
+		/// The thing in the list.
+		pos: T,
+		/// The previous entry in the list.
+		prev: u64,
+	},
+	/// An entry in the middle of the list.
+	Middle {
+		/// The thing in the list.
+		pos: T,
+		/// The next entry in the list.
+		next: u64,
+		/// The previous entry in the list.
+		prev: u64,
+	},
 }
 
 impl<T> Writeable for ListEntry<T>

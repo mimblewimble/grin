@@ -1124,7 +1124,8 @@ impl<'a> Extension<'a> {
 			let mut affected_pos = vec![];
 			let mut current = head_header;
 			while header.height < current.height {
-				let mut affected_pos_single_block = self.rewind_single_block(&current, batch)?;
+				let block = batch.get_block(&current.hash())?;
+				let mut affected_pos_single_block = self.rewind_single_block(&block, batch)?;
 				affected_pos.append(&mut affected_pos_single_block);
 				current = batch.get_previous_header(&current)?;
 			}
@@ -1141,11 +1142,9 @@ impl<'a> Extension<'a> {
 	// Rewind the MMRs and the output_pos index.
 	// Returns a vec of "affected_pos" so we can apply the necessary updates to the bitmap
 	// accumulator in a single pass for all rewound blocks.
-	fn rewind_single_block(
-		&mut self,
-		header: &BlockHeader,
-		batch: &Batch<'_>,
-	) -> Result<Vec<u64>, Error> {
+	fn rewind_single_block(&mut self, block: &Block, batch: &Batch<'_>) -> Result<Vec<u64>, Error> {
+		let header = &block.header;
+
 		// The spent index allows us to conveniently "unspend" everything in a block.
 		let spent = batch.get_spent_index(&header.hash());
 
@@ -1164,7 +1163,7 @@ impl<'a> Extension<'a> {
 		if header.height == 0 {
 			self.rewind_mmrs_to_pos(0, 0, &spent_pos)?;
 		} else {
-			let prev = batch.get_previous_header(&header)?;
+			let prev = batch.get_previous_header(header)?;
 			self.rewind_mmrs_to_pos(prev.output_mmr_size, prev.kernel_mmr_size, &spent_pos)?;
 		}
 
@@ -1175,7 +1174,6 @@ impl<'a> Extension<'a> {
 		affected_pos.push(self.output_pmmr.last_pos);
 
 		// Remove any entries from the output_pos created by the block being rewound.
-		let block = batch.get_block(&header.hash())?;
 		let mut missing_count = 0;
 		for out in block.outputs() {
 			if batch.delete_output_pos_height(&out.commitment()).is_err() {
@@ -1189,6 +1187,20 @@ impl<'a> Extension<'a> {
 				header.hash(),
 				header.height,
 			);
+		}
+
+		// Now rewind the kernel_pos index based on kernels in the block being rewound.
+		// Pop every rewound kernel off the appropriate index list.
+		let coinbase_kernel_index = store::coinbase_kernel_index();
+		for kernel in block.kernels() {
+			if let KernelFeatures::Coinbase = kernel.features {
+				let res = coinbase_kernel_index.pop_pos(batch, kernel.excess());
+				debug!(
+					"rewind_single_block: popped kernel_pos_idx: {:?}, {:?}",
+					res,
+					kernel.excess()
+				);
+			}
 		}
 
 		// Update output_pos based on "unspending" all spent pos from this block.
