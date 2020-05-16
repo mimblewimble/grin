@@ -343,5 +343,12 @@ fn test_store_kernel_idx_rewind() {
 		})),
 	);
 
+	// Check we can rewind back to 0.
+	assert_eq!(index.rewind(&batch, commit, 0), Ok(()),);
+
+	assert_eq!(index.get_list(&batch, commit), Ok(None),);
+
+	assert_eq!(index.rewind(&batch, commit, 0), Ok(()),);
+
 	clean_output_dir(chain_dir);
 }
