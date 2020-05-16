@@ -350,5 +350,36 @@ fn test_store_kernel_idx_rewind() {
 
 	assert_eq!(index.rewind(&batch, commit, 0), Ok(()),);
 
+	// Now check we can rewind past the end of a list safely.
+
+	assert_eq!(
+		index.push_pos(&batch, commit, CommitPos { pos: 1, height: 1 }),
+		Ok(()),
+	);
+
+	assert_eq!(
+		index.push_pos(&batch, commit, CommitPos { pos: 2, height: 2 }),
+		Ok(()),
+	);
+
+	assert_eq!(
+		index.push_pos(&batch, commit, CommitPos { pos: 3, height: 3 }),
+		Ok(()),
+	);
+
+	assert_eq!(
+		index.pop_pos_back(&batch, commit),
+		Ok(Some(CommitPos { pos: 1, height: 1 })),
+	);
+
+	assert_eq!(
+		index.get_list(&batch, commit),
+		Ok(Some(ListWrapper::Multi { head: 3, tail: 2 })),
+	);
+
+	assert_eq!(index.rewind(&batch, commit, 1), Ok(()),);
+
+	assert_eq!(index.get_list(&batch, commit), Ok(None),);
+
 	clean_output_dir(chain_dir);
 }
