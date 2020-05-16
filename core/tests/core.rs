@@ -25,13 +25,18 @@ use self::core::core::{
 };
 use self::core::libtx::build::{self, initial_tx, input, output, with_excess};
 use self::core::libtx::ProofBuilder;
-use self::core::ser;
+use self::core::{global, ser};
 use crate::common::{new_block, tx1i1o, tx1i2o, tx2i1o};
 use grin_core as core;
 use keychain::{BlindingFactor, ExtKeychain, Keychain};
 use std::sync::Arc;
 use util::static_secp_instance;
 use util::RwLock;
+
+// Setup test with AutomatedTesting chain_type;
+fn test_setup() {
+	global::set_local_chain_type(global::ChainTypes::AutomatedTesting);
+}
 
 #[test]
 fn simple_tx_ser() {
@@ -61,6 +66,7 @@ fn simple_tx_ser() {
 
 #[test]
 fn simple_tx_ser_deser() {
+	test_setup();
 	let tx = tx2i1o();
 	let mut vec = Vec::new();
 	ser::serialize_default(&mut vec, &tx).expect("serialization failed");
@@ -73,6 +79,7 @@ fn simple_tx_ser_deser() {
 
 #[test]
 fn tx_double_ser_deser() {
+	test_setup();
 	// checks serializing doesn't mess up the tx and produces consistent results
 	let btx = tx2i1o();
 
@@ -91,6 +98,7 @@ fn tx_double_ser_deser() {
 #[test]
 #[should_panic(expected = "Keychain Error")]
 fn test_zero_commit_fails() {
+	test_setup();
 	let keychain = ExtKeychain::from_random_seed(false).unwrap();
 	let builder = ProofBuilder::new(&keychain);
 	let key_id1 = ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
@@ -111,6 +119,7 @@ fn verifier_cache() -> Arc<RwLock<dyn VerifierCache>> {
 
 #[test]
 fn build_tx_kernel() {
+	test_setup();
 	let keychain = ExtKeychain::from_random_seed(false).unwrap();
 	let builder = ProofBuilder::new(&keychain);
 	let key_id1 = ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
@@ -143,6 +152,7 @@ fn build_tx_kernel() {
 // and check it still validates.
 #[test]
 fn transaction_cut_through() {
+	test_setup();
 	let tx1 = tx1i2o();
 	let tx2 = tx2i1o();
 
@@ -164,6 +174,7 @@ fn transaction_cut_through() {
 // Attempt to deaggregate a multi-kernel transaction in a different way
 #[test]
 fn multi_kernel_transaction_deaggregation() {
+	test_setup();
 	let tx1 = tx1i1o();
 	let tx2 = tx1i1o();
 	let tx3 = tx1i1o();
@@ -202,6 +213,7 @@ fn multi_kernel_transaction_deaggregation() {
 
 #[test]
 fn multi_kernel_transaction_deaggregation_2() {
+	test_setup();
 	let tx1 = tx1i1o();
 	let tx2 = tx1i1o();
 	let tx3 = tx1i1o();
@@ -227,6 +239,7 @@ fn multi_kernel_transaction_deaggregation_2() {
 
 #[test]
 fn multi_kernel_transaction_deaggregation_3() {
+	test_setup();
 	let tx1 = tx1i1o();
 	let tx2 = tx1i1o();
 	let tx3 = tx1i1o();
@@ -253,6 +266,7 @@ fn multi_kernel_transaction_deaggregation_3() {
 
 #[test]
 fn multi_kernel_transaction_deaggregation_4() {
+	test_setup();
 	let tx1 = tx1i1o();
 	let tx2 = tx1i1o();
 	let tx3 = tx1i1o();
@@ -288,6 +302,7 @@ fn multi_kernel_transaction_deaggregation_4() {
 
 #[test]
 fn multi_kernel_transaction_deaggregation_5() {
+	test_setup();
 	let tx1 = tx1i1o();
 	let tx2 = tx1i1o();
 	let tx3 = tx1i1o();
@@ -327,6 +342,7 @@ fn multi_kernel_transaction_deaggregation_5() {
 // Attempt to deaggregate a multi-kernel transaction
 #[test]
 fn basic_transaction_deaggregation() {
+	test_setup();
 	let tx1 = tx1i2o();
 	let tx2 = tx2i1o();
 
@@ -412,6 +428,7 @@ fn tx_hash_diff() {
 /// 2 inputs, 2 outputs transaction.
 #[test]
 fn tx_build_exchange() {
+	test_setup();
 	let keychain = ExtKeychain::from_random_seed(false).unwrap();
 	let builder = ProofBuilder::new(&keychain);
 	let key_id1 = ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
@@ -457,6 +474,7 @@ fn tx_build_exchange() {
 
 #[test]
 fn reward_empty_block() {
+	test_setup();
 	let keychain = keychain::ExtKeychain::from_random_seed(false).unwrap();
 	let builder = ProofBuilder::new(&keychain);
 	let key_id = ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
@@ -473,6 +491,7 @@ fn reward_empty_block() {
 
 #[test]
 fn reward_with_tx_block() {
+	test_setup();
 	let keychain = keychain::ExtKeychain::from_random_seed(false).unwrap();
 	let builder = ProofBuilder::new(&keychain);
 	let key_id = ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
@@ -500,6 +519,7 @@ fn reward_with_tx_block() {
 
 #[test]
 fn simple_block() {
+	test_setup();
 	let keychain = keychain::ExtKeychain::from_random_seed(false).unwrap();
 	let builder = ProofBuilder::new(&keychain);
 	let key_id = ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
@@ -523,6 +543,7 @@ fn simple_block() {
 
 #[test]
 fn test_block_with_timelocked_tx() {
+	test_setup();
 	let keychain = keychain::ExtKeychain::from_random_seed(false).unwrap();
 	let builder = ProofBuilder::new(&keychain);
 	let key_id1 = ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
@@ -581,6 +602,7 @@ fn test_block_with_timelocked_tx() {
 
 #[test]
 pub fn test_verify_1i1o_sig() {
+	test_setup();
 	let tx = tx1i1o();
 	tx.validate(Weighting::AsTransaction, verifier_cache())
 		.unwrap();
@@ -588,6 +610,7 @@ pub fn test_verify_1i1o_sig() {
 
 #[test]
 pub fn test_verify_2i1o_sig() {
+	test_setup();
 	let tx = tx2i1o();
 	tx.validate(Weighting::AsTransaction, verifier_cache())
 		.unwrap();

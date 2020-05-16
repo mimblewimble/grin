@@ -165,6 +165,7 @@ mod test {
 
 	#[test]
 	fn cuckaroom19_29_vectors() {
+		global::set_local_chain_type(global::ChainTypes::Mainnet);
 		let mut ctx19 = new_impl::<u64>(19, 42);
 		ctx19.params.siphash_keys = V1_19_HASH;
 		assert!(ctx19.verify(&Proof::new(V1_19_SOL.to_vec())).is_ok());
