@@ -383,3 +383,92 @@ fn test_store_kernel_idx_rewind() {
 
 	clean_output_dir(chain_dir);
 }
+
+#[test]
+fn test_store_kernel_idx_multiple_commits() {
+	util::init_test_logger();
+
+	let chain_dir = ".grin_idx_4";
+	clean_output_dir(chain_dir);
+
+	let commit = Commitment::from_vec(vec![]);
+	let commit2 = Commitment::from_vec(vec![1]);
+
+	let store = ChainStore::new(chain_dir).unwrap();
+	let batch = store.batch().unwrap();
+	let index = store::coinbase_kernel_index();
+
+	assert_eq!(index.get_list(&batch, commit), Ok(None));
+	assert_eq!(index.get_list(&batch, commit2), Ok(None));
+
+	assert_eq!(
+		index.push_pos(&batch, commit, CommitPos { pos: 1, height: 1 }),
+		Ok(()),
+	);
+
+	assert_eq!(
+		index.get_list(&batch, commit),
+		Ok(Some(ListWrapper::Single {
+			pos: CommitPos { pos: 1, height: 1 }
+		})),
+	);
+
+	assert_eq!(index.get_list(&batch, commit2), Ok(None));
+
+	assert_eq!(
+		index.push_pos(&batch, commit2, CommitPos { pos: 2, height: 2 }),
+		Ok(()),
+	);
+
+	assert_eq!(
+		index.get_list(&batch, commit),
+		Ok(Some(ListWrapper::Single {
+			pos: CommitPos { pos: 1, height: 1 }
+		})),
+	);
+
+	assert_eq!(
+		index.get_list(&batch, commit2),
+		Ok(Some(ListWrapper::Single {
+			pos: CommitPos { pos: 2, height: 2 }
+		})),
+	);
+
+	assert_eq!(
+		index.push_pos(&batch, commit, CommitPos { pos: 3, height: 3 }),
+		Ok(()),
+	);
+
+	assert_eq!(
+		index.get_list(&batch, commit),
+		Ok(Some(ListWrapper::Multi { head: 3, tail: 1 })),
+	);
+
+	assert_eq!(
+		index.get_list(&batch, commit2),
+		Ok(Some(ListWrapper::Single {
+			pos: CommitPos { pos: 2, height: 2 }
+		})),
+	);
+
+	assert_eq!(
+		index.pop_pos(&batch, commit),
+		Ok(Some(CommitPos { pos: 3, height: 3 })),
+	);
+
+	assert_eq!(
+		index.get_list(&batch, commit),
+		Ok(Some(ListWrapper::Single {
+			pos: CommitPos { pos: 1, height: 1 }
+		})),
+	);
+
+	assert_eq!(
+		index.get_list(&batch, commit2),
+		Ok(Some(ListWrapper::Single {
+			pos: CommitPos { pos: 2, height: 2 }
+		})),
+	);
+
+	clean_output_dir(chain_dir);
+}
