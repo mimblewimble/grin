@@ -557,10 +557,14 @@ pub struct BlockHeaderPrintable {
 	pub timestamp: String,
 	/// Merklish root of all the commitments in the TxHashSet
 	pub output_root: String,
+	/// Size of the output MMR
+	pub output_mmr_size: u64,
 	/// Merklish root of all range proofs in the TxHashSet
 	pub range_proof_root: String,
 	/// Merklish root of all transaction kernels in the TxHashSet
 	pub kernel_root: String,
+	/// Size of the kernel MMR
+	pub kernel_mmr_size: u64,
 	/// Nonce increment used to mine this block.
 	pub nonce: u64,
 	/// Size of the cuckoo graph
@@ -585,8 +589,10 @@ impl BlockHeaderPrintable {
 			prev_root: header.prev_root.to_hex(),
 			timestamp: header.timestamp.to_rfc3339(),
 			output_root: header.output_root.to_hex(),
+			output_mmr_size: header.output_mmr_size,
 			range_proof_root: header.range_proof_root.to_hex(),
 			kernel_root: header.kernel_root.to_hex(),
+			kernel_mmr_size: header.kernel_mmr_size,
 			nonce: header.pow.nonce,
 			edge_bits: header.pow.edge_bits(),
 			cuckoo_solution: header.pow.proof.nonces.clone(),
@@ -733,7 +739,8 @@ mod test {
 
 	#[test]
 	fn serialize_output_printable() {
-		let hex_output = "{\
+		let hex_output =
+			"{\
 			 \"output_type\":\"Coinbase\",\
 			 \"commit\":\"083eafae5d61a85ab07b12e1a51b3918d8e6de11fc6cde641d54af53608aa77b9f\",\
 			 \"spent\":false,\
@@ -750,7 +757,8 @@ mod test {
 
 	#[test]
 	fn serialize_output() {
-		let hex_commit = "{\
+		let hex_commit =
+			"{\
 			 \"commit\":\"083eafae5d61a85ab07b12e1a51b3918d8e6de11fc6cde641d54af53608aa77b9f\",\
 			 \"height\":0,\
 			 \"mmr_index\":0\
