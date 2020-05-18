@@ -28,7 +28,7 @@ use crate::pow::{
 	PoWContext,
 };
 use std::cell::Cell;
-use util::OneTime;
+use util::{OneTime, RwLock};
 
 /// An enum collecting sets of parameters used throughout the
 /// code wherever mining is needed. This should allow for
@@ -140,11 +140,19 @@ lazy_static! {
 	/// This is accessed via get_chain_type() which allows the global value
 	/// to be overridden on a per-thread basis (for testing).
 	pub static ref GLOBAL_CHAIN_TYPE: OneTime<ChainTypes> = OneTime::new();
+
+	/// Global feature flag for NRD kernel support.
+	/// If enabled NRD kernels are treated as valid after HF3 (based on header version).
+	/// If disabled NRD kernels are invalid regardless of header version or block height.
+	pub static ref GLOBAL_NRD_FEATURE_ENABLED: OneTime<bool> = OneTime::new();
 }
 
 thread_local! {
 	/// Mainnet|Floonet|UserTesting|AutomatedTesting
 	pub static CHAIN_TYPE: Cell<Option<ChainTypes>> = Cell::new(None);
+
+	/// Local feature flag for NRD kernel support.
+	pub static NRD_FEATURE_ENABLED: Cell<Option<bool>> = Cell::new(None);
 }
 
 /// Set the chain type on a per-thread basis via thread_local storage.
@@ -168,10 +176,6 @@ pub fn get_chain_type() -> ChainTypes {
 	})
 }
 
-/// Global feature flag for NRD kernel support.
-/// If enabled NRD kernels are treated as valid after HF3 (based on header version).
-/// If disabled NRD kernels are invalid regardless of header version or block height.
-pub static ref NRD_FEATURE_ENABLED: AtomicBool = AtomicBool::new(false);
 
 
 /// One time initialization of the global chain_type.
@@ -181,13 +185,27 @@ pub fn init_global_chain_type(new_type: ChainTypes) {
 }
 
 /// Explicitly enable the NRD global feature flag.
-pub fn enable_nrd_feature() {
-	NRD_FEATURE_ENABLED.store(true, Ordering::Relaxed);
+pub fn set_local_nrd_enabled(enabled: bool) {
+	NRD_FEATURE_ENABLED.with(|flag| flag.set(Some(enabled)))
 }
 
 /// Is the NRD feature flag enabled?
+/// Look at thread local config first. If not set fallback to global config.
+/// Default to false if global config unset.
 pub fn is_nrd_enabled() -> bool {
-	NRD_FEATURE_ENABLED.load(Ordering::Relaxed)
+	NRD_FEATURE_ENABLED.with(|flag| match flag.get() {
+		None => {
+			if GLOBAL_NRD_FEATURE_ENABLED.is_init() {
+				let global_flag = GLOBAL_NRD_FEATURE_ENABLED.borrow();
+				set_local_nrd_enabled(global_flag);
+				global_flag
+			} else {
+				// Global config unset, default to false.
+				false
+			}
+		}
+		Some(flag) => flag,
+	})
 }
 
 /// Return either a cuckoo context or a cuckatoo context

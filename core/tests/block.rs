@@ -88,7 +88,7 @@ fn block_with_nrd_kernel_pre_post_hf3() {
 	// automated testing - HF{1|2|3} at block heights {3, 6, 9}
 	global::set_mining_mode(ChainTypes::AutomatedTesting);
 	// Enable the global NRD feature flag. NRD kernels valid at HF3 at height 9.
-	global::enable_nrd_feature();
+	global::set_local_nrd_enabled(true);
 
 	let keychain = ExtKeychain::from_random_seed(false).unwrap();
 	let builder = ProofBuilder::new(&keychain);
@@ -140,7 +140,8 @@ fn block_with_nrd_kernel_pre_post_hf3() {
 		&prev,
 		&ExtKeychain::derive_key_id(1, 1, 0, 0, 0),
 	);
-	// Block is invalid at header version 4 (at HF height) if it contains an NRD kernel.
+
+	// Block is valid at header version 4 (at HF height) if it contains an NRD kernel.
 	assert_eq!(b.header.height, TESTING_THIRD_HARD_FORK);
 	assert_eq!(b.header.version, HeaderVersion(4));
 	assert!(b
@@ -160,7 +161,8 @@ fn block_with_nrd_kernel_pre_post_hf3() {
 		&prev,
 		&ExtKeychain::derive_key_id(1, 1, 0, 0, 0),
 	);
-	// Block is invalid at header version 4 if it contains an NRD kernel.
+
+	// Block is valid at header version 4 if it contains an NRD kernel.
 	assert_eq!(b.header.version, HeaderVersion(4));
 	assert!(b
 		.validate(&BlindingFactor::zero(), verifier_cache())
@@ -202,11 +204,11 @@ fn block_with_nrd_kernel_nrd_not_enabled() {
 		&ExtKeychain::derive_key_id(1, 1, 0, 0, 0),
 	);
 
-	// Block is invalid at header version 3 if it contains an NRD kernel.
+	// Block is invalid as NRD not enabled.
 	assert_eq!(b.header.version, HeaderVersion(3));
 	assert_eq!(
 		b.validate(&BlindingFactor::zero(), verifier_cache()),
-		Err(Error::NRDKernelPreHF3)
+		Err(Error::NRDKernelNotEnabled)
 	);
 
 	let prev_height = TESTING_THIRD_HARD_FORK - 1;
@@ -222,12 +224,14 @@ fn block_with_nrd_kernel_nrd_not_enabled() {
 		&prev,
 		&ExtKeychain::derive_key_id(1, 1, 0, 0, 0),
 	);
-	// Block is invalid at header version 4 (at HF height) if it contains an NRD kernel.
+
+	// Block is invalid as NRD not enabled.
 	assert_eq!(b.header.height, TESTING_THIRD_HARD_FORK);
 	assert_eq!(b.header.version, HeaderVersion(4));
-	assert!(b
-		.validate(&BlindingFactor::zero(), verifier_cache())
-		.is_ok());
+	assert_eq!(
+		b.validate(&BlindingFactor::zero(), verifier_cache()),
+		Err(Error::NRDKernelNotEnabled)
+	);
 
 	let prev_height = TESTING_THIRD_HARD_FORK;
 	let prev = BlockHeader {
@@ -242,11 +246,13 @@ fn block_with_nrd_kernel_nrd_not_enabled() {
 		&prev,
 		&ExtKeychain::derive_key_id(1, 1, 0, 0, 0),
 	);
-	// Block is invalid at header version 4 if it contains an NRD kernel.
+
+	// Block is invalid as NRD not enabled.
 	assert_eq!(b.header.version, HeaderVersion(4));
-	assert!(b
-		.validate(&BlindingFactor::zero(), verifier_cache())
-		.is_ok());
+	assert_eq!(
+		b.validate(&BlindingFactor::zero(), verifier_cache()),
+		Err(Error::NRDKernelNotEnabled)
+	);
 }
 
 #[test]
