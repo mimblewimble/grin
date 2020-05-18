@@ -184,6 +184,12 @@ pub fn init_global_chain_type(new_type: ChainTypes) {
 	GLOBAL_CHAIN_TYPE.init(new_type)
 }
 
+/// One time initialization of the global chain_type.
+/// Will panic if we attempt to re-initialize this (via OneTime).
+pub fn init_global_nrd_enabled(enabled: bool) {
+	GLOBAL_NRD_FEATURE_ENABLED.init(enabled)
+}
+
 /// Explicitly enable the NRD global feature flag.
 pub fn set_local_nrd_enabled(enabled: bool) {
 	NRD_FEATURE_ENABLED.with(|flag| flag.set(Some(enabled)))
@@ -197,7 +203,7 @@ pub fn is_nrd_enabled() -> bool {
 		None => {
 			if GLOBAL_NRD_FEATURE_ENABLED.is_init() {
 				let global_flag = GLOBAL_NRD_FEATURE_ENABLED.borrow();
-				set_local_nrd_enabled(global_flag);
+				flag.set(Some(global_flag));
 				global_flag
 			} else {
 				// Global config unset, default to false.

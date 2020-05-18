@@ -140,8 +140,11 @@ fn real_main() -> i32 {
 	};
 	init_logger(Some(logging_config), logs_tx);
 
-	// One time initialization of the global chain_type.
+	// Initialize our global chain_type and feature flags (NRD kernel support currently).
+	// TODO - Enable NRD kernels for floonet|testing unless disabled in config.
+	// TODO - Allow NRD kernels to be enabled in mainnet if overridden in config?
 	global::init_global_chain_type(config.members.unwrap().server.chain_type);
+	global::init_global_nrd_enabled(false);
 
 	if let Some(file_path) = &config.config_file_path {
 		info!(
