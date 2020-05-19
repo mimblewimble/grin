@@ -454,7 +454,7 @@ pub trait ForeignRpc: Sync + Send {
 	{
 		"jsonrpc": "2.0",
 		"method": "get_unspent_outputs",
-		"params": [1, 2, null, true],
+		"params": [1, null, 2, true],
 		"id": 1
 	}
 	# "#
