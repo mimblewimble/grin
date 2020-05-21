@@ -29,8 +29,8 @@ use serde_json::Value;
 use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::sync::Arc;
+use std::thread;
 use std::time::{Duration, SystemTime};
-use std::{cmp, thread};
 
 use crate::chain::{self, SyncState};
 use crate::common::stats::{StratumStats, WorkerStats};
