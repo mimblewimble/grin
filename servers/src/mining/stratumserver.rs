@@ -633,7 +633,6 @@ fn accept_connections(listen_addr: SocketAddr, handler: Arc<Handler>) {
 
 					let write = async move {
 						while let Some(line) = rx.next().await {
-							let line = line + "\n";
 							writer
 								.send(line)
 								.await
