@@ -29,7 +29,6 @@ use crate::core::libtx::ProofBuilder;
 use crate::core::{global, ser};
 use chrono::Duration;
 use grin_core as core;
-use grin_core::global::ChainTypes;
 use keychain::{BlindingFactor, ExtKeychain, Keychain};
 use std::sync::Arc;
 use util::{secp, RwLock, ToHex};
@@ -45,7 +44,7 @@ fn verifier_cache() -> Arc<RwLock<dyn VerifierCache>> {
 
 #[test]
 fn too_large_block() {
-	global::set_local_chain_type(ChainTypes::AutomatedTesting);
+	test_setup();
 	let keychain = ExtKeychain::from_random_seed(false).unwrap();
 	let builder = ProofBuilder::new(&keychain);
 	let max_out = global::max_block_weight() / BLOCK_OUTPUT_WEIGHT;
@@ -272,7 +271,7 @@ fn serialize_deserialize_block() {
 
 #[test]
 fn empty_block_serialized_size() {
-	global::set_local_chain_type(ChainTypes::AutomatedTesting);
+	test_setup();
 	let keychain = ExtKeychain::from_random_seed(false).unwrap();
 	let builder = ProofBuilder::new(&keychain);
 	let prev = BlockHeader::default();
@@ -285,7 +284,7 @@ fn empty_block_serialized_size() {
 
 #[test]
 fn block_single_tx_serialized_size() {
-	global::set_local_chain_type(ChainTypes::AutomatedTesting);
+	test_setup();
 	let keychain = ExtKeychain::from_random_seed(false).unwrap();
 	let builder = ProofBuilder::new(&keychain);
 	let tx1 = tx1i2o();
@@ -299,7 +298,7 @@ fn block_single_tx_serialized_size() {
 
 #[test]
 fn empty_compact_block_serialized_size() {
-	global::set_local_chain_type(ChainTypes::AutomatedTesting);
+	test_setup();
 	let keychain = ExtKeychain::from_random_seed(false).unwrap();
 	let builder = ProofBuilder::new(&keychain);
 	let prev = BlockHeader::default();
@@ -313,7 +312,7 @@ fn empty_compact_block_serialized_size() {
 
 #[test]
 fn compact_block_single_tx_serialized_size() {
-	global::set_local_chain_type(ChainTypes::AutomatedTesting);
+	test_setup();
 	let keychain = ExtKeychain::from_random_seed(false).unwrap();
 	let builder = ProofBuilder::new(&keychain);
 	let tx1 = tx1i2o();
@@ -365,7 +364,7 @@ fn block_10_tx_serialized_size() {
 
 #[test]
 fn compact_block_10_tx_serialized_size() {
-	global::set_local_chain_type(ChainTypes::AutomatedTesting);
+	test_setup();
 	let keychain = ExtKeychain::from_random_seed(false).unwrap();
 	let builder = ProofBuilder::new(&keychain);
 
