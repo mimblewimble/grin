@@ -159,6 +159,7 @@ fn build_tx_kernel() {
 // to the full private excess.
 #[test]
 fn build_two_half_kernels() {
+	test_setup();
 	let keychain = ExtKeychain::from_random_seed(false).unwrap();
 	let builder = ProofBuilder::new(&keychain);
 	let key_id1 = ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
