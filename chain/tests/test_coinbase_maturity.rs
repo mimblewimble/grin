@@ -40,7 +40,7 @@ fn test_coinbase_maturity() {
 	let _ = env_logger::init();
 	let chain_dir = ".grin_coinbase";
 	clean_output_dir(chain_dir);
-	global::set_mining_mode(ChainTypes::AutomatedTesting);
+	global::set_local_chain_type(ChainTypes::AutomatedTesting);
 
 	let genesis_block = pow::mine_genesis_block().unwrap();
 

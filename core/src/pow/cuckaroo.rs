@@ -170,6 +170,7 @@ mod test {
 
 	#[test]
 	fn cuckaroo19_vectors() {
+		global::set_local_chain_type(global::ChainTypes::Mainnet);
 		let mut ctx = new_impl::<u64>(19, 42);
 		ctx.params.siphash_keys = V1_19_HASH;
 		assert!(ctx.verify(&Proof::new(V1_19_SOL.to_vec())).is_ok());

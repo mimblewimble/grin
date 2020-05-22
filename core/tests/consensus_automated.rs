@@ -22,7 +22,7 @@ use grin_core::pow::Difficulty;
 /// Checks different next_target adjustments and difficulty boundaries
 #[test]
 fn next_target_adjustment() {
-	global::set_mining_mode(global::ChainTypes::AutomatedTesting);
+	global::set_local_chain_type(global::ChainTypes::AutomatedTesting);
 	let cur_time = Utc::now().timestamp() as u64;
 	let diff_min = Difficulty::min();
 

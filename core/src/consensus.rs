@@ -142,7 +142,7 @@ pub const TESTING_SECOND_HARD_FORK: u64 = 6;
 /// Compute possible block version at a given height, implements
 /// 6 months interval scheduled hard forks for the first 2 years.
 pub fn header_version(height: u64) -> HeaderVersion {
-	let chain_type = global::CHAIN_TYPE.read().clone();
+	let chain_type = global::get_chain_type();
 	let hf_interval = (1 + height / HARD_FORK_INTERVAL) as u16;
 	match chain_type {
 		global::ChainTypes::Mainnet => HeaderVersion(hf_interval),
@@ -383,6 +383,8 @@ mod test {
 
 	#[test]
 	fn test_graph_weight() {
+		global::set_local_chain_type(global::ChainTypes::Mainnet);
+
 		// initial weights
 		assert_eq!(graph_weight(1, 31), 256 * 31);
 		assert_eq!(graph_weight(1, 32), 512 * 32);

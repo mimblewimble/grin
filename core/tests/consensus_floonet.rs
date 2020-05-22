@@ -21,7 +21,7 @@ use grin_core::global;
 #[test]
 fn test_secondary_pow_ratio() {
 	// Tests for Floonet chain type (covers pre and post hardfork).
-	global::set_mining_mode(global::ChainTypes::Floonet);
+	global::set_local_chain_type(global::ChainTypes::Floonet);
 	assert_eq!(global::is_floonet(), true);
 
 	assert_eq!(secondary_pow_ratio(1), 90);
@@ -63,7 +63,7 @@ fn test_secondary_pow_ratio() {
 
 #[test]
 fn hard_forks() {
-	global::set_mining_mode(global::ChainTypes::Floonet);
+	global::set_local_chain_type(global::ChainTypes::Floonet);
 	assert_eq!(global::is_floonet(), true);
 	assert!(valid_header_version(0, HeaderVersion(1)));
 	assert!(valid_header_version(10, HeaderVersion(1)));

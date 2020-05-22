@@ -27,7 +27,8 @@ use crate::pow::{
 	self, new_cuckaroo_ctx, new_cuckarood_ctx, new_cuckaroom_ctx, new_cuckatoo_ctx, EdgeType,
 	PoWContext,
 };
-use util::RwLock;
+use std::cell::Cell;
+use util::OneTime;
 
 /// An enum collecting sets of parameters used throughout the
 /// code wherever mining is needed. This should allow for
@@ -104,7 +105,7 @@ pub const TXHASHSET_ARCHIVE_INTERVAL: u64 = 12 * 60;
 
 /// Types of chain a server can run with, dictates the genesis block and
 /// and mining parameters used.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
 pub enum ChainTypes {
 	/// For CI testing
 	AutomatedTesting,
@@ -134,31 +135,43 @@ impl Default for ChainTypes {
 	}
 }
 
-/// PoW test mining and verifier context
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub enum PoWContextTypes {
-	/// Classic Cuckoo
-	Cuckoo,
-	/// ASIC-friendly Cuckatoo
-	Cuckatoo,
-	/// ASIC-resistant Cuckaroo
-	Cuckaroo,
-}
-
 lazy_static! {
-	/// The mining parameter mode
-	pub static ref CHAIN_TYPE: RwLock<ChainTypes> =
-			RwLock::new(ChainTypes::Mainnet);
-
-	/// PoW context type to instantiate
-	pub static ref POW_CONTEXT_TYPE: RwLock<PoWContextTypes> =
-			RwLock::new(PoWContextTypes::Cuckoo);
+	/// Global chain_type that must be initialized once on node startup.
+	/// This is accessed via get_chain_type() which allows the global value
+	/// to be overridden on a per-thread basis (for testing).
+	pub static ref GLOBAL_CHAIN_TYPE: OneTime<ChainTypes> = OneTime::new();
 }
 
-/// Set the mining mode
-pub fn set_mining_mode(mode: ChainTypes) {
-	let mut param_ref = CHAIN_TYPE.write();
-	*param_ref = mode;
+thread_local! {
+	/// Mainnet|Floonet|UserTesting|AutomatedTesting
+	pub static CHAIN_TYPE: Cell<Option<ChainTypes>> = Cell::new(None);
+}
+
+/// Set the chain type on a per-thread basis via thread_local storage.
+pub fn set_local_chain_type(new_type: ChainTypes) {
+	CHAIN_TYPE.with(|chain_type| chain_type.set(Some(new_type)))
+}
+
+/// Get the chain type via thread_local, fallback to global chain_type.
+pub fn get_chain_type() -> ChainTypes {
+	CHAIN_TYPE.with(|chain_type| match chain_type.get() {
+		None => {
+			if GLOBAL_CHAIN_TYPE.is_init() {
+				let chain_type = GLOBAL_CHAIN_TYPE.borrow();
+				set_local_chain_type(chain_type);
+				chain_type
+			} else {
+				panic!("GLOBAL_CHAIN_TYPE and CHAIN_TYPE unset. Consider set_local_chain_type() in tests.");
+			}
+		}
+		Some(chain_type) => chain_type,
+	})
+}
+
+/// One time initialization of the global chain_type.
+/// Will panic if we attempt to re-initialize this (via OneTime).
+pub fn init_global_chain_type(new_type: ChainTypes) {
+	GLOBAL_CHAIN_TYPE.init(new_type)
 }
 
 /// Return either a cuckoo context or a cuckatoo context
@@ -172,7 +185,7 @@ pub fn create_pow_context<T>(
 where
 	T: EdgeType + 'static,
 {
-	let chain_type = CHAIN_TYPE.read().clone();
+	let chain_type = get_chain_type();
 	match chain_type {
 		// Mainnet has Cuckaroo(d)29 for AR and Cuckatoo31+ for AF
 		ChainTypes::Mainnet if edge_bits > 29 => new_cuckatoo_ctx(edge_bits, proof_size, max_sols),
@@ -201,8 +214,7 @@ where
 
 /// The minimum acceptable edge_bits
 pub fn min_edge_bits() -> u8 {
-	let param_ref = CHAIN_TYPE.read();
-	match *param_ref {
+	match get_chain_type() {
 		ChainTypes::AutomatedTesting => AUTOMATED_TESTING_MIN_EDGE_BITS,
 		ChainTypes::UserTesting => USER_TESTING_MIN_EDGE_BITS,
 		_ => DEFAULT_MIN_EDGE_BITS,
@@ -213,8 +225,7 @@ pub fn min_edge_bits() -> u8 {
 /// while the min_edge_bits can be changed on a soft fork, changing
 /// base_edge_bits is a hard fork.
 pub fn base_edge_bits() -> u8 {
-	let param_ref = CHAIN_TYPE.read();
-	match *param_ref {
+	match get_chain_type() {
 		ChainTypes::AutomatedTesting => AUTOMATED_TESTING_MIN_EDGE_BITS,
 		ChainTypes::UserTesting => USER_TESTING_MIN_EDGE_BITS,
 		_ => BASE_EDGE_BITS,
@@ -223,8 +234,7 @@ pub fn base_edge_bits() -> u8 {
 
 /// The proofsize
 pub fn proofsize() -> usize {
-	let param_ref = CHAIN_TYPE.read();
-	match *param_ref {
+	match get_chain_type() {
 		ChainTypes::AutomatedTesting => AUTOMATED_TESTING_PROOF_SIZE,
 		ChainTypes::UserTesting => USER_TESTING_PROOF_SIZE,
 		_ => PROOFSIZE,
@@ -233,8 +243,7 @@ pub fn proofsize() -> usize {
 
 /// Coinbase maturity for coinbases to be spent
 pub fn coinbase_maturity() -> u64 {
-	let param_ref = CHAIN_TYPE.read();
-	match *param_ref {
+	match get_chain_type() {
 		ChainTypes::AutomatedTesting => AUTOMATED_TESTING_COINBASE_MATURITY,
 		ChainTypes::UserTesting => USER_TESTING_COINBASE_MATURITY,
 		_ => COINBASE_MATURITY,
@@ -243,8 +252,7 @@ pub fn coinbase_maturity() -> u64 {
 
 /// Initial mining difficulty
 pub fn initial_block_difficulty() -> u64 {
-	let param_ref = CHAIN_TYPE.read();
-	match *param_ref {
+	match get_chain_type() {
 		ChainTypes::AutomatedTesting => TESTING_INITIAL_DIFFICULTY,
 		ChainTypes::UserTesting => TESTING_INITIAL_DIFFICULTY,
 		ChainTypes::Floonet => INITIAL_DIFFICULTY,
@@ -253,8 +261,7 @@ pub fn initial_block_difficulty() -> u64 {
 }
 /// Initial mining secondary scale
 pub fn initial_graph_weight() -> u32 {
-	let param_ref = CHAIN_TYPE.read();
-	match *param_ref {
+	match get_chain_type() {
 		ChainTypes::AutomatedTesting => TESTING_INITIAL_GRAPH_WEIGHT,
 		ChainTypes::UserTesting => TESTING_INITIAL_GRAPH_WEIGHT,
 		ChainTypes::Floonet => graph_weight(0, SECOND_POW_EDGE_BITS) as u32,
@@ -264,8 +271,7 @@ pub fn initial_graph_weight() -> u32 {
 
 /// Maximum allowed block weight.
 pub fn max_block_weight() -> usize {
-	let param_ref = CHAIN_TYPE.read();
-	match *param_ref {
+	match get_chain_type() {
 		ChainTypes::AutomatedTesting => TESTING_MAX_BLOCK_WEIGHT,
 		ChainTypes::UserTesting => TESTING_MAX_BLOCK_WEIGHT,
 		ChainTypes::Floonet => MAX_BLOCK_WEIGHT,
@@ -275,8 +281,7 @@ pub fn max_block_weight() -> usize {
 
 /// Horizon at which we can cut-through and do full local pruning
 pub fn cut_through_horizon() -> u32 {
-	let param_ref = CHAIN_TYPE.read();
-	match *param_ref {
+	match get_chain_type() {
 		ChainTypes::AutomatedTesting => AUTOMATED_TESTING_CUT_THROUGH_HORIZON,
 		ChainTypes::UserTesting => USER_TESTING_CUT_THROUGH_HORIZON,
 		_ => CUT_THROUGH_HORIZON,
@@ -285,8 +290,7 @@ pub fn cut_through_horizon() -> u32 {
 
 /// Threshold at which we can request a txhashset (and full blocks from)
 pub fn state_sync_threshold() -> u32 {
-	let param_ref = CHAIN_TYPE.read();
-	match *param_ref {
+	match get_chain_type() {
 		ChainTypes::AutomatedTesting => TESTING_STATE_SYNC_THRESHOLD,
 		ChainTypes::UserTesting => TESTING_STATE_SYNC_THRESHOLD,
 		_ => STATE_SYNC_THRESHOLD,
@@ -295,8 +299,7 @@ pub fn state_sync_threshold() -> u32 {
 
 /// Number of blocks to reuse a txhashset zip for.
 pub fn txhashset_archive_interval() -> u64 {
-	let param_ref = CHAIN_TYPE.read();
-	match *param_ref {
+	match get_chain_type() {
 		ChainTypes::AutomatedTesting => TESTING_TXHASHSET_ARCHIVE_INTERVAL,
 		ChainTypes::UserTesting => TESTING_TXHASHSET_ARCHIVE_INTERVAL,
 		_ => TXHASHSET_ARCHIVE_INTERVAL,
@@ -306,8 +309,11 @@ pub fn txhashset_archive_interval() -> u64 {
 /// Are we in production mode?
 /// Production defined as a live public network, testnet[n] or mainnet.
 pub fn is_production_mode() -> bool {
-	let param_ref = CHAIN_TYPE.read();
-	ChainTypes::Floonet == *param_ref || ChainTypes::Mainnet == *param_ref
+	match get_chain_type() {
+		ChainTypes::Floonet => true,
+		ChainTypes::Mainnet => true,
+		_ => false,
+	}
 }
 
 /// Are we in floonet?
@@ -315,8 +321,10 @@ pub fn is_production_mode() -> bool {
 /// as possible to "mainnet" configuration as possible.
 /// We want to avoid missing any mainnet only code paths.
 pub fn is_floonet() -> bool {
-	let param_ref = CHAIN_TYPE.read();
-	ChainTypes::Floonet == *param_ref
+	match get_chain_type() {
+		ChainTypes::Floonet => true,
+		_ => false,
+	}
 }
 
 /// Converts an iterator of block difficulty data to more a more manageable

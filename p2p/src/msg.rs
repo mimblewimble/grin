@@ -106,7 +106,7 @@ fn max_msg_size(msg_type: Type) -> u64 {
 }
 
 fn magic() -> [u8; 2] {
-	match *global::CHAIN_TYPE.read() {
+	match global::get_chain_type() {
 		global::ChainTypes::Floonet => FLOONET_MAGIC,
 		global::ChainTypes::Mainnet => MAINNET_MAGIC,
 		_ => OTHER_MAGIC,
