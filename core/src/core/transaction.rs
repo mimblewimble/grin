@@ -1804,6 +1804,8 @@ mod test {
 
 	#[test]
 	fn test_nrd_kernel_ser_deser() {
+		global::set_local_nrd_enabled(true);
+
 		let keychain = ExtKeychain::from_random_seed(false).unwrap();
 		let key_id = ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
 		let commit = keychain
@@ -1982,6 +1984,23 @@ mod test {
 				lock_height: 100
 			}
 		);
+
+		// NRD kernel support not enabled by default.
+		let mut vec = vec![];
+		ser::serialize_default(&mut vec, &(3u8, 10u64, 100u16)).expect("serialized failed");
+		let res: Result<KernelFeatures, _> = ser::deserialize_default(&mut &vec[..]);
+		assert_eq!(res.err(), Some(ser::Error::CorruptedData));
+
+		// Additional kernel features unsupported.
+		let mut vec = vec![];
+		ser::serialize_default(&mut vec, &(4u8)).expect("serialized failed");
+		let res: Result<KernelFeatures, _> = ser::deserialize_default(&mut &vec[..]);
+		assert_eq!(res.err(), Some(ser::Error::CorruptedData));
+	}
+
+	#[test]
+	fn kernel_features_serialization_nrd_enabled() {
+		global::set_local_nrd_enabled(true);
 
 		let mut vec = vec![];
 		ser::serialize_default(&mut vec, &(3u8, 10u64, 100u16)).expect("serialized failed");
