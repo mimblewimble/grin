@@ -251,6 +251,11 @@ impl KernelFeatures {
 				KernelFeatures::HeightLocked { fee, lock_height }
 			}
 			KernelFeatures::NO_RECENT_DUPLICATE_U8 => {
+				// NRD kernels are invalid if NRD feature flag is not enabled.
+				if !global::is_nrd_enabled() {
+					return Err(ser::Error::CorruptedData);
+				}
+
 				let fee = reader.read_u64()?;
 				reader.read_empty_bytes(6)?;
 				let relative_height = NRDRelativeHeight::read(reader)?;
@@ -281,6 +286,11 @@ impl KernelFeatures {
 				KernelFeatures::HeightLocked { fee, lock_height }
 			}
 			KernelFeatures::NO_RECENT_DUPLICATE_U8 => {
+				// NRD kernels are invalid if NRD feature flag is not enabled.
+				if !global::is_nrd_enabled() {
+					return Err(ser::Error::CorruptedData);
+				}
+
 				let fee = reader.read_u64()?;
 				let relative_height = NRDRelativeHeight::read(reader)?;
 				KernelFeatures::NoRecentDuplicate {

@@ -86,8 +86,8 @@ fn very_empty_block() {
 #[test]
 fn block_with_nrd_kernel_pre_post_hf3() {
 	// automated testing - HF{1|2|3} at block heights {3, 6, 9}
-	global::set_mining_mode(ChainTypes::AutomatedTesting);
 	// Enable the global NRD feature flag. NRD kernels valid at HF3 at height 9.
+	global::set_local_chain_type(global::ChainTypes::AutomatedTesting);
 	global::set_local_nrd_enabled(true);
 
 	let keychain = ExtKeychain::from_random_seed(false).unwrap();
@@ -172,7 +172,7 @@ fn block_with_nrd_kernel_pre_post_hf3() {
 #[test]
 fn block_with_nrd_kernel_nrd_not_enabled() {
 	// automated testing - HF{1|2|3} at block heights {3, 6, 9}
-	global::set_mining_mode(ChainTypes::AutomatedTesting);
+	global::set_local_chain_type(global::ChainTypes::AutomatedTesting);
 
 	let keychain = ExtKeychain::from_random_seed(false).unwrap();
 	let builder = ProofBuilder::new(&keychain);

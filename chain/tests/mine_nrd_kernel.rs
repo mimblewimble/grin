@@ -59,7 +59,7 @@ where
 
 #[test]
 fn mine_block_with_nrd_kernel_and_nrd_feature_enabled() {
-	global::set_mining_mode(global::ChainTypes::AutomatedTesting);
+	global::set_local_chain_type(global::ChainTypes::AutomatedTesting);
 	global::set_local_nrd_enabled(true);
 
 	util::init_test_logger();

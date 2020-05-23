@@ -28,7 +28,7 @@ use crate::pow::{
 	PoWContext,
 };
 use std::cell::Cell;
-use util::{OneTime, RwLock};
+use util::OneTime;
 
 /// An enum collecting sets of parameters used throughout the
 /// code wherever mining is needed. This should allow for
@@ -175,8 +175,6 @@ pub fn get_chain_type() -> ChainTypes {
 		Some(chain_type) => chain_type,
 	})
 }
-
-
 
 /// One time initialization of the global chain_type.
 /// Will panic if we attempt to re-initialize this (via OneTime).
