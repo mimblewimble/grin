@@ -90,7 +90,7 @@ fn pmmr_merkle_proof() {
 	assert_eq!(pmmr.get_hash(3).unwrap(), pos_2);
 
 	assert_eq!(pmmr.root().unwrap(), pos_2);
-	assert_eq!(pmmr.peaks(), [pos_2]);
+	assert_eq!(pmmr.peaks().collect::<Vec<_>>(), [pos_2]);
 
 	// single peak, path with single sibling
 	let proof = pmmr.merkle_proof(1).unwrap();
@@ -107,7 +107,7 @@ fn pmmr_merkle_proof() {
 	assert_eq!(pmmr.get_hash(4).unwrap(), pos_3);
 
 	assert_eq!(pmmr.root().unwrap(), (pos_2, pos_3).hash_with_index(4));
-	assert_eq!(pmmr.peaks(), [pos_2, pos_3]);
+	assert_eq!(pmmr.peaks().collect::<Vec<_>>(), [pos_2, pos_3]);
 
 	let proof = pmmr.merkle_proof(1).unwrap();
 	assert_eq!(proof.path, vec![pos_1, pos_3]);
