@@ -133,11 +133,17 @@ pub const FLOONET_FIRST_HARD_FORK: u64 = 185_040;
 /// Floonet second hard fork height, set to happen around 2019-12-19
 pub const FLOONET_SECOND_HARD_FORK: u64 = 298_080;
 
+/// Floonet second hard fork height, set to happen around 2020-06-20
+pub const FLOONET_THIRD_HARD_FORK: u64 = 552_960;
+
 /// AutomatedTesting and UserTesting first hard fork height.
 pub const TESTING_FIRST_HARD_FORK: u64 = 3;
 
 /// AutomatedTesting and UserTesting second hard fork height.
 pub const TESTING_SECOND_HARD_FORK: u64 = 6;
+
+/// AutomatedTesting and UserTesting third hard fork height.
+pub const TESTING_THIRD_HARD_FORK: u64 = 9;
 
 /// Compute possible block version at a given height, implements
 /// 6 months interval scheduled hard forks for the first 2 years.
@@ -151,8 +157,10 @@ pub fn header_version(height: u64) -> HeaderVersion {
 				HeaderVersion(1)
 			} else if height < FLOONET_SECOND_HARD_FORK {
 				HeaderVersion(2)
-			} else if height < 3 * HARD_FORK_INTERVAL {
+			} else if height < FLOONET_THIRD_HARD_FORK {
 				HeaderVersion(3)
+			} else if height < 4 * HARD_FORK_INTERVAL {
+				HeaderVersion(4)
 			} else {
 				HeaderVersion(hf_interval)
 			}
@@ -162,8 +170,10 @@ pub fn header_version(height: u64) -> HeaderVersion {
 				HeaderVersion(1)
 			} else if height < TESTING_SECOND_HARD_FORK {
 				HeaderVersion(2)
-			} else if height < 3 * HARD_FORK_INTERVAL {
+			} else if height < TESTING_THIRD_HARD_FORK {
 				HeaderVersion(3)
+			} else if height < 4 * HARD_FORK_INTERVAL {
+				HeaderVersion(4)
 			} else {
 				HeaderVersion(hf_interval)
 			}
@@ -174,7 +184,7 @@ pub fn header_version(height: u64) -> HeaderVersion {
 /// Check whether the block version is valid at a given height, implements
 /// 6 months interval scheduled hard forks for the first 2 years.
 pub fn valid_header_version(height: u64, version: HeaderVersion) -> bool {
-	height < 3 * HARD_FORK_INTERVAL && version == header_version(height)
+	height < 4 * HARD_FORK_INTERVAL && version == header_version(height)
 }
 
 /// Number of blocks used to calculate difficulty adjustments
@@ -194,8 +204,7 @@ pub const DIFFICULTY_DAMP_FACTOR: u64 = 3;
 pub const AR_SCALE_DAMP_FACTOR: u64 = 13;
 
 /// Compute weight of a graph as number of siphash bits defining the graph
-/// Must be made dependent on height to phase out C31 in early 2020
-/// Later phase outs are on hold for now
+/// The height dependence allows a 30-week linear transition from C31+ to C32+ starting after 1 year
 pub fn graph_weight(height: u64, edge_bits: u8) -> u64 {
 	let mut xpr_edge_bits = edge_bits as u64;
 
