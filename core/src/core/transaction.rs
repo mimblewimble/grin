@@ -156,7 +156,7 @@ impl KernelFeatures {
 	/// msg = hash(features)                           for coinbase kernels
 	///       hash(features || fee)                    for plain kernels
 	///       hash(features || fee || lock_height)     for height locked kernels
-	///       hash(features || fee || relative_height) for height locked kernels
+	///       hash(features || fee || relative_height) for NRD kernels
 	pub fn kernel_sig_msg(&self) -> Result<secp::Message, Error> {
 		let x = self.as_u8();
 		let hash = match self {
@@ -180,13 +180,16 @@ impl KernelFeatures {
 		match self {
 			KernelFeatures::Plain { fee } => {
 				writer.write_u64(*fee)?;
+				// Write "empty" bytes for feature specific data (8 bytes).
 				writer.write_empty_bytes(8)?;
 			}
 			KernelFeatures::Coinbase => {
+				// Write "empty" bytes for fee (8 bytes) and feature specific data (8 bytes).
 				writer.write_empty_bytes(16)?;
 			}
 			KernelFeatures::HeightLocked { fee, lock_height } => {
 				writer.write_u64(*fee)?;
+				// 8 bytes of feature specific data containing the lock height as big-endian u64.
 				writer.write_u64(*lock_height)?;
 			}
 			KernelFeatures::NoRecentDuplicate {
@@ -194,6 +197,11 @@ impl KernelFeatures {
 				relative_height,
 			} => {
 				writer.write_u64(*fee)?;
+
+				// 8 bytes of feature specific data. First 6 bytes are empty.
+				// Last 2 bytes contain the relative lock height as big-endian u16.
+				// Note: This is effectively the same as big-endian u64.
+				// We write "empty" bytes explicitly rather than quietly casting the u16 -> u64.
 				writer.write_empty_bytes(6)?;
 				relative_height.write(writer)?;
 			}
@@ -209,13 +217,15 @@ impl KernelFeatures {
 		writer.write_u8(self.as_u8())?;
 		match self {
 			KernelFeatures::Plain { fee } => {
+				// Fee only, no additional data on plain kernels.
 				writer.write_u64(*fee)?;
 			}
 			KernelFeatures::Coinbase => {
-				// no additional data
+				// No additional data.
 			}
 			KernelFeatures::HeightLocked { fee, lock_height } => {
 				writer.write_u64(*fee)?;
+				// V2 height locked kernels use 8 bytes for the lock height.
 				writer.write_u64(*lock_height)?;
 			}
 			KernelFeatures::NoRecentDuplicate {
@@ -223,6 +233,7 @@ impl KernelFeatures {
 				relative_height,
 			} => {
 				writer.write_u64(*fee)?;
+				// V2 NRD kernels use 2 bytes for the relative lock height.
 				relative_height.write(writer)?;
 			}
 		}
@@ -238,15 +249,19 @@ impl KernelFeatures {
 		let features = match feature_byte {
 			KernelFeatures::PLAIN_U8 => {
 				let fee = reader.read_u64()?;
+				// 8 "empty" bytes as additional data is not used.
 				reader.read_empty_bytes(8)?;
 				KernelFeatures::Plain { fee }
 			}
 			KernelFeatures::COINBASE_U8 => {
+				// 8 "empty" bytes as fee is not used.
+				// 8 "empty" bytes as additional data is not used.
 				reader.read_empty_bytes(16)?;
 				KernelFeatures::Coinbase
 			}
 			KernelFeatures::HEIGHT_LOCKED_U8 => {
 				let fee = reader.read_u64()?;
+				// 8 bytes of feature specific data, lock height as big-endian u64.
 				let lock_height = reader.read_u64()?;
 				KernelFeatures::HeightLocked { fee, lock_height }
 			}
@@ -257,6 +272,10 @@ impl KernelFeatures {
 				}
 
 				let fee = reader.read_u64()?;
+
+				// 8 bytes of feature specific data.
+				// The first 6 bytes must be "empty".
+				// The last 2 bytes is the relative height as big-endian u16.
 				reader.read_empty_bytes(6)?;
 				let relative_height = NRDRelativeHeight::read(reader)?;
 				KernelFeatures::NoRecentDuplicate {
@@ -368,7 +387,7 @@ pub enum Error {
 	/// Validation error relating to kernel features.
 	/// It is invalid for a transaction to contain a coinbase kernel, for example.
 	InvalidKernelFeatures,
-	/// NRD kernel relative height is limited to 1 week duration.
+	/// NRD kernel relative height is limited to 1 week duration and must be greater than 0.
 	InvalidNRDRelativeHeight,
 	/// Signature verification error.
 	IncorrectSignature,
@@ -1776,13 +1795,7 @@ mod test {
 			let mut vec = vec![];
 			ser::serialize(&mut vec, version, &kernel).expect("serialized failed");
 			let kernel2: TxKernel = ser::deserialize(&mut &vec[..], version).unwrap();
-			assert_eq!(
-				kernel2.features,
-				KernelFeatures::HeightLocked {
-					fee: 10,
-					lock_height: 100
-				}
-			);
+			assert_eq!(kernel.features, kernel2.features);
 			assert_eq!(kernel2.excess, commit);
 			assert_eq!(kernel2.excess_sig, sig.clone());
 		}
@@ -1791,13 +1804,7 @@ mod test {
 		let mut vec = vec![];
 		ser::serialize_default(&mut vec, &kernel).expect("serialized failed");
 		let kernel2: TxKernel = ser::deserialize_default(&mut &vec[..]).unwrap();
-		assert_eq!(
-			kernel2.features,
-			KernelFeatures::HeightLocked {
-				fee: 10,
-				lock_height: 100
-			}
-		);
+		assert_eq!(kernel.features, kernel2.features);
 		assert_eq!(kernel2.excess, commit);
 		assert_eq!(kernel2.excess_sig, sig.clone());
 	}
@@ -1830,13 +1837,7 @@ mod test {
 			let mut vec = vec![];
 			ser::serialize(&mut vec, version, &kernel).expect("serialized failed");
 			let kernel2: TxKernel = ser::deserialize(&mut &vec[..], version).unwrap();
-			assert_eq!(
-				kernel2.features,
-				KernelFeatures::NoRecentDuplicate {
-					fee: 10,
-					relative_height: NRDRelativeHeight(100)
-				}
-			);
+			assert_eq!(kernel.features, kernel2.features);
 			assert_eq!(kernel2.excess, commit);
 			assert_eq!(kernel2.excess_sig, sig.clone());
 		}
@@ -1845,13 +1846,7 @@ mod test {
 		let mut vec = vec![];
 		ser::serialize_default(&mut vec, &kernel).expect("serialized failed");
 		let kernel2: TxKernel = ser::deserialize_default(&mut &vec[..]).unwrap();
-		assert_eq!(
-			kernel2.features,
-			KernelFeatures::NoRecentDuplicate {
-				fee: 10,
-				relative_height: NRDRelativeHeight(100)
-			}
-		);
+		assert_eq!(kernel.features, kernel2.features);
 		assert_eq!(kernel2.excess, commit);
 		assert_eq!(kernel2.excess_sig, sig.clone());
 	}
@@ -1963,20 +1958,20 @@ mod test {
 	}
 
 	#[test]
-	fn kernel_features_serialization() {
+	fn kernel_features_serialization() -> Result<(), Error> {
 		let mut vec = vec![];
-		ser::serialize_default(&mut vec, &(0u8, 10u64, 0u64)).expect("serialized failed");
-		let features: KernelFeatures = ser::deserialize_default(&mut &vec[..]).unwrap();
+		ser::serialize_default(&mut vec, &(0u8, 10u64, 0u64))?;
+		let features: KernelFeatures = ser::deserialize_default(&mut &vec[..])?;
 		assert_eq!(features, KernelFeatures::Plain { fee: 10 });
 
 		let mut vec = vec![];
-		ser::serialize_default(&mut vec, &(1u8, 0u64, 0u64)).expect("serialized failed");
-		let features: KernelFeatures = ser::deserialize_default(&mut &vec[..]).unwrap();
+		ser::serialize_default(&mut vec, &(1u8, 0u64, 0u64))?;
+		let features: KernelFeatures = ser::deserialize_default(&mut &vec[..])?;
 		assert_eq!(features, KernelFeatures::Coinbase);
 
 		let mut vec = vec![];
-		ser::serialize_default(&mut vec, &(2u8, 10u64, 100u64)).expect("serialized failed");
-		let features: KernelFeatures = ser::deserialize_default(&mut &vec[..]).unwrap();
+		ser::serialize_default(&mut vec, &(2u8, 10u64, 100u64))?;
+		let features: KernelFeatures = ser::deserialize_default(&mut &vec[..])?;
 		assert_eq!(
 			features,
 			KernelFeatures::HeightLocked {
@@ -1996,15 +1991,17 @@ mod test {
 		ser::serialize_default(&mut vec, &(4u8)).expect("serialized failed");
 		let res: Result<KernelFeatures, _> = ser::deserialize_default(&mut &vec[..]);
 		assert_eq!(res.err(), Some(ser::Error::CorruptedData));
+
+		Ok(())
 	}
 
 	#[test]
-	fn kernel_features_serialization_nrd_enabled() {
+	fn kernel_features_serialization_nrd_enabled() -> Result<(), Error> {
 		global::set_local_nrd_enabled(true);
 
 		let mut vec = vec![];
-		ser::serialize_default(&mut vec, &(3u8, 10u64, 100u16)).expect("serialized failed");
-		let features: KernelFeatures = ser::deserialize_default(&mut &vec[..]).unwrap();
+		ser::serialize_default(&mut vec, &(3u8, 10u64, 100u16))?;
+		let features: KernelFeatures = ser::deserialize_default(&mut &vec[..])?;
 		assert_eq!(
 			features,
 			KernelFeatures::NoRecentDuplicate {
@@ -2013,9 +2010,25 @@ mod test {
 			}
 		);
 
-		let mut vec = vec![];
-		ser::serialize_default(&mut vec, &(4u8)).expect("serialized failed");
+		// NRD with relative height 0 is invalid.
+		vec.clear();
+		ser::serialize_default(&mut vec, &(3u8, 10u64, 0u16))?;
 		let res: Result<KernelFeatures, _> = ser::deserialize_default(&mut &vec[..]);
 		assert_eq!(res.err(), Some(ser::Error::CorruptedData));
+
+		// NRD with relative height WEEK_HEIGHT+1 is invalid.
+		vec.clear();
+		let invalid_height = consensus::WEEK_HEIGHT + 1;
+		ser::serialize_default(&mut vec, &(3u8, 10u64, invalid_height as u16))?;
+		let res: Result<KernelFeatures, _> = ser::deserialize_default(&mut &vec[..]);
+		assert_eq!(res.err(), Some(ser::Error::CorruptedData));
+
+		// Kernel variant 4 (and above) is invalid.
+		let mut vec = vec![];
+		ser::serialize_default(&mut vec, &(4u8))?;
+		let res: Result<KernelFeatures, _> = ser::deserialize_default(&mut &vec[..]);
+		assert_eq!(res.err(), Some(ser::Error::CorruptedData));
+
+		Ok(())
 	}
 }
