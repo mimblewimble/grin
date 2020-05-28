@@ -24,7 +24,7 @@ use self::core::core::{
 	aggregate, deaggregate, KernelFeatures, Output, Transaction, TxKernel, Weighting,
 };
 use self::core::libtx::build::{self, initial_tx, input, output, with_excess};
-use self::core::libtx::ProofBuilder;
+use self::core::libtx::{aggsig, ProofBuilder};
 use self::core::{global, ser};
 use crate::common::{new_block, tx1i1o, tx1i2o, tx2i1o};
 use grin_core as core;
@@ -146,6 +146,81 @@ fn build_tx_kernel() {
 
 	assert_eq!(kern.features, KernelFeatures::Plain { fee: 2 });
 	assert_eq!(2, tx.fee());
+}
+
+// Proof of concept demonstrating we can build two transactions that share
+// the *same* kernel public excess. This is a key part of building a transaction as two
+// "halves" for NRD kernels.
+// Note: In a real world scenario multiple participants would build the kernel signature
+// using signature aggregation. No party would see the full private kernel excess and
+// the halves would need to be constructed with carefully crafted individual offsets to
+// adjust the excess as required.
+// For the sake of convenience we are simply constructing the kernel directly and we have access
+// to the full private excess.
+#[test]
+fn build_two_half_kernels() {
+	test_setup();
+	let keychain = ExtKeychain::from_random_seed(false).unwrap();
+	let builder = ProofBuilder::new(&keychain);
+	let key_id1 = ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
+	let key_id2 = ExtKeychain::derive_key_id(1, 2, 0, 0, 0);
+	let key_id3 = ExtKeychain::derive_key_id(1, 3, 0, 0, 0);
+
+	// build kernel with associated private excess
+	let mut kernel = TxKernel::with_features(KernelFeatures::Plain { fee: 2 });
+
+	// Construct the message to be signed.
+	let msg = kernel.msg_to_sign().unwrap();
+
+	// Generate a kernel with public excess and associated signature.
+	let excess = BlindingFactor::rand(&keychain.secp());
+	let skey = excess.secret_key(&keychain.secp()).unwrap();
+	kernel.excess = keychain.secp().commit(0, skey).unwrap();
+	let pubkey = &kernel.excess.to_pubkey(&keychain.secp()).unwrap();
+	kernel.excess_sig =
+		aggsig::sign_with_blinding(&keychain.secp(), &msg, &excess, Some(&pubkey)).unwrap();
+	kernel.verify().unwrap();
+
+	let tx1 = build::transaction_with_kernel(
+		vec![input(10, key_id1), output(8, key_id2.clone())],
+		kernel.clone(),
+		excess.clone(),
+		&keychain,
+		&builder,
+	)
+	.unwrap();
+
+	let tx2 = build::transaction_with_kernel(
+		vec![input(8, key_id2), output(6, key_id3)],
+		kernel.clone(),
+		excess.clone(),
+		&keychain,
+		&builder,
+	)
+	.unwrap();
+
+	assert_eq!(
+		tx1.validate(Weighting::AsTransaction, verifier_cache()),
+		Ok(()),
+	);
+
+	assert_eq!(
+		tx2.validate(Weighting::AsTransaction, verifier_cache()),
+		Ok(()),
+	);
+
+	// The transactions share an identical kernel.
+	assert_eq!(tx1.kernels()[0], tx2.kernels()[0]);
+
+	// The public kernel excess is shared between both "halves".
+	assert_eq!(tx1.kernels()[0].excess(), tx2.kernels()[0].excess());
+
+	// Each transaction is built from different inputs and outputs.
+	// The offset differs to compensate for the shared excess commitments.
+	assert!(tx1.offset != tx2.offset);
+
+	// For completeness, these are different transactions.
+	assert!(tx1.hash() != tx2.hash());
 }
 
 // Combine two transactions into one big transaction (with multiple kernels)
