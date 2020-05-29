@@ -29,7 +29,7 @@ use crate::tui::constants::{
 	VIEW_PEER_SYNC, VIEW_VERSION,
 };
 
-pub fn create() -> Box<dyn View> {
+pub fn create() -> impl View {
 	let mut main_menu = SelectView::new().h_align(HAlign::Left).with_name(MAIN_MENU);
 	main_menu
 		.get_mut()
@@ -83,5 +83,5 @@ pub fn create() -> Box<dyn View> {
 		.child(TextView::new("Enter     : Select"))
 		.child(TextView::new("Esc       : Back  "))
 		.child(TextView::new("Q         : Quit  "));
-	Box::new(main_menu)
+	main_menu
 }
