@@ -133,11 +133,14 @@ pub const FLOONET_FIRST_HARD_FORK: u64 = 185_040;
 /// Floonet second hard fork height, set to happen around 2019-12-19
 pub const FLOONET_SECOND_HARD_FORK: u64 = 298_080;
 
-/// AutomatedTesting and UserTesting first hard fork height.
+/// AutomatedTesting and UserTesting HF1 height.
 pub const TESTING_FIRST_HARD_FORK: u64 = 3;
 
-/// AutomatedTesting and UserTesting second hard fork height.
+/// AutomatedTesting and UserTesting HF2 height.
 pub const TESTING_SECOND_HARD_FORK: u64 = 6;
+
+/// AutomatedTesting and UserTesting HF3 height.
+pub const TESTING_THIRD_HARD_FORK: u64 = 9;
 
 /// Compute possible block version at a given height, implements
 /// 6 months interval scheduled hard forks for the first 2 years.
@@ -162,10 +165,12 @@ pub fn header_version(height: u64) -> HeaderVersion {
 				HeaderVersion(1)
 			} else if height < TESTING_SECOND_HARD_FORK {
 				HeaderVersion(2)
-			} else if height < 3 * HARD_FORK_INTERVAL {
+			} else if height < TESTING_THIRD_HARD_FORK {
 				HeaderVersion(3)
+			} else if height < 4 * HARD_FORK_INTERVAL {
+				HeaderVersion(4)
 			} else {
-				HeaderVersion(hf_interval)
+				HeaderVersion(5)
 			}
 		}
 	}

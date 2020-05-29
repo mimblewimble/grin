@@ -186,6 +186,11 @@ pub trait Writer {
 
 	/// Writes a fixed number of bytes. The reader is expected to know the actual length on read.
 	fn write_fixed_bytes<T: AsRef<[u8]>>(&mut self, bytes: T) -> Result<(), Error>;
+
+	/// Writes a fixed length of "empty" bytes.
+	fn write_empty_bytes(&mut self, length: usize) -> Result<(), Error> {
+		self.write_fixed_bytes(vec![0u8; length])
+	}
 }
 
 /// Implementations defined how different numbers and binary structures are
@@ -213,6 +218,17 @@ pub trait Reader {
 	/// Access to underlying protocol version to support
 	/// version specific deserialization logic.
 	fn protocol_version(&self) -> ProtocolVersion;
+
+	/// Read a fixed number of "empty" bytes from the underlying reader.
+	/// It is an error if any non-empty bytes encountered.
+	fn read_empty_bytes(&mut self, length: usize) -> Result<(), Error> {
+		for _ in 0..length {
+			if self.read_u8()? != 0u8 {
+				return Err(Error::CorruptedData);
+			}
+		}
+		Ok(())
+	}
 }
 
 /// Trait that every type that can be serialized as binary must implement.

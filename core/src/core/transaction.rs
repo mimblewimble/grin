@@ -17,7 +17,7 @@
 use crate::core::hash::{DefaultHashable, Hashed};
 use crate::core::verifier_cache::VerifierCache;
 use crate::core::{committed, Committed};
-use crate::libtx::secp_ser;
+use crate::libtx::{aggsig, secp_ser};
 use crate::ser::{
 	self, read_multi, PMMRable, ProtocolVersion, Readable, Reader, VerifySortedAndUnique,
 	Writeable, Writer,
@@ -27,7 +27,7 @@ use enum_primitive::FromPrimitive;
 use keychain::{self, BlindingFactor};
 use std::cmp::Ordering;
 use std::cmp::{max, min};
-use std::convert::TryInto;
+use std::convert::{TryFrom, TryInto};
 use std::sync::Arc;
 use std::{error, fmt};
 use util::secp;
@@ -35,6 +35,70 @@ use util::secp::pedersen::{Commitment, RangeProof};
 use util::static_secp_instance;
 use util::RwLock;
 use util::ToHex;
+
+/// Relative height field on NRD kernel variant.
+/// u16 representing a height between 1 and MAX (consensus::WEEK_HEIGHT).
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub struct NRDRelativeHeight(u16);
+
+impl DefaultHashable for NRDRelativeHeight {}
+
+impl Writeable for NRDRelativeHeight {
+	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
+		writer.write_u16(self.0)
+	}
+}
+
+impl Readable for NRDRelativeHeight {
+	fn read<R: Reader>(reader: &mut R) -> Result<Self, ser::Error> {
+		let x = reader.read_u16()?;
+		NRDRelativeHeight::try_from(x).map_err(|_| ser::Error::CorruptedData)
+	}
+}
+
+/// Conversion from a u16 to a valid NRDRelativeHeight.
+/// Valid height is between 1 and WEEK_HEIGHT inclusive.
+impl TryFrom<u16> for NRDRelativeHeight {
+	type Error = Error;
+
+	fn try_from(height: u16) -> Result<Self, Self::Error> {
+		if height == 0 {
+			Err(Error::InvalidNRDRelativeHeight)
+		} else if height
+			> NRDRelativeHeight::MAX
+				.try_into()
+				.expect("WEEK_HEIGHT const should fit in u16")
+		{
+			Err(Error::InvalidNRDRelativeHeight)
+		} else {
+			Ok(Self(height))
+		}
+	}
+}
+
+impl TryFrom<u64> for NRDRelativeHeight {
+	type Error = Error;
+
+	fn try_from(height: u64) -> Result<Self, Self::Error> {
+		Self::try_from(u16::try_from(height).map_err(|_| Error::InvalidNRDRelativeHeight)?)
+	}
+}
+
+impl From<NRDRelativeHeight> for u64 {
+	fn from(height: NRDRelativeHeight) -> Self {
+		height.0 as u64
+	}
+}
+
+impl NRDRelativeHeight {
+	const MAX: u64 = consensus::WEEK_HEIGHT;
+
+	/// Create a new NRDRelativeHeight from the provided height.
+	/// Checks height is valid (between 1 and WEEK_HEIGHT inclusive).
+	pub fn new(height: u64) -> Result<Self, Error> {
+		NRDRelativeHeight::try_from(height)
+	}
+}
 
 /// Various tx kernel variants.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
@@ -53,12 +117,20 @@ pub enum KernelFeatures {
 		/// Height locked kernels have lock heights.
 		lock_height: u64,
 	},
+	/// "No Recent Duplicate" (NRD) kernels enforcing relative lock height between instances.
+	NoRecentDuplicate {
+		/// These have fees.
+		fee: u64,
+		/// Relative lock height.
+		relative_height: NRDRelativeHeight,
+	},
 }
 
 impl KernelFeatures {
 	const PLAIN_U8: u8 = 0;
 	const COINBASE_U8: u8 = 1;
 	const HEIGHT_LOCKED_U8: u8 = 2;
+	const NO_RECENT_DUPLICATE_U8: u8 = 3;
 
 	/// Underlying (u8) value representing this kernel variant.
 	/// This is the first byte when we serialize/deserialize the kernel features.
@@ -67,6 +139,7 @@ impl KernelFeatures {
 			KernelFeatures::Plain { .. } => KernelFeatures::PLAIN_U8,
 			KernelFeatures::Coinbase => KernelFeatures::COINBASE_U8,
 			KernelFeatures::HeightLocked { .. } => KernelFeatures::HEIGHT_LOCKED_U8,
+			KernelFeatures::NoRecentDuplicate { .. } => KernelFeatures::NO_RECENT_DUPLICATE_U8,
 		}
 	}
 
@@ -76,18 +149,24 @@ impl KernelFeatures {
 			KernelFeatures::Plain { .. } => String::from("Plain"),
 			KernelFeatures::Coinbase => String::from("Coinbase"),
 			KernelFeatures::HeightLocked { .. } => String::from("HeightLocked"),
+			KernelFeatures::NoRecentDuplicate { .. } => String::from("NoRecentDuplicate"),
 		}
 	}
 
-	/// msg = hash(features)                       for coinbase kernels
-	///       hash(features || fee)                for plain kernels
-	///       hash(features || fee || lock_height) for height locked kernels
+	/// msg = hash(features)                           for coinbase kernels
+	///       hash(features || fee)                    for plain kernels
+	///       hash(features || fee || lock_height)     for height locked kernels
+	///       hash(features || fee || relative_height) for NRD kernels
 	pub fn kernel_sig_msg(&self) -> Result<secp::Message, Error> {
 		let x = self.as_u8();
 		let hash = match self {
 			KernelFeatures::Plain { fee } => (x, fee).hash(),
-			KernelFeatures::Coinbase => (x).hash(),
+			KernelFeatures::Coinbase => x.hash(),
 			KernelFeatures::HeightLocked { fee, lock_height } => (x, fee, lock_height).hash(),
+			KernelFeatures::NoRecentDuplicate {
+				fee,
+				relative_height,
+			} => (x, fee, relative_height).hash(),
 		};
 
 		let msg = secp::Message::from_slice(&hash.as_bytes())?;
@@ -97,14 +176,36 @@ impl KernelFeatures {
 	/// Write tx kernel features out in v1 protocol format.
 	/// Always include the fee and lock_height, writing 0 value if unused.
 	fn write_v1<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
-		let (fee, lock_height) = match self {
-			KernelFeatures::Plain { fee } => (*fee, 0),
-			KernelFeatures::Coinbase => (0, 0),
-			KernelFeatures::HeightLocked { fee, lock_height } => (*fee, *lock_height),
-		};
 		writer.write_u8(self.as_u8())?;
-		writer.write_u64(fee)?;
-		writer.write_u64(lock_height)?;
+		match self {
+			KernelFeatures::Plain { fee } => {
+				writer.write_u64(*fee)?;
+				// Write "empty" bytes for feature specific data (8 bytes).
+				writer.write_empty_bytes(8)?;
+			}
+			KernelFeatures::Coinbase => {
+				// Write "empty" bytes for fee (8 bytes) and feature specific data (8 bytes).
+				writer.write_empty_bytes(16)?;
+			}
+			KernelFeatures::HeightLocked { fee, lock_height } => {
+				writer.write_u64(*fee)?;
+				// 8 bytes of feature specific data containing the lock height as big-endian u64.
+				writer.write_u64(*lock_height)?;
+			}
+			KernelFeatures::NoRecentDuplicate {
+				fee,
+				relative_height,
+			} => {
+				writer.write_u64(*fee)?;
+
+				// 8 bytes of feature specific data. First 6 bytes are empty.
+				// Last 2 bytes contain the relative lock height as big-endian u16.
+				// Note: This is effectively the same as big-endian u64.
+				// We write "empty" bytes explicitly rather than quietly casting the u16 -> u64.
+				writer.write_empty_bytes(6)?;
+				relative_height.write(writer)?;
+			}
+		};
 		Ok(())
 	}
 
@@ -113,48 +214,75 @@ impl KernelFeatures {
 	/// Only write fee out for feature variants that support it.
 	/// Only write lock_height out for feature variants that support it.
 	fn write_v2<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
+		writer.write_u8(self.as_u8())?;
 		match self {
 			KernelFeatures::Plain { fee } => {
-				writer.write_u8(self.as_u8())?;
+				// Fee only, no additional data on plain kernels.
 				writer.write_u64(*fee)?;
 			}
 			KernelFeatures::Coinbase => {
-				writer.write_u8(self.as_u8())?;
+				// No additional data.
 			}
 			KernelFeatures::HeightLocked { fee, lock_height } => {
-				writer.write_u8(self.as_u8())?;
 				writer.write_u64(*fee)?;
+				// V2 height locked kernels use 8 bytes for the lock height.
 				writer.write_u64(*lock_height)?;
+			}
+			KernelFeatures::NoRecentDuplicate {
+				fee,
+				relative_height,
+			} => {
+				writer.write_u64(*fee)?;
+				// V2 NRD kernels use 2 bytes for the relative lock height.
+				relative_height.write(writer)?;
 			}
 		}
 		Ok(())
 	}
 
-	// Always read feature byte, 8 bytes for fee and 8 bytes for lock height.
-	// Fee and lock height may be unused for some kernel variants but we need
+	// Always read feature byte, 8 bytes for fee and 8 bytes for additional data
+	// representing lock height or relative height.
+	// Fee and additional data may be unused for some kernel variants but we need
 	// to read these bytes and verify they are 0 if unused.
 	fn read_v1<R: Reader>(reader: &mut R) -> Result<KernelFeatures, ser::Error> {
 		let feature_byte = reader.read_u8()?;
-		let fee = reader.read_u64()?;
-		let lock_height = reader.read_u64()?;
-
 		let features = match feature_byte {
 			KernelFeatures::PLAIN_U8 => {
-				if lock_height != 0 {
-					return Err(ser::Error::CorruptedData);
-				}
+				let fee = reader.read_u64()?;
+				// 8 "empty" bytes as additional data is not used.
+				reader.read_empty_bytes(8)?;
 				KernelFeatures::Plain { fee }
 			}
 			KernelFeatures::COINBASE_U8 => {
-				if fee != 0 {
-					return Err(ser::Error::CorruptedData);
-				}
-				if lock_height != 0 {
-					return Err(ser::Error::CorruptedData);
-				}
+				// 8 "empty" bytes as fee is not used.
+				// 8 "empty" bytes as additional data is not used.
+				reader.read_empty_bytes(16)?;
 				KernelFeatures::Coinbase
 			}
-			KernelFeatures::HEIGHT_LOCKED_U8 => KernelFeatures::HeightLocked { fee, lock_height },
+			KernelFeatures::HEIGHT_LOCKED_U8 => {
+				let fee = reader.read_u64()?;
+				// 8 bytes of feature specific data, lock height as big-endian u64.
+				let lock_height = reader.read_u64()?;
+				KernelFeatures::HeightLocked { fee, lock_height }
+			}
+			KernelFeatures::NO_RECENT_DUPLICATE_U8 => {
+				// NRD kernels are invalid if NRD feature flag is not enabled.
+				if !global::is_nrd_enabled() {
+					return Err(ser::Error::CorruptedData);
+				}
+
+				let fee = reader.read_u64()?;
+
+				// 8 bytes of feature specific data.
+				// The first 6 bytes must be "empty".
+				// The last 2 bytes is the relative height as big-endian u16.
+				reader.read_empty_bytes(6)?;
+				let relative_height = NRDRelativeHeight::read(reader)?;
+				KernelFeatures::NoRecentDuplicate {
+					fee,
+					relative_height,
+				}
+			}
 			_ => {
 				return Err(ser::Error::CorruptedData);
 			}
@@ -175,6 +303,19 @@ impl KernelFeatures {
 				let fee = reader.read_u64()?;
 				let lock_height = reader.read_u64()?;
 				KernelFeatures::HeightLocked { fee, lock_height }
+			}
+			KernelFeatures::NO_RECENT_DUPLICATE_U8 => {
+				// NRD kernels are invalid if NRD feature flag is not enabled.
+				if !global::is_nrd_enabled() {
+					return Err(ser::Error::CorruptedData);
+				}
+
+				let fee = reader.read_u64()?;
+				let relative_height = NRDRelativeHeight::read(reader)?;
+				KernelFeatures::NoRecentDuplicate {
+					fee,
+					relative_height,
+				}
 			}
 			_ => {
 				return Err(ser::Error::CorruptedData);
@@ -246,6 +387,8 @@ pub enum Error {
 	/// Validation error relating to kernel features.
 	/// It is invalid for a transaction to contain a coinbase kernel, for example.
 	InvalidKernelFeatures,
+	/// NRD kernel relative height is limited to 1 week duration and must be greater than 0.
+	InvalidNRDRelativeHeight,
 	/// Signature verification error.
 	IncorrectSignature,
 	/// Underlying serialization error.
@@ -383,6 +526,14 @@ impl KernelFeatures {
 			_ => false,
 		}
 	}
+
+	/// Is this an NRD kernel?
+	pub fn is_nrd(&self) -> bool {
+		match self {
+			KernelFeatures::NoRecentDuplicate { .. } => true,
+			_ => false,
+		}
+	}
 }
 
 impl TxKernel {
@@ -399,6 +550,11 @@ impl TxKernel {
 	/// Is this a height locked kernel?
 	pub fn is_height_locked(&self) -> bool {
 		self.features.is_height_locked()
+	}
+
+	/// Is this an NRD kernel?
+	pub fn is_nrd(&self) -> bool {
+		self.features.is_nrd()
 	}
 
 	/// Return the excess commitment for this tx_kernel.
@@ -422,14 +578,13 @@ impl TxKernel {
 		let sig = &self.excess_sig;
 		// Verify aggsig directly in libsecp
 		let pubkey = &self.excess.to_pubkey(&secp)?;
-		if !secp::aggsig::verify_single(
+		if !aggsig::verify_single(
 			&secp,
 			&sig,
 			&self.msg_to_sign()?,
 			None,
 			&pubkey,
 			Some(&pubkey),
-			None,
 			false,
 		) {
 			return Err(Error::IncorrectSignature);
@@ -440,9 +595,9 @@ impl TxKernel {
 	/// Batch signature verification.
 	pub fn batch_sig_verify(tx_kernels: &[TxKernel]) -> Result<(), Error> {
 		let len = tx_kernels.len();
-		let mut sigs: Vec<secp::Signature> = Vec::with_capacity(len);
-		let mut pubkeys: Vec<secp::key::PublicKey> = Vec::with_capacity(len);
-		let mut msgs: Vec<secp::Message> = Vec::with_capacity(len);
+		let mut sigs = Vec::with_capacity(len);
+		let mut pubkeys = Vec::with_capacity(len);
+		let mut msgs = Vec::with_capacity(len);
 
 		let secp = static_secp_instance();
 		let secp = secp.lock();
@@ -453,7 +608,7 @@ impl TxKernel {
 			msgs.push(tx_kernel.msg_to_sign()?);
 		}
 
-		if !secp::aggsig::verify_batch(&secp, &sigs, &msgs, &pubkeys) {
+		if !aggsig::verify_batch(&secp, &sigs, &msgs, &pubkeys) {
 			return Err(Error::IncorrectSignature);
 		}
 
@@ -668,9 +823,9 @@ impl TransactionBody {
 			.iter()
 			.filter_map(|k| match k.features {
 				KernelFeatures::Coinbase => None,
-				KernelFeatures::Plain { fee } | KernelFeatures::HeightLocked { fee, .. } => {
-					Some(fee)
-				}
+				KernelFeatures::Plain { fee } => Some(fee),
+				KernelFeatures::HeightLocked { fee, .. } => Some(fee),
+				KernelFeatures::NoRecentDuplicate { fee, .. } => Some(fee),
 			})
 			.fold(0, |acc, fee| acc.saturating_add(fee))
 	}
@@ -1577,10 +1732,9 @@ mod test {
 	use crate::core::hash::Hash;
 	use crate::core::id::{ShortId, ShortIdentifiable};
 	use keychain::{ExtKeychain, Keychain, SwitchCommitmentType};
-	use util::secp;
 
 	#[test]
-	fn test_kernel_ser_deser() {
+	fn test_plain_kernel_ser_deser() {
 		let keychain = ExtKeychain::from_random_seed(false).unwrap();
 		let key_id = ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
 		let commit = keychain
@@ -1596,12 +1750,35 @@ mod test {
 			excess_sig: sig.clone(),
 		};
 
+		// Test explicit protocol version.
+		for version in vec![ProtocolVersion(1), ProtocolVersion(2)] {
+			let mut vec = vec![];
+			ser::serialize(&mut vec, version, &kernel).expect("serialized failed");
+			let kernel2: TxKernel = ser::deserialize(&mut &vec[..], version).unwrap();
+			assert_eq!(kernel2.features, KernelFeatures::Plain { fee: 10 });
+			assert_eq!(kernel2.excess, commit);
+			assert_eq!(kernel2.excess_sig, sig.clone());
+		}
+
+		// Test with "default" protocol version.
 		let mut vec = vec![];
 		ser::serialize_default(&mut vec, &kernel).expect("serialized failed");
 		let kernel2: TxKernel = ser::deserialize_default(&mut &vec[..]).unwrap();
 		assert_eq!(kernel2.features, KernelFeatures::Plain { fee: 10 });
 		assert_eq!(kernel2.excess, commit);
 		assert_eq!(kernel2.excess_sig, sig.clone());
+	}
+
+	#[test]
+	fn test_height_locked_kernel_ser_deser() {
+		let keychain = ExtKeychain::from_random_seed(false).unwrap();
+		let key_id = ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
+		let commit = keychain
+			.commit(5, &key_id, SwitchCommitmentType::Regular)
+			.unwrap();
+
+		// just some bytes for testing ser/deser
+		let sig = secp::Signature::from_raw_data(&[0; 64]).unwrap();
 
 		// now check a kernel with lock_height serialize/deserialize correctly
 		let kernel = TxKernel {
@@ -1613,18 +1790,121 @@ mod test {
 			excess_sig: sig.clone(),
 		};
 
+		// Test explicit protocol version.
+		for version in vec![ProtocolVersion(1), ProtocolVersion(2)] {
+			let mut vec = vec![];
+			ser::serialize(&mut vec, version, &kernel).expect("serialized failed");
+			let kernel2: TxKernel = ser::deserialize(&mut &vec[..], version).unwrap();
+			assert_eq!(kernel.features, kernel2.features);
+			assert_eq!(kernel2.excess, commit);
+			assert_eq!(kernel2.excess_sig, sig.clone());
+		}
+
+		// Test with "default" protocol version.
 		let mut vec = vec![];
 		ser::serialize_default(&mut vec, &kernel).expect("serialized failed");
 		let kernel2: TxKernel = ser::deserialize_default(&mut &vec[..]).unwrap();
-		assert_eq!(
-			kernel2.features,
-			KernelFeatures::HeightLocked {
-				fee: 10,
-				lock_height: 100
-			}
-		);
+		assert_eq!(kernel.features, kernel2.features);
 		assert_eq!(kernel2.excess, commit);
 		assert_eq!(kernel2.excess_sig, sig.clone());
+	}
+
+	#[test]
+	fn test_nrd_kernel_ser_deser() {
+		global::set_local_nrd_enabled(true);
+
+		let keychain = ExtKeychain::from_random_seed(false).unwrap();
+		let key_id = ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
+		let commit = keychain
+			.commit(5, &key_id, SwitchCommitmentType::Regular)
+			.unwrap();
+
+		// just some bytes for testing ser/deser
+		let sig = secp::Signature::from_raw_data(&[0; 64]).unwrap();
+
+		// now check an NRD kernel will serialize/deserialize correctly
+		let kernel = TxKernel {
+			features: KernelFeatures::NoRecentDuplicate {
+				fee: 10,
+				relative_height: NRDRelativeHeight(100),
+			},
+			excess: commit,
+			excess_sig: sig.clone(),
+		};
+
+		// Test explicit protocol version.
+		for version in vec![ProtocolVersion(1), ProtocolVersion(2)] {
+			let mut vec = vec![];
+			ser::serialize(&mut vec, version, &kernel).expect("serialized failed");
+			let kernel2: TxKernel = ser::deserialize(&mut &vec[..], version).unwrap();
+			assert_eq!(kernel.features, kernel2.features);
+			assert_eq!(kernel2.excess, commit);
+			assert_eq!(kernel2.excess_sig, sig.clone());
+		}
+
+		// Test with "default" protocol version.
+		let mut vec = vec![];
+		ser::serialize_default(&mut vec, &kernel).expect("serialized failed");
+		let kernel2: TxKernel = ser::deserialize_default(&mut &vec[..]).unwrap();
+		assert_eq!(kernel.features, kernel2.features);
+		assert_eq!(kernel2.excess, commit);
+		assert_eq!(kernel2.excess_sig, sig.clone());
+	}
+
+	#[test]
+	fn nrd_kernel_verify_sig() {
+		let keychain = ExtKeychain::from_random_seed(false).unwrap();
+		let key_id = ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
+
+		let mut kernel = TxKernel::with_features(KernelFeatures::NoRecentDuplicate {
+			fee: 10,
+			relative_height: NRDRelativeHeight(100),
+		});
+
+		// Construct the message to be signed.
+		let msg = kernel.msg_to_sign().unwrap();
+
+		let excess = keychain
+			.commit(0, &key_id, SwitchCommitmentType::Regular)
+			.unwrap();
+		let skey = keychain
+			.derive_key(0, &key_id, SwitchCommitmentType::Regular)
+			.unwrap();
+		let pubkey = excess.to_pubkey(&keychain.secp()).unwrap();
+
+		let excess_sig =
+			aggsig::sign_single(&keychain.secp(), &msg, &skey, None, Some(&pubkey)).unwrap();
+
+		kernel.excess = excess;
+		kernel.excess_sig = excess_sig;
+
+		// Check the signature verifies.
+		assert_eq!(kernel.verify(), Ok(()));
+
+		// Modify the fee and check signature no longer verifies.
+		kernel.features = KernelFeatures::NoRecentDuplicate {
+			fee: 9,
+			relative_height: NRDRelativeHeight(100),
+		};
+		assert_eq!(kernel.verify(), Err(Error::IncorrectSignature));
+
+		// Modify the relative_height and check signature no longer verifies.
+		kernel.features = KernelFeatures::NoRecentDuplicate {
+			fee: 10,
+			relative_height: NRDRelativeHeight(101),
+		};
+		assert_eq!(kernel.verify(), Err(Error::IncorrectSignature));
+
+		// Swap the features out for something different and check signature no longer verifies.
+		kernel.features = KernelFeatures::Plain { fee: 10 };
+		assert_eq!(kernel.verify(), Err(Error::IncorrectSignature));
+
+		// Check signature verifies if we use the original features.
+		kernel.features = KernelFeatures::NoRecentDuplicate {
+			fee: 10,
+			relative_height: NRDRelativeHeight(100),
+		};
+		assert_eq!(kernel.verify(), Ok(()));
 	}
 
 	#[test]
@@ -1678,20 +1958,20 @@ mod test {
 	}
 
 	#[test]
-	fn kernel_features_serialization() {
+	fn kernel_features_serialization() -> Result<(), Error> {
 		let mut vec = vec![];
-		ser::serialize_default(&mut vec, &(0u8, 10u64, 0u64)).expect("serialized failed");
-		let features: KernelFeatures = ser::deserialize_default(&mut &vec[..]).unwrap();
+		ser::serialize_default(&mut vec, &(0u8, 10u64, 0u64))?;
+		let features: KernelFeatures = ser::deserialize_default(&mut &vec[..])?;
 		assert_eq!(features, KernelFeatures::Plain { fee: 10 });
 
 		let mut vec = vec![];
-		ser::serialize_default(&mut vec, &(1u8, 0u64, 0u64)).expect("serialized failed");
-		let features: KernelFeatures = ser::deserialize_default(&mut &vec[..]).unwrap();
+		ser::serialize_default(&mut vec, &(1u8, 0u64, 0u64))?;
+		let features: KernelFeatures = ser::deserialize_default(&mut &vec[..])?;
 		assert_eq!(features, KernelFeatures::Coinbase);
 
 		let mut vec = vec![];
-		ser::serialize_default(&mut vec, &(2u8, 10u64, 100u64)).expect("serialized failed");
-		let features: KernelFeatures = ser::deserialize_default(&mut &vec[..]).unwrap();
+		ser::serialize_default(&mut vec, &(2u8, 10u64, 100u64))?;
+		let features: KernelFeatures = ser::deserialize_default(&mut &vec[..])?;
 		assert_eq!(
 			features,
 			KernelFeatures::HeightLocked {
@@ -1700,9 +1980,55 @@ mod test {
 			}
 		);
 
+		// NRD kernel support not enabled by default.
 		let mut vec = vec![];
-		ser::serialize_default(&mut vec, &(3u8, 0u64, 0u64)).expect("serialized failed");
+		ser::serialize_default(&mut vec, &(3u8, 10u64, 100u16)).expect("serialized failed");
 		let res: Result<KernelFeatures, _> = ser::deserialize_default(&mut &vec[..]);
 		assert_eq!(res.err(), Some(ser::Error::CorruptedData));
+
+		// Additional kernel features unsupported.
+		let mut vec = vec![];
+		ser::serialize_default(&mut vec, &(4u8)).expect("serialized failed");
+		let res: Result<KernelFeatures, _> = ser::deserialize_default(&mut &vec[..]);
+		assert_eq!(res.err(), Some(ser::Error::CorruptedData));
+
+		Ok(())
+	}
+
+	#[test]
+	fn kernel_features_serialization_nrd_enabled() -> Result<(), Error> {
+		global::set_local_nrd_enabled(true);
+
+		let mut vec = vec![];
+		ser::serialize_default(&mut vec, &(3u8, 10u64, 100u16))?;
+		let features: KernelFeatures = ser::deserialize_default(&mut &vec[..])?;
+		assert_eq!(
+			features,
+			KernelFeatures::NoRecentDuplicate {
+				fee: 10,
+				relative_height: NRDRelativeHeight(100)
+			}
+		);
+
+		// NRD with relative height 0 is invalid.
+		vec.clear();
+		ser::serialize_default(&mut vec, &(3u8, 10u64, 0u16))?;
+		let res: Result<KernelFeatures, _> = ser::deserialize_default(&mut &vec[..]);
+		assert_eq!(res.err(), Some(ser::Error::CorruptedData));
+
+		// NRD with relative height WEEK_HEIGHT+1 is invalid.
+		vec.clear();
+		let invalid_height = consensus::WEEK_HEIGHT + 1;
+		ser::serialize_default(&mut vec, &(3u8, 10u64, invalid_height as u16))?;
+		let res: Result<KernelFeatures, _> = ser::deserialize_default(&mut &vec[..]);
+		assert_eq!(res.err(), Some(ser::Error::CorruptedData));
+
+		// Kernel variant 4 (and above) is invalid.
+		let mut vec = vec![];
+		ser::serialize_default(&mut vec, &(4u8))?;
+		let res: Result<KernelFeatures, _> = ser::deserialize_default(&mut &vec[..]);
+		assert_eq!(res.err(), Some(ser::Error::CorruptedData));
+
+		Ok(())
 	}
 }
