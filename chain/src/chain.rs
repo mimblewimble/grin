@@ -516,8 +516,8 @@ impl Chain {
 
 	/// Validate the tx against the current UTXO set and recent kernels (NRD relative lock heights).
 	pub fn validate_tx(&self, tx: &Transaction) -> Result<(), Error> {
-		self.validate_tx_kernels(tx)?;
 		self.validate_tx_against_utxo(tx)?;
+		self.validate_tx_kernels(tx)?;
 		Ok(())
 	}
 
