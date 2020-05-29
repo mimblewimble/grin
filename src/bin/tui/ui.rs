@@ -39,6 +39,7 @@ use crate::servers::Server;
 use crate::tui::constants::{ROOT_STACK, VIEW_BASIC_STATUS, VIEW_MINING, VIEW_PEER_SYNC};
 use crate::tui::types::{TUIStatusListener, UIMessage};
 use crate::tui::{logs, menu, mining, peers, status, version};
+use grin_core::global;
 use grin_util::logger::LogEntry;
 
 pub struct UI {
@@ -98,9 +99,9 @@ impl UI {
 		let mut title_string = StyledString::new();
 		title_string.append(StyledString::styled(
 			format!(
-				"Grin Version {} (proto: {})",
+				"Grin Version {} [{:?}]",
 				built_info::PKG_VERSION,
-				Server::protocol_version()
+				global::get_chain_type()
 			),
 			Color::Dark(BaseColor::Green),
 		));
