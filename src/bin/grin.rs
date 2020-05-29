@@ -64,6 +64,10 @@ fn log_build_info() {
 	debug!("{}", detailed_info);
 }
 
+fn log_feature_flags() {
+	info!("Feature: NRD kernel enabled: {}", global::is_nrd_enabled());
+}
+
 fn main() {
 	let exit_code = real_main();
 	std::process::exit(exit_code);
@@ -140,8 +144,6 @@ fn real_main() -> i32 {
 	};
 	init_logger(Some(logging_config), logs_tx);
 
-	global::set_mining_mode(config.members.unwrap().server.chain_type);
-
 	if let Some(file_path) = &config.config_file_path {
 		info!(
 			"Using configuration file at {}",
@@ -152,6 +154,22 @@ fn real_main() -> i32 {
 	};
 
 	log_build_info();
+
+	// Initialize our global chain_type and feature flags (NRD kernel support currently).
+	// These are read via global and not read from config beyond this point.
+	global::init_global_chain_type(config.members.unwrap().server.chain_type);
+	info!("Chain: {:?}", global::get_chain_type());
+	match global::get_chain_type() {
+		global::ChainTypes::Mainnet => {
+			// Set various mainnet specific feature flags.
+			global::init_global_nrd_enabled(false);
+		}
+		_ => {
+			// Set various non-mainnet feature flags.
+			global::init_global_nrd_enabled(true);
+		}
+	}
+	log_feature_flags();
 
 	// Execute subcommand
 	match args.subcommand() {

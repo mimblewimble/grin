@@ -20,7 +20,8 @@
 use self::core::core::hash::{Hash, Hashed};
 use self::core::core::id::ShortId;
 use self::core::core::verifier_cache::VerifierCache;
-use self::core::core::{transaction, Block, BlockHeader, Transaction, Weighting};
+use self::core::core::{transaction, Block, BlockHeader, HeaderVersion, Transaction, Weighting};
+use self::core::global;
 use self::util::RwLock;
 use crate::pool::Pool;
 use crate::types::{BlockChain, PoolAdapter, PoolConfig, PoolEntry, PoolError, TxSource};
@@ -132,6 +133,24 @@ where
 		Ok(())
 	}
 
+	/// Verify the tx kernel variants and ensure they can all be accepted to the txpool/stempool
+	/// with respect to current header version.
+	fn verify_kernel_variants(
+		&self,
+		tx: &Transaction,
+		header: &BlockHeader,
+	) -> Result<(), PoolError> {
+		if tx.kernels().iter().any(|k| k.is_nrd()) {
+			if !global::is_nrd_enabled() {
+				return Err(PoolError::NRDKernelNotEnabled);
+			}
+			if header.version < HeaderVersion(4) {
+				return Err(PoolError::NRDKernelPreHF3);
+			}
+		}
+		Ok(())
+	}
+
 	/// Add the given tx to the pool, directing it to either the stempool or
 	/// txpool based on stem flag provided.
 	pub fn add_to_pool(
@@ -146,6 +165,9 @@ where
 		if !stem && self.txpool.contains_tx(tx.hash()) {
 			return Err(PoolError::DuplicateTx);
 		}
+
+		// Check this tx is valid based on current header version.
+		self.verify_kernel_variants(&tx, header)?;
 
 		// Do we have the capacity to accept this transaction?
 		let acceptability = self.is_acceptable(&tx, stem);
@@ -195,19 +217,11 @@ where
 		Ok(())
 	}
 
-	// Remove the last transaction from the flattened bucket transactions.
-	// No other tx depends on it, it has low fee_to_weight and is unlikely to participate in any cut-through.
+	// Evict a transaction from the txpool.
+	// Uses bucket logic to identify the "last" transaction.
+	// No other tx depends on it and it has low fee_to_weight.
 	pub fn evict_from_txpool(&mut self) {
-		// Get bucket transactions
-		let bucket_transactions = self.txpool.bucket_transactions(Weighting::NoLimit);
-
-		// Get last transaction and remove it
-		if let Some(evictable_transaction) = bucket_transactions.last() {
-			// Remove transaction
-			self.txpool
-				.entries
-				.retain(|x| x.tx != *evictable_transaction);
-		};
+		self.txpool.evict_transaction()
 	}
 
 	// Old txs will "age out" after 30 mins.

@@ -17,8 +17,8 @@ pub mod common;
 use self::core::core::hash::Hashed;
 use self::core::core::verifier_cache::LruVerifierCache;
 use self::core::core::{Block, BlockHeader};
-use self::core::libtx;
 use self::core::pow::Difficulty;
+use self::core::{global, libtx};
 use self::keychain::{ExtKeychain, Keychain};
 use self::util::RwLock;
 use crate::common::ChainAdapter;
@@ -30,6 +30,7 @@ use std::sync::Arc;
 
 #[test]
 fn test_transaction_pool_block_reconciliation() {
+	global::set_local_chain_type(global::ChainTypes::AutomatedTesting);
 	let keychain: ExtKeychain = Keychain::from_random_seed(false).unwrap();
 
 	let db_root = ".grin_block_reconciliation".to_string();

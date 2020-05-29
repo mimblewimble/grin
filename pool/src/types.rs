@@ -17,12 +17,12 @@
 
 use chrono::prelude::{DateTime, Utc};
 
+use self::core::consensus;
 use self::core::core::block;
 use self::core::core::committed;
 use self::core::core::hash::Hash;
 use self::core::core::transaction::{self, Transaction};
 use self::core::core::{BlockHeader, BlockSums};
-use self::core::{consensus, global};
 use failure::Fail;
 use grin_core as core;
 use grin_keychain as keychain;
@@ -144,7 +144,7 @@ fn default_max_stempool_size() -> usize {
 	50_000
 }
 fn default_mineable_max_weight() -> usize {
-	global::max_block_weight()
+	consensus::MAX_BLOCK_WEIGHT
 }
 
 /// Represents a single entry in the pool.
@@ -221,6 +221,12 @@ pub enum PoolError {
 	/// Attempt to add a duplicate tx to the pool.
 	#[fail(display = "Duplicate tx")]
 	DuplicateTx,
+	/// NRD kernels will not be accepted by the txpool/stempool pre-HF3.
+	#[fail(display = "NRD kernel pre-HF3")]
+	NRDKernelPreHF3,
+	/// NRD kernels are not valid if disabled locally via "feature flag".
+	#[fail(display = "NRD kernel not enabled")]
+	NRDKernelNotEnabled,
 	/// Other kinds of error (not yet pulled out into meaningful errors).
 	#[fail(display = "General pool error {}", _0)]
 	Other(String),

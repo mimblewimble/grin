@@ -367,6 +367,7 @@ mod test {
 
 	#[test]
 	fn cuckatoo() {
+		global::set_local_chain_type(global::ChainTypes::Mainnet);
 		let ret = basic_solve::<u32>();
 		if let Err(r) = ret {
 			panic!("basic_solve u32: Error: {}", r);

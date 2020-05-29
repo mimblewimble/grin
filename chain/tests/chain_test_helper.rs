@@ -50,7 +50,7 @@ pub fn init_chain(dir_name: &str, genesis: Block) -> Chain {
 }
 
 /// Build genesis block with reward (non-empty, like we have in mainnet).
-fn genesis_block<K>(keychain: &K) -> Block
+pub fn genesis_block<K>(keychain: &K) -> Block
 where
 	K: Keychain,
 {
@@ -69,8 +69,9 @@ where
 
 /// Mine a chain of specified length to assist with automated tests.
 /// Probably a good idea to call clean_output_dir at the beginning and end of each test.
+#[allow(dead_code)]
 pub fn mine_chain(dir_name: &str, chain_length: u64) -> Chain {
-	global::set_mining_mode(ChainTypes::AutomatedTesting);
+	global::set_local_chain_type(ChainTypes::AutomatedTesting);
 	let keychain = keychain::ExtKeychain::from_random_seed(false).unwrap();
 	let genesis = genesis_block(&keychain);
 	let mut chain = init_chain(dir_name, genesis.clone());
@@ -78,6 +79,7 @@ pub fn mine_chain(dir_name: &str, chain_length: u64) -> Chain {
 	chain
 }
 
+#[allow(dead_code)]
 fn mine_some_on_top<K>(chain: &mut Chain, chain_length: u64, keychain: &K)
 where
 	K: Keychain,

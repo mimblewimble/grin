@@ -29,8 +29,8 @@ use serde_json::Value;
 use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::sync::Arc;
+use std::thread;
 use std::time::{Duration, SystemTime};
-use std::{cmp, thread};
 
 use crate::chain::{self, SyncState};
 use crate::common::stats::{StratumStats, WorkerStats};
@@ -568,8 +568,7 @@ impl Handler {
 
 					current_hash = latest_hash;
 					// set the minimum acceptable share difficulty for this block
-					state.minimum_share_difficulty =
-						cmp::min(config.minimum_share_difficulty, state.current_difficulty);
+					state.minimum_share_difficulty = config.minimum_share_difficulty;
 
 					// set a new deadline for rebuilding with fresh transactions
 					deadline = Utc::now().timestamp() + config.attempt_time_per_block as i64;
@@ -634,7 +633,6 @@ fn accept_connections(listen_addr: SocketAddr, handler: Arc<Handler>) {
 
 					let write = async move {
 						while let Some(line) = rx.next().await {
-							let line = line + "\n";
 							writer
 								.send(line)
 								.await

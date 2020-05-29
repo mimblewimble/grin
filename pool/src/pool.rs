@@ -29,6 +29,7 @@ use grin_util as util;
 use std::cmp::Reverse;
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
+use util::static_secp_instance;
 
 pub struct Pool<B, V>
 where
@@ -272,7 +273,12 @@ where
 		header: &BlockHeader,
 	) -> Result<BlockSums, PoolError> {
 		let overage = tx.overage();
-		let offset = (header.total_kernel_offset() + tx.offset.clone())?;
+
+		let offset = {
+			let secp = static_secp_instance();
+			let secp = secp.lock();
+			header.total_kernel_offset().add(&tx.offset, &secp)
+		}?;
 
 		let block_sums = self.blockchain.get_block_sums(&header.hash())?;
 
@@ -307,6 +313,15 @@ where
 		Ok(())
 	}
 
+	// Use our bucket logic to identify the best transaction for eviction and evict it.
+	// We want to avoid evicting a transaction where another transaction depends on it.
+	// We want to evict a transaction with low fee_to_weight.
+	pub fn evict_transaction(&mut self) {
+		if let Some(evictable_transaction) = self.bucket_transactions(Weighting::NoLimit).last() {
+			self.entries.retain(|x| x.tx != *evictable_transaction);
+		};
+	}
+
 	/// Buckets consist of a vec of txs and track the aggregate fee_to_weight.
 	/// We aggregate (cut-through) dependent transactions within a bucket *unless* adding a tx
 	/// would reduce the aggregate fee_to_weight, in which case we start a new bucket.
@@ -314,7 +329,7 @@ where
 	/// containing the tx it depends on.
 	/// Sorting the buckets by fee_to_weight will therefore preserve dependency ordering,
 	/// maximizing both cut-through and overall fees.
-	pub fn bucket_transactions(&self, weighting: Weighting) -> Vec<Transaction> {
+	fn bucket_transactions(&self, weighting: Weighting) -> Vec<Transaction> {
 		let mut tx_buckets: Vec<Bucket> = Vec::new();
 		let mut output_commits = HashMap::new();
 		let mut rejected = HashSet::new();

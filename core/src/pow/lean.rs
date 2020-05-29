@@ -88,10 +88,12 @@ impl Lean {
 #[cfg(test)]
 mod test {
 	use super::*;
+	use crate::global;
 	use crate::pow::types::PoWContext;
 
 	#[test]
 	fn lean_miner() {
+		global::set_local_chain_type(global::ChainTypes::Mainnet);
 		let nonce = 15465723;
 		let header = [0u8; 84].to_vec(); // with nonce
 		let edge_bits = 19;

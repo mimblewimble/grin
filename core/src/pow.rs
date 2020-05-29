@@ -130,7 +130,7 @@ mod test {
 	/// We'll be generating genesis blocks differently
 	#[test]
 	fn genesis_pow() {
-		global::set_mining_mode(ChainTypes::UserTesting);
+		global::set_local_chain_type(ChainTypes::UserTesting);
 
 		let mut b = genesis::genesis_dev();
 		b.header.pow.nonce = 28106;

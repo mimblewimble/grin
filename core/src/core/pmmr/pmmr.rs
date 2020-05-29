@@ -90,16 +90,13 @@ where
 	}
 
 	/// Returns a vec of the peaks of this MMR.
-	pub fn peaks(&self) -> Vec<Hash> {
+	pub fn peaks(&self) -> impl DoubleEndedIterator<Item = Hash> + '_ {
 		let peaks_pos = peaks(self.last_pos);
-		peaks_pos
-			.into_iter()
-			.filter_map(|pi| {
-				// here we want to get from underlying hash file
-				// as the pos *may* have been "removed"
-				self.backend.get_from_file(pi)
-			})
-			.collect()
+		peaks_pos.into_iter().filter_map(move |pi| {
+			// here we want to get from underlying hash file
+			// as the pos *may* have been "removed"
+			self.backend.get_from_file(pi)
+		})
 	}
 
 	fn peak_path(&self, peak_pos: u64) -> Vec<Hash> {
@@ -125,11 +122,10 @@ where
 		let rhs = peaks(self.last_pos)
 			.into_iter()
 			.filter(|x| *x > peak_pos)
-			.filter_map(|x| self.backend.get_from_file(x))
-			.collect::<Vec<_>>();
+			.filter_map(|x| self.backend.get_from_file(x));
 
 		let mut res = None;
-		for peak in rhs.into_iter().rev() {
+		for peak in rhs.rev() {
 			res = match res {
 				None => Some(peak),
 				Some(rhash) => Some((peak, rhash).hash_with_index(self.unpruned_size())),
@@ -145,7 +141,7 @@ where
 			return Ok(ZERO_HASH);
 		}
 		let mut res = None;
-		for peak in self.peaks().into_iter().rev() {
+		for peak in self.peaks().rev() {
 			res = match res {
 				None => Some(peak),
 				Some(rhash) => Some((peak, rhash).hash_with_index(self.unpruned_size())),
@@ -538,17 +534,46 @@ pub fn is_left_sibling(pos: u64) -> bool {
 /// corresponding peak in the MMR.
 /// The size (and therefore the set of peaks) of the MMR
 /// is defined by last_pos.
-pub fn path(pos: u64, last_pos: u64) -> Vec<u64> {
-	let (peak_map, height) = peak_map_height(pos - 1);
-	let mut peak = 1 << height;
-	let mut path = vec![];
-	let mut current = pos;
-	while current <= last_pos {
-		path.push(current);
-		current += if (peak_map & peak) != 0 { 1 } else { 2 * peak };
-		peak <<= 1;
+pub fn path(pos: u64, last_pos: u64) -> impl Iterator<Item = u64> {
+	Path::new(pos, last_pos)
+}
+
+struct Path {
+	current: u64,
+	last_pos: u64,
+	peak: u64,
+	peak_map: u64,
+}
+
+impl Path {
+	fn new(pos: u64, last_pos: u64) -> Self {
+		let (peak_map, height) = peak_map_height(pos - 1);
+		Path {
+			current: pos,
+			peak: 1 << height,
+			peak_map,
+			last_pos,
+		}
 	}
-	path
+}
+
+impl Iterator for Path {
+	type Item = u64;
+
+	fn next(&mut self) -> Option<Self::Item> {
+		if self.current > self.last_pos {
+			return None;
+		}
+
+		let next = Some(self.current);
+		self.current += if (self.peak_map & self.peak) != 0 {
+			1
+		} else {
+			2 * self.peak
+		};
+		self.peak <<= 1;
+		next
+	}
 }
 
 /// For a given starting position calculate the parent and sibling positions

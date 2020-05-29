@@ -441,6 +441,16 @@ pub fn verify_single(
 	)
 }
 
+/// Verify a batch of signatures.
+pub fn verify_batch(
+	secp: &Secp256k1,
+	sigs: &Vec<Signature>,
+	msgs: &Vec<Message>,
+	pubkeys: &Vec<PublicKey>,
+) -> bool {
+	aggsig::verify_batch(secp, sigs, msgs, pubkeys)
+}
+
 /// Just a simple sig, creates its own nonce, etc
 pub fn sign_with_blinding(
 	secp: &Secp256k1,
@@ -449,7 +459,6 @@ pub fn sign_with_blinding(
 	pubkey_sum: Option<&PublicKey>,
 ) -> Result<Signature, Error> {
 	let skey = &blinding.secret_key(&secp)?;
-	//let pubkey_sum = PublicKey::from_secret_key(&secp, &skey)?;
 	let sig = aggsig::sign_single(secp, &msg, skey, None, None, None, pubkey_sum, None)?;
 	Ok(sig)
 }

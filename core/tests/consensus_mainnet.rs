@@ -245,8 +245,7 @@ fn print_chain_sim(chain_sim: Vec<(HeaderInfo, DiffStats)>) {
 /// Checks different next_target adjustments and difficulty boundaries
 #[test]
 fn adjustment_scenarios() {
-	// Use production parameters for genesis diff
-	global::set_mining_mode(global::ChainTypes::Mainnet);
+	global::set_local_chain_type(global::ChainTypes::Mainnet);
 
 	// Genesis block with initial diff
 	let chain_sim = create_chain_sim(global::initial_block_difficulty());
@@ -318,8 +317,7 @@ fn adjustment_scenarios() {
 
 #[test]
 fn test_secondary_pow_ratio() {
-	global::set_mining_mode(global::ChainTypes::Mainnet);
-	assert_eq!(global::is_floonet(), false);
+	global::set_local_chain_type(global::ChainTypes::Mainnet);
 
 	assert_eq!(secondary_pow_ratio(1), 90);
 	assert_eq!(secondary_pow_ratio(89), 90);
@@ -360,11 +358,10 @@ fn test_secondary_pow_ratio() {
 
 #[test]
 fn test_secondary_pow_scale() {
+	global::set_local_chain_type(global::ChainTypes::Mainnet);
+
 	let window = DIFFICULTY_ADJUST_WINDOW;
 	let mut hi = HeaderInfo::from_diff_scaling(Difficulty::from_num(10), 100);
-
-	global::set_mining_mode(global::ChainTypes::Mainnet);
-	assert_eq!(global::is_floonet(), false);
 
 	// all primary, factor should increase so it becomes easier to find a high
 	// difficulty block
@@ -436,8 +433,8 @@ fn test_secondary_pow_scale() {
 
 #[test]
 fn hard_forks() {
-	global::set_mining_mode(global::ChainTypes::Mainnet);
-	assert_eq!(global::is_floonet(), false);
+	global::set_local_chain_type(global::ChainTypes::Mainnet);
+
 	assert!(valid_header_version(0, HeaderVersion(1)));
 	assert!(valid_header_version(10, HeaderVersion(1)));
 	assert!(!valid_header_version(10, HeaderVersion(2)));

@@ -507,6 +507,7 @@ mod tests {
 
 	#[test]
 	fn test_proof_rw() {
+		global::set_local_chain_type(global::ChainTypes::Mainnet);
 		for edge_bits in 10..63 {
 			let mut proof = Proof::new(gen_proof(edge_bits as u32));
 			proof.edge_bits = edge_bits;
