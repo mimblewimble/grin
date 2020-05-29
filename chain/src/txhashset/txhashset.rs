@@ -943,35 +943,9 @@ impl<'a> Extension<'a> {
 		}
 		batch.save_spent_index(&b.hash(), &spent)?;
 
-		let kernel_index = store::nrd_recent_kernel_index();
-		for kernel in b.kernels() {
-			let pos = self.apply_kernel(kernel)?;
-			if let KernelFeatures::NoRecentDuplicate {
-				relative_height, ..
-			} = kernel.features
-			{
-				debug!("checking NRD index: {:?}", kernel.excess());
-				if let Some(prev) = kernel_index.peek_pos(batch, kernel.excess())? {
-					let h2 = b.header.height;
-					let h1 = prev.height;
-					let delta = h2.saturating_sub(h1);
-					debug!("NRD check: {}, {}, {:?}", h2, h1, relative_height);
-					if delta < relative_height.into() {
-						return Err(ErrorKind::NRDRelativeHeight.into());
-					}
-				}
-				let new_pos = CommitPos {
-					pos,
-					height: b.header.height,
-				};
-				debug!(
-					"pushing entry to NRD index: {:?}: {:?}",
-					kernel.excess(),
-					new_pos
-				);
-				kernel_index.push_pos(batch, kernel.excess(), new_pos)?;
-			}
-		}
+		// Apply the kernels to the kernel MMR.
+		// Note: This validates and NRD relative height locks via the "recent" kernel index.
+		self.apply_kernels(b.kernels(), b.header.height, batch)?;
 
 		// Update our BitmapAccumulator based on affected outputs (both spent and created).
 		self.apply_to_bitmap_accumulator(&affected_pos)?;
@@ -1064,6 +1038,44 @@ impl<'a> Extension<'a> {
 			}
 		}
 		Ok(output_pos)
+	}
+
+	/// Apply kernels to the kernel MMR.
+	/// Validate any NRD relative height locks via the "recent" kernel index.
+	/// Note: This is used for both block processing and tx validation.
+	/// In the block processing case we use the block height.
+	/// In the tx validation case we use the "next" block height based on current chain head.
+	pub fn apply_kernels(
+		&mut self,
+		kernels: &[TxKernel],
+		height: u64,
+		batch: &Batch<'_>,
+	) -> Result<(), Error> {
+		let kernel_index = store::nrd_recent_kernel_index();
+		for kernel in kernels {
+			let pos = self.apply_kernel(kernel)?;
+			if let KernelFeatures::NoRecentDuplicate {
+				relative_height, ..
+			} = kernel.features
+			{
+				debug!("checking NRD index: {:?}", kernel.excess());
+				if let Some(prev) = kernel_index.peek_pos(batch, kernel.excess())? {
+					let diff = height.saturating_sub(prev.height);
+					debug!("NRD check: {}, {:?}, {:?}", height, prev, relative_height);
+					if diff < relative_height.into() {
+						return Err(ErrorKind::NRDRelativeHeight.into());
+					}
+				}
+				let new_pos = CommitPos { pos, height };
+				debug!(
+					"pushing entry to NRD index: {:?}: {:?}",
+					kernel.excess(),
+					new_pos
+				);
+				kernel_index.push_pos(batch, kernel.excess(), new_pos)?;
+			}
+		}
+		Ok(())
 	}
 
 	/// Push kernel onto MMR (hash and data files).

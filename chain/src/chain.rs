@@ -19,7 +19,8 @@ use crate::core::core::hash::{Hash, Hashed, ZERO_HASH};
 use crate::core::core::merkle_proof::MerkleProof;
 use crate::core::core::verifier_cache::VerifierCache;
 use crate::core::core::{
-	Block, BlockHeader, BlockSums, Committed, Output, OutputIdentifier, Transaction, TxKernel,
+	Block, BlockHeader, BlockSums, Committed, KernelFeatures, Output, OutputIdentifier,
+	Transaction, TxKernel,
 };
 use crate::core::global;
 use crate::core::pow;
@@ -513,17 +514,38 @@ impl Chain {
 		})
 	}
 
-	/// Validate the tx against the current UTXO set.
+	/// Validate the tx against the current UTXO set and recent kernels (NRD relative lock heights).
 	pub fn validate_tx(&self, tx: &Transaction) -> Result<(), Error> {
+		self.validate_tx_kernels(tx)?;
+		self.validate_tx_against_utxo(tx)?;
+		Ok(())
+	}
+
+	/// Validates NRD relative height locks against "recent" kernel history.
+	/// Applies the kernels to the current kernel MMR in a readonly extension.
+	/// The extension and the db batch are discarded.
+	/// The batch ensures duplicate NRD kernels within the tx are handled correctly.
+	fn validate_tx_kernels(&self, tx: &Transaction) -> Result<(), Error> {
+		let has_nrd_kernel = tx.kernels().iter().any(|k| match k.features {
+			KernelFeatures::NoRecentDuplicate { .. } => true,
+			_ => false,
+		});
+		if !has_nrd_kernel {
+			return Ok(());
+		}
+		let mut header_pmmr = self.header_pmmr.write();
+		let mut txhashset = self.txhashset.write();
+		txhashset::extending_readonly(&mut header_pmmr, &mut txhashset, |ext, batch| {
+			let height = self.next_block_height()?;
+			ext.extension.apply_kernels(tx.kernels(), height, batch)
+		})
+	}
+
+	fn validate_tx_against_utxo(&self, tx: &Transaction) -> Result<(), Error> {
 		let header_pmmr = self.header_pmmr.read();
 		let txhashset = self.txhashset.read();
-
-		// TODO - we need to validate the kernel here, cannot do this via utxo_view...
-		// txhashet::extending_readonly
-
 		txhashset::utxo_view(&header_pmmr, &txhashset, |utxo, batch| {
-			utxo.validate_tx(tx, batch)?;
-			Ok(())
+			utxo.validate_tx(tx, batch)
 		})
 	}
 
