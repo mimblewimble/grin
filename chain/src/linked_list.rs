@@ -130,6 +130,7 @@ pub trait ListIndex {
 
 /// Supports "rewind" given the provided commit and a pos to rewind back to.
 pub trait RewindableListIndex {
+	/// Rewind the index for the given commitment to the specified position.
 	fn rewind(&self, batch: &Batch<'_>, commit: Commitment, rewind_pos: u64) -> Result<(), Error>;
 }
 

@@ -517,6 +517,10 @@ impl Chain {
 	pub fn validate_tx(&self, tx: &Transaction) -> Result<(), Error> {
 		let header_pmmr = self.header_pmmr.read();
 		let txhashset = self.txhashset.read();
+
+		// TODO - we need to validate the kernel here, cannot do this via utxo_view...
+		// txhashet::extending_readonly
+
 		txhashset::utxo_view(&header_pmmr, &txhashset, |utxo, batch| {
 			utxo.validate_tx(tx, batch)?;
 			Ok(())

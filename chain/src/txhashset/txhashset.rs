@@ -943,18 +943,33 @@ impl<'a> Extension<'a> {
 		}
 		batch.save_spent_index(&b.hash(), &spent)?;
 
-		let coinbase_kernel_index = store::coinbase_kernel_index();
+		let kernel_index = store::nrd_recent_kernel_index();
 		for kernel in b.kernels() {
 			let pos = self.apply_kernel(kernel)?;
-			if let KernelFeatures::Coinbase = kernel.features {
-				coinbase_kernel_index.push_pos(
-					batch,
+			if let KernelFeatures::NoRecentDuplicate {
+				relative_height, ..
+			} = kernel.features
+			{
+				debug!("checking NRD index: {:?}", kernel.excess());
+				if let Some(prev) = kernel_index.peek_pos(batch, kernel.excess())? {
+					let h2 = b.header.height;
+					let h1 = prev.height;
+					let delta = h2.saturating_sub(h1);
+					debug!("NRD check: {}, {}, {:?}", h2, h1, relative_height);
+					if delta < relative_height.into() {
+						return Err(ErrorKind::NRDRelativeHeight.into());
+					}
+				}
+				let new_pos = CommitPos {
+					pos,
+					height: b.header.height,
+				};
+				debug!(
+					"pushing entry to NRD index: {:?}: {:?}",
 					kernel.excess(),
-					CommitPos {
-						pos,
-						height: b.header.height,
-					},
-				)?;
+					new_pos
+				);
+				kernel_index.push_pos(batch, kernel.excess(), new_pos)?;
 			}
 		}
 
@@ -1191,7 +1206,7 @@ impl<'a> Extension<'a> {
 		}
 
 		// Now rewind the kernel_pos index based on kernels in the block being rewound.
-		let coinbase_kernel_index = store::coinbase_kernel_index();
+		let coinbase_kernel_index = store::nrd_recent_kernel_index();
 		for kernel in block.kernels() {
 			if let KernelFeatures::Coinbase = kernel.features {
 				coinbase_kernel_index.rewind(

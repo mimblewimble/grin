@@ -37,10 +37,10 @@ const TAIL_PREFIX: u8 = b'T';
 const HEADER_HEAD_PREFIX: u8 = b'G';
 const OUTPUT_POS_PREFIX: u8 = b'p';
 
-/// Prefix for kernel pos index lists.
-pub const COINBASE_KERNEL_LIST_PREFIX: u8 = b'K';
-/// Prefix for kernel pos index entries.
-pub const COINBASE_KERNEL_ENTRY_PREFIX: u8 = b'k';
+/// Prefix for NRD kernel pos index lists.
+pub const NRD_KERNEL_LIST_PREFIX: u8 = b'K';
+/// Prefix for NRD kernel pos index entries.
+pub const NRD_KERNEL_ENTRY_PREFIX: u8 = b'k';
 
 const BLOCK_INPUT_BITMAP_PREFIX: u8 = b'B';
 const BLOCK_SUMS_PREFIX: u8 = b'M';
@@ -482,8 +482,9 @@ impl<'a> Iterator for DifficultyIter<'a> {
 	}
 }
 
-/// Init the coinbase kernel index backed by the underlying db.
-/// This index supports multiple entries per key.
-pub fn coinbase_kernel_index() -> MultiIndex<CommitPos> {
-	MultiIndex::init(COINBASE_KERNEL_LIST_PREFIX, COINBASE_KERNEL_ENTRY_PREFIX)
+/// Init the NRD "recent history" kernel index backed by the underlying db.
+/// List index supports multiple entries per key, maintaining insertion order.
+/// Allows for fast lookup of the most recent entry per excess commitment.
+pub fn nrd_recent_kernel_index() -> MultiIndex<CommitPos> {
+	MultiIndex::init(NRD_KERNEL_LIST_PREFIX, NRD_KERNEL_ENTRY_PREFIX)
 }

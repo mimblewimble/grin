@@ -36,7 +36,7 @@ fn test_store_kernel_idx() {
 
 	let store = ChainStore::new(chain_dir).unwrap();
 	let batch = store.batch().unwrap();
-	let index = store::coinbase_kernel_index();
+	let index = store::nrd_recent_kernel_index();
 
 	assert_eq!(index.peek_pos(&batch, commit), Ok(None));
 	assert_eq!(index.get_list(&batch, commit), Ok(None));
@@ -184,7 +184,7 @@ fn test_store_kernel_idx_pop_back() {
 
 	let store = ChainStore::new(chain_dir).unwrap();
 	let batch = store.batch().unwrap();
-	let index = store::coinbase_kernel_index();
+	let index = store::nrd_recent_kernel_index();
 
 	assert_eq!(index.peek_pos(&batch, commit), Ok(None));
 	assert_eq!(index.get_list(&batch, commit), Ok(None));
@@ -293,7 +293,7 @@ fn test_store_kernel_idx_rewind() {
 
 	let store = ChainStore::new(chain_dir).unwrap();
 	let batch = store.batch().unwrap();
-	let index = store::coinbase_kernel_index();
+	let index = store::nrd_recent_kernel_index();
 
 	assert_eq!(
 		index.push_pos(&batch, commit, CommitPos { pos: 1, height: 1 }),
@@ -396,7 +396,7 @@ fn test_store_kernel_idx_multiple_commits() {
 
 	let store = ChainStore::new(chain_dir).unwrap();
 	let batch = store.batch().unwrap();
-	let index = store::coinbase_kernel_index();
+	let index = store::nrd_recent_kernel_index();
 
 	assert_eq!(index.get_list(&batch, commit), Ok(None));
 	assert_eq!(index.get_list(&batch, commit2), Ok(None));
