@@ -32,13 +32,15 @@ fn build_block<K>(
 	keychain: &K,
 	key_id: &Identifier,
 	txs: Vec<Transaction>,
+	nrd_override: bool,
 ) -> Result<Block, Error>
 where
 	K: Keychain,
 {
-	// Tests need to build "invalid" blocks so disable NRD feature flag temprorarily.
+	// Override current NRD feature flag.
+	// This allows us to build an "invalid" block for testing the block processing pipeline.
 	let is_nrd_enabled = global::is_nrd_enabled();
-	global::set_local_nrd_enabled(false);
+	global::set_local_nrd_enabled(nrd_override);
 
 	let prev = chain.head_header()?;
 	let next_header_info = consensus::next_difficulty(1, chain.difficulty_iter().unwrap());
@@ -70,7 +72,7 @@ where
 }
 
 #[test]
-fn process_block_nrd_validation_rules() -> Result<(), Error> {
+fn process_block_nrd_validation() -> Result<(), Error> {
 	global::set_local_chain_type(global::ChainTypes::AutomatedTesting);
 	global::set_local_nrd_enabled(true);
 
@@ -86,16 +88,11 @@ fn process_block_nrd_validation_rules() -> Result<(), Error> {
 
 	for n in 1..9 {
 		let key_id = ExtKeychainPath::new(1, n, 0, 0, 0).to_identifier();
-		let block = build_block(&chain, &keychain, &key_id, vec![])?;
-		chain.process_block(block, Options::MINE).unwrap();
+		let block = build_block(&chain, &keychain, &key_id, vec![], false)?;
+		chain.process_block(block, Options::NONE)?;
 	}
 
-	assert_eq!(chain.head().unwrap().height, 8);
-
-	// TODO - build 2 "half txs" with shared NRD kernel and locked with relative_height = 2
-	// Check invalid if tx1 and tx2 included in same block.
-	// Check invalid if tx2 included in next block.
-	// Check valid if tx2 included in subsequent block (height diff at least 2).
+	assert_eq!(chain.head()?.height, 8);
 
 	let mut kernel = TxKernel::with_features(KernelFeatures::NoRecentDuplicate {
 		fee: 20000,
@@ -143,15 +140,39 @@ fn process_block_nrd_validation_rules() -> Result<(), Error> {
 	.unwrap();
 
 	let key_id9 = ExtKeychainPath::new(1, 9, 0, 0, 0).to_identifier();
+	let key_id10 = ExtKeychainPath::new(1, 10, 0, 0, 0).to_identifier();
+	let key_id11 = ExtKeychainPath::new(1, 11, 0, 0, 0).to_identifier();
 
-	// Check block containing both tx1 and tx2 is invalid.
-	let block = build_block(&chain, &keychain, &key_id9, vec![tx1, tx2])?;
-	assert!(chain.process_block(block, Options::MINE).is_err());
+	// Block containing both tx1 and tx2 is invalid.
+	// Not valid for two duplicate NRD kernels to co-exist in same block.
+	let block_invalid_9 = build_block(
+		&chain,
+		&keychain,
+		&key_id9,
+		vec![tx1.clone(), tx2.clone()],
+		false,
+	)?;
+	assert!(chain.process_block(block_invalid_9, Options::NONE).is_err());
 
-	panic!("tbc");
+	assert_eq!(chain.head()?.height, 8);
 
-	// chain.process_block(block, Options::MINE).unwrap();
-	// chain.validate(false).unwrap();
+	// Block containing tx1 is valid.
+	let block_valid_9 = build_block(&chain, &keychain, &key_id9, vec![tx1.clone()], false)?;
+	chain.process_block(block_valid_9, Options::NONE)?;
+
+	// Block at height 10 is invalid if it contains tx2 due to NRD rule (relative_height=2).
+	let block_invalid_10 = build_block(&chain, &keychain, &key_id10, vec![tx2.clone()], false)?;
+	assert!(chain
+		.process_block(block_invalid_10, Options::NONE)
+		.is_err());
+
+	// Block at height 10 is valid if we do not include tx2.
+	let block_valid_10 = build_block(&chain, &keychain, &key_id10, vec![], false)?;
+	chain.process_block(block_valid_10, Options::NONE)?;
+
+	// Block at height 11 is valid with tx2 as NRD rule is met (relative_height=2).
+	let block_valid_11 = build_block(&chain, &keychain, &key_id11, vec![tx2.clone()], false)?;
+	chain.process_block(block_valid_11, Options::NONE)?;
 
 	clean_output_dir(chain_dir);
 	Ok(())

@@ -297,6 +297,11 @@ impl Chain {
 	/// Returns true if it has been added to the longest chain
 	/// or false if it has added to a fork (or orphan?).
 	fn process_block_single(&self, b: Block, opts: Options) -> Result<Option<Tip>, Error> {
+		// Process the header first.
+		// If invalid then fail early.
+		// If valid then continue with block processing with header_head committed to db etc.
+		self.process_block_header(&b.header, opts)?;
+
 		let (maybe_new_head, prev_head) = {
 			let mut header_pmmr = self.header_pmmr.write();
 			let mut txhashset = self.txhashset.write();

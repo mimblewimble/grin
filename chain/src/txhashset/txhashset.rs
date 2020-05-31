@@ -1057,7 +1057,7 @@ impl<'a> Extension<'a> {
 			let pos = self.apply_kernel(kernel)?;
 
 			if !global::is_nrd_enabled() {
-				return Ok(());
+				continue;
 			}
 
 			if let KernelFeatures::NoRecentDuplicate {
