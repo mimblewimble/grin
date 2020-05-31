@@ -177,3 +177,99 @@ fn process_block_nrd_validation() -> Result<(), Error> {
 	clean_output_dir(chain_dir);
 	Ok(())
 }
+
+#[test]
+fn process_block_nrd_validation_relative_height_1() -> Result<(), Error> {
+	global::set_local_chain_type(global::ChainTypes::AutomatedTesting);
+	global::set_local_nrd_enabled(true);
+
+	util::init_test_logger();
+
+	let chain_dir = ".grin.nrd_kernel_relative_height_1";
+	clean_output_dir(chain_dir);
+
+	let keychain = ExtKeychain::from_random_seed(false).unwrap();
+	let builder = ProofBuilder::new(&keychain);
+	let genesis = genesis_block(&keychain);
+	let chain = init_chain(chain_dir, genesis.clone());
+
+	for n in 1..9 {
+		let key_id = ExtKeychainPath::new(1, n, 0, 0, 0).to_identifier();
+		let block = build_block(&chain, &keychain, &key_id, vec![], false)?;
+		chain.process_block(block, Options::NONE)?;
+	}
+
+	assert_eq!(chain.head()?.height, 8);
+
+	let mut kernel = TxKernel::with_features(KernelFeatures::NoRecentDuplicate {
+		fee: 20000,
+		relative_height: NRDRelativeHeight::new(1)?,
+	});
+
+	// // Construct the message to be signed.
+	let msg = kernel.msg_to_sign().unwrap();
+
+	// // Generate a kernel with public excess and associated signature.
+	let excess = BlindingFactor::rand(&keychain.secp());
+	let skey = excess.secret_key(&keychain.secp()).unwrap();
+	kernel.excess = keychain.secp().commit(0, skey).unwrap();
+	let pubkey = &kernel.excess.to_pubkey(&keychain.secp()).unwrap();
+	kernel.excess_sig =
+		aggsig::sign_with_blinding(&keychain.secp(), &msg, &excess, Some(&pubkey)).unwrap();
+	kernel.verify().unwrap();
+
+	let key_id1 = ExtKeychainPath::new(1, 1, 0, 0, 0).to_identifier();
+	let key_id2 = ExtKeychainPath::new(1, 2, 0, 0, 0).to_identifier();
+	let key_id3 = ExtKeychainPath::new(1, 3, 0, 0, 0).to_identifier();
+
+	let tx1 = build::transaction_with_kernel(
+		vec![
+			build::coinbase_input(consensus::REWARD, key_id1.clone()),
+			build::output(consensus::REWARD - 20000, key_id2.clone()),
+		],
+		kernel.clone(),
+		excess.clone(),
+		&keychain,
+		&builder,
+	)
+	.unwrap();
+
+	let tx2 = build::transaction_with_kernel(
+		vec![
+			build::input(consensus::REWARD - 20000, key_id2.clone()),
+			build::output(consensus::REWARD - 40000, key_id3.clone()),
+		],
+		kernel.clone(),
+		excess.clone(),
+		&keychain,
+		&builder,
+	)
+	.unwrap();
+
+	let key_id9 = ExtKeychainPath::new(1, 9, 0, 0, 0).to_identifier();
+	let key_id10 = ExtKeychainPath::new(1, 10, 0, 0, 0).to_identifier();
+
+	// Block containing both tx1 and tx2 is invalid.
+	// Not valid for two duplicate NRD kernels to co-exist in same block.
+	let block_invalid_9 = build_block(
+		&chain,
+		&keychain,
+		&key_id9,
+		vec![tx1.clone(), tx2.clone()],
+		false,
+	)?;
+	assert!(chain.process_block(block_invalid_9, Options::NONE).is_err());
+
+	assert_eq!(chain.head()?.height, 8);
+
+	// Block containing tx1 is valid.
+	let block_valid_9 = build_block(&chain, &keychain, &key_id9, vec![tx1.clone()], false)?;
+	chain.process_block(block_valid_9, Options::NONE)?;
+
+	// Block at height 10 is valid with tx2 as NRD rule is met (relative_height=1).
+	let block_valid_10 = build_block(&chain, &keychain, &key_id10, vec![tx2.clone()], false)?;
+	chain.process_block(block_valid_10, Options::NONE)?;
+
+	clean_output_dir(chain_dir);
+	Ok(())
+}
