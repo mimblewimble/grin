@@ -1056,29 +1056,29 @@ impl<'a> Extension<'a> {
 		for kernel in kernels {
 			let pos = self.apply_kernel(kernel)?;
 
-			if !global::is_nrd_enabled() {
-				continue;
-			}
-
-			if let KernelFeatures::NoRecentDuplicate {
-				relative_height, ..
-			} = kernel.features
-			{
-				debug!("checking NRD index: {:?}", kernel.excess());
-				if let Some(prev) = kernel_index.peek_pos(batch, kernel.excess())? {
-					let diff = height.saturating_sub(prev.height);
-					debug!("NRD check: {}, {:?}, {:?}", height, prev, relative_height);
-					if diff < relative_height.into() {
-						return Err(ErrorKind::NRDRelativeHeight.into());
+			// If NRD enabled then enforce NRD relative height rule.
+			// Otherwise just conntinue and apply the next kernel.
+			if global::is_nrd_enabled() {
+				if let KernelFeatures::NoRecentDuplicate {
+					relative_height, ..
+				} = kernel.features
+				{
+					debug!("checking NRD index: {:?}", kernel.excess());
+					if let Some(prev) = kernel_index.peek_pos(batch, kernel.excess())? {
+						let diff = height.saturating_sub(prev.height);
+						debug!("NRD check: {}, {:?}, {:?}", height, prev, relative_height);
+						if diff < relative_height.into() {
+							return Err(ErrorKind::NRDRelativeHeight.into());
+						}
 					}
+					let new_pos = CommitPos { pos, height };
+					debug!(
+						"pushing entry to NRD index: {:?}: {:?}",
+						kernel.excess(),
+						new_pos
+					);
+					kernel_index.push_pos(batch, kernel.excess(), new_pos)?;
 				}
-				let new_pos = CommitPos { pos, height };
-				debug!(
-					"pushing entry to NRD index: {:?}: {:?}",
-					kernel.excess(),
-					new_pos
-				);
-				kernel_index.push_pos(batch, kernel.excess(), new_pos)?;
 			}
 		}
 		Ok(())
@@ -1223,15 +1223,14 @@ impl<'a> Extension<'a> {
 			);
 		}
 
-		// Now rewind the kernel_pos index based on kernels in the block being rewound.
-		let coinbase_kernel_index = store::nrd_recent_kernel_index();
-		for kernel in block.kernels() {
-			if let KernelFeatures::Coinbase = kernel.features {
-				coinbase_kernel_index.rewind(
-					batch,
-					kernel.excess(),
-					prev_header.kernel_mmr_size,
-				)?;
+		// If NRD feature flag is enabled rewind the kernel_pos index
+		// for any NRD kernels in the block being rewound.
+		if global::is_nrd_enabled() {
+			let kernel_index = store::nrd_recent_kernel_index();
+			for kernel in block.kernels() {
+				if let KernelFeatures::NoRecentDuplicate { .. } = kernel.features {
+					kernel_index.rewind(batch, kernel.excess(), prev_header.kernel_mmr_size)?;
+				}
 			}
 		}
 
