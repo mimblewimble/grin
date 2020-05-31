@@ -15,18 +15,24 @@
 use crate::chain::linked_list::{ListIndex, ListWrapper, RewindableListIndex};
 use crate::chain::store::{self, ChainStore};
 use crate::chain::types::CommitPos;
+use crate::core::global;
 use crate::util::secp::pedersen::Commitment;
 use grin_chain as chain;
+use grin_core as core;
 use grin_store;
 use grin_util as util;
 mod chain_test_helper;
 use self::chain_test_helper::clean_output_dir;
 use crate::grin_store::Error;
 
+fn setup_test() {
+	util::init_test_logger();
+	global::set_local_chain_type(global::ChainTypes::AutomatedTesting);
+}
+
 #[test]
 fn test_store_kernel_idx() {
-	util::init_test_logger();
-
+	setup_test();
 	let chain_dir = ".grin_idx_1";
 	clean_output_dir(chain_dir);
 
@@ -173,8 +179,7 @@ fn test_store_kernel_idx() {
 
 #[test]
 fn test_store_kernel_idx_pop_back() {
-	util::init_test_logger();
-
+	setup_test();
 	let chain_dir = ".grin_idx_2";
 	clean_output_dir(chain_dir);
 
@@ -282,8 +287,7 @@ fn test_store_kernel_idx_pop_back() {
 
 #[test]
 fn test_store_kernel_idx_rewind() {
-	util::init_test_logger();
-
+	setup_test();
 	let chain_dir = ".grin_idx_3";
 	clean_output_dir(chain_dir);
 
@@ -384,8 +388,7 @@ fn test_store_kernel_idx_rewind() {
 
 #[test]
 fn test_store_kernel_idx_multiple_commits() {
-	util::init_test_logger();
-
+	setup_test();
 	let chain_dir = ".grin_idx_4";
 	clean_output_dir(chain_dir);
 

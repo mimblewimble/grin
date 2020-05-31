@@ -138,6 +138,7 @@ pub trait RewindableListIndex {
 /// This allows us to efficiently maintain an index of "recent" kernel data.
 /// We can maintain a window of 2 weeks of recent data, discarding anything older than this.
 pub trait PruneableListIndex {
+	/// Prune old data.
 	fn prune(&self, batch: &Batch<'_>, commit: Commitment, cutoff_pos: u64) -> Result<(), Error>;
 }
 
@@ -211,6 +212,7 @@ pub struct MultiIndex<T> {
 }
 
 impl<T> MultiIndex<T> {
+	/// Initialize a new multi index with the specified list and entry prefixes.
 	pub fn init(list_prefix: u8, entry_prefix: u8) -> MultiIndex<T> {
 		MultiIndex {
 			phantom: PhantomData,
@@ -436,6 +438,7 @@ impl<T: PosEntry> PruneableListIndex for MultiIndex<T> {
 
 /// Something that tracks pos (in an MMR).
 pub trait PosEntry: Readable + Writeable + Copy {
+	/// Accessor for the underlying (MMR) pos.
 	fn pos(&self) -> u64;
 }
 
@@ -445,9 +448,12 @@ impl PosEntry for CommitPos {
 	}
 }
 
+/// Entry maintained in the list index.
 pub trait ListIndexEntry: Readable + Writeable {
+	/// Type of the underlying pos indexed in the list.
 	type Pos: PosEntry;
 
+	/// Accessor for the underlying pos.
 	fn get_pos(&self) -> Self::Pos;
 }
 
