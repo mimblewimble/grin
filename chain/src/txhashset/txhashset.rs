@@ -22,6 +22,7 @@ use crate::core::core::pmmr::{self, Backend, ReadonlyPMMR, RewindablePMMR, PMMR}
 use crate::core::core::{
 	Block, BlockHeader, Input, KernelFeatures, Output, OutputIdentifier, TxKernel,
 };
+use crate::core::global;
 use crate::core::ser::{PMMRable, ProtocolVersion};
 use crate::error::{Error, ErrorKind};
 use crate::linked_list::{ListIndex, RewindableListIndex};
@@ -1054,6 +1055,11 @@ impl<'a> Extension<'a> {
 		let kernel_index = store::nrd_recent_kernel_index();
 		for kernel in kernels {
 			let pos = self.apply_kernel(kernel)?;
+
+			if !global::is_nrd_enabled() {
+				return Ok(());
+			}
+
 			if let KernelFeatures::NoRecentDuplicate {
 				relative_height, ..
 			} = kernel.features
