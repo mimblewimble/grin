@@ -1052,13 +1052,13 @@ impl<'a> Extension<'a> {
 		height: u64,
 		batch: &Batch<'_>,
 	) -> Result<(), Error> {
-		let kernel_index = store::nrd_recent_kernel_index();
 		for kernel in kernels {
 			let pos = self.apply_kernel(kernel)?;
 
 			// If NRD enabled then enforce NRD relative height rule.
 			// Otherwise just conntinue and apply the next kernel.
 			if global::is_nrd_enabled() {
+				let kernel_index = store::nrd_recent_kernel_index();
 				if let KernelFeatures::NoRecentDuplicate {
 					relative_height, ..
 				} = kernel.features
