@@ -18,9 +18,11 @@ use self::chain::store::ChainStore;
 use self::chain::types::Tip;
 use self::core::core::hash::{Hash, Hashed};
 use self::core::core::verifier_cache::VerifierCache;
-use self::core::core::{Block, BlockHeader, BlockSums, Committed, KernelFeatures, Transaction};
+use self::core::core::{
+	Block, BlockHeader, BlockSums, Committed, KernelFeatures, Transaction, TxKernel,
+};
 use self::core::libtx;
-use self::keychain::{ExtKeychain, Keychain};
+use self::keychain::{BlindingFactor, ExtKeychain, Keychain};
 use self::pool::types::*;
 use self::pool::TransactionPool;
 use self::util::secp::pedersen::Commitment;
@@ -251,6 +253,38 @@ where
 	libtx::build::transaction(
 		kernel_features,
 		tx_elements,
+		keychain,
+		&libtx::ProofBuilder::new(keychain),
+	)
+	.unwrap()
+}
+
+pub fn test_transaction_with_kernel<K>(
+	keychain: &K,
+	input_values: Vec<u64>,
+	output_values: Vec<u64>,
+	kernel: TxKernel,
+	excess: BlindingFactor,
+) -> Transaction
+where
+	K: Keychain,
+{
+	let mut tx_elements = Vec::new();
+
+	for input_value in input_values {
+		let key_id = ExtKeychain::derive_key_id(1, input_value as u32, 0, 0, 0);
+		tx_elements.push(libtx::build::input(input_value, key_id));
+	}
+
+	for output_value in output_values {
+		let key_id = ExtKeychain::derive_key_id(1, output_value as u32, 0, 0, 0);
+		tx_elements.push(libtx::build::output(output_value, key_id));
+	}
+
+	libtx::build::transaction_with_kernel(
+		tx_elements,
+		kernel,
+		excess,
 		keychain,
 		&libtx::ProofBuilder::new(keychain),
 	)
