@@ -287,9 +287,9 @@ pub trait PoolAdapter: Send + Sync {
 
 /// Dummy adapter used as a placeholder for real implementations
 #[allow(dead_code)]
-pub struct NoopAdapter {}
+pub struct NoopPoolAdapter {}
 
-impl PoolAdapter for NoopAdapter {
+impl PoolAdapter for NoopPoolAdapter {
 	fn tx_accepted(&self, _entry: &PoolEntry) {}
 	fn stem_tx_accepted(&self, _entry: &PoolEntry) -> Result<(), PoolError> {
 		Ok(())
