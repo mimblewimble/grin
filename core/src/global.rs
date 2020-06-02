@@ -140,11 +140,19 @@ lazy_static! {
 	/// This is accessed via get_chain_type() which allows the global value
 	/// to be overridden on a per-thread basis (for testing).
 	pub static ref GLOBAL_CHAIN_TYPE: OneTime<ChainTypes> = OneTime::new();
+
+	/// Global feature flag for NRD kernel support.
+	/// If enabled NRD kernels are treated as valid after HF3 (based on header version).
+	/// If disabled NRD kernels are invalid regardless of header version or block height.
+	pub static ref GLOBAL_NRD_FEATURE_ENABLED: OneTime<bool> = OneTime::new();
 }
 
 thread_local! {
 	/// Mainnet|Floonet|UserTesting|AutomatedTesting
 	pub static CHAIN_TYPE: Cell<Option<ChainTypes>> = Cell::new(None);
+
+	/// Local feature flag for NRD kernel support.
+	pub static NRD_FEATURE_ENABLED: Cell<Option<bool>> = Cell::new(None);
 }
 
 /// Set the chain type on a per-thread basis via thread_local storage.
@@ -172,6 +180,36 @@ pub fn get_chain_type() -> ChainTypes {
 /// Will panic if we attempt to re-initialize this (via OneTime).
 pub fn init_global_chain_type(new_type: ChainTypes) {
 	GLOBAL_CHAIN_TYPE.init(new_type)
+}
+
+/// One time initialization of the global chain_type.
+/// Will panic if we attempt to re-initialize this (via OneTime).
+pub fn init_global_nrd_enabled(enabled: bool) {
+	GLOBAL_NRD_FEATURE_ENABLED.init(enabled)
+}
+
+/// Explicitly enable the NRD global feature flag.
+pub fn set_local_nrd_enabled(enabled: bool) {
+	NRD_FEATURE_ENABLED.with(|flag| flag.set(Some(enabled)))
+}
+
+/// Is the NRD feature flag enabled?
+/// Look at thread local config first. If not set fallback to global config.
+/// Default to false if global config unset.
+pub fn is_nrd_enabled() -> bool {
+	NRD_FEATURE_ENABLED.with(|flag| match flag.get() {
+		None => {
+			if GLOBAL_NRD_FEATURE_ENABLED.is_init() {
+				let global_flag = GLOBAL_NRD_FEATURE_ENABLED.borrow();
+				flag.set(Some(global_flag));
+				global_flag
+			} else {
+				// Global config unset, default to false.
+				false
+			}
+		}
+		Some(flag) => flag,
+	})
 }
 
 /// Return either a cuckoo context or a cuckatoo context

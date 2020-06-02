@@ -165,9 +165,9 @@ impl TableViewItem<DiffColumn> for DiffBlock {
 /// Mining status view
 pub struct TUIMiningView;
 
-impl TUIStatusListener for TUIMiningView {
+impl TUIMiningView {
 	/// Create the mining view
-	fn create() -> Box<dyn View> {
+	pub fn create() -> impl View {
 		let devices_button = Button::new_raw("Mining Server Status", |s| {
 			let _ = s.call_on_name("mining_stack_view", |sv: &mut StackView| {
 				let pos = sv.find_layer_from_name("mining_device_view").unwrap();
@@ -307,9 +307,11 @@ impl TUIStatusListener for TUIMiningView {
 			let _ = c.focus_name(MAIN_MENU);
 		});
 
-		Box::new(mining_view.with_name(VIEW_MINING))
+		mining_view.with_name(VIEW_MINING)
 	}
+}
 
+impl TUIStatusListener for TUIMiningView {
 	/// update
 	fn update(c: &mut Cursive, stats: &ServerStats) {
 		c.call_on_name("diff_cur_height", |t: &mut TextView| {

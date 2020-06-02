@@ -45,11 +45,14 @@ pub struct BlockContext<'a> {
 	pub verifier_cache: Arc<RwLock<dyn VerifierCache>>,
 }
 
-// Check if we already know about this block for various reasons
-// from cheapest to most expensive (delay hitting the db until last).
-fn check_known(header: &BlockHeader, ctx: &mut BlockContext<'_>) -> Result<(), Error> {
-	check_known_head(header, ctx)?;
-	check_known_store(header, ctx)?;
+// If this block has greater total difficulty than treat as unknown in current context.
+// If it matches current chain head (latest or previous hash) then we know about it.
+// If it exists in the local db then we know about it.
+fn check_known(header: &BlockHeader, head: &Tip, ctx: &BlockContext<'_>) -> Result<(), Error> {
+	if header.total_difficulty() <= head.total_difficulty {
+		check_known_head(header, head)?;
+		check_known_store(header, head, ctx)?;
+	}
 	Ok(())
 }
 
@@ -86,15 +89,18 @@ pub fn process_block(b: &Block, ctx: &mut BlockContext<'_>) -> Result<Option<Tip
 		b.kernels().len(),
 	);
 
+	// Read current chain head from db via the batch.
+	// We use this for various operations later.
+	let head = ctx.batch.head()?;
+
 	// Check if we have already processed this block previously.
-	check_known(&b.header, ctx)?;
+	check_known(&b.header, &head, ctx)?;
 
 	// Quick pow validation. No point proceeding if this is invalid.
 	// We want to do this before we add the block to the orphan pool so we
 	// want to do this now and not later during header validation.
 	validate_pow_only(&b.header, ctx)?;
 
-	let head = ctx.batch.head()?;
 	let prev = prev_header_store(&b.header, &mut ctx.batch)?;
 
 	// Block is an orphan if we do not know about the previous full block.
@@ -231,9 +237,13 @@ pub fn process_block_header(header: &BlockHeader, ctx: &mut BlockContext<'_>) ->
 	// Check this header is not an orphan, we must know about the previous header to continue.
 	let prev_header = ctx.batch.get_previous_header(&header)?;
 
-	// Check if we know about the full block for this header.
-	if check_known(header, ctx).is_err() {
-		return Ok(());
+	// If we have already processed the full block for this header then done.
+	// Note: "already known" in this context is success so subsequent processing can continue.
+	{
+		let head = ctx.batch.head()?;
+		if check_known(header, &head, ctx).is_err() {
+			return Ok(());
+		}
 	}
 
 	// If we have not yet seen the full block then check if we have seen this header.
@@ -267,11 +277,9 @@ pub fn process_block_header(header: &BlockHeader, ctx: &mut BlockContext<'_>) ->
 	Ok(())
 }
 
-/// Quick in-memory check to fast-reject any block handled recently.
-/// Keeps duplicates from the network in check.
-/// Checks against the last_block_h and prev_block_h of the chain head.
-fn check_known_head(header: &BlockHeader, ctx: &mut BlockContext<'_>) -> Result<(), Error> {
-	let head = ctx.batch.head()?;
+/// Quick check to reject recently handled blocks.
+/// Checks against last_block_h and prev_block_h of the chain head.
+fn check_known_head(header: &BlockHeader, head: &Tip) -> Result<(), Error> {
 	let bh = header.hash();
 	if bh == head.last_block_h || bh == head.prev_block_h {
 		return Err(ErrorKind::Unfit("already known in head".to_string()).into());
@@ -280,10 +288,13 @@ fn check_known_head(header: &BlockHeader, ctx: &mut BlockContext<'_>) -> Result<
 }
 
 // Check if this block is in the store already.
-fn check_known_store(header: &BlockHeader, ctx: &mut BlockContext<'_>) -> Result<(), Error> {
+fn check_known_store(
+	header: &BlockHeader,
+	head: &Tip,
+	ctx: &BlockContext<'_>,
+) -> Result<(), Error> {
 	match ctx.batch.block_exists(&header.hash()) {
 		Ok(true) => {
-			let head = ctx.batch.head()?;
 			if header.height < head.height.saturating_sub(50) {
 				// TODO - we flag this as an "abusive peer" but only in the case
 				// where we have the full block in our store.

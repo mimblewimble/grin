@@ -216,10 +216,26 @@ where
 {
 	let input_sum = input_values.iter().sum::<u64>() as i64;
 	let output_sum = output_values.iter().sum::<u64>() as i64;
-
 	let fees: i64 = input_sum - output_sum;
 	assert!(fees >= 0);
 
+	test_transaction_with_kernel_features(
+		keychain,
+		input_values,
+		output_values,
+		KernelFeatures::Plain { fee: fees as u64 },
+	)
+}
+
+pub fn test_transaction_with_kernel_features<K>(
+	keychain: &K,
+	input_values: Vec<u64>,
+	output_values: Vec<u64>,
+	kernel_features: KernelFeatures,
+) -> Transaction
+where
+	K: Keychain,
+{
 	let mut tx_elements = Vec::new();
 
 	for input_value in input_values {
@@ -233,7 +249,7 @@ where
 	}
 
 	libtx::build::transaction(
-		KernelFeatures::Plain { fee: fees as u64 },
+		kernel_features,
 		tx_elements,
 		keychain,
 		&libtx::ProofBuilder::new(keychain),
