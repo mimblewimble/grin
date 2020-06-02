@@ -15,6 +15,7 @@
 pub mod common;
 
 use self::core::core::hash::Hashed;
+use self::core::core::transaction;
 use self::core::core::verifier_cache::LruVerifierCache;
 use self::core::core::{
 	Block, BlockHeader, HeaderVersion, KernelFeatures, NRDRelativeHeight, Transaction, TxKernel,
@@ -50,13 +51,11 @@ fn test_nrd_kernel_relative_height_rule_1() -> Result<(), PoolError> {
 	global::set_local_chain_type(global::ChainTypes::AutomatedTesting);
 	global::set_local_nrd_enabled(true);
 
-	let keychain: ExtKeychain = Keychain::from_random_seed(false).unwrap();
-
 	let db_root = ".grin_nrd_kernel_relative_height_rule_1";
 	clean_output_dir(db_root.into());
 
 	let mut chain = ChainAdapter::init(db_root.into()).unwrap();
-
+	let keychain: ExtKeychain = Keychain::from_random_seed(false).unwrap();
 	let verifier_cache = Arc::new(RwLock::new(LruVerifierCache::new()));
 
 	// Initialize the chain/txhashset with an initial block
@@ -136,17 +135,37 @@ fn test_nrd_kernel_relative_height_rule_1() -> Result<(), PoolError> {
 		excess.clone(),
 	);
 
-	// Confirm we can successfully add tx1 with NRD kernel to txpool.
+	// Confirm we can successfully add tx1 with NRD kernel to stempool.
 	assert_eq!(
-		pool.add_to_pool(test_source(), tx1.clone(), false, &header),
+		pool.add_to_pool(test_source(), tx1.clone(), true, &header),
 		Ok(()),
 	);
 
-	// Confirm we cannot add tx2 to txpool while tx1 is in there (pair of duplicate NRD kernels).
+	// Confirm we cannot add tx2 to stempool while tx1 is in there (duplicate NRD kernels).
 	assert_eq!(
-		pool.add_to_pool(test_source(), tx2.clone(), false, &header),
-		Ok(()),
+		pool.add_to_pool(test_source(), tx2.clone(), true, &header),
+		Err(PoolError::InvalidTx(
+			transaction::Error::InvalidNRDRelativeHeight
+		))
 	);
+
+	// // Confirm we can successfully add tx1 with NRD kernel to txpool.
+	// assert_eq!(
+	// 	pool.add_to_pool(test_source(), tx1.clone(), false, &header),
+	// 	Ok(()),
+	// );
+
+	// // Confirm we cannot add tx2 to txpool while tx1 is in there (duplicate NRD kernels).
+	// assert_eq!(
+	// 	pool.add_to_pool(test_source(), tx2.clone(), false, &header),
+	// 	Err(PoolError::InvalidTx(transaction::Error::InvalidNRDRelativeHeight))
+	// );
+
+	// // Confirm we cannot add tx2 to stempool while tx1 is in txpool (duplicate NRD kernels).
+	// assert_eq!(
+	// 	pool.add_to_pool(test_source(), tx2.clone(), true, &header),
+	// 	Err(PoolError::InvalidTx(transaction::Error::InvalidNRDRelativeHeight))
+	// );
 
 	// assert_eq!(pool.total_size(), 1);
 
@@ -155,8 +174,6 @@ fn test_nrd_kernel_relative_height_rule_1() -> Result<(), PoolError> {
 
 	// Cleanup db directory
 	clean_output_dir(db_root.into());
-
-	panic!("wip");
 
 	Ok(())
 }

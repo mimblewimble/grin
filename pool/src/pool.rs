@@ -29,6 +29,7 @@ use grin_util as util;
 use std::cmp::Reverse;
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
+use util::secp::pedersen::Commitment;
 use util::static_secp_instance;
 
 pub struct Pool<B, V>
@@ -68,6 +69,19 @@ where
 			.iter()
 			.find(|x| x.tx.hash() == hash)
 			.map(|x| x.tx.clone())
+	}
+
+	/// Query the tx pool for an individual tx matching the given public excess.
+	/// Used for checking for duplicate NRD kernels in the txpool.
+	pub fn retrieve_tx_by_kernel_excess(&self, excess: Commitment) -> Option<Transaction> {
+		for x in &self.entries {
+			for k in x.tx.kernels() {
+				if k.excess() == excess {
+					return Some(x.tx.clone());
+				}
+			}
+		}
+		None
 	}
 
 	/// Query the tx pool for an individual tx matching the given kernel hash.
@@ -298,6 +312,8 @@ where
 		extra_tx: Option<Transaction>,
 		header: &BlockHeader,
 	) -> Result<(), PoolError> {
+		error!("***** TODO - reconcile needs to be NRD aware (0 height and >0 height");
+
 		let existing_entries = self.entries.clone();
 		self.entries.clear();
 
@@ -425,6 +441,7 @@ where
 		tx_buckets.into_iter().flat_map(|x| x.raw_txs).collect()
 	}
 
+	/// TODO - This is kernel based. How does this interact with NRD?
 	pub fn find_matching_transactions(&self, kernels: &[TxKernel]) -> Vec<Transaction> {
 		// While the inputs outputs can be cut-through the kernel will stay intact
 		// In order to deaggregate tx we look for tx with the same kernel
@@ -446,6 +463,8 @@ where
 	/// Quick reconciliation step - we can evict any txs in the pool where
 	/// inputs or kernels intersect with the block.
 	pub fn reconcile_block(&mut self, block: &Block) {
+		error!("***** TODO - reconcile_block needs to be NRD aware (0 height and >0 height");
+
 		// Filter txs in the pool based on the latest block.
 		// Reject any txs where we see a matching tx kernel in the block.
 		// Also reject any txs where we see a conflicting tx,

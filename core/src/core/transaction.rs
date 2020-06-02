@@ -909,6 +909,36 @@ impl TransactionBody {
 		Ok(())
 	}
 
+	// It is never valid to have multiple duplicate NRD kernels (by public excess)
+	// in the same transaction or block. We check this here.
+	// We skip this check if NRD feature is not enabled.
+	fn verify_no_nrd_duplicates(&self) -> Result<(), Error> {
+		if !global::is_nrd_enabled() {
+			return Ok(());
+		}
+
+		let mut nrd_excess: Vec<Commitment> = self
+			.kernels
+			.iter()
+			.filter(|x| match x.features {
+				KernelFeatures::NoRecentDuplicate { .. } => true,
+				_ => false,
+			})
+			.map(|x| x.excess())
+			.collect();
+
+		// Sort and dedup and compare length to look for duplicates.
+		nrd_excess.sort();
+		let original_count = nrd_excess.len();
+		nrd_excess.dedup();
+		let dedup_count = nrd_excess.len();
+		if original_count == dedup_count {
+			Ok(())
+		} else {
+			Err(Error::InvalidNRDRelativeHeight)
+		}
+	}
+
 	// Verify that inputs|outputs|kernels are sorted in lexicographical order
 	// and that there are no duplicates (they are all unique within this transaction).
 	fn verify_sorted(&self) -> Result<(), Error> {
@@ -970,6 +1000,7 @@ impl TransactionBody {
 	/// * kernel signature verification
 	pub fn validate_read(&self, weighting: Weighting) -> Result<(), Error> {
 		self.verify_weight(weighting)?;
+		self.verify_no_nrd_duplicates()?;
 		self.verify_sorted()?;
 		self.verify_cut_through()?;
 		Ok(())
@@ -1227,8 +1258,8 @@ impl Transaction {
 		weighting: Weighting,
 		verifier: Arc<RwLock<dyn VerifierCache>>,
 	) -> Result<(), Error> {
-		self.body.validate(weighting, verifier)?;
 		self.body.verify_features()?;
+		self.body.validate(weighting, verifier)?;
 		self.verify_kernel_sums(self.overage(), self.offset.clone())?;
 		Ok(())
 	}
