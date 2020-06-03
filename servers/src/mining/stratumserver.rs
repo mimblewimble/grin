@@ -342,10 +342,11 @@ impl Handler {
 			bh.pow.write_pre_pow(&mut writer).unwrap();
 		}
 		let pre_pow = header_buf.to_hex();
+		let current_state = self.current_state.read();
 		let job_template = JobTemplate {
 			height: bh.height,
-			job_id: (self.current_state.read().current_block_versions.len() - 1) as u64,
-			difficulty: self.current_state.read().minimum_share_difficulty,
+			job_id: (current_state.current_block_versions.len() - 1) as u64,
+			difficulty: current_state.minimum_share_difficulty,
 			pre_pow,
 		};
 		return job_template;
