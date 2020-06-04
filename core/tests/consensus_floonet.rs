@@ -13,7 +13,7 @@
 
 use grin_core::consensus::{
 	secondary_pow_ratio, valid_header_version, FLOONET_FIRST_HARD_FORK, FLOONET_SECOND_HARD_FORK,
-	YEAR_HEIGHT,
+	FLOONET_THIRD_HARD_FORK, HARD_FORK_INTERVAL,
 };
 use grin_core::core::HeaderVersion;
 use grin_core::global;
@@ -84,7 +84,6 @@ fn hard_forks() {
 		FLOONET_FIRST_HARD_FORK,
 		HeaderVersion(1)
 	));
-	assert!(!valid_header_version(YEAR_HEIGHT, HeaderVersion(1)));
 	assert!(valid_header_version(
 		FLOONET_SECOND_HARD_FORK - 1,
 		HeaderVersion(2)
@@ -105,19 +104,70 @@ fn hard_forks() {
 		FLOONET_SECOND_HARD_FORK,
 		HeaderVersion(1)
 	));
-
-	assert!(!valid_header_version(YEAR_HEIGHT - 1, HeaderVersion(2)));
-	assert!(valid_header_version(YEAR_HEIGHT - 1, HeaderVersion(3)));
-	assert!(valid_header_version(YEAR_HEIGHT, HeaderVersion(3)));
-	assert!(valid_header_version(YEAR_HEIGHT + 1, HeaderVersion(3)));
-	// v4 not active yet
-	assert!(!valid_header_version(YEAR_HEIGHT * 3 / 2, HeaderVersion(4)));
-	assert!(!valid_header_version(YEAR_HEIGHT * 3 / 2, HeaderVersion(3)));
-	assert!(!valid_header_version(YEAR_HEIGHT * 3 / 2, HeaderVersion(2)));
-	assert!(!valid_header_version(YEAR_HEIGHT * 3 / 2, HeaderVersion(1)));
-	assert!(!valid_header_version(YEAR_HEIGHT * 2, HeaderVersion(3)));
-	assert!(!valid_header_version(
-		YEAR_HEIGHT * 3 / 2 + 1,
+	assert!(valid_header_version(
+		FLOONET_THIRD_HARD_FORK - 1,
 		HeaderVersion(3)
+	));
+	assert!(valid_header_version(
+		FLOONET_THIRD_HARD_FORK,
+		HeaderVersion(4)
+	));
+	assert!(valid_header_version(
+		FLOONET_THIRD_HARD_FORK + 1,
+		HeaderVersion(4)
+	));
+	assert!(!valid_header_version(
+		FLOONET_THIRD_HARD_FORK,
+		HeaderVersion(3)
+	));
+	assert!(!valid_header_version(
+		FLOONET_THIRD_HARD_FORK,
+		HeaderVersion(2)
+	));
+	assert!(!valid_header_version(
+		FLOONET_THIRD_HARD_FORK,
+		HeaderVersion(1)
+	));
+
+	assert!(!valid_header_version(
+		HARD_FORK_INTERVAL * 2 - 1,
+		HeaderVersion(1)
+	));
+	assert!(!valid_header_version(
+		HARD_FORK_INTERVAL * 2 - 1,
+		HeaderVersion(2)
+	));
+	assert!(valid_header_version(
+		HARD_FORK_INTERVAL * 2 - 1,
+		HeaderVersion(3)
+	));
+	assert!(valid_header_version(
+		HARD_FORK_INTERVAL * 2,
+		HeaderVersion(3)
+	));
+	assert!(valid_header_version(
+		HARD_FORK_INTERVAL * 2 + 1,
+		HeaderVersion(3)
+	));
+	// v5 not active yet
+	assert!(!valid_header_version(
+		HARD_FORK_INTERVAL * 4,
+		HeaderVersion(5)
+	));
+	assert!(!valid_header_version(
+		HARD_FORK_INTERVAL * 4,
+		HeaderVersion(4)
+	));
+	assert!(!valid_header_version(
+		HARD_FORK_INTERVAL * 4,
+		HeaderVersion(3)
+	));
+	assert!(!valid_header_version(
+		HARD_FORK_INTERVAL * 4,
+		HeaderVersion(2)
+	));
+	assert!(!valid_header_version(
+		HARD_FORK_INTERVAL * 4,
+		HeaderVersion(1)
 	));
 }
