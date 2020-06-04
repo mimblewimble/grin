@@ -714,11 +714,13 @@ impl WorkersList {
 	}
 	pub fn remove_worker(&self, worker_id: usize) {
 		self.update_stats(worker_id, |ws| ws.is_connected = false);
-		self.workers_list
-			.write()
+		let mut stratum_stats = self.stratum_stats.write();
+		let mut workers_list = self.workers_list.write();
+		workers_list
 			.remove(&worker_id)
 			.expect("Stratum: no such addr in map");
-		self.stratum_stats.write().num_workers = self.workers_list.read().len();
+
+		stratum_stats.num_workers = workers_list.len();
 	}
 
 	pub fn login(&self, worker_id: usize, login: String, agent: String) -> Result<(), RpcError> {
