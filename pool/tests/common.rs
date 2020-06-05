@@ -201,7 +201,7 @@ where
 		KernelFeatures::Plain { fee: fees as u64 },
 		tx_elements,
 		keychain,
-		&libtx::ProofBuilder::new(keychain),
+		&libtx::ProofBuilder::new(keychain).expect("new proof builder"),
 	)
 	.unwrap()
 }
@@ -252,7 +252,7 @@ where
 		kernel_features,
 		tx_elements,
 		keychain,
-		&libtx::ProofBuilder::new(keychain),
+		&libtx::ProofBuilder::new(keychain).expect("new proof builder"),
 	)
 	.unwrap()
 }

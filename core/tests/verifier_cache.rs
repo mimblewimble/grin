@@ -34,7 +34,7 @@ fn test_verifier_cache_rangeproofs() {
 	let key_id = ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
 	let switch = SwitchCommitmentType::Regular;
 	let commit = keychain.commit(5, &key_id, switch).unwrap();
-	let builder = proof::ProofBuilder::new(&keychain);
+	let builder = proof::ProofBuilder::new(&keychain).expect("new proof builder");
 	let proof = proof::create(&keychain, &builder, 5, &key_id, switch, commit, None).unwrap();
 
 	let out = Output {

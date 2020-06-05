@@ -432,7 +432,7 @@ impl ExtendedPrivKey {
 		Ok(ExtendedPrivKey {
 			network: self.network,
 			depth: self.depth + 1,
-			parent_fingerprint: self.fingerprint(hasher),
+			parent_fingerprint: self.fingerprint(hasher)?,
 			child_number: i,
 			secret_key: sk,
 			chain_code: ChainCode::from(&result[32..]),
@@ -440,42 +440,46 @@ impl ExtendedPrivKey {
 	}
 
 	/// Returns the HASH160 of the chaincode
-	pub fn identifier<H>(&self, hasher: &mut H) -> [u8; 20]
+	pub fn identifier<H>(&self, hasher: &mut H) -> Result<[u8; 20], Error>
 	where
 		H: BIP32Hasher,
 	{
 		let secp = Secp256k1::with_caps(ContextFlag::SignOnly);
 		// Compute extended public key
-		let pk: ExtendedPubKey = ExtendedPubKey::from_private::<H>(&secp, self, hasher);
+		let pk: ExtendedPubKey = ExtendedPubKey::from_private::<H>(&secp, self, hasher)?;
 		// Do SHA256 of just the ECDSA pubkey
 		let sha2_res = hasher.sha_256(&pk.public_key.serialize_vec(&secp, true)[..]);
 		// do RIPEMD160
-		hasher.ripemd_160(&sha2_res)
+		Ok(hasher.ripemd_160(&sha2_res))
 	}
 
 	/// Returns the first four bytes of the identifier
-	pub fn fingerprint<H>(&self, hasher: &mut H) -> Fingerprint
+	pub fn fingerprint<H>(&self, hasher: &mut H) -> Result<Fingerprint, Error>
 	where
 		H: BIP32Hasher,
 	{
-		Fingerprint::from(&self.identifier(hasher)[0..4])
+		Ok(Fingerprint::from(&self.identifier(hasher)?[0..4]))
 	}
 }
 
 impl ExtendedPubKey {
 	/// Derives a public key from a private key
-	pub fn from_private<H>(secp: &Secp256k1, sk: &ExtendedPrivKey, hasher: &mut H) -> ExtendedPubKey
+	pub fn from_private<H>(
+		secp: &Secp256k1,
+		sk: &ExtendedPrivKey,
+		hasher: &mut H,
+	) -> Result<ExtendedPubKey, Error>
 	where
 		H: BIP32Hasher,
 	{
-		ExtendedPubKey {
+		Ok(ExtendedPubKey {
 			network: hasher.network_pub(),
 			depth: sk.depth,
 			parent_fingerprint: sk.parent_fingerprint,
 			child_number: sk.child_number,
-			public_key: PublicKey::from_secret_key(secp, &sk.secret_key).unwrap(),
+			public_key: PublicKey::from_secret_key(secp, &sk.secret_key)?,
 			chain_code: sk.chain_code,
-		}
+		})
 	}
 
 	/// Attempts to derive an extended public key from a path.
@@ -736,7 +740,8 @@ mod tests {
 	) {
 		let mut h = BIP32ReferenceHasher::new();
 		let mut sk = ExtendedPrivKey::new_master(secp, &mut h, seed).unwrap();
-		let mut pk = ExtendedPubKey::from_private::<BIP32ReferenceHasher>(secp, &sk, &mut h);
+		let mut pk = ExtendedPubKey::from_private::<BIP32ReferenceHasher>(secp, &sk, &mut h)
+			.expect("from_private");
 
 		// Check derivation convenience method for ExtendedPrivKey
 		assert_eq!(
@@ -764,7 +769,8 @@ mod tests {
 			match num {
 				ChildNumber::Normal { .. } => {
 					let pk2 = pk.ckd_pub(secp, &mut h, num).unwrap();
-					pk = ExtendedPubKey::from_private::<BIP32ReferenceHasher>(secp, &sk, &mut h);
+					pk = ExtendedPubKey::from_private::<BIP32ReferenceHasher>(secp, &sk, &mut h)
+						.expect("from_provate");
 					assert_eq!(pk, pk2);
 				}
 				ChildNumber::Hardened { .. } => {
@@ -772,7 +778,8 @@ mod tests {
 						pk.ckd_pub(secp, &mut h, num),
 						Err(Error::CannotDeriveFromHardenedKey)
 					);
-					pk = ExtendedPubKey::from_private::<BIP32ReferenceHasher>(secp, &sk, &mut h);
+					pk = ExtendedPubKey::from_private::<BIP32ReferenceHasher>(secp, &sk, &mut h)
+						.expect("from_private");
 				}
 			}
 		}

@@ -539,7 +539,7 @@ fn spend_rewind_spend() {
 		);
 		let prev = chain.head_header().unwrap();
 		let kc = ExtKeychain::from_random_seed(false).unwrap();
-		let pb = ProofBuilder::new(&kc);
+		let pb = ProofBuilder::new(&kc).expect("new proof builder");
 
 		let mut head = prev;
 
@@ -613,7 +613,7 @@ fn spend_in_fork_and_compact() {
 		let chain = init_chain(".grin6", pow::mine_genesis_block().unwrap());
 		let prev = chain.head_header().unwrap();
 		let kc = ExtKeychain::from_random_seed(false).unwrap();
-		let pb = ProofBuilder::new(&kc);
+		let pb = ProofBuilder::new(&kc).expect("new proof builder");
 
 		let mut fork_head = prev;
 
@@ -761,7 +761,7 @@ fn output_header_mappings() {
 			let pk = ExtKeychainPath::new(1, n as u32, 0, 0, 0).to_identifier();
 			let reward = libtx::reward::output(
 				&keychain,
-				&libtx::ProofBuilder::new(&keychain),
+				&libtx::ProofBuilder::new(&keychain).expect("new proof builder"),
 				&pk,
 				0,
 				false,
@@ -882,8 +882,14 @@ where
 	let key_id = ExtKeychainPath::new(1, key_idx, 0, 0, 0).to_identifier();
 
 	let fees = txs.iter().map(|tx| tx.fee()).sum();
-	let reward =
-		libtx::reward::output(kc, &libtx::ProofBuilder::new(kc), &key_id, fees, false).unwrap();
+	let reward = libtx::reward::output(
+		kc,
+		&libtx::ProofBuilder::new(kc).expect("new proof builder"),
+		&key_id,
+		fees,
+		false,
+	)
+	.unwrap();
 	let mut b = match core::core::Block::new(
 		prev,
 		txs.into_iter().cloned().collect(),

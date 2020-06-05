@@ -35,8 +35,9 @@ pub struct ExtKeychain {
 }
 
 impl ExtKeychain {
-	pub fn pub_root_key(&mut self) -> ExtendedPubKey {
-		ExtendedPubKey::from_private(&self.secp, &self.master, &mut self.hasher)
+	pub fn pub_root_key(&mut self) -> Result<ExtendedPubKey, Error> {
+		let key = ExtendedPubKey::from_private(&self.secp, &self.master, &mut self.hasher)?;
+		Ok(key)
 	}
 
 	pub fn hasher(&self) -> BIP32GrinHasher {
@@ -91,9 +92,10 @@ impl Keychain for ExtKeychain {
 		ExtKeychainPath::new(depth, d1, d2, d3, d4).to_identifier()
 	}
 
-	fn public_root_key(&self) -> PublicKey {
+	fn public_root_key(&self) -> Result<PublicKey, Error> {
 		let mut hasher = self.hasher.clone();
-		ExtendedPubKey::from_private(&self.secp, &self.master, &mut hasher).public_key
+		let key = ExtendedPubKey::from_private(&self.secp, &self.master, &mut hasher)?;
+		Ok(key.public_key)
 	}
 
 	fn derive_key(

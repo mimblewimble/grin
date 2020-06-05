@@ -275,7 +275,7 @@ mod test {
 	fn blind_simple_tx() {
 		global::set_local_chain_type(global::ChainTypes::AutomatedTesting);
 		let keychain = ExtKeychain::from_random_seed(false).unwrap();
-		let builder = ProofBuilder::new(&keychain);
+		let builder = ProofBuilder::new(&keychain).expect("new proof builder");
 		let key_id1 = ExtKeychainPath::new(1, 1, 0, 0, 0).to_identifier();
 		let key_id2 = ExtKeychainPath::new(1, 2, 0, 0, 0).to_identifier();
 		let key_id3 = ExtKeychainPath::new(1, 3, 0, 0, 0).to_identifier();
@@ -297,7 +297,7 @@ mod test {
 	fn blind_simple_tx_with_offset() {
 		global::set_local_chain_type(global::ChainTypes::AutomatedTesting);
 		let keychain = ExtKeychain::from_random_seed(false).unwrap();
-		let builder = ProofBuilder::new(&keychain);
+		let builder = ProofBuilder::new(&keychain).expect("new proof builder");
 		let key_id1 = ExtKeychainPath::new(1, 1, 0, 0, 0).to_identifier();
 		let key_id2 = ExtKeychainPath::new(1, 2, 0, 0, 0).to_identifier();
 		let key_id3 = ExtKeychainPath::new(1, 3, 0, 0, 0).to_identifier();
@@ -319,7 +319,7 @@ mod test {
 	fn blind_simpler_tx() {
 		global::set_local_chain_type(global::ChainTypes::AutomatedTesting);
 		let keychain = ExtKeychain::from_random_seed(false).unwrap();
-		let builder = ProofBuilder::new(&keychain);
+		let builder = ProofBuilder::new(&keychain).expect("new proof builder");
 		let key_id1 = ExtKeychainPath::new(1, 1, 0, 0, 0).to_identifier();
 		let key_id2 = ExtKeychainPath::new(1, 2, 0, 0, 0).to_identifier();
 
