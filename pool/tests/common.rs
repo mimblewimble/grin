@@ -107,65 +107,6 @@ pub struct ChainAdapter {
 	pub chain: Arc<Chain>,
 }
 
-// impl ChainAdapter {
-// 	pub fn init(db_root: String) -> Result<ChainAdapter, String> {
-// 		let target_dir = format!("target/{}", db_root);
-// 		let chain_store = ChainStore::new(&target_dir)
-// 			.map_err(|e| format!("failed to init chain_store, {:?}", e))?;
-// 		let store = Arc::new(RwLock::new(chain_store));
-// 		let utxo = Arc::new(RwLock::new(HashSet::new()));
-
-// 		Ok(ChainAdapter { store, utxo })
-// 	}
-
-// 	pub fn update_db_for_block(&self, block: &Block) {
-// 		let header = &block.header;
-// 		let tip = Tip::from_header(header);
-// 		let s = self.store.write();
-// 		let batch = s.batch().unwrap();
-
-// 		batch.save_block_header(header).unwrap();
-// 		batch.save_body_head(&tip).unwrap();
-
-// 		// Retrieve previous block_sums from the db.
-// 		let prev_sums = if let Ok(prev_sums) = batch.get_block_sums(&tip.prev_block_h) {
-// 			prev_sums
-// 		} else {
-// 			BlockSums::default()
-// 		};
-
-// 		// Overage is based purely on the new block.
-// 		// Previous block_sums have taken all previous overage into account.
-// 		let overage = header.overage();
-
-// 		// Offset on the other hand is the total kernel offset from the new block.
-// 		let offset = header.total_kernel_offset();
-
-// 		// Verify the kernel sums for the block_sums with the new block applied.
-// 		let (utxo_sum, kernel_sum) = (prev_sums, block as &dyn Committed)
-// 			.verify_kernel_sums(overage, offset)
-// 			.unwrap();
-
-// 		let block_sums = BlockSums {
-// 			utxo_sum,
-// 			kernel_sum,
-// 		};
-// 		batch.save_block_sums(&header.hash(), block_sums).unwrap();
-
-// 		batch.commit().unwrap();
-
-// 		{
-// 			let mut utxo = self.utxo.write();
-// 			for x in block.inputs() {
-// 				utxo.remove(&x.commitment());
-// 			}
-// 			for x in block.outputs() {
-// 				utxo.insert(x.commitment());
-// 			}
-// 		}
-// 	}
-// }
-
 impl BlockChain for ChainAdapter {
 	fn chain_head(&self) -> Result<BlockHeader, PoolError> {
 		self.chain
