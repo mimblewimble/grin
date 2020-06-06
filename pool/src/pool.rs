@@ -211,7 +211,6 @@ where
 		// Validate aggregated tx (existing pool + new tx), ignoring tx weight limits.
 		// Validate against known chain state at the provided header.
 		self.validate_raw_tx(&agg_tx, header, Weighting::NoLimit)?;
-
 		// If we get here successfully then we can safely add the entry to the pool.
 		self.log_pool_add(&entry, header);
 		self.entries.push(entry);
@@ -312,8 +311,6 @@ where
 		extra_tx: Option<Transaction>,
 		header: &BlockHeader,
 	) -> Result<(), PoolError> {
-		error!("***** TODO - reconcile needs to be NRD aware (0 height and >0 height");
-
 		let existing_entries = self.entries.clone();
 		self.entries.clear();
 
@@ -463,8 +460,6 @@ where
 	/// Quick reconciliation step - we can evict any txs in the pool where
 	/// inputs or kernels intersect with the block.
 	pub fn reconcile_block(&mut self, block: &Block) {
-		error!("***** TODO - reconcile_block needs to be NRD aware (0 height and >0 height");
-
 		// Filter txs in the pool based on the latest block.
 		// Reject any txs where we see a matching tx kernel in the block.
 		// Also reject any txs where we see a conflicting tx,

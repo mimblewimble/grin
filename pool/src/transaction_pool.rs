@@ -162,10 +162,10 @@ where
 	) -> Result<(), PoolError> {
 		// Quick check for duplicate txs.
 		// Our stempool is private and we do not want to reveal anything about the txs contained.
-		// If this is a stem tx and we have already seen it in the stempool quietly drop it.
-		// Otherwise if we have seen it in the txpool then "duplicate tx" error.
+		// If this is a stem tx and is already present in stempool then fluff by adding to txpool.
+		// Otherwise if already present in txpool return a "duplicate tx" error.
 		if stem && self.stempool.contains_tx(tx.hash()) {
-			return Ok(());
+			return self.add_to_pool(src, tx, false, header);
 		} else if self.txpool.contains_tx(tx.hash()) {
 			return Err(PoolError::DuplicateTx);
 		}
@@ -173,14 +173,6 @@ where
 		// Check this tx is valid based on current header version.
 		// NRD kernels only valid post HF3 and if NRD feature enabled.
 		self.verify_kernel_variants(&tx, header)?;
-
-		// Reject any NRD kernels if duplicate kernels already present in the stempool/txpool.
-		// It is never valid for duplicates to co-exist in the stempool/txpool (min relative_height = 1)
-		if stem {
-			self.stempool.verify_nrd_height_0(&tx)?;
-		} else {
-			self.txpool
-		}
 
 		// Do we have the capacity to accept this transaction?
 		let acceptability = self.is_acceptable(&tx, stem);
@@ -208,19 +200,18 @@ where
 			tx,
 		};
 
-		// If not stem then we are fluff.
-		// If this is a stem tx then attempt to stem.
-		// Any problems during stem, fallback to fluff.
-		if !stem
-			|| self
-				.add_to_stempool(entry.clone(), header)
-				.and_then(|_| self.adapter.stem_tx_accepted(&entry))
-				.is_err()
-		{
-			self.add_to_txpool(entry.clone(), header)?;
-			self.add_to_reorg_cache(entry.clone());
-			self.adapter.tx_accepted(&entry);
+		// If this is a stem tx then attempt to add it to stempool.
+		// If the adapter fails to accept the new stem tx then fallback to fluff via txpool.
+		if stem {
+			self.add_to_stempool(entry.clone(), header)?;
+			if self.adapter.stem_tx_accepted(&entry).is_ok() {
+				return Ok(());
+			}
 		}
+
+		self.add_to_txpool(entry.clone(), header)?;
+		self.add_to_reorg_cache(entry.clone());
+		self.adapter.tx_accepted(&entry);
 
 		// Transaction passed all the checks but we have to make space for it
 		if evict {
