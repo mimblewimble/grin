@@ -14,144 +14,141 @@
 
 //! Common test functions
 
-use self::chain::store::ChainStore;
-use self::chain::types::Tip;
-use self::core::core::hash::{Hash, Hashed};
-use self::core::core::verifier_cache::VerifierCache;
-use self::core::core::{Block, BlockHeader, BlockSums, Committed, KernelFeatures, Transaction};
-use self::core::libtx;
-use self::keychain::{ExtKeychain, Keychain};
+use self::chain::types::{NoopAdapter, Options};
+use self::chain::Chain;
+use self::core::consensus;
+use self::core::core::hash::Hash;
+use self::core::core::verifier_cache::{LruVerifierCache, VerifierCache};
+use self::core::core::{Block, BlockHeader, BlockSums, KernelFeatures, Transaction};
+use self::core::genesis;
+use self::core::global;
+use self::core::libtx::{build, reward, ProofBuilder};
+use self::core::pow;
+use self::keychain::{ExtKeychain, ExtKeychainPath, Keychain};
 use self::pool::types::*;
 use self::pool::TransactionPool;
-use self::util::secp::pedersen::Commitment;
 use self::util::RwLock;
+use chrono::Duration;
 use grin_chain as chain;
 use grin_core as core;
 use grin_keychain as keychain;
 use grin_pool as pool;
 use grin_util as util;
-use std::collections::HashSet;
 use std::fs;
 use std::sync::Arc;
 
-#[derive(Clone)]
-pub struct ChainAdapter {
-	pub store: Arc<RwLock<ChainStore>>,
-	pub utxo: Arc<RwLock<HashSet<Commitment>>>,
+/// Build genesis block with reward (non-empty, like we have in mainnet).
+pub fn genesis_block<K>(keychain: &K) -> Block
+where
+	K: Keychain,
+{
+	let key_id = keychain::ExtKeychain::derive_key_id(1, 0, 0, 0, 0);
+	let reward = reward::output(keychain, &ProofBuilder::new(keychain), &key_id, 0, false).unwrap();
+
+	genesis::genesis_dev().with_reward(reward.0, reward.1)
 }
 
-impl ChainAdapter {
-	pub fn init(db_root: String) -> Result<ChainAdapter, String> {
-		let target_dir = format!("target/{}", db_root);
-		let chain_store = ChainStore::new(&target_dir)
-			.map_err(|e| format!("failed to init chain_store, {:?}", e))?;
-		let store = Arc::new(RwLock::new(chain_store));
-		let utxo = Arc::new(RwLock::new(HashSet::new()));
+pub fn init_chain(dir_name: &str, genesis: Block) -> Chain {
+	let verifier_cache = Arc::new(RwLock::new(LruVerifierCache::new()));
+	Chain::init(
+		dir_name.to_string(),
+		Arc::new(NoopAdapter {}),
+		genesis,
+		pow::verify_size,
+		verifier_cache,
+		false,
+	)
+	.unwrap()
+}
 
-		Ok(ChainAdapter { store, utxo })
+pub fn add_some_blocks<K>(chain: &Chain, count: u64, keychain: &K)
+where
+	K: Keychain,
+{
+	for _ in 0..count {
+		add_block(chain, vec![], keychain);
 	}
+}
 
-	pub fn update_db_for_block(&self, block: &Block) {
-		let header = &block.header;
-		let tip = Tip::from_header(header);
-		let s = self.store.write();
-		let batch = s.batch().unwrap();
+pub fn add_block<K>(chain: &Chain, txs: Vec<Transaction>, keychain: &K)
+where
+	K: Keychain,
+{
+	let prev = chain.head_header().unwrap();
+	let height = prev.height + 1;
+	let next_header_info = consensus::next_difficulty(height, chain.difficulty_iter().unwrap());
+	let fee = txs.iter().map(|x| x.fee()).sum();
+	let key_id = ExtKeychainPath::new(1, height as u32, 0, 0, 0).to_identifier();
+	let reward =
+		reward::output(keychain, &ProofBuilder::new(keychain), &key_id, fee, false).unwrap();
 
-		batch.save_block_header(header).unwrap();
-		batch.save_body_head(&tip).unwrap();
+	let mut block = Block::new(&prev, txs, next_header_info.clone().difficulty, reward).unwrap();
 
-		// Retrieve previous block_sums from the db.
-		let prev_sums = if let Ok(prev_sums) = batch.get_block_sums(&tip.prev_block_h) {
-			prev_sums
-		} else {
-			BlockSums::default()
-		};
+	block.header.timestamp = prev.timestamp + Duration::seconds(60);
+	block.header.pow.secondary_scaling = next_header_info.secondary_scaling;
 
-		// Overage is based purely on the new block.
-		// Previous block_sums have taken all previous overage into account.
-		let overage = header.overage();
+	chain.set_txhashset_roots(&mut block).unwrap();
 
-		// Offset on the other hand is the total kernel offset from the new block.
-		let offset = header.total_kernel_offset();
+	let edge_bits = global::min_edge_bits();
+	block.header.pow.proof.edge_bits = edge_bits;
+	pow::pow_size(
+		&mut block.header,
+		next_header_info.difficulty,
+		global::proofsize(),
+		edge_bits,
+	)
+	.unwrap();
 
-		// Verify the kernel sums for the block_sums with the new block applied.
-		let (utxo_sum, kernel_sum) = (prev_sums, block as &dyn Committed)
-			.verify_kernel_sums(overage, offset)
-			.unwrap();
+	chain.process_block(block, Options::NONE).unwrap();
+}
 
-		let block_sums = BlockSums {
-			utxo_sum,
-			kernel_sum,
-		};
-		batch.save_block_sums(&header.hash(), block_sums).unwrap();
-
-		batch.commit().unwrap();
-
-		{
-			let mut utxo = self.utxo.write();
-			for x in block.inputs() {
-				utxo.remove(&x.commitment());
-			}
-			for x in block.outputs() {
-				utxo.insert(x.commitment());
-			}
-		}
-	}
+#[derive(Clone)]
+pub struct ChainAdapter {
+	pub chain: Arc<Chain>,
 }
 
 impl BlockChain for ChainAdapter {
 	fn chain_head(&self) -> Result<BlockHeader, PoolError> {
-		let s = self.store.read();
-		s.head_header()
-			.map_err(|_| PoolError::Other(format!("failed to get chain head")))
+		self.chain
+			.head_header()
+			.map_err(|_| PoolError::Other("failed to get chain head".into()))
 	}
 
 	fn get_block_header(&self, hash: &Hash) -> Result<BlockHeader, PoolError> {
-		let s = self.store.read();
-		s.get_block_header(hash)
-			.map_err(|_| PoolError::Other(format!("failed to get block header")))
+		self.chain
+			.get_block_header(hash)
+			.map_err(|_| PoolError::Other("failed to get block header".into()))
 	}
 
 	fn get_block_sums(&self, hash: &Hash) -> Result<BlockSums, PoolError> {
-		let s = self.store.read();
-		s.get_block_sums(hash)
-			.map_err(|_| PoolError::Other(format!("failed to get block sums")))
+		self.chain
+			.get_block_sums(hash)
+			.map_err(|_| PoolError::Other("failed to get block sums".into()))
 	}
 
 	fn validate_tx(&self, tx: &Transaction) -> Result<(), pool::PoolError> {
-		let utxo = self.utxo.read();
-
-		for x in tx.outputs() {
-			if utxo.contains(&x.commitment()) {
-				return Err(PoolError::Other(format!("output commitment not unique")));
-			}
-		}
-
-		for x in tx.inputs() {
-			if !utxo.contains(&x.commitment()) {
-				return Err(PoolError::Other(format!("not in utxo set")));
-			}
-		}
-
-		Ok(())
+		self.chain
+			.validate_tx(tx)
+			.map_err(|_| PoolError::Other("failed to validate tx".into()))
 	}
 
-	// Mocking this check out for these tests.
-	// We will test the Merkle proof verification logic elsewhere.
-	fn verify_coinbase_maturity(&self, _tx: &Transaction) -> Result<(), PoolError> {
-		Ok(())
+	fn verify_coinbase_maturity(&self, tx: &Transaction) -> Result<(), PoolError> {
+		self.chain
+			.verify_coinbase_maturity(tx)
+			.map_err(|_| PoolError::ImmatureCoinbase)
 	}
 
-	// Mocking this out for these tests.
-	fn verify_tx_lock_height(&self, _tx: &Transaction) -> Result<(), PoolError> {
-		Ok(())
+	fn verify_tx_lock_height(&self, tx: &Transaction) -> Result<(), PoolError> {
+		self.chain
+			.verify_tx_lock_height(tx)
+			.map_err(|_| PoolError::ImmatureTransaction)
 	}
 }
 
-pub fn test_setup<B, V>(
+pub fn init_transaction_pool<B, V>(
 	chain: Arc<B>,
 	verifier_cache: Arc<RwLock<V>>,
-) -> TransactionPool<B, NoopAdapter, V>
+) -> TransactionPool<B, NoopPoolAdapter, V>
 where
 	B: BlockChain,
 	V: VerifierCache + 'static,
@@ -165,7 +162,7 @@ where
 		},
 		chain.clone(),
 		verifier_cache.clone(),
-		Arc::new(NoopAdapter {}),
+		Arc::new(NoopPoolAdapter {}),
 	)
 }
 
@@ -189,19 +186,19 @@ where
 	// single input spending a single coinbase (deterministic key_id aka height)
 	{
 		let key_id = ExtKeychain::derive_key_id(1, header.height as u32, 0, 0, 0);
-		tx_elements.push(libtx::build::coinbase_input(coinbase_reward, key_id));
+		tx_elements.push(build::coinbase_input(coinbase_reward, key_id));
 	}
 
 	for output_value in output_values {
 		let key_id = ExtKeychain::derive_key_id(1, output_value as u32, 0, 0, 0);
-		tx_elements.push(libtx::build::output(output_value, key_id));
+		tx_elements.push(build::output(output_value, key_id));
 	}
 
-	libtx::build::transaction(
+	build::transaction(
 		KernelFeatures::Plain { fee: fees as u64 },
 		tx_elements,
 		keychain,
-		&libtx::ProofBuilder::new(keychain),
+		&ProofBuilder::new(keychain),
 	)
 	.unwrap()
 }
@@ -240,19 +237,19 @@ where
 
 	for input_value in input_values {
 		let key_id = ExtKeychain::derive_key_id(1, input_value as u32, 0, 0, 0);
-		tx_elements.push(libtx::build::input(input_value, key_id));
+		tx_elements.push(build::input(input_value, key_id));
 	}
 
 	for output_value in output_values {
 		let key_id = ExtKeychain::derive_key_id(1, output_value as u32, 0, 0, 0);
-		tx_elements.push(libtx::build::output(output_value, key_id));
+		tx_elements.push(build::output(output_value, key_id));
 	}
 
-	libtx::build::transaction(
+	build::transaction(
 		kernel_features,
 		tx_elements,
 		keychain,
-		&libtx::ProofBuilder::new(keychain),
+		&ProofBuilder::new(keychain),
 	)
 	.unwrap()
 }
@@ -262,7 +259,7 @@ pub fn test_source() -> TxSource {
 }
 
 pub fn clean_output_dir(db_root: String) {
-	if let Err(e) = fs::remove_dir_all(format!("target/{}", db_root)) {
+	if let Err(e) = fs::remove_dir_all(db_root) {
 		println!("cleaning output dir failed - {:?}", e)
 	}
 }

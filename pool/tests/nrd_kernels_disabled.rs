@@ -14,7 +14,9 @@
 
 pub mod common;
 
+use self::core::consensus;
 use self::core::core::verifier_cache::LruVerifierCache;
+use self::core::core::{HeaderVersion, KernelFeatures, NRDRelativeHeight};
 use self::core::global;
 use self::keychain::{ExtKeychain, Keychain};
 use self::pool::types::PoolError;
@@ -26,14 +28,15 @@ use grin_pool as pool;
 use grin_util as util;
 use std::sync::Arc;
 
-/// Test we correctly verify coinbase maturity when adding txs to the pool.
 #[test]
-fn test_coinbase_maturity() {
+fn test_nrd_kernels_disabled() {
 	util::init_test_logger();
 	global::set_local_chain_type(global::ChainTypes::AutomatedTesting);
+	global::set_local_nrd_enabled(false);
+
 	let keychain: ExtKeychain = Keychain::from_random_seed(false).unwrap();
 
-	let db_root = "target/.coinbase_maturity";
+	let db_root = "target/.nrd_kernels_disabled";
 	clean_output_dir(db_root.into());
 
 	let genesis = genesis_block(&keychain);
@@ -48,27 +51,48 @@ fn test_coinbase_maturity() {
 		verifier_cache,
 	);
 
-	// Add a single block, introducing coinbase output to be spent later.
-	add_block(&chain, vec![], &keychain);
+	// Add some blocks.
+	add_some_blocks(&chain, 3, &keychain);
 
+	// Spend the initial coinbase.
 	let header_1 = chain.get_header_by_height(1).unwrap();
-	let tx = test_transaction_spending_coinbase(&keychain, &header_1, vec![100]);
+	let tx = test_transaction_spending_coinbase(&keychain, &header_1, vec![10, 20, 30, 40]);
+	add_block(&chain, vec![tx], &keychain);
 
-	// Coinbase is not yet matured and cannot be spent.
-	let header = chain.head_header().unwrap();
-	assert_eq!(
-		pool.add_to_pool(test_source(), tx.clone(), true, &header)
-			.err(),
-		Some(PoolError::ImmatureCoinbase)
+	let tx_1 = test_transaction_with_kernel_features(
+		&keychain,
+		vec![10, 20],
+		vec![24],
+		KernelFeatures::NoRecentDuplicate {
+			fee: 6,
+			relative_height: NRDRelativeHeight::new(1440).unwrap(),
+		},
 	);
 
-	// Add 2 more blocks. Original coinbase output is now matured and can be spent.
-	add_some_blocks(&chain, 2, &keychain);
 	let header = chain.head_header().unwrap();
+	assert!(header.version < HeaderVersion(4));
+
 	assert_eq!(
-		pool.add_to_pool(test_source(), tx.clone(), true, &header),
-		Ok(())
+		pool.add_to_pool(test_source(), tx_1.clone(), false, &header),
+		Err(PoolError::NRDKernelNotEnabled)
 	);
 
+	// Now mine several more blocks out to HF3
+	add_some_blocks(&chain, 5, &keychain);
+	let header = chain.head_header().unwrap();
+	assert_eq!(header.height, consensus::TESTING_THIRD_HARD_FORK);
+	assert_eq!(header.version, HeaderVersion(4));
+
+	// NRD kernel support not enabled via feature flag, so not valid.
+	assert_eq!(
+		pool.add_to_pool(test_source(), tx_1.clone(), false, &header),
+		Err(PoolError::NRDKernelNotEnabled)
+	);
+
+	assert_eq!(pool.total_size(), 0);
+	let txs = pool.prepare_mineable_transactions().unwrap();
+	assert_eq!(txs.len(), 0);
+
+	// Cleanup db directory
 	clean_output_dir(db_root.into());
 }
