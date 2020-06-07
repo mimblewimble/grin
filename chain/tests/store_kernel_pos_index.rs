@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::chain::linked_list::{ListIndex, ListWrapper, RewindableListIndex};
+use crate::chain::linked_list::{ListIndex, ListWrapper, PruneableListIndex, RewindableListIndex};
 use crate::chain::store::{self, ChainStore};
 use crate::chain::types::CommitPos;
 use crate::core::global;

@@ -119,13 +119,6 @@ pub trait ListIndex {
 		batch: &Batch<'_>,
 		commit: Commitment,
 	) -> Result<Option<<Self::Entry as ListIndexEntry>::Pos>, Error>;
-
-	/// Pop a pos off the back of the list (used for pruning old data).
-	fn pop_pos_back(
-		&self,
-		batch: &Batch<'_>,
-		commit: Commitment,
-	) -> Result<Option<<Self::Entry as ListIndexEntry>::Pos>, Error>;
 }
 
 /// Supports "rewind" given the provided commit and a pos to rewind back to.
@@ -137,9 +130,16 @@ pub trait RewindableListIndex {
 /// A pruneable list index supports pruning of old data from the index lists.
 /// This allows us to efficiently maintain an index of "recent" kernel data.
 /// We can maintain a window of 2 weeks of recent data, discarding anything older than this.
-pub trait PruneableListIndex {
+pub trait PruneableListIndex: ListIndex {
 	/// Prune old data.
 	fn prune(&self, batch: &Batch<'_>, commit: Commitment, cutoff_pos: u64) -> Result<(), Error>;
+
+	/// Pop a pos off the back of the list (used for pruning old data).
+	fn pop_pos_back(
+		&self,
+		batch: &Batch<'_>,
+		commit: Commitment,
+	) -> Result<Option<<Self::Entry as ListIndexEntry>::Pos>, Error>;
 }
 
 /// Wrapper for the list to handle either `Single` or `Multi` entries.
@@ -365,14 +365,30 @@ where
 			}
 		}
 	}
+}
+
+/// List index that supports rewind.
+impl<T: PosEntry> RewindableListIndex for MultiIndex<T> {
+	fn rewind(&self, batch: &Batch<'_>, commit: Commitment, rewind_pos: u64) -> Result<(), Error> {
+		while self
+			.peek_pos(batch, commit)?
+			.map(|x| x.pos() > rewind_pos)
+			.unwrap_or(false)
+		{
+			self.pop_pos(batch, commit)?;
+		}
+		Ok(())
+	}
+}
+
+impl<T: PosEntry> PruneableListIndex for MultiIndex<T> {
+	fn prune(&self, batch: &Batch<'_>, commit: Commitment, cutoff_pos: u64) -> Result<(), Error> {
+		panic!("wat");
+	}
 
 	/// Pop off the back/tail of the linked list.
 	/// Used when pruning old data.
-	fn pop_pos_back(
-		&self,
-		batch: &Batch<'_>,
-		commit: Commitment,
-	) -> Result<Option<<Self::Entry as ListIndexEntry>::Pos>, Error> {
+	fn pop_pos_back(&self, batch: &Batch<'_>, commit: Commitment) -> Result<Option<T>, Error> {
 		match self.get_list(batch, commit)? {
 			None => Ok(None),
 			Some(ListWrapper::Single { pos }) => {
@@ -413,26 +429,6 @@ where
 				}
 			}
 		}
-	}
-}
-
-/// List index that supports rewind.
-impl<T: PosEntry> RewindableListIndex for MultiIndex<T> {
-	fn rewind(&self, batch: &Batch<'_>, commit: Commitment, rewind_pos: u64) -> Result<(), Error> {
-		while self
-			.peek_pos(batch, commit)?
-			.map(|x| x.pos() > rewind_pos)
-			.unwrap_or(false)
-		{
-			self.pop_pos(batch, commit)?;
-		}
-		Ok(())
-	}
-}
-
-impl<T: PosEntry> PruneableListIndex for MultiIndex<T> {
-	fn prune(&self, batch: &Batch<'_>, commit: Commitment, cutoff_pos: u64) -> Result<(), Error> {
-		panic!("wat");
 	}
 }
 
