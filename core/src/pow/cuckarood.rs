@@ -76,7 +76,7 @@ where
 		let mut ndir = vec![0usize; 2];
 		let mut xor0: u64 = 0;
 		let mut xor1: u64 = 0;
-		let nodemask = self.params.edge_mask >> 1;
+		let node_mask: u64 = to_u64!(self.params.edge_mask) >> 1;
 
 		for n in 0..proof.proof_size() {
 			let dir = (nonces[n] & 1) as usize;
@@ -89,14 +89,12 @@ where
 			if n > 0 && nonces[n] <= nonces[n - 1] {
 				return Err(ErrorKind::Verification("edges not ascending".to_owned()).into());
 			}
-			let edge = to_edge!(
-				T,
-				siphash_block(&self.params.siphash_keys, nonces[n], 25, false)
-			);
+			// cuckarood uses a non-standard siphash rotation constant 25 as anti-ASIC tweak
+			let edge: u64 = siphash_block(&self.params.siphash_keys, nonces[n], 25, false);
 			let idx = 4 * ndir[dir] + 2 * dir;
-			uvs[idx] = to_u64!(edge & nodemask);
-			uvs[idx + 1] = to_u64!((edge >> 32) & nodemask);
+			uvs[idx] = edge & node_mask;
 			xor0 ^= uvs[idx];
+			uvs[idx + 1] = (edge >> 32) & node_mask;
 			xor1 ^= uvs[idx + 1];
 			ndir[dir] += 1;
 		}

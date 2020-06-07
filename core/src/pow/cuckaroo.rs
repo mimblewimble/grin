@@ -76,6 +76,7 @@ where
 		let mut uvs = vec![0u64; 2 * proof.proof_size()];
 		let mut xor0: u64 = 0;
 		let mut xor1: u64 = 0;
+		let node_mask: u64 = to_u64!(self.params.edge_mask);
 
 		for n in 0..proof.proof_size() {
 			if nonces[n] > to_u64!(self.params.edge_mask) {
@@ -85,13 +86,10 @@ where
 				return Err(ErrorKind::Verification("edges not ascending".to_owned()).into());
 			}
 			// 21 is standard siphash rotation constant
-			let edge = to_edge!(
-				T,
-				siphash_block(&self.params.siphash_keys, nonces[n], 21, false)
-			);
-			uvs[2 * n] = to_u64!(edge & self.params.edge_mask);
-			uvs[2 * n + 1] = to_u64!((edge >> 32) & self.params.edge_mask);
+			let edge: u64 = siphash_block(&self.params.siphash_keys, nonces[n], 21, false);
+			uvs[2 * n] = edge & node_mask;
 			xor0 ^= uvs[2 * n];
+			uvs[2 * n + 1] = (edge >> 32) & node_mask;
 			xor1 ^= uvs[2 * n + 1];
 		}
 		if xor0 | xor1 != 0 {
