@@ -17,7 +17,7 @@ failure = "0.1"
 failure_derive = "0.1"
 lmdb-zero = "0.4.4"
 memmap = "0.7"
-tempfile = "3.0.5"
+tempfile = "3.1"
 serde = "1"
 serde_derive = "1"
 log = "0.4"
@@ -26,7 +26,7 @@ grin_core = { path = "../core", version = "4.0.0-beta.1" }
 grin_util = { path = "../util", version = "4.0.0-beta.1" }
 
 [dev-dependencies]
-chrono = "0.4.4"
+chrono = "0.4.11"
 rand = "0.6"
 filetime = "0.2"
-env_logger = "0.5"
+env_logger = "0.7"

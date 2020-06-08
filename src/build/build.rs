@@ -17,7 +17,7 @@
 use built;
 
 use std::env;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 
 fn main() {
@@ -42,10 +42,11 @@ fn main() {
 	// build and versioning information
 	let mut opts = built::Options::default();
 	opts.set_dependencies(true);
+	let out_dir_path = format!("{}{}", env::var("OUT_DIR").unwrap(), "/built.rs");
 	// don't fail the build if something's missing, may just be cargo release
 	let _ = built::write_built_file_with_opts(
 		&opts,
-		env!("CARGO_MANIFEST_DIR"),
-		format!("{}{}", env::var("OUT_DIR").unwrap(), "/built.rs"),
+		Path::new(env!("CARGO_MANIFEST_DIR")),
+		Path::new(&out_dir_path),
 	);
 }

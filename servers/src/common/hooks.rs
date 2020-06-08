@@ -202,7 +202,7 @@ impl WebHook {
 
 		let https = HttpsConnector::new();
 		let client = Client::builder()
-			.keep_alive_timeout(keep_alive)
+			.pool_idle_timeout(keep_alive)
 			.build::<_, hyper::Body>(https);
 
 		WebHook {

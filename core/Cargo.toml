@@ -23,10 +23,10 @@ num-bigint = "0.2"
 rand = "0.6"
 serde = "1"
 serde_derive = "1"
-siphasher = "0.2"
+siphasher = "0.3"
 log = "0.4"
-chrono = { version = "0.4.4", features = ["serde"] }
-zeroize = "0.9"
+chrono = { version = "0.4.11", features = ["serde"] }
+zeroize = { version = "1.1", features =["zeroize_derive"] }
 
 keychain = { package = "grin_keychain", path = "../keychain", version = "4.0.0-beta.1" }
 util = { package = "grin_util", path = "../util", version = "4.0.0-beta.1" }
