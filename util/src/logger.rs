@@ -150,6 +150,8 @@ pub fn init_logger(config: Option<LoggingConfig>, logs_tx: Option<mpsc::SyncSend
 			*tui_running_ref = true;
 		}
 
+		let mut was_init_ref = WAS_INIT.lock();
+
 		// Save current logging configuration
 		let mut config_ref = LOGGING_CONFIG.lock();
 		*config_ref = c.clone();
@@ -250,7 +252,6 @@ pub fn init_logger(config: Option<LoggingConfig>, logs_tx: Option<mpsc::SyncSend
 		);
 
 		// Mark logger as initialized
-		let mut was_init_ref = WAS_INIT.lock();
 		*was_init_ref = true;
 	}
 
