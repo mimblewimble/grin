@@ -196,12 +196,12 @@ impl Chain {
 			&mut txhashset,
 		)?;
 
-		// Initialize the output_pos index based on UTXO set.
-		// This is fast as we only look for stale and missing entries
-		// and do not need to rebuild the entire index.
+		// Initialize the output_pos index based on UTXO set
+		// and NRD kernel_pos index based recent kernel history.
 		{
 			let batch = store.batch()?;
 			txhashset.init_output_pos_index(&header_pmmr, &batch)?;
+			txhashset.init_kernel_pos_index(&header_pmmr, &batch)?;
 			batch.commit()?;
 		}
 
@@ -1010,6 +1010,9 @@ impl Chain {
 		// Rebuild our output_pos index in the db based on fresh UTXO set.
 		txhashset.init_output_pos_index(&header_pmmr, &batch)?;
 
+		// Rebuild our NRD kernel_pos index based on recent kernel history.
+		txhashset.init_kernel_pos_index(&header_pmmr, &batch)?;
+
 		// Commit all the changes to the db.
 		batch.commit()?;
 
@@ -1145,6 +1148,9 @@ impl Chain {
 
 		// Make sure our output_pos index is consistent with the UTXO set.
 		txhashset.init_output_pos_index(&header_pmmr, &batch)?;
+
+		// Rebuild our NRD kernel_pos index based on recent kernel history.
+		txhashset.init_kernel_pos_index(&header_pmmr, &batch)?;
 
 		// Commit all the above db changes.
 		batch.commit()?;

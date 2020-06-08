@@ -15,6 +15,7 @@
 //! Utility structs to handle the 3 MMRs (output, rangeproof,
 //! kernel) along the overall header MMR conveniently and transactionally.
 
+use crate::core::consensus::WEEK_HEIGHT;
 use crate::core::core::committed::Committed;
 use crate::core::core::hash::{Hash, Hashed};
 use crate::core::core::merkle_proof::MerkleProof;
@@ -25,7 +26,7 @@ use crate::core::core::{
 use crate::core::global;
 use crate::core::ser::{PMMRable, ProtocolVersion};
 use crate::error::{Error, ErrorKind};
-use crate::linked_list::{ListIndex, RewindableListIndex};
+use crate::linked_list::{ListIndex, PruneableListIndex, RewindableListIndex};
 use crate::store::{self, Batch, ChainStore};
 use crate::txhashset::bitmap_accumulator::BitmapAccumulator;
 use crate::txhashset::{RewindableKernelView, UTXOView};
@@ -376,6 +377,83 @@ impl TxHashSet {
 
 		debug!("txhashset: ... compaction finished");
 
+		Ok(())
+	}
+
+	/// (Re)build thge NRD kernel_pos based on 2 weeks of recent kernel history.
+	pub fn init_kernel_pos_index(
+		&self,
+		header_pmmr: &PMMRHandle<BlockHeader>,
+		batch: &Batch<'_>,
+	) -> Result<(), Error> {
+		// if !global::is_nrd_enabled() {
+		// 	return Ok(())
+		// }
+
+		let now = Instant::now();
+		let kernel_index = store::nrd_recent_kernel_index();
+		kernel_index.clear(batch)?;
+
+		let head = batch.head()?;
+		let cutoff = head.height.saturating_sub(WEEK_HEIGHT * 2);
+		let cutoff_hash = header_pmmr.get_header_hash_by_height(cutoff)?;
+		let cutoff_header = batch.get_block_header(&cutoff_hash)?;
+
+		let prev_size = if cutoff == 0 {
+			0
+		} else {
+			let prev_header = batch.get_previous_header(&cutoff_header)?;
+			prev_header.kernel_mmr_size
+		};
+
+		debug!(
+			"init_kernel_pos_index: cutoff_header: {} at {}, prev kernel_mmr_size: {}",
+			cutoff_header.hash(),
+			cutoff_header.height,
+			prev_size,
+		);
+
+		let kernel_pmmr =
+			ReadonlyPMMR::at(&self.kernel_pmmr_h.backend, self.kernel_pmmr_h.last_pos);
+
+		let mut current_pos = prev_size + 1;
+		let mut current_header = cutoff_header;
+		let mut count = 0;
+		while current_pos <= self.kernel_pmmr_h.last_pos {
+			if pmmr::is_leaf(current_pos) {
+				if let Some(kernel) = kernel_pmmr.get_data(current_pos) {
+					match kernel.features {
+						KernelFeatures::NoRecentDuplicate { .. } => {
+							while current_pos > current_header.kernel_mmr_size {
+								let hash = header_pmmr
+									.get_header_hash_by_height(current_header.height + 1)?;
+								current_header = batch.get_block_header(&hash)?;
+							}
+
+							let new_pos = CommitPos {
+								pos: current_pos,
+								height: current_header.height,
+							};
+							debug!(
+								"pushing entry to NRD index: {:?}: {:?}",
+								kernel.excess(),
+								new_pos
+							);
+							kernel_index.push_pos(&batch, kernel.excess(), new_pos)?;
+							count += 1;
+						}
+						_ => {}
+					}
+				}
+			}
+			current_pos += 1;
+		}
+
+		debug!(
+			"init_kernel_pos_index: pushed {} entries to the index, took {}s",
+			count,
+			now.elapsed().as_secs(),
+		);
 		Ok(())
 	}
 

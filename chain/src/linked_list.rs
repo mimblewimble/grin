@@ -21,7 +21,7 @@ use crate::util::secp::pedersen::Commitment;
 use enum_primitive::FromPrimitive;
 use grin_store as store;
 use std::marker::PhantomData;
-use store::{to_key, to_key_u64, Error, SerIterator};
+use store::{to_key, to_key_u64, Error};
 
 enum_from_primitive! {
 	#[derive(Copy, Clone, Debug, PartialEq)]
@@ -406,8 +406,16 @@ impl<T: PosEntry> PruneableListIndex for MultiIndex<T> {
 		Ok(())
 	}
 
-	fn prune(&self, batch: &Batch<'_>, commit: Commitment, cutoff_pos: u64) -> Result<(), Error> {
-		panic!("wat");
+	/// Pruning will be more performant than full rebuild but not yet necessary.
+	fn prune(
+		&self,
+		_batch: &Batch<'_>,
+		_commit: Commitment,
+		_cutoff_pos: u64,
+	) -> Result<(), Error> {
+		unimplemented!(
+			"we currently rebuild index on startup/compaction, pruning not yet implemented"
+		);
 	}
 
 	/// Pop off the back/tail of the linked list.
