@@ -380,9 +380,23 @@ impl TxHashSet {
 		Ok(())
 	}
 
-	/// (Re)build thge NRD kernel_pos based on 2 weeks of recent kernel history.
-	pub fn init_kernel_pos_index(
+	/// (Re)build the NRD kernel_pos index based on 2 weeks of recent kernel history.
+	pub fn init_recent_kernel_pos_index(
 		&self,
+		header_pmmr: &PMMRHandle<BlockHeader>,
+		batch: &Batch<'_>,
+	) -> Result<(), Error> {
+		let head = batch.head()?;
+		let cutoff = head.height.saturating_sub(WEEK_HEIGHT * 2);
+		let cutoff_hash = header_pmmr.get_header_hash_by_height(cutoff)?;
+		let cutoff_header = batch.get_block_header(&cutoff_hash)?;
+		self.verify_kernel_pos_index(&cutoff_header, header_pmmr, batch)
+	}
+
+	/// Verify and (re)build the NRD kernel_pos index from the provided header onwards.
+	pub fn verify_kernel_pos_index(
+		&self,
+		from_header: &BlockHeader,
 		header_pmmr: &PMMRHandle<BlockHeader>,
 		batch: &Batch<'_>,
 	) -> Result<(), Error> {
@@ -394,22 +408,17 @@ impl TxHashSet {
 		let kernel_index = store::nrd_recent_kernel_index();
 		kernel_index.clear(batch)?;
 
-		let head = batch.head()?;
-		let cutoff = head.height.saturating_sub(WEEK_HEIGHT * 2);
-		let cutoff_hash = header_pmmr.get_header_hash_by_height(cutoff)?;
-		let cutoff_header = batch.get_block_header(&cutoff_hash)?;
-
-		let prev_size = if cutoff == 0 {
+		let prev_size = if from_header.height == 0 {
 			0
 		} else {
-			let prev_header = batch.get_previous_header(&cutoff_header)?;
+			let prev_header = batch.get_previous_header(&from_header)?;
 			prev_header.kernel_mmr_size
 		};
 
 		debug!(
-			"init_kernel_pos_index: cutoff_header: {} at {}, prev kernel_mmr_size: {}",
-			cutoff_header.hash(),
-			cutoff_header.height,
+			"verify_kernel_pos_index: header: {} at {}, prev kernel_mmr_size: {}",
+			from_header.hash(),
+			from_header.height,
 			prev_size,
 		);
 
@@ -417,7 +426,7 @@ impl TxHashSet {
 			ReadonlyPMMR::at(&self.kernel_pmmr_h.backend, self.kernel_pmmr_h.last_pos);
 
 		let mut current_pos = prev_size + 1;
-		let mut current_header = cutoff_header;
+		let mut current_header = from_header.clone();
 		let mut count = 0;
 		while current_pos <= self.kernel_pmmr_h.last_pos {
 			if pmmr::is_leaf(current_pos) {
@@ -429,17 +438,11 @@ impl TxHashSet {
 									.get_header_hash_by_height(current_header.height + 1)?;
 								current_header = batch.get_block_header(&hash)?;
 							}
-
 							let new_pos = CommitPos {
 								pos: current_pos,
 								height: current_header.height,
 							};
-							debug!(
-								"pushing entry to NRD index: {:?}: {:?}",
-								kernel.excess(),
-								new_pos
-							);
-							kernel_index.push_pos(&batch, kernel.excess(), new_pos)?;
+							apply_kernel_rules(&kernel, new_pos, batch)?;
 							count += 1;
 						}
 						_ => {}
@@ -450,7 +453,7 @@ impl TxHashSet {
 		}
 
 		debug!(
-			"init_kernel_pos_index: pushed {} entries to the index, took {}s",
+			"verify_kernel_pos_index: pushed {} entries to the index, took {}s",
 			count,
 			now.elapsed().as_secs(),
 		);
@@ -1132,32 +1135,8 @@ impl<'a> Extension<'a> {
 	) -> Result<(), Error> {
 		for kernel in kernels {
 			let pos = self.apply_kernel(kernel)?;
-
-			// If NRD enabled then enforce NRD relative height rule.
-			// Otherwise just conntinue and apply the next kernel.
-			if global::is_nrd_enabled() {
-				let kernel_index = store::nrd_recent_kernel_index();
-				if let KernelFeatures::NoRecentDuplicate {
-					relative_height, ..
-				} = kernel.features
-				{
-					debug!("checking NRD index: {:?}", kernel.excess());
-					if let Some(prev) = kernel_index.peek_pos(batch, kernel.excess())? {
-						let diff = height.saturating_sub(prev.height);
-						debug!("NRD check: {}, {:?}, {:?}", height, prev, relative_height);
-						if diff < relative_height.into() {
-							return Err(ErrorKind::NRDRelativeHeight.into());
-						}
-					}
-					let new_pos = CommitPos { pos, height };
-					debug!(
-						"pushing entry to NRD index: {:?}: {:?}",
-						kernel.excess(),
-						new_pos
-					);
-					kernel_index.push_pos(batch, kernel.excess(), new_pos)?;
-				}
-			}
+			let commit_pos = CommitPos { pos, height };
+			apply_kernel_rules(kernel, commit_pos, batch)?;
 		}
 		Ok(())
 	}
@@ -1784,4 +1763,37 @@ fn input_pos_to_rewind(
 		current = batch.get_previous_header(&current)?;
 	}
 	Ok(bitmap)
+}
+
+/// If NRD enabled then enforce NRD relative height rules.
+fn apply_kernel_rules(kernel: &TxKernel, pos: CommitPos, batch: &Batch<'_>) -> Result<(), Error> {
+	if !global::is_nrd_enabled() {
+		return Ok(());
+	}
+	match kernel.features {
+		KernelFeatures::NoRecentDuplicate {
+			relative_height, ..
+		} => {
+			let kernel_index = store::nrd_recent_kernel_index();
+			debug!("checking NRD index: {:?}", kernel.excess());
+			if let Some(prev) = kernel_index.peek_pos(batch, kernel.excess())? {
+				let diff = pos.height.saturating_sub(prev.height);
+				debug!(
+					"NRD check: {}, {:?}, {:?}",
+					pos.height, prev, relative_height
+				);
+				if diff < relative_height.into() {
+					return Err(ErrorKind::NRDRelativeHeight.into());
+				}
+			}
+			debug!(
+				"pushing entry to NRD index: {:?}: {:?}",
+				kernel.excess(),
+				pos,
+			);
+			kernel_index.push_pos(batch, kernel.excess(), pos)?;
+		}
+		_ => {}
+	}
+	Ok(())
 }

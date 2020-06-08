@@ -201,7 +201,7 @@ impl Chain {
 		{
 			let batch = store.batch()?;
 			txhashset.init_output_pos_index(&header_pmmr, &batch)?;
-			txhashset.init_kernel_pos_index(&header_pmmr, &batch)?;
+			txhashset.init_recent_kernel_pos_index(&header_pmmr, &batch)?;
 			batch.commit()?;
 		}
 
@@ -960,8 +960,16 @@ impl Chain {
 			Some(&header),
 		)?;
 
-		// Validate the full kernel history (kernel MMR root for every block header).
-		self.validate_kernel_history(&header, &txhashset)?;
+		// Validate the full kernel history.
+		// Check kernel MMR root for every block header.
+		// Check NRD relative height rules for full kernel history.
+		{
+			self.validate_kernel_history(&header, &txhashset)?;
+
+			let header_pmmr = self.header_pmmr.read();
+			let batch = self.store.batch()?;
+			txhashset.verify_kernel_pos_index(&self.genesis, &header_pmmr, &batch)?;
+		}
 
 		// all good, prepare a new batch and update all the required records
 		debug!("txhashset_write: rewinding a 2nd time (writeable)");
@@ -1011,7 +1019,7 @@ impl Chain {
 		txhashset.init_output_pos_index(&header_pmmr, &batch)?;
 
 		// Rebuild our NRD kernel_pos index based on recent kernel history.
-		txhashset.init_kernel_pos_index(&header_pmmr, &batch)?;
+		txhashset.init_recent_kernel_pos_index(&header_pmmr, &batch)?;
 
 		// Commit all the changes to the db.
 		batch.commit()?;
@@ -1150,7 +1158,7 @@ impl Chain {
 		txhashset.init_output_pos_index(&header_pmmr, &batch)?;
 
 		// Rebuild our NRD kernel_pos index based on recent kernel history.
-		txhashset.init_kernel_pos_index(&header_pmmr, &batch)?;
+		txhashset.init_recent_kernel_pos_index(&header_pmmr, &batch)?;
 
 		// Commit all the above db changes.
 		batch.commit()?;
