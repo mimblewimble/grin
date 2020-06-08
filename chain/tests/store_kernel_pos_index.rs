@@ -473,3 +473,117 @@ fn test_store_kernel_idx_multiple_commits() {
 
 	clean_output_dir(chain_dir);
 }
+
+#[test]
+fn test_store_kernel_idx_clear() -> Result<(), Error> {
+	setup_test();
+	let chain_dir = ".grin_idx_clear";
+	clean_output_dir(chain_dir);
+
+	let commit = Commitment::from_vec(vec![]);
+	let commit2 = Commitment::from_vec(vec![1]);
+
+	let store = ChainStore::new(chain_dir)?;
+	let index = store::nrd_recent_kernel_index();
+
+	// Add a couple of single entries to the index and commit the batch.
+	{
+		let batch = store.batch()?;
+		assert_eq!(index.peek_pos(&batch, commit), Ok(None));
+		assert_eq!(index.get_list(&batch, commit), Ok(None));
+
+		assert_eq!(
+			index.push_pos(&batch, commit, CommitPos { pos: 1, height: 1 }),
+			Ok(()),
+		);
+
+		assert_eq!(
+			index.push_pos(
+				&batch,
+				commit2,
+				CommitPos {
+					pos: 10,
+					height: 10
+				}
+			),
+			Ok(()),
+		);
+
+		assert_eq!(
+			index.peek_pos(&batch, commit),
+			Ok(Some(CommitPos { pos: 1, height: 1 })),
+		);
+
+		assert_eq!(
+			index.get_list(&batch, commit),
+			Ok(Some(ListWrapper::Single {
+				pos: CommitPos { pos: 1, height: 1 }
+			})),
+		);
+
+		assert_eq!(
+			index.peek_pos(&batch, commit2),
+			Ok(Some(CommitPos {
+				pos: 10,
+				height: 10
+			})),
+		);
+
+		assert_eq!(
+			index.get_list(&batch, commit2),
+			Ok(Some(ListWrapper::Single {
+				pos: CommitPos {
+					pos: 10,
+					height: 10
+				}
+			})),
+		);
+
+		batch.commit()?;
+	}
+
+	// Clear the index and confirm everything was deleted as expected.
+	{
+		let batch = store.batch()?;
+		assert_eq!(index.clear(&batch), Ok(()));
+		assert_eq!(index.peek_pos(&batch, commit), Ok(None));
+		assert_eq!(index.get_list(&batch, commit), Ok(None));
+		assert_eq!(index.peek_pos(&batch, commit2), Ok(None));
+		assert_eq!(index.get_list(&batch, commit2), Ok(None));
+		batch.commit()?;
+	}
+
+	// Add multiple entries to the index, commit the batch.
+	{
+		let batch = store.batch()?;
+		assert_eq!(
+			index.push_pos(&batch, commit, CommitPos { pos: 1, height: 1 }),
+			Ok(()),
+		);
+		assert_eq!(
+			index.push_pos(&batch, commit, CommitPos { pos: 2, height: 2 }),
+			Ok(()),
+		);
+		assert_eq!(
+			index.peek_pos(&batch, commit),
+			Ok(Some(CommitPos { pos: 2, height: 2 })),
+		);
+		assert_eq!(
+			index.get_list(&batch, commit),
+			Ok(Some(ListWrapper::Multi { head: 2, tail: 1 })),
+		);
+		batch.commit()?;
+	}
+
+	// Clear the index and confirm everything was deleted as expected.
+	{
+		let batch = store.batch()?;
+		assert_eq!(index.clear(&batch), Ok(()));
+		assert_eq!(index.peek_pos(&batch, commit), Ok(None));
+		assert_eq!(index.get_list(&batch, commit), Ok(None));
+		batch.commit()?;
+	}
+
+	clean_output_dir(chain_dir);
+	Ok(())
+}

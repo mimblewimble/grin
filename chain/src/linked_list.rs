@@ -21,7 +21,7 @@ use crate::util::secp::pedersen::Commitment;
 use enum_primitive::FromPrimitive;
 use grin_store as store;
 use std::marker::PhantomData;
-use store::{to_key, to_key_u64, Error};
+use store::{to_key, to_key_u64, Error, SerIterator};
 
 enum_from_primitive! {
 	#[derive(Copy, Clone, Debug, PartialEq)]
@@ -131,6 +131,10 @@ pub trait RewindableListIndex {
 /// This allows us to efficiently maintain an index of "recent" kernel data.
 /// We can maintain a window of 2 weeks of recent data, discarding anything older than this.
 pub trait PruneableListIndex: ListIndex {
+	/// Clear all data from the index.
+	/// Used when rebuilding the index.
+	fn clear(&self, batch: &Batch<'_>) -> Result<(), Error>;
+
 	/// Prune old data.
 	fn prune(&self, batch: &Batch<'_>, commit: Commitment, cutoff_pos: u64) -> Result<(), Error>;
 
@@ -382,6 +386,26 @@ impl<T: PosEntry> RewindableListIndex for MultiIndex<T> {
 }
 
 impl<T: PosEntry> PruneableListIndex for MultiIndex<T> {
+	fn clear(&self, batch: &Batch<'_>) -> Result<(), Error> {
+		let mut list_count = 0;
+		let mut entry_count = 0;
+		let prefix = to_key(self.list_prefix, "");
+		for (key, _) in batch.db.iter::<ListWrapper<T>>(&prefix)? {
+			let _ = batch.delete(&key);
+			list_count += 1;
+		}
+		let prefix = to_key(self.entry_prefix, "");
+		for (key, _) in batch.db.iter::<ListEntry<T>>(&prefix)? {
+			let _ = batch.delete(&key);
+			entry_count += 1;
+		}
+		debug!(
+			"clear: lists deleted: {}, entries deleted: {}",
+			list_count, entry_count
+		);
+		Ok(())
+	}
+
 	fn prune(&self, batch: &Batch<'_>, commit: Commitment, cutoff_pos: u64) -> Result<(), Error> {
 		panic!("wat");
 	}
