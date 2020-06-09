@@ -20,7 +20,7 @@ enum_primitive = "0.1"
 log = "0.4"
 serde = "1"
 serde_derive = "1"
-chrono = "0.4.4"
+chrono = "0.4.11"
 lru-cache = "0.1"
 lazy_static = "1"
 
@@ -30,5 +30,5 @@ grin_store = { path = "../store", version = "4.0.0-beta.1" }
 grin_util = { path = "../util", version = "4.0.0-beta.1" }
 
 [dev-dependencies]
-env_logger = "0.5"
+env_logger = "0.7"
 rand = "0.6"

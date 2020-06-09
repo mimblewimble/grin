@@ -13,13 +13,13 @@ edition = "2018"
 bitflags = "1"
 enum_primitive = "0.1"
 lru-cache = "0.1"
-num = "0.1"
+num = "0.2"
 rand = "0.6"
 serde = "1"
 serde_derive = "1"
-tempfile = "3.0.5"
+tempfile = "3.1"
 log = "0.4"
-chrono = { version = "0.4.4", features = ["serde"] }
+chrono = { version = "0.4.11", features = ["serde"] }
 
 grin_core = { path = "../core", version = "4.0.0-beta.1" }
 grin_store = { path = "../store", version = "4.0.0-beta.1" }

@@ -30,6 +30,7 @@ use cursive::views::{
 	CircularFocus, Dialog, LinearLayout, Panel, SelectView, StackView, TextView, ViewRef,
 };
 use cursive::Cursive;
+use cursive::CursiveExt;
 use std::sync::mpsc;
 use std::{thread, time};
 

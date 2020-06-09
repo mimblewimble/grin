@@ -72,11 +72,11 @@ where
 			return Err(ErrorKind::Verification("wrong cycle length".to_owned()).into());
 		}
 		let nonces = &proof.nonces;
-		let mut from = vec![0u32; proofsize];
-		let mut to = vec![0u32; proofsize];
-		let mut xor_from: u32 = 0;
-		let mut xor_to: u32 = 0;
-		let nodemask = self.params.edge_mask >> 1;
+		let mut from = vec![0u64; proofsize];
+		let mut to = vec![0u64; proofsize];
+		let mut xor_from: u64 = 0;
+		let mut xor_to: u64 = 0;
+		let node_mask: u64 = to_u64!(self.params.edge_mask) >> 1;
 
 		for n in 0..proofsize {
 			if nonces[n] > to_u64!(self.params.edge_mask) {
@@ -85,13 +85,11 @@ where
 			if n > 0 && nonces[n] <= nonces[n - 1] {
 				return Err(ErrorKind::Verification("edges not ascending".to_owned()).into());
 			}
-			let edge = to_edge!(
-				T,
-				siphash_block(&self.params.siphash_keys, nonces[n], 21, true)
-			);
-			from[n] = to_u32!(edge & nodemask);
+			// 21 is standard siphash rotation constant
+			let edge: u64 = siphash_block(&self.params.siphash_keys, nonces[n], 21, true);
+			from[n] = edge & node_mask;
 			xor_from ^= from[n];
-			to[n] = to_u32!((edge >> 32) & nodemask);
+			to[n] = (edge >> 32) & node_mask;
 			xor_to ^= to[n];
 		}
 		if xor_from != xor_to {
