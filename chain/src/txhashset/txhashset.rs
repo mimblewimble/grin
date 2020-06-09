@@ -400,9 +400,9 @@ impl TxHashSet {
 		header_pmmr: &PMMRHandle<BlockHeader>,
 		batch: &Batch<'_>,
 	) -> Result<(), Error> {
-		// if !global::is_nrd_enabled() {
-		// 	return Ok(())
-		// }
+		if !global::is_nrd_enabled() {
+			return Ok(());
+		}
 
 		let now = Instant::now();
 		let kernel_index = store::nrd_recent_kernel_index();
