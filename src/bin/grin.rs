@@ -80,15 +80,6 @@ fn real_main() -> i32 {
 		.get_matches();
 	let node_config;
 
-	// Temporary wallet warning message
-	if let ("wallet", _) = args.subcommand() {
-		println!();
-		println!("As of v1.1.0, the wallet has been split into a separate executable.");
-		println!("Please visit https://github.com/mimblewimble/grin-wallet/releases to download");
-		println!();
-		return 0;
-	}
-
 	let chain_type = if args.is_present("floonet") {
 		global::ChainTypes::Floonet
 	} else if args.is_present("usernet") {
