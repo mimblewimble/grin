@@ -25,7 +25,7 @@ use std::fmt;
 
 lazy_static! {
 	/// List of bip39 words
-	pub static ref WORDS: Vec<String> = { include_str!("wordlists/en.txt").split_whitespace().map(|s| s.into()).collect() };
+	pub static ref WORDS: Vec<String> = include_str!("wordlists/en.txt").split_whitespace().map(|s| s.into()).collect();
 }
 
 /// An error that might occur during mnemonic decoding
