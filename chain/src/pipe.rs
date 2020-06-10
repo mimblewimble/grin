@@ -219,14 +219,7 @@ pub fn sync_block_headers(
 	txhashset::header_extending(&mut ctx.header_pmmr, &mut ctx.batch, |ext, batch| {
 		rewind_and_apply_header_fork(&last_header, ext, batch)?;
 		Ok(())
-	})?;
-
-	let header_head = ctx.batch.header_head()?;
-	if has_more_work(last_header, &header_head) {
-		update_header_head(&Tip::from_header(last_header), &mut ctx.batch)?;
-	}
-
-	Ok(())
+	})
 }
 
 /// Process a block header. Update the header MMR and corresponding header_head if this header
