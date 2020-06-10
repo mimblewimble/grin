@@ -504,7 +504,7 @@ impl Server {
 		let head_stats = ChainStats {
 			latest_timestamp: head.timestamp,
 			height: head.height,
-			last_block_h: head.prev_hash,
+			last_block_h: head.hash(),
 			total_difficulty: head.total_difficulty(),
 		};
 
@@ -513,7 +513,7 @@ impl Server {
 		let header_stats = ChainStats {
 			latest_timestamp: header.timestamp,
 			height: header.height,
-			last_block_h: header.prev_hash,
+			last_block_h: header.hash(),
 			total_difficulty: header.total_difficulty(),
 		};
 
