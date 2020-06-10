@@ -19,6 +19,7 @@ use crate::core::core::hash::{Hash, Hashed};
 use crate::core::core::{Block, BlockHeader, BlockSums};
 use crate::core::pow::Difficulty;
 use crate::core::ser::ProtocolVersion;
+use crate::linked_list::MultiIndex;
 use crate::types::{CommitPos, Tip};
 use crate::util::secp::pedersen::Commitment;
 use croaring::Bitmap;
@@ -35,6 +36,12 @@ const HEAD_PREFIX: u8 = b'H';
 const TAIL_PREFIX: u8 = b'T';
 const HEADER_HEAD_PREFIX: u8 = b'G';
 const OUTPUT_POS_PREFIX: u8 = b'p';
+
+/// Prefix for NRD kernel pos index lists.
+pub const NRD_KERNEL_LIST_PREFIX: u8 = b'K';
+/// Prefix for NRD kernel pos index entries.
+pub const NRD_KERNEL_ENTRY_PREFIX: u8 = b'k';
+
 const BLOCK_INPUT_BITMAP_PREFIX: u8 = b'B';
 const BLOCK_SUMS_PREFIX: u8 = b'M';
 const BLOCK_SPENT_PREFIX: u8 = b'S';
@@ -61,9 +68,7 @@ impl ChainStore {
 			db: db_with_version,
 		}
 	}
-}
 
-impl ChainStore {
 	/// The current chain head.
 	pub fn head(&self) -> Result<Tip, Error> {
 		option_to_not_found(self.db.get_ser(&[HEAD_PREFIX]), || "HEAD".to_owned())
@@ -144,7 +149,8 @@ impl ChainStore {
 /// An atomic batch in which all changes can be committed all at once or
 /// discarded on error.
 pub struct Batch<'a> {
-	db: store::Batch<'a>,
+	/// The underlying db instance.
+	pub db: store::Batch<'a>,
 }
 
 impl<'a> Batch<'a> {
@@ -474,4 +480,11 @@ impl<'a> Iterator for DifficultyIter<'a> {
 			None
 		}
 	}
+}
+
+/// Init the NRD "recent history" kernel index backed by the underlying db.
+/// List index supports multiple entries per key, maintaining insertion order.
+/// Allows for fast lookup of the most recent entry per excess commitment.
+pub fn nrd_recent_kernel_index() -> MultiIndex<CommitPos> {
+	MultiIndex::init(NRD_KERNEL_LIST_PREFIX, NRD_KERNEL_ENTRY_PREFIX)
 }

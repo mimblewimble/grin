@@ -530,13 +530,11 @@ fn longer_fork() {
 fn spend_rewind_spend() {
 	global::set_local_chain_type(ChainTypes::AutomatedTesting);
 	util::init_test_logger();
-	clean_output_dir(".grin_spend_rewind_spend");
+	let chain_dir = ".grin_spend_rewind_spend";
+	clean_output_dir(chain_dir);
 
 	{
-		let chain = init_chain(
-			".grin_spend_rewind_spend",
-			pow::mine_genesis_block().unwrap(),
-		);
+		let chain = init_chain(chain_dir, pow::mine_genesis_block().unwrap());
 		let prev = chain.head_header().unwrap();
 		let kc = ExtKeychain::from_random_seed(false).unwrap();
 		let pb = ProofBuilder::new(&kc);
@@ -601,7 +599,7 @@ fn spend_rewind_spend() {
 		}
 	}
 
-	clean_output_dir(".grin_spend_rewind_spend");
+	clean_output_dir(chain_dir);
 }
 
 #[test]

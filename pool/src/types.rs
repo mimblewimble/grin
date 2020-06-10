@@ -227,6 +227,9 @@ pub enum PoolError {
 	/// NRD kernels are not valid if disabled locally via "feature flag".
 	#[fail(display = "NRD kernel not enabled")]
 	NRDKernelNotEnabled,
+	/// NRD kernels are not valid if relative_height rule not met.
+	#[fail(display = "NRD kernel relative height")]
+	NRDKernelRelativeHeight,
 	/// Other kinds of error (not yet pulled out into meaningful errors).
 	#[fail(display = "General pool error {}", _0)]
 	Other(String),
@@ -234,7 +237,10 @@ pub enum PoolError {
 
 impl From<transaction::Error> for PoolError {
 	fn from(e: transaction::Error) -> PoolError {
-		PoolError::InvalidTx(e)
+		match e {
+			transaction::Error::InvalidNRDRelativeHeight => PoolError::NRDKernelRelativeHeight,
+			e @ _ => PoolError::InvalidTx(e),
+		}
 	}
 }
 

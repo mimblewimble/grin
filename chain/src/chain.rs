@@ -19,7 +19,8 @@ use crate::core::core::hash::{Hash, Hashed, ZERO_HASH};
 use crate::core::core::merkle_proof::MerkleProof;
 use crate::core::core::verifier_cache::VerifierCache;
 use crate::core::core::{
-	Block, BlockHeader, BlockSums, Committed, Output, OutputIdentifier, Transaction, TxKernel,
+	Block, BlockHeader, BlockSums, Committed, KernelFeatures, Output, OutputIdentifier,
+	Transaction, TxKernel,
 };
 use crate::core::global;
 use crate::core::pow;
@@ -195,12 +196,12 @@ impl Chain {
 			&mut txhashset,
 		)?;
 
-		// Initialize the output_pos index based on UTXO set.
-		// This is fast as we only look for stale and missing entries
-		// and do not need to rebuild the entire index.
+		// Initialize the output_pos index based on UTXO set
+		// and NRD kernel_pos index based recent kernel history.
 		{
 			let batch = store.batch()?;
 			txhashset.init_output_pos_index(&header_pmmr, &batch)?;
+			txhashset.init_recent_kernel_pos_index(&header_pmmr, &batch)?;
 			batch.commit()?;
 		}
 
@@ -296,6 +297,11 @@ impl Chain {
 	/// Returns true if it has been added to the longest chain
 	/// or false if it has added to a fork (or orphan?).
 	fn process_block_single(&self, b: Block, opts: Options) -> Result<Option<Tip>, Error> {
+		// Process the header first.
+		// If invalid then fail early.
+		// If valid then continue with block processing with header_head committed to db etc.
+		self.process_block_header(&b.header, opts)?;
+
 		let (maybe_new_head, prev_head) = {
 			let mut header_pmmr = self.header_pmmr.write();
 			let mut txhashset = self.txhashset.write();
@@ -513,13 +519,38 @@ impl Chain {
 		})
 	}
 
-	/// Validate the tx against the current UTXO set.
+	/// Validate the tx against the current UTXO set and recent kernels (NRD relative lock heights).
 	pub fn validate_tx(&self, tx: &Transaction) -> Result<(), Error> {
+		self.validate_tx_against_utxo(tx)?;
+		self.validate_tx_kernels(tx)?;
+		Ok(())
+	}
+
+	/// Validates NRD relative height locks against "recent" kernel history.
+	/// Applies the kernels to the current kernel MMR in a readonly extension.
+	/// The extension and the db batch are discarded.
+	/// The batch ensures duplicate NRD kernels within the tx are handled correctly.
+	fn validate_tx_kernels(&self, tx: &Transaction) -> Result<(), Error> {
+		let has_nrd_kernel = tx.kernels().iter().any(|k| match k.features {
+			KernelFeatures::NoRecentDuplicate { .. } => true,
+			_ => false,
+		});
+		if !has_nrd_kernel {
+			return Ok(());
+		}
+		let mut header_pmmr = self.header_pmmr.write();
+		let mut txhashset = self.txhashset.write();
+		txhashset::extending_readonly(&mut header_pmmr, &mut txhashset, |ext, batch| {
+			let height = self.next_block_height()?;
+			ext.extension.apply_kernels(tx.kernels(), height, batch)
+		})
+	}
+
+	fn validate_tx_against_utxo(&self, tx: &Transaction) -> Result<(), Error> {
 		let header_pmmr = self.header_pmmr.read();
 		let txhashset = self.txhashset.read();
 		txhashset::utxo_view(&header_pmmr, &txhashset, |utxo, batch| {
-			utxo.validate_tx(tx, batch)?;
-			Ok(())
+			utxo.validate_tx(tx, batch)
 		})
 	}
 
@@ -929,8 +960,16 @@ impl Chain {
 			Some(&header),
 		)?;
 
-		// Validate the full kernel history (kernel MMR root for every block header).
-		self.validate_kernel_history(&header, &txhashset)?;
+		// Validate the full kernel history.
+		// Check kernel MMR root for every block header.
+		// Check NRD relative height rules for full kernel history.
+		{
+			self.validate_kernel_history(&header, &txhashset)?;
+
+			let header_pmmr = self.header_pmmr.read();
+			let batch = self.store.batch()?;
+			txhashset.verify_kernel_pos_index(&self.genesis, &header_pmmr, &batch)?;
+		}
 
 		// all good, prepare a new batch and update all the required records
 		debug!("txhashset_write: rewinding a 2nd time (writeable)");
@@ -978,6 +1017,9 @@ impl Chain {
 
 		// Rebuild our output_pos index in the db based on fresh UTXO set.
 		txhashset.init_output_pos_index(&header_pmmr, &batch)?;
+
+		// Rebuild our NRD kernel_pos index based on recent kernel history.
+		txhashset.init_recent_kernel_pos_index(&header_pmmr, &batch)?;
 
 		// Commit all the changes to the db.
 		batch.commit()?;
@@ -1114,6 +1156,9 @@ impl Chain {
 
 		// Make sure our output_pos index is consistent with the UTXO set.
 		txhashset.init_output_pos_index(&header_pmmr, &batch)?;
+
+		// Rebuild our NRD kernel_pos index based on recent kernel history.
+		txhashset.init_recent_kernel_pos_index(&header_pmmr, &batch)?;
 
 		// Commit all the above db changes.
 		batch.commit()?;

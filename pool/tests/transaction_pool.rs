@@ -165,12 +165,14 @@ fn test_the_transaction_pool() {
 		pool.add_to_pool(test_source(), tx.clone(), true, &header)
 			.unwrap();
 		assert_eq!(pool.total_size(), 4);
+		assert_eq!(pool.txpool.size(), 4);
 		assert_eq!(pool.stempool.size(), 1);
 
 		// Duplicate stem tx so fluff, adding it to txpool and removing it from stempool.
 		pool.add_to_pool(test_source(), tx.clone(), true, &header)
 			.unwrap();
 		assert_eq!(pool.total_size(), 5);
+		assert_eq!(pool.txpool.size(), 5);
 		assert!(pool.stempool.is_empty());
 	}
 

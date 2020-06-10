@@ -15,14 +15,19 @@
 //! Utility structs to handle the 3 MMRs (output, rangeproof,
 //! kernel) along the overall header MMR conveniently and transactionally.
 
+use crate::core::consensus::WEEK_HEIGHT;
 use crate::core::core::committed::Committed;
 use crate::core::core::hash::{Hash, Hashed};
 use crate::core::core::merkle_proof::MerkleProof;
 use crate::core::core::pmmr::{self, Backend, ReadonlyPMMR, RewindablePMMR, PMMR};
-use crate::core::core::{Block, BlockHeader, Input, Output, OutputIdentifier, TxKernel};
+use crate::core::core::{
+	Block, BlockHeader, Input, KernelFeatures, Output, OutputIdentifier, TxKernel,
+};
+use crate::core::global;
 use crate::core::ser::{PMMRable, ProtocolVersion};
 use crate::error::{Error, ErrorKind};
-use crate::store::{Batch, ChainStore};
+use crate::linked_list::{ListIndex, PruneableListIndex, RewindableListIndex};
+use crate::store::{self, Batch, ChainStore};
 use crate::txhashset::bitmap_accumulator::BitmapAccumulator;
 use crate::txhashset::{RewindableKernelView, UTXOView};
 use crate::types::{CommitPos, OutputRoots, Tip, TxHashSetRoots, TxHashsetWriteStatus};
@@ -375,6 +380,86 @@ impl TxHashSet {
 		Ok(())
 	}
 
+	/// (Re)build the NRD kernel_pos index based on 2 weeks of recent kernel history.
+	pub fn init_recent_kernel_pos_index(
+		&self,
+		header_pmmr: &PMMRHandle<BlockHeader>,
+		batch: &Batch<'_>,
+	) -> Result<(), Error> {
+		let head = batch.head()?;
+		let cutoff = head.height.saturating_sub(WEEK_HEIGHT * 2);
+		let cutoff_hash = header_pmmr.get_header_hash_by_height(cutoff)?;
+		let cutoff_header = batch.get_block_header(&cutoff_hash)?;
+		self.verify_kernel_pos_index(&cutoff_header, header_pmmr, batch)
+	}
+
+	/// Verify and (re)build the NRD kernel_pos index from the provided header onwards.
+	pub fn verify_kernel_pos_index(
+		&self,
+		from_header: &BlockHeader,
+		header_pmmr: &PMMRHandle<BlockHeader>,
+		batch: &Batch<'_>,
+	) -> Result<(), Error> {
+		if !global::is_nrd_enabled() {
+			return Ok(());
+		}
+
+		let now = Instant::now();
+		let kernel_index = store::nrd_recent_kernel_index();
+		kernel_index.clear(batch)?;
+
+		let prev_size = if from_header.height == 0 {
+			0
+		} else {
+			let prev_header = batch.get_previous_header(&from_header)?;
+			prev_header.kernel_mmr_size
+		};
+
+		debug!(
+			"verify_kernel_pos_index: header: {} at {}, prev kernel_mmr_size: {}",
+			from_header.hash(),
+			from_header.height,
+			prev_size,
+		);
+
+		let kernel_pmmr =
+			ReadonlyPMMR::at(&self.kernel_pmmr_h.backend, self.kernel_pmmr_h.last_pos);
+
+		let mut current_pos = prev_size + 1;
+		let mut current_header = from_header.clone();
+		let mut count = 0;
+		while current_pos <= self.kernel_pmmr_h.last_pos {
+			if pmmr::is_leaf(current_pos) {
+				if let Some(kernel) = kernel_pmmr.get_data(current_pos) {
+					match kernel.features {
+						KernelFeatures::NoRecentDuplicate { .. } => {
+							while current_pos > current_header.kernel_mmr_size {
+								let hash = header_pmmr
+									.get_header_hash_by_height(current_header.height + 1)?;
+								current_header = batch.get_block_header(&hash)?;
+							}
+							let new_pos = CommitPos {
+								pos: current_pos,
+								height: current_header.height,
+							};
+							apply_kernel_rules(&kernel, new_pos, batch)?;
+							count += 1;
+						}
+						_ => {}
+					}
+				}
+			}
+			current_pos += 1;
+		}
+
+		debug!(
+			"verify_kernel_pos_index: pushed {} entries to the index, took {}s",
+			count,
+			now.elapsed().as_secs(),
+		);
+		Ok(())
+	}
+
 	/// (Re)build the output_pos index to be consistent with the current UTXO set.
 	/// Remove any "stale" index entries that do not correspond to outputs in the UTXO set.
 	/// Add any missing index entries based on UTXO set.
@@ -453,7 +538,7 @@ impl TxHashSet {
 			}
 		}
 		debug!(
-			"init_height_pos_index: added entries for {} utxos, took {}s",
+			"init_output_pos_index: added entries for {} utxos, took {}s",
 			total_outputs,
 			now.elapsed().as_secs(),
 		);
@@ -933,16 +1018,16 @@ impl<'a> Extension<'a> {
 		// Remove the spent output from the output_pos index.
 		let mut spent = vec![];
 		for input in b.inputs() {
-			let spent_pos = self.apply_input(input, batch)?;
-			affected_pos.push(spent_pos.pos);
+			let pos = self.apply_input(input, batch)?;
+			affected_pos.push(pos.pos);
 			batch.delete_output_pos_height(&input.commitment())?;
-			spent.push(spent_pos);
+			spent.push(pos);
 		}
 		batch.save_spent_index(&b.hash(), &spent)?;
 
-		for kernel in b.kernels() {
-			self.apply_kernel(kernel)?;
-		}
+		// Apply the kernels to the kernel MMR.
+		// Note: This validates and NRD relative height locks via the "recent" kernel index.
+		self.apply_kernels(b.kernels(), b.header.height, batch)?;
 
 		// Update our BitmapAccumulator based on affected outputs (both spent and created).
 		self.apply_to_bitmap_accumulator(&affected_pos)?;
@@ -1037,12 +1122,32 @@ impl<'a> Extension<'a> {
 		Ok(output_pos)
 	}
 
+	/// Apply kernels to the kernel MMR.
+	/// Validate any NRD relative height locks via the "recent" kernel index.
+	/// Note: This is used for both block processing and tx validation.
+	/// In the block processing case we use the block height.
+	/// In the tx validation case we use the "next" block height based on current chain head.
+	pub fn apply_kernels(
+		&mut self,
+		kernels: &[TxKernel],
+		height: u64,
+		batch: &Batch<'_>,
+	) -> Result<(), Error> {
+		for kernel in kernels {
+			let pos = self.apply_kernel(kernel)?;
+			let commit_pos = CommitPos { pos, height };
+			apply_kernel_rules(kernel, commit_pos, batch)?;
+		}
+		Ok(())
+	}
+
 	/// Push kernel onto MMR (hash and data files).
-	fn apply_kernel(&mut self, kernel: &TxKernel) -> Result<(), Error> {
-		self.kernel_pmmr
+	fn apply_kernel(&mut self, kernel: &TxKernel) -> Result<u64, Error> {
+		let pos = self
+			.kernel_pmmr
 			.push(kernel)
 			.map_err(&ErrorKind::TxHashSetErr)?;
-		Ok(())
+		Ok(pos)
 	}
 
 	/// Build a Merkle proof for the given output and the block
@@ -1109,7 +1214,8 @@ impl<'a> Extension<'a> {
 			let mut affected_pos = vec![];
 			let mut current = head_header;
 			while header.height < current.height {
-				let mut affected_pos_single_block = self.rewind_single_block(&current, batch)?;
+				let block = batch.get_block(&current.hash())?;
+				let mut affected_pos_single_block = self.rewind_single_block(&block, batch)?;
 				affected_pos.append(&mut affected_pos_single_block);
 				current = batch.get_previous_header(&current)?;
 			}
@@ -1126,11 +1232,10 @@ impl<'a> Extension<'a> {
 	// Rewind the MMRs and the output_pos index.
 	// Returns a vec of "affected_pos" so we can apply the necessary updates to the bitmap
 	// accumulator in a single pass for all rewound blocks.
-	fn rewind_single_block(
-		&mut self,
-		header: &BlockHeader,
-		batch: &Batch<'_>,
-	) -> Result<Vec<u64>, Error> {
+	fn rewind_single_block(&mut self, block: &Block, batch: &Batch<'_>) -> Result<Vec<u64>, Error> {
+		let header = &block.header;
+		let prev_header = batch.get_previous_header(&header)?;
+
 		// The spent index allows us to conveniently "unspend" everything in a block.
 		let spent = batch.get_spent_index(&header.hash());
 
@@ -1149,7 +1254,7 @@ impl<'a> Extension<'a> {
 		if header.height == 0 {
 			self.rewind_mmrs_to_pos(0, 0, &spent_pos)?;
 		} else {
-			let prev = batch.get_previous_header(&header)?;
+			let prev = batch.get_previous_header(header)?;
 			self.rewind_mmrs_to_pos(prev.output_mmr_size, prev.kernel_mmr_size, &spent_pos)?;
 		}
 
@@ -1160,7 +1265,6 @@ impl<'a> Extension<'a> {
 		affected_pos.push(self.output_pmmr.last_pos);
 
 		// Remove any entries from the output_pos created by the block being rewound.
-		let block = batch.get_block(&header.hash())?;
 		let mut missing_count = 0;
 		for out in block.outputs() {
 			if batch.delete_output_pos_height(&out.commitment()).is_err() {
@@ -1174,6 +1278,17 @@ impl<'a> Extension<'a> {
 				header.hash(),
 				header.height,
 			);
+		}
+
+		// If NRD feature flag is enabled rewind the kernel_pos index
+		// for any NRD kernels in the block being rewound.
+		if global::is_nrd_enabled() {
+			let kernel_index = store::nrd_recent_kernel_index();
+			for kernel in block.kernels() {
+				if let KernelFeatures::NoRecentDuplicate { .. } = kernel.features {
+					kernel_index.rewind(batch, kernel.excess(), prev_header.kernel_mmr_size)?;
+				}
+			}
 		}
 
 		// Update output_pos based on "unspending" all spent pos from this block.
@@ -1648,4 +1763,37 @@ fn input_pos_to_rewind(
 		current = batch.get_previous_header(&current)?;
 	}
 	Ok(bitmap)
+}
+
+/// If NRD enabled then enforce NRD relative height rules.
+fn apply_kernel_rules(kernel: &TxKernel, pos: CommitPos, batch: &Batch<'_>) -> Result<(), Error> {
+	if !global::is_nrd_enabled() {
+		return Ok(());
+	}
+	match kernel.features {
+		KernelFeatures::NoRecentDuplicate {
+			relative_height, ..
+		} => {
+			let kernel_index = store::nrd_recent_kernel_index();
+			debug!("checking NRD index: {:?}", kernel.excess());
+			if let Some(prev) = kernel_index.peek_pos(batch, kernel.excess())? {
+				let diff = pos.height.saturating_sub(prev.height);
+				debug!(
+					"NRD check: {}, {:?}, {:?}",
+					pos.height, prev, relative_height
+				);
+				if diff < relative_height.into() {
+					return Err(ErrorKind::NRDRelativeHeight.into());
+				}
+			}
+			debug!(
+				"pushing entry to NRD index: {:?}: {:?}",
+				kernel.excess(),
+				pos,
+			);
+			kernel_index.push_pos(batch, kernel.excess(), pos)?;
+		}
+		_ => {}
+	}
+	Ok(())
 }

@@ -26,7 +26,7 @@ use std::sync::{Arc, Weak};
 // boilerplate of dealing with `Weak`.
 pub fn w<T>(weak: &Weak<T>) -> Result<Arc<T>, Error> {
 	weak.upgrade()
-		.ok_or_else(|| ErrorKind::Internal("failed to upgrade weak refernce".to_owned()).into())
+		.ok_or_else(|| ErrorKind::Internal("failed to upgrade weak reference".to_owned()).into())
 }
 
 /// Internal function to retrieves an output by a given commitment

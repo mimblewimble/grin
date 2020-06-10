@@ -227,9 +227,6 @@ pub fn sync_block_headers(
 /// Note: In contrast to processing a full block we treat "already known" as success
 /// to allow processing to continue (for header itself).
 pub fn process_block_header(header: &BlockHeader, ctx: &mut BlockContext<'_>) -> Result<(), Error> {
-	// Check this header is not an orphan, we must know about the previous header to continue.
-	let prev_header = ctx.batch.get_previous_header(&header)?;
-
 	// If we have already processed the full block for this header then done.
 	// Note: "already known" in this context is success so subsequent processing can continue.
 	{
@@ -238,6 +235,9 @@ pub fn process_block_header(header: &BlockHeader, ctx: &mut BlockContext<'_>) ->
 			return Ok(());
 		}
 	}
+
+	// Check this header is not an orphan, we must know about the previous header to continue.
+	let prev_header = ctx.batch.get_previous_header(&header)?;
 
 	// If we have not yet seen the full block then check if we have seen this header.
 	// If it does not increase total_difficulty beyond our current header_head

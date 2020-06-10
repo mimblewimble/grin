@@ -122,6 +122,9 @@ pub enum ErrorKind {
 	/// Tx not valid based on lock_height.
 	#[fail(display = "Transaction Lock Height")]
 	TxLockHeight,
+	/// Tx is not valid due to NRD relative_height restriction.
+	#[fail(display = "NRD Relative Height")]
+	NRDRelativeHeight,
 	/// No chain exists and genesis block is required
 	#[fail(display = "Genesis Block Required")]
 	GenesisBlockRequired,

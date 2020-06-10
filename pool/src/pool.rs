@@ -29,6 +29,7 @@ use grin_util as util;
 use std::cmp::Reverse;
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
+use util::secp::pedersen::Commitment;
 use util::static_secp_instance;
 
 pub struct Pool<B, V>
@@ -68,6 +69,19 @@ where
 			.iter()
 			.find(|x| x.tx.hash() == hash)
 			.map(|x| x.tx.clone())
+	}
+
+	/// Query the tx pool for an individual tx matching the given public excess.
+	/// Used for checking for duplicate NRD kernels in the txpool.
+	pub fn retrieve_tx_by_kernel_excess(&self, excess: Commitment) -> Option<Transaction> {
+		for x in &self.entries {
+			for k in x.tx.kernels() {
+				if k.excess() == excess {
+					return Some(x.tx.clone());
+				}
+			}
+		}
+		None
 	}
 
 	/// Query the tx pool for an individual tx matching the given kernel hash.
@@ -197,7 +211,6 @@ where
 		// Validate aggregated tx (existing pool + new tx), ignoring tx weight limits.
 		// Validate against known chain state at the provided header.
 		self.validate_raw_tx(&agg_tx, header, Weighting::NoLimit)?;
-
 		// If we get here successfully then we can safely add the entry to the pool.
 		self.log_pool_add(&entry, header);
 		self.entries.push(entry);
@@ -425,6 +438,7 @@ where
 		tx_buckets.into_iter().flat_map(|x| x.raw_txs).collect()
 	}
 
+	/// TODO - This is kernel based. How does this interact with NRD?
 	pub fn find_matching_transactions(&self, kernels: &[TxKernel]) -> Vec<Transaction> {
 		// While the inputs outputs can be cut-through the kernel will stay intact
 		// In order to deaggregate tx we look for tx with the same kernel
