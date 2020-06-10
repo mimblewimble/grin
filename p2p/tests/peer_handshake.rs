@@ -38,7 +38,8 @@ fn open_port() -> u16 {
 
 // Setup test with AutomatedTesting chain_type;
 fn test_setup() {
-	global::set_local_chain_type(global::ChainTypes::AutomatedTesting);
+	// Set "global" chain type here as we spawn peer threads for read/write.
+	global::init_global_chain_type(global::ChainTypes::AutomatedTesting);
 	util::init_test_logger();
 }
 
@@ -69,11 +70,7 @@ fn peer_handshake() {
 	);
 
 	let p2p_inner = server.clone();
-	let _ = thread::spawn(move || {
-		// Test setup relies on thread local for chain_type so make sure we setup here.
-		test_setup();
-		p2p_inner.listen()
-	});
+	let _ = thread::spawn(move || p2p_inner.listen());
 
 	thread::sleep(time::Duration::from_secs(1));
 
