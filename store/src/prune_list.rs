@@ -21,7 +21,7 @@
 //! must be shifted the appropriate amount when reading from the hash and data
 //! files.
 
-use std::io::{self, BufWriter, Write};
+use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 
 use croaring::Bitmap;
@@ -114,10 +114,8 @@ impl PruneList {
 
 		// Write the updated bitmap file to disk.
 		if let Some(ref path) = self.path {
-			save_via_temp_file(path, ".tmp", |w| {
-				let mut w = BufWriter::new(w);
-				w.write_all(&self.bitmap.serialize())?;
-				w.flush()
+			save_via_temp_file(path, ".tmp", |file| {
+				file.write_all(&self.bitmap.serialize())
 			})?;
 		}
 
