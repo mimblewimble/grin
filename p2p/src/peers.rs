@@ -15,7 +15,6 @@
 use crate::util::RwLock;
 use std::collections::HashMap;
 use std::fs::File;
-use std::io::Read;
 use std::path::PathBuf;
 use std::sync::Arc;
 
@@ -670,14 +669,6 @@ impl ChainAdapter for Peers {
 
 	fn get_block(&self, h: Hash) -> Option<core::Block> {
 		self.adapter.get_block(h)
-	}
-
-	fn kernel_data_read(&self) -> Result<File, chain::Error> {
-		self.adapter.kernel_data_read()
-	}
-
-	fn kernel_data_write(&self, reader: &mut dyn Read) -> Result<bool, chain::Error> {
-		self.adapter.kernel_data_write(reader)
 	}
 
 	fn txhashset_read(&self, h: Hash) -> Option<TxHashSetRead> {

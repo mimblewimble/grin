@@ -14,7 +14,6 @@
 
 use std::collections::HashSet;
 use std::convert::TryFrom;
-use std::fs::File;
 
 use croaring::Bitmap;
 
@@ -73,10 +72,6 @@ impl<T: PMMRable> Backend<T> for VecBackend<T> {
 		} else {
 			None
 		}
-	}
-
-	fn data_as_temp_file(&self) -> Result<File, String> {
-		unimplemented!()
 	}
 
 	/// Number of leaves in the MMR

@@ -13,7 +13,7 @@
 // limitations under the License.
 
 use std::fs::File;
-use std::io::{self, Read};
+use std::io;
 use std::net::{IpAddr, Shutdown, SocketAddr, SocketAddrV4, TcpListener, TcpStream};
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -337,12 +337,6 @@ impl ChainAdapter for DummyAdapter {
 	}
 	fn get_block(&self, _: Hash) -> Option<core::Block> {
 		None
-	}
-	fn kernel_data_read(&self) -> Result<File, chain::Error> {
-		unimplemented!()
-	}
-	fn kernel_data_write(&self, _reader: &mut dyn Read) -> Result<bool, chain::Error> {
-		unimplemented!()
 	}
 	fn txhashset_read(&self, _h: Hash) -> Option<TxHashSetRead> {
 		unimplemented!()

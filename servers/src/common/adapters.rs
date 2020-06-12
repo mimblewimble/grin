@@ -17,7 +17,6 @@
 
 use crate::util::RwLock;
 use std::fs::File;
-use std::io::Read;
 use std::path::PathBuf;
 use std::sync::{Arc, Weak};
 use std::thread;
@@ -362,15 +361,6 @@ where
 			Ok(b) => Some(b),
 			_ => None,
 		}
-	}
-
-	fn kernel_data_read(&self) -> Result<File, chain::Error> {
-		self.chain().kernel_data_read()
-	}
-
-	fn kernel_data_write(&self, reader: &mut dyn Read) -> Result<bool, chain::Error> {
-		self.chain().kernel_data_write(reader)?;
-		Ok(true)
 	}
 
 	/// Provides a reading view into the current txhashset state as well as
