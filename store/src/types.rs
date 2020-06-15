@@ -140,13 +140,6 @@ where
 		self.file.path()
 	}
 
-	/// Create a new tempfile containing the contents of this data file.
-	/// This allows callers to see a consistent view of the data without
-	/// locking the data file.
-	pub fn as_temp_file(&self) -> io::Result<File> {
-		self.file.as_temp_file()
-	}
-
 	/// Drop underlying file handles
 	pub fn release(&mut self) {
 		self.file.release();

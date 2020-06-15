@@ -12,8 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::fs::File;
-
 use croaring::Bitmap;
 
 use crate::core::hash::Hash;
@@ -67,11 +65,6 @@ pub trait Backend<T: PMMRable> {
 	/// given index (practically the index is the height of a block that
 	/// triggered removal).
 	fn remove(&mut self, position: u64) -> Result<(), String>;
-
-	/// Creates a temp file containing the contents of the underlying data file
-	/// from the backend storage. This allows a caller to see a consistent view
-	/// of the data without needing to lock the backend storage.
-	fn data_as_temp_file(&self) -> Result<File, String>;
 
 	/// Release underlying datafiles and locks
 	fn release_files(&mut self);
