@@ -1453,6 +1453,10 @@ fn setup_head(
 	// If header_head is missing in db then use head of header PMMR.
 	if let Ok(head) = batch.header_head() {
 		header_pmmr.init_head(&head)?;
+		txhashset::header_extending(header_pmmr, &mut batch, |ext, batch| {
+			let header = batch.get_block_header(&head.hash())?;
+			ext.rewind(&header)
+		})?;
 	} else {
 		let hash = header_pmmr.head_hash()?;
 		let header = batch.get_block_header(&hash)?;
