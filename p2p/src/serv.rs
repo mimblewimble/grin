@@ -383,6 +383,7 @@ impl NetAdapter for DummyAdapter {
 	}
 	fn peer_addrs_received(&self, _: Vec<PeerAddr>) {}
 	fn peer_difficulty(&self, _: PeerAddr, _: Difficulty, _: u64) {}
+	fn ban_peer(&self, _: PeerAddr, _: ReasonForBan) {}
 	fn is_banned(&self, _: PeerAddr) -> bool {
 		false
 	}

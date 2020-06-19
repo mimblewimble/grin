@@ -19,7 +19,8 @@ use std::sync::Arc;
 use crate::chain::{self, SyncState, SyncStatus};
 use crate::common::types::Error;
 use crate::core::core::hash::{Hash, Hashed};
-use crate::p2p::{self, types::ReasonForBan, Peer};
+use crate::p2p::types::{NetAdapter, ReasonForBan};
+use crate::p2p::{self, Peer};
 
 pub struct HeaderSync {
 	sync_state: Arc<SyncState>,
@@ -144,12 +145,8 @@ impl HeaderSync {
 							if now > *stalling_ts + Duration::seconds(120)
 								&& header_head.total_difficulty < peer.info.total_difficulty()
 							{
-								if let Err(e) = self
-									.peers
-									.ban_peer(peer.info.addr, ReasonForBan::FraudHeight)
-								{
-									error!("failed to ban peer {}: {:?}", peer.info.addr, e);
-								}
+								self.peers
+									.ban_peer(peer.info.addr, ReasonForBan::FraudHeight);
 								info!(
 										"sync: ban a fraud peer: {}, claimed height: {}, total difficulty: {}",
 										peer.info.addr,
