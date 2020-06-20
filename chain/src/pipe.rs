@@ -250,6 +250,11 @@ pub fn process_block_header(header: &BlockHeader, ctx: &mut BlockContext<'_>) ->
 		}
 	}
 
+	// We want to validate this individual header before applying it to our header PMMR.
+	validate_header(header, ctx)?;
+
+	// Apply the header to the header PMMR, making sure we put the extension in the correct state
+	// based on previous header first.
 	txhashset::header_extending(&mut ctx.header_pmmr, &mut ctx.batch, |ext, batch| {
 		rewind_and_apply_header_fork(&prev_header, ext, batch)?;
 		ext.validate_root(header)?;
@@ -260,7 +265,7 @@ pub fn process_block_header(header: &BlockHeader, ctx: &mut BlockContext<'_>) ->
 		Ok(())
 	})?;
 
-	validate_header(header, ctx)?;
+	// Add this new block header to the db.
 	add_block_header(header, &ctx.batch)?;
 
 	if has_more_work(header, &header_head) {
