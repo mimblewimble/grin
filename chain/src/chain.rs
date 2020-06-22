@@ -1449,9 +1449,15 @@ fn setup_head(
 		}
 	}
 
-	// Setup our header_head if we do not already have one.
-	// Migrating back to header_head in db and some nodes may note have one.
-	if batch.header_head().is_err() {
+	// Make sure our header PMMR is consistent with header_head from db if it exists.
+	// If header_head is missing in db then use head of header PMMR.
+	if let Ok(head) = batch.header_head() {
+		header_pmmr.init_head(&head)?;
+		txhashset::header_extending(header_pmmr, &mut batch, |ext, batch| {
+			let header = batch.get_block_header(&head.hash())?;
+			ext.rewind(&header)
+		})?;
+	} else {
 		let hash = header_pmmr.head_hash()?;
 		let header = batch.get_block_header(&hash)?;
 		batch.save_header_head(&Tip::from_header(&header))?;

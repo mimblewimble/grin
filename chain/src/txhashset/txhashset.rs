@@ -74,6 +74,41 @@ impl<T: PMMRable> PMMRHandle<T> {
 }
 
 impl PMMRHandle<BlockHeader> {
+	/// Used during chain init to ensure the header PMMR is consistent with header_head in the db.
+	pub fn init_head(&mut self, head: &Tip) -> Result<(), Error> {
+		let head_hash = self.head_hash()?;
+		let expected_hash = self.get_header_hash_by_height(head.height)?;
+		if head.hash() != expected_hash {
+			error!(
+				"header PMMR inconsistent: {} vs {} at {}",
+				expected_hash,
+				head.hash(),
+				head.height
+			);
+			return Err(ErrorKind::Other("header PMMR inconsistent".to_string()).into());
+		}
+
+		// 1-indexed pos and we want to account for subsequent parent hash pos.
+		// so use next header pos to find our last_pos.
+		let next_height = head.height + 1;
+		let next_pos = pmmr::insertion_to_pmmr_index(next_height + 1);
+		let pos = next_pos.saturating_sub(1);
+
+		debug!(
+			"init_head: header PMMR: current head {} at pos {}",
+			head_hash, self.last_pos
+		);
+		debug!(
+			"init_head: header PMMR: resetting to {} at pos {} (height {})",
+			head.hash(),
+			pos,
+			head.height
+		);
+
+		self.last_pos = pos;
+		Ok(())
+	}
+
 	/// Get the header hash at the specified height based on the current header MMR state.
 	pub fn get_header_hash_by_height(&self, height: u64) -> Result<Hash, Error> {
 		let pos = pmmr::insertion_to_pmmr_index(height + 1);
