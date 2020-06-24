@@ -15,7 +15,6 @@
 use crate::consensus::{graph_weight, MIN_DIFFICULTY, SECOND_POW_EDGE_BITS};
 use crate::core::hash::{DefaultHashable, Hashed};
 use crate::global;
-use crate::pow::common::EdgeType;
 use crate::pow::error::Error;
 use crate::ser::{self, Readable, Reader, Writeable, Writer};
 use rand::{thread_rng, Rng};
@@ -28,10 +27,7 @@ use std::{fmt, iter};
 
 /// Generic trait for a solver/verifier providing common interface into Cuckoo-family PoW
 /// Mostly used for verification, but also for test mining if necessary
-pub trait PoWContext<T>
-where
-	T: EdgeType,
-{
+pub trait PoWContext {
 	/// Sets the header along with an optional nonce at the end
 	/// solve: whether to set up structures for a solve (true) or just validate (false)
 	fn set_header_nonce(
