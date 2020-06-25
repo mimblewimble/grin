@@ -47,6 +47,9 @@ pub enum Error {
 	/// Wraps a serialization error for Writeable or Readable
 	#[fail(display = "Serialization Error")]
 	SerErr(String),
+	/// File handling error
+	#[fail(display = "File handling Error")]
+	FileErr(String),
 	/// Other error
 	#[fail(display = "Other Error")]
 	OtherErr(String),
@@ -102,8 +105,12 @@ impl Store {
 			None => "lmdb".to_owned(),
 		};
 		let full_path = [root_path.to_owned(), name].join("/");
-		fs::create_dir_all(&full_path)
-			.expect("Unable to create directory 'db_root' to store chain_data");
+		fs::create_dir_all(&full_path).map_err(|e| {
+			Error::FileErr(format!(
+				"Unable to create directory 'db_root' to store chain_data: {:?}",
+				e
+			))
+		})?;
 
 		let mut env_builder = lmdb::EnvBuilder::new()?;
 		env_builder.set_maxdbs(8)?;
