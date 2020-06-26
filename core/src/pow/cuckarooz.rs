@@ -23,7 +23,7 @@
 //! accordingly.
 
 use crate::global;
-use crate::pow::common::{CuckooParams, EdgeType};
+use crate::pow::common::CuckooParams;
 use crate::pow::error::{Error, ErrorKind};
 use crate::pow::siphash::siphash_block;
 use crate::pow::{PoWContext, Proof};
@@ -31,29 +31,17 @@ use crate::pow::{PoWContext, Proof};
 /// Instantiate a new CuckaroozContext as a PowContext. Note that this can't
 /// be moved in the PoWContext trait as this particular trait needs to be
 /// convertible to an object trait.
-pub fn new_cuckarooz_ctx<T>(
-	edge_bits: u8,
-	proof_size: usize,
-) -> Result<Box<dyn PoWContext<T>>, Error>
-where
-	T: EdgeType + 'static,
-{
-	let params = CuckooParams::new(edge_bits, proof_size)?;
+pub fn new_cuckarooz_ctx(edge_bits: u8, proof_size: usize) -> Result<Box<dyn PoWContext>, Error> {
+	let params = CuckooParams::new(edge_bits, edge_bits + 1, proof_size)?;
 	Ok(Box::new(CuckaroozContext { params }))
 }
 
 /// Cuckarooz cycle context. Only includes the verifier for now.
-pub struct CuckaroozContext<T>
-where
-	T: EdgeType,
-{
-	params: CuckooParams<T>,
+pub struct CuckaroozContext {
+	params: CuckooParams,
 }
 
-impl<T> PoWContext<T> for CuckaroozContext<T>
-where
-	T: EdgeType,
-{
+impl PoWContext for CuckaroozContext {
 	fn set_header_nonce(
 		&mut self,
 		header: Vec<u8>,
@@ -74,10 +62,9 @@ where
 		let nonces = &proof.nonces;
 		let mut uvs = vec![0u64; 2 * proof.proof_size()];
 		let mut xoruv: u64 = 0;
-		let node_mask: u64 = to_u64!(self.params.edge_mask) << 1 | 1;
 
 		for n in 0..proof.proof_size() {
-			if nonces[n] > to_u64!(self.params.edge_mask) {
+			if nonces[n] > self.params.edge_mask {
 				return Err(ErrorKind::Verification("edge too big".to_owned()).into());
 			}
 			if n > 0 && nonces[n] <= nonces[n - 1] {
@@ -85,8 +72,8 @@ where
 			}
 			// 21 is standard siphash rotation constant
 			let edge: u64 = siphash_block(&self.params.siphash_keys, nonces[n], 21, true);
-			uvs[2 * n] = edge & node_mask;
-			uvs[2 * n + 1] = (edge >> 32) & node_mask;
+			uvs[2 * n] = edge & self.params.node_mask;
+			uvs[2 * n + 1] = (edge >> 32) & self.params.node_mask;
 			xoruv ^= uvs[2 * n] ^ uvs[2 * n + 1];
 		}
 		if xoruv != 0 {
@@ -167,13 +154,13 @@ mod test {
 	#[test]
 	fn cuckarooz19_29_vectors() {
 		global::set_local_chain_type(global::ChainTypes::Mainnet);
-		let mut ctx19 = new_impl::<u64>(19, 42);
+		let mut ctx19 = new_impl(19, 42);
 		ctx19.params.siphash_keys = V1_19_HASH.clone();
 		assert!(ctx19
 			.verify(&Proof::new(V1_19_SOL.to_vec().clone()))
 			.is_ok());
 		assert!(ctx19.verify(&Proof::zero(42)).is_err());
-		let mut ctx29 = new_impl::<u64>(29, 42);
+		let mut ctx29 = new_impl(29, 42);
 		ctx29.params.siphash_keys = V2_29_HASH.clone();
 		assert!(ctx29
 			.verify(&Proof::new(V2_29_SOL.to_vec().clone()))
@@ -181,11 +168,8 @@ mod test {
 		assert!(ctx29.verify(&Proof::zero(42)).is_err());
 	}
 
-	fn new_impl<T>(edge_bits: u8, proof_size: usize) -> CuckaroozContext<T>
-	where
-		T: EdgeType,
-	{
-		let params = CuckooParams::new(edge_bits, proof_size).unwrap();
+	fn new_impl(edge_bits: u8, proof_size: usize) -> CuckaroozContext {
+		let params = CuckooParams::new(edge_bits, edge_bits + 1, proof_size).unwrap();
 		CuckaroozContext { params }
 	}
 }
