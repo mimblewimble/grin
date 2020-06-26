@@ -79,38 +79,6 @@ pub fn create_siphash_keys(header: &[u8]) -> Result<[u64; 4], Error> {
 	])
 }
 
-/// Macro to clean up u64 unwrapping
-#[macro_export]
-macro_rules! to_u64 {
-	($n:expr) => {
-		$n.to_u64().ok_or(ErrorKind::IntegerCast)?
-	};
-}
-
-/// Macro to clean up u64 unwrapping as u32
-#[macro_export]
-macro_rules! to_u32 {
-	($n:expr) => {
-		$n.to_u64().ok_or(ErrorKind::IntegerCast)? as u32
-	};
-}
-
-/// Macro to clean up u64 unwrapping as usize
-#[macro_export]
-macro_rules! to_usize {
-	($n:expr) => {
-		$n.to_u64().ok_or(ErrorKind::IntegerCast)? as usize
-	};
-}
-
-/// Macro to clean up casting to edge type
-#[macro_export]
-macro_rules! to_edge {
-	($edge_type:ident, $n:expr) => {
-		$edge_type::from($n).ok_or(ErrorKind::IntegerCast)?
-	};
-}
-
 /// Utility struct to calculate commonly used Cuckoo parameters calculated
 /// from header, nonce, edge_bits, etc.
 pub struct CuckooParams {
