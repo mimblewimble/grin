@@ -19,7 +19,7 @@ use crate::core::core::block::{Block, BlockHeader, Error, HeaderVersion, Untrust
 use crate::core::core::hash::Hashed;
 use crate::core::core::id::ShortIdentifiable;
 use crate::core::core::transaction::{
-	self, KernelFeatures, NRDRelativeHeight, OutputFeatures, Transaction,
+	self, KernelFeatures, NRDRelativeHeight, Output, OutputFeatures, Transaction,
 };
 use crate::core::core::verifier_cache::{LruVerifierCache, VerifierCache};
 use crate::core::core::{Committed, CompactBlock};
@@ -344,11 +344,13 @@ fn remove_coinbase_output_flag() {
 	let builder = ProofBuilder::new(&keychain);
 	let prev = BlockHeader::default();
 	let key_id = ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
-	let mut b = new_block(&[], &keychain, &builder, &prev, &key_id);
-
-	let mut output = b.outputs()[0].clone();
-	output.features = OutputFeatures::Plain;
-	b.body.outputs = vec![output];
+	let b = new_block(&[], &keychain, &builder, &prev, &key_id);
+	let output = b.outputs()[0];
+	let output = Output::new(OutputFeatures::Plain, output.commitment(), output.proof());
+	let b = Block {
+		body: b.body.replace_outputs(&[output]),
+		..b
+	};
 
 	assert_eq!(b.verify_coinbase(), Err(Error::CoinbaseSumMismatch));
 	assert!(b

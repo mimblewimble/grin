@@ -234,12 +234,8 @@ pub fn verify_partial_sig(
 /// let switch = SwitchCommitmentType::Regular;
 /// let commit = keychain.commit(value, &key_id, switch).unwrap();
 /// let builder = proof::ProofBuilder::new(&keychain);
-/// let rproof = proof::create(&keychain, &builder, value, &key_id, switch, commit, None).unwrap();
-/// let output = Output {
-///     features: OutputFeatures::Coinbase,
-///     commit: commit,
-///     proof: rproof,
-/// };
+/// let proof = proof::create(&keychain, &builder, value, &key_id, switch, commit, None).unwrap();
+/// let output = Output::new(OutputFeatures::Coinbase, commit, proof);
 /// let height = 20;
 /// let over_commit = secp.commit_value(reward(fees)).unwrap();
 /// let out_commit = output.commitment();
@@ -301,12 +297,8 @@ where
 /// let switch = SwitchCommitmentType::Regular;
 /// let commit = keychain.commit(value, &key_id, switch).unwrap();
 /// let builder = proof::ProofBuilder::new(&keychain);
-/// let rproof = proof::create(&keychain, &builder, value, &key_id, switch, commit, None).unwrap();
-/// let output = Output {
-///     features: OutputFeatures::Coinbase,
-///     commit: commit,
-///     proof: rproof,
-/// };
+/// let proof = proof::create(&keychain, &builder, value, &key_id, switch, commit, None).unwrap();
+/// let output = Output::new(OutputFeatures::Coinbase, commit, proof);
 /// let height = 20;
 /// let over_commit = secp.commit_value(reward(fees)).unwrap();
 /// let out_commit = output.commitment();

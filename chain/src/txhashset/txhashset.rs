@@ -144,7 +144,7 @@ impl PMMRHandle<BlockHeader> {
 /// may have commitments that have already been spent, even with
 /// pruning enabled.
 pub struct TxHashSet {
-	output_pmmr_h: PMMRHandle<Output>,
+	output_pmmr_h: PMMRHandle<OutputIdentifier>,
 	rproof_pmmr_h: PMMRHandle<RangeProof>,
 	kernel_pmmr_h: PMMRHandle<TxKernel>,
 
@@ -237,7 +237,9 @@ impl TxHashSet {
 	}
 
 	// Build a new bitmap accumulator for the provided output PMMR.
-	fn bitmap_accumulator(pmmr_h: &PMMRHandle<Output>) -> Result<BitmapAccumulator, Error> {
+	fn bitmap_accumulator(
+		pmmr_h: &PMMRHandle<OutputIdentifier>,
+	) -> Result<BitmapAccumulator, Error> {
 		let pmmr = ReadonlyPMMR::at(&pmmr_h.backend, pmmr_h.last_pos);
 		let size = pmmr::n_leaves(pmmr_h.last_pos);
 		let mut bitmap_accumulator = BitmapAccumulator::new();
@@ -261,7 +263,7 @@ impl TxHashSet {
 	) -> Result<Option<(OutputIdentifier, CommitPos)>, Error> {
 		match self.commit_index.get_output_pos_height(&commit) {
 			Ok(Some(pos)) => {
-				let output_pmmr: ReadonlyPMMR<'_, Output, _> =
+				let output_pmmr: ReadonlyPMMR<'_, OutputIdentifier, _> =
 					ReadonlyPMMR::at(&self.output_pmmr_h.backend, self.output_pmmr_h.last_pos);
 				if let Some(out) = output_pmmr.get_data(pos.pos) {
 					if out.commitment() == commit {
@@ -997,7 +999,7 @@ pub struct ExtensionPair<'a> {
 pub struct Extension<'a> {
 	head: Tip,
 
-	output_pmmr: PMMR<'a, Output, PMMRBackend<Output>>,
+	output_pmmr: PMMR<'a, OutputIdentifier, PMMRBackend<OutputIdentifier>>,
 	rproof_pmmr: PMMR<'a, RangeProof, PMMRBackend<RangeProof>>,
 	kernel_pmmr: PMMR<'a, TxKernel, PMMRBackend<TxKernel>>,
 
@@ -1171,13 +1173,13 @@ impl<'a> Extension<'a> {
 		// push the new output to the MMR.
 		let output_pos = self
 			.output_pmmr
-			.push(out)
+			.push(&out.identifier())
 			.map_err(&ErrorKind::TxHashSetErr)?;
 
 		// push the rangeproof to the MMR.
 		let rproof_pos = self
 			.rproof_pmmr
-			.push(&out.proof)
+			.push(&out.proof())
 			.map_err(&ErrorKind::TxHashSetErr)?;
 
 		// The output and rproof MMRs should be exactly the same size
@@ -1231,14 +1233,15 @@ impl<'a> Extension<'a> {
 	/// Note: this relies on the MMR being stable even after pruning/compaction.
 	/// We need the hash of each sibling pos from the pos up to the peak
 	/// including the sibling leaf node which may have been removed.
-	pub fn merkle_proof(
+	pub fn merkle_proof<T: AsRef<OutputIdentifier>>(
 		&self,
-		output: &OutputIdentifier,
+		out_id: T,
 		batch: &Batch<'_>,
 	) -> Result<MerkleProof, Error> {
-		debug!("txhashset: merkle_proof: output: {:?}", output.commit,);
+		let out_id = out_id.as_ref();
+		debug!("txhashset: merkle_proof: output: {:?}", out_id.commit);
 		// then calculate the Merkle Proof based on the known pos
-		let pos = batch.get_output_pos(&output.commit)?;
+		let pos = batch.get_output_pos(&out_id.commit)?;
 		let merkle_proof = self
 			.output_pmmr
 			.merkle_proof(pos)

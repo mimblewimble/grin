@@ -303,8 +303,11 @@ where
 		let agg_tx = self
 			.all_transactions_aggregate(extra_tx)?
 			.unwrap_or(Transaction::empty());
-		let mut outputs: Vec<OutputIdentifier> =
-			agg_tx.outputs().iter().map(|out| out.into()).collect();
+		let mut outputs: Vec<OutputIdentifier> = agg_tx
+			.outputs()
+			.iter()
+			.map(|out| out.identifier())
+			.collect();
 
 		// By applying cut_through to tx inputs and agg_tx outputs we can
 		// determine the outputs being spent from the pool and those still unspent
