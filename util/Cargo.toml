@@ -1,6 +1,6 @@
 [package]
 name = "grin_util"
-version = "4.0.0-rc.1"
+version = "4.0.0"
 authors = ["Grin Developers <mimblewimble@lists.launchpad.net>"]
 description = "Simple, private and scalable cryptocurrency implementation based on the Mimblewimble chain format."
 license = "Apache-2.0"
