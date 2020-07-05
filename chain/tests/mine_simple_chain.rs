@@ -365,12 +365,12 @@ fn mine_reorg() {
 			chain.process_block(b, chain::Options::SKIP_POW).unwrap();
 		}
 
-		let head = chain.head_header().unwrap();
+		let head = chain.head().unwrap();
 		assert_eq!(head.height, NUM_BLOCKS_MAIN);
 		assert_eq!(head.hash(), prev.hash());
 
 		// Reorg chain should exceed main chain's total difficulty to be considered
-		let reorg_difficulty = head.total_difficulty().to_num();
+		let reorg_difficulty = head.total_difficulty.to_num();
 
 		// Create one block for reorg chain forking off NUM_BLOCKS_MAIN - REORG_DEPTH height
 		let fork_head = chain
@@ -381,13 +381,17 @@ fn mine_reorg() {
 		chain.process_block(b, chain::Options::SKIP_POW).unwrap();
 
 		// Check that reorg is correctly reported in block status
+		let fork_point = chain.get_header_by_height(1).unwrap();
 		assert_eq!(
 			*adapter.last_status.read(),
-			Some(BlockStatus::Reorg(REORG_DEPTH))
+			Some(BlockStatus::Reorg {
+				prev_head: head,
+				fork_point: Tip::from_header(&fork_point)
+			})
 		);
 
 		// Chain should be switched to the reorganized chain
-		let head = chain.head_header().unwrap();
+		let head = chain.head().unwrap();
 		assert_eq!(head.height, NUM_BLOCKS_MAIN - REORG_DEPTH + 1);
 		assert_eq!(head.hash(), reorg_head.hash());
 	}

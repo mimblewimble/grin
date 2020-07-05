@@ -725,7 +725,7 @@ where
 		// not broadcasting blocks received through sync
 		if !opts.contains(chain::Options::SYNC) {
 			for hook in &self.hooks {
-				hook.on_block_accepted(b, &status);
+				hook.on_block_accepted(b, status);
 			}
 			// If we mined the block then we want to broadcast the compact block.
 			// If we received the block from another node then broadcast "header first"
@@ -743,12 +743,8 @@ where
 		// Reconcile the txpool against the new block *after* we have broadcast it too our peers.
 		// This may be slow and we do not want to delay block propagation.
 		// We only want to reconcile the txpool against the new block *if* total work has increased.
-		let is_reorg = if let BlockStatus::Reorg(_) = status {
-			true
-		} else {
-			false
-		};
-		if status == BlockStatus::Next || is_reorg {
+
+		if status.is_next() || status.is_reorg() {
 			let mut tx_pool = self.tx_pool.write();
 
 			let _ = tx_pool.reconcile_block(b);
@@ -758,7 +754,7 @@ where
 			tx_pool.truncate_reorg_cache(cutoff);
 		}
 
-		if is_reorg {
+		if status.is_reorg() {
 			let _ = self.tx_pool.write().reconcile_reorg_cache(&b.header);
 		}
 	}
