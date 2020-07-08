@@ -1094,6 +1094,10 @@ impl<'a> Extension<'a> {
 		if let Some((pos, height)) = batch.get_output_pos_height(&commit)? {
 			// First check this input corresponds to an existing entry in the output MMR.
 			if let Some(out) = self.output_pmmr.get_data(pos) {
+				// TODO -
+				// 1. lookup via commitment regardless of input variant.
+				// 2. check features if included in variant
+
 				if OutputIdentifier::from(input) != out {
 					return Err(ErrorKind::TxHashSetErr("output pmmr mismatch".to_string()).into());
 				}

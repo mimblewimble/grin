@@ -69,6 +69,8 @@ pub enum Error {
 	DuplicateError,
 	/// Block header version (hard-fork schedule).
 	InvalidBlockVersion,
+	/// Protocol version related error.
+	ProtocolVersionError,
 }
 
 impl From<io::Error> for Error {
@@ -92,6 +94,7 @@ impl fmt::Display for Error {
 			Error::TooLargeReadErr => f.write_str("too large read"),
 			Error::HexError(ref e) => write!(f, "hex error {:?}", e),
 			Error::InvalidBlockVersion => f.write_str("invalid block version"),
+			Error::ProtocolVersionError => f.write_str("protocol version error"),
 		}
 	}
 }
@@ -115,6 +118,7 @@ impl error::Error for Error {
 			Error::TooLargeReadErr => "too large read",
 			Error::HexError(_) => "hex error",
 			Error::InvalidBlockVersion => "invalid block version",
+			Error::ProtocolVersionError => "protocol version error",
 		}
 	}
 }

@@ -117,6 +117,10 @@ impl<'a> UTXOView<'a> {
 		height: u64,
 		batch: &Batch<'_>,
 	) -> Result<(), Error> {
+		// TODO -
+		// 1. lookup output via commitment
+		// 2. check is_coinbase() on output
+
 		// Find the greatest output pos of any coinbase
 		// outputs we are attempting to spend.
 		let pos = inputs

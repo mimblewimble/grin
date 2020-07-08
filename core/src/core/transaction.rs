@@ -1440,22 +1440,32 @@ pub fn deaggregate(mk_tx: Transaction, txs: &[Transaction]) -> Result<Transactio
 	let tx = Transaction::new(&inputs, &outputs, &kernels).with_offset(total_kernel_offset);
 	Ok(tx)
 }
-
-/// A transaction input.
-///
-/// Primarily a reference to an output being spent by the transaction.
 #[derive(Serialize, Deserialize, Debug, Clone, Copy)]
-pub struct Input {
-	/// The features of the output being spent.
-	/// We will check maturity for coinbase output.
-	pub features: OutputFeatures,
-	/// The commit referencing the output being spent.
-	#[serde(
-		serialize_with = "secp_ser::as_hex",
-		deserialize_with = "secp_ser::commitment_from_hex"
-	)]
-	pub commit: Commitment,
+pub enum Input {
+	FeaturesAndCommit {
+		features: OutputFeatures,
+		commit: Commitment,
+	},
+	CommitOnly {
+		commit: Commitment,
+	},
 }
+
+// /// A transaction input.
+// ///
+// /// Primarily a reference to an output being spent by the transaction.
+// #[derive(Serialize, Deserialize, Debug, Clone, Copy)]
+// pub struct Input {
+// 	/// The features of the output being spent.
+// 	/// We will check maturity for coinbase output.
+// 	pub features: OutputFeatures,
+// 	/// The commit referencing the output being spent.
+// 	#[serde(
+// 		serialize_with = "secp_ser::as_hex",
+// 		deserialize_with = "secp_ser::commitment_from_hex"
+// 	)]
+// 	pub commit: Commitment,
+// }
 
 impl DefaultHashable for Input {}
 hashable_ord!(Input);
@@ -1463,7 +1473,11 @@ hashable_ord!(Input);
 impl ::std::hash::Hash for Input {
 	fn hash<H: ::std::hash::Hasher>(&self, state: &mut H) {
 		let mut vec = Vec::new();
-		ser::serialize_default(&mut vec, &self).expect("serialization failed");
+		let version = match self {
+			Input::FeaturesAndCommit { .. } => ProtocolVersion(2),
+			Input::CommitOnly { .. } => ProtocolVersion(3),
+		};
+		ser::serialize(&mut vec, version, &self).expect("serialization failed");
 		::std::hash::Hash::hash(&vec, state);
 	}
 }
@@ -1472,9 +1486,10 @@ impl ::std::hash::Hash for Input {
 /// an Input as binary.
 impl Writeable for Input {
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
-		self.features.write(writer)?;
-		self.commit.write(writer)?;
-		Ok(())
+		match writer.protocol_version().value() {
+			0..=2 => self.write_v2(writer),
+			3..=ProtocolVersion::MAX => self.write_v3(writer),
+		}
 	}
 }
 
@@ -1482,39 +1497,49 @@ impl Writeable for Input {
 /// an Input from a binary stream.
 impl Readable for Input {
 	fn read<R: Reader>(reader: &mut R) -> Result<Input, ser::Error> {
-		let features = OutputFeatures::read(reader)?;
-		let commit = Commitment::read(reader)?;
-		Ok(Input::new(features, commit))
+		match reader.protocol_version().value() {
+			0..=2 => Input::read_v2(reader),
+			3..=ProtocolVersion::MAX => Input::read_v3(reader),
+		}
 	}
 }
 
-/// The input for a transaction, which spends a pre-existing unspent output.
-/// The input commitment is a reproduction of the commitment of the output
-/// being spent. Input must also provide the original output features and the
-/// hash of the block the output originated from.
+/// A transaction input, which spends an existing unspent output.
 impl Input {
-	/// Build a new input from the data required to identify and verify an
-	/// output being spent.
-	pub fn new(features: OutputFeatures, commit: Commitment) -> Input {
-		Input { features, commit }
-	}
-
-	/// The input commitment which _partially_ identifies the output being
-	/// spent. In the presence of a fork we need additional info to uniquely
-	/// identify the output. Specifically the block hash (to correctly
-	/// calculate lock_height for coinbase outputs).
 	pub fn commitment(&self) -> Commitment {
-		self.commit
+		match self {
+			Input::FeaturesAndCommit { commit, .. } => *commit,
+			Input::CommitOnly { commit } => *commit,
+		}
 	}
 
-	/// Is this a coinbase input?
-	pub fn is_coinbase(&self) -> bool {
-		self.features.is_coinbase()
+	fn read_v2<R: Reader>(reader: &mut R) -> Result<Input, ser::Error> {
+		let features = OutputFeatures::read(reader)?;
+		let commit = Commitment::read(reader)?;
+		Ok(Input::FeaturesAndCommit { features, commit })
 	}
 
-	/// Is this a plain input?
-	pub fn is_plain(&self) -> bool {
-		self.features.is_plain()
+	fn read_v3<R: Reader>(reader: &mut R) -> Result<Input, ser::Error> {
+		let commit = Commitment::read(reader)?;
+		Ok(Input::CommitOnly { commit })
+	}
+
+	fn write_v2<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
+		match self {
+			Input::FeaturesAndCommit { features, commit } => {
+				features.write(writer)?;
+				commit.write(writer)?;
+				Ok(())
+			}
+			Input::CommitOnly { commit } => Err(ser::Error::ProtocolVersionError),
+		}
+	}
+
+	fn write_v3<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
+		match self {
+			Input::CommitOnly { commit } => commit.write(writer),
+			Input::FeaturesAndCommit { commit, .. } => commit.write(writer),
+		}
 	}
 }
 
@@ -1749,14 +1774,14 @@ impl From<&Output> for OutputIdentifier {
 	}
 }
 
-impl From<&Input> for OutputIdentifier {
-	fn from(input: &Input) -> Self {
-		OutputIdentifier {
-			features: input.features,
-			commit: input.commit,
-		}
-	}
-}
+// impl From<&Input> for OutputIdentifier {
+// 	fn from(input: &Input) -> Self {
+// 		OutputIdentifier {
+// 			features: input.features,
+// 			commit: input.commit,
+// 		}
+// 	}
+// }
 
 #[cfg(test)]
 mod test {
@@ -1964,7 +1989,7 @@ mod test {
 			.commit(5, &key_id, SwitchCommitmentType::Regular)
 			.unwrap();
 
-		let input = Input {
+		let input = Input::FeaturesAndCommit {
 			features: OutputFeatures::Plain,
 			commit,
 		};
@@ -1980,7 +2005,7 @@ mod test {
 
 		// now generate the short_id for a *very* similar output (single feature flag
 		// different) and check it generates a different short_id
-		let input = Input {
+		let input = Input::FeaturesAndCommit {
 			features: OutputFeatures::Coinbase,
 			commit,
 		};

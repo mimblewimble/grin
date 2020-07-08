@@ -71,7 +71,7 @@ where
 						.keychain
 						.commit(value, &key_id, SwitchCommitmentType::Regular)?;
 				// TODO: proper support for different switch commitment schemes
-				let input = Input::new(features, commit);
+				let input = Input::FeaturesAndCommit { features, commit };
 				Ok((
 					tx.with_input(input),
 					sum.sub_key_id(key_id.to_value_path(value)),
