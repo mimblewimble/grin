@@ -119,13 +119,16 @@ impl ChainEvents for EventLogger {
 	fn on_block_accepted(&self, block: &core::Block, status: BlockStatus) {
 		match status {
 			BlockStatus::Reorg {
+				prev,
 				prev_head,
 				fork_point,
 			} => {
 				warn!(
-					"block_accepted (REORG!): {} at {}, (prev_head: {} at {}, fork_point: {} at {}, depth: {})",
+					"block_accepted (REORG!): {} at {}, (prev: {} at {}, prev_head: {} at {}, fork_point: {} at {}, depth: {})",
 					block.hash(),
 					block.header.height,
+					prev.hash(),
+					prev.height,
 					prev_head.hash(),
 					prev_head.height,
 					fork_point.hash(),
@@ -134,27 +137,30 @@ impl ChainEvents for EventLogger {
 				);
 			}
 			BlockStatus::Fork {
-				prev_head,
+				prev,
+				head,
 				fork_point,
 			} => {
 				debug!(
-					"block_accepted (fork?): {} at {}, (prev_head: {} at {}, fork_point: {} at {}, depth: {})",
+					"block_accepted (fork?): {} at {}, (prev: {} at {}, head: {} at {}, fork_point: {} at {}, depth: {})",
 					block.hash(),
 					block.header.height,
-					prev_head.hash(),
-					prev_head.height,
+					prev.hash(),
+					prev.height,
+					head.hash(),
+					head.height,
 					fork_point.hash(),
 					fork_point.height,
 					block.header.height.saturating_sub(fork_point.height + 1),
 				);
 			}
-			BlockStatus::Next { prev_head } => {
+			BlockStatus::Next { prev } => {
 				debug!(
-					"block_accepted (head+): {} at {} (prev_head: {} at {})",
+					"block_accepted (head+): {} at {} (prev: {} at {})",
 					block.hash(),
 					block.header.height,
-					prev_head.hash(),
-					prev_head.height,
+					prev.hash(),
+					prev.height,
 				);
 			}
 		}

@@ -448,19 +448,23 @@ impl ChainAdapter for NoopAdapter {
 pub enum BlockStatus {
 	/// Block is the "next" block, updating the chain head.
 	Next {
-		/// Previous chain head.
-		prev_head: Tip,
+		/// Previous block (previous chain head).
+		prev: Tip,
 	},
 	/// Block does not update the chain head and is a fork.
 	Fork {
-		/// Previous chain head.
-		prev_head: Tip,
+		/// Previous block on this fork.
+		prev: Tip,
+		/// Current chain head.
+		head: Tip,
 		/// Fork point for rewind.
 		fork_point: Tip,
 	},
 	/// Block updates the chain head via a (potentially disruptive) "reorg".
 	/// Previous block was not our previous chain head.
 	Reorg {
+		/// Previous block on this fork.
+		prev: Tip,
 		/// Previous chain head.
 		prev_head: Tip,
 		/// Fork point for rewind.
