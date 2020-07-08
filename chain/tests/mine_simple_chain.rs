@@ -385,6 +385,7 @@ fn mine_reorg() {
 		assert_eq!(
 			*adapter.last_status.read(),
 			Some(BlockStatus::Reorg {
+				prev: Tip::from_header(&fork_head),
 				prev_head: head,
 				fork_point: Tip::from_header(&fork_point)
 			})
