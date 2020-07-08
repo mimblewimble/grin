@@ -76,7 +76,7 @@ pub trait NetEvents {
 /// Trait to be implemented by Chain Event Hooks
 pub trait ChainEvents {
 	/// Triggers when a new block is accepted by the chain (might be a Reorg or a Fork)
-	fn on_block_accepted(&self, block: &core::Block, status: &BlockStatus) {}
+	fn on_block_accepted(&self, block: &core::Block, status: BlockStatus) {}
 }
 
 /// Basic Logger
@@ -116,31 +116,45 @@ impl NetEvents for EventLogger {
 }
 
 impl ChainEvents for EventLogger {
-	fn on_block_accepted(&self, block: &core::Block, status: &BlockStatus) {
+	fn on_block_accepted(&self, block: &core::Block, status: BlockStatus) {
 		match status {
-			BlockStatus::Reorg(depth) => {
+			BlockStatus::Reorg {
+				prev_head,
+				fork_point,
+			} => {
 				warn!(
-					"block_accepted (REORG!): {:?} at {} (depth: {}, diff: {})",
+					"block_accepted (REORG!): {} at {}, (prev_head: {} at {}, fork_point: {} at {}, depth: {})",
 					block.hash(),
 					block.header.height,
-					depth,
-					block.header.total_difficulty(),
+					prev_head.hash(),
+					prev_head.height,
+					fork_point.hash(),
+					fork_point.height,
+					block.header.height.saturating_sub(fork_point.height + 1),
 				);
 			}
-			BlockStatus::Fork => {
+			BlockStatus::Fork {
+				prev_head,
+				fork_point,
+			} => {
 				debug!(
-					"block_accepted (fork?): {:?} at {} (diff: {})",
+					"block_accepted (fork?): {} at {}, (prev_head: {} at {}, fork_point: {} at {}, depth: {})",
 					block.hash(),
 					block.header.height,
-					block.header.total_difficulty(),
+					prev_head.hash(),
+					prev_head.height,
+					fork_point.hash(),
+					fork_point.height,
+					block.header.height.saturating_sub(fork_point.height + 1),
 				);
 			}
-			BlockStatus::Next => {
+			BlockStatus::Next { prev_head } => {
 				debug!(
-					"block_accepted (head+): {:?} at {} (diff: {})",
+					"block_accepted (head+): {} at {} (prev_head: {} at {})",
 					block.hash(),
 					block.header.height,
-					block.header.total_difficulty(),
+					prev_head.hash(),
+					prev_head.height,
 				);
 			}
 		}
@@ -262,20 +276,20 @@ impl WebHook {
 }
 
 impl ChainEvents for WebHook {
-	fn on_block_accepted(&self, block: &core::Block, status: &BlockStatus) {
+	fn on_block_accepted(&self, block: &core::Block, status: BlockStatus) {
 		let status_str = match status {
-			BlockStatus::Reorg(_) => "reorg",
-			BlockStatus::Fork => "fork",
-			BlockStatus::Next => "head",
+			BlockStatus::Reorg { .. } => "reorg",
+			BlockStatus::Fork { .. } => "fork",
+			BlockStatus::Next { .. } => "head",
 		};
 
 		// Add additional `depth` field to the JSON in case of reorg
-		let payload = if let BlockStatus::Reorg(depth) = status {
+		let payload = if let BlockStatus::Reorg { fork_point, .. } = status {
+			let depth = block.header.height.saturating_sub(fork_point.height + 1);
 			json!({
 				"hash": block.header.hash().to_hex(),
 				"status": status_str,
 				"data": block,
-
 				"depth": depth
 			})
 		} else {

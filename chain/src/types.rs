@@ -331,7 +331,7 @@ impl Writeable for CommitPos {
 /// blockchain tree. References the max height and the latest and previous
 /// blocks
 /// for convenience and the total difficulty.
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq)]
 pub struct Tip {
 	/// Height of the tip (max height of the fork)
 	pub height: u64,
@@ -444,13 +444,44 @@ impl ChainAdapter for NoopAdapter {
 }
 
 /// Status of an accepted block.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum BlockStatus {
 	/// Block is the "next" block, updating the chain head.
-	Next,
+	Next {
+		/// Previous chain head.
+		prev_head: Tip,
+	},
 	/// Block does not update the chain head and is a fork.
-	Fork,
+	Fork {
+		/// Previous chain head.
+		prev_head: Tip,
+		/// Fork point for rewind.
+		fork_point: Tip,
+	},
 	/// Block updates the chain head via a (potentially disruptive) "reorg".
 	/// Previous block was not our previous chain head.
-	Reorg(u64),
+	Reorg {
+		/// Previous chain head.
+		prev_head: Tip,
+		/// Fork point for rewind.
+		fork_point: Tip,
+	},
+}
+
+impl BlockStatus {
+	/// Is this the "next" block?
+	pub fn is_next(&self) -> bool {
+		match *self {
+			BlockStatus::Next { .. } => true,
+			_ => false,
+		}
+	}
+
+	/// Is this block a "reorg"?
+	pub fn is_reorg(&self) -> bool {
+		match *self {
+			BlockStatus::Reorg { .. } => true,
+			_ => false,
+		}
+	}
 }

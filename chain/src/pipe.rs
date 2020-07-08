@@ -78,8 +78,11 @@ fn validate_pow_only(header: &BlockHeader, ctx: &mut BlockContext<'_>) -> Result
 
 /// Runs the block processing pipeline, including validation and finding a
 /// place for the new block in the chain.
-/// Returns new head if chain head updated.
-pub fn process_block(b: &Block, ctx: &mut BlockContext<'_>) -> Result<Option<Tip>, Error> {
+/// Returns new head if chain head updated and the "fork point" rewound to when processing the new block.
+pub fn process_block(
+	b: &Block,
+	ctx: &mut BlockContext<'_>,
+) -> Result<(Option<Tip>, BlockHeader), Error> {
 	debug!(
 		"pipe: process_block {} at {} [in/out/kern: {}/{}/{}]",
 		b.hash(),
@@ -127,8 +130,8 @@ pub fn process_block(b: &Block, ctx: &mut BlockContext<'_>) -> Result<Option<Tip
 	let header_pmmr = &mut ctx.header_pmmr;
 	let txhashset = &mut ctx.txhashset;
 	let batch = &mut ctx.batch;
-	txhashset::extending(header_pmmr, txhashset, batch, |ext, batch| {
-		rewind_and_apply_fork(&prev, ext, batch)?;
+	let fork_point = txhashset::extending(header_pmmr, txhashset, batch, |ext, batch| {
+		let fork_point = rewind_and_apply_fork(&prev, ext, batch)?;
 
 		// Check any coinbase being spent have matured sufficiently.
 		// This needs to be done within the context of a potentially
@@ -159,7 +162,7 @@ pub fn process_block(b: &Block, ctx: &mut BlockContext<'_>) -> Result<Option<Tip
 			ext.extension.force_rollback();
 		}
 
-		Ok(())
+		Ok(fork_point)
 	})?;
 
 	// Add the validated block to the db.
@@ -176,9 +179,9 @@ pub fn process_block(b: &Block, ctx: &mut BlockContext<'_>) -> Result<Option<Tip
 	if has_more_work(&b.header, &head) {
 		let head = Tip::from_header(&b.header);
 		update_head(&head, &mut ctx.batch)?;
-		Ok(Some(head))
+		Ok((Some(head), fork_point))
 	} else {
-		Ok(None)
+		Ok((None, fork_point))
 	}
 }
 
@@ -545,11 +548,12 @@ pub fn rewind_and_apply_header_fork(
 /// to find to fork point. Rewind the txhashset to the fork point and apply all
 /// necessary blocks prior to the one being processed to set the txhashset in
 /// the expected state.
+/// Returns the "fork point" that we rewound to.
 pub fn rewind_and_apply_fork(
 	header: &BlockHeader,
 	ext: &mut txhashset::ExtensionPair<'_>,
 	batch: &store::Batch<'_>,
-) -> Result<(), Error> {
+) -> Result<BlockHeader, Error> {
 	let extension = &mut ext.extension;
 	let header_extension = &mut ext.header_extension;
 
@@ -593,7 +597,7 @@ pub fn rewind_and_apply_fork(
 		apply_block_to_txhashset(&fb, ext, batch)?;
 	}
 
-	Ok(())
+	Ok(fork_point)
 }
 
 fn validate_utxo(

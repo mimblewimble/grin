@@ -271,24 +271,23 @@ impl Chain {
 		res
 	}
 
-	fn determine_status(&self, head: Option<Tip>, prev_head: Tip) -> BlockStatus {
-		// We have more work if the chain head is updated.
-		let is_more_work = head.is_some();
-
-		let mut is_next_block = false;
-		let mut reorg_depth = None;
+	fn determine_status(&self, head: Option<Tip>, prev_head: Tip, fork_point: Tip) -> BlockStatus {
+		// If head is updated then we are either "next" block or we just experienced a "reorg" to new head.
+		// Otherwise this is a "fork" off the main chain.
 		if let Some(head) = head {
 			if head.prev_block_h == prev_head.last_block_h {
-				is_next_block = true;
+				BlockStatus::Next { prev_head }
 			} else {
-				reorg_depth = Some(prev_head.height.saturating_sub(head.height) + 1);
+				BlockStatus::Reorg {
+					prev_head,
+					fork_point,
+				}
 			}
-		}
-
-		match (is_more_work, is_next_block) {
-			(true, true) => BlockStatus::Next,
-			(true, false) => BlockStatus::Reorg(reorg_depth.unwrap_or(0)),
-			(false, _) => BlockStatus::Fork,
+		} else {
+			BlockStatus::Fork {
+				prev_head,
+				fork_point,
+			}
 		}
 	}
 
@@ -305,9 +304,8 @@ impl Chain {
 			let mut header_pmmr = self.header_pmmr.write();
 			let mut txhashset = self.txhashset.write();
 			let batch = self.store.batch()?;
+			let prev_head = batch.head()?;
 			let mut ctx = self.new_ctx(opts, batch, &mut header_pmmr, &mut txhashset)?;
-
-			let prev_head = ctx.batch.head()?;
 
 			let maybe_new_head = pipe::process_block(&b, &mut ctx);
 
@@ -324,8 +322,8 @@ impl Chain {
 		};
 
 		match maybe_new_head {
-			Ok(head) => {
-				let status = self.determine_status(head.clone(), prev_head);
+			Ok((head, fork_point)) => {
+				let status = self.determine_status(head, prev_head, Tip::from_header(&fork_point));
 
 				// notifying other parts of the system of the update
 				self.adapter.block_accepted(&b, status, opts);
