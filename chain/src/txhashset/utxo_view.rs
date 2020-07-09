@@ -76,14 +76,26 @@ impl<'a> UTXOView<'a> {
 	// that currently exists in the output MMR.
 	// Compare against the entry in output MMR at the expected pos.
 	fn validate_input(&self, input: &Input, batch: &Batch<'_>) -> Result<(), Error> {
-		if let Ok(pos) = batch.get_output_pos(&input.commitment()) {
+		let commit = input.commitment();
+		if let Ok(pos) = batch.get_output_pos(&commit) {
 			if let Some(out) = self.output_pmmr.get_data(pos) {
-				if OutputIdentifier::from(input) == out {
-					return Ok(());
+				// Compare input commitment against output commitment.
+				// If input has features then also verify against output features.
+				if commit == out.commitment() {
+					match input {
+						Input::FeaturesAndCommit { features, .. } => {
+							if *features == out.features {
+								return Ok(());
+							}
+						}
+						Input::CommitOnly { .. } => {
+							return Ok(());
+						}
+					}
 				}
 			}
 		}
-		Err(ErrorKind::AlreadySpent(input.commitment()).into())
+		Err(ErrorKind::AlreadySpent(commit).into())
 	}
 
 	// Output is valid if it would not result in a duplicate commitment in the output MMR.
@@ -111,12 +123,15 @@ impl<'a> UTXOView<'a> {
 
 	/// Verify we are not attempting to spend any coinbase outputs
 	/// that have not sufficiently matured.
-	pub fn verify_coinbase_maturity(
+	pub fn verify_coinbase_maturity<'b, I>(
 		&self,
-		inputs: &[Input],
+		inputs: I,
 		height: u64,
 		batch: &Batch<'_>,
-	) -> Result<(), Error> {
+	) -> Result<(), Error>
+	where
+		I: IntoIterator<Item = &'b Input>,
+	{
 		// TODO -
 		// 1. lookup output via commitment
 		// 2. check is_coinbase() on output
@@ -124,7 +139,7 @@ impl<'a> UTXOView<'a> {
 		// Find the greatest output pos of any coinbase
 		// outputs we are attempting to spend.
 		let pos = inputs
-			.iter()
+			.into_iter()
 			.filter(|x| x.is_coinbase())
 			.filter_map(|x| batch.get_output_pos(&x.commitment()).ok())
 			.max()

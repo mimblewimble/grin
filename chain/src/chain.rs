@@ -560,7 +560,7 @@ impl Chain {
 		let header_pmmr = self.header_pmmr.read();
 		let txhashset = self.txhashset.read();
 		txhashset::utxo_view(&header_pmmr, &txhashset, |utxo, batch| {
-			utxo.verify_coinbase_maturity(&tx.inputs(), height, batch)?;
+			utxo.verify_coinbase_maturity(tx.inputs(), height, batch)?;
 			Ok(())
 		})
 	}

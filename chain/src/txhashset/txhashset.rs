@@ -1034,8 +1034,7 @@ impl<'a> Extension<'a> {
 	}
 
 	/// Apply a new block to the current txhashet extension (output, rangeproof, kernel MMRs).
-	/// Returns a vec of commit_pos representing the pos and height of the outputs spent
-	/// by this block.
+	/// Supports both CommitOnly and FeaturesAndCommit input variant.
 	pub fn apply_block(&mut self, b: &Block, batch: &Batch<'_>) -> Result<(), Error> {
 		let mut affected_pos = vec![];
 
@@ -1094,12 +1093,21 @@ impl<'a> Extension<'a> {
 		if let Some((pos, height)) = batch.get_output_pos_height(&commit)? {
 			// First check this input corresponds to an existing entry in the output MMR.
 			if let Some(out) = self.output_pmmr.get_data(pos) {
-				// TODO -
-				// 1. lookup via commitment regardless of input variant.
-				// 2. check features if included in variant
-
-				if OutputIdentifier::from(input) != out {
+				if commit != out.commit {
 					return Err(ErrorKind::TxHashSetErr("output pmmr mismatch".to_string()).into());
+				}
+
+				// If input includes features then we need to verify these match the output features.
+				match input {
+					Input::FeaturesAndCommit { features, .. } => {
+						if *features != out.features {
+							return Err(ErrorKind::TxHashSetErr(
+								"input features mismatch".to_string(),
+							)
+							.into());
+						}
+					}
+					_ => {}
 				}
 			}
 

@@ -16,7 +16,7 @@
 
 use crate::core::consensus::HeaderInfo;
 use crate::core::core::hash::{Hash, Hashed};
-use crate::core::core::{Block, BlockHeader, BlockSums};
+use crate::core::core::{Block, BlockHeader, BlockSums, Input};
 use crate::core::pow::Difficulty;
 use crate::core::ser::ProtocolVersion;
 use crate::linked_list::MultiIndex;

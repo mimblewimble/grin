@@ -1442,30 +1442,23 @@ pub fn deaggregate(mk_tx: Transaction, txs: &[Transaction]) -> Result<Transactio
 }
 #[derive(Serialize, Deserialize, Debug, Clone, Copy)]
 pub enum Input {
+	/// Input including output features and output commitment.
+	/// Corresponds to protocol version 2.
+	/// Can be translated to protocol version 3.
 	FeaturesAndCommit {
+		/// Output features associated with this input.
 		features: OutputFeatures,
+		/// Output commitment associated with this input.
 		commit: Commitment,
 	},
+	/// Input with output commitment only.
+	/// Corresponds to protocol version 3.
+	/// Note: Translation to protocol version 3 is non-trivial as features must be looked up externally.
 	CommitOnly {
+		/// Output commitment associated with this input.
 		commit: Commitment,
 	},
 }
-
-// /// A transaction input.
-// ///
-// /// Primarily a reference to an output being spent by the transaction.
-// #[derive(Serialize, Deserialize, Debug, Clone, Copy)]
-// pub struct Input {
-// 	/// The features of the output being spent.
-// 	/// We will check maturity for coinbase output.
-// 	pub features: OutputFeatures,
-// 	/// The commit referencing the output being spent.
-// 	#[serde(
-// 		serialize_with = "secp_ser::as_hex",
-// 		deserialize_with = "secp_ser::commitment_from_hex"
-// 	)]
-// 	pub commit: Commitment,
-// }
 
 impl DefaultHashable for Input {}
 hashable_ord!(Input);
@@ -1531,14 +1524,17 @@ impl Input {
 				commit.write(writer)?;
 				Ok(())
 			}
-			Input::CommitOnly { commit } => Err(ser::Error::ProtocolVersionError),
+			Input::CommitOnly { .. } => Err(ser::Error::ProtocolVersionError),
 		}
 	}
 
+	// Note: Attempting to write a FeaturesAndCommit variant in v3 is considered an error
+	// as the sort order will be incorrect.
+	// We *must* convert to CommitOnly and resort the inputs before writing.
 	fn write_v3<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
 		match self {
 			Input::CommitOnly { commit } => commit.write(writer),
-			Input::FeaturesAndCommit { commit, .. } => commit.write(writer),
+			Input::FeaturesAndCommit { .. } => Err(ser::Error::ProtocolVersionError),
 		}
 	}
 }
