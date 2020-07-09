@@ -1499,6 +1499,7 @@ impl Readable for Input {
 
 /// A transaction input, which spends an existing unspent output.
 impl Input {
+	/// Commitment identifying the output being spent by this input.
 	pub fn commitment(&self) -> Commitment {
 		match self {
 			Input::FeaturesAndCommit { commit, .. } => *commit,
