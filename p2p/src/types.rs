@@ -181,9 +181,9 @@ impl<'de> Visitor<'de> for PeerAddrs {
 				Ok(ip) => peers.push(PeerAddr(ip)),
 				// If that fails it's probably a DNS record
 				Err(_) => {
-					let socket_addrs = entry
-						.to_socket_addrs()
-						.unwrap_or_else(|_| panic!("Unable to resolve DNS: {}", entry));
+					let socket_addrs = entry.to_socket_addrs().map_err(|_| {
+						serde::de::Error::custom(format!("Unable to resolve DNS: {}", entry))
+					})?;
 					peers.append(&mut socket_addrs.map(PeerAddr).collect());
 				}
 			}
