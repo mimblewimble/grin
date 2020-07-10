@@ -133,7 +133,7 @@ impl ChainEvents for EventLogger {
 					prev_head.height,
 					fork_point.hash(),
 					fork_point.height,
-					block.header.height.saturating_sub(fork_point.height + 1),
+					prev_head.height.saturating_sub(fork_point.height),
 				);
 			}
 			BlockStatus::Fork {
@@ -151,7 +151,7 @@ impl ChainEvents for EventLogger {
 					head.height,
 					fork_point.hash(),
 					fork_point.height,
-					block.header.height.saturating_sub(fork_point.height + 1),
+					head.height.saturating_sub(fork_point.height),
 				);
 			}
 			BlockStatus::Next { prev } => {
@@ -290,8 +290,13 @@ impl ChainEvents for WebHook {
 		};
 
 		// Add additional `depth` field to the JSON in case of reorg
-		let payload = if let BlockStatus::Reorg { fork_point, .. } = status {
-			let depth = block.header.height.saturating_sub(fork_point.height + 1);
+		let payload = if let BlockStatus::Reorg {
+			fork_point,
+			prev_head,
+			..
+		} = status
+		{
+			let depth = prev_head.height.saturating_sub(fork_point.height);
 			json!({
 				"hash": block.header.hash().to_hex(),
 				"status": status_str,
