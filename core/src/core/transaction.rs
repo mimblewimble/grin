@@ -29,7 +29,7 @@ use std::cmp::Ordering;
 use std::cmp::{max, min};
 use std::convert::{TryFrom, TryInto};
 use std::sync::Arc;
-use std::{error, fmt};
+use std::{error, fmt, slice::Iter};
 use util::secp;
 use util::secp::pedersen::{Commitment, RangeProof};
 use util::static_secp_instance;
@@ -649,39 +649,84 @@ pub enum Weighting {
 	NoLimit,
 }
 
-/// TransactionBody is a common abstraction for transaction and block
-#[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct TransactionBody {
-	/// List of inputs spent by the transaction.
-	pub inputs: Vec<Input>,
-	/// List of outputs the transaction produces.
-	pub outputs: Vec<Output>,
-	/// List of kernels that make up this transaction (usually a single kernel).
-	pub kernels: Vec<TxKernel>,
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+struct Inputs(Vec<Input>);
+
+impl From<Vec<Input>> for Inputs {
+	fn from(inputs: Vec<Input>) -> Self {
+		Inputs(inputs)
+	}
 }
 
-/// PartialEq
-impl PartialEq for TransactionBody {
-	fn eq(&self, l: &TransactionBody) -> bool {
-		self.inputs == l.inputs && self.outputs == l.outputs && self.kernels == l.kernels
+impl Default for Inputs {
+	fn default() -> Self {
+		Inputs(vec![])
 	}
+}
+
+impl Inputs {
+	fn len(&self) -> usize {
+		self.0.len()
+	}
+
+	fn iter(&self) -> Iter<'_, Input> {
+		self.0.iter()
+	}
+
+	fn sort_unstable(&mut self) {
+		self.0.sort_unstable()
+	}
+
+	fn as_slice(&self) -> &[Input] {
+		self.0.as_slice()
+	}
+
+	// Adds an input if it does not already exist.
+	// Sort order is maintained.
+	fn add_input(&mut self, input: Input) {
+		if let Err(e) = self.0.binary_search(&input) {
+			self.0.insert(e, input)
+		}
+	}
+
+	fn verify_sorted(&self) -> Result<(), Error> {
+		// TODO - We want to verify all the inputs share a common enum variant.
+		// It is considered an error if they do not.
+		// A v2 peer will provide a vec of FeaturesAndCommit inputs.
+		// A v3 peer will provide a vec of CommitOnly inputs.
+		// We should never accept a mix of these.
+
+		self.0.verify_sorted_and_unique()?;
+		Ok(())
+	}
+}
+
+impl Writeable for Inputs {
+	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
+		self.0.write(writer)
+	}
+}
+
+/// TransactionBody is a common abstraction for transaction and block
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+pub struct TransactionBody {
+	inputs: Inputs,
+	outputs: Vec<Output>,
+	kernels: Vec<TxKernel>,
 }
 
 /// Implementation of Writeable for a body, defines how to
 /// write the body as binary.
 impl Writeable for TransactionBody {
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
-		ser_multiwrite!(
-			writer,
-			[write_u64, self.inputs.len() as u64],
-			[write_u64, self.outputs.len() as u64],
-			[write_u64, self.kernels.len() as u64]
-		);
-
+		// Write the lengths first.
+		writer.write_u64(self.inputs.len() as u64)?;
+		writer.write_u64(self.outputs.len() as u64)?;
+		writer.write_u64(self.kernels.len() as u64)?;
+		// Then the data itself.
 		self.inputs.write(writer)?;
 		self.outputs.write(writer)?;
 		self.kernels.write(writer)?;
-
 		Ok(())
 	}
 }
@@ -747,7 +792,7 @@ impl TransactionBody {
 	/// Creates a new empty transaction (no inputs or outputs, zero fee).
 	pub fn empty() -> TransactionBody {
 		TransactionBody {
-			inputs: vec![],
+			inputs: Inputs::default(),
 			outputs: vec![],
 			kernels: vec![],
 		}
@@ -758,6 +803,18 @@ impl TransactionBody {
 		self.inputs.sort_unstable();
 		self.outputs.sort_unstable();
 		self.kernels.sort_unstable();
+	}
+
+	pub fn inputs(&self) -> &[Input] {
+		self.inputs.as_slice()
+	}
+
+	pub fn outputs(&self) -> &[Output] {
+		self.outputs.as_slice()
+	}
+
+	pub fn kernels(&self) -> &[TxKernel] {
+		self.kernels.as_slice()
 	}
 
 	/// Creates a new transaction body initialized with
@@ -790,9 +847,7 @@ impl TransactionBody {
 	/// inputs, if any, are kept intact.
 	/// Sort order is maintained.
 	pub fn with_input(mut self, input: Input) -> TransactionBody {
-		if let Err(e) = self.inputs.binary_search(&input) {
-			self.inputs.insert(e, input)
-		};
+		self.inputs.add_input(input);
 		self
 	}
 
@@ -948,7 +1003,7 @@ impl TransactionBody {
 	// Verify that inputs|outputs|kernels are sorted in lexicographical order
 	// and that there are no duplicates (they are all unique within this transaction).
 	fn verify_sorted(&self) -> Result<(), Error> {
-		self.inputs.verify_sorted_and_unique()?;
+		self.inputs.verify_sorted()?;
 		self.outputs.verify_sorted_and_unique()?;
 		self.kernels.verify_sorted_and_unique()?;
 		Ok(())
@@ -1196,7 +1251,7 @@ impl Transaction {
 
 	/// Get inputs
 	pub fn inputs(&self) -> &[Input] {
-		&self.body.inputs
+		&self.body.inputs.as_slice()
 	}
 
 	/// Get outputs

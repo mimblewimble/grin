@@ -656,24 +656,23 @@ impl Block {
 	/// Consumes this block and returns a new block with the coinbase output
 	/// and kernels added
 	pub fn with_reward(mut self, reward_out: Output, reward_kern: TxKernel) -> Block {
-		self.body.outputs = vec![reward_out];
-		self.body.kernels = vec![reward_kern];
+		self.body = self.body.with_output(reward_out).with_kernel(reward_kern);
 		self
 	}
 
 	/// Get inputs
 	pub fn inputs(&self) -> &[Input] {
-		&self.body.inputs
+		self.body.inputs()
 	}
 
 	/// Get outputs
 	pub fn outputs(&self) -> &[Output] {
-		&self.body.outputs
+		self.body.outputs()
 	}
 
 	/// Get kernels
 	pub fn kernels(&self) -> &[TxKernel] {
-		&self.body.kernels
+		self.body.kernels()
 	}
 
 	/// Sum of all fees (inputs less outputs) in the block
@@ -757,15 +756,13 @@ impl Block {
 	/// the sum of coinbase-marked kernels accounting for fees.
 	pub fn verify_coinbase(&self) -> Result<(), Error> {
 		let cb_outs = self
-			.body
-			.outputs
+			.outputs()
 			.iter()
 			.filter(|out| out.is_coinbase())
 			.collect::<Vec<&Output>>();
 
 		let cb_kerns = self
-			.body
-			.kernels
+			.kernels()
 			.iter()
 			.filter(|kernel| kernel.is_coinbase())
 			.collect::<Vec<&TxKernel>>();
