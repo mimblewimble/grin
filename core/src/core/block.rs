@@ -554,6 +554,12 @@ impl Block {
 		Ok(block)
 	}
 
+	/// Consume self and return updated block with inputs fully replaced.
+	pub fn replace_inputs(mut self, inputs: Vec<Input>) -> Block {
+		self.body = self.body.replace_inputs(inputs);
+		self
+	}
+
 	/// Hydrate a block from a compact block.
 	/// Note: caller must validate the block themselves, we do not validate it
 	/// here.

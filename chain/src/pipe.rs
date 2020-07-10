@@ -76,14 +76,39 @@ fn validate_pow_only(header: &BlockHeader, ctx: &mut BlockContext<'_>) -> Result
 	Ok(())
 }
 
-/// TODO - copy the block, convert the inputs, resort the inputs.
+/// We may receive blocks from peers that contain CommitOnly inputs.
+/// We want to convert these to FeaturesAndCommit inputs before saving to the db.
 fn convert_block_input_features(
 	b: &Block,
 	ext: &txhashset::ExtensionPair<'_>,
+	batch: &store::Batch<'_>,
 ) -> Result<Block, Error> {
-	// TODO - implement me!
+	let utxo_view = ext.extension.utxo_view(ext.header_extension);
 
-	Ok(b.clone())
+	let pos: Vec<_> = b
+		.inputs()
+		.iter()
+		.filter_map(|x| batch.get_output_pos(&x.commitment()).ok())
+		.collect();
+
+	let outputs: Vec<_> = pos
+		.iter()
+		.filter_map(|pos| utxo_view.get_unspent_output_at(*pos).ok())
+		.collect();
+
+	if outputs.len() != b.inputs().len() {
+		return Err(ErrorKind::Other("block input features conversion failed".into()).into());
+	}
+
+	let mut inputs: Vec<_> = outputs
+		.iter()
+		.map(|out| out.input_features_and_commit())
+		.collect();
+
+	// Make sure the new converted inputs are sorted correctly.
+	inputs.sort_unstable();
+
+	Ok(b.clone().replace_inputs(inputs))
 }
 
 /// Runs the block processing pipeline, including validation and finding a
@@ -144,15 +169,14 @@ pub fn process_block(
 		txhashset::extending(header_pmmr, txhashset, batch, |ext, batch| {
 			let fork_point = rewind_and_apply_fork(&prev, ext, batch)?;
 
-			// Convert *before* we apply to avoid trying to lookup outputs after we spend them...
-			// TODO - convert_block() must ensure inputs are resorted.
-			let block_with_input_features = convert_block_input_features(b, ext)?;
+			// Convert block *before* we apply to avoid trying to lookup outputs after we spend them...
+			let block_with_input_features = convert_block_input_features(b, ext, batch)?;
 
 			// Check any coinbase being spent have matured sufficiently.
 			// This needs to be done within the context of a potentially
 			// rewound txhashset extension to reflect chain state prior
 			// to applying the new block.
-			verify_coinbase_maturity(&block_with_input_features, ext, batch)?;
+			verify_coinbase_maturity(b, ext, batch)?;
 
 			// Validate the block against the UTXO set.
 			validate_utxo(b, ext, batch)?;
@@ -180,11 +204,12 @@ pub fn process_block(
 			Ok((fork_point, block_with_input_features))
 		})?;
 
-	// Add the validated block to the db.
+	// Add the converted (and validated) block to the db.
 	// Note we do this in the outer batch, not the child batch from the extension
 	// as we only commit the child batch if the extension increases total work.
 	// We want to save the block to the db regardless.
 	// Note: We want to save the "converted" block to the db (with input features) for reference later.
+	validate_block(&block_with_input_features, ctx)?;
 	add_block(&block_with_input_features, &ctx.batch)?;
 
 	// If we have no "tail" then set it now.

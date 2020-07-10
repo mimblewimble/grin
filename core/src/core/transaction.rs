@@ -878,11 +878,18 @@ impl TransactionBody {
 		Ok(body)
 	}
 
-	/// Builds a new body with the provided inputs added. Existing
-	/// inputs, if any, are kept intact.
+	/// Adds an input to this transacion body.
+	/// Consumes self and returns the updated transaction body.
+	/// Existing inputs, if any, are kept intact.
 	/// Sort order is maintained.
 	pub fn with_input(mut self, input: Input) -> TransactionBody {
 		self.inputs.add_input(input);
+		self
+	}
+
+	/// Consumes self and returns the updated transaction body with inputs fully replaced.
+	pub fn replace_inputs(mut self, inputs: Vec<Input>) -> TransactionBody {
+		self.inputs = inputs.into();
 		self
 	}
 
@@ -1752,6 +1759,14 @@ impl Output {
 	/// Commitment for the output
 	pub fn commitment(&self) -> Commitment {
 		self.commit
+	}
+
+	/// Convenient way to build a FeaturesAndCommit input variant from an output.
+	pub fn input_features_and_commit(&self) -> Input {
+		Input::FeaturesAndCommit {
+			features: self.features,
+			commit: self.commit,
+		}
 	}
 
 	/// Is this a coinbase kernel?
