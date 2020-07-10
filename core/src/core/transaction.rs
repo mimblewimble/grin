@@ -29,7 +29,12 @@ use std::cmp::Ordering;
 use std::cmp::{max, min};
 use std::convert::{TryFrom, TryInto};
 use std::sync::Arc;
-use std::{error, fmt, slice::Iter};
+use std::{
+	collections::HashSet,
+	error, fmt,
+	mem::{discriminant, Discriminant},
+	slice::Iter,
+};
 use util::secp;
 use util::secp::pedersen::{Commitment, RangeProof};
 use util::static_secp_instance;
@@ -381,6 +386,8 @@ pub enum Error {
 	/// Validation error relating to cut-through (tx is spending its own
 	/// output).
 	CutThrough,
+	/// Valication error relating to input variants.
+	InvalidInputVariant,
 	/// Validation error relating to output features.
 	/// It is invalid for a transaction to contain a coinbase output, for example.
 	InvalidOutputFeatures,
@@ -681,6 +688,14 @@ impl Inputs {
 		self.0.as_slice()
 	}
 
+	fn as_commit_only(&self) -> Vec<Input> {
+		panic!("implement me!");
+
+		// iterate over inputs
+		// convert them to CommitOnly
+		// then sort them
+	}
+
 	// Adds an input if it does not already exist.
 	// Sort order is maintained.
 	fn add_input(&mut self, input: Input) {
@@ -689,21 +704,33 @@ impl Inputs {
 		}
 	}
 
-	fn verify_sorted(&self) -> Result<(), Error> {
-		// TODO - We want to verify all the inputs share a common enum variant.
-		// It is considered an error if they do not.
-		// A v2 peer will provide a vec of FeaturesAndCommit inputs.
-		// A v3 peer will provide a vec of CommitOnly inputs.
-		// We should never accept a mix of these.
+	/// Find the set of unique enum variants/discriminants, ignoring the data itself.
+	fn variants(&self) -> HashSet<Discriminant<Input>> {
+		self.0.iter().map(|x| discriminant(x)).collect()
+	}
 
+	/// Multiple input variants is invalid.
+	fn verify_variants(&self) -> Result<(), Error> {
+		if self.variants().len() > 1 {
+			return Err(Error::InvalidInputVariant);
+		}
+		Ok(())
+	}
+
+	fn verify_sorted(&self) -> Result<(), Error> {
 		self.0.verify_sorted_and_unique()?;
 		Ok(())
 	}
 }
 
+/// If v2 format then write the inputs out.
+/// If v3 format then convert our inputs to CommitOnly (resorting them in the process) and write them out.
 impl Writeable for Inputs {
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
-		self.0.write(writer)
+		match writer.protocol_version().value() {
+			0..=2 => self.0.write(writer),
+			3..=ProtocolVersion::MAX => self.as_commit_only().write(writer),
+		}
 	}
 }
 
@@ -805,14 +832,22 @@ impl TransactionBody {
 		self.kernels.sort_unstable();
 	}
 
+	/// Transaction inputs.
 	pub fn inputs(&self) -> &[Input] {
 		self.inputs.as_slice()
 	}
 
+	/// Transaction inputs as CommitOnly input variants, sorted appropriately.
+	pub fn inputs_commit_only(&self) -> Vec<Input> {
+		self.inputs.as_commit_only()
+	}
+
+	/// Transaction outputs.
 	pub fn outputs(&self) -> &[Output] {
 		self.outputs.as_slice()
 	}
 
+	/// Transaction kernels.
 	pub fn kernels(&self) -> &[TxKernel] {
 		self.kernels.as_slice()
 	}
@@ -1003,6 +1038,7 @@ impl TransactionBody {
 	// Verify that inputs|outputs|kernels are sorted in lexicographical order
 	// and that there are no duplicates (they are all unique within this transaction).
 	fn verify_sorted(&self) -> Result<(), Error> {
+		self.inputs.verify_variants()?;
 		self.inputs.verify_sorted()?;
 		self.outputs.verify_sorted_and_unique()?;
 		self.kernels.verify_sorted_and_unique()?;
