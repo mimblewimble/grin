@@ -132,40 +132,52 @@ impl<'a> UTXOView<'a> {
 	where
 		I: IntoIterator<Item = &'b Input>,
 	{
-		// TODO -
-		// 1. lookup output via commitment
-		// 2. check is_coinbase() on output
-
-		// Find the greatest output pos of any coinbase
-		// outputs we are attempting to spend.
-		let pos = inputs
+		// Find the pos of every output being spent by the given the inputs.
+		let mut spent_pos: Vec<u64> = inputs
 			.into_iter()
-			.filter(|x| x.is_coinbase())
 			.filter_map(|x| batch.get_output_pos(&x.commitment()).ok())
-			.max()
-			.unwrap_or(0);
+			.collect();
 
-		if pos > 0 {
-			// If we have not yet reached 1440 blocks then
-			// we can fail immediately as coinbase cannot be mature.
-			if height < global::coinbase_maturity() {
-				return Err(ErrorKind::ImmatureCoinbase.into());
+		// Sort pos in descending order.
+		spent_pos.sort();
+		spent_pos.reverse();
+
+		// Find the first (max) coinbase pos.
+		let max_coinbase = spent_pos.into_iter().find(|pos| {
+			if let Some(out) = self.output_pmmr.get_data(*pos) {
+				out.features.is_coinbase()
+			} else {
+				false
 			}
+		});
 
-			// Find the "cutoff" pos in the output MMR based on the
-			// header from 1,000 blocks ago.
-			let cutoff_height = height.saturating_sub(global::coinbase_maturity());
-			let cutoff_header = self.get_header_by_height(cutoff_height, batch)?;
-			let cutoff_pos = cutoff_header.output_mmr_size;
+		// Check the coinbase maturity rule on the max coinbase output.
+		// If this one is mature then all others will be mature also.
+		match max_coinbase {
+			None => Ok(()),
+			Some(pos) => {
+				if pos > 0 {
+					// If we have not yet reached 1440 blocks then
+					// we can fail immediately as coinbase cannot be mature.
+					if height < global::coinbase_maturity() {
+						return Err(ErrorKind::ImmatureCoinbase.into());
+					}
 
-			// If any output pos exceed the cutoff_pos
-			// we know they have not yet sufficiently matured.
-			if pos > cutoff_pos {
-				return Err(ErrorKind::ImmatureCoinbase.into());
+					// Find the "cutoff" pos in the output MMR based on the
+					// header from 1,000 blocks ago.
+					let cutoff_height = height.saturating_sub(global::coinbase_maturity());
+					let cutoff_header = self.get_header_by_height(cutoff_height, batch)?;
+					let cutoff_pos = cutoff_header.output_mmr_size;
+
+					// If any output pos exceed the cutoff_pos
+					// we know they have not yet sufficiently matured.
+					if pos > cutoff_pos {
+						return Err(ErrorKind::ImmatureCoinbase.into());
+					}
+				}
+				Ok(())
 			}
 		}
-
-		Ok(())
 	}
 
 	/// Get the header hash for the specified pos from the underlying MMR backend.
