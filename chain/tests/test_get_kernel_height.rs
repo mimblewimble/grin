@@ -17,6 +17,7 @@ use grin_util as util;
 mod chain_test_helper;
 
 use self::chain_test_helper::{clean_output_dir, mine_chain};
+use util::secp::pedersen::Commitment;
 
 #[test]
 fn test_get_kernel_height() {
@@ -29,11 +30,7 @@ fn test_get_kernel_height() {
 	assert_eq!(
 		None,
 		chain
-			.get_kernel_height(
-				&util::secp::pedersen::Commitment::from_vec(vec![]),
-				None,
-				None,
-			)
+			.get_kernel_height(&Commitment::from_vec(vec![]), None, None)
 			.unwrap()
 	);
 
@@ -41,11 +38,7 @@ fn test_get_kernel_height() {
 	assert_eq!(
 		None,
 		chain
-			.get_kernel_height(
-				&util::secp::pedersen::Commitment::from_vec(vec![]),
-				Some(1),
-				Some(1),
-			)
+			.get_kernel_height(&Commitment::from_vec(vec![]), Some(1), Some(1))
 			.unwrap()
 	);
 
@@ -53,11 +46,7 @@ fn test_get_kernel_height() {
 	assert_eq!(
 		None,
 		chain
-			.get_kernel_height(
-				&util::secp::pedersen::Commitment::from_vec(vec![]),
-				Some(1),
-				Some(100),
-			)
+			.get_kernel_height(&Commitment::from_vec(vec![]), Some(1), Some(100))
 			.unwrap()
 	);
 
@@ -65,11 +54,7 @@ fn test_get_kernel_height() {
 	assert_eq!(
 		None,
 		chain
-			.get_kernel_height(
-				&util::secp::pedersen::Commitment::from_vec(vec![]),
-				Some(100),
-				Some(100),
-			)
+			.get_kernel_height(&Commitment::from_vec(vec![]), Some(100), Some(100))
 			.unwrap()
 	);
 
@@ -77,11 +62,7 @@ fn test_get_kernel_height() {
 	assert_eq!(
 		None,
 		chain
-			.get_kernel_height(
-				&util::secp::pedersen::Commitment::from_vec(vec![]),
-				Some(0),
-				Some(1),
-			)
+			.get_kernel_height(&Commitment::from_vec(vec![]), Some(0), Some(1))
 			.unwrap()
 	);
 
@@ -89,11 +70,7 @@ fn test_get_kernel_height() {
 	assert_eq!(
 		None,
 		chain
-			.get_kernel_height(
-				&util::secp::pedersen::Commitment::from_vec(vec![]),
-				Some(0),
-				Some(100),
-			)
+			.get_kernel_height(&Commitment::from_vec(vec![]), Some(0), Some(100))
 			.unwrap()
 	);
 
@@ -101,11 +78,7 @@ fn test_get_kernel_height() {
 	assert_eq!(
 		None,
 		chain
-			.get_kernel_height(
-				&util::secp::pedersen::Commitment::from_vec(vec![]),
-				Some(0),
-				None,
-			)
+			.get_kernel_height(&Commitment::from_vec(vec![]), Some(0), None)
 			.unwrap()
 	);
 
@@ -113,11 +86,7 @@ fn test_get_kernel_height() {
 	assert_eq!(
 		None,
 		chain
-			.get_kernel_height(
-				&util::secp::pedersen::Commitment::from_vec(vec![]),
-				Some(100),
-				None,
-			)
+			.get_kernel_height(&Commitment::from_vec(vec![]), Some(100), None)
 			.unwrap()
 	);
 
@@ -125,11 +94,7 @@ fn test_get_kernel_height() {
 	assert_eq!(
 		None,
 		chain
-			.get_kernel_height(
-				&util::secp::pedersen::Commitment::from_vec(vec![]),
-				Some(2),
-				Some(1),
-			)
+			.get_kernel_height(&Commitment::from_vec(vec![]), Some(2), Some(1))
 			.unwrap()
 	);
 
@@ -137,11 +102,7 @@ fn test_get_kernel_height() {
 	assert_eq!(
 		None,
 		chain
-			.get_kernel_height(
-				&util::secp::pedersen::Commitment::from_vec(vec![]),
-				Some(100),
-				Some(99),
-			)
+			.get_kernel_height(&Commitment::from_vec(vec![]), Some(100), Some(99))
 			.unwrap()
 	);
 
