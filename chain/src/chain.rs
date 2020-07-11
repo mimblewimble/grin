@@ -1322,13 +1322,36 @@ impl Chain {
 		min_height: Option<u64>,
 		max_height: Option<u64>,
 	) -> Result<Option<(TxKernel, u64, u64)>, Error> {
+		let head = self.head()?;
+
+		if let (Some(min), Some(max)) = (min_height, max_height) {
+			if min > max {
+				return Ok(None);
+			}
+		}
+
 		let min_index = match min_height {
-			Some(h) => Some(self.get_header_by_height(h - 1)?.kernel_mmr_size + 1),
+			Some(0) => None,
+			Some(h) => {
+				if h > head.height {
+					return Ok(None);
+				}
+				let header = self.get_header_by_height(h)?;
+				let prev_header = self.get_previous_header(&header)?;
+				Some(prev_header.kernel_mmr_size + 1)
+			}
 			None => None,
 		};
 
 		let max_index = match max_height {
-			Some(h) => Some(self.get_header_by_height(h)?.kernel_mmr_size),
+			Some(h) => {
+				if h > head.height {
+					None
+				} else {
+					let header = self.get_header_by_height(h)?;
+					Some(header.kernel_mmr_size)
+				}
+			}
 			None => None,
 		};
 
