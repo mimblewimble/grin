@@ -119,7 +119,7 @@ pub struct PoolConfig {
 	/// block from. Allows miners to restrict the maximum weight of their
 	/// blocks.
 	#[serde(default = "default_mineable_max_weight")]
-	pub mineable_max_weight: usize,
+	pub mineable_max_weight: u64,
 }
 
 impl Default for PoolConfig {
@@ -142,7 +142,7 @@ fn default_max_pool_size() -> usize {
 fn default_max_stempool_size() -> usize {
 	50_000
 }
-fn default_mineable_max_weight() -> usize {
+fn default_mineable_max_weight() -> u64 {
 	consensus::MAX_BLOCK_WEIGHT
 }
 

@@ -78,7 +78,7 @@ pub const TESTING_INITIAL_GRAPH_WEIGHT: u32 = 1;
 pub const TESTING_INITIAL_DIFFICULTY: u64 = 1;
 
 /// Testing max_block_weight (artifically low, just enough to support a few txs).
-pub const TESTING_MAX_BLOCK_WEIGHT: usize = 250;
+pub const TESTING_MAX_BLOCK_WEIGHT: u64 = 250;
 
 /// If a peer's last updated difficulty is 2 hours ago and its difficulty's lower than ours,
 /// we're sure this peer is a stuck node, and we will kick out such kind of stuck peers.
@@ -311,7 +311,7 @@ pub fn initial_graph_weight() -> u32 {
 }
 
 /// Maximum allowed block weight.
-pub fn max_block_weight() -> usize {
+pub fn max_block_weight() -> u64 {
 	match get_chain_type() {
 		ChainTypes::AutomatedTesting => TESTING_MAX_BLOCK_WEIGHT,
 		ChainTypes::UserTesting => TESTING_MAX_BLOCK_WEIGHT,

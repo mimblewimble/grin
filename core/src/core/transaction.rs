@@ -639,7 +639,7 @@ pub enum Weighting {
 	AsTransaction,
 	/// Tx representing a tx with artificially limited max_weight.
 	/// This is used when selecting mineable txs from the pool.
-	AsLimitedTransaction(usize),
+	AsLimitedTransaction(u64),
 	/// Tx represents a block (max block weight).
 	AsBlock,
 	/// No max weight limit (skip the weight check).
@@ -680,24 +680,20 @@ impl Writeable for TransactionBody {
 /// body from a binary stream.
 impl Readable for TransactionBody {
 	fn read<R: Reader>(reader: &mut R) -> Result<TransactionBody, ser::Error> {
-		let (input_len, output_len, kernel_len) =
+		let (num_inputs, num_outputs, num_kernels) =
 			ser_multiread!(reader, read_u64, read_u64, read_u64);
 
 		// Quick block weight check before proceeding.
 		// Note: We use weight_as_block here (inputs have weight).
-		let tx_block_weight = TransactionBody::weight_as_block(
-			input_len as usize,
-			output_len as usize,
-			kernel_len as usize,
-		);
-
+		let tx_block_weight =
+			TransactionBody::weight_as_block(num_inputs, num_outputs, num_kernels);
 		if tx_block_weight > global::max_block_weight() {
 			return Err(ser::Error::TooLargeReadErr);
 		}
 
-		let inputs = read_multi(reader, input_len)?;
-		let outputs = read_multi(reader, output_len)?;
-		let kernels = read_multi(reader, kernel_len)?;
+		let inputs = read_multi(reader, num_inputs)?;
+		let outputs = read_multi(reader, num_outputs)?;
+		let kernels = read_multi(reader, num_kernels)?;
 
 		// Initialize tx body and verify everything is sorted.
 		let body = TransactionBody::init(&inputs, &outputs, &kernels, true)
@@ -861,33 +857,41 @@ impl TransactionBody {
 	}
 
 	/// Calculate transaction weight
-	pub fn body_weight(&self) -> usize {
-		TransactionBody::weight(self.inputs.len(), self.outputs.len(), self.kernels.len())
+	pub fn body_weight(&self) -> u64 {
+		TransactionBody::weight(
+			self.inputs.len() as u64,
+			self.outputs.len() as u64,
+			self.kernels.len() as u64,
+		)
 	}
 
 	/// Calculate weight of transaction using block weighing
-	pub fn body_weight_as_block(&self) -> usize {
-		TransactionBody::weight_as_block(self.inputs.len(), self.outputs.len(), self.kernels.len())
+	pub fn body_weight_as_block(&self) -> u64 {
+		TransactionBody::weight_as_block(
+			self.inputs.len() as u64,
+			self.outputs.len() as u64,
+			self.kernels.len() as u64,
+		)
 	}
 
 	/// Calculate transaction weight from transaction details. This is non
 	/// consensus critical and compared to block weight, incentivizes spending
 	/// more outputs (to lower the fee).
-	pub fn weight(input_len: usize, output_len: usize, kernel_len: usize) -> usize {
-		let body_weight = output_len
+	pub fn weight(num_inputs: u64, num_outputs: u64, num_kernels: u64) -> u64 {
+		let body_weight = num_outputs
 			.saturating_mul(4)
-			.saturating_add(kernel_len)
-			.saturating_sub(input_len);
+			.saturating_add(num_kernels)
+			.saturating_sub(num_inputs);
 		max(body_weight, 1)
 	}
 
 	/// Calculate transaction weight using block weighing from transaction
 	/// details. Consensus critical and uses consensus weight values.
-	pub fn weight_as_block(input_len: usize, output_len: usize, kernel_len: usize) -> usize {
-		input_len
-			.saturating_mul(consensus::BLOCK_INPUT_WEIGHT)
-			.saturating_add(output_len.saturating_mul(consensus::BLOCK_OUTPUT_WEIGHT))
-			.saturating_add(kernel_len.saturating_mul(consensus::BLOCK_KERNEL_WEIGHT))
+	pub fn weight_as_block(num_inputs: u64, num_outputs: u64, num_kernels: u64) -> u64 {
+		num_inputs
+			.saturating_mul(consensus::BLOCK_INPUT_WEIGHT as u64)
+			.saturating_add(num_outputs.saturating_mul(consensus::BLOCK_OUTPUT_WEIGHT as u64))
+			.saturating_add(num_kernels.saturating_mul(consensus::BLOCK_KERNEL_WEIGHT as u64))
 	}
 
 	/// Lock height of a body is the max lock height of the kernels.
@@ -1278,18 +1282,18 @@ impl Transaction {
 	}
 
 	/// Calculate transaction weight
-	pub fn tx_weight(&self) -> usize {
+	pub fn tx_weight(&self) -> u64 {
 		self.body.body_weight()
 	}
 
 	/// Calculate transaction weight as a block
-	pub fn tx_weight_as_block(&self) -> usize {
+	pub fn tx_weight_as_block(&self) -> u64 {
 		self.body.body_weight_as_block()
 	}
 
 	/// Calculate transaction weight from transaction details
-	pub fn weight(input_len: usize, output_len: usize, kernel_len: usize) -> usize {
-		TransactionBody::weight(input_len, output_len, kernel_len)
+	pub fn weight(num_inputs: u64, num_outputs: u64, num_kernels: u64) -> u64 {
+		TransactionBody::weight(num_inputs, num_outputs, num_kernels)
 	}
 }
 

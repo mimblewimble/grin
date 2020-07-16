@@ -20,7 +20,7 @@ use crate::core::compact_block::CompactBlock;
 use crate::core::hash::{DefaultHashable, Hash, Hashed, ZERO_HASH};
 use crate::core::verifier_cache::VerifierCache;
 use crate::core::{
-	transaction, Commitment, Inputs, KernelFeatures, Output, Transaction, TransactionBody,
+	pmmr, transaction, Commitment, Inputs, KernelFeatures, Output, Transaction, TransactionBody,
 	TxKernel, Weighting,
 };
 use crate::global;
@@ -51,8 +51,6 @@ pub enum Error {
 	CoinbaseSumMismatch,
 	/// Restrict block total weight.
 	TooHeavy,
-	/// Block weight (based on inputs|outputs|kernels) exceeded.
-	WeightExceeded,
 	/// Block version is invalid for a given block height
 	InvalidBlockVersion(HeaderVersion),
 	/// Block time is invalid
@@ -373,6 +371,22 @@ impl BlockHeader {
 
 		// Deserialize header from constructed bytes
 		Ok(deserialize_default(&mut &header_bytes[..])?)
+	}
+
+	/// Total number of outputs (spent and unspent) based on output MMR size committed to in this block.
+	/// Note: *Not* the number of outputs in this block but total up to and including this block.
+	/// The MMR size is the total number of hashes contained in the full MMR structure.
+	/// We want the corresponding number of leaves in the MMR given the size.
+	pub fn output_mmr_count(&self) -> u64 {
+		pmmr::n_leaves(self.output_mmr_size)
+	}
+
+	/// Total number of kernels based on kernel MMR size committed to in this block.
+	/// Note: *Not* the number of kernels in this block but total up to and including this block.
+	/// The MMR size is the total number of hashes contained in the full MMR structure.
+	/// We want the corresponding number of leaves in the MMR given the size.
+	pub fn kernel_mmr_count(&self) -> u64 {
+		pmmr::n_leaves(self.kernel_mmr_size)
 	}
 
 	/// Total difficulty accumulated by the proof of work on this header
