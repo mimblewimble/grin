@@ -16,7 +16,7 @@
 
 use crate::core::core::hash::{Hash, Hashed};
 use crate::core::core::pmmr::{self, ReadonlyPMMR};
-use crate::core::core::{Block, BlockHeader, Input, Output, OutputIdentifier, Transaction};
+use crate::core::core::{Block, BlockHeader, Input, Output, Transaction};
 use crate::core::global;
 use crate::error::{Error, ErrorKind};
 use crate::store::Batch;
@@ -79,19 +79,8 @@ impl<'a> UTXOView<'a> {
 		let commit = input.commitment();
 		if let Ok(pos) = batch.get_output_pos(&commit) {
 			if let Some(out) = self.output_pmmr.get_data(pos) {
-				// Compare input commitment against output commitment.
-				// If input has features then also verify against output features.
-				if commit == out.commitment() {
-					match input {
-						Input::FeaturesAndCommit { features, .. } => {
-							if *features == out.features {
-								return Ok(());
-							}
-						}
-						Input::CommitOnly { .. } => {
-							return Ok(());
-						}
-					}
+				if input.matches_output(out) {
+					return Ok(());
 				}
 			}
 		}

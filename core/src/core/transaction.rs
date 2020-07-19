@@ -1605,6 +1605,19 @@ impl Input {
 		}
 	}
 
+	/// Does this input match the provided output?
+	pub fn matches_output(&self, out: OutputIdentifier) -> bool {
+		match self {
+			Input::FeaturesAndCommit { features, commit } => {
+				OutputIdentifier {
+					features: *features,
+					commit: *commit,
+				} == out
+			}
+			Input::CommitOnly { commit } => *commit == out.commit,
+		}
+	}
+
 	fn read_v2<R: Reader>(reader: &mut R) -> Result<Input, ser::Error> {
 		let features = OutputFeatures::read(reader)?;
 		let commit = Commitment::read(reader)?;

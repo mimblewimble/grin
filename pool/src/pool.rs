@@ -185,7 +185,7 @@ where
 	pub fn add_to_pool(
 		&mut self,
 		entry: PoolEntry,
-		extra_txs: Vec<Transaction>,
+		extra_txs: &[Transaction],
 		header: &BlockHeader,
 	) -> Result<(), PoolError> {
 		// Combine all the txs from the pool with any extra txs provided.
@@ -196,23 +196,25 @@ where
 			return Err(PoolError::DuplicateTx);
 		}
 
-		txs.extend(extra_txs);
+		txs.extend_from_slice(extra_txs);
 
-		let agg_tx = if txs.is_empty() {
-			// If we have nothing to aggregate then simply return the tx itself.
-			entry.tx.clone()
-		} else {
-			// Create a single aggregated tx from the existing pool txs and the
-			// new entry
-			txs.push(entry.tx.clone());
-			transaction::aggregate(&txs)?
-		};
+		// TODO - rename this...
+		let aggregated_tx_excluding_new_tx = transaction::aggregate(&txs)?;
+		let agg_tx = transaction::aggregate(&[aggregated_tx_excluding_new_tx, entry.tx.clone()])?;
 
 		// Validate aggregated tx (existing pool + new tx), ignoring tx weight limits.
 		// Validate against known chain state at the provided header.
 		self.validate_raw_tx(&agg_tx, header, Weighting::NoLimit)?;
+
+		// **********
+		// At this point we want to convert our tx inputs to FeaturesAndCommit variant (to support relay to V2 peers).
+		// We want to make sure we store the converted tx in our pool (txpool or stempool) for reference later.
+		// We look for input features in the aggregated_tx_excluding_new_tx and the utxo_set.
+		// **********
+
 		// If we get here successfully then we can safely add the entry to the pool.
 		self.log_pool_add(&entry, header);
+
 		self.entries.push(entry);
 
 		Ok(())
@@ -220,7 +222,7 @@ where
 
 	fn log_pool_add(&self, entry: &PoolEntry, header: &BlockHeader) {
 		debug!(
-			"add_to_pool [{}]: {} ({:?}) [in/out/kern: {}/{}/{}] pool: {} (at block {})",
+			"add_to_pool [{}]: {} ({:?}) [in/out/kern: {}/{}/{}] pool: {} ({} at {})",
 			self.name,
 			entry.tx.hash(),
 			entry.src,
@@ -229,6 +231,7 @@ where
 			entry.tx.kernels().len(),
 			self.size(),
 			header.hash(),
+			header.height,
 		);
 	}
 
@@ -320,7 +323,7 @@ where
 		}
 
 		for x in existing_entries {
-			let _ = self.add_to_pool(x, extra_txs.clone(), header);
+			let _ = self.add_to_pool(x, &extra_txs, header);
 		}
 
 		Ok(())

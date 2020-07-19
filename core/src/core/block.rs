@@ -621,7 +621,7 @@ impl Block {
 		// A block is just a big transaction, aggregate and add the reward output
 		// and reward kernel. At this point the tx is technically invalid but the
 		// tx body is valid if we account for the reward (i.e. as a block).
-		let agg_tx = transaction::aggregate(txs)?
+		let agg_tx = transaction::aggregate(&txs)?
 			.with_output(reward_out)
 			.with_kernel(reward_kern);
 

@@ -88,7 +88,7 @@ where
 	// Add tx to stempool (passing in all txs from txpool to validate against).
 	fn add_to_stempool(&mut self, entry: PoolEntry, header: &BlockHeader) -> Result<(), PoolError> {
 		self.stempool
-			.add_to_pool(entry, self.txpool.all_transactions(), header)?;
+			.add_to_pool(entry, &self.txpool.all_transactions(), header)?;
 		Ok(())
 	}
 
@@ -122,7 +122,7 @@ where
 				entry.src = TxSource::Deaggregate;
 			}
 		}
-		self.txpool.add_to_pool(entry.clone(), vec![], header)?;
+		self.txpool.add_to_pool(entry.clone(), &[], header)?;
 
 		// We now need to reconcile the stempool based on the new state of the txpool.
 		// Some stempool txs may no longer be valid and we need to evict them.
