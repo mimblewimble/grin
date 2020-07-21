@@ -18,11 +18,9 @@ use crate::core::consensus::{self, BLOCK_OUTPUT_WEIGHT, TESTING_THIRD_HARD_FORK}
 use crate::core::core::block::{Block, BlockHeader, Error, HeaderVersion};
 use crate::core::core::hash::Hashed;
 use crate::core::core::id::ShortIdentifiable;
-use crate::core::core::transaction::{
-	self, KernelFeatures, NRDRelativeHeight, OutputFeatures, Transaction,
-};
+use crate::core::core::transaction::{self, KernelFeatures, NRDRelativeHeight, Transaction};
 use crate::core::core::verifier_cache::{LruVerifierCache, VerifierCache};
-use crate::core::core::{Committed, CompactBlock};
+use crate::core::core::CompactBlock;
 use crate::core::libtx::build::{self, input, output};
 use crate::core::libtx::ProofBuilder;
 use crate::core::{global, ser};

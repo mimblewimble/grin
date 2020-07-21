@@ -1052,25 +1052,20 @@ impl TransactionBody {
 		Ok(())
 	}
 
+	// **********
+	// TODO - We want to defer this until after we convert to V2 compatibility.
+	// And leverage matches_output_strict() for V2 compatibility?
+	// TODO - Or revert this "cleanup" and use hash() as before.
+	// **********
 	// Verify that no input is spending an output from the same block.
-	// Assumes inputs and outputs are sorted
 	fn verify_cut_through(&self) -> Result<(), Error> {
-		let mut inputs = self.inputs.iter().map(|x| x.hash()).peekable();
-		let mut outputs = self.outputs.iter().map(|x| x.hash()).peekable();
-		while let (Some(ih), Some(oh)) = (inputs.peek(), outputs.peek()) {
-			match ih.cmp(oh) {
-				Ordering::Less => {
-					inputs.next();
-				}
-				Ordering::Greater => {
-					outputs.next();
-				}
-				Ordering::Equal => {
-					return Err(Error::CutThrough);
-				}
-			}
+		let input_commits: HashSet<_> = self.inputs.iter().map(|x| x.commitment()).collect();
+		let output_commits: HashSet<_> = self.outputs.iter().map(|x| x.commitment()).collect();
+		if input_commits.is_disjoint(&output_commits) {
+			Ok(())
+		} else {
+			Err(Error::CutThrough)
 		}
-		Ok(())
 	}
 
 	/// Verify we have no invalid outputs or kernels in the transaction
@@ -1458,7 +1453,8 @@ pub fn aggregate(txs: &[Transaction]) -> Result<Transaction, Error> {
 	// Sort inputs and outputs during cut_through.
 	let (inputs, outputs) = cut_through(&mut inputs, &mut outputs)?;
 
-	// Now sort kernels.
+	inputs.sort_unstable();
+	outputs.sort_unstable();
 	kernels.sort_unstable();
 
 	// now sum the kernel_offsets up to give us an aggregate offset for the
@@ -1618,6 +1614,15 @@ impl Input {
 		}
 	}
 
+	/// Does this input match the provided output?
+	/// Strict check for V2 peer compatibility.
+	pub fn matches_output_strict(&self, out: OutputIdentifier) -> bool {
+		match self {
+			Input::FeaturesAndCommit { .. } => self.matches_output(out),
+			Input::CommitOnly { .. } => false,
+		}
+	}
+
 	fn read_v2<R: Reader>(reader: &mut R) -> Result<Input, ser::Error> {
 		let features = OutputFeatures::read(reader)?;
 		let commit = Commitment::read(reader)?;
@@ -1744,7 +1749,7 @@ impl PMMRable for Output {
 	type E = OutputIdentifier;
 
 	fn as_elmt(&self) -> OutputIdentifier {
-		OutputIdentifier::from(self)
+		self.into()
 	}
 
 	fn elmt_size() -> Option<u16> {
@@ -1822,7 +1827,7 @@ impl Output {
 /// An output_identifier can be build from either an input _or_ an output and
 /// contains everything we need to uniquely identify an output being spent.
 /// Needed because it is not sufficient to pass a commitment around.
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq)]
 pub struct OutputIdentifier {
 	/// Output features (coinbase vs. regular transaction output)
 	/// We need to include this when hashing to ensure coinbase maturity can be
@@ -1889,15 +1894,6 @@ impl From<&Output> for OutputIdentifier {
 		}
 	}
 }
-
-// impl From<&Input> for OutputIdentifier {
-// 	fn from(input: &Input) -> Self {
-// 		OutputIdentifier {
-// 			features: input.features,
-// 			commit: input.commit,
-// 		}
-// 	}
-// }
 
 #[cfg(test)]
 mod test {
