@@ -293,12 +293,18 @@ impl OutputPrintable {
 		};
 
 		let out_id = core::OutputIdentifier::from(output);
-		let res = chain.get_unspent(&out_id)?;
-		let (spent, block_height) = if let Some(output_pos) = res {
-			(false, Some(output_pos.height))
-		} else {
-			(true, None)
-		};
+		let pos = chain.get_unspent(&out_id)?;
+
+		let spent = pos.is_none();
+
+		// If output is unspent then we know its pos and height from the output_pos index.
+		// We use the header height directly for spent pos.
+		// Note: There is an interesting edge case here and we need to consider if the
+		// api is currently doing the right thing here:
+		// An output can be spent and then subsequently reused and the new instance unspent.
+		// This would result in a height that differs from the provided block height.
+		let output_pos = pos.map(|x| x.pos).unwrap_or(0);
+		let block_height = pos.map(|x| x.height).or(block_header.map(|x| x.height));
 
 		let proof = if include_proof {
 			Some(output.proof_bytes().to_hex())
@@ -316,8 +322,6 @@ impl OutputPrintable {
 				merkle_proof = chain.get_merkle_proof(&out_id, &block_header).ok();
 			}
 		};
-
-		let output_pos = chain.get_output_pos(&output.commit).unwrap_or(0);
 
 		Ok(OutputPrintable {
 			output_type,
@@ -743,8 +747,7 @@ mod test {
 
 	#[test]
 	fn serialize_output_printable() {
-		let hex_output =
-			"{\
+		let hex_output = "{\
 			 \"output_type\":\"Coinbase\",\
 			 \"commit\":\"083eafae5d61a85ab07b12e1a51b3918d8e6de11fc6cde641d54af53608aa77b9f\",\
 			 \"spent\":false,\
@@ -761,8 +764,7 @@ mod test {
 
 	#[test]
 	fn serialize_output() {
-		let hex_commit =
-			"{\
+		let hex_commit = "{\
 			 \"commit\":\"083eafae5d61a85ab07b12e1a51b3918d8e6de11fc6cde641d54af53608aa77b9f\",\
 			 \"height\":0,\
 			 \"mmr_index\":0\
