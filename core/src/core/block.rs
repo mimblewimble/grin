@@ -20,8 +20,8 @@ use crate::core::compact_block::{CompactBlock, CompactBlockBody};
 use crate::core::hash::{DefaultHashable, Hash, Hashed, ZERO_HASH};
 use crate::core::verifier_cache::VerifierCache;
 use crate::core::{
-	transaction, Commitment, Input, KernelFeatures, Output, Transaction, TransactionBody, TxKernel,
-	Weighting,
+	transaction, Commitment, Inputs, KernelFeatures, Output, OutputIdentifier, Transaction,
+	TransactionBody, TxKernel, Weighting,
 };
 use crate::global;
 use crate::pow::{verify_size, Difficulty, Proof, ProofOfWork};
@@ -555,7 +555,7 @@ impl Block {
 	}
 
 	/// Consume self and return updated block with inputs fully replaced.
-	pub fn replace_inputs(mut self, inputs: Vec<Input>) -> Block {
+	pub fn replace_inputs(mut self, inputs: Inputs) -> Block {
 		self.body = self.body.replace_inputs(inputs);
 		self
 	}
@@ -667,7 +667,7 @@ impl Block {
 	}
 
 	/// Get inputs
-	pub fn inputs(&self) -> &[Input] {
+	pub fn inputs(&self) -> Inputs {
 		self.body.inputs()
 	}
 

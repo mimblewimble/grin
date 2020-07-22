@@ -29,12 +29,7 @@ use std::cmp::Ordering;
 use std::cmp::{max, min};
 use std::convert::{TryFrom, TryInto};
 use std::sync::Arc;
-use std::{
-	collections::HashSet,
-	error, fmt,
-	mem::{discriminant, Discriminant},
-	slice::Iter,
-};
+use std::{collections::HashSet, error, fmt};
 use util::secp;
 use util::secp::pedersen::{Commitment, RangeProof};
 use util::static_secp_instance;
@@ -657,38 +652,53 @@ pub enum Weighting {
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
-struct Inputs(Vec<Input>);
+pub enum Inputs {
+	CommitOnly(Vec<Commitment>),
+	FeaturesAndCommit(Vec<OutputIdentifier>),
+}
 
-impl From<Vec<Input>> for Inputs {
-	fn from(inputs: Vec<Input>) -> Self {
-		Inputs(inputs)
+impl From<Vec<Commitment>> for Inputs {
+	fn from(inputs: Vec<Commitment>) -> Self {
+		Inputs::CommitOnly(inputs)
+	}
+}
+
+impl From<Vec<OutputIdentifier>> for Inputs {
+	fn from(inputs: Vec<OutputIdentifier>) -> Self {
+		Inputs::FeaturesAndCommit(inputs)
 	}
 }
 
 impl Default for Inputs {
 	fn default() -> Self {
-		Inputs(vec![])
+		Inputs::CommitOnly(vec![])
 	}
 }
 
 impl Inputs {
 	fn len(&self) -> usize {
-		self.0.len()
+		match self {
+			Inputs::CommitOnly(inputs) => inputs.len(),
+			Inputs::FeaturesAndCommit(inputs) => inputs.len(),
+		}
 	}
 
-	fn iter(&self) -> Iter<'_, Input> {
-		self.0.iter()
-	}
+	// fn iter(&self) -> Iter<'_, Input> {
+	// 	self.0.iter()
+	// }
 
 	fn sort_unstable(&mut self) {
-		self.0.sort_unstable()
+		match self {
+			Inputs::CommitOnly(inputs) => inputs.sort_unstable(),
+			Inputs::FeaturesAndCommit(inputs) => inputs.sort_unstable(),
+		}
 	}
 
-	fn as_slice(&self) -> &[Input] {
-		self.0.as_slice()
-	}
+	// fn as_slice(&self) -> &[Input] {
+	// 	self.0.as_slice()
+	// }
 
-	fn as_commit_only(&self) -> Vec<Input> {
+	fn as_commit_only(&self) -> Inputs {
 		panic!("implement me!");
 
 		// iterate over inputs
@@ -698,27 +708,39 @@ impl Inputs {
 
 	// Adds an input if it does not already exist.
 	// Sort order is maintained.
-	fn add_input(&mut self, input: Input) {
-		if let Err(e) = self.0.binary_search(&input) {
-			self.0.insert(e, input)
+	fn add_input(&mut self, input: OutputIdentifier) {
+		match self {
+			Inputs::CommitOnly(inputs) => {
+				if let Err(e) = inputs.binary_search(&input.commitment()) {
+					inputs.insert(e, input.commitment());
+				}
+			}
+			Inputs::FeaturesAndCommit(inputs) => {
+				if let Err(e) = inputs.binary_search(&input) {
+					inputs.insert(e, input);
+				}
+			}
 		}
 	}
 
 	/// Find the set of unique enum variants/discriminants, ignoring the data itself.
-	fn variants(&self) -> HashSet<Discriminant<Input>> {
-		self.0.iter().map(|x| discriminant(x)).collect()
-	}
+	// fn variants(&self) -> HashSet<Discriminant<Input>> {
+	// 	self.0.iter().map(|x| discriminant(x)).collect()
+	// }
 
 	/// Multiple input variants is invalid.
-	fn verify_variants(&self) -> Result<(), Error> {
-		if self.variants().len() > 1 {
-			return Err(Error::InvalidInputVariant);
-		}
-		Ok(())
-	}
+	// fn verify_variants(&self) -> Result<(), Error> {
+	// 	if self.variants().len() > 1 {
+	// 		return Err(Error::InvalidInputVariant);
+	// 	}
+	// 	Ok(())
+	// }
 
-	fn verify_sorted(&self) -> Result<(), Error> {
-		self.0.verify_sorted_and_unique()?;
+	fn verify_sorted_and_unique(&self) -> Result<(), Error> {
+		match self {
+			Inputs::CommitOnly(inputs) => inputs.verify_sorted_and_unique(),
+			Inputs::FeaturesAndCommit(inputs) => inputs.verify_sorted_and_unique(),
+		};
 		Ok(())
 	}
 }
@@ -727,10 +749,17 @@ impl Inputs {
 /// If v3 format then convert our inputs to CommitOnly (resorting them in the process) and write them out.
 impl Writeable for Inputs {
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
-		match writer.protocol_version().value() {
-			0..=2 => self.0.write(writer),
-			3..=ProtocolVersion::MAX => self.as_commit_only().write(writer),
+		match self {
+			Inputs::CommitOnly(inputs) => match writer.protocol_version().value() {
+				0..=2 => return Err(ser::Error::ProtocolVersionError),
+				3..=ProtocolVersion::MAX => inputs.write(writer)?,
+			},
+			Inputs::FeaturesAndCommit(inputs) => match writer.protocol_version().value() {
+				0..=2 => inputs.write(writer)?,
+				3..=ProtocolVersion::MAX => self.as_commit_only().write(writer)?,
+			},
 		}
+		Ok(())
 	}
 }
 
@@ -777,7 +806,10 @@ impl Readable for TransactionBody {
 			return Err(ser::Error::TooLargeReadErr);
 		}
 
-		let inputs = read_multi(reader, input_len)?;
+		// let inputs = read_multi(reader, input_len)?;
+		panic!("read vec of stuff and convert to inputs");
+		let inputs = Inputs::default();
+
 		let outputs = read_multi(reader, output_len)?;
 		let kernels = read_multi(reader, kernel_len)?;
 
@@ -791,7 +823,10 @@ impl Readable for TransactionBody {
 
 impl Committed for TransactionBody {
 	fn inputs_committed(&self) -> Vec<Commitment> {
-		self.inputs.iter().map(|x| x.commitment()).collect()
+		match self.inputs {
+			Inputs::CommitOnly(inputs) => inputs,
+			Inputs::FeaturesAndCommit(inputs) => inputs.iter().map(|x| x.commitment()).collect(),
+		}
 	}
 
 	fn outputs_committed(&self) -> Vec<Commitment> {
@@ -833,14 +868,14 @@ impl TransactionBody {
 	}
 
 	/// Transaction inputs.
-	pub fn inputs(&self) -> &[Input] {
-		self.inputs.as_slice()
+	pub fn inputs(&self) -> Inputs {
+		self.inputs
 	}
 
-	/// Transaction inputs as CommitOnly input variants, sorted appropriately.
-	pub fn inputs_commit_only(&self) -> Vec<Input> {
-		self.inputs.as_commit_only()
-	}
+	// /// Transaction inputs as CommitOnly input variants, sorted appropriately.
+	// pub fn inputs_commit_only(&self) -> Vec<Input> {
+	// 	self.inputs.as_commit_only()
+	// }
 
 	/// Transaction outputs.
 	pub fn outputs(&self) -> &[Output] {
@@ -856,13 +891,13 @@ impl TransactionBody {
 	/// the provided inputs, outputs and kernels.
 	/// Guarantees inputs, outputs, kernels are sorted lexicographically.
 	pub fn init(
-		inputs: &[Input],
+		inputs: Inputs,
 		outputs: &[Output],
 		kernels: &[TxKernel],
 		verify_sorted: bool,
 	) -> Result<TransactionBody, Error> {
 		let mut body = TransactionBody {
-			inputs: inputs.to_vec(),
+			inputs,
 			outputs: outputs.to_vec(),
 			kernels: kernels.to_vec(),
 		};
@@ -878,18 +913,18 @@ impl TransactionBody {
 		Ok(body)
 	}
 
-	/// Adds an input to this transacion body.
+	/// Adds input to this transaction body.
 	/// Consumes self and returns the updated transaction body.
 	/// Existing inputs, if any, are kept intact.
-	/// Sort order is maintained.
-	pub fn with_input(mut self, input: Input) -> TransactionBody {
+	/// Sort order of inputs is maintained.
+	pub fn with_inputs(mut self, input: OutputIdentifier) -> TransactionBody {
 		self.inputs.add_input(input);
 		self
 	}
 
 	/// Consumes self and returns the updated transaction body with inputs fully replaced.
-	pub fn replace_inputs(mut self, inputs: Vec<Input>) -> TransactionBody {
-		self.inputs = inputs.into();
+	pub fn replace_inputs(mut self, inputs: Inputs) -> TransactionBody {
+		self.inputs = inputs;
 		self
 	}
 
@@ -1045,8 +1080,7 @@ impl TransactionBody {
 	// Verify that inputs|outputs|kernels are sorted in lexicographical order
 	// and that there are no duplicates (they are all unique within this transaction).
 	fn verify_sorted(&self) -> Result<(), Error> {
-		self.inputs.verify_variants()?;
-		self.inputs.verify_sorted()?;
+		self.inputs.verify_sorted_and_unique()?;
 		self.outputs.verify_sorted_and_unique()?;
 		self.kernels.verify_sorted_and_unique()?;
 		Ok(())
@@ -1059,13 +1093,15 @@ impl TransactionBody {
 	// **********
 	// Verify that no input is spending an output from the same block.
 	fn verify_cut_through(&self) -> Result<(), Error> {
-		let input_commits: HashSet<_> = self.inputs.iter().map(|x| x.commitment()).collect();
-		let output_commits: HashSet<_> = self.outputs.iter().map(|x| x.commitment()).collect();
-		if input_commits.is_disjoint(&output_commits) {
-			Ok(())
-		} else {
-			Err(Error::CutThrough)
-		}
+		panic!("implement me!");
+
+		// let input_commits: HashSet<_> = self.inputs.iter().map(|x| x.commitment()).collect();
+		// let output_commits: HashSet<_> = self.outputs.iter().map(|x| x.commitment()).collect();
+		// if input_commits.is_disjoint(&output_commits) {
+		// 	Ok(())
+		// } else {
+		// 	Err(Error::CutThrough)
+		// }
 	}
 
 	/// Verify we have no invalid outputs or kernels in the transaction
@@ -1233,7 +1269,7 @@ impl Transaction {
 
 	/// Creates a new transaction initialized with
 	/// the provided inputs, outputs, kernels
-	pub fn new(inputs: &[Input], outputs: &[Output], kernels: &[TxKernel]) -> Transaction {
+	pub fn new(inputs: Inputs, outputs: &[Output], kernels: &[TxKernel]) -> Transaction {
 		let offset = BlindingFactor::zero();
 
 		// Initialize a new tx body and sort everything.
@@ -1252,7 +1288,7 @@ impl Transaction {
 	/// Builds a new transaction with the provided inputs added. Existing
 	/// inputs, if any, are kept intact.
 	/// Sort order is maintained.
-	pub fn with_input(self, input: Input) -> Transaction {
+	pub fn with_input(self, input: OutputIdentifier) -> Transaction {
 		Transaction {
 			body: self.body.with_input(input),
 			..self
@@ -1288,8 +1324,8 @@ impl Transaction {
 	}
 
 	/// Get inputs
-	pub fn inputs(&self) -> &[Input] {
-		&self.body.inputs.as_slice()
+	pub fn inputs(&self) -> Inputs {
+		self.body.inputs
 	}
 
 	/// Get outputs
@@ -1369,7 +1405,7 @@ impl Transaction {
 /// transaction. The elimination is stable with respect to the order of inputs
 /// and outputs.
 pub fn cut_through<'a>(
-	inputs: &'a mut [Input],
+	inputs: &'a mut [Commitment],
 	outputs: &'a mut [Output],
 ) -> Result<(&'a [Input], &'a [Output]), Error> {
 	// assemble output commitments set, checking they're all unique
@@ -1434,7 +1470,7 @@ pub fn aggregate(txs: &[Transaction]) -> Result<Transaction, Error> {
 		n_kernels += tx.kernels().len();
 	}
 
-	let mut inputs: Vec<Input> = Vec::with_capacity(n_inputs);
+	let mut inputs: Inputs::default();
 	let mut outputs: Vec<Output> = Vec::with_capacity(n_outputs);
 	let mut kernels: Vec<TxKernel> = Vec::with_capacity(n_kernels);
 
@@ -1534,127 +1570,127 @@ pub fn deaggregate(mk_tx: Transaction, txs: &[Transaction]) -> Result<Transactio
 	let tx = Transaction::new(&inputs, &outputs, &kernels).with_offset(total_kernel_offset);
 	Ok(tx)
 }
-#[derive(Serialize, Deserialize, Debug, Clone, Copy)]
-pub enum Input {
-	/// Input including output features and output commitment.
-	/// Corresponds to protocol version 2.
-	/// Can be translated to protocol version 3.
-	FeaturesAndCommit {
-		/// Output features associated with this input.
-		features: OutputFeatures,
-		/// Output commitment associated with this input.
-		commit: Commitment,
-	},
-	/// Input with output commitment only.
-	/// Corresponds to protocol version 3.
-	/// Note: Translation to protocol version 3 is non-trivial as features must be looked up externally.
-	CommitOnly {
-		/// Output commitment associated with this input.
-		commit: Commitment,
-	},
-}
+// #[derive(Serialize, Deserialize, Debug, Clone, Copy)]
+// pub enum Input {
+// 	/// Input including output features and output commitment.
+// 	/// Corresponds to protocol version 2.
+// 	/// Can be translated to protocol version 3.
+// 	FeaturesAndCommit {
+// 		/// Output features associated with this input.
+// 		features: OutputFeatures,
+// 		/// Output commitment associated with this input.
+// 		commit: Commitment,
+// 	},
+// 	/// Input with output commitment only.
+// 	/// Corresponds to protocol version 3.
+// 	/// Note: Translation to protocol version 3 is non-trivial as features must be looked up externally.
+// 	CommitOnly {
+// 		/// Output commitment associated with this input.
+// 		commit: Commitment,
+// 	},
+// }
 
-impl DefaultHashable for Input {}
-hashable_ord!(Input);
+// impl DefaultHashable for Input {}
+// hashable_ord!(Input);
 
-impl ::std::hash::Hash for Input {
-	fn hash<H: ::std::hash::Hasher>(&self, state: &mut H) {
-		let mut vec = Vec::new();
-		let version = match self {
-			Input::FeaturesAndCommit { .. } => ProtocolVersion(2),
-			Input::CommitOnly { .. } => ProtocolVersion(3),
-		};
-		ser::serialize(&mut vec, version, &self).expect("serialization failed");
-		::std::hash::Hash::hash(&vec, state);
-	}
-}
+// impl ::std::hash::Hash for Input {
+// 	fn hash<H: ::std::hash::Hasher>(&self, state: &mut H) {
+// 		let mut vec = Vec::new();
+// 		let version = match self {
+// 			Input::FeaturesAndCommit { .. } => ProtocolVersion(2),
+// 			Input::CommitOnly { .. } => ProtocolVersion(3),
+// 		};
+// 		ser::serialize(&mut vec, version, &self).expect("serialization failed");
+// 		::std::hash::Hash::hash(&vec, state);
+// 	}
+// }
 
-/// Implementation of Writeable for a transaction Input, defines how to write
-/// an Input as binary.
-impl Writeable for Input {
-	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
-		match writer.protocol_version().value() {
-			0..=2 => self.write_v2(writer),
-			3..=ProtocolVersion::MAX => self.write_v3(writer),
-		}
-	}
-}
+// /// Implementation of Writeable for a transaction Input, defines how to write
+// /// an Input as binary.
+// impl Writeable for Input {
+// 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
+// 		match writer.protocol_version().value() {
+// 			0..=2 => self.write_v2(writer),
+// 			3..=ProtocolVersion::MAX => self.write_v3(writer),
+// 		}
+// 	}
+// }
 
-/// Implementation of Readable for a transaction Input, defines how to read
-/// an Input from a binary stream.
-impl Readable for Input {
-	fn read<R: Reader>(reader: &mut R) -> Result<Input, ser::Error> {
-		match reader.protocol_version().value() {
-			0..=2 => Input::read_v2(reader),
-			3..=ProtocolVersion::MAX => Input::read_v3(reader),
-		}
-	}
-}
+// /// Implementation of Readable for a transaction Input, defines how to read
+// /// an Input from a binary stream.
+// impl Readable for Input {
+// 	fn read<R: Reader>(reader: &mut R) -> Result<Input, ser::Error> {
+// 		match reader.protocol_version().value() {
+// 			0..=2 => Input::read_v2(reader),
+// 			3..=ProtocolVersion::MAX => Input::read_v3(reader),
+// 		}
+// 	}
+// }
 
-/// A transaction input, which spends an existing unspent output.
-impl Input {
-	/// Commitment identifying the output being spent by this input.
-	pub fn commitment(&self) -> Commitment {
-		match self {
-			Input::FeaturesAndCommit { commit, .. } => *commit,
-			Input::CommitOnly { commit } => *commit,
-		}
-	}
+// /// A transaction input, which spends an existing unspent output.
+// impl Input {
+// 	/// Commitment identifying the output being spent by this input.
+// 	pub fn commitment(&self) -> Commitment {
+// 		match self {
+// 			Input::FeaturesAndCommit { commit, .. } => *commit,
+// 			Input::CommitOnly { commit } => *commit,
+// 		}
+// 	}
 
-	/// Does this input match the provided output?
-	pub fn matches_output(&self, out: OutputIdentifier) -> bool {
-		match self {
-			Input::FeaturesAndCommit { features, commit } => {
-				OutputIdentifier {
-					features: *features,
-					commit: *commit,
-				} == out
-			}
-			Input::CommitOnly { commit } => *commit == out.commit,
-		}
-	}
+// 	/// Does this input match the provided output?
+// 	pub fn matches_output(&self, out: OutputIdentifier) -> bool {
+// 		match self {
+// 			Input::FeaturesAndCommit { features, commit } => {
+// 				OutputIdentifier {
+// 					features: *features,
+// 					commit: *commit,
+// 				} == out
+// 			}
+// 			Input::CommitOnly { commit } => *commit == out.commit,
+// 		}
+// 	}
 
-	/// Does this input match the provided output?
-	/// Strict check for V2 peer compatibility.
-	pub fn matches_output_strict(&self, out: OutputIdentifier) -> bool {
-		match self {
-			Input::FeaturesAndCommit { .. } => self.matches_output(out),
-			Input::CommitOnly { .. } => false,
-		}
-	}
+// 	// /// Does this input match the provided output?
+// 	// /// Strict check for V2 peer compatibility.
+// 	// pub fn matches_output_strict(&self, out: OutputIdentifier) -> bool {
+// 	// 	match self {
+// 	// 		Input::FeaturesAndCommit { .. } => self.matches_output(out),
+// 	// 		Input::CommitOnly { .. } => false,
+// 	// 	}
+// 	// }
 
-	fn read_v2<R: Reader>(reader: &mut R) -> Result<Input, ser::Error> {
-		let features = OutputFeatures::read(reader)?;
-		let commit = Commitment::read(reader)?;
-		Ok(Input::FeaturesAndCommit { features, commit })
-	}
+// 	fn read_v2<R: Reader>(reader: &mut R) -> Result<Input, ser::Error> {
+// 		let features = OutputFeatures::read(reader)?;
+// 		let commit = Commitment::read(reader)?;
+// 		Ok(Input::FeaturesAndCommit { features, commit })
+// 	}
 
-	fn read_v3<R: Reader>(reader: &mut R) -> Result<Input, ser::Error> {
-		let commit = Commitment::read(reader)?;
-		Ok(Input::CommitOnly { commit })
-	}
+// 	fn read_v3<R: Reader>(reader: &mut R) -> Result<Input, ser::Error> {
+// 		let commit = Commitment::read(reader)?;
+// 		Ok(Input::CommitOnly { commit })
+// 	}
 
-	fn write_v2<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
-		match self {
-			Input::FeaturesAndCommit { features, commit } => {
-				features.write(writer)?;
-				commit.write(writer)?;
-				Ok(())
-			}
-			Input::CommitOnly { .. } => Err(ser::Error::ProtocolVersionError),
-		}
-	}
+// 	fn write_v2<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
+// 		match self {
+// 			Input::FeaturesAndCommit { features, commit } => {
+// 				features.write(writer)?;
+// 				commit.write(writer)?;
+// 				Ok(())
+// 			}
+// 			Input::CommitOnly { .. } => Err(ser::Error::ProtocolVersionError),
+// 		}
+// 	}
 
-	// Note: Attempting to write a FeaturesAndCommit variant in v3 is considered an error
-	// as the sort order will be incorrect.
-	// We *must* convert to CommitOnly and resort the inputs before writing.
-	fn write_v3<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
-		match self {
-			Input::CommitOnly { commit } => commit.write(writer),
-			Input::FeaturesAndCommit { .. } => Err(ser::Error::ProtocolVersionError),
-		}
-	}
-}
+// 	// Note: Attempting to write a FeaturesAndCommit variant in v3 is considered an error
+// 	// as the sort order will be incorrect.
+// 	// We *must* convert to CommitOnly and resort the inputs before writing.
+// 	fn write_v3<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
+// 		match self {
+// 			Input::CommitOnly { commit } => commit.write(writer),
+// 			Input::FeaturesAndCommit { .. } => Err(ser::Error::ProtocolVersionError),
+// 		}
+// 	}
+// }
 
 // Enum of various supported kernel "features".
 enum_from_primitive! {
@@ -1779,13 +1815,13 @@ impl Output {
 		self.commit
 	}
 
-	/// Convenient way to build a FeaturesAndCommit input variant from an output.
-	pub fn input_features_and_commit(&self) -> Input {
-		Input::FeaturesAndCommit {
-			features: self.features,
-			commit: self.commit,
-		}
-	}
+	// /// Convenient way to build a FeaturesAndCommit input variant from an output.
+	// pub fn input_features_and_commit(&self) -> Input {
+	// 	Input::FeaturesAndCommit {
+	// 		features: self.features,
+	// 		commit: self.commit,
+	// 	}
+	// }
 
 	/// Is this a coinbase kernel?
 	pub fn is_coinbase(&self) -> bool {
@@ -1827,7 +1863,7 @@ impl Output {
 /// An output_identifier can be build from either an input _or_ an output and
 /// contains everything we need to uniquely identify an output being spent.
 /// Needed because it is not sufficient to pass a commitment around.
-#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq)]
+#[derive(Serialize, Deserialize, Debug, Clone, Copy)]
 pub struct OutputIdentifier {
 	/// Output features (coinbase vs. regular transaction output)
 	/// We need to include this when hashing to ensure coinbase maturity can be
@@ -1838,6 +1874,7 @@ pub struct OutputIdentifier {
 }
 
 impl DefaultHashable for OutputIdentifier {}
+hashable_ord!(OutputIdentifier);
 
 impl OutputIdentifier {
 	/// Build a new output_identifier.
@@ -2094,36 +2131,20 @@ mod test {
 	}
 
 	#[test]
-	fn input_short_id() {
-		let keychain = ExtKeychain::from_seed(&[0; 32], false).unwrap();
-		let key_id = ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
-		let commit = keychain
-			.commit(5, &key_id, SwitchCommitmentType::Regular)
-			.unwrap();
-
-		let input = Input::FeaturesAndCommit {
-			features: OutputFeatures::Plain,
-			commit,
-		};
-
+	fn test_short_id() -> Result<(), Error> {
 		let block_hash =
-			Hash::from_hex("3a42e66e46dd7633b57d1f921780a1ac715e6b93c19ee52ab714178eb3a9f673")
-				.unwrap();
+			Hash::from_hex("3a42e66e46dd7633b57d1f921780a1ac715e6b93c19ee52ab714178eb3a9f673")?;
 
-		let nonce = 0;
-
-		let short_id = input.short_id(&block_hash, nonce);
+		let short_id = vec![0, 0, 0, 1].short_id(&block_hash, 0);
 		assert_eq!(short_id, ShortId::from_hex("c4b05f2ba649").unwrap());
 
-		// now generate the short_id for a *very* similar output (single feature flag
-		// different) and check it generates a different short_id
-		let input = Input::FeaturesAndCommit {
-			features: OutputFeatures::Coinbase,
-			commit,
-		};
+		let short_id = vec![0, 0, 0, 1].short_id(&block_hash, 1);
+		assert_eq!(short_id, ShortId::from_hex("c4b05f2ba649").unwrap());
 
-		let short_id = input.short_id(&block_hash, nonce);
+		let short_id = vec![0, 0, 0, 2].short_id(&block_hash, 0);
 		assert_eq!(short_id, ShortId::from_hex("3f0377c624e9").unwrap());
+
+		Ok(())
 	}
 
 	#[test]
