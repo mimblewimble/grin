@@ -497,12 +497,9 @@ impl Chain {
 		}
 	}
 
-	/// TODO - where do we call this from? And do we need a rewind first?
-	/// For the given commitment find the unspent output and return the
-	/// associated Return an error if the output does not exist or has been
-	/// spent. This querying is done in a way that is consistent with the
-	/// current chain state, specifically the current winning (valid, most
-	/// work) fork.
+	/// Returns Ok(Some(pos)) if output is unspent.
+	/// Returns Ok(None) if output is spent.
+	/// Returns Err if something went wrong beyond not finding the output.
 	pub fn get_unspent(&self, output_ref: &OutputIdentifier) -> Result<Option<CommitPos>, Error> {
 		self.txhashset.read().get_unspent(output_ref)
 	}
