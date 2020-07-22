@@ -133,14 +133,14 @@ impl BlockHandler {
 	) -> Result<BlockPrintable, Error> {
 		let chain = w(&self.chain)?;
 		let block = chain.get_block(h).context(ErrorKind::NotFound)?;
-		BlockPrintable::from_block(&block, chain, include_proof, include_merkle_proof)
+		BlockPrintable::from_block(&block, &chain, include_proof, include_merkle_proof)
 			.map_err(|_| ErrorKind::Internal("chain error".to_owned()).into())
 	}
 
 	fn get_compact_block(&self, h: &Hash) -> Result<CompactBlockPrintable, Error> {
 		let chain = w(&self.chain)?;
 		let block = chain.get_block(h).context(ErrorKind::NotFound)?;
-		CompactBlockPrintable::from_compact_block(&block.into(), chain)
+		CompactBlockPrintable::from_compact_block(&block.into(), &chain)
 			.map_err(|_| ErrorKind::Internal("chain error".to_owned()).into())
 	}
 

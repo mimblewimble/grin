@@ -47,7 +47,8 @@ pub struct TxHashSetHandler {
 impl TxHashSetHandler {
 	// gets roots
 	fn get_roots(&self) -> Result<TxHashSet, Error> {
-		let res = TxHashSet::from_head(w(&self.chain)?).context(ErrorKind::Internal(
+		let chain = w(&self.chain)?;
+		let res = TxHashSet::from_head(&chain).context(ErrorKind::Internal(
 			"failed to read roots from txhashset".to_owned(),
 		))?;
 		Ok(res)
@@ -55,20 +56,20 @@ impl TxHashSetHandler {
 
 	// gets last n outputs inserted in to the tree
 	fn get_last_n_output(&self, distance: u64) -> Result<Vec<TxHashSetNode>, Error> {
-		Ok(TxHashSetNode::get_last_n_output(w(&self.chain)?, distance))
+		let chain = w(&self.chain)?;
+		Ok(TxHashSetNode::get_last_n_output(&chain, distance))
 	}
 
 	// gets last n rangeproofs inserted in to the tree
 	fn get_last_n_rangeproof(&self, distance: u64) -> Result<Vec<TxHashSetNode>, Error> {
-		Ok(TxHashSetNode::get_last_n_rangeproof(
-			w(&self.chain)?,
-			distance,
-		))
+		let chain = w(&self.chain)?;
+		Ok(TxHashSetNode::get_last_n_rangeproof(&chain, distance))
 	}
 
 	// gets last n kernels inserted in to the tree
 	fn get_last_n_kernel(&self, distance: u64) -> Result<Vec<TxHashSetNode>, Error> {
-		Ok(TxHashSetNode::get_last_n_kernel(w(&self.chain)?, distance))
+		let chain = w(&self.chain)?;
+		Ok(TxHashSetNode::get_last_n_kernel(&chain, distance))
 	}
 
 	// allows traversal of utxo set
@@ -92,7 +93,7 @@ impl TxHashSetHandler {
 			outputs: outputs
 				.2
 				.iter()
-				.map(|x| OutputPrintable::from_output(x, chain.clone(), None, true, true))
+				.map(|x| OutputPrintable::from_output(x, &chain, None, true, true))
 				.collect::<Result<Vec<_>, _>>()
 				.context(ErrorKind::Internal("chain error".to_owned()))?,
 		};
