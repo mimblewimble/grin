@@ -20,7 +20,8 @@ use self::core::core::id::{ShortId, ShortIdentifiable};
 use self::core::core::transaction;
 use self::core::core::verifier_cache::VerifierCache;
 use self::core::core::{
-	Block, BlockHeader, BlockSums, Committed, Transaction, TxKernel, Weighting,
+	Block, BlockHeader, BlockSums, Committed, Inputs, OutputIdentifier, Transaction, TxKernel,
+	Weighting,
 };
 use self::util::RwLock;
 use crate::types::{BlockChain, PoolEntry, PoolError};
@@ -60,15 +61,8 @@ where
 	}
 
 	/// Does the transaction pool contain an entry for the given transaction?
-	pub fn contains_tx(&self, hash: Hash) -> bool {
-		self.entries.iter().any(|x| x.tx.hash() == hash)
-	}
-
-	pub fn get_tx(&self, hash: Hash) -> Option<Transaction> {
-		self.entries
-			.iter()
-			.find(|x| x.tx.hash() == hash)
-			.map(|x| x.tx.clone())
+	pub fn contains_tx(&self, tx_hash: Hash) -> bool {
+		self.entries.iter().any(|x| x.tx.hash() == tx_hash)
 	}
 
 	/// Query the tx pool for an individual tx matching the given public excess.
@@ -84,7 +78,45 @@ where
 		None
 	}
 
+	// look them up via -
+	// txpool.get_unspent, or
+	// utxo.get_unspent
+	pub fn convert_tx_to_v2(
+		&self,
+		tx: Transaction,
+		other_tx: Option<Transaction>,
+	) -> Result<Transaction, PoolError> {
+		debug!(
+			"convert_tx_to_v2: {} ({})",
+			tx.hash(),
+			tx.inputs().version_str(),
+		);
+
+		match tx.inputs() {
+			Inputs::CommitOnly(inputs) => {
+				let pool_tx = self.all_transactions_aggregate()?;
+				let txs: Vec<Transaction> = vec![pool_tx, other_tx].into_iter().flatten().collect();
+				let agg_tx = transaction::aggregate(&txs)?;
+
+				let inputs: Vec<OutputIdentifier> = inputs
+					.into_iter()
+					.map(|input| {
+						agg_tx
+							.get_output(&input)
+							.map(|out| OutputIdentifier::from(&out))
+							.or(self.blockchain.get_unspent(input).ok())
+					})
+					.flatten()
+					.collect();
+				Ok(tx.replace_inputs(inputs.into()))
+			}
+			Inputs::FeaturesAndCommit(_) => Ok(tx),
+		}
+	}
+
 	/// Query the tx pool for an individual tx matching the given kernel hash.
+	/// Used to provide transactions to peers (stem relay or requested by peer).
+	/// Note: Tx must be in v2 format to support backward compatibility with v2 peers.
 	pub fn retrieve_tx_by_kernel_hash(&self, hash: Hash) -> Option<Transaction> {
 		for x in &self.entries {
 			for k in x.tx.kernels() {
@@ -94,6 +126,18 @@ where
 			}
 		}
 		None
+	}
+
+	/// Query the tx pool for existence of tx matching the given kernel hash.
+	pub fn tx_by_kernel_hash_exists(&self, hash: Hash) -> bool {
+		for x in &self.entries {
+			for k in x.tx.kernels() {
+				if k.hash() == hash {
+					return true;
+				}
+			}
+		}
+		false
 	}
 
 	/// Query the tx pool for all known txs based on kernel short_ids
@@ -198,19 +242,12 @@ where
 
 		txs.extend_from_slice(extra_txs);
 
-		// TODO - rename this...
-		let aggregated_tx_excluding_new_tx = transaction::aggregate(&txs)?;
-		let agg_tx = transaction::aggregate(&[aggregated_tx_excluding_new_tx, entry.tx.clone()])?;
+		let pool_tx = transaction::aggregate(&txs)?;
+		let agg_tx = transaction::aggregate(&[pool_tx, entry.tx.clone()])?;
 
 		// Validate aggregated tx (existing pool + new tx), ignoring tx weight limits.
 		// Validate against known chain state at the provided header.
 		self.validate_raw_tx(&agg_tx, header, Weighting::NoLimit)?;
-
-		// **********
-		// At this point we want to convert our tx inputs to FeaturesAndCommit variant (to support relay to V2 peers).
-		// We want to make sure we store the converted tx in our pool (txpool or stempool) for reference later.
-		// We look for input features in the aggregated_tx_excluding_new_tx and the utxo_set.
-		// **********
 
 		// If we get here successfully then we can safely add the entry to the pool.
 		self.log_pool_add(&entry, header);
@@ -222,13 +259,14 @@ where
 
 	fn log_pool_add(&self, entry: &PoolEntry, header: &BlockHeader) {
 		debug!(
-			"add_to_pool [{}]: {} ({:?}) [in/out/kern: {}/{}/{}] pool: {} ({} at {})",
+			"add_to_pool [{}]: {} ({:?}) [in/out/kern: {}/{}/{}] ({}) pool: {} ({} at {})",
 			self.name,
 			entry.tx.hash(),
 			entry.src,
 			entry.tx.inputs().len(),
 			entry.tx.outputs().len(),
 			entry.tx.kernels().len(),
+			entry.tx.inputs().version_str(),
 			self.size(),
 			header.hash(),
 			header.height,
@@ -357,12 +395,13 @@ where
 			let mut insert_pos = None;
 			let mut is_rejected = false;
 
-			for input in entry.tx.inputs() {
-				if rejected.contains(&input.commitment()) {
+			let tx_inputs: Vec<_> = entry.tx.inputs().into();
+			for input in &tx_inputs {
+				if rejected.contains(input) {
 					// Depends on a rejected tx, so reject this one.
 					is_rejected = true;
 					continue;
-				} else if let Some(pos) = output_commits.get(&input.commitment()) {
+				} else if let Some(pos) = output_commits.get(input) {
 					if insert_pos.is_some() {
 						// Multiple dependencies so reject this tx (pick it up in next block).
 						is_rejected = true;
@@ -463,13 +502,17 @@ where
 	/// Quick reconciliation step - we can evict any txs in the pool where
 	/// inputs or kernels intersect with the block.
 	pub fn reconcile_block(&mut self, block: &Block) {
+		let block_inputs: Vec<_> = block.inputs().into();
 		// Filter txs in the pool based on the latest block.
 		// Reject any txs where we see a matching tx kernel in the block.
 		// Also reject any txs where we see a conflicting tx,
 		// where an input is spent in a different tx.
 		self.entries.retain(|x| {
+			let tx_inputs: Vec<_> = x.tx.inputs().into();
 			!x.tx.kernels().iter().any(|y| block.kernels().contains(y))
-				&& !x.tx.inputs().iter().any(|y| block.inputs().contains(y))
+				&& !tx_inputs
+					.iter()
+					.any(|y| block_inputs.binary_search(y).is_ok())
 		});
 	}
 

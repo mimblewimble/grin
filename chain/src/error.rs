@@ -77,9 +77,9 @@ pub enum ErrorKind {
 	/// Error from underlying secp lib
 	#[fail(display = "Secp Lib Error")]
 	Secp(secp::Error),
-	/// One of the inputs in the block has already been spent
-	#[fail(display = "Already Spent: {:?}", _0)]
-	AlreadySpent(Commitment),
+	/// One of the inputs in the block has already been spent or was never spendable to begin with.
+	#[fail(display = "Not Unspent: {:?}", _0)]
+	NotUnspent(Commitment),
 	/// An output with that commitment already exists (should be unique)
 	#[fail(display = "Duplicate Commitment: {:?}", _0)]
 	DuplicateCommitment(Commitment),

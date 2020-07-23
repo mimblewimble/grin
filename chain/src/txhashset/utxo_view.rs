@@ -16,11 +16,11 @@
 
 use crate::core::core::hash::{Hash, Hashed};
 use crate::core::core::pmmr::{self, ReadonlyPMMR};
-use crate::core::core::{Block, BlockHeader, Input, Output, Transaction};
+use crate::core::core::{Block, BlockHeader, Output, OutputIdentifier, Transaction};
 use crate::core::global;
 use crate::error::{Error, ErrorKind};
 use crate::store::Batch;
-use crate::util::secp::pedersen::RangeProof;
+use crate::util::secp::pedersen::{Commitment, RangeProof};
 use grin_store::pmmr::PMMRBackend;
 
 /// Readonly view of the UTXO set (based on output MMR).
@@ -48,11 +48,18 @@ impl<'a> UTXOView<'a> {
 	/// Every input must spend an output that currently exists in the UTXO set.
 	/// No duplicate outputs.
 	pub fn validate_block(&self, block: &Block, batch: &Batch<'_>) -> Result<(), Error> {
+		debug!(
+			"validate_block: {} at {} ({})",
+			block.header.hash(),
+			block.header.height,
+			block.inputs().version_str(),
+		);
 		for output in block.outputs() {
 			self.validate_output(output, batch)?;
 		}
 
-		for input in block.inputs() {
+		let inputs: Vec<_> = block.inputs().into();
+		for input in inputs {
 			self.validate_input(input, batch)?;
 		}
 		Ok(())
@@ -62,11 +69,14 @@ impl<'a> UTXOView<'a> {
 	/// Every input must spend an output that currently exists in the UTXO set.
 	/// No duplicate outputs.
 	pub fn validate_tx(&self, tx: &Transaction, batch: &Batch<'_>) -> Result<(), Error> {
+		debug!("validate_tx: {} ({})", tx.hash(), tx.inputs().version_str(),);
+
 		for output in tx.outputs() {
 			self.validate_output(output, batch)?;
 		}
 
-		for input in tx.inputs() {
+		let inputs: Vec<_> = tx.inputs().into();
+		for input in inputs {
 			self.validate_input(input, batch)?;
 		}
 		Ok(())
@@ -75,16 +85,15 @@ impl<'a> UTXOView<'a> {
 	// Input is valid if it is spending an (unspent) output
 	// that currently exists in the output MMR.
 	// Compare against the entry in output MMR at the expected pos.
-	fn validate_input(&self, input: &Input, batch: &Batch<'_>) -> Result<(), Error> {
-		let commit = input.commitment();
-		if let Ok(pos) = batch.get_output_pos(&commit) {
+	fn validate_input(&self, input: Commitment, batch: &Batch<'_>) -> Result<(), Error> {
+		if let Ok(pos) = batch.get_output_pos(&input) {
 			if let Some(out) = self.output_pmmr.get_data(pos) {
-				if input.matches_output(out) {
+				if input == out.commitment() {
 					return Ok(());
 				}
 			}
 		}
-		Err(ErrorKind::AlreadySpent(commit).into())
+		Err(ErrorKind::NotUnspent(input).into())
 	}
 
 	// Output is valid if it would not result in a duplicate commitment in the output MMR.
@@ -97,6 +106,22 @@ impl<'a> UTXOView<'a> {
 			}
 		}
 		Ok(())
+	}
+
+	/// Retrieve unspent output by commitment.
+	pub fn get_unspent(
+		&self,
+		commitment: Commitment,
+		batch: &Batch<'_>,
+	) -> Result<OutputIdentifier, Error> {
+		if let Ok(pos) = batch.get_output_pos(&commitment) {
+			if let Some(out) = self.output_pmmr.get_data(pos) {
+				if commitment == out.commitment() {
+					return Ok(out);
+				}
+			}
+		}
+		Err(ErrorKind::NotUnspent(commitment).into())
 	}
 
 	/// Retrieves an unspent output using its PMMR position
@@ -112,22 +137,20 @@ impl<'a> UTXOView<'a> {
 
 	/// Verify we are not attempting to spend any coinbase outputs
 	/// that have not sufficiently matured.
-	pub fn verify_coinbase_maturity<'b, I>(
+	pub fn verify_coinbase_maturity(
 		&self,
-		inputs: I,
+		inputs: &[Commitment],
 		height: u64,
 		batch: &Batch<'_>,
-	) -> Result<(), Error>
-	where
-		I: IntoIterator<Item = &'b Input>,
-	{
+	) -> Result<(), Error> {
 		// Find the pos of every output being spent by the given the inputs.
-		let mut spent_pos: Vec<u64> = inputs
+		let spent_pos: Result<Vec<u64>, _> = inputs
 			.into_iter()
-			.filter_map(|x| batch.get_output_pos(&x.commitment()).ok())
+			.map(|x| batch.get_output_pos(x))
 			.collect();
 
 		// Sort pos in descending order.
+		let mut spent_pos = spent_pos?;
 		spent_pos.sort();
 		spent_pos.reverse();
 

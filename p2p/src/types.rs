@@ -88,6 +88,7 @@ pub enum Error {
 	PeerNotBanned,
 	PeerException,
 	Internal,
+	Other(String),
 }
 
 impl From<ser::Error> for Error {
@@ -554,6 +555,8 @@ pub trait ChainAdapter: Sync + Send {
 		-> Result<bool, chain::Error>;
 
 	fn get_transaction(&self, kernel_hash: Hash) -> Option<core::Transaction>;
+
+	fn get_stem_transaction(&self, kernel_hash: Hash) -> Option<core::Transaction>;
 
 	fn tx_kernel_received(
 		&self,

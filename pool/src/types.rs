@@ -20,12 +20,13 @@ use chrono::prelude::{DateTime, Utc};
 use self::core::consensus;
 use self::core::core::block;
 use self::core::core::committed;
-use self::core::core::hash::Hash;
+use self::core::core::hash::{Hash, Hashed};
 use self::core::core::transaction::{self, Transaction};
-use self::core::core::{BlockHeader, BlockSums};
+use self::core::core::{BlockHeader, BlockSums, OutputIdentifier};
 use failure::Fail;
 use grin_core as core;
 use grin_keychain as keychain;
+use grin_util::secp::pedersen::Commitment;
 
 /// Dandelion "epoch" length.
 const DANDELION_EPOCH_SECS: u16 = 600;
@@ -159,6 +160,12 @@ pub struct PoolEntry {
 	pub tx: Transaction,
 }
 
+impl PoolEntry {
+	pub fn kernel_hash(&self) -> Hash {
+		self.tx.kernels()[0].hash()
+	}
+}
+
 /// Used to make decisions based on transaction acceptance priority from
 /// various sources. For example, a node may want to bypass pool size
 /// restrictions when accepting a transaction from a local wallet.
@@ -278,6 +285,7 @@ pub trait BlockChain: Sync + Send {
 
 	fn get_block_header(&self, hash: &Hash) -> Result<BlockHeader, PoolError>;
 	fn get_block_sums(&self, hash: &Hash) -> Result<BlockSums, PoolError>;
+	fn get_unspent(&self, commitment: Commitment) -> Result<OutputIdentifier, PoolError>;
 }
 
 /// Bridge between the transaction pool and the rest of the system. Handles

@@ -292,6 +292,9 @@ impl ChainAdapter for DummyAdapter {
 	fn get_transaction(&self, _h: Hash) -> Option<core::Transaction> {
 		None
 	}
+	fn get_stem_transaction(&self, _h: Hash) -> Option<core::Transaction> {
+		None
+	}
 
 	fn tx_kernel_received(&self, _h: Hash, _peer_info: &PeerInfo) -> Result<bool, chain::Error> {
 		Ok(true)

@@ -500,8 +500,15 @@ impl Chain {
 	/// Returns Ok(Some(pos)) if output is unspent.
 	/// Returns Ok(None) if output is spent.
 	/// Returns Err if something went wrong beyond not finding the output.
-	pub fn get_unspent(&self, output_ref: &OutputIdentifier) -> Result<Option<CommitPos>, Error> {
-		self.txhashset.read().get_unspent(output_ref)
+	pub fn get_unspent(&self, output_id: &OutputIdentifier) -> Result<Option<CommitPos>, Error> {
+		self.txhashset.read().get_unspent(output_id)
+	}
+
+	pub fn get_unspent_by_commitment(
+		&self,
+		commitment: Commitment,
+	) -> Result<Option<(OutputIdentifier, CommitPos)>, Error> {
+		self.txhashset.read().get_unspent_by_commitment(commitment)
 	}
 
 	/// Retrieves an unspent output using its PMMR position
@@ -560,7 +567,8 @@ impl Chain {
 		let header_pmmr = self.header_pmmr.read();
 		let txhashset = self.txhashset.read();
 		txhashset::utxo_view(&header_pmmr, &txhashset, |utxo, batch| {
-			utxo.verify_coinbase_maturity(tx.inputs(), height, batch)?;
+			let inputs: Vec<_> = tx.inputs().into();
+			utxo.verify_coinbase_maturity(&inputs, height, batch)?;
 			Ok(())
 		})
 	}

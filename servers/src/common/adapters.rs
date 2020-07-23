@@ -30,12 +30,13 @@ use crate::common::types::{ChainValidationMode, DandelionEpoch, ServerConfig};
 use crate::core::core::hash::{Hash, Hashed};
 use crate::core::core::transaction::Transaction;
 use crate::core::core::verifier_cache::VerifierCache;
-use crate::core::core::{BlockHeader, BlockSums, CompactBlock};
+use crate::core::core::{BlockHeader, BlockSums, CompactBlock, OutputIdentifier};
 use crate::core::pow::Difficulty;
 use crate::core::{core, global};
 use crate::p2p;
 use crate::p2p::types::PeerInfo;
 use crate::pool::{self, BlockChain, PoolAdapter};
+use crate::util::secp::pedersen::Commitment;
 use crate::util::OneTime;
 use chrono::prelude::*;
 use chrono::Duration;
@@ -73,8 +74,19 @@ where
 		Ok(self.chain().head()?.height)
 	}
 
+	// Called when a peer requests a transaction.
 	fn get_transaction(&self, kernel_hash: Hash) -> Option<core::Transaction> {
-		self.tx_pool.read().retrieve_tx_by_kernel_hash(kernel_hash)
+		self.tx_pool
+			.read()
+			.retrieve_tx_by_kernel_hash(kernel_hash)
+			.unwrap_or(None)
+	}
+
+	fn get_stem_transaction(&self, kernel_hash: Hash) -> Option<core::Transaction> {
+		self.tx_pool
+			.read()
+			.retrieve_stem_tx_by_kernel_hash(kernel_hash)
+			.unwrap_or(None)
 	}
 
 	fn tx_kernel_received(
@@ -86,10 +98,7 @@ where
 		if self.sync_state.is_syncing() {
 			return Ok(true);
 		}
-
-		let tx = self.tx_pool.read().retrieve_tx_by_kernel_hash(kernel_hash);
-
-		if tx.is_none() {
+		if !self.tx_pool.read().tx_by_kernel_hash_exists(kernel_hash) {
 			self.request_transaction(kernel_hash, peer_info);
 		}
 		Ok(true)
@@ -113,13 +122,11 @@ where
 			hook.on_transaction_received(&tx);
 		}
 
-		let tx_hash = tx.hash();
-
 		let mut tx_pool = self.tx_pool.write();
-		match tx_pool.add_to_pool(source, tx, stem, &header) {
+		match tx_pool.add_to_pool(source, tx.clone(), stem, &header) {
 			Ok(_) => Ok(true),
 			Err(e) => {
-				debug!("Transaction {} rejected: {:?}", tx_hash, e);
+				debug!("Transaction {} rejected: {:?}", tx.hash(), e);
 				Ok(false)
 			}
 		}
@@ -827,7 +834,7 @@ impl DandelionAdapter for PoolToNetAdapter {
 
 impl pool::PoolAdapter for PoolToNetAdapter {
 	fn tx_accepted(&self, entry: &pool::PoolEntry) {
-		self.peers().broadcast_transaction(&entry.tx);
+		self.peers().broadcast_transaction(entry.kernel_hash());
 	}
 
 	fn stem_tx_accepted(&self, entry: &pool::PoolEntry) -> Result<(), pool::PoolError> {
@@ -841,7 +848,7 @@ impl pool::PoolAdapter for PoolToNetAdapter {
 		// If node is configured to always stem our (pushed via api) txs then do so.
 		if epoch.is_stem() || (entry.src.is_pushed() && epoch.always_stem_our_txs()) {
 			if let Some(peer) = epoch.relay_peer(&self.peers()) {
-				match peer.send_stem_transaction(&entry.tx) {
+				match peer.send_stem_transaction(entry.kernel_hash()) {
 					Ok(_) => {
 						info!("Stemming this epoch, relaying to next peer.");
 						Ok(())
@@ -930,6 +937,14 @@ impl pool::BlockChain for PoolToChainAdapter {
 		self.chain()
 			.get_block_sums(hash)
 			.map_err(|_| pool::PoolError::Other("failed to get block_sums".to_string()))
+	}
+
+	fn get_unspent(&self, commitment: Commitment) -> Result<OutputIdentifier, pool::PoolError> {
+		if let Ok(Some((output, _))) = self.chain().get_unspent_by_commitment(commitment) {
+			Ok(output)
+		} else {
+			Err(pool::PoolError::Other("failed to get unspent".to_string()))
+		}
 	}
 
 	fn validate_tx(&self, tx: &Transaction) -> Result<(), pool::PoolError> {

@@ -58,7 +58,7 @@ pub trait Committed {
 	/// Gather the kernel excesses and sum them.
 	fn sum_kernel_excesses(
 		&self,
-		offset: &BlindingFactor,
+		offset: BlindingFactor,
 	) -> Result<(Commitment, Commitment), Error> {
 		// then gather the kernel excess commitments
 		let kernel_commits = self.kernels_committed();
@@ -72,7 +72,7 @@ pub trait Committed {
 			let secp = static_secp_instance();
 			let secp = secp.lock();
 			let mut commits = vec![kernel_sum];
-			if *offset != BlindingFactor::zero() {
+			if offset != BlindingFactor::zero() {
 				let key = offset.secret_key(&secp)?;
 				let offset_commit = secp.commit(0, key)?;
 				commits.push(offset_commit);
@@ -129,7 +129,7 @@ pub trait Committed {
 		let utxo_sum = self.sum_commitments(overage)?;
 
 		// Sum the kernel excesses accounting for the kernel offset.
-		let (kernel_sum, kernel_sum_plus_offset) = self.sum_kernel_excesses(&kernel_offset)?;
+		let (kernel_sum, kernel_sum_plus_offset) = self.sum_kernel_excesses(kernel_offset)?;
 
 		if utxo_sum != kernel_sum_plus_offset {
 			return Err(Error::KernelSumMismatch);

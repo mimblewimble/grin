@@ -18,12 +18,13 @@ use crate::core::consensus;
 use crate::core::core::hash::Hashed;
 use crate::core::core::verifier_cache::VerifierCache;
 use crate::core::core::Committed;
-use crate::core::core::{Block, BlockHeader, BlockSums};
+use crate::core::core::{Block, BlockHeader, BlockSums, Inputs};
 use crate::core::pow;
 use crate::error::{Error, ErrorKind};
 use crate::store;
 use crate::txhashset;
 use crate::types::{Options, Tip};
+use crate::util::secp::pedersen::Commitment;
 use crate::util::RwLock;
 use grin_store;
 use std::sync::Arc;
@@ -76,39 +77,38 @@ fn validate_pow_only(header: &BlockHeader, ctx: &mut BlockContext<'_>) -> Result
 	Ok(())
 }
 
-/// We may receive blocks from peers that contain CommitOnly inputs.
-/// We want to convert these to FeaturesAndCommit inputs before saving to the db.
-fn convert_block_input_features(
+/// We may receive blocks from peers that contain CommitOnly inputs (v3).
+/// We want to convert these to FeaturesAndCommit inputs (v2) before saving to the db.
+/// This is necessary to support backward compatibility with v2 peers.
+/// API also expects blocks in v2 format.
+/// It is more efficient to store them in v2 format internally vs. converting them during block relay.
+fn convert_block_v2(
 	b: &Block,
 	ext: &txhashset::ExtensionPair<'_>,
 	batch: &store::Batch<'_>,
 ) -> Result<Block, Error> {
-	let utxo_view = ext.extension.utxo_view(ext.header_extension);
+	debug!(
+		"convert_block_v2: {} at {} ({})",
+		b.header.hash(),
+		b.header.height,
+		b.inputs().version_str(),
+	);
+	match b.inputs() {
+		Inputs::CommitOnly(inputs) => {
+			let utxo_view = ext.extension.utxo_view(ext.header_extension);
+			let inputs: Result<Vec<_>, _> = inputs
+				.into_iter()
+				.map(|x| utxo_view.get_unspent(x, batch))
+				.collect();
+			let mut inputs = inputs?;
 
-	let pos: Vec<_> = b
-		.inputs()
-		.iter()
-		.filter_map(|x| batch.get_output_pos(&x.commitment()).ok())
-		.collect();
+			// Make sure the converted inputs are sorted correctly.
+			inputs.sort_unstable();
 
-	let outputs: Vec<_> = pos
-		.iter()
-		.filter_map(|pos| utxo_view.get_unspent_output_at(*pos).ok())
-		.collect();
-
-	if outputs.len() != b.inputs().len() {
-		return Err(ErrorKind::Other("block input features conversion failed".into()).into());
+			Ok(b.clone().replace_inputs(inputs.into()))
+		}
+		Inputs::FeaturesAndCommit(_) => Ok(b.clone()),
 	}
-
-	let mut inputs: Vec<_> = outputs
-		.iter()
-		.map(|out| out.input_features_and_commit())
-		.collect();
-
-	// Make sure the new converted inputs are sorted correctly.
-	inputs.sort_unstable();
-
-	Ok(b.clone().replace_inputs(inputs))
 }
 
 /// Runs the block processing pipeline, including validation and finding a
@@ -119,12 +119,13 @@ pub fn process_block(
 	ctx: &mut BlockContext<'_>,
 ) -> Result<(Option<Tip>, BlockHeader), Error> {
 	debug!(
-		"pipe: process_block {} at {} [in/out/kern: {}/{}/{}]",
+		"pipe: process_block {} at {} [in/out/kern: {}/{}/{}] ({})",
 		b.hash(),
 		b.header.height,
 		b.inputs().len(),
 		b.outputs().len(),
 		b.kernels().len(),
+		b.inputs().version_str(),
 	);
 
 	// Read current chain head from db via the batch.
@@ -158,59 +159,62 @@ pub fn process_block(
 
 	// Validate the block itself, make sure it is internally consistent.
 	// Use the verifier_cache for verifying rangeproofs and kernel signatures.
-	validate_block(b, ctx)?;
+	validate_block(&b, ctx)?;
 
 	// Start a chain extension unit of work dependent on the success of the
 	// internal validation and saving operations
 	let header_pmmr = &mut ctx.header_pmmr;
 	let txhashset = &mut ctx.txhashset;
 	let batch = &mut ctx.batch;
-	let (fork_point, block_with_input_features) =
-		txhashset::extending(header_pmmr, txhashset, batch, |ext, batch| {
-			let fork_point = rewind_and_apply_fork(&prev, ext, batch)?;
+	let (fork_point, b) = txhashset::extending(header_pmmr, txhashset, batch, |ext, batch| {
+		let fork_point = rewind_and_apply_fork(&prev, ext, batch)?;
 
-			// Convert block *before* we apply to avoid trying to lookup outputs after we spend them...
-			let block_with_input_features = convert_block_input_features(b, ext, batch)?;
+		// Convert block to v2 for backward compatibility.
+		// Convert *before* we apply to avoid looking for outputs after we spend them...
+		let b = convert_block_v2(b, ext, batch)?;
 
-			// Check any coinbase being spent have matured sufficiently.
-			// This needs to be done within the context of a potentially
-			// rewound txhashset extension to reflect chain state prior
-			// to applying the new block.
-			verify_coinbase_maturity(b, ext, batch)?;
+		// Verify all inputs and outputs are unique and that no input spends an output in this block.
+		verify_cut_through(&b)?;
 
-			// Validate the block against the UTXO set.
-			validate_utxo(b, ext, batch)?;
+		// Check any coinbase being spent have matured sufficiently.
+		// This needs to be done within the context of a potentially
+		// rewound txhashset extension to reflect chain state prior
+		// to applying the new block.
+		verify_coinbase_maturity(&b, ext, batch)?;
 
-			// Using block_sums (utxo_sum, kernel_sum) for the previous block from the db
-			// we can verify_kernel_sums across the full UTXO sum and full kernel sum
-			// accounting for inputs/outputs/kernels in this new block.
-			// We know there are no double-spends etc. if this verifies successfully.
-			verify_block_sums(b, batch)?;
+		// Validate the block against the UTXO set.
+		validate_utxo(&b, ext, batch)?;
 
-			// Apply the block to the txhashset state.
-			// Validate the txhashset roots and sizes against the block header.
-			// Block is invalid if there are any discrepencies.
-			apply_block_to_txhashset(b, ext, batch)?;
+		// Using block_sums (utxo_sum, kernel_sum) for the previous block from the db
+		// we can verify_kernel_sums across the full UTXO sum and full kernel sum
+		// accounting for inputs/outputs/kernels in this new block.
+		// We know there are no double-spends etc. if this verifies successfully.
+		verify_block_sums(&b, batch)?;
 
-			// If applying this block does not increase the work on the chain then
-			// we know we have not yet updated the chain to produce a new chain head.
-			// We discard the "child" batch used in this extension (original ctx batch still active).
-			// We discard any MMR modifications applied in this extension.
-			let head = batch.head()?;
-			if !has_more_work(&b.header, &head) {
-				ext.extension.force_rollback();
-			}
+		// Apply the block to the txhashset state.
+		// Validate the txhashset roots and sizes against the block header.
+		// Block is invalid if there are any discrepencies.
+		apply_block_to_txhashset(&b, ext, batch)?;
 
-			Ok((fork_point, block_with_input_features))
-		})?;
+		// If applying this block does not increase the work on the chain then
+		// we know we have not yet updated the chain to produce a new chain head.
+		// We discard the "child" batch used in this extension (original ctx batch still active).
+		// We discard any MMR modifications applied in this extension.
+		let head = batch.head()?;
+		if !has_more_work(&b.header, &head) {
+			ext.extension.force_rollback();
+		}
+
+		Ok((fork_point, b))
+	})?;
 
 	// Add the converted (and validated) block to the db.
 	// Note we do this in the outer batch, not the child batch from the extension
 	// as we only commit the child batch if the extension increases total work.
 	// We want to save the block to the db regardless.
 	// Note: We want to save the "converted" block to the db (with input features) for reference later.
-	validate_block(&block_with_input_features, ctx)?;
-	add_block(&block_with_input_features, &ctx.batch)?;
+	validate_block(&b, ctx)?;
+	add_block(&b, &ctx.batch)?;
 
 	// If we have no "tail" then set it now.
 	if ctx.batch.tail().is_err() {
@@ -439,10 +443,22 @@ fn validate_header(header: &BlockHeader, ctx: &mut BlockContext<'_>) -> Result<(
 }
 
 fn validate_block(block: &Block, ctx: &mut BlockContext<'_>) -> Result<(), Error> {
+	debug!(
+		"validate_block: {} at {} ({})",
+		block.header.hash(),
+		block.header.height,
+		block.inputs().version_str(),
+	);
+
 	let prev = ctx.batch.get_previous_header(&block.header)?;
 	block
 		.validate(&prev.total_kernel_offset, ctx.verifier_cache.clone())
 		.map_err(ErrorKind::InvalidBlockProof)?;
+	Ok(())
+}
+
+fn verify_cut_through(block: &Block) -> Result<(), Error> {
+	block.verify_cut_through()?;
 	Ok(())
 }
 
@@ -454,9 +470,10 @@ fn verify_coinbase_maturity(
 ) -> Result<(), Error> {
 	let extension = &ext.extension;
 	let header_extension = &ext.header_extension;
+	let inputs: Vec<Commitment> = block.inputs().into();
 	extension
 		.utxo_view(header_extension)
-		.verify_coinbase_maturity(block.inputs(), block.header.height, batch)
+		.verify_coinbase_maturity(&inputs, block.header.height, batch)
 }
 
 /// Verify kernel sums across the full utxo and kernel sets based on block_sums
@@ -503,8 +520,8 @@ fn apply_block_to_txhashset(
 
 /// Officially adds the block to our chain (possibly on a losing fork).
 /// Header must be added separately (assume this has been done previously).
-fn add_block(block_with_input_features: &Block, batch: &store::Batch<'_>) -> Result<(), Error> {
-	batch.save_block(block_with_input_features)?;
+fn add_block(block: &Block, batch: &store::Batch<'_>) -> Result<(), Error> {
+	batch.save_block(block)?;
 	Ok(())
 }
 

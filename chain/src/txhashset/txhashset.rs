@@ -21,7 +21,7 @@ use crate::core::core::hash::{Hash, Hashed};
 use crate::core::core::merkle_proof::MerkleProof;
 use crate::core::core::pmmr::{self, Backend, ReadonlyPMMR, RewindablePMMR, PMMR};
 use crate::core::core::{
-	Block, BlockHeader, Input, KernelFeatures, Output, OutputIdentifier, TxKernel,
+	Block, BlockHeader, Inputs, KernelFeatures, Output, OutputIdentifier, TxKernel,
 };
 use crate::core::global;
 use crate::core::ser::{PMMRable, ProtocolVersion};
@@ -258,8 +258,7 @@ impl TxHashSet {
 	/// We look in the index to find the output MMR pos.
 	/// Then we check the entry in the output MMR and confirm the hash matches.
 	pub fn get_unspent(&self, output_id: &OutputIdentifier) -> Result<Option<CommitPos>, Error> {
-		let commit = output_id.commit;
-		match self.commit_index.get_output_pos_height(&commit) {
+		match self.commit_index.get_output_pos_height(&output_id.commit) {
 			Ok(Some((pos, height))) => {
 				let output_pmmr: ReadonlyPMMR<'_, Output, _> =
 					ReadonlyPMMR::at(&self.output_pmmr_h.backend, self.output_pmmr_h.last_pos);
@@ -269,6 +268,26 @@ impl TxHashSet {
 					} else {
 						Ok(None)
 					}
+				} else {
+					Ok(None)
+				}
+			}
+			Ok(None) => Ok(None),
+			Err(e) => Err(ErrorKind::StoreErr(e, "txhashset unspent check".to_string()).into()),
+		}
+	}
+
+	/// Get an unspent output (and associated MMR pos) by commitment.
+	pub fn get_unspent_by_commitment(
+		&self,
+		commitment: Commitment,
+	) -> Result<Option<(OutputIdentifier, CommitPos)>, Error> {
+		match self.commit_index.get_output_pos_height(&commitment) {
+			Ok(Some((pos, height))) => {
+				let output_pmmr: ReadonlyPMMR<'_, Output, _> =
+					ReadonlyPMMR::at(&self.output_pmmr_h.backend, self.output_pmmr_h.last_pos);
+				if let Some(out) = output_pmmr.get_data(pos) {
+					Ok(Some((out, CommitPos { pos, height })))
 				} else {
 					Ok(None)
 				}
@@ -1050,14 +1069,42 @@ impl<'a> Extension<'a> {
 		// Remove the output from the output and rangeproof MMRs.
 		// Add spent_pos to affected_pos to update the accumulator later on.
 		// Remove the spent output from the output_pos index.
-		let mut spent = vec![];
-		for input in b.inputs() {
-			let pos = self.apply_input(input, batch)?;
-			affected_pos.push(pos.pos);
-			batch.delete_output_pos_height(&input.commitment())?;
-			spent.push(pos);
+		let spent: Result<Vec<(OutputIdentifier, CommitPos)>, Error> = match b.inputs() {
+			Inputs::CommitOnly(inputs) => inputs
+				.into_iter()
+				.map(|input| {
+					let (out, pos) = self.apply_input(input, batch)?;
+					if input != out.commitment() {
+						Err(ErrorKind::TxHashSetErr("output pmmr mismatch".into()).into())
+					} else {
+						Ok((out, pos))
+					}
+				})
+				.collect(),
+			Inputs::FeaturesAndCommit(inputs) => inputs
+				.into_iter()
+				.map(|input| {
+					let (out, pos) = self.apply_input(input.commitment(), batch)?;
+					if input != out {
+						Err(ErrorKind::TxHashSetErr("output pmmr mismatch".into()).into())
+					} else {
+						Ok((out, pos))
+					}
+				})
+				.collect(),
+		};
+
+		let (spent_outputs, spent_pos): (Vec<_>, Vec<_>) = spent?.into_iter().unzip();
+
+		batch.save_spent_index(&b.hash(), &spent_pos)?;
+
+		for out in spent_outputs {
+			batch.delete_output_pos_height(&out.commitment())?;
 		}
-		batch.save_spent_index(&b.hash(), &spent)?;
+
+		for pos in spent_pos {
+			affected_pos.push(pos.pos);
+		}
 
 		// Apply the kernels to the kernel MMR.
 		// Note: This validates and NRD relative height locks via the "recent" kernel index.
@@ -1088,15 +1135,16 @@ impl<'a> Extension<'a> {
 		)
 	}
 
-	fn apply_input(&mut self, input: &Input, batch: &Batch<'_>) -> Result<CommitPos, Error> {
-		let commit = input.commitment();
-		if let Some((pos, height)) = batch.get_output_pos_height(&commit)? {
-			// First check this input corresponds to an existing entry in the output MMR.
-			if let Some(out) = self.output_pmmr.get_data(pos) {
-				if !input.matches_output(out) {
-					return Err(ErrorKind::TxHashSetErr("output pmmr mismatch".to_string()).into());
-				}
-			}
+	fn apply_input(
+		&mut self,
+		input: Commitment,
+		batch: &Batch<'_>,
+	) -> Result<(OutputIdentifier, CommitPos), Error> {
+		if let Some((pos, height)) = batch.get_output_pos_height(&input)? {
+			let output = self
+				.output_pmmr
+				.get_data(pos)
+				.ok_or(ErrorKind::NotUnspent(input))?;
 
 			// Now prune the output_pmmr, rproof_pmmr and their storage.
 			// Input is not valid if we cannot prune successfully (to spend an unspent
@@ -1106,13 +1154,13 @@ impl<'a> Extension<'a> {
 					self.rproof_pmmr
 						.prune(pos)
 						.map_err(ErrorKind::TxHashSetErr)?;
-					Ok(CommitPos { pos, height })
+					Ok((output, CommitPos { pos, height }))
 				}
-				Ok(false) => Err(ErrorKind::AlreadySpent(commit).into()),
+				Ok(false) => Err(ErrorKind::NotUnspent(input).into()),
 				Err(e) => Err(ErrorKind::TxHashSetErr(e).into()),
 			}
 		} else {
-			Err(ErrorKind::AlreadySpent(commit).into())
+			Err(ErrorKind::NotUnspent(input).into())
 		}
 	}
 
@@ -1330,8 +1378,9 @@ impl<'a> Extension<'a> {
 		// reused output commitment. For example an output at pos 1, spent, reused at pos 2.
 		// The output_pos index should be updated to reflect the old pos 1 when unspent.
 		if let Ok(spent) = spent {
-			for (x, y) in block.inputs().iter().zip(spent) {
-				batch.save_output_pos_height(&x.commitment(), y.pos, y.height)?;
+			let inputs: Vec<_> = block.inputs().into();
+			for (x, y) in inputs.iter().zip(spent) {
+				batch.save_output_pos_height(x, y.pos, y.height)?;
 			}
 		}
 

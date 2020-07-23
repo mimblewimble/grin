@@ -317,26 +317,32 @@ impl Peer {
 	/// dropped if the remote peer is known to already have the transaction.
 	/// We support broadcast of lightweight tx kernel hash
 	/// so track known txs by kernel hash.
-	pub fn send_transaction(&self, tx: &core::Transaction) -> Result<bool, Error> {
-		let kernel = &tx.kernels()[0];
-
+	pub fn send_transaction(&self, kernel_hash: Hash) -> Result<bool, Error> {
 		if self
 			.info
 			.capabilities
 			.contains(Capabilities::TX_KERNEL_HASH)
 		{
-			return self.send_tx_kernel_hash(kernel.hash());
+			return self.send_tx_kernel_hash(kernel_hash);
 		}
 
-		if !self.tracking_adapter.has_recv(kernel.hash()) {
-			debug!("Send full tx {} to {}", tx.hash(), self.info.addr);
-			self.send(tx, msg::Type::Transaction)?;
-			Ok(true)
+		// Fallback to sending full transaction.
+		if !self.tracking_adapter.has_recv(kernel_hash) {
+			if let Some(tx) = self.tracking_adapter.get_transaction(kernel_hash) {
+				debug!("Send full tx {} to {}", kernel_hash, self.info.addr);
+				self.send(tx, msg::Type::Transaction)?;
+				Ok(true)
+			} else {
+				debug!(
+					"Not sending tx {} to {} (cannot find it...)",
+					kernel_hash, self.info.addr
+				);
+				Ok(false)
+			}
 		} else {
 			debug!(
 				"Not sending tx {} to {} (already seen)",
-				tx.hash(),
-				self.info.addr
+				kernel_hash, self.info.addr
 			);
 			Ok(false)
 		}
@@ -345,9 +351,17 @@ impl Peer {
 	/// Sends the provided stem transaction to the remote peer.
 	/// Note: tracking adapter is ignored for stem transactions (while under
 	/// embargo).
-	pub fn send_stem_transaction(&self, tx: &core::Transaction) -> Result<(), Error> {
-		debug!("Send (stem) tx {} to {}", tx.hash(), self.info.addr);
-		self.send(tx, msg::Type::StemTransaction)
+	pub fn send_stem_transaction(&self, kernel_hash: Hash) -> Result<(), Error> {
+		if let Some(tx) = self.tracking_adapter.get_stem_transaction(kernel_hash) {
+			debug!("Send (stem) tx {} to {}", kernel_hash, self.info.addr);
+			self.send(tx, msg::Type::StemTransaction)
+		} else {
+			debug!(
+				"Not sending (stem) tx {} to {} (cannot find it...)",
+				kernel_hash, self.info.addr
+			);
+			Err(Error::Other("Cannot find tx to send".into()))
+		}
 	}
 
 	/// Sends a request for block headers from the provided block locator
@@ -467,6 +481,10 @@ impl ChainAdapter for TrackingAdapter {
 
 	fn get_transaction(&self, kernel_hash: Hash) -> Option<core::Transaction> {
 		self.adapter.get_transaction(kernel_hash)
+	}
+
+	fn get_stem_transaction(&self, kernel_hash: Hash) -> Option<core::Transaction> {
+		self.adapter.get_stem_transaction(kernel_hash)
 	}
 
 	fn tx_kernel_received(

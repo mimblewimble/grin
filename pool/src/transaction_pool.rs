@@ -20,7 +20,9 @@
 use self::core::core::hash::{Hash, Hashed};
 use self::core::core::id::ShortId;
 use self::core::core::verifier_cache::VerifierCache;
-use self::core::core::{transaction, Block, BlockHeader, HeaderVersion, Transaction, Weighting};
+use self::core::core::{
+	transaction, Block, BlockHeader, HeaderVersion, Inputs, Transaction, Weighting,
+};
 use self::core::global;
 use self::util::RwLock;
 use crate::pool::Pool;
@@ -160,6 +162,10 @@ where
 		stem: bool,
 		header: &BlockHeader,
 	) -> Result<(), PoolError> {
+		// TODO - Is this the right place to do this?
+		// Transactions handled internally in consistent v3 format.
+		let tx = tx.convert_to_v3();
+
 		// Quick check for duplicate txs.
 		// Our stempool is private and we do not want to reveal anything about the txs contained.
 		// If this is a stem tx and is already present in stempool then fluff by adding to txpool.
@@ -273,9 +279,30 @@ where
 		Ok(())
 	}
 
+	/// Check txpool for existence of tx by kernel hash.
+	pub fn tx_by_kernel_hash_exists(&self, hash: Hash) -> bool {
+		self.txpool.tx_by_kernel_hash_exists(hash)
+	}
+
 	/// Retrieve individual transaction for the given kernel hash.
-	pub fn retrieve_tx_by_kernel_hash(&self, hash: Hash) -> Option<Transaction> {
-		self.txpool.retrieve_tx_by_kernel_hash(hash)
+	pub fn retrieve_tx_by_kernel_hash(&self, hash: Hash) -> Result<Option<Transaction>, PoolError> {
+		self.txpool
+			.retrieve_tx_by_kernel_hash(hash)
+			.map(|tx| self.txpool.convert_tx_to_v2(tx, None))
+			.transpose()
+	}
+
+	pub fn retrieve_stem_tx_by_kernel_hash(
+		&self,
+		hash: Hash,
+	) -> Result<Option<Transaction>, PoolError> {
+		self.stempool
+			.retrieve_tx_by_kernel_hash(hash)
+			.map(|tx| {
+				let txpool_tx = self.txpool.all_transactions_aggregate()?;
+				self.stempool.convert_tx_to_v2(tx, txpool_tx)
+			})
+			.transpose()
 	}
 
 	/// Retrieve all transactions matching the provided "compact block"

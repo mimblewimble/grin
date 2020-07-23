@@ -28,6 +28,7 @@ use keychain::{self, BlindingFactor};
 use std::cmp::Ordering;
 use std::cmp::{max, min};
 use std::convert::{TryFrom, TryInto};
+use std::default::Default;
 use std::sync::Arc;
 use std::{collections::HashSet, error, fmt};
 use util::secp;
@@ -676,38 +677,25 @@ impl Default for Inputs {
 }
 
 impl Inputs {
-	fn len(&self) -> usize {
+	/// Inputs length.
+	pub fn len(&self) -> usize {
 		match self {
 			Inputs::CommitOnly(inputs) => inputs.len(),
 			Inputs::FeaturesAndCommit(inputs) => inputs.len(),
 		}
 	}
 
-	// fn iter(&self) -> Iter<'_, Input> {
-	// 	self.0.iter()
-	// }
-
 	fn sort_unstable(&mut self) {
 		match self {
-			Inputs::CommitOnly(inputs) => inputs.sort_unstable(),
-			Inputs::FeaturesAndCommit(inputs) => inputs.sort_unstable(),
+			Inputs::CommitOnly(inputs) => {
+				inputs.sort_unstable();
+			}
+			Inputs::FeaturesAndCommit(inputs) => {
+				inputs.sort_unstable();
+			}
 		}
 	}
 
-	// fn as_slice(&self) -> &[Input] {
-	// 	self.0.as_slice()
-	// }
-
-	fn as_commit_only(&self) -> Inputs {
-		panic!("implement me!");
-
-		// iterate over inputs
-		// convert them to CommitOnly
-		// then sort them
-	}
-
-	// Adds an input if it does not already exist.
-	// Sort order is maintained.
 	fn add_input(&mut self, input: OutputIdentifier) {
 		match self {
 			Inputs::CommitOnly(inputs) => {
@@ -723,41 +711,79 @@ impl Inputs {
 		}
 	}
 
-	/// Find the set of unique enum variants/discriminants, ignoring the data itself.
-	// fn variants(&self) -> HashSet<Discriminant<Input>> {
-	// 	self.0.iter().map(|x| discriminant(x)).collect()
-	// }
-
-	/// Multiple input variants is invalid.
-	// fn verify_variants(&self) -> Result<(), Error> {
-	// 	if self.variants().len() > 1 {
-	// 		return Err(Error::InvalidInputVariant);
-	// 	}
-	// 	Ok(())
-	// }
-
-	fn verify_sorted_and_unique(&self) -> Result<(), Error> {
+	fn verify_sorted_and_unique(&self) -> Result<(), ser::Error> {
 		match self {
 			Inputs::CommitOnly(inputs) => inputs.verify_sorted_and_unique(),
 			Inputs::FeaturesAndCommit(inputs) => inputs.verify_sorted_and_unique(),
-		};
+		}
+	}
+
+	// We can verify cut-through by taking all the inputs and outputs, sorting them in a single vec
+	// and checking we have no duplicate entries (every entry must be unique).
+	fn verify_cut_through(&self, outputs: &[Output]) -> Result<(), Error> {
+		match self {
+			Inputs::CommitOnly(inputs) => {
+				let mut inputs = inputs.clone();
+				inputs.extend(outputs.iter().map(|x| x.commitment()));
+				inputs.sort();
+				inputs.verify_sorted_and_unique()?;
+			}
+			Inputs::FeaturesAndCommit(inputs) => {
+				let mut inputs = inputs.clone();
+				inputs.extend(outputs.iter().map(|x| OutputIdentifier::from(x)));
+				inputs.sort();
+				inputs.verify_sorted_and_unique()?;
+			}
+		}
 		Ok(())
+	}
+
+	/// Convenience for debug/logging.
+	/// Caution: Do not rely on this for anything.
+	pub fn version_str(&self) -> &str {
+		match self {
+			Inputs::CommitOnly(_) => "v2",
+			Inputs::FeaturesAndCommit(_) => "v3",
+		}
+	}
+}
+
+impl From<&Inputs> for Vec<Commitment> {
+	fn from(inputs: &Inputs) -> Self {
+		match inputs {
+			Inputs::CommitOnly(inputs) => inputs.clone(),
+			Inputs::FeaturesAndCommit(inputs) => {
+				let mut inputs: Vec<_> = inputs.iter().map(|x| x.commitment()).collect();
+				inputs.sort_unstable();
+				inputs
+			}
+		}
+	}
+}
+
+impl From<Inputs> for Vec<Commitment> {
+	fn from(inputs: Inputs) -> Self {
+		match inputs {
+			Inputs::CommitOnly(inputs) => inputs,
+			Inputs::FeaturesAndCommit(inputs) => {
+				let mut inputs: Vec<_> = inputs.iter().map(|x| x.commitment()).collect();
+				inputs.sort_unstable();
+				inputs
+			}
+		}
 	}
 }
 
 /// If v2 format then write the inputs out.
-/// If v3 format then convert our inputs to CommitOnly (resorting them in the process) and write them out.
+/// If v3 format then write the commitments out (ensure sorted correctly during conversion).
 impl Writeable for Inputs {
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
-		match self {
-			Inputs::CommitOnly(inputs) => match writer.protocol_version().value() {
-				0..=2 => return Err(ser::Error::ProtocolVersionError),
-				3..=ProtocolVersion::MAX => inputs.write(writer)?,
+		match writer.protocol_version().value() {
+			0..=2 => match self {
+				Inputs::CommitOnly(inputs) => return Err(ser::Error::ProtocolVersionError),
+				Inputs::FeaturesAndCommit(inputs) => inputs.write(writer)?,
 			},
-			Inputs::FeaturesAndCommit(inputs) => match writer.protocol_version().value() {
-				0..=2 => inputs.write(writer)?,
-				3..=ProtocolVersion::MAX => self.as_commit_only().write(writer)?,
-			},
+			3..=ProtocolVersion::MAX => <Vec<Commitment>>::from(self).write(writer)?,
 		}
 		Ok(())
 	}
@@ -806,9 +832,18 @@ impl Readable for TransactionBody {
 			return Err(ser::Error::TooLargeReadErr);
 		}
 
-		// let inputs = read_multi(reader, input_len)?;
-		panic!("read vec of stuff and convert to inputs");
-		let inputs = Inputs::default();
+		// v2: inputs are represented as vec of output_identifiers
+		// v3: inputs are represented as vec of commitments
+		let inputs = match reader.protocol_version().value() {
+			0..=2 => {
+				let inputs: Vec<OutputIdentifier> = read_multi(reader, input_len)?;
+				inputs.into()
+			}
+			3..=ProtocolVersion::MAX => {
+				let inputs: Vec<Commitment> = read_multi(reader, input_len)?;
+				inputs.into()
+			}
+		};
 
 		let outputs = read_multi(reader, output_len)?;
 		let kernels = read_multi(reader, kernel_len)?;
@@ -823,8 +858,8 @@ impl Readable for TransactionBody {
 
 impl Committed for TransactionBody {
 	fn inputs_committed(&self) -> Vec<Commitment> {
-		match self.inputs {
-			Inputs::CommitOnly(inputs) => inputs,
+		match &self.inputs {
+			Inputs::CommitOnly(inputs) => inputs.clone(),
 			Inputs::FeaturesAndCommit(inputs) => inputs.iter().map(|x| x.commitment()).collect(),
 		}
 	}
@@ -854,7 +889,7 @@ impl TransactionBody {
 	/// Creates a new empty transaction (no inputs or outputs, zero fee).
 	pub fn empty() -> TransactionBody {
 		TransactionBody {
-			inputs: Inputs::default(),
+			inputs: Default::default(),
 			outputs: vec![],
 			kernels: vec![],
 		}
@@ -869,13 +904,8 @@ impl TransactionBody {
 
 	/// Transaction inputs.
 	pub fn inputs(&self) -> Inputs {
-		self.inputs
+		self.inputs.clone()
 	}
-
-	// /// Transaction inputs as CommitOnly input variants, sorted appropriately.
-	// pub fn inputs_commit_only(&self) -> Vec<Input> {
-	// 	self.inputs.as_commit_only()
-	// }
 
 	/// Transaction outputs.
 	pub fn outputs(&self) -> &[Output] {
@@ -917,7 +947,7 @@ impl TransactionBody {
 	/// Consumes self and returns the updated transaction body.
 	/// Existing inputs, if any, are kept intact.
 	/// Sort order of inputs is maintained.
-	pub fn with_inputs(mut self, input: OutputIdentifier) -> TransactionBody {
+	pub fn with_input(mut self, input: OutputIdentifier) -> TransactionBody {
 		self.inputs.add_input(input);
 		self
 	}
@@ -1086,22 +1116,9 @@ impl TransactionBody {
 		Ok(())
 	}
 
-	// **********
-	// TODO - We want to defer this until after we convert to V2 compatibility.
-	// And leverage matches_output_strict() for V2 compatibility?
-	// TODO - Or revert this "cleanup" and use hash() as before.
-	// **********
-	// Verify that no input is spending an output from the same block.
-	fn verify_cut_through(&self) -> Result<(), Error> {
-		panic!("implement me!");
-
-		// let input_commits: HashSet<_> = self.inputs.iter().map(|x| x.commitment()).collect();
-		// let output_commits: HashSet<_> = self.outputs.iter().map(|x| x.commitment()).collect();
-		// if input_commits.is_disjoint(&output_commits) {
-		// 	Ok(())
-		// } else {
-		// 	Err(Error::CutThrough)
-		// }
+	/// Verify all inputs and outputs are unique and that no input spends an output from the same block.
+	pub fn verify_cut_through(&self) -> Result<(), Error> {
+		self.inputs.verify_cut_through(self.outputs())
 	}
 
 	/// Verify we have no invalid outputs or kernels in the transaction
@@ -1137,7 +1154,6 @@ impl TransactionBody {
 		self.verify_weight(weighting)?;
 		self.verify_no_nrd_duplicates()?;
 		self.verify_sorted()?;
-		self.verify_cut_through()?;
 		Ok(())
 	}
 
@@ -1279,6 +1295,32 @@ impl Transaction {
 		Transaction { offset, body }
 	}
 
+	/// Find the transaction output matching the provided commitment.
+	pub fn get_output(&self, commitment: &Commitment) -> Option<Output> {
+		self.outputs()
+			.into_iter()
+			.find(|x| &x.commitment() == commitment)
+			.cloned()
+	}
+
+	/// Convert a v2 transaction into a v3 transaction.
+	pub fn convert_to_v3(self) -> Transaction {
+		debug!(
+			"convert_to_v3: {} ({})",
+			self.hash(),
+			self.inputs().version_str(),
+		);
+
+		let inputs: Vec<Commitment> = self.inputs().into();
+		Transaction {
+			body: TransactionBody {
+				inputs: inputs.into(),
+				..self.body
+			},
+			..self
+		}
+	}
+
 	/// Creates a new transaction using this transaction as a template
 	/// and with the specified offset.
 	pub fn with_offset(self, offset: BlindingFactor) -> Transaction {
@@ -1291,6 +1333,14 @@ impl Transaction {
 	pub fn with_input(self, input: OutputIdentifier) -> Transaction {
 		Transaction {
 			body: self.body.with_input(input),
+			..self
+		}
+	}
+
+	/// Builds a new transaction replacing any inputs with those provided.
+	pub fn replace_inputs(self, inputs: Inputs) -> Transaction {
+		Transaction {
+			body: self.body.replace_inputs(inputs),
 			..self
 		}
 	}
@@ -1325,7 +1375,7 @@ impl Transaction {
 
 	/// Get inputs
 	pub fn inputs(&self) -> Inputs {
-		self.body.inputs
+		self.body.inputs.clone()
 	}
 
 	/// Get outputs
@@ -1373,6 +1423,7 @@ impl Transaction {
 		verifier: Arc<RwLock<dyn VerifierCache>>,
 	) -> Result<(), Error> {
 		self.body.verify_features()?;
+		self.body.verify_cut_through()?;
 		self.body.validate(weighting, verifier)?;
 		self.verify_kernel_sums(self.overage(), self.offset.clone())?;
 		Ok(())
@@ -1407,7 +1458,7 @@ impl Transaction {
 pub fn cut_through<'a>(
 	inputs: &'a mut [Commitment],
 	outputs: &'a mut [Output],
-) -> Result<(&'a [Input], &'a [Output]), Error> {
+) -> Result<(&'a [Commitment], &'a [Output]), Error> {
 	// assemble output commitments set, checking they're all unique
 	outputs.sort_unstable();
 	if outputs.windows(2).any(|pair| pair[0] == pair[1]) {
@@ -1470,7 +1521,7 @@ pub fn aggregate(txs: &[Transaction]) -> Result<Transaction, Error> {
 		n_kernels += tx.kernels().len();
 	}
 
-	let mut inputs: Inputs::default();
+	let mut inputs: Vec<Commitment> = Vec::with_capacity(n_inputs);
 	let mut outputs: Vec<Output> = Vec::with_capacity(n_outputs);
 	let mut kernels: Vec<TxKernel> = Vec::with_capacity(n_kernels);
 
@@ -1502,7 +1553,7 @@ pub fn aggregate(txs: &[Transaction]) -> Result<Transaction, Error> {
 	//   * cut-through outputs
 	//   * full set of tx kernels
 	//   * sum of all kernel offsets
-	let tx = Transaction::new(inputs, outputs, &kernels).with_offset(total_kernel_offset);
+	let tx = Transaction::new(inputs.into(), outputs, kernels).with_offset(total_kernel_offset);
 
 	Ok(tx)
 }
@@ -1510,7 +1561,7 @@ pub fn aggregate(txs: &[Transaction]) -> Result<Transaction, Error> {
 /// Attempt to deaggregate a multi-kernel transaction based on multiple
 /// transactions
 pub fn deaggregate(mk_tx: Transaction, txs: &[Transaction]) -> Result<Transaction, Error> {
-	let mut inputs: Vec<Input> = vec![];
+	let mut inputs: Vec<Commitment> = vec![];
 	let mut outputs: Vec<Output> = vec![];
 	let mut kernels: Vec<TxKernel> = vec![];
 
@@ -1519,9 +1570,10 @@ pub fn deaggregate(mk_tx: Transaction, txs: &[Transaction]) -> Result<Transactio
 	let mut kernel_offsets = vec![];
 
 	let tx = aggregate(txs)?;
-
-	for mk_input in mk_tx.inputs() {
-		if !tx.inputs().contains(&mk_input) && !inputs.contains(mk_input) {
+	let tx_inputs: Vec<_> = tx.inputs().into();
+	let mk_inputs: Vec<_> = mk_tx.inputs().into();
+	for mk_input in &mk_inputs {
+		if !tx_inputs.contains(mk_input) && !inputs.contains(&mk_input) {
 			inputs.push(*mk_input);
 		}
 	}
@@ -1567,7 +1619,7 @@ pub fn deaggregate(mk_tx: Transaction, txs: &[Transaction]) -> Result<Transactio
 	kernels.sort_unstable();
 
 	// Build a new tx from the above data.
-	let tx = Transaction::new(&inputs, &outputs, &kernels).with_offset(total_kernel_offset);
+	let tx = Transaction::new(inputs.into(), outputs, kernels).with_offset(total_kernel_offset);
 	Ok(tx)
 }
 // #[derive(Serialize, Deserialize, Debug, Clone, Copy)]
@@ -1814,14 +1866,6 @@ impl Output {
 	pub fn commitment(&self) -> Commitment {
 		self.commit
 	}
-
-	// /// Convenient way to build a FeaturesAndCommit input variant from an output.
-	// pub fn input_features_and_commit(&self) -> Input {
-	// 	Input::FeaturesAndCommit {
-	// 		features: self.features,
-	// 		commit: self.commit,
-	// 	}
-	// }
 
 	/// Is this a coinbase kernel?
 	pub fn is_coinbase(&self) -> bool {

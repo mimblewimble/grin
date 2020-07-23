@@ -341,12 +341,11 @@ impl Peers {
 	/// Broadcasts the provided transaction to all our connected peers.
 	/// A peer implementation may drop the broadcast request
 	/// if it knows the remote peer already has the transaction.
-	pub fn broadcast_transaction(&self, tx: &core::Transaction) {
-		let count = self.broadcast("transaction", |p| p.send_transaction(tx));
+	pub fn broadcast_transaction(&self, kernel_hash: Hash) {
+		let count = self.broadcast("transaction", |p| p.send_transaction(kernel_hash));
 		debug!(
 			"broadcast_transaction: {} to {} peers, done.",
-			tx.hash(),
-			count,
+			kernel_hash, count,
 		);
 	}
 
@@ -429,7 +428,7 @@ impl Peers {
 				}
 			};
 			for peer in peers.values() {
-				if peer.is_banned() {
+				if Peer::is_banned(peer) {
 					debug!("clean_peers {:?}, peer banned", peer.info.addr);
 					rm.push(peer.info.addr.clone());
 				} else if !peer.is_connected() {
@@ -554,6 +553,10 @@ impl ChainAdapter for Peers {
 
 	fn get_transaction(&self, kernel_hash: Hash) -> Option<core::Transaction> {
 		self.adapter.get_transaction(kernel_hash)
+	}
+
+	fn get_stem_transaction(&self, kernel_hash: Hash) -> Option<core::Transaction> {
+		self.adapter.get_stem_transaction(kernel_hash)
 	}
 
 	fn tx_kernel_received(
