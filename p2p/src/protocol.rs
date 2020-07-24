@@ -114,7 +114,10 @@ impl MessageHandler for Protocol {
 					h, msg.header.msg_len,
 				);
 				let tx = adapter.get_transaction(h);
+
 				if let Some(tx) = tx {
+					debug!("tx found: {} ({})", h, tx.inputs().version_str());
+
 					Ok(Some(Msg::new(
 						Type::Transaction,
 						tx,
