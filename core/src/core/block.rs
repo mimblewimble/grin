@@ -20,8 +20,8 @@ use crate::core::compact_block::{CompactBlock, CompactBlockBody};
 use crate::core::hash::{DefaultHashable, Hash, Hashed, ZERO_HASH};
 use crate::core::verifier_cache::VerifierCache;
 use crate::core::{
-	transaction, Commitment, Inputs, KernelFeatures, Output, OutputIdentifier, Transaction,
-	TransactionBody, TxKernel, Weighting,
+	transaction, Commitment, Inputs, KernelFeatures, Output, Transaction, TransactionBody,
+	TxKernel, Weighting,
 };
 use crate::global;
 use crate::pow::{verify_size, Difficulty, Proof, ProofOfWork};

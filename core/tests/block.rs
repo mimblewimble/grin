@@ -21,6 +21,7 @@ use crate::core::core::id::ShortIdentifiable;
 use crate::core::core::transaction::{self, KernelFeatures, NRDRelativeHeight, Transaction};
 use crate::core::core::verifier_cache::{LruVerifierCache, VerifierCache};
 use crate::core::core::CompactBlock;
+use crate::core::core::{OutputFeatures, OutputIdentifier};
 use crate::core::libtx::build::{self, input, output};
 use crate::core::libtx::ProofBuilder;
 use crate::core::{global, ser};
@@ -456,7 +457,7 @@ fn empty_block_serialized_size() {
 }
 
 #[test]
-fn block_single_tx_serialized_size() {
+fn block_single_tx_serialized_size_default() {
 	test_setup();
 	let keychain = ExtKeychain::from_random_seed(false).unwrap();
 	let builder = ProofBuilder::new(&keychain);
@@ -466,6 +467,50 @@ fn block_single_tx_serialized_size() {
 	let b = new_block(&[tx1], &keychain, &builder, &prev, &key_id);
 	let mut vec = Vec::new();
 	ser::serialize_default(&mut vec, &b).expect("serialization failed");
+	assert_eq!(vec.len(), 2_669);
+}
+
+#[test]
+fn block_single_tx_serialized_size_v3() {
+	test_setup();
+	let keychain = ExtKeychain::from_random_seed(false).unwrap();
+	let builder = ProofBuilder::new(&keychain);
+	let tx1 = tx1i2o();
+	let prev = BlockHeader::default();
+	let key_id = ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
+	let b = new_block(vec![&tx1], &keychain, &builder, &prev, &key_id);
+	let mut vec = Vec::new();
+	ser::serialize(&mut vec, ser::ProtocolVersion(3), &b).expect("serialization failed");
+	assert_eq!(vec.len(), 2_669);
+}
+
+#[test]
+fn block_single_tx_serialized_size_v2() {
+	test_setup();
+	let keychain = ExtKeychain::from_random_seed(false).unwrap();
+	let builder = ProofBuilder::new(&keychain);
+	let tx1 = tx1i2o();
+	let prev = BlockHeader::default();
+	let key_id = ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
+	let b = new_block(vec![&tx1], &keychain, &builder, &prev, &key_id);
+
+	// We need to jump through some hoops here to convert the block to v2 "compatibility mode".
+	// Real block processing would look input features up in the utxo.
+	// We just use plain feautres here for testing.
+	let inputs: Vec<_> = b.inputs().into();
+	let inputs: Vec<_> = inputs
+		.into_iter()
+		.map(|x| OutputIdentifier {
+			features: OutputFeatures::Plain,
+			commit: x,
+		})
+		.collect();
+	let b = b.replace_inputs(inputs.into());
+
+	let mut vec = Vec::new();
+	ser::serialize(&mut vec, ser::ProtocolVersion(2), &b).expect("serialization failed");
+
+	// Note: additional byte for the features on the single input.
 	assert_eq!(vec.len(), 2_670);
 }
 
@@ -476,7 +521,7 @@ fn empty_compact_block_serialized_size() {
 	let builder = ProofBuilder::new(&keychain);
 	let prev = BlockHeader::default();
 	let key_id = ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
-	let b = new_block(&[], &keychain, &builder, &prev, &key_id);
+	let b = new_block(vec![], &keychain, &builder, &prev, &key_id);
 	let cb: CompactBlock = b.into();
 	let mut vec = Vec::new();
 	ser::serialize_default(&mut vec, &cb).expect("serialization failed");
@@ -489,26 +534,6 @@ fn compact_block_single_tx_serialized_size() {
 	let keychain = ExtKeychain::from_random_seed(false).unwrap();
 	let builder = ProofBuilder::new(&keychain);
 	let tx1 = tx1i2o();
-	let prev = BlockHeader::default();
-	let key_id = ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
-	let b = new_block(&[tx1], &keychain, &builder, &prev, &key_id);
-	let cb: CompactBlock = b.into();
-	let mut vec = Vec::new();
-	ser::serialize_default(&mut vec, &cb).expect("serialization failed");
-	assert_eq!(vec.len(), 1_110);
-}
-
-#[test]
-fn block_10_tx_serialized_size() {
-	test_setup();
-	let keychain = ExtKeychain::from_random_seed(false).unwrap();
-	let builder = ProofBuilder::new(&keychain);
-
-	let mut txs = vec![];
-	for _ in 0..10 {
-		let tx = tx1i2o();
-		txs.push(tx);
-	}
 	let prev = BlockHeader::default();
 	let key_id = ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
 	let b = new_block(&txs, &keychain, &builder, &prev, &key_id);
@@ -674,7 +699,7 @@ fn same_amount_outputs_copy_range_proof() {
 
 	// now we reconstruct the transaction, swapping the rangeproofs so they
 	// have the wrong privkey
-	let ins = tx.inputs();
+	let ins: Vec<_> = tx.inputs().into();
 	let mut outs = tx.outputs().to_vec();
 	let kernels = tx.kernels();
 	outs[0].proof = outs[1].proof;
@@ -682,7 +707,7 @@ fn same_amount_outputs_copy_range_proof() {
 	let key_id = keychain::ExtKeychain::derive_key_id(1, 4, 0, 0, 0);
 	let prev = BlockHeader::default();
 	let b = new_block(
-		&[Transaction::new(ins, &outs, kernels)],
+		vec![&mut Transaction::new(ins.into(), outs, kernels)],
 		&keychain,
 		&builder,
 		&prev,
@@ -727,7 +752,7 @@ fn wrong_amount_range_proof() {
 	.unwrap();
 
 	// we take the range proofs from tx2 into tx1 and rebuild the transaction
-	let ins = tx1.inputs();
+	let ins: Vec<_> = tx1.inputs().into();
 	let mut outs = tx1.outputs().to_vec();
 	let kernels = tx1.kernels();
 	outs[0].proof = tx2.outputs()[0].proof;
@@ -736,7 +761,7 @@ fn wrong_amount_range_proof() {
 	let key_id = keychain::ExtKeychain::derive_key_id(1, 4, 0, 0, 0);
 	let prev = BlockHeader::default();
 	let b = new_block(
-		&[Transaction::new(ins, &outs, kernels)],
+		vec![&mut Transaction::new(ins.into(), outs, kernels)],
 		&keychain,
 		&builder,
 		&prev,

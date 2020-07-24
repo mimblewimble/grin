@@ -21,7 +21,8 @@ use self::core::core::block::Error::KernelLockHeight;
 use self::core::core::hash::{Hashed, ZERO_HASH};
 use self::core::core::verifier_cache::{LruVerifierCache, VerifierCache};
 use self::core::core::{
-	aggregate, deaggregate, KernelFeatures, Output, Transaction, TxKernel, Weighting,
+	aggregate, deaggregate, KernelFeatures, Output, OutputFeatures, OutputIdentifier, Transaction,
+	TxKernel, Weighting,
 };
 use self::core::libtx::build::{self, initial_tx, input, output, with_excess};
 use self::core::libtx::{aggsig, ProofBuilder};
@@ -46,8 +47,21 @@ fn simple_tx_ser() {
 	{
 		let mut vec = Vec::new();
 		ser::serialize_default(&mut vec, &tx).expect("serialization failed");
-		assert_eq!(vec.len(), 947);
+		assert_eq!(vec.len(), 945);
 	}
+
+	// "Convert" our tx to v2 compatibility mode here.
+	// In reality we would look features up in txpool and utxo.
+	// We just use plain features here for testing.
+	let inputs: Vec<_> = tx.inputs().into();
+	let inputs: Vec<_> = inputs
+		.into_iter()
+		.map(|x| OutputIdentifier {
+			features: OutputFeatures::Plain,
+			commit: x,
+		})
+		.collect();
+	let tx = tx.replace_inputs(inputs.into());
 
 	// Explicit protocol version 1.
 	{

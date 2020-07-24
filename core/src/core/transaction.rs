@@ -671,9 +671,16 @@ impl Writeable for CommitWrapper {
 
 hashable_ord!(CommitWrapper);
 
+/// Inputs wrapping a collection of individual inputs.
+/// We support both v2 and v3 inputs for backward compatibility with v2 peers.
+/// Note: This is not just a serialization difference as the data differs and we cannot
+/// trivially convert between versions (specificall downgrading v3 -> v2).
+/// We must take care to convert these prior to relay/broadcast to v2 peers.
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 pub enum Inputs {
+	/// Inputs specifying commitment only (v3 blocks and transactions).
 	CommitOnly(Vec<CommitWrapper>),
+	/// Inputs specifying features and commitment (v2 blocks and transaction).
 	FeaturesAndCommit(Vec<OutputIdentifier>),
 }
 
@@ -978,6 +985,7 @@ impl TransactionBody {
 	/// Consumes self and returns the updated transaction body with inputs fully replaced.
 	pub fn replace_inputs(mut self, inputs: Inputs) -> TransactionBody {
 		self.inputs = inputs;
+		self.inputs.sort_unstable();
 		self
 	}
 
@@ -2077,19 +2085,32 @@ mod test {
 		assert!(commit == commit_2);
 	}
 
+	// Test short_id() against some hashable things.
 	#[test]
 	fn test_short_id() -> Result<(), Error> {
-		let block_hash =
+		let hash =
 			Hash::from_hex("3a42e66e46dd7633b57d1f921780a1ac715e6b93c19ee52ab714178eb3a9f673")?;
 
-		let short_id = vec![0, 0, 0, 1].short_id(&block_hash, 0);
-		assert_eq!(short_id, ShortId::from_hex("c4b05f2ba649").unwrap());
+		let short_id = vec![0, 0, 0, 1].short_id(&hash, 0);
+		assert_eq!(short_id, ShortId::from_hex("b1f0ba1bce57")?);
 
-		let short_id = vec![0, 0, 0, 1].short_id(&block_hash, 1);
-		assert_eq!(short_id, ShortId::from_hex("c4b05f2ba649").unwrap());
+		let short_id = vec![0, 0, 0, 1].short_id(&hash, 1);
+		assert_eq!(short_id, ShortId::from_hex("e1731a8d06cc")?);
 
-		let short_id = vec![0, 0, 0, 2].short_id(&block_hash, 0);
-		assert_eq!(short_id, ShortId::from_hex("3f0377c624e9").unwrap());
+		let short_id = vec![0, 0, 0, 2].short_id(&hash, 0);
+		assert_eq!(short_id, ShortId::from_hex("2d2580a98340")?);
+
+		let hash =
+			Hash::from_hex("3a42e66e46dd7633b57d1f921780a1ac715e6b93c19ee52ab714178eb3a9f600")?;
+
+		let short_id = vec![0, 0, 0, 1].short_id(&hash, 0);
+		assert_eq!(short_id, ShortId::from_hex("77a2ed874654")?);
+
+		let short_id = vec![0, 0, 0, 1].short_id(&hash, 1);
+		assert_eq!(short_id, ShortId::from_hex("1cf41143b8ea")?);
+
+		let short_id = vec![0, 0, 0, 2].short_id(&hash, 0);
+		assert_eq!(short_id, ShortId::from_hex("8185df893296")?);
 
 		Ok(())
 	}

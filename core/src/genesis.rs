@@ -21,6 +21,7 @@
 
 use crate::core;
 use crate::core::hash::Hash;
+use crate::core::Inputs;
 use crate::pow::{Difficulty, Proof, ProofOfWork};
 use chrono::prelude::{TimeZone, Utc};
 use keychain::BlindingFactor;
@@ -33,7 +34,7 @@ use util::secp::Signature;
 /// is small enough to mine it on the fly, so it does not contain its own
 /// proof of work solution. Can also be easily mutated for different tests.
 pub fn genesis_dev() -> core::Block {
-	core::Block::with_header(core::BlockHeader {
+	let gen = core::Block::with_header(core::BlockHeader {
 		height: 0,
 		timestamp: Utc.ymd(1997, 8, 4).and_hms(0, 0, 0),
 		pow: ProofOfWork {
@@ -41,7 +42,10 @@ pub fn genesis_dev() -> core::Block {
 			..Default::default()
 		},
 		..Default::default()
-	})
+	});
+
+	// We need to be compatible with v1/v2 here so inputs must be of the correct enum variant (even if empty).
+	gen.replace_inputs(Inputs::FeaturesAndCommit(vec![]))
 }
 
 /// Floonet genesis block
@@ -153,7 +157,9 @@ pub fn genesis_floo() -> core::Block {
 			],
 		},
 	};
-	gen.with_reward(output, kernel)
+	// We need to be compatible with v1/v2 here so inputs must be of the correct enum variant (even if empty).
+	gen.replace_inputs(Inputs::FeaturesAndCommit(vec![]))
+		.with_reward(output, kernel)
 }
 
 /// Mainnet genesis block
@@ -265,7 +271,10 @@ pub fn genesis_main() -> core::Block {
 			],
 		},
 	};
-	gen.with_reward(output, kernel)
+
+	// We need to be compatible with v1/v2 here so inputs must be of the correct enum variant (even if empty).
+	gen.replace_inputs(Inputs::FeaturesAndCommit(vec![]))
+		.with_reward(output, kernel)
 }
 
 #[cfg(test)]
