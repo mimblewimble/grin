@@ -162,8 +162,9 @@ where
 		stem: bool,
 		header: &BlockHeader,
 	) -> Result<(), PoolError> {
-		// TODO - Is this the right place to do this?
-		// Transactions handled internally in consistent v3 format.
+		// First step is to convert transaction to consistent v3 format.
+		// We handle transactions internally in v3 format.
+		// We will convert to v2 on the way out, if relaying to v2 peer for backward compatibility.
 		let tx = tx.convert_to_v3();
 
 		// Quick check for duplicate txs.

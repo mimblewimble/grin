@@ -651,16 +651,37 @@ pub enum Weighting {
 	/// No max weight limit (skip the weight check).
 	NoLimit,
 }
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct CommitWrapper(Commitment);
+
+impl CommitWrapper {
+	pub fn commitment(&self) -> Commitment {
+		self.0
+	}
+}
+
+impl DefaultHashable for CommitWrapper {}
+
+impl Writeable for CommitWrapper {
+	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
+		self.0.write(writer)?;
+		Ok(())
+	}
+}
+
+hashable_ord!(CommitWrapper);
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 pub enum Inputs {
-	CommitOnly(Vec<Commitment>),
+	CommitOnly(Vec<CommitWrapper>),
 	FeaturesAndCommit(Vec<OutputIdentifier>),
 }
 
 impl From<Vec<Commitment>> for Inputs {
 	fn from(inputs: Vec<Commitment>) -> Self {
-		Inputs::CommitOnly(inputs)
+		let mut wrappers: Vec<_> = inputs.into_iter().map(|x| CommitWrapper(x)).collect();
+		wrappers.sort_unstable();
+		Inputs::CommitOnly(wrappers)
 	}
 }
 
@@ -699,8 +720,9 @@ impl Inputs {
 	fn add_input(&mut self, input: OutputIdentifier) {
 		match self {
 			Inputs::CommitOnly(inputs) => {
-				if let Err(e) = inputs.binary_search(&input.commitment()) {
-					inputs.insert(e, input.commitment());
+				let input = CommitWrapper(input.commitment());
+				if let Err(e) = inputs.binary_search(&input) {
+					inputs.insert(e, input);
 				}
 			}
 			Inputs::FeaturesAndCommit(inputs) => {
@@ -724,7 +746,7 @@ impl Inputs {
 		match self {
 			Inputs::CommitOnly(inputs) => {
 				let mut inputs = inputs.clone();
-				inputs.extend(outputs.iter().map(|x| x.commitment()));
+				inputs.extend(outputs.iter().map(|x| CommitWrapper(x.commitment())));
 				inputs.sort();
 				inputs.verify_sorted_and_unique()?;
 			}
@@ -742,8 +764,8 @@ impl Inputs {
 	/// Caution: Do not rely on this for anything.
 	pub fn version_str(&self) -> &str {
 		match self {
-			Inputs::CommitOnly(_) => "v2",
-			Inputs::FeaturesAndCommit(_) => "v3",
+			Inputs::CommitOnly(_) => "v3",
+			Inputs::FeaturesAndCommit(_) => "v2",
 		}
 	}
 }
@@ -751,12 +773,8 @@ impl Inputs {
 impl From<&Inputs> for Vec<Commitment> {
 	fn from(inputs: &Inputs) -> Self {
 		match inputs {
-			Inputs::CommitOnly(inputs) => inputs.clone(),
-			Inputs::FeaturesAndCommit(inputs) => {
-				let mut inputs: Vec<_> = inputs.iter().map(|x| x.commitment()).collect();
-				inputs.sort_unstable();
-				inputs
-			}
+			Inputs::CommitOnly(inputs) => inputs.iter().map(|x| x.commitment()).collect(),
+			Inputs::FeaturesAndCommit(inputs) => inputs.iter().map(|x| x.commitment()).collect(),
 		}
 	}
 }
@@ -764,12 +782,8 @@ impl From<&Inputs> for Vec<Commitment> {
 impl From<Inputs> for Vec<Commitment> {
 	fn from(inputs: Inputs) -> Self {
 		match inputs {
-			Inputs::CommitOnly(inputs) => inputs,
-			Inputs::FeaturesAndCommit(inputs) => {
-				let mut inputs: Vec<_> = inputs.iter().map(|x| x.commitment()).collect();
-				inputs.sort_unstable();
-				inputs
-			}
+			Inputs::CommitOnly(inputs) => inputs.iter().map(|x| x.commitment()).collect(),
+			Inputs::FeaturesAndCommit(inputs) => inputs.iter().map(|x| x.commitment()).collect(),
 		}
 	}
 }
@@ -780,10 +794,19 @@ impl Writeable for Inputs {
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
 		match writer.protocol_version().value() {
 			0..=2 => match self {
-				Inputs::CommitOnly(inputs) => return Err(ser::Error::ProtocolVersionError),
+				Inputs::CommitOnly(inputs) => {
+					if writer.serialization_mode() == ser::SerializationMode::Hash {
+						inputs.write(writer)?;
+					} else {
+						return Err(ser::Error::ProtocolVersionError);
+					}
+				}
 				Inputs::FeaturesAndCommit(inputs) => inputs.write(writer)?,
 			},
-			3..=ProtocolVersion::MAX => <Vec<Commitment>>::from(self).write(writer)?,
+			3..=ProtocolVersion::MAX => {
+				let inputs: Vec<_> = self.into();
+				inputs.write(writer)?
+			}
 		}
 		Ok(())
 	}
@@ -859,7 +882,7 @@ impl Readable for TransactionBody {
 impl Committed for TransactionBody {
 	fn inputs_committed(&self) -> Vec<Commitment> {
 		match &self.inputs {
-			Inputs::CommitOnly(inputs) => inputs.clone(),
+			Inputs::CommitOnly(inputs) => inputs.iter().map(|x| x.commitment()).collect(),
 			Inputs::FeaturesAndCommit(inputs) => inputs.iter().map(|x| x.commitment()).collect(),
 		}
 	}
@@ -1312,6 +1335,7 @@ impl Transaction {
 		);
 
 		let inputs: Vec<Commitment> = self.inputs().into();
+
 		Transaction {
 			body: TransactionBody {
 				inputs: inputs.into(),
@@ -1622,127 +1646,6 @@ pub fn deaggregate(mk_tx: Transaction, txs: &[Transaction]) -> Result<Transactio
 	let tx = Transaction::new(inputs.into(), outputs, kernels).with_offset(total_kernel_offset);
 	Ok(tx)
 }
-// #[derive(Serialize, Deserialize, Debug, Clone, Copy)]
-// pub enum Input {
-// 	/// Input including output features and output commitment.
-// 	/// Corresponds to protocol version 2.
-// 	/// Can be translated to protocol version 3.
-// 	FeaturesAndCommit {
-// 		/// Output features associated with this input.
-// 		features: OutputFeatures,
-// 		/// Output commitment associated with this input.
-// 		commit: Commitment,
-// 	},
-// 	/// Input with output commitment only.
-// 	/// Corresponds to protocol version 3.
-// 	/// Note: Translation to protocol version 3 is non-trivial as features must be looked up externally.
-// 	CommitOnly {
-// 		/// Output commitment associated with this input.
-// 		commit: Commitment,
-// 	},
-// }
-
-// impl DefaultHashable for Input {}
-// hashable_ord!(Input);
-
-// impl ::std::hash::Hash for Input {
-// 	fn hash<H: ::std::hash::Hasher>(&self, state: &mut H) {
-// 		let mut vec = Vec::new();
-// 		let version = match self {
-// 			Input::FeaturesAndCommit { .. } => ProtocolVersion(2),
-// 			Input::CommitOnly { .. } => ProtocolVersion(3),
-// 		};
-// 		ser::serialize(&mut vec, version, &self).expect("serialization failed");
-// 		::std::hash::Hash::hash(&vec, state);
-// 	}
-// }
-
-// /// Implementation of Writeable for a transaction Input, defines how to write
-// /// an Input as binary.
-// impl Writeable for Input {
-// 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
-// 		match writer.protocol_version().value() {
-// 			0..=2 => self.write_v2(writer),
-// 			3..=ProtocolVersion::MAX => self.write_v3(writer),
-// 		}
-// 	}
-// }
-
-// /// Implementation of Readable for a transaction Input, defines how to read
-// /// an Input from a binary stream.
-// impl Readable for Input {
-// 	fn read<R: Reader>(reader: &mut R) -> Result<Input, ser::Error> {
-// 		match reader.protocol_version().value() {
-// 			0..=2 => Input::read_v2(reader),
-// 			3..=ProtocolVersion::MAX => Input::read_v3(reader),
-// 		}
-// 	}
-// }
-
-// /// A transaction input, which spends an existing unspent output.
-// impl Input {
-// 	/// Commitment identifying the output being spent by this input.
-// 	pub fn commitment(&self) -> Commitment {
-// 		match self {
-// 			Input::FeaturesAndCommit { commit, .. } => *commit,
-// 			Input::CommitOnly { commit } => *commit,
-// 		}
-// 	}
-
-// 	/// Does this input match the provided output?
-// 	pub fn matches_output(&self, out: OutputIdentifier) -> bool {
-// 		match self {
-// 			Input::FeaturesAndCommit { features, commit } => {
-// 				OutputIdentifier {
-// 					features: *features,
-// 					commit: *commit,
-// 				} == out
-// 			}
-// 			Input::CommitOnly { commit } => *commit == out.commit,
-// 		}
-// 	}
-
-// 	// /// Does this input match the provided output?
-// 	// /// Strict check for V2 peer compatibility.
-// 	// pub fn matches_output_strict(&self, out: OutputIdentifier) -> bool {
-// 	// 	match self {
-// 	// 		Input::FeaturesAndCommit { .. } => self.matches_output(out),
-// 	// 		Input::CommitOnly { .. } => false,
-// 	// 	}
-// 	// }
-
-// 	fn read_v2<R: Reader>(reader: &mut R) -> Result<Input, ser::Error> {
-// 		let features = OutputFeatures::read(reader)?;
-// 		let commit = Commitment::read(reader)?;
-// 		Ok(Input::FeaturesAndCommit { features, commit })
-// 	}
-
-// 	fn read_v3<R: Reader>(reader: &mut R) -> Result<Input, ser::Error> {
-// 		let commit = Commitment::read(reader)?;
-// 		Ok(Input::CommitOnly { commit })
-// 	}
-
-// 	fn write_v2<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
-// 		match self {
-// 			Input::FeaturesAndCommit { features, commit } => {
-// 				features.write(writer)?;
-// 				commit.write(writer)?;
-// 				Ok(())
-// 			}
-// 			Input::CommitOnly { .. } => Err(ser::Error::ProtocolVersionError),
-// 		}
-// 	}
-
-// 	// Note: Attempting to write a FeaturesAndCommit variant in v3 is considered an error
-// 	// as the sort order will be incorrect.
-// 	// We *must* convert to CommitOnly and resort the inputs before writing.
-// 	fn write_v3<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
-// 		match self {
-// 			Input::CommitOnly { commit } => commit.write(writer),
-// 			Input::FeaturesAndCommit { .. } => Err(ser::Error::ProtocolVersionError),
-// 		}
-// 	}
-// }
 
 // Enum of various supported kernel "features".
 enum_from_primitive! {

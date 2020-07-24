@@ -102,9 +102,9 @@ where
 					.into_iter()
 					.map(|input| {
 						agg_tx
-							.get_output(&input)
+							.get_output(&input.commitment())
 							.map(|out| OutputIdentifier::from(&out))
-							.or(self.blockchain.get_unspent(input).ok())
+							.or(self.blockchain.get_unspent(input.commitment()).ok())
 					})
 					.flatten()
 					.collect();

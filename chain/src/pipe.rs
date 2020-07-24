@@ -98,7 +98,7 @@ fn convert_block_v2(
 			let utxo_view = ext.extension.utxo_view(ext.header_extension);
 			let inputs: Result<Vec<_>, _> = inputs
 				.into_iter()
-				.map(|x| utxo_view.get_unspent(x, batch))
+				.map(|x| utxo_view.get_unspent(x.commitment(), batch))
 				.collect();
 			let mut inputs = inputs?;
 

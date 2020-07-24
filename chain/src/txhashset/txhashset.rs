@@ -1073,8 +1073,8 @@ impl<'a> Extension<'a> {
 			Inputs::CommitOnly(inputs) => inputs
 				.into_iter()
 				.map(|input| {
-					let (out, pos) = self.apply_input(input, batch)?;
-					if input != out.commitment() {
+					let (out, pos) = self.apply_input(input.commitment(), batch)?;
+					if input.commitment() != out.commitment() {
 						Err(ErrorKind::TxHashSetErr("output pmmr mismatch".into()).into())
 					} else {
 						Ok((out, pos))
