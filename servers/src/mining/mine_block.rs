@@ -177,6 +177,10 @@ fn build_block(
 	let (output, kernel, block_fees) = get_coinbase(wallet_listener_url, block_fees)?;
 	let mut b = core::Block::from_reward(&head, &txs, output, kernel, difficulty.difficulty)?;
 
+	// block we just built should be fully cut-through but lets double check
+	// it is our mining reward to lose if this block is not valid
+	b.verify_cut_through()?;
+
 	// making sure we're not spending time mining a useless block
 	b.validate(&head.total_kernel_offset, verifier_cache)?;
 
