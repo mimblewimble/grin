@@ -30,7 +30,7 @@ use std::cmp::{max, min};
 use std::convert::{TryFrom, TryInto};
 use std::default::Default;
 use std::sync::Arc;
-use std::{collections::HashSet, error, fmt};
+use std::{error, fmt};
 use util::secp;
 use util::secp::pedersen::{Commitment, RangeProof};
 use util::static_secp_instance;
@@ -684,11 +684,25 @@ pub enum Inputs {
 	FeaturesAndCommit(Vec<OutputIdentifier>),
 }
 
+impl From<&[Commitment]> for Inputs {
+	fn from(inputs: &[Commitment]) -> Self {
+		let mut wrappers: Vec<_> = inputs.into_iter().map(|x| CommitWrapper(*x)).collect();
+		wrappers.sort_unstable();
+		Inputs::CommitOnly(wrappers)
+	}
+}
+
 impl From<Vec<Commitment>> for Inputs {
 	fn from(inputs: Vec<Commitment>) -> Self {
 		let mut wrappers: Vec<_> = inputs.into_iter().map(|x| CommitWrapper(x)).collect();
 		wrappers.sort_unstable();
 		Inputs::CommitOnly(wrappers)
+	}
+}
+
+impl From<&[OutputIdentifier]> for Inputs {
+	fn from(inputs: &[OutputIdentifier]) -> Self {
+		Inputs::FeaturesAndCommit(inputs.to_vec())
 	}
 }
 
@@ -752,16 +766,16 @@ impl Inputs {
 	fn verify_cut_through(&self, outputs: &[Output]) -> Result<(), Error> {
 		match self {
 			Inputs::CommitOnly(inputs) => {
-				let mut inputs = inputs.clone();
-				inputs.extend(outputs.iter().map(|x| CommitWrapper(x.commitment())));
-				inputs.sort();
-				inputs.verify_sorted_and_unique()?;
+				let mut puts = inputs.clone();
+				puts.extend(outputs.iter().map(|x| CommitWrapper(x.commitment())));
+				puts.sort();
+				puts.verify_sorted_and_unique()?;
 			}
 			Inputs::FeaturesAndCommit(inputs) => {
-				let mut inputs = inputs.clone();
-				inputs.extend(outputs.iter().map(|x| OutputIdentifier::from(x)));
-				inputs.sort();
-				inputs.verify_sorted_and_unique()?;
+				let mut puts = inputs.clone();
+				puts.extend(outputs.iter().map(|x| OutputIdentifier::from(x)));
+				puts.sort();
+				puts.verify_sorted_and_unique()?;
 			}
 		}
 		Ok(())
@@ -961,9 +975,6 @@ impl TransactionBody {
 			outputs: outputs.to_vec(),
 			kernels: kernels.to_vec(),
 		};
-
-		// Make sure transaction body is fully cut-through.
-		body.verify_cut_through()?;
 
 		if verify_sorted {
 			// If we are verifying sort order then verify and
@@ -1210,12 +1221,8 @@ impl TransactionBody {
 
 		// Now batch verify all those unverified rangeproofs
 		if !outputs.is_empty() {
-			let mut commits = vec![];
-			let mut proofs = vec![];
-			for x in &outputs {
-				commits.push(x.commit);
-				proofs.push(x.proof);
-			}
+			let (commits, proofs): (Vec<Commitment>, Vec<RangeProof>) =
+				outputs.iter().map(|x| (x.commitment(), x.proof())).unzip();
 			Output::batch_verify_proofs(&commits, &proofs)?;
 		}
 
@@ -1487,14 +1494,14 @@ impl Transaction {
 	}
 }
 
-/// Matches any output with a potential spending input, eliminating them
-/// from the Vec. Provides a simple way to cut-through a block or aggregated
-/// transaction. The elimination is stable with respect to the order of inputs
-/// and outputs.
+/// Cut-through inputs and outputs.
+/// Returns new slices without any allocations.
 pub fn cut_through<'a>(
 	inputs: &'a mut [Commitment],
 	outputs: &'a mut [Output],
 ) -> Result<(&'a [Commitment], &'a [Output]), Error> {
+	// Sort inputs and outputs consistently by commitment.
+	// Comparison will be done by commitment later.
 	inputs.sort_unstable();
 	outputs.sort_unstable_by_key(|x| x.commitment());
 
@@ -1586,7 +1593,7 @@ pub fn aggregate(txs: &[Transaction]) -> Result<Transaction, Error> {
 	//   * cut-through outputs
 	//   * full set of tx kernels
 	//   * sum of all kernel offsets
-	Ok(Transaction::new(inputs.into(), outputs, kernels).with_offset(total_kernel_offset))
+	Ok(Transaction::new(inputs.into(), outputs, &kernels).with_offset(total_kernel_offset))
 }
 
 /// Attempt to deaggregate a multi-kernel transaction based on multiple
@@ -1650,8 +1657,7 @@ pub fn deaggregate(mk_tx: Transaction, txs: &[Transaction]) -> Result<Transactio
 	kernels.sort_unstable();
 
 	// Build a new tx from the above data.
-	let tx = Transaction::new(inputs.into(), outputs, kernels).with_offset(total_kernel_offset);
-	Ok(tx)
+	Ok(Transaction::new(inputs.into(), &outputs, &kernels).with_offset(total_kernel_offset))
 }
 
 // Enum of various supported kernel "features".

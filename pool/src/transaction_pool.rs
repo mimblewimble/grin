@@ -20,9 +20,7 @@
 use self::core::core::hash::{Hash, Hashed};
 use self::core::core::id::ShortId;
 use self::core::core::verifier_cache::VerifierCache;
-use self::core::core::{
-	transaction, Block, BlockHeader, HeaderVersion, Inputs, Transaction, Weighting,
-};
+use self::core::core::{transaction, Block, BlockHeader, HeaderVersion, Transaction, Weighting};
 use self::core::global;
 use self::util::RwLock;
 use crate::pool::Pool;

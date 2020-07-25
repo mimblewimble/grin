@@ -543,7 +543,7 @@ impl Block {
 		reward_output: (Output, TxKernel),
 	) -> Result<Block, Error> {
 		let mut block =
-			Block::from_reward(prev, txs, reward_output.0, reward_output.1, difficulty)?;
+			Block::from_reward(prev, &txs, reward_output.0, reward_output.1, difficulty)?;
 
 		// Now set the pow on the header so block hashing works as expected.
 		{
@@ -593,7 +593,7 @@ impl Block {
 		let all_kernels = Vec::from_iter(all_kernels);
 
 		// Initialize a tx body and sort everything.
-		let body = TransactionBody::init(all_inputs.into(), all_outputs, all_kernels, false)?;
+		let body = TransactionBody::init(all_inputs.into(), &all_outputs, &all_kernels, false)?;
 
 		// Finally return the full block.
 		// Note: we have not actually validated the block here,
@@ -619,12 +619,9 @@ impl Block {
 		reward_kern: TxKernel,
 		difficulty: Difficulty,
 	) -> Result<Block, Error> {
-		// A block is just a big transaction, aggregate and add the reward output
-		// and reward kernel. At this point the tx is technically invalid but the
-		// tx body is valid if we account for the reward (i.e. as a block).
-		let agg_tx = transaction::aggregate(&txs)?
-			.with_output(reward_out)
-			.with_kernel(reward_kern);
+		// Build a single cut-through aggregate transacton from the provided transactions.
+		// We will add the reward output and reward kernel when we construct the block below.
+		let agg_tx = transaction::aggregate(txs)?;
 
 		// Now add the kernel offset of the previous block for a total
 		let total_kernel_offset = committed::sum_kernel_offsets(
@@ -642,7 +639,7 @@ impl Block {
 		// Now build the block with all the above information.
 		// Note: We have not validated the block here.
 		// Caller must validate the block as necessary.
-		Block {
+		Ok(Block {
 			header: BlockHeader {
 				version,
 				height,
@@ -655,9 +652,10 @@ impl Block {
 				},
 				..Default::default()
 			},
-			body: agg_tx.into(),
-		}
-		.cut_through()
+			body: TransactionBody::from(agg_tx)
+				.with_output(reward_out)
+				.with_kernel(reward_kern),
+		})
 	}
 
 	/// Consumes this block and returns a new block with the coinbase output
@@ -694,12 +692,10 @@ impl Block {
 	pub fn cut_through(self) -> Result<Block, Error> {
 		let mut inputs: Vec<_> = self.inputs().into();
 		let mut outputs = self.outputs().to_vec();
-		let kernels = self.kernels().to_vec();
-
-		transaction::cut_through(&mut inputs, &mut outputs)?;
+		let (inputs, outputs) = transaction::cut_through(&mut inputs, &mut outputs)?;
 
 		// Initialize tx body and sort everything.
-		let body = TransactionBody::init(inputs.into(), outputs, kernels, false)?;
+		let body = TransactionBody::init(inputs.into(), outputs, self.kernels(), false)?;
 
 		Ok(Block { body, ..self })
 	}

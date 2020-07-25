@@ -707,7 +707,7 @@ fn same_amount_outputs_copy_range_proof() {
 	let key_id = keychain::ExtKeychain::derive_key_id(1, 4, 0, 0, 0);
 	let prev = BlockHeader::default();
 	let b = new_block(
-		vec![&mut Transaction::new(ins.into(), outs, kernels)],
+		vec![&mut Transaction::new(ins.into(), &outs, &kernels)],
 		&keychain,
 		&builder,
 		&prev,
@@ -761,7 +761,7 @@ fn wrong_amount_range_proof() {
 	let key_id = keychain::ExtKeychain::derive_key_id(1, 4, 0, 0, 0);
 	let prev = BlockHeader::default();
 	let b = new_block(
-		vec![&mut Transaction::new(ins.into(), outs, kernels)],
+		vec![&mut Transaction::new(ins.into(), &outs, &kernels)],
 		&keychain,
 		&builder,
 		&prev,
