@@ -692,9 +692,11 @@ impl Block {
 	/// elimination is stable with respect to the order of inputs and outputs.
 	/// Method consumes the block.
 	pub fn cut_through(self) -> Result<Block, Error> {
-		let inputs: Vec<_> = self.inputs().into();
-		let (inputs, outputs) = transaction::cut_through(&inputs, self.outputs());
+		let mut inputs: Vec<_> = self.inputs().into();
+		let mut outputs = self.outputs().to_vec();
 		let kernels = self.kernels().to_vec();
+
+		transaction::cut_through(&mut inputs, &mut outputs)?;
 
 		// Initialize tx body and sort everything.
 		let body = TransactionBody::init(inputs.into(), outputs, kernels, false)?;

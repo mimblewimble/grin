@@ -962,6 +962,9 @@ impl TransactionBody {
 			kernels: kernels.to_vec(),
 		};
 
+		// Make sure transaction body is fully cut-through.
+		body.verify_cut_through()?;
+
 		if verify_sorted {
 			// If we are verifying sort order then verify and
 			// return an error if not sorted lexicographically.
@@ -970,6 +973,7 @@ impl TransactionBody {
 			// If we are not verifying sort order then sort in place and return.
 			body.sort();
 		}
+
 		Ok(body)
 	}
 
@@ -1491,23 +1495,20 @@ pub fn cut_through<'a>(
 	inputs: &'a mut [Commitment],
 	outputs: &'a mut [Output],
 ) -> Result<(&'a [Commitment], &'a [Output]), Error> {
-	// assemble output commitments set, checking they're all unique
-	outputs.sort_unstable();
-	if outputs.windows(2).any(|pair| pair[0] == pair[1]) {
-		return Err(Error::AggregationError);
-	}
 	inputs.sort_unstable();
+	outputs.sort_unstable_by_key(|x| x.commitment());
+
 	let mut inputs_idx = 0;
 	let mut outputs_idx = 0;
 	let mut ncut = 0;
 	while inputs_idx < inputs.len() && outputs_idx < outputs.len() {
-		match inputs[inputs_idx].hash().cmp(&outputs[outputs_idx].hash()) {
+		match inputs[inputs_idx].cmp(&outputs[outputs_idx].commitment()) {
 			Ordering::Less => {
-				inputs.swap(inputs_idx - ncut, inputs_idx);
+				inputs[inputs_idx - ncut] = inputs[inputs_idx];
 				inputs_idx += 1;
 			}
 			Ordering::Greater => {
-				outputs.swap(outputs_idx - ncut, outputs_idx);
+				outputs[outputs_idx - ncut] = outputs[outputs_idx];
 				outputs_idx += 1;
 			}
 			Ordering::Equal => {
@@ -1585,9 +1586,7 @@ pub fn aggregate(txs: &[Transaction]) -> Result<Transaction, Error> {
 	//   * cut-through outputs
 	//   * full set of tx kernels
 	//   * sum of all kernel offsets
-	let tx = Transaction::new(inputs.into(), outputs, kernels).with_offset(total_kernel_offset);
-
-	Ok(tx)
+	Ok(Transaction::new(inputs.into(), outputs, kernels).with_offset(total_kernel_offset))
 }
 
 /// Attempt to deaggregate a multi-kernel transaction based on multiple
