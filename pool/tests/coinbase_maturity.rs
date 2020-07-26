@@ -49,7 +49,7 @@ fn test_coinbase_maturity() {
 	);
 
 	// Add a single block, introducing coinbase output to be spent later.
-	add_block(&chain, vec![], &keychain);
+	add_block(&chain, &[], &keychain);
 
 	let header_1 = chain.get_header_by_height(1).unwrap();
 	let tx = test_transaction_spending_coinbase(&keychain, &header_1, vec![100]);

@@ -146,7 +146,7 @@ fn process_fluff_phase(
 		fluffable_txs.len()
 	);
 
-	let agg_tx = transaction::aggregate(fluffable_txs)?;
+	let agg_tx = transaction::aggregate(&fluffable_txs)?;
 	agg_tx.validate(
 		transaction::Weighting::AsTransaction,
 		verifier_cache.clone(),

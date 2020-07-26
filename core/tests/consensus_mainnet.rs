@@ -93,9 +93,9 @@ fn create_chain_sim(diff: u64) -> Vec<(HeaderInfo, DiffStats)> {
 	)]
 }
 
-fn get_diff_stats(chain_sim: &Vec<HeaderInfo>) -> DiffStats {
+fn get_diff_stats(chain_sim: &[HeaderInfo]) -> DiffStats {
 	// Fill out some difficulty stats for convenience
-	let diff_iter = chain_sim.clone();
+	let diff_iter = chain_sim.to_vec();
 	let last_blocks: Vec<HeaderInfo> = global::difficulty_data_to_vector(diff_iter.iter().cloned());
 
 	let mut last_time = last_blocks[0].timestamp;

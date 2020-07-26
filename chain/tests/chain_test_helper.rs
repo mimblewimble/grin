@@ -91,9 +91,8 @@ where
 		let reward =
 			libtx::reward::output(keychain, &libtx::ProofBuilder::new(keychain), &pk, 0, false)
 				.unwrap();
-		let mut b =
-			core::core::Block::new(&prev, vec![], next_header_info.clone().difficulty, reward)
-				.unwrap();
+		let mut b = core::core::Block::new(&prev, &[], next_header_info.clone().difficulty, reward)
+			.unwrap();
 		b.header.timestamp = prev.timestamp + Duration::seconds(60);
 		b.header.pow.secondary_scaling = next_header_info.secondary_scaling;
 

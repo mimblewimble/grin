@@ -34,13 +34,15 @@ pub fn tx2i1o() -> Transaction {
 	let key_id2 = keychain::ExtKeychain::derive_key_id(1, 2, 0, 0, 0);
 	let key_id3 = keychain::ExtKeychain::derive_key_id(1, 3, 0, 0, 0);
 
-	build::transaction(
+	let tx = build::transaction(
 		KernelFeatures::Plain { fee: 2 },
-		vec![input(10, key_id1), input(11, key_id2), output(19, key_id3)],
+		&[input(10, key_id1), input(11, key_id2), output(19, key_id3)],
 		&keychain,
 		&builder,
 	)
-	.unwrap()
+	.unwrap();
+
+	tx
 }
 
 // utility producing a transaction with a single input and output
@@ -51,13 +53,15 @@ pub fn tx1i1o() -> Transaction {
 	let key_id1 = keychain::ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
 	let key_id2 = keychain::ExtKeychain::derive_key_id(1, 2, 0, 0, 0);
 
-	build::transaction(
+	let tx = build::transaction(
 		KernelFeatures::Plain { fee: 2 },
-		vec![input(5, key_id1), output(3, key_id2)],
+		&[input(5, key_id1), output(3, key_id2)],
 		&keychain,
 		&builder,
 	)
-	.unwrap()
+	.unwrap();
+
+	tx
 }
 
 // utility producing a transaction with a single input
@@ -71,20 +75,22 @@ pub fn tx1i2o() -> Transaction {
 	let key_id2 = keychain::ExtKeychain::derive_key_id(1, 2, 0, 0, 0);
 	let key_id3 = keychain::ExtKeychain::derive_key_id(1, 3, 0, 0, 0);
 
-	build::transaction(
+	let tx = build::transaction(
 		KernelFeatures::Plain { fee: 2 },
-		vec![input(6, key_id1), output(3, key_id2), output(1, key_id3)],
+		&[input(6, key_id1), output(3, key_id2), output(1, key_id3)],
 		&keychain,
 		&builder,
 	)
-	.unwrap()
+	.unwrap();
+
+	tx
 }
 
 // utility to create a block without worrying about the key or previous
 // header
 #[allow(dead_code)]
 pub fn new_block<K, B>(
-	txs: Vec<&Transaction>,
+	txs: &[Transaction],
 	keychain: &K,
 	builder: &B,
 	previous_header: &BlockHeader,
@@ -96,13 +102,7 @@ where
 {
 	let fees = txs.iter().map(|tx| tx.fee()).sum();
 	let reward_output = reward::output(keychain, builder, &key_id, fees, false).unwrap();
-	Block::new(
-		&previous_header,
-		txs.into_iter().cloned().collect(),
-		Difficulty::min(),
-		reward_output,
-	)
-	.unwrap()
+	Block::new(&previous_header, txs, Difficulty::min(), reward_output).unwrap()
 }
 
 // utility producing a transaction that spends an output with the provided
@@ -121,7 +121,7 @@ where
 {
 	build::transaction(
 		KernelFeatures::Plain { fee: 2 },
-		vec![input(v, key_id1), output(3, key_id2)],
+		&[input(v, key_id1), output(3, key_id2)],
 		keychain,
 		builder,
 	)

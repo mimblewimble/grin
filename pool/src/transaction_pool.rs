@@ -113,7 +113,7 @@ where
 		if entry.tx.kernels().len() > 1 {
 			let txs = self.txpool.find_matching_transactions(entry.tx.kernels());
 			if !txs.is_empty() {
-				let tx = transaction::deaggregate(entry.tx, txs)?;
+				let tx = transaction::deaggregate(entry.tx, &txs)?;
 
 				// Validate this deaggregated tx "as tx", subject to regular tx weight limits.
 				tx.validate(Weighting::AsTransaction, self.verifier_cache.clone())?;

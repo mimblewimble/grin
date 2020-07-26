@@ -171,7 +171,7 @@ where
 			return Ok(None);
 		}
 
-		let tx = transaction::aggregate(txs)?;
+		let tx = transaction::aggregate(&txs)?;
 
 		// Validate the single aggregate transaction "as pool", not subject to tx weight limits.
 		tx.validate(Weighting::NoLimit, self.verifier_cache.clone())?;
@@ -205,7 +205,7 @@ where
 			// Create a single aggregated tx from the existing pool txs and the
 			// new entry
 			txs.push(entry.tx.clone());
-			transaction::aggregate(txs)?
+			transaction::aggregate(&txs)?
 		};
 
 		// Validate aggregated tx (existing pool + new tx), ignoring tx weight limits.
@@ -269,7 +269,7 @@ where
 			candidate_txs.push(tx.clone());
 
 			// Build a single aggregate tx from candidate txs.
-			let agg_tx = transaction::aggregate(candidate_txs)?;
+			let agg_tx = transaction::aggregate(&candidate_txs)?;
 
 			// We know the tx is valid if the entire aggregate tx is valid.
 			if self.validate_raw_tx(&agg_tx, header, weighting).is_ok() {
@@ -514,7 +514,7 @@ impl Bucket {
 	) -> Result<Bucket, PoolError> {
 		let mut raw_txs = self.raw_txs.clone();
 		raw_txs.push(new_tx);
-		let agg_tx = transaction::aggregate(raw_txs.clone())?;
+		let agg_tx = transaction::aggregate(&raw_txs)?;
 		agg_tx.validate(weighting, verifier_cache)?;
 		Ok(Bucket {
 			fee_to_weight: agg_tx.fee_to_weight(),

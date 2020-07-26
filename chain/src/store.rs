@@ -212,8 +212,9 @@ impl<'a> Batch<'a> {
 
 	/// We maintain a "spent" index for each full block to allow the output_pos
 	/// to be easily reverted during rewind.
-	pub fn save_spent_index(&self, h: &Hash, spent: &Vec<CommitPos>) -> Result<(), Error> {
-		self.db.put_ser(&to_key(BLOCK_SPENT_PREFIX, h)[..], spent)?;
+	pub fn save_spent_index(&self, h: &Hash, spent: &[CommitPos]) -> Result<(), Error> {
+		self.db
+			.put_ser(&to_key(BLOCK_SPENT_PREFIX, h)[..], &spent.to_vec())?;
 		Ok(())
 	}
 
