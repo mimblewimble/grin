@@ -589,13 +589,7 @@ fn reward_with_tx_block() {
 
 	let previous_header = BlockHeader::default();
 
-	let block = new_block(
-		vec![&mut tx1],
-		&keychain,
-		&builder,
-		&previous_header,
-		&key_id,
-	);
+	let block = new_block(&[tx1], &keychain, &builder, &previous_header, &key_id);
 	block.validate(&BlindingFactor::zero(), vc.clone()).unwrap();
 }
 

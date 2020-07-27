@@ -878,7 +878,7 @@ impl Readable for TransactionBody {
 
 		// v2: inputs are represented as vec of output_identifiers
 		// v3: inputs are represented as vec of commitments
-		let inputs = match reader.protocol_version().value() {
+		let inputs: Inputs = match reader.protocol_version().value() {
 			0..=2 => {
 				let inputs: Vec<OutputIdentifier> = read_multi(reader, input_len)?;
 				inputs.into()
@@ -893,7 +893,7 @@ impl Readable for TransactionBody {
 		let kernels = read_multi(reader, kernel_len)?;
 
 		// Initialize tx body and verify everything is sorted.
-		let body = TransactionBody::init(&inputs, &outputs, &kernels, true)
+		let body = TransactionBody::init(inputs, &outputs, &kernels, true)
 			.map_err(|_| ser::Error::CorruptedData)?;
 
 		Ok(body)
@@ -1011,6 +1011,11 @@ impl TransactionBody {
 		if let Err(e) = self.outputs.binary_search(&output) {
 			self.outputs.insert(e, output)
 		};
+		self
+	}
+
+	pub fn replace_outputs(mut self, outputs: &[Output]) -> TransactionBody {
+		self.outputs = outputs.to_vec();
 		self
 	}
 
@@ -1398,6 +1403,13 @@ impl Transaction {
 		}
 	}
 
+	pub fn replace_outputs(self, outputs: &[Output]) -> Transaction {
+		Transaction {
+			body: self.body.replace_outputs(outputs),
+			..self
+		}
+	}
+
 	/// Builds a new transaction with the provided kernel added. Existing
 	/// kernels, if any, are kept intact.
 	/// Sort order is maintained.
@@ -1572,17 +1584,14 @@ pub fn aggregate(txs: &[Transaction]) -> Result<Transaction, Error> {
 		// we will sum these later to give a single aggregate offset
 		kernel_offsets.push(tx.offset.clone());
 
-		inputs.extend_from_slice(tx.inputs());
+		let tx_inputs: Vec<_> = tx.inputs().into();
+		inputs.extend_from_slice(&tx_inputs);
 		outputs.extend_from_slice(tx.outputs());
 		kernels.extend_from_slice(tx.kernels());
 	}
 
 	// Sort inputs and outputs during cut_through.
 	let (inputs, outputs) = cut_through(&mut inputs, &mut outputs)?;
-
-	inputs.sort_unstable();
-	outputs.sort_unstable();
-	kernels.sort_unstable();
 
 	// now sum the kernel_offsets up to give us an aggregate offset for the
 	// transaction

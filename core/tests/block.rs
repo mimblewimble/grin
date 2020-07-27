@@ -16,6 +16,7 @@ mod common;
 use crate::common::{new_block, tx1i2o, tx2i1o, txspend1i1o};
 use crate::core::consensus::{self, BLOCK_OUTPUT_WEIGHT, TESTING_THIRD_HARD_FORK};
 use crate::core::core::block::{Block, BlockHeader, Error, HeaderVersion};
+use crate::core::core::committed::Committed;
 use crate::core::core::hash::Hashed;
 use crate::core::core::id::ShortIdentifiable;
 use crate::core::core::transaction::{self, KernelFeatures, NRDRelativeHeight, Transaction};
@@ -346,7 +347,7 @@ fn remove_coinbase_output_flag() {
 
 	let mut output = b.outputs()[0].clone();
 	output.features = OutputFeatures::Plain;
-	b.body.outputs = vec![output];
+	b.body = b.body.replace_outputs(&[output]);
 
 	assert_eq!(b.verify_coinbase(), Err(Error::CoinbaseSumMismatch));
 	assert!(b
@@ -478,7 +479,7 @@ fn block_single_tx_serialized_size_v3() {
 	let tx1 = tx1i2o();
 	let prev = BlockHeader::default();
 	let key_id = ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
-	let b = new_block(vec![&tx1], &keychain, &builder, &prev, &key_id);
+	let b = new_block(&[tx1], &keychain, &builder, &prev, &key_id);
 	let mut vec = Vec::new();
 	ser::serialize(&mut vec, ser::ProtocolVersion(3), &b).expect("serialization failed");
 	assert_eq!(vec.len(), 2_669);
@@ -492,7 +493,7 @@ fn block_single_tx_serialized_size_v2() {
 	let tx1 = tx1i2o();
 	let prev = BlockHeader::default();
 	let key_id = ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
-	let b = new_block(vec![&tx1], &keychain, &builder, &prev, &key_id);
+	let b = new_block(&[tx1], &keychain, &builder, &prev, &key_id);
 
 	// We need to jump through some hoops here to convert the block to v2 "compatibility mode".
 	// Real block processing would look input features up in the utxo.
@@ -521,7 +522,7 @@ fn empty_compact_block_serialized_size() {
 	let builder = ProofBuilder::new(&keychain);
 	let prev = BlockHeader::default();
 	let key_id = ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
-	let b = new_block(vec![], &keychain, &builder, &prev, &key_id);
+	let b = new_block(&[], &keychain, &builder, &prev, &key_id);
 	let cb: CompactBlock = b.into();
 	let mut vec = Vec::new();
 	ser::serialize_default(&mut vec, &cb).expect("serialization failed");
@@ -536,7 +537,7 @@ fn compact_block_single_tx_serialized_size() {
 	let tx1 = tx1i2o();
 	let prev = BlockHeader::default();
 	let key_id = ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
-	let b = new_block(&txs, &keychain, &builder, &prev, &key_id);
+	let b = new_block(&[tx1], &keychain, &builder, &prev, &key_id);
 
 	// Default protocol version.
 	{
@@ -707,7 +708,7 @@ fn same_amount_outputs_copy_range_proof() {
 	let key_id = keychain::ExtKeychain::derive_key_id(1, 4, 0, 0, 0);
 	let prev = BlockHeader::default();
 	let b = new_block(
-		vec![&mut Transaction::new(ins.into(), &outs, &kernels)],
+		&[Transaction::new(ins.into(), &outs, &kernels)],
 		&keychain,
 		&builder,
 		&prev,
@@ -761,7 +762,7 @@ fn wrong_amount_range_proof() {
 	let key_id = keychain::ExtKeychain::derive_key_id(1, 4, 0, 0, 0);
 	let prev = BlockHeader::default();
 	let b = new_block(
-		vec![&mut Transaction::new(ins.into(), &outs, &kernels)],
+		&[Transaction::new(ins.into(), &outs, &kernels)],
 		&keychain,
 		&builder,
 		&prev,
