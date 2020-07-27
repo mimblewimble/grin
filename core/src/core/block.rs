@@ -568,37 +568,32 @@ impl Block {
 
 		let header = cb.header.clone();
 
-		let mut all_inputs: HashSet<Commitment> = HashSet::new();
-		let mut all_outputs = HashSet::new();
-		let mut all_kernels = HashSet::new();
+		let mut inputs: Vec<Commitment> = vec![];
+		let mut outputs = vec![];
+		let mut kernels = vec![];
 
 		// collect all the inputs, outputs and kernels from the txs
 		for tx in txs {
 			let tx_inputs: Vec<_> = tx.inputs().into();
-			all_inputs.extend(tx_inputs.iter());
-			all_outputs.extend(tx.outputs());
-			all_kernels.extend(tx.kernels());
+			inputs.extend_from_slice(tx_inputs.as_slice());
+			outputs.extend_from_slice(tx.outputs());
+			kernels.extend_from_slice(tx.kernels());
 		}
+
+		let (inputs, outputs) = transaction::cut_through(&mut inputs, &mut outputs)?;
 
 		// include the coinbase output(s) and kernel(s) from the compact_block
-		{
-			let body: CompactBlockBody = cb.into();
-			all_outputs.extend(body.out_full);
-			all_kernels.extend(body.kern_full);
-		}
-
-		// convert the sets to vecs
-		let all_inputs = Vec::from_iter(all_inputs);
-		let all_outputs = Vec::from_iter(all_outputs);
-		let all_kernels = Vec::from_iter(all_kernels);
+		let mut outputs = outputs.to_vec();
+		outputs.extend_from_slice(cb.out_full());
+		kernels.extend_from_slice(cb.kern_full());
 
 		// Initialize a tx body and sort everything.
-		let body = TransactionBody::init(all_inputs.into(), &all_outputs, &all_kernels, false)?;
+		let body = TransactionBody::init(inputs.into(), &outputs, &kernels, false)?;
 
 		// Finally return the full block.
 		// Note: we have not actually validated the block here,
 		// caller must validate the block.
-		Block { header, body }.cut_through()
+		Ok(Block { header, body })
 	}
 
 	/// Build a new empty block from a specified header
@@ -683,21 +678,6 @@ impl Block {
 	/// Sum of all fees (inputs less outputs) in the block
 	pub fn total_fees(&self) -> u64 {
 		self.body.fee()
-	}
-
-	/// Matches any output with a potential spending input, eliminating them
-	/// from the block. Provides a simple way to cut-through the block. The
-	/// elimination is stable with respect to the order of inputs and outputs.
-	/// Method consumes the block.
-	pub fn cut_through(self) -> Result<Block, Error> {
-		let mut inputs: Vec<_> = self.inputs().into();
-		let mut outputs = self.outputs().to_vec();
-		let (inputs, outputs) = transaction::cut_through(&mut inputs, &mut outputs)?;
-
-		// Initialize tx body and sort everything.
-		let body = TransactionBody::init(inputs.into(), outputs, self.kernels(), false)?;
-
-		Ok(Block { body, ..self })
 	}
 
 	/// "Lightweight" validation that we can perform quickly during read/deserialization.
