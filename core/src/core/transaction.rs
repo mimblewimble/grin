@@ -1306,11 +1306,11 @@ pub fn cut_through<'a>(
 	while inputs_idx < inputs.len() && outputs_idx < outputs.len() {
 		match inputs[inputs_idx].hash().cmp(&outputs[outputs_idx].hash()) {
 			Ordering::Less => {
-				inputs[inputs_idx - ncut] = inputs[inputs_idx];
+				inputs.swap(inputs_idx - ncut, inputs_idx);
 				inputs_idx += 1;
 			}
 			Ordering::Greater => {
-				outputs[outputs_idx - ncut] = outputs[outputs_idx];
+				outputs.swap(outputs_idx - ncut, outputs_idx);
 				outputs_idx += 1;
 			}
 			Ordering::Equal => {
@@ -1323,13 +1323,13 @@ pub fn cut_through<'a>(
 
 	// Make sure we move any the remaining inputs into the slice to be returned.
 	while inputs_idx < inputs.len() {
-		inputs[inputs_idx - ncut] = inputs[inputs_idx];
+		inputs.swap(inputs_idx - ncut, inputs_idx);
 		inputs_idx += 1;
 	}
 
 	// Make sure we move any the remaining outputs into the slice to be returned.
 	while outputs_idx < outputs.len() {
-		outputs[outputs_idx - ncut] = outputs[outputs_idx];
+		outputs.swap(outputs_idx - ncut, outputs_idx);
 		outputs_idx += 1;
 	}
 

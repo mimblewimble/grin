@@ -273,8 +273,8 @@ fn block_with_cut_through() {
 	let key_id2 = ExtKeychain::derive_key_id(1, 2, 0, 0, 0);
 	let key_id3 = ExtKeychain::derive_key_id(1, 3, 0, 0, 0);
 
-	let mut btx1 = tx2i1o();
-	let mut btx2 = build::transaction(
+	let btx1 = tx2i1o();
+	let btx2 = build::transaction(
 		KernelFeatures::Plain { fee: 2 },
 		&[input(7, key_id1), output(5, key_id2.clone())],
 		&keychain,
@@ -284,7 +284,7 @@ fn block_with_cut_through() {
 
 	// spending tx2 - reuse key_id2
 
-	let mut btx3 = txspend1i1o(5, &keychain, &builder, key_id2, key_id3);
+	let btx3 = txspend1i1o(5, &keychain, &builder, key_id2, key_id3);
 	let prev = BlockHeader::default();
 	let key_id = ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
 	let b = new_block(&[btx1, btx2, btx3], &keychain, &builder, &prev, &key_id);

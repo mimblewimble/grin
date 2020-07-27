@@ -572,7 +572,7 @@ fn reward_with_tx_block() {
 
 	let vc = verifier_cache();
 
-	let mut tx1 = tx2i1o();
+	let tx1 = tx2i1o();
 	tx1.validate(Weighting::AsTransaction, vc.clone()).unwrap();
 
 	let previous_header = BlockHeader::default();
