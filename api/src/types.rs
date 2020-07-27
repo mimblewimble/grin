@@ -12,8 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::sync::Arc;
-
 use crate::chain;
 use crate::core::core::hash::Hashed;
 use crate::core::core::merkle_proof::MerkleProof;
@@ -119,7 +117,7 @@ impl TxHashSet {
 	/// A TxHashSet in the context of the api is simply the collection of PMMR roots.
 	/// We can obtain these in a lightweight way by reading them from the head of the chain.
 	/// We will have validated the roots on this header against the roots of the txhashset.
-	pub fn from_head(chain: Arc<chain::Chain>) -> Result<TxHashSet, chain::Error> {
+	pub fn from_head(chain: &chain::Chain) -> Result<TxHashSet, chain::Error> {
 		let header = chain.head_header()?;
 		Ok(TxHashSet {
 			output_root_hash: header.output_root.to_hex(),
@@ -138,7 +136,7 @@ pub struct TxHashSetNode {
 }
 
 impl TxHashSetNode {
-	pub fn get_last_n_output(chain: Arc<chain::Chain>, distance: u64) -> Vec<TxHashSetNode> {
+	pub fn get_last_n_output(chain: &chain::Chain, distance: u64) -> Vec<TxHashSetNode> {
 		let mut return_vec = Vec::new();
 		let last_n = chain.get_last_n_output(distance);
 		for x in last_n {
@@ -147,9 +145,9 @@ impl TxHashSetNode {
 		return_vec
 	}
 
-	pub fn get_last_n_rangeproof(head: Arc<chain::Chain>, distance: u64) -> Vec<TxHashSetNode> {
+	pub fn get_last_n_rangeproof(chain: &chain::Chain, distance: u64) -> Vec<TxHashSetNode> {
 		let mut return_vec = Vec::new();
-		let last_n = head.get_last_n_rangeproof(distance);
+		let last_n = chain.get_last_n_rangeproof(distance);
 		for elem in last_n {
 			return_vec.push(TxHashSetNode {
 				hash: elem.0.to_hex(),
@@ -158,9 +156,9 @@ impl TxHashSetNode {
 		return_vec
 	}
 
-	pub fn get_last_n_kernel(head: Arc<chain::Chain>, distance: u64) -> Vec<TxHashSetNode> {
+	pub fn get_last_n_kernel(chain: &chain::Chain, distance: u64) -> Vec<TxHashSetNode> {
 		let mut return_vec = Vec::new();
-		let last_n = head.get_last_n_kernel(distance);
+		let last_n = chain.get_last_n_kernel(distance);
 		for elem in last_n {
 			return_vec.push(TxHashSetNode {
 				hash: elem.0.to_hex(),
@@ -281,7 +279,7 @@ pub struct OutputPrintable {
 impl OutputPrintable {
 	pub fn from_output(
 		output: &core::Output,
-		chain: Arc<chain::Chain>,
+		chain: &chain::Chain,
 		block_header: Option<&core::BlockHeader>,
 		include_proof: bool,
 		include_merkle_proof: bool,
@@ -627,7 +625,7 @@ pub struct BlockPrintable {
 impl BlockPrintable {
 	pub fn from_block(
 		block: &core::Block,
-		chain: Arc<chain::Chain>,
+		chain: &chain::Chain,
 		include_proof: bool,
 		include_merkle_proof: bool,
 	) -> Result<BlockPrintable, chain::Error> {
@@ -681,15 +679,13 @@ impl CompactBlockPrintable {
 	/// api response
 	pub fn from_compact_block(
 		cb: &core::CompactBlock,
-		chain: Arc<chain::Chain>,
+		chain: &chain::Chain,
 	) -> Result<CompactBlockPrintable, chain::Error> {
 		let block = chain.get_block(&cb.hash())?;
 		let out_full = cb
 			.out_full()
 			.iter()
-			.map(|x| {
-				OutputPrintable::from_output(x, chain.clone(), Some(&block.header), false, true)
-			})
+			.map(|x| OutputPrintable::from_output(x, chain, Some(&block.header), false, true))
 			.collect::<Result<Vec<_>, _>>()?;
 		let kern_full = cb
 			.kern_full()

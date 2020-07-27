@@ -189,7 +189,7 @@ impl OutputHandler {
 				.map(|x| {
 					OutputPrintable::from_output(
 						x,
-						chain.clone(),
+						&chain,
 						None,
 						include_proof.unwrap_or(false),
 						false,
@@ -248,13 +248,7 @@ impl OutputHandler {
 			.iter()
 			.filter(|output| commitments.is_empty() || commitments.contains(&output.commit))
 			.map(|output| {
-				OutputPrintable::from_output(
-					output,
-					chain.clone(),
-					Some(&header),
-					include_proof,
-					true,
-				)
+				OutputPrintable::from_output(output, &chain, Some(&header), include_proof, true)
 			})
 			.collect::<Result<Vec<_>, _>>()
 			.context(ErrorKind::Internal("cain error".to_owned()))?;
@@ -289,7 +283,7 @@ impl OutputHandler {
 			.map(|output| {
 				OutputPrintable::from_output(
 					output,
-					chain.clone(),
+					&chain,
 					Some(&header),
 					include_rproof,
 					include_merkle_proof,
