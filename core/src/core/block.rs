@@ -467,7 +467,7 @@ pub struct Block {
 	/// The header with metadata and commitments to the rest of the data
 	pub header: BlockHeader,
 	/// The body - inputs/outputs/kernels
-	body: TransactionBody,
+	pub body: TransactionBody,
 }
 
 impl Hashed for Block {
@@ -666,29 +666,14 @@ impl Block {
 		&self.body.inputs
 	}
 
-	/// Get inputs mutable
-	pub fn inputs_mut(&mut self) -> &mut [Input] {
-		&mut self.body.inputs
-	}
-
 	/// Get outputs
 	pub fn outputs(&self) -> &[Output] {
 		&self.body.outputs
 	}
 
-	/// Get outputs mutable
-	pub fn outputs_mut(&mut self) -> &mut [Output] {
-		&mut self.body.outputs
-	}
-
 	/// Get kernels
 	pub fn kernels(&self) -> &[TxKernel] {
 		&self.body.kernels
-	}
-
-	/// Get kernels mut
-	pub fn kernels_mut(&mut self) -> &mut [TxKernel] {
-		&mut self.body.kernels
 	}
 
 	/// Sum of all fees (inputs less outputs) in the block
