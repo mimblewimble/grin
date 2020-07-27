@@ -345,8 +345,9 @@ fn remove_coinbase_output_flag() {
 	let key_id = ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
 	let mut b = new_block(&[], &keychain, &builder, &prev, &key_id);
 
-	assert!(b.outputs()[0].is_coinbase());
-	b.outputs_mut()[0].features = OutputFeatures::Plain;
+	let mut output = b.outputs()[0].clone();
+	output.features = OutputFeatures::Plain;
+	b.body.outputs = vec![output];
 
 	assert_eq!(b.verify_coinbase(), Err(Error::CoinbaseSumMismatch));
 	assert!(b
@@ -369,8 +370,9 @@ fn remove_coinbase_kernel_flag() {
 	let key_id = ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
 	let mut b = new_block(&[], &keychain, &builder, &prev, &key_id);
 
-	assert!(b.kernels()[0].is_coinbase());
-	b.kernels_mut()[0].features = KernelFeatures::Plain { fee: 0 };
+	let mut kernel = b.kernels()[0].clone();
+	kernel.features = KernelFeatures::Plain { fee: 0 };
+	b.body = b.body.replace_kernel(kernel);
 
 	// Flipping the coinbase flag results in kernels not summing correctly.
 	assert_eq!(
