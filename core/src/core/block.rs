@@ -806,7 +806,7 @@ impl Block {
 
 	// Verify any absolute kernel lock heights.
 	fn verify_kernel_lock_heights(&self) -> Result<(), Error> {
-		for k in &self.body.kernels {
+		for k in self.kernels() {
 			// check we have no kernels with lock_heights greater than current height
 			// no tx can be included in a block earlier than its lock_height
 			if let KernelFeatures::HeightLocked { lock_height, .. } = k.features {
@@ -822,7 +822,7 @@ impl Block {
 	// NRD kernels were introduced in HF3 and are not valid for block version < 4.
 	// Blocks prior to HF3 containing any NRD kernel(s) are invalid.
 	fn verify_nrd_kernels_for_header_version(&self) -> Result<(), Error> {
-		if self.body.kernels.iter().any(|k| k.is_nrd()) {
+		if self.kernels().iter().any(|k| k.is_nrd()) {
 			if !global::is_nrd_enabled() {
 				return Err(Error::NRDKernelNotEnabled);
 			}

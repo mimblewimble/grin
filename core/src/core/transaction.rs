@@ -1406,17 +1406,17 @@ pub fn deaggregate(mk_tx: Transaction, txs: &[Transaction]) -> Result<Transactio
 	let tx = aggregate(txs)?;
 
 	for mk_input in mk_tx.inputs() {
-		if !tx.body.inputs.contains(&mk_input) && !inputs.contains(mk_input) {
+		if !tx.inputs().contains(&mk_input) && !inputs.contains(mk_input) {
 			inputs.push(*mk_input);
 		}
 	}
 	for mk_output in mk_tx.outputs() {
-		if !tx.body.outputs.contains(&mk_output) && !outputs.contains(mk_output) {
+		if !tx.outputs().contains(&mk_output) && !outputs.contains(mk_output) {
 			outputs.push(*mk_output);
 		}
 	}
 	for mk_kernel in mk_tx.kernels() {
-		if !tx.body.kernels.contains(&mk_kernel) && !kernels.contains(mk_kernel) {
+		if !tx.kernels().contains(&mk_kernel) && !kernels.contains(mk_kernel) {
 			kernels.push(*mk_kernel);
 		}
 	}
