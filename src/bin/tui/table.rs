@@ -488,14 +488,14 @@ impl<T: TableViewItem<H> + PartialEq, H: Eq + Hash + Copy + Clone + 'static> Tab
 	}
 
 	/// Returns a immutable reference to the items contained within the table.
-	pub fn borrow_items(&mut self) -> &Vec<T> {
+	pub fn borrow_items(&mut self) -> &[T] {
 		&self.items
 	}
 
 	/// Returns a mutable reference to the items contained within the table.
 	///
 	/// Can be used to modify the items in place.
-	pub fn borrow_items_mut(&mut self) -> &mut Vec<T> {
+	pub fn borrow_items_mut(&mut self) -> &mut [T] {
 		&mut self.items
 	}
 

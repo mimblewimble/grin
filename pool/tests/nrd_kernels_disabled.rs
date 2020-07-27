@@ -57,7 +57,7 @@ fn test_nrd_kernels_disabled() {
 	// Spend the initial coinbase.
 	let header_1 = chain.get_header_by_height(1).unwrap();
 	let tx = test_transaction_spending_coinbase(&keychain, &header_1, vec![10, 20, 30, 40]);
-	add_block(&chain, vec![tx], &keychain);
+	add_block(&chain, &[tx], &keychain);
 
 	let tx_1 = test_transaction_with_kernel_features(
 		&keychain,

@@ -538,7 +538,7 @@ impl Block {
 	#[warn(clippy::new_ret_no_self)]
 	pub fn new(
 		prev: &BlockHeader,
-		txs: Vec<Transaction>,
+		txs: &[Transaction],
 		difficulty: Difficulty,
 		reward_output: (Output, TxKernel),
 	) -> Result<Block, Error> {
@@ -557,7 +557,7 @@ impl Block {
 	/// Hydrate a block from a compact block.
 	/// Note: caller must validate the block themselves, we do not validate it
 	/// here.
-	pub fn hydrate_from(cb: CompactBlock, txs: Vec<Transaction>) -> Result<Block, Error> {
+	pub fn hydrate_from(cb: CompactBlock, txs: &[Transaction]) -> Result<Block, Error> {
 		trace!("block: hydrate_from: {}, {} txs", cb.hash(), txs.len(),);
 
 		let header = cb.header.clone();
@@ -568,10 +568,9 @@ impl Block {
 
 		// collect all the inputs, outputs and kernels from the txs
 		for tx in txs {
-			let tb: TransactionBody = tx.into();
-			all_inputs.extend(tb.inputs);
-			all_outputs.extend(tb.outputs);
-			all_kernels.extend(tb.kernels);
+			all_inputs.extend(tx.inputs());
+			all_outputs.extend(tx.outputs());
+			all_kernels.extend(tx.kernels());
 		}
 
 		// include the coinbase output(s) and kernel(s) from the compact_block
@@ -587,7 +586,7 @@ impl Block {
 		let all_kernels = Vec::from_iter(all_kernels);
 
 		// Initialize a tx body and sort everything.
-		let body = TransactionBody::init(all_inputs, all_outputs, all_kernels, false)?;
+		let body = TransactionBody::init(&all_inputs, &all_outputs, &all_kernels, false)?;
 
 		// Finally return the full block.
 		// Note: we have not actually validated the block here,
@@ -608,7 +607,7 @@ impl Block {
 	/// that all transactions are valid and calculates the Merkle tree.
 	pub fn from_reward(
 		prev: &BlockHeader,
-		txs: Vec<Transaction>,
+		txs: &[Transaction],
 		reward_out: Output,
 		reward_kern: TxKernel,
 		difficulty: Difficulty,
@@ -663,32 +662,32 @@ impl Block {
 	}
 
 	/// Get inputs
-	pub fn inputs(&self) -> &Vec<Input> {
+	pub fn inputs(&self) -> &[Input] {
 		&self.body.inputs
 	}
 
 	/// Get inputs mutable
-	pub fn inputs_mut(&mut self) -> &mut Vec<Input> {
+	pub fn inputs_mut(&mut self) -> &mut [Input] {
 		&mut self.body.inputs
 	}
 
 	/// Get outputs
-	pub fn outputs(&self) -> &Vec<Output> {
+	pub fn outputs(&self) -> &[Output] {
 		&self.body.outputs
 	}
 
 	/// Get outputs mutable
-	pub fn outputs_mut(&mut self) -> &mut Vec<Output> {
+	pub fn outputs_mut(&mut self) -> &mut [Output] {
 		&mut self.body.outputs
 	}
 
 	/// Get kernels
-	pub fn kernels(&self) -> &Vec<TxKernel> {
+	pub fn kernels(&self) -> &[TxKernel] {
 		&self.body.kernels
 	}
 
 	/// Get kernels mut
-	pub fn kernels_mut(&mut self) -> &mut Vec<TxKernel> {
+	pub fn kernels_mut(&mut self) -> &mut [TxKernel] {
 		&mut self.body.kernels
 	}
 
@@ -702,14 +701,12 @@ impl Block {
 	/// elimination is stable with respect to the order of inputs and outputs.
 	/// Method consumes the block.
 	pub fn cut_through(self) -> Result<Block, Error> {
-		let mut inputs = self.inputs().clone();
-		let mut outputs = self.outputs().clone();
-		transaction::cut_through(&mut inputs, &mut outputs)?;
-
-		let kernels = self.kernels().clone();
+		let mut inputs = self.inputs().to_vec();
+		let mut outputs = self.outputs().to_vec();
+		let (inputs, outputs) = transaction::cut_through(&mut inputs, &mut outputs)?;
 
 		// Initialize tx body and sort everything.
-		let body = TransactionBody::init(inputs, outputs, kernels, false)?;
+		let body = TransactionBody::init(inputs, outputs, self.kernels(), false)?;
 
 		Ok(Block {
 			header: self.header,
@@ -809,7 +806,7 @@ impl Block {
 
 	// Verify any absolute kernel lock heights.
 	fn verify_kernel_lock_heights(&self) -> Result<(), Error> {
-		for k in &self.body.kernels {
+		for k in self.kernels() {
 			// check we have no kernels with lock_heights greater than current height
 			// no tx can be included in a block earlier than its lock_height
 			if let KernelFeatures::HeightLocked { lock_height, .. } = k.features {
@@ -825,7 +822,7 @@ impl Block {
 	// NRD kernels were introduced in HF3 and are not valid for block version < 4.
 	// Blocks prior to HF3 containing any NRD kernel(s) are invalid.
 	fn verify_nrd_kernels_for_header_version(&self) -> Result<(), Error> {
-		if self.body.kernels.iter().any(|k| k.is_nrd()) {
+		if self.kernels().iter().any(|k| k.is_nrd()) {
 			if !global::is_nrd_enabled() {
 				return Err(Error::NRDKernelNotEnabled);
 			}

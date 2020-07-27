@@ -57,7 +57,7 @@ fn test_transaction_pool_block_building() -> Result<(), PoolError> {
 	let initial_tx = test_transaction_spending_coinbase(&keychain, &header_1, vec![10, 20, 30, 40]);
 
 	// Mine that initial tx so we can spend it with multiple txs.
-	add_block(&chain, vec![initial_tx], &keychain);
+	add_block(&chain, &[initial_tx], &keychain);
 
 	let header = chain.head_header().unwrap();
 
@@ -83,7 +83,7 @@ fn test_transaction_pool_block_building() -> Result<(), PoolError> {
 
 	let txs = pool.prepare_mineable_transactions()?;
 
-	add_block(&chain, txs, &keychain);
+	add_block(&chain, &txs, &keychain);
 
 	// Get full block from head of the chain (block we just processed).
 	let block = chain.get_block(&chain.head().unwrap().hash()).unwrap();

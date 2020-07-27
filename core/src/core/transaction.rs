@@ -440,7 +440,7 @@ impl From<committed::Error> for Error {
 /// amount to zero.
 /// The signature signs the fee and the lock_height, which are retained for
 /// signature validation.
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone, Copy)]
 pub struct TxKernel {
 	/// Options for a kernel's structure or use
 	pub features: KernelFeatures,
@@ -710,7 +710,7 @@ impl Readable for TransactionBody {
 		let kernels = read_multi(reader, kernel_len)?;
 
 		// Initialize tx body and verify everything is sorted.
-		let body = TransactionBody::init(inputs, outputs, kernels, true)
+		let body = TransactionBody::init(&inputs, &outputs, &kernels, true)
 			.map_err(|_| ser::Error::CorruptedData)?;
 
 		Ok(body)
@@ -737,6 +737,12 @@ impl Default for TransactionBody {
 	}
 }
 
+impl From<Transaction> for TransactionBody {
+	fn from(tx: Transaction) -> Self {
+		tx.body
+	}
+}
+
 impl TransactionBody {
 	/// Creates a new empty transaction (no inputs or outputs, zero fee).
 	pub fn empty() -> TransactionBody {
@@ -758,15 +764,15 @@ impl TransactionBody {
 	/// the provided inputs, outputs and kernels.
 	/// Guarantees inputs, outputs, kernels are sorted lexicographically.
 	pub fn init(
-		inputs: Vec<Input>,
-		outputs: Vec<Output>,
-		kernels: Vec<TxKernel>,
+		inputs: &[Input],
+		outputs: &[Output],
+		kernels: &[TxKernel],
 		verify_sorted: bool,
 	) -> Result<TransactionBody, Error> {
 		let mut body = TransactionBody {
-			inputs,
-			outputs,
-			kernels,
+			inputs: inputs.to_vec(),
+			outputs: outputs.to_vec(),
+			kernels: kernels.to_vec(),
 		};
 
 		if verify_sorted {
@@ -1075,12 +1081,6 @@ impl PartialEq for Transaction {
 	}
 }
 
-impl Into<TransactionBody> for Transaction {
-	fn into(self) -> TransactionBody {
-		self.body
-	}
-}
-
 /// Implementation of Writeable for a fully blinded transaction, defines how to
 /// write the transaction as binary.
 impl Writeable for Transaction {
@@ -1140,7 +1140,7 @@ impl Transaction {
 
 	/// Creates a new transaction initialized with
 	/// the provided inputs, outputs, kernels
-	pub fn new(inputs: Vec<Input>, outputs: Vec<Output>, kernels: Vec<TxKernel>) -> Transaction {
+	pub fn new(inputs: &[Input], outputs: &[Output], kernels: &[TxKernel]) -> Transaction {
 		let offset = BlindingFactor::zero();
 
 		// Initialize a new tx body and sort everything.
@@ -1195,32 +1195,32 @@ impl Transaction {
 	}
 
 	/// Get inputs
-	pub fn inputs(&self) -> &Vec<Input> {
+	pub fn inputs(&self) -> &[Input] {
 		&self.body.inputs
 	}
 
 	/// Get inputs mutable
-	pub fn inputs_mut(&mut self) -> &mut Vec<Input> {
+	pub fn inputs_mut(&mut self) -> &mut [Input] {
 		&mut self.body.inputs
 	}
 
 	/// Get outputs
-	pub fn outputs(&self) -> &Vec<Output> {
+	pub fn outputs(&self) -> &[Output] {
 		&self.body.outputs
 	}
 
 	/// Get outputs mutable
-	pub fn outputs_mut(&mut self) -> &mut Vec<Output> {
+	pub fn outputs_mut(&mut self) -> &mut [Output] {
 		&mut self.body.outputs
 	}
 
 	/// Get kernels
-	pub fn kernels(&self) -> &Vec<TxKernel> {
+	pub fn kernels(&self) -> &[TxKernel] {
 		&self.body.kernels
 	}
 
 	/// Get kernels mut
-	pub fn kernels_mut(&mut self) -> &mut Vec<TxKernel> {
+	pub fn kernels_mut(&mut self) -> &mut [TxKernel] {
 		&mut self.body.kernels
 	}
 
@@ -1290,7 +1290,10 @@ impl Transaction {
 /// from the Vec. Provides a simple way to cut-through a block or aggregated
 /// transaction. The elimination is stable with respect to the order of inputs
 /// and outputs.
-pub fn cut_through(inputs: &mut Vec<Input>, outputs: &mut Vec<Output>) -> Result<(), Error> {
+pub fn cut_through<'a>(
+	inputs: &'a mut [Input],
+	outputs: &'a mut [Output],
+) -> Result<(&'a [Input], &'a [Output]), Error> {
 	// assemble output commitments set, checking they're all unique
 	outputs.sort_unstable();
 	if outputs.windows(2).any(|pair| pair[0] == pair[1]) {
@@ -1303,11 +1306,11 @@ pub fn cut_through(inputs: &mut Vec<Input>, outputs: &mut Vec<Output>) -> Result
 	while inputs_idx < inputs.len() && outputs_idx < outputs.len() {
 		match inputs[inputs_idx].hash().cmp(&outputs[outputs_idx].hash()) {
 			Ordering::Less => {
-				inputs[inputs_idx - ncut] = inputs[inputs_idx];
+				inputs.swap(inputs_idx - ncut, inputs_idx);
 				inputs_idx += 1;
 			}
 			Ordering::Greater => {
-				outputs[outputs_idx - ncut] = outputs[outputs_idx];
+				outputs.swap(outputs_idx - ncut, outputs_idx);
 				outputs_idx += 1;
 			}
 			Ordering::Equal => {
@@ -1317,27 +1320,40 @@ pub fn cut_through(inputs: &mut Vec<Input>, outputs: &mut Vec<Output>) -> Result
 			}
 		}
 	}
-	// Cut elements that have already been copied
-	outputs.drain(outputs_idx - ncut..outputs_idx);
-	inputs.drain(inputs_idx - ncut..inputs_idx);
-	Ok(())
+
+	// Make sure we move any the remaining inputs into the slice to be returned.
+	while inputs_idx < inputs.len() {
+		inputs.swap(inputs_idx - ncut, inputs_idx);
+		inputs_idx += 1;
+	}
+
+	// Make sure we move any the remaining outputs into the slice to be returned.
+	while outputs_idx < outputs.len() {
+		outputs.swap(outputs_idx - ncut, outputs_idx);
+		outputs_idx += 1;
+	}
+
+	Ok((
+		&inputs[..inputs.len() - ncut],
+		&outputs[..outputs.len() - ncut],
+	))
 }
 
 /// Aggregate a vec of txs into a multi-kernel tx with cut_through.
-pub fn aggregate(mut txs: Vec<Transaction>) -> Result<Transaction, Error> {
+pub fn aggregate(txs: &[Transaction]) -> Result<Transaction, Error> {
 	// convenience short-circuiting
 	if txs.is_empty() {
 		return Ok(Transaction::empty());
 	} else if txs.len() == 1 {
-		return Ok(txs.pop().unwrap());
+		return Ok(txs[0].clone());
 	}
 	let mut n_inputs = 0;
 	let mut n_outputs = 0;
 	let mut n_kernels = 0;
 	for tx in txs.iter() {
-		n_inputs += tx.body.inputs.len();
-		n_outputs += tx.body.outputs.len();
-		n_kernels += tx.body.kernels.len();
+		n_inputs += tx.inputs().len();
+		n_outputs += tx.outputs().len();
+		n_kernels += tx.kernels().len();
 	}
 
 	let mut inputs: Vec<Input> = Vec::with_capacity(n_inputs);
@@ -1347,17 +1363,17 @@ pub fn aggregate(mut txs: Vec<Transaction>) -> Result<Transaction, Error> {
 	// we will sum these together at the end to give us the overall offset for the
 	// transaction
 	let mut kernel_offsets: Vec<BlindingFactor> = Vec::with_capacity(txs.len());
-	for mut tx in txs {
+	for tx in txs {
 		// we will sum these later to give a single aggregate offset
-		kernel_offsets.push(tx.offset);
+		kernel_offsets.push(tx.offset.clone());
 
-		inputs.append(&mut tx.body.inputs);
-		outputs.append(&mut tx.body.outputs);
-		kernels.append(&mut tx.body.kernels);
+		inputs.extend_from_slice(tx.inputs());
+		outputs.extend_from_slice(tx.outputs());
+		kernels.extend_from_slice(tx.kernels());
 	}
 
 	// Sort inputs and outputs during cut_through.
-	cut_through(&mut inputs, &mut outputs)?;
+	let (inputs, outputs) = cut_through(&mut inputs, &mut outputs)?;
 
 	// Now sort kernels.
 	kernels.sort_unstable();
@@ -1371,14 +1387,14 @@ pub fn aggregate(mut txs: Vec<Transaction>) -> Result<Transaction, Error> {
 	//   * cut-through outputs
 	//   * full set of tx kernels
 	//   * sum of all kernel offsets
-	let tx = Transaction::new(inputs, outputs, kernels).with_offset(total_kernel_offset);
+	let tx = Transaction::new(inputs, outputs, &kernels).with_offset(total_kernel_offset);
 
 	Ok(tx)
 }
 
 /// Attempt to deaggregate a multi-kernel transaction based on multiple
 /// transactions
-pub fn deaggregate(mk_tx: Transaction, txs: Vec<Transaction>) -> Result<Transaction, Error> {
+pub fn deaggregate(mk_tx: Transaction, txs: &[Transaction]) -> Result<Transaction, Error> {
 	let mut inputs: Vec<Input> = vec![];
 	let mut outputs: Vec<Output> = vec![];
 	let mut kernels: Vec<TxKernel> = vec![];
@@ -1389,19 +1405,19 @@ pub fn deaggregate(mk_tx: Transaction, txs: Vec<Transaction>) -> Result<Transact
 
 	let tx = aggregate(txs)?;
 
-	for mk_input in mk_tx.body.inputs {
-		if !tx.body.inputs.contains(&mk_input) && !inputs.contains(&mk_input) {
-			inputs.push(mk_input);
+	for mk_input in mk_tx.inputs() {
+		if !tx.inputs().contains(&mk_input) && !inputs.contains(mk_input) {
+			inputs.push(*mk_input);
 		}
 	}
-	for mk_output in mk_tx.body.outputs {
-		if !tx.body.outputs.contains(&mk_output) && !outputs.contains(&mk_output) {
-			outputs.push(mk_output);
+	for mk_output in mk_tx.outputs() {
+		if !tx.outputs().contains(&mk_output) && !outputs.contains(mk_output) {
+			outputs.push(*mk_output);
 		}
 	}
-	for mk_kernel in mk_tx.body.kernels {
-		if !tx.body.kernels.contains(&mk_kernel) && !kernels.contains(&mk_kernel) {
-			kernels.push(mk_kernel);
+	for mk_kernel in mk_tx.kernels() {
+		if !tx.kernels().contains(&mk_kernel) && !kernels.contains(mk_kernel) {
+			kernels.push(*mk_kernel);
 		}
 	}
 
@@ -1436,7 +1452,7 @@ pub fn deaggregate(mk_tx: Transaction, txs: Vec<Transaction>) -> Result<Transact
 	kernels.sort_unstable();
 
 	// Build a new tx from the above data.
-	let tx = Transaction::new(inputs, outputs, kernels).with_offset(total_kernel_offset);
+	let tx = Transaction::new(&inputs, &outputs, &kernels).with_offset(total_kernel_offset);
 	Ok(tx)
 }
 

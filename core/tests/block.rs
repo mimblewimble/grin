@@ -59,12 +59,17 @@ fn too_large_block() {
 	}
 
 	parts.append(&mut vec![input(500000, pks.pop().unwrap())]);
-	let tx =
-		build::transaction(KernelFeatures::Plain { fee: 2 }, parts, &keychain, &builder).unwrap();
+	let tx = build::transaction(
+		KernelFeatures::Plain { fee: 2 },
+		&parts,
+		&keychain,
+		&builder,
+	)
+	.unwrap();
 
 	let prev = BlockHeader::default();
 	let key_id = ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
-	let b = new_block(vec![&tx], &keychain, &builder, &prev, &key_id);
+	let b = new_block(&[tx], &keychain, &builder, &prev, &key_id);
 	assert!(b
 		.validate(&BlindingFactor::zero(), verifier_cache())
 		.is_err());
@@ -95,16 +100,17 @@ fn block_with_nrd_kernel_pre_post_hf3() {
 	let key_id1 = ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
 	let key_id2 = ExtKeychain::derive_key_id(1, 2, 0, 0, 0);
 
-	let mut tx = build::transaction(
+	let tx = build::transaction(
 		KernelFeatures::NoRecentDuplicate {
 			fee: 2,
 			relative_height: NRDRelativeHeight::new(1440).unwrap(),
 		},
-		vec![input(7, key_id1), output(5, key_id2)],
+		&[input(7, key_id1), output(5, key_id2)],
 		&keychain,
 		&builder,
 	)
 	.unwrap();
+	let txs = &[tx];
 
 	let prev_height = TESTING_THIRD_HARD_FORK - 2;
 	let prev = BlockHeader {
@@ -113,7 +119,7 @@ fn block_with_nrd_kernel_pre_post_hf3() {
 		..BlockHeader::default()
 	};
 	let b = new_block(
-		vec![&mut tx],
+		txs,
 		&keychain,
 		&builder,
 		&prev,
@@ -134,7 +140,7 @@ fn block_with_nrd_kernel_pre_post_hf3() {
 		..BlockHeader::default()
 	};
 	let b = new_block(
-		vec![&mut tx],
+		txs,
 		&keychain,
 		&builder,
 		&prev,
@@ -155,7 +161,7 @@ fn block_with_nrd_kernel_pre_post_hf3() {
 		..BlockHeader::default()
 	};
 	let b = new_block(
-		vec![&mut tx],
+		txs,
 		&keychain,
 		&builder,
 		&prev,
@@ -179,16 +185,18 @@ fn block_with_nrd_kernel_nrd_not_enabled() {
 	let key_id1 = ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
 	let key_id2 = ExtKeychain::derive_key_id(1, 2, 0, 0, 0);
 
-	let mut tx = build::transaction(
+	let tx = build::transaction(
 		KernelFeatures::NoRecentDuplicate {
 			fee: 2,
 			relative_height: NRDRelativeHeight::new(1440).unwrap(),
 		},
-		vec![input(7, key_id1), output(5, key_id2)],
+		&[input(7, key_id1), output(5, key_id2)],
 		&keychain,
 		&builder,
 	)
 	.unwrap();
+
+	let txs = &[tx];
 
 	let prev_height = TESTING_THIRD_HARD_FORK - 2;
 	let prev = BlockHeader {
@@ -197,7 +205,7 @@ fn block_with_nrd_kernel_nrd_not_enabled() {
 		..BlockHeader::default()
 	};
 	let b = new_block(
-		vec![&mut tx],
+		txs,
 		&keychain,
 		&builder,
 		&prev,
@@ -218,7 +226,7 @@ fn block_with_nrd_kernel_nrd_not_enabled() {
 		..BlockHeader::default()
 	};
 	let b = new_block(
-		vec![&mut tx],
+		txs,
 		&keychain,
 		&builder,
 		&prev,
@@ -240,7 +248,7 @@ fn block_with_nrd_kernel_nrd_not_enabled() {
 		..BlockHeader::default()
 	};
 	let b = new_block(
-		vec![&mut tx],
+		txs,
 		&keychain,
 		&builder,
 		&prev,
@@ -265,10 +273,10 @@ fn block_with_cut_through() {
 	let key_id2 = ExtKeychain::derive_key_id(1, 2, 0, 0, 0);
 	let key_id3 = ExtKeychain::derive_key_id(1, 3, 0, 0, 0);
 
-	let mut btx1 = tx2i1o();
-	let mut btx2 = build::transaction(
+	let btx1 = tx2i1o();
+	let btx2 = build::transaction(
 		KernelFeatures::Plain { fee: 2 },
-		vec![input(7, key_id1), output(5, key_id2.clone())],
+		&[input(7, key_id1), output(5, key_id2.clone())],
 		&keychain,
 		&builder,
 	)
@@ -276,16 +284,10 @@ fn block_with_cut_through() {
 
 	// spending tx2 - reuse key_id2
 
-	let mut btx3 = txspend1i1o(5, &keychain, &builder, key_id2, key_id3);
+	let btx3 = txspend1i1o(5, &keychain, &builder, key_id2, key_id3);
 	let prev = BlockHeader::default();
 	let key_id = ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
-	let b = new_block(
-		vec![&mut btx1, &mut btx2, &mut btx3],
-		&keychain,
-		&builder,
-		&prev,
-		&key_id,
-	);
+	let b = new_block(&[btx1, btx2, btx3], &keychain, &builder, &prev, &key_id);
 
 	// block should have been automatically compacted (including reward
 	// output) and should still be valid
@@ -302,7 +304,7 @@ fn empty_block_with_coinbase_is_valid() {
 	let builder = ProofBuilder::new(&keychain);
 	let prev = BlockHeader::default();
 	let key_id = ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
-	let b = new_block(vec![], &keychain, &builder, &prev, &key_id);
+	let b = new_block(&[], &keychain, &builder, &prev, &key_id);
 
 	assert_eq!(b.inputs().len(), 0);
 	assert_eq!(b.outputs().len(), 1);
@@ -341,7 +343,7 @@ fn remove_coinbase_output_flag() {
 	let builder = ProofBuilder::new(&keychain);
 	let prev = BlockHeader::default();
 	let key_id = ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
-	let mut b = new_block(vec![], &keychain, &builder, &prev, &key_id);
+	let mut b = new_block(&[], &keychain, &builder, &prev, &key_id);
 
 	assert!(b.outputs()[0].is_coinbase());
 	b.outputs_mut()[0].features = OutputFeatures::Plain;
@@ -365,7 +367,7 @@ fn remove_coinbase_kernel_flag() {
 	let builder = ProofBuilder::new(&keychain);
 	let prev = BlockHeader::default();
 	let key_id = ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
-	let mut b = new_block(vec![], &keychain, &builder, &prev, &key_id);
+	let mut b = new_block(&[], &keychain, &builder, &prev, &key_id);
 
 	assert!(b.kernels()[0].is_coinbase());
 	b.kernels_mut()[0].features = KernelFeatures::Plain { fee: 0 };
@@ -408,7 +410,7 @@ fn serialize_deserialize_block_header() {
 	let builder = ProofBuilder::new(&keychain);
 	let prev = BlockHeader::default();
 	let key_id = ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
-	let b = new_block(vec![], &keychain, &builder, &prev, &key_id);
+	let b = new_block(&[], &keychain, &builder, &prev, &key_id);
 	let header1 = b.header;
 
 	let mut vec = Vec::new();
@@ -427,7 +429,7 @@ fn serialize_deserialize_block() {
 	let builder = ProofBuilder::new(&keychain);
 	let prev = BlockHeader::default();
 	let key_id = ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
-	let b = new_block(vec![&tx1], &keychain, &builder, &prev, &key_id);
+	let b = new_block(&[tx1], &keychain, &builder, &prev, &key_id);
 
 	let mut vec = Vec::new();
 	ser::serialize_default(&mut vec, &b).expect("serialization failed");
@@ -447,7 +449,7 @@ fn empty_block_serialized_size() {
 	let builder = ProofBuilder::new(&keychain);
 	let prev = BlockHeader::default();
 	let key_id = ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
-	let b = new_block(vec![], &keychain, &builder, &prev, &key_id);
+	let b = new_block(&[], &keychain, &builder, &prev, &key_id);
 	let mut vec = Vec::new();
 	ser::serialize_default(&mut vec, &b).expect("serialization failed");
 	assert_eq!(vec.len(), 1_096);
@@ -461,7 +463,7 @@ fn block_single_tx_serialized_size() {
 	let tx1 = tx1i2o();
 	let prev = BlockHeader::default();
 	let key_id = ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
-	let b = new_block(vec![&tx1], &keychain, &builder, &prev, &key_id);
+	let b = new_block(&[tx1], &keychain, &builder, &prev, &key_id);
 	let mut vec = Vec::new();
 	ser::serialize_default(&mut vec, &b).expect("serialization failed");
 	assert_eq!(vec.len(), 2_670);
@@ -474,7 +476,7 @@ fn empty_compact_block_serialized_size() {
 	let builder = ProofBuilder::new(&keychain);
 	let prev = BlockHeader::default();
 	let key_id = ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
-	let b = new_block(vec![], &keychain, &builder, &prev, &key_id);
+	let b = new_block(&[], &keychain, &builder, &prev, &key_id);
 	let cb: CompactBlock = b.into();
 	let mut vec = Vec::new();
 	ser::serialize_default(&mut vec, &cb).expect("serialization failed");
@@ -489,7 +491,7 @@ fn compact_block_single_tx_serialized_size() {
 	let tx1 = tx1i2o();
 	let prev = BlockHeader::default();
 	let key_id = ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
-	let b = new_block(vec![&tx1], &keychain, &builder, &prev, &key_id);
+	let b = new_block(&[tx1], &keychain, &builder, &prev, &key_id);
 	let cb: CompactBlock = b.into();
 	let mut vec = Vec::new();
 	ser::serialize_default(&mut vec, &cb).expect("serialization failed");
@@ -509,7 +511,7 @@ fn block_10_tx_serialized_size() {
 	}
 	let prev = BlockHeader::default();
 	let key_id = ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
-	let b = new_block(txs.iter().collect(), &keychain, &builder, &prev, &key_id);
+	let b = new_block(&txs, &keychain, &builder, &prev, &key_id);
 
 	// Default protocol version.
 	{
@@ -546,7 +548,7 @@ fn compact_block_10_tx_serialized_size() {
 	}
 	let prev = BlockHeader::default();
 	let key_id = ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
-	let b = new_block(txs.iter().collect(), &keychain, &builder, &prev, &key_id);
+	let b = new_block(&txs, &keychain, &builder, &prev, &key_id);
 	let cb: CompactBlock = b.into();
 	let mut vec = Vec::new();
 	ser::serialize_default(&mut vec, &cb).expect("serialization failed");
@@ -561,7 +563,7 @@ fn compact_block_hash_with_nonce() {
 	let tx = tx1i2o();
 	let prev = BlockHeader::default();
 	let key_id = ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
-	let b = new_block(vec![&tx], &keychain, &builder, &prev, &key_id);
+	let b = new_block(&[tx.clone()], &keychain, &builder, &prev, &key_id);
 	let cb1: CompactBlock = b.clone().into();
 	let cb2: CompactBlock = b.clone().into();
 
@@ -593,7 +595,7 @@ fn convert_block_to_compact_block() {
 	let tx1 = tx1i2o();
 	let prev = BlockHeader::default();
 	let key_id = ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
-	let b = new_block(vec![&tx1], &keychain, &builder, &prev, &key_id);
+	let b = new_block(&[tx1], &keychain, &builder, &prev, &key_id);
 	let cb: CompactBlock = b.clone().into();
 
 	assert_eq!(cb.out_full().len(), 1);
@@ -617,9 +619,9 @@ fn hydrate_empty_compact_block() {
 	let builder = ProofBuilder::new(&keychain);
 	let prev = BlockHeader::default();
 	let key_id = ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
-	let b = new_block(vec![], &keychain, &builder, &prev, &key_id);
+	let b = new_block(&[], &keychain, &builder, &prev, &key_id);
 	let cb: CompactBlock = b.clone().into();
-	let hb = Block::hydrate_from(cb, vec![]).unwrap();
+	let hb = Block::hydrate_from(cb, &[]).unwrap();
 	assert_eq!(hb.header, b.header);
 	assert_eq!(hb.outputs(), b.outputs());
 	assert_eq!(hb.kernels(), b.kernels());
@@ -633,7 +635,7 @@ fn serialize_deserialize_compact_block() {
 	let tx1 = tx1i2o();
 	let prev = BlockHeader::default();
 	let key_id = ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
-	let b = new_block(vec![&tx1], &keychain, &builder, &prev, &key_id);
+	let b = new_block(&[tx1], &keychain, &builder, &prev, &key_id);
 
 	let mut cb1: CompactBlock = b.into();
 
@@ -664,7 +666,7 @@ fn same_amount_outputs_copy_range_proof() {
 
 	let tx = build::transaction(
 		KernelFeatures::Plain { fee: 1 },
-		vec![input(7, key_id1), output(3, key_id2), output(3, key_id3)],
+		&[input(7, key_id1), output(3, key_id2), output(3, key_id3)],
 		&keychain,
 		&builder,
 	)
@@ -673,14 +675,14 @@ fn same_amount_outputs_copy_range_proof() {
 	// now we reconstruct the transaction, swapping the rangeproofs so they
 	// have the wrong privkey
 	let ins = tx.inputs();
-	let mut outs = tx.outputs().clone();
+	let mut outs = tx.outputs().to_vec();
 	let kernels = tx.kernels();
 	outs[0].proof = outs[1].proof;
 
 	let key_id = keychain::ExtKeychain::derive_key_id(1, 4, 0, 0, 0);
 	let prev = BlockHeader::default();
 	let b = new_block(
-		vec![&mut Transaction::new(ins.clone(), outs, kernels.clone())],
+		&[Transaction::new(ins, &outs, kernels)],
 		&keychain,
 		&builder,
 		&prev,
@@ -707,7 +709,7 @@ fn wrong_amount_range_proof() {
 
 	let tx1 = build::transaction(
 		KernelFeatures::Plain { fee: 1 },
-		vec![
+		&[
 			input(7, key_id1.clone()),
 			output(3, key_id2.clone()),
 			output(3, key_id3.clone()),
@@ -718,7 +720,7 @@ fn wrong_amount_range_proof() {
 	.unwrap();
 	let tx2 = build::transaction(
 		KernelFeatures::Plain { fee: 1 },
-		vec![input(7, key_id1), output(2, key_id2), output(4, key_id3)],
+		&[input(7, key_id1), output(2, key_id2), output(4, key_id3)],
 		&keychain,
 		&builder,
 	)
@@ -726,7 +728,7 @@ fn wrong_amount_range_proof() {
 
 	// we take the range proofs from tx2 into tx1 and rebuild the transaction
 	let ins = tx1.inputs();
-	let mut outs = tx1.outputs().clone();
+	let mut outs = tx1.outputs().to_vec();
 	let kernels = tx1.kernels();
 	outs[0].proof = tx2.outputs()[0].proof;
 	outs[1].proof = tx2.outputs()[1].proof;
@@ -734,7 +736,7 @@ fn wrong_amount_range_proof() {
 	let key_id = keychain::ExtKeychain::derive_key_id(1, 4, 0, 0, 0);
 	let prev = BlockHeader::default();
 	let b = new_block(
-		vec![&mut Transaction::new(ins.clone(), outs, kernels.clone())],
+		&[Transaction::new(ins, &outs, kernels)],
 		&keychain,
 		&builder,
 		&prev,
@@ -756,7 +758,7 @@ fn validate_header_proof() {
 	let builder = ProofBuilder::new(&keychain);
 	let prev = BlockHeader::default();
 	let key_id = ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
-	let b = new_block(vec![], &keychain, &builder, &prev, &key_id);
+	let b = new_block(&[], &keychain, &builder, &prev, &key_id);
 
 	let mut header_buf = vec![];
 	{

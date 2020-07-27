@@ -58,7 +58,7 @@ fn test_block_building_max_weight() {
 		test_transaction_spending_coinbase(&keychain, &header_1, vec![100, 200, 300, 1000]);
 
 	// Mine that initial tx so we can spend it with multiple txs.
-	add_block(&chain, vec![initial_tx], &keychain);
+	add_block(&chain, &[initial_tx], &keychain);
 
 	let header = chain.head_header().unwrap();
 
@@ -113,7 +113,7 @@ fn test_block_building_max_weight() {
 		[15625, 1125, 1000, 875]
 	);
 
-	add_block(&chain, txs, &keychain);
+	add_block(&chain, &txs, &keychain);
 	let block = chain.get_block(&chain.head().unwrap().hash()).unwrap();
 
 	// Check contents of the block itself (including coinbase reward).

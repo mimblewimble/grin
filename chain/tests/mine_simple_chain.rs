@@ -570,7 +570,7 @@ fn spend_rewind_spend() {
 
 		let tx1 = build::transaction(
 			KernelFeatures::Plain { fee: 20000 },
-			vec![
+			&[
 				build::coinbase_input(consensus::REWARD, key_id_coinbase.clone()),
 				build::output(consensus::REWARD - 20000, key_id30.clone()),
 			],
@@ -579,7 +579,7 @@ fn spend_rewind_spend() {
 		)
 		.unwrap();
 
-		let b = prepare_block_tx(&kc, &head, &chain, 6, vec![&tx1]);
+		let b = prepare_block_tx(&kc, &head, &chain, 6, &[tx1.clone()]);
 		head = b.header.clone();
 		chain
 			.process_block(b.clone(), chain::Options::SKIP_POW)
@@ -595,7 +595,7 @@ fn spend_rewind_spend() {
 		// Now mine a competing block also spending the same coinbase output from earlier.
 		// Rewind back prior to the tx that spends it to "unspend" it.
 		{
-			let b = prepare_block_tx(&kc, &rewind_to, &chain, 6, vec![&tx1]);
+			let b = prepare_block_tx(&kc, &rewind_to, &chain, 6, &[tx1]);
 			chain
 				.process_block(b.clone(), chain::Options::SKIP_POW)
 				.unwrap();
@@ -644,7 +644,7 @@ fn spend_in_fork_and_compact() {
 
 		let tx1 = build::transaction(
 			KernelFeatures::Plain { fee: 20000 },
-			vec![
+			&[
 				build::coinbase_input(consensus::REWARD, key_id2.clone()),
 				build::output(consensus::REWARD - 20000, key_id30.clone()),
 			],
@@ -653,7 +653,7 @@ fn spend_in_fork_and_compact() {
 		)
 		.unwrap();
 
-		let next = prepare_block_tx(&kc, &fork_head, &chain, 7, vec![&tx1]);
+		let next = prepare_block_tx(&kc, &fork_head, &chain, 7, &[tx1.clone()]);
 		let prev_main = next.header.clone();
 		chain
 			.process_block(next.clone(), chain::Options::SKIP_POW)
@@ -662,7 +662,7 @@ fn spend_in_fork_and_compact() {
 
 		let tx2 = build::transaction(
 			KernelFeatures::Plain { fee: 20000 },
-			vec![
+			&[
 				build::input(consensus::REWARD - 20000, key_id30.clone()),
 				build::output(consensus::REWARD - 40000, key_id31.clone()),
 			],
@@ -671,7 +671,7 @@ fn spend_in_fork_and_compact() {
 		)
 		.unwrap();
 
-		let next = prepare_block_tx(&kc, &prev_main, &chain, 9, vec![&tx2]);
+		let next = prepare_block_tx(&kc, &prev_main, &chain, 9, &[tx2.clone()]);
 		let prev_main = next.header.clone();
 		chain.process_block(next, chain::Options::SKIP_POW).unwrap();
 
@@ -679,11 +679,11 @@ fn spend_in_fork_and_compact() {
 		chain.validate(false).unwrap();
 
 		// mine 2 forked blocks from the first
-		let fork = prepare_block_tx(&kc, &fork_head, &chain, 6, vec![&tx1]);
+		let fork = prepare_block_tx(&kc, &fork_head, &chain, 6, &[tx1.clone()]);
 		let prev_fork = fork.header.clone();
 		chain.process_block(fork, chain::Options::SKIP_POW).unwrap();
 
-		let fork_next = prepare_block_tx(&kc, &prev_fork, &chain, 8, vec![&tx2]);
+		let fork_next = prepare_block_tx(&kc, &prev_fork, &chain, 8, &[tx2.clone()]);
 		let prev_fork = fork_next.header.clone();
 		chain
 			.process_block(fork_next, chain::Options::SKIP_POW)
@@ -771,7 +771,7 @@ fn output_header_mappings() {
 			.unwrap();
 			reward_outputs.push(reward.0.clone());
 			let mut b =
-				core::core::Block::new(&prev, vec![], next_header_info.clone().difficulty, reward)
+				core::core::Block::new(&prev, &[], next_header_info.clone().difficulty, reward)
 					.unwrap();
 			b.header.timestamp = prev.timestamp + Duration::seconds(60);
 			b.header.pow.secondary_scaling = next_header_info.secondary_scaling;
@@ -834,7 +834,7 @@ fn prepare_block_key_idx<K>(
 where
 	K: Keychain,
 {
-	let mut b = prepare_block_nosum(kc, prev, diff, key_idx, vec![]);
+	let mut b = prepare_block_nosum(kc, prev, diff, key_idx, &[]);
 	chain.set_txhashset_roots(&mut b).unwrap();
 	b
 }
@@ -845,7 +845,7 @@ fn prepare_block_tx<K>(
 	prev: &BlockHeader,
 	chain: &Chain,
 	diff: u64,
-	txs: Vec<&Transaction>,
+	txs: &[Transaction],
 ) -> Block
 where
 	K: Keychain,
@@ -860,7 +860,7 @@ fn prepare_block_tx_key_idx<K>(
 	chain: &Chain,
 	diff: u64,
 	key_idx: u32,
-	txs: Vec<&Transaction>,
+	txs: &[Transaction],
 ) -> Block
 where
 	K: Keychain,
@@ -875,7 +875,7 @@ fn prepare_block_nosum<K>(
 	prev: &BlockHeader,
 	diff: u64,
 	key_idx: u32,
-	txs: Vec<&Transaction>,
+	txs: &[Transaction],
 ) -> Block
 where
 	K: Keychain,
@@ -886,12 +886,7 @@ where
 	let fees = txs.iter().map(|tx| tx.fee()).sum();
 	let reward =
 		libtx::reward::output(kc, &libtx::ProofBuilder::new(kc), &key_id, fees, false).unwrap();
-	let mut b = match core::core::Block::new(
-		prev,
-		txs.into_iter().cloned().collect(),
-		Difficulty::from_num(diff),
-		reward,
-	) {
+	let mut b = match core::core::Block::new(prev, txs, Difficulty::from_num(diff), reward) {
 		Err(e) => panic!("{:?}", e),
 		Ok(b) => b,
 	};

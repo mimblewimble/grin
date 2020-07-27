@@ -182,7 +182,7 @@ where
 ///
 pub fn partial_transaction<K, B>(
 	tx: Transaction,
-	elems: Vec<Box<Append<K, B>>>,
+	elems: &[Box<Append<K, B>>],
 	keychain: &K,
 	builder: &B,
 ) -> Result<(Transaction, BlindingFactor), Error>
@@ -203,7 +203,7 @@ where
 /// In the real world we use signature aggregation across multiple participants.
 pub fn transaction<K, B>(
 	features: KernelFeatures,
-	elems: Vec<Box<Append<K, B>>>,
+	elems: &[Box<Append<K, B>>],
 	keychain: &K,
 	builder: &B,
 ) -> Result<Transaction, Error>
@@ -230,7 +230,7 @@ where
 /// NOTE: Only used in tests (for convenience).
 /// Cannot recommend passing private excess around like this in the real world.
 pub fn transaction_with_kernel<K, B>(
-	elems: Vec<Box<Append<K, B>>>,
+	elems: &[Box<Append<K, B>>],
 	kernel: TxKernel,
 	excess: BlindingFactor,
 	keychain: &K,
@@ -284,7 +284,7 @@ mod test {
 
 		let tx = transaction(
 			KernelFeatures::Plain { fee: 2 },
-			vec![input(10, key_id1), input(12, key_id2), output(20, key_id3)],
+			&[input(10, key_id1), input(12, key_id2), output(20, key_id3)],
 			&keychain,
 			&builder,
 		)
@@ -306,7 +306,7 @@ mod test {
 
 		let tx = transaction(
 			KernelFeatures::Plain { fee: 2 },
-			vec![input(10, key_id1), input(12, key_id2), output(20, key_id3)],
+			&[input(10, key_id1), input(12, key_id2), output(20, key_id3)],
 			&keychain,
 			&builder,
 		)
@@ -327,7 +327,7 @@ mod test {
 
 		let tx = transaction(
 			KernelFeatures::Plain { fee: 4 },
-			vec![input(6, key_id1), output(2, key_id2)],
+			&[input(6, key_id1), output(2, key_id2)],
 			&keychain,
 			&builder,
 		)

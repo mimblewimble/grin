@@ -146,17 +146,17 @@ impl CompactBlock {
 	}
 
 	/// Get kern_ids
-	pub fn kern_ids(&self) -> &Vec<ShortId> {
+	pub fn kern_ids(&self) -> &[ShortId] {
 		&self.body.kern_ids
 	}
 
 	/// Get full (coinbase) kernels
-	pub fn kern_full(&self) -> &Vec<TxKernel> {
+	pub fn kern_full(&self) -> &[TxKernel] {
 		&self.body.kern_full
 	}
 
 	/// Get full (coinbase) outputs
-	pub fn out_full(&self) -> &Vec<Output> {
+	pub fn out_full(&self) -> &[Output] {
 		&self.body.out_full
 	}
 }

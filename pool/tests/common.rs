@@ -66,11 +66,11 @@ where
 	K: Keychain,
 {
 	for _ in 0..count {
-		add_block(chain, vec![], keychain);
+		add_block(chain, &[], keychain);
 	}
 }
 
-pub fn add_block<K>(chain: &Chain, txs: Vec<Transaction>, keychain: &K)
+pub fn add_block<K>(chain: &Chain, txs: &[Transaction], keychain: &K)
 where
 	K: Keychain,
 {
@@ -198,7 +198,7 @@ where
 
 	build::transaction(
 		KernelFeatures::Plain { fee: fees as u64 },
-		tx_elements,
+		&tx_elements,
 		keychain,
 		&ProofBuilder::new(keychain),
 	)
@@ -249,7 +249,7 @@ where
 
 	build::transaction(
 		kernel_features,
-		tx_elements,
+		&tx_elements,
 		keychain,
 		&ProofBuilder::new(keychain),
 	)
@@ -279,7 +279,7 @@ where
 	}
 
 	build::transaction_with_kernel(
-		tx_elements,
+		&tx_elements,
 		kernel,
 		excess,
 		keychain,

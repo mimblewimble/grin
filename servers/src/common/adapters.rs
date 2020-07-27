@@ -169,7 +169,7 @@ where
 		let cb_hash = cb.hash();
 		if cb.kern_ids().is_empty() {
 			// push the freshly hydrated block through the chain pipeline
-			match core::Block::hydrate_from(cb, vec![]) {
+			match core::Block::hydrate_from(cb, &[]) {
 				Ok(block) => {
 					if !self.sync_state.is_syncing() {
 						for hook in &self.hooks {
@@ -211,7 +211,7 @@ where
 				return Ok(true);
 			}
 
-			let block = match core::Block::hydrate_from(cb.clone(), txs) {
+			let block = match core::Block::hydrate_from(cb.clone(), &txs) {
 				Ok(block) => {
 					if !self.sync_state.is_syncing() {
 						for hook in &self.hooks {
