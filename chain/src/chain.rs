@@ -19,7 +19,7 @@ use crate::core::core::hash::{Hash, Hashed, ZERO_HASH};
 use crate::core::core::merkle_proof::MerkleProof;
 use crate::core::core::verifier_cache::VerifierCache;
 use crate::core::core::{
-	Block, BlockHeader, BlockSums, Committed, KernelFeatures, Output, OutputIdentifier,
+	Block, BlockHeader, BlockSums, Committed, Inputs, KernelFeatures, Output, OutputIdentifier,
 	Transaction, TxKernel,
 };
 use crate::core::global;
@@ -262,13 +262,52 @@ impl Chain {
 
 	/// Processes a single block, then checks for orphans, processing
 	/// those as well if they're found
-	pub fn process_block(&self, b: Block, opts: Options) -> Result<Option<Tip>, Error> {
-		let height = b.header.height;
-		let res = self.process_block_single(b, opts);
+	pub fn process_block(&self, block: Block, opts: Options) -> Result<Option<Tip>, Error> {
+		let height = block.header.height;
+
+		// Process the header first.
+		// If invalid then fail early.
+		// If valid then continue with block processing with header_head committed to db etc.
+		self.process_block_header(&block.header, opts)?;
+
+		// Convert block to FeaturesAndCommit inputs.
+		let block = self.convert_block_v2(block)?;
+
+		let res = self.process_block_single(block, opts);
 		if res.is_ok() {
 			self.check_orphans(height + 1);
 		}
 		res
+	}
+
+	/// tbd
+	fn convert_block_v2(&self, block: Block) -> Result<Block, Error> {
+		debug!(
+			"convert_block_v2: {} at {}",
+			block.header.hash(),
+			block.header.height
+		);
+
+		if block.inputs().is_empty() {
+			return Ok(Block {
+				header: block.header,
+				body: block.body.replace_inputs(Inputs::FeaturesAndCommit(vec![])),
+			});
+		}
+
+		let mut header_pmmr = self.header_pmmr.write();
+		let mut txhashset = self.txhashset.write();
+		let outputs =
+			txhashset::extending_readonly(&mut header_pmmr, &mut txhashset, |ext, batch| {
+				let previous_header = batch.get_previous_header(&block.header)?;
+				pipe::rewind_and_apply_fork(&previous_header, ext, batch)?;
+				pipe::validate_utxo(&block, ext, batch)
+			})?;
+		let outputs: Vec<_> = outputs.into_iter().map(|(out, _)| out).collect();
+		Ok(Block {
+			header: block.header,
+			body: block.body.replace_inputs(outputs.into()),
+		})
 	}
 
 	fn determine_status(&self, head: Option<Tip>, prev_head: Tip, fork_point: Tip) -> BlockStatus {
@@ -295,11 +334,6 @@ impl Chain {
 	/// Returns true if it has been added to the longest chain
 	/// or false if it has added to a fork (or orphan?).
 	fn process_block_single(&self, b: Block, opts: Options) -> Result<Option<Tip>, Error> {
-		// Process the header first.
-		// If invalid then fail early.
-		// If valid then continue with block processing with header_head committed to db etc.
-		self.process_block_header(&b.header, opts)?;
-
 		let (maybe_new_head, prev_head) = {
 			let mut header_pmmr = self.header_pmmr.write();
 			let mut txhashset = self.txhashset.write();
@@ -544,7 +578,8 @@ impl Chain {
 		let header_pmmr = self.header_pmmr.read();
 		let txhashset = self.txhashset.read();
 		txhashset::utxo_view(&header_pmmr, &txhashset, |utxo, batch| {
-			utxo.validate_tx(tx, batch)
+			utxo.validate_tx(tx, batch)?;
+			Ok(())
 		})
 	}
 

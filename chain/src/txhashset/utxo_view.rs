@@ -20,6 +20,7 @@ use crate::core::core::{Block, BlockHeader, Input, Inputs, Output, OutputIdentif
 use crate::core::global;
 use crate::error::{Error, ErrorKind};
 use crate::store::Batch;
+use crate::types::CommitPos;
 use crate::util::secp::pedersen::RangeProof;
 use grin_store::pmmr::PMMRBackend;
 
@@ -47,41 +48,54 @@ impl<'a> UTXOView<'a> {
 	/// Validate a block against the current UTXO set.
 	/// Every input must spend an output that currently exists in the UTXO set.
 	/// No duplicate outputs.
-	pub fn validate_block(&self, block: &Block, batch: &Batch<'_>) -> Result<(), Error> {
+	pub fn validate_block(
+		&self,
+		block: &Block,
+		batch: &Batch<'_>,
+	) -> Result<Vec<(OutputIdentifier, CommitPos)>, Error> {
 		for output in block.outputs() {
 			self.validate_output(output, batch)?;
 		}
-
 		let inputs: Vec<_> = block.inputs().into();
-		for input in &inputs {
-			self.validate_input(input, batch)?;
-		}
-		Ok(())
+		let outputs_spent: Result<Vec<_>, Error> = inputs
+			.iter()
+			.map(|input| self.validate_input(input, batch))
+			.collect();
+		outputs_spent
 	}
 
 	/// Validate a transaction against the current UTXO set.
 	/// Every input must spend an output that currently exists in the UTXO set.
 	/// No duplicate outputs.
-	pub fn validate_tx(&self, tx: &Transaction, batch: &Batch<'_>) -> Result<(), Error> {
+	pub fn validate_tx(
+		&self,
+		tx: &Transaction,
+		batch: &Batch<'_>,
+	) -> Result<Vec<(OutputIdentifier, CommitPos)>, Error> {
 		for output in tx.outputs() {
 			self.validate_output(output, batch)?;
 		}
-
 		let inputs: Vec<_> = tx.inputs().into();
-		for input in &inputs {
-			self.validate_input(input, batch)?;
-		}
-		Ok(())
+		let outputs_spent: Result<Vec<_>, Error> = inputs
+			.iter()
+			.map(|input| self.validate_input(input, batch))
+			.collect();
+		outputs_spent
 	}
 
 	// Input is valid if it is spending an (unspent) output
 	// that currently exists in the output MMR.
 	// Compare against the entry in output MMR at the expected pos.
-	fn validate_input(&self, input: &Input, batch: &Batch<'_>) -> Result<(), Error> {
-		if let Ok(pos) = batch.get_output_pos(&input.commitment()) {
-			if let Some(out) = self.output_pmmr.get_data(pos) {
+	fn validate_input(
+		&self,
+		input: &Input,
+		batch: &Batch<'_>,
+	) -> Result<(OutputIdentifier, CommitPos), Error> {
+		let pos = batch.get_output_pos_height(&input.commitment())?;
+		if let Some(pos) = pos {
+			if let Some(out) = self.output_pmmr.get_data(pos.pos) {
 				if OutputIdentifier::from(input) == out {
-					return Ok(());
+					return Ok((out, pos));
 				}
 			}
 		}

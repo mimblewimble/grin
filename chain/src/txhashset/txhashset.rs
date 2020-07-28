@@ -260,12 +260,12 @@ impl TxHashSet {
 	pub fn get_unspent(&self, output_id: &OutputIdentifier) -> Result<Option<CommitPos>, Error> {
 		let commit = output_id.commit;
 		match self.commit_index.get_output_pos_height(&commit) {
-			Ok(Some((pos, height))) => {
+			Ok(Some(pos)) => {
 				let output_pmmr: ReadonlyPMMR<'_, Output, _> =
 					ReadonlyPMMR::at(&self.output_pmmr_h.backend, self.output_pmmr_h.last_pos);
-				if let Some(out) = output_pmmr.get_data(pos) {
+				if let Some(out) = output_pmmr.get_data(pos.pos) {
 					if out == *output_id {
-						Ok(Some(CommitPos { pos, height }))
+						Ok(Some(pos))
 					} else {
 						Ok(None)
 					}
@@ -568,7 +568,13 @@ impl TxHashSet {
 					// Note: MMR position is 1-based and not 0-based, so here must be '>' instead of '>='
 					break;
 				}
-				batch.save_output_pos_height(&commit, pos, h.height)?;
+				batch.save_output_pos_height(
+					&commit,
+					CommitPos {
+						pos,
+						height: h.height,
+					},
+				)?;
 				i += 1;
 			}
 		}
@@ -1045,7 +1051,13 @@ impl<'a> Extension<'a> {
 		for out in b.outputs() {
 			let pos = self.apply_output(out, batch)?;
 			affected_pos.push(pos);
-			batch.save_output_pos_height(&out.commitment(), pos, b.header.height)?;
+			batch.save_output_pos_height(
+				&out.commitment(),
+				CommitPos {
+					pos,
+					height: b.header.height,
+				},
+			)?;
 		}
 
 		// Remove the output from the output and rangeproof MMRs.
@@ -1092,9 +1104,9 @@ impl<'a> Extension<'a> {
 
 	fn apply_input(&mut self, input: &Input, batch: &Batch<'_>) -> Result<CommitPos, Error> {
 		let commit = input.commitment();
-		if let Some((pos, height)) = batch.get_output_pos_height(&commit)? {
+		if let Some(pos) = batch.get_output_pos_height(&commit)? {
 			// First check this input corresponds to an existing entry in the output MMR.
-			if let Some(out) = self.output_pmmr.get_data(pos) {
+			if let Some(out) = self.output_pmmr.get_data(pos.pos) {
 				if OutputIdentifier::from(input) != out {
 					return Err(ErrorKind::TxHashSetErr("output pmmr mismatch".to_string()).into());
 				}
@@ -1103,12 +1115,12 @@ impl<'a> Extension<'a> {
 			// Now prune the output_pmmr, rproof_pmmr and their storage.
 			// Input is not valid if we cannot prune successfully (to spend an unspent
 			// output).
-			match self.output_pmmr.prune(pos) {
+			match self.output_pmmr.prune(pos.pos) {
 				Ok(true) => {
 					self.rproof_pmmr
-						.prune(pos)
+						.prune(pos.pos)
 						.map_err(ErrorKind::TxHashSetErr)?;
-					Ok(CommitPos { pos, height })
+					Ok(pos)
 				}
 				Ok(false) => Err(ErrorKind::AlreadySpent(commit).into()),
 				Err(e) => Err(ErrorKind::TxHashSetErr(e).into()),
@@ -1333,8 +1345,8 @@ impl<'a> Extension<'a> {
 		// The output_pos index should be updated to reflect the old pos 1 when unspent.
 		if let Ok(spent) = spent {
 			let inputs: Vec<_> = block.inputs().into();
-			for (x, y) in inputs.iter().zip(spent) {
-				batch.save_output_pos_height(&x.commitment(), y.pos, y.height)?;
+			for (input, pos) in inputs.iter().zip(spent) {
+				batch.save_output_pos_height(&input.commitment(), pos)?;
 			}
 		}
 

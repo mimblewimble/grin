@@ -18,12 +18,12 @@ use crate::core::consensus;
 use crate::core::core::hash::Hashed;
 use crate::core::core::verifier_cache::VerifierCache;
 use crate::core::core::Committed;
-use crate::core::core::{Block, BlockHeader, BlockSums};
+use crate::core::core::{Block, BlockHeader, BlockSums, OutputIdentifier};
 use crate::core::pow;
 use crate::error::{Error, ErrorKind};
 use crate::store;
 use crate::txhashset;
-use crate::types::{Options, Tip};
+use crate::types::{CommitPos, Options, Tip};
 use crate::util::RwLock;
 use grin_store;
 use std::sync::Arc;
@@ -600,11 +600,12 @@ pub fn rewind_and_apply_fork(
 	Ok(fork_point)
 }
 
-fn validate_utxo(
+/// Validate block inputs against utxo.
+pub fn validate_utxo(
 	block: &Block,
 	ext: &mut txhashset::ExtensionPair<'_>,
 	batch: &store::Batch<'_>,
-) -> Result<(), Error> {
+) -> Result<Vec<(OutputIdentifier, CommitPos)>, Error> {
 	let extension = &ext.extension;
 	let header_extension = &ext.header_extension;
 	extension
