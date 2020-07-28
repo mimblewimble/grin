@@ -629,11 +629,8 @@ impl BlockPrintable {
 		include_proof: bool,
 		include_merkle_proof: bool,
 	) -> Result<BlockPrintable, chain::Error> {
-		let inputs = block
-			.inputs()
-			.iter()
-			.map(|x| x.commitment().to_hex())
-			.collect();
+		let inputs: Vec<_> = block.inputs().into();
+		let inputs = inputs.iter().map(|x| x.commitment().to_hex()).collect();
 		let outputs = block
 			.outputs()
 			.iter()

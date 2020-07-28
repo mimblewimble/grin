@@ -354,7 +354,8 @@ where
 			let mut insert_pos = None;
 			let mut is_rejected = false;
 
-			for input in entry.tx.inputs() {
+			let tx_inputs: Vec<_> = entry.tx.inputs().into();
+			for input in tx_inputs {
 				if rejected.contains(&input.commitment()) {
 					// Depends on a rejected tx, so reject this one.
 					is_rejected = true;
@@ -464,9 +465,11 @@ where
 		// Reject any txs where we see a matching tx kernel in the block.
 		// Also reject any txs where we see a conflicting tx,
 		// where an input is spent in a different tx.
+		let block_inputs: Vec<_> = block.inputs().into();
 		self.entries.retain(|x| {
+			let tx_inputs: Vec<_> = x.tx.inputs().into();
 			!x.tx.kernels().iter().any(|y| block.kernels().contains(y))
-				&& !x.tx.inputs().iter().any(|y| block.inputs().contains(y))
+				&& !tx_inputs.iter().any(|y| block_inputs.contains(y))
 		});
 	}
 

@@ -16,7 +16,7 @@
 
 use crate::core::core::hash::{Hash, Hashed};
 use crate::core::core::pmmr::{self, ReadonlyPMMR};
-use crate::core::core::{Block, BlockHeader, Input, Output, OutputIdentifier, Transaction};
+use crate::core::core::{Block, BlockHeader, Input, Inputs, Output, OutputIdentifier, Transaction};
 use crate::core::global;
 use crate::error::{Error, ErrorKind};
 use crate::store::Batch;
@@ -52,7 +52,8 @@ impl<'a> UTXOView<'a> {
 			self.validate_output(output, batch)?;
 		}
 
-		for input in block.inputs() {
+		let inputs: Vec<_> = block.inputs().into();
+		for input in &inputs {
 			self.validate_input(input, batch)?;
 		}
 		Ok(())
@@ -66,7 +67,8 @@ impl<'a> UTXOView<'a> {
 			self.validate_output(output, batch)?;
 		}
 
-		for input in tx.inputs() {
+		let inputs: Vec<_> = tx.inputs().into();
+		for input in &inputs {
 			self.validate_input(input, batch)?;
 		}
 		Ok(())
@@ -113,12 +115,13 @@ impl<'a> UTXOView<'a> {
 	/// that have not sufficiently matured.
 	pub fn verify_coinbase_maturity(
 		&self,
-		inputs: &[Input],
+		inputs: &Inputs,
 		height: u64,
 		batch: &Batch<'_>,
 	) -> Result<(), Error> {
 		// Find the greatest output pos of any coinbase
 		// outputs we are attempting to spend.
+		let inputs: Vec<_> = inputs.into();
 		let pos = inputs
 			.iter()
 			.filter(|x| x.is_coinbase())
