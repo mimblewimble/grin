@@ -557,9 +557,7 @@ fn reward_empty_block() {
 
 	let b = new_block(&[], &keychain, &builder, &previous_header, &key_id);
 
-	b.cut_through()
-		.unwrap()
-		.validate(&BlindingFactor::zero(), verifier_cache())
+	b.validate(&BlindingFactor::zero(), verifier_cache())
 		.unwrap();
 }
 
@@ -578,11 +576,7 @@ fn reward_with_tx_block() {
 	let previous_header = BlockHeader::default();
 
 	let block = new_block(&[tx1], &keychain, &builder, &previous_header, &key_id);
-	block
-		.cut_through()
-		.unwrap()
-		.validate(&BlindingFactor::zero(), vc.clone())
-		.unwrap();
+	block.validate(&BlindingFactor::zero(), vc.clone()).unwrap();
 }
 
 #[test]

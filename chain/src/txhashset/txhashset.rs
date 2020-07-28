@@ -1052,7 +1052,8 @@ impl<'a> Extension<'a> {
 		// Add spent_pos to affected_pos to update the accumulator later on.
 		// Remove the spent output from the output_pos index.
 		let mut spent = vec![];
-		for input in b.inputs() {
+		let inputs: Vec<_> = b.inputs().into();
+		for input in &inputs {
 			let pos = self.apply_input(input, batch)?;
 			affected_pos.push(pos.pos);
 			batch.delete_output_pos_height(&input.commitment())?;
@@ -1331,7 +1332,8 @@ impl<'a> Extension<'a> {
 		// reused output commitment. For example an output at pos 1, spent, reused at pos 2.
 		// The output_pos index should be updated to reflect the old pos 1 when unspent.
 		if let Ok(spent) = spent {
-			for (x, y) in block.inputs().iter().zip(spent) {
+			let inputs: Vec<_> = block.inputs().into();
+			for (x, y) in inputs.iter().zip(spent) {
 				batch.save_output_pos_height(&x.commitment(), y.pos, y.height)?;
 			}
 		}

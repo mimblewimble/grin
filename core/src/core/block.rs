@@ -16,12 +16,12 @@
 
 use crate::consensus::{self, reward, REWARD};
 use crate::core::committed::{self, Committed};
-use crate::core::compact_block::{CompactBlock, CompactBlockBody};
+use crate::core::compact_block::CompactBlock;
 use crate::core::hash::{DefaultHashable, Hash, Hashed, ZERO_HASH};
 use crate::core::verifier_cache::VerifierCache;
 use crate::core::{
-	transaction, Commitment, Input, KernelFeatures, Output, Transaction, TransactionBody, TxKernel,
-	Weighting,
+	transaction, Commitment, Inputs, KernelFeatures, Output, Transaction, TransactionBody,
+	TxKernel, Weighting,
 };
 use crate::global;
 use crate::pow::{verify_size, Difficulty, Proof, ProofOfWork};
@@ -32,10 +32,8 @@ use chrono::naive::{MAX_DATE, MIN_DATE};
 use chrono::prelude::{DateTime, NaiveDateTime, Utc};
 use chrono::Duration;
 use keychain::{self, BlindingFactor};
-use std::collections::HashSet;
 use std::convert::TryInto;
 use std::fmt;
-use std::iter::FromIterator;
 use std::sync::Arc;
 use util::from_hex;
 use util::RwLock;
@@ -562,36 +560,35 @@ impl Block {
 
 		let header = cb.header.clone();
 
-		let mut all_inputs = HashSet::new();
-		let mut all_outputs = HashSet::new();
-		let mut all_kernels = HashSet::new();
+		let mut inputs = vec![];
+		let mut outputs = vec![];
+		let mut kernels = vec![];
 
 		// collect all the inputs, outputs and kernels from the txs
 		for tx in txs {
-			all_inputs.extend(tx.inputs());
-			all_outputs.extend(tx.outputs());
-			all_kernels.extend(tx.kernels());
+			let tx_inputs: Vec<_> = tx.inputs().into();
+			inputs.extend_from_slice(tx_inputs.as_slice());
+			outputs.extend_from_slice(tx.outputs());
+			kernels.extend_from_slice(tx.kernels());
 		}
 
-		// include the coinbase output(s) and kernel(s) from the compact_block
-		{
-			let body: CompactBlockBody = cb.into();
-			all_outputs.extend(body.out_full);
-			all_kernels.extend(body.kern_full);
-		}
+		// apply cut-through to our tx inputs and outputs
+		let (inputs, outputs) = transaction::cut_through(&mut inputs, &mut outputs)?;
 
-		// convert the sets to vecs
-		let all_inputs = Vec::from_iter(all_inputs);
-		let all_outputs = Vec::from_iter(all_outputs);
-		let all_kernels = Vec::from_iter(all_kernels);
+		let mut outputs = outputs.to_vec();
+		let mut kernels = kernels.to_vec();
+
+		// include the full outputs and kernels from the compact block
+		outputs.extend_from_slice(cb.out_full());
+		kernels.extend_from_slice(cb.kern_full());
 
 		// Initialize a tx body and sort everything.
-		let body = TransactionBody::init(&all_inputs, &all_outputs, &all_kernels, false)?;
+		let body = TransactionBody::init(inputs, &outputs, &kernels, false)?;
 
 		// Finally return the full block.
 		// Note: we have not actually validated the block here,
 		// caller must validate the block.
-		Block { header, body }.cut_through()
+		Ok(Block { header, body })
 	}
 
 	/// Build a new empty block from a specified header
@@ -635,7 +632,7 @@ impl Block {
 		// Now build the block with all the above information.
 		// Note: We have not validated the block here.
 		// Caller must validate the block as necessary.
-		Block {
+		let block = Block {
 			header: BlockHeader {
 				version,
 				height,
@@ -649,8 +646,8 @@ impl Block {
 				..Default::default()
 			},
 			body: agg_tx.into(),
-		}
-		.cut_through()
+		};
+		Ok(block)
 	}
 
 	/// Consumes this block and returns a new block with the coinbase output
@@ -662,41 +659,23 @@ impl Block {
 	}
 
 	/// Get inputs
-	pub fn inputs(&self) -> &[Input] {
-		&self.body.inputs
+	pub fn inputs(&self) -> Inputs {
+		self.body.inputs()
 	}
 
 	/// Get outputs
 	pub fn outputs(&self) -> &[Output] {
-		&self.body.outputs
+		&self.body.outputs()
 	}
 
 	/// Get kernels
 	pub fn kernels(&self) -> &[TxKernel] {
-		&self.body.kernels
+		&self.body.kernels()
 	}
 
 	/// Sum of all fees (inputs less outputs) in the block
 	pub fn total_fees(&self) -> u64 {
 		self.body.fee()
-	}
-
-	/// Matches any output with a potential spending input, eliminating them
-	/// from the block. Provides a simple way to cut-through the block. The
-	/// elimination is stable with respect to the order of inputs and outputs.
-	/// Method consumes the block.
-	pub fn cut_through(self) -> Result<Block, Error> {
-		let mut inputs = self.inputs().to_vec();
-		let mut outputs = self.outputs().to_vec();
-		let (inputs, outputs) = transaction::cut_through(&mut inputs, &mut outputs)?;
-
-		// Initialize tx body and sort everything.
-		let body = TransactionBody::init(inputs, outputs, self.kernels(), false)?;
-
-		Ok(Block {
-			header: self.header,
-			body,
-		})
 	}
 
 	/// "Lightweight" validation that we can perform quickly during read/deserialization.

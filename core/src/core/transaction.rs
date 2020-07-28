@@ -375,9 +375,6 @@ pub enum Error {
 	InvalidProofMessage,
 	/// Error when verifying kernel sums via committed trait.
 	Committed(committed::Error),
-	/// Error when sums do not verify correctly during tx aggregation.
-	/// Likely a "double spend" across two unconfirmed txs.
-	AggregationError,
 	/// Validation error relating to cut-through (tx is spending its own
 	/// output).
 	CutThrough,
@@ -650,21 +647,14 @@ pub enum Weighting {
 }
 
 /// TransactionBody is a common abstraction for transaction and block
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 pub struct TransactionBody {
 	/// List of inputs spent by the transaction.
-	pub inputs: Vec<Input>,
+	pub inputs: Inputs,
 	/// List of outputs the transaction produces.
 	pub outputs: Vec<Output>,
 	/// List of kernels that make up this transaction (usually a single kernel).
 	pub kernels: Vec<TxKernel>,
-}
-
-/// PartialEq
-impl PartialEq for TransactionBody {
-	fn eq(&self, l: &TransactionBody) -> bool {
-		self.inputs == l.inputs && self.outputs == l.outputs && self.kernels == l.kernels
-	}
 }
 
 /// Implementation of Writeable for a body, defines how to
@@ -719,15 +709,16 @@ impl Readable for TransactionBody {
 
 impl Committed for TransactionBody {
 	fn inputs_committed(&self) -> Vec<Commitment> {
-		self.inputs.iter().map(|x| x.commitment()).collect()
+		let inputs: Vec<_> = self.inputs().into();
+		inputs.iter().map(|x| x.commitment()).collect()
 	}
 
 	fn outputs_committed(&self) -> Vec<Commitment> {
-		self.outputs.iter().map(|x| x.commitment()).collect()
+		self.outputs().iter().map(|x| x.commitment()).collect()
 	}
 
 	fn kernels_committed(&self) -> Vec<Commitment> {
-		self.kernels.iter().map(|x| x.excess()).collect()
+		self.kernels().iter().map(|x| x.excess()).collect()
 	}
 }
 
@@ -747,7 +738,7 @@ impl TransactionBody {
 	/// Creates a new empty transaction (no inputs or outputs, zero fee).
 	pub fn empty() -> TransactionBody {
 		TransactionBody {
-			inputs: vec![],
+			inputs: Inputs::default(),
 			outputs: vec![],
 			kernels: vec![],
 		}
@@ -770,7 +761,7 @@ impl TransactionBody {
 		verify_sorted: bool,
 	) -> Result<TransactionBody, Error> {
 		let mut body = TransactionBody {
-			inputs: inputs.to_vec(),
+			inputs: inputs.into(),
 			outputs: outputs.to_vec(),
 			kernels: kernels.to_vec(),
 		};
@@ -786,13 +777,30 @@ impl TransactionBody {
 		Ok(body)
 	}
 
+	/// Transaction inputs.
+	pub fn inputs(&self) -> Inputs {
+		self.inputs.clone()
+	}
+
+	/// Transaction outputs.
+	pub fn outputs(&self) -> &[Output] {
+		&self.outputs
+	}
+
+	/// Transaction kernels.
+	pub fn kernels(&self) -> &[TxKernel] {
+		&self.kernels
+	}
+
 	/// Builds a new body with the provided inputs added. Existing
 	/// inputs, if any, are kept intact.
 	/// Sort order is maintained.
 	pub fn with_input(mut self, input: Input) -> TransactionBody {
-		if let Err(e) = self.inputs.binary_search(&input) {
-			self.inputs.insert(e, input)
+		let mut inputs: Vec<_> = self.inputs.into();
+		if let Err(e) = inputs.binary_search(&input) {
+			inputs.insert(e, input)
 		};
+		self.inputs = inputs.into();
 		self
 	}
 
@@ -957,7 +965,8 @@ impl TransactionBody {
 	// Verify that no input is spending an output from the same block.
 	// Assumes inputs and outputs are sorted
 	fn verify_cut_through(&self) -> Result<(), Error> {
-		let mut inputs = self.inputs.iter().map(|x| x.hash()).peekable();
+		let inputs: Vec<_> = self.inputs().into();
+		let mut inputs = inputs.iter().map(|x| x.hash()).peekable();
 		let mut outputs = self.outputs.iter().map(|x| x.hash()).peekable();
 		while let (Some(ih), Some(oh)) = (inputs.peek(), outputs.peek()) {
 			match ih.cmp(oh) {
@@ -1195,18 +1204,18 @@ impl Transaction {
 	}
 
 	/// Get inputs
-	pub fn inputs(&self) -> &[Input] {
-		&self.body.inputs
+	pub fn inputs(&self) -> Inputs {
+		self.body.inputs()
 	}
 
 	/// Get outputs
 	pub fn outputs(&self) -> &[Output] {
-		&self.body.outputs
+		&self.body.outputs()
 	}
 
 	/// Get kernels
 	pub fn kernels(&self) -> &[TxKernel] {
-		&self.body.kernels
+		&self.body.kernels()
 	}
 
 	/// Total fee for a transaction is the sum of fees of all kernels.
@@ -1273,23 +1282,23 @@ impl Transaction {
 
 /// Matches any output with a potential spending input, eliminating them
 /// from the Vec. Provides a simple way to cut-through a block or aggregated
-/// transaction. The elimination is stable with respect to the order of inputs
-/// and outputs.
+/// transaction.
 pub fn cut_through<'a>(
 	inputs: &'a mut [Input],
 	outputs: &'a mut [Output],
 ) -> Result<(&'a [Input], &'a [Output]), Error> {
-	// assemble output commitments set, checking they're all unique
-	outputs.sort_unstable();
-	if outputs.windows(2).any(|pair| pair[0] == pair[1]) {
-		return Err(Error::AggregationError);
-	}
-	inputs.sort_unstable();
+	// Make sure inputs and outputs are sorted consistently by commitment.
+	inputs.sort_unstable_by_key(|x| x.commitment());
+	outputs.sort_unstable_by_key(|x| x.commitment());
+
 	let mut inputs_idx = 0;
 	let mut outputs_idx = 0;
 	let mut ncut = 0;
 	while inputs_idx < inputs.len() && outputs_idx < outputs.len() {
-		match inputs[inputs_idx].hash().cmp(&outputs[outputs_idx].hash()) {
+		match inputs[inputs_idx]
+			.partial_cmp(&outputs[outputs_idx])
+			.expect("compare input to output")
+		{
 			Ordering::Less => {
 				inputs.swap(inputs_idx - ncut, inputs_idx);
 				inputs_idx += 1;
@@ -1318,10 +1327,21 @@ pub fn cut_through<'a>(
 		outputs_idx += 1;
 	}
 
-	Ok((
-		&inputs[..inputs.len() - ncut],
-		&outputs[..outputs.len() - ncut],
-	))
+	// Take new shorter slices with cut-through elements removed.
+	let inputs = &inputs[..inputs.len() - ncut];
+	let outputs = &outputs[..outputs.len() - ncut];
+
+	// Check we have no duplicate inputs after cut-through.
+	if inputs.windows(2).any(|pair| pair[0] == pair[1]) {
+		return Err(Error::CutThrough);
+	}
+
+	// Check we have no duplicate outputs after cut-through.
+	if outputs.windows(2).any(|pair| pair[0] == pair[1]) {
+		return Err(Error::CutThrough);
+	}
+
+	Ok((inputs, outputs))
 }
 
 /// Aggregate a vec of txs into a multi-kernel tx with cut_through.
@@ -1352,16 +1372,13 @@ pub fn aggregate(txs: &[Transaction]) -> Result<Transaction, Error> {
 		// we will sum these later to give a single aggregate offset
 		kernel_offsets.push(tx.offset.clone());
 
-		inputs.extend_from_slice(tx.inputs());
+		let tx_inputs: Vec<_> = tx.inputs().into();
+		inputs.extend_from_slice(&tx_inputs);
 		outputs.extend_from_slice(tx.outputs());
 		kernels.extend_from_slice(tx.kernels());
 	}
 
-	// Sort inputs and outputs during cut_through.
 	let (inputs, outputs) = cut_through(&mut inputs, &mut outputs)?;
-
-	// Now sort kernels.
-	kernels.sort_unstable();
 
 	// now sum the kernel_offsets up to give us an aggregate offset for the
 	// transaction
@@ -1372,6 +1389,7 @@ pub fn aggregate(txs: &[Transaction]) -> Result<Transaction, Error> {
 	//   * cut-through outputs
 	//   * full set of tx kernels
 	//   * sum of all kernel offsets
+	// Note: We sort input/outputs/kernels when building the transaction body internally.
 	let tx = Transaction::new(inputs, outputs, &kernels).with_offset(total_kernel_offset);
 
 	Ok(tx)
@@ -1390,9 +1408,11 @@ pub fn deaggregate(mk_tx: Transaction, txs: &[Transaction]) -> Result<Transactio
 
 	let tx = aggregate(txs)?;
 
-	for mk_input in mk_tx.inputs() {
-		if !tx.inputs().contains(&mk_input) && !inputs.contains(mk_input) {
-			inputs.push(*mk_input);
+	let mk_inputs: Vec<_> = mk_tx.inputs().into();
+	for mk_input in mk_inputs {
+		let tx_inputs: Vec<_> = tx.inputs().into();
+		if !tx_inputs.contains(&mk_input) && !inputs.contains(&mk_input) {
+			inputs.push(mk_input);
 		}
 	}
 	for mk_output in mk_tx.outputs() {
@@ -1460,6 +1480,20 @@ pub struct Input {
 impl DefaultHashable for Input {}
 hashable_ord!(Input);
 
+// Inputs can be compared to outputs.
+impl PartialEq<Output> for Input {
+	fn eq(&self, other: &Output) -> bool {
+		self.commitment() == other.commitment()
+	}
+}
+
+// Inputs can be compared to outputs.
+impl PartialOrd<Output> for Input {
+	fn partial_cmp(&self, other: &Output) -> Option<Ordering> {
+		Some(self.commitment().cmp(&other.commitment()))
+	}
+}
+
 impl ::std::hash::Hash for Input {
 	fn hash<H: ::std::hash::Hasher>(&self, state: &mut H) {
 		let mut vec = Vec::new();
@@ -1515,6 +1549,79 @@ impl Input {
 	/// Is this a plain input?
 	pub fn is_plain(&self) -> bool {
 		self.features.is_plain()
+	}
+}
+/// Wrapper around a vec of inputs.
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+pub enum Inputs {
+	/// Vec of inputs.
+	FeaturesAndCommit(Vec<Input>),
+	// Vec of commitments.
+	// CommitOnly(Vec<Commitment>),
+}
+
+impl From<Inputs> for Vec<Input> {
+	fn from(inputs: Inputs) -> Self {
+		match inputs {
+			Inputs::FeaturesAndCommit(inputs) => inputs,
+		}
+	}
+}
+
+impl From<&Inputs> for Vec<Input> {
+	fn from(inputs: &Inputs) -> Self {
+		match inputs {
+			Inputs::FeaturesAndCommit(inputs) => inputs.to_vec(),
+		}
+	}
+}
+
+impl From<&[Input]> for Inputs {
+	fn from(inputs: &[Input]) -> Self {
+		Inputs::FeaturesAndCommit(inputs.to_vec())
+	}
+}
+
+impl From<Vec<Input>> for Inputs {
+	fn from(inputs: Vec<Input>) -> Self {
+		Inputs::FeaturesAndCommit(inputs)
+	}
+}
+
+impl Default for Inputs {
+	fn default() -> Self {
+		Inputs::FeaturesAndCommit(vec![])
+	}
+}
+
+impl Writeable for Inputs {
+	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
+		match self {
+			Inputs::FeaturesAndCommit(inputs) => inputs.write(writer)?,
+		}
+		Ok(())
+	}
+}
+
+impl Inputs {
+	/// Number of inputs.
+	pub fn len(&self) -> usize {
+		match self {
+			Inputs::FeaturesAndCommit(inputs) => inputs.len(),
+		}
+	}
+
+	/// Verify inputs are sorted and unique.
+	fn verify_sorted_and_unique(&self) -> Result<(), ser::Error> {
+		match self {
+			Inputs::FeaturesAndCommit(inputs) => inputs.verify_sorted_and_unique(),
+		}
+	}
+
+	fn sort_unstable(&mut self) {
+		match self {
+			Inputs::FeaturesAndCommit(inputs) => inputs.sort_unstable(),
+		}
 	}
 }
 

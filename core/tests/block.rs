@@ -676,15 +676,14 @@ fn same_amount_outputs_copy_range_proof() {
 
 	// now we reconstruct the transaction, swapping the rangeproofs so they
 	// have the wrong privkey
-	let ins = tx.inputs();
+	let ins: Vec<_> = tx.inputs().into();
 	let mut outs = tx.outputs().to_vec();
-	let kernels = tx.kernels();
 	outs[0].proof = outs[1].proof;
 
 	let key_id = keychain::ExtKeychain::derive_key_id(1, 4, 0, 0, 0);
 	let prev = BlockHeader::default();
 	let b = new_block(
-		&[Transaction::new(ins, &outs, kernels)],
+		&[Transaction::new(&ins, &outs, tx.kernels())],
 		&keychain,
 		&builder,
 		&prev,
@@ -729,16 +728,15 @@ fn wrong_amount_range_proof() {
 	.unwrap();
 
 	// we take the range proofs from tx2 into tx1 and rebuild the transaction
-	let ins = tx1.inputs();
+	let ins: Vec<_> = tx1.inputs().into();
 	let mut outs = tx1.outputs().to_vec();
-	let kernels = tx1.kernels();
 	outs[0].proof = tx2.outputs()[0].proof;
 	outs[1].proof = tx2.outputs()[1].proof;
 
 	let key_id = keychain::ExtKeychain::derive_key_id(1, 4, 0, 0, 0);
 	let prev = BlockHeader::default();
 	let b = new_block(
-		&[Transaction::new(ins, &outs, kernels)],
+		&[Transaction::new(&ins, &outs, tx1.kernels())],
 		&keychain,
 		&builder,
 		&prev,
