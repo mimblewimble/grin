@@ -262,18 +262,9 @@ impl Chain {
 
 	/// Processes a single block, then checks for orphans, processing
 	/// those as well if they're found
-	pub fn process_block(&self, block: Block, opts: Options) -> Result<Option<Tip>, Error> {
-		let height = block.header.height;
-
-		// Process the header first.
-		// If invalid then fail early.
-		// If valid then continue with block processing with header_head committed to db etc.
-		self.process_block_header(&block.header, opts)?;
-
-		// Convert block to FeaturesAndCommit inputs.
-		let block = self.convert_block_v2(block)?;
-
-		let res = self.process_block_single(block, opts);
+	pub fn process_block(&self, b: Block, opts: Options) -> Result<Option<Tip>, Error> {
+		let height = b.header.height;
+		let res = self.process_block_single(b, opts);
 		if res.is_ok() {
 			self.check_orphans(height + 1);
 		}
@@ -334,6 +325,51 @@ impl Chain {
 	/// Returns true if it has been added to the longest chain
 	/// or false if it has added to a fork (or orphan?).
 	fn process_block_single(&self, b: Block, opts: Options) -> Result<Option<Tip>, Error> {
+		// Quick check for duplicate block up to and including current chain head.
+		// TODO - pull this out into separate function.
+		let head = self.head()?;
+		if head.hash() == b.hash() {
+			return Err(ErrorKind::Unfit("duplicate block".into()).into());
+		}
+		if b.header.total_difficulty() <= head.total_difficulty {
+			if self.block_exists(b.hash())? {
+				return Err(ErrorKind::Unfit("duplicate block".into()).into());
+			}
+		}
+
+		// Process the header first.
+		// If invalid then fail early.
+		// If valid then continue with block processing with header_head committed to db etc.
+		self.process_block_header(&b.header, opts)?;
+
+		// Quick orphan check before proceeding.
+		// TODO - pull this out into separate function.
+		if !self.block_exists(b.header.prev_hash)? {
+			let block_hash = b.hash();
+			let orphan = Orphan {
+				block: b,
+				opts: opts,
+				added: Instant::now(),
+			};
+			self.orphans.add(orphan);
+
+			debug!(
+				"process_block_single: orphan: {:?}, # orphans {}{}",
+				block_hash,
+				self.orphans.len(),
+				if self.orphans.len_evicted() > 0 {
+					format!(", # evicted {}", self.orphans.len_evicted())
+				} else {
+					String::new()
+				},
+			);
+			return Err(ErrorKind::Orphan.into());
+		}
+
+		// Convert block to FeaturesAndCommit inputs.
+		// We know this block is not an orphan at this point.
+		let b = self.convert_block_v2(b)?;
+
 		let (maybe_new_head, prev_head) = {
 			let mut header_pmmr = self.header_pmmr.write();
 			let mut txhashset = self.txhashset.write();
@@ -365,28 +401,6 @@ impl Chain {
 				Ok(head)
 			}
 			Err(e) => match e.kind() {
-				ErrorKind::Orphan => {
-					let block_hash = b.hash();
-					let orphan = Orphan {
-						block: b,
-						opts: opts,
-						added: Instant::now(),
-					};
-
-					self.orphans.add(orphan);
-
-					debug!(
-						"process_block: orphan: {:?}, # orphans {}{}",
-						block_hash,
-						self.orphans.len(),
-						if self.orphans.len_evicted() > 0 {
-							format!(", # evicted {}", self.orphans.len_evicted())
-						} else {
-							String::new()
-						},
-					);
-					Err(ErrorKind::Orphan.into())
-				}
 				ErrorKind::Unfit(ref msg) => {
 					debug!(
 						"Block {} at {} is unfit at this time: {}",
