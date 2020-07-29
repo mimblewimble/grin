@@ -321,53 +321,67 @@ impl Chain {
 		}
 	}
 
+	/// Quick check for "known" duplicate block up to and including current chain head.
+	fn is_known(&self, header: &BlockHeader) -> Result<(), Error> {
+		let head = self.head()?;
+		if head.hash() == header.hash() {
+			return Err(ErrorKind::Unfit("duplicate block".into()).into());
+		}
+		if header.total_difficulty() <= head.total_difficulty {
+			if self.block_exists(header.hash())? {
+				return Err(ErrorKind::Unfit("duplicate block".into()).into());
+			}
+		}
+		Ok(())
+	}
+
+	// Check if the provided block is an orphan.
+	// If block is an orphan add it to our orphan block pool for deferred processing.
+	fn check_orphan(&self, block: &Block, opts: Options) -> Result<(), Error> {
+		if self.block_exists(block.header.prev_hash)? {
+			return Ok(());
+		}
+
+		let block_hash = block.hash();
+		let orphan = Orphan {
+			block: block.clone(),
+			opts,
+			added: Instant::now(),
+		};
+		self.orphans.add(orphan);
+
+		debug!(
+			"is_orphan: {:?}, # orphans {}{}",
+			block_hash,
+			self.orphans.len(),
+			if self.orphans.len_evicted() > 0 {
+				format!(", # evicted {}", self.orphans.len_evicted())
+			} else {
+				String::new()
+			},
+		);
+
+		Err(ErrorKind::Orphan.into())
+	}
+
 	/// Attempt to add a new block to the chain.
 	/// Returns true if it has been added to the longest chain
 	/// or false if it has added to a fork (or orphan?).
 	fn process_block_single(&self, b: Block, opts: Options) -> Result<Option<Tip>, Error> {
-		// Quick check for duplicate block up to and including current chain head.
-		// TODO - pull this out into separate function.
-		let head = self.head()?;
-		if head.hash() == b.hash() {
-			return Err(ErrorKind::Unfit("duplicate block".into()).into());
-		}
-		if b.header.total_difficulty() <= head.total_difficulty {
-			if self.block_exists(b.hash())? {
-				return Err(ErrorKind::Unfit("duplicate block".into()).into());
-			}
-		}
+		// Check if we already know about this block.
+		self.is_known(&b.header)?;
 
 		// Process the header first.
 		// If invalid then fail early.
 		// If valid then continue with block processing with header_head committed to db etc.
 		self.process_block_header(&b.header, opts)?;
 
-		// Quick orphan check before proceeding.
-		// TODO - pull this out into separate function.
-		if !self.block_exists(b.header.prev_hash)? {
-			let block_hash = b.hash();
-			let orphan = Orphan {
-				block: b,
-				opts: opts,
-				added: Instant::now(),
-			};
-			self.orphans.add(orphan);
-
-			debug!(
-				"process_block_single: orphan: {:?}, # orphans {}{}",
-				block_hash,
-				self.orphans.len(),
-				if self.orphans.len_evicted() > 0 {
-					format!(", # evicted {}", self.orphans.len_evicted())
-				} else {
-					String::new()
-				},
-			);
-			return Err(ErrorKind::Orphan.into());
-		}
+		// Check if this block is an orphan.
+		// Only do this once we know the header PoW is valid.
+		self.check_orphan(&b, opts)?;
 
 		// Convert block to FeaturesAndCommit inputs.
-		// We know this block is not an orphan at this point.
+		// We know this block is not an orphan and header is valid at this point.
 		let b = self.convert_block_v2(b)?;
 
 		let (maybe_new_head, prev_head) = {
