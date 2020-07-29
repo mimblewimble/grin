@@ -16,12 +16,12 @@
 
 use crate::core::core::hash::{Hash, Hashed};
 use crate::core::core::pmmr::{self, ReadonlyPMMR};
-use crate::core::core::{Block, BlockHeader, Input, Inputs, Output, OutputIdentifier, Transaction};
+use crate::core::core::{Block, BlockHeader, Inputs, Output, OutputIdentifier, Transaction};
 use crate::core::global;
 use crate::error::{Error, ErrorKind};
 use crate::store::Batch;
 use crate::types::CommitPos;
-use crate::util::secp::pedersen::RangeProof;
+use crate::util::secp::pedersen::{Commitment, RangeProof};
 use grin_store::pmmr::PMMRBackend;
 
 /// Readonly view of the UTXO set (based on output MMR).
@@ -85,7 +85,18 @@ impl<'a> UTXOView<'a> {
 			Inputs::FeaturesAndCommit(inputs) => {
 				let outputs_spent: Result<Vec<_>, Error> = inputs
 					.iter()
-					.map(|input| self.validate_input(input, batch))
+					.map(|input| {
+						self.validate_input(input.commitment(), batch)
+							.and_then(|(out, pos)| {
+								// Unspent output found.
+								// Check input matches full output identifier.
+								if out == input.into() {
+									Ok((out, pos))
+								} else {
+									Err(ErrorKind::Other("input mismatch".into()).into())
+								}
+							})
+					})
 					.collect();
 				outputs_spent
 			}
@@ -94,21 +105,19 @@ impl<'a> UTXOView<'a> {
 
 	// Input is valid if it is spending an (unspent) output
 	// that currently exists in the output MMR.
-	// Compare against the entry in output MMR at the expected pos.
+	// Note: We lookup by commitment. Caller must compare the full input as necessary.
 	fn validate_input(
 		&self,
-		input: &Input,
+		input: Commitment,
 		batch: &Batch<'_>,
 	) -> Result<(OutputIdentifier, CommitPos), Error> {
-		let pos = batch.get_output_pos_height(&input.commitment())?;
+		let pos = batch.get_output_pos_height(&input)?;
 		if let Some(pos) = pos {
 			if let Some(out) = self.output_pmmr.get_data(pos.pos) {
-				if OutputIdentifier::from(input) == out {
-					return Ok((out, pos));
-				}
+				return Ok((out, pos));
 			}
 		}
-		Err(ErrorKind::AlreadySpent(input.commitment()).into())
+		Err(ErrorKind::AlreadySpent(input).into())
 	}
 
 	// Output is valid if it would not result in a duplicate commitment in the output MMR.

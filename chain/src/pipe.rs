@@ -442,7 +442,8 @@ fn apply_block_to_txhashset(
 	ext: &mut txhashset::ExtensionPair<'_>,
 	batch: &store::Batch<'_>,
 ) -> Result<(), Error> {
-	ext.extension.apply_block(block, batch)?;
+	ext.extension
+		.apply_block(block, ext.header_extension, batch)?;
 	ext.extension.validate_roots(&block.header)?;
 	ext.extension.validate_sizes(&block.header)?;
 	Ok(())

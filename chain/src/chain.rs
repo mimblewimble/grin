@@ -685,7 +685,7 @@ impl Chain {
 				let prev_root = header_extension.root()?;
 
 				// Apply the latest block to the chain state via the extension.
-				extension.apply_block(b, batch)?;
+				extension.apply_block(b, header_extension, batch)?;
 
 				Ok((prev_root, extension.roots()?, extension.sizes()))
 			})?;
@@ -1644,7 +1644,8 @@ fn setup_head(
 				};
 			}
 			txhashset::extending(header_pmmr, txhashset, &mut batch, |ext, batch| {
-				ext.extension.apply_block(&genesis, batch)
+				ext.extension
+					.apply_block(&genesis, ext.header_extension, batch)
 			})?;
 
 			// Save the block_sums to the db for use later.
