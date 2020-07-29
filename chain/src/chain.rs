@@ -271,7 +271,10 @@ impl Chain {
 		res
 	}
 
-	/// tbd
+	/// We plan to support receiving blocks with CommitOnly inputs.
+	/// We also need to support relaying blocks with FeaturesAndCommit inputs to peers.
+	/// So we need a way to convert blocks from CommitOnly to FeaturesAndCommit.
+	/// Validating the inputs against the utxo_view allows us to look the outputs up.
 	fn convert_block_v2(&self, block: Block) -> Result<Block, Error> {
 		debug!(
 			"convert_block_v2: {} at {}",
@@ -292,7 +295,10 @@ impl Chain {
 			txhashset::extending_readonly(&mut header_pmmr, &mut txhashset, |ext, batch| {
 				let previous_header = batch.get_previous_header(&block.header)?;
 				pipe::rewind_and_apply_fork(&previous_header, ext, batch)?;
-				pipe::validate_utxo(&block, ext, batch)
+				let inputs: Vec<_> = block.inputs().into();
+				ext.extension
+					.utxo_view(ext.header_extension)
+					.validate_inputs(&inputs, batch)
 			})?;
 		let outputs: Vec<_> = outputs.into_iter().map(|(out, _)| out).collect();
 		Ok(Block {

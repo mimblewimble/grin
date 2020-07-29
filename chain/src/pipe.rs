@@ -589,7 +589,7 @@ pub fn rewind_and_apply_fork(
 }
 
 /// Validate block inputs against utxo.
-pub fn validate_utxo(
+fn validate_utxo(
 	block: &Block,
 	ext: &mut txhashset::ExtensionPair<'_>,
 	batch: &store::Batch<'_>,

@@ -57,11 +57,7 @@ impl<'a> UTXOView<'a> {
 			self.validate_output(output, batch)?;
 		}
 		let inputs: Vec<_> = block.inputs().into();
-		let outputs_spent: Result<Vec<_>, Error> = inputs
-			.iter()
-			.map(|input| self.validate_input(input, batch))
-			.collect();
-		outputs_spent
+		self.validate_inputs(&inputs, batch)
 	}
 
 	/// Validate a transaction against the current UTXO set.
@@ -76,6 +72,17 @@ impl<'a> UTXOView<'a> {
 			self.validate_output(output, batch)?;
 		}
 		let inputs: Vec<_> = tx.inputs().into();
+		self.validate_inputs(&inputs, batch)
+	}
+
+	/// Validate the provided inputs.
+	/// Returns a vec of output identifier corresponding to outputs
+	/// that would be spent by the provided inputs.
+	pub fn validate_inputs(
+		&self,
+		inputs: &[Input],
+		batch: &Batch<'_>,
+	) -> Result<Vec<(OutputIdentifier, CommitPos)>, Error> {
 		let outputs_spent: Result<Vec<_>, Error> = inputs
 			.iter()
 			.map(|input| self.validate_input(input, batch))
