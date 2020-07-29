@@ -295,10 +295,9 @@ impl Chain {
 			txhashset::extending_readonly(&mut header_pmmr, &mut txhashset, |ext, batch| {
 				let previous_header = batch.get_previous_header(&block.header)?;
 				pipe::rewind_and_apply_fork(&previous_header, ext, batch)?;
-				let inputs: Vec<_> = block.inputs().into();
 				ext.extension
 					.utxo_view(ext.header_extension)
-					.validate_inputs(&inputs, batch)
+					.validate_inputs(block.inputs(), batch)
 			})?;
 		let outputs: Vec<_> = outputs.into_iter().map(|(out, _)| out).collect();
 		Ok(Block {
