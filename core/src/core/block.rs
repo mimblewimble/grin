@@ -573,7 +573,7 @@ impl Block {
 		}
 
 		// apply cut-through to our tx inputs and outputs
-		let (inputs, outputs) = transaction::cut_through(&mut inputs, &mut outputs)?;
+		let (inputs, outputs, _, _) = transaction::cut_through(&mut inputs, &mut outputs)?;
 
 		let mut outputs = outputs.to_vec();
 		let mut kernels = kernels.to_vec();

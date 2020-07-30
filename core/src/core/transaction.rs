@@ -1280,13 +1280,19 @@ impl Transaction {
 	}
 }
 
-/// Matches any output with a potential spending input, eliminating them
-/// from the Vec. Provides a simple way to cut-through a block or aggregated
-/// transaction.
+/// Takes a slice of inputs and a slice of outputs and applies "cut-through"
+/// eliminating any input/output pairs with input spending output.
+/// Returns new slices with cut-through elements removed.
+/// Also returns slices of the cut-through elements themselves.
+///
+/// Example:
+/// Inputs: [A, B, C]
+/// Outputs: [C, D, E]
+/// Returns: ([A, B], [D, E], [C], [C]) # element C is cut-through
 pub fn cut_through<'a>(
 	inputs: &'a mut [Input],
 	outputs: &'a mut [Output],
-) -> Result<(&'a [Input], &'a [Output]), Error> {
+) -> Result<(&'a [Input], &'a [Output], &'a [Input], &'a [Output]), Error> {
 	// Make sure inputs and outputs are sorted consistently by commitment.
 	inputs.sort_unstable_by_key(|x| x.commitment());
 	outputs.sort_unstable_by_key(|x| x.commitment());
@@ -1327,9 +1333,15 @@ pub fn cut_through<'a>(
 		outputs_idx += 1;
 	}
 
-	// Take new shorter slices with cut-through elements removed.
-	let inputs = &inputs[..inputs.len() - ncut];
-	let outputs = &outputs[..outputs.len() - ncut];
+	// Split inputs and outputs slices into non-cut-through and cut-through slices.
+	let (inputs, inputs_cut) = inputs.split_at_mut(inputs.len() - ncut);
+	let (outputs, outputs_cut) = outputs.split_at_mut(outputs.len() - ncut);
+
+	// Resort all the new slices.
+	inputs.sort_unstable();
+	outputs.sort_unstable();
+	inputs_cut.sort_unstable();
+	outputs_cut.sort_unstable();
 
 	// Check we have no duplicate inputs after cut-through.
 	if inputs.windows(2).any(|pair| pair[0] == pair[1]) {
@@ -1341,7 +1353,7 @@ pub fn cut_through<'a>(
 		return Err(Error::CutThrough);
 	}
 
-	Ok((inputs, outputs))
+	Ok((inputs, outputs, inputs_cut, outputs_cut))
 }
 
 /// Aggregate a vec of txs into a multi-kernel tx with cut_through.
@@ -1378,7 +1390,7 @@ pub fn aggregate(txs: &[Transaction]) -> Result<Transaction, Error> {
 		kernels.extend_from_slice(tx.kernels());
 	}
 
-	let (inputs, outputs) = cut_through(&mut inputs, &mut outputs)?;
+	let (inputs, outputs, _, _) = cut_through(&mut inputs, &mut outputs)?;
 
 	// now sum the kernel_offsets up to give us an aggregate offset for the
 	// transaction
