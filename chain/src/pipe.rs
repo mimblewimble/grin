@@ -18,14 +18,13 @@ use crate::core::consensus;
 use crate::core::core::hash::Hashed;
 use crate::core::core::verifier_cache::VerifierCache;
 use crate::core::core::Committed;
-use crate::core::core::{Block, BlockHeader, BlockSums};
+use crate::core::core::{Block, BlockHeader, BlockSums, OutputIdentifier};
 use crate::core::pow;
 use crate::error::{Error, ErrorKind};
 use crate::store;
 use crate::txhashset;
-use crate::types::{Options, Tip};
+use crate::types::{CommitPos, Options, Tip};
 use crate::util::RwLock;
-use grin_store;
 use std::sync::Arc;
 
 /// Contextual information required to process a new block and either reject or
@@ -104,17 +103,9 @@ pub fn process_block(
 	// want to do this now and not later during header validation.
 	validate_pow_only(&b.header, ctx)?;
 
+	// Get previous header from the db and check we have the corresponding full block.
 	let prev = prev_header_store(&b.header, &mut ctx.batch)?;
-
-	// Block is an orphan if we do not know about the previous full block.
-	// Skip this check if we have just processed the previous block
-	// or the full txhashset state (fast sync) at the previous block height.
-	{
-		let is_next = b.header.prev_hash == head.last_block_h;
-		if !is_next && !ctx.batch.block_exists(&prev.hash())? {
-			return Err(ErrorKind::Orphan.into());
-		}
-	}
+	ctx.batch.block_exists(&prev.hash())?;
 
 	// Process the header for the block.
 	// Note: We still want to process the full block if we have seen this header before
@@ -319,10 +310,7 @@ fn prev_header_store(
 	header: &BlockHeader,
 	batch: &mut store::Batch<'_>,
 ) -> Result<BlockHeader, Error> {
-	let prev = batch.get_previous_header(&header).map_err(|e| match e {
-		grin_store::Error::NotFoundErr(_) => ErrorKind::Orphan,
-		_ => ErrorKind::StoreErr(e, "check prev header".into()),
-	})?;
+	let prev = batch.get_previous_header(&header)?;
 	Ok(prev)
 }
 
@@ -454,7 +442,8 @@ fn apply_block_to_txhashset(
 	ext: &mut txhashset::ExtensionPair<'_>,
 	batch: &store::Batch<'_>,
 ) -> Result<(), Error> {
-	ext.extension.apply_block(block, batch)?;
+	ext.extension
+		.apply_block(block, ext.header_extension, batch)?;
 	ext.extension.validate_roots(&block.header)?;
 	ext.extension.validate_sizes(&block.header)?;
 	Ok(())
@@ -600,11 +589,12 @@ pub fn rewind_and_apply_fork(
 	Ok(fork_point)
 }
 
+/// Validate block inputs against utxo.
 fn validate_utxo(
 	block: &Block,
 	ext: &mut txhashset::ExtensionPair<'_>,
 	batch: &store::Batch<'_>,
-) -> Result<(), Error> {
+) -> Result<Vec<(OutputIdentifier, CommitPos)>, Error> {
 	let extension = &ext.extension;
 	let header_extension = &ext.header_extension;
 	extension

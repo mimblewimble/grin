@@ -19,7 +19,7 @@ use crate::core::core::hash::{Hash, Hashed, ZERO_HASH};
 use crate::core::core::merkle_proof::MerkleProof;
 use crate::core::core::verifier_cache::VerifierCache;
 use crate::core::core::{
-	Block, BlockHeader, BlockSums, Committed, KernelFeatures, Output, OutputIdentifier,
+	Block, BlockHeader, BlockSums, Committed, Inputs, KernelFeatures, Output, OutputIdentifier,
 	Transaction, TxKernel,
 };
 use crate::core::global;
@@ -271,6 +271,41 @@ impl Chain {
 		res
 	}
 
+	/// We plan to support receiving blocks with CommitOnly inputs.
+	/// We also need to support relaying blocks with FeaturesAndCommit inputs to peers.
+	/// So we need a way to convert blocks from CommitOnly to FeaturesAndCommit.
+	/// Validating the inputs against the utxo_view allows us to look the outputs up.
+	fn convert_block_v2(&self, block: Block) -> Result<Block, Error> {
+		debug!(
+			"convert_block_v2: {} at {}",
+			block.header.hash(),
+			block.header.height
+		);
+
+		if block.inputs().is_empty() {
+			return Ok(Block {
+				header: block.header,
+				body: block.body.replace_inputs(Inputs::FeaturesAndCommit(vec![])),
+			});
+		}
+
+		let mut header_pmmr = self.header_pmmr.write();
+		let mut txhashset = self.txhashset.write();
+		let outputs =
+			txhashset::extending_readonly(&mut header_pmmr, &mut txhashset, |ext, batch| {
+				let previous_header = batch.get_previous_header(&block.header)?;
+				pipe::rewind_and_apply_fork(&previous_header, ext, batch)?;
+				ext.extension
+					.utxo_view(ext.header_extension)
+					.validate_inputs(block.inputs(), batch)
+			})?;
+		let outputs: Vec<_> = outputs.into_iter().map(|(out, _)| out).collect();
+		Ok(Block {
+			header: block.header,
+			body: block.body.replace_inputs(outputs.into()),
+		})
+	}
+
 	fn determine_status(&self, head: Option<Tip>, prev_head: Tip, fork_point: Tip) -> BlockStatus {
 		// If head is updated then we are either "next" block or we just experienced a "reorg" to new head.
 		// Otherwise this is a "fork" off the main chain.
@@ -291,14 +326,68 @@ impl Chain {
 		}
 	}
 
+	/// Quick check for "known" duplicate block up to and including current chain head.
+	fn is_known(&self, header: &BlockHeader) -> Result<(), Error> {
+		let head = self.head()?;
+		if head.hash() == header.hash() {
+			return Err(ErrorKind::Unfit("duplicate block".into()).into());
+		}
+		if header.total_difficulty() <= head.total_difficulty {
+			if self.block_exists(header.hash())? {
+				return Err(ErrorKind::Unfit("duplicate block".into()).into());
+			}
+		}
+		Ok(())
+	}
+
+	// Check if the provided block is an orphan.
+	// If block is an orphan add it to our orphan block pool for deferred processing.
+	fn check_orphan(&self, block: &Block, opts: Options) -> Result<(), Error> {
+		if self.block_exists(block.header.prev_hash)? {
+			return Ok(());
+		}
+
+		let block_hash = block.hash();
+		let orphan = Orphan {
+			block: block.clone(),
+			opts,
+			added: Instant::now(),
+		};
+		self.orphans.add(orphan);
+
+		debug!(
+			"is_orphan: {:?}, # orphans {}{}",
+			block_hash,
+			self.orphans.len(),
+			if self.orphans.len_evicted() > 0 {
+				format!(", # evicted {}", self.orphans.len_evicted())
+			} else {
+				String::new()
+			},
+		);
+
+		Err(ErrorKind::Orphan.into())
+	}
+
 	/// Attempt to add a new block to the chain.
 	/// Returns true if it has been added to the longest chain
 	/// or false if it has added to a fork (or orphan?).
 	fn process_block_single(&self, b: Block, opts: Options) -> Result<Option<Tip>, Error> {
+		// Check if we already know about this block.
+		self.is_known(&b.header)?;
+
 		// Process the header first.
 		// If invalid then fail early.
 		// If valid then continue with block processing with header_head committed to db etc.
 		self.process_block_header(&b.header, opts)?;
+
+		// Check if this block is an orphan.
+		// Only do this once we know the header PoW is valid.
+		self.check_orphan(&b, opts)?;
+
+		// Convert block to FeaturesAndCommit inputs.
+		// We know this block is not an orphan and header is valid at this point.
+		let b = self.convert_block_v2(b)?;
 
 		let (maybe_new_head, prev_head) = {
 			let mut header_pmmr = self.header_pmmr.write();
@@ -331,28 +420,6 @@ impl Chain {
 				Ok(head)
 			}
 			Err(e) => match e.kind() {
-				ErrorKind::Orphan => {
-					let block_hash = b.hash();
-					let orphan = Orphan {
-						block: b,
-						opts: opts,
-						added: Instant::now(),
-					};
-
-					self.orphans.add(orphan);
-
-					debug!(
-						"process_block: orphan: {:?}, # orphans {}{}",
-						block_hash,
-						self.orphans.len(),
-						if self.orphans.len_evicted() > 0 {
-							format!(", # evicted {}", self.orphans.len_evicted())
-						} else {
-							String::new()
-						},
-					);
-					Err(ErrorKind::Orphan.into())
-				}
 				ErrorKind::Unfit(ref msg) => {
 					debug!(
 						"Block {} at {} is unfit at this time: {}",
@@ -544,7 +611,8 @@ impl Chain {
 		let header_pmmr = self.header_pmmr.read();
 		let txhashset = self.txhashset.read();
 		txhashset::utxo_view(&header_pmmr, &txhashset, |utxo, batch| {
-			utxo.validate_tx(tx, batch)
+			utxo.validate_tx(tx, batch)?;
+			Ok(())
 		})
 	}
 
@@ -617,7 +685,7 @@ impl Chain {
 				let prev_root = header_extension.root()?;
 
 				// Apply the latest block to the chain state via the extension.
-				extension.apply_block(b, batch)?;
+				extension.apply_block(b, header_extension, batch)?;
 
 				Ok((prev_root, extension.roots()?, extension.sizes()))
 			})?;
@@ -1576,7 +1644,8 @@ fn setup_head(
 				};
 			}
 			txhashset::extending(header_pmmr, txhashset, &mut batch, |ext, batch| {
-				ext.extension.apply_block(&genesis, batch)
+				ext.extension
+					.apply_block(&genesis, ext.header_extension, batch)
 			})?;
 
 			// Save the block_sums to the db for use later.

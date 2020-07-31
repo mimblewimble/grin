@@ -43,7 +43,7 @@ fn check_known() {
 		let res = chain.process_block(latest.clone(), chain::Options::NONE);
 		assert_eq!(
 			res.unwrap_err().kind(),
-			ErrorKind::Unfit("already known in head".to_string()).into()
+			ErrorKind::Unfit("duplicate block".to_string()).into()
 		);
 	}
 
@@ -53,7 +53,7 @@ fn check_known() {
 		let res = chain.process_block(genesis.clone(), chain::Options::NONE);
 		assert_eq!(
 			res.unwrap_err().kind(),
-			ErrorKind::Unfit("already known in store".to_string()).into()
+			ErrorKind::Unfit("duplicate block".to_string()).into()
 		);
 	}
 

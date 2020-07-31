@@ -804,6 +804,12 @@ impl TransactionBody {
 		self
 	}
 
+	/// Fully replace inputs.
+	pub fn replace_inputs(mut self, inputs: Inputs) -> TransactionBody {
+		self.inputs = inputs;
+		self
+	}
+
 	/// Builds a new TransactionBody with the provided output added. Existing
 	/// outputs, if any, are kept intact.
 	/// Sort order is maintained.
@@ -1600,6 +1606,19 @@ impl From<Vec<Input>> for Inputs {
 	}
 }
 
+impl From<Vec<OutputIdentifier>> for Inputs {
+	fn from(outputs: Vec<OutputIdentifier>) -> Self {
+		let inputs = outputs
+			.into_iter()
+			.map(|out| Input {
+				features: out.features,
+				commit: out.commit,
+			})
+			.collect();
+		Inputs::FeaturesAndCommit(inputs)
+	}
+}
+
 impl Default for Inputs {
 	fn default() -> Self {
 		Inputs::FeaturesAndCommit(vec![])
@@ -1621,6 +1640,11 @@ impl Inputs {
 		match self {
 			Inputs::FeaturesAndCommit(inputs) => inputs.len(),
 		}
+	}
+
+	/// Empty inputs?
+	pub fn is_empty(&self) -> bool {
+		self.len() == 0
 	}
 
 	/// Verify inputs are sorted and unique.

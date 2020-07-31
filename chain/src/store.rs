@@ -125,7 +125,7 @@ impl ChainStore {
 	/// Get PMMR pos for the given output commitment.
 	pub fn get_output_pos(&self, commit: &Commitment) -> Result<u64, Error> {
 		match self.get_output_pos_height(commit)? {
-			Some((pos, _)) => Ok(pos),
+			Some(pos) => Ok(pos.pos),
 			None => Err(Error::NotFoundErr(format!(
 				"Output position for: {:?}",
 				commit
@@ -134,7 +134,7 @@ impl ChainStore {
 	}
 
 	/// Get PMMR pos and block height for the given output commitment.
-	pub fn get_output_pos_height(&self, commit: &Commitment) -> Result<Option<(u64, u64)>, Error> {
+	pub fn get_output_pos_height(&self, commit: &Commitment) -> Result<Option<CommitPos>, Error> {
 		self.db.get_ser(&to_key(OUTPUT_POS_PREFIX, commit))
 	}
 
@@ -258,14 +258,9 @@ impl<'a> Batch<'a> {
 	}
 
 	/// Save output_pos and block height to index.
-	pub fn save_output_pos_height(
-		&self,
-		commit: &Commitment,
-		pos: u64,
-		height: u64,
-	) -> Result<(), Error> {
+	pub fn save_output_pos_height(&self, commit: &Commitment, pos: CommitPos) -> Result<(), Error> {
 		self.db
-			.put_ser(&to_key(OUTPUT_POS_PREFIX, commit)[..], &(pos, height))
+			.put_ser(&to_key(OUTPUT_POS_PREFIX, commit)[..], &pos)
 	}
 
 	/// Delete the output_pos index entry for a spent output.
@@ -290,7 +285,7 @@ impl<'a> Batch<'a> {
 	/// Get output_pos from index.
 	pub fn get_output_pos(&self, commit: &Commitment) -> Result<u64, Error> {
 		match self.get_output_pos_height(commit)? {
-			Some((pos, _)) => Ok(pos),
+			Some(pos) => Ok(pos.pos),
 			None => Err(Error::NotFoundErr(format!(
 				"Output position for: {:?}",
 				commit
@@ -299,7 +294,7 @@ impl<'a> Batch<'a> {
 	}
 
 	/// Get output_pos and block height from index.
-	pub fn get_output_pos_height(&self, commit: &Commitment) -> Result<Option<(u64, u64)>, Error> {
+	pub fn get_output_pos_height(&self, commit: &Commitment) -> Result<Option<CommitPos>, Error> {
 		self.db.get_ser(&to_key(OUTPUT_POS_PREFIX, commit))
 	}
 
