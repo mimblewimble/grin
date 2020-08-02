@@ -607,12 +607,29 @@ impl Chain {
 		})
 	}
 
-	fn validate_tx_against_utxo(&self, tx: &Transaction) -> Result<(), Error> {
+	fn validate_tx_against_utxo(
+		&self,
+		tx: &Transaction,
+	) -> Result<Vec<(OutputIdentifier, CommitPos)>, Error> {
 		let header_pmmr = self.header_pmmr.read();
 		let txhashset = self.txhashset.read();
 		txhashset::utxo_view(&header_pmmr, &txhashset, |utxo, batch| {
-			utxo.validate_tx(tx, batch)?;
-			Ok(())
+			utxo.validate_tx(tx, batch)
+		})
+	}
+
+	/// Validates inputs against the current utxo.
+	/// Each input must spend an unspent output.
+	/// Returns the vec of output identifiers and their pos of the outputs
+	/// that would be spent by the inputs.
+	pub fn validate_inputs(
+		&self,
+		inputs: Inputs,
+	) -> Result<Vec<(OutputIdentifier, CommitPos)>, Error> {
+		let header_pmmr = self.header_pmmr.read();
+		let txhashset = self.txhashset.read();
+		txhashset::utxo_view(&header_pmmr, &txhashset, |utxo, batch| {
+			utxo.validate_inputs(inputs, batch)
 		})
 	}
 

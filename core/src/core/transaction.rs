@@ -1023,7 +1023,6 @@ impl TransactionBody {
 		self.verify_weight(weighting)?;
 		self.verify_no_nrd_duplicates()?;
 		self.verify_sorted()?;
-		self.verify_cut_through()?;
 		Ok(())
 	}
 
@@ -1036,6 +1035,7 @@ impl TransactionBody {
 		verifier: Arc<RwLock<dyn VerifierCache>>,
 	) -> Result<(), Error> {
 		self.validate_read(weighting)?;
+		self.verify_cut_through()?;
 
 		// Find all the outputs that have not had their rangeproofs verified.
 		let outputs = {
@@ -1483,8 +1483,7 @@ pub fn deaggregate(mk_tx: Transaction, txs: &[Transaction]) -> Result<Transactio
 	kernels.sort_unstable();
 
 	// Build a new tx from the above data.
-	let tx = Transaction::new(&inputs, &outputs, &kernels).with_offset(total_kernel_offset);
-	Ok(tx)
+	Ok(Transaction::new(&inputs, &outputs, &kernels).with_offset(total_kernel_offset))
 }
 
 /// A transaction input.
@@ -1509,6 +1508,15 @@ hashable_ord!(Input);
 impl AsRef<Commitment> for Input {
 	fn as_ref(&self) -> &Commitment {
 		&self.commit
+	}
+}
+
+impl From<&OutputIdentifier> for Input {
+	fn from(out: &OutputIdentifier) -> Self {
+		Input {
+			features: out.features,
+			commit: out.commit,
+		}
 	}
 }
 
@@ -1830,7 +1838,7 @@ impl Output {
 /// An output_identifier can be build from either an input _or_ an output and
 /// contains everything we need to uniquely identify an output being spent.
 /// Needed because it is not sufficient to pass a commitment around.
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+#[derive(Serialize, Deserialize, Debug, Clone, Copy)]
 pub struct OutputIdentifier {
 	/// Output features (coinbase vs. regular transaction output)
 	/// We need to include this when hashing to ensure coinbase maturity can be
@@ -1841,6 +1849,13 @@ pub struct OutputIdentifier {
 }
 
 impl DefaultHashable for OutputIdentifier {}
+hashable_ord!(OutputIdentifier);
+
+impl AsRef<Commitment> for OutputIdentifier {
+	fn as_ref(&self) -> &Commitment {
+		&self.commit
+	}
+}
 
 impl OutputIdentifier {
 	/// Build a new output_identifier.

@@ -150,7 +150,11 @@ fn test_the_transaction_pool() {
 	// Check we can take some entries from the stempool and "fluff" them into the
 	// txpool. This also exercises multi-kernel txs.
 	{
-		let agg_tx = pool.stempool.all_transactions_aggregate().unwrap().unwrap();
+		let agg_tx = pool
+			.stempool
+			.all_transactions_aggregate(None)
+			.unwrap()
+			.unwrap();
 		assert_eq!(agg_tx.kernels().len(), 2);
 		pool.add_to_pool(test_source(), agg_tx, false, &header)
 			.unwrap();
@@ -182,6 +186,7 @@ fn test_the_transaction_pool() {
 	// that is a superset of a tx already in the pool.
 	{
 		let tx4 = test_transaction(&keychain, vec![800], vec![799]);
+
 		// tx1 and tx2 are already in the txpool (in aggregated form)
 		// tx4 is the "new" part of this aggregated tx that we care about
 		let agg_tx = transaction::aggregate(&[tx1.clone(), tx2.clone(), tx4]).unwrap();

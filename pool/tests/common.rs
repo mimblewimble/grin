@@ -19,7 +19,9 @@ use self::chain::Chain;
 use self::core::consensus;
 use self::core::core::hash::Hash;
 use self::core::core::verifier_cache::{LruVerifierCache, VerifierCache};
-use self::core::core::{Block, BlockHeader, BlockSums, KernelFeatures, Transaction, TxKernel};
+use self::core::core::{
+	Block, BlockHeader, BlockSums, Inputs, KernelFeatures, OutputIdentifier, Transaction, TxKernel,
+};
 use self::core::genesis;
 use self::core::global;
 use self::core::libtx::{build, reward, ProofBuilder};
@@ -132,6 +134,13 @@ impl BlockChain for ChainAdapter {
 			chain::ErrorKind::NRDRelativeHeight => PoolError::NRDKernelRelativeHeight,
 			_ => PoolError::Other("failed to validate tx".into()),
 		})
+	}
+
+	fn validate_inputs(&self, inputs: Inputs) -> Result<Vec<OutputIdentifier>, PoolError> {
+		self.chain
+			.validate_inputs(inputs)
+			.map(|outputs| outputs.into_iter().map(|(out, _)| out).collect::<Vec<_>>())
+			.map_err(|_| PoolError::Other("failed to validate inputs".into()))
 	}
 
 	fn verify_coinbase_maturity(&self, tx: &Transaction) -> Result<(), PoolError> {

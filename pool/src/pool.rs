@@ -20,7 +20,7 @@ use self::core::core::id::{ShortId, ShortIdentifiable};
 use self::core::core::transaction;
 use self::core::core::verifier_cache::VerifierCache;
 use self::core::core::{
-	Block, BlockHeader, BlockSums, Committed, Transaction, TxKernel, Weighting,
+	Block, BlockHeader, BlockSums, Committed, OutputIdentifier, Transaction, TxKernel, Weighting,
 };
 use self::util::RwLock;
 use crate::types::{BlockChain, PoolEntry, PoolError};
@@ -163,13 +163,20 @@ where
 		self.entries.iter().map(|x| x.tx.clone()).collect()
 	}
 
-	/// Return a single aggregate tx representing all txs in the txpool.
-	/// Returns None if the txpool is empty.
-	pub fn all_transactions_aggregate(&self) -> Result<Option<Transaction>, PoolError> {
-		let txs = self.all_transactions();
+	/// Return a single aggregate tx representing all txs in the pool.
+	/// Takes an optional "extra tx" to include in the aggregation.
+	/// Returns None if there is nothing to aggregate.
+	/// Returns the extra tx if provided and pool is empty.
+	pub fn all_transactions_aggregate(
+		&self,
+		extra_tx: Option<Transaction>,
+	) -> Result<Option<Transaction>, PoolError> {
+		let mut txs = self.all_transactions();
 		if txs.is_empty() {
-			return Ok(None);
+			return Ok(extra_tx);
 		}
+
+		txs.extend(extra_tx);
 
 		let tx = transaction::aggregate(&txs)?;
 
@@ -185,7 +192,7 @@ where
 	pub fn add_to_pool(
 		&mut self,
 		entry: PoolEntry,
-		extra_txs: Vec<Transaction>,
+		extra_tx: Option<Transaction>,
 		header: &BlockHeader,
 	) -> Result<(), PoolError> {
 		// Combine all the txs from the pool with any extra txs provided.
@@ -196,7 +203,9 @@ where
 			return Err(PoolError::DuplicateTx);
 		}
 
-		txs.extend(extra_txs);
+		// Make sure we take extra_tx into consideration here.
+		// When adding to stempool we need to account for current txpool.
+		txs.extend(extra_tx);
 
 		let agg_tx = if txs.is_empty() {
 			// If we have nothing to aggregate then simply return the tx itself.
@@ -280,6 +289,53 @@ where
 		Ok(valid_txs)
 	}
 
+	/// Convert a transaction for v2 compatibility.
+	/// We may receive a transaction with "commit only" inputs.
+	/// We convert it to "features and commit" so we can safely relay it to v2 peers.
+	/// Converson is done by looking up outputs to be spent in both the pool and the current utxo.
+	pub fn convert_tx_v2(
+		&self,
+		tx: Transaction,
+		extra_tx: Option<Transaction>,
+	) -> Result<Transaction, PoolError> {
+		let mut inputs: Vec<_> = tx.inputs().into();
+
+		let agg_tx = self
+			.all_transactions_aggregate(extra_tx)?
+			.unwrap_or(Transaction::empty());
+		let mut outputs: Vec<OutputIdentifier> =
+			agg_tx.outputs().iter().map(|out| out.into()).collect();
+
+		// By applying cut_through to tx inputs and agg_tx outputs we can
+		// determine the outputs being spent from the pool and those still unspent
+		// that need to be looked up via the current utxo.
+		let (inputs, _, _, spent_pool) =
+			transaction::cut_through(&mut inputs[..], &mut outputs[..])?;
+
+		// Lookup remaining outputs to be spent from the current utxo.
+		let spent_utxo = self.blockchain.validate_inputs(inputs.into())?;
+
+		// Combine outputs spent in utxo with outputs spent in pool to give us the
+		// full set of outputs being spent by this transaction.
+		// This is our source of truth for input features.
+		let mut spent = spent_pool.to_vec();
+		spent.extend(spent_utxo);
+		spent.sort();
+
+		// Now build the resulting transaction based on our inputs and outputs from the original transaction.
+		// Remember to use the original kernels and kernel offset.
+		let mut outputs = tx.outputs().to_vec();
+		let (inputs, outputs, _, _) = transaction::cut_through(&mut spent[..], &mut outputs[..])?;
+		let inputs: Vec<_> = inputs.iter().map(|out| out.into()).collect();
+		let tx = Transaction::new(inputs.as_slice(), outputs, tx.kernels()).with_offset(tx.offset);
+
+		// Validate the tx to ensure our converted inputs are correct.
+		tx.validate(Weighting::AsTransaction, self.verifier_cache.clone())
+			.map_err(PoolError::InvalidTx)?;
+
+		Ok(tx)
+	}
+
 	fn apply_tx_to_block_sums(
 		&self,
 		tx: &Transaction,
@@ -313,16 +369,9 @@ where
 	) -> Result<(), PoolError> {
 		let existing_entries = self.entries.clone();
 		self.entries.clear();
-
-		let mut extra_txs = vec![];
-		if let Some(extra_tx) = extra_tx {
-			extra_txs.push(extra_tx);
-		}
-
 		for x in existing_entries {
-			let _ = self.add_to_pool(x, extra_txs.clone(), header);
+			let _ = self.add_to_pool(x, extra_tx.clone(), header);
 		}
-
 		Ok(())
 	}
 

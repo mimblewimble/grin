@@ -15,14 +15,13 @@
 //! The primary module containing the implementations of the transaction pool
 //! and its top-level members.
 
-use chrono::prelude::{DateTime, Utc};
-
 use self::core::consensus;
 use self::core::core::block;
 use self::core::core::committed;
 use self::core::core::hash::Hash;
 use self::core::core::transaction::{self, Transaction};
-use self::core::core::{BlockHeader, BlockSums};
+use self::core::core::{BlockHeader, BlockSums, Inputs, OutputIdentifier};
+use chrono::prelude::*;
 use failure::Fail;
 use grin_core as core;
 use grin_keychain as keychain;
@@ -159,13 +158,23 @@ pub struct PoolEntry {
 	pub tx: Transaction,
 }
 
+impl PoolEntry {
+	pub fn new(tx: Transaction, src: TxSource) -> PoolEntry {
+		PoolEntry {
+			src,
+			tx_at: Utc::now(),
+			tx,
+		}
+	}
+}
+
 /// Used to make decisions based on transaction acceptance priority from
 /// various sources. For example, a node may want to bypass pool size
 /// restrictions when accepting a transaction from a local wallet.
 ///
 /// Most likely this will evolve to contain some sort of network identifier,
 /// once we get a better sense of what transaction building might look like.
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
 pub enum TxSource {
 	PushApi,
 	Broadcast,
@@ -272,7 +281,13 @@ pub trait BlockChain: Sync + Send {
 	/// have matured sufficiently.
 	fn verify_tx_lock_height(&self, tx: &transaction::Transaction) -> Result<(), PoolError>;
 
+	/// Validate a transaction against the current utxo.
 	fn validate_tx(&self, tx: &Transaction) -> Result<(), PoolError>;
+
+	/// Validate inputs against the current utxo.
+	/// Returns the vec of output identifiers that would be spent
+	/// by these inputs if they can all be successfully spent.
+	fn validate_inputs(&self, inputs: Inputs) -> Result<Vec<OutputIdentifier>, PoolError>;
 
 	fn chain_head(&self) -> Result<BlockHeader, PoolError>;
 

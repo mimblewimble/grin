@@ -30,7 +30,7 @@ use crate::common::types::{ChainValidationMode, DandelionEpoch, ServerConfig};
 use crate::core::core::hash::{Hash, Hashed};
 use crate::core::core::transaction::Transaction;
 use crate::core::core::verifier_cache::VerifierCache;
-use crate::core::core::{BlockHeader, BlockSums, CompactBlock};
+use crate::core::core::{BlockHeader, BlockSums, CompactBlock, Inputs, OutputIdentifier};
 use crate::core::pow::Difficulty;
 use crate::core::{core, global};
 use crate::p2p;
@@ -935,6 +935,13 @@ impl pool::BlockChain for PoolToChainAdapter {
 	fn validate_tx(&self, tx: &Transaction) -> Result<(), pool::PoolError> {
 		self.chain()
 			.validate_tx(tx)
+			.map_err(|_| pool::PoolError::Other("failed to validate tx".to_string()))
+	}
+
+	fn validate_inputs(&self, inputs: Inputs) -> Result<Vec<OutputIdentifier>, pool::PoolError> {
+		self.chain()
+			.validate_inputs(inputs)
+			.map(|outputs| outputs.into_iter().map(|(out, _)| out).collect::<Vec<_>>())
 			.map_err(|_| pool::PoolError::Other("failed to validate tx".to_string()))
 	}
 
