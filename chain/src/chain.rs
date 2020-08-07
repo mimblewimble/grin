@@ -291,18 +291,19 @@ impl Chain {
 
 		let mut header_pmmr = self.header_pmmr.write();
 		let mut txhashset = self.txhashset.write();
-		let outputs =
+		let inputs: Vec<_> =
 			txhashset::extending_readonly(&mut header_pmmr, &mut txhashset, |ext, batch| {
 				let previous_header = batch.get_previous_header(&block.header)?;
 				pipe::rewind_and_apply_fork(&previous_header, ext, batch)?;
 				ext.extension
 					.utxo_view(ext.header_extension)
 					.validate_inputs(block.inputs(), batch)
+					.map(|outputs| outputs.into_iter().map(|(out, _)| out).collect())
 			})?;
-		let outputs: Vec<_> = outputs.into_iter().map(|(out, _)| out).collect();
+		let inputs = inputs.as_slice().into();
 		Ok(Block {
 			header: block.header,
-			body: block.body.replace_inputs(outputs.into()),
+			body: block.body.replace_inputs(inputs),
 		})
 	}
 

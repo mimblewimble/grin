@@ -609,7 +609,7 @@ impl Block {
 		kernels.extend_from_slice(cb.kern_full());
 
 		// Initialize a tx body and sort everything.
-		let body = TransactionBody::init(inputs, &outputs, &kernels, false)?;
+		let body = TransactionBody::init(inputs.into(), &outputs, &kernels, false)?;
 
 		// Finally return the full block.
 		// Note: we have not actually validated the block here,

@@ -329,8 +329,7 @@ where
 		// Remember to use the original kernels and kernel offset.
 		let mut outputs = tx.outputs().to_vec();
 		let (inputs, outputs, _, _) = transaction::cut_through(&mut spent[..], &mut outputs[..])?;
-		let inputs: Vec<_> = inputs.iter().map(|out| out.into()).collect();
-		let tx = Transaction::new(inputs.as_slice(), outputs, tx.kernels()).with_offset(tx.offset);
+		let tx = Transaction::new(inputs.into(), outputs, tx.kernels()).with_offset(tx.offset);
 
 		// Validate the tx to ensure our converted inputs are correct.
 		tx.validate(Weighting::AsTransaction, self.verifier_cache.clone())

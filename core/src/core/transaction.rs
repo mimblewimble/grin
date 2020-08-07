@@ -691,12 +691,13 @@ impl Readable for TransactionBody {
 			return Err(ser::Error::TooLargeReadErr);
 		}
 
-		let inputs = read_multi(reader, num_inputs)?;
+		let inputs: Vec<Input> = read_multi(reader, num_inputs)?;
+		let inputs = Inputs::from(inputs.as_slice());
 		let outputs = read_multi(reader, num_outputs)?;
 		let kernels = read_multi(reader, num_kernels)?;
 
 		// Initialize tx body and verify everything is sorted.
-		let body = TransactionBody::init(&inputs, &outputs, &kernels, true)
+		let body = TransactionBody::init(inputs, &outputs, &kernels, true)
 			.map_err(|_| ser::Error::CorruptedData)?;
 
 		Ok(body)
@@ -751,13 +752,13 @@ impl TransactionBody {
 	/// the provided inputs, outputs and kernels.
 	/// Guarantees inputs, outputs, kernels are sorted lexicographically.
 	pub fn init(
-		inputs: &[Input],
+		inputs: Inputs,
 		outputs: &[Output],
 		kernels: &[TxKernel],
 		verify_sorted: bool,
 	) -> Result<TransactionBody, Error> {
 		let mut body = TransactionBody {
-			inputs: inputs.into(),
+			inputs,
 			outputs: outputs.to_vec(),
 			kernels: kernels.to_vec(),
 		};
@@ -792,11 +793,19 @@ impl TransactionBody {
 	/// inputs, if any, are kept intact.
 	/// Sort order is maintained.
 	pub fn with_input(mut self, input: Input) -> TransactionBody {
-		let mut inputs: Vec<_> = self.inputs.into();
-		if let Err(e) = inputs.binary_search(&input) {
-			inputs.insert(e, input)
+		match &mut self.inputs {
+			Inputs::CommitOnly(inputs) => {
+				let commit = input.into();
+				if let Err(e) = inputs.binary_search(&commit) {
+					inputs.insert(e, commit)
+				};
+			}
+			Inputs::FeaturesAndCommit(inputs) => {
+				if let Err(e) = inputs.binary_search(&input) {
+					inputs.insert(e, input)
+				};
+			}
 		};
-		self.inputs = inputs.into();
 		self
 	}
 
@@ -1166,14 +1175,15 @@ impl Transaction {
 
 	/// Creates a new transaction initialized with
 	/// the provided inputs, outputs, kernels
-	pub fn new(inputs: &[Input], outputs: &[Output], kernels: &[TxKernel]) -> Transaction {
-		let offset = BlindingFactor::zero();
-
+	pub fn new(inputs: Inputs, outputs: &[Output], kernels: &[TxKernel]) -> Transaction {
 		// Initialize a new tx body and sort everything.
 		let body =
 			TransactionBody::init(inputs, outputs, kernels, false).expect("sorting, not verifying");
 
-		Transaction { offset, body }
+		Transaction {
+			offset: BlindingFactor::zero(),
+			body,
+		}
 	}
 
 	/// Creates a new transaction using this transaction as a template
@@ -1398,7 +1408,7 @@ pub fn aggregate(txs: &[Transaction]) -> Result<Transaction, Error> {
 					kernels + tx.kernels().len(),
 				)
 			});
-	let mut inputs: Vec<Input> = Vec::with_capacity(n_inputs);
+	let mut inputs: Vec<CommitWrapper> = Vec::with_capacity(n_inputs);
 	let mut outputs: Vec<Output> = Vec::with_capacity(n_outputs);
 	let mut kernels: Vec<TxKernel> = Vec::with_capacity(n_kernels);
 
@@ -1427,7 +1437,8 @@ pub fn aggregate(txs: &[Transaction]) -> Result<Transaction, Error> {
 	//   * full set of tx kernels
 	//   * sum of all kernel offsets
 	// Note: We sort input/outputs/kernels when building the transaction body internally.
-	let tx = Transaction::new(inputs, outputs, &kernels).with_offset(total_kernel_offset);
+	let tx =
+		Transaction::new(Inputs::from(inputs), outputs, &kernels).with_offset(total_kernel_offset);
 
 	Ok(tx)
 }
@@ -1435,7 +1446,7 @@ pub fn aggregate(txs: &[Transaction]) -> Result<Transaction, Error> {
 /// Attempt to deaggregate a multi-kernel transaction based on multiple
 /// transactions
 pub fn deaggregate(mk_tx: Transaction, txs: &[Transaction]) -> Result<Transaction, Error> {
-	let mut inputs: Vec<Input> = vec![];
+	let mut inputs: Vec<CommitWrapper> = vec![];
 	let mut outputs: Vec<Output> = vec![];
 	let mut kernels: Vec<TxKernel> = vec![];
 
@@ -1494,7 +1505,10 @@ pub fn deaggregate(mk_tx: Transaction, txs: &[Transaction]) -> Result<Transactio
 	kernels.sort_unstable();
 
 	// Build a new tx from the above data.
-	Ok(Transaction::new(&inputs, &outputs, &kernels).with_offset(total_kernel_offset))
+	Ok(
+		Transaction::new(Inputs::from(inputs.as_slice()), &outputs, &kernels)
+			.with_offset(total_kernel_offset),
+	)
 }
 
 /// A transaction input.
@@ -1588,30 +1602,84 @@ impl Input {
 		self.features.is_plain()
 	}
 }
+
+/// We need to wrap commitments so they can be sorted with hashable_ord.
+#[derive(Serialize, Deserialize, Debug, Clone, Copy)]
+pub struct CommitWrapper(Commitment);
+
+impl DefaultHashable for CommitWrapper {}
+hashable_ord!(CommitWrapper);
+
+impl From<Commitment> for CommitWrapper {
+	fn from(commit: Commitment) -> Self {
+		CommitWrapper(commit)
+	}
+}
+
+impl From<Input> for CommitWrapper {
+	fn from(input: Input) -> Self {
+		CommitWrapper(input.commitment())
+	}
+}
+
+impl From<&Input> for CommitWrapper {
+	fn from(input: &Input) -> Self {
+		CommitWrapper(input.commitment())
+	}
+}
+
+impl AsRef<Commitment> for CommitWrapper {
+	fn as_ref(&self) -> &Commitment {
+		&self.0
+	}
+}
+
+impl Writeable for CommitWrapper {
+	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
+		self.0.write(writer)
+	}
+}
+
+impl From<Inputs> for Vec<CommitWrapper> {
+	fn from(inputs: Inputs) -> Self {
+		match inputs {
+			Inputs::CommitOnly(inputs) => inputs,
+			Inputs::FeaturesAndCommit(inputs) => {
+				let mut commits: Vec<_> = inputs.iter().map(|input| input.into()).collect();
+				commits.sort_unstable();
+				commits
+			}
+		}
+	}
+}
+
+impl From<&Inputs> for Vec<CommitWrapper> {
+	fn from(inputs: &Inputs) -> Self {
+		match inputs {
+			Inputs::CommitOnly(inputs) => inputs.clone(),
+			Inputs::FeaturesAndCommit(inputs) => {
+				let mut commits: Vec<_> = inputs.iter().map(|input| input.into()).collect();
+				commits.sort_unstable();
+				commits
+			}
+		}
+	}
+}
+
+impl CommitWrapper {
+	/// Wrapped commitment.
+	pub fn commitment(&self) -> Commitment {
+		self.0
+	}
+}
 /// Wrapper around a vec of inputs.
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 #[serde(untagged)]
 pub enum Inputs {
+	/// Vec of commitments.
+	CommitOnly(Vec<CommitWrapper>),
 	/// Vec of inputs.
 	FeaturesAndCommit(Vec<Input>),
-	// Vec of commitments.
-	// CommitOnly(Vec<Commitment>),
-}
-
-impl From<Inputs> for Vec<Input> {
-	fn from(inputs: Inputs) -> Self {
-		match inputs {
-			Inputs::FeaturesAndCommit(inputs) => inputs,
-		}
-	}
-}
-
-impl From<&Inputs> for Vec<Input> {
-	fn from(inputs: &Inputs) -> Self {
-		match inputs {
-			Inputs::FeaturesAndCommit(inputs) => inputs.to_vec(),
-		}
-	}
 }
 
 impl From<&[Input]> for Inputs {
@@ -1620,16 +1688,18 @@ impl From<&[Input]> for Inputs {
 	}
 }
 
-impl From<Vec<Input>> for Inputs {
-	fn from(inputs: Vec<Input>) -> Self {
-		Inputs::FeaturesAndCommit(inputs)
+impl From<&[CommitWrapper]> for Inputs {
+	fn from(commits: &[CommitWrapper]) -> Self {
+		Inputs::CommitOnly(commits.to_vec())
 	}
 }
 
-impl From<Vec<OutputIdentifier>> for Inputs {
-	fn from(outputs: Vec<OutputIdentifier>) -> Self {
+/// Used when converting to v2 compatibility.
+/// We want to preserve output features here.
+impl From<&[OutputIdentifier]> for Inputs {
+	fn from(outputs: &[OutputIdentifier]) -> Self {
 		let inputs = outputs
-			.into_iter()
+			.iter()
 			.map(|out| Input {
 				features: out.features,
 				commit: out.commit,
@@ -1641,13 +1711,23 @@ impl From<Vec<OutputIdentifier>> for Inputs {
 
 impl Default for Inputs {
 	fn default() -> Self {
-		Inputs::FeaturesAndCommit(vec![])
+		Inputs::CommitOnly(vec![])
 	}
 }
 
 impl Writeable for Inputs {
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
+		if self.is_empty() {
+			return Ok(());
+		}
 		match self {
+			Inputs::CommitOnly(inputs) => {
+				if writer.serialization_mode() == ser::SerializationMode::Hash {
+					inputs.write(writer)?;
+				} else {
+					panic!("not yet implemented!");
+				}
+			}
 			Inputs::FeaturesAndCommit(inputs) => inputs.write(writer)?,
 		}
 		Ok(())
@@ -1658,6 +1738,7 @@ impl Inputs {
 	/// Number of inputs.
 	pub fn len(&self) -> usize {
 		match self {
+			Inputs::CommitOnly(inputs) => inputs.len(),
 			Inputs::FeaturesAndCommit(inputs) => inputs.len(),
 		}
 	}
@@ -1670,12 +1751,15 @@ impl Inputs {
 	/// Verify inputs are sorted and unique.
 	fn verify_sorted_and_unique(&self) -> Result<(), ser::Error> {
 		match self {
+			Inputs::CommitOnly(inputs) => inputs.verify_sorted_and_unique(),
 			Inputs::FeaturesAndCommit(inputs) => inputs.verify_sorted_and_unique(),
 		}
 	}
 
+	/// Sort the inputs.
 	fn sort_unstable(&mut self) {
 		match self {
+			Inputs::CommitOnly(inputs) => inputs.sort_unstable(),
 			Inputs::FeaturesAndCommit(inputs) => inputs.sort_unstable(),
 		}
 	}

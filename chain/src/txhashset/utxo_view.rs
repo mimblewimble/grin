@@ -16,7 +16,10 @@
 
 use crate::core::core::hash::{Hash, Hashed};
 use crate::core::core::pmmr::{self, ReadonlyPMMR};
-use crate::core::core::{Block, BlockHeader, Inputs, Output, OutputIdentifier, Transaction};
+use crate::core::core::{
+	Block, BlockHeader, CommitWrapper, Inputs, Output, OutputFeatures, OutputIdentifier,
+	Transaction,
+};
 use crate::core::global;
 use crate::error::{Error, ErrorKind};
 use crate::store::Batch;
@@ -82,6 +85,16 @@ impl<'a> UTXOView<'a> {
 		batch: &Batch<'_>,
 	) -> Result<Vec<(OutputIdentifier, CommitPos)>, Error> {
 		match inputs {
+			Inputs::CommitOnly(inputs) => {
+				let outputs_spent: Result<Vec<_>, Error> = inputs
+					.iter()
+					.map(|input| {
+						self.validate_input(input.commitment(), batch)
+							.and_then(|(out, pos)| Ok((out, pos)))
+					})
+					.collect();
+				outputs_spent
+			}
 			Inputs::FeaturesAndCommit(inputs) => {
 				let outputs_spent: Result<Vec<_>, Error> = inputs
 					.iter()
@@ -153,15 +166,22 @@ impl<'a> UTXOView<'a> {
 	) -> Result<(), Error> {
 		// Find the greatest output pos of any coinbase
 		// outputs we are attempting to spend.
-		let inputs: Vec<_> = inputs.into();
-		let pos = inputs
-			.iter()
-			.filter(|x| x.is_coinbase())
-			.filter_map(|x| batch.get_output_pos(&x.commitment()).ok())
-			.max()
-			.unwrap_or(0);
+		let inputs: Vec<CommitWrapper> = inputs.into();
 
-		if pos > 0 {
+		let outputs: Result<Vec<_>, _> = inputs
+			.iter()
+			.map(|x| self.validate_input(x.commitment(), batch))
+			.collect();
+
+		let pos = outputs?
+			.iter()
+			.filter_map(|(out, pos)| match out.features {
+				OutputFeatures::Coinbase => Some(pos.pos),
+				_ => None,
+			})
+			.max();
+
+		if let Some(pos) = pos {
 			// If we have not yet reached 1440 blocks then
 			// we can fail immediately as coinbase cannot be mature.
 			if height < global::coinbase_maturity() {
