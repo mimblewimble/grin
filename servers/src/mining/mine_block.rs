@@ -25,11 +25,13 @@ use std::time::Duration;
 use crate::api;
 use crate::chain;
 use crate::common::types::Error;
-use crate::core::core::{Output, TxKernel};
+use crate::core::core::{KernelFeatures, Output, OutputFeatures, TxKernel};
 use crate::core::libtx::secp_ser;
 use crate::core::libtx::ProofBuilder;
 use crate::core::{consensus, core, global};
 use crate::keychain::{ExtKeychain, Identifier, Keychain};
+use crate::util::secp;
+use crate::util::secp::pedersen::{Commitment, RangeProof};
 use crate::{ServerTxPool, ServerVerifierCache};
 
 /// Fees in block to use for coinbase amount calculation
@@ -53,15 +55,68 @@ impl BlockFees {
 	}
 }
 
-/// Response to build a coinbase output.
-#[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct CbData {
-	/// Output
-	pub output: Output,
-	/// Kernel
-	pub kernel: TxKernel,
-	/// Key Id
-	pub key_id: Option<Identifier>,
+// Response from wallet for building a coinbase output.
+//
+// {
+// 	"id": 1,
+// 	"jsonrpc": "2.0",
+// 	"result": {
+// 		"Ok": {
+// 			"kernel": {
+// 				"excess": "08dfe86d732f2dd24bac36aa7502685221369514197c26d33fac03041d47e4b490",
+// 				"excess_sig": "8f07ddd5...",
+// 				"features": "Coinbase"
+// 			},
+// 			"key_id": "0300000000000000000000000400000000",
+// 			"output": {
+// 				"com": "08fe198e525a5937d0c5d01fa354394d2679be6df5d42064a0f7550c332fce3d9d",
+// 				"features": "Coinbase",
+// 				"prf": "9d8488fc..."
+// 			}
+// 		}
+// 	}
+// }
+#[derive(Deserialize, Debug, Clone)]
+struct CbData {
+	output: CbOutput,
+	kernel: CbKernel,
+	key_id: Option<Identifier>,
+}
+
+#[derive(Deserialize, Debug, Clone, Copy)]
+struct CbOutput {
+	#[serde(alias = "com", deserialize_with = "secp_ser::commitment_from_hex")]
+	commit: Commitment,
+	#[serde(alias = "prf", deserialize_with = "secp_ser::rangeproof_from_hex")]
+	proof: RangeProof,
+}
+
+impl From<CbOutput> for Output {
+	fn from(output: CbOutput) -> Self {
+		Output {
+			features: OutputFeatures::Coinbase,
+			commit: output.commit,
+			proof: output.proof,
+		}
+	}
+}
+
+#[derive(Deserialize, Debug, Clone, Copy)]
+struct CbKernel {
+	#[serde(deserialize_with = "secp_ser::commitment_from_hex")]
+	excess: Commitment,
+	#[serde(with = "secp_ser::sig_serde")]
+	excess_sig: secp::Signature,
+}
+
+impl From<CbKernel> for TxKernel {
+	fn from(kernel: CbKernel) -> Self {
+		TxKernel {
+			features: KernelFeatures::Coinbase,
+			excess: kernel.excess,
+			excess_sig: kernel.excess_sig,
+		}
+	}
 }
 
 // Ensure a block suitable for mining is built and returned
@@ -247,11 +302,11 @@ fn get_coinbase(
 		}
 		Some(wallet_listener_url) => {
 			let res = create_coinbase(&wallet_listener_url, &block_fees)?;
-			let output = res.output;
-			let kernel = res.kernel;
+			let output = res.output.into();
+			let kernel = res.kernel.into();
 			let key_id = res.key_id;
 			let block_fees = BlockFees {
-				key_id: key_id,
+				key_id,
 				..block_fees
 			};
 
