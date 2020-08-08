@@ -331,7 +331,7 @@ impl Writeable for KernelFeatures {
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
 		// Care must be exercised when writing for hashing purposes.
 		// All kernels are hashed using original v1 serialization strategy.
-		if writer.serialization_mode() == ser::SerializationMode::Hash {
+		if writer.serialization_mode().is_hash_mode() {
 			return self.write_v1(writer);
 		}
 
@@ -1718,18 +1718,32 @@ impl Default for Inputs {
 
 impl Writeable for Inputs {
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
+		// Nothing to write so we are done.
 		if self.is_empty() {
 			return Ok(());
 		}
-		match self {
-			Inputs::CommitOnly(inputs) => {
-				if writer.serialization_mode() == ser::SerializationMode::Hash {
-					inputs.write(writer)?;
-				} else {
-					panic!("not yet implemented!");
-				}
+
+		// If writing for a hash then simply write all our inputs.
+		if writer.serialization_mode().is_hash_mode() {
+			match self {
+				Inputs::CommitOnly(inputs) => inputs.write(writer)?,
+				Inputs::FeaturesAndCommit(inputs) => inputs.write(writer)?,
 			}
-			Inputs::FeaturesAndCommit(inputs) => inputs.write(writer)?,
+		} else {
+			// Otherwise we are writing full data and need to consider our inputs variant and protocol version.
+			match self {
+				Inputs::CommitOnly(inputs) => match writer.protocol_version().value() {
+					0..=2 => return Err(ser::Error::UnsupportedProtocolVersion),
+					3..=ProtocolVersion::MAX => inputs.write(writer)?,
+				},
+				Inputs::FeaturesAndCommit(inputs) => match writer.protocol_version().value() {
+					0..=2 => inputs.write(writer)?,
+					3..=ProtocolVersion::MAX => {
+						let inputs: Vec<CommitWrapper> = self.into();
+						inputs.write(writer)?;
+					}
+				},
+			}
 		}
 		Ok(())
 	}

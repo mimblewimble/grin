@@ -69,6 +69,8 @@ pub enum Error {
 	DuplicateError,
 	/// Block header version (hard-fork schedule).
 	InvalidBlockVersion,
+	/// Unsupported protocol version
+	UnsupportedProtocolVersion,
 }
 
 impl From<io::Error> for Error {
@@ -92,6 +94,7 @@ impl fmt::Display for Error {
 			Error::TooLargeReadErr => f.write_str("too large read"),
 			Error::HexError(ref e) => write!(f, "hex error {:?}", e),
 			Error::InvalidBlockVersion => f.write_str("invalid block version"),
+			Error::UnsupportedProtocolVersion => f.write_str("unsupported protocol version"),
 		}
 	}
 }
@@ -115,6 +118,7 @@ impl error::Error for Error {
 			Error::TooLargeReadErr => "too large read",
 			Error::HexError(_) => "hex error",
 			Error::InvalidBlockVersion => "invalid block version",
+			Error::UnsupportedProtocolVersion => "unsupported protocol version",
 		}
 	}
 }
@@ -126,6 +130,16 @@ pub enum SerializationMode {
 	Full,
 	/// Serialize the data that defines the object
 	Hash,
+}
+
+impl SerializationMode {
+	/// Hash mode?
+	pub fn is_hash_mode(&self) -> bool {
+		match self {
+			SerializationMode::Hash => true,
+			_ => false,
+		}
+	}
 }
 
 /// Implementations defined how different numbers and binary structures are
