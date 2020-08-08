@@ -342,8 +342,12 @@ impl Chain {
 
 	// Check if the provided block is an orphan.
 	// If block is an orphan add it to our orphan block pool for deferred processing.
+	// If this is the "next" block immediately following current head then not an orphan.
+	// Or if we have the previous full block then not an orphan.
 	fn check_orphan(&self, block: &Block, opts: Options) -> Result<(), Error> {
-		if self.block_exists(block.header.prev_hash)? {
+		let head = self.head()?;
+		let is_next = block.header.prev_hash == head.last_block_h;
+		if is_next || self.block_exists(block.header.prev_hash)? {
 			return Ok(());
 		}
 
