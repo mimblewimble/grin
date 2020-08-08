@@ -1698,13 +1698,14 @@ impl From<&[CommitWrapper]> for Inputs {
 /// We want to preserve output features here.
 impl From<&[OutputIdentifier]> for Inputs {
 	fn from(outputs: &[OutputIdentifier]) -> Self {
-		let inputs = outputs
+		let mut inputs: Vec<_> = outputs
 			.iter()
 			.map(|out| Input {
 				features: out.features,
 				commit: out.commit,
 			})
 			.collect();
+		inputs.sort_unstable();
 		Inputs::FeaturesAndCommit(inputs)
 	}
 }
