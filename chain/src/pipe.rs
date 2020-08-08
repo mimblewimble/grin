@@ -103,9 +103,8 @@ pub fn process_block(
 	// want to do this now and not later during header validation.
 	validate_pow_only(&b.header, ctx)?;
 
-	// Get previous header from the db and check we have the corresponding full block.
+	// Get previous header from the db.
 	let prev = prev_header_store(&b.header, &mut ctx.batch)?;
-	ctx.batch.block_exists(&prev.hash())?;
 
 	// Process the header for the block.
 	// Note: We still want to process the full block if we have seen this header before
