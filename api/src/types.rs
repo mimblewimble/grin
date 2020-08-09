@@ -291,7 +291,7 @@ impl OutputPrintable {
 		};
 
 		let out_id = core::OutputIdentifier::from(output);
-		let pos = chain.get_unspent(&out_id)?;
+		let pos = chain.get_unspent(out_id.commitment())?;
 
 		let spent = pos.is_none();
 
@@ -301,8 +301,10 @@ impl OutputPrintable {
 		// api is currently doing the right thing here:
 		// An output can be spent and then subsequently reused and the new instance unspent.
 		// This would result in a height that differs from the provided block height.
-		let output_pos = pos.map(|x| x.pos).unwrap_or(0);
-		let block_height = pos.map(|x| x.height).or(block_header.map(|x| x.height));
+		let output_pos = pos.map(|(_, x)| x.pos).unwrap_or(0);
+		let block_height = pos
+			.map(|(_, x)| x.height)
+			.or(block_header.map(|x| x.height));
 
 		let proof = if include_proof {
 			Some(output.proof_bytes().to_hex())

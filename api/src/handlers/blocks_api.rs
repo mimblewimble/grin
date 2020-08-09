@@ -61,7 +61,7 @@ impl HeaderHandler {
 			Some((_, o)) => o,
 			None => return Err(ErrorKind::NotFound.into()),
 		};
-		match w(&self.chain)?.get_header_for_output(&oid) {
+		match w(&self.chain)?.get_header_for_output(oid.commitment()) {
 			Ok(header) => Ok(BlockHeaderPrintable::from_header(&header)),
 			Err(_) => Err(ErrorKind::NotFound.into()),
 		}
@@ -94,7 +94,7 @@ impl HeaderHandler {
 				Some((_, o)) => o,
 				None => return Err(ErrorKind::NotFound.into()),
 			};
-			match w(&self.chain)?.get_header_for_output(&oid) {
+			match w(&self.chain)?.get_header_for_output(oid.commitment()) {
 				Ok(header) => return Ok(header.hash()),
 				Err(_) => return Err(ErrorKind::NotFound.into()),
 			}
@@ -179,7 +179,7 @@ impl BlockHandler {
 				Some((_, o)) => o,
 				None => return Err(ErrorKind::NotFound.into()),
 			};
-			match w(&self.chain)?.get_header_for_output(&oid) {
+			match w(&self.chain)?.get_header_for_output(oid.commitment()) {
 				Ok(header) => return Ok(header.hash()),
 				Err(_) => return Err(ErrorKind::NotFound.into()),
 			}

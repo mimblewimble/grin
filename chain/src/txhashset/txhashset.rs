@@ -255,15 +255,17 @@ impl TxHashSet {
 	/// Check if an output is unspent.
 	/// We look in the index to find the output MMR pos.
 	/// Then we check the entry in the output MMR and confirm the hash matches.
-	pub fn get_unspent(&self, output_id: &OutputIdentifier) -> Result<Option<CommitPos>, Error> {
-		let commit = output_id.commit;
+	pub fn get_unspent(
+		&self,
+		commit: Commitment,
+	) -> Result<Option<(OutputIdentifier, CommitPos)>, Error> {
 		match self.commit_index.get_output_pos_height(&commit) {
 			Ok(Some(pos)) => {
 				let output_pmmr: ReadonlyPMMR<'_, Output, _> =
 					ReadonlyPMMR::at(&self.output_pmmr_h.backend, self.output_pmmr_h.last_pos);
 				if let Some(out) = output_pmmr.get_data(pos.pos) {
-					if out == *output_id {
-						Ok(Some(pos))
+					if out.commitment() == commit {
+						Ok(Some((out, pos)))
 					} else {
 						Ok(None)
 					}
