@@ -84,12 +84,13 @@ pub fn process_block(
 	ctx: &mut BlockContext<'_>,
 ) -> Result<(Option<Tip>, BlockHeader), Error> {
 	debug!(
-		"pipe: process_block {} at {} [in/out/kern: {}/{}/{}]",
+		"pipe: process_block {} at {} [in/out/kern: {}/{}/{}] ({})",
 		b.hash(),
 		b.header.height,
 		b.inputs().len(),
 		b.outputs().len(),
 		b.kernels().len(),
+		b.inputs().version_str(),
 	);
 
 	// Read current chain head from db via the batch.

@@ -1795,6 +1795,14 @@ impl Inputs {
 			Inputs::FeaturesAndCommit(inputs) => inputs.sort_unstable(),
 		}
 	}
+
+	/// For debug purposes only. Do not rely on this for anything.
+	pub fn version_str(&self) -> &str {
+		match self {
+			Inputs::CommitOnly(_) => "v3",
+			Inputs::FeaturesAndCommit(_) => "v2",
+		}
+	}
 }
 
 // Enum of various supported kernel "features".

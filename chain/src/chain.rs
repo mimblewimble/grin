@@ -275,9 +275,10 @@ impl Chain {
 	/// Validating the inputs against the utxo_view allows us to look the outputs up.
 	pub fn convert_block_v2(&self, block: Block) -> Result<Block, Error> {
 		debug!(
-			"convert_block_v2: {} at {}",
+			"convert_block_v2: {} at {} ({})",
 			block.header.hash(),
-			block.header.height
+			block.header.height,
+			block.inputs().version_str(),
 		);
 
 		if block.inputs().is_empty() {
