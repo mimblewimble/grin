@@ -333,7 +333,7 @@ impl ProtocolVersion {
 	/// negotiation in the p2p layer. Connected peers will negotiate a suitable
 	/// protocol version for serialization/deserialization of p2p messages.
 	pub fn local() -> ProtocolVersion {
-		ProtocolVersion(PROTOCOL_VERSION)
+		PROTOCOL_VERSION
 	}
 
 	/// We need to specify a protocol version for our local database.

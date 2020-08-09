@@ -23,9 +23,12 @@ use crate::consensus::{
 	PROOFSIZE, SECOND_POW_EDGE_BITS, STATE_SYNC_THRESHOLD,
 };
 use crate::core::block::HeaderVersion;
-use crate::pow::{
-	self, new_cuckaroo_ctx, new_cuckarood_ctx, new_cuckaroom_ctx, new_cuckarooz_ctx,
-	new_cuckatoo_ctx, PoWContext,
+use crate::{
+	pow::{
+		self, new_cuckaroo_ctx, new_cuckarood_ctx, new_cuckaroom_ctx, new_cuckarooz_ctx,
+		new_cuckatoo_ctx, PoWContext,
+	},
+	ser::ProtocolVersion,
 };
 use std::cell::Cell;
 use util::OneTime;
@@ -42,7 +45,7 @@ use util::OneTime;
 /// Note: We also use a specific (possible different) protocol version
 /// for both the backend database and MMR data files.
 /// This defines the p2p layer protocol version for this node.
-pub const PROTOCOL_VERSION: u32 = 2;
+pub const PROTOCOL_VERSION: ProtocolVersion = ProtocolVersion(3);
 
 /// Automated testing edge_bits
 pub const AUTOMATED_TESTING_MIN_EDGE_BITS: u8 = 10;

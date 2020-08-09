@@ -691,8 +691,18 @@ impl Readable for TransactionBody {
 			return Err(ser::Error::TooLargeReadErr);
 		}
 
-		let inputs: Vec<Input> = read_multi(reader, num_inputs)?;
-		let inputs = Inputs::from(inputs.as_slice());
+		// Read protocol version specific inputs.
+		let inputs = match reader.protocol_version().value() {
+			0..=2 => {
+				let inputs: Vec<Input> = read_multi(reader, num_inputs)?;
+				Inputs::from(inputs.as_slice())
+			}
+			3..=ser::ProtocolVersion::MAX => {
+				let inputs: Vec<CommitWrapper> = read_multi(reader, num_inputs)?;
+				Inputs::from(inputs.as_slice())
+			}
+		};
+
 		let outputs = read_multi(reader, num_outputs)?;
 		let kernels = read_multi(reader, num_kernels)?;
 
@@ -1631,6 +1641,13 @@ impl From<&Input> for CommitWrapper {
 impl AsRef<Commitment> for CommitWrapper {
 	fn as_ref(&self) -> &Commitment {
 		&self.0
+	}
+}
+
+impl Readable for CommitWrapper {
+	fn read<R: Reader>(reader: &mut R) -> Result<CommitWrapper, ser::Error> {
+		let commit = Commitment::read(reader)?;
+		Ok(CommitWrapper(commit))
 	}
 }
 
