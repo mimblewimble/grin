@@ -19,8 +19,8 @@ use crate::core::core::hash::{Hash, Hashed, ZERO_HASH};
 use crate::core::core::merkle_proof::MerkleProof;
 use crate::core::core::verifier_cache::VerifierCache;
 use crate::core::core::{
-	Block, BlockHeader, BlockSums, Committed, Inputs, KernelFeatures, Output, OutputIdentifier,
-	Transaction, TxKernel,
+	Block, BlockHeader, BlockSums, Committed, HeaderVersion, Inputs, KernelFeatures, Output,
+	OutputIdentifier, Transaction, TxKernel,
 };
 use crate::core::global;
 use crate::core::pow;
@@ -219,10 +219,8 @@ impl Chain {
 		};
 
 		// DB migrations to be run prior to the chain being used.
-		{
-			// Migrate full blocks to protocol version v2.
-			chain.migrate_db_v1_v2()?;
-		}
+		// Migrate full blocks to protocol version v3.
+		chain.migrate_db_v2_v3()?;
 
 		chain.log_heads()?;
 
@@ -275,7 +273,7 @@ impl Chain {
 	/// We also need to support relaying blocks with FeaturesAndCommit inputs to peers.
 	/// So we need a way to convert blocks from CommitOnly to FeaturesAndCommit.
 	/// Validating the inputs against the utxo_view allows us to look the outputs up.
-	fn convert_block_v2(&self, block: Block) -> Result<Block, Error> {
+	pub fn convert_block_v2(&self, block: Block) -> Result<Block, Error> {
 		debug!(
 			"convert_block_v2: {} at {}",
 			block.header.hash(),
@@ -398,9 +396,13 @@ impl Chain {
 		// Only do this once we know the header PoW is valid.
 		self.check_orphan(&b, opts)?;
 
-		// Convert block to FeaturesAndCommit inputs.
-		// We know this block is not an orphan and header is valid at this point.
-		let b = self.convert_block_v2(b)?;
+		// Conversion is relatively expensive so defer this until after orphan check.
+		// Maintain "features and commit" backward compatibility until HF4.
+		let b = if b.header.version <= HeaderVersion(4) {
+			self.convert_block_v2(b)?
+		} else {
+			b
+		};
 
 		let (maybe_new_head, prev_head) = {
 			let mut header_pmmr = self.header_pmmr.write();
@@ -1404,14 +1406,13 @@ impl Chain {
 		self.header_pmmr.read().get_header_hash_by_height(height)
 	}
 
-	/// Migrate our local db from v1 to v2.
-	/// This covers blocks which themselves contain transactions.
-	/// Transaction kernels changed in v2 due to "variable size kernels".
-	fn migrate_db_v1_v2(&self) -> Result<(), Error> {
-		let store_v1 = self.store.with_version(ProtocolVersion(1));
-		let batch = store_v1.batch()?;
+	/// Migrate our local db from v2 to v3.
+	/// "commit only" inputs.
+	fn migrate_db_v2_v3(&self) -> Result<(), Error> {
+		let store_v2 = self.store.with_version(ProtocolVersion(2));
+		let batch = store_v2.batch()?;
 		for (_, block) in batch.blocks_iter()? {
-			batch.migrate_block(&block, ProtocolVersion(2))?;
+			batch.migrate_block(&block, ProtocolVersion(3))?;
 		}
 		batch.commit()?;
 		Ok(())

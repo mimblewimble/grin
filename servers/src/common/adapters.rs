@@ -32,6 +32,7 @@ use crate::core::core::transaction::Transaction;
 use crate::core::core::verifier_cache::VerifierCache;
 use crate::core::core::{BlockHeader, BlockSums, CompactBlock, Inputs, OutputIdentifier};
 use crate::core::pow::Difficulty;
+use crate::core::ser::ProtocolVersion;
 use crate::core::{core, global};
 use crate::p2p;
 use crate::p2p::types::PeerInfo;
@@ -355,12 +356,15 @@ where
 	}
 
 	/// Gets a full block by its hash.
-	fn get_block(&self, h: Hash) -> Option<core::Block> {
-		let b = self.chain().get_block(&h);
-		match b {
-			Ok(b) => Some(b),
-			_ => None,
-		}
+	/// Will convert to v2 compatibility based on peer protocol version.
+	fn get_block(&self, h: Hash, peer_info: &PeerInfo) -> Option<core::Block> {
+		self.chain()
+			.get_block(&h)
+			.map(|b| match peer_info.version.value() {
+				0..=2 => Some(b),
+				3..=ProtocolVersion::MAX => self.chain().convert_block_v2(b).ok(),
+			})
+			.unwrap_or(None)
 	}
 
 	/// Provides a reading view into the current txhashset state as well as

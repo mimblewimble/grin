@@ -73,7 +73,7 @@ where
 	}
 }
 
-const DEFAULT_DB_VERSION: ProtocolVersion = ProtocolVersion(2);
+const DEFAULT_DB_VERSION: ProtocolVersion = ProtocolVersion(3);
 
 /// LMDB-backed store facilitating data access and serialization. All writes
 /// are done through a Batch abstraction providing atomicity.
