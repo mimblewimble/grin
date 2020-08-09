@@ -84,53 +84,56 @@ deux clés privées (`k*H + j*H`). Dans la blockchain Bitcoin, les portefeuilles
 hiérarchiques déterministes reposent fortement sur ce principe. Mimblewimble et
 l'implémentation de Grin aussi.
 
-### Transacting with Mimblewimble
+### Transactions avec Mimblewimble
 
-The structure of transactions demonstrates a crucial tenet of Mimblewimble:
-strong privacy and confidentiality guarantees.
+La structure des transactions démontre un principe crucial de Mimblewimble:
+de solides garanties de vie privée et de confidentialité.
 
-The validation of Mimblewimble transactions relies on two basic properties:
+La validation des transactions Mimblewimble repose sur deux propriétés de base:
 
-* **Verification of zero sums.** The sum of outputs minus inputs always equals zero,
-  proving that the transaction did not create new funds, _without revealing the actual amounts_.
-* **Possession of private keys.** Like with most other cryptocurrencies, ownership of
-  transaction outputs is guaranteed by the possession of ECC private keys. However,
-  the proof that an entity owns those private keys is not achieved by directly signing
-  the transaction.
+* **Vérification des sommes nulles.** La somme des sorties moins les entrées est
+  toujours égale à zéro, prouvant que l'opération n'a pas créé de nouveaux fonds,
+  _sans révéler les montants réels_.
+* **Possession de clés privées.** Comme pour la plupart des autres crypto-monnaies,
+  la propriété des résultats d'une transaction est garanties par la possession de
+  clés privées ECC. cependant, la preuve qu'une entité possède ces clés privées
+  n'est pas obtenue en signant directement la transaction.
 
-The next sections on balance, ownership, change and proofs details how those two
-fundamental properties are achieved.
+Les sections suivantes sur l'équilibre, la propriété, le changement et les preuves
+expliquent comment ces deux propriétés fondamentales sont atteintes.
 
 #### Balance
 
-Building upon the properties of ECC we described above, one can obscure the values
-in a transaction.
+En s'appuyant sur les propriétés de la ECC que nous avons décrites ci-dessus, on
+peut occulter les valeurs dans une transaction.
 
-If _v_ is the value of a transaction input or output and _H_ a point on the elliptic curve _C_, we can simply 
-embed `v*H` instead of _v_ in a transaction. This works because using the ECC
-operations, we can still validate that the sum of the outputs of a transaction equals the
-sum of inputs:
+Si _v_ est la valeur d'une entrée ou d'une sortie de transaction et _H_ un point
+sur la courbe elliptique _C_, nous pouvons simplement utiliser `v*H` au lieu de _v_
+dans une transaction. Cela fonctionne parce qu'en utilisant les opérations ECC, nous
+pouvons encore valider que la somme des résultats d'une transaction est égale à la
+somme des entrées :
 
     v1 + v2 = v3  =>  v1*H + v2*H = v3*H
 
-Verifying this property on every transaction allows the protocol to verify that a
-transaction doesn't create money out of thin air, without knowing what the actual
-values are. However, there are a finite number of usable values (transaction amounts) and one 
-could try every single 
-one of them to guess the value of the transaction. In addition, knowing *v1* (from
-a previous transaction for example) and the resulting `v1*H` reveals all outputs with
-value *v1* across the blockchain. For these reasons, we introduce a second point _G_ on the same elliptic curve
-(practically _G_ is just another generator point on the same curve group as _H_) and
-a private key _r_ used as a *blinding factor*.
+La vérification de cette propriété à chaque transaction permet au protocole de vérifier
+qu'une transaction ne crée pas d'argent à partir de rien, sans connaître les véritables
+valeurs. Cependant, il existe un nombre fini de valeurs utilisables (montants de 
+transaction) et on pourrait essayer chacune d'entre elles pour deviner la valeur de la
+transaction. De plus en connaissant *v1* (d'une transaction précédente par exemple), le
+résultat `v1*H` révèle toutes les sorties avec *v1* à travers la blockchain.
+Pour ces raisons, nous introduisons un deuxième point _G_ sur la même courbe elliptique
+(_G_ est juste un autre point générateur sur le même groupe de courbes que _H_) et
+une clé privée _r_ utilisée comme *facteur aveuglant*.
 
-An input or output value in a transaction can then be expressed as:
+Une valeur d'entrée ou de sortie dans une transaction peut alors être exprimée comme suit:
 
     r*G + v*H
 
-Where:
+Où :
 
-* _r_ is a private key used as a blinding factor, _G_ is a point on the elliptic curve _C_ and
-  their product `r*G` is the public key for _r_ (using _G_ as generator point).
+* _r_ est une clé privée utilisée comme facteur aveuglant, _G_ est un point sur la courbe
+  elliptique _C_ et leur produit `r*G` est la clé publique pour _r_ (en utilisant _G_ 
+  comme point générateur).
 * _v_ is the value of an input or output and _H_ is another point on the elliptic curve _C_,
   together producing another public key `v*H` (using _H_ as generator point).
 
