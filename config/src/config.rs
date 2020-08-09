@@ -114,8 +114,6 @@ fn check_api_secret_files(
 
 /// Handles setup and detection of paths for node
 pub fn initial_setup_server(chain_type: &global::ChainTypes) -> Result<GlobalConfig, ConfigError> {
-	check_api_secret_files(chain_type, API_SECRET_FILE_NAME)?;
-	check_api_secret_files(chain_type, FOREIGN_API_SECRET_FILE_NAME)?;
 	// Use config file if current directory if it exists, .grin home otherwise
 	if let Some(p) = check_config_current_dir(SERVER_CONFIG_FILE_NAME) {
 		GlobalConfig::new(p.to_str().unwrap())
@@ -231,6 +229,16 @@ impl GlobalConfig {
 		let decoded: Result<ConfigMembers, toml::de::Error> = toml::from_str(&fixed);
 		match decoded {
 			Ok(gc) => {
+				// Ensure api secret files exist if configuration options are specified
+				let ensure_api_secret = |api_secret_path: &String| {
+					let _ = check_api_secret_files(&gc.server.chain_type, api_secret_path);
+				};
+				gc.server.api_secret_path.as_ref().map(ensure_api_secret);
+				gc.server
+					.foreign_api_secret_path
+					.as_ref()
+					.map(ensure_api_secret);
+
 				self.members = Some(gc);
 				return Ok(self);
 			}
