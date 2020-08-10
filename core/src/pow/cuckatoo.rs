@@ -339,40 +339,88 @@ mod test {
 		0x6728b6e1, 0x67adfb45, 0x68ae2306, 0x6d60f5e1, 0x78af3c4f, 0x7dde51ab, 0x7faced21,
 	];
 
+	// Cuckatoo 32 Solution for Header [0u8;80] - nonce 17
+	static V1_32: [u64; 42] = [
+		0x6da0bbf, 0xb175276, 0xf978803, 0x187bea71, 0x2074a1a6, 0x22270923, 0x2c70b560,
+		0x411d193f, 0x417c55d4, 0x4ebbda62, 0x5238584a, 0x545efac9, 0x569e98e1, 0x57040b66,
+		0x5e16153e, 0x5e749d2e, 0x60b771c2, 0x68e63420, 0x74a2825e, 0x755790ac, 0x7d5e280f,
+		0x7fe4d148, 0x934b32c8, 0x94a0c441, 0x9643fb25, 0x9718e41d, 0x982e6b8b, 0x9c47d21c,
+		0xa1f64135, 0xa90e209c, 0xabb868cb, 0xafef989e, 0xb0fc021e, 0xb20a7b56, 0xb5e59931,
+		0xb63e46b9, 0xb8823ed5, 0xd11e966c, 0xd95e515d, 0xe0245efe, 0xf3edc79a, 0xfb8a29ce,
+	];
+
+	// Cuckatoo 33 Solution for Header [0u8;80] - nonce 79
+	static V1_33: [u64; 42] = [
+		0x7aaf51f,
+		0x1434ebf3,
+		0x25bcee6e,
+		0x2fbddf0b,
+		0x322a87b6,
+		0x414f6a57,
+		0x701a84af,
+		0x7c432040,
+		0x822b8ee0,
+		0x83c9fed3,
+		0x89af26b2,
+		0xa5bc5d69,
+		0xbe924630,
+		0xd3146f50,
+		0xd4e0f240,
+		0xe10e5bdc,
+		0x113400ccc,
+		0x114a917b2,
+		0x118482498,
+		0x11deca0f4,
+		0x1241c7ff0,
+		0x1245f8886,
+		0x12a6517e3,
+		0x12c1a0edd,
+		0x142d988ee,
+		0x14637a89b,
+		0x15399e735,
+		0x1699c1cf9,
+		0x16e91ddd4,
+		0x17414f603,
+		0x18c07384c,
+		0x1993cdd97,
+		0x19d37ce5b,
+		0x1a43455c5,
+		0x1aa312c2f,
+		0x1b20fe128,
+		0x1b7610376,
+		0x1bce4d125,
+		0x1c4834307,
+		0x1c7a2e5b2,
+		0x1da840832,
+		0x1e4e3da0c,
+	];
+
 	#[test]
 	fn cuckatoo() {
 		global::set_local_chain_type(global::ChainTypes::Mainnet);
 		let ret = basic_solve();
 		if let Err(r) = ret {
-			panic!("basic_solve u32: Error: {}", r);
-		}
-		let ret = basic_solve();
-		if let Err(r) = ret {
-			panic!("basic_solve u64: Error: {}", r);
+			panic!("basic_solve: Error: {}", r);
 		}
 		let ret = validate29_vectors();
 		if let Err(r) = ret {
-			panic!("validate_29_vectors u32: Error: {}", r);
-		}
-		let ret = validate29_vectors();
-		if let Err(r) = ret {
-			panic!("validate_29_vectors u64: Error: {}", r);
+			panic!("validate_29_vectors: Error: {}", r);
 		}
 		let ret = validate31_vectors();
 		if let Err(r) = ret {
-			panic!("validate_31_vectors u32: Error: {}", r);
+			panic!("validate_31_vectors: Error: {}", r);
 		}
-		let ret = validate31_vectors();
+		let ret = validate32_vectors();
 		if let Err(r) = ret {
-			panic!("validate_31_vectors u64: Error: {}", r);
+			panic!("validate_32_vectors: Error: {}", r);
+		}
+		let ret = validate33_vectors();
+		if let Err(r) = ret {
+			panic!("validate_33_vectors: Error: {}", r);
 		}
 		let ret = validate_fail();
 		if let Err(r) = ret {
-			panic!("validate_fail u32: Error: {}", r);
-		}
-		let ret = validate_fail();
-		if let Err(r) = ret {
-			panic!("validate_fail u64: Error: {}", r);
+			panic!("validate_fail: Error: {}", r);
 		}
 	}
 
@@ -387,6 +435,20 @@ mod test {
 		let mut ctx = CuckatooContext::new_impl(31, 42, 10).unwrap();
 		ctx.set_header_nonce([0u8; 80].to_vec(), Some(99), false)?;
 		assert!(ctx.verify(&Proof::new(V1_31.to_vec())).is_ok());
+		Ok(())
+	}
+
+	fn validate32_vectors() -> Result<(), Error> {
+		let mut ctx = CuckatooContext::new_impl(32, 42, 10).unwrap();
+		ctx.set_header_nonce([0u8; 80].to_vec(), Some(17), false)?;
+		assert!(ctx.verify(&Proof::new(V1_32.to_vec())).is_ok());
+		Ok(())
+	}
+
+	fn validate33_vectors() -> Result<(), Error> {
+		let mut ctx = CuckatooContext::new_impl(33, 42, 10).unwrap();
+		ctx.set_header_nonce([0u8; 80].to_vec(), Some(79), false)?;
+		assert!(ctx.verify(&Proof::new(V1_33.to_vec())).is_ok());
 		Ok(())
 	}
 
