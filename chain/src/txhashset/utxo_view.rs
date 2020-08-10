@@ -106,6 +106,7 @@ impl<'a> UTXOView<'a> {
 								if out == input.into() {
 									Ok((out, pos))
 								} else {
+									error!("input mismatch: {:?}, {:?}, {:?}", out, pos, input);
 									Err(ErrorKind::Other("input mismatch".into()).into())
 								}
 							})
@@ -127,7 +128,15 @@ impl<'a> UTXOView<'a> {
 		let pos = batch.get_output_pos_height(&input)?;
 		if let Some(pos) = pos {
 			if let Some(out) = self.output_pmmr.get_data(pos.pos) {
-				return Ok((out, pos));
+				if out.commitment() == input {
+					return Ok((out, pos));
+				} else {
+					error!("input mismatch: {:?}, {:?}, {:?}", out, pos, input);
+					return Err(ErrorKind::Other(
+						"input mismatch (output_pos index mismatch?)".into(),
+					)
+					.into());
+				}
 			}
 		}
 		Err(ErrorKind::AlreadySpent(input).into())
