@@ -195,7 +195,7 @@ Therefore, the protocol needs to verify that the transacting parties collectivel
 A simple way of doing so is by using the public key `Y - Xi` (`85*G`) to verify a signature, that was signed using the excess value (85). This ensures that:
 
 * The transacting parties collectively can produce the private key (the excess value) for the public key (`Y - Xi`).
-* The sum of _values_ in the outputs minus the sum of _values_ in the inputs are zero (otherwise there would be no correspondence between private and public keys, which is exactly the reason for having a signature).
+* The sum of _values_ in the outputs minus the sum of _values_ in the inputs is zero (otherwise there would be no correspondence between private and public keys, which is exactly the reason for having a signature).
 
 This signature, attached to every transaction, together with some additional data (like mining
 fees), is called a _transaction kernel_ and is checked by all validators.
