@@ -466,6 +466,17 @@ impl Readable for UntrustedBlockHeader {
 			);
 			return Err(ser::Error::CorruptedData);
 		}
+
+		// Validate global output and kernel MMR sizes against upper bounds based on block height.
+		let global_weight = TransactionBody::weight_as_block(
+			0,
+			header.output_mmr_count(),
+			header.kernel_mmr_count(),
+		);
+		if global_weight > global::max_block_weight() * (header.height + 1) {
+			return Err(ser::Error::CorruptedData);
+		}
+
 		Ok(UntrustedBlockHeader(header))
 	}
 }
