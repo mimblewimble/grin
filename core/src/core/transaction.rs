@@ -810,6 +810,12 @@ impl TransactionBody {
 		self
 	}
 
+	/// Fully replace inputs.
+	pub fn replace_outputs(mut self, outputs: &[Output]) -> TransactionBody {
+		self.outputs = outputs.to_vec();
+		self
+	}
+
 	/// Builds a new TransactionBody with the provided output added. Existing
 	/// outputs, if any, are kept intact.
 	/// Sort order is maintained.
@@ -968,23 +974,24 @@ impl TransactionBody {
 		Ok(())
 	}
 
+	// Returns a single sorted vec of all input and output commitments.
+	// This gives us a convenient way of verifying cut_through.
+	fn inputs_outputs_committed(&self) -> Vec<Commitment> {
+		let mut commits = self.inputs_committed();
+		commits.extend_from_slice(self.outputs_committed().as_slice());
+		commits.sort_unstable();
+		commits
+	}
+
 	// Verify that no input is spending an output from the same block.
-	// Assumes inputs and outputs are sorted
+	// The inputs and outputs are not guaranteed to be sorted consistently once we support "commit only" inputs.
+	// We need to allocate as we need to sort the commitments so we keep this very simple and just look
+	// for duplicates across all input and output commitments.
 	fn verify_cut_through(&self) -> Result<(), Error> {
-		let inputs: Vec<_> = self.inputs().into();
-		let mut inputs = inputs.iter().map(|x| x.hash()).peekable();
-		let mut outputs = self.outputs.iter().map(|x| x.hash()).peekable();
-		while let (Some(ih), Some(oh)) = (inputs.peek(), outputs.peek()) {
-			match ih.cmp(oh) {
-				Ordering::Less => {
-					inputs.next();
-				}
-				Ordering::Greater => {
-					outputs.next();
-				}
-				Ordering::Equal => {
-					return Err(Error::CutThrough);
-				}
+		let commits = self.inputs_outputs_committed();
+		for pair in commits.windows(2) {
+			if pair[0] == pair[1] {
+				return Err(Error::CutThrough);
 			}
 		}
 		Ok(())
@@ -1023,6 +1030,7 @@ impl TransactionBody {
 		self.verify_weight(weighting)?;
 		self.verify_no_nrd_duplicates()?;
 		self.verify_sorted()?;
+		self.verify_cut_through()?;
 		Ok(())
 	}
 
@@ -1035,7 +1043,6 @@ impl TransactionBody {
 		verifier: Arc<RwLock<dyn VerifierCache>>,
 	) -> Result<(), Error> {
 		self.validate_read(weighting)?;
-		self.verify_cut_through()?;
 
 		// Find all the outputs that have not had their rangeproofs verified.
 		let outputs = {
