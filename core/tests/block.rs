@@ -424,6 +424,17 @@ fn serialize_deserialize_block_header() {
 }
 
 #[test]
+fn deserialize_untrusted_header_weight() {
+	test_setup();
+
+	// build block with header with excessive mmr size relative to height
+	// serialize header
+	// deserialize as untrusted header and watch validation fail
+
+	panic!("not yet implemented!");
+}
+
+#[test]
 fn serialize_deserialize_block() {
 	test_setup();
 	let tx1 = tx1i2o();
