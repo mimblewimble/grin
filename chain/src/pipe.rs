@@ -18,7 +18,9 @@ use crate::core::consensus;
 use crate::core::core::hash::Hashed;
 use crate::core::core::verifier_cache::VerifierCache;
 use crate::core::core::Committed;
-use crate::core::core::{transaction, Block, BlockHeader, BlockSums, OutputIdentifier, TransactionBody};
+use crate::core::core::{
+	transaction, Block, BlockHeader, BlockSums, OutputIdentifier, TransactionBody,
+};
 use crate::core::global;
 use crate::core::pow;
 use crate::error::{Error, ErrorKind};
@@ -339,13 +341,19 @@ fn validate_header(header: &BlockHeader, ctx: &mut BlockContext<'_>) -> Result<(
 
 	// We can determine output and kernel counts for this block based on mmr sizes from previous header.
 	// Assume 0 inputs and estimate a lower bound on the full block weight.
-	// Block header is invalid (and block is invalid) if this lower bound is too heavy for a full block.
 	let num_outputs = header
 		.output_mmr_count()
 		.saturating_sub(prev.output_mmr_count());
 	let num_kernels = header
 		.kernel_mmr_count()
 		.saturating_sub(prev.kernel_mmr_count());
+
+	// Each block must contain at least 1 kernel and 1 output for the block reward.
+	if header.height > 0 && (num_outputs == 0 || num_kernels == 0) {
+		return Err(ErrorKind::InvalidMMRSize.into());
+	}
+
+	// Block header is invalid (and block is invalid) if this lower bound is too heavy for a full block.
 	let weight = TransactionBody::weight_as_block(0, num_outputs, num_kernels);
 	if weight > global::max_block_weight() {
 		return Err(ErrorKind::Transaction(transaction::Error::TooHeavy).into());
