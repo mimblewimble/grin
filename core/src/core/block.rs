@@ -425,6 +425,7 @@ impl From<UntrustedBlockHeader> for BlockHeader {
 
 /// Block header which does lightweight validation as part of deserialization,
 /// it supposed to be used when we can't trust the channel (eg network)
+#[derive(Debug)]
 pub struct UntrustedBlockHeader(BlockHeader);
 
 /// Deserialization of an untrusted block header
