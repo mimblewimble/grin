@@ -172,6 +172,12 @@ where
 			// push the freshly hydrated block through the chain pipeline
 			match core::Block::hydrate_from(cb, &[]) {
 				Ok(block) => {
+					debug!(
+						"successfully hydrated (empty) block: {} at {} ({})",
+						block.header.hash(),
+						block.header.height,
+						block.inputs().version_str(),
+					);
 					if !self.sync_state.is_syncing() {
 						for hook in &self.hooks {
 							hook.on_block_received(&block, &peer_info.addr);
@@ -232,7 +238,12 @@ where
 					.validate(&prev.total_kernel_offset, self.verifier_cache.clone())
 					.is_ok()
 				{
-					debug!("successfully hydrated block from tx pool!");
+					debug!(
+						"successfully hydrated block: {} at {} ({})",
+						block.header.hash(),
+						block.header.height,
+						block.inputs().version_str(),
+					);
 					self.process_block(block, peer_info, chain::Options::NONE)
 				} else if self.sync_state.status() == SyncStatus::NoSync {
 					debug!("adapter: block invalid after hydration, requesting full block");

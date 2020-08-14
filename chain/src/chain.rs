@@ -19,8 +19,8 @@ use crate::core::core::hash::{Hash, Hashed, ZERO_HASH};
 use crate::core::core::merkle_proof::MerkleProof;
 use crate::core::core::verifier_cache::VerifierCache;
 use crate::core::core::{
-	Block, BlockHeader, BlockSums, Committed, HeaderVersion, Inputs, KernelFeatures, Output,
-	OutputIdentifier, Transaction, TxKernel,
+	Block, BlockHeader, BlockSums, Committed, Inputs, KernelFeatures, Output, OutputIdentifier,
+	Transaction, TxKernel,
 };
 use crate::core::global;
 use crate::core::pow;
@@ -275,7 +275,7 @@ impl Chain {
 	/// Validating the inputs against the utxo_view allows us to look the outputs up.
 	pub fn convert_block_v2(&self, block: Block) -> Result<Block, Error> {
 		debug!(
-			"convert_block_v2: {} at {} ({})",
+			"convert_block_v2: {} at {} ({} -> v2)",
 			block.header.hash(),
 			block.header.height,
 			block.inputs().version_str(),
@@ -397,13 +397,10 @@ impl Chain {
 		// Only do this once we know the header PoW is valid.
 		self.check_orphan(&b, opts)?;
 
-		// Conversion is relatively expensive so defer this until after orphan check.
-		// Maintain "features and commit" backward compatibility until HF4.
-		let b = if b.header.version <= HeaderVersion(4) {
-			self.convert_block_v2(b)?
-		} else {
-			b
-		};
+		// We can only reliably convert to "v2" if not an orphan (may spend output from previous block).
+		// We convert from "v3" to "v2" by looking up outputs to be spent.
+		// This conversion also ensures a block received in "v2" has valid input features (prevents malleability).
+		let b = self.convert_block_v2(b)?;
 
 		let (maybe_new_head, prev_head) = {
 			let mut header_pmmr = self.header_pmmr.write();

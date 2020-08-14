@@ -298,7 +298,11 @@ where
 		tx: Transaction,
 		extra_tx: Option<Transaction>,
 	) -> Result<Transaction, PoolError> {
-		debug!("convert_tx_v2: {}", tx.inputs().version_str());
+		debug!(
+			"convert_tx_v2: {} ({} -> v2)",
+			tx.hash(),
+			tx.inputs().version_str()
+		);
 
 		let mut inputs: Vec<_> = tx.inputs().into();
 
