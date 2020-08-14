@@ -177,16 +177,18 @@ impl<'a> UTXOView<'a> {
 		// outputs we are attempting to spend.
 		let inputs: Vec<CommitWrapper> = inputs.into();
 
-		let outputs: Result<Vec<_>, _> = inputs
+		// Note: we only care about coinbase outputs here so filter appropriately.
+		// Use validate_input() to lookup outputs being spent and ignore non-coinbase.
+		// If we are trying to spend an already spent or non-existent coinbase this will be caught elsewhere.
+		let pos = inputs
 			.iter()
-			.map(|x| self.validate_input(x.commitment(), batch))
-			.collect();
-
-		let pos = outputs?
-			.iter()
-			.filter_map(|(out, pos)| match out.features {
-				OutputFeatures::Coinbase => Some(pos.pos),
-				_ => None,
+			.filter_map(|x| {
+				self.validate_input(x.commitment(), batch)
+					.map(|(out, pos)| match out.features {
+						OutputFeatures::Coinbase => Some(pos.pos),
+						_ => None,
+					})
+					.unwrap_or(None)
 			})
 			.max();
 
