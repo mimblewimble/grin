@@ -289,21 +289,11 @@ where
 		Ok(valid_txs)
 	}
 
-	/// Convert a transaction for v2 compatibility.
-	/// We may receive a transaction with "commit only" inputs.
-	/// We convert it to "features and commit" so we can safely relay it to v2 peers.
-	/// Converson is done by looking up outputs to be spent in both the pool and the current utxo.
-	pub fn convert_tx_v2(
+	pub fn locate_spends(
 		&self,
-		tx: Transaction,
+		tx: &Transaction,
 		extra_tx: Option<Transaction>,
-	) -> Result<Transaction, PoolError> {
-		debug!(
-			"convert_tx_v2: {} ({} -> v2)",
-			tx.hash(),
-			tx.inputs().version_str()
-		);
-
+	) -> Result<(Vec<OutputIdentifier>, Vec<OutputIdentifier>), PoolError> {
 		let mut inputs: Vec<_> = tx.inputs().into();
 
 		let agg_tx = self
@@ -318,30 +308,13 @@ where
 		// By applying cut_through to tx inputs and agg_tx outputs we can
 		// determine the outputs being spent from the pool and those still unspent
 		// that need to be looked up via the current utxo.
-		let (inputs, _, _, spent_pool) =
+		let (spent_utxo, _, _, spent_pool) =
 			transaction::cut_through(&mut inputs[..], &mut outputs[..])?;
 
 		// Lookup remaining outputs to be spent from the current utxo.
-		let spent_utxo = self.blockchain.validate_inputs(inputs.into())?;
+		let spent_utxo = self.blockchain.validate_inputs(spent_utxo.into())?;
 
-		// Combine outputs spent in utxo with outputs spent in pool to give us the
-		// full set of outputs being spent by this transaction.
-		// This is our source of truth for input features.
-		let mut spent = spent_pool.to_vec();
-		spent.extend(spent_utxo);
-		spent.sort();
-
-		// Now build the resulting transaction based on our inputs and outputs from the original transaction.
-		// Remember to use the original kernels and kernel offset.
-		let mut outputs = tx.outputs().to_vec();
-		let (inputs, outputs, _, _) = transaction::cut_through(&mut spent[..], &mut outputs[..])?;
-		let tx = Transaction::new(inputs.into(), outputs, tx.kernels()).with_offset(tx.offset);
-
-		// Validate the tx to ensure our converted inputs are correct.
-		tx.validate(Weighting::AsTransaction, self.verifier_cache.clone())
-			.map_err(PoolError::InvalidTx)?;
-
-		Ok(tx)
+		Ok((spent_pool.to_vec(), spent_utxo))
 	}
 
 	fn apply_tx_to_block_sums(

@@ -663,12 +663,12 @@ impl Chain {
 
 	/// Verify we are not attempting to spend a coinbase output
 	/// that has not yet sufficiently matured.
-	pub fn verify_coinbase_maturity(&self, tx: &Transaction) -> Result<(), Error> {
+	pub fn verify_coinbase_maturity(&self, inputs: Inputs) -> Result<(), Error> {
 		let height = self.next_block_height()?;
 		let header_pmmr = self.header_pmmr.read();
 		let txhashset = self.txhashset.read();
 		txhashset::utxo_view(&header_pmmr, &txhashset, |utxo, batch| {
-			utxo.verify_coinbase_maturity(&tx.inputs(), height, batch)?;
+			utxo.verify_coinbase_maturity(inputs, height, batch)?;
 			Ok(())
 		})
 	}

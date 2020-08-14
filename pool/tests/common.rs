@@ -143,9 +143,9 @@ impl BlockChain for ChainAdapter {
 			.map_err(|_| PoolError::Other("failed to validate inputs".into()))
 	}
 
-	fn verify_coinbase_maturity(&self, tx: &Transaction) -> Result<(), PoolError> {
+	fn verify_coinbase_maturity(&self, inputs: Inputs) -> Result<(), PoolError> {
 		self.chain
-			.verify_coinbase_maturity(tx)
+			.verify_coinbase_maturity(inputs)
 			.map_err(|_| PoolError::ImmatureCoinbase)
 	}
 

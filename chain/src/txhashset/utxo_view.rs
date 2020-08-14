@@ -16,10 +16,7 @@
 
 use crate::core::core::hash::{Hash, Hashed};
 use crate::core::core::pmmr::{self, ReadonlyPMMR};
-use crate::core::core::{
-	Block, BlockHeader, CommitWrapper, Inputs, Output, OutputFeatures, OutputIdentifier,
-	Transaction,
-};
+use crate::core::core::{Block, BlockHeader, Inputs, Output, OutputIdentifier, Transaction};
 use crate::core::global;
 use crate::error::{Error, ErrorKind};
 use crate::store::Batch;
@@ -169,26 +166,27 @@ impl<'a> UTXOView<'a> {
 	/// that have not sufficiently matured.
 	pub fn verify_coinbase_maturity(
 		&self,
-		inputs: &Inputs,
+		inputs: Inputs,
 		height: u64,
 		batch: &Batch<'_>,
 	) -> Result<(), Error> {
-		// Find the greatest output pos of any coinbase
-		// outputs we are attempting to spend.
-		let inputs: Vec<CommitWrapper> = inputs.into();
+		let inputs: Vec<_> = inputs.into();
 
-		// Note: we only care about coinbase outputs here so filter appropriately.
-		// Use validate_input() to lookup outputs being spent and ignore non-coinbase.
-		// If we are trying to spend an already spent or non-existent coinbase this will be caught elsewhere.
-		let pos = inputs
+		// Lookup the outputs being spent.
+		let spent: Result<Vec<_>, _> = inputs
 			.iter()
-			.filter_map(|x| {
-				self.validate_input(x.commitment(), batch)
-					.map(|(out, pos)| match out.features {
-						OutputFeatures::Coinbase => Some(pos.pos),
-						_ => None,
-					})
-					.unwrap_or(None)
+			.map(|x| self.validate_input(x.commitment(), batch))
+			.collect();
+
+		// Find the max pos of any coinbase being spent.
+		let pos = spent?
+			.iter()
+			.filter_map(|(out, pos)| {
+				if out.features.is_coinbase() {
+					Some(pos.pos)
+				} else {
+					None
+				}
 			})
 			.max();
 

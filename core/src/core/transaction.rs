@@ -2041,6 +2041,11 @@ impl OutputIdentifier {
 			proof,
 		}
 	}
+
+	/// Is this a coinbase?
+	pub fn is_coinbase(&self) -> bool {
+		self.features.is_coinbase()
+	}
 }
 
 impl ToHex for OutputIdentifier {

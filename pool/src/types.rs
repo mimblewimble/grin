@@ -275,7 +275,7 @@ impl From<committed::Error> for PoolError {
 pub trait BlockChain: Sync + Send {
 	/// Verify any coinbase outputs being spent
 	/// have matured sufficiently.
-	fn verify_coinbase_maturity(&self, tx: &transaction::Transaction) -> Result<(), PoolError>;
+	fn verify_coinbase_maturity(&self, inputs: Inputs) -> Result<(), PoolError>;
 
 	/// Verify any coinbase outputs being spent
 	/// have matured sufficiently.
