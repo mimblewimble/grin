@@ -21,7 +21,8 @@ use self::core::core::block::Error::KernelLockHeight;
 use self::core::core::hash::{Hashed, ZERO_HASH};
 use self::core::core::verifier_cache::{LruVerifierCache, VerifierCache};
 use self::core::core::{
-	aggregate, deaggregate, KernelFeatures, Output, Transaction, TxKernel, Weighting,
+	aggregate, deaggregate, KernelFeatures, Output, OutputFeatures, OutputIdentifier, Transaction,
+	TxKernel, Weighting,
 };
 use self::core::libtx::build::{self, initial_tx, input, output, with_excess};
 use self::core::libtx::{aggsig, ProofBuilder};
@@ -42,26 +43,51 @@ fn test_setup() {
 fn simple_tx_ser() {
 	let tx = tx2i1o();
 
-	// Default protocol version.
-	{
-		let mut vec = Vec::new();
-		ser::serialize_default(&mut vec, &tx).expect("serialization failed");
-		assert_eq!(vec.len(), 947);
-	}
+	// Default protocol version (3).
+	let mut vec = Vec::new();
+	ser::serialize_default(&mut vec, &tx).expect("serialization failed");
+	assert_eq!(vec.len(), 945);
+
+	// Explicit protocol version 3.
+	let mut vec = Vec::new();
+	ser::serialize(&mut vec, ser::ProtocolVersion(3), &tx).expect("serialization failed");
+	assert_eq!(vec.len(), 945);
+
+	// We need to convert the tx to v2 compatibility with "features and commitment" inputs
+	// to serialize to any previous protocol version.
+	// Normally we would do this conversion against the utxo and txpool but we fake it here for testing.
+	let inputs: Vec<_> = tx.inputs().into();
+	let inputs: Vec<_> = inputs
+		.iter()
+		.map(|input| OutputIdentifier {
+			features: OutputFeatures::Plain,
+			commit: input.commitment(),
+		})
+		.collect();
+	let tx = Transaction {
+		body: tx.body.replace_inputs(inputs.as_slice().into()),
+		..tx
+	};
 
 	// Explicit protocol version 1.
-	{
-		let mut vec = Vec::new();
-		ser::serialize(&mut vec, ser::ProtocolVersion(1), &tx).expect("serialization failed");
-		assert_eq!(vec.len(), 955);
-	}
+	let mut vec = Vec::new();
+	ser::serialize(&mut vec, ser::ProtocolVersion(1), &tx).expect("serialization failed");
+	assert_eq!(vec.len(), 955);
 
 	// Explicit protocol version 2.
-	{
-		let mut vec = Vec::new();
-		ser::serialize(&mut vec, ser::ProtocolVersion(2), &tx).expect("serialization failed");
-		assert_eq!(vec.len(), 947);
-	}
+	let mut vec = Vec::new();
+	ser::serialize(&mut vec, ser::ProtocolVersion(2), &tx).expect("serialization failed");
+	assert_eq!(vec.len(), 947);
+
+	// Check we can still serialize to protocol version 3 without explicitly converting the tx.
+	let mut vec = Vec::new();
+	ser::serialize(&mut vec, ser::ProtocolVersion(3), &tx).expect("serialization failed");
+	assert_eq!(vec.len(), 945);
+
+	// And default protocol version for completeness.
+	let mut vec = Vec::new();
+	ser::serialize_default(&mut vec, &tx).expect("serialization failed");
+	assert_eq!(vec.len(), 945);
 }
 
 #[test]
