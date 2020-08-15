@@ -110,23 +110,16 @@ where
 	}
 
 	// Deaggregate this tx against the txpool.
-	// Re-converts the tx to v2 if deaggregated.
-	// Returns the new deaggregated entry or the original entry if no deaggregation.
-	fn deaggregate_tx(&self, entry: &PoolEntry) -> Result<PoolEntry, PoolError> {
-		if entry.tx.kernels().len() == 1 {
-			Ok(entry.clone())
-		} else {
-			let tx = entry.tx.clone();
-			let txs = self.txpool.find_matching_transactions(tx.kernels());
-			if txs.is_empty() {
-				Ok(entry.clone())
-			} else {
-				let tx = transaction::deaggregate(tx, &txs)?;
-				let (spent_pool, spent_utxo) = self.txpool.locate_spends(&tx, None)?;
-				let tx = self.convert_tx_v2(tx, &spent_pool, &spent_utxo)?;
-				Ok(PoolEntry::new(tx, TxSource::Deaggregate))
+	// Returns the new deaggregated tx or the original tx if no deaggregation.
+	fn deaggregate_tx(&self, entry: PoolEntry) -> Result<PoolEntry, PoolError> {
+		if entry.tx.kernels().len() > 1 {
+			let txs = self.txpool.find_matching_transactions(entry.tx.kernels());
+			if !txs.is_empty() {
+				let tx = transaction::deaggregate(entry.tx, &txs)?;
+				return Ok(PoolEntry::new(tx, TxSource::Deaggregate));
 			}
 		}
+		Ok(entry)
 	}
 
 	fn add_to_txpool(&mut self, entry: &PoolEntry, header: &BlockHeader) -> Result<(), PoolError> {
@@ -174,18 +167,26 @@ where
 		// Our stempool is private and we do not want to reveal anything about the txs contained.
 		// If this is a stem tx and is already present in stempool then fluff by adding to txpool.
 		// Otherwise if already present in txpool return a "duplicate tx" error.
-		if stem && self.stempool.contains_tx(tx.hash()) {
+		if stem && self.stempool.contains_tx(&tx) {
 			return self.add_to_pool(src, tx, false, header);
-		} else if self.txpool.contains_tx(tx.hash()) {
+		} else if self.txpool.contains_tx(&tx) {
 			return Err(PoolError::DuplicateTx);
 		}
 
+		// Attempt to deaggregate the tx if not stem tx.
+		let entry = if stem {
+			PoolEntry::new(tx, src)
+		} else {
+			self.deaggregate_tx(PoolEntry::new(tx, src))?
+		};
+		let ref tx = entry.tx;
+
 		// Check this tx is valid based on current header version.
 		// NRD kernels only valid post HF3 and if NRD feature enabled.
-		self.verify_kernel_variants(&tx, header)?;
+		self.verify_kernel_variants(tx, header)?;
 
 		// Do we have the capacity to accept this transaction?
-		let acceptability = self.is_acceptable(&tx, stem);
+		let acceptability = self.is_acceptable(tx, stem);
 		let mut evict = false;
 		if !stem && acceptability.as_ref().err() == Some(&PoolError::OverCapacity) {
 			evict = true;
@@ -199,7 +200,7 @@ where
 			.map_err(PoolError::InvalidTx)?;
 
 		// Check the tx lock_time is valid based on current chain state.
-		self.blockchain.verify_tx_lock_height(&tx)?;
+		self.blockchain.verify_tx_lock_height(tx)?;
 
 		// If stem we want to account for the txpool.
 		let extra_tx = if stem {
@@ -210,9 +211,9 @@ where
 
 		// Locate outputs being spent from pool and current utxo.
 		let (spent_pool, spent_utxo) = if stem {
-			self.stempool.locate_spends(&tx, extra_tx.clone())
+			self.stempool.locate_spends(tx, extra_tx.clone())
 		} else {
-			self.txpool.locate_spends(&tx, None)
+			self.txpool.locate_spends(tx, None)
 		}?;
 
 		// Check coinbase maturity before we go any further.
@@ -225,25 +226,21 @@ where
 			.verify_coinbase_maturity(coinbase_inputs.as_slice().into())?;
 
 		// Convert the tx to "v2" compatibility with "features and commit" inputs.
-		let tx_v2 = self.convert_tx_v2(tx, &spent_pool, &spent_utxo)?;
-		let entry = PoolEntry::new(tx_v2, src);
+		let ref entry = self.convert_tx_v2(entry, &spent_pool, &spent_utxo)?;
 
 		// If this is a stem tx then attempt to add it to stempool.
 		// If the adapter fails to accept the new stem tx then fallback to fluff via txpool.
 		if stem {
-			self.add_to_stempool(&entry, header, extra_tx)?;
-			if self.adapter.stem_tx_accepted(&entry).is_ok() {
+			self.add_to_stempool(entry, header, extra_tx)?;
+			if self.adapter.stem_tx_accepted(entry).is_ok() {
 				return Ok(());
 			}
 		}
 
-		// Deaggregate this tx against the current txpool.
-		let entry = self.deaggregate_tx(&entry)?;
-
 		// Add tx to txpool.
-		self.add_to_txpool(&entry, header)?;
-		self.add_to_reorg_cache(&entry);
-		self.adapter.tx_accepted(&entry);
+		self.add_to_txpool(entry, header)?;
+		self.add_to_reorg_cache(entry);
+		self.adapter.tx_accepted(entry);
 
 		// Transaction passed all the checks but we have to make space for it
 		if evict {
@@ -259,10 +256,11 @@ where
 	/// Conversion is done using outputs previously looked up in both the pool and the current utxo.
 	fn convert_tx_v2(
 		&self,
-		tx: Transaction,
+		entry: PoolEntry,
 		spent_pool: &[OutputIdentifier],
 		spent_utxo: &[OutputIdentifier],
-	) -> Result<Transaction, PoolError> {
+	) -> Result<PoolEntry, PoolError> {
+		let tx = entry.tx;
 		debug!(
 			"convert_tx_v2: {} ({} -> v2)",
 			tx.hash(),
@@ -281,7 +279,7 @@ where
 		// Validate the tx to ensure our converted inputs are correct.
 		tx.validate(Weighting::AsTransaction, self.verifier_cache.clone())?;
 
-		Ok(tx)
+		Ok(PoolEntry::new(tx, entry.src))
 	}
 
 	// Evict a transaction from the txpool.

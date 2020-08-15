@@ -29,7 +29,6 @@ use grin_util as util;
 use std::cmp::Reverse;
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
-use util::secp::pedersen::Commitment;
 use util::static_secp_instance;
 
 pub struct Pool<B, V>
@@ -60,28 +59,9 @@ where
 	}
 
 	/// Does the transaction pool contain an entry for the given transaction?
-	pub fn contains_tx(&self, hash: Hash) -> bool {
-		self.entries.iter().any(|x| x.tx.hash() == hash)
-	}
-
-	pub fn get_tx(&self, hash: Hash) -> Option<Transaction> {
-		self.entries
-			.iter()
-			.find(|x| x.tx.hash() == hash)
-			.map(|x| x.tx.clone())
-	}
-
-	/// Query the tx pool for an individual tx matching the given public excess.
-	/// Used for checking for duplicate NRD kernels in the txpool.
-	pub fn retrieve_tx_by_kernel_excess(&self, excess: Commitment) -> Option<Transaction> {
-		for x in &self.entries {
-			for k in x.tx.kernels() {
-				if k.excess() == excess {
-					return Some(x.tx.clone());
-				}
-			}
-		}
-		None
+	/// Transactions are compared by their kernels.
+	pub fn contains_tx(&self, tx: &Transaction) -> bool {
+		self.entries.iter().any(|x| x.tx.kernels() == tx.kernels())
 	}
 
 	/// Query the tx pool for an individual tx matching the given kernel hash.
