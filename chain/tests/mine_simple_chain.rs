@@ -696,11 +696,11 @@ fn spend_in_fork_and_compact() {
 		assert_eq!(head.height, 6);
 		assert_eq!(head.hash(), prev_main.hash());
 		assert!(chain
-			.get_unspent(&OutputIdentifier::from(&tx2.outputs()[0]))
+			.get_unspent(tx2.outputs()[0].commitment())
 			.unwrap()
 			.is_some());
 		assert!(chain
-			.get_unspent(&OutputIdentifier::from(&tx1.outputs()[0]))
+			.get_unspent(tx1.outputs()[0].commitment())
 			.unwrap()
 			.is_none());
 
@@ -717,11 +717,11 @@ fn spend_in_fork_and_compact() {
 		assert_eq!(head.height, 7);
 		assert_eq!(head.hash(), prev_fork.hash());
 		assert!(chain
-			.get_unspent(&OutputIdentifier::from(&tx2.outputs()[0]))
+			.get_unspent(tx2.outputs()[0].commitment())
 			.unwrap()
 			.is_some());
 		assert!(chain
-			.get_unspent(&OutputIdentifier::from(&tx1.outputs()[0]))
+			.get_unspent(tx1.outputs()[0].commitment())
 			.unwrap()
 			.is_none());
 
@@ -796,7 +796,7 @@ fn output_header_mappings() {
 			chain.process_block(b, chain::Options::MINE).unwrap();
 
 			let header_for_output = chain
-				.get_header_for_output(&OutputIdentifier::from(&reward_outputs[n - 1]))
+				.get_header_for_output(reward_outputs[n - 1].commitment())
 				.unwrap();
 			assert_eq!(header_for_output.height, n as u64);
 
@@ -806,7 +806,7 @@ fn output_header_mappings() {
 		// Check all output positions are as expected
 		for n in 1..15 {
 			let header_for_output = chain
-				.get_header_for_output(&OutputIdentifier::from(&reward_outputs[n - 1]))
+				.get_header_for_output(reward_outputs[n - 1].commitment())
 				.unwrap();
 			assert_eq!(header_for_output.height, n as u64);
 		}

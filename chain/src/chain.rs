@@ -568,11 +568,14 @@ impl Chain {
 		}
 	}
 
-	/// Returns Ok(Some(pos)) if output is unspent.
+	/// Returns Ok(Some((out, pos))) if output is unspent.
 	/// Returns Ok(None) if output is spent.
 	/// Returns Err if something went wrong beyond not finding the output.
-	pub fn get_unspent(&self, output_ref: &OutputIdentifier) -> Result<Option<CommitPos>, Error> {
-		self.txhashset.read().get_unspent(output_ref)
+	pub fn get_unspent(
+		&self,
+		commit: Commitment,
+	) -> Result<Option<(OutputIdentifier, CommitPos)>, Error> {
+		self.txhashset.read().get_unspent(commit)
 	}
 
 	/// Retrieves an unspent output using its PMMR position
@@ -1387,17 +1390,14 @@ impl Chain {
 	}
 
 	/// Gets the block header in which a given output appears in the txhashset.
-	pub fn get_header_for_output(
-		&self,
-		output_ref: &OutputIdentifier,
-	) -> Result<BlockHeader, Error> {
+	pub fn get_header_for_output(&self, commit: Commitment) -> Result<BlockHeader, Error> {
 		let header_pmmr = self.header_pmmr.read();
 		let txhashset = self.txhashset.read();
-		let output_pos = match txhashset.get_unspent(output_ref)? {
+		let (_, pos) = match txhashset.get_unspent(commit)? {
 			Some(o) => o,
 			None => return Err(ErrorKind::OutputNotFound.into()),
 		};
-		let hash = header_pmmr.get_header_hash_by_height(output_pos.height)?;
+		let hash = header_pmmr.get_header_hash_by_height(pos.height)?;
 		Ok(self.get_block_header(&hash)?)
 	}
 
