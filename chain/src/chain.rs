@@ -1511,6 +1511,16 @@ impl Chain {
 		Ok(Tip::from_header(&header))
 	}
 
+	/// Gets multiple headers at the provided heights.
+	/// Note: Uses the sync pmmr, not the header pmmr.
+	pub fn get_locator_hashes(&self, heights: &[u64]) -> Result<Vec<Hash>, Error> {
+		let pmmr = self.sync_pmmr.read();
+		heights
+			.iter()
+			.map(|h| pmmr.get_header_hash_by_height(*h))
+			.collect()
+	}
+
 	/// Builds an iterator on blocks starting from the current chain head and
 	/// running backward. Specialized to return information pertaining to block
 	/// difficulty calculation (timestamp and previous difficulties).
