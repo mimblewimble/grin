@@ -34,7 +34,7 @@ use crate::util;
 #[easy_jsonrpc_mw::rpc]
 pub trait ForeignRpc: Sync + Send {
 	/**
-	Networked version of [Foreign::get_header](struct.Node.html#method.get_header).
+	Networked version of [Foreign::get_header](struct.Foreign.html#method.get_header).
 
 	# Json rpc example
 
@@ -130,7 +130,7 @@ pub trait ForeignRpc: Sync + Send {
 	) -> Result<BlockHeaderPrintable, ErrorKind>;
 
 	/**
-	Networked version of [Foreign::get_block](struct.Node.html#method.get_block).
+	Networked version of [Foreign::get_block](struct.Foreign.html#method.get_block).
 
 	# Json rpc example
 
@@ -248,7 +248,7 @@ pub trait ForeignRpc: Sync + Send {
 	) -> Result<BlockPrintable, ErrorKind>;
 
 	/**
-	Networked version of [Foreign::get_version](struct.Node.html#method.get_version).
+	Networked version of [Foreign::get_version](struct.Foreign.html#method.get_version).
 
 	# Json rpc example
 
@@ -281,7 +281,7 @@ pub trait ForeignRpc: Sync + Send {
 	fn get_version(&self) -> Result<Version, ErrorKind>;
 
 	/**
-	Networked version of [Foreign::get_tip](struct.Node.html#method.get_tip).
+	Networked version of [Foreign::get_tip](struct.Foreign.html#method.get_tip).
 
 	# Json rpc example
 
@@ -316,7 +316,7 @@ pub trait ForeignRpc: Sync + Send {
 	fn get_tip(&self) -> Result<Tip, ErrorKind>;
 
 	/**
-	Networked version of [Foreign::get_kernel](struct.Node.html#method.get_kernel).
+	Networked version of [Foreign::get_kernel](struct.Foreign.html#method.get_kernel).
 
 	# Json rpc example
 
@@ -359,7 +359,7 @@ pub trait ForeignRpc: Sync + Send {
 	) -> Result<LocatedTxKernel, ErrorKind>;
 
 	/**
-	Networked version of [Foreign::get_outputs](struct.Node.html#method.get_outputs).
+	Networked version of [Foreign::get_outputs](struct.Foreign.html#method.get_outputs).
 
 	# Json rpc example
 
@@ -446,7 +446,7 @@ pub trait ForeignRpc: Sync + Send {
 	) -> Result<Vec<OutputPrintable>, ErrorKind>;
 
 	/**
-	Networked version of [Foreign::get_unspent_outputs](struct.Node.html#method.get_unspent_outputs).
+	Networked version of [Foreign::get_unspent_outputs](struct.Foreign.html#method.get_unspent_outputs).
 
 	# Json rpc example
 
@@ -507,7 +507,7 @@ pub trait ForeignRpc: Sync + Send {
 	) -> Result<OutputListing, ErrorKind>;
 
 	/**
-	Networked version of [Foreign::get_pmmr_indices](struct.Node.html#method.get_pmmr_indices).
+	Networked version of [Foreign::get_pmmr_indices](struct.Foreign.html#method.get_pmmr_indices).
 
 	# Json rpc example
 
@@ -544,7 +544,7 @@ pub trait ForeignRpc: Sync + Send {
 	) -> Result<OutputListing, ErrorKind>;
 
 	/**
-	Networked version of [Foreign::get_pool_size](struct.Node.html#method.get_pool_size).
+	Networked version of [Foreign::get_pool_size](struct.Foreign.html#method.get_pool_size).
 
 	# Json rpc example
 
@@ -574,7 +574,7 @@ pub trait ForeignRpc: Sync + Send {
 	fn get_pool_size(&self) -> Result<usize, ErrorKind>;
 
 	/**
-	Networked version of [Foreign::get_stempool_size](struct.Node.html#method.get_stempool_size).
+	Networked version of [Foreign::get_stempool_size](struct.Foreign.html#method.get_stempool_size).
 
 	# Json rpc example
 
@@ -604,7 +604,7 @@ pub trait ForeignRpc: Sync + Send {
 	fn get_stempool_size(&self) -> Result<usize, ErrorKind>;
 
 	/**
-	Networked version of [Foreign::get_unconfirmed_transactions](struct.Node.html#method.get_unconfirmed_transactions).
+	Networked version of [Foreign::get_unconfirmed_transactions](struct.Foreign.html#method.get_unconfirmed_transactions).
 
 	# Json rpc example
 
@@ -677,7 +677,7 @@ pub trait ForeignRpc: Sync + Send {
 	fn get_unconfirmed_transactions(&self) -> Result<Vec<PoolEntry>, ErrorKind>;
 
 	/**
-	Networked version of [Foreign::push_transaction](struct.Node.html#method.push_transaction).
+	Networked version of [Foreign::push_transaction](struct.Foreign.html#method.push_transaction).
 
 	# Json rpc example
 

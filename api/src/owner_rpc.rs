@@ -28,7 +28,7 @@ use std::net::SocketAddr;
 #[easy_jsonrpc_mw::rpc]
 pub trait OwnerRpc: Sync + Send {
 	/**
-	Networked version of [Owner::get_status](struct.Node.html#method.get_status).
+	Networked version of [Owner::get_status](struct.Owner.html#method.get_status).
 
 	# Json rpc example
 
@@ -73,7 +73,7 @@ pub trait OwnerRpc: Sync + Send {
 	fn get_status(&self) -> Result<Status, ErrorKind>;
 
 	/**
-	Networked version of [Owner::validate_chain](struct.Node.html#method.validate_chain).
+	Networked version of [Owner::validate_chain](struct.Owner.html#method.validate_chain).
 
 	# Json rpc example
 
@@ -103,7 +103,7 @@ pub trait OwnerRpc: Sync + Send {
 	fn validate_chain(&self) -> Result<(), ErrorKind>;
 
 	/**
-	Networked version of [Owner::compact_chain](struct.Node.html#method.compact_chain).
+	Networked version of [Owner::compact_chain](struct.Owner.html#method.compact_chain).
 
 	# Json rpc example
 
@@ -133,7 +133,7 @@ pub trait OwnerRpc: Sync + Send {
 	fn compact_chain(&self) -> Result<(), ErrorKind>;
 
 	/**
-	Networked version of [Owner::get_peers](struct.Node.html#method.get_peers).
+	Networked version of [Owner::get_peers](struct.Owner.html#method.get_peers).
 
 	# Json rpc example
 
@@ -175,7 +175,7 @@ pub trait OwnerRpc: Sync + Send {
 	fn get_peers(&self, peer_addr: Option<SocketAddr>) -> Result<Vec<PeerData>, ErrorKind>;
 
 	/**
-	Networked version of [Owner::get_connected_peers](struct.Node.html#method.get_connected_peers).
+	Networked version of [Owner::get_connected_peers](struct.Owner.html#method.get_connected_peers).
 
 	# Json rpc example
 
@@ -294,7 +294,7 @@ pub trait OwnerRpc: Sync + Send {
 	fn get_connected_peers(&self) -> Result<Vec<PeerInfoDisplay>, ErrorKind>;
 
 	/**
-	Networked version of [Owner::ban_peer](struct.Node.html#method.ban_peer).
+	Networked version of [Owner::ban_peer](struct.Owner.html#method.ban_peer).
 
 	# Json rpc example
 
@@ -324,7 +324,7 @@ pub trait OwnerRpc: Sync + Send {
 	fn ban_peer(&self, peer_addr: SocketAddr) -> Result<(), ErrorKind>;
 
 	/**
-	Networked version of [Owner::unban_peer](struct.Node.html#method.unban_peer).
+	Networked version of [Owner::unban_peer](struct.Owner.html#method.unban_peer).
 
 	# Json rpc example
 
