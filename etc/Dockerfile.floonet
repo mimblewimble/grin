@@ -1,7 +1,7 @@
 # Multistage docker build, requires docker 17.05
 
 # builder stage
-FROM rust:1.35 as builder
+FROM rust:1.45 as builder
 
 RUN set -ex && \
     apt-get update && \
@@ -23,7 +23,7 @@ COPY . .
 RUN cargo build --release
 
 # runtime stage
-FROM debian:9.4
+FROM debian:10
 
 RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y locales openssl
 
