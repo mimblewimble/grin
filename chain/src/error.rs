@@ -131,6 +131,9 @@ pub enum ErrorKind {
 	/// Error from underlying tx handling
 	#[fail(display = "Transaction Validation Error: {:?}", _0)]
 	Transaction(transaction::Error),
+	/// Error from underlying block handling
+	#[fail(display = "Block Validation Error: {:?}", _0)]
+	Block(block::Error),
 	/// Anything else
 	#[fail(display = "Other Error: {}", _0)]
 	Other(String),

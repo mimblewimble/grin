@@ -22,7 +22,7 @@ use self::chain_test_helper::{clean_output_dir, mine_chain};
 use crate::chain::{Chain, ErrorKind, Options};
 use crate::core::{
 	consensus,
-	core::{transaction, Block},
+	core::{block, Block},
 	global,
 	libtx::{reward, ProofBuilder},
 	pow,
@@ -76,10 +76,7 @@ fn test_header_weight_validation() {
 		.map_err(|e| e.kind());
 
 	// Weight validation is done via transaction body and results in a slightly counter-intuitive tx error.
-	assert_eq!(
-		res,
-		Err(ErrorKind::Transaction(transaction::Error::TooHeavy))
-	);
+	assert_eq!(res, Err(ErrorKind::Block(block::Error::TooHeavy)));
 
 	clean_output_dir(chain_dir);
 }

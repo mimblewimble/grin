@@ -18,9 +18,7 @@ use crate::core::consensus;
 use crate::core::core::hash::Hashed;
 use crate::core::core::verifier_cache::VerifierCache;
 use crate::core::core::Committed;
-use crate::core::core::{
-	transaction, Block, BlockHeader, BlockSums, OutputIdentifier, TransactionBody,
-};
+use crate::core::core::{block, Block, BlockHeader, BlockSums, OutputIdentifier, TransactionBody};
 use crate::core::global;
 use crate::core::pow;
 use crate::error::{Error, ErrorKind};
@@ -356,7 +354,7 @@ fn validate_header(header: &BlockHeader, ctx: &mut BlockContext<'_>) -> Result<(
 	// Block header is invalid (and block is invalid) if this lower bound is too heavy for a full block.
 	let weight = TransactionBody::weight_as_block(0, num_outputs, num_kernels);
 	if weight > global::max_block_weight() {
-		return Err(ErrorKind::Transaction(transaction::Error::TooHeavy).into());
+		return Err(ErrorKind::Block(block::Error::TooHeavy).into());
 	}
 
 	// verify the proof of work and related parameters
