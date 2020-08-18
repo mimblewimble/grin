@@ -349,7 +349,7 @@ fn validate_header(header: &BlockHeader, ctx: &mut BlockContext<'_>) -> Result<(
 		.saturating_sub(prev.kernel_mmr_count());
 
 	// Each block must contain at least 1 kernel and 1 output for the block reward.
-	if header.height > 0 && (num_outputs == 0 || num_kernels == 0) {
+	if num_outputs == 0 || num_kernels == 0 {
 		return Err(ErrorKind::InvalidMMRSize.into());
 	}
 
