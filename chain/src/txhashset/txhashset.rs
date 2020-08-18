@@ -766,6 +766,38 @@ where
 	}
 }
 
+/// Start a new readonly header MMR extension.
+/// This MMR can be extended individually beyond the other (output, rangeproof and kernel) MMRs
+/// to allow headers to be validated before we receive the full block data.
+pub fn header_extending_readonly<'a, F, T>(
+	handle: &'a mut PMMRHandle<BlockHeader>,
+	store: &ChainStore,
+	inner: F,
+) -> Result<T, Error>
+where
+	F: FnOnce(&mut HeaderExtension<'_>, &Batch<'_>) -> Result<T, Error>,
+{
+	let batch = store.batch()?;
+
+	// Note: Extending either the sync_head or header_head MMR here.
+	// Use underlying MMR to determine the "head".
+	let head = match handle.head_hash() {
+		Ok(hash) => {
+			let header = batch.get_block_header(&hash)?;
+			Tip::from_header(&header)
+		}
+		Err(_) => Tip::default(),
+	};
+
+	let pmmr = PMMR::at(&mut handle.backend, handle.last_pos);
+	let mut extension = HeaderExtension::new(pmmr, head);
+	let res = inner(&mut extension, &batch);
+
+	handle.backend.discard();
+
+	res
+}
+
 /// Start a new header MMR unit of work.
 /// This MMR can be extended individually beyond the other (output, rangeproof and kernel) MMRs
 /// to allow headers to be validated before we receive the full block data.

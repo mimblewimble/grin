@@ -784,3 +784,131 @@ fn validate_header_proof() {
 	)
 	.is_err());
 }
+
+// Test coverage for verifying cut-through during block validation.
+// It is not valid for a block to spend an output and produce a new output with the same commitment.
+// This test covers the case where a plain output is spent, producing a plain output with the same commitment.
+#[test]
+fn test_verify_cut_through_plain() -> Result<(), Error> {
+	global::set_local_chain_type(global::ChainTypes::UserTesting);
+
+	let keychain = ExtKeychain::from_random_seed(false).unwrap();
+
+	let key_id1 = ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
+	let key_id2 = ExtKeychain::derive_key_id(1, 2, 0, 0, 0);
+	let key_id3 = ExtKeychain::derive_key_id(1, 3, 0, 0, 0);
+
+	let builder = ProofBuilder::new(&keychain);
+
+	let tx = build::transaction(
+		KernelFeatures::Plain { fee: 0 },
+		&[
+			build::input(10, key_id1.clone()),
+			build::input(10, key_id2.clone()),
+			build::output(10, key_id1.clone()),
+			build::output(6, key_id2.clone()),
+			build::output(4, key_id3.clone()),
+		],
+		&keychain,
+		&builder,
+	)
+	.expect("valid tx");
+
+	let prev = BlockHeader::default();
+	let key_id = ExtKeychain::derive_key_id(0, 0, 0, 0, 0);
+	let mut block = new_block(&[tx], &keychain, &builder, &prev, &key_id);
+
+	// The block should fail validation due to cut-through.
+	assert_eq!(
+		block.validate(&BlindingFactor::zero(), verifier_cache()),
+		Err(Error::Transaction(transaction::Error::CutThrough))
+	);
+
+	// The block should fail lightweight "read" validation due to cut-through.
+	assert_eq!(
+		block.validate_read(),
+		Err(Error::Transaction(transaction::Error::CutThrough))
+	);
+
+	// Apply cut-through to eliminate the offending input and output.
+	let mut inputs: Vec<_> = block.inputs().into();
+	let mut outputs = block.outputs().to_vec();
+	let (inputs, outputs, _, _) = transaction::cut_through(&mut inputs[..], &mut outputs[..])?;
+
+	block.body = block
+		.body
+		.replace_inputs(inputs.into())
+		.replace_outputs(outputs);
+
+	// Block validates successfully after applying cut-through.
+	block.validate(&BlindingFactor::zero(), verifier_cache())?;
+
+	// Block validates via lightweight "read" validation.
+	block.validate_read()?;
+
+	Ok(())
+}
+
+// Test coverage for verifying cut-through during block validation.
+// It is not valid for a block to spend an output and produce a new output with the same commitment.
+// This test covers the case where a coinbase output is spent, producing a plain output with the same commitment.
+#[test]
+fn test_verify_cut_through_coinbase() -> Result<(), Error> {
+	global::set_local_chain_type(global::ChainTypes::UserTesting);
+
+	let keychain = ExtKeychain::from_random_seed(false).unwrap();
+
+	let key_id1 = ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
+	let key_id2 = ExtKeychain::derive_key_id(1, 2, 0, 0, 0);
+	let key_id3 = ExtKeychain::derive_key_id(1, 3, 0, 0, 0);
+
+	let builder = ProofBuilder::new(&keychain);
+
+	let tx = build::transaction(
+		KernelFeatures::Plain { fee: 0 },
+		&[
+			build::coinbase_input(consensus::REWARD, key_id1.clone()),
+			build::coinbase_input(consensus::REWARD, key_id2.clone()),
+			build::output(60_000_000_000, key_id1.clone()),
+			build::output(50_000_000_000, key_id2.clone()),
+			build::output(10_000_000_000, key_id3.clone()),
+		],
+		&keychain,
+		&builder,
+	)
+	.expect("valid tx");
+
+	let prev = BlockHeader::default();
+	let key_id = ExtKeychain::derive_key_id(0, 0, 0, 0, 0);
+	let mut block = new_block(&[tx], &keychain, &builder, &prev, &key_id);
+
+	// The block should fail validation due to cut-through.
+	assert_eq!(
+		block.validate(&BlindingFactor::zero(), verifier_cache()),
+		Err(Error::Transaction(transaction::Error::CutThrough))
+	);
+
+	// The block should fail lightweight "read" validation due to cut-through.
+	assert_eq!(
+		block.validate_read(),
+		Err(Error::Transaction(transaction::Error::CutThrough))
+	);
+
+	// Apply cut-through to eliminate the offending input and output.
+	let mut inputs: Vec<_> = block.inputs().into();
+	let mut outputs = block.outputs().to_vec();
+	let (inputs, outputs, _, _) = transaction::cut_through(&mut inputs[..], &mut outputs[..])?;
+
+	block.body = block
+		.body
+		.replace_inputs(inputs.into())
+		.replace_outputs(outputs);
+
+	// Block validates successfully after applying cut-through.
+	block.validate(&BlindingFactor::zero(), verifier_cache())?;
+
+	// Block validates via lightweight "read" validation.
+	block.validate_read()?;
+
+	Ok(())
+}

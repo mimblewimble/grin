@@ -486,7 +486,8 @@ impl Chain {
 		Ok(())
 	}
 
-	fn new_ctx<'a>(
+	/// Build a new block processing context.
+	pub fn new_ctx<'a>(
 		&self,
 		opts: Options,
 		batch: store::Batch<'a>,
@@ -689,6 +690,22 @@ impl Chain {
 				.validate(&self.genesis, fast_validation, &NoStatus, &header)?;
 			Ok(())
 		})
+	}
+
+	/// Sets prev_root on a brand new block header by applying the previous header to the header MMR.
+	pub fn set_prev_root_only(&self, header: &mut BlockHeader) -> Result<(), Error> {
+		let mut header_pmmr = self.header_pmmr.write();
+		let prev_root =
+			txhashset::header_extending_readonly(&mut header_pmmr, &self.store(), |ext, batch| {
+				let prev_header = batch.get_previous_header(header)?;
+				pipe::rewind_and_apply_header_fork(&prev_header, ext, batch)?;
+				ext.root()
+			})?;
+
+		// Set the prev_root on the header.
+		header.prev_root = prev_root;
+
+		Ok(())
 	}
 
 	/// Sets the txhashset roots on a brand new block by applying the block on
