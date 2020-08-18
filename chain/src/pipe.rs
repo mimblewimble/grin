@@ -588,7 +588,9 @@ pub fn rewind_and_apply_fork(
 	Ok(fork_point)
 }
 
-/// Validate block inputs against utxo.
+/// Validate block inputs and outputs against utxo.
+/// Every input must spend an unspent output.
+/// No duplicate outputs created.
 fn validate_utxo(
 	block: &Block,
 	ext: &mut txhashset::ExtensionPair<'_>,
