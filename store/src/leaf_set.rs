@@ -165,6 +165,11 @@ impl LeafSet {
 		Ok(())
 	}
 
+	/// TODO - rework this with From<LeafSet> into Bitmap
+	pub fn bitmap(&self) -> Bitmap {
+		self.bitmap.clone()
+	}
+
 	/// Flush the leaf_set to file.
 	pub fn flush(&mut self) -> io::Result<()> {
 		// First run the optimization step on the bitmap.

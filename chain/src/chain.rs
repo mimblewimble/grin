@@ -203,7 +203,7 @@ impl Chain {
 		// and NRD kernel_pos index based recent kernel history.
 		{
 			let batch = store.batch()?;
-			txhashset.init_output_pos_index(&header_pmmr, &batch)?;
+			// txhashset.init_output_pos_index(&header_pmmr, &batch)?;
 			txhashset.init_recent_kernel_pos_index(&header_pmmr, &batch)?;
 			batch.commit()?;
 		}
@@ -702,7 +702,7 @@ impl Chain {
 		txhashset::extending_readonly(&mut header_pmmr, &mut txhashset, |ext, batch| {
 			pipe::rewind_and_apply_fork(&header, ext, batch)?;
 			ext.extension
-				.validate(&self.genesis, fast_validation, &NoStatus, &header)?;
+				.validate(&self.genesis, fast_validation, &NoStatus, &header, batch)?;
 			Ok(())
 		})
 	}
@@ -1083,7 +1083,7 @@ impl Chain {
 				// Validate the extension, generating the utxo_sum and kernel_sum.
 				// Full validation, including rangeproofs and kernel signature verification.
 				let (utxo_sum, kernel_sum) =
-					extension.validate(&self.genesis, false, status, &header)?;
+					extension.validate(&self.genesis, false, status, &header, &batch)?;
 
 				// Save the block_sums (utxo_sum, kernel_sum) to the db for use later.
 				batch.save_block_sums(
@@ -1111,8 +1111,10 @@ impl Chain {
 			batch.save_body_tail(&tip)?;
 		}
 
+		// TODO - We need to use the "leaf_set" provided by the peer to rebuild the output_pos index.
 		// Rebuild our output_pos index in the db based on fresh UTXO set.
-		txhashset.init_output_pos_index(&header_pmmr, &batch)?;
+		let leaf_set_bitmap = txhashset.get_leaf_set()?;
+		txhashset.init_output_pos_index(&header_pmmr, leaf_set_bitmap, &batch)?;
 
 		// Rebuild our NRD kernel_pos index based on recent kernel history.
 		txhashset.init_recent_kernel_pos_index(&header_pmmr, &batch)?;
@@ -1250,8 +1252,9 @@ impl Chain {
 			self.remove_historical_blocks(&header_pmmr, &batch)?;
 		}
 
+		// TODO - this should be entirely unaffected by compaction. But we should confirm this.
 		// Make sure our output_pos index is consistent with the UTXO set.
-		txhashset.init_output_pos_index(&header_pmmr, &batch)?;
+		// txhashset.init_output_pos_index(&header_pmmr, &batch)?;
 
 		// Rebuild our NRD kernel_pos index based on recent kernel history.
 		txhashset.init_recent_kernel_pos_index(&header_pmmr, &batch)?;

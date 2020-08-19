@@ -42,29 +42,31 @@ pub trait Backend<T: PMMRable> {
 	/// Get underlying data by insertion position.
 	fn get_data(&self, position: u64) -> Option<T::E>;
 
-	/// Get a Hash  by original insertion position
-	/// (ignoring the remove log).
-	fn get_from_file(&self, position: u64) -> Option<Hash>;
+	fn get_leaf_set(&self) -> Result<Bitmap, String>;
 
-	/// Get a Data Element by original insertion position
-	/// (ignoring the remove log).
-	fn get_data_from_file(&self, position: u64) -> Option<T::E>;
+	// /// Get a Hash  by original insertion position
+	// /// (ignoring the remove log).
+	// fn get_from_file(&self, position: u64) -> Option<Hash>;
+
+	// /// Get a Data Element by original insertion position
+	// /// (ignoring the remove log).
+	// fn get_data_from_file(&self, position: u64) -> Option<T::E>;
 
 	/// Iterator over current (unpruned, unremoved) leaf positions.
-	fn leaf_pos_iter(&self) -> Box<dyn Iterator<Item = u64> + '_>;
+	// fn leaf_pos_iter(&self) -> Box<dyn Iterator<Item = u64> + '_>;
 
 	/// Number of leaves
-	fn n_unpruned_leaves(&self) -> u64;
+	// fn n_unpruned_leaves(&self) -> u64;
 
-	/// Iterator over current (unpruned, unremoved) leaf insertion index.
-	/// Note: This differs from underlying MMR pos - [0, 1, 2, 3, 4] vs. [1, 2, 4, 5, 8].
-	fn leaf_idx_iter(&self, from_idx: u64) -> Box<dyn Iterator<Item = u64> + '_>;
+	// /// Iterator over current (unpruned, unremoved) leaf insertion index.
+	// /// Note: This differs from underlying MMR pos - [0, 1, 2, 3, 4] vs. [1, 2, 4, 5, 8].
+	// fn leaf_idx_iter(&self, from_idx: u64) -> Box<dyn Iterator<Item = u64> + '_>;
 
-	/// Remove Hash by insertion position. An index is also provided so the
-	/// underlying backend can implement some rollback of positions up to a
-	/// given index (practically the index is the height of a block that
-	/// triggered removal).
-	fn remove(&mut self, position: u64) -> Result<(), String>;
+	// /// Remove Hash by insertion position. An index is also provided so the
+	// /// underlying backend can implement some rollback of positions up to a
+	// /// given index (practically the index is the height of a block that
+	// /// triggered removal).
+	// fn remove(&mut self, position: u64) -> Result<(), String>;
 
 	/// Release underlying datafiles and locks
 	fn release_files(&mut self);

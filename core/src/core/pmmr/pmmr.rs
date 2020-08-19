@@ -74,20 +74,20 @@ where
 		ReadonlyPMMR::at(&self.backend, self.last_pos)
 	}
 
-	/// Iterator over current (unpruned, unremoved) leaf positions.
-	pub fn leaf_pos_iter(&self) -> impl Iterator<Item = u64> + '_ {
-		self.backend.leaf_pos_iter()
-	}
+	// /// Iterator over current (unpruned, unremoved) leaf positions.
+	// pub fn leaf_pos_iter(&self) -> impl Iterator<Item = u64> + '_ {
+	// 	self.backend.leaf_pos_iter()
+	// }
 
-	/// Number of leafs in the MMR
-	pub fn n_unpruned_leaves(&self) -> u64 {
-		self.backend.n_unpruned_leaves()
-	}
+	// /// Number of leafs in the MMR
+	// pub fn n_unpruned_leaves(&self) -> u64 {
+	// 	self.backend.n_unpruned_leaves()
+	// }
 
-	/// Iterator over current (unpruned, unremoved) leaf insertion indices.
-	pub fn leaf_idx_iter(&self, from_idx: u64) -> impl Iterator<Item = u64> + '_ {
-		self.backend.leaf_idx_iter(from_idx)
-	}
+	// /// Iterator over current (unpruned, unremoved) leaf insertion indices.
+	// pub fn leaf_idx_iter(&self, from_idx: u64) -> impl Iterator<Item = u64> + '_ {
+	// 	self.backend.leaf_idx_iter(from_idx)
+	// }
 
 	/// Returns a vec of the peaks of this MMR.
 	pub fn peaks(&self) -> impl DoubleEndedIterator<Item = Hash> + '_ {
@@ -95,7 +95,7 @@ where
 		peaks_pos.into_iter().filter_map(move |pi| {
 			// here we want to get from underlying hash file
 			// as the pos *may* have been "removed"
-			self.backend.get_from_file(pi)
+			self.backend.get_hash(pi)
 		})
 	}
 
@@ -104,7 +104,7 @@ where
 		let mut res = peaks(self.last_pos)
 			.into_iter()
 			.filter(|x| *x < peak_pos)
-			.filter_map(|x| self.backend.get_from_file(x))
+			.filter_map(|x| self.backend.get_hash(x))
 			.collect::<Vec<_>>();
 		if let Some(rhs) = rhs {
 			res.push(rhs);
@@ -122,7 +122,7 @@ where
 		let rhs = peaks(self.last_pos)
 			.into_iter()
 			.filter(|x| *x > peak_pos)
-			.filter_map(|x| self.backend.get_from_file(x));
+			.filter_map(|x| self.backend.get_hash(x));
 
 		let mut res = None;
 		for peak in rhs.rev() {
@@ -169,7 +169,7 @@ where
 
 		let mut path = family_branch
 			.iter()
-			.filter_map(|x| self.get_from_file(x.1))
+			.filter_map(|x| self.get_hash(x.1))
 			.collect::<Vec<_>>();
 
 		let peak_pos = match family_branch.last() {
@@ -201,7 +201,7 @@ where
 			let left_sibling = pos + 1 - 2 * peak;
 			let left_hash = self
 				.backend
-				.get_from_file(left_sibling)
+				.get_hash(left_sibling)
 				.ok_or("missing left sibling in tree, should not have been pruned")?;
 			peak *= 2;
 			pos += 1;
@@ -241,59 +241,66 @@ where
 		Ok(())
 	}
 
-	/// Prunes (removes) the leaf from the MMR at the specified position.
-	/// Returns an error if prune is called on a non-leaf position.
-	/// Returns false if the leaf node has already been pruned.
-	/// Returns true if pruning is successful.
-	pub fn prune(&mut self, position: u64) -> Result<bool, String> {
-		if !is_leaf(position) {
-			return Err(format!("Node at {} is not a leaf, can't prune.", position));
-		}
+	// /// Prunes (removes) the leaf from the MMR at the specified position.
+	// /// Returns an error if prune is called on a non-leaf position.
+	// /// Returns false if the leaf node has already been pruned.
+	// /// Returns true if pruning is successful.
+	// pub fn prune(&mut self, position: u64) -> Result<bool, String> {
+	// 	if !is_leaf(position) {
+	// 		return Err(format!("Node at {} is not a leaf, can't prune.", position));
+	// 	}
 
-		if self.backend.get_hash(position).is_none() {
-			return Ok(false);
-		}
+	// 	if self.backend.get_hash(position).is_none() {
+	// 		return Ok(false);
+	// 	}
 
-		self.backend.remove(position)?;
-		Ok(true)
-	}
+	// 	self.backend.remove(position)?;
+	// 	Ok(true)
+	// }
 
 	/// Get the hash at provided position in the MMR.
 	pub fn get_hash(&self, pos: u64) -> Option<Hash> {
 		if pos > self.last_pos {
 			None
-		} else if is_leaf(pos) {
-			// If we are a leaf then get hash from the backend.
-			self.backend.get_hash(pos)
 		} else {
-			// If we are not a leaf get hash ignoring the remove log.
-			self.backend.get_from_file(pos)
+			self.backend.get_hash(pos)
 		}
+
+		// else if is_leaf(pos) {
+		// 	// If we are a leaf then get hash from the backend.
+		// 	self.backend.get_hash(pos)
+		// } else {
+		// 	// If we are not a leaf get hash ignoring the remove log.
+		// 	self.backend.get_from_file(pos)
+		// }
 	}
 
 	/// Get the data element at provided position in the MMR.
 	pub fn get_data(&self, pos: u64) -> Option<T::E> {
 		if pos > self.last_pos {
-			// If we are beyond the rhs of the MMR return None.
 			None
-		} else if is_leaf(pos) {
-			// If we are a leaf then get data from the backend.
-			self.backend.get_data(pos)
 		} else {
-			// If we are not a leaf then return None as only leaves have data.
-			None
+			self.backend.get_data(pos)
 		}
+
+		// else if is_leaf(pos) {
+		// 	// If we are a leaf then get data from the backend.
+		// 	self.backend.get_data(pos)
+		// } else {
+		// 	// If we are not a leaf then return None as only leaves have data.
+		// 	None
+		// }
 	}
 
-	/// Get the hash from the underlying MMR file
-	/// (ignores the remove log).
-	fn get_from_file(&self, pos: u64) -> Option<Hash> {
-		if pos > self.last_pos {
-			None
-		} else {
-			self.backend.get_from_file(pos)
-		}
-	}
+	// /// Get the hash from the underlying MMR file
+	// /// (ignores the remove log).
+	// fn get_from_file(&self, pos: u64) -> Option<Hash> {
+	// 	if pos > self.last_pos {
+	// 		None
+	// 	} else {
+	// 		self.backend.get_from_file(pos)
+	// 	}
+	// }
 
 	/// Walks all unpruned nodes in the MMR and revalidate all parent hashes
 	pub fn validate(&self) -> Result<(), String> {
@@ -304,9 +311,8 @@ where
 				if let Some(hash) = self.get_hash(n) {
 					let left_pos = n - (1 << height);
 					let right_pos = n - 1;
-					// using get_from_file here for the children (they may have been "removed")
-					if let Some(left_child_hs) = self.get_from_file(left_pos) {
-						if let Some(right_child_hs) = self.get_from_file(right_pos) {
+					if let Some(left_child_hs) = self.get_hash(left_pos) {
+						if let Some(right_child_hs) = self.get_hash(right_pos) {
 							// hash the two child nodes together with parent_pos and compare
 							if (left_child_hs, right_child_hs).hash_with_index(n - 1) != hash {
 								return Err(format!(
@@ -384,7 +390,7 @@ where
 					break;
 				}
 				idx.push_str(&format!("{:>8} ", m + 1));
-				let ohs = self.get_from_file(m + 1);
+				let ohs = self.get_hash(m + 1);
 				match ohs {
 					Some(hs) => hashes.push_str(&format!("{} ", hs)),
 					None => hashes.push_str(&format!("{:>8} ", " .")),
