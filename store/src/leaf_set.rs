@@ -171,10 +171,8 @@ impl LeafSet {
 		self.bitmap.run_optimize();
 
 		// Write the updated bitmap file to disk.
-		save_via_temp_file(&self.path, ".tmp", |w| {
-			let mut w = BufWriter::new(w);
-			w.write_all(&self.bitmap.serialize())?;
-			w.flush()
+		save_via_temp_file(&self.path, ".tmp", |file| {
+			file.write_all(&self.bitmap.serialize())
 		})?;
 
 		// Make sure our backup in memory is up to date.

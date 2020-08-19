@@ -75,6 +75,7 @@ pub fn u64_to_key(prefix: u8, val: u64) -> Vec<u8> {
 use std::ffi::OsStr;
 use std::fs::{remove_file, rename, File};
 use std::path::Path;
+
 /// Creates temporary file with name created by adding `temp_suffix` to `path`.
 /// Applies writer function to it and renames temporary file into original specified by `path`.
 pub fn save_via_temp_file<F, P, E>(
@@ -83,7 +84,7 @@ pub fn save_via_temp_file<F, P, E>(
 	mut writer: F,
 ) -> Result<(), std::io::Error>
 where
-	F: FnMut(Box<dyn std::io::Write>) -> Result<(), std::io::Error>,
+	F: FnMut(&mut File) -> Result<(), std::io::Error>,
 	P: AsRef<Path>,
 	E: AsRef<OsStr>,
 {
@@ -99,13 +100,13 @@ where
 		remove_file(&temp_path)?;
 	}
 
-	let file = File::create(&temp_path)?;
-	writer(Box::new(file))?;
+	let mut temp_file = File::create(&temp_path)?;
 
-	// Move temporary file into original
-	if original.exists() {
-		remove_file(&original)?;
-	}
+	// write the new data to the temp file
+	writer(&mut temp_file)?;
+
+	// force an fsync on the temp file to ensure bytes are on disk
+	temp_file.sync_all()?;
 
 	rename(&temp_path, &original)?;
 
