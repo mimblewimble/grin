@@ -102,13 +102,13 @@ pub const CUT_THROUGH_HORIZON: u32 = WEEK_HEIGHT as u32;
 pub const STATE_SYNC_THRESHOLD: u32 = 2 * DAY_HEIGHT as u32;
 
 /// Weight of an input when counted against the max block weight capacity
-pub const BLOCK_INPUT_WEIGHT: usize = 1;
+pub const BLOCK_INPUT_WEIGHT: u64 = 1;
 
 /// Weight of an output when counted against the max block weight capacity
-pub const BLOCK_OUTPUT_WEIGHT: usize = 21;
+pub const BLOCK_OUTPUT_WEIGHT: u64 = 21;
 
 /// Weight of a kernel when counted against the max block weight capacity
-pub const BLOCK_KERNEL_WEIGHT: usize = 3;
+pub const BLOCK_KERNEL_WEIGHT: u64 = 3;
 
 /// Total maximum block weight. At current sizes, this means a maximum
 /// theoretical size of:
@@ -122,7 +122,7 @@ pub const BLOCK_KERNEL_WEIGHT: usize = 3;
 /// `(1 * 2) + (21 * 2) + (3 * 1) = 47` (weight per tx)
 /// `40_000 / 47 = 851` (txs per block)
 ///
-pub const MAX_BLOCK_WEIGHT: usize = 40_000;
+pub const MAX_BLOCK_WEIGHT: u64 = 40_000;
 
 /// Fork every 6 months.
 pub const HARD_FORK_INTERVAL: u64 = YEAR_HEIGHT / 2;

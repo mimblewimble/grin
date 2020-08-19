@@ -15,7 +15,7 @@
 mod common;
 use crate::common::{new_block, tx1i2o, tx2i1o, txspend1i1o};
 use crate::core::consensus::{self, BLOCK_OUTPUT_WEIGHT, TESTING_THIRD_HARD_FORK};
-use crate::core::core::block::{Block, BlockHeader, Error, HeaderVersion};
+use crate::core::core::block::{Block, BlockHeader, Error, HeaderVersion, UntrustedBlockHeader};
 use crate::core::core::hash::Hashed;
 use crate::core::core::id::ShortIdentifiable;
 use crate::core::core::transaction::{
@@ -25,7 +25,7 @@ use crate::core::core::verifier_cache::{LruVerifierCache, VerifierCache};
 use crate::core::core::{Committed, CompactBlock};
 use crate::core::libtx::build::{self, input, output};
 use crate::core::libtx::ProofBuilder;
-use crate::core::{global, ser};
+use crate::core::{global, pow, ser};
 use chrono::Duration;
 use grin_core as core;
 use keychain::{BlindingFactor, ExtKeychain, Keychain};
@@ -34,6 +34,7 @@ use util::{secp, RwLock, ToHex};
 
 // Setup test with AutomatedTesting chain_type;
 fn test_setup() {
+	util::init_test_logger();
 	global::set_local_chain_type(global::ChainTypes::AutomatedTesting);
 }
 
@@ -421,6 +422,59 @@ fn serialize_deserialize_block_header() {
 
 	assert_eq!(header1.hash(), header2.hash());
 	assert_eq!(header1, header2);
+}
+
+fn set_pow(header: &mut BlockHeader) {
+	// Set valid pow on the block as we will test deserialization of this "untrusted" from the network.
+	let edge_bits = global::min_edge_bits();
+	header.pow.proof.edge_bits = edge_bits;
+	pow::pow_size(
+		header,
+		pow::Difficulty::min(),
+		global::proofsize(),
+		edge_bits,
+	)
+	.unwrap();
+}
+
+#[test]
+fn deserialize_untrusted_header_weight() {
+	test_setup();
+	let keychain = ExtKeychain::from_random_seed(false).unwrap();
+	let builder = ProofBuilder::new(&keychain);
+	let prev = BlockHeader::default();
+	let key_id = ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
+	let mut b = new_block(&[], &keychain, &builder, &prev, &key_id);
+
+	// Set excessively large output mmr size on the header.
+	b.header.output_mmr_size = 10_000;
+	b.header.kernel_mmr_size = 0;
+	set_pow(&mut b.header);
+
+	let mut vec = Vec::new();
+	ser::serialize_default(&mut vec, &b.header).expect("serialization failed");
+	let res: Result<UntrustedBlockHeader, _> = ser::deserialize_default(&mut &vec[..]);
+	assert_eq!(res.err(), Some(ser::Error::CorruptedData));
+
+	// Set excessively large kernel mmr size on the header.
+	b.header.output_mmr_size = 0;
+	b.header.kernel_mmr_size = 10_000;
+	set_pow(&mut b.header);
+
+	let mut vec = Vec::new();
+	ser::serialize_default(&mut vec, &b.header).expect("serialization failed");
+	let res: Result<UntrustedBlockHeader, _> = ser::deserialize_default(&mut &vec[..]);
+	assert_eq!(res.err(), Some(ser::Error::CorruptedData));
+
+	// Set reasonable mmr sizes on the header to confirm the header can now be read "untrusted".
+	b.header.output_mmr_size = 1;
+	b.header.kernel_mmr_size = 1;
+	set_pow(&mut b.header);
+
+	let mut vec = Vec::new();
+	ser::serialize_default(&mut vec, &b.header).expect("serialization failed");
+	let res: Result<UntrustedBlockHeader, _> = ser::deserialize_default(&mut &vec[..]);
+	assert!(res.is_ok());
 }
 
 #[test]

@@ -22,7 +22,7 @@ use grin_util as util;
 use self::chain_test_helper::{clean_output_dir, genesis_block, init_chain};
 use crate::chain::{pipe, Chain, Options};
 use crate::core::core::verifier_cache::LruVerifierCache;
-use crate::core::core::{block, transaction};
+use crate::core::core::{block, pmmr, transaction};
 use crate::core::core::{Block, KernelFeatures, Transaction, Weighting};
 use crate::core::libtx::{build, reward, ProofBuilder};
 use crate::core::{consensus, global, pow};
@@ -57,6 +57,10 @@ where
 	// This allows us to build a header for an "invalid" block by ignoring outputs and kernels.
 	if skip_roots {
 		chain.set_prev_root_only(&mut block.header)?;
+
+		// Manually set the mmr sizes for a "valid" block (increment prev output and kernel counts).
+		block.header.output_mmr_size = pmmr::insertion_to_pmmr_index(prev.output_mmr_count() + 1);
+		block.header.kernel_mmr_size = pmmr::insertion_to_pmmr_index(prev.kernel_mmr_count() + 1);
 	} else {
 		chain.set_txhashset_roots(&mut block)?;
 	}

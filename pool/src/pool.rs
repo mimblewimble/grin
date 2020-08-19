@@ -140,7 +140,7 @@ where
 	/// does not exceed the provided max_weight (miner defined block weight).
 	pub fn prepare_mineable_transactions(
 		&self,
-		max_weight: usize,
+		max_weight: u64,
 	) -> Result<Vec<Transaction>, PoolError> {
 		let weighting = Weighting::AsLimitedTransaction(max_weight);
 
