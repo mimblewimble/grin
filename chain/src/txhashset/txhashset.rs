@@ -156,6 +156,7 @@ pub struct TxHashSet {
 	rproof_pmmr_h: PMMRHandle<RangeProof>,
 	kernel_pmmr_h: PMMRHandle<TxKernel>,
 
+	utxo_bitmap: Bitmap,
 	bitmap_accumulator: BitmapAccumulator,
 
 	// chain store used as index of commitments to MMR positions
@@ -188,12 +189,12 @@ impl TxHashSet {
 		)?;
 
 		// Initialize the bitmap accumulator from the current output_pos index.
-		let bitmap: Bitmap = commit_index
+		let utxo_bitmap: Bitmap = commit_index
 			.batch()?
 			.output_pos_iter()?
 			.map(|(_, pos)| pos.pos as u32)
 			.collect();
-		let bitmap_accumulator = TxHashSet::bitmap_accumulator(&bitmap)?;
+		let bitmap_accumulator = TxHashSet::bitmap_accumulator(&utxo_bitmap)?;
 
 		let mut maybe_kernel_handle: Option<PMMRHandle<TxKernel>> = None;
 		let versions = vec![ProtocolVersion(2), ProtocolVersion(1)];
@@ -241,6 +242,7 @@ impl TxHashSet {
 				output_pmmr_h,
 				rproof_pmmr_h,
 				kernel_pmmr_h,
+				utxo_bitmap,
 				bitmap_accumulator,
 				commit_index,
 			})
@@ -262,6 +264,7 @@ impl TxHashSet {
 	}
 
 	// Build a new bitmap accumulator based on our output_pos index.
+	// NOTE: bitmap provided is MMR pos based while accumulator is insertion index based.
 	fn bitmap_accumulator(bitmap: &Bitmap) -> Result<BitmapAccumulator, Error> {
 		let mut bitmap_accumulator = BitmapAccumulator::new();
 
@@ -287,7 +290,6 @@ impl TxHashSet {
 
 		bitmap_accumulator.init(utxo_idx, size)?;
 
-		// ***** comparing accumulators: c82972dc97e6 vs. c82972dc97e6
 		debug!("*****: accumulator root: {}", bitmap_accumulator.root());
 
 		Ok(bitmap_accumulator)
@@ -767,6 +769,7 @@ where
 	let sizes: (u64, u64, u64);
 	let res: Result<T, Error>;
 	let rollback: bool;
+	let utxo_bitmap: Bitmap;
 	let bitmap_accumulator: BitmapAccumulator;
 
 	let head = batch.head()?;
@@ -789,6 +792,7 @@ where
 
 		rollback = extension_pair.extension.rollback;
 		sizes = extension_pair.extension.sizes();
+		utxo_bitmap = extension_pair.extension.utxo_bitmap.clone();
 		bitmap_accumulator = extension_pair.extension.bitmap_accumulator.clone();
 	}
 
@@ -820,7 +824,8 @@ where
 				trees.rproof_pmmr_h.last_pos = sizes.1;
 				trees.kernel_pmmr_h.last_pos = sizes.2;
 
-				// Update our bitmap_accumulator based on our extension
+				// Update our utxo_bitmap and bitmap_accumulator based on our extension
+				trees.utxo_bitmap = utxo_bitmap;
 				trees.bitmap_accumulator = bitmap_accumulator;
 			}
 
@@ -1065,6 +1070,7 @@ pub struct Extension<'a> {
 	rproof_pmmr: PMMR<'a, RangeProof, PMMRBackend<RangeProof>>,
 	kernel_pmmr: PMMR<'a, TxKernel, PMMRBackend<TxKernel>>,
 
+	utxo_bitmap: Bitmap,
 	bitmap_accumulator: BitmapAccumulator,
 
 	/// Rollback flag.
@@ -1135,6 +1141,7 @@ impl<'a> Extension<'a> {
 				&mut trees.kernel_pmmr_h.backend,
 				trees.kernel_pmmr_h.last_pos,
 			),
+			utxo_bitmap: trees.utxo_bitmap.clone(),
 			bitmap_accumulator: trees.bitmap_accumulator.clone(),
 			rollback: false,
 		}
@@ -1164,14 +1171,16 @@ impl<'a> Extension<'a> {
 		header_ext: &HeaderExtension<'_>,
 		batch: &Batch<'_>,
 	) -> Result<(), Error> {
-		let mut affected_pos = vec![];
+		let mut spent_pos = vec![];
+		let mut new_pos = vec![];
 
 		// Apply the output to the output and rangeproof MMRs.
 		// Add pos to affected_pos to update the accumulator later on.
 		// Add the new output to the output_pos index.
 		for out in b.outputs() {
 			let pos = self.apply_output(out, batch)?;
-			affected_pos.push(pos);
+			new_pos.push(pos);
+			self.utxo_bitmap.add(pos as u32);
 			batch.save_output_pos_height(
 				&out.commitment(),
 				CommitPos {
@@ -1190,7 +1199,8 @@ impl<'a> Extension<'a> {
 			.validate_inputs(&b.inputs(), batch)?;
 		for (out, pos) in &spent {
 			self.apply_input(out.commitment(), *pos)?;
-			affected_pos.push(pos.pos);
+			self.utxo_bitmap.remove(pos.pos as u32);
+			spent_pos.push(pos.pos);
 			batch.delete_output_pos_height(&out.commitment())?;
 		}
 
@@ -1203,7 +1213,9 @@ impl<'a> Extension<'a> {
 		self.apply_kernels(b.kernels(), b.header.height, batch)?;
 
 		// Update our BitmapAccumulator based on affected outputs (both spent and created).
-		self.apply_to_bitmap_accumulator(&affected_pos, batch)?;
+		let mut affected_pos = new_pos;
+		affected_pos.extend_from_slice(&spent_pos);
+		self.apply_to_bitmap_accumulator(&affected_pos)?;
 
 		// Update the head of the extension to reflect the block we just applied.
 		self.head = Tip::from_header(&b.header);
@@ -1211,11 +1223,7 @@ impl<'a> Extension<'a> {
 		Ok(())
 	}
 
-	fn apply_to_bitmap_accumulator(
-		&mut self,
-		output_pos: &[u64],
-		batch: &Batch<'_>,
-	) -> Result<(), Error> {
+	fn apply_to_bitmap_accumulator(&mut self, output_pos: &[u64]) -> Result<(), Error> {
 		let mut output_idx: Vec<_> = output_pos
 			.iter()
 			.map(|x| pmmr::n_leaves(*x).saturating_sub(1))
@@ -1225,27 +1233,20 @@ impl<'a> Extension<'a> {
 		let size = pmmr::n_leaves(self.output_pmmr.last_pos);
 
 		// convert output_pos index from db (our utxo pos) to insertion index
-		// and filter everything out below min_idx
-
-		// TODO - rethink this.
-		// TODO - can we defer collecting this vec?
-
-		// TODO - the iter here is not aware of the uncommitted batch...
-
-		let utxo_pos: Vec<(_, _)> = batch.output_pos_iter()?.collect();
-		let utxo_pos: Vec<_> = utxo_pos.into_iter().map(|(_, x)| x.pos).collect();
-		let mut utxo_idx: Vec<_> = utxo_pos
-			.into_iter()
-			.map(|x| pmmr::n_leaves(x).saturating_sub(1))
-			.collect();
-		utxo_idx.sort_unstable();
+		// and filter everything out below min_idx.
+		// NOTE: Conversion between pos and idx is horrible here.
 		let chunk_start_idx = BitmapAccumulator::chunk_start_idx(min_idx);
-		let utxo_idx: Vec<_> = utxo_idx
-			.into_iter()
-			.filter(|x| *x >= chunk_start_idx)
+		let from_pos = pmmr::insertion_to_pmmr_index(chunk_start_idx + 1) as u32;
+		let utxo_idx: Vec<_> = self
+			.utxo_bitmap
+			.iter()
+			.skip_while(move |x| *x < from_pos)
+			.map(|x| pmmr::n_leaves(x as u64).saturating_sub(1))
 			.collect();
 
-		self.bitmap_accumulator.apply(output_idx, utxo_idx, size)
+		self.bitmap_accumulator.apply(output_idx, utxo_idx, size)?;
+
+		Ok(())
 	}
 
 	// Prune output and rangeproof PMMRs based on provided pos.
@@ -1393,8 +1394,12 @@ impl<'a> Extension<'a> {
 
 		if head_header.height <= header.height {
 			// Nothing to rewind but we do want to truncate the MMRs at header for consistency.
-			self.rewind_mmrs_to_pos(header.output_mmr_size, header.kernel_mmr_size, &[])?;
-			self.apply_to_bitmap_accumulator(&[header.output_mmr_size], batch)?;
+			self.rewind_mmrs_to_pos(
+				header.output_mmr_size,
+				header.kernel_mmr_size,
+				&Bitmap::create(),
+			)?;
+			self.apply_to_bitmap_accumulator(&[header.output_mmr_size])?;
 		} else {
 			let mut affected_pos = vec![];
 			let mut current = head_header;
@@ -1405,7 +1410,7 @@ impl<'a> Extension<'a> {
 				current = batch.get_previous_header(&current)?;
 			}
 			// Now apply a single aggregate "affected_pos" to our bitmap accumulator.
-			self.apply_to_bitmap_accumulator(&affected_pos, batch)?;
+			self.apply_to_bitmap_accumulator(&affected_pos)?;
 		}
 
 		error!("***** roots after rewind: {:?}", self.roots());
@@ -1429,29 +1434,34 @@ impl<'a> Extension<'a> {
 		// The spent index allows us to conveniently "unspend" everything in a block.
 		let spent = batch.get_spent_index(&header.hash());
 
-		let spent_pos: Vec<_> = if let Ok(ref spent) = spent {
-			spent.iter().map(|x| x.pos).collect()
+		let spent_bitmap: Bitmap = if let Ok(ref spent) = spent {
+			spent.iter().map(|x| x.pos as u32).collect()
 		} else {
 			warn!(
 				"rewind_single_block: fallback to legacy input bitmap for block {} at {}",
 				header.hash(),
 				header.height
 			);
-			let bitmap = batch.get_block_input_bitmap(&header.hash())?;
-			bitmap.iter().map(|x| x.into()).collect()
+			batch.get_block_input_bitmap(&header.hash())?
 		};
 
 		if header.height == 0 {
-			self.rewind_mmrs_to_pos(0, 0, &spent_pos)?;
+			self.rewind_mmrs_to_pos(0, 0, &spent_bitmap)?;
 		} else {
 			let prev = batch.get_previous_header(header)?;
-			self.rewind_mmrs_to_pos(prev.output_mmr_size, prev.kernel_mmr_size, &spent_pos)?;
+			self.rewind_mmrs_to_pos(prev.output_mmr_size, prev.kernel_mmr_size, &spent_bitmap)?;
 		}
+
+		// TODO - confirm this works...
+		self.utxo_bitmap.remove_range_closed(
+			((self.output_pmmr.last_pos + 1) as u32)..self.utxo_bitmap.maximum().unwrap_or(0),
+		);
+		self.utxo_bitmap.and_inplace(&spent_bitmap); //add_many(spent_pos.iter().map(|x| *x as u32).collect::<Vec<_>>().as_slice());
 
 		// Update our BitmapAccumulator based on affected outputs.
 		// We want to "unspend" every rewound spent output.
 		// Treat last_pos as an affected output to ensure we rebuild far enough back.
-		let mut affected_pos = spent_pos;
+		let mut affected_pos: Vec<u64> = spent_bitmap.to_vec().iter().map(|x| *x as u64).collect();
 		affected_pos.push(self.output_pmmr.last_pos);
 
 		// Remove any entries from the output_pos created by the block being rewound.
@@ -1502,14 +1512,13 @@ impl<'a> Extension<'a> {
 		&mut self,
 		output_pos: u64,
 		kernel_pos: u64,
-		spent_pos: &[u64],
+		spent_bitmap: &Bitmap,
 	) -> Result<(), Error> {
-		let bitmap: Bitmap = spent_pos.iter().map(|x| *x as u32).collect();
 		self.output_pmmr
-			.rewind(output_pos, &bitmap)
+			.rewind(output_pos, &spent_bitmap)
 			.map_err(&ErrorKind::TxHashSetErr)?;
 		self.rproof_pmmr
-			.rewind(output_pos, &bitmap)
+			.rewind(output_pos, &spent_bitmap)
 			.map_err(&ErrorKind::TxHashSetErr)?;
 		self.kernel_pmmr
 			.rewind(kernel_pos, &Bitmap::create())
