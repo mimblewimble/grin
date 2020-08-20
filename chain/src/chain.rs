@@ -1072,6 +1072,13 @@ impl Chain {
 
 		let mut header_pmmr = self.header_pmmr.write();
 		let mut batch = self.store.batch()?;
+
+		// Rebuild our output_pos index and our accumulator based on the "leaf_set" provided to us.
+		let leaf_set_bitmap = txhashset.get_leaf_set(&header)?;
+
+		debug!("***** about to init the accumulator");
+		txhashset.init_accumulator(&leaf_set_bitmap)?;
+
 		txhashset::extending(
 			&mut header_pmmr,
 			&mut txhashset,
@@ -1111,10 +1118,9 @@ impl Chain {
 			batch.save_body_tail(&tip)?;
 		}
 
-		// TODO - We need to use the "leaf_set" provided by the peer to rebuild the output_pos index.
-		// Rebuild our output_pos index in the db based on fresh UTXO set.
-		let leaf_set_bitmap = txhashset.get_leaf_set()?;
-		txhashset.init_output_pos_index(&header_pmmr, leaf_set_bitmap, &batch)?;
+		// Rebuild our output_pos index in the db based on the provided "leaf_set".
+		debug!("***** about to rebuild the output_pos index");
+		txhashset.init_output_pos_index(&header_pmmr, &header, &leaf_set_bitmap, &batch)?;
 
 		// Rebuild our NRD kernel_pos index based on recent kernel history.
 		txhashset.init_recent_kernel_pos_index(&header_pmmr, &batch)?;

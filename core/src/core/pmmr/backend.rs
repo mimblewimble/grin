@@ -42,7 +42,7 @@ pub trait Backend<T: PMMRable> {
 	/// Get underlying data by insertion position.
 	fn get_data(&self, position: u64) -> Option<T::E>;
 
-	fn get_leaf_set(&self) -> Result<Bitmap, String>;
+	fn get_leaf_set(&self, header: &BlockHeader) -> Result<Bitmap, String>;
 
 	// /// Get a Hash  by original insertion position
 	// /// (ignoring the remove log).

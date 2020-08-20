@@ -72,9 +72,9 @@ impl<T: PMMRable> PMMRHandle<T> {
 }
 
 impl PMMRHandle<Output> {
-	pub fn get_leaf_set(&self) -> Result<Bitmap, Error> {
+	pub fn get_leaf_set(&self, header: &BlockHeader) -> Result<Bitmap, Error> {
 		self.backend
-			.get_leaf_set()
+			.get_leaf_set(header)
 			.map_err(|_| ErrorKind::Other("leaf_set problems".to_string()).into())
 	}
 }
@@ -187,10 +187,11 @@ impl TxHashSet {
 			header,
 		)?;
 
+		// This needs to be done outside of init() now as we use the output_pos index for this.
 		// Initialize the bitmap accumulator from the current output PMMR.
 		// We use the current output_pos index from the db.
-		let bitmap_accumulator =
-			TxHashSet::bitmap_accumulator(&output_pmmr_h, &commit_index.batch()?)?;
+		// let bitmap_accumulator =
+		// 	TxHashSet::bitmap_accumulator(&output_pmmr_h, &commit_index.batch()?)?;
 
 		let mut maybe_kernel_handle: Option<PMMRHandle<TxKernel>> = None;
 		let versions = vec![ProtocolVersion(2), ProtocolVersion(1)];
@@ -234,6 +235,7 @@ impl TxHashSet {
 			}
 		}
 		if let Some(kernel_pmmr_h) = maybe_kernel_handle {
+			let bitmap_accumulator = BitmapAccumulator::new();
 			Ok(TxHashSet {
 				output_pmmr_h,
 				rproof_pmmr_h,
@@ -248,25 +250,38 @@ impl TxHashSet {
 
 	/// Gets the "leaf_set" bitmap from the underlying leaf_set file in the output PMMR.
 	/// This is the utxo provided to us by a peer during fast sync.
-	pub fn get_leaf_set(&self) -> Result<Bitmap, Error> {
-		self.output_pmmr_h.get_leaf_set()
+	pub fn get_leaf_set(&self, header: &BlockHeader) -> Result<Bitmap, Error> {
+		self.output_pmmr_h.get_leaf_set(header)
 	}
 
-	// Build a new bitmap accumulator for the provided output PMMR.
-	fn bitmap_accumulator(
-		pmmr_h: &PMMRHandle<Output>,
-		batch: &Batch<'_>,
-	) -> Result<BitmapAccumulator, Error> {
-		let pmmr = ReadonlyPMMR::at(&pmmr_h.backend, pmmr_h.last_pos);
-		let size = pmmr::n_leaves(pmmr_h.last_pos);
+	/// TODO - cleanup.
+	pub fn init_accumulator(&mut self, bitmap: &Bitmap) -> Result<(), Error> {
+		self.bitmap_accumulator = TxHashSet::bitmap_accumulator(bitmap)?;
+		Ok(())
+	}
+
+	// Build a new bitmap accumulator based on our output_pos index.
+	fn bitmap_accumulator(bitmap: &Bitmap) -> Result<BitmapAccumulator, Error> {
 		let mut bitmap_accumulator = BitmapAccumulator::new();
 
-		// TODO - refactor this.
-		let utxo_pos: Vec<(_, _)> = batch.output_pos_iter()?.collect();
-		let utxo_pos: Vec<_> = utxo_pos.into_iter().map(|(_, x)| x.pos).collect();
-		let utxo_idx: Vec<_> = utxo_pos
-			.into_iter()
-			.map(|x| pmmr::n_leaves(x).saturating_sub(1))
+		// // TODO - refactor this.
+		// let utxo_pos: Vec<(_, _)> = batch.output_pos_iter()?.collect();
+		// debug!("***** bitmap_accumulator: {} output pos", utxo_pos.len());
+
+		// let utxo_pos: Vec<_> = utxo_pos.into_iter().map(|(_, x)| x.pos).collect();
+
+		// let last_pos = utxo_pos.last().unwrap_or(&0);
+		// let size = pmmr::n_leaves(*last_pos);
+
+		// debug!("***** last_pos: {}", last_pos);
+
+		debug!("bitmap_accumulator: bitmap size: {}", bitmap.cardinality());
+
+		let size = pmmr::n_leaves(bitmap.maximum().unwrap_or(0) as u64);
+
+		let utxo_idx: Vec<_> = bitmap
+			.iter()
+			.map(|x| pmmr::n_leaves(x as u64).saturating_sub(1))
 			.collect();
 
 		bitmap_accumulator.init(utxo_idx, size)?;
@@ -530,13 +545,26 @@ impl TxHashSet {
 	pub fn init_output_pos_index(
 		&self,
 		header_pmmr: &PMMRHandle<BlockHeader>,
-		bitmap: Bitmap,
+		header: &BlockHeader,
+		bitmap: &Bitmap,
 		batch: &Batch<'_>,
 	) -> Result<(), Error> {
+		debug!("init_output_pos_index: bitmap: {}", bitmap.cardinality());
+		debug!(
+			"init_output_pos_index: output last_pos: {}",
+			self.output_pmmr_h.last_pos
+		);
+
 		let now = Instant::now();
 
 		let output_pmmr =
 			ReadonlyPMMR::at(&self.output_pmmr_h.backend, self.output_pmmr_h.last_pos);
+
+		// First clear out any existing entries.
+		// We want to fully replace the index with the provided bitmap.
+		for (key, _) in batch.output_pos_iter()? {
+			batch.delete(&key)?;
+		}
 
 		// 	// Iterate over the current output_pos index, removing any entries that
 		// 	// do not point to to the expected output.
@@ -585,14 +613,12 @@ impl TxHashSet {
 			return Ok(());
 		}
 
-		let total_outputs = outputs_pos.len();
-		let max_height = batch.head()?.height;
-
 		let mut i = 0;
-		for search_height in 0..max_height {
-			let hash = header_pmmr.get_header_hash_by_height(search_height + 1)?;
+		for search_height in 0..=header.height {
+			let hash = header_pmmr.get_header_hash_by_height(search_height)?;
 			let h = batch.get_block_header(&hash)?;
-			while i < total_outputs {
+			debug!("looping: {} at {}, {}", h.hash(), h.height, i);
+			while i < outputs_pos.len() {
 				let (commit, pos) = outputs_pos[i];
 				if pos > h.output_mmr_size {
 					// Note: MMR position is 1-based and not 0-based, so here must be '>' instead of '>='
@@ -608,9 +634,10 @@ impl TxHashSet {
 				i += 1;
 			}
 		}
+
 		debug!(
 			"init_output_pos_index: added entries for {} utxos, took {}s",
-			total_outputs,
+			outputs_pos.len(),
 			now.elapsed().as_secs(),
 		);
 

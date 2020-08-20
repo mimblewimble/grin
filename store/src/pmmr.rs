@@ -91,8 +91,18 @@ impl<T: PMMRable> Backend<T> for PMMRBackend<T> {
 		Ok(())
 	}
 
-	fn get_leaf_set(&self) -> Result<Bitmap, String> {
-		let leaf_set_path = self.data_dir.join(PMMR_LEAF_FILE);
+	// Leaf set files are "snapshots" at a given block (by hash suffix).
+	fn get_leaf_set(&self, header: &BlockHeader) -> Result<Bitmap, String> {
+		let mut leaf_set_path = self.data_dir.join(PMMR_LEAF_FILE);
+
+		debug!("***** leaf_set_path (no extension): {:?}", leaf_set_path);
+
+		// TODO - it would be nice if there was a robust way of converting hash into an extension here.
+		// We currently rely on format which feels brittle.
+		leaf_set_path.set_extension(format!("bin.{}", header.hash()));
+
+		debug!("***** leaf_set_path (with extension): {:?}", leaf_set_path);
+
 		LeafSet::open(leaf_set_path)
 			.map(|leaf_set| leaf_set.bitmap())
 			.map_err(|_| "failed to read leaf_set bitmap".into())
@@ -283,18 +293,18 @@ impl<T: PMMRable> PMMRBackend<T> {
 		let hash_file = DataFile::open(&data_dir.join(PMMR_HASH_FILE), hash_size_info, version)?;
 		let data_file = DataFile::open(&data_dir.join(PMMR_DATA_FILE), size_info, version)?;
 
-		let leaf_set_path = data_dir.join(PMMR_LEAF_FILE);
+		// let leaf_set_path = data_dir.join(PMMR_LEAF_FILE);
 
-		// If we received a rewound "snapshot" leaf_set file move it into
-		// place so we use it.
-		if let Some(header) = header {
-			let leaf_snapshot_path = format!(
-				"{}.{}",
-				data_dir.join(PMMR_LEAF_FILE).to_str().unwrap(),
-				header.hash()
-			);
-			LeafSet::copy_snapshot(&leaf_set_path, &PathBuf::from(leaf_snapshot_path))?;
-		}
+		// // If we received a rewound "snapshot" leaf_set file move it into
+		// // place so we use it.
+		// if let Some(header) = header {
+		// 	let leaf_snapshot_path = format!(
+		// 		"{}.{}",
+		// 		data_dir.join(PMMR_LEAF_FILE).to_str().unwrap(),
+		// 		header.hash()
+		// 	);
+		// 	LeafSet::copy_snapshot(&leaf_set_path, &PathBuf::from(leaf_snapshot_path))?;
+		// }
 
 		// let leaf_set = LeafSet::open(&leaf_set_path)?;
 		let prune_list = PruneList::open(&data_dir.join(PMMR_PRUN_FILE))?;

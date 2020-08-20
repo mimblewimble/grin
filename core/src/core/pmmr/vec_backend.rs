@@ -110,7 +110,7 @@ impl<T: PMMRable> Backend<T> for VecBackend<T> {
 	// 	Ok(())
 	// }
 
-	fn get_leaf_set(&self) -> Result<Bitmap, String> {
+	fn get_leaf_set(&self, _header: &BlockHeader) -> Result<Bitmap, String> {
 		panic!("not yet implemented");
 	}
 
