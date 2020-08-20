@@ -156,6 +156,7 @@ pub struct TxHashSet {
 	rproof_pmmr_h: PMMRHandle<RangeProof>,
 	kernel_pmmr_h: PMMRHandle<TxKernel>,
 
+	// Our utxo bitmap is MMR pos based which differs from the accumulator (insertion index based).
 	utxo_bitmap: Bitmap,
 	bitmap_accumulator: BitmapAccumulator,
 

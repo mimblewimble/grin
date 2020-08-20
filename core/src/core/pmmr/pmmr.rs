@@ -15,8 +15,6 @@
 use std::marker;
 use std::u64;
 
-use croaring::Bitmap;
-
 use crate::core::hash::{Hash, ZERO_HASH};
 use crate::core::merkle_proof::MerkleProof;
 use crate::core::pmmr::{Backend, ReadonlyPMMR};
