@@ -306,21 +306,29 @@ impl Chain {
 		})
 	}
 
-	fn determine_status(&self, head: Option<Tip>, prev_head: Tip, fork_point: Tip) -> BlockStatus {
+	fn determine_status(
+		&self,
+		head: Option<Tip>,
+		prev: Tip,
+		prev_head: Tip,
+		fork_point: Tip,
+	) -> BlockStatus {
 		// If head is updated then we are either "next" block or we just experienced a "reorg" to new head.
 		// Otherwise this is a "fork" off the main chain.
 		if let Some(head) = head {
 			if head.prev_block_h == prev_head.last_block_h {
-				BlockStatus::Next { prev_head }
+				BlockStatus::Next { prev }
 			} else {
 				BlockStatus::Reorg {
+					prev,
 					prev_head,
 					fork_point,
 				}
 			}
 		} else {
 			BlockStatus::Fork {
-				prev_head,
+				prev,
+				head: prev_head,
 				fork_point,
 			}
 		}
@@ -416,7 +424,13 @@ impl Chain {
 
 		match maybe_new_head {
 			Ok((head, fork_point)) => {
-				let status = self.determine_status(head, prev_head, Tip::from_header(&fork_point));
+				let prev = self.get_previous_header(&b.header)?;
+				let status = self.determine_status(
+					head,
+					Tip::from_header(&prev),
+					prev_head,
+					Tip::from_header(&fork_point),
+				);
 
 				// notifying other parts of the system of the update
 				self.adapter.block_accepted(&b, status, opts);

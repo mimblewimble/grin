@@ -119,42 +119,48 @@ impl ChainEvents for EventLogger {
 	fn on_block_accepted(&self, block: &core::Block, status: BlockStatus) {
 		match status {
 			BlockStatus::Reorg {
+				prev,
 				prev_head,
 				fork_point,
 			} => {
 				warn!(
-					"block_accepted (REORG!): {} at {}, (prev_head: {} at {}, fork_point: {} at {}, depth: {})",
+					"block_accepted (REORG!): {} at {}, (prev: {} at {}, prev_head: {} at {}, fork_point: {} at {}, depth: {})",
 					block.hash(),
 					block.header.height,
+					prev.hash(),
+					prev.height,
 					prev_head.hash(),
 					prev_head.height,
 					fork_point.hash(),
 					fork_point.height,
-					block.header.height.saturating_sub(fork_point.height + 1),
+					prev_head.height.saturating_sub(fork_point.height),
 				);
 			}
 			BlockStatus::Fork {
-				prev_head,
+				prev,
+				head,
 				fork_point,
 			} => {
 				debug!(
-					"block_accepted (fork?): {} at {}, (prev_head: {} at {}, fork_point: {} at {}, depth: {})",
+					"block_accepted (fork?): {} at {}, (prev: {} at {}, head: {} at {}, fork_point: {} at {}, depth: {})",
 					block.hash(),
 					block.header.height,
-					prev_head.hash(),
-					prev_head.height,
+					prev.hash(),
+					prev.height,
+					head.hash(),
+					head.height,
 					fork_point.hash(),
 					fork_point.height,
-					block.header.height.saturating_sub(fork_point.height + 1),
+					head.height.saturating_sub(fork_point.height),
 				);
 			}
-			BlockStatus::Next { prev_head } => {
+			BlockStatus::Next { prev } => {
 				debug!(
-					"block_accepted (head+): {} at {} (prev_head: {} at {})",
+					"block_accepted (head+): {} at {} (prev: {} at {})",
 					block.hash(),
 					block.header.height,
-					prev_head.hash(),
-					prev_head.height,
+					prev.hash(),
+					prev.height,
 				);
 			}
 		}
@@ -284,8 +290,13 @@ impl ChainEvents for WebHook {
 		};
 
 		// Add additional `depth` field to the JSON in case of reorg
-		let payload = if let BlockStatus::Reorg { fork_point, .. } = status {
-			let depth = block.header.height.saturating_sub(fork_point.height + 1);
+		let payload = if let BlockStatus::Reorg {
+			fork_point,
+			prev_head,
+			..
+		} = status
+		{
+			let depth = prev_head.height.saturating_sub(fork_point.height);
 			json!({
 				"hash": block.header.hash().to_hex(),
 				"status": status_str,
