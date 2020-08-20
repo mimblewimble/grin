@@ -74,21 +74,6 @@ where
 		ReadonlyPMMR::at(&self.backend, self.last_pos)
 	}
 
-	// /// Iterator over current (unpruned, unremoved) leaf positions.
-	// pub fn leaf_pos_iter(&self) -> impl Iterator<Item = u64> + '_ {
-	// 	self.backend.leaf_pos_iter()
-	// }
-
-	// /// Number of leafs in the MMR
-	// pub fn n_unpruned_leaves(&self) -> u64 {
-	// 	self.backend.n_unpruned_leaves()
-	// }
-
-	// /// Iterator over current (unpruned, unremoved) leaf insertion indices.
-	// pub fn leaf_idx_iter(&self, from_idx: u64) -> impl Iterator<Item = u64> + '_ {
-	// 	self.backend.leaf_idx_iter(from_idx)
-	// }
-
 	/// Returns a vec of the peaks of this MMR.
 	pub fn peaks(&self) -> impl DoubleEndedIterator<Item = Hash> + '_ {
 		let peaks_pos = peaks(self.last_pos);
@@ -227,7 +212,7 @@ where
 	/// that had been canceled. Expects a position in the PMMR to rewind and
 	/// bitmaps representing the positions added and removed that we want to
 	/// "undo".
-	pub fn rewind(&mut self, position: u64, rewind_rm_pos: &Bitmap) -> Result<(), String> {
+	pub fn rewind(&mut self, position: u64) -> Result<(), String> {
 		// Identify which actual position we should rewind to as the provided
 		// position is a leaf. We traverse the MMR to include any parent(s) that
 		// need to be included for the MMR to be valid.
@@ -236,27 +221,10 @@ where
 			pos += 1;
 		}
 
-		self.backend.rewind(pos, rewind_rm_pos)?;
+		self.backend.rewind(pos)?;
 		self.last_pos = pos;
 		Ok(())
 	}
-
-	// /// Prunes (removes) the leaf from the MMR at the specified position.
-	// /// Returns an error if prune is called on a non-leaf position.
-	// /// Returns false if the leaf node has already been pruned.
-	// /// Returns true if pruning is successful.
-	// pub fn prune(&mut self, position: u64) -> Result<bool, String> {
-	// 	if !is_leaf(position) {
-	// 		return Err(format!("Node at {} is not a leaf, can't prune.", position));
-	// 	}
-
-	// 	if self.backend.get_hash(position).is_none() {
-	// 		return Ok(false);
-	// 	}
-
-	// 	self.backend.remove(position)?;
-	// 	Ok(true)
-	// }
 
 	/// Get the hash at provided position in the MMR.
 	pub fn get_hash(&self, pos: u64) -> Option<Hash> {
@@ -265,14 +233,6 @@ where
 		} else {
 			self.backend.get_hash(pos)
 		}
-
-		// else if is_leaf(pos) {
-		// 	// If we are a leaf then get hash from the backend.
-		// 	self.backend.get_hash(pos)
-		// } else {
-		// 	// If we are not a leaf get hash ignoring the remove log.
-		// 	self.backend.get_from_file(pos)
-		// }
 	}
 
 	/// Get the data element at provided position in the MMR.
@@ -282,25 +242,7 @@ where
 		} else {
 			self.backend.get_data(pos)
 		}
-
-		// else if is_leaf(pos) {
-		// 	// If we are a leaf then get data from the backend.
-		// 	self.backend.get_data(pos)
-		// } else {
-		// 	// If we are not a leaf then return None as only leaves have data.
-		// 	None
-		// }
 	}
-
-	// /// Get the hash from the underlying MMR file
-	// /// (ignores the remove log).
-	// fn get_from_file(&self, pos: u64) -> Option<Hash> {
-	// 	if pos > self.last_pos {
-	// 		None
-	// 	} else {
-	// 		self.backend.get_from_file(pos)
-	// 	}
-	// }
 
 	/// Walks all unpruned nodes in the MMR and revalidate all parent hashes
 	pub fn validate(&self) -> Result<(), String> {

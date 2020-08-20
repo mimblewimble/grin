@@ -114,7 +114,7 @@ impl<T: PMMRable> Backend<T> for VecBackend<T> {
 		panic!("not yet implemented");
 	}
 
-	fn rewind(&mut self, position: u64, _rewind_rm_pos: &Bitmap) -> Result<(), String> {
+	fn rewind(&mut self, position: u64) -> Result<(), String> {
 		if let Some(data) = &mut self.data {
 			let idx = pmmr::n_leaves(position);
 			data.truncate(usize::try_from(idx).expect("usize from u64"));

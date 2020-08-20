@@ -268,17 +268,6 @@ impl TxHashSet {
 	fn bitmap_accumulator(bitmap: &Bitmap) -> Result<BitmapAccumulator, Error> {
 		let mut bitmap_accumulator = BitmapAccumulator::new();
 
-		// // TODO - refactor this.
-		// let utxo_pos: Vec<(_, _)> = batch.output_pos_iter()?.collect();
-		// debug!("***** bitmap_accumulator: {} output pos", utxo_pos.len());
-
-		// let utxo_pos: Vec<_> = utxo_pos.into_iter().map(|(_, x)| x.pos).collect();
-
-		// let last_pos = utxo_pos.last().unwrap_or(&0);
-		// let size = pmmr::n_leaves(*last_pos);
-
-		// debug!("***** last_pos: {}", last_pos);
-
 		debug!("bitmap_accumulator: bitmap size: {}", bitmap.cardinality());
 
 		let size = pmmr::n_leaves(bitmap.maximum().unwrap_or(0) as u64);
@@ -545,7 +534,6 @@ impl TxHashSet {
 		Ok(())
 	}
 
-	/// TODO - WIP
 	/// (Re)build the output_pos index to be consistent with the current UTXO set.
 	/// Remove any "stale" index entries that do not correspond to outputs in the UTXO set.
 	/// Add any missing index entries based on UTXO set.
@@ -569,33 +557,10 @@ impl TxHashSet {
 
 		// First clear out any existing entries.
 		// We want to fully replace the index with the provided bitmap.
-
 		let keys: Vec<_> = batch.output_pos_iter()?.map(|(k, v)| k).collect();
 		for key in keys {
 			batch.delete(&key)?;
 		}
-
-		// 	// Iterate over the current output_pos index, removing any entries that
-		// 	// do not point to to the expected output.
-		// 	let mut removed_count = 0;
-		// 	for (key, pos) in batch.output_pos_iter()? {
-		// 		if let Some(out) = output_pmmr.get_data(pos.pos) {
-		// 			if let Ok(pos_via_mmr) = batch.get_output_pos(&out.commitment()) {
-		// 				// If the pos matches and the index key matches the commitment
-		// 				// then keep the entry, other we want to clean it up.
-		// 				if pos.pos == pos_via_mmr && batch.is_match_output_pos_key(&key, &out.commitment())
-		// 				{
-		// 					continue;
-		// 				}
-		// 			}
-		// 		}
-		// 		batch.delete(&key)?;
-		// 		removed_count += 1;
-		// 	}
-		// 	debug!(
-		// 		"init_output_pos_index: removed {} stale index entries",
-		// 		removed_count
-		// 	);
 
 		let mut outputs_pos: Vec<(Commitment, u64)> = vec![];
 		for pos in bitmap.iter() {
@@ -605,18 +570,6 @@ impl TxHashSet {
 		}
 
 		debug!("init_output_pos_index: {} utxos", outputs_pos.len());
-
-		// 	outputs_pos.retain(|x| {
-		// 		batch
-		// 			.get_output_pos_height(&x.0)
-		// 			.map(|p| p.is_none())
-		// 			.unwrap_or(true)
-		// 	});
-
-		// 	debug!(
-		// 		"init_output_pos_index: {} utxos with missing index entries",
-		// 		outputs_pos.len()
-		// 	);
 
 		if outputs_pos.is_empty() {
 			return Ok(());
@@ -1017,7 +970,7 @@ impl<'a> HeaderExtension<'a> {
 
 		let header_pos = pmmr::insertion_to_pmmr_index(header.height + 1);
 		self.pmmr
-			.rewind(header_pos, &Bitmap::create())
+			.rewind(header_pos)
 			.map_err(&ErrorKind::TxHashSetErr)?;
 
 		// Update our head to reflect the header we rewound to.
@@ -1094,35 +1047,6 @@ impl Committed for CommittedExtension {
 	fn kernels_committed(&self) -> Vec<Commitment> {
 		self.kernels.clone()
 	}
-
-	// /// TODO - this can panic, we should try and avoid this.
-	// fn outputs_committed(&self) -> Vec<Commitment> {
-	// 	let utxo_pos: Vec<_> = self
-	// 		.batch
-	// 		.output_pos_iter()
-	// 		.expect("output_pos index")
-	// 		.map(|(_, pos)| pos.pos)
-	// 		.collect();
-	// 	let mut commitments = vec![];
-	// 	for pos in utxo_pos {
-	// 		if let Some(out) = self.output_pmmr.get_data(pos) {
-	// 			commitments.push(out.commit);
-	// 		}
-	// 	}
-	// 	commitments
-	// }
-
-	// fn kernels_committed(&self) -> Vec<Commitment> {
-	// 	let mut commitments = vec![];
-	// 	for n in 1..self.kernel_pmmr.unpruned_size() + 1 {
-	// 		if pmmr::is_leaf(n) {
-	// 			if let Some(kernel) = self.kernel_pmmr.get_data(n) {
-	// 				commitments.push(kernel.excess());
-	// 			}
-	// 		}
-	// 	}
-	// 	commitments
-	// }
 }
 
 impl<'a> Extension<'a> {
@@ -1198,7 +1122,7 @@ impl<'a> Extension<'a> {
 			.utxo_view(header_ext)
 			.validate_inputs(&b.inputs(), batch)?;
 		for (out, pos) in &spent {
-			self.apply_input(out.commitment(), *pos)?;
+			// self.apply_input(out.commitment(), *pos)?;
 			self.utxo_bitmap.remove(pos.pos as u32);
 			spent_pos.push(pos.pos);
 			batch.delete_output_pos_height(&out.commitment())?;
@@ -1247,24 +1171,6 @@ impl<'a> Extension<'a> {
 		self.bitmap_accumulator.apply(output_idx, utxo_idx, size)?;
 
 		Ok(())
-	}
-
-	// Prune output and rangeproof PMMRs based on provided pos.
-	// Input is not valid if we cannot prune successfully.
-	fn apply_input(&mut self, commit: Commitment, pos: CommitPos) -> Result<(), Error> {
-		// This is uncomfortably a no-op now. YOLO.
-		Ok(())
-
-		// match self.output_pmmr.prune(pos.pos) {
-		// 	Ok(true) => {
-		// 		self.rproof_pmmr
-		// 			.prune(pos.pos)
-		// 			.map_err(ErrorKind::TxHashSetErr)?;
-		// 		Ok(())
-		// 	}
-		// 	Ok(false) => Err(ErrorKind::AlreadySpent(commit).into()),
-		// 	Err(e) => Err(ErrorKind::TxHashSetErr(e).into()),
-		// }
 	}
 
 	fn apply_output(&mut self, out: &Output, batch: &Batch<'_>) -> Result<u64, Error> {
@@ -1394,11 +1300,7 @@ impl<'a> Extension<'a> {
 
 		if head_header.height <= header.height {
 			// Nothing to rewind but we do want to truncate the MMRs at header for consistency.
-			self.rewind_mmrs_to_pos(
-				header.output_mmr_size,
-				header.kernel_mmr_size,
-				&Bitmap::create(),
-			)?;
+			self.rewind_mmrs_to_pos(header.output_mmr_size, header.kernel_mmr_size)?;
 			self.apply_to_bitmap_accumulator(&[header.output_mmr_size])?;
 		} else {
 			let mut affected_pos = vec![];
@@ -1446,10 +1348,10 @@ impl<'a> Extension<'a> {
 		};
 
 		if header.height == 0 {
-			self.rewind_mmrs_to_pos(0, 0, &spent_bitmap)?;
+			self.rewind_mmrs_to_pos(0, 0)?;
 		} else {
 			let prev = batch.get_previous_header(header)?;
-			self.rewind_mmrs_to_pos(prev.output_mmr_size, prev.kernel_mmr_size, &spent_bitmap)?;
+			self.rewind_mmrs_to_pos(prev.output_mmr_size, prev.kernel_mmr_size)?;
 		}
 
 		// TODO - confirm this works...
@@ -1508,20 +1410,15 @@ impl<'a> Extension<'a> {
 
 	/// Rewinds the MMRs to the provided positions, given the output and
 	/// kernel pos we want to rewind to.
-	fn rewind_mmrs_to_pos(
-		&mut self,
-		output_pos: u64,
-		kernel_pos: u64,
-		spent_bitmap: &Bitmap,
-	) -> Result<(), Error> {
+	fn rewind_mmrs_to_pos(&mut self, output_pos: u64, kernel_pos: u64) -> Result<(), Error> {
 		self.output_pmmr
-			.rewind(output_pos, &spent_bitmap)
+			.rewind(output_pos)
 			.map_err(&ErrorKind::TxHashSetErr)?;
 		self.rproof_pmmr
-			.rewind(output_pos, &spent_bitmap)
+			.rewind(output_pos)
 			.map_err(&ErrorKind::TxHashSetErr)?;
 		self.kernel_pmmr
-			.rewind(kernel_pos, &Bitmap::create())
+			.rewind(kernel_pos)
 			.map_err(&ErrorKind::TxHashSetErr)?;
 		Ok(())
 	}
