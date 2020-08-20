@@ -187,11 +187,13 @@ impl TxHashSet {
 			header,
 		)?;
 
-		// This needs to be done outside of init() now as we use the output_pos index for this.
-		// Initialize the bitmap accumulator from the current output PMMR.
-		// We use the current output_pos index from the db.
-		// let bitmap_accumulator =
-		// 	TxHashSet::bitmap_accumulator(&output_pmmr_h, &commit_index.batch()?)?;
+		// Initialize the bitmap accumulator from the current output_pos index.
+		let bitmap: Bitmap = commit_index
+			.batch()?
+			.output_pos_iter()?
+			.map(|(_, pos)| pos.pos as u32)
+			.collect();
+		let bitmap_accumulator = TxHashSet::bitmap_accumulator(&bitmap)?;
 
 		let mut maybe_kernel_handle: Option<PMMRHandle<TxKernel>> = None;
 		let versions = vec![ProtocolVersion(2), ProtocolVersion(1)];
@@ -235,7 +237,6 @@ impl TxHashSet {
 			}
 		}
 		if let Some(kernel_pmmr_h) = maybe_kernel_handle {
-			let bitmap_accumulator = BitmapAccumulator::new();
 			Ok(TxHashSet {
 				output_pmmr_h,
 				rproof_pmmr_h,
@@ -675,7 +676,7 @@ where
 	let res = {
 		let header_pmmr = PMMR::at(&mut handle.backend, handle.last_pos);
 		let mut header_extension = HeaderExtension::new(header_pmmr, header_head);
-		let mut extension = Extension::new(trees, head, &batch);
+		let mut extension = Extension::new(trees, head);
 		let mut extension_pair = ExtensionPair {
 			header_extension: &mut header_extension,
 			extension: &mut extension,
@@ -779,7 +780,7 @@ where
 
 		let header_pmmr = PMMR::at(&mut header_pmmr.backend, header_pmmr.last_pos);
 		let mut header_extension = HeaderExtension::new(header_pmmr, header_head);
-		let mut extension = Extension::new(trees, head, &child_batch);
+		let mut extension = Extension::new(trees, head);
 		let mut extension_pair = ExtensionPair {
 			header_extension: &mut header_extension,
 			extension: &mut extension,
@@ -1059,7 +1060,6 @@ pub struct ExtensionPair<'a> {
 /// function.
 pub struct Extension<'a> {
 	head: Tip,
-	batch: &'a Batch<'a>,
 
 	output_pmmr: PMMR<'a, OutputIdentifier, PMMRBackend<OutputIdentifier>>,
 	rproof_pmmr: PMMR<'a, RangeProof, PMMRBackend<RangeProof>>,
@@ -1071,46 +1071,58 @@ pub struct Extension<'a> {
 	rollback: bool,
 }
 
-impl<'a> Committed for Extension<'a> {
+struct CommittedExtension {
+	outputs: Vec<Commitment>,
+	kernels: Vec<Commitment>,
+}
+
+impl Committed for CommittedExtension {
 	fn inputs_committed(&self) -> Vec<Commitment> {
 		vec![]
 	}
 
-	/// TODO - this can panic, we should try and avoid this.
 	fn outputs_committed(&self) -> Vec<Commitment> {
-		let utxo_pos: Vec<_> = self
-			.batch
-			.output_pos_iter()
-			.expect("output_pos index")
-			.map(|(_, pos)| pos.pos)
-			.collect();
-		let mut commitments = vec![];
-		for pos in utxo_pos {
-			if let Some(out) = self.output_pmmr.get_data(pos) {
-				commitments.push(out.commit);
-			}
-		}
-		commitments
+		self.outputs.clone()
 	}
 
 	fn kernels_committed(&self) -> Vec<Commitment> {
-		let mut commitments = vec![];
-		for n in 1..self.kernel_pmmr.unpruned_size() + 1 {
-			if pmmr::is_leaf(n) {
-				if let Some(kernel) = self.kernel_pmmr.get_data(n) {
-					commitments.push(kernel.excess());
-				}
-			}
-		}
-		commitments
+		self.kernels.clone()
 	}
+
+	// /// TODO - this can panic, we should try and avoid this.
+	// fn outputs_committed(&self) -> Vec<Commitment> {
+	// 	let utxo_pos: Vec<_> = self
+	// 		.batch
+	// 		.output_pos_iter()
+	// 		.expect("output_pos index")
+	// 		.map(|(_, pos)| pos.pos)
+	// 		.collect();
+	// 	let mut commitments = vec![];
+	// 	for pos in utxo_pos {
+	// 		if let Some(out) = self.output_pmmr.get_data(pos) {
+	// 			commitments.push(out.commit);
+	// 		}
+	// 	}
+	// 	commitments
+	// }
+
+	// fn kernels_committed(&self) -> Vec<Commitment> {
+	// 	let mut commitments = vec![];
+	// 	for n in 1..self.kernel_pmmr.unpruned_size() + 1 {
+	// 		if pmmr::is_leaf(n) {
+	// 			if let Some(kernel) = self.kernel_pmmr.get_data(n) {
+	// 				commitments.push(kernel.excess());
+	// 			}
+	// 		}
+	// 	}
+	// 	commitments
+	// }
 }
 
 impl<'a> Extension<'a> {
-	fn new(trees: &'a mut TxHashSet, head: Tip, batch: &'a Batch<'a>) -> Extension<'a> {
+	fn new(trees: &'a mut TxHashSet, head: Tip) -> Extension<'a> {
 		Extension {
 			head,
-			batch,
 			output_pmmr: PMMR::at(
 				&mut trees.output_pmmr_h.backend,
 				trees.output_pmmr_h.last_pos,
@@ -1222,10 +1234,11 @@ impl<'a> Extension<'a> {
 
 		let utxo_pos: Vec<(_, _)> = batch.output_pos_iter()?.collect();
 		let utxo_pos: Vec<_> = utxo_pos.into_iter().map(|(_, x)| x.pos).collect();
-		let utxo_idx: Vec<_> = utxo_pos
+		let mut utxo_idx: Vec<_> = utxo_pos
 			.into_iter()
 			.map(|x| pmmr::n_leaves(x).saturating_sub(1))
 			.collect();
+		utxo_idx.sort_unstable();
 		let chunk_start_idx = BitmapAccumulator::chunk_start_idx(min_idx);
 		let utxo_idx: Vec<_> = utxo_idx
 			.into_iter()
@@ -1395,6 +1408,11 @@ impl<'a> Extension<'a> {
 			self.apply_to_bitmap_accumulator(&affected_pos, batch)?;
 		}
 
+		error!("***** roots after rewind: {:?}", self.roots());
+		error!(
+			"***** roots from header: {:?}, {:?}, {:?}",
+			header.output_root, header.range_proof_root, header.kernel_root
+		);
 		// Update our head to reflect the header we rewound to.
 		self.head = Tip::from_header(header);
 
@@ -1579,10 +1597,30 @@ impl<'a> Extension<'a> {
 		&self,
 		genesis: &BlockHeader,
 		header: &BlockHeader,
+		batch: &Batch<'_>,
 	) -> Result<(Commitment, Commitment), Error> {
 		let now = Instant::now();
 
-		let (utxo_sum, kernel_sum) = self.verify_kernel_sums(
+		let utxo_pos: Vec<_> = batch.output_pos_iter()?.map(|(_, pos)| pos.pos).collect();
+		let mut outputs = vec![];
+		for pos in utxo_pos {
+			if let Some(out) = self.output_pmmr.get_data(pos) {
+				outputs.push(out.commit);
+			}
+		}
+
+		let mut kernels = vec![];
+		for n in 1..self.kernel_pmmr.unpruned_size() + 1 {
+			if pmmr::is_leaf(n) {
+				if let Some(kernel) = self.kernel_pmmr.get_data(n) {
+					kernels.push(kernel.excess());
+				}
+			}
+		}
+
+		let committed = CommittedExtension { outputs, kernels };
+
+		let (utxo_sum, kernel_sum) = committed.verify_kernel_sums(
 			header.total_overage(genesis.kernel_mmr_size > 0),
 			header.total_kernel_offset(),
 		)?;
@@ -1616,7 +1654,7 @@ impl<'a> Extension<'a> {
 
 		// The real magicking happens here. Sum of kernel excesses should equal
 		// sum of unspent outputs minus total supply.
-		let (output_sum, kernel_sum) = self.validate_kernel_sums(genesis, header)?;
+		let (output_sum, kernel_sum) = self.validate_kernel_sums(genesis, header, batch)?;
 
 		// These are expensive verification step (skipped for "fast validation").
 		if !fast_validation {

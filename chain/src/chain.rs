@@ -1649,7 +1649,7 @@ fn setup_head(
 						// Do a full (and slow) validation of the txhashset extension
 						// to calculate the utxo_sum and kernel_sum at this block height.
 						let (utxo_sum, kernel_sum) =
-							extension.validate_kernel_sums(&genesis.header, &header)?;
+							extension.validate_kernel_sums(&genesis.header, &header, batch)?;
 
 						// Save the block_sums to the db for use later.
 						batch.save_block_sums(
