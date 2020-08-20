@@ -285,6 +285,10 @@ impl TxHashSet {
 			.collect();
 
 		bitmap_accumulator.init(utxo_idx, size)?;
+
+		// ***** comparing accumulators: c82972dc97e6 vs. c82972dc97e6
+		debug!("*****: accumulator root: {}", bitmap_accumulator.root());
+
 		Ok(bitmap_accumulator)
 	}
 
@@ -562,7 +566,9 @@ impl TxHashSet {
 
 		// First clear out any existing entries.
 		// We want to fully replace the index with the provided bitmap.
-		for (key, _) in batch.output_pos_iter()? {
+
+		let keys: Vec<_> = batch.output_pos_iter()?.map(|(k, v)| k).collect();
+		for key in keys {
 			batch.delete(&key)?;
 		}
 
@@ -617,7 +623,6 @@ impl TxHashSet {
 		for search_height in 0..=header.height {
 			let hash = header_pmmr.get_header_hash_by_height(search_height)?;
 			let h = batch.get_block_header(&hash)?;
-			debug!("looping: {} at {}, {}", h.hash(), h.height, i);
 			while i < outputs_pos.len() {
 				let (commit, pos) = outputs_pos[i];
 				if pos > h.output_mmr_size {
@@ -670,7 +675,7 @@ where
 	let res = {
 		let header_pmmr = PMMR::at(&mut handle.backend, handle.last_pos);
 		let mut header_extension = HeaderExtension::new(header_pmmr, header_head);
-		let mut extension = Extension::new(trees, head);
+		let mut extension = Extension::new(trees, head, &batch);
 		let mut extension_pair = ExtensionPair {
 			header_extension: &mut header_extension,
 			extension: &mut extension,
@@ -774,7 +779,7 @@ where
 
 		let header_pmmr = PMMR::at(&mut header_pmmr.backend, header_pmmr.last_pos);
 		let mut header_extension = HeaderExtension::new(header_pmmr, header_head);
-		let mut extension = Extension::new(trees, head);
+		let mut extension = Extension::new(trees, head, &child_batch);
 		let mut extension_pair = ExtensionPair {
 			header_extension: &mut header_extension,
 			extension: &mut extension,
@@ -1054,6 +1059,7 @@ pub struct ExtensionPair<'a> {
 /// function.
 pub struct Extension<'a> {
 	head: Tip,
+	batch: &'a Batch<'a>,
 
 	output_pmmr: PMMR<'a, OutputIdentifier, PMMRBackend<OutputIdentifier>>,
 	rproof_pmmr: PMMR<'a, RangeProof, PMMRBackend<RangeProof>>,
@@ -1070,15 +1076,21 @@ impl<'a> Committed for Extension<'a> {
 		vec![]
 	}
 
+	/// TODO - this can panic, we should try and avoid this.
 	fn outputs_committed(&self) -> Vec<Commitment> {
-		panic!("no batch here...");
-		// let mut commitments = vec![];
-		// for pos in self.leaf_pos_iter() {
-		// 	if let Some(out) = self.output_pmmr.get_data(pos) {
-		// 		commitments.push(out.commit);
-		// 	}
-		// }
-		// commitments
+		let utxo_pos: Vec<_> = self
+			.batch
+			.output_pos_iter()
+			.expect("output_pos index")
+			.map(|(_, pos)| pos.pos)
+			.collect();
+		let mut commitments = vec![];
+		for pos in utxo_pos {
+			if let Some(out) = self.output_pmmr.get_data(pos) {
+				commitments.push(out.commit);
+			}
+		}
+		commitments
 	}
 
 	fn kernels_committed(&self) -> Vec<Commitment> {
@@ -1095,9 +1107,10 @@ impl<'a> Committed for Extension<'a> {
 }
 
 impl<'a> Extension<'a> {
-	fn new(trees: &'a mut TxHashSet, head: Tip) -> Extension<'a> {
+	fn new(trees: &'a mut TxHashSet, head: Tip, batch: &'a Batch<'a>) -> Extension<'a> {
 		Extension {
 			head,
+			batch,
 			output_pmmr: PMMR::at(
 				&mut trees.output_pmmr_h.backend,
 				trees.output_pmmr_h.last_pos,
@@ -1204,6 +1217,9 @@ impl<'a> Extension<'a> {
 
 		// TODO - rethink this.
 		// TODO - can we defer collecting this vec?
+
+		// TODO - the iter here is not aware of the uncommitted batch...
+
 		let utxo_pos: Vec<(_, _)> = batch.output_pos_iter()?.collect();
 		let utxo_pos: Vec<_> = utxo_pos.into_iter().map(|(_, x)| x.pos).collect();
 		let utxo_idx: Vec<_> = utxo_pos

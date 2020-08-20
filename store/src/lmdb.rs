@@ -389,10 +389,27 @@ impl<'a> Batch<'a> {
 		self.store.exists(key)
 	}
 
-	/// Produces an iterator of `Readable` types moving forward from the
-	/// provided key.
-	pub fn iter<T: ser::Readable>(&self, from: &[u8]) -> Result<SerIterator<T>, Error> {
-		self.store.iter(from)
+	// /// Produces an iterator of `Readable` types moving forward from the
+	// /// provided key.
+	// pub fn iter<T: ser::Readable>(&self, from: &[u8]) -> Result<SerIterator<T>, Error> {
+	// 	self.store.iter(from)
+	// }
+
+	pub fn iter<T: ser::Readable>(&self, from: &[u8]) -> Result<BatchSerIterator<T>, Error> {
+		let lock = self.store.db.read();
+		let db = lock
+			.as_ref()
+			.ok_or_else(|| Error::NotFoundErr("chain db is None".to_string()))?;
+		let access = self.tx.access();
+		let cursor = self.tx.cursor(db.clone())?;
+		Ok(BatchSerIterator {
+			access,
+			cursor,
+			seek: false,
+			prefix: from.to_vec(),
+			version: self.store.version,
+			_marker: marker::PhantomData,
+		})
 	}
 
 	/// Gets a `Readable` value from the db, provided its key, taking the
@@ -472,6 +489,58 @@ where
 }
 
 impl<T> SerIterator<T>
+where
+	T: ser::Readable,
+{
+	fn deser_if_prefix_match(&self, key: &[u8], value: &[u8]) -> Option<(Vec<u8>, T)> {
+		let plen = self.prefix.len();
+		if plen == 0 || (key.len() >= plen && key[0..plen] == self.prefix[..]) {
+			if let Ok(value) = ser::deserialize(&mut &value[..], self.version) {
+				Some((key.to_vec(), value))
+			} else {
+				None
+			}
+		} else {
+			None
+		}
+	}
+}
+
+/// TODO - NASTY.
+pub struct BatchSerIterator<'a, T>
+where
+	T: ser::Readable,
+{
+	access: lmdb::WriteAccessor<'a>,
+	cursor: lmdb::Cursor<'a, 'a>,
+	seek: bool,
+	prefix: Vec<u8>,
+	version: ProtocolVersion,
+	_marker: marker::PhantomData<T>,
+}
+
+impl<'a, T> Iterator for BatchSerIterator<'a, T>
+where
+	T: ser::Readable,
+{
+	type Item = (Vec<u8>, T);
+
+	fn next(&mut self) -> Option<(Vec<u8>, T)> {
+		// let access = self.tx.access();
+		let kv = if self.seek {
+			self.cursor.next(&self.access)
+		} else {
+			self.seek = true;
+			self.cursor.seek_range_k(&self.access, &self.prefix[..])
+		};
+		match kv {
+			Ok((k, v)) => self.deser_if_prefix_match(k, v),
+			Err(_) => None,
+		}
+	}
+}
+
+impl<'a, T> BatchSerIterator<'a, T>
 where
 	T: ser::Readable,
 {

@@ -24,7 +24,7 @@ use crate::types::{CommitPos, Tip};
 use crate::util::secp::pedersen::Commitment;
 use croaring::Bitmap;
 use grin_store as store;
-use grin_store::{option_to_not_found, to_key, Error, SerIterator};
+use grin_store::{option_to_not_found, to_key, BatchSerIterator, Error, SerIterator};
 use std::convert::TryInto;
 use std::sync::Arc;
 
@@ -284,7 +284,7 @@ impl<'a> Batch<'a> {
 	}
 
 	/// Iterator over the output_pos index.
-	pub fn output_pos_iter(&self) -> Result<SerIterator<CommitPos>, Error> {
+	pub fn output_pos_iter(&self) -> Result<BatchSerIterator<CommitPos>, Error> {
 		let key = to_key(OUTPUT_POS_PREFIX, "");
 		self.db.iter(&key)
 	}
@@ -387,7 +387,7 @@ impl<'a> Batch<'a> {
 	}
 
 	/// An iterator to all block in db
-	pub fn blocks_iter(&self) -> Result<SerIterator<Block>, Error> {
+	pub fn blocks_iter(&self) -> Result<BatchSerIterator<Block>, Error> {
 		let key = to_key(BLOCK_PREFIX, "");
 		self.db.iter(&key)
 	}

@@ -1079,6 +1079,10 @@ impl Chain {
 		debug!("***** about to init the accumulator");
 		txhashset.init_accumulator(&leaf_set_bitmap)?;
 
+		// Rebuild our output_pos index in the db based on the provided "leaf_set".
+		debug!("***** about to rebuild the output_pos index");
+		txhashset.init_output_pos_index(&header_pmmr, &header, &leaf_set_bitmap, &batch)?;
+
 		txhashset::extending(
 			&mut header_pmmr,
 			&mut txhashset,
@@ -1117,10 +1121,6 @@ impl Chain {
 			// Reset the body tail to the body head after a txhashset write
 			batch.save_body_tail(&tip)?;
 		}
-
-		// Rebuild our output_pos index in the db based on the provided "leaf_set".
-		debug!("***** about to rebuild the output_pos index");
-		txhashset.init_output_pos_index(&header_pmmr, &header, &leaf_set_bitmap, &batch)?;
 
 		// Rebuild our NRD kernel_pos index based on recent kernel history.
 		txhashset.init_recent_kernel_pos_index(&header_pmmr, &batch)?;
