@@ -34,7 +34,7 @@ use crate::types::{
 	BlockStatus, ChainAdapter, CommitPos, NoStatus, Options, Tip, TxHashsetWriteStatus,
 };
 use crate::util::secp::pedersen::{Commitment, RangeProof};
-use crate::util::RwLock;
+use crate::{util::RwLock, ChainStore};
 use grin_store::Error::NotFoundErr;
 use std::collections::HashMap;
 use std::fs::{self, File};
@@ -171,6 +171,10 @@ impl Chain {
 	) -> Result<Chain, Error> {
 		let store = Arc::new(store::ChainStore::new(&db_root)?);
 
+		// DB migrations to be run prior to the chain being used.
+		// Migrate full blocks to protocol version v3.
+		Chain::migrate_db_v2_v3(&store)?;
+
 		// open the txhashset, creating a new one if necessary
 		let mut txhashset = txhashset::TxHashSet::open(db_root.clone(), store.clone(), None)?;
 
@@ -217,10 +221,6 @@ impl Chain {
 			archive_mode,
 			genesis: genesis.header,
 		};
-
-		// DB migrations to be run prior to the chain being used.
-		// Migrate full blocks to protocol version v3.
-		chain.migrate_db_v2_v3()?;
 
 		chain.log_heads()?;
 
@@ -1406,8 +1406,8 @@ impl Chain {
 
 	/// Migrate our local db from v2 to v3.
 	/// "commit only" inputs.
-	fn migrate_db_v2_v3(&self) -> Result<(), Error> {
-		let store_v2 = self.store.with_version(ProtocolVersion(2));
+	fn migrate_db_v2_v3(store: &ChainStore) -> Result<(), Error> {
+		let store_v2 = store.with_version(ProtocolVersion(2));
 		let batch = store_v2.batch()?;
 		for (_, block) in batch.blocks_iter()? {
 			batch.migrate_block(&block, ProtocolVersion(3))?;
