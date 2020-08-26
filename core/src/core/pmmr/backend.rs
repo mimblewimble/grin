@@ -51,7 +51,7 @@ pub trait Backend<T: PMMRable> {
 	/// Saves a snapshot of the rewound utxo file with the block hash as
 	/// filename suffix. We need this when sending a txhashset zip file to a
 	/// node for fast sync.
-	fn snapshot(&self, header: &BlockHeader) -> Result<(), String>;
+	fn snapshot(&self, header: &BlockHeader, bitmap: &Bitmap) -> Result<(), String>;
 
 	/// For debugging purposes so we can see how compaction is doing.
 	fn dump_stats(&self);

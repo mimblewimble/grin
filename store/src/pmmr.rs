@@ -62,7 +62,6 @@ pub struct PMMRBackend<T: PMMRable> {
 
 impl<T: PMMRable> Backend<T> for PMMRBackend<T> {
 	/// Append the provided data and hashes to the backend storage.
-	/// Add the new leaf pos to our leaf_set if this is a prunable MMR.
 	#[allow(unused_variables)]
 	fn append(&mut self, data: &T, hashes: Vec<Hash>) -> Result<(), String> {
 		let size = self
@@ -137,8 +136,12 @@ impl<T: PMMRable> Backend<T> for PMMRBackend<T> {
 		self.hash_file.release();
 	}
 
-	fn snapshot(&self, header: &BlockHeader) -> Result<(), String> {
+	fn snapshot(&self, header: &BlockHeader, bitmap: &Bitmap) -> Result<(), String> {
 		panic!("implement me!");
+
+		// TODO - Take a bitmap and write it out to disk.
+		// Maybe header is optional?
+		// On node shutdown, write a backward compatible leaf_set to disk?
 
 		// self.leaf_set
 		// 	.snapshot(header)

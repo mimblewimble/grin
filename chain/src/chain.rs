@@ -806,7 +806,10 @@ impl Chain {
 		let mut txhashset = self.txhashset.write();
 		txhashset::extending_readonly(&mut header_pmmr, &mut txhashset, |ext, batch| {
 			pipe::rewind_and_apply_fork(&header, ext, batch)?;
-			ext.extension.snapshot(batch)?;
+
+			// Write rewound leaf_set snaphot file out to disk for both output and rangeproof MMR.
+			// pmmr_leaf.bin.<header_hash>
+			ext.extension.snapshot(&header)?;
 
 			// prepare the zip
 			txhashset::zip_read(self.db_root.clone(), &header)

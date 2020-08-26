@@ -20,6 +20,7 @@ use crate::core::merkle_proof::MerkleProof;
 use crate::core::pmmr::{Backend, ReadonlyPMMR};
 use crate::core::BlockHeader;
 use crate::ser::{PMMRIndexHashable, PMMRable};
+use croaring::Bitmap;
 
 /// 64 bits all ones: 0b11111111...1
 const ALL_ONES: u64 = u64::MAX;
@@ -201,8 +202,8 @@ where
 	/// Saves a snapshot of the MMR tagged with the block hash.
 	/// Specifically - snapshots the utxo file as we need this rewound before
 	/// sending the txhashset zip file to another node for fast-sync.
-	pub fn snapshot(&mut self, header: &BlockHeader) -> Result<(), String> {
-		self.backend.snapshot(header)?;
+	pub fn snapshot(&mut self, header: &BlockHeader, bitmap: &Bitmap) -> Result<(), String> {
+		self.backend.snapshot(header, bitmap)?;
 		Ok(())
 	}
 

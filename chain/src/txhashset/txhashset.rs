@@ -1269,13 +1269,15 @@ impl<'a> Extension<'a> {
 	/// the block hash as filename suffix.
 	/// Needed for fast-sync (utxo file needs to be rewound before sending
 	/// across).
-	pub fn snapshot(&mut self, batch: &Batch<'_>) -> Result<(), Error> {
-		let header = batch.get_block_header(&self.head.last_block_h)?;
+	///
+	/// pmmr_leaf.bin.<header_hash>
+	///
+	pub fn snapshot(&mut self, header: &BlockHeader) -> Result<(), Error> {
 		self.output_pmmr
-			.snapshot(&header)
+			.snapshot(&header, &self.utxo_bitmap)
 			.map_err(ErrorKind::Other)?;
 		self.rproof_pmmr
-			.snapshot(&header)
+			.snapshot(&header, &self.utxo_bitmap)
 			.map_err(ErrorKind::Other)?;
 		Ok(())
 	}
