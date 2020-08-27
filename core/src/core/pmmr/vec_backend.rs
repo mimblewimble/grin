@@ -53,7 +53,9 @@ impl<T: PMMRable> Backend<T> for VecBackend<T> {
 	}
 
 	fn get_data(&self, position: u64) -> Option<T::E> {
-		if self.removed.contains(&position) {
+		if !pmmr::is_leaf(position) {
+			None
+		} else if self.removed.contains(&position) {
 			None
 		} else {
 			if let Some(data) = &self.data {
