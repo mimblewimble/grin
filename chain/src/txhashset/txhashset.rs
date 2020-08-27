@@ -457,14 +457,18 @@ impl TxHashSet {
 		let rewind_rm_pos = input_pos_to_rewind(&horizon_header, &head_header, batch)?;
 
 		debug!("txhashset: check_compact output mmr backend...");
-		self.output_pmmr_h
-			.backend
-			.check_compact(horizon_header.output_mmr_size, &rewind_rm_pos)?;
+		self.output_pmmr_h.backend.check_compact(
+			&self.utxo_bitmap,
+			horizon_header.output_mmr_size,
+			&rewind_rm_pos,
+		)?;
 
 		debug!("txhashset: check_compact rangeproof mmr backend...");
-		self.rproof_pmmr_h
-			.backend
-			.check_compact(horizon_header.output_mmr_size, &rewind_rm_pos)?;
+		self.rproof_pmmr_h.backend.check_compact(
+			&self.utxo_bitmap,
+			horizon_header.output_mmr_size,
+			&rewind_rm_pos,
+		)?;
 
 		debug!("txhashset: ... compaction finished");
 

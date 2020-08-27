@@ -17,7 +17,8 @@
 
 use croaring::Bitmap;
 
-use crate::{read_bitmap, save_via_temp_file};
+use crate::core::core::pmmr;
+use crate::{prune_list::PruneList, read_bitmap, save_via_temp_file};
 
 use std::io;
 use std::io::Write;
@@ -49,6 +50,7 @@ impl LeafSet {
 		Ok(bitmap)
 	}
 
+	/// Write leaf_set bitmap out to provided file path.
 	pub fn write<P: AsRef<Path>>(path: P, bitmap: &Bitmap) -> io::Result<()> {
 		let mut bitmap = bitmap.clone();
 
@@ -61,41 +63,41 @@ impl LeafSet {
 		Ok(())
 	}
 
-	// /// Calculate the set of unpruned leaves
-	// /// up to and including the cutoff_pos.
-	// /// Only applicable for the output MMR.
-	// fn unpruned_pre_cutoff(&self, cutoff_pos: u64, prune_list: &PruneList) -> Bitmap {
-	// 	(1..=cutoff_pos)
-	// 		.filter(|&x| pmmr::is_leaf(x) && !prune_list.is_pruned(x))
-	// 		.map(|x| x as u32)
-	// 		.collect()
-	// }
+	/// Calculate the set of unpruned leaves
+	/// up to and including the cutoff_pos.
+	/// Only applicable for the output MMR.
+	fn unpruned_pre_cutoff(cutoff_pos: u64, prune_list: &PruneList) -> Bitmap {
+		(1..=cutoff_pos)
+			.filter(|&x| pmmr::is_leaf(x) && !prune_list.is_pruned(x))
+			.map(|x| x as u32)
+			.collect()
+	}
 
-	// /// Calculate the set of pruned positions
-	// /// up to and including the cutoff_pos.
-	// /// Uses both the leaf_set and the prune_list to determine prunedness.
-	// pub fn removed_pre_cutoff(
-	// 	&self,
-	// 	cutoff_pos: u64,
-	// 	rewind_rm_pos: &Bitmap,
-	// 	prune_list: &PruneList,
-	// ) -> Bitmap {
-	// 	let mut bitmap = self.bitmap.clone();
+	/// Calculate the set of pruned positions
+	/// up to and including the cutoff_pos.
+	/// Uses both the leaf_set and the prune_list to determine prunedness.
+	pub fn removed_pre_cutoff(
+		bitmap: &Bitmap,
+		cutoff_pos: u64,
+		rewind_rm_pos: &Bitmap,
+		prune_list: &PruneList,
+	) -> Bitmap {
+		let mut bitmap = bitmap.clone();
 
-	// 	// First remove pos from leaf_set that were
-	// 	// added after the point we are rewinding to.
-	// 	let to_remove = ((cutoff_pos + 1) as u32)..bitmap.maximum().unwrap_or(0);
-	// 	bitmap.remove_range_closed(to_remove);
+		// First remove pos from leaf_set that were
+		// added after the point we are rewinding to.
+		let to_remove = ((cutoff_pos + 1) as u32)..bitmap.maximum().unwrap_or(0);
+		bitmap.remove_range_closed(to_remove);
 
-	// 	// Then add back output pos to the leaf_set
-	// 	// that were removed.
-	// 	bitmap.or_inplace(&rewind_rm_pos);
+		// Then add back output pos to the leaf_set
+		// that were removed.
+		bitmap.or_inplace(&rewind_rm_pos);
 
-	// 	// Invert bitmap for the leaf pos and return the resulting bitmap.
-	// 	bitmap
-	// 		.flip(1..(cutoff_pos + 1))
-	// 		.and(&self.unpruned_pre_cutoff(cutoff_pos, prune_list))
-	// }
+		// Invert bitmap for the leaf pos and return the resulting bitmap.
+		bitmap
+			.flip(1..(cutoff_pos + 1))
+			.and(&LeafSet::unpruned_pre_cutoff(cutoff_pos, prune_list))
+	}
 
 	// /// Rewinds the leaf_set back to a previous state.
 	// /// Removes all pos after the cutoff.

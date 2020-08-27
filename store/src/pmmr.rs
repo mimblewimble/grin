@@ -264,14 +264,19 @@ impl<T: PMMRable> PMMRBackend<T> {
 	/// aligned. The block_marker in the db/index for the particular block
 	/// will have a suitable output_pos. This is used to enforce a horizon
 	/// after which the local node should have all the data to allow rewinding.
-	pub fn check_compact(&mut self, cutoff_pos: u64, rewind_rm_pos: &Bitmap) -> io::Result<bool> {
+	pub fn check_compact(
+		&mut self,
+		bitmap: &Bitmap,
+		cutoff_pos: u64,
+		rewind_rm_pos: &Bitmap,
+	) -> io::Result<bool> {
 		assert!(self.prunable, "Trying to compact a non-prunable PMMR");
 
 		// Calculate the sets of leaf positions and node positions to remove based
 		// on the cutoff_pos provided.
-		let (leaves_removed, pos_to_rm) = self.pos_to_rm(cutoff_pos, rewind_rm_pos);
+		let (leaves_removed, pos_to_rm) = self.pos_to_rm(bitmap, cutoff_pos, rewind_rm_pos);
 
-		// 1. Save compact copy of the hash file, skipping removed data.
+		// Save compact copy of the hash file, skipping removed data.
 		{
 			let pos_to_rm = map_vec!(pos_to_rm, |pos| {
 				let shift = self.prune_list.get_shift(pos.into());
@@ -281,7 +286,7 @@ impl<T: PMMRable> PMMRBackend<T> {
 			self.hash_file.save_prune(&pos_to_rm)?;
 		}
 
-		// 2. Save compact copy of the data file, skipping removed leaves.
+		// Save compact copy of the data file, skipping removed leaves.
 		{
 			let leaf_pos_to_rm = pos_to_rm
 				.iter()
@@ -298,7 +303,7 @@ impl<T: PMMRable> PMMRBackend<T> {
 			self.data_file.save_prune(&pos_to_rm)?;
 		}
 
-		// 3. Update the prune list and write to disk.
+		// Update the prune list and write to disk.
 		{
 			for pos in leaves_removed.iter() {
 				self.prune_list.add(pos.into());
@@ -306,11 +311,6 @@ impl<T: PMMRable> PMMRBackend<T> {
 			self.prune_list.flush()?;
 		}
 
-		// // 4. Write the leaf_set to disk.
-		// // Optimize the bitmap storage in the process.
-		// self.leaf_set.flush()?;
-
-		// 5. cleanup rewind files
 		self.clean_rewind_files()?;
 
 		Ok(true)
@@ -322,38 +322,40 @@ impl<T: PMMRable> PMMRBackend<T> {
 		clean_files_by_prefix(data_dir, &pattern, REWIND_FILE_CLEANUP_DURATION_SECONDS)
 	}
 
-	fn pos_to_rm(&self, cutoff_pos: u64, rewind_rm_pos: &Bitmap) -> (Bitmap, Bitmap) {
-		panic!("not yet inplemented");
+	fn pos_to_rm(
+		&self,
+		bitmap: &Bitmap,
+		cutoff_pos: u64,
+		rewind_rm_pos: &Bitmap,
+	) -> (Bitmap, Bitmap) {
+		let mut expanded = Bitmap::create();
 
-		// let mut expanded = Bitmap::create();
+		let leaf_pos_to_rm =
+			LeafSet::removed_pre_cutoff(bitmap, cutoff_pos, rewind_rm_pos, &self.prune_list);
 
-		// let leaf_pos_to_rm =
-		// 	self.leaf_set
-		// 		.removed_pre_cutoff(cutoff_pos, rewind_rm_pos, &self.prune_list);
+		for x in leaf_pos_to_rm.iter() {
+			expanded.add(x);
+			let mut current = x as u64;
+			loop {
+				let (parent, sibling) = family(current);
+				let sibling_pruned = self.is_pruned_root(sibling);
 
-		// for x in leaf_pos_to_rm.iter() {
-		// 	expanded.add(x);
-		// 	let mut current = x as u64;
-		// 	loop {
-		// 		let (parent, sibling) = family(current);
-		// 		let sibling_pruned = self.is_pruned_root(sibling);
+				// if sibling previously pruned
+				// push it back onto list of pos to remove
+				// so we can remove it and traverse up to parent
+				if sibling_pruned {
+					expanded.add(sibling as u32);
+				}
 
-		// 		// if sibling previously pruned
-		// 		// push it back onto list of pos to remove
-		// 		// so we can remove it and traverse up to parent
-		// 		if sibling_pruned {
-		// 			expanded.add(sibling as u32);
-		// 		}
-
-		// 		if sibling_pruned || expanded.contains(sibling as u32) {
-		// 			expanded.add(parent as u32);
-		// 			current = parent;
-		// 		} else {
-		// 			break;
-		// 		}
-		// 	}
-		// }
-		// (leaf_pos_to_rm, removed_excl_roots(&expanded))
+				if sibling_pruned || expanded.contains(sibling as u32) {
+					expanded.add(parent as u32);
+					current = parent;
+				} else {
+					break;
+				}
+			}
+		}
+		(leaf_pos_to_rm, removed_excl_roots(&expanded))
 	}
 }
 
