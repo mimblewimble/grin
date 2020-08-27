@@ -292,6 +292,22 @@ impl TxHashSet {
 		self.kernel_pmmr_h.backend.release_files();
 	}
 
+	/// Backward compatible snapshot of the leaf_set file for both output and rangeproof MMRs.
+	/// Called during clean node shutdown.
+	pub fn snapshot(&mut self) -> Result<(), Error> {
+		let mut output_pmmr: PMMR<'_, Output, _> =
+			PMMR::at(&mut self.output_pmmr_h.backend, self.output_pmmr_h.last_pos);
+		let mut rproof_pmmr =
+			PMMR::at(&mut self.rproof_pmmr_h.backend, self.rproof_pmmr_h.last_pos);
+		output_pmmr
+			.snapshot(&self.utxo_bitmap, None)
+			.map_err(ErrorKind::Other)?;
+		rproof_pmmr
+			.snapshot(&self.utxo_bitmap, None)
+			.map_err(ErrorKind::Other)?;
+		Ok(())
+	}
+
 	/// Check if an output is unspent.
 	/// We look in the index to find the output MMR pos.
 	/// Then we check the entry in the output MMR and confirm the hash matches.
@@ -1274,10 +1290,10 @@ impl<'a> Extension<'a> {
 	///
 	pub fn snapshot(&mut self, header: &BlockHeader) -> Result<(), Error> {
 		self.output_pmmr
-			.snapshot(&header, &self.utxo_bitmap)
+			.snapshot(&self.utxo_bitmap, Some(&header))
 			.map_err(ErrorKind::Other)?;
 		self.rproof_pmmr
-			.snapshot(&header, &self.utxo_bitmap)
+			.snapshot(&self.utxo_bitmap, Some(&header))
 			.map_err(ErrorKind::Other)?;
 		Ok(())
 	}

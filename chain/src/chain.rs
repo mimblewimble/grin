@@ -885,6 +885,12 @@ impl Chain {
 		Ok(())
 	}
 
+	/// Backward compatible snapshot of the output and rangeproof leaf_set files.
+	/// Called during clean node shutdown.
+	pub fn snapshot(&self) -> Result<(), Error> {
+		self.txhashset.write().snapshot()
+	}
+
 	/// Check chain status whether a txhashset downloading is needed
 	pub fn check_txhashset_needed(
 		&self,

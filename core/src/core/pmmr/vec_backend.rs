@@ -80,7 +80,7 @@ impl<T: PMMRable> Backend<T> for VecBackend<T> {
 		Ok(())
 	}
 
-	fn snapshot(&self, _header: &BlockHeader, _bitmap: &Bitmap) -> Result<(), String> {
+	fn snapshot(&self, _bitmap: &Bitmap, _header: Option<&BlockHeader>) -> Result<(), String> {
 		Ok(())
 	}
 

@@ -88,8 +88,8 @@ impl<T: PMMRable> Backend<T> for PMMRBackend<T> {
 
 		debug!("***** leaf_set_path (with extension): {:?}", leaf_set_path);
 
-		LeafSet::open(leaf_set_path)
-			.map(|leaf_set| leaf_set.bitmap())
+		LeafSet::read(leaf_set_path)
+			// .map(|leaf_set| leaf_set.into())
 			.map_err(|_| "failed to read leaf_set bitmap".into())
 	}
 
@@ -136,17 +136,20 @@ impl<T: PMMRable> Backend<T> for PMMRBackend<T> {
 		self.hash_file.release();
 	}
 
-	fn snapshot(&self, header: &BlockHeader, bitmap: &Bitmap) -> Result<(), String> {
-		panic!("implement me!");
+	fn snapshot(&self, bitmap: &Bitmap, header: Option<&BlockHeader>) -> Result<(), String> {
+		let mut leaf_set_path = self.data_dir.join(PMMR_LEAF_FILE);
+		debug!("***** leaf_set_path (no extension): {:?}", leaf_set_path);
 
-		// TODO - Take a bitmap and write it out to disk.
-		// Maybe header is optional?
-		// On node shutdown, write a backward compatible leaf_set to disk?
+		// TODO - it would be nice if there was a robust way of converting hash into an extension here.
+		// We currently rely on format which feels brittle.
+		if let Some(header) = header {
+			leaf_set_path.set_extension(format!("bin.{}", header.hash()));
+		}
 
-		// self.leaf_set
-		// 	.snapshot(header)
-		// 	.map_err(|_| format!("Failed to save copy of leaf_set for {}", header.hash()))?;
-		// Ok(())
+		debug!("***** leaf_set_path (with extension): {:?}", leaf_set_path);
+
+		LeafSet::write(&leaf_set_path, bitmap)
+			.map_err(|_| format!("Failed to write leaf_set: {:?}", leaf_set_path))
 	}
 
 	fn dump_stats(&self) {

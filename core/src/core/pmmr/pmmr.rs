@@ -202,8 +202,12 @@ where
 	/// Saves a snapshot of the MMR tagged with the block hash.
 	/// Specifically - snapshots the utxo file as we need this rewound before
 	/// sending the txhashset zip file to another node for fast-sync.
-	pub fn snapshot(&mut self, header: &BlockHeader, bitmap: &Bitmap) -> Result<(), String> {
-		self.backend.snapshot(header, bitmap)?;
+	pub fn snapshot(
+		&mut self,
+		bitmap: &Bitmap,
+		header: Option<&BlockHeader>,
+	) -> Result<(), String> {
+		self.backend.snapshot(bitmap, header)?;
 		Ok(())
 	}
 

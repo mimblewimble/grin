@@ -546,6 +546,10 @@ impl Server {
 
 	/// Stop the server.
 	pub fn stop(self) {
+		// Attempt to snapshot the output and rangeproof leaf_set files.
+		// This will allow our state on disk to be backward compatible with versions that rely on the leaf_set file.
+		let _ = self.chain.snapshot();
+
 		{
 			self.sync_state.update(SyncStatus::Shutdown);
 			self.stop_state.stop();
