@@ -76,23 +76,7 @@ impl LeafSet {
 	/// Calculate the set of pruned positions
 	/// up to and including the cutoff_pos.
 	/// Uses both the leaf_set and the prune_list to determine prunedness.
-	pub fn removed_pre_cutoff(
-		bitmap: &Bitmap,
-		cutoff_pos: u64,
-		rewind_rm_pos: &Bitmap,
-		prune_list: &PruneList,
-	) -> Bitmap {
-		let mut bitmap = bitmap.clone();
-
-		// First remove pos from leaf_set that were
-		// added after the point we are rewinding to.
-		let to_remove = ((cutoff_pos + 1) as u32)..bitmap.maximum().unwrap_or(0);
-		bitmap.remove_range_closed(to_remove);
-
-		// Then add back output pos to the leaf_set
-		// that were removed.
-		bitmap.or_inplace(&rewind_rm_pos);
-
+	pub fn removed_pre_cutoff(cutoff_pos: u64, bitmap: &Bitmap, prune_list: &PruneList) -> Bitmap {
 		// Invert bitmap for the leaf pos and return the resulting bitmap.
 		bitmap
 			.flip(1..(cutoff_pos + 1))

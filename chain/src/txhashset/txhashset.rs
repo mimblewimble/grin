@@ -448,27 +448,19 @@ impl TxHashSet {
 	pub fn compact(
 		&mut self,
 		horizon_header: &BlockHeader,
-		batch: &Batch<'_>,
+		horizon_bitmap: &Bitmap,
 	) -> Result<(), Error> {
 		debug!("txhashset: starting compaction...");
 
-		let head_header = batch.head_header()?;
-
-		let rewind_rm_pos = input_pos_to_rewind(&horizon_header, &head_header, batch)?;
-
 		debug!("txhashset: check_compact output mmr backend...");
-		self.output_pmmr_h.backend.check_compact(
-			&self.utxo_bitmap,
-			horizon_header.output_mmr_size,
-			&rewind_rm_pos,
-		)?;
+		self.output_pmmr_h
+			.backend
+			.check_compact(horizon_bitmap, horizon_header.output_mmr_size)?;
 
 		debug!("txhashset: check_compact rangeproof mmr backend...");
-		self.rproof_pmmr_h.backend.check_compact(
-			&self.utxo_bitmap,
-			horizon_header.output_mmr_size,
-			&rewind_rm_pos,
-		)?;
+		self.rproof_pmmr_h
+			.backend
+			.check_compact(horizon_bitmap, horizon_header.output_mmr_size)?;
 
 		debug!("txhashset: ... compaction finished");
 
@@ -1302,6 +1294,11 @@ impl<'a> Extension<'a> {
 		Ok(())
 	}
 
+	/// Return the current state of the utxo bitmap.
+	pub fn utxo_bitmap(&self) -> Result<Bitmap, Error> {
+		Ok(self.utxo_bitmap.clone())
+	}
+
 	/// Rewinds the MMRs to the provided block, rewinding to the last output pos
 	/// and last kernel pos of that block.
 	pub fn rewind(&mut self, header: &BlockHeader, batch: &Batch<'_>) -> Result<(), Error> {
@@ -1892,26 +1889,26 @@ pub fn clean_txhashset_folder(root_dir: &PathBuf) {
 	}
 }
 
-/// Given a block header to rewind to and the block header at the
-/// head of the current chain state, we need to calculate the positions
-/// of all inputs (spent outputs) we need to "undo" during a rewind.
-/// We do this by leveraging the "block_input_bitmap" cache and OR'ing
-/// the set of bitmaps together for the set of blocks being rewound.
-fn input_pos_to_rewind(
-	block_header: &BlockHeader,
-	head_header: &BlockHeader,
-	batch: &Batch<'_>,
-) -> Result<Bitmap, Error> {
-	let mut bitmap = Bitmap::create();
-	let mut current = head_header.clone();
-	while current.height > block_header.height {
-		if let Ok(block_bitmap) = batch.get_block_input_bitmap(&current.hash()) {
-			bitmap.or_inplace(&block_bitmap);
-		}
-		current = batch.get_previous_header(&current)?;
-	}
-	Ok(bitmap)
-}
+// /// Given a block header to rewind to and the block header at the
+// /// head of the current chain state, we need to calculate the positions
+// /// of all inputs (spent outputs) we need to "undo" during a rewind.
+// /// We do this by leveraging the "block_input_bitmap" cache and OR'ing
+// /// the set of bitmaps together for the set of blocks being rewound.
+// fn input_pos_to_rewind(
+// 	block_header: &BlockHeader,
+// 	head_header: &BlockHeader,
+// 	batch: &Batch<'_>,
+// ) -> Result<Bitmap, Error> {
+// 	let mut bitmap = Bitmap::create();
+// 	let mut current = head_header.clone();
+// 	while current.height > block_header.height {
+// 		if let Ok(block_bitmap) = batch.get_block_input_bitmap(&current.hash()) {
+// 			bitmap.or_inplace(&block_bitmap);
+// 		}
+// 		current = batch.get_previous_header(&current)?;
+// 	}
+// 	Ok(bitmap)
+// }
 
 /// If NRD enabled then enforce NRD relative height rules.
 fn apply_kernel_rules(kernel: &TxKernel, pos: CommitPos, batch: &Batch<'_>) -> Result<(), Error> {

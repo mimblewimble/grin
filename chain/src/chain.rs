@@ -1245,31 +1245,30 @@ impl Chain {
 			}
 		}
 
-		// Take a write lock on the txhashet and start a new writeable db batch.
-		let header_pmmr = self.header_pmmr.read();
+		let head_header = self.head_header()?;
+		let horizon_height = head_header
+			.height
+			.saturating_sub(global::cut_through_horizon().into());
+		let horizon_header = self.get_header_by_height(horizon_height)?;
+
+		let mut header_pmmr = self.header_pmmr.write();
 		let mut txhashset = self.txhashset.write();
-		let batch = self.store.batch()?;
+		let horizon_bitmap =
+			txhashset::extending_readonly(&mut header_pmmr, &mut txhashset, |ext, batch| {
+				pipe::rewind_and_apply_fork(&horizon_header, ext, batch)?;
+				ext.extension.utxo_bitmap()
+			})?;
 
 		// Compact the txhashset itself (rewriting the pruned backend files).
-		{
-			let head_header = batch.head_header()?;
-			let current_height = head_header.height;
-			let horizon_height =
-				current_height.saturating_sub(global::cut_through_horizon().into());
-			let horizon_hash = header_pmmr.get_header_hash_by_height(horizon_height)?;
-			let horizon_header = batch.get_block_header(&horizon_hash)?;
+		txhashset.compact(&horizon_header, &horizon_bitmap)?;
 
-			txhashset.compact(&horizon_header, &batch)?;
-		}
+		// Start new batch here.
+		let batch = self.store.batch()?;
 
 		// If we are not in archival mode remove historical blocks from the db.
 		if !self.archive_mode {
 			self.remove_historical_blocks(&header_pmmr, &batch)?;
 		}
-
-		// TODO - this should be entirely unaffected by compaction. But we should confirm this.
-		// Make sure our output_pos index is consistent with the UTXO set.
-		// txhashset.init_output_pos_index(&header_pmmr, &batch)?;
 
 		// Rebuild our NRD kernel_pos index based on recent kernel history.
 		txhashset.init_recent_kernel_pos_index(&header_pmmr, &batch)?;

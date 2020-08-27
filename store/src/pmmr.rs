@@ -264,17 +264,12 @@ impl<T: PMMRable> PMMRBackend<T> {
 	/// aligned. The block_marker in the db/index for the particular block
 	/// will have a suitable output_pos. This is used to enforce a horizon
 	/// after which the local node should have all the data to allow rewinding.
-	pub fn check_compact(
-		&mut self,
-		bitmap: &Bitmap,
-		cutoff_pos: u64,
-		rewind_rm_pos: &Bitmap,
-	) -> io::Result<bool> {
+	pub fn check_compact(&mut self, horizon_bitmap: &Bitmap, cutoff_pos: u64) -> io::Result<bool> {
 		assert!(self.prunable, "Trying to compact a non-prunable PMMR");
 
 		// Calculate the sets of leaf positions and node positions to remove based
 		// on the cutoff_pos provided.
-		let (leaves_removed, pos_to_rm) = self.pos_to_rm(bitmap, cutoff_pos, rewind_rm_pos);
+		let (leaves_removed, pos_to_rm) = self.pos_to_rm(horizon_bitmap, cutoff_pos);
 
 		// Save compact copy of the hash file, skipping removed data.
 		{
@@ -322,16 +317,10 @@ impl<T: PMMRable> PMMRBackend<T> {
 		clean_files_by_prefix(data_dir, &pattern, REWIND_FILE_CLEANUP_DURATION_SECONDS)
 	}
 
-	fn pos_to_rm(
-		&self,
-		bitmap: &Bitmap,
-		cutoff_pos: u64,
-		rewind_rm_pos: &Bitmap,
-	) -> (Bitmap, Bitmap) {
+	fn pos_to_rm(&self, bitmap: &Bitmap, cutoff_pos: u64) -> (Bitmap, Bitmap) {
 		let mut expanded = Bitmap::create();
 
-		let leaf_pos_to_rm =
-			LeafSet::removed_pre_cutoff(bitmap, cutoff_pos, rewind_rm_pos, &self.prune_list);
+		let leaf_pos_to_rm = LeafSet::removed_pre_cutoff(cutoff_pos, bitmap, &self.prune_list);
 
 		for x in leaf_pos_to_rm.iter() {
 			expanded.add(x);
