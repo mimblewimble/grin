@@ -258,9 +258,13 @@ impl TxHashSet {
 		self.output_pmmr_h.get_leaf_set(header)
 	}
 
+	pub fn init_utxo_bitmap(&mut self, bitmap: &Bitmap) {
+		self.utxo_bitmap = bitmap.clone()
+	}
+
 	/// TODO - cleanup.
-	pub fn init_accumulator(&mut self, bitmap: &Bitmap) -> Result<(), Error> {
-		self.bitmap_accumulator = TxHashSet::bitmap_accumulator(bitmap)?;
+	pub fn init_accumulator(&mut self) -> Result<(), Error> {
+		self.bitmap_accumulator = TxHashSet::bitmap_accumulator(&self.utxo_bitmap)?;
 		Ok(())
 	}
 
@@ -567,15 +571,13 @@ impl TxHashSet {
 		&self,
 		header_pmmr: &PMMRHandle<BlockHeader>,
 		header: &BlockHeader,
-		bitmap: &Bitmap,
 		batch: &Batch<'_>,
 	) -> Result<(), Error> {
-		debug!("init_output_pos_index: bitmap: {}", bitmap.cardinality());
 		debug!(
-			"init_output_pos_index: output last_pos: {}",
-			self.output_pmmr_h.last_pos
+			"init_output_pos_index: bitmap: {}, last_pos: {}",
+			self.utxo_bitmap.cardinality(),
+			self.output_pmmr_h.last_pos,
 		);
-
 		let now = Instant::now();
 
 		let output_pmmr =
@@ -589,7 +591,7 @@ impl TxHashSet {
 		}
 
 		let mut outputs_pos: Vec<(Commitment, u64)> = vec![];
-		for pos in bitmap.iter() {
+		for pos in self.utxo_bitmap.iter() {
 			if let Some(out) = output_pmmr.get_data(pos as u64) {
 				outputs_pos.push((out.commit, pos as u64));
 			}

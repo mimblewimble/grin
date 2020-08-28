@@ -1081,13 +1081,9 @@ impl Chain {
 
 		// Rebuild our output_pos index and our accumulator based on the "leaf_set" provided to us.
 		let leaf_set_bitmap = txhashset.get_leaf_set(&header)?;
-
-		debug!("***** about to init the accumulator");
-		txhashset.init_accumulator(&leaf_set_bitmap)?;
-
-		// Rebuild our output_pos index in the db based on the provided "leaf_set".
-		debug!("***** about to rebuild the output_pos index");
-		txhashset.init_output_pos_index(&header_pmmr, &header, &leaf_set_bitmap, &batch)?;
+		txhashset.init_utxo_bitmap(&leaf_set_bitmap);
+		txhashset.init_accumulator()?;
+		txhashset.init_output_pos_index(&header_pmmr, &header, &batch)?;
 
 		txhashset::extending(
 			&mut header_pmmr,
