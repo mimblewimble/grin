@@ -34,12 +34,7 @@ use crate::types::{
 	BlockStatus, ChainAdapter, CommitPos, NoStatus, Options, Tip, TxHashsetWriteStatus,
 };
 use crate::util::secp::pedersen::{Commitment, RangeProof};
-<<<<<<< HEAD
 use crate::{util::RwLock, ChainStore};
-=======
-use crate::util::RwLock;
-use croaring::Bitmap;
->>>>>>> rewindable utxo bitmap
 use grin_store::Error::NotFoundErr;
 use std::collections::HashMap;
 use std::fs::{self, File};

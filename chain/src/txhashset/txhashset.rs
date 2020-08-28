@@ -705,6 +705,7 @@ where
 	res
 }
 
+/// Create a new rewindable utxo bitmap based on current state.
 pub fn rewindable_utxo_bitmap<F, T>(trees: &TxHashSet, inner: F) -> Result<T, Error>
 where
 	F: FnOnce(&mut RewindableUtxoBitmap, &Batch<'_>) -> Result<T, Error>,

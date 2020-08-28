@@ -64,7 +64,10 @@ where
 	)
 	.unwrap();
 
-	genesis::genesis_dev().with_reward(reward.0, reward.1)
+	let mut block = genesis::genesis_dev().with_reward(reward.0, reward.1);
+	block.header.output_mmr_size = 1;
+	block.header.kernel_mmr_size = 1;
+	block
 }
 
 /// Mine a chain of specified length to assist with automated tests.
