@@ -42,7 +42,6 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
-use txhashset::RewindableUtxoBitmap;
 
 /// Orphan pool size is limited by MAX_ORPHAN_SIZE
 pub const MAX_ORPHAN_SIZE: usize = 200;
@@ -1650,7 +1649,7 @@ fn setup_head(
 						// Do a full (and slow) validation of the txhashset extension
 						// to calculate the utxo_sum and kernel_sum at this block height.
 						let (utxo_sum, kernel_sum) =
-							extension.validate_kernel_sums(&genesis.header, &header, batch)?;
+							extension.validate_kernel_sums(&genesis.header, &header)?;
 
 						// Save the block_sums to the db for use later.
 						batch.save_block_sums(

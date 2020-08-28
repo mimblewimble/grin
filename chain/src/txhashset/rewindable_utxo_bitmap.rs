@@ -52,7 +52,6 @@ impl RewindableUtxoBitmap {
 		batch: &Batch<'_>,
 	) -> Result<Vec<CommitPos>, Error> {
 		let prev = batch.get_previous_header(&header)?;
-
 		// The spent index allows us to conveniently "unspend" everything in a block.
 		let spent = batch.get_spent_index(&header.hash())?;
 		let spent_bitmap: Bitmap = spent.iter().map(|x| x.pos as u32).collect();
@@ -61,9 +60,9 @@ impl RewindableUtxoBitmap {
 		self.bitmap.remove_range_closed(
 			((prev.output_mmr_size + 1) as u32)..self.bitmap.maximum().unwrap_or(0),
 		);
-		// Add back everything spent by this block.
-		self.bitmap.and_inplace(&spent_bitmap);
 
+		// Add back everything spent by this block.
+		self.bitmap.or_inplace(&spent_bitmap);
 		Ok(spent)
 	}
 }

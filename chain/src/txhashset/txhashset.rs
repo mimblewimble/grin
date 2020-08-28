@@ -1160,7 +1160,6 @@ impl<'a> Extension<'a> {
 			.utxo_view(header_ext)
 			.validate_inputs(&b.inputs(), batch)?;
 		for (out, pos) in &spent {
-			// self.apply_input(out.commitment(), *pos)?;
 			self.utxo_bitmap.remove(pos.pos as u32);
 			spent_pos.push(pos.pos);
 			batch.delete_output_pos_height(&out.commitment())?;
@@ -1527,14 +1526,11 @@ impl<'a> Extension<'a> {
 		&self,
 		genesis: &BlockHeader,
 		header: &BlockHeader,
-		batch: &Batch<'_>,
 	) -> Result<(Commitment, Commitment), Error> {
 		let now = Instant::now();
-
-		let utxo_pos: Vec<_> = batch.output_pos_iter()?.map(|(_, pos)| pos.pos).collect();
 		let mut outputs = vec![];
-		for pos in utxo_pos {
-			if let Some(out) = self.output_pmmr.get_data(pos) {
+		for pos in self.utxo_bitmap.iter() {
+			if let Some(out) = self.output_pmmr.get_data(pos as u64) {
 				outputs.push(out.commit);
 			}
 		}
@@ -1584,7 +1580,8 @@ impl<'a> Extension<'a> {
 
 		// The real magicking happens here. Sum of kernel excesses should equal
 		// sum of unspent outputs minus total supply.
-		let (output_sum, kernel_sum) = self.validate_kernel_sums(genesis, header, batch)?;
+		let db_pos: Vec<_> = batch.output_pos_iter()?.map(|(_, pos)| pos.pos).collect();
+		let (output_sum, kernel_sum) = self.validate_kernel_sums(genesis, header)?;
 
 		// These are expensive verification step (skipped for "fast validation").
 		if !fast_validation {
@@ -1892,27 +1889,6 @@ pub fn clean_txhashset_folder(root_dir: &PathBuf) {
 		}
 	}
 }
-
-// /// Given a block header to rewind to and the block header at the
-// /// head of the current chain state, we need to calculate the positions
-// /// of all inputs (spent outputs) we need to "undo" during a rewind.
-// /// We do this by leveraging the "block_input_bitmap" cache and OR'ing
-// /// the set of bitmaps together for the set of blocks being rewound.
-// fn input_pos_to_rewind(
-// 	block_header: &BlockHeader,
-// 	head_header: &BlockHeader,
-// 	batch: &Batch<'_>,
-// ) -> Result<Bitmap, Error> {
-// 	let mut bitmap = Bitmap::create();
-// 	let mut current = head_header.clone();
-// 	while current.height > block_header.height {
-// 		if let Ok(block_bitmap) = batch.get_block_input_bitmap(&current.hash()) {
-// 			bitmap.or_inplace(&block_bitmap);
-// 		}
-// 		current = batch.get_previous_header(&current)?;
-// 	}
-// 	Ok(bitmap)
-// }
 
 /// If NRD enabled then enforce NRD relative height rules.
 fn apply_kernel_rules(kernel: &TxKernel, pos: CommitPos, batch: &Batch<'_>) -> Result<(), Error> {

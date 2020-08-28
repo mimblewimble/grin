@@ -92,10 +92,10 @@ where
 	assert!(!temp_suffix.is_empty());
 
 	let original = path.as_ref();
-	let mut _original = original.as_os_str().to_os_string();
-	_original.push(temp_suffix);
+	let mut original = original.as_os_str().to_os_string();
+	original.push(temp_suffix);
 	// Write temporary file
-	let temp_path = Path::new(&_original);
+	let temp_path = Path::new(&original);
 	if temp_path.exists() {
 		remove_file(&temp_path)?;
 	}
