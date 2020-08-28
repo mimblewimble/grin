@@ -34,7 +34,12 @@ use crate::types::{
 	BlockStatus, ChainAdapter, CommitPos, NoStatus, Options, Tip, TxHashsetWriteStatus,
 };
 use crate::util::secp::pedersen::{Commitment, RangeProof};
+<<<<<<< HEAD
 use crate::{util::RwLock, ChainStore};
+=======
+use crate::util::RwLock;
+use croaring::Bitmap;
+>>>>>>> rewindable utxo bitmap
 use grin_store::Error::NotFoundErr;
 use std::collections::HashMap;
 use std::fs::{self, File};
@@ -42,6 +47,7 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
+use txhashset::RewindableUtxoBitmap;
 
 /// Orphan pool size is limited by MAX_ORPHAN_SIZE
 pub const MAX_ORPHAN_SIZE: usize = 200;
@@ -595,12 +601,8 @@ impl Chain {
 	}
 
 	/// Retrieves an unspent output using its PMMR position
-	pub fn get_unspent_output_at(&self, pos: u64) -> Result<Output, Error> {
-		let header_pmmr = self.header_pmmr.read();
-		let txhashset = self.txhashset.read();
-		txhashset::utxo_view(&header_pmmr, &txhashset, |utxo, _| {
-			utxo.get_unspent_output_at(pos)
-		})
+	pub fn get_output_at_pos(&self, pos: u64) -> Result<Output, Error> {
+		self.txhashset.read().get_output_at_pos(pos)
 	}
 
 	/// Validate the tx against the current UTXO set and recent kernels (NRD relative lock heights).
@@ -1199,24 +1201,26 @@ impl Chain {
 			return Ok(());
 		}
 
-		let mut count = 0;
 		let tail_hash = header_pmmr.get_header_hash_by_height(head.height - horizon)?;
 		let tail = batch.get_block_header(&tail_hash)?;
 
 		// Remove old blocks (including short lived fork blocks) which height < tail.height
-		// here b is a block
+		let mut hashes = vec![];
 		for (_, b) in batch.blocks_iter()? {
 			if b.header.height < tail.height {
-				let _ = batch.delete_block(&b.hash());
-				count += 1;
+				hashes.push(b.hash());
 			}
+		}
+		for h in &hashes {
+			let _ = batch.delete_block(h);
 		}
 
 		batch.save_body_tail(&Tip::from_header(&tail))?;
 
 		debug!(
 			"remove_historical_blocks: removed {} blocks. tail height: {}",
-			count, tail.height
+			hashes.len(),
+			tail.height
 		);
 
 		Ok(())
@@ -1251,13 +1255,11 @@ impl Chain {
 			.saturating_sub(global::cut_through_horizon().into());
 		let horizon_header = self.get_header_by_height(horizon_height)?;
 
-		let mut header_pmmr = self.header_pmmr.write();
+		let header_pmmr = self.header_pmmr.read();
 		let mut txhashset = self.txhashset.write();
-		let horizon_bitmap =
-			txhashset::extending_readonly(&mut header_pmmr, &mut txhashset, |ext, batch| {
-				pipe::rewind_and_apply_fork(&horizon_header, ext, batch)?;
-				ext.extension.utxo_bitmap()
-			})?;
+		let horizon_bitmap = txhashset::rewindable_utxo_bitmap(&mut txhashset, |bitmap, batch| {
+			bitmap.rewind(&horizon_header, batch)
+		})?;
 
 		// Compact the txhashset itself (rewriting the pruned backend files).
 		txhashset.compact(&horizon_header, &horizon_bitmap)?;

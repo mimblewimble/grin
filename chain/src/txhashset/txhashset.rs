@@ -27,7 +27,7 @@ use crate::error::{Error, ErrorKind};
 use crate::linked_list::{ListIndex, PruneableListIndex, RewindableListIndex};
 use crate::store::{self, Batch, ChainStore};
 use crate::txhashset::bitmap_accumulator::BitmapAccumulator;
-use crate::txhashset::{RewindableKernelView, UTXOView};
+use crate::txhashset::{RewindableKernelView, RewindableUtxoBitmap, UTXOView};
 use crate::types::{CommitPos, OutputRoots, Tip, TxHashSetRoots, TxHashsetWriteStatus};
 use crate::util::secp::pedersen::{Commitment, RangeProof};
 use crate::util::{file, secp_static, zip};
@@ -295,7 +295,7 @@ impl TxHashSet {
 	/// Backward compatible snapshot of the leaf_set file for both output and rangeproof MMRs.
 	/// Called during clean node shutdown.
 	pub fn snapshot(&mut self) -> Result<(), Error> {
-		let mut output_pmmr: PMMR<'_, Output, _> =
+		let mut output_pmmr =
 			PMMR::at(&mut self.output_pmmr_h.backend, self.output_pmmr_h.last_pos);
 		let mut rproof_pmmr =
 			PMMR::at(&mut self.rproof_pmmr_h.backend, self.rproof_pmmr_h.last_pos);
@@ -306,6 +306,19 @@ impl TxHashSet {
 			.snapshot(&self.utxo_bitmap, None)
 			.map_err(ErrorKind::Other)?;
 		Ok(())
+	}
+
+	/// Retrieves full output from data in output and rangeproof MMRs.
+	pub fn get_output_at_pos(&self, pos: u64) -> Result<Output, Error> {
+		let output_pmmr =
+			ReadonlyPMMR::at(&self.output_pmmr_h.backend, self.output_pmmr_h.last_pos);
+		let rproof_pmmr =
+			ReadonlyPMMR::at(&self.rproof_pmmr_h.backend, self.rproof_pmmr_h.last_pos);
+		if let (Some(out), Some(proof)) = (output_pmmr.get_data(pos), rproof_pmmr.get_data(pos)) {
+			Ok(out.into_output(proof))
+		} else {
+			Err(ErrorKind::OutputNotFound.into())
+		}
 	}
 
 	/// Check if an output is unspent.
@@ -686,10 +699,20 @@ where
 		// Create a new batch here to pass into the utxo_view.
 		// Discard it (rollback) after we finish with the utxo_view.
 		let batch = trees.commit_index.batch()?;
-		let utxo = UTXOView::new(header_pmmr, output_pmmr, rproof_pmmr);
+		let utxo = UTXOView::new(header_pmmr, output_pmmr);
 		res = inner(&utxo, &batch);
 	}
 	res
+}
+
+pub fn rewindable_utxo_bitmap<F, T>(trees: &TxHashSet, inner: F) -> Result<T, Error>
+where
+	F: FnOnce(&mut RewindableUtxoBitmap, &Batch<'_>) -> Result<T, Error>,
+{
+	let batch = trees.commit_index.batch()?;
+	let head = batch.head()?;
+	let mut bitmap = RewindableUtxoBitmap::new(&trees.utxo_bitmap, head);
+	inner(&mut bitmap, &batch)
 }
 
 /// Rewindable (but still readonly) view on the kernel MMR.
@@ -1095,7 +1118,6 @@ impl<'a> Extension<'a> {
 		UTXOView::new(
 			header_ext.pmmr.readonly_pmmr(),
 			self.output_pmmr.readonly_pmmr(),
-			self.rproof_pmmr.readonly_pmmr(),
 		)
 	}
 
@@ -1335,11 +1357,6 @@ impl<'a> Extension<'a> {
 			self.apply_to_bitmap_accumulator(&affected_pos)?;
 		}
 
-		error!("***** roots after rewind: {:?}", self.roots());
-		error!(
-			"***** roots from header: {:?}, {:?}, {:?}",
-			header.output_root, header.range_proof_root, header.kernel_root
-		);
 		// Update our head to reflect the header we rewound to.
 		self.head = Tip::from_header(header);
 
@@ -1353,19 +1370,9 @@ impl<'a> Extension<'a> {
 		let header = &block.header;
 		let prev_header = batch.get_previous_header(&header)?;
 
-		// The spent index allows us to conveniently "unspend" everything in a block.
-		let spent = batch.get_spent_index(&header.hash());
-
-		let spent_bitmap: Bitmap = if let Ok(ref spent) = spent {
-			spent.iter().map(|x| x.pos as u32).collect()
-		} else {
-			warn!(
-				"rewind_single_block: fallback to legacy input bitmap for block {} at {}",
-				header.hash(),
-				header.height
-			);
-			batch.get_block_input_bitmap(&header.hash())?
-		};
+		let mut rewindable_bitmap = RewindableUtxoBitmap::new(&self.utxo_bitmap, self.head);
+		let spent = rewindable_bitmap.rewind_single_block(&header, batch)?;
+		self.utxo_bitmap = rewindable_bitmap.into();
 
 		if header.height == 0 {
 			self.rewind_mmrs_to_pos(0, 0)?;
@@ -1374,16 +1381,10 @@ impl<'a> Extension<'a> {
 			self.rewind_mmrs_to_pos(prev.output_mmr_size, prev.kernel_mmr_size)?;
 		}
 
-		// TODO - confirm this works...
-		self.utxo_bitmap.remove_range_closed(
-			((self.output_pmmr.last_pos + 1) as u32)..self.utxo_bitmap.maximum().unwrap_or(0),
-		);
-		self.utxo_bitmap.and_inplace(&spent_bitmap); //add_many(spent_pos.iter().map(|x| *x as u32).collect::<Vec<_>>().as_slice());
-
 		// Update our BitmapAccumulator based on affected outputs.
 		// We want to "unspend" every rewound spent output.
 		// Treat last_pos as an affected output to ensure we rebuild far enough back.
-		let mut affected_pos: Vec<u64> = spent_bitmap.to_vec().iter().map(|x| *x as u64).collect();
+		let mut affected_pos: Vec<u64> = spent.iter().map(|x| x.pos).collect();
 		affected_pos.push(self.output_pmmr.last_pos);
 
 		// Remove any entries from the output_pos created by the block being rewound.

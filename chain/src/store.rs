@@ -24,7 +24,7 @@ use crate::types::{CommitPos, Tip};
 use crate::util::secp::pedersen::Commitment;
 use croaring::Bitmap;
 use grin_store as store;
-use grin_store::{option_to_not_found, to_key, BatchSerIterator, Error, SerIterator};
+use grin_store::{option_to_not_found, to_key, BatchSerIterator, Error};
 use std::convert::TryInto;
 use std::sync::Arc;
 
