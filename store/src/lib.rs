@@ -91,11 +91,11 @@ where
 	let temp_suffix = temp_suffix.as_ref();
 	assert!(!temp_suffix.is_empty());
 
-	let original = path.as_ref();
-	let mut original = original.as_os_str().to_os_string();
-	original.push(temp_suffix);
+	let mut temp = path.as_ref().as_os_str().to_os_string();
+	temp.push(temp_suffix);
+
 	// Write temporary file
-	let temp_path = Path::new(&original);
+	let temp_path = Path::new(&temp);
 	if temp_path.exists() {
 		remove_file(&temp_path)?;
 	}
@@ -108,7 +108,7 @@ where
 	// force an fsync on the temp file to ensure bytes are on disk
 	temp_file.sync_all()?;
 
-	rename(&temp_path, &original)?;
+	rename(&temp_path, &path)?;
 
 	Ok(())
 }
