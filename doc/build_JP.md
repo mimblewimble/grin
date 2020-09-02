@@ -102,7 +102,7 @@ grin client --help
 ```sh
 docker build -t grin -f etc/Dockerfile .
 ```
-floonetを使用する場合、代わりに`etc/Dockerfile.floonet`を指定。
+testnetを使用する場合、代わりに`etc/Dockerfile.testnet`を指定。
 
 コンテナ内で実行する場合、grinのキャッシュをバインドマウントすることも可能。
 

@@ -12,17 +12,17 @@
 // limitations under the License.
 
 use grin_core::consensus::{
-	secondary_pow_ratio, valid_header_version, FLOONET_FIRST_HARD_FORK, FLOONET_SECOND_HARD_FORK,
-	FLOONET_THIRD_HARD_FORK, HARD_FORK_INTERVAL,
+	secondary_pow_ratio, valid_header_version, HARD_FORK_INTERVAL, TESTNET_FIRST_HARD_FORK,
+	TESTNET_SECOND_HARD_FORK, TESTNET_THIRD_HARD_FORK,
 };
 use grin_core::core::HeaderVersion;
 use grin_core::global;
 
 #[test]
 fn test_secondary_pow_ratio() {
-	// Tests for Floonet chain type (covers pre and post hardfork).
-	global::set_local_chain_type(global::ChainTypes::Floonet);
-	assert_eq!(global::is_floonet(), true);
+	// Tests for Testnet chain type (covers pre and post hardfork).
+	global::set_local_chain_type(global::ChainTypes::Testnet);
+	assert_eq!(global::is_testnet(), true);
 
 	assert_eq!(secondary_pow_ratio(1), 90);
 	assert_eq!(secondary_pow_ratio(89), 90);
@@ -63,69 +63,69 @@ fn test_secondary_pow_ratio() {
 
 #[test]
 fn hard_forks() {
-	global::set_local_chain_type(global::ChainTypes::Floonet);
-	assert_eq!(global::is_floonet(), true);
+	global::set_local_chain_type(global::ChainTypes::Testnet);
+	assert_eq!(global::is_testnet(), true);
 	assert!(valid_header_version(0, HeaderVersion(1)));
 	assert!(valid_header_version(10, HeaderVersion(1)));
 	assert!(!valid_header_version(10, HeaderVersion(2)));
 	assert!(valid_header_version(
-		FLOONET_FIRST_HARD_FORK - 1,
+		TESTNET_FIRST_HARD_FORK - 1,
 		HeaderVersion(1)
 	));
 	assert!(valid_header_version(
-		FLOONET_FIRST_HARD_FORK,
+		TESTNET_FIRST_HARD_FORK,
 		HeaderVersion(2)
 	));
 	assert!(valid_header_version(
-		FLOONET_FIRST_HARD_FORK + 1,
+		TESTNET_FIRST_HARD_FORK + 1,
 		HeaderVersion(2)
 	));
 	assert!(!valid_header_version(
-		FLOONET_FIRST_HARD_FORK,
+		TESTNET_FIRST_HARD_FORK,
 		HeaderVersion(1)
 	));
 	assert!(valid_header_version(
-		FLOONET_SECOND_HARD_FORK - 1,
+		TESTNET_SECOND_HARD_FORK - 1,
 		HeaderVersion(2)
 	));
 	assert!(valid_header_version(
-		FLOONET_SECOND_HARD_FORK,
+		TESTNET_SECOND_HARD_FORK,
 		HeaderVersion(3)
 	));
 	assert!(valid_header_version(
-		FLOONET_SECOND_HARD_FORK + 1,
+		TESTNET_SECOND_HARD_FORK + 1,
 		HeaderVersion(3)
 	));
 	assert!(!valid_header_version(
-		FLOONET_SECOND_HARD_FORK,
+		TESTNET_SECOND_HARD_FORK,
 		HeaderVersion(2)
 	));
 	assert!(!valid_header_version(
-		FLOONET_SECOND_HARD_FORK,
+		TESTNET_SECOND_HARD_FORK,
 		HeaderVersion(1)
 	));
 	assert!(valid_header_version(
-		FLOONET_THIRD_HARD_FORK - 1,
+		TESTNET_THIRD_HARD_FORK - 1,
 		HeaderVersion(3)
 	));
 	assert!(valid_header_version(
-		FLOONET_THIRD_HARD_FORK,
+		TESTNET_THIRD_HARD_FORK,
 		HeaderVersion(4)
 	));
 	assert!(valid_header_version(
-		FLOONET_THIRD_HARD_FORK + 1,
+		TESTNET_THIRD_HARD_FORK + 1,
 		HeaderVersion(4)
 	));
 	assert!(!valid_header_version(
-		FLOONET_THIRD_HARD_FORK,
+		TESTNET_THIRD_HARD_FORK,
 		HeaderVersion(3)
 	));
 	assert!(!valid_header_version(
-		FLOONET_THIRD_HARD_FORK,
+		TESTNET_THIRD_HARD_FORK,
 		HeaderVersion(2)
 	));
 	assert!(!valid_header_version(
-		FLOONET_THIRD_HARD_FORK,
+		TESTNET_THIRD_HARD_FORK,
 		HeaderVersion(1)
 	));
 

@@ -112,18 +112,18 @@ pub enum ChainTypes {
 	/// For User testing
 	UserTesting,
 	/// Protocol testing network
-	Floonet,
+	Testnet,
 	/// Main production network
 	Mainnet,
 }
 
 impl ChainTypes {
-	/// Short name representing the chain type ("floo", "main", etc.)
+	/// Short name representing the chain type ("test", "main", etc.)
 	pub fn shortname(&self) -> String {
 		match *self {
 			ChainTypes::AutomatedTesting => "auto".to_owned(),
 			ChainTypes::UserTesting => "user".to_owned(),
-			ChainTypes::Floonet => "floo".to_owned(),
+			ChainTypes::Testnet => "test".to_owned(),
 			ChainTypes::Mainnet => "main".to_owned(),
 		}
 	}
@@ -148,7 +148,7 @@ lazy_static! {
 }
 
 thread_local! {
-	/// Mainnet|Floonet|UserTesting|AutomatedTesting
+	/// Mainnet|Testnet|UserTesting|AutomatedTesting
 	pub static CHAIN_TYPE: Cell<Option<ChainTypes>> = Cell::new(None);
 
 	/// Local feature flag for NRD kernel support.
@@ -235,18 +235,18 @@ pub fn create_pow_context<T>(
 		}
 		ChainTypes::Mainnet => new_cuckaroo_ctx(edge_bits, proof_size),
 
-		// Same for Floonet
-		ChainTypes::Floonet if edge_bits > 29 => new_cuckatoo_ctx(edge_bits, proof_size, max_sols),
-		ChainTypes::Floonet if valid_header_version(height, HeaderVersion(4)) => {
+		// Same for Testnet
+		ChainTypes::Testnet if edge_bits > 29 => new_cuckatoo_ctx(edge_bits, proof_size, max_sols),
+		ChainTypes::Testnet if valid_header_version(height, HeaderVersion(4)) => {
 			new_cuckarooz_ctx(edge_bits, proof_size)
 		}
-		ChainTypes::Floonet if valid_header_version(height, HeaderVersion(3)) => {
+		ChainTypes::Testnet if valid_header_version(height, HeaderVersion(3)) => {
 			new_cuckaroom_ctx(edge_bits, proof_size)
 		}
-		ChainTypes::Floonet if valid_header_version(height, HeaderVersion(2)) => {
+		ChainTypes::Testnet if valid_header_version(height, HeaderVersion(2)) => {
 			new_cuckarood_ctx(edge_bits, proof_size)
 		}
-		ChainTypes::Floonet => new_cuckaroo_ctx(edge_bits, proof_size),
+		ChainTypes::Testnet => new_cuckaroo_ctx(edge_bits, proof_size),
 
 		// Everything else is Cuckatoo only
 		_ => new_cuckatoo_ctx(edge_bits, proof_size, max_sols),
@@ -296,7 +296,7 @@ pub fn initial_block_difficulty() -> u64 {
 	match get_chain_type() {
 		ChainTypes::AutomatedTesting => TESTING_INITIAL_DIFFICULTY,
 		ChainTypes::UserTesting => TESTING_INITIAL_DIFFICULTY,
-		ChainTypes::Floonet => INITIAL_DIFFICULTY,
+		ChainTypes::Testnet => INITIAL_DIFFICULTY,
 		ChainTypes::Mainnet => INITIAL_DIFFICULTY,
 	}
 }
@@ -305,7 +305,7 @@ pub fn initial_graph_weight() -> u32 {
 	match get_chain_type() {
 		ChainTypes::AutomatedTesting => TESTING_INITIAL_GRAPH_WEIGHT,
 		ChainTypes::UserTesting => TESTING_INITIAL_GRAPH_WEIGHT,
-		ChainTypes::Floonet => graph_weight(0, SECOND_POW_EDGE_BITS) as u32,
+		ChainTypes::Testnet => graph_weight(0, SECOND_POW_EDGE_BITS) as u32,
 		ChainTypes::Mainnet => graph_weight(0, SECOND_POW_EDGE_BITS) as u32,
 	}
 }
@@ -315,7 +315,7 @@ pub fn max_block_weight() -> u64 {
 	match get_chain_type() {
 		ChainTypes::AutomatedTesting => TESTING_MAX_BLOCK_WEIGHT,
 		ChainTypes::UserTesting => TESTING_MAX_BLOCK_WEIGHT,
-		ChainTypes::Floonet => MAX_BLOCK_WEIGHT,
+		ChainTypes::Testnet => MAX_BLOCK_WEIGHT,
 		ChainTypes::Mainnet => MAX_BLOCK_WEIGHT,
 	}
 }
@@ -357,19 +357,19 @@ pub fn txhashset_archive_interval() -> u64 {
 /// Production defined as a live public network, testnet[n] or mainnet.
 pub fn is_production_mode() -> bool {
 	match get_chain_type() {
-		ChainTypes::Floonet => true,
+		ChainTypes::Testnet => true,
 		ChainTypes::Mainnet => true,
 		_ => false,
 	}
 }
 
-/// Are we in floonet?
+/// Are we in testnet?
 /// Note: We do not have a corresponding is_mainnet() as we want any tests to be as close
 /// as possible to "mainnet" configuration as possible.
 /// We want to avoid missing any mainnet only code paths.
-pub fn is_floonet() -> bool {
+pub fn is_testnet() -> bool {
 	match get_chain_type() {
-		ChainTypes::Floonet => true,
+		ChainTypes::Testnet => true,
 		_ => false,
 	}
 }

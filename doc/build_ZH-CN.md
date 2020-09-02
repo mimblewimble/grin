@@ -100,7 +100,7 @@ grin client --help
 ```sh
 docker build -t grin -f etc/Dockerfile .
 ```
-对于 floonet, 使用 `etc/Dockerfile.floonet` 代替
+对于 testnet, 使用 `etc/Dockerfile.testnet` 代替
 
 您可以绑定安装您的 grin 缓存以在容器中运行。
 

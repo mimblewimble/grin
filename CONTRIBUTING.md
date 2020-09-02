@@ -17,7 +17,7 @@ Since mainnet has been released, the bar for having PRs accepted has been raised
 * Explains whether/how the change is consensus breaking or breaks existing client functionality
 * Contains unit tests exercising new/changed functionality
 * Fully considers the potential impact of the change on other parts of the system
-* Describes how you've tested the change (e.g. against Floonet, etc)
+* Describes how you've tested the change (e.g. against Testnet, etc)
 * Updates any documentation that's affected by the PR
 
 If submitting a PR consisting of documentation changes only, please try to ensure that the change is significantly more substantial than one or two lines. For example, working through an install document and making changes and updates throughout as you find issues is worth a PR. For typos and other small changes, either contact one of the developers, or if you think it's a significant enough error to cause problems for other users, please feel free to open an issue.

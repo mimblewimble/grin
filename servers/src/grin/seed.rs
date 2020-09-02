@@ -41,7 +41,7 @@ const MAINNET_DNS_SEEDS: &[&str] = &[
 	"grinseed.yeastplume.org",         // yeastplume@protonmail.com
 	"mainnet-seed.grinnode.live",      // info@grinnode.live
 ];
-const FLOONET_DNS_SEEDS: &[&str] = &[
+const TESTNET_DNS_SEEDS: &[&str] = &[
 	"floonet.seed.grin.icu",           // gary.peverell@protonmail.com
 	"floonet.seed.713.mw",             // jasper@713.mw
 	"floonet.seed.grin.lesceller.com", // q.lesceller@gmail.com
@@ -362,8 +362,8 @@ fn listen_for_addrs(
 
 pub fn default_dns_seeds() -> Box<dyn Fn() -> Vec<PeerAddr> + Send> {
 	Box::new(|| {
-		let net_seeds = if global::is_floonet() {
-			FLOONET_DNS_SEEDS
+		let net_seeds = if global::is_testnet() {
+			TESTNET_DNS_SEEDS
 		} else {
 			MAINNET_DNS_SEEDS
 		};
@@ -372,7 +372,7 @@ pub fn default_dns_seeds() -> Box<dyn Fn() -> Vec<PeerAddr> + Send> {
 				.iter()
 				.map(|s| {
 					s.to_string()
-						+ if global::is_floonet() {
+						+ if global::is_testnet() {
 							":13414"
 						} else {
 							":3414"

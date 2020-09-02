@@ -188,7 +188,7 @@ impl Server {
 		let genesis = match config.chain_type {
 			global::ChainTypes::AutomatedTesting => pow::mine_genesis_block().unwrap(),
 			global::ChainTypes::UserTesting => pow::mine_genesis_block().unwrap(),
-			global::ChainTypes::Floonet => genesis::genesis_floo(),
+			global::ChainTypes::Testnet => genesis::genesis_test(),
 			global::ChainTypes::Mainnet => genesis::genesis_main(),
 		};
 

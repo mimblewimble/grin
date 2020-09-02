@@ -235,9 +235,9 @@ impl std::fmt::Display for PeerAddr {
 
 impl PeerAddr {
 	/// Convenient way of constructing a new peer_addr from an ip_addr
-	/// defaults to port 3414 on mainnet and 13414 on floonet.
+	/// defaults to port 3414 on mainnet and 13414 on testnet.
 	pub fn from_ip(addr: IpAddr) -> PeerAddr {
-		let port = if global::is_floonet() { 13414 } else { 3414 };
+		let port = if global::is_testnet() { 13414 } else { 3414 };
 		PeerAddr(SocketAddr::new(addr, port))
 	}
 

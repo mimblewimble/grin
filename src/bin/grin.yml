@@ -3,9 +3,9 @@ about: Lightweight implementation of the Mimblewimble protocol.
 author: The Grin Team
 
 args:
-  - floonet:
-      help: Run grin against the Floonet (as opposed to mainnet)
-      long: floonet
+  - testnet:
+      help: Run grin against the Testnet (as opposed to mainnet)
+      long: testnet
       takes_value: false
   - usernet:
       help: Run grin as a local-only network. Doesn't block peer connections but will not connect to any peer or seed
