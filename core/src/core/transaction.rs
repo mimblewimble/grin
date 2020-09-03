@@ -458,6 +458,8 @@ pub struct TxKernel {
 impl DefaultHashable for TxKernel {}
 hashable_ord!(TxKernel);
 
+/// We want to be able to put kernels in a hashset in the pool.
+/// So we need to be able to hash them.
 impl ::std::hash::Hash for TxKernel {
 	fn hash<H: ::std::hash::Hasher>(&self, state: &mut H) {
 		let mut vec = Vec::new();
@@ -1555,13 +1557,13 @@ impl From<&OutputIdentifier> for Input {
 	}
 }
 
-impl ::std::hash::Hash for Input {
-	fn hash<H: ::std::hash::Hasher>(&self, state: &mut H) {
-		let mut vec = Vec::new();
-		ser::serialize_default(&mut vec, &self).expect("serialization failed");
-		::std::hash::Hash::hash(&vec, state);
-	}
-}
+// impl ::std::hash::Hash for Input {
+// 	fn hash<H: ::std::hash::Hasher>(&self, state: &mut H) {
+// 		let mut vec = Vec::new();
+// 		ser::serialize_default(&mut vec, &self).expect("serialization failed");
+// 		::std::hash::Hash::hash(&vec, state);
+// 	}
+// }
 
 /// Implementation of Writeable for a transaction Input, defines how to write
 /// an Input as binary.
@@ -1615,45 +1617,56 @@ impl Input {
 
 /// We need to wrap commitments so they can be sorted with hashable_ord.
 #[derive(Serialize, Deserialize, Debug, Clone, Copy)]
-pub struct CommitWrapper(Commitment);
+#[serde(transparent)]
+pub struct CommitWrapper {
+	#[serde(
+		serialize_with = "secp_ser::as_hex",
+		deserialize_with = "secp_ser::commitment_from_hex"
+	)]
+	commit: Commitment,
+}
 
 impl DefaultHashable for CommitWrapper {}
 hashable_ord!(CommitWrapper);
 
 impl From<Commitment> for CommitWrapper {
 	fn from(commit: Commitment) -> Self {
-		CommitWrapper(commit)
+		CommitWrapper { commit }
 	}
 }
 
 impl From<Input> for CommitWrapper {
 	fn from(input: Input) -> Self {
-		CommitWrapper(input.commitment())
+		CommitWrapper {
+			commit: input.commitment(),
+		}
 	}
 }
 
 impl From<&Input> for CommitWrapper {
 	fn from(input: &Input) -> Self {
-		CommitWrapper(input.commitment())
+		CommitWrapper {
+			commit: input.commitment(),
+		}
 	}
 }
 
 impl AsRef<Commitment> for CommitWrapper {
 	fn as_ref(&self) -> &Commitment {
-		&self.0
+		&self.commit
 	}
 }
 
 impl Readable for CommitWrapper {
 	fn read<R: Reader>(reader: &mut R) -> Result<CommitWrapper, ser::Error> {
 		let commit = Commitment::read(reader)?;
-		Ok(CommitWrapper(commit))
+		Ok(CommitWrapper { commit })
 	}
 }
 
 impl Writeable for CommitWrapper {
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
-		self.0.write(writer)
+		self.commit.write(writer)
 	}
 }
 
@@ -1686,7 +1699,7 @@ impl From<&Inputs> for Vec<CommitWrapper> {
 impl CommitWrapper {
 	/// Wrapped commitment.
 	pub fn commitment(&self) -> Commitment {
-		self.0
+		self.commit
 	}
 }
 /// Wrapper around a vec of inputs.
@@ -1876,13 +1889,13 @@ impl AsRef<Commitment> for Output {
 	}
 }
 
-impl ::std::hash::Hash for Output {
-	fn hash<H: ::std::hash::Hasher>(&self, state: &mut H) {
-		let mut vec = Vec::new();
-		ser::serialize_default(&mut vec, &self).expect("serialization failed");
-		::std::hash::Hash::hash(&vec, state);
-	}
-}
+// impl ::std::hash::Hash for Output {
+// 	fn hash<H: ::std::hash::Hasher>(&self, state: &mut H) {
+// 		let mut vec = Vec::new();
+// 		ser::serialize_default(&mut vec, &self).expect("serialization failed");
+// 		::std::hash::Hash::hash(&vec, state);
+// 	}
+// }
 
 /// Implementation of Writeable for a transaction Output, defines how to write
 /// an Output as binary.
@@ -2040,11 +2053,6 @@ impl OutputIdentifier {
 			identifier: self,
 			proof,
 		}
-	}
-
-	/// Is this a coinbase?
-	pub fn is_coinbase(&self) -> bool {
-		self.features.is_coinbase()
 	}
 }
 
