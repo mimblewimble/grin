@@ -767,9 +767,9 @@ impl Chain {
 	}
 
 	/// Return a Merkle proof for the given commitment from the store.
-	pub fn get_merkle_proof(
+	pub fn get_merkle_proof<T: AsRef<OutputIdentifier>>(
 		&self,
-		output: &OutputIdentifier,
+		out_id: T,
 		header: &BlockHeader,
 	) -> Result<MerkleProof, Error> {
 		let mut header_pmmr = self.header_pmmr.write();
@@ -777,7 +777,7 @@ impl Chain {
 		let merkle_proof =
 			txhashset::extending_readonly(&mut header_pmmr, &mut txhashset, |ext, batch| {
 				pipe::rewind_and_apply_fork(&header, ext, batch)?;
-				ext.extension.merkle_proof(output, batch)
+				ext.extension.merkle_proof(out_id, batch)
 			})?;
 
 		Ok(merkle_proof)
@@ -1304,11 +1304,7 @@ impl Chain {
 		}
 		let mut output_vec: Vec<Output> = vec![];
 		for (ref x, &y) in outputs.1.iter().zip(rangeproofs.1.iter()) {
-			output_vec.push(Output {
-				commit: x.commit,
-				features: x.features,
-				proof: y,
-			});
+			output_vec.push(Output::new(x.features, x.commitment(), y));
 		}
 		Ok((outputs.0, last_index, output_vec))
 	}

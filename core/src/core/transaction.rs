@@ -806,12 +806,6 @@ impl TransactionBody {
 		self
 	}
 
-	/// Fully replace inputs.
-	pub fn replace_outputs(mut self, outputs: &[Output]) -> TransactionBody {
-		self.outputs = outputs.to_vec();
-		self
-	}
-
 	/// Builds a new TransactionBody with the provided output added. Existing
 	/// outputs, if any, are kept intact.
 	/// Sort order is maintained.
@@ -819,6 +813,12 @@ impl TransactionBody {
 		if let Err(e) = self.outputs.binary_search(&output) {
 			self.outputs.insert(e, output)
 		};
+		self
+	}
+
+	/// Fully replace outputs.
+	pub fn replace_outputs(mut self, outputs: &[Output]) -> TransactionBody {
+		self.outputs = outputs.to_vec();
 		self
 	}
 
@@ -1059,7 +1059,7 @@ impl TransactionBody {
 			let mut commits = vec![];
 			let mut proofs = vec![];
 			for x in &outputs {
-				commits.push(x.commit);
+				commits.push(x.commitment());
 				proofs.push(x.proof);
 			}
 			Output::batch_verify_proofs(&commits, &proofs)?;
@@ -1590,6 +1590,7 @@ impl Input {
 }
 /// Wrapper around a vec of inputs.
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+#[serde(untagged)]
 pub enum Inputs {
 	/// Vec of inputs.
 	FeaturesAndCommit(Vec<Input>),
@@ -1714,15 +1715,10 @@ impl Readable for OutputFeatures {
 /// overflow and the ownership of the private key.
 #[derive(Debug, Copy, Clone, Serialize, Deserialize)]
 pub struct Output {
-	/// Options for an output's structure or use
-	pub features: OutputFeatures,
-	/// The homomorphic commitment representing the output amount
-	#[serde(
-		serialize_with = "secp_ser::as_hex",
-		deserialize_with = "secp_ser::commitment_from_hex"
-	)]
-	pub commit: Commitment,
-	/// A proof that the commitment is in the right range
+	/// Output identifier (features and commitment).
+	#[serde(flatten)]
+	pub identifier: OutputIdentifier,
+	/// Rangeproof associated with the commitment.
 	#[serde(
 		serialize_with = "secp_ser::as_hex",
 		deserialize_with = "secp_ser::rangeproof_from_hex"
@@ -1730,12 +1726,29 @@ pub struct Output {
 	pub proof: RangeProof,
 }
 
-impl DefaultHashable for Output {}
-hashable_ord!(Output);
+impl Ord for Output {
+	fn cmp(&self, other: &Self) -> Ordering {
+		self.identifier.cmp(&other.identifier)
+	}
+}
+
+impl PartialOrd for Output {
+	fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+		Some(self.cmp(other))
+	}
+}
+
+impl PartialEq for Output {
+	fn eq(&self, other: &Self) -> bool {
+		self.identifier == other.identifier
+	}
+}
+
+impl Eq for Output {}
 
 impl AsRef<Commitment> for Output {
 	fn as_ref(&self) -> &Commitment {
-		&self.commit
+		&self.identifier.commit
 	}
 }
 
@@ -1751,13 +1764,8 @@ impl ::std::hash::Hash for Output {
 /// an Output as binary.
 impl Writeable for Output {
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
-		self.features.write(writer)?;
-		self.commit.write(writer)?;
-		// The hash of an output doesn't include the range proof, which
-		// is committed to separately
-		if writer.serialization_mode() != ser::SerializationMode::Hash {
-			writer.write_bytes(&self.proof)?
-		}
+		self.identifier.write(writer)?;
+		self.proof.write(writer)?;
 		Ok(())
 	}
 }
@@ -1767,27 +1775,9 @@ impl Writeable for Output {
 impl Readable for Output {
 	fn read<R: Reader>(reader: &mut R) -> Result<Output, ser::Error> {
 		Ok(Output {
-			features: OutputFeatures::read(reader)?,
-			commit: Commitment::read(reader)?,
+			identifier: OutputIdentifier::read(reader)?,
 			proof: RangeProof::read(reader)?,
 		})
-	}
-}
-
-/// We can build an Output MMR but store instances of OutputIdentifier in the MMR data file.
-impl PMMRable for Output {
-	type E = OutputIdentifier;
-
-	fn as_elmt(&self) -> OutputIdentifier {
-		OutputIdentifier::from(self)
-	}
-
-	fn elmt_size() -> Option<u16> {
-		Some(
-			(1 + secp::constants::PEDERSEN_COMMITMENT_SIZE)
-				.try_into()
-				.unwrap(),
-		)
 	}
 }
 
@@ -1804,19 +1794,37 @@ impl OutputFeatures {
 }
 
 impl Output {
+	/// Create a new output with the provided features, commitment and rangeproof.
+	pub fn new(features: OutputFeatures, commit: Commitment, proof: RangeProof) -> Output {
+		Output {
+			identifier: OutputIdentifier { features, commit },
+			proof,
+		}
+	}
+
+	/// Output identifier.
+	pub fn identifier(&self) -> OutputIdentifier {
+		self.identifier
+	}
+
 	/// Commitment for the output
 	pub fn commitment(&self) -> Commitment {
-		self.commit
+		self.identifier.commitment()
 	}
 
-	/// Is this a coinbase kernel?
+	/// Output features.
+	pub fn features(&self) -> OutputFeatures {
+		self.identifier.features
+	}
+
+	/// Is this a coinbase output?
 	pub fn is_coinbase(&self) -> bool {
-		self.features.is_coinbase()
+		self.identifier.is_coinbase()
 	}
 
-	/// Is this a plain kernel?
+	/// Is this a plain output?
 	pub fn is_plain(&self) -> bool {
-		self.features.is_plain()
+		self.identifier.is_plain()
 	}
 
 	/// Range proof for the output
@@ -1833,7 +1841,7 @@ impl Output {
 	pub fn verify_proof(&self) -> Result<(), Error> {
 		let secp = static_secp_instance();
 		secp.lock()
-			.verify_bullet_proof(self.commit, self.proof, None)?;
+			.verify_bullet_proof(self.commitment(), self.proof, None)?;
 		Ok(())
 	}
 
@@ -1843,6 +1851,12 @@ impl Output {
 		secp.lock()
 			.verify_bullet_proof_multi(commits.to_vec(), proofs.to_vec(), None)?;
 		Ok(())
+	}
+}
+
+impl AsRef<OutputIdentifier> for Output {
+	fn as_ref(&self) -> &OutputIdentifier {
+		&self.identifier
 	}
 }
 
@@ -1856,6 +1870,10 @@ pub struct OutputIdentifier {
 	/// enforced.
 	pub features: OutputFeatures,
 	/// Output commitment
+	#[serde(
+		serialize_with = "secp_ser::as_hex",
+		deserialize_with = "secp_ser::commitment_from_hex"
+	)]
 	pub commit: Commitment,
 }
 
@@ -1882,12 +1900,21 @@ impl OutputIdentifier {
 		self.commit
 	}
 
+	/// Is this a coinbase output?
+	pub fn is_coinbase(&self) -> bool {
+		self.features.is_coinbase()
+	}
+
+	/// Is this a plain output?
+	pub fn is_plain(&self) -> bool {
+		self.features.is_plain()
+	}
+
 	/// Converts this identifier to a full output, provided a RangeProof
 	pub fn into_output(self, proof: RangeProof) -> Output {
 		Output {
+			identifier: self,
 			proof,
-			features: self.features,
-			commit: self.commit,
 		}
 	}
 }
@@ -1915,12 +1942,19 @@ impl Readable for OutputIdentifier {
 	}
 }
 
-impl From<&Output> for OutputIdentifier {
-	fn from(out: &Output) -> Self {
-		OutputIdentifier {
-			features: out.features,
-			commit: out.commit,
-		}
+impl PMMRable for OutputIdentifier {
+	type E = Self;
+
+	fn as_elmt(&self) -> OutputIdentifier {
+		*self
+	}
+
+	fn elmt_size() -> Option<u16> {
+		Some(
+			(1 + secp::constants::PEDERSEN_COMMITMENT_SIZE)
+				.try_into()
+				.unwrap(),
+		)
 	}
 }
 
@@ -1930,6 +1964,12 @@ impl From<&Input> for OutputIdentifier {
 			features: input.features,
 			commit: input.commit,
 		}
+	}
+}
+
+impl AsRef<OutputIdentifier> for OutputIdentifier {
+	fn as_ref(&self) -> &OutputIdentifier {
+		self
 	}
 }
 

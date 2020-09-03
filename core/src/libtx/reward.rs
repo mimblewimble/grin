@@ -43,13 +43,9 @@ where
 
 	trace!("Block reward - Pedersen Commit is: {:?}", commit,);
 
-	let rproof = proof::create(keychain, builder, value, key_id, switch, commit, None)?;
+	let proof = proof::create(keychain, builder, value, key_id, switch, commit, None)?;
 
-	let output = Output {
-		features: OutputFeatures::Coinbase,
-		commit,
-		proof: rproof,
-	};
+	let output = Output::new(OutputFeatures::Coinbase, commit, proof);
 
 	let secp = static_secp_instance();
 	let secp = secp.lock();
@@ -78,10 +74,10 @@ where
 		}
 	};
 
-	let proof = TxKernel {
+	let kernel = TxKernel {
 		features: KernelFeatures::Coinbase,
 		excess,
 		excess_sig: sig,
 	};
-	Ok((output, proof))
+	Ok((output, kernel))
 }

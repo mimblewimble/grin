@@ -675,11 +675,9 @@ pub trait VerifySortedAndUnique<T> {
 	fn verify_sorted_and_unique(&self) -> Result<(), Error>;
 }
 
-impl<T: Hashed> VerifySortedAndUnique<T> for Vec<T> {
+impl<T: Ord> VerifySortedAndUnique<T> for Vec<T> {
 	fn verify_sorted_and_unique(&self) -> Result<(), Error> {
-		let hashes = self.iter().map(|item| item.hash()).collect::<Vec<_>>();
-		let pairs = hashes.windows(2);
-		for pair in pairs {
+		for pair in self.windows(2) {
 			if pair[0] > pair[1] {
 				return Err(Error::SortError);
 			} else if pair[0] == pair[1] {

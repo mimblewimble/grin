@@ -16,7 +16,7 @@ use self::chain::types::{NoopAdapter, Tip};
 use self::chain::Chain;
 use self::core::core::hash::Hashed;
 use self::core::core::verifier_cache::LruVerifierCache;
-use self::core::core::{Block, BlockHeader, KernelFeatures, OutputIdentifier, Transaction};
+use self::core::core::{Block, BlockHeader, KernelFeatures, Transaction};
 use self::core::global::ChainTypes;
 use self::core::libtx::{self, build, ProofBuilder};
 use self::core::pow::Difficulty;
@@ -549,8 +549,7 @@ fn spend_rewind_spend() {
 		// mine the first block and keep track of the block_hash
 		// so we can spend the coinbase later
 		let b = prepare_block_key_idx(&kc, &head, &chain, 2, 1);
-		let out_id = OutputIdentifier::from(&b.outputs()[0]);
-		assert!(out_id.features.is_coinbase());
+		assert!(b.outputs()[0].is_coinbase());
 		head = b.header.clone();
 		chain
 			.process_block(b.clone(), chain::Options::SKIP_POW)
@@ -623,8 +622,7 @@ fn spend_in_fork_and_compact() {
 		// mine the first block and keep track of the block_hash
 		// so we can spend the coinbase later
 		let b = prepare_block(&kc, &fork_head, &chain, 2);
-		let out_id = OutputIdentifier::from(&b.outputs()[0]);
-		assert!(out_id.features.is_coinbase());
+		assert!(b.outputs()[0].is_coinbase());
 		fork_head = b.header.clone();
 		chain
 			.process_block(b.clone(), chain::Options::SKIP_POW)

@@ -460,9 +460,9 @@ fn hash_output() {
 		&builder,
 	)
 	.unwrap();
-	let h = tx.outputs()[0].hash();
+	let h = tx.outputs()[0].identifier.hash();
 	assert!(h != ZERO_HASH);
-	let h2 = tx.outputs()[1].hash();
+	let h2 = tx.outputs()[1].identifier.hash();
 	assert!(h != h2);
 }
 

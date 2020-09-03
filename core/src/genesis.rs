@@ -103,13 +103,13 @@ pub fn genesis_floo() -> core::Block {
 		])
 		.unwrap(),
 	};
-	let output = core::Output {
-		features: core::OutputFeatures::Coinbase,
-		commit: Commitment::from_vec(
+	let output = core::Output::new(
+		core::OutputFeatures::Coinbase,
+		Commitment::from_vec(
 			util::from_hex("08c12007af16d1ee55fffe92cef808c77e318dae70c3bc70cb6361f49d517f1b68")
 				.unwrap(),
 		),
-		proof: RangeProof {
+		RangeProof {
 			plen: SINGLE_BULLET_PROOF_SIZE,
 			proof: [
 				159, 156, 202, 179, 128, 169, 14, 227, 176, 79, 118, 180, 62, 164, 2, 234, 123, 30,
@@ -152,7 +152,7 @@ pub fn genesis_floo() -> core::Block {
 				52, 175, 76, 157, 120, 208, 99, 135, 210, 81, 114, 230, 181,
 			],
 		},
-	};
+	);
 	gen.with_reward(output, kernel)
 }
 
@@ -215,13 +215,13 @@ pub fn genesis_main() -> core::Block {
 		])
 		.unwrap(),
 	};
-	let output = core::Output {
-		features: core::OutputFeatures::Coinbase,
-		commit: Commitment::from_vec(
+	let output = core::Output::new(
+		core::OutputFeatures::Coinbase,
+		Commitment::from_vec(
 			util::from_hex("08b7e57c448db5ef25aa119dde2312c64d7ff1b890c416c6dda5ec73cbfed2edea")
 				.unwrap(),
 		),
-		proof: RangeProof {
+		RangeProof {
 			plen: SINGLE_BULLET_PROOF_SIZE,
 			proof: [
 				147, 48, 173, 140, 222, 32, 95, 49, 124, 101, 55, 236, 169, 107, 134, 98, 147, 160,
@@ -264,7 +264,7 @@ pub fn genesis_main() -> core::Block {
 				156, 243, 168, 216, 103, 38, 160, 20, 71, 148,
 			],
 		},
-	};
+	);
 	gen.with_reward(output, kernel)
 }
 

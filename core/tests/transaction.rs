@@ -15,10 +15,10 @@
 //! Transaction integration tests
 
 pub mod common;
-
+use crate::common::tx1i1o;
 use crate::core::core::transaction::{self, Error};
 use crate::core::core::verifier_cache::LruVerifierCache;
-use crate::core::core::{KernelFeatures, Output, OutputFeatures, Weighting};
+use crate::core::core::{KernelFeatures, Output, OutputFeatures, Transaction, Weighting};
 use crate::core::global;
 use crate::core::libtx::build;
 use crate::core::libtx::proof::{self, ProofBuilder};
@@ -27,6 +27,35 @@ use grin_core as core;
 use keychain::{ExtKeychain, Keychain};
 use std::sync::Arc;
 use util::RwLock;
+
+// We use json serialization between wallet->node when pushing transactions to the network.
+// This test ensures we exercise this serialization/deserialization code.
+#[test]
+fn test_transaction_json_ser_deser() {
+	let tx1 = tx1i1o();
+	let value = serde_json::to_value(&tx1).unwrap();
+
+	assert!(value["offset"].is_string());
+	assert_eq!(value["body"]["inputs"][0]["features"], "Plain");
+	assert!(value["body"]["inputs"][0]["commit"].is_string());
+	assert_eq!(value["body"]["outputs"][0]["features"], "Plain");
+	assert!(value["body"]["outputs"][0]["commit"].is_string());
+	assert!(value["body"]["outputs"][0]["proof"].is_string());
+
+	// Note: Tx kernel "features" serialize in a slightly unexpected way.
+	assert_eq!(value["body"]["kernels"][0]["features"]["Plain"]["fee"], 2);
+	assert!(value["body"]["kernels"][0]["excess"].is_string());
+	assert!(value["body"]["kernels"][0]["excess_sig"].is_string());
+
+	let tx2: Transaction = serde_json::from_value(value).unwrap();
+	assert_eq!(tx1, tx2);
+
+	let tx1 = tx1i1o();
+	let str = serde_json::to_string(&tx1).unwrap();
+	println!("{}", str);
+	let tx2: Transaction = serde_json::from_str(&str).unwrap();
+	assert_eq!(tx1, tx2);
+}
 
 #[test]
 fn test_output_ser_deser() {
@@ -37,18 +66,14 @@ fn test_output_ser_deser() {
 	let builder = ProofBuilder::new(&keychain);
 	let proof = proof::create(&keychain, &builder, 5, &key_id, switch, commit, None).unwrap();
 
-	let out = Output {
-		features: OutputFeatures::Plain,
-		commit: commit,
-		proof: proof,
-	};
+	let out = Output::new(OutputFeatures::Plain, commit, proof);
 
 	let mut vec = vec![];
 	ser::serialize_default(&mut vec, &out).expect("serialized failed");
 	let dout: Output = ser::deserialize_default(&mut &vec[..]).unwrap();
 
-	assert_eq!(dout.features, OutputFeatures::Plain);
-	assert_eq!(dout.commit, out.commit);
+	assert_eq!(dout.features(), OutputFeatures::Plain);
+	assert_eq!(dout.commitment(), out.commitment());
 	assert_eq!(dout.proof, out.proof);
 }
 
