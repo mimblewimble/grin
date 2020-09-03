@@ -1718,6 +1718,10 @@ pub struct Output {
 	#[serde(flatten)]
 	pub identifier: OutputIdentifier,
 	/// Rangeproof associated with the commitment.
+	#[serde(
+		serialize_with = "secp_ser::as_hex",
+		deserialize_with = "secp_ser::rangeproof_from_hex"
+	)]
 	pub proof: RangeProof,
 }
 
@@ -1760,8 +1764,6 @@ impl ::std::hash::Hash for Output {
 impl Writeable for Output {
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
 		self.identifier.write(writer)?;
-
-		// writer.write_bytes(&self.proof)?
 		self.proof.write(writer)?;
 		Ok(())
 	}
