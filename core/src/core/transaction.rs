@@ -1590,6 +1590,7 @@ impl Input {
 }
 /// Wrapper around a vec of inputs.
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+#[serde(untagged)]
 pub enum Inputs {
 	/// Vec of inputs.
 	FeaturesAndCommit(Vec<Input>),
