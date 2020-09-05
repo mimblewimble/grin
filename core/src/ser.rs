@@ -69,6 +69,8 @@ pub enum Error {
 	DuplicateError,
 	/// Block header version (hard-fork schedule).
 	InvalidBlockVersion,
+	/// Invalid PoW size.
+	InvalidPoWSize,
 }
 
 impl From<io::Error> for Error {
@@ -92,6 +94,7 @@ impl fmt::Display for Error {
 			Error::TooLargeReadErr => f.write_str("too large read"),
 			Error::HexError(ref e) => write!(f, "hex error {:?}", e),
 			Error::InvalidBlockVersion => f.write_str("invalid block version"),
+			Error::InvalidPoWSize => f.write_str("invalid PoW size"),
 		}
 	}
 }
@@ -115,6 +118,18 @@ impl error::Error for Error {
 			Error::TooLargeReadErr => "too large read",
 			Error::HexError(_) => "hex error",
 			Error::InvalidBlockVersion => "invalid block version",
+			Error::InvalidPoWSize => "invalid PoW size",
+		}
+	}
+}
+
+impl Error {
+	/// Some errors related to deserialization are intrinsically bad
+	/// and should result in a peer being banned.
+	pub fn is_bad(&self) -> bool {
+		match *self {
+			Error::InvalidPoWSize => true,
+			_ => false,
 		}
 	}
 }

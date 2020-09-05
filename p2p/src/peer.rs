@@ -597,6 +597,10 @@ impl NetAdapter for TrackingAdapter {
 		self.adapter.peer_difficulty(addr, diff, height)
 	}
 
+	fn ban_peer(&self, addr: PeerAddr, reason: ReasonForBan) {
+		self.adapter.ban_peer(addr, reason)
+	}
+
 	fn is_banned(&self, addr: PeerAddr) -> bool {
 		self.adapter.is_banned(addr)
 	}

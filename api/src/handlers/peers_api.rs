@@ -13,7 +13,7 @@
 // limitations under the License.
 
 use super::utils::w;
-use crate::p2p::types::{PeerAddr, PeerInfoDisplay, ReasonForBan};
+use crate::p2p::types::{NetAdapter, PeerAddr, PeerInfoDisplay, ReasonForBan};
 use crate::p2p::{self, PeerData};
 use crate::rest::*;
 use crate::router::{Handler, ResponseFuture};
@@ -81,18 +81,14 @@ impl PeerHandler {
 		Ok(peers)
 	}
 
-	pub fn ban_peer(&self, addr: SocketAddr) -> Result<(), Error> {
-		let peer_addr = PeerAddr(addr);
-		w(&self.peers)?
-			.ban_peer(peer_addr, ReasonForBan::ManualBan)
-			.map_err(|e| ErrorKind::Internal(format!("ban peer error: {:?}", e)).into())
+	pub fn ban_peer(&self, addr: PeerAddr) -> Result<(), Error> {
+		w(&self.peers)?.ban_peer(addr, ReasonForBan::ManualBan);
+		Ok(())
 	}
 
-	pub fn unban_peer(&self, addr: SocketAddr) -> Result<(), Error> {
-		let peer_addr = PeerAddr(addr);
-		w(&self.peers)?
-			.unban_peer(peer_addr)
-			.map_err(|e| ErrorKind::Internal(format!("unban peer error: {:?}", e)).into())
+	pub fn unban_peer(&self, addr: PeerAddr) -> Result<(), Error> {
+		w(&self.peers)?.unban_peer(addr);
+		Ok(())
 	}
 }
 
@@ -143,14 +139,14 @@ impl Handler for PeerHandler {
 		};
 
 		match command {
-			"ban" => match w_fut!(&self.peers).ban_peer(addr, ReasonForBan::ManualBan) {
+			"ban" => match self.ban_peer(addr) {
 				Ok(_) => response(StatusCode::OK, "{}"),
 				Err(e) => response(
 					StatusCode::INTERNAL_SERVER_ERROR,
 					format!("ban failed: {:?}", e),
 				),
 			},
-			"unban" => match w_fut!(&self.peers).unban_peer(addr) {
+			"unban" => match self.unban_peer(addr) {
 				Ok(_) => response(StatusCode::OK, "{}"),
 				Err(e) => response(
 					StatusCode::INTERNAL_SERVER_ERROR,

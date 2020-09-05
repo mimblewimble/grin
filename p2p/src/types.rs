@@ -650,10 +650,13 @@ pub trait NetAdapter: ChainAdapter {
 	fn find_peer_addrs(&self, capab: Capabilities) -> Vec<PeerAddr>;
 
 	/// A list of peers has been received from one of our peers.
-	fn peer_addrs_received(&self, _: Vec<PeerAddr>);
+	fn peer_addrs_received(&self, addrs: Vec<PeerAddr>);
 
 	/// Heard total_difficulty from a connected peer (via ping/pong).
-	fn peer_difficulty(&self, _: PeerAddr, _: Difficulty, _: u64);
+	fn peer_difficulty(&self, addr: PeerAddr, difficulty: Difficulty, height: u64);
+
+	/// Peer just did something unforgiveable.
+	fn ban_peer(&self, addr: PeerAddr, reason: ReasonForBan);
 
 	/// Is this peer currently banned?
 	fn is_banned(&self, addr: PeerAddr) -> bool;

@@ -19,7 +19,7 @@ use crate::handlers::chain_api::{ChainCompactHandler, ChainValidationHandler};
 use crate::handlers::peers_api::{PeerHandler, PeersConnectedHandler};
 use crate::handlers::server_api::StatusHandler;
 use crate::p2p::types::PeerInfoDisplay;
-use crate::p2p::{self, PeerData};
+use crate::p2p::{self, PeerAddr, PeerData};
 use crate::rest::*;
 use crate::types::Status;
 use std::net::SocketAddr;
@@ -156,7 +156,7 @@ impl Owner {
 		let peer_handler = PeerHandler {
 			peers: self.peers.clone(),
 		};
-		peer_handler.ban_peer(addr)
+		peer_handler.ban_peer(PeerAddr(addr))
 	}
 
 	/// Unbans a specific peer.
@@ -174,6 +174,6 @@ impl Owner {
 		let peer_handler = PeerHandler {
 			peers: self.peers.clone(),
 		};
-		peer_handler.unban_peer(addr)
+		peer_handler.unban_peer(PeerAddr(addr))
 	}
 }
