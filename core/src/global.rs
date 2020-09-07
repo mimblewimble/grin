@@ -45,7 +45,7 @@ use util::OneTime;
 /// Note: We also use a specific (possible different) protocol version
 /// for both the backend database and MMR data files.
 /// This defines the p2p layer protocol version for this node.
-pub const PROTOCOL_VERSION: ProtocolVersion = ProtocolVersion(3);
+pub const PROTOCOL_VERSION: ProtocolVersion = ProtocolVersion(1_000);
 
 /// Automated testing edge_bits
 pub const AUTOMATED_TESTING_MIN_EDGE_BITS: u8 = 10;
