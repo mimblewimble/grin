@@ -19,13 +19,16 @@ use crate::core::core::hash::Hash;
 use crate::core::core::BlockHeader;
 use crate::core::pow::Difficulty;
 use crate::core::ser::{
-	self, ProtocolVersion, Readable, Reader, StreamingReader, Writeable, Writer,
+	self, BufReader, ProtocolVersion, Readable, Reader, StreamingReader, Writeable, Writer,
 };
 use crate::core::{consensus, global};
 use crate::types::{
-	Capabilities, Error, PeerAddr, ReasonForBan, MAX_BLOCK_HEADERS, MAX_LOCATORS, MAX_PEER_ADDRS,
+	AttachmentMeta, AttachmentUpdate, Capabilities, Error, PeerAddr, ReasonForBan,
+	MAX_BLOCK_HEADERS, MAX_LOCATORS, MAX_PEER_ADDRS,
 };
+use bytes::Bytes;
 use num::FromPrimitive;
+use std::fmt;
 use std::fs::File;
 use std::io::{Read, Write};
 use std::sync::Arc;
@@ -702,5 +705,43 @@ impl Readable for TxHashSetArchive {
 			height,
 			bytes,
 		})
+	}
+}
+
+pub enum Consume<'a> {
+	Message(&'a MsgHeader, BufReader<'a, Bytes>),
+	Attachment(&'a AttachmentUpdate),
+}
+
+impl fmt::Display for Consume<'_> {
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+		match self {
+			Consume::Message(h, _) => write!(f, "{:?}", h.msg_type),
+			Consume::Attachment { .. } => write!(f, "attachment"),
+		}
+	}
+}
+
+impl fmt::Debug for Consume<'_> {
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+		write!(f, "Consume({})", self)
+	}
+}
+
+pub enum Consumed {
+	Response(Msg),
+	Attachment(AttachmentMeta, File),
+	None,
+	Disconnect,
+}
+
+impl fmt::Debug for Consumed {
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+		match self {
+			Consumed::Response(msg) => write!(f, "Consumed::Response({:?})", msg.header.msg_type),
+			Consumed::Attachment(meta, _) => write!(f, "Consumed::Attachment({:?})", meta.size),
+			Consumed::None => write!(f, "Consumed::None"),
+			Consumed::Disconnect => write!(f, "Consumed::Disconnect"),
+		}
 	}
 }

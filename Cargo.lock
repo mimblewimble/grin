@@ -1027,6 +1027,7 @@ version = "4.1.0-alpha.1"
 dependencies = [
  "blake2-rfc",
  "byteorder",
+ "bytes",
  "chrono",
  "croaring-mw",
  "enum_primitive",
@@ -1073,6 +1074,7 @@ name = "grin_p2p"
 version = "4.1.0-alpha.1"
 dependencies = [
  "bitflags 1.2.1",
+ "bytes",
  "chrono",
  "enum_primitive",
  "grin_chain",

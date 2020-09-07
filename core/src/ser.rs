@@ -22,6 +22,7 @@
 use crate::core::hash::{DefaultHashable, Hash, Hashed};
 use crate::global::PROTOCOL_VERSION;
 use byteorder::{BigEndian, ByteOrder, ReadBytesExt};
+use bytes::Buf;
 use keychain::{BlindingFactor, Identifier, IDENTIFIER_SIZE};
 use std::convert::TryInto;
 use std::fmt::{self, Debug};
@@ -74,6 +75,12 @@ pub enum Error {
 impl From<io::Error> for Error {
 	fn from(e: io::Error) -> Error {
 		Error::IOErr(format!("{}", e), e.kind())
+	}
+}
+
+impl From<io::ErrorKind> for Error {
+	fn from(e: io::ErrorKind) -> Error {
+		Error::IOErr(format!("{}", io::Error::from(e)), e)
 	}
 }
 
@@ -541,6 +548,109 @@ impl<'a> Reader for StreamingReader<'a> {
 		let mut buf = vec![0u8; len];
 		self.stream.read_exact(&mut buf)?;
 		self.total_bytes_read += len as u64;
+		Ok(buf)
+	}
+
+	fn expect_u8(&mut self, val: u8) -> Result<u8, Error> {
+		let b = self.read_u8()?;
+		if b == val {
+			Ok(b)
+		} else {
+			Err(Error::UnexpectedData {
+				expected: vec![val],
+				received: vec![b],
+			})
+		}
+	}
+
+	fn protocol_version(&self) -> ProtocolVersion {
+		self.version
+	}
+}
+
+/// Protocol version-aware wrapper around a `Buf` impl
+pub struct BufReader<'a, B: Buf> {
+	inner: &'a mut B,
+	version: ProtocolVersion,
+	bytes_read: usize,
+}
+
+impl<'a, B: Buf> BufReader<'a, B> {
+	/// Construct a new BufReader
+	pub fn new(buf: &'a mut B, version: ProtocolVersion) -> Self {
+		Self {
+			inner: buf,
+			version,
+			bytes_read: 0,
+		}
+	}
+
+	/// Check whether the buffer has enough bytes remaining to perform a read
+	fn has_remaining(&mut self, len: usize) -> Result<(), Error> {
+		if self.inner.remaining() >= len {
+			self.bytes_read += len;
+			Ok(())
+		} else {
+			Err(io::ErrorKind::UnexpectedEof.into())
+		}
+	}
+
+	/// The total bytes read
+	pub fn bytes_read(&self) -> u64 {
+		self.bytes_read as u64
+	}
+
+	/// Convenience function to read from the buffer and deserialize
+	pub fn body<T: Readable>(&mut self) -> Result<T, Error> {
+		T::read(self)
+	}
+}
+
+impl<'a, B: Buf> Reader for BufReader<'a, B> {
+	fn read_u8(&mut self) -> Result<u8, Error> {
+		self.has_remaining(1)?;
+		Ok(self.inner.get_u8())
+	}
+
+	fn read_u16(&mut self) -> Result<u16, Error> {
+		self.has_remaining(2)?;
+		Ok(self.inner.get_u16())
+	}
+
+	fn read_u32(&mut self) -> Result<u32, Error> {
+		self.has_remaining(4)?;
+		Ok(self.inner.get_u32())
+	}
+
+	fn read_u64(&mut self) -> Result<u64, Error> {
+		self.has_remaining(8)?;
+		Ok(self.inner.get_u64())
+	}
+
+	fn read_i32(&mut self) -> Result<i32, Error> {
+		self.has_remaining(4)?;
+		Ok(self.inner.get_i32())
+	}
+
+	fn read_i64(&mut self) -> Result<i64, Error> {
+		self.has_remaining(8)?;
+		Ok(self.inner.get_i64())
+	}
+
+	fn read_bytes_len_prefix(&mut self) -> Result<Vec<u8>, Error> {
+		let len = self.read_u64()?;
+		self.read_fixed_bytes(len as usize)
+	}
+
+	fn read_fixed_bytes(&mut self, len: usize) -> Result<Vec<u8>, Error> {
+		// not reading more than 100k bytes in a single read
+		if len > 100_000 {
+			return Err(Error::TooLargeReadErr);
+		}
+		self.has_remaining(len)?;
+
+		let mut buf = vec![0; len];
+		self.inner.copy_to_slice(&mut buf[..]);
 		Ok(buf)
 	}
 
