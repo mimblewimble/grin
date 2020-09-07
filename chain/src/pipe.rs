@@ -424,7 +424,7 @@ fn verify_coinbase_maturity(
 	let header_extension = &ext.header_extension;
 	extension
 		.utxo_view(header_extension)
-		.verify_coinbase_maturity(block.inputs(), block.header.height, batch)
+		.verify_coinbase_maturity(&block.inputs(), block.header.height, batch)
 }
 
 /// Verify kernel sums across the full utxo and kernel sets based on block_sums

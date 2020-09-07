@@ -953,14 +953,14 @@ impl pool::BlockChain for PoolToChainAdapter {
 			.map_err(|_| pool::PoolError::Other("failed to validate tx".to_string()))
 	}
 
-	fn validate_inputs(&self, inputs: Inputs) -> Result<Vec<OutputIdentifier>, pool::PoolError> {
+	fn validate_inputs(&self, inputs: &Inputs) -> Result<Vec<OutputIdentifier>, pool::PoolError> {
 		self.chain()
 			.validate_inputs(inputs)
 			.map(|outputs| outputs.into_iter().map(|(out, _)| out).collect::<Vec<_>>())
 			.map_err(|_| pool::PoolError::Other("failed to validate tx".to_string()))
 	}
 
-	fn verify_coinbase_maturity(&self, inputs: Inputs) -> Result<(), pool::PoolError> {
+	fn verify_coinbase_maturity(&self, inputs: &Inputs) -> Result<(), pool::PoolError> {
 		self.chain()
 			.verify_coinbase_maturity(inputs)
 			.map_err(|_| pool::PoolError::ImmatureCoinbase)

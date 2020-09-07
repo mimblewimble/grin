@@ -296,7 +296,7 @@ impl Chain {
 				pipe::rewind_and_apply_fork(&previous_header, ext, batch)?;
 				ext.extension
 					.utxo_view(ext.header_extension)
-					.validate_inputs(block.inputs(), batch)
+					.validate_inputs(&block.inputs(), batch)
 					.map(|outputs| outputs.into_iter().map(|(out, _)| out).collect())
 			})?;
 		let inputs = inputs.as_slice().into();
@@ -647,7 +647,7 @@ impl Chain {
 	/// that would be spent by the inputs.
 	pub fn validate_inputs(
 		&self,
-		inputs: Inputs,
+		inputs: &Inputs,
 	) -> Result<Vec<(OutputIdentifier, CommitPos)>, Error> {
 		let header_pmmr = self.header_pmmr.read();
 		let txhashset = self.txhashset.read();
@@ -663,7 +663,7 @@ impl Chain {
 
 	/// Verify we are not attempting to spend a coinbase output
 	/// that has not yet sufficiently matured.
-	pub fn verify_coinbase_maturity(&self, inputs: Inputs) -> Result<(), Error> {
+	pub fn verify_coinbase_maturity(&self, inputs: &Inputs) -> Result<(), Error> {
 		let height = self.next_block_height()?;
 		let header_pmmr = self.header_pmmr.read();
 		let txhashset = self.txhashset.read();

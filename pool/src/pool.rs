@@ -269,6 +269,8 @@ where
 		Ok(valid_txs)
 	}
 
+	/// Lookup unspent outputs to be spent by the provided transaction.
+	/// We look for unspent outputs in the current txpool and then in the current utxo.
 	pub fn locate_spends(
 		&self,
 		tx: &Transaction,
@@ -292,7 +294,7 @@ where
 			transaction::cut_through(&mut inputs[..], &mut outputs[..])?;
 
 		// Lookup remaining outputs to be spent from the current utxo.
-		let spent_utxo = self.blockchain.validate_inputs(spent_utxo.into())?;
+		let spent_utxo = self.blockchain.validate_inputs(&spent_utxo.into())?;
 
 		Ok((spent_pool.to_vec(), spent_utxo))
 	}

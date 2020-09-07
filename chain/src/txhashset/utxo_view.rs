@@ -56,7 +56,7 @@ impl<'a> UTXOView<'a> {
 		for output in block.outputs() {
 			self.validate_output(output, batch)?;
 		}
-		self.validate_inputs(block.inputs(), batch)
+		self.validate_inputs(&block.inputs(), batch)
 	}
 
 	/// Validate a transaction against the current UTXO set.
@@ -70,7 +70,7 @@ impl<'a> UTXOView<'a> {
 		for output in tx.outputs() {
 			self.validate_output(output, batch)?;
 		}
-		self.validate_inputs(tx.inputs(), batch)
+		self.validate_inputs(&tx.inputs(), batch)
 	}
 
 	/// Validate the provided inputs.
@@ -78,7 +78,7 @@ impl<'a> UTXOView<'a> {
 	/// that would be spent by the provided inputs.
 	pub fn validate_inputs(
 		&self,
-		inputs: Inputs,
+		inputs: &Inputs,
 		batch: &Batch<'_>,
 	) -> Result<Vec<(OutputIdentifier, CommitPos)>, Error> {
 		match inputs {
@@ -166,7 +166,7 @@ impl<'a> UTXOView<'a> {
 	/// that have not sufficiently matured.
 	pub fn verify_coinbase_maturity(
 		&self,
-		inputs: Inputs,
+		inputs: &Inputs,
 		height: u64,
 		batch: &Batch<'_>,
 	) -> Result<(), Error> {

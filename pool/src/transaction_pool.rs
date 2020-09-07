@@ -160,9 +160,6 @@ where
 		stem: bool,
 		header: &BlockHeader,
 	) -> Result<(), PoolError> {
-		//
-		// TODO - hash here is not sufficient as we have v2 vs. v3 txs...
-		//
 		// Quick check for duplicate txs.
 		// Our stempool is private and we do not want to reveal anything about the txs contained.
 		// If this is a stem tx and is already present in stempool then fluff by adding to txpool.
@@ -223,7 +220,7 @@ where
 			.cloned()
 			.collect();
 		self.blockchain
-			.verify_coinbase_maturity(coinbase_inputs.as_slice().into())?;
+			.verify_coinbase_maturity(&coinbase_inputs.as_slice().into())?;
 
 		// Convert the tx to "v2" compatibility with "features and commit" inputs.
 		let ref entry = self.convert_tx_v2(entry, &spent_pool, &spent_utxo)?;

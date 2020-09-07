@@ -1105,7 +1105,7 @@ impl<'a> Extension<'a> {
 		// Remove the spent outputs from the output_pos index.
 		let spent = self
 			.utxo_view(header_ext)
-			.validate_inputs(b.inputs(), batch)?;
+			.validate_inputs(&b.inputs(), batch)?;
 		for (out, pos) in &spent {
 			self.apply_input(out.commitment(), *pos)?;
 			affected_pos.push(pos.pos);

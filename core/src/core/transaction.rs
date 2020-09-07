@@ -1557,14 +1557,6 @@ impl From<&OutputIdentifier> for Input {
 	}
 }
 
-// impl ::std::hash::Hash for Input {
-// 	fn hash<H: ::std::hash::Hasher>(&self, state: &mut H) {
-// 		let mut vec = Vec::new();
-// 		ser::serialize_default(&mut vec, &self).expect("serialization failed");
-// 		::std::hash::Hash::hash(&vec, state);
-// 	}
-// }
-
 /// Implementation of Writeable for a transaction Input, defines how to write
 /// an Input as binary.
 impl Writeable for Input {
@@ -1888,14 +1880,6 @@ impl AsRef<Commitment> for Output {
 		&self.identifier.commit
 	}
 }
-
-// impl ::std::hash::Hash for Output {
-// 	fn hash<H: ::std::hash::Hasher>(&self, state: &mut H) {
-// 		let mut vec = Vec::new();
-// 		ser::serialize_default(&mut vec, &self).expect("serialization failed");
-// 		::std::hash::Hash::hash(&vec, state);
-// 	}
-// }
 
 /// Implementation of Writeable for a transaction Output, defines how to write
 /// an Output as binary.
