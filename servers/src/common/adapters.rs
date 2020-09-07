@@ -32,6 +32,7 @@ use crate::core::core::transaction::Transaction;
 use crate::core::core::verifier_cache::VerifierCache;
 use crate::core::core::{BlockHeader, BlockSums, CompactBlock, Inputs, OutputIdentifier};
 use crate::core::pow::Difficulty;
+use crate::core::ser::ProtocolVersion;
 use crate::core::{core, global};
 use crate::p2p;
 use crate::p2p::types::PeerInfo;
@@ -171,6 +172,12 @@ where
 			// push the freshly hydrated block through the chain pipeline
 			match core::Block::hydrate_from(cb, &[]) {
 				Ok(block) => {
+					debug!(
+						"successfully hydrated (empty) block: {} at {} ({})",
+						block.header.hash(),
+						block.header.height,
+						block.inputs().version_str(),
+					);
 					if !self.sync_state.is_syncing() {
 						for hook in &self.hooks {
 							hook.on_block_received(&block, &peer_info.addr);
@@ -231,7 +238,12 @@ where
 					.validate(&prev.total_kernel_offset, self.verifier_cache.clone())
 					.is_ok()
 				{
-					debug!("successfully hydrated block from tx pool!");
+					debug!(
+						"successfully hydrated block: {} at {} ({})",
+						block.header.hash(),
+						block.header.height,
+						block.inputs().version_str(),
+					);
 					self.process_block(block, peer_info, chain::Options::NONE)
 				} else if self.sync_state.status() == SyncStatus::NoSync {
 					debug!("adapter: block invalid after hydration, requesting full block");
@@ -355,12 +367,15 @@ where
 	}
 
 	/// Gets a full block by its hash.
-	fn get_block(&self, h: Hash) -> Option<core::Block> {
-		let b = self.chain().get_block(&h);
-		match b {
-			Ok(b) => Some(b),
-			_ => None,
-		}
+	/// Will convert to v2 compatibility based on peer protocol version.
+	fn get_block(&self, h: Hash, peer_info: &PeerInfo) -> Option<core::Block> {
+		self.chain()
+			.get_block(&h)
+			.map(|b| match peer_info.version.value() {
+				0..=2 => Some(b),
+				3..=ProtocolVersion::MAX => self.chain().convert_block_v2(b).ok(),
+			})
+			.unwrap_or(None)
 	}
 
 	/// Provides a reading view into the current txhashset state as well as
@@ -938,16 +953,16 @@ impl pool::BlockChain for PoolToChainAdapter {
 			.map_err(|_| pool::PoolError::Other("failed to validate tx".to_string()))
 	}
 
-	fn validate_inputs(&self, inputs: Inputs) -> Result<Vec<OutputIdentifier>, pool::PoolError> {
+	fn validate_inputs(&self, inputs: &Inputs) -> Result<Vec<OutputIdentifier>, pool::PoolError> {
 		self.chain()
 			.validate_inputs(inputs)
 			.map(|outputs| outputs.into_iter().map(|(out, _)| out).collect::<Vec<_>>())
 			.map_err(|_| pool::PoolError::Other("failed to validate tx".to_string()))
 	}
 
-	fn verify_coinbase_maturity(&self, tx: &Transaction) -> Result<(), pool::PoolError> {
+	fn verify_coinbase_maturity(&self, inputs: &Inputs) -> Result<(), pool::PoolError> {
 		self.chain()
-			.verify_coinbase_maturity(tx)
+			.verify_coinbase_maturity(inputs)
 			.map_err(|_| pool::PoolError::ImmatureCoinbase)
 	}
 

@@ -275,7 +275,7 @@ impl From<committed::Error> for PoolError {
 pub trait BlockChain: Sync + Send {
 	/// Verify any coinbase outputs being spent
 	/// have matured sufficiently.
-	fn verify_coinbase_maturity(&self, tx: &transaction::Transaction) -> Result<(), PoolError>;
+	fn verify_coinbase_maturity(&self, inputs: &Inputs) -> Result<(), PoolError>;
 
 	/// Verify any coinbase outputs being spent
 	/// have matured sufficiently.
@@ -287,7 +287,7 @@ pub trait BlockChain: Sync + Send {
 	/// Validate inputs against the current utxo.
 	/// Returns the vec of output identifiers that would be spent
 	/// by these inputs if they can all be successfully spent.
-	fn validate_inputs(&self, inputs: Inputs) -> Result<Vec<OutputIdentifier>, PoolError>;
+	fn validate_inputs(&self, inputs: &Inputs) -> Result<Vec<OutputIdentifier>, PoolError>;
 
 	fn chain_head(&self) -> Result<BlockHeader, PoolError>;
 

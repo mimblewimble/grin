@@ -141,10 +141,20 @@ fn test_transaction_pool_block_reconciliation() {
 	pool.reconcile_block(&block).unwrap();
 
 	assert_eq!(pool.total_size(), 4);
-	assert_eq!(pool.txpool.entries[0].tx, valid_transaction);
-	assert_eq!(pool.txpool.entries[1].tx, pool_child);
-	assert_eq!(pool.txpool.entries[2].tx, conflict_valid_child);
-	assert_eq!(pool.txpool.entries[3].tx, valid_child_valid);
+	// Compare the various txs by their kernels as entries in the pool are "v2" compatibility.
+	assert_eq!(
+		pool.txpool.entries[0].tx.kernels(),
+		valid_transaction.kernels()
+	);
+	assert_eq!(pool.txpool.entries[1].tx.kernels(), pool_child.kernels());
+	assert_eq!(
+		pool.txpool.entries[2].tx.kernels(),
+		conflict_valid_child.kernels()
+	);
+	assert_eq!(
+		pool.txpool.entries[3].tx.kernels(),
+		valid_child_valid.kernels()
+	);
 
 	// Cleanup db directory
 	clean_output_dir(db_root.into());

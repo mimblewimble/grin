@@ -15,7 +15,7 @@
 //! Transaction integration tests
 
 pub mod common;
-use crate::common::tx1i1o;
+use crate::common::tx1i10_v2_compatible;
 use crate::core::core::transaction::{self, Error};
 use crate::core::core::verifier_cache::LruVerifierCache;
 use crate::core::core::{KernelFeatures, Output, OutputFeatures, Transaction, Weighting};
@@ -32,8 +32,10 @@ use util::RwLock;
 // This test ensures we exercise this serialization/deserialization code.
 #[test]
 fn test_transaction_json_ser_deser() {
-	let tx1 = tx1i1o();
+	let tx1 = tx1i10_v2_compatible();
+
 	let value = serde_json::to_value(&tx1).unwrap();
+	println!("{:?}", value);
 
 	assert!(value["offset"].is_string());
 	assert_eq!(value["body"]["inputs"][0]["features"], "Plain");
@@ -50,7 +52,6 @@ fn test_transaction_json_ser_deser() {
 	let tx2: Transaction = serde_json::from_value(value).unwrap();
 	assert_eq!(tx1, tx2);
 
-	let tx1 = tx1i1o();
 	let str = serde_json::to_string(&tx1).unwrap();
 	println!("{}", str);
 	let tx2: Transaction = serde_json::from_str(&str).unwrap();

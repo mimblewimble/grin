@@ -1105,7 +1105,7 @@ impl<'a> Extension<'a> {
 		// Remove the spent outputs from the output_pos index.
 		let spent = self
 			.utxo_view(header_ext)
-			.validate_inputs(b.inputs(), batch)?;
+			.validate_inputs(&b.inputs(), batch)?;
 		for (out, pos) in &spent {
 			self.apply_input(out.commitment(), *pos)?;
 			affected_pos.push(pos.pos);
@@ -1371,13 +1371,14 @@ impl<'a> Extension<'a> {
 		}
 
 		// Update output_pos based on "unspending" all spent pos from this block.
-		// This is necessary to ensure the output_pos index correclty reflects a
+		// This is necessary to ensure the output_pos index correctly reflects a
 		// reused output commitment. For example an output at pos 1, spent, reused at pos 2.
 		// The output_pos index should be updated to reflect the old pos 1 when unspent.
 		if let Ok(spent) = spent {
-			let inputs: Vec<_> = block.inputs().into();
-			for (input, pos) in inputs.iter().zip(spent) {
-				batch.save_output_pos_height(&input.commitment(), pos)?;
+			for pos in spent {
+				if let Some(out) = self.output_pmmr.get_data(pos.pos) {
+					batch.save_output_pos_height(&out.commitment(), pos)?;
+				}
 			}
 		}
 

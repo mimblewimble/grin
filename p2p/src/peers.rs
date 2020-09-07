@@ -667,8 +667,8 @@ impl ChainAdapter for Peers {
 		self.adapter.locate_headers(hs)
 	}
 
-	fn get_block(&self, h: Hash) -> Option<core::Block> {
-		self.adapter.get_block(h)
+	fn get_block(&self, h: Hash, peer_info: &PeerInfo) -> Option<core::Block> {
+		self.adapter.get_block(h, peer_info)
 	}
 
 	fn txhashset_read(&self, h: Hash) -> Option<TxHashSetRead> {

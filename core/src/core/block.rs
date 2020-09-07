@@ -272,7 +272,7 @@ impl PMMRable for BlockHeader {
 /// Serialization of a block header
 impl Writeable for BlockHeader {
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
-		if writer.serialization_mode() != ser::SerializationMode::Hash {
+		if !writer.serialization_mode().is_hash_mode() {
 			self.write_pre_pow(writer)?;
 		}
 		self.pow.write(writer)?;
@@ -507,8 +507,7 @@ impl Hashed for Block {
 impl Writeable for Block {
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
 		self.header.write(writer)?;
-
-		if writer.serialization_mode() != ser::SerializationMode::Hash {
+		if !writer.serialization_mode().is_hash_mode() {
 			self.body.write(writer)?;
 		}
 		Ok(())
@@ -609,7 +608,7 @@ impl Block {
 		kernels.extend_from_slice(cb.kern_full());
 
 		// Initialize a tx body and sort everything.
-		let body = TransactionBody::init(inputs, &outputs, &kernels, false)?;
+		let body = TransactionBody::init(inputs.into(), &outputs, &kernels, false)?;
 
 		// Finally return the full block.
 		// Note: we have not actually validated the block here,

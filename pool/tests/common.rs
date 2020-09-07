@@ -136,16 +136,16 @@ impl BlockChain for ChainAdapter {
 		})
 	}
 
-	fn validate_inputs(&self, inputs: Inputs) -> Result<Vec<OutputIdentifier>, PoolError> {
+	fn validate_inputs(&self, inputs: &Inputs) -> Result<Vec<OutputIdentifier>, PoolError> {
 		self.chain
 			.validate_inputs(inputs)
 			.map(|outputs| outputs.into_iter().map(|(out, _)| out).collect::<Vec<_>>())
 			.map_err(|_| PoolError::Other("failed to validate inputs".into()))
 	}
 
-	fn verify_coinbase_maturity(&self, tx: &Transaction) -> Result<(), PoolError> {
+	fn verify_coinbase_maturity(&self, inputs: &Inputs) -> Result<(), PoolError> {
 		self.chain
-			.verify_coinbase_maturity(tx)
+			.verify_coinbase_maturity(inputs)
 			.map_err(|_| PoolError::ImmatureCoinbase)
 	}
 

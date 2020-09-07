@@ -122,7 +122,7 @@ fn test_coinbase_maturity() {
 
 		// Confirm the tx attempting to spend the coinbase output
 		// is not valid at the current block height given the current chain state.
-		match chain.verify_coinbase_maturity(&coinbase_txn) {
+		match chain.verify_coinbase_maturity(&coinbase_txn.inputs()) {
 			Ok(_) => {}
 			Err(e) => match e.kind() {
 				ErrorKind::ImmatureCoinbase => {}
@@ -204,7 +204,7 @@ fn test_coinbase_maturity() {
 
 			// Confirm the tx attempting to spend the coinbase output
 			// is not valid at the current block height given the current chain state.
-			match chain.verify_coinbase_maturity(&coinbase_txn) {
+			match chain.verify_coinbase_maturity(&coinbase_txn.inputs()) {
 				Ok(_) => {}
 				Err(e) => match e.kind() {
 					ErrorKind::ImmatureCoinbase => {}
@@ -254,7 +254,9 @@ fn test_coinbase_maturity() {
 
 			// Confirm the tx spending the coinbase output is now valid.
 			// The coinbase output has matured sufficiently based on current chain state.
-			chain.verify_coinbase_maturity(&coinbase_txn).unwrap();
+			chain
+				.verify_coinbase_maturity(&coinbase_txn.inputs())
+				.unwrap();
 
 			let txs = &[coinbase_txn];
 			let fees = txs.iter().map(|tx| tx.fee()).sum();

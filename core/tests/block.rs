@@ -19,7 +19,7 @@ use crate::core::core::block::{Block, BlockHeader, Error, HeaderVersion, Untrust
 use crate::core::core::hash::Hashed;
 use crate::core::core::id::ShortIdentifiable;
 use crate::core::core::transaction::{
-	self, KernelFeatures, NRDRelativeHeight, Output, OutputFeatures, Transaction,
+	self, KernelFeatures, NRDRelativeHeight, Output, OutputFeatures, OutputIdentifier, Transaction,
 };
 use crate::core::core::verifier_cache::{LruVerifierCache, VerifierCache};
 use crate::core::core::{Committed, CompactBlock};
@@ -522,9 +522,53 @@ fn block_single_tx_serialized_size() {
 	let prev = BlockHeader::default();
 	let key_id = ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
 	let b = new_block(&[tx1], &keychain, &builder, &prev, &key_id);
+
+	// Default protocol version (3)
 	let mut vec = Vec::new();
 	ser::serialize_default(&mut vec, &b).expect("serialization failed");
+	assert_eq!(vec.len(), 2_669);
+
+	// Protocol version 3
+	let mut vec = Vec::new();
+	ser::serialize(&mut vec, ser::ProtocolVersion(3), &b).expect("serialization failed");
+	assert_eq!(vec.len(), 2_669);
+
+	// Protocol version 2.
+	// Note: block must be in "v2" compatibility with "features and commit" inputs for this.
+	// Normally we would convert the block by looking inputs up in utxo but we fake it here for testing.
+	let inputs: Vec<_> = b.inputs().into();
+	let inputs: Vec<_> = inputs
+		.iter()
+		.map(|input| OutputIdentifier {
+			features: OutputFeatures::Plain,
+			commit: input.commitment(),
+		})
+		.collect();
+	let b = Block {
+		header: b.header,
+		body: b.body.replace_inputs(inputs.as_slice().into()),
+	};
+
+	// Protocol version 2
+	let mut vec = Vec::new();
+	ser::serialize(&mut vec, ser::ProtocolVersion(2), &b).expect("serialization failed");
 	assert_eq!(vec.len(), 2_670);
+
+	// Protocol version 1 (fixed size kernels)
+	let mut vec = Vec::new();
+	ser::serialize(&mut vec, ser::ProtocolVersion(1), &b).expect("serialization failed");
+	assert_eq!(vec.len(), 2_694);
+
+	// Check we can also serialize a v2 compatibility block in v3 protocol version
+	// without needing to explicitly convert the block.
+	let mut vec = Vec::new();
+	ser::serialize(&mut vec, ser::ProtocolVersion(3), &b).expect("serialization failed");
+	assert_eq!(vec.len(), 2_669);
+
+	// Default protocol version (3) for completeness
+	let mut vec = Vec::new();
+	ser::serialize_default(&mut vec, &b).expect("serialization failed");
+	assert_eq!(vec.len(), 2_669);
 }
 
 #[test]
@@ -571,25 +615,10 @@ fn block_10_tx_serialized_size() {
 	let key_id = ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
 	let b = new_block(&txs, &keychain, &builder, &prev, &key_id);
 
-	// Default protocol version.
 	{
 		let mut vec = Vec::new();
 		ser::serialize_default(&mut vec, &b).expect("serialization failed");
-		assert_eq!(vec.len(), 16_836);
-	}
-
-	// Explicit protocol version 1
-	{
-		let mut vec = Vec::new();
-		ser::serialize(&mut vec, ser::ProtocolVersion(1), &b).expect("serialization failed");
-		assert_eq!(vec.len(), 16_932);
-	}
-
-	// Explicit protocol version 2
-	{
-		let mut vec = Vec::new();
-		ser::serialize(&mut vec, ser::ProtocolVersion(2), &b).expect("serialization failed");
-		assert_eq!(vec.len(), 16_836);
+		assert_eq!(vec.len(), 16_826);
 	}
 }
 
@@ -732,14 +761,13 @@ fn same_amount_outputs_copy_range_proof() {
 
 	// now we reconstruct the transaction, swapping the rangeproofs so they
 	// have the wrong privkey
-	let ins: Vec<_> = tx.inputs().into();
 	let mut outs = tx.outputs().to_vec();
 	outs[0].proof = outs[1].proof;
 
 	let key_id = keychain::ExtKeychain::derive_key_id(1, 4, 0, 0, 0);
 	let prev = BlockHeader::default();
 	let b = new_block(
-		&[Transaction::new(&ins, &outs, tx.kernels())],
+		&[Transaction::new(tx.inputs(), &outs, tx.kernels())],
 		&keychain,
 		&builder,
 		&prev,
@@ -784,7 +812,6 @@ fn wrong_amount_range_proof() {
 	.unwrap();
 
 	// we take the range proofs from tx2 into tx1 and rebuild the transaction
-	let ins: Vec<_> = tx1.inputs().into();
 	let mut outs = tx1.outputs().to_vec();
 	outs[0].proof = tx2.outputs()[0].proof;
 	outs[1].proof = tx2.outputs()[1].proof;
@@ -792,7 +819,7 @@ fn wrong_amount_range_proof() {
 	let key_id = keychain::ExtKeychain::derive_key_id(1, 4, 0, 0, 0);
 	let prev = BlockHeader::default();
 	let b = new_block(
-		&[Transaction::new(&ins, &outs, tx1.kernels())],
+		&[Transaction::new(tx1.inputs(), &outs, tx1.kernels())],
 		&keychain,
 		&builder,
 		&prev,

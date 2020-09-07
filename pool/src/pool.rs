@@ -29,7 +29,6 @@ use grin_util as util;
 use std::cmp::Reverse;
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
-use util::secp::pedersen::Commitment;
 use util::static_secp_instance;
 
 pub struct Pool<B, V>
@@ -60,28 +59,9 @@ where
 	}
 
 	/// Does the transaction pool contain an entry for the given transaction?
-	pub fn contains_tx(&self, hash: Hash) -> bool {
-		self.entries.iter().any(|x| x.tx.hash() == hash)
-	}
-
-	pub fn get_tx(&self, hash: Hash) -> Option<Transaction> {
-		self.entries
-			.iter()
-			.find(|x| x.tx.hash() == hash)
-			.map(|x| x.tx.clone())
-	}
-
-	/// Query the tx pool for an individual tx matching the given public excess.
-	/// Used for checking for duplicate NRD kernels in the txpool.
-	pub fn retrieve_tx_by_kernel_excess(&self, excess: Commitment) -> Option<Transaction> {
-		for x in &self.entries {
-			for k in x.tx.kernels() {
-				if k.excess() == excess {
-					return Some(x.tx.clone());
-				}
-			}
-		}
-		None
+	/// Transactions are compared by their kernels.
+	pub fn contains_tx(&self, tx: &Transaction) -> bool {
+		self.entries.iter().any(|x| x.tx.kernels() == tx.kernels())
 	}
 
 	/// Query the tx pool for an individual tx matching the given kernel hash.
@@ -289,15 +269,13 @@ where
 		Ok(valid_txs)
 	}
 
-	/// Convert a transaction for v2 compatibility.
-	/// We may receive a transaction with "commit only" inputs.
-	/// We convert it to "features and commit" so we can safely relay it to v2 peers.
-	/// Converson is done by looking up outputs to be spent in both the pool and the current utxo.
-	pub fn convert_tx_v2(
+	/// Lookup unspent outputs to be spent by the provided transaction.
+	/// We look for unspent outputs in the current txpool and then in the current utxo.
+	pub fn locate_spends(
 		&self,
-		tx: Transaction,
+		tx: &Transaction,
 		extra_tx: Option<Transaction>,
-	) -> Result<Transaction, PoolError> {
+	) -> Result<(Vec<OutputIdentifier>, Vec<OutputIdentifier>), PoolError> {
 		let mut inputs: Vec<_> = tx.inputs().into();
 
 		let agg_tx = self
@@ -312,31 +290,13 @@ where
 		// By applying cut_through to tx inputs and agg_tx outputs we can
 		// determine the outputs being spent from the pool and those still unspent
 		// that need to be looked up via the current utxo.
-		let (inputs, _, _, spent_pool) =
+		let (spent_utxo, _, _, spent_pool) =
 			transaction::cut_through(&mut inputs[..], &mut outputs[..])?;
 
 		// Lookup remaining outputs to be spent from the current utxo.
-		let spent_utxo = self.blockchain.validate_inputs(inputs.into())?;
+		let spent_utxo = self.blockchain.validate_inputs(&spent_utxo.into())?;
 
-		// Combine outputs spent in utxo with outputs spent in pool to give us the
-		// full set of outputs being spent by this transaction.
-		// This is our source of truth for input features.
-		let mut spent = spent_pool.to_vec();
-		spent.extend(spent_utxo);
-		spent.sort();
-
-		// Now build the resulting transaction based on our inputs and outputs from the original transaction.
-		// Remember to use the original kernels and kernel offset.
-		let mut outputs = tx.outputs().to_vec();
-		let (inputs, outputs, _, _) = transaction::cut_through(&mut spent[..], &mut outputs[..])?;
-		let inputs: Vec<_> = inputs.iter().map(|out| out.into()).collect();
-		let tx = Transaction::new(inputs.as_slice(), outputs, tx.kernels()).with_offset(tx.offset);
-
-		// Validate the tx to ensure our converted inputs are correct.
-		tx.validate(Weighting::AsTransaction, self.verifier_cache.clone())
-			.map_err(PoolError::InvalidTx)?;
-
-		Ok(tx)
+		Ok((spent_pool.to_vec(), spent_utxo))
 	}
 
 	fn apply_tx_to_block_sums(

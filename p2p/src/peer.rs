@@ -252,23 +252,6 @@ impl Peer {
 		self.send(ban_reason_msg, msg::Type::BanReason).map(|_| ())
 	}
 
-	/// Sends the provided block to the remote peer. The request may be dropped
-	/// if the remote peer is known to already have the block.
-	pub fn send_block(&self, b: &core::Block) -> Result<bool, Error> {
-		if !self.tracking_adapter.has_recv(b.hash()) {
-			trace!("Send block {} to {}", b.hash(), self.info.addr);
-			self.send(b, msg::Type::Block)?;
-			Ok(true)
-		} else {
-			debug!(
-				"Suppress block send {} to {} (already seen)",
-				b.hash(),
-				self.info.addr,
-			);
-			Ok(false)
-		}
-	}
-
 	pub fn send_compact_block(&self, b: &core::CompactBlock) -> Result<bool, Error> {
 		if !self.tracking_adapter.has_recv(b.hash()) {
 			trace!("Send compact block {} to {}", b.hash(), self.info.addr);
@@ -540,8 +523,8 @@ impl ChainAdapter for TrackingAdapter {
 		self.adapter.locate_headers(locator)
 	}
 
-	fn get_block(&self, h: Hash) -> Option<core::Block> {
-		self.adapter.get_block(h)
+	fn get_block(&self, h: Hash, peer_info: &PeerInfo) -> Option<core::Block> {
+		self.adapter.get_block(h, peer_info)
 	}
 
 	fn txhashset_read(&self, h: Hash) -> Option<TxHashSetRead> {

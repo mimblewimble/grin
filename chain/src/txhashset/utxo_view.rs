@@ -56,7 +56,7 @@ impl<'a> UTXOView<'a> {
 		for output in block.outputs() {
 			self.validate_output(output, batch)?;
 		}
-		self.validate_inputs(block.inputs(), batch)
+		self.validate_inputs(&block.inputs(), batch)
 	}
 
 	/// Validate a transaction against the current UTXO set.
@@ -70,7 +70,7 @@ impl<'a> UTXOView<'a> {
 		for output in tx.outputs() {
 			self.validate_output(output, batch)?;
 		}
-		self.validate_inputs(tx.inputs(), batch)
+		self.validate_inputs(&tx.inputs(), batch)
 	}
 
 	/// Validate the provided inputs.
@@ -78,10 +78,20 @@ impl<'a> UTXOView<'a> {
 	/// that would be spent by the provided inputs.
 	pub fn validate_inputs(
 		&self,
-		inputs: Inputs,
+		inputs: &Inputs,
 		batch: &Batch<'_>,
 	) -> Result<Vec<(OutputIdentifier, CommitPos)>, Error> {
 		match inputs {
+			Inputs::CommitOnly(inputs) => {
+				let outputs_spent: Result<Vec<_>, Error> = inputs
+					.iter()
+					.map(|input| {
+						self.validate_input(input.commitment(), batch)
+							.and_then(|(out, pos)| Ok((out, pos)))
+					})
+					.collect();
+				outputs_spent
+			}
 			Inputs::FeaturesAndCommit(inputs) => {
 				let outputs_spent: Result<Vec<_>, Error> = inputs
 					.iter()
@@ -93,6 +103,7 @@ impl<'a> UTXOView<'a> {
 								if out == input.into() {
 									Ok((out, pos))
 								} else {
+									error!("input mismatch: {:?}, {:?}, {:?}", out, pos, input);
 									Err(ErrorKind::Other("input mismatch".into()).into())
 								}
 							})
@@ -114,7 +125,15 @@ impl<'a> UTXOView<'a> {
 		let pos = batch.get_output_pos_height(&input)?;
 		if let Some(pos) = pos {
 			if let Some(out) = self.output_pmmr.get_data(pos.pos) {
-				return Ok((out, pos));
+				if out.commitment() == input {
+					return Ok((out, pos));
+				} else {
+					error!("input mismatch: {:?}, {:?}, {:?}", out, pos, input);
+					return Err(ErrorKind::Other(
+						"input mismatch (output_pos index mismatch?)".into(),
+					)
+					.into());
+				}
 			}
 		}
 		Err(ErrorKind::AlreadySpent(input).into())
@@ -151,17 +170,27 @@ impl<'a> UTXOView<'a> {
 		height: u64,
 		batch: &Batch<'_>,
 	) -> Result<(), Error> {
-		// Find the greatest output pos of any coinbase
-		// outputs we are attempting to spend.
 		let inputs: Vec<_> = inputs.into();
-		let pos = inputs
-			.iter()
-			.filter(|x| x.is_coinbase())
-			.filter_map(|x| batch.get_output_pos(&x.commitment()).ok())
-			.max()
-			.unwrap_or(0);
 
-		if pos > 0 {
+		// Lookup the outputs being spent.
+		let spent: Result<Vec<_>, _> = inputs
+			.iter()
+			.map(|x| self.validate_input(x.commitment(), batch))
+			.collect();
+
+		// Find the max pos of any coinbase being spent.
+		let pos = spent?
+			.iter()
+			.filter_map(|(out, pos)| {
+				if out.features.is_coinbase() {
+					Some(pos.pos)
+				} else {
+					None
+				}
+			})
+			.max();
+
+		if let Some(pos) = pos {
 			// If we have not yet reached 1440 blocks then
 			// we can fail immediately as coinbase cannot be mature.
 			if height < global::coinbase_maturity() {

@@ -34,7 +34,7 @@ use crate::types::{
 	BlockStatus, ChainAdapter, CommitPos, NoStatus, Options, Tip, TxHashsetWriteStatus,
 };
 use crate::util::secp::pedersen::{Commitment, RangeProof};
-use crate::util::RwLock;
+use crate::{util::RwLock, ChainStore};
 use grin_store::Error::NotFoundErr;
 use std::collections::HashMap;
 use std::fs::{self, File};
@@ -171,6 +171,10 @@ impl Chain {
 	) -> Result<Chain, Error> {
 		let store = Arc::new(store::ChainStore::new(&db_root)?);
 
+		// DB migrations to be run prior to the chain being used.
+		// Migrate full blocks to protocol version v3.
+		Chain::migrate_db_v2_v3(&store)?;
+
 		// open the txhashset, creating a new one if necessary
 		let mut txhashset = txhashset::TxHashSet::open(db_root.clone(), store.clone(), None)?;
 
@@ -217,12 +221,6 @@ impl Chain {
 			archive_mode,
 			genesis: genesis.header,
 		};
-
-		// DB migrations to be run prior to the chain being used.
-		{
-			// Migrate full blocks to protocol version v2.
-			chain.migrate_db_v1_v2()?;
-		}
 
 		chain.log_heads()?;
 
@@ -275,11 +273,12 @@ impl Chain {
 	/// We also need to support relaying blocks with FeaturesAndCommit inputs to peers.
 	/// So we need a way to convert blocks from CommitOnly to FeaturesAndCommit.
 	/// Validating the inputs against the utxo_view allows us to look the outputs up.
-	fn convert_block_v2(&self, block: Block) -> Result<Block, Error> {
+	pub fn convert_block_v2(&self, block: Block) -> Result<Block, Error> {
 		debug!(
-			"convert_block_v2: {} at {}",
+			"convert_block_v2: {} at {} ({} -> v2)",
 			block.header.hash(),
-			block.header.height
+			block.header.height,
+			block.inputs().version_str(),
 		);
 
 		if block.inputs().is_empty() {
@@ -291,18 +290,19 @@ impl Chain {
 
 		let mut header_pmmr = self.header_pmmr.write();
 		let mut txhashset = self.txhashset.write();
-		let outputs =
+		let inputs: Vec<_> =
 			txhashset::extending_readonly(&mut header_pmmr, &mut txhashset, |ext, batch| {
 				let previous_header = batch.get_previous_header(&block.header)?;
 				pipe::rewind_and_apply_fork(&previous_header, ext, batch)?;
 				ext.extension
 					.utxo_view(ext.header_extension)
-					.validate_inputs(block.inputs(), batch)
+					.validate_inputs(&block.inputs(), batch)
+					.map(|outputs| outputs.into_iter().map(|(out, _)| out).collect())
 			})?;
-		let outputs: Vec<_> = outputs.into_iter().map(|(out, _)| out).collect();
+		let inputs = inputs.as_slice().into();
 		Ok(Block {
 			header: block.header,
-			body: block.body.replace_inputs(outputs.into()),
+			body: block.body.replace_inputs(inputs),
 		})
 	}
 
@@ -397,8 +397,9 @@ impl Chain {
 		// Only do this once we know the header PoW is valid.
 		self.check_orphan(&b, opts)?;
 
-		// Convert block to FeaturesAndCommit inputs.
-		// We know this block is not an orphan and header is valid at this point.
+		// We can only reliably convert to "v2" if not an orphan (may spend output from previous block).
+		// We convert from "v3" to "v2" by looking up outputs to be spent.
+		// This conversion also ensures a block received in "v2" has valid input features (prevents malleability).
 		let b = self.convert_block_v2(b)?;
 
 		let (maybe_new_head, prev_head) = {
@@ -646,7 +647,7 @@ impl Chain {
 	/// that would be spent by the inputs.
 	pub fn validate_inputs(
 		&self,
-		inputs: Inputs,
+		inputs: &Inputs,
 	) -> Result<Vec<(OutputIdentifier, CommitPos)>, Error> {
 		let header_pmmr = self.header_pmmr.read();
 		let txhashset = self.txhashset.read();
@@ -662,12 +663,12 @@ impl Chain {
 
 	/// Verify we are not attempting to spend a coinbase output
 	/// that has not yet sufficiently matured.
-	pub fn verify_coinbase_maturity(&self, tx: &Transaction) -> Result<(), Error> {
+	pub fn verify_coinbase_maturity(&self, inputs: &Inputs) -> Result<(), Error> {
 		let height = self.next_block_height()?;
 		let header_pmmr = self.header_pmmr.read();
 		let txhashset = self.txhashset.read();
 		txhashset::utxo_view(&header_pmmr, &txhashset, |utxo, batch| {
-			utxo.verify_coinbase_maturity(&tx.inputs(), height, batch)?;
+			utxo.verify_coinbase_maturity(inputs, height, batch)?;
 			Ok(())
 		})
 	}
@@ -1403,14 +1404,13 @@ impl Chain {
 		self.header_pmmr.read().get_header_hash_by_height(height)
 	}
 
-	/// Migrate our local db from v1 to v2.
-	/// This covers blocks which themselves contain transactions.
-	/// Transaction kernels changed in v2 due to "variable size kernels".
-	fn migrate_db_v1_v2(&self) -> Result<(), Error> {
-		let store_v1 = self.store.with_version(ProtocolVersion(1));
-		let batch = store_v1.batch()?;
+	/// Migrate our local db from v2 to v3.
+	/// "commit only" inputs.
+	fn migrate_db_v2_v3(store: &ChainStore) -> Result<(), Error> {
+		let store_v2 = store.with_version(ProtocolVersion(2));
+		let batch = store_v2.batch()?;
 		for (_, block) in batch.blocks_iter()? {
-			batch.migrate_block(&block, ProtocolVersion(2))?;
+			batch.migrate_block(&block, ProtocolVersion(3))?;
 		}
 		batch.commit()?;
 		Ok(())
