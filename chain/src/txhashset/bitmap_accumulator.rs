@@ -16,7 +16,6 @@ use std::convert::TryFrom;
 use std::time::Instant;
 
 use bit_vec::BitVec;
-use croaring::Bitmap;
 
 use crate::core::core::hash::{DefaultHashable, Hash};
 use crate::core::core::pmmr::{self, ReadonlyPMMR, VecBackend, PMMR};

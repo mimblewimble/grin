@@ -176,19 +176,17 @@ impl Chain {
 		Chain::migrate_db_v2_v3(&store)?;
 
 		// open the txhashset, creating a new one if necessary
-		let mut txhashset = txhashset::TxHashSet::open(db_root.clone(), store.clone(), None)?;
+		let mut txhashset = txhashset::TxHashSet::open(db_root.clone(), store.clone())?;
 
 		let mut header_pmmr = PMMRHandle::new(
 			Path::new(&db_root).join("header").join("header_head"),
 			false,
 			ProtocolVersion(1),
-			None,
 		)?;
 		let mut sync_pmmr = PMMRHandle::new(
 			Path::new(&db_root).join("header").join("sync_head"),
 			false,
 			ProtocolVersion(1),
-			None,
 		)?;
 
 		setup_head(
@@ -1058,7 +1056,6 @@ impl Chain {
 				.expect("invalid sandbox folder")
 				.to_owned(),
 			self.store.clone(),
-			Some(&header),
 		)?;
 
 		// Validate the full kernel history.
@@ -1143,11 +1140,7 @@ impl Chain {
 			txhashset::txhashset_replace(sandbox_dir, PathBuf::from(self.db_root.clone()))?;
 
 			// Re-open on db root dir
-			txhashset = txhashset::TxHashSet::open(
-				self.db_root.clone(),
-				self.store.clone(),
-				Some(&header),
-			)?;
+			txhashset = txhashset::TxHashSet::open(self.db_root.clone(), self.store.clone())?;
 
 			// Replace the chain txhashset with the newly built one.
 			*txhashset_ref = txhashset;

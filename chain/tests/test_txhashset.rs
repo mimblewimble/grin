@@ -40,7 +40,7 @@ fn test_unexpected_zip() {
 	{
 		let chain_store = ChainStore::new(&db_root).unwrap();
 		let store = Arc::new(chain_store);
-		txhashset::TxHashSet::open(db_root.clone(), store.clone(), None).unwrap();
+		txhashset::TxHashSet::open(db_root.clone(), store.clone()).unwrap();
 		let head = BlockHeader::default();
 		// First check if everything works out of the box
 		assert!(txhashset::zip_read(db_root.clone(), &head).is_ok());

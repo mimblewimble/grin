@@ -171,7 +171,6 @@ impl<T: PMMRable> PMMRBackend<T> {
 		data_dir: P,
 		prunable: bool,
 		version: ProtocolVersion,
-		header: Option<&BlockHeader>,
 	) -> io::Result<PMMRBackend<T>> {
 		let data_dir = data_dir.as_ref();
 

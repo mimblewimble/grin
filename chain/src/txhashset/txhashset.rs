@@ -62,16 +62,16 @@ impl<T: PMMRable> PMMRHandle<T> {
 		path: P,
 		prunable: bool,
 		version: ProtocolVersion,
-		header: Option<&BlockHeader>,
 	) -> Result<PMMRHandle<T>, Error> {
 		fs::create_dir_all(&path)?;
-		let backend = PMMRBackend::new(&path, prunable, version, header)?;
+		let backend = PMMRBackend::new(&path, prunable, version)?;
 		let last_pos = backend.unpruned_size();
 		Ok(PMMRHandle { backend, last_pos })
 	}
 }
 
 impl PMMRHandle<OutputIdentifier> {
+	/// Retrieve the leaf_set state corresponding to the provided block header.
 	pub fn get_leaf_set(&self, header: &BlockHeader) -> Result<Bitmap, Error> {
 		self.backend
 			.get_leaf_set(header)
@@ -166,18 +166,13 @@ pub struct TxHashSet {
 
 impl TxHashSet {
 	/// Open an existing or new set of backends for the TxHashSet
-	pub fn open(
-		root_dir: String,
-		commit_index: Arc<ChainStore>,
-		header: Option<&BlockHeader>,
-	) -> Result<TxHashSet, Error> {
+	pub fn open(root_dir: String, commit_index: Arc<ChainStore>) -> Result<TxHashSet, Error> {
 		let output_pmmr_h = PMMRHandle::new(
 			Path::new(&root_dir)
 				.join(TXHASHSET_SUBDIR)
 				.join(OUTPUT_SUBDIR),
 			true,
 			ProtocolVersion(1),
-			header,
 		)?;
 
 		let rproof_pmmr_h = PMMRHandle::new(
@@ -186,7 +181,6 @@ impl TxHashSet {
 				.join(RANGE_PROOF_SUBDIR),
 			true,
 			ProtocolVersion(1),
-			header,
 		)?;
 
 		// Initialize the bitmap accumulator from the current output_pos index.
@@ -206,7 +200,6 @@ impl TxHashSet {
 					.join(KERNEL_SUBDIR),
 				false, // not prunable
 				version,
-				None,
 			)?;
 			if handle.last_pos == 0 {
 				debug!(
@@ -258,11 +251,12 @@ impl TxHashSet {
 		self.output_pmmr_h.get_leaf_set(header)
 	}
 
+	/// Initialize the utxo bitmap.
 	pub fn init_utxo_bitmap(&mut self, bitmap: &Bitmap) {
 		self.utxo_bitmap = bitmap.clone()
 	}
 
-	/// TODO - cleanup.
+	/// Initialize the accumulator.
 	pub fn init_accumulator(&mut self) -> Result<(), Error> {
 		self.bitmap_accumulator = TxHashSet::bitmap_accumulator(&self.utxo_bitmap)?;
 		Ok(())
@@ -585,7 +579,7 @@ impl TxHashSet {
 
 		// First clear out any existing entries.
 		// We want to fully replace the index with the provided bitmap.
-		let keys: Vec<_> = batch.output_pos_iter()?.map(|(k, v)| k).collect();
+		let keys: Vec<_> = batch.output_pos_iter()?.map(|(k, _)| k).collect();
 		for key in keys {
 			batch.delete(&key)?;
 		}
@@ -1576,7 +1570,6 @@ impl<'a> Extension<'a> {
 
 		// The real magicking happens here. Sum of kernel excesses should equal
 		// sum of unspent outputs minus total supply.
-		let db_pos: Vec<_> = batch.output_pos_iter()?.map(|(_, pos)| pos.pos).collect();
 		let (output_sum, kernel_sum) = self.validate_kernel_sums(genesis, header)?;
 
 		// These are expensive verification step (skipped for "fast validation").
