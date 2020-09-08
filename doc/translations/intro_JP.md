@@ -1,6 +1,6 @@
 # Mimblewimble と Grin 概論
 
-*この文章を他の言語で読む： [English](intro.md), [Español](intro_ES.md), [Nederlands](intro_NL.md), [Русский](intro_RU.md), [日本語](intro_JP.md), [Deutsch](intro_DE.md), [Portuguese](intro_PT-BR.md), [Korean](intro_KR.md), [简体中文](intro_ZH-CN.md).*
+*この文章を他の言語で読む： [English](../intro.md), [Español](intro_ES.md), [Nederlands](intro_NL.md), [Русский](intro_RU.md), [日本語](intro_JP.md), [Deutsch](intro_DE.md), [Portuguese](intro_PT-BR.md), [Korean](intro_KR.md), [简体中文](intro_ZH-CN.md).*
 
 Mimblewimble は、極めてよいスケーラビリティ、プライバシー、そして代替可能性（fungibility）の解決法を提供
 するブロックチェーンのフォーマット・プロトコルである。Mimblewimble は、ほとんどすべてのブロックチェーンの
@@ -133,7 +133,7 @@ Alice があなたに 3 coin を送金し、その額を秘匿化するために
 
     X = 28*G + 3*H
 
-加算の結果である _X_ は誰からも見ることができる。送金額 3 は Alice とあなただけが知っていて、 
+加算の結果である _X_ は誰からも見ることができる。送金額 3 は Alice とあなただけが知っていて、
 28 はあなただけが知っている。
 
 この 3 coin を再び転送するには、プロトコルは 28 の値をどうにかして知っている必要がある。
@@ -178,7 +178,7 @@ _transaction kernel_ と呼ばれ、バリデーターにチェックされる�
 
 #### いくつかの細かい点について
 
-この章では、お釣りがどのように導入されるか、またすべての値が非負であることの証明となる range proof 
+この章では、お釣りがどのように導入されるか、またすべての値が非負であることの証明となる range proof
 の要件について議論することで、トランザクションの構成についての詳細を詳しく述べる。これらの両方とも、
 Mimblewimble と Grin を理解するために必ず必要というわけではない。したがって、もし急いでいるのならば
 [まとめ](#まとめ) まで読み飛ばしてもらって構わない。
@@ -186,7 +186,7 @@ Mimblewimble と Grin を理解するために必ず必要というわけでは�
 ##### お釣り
 
 Alice から受け取った 3 coins のうち 2 coins を Carol に送金したいとする。
-そのためには、残りの 1 coin を自らにお釣りとして送金する。もう一つの秘密鍵（12 とする）を 
+そのためには、残りの 1 coin を自らにお釣りとして送金する。もう一つの秘密鍵（12 とする）を
 blinding factor として生成しお釣りの output を保護する。Carol は以前の例と同じように
 自らの秘密鍵を使用する。
 

@@ -1,6 +1,6 @@
 # grin - ビルド、設定、動作確認
 
-*この文章を他の言語で読む: [English](build.md), [Español](build_ES.md), [Korean](build_KR.md), [简体中文](build_ZH-CN.md).*
+*この文章を他の言語で読む: [English](../build.md), [Español](build_ES.md), [Korean](build_KR.md), [简体中文](build_ZH-CN.md).*
 
 ## 動作環境
 

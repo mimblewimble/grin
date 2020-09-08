@@ -1,6 +1,6 @@
 # 状态和存储
 
-*阅读其它语言版本: [English](state.md), [Korean](state_KR.md), [日本語](state_JP.md).*
+*阅读其它语言版本: [English](../state.md), [Korean](state_KR.md), [日本語](state_JP.md).*
 
 ## Grin 的状态
 

@@ -1,6 +1,6 @@
 # Grin Stratum RPC 协议
 
-*阅读其它语言版本: [Korean](stratum_KR.md)，[English](stratum.md).*
+*阅读其它语言版本: [Korean](../stratum_KR.md)，[English](stratum.md).*
 
 本文说明在 Grin 部署目前的 Stratum RPC 协议。
 
@@ -33,11 +33,11 @@
 范例：
 
 ```JSON
-{  
+{
    "id":"10",
    "jsonrpc":"2.0",
    "method":"getjobtemplate",
-   "error":{  
+   "error":{
       "code":-32500,
       "message":"login first"
    }
@@ -56,11 +56,11 @@
 范例：
 
 ```JSON
-{  
+{
    "id":"10",
    "jsonrpc":"2.0",
    "method":"getgrins",
-   "error":{  
+   "error":{
       "code":-32601,
       "message":"Method not found"
    }
@@ -84,7 +84,7 @@
 范例：
 
 ``` JSON
-{  
+{
    "id":"2",
    "jsonrpc":"2.0",
    "method":"getjobtemplate",
@@ -101,11 +101,11 @@
 范例：
 
 ``` JSON
-{  
+{
    "id":"0",
    "jsonrpc":"2.0",
    "method":"getjobtemplate",
-   "result":{  
+   "result":{
       "difficulty":1,
       "height":13726,
       "job_id":4,
@@ -128,11 +128,11 @@
 范例：
 
 ```JSON
-{  
+{
    "id":"10",
    "jsonrpc":"2.0",
    "method":"getjobtemplate",
-   "error":{  
+   "error":{
       "code":-32000,
       "message":"Node is syncing - Please wait"
    }
@@ -155,11 +155,11 @@ Stratum 服务器发起新消息。Stratum 服务器会自动发送工作给连�
 范例：
 
 ``` JSON
-{  
+{
    "id":"Stratum",
    "jsonrpc":"2.0",
    "method":"job",
-   "params":{  
+   "params":{
       "difficulty":1,
       "height":16375,
       "job_id":5,
@@ -188,7 +188,7 @@ Stratum 服务器发起新消息。Stratum 服务器会自动发送工作给连�
 范例：
 
 ``` JSON
-{  
+{
    "id":"2",
    "jsonrpc":"2.0",
    "method":"keepalive",
@@ -209,7 +209,7 @@ Stratum 服务器发起新消息。Stratum 服务器会自动发送工作给连�
 范例：
 
 ``` JSON
-{  
+{
    "id":"2",
    "jsonrpc":"2.0",
    "method":"keepalive",
@@ -237,11 +237,11 @@ Stratum 服务器发起新消息。Stratum 服务器会自动发送工作给连�
 
 ``` JSON
 
-{  
+{
    "id":"0",
    "jsonrpc":"2.0",
    "method":"login",
-   "params":{  
+   "params":{
       "login":"login",
       "pass":"password",
       "agent":"grin-miner"
@@ -266,7 +266,7 @@ Stratum 服务器发起新消息。Stratum 服务器会自动发送工作给连�
 范例：
 
 ``` JSON
-{  
+{
    "id":"1",
    "jsonrpc":"2.0",
    "method":"login",
@@ -295,7 +295,7 @@ Stratum 服务器发起新消息。Stratum 服务器会自动发送工作给连�
 范例：
 
 ``` JSON
-{  
+{
    "id":"2",
    "jsonrpc":"2.0",
    "method":"status",
@@ -318,11 +318,11 @@ Stratum 服务器发起新消息。Stratum 服务器会自动发送工作给连�
 范例：
 
 ```JSON
-{  
+{
    "id":"5",
    "jsonrpc":"2.0",
    "method":"status",
-   "result":{  
+   "result":{
       "id":"5",
       "height":13726,
       "difficulty":1,
@@ -361,7 +361,7 @@ Stratum 服务器发起新消息。Stratum 服务器会自动发送工作给连�
       "height":16419,
       "job_id":0,
       "nonce":8895699060858340771,
-      "pow":[  
+      "pow":[
          4210040,10141596,13269632,24291934,28079062,84254573,84493890,100560174,100657333,120128285,130518226,140371663,142109188,159800646,163323737,171019100,176840047,191220010,192245584,198941444,209276164,216952635,217795152,225662613,230166736,231315079,248639876,263910393,293995691,298361937,326412694,330363619,414572127,424798984,426489226,466671748,466924466,490048497,495035248,496623057,502828197, 532838434
          ]
    }
@@ -387,7 +387,7 @@ Stratum 接受份额，但不是目前网络目标难度的有效 cuck(at)oo 解
 范例：
 
 ``` JSON
-{  
+{
    "id":"2",
    "jsonrpc":"2.0",
    "method":"submit",
@@ -411,7 +411,7 @@ Stratum 接受份额，但不是目前网络目标难度的有效 cuck(at)oo 解
 范例：
 
 ``` JSON
-{  
+{
    "id":"6",
    "jsonrpc":"2.0",
    "method":"submit",
@@ -438,11 +438,11 @@ Stratum 接受份额，但不是目前网络目标难度的有效 cuck(at)oo 解
 范例：
 
 ```JSON
-{  
+{
    "id":"5",
    "jsonrpc":"2.0",
    "method":"submit",
-   "error":{  
+   "error":{
       "code":-32503,
       "message":"Solution submitted too late"
    }
@@ -467,11 +467,11 @@ Stratum 接受份额，但不是目前网络目标难度的有效 cuck(at)oo 解
 范例：
 
 ```JSON
-{  
+{
    "id":"5",
    "jsonrpc":"2.0",
    "method":"submit",
-   "error":{  
+   "error":{
       "code":-32502,
       "message":"Failed to validate solution"
    }
@@ -492,11 +492,11 @@ Stratum 接受份额，但不是目前网络目标难度的有效 cuck(at)oo 解
 范例：
 
 ```JSON
-{  
+{
    "id":"5",
    "jsonrpc":"2.0",
    "method":"submit",
-   "error":{  
+   "error":{
       "code":-32501,
       "message":"Share rejected due to low difficulty"
    }

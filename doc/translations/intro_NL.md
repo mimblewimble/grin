@@ -1,6 +1,6 @@
 # Inleiding tot Mimblewimble en Grin
 
-*Lees dit in andere talen: [English](intro.md), [Español](intro_ES.md), [Nederlands](intro_NL.md), [Русский](intro_RU.md), [日本語](intro_JP.md), [Deutsch](intro_DE.md), [Portuguese](intro_PT-BR.md), [Korean](intro_KR.md), [简体中文](intro_ZH-CN.md).*
+*Lees dit in andere talen: [English](../intro.md), [Español](intro_ES.md), [Nederlands](intro_NL.md), [Русский](intro_RU.md), [日本語](intro_JP.md), [Deutsch](intro_DE.md), [Portuguese](intro_PT-BR.md), [Korean](intro_KR.md), [简体中文](intro_ZH-CN.md).*
 
 Mimblewimble is een blockchain formaat en protocol die extreem goede schaalbaarheid, privacy en fungibiliteit biedt door zich te berusten op sterke cryptografische primiteven. Het adresseert de lacunes die in bijna alle huidige blockchain-implementaties bestaan.
 
@@ -22,7 +22,7 @@ Het belangrijkste doel en eigenschappen van het Grin project zijn:
   controleren en onderhouden.
 * Gemeenschapsgedreven, met behulp van een asic-resistant mining algoritme
   (Cuckoo Cycle) welke mining decentralisatie stimuleert.
-  
+
 ## Betwisting voor Iedereen
 
 Dit document is bedoeld voor lezers met een sterke achtergrond
@@ -65,8 +65,8 @@ terwijl vermenigvuldiging triviaal is, "verdeling" door curvepunten is extreem m
 De vorige formule `(k+j)*H = k*H + j*H`, met _k_ en _j_ als privésleutels,
 demonstreert dat een openbare sleutel verkregen is door de toevoeging van
 twee privésleutels (`(k+j)*H`) zijn identiek aan de toevoeging van de
-openbare sleutels voor elk van die twee privésleutels (`k*H + j*H`). 
-In de Bitcoin blockchain, zijn Hiërarchische Deterministische portefeuilles 
+openbare sleutels voor elk van die twee privésleutels (`k*H + j*H`).
+In de Bitcoin blockchain, zijn Hiërarchische Deterministische portefeuilles
 sterk afhankelijk van dit principe. Alsook Mimblewimble en de Grin-implementatie.
 
 ### Transacties met Mimblewimble
@@ -247,7 +247,7 @@ Het is ook belangrijk om op te merken dat om een geldige range proof te maken ui
 
 Een Mimblewimble transactie omvat het volgende:
 
-* Een reeks invoeren, die verwijzen naar en een vorige reeks aan uitvoeren spendeert. 
+* Een reeks invoeren, die verwijzen naar en een vorige reeks aan uitvoeren spendeert.
 * Een reeks van nieuwe uitvoeren met:
   * Een waarde en een blinding factor (welke gewoonweg een nieuwe privésleutel is) vermenigvuldigd met
   een curve en bij elkaar opgeteld `r.G + v.H`.
@@ -288,7 +288,7 @@ We kunnen zeggen dat het volgende waar is voor elke geldige transactie (voor een
 
     som(uitvoeren) - som(invoeren) = kernel_excess
 
-Hetzelfde geldt voor blokken zelf als we eenmaal realiseren dat een blok eenvoudigweg een reeks van geaggregeerde invoeren, uitvoeren en transactiekernels zijn. 
+Hetzelfde geldt voor blokken zelf als we eenmaal realiseren dat een blok eenvoudigweg een reeks van geaggregeerde invoeren, uitvoeren en transactiekernels zijn.
 
     som(uitvoeren) - som(invoeren) = sum(kernel_excess)
 
@@ -324,7 +324,7 @@ Wanneer we transacties in een blok samenvoegen, bewaren we een _single_ geaggreg
     som(uitvoeren) - sum(invoeren) = sum(kernel_excess) + kernel_offset
 
 We "splitsen" de sleutel `k` in `k1+k2` tijdens de transactie opbouw. Voor een transactie kernel `(k1+k2)*G` publiceren we `k1*G` (de overspil) en `k2` (de offset) en ondertekenen we de transactie met `k1*G` zoals eerder.
-Tijdens de blockconstructie kunnen we eenvoudigweg de `k2` offsets optellen om een single aggregate `k2` offset te genereren om alle transacties in de blok te dekken. De `k2` offset voor elke individuele transactie is niet-terugvorderbaar. 
+Tijdens de blockconstructie kunnen we eenvoudigweg de `k2` offsets optellen om een single aggregate `k2` offset te genereren om alle transacties in de blok te dekken. De `k2` offset voor elke individuele transactie is niet-terugvorderbaar.
 
 #### Cut-through
 
@@ -393,7 +393,7 @@ samengevat kunnen worden door alleen deze stukjes informatie:
 1. De volledige verzameling aan niet-bestede uitgaven.
 1. De transactiekernels voor elke transactie.
 
-Het eerste stuk informatie kan afgeleid worden door alleen de blokhoogte 
+Het eerste stuk informatie kan afgeleid worden door alleen de blokhoogte
 (de afstand tot het genesisblok) te gebruiken. En zowel de niet-bestede uitgaven als de
 transactiekernels zijn ontzettend compact. Dit heeft 2 belangrijke gevolgen:
 

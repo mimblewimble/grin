@@ -1,6 +1,6 @@
 # Grin - Compilación, configuración y ejecución
 
-*Lea esto en otros idiomas: [English](build.md), [日本語](build_JP.md), [Korean](build_KR.md), [简体中文](build_ZH-CN.md).*
+*Lea esto en otros idiomas: [English](../build.md), [日本語](build_JP.md), [Korean](build_KR.md), [简体中文](build_ZH-CN.md).*
 
 ## Plataformas soportadas
 

@@ -1,6 +1,6 @@
 # Introduction to Mimblewimble and Grin
 
-*Read this in other languages: [English](intro.md), [简体中文](intro_ZH-CN.md), [Español](intro_ES.md), [Nederlands](intro_NL.md), [Русский](intro_RU.md), [日本語](intro_JP.md), [Deutsch](intro_DE.md), [Portuguese](intro_PT-BR.md), [Korean](intro_KR.md).*
+*Read this in other languages: [简体中文](translations/intro_ZH-CN.md), [Español](translations/intro_ES.md), [Nederlands](translations/intro_NL.md), [Русский](translations/intro_RU.md), [日本語](translations/intro_JP.md), [Deutsch](translations/intro_DE.md), [Portuguese](translations/intro_PT-BR.md), [Korean](translations/intro_KR.md).*
 
 Mimblewimble is a blockchain format and protocol that provides
 extremely good scalability, privacy and fungibility by relying on strong
@@ -23,7 +23,7 @@ The main goal and characteristics of the Grin project are:
 * Design simplicity that makes it easy to audit and maintain over time.
 * Community driven, encouraging mining decentralization.
 
-A detailed post on the step-by-step of how Grin transactions work (with graphics) can be found [in this Medium post](https://medium.com/@brandonarvanaghi/grin-transactions-explained-step-by-step-fdceb905a853). 
+A detailed post on the step-by-step of how Grin transactions work (with graphics) can be found [in this Medium post](https://medium.com/@brandonarvanaghi/grin-transactions-explained-step-by-step-fdceb905a853).
 
 ## Tongue Tying for Everyone
 
@@ -92,7 +92,7 @@ fundamental properties are achieved.
 Building upon the properties of ECC we described above, one can obscure the values
 in a transaction.
 
-If _v_ is the value of a transaction input or output and _H_ a point on the elliptic curve _C_, we can simply 
+If _v_ is the value of a transaction input or output and _H_ a point on the elliptic curve _C_, we can simply
 embed `v*H` instead of _v_ in a transaction. This works because using the ECC
 operations, we can still validate that the sum of the outputs of a transaction equals the
 sum of inputs:
@@ -144,8 +144,8 @@ transaction can be done without knowing any of the values.
 
 As a final note, this idea is actually derived from Greg Maxwell's
 [Confidential Transactions](https://elementsproject.org/features/confidential-transactions/investigation),
-which is itself derived from an 
-[Adam Back proposal for homomorphic values](https://bitcointalk.org/index.php?topic=305791.0) 
+which is itself derived from an
+[Adam Back proposal for homomorphic values](https://bitcointalk.org/index.php?topic=305791.0)
 applied to Bitcoin.
 
 #### Ownership
@@ -249,7 +249,7 @@ by creating a transaction such as the following:
 which can be signed by the attacker because Carol's blinding factor cancels out in the equation `Y - Xi`:
 
     Y - Xi = ((113 + 99)*G + 2*H) - (113*G + 2*H) =  99*G
-    
+
 This output (`(113 + 99)*G + 2*H`) requires that both the numbers 113 and 99 are known in order to be spent; the attacker
 would thus have successfully locked Carol's UTXO. The requirement for a range proof for the blinding factor prevents this
 because the attacker doesn't know the number 113 and thus neither (113 + 99). A more detailed description of range proofs is further detailed in the [range proof paper](https://eprint.iacr.org/2017/1066.pdf).
@@ -260,7 +260,7 @@ A Mimblewimble transaction includes the following:
 
 * A set of inputs, that reference and spend a set of previous outputs.
 * A set of new outputs that include:
-  * A blinding factor *r* and a value *v* used for scalar multiplication for the curve 
+  * A blinding factor *r* and a value *v* used for scalar multiplication for the curve
   points G,H correspondingly, and subsequently summed to be `r*G + v*H`.
   * A range proof that among other things shows that *v* is non-negative.
 * A transaction fee in cleartext.
@@ -327,11 +327,11 @@ We also know that everything remaining can be used to reconstruct the other vali
 Remember that the kernel excess `r*G` simply is the public key of the excess value *r*. To mitigate this we redefine the kernel excess from `r*G` to `(r-kernel_offset)*G` and distribute the _kernel offset_ to be included with every transaction kernel. The kernel offset is thus a blinding factor that needs to be added to the excess value to ensure the commitments sum to zero:
 
     sum(outputs) - sum(inputs) = r*G = (r-kernel_offset)*G + kernel_offset*G
-    
+
 or alternatively
 
     sum(outputs) - sum(inputs) = kernel_excess + kernel_offset*G
-    
+
 For a commitment `r*G + 0*H` with the offset `a`, the transaction is signed with `(r-a)` and *a* is published so that `r*G` could be computed in order to verify the validity of the transaction: given the kernel excess (recall that it is given as part of the transaction kernel) `(r-a)*G` and the offset `a`, one computes `a*G` and obtains `(r-a)*G + a*G = r*G`.
 During block construction all kernel offsets are summed to generate a _single_ aggregate kernel offset to cover the whole block. The kernel offset for any individual transaction is then unrecoverable and the subset problem is solved.
 
@@ -384,7 +384,7 @@ A block is simply built from:
   * The signatures generated using the (modified) excess value `(r-a)` as the private (signing) key.
   * The mining fee.
 
-The block contents satisfy: 
+The block contents satisfy:
 
 sum(outputs) - sum(inputs) = sum(kernel_excess) + kernel_offset*G
 
@@ -414,12 +414,12 @@ in time can be summarized by just these pieces of information:
 1. The transactions kernels for each transaction.
 
 The first piece of information can be deduced just using the block
-height. 
+height.
 
 Both the UTXOs and the
 transaction kernels are extremely compact. This has two important consequences:
 
-* The blockchain a node needs to maintain is very small (on the 
+* The blockchain a node needs to maintain is very small (on the
 order of a few gigabytes for a bitcoin-sized blockchain, and
   potentially optimizable to a few hundreds of megabytes).
 * When a new node joins the network the amount of

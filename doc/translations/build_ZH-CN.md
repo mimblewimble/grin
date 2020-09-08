@@ -1,6 +1,6 @@
 # Grin - 构建，配置和运行
 
-*阅读其它语言版本: [English](build.md), [Español](build_ES.md), [日本語](build_JP.md), [Korean](build_KR.md).*
+*阅读其它语言版本: [English](../build.md), [Español](build_ES.md), [日本語](build_JP.md), [Korean](build_KR.md).*
 
 ## 支持的平台
 

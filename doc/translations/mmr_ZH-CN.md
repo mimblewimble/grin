@@ -1,6 +1,6 @@
 # Merkle Mountain Ranges
 
-*阅读其它语言版本: [English](mmr.md), [Korean](mmr_KR.md).*
+*阅读其它语言版本: [English](../mmr.md), [Korean](mmr_KR.md).*
 
 ## 结构
 
@@ -124,7 +124,7 @@ P = Blake2b(N | Blake2b(N | Node(p3) | Node(p2)) | Node(p1))
 2       6            13
        /            /   \
 1     2            9     12     17
-       \          /     /  \   /  
+       \          /     /  \   /
 0       1        7     10  11 15     18
 ```
 

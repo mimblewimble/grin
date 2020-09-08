@@ -1,7 +1,7 @@
 
 # Grin/Mimblewimble 致比特币持有者
 
-* 阅读其他语言版本：[Korean](grin4bitcoiners_KR.md)、 [English](grin4bitcoiners.md)
+*阅读其他语言版本：  [English](../grin4bitcoiners.md), [Korean](grin4bitcoiners_KR.md).*
 
 ## 隐私和可互换性
 

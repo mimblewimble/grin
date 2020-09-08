@@ -1,6 +1,6 @@
 # Introduktion till Mimblewimble och Grin
 
-*Läs detta på andra språk: [English](intro.md), [Español](intro_ES.md), [Nederlands](intro_NL.md), [Русский](intro_RU.md), [日本語](intro_JP.md), [Deutsch](intro_DE.md), [Portuguese](intro_PT-BR.md), [Korean](intro_KR.md), [简体中文](intro_ZH-CN.md).*
+*Läs detta på andra språk: [English](../intro.md), [Español](intro_ES.md), [Nederlands](intro_NL.md), [Русский](intro_RU.md), [日本語](intro_JP.md), [Deutsch](intro_DE.md), [Portuguese](intro_PT-BR.md), [Korean](intro_KR.md), [简体中文](intro_ZH-CN.md).*
 
 Mimblewimble är ett blockkedjeformat och protokoll som erbjuder extremt bra
 skalbarhet, integritet, och fungibilitet genom starka kryptografiska primitiver.
@@ -13,9 +13,9 @@ Grin-projektets huvudsakliga mål och kännetecken är:
 
 * Integritet som standard. Detta möjliggör fullkomlig fungibilitet utan att
 förhindra förmågan att selektivt uppdaga information efter behov.
-* Växer mestadels med antal användare och minimalt med antal transaktioner (< 100 bytes transaktionskärna), 
+* Växer mestadels med antal användare och minimalt med antal transaktioner (< 100 bytes transaktionskärna),
 vilket resulterar i stora utrymmesbesparingar i jämförelse med andra blockkedjor.
-* Stark och bevisad kryptografi. Mimblewimble förlitar sig endast på kryptografi med 
+* Stark och bevisad kryptografi. Mimblewimble förlitar sig endast på kryptografi med
 elliptiska kurvor (ECC) vilket har beprövats i decennier.
 * Simplistik design som gör det enkelt att granska och underhålla på lång sikt.
 * Gemenskapsdriven, uppmuntrar mining och decentralisering.
@@ -47,7 +47,7 @@ heltal _j_ kan vi också beräkna `(k+j)*H`, vilket är lika med `k*H + j*H`. Ad
 kurvor behåller sina kommutativa och associativa egenskaper från vanlig addition och multiplikation:
 
     (k+j)*H = k*H + j*H
-    
+
 Om vi inom ECC väljer ett väldigt stort tal _k_ som privat nyckel så anses `k*H` vara dess publika nyckel. Även om
 man vet värdet av den publika nyckeln `k*H`, är det nästintill omöjligt att härleda `k` (sagt med andra ord, medan
 multiplikation med kurvpunkter är trivialt är "division" extremt svårt).
@@ -64,7 +64,7 @@ starka garantier av integritet och konfidentialitet.
 
 Valideringen av Mimblewimble-transaktioner använder sig av två grundläggande egenskaper:
 
-* **Kontroll av nollsummor.** Summan av outputs minus inputs är alltid lika med noll, vilket bevisar—utan att 
+* **Kontroll av nollsummor.** Summan av outputs minus inputs är alltid lika med noll, vilket bevisar—utan att
 avslöja beloppen—att transaktionen inte skapade nya pengar.
 * **Innehav av privata nycklar.** Som med de flesta andra kryptovalutor garanteras ägandet av outputs (UTXOs)
 med innehavet av privata nycklar. Dock bevisas inte ägandet av dem genom en direkt signering av transaktionen.
@@ -80,7 +80,7 @@ Om _v_ är beloppet av en input eller output och _H_ en punkt på den elliptiska
 lika med summan av inputs i en transaktion med hjälp av ECC-operationer:
 
     v1 + v2 = v3 => v1*H + v2*H = v3*H
-    
+
 Bekräftandet av denna egenskap på alla transaktioner låter protokollet bekräfta att en transaktion inte skapar pengar ur
 tomma intet utan att veta vad beloppen är. Dock finns det ett begränsat antal av användbara belopp och man skulle kunna
 prova varenda en för att gissa beloppet på transaktionen. Dessutom, om man känner till _v1_ (till exempel från en föregående
@@ -90,7 +90,7 @@ anledningar introducerar vi en andra punkt _G_ på samma elliptiska kurva och en
 En input eller output i en transaktion kan uttryckas som:
 
     r*G + v*H
-    
+
 Där:
 
 * _r_ är en privat nyckel använd som en förblindningsfaktor, _G_ är en punkt på elliptiska kurvan _C_, och deras
@@ -110,16 +110,16 @@ Vi har (utan hänsyn till avgifter):
 Sådana att:
 
     vi1 + vi2 = vo3
-    
+
 Vi genererar en privat nyckel som en förblidningsfaktor för varje input och ersätter alla belopp med
 deras respektive Pedersen Commitment och får därmed:
 
     (ri1*G + vi1*H) + (ri2*G + vi2*H) = (ro3*G + vi3*H)
-    
+
 Vilket som följd kräver att:
 
     ri1 + ri2 = ro3
-    
+
 Detta är Mimblewimbles första pelare: de beräkningar som är nödvändiga för att validera en transaktion
 kan göras utan att veta några belopp.
 
@@ -136,7 +136,7 @@ Alice skickar 3 mynt till dig och för att dölja beloppet väljer du 28 som din
 är ett extremt stort tal). Någonstans i blockkedjan dyker följande output upp och ska endast kunna spenderas av dig:
 
     X = 28*G + 3*H
-    
+
 _X_ som är summan är synlig för alla. Beloppet 3 är endast känt av dig och Alice, och 28 är endast
 känt av dig.
 
@@ -144,13 +144,13 @@ För att skicka dessa 3 mynt igen kräver protokollet att 28 ska vara känt. Fö
 oss säga att du vill skicka samma 3 mynt till Carol. Du behöver skapa en simpel transaktion sådan att:
 
     Xi => Y
-    
+
 Där _Xi_ är en input som spenderar din _X_-output och Y är Carols output. Det finns inget sätt att skapa
 en sådan transaktion utan att känna till din privata nyckel 28. Om Carol ska balansera denna transaktion behöver hon
 både känna till det skickade beloppet och din privata nyckel så att:
 
     Y - Xi = (28*G + 3*H) - (28*G + 3*H) = 0*G + 0*H
-    
+
 Genom att kontrollera att allt har nollställts kan vi återigen försäkra oss om att inga nya pengar har skapats.
 
 Vänta! Stopp! Nu känner du till den privata nyckeln i Carols output (vilket i detta fall måste vara samma som ditt
@@ -160,7 +160,7 @@ För att lösa detta problem använder Carol en privat nyckel som hon väljer sj
 Det som hamnar i blockkedjan är:
 
     Y - Xi = (113*G + 3*H) - (28*G + 3*H) = 85*G + 0*H
-    
+
 Nu summeras transaktionen inte längre till noll och vi har ett _överskottsbelopp_ (85), vilket är resultatet
 av summeringen av alla förblindningsfaktorer. Eftersom `85*G` är en giltig publik nyckel för generatorpunkt _G_ vet vi
 att alla inputs och outputs har balanserats och transaktionen därmed är giltig då `x*G + y*H` är en giltig publik nyckel för generatorpunkt _G_ om och endast om `y = 0`.
@@ -189,12 +189,12 @@ förblindningsfaktor för att skydda beloppet på din växel-output. Carol anvä
 
     Växel-output:   12*G + 1*H
     Carols output:  113*G + 2*H
-    
+
 Det som hamnar i blockkedjan är något väldigt likt det vi hade tidigare, och signaturen är återigen skapat med
 överskottsbeloppet, 97 i detta exempel.
 
     (12*G + 1*H) + (113*G + 2*H) - (28*G + 3*H) = 97*G + 0*H
-    
+
 #### Range Proofs
 
 I alla beräkningar ovan förlitar vi oss på att alla belopp är positiva. Introduktionen av negativa belopp skulle vara
@@ -213,12 +213,12 @@ Det är även viktigt att notera att range proofs krävs för både förblindnin
 
     Carols UTXO:          133*G + 2*H
     Attackerarens output: (113 + 99)*G + 2*H
-    
+
 vilket kan signeras av attackeraren eftersom Carols förblindningsfaktor nollställs i ekvationen `Y - Xi`:
 
     Y - Xi = ((113 + 99)*G + 2*H) - (113*G + 2*H) = 99*G
-    
-Denna output (`(113 + 99)*G + 2*H`) kräver att både talen 113 och 99 är kända för att kunna spenderas; attackeraren skulle därmed ha lyckats låsa Carols UTXO. Kravet på range proof för förblindingsfaktorn förhindrar detta eftersom attackeraren inte känner till 113 och därmed inte heller (113 + 99). En mer utförlig beskrivning av range proofs är förklarat i 
+
+Denna output (`(113 + 99)*G + 2*H`) kräver att både talen 113 och 99 är kända för att kunna spenderas; attackeraren skulle därmed ha lyckats låsa Carols UTXO. Kravet på range proof för förblindingsfaktorn förhindrar detta eftersom attackeraren inte känner till 113 och därmed inte heller (113 + 99). En mer utförlig beskrivning av range proofs är förklarat i
 [range proof-pappret](https://eprint.iacr.org/2017/1066.pdf).
 
 #### Sammanställningen av allt
@@ -231,7 +231,7 @@ En Mimblewimble-transaktion inkluderar följande:
   till att bli `r*G + v*H`.
   * Ett range proof som bland annat visar att v är icke-negativt.
 * En transaktionsavgift i klartext.
-* En signatur vars privata nyckel beräknas genom att ta överskottsbeloppet (summan av alla outputs och 
+* En signatur vars privata nyckel beräknas genom att ta överskottsbeloppet (summan av alla outputs och
 avgiften minus inputs).
 
 ### Block och kedjetillstånd
@@ -241,7 +241,7 @@ upprätthåller egenskaperna för en giltig blockkedja, d v s att en transaktion
 fastställs med privata nycklar.
 
 Mimblewimble-blockformatet bygger på detta genom att introducera ett till koncept: _cut-through_. Med detta
-får en Mimblewimble-kedja: 
+får en Mimblewimble-kedja:
 
 * Extremt bra skalbarhet då den stora majoriteten av transaktionsinformation kan elimineras på lång sikt utan att
 kompromissa säkerhet.
@@ -254,25 +254,25 @@ Kom igåg att en transaktion består av följande:
 * En mängd inputs som refererar till och spenderar en mängd föregående outputs
 * En mängd nya outputs
 * En transaktionskärna som består av:
-  * kärnöverskottet (överskottsbeloppets publika nyckel) 
+  * kärnöverskottet (överskottsbeloppets publika nyckel)
   * transaktionssignatur vars publika nyckel är kärnöverskottet
-  
+
 En transaktion valideras genom att kärnöverskottet faställs vara en giltig publik nyckel:
 
     (42*G + 1*H) + (99*G + 2*H) - (113*G + 3*H) = 28*G + 0*H
-    
+
 Den publika nyckeln i detta exempel är `28*G`.
 
 Vi kan säga att följande är sant för alla giltiga transaktioner (vi ignorerar avgifter för enkelhetens skull):
 
     (summan av outputs) - (summan av inputs) = kärnöverskott
-    
+
 Detsamma gäller för blocken själva när vi inser att ett block helt enkelt är en mängd aggregerade inputs, outputs, och
 transaktionskärnor. Vi kan summera alla outputs, subtrahera det med summan av alla inputs, och likställa vårt resulterande Pedersen commitment med summan av kärnöverskotten:
 
     (summan av outputs) - (summan av inputs) = (summan av kärnöverskott)
-    
-    
+
+
 Något förenklat (återigen utan hänsyn till transaktionsavgifter) kan vi säga att Mimblewimble-block kan betraktas precis som
 Mimblewimble-transaktioner.
 
@@ -287,27 +287,27 @@ Betrakta dessa två transaktioner:
 
     (input1, input2) -> (output1), (kärna1)
     (input3) -> (output2), (kärna2)
-    
+
 Vi kan aggregera dem till följande block:
 
     (input1, input2, input3) -> (output1, output2), (kärna1, kärna2)
-    
+
 Det är trivialt att testa alla möjliga kombinationer och återskapa en av transaktionerna (där summan lyckas bli noll).
 
     (input1, input2) -> (output1), (kärna1)
-    
+
 Vi vet också att allt som kvarstår kan användas för att rekonstruera den andra giltiga transaktionen:
 
     (input3) -> (output2), (kärna2)
-     
+
 Kom ihåg att kärnöverskottet `r*G` helt enkelt är den publika nyckeln till överskottsbeloppet *r*. För att lösa detta problem omdefinierar vi kärnöverskottet från `r*G` till `(r-kärn_offset)*G` och distribuerar detta *kärn-offset* för att inkluderas i varje transktionskärna. Detta kärn-offset är således en förblindningsfaktor som måste tilläggas överskottsbeloopet för att ekvationen ska gå ihop:
 
     (summan av outputs) - (summan av inputs) = r*G = (r-kärn_offset)*G + kärn_offset*G
-    
+
 eller alternativt
 
     (summan av outputs) - (summan av inputs) = kärnöverskott + kärn_offset*G
-    
+
 För ett commitment `r*G + 0*H` med kärn-offset *a*, signeras transaktionen med `(r-a)` och *a* publiceras så att `r*G` kan beräknas för att kontrollera att transaktionen är giltig. Vid block-konstruktionen summeras alla kärn-offsets till ett enstaka sammanlagt offset som täcker hela blocket. Kärn-offsetet för en individuell transaktion blir därmed omöjlig att härleda och delmängdsproblemet är löst.
 
     (summan av outputs) - (summan av inputs) = (summan av kärnöverskott) + kärn_offset*G
@@ -320,13 +320,13 @@ föregående outputs som härmed spenderas. Föregående outputs markeras med _x
 
     I1(x1) --- O1
             |- O2
-            
+
     I2(x2) --- O3
     I3(O2) -|
 
     I4(O3) --- O4
             |- O5
-            
+
 Vi lägger märke till följande två egenskaper:
 
 * Inom detta block är vissa outputs spenderade direkt av påföljande inputs (I3 spenderar O2, och I4 spenderar O3).
@@ -340,7 +340,7 @@ deras sammansatta påverkan är noll. Detta leder till följande, mycket mer kom
     I1(x1) | O1
     I2(x2) | O4
            | O5
-           
+
 Notera att all transaktionsstruktur har eliminerats och att ordningen av inputs och outputs inte längre spelar någon roll.
 Summan av alla inputs och outputs är garanterat fortfarande noll.
 
@@ -354,7 +354,7 @@ Ett block består av:
   * Publika nyckeln `r*G` erhållen genom summation av alla inputs och outputs.
   * Signaturen genererad av överskottsbeloppet.
   * Mining-avgiften
-  
+
 Med denna struktur erbjuder ett Mimblewimble-block extremt bra integritetsgarantier:
 
 * Mellanliggande (genomskurna) transaktioner är endast representerade av sina transaktionskärnor.

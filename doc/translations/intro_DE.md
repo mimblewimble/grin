@@ -1,6 +1,6 @@
 # Einführung in Mimblewimble und Grin
 
-*In anderen Sprachen lesen: [English](intro.md), [Español](intro_ES.md), [Nederlands](intro_NL.md), [Русский](intro_RU.md), [日本語](intro_JP.md), [Deutsch](intro_DE.md), [Portuguese](intro_PT-BR.md), [Korean](intro_KR.md), [简体中文](intro_ZH-CN.md)*
+*In anderen Sprachen lesen: [English](../intro.md), [Español](intro_ES.md), [Nederlands](intro_NL.md), [Русский](intro_RU.md), [日本語](intro_JP.md), [Deutsch](intro_DE.md), [Portuguese](intro_PT-BR.md), [Korean](intro_KR.md), [简体中文](intro_ZH-CN.md)*
 
 Mimblewimble ist ein Blockchain-Format und Protokoll, welches auf starke kryptographische Primitiven setzt und dadurch äußerst gute Skalierbarkeit, Privatsphäre und Fungibilität bietet. Es befasst sich mit Lücken, die in fast allen gegenwärtigen Blockchainimplementierungen existieren.
 
@@ -18,13 +18,13 @@ Das Hauptziel und die Charakteristika des Grin-Projekts sind wie folgt:
 
 Dieses Dokument richtet sich an Leser, die ein gutes Verständnis von Blockchain und grundlegender Kryptografie haben. Vor diesem Hintergrund sind wir bestrebt, den technischen Aufbau von Mimblewimble, sowie dessen Einsatz in Grin zu erklären. Wir hoffen, dass dieses Dokument für die meisten technikbegeisterten Leser verständlich ist. Unser Ziel ist es, dich für Grin zu begeistern und dein Interesse zu wecken, dich in jeder möglichen Weise einzubringen.
 
-Um dieses Ziel zu erreichen, führen wir die für ein gutes Verständnis von Grin als Mimblewimble-Umsetzung nötigen Hauptkonzepte ein. Wir beginnen mit einer kurzen Erläutering einiger relevanter Eigenschaften der Elliptischen-Kurven-Kryptografie (ECC), um die Grundlagen für Grin zu legen und anschließend die Kernelemente von Transaktionen und Blocks im Mimblewimble-Blockchain zu beschreiben. 
+Um dieses Ziel zu erreichen, führen wir die für ein gutes Verständnis von Grin als Mimblewimble-Umsetzung nötigen Hauptkonzepte ein. Wir beginnen mit einer kurzen Erläutering einiger relevanter Eigenschaften der Elliptischen-Kurven-Kryptografie (ECC), um die Grundlagen für Grin zu legen und anschließend die Kernelemente von Transaktionen und Blocks im Mimblewimble-Blockchain zu beschreiben.
 
 ### Tiny Bits of Elliptic Curves
 
 Wir beginnen mit einer kurzen Einführung in Elliptische-Kurven-Kryptografie, wobei wir nur die Eigenschaften betrachten, die für das Verständnis von Mimblewimbles Funktionsweise nötig sind, ohne die Feinheiten von ECC eingehend zu vertiefen. Für Leser, die tiefer in diese Vorraussetzungen einzutauchen wünschen, gibt es weitere Möglichkeiten [mehr zu lernen](http://andrea.corbellini.name/2015/05/17/elliptic-curve-cryptography-a-gentle-introduction/).
 
-Eine elliptische Kurve zum Zwecke der Kryptografie ist ein großes Set an Punkten, die wir _C_ nennen. Diese Punkte können von Integern (auch Skalare genannt) addiert, substrahiert, oder multipliziert werden. Mit einem Integer _k_ und mittels einer Operation der skalaren Multiplikation können wir `k*H` errechnen, was auch einen Punkt auf der Kurve _C_ darstellt. Mit einem weiteren Integer _j_ können wir ferner `(k+j)*H` errechnen, was `k*H + j*H` gleicht. Diese Addition- und Skalarmultiplikationsoperationen auf einer elliptischen Kurve behalten die kommutativen und assoziativen Eigenschaften der Addition und Multiplikation bei: 
+Eine elliptische Kurve zum Zwecke der Kryptografie ist ein großes Set an Punkten, die wir _C_ nennen. Diese Punkte können von Integern (auch Skalare genannt) addiert, substrahiert, oder multipliziert werden. Mit einem Integer _k_ und mittels einer Operation der skalaren Multiplikation können wir `k*H` errechnen, was auch einen Punkt auf der Kurve _C_ darstellt. Mit einem weiteren Integer _j_ können wir ferner `(k+j)*H` errechnen, was `k*H + j*H` gleicht. Diese Addition- und Skalarmultiplikationsoperationen auf einer elliptischen Kurve behalten die kommutativen und assoziativen Eigenschaften der Addition und Multiplikation bei:
 
     (k+j)*H = k*H + j*H
 
@@ -59,7 +59,7 @@ Ein Input- oder Outputwert in einer Transaktion kann sodann ausgedrückt werden 
 
 Wobei:
 
-* _r_ ein privater Schlüssel ist, der als Blinding Factor genutzt wird, _G_ eine elliptische Kurve, und deren Produkt `r*G` der öffentliche Schlüssel für _r_ auf _G_ ist. 
+* _r_ ein privater Schlüssel ist, der als Blinding Factor genutzt wird, _G_ eine elliptische Kurve, und deren Produkt `r*G` der öffentliche Schlüssel für _r_ auf _G_ ist.
 * _v_ der Wert eines Inputs oder Outputs und _H_ eine weitere elliptische Kurve ist.
 
 Weder _v_ noch _r_ können abgeleitet werden, was die grundlegenden Eigenschaften der Elliptischen-Kurven-Kryptografie wirksam zum Einsatz bringt. `r*G + v*H` wird als ein _Pedersen Commitment_ bezeichnet.
@@ -73,7 +73,7 @@ Sodass
 
     vi1 + vi2 = vo3
 
-Durch die Erstellung eines privaten Schlüssels als Blinding Factor für jeden Inputwert und das Austauschen jedes Wertes mit den respektiven Pedersen Commitments der vorherigen Gleichung, erhalten wir: 
+Durch die Erstellung eines privaten Schlüssels als Blinding Factor für jeden Inputwert und das Austauschen jedes Wertes mit den respektiven Pedersen Commitments der vorherigen Gleichung, erhalten wir:
 
     (ri1*G + vi1*H) + (ri2*G + vi2*H) = (ro3*G + vo3*H)
 
@@ -111,7 +111,7 @@ Um dies zu lösen, nutzt Carol einen privaten Schlüssel ihrer Wahl. Sie wählt 
 
     Y - Xi = (113*G + 3*H) - (28*G + 3*H) = 85*G + 0*H
 
-Nun ergibt die Transaktion nicht länger Null und wir haben einen Wertüberschuss auf _G_ (85), was das Ergebnis der Summierung aller Blinding Factors ist. Weil aber `85*G` ein gültiger öffentlicher Schlüssel auf der elliptischen Kurve _C_, mit dem privaten Schlüssel 85, für jedes x und y, ist, gilt `x*G + y*H` nur dann als gültiger öffentlicher Schlüssel auf _G_, wenn `y = 0` ist. 
+Nun ergibt die Transaktion nicht länger Null und wir haben einen Wertüberschuss auf _G_ (85), was das Ergebnis der Summierung aller Blinding Factors ist. Weil aber `85*G` ein gültiger öffentlicher Schlüssel auf der elliptischen Kurve _C_, mit dem privaten Schlüssel 85, für jedes x und y, ist, gilt `x*G + y*H` nur dann als gültiger öffentlicher Schlüssel auf _G_, wenn `y = 0` ist.
 
 Daher muss das Protokoll lediglich verifizieren, dass (`Y - Xi`) ein gültiger öffentlicher Schlüssel auf _G_ ist, und dass die Transaktionspartner gemeinsam den privaten Schlüssel kennen (85 in unserer Transaktion mit Carol). Der einfachste Weg dies zu tun ist eine mit dem Wertüberschuss (85) erstellte Signature zu erfordern, die dann validiert, dass:
 
@@ -139,7 +139,7 @@ Was auf die Blockchain gelangt ist sehr ähnlich wie zuvor. Die Signatur wird wi
 
 In allen obigen Berechnungen stützen wir uns darauf, dass die Transaktionswerte immer positiv sind. Die Einführung von negativen Beträgen wäre extrem problematisch, da in jeder Transaktion neue Gelder erstellt werden könnten.
 
-Zum Beispiel könnten Transaktionen mit einem Input von 2 und Outputs von 5 und -3 erstellt werden, die trotzdem ausgeglichen sind, folgend der Definition in den vorherigen Abschnitten. Dies ist nicht einfach festzustellen, da sogar wenn _x_ Negativ ist, der korrespondierende Punkt `x.H` auf der Kurve so aussieht wie jeder andere. 
+Zum Beispiel könnten Transaktionen mit einem Input von 2 und Outputs von 5 und -3 erstellt werden, die trotzdem ausgeglichen sind, folgend der Definition in den vorherigen Abschnitten. Dies ist nicht einfach festzustellen, da sogar wenn _x_ Negativ ist, der korrespondierende Punkt `x.H` auf der Kurve so aussieht wie jeder andere.
 
 Um dieses Problem zu lösen, setzt Mimblewimble ein anderes kryptographisches Konzept (ebenso stammend von Confidential Transactions) namens Range Proofs ein. Wir werden Range Proofs nicht ausführlich behandeln, du solltest nur wissen, dass wir für jedes `r.G + v.H` einen Beweis erstellen können, der zeigt, dass _v_ größer als Null ist und nicht zu Overflow führt.
 
@@ -149,7 +149,7 @@ Es ist auch wichtig anzumerken, dass um einen gültigen Range Proof der obigen B
 
   Eine Mimblewimble-Transaktion beinhaltet wie folgt:
 
-  * Eine Reihe von Inputs, die referenzieren, sowie eine Reihe an vorherigen Outputs ausgeben. 
+  * Eine Reihe von Inputs, die referenzieren, sowie eine Reihe an vorherigen Outputs ausgeben.
   * Eine Reihe an neuen Outputs, die Folgendes umfassen:
     * einen Wert und ein Blinding Factor (welcher nur ein neuer privater Schlüssel ist) auf einer Kurve multipliziert und als `r.G + v.H` summiert.
     * Ein Range Proof der zeigt, dass v nicht negativ ist.
@@ -213,7 +213,7 @@ Wir wissen auch, dass alles Übrige genutzt werden kann, um die andere gültige 
 
     (in3) -> (out2), (kern2)
 
-Um dies einzuschränken, beziehen wir einen _Kernel Offset_ in jedem Transaktionskernel mit ein. Dies ist ein Blinding Factor (privater Schlüssel) der zurück zum Kernel Excess hinzugefügt werden muss um zu verifizieren, dass die Summe der Commitments Null ergibt. 
+Um dies einzuschränken, beziehen wir einen _Kernel Offset_ in jedem Transaktionskernel mit ein. Dies ist ein Blinding Factor (privater Schlüssel) der zurück zum Kernel Excess hinzugefügt werden muss um zu verifizieren, dass die Summe der Commitments Null ergibt.
 
     sum(outputs) - sum(inputs) = kernel_excess + kernel_offset
 
@@ -225,7 +225,7 @@ Wir "teilen" den Schlüssel `k` in `k1+k2` während des Aufbaus der Transaktion.
 
 #### Cut-through
 
-Blocks erlauben es Minern multiple Transaktionen in einem einzelnen Set zusammenzustellen, welches der Chain hinzugefügt wird. In den folgenden Blockrepräsentationen, die 3 Transaktionen enthalten, zeigen wir nur Inputs und Outputs der Transaktionen. Inputs referenzieren die Outputs, die sie ausgeben. 
+Blocks erlauben es Minern multiple Transaktionen in einem einzelnen Set zusammenzustellen, welches der Chain hinzugefügt wird. In den folgenden Blockrepräsentationen, die 3 Transaktionen enthalten, zeigen wir nur Inputs und Outputs der Transaktionen. Inputs referenzieren die Outputs, die sie ausgeben.
 
     I1(x1) --- O1
             |- O2
@@ -264,7 +264,7 @@ Sofern so strukturiert, bietet ein Mimblewimble-Block äußerst gute Garantie de
 
 * Intermediäre (cut-through) Transaktionen werden nur von ihren Transaktionskerneln repräsentiert.
 * Alle Outputs sehen gleich aus: nur sehr große Zahlen, die unmöglich voneinander differenzierbar sind. Um einige Outputs auszuschließen, müssten alle ausgeschlossen werden.
-* Alle Transaktionsstrukturen wurden entfernt, was es unmöglich macht zu ermitteln, welches Output mit jedem Input verbunden wurde. 
+* Alle Transaktionsstrukturen wurden entfernt, was es unmöglich macht zu ermitteln, welches Output mit jedem Input verbunden wurde.
 
 Und doch validiert es alles noch immer!
 

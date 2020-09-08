@@ -1,6 +1,6 @@
 # 文档结构
 
-*阅读其它语言版本： [English](table_of_contents.md)，[Korean](table_of_contents_KR.md)*
+*阅读其它语言版本： [English](../table_of_contents.md)，[Korean](table_of_contents_KR.md)*
 
 ## Grin 详解
 

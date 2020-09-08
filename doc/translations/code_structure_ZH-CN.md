@@ -1,6 +1,6 @@
 # Grin 代码结构
 
-*阅读其它语言版本: [English](code_structure.md).*
+*阅读其它语言版本: [English](../code_structure.md).*
 
 Grin 使用 [Rust]（https://www.rust-lang.org/）编写，这是一个内存安全的编译语言。诸如 Cuckoo 挖掘算法之类的性能关键部分都是作为插件构建的，因此可以轻松地在各种硬件的算法实现之间进行交换。Grin 带有 CPU 和实验性 GPU 支持。
 

@@ -1,6 +1,6 @@
 # Coinbase 期限规则（亦即"输出锁定高度"）
 
-*阅读其它语言版本: [English](coinbase_maturity.md), [Korean](coinbase_maturity_KR.md).*
+*阅读其它语言版本: [English](../coinbase_maturity.md), [Korean](coinbase_maturity_KR.md).*
 
 coinbase 输出（区块奖励和手续费）为“锁定”，需要有 1440 个确认（也就是经过约 24 小时在链上加上区块）才能到期花费。这是为了防止之后如果出现链上回滚的情况下，降低撤销之后交易的风险。
 
