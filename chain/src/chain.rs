@@ -1418,8 +1418,12 @@ impl Chain {
 	fn migrate_db_v2_v3(store: &ChainStore) -> Result<(), Error> {
 		let store_v2 = store.with_version(ProtocolVersion(2));
 		let batch = store_v2.batch()?;
-		for (_, block) in batch.blocks_iter()? {
-			batch.migrate_block(&block, ProtocolVersion(3))?;
+		let block_hashes: Vec<_> = batch
+			.blocks_iter()?
+			.map(|(_, block)| block.hash())
+			.collect();
+		for hash in block_hashes {
+			batch.migrate_block(hash, ProtocolVersion(3))?;
 		}
 		batch.commit()?;
 		Ok(())

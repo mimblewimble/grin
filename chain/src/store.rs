@@ -226,10 +226,10 @@ impl<'a> Batch<'a> {
 	}
 
 	/// Migrate a block stored in the db by serializing it using the provided protocol version.
-	/// Block may have been read using a previous protocol version but we do not actually care.
-	pub fn migrate_block(&self, b: &Block, version: ProtocolVersion) -> Result<(), Error> {
+	pub fn migrate_block(&self, hash: Hash, version: ProtocolVersion) -> Result<(), Error> {
+		let b = self.get_block(&hash)?;
 		self.db
-			.put_ser_with_version(&to_key(BLOCK_PREFIX, b.hash())[..], b, version)?;
+			.put_ser_with_version(&to_key(BLOCK_PREFIX, b.hash())[..], &b, version)?;
 		Ok(())
 	}
 
