@@ -695,8 +695,6 @@ where
 		let header_pmmr = ReadonlyPMMR::at(&handle.backend, handle.last_pos);
 		let output_pmmr =
 			ReadonlyPMMR::at(&trees.output_pmmr_h.backend, trees.output_pmmr_h.last_pos);
-		let rproof_pmmr =
-			ReadonlyPMMR::at(&trees.rproof_pmmr_h.backend, trees.rproof_pmmr_h.last_pos);
 
 		// Create a new batch here to pass into the utxo_view.
 		// Discard it (rollback) after we finish with the utxo_view.
