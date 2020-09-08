@@ -71,7 +71,7 @@ impl<T: PMMRable> PMMRHandle<T> {
 	}
 }
 
-impl PMMRHandle<Output> {
+impl PMMRHandle<OutputIdentifier> {
 	pub fn get_leaf_set(&self, header: &BlockHeader) -> Result<Bitmap, Error> {
 		self.backend
 			.get_leaf_set(header)
@@ -1420,11 +1420,9 @@ impl<'a> Extension<'a> {
 		// This is necessary to ensure the output_pos index correctly reflects a
 		// reused output commitment. For example an output at pos 1, spent, reused at pos 2.
 		// The output_pos index should be updated to reflect the old pos 1 when unspent.
-		if let Ok(spent) = spent {
-			for pos in spent {
-				if let Some(out) = self.output_pmmr.get_data(pos.pos) {
-					batch.save_output_pos_height(&out.commitment(), pos)?;
-				}
+		for pos in spent {
+			if let Some(out) = self.output_pmmr.get_data(pos.pos) {
+				batch.save_output_pos_height(&out.commitment(), pos)?;
 			}
 		}
 
