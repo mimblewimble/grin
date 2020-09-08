@@ -31,7 +31,7 @@ impl State {
 	}
 }
 
-pub enum Output {
+pub enum Message {
 	Known(MsgHeader, Bytes),
 	Unknown(u64, u8),
 	Attachment(AttachmentUpdate, Bytes),
@@ -87,7 +87,7 @@ impl Codec {
 	}
 
 	/// Blocking read of the next message
-	pub fn read(&mut self) -> Result<Output, Error> {
+	pub fn read(&mut self) -> Result<Message, Error> {
 		loop {
 			let next_len = self.next_len();
 			self.buffer.reserve(next_len);
@@ -107,11 +107,11 @@ impl Codec {
 				}
 				Header(Known(header)) => {
 					// Return message
-					return Ok(Output::Known(header, raw));
+					return Ok(Message::Known(header, raw));
 				}
 				Header(Unknown(len, msg_type)) => {
 					// Discard body and return
-					return Ok(Output::Unknown(len, msg_type));
+					return Ok(Message::Unknown(len, msg_type));
 				}
 				Attachment(mut left, meta, mut now) => {
 					left -= next_len;
@@ -129,7 +129,7 @@ impl Codec {
 					} else {
 						debug!("attachment: DONE");
 					}
-					return Ok(Output::Attachment(update, raw));
+					return Ok(Message::Attachment(update, raw));
 				}
 			}
 		}

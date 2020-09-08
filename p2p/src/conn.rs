@@ -20,7 +20,7 @@
 //! forces us to go through some additional gymnastic to loop over the async
 //! stream and make sure we get the right number of bytes out.
 
-use crate::codec::{Codec, Output, BODY_IO_TIMEOUT};
+use crate::codec::{Codec, Message, BODY_IO_TIMEOUT};
 use crate::core::ser::{BufReader, ProtocolVersion};
 use crate::msg::{write_message, Consume, Consumed, Msg, MsgHeader};
 use crate::types::Error;
@@ -246,7 +246,7 @@ where
 				// check the read end
 				let mut next = try_break!(codec.read());
 				let consume = match &mut next {
-					Some(Output::Known(header, body)) => {
+					Some(Message::Known(header, body)) => {
 						trace!(
 							"Received message, type {:?}, len {}.",
 							header.msg_type,
@@ -258,7 +258,7 @@ where
 
 						Consume::Message(header, BufReader::new(body, version))
 					}
-					Some(Output::Unknown(msg_len, type_byte)) => {
+					Some(Message::Unknown(msg_len, type_byte)) => {
 						debug!(
 							"Received unknown message, type {:?}, len {}.",
 							type_byte, msg_len
@@ -268,7 +268,7 @@ where
 
 						continue;
 					}
-					Some(Output::Attachment(update, bytes)) => {
+					Some(Message::Attachment(update, bytes)) => {
 						let a = match &mut attachment {
 							Some(a) => a,
 							None => {
