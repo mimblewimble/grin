@@ -5,6 +5,7 @@ use bytes::{BufMut, Bytes, BytesMut};
 use std::cmp::min;
 use std::io::Read;
 use std::net::TcpStream;
+use std::sync::Arc;
 use std::time::{Duration, Instant};
 use MsgHeaderWrapper::*;
 use State::*;
@@ -15,7 +16,7 @@ pub const BODY_IO_TIMEOUT: Duration = Duration::from_millis(60000);
 enum State {
 	None,
 	Header(MsgHeaderWrapper),
-	Attachment(usize, AttachmentMeta, Instant),
+	Attachment(usize, Arc<AttachmentMeta>, Instant),
 }
 
 impl State {
@@ -61,7 +62,7 @@ impl Codec {
 
 	/// Inform codec next `len` bytes are an attachment
 	/// Panics if already reading a body
-	pub fn expect_attachment(&mut self, meta: AttachmentMeta) {
+	pub fn expect_attachment(&mut self, meta: Arc<AttachmentMeta>) {
 		assert!(self.state.is_none());
 		self.state = Attachment(meta.size, meta, Instant::now());
 	}
@@ -122,7 +123,7 @@ impl Codec {
 					let update = AttachmentUpdate {
 						read: next_len,
 						left,
-						meta: meta.clone(),
+						meta: Arc::clone(&meta),
 					};
 					if left > 0 {
 						self.state = Attachment(left, meta, now);

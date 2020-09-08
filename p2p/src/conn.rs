@@ -21,7 +21,7 @@
 //! stream and make sure we get the right number of bytes out.
 
 use crate::codec::{Codec, Message, BODY_IO_TIMEOUT};
-use crate::core::ser::{BufReader, ProtocolVersion};
+use crate::core::ser::ProtocolVersion;
 use crate::msg::{write_message, Consume, Consumed, Msg, MsgHeader};
 use crate::types::Error;
 use crate::util::{RateCounter, RwLock};
@@ -244,8 +244,7 @@ where
 				}
 
 				// check the read end
-				let mut next = try_break!(codec.read());
-				let consume = match &mut next {
+				let consume = match try_break!(codec.read()) {
 					Some(Message::Known(header, body)) => {
 						trace!(
 							"Received message, type {:?}, len {}.",
@@ -256,7 +255,7 @@ where
 						// Increase received bytes counter
 						reader_tracker.inc_received(MsgHeader::LEN as u64 + header.msg_len);
 
-						Consume::Message(header, BufReader::new(body, version))
+						Consume::Message(header, body, version)
 					}
 					Some(Message::Unknown(msg_len, type_byte)) => {
 						debug!(
@@ -264,7 +263,7 @@ where
 							type_byte, msg_len
 						);
 						// Increase received bytes counter
-						reader_tracker.inc_received(MsgHeader::LEN as u64 + *msg_len);
+						reader_tracker.inc_received(MsgHeader::LEN as u64 + msg_len);
 
 						continue;
 					}

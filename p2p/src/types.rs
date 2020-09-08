@@ -672,5 +672,5 @@ pub struct AttachmentMeta {
 pub struct AttachmentUpdate {
 	pub read: usize,
 	pub left: usize,
-	pub meta: AttachmentMeta,
+	pub meta: Arc<AttachmentMeta>,
 }

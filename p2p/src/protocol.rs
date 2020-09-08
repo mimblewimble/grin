@@ -16,7 +16,7 @@ use crate::chain;
 use crate::conn::{MessageHandler, Tracker};
 use crate::core::core::{self, hash::Hash, hash::Hashed, CompactBlock};
 
-use crate::core::ser::Reader;
+use crate::core::ser::{BufReader, Reader};
 use crate::msg::{
 	BanReason, Consume, Consumed, GetPeerAddrs, Headers, Locator, Msg, PeerAddrs, Ping, Pong,
 	TxHashSetArchive, TxHashSetRequest, Type,
@@ -64,7 +64,7 @@ impl MessageHandler for Protocol {
 		}
 
 		// Item to consume can be either a message or an attachment download status update
-		let (header, mut msg) = match input {
+		let (header, mut body, version) = match input {
 			Consume::Attachment(update) => {
 				self.adapter.txhashset_download_update(
 					update.meta.start_time,
@@ -76,7 +76,7 @@ impl MessageHandler for Protocol {
 				tracker.inc_quiet_received(update.read as u64);
 
 				if update.left == 0 {
-					let meta = &update.meta;
+					let meta = update.meta;
 					trace!(
 						"handle_payload: txhashset archive save to file {:?} success",
 						meta.path,
@@ -99,8 +99,9 @@ impl MessageHandler for Protocol {
 
 				return Ok(Consumed::None);
 			}
-			Consume::Message(header, msg) => (header, msg),
+			Consume::Message(header, body, version) => (header, body, version),
 		};
+		let mut msg = BufReader::new(&mut body, version);
 
 		match header.msg_type {
 			Type::Ping => {
@@ -367,7 +368,7 @@ impl MessageHandler for Protocol {
 					path,
 				};
 
-				Ok(Consumed::Attachment(meta, file))
+				Ok(Consumed::Attachment(Arc::new(meta), file))
 			}
 			Type::Error | Type::Hand | Type::Shake => {
 				debug!("Received an unexpected msg: {:?}", header.msg_type);

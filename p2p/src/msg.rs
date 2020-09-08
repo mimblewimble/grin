@@ -19,7 +19,7 @@ use crate::core::core::hash::Hash;
 use crate::core::core::BlockHeader;
 use crate::core::pow::Difficulty;
 use crate::core::ser::{
-	self, BufReader, ProtocolVersion, Readable, Reader, StreamingReader, Writeable, Writer,
+	self, ProtocolVersion, Readable, Reader, StreamingReader, Writeable, Writer,
 };
 use crate::core::{consensus, global};
 use crate::types::{
@@ -708,21 +708,21 @@ impl Readable for TxHashSetArchive {
 	}
 }
 
-pub enum Consume<'a> {
-	Message(&'a MsgHeader, BufReader<'a, Bytes>),
-	Attachment(&'a AttachmentUpdate),
+pub enum Consume {
+	Message(MsgHeader, Bytes, ProtocolVersion),
+	Attachment(AttachmentUpdate),
 }
 
-impl fmt::Display for Consume<'_> {
+impl fmt::Display for Consume {
 	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
 		match self {
-			Consume::Message(h, _) => write!(f, "{:?}", h.msg_type),
+			Consume::Message(h, _, _) => write!(f, "{:?}", h.msg_type),
 			Consume::Attachment { .. } => write!(f, "attachment"),
 		}
 	}
 }
 
-impl fmt::Debug for Consume<'_> {
+impl fmt::Debug for Consume {
 	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
 		write!(f, "Consume({})", self)
 	}
@@ -730,7 +730,7 @@ impl fmt::Debug for Consume<'_> {
 
 pub enum Consumed {
 	Response(Msg),
-	Attachment(AttachmentMeta, File),
+	Attachment(Arc<AttachmentMeta>, File),
 	None,
 	Disconnect,
 }
