@@ -345,6 +345,38 @@ impl TxHashSet {
 		}
 	}
 
+	/// WIP
+	pub fn get_unspent_by_pos(
+		&self,
+		start_pos: u64,
+		max_count: usize,
+		max_pos: u64,
+	) -> Result<Vec<(OutputIdentifier, CommitPos)>, Error> {
+		let output_pmmr =
+			ReadonlyPMMR::at(&self.output_pmmr_h.backend, self.output_pmmr_h.last_pos);
+		let res: Vec<_> = self
+			.utxo_bitmap
+			.iter()
+			.skip_while(|x| (*x as u64) < start_pos)
+			.take_while(|x| (*x as u64) <= max_pos)
+			.take(max_count as usize)
+			.filter_map(|x| {
+				if let Some(out) = output_pmmr.get_data(x.into()) {
+					if let Ok(Some(pos)) =
+						self.commit_index.get_output_pos_height(&out.commitment())
+					{
+						Some((out, pos))
+					} else {
+						None
+					}
+				} else {
+					None
+				}
+			})
+			.collect();
+		Ok(res)
+	}
+
 	/// returns the last N nodes inserted into the tree (i.e. the 'bottom'
 	/// nodes at level 0
 	/// TODO: These need to return the actual data from the flat-files instead
@@ -371,34 +403,34 @@ impl TxHashSet {
 		Ok(self.commit_index.get_block_header(&hash)?)
 	}
 
-	/// returns outputs from the given pmmr index up to the
-	/// specified limit. Also returns the last index actually populated
-	/// max index is the last PMMR index to consider, not leaf index
-	pub fn outputs_by_pmmr_index(
-		&self,
-		start_index: u64,
-		max_count: u64,
-		max_index: Option<u64>,
-	) -> (u64, Vec<OutputIdentifier>) {
-		ReadonlyPMMR::at(&self.output_pmmr_h.backend, self.output_pmmr_h.last_pos)
-			.elements_from_pmmr_index(start_index, max_count, max_index)
-	}
+	// /// returns outputs from the given pmmr index up to the
+	// /// specified limit. Also returns the last index actually populated
+	// /// max index is the last PMMR index to consider, not leaf index
+	// pub fn outputs_by_pmmr_index(
+	// 	&self,
+	// 	start_index: u64,
+	// 	max_count: u64,
+	// 	max_index: Option<u64>,
+	// ) -> (u64, Vec<OutputIdentifier>) {
+	// 	ReadonlyPMMR::at(&self.output_pmmr_h.backend, self.output_pmmr_h.last_pos)
+	// 		.elements_from_pmmr_index(start_index, max_count, max_index)
+	// }
 
 	/// highest output insertion index available
 	pub fn highest_output_insertion_index(&self) -> u64 {
 		self.output_pmmr_h.last_pos
 	}
 
-	/// As above, for rangeproofs
-	pub fn rangeproofs_by_pmmr_index(
-		&self,
-		start_index: u64,
-		max_count: u64,
-		max_index: Option<u64>,
-	) -> (u64, Vec<RangeProof>) {
-		ReadonlyPMMR::at(&self.rproof_pmmr_h.backend, self.rproof_pmmr_h.last_pos)
-			.elements_from_pmmr_index(start_index, max_count, max_index)
-	}
+	// /// As above, for rangeproofs
+	// pub fn rangeproofs_by_pmmr_index(
+	// 	&self,
+	// 	start_index: u64,
+	// 	max_count: u64,
+	// 	max_index: Option<u64>,
+	// ) -> (u64, Vec<RangeProof>) {
+	// 	ReadonlyPMMR::at(&self.rproof_pmmr_h.backend, self.rproof_pmmr_h.last_pos)
+	// 		.elements_from_pmmr_index(start_index, max_count, max_index)
+	// }
 
 	/// Find a kernel with a given excess. Work backwards from `max_index` to `min_index`
 	pub fn find_kernel(

@@ -1285,6 +1285,7 @@ impl Chain {
 	}
 
 	/// outputs by insertion index
+	/// TODO - Confirm this is not "insertion index" and actually "position".
 	pub fn unspent_outputs_by_pmmr_index(
 		&self,
 		start_index: u64,
@@ -1296,20 +1297,16 @@ impl Chain {
 			Some(i) => i,
 			None => txhashset.highest_output_insertion_index(),
 		};
-		let outputs = txhashset.outputs_by_pmmr_index(start_index, max_count, max_pmmr_index);
-		let rangeproofs =
-			txhashset.rangeproofs_by_pmmr_index(start_index, max_count, max_pmmr_index);
-		if outputs.0 != rangeproofs.0 || outputs.1.len() != rangeproofs.1.len() {
-			return Err(ErrorKind::TxHashSetErr(String::from(
-				"Output and rangeproof sets don't match",
-			))
-			.into());
-		}
-		let mut output_vec: Vec<Output> = vec![];
-		for (ref x, &y) in outputs.1.iter().zip(rangeproofs.1.iter()) {
-			output_vec.push(Output::new(x.features, x.commitment(), y));
-		}
-		Ok((outputs.0, last_index, output_vec))
+		let unspent = txhashset.get_unspent_by_pos(start_index, max_count as usize, last_index)?;
+		let max_unspent_pos = unspent
+			.last()
+			.map(|(_, pos)| pos.pos)
+			.unwrap_or(start_index);
+		let outputs: Vec<_> = unspent
+			.iter()
+			.filter_map(|(_, pos)| txhashset.get_output_at_pos(pos.pos).ok())
+			.collect();
+		Ok((max_unspent_pos, last_index, outputs))
 	}
 
 	/// Return unspent outputs as above, but bounded between a particular range of blocks

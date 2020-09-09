@@ -118,31 +118,31 @@ where
 		self.last_pos
 	}
 
-	/// Helper function which returns un-pruned nodes from the insertion index
-	/// forward
-	/// returns last pmmr index returned along with data
-	pub fn elements_from_pmmr_index(
-		&self,
-		mut pmmr_index: u64,
-		max_count: u64,
-		max_pmmr_pos: Option<u64>,
-	) -> (u64, Vec<T::E>) {
-		let mut return_vec = vec![];
-		let last_pos = match max_pmmr_pos {
-			Some(p) => p,
-			None => self.last_pos,
-		};
-		if pmmr_index == 0 {
-			pmmr_index = 1;
-		}
-		while return_vec.len() < max_count as usize && pmmr_index <= last_pos {
-			if let Some(t) = self.get_data(pmmr_index) {
-				return_vec.push(t);
-			}
-			pmmr_index += 1;
-		}
-		(pmmr_index.saturating_sub(1), return_vec)
-	}
+	// /// Helper function which returns un-pruned nodes from the insertion index
+	// /// forward
+	// /// returns last pmmr index returned along with data
+	// pub fn elements_from_pmmr_index(
+	// 	&self,
+	// 	mut pmmr_index: u64,
+	// 	max_count: u64,
+	// 	max_pmmr_pos: Option<u64>,
+	// ) -> (u64, Vec<T::E>) {
+	// 	let mut return_vec = vec![];
+	// 	let last_pos = match max_pmmr_pos {
+	// 		Some(p) => p,
+	// 		None => self.last_pos,
+	// 	};
+	// 	if pmmr_index == 0 {
+	// 		pmmr_index = 1;
+	// 	}
+	// 	while return_vec.len() < max_count as usize && pmmr_index <= last_pos {
+	// 		if let Some(t) = self.get_data(pmmr_index) {
+	// 			return_vec.push(t);
+	// 		}
+	// 		pmmr_index += 1;
+	// 	}
+	// 	(pmmr_index.saturating_sub(1), return_vec)
+	// }
 
 	/// Helper function to get the last N nodes inserted, i.e. the last
 	/// n nodes along the bottom of the tree.
