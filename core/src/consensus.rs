@@ -208,6 +208,10 @@ pub const AR_SCALE_DAMP_FACTOR: u64 = 13;
 pub fn graph_weight(height: u64, edge_bits: u8) -> u64 {
 	let mut xpr_edge_bits = edge_bits as u64;
 
+	if edge_bits < global::base_edge_bits() {
+		return 0;
+	}
+
 	let expiry_height = YEAR_HEIGHT;
 	if edge_bits == 31 && height >= expiry_height {
 		xpr_edge_bits = xpr_edge_bits.saturating_sub(1 + (height - expiry_height) / WEEK_HEIGHT);
