@@ -38,6 +38,7 @@ use crate::common::types::StratumServerConfig;
 use crate::core::consensus::graph_weight;
 use crate::core::core::hash::Hashed;
 use crate::core::core::Block;
+use crate::core::global;
 use crate::core::{pow, ser};
 use crate::keychain;
 use crate::mining::mine_block;
@@ -575,19 +576,19 @@ impl Handler {
 					// set a new deadline for rebuilding with fresh transactions
 					deadline = Utc::now().timestamp() + config.attempt_time_per_block as i64;
 
-					// Manage list of versions of this heights block
+					// If this is a new block we will clear the current_block version history
 					if clear_blocks {
 						state.current_block_versions.clear();
 					}
-					state.current_block_versions.push(new_block);
 
 					// Update the mining stats
-					self.workers
-						.update_block_height(state.current_block_versions[0].header.height);
-					let difficulty = state.current_block_versions[0].header.total_difficulty()
-						- head.total_difficulty;
+					self.workers.update_block_height(new_block.header.height);
+					let difficulty = new_block.header.total_difficulty() - head.total_difficulty;
 					self.workers.update_network_difficulty(difficulty.to_num());
 					self.workers.update_network_hashrate();
+
+					// Add this new block candidate onto our list of block versions for this height
+					state.current_block_versions.push(new_block);
 				}
 				// Send this job to all connected workers
 				self.broadcast_job();
@@ -883,7 +884,7 @@ impl StratumServer {
 		{
 			let mut stratum_stats = self.stratum_stats.write();
 			stratum_stats.is_running = true;
-			stratum_stats.edge_bits = 32 as u16;
+			stratum_stats.edge_bits = (global::min_edge_bits() + 1) as u16;
 		}
 
 		warn!(

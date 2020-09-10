@@ -346,8 +346,8 @@ impl TUIStatusListener for TUIMiningView {
 			_ => format!("Solving Block Height:  {}", stratum_stats.block_height),
 		};
 		let stratum_edge_bits = match stratum_stats.num_workers {
-			0 => "Mining POW:            n/a".to_string(),
-			_ => format!("Mining POW:            Cuckoo{}", stratum_stats.edge_bits),
+			0 => "Latest POW submitted:  n/a".to_string(),
+			_ => format!("Latest POW submitted:  Cuckoo{}", stratum_stats.edge_bits),
 		};
 		let stratum_network_difficulty = match stratum_stats.num_workers {
 			0 => "Network Difficulty:    n/a".to_string(),
