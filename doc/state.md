@@ -1,6 +1,6 @@
 # State and Storage
 
-*Read this in other languages: [Korean](state_KR.md), [日本語](state_JP.md), [简体中文](state_ZH-CN.md).*
+*Read this in other languages: [Korean](translations/state_KR.md), [日本語](translations/state_JP.md), [简体中文](translations/state_ZH-CN.md).*
 
 ## The Grin State
 

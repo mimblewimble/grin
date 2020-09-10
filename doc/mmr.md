@@ -1,6 +1,6 @@
 # Merkle Mountain Ranges
 
-*Read this in other languages: [Korean](mmr_KR.md), [简体中文](mmr_ZH-CN.md).*
+*Read this in other languages: [Korean](translations/mmr_KR.md), [简体中文](translations/mmr_ZH-CN.md).*
 
 ## Structure
 
@@ -145,7 +145,7 @@ Height
 2       6            13
        /            /   \
 1     2            9     12     17
-       \          /     /  \   /  
+       \          /     /  \   /
 0       1        7     10  11 15     18
 ```
 
