@@ -267,7 +267,7 @@ impl Default for StratumStats {
 			num_workers: 0,
 			block_height: 0,
 			network_difficulty: 0,
-			edge_bits: 32,
+			edge_bits: 0,
 			network_hashrate: 0.0,
 			worker_stats: Vec::new(),
 		}
