@@ -16,7 +16,10 @@
 
 use crate::conn::Tracker;
 use crate::core::core::hash::Hash;
-use crate::core::core::BlockHeader;
+use crate::core::core::{
+	BlockHeader, BlockHeaders, Transaction, UntrustedBlock, UntrustedBlockHeader,
+	UntrustedCompactBlock,
+};
 use crate::core::pow::Difficulty;
 use crate::core::ser::{
 	self, ProtocolVersion, Readable, Reader, StreamingReader, Writeable, Writer,
@@ -708,21 +711,57 @@ impl Readable for TxHashSetArchive {
 	}
 }
 
-pub enum Consume {
-	Message(MsgHeader, Bytes, ProtocolVersion),
-	Attachment(AttachmentUpdate),
+pub enum Message {
+	Unknown(u8),
+	Ping(Ping),
+	Pong(Pong),
+	BanReason(BanReason),
+	TransactionKernel(Hash),
+	GetTransaction(Hash),
+	Transaction(Transaction),
+	StemTransaction(Transaction),
+	GetBlock(Hash),
+	Block(UntrustedBlock),
+	GetCompactBlock(Hash),
+	CompactBlock(UntrustedCompactBlock),
+	GetHeaders(Locator),
+	Header(UntrustedBlockHeader),
+	Headers(BlockHeaders),
+	GetPeerAddrs(GetPeerAddrs),
+	PeerAddrs(PeerAddrs),
+	TxHashSetRequest(TxHashSetRequest),
+	TxHashSetArchive(TxHashSetArchive),
+	Attachment(AttachmentUpdate, Option<Bytes>),
 }
 
-impl fmt::Display for Consume {
+impl fmt::Display for Message {
 	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
 		match self {
-			Consume::Message(h, _, _) => write!(f, "{:?}", h.msg_type),
-			Consume::Attachment { .. } => write!(f, "attachment"),
+			Message::Unknown(_) => write!(f, "unknown"),
+			Message::Ping(_) => write!(f, "ping"),
+			Message::Pong(_) => write!(f, "pong"),
+			Message::BanReason(_) => write!(f, "ban reason"),
+			Message::TransactionKernel(_) => write!(f, "tx kernel"),
+			Message::GetTransaction(_) => write!(f, "get tx"),
+			Message::Transaction(_) => write!(f, "tx"),
+			Message::StemTransaction(_) => write!(f, "stem tx"),
+			Message::GetBlock(_) => write!(f, "get block"),
+			Message::Block(_) => write!(f, "block"),
+			Message::GetCompactBlock(_) => write!(f, "get compact block"),
+			Message::CompactBlock(_) => write!(f, "compact block"),
+			Message::GetHeaders(_) => write!(f, "get headers"),
+			Message::Header(_) => write!(f, "header"),
+			Message::Headers(_) => write!(f, "headers"),
+			Message::GetPeerAddrs(_) => write!(f, "get peer addrs"),
+			Message::PeerAddrs(_) => write!(f, "peer addrs"),
+			Message::TxHashSetRequest(_) => write!(f, "tx hash set request"),
+			Message::TxHashSetArchive(_) => write!(f, "tx hash set"),
+			Message::Attachment(_, _) => write!(f, "attachment"),
 		}
 	}
 }
 
-impl fmt::Debug for Consume {
+impl fmt::Debug for Message {
 	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
 		write!(f, "Consume({})", self)
 	}

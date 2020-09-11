@@ -13,14 +13,10 @@
 // limitations under the License.
 
 use crate::chain;
-use crate::conn::{MessageHandler, Tracker};
-use crate::core::core::{self, hash::Hash, hash::Hashed, CompactBlock};
+use crate::conn::MessageHandler;
+use crate::core::core::{hash::Hashed, CompactBlock};
 
-use crate::core::ser::{BufReader, Reader};
-use crate::msg::{
-	BanReason, Consume, Consumed, GetPeerAddrs, Headers, Locator, Msg, PeerAddrs, Ping, Pong,
-	TxHashSetArchive, TxHashSetRequest, Type,
-};
+use crate::msg::{Consumed, Headers, Message, Msg, PeerAddrs, Pong, TxHashSetArchive, Type};
 use crate::types::{AttachmentMeta, Error, NetAdapter, PeerInfo};
 use chrono::prelude::Utc;
 use rand::{thread_rng, Rng};
@@ -49,7 +45,7 @@ impl Protocol {
 }
 
 impl MessageHandler for Protocol {
-	fn consume(&self, input: Consume, tracker: Arc<Tracker>) -> Result<Consumed, Error> {
+	fn consume(&self, message: Message) -> Result<Consumed, Error> {
 		let adapter = &self.adapter;
 
 		// If we received a msg from a banned peer then log and drop it.
@@ -58,22 +54,18 @@ impl MessageHandler for Protocol {
 		if adapter.is_banned(self.peer_info.addr) {
 			debug!(
 				"handler: consume: peer {:?} banned, received: {}, dropping.",
-				self.peer_info.addr, input,
+				self.peer_info.addr, message,
 			);
 			return Ok(Consumed::Disconnect);
 		}
 
-		// Item to consume can be either a message or an attachment download status update
-		let (header, mut body, version) = match input {
-			Consume::Attachment(update) => {
+		let consumed = match message {
+			Message::Attachment(update, _) => {
 				self.adapter.txhashset_download_update(
 					update.meta.start_time,
 					(update.meta.size - update.left) as u64,
 					update.meta.size as u64,
 				);
-				// Increase received bytes quietly (without affecting the counters).
-				// Otherwise we risk banning a peer as "abusive".
-				tracker.inc_quiet_received(update.read as u64);
 
 				if update.left == 0 {
 					let meta = update.meta;
@@ -97,207 +89,144 @@ impl MessageHandler for Protocol {
 					}
 				}
 
-				return Ok(Consumed::None);
+				Consumed::None
 			}
-			Consume::Message(header, body, version) => (header, body, version),
-		};
-		let mut msg = BufReader::new(&mut body, version);
 
-		match header.msg_type {
-			Type::Ping => {
-				let ping: Ping = msg.body()?;
+			Message::Ping(ping) => {
 				adapter.peer_difficulty(self.peer_info.addr, ping.total_difficulty, ping.height);
-
-				Ok(Consumed::Response(Msg::new(
+				Consumed::Response(Msg::new(
 					Type::Pong,
 					Pong {
 						total_difficulty: adapter.total_difficulty()?,
 						height: adapter.total_height()?,
 					},
 					self.peer_info.version,
-				)?))
+				)?)
 			}
 
-			Type::Pong => {
-				let pong: Pong = msg.body()?;
+			Message::Pong(pong) => {
 				adapter.peer_difficulty(self.peer_info.addr, pong.total_difficulty, pong.height);
-				Ok(Consumed::None)
+				Consumed::None
 			}
 
-			Type::BanReason => {
-				let ban_reason: BanReason = msg.body()?;
+			Message::BanReason(ban_reason) => {
 				error!("handle_payload: BanReason {:?}", ban_reason);
-				Ok(Consumed::None)
+				Consumed::Disconnect
 			}
 
-			Type::TransactionKernel => {
-				let h: Hash = msg.body()?;
-				debug!(
-					"handle_payload: received tx kernel: {}, msg_len: {}",
-					h, header.msg_len
-				);
+			Message::TransactionKernel(h) => {
+				debug!("handle_payload: received tx kernel: {}", h);
 				adapter.tx_kernel_received(h, &self.peer_info)?;
-				Ok(Consumed::None)
+				Consumed::None
 			}
 
-			Type::GetTransaction => {
-				let h: Hash = msg.body()?;
-				debug!(
-					"handle_payload: GetTransaction: {}, msg_len: {}",
-					h, header.msg_len,
-				);
+			Message::GetTransaction(h) => {
+				debug!("handle_payload: GetTransaction: {}", h);
 				let tx = adapter.get_transaction(h);
 				if let Some(tx) = tx {
-					Ok(Consumed::Response(Msg::new(
-						Type::Transaction,
-						tx,
-						self.peer_info.version,
-					)?))
+					Consumed::Response(Msg::new(Type::Transaction, tx, self.peer_info.version)?)
 				} else {
-					Ok(Consumed::None)
+					Consumed::None
 				}
 			}
 
-			Type::Transaction => {
-				debug!("handle_payload: received tx: msg_len: {}", header.msg_len);
-				let tx: core::Transaction = msg.body()?;
+			Message::Transaction(tx) => {
+				debug!("handle_payload: received tx");
 				adapter.transaction_received(tx, false)?;
-				Ok(Consumed::None)
+				Consumed::None
 			}
 
-			Type::StemTransaction => {
-				debug!(
-					"handle_payload: received stem tx: msg_len: {}",
-					header.msg_len
-				);
-				let tx: core::Transaction = msg.body()?;
+			Message::StemTransaction(tx) => {
+				debug!("handle_payload: received stem tx");
 				adapter.transaction_received(tx, true)?;
-				Ok(Consumed::None)
+				Consumed::None
 			}
 
-			Type::GetBlock => {
-				let h: Hash = msg.body()?;
-				trace!(
-					"handle_payload: GetBlock: {}, msg_len: {}",
-					h,
-					header.msg_len,
-				);
-
+			Message::GetBlock(h) => {
+				trace!("handle_payload: GetBlock: {}", h);
 				let bo = adapter.get_block(h);
 				if let Some(b) = bo {
-					Ok(Consumed::Response(Msg::new(
-						Type::Block,
-						b,
-						self.peer_info.version,
-					)?))
+					Consumed::Response(Msg::new(Type::Block, b, self.peer_info.version)?)
 				} else {
-					Ok(Consumed::None)
+					Consumed::None
 				}
 			}
 
-			Type::Block => {
-				debug!(
-					"handle_payload: received block: msg_len: {}",
-					header.msg_len
-				);
-				let b: core::UntrustedBlock = msg.body()?;
-
+			Message::Block(b) => {
+				debug!("handle_payload: received block");
 				// We default to NONE opts here as we do not know know yet why this block was
 				// received.
 				// If we requested this block from a peer due to our node syncing then
 				// the peer adapter will override opts to reflect this.
 				adapter.block_received(b.into(), &self.peer_info, chain::Options::NONE)?;
-				Ok(Consumed::None)
+				Consumed::None
 			}
 
-			Type::GetCompactBlock => {
-				let h: Hash = msg.body()?;
+			Message::GetCompactBlock(h) => {
 				if let Some(b) = adapter.get_block(h) {
 					let cb: CompactBlock = b.into();
-					Ok(Consumed::Response(Msg::new(
-						Type::CompactBlock,
-						cb,
-						self.peer_info.version,
-					)?))
+					Consumed::Response(Msg::new(Type::CompactBlock, cb, self.peer_info.version)?)
 				} else {
-					Ok(Consumed::None)
+					Consumed::None
 				}
 			}
 
-			Type::CompactBlock => {
-				debug!(
-					"handle_payload: received compact block: msg_len: {}",
-					header.msg_len
-				);
-				let b: core::UntrustedCompactBlock = msg.body()?;
-
+			Message::CompactBlock(b) => {
+				debug!("handle_payload: received compact block");
 				adapter.compact_block_received(b.into(), &self.peer_info)?;
-				Ok(Consumed::None)
+				Consumed::None
 			}
 
-			Type::GetHeaders => {
+			Message::GetHeaders(loc) => {
 				// load headers from the locator
-				let loc: Locator = msg.body()?;
 				let headers = adapter.locate_headers(&loc.hashes)?;
 
 				// serialize and send all the headers over
-				Ok(Consumed::Response(Msg::new(
+				Consumed::Response(Msg::new(
 					Type::Headers,
 					Headers { headers },
 					self.peer_info.version,
-				)?))
+				)?)
 			}
 
 			// "header first" block propagation - if we have not yet seen this block
 			// we can go request it from some of our peers
-			Type::Header => {
-				let header: core::UntrustedBlockHeader = msg.body()?;
+			Message::Header(header) => {
 				adapter.header_received(header.into(), &self.peer_info)?;
-				Ok(Consumed::None)
+				Consumed::None
 			}
 
-			Type::Headers => {
-				// Read the count (u16) so we now how many headers to read.
-				let count = msg.read_u16()?;
-
+			Message::Headers(hs) => {
 				// Read chunks of headers off the stream and pass them off to the adapter.
-				let chunk_size = 32u16;
-				let mut headers = Vec::with_capacity(chunk_size as usize);
-				for i in 1..=count {
-					let header: core::UntrustedBlockHeader = msg.body()?;
-					headers.push(header.into());
+				let hs = hs.0;
+				let chunk_size = 32;
+				let count = hs.len() - 1;
+				let mut headers = Vec::with_capacity(chunk_size);
+				for (i, header) in hs.into_iter().enumerate() {
+					headers.push(header);
 					if i % chunk_size == 0 || i == count {
 						adapter.headers_received(&headers, &self.peer_info)?;
 						headers.clear();
 					}
 				}
-
-				// Now check we read the correct total number of bytes off the stream.
-				if msg.bytes_read() != header.msg_len {
-					Err(Error::MsgLen)
-				} else {
-					Ok(Consumed::None)
-				}
+				Consumed::None
 			}
 
-			Type::GetPeerAddrs => {
-				let get_peers: GetPeerAddrs = msg.body()?;
+			Message::GetPeerAddrs(get_peers) => {
 				let peers = adapter.find_peer_addrs(get_peers.capabilities);
-				Ok(Consumed::Response(Msg::new(
+				Consumed::Response(Msg::new(
 					Type::PeerAddrs,
 					PeerAddrs { peers },
 					self.peer_info.version,
-				)?))
+				)?)
 			}
 
-			Type::PeerAddrs => {
-				let peer_addrs: PeerAddrs = msg.body()?;
+			Message::PeerAddrs(peer_addrs) => {
 				adapter.peer_addrs_received(peer_addrs.peers);
-				Ok(Consumed::None)
+				Consumed::None
 			}
 
-			Type::TxHashSetRequest => {
-				let sm_req: TxHashSetRequest = msg.body()?;
+			Message::TxHashSetRequest(sm_req) => {
 				debug!(
 					"handle_payload: txhashset req for {} at {}",
 					sm_req.hash, sm_req.height
@@ -319,14 +248,13 @@ impl MessageHandler for Protocol {
 						self.peer_info.version,
 					)?;
 					resp.add_attachment(txhashset.reader);
-					Ok(Consumed::Response(resp))
+					Consumed::Response(resp)
 				} else {
-					Ok(Consumed::None)
+					Consumed::None
 				}
 			}
 
-			Type::TxHashSetArchive => {
-				let sm_arch: TxHashSetArchive = msg.body()?;
+			Message::TxHashSetArchive(sm_arch) => {
 				debug!(
 					"handle_payload: txhashset archive for {} at {}. size={}",
 					sm_arch.hash, sm_arch.height, sm_arch.bytes,
@@ -368,12 +296,10 @@ impl MessageHandler for Protocol {
 					path,
 				};
 
-				Ok(Consumed::Attachment(Arc::new(meta), file))
+				Consumed::Attachment(Arc::new(meta), file)
 			}
-			Type::Error | Type::Hand | Type::Shake => {
-				debug!("Received an unexpected msg: {:?}", header.msg_type);
-				Ok(Consumed::None)
-			}
-		}
+			Message::Unknown(_) => Consumed::None,
+		};
+		Ok(consumed)
 	}
 }

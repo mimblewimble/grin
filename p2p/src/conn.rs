@@ -20,9 +20,9 @@
 //! forces us to go through some additional gymnastic to loop over the async
 //! stream and make sure we get the right number of bytes out.
 
-use crate::codec::{Codec, Message, BODY_IO_TIMEOUT};
+use crate::codec::{Codec, BODY_IO_TIMEOUT};
 use crate::core::ser::ProtocolVersion;
-use crate::msg::{write_message, Consume, Consumed, Msg, MsgHeader};
+use crate::msg::{write_message, Consumed, Message, Msg};
 use crate::types::Error;
 use crate::util::{RateCounter, RwLock};
 use std::fs::File;
@@ -41,7 +41,7 @@ const CHANNEL_TIMEOUT: Duration = Duration::from_millis(1000);
 /// A trait to be implemented in order to receive messages from the
 /// connection. Allows providing an optional response.
 pub trait MessageHandler: Send + 'static {
-	fn consume(&self, input: Consume, tracker: Arc<Tracker>) -> Result<Consumed, Error>;
+	fn consume(&self, message: Message) -> Result<Consumed, Error>;
 }
 
 // Macro to simplify the boilerplate around I/O and Grin error handling
@@ -244,27 +244,20 @@ where
 				}
 
 				// check the read end
-				let consume = match try_break!(codec.read()) {
-					Some(Message::Known(header, body)) => {
-						trace!(
-							"Received message, type {:?}, len {}.",
-							header.msg_type,
-							header.msg_len
-						);
+				let (next, bytes_read) = codec.read();
 
-						// Increase received bytes counter
-						reader_tracker.inc_received(MsgHeader::LEN as u64 + header.msg_len);
+				// increase the appropriate counter
+				match &next {
+					Ok(Message::Attachment(_, _)) => reader_tracker.inc_quiet_received(bytes_read),
+					_ => reader_tracker.inc_received(bytes_read),
+				}
 
-						Consume::Message(header, body, version)
-					}
-					Some(Message::Unknown(msg_len, type_byte)) => {
+				let message = match try_break!(next) {
+					Some(Message::Unknown(type_byte)) => {
 						debug!(
 							"Received unknown message, type {:?}, len {}.",
-							type_byte, msg_len
+							type_byte, bytes_read
 						);
-						// Increase received bytes counter
-						reader_tracker.inc_received(MsgHeader::LEN as u64 + msg_len);
-
 						continue;
 					}
 					Some(Message::Attachment(update, bytes)) => {
@@ -276,6 +269,7 @@ where
 							}
 						};
 
+						let bytes = bytes.unwrap();
 						if let Err(e) = a.write_all(&bytes) {
 							error!("Unable to write attachment file: {}", e);
 							break;
@@ -288,13 +282,16 @@ where
 							attachment.take();
 						}
 
-						Consume::Attachment(update)
+						Message::Attachment(update, None)
+					}
+					Some(message) => {
+						trace!("Received message, type {}, len {}.", message, bytes_read);
+						message
 					}
 					None => continue,
 				};
 
-				let consumed = try_break!(handler.consume(consume, reader_tracker.clone()))
-					.unwrap_or(Consumed::None);
+				let consumed = try_break!(handler.consume(message)).unwrap_or(Consumed::None);
 				match consumed {
 					Consumed::Response(resp_msg) => {
 						try_break!(conn_handle.send(resp_msg));

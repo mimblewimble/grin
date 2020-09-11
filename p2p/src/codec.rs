@@ -1,5 +1,5 @@
 use crate::core::ser::{BufReader, ProtocolVersion, Readable};
-use crate::msg::{MsgHeader, MsgHeaderWrapper};
+use crate::msg::{Message, MsgHeader, MsgHeaderWrapper, Type};
 use crate::types::{AttachmentMeta, AttachmentUpdate, Error};
 use bytes::{BufMut, Bytes, BytesMut};
 use std::cmp::min;
@@ -32,17 +32,12 @@ impl State {
 	}
 }
 
-pub enum Message {
-	Known(MsgHeader, Bytes),
-	Unknown(u64, u8),
-	Attachment(AttachmentUpdate, Bytes),
-}
-
 pub struct Codec {
 	pub version: ProtocolVersion,
 	stream: TcpStream,
 	buffer: BytesMut,
 	state: State,
+	bytes_read: usize,
 }
 
 impl Codec {
@@ -52,6 +47,7 @@ impl Codec {
 			stream,
 			buffer: BytesMut::with_capacity(8 * 1024),
 			state: None,
+			bytes_read: 0,
 		}
 	}
 
@@ -87,8 +83,8 @@ impl Codec {
 		Ok(())
 	}
 
-	/// Blocking read of the next message
-	pub fn read(&mut self) -> Result<Message, Error> {
+	fn read_inner(&mut self) -> Result<Message, Error> {
+		self.bytes_read = 0;
 		loop {
 			let next_len = self.next_len();
 			self.buffer.reserve(next_len);
@@ -98,6 +94,7 @@ impl Codec {
 			let mut buf = self.buffer.split_to(next_len);
 			self.set_stream_timeout()?;
 			self.stream.read_exact(&mut buf[..])?;
+			self.bytes_read += buf.len();
 			let mut raw = buf.freeze();
 			match self.state.take() {
 				None => {
@@ -108,11 +105,11 @@ impl Codec {
 				}
 				Header(Known(header)) => {
 					// Return message
-					return Ok(Message::Known(header, raw));
+					return decode_message(&header, &mut raw, self.version);
 				}
-				Header(Unknown(len, msg_type)) => {
+				Header(Unknown(_, msg_type)) => {
 					// Discard body and return
-					return Ok(Message::Unknown(len, msg_type));
+					return Ok(Message::Unknown(msg_type));
 				}
 				Attachment(mut left, meta, mut now) => {
 					left -= next_len;
@@ -130,9 +127,46 @@ impl Codec {
 					} else {
 						debug!("attachment: DONE");
 					}
-					return Ok(Message::Attachment(update, raw));
+					return Ok(Message::Attachment(update, Some(raw)));
 				}
 			}
 		}
 	}
+
+	/// Blocking read of the next message
+	pub fn read(&mut self) -> (Result<Message, Error>, u64) {
+		let msg = self.read_inner();
+		(msg, self.bytes_read as u64)
+	}
+}
+
+// TODO: replace with a macro?
+fn decode_message(
+	header: &MsgHeader,
+	body: &mut Bytes,
+	version: ProtocolVersion,
+) -> Result<Message, Error> {
+	let mut msg = BufReader::new(body, version);
+	let c = match header.msg_type {
+		Type::Ping => Message::Ping(msg.body()?),
+		Type::Pong => Message::Pong(msg.body()?),
+		Type::BanReason => Message::BanReason(msg.body()?),
+		Type::TransactionKernel => Message::TransactionKernel(msg.body()?),
+		Type::GetTransaction => Message::GetTransaction(msg.body()?),
+		Type::Transaction => Message::Transaction(msg.body()?),
+		Type::StemTransaction => Message::StemTransaction(msg.body()?),
+		Type::GetBlock => Message::GetBlock(msg.body()?),
+		Type::Block => Message::Block(msg.body()?),
+		Type::GetCompactBlock => Message::GetCompactBlock(msg.body()?),
+		Type::CompactBlock => Message::CompactBlock(msg.body()?),
+		Type::GetHeaders => Message::GetHeaders(msg.body()?),
+		Type::Header => Message::Header(msg.body()?),
+		Type::Headers => Message::Headers(msg.body()?),
+		Type::GetPeerAddrs => Message::GetPeerAddrs(msg.body()?),
+		Type::PeerAddrs => Message::PeerAddrs(msg.body()?),
+		Type::TxHashSetRequest => Message::TxHashSetRequest(msg.body()?),
+		Type::TxHashSetArchive => Message::TxHashSetArchive(msg.body()?),
+		Type::Error | Type::Hand | Type::Shake => return Err(Error::UnexpectedMessage),
+	};
+	Ok(c)
 }
