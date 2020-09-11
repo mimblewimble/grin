@@ -1,6 +1,6 @@
 # Grin/Mimblewimble for Bitcoiners
 
-*Read this in other languages:[Korean](grin4bitcoiners_KR.md)
+*Read this in other languages:[Korean](translations/grin4bitcoiners_KR.md)
 
 ## Privacy and Fungibility
 

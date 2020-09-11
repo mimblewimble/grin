@@ -1,6 +1,6 @@
 # Introduction to Switch Commitments
 
-*Read this in other languages: [简体中文](switch_commitment_ZH-CN.md).*
+*Read this in other languages: [简体中文](translations/switch_commitment_ZH-CN.md).*
 
 ## General introduction
 
@@ -51,7 +51,7 @@ get a single box as result (which still is locked), and if you open this single 
 from _box1_ and _box2_.
 
 While this "box" metaphor no longer seems to be reasonable in the real-world this
-is perfectly possible using the properties of operations on elliptic curves.   
+is perfectly possible using the properties of operations on elliptic curves.
 
 Look into [Introduction to Mimblewimble](intro.md) for further details on Pedersen Commitments
 and how they are used in Grin.
@@ -184,7 +184,7 @@ security of the new commitment scheme. Also, this has to happen **before** the s
 actually broken in the wild, otherwise the existing UTXOs no longer can be assumed
 to contain correct values.
 
-In this situation [_Switch Commitments_](https://eprint.iacr.org/2017/237.pdf) offer a neat 
+In this situation [_Switch Commitments_](https://eprint.iacr.org/2017/237.pdf) offer a neat
 solution. These type of commitments allow changing the properties of the commitments just
 by changing the revealing / validating procedure without changing the way commitments
 are created. (You "_switch_" to a new validation scheme which is backwards
@@ -268,20 +268,20 @@ important safety measure:
 
 Pedersen Commitments are already _perfectly hiding_ so whatever happens, privacy will
 never be at risk without requiring any action from users. But in case of a disaster if the
-bindingness of the commitment scheme gets broken, then switch commitments can be enabled 
+bindingness of the commitment scheme gets broken, then switch commitments can be enabled
 (via a soft fork) requiring that all new transactions prove that their commitment is not
-breaking the bindingness by validating the full ElGamal commitment. 
+breaking the bindingness by validating the full ElGamal commitment.
 
 But in this case users would still have a choice:
 
 - they can decide to continue to create new transactions, even if this might compromise
-  their privacy (only on their **last** UTXOs) as the ElGamal commitment scheme is 
+  their privacy (only on their **last** UTXOs) as the ElGamal commitment scheme is
   only computationally hiding, but at least they would still have access to their coins
 
 - or users can decide to just leave the money alone, walk away and make no more transactions
   (but preserve their privacy, as their old transactions only validated the Pedersen commitment
   which is perfectly hiding)
-  
+
 
 There are many cases where a privacy leak is much more dangerous to one's life than
 some cryptocurrency might be worth. But this is a decision that should be left up to

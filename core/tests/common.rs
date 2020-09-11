@@ -15,7 +15,9 @@
 //! Common test functions
 
 use grin_core::core::hash::DefaultHashable;
-use grin_core::core::{Block, BlockHeader, KernelFeatures, Transaction};
+use grin_core::core::{
+	Block, BlockHeader, KernelFeatures, OutputFeatures, OutputIdentifier, Transaction,
+};
 use grin_core::libtx::{
 	build::{self, input, output},
 	proof::{ProofBuild, ProofBuilder},
@@ -62,6 +64,24 @@ pub fn tx1i1o() -> Transaction {
 	.unwrap();
 
 	tx
+}
+
+#[allow(dead_code)]
+pub fn tx1i10_v2_compatible() -> Transaction {
+	let tx = tx1i1o();
+
+	let inputs: Vec<_> = tx.inputs().into();
+	let inputs: Vec<_> = inputs
+		.iter()
+		.map(|input| OutputIdentifier {
+			features: OutputFeatures::Plain,
+			commit: input.commitment(),
+		})
+		.collect();
+	Transaction {
+		body: tx.body.replace_inputs(inputs.as_slice().into()),
+		..tx
+	}
 }
 
 // utility producing a transaction with a single input

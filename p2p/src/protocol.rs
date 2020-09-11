@@ -144,7 +144,7 @@ impl MessageHandler for Protocol {
 
 			Message::GetBlock(h) => {
 				trace!("handle_payload: GetBlock: {}", h);
-				let bo = adapter.get_block(h);
+				let bo = adapter.get_block(h, &self.peer_info);
 				if let Some(b) = bo {
 					Consumed::Response(Msg::new(Type::Block, b, self.peer_info.version)?)
 				} else {
@@ -163,7 +163,7 @@ impl MessageHandler for Protocol {
 			}
 
 			Message::GetCompactBlock(h) => {
-				if let Some(b) = adapter.get_block(h) {
+				if let Some(b) = adapter.get_block(h, &self.peer_info) {
 					let cb: CompactBlock = b.into();
 					Consumed::Response(Msg::new(Type::CompactBlock, cb, self.peer_info.version)?)
 				} else {

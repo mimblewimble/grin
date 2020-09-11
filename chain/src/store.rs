@@ -206,6 +206,13 @@ impl<'a> Batch<'a> {
 	/// Save the block to the db.
 	/// Note: the block header is not saved to the db here, assumes this has already been done.
 	pub fn save_block(&self, b: &Block) -> Result<(), Error> {
+		debug!(
+			"save_block: {} at {} ({} -> v{})",
+			b.header.hash(),
+			b.header.height,
+			b.inputs().version_str(),
+			self.db.protocol_version(),
+		);
 		self.db.put_ser(&to_key(BLOCK_PREFIX, b.hash())[..], b)?;
 		Ok(())
 	}
@@ -222,7 +229,7 @@ impl<'a> Batch<'a> {
 	/// Block may have been read using a previous protocol version but we do not actually care.
 	pub fn migrate_block(&self, b: &Block, version: ProtocolVersion) -> Result<(), Error> {
 		self.db
-			.put_ser_with_version(&to_key(BLOCK_PREFIX, &mut b.hash())[..], b, version)?;
+			.put_ser_with_version(&to_key(BLOCK_PREFIX, b.hash())[..], b, version)?;
 		Ok(())
 	}
 

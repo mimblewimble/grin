@@ -73,7 +73,7 @@ where
 	}
 }
 
-const DEFAULT_DB_VERSION: ProtocolVersion = ProtocolVersion(2);
+const DEFAULT_DB_VERSION: ProtocolVersion = ProtocolVersion(3);
 
 /// LMDB-backed store facilitating data access and serialization. All writes
 /// are done through a Batch abstraction providing atomicity.
@@ -157,9 +157,14 @@ impl Store {
 			env: self.env.clone(),
 			db: self.db.clone(),
 			name: self.name.clone(),
-			version: version,
+			version,
 			alloc_chunk_size,
 		}
+	}
+
+	/// Protocol version for the store.
+	pub fn protocol_version(&self) -> ProtocolVersion {
+		self.version
 	}
 
 	/// Opens the database environment
@@ -275,7 +280,7 @@ impl Store {
 	) -> Result<Option<T>, Error> {
 		let res: lmdb::error::Result<&[u8]> = access.get(&db, key);
 		match res.to_opt() {
-			Ok(Some(mut res)) => match ser::deserialize(&mut res, self.version) {
+			Ok(Some(mut res)) => match ser::deserialize(&mut res, self.protocol_version()) {
 				Ok(res) => Ok(Some(res)),
 				Err(e) => Err(Error::SerErr(format!("{}", e))),
 			},
@@ -310,7 +315,7 @@ impl Store {
 			cursor,
 			seek: false,
 			prefix: from.to_vec(),
-			version: self.version,
+			version: self.protocol_version(),
 			_marker: marker::PhantomData,
 		})
 	}
@@ -348,7 +353,12 @@ impl<'a> Batch<'a> {
 	/// Writes a single key and its `Writeable` value to the db.
 	/// Encapsulates serialization using the (default) version configured on the store instance.
 	pub fn put_ser<W: ser::Writeable>(&self, key: &[u8], value: &W) -> Result<(), Error> {
-		self.put_ser_with_version(key, value, self.store.version)
+		self.put_ser_with_version(key, value, self.store.protocol_version())
+	}
+
+	/// Protocol version used by this batch.
+	pub fn protocol_version(&self) -> ProtocolVersion {
+		self.store.protocol_version()
 	}
 
 	/// Writes a single key and its `Writeable` value to the db.

@@ -246,7 +246,7 @@ impl OutputHandler {
 		let outputs = block
 			.outputs()
 			.iter()
-			.filter(|output| commitments.is_empty() || commitments.contains(&output.commit))
+			.filter(|output| commitments.is_empty() || commitments.contains(&output.commitment()))
 			.map(|output| {
 				OutputPrintable::from_output(output, &chain, Some(&header), include_proof, true)
 			})
@@ -279,7 +279,7 @@ impl OutputHandler {
 		let outputs = block
 			.outputs()
 			.iter()
-			.filter(|output| commitments.is_empty() || commitments.contains(&output.commit))
+			.filter(|output| commitments.is_empty() || commitments.contains(&output.commitment()))
 			.map(|output| {
 				OutputPrintable::from_output(
 					output,

@@ -1,6 +1,6 @@
 # Grin Stratum RPC Protocol
 
-*Read this in other languages: [Korean](stratum_KR.md), [简体中文](stratum_ZH-CN.md).*
+*Read this in other languages: [Korean](translations/stratum_KR.md), [简体中文](translations/stratum_ZH-CN.md).*
 
 This document describes the current Stratum RPC protocol implemented in Grin.
 
@@ -33,11 +33,11 @@ At any point, if miner the tries to do one of the following request (except logi
 Example:
 
 ```JSON
-{  
+{
    "id":"10",
    "jsonrpc":"2.0",
    "method":"getjobtemplate",
-   "error":{  
+   "error":{
       "code":-32500,
       "message":"login first"
    }
@@ -56,11 +56,11 @@ if the request is not one of the following, the stratum server will give this er
 Example:
 
 ```JSON
-{  
+{
    "id":"10",
    "jsonrpc":"2.0",
    "method":"getgrins",
-   "error":{  
+   "error":{
       "code":-32601,
       "message":"Method not found"
    }
@@ -84,7 +84,7 @@ Miner can request a job with this message.
 Example:
 
 ``` JSON
-{  
+{
    "id":"2",
    "jsonrpc":"2.0",
    "method":"getjobtemplate",
@@ -101,11 +101,11 @@ The response can be of two types:
 Example:
 
 ``` JSON
-{  
+{
    "id":"0",
    "jsonrpc":"2.0",
    "method":"getjobtemplate",
-   "result":{  
+   "result":{
       "difficulty":1,
       "height":13726,
       "job_id":4,
@@ -128,11 +128,11 @@ If the node is syncing, it will send the following message:
 Example:
 
 ```JSON
-{  
+{
    "id":"10",
    "jsonrpc":"2.0",
    "method":"getjobtemplate",
-   "error":{  
+   "error":{
       "code":-32000,
       "message":"Node is syncing - Please wait"
    }
@@ -157,11 +157,11 @@ The miner SHOULD interrupt current job if job_id = 0, and SHOULD replace the cur
 Example:
 
 ``` JSON
-{  
+{
    "id":"Stratum",
    "jsonrpc":"2.0",
    "method":"job",
-   "params":{  
+   "params":{
       "difficulty":1,
       "height":16375,
       "job_id":5,
@@ -190,7 +190,7 @@ A message initiated by the miner in order to keep the connection alive.
 Example:
 
 ``` JSON
-{  
+{
    "id":"2",
    "jsonrpc":"2.0",
    "method":"keepalive",
@@ -211,7 +211,7 @@ Example:
 Example:
 
 ``` JSON
-{  
+{
    "id":"2",
    "jsonrpc":"2.0",
    "method":"keepalive",
@@ -240,11 +240,11 @@ Example:
 
 ``` JSON
 
-{  
+{
    "id":"0",
    "jsonrpc":"2.0",
    "method":"login",
-   "params":{  
+   "params":{
       "login":"login",
       "pass":"password",
       "agent":"grin-miner"
@@ -269,7 +269,7 @@ The response can be of two types:
 Example:
 
 ``` JSON
-{  
+{
    "id":"1",
    "jsonrpc":"2.0",
    "method":"login",
@@ -299,7 +299,7 @@ This message allows a miner to get the status of its current worker and the netw
 Example:
 
 ``` JSON
-{  
+{
    "id":"2",
    "jsonrpc":"2.0",
    "method":"status",
@@ -322,11 +322,11 @@ The response is the following:
 Example:
 
 ```JSON
-{  
+{
    "id":"5",
    "jsonrpc":"2.0",
    "method":"status",
-   "result":{  
+   "result":{
       "id":"5",
       "height":13726,
       "difficulty":1,
@@ -366,7 +366,7 @@ Example:
       "height":16419,
       "job_id":0,
       "nonce":8895699060858340771,
-      "pow":[  
+      "pow":[
          4210040,10141596,13269632,24291934,28079062,84254573,84493890,100560174,100657333,120128285,130518226,140371663,142109188,159800646,163323737,171019100,176840047,191220010,192245584,198941444,209276164,216952635,217795152,225662613,230166736,231315079,248639876,263910393,293995691,298361937,326412694,330363619,414572127,424798984,426489226,466671748,466924466,490048497,495035248,496623057,502828197, 532838434
          ]
    }
@@ -392,7 +392,7 @@ The share is accepted by the Stratum but is not a valid cuck(at)oo solution at t
 Example:
 
 ``` JSON
-{  
+{
    "id":"2",
    "jsonrpc":"2.0",
    "method":"submit",
@@ -416,7 +416,7 @@ The share is accepted by the Stratum and is a valid cuck(at)oo solution at the n
 Example:
 
 ``` JSON
-{  
+{
    "id":"6",
    "jsonrpc":"2.0",
    "method":"submit",
@@ -443,11 +443,11 @@ The share is a valid solution to a previous job not the current one.
 Example:
 
 ```JSON
-{  
+{
    "id":"5",
    "jsonrpc":"2.0",
    "method":"submit",
-   "error":{  
+   "error":{
       "code":-32503,
       "message":"Solution submitted too late"
    }
@@ -472,11 +472,11 @@ The submitted solution cannot be validated.
 Example:
 
 ```JSON
-{  
+{
    "id":"5",
    "jsonrpc":"2.0",
    "method":"submit",
-   "error":{  
+   "error":{
       "code":-32502,
       "message":"Failed to validate solution"
    }
@@ -497,11 +497,11 @@ The submitted solution is of too low difficulty.
 Example:
 
 ```JSON
-{  
+{
    "id":"5",
    "jsonrpc":"2.0",
    "method":"submit",
-   "error":{  
+   "error":{
       "code":-32501,
       "message":"Share rejected due to low difficulty"
    }
