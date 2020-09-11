@@ -127,7 +127,7 @@ pub struct StratumStats {
 	pub block_height: u64,
 	/// current network difficulty we're working on
 	pub network_difficulty: u64,
-	/// cuckoo size of last share sumitted
+	/// cuckoo size of last share submitted
 	pub edge_bits: u16,
 	/// current network Hashrate (for edge_bits)
 	pub network_hashrate: f64,
