@@ -174,13 +174,19 @@ fn monitor_peers(
 		total_count += 1;
 	}
 
+	let max_diff = peers.max_peer_difficulty();
+	let most_work_count = peers
+		.connected_peers()
+		.filter(|peer| peer.info.total_difficulty() >= max_diff)
+		.count();
+
 	debug!(
 		"monitor_peers: on {}:{}, {} connected ({} most_work). \
 		 all {} = {} healthy + {} banned + {} defunct",
 		config.host,
 		config.port,
-		peers.peer_count(),
-		peers.most_work_peers().len(),
+		peers.connected_peers().count(),
+		most_work_count,
 		total_count,
 		healthy_count,
 		banned_count,

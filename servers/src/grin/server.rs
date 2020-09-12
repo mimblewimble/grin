@@ -16,11 +16,11 @@
 //! the peer-to-peer server, the blockchain and the transaction pool) and acts
 //! as a facade.
 
-use std::fs;
 use std::fs::File;
 use std::io::prelude::*;
 use std::path::Path;
 use std::sync::{mpsc, Arc};
+use std::{convert::TryInto, fs};
 use std::{
 	thread::{self, JoinHandle},
 	time::{self, Duration},
@@ -356,7 +356,7 @@ impl Server {
 
 	/// Number of peers
 	pub fn peer_count(&self) -> u32 {
-		self.p2p.peers.peer_count()
+		self.p2p.peers.connected_peers().count().try_into().unwrap()
 	}
 
 	/// Start a minimal "stratum" mining service on a separate thread

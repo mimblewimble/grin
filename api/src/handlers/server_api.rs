@@ -21,6 +21,7 @@ use crate::types::*;
 use crate::web::*;
 use hyper::{Body, Request};
 use serde_json::json;
+use std::convert::TryInto;
 use std::sync::Weak;
 
 // RESTful index of available api endpoints
@@ -54,7 +55,11 @@ impl StatusHandler {
 		let (api_sync_status, api_sync_info) = sync_status_to_api(sync_status);
 		Ok(Status::from_tip_and_peers(
 			head,
-			w(&self.peers)?.peer_count(),
+			w(&self.peers)?
+				.connected_peers()
+				.count()
+				.try_into()
+				.unwrap(),
 			api_sync_status,
 			api_sync_info,
 		))

@@ -344,11 +344,11 @@ impl DandelionEpoch {
 	/// Select stem/fluff based on configured stem_probability.
 	/// Choose a new outbound stem relay peer.
 	pub fn next_epoch(&mut self, peers: &Arc<p2p::Peers>) {
+		let mut rng = rand::thread_rng();
 		self.start_time = Some(Utc::now().timestamp());
-		self.relay_peer = peers.outgoing_connected_peers().first().cloned();
+		self.relay_peer = peers.outgoing_connected_peers().choose(&mut rng);
 
 		// If stem_probability == 90 then we stem 90% of the time.
-		let mut rng = rand::thread_rng();
 		let stem_probability = self.config.stem_probability;
 		self.is_stem = rng.gen_range(0, 100) < stem_probability;
 
@@ -386,7 +386,8 @@ impl DandelionEpoch {
 		}
 
 		if update_relay {
-			self.relay_peer = peers.outgoing_connected_peers().first().cloned();
+			let mut rng = rand::thread_rng();
+			self.relay_peer = peers.outgoing_connected_peers().choose(&mut rng);
 			info!(
 				"DandelionEpoch: relay_peer: new peer chosen: {:?}",
 				self.relay_peer.clone().map(|p| p.info.addr)

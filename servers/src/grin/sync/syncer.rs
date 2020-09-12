@@ -221,8 +221,8 @@ impl SyncRunner {
 	fn needs_syncing(&self) -> Result<(bool, u64), chain::Error> {
 		let local_diff = self.chain.head()?.total_difficulty;
 		let mut is_syncing = self.sync_state.is_syncing();
-		let peer = self.peers.most_work_peer();
 
+		let peer = self.peers.most_work_peer();
 		let peer_info = if let Some(p) = peer {
 			p.info.clone()
 		} else {
