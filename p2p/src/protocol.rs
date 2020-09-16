@@ -15,7 +15,6 @@
 use crate::chain;
 use crate::conn::{Message, MessageHandler, Tracker};
 use crate::core::core::{self, hash::Hash, hash::Hashed, CompactBlock};
-
 use crate::msg::{
 	BanReason, GetPeerAddrs, Headers, Locator, Msg, PeerAddrs, Ping, Pong, TxHashSetArchive,
 	TxHashSetRequest, Type,
@@ -153,7 +152,7 @@ impl MessageHandler for Protocol {
 					msg.header.msg_len,
 				);
 
-				let bo = adapter.get_block(h);
+				let bo = adapter.get_block(h, &self.peer_info);
 				if let Some(b) = bo {
 					return Ok(Some(Msg::new(Type::Block, b, self.peer_info.version)?));
 				}
@@ -177,7 +176,7 @@ impl MessageHandler for Protocol {
 
 			Type::GetCompactBlock => {
 				let h: Hash = msg.body()?;
-				if let Some(b) = adapter.get_block(h) {
+				if let Some(b) = adapter.get_block(h, &self.peer_info) {
 					let cb: CompactBlock = b.into();
 					Ok(Some(Msg::new(
 						Type::CompactBlock,

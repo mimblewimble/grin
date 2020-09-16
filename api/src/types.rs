@@ -290,8 +290,7 @@ impl OutputPrintable {
 			OutputType::Transaction
 		};
 
-		let out_id = core::OutputIdentifier::from(output);
-		let pos = chain.get_unspent(out_id.commitment())?;
+		let pos = chain.get_unspent(output.commitment())?;
 
 		let spent = pos.is_none();
 
@@ -319,13 +318,13 @@ impl OutputPrintable {
 		let mut merkle_proof = None;
 		if include_merkle_proof && output.is_coinbase() && !spent {
 			if let Some(block_header) = block_header {
-				merkle_proof = chain.get_merkle_proof(&out_id, &block_header).ok();
+				merkle_proof = chain.get_merkle_proof(output, &block_header).ok();
 			}
 		};
 
 		Ok(OutputPrintable {
 			output_type,
-			commit: output.commit,
+			commit: output.commitment(),
 			spent,
 			proof,
 			proof_hash: output.proof.hash().to_hex(),

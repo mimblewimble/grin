@@ -87,6 +87,12 @@ fn test_nrd_kernel_relative_height() -> Result<(), PoolError> {
 			aggsig::sign_with_blinding(&keychain.secp(), &msg, &excess, Some(&pubkey)).unwrap();
 		kernel.verify().unwrap();
 
+		// Generate a 2nd NRD kernel sharing the same excess commitment but with different signature.
+		let mut kernel2 = kernel.clone();
+		kernel2.excess_sig =
+			aggsig::sign_with_blinding(&keychain.secp(), &msg, &excess, Some(&pubkey)).unwrap();
+		kernel2.verify().unwrap();
+
 		let tx1 = test_transaction_with_kernel(
 			&keychain,
 			vec![10, 20],
@@ -99,7 +105,7 @@ fn test_nrd_kernel_relative_height() -> Result<(), PoolError> {
 			&keychain,
 			vec![24],
 			vec![18],
-			kernel.clone(),
+			kernel2.clone(),
 			excess.clone(),
 		);
 

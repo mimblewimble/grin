@@ -335,7 +335,7 @@ impl ChainAdapter for DummyAdapter {
 	fn locate_headers(&self, _: &[Hash]) -> Result<Vec<core::BlockHeader>, chain::Error> {
 		Ok(vec![])
 	}
-	fn get_block(&self, _: Hash) -> Option<core::Block> {
+	fn get_block(&self, _: Hash, _: &PeerInfo) -> Option<core::Block> {
 		None
 	}
 	fn txhashset_read(&self, _h: Hash) -> Option<TxHashSetRead> {

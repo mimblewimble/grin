@@ -248,13 +248,16 @@ impl Server {
 				_ => unreachable!(),
 			};
 
-			let preferred_peers = config.p2p_config.peers_preferred.clone().map(|p| p.peers);
+			let preferred_peers = match &config.p2p_config.peers_preferred {
+				Some(addrs) => addrs.peers.clone(),
+				None => vec![],
+			};
 
 			connect_thread = Some(seed::connect_and_monitor(
 				p2p_server.clone(),
 				config.p2p_config.capabilities,
 				seeder,
-				preferred_peers,
+				&preferred_peers,
 				stop_state.clone(),
 			)?);
 		}
@@ -358,7 +361,6 @@ impl Server {
 
 	/// Start a minimal "stratum" mining service on a separate thread
 	pub fn start_stratum_server(&self, config: StratumServerConfig) {
-		let edge_bits = global::min_edge_bits();
 		let proof_size = global::proofsize();
 		let sync_state = self.sync_state.clone();
 
@@ -372,7 +374,7 @@ impl Server {
 		let _ = thread::Builder::new()
 			.name("stratum_server".to_string())
 			.spawn(move || {
-				stratum_server.run_loop(edge_bits as u32, proof_size, sync_state);
+				stratum_server.run_loop(proof_size, sync_state);
 			});
 	}
 

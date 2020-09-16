@@ -331,7 +331,7 @@ impl Writeable for KernelFeatures {
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
 		// Care must be exercised when writing for hashing purposes.
 		// All kernels are hashed using original v1 serialization strategy.
-		if writer.serialization_mode() == ser::SerializationMode::Hash {
+		if writer.serialization_mode().is_hash_mode() {
 			return self.write_v1(writer);
 		}
 
@@ -458,6 +458,8 @@ pub struct TxKernel {
 impl DefaultHashable for TxKernel {}
 hashable_ord!(TxKernel);
 
+/// We want to be able to put kernels in a hashset in the pool.
+/// So we need to be able to hash them.
 impl ::std::hash::Hash for TxKernel {
 	fn hash<H: ::std::hash::Hasher>(&self, state: &mut H) {
 		let mut vec = Vec::new();
@@ -691,12 +693,23 @@ impl Readable for TransactionBody {
 			return Err(ser::Error::TooLargeReadErr);
 		}
 
-		let inputs = read_multi(reader, num_inputs)?;
+		// Read protocol version specific inputs.
+		let inputs = match reader.protocol_version().value() {
+			0..=2 => {
+				let inputs: Vec<Input> = read_multi(reader, num_inputs)?;
+				Inputs::from(inputs.as_slice())
+			}
+			3..=ser::ProtocolVersion::MAX => {
+				let inputs: Vec<CommitWrapper> = read_multi(reader, num_inputs)?;
+				Inputs::from(inputs.as_slice())
+			}
+		};
+
 		let outputs = read_multi(reader, num_outputs)?;
 		let kernels = read_multi(reader, num_kernels)?;
 
 		// Initialize tx body and verify everything is sorted.
-		let body = TransactionBody::init(&inputs, &outputs, &kernels, true)
+		let body = TransactionBody::init(inputs, &outputs, &kernels, true)
 			.map_err(|_| ser::Error::CorruptedData)?;
 
 		Ok(body)
@@ -751,13 +764,13 @@ impl TransactionBody {
 	/// the provided inputs, outputs and kernels.
 	/// Guarantees inputs, outputs, kernels are sorted lexicographically.
 	pub fn init(
-		inputs: &[Input],
+		inputs: Inputs,
 		outputs: &[Output],
 		kernels: &[TxKernel],
 		verify_sorted: bool,
 	) -> Result<TransactionBody, Error> {
 		let mut body = TransactionBody {
-			inputs: inputs.into(),
+			inputs,
 			outputs: outputs.to_vec(),
 			kernels: kernels.to_vec(),
 		};
@@ -792,23 +805,25 @@ impl TransactionBody {
 	/// inputs, if any, are kept intact.
 	/// Sort order is maintained.
 	pub fn with_input(mut self, input: Input) -> TransactionBody {
-		let mut inputs: Vec<_> = self.inputs.into();
-		if let Err(e) = inputs.binary_search(&input) {
-			inputs.insert(e, input)
+		match &mut self.inputs {
+			Inputs::CommitOnly(inputs) => {
+				let commit = input.into();
+				if let Err(e) = inputs.binary_search(&commit) {
+					inputs.insert(e, commit)
+				};
+			}
+			Inputs::FeaturesAndCommit(inputs) => {
+				if let Err(e) = inputs.binary_search(&input) {
+					inputs.insert(e, input)
+				};
+			}
 		};
-		self.inputs = inputs.into();
 		self
 	}
 
 	/// Fully replace inputs.
 	pub fn replace_inputs(mut self, inputs: Inputs) -> TransactionBody {
 		self.inputs = inputs;
-		self
-	}
-
-	/// Fully replace inputs.
-	pub fn replace_outputs(mut self, outputs: &[Output]) -> TransactionBody {
-		self.outputs = outputs.to_vec();
 		self
 	}
 
@@ -819,6 +834,12 @@ impl TransactionBody {
 		if let Err(e) = self.outputs.binary_search(&output) {
 			self.outputs.insert(e, output)
 		};
+		self
+	}
+
+	/// Fully replace outputs.
+	pub fn replace_outputs(mut self, outputs: &[Output]) -> TransactionBody {
+		self.outputs = outputs.to_vec();
 		self
 	}
 
@@ -1059,7 +1080,7 @@ impl TransactionBody {
 			let mut commits = vec![];
 			let mut proofs = vec![];
 			for x in &outputs {
-				commits.push(x.commit);
+				commits.push(x.commitment());
 				proofs.push(x.proof);
 			}
 			Output::batch_verify_proofs(&commits, &proofs)?;
@@ -1166,14 +1187,15 @@ impl Transaction {
 
 	/// Creates a new transaction initialized with
 	/// the provided inputs, outputs, kernels
-	pub fn new(inputs: &[Input], outputs: &[Output], kernels: &[TxKernel]) -> Transaction {
-		let offset = BlindingFactor::zero();
-
+	pub fn new(inputs: Inputs, outputs: &[Output], kernels: &[TxKernel]) -> Transaction {
 		// Initialize a new tx body and sort everything.
 		let body =
 			TransactionBody::init(inputs, outputs, kernels, false).expect("sorting, not verifying");
 
-		Transaction { offset, body }
+		Transaction {
+			offset: BlindingFactor::zero(),
+			body,
+		}
 	}
 
 	/// Creates a new transaction using this transaction as a template
@@ -1398,7 +1420,7 @@ pub fn aggregate(txs: &[Transaction]) -> Result<Transaction, Error> {
 					kernels + tx.kernels().len(),
 				)
 			});
-	let mut inputs: Vec<Input> = Vec::with_capacity(n_inputs);
+	let mut inputs: Vec<CommitWrapper> = Vec::with_capacity(n_inputs);
 	let mut outputs: Vec<Output> = Vec::with_capacity(n_outputs);
 	let mut kernels: Vec<TxKernel> = Vec::with_capacity(n_kernels);
 
@@ -1427,7 +1449,8 @@ pub fn aggregate(txs: &[Transaction]) -> Result<Transaction, Error> {
 	//   * full set of tx kernels
 	//   * sum of all kernel offsets
 	// Note: We sort input/outputs/kernels when building the transaction body internally.
-	let tx = Transaction::new(inputs, outputs, &kernels).with_offset(total_kernel_offset);
+	let tx =
+		Transaction::new(Inputs::from(inputs), outputs, &kernels).with_offset(total_kernel_offset);
 
 	Ok(tx)
 }
@@ -1435,7 +1458,7 @@ pub fn aggregate(txs: &[Transaction]) -> Result<Transaction, Error> {
 /// Attempt to deaggregate a multi-kernel transaction based on multiple
 /// transactions
 pub fn deaggregate(mk_tx: Transaction, txs: &[Transaction]) -> Result<Transaction, Error> {
-	let mut inputs: Vec<Input> = vec![];
+	let mut inputs: Vec<CommitWrapper> = vec![];
 	let mut outputs: Vec<Output> = vec![];
 	let mut kernels: Vec<TxKernel> = vec![];
 
@@ -1494,7 +1517,10 @@ pub fn deaggregate(mk_tx: Transaction, txs: &[Transaction]) -> Result<Transactio
 	kernels.sort_unstable();
 
 	// Build a new tx from the above data.
-	Ok(Transaction::new(&inputs, &outputs, &kernels).with_offset(total_kernel_offset))
+	Ok(
+		Transaction::new(Inputs::from(inputs.as_slice()), &outputs, &kernels)
+			.with_offset(total_kernel_offset),
+	)
 }
 
 /// A transaction input.
@@ -1528,14 +1554,6 @@ impl From<&OutputIdentifier> for Input {
 			features: out.features,
 			commit: out.commit,
 		}
-	}
-}
-
-impl ::std::hash::Hash for Input {
-	fn hash<H: ::std::hash::Hasher>(&self, state: &mut H) {
-		let mut vec = Vec::new();
-		ser::serialize_default(&mut vec, &self).expect("serialization failed");
-		::std::hash::Hash::hash(&vec, state);
 	}
 }
 
@@ -1588,29 +1606,102 @@ impl Input {
 		self.features.is_plain()
 	}
 }
-/// Wrapper around a vec of inputs.
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
-pub enum Inputs {
-	/// Vec of inputs.
-	FeaturesAndCommit(Vec<Input>),
-	// Vec of commitments.
-	// CommitOnly(Vec<Commitment>),
+
+/// We need to wrap commitments so they can be sorted with hashable_ord.
+#[derive(Serialize, Deserialize, Debug, Clone, Copy)]
+#[serde(transparent)]
+pub struct CommitWrapper {
+	#[serde(
+		serialize_with = "secp_ser::as_hex",
+		deserialize_with = "secp_ser::commitment_from_hex"
+	)]
+	commit: Commitment,
 }
 
-impl From<Inputs> for Vec<Input> {
+impl DefaultHashable for CommitWrapper {}
+hashable_ord!(CommitWrapper);
+
+impl From<Commitment> for CommitWrapper {
+	fn from(commit: Commitment) -> Self {
+		CommitWrapper { commit }
+	}
+}
+
+impl From<Input> for CommitWrapper {
+	fn from(input: Input) -> Self {
+		CommitWrapper {
+			commit: input.commitment(),
+		}
+	}
+}
+
+impl From<&Input> for CommitWrapper {
+	fn from(input: &Input) -> Self {
+		CommitWrapper {
+			commit: input.commitment(),
+		}
+	}
+}
+
+impl AsRef<Commitment> for CommitWrapper {
+	fn as_ref(&self) -> &Commitment {
+		&self.commit
+	}
+}
+
+impl Readable for CommitWrapper {
+	fn read<R: Reader>(reader: &mut R) -> Result<CommitWrapper, ser::Error> {
+		let commit = Commitment::read(reader)?;
+		Ok(CommitWrapper { commit })
+	}
+}
+
+impl Writeable for CommitWrapper {
+	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
+		self.commit.write(writer)
+	}
+}
+
+impl From<Inputs> for Vec<CommitWrapper> {
 	fn from(inputs: Inputs) -> Self {
 		match inputs {
-			Inputs::FeaturesAndCommit(inputs) => inputs,
+			Inputs::CommitOnly(inputs) => inputs,
+			Inputs::FeaturesAndCommit(inputs) => {
+				let mut commits: Vec<_> = inputs.iter().map(|input| input.into()).collect();
+				commits.sort_unstable();
+				commits
+			}
 		}
 	}
 }
 
-impl From<&Inputs> for Vec<Input> {
+impl From<&Inputs> for Vec<CommitWrapper> {
 	fn from(inputs: &Inputs) -> Self {
 		match inputs {
-			Inputs::FeaturesAndCommit(inputs) => inputs.to_vec(),
+			Inputs::CommitOnly(inputs) => inputs.clone(),
+			Inputs::FeaturesAndCommit(inputs) => {
+				let mut commits: Vec<_> = inputs.iter().map(|input| input.into()).collect();
+				commits.sort_unstable();
+				commits
+			}
 		}
 	}
+}
+
+impl CommitWrapper {
+	/// Wrapped commitment.
+	pub fn commitment(&self) -> Commitment {
+		self.commit
+	}
+}
+/// Wrapper around a vec of inputs.
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+#[serde(untagged)]
+pub enum Inputs {
+	/// Vec of commitments.
+	CommitOnly(Vec<CommitWrapper>),
+	/// Vec of inputs.
+	FeaturesAndCommit(Vec<Input>),
 }
 
 impl From<&[Input]> for Inputs {
@@ -1619,35 +1710,62 @@ impl From<&[Input]> for Inputs {
 	}
 }
 
-impl From<Vec<Input>> for Inputs {
-	fn from(inputs: Vec<Input>) -> Self {
-		Inputs::FeaturesAndCommit(inputs)
+impl From<&[CommitWrapper]> for Inputs {
+	fn from(commits: &[CommitWrapper]) -> Self {
+		Inputs::CommitOnly(commits.to_vec())
 	}
 }
 
-impl From<Vec<OutputIdentifier>> for Inputs {
-	fn from(outputs: Vec<OutputIdentifier>) -> Self {
-		let inputs = outputs
-			.into_iter()
+/// Used when converting to v2 compatibility.
+/// We want to preserve output features here.
+impl From<&[OutputIdentifier]> for Inputs {
+	fn from(outputs: &[OutputIdentifier]) -> Self {
+		let mut inputs: Vec<_> = outputs
+			.iter()
 			.map(|out| Input {
 				features: out.features,
 				commit: out.commit,
 			})
 			.collect();
+		inputs.sort_unstable();
 		Inputs::FeaturesAndCommit(inputs)
 	}
 }
 
 impl Default for Inputs {
 	fn default() -> Self {
-		Inputs::FeaturesAndCommit(vec![])
+		Inputs::CommitOnly(vec![])
 	}
 }
 
 impl Writeable for Inputs {
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
-		match self {
-			Inputs::FeaturesAndCommit(inputs) => inputs.write(writer)?,
+		// Nothing to write so we are done.
+		if self.is_empty() {
+			return Ok(());
+		}
+
+		// If writing for a hash then simply write all our inputs.
+		if writer.serialization_mode().is_hash_mode() {
+			match self {
+				Inputs::CommitOnly(inputs) => inputs.write(writer)?,
+				Inputs::FeaturesAndCommit(inputs) => inputs.write(writer)?,
+			}
+		} else {
+			// Otherwise we are writing full data and need to consider our inputs variant and protocol version.
+			match self {
+				Inputs::CommitOnly(inputs) => match writer.protocol_version().value() {
+					0..=2 => return Err(ser::Error::UnsupportedProtocolVersion),
+					3..=ProtocolVersion::MAX => inputs.write(writer)?,
+				},
+				Inputs::FeaturesAndCommit(inputs) => match writer.protocol_version().value() {
+					0..=2 => inputs.write(writer)?,
+					3..=ProtocolVersion::MAX => {
+						let inputs: Vec<CommitWrapper> = self.into();
+						inputs.write(writer)?;
+					}
+				},
+			}
 		}
 		Ok(())
 	}
@@ -1657,6 +1775,7 @@ impl Inputs {
 	/// Number of inputs.
 	pub fn len(&self) -> usize {
 		match self {
+			Inputs::CommitOnly(inputs) => inputs.len(),
 			Inputs::FeaturesAndCommit(inputs) => inputs.len(),
 		}
 	}
@@ -1669,13 +1788,24 @@ impl Inputs {
 	/// Verify inputs are sorted and unique.
 	fn verify_sorted_and_unique(&self) -> Result<(), ser::Error> {
 		match self {
+			Inputs::CommitOnly(inputs) => inputs.verify_sorted_and_unique(),
 			Inputs::FeaturesAndCommit(inputs) => inputs.verify_sorted_and_unique(),
 		}
 	}
 
+	/// Sort the inputs.
 	fn sort_unstable(&mut self) {
 		match self {
+			Inputs::CommitOnly(inputs) => inputs.sort_unstable(),
 			Inputs::FeaturesAndCommit(inputs) => inputs.sort_unstable(),
+		}
+	}
+
+	/// For debug purposes only. Do not rely on this for anything.
+	pub fn version_str(&self) -> &str {
+		match self {
+			Inputs::CommitOnly(_) => "v3",
+			Inputs::FeaturesAndCommit(_) => "v2",
 		}
 	}
 }
@@ -1714,15 +1844,10 @@ impl Readable for OutputFeatures {
 /// overflow and the ownership of the private key.
 #[derive(Debug, Copy, Clone, Serialize, Deserialize)]
 pub struct Output {
-	/// Options for an output's structure or use
-	pub features: OutputFeatures,
-	/// The homomorphic commitment representing the output amount
-	#[serde(
-		serialize_with = "secp_ser::as_hex",
-		deserialize_with = "secp_ser::commitment_from_hex"
-	)]
-	pub commit: Commitment,
-	/// A proof that the commitment is in the right range
+	/// Output identifier (features and commitment).
+	#[serde(flatten)]
+	pub identifier: OutputIdentifier,
+	/// Rangeproof associated with the commitment.
 	#[serde(
 		serialize_with = "secp_ser::as_hex",
 		deserialize_with = "secp_ser::rangeproof_from_hex"
@@ -1730,20 +1855,29 @@ pub struct Output {
 	pub proof: RangeProof,
 }
 
-impl DefaultHashable for Output {}
-hashable_ord!(Output);
-
-impl AsRef<Commitment> for Output {
-	fn as_ref(&self) -> &Commitment {
-		&self.commit
+impl Ord for Output {
+	fn cmp(&self, other: &Self) -> Ordering {
+		self.identifier.cmp(&other.identifier)
 	}
 }
 
-impl ::std::hash::Hash for Output {
-	fn hash<H: ::std::hash::Hasher>(&self, state: &mut H) {
-		let mut vec = Vec::new();
-		ser::serialize_default(&mut vec, &self).expect("serialization failed");
-		::std::hash::Hash::hash(&vec, state);
+impl PartialOrd for Output {
+	fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+		Some(self.cmp(other))
+	}
+}
+
+impl PartialEq for Output {
+	fn eq(&self, other: &Self) -> bool {
+		self.identifier == other.identifier
+	}
+}
+
+impl Eq for Output {}
+
+impl AsRef<Commitment> for Output {
+	fn as_ref(&self) -> &Commitment {
+		&self.identifier.commit
 	}
 }
 
@@ -1751,13 +1885,8 @@ impl ::std::hash::Hash for Output {
 /// an Output as binary.
 impl Writeable for Output {
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
-		self.features.write(writer)?;
-		self.commit.write(writer)?;
-		// The hash of an output doesn't include the range proof, which
-		// is committed to separately
-		if writer.serialization_mode() != ser::SerializationMode::Hash {
-			writer.write_bytes(&self.proof)?
-		}
+		self.identifier.write(writer)?;
+		self.proof.write(writer)?;
 		Ok(())
 	}
 }
@@ -1767,27 +1896,9 @@ impl Writeable for Output {
 impl Readable for Output {
 	fn read<R: Reader>(reader: &mut R) -> Result<Output, ser::Error> {
 		Ok(Output {
-			features: OutputFeatures::read(reader)?,
-			commit: Commitment::read(reader)?,
+			identifier: OutputIdentifier::read(reader)?,
 			proof: RangeProof::read(reader)?,
 		})
-	}
-}
-
-/// We can build an Output MMR but store instances of OutputIdentifier in the MMR data file.
-impl PMMRable for Output {
-	type E = OutputIdentifier;
-
-	fn as_elmt(&self) -> OutputIdentifier {
-		OutputIdentifier::from(self)
-	}
-
-	fn elmt_size() -> Option<u16> {
-		Some(
-			(1 + secp::constants::PEDERSEN_COMMITMENT_SIZE)
-				.try_into()
-				.unwrap(),
-		)
 	}
 }
 
@@ -1804,19 +1915,37 @@ impl OutputFeatures {
 }
 
 impl Output {
+	/// Create a new output with the provided features, commitment and rangeproof.
+	pub fn new(features: OutputFeatures, commit: Commitment, proof: RangeProof) -> Output {
+		Output {
+			identifier: OutputIdentifier { features, commit },
+			proof,
+		}
+	}
+
+	/// Output identifier.
+	pub fn identifier(&self) -> OutputIdentifier {
+		self.identifier
+	}
+
 	/// Commitment for the output
 	pub fn commitment(&self) -> Commitment {
-		self.commit
+		self.identifier.commitment()
 	}
 
-	/// Is this a coinbase kernel?
+	/// Output features.
+	pub fn features(&self) -> OutputFeatures {
+		self.identifier.features
+	}
+
+	/// Is this a coinbase output?
 	pub fn is_coinbase(&self) -> bool {
-		self.features.is_coinbase()
+		self.identifier.is_coinbase()
 	}
 
-	/// Is this a plain kernel?
+	/// Is this a plain output?
 	pub fn is_plain(&self) -> bool {
-		self.features.is_plain()
+		self.identifier.is_plain()
 	}
 
 	/// Range proof for the output
@@ -1833,7 +1962,7 @@ impl Output {
 	pub fn verify_proof(&self) -> Result<(), Error> {
 		let secp = static_secp_instance();
 		secp.lock()
-			.verify_bullet_proof(self.commit, self.proof, None)?;
+			.verify_bullet_proof(self.commitment(), self.proof, None)?;
 		Ok(())
 	}
 
@@ -1843,6 +1972,12 @@ impl Output {
 		secp.lock()
 			.verify_bullet_proof_multi(commits.to_vec(), proofs.to_vec(), None)?;
 		Ok(())
+	}
+}
+
+impl AsRef<OutputIdentifier> for Output {
+	fn as_ref(&self) -> &OutputIdentifier {
+		&self.identifier
 	}
 }
 
@@ -1856,6 +1991,10 @@ pub struct OutputIdentifier {
 	/// enforced.
 	pub features: OutputFeatures,
 	/// Output commitment
+	#[serde(
+		serialize_with = "secp_ser::as_hex",
+		deserialize_with = "secp_ser::commitment_from_hex"
+	)]
 	pub commit: Commitment,
 }
 
@@ -1882,12 +2021,21 @@ impl OutputIdentifier {
 		self.commit
 	}
 
+	/// Is this a coinbase output?
+	pub fn is_coinbase(&self) -> bool {
+		self.features.is_coinbase()
+	}
+
+	/// Is this a plain output?
+	pub fn is_plain(&self) -> bool {
+		self.features.is_plain()
+	}
+
 	/// Converts this identifier to a full output, provided a RangeProof
 	pub fn into_output(self, proof: RangeProof) -> Output {
 		Output {
+			identifier: self,
 			proof,
-			features: self.features,
-			commit: self.commit,
 		}
 	}
 }
@@ -1915,12 +2063,19 @@ impl Readable for OutputIdentifier {
 	}
 }
 
-impl From<&Output> for OutputIdentifier {
-	fn from(out: &Output) -> Self {
-		OutputIdentifier {
-			features: out.features,
-			commit: out.commit,
-		}
+impl PMMRable for OutputIdentifier {
+	type E = Self;
+
+	fn as_elmt(&self) -> OutputIdentifier {
+		*self
+	}
+
+	fn elmt_size() -> Option<u16> {
+		Some(
+			(1 + secp::constants::PEDERSEN_COMMITMENT_SIZE)
+				.try_into()
+				.unwrap(),
+		)
 	}
 }
 
@@ -1930,6 +2085,12 @@ impl From<&Input> for OutputIdentifier {
 			features: input.features,
 			commit: input.commit,
 		}
+	}
+}
+
+impl AsRef<OutputIdentifier> for OutputIdentifier {
+	fn as_ref(&self) -> &OutputIdentifier {
+		self
 	}
 }
 

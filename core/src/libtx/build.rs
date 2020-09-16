@@ -125,7 +125,7 @@ where
 
 			debug!("Building output: {}, {:?}", value, commit);
 
-			let rproof = proof::create(
+			let proof = proof::create(
 				build.keychain,
 				build.builder,
 				value,
@@ -136,11 +136,7 @@ where
 			)?;
 
 			Ok((
-				tx.with_output(Output {
-					features: OutputFeatures::Plain,
-					commit,
-					proof: rproof,
-				}),
+				tx.with_output(Output::new(OutputFeatures::Plain, commit, proof)),
 				sum.add_key_id(key_id.to_value_path(value)),
 			))
 		},

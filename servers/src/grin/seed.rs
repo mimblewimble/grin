@@ -52,9 +52,11 @@ pub fn connect_and_monitor(
 	p2p_server: Arc<p2p::Server>,
 	capabilities: p2p::Capabilities,
 	seed_list: Box<dyn Fn() -> Vec<PeerAddr> + Send>,
-	preferred_peers: Option<Vec<PeerAddr>>,
+	preferred_peers: &[PeerAddr],
 	stop_state: Arc<StopState>,
 ) -> std::io::Result<thread::JoinHandle<()>> {
+	let preferred_peers = preferred_peers.to_vec();
+
 	thread::Builder::new()
 		.name("seed".to_string())
 		.spawn(move || {
@@ -69,7 +71,7 @@ pub fn connect_and_monitor(
 				peers.clone(),
 				tx.clone(),
 				seed_list,
-				preferred_peers.clone(),
+				&preferred_peers,
 			);
 
 			let mut prev = MIN_DATE.and_hms(0, 0, 0);
@@ -113,7 +115,7 @@ pub fn connect_and_monitor(
 						peers.clone(),
 						p2p_server.config.clone(),
 						tx.clone(),
-						preferred_peers.clone(),
+						&preferred_peers,
 					);
 
 					prev = Utc::now();
@@ -141,7 +143,7 @@ fn monitor_peers(
 	peers: Arc<p2p::Peers>,
 	config: p2p::P2PConfig,
 	tx: mpsc::Sender<PeerAddr>,
-	preferred_peers_list: Option<Vec<PeerAddr>>,
+	preferred_peers: &[PeerAddr],
 ) {
 	// regularly check if we need to acquire more peers  and if so, gets
 	// them from db
@@ -189,6 +191,7 @@ fn monitor_peers(
 	peers.clean_peers(
 		config.peer_max_inbound_count() as usize,
 		config.peer_max_outbound_count() as usize,
+		preferred_peers,
 	);
 
 	if peers.enough_outbound_peers() {
@@ -209,16 +212,14 @@ fn monitor_peers(
 		connected_peers.push(p.info.addr)
 	}
 
-	// Attempt to connect to preferred peers if there is some
-	if let Some(preferred_peers) = preferred_peers_list {
-		for p in preferred_peers {
-			if !connected_peers.is_empty() {
-				if !connected_peers.contains(&p) {
-					tx.send(p).unwrap();
-				}
-			} else {
-				tx.send(p).unwrap();
+	// Attempt to connect to any preferred peers.
+	for p in preferred_peers {
+		if !connected_peers.is_empty() {
+			if !connected_peers.contains(p) {
+				tx.send(*p).unwrap();
 			}
+		} else {
+			tx.send(*p).unwrap();
 		}
 	}
 
@@ -257,7 +258,7 @@ fn connect_to_seeds_and_preferred_peers(
 	peers: Arc<p2p::Peers>,
 	tx: mpsc::Sender<PeerAddr>,
 	seed_list: Box<dyn Fn() -> Vec<PeerAddr>>,
-	peers_preferred_list: Option<Vec<PeerAddr>>,
+	peers_preferred: &[PeerAddr],
 ) {
 	// check if we have some peers in db
 	// look for peers that are able to give us other peers (via PEER_LIST capability)
@@ -270,11 +271,8 @@ fn connect_to_seeds_and_preferred_peers(
 		seed_list()
 	};
 
-	// If we have preferred peers add them to the connection
-	match peers_preferred_list {
-		Some(mut peers_preferred) => peer_addrs.append(&mut peers_preferred),
-		None => trace!("No preferred peers"),
-	};
+	// If we have preferred peers add them to the initial list
+	peer_addrs.extend_from_slice(peers_preferred);
 
 	if peer_addrs.is_empty() {
 		warn!("No seeds were retrieved.");
