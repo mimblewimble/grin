@@ -423,22 +423,6 @@ impl From<UntrustedBlockHeader> for BlockHeader {
 	}
 }
 
-/// List of block headers
-pub struct BlockHeaders(pub Vec<BlockHeader>);
-
-/// Deserialization of a list of block headers
-impl Readable for BlockHeaders {
-	fn read<R: Reader>(reader: &mut R) -> Result<Self, ser::Error> {
-		let count = reader.read_u16()?;
-		let mut headers = Vec::with_capacity(count as usize);
-		for _ in 0..count {
-			let header = UntrustedBlockHeader::read(reader)?;
-			headers.push(header.into());
-		}
-		Ok(BlockHeaders(headers))
-	}
-}
-
 /// Block header which does lightweight validation as part of deserialization,
 /// it supposed to be used when we can't trust the channel (eg network)
 #[derive(Debug)]

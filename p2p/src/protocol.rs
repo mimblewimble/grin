@@ -196,19 +196,8 @@ impl MessageHandler for Protocol {
 				Consumed::None
 			}
 
-			Message::Headers(hs) => {
-				// Read chunks of headers off the stream and pass them off to the adapter.
-				let hs = hs.0;
-				let chunk_size = 32;
-				let count = hs.len() - 1;
-				let mut headers = Vec::with_capacity(chunk_size);
-				for (i, header) in hs.into_iter().enumerate() {
-					headers.push(header);
-					if i % chunk_size == 0 || i == count {
-						adapter.headers_received(&headers, &self.peer_info)?;
-						headers.clear();
-					}
-				}
+			Message::Headers(headers) => {
+				adapter.headers_received(&headers, &self.peer_info)?;
 				Consumed::None
 			}
 

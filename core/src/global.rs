@@ -413,6 +413,7 @@ where
 }
 
 /// Calculates the size of a header (in bytes) given a number of edge bits in the PoW
+#[inline]
 pub fn header_size_bytes(edge_bits: u8) -> usize {
 	let size = 2 + 2 * 8 + 5 * 32 + 32 + 2 * 8;
 	let proof_size = 8 + 4 + 8 + 1 + BitVec::bytes_len(edge_bits as usize * proofsize());

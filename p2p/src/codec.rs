@@ -1,9 +1,13 @@
+use crate::core::core::block::{BlockHeader, UntrustedBlockHeader};
+use crate::core::global::header_size_bytes;
 use crate::core::ser::{BufReader, ProtocolVersion, Readable};
 use crate::msg::{Message, MsgHeader, MsgHeaderWrapper, Type};
 use crate::types::{AttachmentMeta, AttachmentUpdate, Error};
-use bytes::{BufMut, Bytes, BytesMut};
+use bytes::{Buf, BufMut, Bytes, BytesMut};
+use core::ser::Reader;
 use std::cmp::min;
 use std::io::Read;
+use std::mem;
 use std::net::TcpStream;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -12,18 +16,20 @@ use State::*;
 
 const HEADER_IO_TIMEOUT: Duration = Duration::from_millis(2000);
 pub const BODY_IO_TIMEOUT: Duration = Duration::from_millis(60000);
+const HEADER_BATCH_SIZE: usize = 32;
 
 enum State {
 	None,
 	Header(MsgHeaderWrapper),
+	BlockHeaders {
+		bytes_left: usize,
+		items_left: usize,
+		headers: Vec<BlockHeader>,
+	},
 	Attachment(usize, Arc<AttachmentMeta>, Instant),
 }
 
 impl State {
-	fn take(&mut self) -> Self {
-		std::mem::replace(self, State::None)
-	}
-
 	fn is_none(&self) -> bool {
 		match self {
 			State::None => true,
@@ -63,12 +69,21 @@ impl Codec {
 		self.state = Attachment(meta.size, meta, Instant::now());
 	}
 
-	/// Length of the next item we are expecting, could be header, body or attachment chunk
+	/// Length of the next item we are expecting, could be msg header, body, block header or attachment chunk
 	fn next_len(&self) -> usize {
 		match &self.state {
 			None => MsgHeader::LEN,
+			Header(Known(h)) if h.msg_type == Type::Headers => {
+				// If we are receiving a list of headers, read off the item count first
+				min(h.msg_len as usize, 2)
+			}
 			Header(Known(header)) => header.msg_len as usize,
 			Header(Unknown(len, _)) => *len as usize,
+			BlockHeaders { bytes_left, .. } => {
+				// The header length varies with the number of edge bits. Therefore we overestimate
+				// its size and only actually read the bytes we need
+				min(*bytes_left, header_size_bytes(63))
+			}
 			Attachment(left, _, _) => min(*left, 48_000),
 		}
 	}
@@ -87,44 +102,101 @@ impl Codec {
 		self.bytes_read = 0;
 		loop {
 			let next_len = self.next_len();
-			self.buffer.reserve(next_len);
-			for _ in 0..next_len {
-				self.buffer.put_u8(0);
+			let pre_len = self.buffer.len();
+			// Buffer could already be partially filled, calculate additional bytes we need
+			let to_read = next_len.saturating_sub(pre_len);
+			if to_read > 0 {
+				self.buffer.reserve(to_read);
+				for _ in 0..to_read {
+					self.buffer.put_u8(0);
+				}
+				self.set_stream_timeout()?;
+				if let Err(e) = self.stream.read_exact(&mut self.buffer[pre_len..]) {
+					// Undo reserved bytes on a failed read
+					self.buffer.truncate(pre_len);
+					return Err(e.into());
+				}
+				self.bytes_read += to_read;
 			}
-			let mut buf = self.buffer.split_to(next_len);
-			self.set_stream_timeout()?;
-			self.stream.read_exact(&mut buf[..])?;
-			self.bytes_read += buf.len();
-			let mut raw = buf.freeze();
-			match self.state.take() {
+			match &mut self.state {
 				None => {
 					// Parse header and keep reading
+					let mut raw = self.buffer.split_to(next_len).freeze();
 					let mut reader = BufReader::new(&mut raw, self.version);
 					let header = MsgHeaderWrapper::read(&mut reader)?;
 					self.state = Header(header);
 				}
 				Header(Known(header)) => {
-					// Return message
-					return decode_message(&header, &mut raw, self.version);
+					let mut raw = self.buffer.split_to(next_len).freeze();
+					if header.msg_type == Type::Headers {
+						// Special consideration for a list of headers, as we want to verify and process
+						// them as they come in instead of only after the full list has been received
+						let mut reader = BufReader::new(&mut raw, self.version);
+						let items_left = reader.read_u16()? as usize;
+						self.state = BlockHeaders {
+							bytes_left: header.msg_len as usize - 2,
+							items_left,
+							headers: Vec::with_capacity(min(HEADER_BATCH_SIZE, items_left)),
+						};
+					} else {
+						// Return full message
+						let msg = decode_message(header, &mut raw, self.version);
+						self.state = None;
+						return msg;
+					}
 				}
 				Header(Unknown(_, msg_type)) => {
 					// Discard body and return
+					let msg_type = *msg_type;
+					self.buffer.advance(next_len);
+					self.state = None;
 					return Ok(Message::Unknown(msg_type));
 				}
-				Attachment(mut left, meta, mut now) => {
-					left -= next_len;
+				BlockHeaders {
+					bytes_left,
+					items_left,
+					headers,
+				} => {
+					if *bytes_left == 0 {
+						// Incorrect item count
+						self.state = None;
+						return Err(Error::BadMessage);
+					}
+
+					let mut reader = BufReader::new(&mut self.buffer, self.version);
+					let header: UntrustedBlockHeader = reader.body()?;
+					let bytes_read = reader.bytes_read() as usize;
+					headers.push(header.into());
+					*bytes_left = bytes_left.saturating_sub(bytes_read);
+					*items_left -= 1;
+
+					if headers.len() == HEADER_BATCH_SIZE || *items_left == 0 {
+						let mut h = Vec::with_capacity(min(HEADER_BATCH_SIZE, *items_left));
+						mem::swap(headers, &mut h);
+						if *items_left == 0 {
+							let bytes_left = *bytes_left;
+							self.state = None;
+							if bytes_left > 0 {
+								return Err(Error::BadMessage);
+							}
+						}
+						return Ok(Message::Headers(h));
+					}
+				}
+				Attachment(left, meta, now) => {
+					let raw = self.buffer.split_to(next_len).freeze();
+					*left -= next_len;
 					if now.elapsed().as_secs() > 10 {
-						now = Instant::now();
-						debug!("attachment: {}/{}", meta.size - left, meta.size);
+						*now = Instant::now();
+						debug!("attachment: {}/{}", meta.size - *left, meta.size);
 					}
 					let update = AttachmentUpdate {
 						read: next_len,
-						left,
-						meta: Arc::clone(&meta),
+						left: *left,
+						meta: Arc::clone(meta),
 					};
-					if left > 0 {
-						self.state = Attachment(left, meta, now);
-					} else {
+					if *left == 0 {
+						self.state = None;
 						debug!("attachment: DONE");
 					}
 					return Ok(Message::Attachment(update, Some(raw)));

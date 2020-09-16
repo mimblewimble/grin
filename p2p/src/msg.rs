@@ -17,8 +17,7 @@
 use crate::conn::Tracker;
 use crate::core::core::hash::Hash;
 use crate::core::core::{
-	BlockHeader, BlockHeaders, Transaction, UntrustedBlock, UntrustedBlockHeader,
-	UntrustedCompactBlock,
+	BlockHeader, Transaction, UntrustedBlock, UntrustedBlockHeader, UntrustedCompactBlock,
 };
 use crate::core::pow::Difficulty;
 use crate::core::ser::{
@@ -726,7 +725,7 @@ pub enum Message {
 	CompactBlock(UntrustedCompactBlock),
 	GetHeaders(Locator),
 	Header(UntrustedBlockHeader),
-	Headers(BlockHeaders),
+	Headers(Vec<BlockHeader>),
 	GetPeerAddrs(GetPeerAddrs),
 	PeerAddrs(PeerAddrs),
 	TxHashSetRequest(TxHashSetRequest),
