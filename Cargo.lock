@@ -922,7 +922,7 @@ checksum = "9b919933a397b79c37e33b77bb2aa3dc8eb6e165ad809e58ff75bc7db2e34574"
 
 [[package]]
 name = "grin"
-version = "4.1.0"
+version = "4.1.1-alpha.1"
 dependencies = [
  "blake2-rfc",
  "built",
@@ -950,7 +950,7 @@ dependencies = [
 
 [[package]]
 name = "grin_api"
-version = "4.1.0"
+version = "4.1.1-alpha.1"
 dependencies = [
  "bytes",
  "easy-jsonrpc-mw",
@@ -982,7 +982,7 @@ dependencies = [
 
 [[package]]
 name = "grin_chain"
-version = "4.1.0"
+version = "4.1.1-alpha.1"
 dependencies = [
  "bit-vec",
  "bitflags 1.2.1",
@@ -1007,7 +1007,7 @@ dependencies = [
 
 [[package]]
 name = "grin_config"
-version = "4.1.0"
+version = "4.1.1-alpha.1"
 dependencies = [
  "dirs",
  "grin_core",
@@ -1023,7 +1023,7 @@ dependencies = [
 
 [[package]]
 name = "grin_core"
-version = "4.1.0"
+version = "4.1.1-alpha.1"
 dependencies = [
  "blake2-rfc",
  "byteorder",
@@ -1049,7 +1049,7 @@ dependencies = [
 
 [[package]]
 name = "grin_keychain"
-version = "4.1.0"
+version = "4.1.1-alpha.1"
 dependencies = [
  "blake2-rfc",
  "byteorder",
@@ -1070,7 +1070,7 @@ dependencies = [
 
 [[package]]
 name = "grin_p2p"
-version = "4.1.0"
+version = "4.1.1-alpha.1"
 dependencies = [
  "bitflags 1.2.1",
  "chrono",
@@ -1091,7 +1091,7 @@ dependencies = [
 
 [[package]]
 name = "grin_pool"
-version = "4.1.0"
+version = "4.1.1-alpha.1"
 dependencies = [
  "blake2-rfc",
  "chrono",
@@ -1125,7 +1125,7 @@ dependencies = [
 
 [[package]]
 name = "grin_servers"
-version = "4.1.0"
+version = "4.1.1-alpha.1"
 dependencies = [
  "chrono",
  "fs2",
@@ -1154,7 +1154,7 @@ dependencies = [
 
 [[package]]
 name = "grin_store"
-version = "4.1.0"
+version = "4.1.1-alpha.1"
 dependencies = [
  "byteorder",
  "chrono",
@@ -1177,7 +1177,7 @@ dependencies = [
 
 [[package]]
 name = "grin_util"
-version = "4.1.0"
+version = "4.1.1-alpha.1"
 dependencies = [
  "backtrace",
  "base64 0.12.1",
