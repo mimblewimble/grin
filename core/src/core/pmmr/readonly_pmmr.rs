@@ -18,7 +18,7 @@ use std::marker;
 
 use crate::core::hash::{Hash, ZERO_HASH};
 use crate::core::pmmr::pmmr::{bintree_rightmost, peaks};
-use crate::core::pmmr::{is_leaf, Backend};
+use crate::core::pmmr::Backend;
 use crate::ser::{PMMRIndexHashable, PMMRable};
 
 /// Readonly view of a PMMR.
@@ -64,12 +64,8 @@ where
 		if pos > self.last_pos {
 			// If we are beyond the rhs of the MMR return None.
 			None
-		} else if is_leaf(pos) {
-			// If we are a leaf then get data from the backend.
-			self.backend.get_data(pos)
 		} else {
-			// If we are not a leaf then return None as only leaves have data.
-			None
+			self.backend.get_data(pos)
 		}
 	}
 
@@ -77,33 +73,9 @@ where
 	pub fn get_hash(&self, pos: u64) -> Option<Hash> {
 		if pos > self.last_pos {
 			None
-		} else if is_leaf(pos) {
-			// If we are a leaf then get hash from the backend.
+		} else {
 			self.backend.get_hash(pos)
-		} else {
-			// If we are not a leaf get hash ignoring the remove log.
-			self.backend.get_from_file(pos)
 		}
-	}
-
-	/// Get the hash from the underlying MMR file, ignoring the leafset.
-	/// Some entries may have been removed from the leafset but not yet pruned from the file.
-	pub fn get_from_file(&self, pos: u64) -> Option<Hash> {
-		if pos > self.last_pos {
-			None
-		} else {
-			self.backend.get_from_file(pos)
-		}
-	}
-
-	/// Iterator over current (unpruned, unremoved) leaf positions.
-	pub fn leaf_pos_iter(&self) -> impl Iterator<Item = u64> + '_ {
-		self.backend.leaf_pos_iter()
-	}
-
-	/// Iterator over current (unpruned, unremoved) leaf insertion indices.
-	pub fn leaf_idx_iter(&self, from_idx: u64) -> impl Iterator<Item = u64> + '_ {
-		self.backend.leaf_idx_iter(from_idx)
 	}
 
 	/// Is the MMR empty?
@@ -135,7 +107,7 @@ where
 			.filter_map(|pi| {
 				// here we want to get from underlying hash file
 				// as the pos *may* have been "removed"
-				self.backend.get_from_file(pi)
+				self.backend.get_hash(pi)
 			})
 			.collect()
 	}
@@ -146,31 +118,31 @@ where
 		self.last_pos
 	}
 
-	/// Helper function which returns un-pruned nodes from the insertion index
-	/// forward
-	/// returns last pmmr index returned along with data
-	pub fn elements_from_pmmr_index(
-		&self,
-		mut pmmr_index: u64,
-		max_count: u64,
-		max_pmmr_pos: Option<u64>,
-	) -> (u64, Vec<T::E>) {
-		let mut return_vec = vec![];
-		let last_pos = match max_pmmr_pos {
-			Some(p) => p,
-			None => self.last_pos,
-		};
-		if pmmr_index == 0 {
-			pmmr_index = 1;
-		}
-		while return_vec.len() < max_count as usize && pmmr_index <= last_pos {
-			if let Some(t) = self.get_data(pmmr_index) {
-				return_vec.push(t);
-			}
-			pmmr_index += 1;
-		}
-		(pmmr_index.saturating_sub(1), return_vec)
-	}
+	// /// Helper function which returns un-pruned nodes from the insertion index
+	// /// forward
+	// /// returns last pmmr index returned along with data
+	// pub fn elements_from_pmmr_index(
+	// 	&self,
+	// 	mut pmmr_index: u64,
+	// 	max_count: u64,
+	// 	max_pmmr_pos: Option<u64>,
+	// ) -> (u64, Vec<T::E>) {
+	// 	let mut return_vec = vec![];
+	// 	let last_pos = match max_pmmr_pos {
+	// 		Some(p) => p,
+	// 		None => self.last_pos,
+	// 	};
+	// 	if pmmr_index == 0 {
+	// 		pmmr_index = 1;
+	// 	}
+	// 	while return_vec.len() < max_count as usize && pmmr_index <= last_pos {
+	// 		if let Some(t) = self.get_data(pmmr_index) {
+	// 			return_vec.push(t);
+	// 		}
+	// 		pmmr_index += 1;
+	// 	}
+	// 	(pmmr_index.saturating_sub(1), return_vec)
+	// }
 
 	/// Helper function to get the last N nodes inserted, i.e. the last
 	/// n nodes along the bottom of the tree.

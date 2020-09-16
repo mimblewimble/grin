@@ -176,19 +176,17 @@ impl Chain {
 		Chain::migrate_db_v2_v3(&store)?;
 
 		// open the txhashset, creating a new one if necessary
-		let mut txhashset = txhashset::TxHashSet::open(db_root.clone(), store.clone(), None)?;
+		let mut txhashset = txhashset::TxHashSet::open(db_root.clone(), store.clone())?;
 
 		let mut header_pmmr = PMMRHandle::new(
 			Path::new(&db_root).join("header").join("header_head"),
 			false,
 			ProtocolVersion(1),
-			None,
 		)?;
 		let mut sync_pmmr = PMMRHandle::new(
 			Path::new(&db_root).join("header").join("sync_head"),
 			false,
 			ProtocolVersion(1),
-			None,
 		)?;
 
 		setup_head(
@@ -203,7 +201,7 @@ impl Chain {
 		// and NRD kernel_pos index based recent kernel history.
 		{
 			let batch = store.batch()?;
-			txhashset.init_output_pos_index(&header_pmmr, &batch)?;
+			// txhashset.init_output_pos_index(&header_pmmr, &batch)?;
 			txhashset.init_recent_kernel_pos_index(&header_pmmr, &batch)?;
 			batch.commit()?;
 		}
@@ -595,12 +593,8 @@ impl Chain {
 	}
 
 	/// Retrieves an unspent output using its PMMR position
-	pub fn get_unspent_output_at(&self, pos: u64) -> Result<Output, Error> {
-		let header_pmmr = self.header_pmmr.read();
-		let txhashset = self.txhashset.read();
-		txhashset::utxo_view(&header_pmmr, &txhashset, |utxo, _| {
-			utxo.get_unspent_output_at(pos)
-		})
+	pub fn get_output_at_pos(&self, pos: u64) -> Result<Output, Error> {
+		self.txhashset.read().get_output_at_pos(pos)
 	}
 
 	/// Validate the tx against the current UTXO set and recent kernels (NRD relative lock heights).
@@ -702,7 +696,7 @@ impl Chain {
 		txhashset::extending_readonly(&mut header_pmmr, &mut txhashset, |ext, batch| {
 			pipe::rewind_and_apply_fork(&header, ext, batch)?;
 			ext.extension
-				.validate(&self.genesis, fast_validation, &NoStatus, &header)?;
+				.validate(&self.genesis, fast_validation, &NoStatus, &header, batch)?;
 			Ok(())
 		})
 	}
@@ -806,7 +800,10 @@ impl Chain {
 		let mut txhashset = self.txhashset.write();
 		txhashset::extending_readonly(&mut header_pmmr, &mut txhashset, |ext, batch| {
 			pipe::rewind_and_apply_fork(&header, ext, batch)?;
-			ext.extension.snapshot(batch)?;
+
+			// Write rewound leaf_set snaphot file out to disk for both output and rangeproof MMR.
+			// pmmr_leaf.bin.<header_hash>
+			ext.extension.snapshot(&header)?;
 
 			// prepare the zip
 			txhashset::zip_read(self.db_root.clone(), &header)
@@ -880,6 +877,12 @@ impl Chain {
 		})?;
 		batch.commit()?;
 		Ok(())
+	}
+
+	/// Backward compatible snapshot of the output and rangeproof leaf_set files.
+	/// Called during clean node shutdown.
+	pub fn snapshot(&self) -> Result<(), Error> {
+		self.txhashset.write().snapshot()
 	}
 
 	/// Check chain status whether a txhashset downloading is needed
@@ -1053,7 +1056,6 @@ impl Chain {
 				.expect("invalid sandbox folder")
 				.to_owned(),
 			self.store.clone(),
-			Some(&header),
 		)?;
 
 		// Validate the full kernel history.
@@ -1072,6 +1074,13 @@ impl Chain {
 
 		let mut header_pmmr = self.header_pmmr.write();
 		let mut batch = self.store.batch()?;
+
+		// Rebuild our output_pos index and our accumulator based on the "leaf_set" provided to us.
+		let leaf_set_bitmap = txhashset.get_leaf_set(&header)?;
+		txhashset.init_utxo_bitmap(&leaf_set_bitmap);
+		txhashset.init_accumulator()?;
+		txhashset.init_output_pos_index(&header_pmmr, &header, &batch)?;
+
 		txhashset::extending(
 			&mut header_pmmr,
 			&mut txhashset,
@@ -1083,7 +1092,7 @@ impl Chain {
 				// Validate the extension, generating the utxo_sum and kernel_sum.
 				// Full validation, including rangeproofs and kernel signature verification.
 				let (utxo_sum, kernel_sum) =
-					extension.validate(&self.genesis, false, status, &header)?;
+					extension.validate(&self.genesis, false, status, &header, &batch)?;
 
 				// Save the block_sums (utxo_sum, kernel_sum) to the db for use later.
 				batch.save_block_sums(
@@ -1111,9 +1120,6 @@ impl Chain {
 			batch.save_body_tail(&tip)?;
 		}
 
-		// Rebuild our output_pos index in the db based on fresh UTXO set.
-		txhashset.init_output_pos_index(&header_pmmr, &batch)?;
-
 		// Rebuild our NRD kernel_pos index based on recent kernel history.
 		txhashset.init_recent_kernel_pos_index(&header_pmmr, &batch)?;
 
@@ -1134,11 +1140,7 @@ impl Chain {
 			txhashset::txhashset_replace(sandbox_dir, PathBuf::from(self.db_root.clone()))?;
 
 			// Re-open on db root dir
-			txhashset = txhashset::TxHashSet::open(
-				self.db_root.clone(),
-				self.store.clone(),
-				Some(&header),
-			)?;
+			txhashset = txhashset::TxHashSet::open(self.db_root.clone(), self.store.clone())?;
 
 			// Replace the chain txhashset with the newly built one.
 			*txhashset_ref = txhashset;
@@ -1182,24 +1184,26 @@ impl Chain {
 			return Ok(());
 		}
 
-		let mut count = 0;
 		let tail_hash = header_pmmr.get_header_hash_by_height(head.height - horizon)?;
 		let tail = batch.get_block_header(&tail_hash)?;
 
 		// Remove old blocks (including short lived fork blocks) which height < tail.height
-		// here b is a block
+		let mut hashes = vec![];
 		for (_, b) in batch.blocks_iter()? {
 			if b.header.height < tail.height {
-				let _ = batch.delete_block(&b.hash());
-				count += 1;
+				hashes.push(b.hash());
 			}
+		}
+		for h in &hashes {
+			let _ = batch.delete_block(h);
 		}
 
 		batch.save_body_tail(&Tip::from_header(&tail))?;
 
 		debug!(
 			"remove_historical_blocks: removed {} blocks. tail height: {}",
-			count, tail.height
+			hashes.len(),
+			tail.height
 		);
 
 		Ok(())
@@ -1228,30 +1232,28 @@ impl Chain {
 			}
 		}
 
-		// Take a write lock on the txhashet and start a new writeable db batch.
+		let head_header = self.head_header()?;
+		let horizon_height = head_header
+			.height
+			.saturating_sub(global::cut_through_horizon().into());
+		let horizon_header = self.get_header_by_height(horizon_height)?;
+
 		let header_pmmr = self.header_pmmr.read();
 		let mut txhashset = self.txhashset.write();
-		let batch = self.store.batch()?;
+		let horizon_bitmap = txhashset::rewindable_utxo_bitmap(&mut txhashset, |bitmap, batch| {
+			bitmap.rewind(&horizon_header, batch)
+		})?;
 
 		// Compact the txhashset itself (rewriting the pruned backend files).
-		{
-			let head_header = batch.head_header()?;
-			let current_height = head_header.height;
-			let horizon_height =
-				current_height.saturating_sub(global::cut_through_horizon().into());
-			let horizon_hash = header_pmmr.get_header_hash_by_height(horizon_height)?;
-			let horizon_header = batch.get_block_header(&horizon_hash)?;
+		txhashset.compact(&horizon_header, &horizon_bitmap)?;
 
-			txhashset.compact(&horizon_header, &batch)?;
-		}
+		// Start new batch here.
+		let batch = self.store.batch()?;
 
 		// If we are not in archival mode remove historical blocks from the db.
 		if !self.archive_mode {
 			self.remove_historical_blocks(&header_pmmr, &batch)?;
 		}
-
-		// Make sure our output_pos index is consistent with the UTXO set.
-		txhashset.init_output_pos_index(&header_pmmr, &batch)?;
 
 		// Rebuild our NRD kernel_pos index based on recent kernel history.
 		txhashset.init_recent_kernel_pos_index(&header_pmmr, &batch)?;
@@ -1283,6 +1285,7 @@ impl Chain {
 	}
 
 	/// outputs by insertion index
+	/// TODO - Confirm this is not "insertion index" and actually "position".
 	pub fn unspent_outputs_by_pmmr_index(
 		&self,
 		start_index: u64,
@@ -1294,20 +1297,16 @@ impl Chain {
 			Some(i) => i,
 			None => txhashset.highest_output_insertion_index(),
 		};
-		let outputs = txhashset.outputs_by_pmmr_index(start_index, max_count, max_pmmr_index);
-		let rangeproofs =
-			txhashset.rangeproofs_by_pmmr_index(start_index, max_count, max_pmmr_index);
-		if outputs.0 != rangeproofs.0 || outputs.1.len() != rangeproofs.1.len() {
-			return Err(ErrorKind::TxHashSetErr(String::from(
-				"Output and rangeproof sets don't match",
-			))
-			.into());
-		}
-		let mut output_vec: Vec<Output> = vec![];
-		for (ref x, &y) in outputs.1.iter().zip(rangeproofs.1.iter()) {
-			output_vec.push(Output::new(x.features, x.commitment(), y));
-		}
-		Ok((outputs.0, last_index, output_vec))
+		let unspent = txhashset.get_unspent_by_pos(start_index, max_count as usize, last_index)?;
+		let max_unspent_pos = unspent
+			.last()
+			.map(|(_, pos)| pos.pos)
+			.unwrap_or(start_index);
+		let outputs: Vec<_> = unspent
+			.iter()
+			.filter_map(|(_, pos)| txhashset.get_output_at_pos(pos.pos).ok())
+			.collect();
+		Ok((max_unspent_pos, last_index, outputs))
 	}
 
 	/// Return unspent outputs as above, but bounded between a particular range of blocks
@@ -1409,8 +1408,12 @@ impl Chain {
 	fn migrate_db_v2_v3(store: &ChainStore) -> Result<(), Error> {
 		let store_v2 = store.with_version(ProtocolVersion(2));
 		let batch = store_v2.batch()?;
-		for (_, block) in batch.blocks_iter()? {
-			batch.migrate_block(&block, ProtocolVersion(3))?;
+		let block_hashes: Vec<_> = batch
+			.blocks_iter()?
+			.map(|(_, block)| block.hash())
+			.collect();
+		for hash in block_hashes {
+			batch.migrate_block(hash, ProtocolVersion(3))?;
 		}
 		batch.commit()?;
 		Ok(())

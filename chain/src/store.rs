@@ -24,7 +24,7 @@ use crate::types::{CommitPos, Tip};
 use crate::util::secp::pedersen::Commitment;
 use croaring::Bitmap;
 use grin_store as store;
-use grin_store::{option_to_not_found, to_key, Error, SerIterator};
+use grin_store::{option_to_not_found, to_key, BatchSerIterator, Error};
 use std::convert::TryInto;
 use std::sync::Arc;
 
@@ -226,10 +226,10 @@ impl<'a> Batch<'a> {
 	}
 
 	/// Migrate a block stored in the db by serializing it using the provided protocol version.
-	/// Block may have been read using a previous protocol version but we do not actually care.
-	pub fn migrate_block(&self, b: &Block, version: ProtocolVersion) -> Result<(), Error> {
+	pub fn migrate_block(&self, hash: Hash, version: ProtocolVersion) -> Result<(), Error> {
+		let b = self.get_block(&hash)?;
 		self.db
-			.put_ser_with_version(&to_key(BLOCK_PREFIX, b.hash())[..], b, version)?;
+			.put_ser_with_version(&to_key(BLOCK_PREFIX, b.hash())[..], &b, version)?;
 		Ok(())
 	}
 
@@ -284,7 +284,7 @@ impl<'a> Batch<'a> {
 	}
 
 	/// Iterator over the output_pos index.
-	pub fn output_pos_iter(&self) -> Result<SerIterator<(u64, u64)>, Error> {
+	pub fn output_pos_iter(&self) -> Result<BatchSerIterator<CommitPos>, Error> {
 		let key = to_key(OUTPUT_POS_PREFIX, "");
 		self.db.iter(&key)
 	}
@@ -387,7 +387,7 @@ impl<'a> Batch<'a> {
 	}
 
 	/// An iterator to all block in db
-	pub fn blocks_iter(&self) -> Result<SerIterator<Block>, Error> {
+	pub fn blocks_iter(&self) -> Result<BatchSerIterator<Block>, Error> {
 		let key = to_key(BLOCK_PREFIX, "");
 		self.db.iter(&key)
 	}

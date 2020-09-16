@@ -17,10 +17,12 @@
 
 mod bitmap_accumulator;
 mod rewindable_kernel_view;
+mod rewindable_utxo_bitmap;
 mod txhashset;
 mod utxo_view;
 
 pub use self::bitmap_accumulator::*;
 pub use self::rewindable_kernel_view::*;
+pub use self::rewindable_utxo_bitmap::*;
 pub use self::txhashset::*;
 pub use self::utxo_view::*;

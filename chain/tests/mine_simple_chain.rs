@@ -81,6 +81,7 @@ fn mine_empty_chain() {
 
 #[test]
 fn mine_short_chain() {
+	util::init_test_logger();
 	let chain_dir = ".grin.short";
 	clean_output_dir(chain_dir);
 	let chain = mine_chain(chain_dir, 4);
@@ -747,6 +748,7 @@ fn spend_in_fork_and_compact() {
 /// Test ability to retrieve block headers for a given output
 #[test]
 fn output_header_mappings() {
+	clean_output_dir(".grin_header_for_output");
 	global::set_local_chain_type(ChainTypes::AutomatedTesting);
 	{
 		let chain = init_chain(

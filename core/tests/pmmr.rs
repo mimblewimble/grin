@@ -14,7 +14,6 @@
 
 mod common;
 
-use self::core::core::hash::Hash;
 use self::core::core::pmmr::{self, VecBackend, PMMR};
 use self::core::ser::PMMRIndexHashable;
 use crate::common::TestElem;
@@ -403,102 +402,102 @@ fn pmmr_get_last_n_insertions() {
 	assert!(res.len() == 7);
 }
 
-#[test]
-#[allow(unused_variables)]
-fn pmmr_prune() {
-	let elems = [
-		TestElem([0, 0, 0, 1]),
-		TestElem([0, 0, 0, 2]),
-		TestElem([0, 0, 0, 3]),
-		TestElem([0, 0, 0, 4]),
-		TestElem([0, 0, 0, 5]),
-		TestElem([0, 0, 0, 6]),
-		TestElem([0, 0, 0, 7]),
-		TestElem([0, 0, 0, 8]),
-		TestElem([1, 0, 0, 0]),
-	];
+// #[test]
+// #[allow(unused_variables)]
+// fn pmmr_prune() {
+// 	let elems = [
+// 		TestElem([0, 0, 0, 1]),
+// 		TestElem([0, 0, 0, 2]),
+// 		TestElem([0, 0, 0, 3]),
+// 		TestElem([0, 0, 0, 4]),
+// 		TestElem([0, 0, 0, 5]),
+// 		TestElem([0, 0, 0, 6]),
+// 		TestElem([0, 0, 0, 7]),
+// 		TestElem([0, 0, 0, 8]),
+// 		TestElem([1, 0, 0, 0]),
+// 	];
 
-	let orig_root: Hash;
-	let sz: u64;
-	let mut ba = VecBackend::new();
-	{
-		let mut pmmr = PMMR::new(&mut ba);
-		for elem in &elems[..] {
-			pmmr.push(elem).unwrap();
-		}
-		orig_root = pmmr.root().unwrap();
-		sz = pmmr.unpruned_size();
-	}
+// 	let orig_root: Hash;
+// 	let sz: u64;
+// 	let mut ba = VecBackend::new();
+// 	{
+// 		let mut pmmr = PMMR::new(&mut ba);
+// 		for elem in &elems[..] {
+// 			pmmr.push(elem).unwrap();
+// 		}
+// 		orig_root = pmmr.root().unwrap();
+// 		sz = pmmr.unpruned_size();
+// 	}
 
-	// First check the initial numbers of elements.
-	assert_eq!(ba.hashes.len(), 16);
-	assert_eq!(ba.removed.len(), 0);
+// 	// First check the initial numbers of elements.
+// 	assert_eq!(ba.hashes.len(), 16);
+// 	assert_eq!(ba.removed.len(), 0);
 
-	// pruning a leaf with no parent should do nothing
-	{
-		let mut pmmr: PMMR<'_, TestElem, _> = PMMR::at(&mut ba, sz);
-		pmmr.prune(16).unwrap();
-		assert_eq!(orig_root, pmmr.root().unwrap());
-	}
-	assert_eq!(ba.hashes.len(), 16);
-	assert_eq!(ba.removed.len(), 1);
+// 	// pruning a leaf with no parent should do nothing
+// 	{
+// 		let mut pmmr: PMMR<'_, TestElem, _> = PMMR::at(&mut ba, sz);
+// 		pmmr.prune(16).unwrap();
+// 		assert_eq!(orig_root, pmmr.root().unwrap());
+// 	}
+// 	assert_eq!(ba.hashes.len(), 16);
+// 	assert_eq!(ba.removed.len(), 1);
 
-	// pruning leaves with no shared parent just removes 1 element
-	{
-		let mut pmmr: PMMR<'_, TestElem, _> = PMMR::at(&mut ba, sz);
-		pmmr.prune(2).unwrap();
-		assert_eq!(orig_root, pmmr.root().unwrap());
-	}
-	assert_eq!(ba.hashes.len(), 16);
-	assert_eq!(ba.removed.len(), 2);
+// 	// pruning leaves with no shared parent just removes 1 element
+// 	{
+// 		let mut pmmr: PMMR<'_, TestElem, _> = PMMR::at(&mut ba, sz);
+// 		pmmr.prune(2).unwrap();
+// 		assert_eq!(orig_root, pmmr.root().unwrap());
+// 	}
+// 	assert_eq!(ba.hashes.len(), 16);
+// 	assert_eq!(ba.removed.len(), 2);
 
-	{
-		let mut pmmr: PMMR<'_, TestElem, _> = PMMR::at(&mut ba, sz);
-		pmmr.prune(4).unwrap();
-		assert_eq!(orig_root, pmmr.root().unwrap());
-	}
-	assert_eq!(ba.hashes.len(), 16);
-	assert_eq!(ba.removed.len(), 3);
+// 	{
+// 		let mut pmmr: PMMR<'_, TestElem, _> = PMMR::at(&mut ba, sz);
+// 		pmmr.prune(4).unwrap();
+// 		assert_eq!(orig_root, pmmr.root().unwrap());
+// 	}
+// 	assert_eq!(ba.hashes.len(), 16);
+// 	assert_eq!(ba.removed.len(), 3);
 
-	// pruning a non-leaf node has no effect
-	{
-		let mut pmmr: PMMR<'_, TestElem, _> = PMMR::at(&mut ba, sz);
-		pmmr.prune(3).unwrap_err();
-		assert_eq!(orig_root, pmmr.root().unwrap());
-	}
-	assert_eq!(ba.hashes.len(), 16);
-	assert_eq!(ba.removed.len(), 3);
+// 	// pruning a non-leaf node has no effect
+// 	{
+// 		let mut pmmr: PMMR<'_, TestElem, _> = PMMR::at(&mut ba, sz);
+// 		pmmr.prune(3).unwrap_err();
+// 		assert_eq!(orig_root, pmmr.root().unwrap());
+// 	}
+// 	assert_eq!(ba.hashes.len(), 16);
+// 	assert_eq!(ba.removed.len(), 3);
 
-	// TODO - no longer true (leaves only now) - pruning sibling removes subtree
-	{
-		let mut pmmr: PMMR<'_, TestElem, _> = PMMR::at(&mut ba, sz);
-		pmmr.prune(5).unwrap();
-		assert_eq!(orig_root, pmmr.root().unwrap());
-	}
-	assert_eq!(ba.hashes.len(), 16);
-	assert_eq!(ba.removed.len(), 4);
+// 	// TODO - no longer true (leaves only now) - pruning sibling removes subtree
+// 	{
+// 		let mut pmmr: PMMR<'_, TestElem, _> = PMMR::at(&mut ba, sz);
+// 		pmmr.prune(5).unwrap();
+// 		assert_eq!(orig_root, pmmr.root().unwrap());
+// 	}
+// 	assert_eq!(ba.hashes.len(), 16);
+// 	assert_eq!(ba.removed.len(), 4);
 
-	// TODO - no longer true (leaves only now) - pruning all leaves under level >1
-	// removes all subtree
-	{
-		let mut pmmr: PMMR<'_, TestElem, _> = PMMR::at(&mut ba, sz);
-		pmmr.prune(1).unwrap();
-		assert_eq!(orig_root, pmmr.root().unwrap());
-	}
-	assert_eq!(ba.hashes.len(), 16);
-	assert_eq!(ba.removed.len(), 5);
+// 	// TODO - no longer true (leaves only now) - pruning all leaves under level >1
+// 	// removes all subtree
+// 	{
+// 		let mut pmmr: PMMR<'_, TestElem, _> = PMMR::at(&mut ba, sz);
+// 		pmmr.prune(1).unwrap();
+// 		assert_eq!(orig_root, pmmr.root().unwrap());
+// 	}
+// 	assert_eq!(ba.hashes.len(), 16);
+// 	assert_eq!(ba.removed.len(), 5);
 
-	// pruning everything should only leave us with a single peak
-	{
-		let mut pmmr: PMMR<'_, TestElem, _> = PMMR::at(&mut ba, sz);
-		for n in 1..16 {
-			let _ = pmmr.prune(n);
-		}
-		assert_eq!(orig_root, pmmr.root().unwrap());
-	}
-	assert_eq!(ba.hashes.len(), 16);
-	assert_eq!(ba.removed.len(), 9);
-}
+// 	// pruning everything should only leave us with a single peak
+// 	{
+// 		let mut pmmr: PMMR<'_, TestElem, _> = PMMR::at(&mut ba, sz);
+// 		for n in 1..16 {
+// 			let _ = pmmr.prune(n);
+// 		}
+// 		assert_eq!(orig_root, pmmr.root().unwrap());
+// 	}
+// 	assert_eq!(ba.hashes.len(), 16);
+// 	assert_eq!(ba.removed.len(), 9);
+// }
 
 #[test]
 fn check_insertion_to_pmmr_index() {
@@ -546,15 +545,15 @@ fn check_elements_from_pmmr_index() {
 	assert_eq!(res.1[0].0[3], 5);
 	assert_eq!(res.1[6].0[3], 11);
 
-	// pruning a few nodes should get consistent results
-	pmmr.prune(pmmr::insertion_to_pmmr_index(5)).unwrap();
-	pmmr.prune(pmmr::insertion_to_pmmr_index(20)).unwrap();
+	// // pruning a few nodes should get consistent results
+	// pmmr.prune(pmmr::insertion_to_pmmr_index(5)).unwrap();
+	// pmmr.prune(pmmr::insertion_to_pmmr_index(20)).unwrap();
 
-	let res = pmmr
-		.readonly_pmmr()
-		.elements_from_pmmr_index(8, 7, Some(34));
-	assert_eq!(res.0, 20);
-	assert_eq!(res.1.len(), 7);
-	assert_eq!(res.1[0].0[3], 6);
-	assert_eq!(res.1[6].0[3], 12);
+	// let res = pmmr
+	// 	.readonly_pmmr()
+	// 	.elements_from_pmmr_index(8, 7, Some(34));
+	// assert_eq!(res.0, 20);
+	// assert_eq!(res.1.len(), 7);
+	// assert_eq!(res.1[0].0[3], 6);
+	// assert_eq!(res.1[6].0[3], 12);
 }

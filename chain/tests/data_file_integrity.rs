@@ -12,13 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use self::core::genesis;
 use grin_core as core;
 use grin_util as util;
 
 mod chain_test_helper;
 
 use self::chain_test_helper::{clean_output_dir, init_chain, mine_chain};
+use crate::core::core::hash::Hashed;
 
 #[test]
 fn data_files() {
@@ -28,15 +28,18 @@ fn data_files() {
 	clean_output_dir(chain_dir);
 
 	// Mine a few blocks on a new chain.
-	{
+	let genesis = {
 		let chain = mine_chain(chain_dir, 4);
 		chain.validate(false).unwrap();
 		assert_eq!(chain.head().unwrap().height, 3);
+
+		let genesis = chain.get_header_by_height(0).unwrap();
+		chain.get_block(&genesis.hash()).unwrap()
 	};
 
 	// Now reload the chain from existing data files and check it is valid.
 	{
-		let chain = init_chain(chain_dir, genesis::genesis_dev());
+		let chain = init_chain(chain_dir, genesis);
 		chain.validate(false).unwrap();
 		assert_eq!(chain.head().unwrap().height, 3);
 	}

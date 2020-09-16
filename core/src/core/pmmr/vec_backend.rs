@@ -47,63 +47,32 @@ impl<T: PMMRable> Backend<T> for VecBackend<T> {
 		if self.removed.contains(&position) {
 			None
 		} else {
-			self.get_from_file(position)
+			let idx = usize::try_from(position.saturating_sub(1)).expect("usize from u64");
+			self.hashes.get(idx).cloned()
 		}
 	}
 
 	fn get_data(&self, position: u64) -> Option<T::E> {
-		if self.removed.contains(&position) {
+		if !pmmr::is_leaf(position) {
+			None
+		} else if self.removed.contains(&position) {
 			None
 		} else {
-			self.get_data_from_file(position)
+			if let Some(data) = &self.data {
+				let idx = usize::try_from(pmmr::n_leaves(position).saturating_sub(1))
+					.expect("usize from u64");
+				data.get(idx).map(|x| x.as_elmt())
+			} else {
+				None
+			}
 		}
 	}
 
-	fn get_from_file(&self, position: u64) -> Option<Hash> {
-		let idx = usize::try_from(position.saturating_sub(1)).expect("usize from u64");
-		self.hashes.get(idx).cloned()
+	fn get_leaf_set(&self, _header: &BlockHeader) -> Result<Bitmap, String> {
+		panic!("not yet implemented");
 	}
 
-	fn get_data_from_file(&self, position: u64) -> Option<T::E> {
-		if let Some(data) = &self.data {
-			let idx = usize::try_from(pmmr::n_leaves(position).saturating_sub(1))
-				.expect("usize from u64");
-			data.get(idx).map(|x| x.as_elmt())
-		} else {
-			None
-		}
-	}
-
-	/// Number of leaves in the MMR
-	fn n_unpruned_leaves(&self) -> u64 {
-		unimplemented!()
-	}
-
-	fn leaf_pos_iter(&self) -> Box<dyn Iterator<Item = u64> + '_> {
-		Box::new(
-			self.hashes
-				.iter()
-				.enumerate()
-				.map(|(x, _)| (x + 1) as u64)
-				.filter(move |x| pmmr::is_leaf(*x) && !self.removed.contains(x)),
-		)
-	}
-
-	fn leaf_idx_iter(&self, from_idx: u64) -> Box<dyn Iterator<Item = u64> + '_> {
-		let from_pos = pmmr::insertion_to_pmmr_index(from_idx + 1);
-		Box::new(
-			self.leaf_pos_iter()
-				.skip_while(move |x| *x < from_pos)
-				.map(|x| pmmr::n_leaves(x).saturating_sub(1)),
-		)
-	}
-
-	fn remove(&mut self, position: u64) -> Result<(), String> {
-		self.removed.insert(position);
-		Ok(())
-	}
-
-	fn rewind(&mut self, position: u64, _rewind_rm_pos: &Bitmap) -> Result<(), String> {
+	fn rewind(&mut self, position: u64) -> Result<(), String> {
 		if let Some(data) = &mut self.data {
 			let idx = pmmr::n_leaves(position);
 			data.truncate(usize::try_from(idx).expect("usize from u64"));
@@ -113,7 +82,7 @@ impl<T: PMMRable> Backend<T> for VecBackend<T> {
 		Ok(())
 	}
 
-	fn snapshot(&self, _header: &BlockHeader) -> Result<(), String> {
+	fn snapshot(&self, _bitmap: &Bitmap, _header: Option<&BlockHeader>) -> Result<(), String> {
 		Ok(())
 	}
 

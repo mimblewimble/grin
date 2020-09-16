@@ -43,20 +43,20 @@ fn merkle_proof_ser_deser() {
 	assert_eq!(proof, proof_2);
 }
 
-#[test]
-fn pmmr_merkle_proof_prune_and_rewind() {
-	let mut ba = VecBackend::new();
-	let mut pmmr = PMMR::new(&mut ba);
-	pmmr.push(&TestElem([0, 0, 0, 1])).unwrap();
-	pmmr.push(&TestElem([0, 0, 0, 2])).unwrap();
-	let proof = pmmr.merkle_proof(2).unwrap();
+// #[test]
+// fn pmmr_merkle_proof_prune_and_rewind() {
+// 	let mut ba = VecBackend::new();
+// 	let mut pmmr = PMMR::new(&mut ba);
+// 	pmmr.push(&TestElem([0, 0, 0, 1])).unwrap();
+// 	pmmr.push(&TestElem([0, 0, 0, 2])).unwrap();
+// 	let proof = pmmr.merkle_proof(2).unwrap();
 
-	// now prune an element and check we can still generate
-	// the correct Merkle proof for the other element (after sibling pruned)
-	pmmr.prune(1).unwrap();
-	let proof_2 = pmmr.merkle_proof(2).unwrap();
-	assert_eq!(proof, proof_2);
-}
+// 	// now prune an element and check we can still generate
+// 	// the correct Merkle proof for the other element (after sibling pruned)
+// 	pmmr.prune(1).unwrap();
+// 	let proof_2 = pmmr.merkle_proof(2).unwrap();
+// 	assert_eq!(proof, proof_2);
+// }
 
 #[test]
 fn pmmr_merkle_proof() {

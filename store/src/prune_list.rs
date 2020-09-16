@@ -109,6 +109,8 @@ impl PruneList {
 	/// Clears out leaf pos before saving to disk
 	/// as we track these via the leaf_set.
 	pub fn flush(&mut self) -> io::Result<()> {
+		debug!("flush: {} pos", self.bitmap.cardinality());
+
 		// Run the optimization step on the bitmap.
 		self.bitmap.run_optimize();
 
