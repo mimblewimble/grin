@@ -144,73 +144,11 @@ impl Peers {
 			.unwrap_or(Difficulty::zero())
 	}
 
-	// /// Number of peers currently connected to.
-	// pub fn peer_count(&self) -> u32 {
-	// 	self.connected_peers().count() as u32
-	// }
-
-	// /// Number of outbound peers currently connected to.
-	// pub fn peer_outbound_count(&self) -> u32 {
-	// 	self.outgoing_connected_peers().count() as u32
-	// }
-
-	// /// Number of inbound peers currently connected to.
-	// pub fn peer_inbound_count(&self) -> u32 {
-	// 	self.incoming_connected_peers().count() as u32
-	// }
-
-	// Return vec of connected peers that currently advertise more work
-	// (total_difficulty) than we do.
-	pub fn more_work_peers(&self) -> Result<Vec<Arc<Peer>>, chain::Error> {
-		let peers = self.connected_peers();
-
-		let total_difficulty = self.total_difficulty()?;
-
-		let mut max_peers = peers
-			.into_iter()
-			.filter(|x| x.info.total_difficulty() > total_difficulty)
-			.collect::<Vec<_>>();
-
-		max_peers.shuffle(&mut thread_rng());
-		Ok(max_peers)
-	}
-
-	// Return number of connected peers that currently advertise more/same work
-	// (total_difficulty) than/as we do.
-	pub fn more_or_same_work_peers(&self) -> Result<usize, chain::Error> {
-		let peers = self.connected_peers();
-
-		let total_difficulty = self.total_difficulty()?;
-
-		Ok(peers
-			.filter(|x| x.info.total_difficulty() >= total_difficulty)
-			.count())
-	}
-
-	// /// Returns single random peer with more work than us.
-	// pub fn more_work_peer(&self) -> Option<Arc<Peer>> {
-	// 	match self.more_work_peers() {
-	// 		Ok(mut peers) => peers.pop(),
-	// 		Err(e) => {
-	// 			error!("failed to get more work peers: {:?}", e);
-	// 			None
-	// 		}
-	// 	}
-	// }
-
-	// /// Iterator of connected peers known to have at least the provided difficulty.
-	// pub fn connected_peers_with_difficulty(&self, diff: Difficulty) -> impl Iterator<Item = Arc<Peer>> {
-	// 	self.connected_peers()
-	// 		.filter(|peer| peer.info.total_difficulty() >= diff)
-	// }
-
-	/// Returns single random peer with the most worked branch, showing the
-	/// highest total difficulty.
-	pub fn most_work_peer(&self) -> Option<Arc<Peer>> {
+	/// Choose a random connected peer >= provided difficulty.
+	pub fn peer_with_difficulty(&self, diff: Difficulty) -> Option<Arc<Peer>> {
 		let mut rng = rand::thread_rng();
-		let max_diff = self.max_peer_difficulty();
 		self.connected_peers()
-			.filter(|peer| peer.info.total_difficulty() >= max_diff)
+			.filter(|peer| peer.info.total_difficulty() >= diff)
 			.choose(&mut rng)
 	}
 

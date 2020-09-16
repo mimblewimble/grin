@@ -171,8 +171,8 @@ impl HeaderSync {
 	fn header_sync(&mut self) -> Option<Arc<Peer>> {
 		if let Ok(header_head) = self.chain.header_head() {
 			let difficulty = header_head.total_difficulty;
-			// TODO - We want to choose a random peer with more than our total difficulty.
-			if let Some(peer) = self.peers.most_work_peer() {
+			let max_diff = self.peers.max_peer_difficulty();
+			if let Some(peer) = self.peers.peer_with_difficulty(max_diff) {
 				if peer.info.total_difficulty() > difficulty {
 					return self.request_headers(peer);
 				}

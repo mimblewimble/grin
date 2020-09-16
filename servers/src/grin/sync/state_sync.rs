@@ -158,7 +158,8 @@ impl StateSync {
 		let mut txhashset_height = header_head.height.saturating_sub(threshold);
 		txhashset_height = txhashset_height.saturating_sub(txhashset_height % archive_interval);
 
-		if let Some(peer) = self.peers.most_work_peer() {
+		let max_diff = self.peers.max_peer_difficulty();
+		if let Some(peer) = self.peers.peer_with_difficulty(max_diff) {
 			// ask for txhashset at state_sync_threshold
 			let mut txhashset_head = self
 				.chain
