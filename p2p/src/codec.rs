@@ -233,12 +233,13 @@ fn decode_message(
 		Type::CompactBlock => Message::CompactBlock(msg.body()?),
 		Type::GetHeaders => Message::GetHeaders(msg.body()?),
 		Type::Header => Message::Header(msg.body()?),
-		Type::Headers => Message::Headers(msg.body()?),
 		Type::GetPeerAddrs => Message::GetPeerAddrs(msg.body()?),
 		Type::PeerAddrs => Message::PeerAddrs(msg.body()?),
 		Type::TxHashSetRequest => Message::TxHashSetRequest(msg.body()?),
 		Type::TxHashSetArchive => Message::TxHashSetArchive(msg.body()?),
-		Type::Error | Type::Hand | Type::Shake => return Err(Error::UnexpectedMessage),
+		Type::Error | Type::Hand | Type::Shake | Type::Headers => {
+			return Err(Error::UnexpectedMessage)
+		}
 	};
 	Ok(c)
 }
