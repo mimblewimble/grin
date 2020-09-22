@@ -20,9 +20,6 @@ use crate::core::global;
 use crate::core::ser::{self, Readable, Reader, Writeable, Writer};
 use std::fs;
 
-const WRITE_CHUNK_SIZE: usize = 20;
-const TEST_ALLOC_SIZE: usize = store::lmdb::ALLOC_CHUNK_SIZE_DEFAULT / 8 / WRITE_CHUNK_SIZE;
-
 #[derive(Clone)]
 struct PhatChunkStruct {
 	phatness: u64,
@@ -38,7 +35,7 @@ impl PhatChunkStruct {
 impl Readable for PhatChunkStruct {
 	fn read<R: Reader>(reader: &mut R) -> Result<PhatChunkStruct, ser::Error> {
 		let mut retval = PhatChunkStruct::new();
-		for _ in 0..TEST_ALLOC_SIZE {
+		for _ in 0..100_000 {
 			retval.phatness = reader.read_u64()?;
 		}
 		Ok(retval)
@@ -48,7 +45,7 @@ impl Readable for PhatChunkStruct {
 impl Writeable for PhatChunkStruct {
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
 		// write many times
-		for _ in 0..TEST_ALLOC_SIZE {
+		for _ in 0..100_000 {
 			writer.write_u64(self.phatness)?;
 		}
 		Ok(())
@@ -60,7 +57,7 @@ fn clean_output_dir(test_dir: &str) {
 }
 
 fn setup(test_dir: &str) {
-	global::set_local_chain_type(global::ChainTypes::Mainnet);
+	global::set_local_chain_type(global::ChainTypes::AutomatedTesting);
 	util::init_test_logger();
 	clean_output_dir(test_dir);
 }
@@ -74,8 +71,8 @@ fn lmdb_allocate() -> Result<(), store::Error> {
 	{
 		let store = store::Store::new(test_dir, Some("test1"), None, None)?;
 
-		for i in 0..WRITE_CHUNK_SIZE * 2 {
-			println!("Allocating chunk: {}", i);
+		for i in 0..40 {
+			println!("Writing chunk: {}", i);
 			let chunk = PhatChunkStruct::new();
 			let key_val = format!("phat_chunk_set_1_{}", i);
 			let batch = store.batch()?;
@@ -90,8 +87,8 @@ fn lmdb_allocate() -> Result<(), store::Error> {
 	// Open env again and keep adding
 	{
 		let store = store::Store::new(test_dir, Some("test1"), None, None)?;
-		for i in 0..WRITE_CHUNK_SIZE * 2 {
-			println!("Allocating chunk: {}", i);
+		for i in 0..40 {
+			println!("Writing chunk: {}", i);
 			let chunk = PhatChunkStruct::new();
 			let key_val = format!("phat_chunk_set_2_{}", i);
 			let batch = store.batch()?;

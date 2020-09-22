@@ -22,18 +22,10 @@ use lmdb_zero as lmdb;
 use lmdb_zero::traits::CreateCursor;
 use lmdb_zero::LmdbResultExt;
 
-use crate::core::global;
 use crate::core::ser::{self, ProtocolVersion};
 use crate::util::RwLock;
 
-/// number of bytes to grow the database by when needed
-pub const ALLOC_CHUNK_SIZE_DEFAULT: usize = 134_217_728; //128 MB
-/// And for test mode, to avoid too much disk allocation on windows
-pub const ALLOC_CHUNK_SIZE_DEFAULT_TEST: usize = 1_048_576; //1 MB
-const RESIZE_PERCENT: f32 = 0.9;
-/// Want to ensure that each resize gives us at least this %
-/// of total space free
-const RESIZE_MIN_TARGET_PERCENT: f32 = 0.65;
+const RESIZE_PERCENT: f32 = 0.5;
 
 /// Main error type for this lmdb
 #[derive(Clone, Eq, PartialEq, Debug, Fail)]
@@ -82,7 +74,6 @@ pub struct Store {
 	db: Arc<RwLock<Option<Arc<lmdb::Database<'static>>>>>,
 	name: String,
 	version: ProtocolVersion,
-	alloc_chunk_size: usize,
 }
 
 impl Store {
@@ -119,11 +110,6 @@ impl Store {
 			env_builder.set_maxreaders(max_readers)?;
 		}
 
-		let alloc_chunk_size = match global::is_production_mode() {
-			true => ALLOC_CHUNK_SIZE_DEFAULT,
-			false => ALLOC_CHUNK_SIZE_DEFAULT_TEST,
-		};
-
 		let env = unsafe { env_builder.open(&full_path, lmdb::open::NOTLS, 0o600)? };
 
 		debug!("DB Mapsize for {} is {}", full_path, env.info()?.mapsize);
@@ -132,7 +118,6 @@ impl Store {
 			db: Arc::new(RwLock::new(None)),
 			name: db_name,
 			version: DEFAULT_DB_VERSION,
-			alloc_chunk_size,
 		};
 
 		{
@@ -149,16 +134,11 @@ impl Store {
 	/// Construct a new store using a specific protocol version.
 	/// Permits access to the db with legacy protocol versions for db migrations.
 	pub fn with_version(&self, version: ProtocolVersion) -> Store {
-		let alloc_chunk_size = match global::is_production_mode() {
-			true => ALLOC_CHUNK_SIZE_DEFAULT,
-			false => ALLOC_CHUNK_SIZE_DEFAULT_TEST,
-		};
 		Store {
 			env: self.env.clone(),
 			db: self.db.clone(),
 			name: self.name.clone(),
 			version,
-			alloc_chunk_size,
 		}
 	}
 
@@ -179,7 +159,7 @@ impl Store {
 	}
 
 	/// Determines whether the environment needs a resize based on a simple percentage threshold
-	pub fn needs_resize(&self) -> Result<bool, Error> {
+	pub fn needs_resize(&self, resize_percent: f32) -> Result<bool, Error> {
 		let env_info = self.env.info()?;
 		let stat = self.env.stat()?;
 
@@ -187,7 +167,6 @@ impl Store {
 		trace!("DB map size: {}", env_info.mapsize);
 		trace!("Space used: {}", size_used);
 		trace!("Space remaining: {}", env_info.mapsize - size_used);
-		let resize_percent = RESIZE_PERCENT;
 		trace!(
 			"Percent used: {:.*}  Percent threshold: {:.*}",
 			4,
@@ -196,9 +175,7 @@ impl Store {
 			resize_percent
 		);
 
-		if size_used as f32 / env_info.mapsize as f32 > resize_percent
-			|| env_info.mapsize < self.alloc_chunk_size
-		{
+		if size_used as f32 / env_info.mapsize as f32 > resize_percent {
 			trace!("Resize threshold met (percent-based)");
 			Ok(true)
 		} else {
@@ -207,22 +184,10 @@ impl Store {
 		}
 	}
 
-	/// Increments the database size by as many ALLOC_CHUNK_SIZES
-	/// to give a minimum threshold of free space
-	pub fn do_resize(&self) -> Result<(), Error> {
+	/// Simply double the size of the db.
+	fn do_resize(&self) -> Result<(), Error> {
 		let env_info = self.env.info()?;
-		let stat = self.env.stat()?;
-		let size_used = stat.psize as usize * env_info.last_pgno;
-
-		let new_mapsize = if env_info.mapsize < self.alloc_chunk_size {
-			self.alloc_chunk_size
-		} else {
-			let mut tot = env_info.mapsize;
-			while size_used as f32 / tot as f32 > RESIZE_MIN_TARGET_PERCENT {
-				tot += self.alloc_chunk_size;
-			}
-			tot
-		};
+		let new_mapsize = env_info.mapsize * 2;
 
 		// close
 		let mut w = self.db.write();
@@ -240,7 +205,7 @@ impl Store {
 
 		info!(
 			"Resized database from {} to {}",
-			env_info.mapsize, new_mapsize
+			env_info.mapsize, new_mapsize,
 		);
 		Ok(())
 	}
@@ -320,12 +285,17 @@ impl Store {
 		})
 	}
 
-	/// Builds a new batch to be used with this store.
-	pub fn batch(&self) -> Result<Batch<'_>, Error> {
-		// check if the db needs resizing before returning the batch
-		if self.needs_resize()? {
+	/// Check if db needs resizing based on our used percentage.
+	fn check_resize(&self) -> Result<(), Error> {
+		if self.needs_resize(RESIZE_PERCENT)? {
 			self.do_resize()?;
 		}
+		Ok(())
+	}
+
+	/// Builds a new batch to be used with this store.
+	pub fn batch(&self) -> Result<Batch<'_>, Error> {
+		self.check_resize()?;
 		let tx = lmdb::WriteTransaction::new(self.env.clone())?;
 		Ok(Batch { store: self, tx })
 	}
