@@ -390,12 +390,12 @@ impl<T: PosEntry> PruneableListIndex for MultiIndex<T> {
 		let mut list_count = 0;
 		let mut entry_count = 0;
 		let prefix = to_key(self.list_prefix, "");
-		for (key, _) in batch.db.iter::<ListWrapper<T>>(&prefix)? {
+		for key in batch.db.iter(&prefix, |k, _| Ok(k.to_vec()))? {
 			let _ = batch.delete(&key);
 			list_count += 1;
 		}
 		let prefix = to_key(self.entry_prefix, "");
-		for (key, _) in batch.db.iter::<ListEntry<T>>(&prefix)? {
+		for key in batch.db.iter(&prefix, |k, _| Ok(k.to_vec()))? {
 			let _ = batch.delete(&key);
 			entry_count += 1;
 		}

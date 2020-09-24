@@ -15,7 +15,7 @@
 use grin_core as core;
 use grin_store as store;
 use grin_util as util;
-use store::SerIterator;
+use store::PrefixIterator;
 
 use crate::core::global;
 use crate::core::ser::{self, Readable, Reader, Writeable, Writer};
@@ -118,14 +118,14 @@ fn test_iter() -> Result<(), store::Error> {
 	// assert_eq!(iter.next(), None);
 
 	// Check we can not yet see the new entry via an iterator outside the uncommitted batch.
-	let mut iter: SerIterator<Vec<u8>> = store.iter(&[0])?;
+	let mut iter = store.iter(&[0], |_, v| Ok(v.to_vec()))?;
 	assert_eq!(iter.next(), None);
 
 	batch.commit()?;
 
 	// Check we can see the new entry via an iterator after committing the batch.
-	let mut iter: SerIterator<Vec<u8>> = store.iter(&[0])?;
-	assert_eq!(iter.next(), Some((key.to_vec(), value.to_vec())));
+	let mut iter = store.iter(&[0], |_, v| Ok(v.to_vec()))?;
+	assert_eq!(iter.next(), Some(value.to_vec()));
 	assert_eq!(iter.next(), None);
 
 	clean_output_dir(test_dir);

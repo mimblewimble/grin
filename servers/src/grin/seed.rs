@@ -147,12 +147,12 @@ fn monitor_peers(
 ) {
 	// regularly check if we need to acquire more peers  and if so, gets
 	// them from db
-	let total_count = peers.all_peers().len();
+	let total_count = peers.peers_iter().count();
 	let mut healthy_count = 0;
 	let mut banned_count = 0;
 	let mut defuncts = vec![];
 
-	for x in peers.all_peers() {
+	for x in peers.peers_iter() {
 		match x.flags {
 			p2p::State::Banned => {
 				let interval = Utc::now().timestamp() - x.last_banned;
