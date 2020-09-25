@@ -359,7 +359,9 @@ impl<'a> Batch<'a> {
 	fn get_legacy_input_bitmap(&self, bh: &Hash) -> Result<Bitmap, Error> {
 		option_to_not_found(
 			self.db
-				.get_with(&to_key(BLOCK_INPUT_BITMAP_PREFIX, bh), Bitmap::deserialize),
+				.get_with(&to_key(BLOCK_INPUT_BITMAP_PREFIX, bh), |data| {
+					Ok(Bitmap::deserialize(data))
+				}),
 			|| "legacy block input bitmap".to_string(),
 		)
 	}

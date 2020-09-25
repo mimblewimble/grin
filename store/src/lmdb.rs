@@ -245,23 +245,27 @@ impl Store {
 		Ok(())
 	}
 
-	/// Gets a value from the db, provided its key
-	pub fn get_with<T, F>(&self, key: &[u8], f: F) -> Result<Option<T>, Error>
+	/// Gets a value from the db, provided its key.
+	/// Deserializes the retrieved data using the provided function.
+	pub fn get_with<T, F>(
+		&self,
+		key: &[u8],
+		access: &lmdb::ConstAccessor<'_>,
+		db: &lmdb::Database<'_>,
+		deserialize: F,
+	) -> Result<Option<T>, Error>
 	where
-		F: Fn(&[u8]) -> T,
+		F: Fn(&[u8]) -> Result<T, Error>,
 	{
-		let lock = self.db.read();
-		let db = lock
-			.as_ref()
-			.ok_or_else(|| Error::NotFoundErr("chain db is None".to_string()))?;
-		let txn = lmdb::ReadTransaction::new(self.env.clone())?;
-		let access = txn.access();
-		let res = access.get(db, key);
-		res.map(f).to_opt().map_err(From::from)
+		let res: Option<&[u8]> = access.get(db, key).to_opt()?;
+		match res {
+			None => Ok(None),
+			Some(res) => deserialize(res).map(|x| Some(x)),
+		}
 	}
 
-	/// Gets a `Readable` value from the db, provided its key. Encapsulates
-	/// serialization.
+	/// Gets a `Readable` value from the db, provided its key.
+	/// Note: Creates a new read transaction so will *not* see any uncommitted data.
 	pub fn get_ser<T: ser::Readable>(&self, key: &[u8]) -> Result<Option<T>, Error> {
 		let lock = self.db.read();
 		let db = lock
@@ -269,24 +273,11 @@ impl Store {
 			.ok_or_else(|| Error::NotFoundErr("chain db is None".to_string()))?;
 		let txn = lmdb::ReadTransaction::new(self.env.clone())?;
 		let access = txn.access();
-		self.get_ser_access(key, &access, db.clone())
-	}
 
-	fn get_ser_access<T: ser::Readable>(
-		&self,
-		key: &[u8],
-		access: &lmdb::ConstAccessor<'_>,
-		db: Arc<lmdb::Database<'static>>,
-	) -> Result<Option<T>, Error> {
-		let res: lmdb::error::Result<&[u8]> = access.get(&db, key);
-		match res.to_opt() {
-			Ok(Some(mut res)) => match ser::deserialize(&mut res, self.protocol_version()) {
-				Ok(res) => Ok(Some(res)),
-				Err(e) => Err(Error::SerErr(format!("{}", e))),
-			},
-			Ok(None) => Ok(None),
-			Err(e) => Err(From::from(e)),
-		}
+		self.get_with(key, &access, &db, |mut data| {
+			ser::deserialize(&mut data, self.protocol_version())
+				.map_err(|e| Error::SerErr(format!("{}", e)))
+		})
 	}
 
 	/// Whether the provided key exists
@@ -297,8 +288,9 @@ impl Store {
 			.ok_or_else(|| Error::NotFoundErr("chain db is None".to_string()))?;
 		let txn = lmdb::ReadTransaction::new(self.env.clone())?;
 		let access = txn.access();
-		let res: lmdb::error::Result<&lmdb::Ignore> = access.get(db, key);
-		res.to_opt().map(|r| r.is_some()).map_err(From::from)
+
+		let res: Option<&lmdb::Ignore> = access.get(db, key).to_opt()?;
+		Ok(res.is_some())
 	}
 
 	/// Produces an iterator of (key, value) pairs, where values are `Readable` types
@@ -376,17 +368,31 @@ impl<'a> Batch<'a> {
 		}
 	}
 
-	/// gets a value from the db, provided its key
-	pub fn get_with<T, F>(&self, key: &[u8], f: F) -> Result<Option<T>, Error>
+	/// Low-level access for retrieving data by key.
+	/// Takes a function for flexible deserialization.
+	pub fn get_with<T, F>(&self, key: &[u8], deserialize: F) -> Result<Option<T>, Error>
 	where
-		F: Fn(&[u8]) -> T,
+		F: Fn(&[u8]) -> Result<T, Error>,
 	{
-		self.store.get_with(key, f)
+		let access = self.tx.access();
+		let lock = self.store.db.read();
+		let db = lock
+			.as_ref()
+			.ok_or_else(|| Error::NotFoundErr("chain db is None".to_string()))?;
+
+		self.store.get_with(key, &access, &db, deserialize)
 	}
 
-	/// Whether the provided key exists
+	/// Whether the provided key exists.
+	/// This is in the context of the current write transaction.
 	pub fn exists(&self, key: &[u8]) -> Result<bool, Error> {
-		self.store.exists(key)
+		let access = self.tx.access();
+		let lock = self.store.db.read();
+		let db = lock
+			.as_ref()
+			.ok_or_else(|| Error::NotFoundErr("chain db is None".to_string()))?;
+		let res: Option<&lmdb::Ignore> = access.get(db, key).to_opt()?;
+		Ok(res.is_some())
 	}
 
 	/// Produces an iterator of `Readable` types moving forward from the
@@ -395,17 +401,14 @@ impl<'a> Batch<'a> {
 		self.store.iter(from)
 	}
 
-	/// Gets a `Readable` value from the db, provided its key, taking the
-	/// content of the current batch into account.
+	/// Gets a `Readable` value from the db by provided key and default deserialization strategy.
 	pub fn get_ser<T: ser::Readable>(&self, key: &[u8]) -> Result<Option<T>, Error> {
-		let access = self.tx.access();
-
-		let lock = self.store.db.read();
-		let db = lock
-			.as_ref()
-			.ok_or_else(|| Error::NotFoundErr("chain db is None".to_string()))?;
-
-		self.store.get_ser_access(key, &access, db.clone())
+		self.get_with(key, |mut data| {
+			match ser::deserialize(&mut data, self.protocol_version()) {
+				Ok(res) => Ok(res),
+				Err(e) => Err(Error::SerErr(format!("{}", e))),
+			}
+		})
 	}
 
 	/// Deletes a key/value pair from the db
