@@ -37,12 +37,12 @@ use crate::util::secp::pedersen::{Commitment, RangeProof};
 use crate::{util::RwLock, ChainStore};
 use grin_core::ser;
 use grin_store::Error::NotFoundErr;
-use std::collections::HashMap;
 use std::fs::{self, File};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
+use std::{collections::HashMap, io::Cursor};
 
 /// Orphan pool size is limited by MAX_ORPHAN_SIZE
 pub const MAX_ORPHAN_SIZE: usize = 200;

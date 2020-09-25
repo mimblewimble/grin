@@ -14,8 +14,8 @@
 
 //! Storage of core types using LMDB.
 
-use std::sync::Arc;
 use std::fs;
+use std::sync::Arc;
 
 use lmdb_zero as lmdb;
 use lmdb_zero::traits::CreateCursor;
@@ -284,20 +284,6 @@ impl Store {
 		})
 	}
 
-	// fn get_raw(
-	// 	&self,
-	// 	key: &[u8],
-	// 	access: &lmdb::ConstAccessor<'_>,
-	// 	db: Arc<lmdb::Database<'static>>,
-	// ) -> Result<Option<Cursor<Vec<u8>>>, Error> {
-	// 	let res: lmdb::error::Result<&[u8]> = access.get(&db, key);
-	// 	match res.to_opt() {
-	// 		Ok(Some(res)) => Ok(Some(Cursor::new(res.to_vec()))),
-	// 		Ok(None) => Ok(None),
-	// 		Err(e) => Err(From::from(e)),
-	// 	}
-	// }
-
 	/// Whether the provided key exists
 	pub fn exists(&self, key: &[u8]) -> Result<bool, Error> {
 		let lock = self.db.read();
@@ -426,18 +412,6 @@ impl<'a> Batch<'a> {
 		})
 	}
 
-	// /// Gets a db entry by provided key.
-	// pub fn get_raw(&self, key: &[u8]) -> Result<Option<Cursor<Vec<u8>>>, Error> {
-	// 	let access = self.tx.access();
-
-	// 	let lock = self.store.db.read();
-	// 	let db = lock
-	// 		.as_ref()
-	// 		.ok_or_else(|| Error::NotFoundErr("chain db is None".to_string()))?;
-
-	// 	self.store.get_raw(key, &access, db.clone())
-	// }
-
 	/// Deletes a key/value pair from the db
 	pub fn delete(&self, key: &[u8]) -> Result<(), Error> {
 		let lock = self.store.db.read();
@@ -494,11 +468,9 @@ where
 		};
 		kv.ok()
 			.filter(|(k, _)| k.starts_with(self.prefix.as_slice()))
-			.map(|(k, v)| {
-				match (self.deserialize)(k, v) {
-					Ok(v) => Some(v),
-					Err(_) => None,
-				}
+			.map(|(k, v)| match (self.deserialize)(k, v) {
+				Ok(v) => Some(v),
+				Err(_) => None,
 			})
 			.flatten()
 	}
@@ -514,7 +486,6 @@ where
 		cursor: Arc<lmdb::Cursor<'static, 'static>>,
 		prefix: &[u8],
 		deserialize: F,
-
 	) -> PrefixIterator<F, T> {
 		PrefixIterator {
 			tx,

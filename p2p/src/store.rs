@@ -169,9 +169,7 @@ impl PeerStore {
 	/// List all known peers
 	/// Used for /v1/peers/all api endpoint
 	pub fn all_peers(&self) -> Result<Vec<PeerData>, Error> {
-		let peers: Vec<PeerData> = self
-			.peers_iter()?
-			.collect();
+		let peers: Vec<PeerData> = self.peers_iter()?.collect();
 		Ok(peers)
 	}
 
