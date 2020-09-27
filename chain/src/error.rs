@@ -19,6 +19,7 @@ use crate::keychain;
 use crate::util::secp;
 use crate::util::secp::pedersen::Commitment;
 use failure::{Backtrace, Context, Fail};
+use grin_core::core::ChunkError;
 use grin_store as store;
 use std::fmt::{self, Display};
 use std::io;
@@ -119,6 +120,9 @@ pub enum ErrorKind {
 	/// Error with the txhashset
 	#[fail(display = "TxHashSetErr: {}", _0)]
 	TxHashSetErr(String),
+	/// Error during creation or validation of a mmr chunk
+	#[fail(display = "ChunkErr: {}", _0)]
+	ChunkErr(ChunkError),
 	/// Tx not valid based on lock_height.
 	#[fail(display = "Transaction Lock Height")]
 	TxLockHeight,
@@ -192,6 +196,7 @@ impl Error {
 			| ErrorKind::StoreErr(_, _)
 			| ErrorKind::SerErr(_)
 			| ErrorKind::TxHashSetErr(_)
+			| ErrorKind::ChunkErr(_)
 			| ErrorKind::GenesisBlockRequired
 			| ErrorKind::Other(_) => false,
 			_ => true,
@@ -269,6 +274,14 @@ impl From<secp::Error> for Error {
 	fn from(e: secp::Error) -> Error {
 		Error {
 			inner: Context::new(ErrorKind::Secp(e)),
+		}
+	}
+}
+
+impl From<ChunkError> for Error {
+	fn from(e: ChunkError) -> Error {
+		Error {
+			inner: Context::new(ErrorKind::ChunkErr(e)),
 		}
 	}
 }

@@ -37,6 +37,7 @@
 //! either be a simple Vec or a database.
 
 mod backend;
+pub mod chunk;
 mod pmmr;
 mod readonly_pmmr;
 mod rewindable_pmmr;

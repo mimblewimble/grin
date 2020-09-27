@@ -19,8 +19,8 @@ use crate::core::core::hash::{Hash, Hashed, ZERO_HASH};
 use crate::core::core::merkle_proof::MerkleProof;
 use crate::core::core::verifier_cache::VerifierCache;
 use crate::core::core::{
-	Block, BlockHeader, BlockSums, Committed, Inputs, KernelFeatures, Output, OutputIdentifier,
-	Transaction, TxKernel,
+	Block, BlockHeader, BlockSums, Chunk, ChunkIdentifier, Committed, Inputs, KernelFeatures,
+	Output, OutputIdentifier, Transaction, TxKernel,
 };
 use crate::core::global;
 use crate::core::pow;
@@ -1260,6 +1260,14 @@ impl Chain {
 		batch.commit()?;
 
 		Ok(())
+	}
+
+	pub fn get_output_chunk(
+		&self,
+		identifier: ChunkIdentifier,
+	) -> Result<Chunk<OutputIdentifier>, Error> {
+		let txhashset = self.txhashset.read();
+		txhashset.build_output_chunk(identifier)
 	}
 
 	/// returns the last n nodes inserted into the output sum tree
