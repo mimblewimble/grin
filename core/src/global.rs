@@ -26,7 +26,7 @@ use crate::core::block::HeaderVersion;
 use crate::{
 	pow::{
 		self, new_cuckaroo_ctx, new_cuckarood_ctx, new_cuckaroom_ctx, new_cuckarooz_ctx,
-		new_cuckatoo_ctx, PoWContext,
+		new_cuckatoo_ctx, BitVec, PoWContext,
 	},
 	ser::ProtocolVersion,
 };
@@ -410,4 +410,52 @@ where
 	}
 	last_n.reverse();
 	last_n
+}
+
+/// Calculates the size of a header (in bytes) given a number of edge bits in the PoW
+#[inline]
+pub fn header_size_bytes(edge_bits: u8) -> usize {
+	let size = 2 + 2 * 8 + 5 * 32 + 32 + 2 * 8;
+	let proof_size = 8 + 4 + 8 + 1 + BitVec::bytes_len(edge_bits as usize * proofsize());
+	size + proof_size
+}
+
+#[cfg(test)]
+mod test {
+	use super::*;
+	use crate::core::Block;
+	use crate::genesis::*;
+	use crate::pow::mine_genesis_block;
+	use crate::ser::{BinWriter, Writeable};
+
+	fn test_header_len(genesis: Block) {
+		let mut raw = Vec::<u8>::with_capacity(1_024);
+		let mut writer = BinWriter::new(&mut raw, ProtocolVersion::local());
+		genesis.header.write(&mut writer).unwrap();
+		assert_eq!(raw.len(), header_size_bytes(genesis.header.pow.edge_bits()));
+	}
+
+	#[test]
+	fn automated_testing_header_len() {
+		set_local_chain_type(ChainTypes::AutomatedTesting);
+		test_header_len(mine_genesis_block().unwrap());
+	}
+
+	#[test]
+	fn user_testing_header_len() {
+		set_local_chain_type(ChainTypes::UserTesting);
+		test_header_len(mine_genesis_block().unwrap());
+	}
+
+	#[test]
+	fn floonet_header_len() {
+		set_local_chain_type(ChainTypes::Floonet);
+		test_header_len(genesis_floo());
+	}
+
+	#[test]
+	fn mainnet_header_len() {
+		set_local_chain_type(ChainTypes::Mainnet);
+		test_header_len(genesis_main());
+	}
 }

@@ -16,16 +16,21 @@
 
 use crate::conn::Tracker;
 use crate::core::core::hash::Hash;
-use crate::core::core::BlockHeader;
+use crate::core::core::{
+	BlockHeader, Transaction, UntrustedBlock, UntrustedBlockHeader, UntrustedCompactBlock,
+};
 use crate::core::pow::Difficulty;
 use crate::core::ser::{
 	self, ProtocolVersion, Readable, Reader, StreamingReader, Writeable, Writer,
 };
 use crate::core::{consensus, global};
 use crate::types::{
-	Capabilities, Error, PeerAddr, ReasonForBan, MAX_BLOCK_HEADERS, MAX_LOCATORS, MAX_PEER_ADDRS,
+	AttachmentMeta, AttachmentUpdate, Capabilities, Error, PeerAddr, ReasonForBan,
+	MAX_BLOCK_HEADERS, MAX_LOCATORS, MAX_PEER_ADDRS,
 };
+use bytes::Bytes;
 use num::FromPrimitive;
+use std::fmt;
 use std::fs::File;
 use std::io::{Read, Write};
 use std::sync::Arc;
@@ -702,5 +707,79 @@ impl Readable for TxHashSetArchive {
 			height,
 			bytes,
 		})
+	}
+}
+
+pub enum Message {
+	Unknown(u8),
+	Ping(Ping),
+	Pong(Pong),
+	BanReason(BanReason),
+	TransactionKernel(Hash),
+	GetTransaction(Hash),
+	Transaction(Transaction),
+	StemTransaction(Transaction),
+	GetBlock(Hash),
+	Block(UntrustedBlock),
+	GetCompactBlock(Hash),
+	CompactBlock(UntrustedCompactBlock),
+	GetHeaders(Locator),
+	Header(UntrustedBlockHeader),
+	Headers(Vec<BlockHeader>),
+	GetPeerAddrs(GetPeerAddrs),
+	PeerAddrs(PeerAddrs),
+	TxHashSetRequest(TxHashSetRequest),
+	TxHashSetArchive(TxHashSetArchive),
+	Attachment(AttachmentUpdate, Option<Bytes>),
+}
+
+impl fmt::Display for Message {
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+		match self {
+			Message::Unknown(_) => write!(f, "unknown"),
+			Message::Ping(_) => write!(f, "ping"),
+			Message::Pong(_) => write!(f, "pong"),
+			Message::BanReason(_) => write!(f, "ban reason"),
+			Message::TransactionKernel(_) => write!(f, "tx kernel"),
+			Message::GetTransaction(_) => write!(f, "get tx"),
+			Message::Transaction(_) => write!(f, "tx"),
+			Message::StemTransaction(_) => write!(f, "stem tx"),
+			Message::GetBlock(_) => write!(f, "get block"),
+			Message::Block(_) => write!(f, "block"),
+			Message::GetCompactBlock(_) => write!(f, "get compact block"),
+			Message::CompactBlock(_) => write!(f, "compact block"),
+			Message::GetHeaders(_) => write!(f, "get headers"),
+			Message::Header(_) => write!(f, "header"),
+			Message::Headers(_) => write!(f, "headers"),
+			Message::GetPeerAddrs(_) => write!(f, "get peer addrs"),
+			Message::PeerAddrs(_) => write!(f, "peer addrs"),
+			Message::TxHashSetRequest(_) => write!(f, "tx hash set request"),
+			Message::TxHashSetArchive(_) => write!(f, "tx hash set"),
+			Message::Attachment(_, _) => write!(f, "attachment"),
+		}
+	}
+}
+
+impl fmt::Debug for Message {
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+		write!(f, "Consume({})", self)
+	}
+}
+
+pub enum Consumed {
+	Response(Msg),
+	Attachment(Arc<AttachmentMeta>, File),
+	None,
+	Disconnect,
+}
+
+impl fmt::Debug for Consumed {
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+		match self {
+			Consumed::Response(msg) => write!(f, "Consumed::Response({:?})", msg.header.msg_type),
+			Consumed::Attachment(meta, _) => write!(f, "Consumed::Attachment({:?})", meta.size),
+			Consumed::None => write!(f, "Consumed::None"),
+			Consumed::Disconnect => write!(f, "Consumed::Disconnect"),
+		}
 	}
 }
