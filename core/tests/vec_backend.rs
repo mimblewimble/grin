@@ -14,7 +14,7 @@
 
 mod common;
 
-use self::core::core::pmmr::{VecBackend, PMMR};
+use self::core::core::pmmr::{ReadablePMMR, VecBackend, PMMR};
 use crate::common::TestElem;
 use grin_core as core;
 
