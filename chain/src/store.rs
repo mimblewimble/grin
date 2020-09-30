@@ -42,7 +42,6 @@ pub const NRD_KERNEL_LIST_PREFIX: u8 = b'K';
 /// Prefix for NRD kernel pos index entries.
 pub const NRD_KERNEL_ENTRY_PREFIX: u8 = b'k';
 
-const BLOCK_INPUT_BITMAP_PREFIX: u8 = b'B';
 const BLOCK_SUMS_PREFIX: u8 = b'M';
 const BLOCK_SPENT_PREFIX: u8 = b'S';
 
@@ -319,9 +318,6 @@ impl<'a> Batch<'a> {
 
 	/// Delete the block spent index.
 	fn delete_spent_index(&self, bh: &Hash) -> Result<(), Error> {
-		// Clean up the legacy input bitmap as well.
-		let _ = self.db.delete(&to_key(BLOCK_INPUT_BITMAP_PREFIX, bh));
-
 		self.db.delete(&to_key(BLOCK_SPENT_PREFIX, bh))
 	}
 
@@ -345,25 +341,12 @@ impl<'a> Batch<'a> {
 	/// Get the block input bitmap based on our spent index.
 	/// Fallback to legacy block input bitmap from the db.
 	pub fn get_block_input_bitmap(&self, bh: &Hash) -> Result<Bitmap, Error> {
-		if let Ok(spent) = self.get_spent_index(bh) {
-			let bitmap = spent
-				.into_iter()
-				.map(|x| x.pos.try_into().unwrap())
-				.collect();
-			Ok(bitmap)
-		} else {
-			self.get_legacy_input_bitmap(bh)
-		}
-	}
-
-	fn get_legacy_input_bitmap(&self, bh: &Hash) -> Result<Bitmap, Error> {
-		option_to_not_found(
-			self.db
-				.get_with(&to_key(BLOCK_INPUT_BITMAP_PREFIX, bh), |data| {
-					Ok(Bitmap::deserialize(data))
-				}),
-			|| "legacy block input bitmap".to_string(),
-		)
+		let bitmap = self
+			.get_spent_index(bh)?
+			.into_iter()
+			.map(|x| x.pos.try_into().unwrap())
+			.collect();
+		Ok(bitmap)
 	}
 
 	/// Get the "spent index" from the db for the specified block.
