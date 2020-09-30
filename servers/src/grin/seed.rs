@@ -174,10 +174,13 @@ fn monitor_peers(
 		total_count += 1;
 	}
 
+	let peers_count = peers.peers_iter().connected().count();
+
 	let max_diff = peers.max_peer_difficulty();
 	let most_work_count = peers
-		.connected_peers()
-		.filter(|peer| peer.info.total_difficulty() >= max_diff)
+		.peers_iter()
+		.connected()
+		.with_difficulty(max_diff)
 		.count();
 
 	debug!(
@@ -185,7 +188,7 @@ fn monitor_peers(
 		 all {} = {} healthy + {} banned + {} defunct",
 		config.host,
 		config.port,
-		peers.connected_peers().count(),
+		peers_count,
 		most_work_count,
 		total_count,
 		healthy_count,
@@ -207,7 +210,7 @@ fn monitor_peers(
 	// loop over connected peers
 	// ask them for their list of peers
 	let mut connected_peers: Vec<PeerAddr> = vec![];
-	for p in peers.connected_peers() {
+	for p in peers.peers_iter().connected() {
 		trace!(
 			"monitor_peers: {}:{} ask {} for more peers",
 			config.host,

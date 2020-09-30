@@ -356,7 +356,13 @@ impl Server {
 
 	/// Number of peers
 	pub fn peer_count(&self) -> u32 {
-		self.p2p.peers.connected_peers().count().try_into().unwrap()
+		self.p2p
+			.peers
+			.peers_iter()
+			.connected()
+			.count()
+			.try_into()
+			.unwrap()
 	}
 
 	/// Start a minimal "stratum" mining service on a separate thread
@@ -486,7 +492,8 @@ impl Server {
 		let peer_stats = self
 			.p2p
 			.peers
-			.connected_peers()
+			.peers_iter()
+			.connected()
 			.into_iter()
 			.map(|p| PeerStats::from_peer(&p))
 			.collect();

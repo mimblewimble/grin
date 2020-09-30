@@ -82,8 +82,9 @@ impl SyncRunner {
 			// Count peers with at least our difficulty.
 			let wp = self
 				.peers
-				.connected_peers()
-				.filter(|peer| peer.info.total_difficulty() >= head.total_difficulty)
+				.peers_iter()
+				.connected()
+				.with_difficulty(head.total_difficulty)
 				.count();
 
 			// exit loop when:
@@ -228,10 +229,14 @@ impl SyncRunner {
 		let local_diff = self.chain.head()?.total_difficulty;
 		let mut is_syncing = self.sync_state.is_syncing();
 
-		// Find max difficulty across all our peers.
-		// Then pick a random peer with this max difficulty.
+		// Find a random peer to sync from.
 		let max_diff = self.peers.max_peer_difficulty();
-		let peer = self.peers.peer_with_difficulty(max_diff);
+		let peer = self
+			.peers
+			.peers_iter()
+			.connected()
+			.with_difficulty(max_diff)
+			.choose_random();
 
 		let peer_info = if let Some(p) = peer {
 			p.info.clone()

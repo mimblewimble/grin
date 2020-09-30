@@ -14,6 +14,7 @@
 
 use chrono::prelude::{DateTime, Utc};
 use chrono::Duration;
+use grin_core::pow::Difficulty;
 use rand::prelude::*;
 use std::cmp;
 use std::sync::Arc;
@@ -91,10 +92,14 @@ impl BodySync {
 		hashes.reverse();
 
 		let head = self.chain.head()?;
+
+		// Find connected peers with strictly greater difficulty than us.
 		let peers: Vec<_> = self
 			.peers
-			.connected_peers()
-			.filter(|peer| peer.info.total_difficulty() > head.total_difficulty)
+			.peers_iter()
+			.connected()
+			.with_difficulty(head.total_difficulty + Difficulty::from_num(1))
+			.into_iter()
 			.collect();
 
 		// if we have 5 peers to sync from then ask for 50 blocks total (peer_count *

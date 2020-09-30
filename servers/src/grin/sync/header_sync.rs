@@ -170,10 +170,15 @@ impl HeaderSync {
 
 	fn header_sync(&mut self) -> Option<Arc<Peer>> {
 		if let Ok(header_head) = self.chain.header_head() {
-			let difficulty = header_head.total_difficulty;
 			let max_diff = self.peers.max_peer_difficulty();
-			if let Some(peer) = self.peers.peer_with_difficulty(max_diff) {
-				if peer.info.total_difficulty() > difficulty {
+			let peer = self
+				.peers
+				.peers_iter()
+				.connected()
+				.with_difficulty(max_diff)
+				.choose_random();
+			if let Some(peer) = peer {
+				if peer.info.total_difficulty() > header_head.total_difficulty {
 					return self.request_headers(peer);
 				}
 			}

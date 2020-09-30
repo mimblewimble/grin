@@ -106,7 +106,8 @@ impl Peers {
 
 	/// Iterator over our current peers.
 	/// This allows us to hide try_read_for() behind a cleaner interface.
-	fn peers(&self) -> impl Iterator<Item = Arc<Peer>> {
+	/// PeersIter lets us chain various adaptors for convenience.
+	pub fn peers_iter(&self) -> PeersIter<impl Iterator<Item = Arc<Peer>>> {
 		let peers = match self.peers.try_read_for(LOCK_TIMEOUT) {
 			Some(peers) => peers.values().cloned().collect(),
 			None => {
@@ -114,42 +115,21 @@ impl Peers {
 				vec![]
 			}
 		};
-		peers.into_iter()
-	}
-
-	/// Iterator over connected peers.
-	pub fn connected_peers(&self) -> impl Iterator<Item = Arc<Peer>> {
-		self.peers().filter(|p| p.is_connected())
-	}
-
-	/// Iterator over outbound connected peers.
-	pub fn outgoing_connected_peers(&self) -> impl Iterator<Item = Arc<Peer>> {
-		self.connected_peers().filter(|x| x.info.is_outbound())
-	}
-
-	/// Iterator over inbound connected peers.
-	pub fn incoming_connected_peers(&self) -> impl Iterator<Item = Arc<Peer>> {
-		self.connected_peers().filter(|x| x.info.is_inbound())
+		PeersIter {
+			iter: peers.into_iter(),
+		}
 	}
 
 	/// Get a peer we're connected to by address.
 	pub fn get_connected_peer(&self, addr: PeerAddr) -> Option<Arc<Peer>> {
-		self.connected_peers().find(|p| p.info.addr == addr)
+		self.peers_iter().connected().by_addr(addr) //find(|p| p.info.addr == addr)
 	}
 
 	pub fn max_peer_difficulty(&self) -> Difficulty {
-		self.connected_peers()
-			.map(|p| p.info.total_difficulty())
-			.max()
+		self.peers_iter()
+			.connected()
+			.max_difficulty()
 			.unwrap_or(Difficulty::zero())
-	}
-
-	/// Choose a random connected peer >= provided difficulty.
-	pub fn peer_with_difficulty(&self, diff: Difficulty) -> Option<Arc<Peer>> {
-		let mut rng = rand::thread_rng();
-		self.connected_peers()
-			.filter(|peer| peer.info.total_difficulty() >= diff)
-			.choose(&mut rng)
 	}
 
 	pub fn is_banned(&self, peer_addr: PeerAddr) -> bool {
@@ -198,7 +178,7 @@ impl Peers {
 	{
 		let mut count = 0;
 
-		for p in self.connected_peers() {
+		for p in self.peers_iter().connected() {
 			match inner(&p) {
 				Ok(true) => count += 1,
 				Ok(false) => (),
@@ -265,7 +245,7 @@ impl Peers {
 	/// Ping all our connected peers. Always automatically expects a pong back
 	/// or disconnects. This acts as a liveness test.
 	pub fn check_all(&self, total_difficulty: Difficulty, height: u64) {
-		for p in self.connected_peers() {
+		for p in self.peers_iter().connected() {
 			if let Err(e) = p.send_ping(total_difficulty, height) {
 				debug!("Error pinging peer {:?}: {:?}", &p.info.addr, e);
 				let mut peers = match self.peers.try_write_for(LOCK_TIMEOUT) {
@@ -339,7 +319,7 @@ impl Peers {
 
 		// build a list of peers to be cleaned up
 		{
-			for peer in self.peers() {
+			for peer in self.peers_iter() {
 				let ref peer: &Peer = peer.as_ref();
 				if peer.is_banned() {
 					debug!("clean_peers {:?}, peer banned", peer.info.addr);
@@ -372,14 +352,13 @@ impl Peers {
 			}
 		}
 
+		// closure to build an iterator of our inbound peers
+		let outbound_peers = || self.peers_iter().connected().outbound().into_iter();
+
 		// check here to make sure we don't have too many outgoing connections
-		let excess_outgoing_count = self
-			.outgoing_connected_peers()
-			.count()
-			.saturating_sub(max_outbound_count);
+		let excess_outgoing_count = outbound_peers().count().saturating_sub(max_outbound_count);
 		if excess_outgoing_count > 0 {
-			let mut addrs: Vec<_> = self
-				.outgoing_connected_peers()
+			let mut addrs: Vec<_> = outbound_peers()
 				.filter(|x| !preferred_peers.contains(&x.info.addr))
 				.take(excess_outgoing_count)
 				.map(|x| x.info.addr)
@@ -387,14 +366,13 @@ impl Peers {
 			rm.append(&mut addrs);
 		}
 
+		// closure to build an iterator of our inbound peers
+		let inbound_peers = || self.peers_iter().connected().inbound().into_iter();
+
 		// check here to make sure we don't have too many incoming connections
-		let excess_incoming_count = self
-			.incoming_connected_peers()
-			.count()
-			.saturating_sub(max_inbound_count);
+		let excess_incoming_count = inbound_peers().count().saturating_sub(max_inbound_count);
 		if excess_incoming_count > 0 {
-			let mut addrs: Vec<_> = self
-				.incoming_connected_peers()
+			let mut addrs: Vec<_> = inbound_peers()
 				.filter(|x| !preferred_peers.contains(&x.info.addr))
 				.take(excess_incoming_count)
 				.map(|x| x.info.addr)
@@ -430,7 +408,7 @@ impl Peers {
 
 	/// We have enough outbound connected peers
 	pub fn enough_outbound_peers(&self) -> bool {
-		self.outgoing_connected_peers().count()
+		self.peers_iter().connected().outbound().count()
 			>= self.config.peer_min_preferred_outbound_count() as usize
 	}
 
@@ -687,5 +665,65 @@ impl NetAdapter for Peers {
 		} else {
 			false
 		}
+	}
+}
+
+pub struct PeersIter<I> {
+	iter: I,
+}
+
+impl<I: Iterator> IntoIterator for PeersIter<I> {
+	type Item = I::Item;
+	type IntoIter = I;
+
+	fn into_iter(self) -> Self::IntoIter {
+		self.iter.into_iter()
+	}
+}
+
+impl<I: Iterator<Item = Arc<Peer>>> PeersIter<I> {
+	pub fn connected(self) -> PeersIter<impl Iterator<Item = Arc<Peer>>> {
+		PeersIter {
+			iter: self.iter.filter(|p| p.is_connected()),
+		}
+	}
+
+	pub fn inbound(self) -> PeersIter<impl Iterator<Item = Arc<Peer>>> {
+		PeersIter {
+			iter: self.iter.filter(|p| p.info.is_inbound()),
+		}
+	}
+
+	pub fn outbound(self) -> PeersIter<impl Iterator<Item = Arc<Peer>>> {
+		PeersIter {
+			iter: self.iter.filter(|p| p.info.is_outbound()),
+		}
+	}
+
+	pub fn with_difficulty(self, diff: Difficulty) -> PeersIter<impl Iterator<Item = Arc<Peer>>> {
+		PeersIter {
+			iter: self.iter.filter(move |p| p.info.total_difficulty() >= diff),
+		}
+	}
+
+	pub fn with_capabilities(self, cap: Capabilities) -> Self {
+		unimplemented!("not yet implemented!")
+	}
+
+	pub fn by_addr(&mut self, addr: PeerAddr) -> Option<Arc<Peer>> {
+		self.iter.find(|p| p.info.addr == addr)
+	}
+
+	pub fn choose_random(self) -> Option<Arc<Peer>> {
+		let mut rng = rand::thread_rng();
+		self.iter.choose(&mut rng)
+	}
+
+	pub fn max_difficulty(self) -> Option<Difficulty> {
+		self.iter.map(|p| p.info.total_difficulty()).max()
+	}
+
+	pub fn count(self) -> usize {
+		self.iter.count()
 	}
 }
