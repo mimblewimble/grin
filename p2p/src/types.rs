@@ -71,6 +71,7 @@ pub enum Error {
 	Connection(io::Error),
 	/// Header type does not match the expected message type
 	BadMessage,
+	UnexpectedMessage,
 	MsgLen,
 	Banned,
 	ConnectionClose,
@@ -658,4 +659,20 @@ pub trait NetAdapter: ChainAdapter {
 
 	/// Is this peer currently banned?
 	fn is_banned(&self, addr: PeerAddr) -> bool;
+}
+
+#[derive(Clone, Debug)]
+pub struct AttachmentMeta {
+	pub size: usize,
+	pub hash: Hash,
+	pub height: u64,
+	pub start_time: DateTime<Utc>,
+	pub path: PathBuf,
+}
+
+#[derive(Clone, Debug)]
+pub struct AttachmentUpdate {
+	pub read: usize,
+	pub left: usize,
+	pub meta: Arc<AttachmentMeta>,
 }

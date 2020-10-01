@@ -20,40 +20,28 @@
 //! forces us to go through some additional gymnastic to loop over the async
 //! stream and make sure we get the right number of bytes out.
 
-use crate::core::ser;
+use crate::codec::{Codec, BODY_IO_TIMEOUT};
 use crate::core::ser::ProtocolVersion;
-use crate::msg::{
-	read_body, read_discard, read_header, read_item, write_message, Msg, MsgHeader,
-	MsgHeaderWrapper,
-};
+use crate::msg::{write_message, Consumed, Message, Msg};
 use crate::types::Error;
 use crate::util::{RateCounter, RwLock};
-use std::io::{self, Read, Write};
+use std::fs::File;
+use std::io::{self, Write};
 use std::net::{Shutdown, TcpStream};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::RecvTimeoutError;
 use std::sync::{mpsc, Arc};
+use std::thread::{self, JoinHandle};
 use std::time::Duration;
-use std::{
-	cmp,
-	thread::{self, JoinHandle},
-};
 
 pub const SEND_CHANNEL_CAP: usize = 100;
 
-const HEADER_IO_TIMEOUT: Duration = Duration::from_millis(2000);
 const CHANNEL_TIMEOUT: Duration = Duration::from_millis(1000);
-const BODY_IO_TIMEOUT: Duration = Duration::from_millis(60000);
 
 /// A trait to be implemented in order to receive messages from the
 /// connection. Allows providing an optional response.
 pub trait MessageHandler: Send + 'static {
-	fn consume<'a, R: Read>(
-		&self,
-		msg: Message<'a, R>,
-		stopped: Arc<AtomicBool>,
-		tracker: Arc<Tracker>,
-	) -> Result<Option<Msg>, Error>;
+	fn consume(&self, message: Message) -> Result<Consumed, Error>;
 }
 
 // Macro to simplify the boilerplate around I/O and Grin error handling
@@ -77,54 +65,6 @@ macro_rules! try_break {
 				}
 			}
 	};
-}
-
-macro_rules! try_header {
-	($res:expr, $conn: expr) => {{
-		let _ = $conn.set_read_timeout(Some(HEADER_IO_TIMEOUT));
-		try_break!($res)
-		}};
-}
-
-/// A message as received by the connection. Provides access to the message
-/// header lazily consumes the message body, handling its deserialization.
-pub struct Message<'a, R: Read> {
-	pub header: MsgHeader,
-	stream: &'a mut R,
-	version: ProtocolVersion,
-}
-
-impl<'a, R: Read> Message<'a, R> {
-	fn from_header(header: MsgHeader, stream: &'a mut R, version: ProtocolVersion) -> Self {
-		Message {
-			header,
-			stream,
-			version,
-		}
-	}
-
-	/// Read the message body from the underlying connection
-	pub fn body<T: ser::Readable>(&mut self) -> Result<T, Error> {
-		read_body(&self.header, self.stream, self.version)
-	}
-
-	/// Read a single "thing" from the underlying connection.
-	/// Return the thing and the total bytes read.
-	pub fn streaming_read<T: ser::Readable>(&mut self) -> Result<(T, u64), Error> {
-		read_item(self.stream, self.version)
-	}
-
-	pub fn copy_attachment(&mut self, len: usize, writer: &mut dyn Write) -> Result<usize, Error> {
-		let mut written = 0;
-		while written < len {
-			let read_len = cmp::min(8000, len - written);
-			let mut buf = vec![0u8; read_len];
-			self.stream.read_exact(&mut buf[..])?;
-			writer.write_all(&buf)?;
-			written += read_len;
-		}
-		Ok(written)
-	}
 }
 
 pub struct StopHandle {
@@ -281,7 +221,7 @@ where
 	H: MessageHandler,
 {
 	// Split out tcp stream out into separate reader/writer halves.
-	let mut reader = conn.try_clone().expect("clone conn for reader failed");
+	let reader = conn.try_clone().expect("clone conn for reader failed");
 	let mut writer = conn.try_clone().expect("clone conn for writer failed");
 	let reader_stopped = stopped.clone();
 
@@ -291,58 +231,83 @@ where
 	let reader_thread = thread::Builder::new()
 		.name("peer_read".to_string())
 		.spawn(move || {
+			let peer_addr = reader
+				.peer_addr()
+				.map(|a| a.to_string())
+				.unwrap_or_else(|_| "?".to_owned());
+			let mut codec = Codec::new(version, reader);
+			let mut attachment: Option<File> = None;
 			loop {
-				// check the read end
-				match try_header!(read_header(&mut reader, version), &reader) {
-					Some(MsgHeaderWrapper::Known(header)) => {
-						let _ = reader.set_read_timeout(Some(BODY_IO_TIMEOUT));
-						let msg = Message::from_header(header, &mut reader, version);
-
-						trace!(
-							"Received message header, type {:?}, len {}.",
-							msg.header.msg_type,
-							msg.header.msg_len
-						);
-
-						// Increase received bytes counter
-						reader_tracker.inc_received(MsgHeader::LEN as u64 + msg.header.msg_len);
-
-						let resp_msg = try_break!(handler.consume(
-							msg,
-							reader_stopped.clone(),
-							reader_tracker.clone()
-						));
-						if let Some(Some(resp_msg)) = resp_msg {
-							try_break!(conn_handle.send(resp_msg));
-						}
-					}
-					Some(MsgHeaderWrapper::Unknown(msg_len, type_byte)) => {
-						debug!(
-							"Received unknown message header, type {:?}, len {}.",
-							type_byte, msg_len
-						);
-						// Increase received bytes counter
-						reader_tracker.inc_received(MsgHeader::LEN as u64 + msg_len);
-
-						try_break!(read_discard(msg_len, &mut reader));
-					}
-					None => {}
-				}
-
 				// check the close channel
 				if reader_stopped.load(Ordering::Relaxed) {
 					break;
 				}
+
+				// check the read end
+				let (next, bytes_read) = codec.read();
+
+				// increase the appropriate counter
+				match &next {
+					Ok(Message::Attachment(_, _)) => reader_tracker.inc_quiet_received(bytes_read),
+					_ => reader_tracker.inc_received(bytes_read),
+				}
+
+				let message = match try_break!(next) {
+					Some(Message::Unknown(type_byte)) => {
+						debug!(
+							"Received unknown message, type {:?}, len {}.",
+							type_byte, bytes_read
+						);
+						continue;
+					}
+					Some(Message::Attachment(update, bytes)) => {
+						let a = match &mut attachment {
+							Some(a) => a,
+							None => {
+								error!("Received unexpected attachment chunk");
+								break;
+							}
+						};
+
+						let bytes = bytes.unwrap();
+						if let Err(e) = a.write_all(&bytes) {
+							error!("Unable to write attachment file: {}", e);
+							break;
+						}
+						if update.left == 0 {
+							if let Err(e) = a.sync_all() {
+								error!("Unable to sync attachment file: {}", e);
+								break;
+							}
+							attachment.take();
+						}
+
+						Message::Attachment(update, None)
+					}
+					Some(message) => {
+						trace!("Received message, type {}, len {}.", message, bytes_read);
+						message
+					}
+					None => continue,
+				};
+
+				let consumed = try_break!(handler.consume(message)).unwrap_or(Consumed::None);
+				match consumed {
+					Consumed::Response(resp_msg) => {
+						try_break!(conn_handle.send(resp_msg));
+					}
+					Consumed::Attachment(meta, file) => {
+						// Start attachment
+						codec.expect_attachment(meta);
+						attachment = Some(file);
+					}
+					Consumed::Disconnect => break,
+					Consumed::None => {}
+				}
 			}
 
-			debug!(
-				"Shutting down reader connection with {}",
-				reader
-					.peer_addr()
-					.map(|a| a.to_string())
-					.unwrap_or_else(|_| "?".to_owned())
-			);
-			let _ = reader.shutdown(Shutdown::Both);
+			debug!("Shutting down reader connection with {}", peer_addr);
+			let _ = codec.stream().shutdown(Shutdown::Both);
 		})?;
 
 	let writer_thread = thread::Builder::new()

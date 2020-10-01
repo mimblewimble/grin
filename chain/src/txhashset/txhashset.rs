@@ -19,7 +19,7 @@ use crate::core::consensus::WEEK_HEIGHT;
 use crate::core::core::committed::Committed;
 use crate::core::core::hash::{Hash, Hashed};
 use crate::core::core::merkle_proof::MerkleProof;
-use crate::core::core::pmmr::{self, Backend, ReadonlyPMMR, RewindablePMMR, PMMR};
+use crate::core::core::pmmr::{self, Backend, ReadablePMMR, ReadonlyPMMR, RewindablePMMR, PMMR};
 use crate::core::core::{Block, BlockHeader, KernelFeatures, Output, OutputIdentifier, TxKernel};
 use crate::core::global;
 use crate::core::ser::{PMMRable, ProtocolVersion};
@@ -380,11 +380,11 @@ impl TxHashSet {
 
 		TxHashSetRoots {
 			output_roots: OutputRoots {
-				pmmr_root: output_pmmr.root(),
+				pmmr_root: output_pmmr.root().expect("no root, invalid tree"),
 				bitmap_root: self.bitmap_accumulator.root(),
 			},
-			rproof_root: rproof_pmmr.root(),
-			kernel_root: kernel_pmmr.root(),
+			rproof_root: rproof_pmmr.root().expect("no root, invalid tree"),
+			kernel_root: kernel_pmmr.root().expect("no root, invalid tree"),
 		}
 	}
 
