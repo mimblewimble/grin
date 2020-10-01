@@ -19,8 +19,8 @@ use crate::core::core::hash::{Hash, Hashed, ZERO_HASH};
 use crate::core::core::merkle_proof::MerkleProof;
 use crate::core::core::verifier_cache::VerifierCache;
 use crate::core::core::{
-	Block, BlockHeader, BlockSums, Chunk, ChunkIdentifier, Committed, Inputs, KernelFeatures,
-	Output, OutputIdentifier, Transaction, TxKernel,
+	Block, BlockHeader, BlockSums, Committed, Inputs, KernelFeatures, Output, OutputIdentifier,
+	Segment, SegmentIdentifier, Transaction, TxKernel,
 };
 use crate::core::global;
 use crate::core::pow;
@@ -1264,8 +1264,8 @@ impl Chain {
 
 	pub fn get_output_segment(
 		&self,
-		identifier: ChunkIdentifier,
-	) -> Result<Chunk<OutputIdentifier>, Error> {
+		identifier: SegmentIdentifier,
+	) -> Result<Segment<OutputIdentifier>, Error> {
 		self.txhashset.read().build_output_segment(identifier)
 	}
 

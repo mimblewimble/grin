@@ -284,7 +284,7 @@ impl TxHashSet {
 	pub fn build_output_segment(
 		&self,
 		segment_id: SegmentIdentifier,
-	) -> Result<Chunk<OutputIdentifier>, Error> {
+	) -> Result<Segment<OutputIdentifier>, Error> {
 		let pmmr: ReadonlyPMMR<'_, OutputIdentifier, _> =
 			ReadonlyPMMR::at(&self.output_pmmr_h.backend, self.output_pmmr_h.last_pos);
 
