@@ -715,8 +715,13 @@ impl<I: Iterator<Item = Arc<Peer>>> PeersIter<I> {
 	}
 
 	/// Filter peers that support the provided capabilities.
-	pub fn with_capabilities(self, cap: Capabilities) -> Self {
-		unimplemented!("not yet implemented!")
+	pub fn with_capabilities(
+		self,
+		cap: Capabilities,
+	) -> PeersIter<impl Iterator<Item = Arc<Peer>>> {
+		PeersIter {
+			iter: self.iter.filter(move |p| p.info.capabilities.contains(cap)),
+		}
 	}
 
 	pub fn by_addr(&mut self, addr: PeerAddr) -> Option<Arc<Peer>> {

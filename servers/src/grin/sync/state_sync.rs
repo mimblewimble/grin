@@ -19,7 +19,7 @@ use std::sync::Arc;
 use crate::chain::{self, SyncState, SyncStatus};
 use crate::core::core::hash::Hashed;
 use crate::core::global;
-use crate::p2p::{self, Peer};
+use crate::p2p::{self, Capabilities, Peer};
 
 /// Fast sync has 3 "states":
 /// * syncing headers
@@ -163,6 +163,7 @@ impl StateSync {
 			.peers
 			.peers_iter()
 			.outbound()
+			.with_capabilities(Capabilities::TXHASHSET_HIST)
 			.with_difficulty(max_diff)
 			.connected()
 			.choose_random();

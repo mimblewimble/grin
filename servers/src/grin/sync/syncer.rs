@@ -230,7 +230,7 @@ impl SyncRunner {
 		let local_diff = self.chain.head()?.total_difficulty;
 		let mut is_syncing = self.sync_state.is_syncing();
 
-		// Find a random peer to sync from.
+		// Find a peer with greatest known difficulty.
 		let max_diff = self.peers.max_peer_difficulty();
 		let peer = self
 			.peers

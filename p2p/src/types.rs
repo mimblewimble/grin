@@ -266,6 +266,7 @@ pub struct P2PConfig {
 	/// The list of seed nodes, if using Seeding as a seed type
 	pub seeds: Option<PeerAddrs>,
 
+	/// TODO: Rethink this. We need to separate what *we* advertise vs. who we connect to.
 	/// Capabilities expose by this node, also conditions which other peers this
 	/// node will have an affinity toward when connection.
 	pub capabilities: Capabilities,

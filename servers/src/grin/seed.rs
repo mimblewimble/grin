@@ -208,10 +208,14 @@ fn monitor_peers(
 		return;
 	}
 
-	// loop over connected peers
+	// loop over connected peers that can provide peer lists
 	// ask them for their list of peers
 	let mut connected_peers: Vec<PeerAddr> = vec![];
-	for p in peers.peers_iter().connected() {
+	for p in peers
+		.peers_iter()
+		.with_capabilities(p2p::Capabilities::PEER_LIST)
+		.connected()
+	{
 		trace!(
 			"monitor_peers: {}:{} ask {} for more peers",
 			config.host,
@@ -341,9 +345,10 @@ fn listen_for_addrs(
 			.name("peer_connect".to_string())
 			.spawn(move || match p2p_c.connect(addr) {
 				Ok(p) => {
-					if p.send_peer_request(capab).is_ok() {
-						let _ = peers_c.update_state(addr, p2p::State::Healthy);
+					if p.info.capabilities.contains(p2p::Capabilities::PEER_LIST) {
+						let _ = p.send_peer_request(capab);
 					}
+					let _ = peers_c.update_state(addr, p2p::State::Healthy);
 				}
 				Err(_) => {
 					let _ = peers_c.update_state(addr, p2p::State::Defunct);

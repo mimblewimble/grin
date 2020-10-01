@@ -19,7 +19,7 @@ use std::sync::Arc;
 use crate::chain::{self, SyncState, SyncStatus};
 use crate::common::types::Error;
 use crate::core::core::hash::{Hash, Hashed};
-use crate::p2p::{self, types::ReasonForBan, Peer};
+use crate::p2p::{self, types::ReasonForBan, Capabilities, Peer};
 
 pub struct HeaderSync {
 	sync_state: Arc<SyncState>,
@@ -175,6 +175,7 @@ impl HeaderSync {
 				.peers
 				.peers_iter()
 				.outbound()
+				.with_capabilities(Capabilities::HEADER_HIST)
 				.with_difficulty(max_diff)
 				.connected()
 				.choose_random();
