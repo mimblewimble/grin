@@ -16,8 +16,7 @@
 
 use chrono::Utc;
 use num::FromPrimitive;
-use rand::seq::SliceRandom;
-use rand::thread_rng;
+use rand::prelude::*;
 
 use crate::core::ser::{self, Readable, Reader, Writeable, Writer};
 use crate::types::{Capabilities, PeerAddr, ReasonForBan};
@@ -146,31 +145,28 @@ impl PeerStore {
 		batch.commit()
 	}
 
+	/// Find some peers in our local db.
 	pub fn find_peers(
 		&self,
 		state: State,
 		cap: Capabilities,
 		count: usize,
 	) -> Result<Vec<PeerData>, Error> {
-		let mut peers = self
+		let key = to_key(PEER_PREFIX, "");
+		let peers = self
 			.db
-			.iter::<PeerData>(&to_key(PEER_PREFIX, ""))?
+			.iter::<PeerData>(&key)?
 			.map(|(_, v)| v)
 			.filter(|p| p.flags == state && p.capabilities.contains(cap))
-			.collect::<Vec<_>>();
-		peers[..].shuffle(&mut thread_rng());
-		Ok(peers.iter().take(count).cloned().collect())
+			.choose_multiple(&mut thread_rng(), count);
+		Ok(peers)
 	}
 
 	/// List all known peers
 	/// Used for /v1/peers/all api endpoint
 	pub fn all_peers(&self) -> Result<Vec<PeerData>, Error> {
 		let key = to_key(PEER_PREFIX, "");
-		Ok(self
-			.db
-			.iter::<PeerData>(&key)?
-			.map(|(_, v)| v)
-			.collect::<Vec<_>>())
+		Ok(self.db.iter::<PeerData>(&key)?.map(|(_, v)| v).collect())
 	}
 
 	/// Convenience method to load a peer data, update its status and save it
