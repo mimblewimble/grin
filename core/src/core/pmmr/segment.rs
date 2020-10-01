@@ -13,7 +13,7 @@
 // limitations under the License.
 
 use crate::core::hash::Hash;
-use crate::core::pmmr::{self, Backend, ReadonlyPMMR};
+use crate::core::pmmr::{self, Backend, ReadablePMMR, ReadonlyPMMR};
 use crate::ser::{PMMRIndexHashable, PMMRable, Readable, Writeable};
 use croaring::Bitmap;
 use std::cmp::min;
@@ -21,141 +21,141 @@ use std::collections::HashMap;
 use std::fmt::{self, Debug};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub enum ChunkError {
+pub enum SegmentError {
 	MissingLeaf(u64),
 	MissingHash(u64),
 	Empty,
 	NotFound,
 }
 
-impl fmt::Display for ChunkError {
+impl fmt::Display for SegmentError {
 	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
 		match self {
-			ChunkError::MissingLeaf(idx) => write!(f, "Missing leaf at pos {}", idx),
-			ChunkError::MissingHash(idx) => write!(f, "Missing hash at pos {}", idx),
-			ChunkError::Empty => write!(f, "Chunk is empty"),
-			ChunkError::NotFound => write!(f, "Chunk not found"),
+			SegmentError::MissingLeaf(idx) => write!(f, "Missing leaf at pos {}", idx),
+			SegmentError::MissingHash(idx) => write!(f, "Missing hash at pos {}", idx),
+			SegmentError::Empty => write!(f, "Segment is empty"),
+			SegmentError::NotFound => write!(f, "Segment not found"),
 		}
 	}
 }
 
 #[derive(Copy, Clone)]
-pub struct ChunkIdentifier {
+pub struct SegmentIdentifier {
 	pub block_hash: Hash,
 	pub log_size: u8,
 	pub idx: u64,
 }
 
-pub struct Chunk<T> {
-	identifier: ChunkIdentifier,
+pub struct Segment<T> {
+	identifier: SegmentIdentifier,
 	pub hashes: HashMap<u64, Hash>,
 	pub leaf_data: HashMap<u64, T>,
-	proof: ChunkProof,
+	proof: SegmentProof,
 }
 
-impl<T> Chunk<T>
+impl<T> Segment<T>
 where
 	T: Readable + Writeable + Debug,
 {
 	pub fn from_pmmr<U, B>(
-		chunk_id: ChunkIdentifier,
+		segment_id: SegmentIdentifier,
 		pmmr: ReadonlyPMMR<'_, U, B>,
-	) -> Result<Self, ChunkError>
+	) -> Result<Self, SegmentError>
 	where
 		U: PMMRable<E = T>,
 		B: Backend<U>,
 	{
-		let mut chunk = Chunk {
-			identifier: chunk_id,
+		let mut segment = Segment {
+			identifier: segment_id,
 			hashes: HashMap::new(),
 			leaf_data: HashMap::new(),
-			proof: ChunkProof { hashes: Vec::new() },
+			proof: SegmentProof { hashes: Vec::new() },
 		};
 
 		let last_pos = pmmr.unpruned_size();
-		if chunk.chunk_size(last_pos) == 0 {
-			return Err(ChunkError::NotFound);
+		if segment.segment_size(last_pos) == 0 {
+			return Err(SegmentError::NotFound);
 		}
 
-		// Fill leave data and hashes
-		let (chunk_first_pos, chunk_last_pos) = chunk.chunk_pos_range(last_pos);
-		for pos in chunk_first_pos..=chunk_last_pos {
+		// Fill leaf data and hashes
+		let (segment_first_pos, segment_last_pos) = segment.segment_pos_range(last_pos);
+		for pos in segment_first_pos..=segment_last_pos {
 			if pmmr::is_leaf(pos) {
 				if let Some(data) = pmmr.get_data(pos) {
-					chunk.leaf_data.insert(pos, data);
+					segment.leaf_data.insert(pos, data);
 				}
 			}
 			// TODO: optimize, no need to send every intermediary hash
 			if let Some(hash) = pmmr.get_hash(pos) {
-				chunk.hashes.insert(pos, hash);
+				segment.hashes.insert(pos, hash);
 			}
 		}
 
-		// Chunk merkle proof
-		let family_branch = pmmr::family_branch(chunk_last_pos, last_pos);
+		// Segment merkle proof
+		let family_branch = pmmr::family_branch(segment_last_pos, last_pos);
 
 		// 1. siblings along the path from the subtree root to the peak
 		let hashes: Result<Vec<_>, _> = family_branch
 			.iter()
-			.map(|&(_, s)| pmmr.get_hash(s).ok_or_else(|| ChunkError::MissingHash(s)))
+			.map(|&(_, s)| pmmr.get_hash(s).ok_or_else(|| SegmentError::MissingHash(s)))
 			.collect();
-		chunk.proof.hashes = hashes?;
+		segment.proof.hashes = hashes?;
 
 		// 2. bagged peaks to the right
 		let peak_pos = family_branch
 			.last()
 			.map(|&(p, _)| p)
-			.unwrap_or(chunk_last_pos);
+			.unwrap_or(segment_last_pos);
 		if let Some(h) = pmmr.bag_the_rhs(peak_pos) {
-			chunk.proof.hashes.push(h);
+			segment.proof.hashes.push(h);
 		}
 
 		// 3. peaks to the left
 		let peaks: Result<Vec<_>, _> = pmmr::peaks(last_pos)
 			.into_iter()
 			.filter(|x| *x < peak_pos)
-			.map(|p| pmmr.get_hash(p).ok_or_else(|| ChunkError::MissingHash(p)))
+			.map(|p| pmmr.get_hash(p).ok_or_else(|| SegmentError::MissingHash(p)))
 			.collect();
 		let mut peaks = peaks?;
 		peaks.reverse();
-		chunk.proof.hashes.extend(peaks);
+		segment.proof.hashes.extend(peaks);
 
-		Ok(chunk)
+		Ok(segment)
 	}
 }
 
-impl<T> Chunk<T> {
-	/// Maximum number of leaves in a chunk, given by `2**b`
+impl<T> Segment<T> {
+	/// Maximum number of leaves in a segment, given by `2**b`
 	#[inline]
-	fn chunk_capacity(&self) -> u64 {
+	fn segment_capacity(&self) -> u64 {
 		1u64 << self.identifier.log_size
 	}
 
-	/// Offset (in leaf idx) of first leaf in the chunk
+	/// Offset (in leaf idx) of first leaf in the segment
 	#[inline]
 	fn leaf_offset(&self) -> u64 {
-		self.identifier.idx * self.chunk_capacity()
+		self.identifier.idx * self.segment_capacity()
 	}
 
-	/// Number of leaves in this chunk. Equal to capacity except for the final chunk, which can be smaller
+	/// Number of leaves in this segment. Equal to capacity except for the final segment, which can be smaller
 	#[inline]
-	fn chunk_size(&self, last_pos: u64) -> u64 {
+	fn segment_size(&self, last_pos: u64) -> u64 {
 		min(
-			self.chunk_capacity(),
+			self.segment_capacity(),
 			pmmr::n_leaves(last_pos).saturating_sub(self.leaf_offset()),
 		)
 	}
 
-	/// Inclusive range of MMR positions for this chunk
+	/// Inclusive range of MMR positions for this segment
 	#[inline]
-	fn chunk_pos_range(&self, last_pos: u64) -> (u64, u64) {
-		let chunk_size = self.chunk_size(last_pos);
+	fn segment_pos_range(&self, last_pos: u64) -> (u64, u64) {
+		let segment_size = self.segment_size(last_pos);
 		let leaf_offset = self.leaf_offset();
 		let first = pmmr::insertion_to_pmmr_index(leaf_offset + 1);
-		let last = if self.chunk_capacity() < chunk_size {
+		let last = if self.segment_capacity() < segment_size {
 			last_pos
 		} else {
-			pmmr::insertion_to_pmmr_index(leaf_offset + chunk_size)
+			pmmr::insertion_to_pmmr_index(leaf_offset + segment_size)
 				+ (self.identifier.log_size as u64)
 		};
 
@@ -163,15 +163,15 @@ impl<T> Chunk<T> {
 	}
 }
 
-impl<T> Chunk<T>
+impl<T> Segment<T>
 where
 	T: PMMRIndexHashable,
 {
-	/// Calculate root hash of this chunk
-	pub fn root(&self, last_pos: u64, bitmap: Option<&Bitmap>) -> Result<Hash, ChunkError> {
-		let (chunk_first_pos, chunk_last_pos) = self.chunk_pos_range(last_pos);
+	/// Calculate root hash of this segment
+	pub fn root(&self, last_pos: u64, bitmap: Option<&Bitmap>) -> Result<Hash, SegmentError> {
+		let (segment_first_pos, segment_last_pos) = self.segment_pos_range(last_pos);
 		let mut hashes = HashMap::with_capacity(2 * (self.identifier.log_size as usize + 1));
-		for pos in chunk_first_pos..=chunk_last_pos {
+		for pos in segment_first_pos..=segment_last_pos {
 			let height = pmmr::bintree_postorder_height(pos);
 			if height == 0 {
 				// Leaf
@@ -184,7 +184,7 @@ where
 					let data = self
 						.leaf_data
 						.get(&pos)
-						.ok_or_else(|| ChunkError::MissingLeaf(pos))?;
+						.ok_or_else(|| SegmentError::MissingLeaf(pos))?;
 					hashes.insert(pos, data.hash_with_index(pos - 1));
 				};
 			} else {
@@ -202,18 +202,18 @@ where
 					match (l, r) {
 						(Some(l), Some(r)) => (l, r),
 						(None, Some(_)) if height > 1 => {
-							return Err(ChunkError::MissingHash(left_child_pos))
+							return Err(SegmentError::MissingHash(left_child_pos))
 						}
 						(Some(_), None) if height > 1 => {
-							return Err(ChunkError::MissingHash(right_child_pos))
+							return Err(SegmentError::MissingHash(right_child_pos))
 						}
 						_ => continue,
 					}
 				} else {
 					// Non-prunable MMR
 					(
-						left_child.ok_or_else(|| ChunkError::MissingHash(left_child_pos))?,
-						right_child.ok_or_else(|| ChunkError::MissingHash(right_child_pos))?,
+						left_child.ok_or_else(|| SegmentError::MissingHash(left_child_pos))?,
+						right_child.ok_or_else(|| SegmentError::MissingHash(right_child_pos))?,
 					)
 				};
 
@@ -222,34 +222,34 @@ where
 			}
 		}
 
-		// TODO: bag peaks for final chunk
+		// TODO: bag peaks for final segment
 		hashes
-			.remove(&chunk_last_pos)
-			.ok_or_else(|| ChunkError::MissingHash(chunk_last_pos))
+			.remove(&segment_last_pos)
+			.ok_or_else(|| SegmentError::MissingHash(segment_last_pos))
 	}
 
 	pub fn validate(&self, last_pos: u64, bitmap: Option<&Bitmap>, mmr_root: Hash) -> bool {
-		if let Ok(chunk_root) = self.root(last_pos, bitmap) {
-			let (_, chunk_root_pos) = self.chunk_pos_range(last_pos);
+		if let Ok(segment_root) = self.root(last_pos, bitmap) {
+			let (_, segment_root_pos) = self.segment_pos_range(last_pos);
 			self.proof
-				.validate(last_pos, mmr_root, chunk_root_pos, chunk_root)
+				.validate(last_pos, mmr_root, segment_root_pos, segment_root)
 		} else {
 			false
 		}
 	}
 }
 
-pub struct ChunkProof {
+pub struct SegmentProof {
 	hashes: Vec<Hash>,
 }
 
-impl ChunkProof {
+impl SegmentProof {
 	pub fn validate(
 		&self,
 		last_pos: u64,
 		mmr_root: Hash,
-		chunk_root_pos: u64,
-		chunk_root: Hash,
+		segment_root_pos: u64,
+		segment_root: Hash,
 	) -> bool {
 		unimplemented!()
 	}

@@ -37,10 +37,10 @@
 //! either be a simple Vec or a database.
 
 mod backend;
-pub mod chunk;
 mod pmmr;
 mod readonly_pmmr;
 mod rewindable_pmmr;
+pub mod segment;
 mod vec_backend;
 
 pub use self::backend::*;

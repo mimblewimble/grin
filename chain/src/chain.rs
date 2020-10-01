@@ -1262,12 +1262,11 @@ impl Chain {
 		Ok(())
 	}
 
-	pub fn get_output_chunk(
+	pub fn get_output_segment(
 		&self,
 		identifier: ChunkIdentifier,
 	) -> Result<Chunk<OutputIdentifier>, Error> {
-		let txhashset = self.txhashset.read();
-		txhashset.build_output_chunk(identifier)
+		self.txhashset.read().build_output_segment(identifier)
 	}
 
 	/// returns the last n nodes inserted into the output sum tree

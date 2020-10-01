@@ -32,7 +32,7 @@ use crate::types::{CommitPos, OutputRoots, Tip, TxHashSetRoots, TxHashsetWriteSt
 use crate::util::secp::pedersen::{Commitment, RangeProof};
 use crate::util::{file, secp_static, zip};
 use croaring::Bitmap;
-use grin_core::core::{Chunk, ChunkIdentifier};
+use grin_core::core::{Segment, SegmentIdentifier};
 use grin_store;
 use grin_store::pmmr::{clean_files_by_prefix, PMMRBackend};
 use std::fs::{self, File};
@@ -281,14 +281,14 @@ impl TxHashSet {
 		}
 	}
 
-	pub fn build_output_chunk(
+	pub fn build_output_segment(
 		&self,
-		chunk_id: ChunkIdentifier,
+		segment_id: SegmentIdentifier,
 	) -> Result<Chunk<OutputIdentifier>, Error> {
 		let pmmr: ReadonlyPMMR<'_, OutputIdentifier, _> =
 			ReadonlyPMMR::at(&self.output_pmmr_h.backend, self.output_pmmr_h.last_pos);
 
-		Chunk::from_pmmr(chunk_id, pmmr).map_err(|e| e.into())
+		Segment::from_pmmr(segment_id, pmmr).map_err(|e| e.into())
 	}
 
 	/// returns the last N nodes inserted into the tree (i.e. the 'bottom'
