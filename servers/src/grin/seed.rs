@@ -179,8 +179,9 @@ fn monitor_peers(
 	let max_diff = peers.max_peer_difficulty();
 	let most_work_count = peers
 		.peers_iter()
-		.connected()
+		.outbound()
 		.with_difficulty(max_diff)
+		.connected()
 		.count();
 
 	debug!(

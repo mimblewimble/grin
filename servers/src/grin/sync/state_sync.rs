@@ -162,8 +162,9 @@ impl StateSync {
 		let peer = self
 			.peers
 			.peers_iter()
-			.connected()
+			.outbound()
 			.with_difficulty(max_diff)
+			.connected()
 			.choose_random();
 		if let Some(peer) = peer {
 			// ask for txhashset at state_sync_threshold

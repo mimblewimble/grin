@@ -83,8 +83,9 @@ impl SyncRunner {
 			let wp = self
 				.peers
 				.peers_iter()
-				.connected()
+				.outbound()
 				.with_difficulty(head.total_difficulty)
+				.connected()
 				.count();
 
 			// exit loop when:
@@ -234,8 +235,9 @@ impl SyncRunner {
 		let peer = self
 			.peers
 			.peers_iter()
-			.connected()
+			.outbound()
 			.with_difficulty(max_diff)
+			.connected()
 			.choose_random();
 
 		let peer_info = if let Some(p) = peer {

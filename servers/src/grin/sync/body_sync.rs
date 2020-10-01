@@ -97,8 +97,9 @@ impl BodySync {
 		let peers: Vec<_> = self
 			.peers
 			.peers_iter()
-			.connected()
+			.outbound()
 			.with_difficulty(head.total_difficulty + Difficulty::from_num(1))
+			.connected()
 			.into_iter()
 			.collect();
 

@@ -353,7 +353,7 @@ impl Peers {
 		}
 
 		// closure to build an iterator of our inbound peers
-		let outbound_peers = || self.peers_iter().connected().outbound().into_iter();
+		let outbound_peers = || self.peers_iter().outbound().connected().into_iter();
 
 		// check here to make sure we don't have too many outgoing connections
 		let excess_outgoing_count = outbound_peers().count().saturating_sub(max_outbound_count);
@@ -367,7 +367,7 @@ impl Peers {
 		}
 
 		// closure to build an iterator of our inbound peers
-		let inbound_peers = || self.peers_iter().connected().inbound().into_iter();
+		let inbound_peers = || self.peers_iter().inbound().connected().into_iter();
 
 		// check here to make sure we don't have too many incoming connections
 		let excess_incoming_count = inbound_peers().count().saturating_sub(max_inbound_count);
@@ -408,7 +408,7 @@ impl Peers {
 
 	/// We have enough outbound connected peers
 	pub fn enough_outbound_peers(&self) -> bool {
-		self.peers_iter().connected().outbound().count()
+		self.peers_iter().outbound().connected().count()
 			>= self.config.peer_min_preferred_outbound_count() as usize
 	}
 
@@ -682,30 +682,39 @@ impl<I: Iterator> IntoIterator for PeersIter<I> {
 }
 
 impl<I: Iterator<Item = Arc<Peer>>> PeersIter<I> {
+	/// Filter peers that are currently connected.
+	/// Note: This adaptor takes a read lock internally.
+	/// So if we are chaining adaptors then defer this toward the end of the chain.
 	pub fn connected(self) -> PeersIter<impl Iterator<Item = Arc<Peer>>> {
 		PeersIter {
 			iter: self.iter.filter(|p| p.is_connected()),
 		}
 	}
 
+	/// Filter inbound peers.
 	pub fn inbound(self) -> PeersIter<impl Iterator<Item = Arc<Peer>>> {
 		PeersIter {
 			iter: self.iter.filter(|p| p.info.is_inbound()),
 		}
 	}
 
+	/// Filter outbound peers.
 	pub fn outbound(self) -> PeersIter<impl Iterator<Item = Arc<Peer>>> {
 		PeersIter {
 			iter: self.iter.filter(|p| p.info.is_outbound()),
 		}
 	}
 
+	/// Filter peers having greater than or equal to the provided difficulty.
+	/// Note: This adaptor takes a read lock internally.
+	/// So if we are chaining adaptors then defer this toward the end of the chain.
 	pub fn with_difficulty(self, diff: Difficulty) -> PeersIter<impl Iterator<Item = Arc<Peer>>> {
 		PeersIter {
 			iter: self.iter.filter(move |p| p.info.total_difficulty() >= diff),
 		}
 	}
 
+	/// Filter peers that support the provided capabilities.
 	pub fn with_capabilities(self, cap: Capabilities) -> Self {
 		unimplemented!("not yet implemented!")
 	}
@@ -714,15 +723,18 @@ impl<I: Iterator<Item = Arc<Peer>>> PeersIter<I> {
 		self.iter.find(|p| p.info.addr == addr)
 	}
 
+	/// Choose a random peer from the current (filtered) peers.
 	pub fn choose_random(self) -> Option<Arc<Peer>> {
 		let mut rng = rand::thread_rng();
 		self.iter.choose(&mut rng)
 	}
 
+	/// Find the max difficulty of the current (filtered) peers.
 	pub fn max_difficulty(self) -> Option<Difficulty> {
 		self.iter.map(|p| p.info.total_difficulty()).max()
 	}
 
+	/// Count the current (filtered) peers.
 	pub fn count(self) -> usize {
 		self.iter.count()
 	}

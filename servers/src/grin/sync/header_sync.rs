@@ -174,8 +174,9 @@ impl HeaderSync {
 			let peer = self
 				.peers
 				.peers_iter()
-				.connected()
+				.outbound()
 				.with_difficulty(max_diff)
+				.connected()
 				.choose_random();
 			if let Some(peer) = peer {
 				if peer.info.total_difficulty() > header_head.total_difficulty {
