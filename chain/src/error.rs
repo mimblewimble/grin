@@ -19,7 +19,6 @@ use crate::keychain;
 use crate::util::secp;
 use crate::util::secp::pedersen::Commitment;
 use failure::{Backtrace, Context, Fail};
-use grin_core::core::SegmentError;
 use grin_store as store;
 use std::fmt::{self, Display};
 use std::io;
@@ -120,9 +119,6 @@ pub enum ErrorKind {
 	/// Error with the txhashset
 	#[fail(display = "TxHashSetErr: {}", _0)]
 	TxHashSetErr(String),
-	/// Error during creation or validation of a mmr segment
-	#[fail(display = "SegmentErr: {}", _0)]
-	SegmentErr(SegmentError),
 	/// Tx not valid based on lock_height.
 	#[fail(display = "Transaction Lock Height")]
 	TxLockHeight,
@@ -196,7 +192,6 @@ impl Error {
 			| ErrorKind::StoreErr(_, _)
 			| ErrorKind::SerErr(_)
 			| ErrorKind::TxHashSetErr(_)
-			| ErrorKind::SegmentErr(_)
 			| ErrorKind::GenesisBlockRequired
 			| ErrorKind::Other(_) => false,
 			_ => true,
@@ -274,14 +269,6 @@ impl From<secp::Error> for Error {
 	fn from(e: secp::Error) -> Error {
 		Error {
 			inner: Context::new(ErrorKind::Secp(e)),
-		}
-	}
-}
-
-impl From<SegmentError> for Error {
-	fn from(e: SegmentError) -> Error {
-		Error {
-			inner: Context::new(ErrorKind::SegmentErr(e)),
 		}
 	}
 }
