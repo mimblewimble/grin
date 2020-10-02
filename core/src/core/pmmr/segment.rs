@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+//! Segment of a PMMR.
+
 use crate::core::hash::Hash;
 use crate::core::pmmr::{self, Backend, ReadablePMMR, ReadonlyPMMR};
 use crate::ser::{PMMRIndexHashable, PMMRable, Readable, Writeable};
@@ -21,11 +23,15 @@ use std::collections::HashMap;
 use std::fmt::{self, Debug};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
+/// Error related to segment creation or validation
 pub enum SegmentError {
+	/// An expected leaf was missing
 	MissingLeaf(u64),
+	/// An expected hash was missing
 	MissingHash(u64),
-	Empty,
-	NotFound,
+	/// The segment does not exist
+	NonExistent,
+	/// Mismatch between expected and actual root hash
 	Mismatch,
 }
 
@@ -34,24 +40,28 @@ impl fmt::Display for SegmentError {
 		match self {
 			SegmentError::MissingLeaf(idx) => write!(f, "Missing leaf at pos {}", idx),
 			SegmentError::MissingHash(idx) => write!(f, "Missing hash at pos {}", idx),
-			SegmentError::Empty => write!(f, "Segment is empty"),
-			SegmentError::NotFound => write!(f, "Segment not found"),
+			SegmentError::NonExistent => write!(f, "Segment does not exist"),
 			SegmentError::Mismatch => write!(f, "Root hash mismatch"),
 		}
 	}
 }
 
+/// Tuple that defines a segment of a given PMMR
 #[derive(Copy, Clone, Debug)]
 pub struct SegmentIdentifier {
+	/// 2-Log of the size of a segment
 	pub log_size: u8,
+	/// Zero-based index of the segment
 	pub idx: u64,
 }
 
+/// Segment of a PMMR: unpruned leaves and the necessary data to verify
+/// segment membership in the original MMR.
 #[derive(Debug)]
 pub struct Segment<T> {
 	identifier: SegmentIdentifier,
-	pub hashes: HashMap<u64, Hash>,
-	pub leaf_data: HashMap<u64, T>,
+	hashes: HashMap<u64, Hash>,
+	leaf_data: HashMap<u64, T>,
 	proof: SegmentProof,
 }
 
@@ -104,6 +114,7 @@ impl<T> Segment<T>
 where
 	T: Readable + Writeable + Debug,
 {
+	/// Generate a segment from a PMMR
 	pub fn from_pmmr<U, B>(
 		segment_id: SegmentIdentifier,
 		pmmr: &ReadonlyPMMR<'_, U, B>,
@@ -121,7 +132,7 @@ where
 
 		let last_pos = pmmr.unpruned_size();
 		if segment.segment_size(last_pos) == 0 {
-			return Err(SegmentError::NotFound);
+			return Err(SegmentError::NonExistent);
 		}
 
 		// Fill leaf data and hashes
@@ -230,6 +241,7 @@ where
 		}
 	}
 
+	/// Check validity of the segment by calculating its root and validating the merkle proof
 	pub fn validate(
 		&self,
 		last_pos: u64,
@@ -294,6 +306,7 @@ impl SegmentProof {
 		Ok(proof)
 	}
 
+	/// Reconstruct PMMR root using this proof
 	pub fn reconstruct_root(
 		&self,
 		last_pos: u64,
@@ -344,13 +357,13 @@ impl SegmentProof {
 				iter.next().ok_or_else(|| SegmentError::MissingHash(pos))?,
 				root,
 			)
-				.hash_with_index(last_pos)
+				.hash_with_index(last_pos);
 		}
 
 		Ok(root)
 	}
 
-	/// Check validity of the proof
+	/// Check validity of the proof by equating the reconstructed root with the actual root
 	pub fn validate(
 		&self,
 		last_pos: u64,
