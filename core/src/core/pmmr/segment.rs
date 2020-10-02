@@ -41,13 +41,13 @@ impl fmt::Display for SegmentError {
 	}
 }
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Debug)]
 pub struct SegmentIdentifier {
-	pub block_hash: Hash,
 	pub log_size: u8,
 	pub idx: u64,
 }
 
+#[derive(Debug)]
 pub struct Segment<T> {
 	identifier: SegmentIdentifier,
 	pub hashes: HashMap<u64, Hash>,
@@ -59,7 +59,7 @@ impl<T> Segment<T> {
 	/// Maximum number of leaves in a segment, given by `2**b`
 	#[inline]
 	fn segment_capacity(&self) -> u64 {
-		1u64 << self.identifier.log_size
+		1 << self.identifier.log_size
 	}
 
 	/// Offset (in leaf idx) of first leaf in the segment
@@ -77,17 +77,23 @@ impl<T> Segment<T> {
 		)
 	}
 
+	/// Whether the segment is full (size == capacity)
+	#[inline]
+	fn full_segment(&self, last_pos: u64) -> bool {
+		self.segment_size(last_pos) == self.segment_capacity()
+	}
+
 	/// Inclusive range of MMR positions for this segment
 	#[inline]
 	fn segment_pos_range(&self, last_pos: u64) -> (u64, u64) {
 		let segment_size = self.segment_size(last_pos);
 		let leaf_offset = self.leaf_offset();
 		let first = pmmr::insertion_to_pmmr_index(leaf_offset + 1);
-		let last = if self.segment_capacity() < segment_size {
-			last_pos
-		} else {
+		let last = if self.full_segment(last_pos) {
 			pmmr::insertion_to_pmmr_index(leaf_offset + segment_size)
 				+ (self.identifier.log_size as u64)
+		} else {
+			last_pos
 		};
 
 		(first, last)
@@ -100,7 +106,7 @@ where
 {
 	pub fn from_pmmr<U, B>(
 		segment_id: SegmentIdentifier,
-		pmmr: ReadonlyPMMR<'_, U, B>,
+		pmmr: &ReadonlyPMMR<'_, U, B>,
 	) -> Result<Self, SegmentError>
 	where
 		U: PMMRable<E = T>,
@@ -169,7 +175,7 @@ where
 				let right_child_pos = pos - 1;
 
 				let left_child = hashes.remove(&left_child_pos);
-				let right_child = hashes.remove(&left_child_pos);
+				let right_child = hashes.remove(&right_child_pos);
 
 				// TODO: edge cases
 				let (left_child, right_child) = if bitmap.is_some() {
@@ -199,10 +205,29 @@ where
 			}
 		}
 
-		// TODO: bag peaks for final segment
-		hashes
-			.remove(&segment_last_pos)
-			.ok_or_else(|| SegmentError::MissingHash(segment_last_pos))
+		if self.full_segment(last_pos) {
+			// Full segment: last position of segment is subtree root
+			hashes
+				.remove(&segment_last_pos)
+				.ok_or_else(|| SegmentError::MissingHash(segment_last_pos))
+		} else {
+			// Final segment not full: peaks in segment, bag them together
+			let peaks = pmmr::peaks(last_pos)
+				.into_iter()
+				.filter(|&pos| pos >= segment_first_pos && pos <= segment_last_pos)
+				.rev();
+			let mut hash = None;
+			for pos in peaks {
+				let lhash = hashes
+					.remove(&pos)
+					.ok_or_else(|| SegmentError::MissingHash(segment_last_pos))?;
+				hash = match hash {
+					None => Some(lhash),
+					Some(rhash) => Some((lhash, rhash).hash_with_index(last_pos)),
+				};
+			}
+			hash.ok_or_else(|| SegmentError::MissingHash(0))
+		}
 	}
 
 	pub fn validate(
@@ -219,6 +244,7 @@ where
 }
 
 /// Merkle proof of a segment
+#[derive(Debug)]
 pub struct SegmentProof {
 	hashes: Vec<Hash>,
 }
@@ -229,7 +255,7 @@ impl SegmentProof {
 	}
 
 	fn generate<U, B>(
-		pmmr: ReadonlyPMMR<'_, U, B>,
+		pmmr: &ReadonlyPMMR<'_, U, B>,
 		last_pos: u64,
 		segment_first_pos: u64,
 		segment_last_pos: u64,
@@ -260,11 +286,11 @@ impl SegmentProof {
 		let peaks: Result<Vec<_>, _> = pmmr::peaks(last_pos)
 			.into_iter()
 			.filter(|&x| x < segment_first_pos)
+			.rev()
 			.map(|p| pmmr.get_hash(p).ok_or_else(|| SegmentError::MissingHash(p)))
 			.collect();
-		let mut peaks = peaks?;
-		peaks.reverse();
-		proof.hashes.extend(peaks);
+		proof.hashes.extend(peaks?);
+
 		Ok(proof)
 	}
 
@@ -311,7 +337,8 @@ impl SegmentProof {
 		// 3. peaks to the left
 		let peaks = pmmr::peaks(last_pos)
 			.into_iter()
-			.filter(|&x| x < segment_first_pos);
+			.filter(|&x| x < segment_first_pos)
+			.rev();
 		for pos in peaks {
 			root = (
 				iter.next().ok_or_else(|| SegmentError::MissingHash(pos))?,
