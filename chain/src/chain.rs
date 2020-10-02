@@ -20,7 +20,7 @@ use crate::core::core::merkle_proof::MerkleProof;
 use crate::core::core::verifier_cache::VerifierCache;
 use crate::core::core::{
 	Block, BlockHeader, BlockSums, Committed, Inputs, KernelFeatures, Output, OutputIdentifier,
-	Segment, SegmentIdentifier, Transaction, TxKernel,
+	Transaction, TxKernel,
 };
 use crate::core::global;
 use crate::core::pow;
@@ -1260,13 +1260,6 @@ impl Chain {
 		batch.commit()?;
 
 		Ok(())
-	}
-
-	pub fn get_output_segment(
-		&self,
-		identifier: SegmentIdentifier,
-	) -> Result<Segment<OutputIdentifier>, Error> {
-		self.txhashset.read().build_output_segment(identifier)
 	}
 
 	/// returns the last n nodes inserted into the output sum tree
