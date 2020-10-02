@@ -26,6 +26,7 @@ pub enum SegmentError {
 	MissingHash(u64),
 	Empty,
 	NotFound,
+	Mismatch,
 }
 
 impl fmt::Display for SegmentError {
@@ -35,6 +36,7 @@ impl fmt::Display for SegmentError {
 			SegmentError::MissingHash(idx) => write!(f, "Missing hash at pos {}", idx),
 			SegmentError::Empty => write!(f, "Segment is empty"),
 			SegmentError::NotFound => write!(f, "Segment not found"),
+			SegmentError::Mismatch => write!(f, "Root hash mismatch"),
 		}
 	}
 }
@@ -51,77 +53,6 @@ pub struct Segment<T> {
 	pub hashes: HashMap<u64, Hash>,
 	pub leaf_data: HashMap<u64, T>,
 	proof: SegmentProof,
-}
-
-impl<T> Segment<T>
-where
-	T: Readable + Writeable + Debug,
-{
-	pub fn from_pmmr<U, B>(
-		segment_id: SegmentIdentifier,
-		pmmr: ReadonlyPMMR<'_, U, B>,
-	) -> Result<Self, SegmentError>
-	where
-		U: PMMRable<E = T>,
-		B: Backend<U>,
-	{
-		let mut segment = Segment {
-			identifier: segment_id,
-			hashes: HashMap::new(),
-			leaf_data: HashMap::new(),
-			proof: SegmentProof { hashes: Vec::new() },
-		};
-
-		let last_pos = pmmr.unpruned_size();
-		if segment.segment_size(last_pos) == 0 {
-			return Err(SegmentError::NotFound);
-		}
-
-		// Fill leaf data and hashes
-		let (segment_first_pos, segment_last_pos) = segment.segment_pos_range(last_pos);
-		for pos in segment_first_pos..=segment_last_pos {
-			if pmmr::is_leaf(pos) {
-				if let Some(data) = pmmr.get_data(pos) {
-					segment.leaf_data.insert(pos, data);
-				}
-			}
-			// TODO: optimize, no need to send every intermediary hash
-			if let Some(hash) = pmmr.get_hash(pos) {
-				segment.hashes.insert(pos, hash);
-			}
-		}
-
-		// Segment merkle proof
-		let family_branch = pmmr::family_branch(segment_last_pos, last_pos);
-
-		// 1. siblings along the path from the subtree root to the peak
-		let hashes: Result<Vec<_>, _> = family_branch
-			.iter()
-			.map(|&(_, s)| pmmr.get_hash(s).ok_or_else(|| SegmentError::MissingHash(s)))
-			.collect();
-		segment.proof.hashes = hashes?;
-
-		// 2. bagged peaks to the right
-		let peak_pos = family_branch
-			.last()
-			.map(|&(p, _)| p)
-			.unwrap_or(segment_last_pos);
-		if let Some(h) = pmmr.bag_the_rhs(peak_pos) {
-			segment.proof.hashes.push(h);
-		}
-
-		// 3. peaks to the left
-		let peaks: Result<Vec<_>, _> = pmmr::peaks(last_pos)
-			.into_iter()
-			.filter(|x| *x < peak_pos)
-			.map(|p| pmmr.get_hash(p).ok_or_else(|| SegmentError::MissingHash(p)))
-			.collect();
-		let mut peaks = peaks?;
-		peaks.reverse();
-		segment.proof.hashes.extend(peaks);
-
-		Ok(segment)
-	}
 }
 
 impl<T> Segment<T> {
@@ -165,6 +96,52 @@ impl<T> Segment<T> {
 
 impl<T> Segment<T>
 where
+	T: Readable + Writeable + Debug,
+{
+	pub fn from_pmmr<U, B>(
+		segment_id: SegmentIdentifier,
+		pmmr: ReadonlyPMMR<'_, U, B>,
+	) -> Result<Self, SegmentError>
+	where
+		U: PMMRable<E = T>,
+		B: Backend<U>,
+	{
+		let mut segment = Segment {
+			identifier: segment_id,
+			hashes: HashMap::new(),
+			leaf_data: HashMap::new(),
+			proof: SegmentProof::empty(),
+		};
+
+		let last_pos = pmmr.unpruned_size();
+		if segment.segment_size(last_pos) == 0 {
+			return Err(SegmentError::NotFound);
+		}
+
+		// Fill leaf data and hashes
+		let (segment_first_pos, segment_last_pos) = segment.segment_pos_range(last_pos);
+		for pos in segment_first_pos..=segment_last_pos {
+			if pmmr::is_leaf(pos) {
+				if let Some(data) = pmmr.get_data(pos) {
+					segment.leaf_data.insert(pos, data);
+				}
+			}
+			// TODO: optimize, no need to send every intermediary hash
+			if let Some(hash) = pmmr.get_hash(pos) {
+				segment.hashes.insert(pos, hash);
+			}
+		}
+
+		// Segment merkle proof
+		segment.proof =
+			SegmentProof::generate(pmmr, last_pos, segment_first_pos, segment_last_pos)?;
+
+		Ok(segment)
+	}
+}
+
+impl<T> Segment<T>
+where
 	T: PMMRIndexHashable,
 {
 	/// Calculate root hash of this segment
@@ -195,7 +172,7 @@ where
 				let right_child = hashes.remove(&left_child_pos);
 
 				// TODO: edge cases
-				let (left_child, right_child) = if let Some(b) = bitmap {
+				let (left_child, right_child) = if bitmap.is_some() {
 					// Prunable MMR
 					let l = left_child.or_else(|| self.hashes.get(&left_child_pos).map(|h| *h));
 					let r = right_child.or_else(|| self.hashes.get(&right_child_pos).map(|h| *h));
@@ -210,7 +187,7 @@ where
 						_ => continue,
 					}
 				} else {
-					// Non-prunable MMR
+					// Non-prunable MMR: require both children
 					(
 						left_child.ok_or_else(|| SegmentError::MissingHash(left_child_pos))?,
 						right_child.ok_or_else(|| SegmentError::MissingHash(right_child_pos))?,
@@ -228,29 +205,139 @@ where
 			.ok_or_else(|| SegmentError::MissingHash(segment_last_pos))
 	}
 
-	pub fn validate(&self, last_pos: u64, bitmap: Option<&Bitmap>, mmr_root: Hash) -> bool {
-		if let Ok(segment_root) = self.root(last_pos, bitmap) {
-			let (_, segment_root_pos) = self.segment_pos_range(last_pos);
-			self.proof
-				.validate(last_pos, mmr_root, segment_root_pos, segment_root)
-		} else {
-			false
-		}
+	pub fn validate(
+		&self,
+		last_pos: u64,
+		bitmap: Option<&Bitmap>,
+		mmr_root: Hash,
+	) -> Result<(), SegmentError> {
+		let (first, last) = self.segment_pos_range(last_pos);
+		let segment_root = self.root(last_pos, bitmap)?;
+		self.proof
+			.validate(last_pos, mmr_root, first, last, segment_root)
 	}
 }
 
+/// Merkle proof of a segment
 pub struct SegmentProof {
 	hashes: Vec<Hash>,
 }
 
 impl SegmentProof {
+	fn empty() -> Self {
+		Self { hashes: Vec::new() }
+	}
+
+	fn generate<U, B>(
+		pmmr: ReadonlyPMMR<'_, U, B>,
+		last_pos: u64,
+		segment_first_pos: u64,
+		segment_last_pos: u64,
+	) -> Result<Self, SegmentError>
+	where
+		U: PMMRable,
+		B: Backend<U>,
+	{
+		let family_branch = pmmr::family_branch(segment_last_pos, last_pos);
+
+		// 1. siblings along the path from the subtree root to the peak
+		let hashes: Result<Vec<_>, _> = family_branch
+			.iter()
+			.map(|&(_, s)| pmmr.get_hash(s).ok_or_else(|| SegmentError::MissingHash(s)))
+			.collect();
+		let mut proof = Self { hashes: hashes? };
+
+		// 2. bagged peaks to the right
+		let peak_pos = family_branch
+			.last()
+			.map(|&(p, _)| p)
+			.unwrap_or(segment_last_pos);
+		if let Some(h) = pmmr.bag_the_rhs(peak_pos) {
+			proof.hashes.push(h);
+		}
+
+		// 3. peaks to the left
+		let peaks: Result<Vec<_>, _> = pmmr::peaks(last_pos)
+			.into_iter()
+			.filter(|&x| x < segment_first_pos)
+			.map(|p| pmmr.get_hash(p).ok_or_else(|| SegmentError::MissingHash(p)))
+			.collect();
+		let mut peaks = peaks?;
+		peaks.reverse();
+		proof.hashes.extend(peaks);
+		Ok(proof)
+	}
+
+	pub fn reconstruct_root(
+		&self,
+		last_pos: u64,
+		segment_first_pos: u64,
+		segment_last_pos: u64,
+		segment_root: Hash,
+	) -> Result<Hash, SegmentError> {
+		let mut iter = self.hashes.iter();
+		let family_branch = pmmr::family_branch(segment_last_pos, last_pos);
+
+		// 1. siblings along the path from the subtree root to the peak
+		let mut root = segment_root;
+		for &(p, s) in &family_branch {
+			let sibling_hash = iter.next().ok_or_else(|| SegmentError::MissingHash(s))?;
+			root = if pmmr::is_left_sibling(s) {
+				(sibling_hash, root).hash_with_index(p - 1)
+			} else {
+				(root, sibling_hash).hash_with_index(p - 1)
+			};
+		}
+
+		// 2. bagged peaks to the right
+		let peak_pos = family_branch
+			.last()
+			.map(|&(p, _)| p)
+			.unwrap_or(segment_last_pos);
+
+		let rhs = pmmr::peaks(last_pos)
+			.into_iter()
+			.filter(|&x| x > peak_pos)
+			.next();
+
+		if let Some(pos) = rhs {
+			root = (
+				root,
+				iter.next().ok_or_else(|| SegmentError::MissingHash(pos))?,
+			)
+				.hash_with_index(last_pos)
+		}
+
+		// 3. peaks to the left
+		let peaks = pmmr::peaks(last_pos)
+			.into_iter()
+			.filter(|&x| x < segment_first_pos);
+		for pos in peaks {
+			root = (
+				iter.next().ok_or_else(|| SegmentError::MissingHash(pos))?,
+				root,
+			)
+				.hash_with_index(last_pos)
+		}
+
+		Ok(root)
+	}
+
+	/// Check validity of the proof
 	pub fn validate(
 		&self,
 		last_pos: u64,
 		mmr_root: Hash,
-		segment_root_pos: u64,
+		segment_first_pos: u64,
+		segment_last_pos: u64,
 		segment_root: Hash,
-	) -> bool {
-		unimplemented!()
+	) -> Result<(), SegmentError> {
+		let root =
+			self.reconstruct_root(last_pos, segment_first_pos, segment_last_pos, segment_root)?;
+		if root == mmr_root {
+			Ok(())
+		} else {
+			Err(SegmentError::Mismatch)
+		}
 	}
 }
