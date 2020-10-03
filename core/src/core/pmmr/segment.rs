@@ -108,6 +108,13 @@ impl<T> Segment<T> {
 
 		(first, last)
 	}
+
+	fn require_hash(&self, pos: u64) -> Result<Hash, SegmentError> {
+		self.hashes
+			.get(&pos)
+			.map(|h| *h)
+			.ok_or_else(|| SegmentError::MissingHash(pos))
+	}
 }
 
 impl<T> Segment<T>
@@ -164,10 +171,11 @@ where
 	/// Calculate root hash of this segment
 	pub fn root(&self, last_pos: u64, bitmap: Option<&Bitmap>) -> Result<Hash, SegmentError> {
 		let (segment_first_pos, segment_last_pos) = self.segment_pos_range(last_pos);
-		let mut hashes = HashMap::with_capacity(2 * (self.identifier.log_size as usize + 1));
+		let mut hashes =
+			Vec::<Option<Hash>>::with_capacity(2 * (self.identifier.log_size as usize));
 		for pos in segment_first_pos..=segment_last_pos {
 			let height = pmmr::bintree_postorder_height(pos);
-			if height == 0 {
+			let hash = if height == 0 {
 				// Leaf
 				if bitmap
 					.map(|b| b.contains((pmmr::n_leaves(pos) - 1) as u32))
@@ -179,47 +187,55 @@ where
 						.leaf_data
 						.get(&pos)
 						.ok_or_else(|| SegmentError::MissingLeaf(pos))?;
-					hashes.insert(pos, data.hash_with_index(pos - 1));
-				};
+					Some(data.hash_with_index(pos - 1))
+				} else {
+					None
+				}
 			} else {
 				let left_child_pos = pos - (1 << height);
 				let right_child_pos = pos - 1;
 
-				let left_child = hashes.remove(&left_child_pos);
-				let right_child = hashes.remove(&right_child_pos);
+				let right_child = hashes.pop().unwrap();
+				let left_child = hashes.pop().unwrap();
 
-				// TODO: edge cases
-				let (left_child, right_child) = if bitmap.is_some() {
+				if bitmap.is_some() {
 					// Prunable MMR
-					let l = left_child.or_else(|| self.hashes.get(&left_child_pos).map(|h| *h));
-					let r = right_child.or_else(|| self.hashes.get(&right_child_pos).map(|h| *h));
-					match (l, r) {
-						(Some(l), Some(r)) => (l, r),
-						(None, Some(_)) if height > 1 => {
-							return Err(SegmentError::MissingHash(left_child_pos))
+					match (left_child, right_child) {
+						(None, None) => None,
+						(Some(l), Some(r)) => Some((l, r).hash_with_index(pos - 1)),
+						_ if height == 1 => {
+							// TODO: verify this is correct behaviour
+							Some(self.require_hash(pos)?)
 						}
-						(Some(_), None) if height > 1 => {
-							return Err(SegmentError::MissingHash(right_child_pos))
+						(None, Some(r)) => {
+							let l = self.require_hash(left_child_pos)?;
+							Some((l, r).hash_with_index(pos - 1))
 						}
-						_ => continue,
+						(Some(l), None) => {
+							let r = self.require_hash(right_child_pos)?;
+							Some((l, r).hash_with_index(pos - 1))
+						}
 					}
 				} else {
 					// Non-prunable MMR: require both children
-					(
-						left_child.ok_or_else(|| SegmentError::MissingHash(left_child_pos))?,
-						right_child.ok_or_else(|| SegmentError::MissingHash(right_child_pos))?,
+					Some(
+						(
+							left_child.ok_or_else(|| SegmentError::MissingHash(left_child_pos))?,
+							right_child
+								.ok_or_else(|| SegmentError::MissingHash(right_child_pos))?,
+						)
+							.hash_with_index(pos - 1),
 					)
-				};
-
-				let hash = (left_child, right_child).hash_with_index(pos - 1);
-				hashes.insert(pos, hash);
-			}
+				}
+			};
+			hashes.push(hash);
 		}
 
 		if self.full_segment(last_pos) {
 			// Full segment: last position of segment is subtree root
 			hashes
-				.remove(&segment_last_pos)
+				.pop()
+				.flatten()
 				.ok_or_else(|| SegmentError::MissingHash(segment_last_pos))
 		} else {
 			// Final segment not full: peaks in segment, bag them together
@@ -229,9 +245,13 @@ where
 				.rev();
 			let mut hash = None;
 			for pos in peaks {
-				let lhash = hashes
-					.remove(&pos)
-					.ok_or_else(|| SegmentError::MissingHash(segment_last_pos))?;
+				let mut lhash = hashes.pop().ok_or_else(|| SegmentError::MissingHash(pos))?;
+				if lhash.is_none() && bitmap.is_some() {
+					// If this entire peak is pruned, load it from the segment hashes
+					lhash = self.hashes.get(&pos).map(|h| *h);
+				}
+				let lhash = lhash.ok_or_else(|| SegmentError::MissingHash(pos))?;
+
 				hash = match hash {
 					None => Some(lhash),
 					Some(rhash) => Some((lhash, rhash).hash_with_index(last_pos)),
