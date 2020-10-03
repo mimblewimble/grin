@@ -20,38 +20,42 @@ use common::TestElem;
 use grin_core as core;
 use grin_core::core::pmmr::ReadablePMMR;
 
-fn test_unprunable_size(n_leaves: u64) {
-	let log_size = 2;
+fn test_unprunable_size(log_size: u8, n_leaves: u32) {
 	let size = 1u64 << log_size;
-	let n_segments = (n_leaves + size - 1) / size;
+	let n_segments = (n_leaves as u64 + size - 1) / size;
 
 	// Build an MMR with n_leaves leaves
 	let mut ba = pmmr::VecBackend::new();
-	let mut pmmr = pmmr::PMMR::new(&mut ba);
-	for i in 0..(n_leaves as u32) {
-		pmmr.push(&TestElem([i / 7, i / 5, i / 3, i])).unwrap();
+	let mut mmr = pmmr::PMMR::new(&mut ba);
+	for i in 0..n_leaves {
+		mmr.push(&TestElem([i / 7, i / 5, i / 3, i])).unwrap();
 	}
-	let rpmmr = pmmr.readonly_pmmr();
-	let root = rpmmr.root().unwrap();
+	let mmr = mmr.readonly_pmmr();
+	let last_pos = mmr.unpruned_size();
+	let root = mmr.root().unwrap();
 
 	for idx in 0..n_segments {
 		let id = SegmentIdentifier { log_size, idx };
-		let segment = Segment::from_pmmr(id, &rpmmr).unwrap();
+		let segment = Segment::from_pmmr(id, &mmr).unwrap();
 		println!(
 			"\n\n>>>>>>> N_LEAVES = {}, LAST_POS = {}, SEGMENT = {}:\n{:#?}",
-			n_leaves,
-			rpmmr.unpruned_size(),
-			idx,
-			segment
+			n_leaves, last_pos, idx, segment
 		);
-		segment.validate(pmmr.last_pos, None, root).unwrap();
+		if idx < n_segments - 1 || (n_leaves as u64) % size == 0 {
+			// Check if the reconstructed subtree root matches with the hash stored in the mmr
+			let subtree_root = segment.root(last_pos, None).unwrap();
+			let last = pmmr::insertion_to_pmmr_index((idx + 1) * size) + (log_size as u64);
+			assert_eq!(subtree_root, mmr.get_hash(last).unwrap());
+			println!(" ROOT OK");
+		}
+		segment.validate(last_pos, None, root).unwrap();
 		println!(" PROOF OK");
 	}
 }
 
 #[test]
-fn unprunable_pmmr() {
+fn unprunable_mmr() {
 	for i in 1..=64 {
-		test_unprunable_size(i);
+		test_unprunable_size(3, i);
 	}
 }

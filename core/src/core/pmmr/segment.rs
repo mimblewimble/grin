@@ -82,7 +82,7 @@ impl<T> Segment<T> {
 
 	/// Number of leaves in this segment. Equal to capacity except for the final segment, which can be smaller
 	#[inline]
-	fn segment_size(&self, last_pos: u64) -> u64 {
+	fn segment_unpruned_size(&self, last_pos: u64) -> u64 {
 		min(
 			self.segment_capacity(),
 			pmmr::n_leaves(last_pos).saturating_sub(self.leaf_offset()),
@@ -92,13 +92,13 @@ impl<T> Segment<T> {
 	/// Whether the segment is full (size == capacity)
 	#[inline]
 	fn full_segment(&self, last_pos: u64) -> bool {
-		self.segment_size(last_pos) == self.segment_capacity()
+		self.segment_unpruned_size(last_pos) == self.segment_capacity()
 	}
 
 	/// Inclusive range of MMR positions for this segment
 	#[inline]
 	fn segment_pos_range(&self, last_pos: u64) -> (u64, u64) {
-		let segment_size = self.segment_size(last_pos);
+		let segment_size = self.segment_unpruned_size(last_pos);
 		let leaf_offset = self.leaf_offset();
 		let first = pmmr::insertion_to_pmmr_index(leaf_offset + 1);
 		let last = if self.full_segment(last_pos) {
@@ -140,7 +140,7 @@ where
 		};
 
 		let last_pos = pmmr.unpruned_size();
-		if segment.segment_size(last_pos) == 0 {
+		if segment.segment_unpruned_size(last_pos) == 0 {
 			return Err(SegmentError::NonExistent);
 		}
 
