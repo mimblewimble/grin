@@ -19,7 +19,6 @@ use crate::core::pmmr::{self, Backend, ReadablePMMR, ReadonlyPMMR};
 use crate::ser::{PMMRIndexHashable, PMMRable, Readable, Writeable};
 use croaring::Bitmap;
 use std::cmp::min;
-use std::collections::HashMap;
 use std::fmt::{self, Debug};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -31,6 +30,8 @@ pub enum SegmentError {
 	MissingHash(u64),
 	/// The segment does not exist
 	NonExistent,
+	/// The segment is fully pruned
+	Pruned,
 	/// Mismatch between expected and actual root hash
 	Mismatch,
 }
@@ -41,6 +42,7 @@ impl fmt::Display for SegmentError {
 			SegmentError::MissingLeaf(idx) => write!(f, "Missing leaf at pos {}", idx),
 			SegmentError::MissingHash(idx) => write!(f, "Missing hash at pos {}", idx),
 			SegmentError::NonExistent => write!(f, "Segment does not exist"),
+			SegmentError::Pruned => write!(f, "Segment is fully pruned"),
 			SegmentError::Mismatch => write!(f, "Root hash mismatch"),
 		}
 	}
@@ -60,8 +62,8 @@ pub struct SegmentIdentifier {
 #[derive(Debug)]
 pub struct Segment<T> {
 	identifier: SegmentIdentifier,
-	hashes: HashMap<u64, Hash>,
-	leaf_data: HashMap<u64, T>,
+	hashes: Vec<(u64, Hash)>,
+	leaf_data: Vec<(u64, T)>,
 	proof: SegmentProof,
 }
 
@@ -109,11 +111,11 @@ impl<T> Segment<T> {
 		(first, last)
 	}
 
-	fn require_hash(&self, pos: u64) -> Result<Hash, SegmentError> {
+	fn get_hash(&self, pos: u64) -> Result<Hash, SegmentError> {
 		self.hashes
-			.get(&pos)
-			.map(|h| *h)
-			.ok_or_else(|| SegmentError::MissingHash(pos))
+			.binary_search_by(|&(p, _)| p.cmp(&pos))
+			.map(|p| self.hashes[p].1)
+			.map_err(|_| SegmentError::MissingHash(pos))
 	}
 }
 
@@ -132,8 +134,8 @@ where
 	{
 		let mut segment = Segment {
 			identifier: segment_id,
-			hashes: HashMap::new(),
-			leaf_data: HashMap::new(),
+			hashes: Vec::new(),
+			leaf_data: Vec::new(),
 			proof: SegmentProof::empty(),
 		};
 
@@ -147,13 +149,17 @@ where
 		for pos in segment_first_pos..=segment_last_pos {
 			if pmmr::is_leaf(pos) {
 				if let Some(data) = pmmr.get_data(pos) {
-					segment.leaf_data.insert(pos, data);
+					segment.leaf_data.push((pos, data));
 				}
 			}
 			// TODO: optimize, no need to send every intermediary hash
 			if let Some(hash) = pmmr.get_hash(pos) {
-				segment.hashes.insert(pos, hash);
+				segment.hashes.push((pos, hash));
 			}
+		}
+
+		if segment.leaf_data.is_empty() {
+			return Err(SegmentError::Pruned);
 		}
 
 		// Segment merkle proof
@@ -173,6 +179,7 @@ where
 		let (segment_first_pos, segment_last_pos) = self.segment_pos_range(last_pos);
 		let mut hashes =
 			Vec::<Option<Hash>>::with_capacity(2 * (self.identifier.log_size as usize));
+		let mut leaves = self.leaf_data.iter();
 		for pos in segment_first_pos..=segment_last_pos {
 			let height = pmmr::bintree_postorder_height(pos);
 			let hash = if height == 0 {
@@ -183,9 +190,9 @@ where
 				{
 					// We require the data of this leaf if either the mmr is not prunable or if
 					// the bitmap indicates it should be here
-					let data = self
-						.leaf_data
-						.get(&pos)
+					let data = leaves
+						.find(|&&(p, _)| p == pos)
+						.map(|(_, l)| l)
 						.ok_or_else(|| SegmentError::MissingLeaf(pos))?;
 					Some(data.hash_with_index(pos - 1))
 				} else {
@@ -205,14 +212,14 @@ where
 						(Some(l), Some(r)) => Some((l, r).hash_with_index(pos - 1)),
 						_ if height == 1 => {
 							// TODO: verify this is correct behaviour
-							Some(self.require_hash(pos)?)
+							Some(self.get_hash(pos)?)
 						}
 						(None, Some(r)) => {
-							let l = self.require_hash(left_child_pos)?;
+							let l = self.get_hash(left_child_pos)?;
 							Some((l, r).hash_with_index(pos - 1))
 						}
 						(Some(l), None) => {
-							let r = self.require_hash(right_child_pos)?;
+							let r = self.get_hash(right_child_pos)?;
 							Some((l, r).hash_with_index(pos - 1))
 						}
 					}
@@ -238,7 +245,7 @@ where
 				.flatten()
 				.ok_or_else(|| SegmentError::MissingHash(segment_last_pos))
 		} else {
-			// Final segment not full: peaks in segment, bag them together
+			// Not full (only final segment): peaks in segment, bag them together
 			let peaks = pmmr::peaks(last_pos)
 				.into_iter()
 				.filter(|&pos| pos >= segment_first_pos && pos <= segment_last_pos)
@@ -248,7 +255,7 @@ where
 				let mut lhash = hashes.pop().ok_or_else(|| SegmentError::MissingHash(pos))?;
 				if lhash.is_none() && bitmap.is_some() {
 					// If this entire peak is pruned, load it from the segment hashes
-					lhash = self.hashes.get(&pos).map(|h| *h);
+					lhash = Some(self.get_hash(pos)?);
 				}
 				let lhash = lhash.ok_or_else(|| SegmentError::MissingHash(pos))?;
 
