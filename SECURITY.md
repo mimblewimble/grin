@@ -95,7 +95,7 @@ has - allowing the development team to accurately prioritize and resolve the iss
 
 In the case of a counterfeiting or privacy-breaking bug, however, we might decide
 not to include those details with our reports to partners ahead of coordinated
-release, so long as we are sure that they are vulnerable.
+release, as long as we are sure that they are not vulnerable to these.
 
 ## More Information
 
