@@ -150,6 +150,7 @@ where
 			if pmmr::is_leaf(pos) {
 				if let Some(data) = pmmr.get_data(pos) {
 					segment.leaf_data.push((pos, data));
+					continue;
 				}
 			}
 			// TODO: optimize, no need to send every intermediary hash
@@ -185,7 +186,7 @@ where
 			let hash = if height == 0 {
 				// Leaf
 				if bitmap
-					.map(|b| b.contains((pmmr::n_leaves(pos) - 1) as u32))
+					.map(|b| b.contains(pmmr::n_leaves(pos) as u32))
 					.unwrap_or(true)
 				{
 					// We require the data of this leaf if either the mmr is not prunable or if
