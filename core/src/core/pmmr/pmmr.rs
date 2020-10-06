@@ -34,6 +34,9 @@ pub trait ReadablePMMR {
 	/// Get the hash at provided position in the MMR.
 	fn get_hash(&self, pos: u64) -> Option<Hash>;
 
+	/// Get the hash of a leaf, ignoring the leaf set
+	fn get_leaf_hash(&self, pos: u64) -> Option<Hash>;
+
 	/// Get the data element at provided position in the MMR.
 	fn get_data(&self, pos: u64) -> Option<Self::Item>;
 
@@ -388,6 +391,14 @@ where
 		} else {
 			// If we are not a leaf get hash ignoring the remove log.
 			self.backend.get_from_file(pos)
+		}
+	}
+
+	fn get_leaf_hash(&self, pos: u64) -> Option<Hash> {
+		if pos <= self.last_pos && is_leaf(pos) {
+			self.backend.get_leaf_hash(pos)
+		} else {
+			None
 		}
 	}
 

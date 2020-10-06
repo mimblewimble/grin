@@ -39,6 +39,9 @@ pub trait Backend<T: PMMRable> {
 	/// Get a Hash by insertion position.
 	fn get_hash(&self, position: u64) -> Option<Hash>;
 
+	/// Get a leaf hash by insertion position, ignoring the leaf set
+	fn get_leaf_hash(&self, position: u64) -> Option<Hash>;
+
 	/// Get underlying data by insertion position.
 	fn get_data(&self, position: u64) -> Option<T::E>;
 

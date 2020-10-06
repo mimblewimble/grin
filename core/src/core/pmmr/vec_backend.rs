@@ -51,6 +51,15 @@ impl<T: PMMRable> Backend<T> for VecBackend<T> {
 		}
 	}
 
+	fn get_leaf_hash(&self, position: u64) -> Option<Hash> {
+		// Vec backend doesn't have a leaf set
+		if pmmr::is_leaf(position) {
+			self.get_hash(position)
+		} else {
+			None
+		}
+	}
+
 	fn get_data(&self, position: u64) -> Option<T::E> {
 		if self.removed.contains(&position) {
 			None

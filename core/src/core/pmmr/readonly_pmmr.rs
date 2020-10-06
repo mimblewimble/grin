@@ -127,6 +127,14 @@ where
 		}
 	}
 
+	fn get_leaf_hash(&self, pos: u64) -> Option<Hash> {
+		if pos <= self.last_pos && is_leaf(pos) {
+			self.backend.get_leaf_hash(pos)
+		} else {
+			None
+		}
+	}
+
 	fn get_data(&self, pos: u64) -> Option<Self::Item> {
 		if pos > self.last_pos {
 			// If we are beyond the rhs of the MMR return None.

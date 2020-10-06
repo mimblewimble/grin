@@ -118,6 +118,15 @@ impl<T: PMMRable> Backend<T> for PMMRBackend<T> {
 		self.get_from_file(pos)
 	}
 
+	/// Get the hash of a leaf at pos, ignoring the leaf set.
+	fn get_leaf_hash(&self, pos: u64) -> Option<Hash> {
+		if pmmr::is_leaf(pos) {
+			self.get_from_file(pos)
+		} else {
+			None
+		}
+	}
+
 	/// Get the data at pos.
 	/// Return None if it has been removed or if pos is not a leaf node.
 	fn get_data(&self, pos: u64) -> Option<T::E> {
