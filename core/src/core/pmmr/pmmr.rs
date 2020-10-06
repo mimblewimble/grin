@@ -26,6 +26,138 @@ use crate::ser::{PMMRIndexHashable, PMMRable};
 /// 64 bits all ones: 0b11111111...1
 const ALL_ONES: u64 = u64::MAX;
 
+/// Trait with common methods for reading from a PMMR
+pub trait ReadablePMMR {
+	/// Leaf type
+	type Item;
+
+	/// Get the hash at provided position in the MMR.
+	fn get_hash(&self, pos: u64) -> Option<Hash>;
+
+	/// Get the data element at provided position in the MMR.
+	fn get_data(&self, pos: u64) -> Option<Self::Item>;
+
+	/// Get the hash from the underlying MMR file (ignores the remove log).
+	fn get_from_file(&self, pos: u64) -> Option<Hash>;
+
+	/// Total size of the tree, including intermediary nodes and ignoring any pruning.
+	fn unpruned_size(&self) -> u64;
+
+	/// Iterator over current (unpruned, unremoved) leaf positions.
+	fn leaf_pos_iter(&self) -> Box<dyn Iterator<Item = u64> + '_>;
+
+	/// Iterator over current (unpruned, unremoved) leaf insertion indices.
+	fn leaf_idx_iter(&self, from_idx: u64) -> Box<dyn Iterator<Item = u64> + '_>;
+
+	/// Number of leaves in the MMR
+	fn n_unpruned_leaves(&self) -> u64;
+
+	/// Is the MMR empty?
+	fn is_empty(&self) -> bool {
+		self.unpruned_size() == 0
+	}
+
+	/// Takes a single peak position and hashes together
+	/// all the peaks to the right of this peak (if any).
+	/// If this return a hash then this is our peaks sibling.
+	/// If none then the sibling of our peak is the peak to the left.
+	fn bag_the_rhs(&self, peak_pos: u64) -> Option<Hash> {
+		let last_pos = self.unpruned_size();
+		let rhs = peaks(last_pos)
+			.into_iter()
+			.filter(|&x| x > peak_pos)
+			.filter_map(|x| self.get_from_file(x));
+
+		let mut res = None;
+		for peak in rhs.rev() {
+			res = match res {
+				None => Some(peak),
+				Some(rhash) => Some((peak, rhash).hash_with_index(last_pos)),
+			}
+		}
+		res
+	}
+
+	/// Returns a vec of the peaks of this MMR.
+	fn peaks(&self) -> Vec<Hash> {
+		peaks(self.unpruned_size())
+			.into_iter()
+			.filter_map(move |pi| {
+				// here we want to get from underlying hash file
+				// as the pos *may* have been "removed"
+				self.get_from_file(pi)
+			})
+			.collect()
+	}
+
+	/// Hashes of the peaks excluding `peak_pos`, where the rhs is bagged together
+	fn peak_path(&self, peak_pos: u64) -> Vec<Hash> {
+		let rhs = self.bag_the_rhs(peak_pos);
+		let mut res = peaks(self.unpruned_size())
+			.into_iter()
+			.filter(|&x| x < peak_pos)
+			.filter_map(|x| self.get_from_file(x))
+			.collect::<Vec<_>>();
+		if let Some(rhs) = rhs {
+			res.push(rhs);
+		}
+		res.reverse();
+
+		res
+	}
+
+	/// Computes the root of the MMR. Find all the peaks in the current
+	/// tree and "bags" them to get a single peak.
+	fn root(&self) -> Result<Hash, String> {
+		if self.is_empty() {
+			return Ok(ZERO_HASH);
+		}
+		let mut res = None;
+		let peaks = self.peaks();
+		for peak in peaks.into_iter().rev() {
+			res = match res {
+				None => Some(peak),
+				Some(rhash) => Some((peak, rhash).hash_with_index(self.unpruned_size())),
+			}
+		}
+		res.ok_or_else(|| "no root, invalid tree".to_owned())
+	}
+
+	/// Build a Merkle proof for the element at the given position.
+	fn merkle_proof(&self, pos: u64) -> Result<MerkleProof, String> {
+		let last_pos = self.unpruned_size();
+		debug!("merkle_proof  {}, last_pos {}", pos, last_pos);
+
+		// check this pos is actually a leaf in the MMR
+		if !is_leaf(pos) {
+			return Err(format!("not a leaf at pos {}", pos));
+		}
+
+		// check we actually have a hash in the MMR at this pos
+		self.get_hash(pos)
+			.ok_or_else(|| format!("no element at pos {}", pos))?;
+
+		let family_branch = family_branch(pos, last_pos);
+
+		let mut path = family_branch
+			.iter()
+			.filter_map(|x| self.get_from_file(x.1))
+			.collect::<Vec<_>>();
+
+		let peak_pos = match family_branch.last() {
+			Some(&(x, _)) => x,
+			None => pos,
+		};
+
+		path.append(&mut self.peak_path(peak_pos));
+
+		Ok(MerkleProof {
+			mmr_size: last_pos,
+			path,
+		})
+	}
+}
+
 /// Prunable Merkle Mountain Range implementation. All positions within the tree
 /// start at 1 as they're postorder tree traversal positions rather than array
 /// indices.
@@ -72,114 +204,6 @@ where
 	/// Build a "readonly" view of this PMMR.
 	pub fn readonly_pmmr(&self) -> ReadonlyPMMR<'_, T, B> {
 		ReadonlyPMMR::at(&self.backend, self.last_pos)
-	}
-
-	/// Iterator over current (unpruned, unremoved) leaf positions.
-	pub fn leaf_pos_iter(&self) -> impl Iterator<Item = u64> + '_ {
-		self.backend.leaf_pos_iter()
-	}
-
-	/// Number of leafs in the MMR
-	pub fn n_unpruned_leaves(&self) -> u64 {
-		self.backend.n_unpruned_leaves()
-	}
-
-	/// Iterator over current (unpruned, unremoved) leaf insertion indices.
-	pub fn leaf_idx_iter(&self, from_idx: u64) -> impl Iterator<Item = u64> + '_ {
-		self.backend.leaf_idx_iter(from_idx)
-	}
-
-	/// Returns a vec of the peaks of this MMR.
-	pub fn peaks(&self) -> impl DoubleEndedIterator<Item = Hash> + '_ {
-		let peaks_pos = peaks(self.last_pos);
-		peaks_pos.into_iter().filter_map(move |pi| {
-			// here we want to get from underlying hash file
-			// as the pos *may* have been "removed"
-			self.backend.get_from_file(pi)
-		})
-	}
-
-	fn peak_path(&self, peak_pos: u64) -> Vec<Hash> {
-		let rhs = self.bag_the_rhs(peak_pos);
-		let mut res = peaks(self.last_pos)
-			.into_iter()
-			.filter(|x| *x < peak_pos)
-			.filter_map(|x| self.backend.get_from_file(x))
-			.collect::<Vec<_>>();
-		if let Some(rhs) = rhs {
-			res.push(rhs);
-		}
-		res.reverse();
-
-		res
-	}
-
-	/// Takes a single peak position and hashes together
-	/// all the peaks to the right of this peak (if any).
-	/// If this return a hash then this is our peaks sibling.
-	/// If none then the sibling of our peak is the peak to the left.
-	pub fn bag_the_rhs(&self, peak_pos: u64) -> Option<Hash> {
-		let rhs = peaks(self.last_pos)
-			.into_iter()
-			.filter(|x| *x > peak_pos)
-			.filter_map(|x| self.backend.get_from_file(x));
-
-		let mut res = None;
-		for peak in rhs.rev() {
-			res = match res {
-				None => Some(peak),
-				Some(rhash) => Some((peak, rhash).hash_with_index(self.unpruned_size())),
-			}
-		}
-		res
-	}
-
-	/// Computes the root of the MMR. Find all the peaks in the current
-	/// tree and "bags" them to get a single peak.
-	pub fn root(&self) -> Result<Hash, String> {
-		if self.is_empty() {
-			return Ok(ZERO_HASH);
-		}
-		let mut res = None;
-		for peak in self.peaks().rev() {
-			res = match res {
-				None => Some(peak),
-				Some(rhash) => Some((peak, rhash).hash_with_index(self.unpruned_size())),
-			}
-		}
-		res.ok_or_else(|| "no root, invalid tree".to_owned())
-	}
-
-	/// Build a Merkle proof for the element at the given position.
-	pub fn merkle_proof(&self, pos: u64) -> Result<MerkleProof, String> {
-		debug!("merkle_proof  {}, last_pos {}", pos, self.last_pos);
-
-		// check this pos is actually a leaf in the MMR
-		if !is_leaf(pos) {
-			return Err(format!("not a leaf at pos {}", pos));
-		}
-
-		// check we actually have a hash in the MMR at this pos
-		self.get_hash(pos)
-			.ok_or_else(|| format!("no element at pos {}", pos))?;
-
-		let mmr_size = self.unpruned_size();
-
-		let family_branch = family_branch(pos, self.last_pos);
-
-		let mut path = family_branch
-			.iter()
-			.filter_map(|x| self.get_from_file(x.1))
-			.collect::<Vec<_>>();
-
-		let peak_pos = match family_branch.last() {
-			Some(&(x, _)) => x,
-			None => pos,
-		};
-
-		path.append(&mut self.peak_path(peak_pos));
-
-		Ok(MerkleProof { mmr_size, path })
 	}
 
 	/// Push a new element into the MMR. Computes new related peaks at
@@ -258,43 +282,6 @@ where
 		Ok(true)
 	}
 
-	/// Get the hash at provided position in the MMR.
-	pub fn get_hash(&self, pos: u64) -> Option<Hash> {
-		if pos > self.last_pos {
-			None
-		} else if is_leaf(pos) {
-			// If we are a leaf then get hash from the backend.
-			self.backend.get_hash(pos)
-		} else {
-			// If we are not a leaf get hash ignoring the remove log.
-			self.backend.get_from_file(pos)
-		}
-	}
-
-	/// Get the data element at provided position in the MMR.
-	pub fn get_data(&self, pos: u64) -> Option<T::E> {
-		if pos > self.last_pos {
-			// If we are beyond the rhs of the MMR return None.
-			None
-		} else if is_leaf(pos) {
-			// If we are a leaf then get data from the backend.
-			self.backend.get_data(pos)
-		} else {
-			// If we are not a leaf then return None as only leaves have data.
-			None
-		}
-	}
-
-	/// Get the hash from the underlying MMR file
-	/// (ignores the remove log).
-	fn get_from_file(&self, pos: u64) -> Option<Hash> {
-		if pos > self.last_pos {
-			None
-		} else {
-			self.backend.get_from_file(pos)
-		}
-	}
-
 	/// Walks all unpruned nodes in the MMR and revalidate all parent hashes
 	pub fn validate(&self) -> Result<(), String> {
 		// iterate on all parent nodes
@@ -321,17 +308,6 @@ where
 			}
 		}
 		Ok(())
-	}
-
-	/// Is the MMR empty?
-	pub fn is_empty(&self) -> bool {
-		self.last_pos == 0
-	}
-
-	/// Total size of the tree, including intermediary nodes and ignoring any
-	/// pruning.
-	pub fn unpruned_size(&self) -> u64 {
-		self.last_pos
 	}
 
 	/// Debugging utility to print information about the MMRs. Short version
@@ -393,6 +369,63 @@ where
 			debug!("{}", idx);
 			debug!("{}", hashes);
 		}
+	}
+}
+
+impl<'a, T, B> ReadablePMMR for PMMR<'a, T, B>
+where
+	T: PMMRable,
+	B: 'a + Backend<T>,
+{
+	type Item = T::E;
+
+	fn get_hash(&self, pos: u64) -> Option<Hash> {
+		if pos > self.last_pos {
+			None
+		} else if is_leaf(pos) {
+			// If we are a leaf then get hash from the backend.
+			self.backend.get_hash(pos)
+		} else {
+			// If we are not a leaf get hash ignoring the remove log.
+			self.backend.get_from_file(pos)
+		}
+	}
+
+	fn get_data(&self, pos: u64) -> Option<Self::Item> {
+		if pos > self.last_pos {
+			// If we are beyond the rhs of the MMR return None.
+			None
+		} else if is_leaf(pos) {
+			// If we are a leaf then get data from the backend.
+			self.backend.get_data(pos)
+		} else {
+			// If we are not a leaf then return None as only leaves have data.
+			None
+		}
+	}
+
+	fn get_from_file(&self, pos: u64) -> Option<Hash> {
+		if pos > self.last_pos {
+			None
+		} else {
+			self.backend.get_from_file(pos)
+		}
+	}
+
+	fn unpruned_size(&self) -> u64 {
+		self.last_pos
+	}
+
+	fn leaf_pos_iter(&self) -> Box<dyn Iterator<Item = u64> + '_> {
+		self.backend.leaf_pos_iter()
+	}
+
+	fn leaf_idx_iter(&self, from_idx: u64) -> Box<dyn Iterator<Item = u64> + '_> {
+		self.backend.leaf_idx_iter(from_idx)
+	}
+
+	fn n_unpruned_leaves(&self) -> u64 {
+		self.backend.n_unpruned_leaves()
 	}
 }
 

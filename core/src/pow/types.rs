@@ -471,15 +471,17 @@ impl Writeable for Proof {
 	}
 }
 
+/// A bit vector
 // TODO this could likely be optimized by writing whole bytes (or even words)
 // in the `BitVec` at once, dealing with the truncation, instead of bits by bits
-struct BitVec {
+pub struct BitVec {
 	bits: Vec<u8>,
 }
 
 impl BitVec {
 	/// Number of bytes required to store the provided number of bits
-	fn bytes_len(bits_len: usize) -> usize {
+	#[inline]
+	pub fn bytes_len(bits_len: usize) -> usize {
 		(bits_len + 7) / 8
 	}
 

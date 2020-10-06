@@ -15,6 +15,7 @@
 use grin_core as core;
 use grin_store as store;
 use grin_util as util;
+use store::SerIterator;
 
 use crate::core::global;
 use crate::core::ser::{self, Readable, Reader, Writeable, Writer};
@@ -66,8 +67,74 @@ fn setup(test_dir: &str) {
 }
 
 #[test]
+fn test_exists() -> Result<(), store::Error> {
+	let test_dir = "target/test_exists";
+	setup(test_dir);
+
+	let store = store::Store::new(test_dir, Some("test1"), None, None)?;
+
+	let key = [0, 0, 0, 1];
+	let value = [1, 1, 1, 1];
+
+	// Start new batch and insert a new key/value entry.
+	let batch = store.batch()?;
+	batch.put(&key, &value)?;
+
+	// Check we can see the new entry in uncommitted batch.
+	assert!(batch.exists(&key)?);
+
+	// Check we cannot see the new entry yet outside of the uncommitted batch.
+	assert!(!store.exists(&key)?);
+
+	batch.commit()?;
+
+	// Check we can see the new entry after committing the batch.
+	assert!(store.exists(&key)?);
+
+	clean_output_dir(test_dir);
+	Ok(())
+}
+
+#[test]
+fn test_iter() -> Result<(), store::Error> {
+	let test_dir = "target/test_iter";
+	setup(test_dir);
+
+	let store = store::Store::new(test_dir, Some("test1"), None, None)?;
+
+	let key = [0, 0, 0, 1];
+	let value = [1, 1, 1, 1];
+
+	// Start new batch and insert a new key/value entry.
+	let batch = store.batch()?;
+	batch.put(&key, &value)?;
+
+	// TODO - This is not currently possible (and we need to be aware of this).
+	// Currently our SerIterator is limited to using a ReadTransaction only.
+	//
+	// Check we can see the new entry via an iterator using the uncommitted batch.
+	// let mut iter: SerIterator<Vec<u8>> = batch.iter(&[0])?;
+	// assert_eq!(iter.next(), Some((key.to_vec(), value.to_vec())));
+	// assert_eq!(iter.next(), None);
+
+	// Check we can not yet see the new entry via an iterator outside the uncommitted batch.
+	let mut iter: SerIterator<Vec<u8>> = store.iter(&[0])?;
+	assert_eq!(iter.next(), None);
+
+	batch.commit()?;
+
+	// Check we can see the new entry via an iterator after committing the batch.
+	let mut iter: SerIterator<Vec<u8>> = store.iter(&[0])?;
+	assert_eq!(iter.next(), Some((key.to_vec(), value.to_vec())));
+	assert_eq!(iter.next(), None);
+
+	clean_output_dir(test_dir);
+	Ok(())
+}
+
+#[test]
 fn lmdb_allocate() -> Result<(), store::Error> {
-	let test_dir = "test_output/lmdb_allocate";
+	let test_dir = "target/lmdb_allocate";
 	setup(test_dir);
 	// Allocate more than the initial chunk, ensuring
 	// the DB resizes underneath

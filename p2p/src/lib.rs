@@ -36,6 +36,7 @@ extern crate serde_derive;
 #[macro_use]
 extern crate log;
 
+mod codec;
 mod conn;
 pub mod handshake;
 pub mod msg;
