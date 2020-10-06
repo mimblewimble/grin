@@ -152,11 +152,13 @@ where
 				if let Some(data) = pmmr.get_data(pos) {
 					segment.leaf_data.push((pos, data));
 					continue;
+				} else if !prunable {
+					return Err(SegmentError::MissingLeaf(pos));
 				}
 			}
 			// TODO: optimize, no need to send every intermediary hash
 			if prunable {
-				if let Some(hash) = pmmr.get_hash(pos) {
+				if let Some(hash) = pmmr.get_from_file(pos) {
 					segment.hashes.push((pos, hash));
 				}
 			}
@@ -214,10 +216,6 @@ where
 					match (left_child, right_child) {
 						(None, None) => None,
 						(Some(l), Some(r)) => Some((l, r).hash_with_index(pos - 1)),
-						_ if height == 1 => {
-							// TODO: verify this is correct behaviour
-							Some(self.get_hash(pos)?)
-						}
 						(None, Some(r)) => {
 							let l = self.get_hash(left_child_pos)?;
 							Some((l, r).hash_with_index(pos - 1))
