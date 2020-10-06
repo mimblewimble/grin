@@ -448,9 +448,9 @@ mod test {
 	}
 
 	#[test]
-	fn floonet_header_len() {
-		set_local_chain_type(ChainTypes::Floonet);
-		test_header_len(genesis_floo());
+	fn testnet_header_len() {
+		set_local_chain_type(ChainTypes::Testnet);
+		test_header_len(genesis_test());
 	}
 
 	#[test]
