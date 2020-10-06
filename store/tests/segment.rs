@@ -103,8 +103,6 @@ fn prunable_mmr() {
 	segment.validate(last_pos, Some(&bitmap), root).unwrap();
 
 	fs::remove_dir_all(&data_dir).unwrap();
-
-	assert!(false);
 }
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
