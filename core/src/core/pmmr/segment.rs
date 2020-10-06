@@ -127,6 +127,7 @@ where
 	pub fn from_pmmr<U, B>(
 		segment_id: SegmentIdentifier,
 		pmmr: &ReadonlyPMMR<'_, U, B>,
+		prunable: bool,
 	) -> Result<Self, SegmentError>
 	where
 		U: PMMRable<E = T>,
@@ -154,8 +155,10 @@ where
 				}
 			}
 			// TODO: optimize, no need to send every intermediary hash
-			if let Some(hash) = pmmr.get_hash(pos) {
-				segment.hashes.push((pos, hash));
+			if prunable {
+				if let Some(hash) = pmmr.get_hash(pos) {
+					segment.hashes.push((pos, hash));
+				}
 			}
 		}
 

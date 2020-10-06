@@ -53,7 +53,7 @@ fn prunable_mmr() {
 
 	// Validate a segment before any pruning
 	let mmr = ReadonlyPMMR::at(&mut ba, last_pos);
-	let segment = Segment::from_pmmr(id, &mmr).unwrap();
+	let segment = Segment::from_pmmr(id, &mmr, true).unwrap();
 	assert_eq!(
 		segment.root(last_pos, Some(&bitmap)).unwrap(),
 		mmr.get_hash(30).unwrap()
@@ -74,7 +74,7 @@ fn prunable_mmr() {
 
 	// Validate a full segment with some pruned leaves
 	let mmr = ReadonlyPMMR::at(&mut ba, last_pos);
-	let segment = Segment::from_pmmr(id, &mmr).unwrap();
+	let segment = Segment::from_pmmr(id, &mmr, true).unwrap();
 	assert_eq!(
 		segment.root(last_pos, Some(&bitmap)).unwrap(),
 		mmr.get_hash(30).unwrap()
@@ -95,7 +95,7 @@ fn prunable_mmr() {
 
 	// Validate again
 	let mmr = ReadonlyPMMR::at(&mut ba, last_pos);
-	let segment = Segment::from_pmmr(id, &mmr).unwrap();
+	let segment = Segment::from_pmmr(id, &mmr, true).unwrap();
 	assert_eq!(
 		segment.root(last_pos, Some(&bitmap)).unwrap(),
 		mmr.get_hash(30).unwrap()

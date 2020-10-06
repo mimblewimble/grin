@@ -36,7 +36,7 @@ fn test_unprunable_size(log_size: u8, n_leaves: u32) {
 
 	for idx in 0..n_segments {
 		let id = SegmentIdentifier { log_size, idx };
-		let segment = Segment::from_pmmr(id, &mmr).unwrap();
+		let segment = Segment::from_pmmr(id, &mmr, false).unwrap();
 		println!(
 			"\n\n>>>>>>> N_LEAVES = {}, LAST_POS = {}, SEGMENT = {}:\n{:#?}",
 			n_leaves, last_pos, idx, segment
