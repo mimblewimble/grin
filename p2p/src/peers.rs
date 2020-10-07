@@ -262,13 +262,13 @@ impl Peers {
 	}
 
 	/// Iterator over all peers we know about (stored in our db).
-	pub fn peers_iter(&self) -> Result<impl Iterator<Item = PeerData>, Error> {
+	pub fn peer_data_iter(&self) -> Result<impl Iterator<Item = PeerData>, Error> {
 		self.store.peers_iter().map_err(From::from)
 	}
 
-	/// Convenience for reading all peers.
-	pub fn all_peers(&self) -> Vec<PeerData> {
-		self.peers_iter()
+	/// Convenience for reading all peer data from the db.
+	pub fn all_peer_data(&self) -> Vec<PeerData> {
+		self.peer_data_iter()
 			.map(|peers| peers.collect())
 			.unwrap_or(vec![])
 	}
@@ -356,12 +356,19 @@ impl Peers {
 		let outbound_peers = || self.peers_iter().outbound().connected().into_iter();
 
 		// check here to make sure we don't have too many outgoing connections
+		// Preferred peers are treated preferentially here.
+		// Also choose outbound peers with lowest total difficulty to drop.
 		let excess_outgoing_count = outbound_peers().count().saturating_sub(max_outbound_count);
 		if excess_outgoing_count > 0 {
-			let mut addrs: Vec<_> = outbound_peers()
-				.filter(|x| !preferred_peers.contains(&x.info.addr))
+			let mut peer_infos: Vec<_> = outbound_peers()
+				.map(|x| x.info.clone())
+				.filter(|x| !preferred_peers.contains(&x.addr))
+				.collect();
+			peer_infos.sort_unstable_by_key(|x| x.total_difficulty());
+			let mut addrs = peer_infos
+				.into_iter()
+				.map(|x| x.addr)
 				.take(excess_outgoing_count)
-				.map(|x| x.info.addr)
 				.collect();
 			rm.append(&mut addrs);
 		}

@@ -28,7 +28,7 @@ pub struct PeersAllHandler {
 
 impl Handler for PeersAllHandler {
 	fn get(&self, _req: Request<Body>) -> ResponseFuture {
-		let peers = &w_fut!(&self.peers).all_peers();
+		let peers = &w_fut!(&self.peers).all_peer_data();
 		json_response_pretty(&peers)
 	}
 }
@@ -79,7 +79,7 @@ impl PeerHandler {
 			})?;
 			return Ok(vec![peer_data]);
 		}
-		let peers = w(&self.peers)?.all_peers();
+		let peers = w(&self.peers)?.all_peer_data();
 		Ok(peers)
 	}
 

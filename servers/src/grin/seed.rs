@@ -151,7 +151,7 @@ fn monitor_peers(
 	let mut banned_count = 0;
 	let mut defuncts = vec![];
 
-	for x in peers.all_peers().into_iter() {
+	for x in peers.all_peer_data().into_iter() {
 		match x.flags {
 			p2p::State::Banned => {
 				let interval = Utc::now().timestamp() - x.last_banned;
