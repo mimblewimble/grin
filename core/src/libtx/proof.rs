@@ -412,7 +412,7 @@ impl ProofBuild for ViewKey {
 		}
 
 		let mut key = self.clone();
-		let mut hasher = BIP32GrinHasher::new(self.is_floo);
+		let mut hasher = BIP32GrinHasher::new(self.is_test);
 		for i in self.depth..path.depth {
 			let child_number = path.path[i as usize];
 			if child_number.is_hardened() {

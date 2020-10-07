@@ -986,7 +986,7 @@ impl Chain {
 
 	/// Specific tmp dir.
 	/// Normally it's ~/.grin/main/tmp for mainnet
-	/// or ~/.grin/floo/tmp for floonet
+	/// or ~/.grin/test/tmp for Testnet
 	pub fn get_tmp_dir(&self) -> PathBuf {
 		let mut tmp_dir = PathBuf::from(self.db_root.clone());
 		tmp_dir = tmp_dir

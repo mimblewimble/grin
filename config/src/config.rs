@@ -168,7 +168,7 @@ impl GlobalConfig {
 
 		match *chain_type {
 			global::ChainTypes::Mainnet => {}
-			global::ChainTypes::Floonet => {
+			global::ChainTypes::Testnet => {
 				defaults.api_http_addr = "127.0.0.1:13413".to_owned();
 				defaults.p2p_config.port = 13414;
 				defaults

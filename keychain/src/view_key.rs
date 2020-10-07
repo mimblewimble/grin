@@ -12,8 +12,8 @@ use crate::util::secp::key::{PublicKey, SecretKey};
 use crate::util::secp::Secp256k1;
 use crate::SwitchCommitmentType;
 
-/*const VERSION_FLOO_NS: [u8;4] = [0x03, 0x27, 0x3E, 0x4B];
-const VERSION_FLOO: [u8;4]    = [0x03, 0x27, 0x3E, 0x4B];
+/*const VERSION_TEST_NS: [u8;4] = [0x03, 0x27, 0x3E, 0x4B];
+const VERSION_TEST: [u8;4]    = [0x03, 0x27, 0x3E, 0x4B];
 const VERSION_MAIN_NS: [u8;4] = [0x03, 0x3C, 0x08, 0xDF];
 const VERSION_MAIN: [u8;4]    = [0x03, 0x3C, 0x08, 0xDF];*/
 
@@ -22,8 +22,8 @@ const VERSION_MAIN: [u8;4]    = [0x03, 0x3C, 0x08, 0xDF];*/
 /// At the moment only depth 0 keys can be used
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct ViewKey {
-	/// Whether this view key is meant for floonet or not
-	pub is_floo: bool,
+	/// Whether this view key is meant for testnet or not
+	pub is_test: bool,
 	/// How many derivations this key is from the master (which is 0)
 	pub depth: u8,
 	/// Fingerprint of the parent key
@@ -45,7 +45,7 @@ impl ViewKey {
 		keychain: &K,
 		ext_key: ExtendedPrivKey,
 		hasher: &mut H,
-		is_floo: bool,
+		is_test: bool,
 	) -> Result<Self, Error>
 	where
 		K: Keychain,
@@ -69,7 +69,7 @@ impl ViewKey {
 		let rewind_hash = Self::rewind_hash(secp, keychain.public_root_key());
 
 		Ok(Self {
-			is_floo,
+			is_test,
 			depth,
 			parent_fingerprint,
 			child_number,
@@ -136,7 +136,7 @@ impl ViewKey {
 		};
 
 		Ok(Self {
-			is_floo: self.is_floo,
+			is_test: self.is_test,
 			depth: self.depth + 1,
 			parent_fingerprint: self.fingerprint(secp, hasher),
 			child_number: i,

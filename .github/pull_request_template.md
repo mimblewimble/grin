@@ -14,5 +14,5 @@ Before submitting your PR for final review, please ensure that it:
 * Explains whether/how the change is consensus breaking or breaks existing client functionality
 * Contains unit tests exercising new/changed functionality
 * Fully considers the potential impact of the change on other parts of the system
-* Describes how you've tested the change (e.g. against Floonet, etc)
+* Describes how you've tested the change (e.g. against Testnet, etc)
 * Updates any documentation that's affected by the PR

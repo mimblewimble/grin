@@ -40,7 +40,7 @@ pub const USER_AGENT: &str = concat!("MW/Grin ", env!("CARGO_PKG_VERSION"));
 
 /// Magic numbers expected in the header of every message
 const OTHER_MAGIC: [u8; 2] = [73, 43];
-const FLOONET_MAGIC: [u8; 2] = [83, 59];
+const TESTNET_MAGIC: [u8; 2] = [83, 59];
 const MAINNET_MAGIC: [u8; 2] = [97, 61];
 
 // Types of messages.
@@ -112,7 +112,7 @@ fn max_msg_size(msg_type: Type) -> u64 {
 
 fn magic() -> [u8; 2] {
 	match global::get_chain_type() {
-		global::ChainTypes::Floonet => FLOONET_MAGIC,
+		global::ChainTypes::Testnet => TESTNET_MAGIC,
 		global::ChainTypes::Mainnet => MAINNET_MAGIC,
 		_ => OTHER_MAGIC,
 	}

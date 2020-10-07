@@ -45,8 +45,8 @@ impl ExtKeychain {
 }
 
 impl Keychain for ExtKeychain {
-	fn from_seed(seed: &[u8], is_floo: bool) -> Result<ExtKeychain, Error> {
-		let mut h = BIP32GrinHasher::new(is_floo);
+	fn from_seed(seed: &[u8], is_test: bool) -> Result<ExtKeychain, Error> {
+		let mut h = BIP32GrinHasher::new(is_test);
 		let secp = secp::Secp256k1::with_caps(secp::ContextFlag::Commit);
 		let master = ExtendedPrivKey::new_master(&secp, &mut h, seed)?;
 		let keychain = ExtKeychain {
@@ -57,10 +57,10 @@ impl Keychain for ExtKeychain {
 		Ok(keychain)
 	}
 
-	fn from_mnemonic(word_list: &str, extension_word: &str, is_floo: bool) -> Result<Self, Error> {
+	fn from_mnemonic(word_list: &str, extension_word: &str, is_test: bool) -> Result<Self, Error> {
 		let secp = secp::Secp256k1::with_caps(secp::ContextFlag::Commit);
-		let h = BIP32GrinHasher::new(is_floo);
-		let master = ExtendedPrivKey::from_mnemonic(&secp, word_list, extension_word, is_floo)?;
+		let h = BIP32GrinHasher::new(is_test);
+		let master = ExtendedPrivKey::from_mnemonic(&secp, word_list, extension_word, is_test)?;
 		let keychain = ExtKeychain {
 			secp: secp,
 			master: master,
@@ -77,10 +77,10 @@ impl Keychain for ExtKeychain {
 	}
 
 	/// For testing - probably not a good idea to use outside of tests.
-	fn from_random_seed(is_floo: bool) -> Result<ExtKeychain, Error> {
+	fn from_random_seed(is_test: bool) -> Result<ExtKeychain, Error> {
 		let seed: String = thread_rng().sample_iter(&Alphanumeric).take(16).collect();
 		let seed = blake2b(32, &[], seed.as_bytes());
-		ExtKeychain::from_seed(seed.as_bytes(), is_floo)
+		ExtKeychain::from_seed(seed.as_bytes(), is_test)
 	}
 
 	fn root_key_id() -> Identifier {

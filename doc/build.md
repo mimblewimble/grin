@@ -108,7 +108,7 @@ grin client --help
 ```sh
 docker build -t grin -f etc/Dockerfile .
 ```
-For floonet, use `etc/Dockerfile.floonet` instead
+For testnet, use `etc/Dockerfile.testnet` instead
 
 You can bind-mount your grin cache to run inside the container.
 
