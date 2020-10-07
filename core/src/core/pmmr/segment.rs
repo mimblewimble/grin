@@ -16,7 +16,7 @@
 
 use crate::core::hash::Hash;
 use crate::core::pmmr::{self, Backend, ReadablePMMR, ReadonlyPMMR};
-use crate::ser::{PMMRIndexHashable, PMMRable, Readable, Writeable};
+use crate::ser::{Error, PMMRIndexHashable, PMMRable, Readable, Reader, Writeable, Writer};
 use croaring::Bitmap;
 use std::cmp::min;
 use std::fmt::{self, Debug};
@@ -49,7 +49,7 @@ impl fmt::Display for SegmentError {
 }
 
 /// Tuple that defines a segment of a given PMMR
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub struct SegmentIdentifier {
 	/// 2-Log of the size of a segment
 	pub log_size: u8,
@@ -57,9 +57,24 @@ pub struct SegmentIdentifier {
 	pub idx: u64,
 }
 
+impl Readable for SegmentIdentifier {
+	fn read<R: Reader>(reader: &mut R) -> Result<Self, Error> {
+		let log_size = reader.read_u8()?;
+		let idx = reader.read_u64()?;
+		Ok(Self { log_size, idx })
+	}
+}
+
+impl Writeable for SegmentIdentifier {
+	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), Error> {
+		writer.write_u8(self.log_size)?;
+		writer.write_u64(self.idx)
+	}
+}
+
 /// Segment of a PMMR: unpruned leaves and the necessary data to verify
 /// segment membership in the original MMR.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Segment<T> {
 	identifier: SegmentIdentifier,
 	hashes: Vec<(u64, Hash)>,
@@ -294,8 +309,57 @@ where
 	}
 }
 
+impl<T: Readable> Readable for Segment<T> {
+	fn read<R: Reader>(reader: &mut R) -> Result<Self, Error> {
+		let identifier = Readable::read(reader)?;
+
+		let n_hashes = reader.read_u64()? as usize;
+		let mut hashes = Vec::with_capacity(n_hashes);
+		for _ in 0..n_hashes {
+			let pos = reader.read_u64()?;
+			let hash: Hash = Readable::read(reader)?;
+			hashes.push((pos, hash));
+		}
+
+		let n_leaves = reader.read_u64()? as usize;
+		let mut leaf_data = Vec::with_capacity(n_leaves);
+		for _ in 0..n_leaves {
+			let pos = reader.read_u64()?;
+			let data: T = Readable::read(reader)?;
+			leaf_data.push((pos, data));
+		}
+
+		let proof = Readable::read(reader)?;
+
+		Ok(Self {
+			identifier,
+			hashes,
+			leaf_data,
+			proof,
+		})
+	}
+}
+
+impl<T: Writeable> Writeable for Segment<T> {
+	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), Error> {
+		Writeable::write(&self.identifier, writer)?;
+		writer.write_u64(self.hashes.len() as u64)?;
+		for (pos, hash) in &self.hashes {
+			writer.write_u64(*pos)?;
+			Writeable::write(hash, writer)?;
+		}
+		writer.write_u64(self.leaf_data.len() as u64)?;
+		for (pos, data) in &self.leaf_data {
+			writer.write_u64(*pos)?;
+			Writeable::write(data, writer)?;
+		}
+		Writeable::write(&self.proof, writer)?;
+		Ok(())
+	}
+}
+
 /// Merkle proof of a segment
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct SegmentProof {
 	hashes: Vec<Hash>,
 }
@@ -418,5 +482,27 @@ impl SegmentProof {
 		} else {
 			Err(SegmentError::Mismatch)
 		}
+	}
+}
+
+impl Readable for SegmentProof {
+	fn read<R: Reader>(reader: &mut R) -> Result<Self, Error> {
+		let n_hashes = reader.read_u64()? as usize;
+		let mut hashes = Vec::with_capacity(n_hashes);
+		for _ in 0..n_hashes {
+			let hash: Hash = Readable::read(reader)?;
+			hashes.push(hash);
+		}
+		Ok(Self { hashes })
+	}
+}
+
+impl Writeable for SegmentProof {
+	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), Error> {
+		writer.write_u64(self.hashes.len() as u64)?;
+		for hash in &self.hashes {
+			Writeable::write(hash, writer)?;
+		}
+		Ok(())
 	}
 }

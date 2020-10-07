@@ -16,13 +16,16 @@ use crate::core::core::hash::DefaultHashable;
 use crate::core::core::pmmr;
 use crate::core::core::pmmr::segment::{Segment, SegmentError, SegmentIdentifier};
 use crate::core::core::pmmr::{Backend, ReadablePMMR, ReadonlyPMMR, PMMR};
-use crate::core::ser::{Error, PMMRable, ProtocolVersion, Readable, Reader, Writeable, Writer};
+use crate::core::ser::{
+	BinReader, BinWriter, Error, PMMRable, ProtocolVersion, Readable, Reader, Writeable, Writer,
+};
 use crate::store::pmmr::PMMRBackend;
 use chrono::Utc;
 use croaring::Bitmap;
 use grin_core as core;
 use grin_store as store;
 use std::fs;
+use std::io::Cursor;
 
 #[test]
 fn prunable_mmr() {
@@ -154,6 +157,55 @@ fn prunable_mmr() {
 	let mmr = ReadonlyPMMR::at(&mut ba, last_pos);
 	let segment = Segment::from_pmmr(id, &mmr, true).unwrap();
 	segment.validate(last_pos, Some(&bitmap), root).unwrap();
+
+	std::mem::drop(ba);
+	fs::remove_dir_all(&data_dir).unwrap();
+}
+
+#[test]
+fn ser_round_trip() {
+	let t = Utc::now();
+	let data_dir = format!(
+		"./target/tmp/{}.{}-segment_ser_round_trip",
+		t.timestamp(),
+		t.timestamp_subsec_nanos()
+	);
+	fs::create_dir_all(&data_dir).unwrap();
+
+	let n_leaves = 32;
+	let mut ba = PMMRBackend::new(&data_dir, true, ProtocolVersion(1), None).unwrap();
+	let mut mmr = pmmr::PMMR::new(&mut ba);
+	for i in 0..n_leaves {
+		mmr.push(&TestElem([i / 7, i / 5, i / 3, i])).unwrap();
+	}
+	let mut bitmap = Bitmap::create();
+	bitmap.add_range_closed(1..n_leaves);
+	let last_pos = mmr.unpruned_size();
+
+	prune(&mut mmr, &mut bitmap, &[1, 2]);
+	ba.sync().unwrap();
+	ba.check_compact(last_pos, &Bitmap::create()).unwrap();
+	ba.sync().unwrap();
+
+	let mmr = ReadonlyPMMR::at(&ba, last_pos);
+	let id = SegmentIdentifier {
+		log_size: 3,
+		idx: 0,
+	};
+	let segment = Segment::from_pmmr(id, &mmr, true).unwrap();
+
+	let mut cursor = Cursor::new(Vec::<u8>::new());
+	let mut writer = BinWriter::new(&mut cursor, ProtocolVersion(1));
+	Writeable::write(&segment, &mut writer).unwrap();
+	assert_eq!(
+		cursor.position(),
+		(9) + (8 + 7 * (8 + 32)) + (8 + 6 * (8 + 16)) + (8 + 2 * 32)
+	);
+	cursor.set_position(0);
+
+	let mut reader = BinReader::new(&mut cursor, ProtocolVersion(1));
+	let segment2: Segment<TestElem> = Readable::read(&mut reader).unwrap();
+	assert_eq!(segment, segment2);
 
 	std::mem::drop(ba);
 	fs::remove_dir_all(&data_dir).unwrap();
