@@ -149,7 +149,7 @@ where
 		let (segment_first_pos, segment_last_pos) = segment.segment_pos_range(last_pos);
 		for pos in segment_first_pos..=segment_last_pos {
 			if pmmr::is_leaf(pos) {
-				if let Some(data) = pmmr.get_data(pos) {
+				if let Some(data) = pmmr.get_data_from_file(pos) {
 					segment.leaf_data.push((pos, data));
 					continue;
 				} else if !prunable {
@@ -191,11 +191,21 @@ where
 			let hash = if height == 0 {
 				// Leaf
 				if bitmap
-					.map(|b| b.contains(pmmr::n_leaves(pos) as u32))
+					.map(|b| {
+						let idx_1 = pmmr::n_leaves(pos);
+						let idx_2 = if pmmr::is_left_sibling(pos) {
+							idx_1 + 1
+						} else {
+							idx_1 - 1
+						};
+						b.contains(idx_1 as u32) || b.contains(idx_2 as u32)
+					})
 					.unwrap_or(true)
 				{
 					// We require the data of this leaf if either the mmr is not prunable or if
-					// the bitmap indicates it should be here
+					// the bitmap indicates it (or its sibling) should be here
+					// TODO: possibly remove requirement on the sibling when we no longer support
+					//  syncing through the txhashset.zip method
 					let data = leaves
 						.find(|&&(p, _)| p == pos)
 						.map(|(_, l)| l)
