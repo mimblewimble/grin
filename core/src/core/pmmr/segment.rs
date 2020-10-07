@@ -59,7 +59,7 @@ pub struct SegmentIdentifier {
 
 /// Segment of a PMMR: unpruned leaves and the necessary data to verify
 /// segment membership in the original MMR.
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct Segment<T> {
 	identifier: SegmentIdentifier,
 	hashes: Vec<(u64, Hash)>,
@@ -295,7 +295,7 @@ where
 }
 
 /// Merkle proof of a segment
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct SegmentProof {
 	hashes: Vec<Hash>,
 }
