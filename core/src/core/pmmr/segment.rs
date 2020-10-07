@@ -313,18 +313,29 @@ impl<T: Readable> Readable for Segment<T> {
 	fn read<R: Reader>(reader: &mut R) -> Result<Self, Error> {
 		let identifier = Readable::read(reader)?;
 
+		let mut last_pos = 0;
+
 		let n_hashes = reader.read_u64()? as usize;
 		let mut hashes = Vec::with_capacity(n_hashes);
 		for _ in 0..n_hashes {
 			let pos = reader.read_u64()?;
+			if pos <= last_pos {
+				return Err(Error::SortError);
+			}
+			last_pos = pos;
 			let hash: Hash = Readable::read(reader)?;
 			hashes.push((pos, hash));
 		}
 
 		let n_leaves = reader.read_u64()? as usize;
 		let mut leaf_data = Vec::with_capacity(n_leaves);
+		last_pos = 0;
 		for _ in 0..n_leaves {
 			let pos = reader.read_u64()?;
+			if pos <= last_pos {
+				return Err(Error::SortError);
+			}
+			last_pos = pos;
 			let data: T = Readable::read(reader)?;
 			leaf_data.push((pos, data));
 		}
