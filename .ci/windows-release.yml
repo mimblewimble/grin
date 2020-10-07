@@ -29,7 +29,7 @@ steps:
       archiveType: 'zip'
       archiveFile: '$(Build.ArtifactStagingDirectory)\grin-$(build.my_tag)-$(build.platform).zip'
   - script: |
-      powershell -Command "get-filehash -algorithm sha256 $(Build.ArtifactStagingDirectory)\grin-$(build.my_tag)-$(build.platform).zip | Format-List |  Out-String | ForEach-Object { $_.Trim() } > $(Build.ArtifactStagingDirectory)\grin-$(build.my_tag)-$(build.platform)-sha256sum.txt"
+      powershell -Command "cd $(Build.ArtifactStagingDirectory); get-filehash -algorithm sha256 grin-$(build.my_tag)-$(build.platform).zip | Format-List |  Out-String | ForEach-Object { $_.Trim() } > grin-$(build.my_tag)-$(build.platform)-sha256sum.txt"
     displayName: Create Checksum
     condition:  and(succeeded(), contains(variables['Build.SourceBranch'], 'refs/tags/'), eq(variables['CI_JOB'], 'release' ))
   - task: GithubRelease@0

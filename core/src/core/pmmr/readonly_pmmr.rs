@@ -148,6 +148,14 @@ where
 		}
 	}
 
+	fn get_data_from_file(&self, pos: u64) -> Option<Self::Item> {
+		if pos > self.last_pos {
+			None
+		} else {
+			self.backend.get_data_from_file(pos)
+		}
+	}
+
 	fn unpruned_size(&self) -> u64 {
 		self.last_pos
 	}

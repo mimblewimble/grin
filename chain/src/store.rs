@@ -23,8 +23,9 @@ use crate::linked_list::MultiIndex;
 use crate::types::{CommitPos, Tip};
 use crate::util::secp::pedersen::Commitment;
 use croaring::Bitmap;
+use grin_core::ser;
 use grin_store as store;
-use grin_store::{option_to_not_found, to_key, Error, SerIterator};
+use grin_store::{option_to_not_found, to_key, Error};
 use std::convert::TryInto;
 use std::sync::Arc;
 
@@ -42,7 +43,6 @@ pub const NRD_KERNEL_LIST_PREFIX: u8 = b'K';
 /// Prefix for NRD kernel pos index entries.
 pub const NRD_KERNEL_ENTRY_PREFIX: u8 = b'k';
 
-const BLOCK_INPUT_BITMAP_PREFIX: u8 = b'B';
 const BLOCK_SUMS_PREFIX: u8 = b'M';
 const BLOCK_SPENT_PREFIX: u8 = b'S';
 
@@ -56,17 +56,6 @@ impl ChainStore {
 	pub fn new(db_root: &str) -> Result<ChainStore, Error> {
 		let db = store::Store::new(db_root, None, Some(STORE_SUBPATH), None)?;
 		Ok(ChainStore { db })
-	}
-
-	/// Create a new instance of the chain store based on this instance
-	/// but with the provided protocol version. This is used when migrating
-	/// data in the db to a different protocol version, reading using one version and
-	/// writing back to the db with a different version.
-	pub fn with_version(&self, version: ProtocolVersion) -> ChainStore {
-		let db_with_version = self.db.with_version(version);
-		ChainStore {
-			db: db_with_version,
-		}
 	}
 
 	/// The current chain head.
@@ -225,11 +214,20 @@ impl<'a> Batch<'a> {
 		Ok(())
 	}
 
-	/// Migrate a block stored in the db by serializing it using the provided protocol version.
-	/// Block may have been read using a previous protocol version but we do not actually care.
-	pub fn migrate_block(&self, b: &Block, version: ProtocolVersion) -> Result<(), Error> {
-		self.db
-			.put_ser_with_version(&to_key(BLOCK_PREFIX, b.hash())[..], b, version)?;
+	/// Migrate a block stored in the db reading from one protocol version and writing
+	/// with new protocol version.
+	pub fn migrate_block(
+		&self,
+		key: &[u8],
+		from_version: ProtocolVersion,
+		to_version: ProtocolVersion,
+	) -> Result<(), Error> {
+		let block: Option<Block> = self.db.get_with(key, move |_, mut v| {
+			ser::deserialize(&mut v, from_version).map_err(From::from)
+		})?;
+		if let Some(block) = block {
+			self.db.put_ser_with_version(key, &block, to_version)?;
+		}
 		Ok(())
 	}
 
@@ -284,9 +282,14 @@ impl<'a> Batch<'a> {
 	}
 
 	/// Iterator over the output_pos index.
-	pub fn output_pos_iter(&self) -> Result<SerIterator<(u64, u64)>, Error> {
+	pub fn output_pos_iter(&self) -> Result<impl Iterator<Item = (Vec<u8>, CommitPos)>, Error> {
 		let key = to_key(OUTPUT_POS_PREFIX, "");
-		self.db.iter(&key)
+		let protocol_version = self.db.protocol_version();
+		self.db.iter(&key, move |k, mut v| {
+			ser::deserialize(&mut v, protocol_version)
+				.map(|pos| (k.to_vec(), pos))
+				.map_err(From::from)
+		})
 	}
 
 	/// Get output_pos from index.
@@ -319,9 +322,6 @@ impl<'a> Batch<'a> {
 
 	/// Delete the block spent index.
 	fn delete_spent_index(&self, bh: &Hash) -> Result<(), Error> {
-		// Clean up the legacy input bitmap as well.
-		let _ = self.db.delete(&to_key(BLOCK_INPUT_BITMAP_PREFIX, bh));
-
 		self.db.delete(&to_key(BLOCK_SPENT_PREFIX, bh))
 	}
 
@@ -345,25 +345,12 @@ impl<'a> Batch<'a> {
 	/// Get the block input bitmap based on our spent index.
 	/// Fallback to legacy block input bitmap from the db.
 	pub fn get_block_input_bitmap(&self, bh: &Hash) -> Result<Bitmap, Error> {
-		if let Ok(spent) = self.get_spent_index(bh) {
-			let bitmap = spent
-				.into_iter()
-				.map(|x| x.pos.try_into().unwrap())
-				.collect();
-			Ok(bitmap)
-		} else {
-			self.get_legacy_input_bitmap(bh)
-		}
-	}
-
-	fn get_legacy_input_bitmap(&self, bh: &Hash) -> Result<Bitmap, Error> {
-		option_to_not_found(
-			self.db
-				.get_with(&to_key(BLOCK_INPUT_BITMAP_PREFIX, bh), |data| {
-					Ok(Bitmap::deserialize(data))
-				}),
-			|| "legacy block input bitmap".to_string(),
-		)
+		let bitmap = self
+			.get_spent_index(bh)?
+			.into_iter()
+			.map(|x| x.pos.try_into().unwrap())
+			.collect();
+		Ok(bitmap)
 	}
 
 	/// Get the "spent index" from the db for the specified block.
@@ -388,10 +375,26 @@ impl<'a> Batch<'a> {
 		})
 	}
 
-	/// An iterator to all block in db
-	pub fn blocks_iter(&self) -> Result<SerIterator<Block>, Error> {
+	/// Iterator over all full blocks in the db.
+	/// Uses default db serialization strategy via db protocol version.
+	pub fn blocks_iter(&self) -> Result<impl Iterator<Item = Block>, Error> {
 		let key = to_key(BLOCK_PREFIX, "");
-		self.db.iter(&key)
+		let protocol_version = self.db.protocol_version();
+		self.db.iter(&key, move |_, mut v| {
+			ser::deserialize(&mut v, protocol_version).map_err(From::from)
+		})
+	}
+
+	/// Iterator over raw data for full blocks in the db.
+	/// Used during block migration (we need flexibility around deserialization).
+	pub fn blocks_raw_iter(&self) -> Result<impl Iterator<Item = (Vec<u8>, Vec<u8>)>, Error> {
+		let key = to_key(BLOCK_PREFIX, "");
+		self.db.iter(&key, |k, v| Ok((k.to_vec(), v.to_vec())))
+	}
+
+	/// Protocol version of our underlying db.
+	pub fn protocol_version(&self) -> ProtocolVersion {
+		self.db.protocol_version()
 	}
 }
 

@@ -35,13 +35,14 @@ use crate::types::{
 };
 use crate::util::secp::pedersen::{Commitment, RangeProof};
 use crate::{util::RwLock, ChainStore};
+use grin_core::ser;
 use grin_store::Error::NotFoundErr;
-use std::collections::HashMap;
 use std::fs::{self, File};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
+use std::{collections::HashMap, io::Cursor};
 
 /// Orphan pool size is limited by MAX_ORPHAN_SIZE
 pub const MAX_ORPHAN_SIZE: usize = 200;
@@ -1187,10 +1188,9 @@ impl Chain {
 		let tail = batch.get_block_header(&tail_hash)?;
 
 		// Remove old blocks (including short lived fork blocks) which height < tail.height
-		// here b is a block
-		for (_, b) in batch.blocks_iter()? {
-			if b.header.height < tail.height {
-				let _ = batch.delete_block(&b.hash());
+		for block in batch.blocks_iter()? {
+			if block.header.height < tail.height {
+				let _ = batch.delete_block(&block.hash());
 				count += 1;
 			}
 		}
@@ -1407,13 +1407,32 @@ impl Chain {
 	/// Migrate our local db from v2 to v3.
 	/// "commit only" inputs.
 	fn migrate_db_v2_v3(store: &ChainStore) -> Result<(), Error> {
-		let store_v2 = store.with_version(ProtocolVersion(2));
-		let batch = store_v2.batch()?;
-		for (_, block) in batch.blocks_iter()? {
-			batch.migrate_block(&block, ProtocolVersion(3))?;
+		let mut keys_to_migrate = vec![];
+		for (k, v) in store.batch()?.blocks_raw_iter()? {
+			// We want to migrate all blocks that cannot be read via v3 protocol version.
+			let block_v2: Result<Block, _> =
+				ser::deserialize(&mut Cursor::new(&v), ProtocolVersion(2));
+			let block_v3: Result<Block, _> =
+				ser::deserialize(&mut Cursor::new(&v), ProtocolVersion(3));
+			if let (Ok(_), Err(_)) = (block_v2, block_v3) {
+				keys_to_migrate.push(k);
+			}
 		}
-		batch.commit()?;
-		Ok(())
+		debug!(
+			"migrate_db_v2_v3: {} blocks to migrate",
+			keys_to_migrate.len()
+		);
+		let mut count = 0;
+		keys_to_migrate.chunks(100).try_for_each(|keys| {
+			let batch = store.batch()?;
+			for key in keys {
+				batch.migrate_block(&key, ProtocolVersion(2), ProtocolVersion(3))?;
+				count += 1;
+			}
+			batch.commit()?;
+			debug!("migrate_db_v2_v3: successfully migrated {} blocks", count);
+			Ok(())
+		})
 	}
 
 	/// Gets the block header in which a given output appears in the txhashset.
