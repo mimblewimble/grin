@@ -369,15 +369,16 @@ impl Peers {
 		}
 	}
 
-	/// All peer information we have in storage
+	/// Iterator over all peers we know about (stored in our db).
+	pub fn peers_iter(&self) -> Result<impl Iterator<Item = PeerData>, Error> {
+		self.store.peers_iter().map_err(From::from)
+	}
+
+	/// Convenience for reading all peers.
 	pub fn all_peers(&self) -> Vec<PeerData> {
-		match self.store.all_peers() {
-			Ok(peers) => peers,
-			Err(e) => {
-				error!("all_peers failed: {:?}", e);
-				vec![]
-			}
-		}
+		self.peers_iter()
+			.map(|peers| peers.collect())
+			.unwrap_or(vec![])
 	}
 
 	/// Find peers in store (not necessarily connected) and return their data

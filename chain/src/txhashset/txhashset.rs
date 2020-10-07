@@ -513,12 +513,13 @@ impl TxHashSet {
 		// Iterate over the current output_pos index, removing any entries that
 		// do not point to to the expected output.
 		let mut removed_count = 0;
-		for (key, (pos, _)) in batch.output_pos_iter()? {
-			if let Some(out) = output_pmmr.get_data(pos) {
+		for (key, pos) in batch.output_pos_iter()? {
+			if let Some(out) = output_pmmr.get_data(pos.pos) {
 				if let Ok(pos_via_mmr) = batch.get_output_pos(&out.commitment()) {
 					// If the pos matches and the index key matches the commitment
 					// then keep the entry, other we want to clean it up.
-					if pos == pos_via_mmr && batch.is_match_output_pos_key(&key, &out.commitment())
+					if pos.pos == pos_via_mmr
+						&& batch.is_match_output_pos_key(&key, &out.commitment())
 					{
 						continue;
 					}
