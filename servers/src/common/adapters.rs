@@ -372,8 +372,8 @@ where
 		self.chain()
 			.get_block(&h)
 			.map(|b| match peer_info.version.value() {
-				0..=2 => Some(b),
-				3..=ProtocolVersion::MAX => self.chain().convert_block_v2(b).ok(),
+				0..=2 => self.chain().convert_block_v2(b).ok(),
+				3..=ProtocolVersion::MAX => Some(b),
 			})
 			.unwrap_or(None)
 	}
