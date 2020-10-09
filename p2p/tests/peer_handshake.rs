@@ -18,9 +18,11 @@ use grin_p2p as p2p;
 use grin_util as util;
 use grin_util::StopState;
 
+use std::collections::hash_map::DefaultHasher;
+use std::hash::Hasher;
 use std::net::{SocketAddr, TcpListener, TcpStream};
 use std::sync::Arc;
-use std::{thread, time};
+use std::{fs, thread, time};
 
 use crate::core::core::hash::Hash;
 use crate::core::global;
@@ -36,6 +38,10 @@ fn open_port() -> u16 {
 	listener.local_addr().unwrap().port()
 }
 
+fn clean_output_dir(dir_name: &str) {
+	let _ = fs::remove_dir_all(dir_name);
+}
+
 // Setup test with AutomatedTesting chain_type;
 fn test_setup() {
 	// Set "global" chain type here as we spawn peer threads for read/write.
@@ -45,21 +51,24 @@ fn test_setup() {
 
 // Starts a server and connects a client peer to it to check handshake,
 // followed by a ping/pong exchange to make sure the connection is live.
-#[test]
-fn peer_handshake() {
+fn peer_handshake_aux(server_ip: &str, client_addr: &str) {
 	test_setup();
 
 	let p2p_config = p2p::P2PConfig {
-		host: "127.0.0.1".parse().unwrap(),
+		host: server_ip.parse().unwrap(),
 		port: open_port(),
 		peers_allow: None,
 		peers_deny: None,
 		..p2p::P2PConfig::default()
 	};
 	let net_adapter = Arc::new(p2p::DummyAdapter {});
+	let mut hasher = DefaultHasher::new();
+	hasher.write(server_ip.as_bytes());
+	hasher.write(client_addr.as_bytes());
+	let data_folder = format!("{:x}", hasher.finish());
 	let server = Arc::new(
 		p2p::Server::new(
-			".grin",
+			data_folder.as_str(),
 			p2p::Capabilities::UNKNOWN,
 			p2p_config.clone(),
 			net_adapter.clone(),
@@ -77,7 +86,7 @@ fn peer_handshake() {
 	let addr = SocketAddr::new(p2p_config.host, p2p_config.port);
 	let socket = TcpStream::connect_timeout(&addr, time::Duration::from_secs(10)).unwrap();
 
-	let my_addr = PeerAddr("127.0.0.1:5000".parse().unwrap());
+	let my_addr = PeerAddr(client_addr.parse().unwrap());
 	let peer = Peer::connect(
 		socket,
 		p2p::Capabilities::UNKNOWN,
@@ -93,9 +102,27 @@ fn peer_handshake() {
 	thread::sleep(time::Duration::from_secs(1));
 
 	peer.send_ping(Difficulty::min(), 0).unwrap();
-	thread::sleep(time::Duration::from_secs(1));
+	thread::sleep(time::Duration::from_secs(2));
+
+	println!("stuff: {:?}", server.peers.get_connected_peer(my_addr));
 
 	let server_peer = server.peers.get_connected_peer(my_addr).unwrap();
 	assert_eq!(server_peer.info.total_difficulty(), Difficulty::min());
 	assert!(server.peers.peer_count() > 0);
+	clean_output_dir(data_folder.as_str());
+}
+
+#[test]
+fn peer_handshake_ipv4() {
+	peer_handshake_aux("127.0.0.1", "127.0.0.1:5000");
+}
+
+#[test]
+fn peer_handshake_ipv6() {
+	peer_handshake_aux("::1", "[::1]:5000");
+}
+
+#[test]
+fn peer_handshake_mixed() {
+	peer_handshake_aux("::", "127.0.0.1:5000");
 }
