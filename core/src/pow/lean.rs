@@ -25,7 +25,7 @@ use crate::pow::Proof;
 /// Tromp's implementation, as it's not optimized for performance and reuses
 /// croaring which is likely sub-optimal for this task.
 pub struct Lean {
-	params: CuckooParams<u32>,
+	params: CuckooParams,
 	edges: Bitmap,
 }
 
@@ -33,7 +33,7 @@ impl Lean {
 	/// Instantiates a new lean miner based on some Cuckatoo parameters
 	pub fn new(edge_bits: u8) -> Lean {
 		// note that proof size doesn't matter to a lean miner
-		let params = CuckooParams::new(edge_bits, 42).unwrap();
+		let params = CuckooParams::new(edge_bits, edge_bits, 42).unwrap();
 
 		// edge bitmap, before trimming all of them are on
 		let mut edges = Bitmap::create_with_capacity(params.num_edges as u32);
@@ -58,7 +58,7 @@ impl Lean {
 
 	/// Finds the Cuckatoo Cycles on the remaining edges. Delegates the finding
 	/// to a context, passing the trimmed edges iterator.
-	pub fn find_cycles(&self, mut ctx: CuckatooContext<u32>) -> Result<Vec<Proof>, Error> {
+	pub fn find_cycles(&self, mut ctx: CuckatooContext) -> Result<Vec<Proof>, Error> {
 		ctx.find_cycles_iter(self.edges.iter().map(|e| e as u64))
 	}
 
@@ -68,15 +68,15 @@ impl Lean {
 			let mut nodes = Bitmap::create();
 			// increment count for each node
 			for e in self.edges.iter() {
-				let node = self.params.sipnode(e, uorv, false).unwrap();
-				nodes.add(node);
+				let node = self.params.sipnode(e.into(), uorv).unwrap();
+				nodes.add(node as u32);
 			}
 
 			// then kill edges with lone nodes (no neighbour at ^1)
 			let mut to_kill = Bitmap::create();
 			for e in self.edges.iter() {
-				let node = self.params.sipnode(e, uorv, false).unwrap();
-				if !nodes.contains(node ^ 1) {
+				let node = self.params.sipnode(e.into(), uorv).unwrap();
+				if !nodes.contains((node ^ 1) as u32) {
 					to_kill.add(e);
 				}
 			}
@@ -88,10 +88,12 @@ impl Lean {
 #[cfg(test)]
 mod test {
 	use super::*;
+	use crate::global;
 	use crate::pow::types::PoWContext;
 
 	#[test]
 	fn lean_miner() {
+		global::set_local_chain_type(global::ChainTypes::Mainnet);
 		let nonce = 15465723;
 		let header = [0u8; 84].to_vec(); // with nonce
 		let edge_bits = 19;
@@ -100,7 +102,7 @@ mod test {
 		lean.set_header_nonce(header.clone(), nonce);
 		lean.trim();
 
-		let mut ctx_u32 = CuckatooContext::<u32>::new_impl(edge_bits, 42, 10).unwrap();
+		let mut ctx_u32 = CuckatooContext::new_impl(edge_bits, 42, 10).unwrap();
 		ctx_u32.set_header_nonce(header, Some(nonce), true).unwrap();
 		lean.find_cycles(ctx_u32).unwrap();
 	}

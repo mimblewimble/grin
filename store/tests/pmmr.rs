@@ -22,7 +22,7 @@ use chrono::prelude::Utc;
 use croaring::Bitmap;
 
 use crate::core::core::hash::DefaultHashable;
-use crate::core::core::pmmr::{Backend, PMMR};
+use crate::core::core::pmmr::{Backend, ReadablePMMR, PMMR};
 use crate::core::ser::{
 	Error, PMMRIndexHashable, PMMRable, ProtocolVersion, Readable, Reader, Writeable, Writer,
 };
@@ -982,7 +982,7 @@ impl Writeable for TestElem {
 	}
 }
 impl Readable for TestElem {
-	fn read(reader: &mut dyn Reader) -> Result<TestElem, Error> {
+	fn read<R: Reader>(reader: &mut R) -> Result<TestElem, Error> {
 		Ok(TestElem(reader.read_u32()?))
 	}
 }

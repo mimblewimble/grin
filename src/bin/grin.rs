@@ -49,14 +49,12 @@ pub fn info_strings() -> (String, String) {
 			built_info::GIT_VERSION.map_or_else(|| "".to_owned(), |v| format!(" (git {})", v)),
 			built_info::TARGET,
 			built_info::RUSTC_VERSION,
-		)
-		.to_string(),
+		),
 		format!(
 			"Built with profile \"{}\", features \"{}\".",
 			built_info::PROFILE,
 			built_info::FEATURES_STR,
-		)
-		.to_string(),
+		),
 	)
 }
 
@@ -64,6 +62,10 @@ fn log_build_info() {
 	let (basic_info, detailed_info) = info_strings();
 	info!("{}", basic_info);
 	debug!("{}", detailed_info);
+}
+
+fn log_feature_flags() {
+	info!("Feature: NRD kernel enabled: {}", global::is_nrd_enabled());
 }
 
 fn main() {
@@ -78,22 +80,8 @@ fn real_main() -> i32 {
 		.get_matches();
 	let node_config;
 
-	// Temporary wallet warning message
-	match args.subcommand() {
-		("wallet", _) => {
-			println!();
-			println!("As of v1.1.0, the wallet has been split into a separate executable.");
-			println!(
-				"Please visit https://github.com/mimblewimble/grin-wallet/releases to download"
-			);
-			println!();
-			return 0;
-		}
-		_ => {}
-	}
-
-	let chain_type = if args.is_present("floonet") {
-		global::ChainTypes::Floonet
+	let chain_type = if args.is_present("testnet") {
+		global::ChainTypes::Testnet
 	} else if args.is_present("usernet") {
 		global::ChainTypes::UserTesting
 	} else {
@@ -101,15 +89,12 @@ fn real_main() -> i32 {
 	};
 
 	// Deal with configuration file creation
-	match args.subcommand() {
-		("server", Some(server_args)) => {
-			// If it's just a server config command, do it and exit
-			if let ("config", Some(_)) = server_args.subcommand() {
-				cmd::config_command_server(&chain_type, SERVER_CONFIG_FILE_NAME);
-				return 0;
-			}
+	if let ("server", Some(server_args)) = args.subcommand() {
+		// If it's just a server config command, do it and exit
+		if let ("config", Some(_)) = server_args.subcommand() {
+			cmd::config_command_server(&chain_type, SERVER_CONFIG_FILE_NAME);
+			return 0;
 		}
-		_ => {}
 	}
 
 	// Load relevant config
@@ -150,8 +135,6 @@ fn real_main() -> i32 {
 	};
 	init_logger(Some(logging_config), logs_tx);
 
-	global::set_mining_mode(config.members.unwrap().server.clone().chain_type);
-
 	if let Some(file_path) = &config.config_file_path {
 		info!(
 			"Using configuration file at {}",
@@ -162,6 +145,22 @@ fn real_main() -> i32 {
 	};
 
 	log_build_info();
+
+	// Initialize our global chain_type and feature flags (NRD kernel support currently).
+	// These are read via global and not read from config beyond this point.
+	global::init_global_chain_type(config.members.unwrap().server.chain_type);
+	info!("Chain: {:?}", global::get_chain_type());
+	match global::get_chain_type() {
+		global::ChainTypes::Mainnet => {
+			// Set various mainnet specific feature flags.
+			global::init_global_nrd_enabled(false);
+		}
+		_ => {
+			// Set various non-mainnet feature flags.
+			global::init_global_nrd_enabled(true);
+		}
+	}
+	log_feature_flags();
 
 	// Execute subcommand
 	match args.subcommand() {

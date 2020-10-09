@@ -93,9 +93,9 @@ fn create_chain_sim(diff: u64) -> Vec<(HeaderInfo, DiffStats)> {
 	)]
 }
 
-fn get_diff_stats(chain_sim: &Vec<HeaderInfo>) -> DiffStats {
+fn get_diff_stats(chain_sim: &[HeaderInfo]) -> DiffStats {
 	// Fill out some difficulty stats for convenience
-	let diff_iter = chain_sim.clone();
+	let diff_iter = chain_sim.to_vec();
 	let last_blocks: Vec<HeaderInfo> = global::difficulty_data_to_vector(diff_iter.iter().cloned());
 
 	let mut last_time = last_blocks[0].timestamp;
@@ -245,8 +245,7 @@ fn print_chain_sim(chain_sim: Vec<(HeaderInfo, DiffStats)>) {
 /// Checks different next_target adjustments and difficulty boundaries
 #[test]
 fn adjustment_scenarios() {
-	// Use production parameters for genesis diff
-	global::set_mining_mode(global::ChainTypes::Mainnet);
+	global::set_local_chain_type(global::ChainTypes::Mainnet);
 
 	// Genesis block with initial diff
 	let chain_sim = create_chain_sim(global::initial_block_difficulty());
@@ -318,8 +317,7 @@ fn adjustment_scenarios() {
 
 #[test]
 fn test_secondary_pow_ratio() {
-	global::set_mining_mode(global::ChainTypes::Mainnet);
-	assert_eq!(global::is_floonet(), false);
+	global::set_local_chain_type(global::ChainTypes::Mainnet);
 
 	assert_eq!(secondary_pow_ratio(1), 90);
 	assert_eq!(secondary_pow_ratio(89), 90);
@@ -360,11 +358,10 @@ fn test_secondary_pow_ratio() {
 
 #[test]
 fn test_secondary_pow_scale() {
+	global::set_local_chain_type(global::ChainTypes::Mainnet);
+
 	let window = DIFFICULTY_ADJUST_WINDOW;
 	let mut hi = HeaderInfo::from_diff_scaling(Difficulty::from_num(10), 100);
-
-	global::set_mining_mode(global::ChainTypes::Mainnet);
-	assert_eq!(global::is_floonet(), false);
 
 	// all primary, factor should increase so it becomes easier to find a high
 	// difficulty block
@@ -436,30 +433,75 @@ fn test_secondary_pow_scale() {
 
 #[test]
 fn hard_forks() {
-	global::set_mining_mode(global::ChainTypes::Mainnet);
-	assert_eq!(global::is_floonet(), false);
+	global::set_local_chain_type(global::ChainTypes::Mainnet);
+
 	assert!(valid_header_version(0, HeaderVersion(1)));
 	assert!(valid_header_version(10, HeaderVersion(1)));
 	assert!(!valid_header_version(10, HeaderVersion(2)));
-	assert!(valid_header_version(YEAR_HEIGHT / 2 - 1, HeaderVersion(1)));
-	assert!(valid_header_version(YEAR_HEIGHT / 2, HeaderVersion(2)));
-	assert!(valid_header_version(YEAR_HEIGHT / 2 + 1, HeaderVersion(2)));
-	assert!(!valid_header_version(YEAR_HEIGHT / 2, HeaderVersion(1)));
-	assert!(!valid_header_version(YEAR_HEIGHT, HeaderVersion(1)));
+	assert!(valid_header_version(
+		HARD_FORK_INTERVAL - 1,
+		HeaderVersion(1)
+	));
+	assert!(!valid_header_version(HARD_FORK_INTERVAL, HeaderVersion(1)));
+	assert!(valid_header_version(HARD_FORK_INTERVAL, HeaderVersion(2)));
+	assert!(valid_header_version(
+		HARD_FORK_INTERVAL + 1,
+		HeaderVersion(2)
+	));
 
-	assert!(valid_header_version(YEAR_HEIGHT - 1, HeaderVersion(2)));
-	assert!(valid_header_version(YEAR_HEIGHT, HeaderVersion(3)));
-	assert!(valid_header_version(YEAR_HEIGHT + 1, HeaderVersion(3)));
-	assert!(!valid_header_version(YEAR_HEIGHT, HeaderVersion(2)));
-	assert!(!valid_header_version(YEAR_HEIGHT * 3 / 2, HeaderVersion(2)));
-	// v4 not active yet
-	assert!(!valid_header_version(YEAR_HEIGHT * 3 / 2, HeaderVersion(4)));
-	assert!(!valid_header_version(YEAR_HEIGHT * 3 / 2, HeaderVersion(3)));
-	assert!(!valid_header_version(YEAR_HEIGHT * 3 / 2, HeaderVersion(2)));
-	assert!(!valid_header_version(YEAR_HEIGHT * 3 / 2, HeaderVersion(1)));
-	assert!(!valid_header_version(YEAR_HEIGHT * 2, HeaderVersion(3)));
+	assert!(valid_header_version(
+		HARD_FORK_INTERVAL * 2 - 1,
+		HeaderVersion(2)
+	));
 	assert!(!valid_header_version(
-		YEAR_HEIGHT * 3 / 2 + 1,
+		HARD_FORK_INTERVAL * 2,
+		HeaderVersion(2)
+	));
+	assert!(valid_header_version(
+		HARD_FORK_INTERVAL * 2,
 		HeaderVersion(3)
+	));
+	assert!(valid_header_version(
+		HARD_FORK_INTERVAL * 2 + 1,
+		HeaderVersion(3)
+	));
+
+	assert!(valid_header_version(
+		HARD_FORK_INTERVAL * 3 - 1,
+		HeaderVersion(3)
+	));
+	assert!(!valid_header_version(
+		HARD_FORK_INTERVAL * 3,
+		HeaderVersion(3)
+	));
+	assert!(valid_header_version(
+		HARD_FORK_INTERVAL * 3,
+		HeaderVersion(4)
+	));
+	assert!(valid_header_version(
+		HARD_FORK_INTERVAL * 3 + 1,
+		HeaderVersion(4)
+	));
+
+	// v5 not active yet
+	assert!(!valid_header_version(
+		HARD_FORK_INTERVAL * 4,
+		HeaderVersion(5)
+	));
+	assert!(!valid_header_version(
+		HARD_FORK_INTERVAL * 4,
+		HeaderVersion(4)
+	));
+	assert!(!valid_header_version(
+		HARD_FORK_INTERVAL * 4,
+		HeaderVersion(3)
+	));
+	assert!(!valid_header_version(
+		HARD_FORK_INTERVAL * 4,
+		HeaderVersion(2)
+	));
+	assert!(!valid_header_version(
+		HARD_FORK_INTERVAL * 4,
+		HeaderVersion(1)
 	));
 }

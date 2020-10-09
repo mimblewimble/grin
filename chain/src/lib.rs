@@ -24,6 +24,9 @@
 extern crate bitflags;
 
 #[macro_use]
+extern crate enum_primitive;
+
+#[macro_use]
 extern crate serde_derive;
 #[macro_use]
 extern crate log;
@@ -35,6 +38,7 @@ use grin_util as util;
 
 mod chain;
 mod error;
+pub mod linked_list;
 pub mod pipe;
 pub mod store;
 pub mod txhashset;

@@ -19,7 +19,7 @@ use bit_vec::BitVec;
 use croaring::Bitmap;
 
 use crate::core::core::hash::{DefaultHashable, Hash};
-use crate::core::core::pmmr::{self, ReadonlyPMMR, VecBackend, PMMR};
+use crate::core::core::pmmr::{self, ReadablePMMR, ReadonlyPMMR, VecBackend, PMMR};
 use crate::core::ser::{self, PMMRable, Readable, Reader, Writeable, Writer};
 use crate::error::{Error, ErrorKind};
 
@@ -176,7 +176,9 @@ impl BitmapAccumulator {
 
 	/// The root hash of the bitmap accumulator MMR.
 	pub fn root(&self) -> Hash {
-		ReadonlyPMMR::at(&self.backend, self.backend.size()).root()
+		ReadonlyPMMR::at(&self.backend, self.backend.size())
+			.root()
+			.expect("no root, invalid tree")
 	}
 }
 
@@ -233,7 +235,7 @@ impl Readable for BitmapChunk {
 	/// Reading is not currently supported, just return an empty one for now.
 	/// We store the underlying roaring bitmap externally for the bitmap accumulator
 	/// and the "hash only" backend means we never actually read these chunks.
-	fn read(_reader: &mut dyn Reader) -> Result<BitmapChunk, ser::Error> {
+	fn read<R: Reader>(_reader: &mut R) -> Result<BitmapChunk, ser::Error> {
 		Ok(BitmapChunk::new())
 	}
 }

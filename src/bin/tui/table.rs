@@ -488,14 +488,14 @@ impl<T: TableViewItem<H> + PartialEq, H: Eq + Hash + Copy + Clone + 'static> Tab
 	}
 
 	/// Returns a immutable reference to the items contained within the table.
-	pub fn borrow_items(&mut self) -> &Vec<T> {
+	pub fn borrow_items(&mut self) -> &[T] {
 		&self.items
 	}
 
 	/// Returns a mutable reference to the items contained within the table.
 	///
 	/// Can be used to modify the items in place.
-	pub fn borrow_items_mut(&mut self) -> &mut Vec<T> {
+	pub fn borrow_items_mut(&mut self) -> &mut [T] {
 		&mut self.items
 	}
 
@@ -625,8 +625,9 @@ impl<T: TableViewItem<H> + PartialEq, H: Eq + Hash + Copy + Clone + 'static> Tab
 				}
 			});
 			self.rows_to_items = rows_to_items;
-
-			old_item.map(|o| self.set_selected_item(o));
+			if let Some(o) = old_item {
+				self.set_selected_item(o)
+			}
 		}
 	}
 

@@ -1,6 +1,6 @@
 # Contracts
 
-*Read this in other languages: [简体中文]( contracts_ZH-CN.md)*
+*Read this in other languages: [简体中文](translations/contracts_ZH-CN.md)*
 
 This document describes smart contracts that can be setup using Grin even
 though the Grin chain does not support scripting. All these contracts rely

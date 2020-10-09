@@ -142,8 +142,8 @@ impl TableViewItem<DiffColumn> for DiffBlock {
 			DiffColumn::PoWType => pow_type,
 			DiffColumn::Difficulty => self.difficulty.to_string(),
 			DiffColumn::SecondaryScaling => self.secondary_scaling.to_string(),
-			DiffColumn::Time => format!("{}", datetime).to_string(),
-			DiffColumn::Duration => format!("{}s", self.duration).to_string(),
+			DiffColumn::Time => format!("{}", datetime),
+			DiffColumn::Duration => format!("{}s", self.duration),
 		}
 	}
 
@@ -165,9 +165,9 @@ impl TableViewItem<DiffColumn> for DiffBlock {
 /// Mining status view
 pub struct TUIMiningView;
 
-impl TUIStatusListener for TUIMiningView {
+impl TUIMiningView {
 	/// Create the mining view
-	fn create() -> Box<dyn View> {
+	pub fn create() -> impl View {
 		let devices_button = Button::new_raw("Mining Server Status", |s| {
 			let _ = s.call_on_name("mining_stack_view", |sv: &mut StackView| {
 				let pos = sv.find_layer_from_name("mining_device_view").unwrap();
@@ -228,15 +228,15 @@ impl TUIStatusListener for TUIMiningView {
 			)
 			.child(
 				LinearLayout::new(Orientation::Horizontal)
+					.child(TextView::new("  ").with_name("stratum_edge_bits_status")),
+			)
+			.child(
+				LinearLayout::new(Orientation::Horizontal)
 					.child(TextView::new("  ").with_name("stratum_network_difficulty_status")),
 			)
 			.child(
 				LinearLayout::new(Orientation::Horizontal)
 					.child(TextView::new("  ").with_name("stratum_network_hashrate")),
-			)
-			.child(
-				LinearLayout::new(Orientation::Horizontal)
-					.child(TextView::new("  ").with_name("stratum_edge_bits_status")),
 			);
 
 		let mining_device_view = LinearLayout::new(Orientation::Vertical)
@@ -307,9 +307,11 @@ impl TUIStatusListener for TUIMiningView {
 			let _ = c.focus_name(MAIN_MENU);
 		});
 
-		Box::new(mining_view.with_name(VIEW_MINING))
+		mining_view.with_name(VIEW_MINING)
 	}
+}
 
+impl TUIStatusListener for TUIMiningView {
 	/// update
 	fn update(c: &mut Cursive, stats: &ServerStats) {
 		c.call_on_name("diff_cur_height", |t: &mut TextView| {
@@ -320,7 +322,7 @@ impl TUIStatusListener for TUIMiningView {
 		});
 		let dur = time::Duration::from_secs(stats.diff_stats.average_block_time);
 		c.call_on_name("diff_avg_block_time", |t: &mut TextView| {
-			t.set_content(format!("{} Secs", dur.as_secs()).to_string());
+			t.set_content(format!("{} Secs", dur.as_secs()));
 		});
 		c.call_on_name("diff_avg_difficulty", |t: &mut TextView| {
 			t.set_content(stats.diff_stats.average_difficulty.to_string());
@@ -335,21 +337,32 @@ impl TUIStatusListener for TUIMiningView {
 			},
 		);
 		let stratum_stats = stats.stratum_stats.clone();
-		let stratum_network_hashrate = format!(
-			"Network Hashrate:      {:.*}",
-			2,
-			stratum_stats.network_hashrate(stratum_stats.block_height)
-		);
 		let worker_stats = stratum_stats.worker_stats;
 		let stratum_enabled = format!("Mining server enabled: {}", stratum_stats.is_enabled);
 		let stratum_is_running = format!("Mining server running: {}", stratum_stats.is_running);
 		let stratum_num_workers = format!("Number of workers:     {}", stratum_stats.num_workers);
-		let stratum_block_height = format!("Solving Block Height:  {}", stratum_stats.block_height);
-		let stratum_network_difficulty = format!(
-			"Network Difficulty:    {}",
-			stratum_stats.network_difficulty
-		);
-		let stratum_edge_bits = format!("Cuckoo Size:           {}", stratum_stats.edge_bits);
+		let stratum_block_height = match stratum_stats.num_workers {
+			0 => "Solving Block Height:  n/a".to_string(),
+			_ => format!("Solving Block Height:  {}", stratum_stats.block_height),
+		};
+		let stratum_edge_bits = match stratum_stats.num_workers {
+			0 => "Latest POW submitted:  n/a".to_string(),
+			_ => format!("Latest POW submitted:  Cuckoo{}", stratum_stats.edge_bits),
+		};
+		let stratum_network_difficulty = match stratum_stats.num_workers {
+			0 => "Network Difficulty:    n/a".to_string(),
+			_ => format!(
+				"Network Difficulty:    {}",
+				stratum_stats.network_difficulty
+			),
+		};
+		let stratum_network_hashrate = match stratum_stats.num_workers {
+			0 => "Network Hashrate:      n/a".to_string(),
+			_ => format!(
+				"Network Hashrate C{}:  {:.*}",
+				stratum_stats.edge_bits, 2, stratum_stats.network_hashrate
+			),
+		};
 
 		c.call_on_name("stratum_config_status", |t: &mut TextView| {
 			t.set_content(stratum_enabled);
@@ -363,14 +376,14 @@ impl TUIStatusListener for TUIMiningView {
 		c.call_on_name("stratum_block_height_status", |t: &mut TextView| {
 			t.set_content(stratum_block_height);
 		});
+		c.call_on_name("stratum_edge_bits_status", |t: &mut TextView| {
+			t.set_content(stratum_edge_bits);
+		});
 		c.call_on_name("stratum_network_difficulty_status", |t: &mut TextView| {
 			t.set_content(stratum_network_difficulty);
 		});
 		c.call_on_name("stratum_network_hashrate", |t: &mut TextView| {
 			t.set_content(stratum_network_hashrate);
-		});
-		c.call_on_name("stratum_edge_bits_status", |t: &mut TextView| {
-			t.set_content(stratum_edge_bits);
 		});
 		let _ = c.call_on_name(
 			TABLE_MINING_STATUS,

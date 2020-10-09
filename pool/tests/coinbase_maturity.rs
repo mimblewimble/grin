@@ -14,11 +14,10 @@
 
 pub mod common;
 
-use self::core::core::hash::Hash;
 use self::core::core::verifier_cache::LruVerifierCache;
-use self::core::core::{BlockHeader, BlockSums, Transaction};
+use self::core::global;
 use self::keychain::{ExtKeychain, Keychain};
-use self::pool::types::{BlockChain, PoolError};
+use self::pool::types::PoolError;
 use self::util::RwLock;
 use crate::common::*;
 use grin_core as core;
@@ -27,60 +26,49 @@ use grin_pool as pool;
 use grin_util as util;
 use std::sync::Arc;
 
-#[derive(Clone)]
-pub struct CoinbaseMaturityErrorChainAdapter {}
-
-impl CoinbaseMaturityErrorChainAdapter {
-	pub fn new() -> CoinbaseMaturityErrorChainAdapter {
-		CoinbaseMaturityErrorChainAdapter {}
-	}
-}
-
-impl BlockChain for CoinbaseMaturityErrorChainAdapter {
-	fn chain_head(&self) -> Result<BlockHeader, PoolError> {
-		unimplemented!();
-	}
-
-	fn get_block_header(&self, _hash: &Hash) -> Result<BlockHeader, PoolError> {
-		unimplemented!();
-	}
-
-	fn get_block_sums(&self, _hash: &Hash) -> Result<BlockSums, PoolError> {
-		unimplemented!();
-	}
-
-	fn validate_tx(&self, _tx: &Transaction) -> Result<(), PoolError> {
-		unimplemented!();
-	}
-
-	// Returns an ImmatureCoinbase for every tx we pass in.
-	fn verify_coinbase_maturity(&self, _tx: &Transaction) -> Result<(), PoolError> {
-		Err(PoolError::ImmatureCoinbase)
-	}
-
-	// Mocking this out for these tests.
-	fn verify_tx_lock_height(&self, _tx: &Transaction) -> Result<(), PoolError> {
-		Ok(())
-	}
-}
-
 /// Test we correctly verify coinbase maturity when adding txs to the pool.
 #[test]
 fn test_coinbase_maturity() {
+	util::init_test_logger();
+	global::set_local_chain_type(global::ChainTypes::AutomatedTesting);
 	let keychain: ExtKeychain = Keychain::from_random_seed(false).unwrap();
 
-	// Mocking this up with an adapter that will raise an error for coinbase
-	// maturity.
-	let chain = Arc::new(CoinbaseMaturityErrorChainAdapter::new());
-	let verifier_cache = Arc::new(RwLock::new(LruVerifierCache::new()));
-	let pool = RwLock::new(test_setup(chain, verifier_cache));
+	let db_root = "target/.coinbase_maturity";
+	clean_output_dir(db_root.into());
 
-	{
-		let mut write_pool = pool.write();
-		let tx = test_transaction(&keychain, vec![50], vec![49]);
-		match write_pool.add_to_pool(test_source(), tx.clone(), true, &BlockHeader::default()) {
-			Err(PoolError::ImmatureCoinbase) => {}
-			_ => panic!("Expected an immature coinbase error here."),
-		}
-	}
+	let genesis = genesis_block(&keychain);
+	let chain = Arc::new(init_chain(db_root, genesis));
+	let verifier_cache = Arc::new(RwLock::new(LruVerifierCache::new()));
+
+	// Initialize a new pool with our chain adapter.
+	let mut pool = init_transaction_pool(
+		Arc::new(ChainAdapter {
+			chain: chain.clone(),
+		}),
+		verifier_cache,
+	);
+
+	// Add a single block, introducing coinbase output to be spent later.
+	add_block(&chain, &[], &keychain);
+
+	let header_1 = chain.get_header_by_height(1).unwrap();
+	let tx = test_transaction_spending_coinbase(&keychain, &header_1, vec![100]);
+
+	// Coinbase is not yet matured and cannot be spent.
+	let header = chain.head_header().unwrap();
+	assert_eq!(
+		pool.add_to_pool(test_source(), tx.clone(), true, &header)
+			.err(),
+		Some(PoolError::ImmatureCoinbase)
+	);
+
+	// Add 2 more blocks. Original coinbase output is now matured and can be spent.
+	add_some_blocks(&chain, 2, &keychain);
+	let header = chain.head_header().unwrap();
+	assert_eq!(
+		pool.add_to_pool(test_source(), tx.clone(), true, &header),
+		Ok(())
+	);
+
+	clean_output_dir(db_root.into());
 }

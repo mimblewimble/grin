@@ -15,14 +15,13 @@
 //! The primary module containing the implementations of the transaction pool
 //! and its top-level members.
 
-use chrono::prelude::{DateTime, Utc};
-
+use self::core::consensus;
 use self::core::core::block;
 use self::core::core::committed;
 use self::core::core::hash::Hash;
 use self::core::core::transaction::{self, Transaction};
-use self::core::core::{BlockHeader, BlockSums};
-use self::core::{consensus, global};
+use self::core::core::{BlockHeader, BlockSums, Inputs, OutputIdentifier};
+use chrono::prelude::*;
 use failure::Fail;
 use grin_core as core;
 use grin_keychain as keychain;
@@ -120,7 +119,7 @@ pub struct PoolConfig {
 	/// block from. Allows miners to restrict the maximum weight of their
 	/// blocks.
 	#[serde(default = "default_mineable_max_weight")]
-	pub mineable_max_weight: usize,
+	pub mineable_max_weight: u64,
 }
 
 impl Default for PoolConfig {
@@ -143,8 +142,8 @@ fn default_max_pool_size() -> usize {
 fn default_max_stempool_size() -> usize {
 	50_000
 }
-fn default_mineable_max_weight() -> usize {
-	global::max_block_weight()
+fn default_mineable_max_weight() -> u64 {
+	consensus::MAX_BLOCK_WEIGHT
 }
 
 /// Represents a single entry in the pool.
@@ -159,13 +158,23 @@ pub struct PoolEntry {
 	pub tx: Transaction,
 }
 
+impl PoolEntry {
+	pub fn new(tx: Transaction, src: TxSource) -> PoolEntry {
+		PoolEntry {
+			src,
+			tx_at: Utc::now(),
+			tx,
+		}
+	}
+}
+
 /// Used to make decisions based on transaction acceptance priority from
 /// various sources. For example, a node may want to bypass pool size
 /// restrictions when accepting a transaction from a local wallet.
 ///
 /// Most likely this will evolve to contain some sort of network identifier,
 /// once we get a better sense of what transaction building might look like.
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
 pub enum TxSource {
 	PushApi,
 	Broadcast,
@@ -221,6 +230,15 @@ pub enum PoolError {
 	/// Attempt to add a duplicate tx to the pool.
 	#[fail(display = "Duplicate tx")]
 	DuplicateTx,
+	/// NRD kernels will not be accepted by the txpool/stempool pre-HF3.
+	#[fail(display = "NRD kernel pre-HF3")]
+	NRDKernelPreHF3,
+	/// NRD kernels are not valid if disabled locally via "feature flag".
+	#[fail(display = "NRD kernel not enabled")]
+	NRDKernelNotEnabled,
+	/// NRD kernels are not valid if relative_height rule not met.
+	#[fail(display = "NRD kernel relative height")]
+	NRDKernelRelativeHeight,
 	/// Other kinds of error (not yet pulled out into meaningful errors).
 	#[fail(display = "General pool error {}", _0)]
 	Other(String),
@@ -228,7 +246,10 @@ pub enum PoolError {
 
 impl From<transaction::Error> for PoolError {
 	fn from(e: transaction::Error) -> PoolError {
-		PoolError::InvalidTx(e)
+		match e {
+			transaction::Error::InvalidNRDRelativeHeight => PoolError::NRDKernelRelativeHeight,
+			e @ _ => PoolError::InvalidTx(e),
+		}
 	}
 }
 
@@ -254,13 +275,19 @@ impl From<committed::Error> for PoolError {
 pub trait BlockChain: Sync + Send {
 	/// Verify any coinbase outputs being spent
 	/// have matured sufficiently.
-	fn verify_coinbase_maturity(&self, tx: &transaction::Transaction) -> Result<(), PoolError>;
+	fn verify_coinbase_maturity(&self, inputs: &Inputs) -> Result<(), PoolError>;
 
 	/// Verify any coinbase outputs being spent
 	/// have matured sufficiently.
 	fn verify_tx_lock_height(&self, tx: &transaction::Transaction) -> Result<(), PoolError>;
 
+	/// Validate a transaction against the current utxo.
 	fn validate_tx(&self, tx: &Transaction) -> Result<(), PoolError>;
+
+	/// Validate inputs against the current utxo.
+	/// Returns the vec of output identifiers that would be spent
+	/// by these inputs if they can all be successfully spent.
+	fn validate_inputs(&self, inputs: &Inputs) -> Result<Vec<OutputIdentifier>, PoolError>;
 
 	fn chain_head(&self) -> Result<BlockHeader, PoolError>;
 
@@ -281,9 +308,9 @@ pub trait PoolAdapter: Send + Sync {
 
 /// Dummy adapter used as a placeholder for real implementations
 #[allow(dead_code)]
-pub struct NoopAdapter {}
+pub struct NoopPoolAdapter {}
 
-impl PoolAdapter for NoopAdapter {
+impl PoolAdapter for NoopPoolAdapter {
 	fn tx_accepted(&self, _entry: &PoolEntry) {}
 	fn stem_tx_accepted(&self, _entry: &PoolEntry) -> Result<(), PoolError> {
 		Ok(())

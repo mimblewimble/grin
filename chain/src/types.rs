@@ -188,10 +188,7 @@ impl SyncState {
 
 	/// Get sync error
 	pub fn sync_error(&self) -> Option<String> {
-		self.sync_error
-			.read()
-			.as_ref()
-			.and_then(|e| Some(e.to_string()))
+		self.sync_error.read().as_ref().map(|e| e.to_string())
 	}
 
 	/// Clear sync error
@@ -306,7 +303,7 @@ impl OutputRoots {
 }
 
 /// Minimal struct representing a known MMR position and associated block height.
-#[derive(Debug)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub struct CommitPos {
 	/// MMR position
 	pub pos: u64,
@@ -315,7 +312,7 @@ pub struct CommitPos {
 }
 
 impl Readable for CommitPos {
-	fn read(reader: &mut dyn Reader) -> Result<CommitPos, ser::Error> {
+	fn read<R: Reader>(reader: &mut R) -> Result<CommitPos, ser::Error> {
 		let pos = reader.read_u64()?;
 		let height = reader.read_u64()?;
 		Ok(CommitPos { pos, height })
@@ -334,7 +331,7 @@ impl Writeable for CommitPos {
 /// blockchain tree. References the max height and the latest and previous
 /// blocks
 /// for convenience and the total difficulty.
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq)]
 pub struct Tip {
 	/// Height of the tip (max height of the fork)
 	pub height: u64,
@@ -387,7 +384,7 @@ impl ser::Writeable for Tip {
 }
 
 impl ser::Readable for Tip {
-	fn read(reader: &mut dyn ser::Reader) -> Result<Tip, ser::Error> {
+	fn read<R: ser::Reader>(reader: &mut R) -> Result<Tip, ser::Error> {
 		let height = reader.read_u64()?;
 		let last = Hash::read(reader)?;
 		let prev = Hash::read(reader)?;
@@ -447,13 +444,48 @@ impl ChainAdapter for NoopAdapter {
 }
 
 /// Status of an accepted block.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum BlockStatus {
 	/// Block is the "next" block, updating the chain head.
-	Next,
+	Next {
+		/// Previous block (previous chain head).
+		prev: Tip,
+	},
 	/// Block does not update the chain head and is a fork.
-	Fork,
+	Fork {
+		/// Previous block on this fork.
+		prev: Tip,
+		/// Current chain head.
+		head: Tip,
+		/// Fork point for rewind.
+		fork_point: Tip,
+	},
 	/// Block updates the chain head via a (potentially disruptive) "reorg".
 	/// Previous block was not our previous chain head.
-	Reorg(u64),
+	Reorg {
+		/// Previous block on this fork.
+		prev: Tip,
+		/// Previous chain head.
+		prev_head: Tip,
+		/// Fork point for rewind.
+		fork_point: Tip,
+	},
+}
+
+impl BlockStatus {
+	/// Is this the "next" block?
+	pub fn is_next(&self) -> bool {
+		match *self {
+			BlockStatus::Next { .. } => true,
+			_ => false,
+		}
+	}
+
+	/// Is this block a "reorg"?
+	pub fn is_reorg(&self) -> bool {
+		match *self {
+			BlockStatus::Reorg { .. } => true,
+			_ => false,
+		}
+	}
 }

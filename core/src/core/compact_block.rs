@@ -82,7 +82,7 @@ impl CompactBlockBody {
 }
 
 impl Readable for CompactBlockBody {
-	fn read(reader: &mut dyn Reader) -> Result<CompactBlockBody, ser::Error> {
+	fn read<R: Reader>(reader: &mut R) -> Result<CompactBlockBody, ser::Error> {
 		let (out_full_len, kern_full_len, kern_id_len) =
 			ser_multiread!(reader, read_u64, read_u64, read_u64);
 
@@ -146,17 +146,17 @@ impl CompactBlock {
 	}
 
 	/// Get kern_ids
-	pub fn kern_ids(&self) -> &Vec<ShortId> {
+	pub fn kern_ids(&self) -> &[ShortId] {
 		&self.body.kern_ids
 	}
 
 	/// Get full (coinbase) kernels
-	pub fn kern_full(&self) -> &Vec<TxKernel> {
+	pub fn kern_full(&self) -> &[TxKernel] {
 		&self.body.kern_full
 	}
 
 	/// Get full (coinbase) outputs
-	pub fn out_full(&self) -> &Vec<Output> {
+	pub fn out_full(&self) -> &[Output] {
 		&self.body.out_full
 	}
 }
@@ -215,7 +215,7 @@ impl Writeable for CompactBlock {
 /// Implementation of Readable for a compact block, defines how to read a
 /// compact block from a binary stream.
 impl Readable for CompactBlock {
-	fn read(reader: &mut dyn Reader) -> Result<CompactBlock, ser::Error> {
+	fn read<R: Reader>(reader: &mut R) -> Result<CompactBlock, ser::Error> {
 		let header = BlockHeader::read(reader)?;
 		let nonce = reader.read_u64()?;
 		let body = CompactBlockBody::read(reader)?;
@@ -241,7 +241,7 @@ pub struct UntrustedCompactBlock(CompactBlock);
 /// Implementation of Readable for an untrusted compact block, defines how to read a
 /// compact block from a binary stream.
 impl Readable for UntrustedCompactBlock {
-	fn read(reader: &mut dyn Reader) -> Result<UntrustedCompactBlock, ser::Error> {
+	fn read<R: Reader>(reader: &mut R) -> Result<UntrustedCompactBlock, ser::Error> {
 		let header = UntrustedBlockHeader::read(reader)?;
 		let nonce = reader.read_u64()?;
 		let body = CompactBlockBody::read(reader)?;

@@ -13,26 +13,23 @@
 
 //! Implementation of Cuckatoo Cycle designed by John Tromp.
 use crate::global;
-use crate::pow::common::{CuckooParams, EdgeType, Link};
+use crate::pow::common::{CuckooParams, Link};
 use crate::pow::error::{Error, ErrorKind};
 use crate::pow::{PoWContext, Proof};
 use byteorder::{BigEndian, WriteBytesExt};
 use croaring::Bitmap;
 use std::mem;
-use util;
+use util::ToHex;
 
-struct Graph<T>
-where
-	T: EdgeType,
-{
+struct Graph {
 	/// Maximum number of edges
-	max_edges: T,
+	max_edges: u64,
 	/// Maximum nodes
 	max_nodes: u64,
 	/// Adjacency links
-	links: Vec<Link<T>>,
+	links: Vec<Link>,
 	/// Index into links array
-	adj_list: Vec<T>,
+	adj_list: Vec<u64>,
 	///
 	visited: Bitmap,
 	/// Maximum solutions
@@ -42,19 +39,16 @@ where
 	/// proof size
 	proof_size: usize,
 	/// define NIL type
-	nil: T,
+	nil: u64,
 }
 
-impl<T> Graph<T>
-where
-	T: EdgeType,
-{
+impl Graph {
 	/// Create a new graph with given parameters
-	pub fn new(max_edges: T, max_sols: u32, proof_size: usize) -> Result<Graph<T>, Error> {
-		if to_u64!(max_edges) >= u64::max_value() / 2 {
+	pub fn new(max_edges: u64, max_sols: u32, proof_size: usize) -> Result<Graph, Error> {
+		if max_edges >= u64::max_value() / 2 {
 			return Err(ErrorKind::Verification("graph is to big to build".to_string()).into());
 		}
-		let max_nodes = 2 * to_u64!(max_edges);
+		let max_nodes = 2 * max_edges;
 		Ok(Graph {
 			max_edges,
 			max_nodes,
@@ -64,55 +58,52 @@ where
 			adj_list: vec![],
 			visited: Bitmap::create(),
 			solutions: vec![],
-			nil: T::max_value(),
+			nil: u64::max_value(),
 		})
 	}
 
 	pub fn reset(&mut self) -> Result<(), Error> {
 		//TODO: Can be optimised
 		self.links = Vec::with_capacity(2 * self.max_nodes as usize);
-		self.adj_list = vec![T::max_value(); 2 * self.max_nodes as usize];
+		self.adj_list = vec![u64::max_value(); 2 * self.max_nodes as usize];
 		self.solutions = vec![Proof::zero(self.proof_size); 1];
 		self.visited = Bitmap::create();
 		Ok(())
 	}
 
 	pub fn byte_count(&self) -> Result<u64, Error> {
-		Ok(
-			2 * to_u64!(self.max_edges) * mem::size_of::<Link<T>>() as u64
-				+ mem::size_of::<T>() as u64 * 2 * self.max_nodes,
-		)
+		Ok(2 * self.max_edges * mem::size_of::<Link>() as u64
+			+ mem::size_of::<u64>() as u64 * 2 * self.max_nodes)
 	}
 
 	/// Add an edge to the graph
-	pub fn add_edge(&mut self, u: T, mut v: T) -> Result<(), Error> {
-		let max_nodes_t = to_edge!(T, self.max_nodes);
-		if u >= max_nodes_t || v >= max_nodes_t {
+	pub fn add_edge(&mut self, u: u64, mut v: u64) -> Result<(), Error> {
+		if u >= self.max_nodes || v >= self.max_nodes {
 			return Err(ErrorKind::EdgeAddition.into());
 		}
-		v = v + to_edge!(T, self.max_nodes);
-		let adj_u = self.adj_list[to_usize!(u ^ T::one())];
-		let adj_v = self.adj_list[to_usize!(v ^ T::one())];
+		v = v + self.max_nodes;
+		let adj_u = self.adj_list[(u ^ 1) as usize];
+		let adj_v = self.adj_list[(v ^ 1) as usize];
 		if adj_u != self.nil && adj_v != self.nil {
 			let sol_index = self.solutions.len() - 1;
 			self.solutions[sol_index].nonces[0] = self.links.len() as u64 / 2;
 			self.cycles_with_link(1, u, v)?;
 		}
-		let ulink = self.links.len();
-		let vlink = self.links.len() + 1;
-		if to_edge!(T, vlink) == self.nil {
+		let ulink = self.links.len() as u64;
+		let vlink = (self.links.len() + 1) as u64;
+		if vlink == self.nil {
 			return Err(ErrorKind::EdgeAddition.into());
 		}
 		self.links.push(Link {
-			next: self.adj_list[to_usize!(u)],
+			next: self.adj_list[u as usize],
 			to: u,
 		});
 		self.links.push(Link {
-			next: self.adj_list[to_usize!(v)],
+			next: self.adj_list[v as usize],
 			to: v,
 		});
-		self.adj_list[to_usize!(u)] = T::from(ulink).ok_or(ErrorKind::IntegerCast)?;
-		self.adj_list[to_usize!(v)] = T::from(vlink).ok_or(ErrorKind::IntegerCast)?;
+		self.adj_list[u as usize] = ulink;
+		self.adj_list[v as usize] = vlink;
 		Ok(())
 	}
 
@@ -120,11 +111,11 @@ where
 		self.visited.contains(u as u32)
 	}
 
-	fn cycles_with_link(&mut self, len: u32, u: T, dest: T) -> Result<(), Error> {
-		if self.test_bit(to_u64!(u >> 1)) {
+	fn cycles_with_link(&mut self, len: u32, u: u64, dest: u64) -> Result<(), Error> {
+		if self.test_bit(u >> 1) {
 			return Ok(());
 		}
-		if (u ^ T::one()) == dest {
+		if (u ^ 1) == dest {
 			if len == self.proof_size as u32 {
 				if self.solutions.len() < self.max_sols as usize {
 					// create next solution
@@ -135,20 +126,20 @@ where
 		} else if len == self.proof_size as u32 {
 			return Ok(());
 		}
-		let mut au1 = self.adj_list[to_usize!(u ^ T::one())];
+		let mut au1 = self.adj_list[(u ^ 1) as usize];
 		if au1 != self.nil {
-			self.visited.add(to_u32!(u >> 1));
+			self.visited.add((u >> 1) as u32);
 			while au1 != self.nil {
 				let i = self.solutions.len() - 1;
-				self.solutions[i].nonces[len as usize] = to_u64!(au1) / 2;
-				let link_index = to_usize!(au1 ^ T::one());
+				self.solutions[i].nonces[len as usize] = au1 / 2;
+				let link_index = (au1 ^ 1) as usize;
 				let link = self.links[link_index].to;
 				if link != self.nil {
 					self.cycles_with_link(len + 1, link, dest)?;
 				}
-				au1 = self.links[to_usize!(au1)].next;
+				au1 = self.links[au1 as usize].next;
 			}
-			self.visited.remove(to_u32!(u >> 1));
+			self.visited.remove((u >> 1) as u32);
 		}
 		Ok(())
 	}
@@ -157,32 +148,23 @@ where
 /// Instantiate a new CuckatooContext as a PowContext. Note that this can't
 /// be moved in the PoWContext trait as this particular trait needs to be
 /// convertible to an object trait.
-pub fn new_cuckatoo_ctx<T>(
+pub fn new_cuckatoo_ctx(
 	edge_bits: u8,
 	proof_size: usize,
 	max_sols: u32,
-) -> Result<Box<dyn PoWContext<T>>, Error>
-where
-	T: EdgeType + 'static,
-{
-	Ok(Box::new(CuckatooContext::<T>::new_impl(
+) -> Result<Box<dyn PoWContext>, Error> {
+	Ok(Box::new(CuckatooContext::new_impl(
 		edge_bits, proof_size, max_sols,
 	)?))
 }
 
 /// Cuckatoo solver context
-pub struct CuckatooContext<T>
-where
-	T: EdgeType,
-{
-	params: CuckooParams<T>,
-	graph: Graph<T>,
+pub struct CuckatooContext {
+	params: CuckooParams,
+	graph: Graph,
 }
 
-impl<T> PoWContext<T> for CuckatooContext<T>
-where
-	T: EdgeType,
-{
+impl PoWContext for CuckatooContext {
 	fn set_header_nonce(
 		&mut self,
 		header: Vec<u8>,
@@ -202,18 +184,15 @@ where
 	}
 }
 
-impl<T> CuckatooContext<T>
-where
-	T: EdgeType,
-{
+impl CuckatooContext {
 	/// New Solver context
 	pub fn new_impl(
 		edge_bits: u8,
 		proof_size: usize,
 		max_sols: u32,
-	) -> Result<CuckatooContext<T>, Error> {
-		let params = CuckooParams::new(edge_bits, proof_size)?;
-		let num_edges = to_edge!(T, params.num_edges);
+	) -> Result<CuckatooContext, Error> {
+		let params = CuckooParams::new(edge_bits, edge_bits, proof_size)?;
+		let num_edges = params.num_edges;
 		Ok(CuckatooContext {
 			params,
 			graph: Graph::new(num_edges, max_sols, proof_size)?,
@@ -224,7 +203,7 @@ where
 	pub fn sipkey_hex(&self, index: usize) -> Result<String, Error> {
 		let mut rdr = vec![];
 		rdr.write_u64::<BigEndian>(self.params.siphash_keys[index])?;
-		Ok(util::to_hex(rdr))
+		Ok(rdr.to_hex())
 	}
 
 	/// Return number of bytes used by the graph
@@ -246,11 +225,6 @@ where
 		Ok(())
 	}
 
-	/// Return siphash masked for type
-	pub fn sipnode(&self, edge: T, uorv: u64) -> Result<T, Error> {
-		self.params.sipnode(edge, uorv, false)
-	}
-
 	/// Simple implementation of algorithm
 	pub fn find_cycles_iter<I>(&mut self, iter: I) -> Result<Vec<Proof>, Error>
 	where
@@ -259,9 +233,9 @@ where
 		let mut val = vec![];
 		for n in iter {
 			val.push(n);
-			let u = self.sipnode(to_edge!(T, n), 0)?;
-			let v = self.sipnode(to_edge!(T, n), 1)?;
-			self.graph.add_edge(to_edge!(T, u), to_edge!(T, v))?;
+			let u = self.params.sipnode(n, 0)?;
+			let v = self.params.sipnode(n, 1)?;
+			self.graph.add_edge(u, v)?;
 		}
 		self.graph.solutions.pop();
 		for s in &mut self.graph.solutions {
@@ -290,14 +264,14 @@ where
 		let mut xor1: u64 = xor0;
 
 		for n in 0..proof.proof_size() {
-			if nonces[n] > to_u64!(self.params.edge_mask) {
+			if nonces[n] > self.params.edge_mask {
 				return Err(ErrorKind::Verification("edge too big".to_owned()).into());
 			}
 			if n > 0 && nonces[n] <= nonces[n - 1] {
 				return Err(ErrorKind::Verification("edges not ascending".to_owned()).into());
 			}
-			uvs[2 * n] = to_u64!(self.sipnode(to_edge!(T, nonces[n]), 0)?);
-			uvs[2 * n + 1] = to_u64!(self.sipnode(to_edge!(T, nonces[n]), 1)?);
+			uvs[2 * n] = self.params.sipnode(nonces[n], 0)?;
+			uvs[2 * n + 1] = self.params.sipnode(nonces[n], 1)?;
 			xor0 ^= uvs[2 * n];
 			xor1 ^= uvs[2 * n + 1];
 		}
@@ -365,67 +339,121 @@ mod test {
 		0x6728b6e1, 0x67adfb45, 0x68ae2306, 0x6d60f5e1, 0x78af3c4f, 0x7dde51ab, 0x7faced21,
 	];
 
+	// Cuckatoo 32 Solution for Header [0u8;80] - nonce 17
+	static V1_32: [u64; 42] = [
+		0x6da0bbf, 0xb175276, 0xf978803, 0x187bea71, 0x2074a1a6, 0x22270923, 0x2c70b560,
+		0x411d193f, 0x417c55d4, 0x4ebbda62, 0x5238584a, 0x545efac9, 0x569e98e1, 0x57040b66,
+		0x5e16153e, 0x5e749d2e, 0x60b771c2, 0x68e63420, 0x74a2825e, 0x755790ac, 0x7d5e280f,
+		0x7fe4d148, 0x934b32c8, 0x94a0c441, 0x9643fb25, 0x9718e41d, 0x982e6b8b, 0x9c47d21c,
+		0xa1f64135, 0xa90e209c, 0xabb868cb, 0xafef989e, 0xb0fc021e, 0xb20a7b56, 0xb5e59931,
+		0xb63e46b9, 0xb8823ed5, 0xd11e966c, 0xd95e515d, 0xe0245efe, 0xf3edc79a, 0xfb8a29ce,
+	];
+
+	// Cuckatoo 33 Solution for Header [0u8;80] - nonce 79
+	static V1_33: [u64; 42] = [
+		0x7aaf51f,
+		0x1434ebf3,
+		0x25bcee6e,
+		0x2fbddf0b,
+		0x322a87b6,
+		0x414f6a57,
+		0x701a84af,
+		0x7c432040,
+		0x822b8ee0,
+		0x83c9fed3,
+		0x89af26b2,
+		0xa5bc5d69,
+		0xbe924630,
+		0xd3146f50,
+		0xd4e0f240,
+		0xe10e5bdc,
+		0x113400ccc,
+		0x114a917b2,
+		0x118482498,
+		0x11deca0f4,
+		0x1241c7ff0,
+		0x1245f8886,
+		0x12a6517e3,
+		0x12c1a0edd,
+		0x142d988ee,
+		0x14637a89b,
+		0x15399e735,
+		0x1699c1cf9,
+		0x16e91ddd4,
+		0x17414f603,
+		0x18c07384c,
+		0x1993cdd97,
+		0x19d37ce5b,
+		0x1a43455c5,
+		0x1aa312c2f,
+		0x1b20fe128,
+		0x1b7610376,
+		0x1bce4d125,
+		0x1c4834307,
+		0x1c7a2e5b2,
+		0x1da840832,
+		0x1e4e3da0c,
+	];
+
 	#[test]
 	fn cuckatoo() {
-		let ret = basic_solve::<u32>();
+		global::set_local_chain_type(global::ChainTypes::Mainnet);
+		let ret = basic_solve();
 		if let Err(r) = ret {
-			panic!("basic_solve u32: Error: {}", r);
+			panic!("basic_solve: Error: {}", r);
 		}
-		let ret = basic_solve::<u64>();
+		let ret = validate29_vectors();
 		if let Err(r) = ret {
-			panic!("basic_solve u64: Error: {}", r);
+			panic!("validate_29_vectors: Error: {}", r);
 		}
-		let ret = validate29_vectors::<u32>();
+		let ret = validate31_vectors();
 		if let Err(r) = ret {
-			panic!("validate_29_vectors u32: Error: {}", r);
+			panic!("validate_31_vectors: Error: {}", r);
 		}
-		let ret = validate29_vectors::<u64>();
+		let ret = validate32_vectors();
 		if let Err(r) = ret {
-			panic!("validate_29_vectors u64: Error: {}", r);
+			panic!("validate_32_vectors: Error: {}", r);
 		}
-		let ret = validate31_vectors::<u32>();
+		let ret = validate33_vectors();
 		if let Err(r) = ret {
-			panic!("validate_31_vectors u32: Error: {}", r);
+			panic!("validate_33_vectors: Error: {}", r);
 		}
-		let ret = validate31_vectors::<u64>();
+		let ret = validate_fail();
 		if let Err(r) = ret {
-			panic!("validate_31_vectors u64: Error: {}", r);
-		}
-		let ret = validate_fail::<u32>();
-		if let Err(r) = ret {
-			panic!("validate_fail u32: Error: {}", r);
-		}
-		let ret = validate_fail::<u64>();
-		if let Err(r) = ret {
-			panic!("validate_fail u64: Error: {}", r);
+			panic!("validate_fail: Error: {}", r);
 		}
 	}
 
-	fn validate29_vectors<T>() -> Result<(), Error>
-	where
-		T: EdgeType,
-	{
-		let mut ctx = CuckatooContext::<u32>::new_impl(29, 42, 10).unwrap();
+	fn validate29_vectors() -> Result<(), Error> {
+		let mut ctx = CuckatooContext::new_impl(29, 42, 10).unwrap();
 		ctx.set_header_nonce([0u8; 80].to_vec(), Some(20), false)?;
 		assert!(ctx.verify(&Proof::new(V1_29.to_vec())).is_ok());
 		Ok(())
 	}
 
-	fn validate31_vectors<T>() -> Result<(), Error>
-	where
-		T: EdgeType,
-	{
-		let mut ctx = CuckatooContext::<u32>::new_impl(31, 42, 10).unwrap();
+	fn validate31_vectors() -> Result<(), Error> {
+		let mut ctx = CuckatooContext::new_impl(31, 42, 10).unwrap();
 		ctx.set_header_nonce([0u8; 80].to_vec(), Some(99), false)?;
 		assert!(ctx.verify(&Proof::new(V1_31.to_vec())).is_ok());
 		Ok(())
 	}
 
-	fn validate_fail<T>() -> Result<(), Error>
-	where
-		T: EdgeType,
-	{
-		let mut ctx = CuckatooContext::<u32>::new_impl(29, 42, 10).unwrap();
+	fn validate32_vectors() -> Result<(), Error> {
+		let mut ctx = CuckatooContext::new_impl(32, 42, 10).unwrap();
+		ctx.set_header_nonce([0u8; 80].to_vec(), Some(17), false)?;
+		assert!(ctx.verify(&Proof::new(V1_32.to_vec())).is_ok());
+		Ok(())
+	}
+
+	fn validate33_vectors() -> Result<(), Error> {
+		let mut ctx = CuckatooContext::new_impl(33, 42, 10).unwrap();
+		ctx.set_header_nonce([0u8; 80].to_vec(), Some(79), false)?;
+		assert!(ctx.verify(&Proof::new(V1_33.to_vec())).is_ok());
+		Ok(())
+	}
+
+	fn validate_fail() -> Result<(), Error> {
+		let mut ctx = CuckatooContext::new_impl(29, 42, 10).unwrap();
 		let mut header = [0u8; 80];
 		header[0] = 1u8;
 		ctx.set_header_nonce(header.to_vec(), Some(20), false)?;
@@ -439,10 +467,7 @@ mod test {
 		Ok(())
 	}
 
-	fn basic_solve<T>() -> Result<(), Error>
-	where
-		T: EdgeType,
-	{
+	fn basic_solve() -> Result<(), Error> {
 		let nonce = 1546569;
 		let _range = 1;
 		let header = [0u8; 80].to_vec();
@@ -457,7 +482,7 @@ mod test {
 			String::from_utf8(header.clone()).unwrap(),
 			nonce
 		);
-		let mut ctx_u32 = CuckatooContext::<u32>::new_impl(edge_bits, proof_size, max_sols)?;
+		let mut ctx_u32 = CuckatooContext::new_impl(edge_bits, proof_size, max_sols)?;
 		let mut bytes = ctx_u32.byte_count()?;
 		let mut unit = 0;
 		while bytes >= 10240 {

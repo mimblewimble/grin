@@ -17,17 +17,21 @@
 //! should be used sparingly.
 
 use crate::consensus::{
-	graph_weight, valid_header_version, HeaderInfo, BASE_EDGE_BITS, BLOCK_TIME_SEC,
-	COINBASE_MATURITY, CUT_THROUGH_HORIZON, DAY_HEIGHT, DEFAULT_MIN_EDGE_BITS,
-	DIFFICULTY_ADJUST_WINDOW, INITIAL_DIFFICULTY, MAX_BLOCK_WEIGHT, PROOFSIZE,
-	SECOND_POW_EDGE_BITS, STATE_SYNC_THRESHOLD,
+	graph_weight, valid_header_version, HeaderInfo, BASE_EDGE_BITS, BLOCK_KERNEL_WEIGHT,
+	BLOCK_OUTPUT_WEIGHT, BLOCK_TIME_SEC, COINBASE_MATURITY, CUT_THROUGH_HORIZON, DAY_HEIGHT,
+	DEFAULT_MIN_EDGE_BITS, DIFFICULTY_ADJUST_WINDOW, INITIAL_DIFFICULTY, MAX_BLOCK_WEIGHT,
+	PROOFSIZE, SECOND_POW_EDGE_BITS, STATE_SYNC_THRESHOLD,
 };
 use crate::core::block::HeaderVersion;
-use crate::pow::{
-	self, new_cuckaroo_ctx, new_cuckarood_ctx, new_cuckaroom_ctx, new_cuckatoo_ctx, EdgeType,
-	PoWContext,
+use crate::{
+	pow::{
+		self, new_cuckaroo_ctx, new_cuckarood_ctx, new_cuckaroom_ctx, new_cuckarooz_ctx,
+		new_cuckatoo_ctx, BitVec, PoWContext,
+	},
+	ser::ProtocolVersion,
 };
-use util::RwLock;
+use std::cell::Cell;
+use util::OneTime;
 
 /// An enum collecting sets of parameters used throughout the
 /// code wherever mining is needed. This should allow for
@@ -41,7 +45,7 @@ use util::RwLock;
 /// Note: We also use a specific (possible different) protocol version
 /// for both the backend database and MMR data files.
 /// This defines the p2p layer protocol version for this node.
-pub const PROTOCOL_VERSION: u32 = 2;
+pub const PROTOCOL_VERSION: ProtocolVersion = ProtocolVersion(1_000);
 
 /// Automated testing edge_bits
 pub const AUTOMATED_TESTING_MIN_EDGE_BITS: u8 = 10;
@@ -77,7 +81,7 @@ pub const TESTING_INITIAL_GRAPH_WEIGHT: u32 = 1;
 pub const TESTING_INITIAL_DIFFICULTY: u64 = 1;
 
 /// Testing max_block_weight (artifically low, just enough to support a few txs).
-pub const TESTING_MAX_BLOCK_WEIGHT: usize = 150;
+pub const TESTING_MAX_BLOCK_WEIGHT: u64 = 250;
 
 /// If a peer's last updated difficulty is 2 hours ago and its difficulty's lower than ours,
 /// we're sure this peer is a stuck node, and we will kick out such kind of stuck peers.
@@ -104,25 +108,25 @@ pub const TXHASHSET_ARCHIVE_INTERVAL: u64 = 12 * 60;
 
 /// Types of chain a server can run with, dictates the genesis block and
 /// and mining parameters used.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
 pub enum ChainTypes {
 	/// For CI testing
 	AutomatedTesting,
 	/// For User testing
 	UserTesting,
 	/// Protocol testing network
-	Floonet,
+	Testnet,
 	/// Main production network
 	Mainnet,
 }
 
 impl ChainTypes {
-	/// Short name representing the chain type ("floo", "main", etc.)
+	/// Short name representing the chain type ("test", "main", etc.)
 	pub fn shortname(&self) -> String {
 		match *self {
 			ChainTypes::AutomatedTesting => "auto".to_owned(),
 			ChainTypes::UserTesting => "user".to_owned(),
-			ChainTypes::Floonet => "floo".to_owned(),
+			ChainTypes::Testnet => "test".to_owned(),
 			ChainTypes::Mainnet => "main".to_owned(),
 		}
 	}
@@ -134,31 +138,81 @@ impl Default for ChainTypes {
 	}
 }
 
-/// PoW test mining and verifier context
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub enum PoWContextTypes {
-	/// Classic Cuckoo
-	Cuckoo,
-	/// ASIC-friendly Cuckatoo
-	Cuckatoo,
-	/// ASIC-resistant Cuckaroo
-	Cuckaroo,
-}
-
 lazy_static! {
-	/// The mining parameter mode
-	pub static ref CHAIN_TYPE: RwLock<ChainTypes> =
-			RwLock::new(ChainTypes::Mainnet);
+	/// Global chain_type that must be initialized once on node startup.
+	/// This is accessed via get_chain_type() which allows the global value
+	/// to be overridden on a per-thread basis (for testing).
+	pub static ref GLOBAL_CHAIN_TYPE: OneTime<ChainTypes> = OneTime::new();
 
-	/// PoW context type to instantiate
-	pub static ref POW_CONTEXT_TYPE: RwLock<PoWContextTypes> =
-			RwLock::new(PoWContextTypes::Cuckoo);
+	/// Global feature flag for NRD kernel support.
+	/// If enabled NRD kernels are treated as valid after HF3 (based on header version).
+	/// If disabled NRD kernels are invalid regardless of header version or block height.
+	pub static ref GLOBAL_NRD_FEATURE_ENABLED: OneTime<bool> = OneTime::new();
 }
 
-/// Set the mining mode
-pub fn set_mining_mode(mode: ChainTypes) {
-	let mut param_ref = CHAIN_TYPE.write();
-	*param_ref = mode;
+thread_local! {
+	/// Mainnet|Testnet|UserTesting|AutomatedTesting
+	pub static CHAIN_TYPE: Cell<Option<ChainTypes>> = Cell::new(None);
+
+	/// Local feature flag for NRD kernel support.
+	pub static NRD_FEATURE_ENABLED: Cell<Option<bool>> = Cell::new(None);
+}
+
+/// Set the chain type on a per-thread basis via thread_local storage.
+pub fn set_local_chain_type(new_type: ChainTypes) {
+	CHAIN_TYPE.with(|chain_type| chain_type.set(Some(new_type)))
+}
+
+/// Get the chain type via thread_local, fallback to global chain_type.
+pub fn get_chain_type() -> ChainTypes {
+	CHAIN_TYPE.with(|chain_type| match chain_type.get() {
+		None => {
+			if GLOBAL_CHAIN_TYPE.is_init() {
+				let chain_type = GLOBAL_CHAIN_TYPE.borrow();
+				set_local_chain_type(chain_type);
+				chain_type
+			} else {
+				panic!("GLOBAL_CHAIN_TYPE and CHAIN_TYPE unset. Consider set_local_chain_type() in tests.");
+			}
+		}
+		Some(chain_type) => chain_type,
+	})
+}
+
+/// One time initialization of the global chain_type.
+/// Will panic if we attempt to re-initialize this (via OneTime).
+pub fn init_global_chain_type(new_type: ChainTypes) {
+	GLOBAL_CHAIN_TYPE.init(new_type)
+}
+
+/// One time initialization of the global chain_type.
+/// Will panic if we attempt to re-initialize this (via OneTime).
+pub fn init_global_nrd_enabled(enabled: bool) {
+	GLOBAL_NRD_FEATURE_ENABLED.init(enabled)
+}
+
+/// Explicitly enable the NRD global feature flag.
+pub fn set_local_nrd_enabled(enabled: bool) {
+	NRD_FEATURE_ENABLED.with(|flag| flag.set(Some(enabled)))
+}
+
+/// Is the NRD feature flag enabled?
+/// Look at thread local config first. If not set fallback to global config.
+/// Default to false if global config unset.
+pub fn is_nrd_enabled() -> bool {
+	NRD_FEATURE_ENABLED.with(|flag| match flag.get() {
+		None => {
+			if GLOBAL_NRD_FEATURE_ENABLED.is_init() {
+				let global_flag = GLOBAL_NRD_FEATURE_ENABLED.borrow();
+				flag.set(Some(global_flag));
+				global_flag
+			} else {
+				// Global config unset, default to false.
+				false
+			}
+		}
+		Some(flag) => flag,
+	})
 }
 
 /// Return either a cuckoo context or a cuckatoo context
@@ -168,14 +222,14 @@ pub fn create_pow_context<T>(
 	edge_bits: u8,
 	proof_size: usize,
 	max_sols: u32,
-) -> Result<Box<dyn PoWContext<T>>, pow::Error>
-where
-	T: EdgeType + 'static,
-{
-	let chain_type = CHAIN_TYPE.read().clone();
+) -> Result<Box<dyn PoWContext>, pow::Error> {
+	let chain_type = get_chain_type();
 	match chain_type {
-		// Mainnet has Cuckaroo(d)29 for AR and Cuckatoo31+ for AF
+		// Mainnet has Cuckaroo{,d,m,z}29 for AR and Cuckatoo31+ for AF
 		ChainTypes::Mainnet if edge_bits > 29 => new_cuckatoo_ctx(edge_bits, proof_size, max_sols),
+		ChainTypes::Mainnet if valid_header_version(height, HeaderVersion(4)) => {
+			new_cuckarooz_ctx(edge_bits, proof_size)
+		}
 		ChainTypes::Mainnet if valid_header_version(height, HeaderVersion(3)) => {
 			new_cuckaroom_ctx(edge_bits, proof_size)
 		}
@@ -184,15 +238,18 @@ where
 		}
 		ChainTypes::Mainnet => new_cuckaroo_ctx(edge_bits, proof_size),
 
-		// Same for Floonet
-		ChainTypes::Floonet if edge_bits > 29 => new_cuckatoo_ctx(edge_bits, proof_size, max_sols),
-		ChainTypes::Floonet if valid_header_version(height, HeaderVersion(3)) => {
+		// Same for Testnet
+		ChainTypes::Testnet if edge_bits > 29 => new_cuckatoo_ctx(edge_bits, proof_size, max_sols),
+		ChainTypes::Testnet if valid_header_version(height, HeaderVersion(4)) => {
+			new_cuckarooz_ctx(edge_bits, proof_size)
+		}
+		ChainTypes::Testnet if valid_header_version(height, HeaderVersion(3)) => {
 			new_cuckaroom_ctx(edge_bits, proof_size)
 		}
-		ChainTypes::Floonet if valid_header_version(height, HeaderVersion(2)) => {
+		ChainTypes::Testnet if valid_header_version(height, HeaderVersion(2)) => {
 			new_cuckarood_ctx(edge_bits, proof_size)
 		}
-		ChainTypes::Floonet => new_cuckaroo_ctx(edge_bits, proof_size),
+		ChainTypes::Testnet => new_cuckaroo_ctx(edge_bits, proof_size),
 
 		// Everything else is Cuckatoo only
 		_ => new_cuckatoo_ctx(edge_bits, proof_size, max_sols),
@@ -201,8 +258,7 @@ where
 
 /// The minimum acceptable edge_bits
 pub fn min_edge_bits() -> u8 {
-	let param_ref = CHAIN_TYPE.read();
-	match *param_ref {
+	match get_chain_type() {
 		ChainTypes::AutomatedTesting => AUTOMATED_TESTING_MIN_EDGE_BITS,
 		ChainTypes::UserTesting => USER_TESTING_MIN_EDGE_BITS,
 		_ => DEFAULT_MIN_EDGE_BITS,
@@ -213,8 +269,7 @@ pub fn min_edge_bits() -> u8 {
 /// while the min_edge_bits can be changed on a soft fork, changing
 /// base_edge_bits is a hard fork.
 pub fn base_edge_bits() -> u8 {
-	let param_ref = CHAIN_TYPE.read();
-	match *param_ref {
+	match get_chain_type() {
 		ChainTypes::AutomatedTesting => AUTOMATED_TESTING_MIN_EDGE_BITS,
 		ChainTypes::UserTesting => USER_TESTING_MIN_EDGE_BITS,
 		_ => BASE_EDGE_BITS,
@@ -223,8 +278,7 @@ pub fn base_edge_bits() -> u8 {
 
 /// The proofsize
 pub fn proofsize() -> usize {
-	let param_ref = CHAIN_TYPE.read();
-	match *param_ref {
+	match get_chain_type() {
 		ChainTypes::AutomatedTesting => AUTOMATED_TESTING_PROOF_SIZE,
 		ChainTypes::UserTesting => USER_TESTING_PROOF_SIZE,
 		_ => PROOFSIZE,
@@ -233,8 +287,7 @@ pub fn proofsize() -> usize {
 
 /// Coinbase maturity for coinbases to be spent
 pub fn coinbase_maturity() -> u64 {
-	let param_ref = CHAIN_TYPE.read();
-	match *param_ref {
+	match get_chain_type() {
 		ChainTypes::AutomatedTesting => AUTOMATED_TESTING_COINBASE_MATURITY,
 		ChainTypes::UserTesting => USER_TESTING_COINBASE_MATURITY,
 		_ => COINBASE_MATURITY,
@@ -243,40 +296,42 @@ pub fn coinbase_maturity() -> u64 {
 
 /// Initial mining difficulty
 pub fn initial_block_difficulty() -> u64 {
-	let param_ref = CHAIN_TYPE.read();
-	match *param_ref {
+	match get_chain_type() {
 		ChainTypes::AutomatedTesting => TESTING_INITIAL_DIFFICULTY,
 		ChainTypes::UserTesting => TESTING_INITIAL_DIFFICULTY,
-		ChainTypes::Floonet => INITIAL_DIFFICULTY,
+		ChainTypes::Testnet => INITIAL_DIFFICULTY,
 		ChainTypes::Mainnet => INITIAL_DIFFICULTY,
 	}
 }
 /// Initial mining secondary scale
 pub fn initial_graph_weight() -> u32 {
-	let param_ref = CHAIN_TYPE.read();
-	match *param_ref {
+	match get_chain_type() {
 		ChainTypes::AutomatedTesting => TESTING_INITIAL_GRAPH_WEIGHT,
 		ChainTypes::UserTesting => TESTING_INITIAL_GRAPH_WEIGHT,
-		ChainTypes::Floonet => graph_weight(0, SECOND_POW_EDGE_BITS) as u32,
+		ChainTypes::Testnet => graph_weight(0, SECOND_POW_EDGE_BITS) as u32,
 		ChainTypes::Mainnet => graph_weight(0, SECOND_POW_EDGE_BITS) as u32,
 	}
 }
 
 /// Maximum allowed block weight.
-pub fn max_block_weight() -> usize {
-	let param_ref = CHAIN_TYPE.read();
-	match *param_ref {
+pub fn max_block_weight() -> u64 {
+	match get_chain_type() {
 		ChainTypes::AutomatedTesting => TESTING_MAX_BLOCK_WEIGHT,
 		ChainTypes::UserTesting => TESTING_MAX_BLOCK_WEIGHT,
-		ChainTypes::Floonet => MAX_BLOCK_WEIGHT,
+		ChainTypes::Testnet => MAX_BLOCK_WEIGHT,
 		ChainTypes::Mainnet => MAX_BLOCK_WEIGHT,
 	}
 }
 
+/// Maximum allowed transaction weight (1 weight unit ~= 32 bytes)
+pub fn max_tx_weight() -> u64 {
+	let coinbase_weight = BLOCK_OUTPUT_WEIGHT + BLOCK_KERNEL_WEIGHT;
+	max_block_weight().saturating_sub(coinbase_weight) as u64
+}
+
 /// Horizon at which we can cut-through and do full local pruning
 pub fn cut_through_horizon() -> u32 {
-	let param_ref = CHAIN_TYPE.read();
-	match *param_ref {
+	match get_chain_type() {
 		ChainTypes::AutomatedTesting => AUTOMATED_TESTING_CUT_THROUGH_HORIZON,
 		ChainTypes::UserTesting => USER_TESTING_CUT_THROUGH_HORIZON,
 		_ => CUT_THROUGH_HORIZON,
@@ -285,8 +340,7 @@ pub fn cut_through_horizon() -> u32 {
 
 /// Threshold at which we can request a txhashset (and full blocks from)
 pub fn state_sync_threshold() -> u32 {
-	let param_ref = CHAIN_TYPE.read();
-	match *param_ref {
+	match get_chain_type() {
 		ChainTypes::AutomatedTesting => TESTING_STATE_SYNC_THRESHOLD,
 		ChainTypes::UserTesting => TESTING_STATE_SYNC_THRESHOLD,
 		_ => STATE_SYNC_THRESHOLD,
@@ -295,8 +349,7 @@ pub fn state_sync_threshold() -> u32 {
 
 /// Number of blocks to reuse a txhashset zip for.
 pub fn txhashset_archive_interval() -> u64 {
-	let param_ref = CHAIN_TYPE.read();
-	match *param_ref {
+	match get_chain_type() {
 		ChainTypes::AutomatedTesting => TESTING_TXHASHSET_ARCHIVE_INTERVAL,
 		ChainTypes::UserTesting => TESTING_TXHASHSET_ARCHIVE_INTERVAL,
 		_ => TXHASHSET_ARCHIVE_INTERVAL,
@@ -306,17 +359,22 @@ pub fn txhashset_archive_interval() -> u64 {
 /// Are we in production mode?
 /// Production defined as a live public network, testnet[n] or mainnet.
 pub fn is_production_mode() -> bool {
-	let param_ref = CHAIN_TYPE.read();
-	ChainTypes::Floonet == *param_ref || ChainTypes::Mainnet == *param_ref
+	match get_chain_type() {
+		ChainTypes::Testnet => true,
+		ChainTypes::Mainnet => true,
+		_ => false,
+	}
 }
 
-/// Are we in floonet?
+/// Are we in testnet?
 /// Note: We do not have a corresponding is_mainnet() as we want any tests to be as close
 /// as possible to "mainnet" configuration as possible.
 /// We want to avoid missing any mainnet only code paths.
-pub fn is_floonet() -> bool {
-	let param_ref = CHAIN_TYPE.read();
-	ChainTypes::Floonet == *param_ref
+pub fn is_testnet() -> bool {
+	match get_chain_type() {
+		ChainTypes::Testnet => true,
+		_ => false,
+	}
 }
 
 /// Converts an iterator of block difficulty data to more a more manageable
@@ -352,4 +410,52 @@ where
 	}
 	last_n.reverse();
 	last_n
+}
+
+/// Calculates the size of a header (in bytes) given a number of edge bits in the PoW
+#[inline]
+pub fn header_size_bytes(edge_bits: u8) -> usize {
+	let size = 2 + 2 * 8 + 5 * 32 + 32 + 2 * 8;
+	let proof_size = 8 + 4 + 8 + 1 + BitVec::bytes_len(edge_bits as usize * proofsize());
+	size + proof_size
+}
+
+#[cfg(test)]
+mod test {
+	use super::*;
+	use crate::core::Block;
+	use crate::genesis::*;
+	use crate::pow::mine_genesis_block;
+	use crate::ser::{BinWriter, Writeable};
+
+	fn test_header_len(genesis: Block) {
+		let mut raw = Vec::<u8>::with_capacity(1_024);
+		let mut writer = BinWriter::new(&mut raw, ProtocolVersion::local());
+		genesis.header.write(&mut writer).unwrap();
+		assert_eq!(raw.len(), header_size_bytes(genesis.header.pow.edge_bits()));
+	}
+
+	#[test]
+	fn automated_testing_header_len() {
+		set_local_chain_type(ChainTypes::AutomatedTesting);
+		test_header_len(mine_genesis_block().unwrap());
+	}
+
+	#[test]
+	fn user_testing_header_len() {
+		set_local_chain_type(ChainTypes::UserTesting);
+		test_header_len(mine_genesis_block().unwrap());
+	}
+
+	#[test]
+	fn testnet_header_len() {
+		set_local_chain_type(ChainTypes::Testnet);
+		test_header_len(genesis_test());
+	}
+
+	#[test]
+	fn mainnet_header_len() {
+		set_local_chain_type(ChainTypes::Mainnet);
+		test_header_len(genesis_main());
+	}
 }

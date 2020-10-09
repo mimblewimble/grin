@@ -91,15 +91,15 @@ pub trait BIP32Hasher {
 /// Implementation of the above that uses the standard BIP32 Hash algorithms
 #[derive(Clone, Debug)]
 pub struct BIP32GrinHasher {
-	is_floo: bool,
+	is_test: bool,
 	hmac_sha512: Hmac<Sha512>,
 }
 
 impl BIP32GrinHasher {
 	/// New empty hasher
-	pub fn new(is_floo: bool) -> BIP32GrinHasher {
+	pub fn new(is_test: bool) -> BIP32GrinHasher {
 		BIP32GrinHasher {
-			is_floo: is_floo,
+			is_test: is_test,
 			hmac_sha512: HmacSha512::new(GenericArray::from_slice(&[0u8; 128])),
 		}
 	}
@@ -107,14 +107,14 @@ impl BIP32GrinHasher {
 
 impl BIP32Hasher for BIP32GrinHasher {
 	fn network_priv(&self) -> [u8; 4] {
-		if self.is_floo {
+		if self.is_test {
 			[0x03, 0x27, 0x3A, 0x10]
 		} else {
 			[0x03, 0x3C, 0x04, 0xA4]
 		}
 	}
 	fn network_pub(&self) -> [u8; 4] {
-		if self.is_floo {
+		if self.is_test {
 			[0x03, 0x27, 0x3E, 0x4B]
 		} else {
 			[0x03, 0x3C, 0x08, 0xDF]
@@ -370,10 +370,10 @@ impl ExtendedPrivKey {
 		secp: &Secp256k1,
 		mnemonic: &str,
 		passphrase: &str,
-		is_floo: bool,
+		is_test: bool,
 	) -> Result<ExtendedPrivKey, Error> {
 		let seed = mnemonic::to_seed(mnemonic, passphrase).map_err(Error::MnemonicError)?;
-		let mut hasher = BIP32GrinHasher::new(is_floo);
+		let mut hasher = BIP32GrinHasher::new(is_test);
 		let key = ExtendedPrivKey::new_master(secp, &mut hasher, &seed)?;
 		Ok(key)
 	}

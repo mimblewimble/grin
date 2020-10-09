@@ -1,6 +1,6 @@
 # Introduction to Mimblewimble and Grin
 
-*Read this in other languages: [English](intro.md), [简体中文](intro_ZH-CN.md), [Español](intro_ES.md), [Nederlands](intro_NL.md), [Русский](intro_RU.md), [日本語](intro_JP.md), [Deutsch](intro_DE.md), [Portuguese](intro_PT-BR.md), [Korean](intro_KR.md).*
+*Read this in other languages: [简体中文](translations/intro_ZH-CN.md), [Español](translations/intro_ES.md), [Nederlands](translations/intro_NL.md), [Русский](translations/intro_RU.md), [日本語](translations/intro_JP.md), [Deutsch](translations/intro_DE.md), [Portuguese](translations/intro_PT-BR.md), [Korean](translations/intro_KR.md).*
 
 Mimblewimble is a blockchain format and protocol that provides
 extremely good scalability, privacy and fungibility by relying on strong
@@ -23,7 +23,7 @@ The main goal and characteristics of the Grin project are:
 * Design simplicity that makes it easy to audit and maintain over time.
 * Community driven, encouraging mining decentralization.
 
-A detailed post on the step-by-step of how Grin transactions work (with graphics) can be found [in this Medium post](https://medium.com/@brandonarvanaghi/grin-transactions-explained-step-by-step-fdceb905a853). 
+A detailed post on the step-by-step of how Grin transactions work (with graphics) can be found [in this Medium post](https://medium.com/@brandonarvanaghi/grin-transactions-explained-step-by-step-fdceb905a853).
 
 ## Tongue Tying for Everyone
 
@@ -47,18 +47,18 @@ delving too much into the intricacies of ECC. For readers who would want to
 dive deeper into those assumptions, there are other opportunities to
 [learn more](http://andrea.corbellini.name/2015/05/17/elliptic-curve-cryptography-a-gentle-introduction/).
 
-An Elliptic Curve for the purpose of cryptography is simply a large set of points that
-we will call _C_. These points can be added, subtracted, or multiplied by integers (also called scalars).
+An elliptic curve for the purpose of cryptography is simply a large set of points that
+we will call _C_. These points can be added and subtracted, and the result is a point on the curve _C_. Furthermore, a point can be successively added to itself, which is represented as point multiplication by integers (also called scalars).
 Given such a point _H_, an integer _k_ and
 using the scalar multiplication operation we can compute `k*H`, which is also a point on
 curve _C_. Given another integer _j_ we can also calculate `(k+j)*H`, which equals
 `k*H + j*H`. The addition and scalar multiplication operations on an elliptic curve
-maintain the commutative and associative properties of addition and multiplication:
+maintain the distributive property of addition and multiplication:
 
     (k+j)*H = k*H + j*H
 
-In ECC, if we pick a very large number _k_ as a private key, `k*H` is
-considered the corresponding public key. Even if one knows the
+In ECC, if we pick a (very large) number _k_ as a _private key_, `k*H` is
+considered the corresponding _public key_. Even if one knows the
 value of the public key `k*H`, deducing _k_ is close to impossible (or said
 differently, while multiplication is trivial, "division" by curve points is
 extremely difficult).
@@ -92,7 +92,7 @@ fundamental properties are achieved.
 Building upon the properties of ECC we described above, one can obscure the values
 in a transaction.
 
-If _v_ is the value of a transaction input or output and _H_ a point on the elliptic curve _C_, we can simply 
+If _v_ is the value of a transaction input or output and _H_ a point on the elliptic curve _C_, we can simply
 embed `v*H` instead of _v_ in a transaction. This works because using the ECC
 operations, we can still validate that the sum of the outputs of a transaction equals the
 sum of inputs:
@@ -101,11 +101,8 @@ sum of inputs:
 
 Verifying this property on every transaction allows the protocol to verify that a
 transaction doesn't create money out of thin air, without knowing what the actual
-values are. However, there are a finite number of usable values (transaction amounts) and one 
-could try every single 
-one of them to guess the value of the transaction. In addition, knowing *v1* (from
-a previous transaction for example) and the resulting `v1*H` reveals all outputs with
-value *v1* across the blockchain. For these reasons, we introduce a second point _G_ on the same elliptic curve
+values are. Note that knowing *v1* (from a previous transaction for example) and the resulting `v1*H` reveals all outputs with
+value *v1* across the blockchain. We introduce a second point _G_ on the same elliptic curve
 (practically _G_ is just another generator point on the same curve group as _H_) and
 a private key _r_ used as a *blinding factor*.
 
@@ -116,7 +113,7 @@ An input or output value in a transaction can then be expressed as:
 Where:
 
 * _r_ is a private key used as a blinding factor, _G_ is a point on the elliptic curve _C_ and
-  their product `r*G` is the public key for _r_ (using _G_ as generator point).
+  the point `r*G` is the public key for _r_ (using _G_ as generator point).
 * _v_ is the value of an input or output and _H_ is another point on the elliptic curve _C_,
   together producing another public key `v*H` (using _H_ as generator point).
 
@@ -147,8 +144,8 @@ transaction can be done without knowing any of the values.
 
 As a final note, this idea is actually derived from Greg Maxwell's
 [Confidential Transactions](https://elementsproject.org/features/confidential-transactions/investigation),
-which is itself derived from an 
-[Adam Back proposal for homomorphic values](https://bitcointalk.org/index.php?topic=305791.0) 
+which is itself derived from an
+[Adam Back proposal for homomorphic values](https://bitcointalk.org/index.php?topic=305791.0)
 applied to Bitcoin.
 
 #### Ownership
@@ -158,13 +155,13 @@ transaction's values. The second insight of Mimblewimble is that this private
 key can be leveraged to prove ownership of the value.
 
 Alice sends you 3 coins and to obscure that amount, you chose 28 as your
-blinding factor (note that in practice, the blinding factor being a private key, it's an
+blinding factor (note that in practice the blinding factor, being a private key, is an
 extremely large number). Somewhere on the blockchain, the following output appears and
 should only be spendable by you:
 
     X = 28*G + 3*H
 
-_X_, the result of the addition, is visible by everyone. The value 3 is only known to you and Alice,
+_X_, the addition result, is visible to everyone. The value 3 is only known to you and Alice,
 and 28 is only known to you.
 
 To transfer those 3 coins again, the protocol requires 28 to be known somehow.
@@ -183,7 +180,7 @@ so that:
 By checking that everything has been zeroed out, we can again make sure that
 no new money has been created.
 
-Wait! Stop! Now you know the private key in Carol's output (which, in this case, must
+Wait! Stop! Now you know the private keys in Carol's output (which, in this case, must
 be the same as yours to balance out) and so you could
 steal the money back from Carol!
 
@@ -192,15 +189,13 @@ She picks 113 say, and what ends up on the blockchain is:
 
     Y - Xi = (113*G + 3*H) - (28*G + 3*H) = 85*G + 0*H
 
-Now the transaction no longer sums to zero and we have an _excess value_ (85), which is the result of the summation of all blinding factors. Because `85*G` is
-a valid public key for the generator point _G_ the input and output values must sum to zero and the transaction is thus valid, since `x*G + y*H` is a valid public key for generator point _G_ if and only if `y = 0`.
+Now the transaction no longer sums to zero and we have an _excess value_ (85), which is the result of the summation (and correspondingly subtraction) of all blinding factors. Note that `85*G` is a valid public key for the generator point _G_.
 
-So all the protocol needs to verify is that (`Y - Xi`) is a valid public key for generator point _G_ 
-and that the transacting parties collectively can produce its private key (85 in the above example). The simplest way to do so is to require a signature built with the excess value (85),
-which then ensures that:
+Therefore, the protocol needs to verify that the transacting parties collectively can produce the private key (85 in the above example) for the resulting point `Y - Xi` (this should be the corresponding public key, for generator point _G_; `85*G` in the above example).
+A simple way of doing so is by using the public key `Y - Xi` (`85*G`) to verify a signature, that was signed using the excess value (85). This ensures that:
 
-* The transacting parties collectively can produce the private key (the excess value)
-* The sum of the outputs minus the inputs are zero (because only a valid public key will check against the signature).
+* The transacting parties collectively can produce the private key (the excess value) for the public key (`Y - Xi`).
+* The sum of _values_ in the outputs minus the sum of _values_ in the inputs is zero (otherwise there would be no correspondence between private and public keys, which is exactly the reason for having a signature).
 
 This signature, attached to every transaction, together with some additional data (like mining
 fees), is called a _transaction kernel_ and is checked by all validators.
@@ -242,8 +237,7 @@ To solve this problem, Mimblewimble leverages another cryptographic concept (als
 coming from Confidential Transactions) called
 range proofs: a proof that a number falls within a given range, without revealing
 the number. We won't elaborate on the range proof, but you just need to know
-that for any `r*G + v*H` we can build a proof that will show that _v_ is greater than
-zero and does not overflow.
+that for any `r*G + v*H` we can build a proof that shows that _v_ is non-negative and does not overflow.
 
 It's also important to note that range proofs for both the blinding factor and the values are needed. The reason for this
 is that it prevents a censoring attack where a third party would be able to lock UTXOs without knowing their private keys
@@ -255,7 +249,7 @@ by creating a transaction such as the following:
 which can be signed by the attacker because Carol's blinding factor cancels out in the equation `Y - Xi`:
 
     Y - Xi = ((113 + 99)*G + 2*H) - (113*G + 2*H) =  99*G
-    
+
 This output (`(113 + 99)*G + 2*H`) requires that both the numbers 113 and 99 are known in order to be spent; the attacker
 would thus have successfully locked Carol's UTXO. The requirement for a range proof for the blinding factor prevents this
 because the attacker doesn't know the number 113 and thus neither (113 + 99). A more detailed description of range proofs is further detailed in the [range proof paper](https://eprint.iacr.org/2017/1066.pdf).
@@ -266,12 +260,12 @@ A Mimblewimble transaction includes the following:
 
 * A set of inputs, that reference and spend a set of previous outputs.
 * A set of new outputs that include:
-  * A value and a blinding factor (which is just a new private key) multiplied on
-  a curve and summed to be `r*G + v*H`.
+  * A blinding factor *r* and a value *v* used for scalar multiplication for the curve
+  points G,H correspondingly, and subsequently summed to be `r*G + v*H`.
   * A range proof that among other things shows that *v* is non-negative.
-* An transaction fee in cleartext.
-* A signature whose private key is computed by taking the excess value (the sum of all
-  output values plus the fee, minus the input values).
+* A transaction fee in cleartext.
+* A signature signed with the excess value (the sum of all
+  output values and the fee minus the input values) as the private key.
 
 ### Blocks and Chain State
 
@@ -291,17 +285,13 @@ concept: _cut-through_. With this addition, a Mimblewimble chain gains:
 
 Recall that a transaction consists of the following:
 
-* a set of inputs that reference and spent a set of previous outputs
+* a set of inputs that reference and spend a set of previous outputs
 * a set of new outputs
 * a transaction kernel consisting of:
-  * kernel excess (the public key of the excess value)
-  * transaction signature whose public key is the kernel excess
+  * kernel excess (the public key corresponding to the excess value)
+  * transaction signature signed by the excess value (and verifies with the kernel excess)
 
-A transaction is validated by determining that the kernel excess is a valid public key:
-
-    (42*G + 1*H) + (99*G + 2*H) - (113*G + 3*H) = 28*G + 0*H
-    
-The public key in this example is `28*G`.
+(the presentation above did not explicitly include the kernel excess in the transaction, because it can be computed from the inputs and outputs. This paragrpah shows the benefit in including it, for aggregation within block construction.)
 
 We can say the following is true for any valid transaction (ignoring fees for simplicity):
 
@@ -311,11 +301,11 @@ The same holds true for blocks themselves once we realize a block is simply a se
 
     sum(outputs) - sum(inputs) = sum(kernel_excess)
 
-Simplifying slightly, (again ignoring transaction fees) we can say that Mimblewimble blocks can be treated exactly as Mimblewimble transactions.
+Simplifying slightly (again ignoring transaction fees), we can say that Mimblewimble blocks can be treated exactly as Mimblewimble transactions.
 
 ##### Kernel Offsets
 
-There is a subtle problem with Mimblewimble blocks and transactions as described above. It is possible (and in some cases trivial) to reconstruct the constituent transactions in a block. This is clearly bad for privacy. This is the "subset" problem: given a set of inputs, outputs, and transaction kernels a subset of these will recombine to reconstruct a valid transaction.
+There is a subtle problem with Mimblewimble blocks and transactions as described above. It is possible (and in some cases trivial) to reconstruct the constituent transactions in a block. This is clearly bad for privacy. This is the "subset" problem: given a set of inputs, outputs and transaction kernels, a subset of these will recombine to reconstruct a valid transaction.
 
 Consider the following two transactions:
 
@@ -337,14 +327,13 @@ We also know that everything remaining can be used to reconstruct the other vali
 Remember that the kernel excess `r*G` simply is the public key of the excess value *r*. To mitigate this we redefine the kernel excess from `r*G` to `(r-kernel_offset)*G` and distribute the _kernel offset_ to be included with every transaction kernel. The kernel offset is thus a blinding factor that needs to be added to the excess value to ensure the commitments sum to zero:
 
     sum(outputs) - sum(inputs) = r*G = (r-kernel_offset)*G + kernel_offset*G
-    
+
 or alternatively
 
     sum(outputs) - sum(inputs) = kernel_excess + kernel_offset*G
-    
-For a commitment `r*G + 0*H` with the offset `a`, the transaction is signed with `(r-a)` and *a* is published so that `r*G` can be calculated in order to verify the validity of the transaction. During block construction all kernel offsets are summed to generate a _single_ aggregate kernel offset to cover the whole block. The kernel offset for any individual transaction is then unrecoverable and the subset problem is solved.
 
-    sum(outputs) - sum(inputs) = sum(kernel_excess) + kernel_offset*G
+For a commitment `r*G + 0*H` with the offset `a`, the transaction is signed with `(r-a)` and *a* is published so that `r*G` could be computed in order to verify the validity of the transaction: given the kernel excess (recall that it is given as part of the transaction kernel) `(r-a)*G` and the offset `a`, one computes `a*G` and obtains `(r-a)*G + a*G = r*G`.
+During block construction all kernel offsets are summed to generate a _single_ aggregate kernel offset to cover the whole block. The kernel offset for any individual transaction is then unrecoverable and the subset problem is solved.
 
 
 #### Cut-through
@@ -389,11 +378,15 @@ A block is simply built from:
 * A block header.
 * The list of inputs remaining after cut-through.
 * The list of outputs remaining after cut-through.
-* A single kernel offset to cover the full block.
+* A single kernel offset (sum of all kernel offsets) to cover the full block.
 * The transaction kernels containing, for each transaction:
-  * The public key `r*G` obtained from the summation of all inputs and outputs.
-  * The signatures generated using the excess value.
+  * The public key `(r-a)*G`, which is the (modified) kernel excess.
+  * The signatures generated using the (modified) excess value `(r-a)` as the private (signing) key.
   * The mining fee.
+
+The block contents satisfy:
+
+sum(outputs) - sum(inputs) = sum(kernel_excess) + kernel_offset*G
 
 When structured this way, a Mimblewimble block offers extremely good privacy
 guarantees:
@@ -421,12 +414,12 @@ in time can be summarized by just these pieces of information:
 1. The transactions kernels for each transaction.
 
 The first piece of information can be deduced just using the block
-height. 
+height.
 
 Both the UTXOs and the
 transaction kernels are extremely compact. This has two important consequences:
 
-* The blockchain a node needs to maintain is very small (on the 
+* The blockchain a node needs to maintain is very small (on the
 order of a few gigabytes for a bitcoin-sized blockchain, and
   potentially optimizable to a few hundreds of megabytes).
 * When a new node joins the network the amount of
@@ -438,7 +431,7 @@ one input or output would change the sum of the transactions to be something oth
 ### Conclusion
 
 In this document we covered the basic principles that underlie a Mimblewimble
-blockchain. By using the addition properties of Elliptic Curve Cryptography, we're
+blockchain. By using addition of elliptic curve points, we're
 able to build transactions that are completely opaque but can still be properly
 validated. And by generalizing those properties to blocks, we can eliminate a large
 amount of blockchain data, allowing for great scaling and fast sync of new peers.

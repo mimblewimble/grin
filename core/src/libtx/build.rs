@@ -125,7 +125,7 @@ where
 
 			debug!("Building output: {}, {:?}", value, commit);
 
-			let rproof = proof::create(
+			let proof = proof::create(
 				build.keychain,
 				build.builder,
 				value,
@@ -136,11 +136,7 @@ where
 			)?;
 
 			Ok((
-				tx.with_output(Output {
-					features: OutputFeatures::Plain,
-					commit,
-					proof: rproof,
-				}),
+				tx.with_output(Output::new(OutputFeatures::Plain, commit, proof)),
 				sum.add_key_id(key_id.to_value_path(value)),
 			))
 		},
@@ -182,7 +178,7 @@ where
 ///
 pub fn partial_transaction<K, B>(
 	tx: Transaction,
-	elems: Vec<Box<Append<K, B>>>,
+	elems: &[Box<Append<K, B>>],
 	keychain: &K,
 	builder: &B,
 ) -> Result<(Transaction, BlindingFactor), Error>
@@ -199,9 +195,40 @@ where
 }
 
 /// Builds a complete transaction.
+/// NOTE: We only use this in tests (for convenience).
+/// In the real world we use signature aggregation across multiple participants.
 pub fn transaction<K, B>(
 	features: KernelFeatures,
-	elems: Vec<Box<Append<K, B>>>,
+	elems: &[Box<Append<K, B>>],
+	keychain: &K,
+	builder: &B,
+) -> Result<Transaction, Error>
+where
+	K: Keychain,
+	B: ProofBuild,
+{
+	let mut kernel = TxKernel::with_features(features);
+
+	// Construct the message to be signed.
+	let msg = kernel.msg_to_sign()?;
+
+	// Generate kernel public excess and associated signature.
+	let excess = BlindingFactor::rand(&keychain.secp());
+	let skey = excess.secret_key(&keychain.secp())?;
+	kernel.excess = keychain.secp().commit(0, skey)?;
+	let pubkey = &kernel.excess.to_pubkey(&keychain.secp())?;
+	kernel.excess_sig = aggsig::sign_with_blinding(&keychain.secp(), &msg, &excess, Some(&pubkey))?;
+	kernel.verify()?;
+	transaction_with_kernel(elems, kernel, excess, keychain, builder)
+}
+
+/// Build a complete transaction with the provided kernel and corresponding private excess.
+/// NOTE: Only used in tests (for convenience).
+/// Cannot recommend passing private excess around like this in the real world.
+pub fn transaction_with_kernel<K, B>(
+	elems: &[Box<Append<K, B>>],
+	kernel: TxKernel,
+	excess: BlindingFactor,
 	keychain: &K,
 	builder: &B,
 ) -> Result<Transaction, Error>
@@ -210,36 +237,16 @@ where
 	B: ProofBuild,
 {
 	let mut ctx = Context { keychain, builder };
-	let (mut tx, sum) = elems
+	let (tx, sum) = elems
 		.iter()
 		.fold(Ok((Transaction::empty(), BlindSum::new())), |acc, elem| {
 			elem(&mut ctx, acc)
 		})?;
 	let blind_sum = ctx.keychain.blind_sum(&sum)?;
 
-	// Split the key so we can generate an offset for the tx.
-	let split = blind_sum.split(&keychain.secp())?;
-	let k1 = split.blind_1;
-	let k2 = split.blind_2;
-
-	let mut kern = TxKernel::with_features(features);
-
-	// Construct the message to be signed.
-	let msg = kern.msg_to_sign()?;
-
-	// Generate kernel excess and excess_sig using the split key k1.
-	let skey = k1.secret_key(&keychain.secp())?;
-	kern.excess = ctx.keychain.secp().commit(0, skey)?;
-	let pubkey = &kern.excess.to_pubkey(&keychain.secp())?;
-	kern.excess_sig = aggsig::sign_with_blinding(&keychain.secp(), &msg, &k1, Some(&pubkey))?;
-
-	// Store the kernel offset (k2) on the tx.
-	// Commitments will sum correctly when accounting for the offset.
-	tx.offset = k2;
-
-	// Set the kernel on the tx.
-	let tx = tx.replace_kernel(kern);
-
+	// Update tx with new kernel and offset.
+	let mut tx = tx.replace_kernel(kernel);
+	tx.offset = blind_sum.split(&excess, &keychain.secp())?;
 	Ok(tx)
 }
 
@@ -252,6 +259,7 @@ mod test {
 	use super::*;
 	use crate::core::transaction::Weighting;
 	use crate::core::verifier_cache::{LruVerifierCache, VerifierCache};
+	use crate::global;
 	use crate::libtx::ProofBuilder;
 	use keychain::{ExtKeychain, ExtKeychainPath};
 
@@ -261,6 +269,7 @@ mod test {
 
 	#[test]
 	fn blind_simple_tx() {
+		global::set_local_chain_type(global::ChainTypes::AutomatedTesting);
 		let keychain = ExtKeychain::from_random_seed(false).unwrap();
 		let builder = ProofBuilder::new(&keychain);
 		let key_id1 = ExtKeychainPath::new(1, 1, 0, 0, 0).to_identifier();
@@ -271,7 +280,7 @@ mod test {
 
 		let tx = transaction(
 			KernelFeatures::Plain { fee: 2 },
-			vec![input(10, key_id1), input(12, key_id2), output(20, key_id3)],
+			&[input(10, key_id1), input(12, key_id2), output(20, key_id3)],
 			&keychain,
 			&builder,
 		)
@@ -282,6 +291,7 @@ mod test {
 
 	#[test]
 	fn blind_simple_tx_with_offset() {
+		global::set_local_chain_type(global::ChainTypes::AutomatedTesting);
 		let keychain = ExtKeychain::from_random_seed(false).unwrap();
 		let builder = ProofBuilder::new(&keychain);
 		let key_id1 = ExtKeychainPath::new(1, 1, 0, 0, 0).to_identifier();
@@ -292,7 +302,7 @@ mod test {
 
 		let tx = transaction(
 			KernelFeatures::Plain { fee: 2 },
-			vec![input(10, key_id1), input(12, key_id2), output(20, key_id3)],
+			&[input(10, key_id1), input(12, key_id2), output(20, key_id3)],
 			&keychain,
 			&builder,
 		)
@@ -303,6 +313,7 @@ mod test {
 
 	#[test]
 	fn blind_simpler_tx() {
+		global::set_local_chain_type(global::ChainTypes::AutomatedTesting);
 		let keychain = ExtKeychain::from_random_seed(false).unwrap();
 		let builder = ProofBuilder::new(&keychain);
 		let key_id1 = ExtKeychainPath::new(1, 1, 0, 0, 0).to_identifier();
@@ -312,7 +323,7 @@ mod test {
 
 		let tx = transaction(
 			KernelFeatures::Plain { fee: 4 },
-			vec![input(6, key_id1), output(2, key_id2)],
+			&[input(6, key_id1), output(2, key_id2)],
 			&keychain,
 			&builder,
 		)

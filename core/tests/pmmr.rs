@@ -15,7 +15,7 @@
 mod common;
 
 use self::core::core::hash::Hash;
-use self::core::core::pmmr::{self, VecBackend, PMMR};
+use self::core::core::pmmr::{self, ReadablePMMR, VecBackend, PMMR};
 use self::core::ser::PMMRIndexHashable;
 use crate::common::TestElem;
 use chrono::prelude::Utc;
@@ -150,10 +150,9 @@ fn various_families() {
 
 #[test]
 fn test_paths() {
-	assert_eq!(pmmr::path(1, 1), [1]);
-	assert_eq!(pmmr::path(1, 3), [1, 3]);
-	assert_eq!(pmmr::path(2, 3), [2, 3]);
-	assert_eq!(pmmr::path(4, 16), [4, 6, 7, 15]);
+	assert_eq!(pmmr::path(1, 3).collect::<Vec<_>>(), [1, 3]);
+	assert_eq!(pmmr::path(2, 3).collect::<Vec<_>>(), [2, 3]);
+	assert_eq!(pmmr::path(4, 16).collect::<Vec<_>>(), [4, 6, 7, 15]);
 }
 
 #[test]

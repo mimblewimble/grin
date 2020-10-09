@@ -18,7 +18,7 @@ use crate::core::hash::Hash;
 use crate::core::pmmr;
 use crate::ser;
 use crate::ser::{PMMRIndexHashable, Readable, Reader, Writeable, Writer};
-use util;
+use util::ToHex;
 
 /// Merkle proof errors.
 #[derive(Clone, Debug, PartialEq)]
@@ -47,7 +47,7 @@ impl Writeable for MerkleProof {
 }
 
 impl Readable for MerkleProof {
-	fn read(reader: &mut dyn Reader) -> Result<MerkleProof, ser::Error> {
+	fn read<R: Reader>(reader: &mut R) -> Result<MerkleProof, ser::Error> {
 		let mmr_size = reader.read_u64()?;
 		let path_len = reader.read_u64()?;
 		let mut path = Vec::with_capacity(path_len as usize);
@@ -79,7 +79,7 @@ impl MerkleProof {
 	pub fn to_hex(&self) -> String {
 		let mut vec = Vec::new();
 		ser::serialize_default(&mut vec, &self).expect("serialization failed");
-		util::to_hex(vec)
+		vec.to_hex()
 	}
 
 	/// Convert hex string representation back to a Merkle proof instance

@@ -17,7 +17,7 @@
 use crate::core::hash::{DefaultHashable, Hashed};
 use crate::core::verifier_cache::VerifierCache;
 use crate::core::{committed, Committed};
-use crate::libtx::secp_ser;
+use crate::libtx::{aggsig, secp_ser};
 use crate::ser::{
 	self, read_multi, PMMRable, ProtocolVersion, Readable, Reader, VerifySortedAndUnique,
 	Writeable, Writer,
@@ -27,14 +27,78 @@ use enum_primitive::FromPrimitive;
 use keychain::{self, BlindingFactor};
 use std::cmp::Ordering;
 use std::cmp::{max, min};
-use std::convert::TryInto;
+use std::convert::{TryFrom, TryInto};
 use std::sync::Arc;
 use std::{error, fmt};
-use util;
 use util::secp;
 use util::secp::pedersen::{Commitment, RangeProof};
 use util::static_secp_instance;
 use util::RwLock;
+use util::ToHex;
+
+/// Relative height field on NRD kernel variant.
+/// u16 representing a height between 1 and MAX (consensus::WEEK_HEIGHT).
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub struct NRDRelativeHeight(u16);
+
+impl DefaultHashable for NRDRelativeHeight {}
+
+impl Writeable for NRDRelativeHeight {
+	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
+		writer.write_u16(self.0)
+	}
+}
+
+impl Readable for NRDRelativeHeight {
+	fn read<R: Reader>(reader: &mut R) -> Result<Self, ser::Error> {
+		let x = reader.read_u16()?;
+		NRDRelativeHeight::try_from(x).map_err(|_| ser::Error::CorruptedData)
+	}
+}
+
+/// Conversion from a u16 to a valid NRDRelativeHeight.
+/// Valid height is between 1 and WEEK_HEIGHT inclusive.
+impl TryFrom<u16> for NRDRelativeHeight {
+	type Error = Error;
+
+	fn try_from(height: u16) -> Result<Self, Self::Error> {
+		if height == 0 {
+			Err(Error::InvalidNRDRelativeHeight)
+		} else if height
+			> NRDRelativeHeight::MAX
+				.try_into()
+				.expect("WEEK_HEIGHT const should fit in u16")
+		{
+			Err(Error::InvalidNRDRelativeHeight)
+		} else {
+			Ok(Self(height))
+		}
+	}
+}
+
+impl TryFrom<u64> for NRDRelativeHeight {
+	type Error = Error;
+
+	fn try_from(height: u64) -> Result<Self, Self::Error> {
+		Self::try_from(u16::try_from(height).map_err(|_| Error::InvalidNRDRelativeHeight)?)
+	}
+}
+
+impl From<NRDRelativeHeight> for u64 {
+	fn from(height: NRDRelativeHeight) -> Self {
+		height.0 as u64
+	}
+}
+
+impl NRDRelativeHeight {
+	const MAX: u64 = consensus::WEEK_HEIGHT;
+
+	/// Create a new NRDRelativeHeight from the provided height.
+	/// Checks height is valid (between 1 and WEEK_HEIGHT inclusive).
+	pub fn new(height: u64) -> Result<Self, Error> {
+		NRDRelativeHeight::try_from(height)
+	}
+}
 
 /// Various tx kernel variants.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
@@ -53,12 +117,20 @@ pub enum KernelFeatures {
 		/// Height locked kernels have lock heights.
 		lock_height: u64,
 	},
+	/// "No Recent Duplicate" (NRD) kernels enforcing relative lock height between instances.
+	NoRecentDuplicate {
+		/// These have fees.
+		fee: u64,
+		/// Relative lock height.
+		relative_height: NRDRelativeHeight,
+	},
 }
 
 impl KernelFeatures {
 	const PLAIN_U8: u8 = 0;
 	const COINBASE_U8: u8 = 1;
 	const HEIGHT_LOCKED_U8: u8 = 2;
+	const NO_RECENT_DUPLICATE_U8: u8 = 3;
 
 	/// Underlying (u8) value representing this kernel variant.
 	/// This is the first byte when we serialize/deserialize the kernel features.
@@ -67,6 +139,7 @@ impl KernelFeatures {
 			KernelFeatures::Plain { .. } => KernelFeatures::PLAIN_U8,
 			KernelFeatures::Coinbase => KernelFeatures::COINBASE_U8,
 			KernelFeatures::HeightLocked { .. } => KernelFeatures::HEIGHT_LOCKED_U8,
+			KernelFeatures::NoRecentDuplicate { .. } => KernelFeatures::NO_RECENT_DUPLICATE_U8,
 		}
 	}
 
@@ -76,18 +149,24 @@ impl KernelFeatures {
 			KernelFeatures::Plain { .. } => String::from("Plain"),
 			KernelFeatures::Coinbase => String::from("Coinbase"),
 			KernelFeatures::HeightLocked { .. } => String::from("HeightLocked"),
+			KernelFeatures::NoRecentDuplicate { .. } => String::from("NoRecentDuplicate"),
 		}
 	}
 
-	/// msg = hash(features)                       for coinbase kernels
-	///       hash(features || fee)                for plain kernels
-	///       hash(features || fee || lock_height) for height locked kernels
+	/// msg = hash(features)                           for coinbase kernels
+	///       hash(features || fee)                    for plain kernels
+	///       hash(features || fee || lock_height)     for height locked kernels
+	///       hash(features || fee || relative_height) for NRD kernels
 	pub fn kernel_sig_msg(&self) -> Result<secp::Message, Error> {
 		let x = self.as_u8();
 		let hash = match self {
 			KernelFeatures::Plain { fee } => (x, fee).hash(),
-			KernelFeatures::Coinbase => (x).hash(),
+			KernelFeatures::Coinbase => x.hash(),
 			KernelFeatures::HeightLocked { fee, lock_height } => (x, fee, lock_height).hash(),
+			KernelFeatures::NoRecentDuplicate {
+				fee,
+				relative_height,
+			} => (x, fee, relative_height).hash(),
 		};
 
 		let msg = secp::Message::from_slice(&hash.as_bytes())?;
@@ -97,14 +176,36 @@ impl KernelFeatures {
 	/// Write tx kernel features out in v1 protocol format.
 	/// Always include the fee and lock_height, writing 0 value if unused.
 	fn write_v1<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
-		let (fee, lock_height) = match self {
-			KernelFeatures::Plain { fee } => (*fee, 0),
-			KernelFeatures::Coinbase => (0, 0),
-			KernelFeatures::HeightLocked { fee, lock_height } => (*fee, *lock_height),
-		};
 		writer.write_u8(self.as_u8())?;
-		writer.write_u64(fee)?;
-		writer.write_u64(lock_height)?;
+		match self {
+			KernelFeatures::Plain { fee } => {
+				writer.write_u64(*fee)?;
+				// Write "empty" bytes for feature specific data (8 bytes).
+				writer.write_empty_bytes(8)?;
+			}
+			KernelFeatures::Coinbase => {
+				// Write "empty" bytes for fee (8 bytes) and feature specific data (8 bytes).
+				writer.write_empty_bytes(16)?;
+			}
+			KernelFeatures::HeightLocked { fee, lock_height } => {
+				writer.write_u64(*fee)?;
+				// 8 bytes of feature specific data containing the lock height as big-endian u64.
+				writer.write_u64(*lock_height)?;
+			}
+			KernelFeatures::NoRecentDuplicate {
+				fee,
+				relative_height,
+			} => {
+				writer.write_u64(*fee)?;
+
+				// 8 bytes of feature specific data. First 6 bytes are empty.
+				// Last 2 bytes contain the relative lock height as big-endian u16.
+				// Note: This is effectively the same as big-endian u64.
+				// We write "empty" bytes explicitly rather than quietly casting the u16 -> u64.
+				writer.write_empty_bytes(6)?;
+				relative_height.write(writer)?;
+			}
+		};
 		Ok(())
 	}
 
@@ -113,48 +214,75 @@ impl KernelFeatures {
 	/// Only write fee out for feature variants that support it.
 	/// Only write lock_height out for feature variants that support it.
 	fn write_v2<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
+		writer.write_u8(self.as_u8())?;
 		match self {
 			KernelFeatures::Plain { fee } => {
-				writer.write_u8(self.as_u8())?;
+				// Fee only, no additional data on plain kernels.
 				writer.write_u64(*fee)?;
 			}
 			KernelFeatures::Coinbase => {
-				writer.write_u8(self.as_u8())?;
+				// No additional data.
 			}
 			KernelFeatures::HeightLocked { fee, lock_height } => {
-				writer.write_u8(self.as_u8())?;
 				writer.write_u64(*fee)?;
+				// V2 height locked kernels use 8 bytes for the lock height.
 				writer.write_u64(*lock_height)?;
+			}
+			KernelFeatures::NoRecentDuplicate {
+				fee,
+				relative_height,
+			} => {
+				writer.write_u64(*fee)?;
+				// V2 NRD kernels use 2 bytes for the relative lock height.
+				relative_height.write(writer)?;
 			}
 		}
 		Ok(())
 	}
 
-	// Always read feature byte, 8 bytes for fee and 8 bytes for lock height.
-	// Fee and lock height may be unused for some kernel variants but we need
+	// Always read feature byte, 8 bytes for fee and 8 bytes for additional data
+	// representing lock height or relative height.
+	// Fee and additional data may be unused for some kernel variants but we need
 	// to read these bytes and verify they are 0 if unused.
-	fn read_v1(reader: &mut dyn Reader) -> Result<KernelFeatures, ser::Error> {
+	fn read_v1<R: Reader>(reader: &mut R) -> Result<KernelFeatures, ser::Error> {
 		let feature_byte = reader.read_u8()?;
-		let fee = reader.read_u64()?;
-		let lock_height = reader.read_u64()?;
-
 		let features = match feature_byte {
 			KernelFeatures::PLAIN_U8 => {
-				if lock_height != 0 {
-					return Err(ser::Error::CorruptedData);
-				}
+				let fee = reader.read_u64()?;
+				// 8 "empty" bytes as additional data is not used.
+				reader.read_empty_bytes(8)?;
 				KernelFeatures::Plain { fee }
 			}
 			KernelFeatures::COINBASE_U8 => {
-				if fee != 0 {
-					return Err(ser::Error::CorruptedData);
-				}
-				if lock_height != 0 {
-					return Err(ser::Error::CorruptedData);
-				}
+				// 8 "empty" bytes as fee is not used.
+				// 8 "empty" bytes as additional data is not used.
+				reader.read_empty_bytes(16)?;
 				KernelFeatures::Coinbase
 			}
-			KernelFeatures::HEIGHT_LOCKED_U8 => KernelFeatures::HeightLocked { fee, lock_height },
+			KernelFeatures::HEIGHT_LOCKED_U8 => {
+				let fee = reader.read_u64()?;
+				// 8 bytes of feature specific data, lock height as big-endian u64.
+				let lock_height = reader.read_u64()?;
+				KernelFeatures::HeightLocked { fee, lock_height }
+			}
+			KernelFeatures::NO_RECENT_DUPLICATE_U8 => {
+				// NRD kernels are invalid if NRD feature flag is not enabled.
+				if !global::is_nrd_enabled() {
+					return Err(ser::Error::CorruptedData);
+				}
+
+				let fee = reader.read_u64()?;
+
+				// 8 bytes of feature specific data.
+				// The first 6 bytes must be "empty".
+				// The last 2 bytes is the relative height as big-endian u16.
+				reader.read_empty_bytes(6)?;
+				let relative_height = NRDRelativeHeight::read(reader)?;
+				KernelFeatures::NoRecentDuplicate {
+					fee,
+					relative_height,
+				}
+			}
 			_ => {
 				return Err(ser::Error::CorruptedData);
 			}
@@ -164,7 +292,7 @@ impl KernelFeatures {
 
 	// V2 kernels only expect bytes specific to each variant.
 	// Coinbase kernels have no associated fee and we do not serialize a fee for these.
-	fn read_v2(reader: &mut dyn Reader) -> Result<KernelFeatures, ser::Error> {
+	fn read_v2<R: Reader>(reader: &mut R) -> Result<KernelFeatures, ser::Error> {
 		let features = match reader.read_u8()? {
 			KernelFeatures::PLAIN_U8 => {
 				let fee = reader.read_u64()?;
@@ -175,6 +303,19 @@ impl KernelFeatures {
 				let fee = reader.read_u64()?;
 				let lock_height = reader.read_u64()?;
 				KernelFeatures::HeightLocked { fee, lock_height }
+			}
+			KernelFeatures::NO_RECENT_DUPLICATE_U8 => {
+				// NRD kernels are invalid if NRD feature flag is not enabled.
+				if !global::is_nrd_enabled() {
+					return Err(ser::Error::CorruptedData);
+				}
+
+				let fee = reader.read_u64()?;
+				let relative_height = NRDRelativeHeight::read(reader)?;
+				KernelFeatures::NoRecentDuplicate {
+					fee,
+					relative_height,
+				}
 			}
 			_ => {
 				return Err(ser::Error::CorruptedData);
@@ -190,7 +331,7 @@ impl Writeable for KernelFeatures {
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
 		// Care must be exercised when writing for hashing purposes.
 		// All kernels are hashed using original v1 serialization strategy.
-		if writer.serialization_mode() == ser::SerializationMode::Hash {
+		if writer.serialization_mode().is_hash_mode() {
 			return self.write_v1(writer);
 		}
 
@@ -202,7 +343,7 @@ impl Writeable for KernelFeatures {
 }
 
 impl Readable for KernelFeatures {
-	fn read(reader: &mut dyn Reader) -> Result<KernelFeatures, ser::Error> {
+	fn read<R: Reader>(reader: &mut R) -> Result<KernelFeatures, ser::Error> {
 		match reader.protocol_version().value() {
 			0..=1 => KernelFeatures::read_v1(reader),
 			2..=ProtocolVersion::MAX => KernelFeatures::read_v2(reader),
@@ -234,9 +375,6 @@ pub enum Error {
 	InvalidProofMessage,
 	/// Error when verifying kernel sums via committed trait.
 	Committed(committed::Error),
-	/// Error when sums do not verify correctly during tx aggregation.
-	/// Likely a "double spend" across two unconfirmed txs.
-	AggregationError,
 	/// Validation error relating to cut-through (tx is spending its own
 	/// output).
 	CutThrough,
@@ -246,6 +384,8 @@ pub enum Error {
 	/// Validation error relating to kernel features.
 	/// It is invalid for a transaction to contain a coinbase kernel, for example.
 	InvalidKernelFeatures,
+	/// NRD kernel relative height is limited to 1 week duration and must be greater than 0.
+	InvalidNRDRelativeHeight,
 	/// Signature verification error.
 	IncorrectSignature,
 	/// Underlying serialization error.
@@ -297,7 +437,7 @@ impl From<committed::Error> for Error {
 /// amount to zero.
 /// The signature signs the fee and the lock_height, which are retained for
 /// signature validation.
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone, Copy)]
 pub struct TxKernel {
 	/// Options for a kernel's structure or use
 	pub features: KernelFeatures,
@@ -318,6 +458,8 @@ pub struct TxKernel {
 impl DefaultHashable for TxKernel {}
 hashable_ord!(TxKernel);
 
+/// We want to be able to put kernels in a hashset in the pool.
+/// So we need to be able to hash them.
 impl ::std::hash::Hash for TxKernel {
 	fn hash<H: ::std::hash::Hasher>(&self, state: &mut H) {
 		let mut vec = Vec::new();
@@ -336,7 +478,7 @@ impl Writeable for TxKernel {
 }
 
 impl Readable for TxKernel {
-	fn read(reader: &mut dyn Reader) -> Result<TxKernel, ser::Error> {
+	fn read<R: Reader>(reader: &mut R) -> Result<TxKernel, ser::Error> {
 		Ok(TxKernel {
 			features: KernelFeatures::read(reader)?,
 			excess: Commitment::read(reader)?,
@@ -383,6 +525,14 @@ impl KernelFeatures {
 			_ => false,
 		}
 	}
+
+	/// Is this an NRD kernel?
+	pub fn is_nrd(&self) -> bool {
+		match self {
+			KernelFeatures::NoRecentDuplicate { .. } => true,
+			_ => false,
+		}
+	}
 }
 
 impl TxKernel {
@@ -399,6 +549,11 @@ impl TxKernel {
 	/// Is this a height locked kernel?
 	pub fn is_height_locked(&self) -> bool {
 		self.features.is_height_locked()
+	}
+
+	/// Is this an NRD kernel?
+	pub fn is_nrd(&self) -> bool {
+		self.features.is_nrd()
 	}
 
 	/// Return the excess commitment for this tx_kernel.
@@ -422,14 +577,13 @@ impl TxKernel {
 		let sig = &self.excess_sig;
 		// Verify aggsig directly in libsecp
 		let pubkey = &self.excess.to_pubkey(&secp)?;
-		if !secp::aggsig::verify_single(
+		if !aggsig::verify_single(
 			&secp,
 			&sig,
 			&self.msg_to_sign()?,
 			None,
 			&pubkey,
 			Some(&pubkey),
-			None,
 			false,
 		) {
 			return Err(Error::IncorrectSignature);
@@ -440,9 +594,9 @@ impl TxKernel {
 	/// Batch signature verification.
 	pub fn batch_sig_verify(tx_kernels: &[TxKernel]) -> Result<(), Error> {
 		let len = tx_kernels.len();
-		let mut sigs: Vec<secp::Signature> = Vec::with_capacity(len);
-		let mut pubkeys: Vec<secp::key::PublicKey> = Vec::with_capacity(len);
-		let mut msgs: Vec<secp::Message> = Vec::with_capacity(len);
+		let mut sigs = Vec::with_capacity(len);
+		let mut pubkeys = Vec::with_capacity(len);
+		let mut msgs = Vec::with_capacity(len);
 
 		let secp = static_secp_instance();
 		let secp = secp.lock();
@@ -453,7 +607,7 @@ impl TxKernel {
 			msgs.push(tx_kernel.msg_to_sign()?);
 		}
 
-		if !secp::aggsig::verify_batch(&secp, &sigs, &msgs, &pubkeys) {
+		if !aggsig::verify_batch(&secp, &sigs, &msgs, &pubkeys) {
 			return Err(Error::IncorrectSignature);
 		}
 
@@ -487,7 +641,7 @@ pub enum Weighting {
 	AsTransaction,
 	/// Tx representing a tx with artificially limited max_weight.
 	/// This is used when selecting mineable txs from the pool.
-	AsLimitedTransaction(usize),
+	AsLimitedTransaction(u64),
 	/// Tx represents a block (max block weight).
 	AsBlock,
 	/// No max weight limit (skip the weight check).
@@ -495,21 +649,14 @@ pub enum Weighting {
 }
 
 /// TransactionBody is a common abstraction for transaction and block
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 pub struct TransactionBody {
 	/// List of inputs spent by the transaction.
-	pub inputs: Vec<Input>,
+	pub inputs: Inputs,
 	/// List of outputs the transaction produces.
 	pub outputs: Vec<Output>,
 	/// List of kernels that make up this transaction (usually a single kernel).
 	pub kernels: Vec<TxKernel>,
-}
-
-/// PartialEq
-impl PartialEq for TransactionBody {
-	fn eq(&self, l: &TransactionBody) -> bool {
-		self.inputs == l.inputs && self.outputs == l.outputs && self.kernels == l.kernels
-	}
 }
 
 /// Implementation of Writeable for a body, defines how to
@@ -534,28 +681,35 @@ impl Writeable for TransactionBody {
 /// Implementation of Readable for a body, defines how to read a
 /// body from a binary stream.
 impl Readable for TransactionBody {
-	fn read(reader: &mut dyn Reader) -> Result<TransactionBody, ser::Error> {
-		let (input_len, output_len, kernel_len) =
+	fn read<R: Reader>(reader: &mut R) -> Result<TransactionBody, ser::Error> {
+		let (num_inputs, num_outputs, num_kernels) =
 			ser_multiread!(reader, read_u64, read_u64, read_u64);
 
 		// Quick block weight check before proceeding.
 		// Note: We use weight_as_block here (inputs have weight).
-		let tx_block_weight = TransactionBody::weight_as_block(
-			input_len as usize,
-			output_len as usize,
-			kernel_len as usize,
-		);
-
+		let tx_block_weight =
+			TransactionBody::weight_as_block(num_inputs, num_outputs, num_kernels);
 		if tx_block_weight > global::max_block_weight() {
 			return Err(ser::Error::TooLargeReadErr);
 		}
 
-		let inputs = read_multi(reader, input_len)?;
-		let outputs = read_multi(reader, output_len)?;
-		let kernels = read_multi(reader, kernel_len)?;
+		// Read protocol version specific inputs.
+		let inputs = match reader.protocol_version().value() {
+			0..=2 => {
+				let inputs: Vec<Input> = read_multi(reader, num_inputs)?;
+				Inputs::from(inputs.as_slice())
+			}
+			3..=ser::ProtocolVersion::MAX => {
+				let inputs: Vec<CommitWrapper> = read_multi(reader, num_inputs)?;
+				Inputs::from(inputs.as_slice())
+			}
+		};
+
+		let outputs = read_multi(reader, num_outputs)?;
+		let kernels = read_multi(reader, num_kernels)?;
 
 		// Initialize tx body and verify everything is sorted.
-		let body = TransactionBody::init(inputs, outputs, kernels, true)
+		let body = TransactionBody::init(inputs, &outputs, &kernels, true)
 			.map_err(|_| ser::Error::CorruptedData)?;
 
 		Ok(body)
@@ -564,15 +718,16 @@ impl Readable for TransactionBody {
 
 impl Committed for TransactionBody {
 	fn inputs_committed(&self) -> Vec<Commitment> {
-		self.inputs.iter().map(|x| x.commitment()).collect()
+		let inputs: Vec<_> = self.inputs().into();
+		inputs.iter().map(|x| x.commitment()).collect()
 	}
 
 	fn outputs_committed(&self) -> Vec<Commitment> {
-		self.outputs.iter().map(|x| x.commitment()).collect()
+		self.outputs().iter().map(|x| x.commitment()).collect()
 	}
 
 	fn kernels_committed(&self) -> Vec<Commitment> {
-		self.kernels.iter().map(|x| x.excess()).collect()
+		self.kernels().iter().map(|x| x.excess()).collect()
 	}
 }
 
@@ -582,11 +737,17 @@ impl Default for TransactionBody {
 	}
 }
 
+impl From<Transaction> for TransactionBody {
+	fn from(tx: Transaction) -> Self {
+		tx.body
+	}
+}
+
 impl TransactionBody {
 	/// Creates a new empty transaction (no inputs or outputs, zero fee).
 	pub fn empty() -> TransactionBody {
 		TransactionBody {
-			inputs: vec![],
+			inputs: Inputs::default(),
 			outputs: vec![],
 			kernels: vec![],
 		}
@@ -603,15 +764,15 @@ impl TransactionBody {
 	/// the provided inputs, outputs and kernels.
 	/// Guarantees inputs, outputs, kernels are sorted lexicographically.
 	pub fn init(
-		inputs: Vec<Input>,
-		outputs: Vec<Output>,
-		kernels: Vec<TxKernel>,
+		inputs: Inputs,
+		outputs: &[Output],
+		kernels: &[TxKernel],
 		verify_sorted: bool,
 	) -> Result<TransactionBody, Error> {
 		let mut body = TransactionBody {
 			inputs,
-			outputs,
-			kernels,
+			outputs: outputs.to_vec(),
+			kernels: kernels.to_vec(),
 		};
 
 		if verify_sorted {
@@ -625,13 +786,44 @@ impl TransactionBody {
 		Ok(body)
 	}
 
+	/// Transaction inputs.
+	pub fn inputs(&self) -> Inputs {
+		self.inputs.clone()
+	}
+
+	/// Transaction outputs.
+	pub fn outputs(&self) -> &[Output] {
+		&self.outputs
+	}
+
+	/// Transaction kernels.
+	pub fn kernels(&self) -> &[TxKernel] {
+		&self.kernels
+	}
+
 	/// Builds a new body with the provided inputs added. Existing
 	/// inputs, if any, are kept intact.
 	/// Sort order is maintained.
 	pub fn with_input(mut self, input: Input) -> TransactionBody {
-		if let Err(e) = self.inputs.binary_search(&input) {
-			self.inputs.insert(e, input)
+		match &mut self.inputs {
+			Inputs::CommitOnly(inputs) => {
+				let commit = input.into();
+				if let Err(e) = inputs.binary_search(&commit) {
+					inputs.insert(e, commit)
+				};
+			}
+			Inputs::FeaturesAndCommit(inputs) => {
+				if let Err(e) = inputs.binary_search(&input) {
+					inputs.insert(e, input)
+				};
+			}
 		};
+		self
+	}
+
+	/// Fully replace inputs.
+	pub fn replace_inputs(mut self, inputs: Inputs) -> TransactionBody {
+		self.inputs = inputs;
 		self
 	}
 
@@ -642,6 +834,12 @@ impl TransactionBody {
 		if let Err(e) = self.outputs.binary_search(&output) {
 			self.outputs.insert(e, output)
 		};
+		self
+	}
+
+	/// Fully replace outputs.
+	pub fn replace_outputs(mut self, outputs: &[Output]) -> TransactionBody {
+		self.outputs = outputs.to_vec();
 		self
 	}
 
@@ -668,9 +866,9 @@ impl TransactionBody {
 			.iter()
 			.filter_map(|k| match k.features {
 				KernelFeatures::Coinbase => None,
-				KernelFeatures::Plain { fee } | KernelFeatures::HeightLocked { fee, .. } => {
-					Some(fee)
-				}
+				KernelFeatures::Plain { fee } => Some(fee),
+				KernelFeatures::HeightLocked { fee, .. } => Some(fee),
+				KernelFeatures::NoRecentDuplicate { fee, .. } => Some(fee),
 			})
 			.fold(0, |acc, fee| acc.saturating_add(fee))
 	}
@@ -680,33 +878,41 @@ impl TransactionBody {
 	}
 
 	/// Calculate transaction weight
-	pub fn body_weight(&self) -> usize {
-		TransactionBody::weight(self.inputs.len(), self.outputs.len(), self.kernels.len())
+	pub fn body_weight(&self) -> u64 {
+		TransactionBody::weight(
+			self.inputs.len() as u64,
+			self.outputs.len() as u64,
+			self.kernels.len() as u64,
+		)
 	}
 
 	/// Calculate weight of transaction using block weighing
-	pub fn body_weight_as_block(&self) -> usize {
-		TransactionBody::weight_as_block(self.inputs.len(), self.outputs.len(), self.kernels.len())
+	pub fn body_weight_as_block(&self) -> u64 {
+		TransactionBody::weight_as_block(
+			self.inputs.len() as u64,
+			self.outputs.len() as u64,
+			self.kernels.len() as u64,
+		)
 	}
 
 	/// Calculate transaction weight from transaction details. This is non
 	/// consensus critical and compared to block weight, incentivizes spending
 	/// more outputs (to lower the fee).
-	pub fn weight(input_len: usize, output_len: usize, kernel_len: usize) -> usize {
-		let body_weight = output_len
+	pub fn weight(num_inputs: u64, num_outputs: u64, num_kernels: u64) -> u64 {
+		let body_weight = num_outputs
 			.saturating_mul(4)
-			.saturating_add(kernel_len)
-			.saturating_sub(input_len);
+			.saturating_add(num_kernels)
+			.saturating_sub(num_inputs);
 		max(body_weight, 1)
 	}
 
 	/// Calculate transaction weight using block weighing from transaction
 	/// details. Consensus critical and uses consensus weight values.
-	pub fn weight_as_block(input_len: usize, output_len: usize, kernel_len: usize) -> usize {
-		input_len
-			.saturating_mul(consensus::BLOCK_INPUT_WEIGHT)
-			.saturating_add(output_len.saturating_mul(consensus::BLOCK_OUTPUT_WEIGHT))
-			.saturating_add(kernel_len.saturating_mul(consensus::BLOCK_KERNEL_WEIGHT))
+	pub fn weight_as_block(num_inputs: u64, num_outputs: u64, num_kernels: u64) -> u64 {
+		num_inputs
+			.saturating_mul(consensus::BLOCK_INPUT_WEIGHT as u64)
+			.saturating_add(num_outputs.saturating_mul(consensus::BLOCK_OUTPUT_WEIGHT as u64))
+			.saturating_add(num_kernels.saturating_mul(consensus::BLOCK_KERNEL_WEIGHT as u64))
 	}
 
 	/// Lock height of a body is the max lock height of the kernels.
@@ -754,6 +960,36 @@ impl TransactionBody {
 		Ok(())
 	}
 
+	// It is never valid to have multiple duplicate NRD kernels (by public excess)
+	// in the same transaction or block. We check this here.
+	// We skip this check if NRD feature is not enabled.
+	fn verify_no_nrd_duplicates(&self) -> Result<(), Error> {
+		if !global::is_nrd_enabled() {
+			return Ok(());
+		}
+
+		let mut nrd_excess: Vec<Commitment> = self
+			.kernels
+			.iter()
+			.filter(|x| match x.features {
+				KernelFeatures::NoRecentDuplicate { .. } => true,
+				_ => false,
+			})
+			.map(|x| x.excess())
+			.collect();
+
+		// Sort and dedup and compare length to look for duplicates.
+		nrd_excess.sort();
+		let original_count = nrd_excess.len();
+		nrd_excess.dedup();
+		let dedup_count = nrd_excess.len();
+		if original_count == dedup_count {
+			Ok(())
+		} else {
+			Err(Error::InvalidNRDRelativeHeight)
+		}
+	}
+
 	// Verify that inputs|outputs|kernels are sorted in lexicographical order
 	// and that there are no duplicates (they are all unique within this transaction).
 	fn verify_sorted(&self) -> Result<(), Error> {
@@ -763,22 +999,24 @@ impl TransactionBody {
 		Ok(())
 	}
 
+	// Returns a single sorted vec of all input and output commitments.
+	// This gives us a convenient way of verifying cut_through.
+	fn inputs_outputs_committed(&self) -> Vec<Commitment> {
+		let mut commits = self.inputs_committed();
+		commits.extend_from_slice(self.outputs_committed().as_slice());
+		commits.sort_unstable();
+		commits
+	}
+
 	// Verify that no input is spending an output from the same block.
-	// Assumes inputs and outputs are sorted
+	// The inputs and outputs are not guaranteed to be sorted consistently once we support "commit only" inputs.
+	// We need to allocate as we need to sort the commitments so we keep this very simple and just look
+	// for duplicates across all input and output commitments.
 	fn verify_cut_through(&self) -> Result<(), Error> {
-		let mut inputs = self.inputs.iter().map(|x| x.hash()).peekable();
-		let mut outputs = self.outputs.iter().map(|x| x.hash()).peekable();
-		while let (Some(ih), Some(oh)) = (inputs.peek(), outputs.peek()) {
-			match ih.cmp(oh) {
-				Ordering::Less => {
-					inputs.next();
-				}
-				Ordering::Greater => {
-					outputs.next();
-				}
-				Ordering::Equal => {
-					return Err(Error::CutThrough);
-				}
+		let commits = self.inputs_outputs_committed();
+		for pair in commits.windows(2) {
+			if pair[0] == pair[1] {
+				return Err(Error::CutThrough);
 			}
 		}
 		Ok(())
@@ -815,6 +1053,7 @@ impl TransactionBody {
 	/// * kernel signature verification
 	pub fn validate_read(&self, weighting: Weighting) -> Result<(), Error> {
 		self.verify_weight(weighting)?;
+		self.verify_no_nrd_duplicates()?;
 		self.verify_sorted()?;
 		self.verify_cut_through()?;
 		Ok(())
@@ -841,7 +1080,7 @@ impl TransactionBody {
 			let mut commits = vec![];
 			let mut proofs = vec![];
 			for x in &outputs {
-				commits.push(x.commit);
+				commits.push(x.commitment());
 				proofs.push(x.proof);
 			}
 			Output::batch_verify_proofs(&commits, &proofs)?;
@@ -889,12 +1128,6 @@ impl PartialEq for Transaction {
 	}
 }
 
-impl Into<TransactionBody> for Transaction {
-	fn into(self) -> TransactionBody {
-		self.body
-	}
-}
-
 /// Implementation of Writeable for a fully blinded transaction, defines how to
 /// write the transaction as binary.
 impl Writeable for Transaction {
@@ -908,7 +1141,7 @@ impl Writeable for Transaction {
 /// Implementation of Readable for a transaction, defines how to read a full
 /// transaction from a binary stream.
 impl Readable for Transaction {
-	fn read(reader: &mut dyn Reader) -> Result<Transaction, ser::Error> {
+	fn read<R: Reader>(reader: &mut R) -> Result<Transaction, ser::Error> {
 		let offset = BlindingFactor::read(reader)?;
 		let body = TransactionBody::read(reader)?;
 		let tx = Transaction { offset, body };
@@ -954,14 +1187,15 @@ impl Transaction {
 
 	/// Creates a new transaction initialized with
 	/// the provided inputs, outputs, kernels
-	pub fn new(inputs: Vec<Input>, outputs: Vec<Output>, kernels: Vec<TxKernel>) -> Transaction {
-		let offset = BlindingFactor::zero();
-
+	pub fn new(inputs: Inputs, outputs: &[Output], kernels: &[TxKernel]) -> Transaction {
 		// Initialize a new tx body and sort everything.
 		let body =
 			TransactionBody::init(inputs, outputs, kernels, false).expect("sorting, not verifying");
 
-		Transaction { offset, body }
+		Transaction {
+			offset: BlindingFactor::zero(),
+			body,
+		}
 	}
 
 	/// Creates a new transaction using this transaction as a template
@@ -1009,33 +1243,18 @@ impl Transaction {
 	}
 
 	/// Get inputs
-	pub fn inputs(&self) -> &Vec<Input> {
-		&self.body.inputs
-	}
-
-	/// Get inputs mutable
-	pub fn inputs_mut(&mut self) -> &mut Vec<Input> {
-		&mut self.body.inputs
+	pub fn inputs(&self) -> Inputs {
+		self.body.inputs()
 	}
 
 	/// Get outputs
-	pub fn outputs(&self) -> &Vec<Output> {
-		&self.body.outputs
-	}
-
-	/// Get outputs mutable
-	pub fn outputs_mut(&mut self) -> &mut Vec<Output> {
-		&mut self.body.outputs
+	pub fn outputs(&self) -> &[Output] {
+		&self.body.outputs()
 	}
 
 	/// Get kernels
-	pub fn kernels(&self) -> &Vec<TxKernel> {
-		&self.body.kernels
-	}
-
-	/// Get kernels mut
-	pub fn kernels_mut(&mut self) -> &mut Vec<TxKernel> {
-		&mut self.body.kernels
+	pub fn kernels(&self) -> &[TxKernel] {
+		&self.body.kernels()
 	}
 
 	/// Total fee for a transaction is the sum of fees of all kernels.
@@ -1072,8 +1291,8 @@ impl Transaction {
 		weighting: Weighting,
 		verifier: Arc<RwLock<dyn VerifierCache>>,
 	) -> Result<(), Error> {
-		self.body.validate(weighting, verifier)?;
 		self.body.verify_features()?;
+		self.body.validate(weighting, verifier)?;
 		self.verify_kernel_sums(self.overage(), self.offset.clone())?;
 		Ok(())
 	}
@@ -1085,43 +1304,59 @@ impl Transaction {
 	}
 
 	/// Calculate transaction weight
-	pub fn tx_weight(&self) -> usize {
+	pub fn tx_weight(&self) -> u64 {
 		self.body.body_weight()
 	}
 
 	/// Calculate transaction weight as a block
-	pub fn tx_weight_as_block(&self) -> usize {
+	pub fn tx_weight_as_block(&self) -> u64 {
 		self.body.body_weight_as_block()
 	}
 
 	/// Calculate transaction weight from transaction details
-	pub fn weight(input_len: usize, output_len: usize, kernel_len: usize) -> usize {
-		TransactionBody::weight(input_len, output_len, kernel_len)
+	pub fn weight(num_inputs: u64, num_outputs: u64, num_kernels: u64) -> u64 {
+		TransactionBody::weight(num_inputs, num_outputs, num_kernels)
 	}
 }
 
-/// Matches any output with a potential spending input, eliminating them
-/// from the Vec. Provides a simple way to cut-through a block or aggregated
-/// transaction. The elimination is stable with respect to the order of inputs
-/// and outputs.
-pub fn cut_through(inputs: &mut Vec<Input>, outputs: &mut Vec<Output>) -> Result<(), Error> {
-	// assemble output commitments set, checking they're all unique
-	outputs.sort_unstable();
-	if outputs.windows(2).any(|pair| pair[0] == pair[1]) {
-		return Err(Error::AggregationError);
-	}
-	inputs.sort_unstable();
+/// Takes a slice of inputs and a slice of outputs and applies "cut-through"
+/// eliminating any input/output pairs with input spending output.
+/// Returns new slices with cut-through elements removed.
+/// Also returns slices of the cut-through elements themselves.
+/// Note: Takes slices of _anything_ that is AsRef<Commitment> for greater flexibility.
+/// So we can cut_through inputs and outputs but we can also cut_through inputs and output identifiers.
+/// Or we can get crazy and cut_through inputs with other inputs to identify intersection and difference etc.
+///
+/// Example:
+/// Inputs: [A, B, C]
+/// Outputs: [C, D, E]
+/// Returns: ([A, B], [D, E], [C], [C]) # element C is cut-through
+pub fn cut_through<'a, 'b, T, U>(
+	inputs: &'a mut [T],
+	outputs: &'b mut [U],
+) -> Result<(&'a [T], &'b [U], &'a [T], &'b [U]), Error>
+where
+	T: AsRef<Commitment> + Ord,
+	U: AsRef<Commitment> + Ord,
+{
+	// Make sure inputs and outputs are sorted consistently as we will iterate over both.
+	inputs.sort_unstable_by_key(|x| *x.as_ref());
+	outputs.sort_unstable_by_key(|x| *x.as_ref());
+
 	let mut inputs_idx = 0;
 	let mut outputs_idx = 0;
 	let mut ncut = 0;
 	while inputs_idx < inputs.len() && outputs_idx < outputs.len() {
-		match inputs[inputs_idx].hash().cmp(&outputs[outputs_idx].hash()) {
+		match inputs[inputs_idx]
+			.as_ref()
+			.cmp(&outputs[outputs_idx].as_ref())
+		{
 			Ordering::Less => {
-				inputs[inputs_idx - ncut] = inputs[inputs_idx];
+				inputs.swap(inputs_idx - ncut, inputs_idx);
 				inputs_idx += 1;
 			}
 			Ordering::Greater => {
-				outputs[outputs_idx - ncut] = outputs[outputs_idx];
+				outputs.swap(outputs_idx - ncut, outputs_idx);
 				outputs_idx += 1;
 			}
 			Ordering::Equal => {
@@ -1131,50 +1366,78 @@ pub fn cut_through(inputs: &mut Vec<Input>, outputs: &mut Vec<Output>) -> Result
 			}
 		}
 	}
-	// Cut elements that have already been copied
-	outputs.drain(outputs_idx - ncut..outputs_idx);
-	inputs.drain(inputs_idx - ncut..inputs_idx);
-	Ok(())
+
+	// Make sure we move any the remaining inputs into the slice to be returned.
+	while inputs_idx < inputs.len() {
+		inputs.swap(inputs_idx - ncut, inputs_idx);
+		inputs_idx += 1;
+	}
+
+	// Make sure we move any the remaining outputs into the slice to be returned.
+	while outputs_idx < outputs.len() {
+		outputs.swap(outputs_idx - ncut, outputs_idx);
+		outputs_idx += 1;
+	}
+
+	// Split inputs and outputs slices into non-cut-through and cut-through slices.
+	let (inputs, inputs_cut) = inputs.split_at_mut(inputs.len() - ncut);
+	let (outputs, outputs_cut) = outputs.split_at_mut(outputs.len() - ncut);
+
+	// Resort all the new slices.
+	inputs.sort_unstable();
+	outputs.sort_unstable();
+	inputs_cut.sort_unstable();
+	outputs_cut.sort_unstable();
+
+	// Check we have no duplicate inputs after cut-through.
+	if inputs.windows(2).any(|pair| pair[0] == pair[1]) {
+		return Err(Error::CutThrough);
+	}
+
+	// Check we have no duplicate outputs after cut-through.
+	if outputs.windows(2).any(|pair| pair[0] == pair[1]) {
+		return Err(Error::CutThrough);
+	}
+
+	Ok((inputs, outputs, inputs_cut, outputs_cut))
 }
 
 /// Aggregate a vec of txs into a multi-kernel tx with cut_through.
-pub fn aggregate(mut txs: Vec<Transaction>) -> Result<Transaction, Error> {
+pub fn aggregate(txs: &[Transaction]) -> Result<Transaction, Error> {
 	// convenience short-circuiting
 	if txs.is_empty() {
 		return Ok(Transaction::empty());
 	} else if txs.len() == 1 {
-		return Ok(txs.pop().unwrap());
-	}
-	let mut n_inputs = 0;
-	let mut n_outputs = 0;
-	let mut n_kernels = 0;
-	for tx in txs.iter() {
-		n_inputs += tx.body.inputs.len();
-		n_outputs += tx.body.outputs.len();
-		n_kernels += tx.body.kernels.len();
+		return Ok(txs[0].clone());
 	}
 
-	let mut inputs: Vec<Input> = Vec::with_capacity(n_inputs);
+	let (n_inputs, n_outputs, n_kernels) =
+		txs.iter()
+			.fold((0, 0, 0), |(inputs, outputs, kernels), tx| {
+				(
+					inputs + tx.inputs().len(),
+					outputs + tx.outputs().len(),
+					kernels + tx.kernels().len(),
+				)
+			});
+	let mut inputs: Vec<CommitWrapper> = Vec::with_capacity(n_inputs);
 	let mut outputs: Vec<Output> = Vec::with_capacity(n_outputs);
 	let mut kernels: Vec<TxKernel> = Vec::with_capacity(n_kernels);
 
 	// we will sum these together at the end to give us the overall offset for the
 	// transaction
 	let mut kernel_offsets: Vec<BlindingFactor> = Vec::with_capacity(txs.len());
-	for mut tx in txs {
+	for tx in txs {
 		// we will sum these later to give a single aggregate offset
-		kernel_offsets.push(tx.offset);
+		kernel_offsets.push(tx.offset.clone());
 
-		inputs.append(&mut tx.body.inputs);
-		outputs.append(&mut tx.body.outputs);
-		kernels.append(&mut tx.body.kernels);
+		let tx_inputs: Vec<_> = tx.inputs().into();
+		inputs.extend_from_slice(&tx_inputs);
+		outputs.extend_from_slice(tx.outputs());
+		kernels.extend_from_slice(tx.kernels());
 	}
 
-	// Sort inputs and outputs during cut_through.
-	cut_through(&mut inputs, &mut outputs)?;
-
-	// Now sort kernels.
-	kernels.sort_unstable();
+	let (inputs, outputs, _, _) = cut_through(&mut inputs, &mut outputs)?;
 
 	// now sum the kernel_offsets up to give us an aggregate offset for the
 	// transaction
@@ -1185,15 +1448,17 @@ pub fn aggregate(mut txs: Vec<Transaction>) -> Result<Transaction, Error> {
 	//   * cut-through outputs
 	//   * full set of tx kernels
 	//   * sum of all kernel offsets
-	let tx = Transaction::new(inputs, outputs, kernels).with_offset(total_kernel_offset);
+	// Note: We sort input/outputs/kernels when building the transaction body internally.
+	let tx =
+		Transaction::new(Inputs::from(inputs), outputs, &kernels).with_offset(total_kernel_offset);
 
 	Ok(tx)
 }
 
 /// Attempt to deaggregate a multi-kernel transaction based on multiple
 /// transactions
-pub fn deaggregate(mk_tx: Transaction, txs: Vec<Transaction>) -> Result<Transaction, Error> {
-	let mut inputs: Vec<Input> = vec![];
+pub fn deaggregate(mk_tx: Transaction, txs: &[Transaction]) -> Result<Transaction, Error> {
+	let mut inputs: Vec<CommitWrapper> = vec![];
 	let mut outputs: Vec<Output> = vec![];
 	let mut kernels: Vec<TxKernel> = vec![];
 
@@ -1203,19 +1468,21 @@ pub fn deaggregate(mk_tx: Transaction, txs: Vec<Transaction>) -> Result<Transact
 
 	let tx = aggregate(txs)?;
 
-	for mk_input in mk_tx.body.inputs {
-		if !tx.body.inputs.contains(&mk_input) && !inputs.contains(&mk_input) {
+	let mk_inputs: Vec<_> = mk_tx.inputs().into();
+	for mk_input in mk_inputs {
+		let tx_inputs: Vec<_> = tx.inputs().into();
+		if !tx_inputs.contains(&mk_input) && !inputs.contains(&mk_input) {
 			inputs.push(mk_input);
 		}
 	}
-	for mk_output in mk_tx.body.outputs {
-		if !tx.body.outputs.contains(&mk_output) && !outputs.contains(&mk_output) {
-			outputs.push(mk_output);
+	for mk_output in mk_tx.outputs() {
+		if !tx.outputs().contains(&mk_output) && !outputs.contains(mk_output) {
+			outputs.push(*mk_output);
 		}
 	}
-	for mk_kernel in mk_tx.body.kernels {
-		if !tx.body.kernels.contains(&mk_kernel) && !kernels.contains(&mk_kernel) {
-			kernels.push(mk_kernel);
+	for mk_kernel in mk_tx.kernels() {
+		if !tx.kernels().contains(&mk_kernel) && !kernels.contains(mk_kernel) {
+			kernels.push(*mk_kernel);
 		}
 	}
 
@@ -1250,8 +1517,10 @@ pub fn deaggregate(mk_tx: Transaction, txs: Vec<Transaction>) -> Result<Transact
 	kernels.sort_unstable();
 
 	// Build a new tx from the above data.
-	let tx = Transaction::new(inputs, outputs, kernels).with_offset(total_kernel_offset);
-	Ok(tx)
+	Ok(
+		Transaction::new(Inputs::from(inputs.as_slice()), &outputs, &kernels)
+			.with_offset(total_kernel_offset),
+	)
 }
 
 /// A transaction input.
@@ -1273,11 +1542,18 @@ pub struct Input {
 impl DefaultHashable for Input {}
 hashable_ord!(Input);
 
-impl ::std::hash::Hash for Input {
-	fn hash<H: ::std::hash::Hasher>(&self, state: &mut H) {
-		let mut vec = Vec::new();
-		ser::serialize_default(&mut vec, &self).expect("serialization failed");
-		::std::hash::Hash::hash(&vec, state);
+impl AsRef<Commitment> for Input {
+	fn as_ref(&self) -> &Commitment {
+		&self.commit
+	}
+}
+
+impl From<&OutputIdentifier> for Input {
+	fn from(out: &OutputIdentifier) -> Self {
+		Input {
+			features: out.features,
+			commit: out.commit,
+		}
 	}
 }
 
@@ -1294,7 +1570,7 @@ impl Writeable for Input {
 /// Implementation of Readable for a transaction Input, defines how to read
 /// an Input from a binary stream.
 impl Readable for Input {
-	fn read(reader: &mut dyn Reader) -> Result<Input, ser::Error> {
+	fn read<R: Reader>(reader: &mut R) -> Result<Input, ser::Error> {
 		let features = OutputFeatures::read(reader)?;
 		let commit = Commitment::read(reader)?;
 		Ok(Input::new(features, commit))
@@ -1331,6 +1607,209 @@ impl Input {
 	}
 }
 
+/// We need to wrap commitments so they can be sorted with hashable_ord.
+#[derive(Serialize, Deserialize, Debug, Clone, Copy)]
+#[serde(transparent)]
+pub struct CommitWrapper {
+	#[serde(
+		serialize_with = "secp_ser::as_hex",
+		deserialize_with = "secp_ser::commitment_from_hex"
+	)]
+	commit: Commitment,
+}
+
+impl DefaultHashable for CommitWrapper {}
+hashable_ord!(CommitWrapper);
+
+impl From<Commitment> for CommitWrapper {
+	fn from(commit: Commitment) -> Self {
+		CommitWrapper { commit }
+	}
+}
+
+impl From<Input> for CommitWrapper {
+	fn from(input: Input) -> Self {
+		CommitWrapper {
+			commit: input.commitment(),
+		}
+	}
+}
+
+impl From<&Input> for CommitWrapper {
+	fn from(input: &Input) -> Self {
+		CommitWrapper {
+			commit: input.commitment(),
+		}
+	}
+}
+
+impl AsRef<Commitment> for CommitWrapper {
+	fn as_ref(&self) -> &Commitment {
+		&self.commit
+	}
+}
+
+impl Readable for CommitWrapper {
+	fn read<R: Reader>(reader: &mut R) -> Result<CommitWrapper, ser::Error> {
+		let commit = Commitment::read(reader)?;
+		Ok(CommitWrapper { commit })
+	}
+}
+
+impl Writeable for CommitWrapper {
+	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
+		self.commit.write(writer)
+	}
+}
+
+impl From<Inputs> for Vec<CommitWrapper> {
+	fn from(inputs: Inputs) -> Self {
+		match inputs {
+			Inputs::CommitOnly(inputs) => inputs,
+			Inputs::FeaturesAndCommit(inputs) => {
+				let mut commits: Vec<_> = inputs.iter().map(|input| input.into()).collect();
+				commits.sort_unstable();
+				commits
+			}
+		}
+	}
+}
+
+impl From<&Inputs> for Vec<CommitWrapper> {
+	fn from(inputs: &Inputs) -> Self {
+		match inputs {
+			Inputs::CommitOnly(inputs) => inputs.clone(),
+			Inputs::FeaturesAndCommit(inputs) => {
+				let mut commits: Vec<_> = inputs.iter().map(|input| input.into()).collect();
+				commits.sort_unstable();
+				commits
+			}
+		}
+	}
+}
+
+impl CommitWrapper {
+	/// Wrapped commitment.
+	pub fn commitment(&self) -> Commitment {
+		self.commit
+	}
+}
+/// Wrapper around a vec of inputs.
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+#[serde(untagged)]
+pub enum Inputs {
+	/// Vec of commitments.
+	CommitOnly(Vec<CommitWrapper>),
+	/// Vec of inputs.
+	FeaturesAndCommit(Vec<Input>),
+}
+
+impl From<&[Input]> for Inputs {
+	fn from(inputs: &[Input]) -> Self {
+		Inputs::FeaturesAndCommit(inputs.to_vec())
+	}
+}
+
+impl From<&[CommitWrapper]> for Inputs {
+	fn from(commits: &[CommitWrapper]) -> Self {
+		Inputs::CommitOnly(commits.to_vec())
+	}
+}
+
+/// Used when converting to v2 compatibility.
+/// We want to preserve output features here.
+impl From<&[OutputIdentifier]> for Inputs {
+	fn from(outputs: &[OutputIdentifier]) -> Self {
+		let mut inputs: Vec<_> = outputs
+			.iter()
+			.map(|out| Input {
+				features: out.features,
+				commit: out.commit,
+			})
+			.collect();
+		inputs.sort_unstable();
+		Inputs::FeaturesAndCommit(inputs)
+	}
+}
+
+impl Default for Inputs {
+	fn default() -> Self {
+		Inputs::CommitOnly(vec![])
+	}
+}
+
+impl Writeable for Inputs {
+	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
+		// Nothing to write so we are done.
+		if self.is_empty() {
+			return Ok(());
+		}
+
+		// If writing for a hash then simply write all our inputs.
+		if writer.serialization_mode().is_hash_mode() {
+			match self {
+				Inputs::CommitOnly(inputs) => inputs.write(writer)?,
+				Inputs::FeaturesAndCommit(inputs) => inputs.write(writer)?,
+			}
+		} else {
+			// Otherwise we are writing full data and need to consider our inputs variant and protocol version.
+			match self {
+				Inputs::CommitOnly(inputs) => match writer.protocol_version().value() {
+					0..=2 => return Err(ser::Error::UnsupportedProtocolVersion),
+					3..=ProtocolVersion::MAX => inputs.write(writer)?,
+				},
+				Inputs::FeaturesAndCommit(inputs) => match writer.protocol_version().value() {
+					0..=2 => inputs.write(writer)?,
+					3..=ProtocolVersion::MAX => {
+						let inputs: Vec<CommitWrapper> = self.into();
+						inputs.write(writer)?;
+					}
+				},
+			}
+		}
+		Ok(())
+	}
+}
+
+impl Inputs {
+	/// Number of inputs.
+	pub fn len(&self) -> usize {
+		match self {
+			Inputs::CommitOnly(inputs) => inputs.len(),
+			Inputs::FeaturesAndCommit(inputs) => inputs.len(),
+		}
+	}
+
+	/// Empty inputs?
+	pub fn is_empty(&self) -> bool {
+		self.len() == 0
+	}
+
+	/// Verify inputs are sorted and unique.
+	fn verify_sorted_and_unique(&self) -> Result<(), ser::Error> {
+		match self {
+			Inputs::CommitOnly(inputs) => inputs.verify_sorted_and_unique(),
+			Inputs::FeaturesAndCommit(inputs) => inputs.verify_sorted_and_unique(),
+		}
+	}
+
+	/// Sort the inputs.
+	fn sort_unstable(&mut self) {
+		match self {
+			Inputs::CommitOnly(inputs) => inputs.sort_unstable(),
+			Inputs::FeaturesAndCommit(inputs) => inputs.sort_unstable(),
+		}
+	}
+
+	/// For debug purposes only. Do not rely on this for anything.
+	pub fn version_str(&self) -> &str {
+		match self {
+			Inputs::CommitOnly(_) => "v3",
+			Inputs::FeaturesAndCommit(_) => "v2",
+		}
+	}
+}
+
 // Enum of various supported kernel "features".
 enum_from_primitive! {
 	/// Various flavors of tx kernel.
@@ -1352,7 +1831,7 @@ impl Writeable for OutputFeatures {
 }
 
 impl Readable for OutputFeatures {
-	fn read(reader: &mut dyn Reader) -> Result<OutputFeatures, ser::Error> {
+	fn read<R: Reader>(reader: &mut R) -> Result<OutputFeatures, ser::Error> {
 		let features =
 			OutputFeatures::from_u8(reader.read_u8()?).ok_or(ser::Error::CorruptedData)?;
 		Ok(features)
@@ -1365,15 +1844,10 @@ impl Readable for OutputFeatures {
 /// overflow and the ownership of the private key.
 #[derive(Debug, Copy, Clone, Serialize, Deserialize)]
 pub struct Output {
-	/// Options for an output's structure or use
-	pub features: OutputFeatures,
-	/// The homomorphic commitment representing the output amount
-	#[serde(
-		serialize_with = "secp_ser::as_hex",
-		deserialize_with = "secp_ser::commitment_from_hex"
-	)]
-	pub commit: Commitment,
-	/// A proof that the commitment is in the right range
+	/// Output identifier (features and commitment).
+	#[serde(flatten)]
+	pub identifier: OutputIdentifier,
+	/// Rangeproof associated with the commitment.
 	#[serde(
 		serialize_with = "secp_ser::as_hex",
 		deserialize_with = "secp_ser::rangeproof_from_hex"
@@ -1381,14 +1855,29 @@ pub struct Output {
 	pub proof: RangeProof,
 }
 
-impl DefaultHashable for Output {}
-hashable_ord!(Output);
+impl Ord for Output {
+	fn cmp(&self, other: &Self) -> Ordering {
+		self.identifier.cmp(&other.identifier)
+	}
+}
 
-impl ::std::hash::Hash for Output {
-	fn hash<H: ::std::hash::Hasher>(&self, state: &mut H) {
-		let mut vec = Vec::new();
-		ser::serialize_default(&mut vec, &self).expect("serialization failed");
-		::std::hash::Hash::hash(&vec, state);
+impl PartialOrd for Output {
+	fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+		Some(self.cmp(other))
+	}
+}
+
+impl PartialEq for Output {
+	fn eq(&self, other: &Self) -> bool {
+		self.identifier == other.identifier
+	}
+}
+
+impl Eq for Output {}
+
+impl AsRef<Commitment> for Output {
+	fn as_ref(&self) -> &Commitment {
+		&self.identifier.commit
 	}
 }
 
@@ -1396,13 +1885,8 @@ impl ::std::hash::Hash for Output {
 /// an Output as binary.
 impl Writeable for Output {
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
-		self.features.write(writer)?;
-		self.commit.write(writer)?;
-		// The hash of an output doesn't include the range proof, which
-		// is committed to separately
-		if writer.serialization_mode() != ser::SerializationMode::Hash {
-			writer.write_bytes(&self.proof)?
-		}
+		self.identifier.write(writer)?;
+		self.proof.write(writer)?;
 		Ok(())
 	}
 }
@@ -1410,29 +1894,11 @@ impl Writeable for Output {
 /// Implementation of Readable for a transaction Output, defines how to read
 /// an Output from a binary stream.
 impl Readable for Output {
-	fn read(reader: &mut dyn Reader) -> Result<Output, ser::Error> {
+	fn read<R: Reader>(reader: &mut R) -> Result<Output, ser::Error> {
 		Ok(Output {
-			features: OutputFeatures::read(reader)?,
-			commit: Commitment::read(reader)?,
+			identifier: OutputIdentifier::read(reader)?,
 			proof: RangeProof::read(reader)?,
 		})
-	}
-}
-
-/// We can build an Output MMR but store instances of OutputIdentifier in the MMR data file.
-impl PMMRable for Output {
-	type E = OutputIdentifier;
-
-	fn as_elmt(&self) -> OutputIdentifier {
-		OutputIdentifier::from(self)
-	}
-
-	fn elmt_size() -> Option<u16> {
-		Some(
-			(1 + secp::constants::PEDERSEN_COMMITMENT_SIZE)
-				.try_into()
-				.unwrap(),
-		)
 	}
 }
 
@@ -1449,19 +1915,37 @@ impl OutputFeatures {
 }
 
 impl Output {
+	/// Create a new output with the provided features, commitment and rangeproof.
+	pub fn new(features: OutputFeatures, commit: Commitment, proof: RangeProof) -> Output {
+		Output {
+			identifier: OutputIdentifier { features, commit },
+			proof,
+		}
+	}
+
+	/// Output identifier.
+	pub fn identifier(&self) -> OutputIdentifier {
+		self.identifier
+	}
+
 	/// Commitment for the output
 	pub fn commitment(&self) -> Commitment {
-		self.commit
+		self.identifier.commitment()
 	}
 
-	/// Is this a coinbase kernel?
+	/// Output features.
+	pub fn features(&self) -> OutputFeatures {
+		self.identifier.features
+	}
+
+	/// Is this a coinbase output?
 	pub fn is_coinbase(&self) -> bool {
-		self.features.is_coinbase()
+		self.identifier.is_coinbase()
 	}
 
-	/// Is this a plain kernel?
+	/// Is this a plain output?
 	pub fn is_plain(&self) -> bool {
-		self.features.is_plain()
+		self.identifier.is_plain()
 	}
 
 	/// Range proof for the output
@@ -1469,11 +1953,16 @@ impl Output {
 		self.proof
 	}
 
+	/// Get range proof as byte slice
+	pub fn proof_bytes(&self) -> &[u8] {
+		&self.proof.proof[..]
+	}
+
 	/// Validates the range proof using the commitment
 	pub fn verify_proof(&self) -> Result<(), Error> {
 		let secp = static_secp_instance();
 		secp.lock()
-			.verify_bullet_proof(self.commit, self.proof, None)?;
+			.verify_bullet_proof(self.commitment(), self.proof, None)?;
 		Ok(())
 	}
 
@@ -1486,20 +1975,37 @@ impl Output {
 	}
 }
 
+impl AsRef<OutputIdentifier> for Output {
+	fn as_ref(&self) -> &OutputIdentifier {
+		&self.identifier
+	}
+}
+
 /// An output_identifier can be build from either an input _or_ an output and
 /// contains everything we need to uniquely identify an output being spent.
 /// Needed because it is not sufficient to pass a commitment around.
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+#[derive(Serialize, Deserialize, Debug, Clone, Copy)]
 pub struct OutputIdentifier {
 	/// Output features (coinbase vs. regular transaction output)
 	/// We need to include this when hashing to ensure coinbase maturity can be
 	/// enforced.
 	pub features: OutputFeatures,
 	/// Output commitment
+	#[serde(
+		serialize_with = "secp_ser::as_hex",
+		deserialize_with = "secp_ser::commitment_from_hex"
+	)]
 	pub commit: Commitment,
 }
 
 impl DefaultHashable for OutputIdentifier {}
+hashable_ord!(OutputIdentifier);
+
+impl AsRef<Commitment> for OutputIdentifier {
+	fn as_ref(&self) -> &Commitment {
+		&self.commit
+	}
+}
 
 impl OutputIdentifier {
 	/// Build a new output_identifier.
@@ -1515,22 +2021,28 @@ impl OutputIdentifier {
 		self.commit
 	}
 
+	/// Is this a coinbase output?
+	pub fn is_coinbase(&self) -> bool {
+		self.features.is_coinbase()
+	}
+
+	/// Is this a plain output?
+	pub fn is_plain(&self) -> bool {
+		self.features.is_plain()
+	}
+
 	/// Converts this identifier to a full output, provided a RangeProof
 	pub fn into_output(self, proof: RangeProof) -> Output {
 		Output {
+			identifier: self,
 			proof,
-			features: self.features,
-			commit: self.commit,
 		}
 	}
+}
 
-	/// convert an output_identifier to hex string format.
-	pub fn to_hex(&self) -> String {
-		format!(
-			"{:b}{}",
-			self.features as u8,
-			util::to_hex(self.commit.0.to_vec()),
-		)
+impl ToHex for OutputIdentifier {
+	fn to_hex(&self) -> String {
+		format!("{:b}{}", self.features as u8, self.commit.to_hex())
 	}
 }
 
@@ -1543,7 +2055,7 @@ impl Writeable for OutputIdentifier {
 }
 
 impl Readable for OutputIdentifier {
-	fn read(reader: &mut dyn Reader) -> Result<OutputIdentifier, ser::Error> {
+	fn read<R: Reader>(reader: &mut R) -> Result<OutputIdentifier, ser::Error> {
 		Ok(OutputIdentifier {
 			features: OutputFeatures::read(reader)?,
 			commit: Commitment::read(reader)?,
@@ -1551,12 +2063,19 @@ impl Readable for OutputIdentifier {
 	}
 }
 
-impl From<&Output> for OutputIdentifier {
-	fn from(out: &Output) -> Self {
-		OutputIdentifier {
-			features: out.features,
-			commit: out.commit,
-		}
+impl PMMRable for OutputIdentifier {
+	type E = Self;
+
+	fn as_elmt(&self) -> OutputIdentifier {
+		*self
+	}
+
+	fn elmt_size() -> Option<u16> {
+		Some(
+			(1 + secp::constants::PEDERSEN_COMMITMENT_SIZE)
+				.try_into()
+				.unwrap(),
+		)
 	}
 }
 
@@ -1569,16 +2088,21 @@ impl From<&Input> for OutputIdentifier {
 	}
 }
 
+impl AsRef<OutputIdentifier> for OutputIdentifier {
+	fn as_ref(&self) -> &OutputIdentifier {
+		self
+	}
+}
+
 #[cfg(test)]
 mod test {
 	use super::*;
 	use crate::core::hash::Hash;
 	use crate::core::id::{ShortId, ShortIdentifiable};
 	use keychain::{ExtKeychain, Keychain, SwitchCommitmentType};
-	use util::secp;
 
 	#[test]
-	fn test_kernel_ser_deser() {
+	fn test_plain_kernel_ser_deser() {
 		let keychain = ExtKeychain::from_random_seed(false).unwrap();
 		let key_id = ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
 		let commit = keychain
@@ -1594,12 +2118,35 @@ mod test {
 			excess_sig: sig.clone(),
 		};
 
+		// Test explicit protocol version.
+		for version in vec![ProtocolVersion(1), ProtocolVersion(2)] {
+			let mut vec = vec![];
+			ser::serialize(&mut vec, version, &kernel).expect("serialized failed");
+			let kernel2: TxKernel = ser::deserialize(&mut &vec[..], version).unwrap();
+			assert_eq!(kernel2.features, KernelFeatures::Plain { fee: 10 });
+			assert_eq!(kernel2.excess, commit);
+			assert_eq!(kernel2.excess_sig, sig.clone());
+		}
+
+		// Test with "default" protocol version.
 		let mut vec = vec![];
 		ser::serialize_default(&mut vec, &kernel).expect("serialized failed");
 		let kernel2: TxKernel = ser::deserialize_default(&mut &vec[..]).unwrap();
 		assert_eq!(kernel2.features, KernelFeatures::Plain { fee: 10 });
 		assert_eq!(kernel2.excess, commit);
 		assert_eq!(kernel2.excess_sig, sig.clone());
+	}
+
+	#[test]
+	fn test_height_locked_kernel_ser_deser() {
+		let keychain = ExtKeychain::from_random_seed(false).unwrap();
+		let key_id = ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
+		let commit = keychain
+			.commit(5, &key_id, SwitchCommitmentType::Regular)
+			.unwrap();
+
+		// just some bytes for testing ser/deser
+		let sig = secp::Signature::from_raw_data(&[0; 64]).unwrap();
 
 		// now check a kernel with lock_height serialize/deserialize correctly
 		let kernel = TxKernel {
@@ -1611,18 +2158,121 @@ mod test {
 			excess_sig: sig.clone(),
 		};
 
+		// Test explicit protocol version.
+		for version in vec![ProtocolVersion(1), ProtocolVersion(2)] {
+			let mut vec = vec![];
+			ser::serialize(&mut vec, version, &kernel).expect("serialized failed");
+			let kernel2: TxKernel = ser::deserialize(&mut &vec[..], version).unwrap();
+			assert_eq!(kernel.features, kernel2.features);
+			assert_eq!(kernel2.excess, commit);
+			assert_eq!(kernel2.excess_sig, sig.clone());
+		}
+
+		// Test with "default" protocol version.
 		let mut vec = vec![];
 		ser::serialize_default(&mut vec, &kernel).expect("serialized failed");
 		let kernel2: TxKernel = ser::deserialize_default(&mut &vec[..]).unwrap();
-		assert_eq!(
-			kernel2.features,
-			KernelFeatures::HeightLocked {
-				fee: 10,
-				lock_height: 100
-			}
-		);
+		assert_eq!(kernel.features, kernel2.features);
 		assert_eq!(kernel2.excess, commit);
 		assert_eq!(kernel2.excess_sig, sig.clone());
+	}
+
+	#[test]
+	fn test_nrd_kernel_ser_deser() {
+		global::set_local_nrd_enabled(true);
+
+		let keychain = ExtKeychain::from_random_seed(false).unwrap();
+		let key_id = ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
+		let commit = keychain
+			.commit(5, &key_id, SwitchCommitmentType::Regular)
+			.unwrap();
+
+		// just some bytes for testing ser/deser
+		let sig = secp::Signature::from_raw_data(&[0; 64]).unwrap();
+
+		// now check an NRD kernel will serialize/deserialize correctly
+		let kernel = TxKernel {
+			features: KernelFeatures::NoRecentDuplicate {
+				fee: 10,
+				relative_height: NRDRelativeHeight(100),
+			},
+			excess: commit,
+			excess_sig: sig.clone(),
+		};
+
+		// Test explicit protocol version.
+		for version in vec![ProtocolVersion(1), ProtocolVersion(2)] {
+			let mut vec = vec![];
+			ser::serialize(&mut vec, version, &kernel).expect("serialized failed");
+			let kernel2: TxKernel = ser::deserialize(&mut &vec[..], version).unwrap();
+			assert_eq!(kernel.features, kernel2.features);
+			assert_eq!(kernel2.excess, commit);
+			assert_eq!(kernel2.excess_sig, sig.clone());
+		}
+
+		// Test with "default" protocol version.
+		let mut vec = vec![];
+		ser::serialize_default(&mut vec, &kernel).expect("serialized failed");
+		let kernel2: TxKernel = ser::deserialize_default(&mut &vec[..]).unwrap();
+		assert_eq!(kernel.features, kernel2.features);
+		assert_eq!(kernel2.excess, commit);
+		assert_eq!(kernel2.excess_sig, sig.clone());
+	}
+
+	#[test]
+	fn nrd_kernel_verify_sig() {
+		let keychain = ExtKeychain::from_random_seed(false).unwrap();
+		let key_id = ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
+
+		let mut kernel = TxKernel::with_features(KernelFeatures::NoRecentDuplicate {
+			fee: 10,
+			relative_height: NRDRelativeHeight(100),
+		});
+
+		// Construct the message to be signed.
+		let msg = kernel.msg_to_sign().unwrap();
+
+		let excess = keychain
+			.commit(0, &key_id, SwitchCommitmentType::Regular)
+			.unwrap();
+		let skey = keychain
+			.derive_key(0, &key_id, SwitchCommitmentType::Regular)
+			.unwrap();
+		let pubkey = excess.to_pubkey(&keychain.secp()).unwrap();
+
+		let excess_sig =
+			aggsig::sign_single(&keychain.secp(), &msg, &skey, None, Some(&pubkey)).unwrap();
+
+		kernel.excess = excess;
+		kernel.excess_sig = excess_sig;
+
+		// Check the signature verifies.
+		assert_eq!(kernel.verify(), Ok(()));
+
+		// Modify the fee and check signature no longer verifies.
+		kernel.features = KernelFeatures::NoRecentDuplicate {
+			fee: 9,
+			relative_height: NRDRelativeHeight(100),
+		};
+		assert_eq!(kernel.verify(), Err(Error::IncorrectSignature));
+
+		// Modify the relative_height and check signature no longer verifies.
+		kernel.features = KernelFeatures::NoRecentDuplicate {
+			fee: 10,
+			relative_height: NRDRelativeHeight(101),
+		};
+		assert_eq!(kernel.verify(), Err(Error::IncorrectSignature));
+
+		// Swap the features out for something different and check signature no longer verifies.
+		kernel.features = KernelFeatures::Plain { fee: 10 };
+		assert_eq!(kernel.verify(), Err(Error::IncorrectSignature));
+
+		// Check signature verifies if we use the original features.
+		kernel.features = KernelFeatures::NoRecentDuplicate {
+			fee: 10,
+			relative_height: NRDRelativeHeight(100),
+		};
+		assert_eq!(kernel.verify(), Ok(()));
 	}
 
 	#[test]
@@ -1676,20 +2326,20 @@ mod test {
 	}
 
 	#[test]
-	fn kernel_features_serialization() {
+	fn kernel_features_serialization() -> Result<(), Error> {
 		let mut vec = vec![];
-		ser::serialize_default(&mut vec, &(0u8, 10u64, 0u64)).expect("serialized failed");
-		let features: KernelFeatures = ser::deserialize_default(&mut &vec[..]).unwrap();
+		ser::serialize_default(&mut vec, &(0u8, 10u64, 0u64))?;
+		let features: KernelFeatures = ser::deserialize_default(&mut &vec[..])?;
 		assert_eq!(features, KernelFeatures::Plain { fee: 10 });
 
 		let mut vec = vec![];
-		ser::serialize_default(&mut vec, &(1u8, 0u64, 0u64)).expect("serialized failed");
-		let features: KernelFeatures = ser::deserialize_default(&mut &vec[..]).unwrap();
+		ser::serialize_default(&mut vec, &(1u8, 0u64, 0u64))?;
+		let features: KernelFeatures = ser::deserialize_default(&mut &vec[..])?;
 		assert_eq!(features, KernelFeatures::Coinbase);
 
 		let mut vec = vec![];
-		ser::serialize_default(&mut vec, &(2u8, 10u64, 100u64)).expect("serialized failed");
-		let features: KernelFeatures = ser::deserialize_default(&mut &vec[..]).unwrap();
+		ser::serialize_default(&mut vec, &(2u8, 10u64, 100u64))?;
+		let features: KernelFeatures = ser::deserialize_default(&mut &vec[..])?;
 		assert_eq!(
 			features,
 			KernelFeatures::HeightLocked {
@@ -1698,9 +2348,55 @@ mod test {
 			}
 		);
 
+		// NRD kernel support not enabled by default.
 		let mut vec = vec![];
-		ser::serialize_default(&mut vec, &(3u8, 0u64, 0u64)).expect("serialized failed");
+		ser::serialize_default(&mut vec, &(3u8, 10u64, 100u16)).expect("serialized failed");
 		let res: Result<KernelFeatures, _> = ser::deserialize_default(&mut &vec[..]);
 		assert_eq!(res.err(), Some(ser::Error::CorruptedData));
+
+		// Additional kernel features unsupported.
+		let mut vec = vec![];
+		ser::serialize_default(&mut vec, &(4u8)).expect("serialized failed");
+		let res: Result<KernelFeatures, _> = ser::deserialize_default(&mut &vec[..]);
+		assert_eq!(res.err(), Some(ser::Error::CorruptedData));
+
+		Ok(())
+	}
+
+	#[test]
+	fn kernel_features_serialization_nrd_enabled() -> Result<(), Error> {
+		global::set_local_nrd_enabled(true);
+
+		let mut vec = vec![];
+		ser::serialize_default(&mut vec, &(3u8, 10u64, 100u16))?;
+		let features: KernelFeatures = ser::deserialize_default(&mut &vec[..])?;
+		assert_eq!(
+			features,
+			KernelFeatures::NoRecentDuplicate {
+				fee: 10,
+				relative_height: NRDRelativeHeight(100)
+			}
+		);
+
+		// NRD with relative height 0 is invalid.
+		vec.clear();
+		ser::serialize_default(&mut vec, &(3u8, 10u64, 0u16))?;
+		let res: Result<KernelFeatures, _> = ser::deserialize_default(&mut &vec[..]);
+		assert_eq!(res.err(), Some(ser::Error::CorruptedData));
+
+		// NRD with relative height WEEK_HEIGHT+1 is invalid.
+		vec.clear();
+		let invalid_height = consensus::WEEK_HEIGHT + 1;
+		ser::serialize_default(&mut vec, &(3u8, 10u64, invalid_height as u16))?;
+		let res: Result<KernelFeatures, _> = ser::deserialize_default(&mut &vec[..]);
+		assert_eq!(res.err(), Some(ser::Error::CorruptedData));
+
+		// Kernel variant 4 (and above) is invalid.
+		let mut vec = vec![];
+		ser::serialize_default(&mut vec, &(4u8))?;
+		let res: Result<KernelFeatures, _> = ser::deserialize_default(&mut &vec[..]);
+		assert_eq!(res.err(), Some(ser::Error::CorruptedData));
+
+		Ok(())
 	}
 }

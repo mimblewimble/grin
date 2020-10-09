@@ -102,13 +102,13 @@ pub const CUT_THROUGH_HORIZON: u32 = WEEK_HEIGHT as u32;
 pub const STATE_SYNC_THRESHOLD: u32 = 2 * DAY_HEIGHT as u32;
 
 /// Weight of an input when counted against the max block weight capacity
-pub const BLOCK_INPUT_WEIGHT: usize = 1;
+pub const BLOCK_INPUT_WEIGHT: u64 = 1;
 
 /// Weight of an output when counted against the max block weight capacity
-pub const BLOCK_OUTPUT_WEIGHT: usize = 21;
+pub const BLOCK_OUTPUT_WEIGHT: u64 = 21;
 
 /// Weight of a kernel when counted against the max block weight capacity
-pub const BLOCK_KERNEL_WEIGHT: usize = 3;
+pub const BLOCK_KERNEL_WEIGHT: u64 = 3;
 
 /// Total maximum block weight. At current sizes, this means a maximum
 /// theoretical size of:
@@ -122,37 +122,45 @@ pub const BLOCK_KERNEL_WEIGHT: usize = 3;
 /// `(1 * 2) + (21 * 2) + (3 * 1) = 47` (weight per tx)
 /// `40_000 / 47 = 851` (txs per block)
 ///
-pub const MAX_BLOCK_WEIGHT: usize = 40_000;
+pub const MAX_BLOCK_WEIGHT: u64 = 40_000;
 
 /// Fork every 6 months.
 pub const HARD_FORK_INTERVAL: u64 = YEAR_HEIGHT / 2;
 
-/// Floonet first hard fork height, set to happen around 2019-06-20
-pub const FLOONET_FIRST_HARD_FORK: u64 = 185_040;
+/// Testnet first hard fork height, set to happen around 2019-06-20
+pub const TESTNET_FIRST_HARD_FORK: u64 = 185_040;
 
-/// Floonet second hard fork height, set to happen around 2019-12-19
-pub const FLOONET_SECOND_HARD_FORK: u64 = 298_080;
+/// Testnet second hard fork height, set to happen around 2019-12-19
+pub const TESTNET_SECOND_HARD_FORK: u64 = 298_080;
 
-/// AutomatedTesting and UserTesting first hard fork height.
+/// Testnet second hard fork height, set to happen around 2020-06-20
+pub const TESTNET_THIRD_HARD_FORK: u64 = 552_960;
+
+/// AutomatedTesting and UserTesting HF1 height.
 pub const TESTING_FIRST_HARD_FORK: u64 = 3;
 
-/// AutomatedTesting and UserTesting second hard fork height.
+/// AutomatedTesting and UserTesting HF2 height.
 pub const TESTING_SECOND_HARD_FORK: u64 = 6;
+
+/// AutomatedTesting and UserTesting HF3 height.
+pub const TESTING_THIRD_HARD_FORK: u64 = 9;
 
 /// Compute possible block version at a given height, implements
 /// 6 months interval scheduled hard forks for the first 2 years.
 pub fn header_version(height: u64) -> HeaderVersion {
-	let chain_type = global::CHAIN_TYPE.read().clone();
+	let chain_type = global::get_chain_type();
 	let hf_interval = (1 + height / HARD_FORK_INTERVAL) as u16;
 	match chain_type {
 		global::ChainTypes::Mainnet => HeaderVersion(hf_interval),
-		global::ChainTypes::Floonet => {
-			if height < FLOONET_FIRST_HARD_FORK {
+		global::ChainTypes::Testnet => {
+			if height < TESTNET_FIRST_HARD_FORK {
 				HeaderVersion(1)
-			} else if height < FLOONET_SECOND_HARD_FORK {
+			} else if height < TESTNET_SECOND_HARD_FORK {
 				HeaderVersion(2)
-			} else if height < 3 * HARD_FORK_INTERVAL {
+			} else if height < TESTNET_THIRD_HARD_FORK {
 				HeaderVersion(3)
+			} else if height < 4 * HARD_FORK_INTERVAL {
+				HeaderVersion(4)
 			} else {
 				HeaderVersion(hf_interval)
 			}
@@ -162,10 +170,12 @@ pub fn header_version(height: u64) -> HeaderVersion {
 				HeaderVersion(1)
 			} else if height < TESTING_SECOND_HARD_FORK {
 				HeaderVersion(2)
-			} else if height < 3 * HARD_FORK_INTERVAL {
+			} else if height < TESTING_THIRD_HARD_FORK {
 				HeaderVersion(3)
+			} else if height < 4 * HARD_FORK_INTERVAL {
+				HeaderVersion(4)
 			} else {
-				HeaderVersion(hf_interval)
+				HeaderVersion(5)
 			}
 		}
 	}
@@ -174,7 +184,7 @@ pub fn header_version(height: u64) -> HeaderVersion {
 /// Check whether the block version is valid at a given height, implements
 /// 6 months interval scheduled hard forks for the first 2 years.
 pub fn valid_header_version(height: u64, version: HeaderVersion) -> bool {
-	height < 3 * HARD_FORK_INTERVAL && version == header_version(height)
+	height < 4 * HARD_FORK_INTERVAL && version == header_version(height)
 }
 
 /// Number of blocks used to calculate difficulty adjustments
@@ -194,8 +204,7 @@ pub const DIFFICULTY_DAMP_FACTOR: u64 = 3;
 pub const AR_SCALE_DAMP_FACTOR: u64 = 13;
 
 /// Compute weight of a graph as number of siphash bits defining the graph
-/// Must be made dependent on height to phase out C31 in early 2020
-/// Later phase outs are on hold for now
+/// The height dependence allows a 30-week linear transition from C31+ to C32+ starting after 1 year
 pub fn graph_weight(height: u64, edge_bits: u8) -> u64 {
 	let mut xpr_edge_bits = edge_bits as u64;
 
@@ -383,6 +392,8 @@ mod test {
 
 	#[test]
 	fn test_graph_weight() {
+		global::set_local_chain_type(global::ChainTypes::Mainnet);
+
 		// initial weights
 		assert_eq!(graph_weight(1, 31), 256 * 31);
 		assert_eq!(graph_weight(1, 32), 512 * 32);

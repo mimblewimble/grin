@@ -15,7 +15,6 @@
 //! Build a block to mine: gathers transactions from the pool, assembles
 //! them into a block and returns it.
 
-use crate::util::RwLock;
 use chrono::prelude::{DateTime, NaiveDateTime, Utc};
 use rand::{thread_rng, Rng};
 use serde_json::{json, Value};
@@ -26,13 +25,12 @@ use std::time::Duration;
 use crate::api;
 use crate::chain;
 use crate::common::types::Error;
-use crate::core::core::verifier_cache::VerifierCache;
 use crate::core::core::{Output, TxKernel};
 use crate::core::libtx::secp_ser;
 use crate::core::libtx::ProofBuilder;
 use crate::core::{consensus, core, global};
 use crate::keychain::{ExtKeychain, Identifier, Keychain};
-use crate::pool;
+use crate::{ServerTxPool, ServerVerifierCache};
 
 /// Fees in block to use for coinbase amount calculation
 /// (Duplicated from Grin wallet project)
@@ -71,8 +69,8 @@ pub struct CbData {
 // Warning: This call does not return until/unless a new block can be built
 pub fn get_block(
 	chain: &Arc<chain::Chain>,
-	tx_pool: &Arc<RwLock<pool::TransactionPool>>,
-	verifier_cache: Arc<RwLock<dyn VerifierCache>>,
+	tx_pool: &ServerTxPool,
+	verifier_cache: ServerVerifierCache,
 	key_id: Option<Identifier>,
 	wallet_listener_url: Option<String>,
 ) -> (core::Block, BlockFees) {
@@ -133,8 +131,8 @@ pub fn get_block(
 /// transactions from the pool.
 fn build_block(
 	chain: &Arc<chain::Chain>,
-	tx_pool: &Arc<RwLock<pool::TransactionPool>>,
-	verifier_cache: Arc<RwLock<dyn VerifierCache>>,
+	tx_pool: &ServerTxPool,
+	verifier_cache: ServerVerifierCache,
 	key_id: Option<Identifier>,
 	wallet_listener_url: Option<String>,
 ) -> Result<(core::Block, BlockFees), Error> {
@@ -177,7 +175,7 @@ fn build_block(
 	};
 
 	let (output, kernel, block_fees) = get_coinbase(wallet_listener_url, block_fees)?;
-	let mut b = core::Block::from_reward(&head, txs, output, kernel, difficulty.difficulty)?;
+	let mut b = core::Block::from_reward(&head, &txs, output, kernel, difficulty.difficulty)?;
 
 	// making sure we're not spending time mining a useless block
 	b.validate(&head.total_kernel_offset, verifier_cache)?;
@@ -223,7 +221,7 @@ fn build_block(
 ///
 fn burn_reward(block_fees: BlockFees) -> Result<(core::Output, core::TxKernel, BlockFees), Error> {
 	warn!("Burning block fees: {:?}", block_fees);
-	let keychain = ExtKeychain::from_random_seed(global::is_floonet())?;
+	let keychain = ExtKeychain::from_random_seed(global::is_testnet())?;
 	let key_id = ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
 	let (out, kernel) = crate::core::libtx::reward::output(
 		&keychain,

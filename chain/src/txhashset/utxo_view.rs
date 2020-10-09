@@ -15,18 +15,19 @@
 //! Lightweight readonly view into output MMR for convenience.
 
 use crate::core::core::hash::{Hash, Hashed};
-use crate::core::core::pmmr::{self, ReadonlyPMMR};
-use crate::core::core::{Block, BlockHeader, Input, Output, OutputIdentifier, Transaction};
+use crate::core::core::pmmr::{self, ReadablePMMR, ReadonlyPMMR};
+use crate::core::core::{Block, BlockHeader, Inputs, Output, OutputIdentifier, Transaction};
 use crate::core::global;
 use crate::error::{Error, ErrorKind};
 use crate::store::Batch;
-use crate::util::secp::pedersen::RangeProof;
+use crate::types::CommitPos;
+use crate::util::secp::pedersen::{Commitment, RangeProof};
 use grin_store::pmmr::PMMRBackend;
 
 /// Readonly view of the UTXO set (based on output MMR).
 pub struct UTXOView<'a> {
 	header_pmmr: ReadonlyPMMR<'a, BlockHeader, PMMRBackend<BlockHeader>>,
-	output_pmmr: ReadonlyPMMR<'a, Output, PMMRBackend<Output>>,
+	output_pmmr: ReadonlyPMMR<'a, OutputIdentifier, PMMRBackend<OutputIdentifier>>,
 	rproof_pmmr: ReadonlyPMMR<'a, RangeProof, PMMRBackend<RangeProof>>,
 }
 
@@ -34,7 +35,7 @@ impl<'a> UTXOView<'a> {
 	/// Build a new UTXO view.
 	pub fn new(
 		header_pmmr: ReadonlyPMMR<'a, BlockHeader, PMMRBackend<BlockHeader>>,
-		output_pmmr: ReadonlyPMMR<'a, Output, PMMRBackend<Output>>,
+		output_pmmr: ReadonlyPMMR<'a, OutputIdentifier, PMMRBackend<OutputIdentifier>>,
 		rproof_pmmr: ReadonlyPMMR<'a, RangeProof, PMMRBackend<RangeProof>>,
 	) -> UTXOView<'a> {
 		UTXOView {
@@ -47,43 +48,95 @@ impl<'a> UTXOView<'a> {
 	/// Validate a block against the current UTXO set.
 	/// Every input must spend an output that currently exists in the UTXO set.
 	/// No duplicate outputs.
-	pub fn validate_block(&self, block: &Block, batch: &Batch<'_>) -> Result<(), Error> {
+	pub fn validate_block(
+		&self,
+		block: &Block,
+		batch: &Batch<'_>,
+	) -> Result<Vec<(OutputIdentifier, CommitPos)>, Error> {
 		for output in block.outputs() {
 			self.validate_output(output, batch)?;
 		}
-
-		for input in block.inputs() {
-			self.validate_input(input, batch)?;
-		}
-		Ok(())
+		self.validate_inputs(&block.inputs(), batch)
 	}
 
 	/// Validate a transaction against the current UTXO set.
 	/// Every input must spend an output that currently exists in the UTXO set.
 	/// No duplicate outputs.
-	pub fn validate_tx(&self, tx: &Transaction, batch: &Batch<'_>) -> Result<(), Error> {
+	pub fn validate_tx(
+		&self,
+		tx: &Transaction,
+		batch: &Batch<'_>,
+	) -> Result<Vec<(OutputIdentifier, CommitPos)>, Error> {
 		for output in tx.outputs() {
 			self.validate_output(output, batch)?;
 		}
+		self.validate_inputs(&tx.inputs(), batch)
+	}
 
-		for input in tx.inputs() {
-			self.validate_input(input, batch)?;
+	/// Validate the provided inputs.
+	/// Returns a vec of output identifiers corresponding to outputs
+	/// that would be spent by the provided inputs.
+	pub fn validate_inputs(
+		&self,
+		inputs: &Inputs,
+		batch: &Batch<'_>,
+	) -> Result<Vec<(OutputIdentifier, CommitPos)>, Error> {
+		match inputs {
+			Inputs::CommitOnly(inputs) => {
+				let outputs_spent: Result<Vec<_>, Error> = inputs
+					.iter()
+					.map(|input| {
+						self.validate_input(input.commitment(), batch)
+							.and_then(|(out, pos)| Ok((out, pos)))
+					})
+					.collect();
+				outputs_spent
+			}
+			Inputs::FeaturesAndCommit(inputs) => {
+				let outputs_spent: Result<Vec<_>, Error> = inputs
+					.iter()
+					.map(|input| {
+						self.validate_input(input.commitment(), batch)
+							.and_then(|(out, pos)| {
+								// Unspent output found.
+								// Check input matches full output identifier.
+								if out == input.into() {
+									Ok((out, pos))
+								} else {
+									error!("input mismatch: {:?}, {:?}, {:?}", out, pos, input);
+									Err(ErrorKind::Other("input mismatch".into()).into())
+								}
+							})
+					})
+					.collect();
+				outputs_spent
+			}
 		}
-		Ok(())
 	}
 
 	// Input is valid if it is spending an (unspent) output
 	// that currently exists in the output MMR.
-	// Compare against the entry in output MMR at the expected pos.
-	fn validate_input(&self, input: &Input, batch: &Batch<'_>) -> Result<(), Error> {
-		if let Ok(pos) = batch.get_output_pos(&input.commitment()) {
-			if let Some(out) = self.output_pmmr.get_data(pos) {
-				if OutputIdentifier::from(input) == out {
-					return Ok(());
+	// Note: We lookup by commitment. Caller must compare the full input as necessary.
+	fn validate_input(
+		&self,
+		input: Commitment,
+		batch: &Batch<'_>,
+	) -> Result<(OutputIdentifier, CommitPos), Error> {
+		let pos = batch.get_output_pos_height(&input)?;
+		if let Some(pos) = pos {
+			if let Some(out) = self.output_pmmr.get_data(pos.pos) {
+				if out.commitment() == input {
+					return Ok((out, pos));
+				} else {
+					error!("input mismatch: {:?}, {:?}, {:?}", out, pos, input);
+					return Err(ErrorKind::Other(
+						"input mismatch (output_pos index mismatch?)".into(),
+					)
+					.into());
 				}
 			}
 		}
-		Err(ErrorKind::AlreadySpent(input.commitment()).into())
+		Err(ErrorKind::AlreadySpent(input).into())
 	}
 
 	// Output is valid if it would not result in a duplicate commitment in the output MMR.
@@ -113,20 +166,31 @@ impl<'a> UTXOView<'a> {
 	/// that have not sufficiently matured.
 	pub fn verify_coinbase_maturity(
 		&self,
-		inputs: &[Input],
+		inputs: &Inputs,
 		height: u64,
 		batch: &Batch<'_>,
 	) -> Result<(), Error> {
-		// Find the greatest output pos of any coinbase
-		// outputs we are attempting to spend.
-		let pos = inputs
-			.iter()
-			.filter(|x| x.is_coinbase())
-			.filter_map(|x| batch.get_output_pos(&x.commitment()).ok())
-			.max()
-			.unwrap_or(0);
+		let inputs: Vec<_> = inputs.into();
 
-		if pos > 0 {
+		// Lookup the outputs being spent.
+		let spent: Result<Vec<_>, _> = inputs
+			.iter()
+			.map(|x| self.validate_input(x.commitment(), batch))
+			.collect();
+
+		// Find the max pos of any coinbase being spent.
+		let pos = spent?
+			.iter()
+			.filter_map(|(out, pos)| {
+				if out.features.is_coinbase() {
+					Some(pos.pos)
+				} else {
+					None
+				}
+			})
+			.max();
+
+		if let Some(pos) = pos {
 			// If we have not yet reached 1440 blocks then
 			// we can fail immediately as coinbase cannot be mature.
 			if height < global::coinbase_maturity() {

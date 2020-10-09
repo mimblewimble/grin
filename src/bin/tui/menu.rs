@@ -16,7 +16,7 @@
 
 use cursive::align::HAlign;
 use cursive::direction::Orientation;
-use cursive::event::{EventResult, Key};
+use cursive::event::Key;
 use cursive::view::Identifiable;
 use cursive::view::View;
 use cursive::views::{
@@ -29,7 +29,7 @@ use crate::tui::constants::{
 	VIEW_PEER_SYNC, VIEW_VERSION,
 };
 
-pub fn create() -> Box<dyn View> {
+pub fn create() -> impl View {
 	let mut main_menu = SelectView::new().h_align(HAlign::Left).with_name(MAIN_MENU);
 	main_menu
 		.get_mut()
@@ -63,12 +63,10 @@ pub fn create() -> Box<dyn View> {
 		.on_pre_event('j', move |c| {
 			let mut s: ViewRef<SelectView<&str>> = c.find_name(MAIN_MENU).unwrap();
 			s.select_down(1)(c);
-			Some(EventResult::Consumed(None));
 		})
 		.on_pre_event('k', move |c| {
 			let mut s: ViewRef<SelectView<&str>> = c.find_name(MAIN_MENU).unwrap();
 			s.select_up(1)(c);
-			Some(EventResult::Consumed(None));
 		})
 		.on_pre_event(Key::Tab, move |c| {
 			let mut s: ViewRef<SelectView<&str>> = c.find_name(MAIN_MENU).unwrap();
@@ -77,7 +75,6 @@ pub fn create() -> Box<dyn View> {
 			} else {
 				s.select_down(1)(c);
 			}
-			Some(EventResult::Consumed(None));
 		});
 	let main_menu = LinearLayout::new(Orientation::Vertical)
 		.child(ResizedView::with_full_height(main_menu))
@@ -86,5 +83,5 @@ pub fn create() -> Box<dyn View> {
 		.child(TextView::new("Enter     : Select"))
 		.child(TextView::new("Esc       : Back  "))
 		.child(TextView::new("Q         : Quit  "));
-	Box::new(main_menu)
+	main_menu
 }

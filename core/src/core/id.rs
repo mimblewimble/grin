@@ -19,7 +19,7 @@ use crate::ser::{self, Readable, Reader, Writeable, Writer};
 use byteorder::{ByteOrder, LittleEndian};
 use siphasher::sip::SipHasher24;
 use std::cmp::{min, Ordering};
-use util;
+use util::ToHex;
 
 /// The size of a short id used to identify inputs|outputs|kernels (6 bytes)
 pub const SHORT_ID_SIZE: usize = 6;
@@ -84,8 +84,14 @@ impl ::std::fmt::Debug for ShortId {
 	}
 }
 
+impl AsRef<[u8]> for ShortId {
+	fn as_ref(&self) -> &[u8] {
+		self.0.as_ref()
+	}
+}
+
 impl Readable for ShortId {
-	fn read(reader: &mut dyn Reader) -> Result<ShortId, ser::Error> {
+	fn read<R: Reader>(reader: &mut R) -> Result<ShortId, ser::Error> {
 		let v = reader.read_fixed_bytes(SHORT_ID_SIZE)?;
 		let mut a = [0; SHORT_ID_SIZE];
 		a.copy_from_slice(&v[..]);
@@ -106,11 +112,6 @@ impl ShortId {
 		let copy_size = min(SHORT_ID_SIZE, bytes.len());
 		hash[..copy_size].copy_from_slice(&bytes[..copy_size]);
 		ShortId(hash)
-	}
-
-	/// Hex string representation of a short_id
-	pub fn to_hex(&self) -> String {
-		util::to_hex(self.0.to_vec())
 	}
 
 	/// Reconstructs a switch commit hash from a hex string.

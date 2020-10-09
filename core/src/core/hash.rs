@@ -20,10 +20,8 @@
 use crate::ser::{self, Error, ProtocolVersion, Readable, Reader, Writeable, Writer};
 use blake2::blake2b::Blake2b;
 use byteorder::{BigEndian, ByteOrder};
-use std::cmp::min;
-use std::convert::AsRef;
-use std::{fmt, ops};
-use util;
+use std::{cmp::min, convert::AsRef, fmt, ops};
+use util::ToHex;
 
 /// A hash consisting of all zeroes, used as a sentinel. No known preimage.
 pub const ZERO_HASH: Hash = Hash([0; 32]);
@@ -71,11 +69,6 @@ impl Hash {
 	/// Returns a byte slice of the hash contents.
 	pub fn as_bytes(&self) -> &[u8] {
 		&self.0
-	}
-
-	/// Convert a hash to hex string format.
-	pub fn to_hex(&self) -> String {
-		util::to_hex(self.to_vec())
 	}
 
 	/// Convert hex string back to hash.
@@ -138,7 +131,7 @@ impl AsRef<[u8]> for Hash {
 }
 
 impl Readable for Hash {
-	fn read(reader: &mut dyn Reader) -> Result<Hash, ser::Error> {
+	fn read<R: Reader>(reader: &mut R) -> Result<Hash, ser::Error> {
 		let v = reader.read_fixed_bytes(32)?;
 		let mut a = [0; 32];
 		a.copy_from_slice(&v[..]);

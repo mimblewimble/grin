@@ -29,7 +29,7 @@ use grin_chain as chain;
 use grin_core as core;
 use grin_miner_plugin as plugin;
 use grin_store as store;
-use grin_util as util;
+use grin_util::{self as util, ToHex};
 use grin_wallet as wallet;
 
 use grin_core::core::hash::Hashed;
@@ -92,7 +92,7 @@ fn main() {
 
 	{
 		// setup a tmp chain to set block header roots
-		core::global::set_mining_mode(core::global::ChainTypes::UserTesting);
+		core::global::set_local_chain_type(core::global::ChainTypes::UserTesting);
 		let tmp_chain = setup_chain(".grin.tmp", core::pow::mine_genesis_block().unwrap());
 		tmp_chain.set_txhashset_roots(&mut gen).unwrap();
 	}
@@ -103,7 +103,7 @@ fn main() {
 	gen.header.prev_root = core::core::hash::Hash::from_hex(&h1).unwrap();
 
 	// mine a Cuckaroo29 block
-	core::global::set_mining_mode(core::global::ChainTypes::Mainnet);
+	core::global::set_local_chain_type(core::global::ChainTypes::Mainnet);
 	let plugin_lib = cuckoo::PluginLibrary::new(PLUGIN_PATH).unwrap();
 	let mut params = plugin_lib.get_default_params();
 	params.mutate_nonce = false;
@@ -216,7 +216,7 @@ fn update_genesis_rs(gen: &core::core::Block) {
 		"excess".to_string(),
 		format!(
 			"Commitment::from_vec(util::from_hex({:x?}.to_string()).unwrap())",
-			util::to_hex(gen.kernels()[0].excess.0.to_vec())
+			gen.kernels()[0].excess.to_hex()
 		),
 	));
 	replacements.push((

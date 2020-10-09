@@ -23,9 +23,10 @@ use std::sync::Arc;
 
 use crate::chain::store::ChainStore;
 use crate::chain::txhashset;
+use crate::core::core::hash::Hashed;
 use crate::core::core::BlockHeader;
+use crate::core::global;
 use crate::util::file;
-use grin_core::core::hash::Hashed;
 
 fn clean_output_dir(dir_name: &str) {
 	let _ = fs::remove_dir_all(dir_name);
@@ -33,6 +34,7 @@ fn clean_output_dir(dir_name: &str) {
 
 #[test]
 fn test_unexpected_zip() {
+	global::set_local_chain_type(global::ChainTypes::AutomatedTesting);
 	let db_root = format!(".grin_txhashset_zip");
 	clean_output_dir(&db_root);
 	{

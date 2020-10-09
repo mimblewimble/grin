@@ -13,7 +13,7 @@
 
 //! Implementation of the persistent Backend for the prunable MMR tree.
 
-use std::fs::{self, File};
+use std::fs;
 use std::{io, time};
 
 use crate::core::core::hash::{Hash, Hashed};
@@ -169,12 +169,6 @@ impl<T: PMMRable> Backend<T> for PMMRBackend<T> {
 		} else {
 			panic!("leaf_idx_iter not implemented for non-prunable PMMR")
 		}
-	}
-
-	fn data_as_temp_file(&self) -> Result<File, String> {
-		self.data_file
-			.as_temp_file()
-			.map_err(|_| "Failed to build temp data file".to_string())
 	}
 
 	/// Rewind the PMMR backend to the given position.

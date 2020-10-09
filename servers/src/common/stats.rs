@@ -19,7 +19,6 @@ use crate::util::RwLock;
 use std::sync::Arc;
 use std::time::SystemTime;
 
-use crate::core::consensus::graph_weight;
 use crate::core::core::hash::Hash;
 use crate::core::ser::ProtocolVersion;
 
@@ -128,8 +127,10 @@ pub struct StratumStats {
 	pub block_height: u64,
 	/// current network difficulty we're working on
 	pub network_difficulty: u64,
-	/// cuckoo size used for mining
+	/// cuckoo size of last share submitted
 	pub edge_bits: u16,
+	/// current network Hashrate (for edge_bits)
+	pub network_hashrate: f64,
 	/// Individual worker status
 	pub worker_stats: Vec<WorkerStats>,
 }
@@ -211,25 +212,17 @@ impl PartialEq for DiffBlock {
 	}
 }
 
-impl StratumStats {
-	/// Calculate network hashrate
-	pub fn network_hashrate(&self, height: u64) -> f64 {
-		42.0 * (self.network_difficulty as f64 / graph_weight(height, self.edge_bits as u8) as f64)
-			/ 60.0
-	}
-}
-
 impl PeerStats {
 	/// Convert from a peer directly
 	pub fn from_peer(peer: &p2p::Peer) -> PeerStats {
 		// State
-		let mut state = "Disconnected";
-		if peer.is_connected() {
-			state = "Connected";
-		}
-		if peer.is_banned() {
-			state = "Banned";
-		}
+		let state = if peer.is_banned() {
+			"Banned"
+		} else if peer.is_connected() {
+			"Connected"
+		} else {
+			"Disconnected"
+		};
 		let addr = peer.info.addr.to_string();
 		let direction = match peer.info.direction {
 			p2p::types::Direction::Inbound => "Inbound",
@@ -273,8 +266,9 @@ impl Default for StratumStats {
 			is_running: false,
 			num_workers: 0,
 			block_height: 0,
-			network_difficulty: 1000,
-			edge_bits: 29,
+			network_difficulty: 0,
+			edge_bits: 0,
+			network_hashrate: 0.0,
 			worker_stats: Vec::new(),
 		}
 	}

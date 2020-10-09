@@ -54,8 +54,6 @@ Andrew Poelstra for his related work and improvements.
 
 John Tromp for the Cuckoo Cycle proof of work.
 
-J.K. Rowling for making it despite extraordinary adversity.
-
 ## License
 
 Apache License v2.0.

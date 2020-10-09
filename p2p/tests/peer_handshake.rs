@@ -25,6 +25,7 @@ use std::sync::Arc;
 use std::{thread, time};
 
 use crate::core::core::hash::Hash;
+use crate::core::global;
 use crate::core::pow::Difficulty;
 use crate::p2p::types::PeerAddr;
 use crate::p2p::Peer;
@@ -37,10 +38,17 @@ fn open_port() -> u16 {
 	listener.local_addr().unwrap().port()
 }
 
+// Setup test with AutomatedTesting chain_type;
+fn test_setup() {
+	// Set "global" chain type here as we spawn peer threads for read/write.
+	global::init_global_chain_type(global::ChainTypes::AutomatedTesting);
+	util::init_test_logger();
+}
+
 // Starts a server and connects a client peer to it to check handshake,
 // followed by a ping/pong exchange to make sure the connection is live.
 fn peer_handshake_aux(server_ip: &str, client_addr: &str) {
-	util::init_test_logger();
+	test_setup();
 
 	let p2p_config = p2p::P2PConfig {
 		host: server_ip.parse().unwrap(),

@@ -20,6 +20,7 @@ use cursive::traits::Identifiable;
 use cursive::view::View;
 use cursive::views::{LinearLayout, ResizedView, TextView};
 use cursive::Cursive;
+use std::borrow::Cow;
 
 use crate::tui::constants::VIEW_BASIC_STATUS;
 use crate::tui::types::TUIStatusListener;
@@ -32,11 +33,11 @@ const NANO_TO_MILLIS: f64 = 1.0 / 1_000_000.0;
 pub struct TUIStatusView;
 
 impl TUIStatusView {
-	fn update_sync_status(sync_status: SyncStatus) -> String {
+	pub fn update_sync_status(sync_status: SyncStatus) -> Cow<'static, str> {
 		match sync_status {
-			SyncStatus::Initial => "Initializing".to_string(),
-			SyncStatus::NoSync => "Running".to_string(),
-			SyncStatus::AwaitingPeers(_) => "Waiting for peers".to_string(),
+			SyncStatus::Initial => Cow::Borrowed("Initializing"),
+			SyncStatus::NoSync => Cow::Borrowed("Running"),
+			SyncStatus::AwaitingPeers(_) => Cow::Borrowed("Waiting for peers"),
 			SyncStatus::HeaderSync {
 				current_height,
 				highest_height,
@@ -46,7 +47,7 @@ impl TUIStatusView {
 				} else {
 					current_height * 100 / highest_height
 				};
-				format!("Sync step 1/7: Downloading headers: {}%", percent)
+				Cow::Owned(format!("Sync step 1/7: Downloading headers: {}%", percent))
 			}
 			SyncStatus::TxHashsetDownload(stat) => {
 				if stat.total_size > 0 {
@@ -55,23 +56,23 @@ impl TUIStatusView {
 					let fin = Utc::now().timestamp_nanos();
 					let dur_ms = (fin - start) as f64 * NANO_TO_MILLIS;
 
-					format!("Sync step 2/7: Downloading {}(MB) chain state for state sync: {}% at {:.1?}(kB/s)",
+					Cow::Owned(format!("Sync step 2/7: Downloading {}(MB) chain state for state sync: {}% at {:.1?}(kB/s)",
 							stat.total_size / 1_000_000,
 							percent,
 							if dur_ms > 1.0f64 { stat.downloaded_size.saturating_sub(stat.prev_downloaded_size) as f64 / dur_ms as f64 } else { 0f64 },
-					)
+					))
 				} else {
 					let start = stat.start_time.timestamp_millis();
 					let fin = Utc::now().timestamp_millis();
 					let dur_secs = (fin - start) / 1000;
 
-					format!("Sync step 2/7: Downloading chain state for state sync. Waiting remote peer to start: {}s",
+					Cow::Owned(format!("Sync step 2/7: Downloading chain state for state sync. Waiting remote peer to start: {}s",
 							dur_secs,
-					)
+					))
 				}
 			}
 			SyncStatus::TxHashsetSetup => {
-				"Sync step 3/7: Preparing chain state for validation".to_string()
+				Cow::Borrowed("Sync step 3/7: Preparing chain state for validation")
 			}
 			SyncStatus::TxHashsetRangeProofsValidation {
 				rproofs,
@@ -82,10 +83,10 @@ impl TUIStatusView {
 				} else {
 					0
 				};
-				format!(
+				Cow::Owned(format!(
 					"Sync step 4/7: Validating chain state - range proofs: {}%",
 					r_percent
-				)
+				))
 			}
 			SyncStatus::TxHashsetKernelsValidation {
 				kernels,
@@ -96,16 +97,16 @@ impl TUIStatusView {
 				} else {
 					0
 				};
-				format!(
+				Cow::Owned(format!(
 					"Sync step 5/7: Validating chain state - kernels: {}%",
 					k_percent
-				)
+				))
 			}
 			SyncStatus::TxHashsetSave => {
-				"Sync step 6/7: Finalizing chain state for state sync".to_string()
+				Cow::Borrowed("Sync step 6/7: Finalizing chain state for state sync")
 			}
 			SyncStatus::TxHashsetDone => {
-				"Sync step 6/7: Finalized chain state for state sync".to_string()
+				Cow::Borrowed("Sync step 6/7: Finalized chain state for state sync")
 			}
 			SyncStatus::BodySync {
 				current_height,
@@ -116,16 +117,14 @@ impl TUIStatusView {
 				} else {
 					current_height * 100 / highest_height
 				};
-				format!("Sync step 7/7: Downloading blocks: {}%", percent)
+				Cow::Owned(format!("Sync step 7/7: Downloading blocks: {}%", percent))
 			}
-			SyncStatus::Shutdown => "Shutting down, closing connections".to_string(),
+			SyncStatus::Shutdown => Cow::Borrowed("Shutting down, closing connections"),
 		}
 	}
-}
 
-impl TUIStatusListener for TUIStatusView {
 	/// Create basic status view
-	fn create() -> Box<dyn View> {
+	pub fn create() -> impl View {
 		let basic_status_view = ResizedView::with_full_screen(
 			LinearLayout::new(Orientation::Vertical)
 				.child(
@@ -232,9 +231,11 @@ impl TUIStatusListener for TUIStatusView {
 						.child(TextView::new("  ").with_name("basic_network_info")),
 				), //.child(logo_view)
 		);
-		Box::new(basic_status_view.with_name(VIEW_BASIC_STATUS))
+		basic_status_view.with_name(VIEW_BASIC_STATUS)
 	}
+}
 
+impl TUIStatusListener for TUIStatusView {
 	fn update(c: &mut Cursive, stats: &ServerStats) {
 		let basic_status = TUIStatusView::update_sync_status(stats.sync_status);
 

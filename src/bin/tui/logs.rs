@@ -28,9 +28,9 @@ use std::collections::VecDeque;
 pub struct TUILogsView;
 
 impl TUILogsView {
-	pub fn create() -> Box<dyn View> {
+	pub fn create() -> impl View {
 		let logs_view = ResizedView::with_full_screen(LogBufferView::new(200).with_name("logs"));
-		Box::new(logs_view.with_name(VIEW_LOGS))
+		logs_view.with_name(VIEW_LOGS)
 	}
 
 	pub fn update(c: &mut Cursive, entry: LogEntry) {

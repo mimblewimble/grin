@@ -41,6 +41,7 @@ mod common;
 pub mod cuckaroo;
 pub mod cuckarood;
 pub mod cuckaroom;
+pub mod cuckarooz;
 pub mod cuckatoo;
 mod error;
 #[allow(dead_code)]
@@ -51,6 +52,7 @@ mod types;
 pub use crate::pow::cuckaroo::{new_cuckaroo_ctx, CuckarooContext};
 pub use crate::pow::cuckarood::{new_cuckarood_ctx, CuckaroodContext};
 pub use crate::pow::cuckaroom::{new_cuckaroom_ctx, CuckaroomContext};
+pub use crate::pow::cuckarooz::{new_cuckarooz_ctx, CuckaroozContext};
 pub use crate::pow::cuckatoo::{new_cuckatoo_ctx, CuckatooContext};
 pub use crate::pow::error::Error;
 use chrono::prelude::{DateTime, NaiveDateTime, Utc};
@@ -130,7 +132,7 @@ mod test {
 	/// We'll be generating genesis blocks differently
 	#[test]
 	fn genesis_pow() {
-		global::set_mining_mode(ChainTypes::UserTesting);
+		global::set_local_chain_type(ChainTypes::UserTesting);
 
 		let mut b = genesis::genesis_dev();
 		b.header.pow.nonce = 28106;

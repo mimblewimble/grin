@@ -261,7 +261,7 @@ impl SyncRunner {
 			};
 
 			let peer_diff = peer_info.total_difficulty();
-			if peer_diff > local_diff.clone() + threshold.clone() {
+			if peer_diff > local_diff + threshold {
 				info!(
 					"sync: total_difficulty {}, peer_difficulty {}, threshold {} (last 5 blocks), enabling sync",
 					local_diff,

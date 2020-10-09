@@ -15,7 +15,6 @@
 use crate::consensus::{graph_weight, MIN_DIFFICULTY, SECOND_POW_EDGE_BITS};
 use crate::core::hash::{DefaultHashable, Hashed};
 use crate::global;
-use crate::pow::common::EdgeType;
 use crate::pow::error::Error;
 use crate::ser::{self, Readable, Reader, Writeable, Writer};
 use rand::{thread_rng, Rng};
@@ -28,10 +27,7 @@ use std::{fmt, iter};
 
 /// Generic trait for a solver/verifier providing common interface into Cuckoo-family PoW
 /// Mostly used for verification, but also for test mining if necessary
-pub trait PoWContext<T>
-where
-	T: EdgeType,
-{
+pub trait PoWContext {
 	/// Sets the header along with an optional nonce at the end
 	/// solve: whether to set up structures for a solve (true) or just validate (false)
 	fn set_header_nonce(
@@ -150,7 +146,7 @@ impl Writeable for Difficulty {
 }
 
 impl Readable for Difficulty {
-	fn read(reader: &mut dyn Reader) -> Result<Difficulty, ser::Error> {
+	fn read<R: Reader>(reader: &mut R) -> Result<Difficulty, ser::Error> {
 		let data = reader.read_u64()?;
 		Ok(Difficulty { num: data })
 	}
@@ -249,7 +245,7 @@ impl Writeable for ProofOfWork {
 }
 
 impl Readable for ProofOfWork {
-	fn read(reader: &mut dyn Reader) -> Result<ProofOfWork, ser::Error> {
+	fn read<R: Reader>(reader: &mut R) -> Result<ProofOfWork, ser::Error> {
 		let total_difficulty = Difficulty::read(reader)?;
 		let secondary_scaling = reader.read_u32()?;
 		let nonce = reader.read_u64()?;
@@ -425,7 +421,7 @@ fn read_number(bits: &[u8], bit_start: usize, bit_count: usize) -> u64 {
 }
 
 impl Readable for Proof {
-	fn read(reader: &mut dyn Reader) -> Result<Proof, ser::Error> {
+	fn read<R: Reader>(reader: &mut R) -> Result<Proof, ser::Error> {
 		let edge_bits = reader.read_u8()?;
 		if edge_bits == 0 || edge_bits > 63 {
 			return Err(ser::Error::CorruptedData);
@@ -475,15 +471,17 @@ impl Writeable for Proof {
 	}
 }
 
+/// A bit vector
 // TODO this could likely be optimized by writing whole bytes (or even words)
 // in the `BitVec` at once, dealing with the truncation, instead of bits by bits
-struct BitVec {
+pub struct BitVec {
 	bits: Vec<u8>,
 }
 
 impl BitVec {
 	/// Number of bytes required to store the provided number of bits
-	fn bytes_len(bits_len: usize) -> usize {
+	#[inline]
+	pub fn bytes_len(bits_len: usize) -> usize {
 		(bits_len + 7) / 8
 	}
 
@@ -507,6 +505,7 @@ mod tests {
 
 	#[test]
 	fn test_proof_rw() {
+		global::set_local_chain_type(global::ChainTypes::Mainnet);
 		for edge_bits in 10..63 {
 			let mut proof = Proof::new(gen_proof(edge_bits as u32));
 			proof.edge_bits = edge_bits;

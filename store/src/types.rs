@@ -44,7 +44,7 @@ impl SizeEntry {
 }
 
 impl Readable for SizeEntry {
-	fn read(reader: &mut dyn Reader) -> Result<SizeEntry, ser::Error> {
+	fn read<R: Reader>(reader: &mut R) -> Result<SizeEntry, ser::Error> {
 		Ok(SizeEntry {
 			offset: reader.read_u64()?,
 			size: reader.read_u16()?,
@@ -138,13 +138,6 @@ where
 	/// Path of the underlying file
 	pub fn path(&self) -> &Path {
 		self.file.path()
-	}
-
-	/// Create a new tempfile containing the contents of this data file.
-	/// This allows callers to see a consistent view of the data without
-	/// locking the data file.
-	pub fn as_temp_file(&self) -> io::Result<File> {
-		self.file.as_temp_file()
 	}
 
 	/// Drop underlying file handles

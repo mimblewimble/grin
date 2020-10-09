@@ -17,19 +17,17 @@
 //! header with its proof-of-work.  Any valid mined blocks are submitted to the
 //! network.
 
-use crate::util::RwLock;
 use chrono::prelude::Utc;
 use std::sync::Arc;
 
 use crate::chain;
 use crate::common::types::StratumServerConfig;
 use crate::core::core::hash::{Hash, Hashed};
-use crate::core::core::verifier_cache::VerifierCache;
 use crate::core::core::{Block, BlockHeader};
 use crate::core::global;
 use crate::mining::mine_block;
-use crate::pool;
 use crate::util::StopState;
+use crate::{ServerTxPool, ServerVerifierCache};
 use grin_chain::SyncState;
 use std::thread;
 use std::time::Duration;
@@ -37,8 +35,8 @@ use std::time::Duration;
 pub struct Miner {
 	config: StratumServerConfig,
 	chain: Arc<chain::Chain>,
-	tx_pool: Arc<RwLock<pool::TransactionPool>>,
-	verifier_cache: Arc<RwLock<dyn VerifierCache>>,
+	tx_pool: ServerTxPool,
+	verifier_cache: ServerVerifierCache,
 	stop_state: Arc<StopState>,
 	sync_state: Arc<SyncState>,
 	// Just to hold the port we're on, so this miner can be identified
@@ -47,13 +45,13 @@ pub struct Miner {
 }
 
 impl Miner {
-	/// Creates a new Miner. Needs references to the chain state and its
+	// Creates a new Miner. Needs references to the chain state and its
 	/// storage.
 	pub fn new(
 		config: StratumServerConfig,
 		chain: Arc<chain::Chain>,
-		tx_pool: Arc<RwLock<pool::TransactionPool>>,
-		verifier_cache: Arc<RwLock<dyn VerifierCache>>,
+		tx_pool: ServerTxPool,
+		verifier_cache: ServerVerifierCache,
 		stop_state: Arc<StopState>,
 		sync_state: Arc<SyncState>,
 	) -> Miner {

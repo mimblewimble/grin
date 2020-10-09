@@ -26,15 +26,21 @@ use cursive::theme::{BaseColor, BorderStyle, Color, Theme};
 use cursive::traits::Boxable;
 use cursive::traits::Identifiable;
 use cursive::utils::markup::StyledString;
-use cursive::views::{BoxedView, CircularFocus, Dialog, LinearLayout, Panel, StackView, TextView};
+use cursive::views::{
+	CircularFocus, Dialog, LinearLayout, Panel, SelectView, StackView, TextView, ViewRef,
+};
 use cursive::Cursive;
+use cursive::CursiveExt;
 use std::sync::mpsc;
+use std::{thread, time};
 
+use super::constants::MAIN_MENU;
 use crate::built_info;
 use crate::servers::Server;
-use crate::tui::constants::ROOT_STACK;
+use crate::tui::constants::{ROOT_STACK, VIEW_BASIC_STATUS, VIEW_MINING, VIEW_PEER_SYNC};
 use crate::tui::types::{TUIStatusListener, UIMessage};
 use crate::tui::{logs, menu, mining, peers, status, version};
+use grin_core::global;
 use grin_util::logger::LogEntry;
 
 pub struct UI {
@@ -94,9 +100,9 @@ impl UI {
 		let mut title_string = StyledString::new();
 		title_string.append(StyledString::styled(
 			format!(
-				"Grin Version {} (proto: {})",
+				"Grin Version {} [{:?}]",
 				built_info::PKG_VERSION,
-				Server::protocol_version()
+				global::get_chain_type()
 			),
 			Color::Dark(BaseColor::Green),
 		));
@@ -105,7 +111,7 @@ impl UI {
 			.child(Panel::new(TextView::new(title_string).full_width()))
 			.child(
 				LinearLayout::new(Orientation::Horizontal)
-					.child(Panel::new(BoxedView::new(main_menu)))
+					.child(Panel::new(main_menu))
 					.child(Panel::new(root_stack)),
 			);
 
@@ -143,12 +149,17 @@ impl UI {
 
 		// Process any pending UI messages
 		while let Some(message) = self.ui_rx.try_iter().next() {
-			match message {
-				UIMessage::UpdateStatus(update) => {
-					status::TUIStatusView::update(&mut self.cursive, &update);
-					mining::TUIMiningView::update(&mut self.cursive, &update);
-					peers::TUIPeerView::update(&mut self.cursive, &update);
-					version::TUIVersionView::update(&mut self.cursive, &update);
+			let menu: ViewRef<SelectView<&str>> = self.cursive.find_name(MAIN_MENU).unwrap();
+			if let Some(selection) = menu.selection() {
+				match message {
+					UIMessage::UpdateStatus(update) => match *selection {
+						VIEW_BASIC_STATUS => {
+							status::TUIStatusView::update(&mut self.cursive, &update)
+						}
+						VIEW_MINING => mining::TUIMiningView::update(&mut self.cursive, &update),
+						VIEW_PEER_SYNC => peers::TUIPeerView::update(&mut self.cursive, &update),
+						_ => {}
+					},
 				}
 			}
 		}
@@ -187,8 +198,9 @@ impl Controller {
 	pub fn run(&mut self, server: Server) {
 		let stat_update_interval = 1;
 		let mut next_stat_update = Utc::now().timestamp() + stat_update_interval;
+		let delay = time::Duration::from_millis(50);
 		while self.ui.step() {
-			while let Some(message) = self.rx.try_iter().next() {
+			if let Some(message) = self.rx.try_iter().next() {
 				match message {
 					ControllerMessage::Shutdown => {
 						warn!("Shutdown in progress, please wait");
@@ -205,6 +217,7 @@ impl Controller {
 					self.ui.ui_tx.send(UIMessage::UpdateStatus(stats)).unwrap();
 				}
 			}
+			thread::sleep(delay);
 		}
 		server.stop();
 	}

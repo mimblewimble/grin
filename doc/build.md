@@ -1,6 +1,6 @@
 # Grin - Build, Configuration, and Running
 
-*Read this in other languages: [Español](build_ES.md), [Korean](build_KR.md), [日本語](build_JP.md), [简体中文](build_ZH-CN.md).*
+*Read this in other languages: [Español](translations/build_ES.md), [Korean](translations/build_KR.md), [日本語](translations/build_JP.md), [简体中文](translations/build_ZH-CN.md).*
 
 ## Supported Platforms
 
@@ -108,7 +108,7 @@ grin client --help
 ```sh
 docker build -t grin -f etc/Dockerfile .
 ```
-For floonet, use `etc/Dockerfile.floonet` instead
+For testnet, use `etc/Dockerfile.testnet` instead
 
 You can bind-mount your grin cache to run inside the container.
 
@@ -138,4 +138,4 @@ Please note that all mining functions for Grin have moved into a separate, stand
 you can start mining by building and running grin-miner against your running Grin node.
 
 For grin-miner to be able to communicate with your grin node, make sure that you have `enable_stratum_server = true`
-in your `grin-server.toml` configuration file and you have a wallet listener running (`grin-wallet listen`). 
+in your `grin-server.toml` configuration file and you have a wallet listener running (`grin-wallet listen`).

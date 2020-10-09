@@ -1,6 +1,6 @@
 # Pruning Blockchain Data
 
-*Read this in other languages: [Korean](pruning_KR.md), [简体中文](pruning_ZH-CN.md).*
+*Read this in other languages: [Korean](translations/pruning_KR.md), [简体中文](translations/pruning_ZH-CN.md).*
 
 One of the principal attractions of Mimblewimble is its theoretical space
 efficiency. Indeed, a trusted or pre-validated full blockchain state only

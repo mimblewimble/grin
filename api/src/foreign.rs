@@ -17,12 +17,13 @@
 use crate::chain::{Chain, SyncState};
 use crate::core::core::hash::Hash;
 use crate::core::core::transaction::Transaction;
+use crate::core::core::verifier_cache::VerifierCache;
 use crate::handlers::blocks_api::{BlockHandler, HeaderHandler};
 use crate::handlers::chain_api::{ChainHandler, KernelHandler, OutputHandler};
 use crate::handlers::pool_api::PoolHandler;
 use crate::handlers::transactions_api::TxHashSetHandler;
 use crate::handlers::version_api::VersionHandler;
-use crate::pool::{self, PoolEntry};
+use crate::pool::{self, BlockChain, PoolAdapter, PoolEntry};
 use crate::rest::*;
 use crate::types::{
 	BlockHeaderPrintable, BlockPrintable, LocatedTxKernel, OutputListing, OutputPrintable, Tip,
@@ -38,13 +39,23 @@ use std::sync::Weak;
 /// Methods in this API are intended to be 'single use'.
 ///
 
-pub struct Foreign {
+pub struct Foreign<B, P, V>
+where
+	B: BlockChain,
+	P: PoolAdapter,
+	V: VerifierCache + 'static,
+{
 	pub chain: Weak<Chain>,
-	pub tx_pool: Weak<RwLock<pool::TransactionPool>>,
+	pub tx_pool: Weak<RwLock<pool::TransactionPool<B, P, V>>>,
 	pub sync_state: Weak<SyncState>,
 }
 
-impl Foreign {
+impl<B, P, V> Foreign<B, P, V>
+where
+	B: BlockChain,
+	P: PoolAdapter,
+	V: VerifierCache + 'static,
+{
 	/// Create a new API instance with the chain, transaction pool, peers and `sync_state`. All subsequent
 	/// API calls will operate on this instance of node API.
 	///
@@ -60,7 +71,7 @@ impl Foreign {
 
 	pub fn new(
 		chain: Weak<Chain>,
-		tx_pool: Weak<RwLock<pool::TransactionPool>>,
+		tx_pool: Weak<RwLock<pool::TransactionPool<B, P, V>>>,
 		sync_state: Weak<SyncState>,
 	) -> Self {
 		Foreign {

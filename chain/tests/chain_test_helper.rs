@@ -50,7 +50,7 @@ pub fn init_chain(dir_name: &str, genesis: Block) -> Chain {
 }
 
 /// Build genesis block with reward (non-empty, like we have in mainnet).
-fn genesis_block<K>(keychain: &K) -> Block
+pub fn genesis_block<K>(keychain: &K) -> Block
 where
 	K: Keychain,
 {
@@ -69,8 +69,9 @@ where
 
 /// Mine a chain of specified length to assist with automated tests.
 /// Probably a good idea to call clean_output_dir at the beginning and end of each test.
+#[allow(dead_code)]
 pub fn mine_chain(dir_name: &str, chain_length: u64) -> Chain {
-	global::set_mining_mode(ChainTypes::AutomatedTesting);
+	global::set_local_chain_type(ChainTypes::AutomatedTesting);
 	let keychain = keychain::ExtKeychain::from_random_seed(false).unwrap();
 	let genesis = genesis_block(&keychain);
 	let mut chain = init_chain(dir_name, genesis.clone());
@@ -78,6 +79,7 @@ pub fn mine_chain(dir_name: &str, chain_length: u64) -> Chain {
 	chain
 }
 
+#[allow(dead_code)]
 fn mine_some_on_top<K>(chain: &mut Chain, chain_length: u64, keychain: &K)
 where
 	K: Keychain,
@@ -89,19 +91,14 @@ where
 		let reward =
 			libtx::reward::output(keychain, &libtx::ProofBuilder::new(keychain), &pk, 0, false)
 				.unwrap();
-		let mut b =
-			core::core::Block::new(&prev, vec![], next_header_info.clone().difficulty, reward)
-				.unwrap();
+		let mut b = core::core::Block::new(&prev, &[], next_header_info.clone().difficulty, reward)
+			.unwrap();
 		b.header.timestamp = prev.timestamp + Duration::seconds(60);
 		b.header.pow.secondary_scaling = next_header_info.secondary_scaling;
 
 		chain.set_txhashset_roots(&mut b).unwrap();
 
-		let edge_bits = if n == 2 {
-			global::min_edge_bits() + 1
-		} else {
-			global::min_edge_bits()
-		};
+		let edge_bits = global::min_edge_bits();
 		b.header.pow.proof.edge_bits = edge_bits;
 		pow::pow_size(
 			&mut b.header,
@@ -110,7 +107,6 @@ where
 			edge_bits,
 		)
 		.unwrap();
-		b.header.pow.proof.edge_bits = edge_bits;
 
 		let bhash = b.hash();
 		chain.process_block(b, Options::MINE).unwrap();
