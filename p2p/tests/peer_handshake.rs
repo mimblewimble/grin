@@ -22,7 +22,7 @@ use std::collections::hash_map::DefaultHasher;
 use std::hash::Hasher;
 use std::net::{SocketAddr, TcpListener, TcpStream};
 use std::sync::Arc;
-use std::{thread, time};
+use std::{fs, thread, time};
 
 use crate::core::core::hash::Hash;
 use crate::core::global;
@@ -36,6 +36,10 @@ fn open_port() -> u16 {
 	// listener goes out of scope
 	let listener = TcpListener::bind("127.0.0.1:0").unwrap();
 	listener.local_addr().unwrap().port()
+}
+
+fn clean_output_dir(dir_name: &str) {
+	let _ = fs::remove_dir_all(dir_name);
 }
 
 // Setup test with AutomatedTesting chain_type;
@@ -98,11 +102,14 @@ fn peer_handshake_aux(server_ip: &str, client_addr: &str) {
 	thread::sleep(time::Duration::from_secs(1));
 
 	peer.send_ping(Difficulty::min(), 0).unwrap();
-	thread::sleep(time::Duration::from_secs(1));
+	thread::sleep(time::Duration::from_secs(2));
+
+	println!("stuff: {:?}", server.peers.get_connected_peer(my_addr));
 
 	let server_peer = server.peers.get_connected_peer(my_addr).unwrap();
 	assert_eq!(server_peer.info.total_difficulty(), Difficulty::min());
 	assert!(server.peers.peer_count() > 0);
+	clean_output_dir(data_folder.as_str());
 }
 
 #[test]
