@@ -184,19 +184,18 @@ impl Handshake {
 				us: self.genesis,
 				peer: hand.genesis,
 			});
-		} else {
-			// check the nonce to see if we are trying to connect to ourselves
-			let nonces = self.nonces.read();
-			let addr = resolve_peer_addr(hand.sender_addr, &conn);
-			if nonces.contains(&hand.nonce) {
-				// save ip addresses of ourselves
-				let mut addrs = self.addrs.write();
-				addrs.push_back(addr);
-				if addrs.len() >= ADDRS_CAP {
-					addrs.pop_front();
-				}
-				return Err(Error::PeerWithSelf);
+		}
+		// check the nonce to see if we are trying to connect to ourselves
+		let nonces = self.nonces.read();
+		let addr = resolve_peer_addr(hand.sender_addr, &conn);
+		if nonces.contains(&hand.nonce) {
+			// save ip addresses of ourselves
+			let mut addrs = self.addrs.write();
+			addrs.push_back(addr);
+			if addrs.len() >= ADDRS_CAP {
+				addrs.pop_front();
 			}
+			return Err(Error::PeerWithSelf);
 		}
 
 		let negotiated_version = self.negotiate_protocol_version(hand.version)?;
@@ -205,7 +204,7 @@ impl Handshake {
 		let peer_info = PeerInfo {
 			capabilities: hand.capabilities,
 			user_agent: hand.user_agent,
-			addr: resolve_peer_addr(hand.sender_addr, &conn),
+			addr: addr,
 			version: negotiated_version,
 			live_info: Arc::new(RwLock::new(PeerLiveInfo::new(hand.total_difficulty))),
 			direction: Direction::Inbound,
