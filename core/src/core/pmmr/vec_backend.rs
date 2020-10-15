@@ -43,6 +43,11 @@ impl<T: PMMRable> Backend<T> for VecBackend<T> {
 		Ok(())
 	}
 
+	// TODO - Do we pass pos or height in here?
+	fn append_pruned_subtree(&mut self, _hash: Hash, _pos: u64) -> Result<(), String> {
+		unimplemented!()
+	}
+
 	fn get_hash(&self, position: u64) -> Option<Hash> {
 		if self.removed.contains(&position) {
 			None

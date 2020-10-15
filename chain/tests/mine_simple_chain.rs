@@ -749,6 +749,7 @@ fn spend_in_fork_and_compact() {
 fn output_header_mappings() {
 	global::set_local_chain_type(ChainTypes::AutomatedTesting);
 	{
+		clean_output_dir(".grin_header_for_output");
 		let chain = init_chain(
 			".grin_header_for_output",
 			pow::mine_genesis_block().unwrap(),

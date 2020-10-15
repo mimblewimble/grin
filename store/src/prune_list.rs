@@ -26,7 +26,7 @@ use std::path::{Path, PathBuf};
 
 use croaring::Bitmap;
 
-use crate::core::core::pmmr::{bintree_postorder_height, family, path};
+use crate::core::core::pmmr::{bintree_leaf_pos_iter, bintree_postorder_height, family};
 use crate::{read_bitmap, save_via_temp_file};
 
 /// Maintains a list of previously pruned nodes in PMMR, compacting the list as
@@ -100,9 +100,9 @@ impl PruneList {
 
 	/// Init our internal shift caches.
 	pub fn init_caches(&mut self) {
-		self.build_shift_cache();
-		self.build_leaf_shift_cache();
-		self.build_pruned_cache();
+		self.rebuild_shift_cache();
+		self.rebuild_leaf_shift_cache();
+		self.rebuild_pruned_cache();
 	}
 
 	/// Save the prune_list to disk.
@@ -159,24 +159,23 @@ impl PruneList {
 		}
 	}
 
-	fn build_shift_cache(&mut self) {
-		if self.bitmap.is_empty() {
-			return;
-		}
+	// Calculate the next shift based on provided pos and the previous shift.
+	fn calculate_next_shift(&self, pos: u64) -> u64 {
+		let prev_shift = self.get_shift(pos.saturating_sub(1));
+		let shift = if self.is_pruned_root(pos) {
+			let height = bintree_postorder_height(pos);
+			2 * ((1 << height) - 1)
+		} else {
+			0
+		};
+		prev_shift + shift
+	}
 
+	fn rebuild_shift_cache(&mut self) {
 		self.shift_cache.clear();
 		for pos in self.bitmap.iter().filter(|x| *x > 0) {
-			let pos = pos as u64;
-			let prev_shift = self.get_shift(pos.saturating_sub(1));
-
-			let curr_shift = if self.is_pruned_root(pos) {
-				let height = bintree_postorder_height(pos);
-				2 * ((1 << height) - 1)
-			} else {
-				0
-			};
-
-			self.shift_cache.push(prev_shift + curr_shift);
+			let next_shift = self.calculate_next_shift(pos as u64);
+			self.shift_cache.push(next_shift);
 		}
 	}
 
@@ -200,29 +199,28 @@ impl PruneList {
 		}
 	}
 
-	fn build_leaf_shift_cache(&mut self) {
-		if self.bitmap.is_empty() {
-			return;
-		}
+	// Calculate the next leaf shift based on provided pos and the previous leaf shift.
+	fn calculate_next_leaf_shift(&self, pos: u64) -> u64 {
+		let prev_shift = self.get_leaf_shift(pos.saturating_sub(1) as u64);
+		let shift = if self.is_pruned_root(pos) {
+			let height = bintree_postorder_height(pos);
+			if height == 0 {
+				0
+			} else {
+				1 << height
+			}
+		} else {
+			0
+		};
+		prev_shift + shift
+	}
 
+	fn rebuild_leaf_shift_cache(&mut self) {
 		self.leaf_shift_cache.clear();
 
 		for pos in self.bitmap.iter().filter(|x| *x > 0) {
-			let pos = pos as u64;
-			let prev_shift = self.get_leaf_shift(pos.saturating_sub(1));
-
-			let curr_shift = if self.is_pruned_root(pos) {
-				let height = bintree_postorder_height(pos);
-				if height == 0 {
-					0
-				} else {
-					1 << height
-				}
-			} else {
-				0
-			};
-
-			self.leaf_shift_cache.push(prev_shift + curr_shift);
+			let next_shift = self.calculate_next_leaf_shift(pos as u64);
+			self.leaf_shift_cache.push(next_shift);
 		}
 	}
 
@@ -270,16 +268,14 @@ impl PruneList {
 		self.pruned_cache.contains(pos as u32)
 	}
 
-	fn build_pruned_cache(&mut self) {
-		if self.bitmap.is_empty() {
-			return;
-		}
+	// Rebuild the "pruned cache" by expanding every pruned subtree into the contained
+	// leaf pos and adding them all to the cache.
+	fn rebuild_pruned_cache(&mut self) {
 		let maximum = self.bitmap.maximum().unwrap_or(0);
 		self.pruned_cache = Bitmap::create_with_capacity(maximum);
-		for pos in 1..(maximum + 1) {
-			let pruned = path(pos as u64, maximum as u64).any(|x| self.bitmap.contains(x as u32));
-			if pruned {
-				self.pruned_cache.add(pos as u32)
+		for pos in self.bitmap.iter() {
+			for x in bintree_leaf_pos_iter(pos as u64) {
+				self.pruned_cache.add(x as u32);
 			}
 		}
 		self.pruned_cache.run_optimize();

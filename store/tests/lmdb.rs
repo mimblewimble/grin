@@ -15,7 +15,6 @@
 use grin_core as core;
 use grin_store as store;
 use grin_util as util;
-use store::PrefixIterator;
 
 use crate::core::global;
 use crate::core::ser::{self, Readable, Reader, Writeable, Writer};

@@ -65,7 +65,6 @@ pub struct PMMRBackend<T: PMMRable> {
 impl<T: PMMRable> Backend<T> for PMMRBackend<T> {
 	/// Append the provided data and hashes to the backend storage.
 	/// Add the new leaf pos to our leaf_set if this is a prunable MMR.
-	#[allow(unused_variables)]
 	fn append(&mut self, data: &T, hashes: Vec<Hash>) -> Result<(), String> {
 		let size = self
 			.data_file
@@ -86,6 +85,11 @@ impl<T: PMMRable> Backend<T> for PMMRBackend<T> {
 		}
 
 		Ok(())
+	}
+
+	/// TODO - Do we pass pos or height in here?
+	fn append_pruned_subtree(&mut self, _hash: Hash, _pos: u64) -> Result<(), String> {
+		unimplemented!("not yet implemented!");
 	}
 
 	fn get_from_file(&self, position: u64) -> Option<Hash> {
