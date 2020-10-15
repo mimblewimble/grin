@@ -552,6 +552,9 @@ pub fn bintree_postorder_height(num: u64) -> u64 {
 /// of any size (somewhat unintuitively but this is how the PMMR is "append
 /// only").
 pub fn is_leaf(pos: u64) -> bool {
+	if pos == 0 {
+		return false;
+	}
 	bintree_postorder_height(pos) == 0
 }
 
