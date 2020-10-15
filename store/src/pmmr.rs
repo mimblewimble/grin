@@ -87,8 +87,12 @@ impl<T: PMMRable> Backend<T> for PMMRBackend<T> {
 		Ok(())
 	}
 
-	/// TODO - Do we pass pos or height in here?
 	fn append_pruned_subtree(&mut self, _hash: Hash, _pos: u64) -> Result<(), String> {
+		// check this is indeed a prunable MMR
+		// push hash onto hash file directly
+		// update prune_list and various pruned caches (shift, leaf_shift, pruned)
+		// we can use a subset of the rebuild impl here
+
 		unimplemented!("not yet implemented!");
 	}
 

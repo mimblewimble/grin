@@ -29,7 +29,7 @@ pub trait Backend<T: PMMRable> {
 	/// help the implementation.
 	fn append(&mut self, data: &T, hashes: Vec<Hash>) -> Result<(), String>;
 
-	fn append_pruned_subtree(&mut self, hash: Hash, pos_height_foo: u64) -> Result<(), String>;
+	fn append_pruned_subtree(&mut self, hash: Hash, pos: u64) -> Result<(), String>;
 
 	/// Rewind the backend state to a previous position, as if all append
 	/// operations after that had been canceled. Expects a position in the PMMR

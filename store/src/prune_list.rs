@@ -171,6 +171,9 @@ impl PruneList {
 		prev_shift + shift
 	}
 
+	/// Rebuild the shift cache.
+	/// For each entry in the pruned bitmap calculate the total shift
+	/// based on previous shift and size of pruned subtree.
 	fn rebuild_shift_cache(&mut self) {
 		self.shift_cache.clear();
 		for pos in self.bitmap.iter().filter(|x| *x > 0) {
@@ -215,9 +218,11 @@ impl PruneList {
 		prev_shift + shift
 	}
 
+	/// Rebuild the leaf shift cache.
+	/// For each entry in the pruned bitmap calculate the total shift
+	/// based on previous shift and size of pruned subtree.
 	fn rebuild_leaf_shift_cache(&mut self) {
 		self.leaf_shift_cache.clear();
-
 		for pos in self.bitmap.iter().filter(|x| *x > 0) {
 			let next_shift = self.calculate_next_leaf_shift(pos as u64);
 			self.leaf_shift_cache.push(next_shift);
@@ -225,8 +230,7 @@ impl PruneList {
 	}
 
 	/// Push the node at the provided position in the prune list. Compacts the
-	/// list if pruning the additional node means a parent can get pruned as
-	/// well.
+	/// list if pruning the additional node means a parent can get pruned as well.
 	pub fn add(&mut self, pos: u64) {
 		assert!(pos > 0, "prune list 1-indexed, 0 not valid pos");
 
