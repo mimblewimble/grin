@@ -432,10 +432,9 @@ pub struct UntrustedBlockHeader(BlockHeader);
 impl Readable for UntrustedBlockHeader {
 	fn read<R: Reader>(reader: &mut R) -> Result<UntrustedBlockHeader, ser::Error> {
 		let header = read_block_header(reader)?;
-		if header.timestamp
-			> Utc::now() + Duration::seconds(12 * (consensus::BLOCK_TIME_SEC as i64))
-		{
-			// refuse blocks more than 12 blocks intervals in future (as in bitcoin)
+		if header.timestamp > Utc::now() + Duration::seconds(5 * 60) {
+			// refuse blocks more than 5 minutes in the future
+			// ideally this Future Time Limit (FTL) is specified in grin-server.toml
 			// TODO add warning in p2p code if local time is too different from peers
 			error!(
 				"block header {} validation error: block time is more than 12 blocks in future",
