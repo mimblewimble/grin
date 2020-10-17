@@ -140,14 +140,14 @@ mod test {
 		println!("proof {}", global::proofsize());
 		pow_size(
 			&mut b.header,
-			Difficulty::min(),
+			Difficulty::min_dma(),
 			global::proofsize(),
 			global::min_edge_bits(),
 		)
 		.unwrap();
 		println!("nonce {}", b.header.pow.nonce);
 		assert_ne!(b.header.pow.nonce, 310);
-		assert!(b.header.pow.to_difficulty(0) >= Difficulty::min());
+		assert!(b.header.pow.to_difficulty(0) >= Difficulty::min_dma());
 		assert!(verify_size(&b.header).is_ok());
 	}
 }

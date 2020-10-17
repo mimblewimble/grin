@@ -432,7 +432,7 @@ fn set_pow(header: &mut BlockHeader) {
 	header.pow.proof.edge_bits = edge_bits;
 	pow::pow_size(
 		header,
-		pow::Difficulty::min(),
+		pow::Difficulty::min_dma(),
 		global::proofsize(),
 		edge_bits,
 	)
