@@ -49,10 +49,7 @@ fn prunable_mmr() {
 	let mut bitmap = Bitmap::create();
 	bitmap.add_range_closed(1..n_leaves);
 
-	let id = SegmentIdentifier {
-		log_size: 3,
-		idx: 1,
-	};
+	let id = SegmentIdentifier { height: 3, idx: 1 };
 
 	// Validate a segment before any pruning
 	let mmr = ReadonlyPMMR::at(&mut ba, last_pos);
@@ -125,10 +122,7 @@ fn prunable_mmr() {
 	);
 
 	// Final segment is not full, test it before pruning
-	let id = SegmentIdentifier {
-		log_size: 3,
-		idx: 9,
-	};
+	let id = SegmentIdentifier { height: 3, idx: 9 };
 
 	let mmr = ReadonlyPMMR::at(&mut ba, last_pos);
 	let segment = Segment::from_pmmr(id, &mmr, true).unwrap();
@@ -188,10 +182,7 @@ fn ser_round_trip() {
 	ba.sync().unwrap();
 
 	let mmr = ReadonlyPMMR::at(&ba, last_pos);
-	let id = SegmentIdentifier {
-		log_size: 3,
-		idx: 0,
-	};
+	let id = SegmentIdentifier { height: 3, idx: 0 };
 	let segment = Segment::from_pmmr(id, &mmr, true).unwrap();
 
 	let mut cursor = Cursor::new(Vec::<u8>::new());

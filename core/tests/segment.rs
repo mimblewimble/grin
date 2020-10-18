@@ -20,8 +20,8 @@ use common::TestElem;
 use grin_core as core;
 use grin_core::core::pmmr::ReadablePMMR;
 
-fn test_unprunable_size(log_size: u8, n_leaves: u32) {
-	let size = 1u64 << log_size;
+fn test_unprunable_size(height: u8, n_leaves: u32) {
+	let size = 1u64 << height;
 	let n_segments = (n_leaves as u64 + size - 1) / size;
 
 	// Build an MMR with n_leaves leaves
@@ -35,7 +35,7 @@ fn test_unprunable_size(log_size: u8, n_leaves: u32) {
 	let root = mmr.root().unwrap();
 
 	for idx in 0..n_segments {
-		let id = SegmentIdentifier { log_size, idx };
+		let id = SegmentIdentifier { height, idx };
 		let segment = Segment::from_pmmr(id, &mmr, false).unwrap();
 		println!(
 			"\n\n>>>>>>> N_LEAVES = {}, LAST_POS = {}, SEGMENT = {}:\n{:#?}",
@@ -44,7 +44,7 @@ fn test_unprunable_size(log_size: u8, n_leaves: u32) {
 		if idx < n_segments - 1 || (n_leaves as u64) % size == 0 {
 			// Check if the reconstructed subtree root matches with the hash stored in the mmr
 			let subtree_root = segment.root(last_pos, None).unwrap();
-			let last = pmmr::insertion_to_pmmr_index((idx + 1) * size) + (log_size as u64);
+			let last = pmmr::insertion_to_pmmr_index((idx + 1) * size) + (height as u64);
 			assert_eq!(subtree_root, mmr.get_hash(last).unwrap());
 			println!(" ROOT OK");
 		}

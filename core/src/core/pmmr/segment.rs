@@ -51,23 +51,23 @@ impl fmt::Display for SegmentError {
 /// Tuple that defines a segment of a given PMMR
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub struct SegmentIdentifier {
-	/// 2-Log of the size of a segment
-	pub log_size: u8,
+	/// Height of a segment
+	pub height: u8,
 	/// Zero-based index of the segment
 	pub idx: u64,
 }
 
 impl Readable for SegmentIdentifier {
 	fn read<R: Reader>(reader: &mut R) -> Result<Self, Error> {
-		let log_size = reader.read_u8()?;
+		let height = reader.read_u8()?;
 		let idx = reader.read_u64()?;
-		Ok(Self { log_size, idx })
+		Ok(Self { height, idx })
 	}
 }
 
 impl Writeable for SegmentIdentifier {
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), Error> {
-		writer.write_u8(self.log_size)?;
+		writer.write_u8(self.height)?;
 		writer.write_u64(self.idx)
 	}
 }
@@ -87,7 +87,7 @@ pub struct Segment<T> {
 impl<T> Segment<T> {
 	/// Maximum number of leaves in a segment, given by `2**b`
 	fn segment_capacity(&self) -> u64 {
-		1 << self.identifier.log_size
+		1 << self.identifier.height
 	}
 
 	/// Offset (in leaf idx) of first leaf in the segment
@@ -115,7 +115,7 @@ impl<T> Segment<T> {
 		let first = pmmr::insertion_to_pmmr_index(leaf_offset + 1);
 		let last = if self.full_segment(last_pos) {
 			pmmr::insertion_to_pmmr_index(leaf_offset + segment_size)
-				+ (self.identifier.log_size as u64)
+				+ (self.identifier.height as u64)
 		} else {
 			last_pos
 		};
@@ -205,8 +205,7 @@ where
 	/// Calculate root hash of this segment
 	pub fn root(&self, last_pos: u64, bitmap: Option<&Bitmap>) -> Result<Hash, SegmentError> {
 		let (segment_first_pos, segment_last_pos) = self.segment_pos_range(last_pos);
-		let mut hashes =
-			Vec::<Option<Hash>>::with_capacity(2 * (self.identifier.log_size as usize));
+		let mut hashes = Vec::<Option<Hash>>::with_capacity(2 * (self.identifier.height as usize));
 		let mut leaves = self.leaf_pos.iter().zip(&self.leaf_data);
 		for pos in segment_first_pos..=segment_last_pos {
 			let height = pmmr::bintree_postorder_height(pos);
