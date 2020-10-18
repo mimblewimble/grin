@@ -14,7 +14,7 @@
 use chrono::Utc;
 use grin_core::consensus::{
 	next_dma_difficulty, next_wtema_difficulty, HeaderInfo, AR_SCALE_DAMP_FACTOR, BLOCK_TIME_SEC,
-	DIFFICULTY_ADJUST_WINDOW, MIN_AR_SCALE, MIN_DMA_DIFFICULTY, MIN_WTEMA_DIFFICULTY, YEAR_HEIGHT,
+	DMA_WINDOW, MIN_AR_SCALE, MIN_DMA_DIFFICULTY, MIN_WTEMA_DIFFICULTY, YEAR_HEIGHT,
 };
 use grin_core::global;
 use grin_core::pow::Difficulty;
@@ -29,15 +29,7 @@ fn next_dma_difficulty_adjustment() {
 	// Check we don't get stuck on difficulty <= MIN_DMA_DIFFICULTY (at 4x faster blocks at least)
 	let mut hi = HeaderInfo::from_diff_scaling(diff_min, AR_SCALE_DAMP_FACTOR as u32);
 	hi.is_secondary = false;
-	let hinext = next_dma_difficulty(
-		1,
-		repeat(
-			BLOCK_TIME_SEC / 4,
-			hi.clone(),
-			DIFFICULTY_ADJUST_WINDOW,
-			None,
-		),
-	);
+	let hinext = next_dma_difficulty(1, repeat(BLOCK_TIME_SEC / 4, hi.clone(), DMA_WINDOW, None));
 
 	assert_ne!(hinext.difficulty, diff_min);
 
@@ -45,7 +37,7 @@ fn next_dma_difficulty_adjustment() {
 	assert_ne!(hinext.secondary_scaling, MIN_AR_SCALE as u32);
 
 	// just enough data, right interval, should stay constant
-	let just_enough = DIFFICULTY_ADJUST_WINDOW + 1;
+	let just_enough = DMA_WINDOW + 1;
 	hi.difficulty = Difficulty::from_num(10000);
 	assert_eq!(
 		next_dma_difficulty(1, repeat(BLOCK_TIME_SEC, hi.clone(), just_enough, None)).difficulty,
@@ -60,7 +52,7 @@ fn next_dma_difficulty_adjustment() {
 
 	// checking averaging works
 	hi.difficulty = Difficulty::from_num(500);
-	let sec = DIFFICULTY_ADJUST_WINDOW / 2;
+	let sec = DMA_WINDOW / 2;
 	let mut s1 = repeat(BLOCK_TIME_SEC, hi.clone(), sec, Some(cur_time));
 	let mut s2 = repeat_offs(
 		BLOCK_TIME_SEC,

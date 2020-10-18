@@ -184,21 +184,21 @@ pub fn valid_header_version(height: u64, version: HeaderVersion) -> bool {
 	height < 4 * HARD_FORK_INTERVAL && version == header_version(height)
 }
 
-/// Number of blocks used to calculate difficulty adjustments
-pub const DIFFICULTY_ADJUST_WINDOW: u64 = HOUR_HEIGHT;
+/// Number of blocks used to calculate difficulty adjustment by Damped Moving Average
+pub const DMA_WINDOW: u64 = HOUR_HEIGHT;
 
 /// Difficulty adjustment half life is 4 hours
 pub const WTEMA_HALF_LIFE: u64 = 4 * HOUR_SEC;
 
-/// Average time span of the difficulty adjustment window
-pub const BLOCK_TIME_WINDOW: u64 = DIFFICULTY_ADJUST_WINDOW * BLOCK_TIME_SEC;
+/// Average time span of the DMA difficulty adjustment window
+pub const BLOCK_TIME_WINDOW: u64 = DMA_WINDOW * BLOCK_TIME_SEC;
 
-/// Clamp factor to use for difficulty adjustment
+/// Clamp factor to use for DMA difficulty adjustment
 /// Limit value to within this factor of goal
 pub const CLAMP_FACTOR: u64 = 2;
 
-/// Dampening factor to use for difficulty adjustment
-pub const DIFFICULTY_DAMP_FACTOR: u64 = 3;
+/// Dampening factor to use for DMA difficulty adjustment
+pub const DMA_DAMP_FACTOR: u64 = 3;
 
 /// Dampening factor to use for AR scale calculation.
 pub const AR_SCALE_DAMP_FACTOR: u64 = 13;
@@ -223,7 +223,7 @@ pub const C32_GRAPH_WEIGHT: u64 = (2u64 << (32 - BASE_EDGE_BITS) as u64) * 32; /
 
 /// Minimum difficulty, enforced in Damped Moving Average diff retargetting
 /// avoids getting stuck when trying to increase difficulty subject to dampening
-pub const MIN_DMA_DIFFICULTY: u64 = DIFFICULTY_DAMP_FACTOR;
+pub const MIN_DMA_DIFFICULTY: u64 = DMA_DAMP_FACTOR;
 
 /// Minimum difficulty, enforced in Weighted Target Exponential Moving Average diff retargetting
 /// avoids getting stuck when trying to increase difficulty
@@ -329,7 +329,7 @@ where
 }
 
 /// Difficulty calculation based on a Damped Moving Average
-/// of difficulty over a window of DIFFICULTY_ADJUST_WINDOW blocks.
+/// of difficulty over a window of DMA_WINDOW blocks.
 /// The corresponding timespan is calculated
 /// by using the difference between the timestamps at the beginning
 /// and the end of the window, with a damping toward the target block time.
@@ -340,17 +340,16 @@ where
 	// Create vector of difficulty data running from earliest
 	// to latest, and pad with simulated pre-genesis data to allow earlier
 	// adjustment if there isn't enough window data length will be
-	// DIFFICULTY_ADJUST_WINDOW + 1 (for initial block time bound)
+	// DMA_WINDOW + 1 (for initial block time bound)
 	let diff_data = global::difficulty_data_to_vector(cursor);
 
 	// First, get the ratio of secondary PoW vs primary, skipping initial header
 	let sec_pow_scaling = secondary_pow_scaling(height, &diff_data[1..]);
 
 	// Get the timestamp delta across the window
-	let ts_delta: u64 =
-		diff_data[DIFFICULTY_ADJUST_WINDOW as usize].timestamp - diff_data[0].timestamp;
+	let ts_delta: u64 = diff_data[DMA_WINDOW as usize].timestamp - diff_data[0].timestamp;
 
-	// Get the difficulty sum of the last DIFFICULTY_ADJUST_WINDOW elements
+	// Get the difficulty sum of the last DMA_WINDOW elements
 	let diff_sum: u64 = diff_data
 		.iter()
 		.skip(1)
@@ -359,7 +358,7 @@ where
 
 	// adjust time delta toward goal subject to dampening and clamping
 	let adj_ts = clamp(
-		damp(ts_delta, BLOCK_TIME_WINDOW, DIFFICULTY_DAMP_FACTOR),
+		damp(ts_delta, BLOCK_TIME_WINDOW, DMA_DAMP_FACTOR),
 		BLOCK_TIME_WINDOW,
 		CLAMP_FACTOR,
 	);
@@ -405,12 +404,12 @@ pub fn ar_count(_height: u64, diff_data: &[HeaderInfo]) -> u64 {
 /// as an adjustment on the deviation against the ideal value.
 /// Factor by which the secondary proof of work difficulty will be adjusted
 pub fn secondary_pow_scaling(height: u64, diff_data: &[HeaderInfo]) -> u32 {
-	// Get the scaling factor sum of the last DIFFICULTY_ADJUST_WINDOW elements
+	// Get the scaling factor sum of the last DMA_WINDOW elements
 	let scale_sum: u64 = diff_data.iter().map(|dd| dd.secondary_scaling as u64).sum();
 
 	// compute ideal 2nd_pow_fraction in pct and across window
 	let target_pct = secondary_pow_ratio(height);
-	let target_count = DIFFICULTY_ADJUST_WINDOW * target_pct;
+	let target_count = DMA_WINDOW * target_pct;
 
 	// Get the secondary count across the window, adjusting count toward goal
 	// subject to dampening and clamping.

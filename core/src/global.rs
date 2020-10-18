@@ -19,8 +19,8 @@
 use crate::consensus::{
 	graph_weight, valid_header_version, HeaderInfo, BASE_EDGE_BITS, BLOCK_KERNEL_WEIGHT,
 	BLOCK_OUTPUT_WEIGHT, BLOCK_TIME_SEC, COINBASE_MATURITY, CUT_THROUGH_HORIZON, DAY_HEIGHT,
-	DEFAULT_MIN_EDGE_BITS, DIFFICULTY_ADJUST_WINDOW, INITIAL_DIFFICULTY, MAX_BLOCK_WEIGHT,
-	PROOFSIZE, SECOND_POW_EDGE_BITS, STATE_SYNC_THRESHOLD,
+	DEFAULT_MIN_EDGE_BITS, DMA_WINDOW, INITIAL_DIFFICULTY, MAX_BLOCK_WEIGHT, PROOFSIZE,
+	SECOND_POW_EDGE_BITS, STATE_SYNC_THRESHOLD,
 };
 use crate::core::block::HeaderVersion;
 use crate::{
@@ -386,7 +386,7 @@ where
 	T: IntoIterator<Item = HeaderInfo>,
 {
 	// Convert iterator to vector, so we can append to it if necessary
-	let needed_block_count = DIFFICULTY_ADJUST_WINDOW as usize + 1;
+	let needed_block_count = DMA_WINDOW as usize + 1;
 	let mut last_n: Vec<HeaderInfo> = cursor.into_iter().take(needed_block_count).collect();
 
 	// Only needed just after blockchain launch... basically ensures there's

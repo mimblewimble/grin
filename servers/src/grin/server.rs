@@ -477,9 +477,9 @@ impl Server {
 			DiffStats {
 				height: height as u64,
 				last_blocks: diff_entries,
-				average_block_time: block_time_sum / (consensus::DIFFICULTY_ADJUST_WINDOW - 1),
-				average_difficulty: block_diff_sum / (consensus::DIFFICULTY_ADJUST_WINDOW - 1),
-				window_size: consensus::DIFFICULTY_ADJUST_WINDOW,
+				average_block_time: block_time_sum / (consensus::DMA_WINDOW - 1),
+				average_difficulty: block_diff_sum / (consensus::DMA_WINDOW - 1),
+				window_size: consensus::DMA_WINDOW,
 			}
 		};
 
