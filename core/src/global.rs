@@ -17,19 +17,17 @@
 //! should be used sparingly.
 
 use crate::consensus::{
-	graph_weight, valid_header_version, HeaderInfo, BASE_EDGE_BITS, BLOCK_KERNEL_WEIGHT,
+	graph_weight, header_version, HeaderInfo, BASE_EDGE_BITS, BLOCK_KERNEL_WEIGHT,
 	BLOCK_OUTPUT_WEIGHT, BLOCK_TIME_SEC, COINBASE_MATURITY, CUT_THROUGH_HORIZON, DAY_HEIGHT,
 	DEFAULT_MIN_EDGE_BITS, DIFFICULTY_ADJUST_WINDOW, INITIAL_DIFFICULTY, MAX_BLOCK_WEIGHT,
 	PROOFSIZE, SECOND_POW_EDGE_BITS, STATE_SYNC_THRESHOLD,
 };
 use crate::core::block::HeaderVersion;
-use crate::{
-	pow::{
-		self, new_cuckaroo_ctx, new_cuckarood_ctx, new_cuckaroom_ctx, new_cuckarooz_ctx,
-		new_cuckatoo_ctx, BitVec, PoWContext,
-	},
-	ser::ProtocolVersion,
+use crate::pow::{
+	self, new_cuckaroo_ctx, new_cuckarood_ctx, new_cuckaroom_ctx, new_cuckarooz_ctx,
+	new_cuckatoo_ctx, no_cuckaroo_ctx, BitVec, PoWContext,
 };
+use crate::ser::ProtocolVersion;
 use std::cell::Cell;
 use util::OneTime;
 
@@ -215,7 +213,7 @@ pub fn is_nrd_enabled() -> bool {
 	})
 }
 
-/// Return either a cuckoo context or a cuckatoo context
+/// Return either a cuckaroo* context or a cuckatoo context
 /// Single change point
 pub fn create_pow_context<T>(
 	height: u64,
@@ -224,35 +222,22 @@ pub fn create_pow_context<T>(
 	max_sols: u32,
 ) -> Result<Box<dyn PoWContext>, pow::Error> {
 	let chain_type = get_chain_type();
-	match chain_type {
-		// Mainnet has Cuckaroo{,d,m,z}29 for AR and Cuckatoo31+ for AF
-		ChainTypes::Mainnet if edge_bits > 29 => new_cuckatoo_ctx(edge_bits, proof_size, max_sols),
-		ChainTypes::Mainnet if valid_header_version(height, HeaderVersion(4)) => {
-			new_cuckarooz_ctx(edge_bits, proof_size)
+	if chain_type == ChainTypes::Mainnet || chain_type == ChainTypes::Testnet {
+		// Mainnet and Testnet have Cuckatoo31+ for AF and Cuckaroo{,d,m,z}29 for AR
+		if edge_bits > 29 {
+			new_cuckatoo_ctx(edge_bits, proof_size, max_sols)
+		} else {
+			match header_version(height) {
+				HeaderVersion(1) => new_cuckaroo_ctx(edge_bits, proof_size),
+				HeaderVersion(2) => new_cuckarood_ctx(edge_bits, proof_size),
+				HeaderVersion(3) => new_cuckaroom_ctx(edge_bits, proof_size),
+				HeaderVersion(4) => new_cuckarooz_ctx(edge_bits, proof_size),
+				_ => no_cuckaroo_ctx(),
+			}
 		}
-		ChainTypes::Mainnet if valid_header_version(height, HeaderVersion(3)) => {
-			new_cuckaroom_ctx(edge_bits, proof_size)
-		}
-		ChainTypes::Mainnet if valid_header_version(height, HeaderVersion(2)) => {
-			new_cuckarood_ctx(edge_bits, proof_size)
-		}
-		ChainTypes::Mainnet => new_cuckaroo_ctx(edge_bits, proof_size),
-
-		// Same for Testnet
-		ChainTypes::Testnet if edge_bits > 29 => new_cuckatoo_ctx(edge_bits, proof_size, max_sols),
-		ChainTypes::Testnet if valid_header_version(height, HeaderVersion(4)) => {
-			new_cuckarooz_ctx(edge_bits, proof_size)
-		}
-		ChainTypes::Testnet if valid_header_version(height, HeaderVersion(3)) => {
-			new_cuckaroom_ctx(edge_bits, proof_size)
-		}
-		ChainTypes::Testnet if valid_header_version(height, HeaderVersion(2)) => {
-			new_cuckarood_ctx(edge_bits, proof_size)
-		}
-		ChainTypes::Testnet => new_cuckaroo_ctx(edge_bits, proof_size),
-
+	} else {
 		// Everything else is Cuckatoo only
-		_ => new_cuckatoo_ctx(edge_bits, proof_size, max_sols),
+		new_cuckatoo_ctx(edge_bits, proof_size, max_sols)
 	}
 }
 
