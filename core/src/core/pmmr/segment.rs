@@ -77,26 +77,25 @@ impl Writeable for SegmentIdentifier {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Segment<T> {
 	identifier: SegmentIdentifier,
-	hashes: Vec<(u64, Hash)>,
-	leaf_data: Vec<(u64, T)>,
+	hash_pos: Vec<u64>,
+	hashes: Vec<Hash>,
+	leaf_pos: Vec<u64>,
+	leaf_data: Vec<T>,
 	proof: SegmentProof,
 }
 
 impl<T> Segment<T> {
 	/// Maximum number of leaves in a segment, given by `2**b`
-	#[inline]
 	fn segment_capacity(&self) -> u64 {
 		1 << self.identifier.log_size
 	}
 
 	/// Offset (in leaf idx) of first leaf in the segment
-	#[inline]
 	fn leaf_offset(&self) -> u64 {
 		self.identifier.idx * self.segment_capacity()
 	}
 
 	/// Number of leaves in this segment. Equal to capacity except for the final segment, which can be smaller
-	#[inline]
 	fn segment_unpruned_size(&self, last_pos: u64) -> u64 {
 		min(
 			self.segment_capacity(),
@@ -105,13 +104,11 @@ impl<T> Segment<T> {
 	}
 
 	/// Whether the segment is full (size == capacity)
-	#[inline]
 	fn full_segment(&self, last_pos: u64) -> bool {
 		self.segment_unpruned_size(last_pos) == self.segment_capacity()
 	}
 
 	/// Inclusive range of MMR positions for this segment
-	#[inline]
 	fn segment_pos_range(&self, last_pos: u64) -> (u64, u64) {
 		let segment_size = self.segment_unpruned_size(last_pos);
 		let leaf_offset = self.leaf_offset();
@@ -127,10 +124,12 @@ impl<T> Segment<T> {
 	}
 
 	fn get_hash(&self, pos: u64) -> Result<Hash, SegmentError> {
-		self.hashes
-			.binary_search_by(|&(p, _)| p.cmp(&pos))
-			.map(|p| self.hashes[p].1)
-			.map_err(|_| SegmentError::MissingHash(pos))
+		self.hash_pos
+			.iter()
+			.zip(&self.hashes)
+			.find(|&(&p, _)| p == pos)
+			.map(|(_, &h)| h)
+			.ok_or_else(|| SegmentError::MissingHash(pos))
 	}
 }
 
@@ -138,6 +137,17 @@ impl<T> Segment<T>
 where
 	T: Readable + Writeable + Debug,
 {
+	fn empty(identifier: SegmentIdentifier) -> Self {
+		Segment {
+			identifier,
+			hash_pos: Vec::new(),
+			hashes: Vec::new(),
+			leaf_pos: Vec::new(),
+			leaf_data: Vec::new(),
+			proof: SegmentProof::empty(),
+		}
+	}
+
 	/// Generate a segment from a PMMR
 	pub fn from_pmmr<U, B>(
 		segment_id: SegmentIdentifier,
@@ -148,12 +158,7 @@ where
 		U: PMMRable<E = T>,
 		B: Backend<U>,
 	{
-		let mut segment = Segment {
-			identifier: segment_id,
-			hashes: Vec::new(),
-			leaf_data: Vec::new(),
-			proof: SegmentProof::empty(),
-		};
+		let mut segment = Segment::empty(segment_id);
 
 		let last_pos = pmmr.unpruned_size();
 		if segment.segment_unpruned_size(last_pos) == 0 {
@@ -165,7 +170,8 @@ where
 		for pos in segment_first_pos..=segment_last_pos {
 			if pmmr::is_leaf(pos) {
 				if let Some(data) = pmmr.get_data_from_file(pos) {
-					segment.leaf_data.push((pos, data));
+					segment.leaf_data.push(data);
+					segment.leaf_pos.push(pos);
 					continue;
 				} else if !prunable {
 					return Err(SegmentError::MissingLeaf(pos));
@@ -174,7 +180,8 @@ where
 			// TODO: optimize, no need to send every intermediary hash
 			if prunable {
 				if let Some(hash) = pmmr.get_from_file(pos) {
-					segment.hashes.push((pos, hash));
+					segment.hashes.push(hash);
+					segment.hash_pos.push(pos);
 				}
 			}
 		}
@@ -200,7 +207,7 @@ where
 		let (segment_first_pos, segment_last_pos) = self.segment_pos_range(last_pos);
 		let mut hashes =
 			Vec::<Option<Hash>>::with_capacity(2 * (self.identifier.log_size as usize));
-		let mut leaves = self.leaf_data.iter();
+		let mut leaves = self.leaf_pos.iter().zip(&self.leaf_data);
 		for pos in segment_first_pos..=segment_last_pos {
 			let height = pmmr::bintree_postorder_height(pos);
 			let hash = if height == 0 {
@@ -222,7 +229,7 @@ where
 					// TODO: possibly remove requirement on the sibling when we no longer support
 					//  syncing through the txhashset.zip method
 					let data = leaves
-						.find(|&&(p, _)| p == pos)
+						.find(|&(&p, _)| p == pos)
 						.map(|(_, l)| l)
 						.ok_or_else(|| SegmentError::MissingLeaf(pos))?;
 					Some(data.hash_with_index(pos - 1))
@@ -314,21 +321,24 @@ impl<T: Readable> Readable for Segment<T> {
 		let identifier = Readable::read(reader)?;
 
 		let mut last_pos = 0;
-
 		let n_hashes = reader.read_u64()? as usize;
-		let mut hashes = Vec::with_capacity(n_hashes);
+		let mut hash_pos = Vec::with_capacity(n_hashes);
 		for _ in 0..n_hashes {
 			let pos = reader.read_u64()?;
 			if pos <= last_pos {
 				return Err(Error::SortError);
 			}
 			last_pos = pos;
-			let hash: Hash = Readable::read(reader)?;
-			hashes.push((pos, hash));
+			hash_pos.push(pos);
+		}
+
+		let mut hashes = Vec::<Hash>::with_capacity(n_hashes);
+		for _ in 0..n_hashes {
+			hashes.push(Readable::read(reader)?);
 		}
 
 		let n_leaves = reader.read_u64()? as usize;
-		let mut leaf_data = Vec::with_capacity(n_leaves);
+		let mut leaf_pos = Vec::with_capacity(n_leaves);
 		last_pos = 0;
 		for _ in 0..n_leaves {
 			let pos = reader.read_u64()?;
@@ -336,15 +346,21 @@ impl<T: Readable> Readable for Segment<T> {
 				return Err(Error::SortError);
 			}
 			last_pos = pos;
-			let data: T = Readable::read(reader)?;
-			leaf_data.push((pos, data));
+			leaf_pos.push(pos);
+		}
+
+		let mut leaf_data = Vec::<T>::with_capacity(n_leaves);
+		for _ in 0..n_leaves {
+			leaf_data.push(Readable::read(reader)?);
 		}
 
 		let proof = Readable::read(reader)?;
 
 		Ok(Self {
 			identifier,
+			hash_pos,
 			hashes,
+			leaf_pos,
 			leaf_data,
 			proof,
 		})
@@ -355,13 +371,17 @@ impl<T: Writeable> Writeable for Segment<T> {
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), Error> {
 		Writeable::write(&self.identifier, writer)?;
 		writer.write_u64(self.hashes.len() as u64)?;
-		for (pos, hash) in &self.hashes {
-			writer.write_u64(*pos)?;
+		for &pos in &self.hash_pos {
+			writer.write_u64(pos)?;
+		}
+		for hash in &self.hashes {
 			Writeable::write(hash, writer)?;
 		}
 		writer.write_u64(self.leaf_data.len() as u64)?;
-		for (pos, data) in &self.leaf_data {
-			writer.write_u64(*pos)?;
+		for &pos in &self.leaf_pos {
+			writer.write_u64(pos)?;
+		}
+		for data in &self.leaf_data {
 			Writeable::write(data, writer)?;
 		}
 		Writeable::write(&self.proof, writer)?;
