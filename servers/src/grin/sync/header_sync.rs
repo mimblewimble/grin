@@ -176,7 +176,7 @@ impl HeaderSync {
 				.peers_iter()
 				.outbound()
 				.with_capabilities(Capabilities::HEADER_HIST)
-				.with_difficulty(max_diff)
+				.with_difficulty(|x| x >= max_diff)
 				.connected()
 				.choose_random();
 			if let Some(peer) = peer {

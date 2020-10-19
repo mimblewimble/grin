@@ -180,7 +180,7 @@ fn monitor_peers(
 	let most_work_count = peers
 		.peers_iter()
 		.outbound()
-		.with_difficulty(max_diff)
+		.with_difficulty(|x| x >= max_diff)
 		.connected()
 		.count();
 

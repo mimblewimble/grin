@@ -84,7 +84,7 @@ impl SyncRunner {
 				.peers
 				.peers_iter()
 				.outbound()
-				.with_difficulty(head.total_difficulty)
+				.with_difficulty(|x| x >= head.total_difficulty)
 				.connected()
 				.count();
 
@@ -236,7 +236,7 @@ impl SyncRunner {
 			.peers
 			.peers_iter()
 			.outbound()
-			.with_difficulty(max_diff)
+			.with_difficulty(|x| x >= max_diff)
 			.connected()
 			.choose_random();
 

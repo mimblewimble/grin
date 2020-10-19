@@ -122,7 +122,7 @@ impl Peers {
 
 	/// Get a peer we're connected to by address.
 	pub fn get_connected_peer(&self, addr: PeerAddr) -> Option<Arc<Peer>> {
-		self.peers_iter().connected().by_addr(addr) //find(|p| p.info.addr == addr)
+		self.peers_iter().connected().by_addr(addr)
 	}
 
 	pub fn max_peer_difficulty(&self) -> Difficulty {
@@ -712,12 +712,18 @@ impl<I: Iterator<Item = Arc<Peer>>> PeersIter<I> {
 		}
 	}
 
-	/// Filter peers having greater than or equal to the provided difficulty.
-	/// Note: This adaptor takes a read lock internally.
-	/// So if we are chaining adaptors then defer this toward the end of the chain.
-	pub fn with_difficulty(self, diff: Difficulty) -> PeersIter<impl Iterator<Item = Arc<Peer>>> {
+	/// Filter peers with the provided difficulty comparison fn.
+	///
+	/// with_difficulty(|x| x > diff)
+	///
+	/// Note: This adaptor takes a read lock internally for each peer.
+	/// So if we are chaining adaptors then put this toward later in the chain.
+	pub fn with_difficulty<F>(self, f: F) -> PeersIter<impl Iterator<Item = Arc<Peer>>>
+	where
+		F: Fn(Difficulty) -> bool,
+	{
 		PeersIter {
-			iter: self.iter.filter(move |p| p.info.total_difficulty() >= diff),
+			iter: self.iter.filter(move |p| f(p.info.total_difficulty())),
 		}
 	}
 

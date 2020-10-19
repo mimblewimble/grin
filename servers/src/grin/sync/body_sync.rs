@@ -14,7 +14,6 @@
 
 use chrono::prelude::{DateTime, Utc};
 use chrono::Duration;
-use grin_core::pow::Difficulty;
 use rand::prelude::*;
 use std::cmp;
 use std::sync::Arc;
@@ -98,7 +97,7 @@ impl BodySync {
 			.peers
 			.peers_iter()
 			.outbound()
-			.with_difficulty(head.total_difficulty + Difficulty::from_num(1))
+			.with_difficulty(|x| x > head.total_difficulty)
 			.connected()
 			.into_iter()
 			.collect();

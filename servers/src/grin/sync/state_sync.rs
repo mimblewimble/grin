@@ -164,7 +164,7 @@ impl StateSync {
 			.peers_iter()
 			.outbound()
 			.with_capabilities(Capabilities::TXHASHSET_HIST)
-			.with_difficulty(max_diff)
+			.with_difficulty(|x| x >= max_diff)
 			.connected()
 			.choose_random();
 		if let Some(peer) = peer {
