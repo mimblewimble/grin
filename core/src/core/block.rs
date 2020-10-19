@@ -437,7 +437,7 @@ impl Readable for UntrustedBlockHeader {
 			// ideally this Future Time Limit (FTL) is specified in grin-server.toml
 			// TODO add warning in p2p code if local time is too different from peers
 			error!(
-				"block header {} validation error: block time is more than 12 blocks in future",
+				"block header {} validation error: block time is more than 5 minutes in the future",
 				header.hash()
 			);
 			return Err(ser::Error::CorruptedData);
