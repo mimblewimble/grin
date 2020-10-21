@@ -14,10 +14,10 @@
 
 //! Merkle Proofs
 
-use crate::core::hash::Hash;
 use crate::core::pmmr;
 use crate::ser;
 use crate::ser::{HashEntry, PMMRIndexHashable, Readable, Reader, Writeable, Writer};
+use crate::{core::hash::Hash, ser::read_multi};
 use util::ToHex;
 
 /// Merkle proof errors.
@@ -29,15 +29,15 @@ pub enum MerkleProofError {
 
 /// A Merkle proof that proves a particular element exists in the MMR.
 #[derive(Serialize, Deserialize, Debug, Eq, PartialEq, Clone, PartialOrd, Ord)]
-pub struct MerkleProof {
+pub struct MerkleProof<T: PMMRIndexHashable> {
 	/// The size of the MMR at the time the proof was created.
 	pub mmr_size: u64,
 	/// The sibling path from the leaf up to the final sibling hashing to the
 	/// root.
-	pub path: Vec<Hash>,
+	pub path: Vec<T::H>,
 }
 
-impl Writeable for MerkleProof {
+impl<T: PMMRIndexHashable> Writeable for MerkleProof<T> {
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
 		writer.write_u64(self.mmr_size)?;
 		writer.write_u64(self.path.len() as u64)?;
@@ -46,29 +46,24 @@ impl Writeable for MerkleProof {
 	}
 }
 
-impl Readable for MerkleProof {
-	fn read<R: Reader>(reader: &mut R) -> Result<MerkleProof, ser::Error> {
+impl<T: PMMRIndexHashable> Readable for MerkleProof<T> {
+	fn read<R: Reader>(reader: &mut R) -> Result<MerkleProof<T>, ser::Error> {
 		let mmr_size = reader.read_u64()?;
 		let path_len = reader.read_u64()?;
-		let mut path = Vec::with_capacity(path_len as usize);
-		for _ in 0..path_len {
-			let hash = Hash::read(reader)?;
-			path.push(hash);
-		}
-
+		let path = read_multi(reader, path_len)?;
 		Ok(MerkleProof { mmr_size, path })
 	}
 }
 
-impl Default for MerkleProof {
-	fn default() -> MerkleProof {
+impl<T: PMMRIndexHashable> Default for MerkleProof<T> {
+	fn default() -> MerkleProof<T> {
 		MerkleProof::empty()
 	}
 }
 
-impl MerkleProof {
+impl<T: PMMRIndexHashable> MerkleProof<T> {
 	/// The "empty" Merkle proof.
-	pub fn empty() -> MerkleProof {
+	pub fn empty() -> MerkleProof<T> {
 		MerkleProof {
 			mmr_size: 0,
 			path: Vec::default(),
@@ -83,7 +78,7 @@ impl MerkleProof {
 	}
 
 	/// Convert hex string representation back to a Merkle proof instance
-	pub fn from_hex(hex: &str) -> Result<MerkleProof, String> {
+	pub fn from_hex(hex: &str) -> Result<MerkleProof<T>, String> {
 		let bytes = util::from_hex(hex).unwrap();
 		let res = ser::deserialize_default(&mut &bytes[..])
 			.map_err(|_| "failed to deserialize a Merkle Proof".to_string())?;
@@ -92,12 +87,7 @@ impl MerkleProof {
 
 	/// Verifies the Merkle proof against the provided
 	/// root hash, element and position in the MMR.
-	pub fn verify<P: PMMRIndexHashable>(
-		&self,
-		root: Hash,
-		element: &P,
-		node_pos: u64,
-	) -> Result<(), MerkleProofError> {
+	pub fn verify(&self, root: T::H, element: &T, node_pos: u64) -> Result<(), MerkleProofError> {
 		let mut proof = self.clone();
 		// calculate the peaks once as these are based on overall MMR size
 		// (and will not change)
@@ -108,10 +98,10 @@ impl MerkleProof {
 	/// Consumes the Merkle proof while verifying it.
 	/// The proof can no longer be used by the caller after dong this.
 	/// Caller must clone() the proof first.
-	fn verify_consume<P: PMMRIndexHashable>(
+	fn verify_consume(
 		&mut self,
-		root: Hash,
-		element: &P,
+		root: T::H,
+		element: &T,
 		node_pos: u64,
 		peaks_pos: &[u64],
 	) -> Result<(), MerkleProofError> {
@@ -119,8 +109,7 @@ impl MerkleProof {
 			element.hash_with_index(self.mmr_size)
 		} else {
 			element.hash_with_index(node_pos - 1)
-		}
-		.as_hash();
+		};
 
 		// handle special case of only a single entry in the MMR
 		// (no siblings to hash together)
@@ -135,23 +124,23 @@ impl MerkleProof {
 		let sibling = self.path.remove(0);
 		let (parent_pos, sibling_pos) = pmmr::family(node_pos);
 
-		if let Ok(x) = peaks_pos.binary_search(&node_pos) {
-			let parent = if x == peaks_pos.len() - 1 {
+		let parent = if let Ok(x) = peaks_pos.binary_search(&node_pos) {
+			if x == peaks_pos.len() - 1 {
 				(sibling, node_hash)
 			} else {
 				(node_hash, sibling)
-			};
-			self.verify(root, &parent, parent_pos)
+			}
 		} else if parent_pos > self.mmr_size {
-			let parent = (sibling, node_hash);
-			self.verify(root, &parent, parent_pos)
+			(sibling, node_hash)
 		} else {
-			let parent = if pmmr::is_left_sibling(sibling_pos) {
+			if pmmr::is_left_sibling(sibling_pos) {
 				(sibling, node_hash)
 			} else {
 				(node_hash, sibling)
-			};
-			self.verify(root, &parent, parent_pos)
-		}
+			}
+		};
+
+		// TODO - Do we really want to pass a "parent" (tuple) in here?
+		self.verify(root, &parent, parent_pos)
 	}
 }

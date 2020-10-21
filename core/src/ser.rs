@@ -989,7 +989,7 @@ pub trait PMMRable: Clone + Debug + DefaultHashable {
 /// Generic trait to ensure PMMR elements can be hashed with an index
 pub trait PMMRIndexHashable: DefaultHashable {
 	/// Type of hash entry for intermediate nodes.
-	type H: HashEntry + Clone + Default;
+	type H: HashEntry;
 
 	/// Hash with a given index
 	fn hash_with_index(&self, index: u64) -> Self::H;
@@ -1002,20 +1002,28 @@ pub trait PMMRIndexHashable: DefaultHashable {
 	}
 }
 
-/// TODO - What do we need this for?
-impl PMMRIndexHashable for (Hash, Hash) {
-	type H = Hash;
+// /// TODO - What do we need this for?
+// impl PMMRIndexHashable for (Hash, Hash) {
+// 	type H = Hash;
 
-	fn hash_with_index(&self, index: u64) -> Hash {
-		Self::index_hash(index, self)
-	}
+// 	fn hash_with_index(&self, index: u64) -> Hash {
+// 		Self::index_hash(index, self)
+// 	}
 
-	fn hash_children(index: u64, lc: Hash, rc: Hash) -> Hash {
-		Self::index_hash(index, (lc, rc))
-	}
-}
+// 	fn hash_children(index: u64, lc: Hash, rc: Hash) -> Hash {
+// 		Self::index_hash(index, (lc, rc))
+// 	}
+// }
 
-pub trait HashEntry: DefaultHashable {
+pub trait HashEntry:
+	DefaultHashable
+	+ Readable
+	+ Default
+	+ Clone
+	+ PartialEq
+	+ serde::ser::Serialize
+	+ serde::de::DeserializeOwned
+{
 	fn as_hash(&self) -> Hash;
 }
 

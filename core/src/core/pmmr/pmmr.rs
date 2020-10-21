@@ -129,40 +129,6 @@ pub trait ReadablePMMR {
 		}
 		res.ok_or_else(|| "no root, invalid tree".to_owned())
 	}
-
-	/// Build a Merkle proof for the element at the given position.
-	fn merkle_proof(&self, pos: u64) -> Result<MerkleProof, String> {
-		let last_pos = self.unpruned_size();
-		debug!("merkle_proof  {}, last_pos {}", pos, last_pos);
-
-		// check this pos is actually a leaf in the MMR
-		if !is_leaf(pos) {
-			return Err(format!("not a leaf at pos {}", pos));
-		}
-
-		// check we actually have a hash in the MMR at this pos
-		self.get_hash(pos)
-			.ok_or_else(|| format!("no element at pos {}", pos))?;
-
-		let family_branch = family_branch(pos, last_pos);
-
-		let mut path = family_branch
-			.iter()
-			.filter_map(|x| self.get_from_file(x.1))
-			.collect::<Vec<_>>();
-
-		let peak_pos = match family_branch.last() {
-			Some(&(x, _)) => x,
-			None => pos,
-		};
-
-		path.append(&mut self.peak_path(peak_pos));
-
-		Ok(MerkleProof {
-			mmr_size: last_pos,
-			path,
-		})
-	}
 }
 
 /// Prunable Merkle Mountain Range implementation. All positions within the tree
@@ -376,6 +342,42 @@ where
 			debug!("{}", idx);
 			debug!("{}", hashes);
 		}
+	}
+
+	/// Build a Merkle proof for the element at the given position.
+	///
+	///
+	fn merkle_proof(&self, pos: u64) -> Result<MerkleProof<T>, String> {
+		let last_pos = self.unpruned_size();
+		debug!("merkle_proof  {}, last_pos {}", pos, last_pos);
+
+		// check this pos is actually a leaf in the MMR
+		if !is_leaf(pos) {
+			return Err(format!("not a leaf at pos {}", pos));
+		}
+
+		// check we actually have a hash in the MMR at this pos
+		self.get_hash(pos)
+			.ok_or_else(|| format!("no element at pos {}", pos))?;
+
+		let family_branch = family_branch(pos, last_pos);
+
+		let mut path = family_branch
+			.iter()
+			.filter_map(|x| self.get_from_file(x.1))
+			.collect::<Vec<_>>();
+
+		let peak_pos = match family_branch.last() {
+			Some(&(x, _)) => x,
+			None => pos,
+		};
+
+		path.append(&mut self.peak_path(peak_pos));
+
+		Ok(MerkleProof {
+			mmr_size: last_pos,
+			path,
+		})
 	}
 }
 
