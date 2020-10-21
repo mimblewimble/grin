@@ -158,7 +158,6 @@ impl DefaultHashable for TestElem {}
 
 impl PMMRable for TestElem {
 	type E = Self;
-	// type H = Hash;
 
 	fn as_elmt(&self) -> Self::E {
 		*self
@@ -173,7 +172,7 @@ impl PMMRIndexHashable for TestElem {
 	type H = Hash;
 
 	fn hash_with_index(&self, index: u64) -> Hash {
-		(index, self).hash()
+		Self::index_hash(index, self)
 	}
 }
 

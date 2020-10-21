@@ -37,7 +37,7 @@ pub trait Backend<T: PMMRable + PMMRIndexHashable> {
 	fn rewind(&mut self, position: u64, rewind_rm_pos: &Bitmap) -> Result<(), String>;
 
 	/// Get a Hash by insertion position.
-	fn get_hash(&self, position: u64) -> Option<Hash>;
+	fn get_hash(&self, position: u64) -> Option<Hash>; // TODO ******** T::H
 
 	/// Get underlying data by insertion position.
 	fn get_data(&self, position: u64) -> Option<T::E>;

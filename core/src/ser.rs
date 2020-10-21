@@ -764,7 +764,7 @@ impl PMMRIndexHashable for RangeProof {
 	type H = Hash;
 
 	fn hash_with_index(&self, index: u64) -> Hash {
-		(index, self).hash()
+		Self::index_hash(index, self)
 	}
 }
 
@@ -984,26 +984,23 @@ pub trait PMMRable: Clone + Debug + DefaultHashable {
 
 /// Generic trait to ensure PMMR elements can be hashed with an index
 pub trait PMMRIndexHashable: DefaultHashable {
+	/// Type of hash entry for intermediate nodes.
 	type H: HashEntry;
 
 	/// Hash with a given index
 	fn hash_with_index(&self, index: u64) -> Self::H;
+
+	/// Hash given index and data.
+	fn index_hash<T: DefaultHashable>(index: u64, data: T) -> Hash {
+		(index, data).hash()
+	}
 }
-
-// Concrete impls of these for all our PMMRable structs.
-// impl<P: PMMRable<H = Hash>> PMMRIndexHashable for P {
-// 	type H = P::H;
-
-// 	fn hash_with_index(&self, index: u64) -> Self::H {
-// 		(index, self).hash()
-// 	}
-// }
 
 impl PMMRIndexHashable for (Hash, Hash) {
 	type H = Hash;
 
-	fn hash_with_index(&self, index: u64) -> Self::H {
-		(index, self).hash()
+	fn hash_with_index(&self, index: u64) -> Hash {
+		Self::index_hash(index, self)
 	}
 }
 

@@ -494,7 +494,6 @@ impl Readable for TxKernel {
 /// Note: These are "variable size" to support different kernel feature variants.
 impl PMMRable for TxKernel {
 	type E = Self;
-	// type H = Hash;
 
 	fn as_elmt(&self) -> Self::E {
 		self.clone()
@@ -509,7 +508,7 @@ impl PMMRIndexHashable for TxKernel {
 	type H = Hash;
 
 	fn hash_with_index(&self, index: u64) -> Hash {
-		(index, self).hash()
+		Self::index_hash(index, self)
 	}
 }
 
@@ -2077,7 +2076,6 @@ impl Readable for OutputIdentifier {
 
 impl PMMRable for OutputIdentifier {
 	type E = Self;
-	// type H = Hash;
 
 	fn as_elmt(&self) -> OutputIdentifier {
 		*self
@@ -2096,7 +2094,7 @@ impl PMMRIndexHashable for OutputIdentifier {
 	type H = Hash;
 
 	fn hash_with_index(&self, index: u64) -> Hash {
-		(index, self).hash()
+		Self::index_hash(index, self)
 	}
 }
 

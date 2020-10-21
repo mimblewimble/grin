@@ -214,7 +214,6 @@ impl BitmapChunk {
 
 impl PMMRable for BitmapChunk {
 	type E = Self;
-	// type H = Hash;
 
 	fn as_elmt(&self) -> Self::E {
 		self.clone()
@@ -229,7 +228,7 @@ impl PMMRIndexHashable for BitmapChunk {
 	type H = Hash;
 
 	fn hash_with_index(&self, index: u64) -> Hash {
-		(index, self).hash()
+		Self::index_hash(index, self)
 	}
 }
 

@@ -257,7 +257,6 @@ impl Default for BlockHeader {
 
 impl PMMRable for BlockHeader {
 	type E = HeaderEntry;
-	// type H = Hash;
 
 	fn as_elmt(&self) -> Self::E {
 		HeaderEntry {
@@ -280,11 +279,13 @@ impl PMMRIndexHashable for BlockHeader {
 	type H = HeaderHashEntry;
 
 	fn hash_with_index(&self, index: u64) -> HeaderHashEntry {
-		let hash = (index, self).hash();
+		let hash = Self::index_hash(index, self);
 		HeaderHashEntry { hash }
 	}
 }
 
+/// Hash entry for the header MMR.
+#[derive(Clone, Debug)]
 pub struct HeaderHashEntry {
 	hash: Hash,
 }
@@ -292,6 +293,24 @@ pub struct HeaderHashEntry {
 impl HashEntry for HeaderHashEntry {
 	fn as_hash(&self) -> Hash {
 		self.hash
+	}
+}
+
+impl DefaultHashable for HeaderHashEntry {}
+
+impl PMMRIndexHashable for (HeaderHashEntry, HeaderHashEntry) {
+	type H = HeaderHashEntry;
+
+	fn hash_with_index(&self, index: u64) -> HeaderHashEntry {
+		let hash = Self::index_hash(index, self);
+		HeaderHashEntry { hash }
+	}
+}
+
+impl Writeable for HeaderHashEntry {
+	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
+		self.hash.write(writer)?;
+		Ok(())
 	}
 }
 
