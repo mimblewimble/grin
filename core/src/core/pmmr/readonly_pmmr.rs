@@ -19,12 +19,12 @@ use std::marker;
 use crate::core::hash::Hash;
 use crate::core::pmmr::pmmr::{bintree_rightmost, ReadablePMMR};
 use crate::core::pmmr::{is_leaf, Backend};
-use crate::ser::PMMRable;
+use crate::ser::{PMMRIndexHashable, PMMRable};
 
 /// Readonly view of a PMMR.
 pub struct ReadonlyPMMR<'a, T, B>
 where
-	T: PMMRable,
+	T: PMMRable + PMMRIndexHashable,
 	B: Backend<T>,
 {
 	/// The last position in the PMMR
@@ -37,7 +37,7 @@ where
 
 impl<'a, T, B> ReadonlyPMMR<'a, T, B>
 where
-	T: PMMRable,
+	T: PMMRable + PMMRIndexHashable,
 	B: 'a + Backend<T>,
 {
 	/// Build a new readonly PMMR.
@@ -110,7 +110,7 @@ where
 
 impl<'a, T, B> ReadablePMMR for ReadonlyPMMR<'a, T, B>
 where
-	T: PMMRable,
+	T: PMMRable + PMMRIndexHashable,
 	B: 'a + Backend<T>,
 {
 	type Item = T::E;

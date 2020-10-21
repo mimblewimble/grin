@@ -24,7 +24,7 @@ use crate::ser::{PMMRIndexHashable, PMMRable};
 /// Rewindable (but still readonly) view of a PMMR.
 pub struct RewindablePMMR<'a, T, B>
 where
-	T: PMMRable,
+	T: PMMRable + PMMRIndexHashable,
 	B: Backend<T>,
 {
 	/// The last position in the PMMR
@@ -37,7 +37,7 @@ where
 
 impl<'a, T, B> RewindablePMMR<'a, T, B>
 where
-	T: PMMRable,
+	T: PMMRable + PMMRIndexHashable,
 	B: 'a + Backend<T>,
 {
 	/// Build a new readonly PMMR.

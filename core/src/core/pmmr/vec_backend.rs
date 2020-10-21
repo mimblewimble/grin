@@ -20,7 +20,7 @@ use croaring::Bitmap;
 use crate::core::hash::Hash;
 use crate::core::pmmr::{self, Backend};
 use crate::core::BlockHeader;
-use crate::ser::PMMRable;
+use crate::ser::{PMMRIndexHashable, PMMRable};
 
 /// Simple/minimal/naive MMR backend implementation backed by Vec<T> and Vec<Hash>.
 /// Removed pos are maintained in a HashSet<u64>.
@@ -34,7 +34,7 @@ pub struct VecBackend<T: PMMRable> {
 	pub removed: HashSet<u64>,
 }
 
-impl<T: PMMRable> Backend<T> for VecBackend<T> {
+impl<T: PMMRable + PMMRIndexHashable> Backend<T> for VecBackend<T> {
 	fn append(&mut self, elmt: &T, hashes: Vec<Hash>) -> Result<(), String> {
 		if let Some(data) = &mut self.data {
 			data.push(elmt.clone());

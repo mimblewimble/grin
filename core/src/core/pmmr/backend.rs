@@ -16,13 +16,13 @@ use croaring::Bitmap;
 
 use crate::core::hash::Hash;
 use crate::core::BlockHeader;
-use crate::ser::PMMRable;
+use crate::ser::{PMMRIndexHashable, PMMRable};
 
 /// Storage backend for the MMR, just needs to be indexed by order of insertion.
 /// The PMMR itself does not need the Backend to be accurate on the existence
 /// of an element (i.e. remove could be a no-op) but layers above can
 /// depend on an accurate Backend to check existence.
-pub trait Backend<T: PMMRable> {
+pub trait Backend<T: PMMRable + PMMRIndexHashable> {
 	/// Append the provided Hashes to the backend storage, and optionally an
 	/// associated data element to flatfile storage (for leaf nodes only). The
 	/// position of the first element of the Vec in the MMR is provided to

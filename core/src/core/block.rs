@@ -14,7 +14,6 @@
 
 //! Blocks and blockheaders
 
-use crate::core::committed::{self, Committed};
 use crate::core::compact_block::CompactBlock;
 use crate::core::hash::{DefaultHashable, Hash, Hashed, ZERO_HASH};
 use crate::core::verifier_cache::VerifierCache;
@@ -30,6 +29,10 @@ use crate::ser::{
 use crate::{
 	consensus::{self, reward, REWARD},
 	ser::PMMRIndexHashable,
+};
+use crate::{
+	core::committed::{self, Committed},
+	ser::HashEntry,
 };
 use chrono::naive::{MAX_DATE, MIN_DATE};
 use chrono::prelude::{DateTime, NaiveDateTime, Utc};
@@ -274,10 +277,21 @@ impl PMMRable for BlockHeader {
 }
 
 impl PMMRIndexHashable for BlockHeader {
-	type H = Hash;
+	type H = HeaderHashEntry;
 
-	fn hash_with_index(&self, index: u64) -> Hash {
-		(index, self).hash()
+	fn hash_with_index(&self, index: u64) -> HeaderHashEntry {
+		let hash = (index, self).hash();
+		HeaderHashEntry { hash }
+	}
+}
+
+pub struct HeaderHashEntry {
+	hash: Hash,
+}
+
+impl HashEntry for HeaderHashEntry {
+	fn as_hash(&self) -> Hash {
+		self.hash
 	}
 }
 

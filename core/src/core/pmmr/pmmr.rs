@@ -170,7 +170,7 @@ pub trait ReadablePMMR {
 /// we are in the sequence of nodes making up the MMR.
 pub struct PMMR<'a, T, B>
 where
-	T: PMMRable,
+	T: PMMRable + PMMRIndexHashable,
 	B: Backend<T>,
 {
 	/// The last position in the PMMR
@@ -377,7 +377,7 @@ where
 
 impl<'a, T, B> ReadablePMMR for PMMR<'a, T, B>
 where
-	T: PMMRable,
+	T: PMMRable + PMMRIndexHashable,
 	B: 'a + Backend<T>,
 {
 	type Item = T::E;
