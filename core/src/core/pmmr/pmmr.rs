@@ -17,7 +17,7 @@ use std::u64;
 
 use croaring::Bitmap;
 
-use crate::core::hash::{Hash, ZERO_HASH};
+use crate::core::hash::{DefaultHashable, Hash, ZERO_HASH};
 use crate::core::merkle_proof::MerkleProof;
 use crate::core::pmmr::{Backend, ReadonlyPMMR};
 use crate::core::BlockHeader;
@@ -30,15 +30,17 @@ const ALL_ONES: u64 = u64::MAX;
 pub trait ReadablePMMR {
 	/// Leaf type
 	type Item;
+	/// Hash type
+	type H: HashEntry + Default;
 
 	/// Get the hash at provided position in the MMR.
-	fn get_hash(&self, pos: u64) -> Option<Hash>;
+	fn get_hash(&self, pos: u64) -> Option<Self::H>;
 
 	/// Get the data element at provided position in the MMR.
 	fn get_data(&self, pos: u64) -> Option<Self::Item>;
 
 	/// Get the hash from the underlying MMR file (ignores the remove log).
-	fn get_from_file(&self, pos: u64) -> Option<Hash>;
+	fn get_from_file(&self, pos: u64) -> Option<Self::H>;
 
 	/// Get the data element at provided position in the MMR (ignores the remove log).
 	fn get_data_from_file(&self, pos: u64) -> Option<Self::Item>;
@@ -55,6 +57,8 @@ pub trait ReadablePMMR {
 	/// Number of leaves in the MMR
 	fn n_unpruned_leaves(&self) -> u64;
 
+	fn hash_children(index: u64, lc: Self::H, rc: Self::H) -> Self::H;
+
 	/// Is the MMR empty?
 	fn is_empty(&self) -> bool {
 		self.unpruned_size() == 0
@@ -64,7 +68,7 @@ pub trait ReadablePMMR {
 	/// all the peaks to the right of this peak (if any).
 	/// If this return a hash then this is our peaks sibling.
 	/// If none then the sibling of our peak is the peak to the left.
-	fn bag_the_rhs(&self, peak_pos: u64) -> Option<Hash> {
+	fn bag_the_rhs(&self, peak_pos: u64) -> Option<Self::H> {
 		let last_pos = self.unpruned_size();
 		let rhs = peaks(last_pos)
 			.into_iter()
@@ -75,14 +79,14 @@ pub trait ReadablePMMR {
 		for peak in rhs.rev() {
 			res = match res {
 				None => Some(peak),
-				Some(rhash) => Some((peak, rhash).hash_with_index(last_pos)),
+				Some(rhash) => Some(Self::hash_children(last_pos, peak, rhash)),
 			}
 		}
 		res
 	}
 
 	/// Returns a vec of the peaks of this MMR.
-	fn peaks(&self) -> Vec<Hash> {
+	fn peaks(&self) -> Vec<Self::H> {
 		peaks(self.unpruned_size())
 			.into_iter()
 			.filter_map(move |pi| {
@@ -94,7 +98,7 @@ pub trait ReadablePMMR {
 	}
 
 	/// Hashes of the peaks excluding `peak_pos`, where the rhs is bagged together
-	fn peak_path(&self, peak_pos: u64) -> Vec<Hash> {
+	fn peak_path(&self, peak_pos: u64) -> Vec<Self::H> {
 		let rhs = self.bag_the_rhs(peak_pos);
 		let mut res = peaks(self.unpruned_size())
 			.into_iter()
@@ -111,16 +115,16 @@ pub trait ReadablePMMR {
 
 	/// Computes the root of the MMR. Find all the peaks in the current
 	/// tree and "bags" them to get a single peak.
-	fn root(&self) -> Result<Hash, String> {
+	fn root(&self) -> Result<Self::H, String> {
 		if self.is_empty() {
-			return Ok(ZERO_HASH);
+			return Ok(Default::default());
 		}
 		let mut res = None;
 		let peaks = self.peaks();
 		for peak in peaks.into_iter().rev() {
 			res = match res {
 				None => Some(peak),
-				Some(rhash) => Some((peak, rhash).hash_with_index(self.unpruned_size())),
+				Some(rhash) => Some(Self::hash_children(self.unpruned_size(), peak, rhash)), // Some((peak, rhash).hash_with_index(self.unpruned_size())),
 			}
 		}
 		res.ok_or_else(|| "no root, invalid tree".to_owned())
@@ -213,7 +217,7 @@ where
 	/// the same time if applicable.
 	pub fn push(&mut self, elmt: &T) -> Result<u64, String> {
 		let elmt_pos = self.last_pos + 1;
-		let mut current_hash = elmt.hash_with_index(elmt_pos - 1).as_hash();
+		let mut current_hash = elmt.hash_with_index(elmt_pos - 1);
 
 		let mut hashes = vec![current_hash];
 		let mut pos = elmt_pos;
@@ -232,7 +236,7 @@ where
 				.ok_or("missing left sibling in tree, should not have been pruned")?;
 			peak *= 2;
 			pos += 1;
-			current_hash = (left_hash, current_hash).hash_with_index(pos - 1);
+			current_hash = T::hash_children(pos - 1, left_hash, current_hash);
 			hashes.push(current_hash);
 		}
 
@@ -298,7 +302,7 @@ where
 					if let Some(left_child_hs) = self.get_from_file(left_pos) {
 						if let Some(right_child_hs) = self.get_from_file(right_pos) {
 							// hash the two child nodes together with parent_pos and compare
-							if (left_child_hs, right_child_hs).hash_with_index(n - 1) != hash {
+							if T::hash_children(n - 1, left_child_hs, right_child_hs) != hash {
 								return Err(format!(
 									"Invalid MMR, hash of parent at {} does \
 									 not match children.",
@@ -331,7 +335,7 @@ where
 				idx.push_str(&format!("{:>8} ", m + 1));
 				let ohs = self.get_hash(m + 1);
 				match ohs {
-					Some(hs) => hashes.push_str(&format!("{} ", hs)),
+					Some(hs) => hashes.push_str(&format!("{} ", hs.as_hash())),
 					None => hashes.push_str(&format!("{:>8} ", "??")),
 				}
 			}
@@ -365,7 +369,7 @@ where
 				idx.push_str(&format!("{:>8} ", m + 1));
 				let ohs = self.get_from_file(m + 1);
 				match ohs {
-					Some(hs) => hashes.push_str(&format!("{} ", hs)),
+					Some(hs) => hashes.push_str(&format!("{} ", hs.as_hash())),
 					None => hashes.push_str(&format!("{:>8} ", " .")),
 				}
 			}
@@ -381,8 +385,9 @@ where
 	B: 'a + Backend<T>,
 {
 	type Item = T::E;
+	type H = T::H;
 
-	fn get_hash(&self, pos: u64) -> Option<Hash> {
+	fn get_hash(&self, pos: u64) -> Option<T::H> {
 		if pos > self.last_pos {
 			None
 		} else if is_leaf(pos) {
@@ -407,7 +412,7 @@ where
 		}
 	}
 
-	fn get_from_file(&self, pos: u64) -> Option<Hash> {
+	fn get_from_file(&self, pos: u64) -> Option<T::H> {
 		if pos > self.last_pos {
 			None
 		} else {
@@ -437,6 +442,11 @@ where
 
 	fn n_unpruned_leaves(&self) -> u64 {
 		self.backend.n_unpruned_leaves()
+	}
+
+	// Delegate child hashing logic.
+	fn hash_children(index: u64, lc: Self::H, rc: Self::H) -> Self::H {
+		T::hash_children(index, lc, rc)
 	}
 }
 

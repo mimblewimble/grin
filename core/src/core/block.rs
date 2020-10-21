@@ -282,12 +282,25 @@ impl PMMRIndexHashable for BlockHeader {
 		let hash = Self::index_hash(index, self);
 		HeaderHashEntry { hash }
 	}
+
+	fn hash_children(index: u64, lc: Self::H, rc: Self::H) -> Self::H {
+		let hash = Self::index_hash(index, (lc, rc));
+		HeaderHashEntry { hash }
+	}
 }
 
 /// Hash entry for the header MMR.
 #[derive(Clone, Debug)]
 pub struct HeaderHashEntry {
 	hash: Hash,
+}
+
+impl Default for HeaderHashEntry {
+	fn default() -> Self {
+		HeaderHashEntry {
+			hash: Default::default(),
+		}
+	}
 }
 
 impl HashEntry for HeaderHashEntry {
@@ -298,11 +311,17 @@ impl HashEntry for HeaderHashEntry {
 
 impl DefaultHashable for HeaderHashEntry {}
 
+/// TODO - What do we need this for?
 impl PMMRIndexHashable for (HeaderHashEntry, HeaderHashEntry) {
 	type H = HeaderHashEntry;
 
 	fn hash_with_index(&self, index: u64) -> HeaderHashEntry {
 		let hash = Self::index_hash(index, self);
+		HeaderHashEntry { hash }
+	}
+
+	fn hash_children(index: u64, lc: Self::H, rc: Self::H) -> Self::H {
+		let hash = Self::index_hash(index, (lc, rc));
 		HeaderHashEntry { hash }
 	}
 }

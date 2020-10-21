@@ -25,17 +25,17 @@ use crate::ser::{PMMRIndexHashable, PMMRable};
 /// Simple/minimal/naive MMR backend implementation backed by Vec<T> and Vec<Hash>.
 /// Removed pos are maintained in a HashSet<u64>.
 #[derive(Clone, Debug)]
-pub struct VecBackend<T: PMMRable> {
+pub struct VecBackend<T: PMMRable + PMMRIndexHashable> {
 	/// Backend elements (optional, possible to just store hashes).
 	pub data: Option<Vec<T>>,
 	/// Vec of hashes for the PMMR (both leaves and parents).
-	pub hashes: Vec<Hash>,
+	pub hashes: Vec<T::H>,
 	/// Positions of removed elements (is this applicable if we do not store data?)
 	pub removed: HashSet<u64>,
 }
 
 impl<T: PMMRable + PMMRIndexHashable> Backend<T> for VecBackend<T> {
-	fn append(&mut self, elmt: &T, hashes: Vec<Hash>) -> Result<(), String> {
+	fn append(&mut self, elmt: &T, hashes: Vec<T::H>) -> Result<(), String> {
 		if let Some(data) = &mut self.data {
 			data.push(elmt.clone());
 		}
@@ -43,7 +43,7 @@ impl<T: PMMRable + PMMRIndexHashable> Backend<T> for VecBackend<T> {
 		Ok(())
 	}
 
-	fn get_hash(&self, position: u64) -> Option<Hash> {
+	fn get_hash(&self, position: u64) -> Option<T::H> {
 		if self.removed.contains(&position) {
 			None
 		} else {
@@ -59,7 +59,7 @@ impl<T: PMMRable + PMMRIndexHashable> Backend<T> for VecBackend<T> {
 		}
 	}
 
-	fn get_from_file(&self, position: u64) -> Option<Hash> {
+	fn get_from_file(&self, position: u64) -> Option<T::H> {
 		let idx = usize::try_from(position.saturating_sub(1)).expect("usize from u64");
 		self.hashes.get(idx).cloned()
 	}
@@ -122,7 +122,7 @@ impl<T: PMMRable + PMMRIndexHashable> Backend<T> for VecBackend<T> {
 	fn dump_stats(&self) {}
 }
 
-impl<T: PMMRable> VecBackend<T> {
+impl<T: PMMRable + PMMRIndexHashable> VecBackend<T> {
 	/// Instantiates a new empty vec backend.
 	pub fn new() -> VecBackend<T> {
 		VecBackend {

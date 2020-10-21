@@ -100,22 +100,22 @@ where
 
 	/// Computes the root of the MMR. Find all the peaks in the current
 	/// tree and "bags" them to get a single peak.
-	pub fn root(&self) -> Result<Hash, String> {
+	pub fn root(&self) -> Result<T::H, String> {
 		if self.is_empty() {
-			return Ok(ZERO_HASH);
+			return Ok(Default::default());
 		}
 		let mut res = None;
 		for peak in self.peaks().iter().rev() {
 			res = match res {
 				None => Some(*peak),
-				Some(rhash) => Some((*peak, rhash).hash_with_index(self.unpruned_size())),
+				Some(rhash) => Some(T::hash_children(self.unpruned_size(), *peak, rhash)),
 			}
 		}
 		res.ok_or_else(|| "no root, invalid tree".to_owned())
 	}
 
 	/// Returns a vec of the peaks of this MMR.
-	pub fn peaks(&self) -> Vec<Hash> {
+	pub fn peaks(&self) -> Vec<T::H> {
 		let peaks_pos = peaks(self.last_pos);
 		peaks_pos
 			.into_iter()

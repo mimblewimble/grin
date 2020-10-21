@@ -766,6 +766,10 @@ impl PMMRIndexHashable for RangeProof {
 	fn hash_with_index(&self, index: u64) -> Hash {
 		Self::index_hash(index, self)
 	}
+
+	fn hash_children(index: u64, lc: Self::H, rc: Self::H) -> Self::H {
+		Self::index_hash(index, (lc, rc))
+	}
 }
 
 impl Readable for Signature {
@@ -985,10 +989,12 @@ pub trait PMMRable: Clone + Debug + DefaultHashable {
 /// Generic trait to ensure PMMR elements can be hashed with an index
 pub trait PMMRIndexHashable: DefaultHashable {
 	/// Type of hash entry for intermediate nodes.
-	type H: HashEntry;
+	type H: HashEntry + Clone + Default;
 
 	/// Hash with a given index
 	fn hash_with_index(&self, index: u64) -> Self::H;
+
+	fn hash_children(index: u64, lc: Self::H, rc: Self::H) -> Self::H;
 
 	/// Hash given index and data.
 	fn index_hash<T: DefaultHashable>(index: u64, data: T) -> Hash {
@@ -996,15 +1002,20 @@ pub trait PMMRIndexHashable: DefaultHashable {
 	}
 }
 
+/// TODO - What do we need this for?
 impl PMMRIndexHashable for (Hash, Hash) {
 	type H = Hash;
 
 	fn hash_with_index(&self, index: u64) -> Hash {
 		Self::index_hash(index, self)
 	}
+
+	fn hash_children(index: u64, lc: Hash, rc: Hash) -> Hash {
+		Self::index_hash(index, (lc, rc))
+	}
 }
 
-pub trait HashEntry {
+pub trait HashEntry: DefaultHashable {
 	fn as_hash(&self) -> Hash;
 }
 

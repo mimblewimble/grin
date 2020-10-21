@@ -88,7 +88,7 @@ where
 	/// Helper function to get the last N nodes inserted, i.e. the last
 	/// n nodes along the bottom of the tree.
 	/// May return less than n items if the MMR has been pruned/compacted.
-	pub fn get_last_n_insertions(&self, n: u64) -> Vec<(Hash, T::E)> {
+	pub fn get_last_n_insertions(&self, n: u64) -> Vec<(T::H, T::E)> {
 		let mut return_vec = vec![];
 		let mut last_leaf = self.last_pos;
 		for _ in 0..n as u64 {
@@ -114,8 +114,9 @@ where
 	B: 'a + Backend<T>,
 {
 	type Item = T::E;
+	type H = T::H;
 
-	fn get_hash(&self, pos: u64) -> Option<Hash> {
+	fn get_hash(&self, pos: u64) -> Option<Self::H> {
 		if pos > self.last_pos {
 			None
 		} else if is_leaf(pos) {
@@ -140,7 +141,7 @@ where
 		}
 	}
 
-	fn get_from_file(&self, pos: u64) -> Option<Hash> {
+	fn get_from_file(&self, pos: u64) -> Option<Self::H> {
 		if pos > self.last_pos {
 			None
 		} else {
@@ -170,5 +171,10 @@ where
 
 	fn n_unpruned_leaves(&self) -> u64 {
 		self.backend.n_unpruned_leaves()
+	}
+
+	/// Delegate our child hashing logic.
+	fn hash_children(index: u64, lc: Self::H, rc: Self::H) -> Self::H {
+		T::hash_children(index, lc, rc)
 	}
 }

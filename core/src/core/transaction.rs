@@ -510,6 +510,10 @@ impl PMMRIndexHashable for TxKernel {
 	fn hash_with_index(&self, index: u64) -> Hash {
 		Self::index_hash(index, self)
 	}
+
+	fn hash_children(index: u64, lc: Self::H, rc: Self::H) -> Self::H {
+		Self::index_hash(index, (lc, rc))
+	}
 }
 
 impl KernelFeatures {
@@ -2095,6 +2099,10 @@ impl PMMRIndexHashable for OutputIdentifier {
 
 	fn hash_with_index(&self, index: u64) -> Hash {
 		Self::index_hash(index, self)
+	}
+
+	fn hash_children(index: u64, lc: Self::H, rc: Self::H) -> Self::H {
+		Self::index_hash(index, (lc, rc))
 	}
 }
 
