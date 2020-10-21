@@ -17,7 +17,7 @@
 use crate::core::hash::Hash;
 use crate::core::pmmr;
 use crate::ser;
-use crate::ser::{PMMRIndexHashable, Readable, Reader, Writeable, Writer};
+use crate::ser::{HashEntry, PMMRIndexHashable, Readable, Reader, Writeable, Writer};
 use util::ToHex;
 
 /// Merkle proof errors.
@@ -92,10 +92,10 @@ impl MerkleProof {
 
 	/// Verifies the Merkle proof against the provided
 	/// root hash, element and position in the MMR.
-	pub fn verify(
+	pub fn verify<P: PMMRIndexHashable>(
 		&self,
 		root: Hash,
-		element: &dyn PMMRIndexHashable,
+		element: &P,
 		node_pos: u64,
 	) -> Result<(), MerkleProofError> {
 		let mut proof = self.clone();
@@ -108,10 +108,10 @@ impl MerkleProof {
 	/// Consumes the Merkle proof while verifying it.
 	/// The proof can no longer be used by the caller after dong this.
 	/// Caller must clone() the proof first.
-	fn verify_consume(
+	fn verify_consume<P: PMMRIndexHashable>(
 		&mut self,
 		root: Hash,
-		element: &dyn PMMRIndexHashable,
+		element: &P,
 		node_pos: u64,
 		peaks_pos: &[u64],
 	) -> Result<(), MerkleProofError> {
@@ -119,7 +119,8 @@ impl MerkleProof {
 			element.hash_with_index(self.mmr_size)
 		} else {
 			element.hash_with_index(node_pos - 1)
-		};
+		}
+		.as_hash();
 
 		// handle special case of only a single entry in the MMR
 		// (no siblings to hash together)

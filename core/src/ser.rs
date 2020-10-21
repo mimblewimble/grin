@@ -748,6 +748,7 @@ impl Readable for RangeProof {
 
 impl PMMRable for RangeProof {
 	type E = Self;
+	type H = Hash;
 
 	fn as_elmt(&self) -> Self::E {
 		*self
@@ -959,10 +960,12 @@ impl<A: Readable, B: Readable, C: Readable, D: Readable> Readable for (A, B, C, 
 }
 
 /// Trait for types that can be added to a PMMR.
-pub trait PMMRable: Writeable + Clone + Debug + DefaultHashable {
+pub trait PMMRable: Clone + Debug + DefaultHashable {
 	/// The type of element actually stored in the MMR data file.
 	/// This allows us to store Hash elements in the header MMR for variable size BlockHeaders.
 	type E: Readable + Writeable + Debug;
+
+	type H: HashEntry;
 
 	/// Convert the pmmrable into the element to be stored in the MMR data file.
 	fn as_elmt(&self) -> Self::E;
@@ -972,14 +975,35 @@ pub trait PMMRable: Writeable + Clone + Debug + DefaultHashable {
 }
 
 /// Generic trait to ensure PMMR elements can be hashed with an index
-pub trait PMMRIndexHashable {
+pub trait PMMRIndexHashable: DefaultHashable {
+	type H: HashEntry;
+
 	/// Hash with a given index
-	fn hash_with_index(&self, index: u64) -> Hash;
+	fn hash_with_index(&self, index: u64) -> Self::H;
 }
 
-impl<T: DefaultHashable> PMMRIndexHashable for T {
-	fn hash_with_index(&self, index: u64) -> Hash {
+impl<P: PMMRable<H = Hash>> PMMRIndexHashable for P {
+	type H = P::H;
+
+	fn hash_with_index(&self, index: u64) -> Self::H {
 		(index, self).hash()
+	}
+}
+
+impl PMMRIndexHashable for (Hash, Hash) {
+	type H = Hash;
+
+	fn hash_with_index(&self, index: u64) -> Self::H {
+		(index, self).hash()
+	}
+}
+pub trait HashEntry {
+	fn as_hash(&self) -> Hash;
+}
+
+impl HashEntry for Hash {
+	fn as_hash(&self) -> Hash {
+		*self
 	}
 }
 

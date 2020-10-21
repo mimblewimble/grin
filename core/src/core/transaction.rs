@@ -14,7 +14,7 @@
 
 //! Transactions
 
-use crate::core::hash::{DefaultHashable, Hashed};
+use crate::core::hash::{DefaultHashable, Hash, Hashed};
 use crate::core::verifier_cache::VerifierCache;
 use crate::core::{committed, Committed};
 use crate::libtx::{aggsig, secp_ser};
@@ -491,6 +491,7 @@ impl Readable for TxKernel {
 /// Note: These are "variable size" to support different kernel feature variants.
 impl PMMRable for TxKernel {
 	type E = Self;
+	type H = Hash;
 
 	fn as_elmt(&self) -> Self::E {
 		self.clone()
@@ -2065,6 +2066,7 @@ impl Readable for OutputIdentifier {
 
 impl PMMRable for OutputIdentifier {
 	type E = Self;
+	type H = Hash;
 
 	fn as_elmt(&self) -> OutputIdentifier {
 		*self

@@ -21,7 +21,7 @@ use crate::core::hash::{Hash, ZERO_HASH};
 use crate::core::merkle_proof::MerkleProof;
 use crate::core::pmmr::{Backend, ReadonlyPMMR};
 use crate::core::BlockHeader;
-use crate::ser::{PMMRIndexHashable, PMMRable};
+use crate::ser::{HashEntry, PMMRIndexHashable, PMMRable};
 
 /// 64 bits all ones: 0b11111111...1
 const ALL_ONES: u64 = u64::MAX;
@@ -182,7 +182,7 @@ where
 
 impl<'a, T, B> PMMR<'a, T, B>
 where
-	T: PMMRable,
+	T: PMMRable + PMMRIndexHashable,
 	B: 'a + Backend<T>,
 {
 	/// Build a new prunable Merkle Mountain Range using the provided backend.
@@ -213,7 +213,7 @@ where
 	/// the same time if applicable.
 	pub fn push(&mut self, elmt: &T) -> Result<u64, String> {
 		let elmt_pos = self.last_pos + 1;
-		let mut current_hash = elmt.hash_with_index(elmt_pos - 1);
+		let mut current_hash = elmt.hash_with_index(elmt_pos - 1).as_hash();
 
 		let mut hashes = vec![current_hash];
 		let mut pos = elmt_pos;

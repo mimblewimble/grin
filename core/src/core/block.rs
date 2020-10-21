@@ -251,6 +251,7 @@ impl Default for BlockHeader {
 
 impl PMMRable for BlockHeader {
 	type E = HeaderEntry;
+	type H = Hash;
 
 	fn as_elmt(&self) -> Self::E {
 		HeaderEntry {

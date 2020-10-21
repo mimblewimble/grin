@@ -213,6 +213,7 @@ impl BitmapChunk {
 
 impl PMMRable for BitmapChunk {
 	type E = Self;
+	type H = Hash;
 
 	fn as_elmt(&self) -> Self::E {
 		self.clone()

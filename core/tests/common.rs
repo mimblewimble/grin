@@ -14,7 +14,7 @@
 
 //! Common test functions
 
-use grin_core::core::hash::DefaultHashable;
+use grin_core::core::hash::{DefaultHashable, Hash};
 use grin_core::core::{
 	Block, BlockHeader, KernelFeatures, OutputFeatures, OutputIdentifier, Transaction,
 };
@@ -155,6 +155,7 @@ impl DefaultHashable for TestElem {}
 
 impl PMMRable for TestElem {
 	type E = Self;
+	type H = Hash;
 
 	fn as_elmt(&self) -> Self::E {
 		*self
