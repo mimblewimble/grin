@@ -14,7 +14,6 @@
 
 //! Blocks and blockheaders
 
-use crate::consensus::{self, reward, REWARD};
 use crate::core::committed::{self, Committed};
 use crate::core::compact_block::CompactBlock;
 use crate::core::hash::{DefaultHashable, Hash, Hashed, ZERO_HASH};
@@ -27,6 +26,10 @@ use crate::global;
 use crate::pow::{verify_size, Difficulty, Proof, ProofOfWork};
 use crate::ser::{
 	self, deserialize_default, serialize_default, PMMRable, Readable, Reader, Writeable, Writer,
+};
+use crate::{
+	consensus::{self, reward, REWARD},
+	ser::PMMRIndexHashable,
 };
 use chrono::naive::{MAX_DATE, MIN_DATE};
 use chrono::prelude::{DateTime, NaiveDateTime, Utc};
@@ -251,7 +254,7 @@ impl Default for BlockHeader {
 
 impl PMMRable for BlockHeader {
 	type E = HeaderEntry;
-	type H = Hash;
+	// type H = Hash;
 
 	fn as_elmt(&self) -> Self::E {
 		HeaderEntry {
@@ -267,6 +270,14 @@ impl PMMRable for BlockHeader {
 	fn elmt_size() -> Option<u16> {
 		const LEN: usize = Hash::LEN + 8 + Difficulty::LEN + 4 + 1;
 		Some(LEN.try_into().unwrap())
+	}
+}
+
+impl PMMRIndexHashable for BlockHeader {
+	type H = Hash;
+
+	fn hash_with_index(&self, index: u64) -> Hash {
+		(index, self).hash()
 	}
 }
 

@@ -748,7 +748,7 @@ impl Readable for RangeProof {
 
 impl PMMRable for RangeProof {
 	type E = Self;
-	type H = Hash;
+	// type H = Hash;
 
 	fn as_elmt(&self) -> Self::E {
 		*self
@@ -757,6 +757,14 @@ impl PMMRable for RangeProof {
 	// Size is length prefix (8 bytes for u64) + MAX_PROOF_SIZE.
 	fn elmt_size() -> Option<u16> {
 		Some((8 + MAX_PROOF_SIZE).try_into().unwrap())
+	}
+}
+
+impl PMMRIndexHashable for RangeProof {
+	type H = Hash;
+
+	fn hash_with_index(&self, index: u64) -> Hash {
+		(index, self).hash()
 	}
 }
 
@@ -965,7 +973,7 @@ pub trait PMMRable: Clone + Debug + DefaultHashable {
 	/// This allows us to store Hash elements in the header MMR for variable size BlockHeaders.
 	type E: Readable + Writeable + Debug;
 
-	type H: HashEntry;
+	// type H: HashEntry;
 
 	/// Convert the pmmrable into the element to be stored in the MMR data file.
 	fn as_elmt(&self) -> Self::E;
@@ -982,13 +990,14 @@ pub trait PMMRIndexHashable: DefaultHashable {
 	fn hash_with_index(&self, index: u64) -> Self::H;
 }
 
-impl<P: PMMRable<H = Hash>> PMMRIndexHashable for P {
-	type H = P::H;
+// Concrete impls of these for all our PMMRable structs.
+// impl<P: PMMRable<H = Hash>> PMMRIndexHashable for P {
+// 	type H = P::H;
 
-	fn hash_with_index(&self, index: u64) -> Self::H {
-		(index, self).hash()
-	}
-}
+// 	fn hash_with_index(&self, index: u64) -> Self::H {
+// 		(index, self).hash()
+// 	}
+// }
 
 impl PMMRIndexHashable for (Hash, Hash) {
 	type H = Hash;
@@ -997,6 +1006,7 @@ impl PMMRIndexHashable for (Hash, Hash) {
 		(index, self).hash()
 	}
 }
+
 pub trait HashEntry {
 	fn as_hash(&self) -> Hash;
 }

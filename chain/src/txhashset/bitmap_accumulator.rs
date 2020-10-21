@@ -17,8 +17,9 @@ use std::time::Instant;
 
 use bit_vec::BitVec;
 use croaring::Bitmap;
+use grin_core::ser::PMMRIndexHashable;
 
-use crate::core::core::hash::{DefaultHashable, Hash};
+use crate::core::core::hash::{DefaultHashable, Hash, Hashed};
 use crate::core::core::pmmr::{self, ReadablePMMR, ReadonlyPMMR, VecBackend, PMMR};
 use crate::core::ser::{self, PMMRable, Readable, Reader, Writeable, Writer};
 use crate::error::{Error, ErrorKind};
@@ -213,7 +214,7 @@ impl BitmapChunk {
 
 impl PMMRable for BitmapChunk {
 	type E = Self;
-	type H = Hash;
+	// type H = Hash;
 
 	fn as_elmt(&self) -> Self::E {
 		self.clone()
@@ -221,6 +222,14 @@ impl PMMRable for BitmapChunk {
 
 	fn elmt_size() -> Option<u16> {
 		Some(Self::LEN_BYTES as u16)
+	}
+}
+
+impl PMMRIndexHashable for BitmapChunk {
+	type H = Hash;
+
+	fn hash_with_index(&self, index: u64) -> Hash {
+		(index, self).hash()
 	}
 }
 

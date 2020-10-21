@@ -14,7 +14,6 @@
 
 //! Common test functions
 
-use grin_core::core::hash::{DefaultHashable, Hash};
 use grin_core::core::{
 	Block, BlockHeader, KernelFeatures, OutputFeatures, OutputIdentifier, Transaction,
 };
@@ -25,6 +24,10 @@ use grin_core::libtx::{
 };
 use grin_core::pow::Difficulty;
 use grin_core::ser::{self, PMMRable, Readable, Reader, Writeable, Writer};
+use grin_core::{
+	core::hash::{DefaultHashable, Hash, Hashed},
+	ser::PMMRIndexHashable,
+};
 use keychain::{Identifier, Keychain};
 
 // utility producing a transaction with 2 inputs and a single outputs
@@ -155,7 +158,7 @@ impl DefaultHashable for TestElem {}
 
 impl PMMRable for TestElem {
 	type E = Self;
-	type H = Hash;
+	// type H = Hash;
 
 	fn as_elmt(&self) -> Self::E {
 		*self
@@ -163,6 +166,14 @@ impl PMMRable for TestElem {
 
 	fn elmt_size() -> Option<u16> {
 		Some(16)
+	}
+}
+
+impl PMMRIndexHashable for TestElem {
+	type H = Hash;
+
+	fn hash_with_index(&self, index: u64) -> Hash {
+		(index, self).hash()
 	}
 }
 

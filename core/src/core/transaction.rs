@@ -14,7 +14,6 @@
 
 //! Transactions
 
-use crate::core::hash::{DefaultHashable, Hash, Hashed};
 use crate::core::verifier_cache::VerifierCache;
 use crate::core::{committed, Committed};
 use crate::libtx::{aggsig, secp_ser};
@@ -23,6 +22,10 @@ use crate::ser::{
 	Writeable, Writer,
 };
 use crate::{consensus, global};
+use crate::{
+	core::hash::{DefaultHashable, Hash, Hashed},
+	ser::PMMRIndexHashable,
+};
 use enum_primitive::FromPrimitive;
 use keychain::{self, BlindingFactor};
 use std::cmp::Ordering;
@@ -491,7 +494,7 @@ impl Readable for TxKernel {
 /// Note: These are "variable size" to support different kernel feature variants.
 impl PMMRable for TxKernel {
 	type E = Self;
-	type H = Hash;
+	// type H = Hash;
 
 	fn as_elmt(&self) -> Self::E {
 		self.clone()
@@ -499,6 +502,14 @@ impl PMMRable for TxKernel {
 
 	fn elmt_size() -> Option<u16> {
 		None
+	}
+}
+
+impl PMMRIndexHashable for TxKernel {
+	type H = Hash;
+
+	fn hash_with_index(&self, index: u64) -> Hash {
+		(index, self).hash()
 	}
 }
 
@@ -2066,7 +2077,7 @@ impl Readable for OutputIdentifier {
 
 impl PMMRable for OutputIdentifier {
 	type E = Self;
-	type H = Hash;
+	// type H = Hash;
 
 	fn as_elmt(&self) -> OutputIdentifier {
 		*self
@@ -2078,6 +2089,14 @@ impl PMMRable for OutputIdentifier {
 				.try_into()
 				.unwrap(),
 		)
+	}
+}
+
+impl PMMRIndexHashable for OutputIdentifier {
+	type H = Hash;
+
+	fn hash_with_index(&self, index: u64) -> Hash {
+		(index, self).hash()
 	}
 }
 
