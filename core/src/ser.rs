@@ -1002,24 +1002,13 @@ pub trait PMMRIndexHashable: DefaultHashable {
 	}
 }
 
-// /// TODO - What do we need this for?
-// impl PMMRIndexHashable for (Hash, Hash) {
-// 	type H = Hash;
-
-// 	fn hash_with_index(&self, index: u64) -> Hash {
-// 		Self::index_hash(index, self)
-// 	}
-
-// 	fn hash_children(index: u64, lc: Hash, rc: Hash) -> Hash {
-// 		Self::index_hash(index, (lc, rc))
-// 	}
-// }
-
 pub trait HashEntry:
 	DefaultHashable
 	+ Readable
 	+ Default
 	+ Clone
+	+ Copy
+	+ Debug
 	+ PartialEq
 	+ serde::ser::Serialize
 	+ serde::de::DeserializeOwned

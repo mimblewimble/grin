@@ -290,7 +290,7 @@ impl PMMRIndexHashable for BlockHeader {
 }
 
 /// Hash entry for the header MMR.
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
 pub struct HeaderHashEntry {
 	hash: Hash,
 }

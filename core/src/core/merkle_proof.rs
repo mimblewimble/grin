@@ -16,8 +16,8 @@
 
 use crate::core::pmmr;
 use crate::ser;
-use crate::ser::{HashEntry, PMMRIndexHashable, Readable, Reader, Writeable, Writer};
-use crate::{core::hash::Hash, ser::read_multi};
+use crate::ser::read_multi;
+use crate::ser::{PMMRIndexHashable, Readable, Reader, Writeable, Writer};
 use util::ToHex;
 
 /// Merkle proof errors.
@@ -87,34 +87,46 @@ impl<T: PMMRIndexHashable> MerkleProof<T> {
 
 	/// Verifies the Merkle proof against the provided
 	/// root hash, element and position in the MMR.
-	pub fn verify(&self, root: T::H, element: &T, node_pos: u64) -> Result<(), MerkleProofError> {
-		let mut proof = self.clone();
-		// calculate the peaks once as these are based on overall MMR size
-		// (and will not change)
-		let peaks_pos = pmmr::peaks(self.mmr_size);
-		proof.verify_consume(root, element, node_pos, &peaks_pos)
+	pub fn verify(&mut self, root: T::H, node: &T, node_pos: u64) -> Result<(), MerkleProofError> {
+		// TODO - can we just max or min this?
+		let index = if node_pos > self.mmr_size {
+			self.mmr_size
+		} else {
+			node_pos - 1
+		};
+		let hash = node.hash_with_index(index);
+		self.verify_consume(root, hash, node_pos)
 	}
 
-	/// Consumes the Merkle proof while verifying it.
-	/// The proof can no longer be used by the caller after dong this.
-	/// Caller must clone() the proof first.
+	fn verify_children(
+		&mut self,
+		root: T::H,
+		lc: T::H,
+		rc: T::H,
+		node_pos: u64,
+	) -> Result<(), MerkleProofError> {
+		// TODO - can we just max or min this?
+		let index = if node_pos > self.mmr_size {
+			self.mmr_size
+		} else {
+			node_pos - 1
+		};
+		let hash = T::hash_children(index, lc, rc);
+		self.verify_consume(root, hash, node_pos)
+	}
+
+	/// Internal verify fn.
+	/// Takes a mut proof as it removes elements from the path as it progresses.
 	fn verify_consume(
 		&mut self,
 		root: T::H,
-		element: &T,
+		node: T::H,
 		node_pos: u64,
-		peaks_pos: &[u64],
 	) -> Result<(), MerkleProofError> {
-		let node_hash = if node_pos > self.mmr_size {
-			element.hash_with_index(self.mmr_size)
-		} else {
-			element.hash_with_index(node_pos - 1)
-		};
-
 		// handle special case of only a single entry in the MMR
 		// (no siblings to hash together)
 		if self.path.is_empty() {
-			if root == node_hash {
+			if root == node {
 				return Ok(());
 			} else {
 				return Err(MerkleProofError::RootMismatch);
@@ -124,23 +136,26 @@ impl<T: PMMRIndexHashable> MerkleProof<T> {
 		let sibling = self.path.remove(0);
 		let (parent_pos, sibling_pos) = pmmr::family(node_pos);
 
-		let parent = if let Ok(x) = peaks_pos.binary_search(&node_pos) {
+		// parent here is a tuple of child hash entries (lc, rc)
+		// these will be hashed with the parent_pos in the next iteration as we
+		// progress up the path toward the root
+		let peaks_pos = pmmr::peaks(self.mmr_size);
+		let (lc, rc) = if let Ok(x) = peaks_pos.binary_search(&node_pos) {
 			if x == peaks_pos.len() - 1 {
-				(sibling, node_hash)
+				(sibling, node)
 			} else {
-				(node_hash, sibling)
+				(node, sibling)
 			}
 		} else if parent_pos > self.mmr_size {
-			(sibling, node_hash)
+			(sibling, node)
 		} else {
 			if pmmr::is_left_sibling(sibling_pos) {
-				(sibling, node_hash)
+				(sibling, node)
 			} else {
-				(node_hash, sibling)
+				(node, sibling)
 			}
 		};
 
-		// TODO - Do we really want to pass a "parent" (tuple) in here?
-		self.verify(root, &parent, parent_pos)
+		self.verify_children(root, lc, rc, parent_pos)
 	}
 }

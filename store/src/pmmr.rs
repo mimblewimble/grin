@@ -19,7 +19,7 @@ use std::{io, time};
 use crate::core::core::hash::{Hash, Hashed};
 use crate::core::core::pmmr::{self, family, Backend};
 use crate::core::core::BlockHeader;
-use crate::core::ser::{PMMRable, ProtocolVersion};
+use crate::core::ser::{PMMRIndexHashable, PMMRable, ProtocolVersion};
 use crate::leaf_set::LeafSet;
 use crate::prune_list::PruneList;
 use crate::types::{AppendOnlyFile, DataFile, SizeEntry, SizeInfo};
@@ -53,20 +53,20 @@ pub const PMMR_FILES: [&str; 4] = [
 /// * A leaf_set tracks unpruned (unremoved) leaf positions in the MMR..
 /// * A prune_list tracks the positions of pruned (and compacted) roots in the
 /// MMR.
-pub struct PMMRBackend<T: PMMRable> {
+pub struct PMMRBackend<T: PMMRable + PMMRIndexHashable> {
 	data_dir: PathBuf,
 	prunable: bool,
-	hash_file: DataFile<Hash>,
+	hash_file: DataFile<T::H>,
 	data_file: DataFile<T::E>,
 	leaf_set: LeafSet,
 	prune_list: PruneList,
 }
 
-impl<T: PMMRable> Backend<T> for PMMRBackend<T> {
+impl<T: PMMRable + PMMRIndexHashable> Backend<T> for PMMRBackend<T> {
 	/// Append the provided data and hashes to the backend storage.
 	/// Add the new leaf pos to our leaf_set if this is a prunable MMR.
 	#[allow(unused_variables)]
-	fn append(&mut self, data: &T, hashes: Vec<Hash>) -> Result<(), String> {
+	fn append(&mut self, data: &T, hashes: Vec<T::H>) -> Result<(), String> {
 		let size = self
 			.data_file
 			.append(&data.as_elmt())
@@ -88,7 +88,7 @@ impl<T: PMMRable> Backend<T> for PMMRBackend<T> {
 		Ok(())
 	}
 
-	fn get_from_file(&self, position: u64) -> Option<Hash> {
+	fn get_from_file(&self, position: u64) -> Option<T::H> {
 		if self.is_compacted(position) {
 			return None;
 		}
@@ -111,7 +111,7 @@ impl<T: PMMRable> Backend<T> for PMMRBackend<T> {
 	/// Get the hash at pos.
 	/// Return None if pos is a leaf and it has been removed (or pruned or
 	/// compacted).
-	fn get_hash(&self, pos: u64) -> Option<Hash> {
+	fn get_hash(&self, pos: u64) -> Option<T::H> {
 		if self.prunable && pmmr::is_leaf(pos) && !self.leaf_set.includes(pos) {
 			return None;
 		}
@@ -222,7 +222,7 @@ impl<T: PMMRable> Backend<T> for PMMRBackend<T> {
 	}
 }
 
-impl<T: PMMRable> PMMRBackend<T> {
+impl<T: PMMRable + PMMRIndexHashable> PMMRBackend<T> {
 	/// Instantiates a new PMMR backend.
 	/// If optional size is provided then treat as "fixed" size otherwise "variable" size backend.
 	/// Use the provided dir to store its files.
