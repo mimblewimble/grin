@@ -345,9 +345,7 @@ where
 	}
 
 	/// Build a Merkle proof for the element at the given position.
-	///
-	///
-	fn merkle_proof(&self, pos: u64) -> Result<MerkleProof<T>, String> {
+	pub fn merkle_proof(&self, pos: u64) -> Result<MerkleProof<T>, String> {
 		let last_pos = self.unpruned_size();
 		debug!("merkle_proof  {}, last_pos {}", pos, last_pos);
 

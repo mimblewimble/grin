@@ -298,7 +298,7 @@ impl OutputRoots {
 	/// together with the size of the output PMMR (for consistency with existing PMMR impl).
 	/// H(pmmr_size | pmmr_root | bitmap_root)
 	fn merged_root(&self, header: &BlockHeader) -> Hash {
-		(self.pmmr_root, self.bitmap_root).hash_with_index(header.output_mmr_size)
+		(header.output_mmr_size, self.pmmr_root, self.bitmap_root).hash()
 	}
 }
 

@@ -20,9 +20,11 @@ use crate::core::core::committed::Committed;
 use crate::core::core::hash::{Hash, Hashed};
 use crate::core::core::merkle_proof::MerkleProof;
 use crate::core::core::pmmr::{self, Backend, ReadablePMMR, ReadonlyPMMR, RewindablePMMR, PMMR};
-use crate::core::core::{Block, BlockHeader, KernelFeatures, Output, OutputIdentifier, TxKernel};
+use crate::core::core::{
+	Block, BlockHeader, HeaderHashEntry, KernelFeatures, Output, OutputIdentifier, TxKernel,
+};
 use crate::core::global;
-use crate::core::ser::{PMMRable, ProtocolVersion};
+use crate::core::ser::{HashEntry, PMMRIndexHashable, PMMRable, ProtocolVersion};
 use crate::error::{Error, ErrorKind};
 use crate::linked_list::{ListIndex, PruneableListIndex, RewindableListIndex};
 use crate::store::{self, Batch, ChainStore};
@@ -48,14 +50,14 @@ const KERNEL_SUBDIR: &str = "kernel";
 const TXHASHSET_ZIP: &str = "txhashset_snapshot";
 
 /// Convenience wrapper around a single prunable MMR backend.
-pub struct PMMRHandle<T: PMMRable> {
+pub struct PMMRHandle<T: PMMRable + PMMRIndexHashable> {
 	/// The backend storage for the MMR.
 	pub backend: PMMRBackend<T>,
 	/// The last position accessible via this MMR handle (backend may continue out beyond this).
 	pub last_pos: u64,
 }
 
-impl<T: PMMRable> PMMRHandle<T> {
+impl<T: PMMRable + PMMRIndexHashable> PMMRHandle<T> {
 	/// Constructor to create a PMMR handle from an existing directory structure on disk.
 	/// Creates the backend files as necessary if they do not already exist.
 	pub fn new<P: AsRef<Path>>(
@@ -383,7 +385,10 @@ impl TxHashSet {
 	}
 
 	/// build a new merkle proof for the given position.
-	pub fn merkle_proof(&mut self, commit: Commitment) -> Result<MerkleProof, Error> {
+	pub fn merkle_proof(
+		&mut self,
+		commit: Commitment,
+	) -> Result<MerkleProof<OutputIdentifier>, Error> {
 		let pos = self.commit_index.get_output_pos(&commit)?;
 		PMMR::at(&mut self.output_pmmr_h.backend, self.output_pmmr_h.last_pos)
 			.merkle_proof(pos)
@@ -966,7 +971,7 @@ impl<'a> HeaderExtension<'a> {
 	}
 
 	/// The root of the header MMR for convenience.
-	pub fn root(&self) -> Result<Hash, Error> {
+	pub fn root(&self) -> Result<HeaderHashEntry, Error> {
 		Ok(self.pmmr.root().map_err(|_| ErrorKind::InvalidRoot)?)
 	}
 
@@ -977,7 +982,7 @@ impl<'a> HeaderExtension<'a> {
 		if header.height == 0 {
 			return Ok(());
 		}
-		if self.root()? != header.prev_root {
+		if self.root()?.as_hash() != header.prev_root {
 			Err(ErrorKind::InvalidRoot.into())
 		} else {
 			Ok(())
@@ -1238,7 +1243,7 @@ impl<'a> Extension<'a> {
 		&self,
 		out_id: T,
 		batch: &Batch<'_>,
-	) -> Result<MerkleProof, Error> {
+	) -> Result<MerkleProof<OutputIdentifier>, Error> {
 		let out_id = out_id.as_ref();
 		debug!("txhashset: merkle_proof: output: {:?}", out_id.commit);
 		// then calculate the Merkle Proof based on the known pos

@@ -24,7 +24,7 @@ use crate::core::core::{
 };
 use crate::core::global;
 use crate::core::pow;
-use crate::core::ser::ProtocolVersion;
+use crate::core::ser::{HashEntry, ProtocolVersion};
 use crate::error::{Error, ErrorKind};
 use crate::pipe;
 use crate::store;
@@ -719,7 +719,7 @@ impl Chain {
 			})?;
 
 		// Set the prev_root on the header.
-		header.prev_root = prev_root;
+		header.prev_root = prev_root.as_hash();
 
 		Ok(())
 	}
@@ -758,7 +758,7 @@ impl Chain {
 		}
 
 		// Set the prev_root on the header.
-		b.header.prev_root = prev_root;
+		b.header.prev_root = prev_root.as_hash();
 
 		// Set the output, rangeproof and kernel MMR roots.
 		b.header.output_root = roots.output_root(&b.header);
@@ -773,7 +773,7 @@ impl Chain {
 		&self,
 		out_id: T,
 		header: &BlockHeader,
-	) -> Result<MerkleProof, Error> {
+	) -> Result<MerkleProof<OutputIdentifier>, Error> {
 		let mut header_pmmr = self.header_pmmr.write();
 		let mut txhashset = self.txhashset.write();
 		let merkle_proof =
@@ -787,7 +787,10 @@ impl Chain {
 
 	/// Return a merkle proof valid for the current output pmmr state at the
 	/// given pos
-	pub fn get_merkle_proof_for_pos(&self, commit: Commitment) -> Result<MerkleProof, Error> {
+	pub fn get_merkle_proof_for_pos(
+		&self,
+		commit: Commitment,
+	) -> Result<MerkleProof<OutputIdentifier>, Error> {
 		let mut txhashset = self.txhashset.write();
 		txhashset.merkle_proof(commit)
 	}

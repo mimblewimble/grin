@@ -767,7 +767,7 @@ impl PMMRIndexHashable for RangeProof {
 		Self::index_hash(index, self)
 	}
 
-	fn hash_children(index: u64, lc: Self::H, rc: Self::H) -> Self::H {
+	fn hash_children(index: u64, lc: Hash, rc: Hash) -> Hash {
 		Self::index_hash(index, (lc, rc))
 	}
 }
@@ -994,9 +994,11 @@ pub trait PMMRIndexHashable: DefaultHashable {
 	/// Hash with a given index
 	fn hash_with_index(&self, index: u64) -> Self::H;
 
+	/// Hash a pair of child hash entries together.
 	fn hash_children(index: u64, lc: Self::H, rc: Self::H) -> Self::H;
 
 	/// Hash given index and data.
+	/// Note: This returns a raw hash and not a hash entry.
 	fn index_hash<T: DefaultHashable>(index: u64, data: T) -> Hash {
 		(index, data).hash()
 	}

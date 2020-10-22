@@ -283,7 +283,7 @@ impl PMMRIndexHashable for BlockHeader {
 		HeaderHashEntry { hash }
 	}
 
-	fn hash_children(index: u64, lc: Self::H, rc: Self::H) -> Self::H {
+	fn hash_children(index: u64, lc: HeaderHashEntry, rc: HeaderHashEntry) -> HeaderHashEntry {
 		let hash = Self::index_hash(index, (lc, rc));
 		HeaderHashEntry { hash }
 	}
@@ -310,21 +310,6 @@ impl HashEntry for HeaderHashEntry {
 }
 
 impl DefaultHashable for HeaderHashEntry {}
-
-// /// TODO - What do we need this for?
-// impl PMMRIndexHashable for (HeaderHashEntry, HeaderHashEntry) {
-// 	type H = HeaderHashEntry;
-
-// 	fn hash_with_index(&self, index: u64) -> HeaderHashEntry {
-// 		let hash = Self::index_hash(index, self);
-// 		HeaderHashEntry { hash }
-// 	}
-
-// 	fn hash_children(index: u64, lc: Self::H, rc: Self::H) -> Self::H {
-// 		let hash = Self::index_hash(index, (lc, rc));
-// 		HeaderHashEntry { hash }
-// 	}
-// }
 
 impl Writeable for HeaderHashEntry {
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
