@@ -55,6 +55,7 @@ pub struct PruneList {
 
 impl PruneList {
 	/// Instantiate a new prune list from the provided path and bitmap.
+	/// Note: Does not flush the bitmap to disk. Caller is responsible for doing this.
 	pub fn new(path: Option<PathBuf>, bitmap: Bitmap) -> PruneList {
 		let mut prune_list = PruneList {
 			path,
@@ -82,24 +83,15 @@ impl PruneList {
 
 	/// Open an existing prune_list or create a new one.
 	/// Takes an optional bitmap of new pruned pos to be combined with existing pos.
-	pub fn open<P: AsRef<Path>>(path: P, new_pruned: Option<Bitmap>) -> io::Result<PruneList> {
+	pub fn open<P: AsRef<Path>>(path: P) -> io::Result<PruneList> {
 		let file_path = PathBuf::from(path.as_ref());
-		let mut bitmap = if file_path.exists() {
+		let bitmap = if file_path.exists() {
 			read_bitmap(&file_path)?
 		} else {
 			Bitmap::create()
 		};
 
-		// TODO - Maybe a bad idea as this breaks all our assumptions and we cannot do a fast open...
-		if let Some(new_pruned) = new_pruned {
-			bitmap.or_inplace(&new_pruned);
-		}
-
 		let prune_list = PruneList::new(Some(file_path), bitmap);
-
-		// TODO - Confirm we no longer need to init caches now (caches built during creation).
-		// Now built the shift and pruned caches from the bitmap we read from disk.
-		// prune_list.init_caches();
 
 		if !prune_list.bitmap.is_empty() {
 			debug!("bitmap {} pos ({} bytes), pruned_cache {} pos ({} bytes), shift_cache {}, leaf_shift_cache {}",
@@ -115,12 +107,12 @@ impl PruneList {
 		Ok(prune_list)
 	}
 
-	/// Init our internal shift caches.
-	pub fn init_caches(&mut self) {
-		self.rebuild_shift_cache();
-		self.rebuild_leaf_shift_cache();
-		self.rebuild_pruned_cache();
-	}
+	// /// Init our internal shift caches.
+	// pub fn init_caches(&mut self) {
+	// 	self.rebuild_shift_cache();
+	// 	self.rebuild_leaf_shift_cache();
+	// 	self.rebuild_pruned_cache();
+	// }
 
 	/// Save the prune_list to disk.
 	pub fn flush(&mut self) -> io::Result<()> {
@@ -182,16 +174,16 @@ impl PruneList {
 		prev_shift + shift
 	}
 
-	/// Rebuild the shift cache.
-	/// For each entry in the pruned bitmap calculate the total shift
-	/// based on previous shift and size of pruned subtree.
-	fn rebuild_shift_cache(&mut self) {
-		self.shift_cache.clear();
-		for pos in self.bitmap.iter().filter(|x| *x > 0) {
-			let next_shift = self.calculate_next_shift(pos as u64);
-			self.shift_cache.push(next_shift);
-		}
-	}
+	// /// Rebuild the shift cache.
+	// /// For each entry in the pruned bitmap calculate the total shift
+	// /// based on previous shift and size of pruned subtree.
+	// fn rebuild_shift_cache(&mut self) {
+	// 	self.shift_cache.clear();
+	// 	for pos in self.bitmap.iter().filter(|x| *x > 0) {
+	// 		let next_shift = self.calculate_next_shift(pos as u64);
+	// 		self.shift_cache.push(next_shift);
+	// 	}
+	// }
 
 	/// As above, but only returning the number of leaf nodes to skip for a
 	/// given leaf. Helpful if, for instance, data for each leaf is being stored
@@ -229,16 +221,16 @@ impl PruneList {
 		prev_shift + shift
 	}
 
-	/// Rebuild the leaf shift cache.
-	/// For each entry in the pruned bitmap calculate the total shift
-	/// based on previous shift and size of pruned subtree.
-	fn rebuild_leaf_shift_cache(&mut self) {
-		self.leaf_shift_cache.clear();
-		for pos in self.bitmap.iter().filter(|x| *x > 0) {
-			let next_shift = self.calculate_next_leaf_shift(pos as u64);
-			self.leaf_shift_cache.push(next_shift);
-		}
-	}
+	// /// Rebuild the leaf shift cache.
+	// /// For each entry in the pruned bitmap calculate the total shift
+	// /// based on previous shift and size of pruned subtree.
+	// fn rebuild_leaf_shift_cache(&mut self) {
+	// 	self.leaf_shift_cache.clear();
+	// 	for pos in self.bitmap.iter().filter(|x| *x > 0) {
+	// 		let next_shift = self.calculate_next_leaf_shift(pos as u64);
+	// 		self.leaf_shift_cache.push(next_shift);
+	// 	}
+	// }
 
 	// Remove any existing entries in shift_cache and leaf_shift_cache
 	// for any pos contained in the subtree with provided root.
@@ -332,22 +324,27 @@ impl PruneList {
 		self.pruned_cache.contains(pos as u32)
 	}
 
-	// Rebuild the "pruned cache" by expanding every pruned subtree into the contained
-	// pos and adding them all to the cache.
-	fn rebuild_pruned_cache(&mut self) {
-		let maximum = self.bitmap.maximum().unwrap_or(0);
-		self.pruned_cache = Bitmap::create_with_capacity(maximum);
-		for pos in self.bitmap.iter() {
-			for x in bintree_pos_iter(pos as u64) {
-				self.pruned_cache.add(x as u32);
-			}
-		}
-		self.pruned_cache.run_optimize();
-	}
+	// // Rebuild the "pruned cache" by expanding every pruned subtree into the contained
+	// // pos and adding them all to the cache.
+	// fn rebuild_pruned_cache(&mut self) {
+	// 	let maximum = self.bitmap.maximum().unwrap_or(0);
+	// 	self.pruned_cache = Bitmap::create_with_capacity(maximum);
+	// 	for pos in self.bitmap.iter() {
+	// 		for x in bintree_pos_iter(pos as u64) {
+	// 			self.pruned_cache.add(x as u32);
+	// 		}
+	// 	}
+	// 	self.pruned_cache.run_optimize();
+	// }
 
 	/// Is the specified position a root of a pruned subtree?
 	pub fn is_pruned_root(&self, pos: u64) -> bool {
 		assert!(pos > 0, "prune list 1-indexed, 0 not valid pos");
 		self.bitmap.contains(pos as u32)
+	}
+
+	/// Return a clone of our internal bitmap.
+	pub fn bitmap(&self) -> Bitmap {
+		self.bitmap.clone()
 	}
 }

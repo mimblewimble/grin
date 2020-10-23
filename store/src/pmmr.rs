@@ -281,7 +281,7 @@ impl<T: PMMRable> PMMRBackend<T> {
 		}
 
 		let leaf_set = LeafSet::open(&leaf_set_path)?;
-		let prune_list = PruneList::open(&data_dir.join(PMMR_PRUN_FILE), None)?;
+		let prune_list = PruneList::open(&data_dir.join(PMMR_PRUN_FILE))?;
 
 		Ok(PMMRBackend {
 			data_dir: data_dir.to_path_buf(),
@@ -397,11 +397,10 @@ impl<T: PMMRable> PMMRBackend<T> {
 		}
 
 		// 3. Update the prune list and write to disk.
-		// TODO - encapsulate this in something other than reopening the prune_list...
 		{
-			let prune_list =
-				PruneList::open(&self.data_dir.join(PMMR_PRUN_FILE), Some(leaves_removed))?;
-			self.prune_list = prune_list;
+			let mut bitmap = self.prune_list.bitmap();
+			bitmap.or_inplace(&leaves_removed);
+			self.prune_list = PruneList::new(Some(self.data_dir.join(PMMR_PRUN_FILE)), bitmap);
 			self.prune_list.flush()?;
 		}
 
