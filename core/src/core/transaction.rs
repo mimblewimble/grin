@@ -36,6 +36,105 @@ use util::static_secp_instance;
 use util::RwLock;
 use util::ToHex;
 
+/// Fee fields as in fix-fees RFC: { future_use: 20, fee_shift: 4, fee: 40 }
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub struct FeeFields(u64);
+
+impl DefaultHashable for FeeFields {}
+
+impl Writeable for FeeFields {
+	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
+		writer.write_u64(self.0)
+	}
+}
+
+impl Readable for FeeFields {
+	fn read<R: Reader>(reader: &mut R) -> Result<Self, ser::Error> {
+		let fee_fields = reader.read_u64()?;
+		Ok(Self(fee_fields))
+	}
+}
+
+/// Conversion from a u64 to a valid FeeFields.
+/// Valid height is between 1 and WEEK_HEIGHT inclusive.
+impl TryFrom<u64> for FeeFields {
+	type Error = Error;
+
+	fn try_from(fee: u64) -> Result<Self, Self::Error> {
+		if fee == 0 {
+			Err(Error::InvalidFeeFields)
+		} else if fee > FeeFields::FEE_MASK {
+			Err(Error::InvalidFeeFields)
+		} else {
+			Ok(Self(fee))
+		}
+	}
+}
+
+impl From<FeeFields> for u64 {
+	fn from(fee_fields: FeeFields) -> Self {
+		fee_fields.0 as u64
+	}
+}
+
+impl FeeFields {
+	/// Fees are limited to 40 bits
+	const FEE_BITS: u32 = 40;
+	/// Used to extract fee field
+	const FEE_MASK: u64 = 1u64 << FeeFields::FEE_BITS - 1;
+
+	/// Fee shifts are limited to 4 bits
+	pub const FEE_SHIFT_BITS: u32 = 4;
+	/// Used to extract fee_shift field
+	pub const FEE_SHIFT_MASK: u64 = 1u64 << FeeFields::FEE_SHIFT_BITS - 1;
+
+	/// Create a zero FeeFields with 0 fee and 0 fee_shift
+	pub fn zero() -> Self {
+		Self(0)
+	}
+
+	/// Create a new FeeFields from the provided shift and fee
+	/// Checks both are valid (in range)
+	pub fn new(fee_shift: u64, fee: u64) -> Result<Self, Error> {
+		if fee == 0 {
+			Err(Error::InvalidFeeFields)
+		} else if fee > FeeFields::FEE_MASK {
+			Err(Error::InvalidFeeFields)
+		} else if fee_shift > FeeFields::FEE_SHIFT_MASK {
+			Err(Error::InvalidFeeFields)
+		} else {
+			Ok(Self(fee_shift << FeeFields::FEE_BITS | fee))
+		}
+	}
+
+	/// Extract fee_shift field
+	pub fn fee_shift(&self) -> u64 {
+		(self.0 >> FeeFields::FEE_BITS) & FeeFields::FEE_SHIFT_MASK
+	}
+
+	/// Extract fee field
+	pub fn fee(&self) -> u64 {
+		self.0 & FeeFields::FEE_MASK
+	}
+
+	/// Extract bitfields fee_shift and fee into tuple
+	/// ignore upper 64-FEE_BITS-FEE_SHIFT_BITS bits
+	pub fn as_tuple(&self) -> (u64, u64) {
+		let fee = self.0 & FeeFields::FEE_MASK;
+		let fee_shift = (self.0 >> FeeFields::FEE_BITS) & FeeFields::FEE_SHIFT_MASK;
+		(fee, fee_shift)
+	}
+
+	/// Accumulate two fee_fields by adding fees and maxing fee_shift
+	/// THIS CAN'T WORK SINCE A TX CAN HAVE MULTIPLE MAXED-OUT FEES
+	/// WHICH ADDED UP DON'T FIT
+	pub fn accumulate(&self, other: FeeFields) -> Result<Self, Error> {
+		let (fee, fee_shift) = self.as_tuple();
+		let (other_fee, other_fee_shift) = other.as_tuple();
+		FeeFields::new(max(fee_shift, other_fee_shift), fee + other_fee)
+	}
+}
+
 /// Relative height field on NRD kernel variant.
 /// u16 representing a height between 1 and MAX (consensus::WEEK_HEIGHT).
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
@@ -106,21 +205,21 @@ pub enum KernelFeatures {
 	/// Plain kernel (the default for Grin txs).
 	Plain {
 		/// Plain kernels have fees.
-		fee: u64,
+		fee_fields: FeeFields,
 	},
 	/// A coinbase kernel.
 	Coinbase,
 	/// A kernel with an explicit lock height (and fee).
 	HeightLocked {
 		/// Height locked kernels have fees.
-		fee: u64,
+		fee_fields: FeeFields,
 		/// Height locked kernels have lock heights.
 		lock_height: u64,
 	},
 	/// "No Recent Duplicate" (NRD) kernels enforcing relative lock height between instances.
 	NoRecentDuplicate {
 		/// These have fees.
-		fee: u64,
+		fee_fields: FeeFields,
 		/// Relative lock height.
 		relative_height: NRDRelativeHeight,
 	},
@@ -153,20 +252,23 @@ impl KernelFeatures {
 		}
 	}
 
-	/// msg = hash(features)                           for coinbase kernels
-	///       hash(features || fee)                    for plain kernels
-	///       hash(features || fee || lock_height)     for height locked kernels
-	///       hash(features || fee || relative_height) for NRD kernels
+	/// msg = hash(features)                                  for coinbase kernels
+	///       hash(features || fee_fields)                    for plain kernels
+	///       hash(features || fee_fields || lock_height)     for height locked kernels
+	///       hash(features || fee_fields || relative_height) for NRD kernels
 	pub fn kernel_sig_msg(&self) -> Result<secp::Message, Error> {
 		let x = self.as_u8();
 		let hash = match self {
-			KernelFeatures::Plain { fee } => (x, fee).hash(),
+			KernelFeatures::Plain { fee_fields } => (x, fee_fields).hash(),
 			KernelFeatures::Coinbase => x.hash(),
-			KernelFeatures::HeightLocked { fee, lock_height } => (x, fee, lock_height).hash(),
+			KernelFeatures::HeightLocked {
+				fee_fields,
+				lock_height,
+			} => (x, fee_fields, lock_height).hash(),
 			KernelFeatures::NoRecentDuplicate {
-				fee,
+				fee_fields,
 				relative_height,
-			} => (x, fee, relative_height).hash(),
+			} => (x, fee_fields, relative_height).hash(),
 		};
 
 		let msg = secp::Message::from_slice(&hash.as_bytes())?;
@@ -174,29 +276,32 @@ impl KernelFeatures {
 	}
 
 	/// Write tx kernel features out in v1 protocol format.
-	/// Always include the fee and lock_height, writing 0 value if unused.
+	/// Always include the fee_fields and lock_height, writing 0 value if unused.
 	fn write_v1<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
 		writer.write_u8(self.as_u8())?;
 		match self {
-			KernelFeatures::Plain { fee } => {
-				writer.write_u64(*fee)?;
+			KernelFeatures::Plain { fee_fields } => {
+				fee_fields.write(writer)?;
 				// Write "empty" bytes for feature specific data (8 bytes).
 				writer.write_empty_bytes(8)?;
 			}
 			KernelFeatures::Coinbase => {
-				// Write "empty" bytes for fee (8 bytes) and feature specific data (8 bytes).
+				// Write "empty" bytes for fee_fields (8 bytes) and feature specific data (8 bytes).
 				writer.write_empty_bytes(16)?;
 			}
-			KernelFeatures::HeightLocked { fee, lock_height } => {
-				writer.write_u64(*fee)?;
+			KernelFeatures::HeightLocked {
+				fee_fields,
+				lock_height,
+			} => {
+				fee_fields.write(writer)?;
 				// 8 bytes of feature specific data containing the lock height as big-endian u64.
 				writer.write_u64(*lock_height)?;
 			}
 			KernelFeatures::NoRecentDuplicate {
-				fee,
+				fee_fields,
 				relative_height,
 			} => {
-				writer.write_u64(*fee)?;
+				fee_fields.write(writer)?;
 
 				// 8 bytes of feature specific data. First 6 bytes are empty.
 				// Last 2 bytes contain the relative lock height as big-endian u16.
@@ -211,28 +316,31 @@ impl KernelFeatures {
 
 	/// Write tx kernel features out in v2 protocol format.
 	/// These are variable sized based on feature variant.
-	/// Only write fee out for feature variants that support it.
+	/// Only write fee_fields out for feature variants that support it.
 	/// Only write lock_height out for feature variants that support it.
 	fn write_v2<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
 		writer.write_u8(self.as_u8())?;
 		match self {
-			KernelFeatures::Plain { fee } => {
+			KernelFeatures::Plain { fee_fields } => {
 				// Fee only, no additional data on plain kernels.
-				writer.write_u64(*fee)?;
+				fee_fields.write(writer)?;
 			}
 			KernelFeatures::Coinbase => {
 				// No additional data.
 			}
-			KernelFeatures::HeightLocked { fee, lock_height } => {
-				writer.write_u64(*fee)?;
+			KernelFeatures::HeightLocked {
+				fee_fields,
+				lock_height,
+			} => {
+				fee_fields.write(writer)?;
 				// V2 height locked kernels use 8 bytes for the lock height.
 				writer.write_u64(*lock_height)?;
 			}
 			KernelFeatures::NoRecentDuplicate {
-				fee,
+				fee_fields,
 				relative_height,
 			} => {
-				writer.write_u64(*fee)?;
+				fee_fields.write(writer)?;
 				// V2 NRD kernels use 2 bytes for the relative lock height.
 				relative_height.write(writer)?;
 			}
@@ -240,7 +348,7 @@ impl KernelFeatures {
 		Ok(())
 	}
 
-	// Always read feature byte, 8 bytes for fee and 8 bytes for additional data
+	// Always read feature byte, 8 bytes for fee_fields and 8 bytes for additional data
 	// representing lock height or relative height.
 	// Fee and additional data may be unused for some kernel variants but we need
 	// to read these bytes and verify they are 0 if unused.
@@ -248,22 +356,25 @@ impl KernelFeatures {
 		let feature_byte = reader.read_u8()?;
 		let features = match feature_byte {
 			KernelFeatures::PLAIN_U8 => {
-				let fee = reader.read_u64()?;
+				let fee_fields = FeeFields::read(reader)?;
 				// 8 "empty" bytes as additional data is not used.
 				reader.read_empty_bytes(8)?;
-				KernelFeatures::Plain { fee }
+				KernelFeatures::Plain { fee_fields }
 			}
 			KernelFeatures::COINBASE_U8 => {
-				// 8 "empty" bytes as fee is not used.
+				// 8 "empty" bytes as fee_fields is not used.
 				// 8 "empty" bytes as additional data is not used.
 				reader.read_empty_bytes(16)?;
 				KernelFeatures::Coinbase
 			}
 			KernelFeatures::HEIGHT_LOCKED_U8 => {
-				let fee = reader.read_u64()?;
+				let fee_fields = FeeFields::read(reader)?;
 				// 8 bytes of feature specific data, lock height as big-endian u64.
 				let lock_height = reader.read_u64()?;
-				KernelFeatures::HeightLocked { fee, lock_height }
+				KernelFeatures::HeightLocked {
+					fee_fields,
+					lock_height,
+				}
 			}
 			KernelFeatures::NO_RECENT_DUPLICATE_U8 => {
 				// NRD kernels are invalid if NRD feature flag is not enabled.
@@ -271,7 +382,7 @@ impl KernelFeatures {
 					return Err(ser::Error::CorruptedData);
 				}
 
-				let fee = reader.read_u64()?;
+				let fee_fields = FeeFields::read(reader)?;
 
 				// 8 bytes of feature specific data.
 				// The first 6 bytes must be "empty".
@@ -279,7 +390,7 @@ impl KernelFeatures {
 				reader.read_empty_bytes(6)?;
 				let relative_height = NRDRelativeHeight::read(reader)?;
 				KernelFeatures::NoRecentDuplicate {
-					fee,
+					fee_fields,
 					relative_height,
 				}
 			}
@@ -295,14 +406,17 @@ impl KernelFeatures {
 	fn read_v2<R: Reader>(reader: &mut R) -> Result<KernelFeatures, ser::Error> {
 		let features = match reader.read_u8()? {
 			KernelFeatures::PLAIN_U8 => {
-				let fee = reader.read_u64()?;
-				KernelFeatures::Plain { fee }
+				let fee_fields = FeeFields::read(reader)?;
+				KernelFeatures::Plain { fee_fields }
 			}
 			KernelFeatures::COINBASE_U8 => KernelFeatures::Coinbase,
 			KernelFeatures::HEIGHT_LOCKED_U8 => {
-				let fee = reader.read_u64()?;
+				let fee_fields = FeeFields::read(reader)?;
 				let lock_height = reader.read_u64()?;
-				KernelFeatures::HeightLocked { fee, lock_height }
+				KernelFeatures::HeightLocked {
+					fee_fields,
+					lock_height,
+				}
 			}
 			KernelFeatures::NO_RECENT_DUPLICATE_U8 => {
 				// NRD kernels are invalid if NRD feature flag is not enabled.
@@ -310,10 +424,10 @@ impl KernelFeatures {
 					return Err(ser::Error::CorruptedData);
 				}
 
-				let fee = reader.read_u64()?;
+				let fee_fields = FeeFields::read(reader)?;
 				let relative_height = NRDRelativeHeight::read(reader)?;
 				KernelFeatures::NoRecentDuplicate {
-					fee,
+					fee_fields,
 					relative_height,
 				}
 			}
@@ -384,6 +498,8 @@ pub enum Error {
 	/// Validation error relating to kernel features.
 	/// It is invalid for a transaction to contain a coinbase kernel, for example.
 	InvalidKernelFeatures,
+	/// feeshift is limited to 4 bits and fee must be positive and fit in 40 bits.
+	InvalidFeeFields,
 	/// NRD kernel relative height is limited to 1 week duration and must be greater than 0.
 	InvalidNRDRelativeHeight,
 	/// Signature verification error.
@@ -435,7 +551,7 @@ impl From<committed::Error> for Error {
 /// A proof that a transaction sums to zero. Includes both the transaction's
 /// Pedersen commitment and the signature, that guarantees that the commitments
 /// amount to zero.
-/// The signature signs the fee and the lock_height, which are retained for
+/// The signature signs the fee_fields and the lock_height, which are retained for
 /// signature validation.
 #[derive(Serialize, Deserialize, Debug, Clone, Copy)]
 pub struct TxKernel {
@@ -450,7 +566,7 @@ pub struct TxKernel {
 	)]
 	pub excess: Commitment,
 	/// The signature proving the excess is a valid public key, which signs
-	/// the transaction fee.
+	/// the transaction fee_fields.
 	#[serde(with = "secp_ser::sig_serde")]
 	pub excess_sig: secp::Signature,
 }
@@ -562,14 +678,14 @@ impl TxKernel {
 	}
 
 	/// The msg signed as part of the tx kernel.
-	/// Based on kernel features and associated fields (fee and lock_height).
+	/// Based on kernel features and associated fields (fee_fields and lock_height).
 	pub fn msg_to_sign(&self) -> Result<secp::Message, Error> {
 		let msg = self.features.kernel_sig_msg()?;
 		Ok(msg)
 	}
 
 	/// Verify the transaction proof validity. Entails handling the commitment
-	/// as a public key and checking the signature verifies with the fee as
+	/// as a public key and checking the signature verifies with the fee_fields as
 	/// message.
 	pub fn verify(&self) -> Result<(), Error> {
 		let secp = static_secp_instance();
@@ -616,7 +732,9 @@ impl TxKernel {
 
 	/// Build an empty tx kernel with zero values.
 	pub fn empty() -> TxKernel {
-		TxKernel::with_features(KernelFeatures::Plain { fee: 0 })
+		TxKernel::with_features(KernelFeatures::Plain {
+			fee_fields: FeeFields::zero(),
+		})
 	}
 
 	/// Build an empty tx kernel with the provided kernel features.
@@ -687,8 +805,7 @@ impl Readable for TransactionBody {
 
 		// Quick block weight check before proceeding.
 		// Note: We use weight_as_block here (inputs have weight).
-		let tx_block_weight =
-			TransactionBody::weight_as_block(num_inputs, num_outputs, num_kernels);
+		let tx_block_weight = TransactionBody::weight_by_iok(num_inputs, num_outputs, num_kernels);
 		if tx_block_weight > global::max_block_weight() {
 			return Err(ser::Error::TooLargeReadErr);
 		}
@@ -866,53 +983,54 @@ impl TransactionBody {
 			.iter()
 			.filter_map(|k| match k.features {
 				KernelFeatures::Coinbase => None,
-				KernelFeatures::Plain { fee } => Some(fee),
-				KernelFeatures::HeightLocked { fee, .. } => Some(fee),
-				KernelFeatures::NoRecentDuplicate { fee, .. } => Some(fee),
+				KernelFeatures::Plain { fee_fields } => Some(fee_fields),
+				KernelFeatures::HeightLocked { fee_fields, .. } => Some(fee_fields),
+				KernelFeatures::NoRecentDuplicate { fee_fields, .. } => Some(fee_fields),
 			})
-			.fold(0, |acc, fee| acc.saturating_add(fee))
+			.fold(0, |acc, fee_fields| acc.saturating_add(fee_fields.fee()))
+	}
+
+	/// Shifted fee for a TransactionBody is the sum of fees shifted right by the maximum fee_shift
+	/// this is used to determine whether a tx can be relayed or accepted in a mempool
+	/// where transactions can specify a higher block-inclusion priority as a positive shift up to 15
+	/// but are required to overpaythe minimum required fees by a factor of 2^priority
+	pub fn shifted_fee(&self) -> u64 {
+		let (fee, fee_shift) = self
+			.kernels
+			.iter()
+			.filter_map(|k| match k.features {
+				KernelFeatures::Coinbase => None,
+				KernelFeatures::Plain { fee_fields } => Some(fee_fields),
+				KernelFeatures::HeightLocked { fee_fields, .. } => Some(fee_fields),
+				KernelFeatures::NoRecentDuplicate { fee_fields, .. } => Some(fee_fields),
+			})
+			.fold(FeeFields::zero, |acc: FeeFields, fee_fields| {
+				acc.accumulate(fee_fields)?
+			})
+			.as_tuple();
+		fee >> fee_shift
 	}
 
 	fn overage(&self) -> i64 {
 		self.fee() as i64
 	}
 
-	/// Calculate transaction weight
-	pub fn body_weight(&self) -> u64 {
-		TransactionBody::weight(
-			self.inputs.len() as u64,
-			self.outputs.len() as u64,
-			self.kernels.len() as u64,
-		)
-	}
-
 	/// Calculate weight of transaction using block weighing
-	pub fn body_weight_as_block(&self) -> u64 {
-		TransactionBody::weight_as_block(
+	pub fn weight(&self) -> u64 {
+		TransactionBody::weight_by_iok(
 			self.inputs.len() as u64,
 			self.outputs.len() as u64,
 			self.kernels.len() as u64,
 		)
-	}
-
-	/// Calculate transaction weight from transaction details. This is non
-	/// consensus critical and compared to block weight, incentivizes spending
-	/// more outputs (to lower the fee).
-	pub fn weight(num_inputs: u64, num_outputs: u64, num_kernels: u64) -> u64 {
-		let body_weight = num_outputs
-			.saturating_mul(4)
-			.saturating_add(num_kernels)
-			.saturating_sub(num_inputs);
-		max(body_weight, 1)
 	}
 
 	/// Calculate transaction weight using block weighing from transaction
 	/// details. Consensus critical and uses consensus weight values.
-	pub fn weight_as_block(num_inputs: u64, num_outputs: u64, num_kernels: u64) -> u64 {
+	pub fn weight_by_iok(num_inputs: u64, num_outputs: u64, num_kernels: u64) -> u64 {
 		num_inputs
-			.saturating_mul(consensus::BLOCK_INPUT_WEIGHT as u64)
-			.saturating_add(num_outputs.saturating_mul(consensus::BLOCK_OUTPUT_WEIGHT as u64))
-			.saturating_add(num_kernels.saturating_mul(consensus::BLOCK_KERNEL_WEIGHT as u64))
+			.saturating_mul(consensus::INPUT_WEIGHT as u64)
+			.saturating_add(num_outputs.saturating_mul(consensus::OUTPUT_WEIGHT as u64))
+			.saturating_add(num_kernels.saturating_mul(consensus::KERNEL_WEIGHT as u64))
 	}
 
 	/// Lock height of a body is the max lock height of the kernels.
@@ -932,7 +1050,7 @@ impl TransactionBody {
 	fn verify_weight(&self, weighting: Weighting) -> Result<(), Error> {
 		// A coinbase reward is a single output and a single kernel (for now).
 		// We need to account for this when verifying max tx weights.
-		let coinbase_weight = consensus::BLOCK_OUTPUT_WEIGHT + consensus::BLOCK_KERNEL_WEIGHT;
+		let coinbase_weight = consensus::OUTPUT_WEIGHT + consensus::KERNEL_WEIGHT;
 
 		// If "tx" body then remember to reduce the max_block_weight by the weight of a kernel.
 		// If "limited tx" then compare against the provided max_weight.
@@ -943,7 +1061,7 @@ impl TransactionBody {
 		// for the additional coinbase reward (1 output + 1 kernel).
 		//
 		let max_weight = match weighting {
-			Weighting::AsTransaction => global::max_block_weight().saturating_sub(coinbase_weight),
+			Weighting::AsTransaction => global::max_tx_weight(),
 			Weighting::AsLimitedTransaction(max_weight) => {
 				min(global::max_block_weight(), max_weight).saturating_sub(coinbase_weight)
 			}
@@ -954,7 +1072,7 @@ impl TransactionBody {
 			}
 		};
 
-		if self.body_weight_as_block() > max_weight {
+		if self.weight() > max_weight {
 			return Err(Error::TooHeavy);
 		}
 		Ok(())
@@ -1262,6 +1380,11 @@ impl Transaction {
 		self.body.fee()
 	}
 
+	/// Shifted fee for a transaction is the sum of fees of all kernels shifted right by the maximum fee shift
+	pub fn shifted_fee(&self) -> u64 {
+		self.body.shifted_fee()
+	}
+
 	/// Total overage across all kernels.
 	pub fn overage(&self) -> i64 {
 		self.body.overage()
@@ -1297,25 +1420,20 @@ impl Transaction {
 		Ok(())
 	}
 
-	/// Can be used to compare txs by their fee/weight ratio.
+	/// Can be used to compare txs by their fee/weight ratio, aka feerate.
 	/// Don't use these values for anything else though due to precision multiplier.
-	pub fn fee_to_weight(&self) -> u64 {
-		self.fee() * 1_000 / self.tx_weight() as u64
+	pub fn fee_rate(&self) -> u64 {
+		self.fee() / self.weight() as u64
 	}
 
 	/// Calculate transaction weight
-	pub fn tx_weight(&self) -> u64 {
-		self.body.body_weight()
-	}
-
-	/// Calculate transaction weight as a block
-	pub fn tx_weight_as_block(&self) -> u64 {
-		self.body.body_weight_as_block()
+	pub fn weight(&self) -> u64 {
+		self.body.weight()
 	}
 
 	/// Calculate transaction weight from transaction details
-	pub fn weight(num_inputs: u64, num_outputs: u64, num_kernels: u64) -> u64 {
-		TransactionBody::weight(num_inputs, num_outputs, num_kernels)
+	pub fn weight_by_iok(num_inputs: u64, num_outputs: u64, num_kernels: u64) -> u64 {
+		TransactionBody::weight_by_iok(num_inputs, num_outputs, num_kernels)
 	}
 }
 
@@ -2113,7 +2231,9 @@ mod test {
 		let sig = secp::Signature::from_raw_data(&[0; 64]).unwrap();
 
 		let kernel = TxKernel {
-			features: KernelFeatures::Plain { fee: 10 },
+			features: KernelFeatures::Plain {
+				fee_fields: FeeFields::new(0, 10),
+			},
 			excess: commit,
 			excess_sig: sig.clone(),
 		};
@@ -2123,7 +2243,12 @@ mod test {
 			let mut vec = vec![];
 			ser::serialize(&mut vec, version, &kernel).expect("serialized failed");
 			let kernel2: TxKernel = ser::deserialize(&mut &vec[..], version).unwrap();
-			assert_eq!(kernel2.features, KernelFeatures::Plain { fee: 10 });
+			assert_eq!(
+				kernel2.features,
+				KernelFeatures::Plain {
+					fee_fields: FeeFields::new(0, 10)
+				}
+			);
 			assert_eq!(kernel2.excess, commit);
 			assert_eq!(kernel2.excess_sig, sig.clone());
 		}
@@ -2132,7 +2257,12 @@ mod test {
 		let mut vec = vec![];
 		ser::serialize_default(&mut vec, &kernel).expect("serialized failed");
 		let kernel2: TxKernel = ser::deserialize_default(&mut &vec[..]).unwrap();
-		assert_eq!(kernel2.features, KernelFeatures::Plain { fee: 10 });
+		assert_eq!(
+			kernel2.features,
+			KernelFeatures::Plain {
+				fee_fields: FeeFields::new(0, 10)
+			}
+		);
 		assert_eq!(kernel2.excess, commit);
 		assert_eq!(kernel2.excess_sig, sig.clone());
 	}
@@ -2151,7 +2281,7 @@ mod test {
 		// now check a kernel with lock_height serialize/deserialize correctly
 		let kernel = TxKernel {
 			features: KernelFeatures::HeightLocked {
-				fee: 10,
+				fee_fields: FeeFields::new(0, 10),
 				lock_height: 100,
 			},
 			excess: commit,
@@ -2193,7 +2323,7 @@ mod test {
 		// now check an NRD kernel will serialize/deserialize correctly
 		let kernel = TxKernel {
 			features: KernelFeatures::NoRecentDuplicate {
-				fee: 10,
+				fee_fields: FeeFields::new(0, 10),
 				relative_height: NRDRelativeHeight(100),
 			},
 			excess: commit,
@@ -2225,7 +2355,7 @@ mod test {
 		let key_id = ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
 
 		let mut kernel = TxKernel::with_features(KernelFeatures::NoRecentDuplicate {
-			fee: 10,
+			fee_fields: FeeFields::new(0, 10),
 			relative_height: NRDRelativeHeight(100),
 		});
 
@@ -2251,25 +2381,27 @@ mod test {
 
 		// Modify the fee and check signature no longer verifies.
 		kernel.features = KernelFeatures::NoRecentDuplicate {
-			fee: 9,
+			fee_fields: FeeFields::new(0, 9),
 			relative_height: NRDRelativeHeight(100),
 		};
 		assert_eq!(kernel.verify(), Err(Error::IncorrectSignature));
 
 		// Modify the relative_height and check signature no longer verifies.
 		kernel.features = KernelFeatures::NoRecentDuplicate {
-			fee: 10,
+			fee_fields: FeeFields::new(0, 10),
 			relative_height: NRDRelativeHeight(101),
 		};
 		assert_eq!(kernel.verify(), Err(Error::IncorrectSignature));
 
 		// Swap the features out for something different and check signature no longer verifies.
-		kernel.features = KernelFeatures::Plain { fee: 10 };
+		kernel.features = KernelFeatures::Plain {
+			fee_fields: FeeFields::new(0, 10),
+		};
 		assert_eq!(kernel.verify(), Err(Error::IncorrectSignature));
 
 		// Check signature verifies if we use the original features.
 		kernel.features = KernelFeatures::NoRecentDuplicate {
-			fee: 10,
+			fee_fields: FeeFields::new(0, 10),
 			relative_height: NRDRelativeHeight(100),
 		};
 		assert_eq!(kernel.verify(), Ok(()));
@@ -2330,7 +2462,12 @@ mod test {
 		let mut vec = vec![];
 		ser::serialize_default(&mut vec, &(0u8, 10u64, 0u64))?;
 		let features: KernelFeatures = ser::deserialize_default(&mut &vec[..])?;
-		assert_eq!(features, KernelFeatures::Plain { fee: 10 });
+		assert_eq!(
+			features,
+			KernelFeatures::Plain {
+				fee_fields: FeeFields::new(0, 10)
+			}
+		);
 
 		let mut vec = vec![];
 		ser::serialize_default(&mut vec, &(1u8, 0u64, 0u64))?;
@@ -2343,7 +2480,7 @@ mod test {
 		assert_eq!(
 			features,
 			KernelFeatures::HeightLocked {
-				fee: 10,
+				fee_fields: FeeFields::new(0, 10),
 				lock_height: 100
 			}
 		);
@@ -2373,7 +2510,7 @@ mod test {
 		assert_eq!(
 			features,
 			KernelFeatures::NoRecentDuplicate {
-				fee: 10,
+				fee_fields: FeeFields::new(0, 10),
 				relative_height: NRDRelativeHeight(100)
 			}
 		);

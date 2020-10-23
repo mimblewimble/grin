@@ -37,7 +37,7 @@ pub fn tx2i1o() -> Transaction {
 	let key_id3 = keychain::ExtKeychain::derive_key_id(1, 3, 0, 0, 0);
 
 	let tx = build::transaction(
-		KernelFeatures::Plain { fee: 2 },
+		KernelFeatures::Plain { fee_fields: 2 },
 		&[input(10, key_id1), input(11, key_id2), output(19, key_id3)],
 		&keychain,
 		&builder,
@@ -56,7 +56,7 @@ pub fn tx1i1o() -> Transaction {
 	let key_id2 = keychain::ExtKeychain::derive_key_id(1, 2, 0, 0, 0);
 
 	let tx = build::transaction(
-		KernelFeatures::Plain { fee: 2 },
+		KernelFeatures::Plain { fee_fields: 2 },
 		&[input(5, key_id1), output(3, key_id2)],
 		&keychain,
 		&builder,
@@ -96,7 +96,7 @@ pub fn tx1i2o() -> Transaction {
 	let key_id3 = keychain::ExtKeychain::derive_key_id(1, 3, 0, 0, 0);
 
 	let tx = build::transaction(
-		KernelFeatures::Plain { fee: 2 },
+		KernelFeatures::Plain { fee_fields: 2 },
 		&[input(6, key_id1), output(3, key_id2), output(1, key_id3)],
 		&keychain,
 		&builder,
@@ -140,7 +140,7 @@ where
 	B: ProofBuild,
 {
 	build::transaction(
-		KernelFeatures::Plain { fee: 2 },
+		KernelFeatures::Plain { fee_fields: 2 },
 		&[input(v, key_id1), output(3, key_id2)],
 		keychain,
 		builder,

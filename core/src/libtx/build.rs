@@ -23,7 +23,7 @@
 //!
 //! Example:
 //! build::transaction(
-//!   KernelFeatures::Plain{ fee: 2 },
+//!   KernelFeatures::Plain{ fee_fields: 2 },
 //!   vec![
 //!     input_rand(75),
 //!     output_rand(42),
@@ -279,7 +279,7 @@ mod test {
 		let vc = verifier_cache();
 
 		let tx = transaction(
-			KernelFeatures::Plain { fee: 2 },
+			KernelFeatures::Plain { fee_fields: 2 },
 			&[input(10, key_id1), input(12, key_id2), output(20, key_id3)],
 			&keychain,
 			&builder,
@@ -301,7 +301,7 @@ mod test {
 		let vc = verifier_cache();
 
 		let tx = transaction(
-			KernelFeatures::Plain { fee: 2 },
+			KernelFeatures::Plain { fee_fields: 2 },
 			&[input(10, key_id1), input(12, key_id2), output(20, key_id3)],
 			&keychain,
 			&builder,
@@ -322,7 +322,7 @@ mod test {
 		let vc = verifier_cache();
 
 		let tx = transaction(
-			KernelFeatures::Plain { fee: 4 },
+			KernelFeatures::Plain { fee_fields: 4 },
 			&[input(6, key_id1), output(2, key_id2)],
 			&keychain,
 			&builder,

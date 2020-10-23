@@ -206,7 +206,9 @@ where
 	}
 
 	build::transaction(
-		KernelFeatures::Plain { fee: fees as u64 },
+		KernelFeatures::Plain {
+			fee_fields: fees as u64,
+		},
 		&tx_elements,
 		keychain,
 		&ProofBuilder::new(keychain),
@@ -231,7 +233,9 @@ where
 		keychain,
 		input_values,
 		output_values,
-		KernelFeatures::Plain { fee: fees as u64 },
+		KernelFeatures::Plain {
+			fee_fields: fees as u64,
+		},
 	)
 }
 

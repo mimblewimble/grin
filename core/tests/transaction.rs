@@ -94,7 +94,7 @@ fn test_verify_cut_through_plain() -> Result<(), Error> {
 	let builder = proof::ProofBuilder::new(&keychain);
 
 	let mut tx = build::transaction(
-		KernelFeatures::Plain { fee: 0 },
+		KernelFeatures::Plain { fee_fields: 0 },
 		&[
 			build::input(10, key_id1.clone()),
 			build::input(10, key_id2.clone()),
@@ -153,7 +153,7 @@ fn test_verify_cut_through_coinbase() -> Result<(), Error> {
 	let builder = ProofBuilder::new(&keychain);
 
 	let mut tx = build::transaction(
-		KernelFeatures::Plain { fee: 0 },
+		KernelFeatures::Plain { fee_fields: 0 },
 		&[
 			build::coinbase_input(consensus::REWARD, key_id1.clone()),
 			build::coinbase_input(consensus::REWARD, key_id2.clone()),

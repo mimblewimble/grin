@@ -102,13 +102,13 @@ pub const CUT_THROUGH_HORIZON: u32 = WEEK_HEIGHT as u32;
 pub const STATE_SYNC_THRESHOLD: u32 = 2 * DAY_HEIGHT as u32;
 
 /// Weight of an input when counted against the max block weight capacity
-pub const BLOCK_INPUT_WEIGHT: u64 = 1;
+pub const INPUT_WEIGHT: u64 = 1;
 
 /// Weight of an output when counted against the max block weight capacity
-pub const BLOCK_OUTPUT_WEIGHT: u64 = 21;
+pub const OUTPUT_WEIGHT: u64 = 21;
 
 /// Weight of a kernel when counted against the max block weight capacity
-pub const BLOCK_KERNEL_WEIGHT: u64 = 3;
+pub const KERNEL_WEIGHT: u64 = 3;
 
 /// Total maximum block weight. At current sizes, this means a maximum
 /// theoretical size of:

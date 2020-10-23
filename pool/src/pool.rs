@@ -340,19 +340,19 @@ where
 
 	// Use our bucket logic to identify the best transaction for eviction and evict it.
 	// We want to avoid evicting a transaction where another transaction depends on it.
-	// We want to evict a transaction with low fee_to_weight.
+	// We want to evict a transaction with low fee_rate.
 	pub fn evict_transaction(&mut self) {
 		if let Some(evictable_transaction) = self.bucket_transactions(Weighting::NoLimit).last() {
 			self.entries.retain(|x| x.tx != *evictable_transaction);
 		};
 	}
 
-	/// Buckets consist of a vec of txs and track the aggregate fee_to_weight.
+	/// Buckets consist of a vec of txs and track the aggregate fee_rate.
 	/// We aggregate (cut-through) dependent transactions within a bucket *unless* adding a tx
-	/// would reduce the aggregate fee_to_weight, in which case we start a new bucket.
-	/// Note this new bucket will by definition have a lower fee_to_weight than the bucket
+	/// would reduce the aggregate fee_rate, in which case we start a new bucket.
+	/// Note this new bucket will by definition have a lower fee_rate than the bucket
 	/// containing the tx it depends on.
-	/// Sorting the buckets by fee_to_weight will therefore preserve dependency ordering,
+	/// Sorting the buckets by fee_rate will therefore preserve dependency ordering,
 	/// maximizing both cut-through and overall fees.
 	fn bucket_transactions(&self, weighting: Weighting) -> Vec<Transaction> {
 		let mut tx_buckets: Vec<Bucket> = Vec::new();
@@ -413,12 +413,12 @@ where
 						weighting,
 						self.verifier_cache.clone(),
 					) {
-						if new_bucket.fee_to_weight >= bucket.fee_to_weight {
-							// Only aggregate if it would not reduce the fee_to_weight ratio.
+						if new_bucket.fee_rate >= bucket.fee_rate {
+							// Only aggregate if it would not reduce the fee_rate ratio.
 							tx_buckets[pos] = new_bucket;
 						} else {
 							// Otherwise put it in its own bucket at the end.
-							// Note: This bucket will have a lower fee_to_weight
+							// Note: This bucket will have a lower fee_rate
 							// than the bucket it depends on.
 							tx_buckets.push(Bucket::new(entry.tx.clone(), tx_buckets.len()));
 						}
@@ -442,11 +442,11 @@ where
 			}
 		}
 
-		// Sort buckets by fee_to_weight (descending) and age (oldest first).
-		// Txs with highest fee_to_weight will be prioritied.
-		// Aggregation that increases the fee_to_weight of a bucket will prioritize the bucket.
+		// Sort buckets by fee_rate (descending) and age (oldest first).
+		// Txs with highest fee_rate will be prioritied.
+		// Aggregation that increases the fee_rate of a bucket will prioritize the bucket.
 		// Oldest (based on pool insertion time) will then be prioritized.
-		tx_buckets.sort_unstable_by_key(|x| (Reverse(x.fee_to_weight), x.age_idx));
+		tx_buckets.sort_unstable_by_key(|x| (Reverse(x.fee_rate), x.age_idx));
 
 		tx_buckets.into_iter().flat_map(|x| x.raw_txs).collect()
 	}
@@ -504,18 +504,18 @@ where
 
 struct Bucket {
 	raw_txs: Vec<Transaction>,
-	fee_to_weight: u64,
+	fee_rate: u64,
 	age_idx: usize,
 }
 
 impl Bucket {
 	/// Construct a new bucket with the given tx.
 	/// also specifies an "age_idx" so we can sort buckets by age
-	/// as well as fee_to_weight. Txs are maintainedin the pool in insert order
+	/// as well as fee_rate. Txs are maintainedin the pool in insert order
 	/// so buckets with low age_idx contain oldest txs.
 	fn new(tx: Transaction, age_idx: usize) -> Bucket {
 		Bucket {
-			fee_to_weight: tx.fee_to_weight(),
+			fee_rate: tx.fee_rate(),
 			raw_txs: vec![tx],
 			age_idx,
 		}
@@ -532,7 +532,7 @@ impl Bucket {
 		let agg_tx = transaction::aggregate(&raw_txs)?;
 		agg_tx.validate(weighting, verifier_cache)?;
 		Ok(Bucket {
-			fee_to_weight: agg_tx.fee_to_weight(),
+			fee_rate: agg_tx.fee_rate(),
 			raw_txs: raw_txs,
 			age_idx: self.age_idx,
 		})

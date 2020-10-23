@@ -17,9 +17,9 @@
 //! should be used sparingly.
 
 use crate::consensus::{
-	graph_weight, valid_header_version, HeaderInfo, BASE_EDGE_BITS, BLOCK_KERNEL_WEIGHT,
-	BLOCK_OUTPUT_WEIGHT, BLOCK_TIME_SEC, COINBASE_MATURITY, CUT_THROUGH_HORIZON, DAY_HEIGHT,
-	DEFAULT_MIN_EDGE_BITS, DIFFICULTY_ADJUST_WINDOW, INITIAL_DIFFICULTY, MAX_BLOCK_WEIGHT,
+	graph_weight, valid_header_version, HeaderInfo, BASE_EDGE_BITS, BLOCK_TIME_SEC,
+	COINBASE_MATURITY, CUT_THROUGH_HORIZON, DAY_HEIGHT, DEFAULT_MIN_EDGE_BITS,
+	DIFFICULTY_ADJUST_WINDOW, INITIAL_DIFFICULTY, KERNEL_WEIGHT, MAX_BLOCK_WEIGHT, OUTPUT_WEIGHT,
 	PROOFSIZE, SECOND_POW_EDGE_BITS, STATE_SYNC_THRESHOLD,
 };
 use crate::core::block::HeaderVersion;
@@ -325,7 +325,7 @@ pub fn max_block_weight() -> u64 {
 
 /// Maximum allowed transaction weight (1 weight unit ~= 32 bytes)
 pub fn max_tx_weight() -> u64 {
-	let coinbase_weight = BLOCK_OUTPUT_WEIGHT + BLOCK_KERNEL_WEIGHT;
+	let coinbase_weight = OUTPUT_WEIGHT + KERNEL_WEIGHT;
 	max_block_weight().saturating_sub(coinbase_weight) as u64
 }
 

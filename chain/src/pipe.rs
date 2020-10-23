@@ -353,7 +353,7 @@ fn validate_header(header: &BlockHeader, ctx: &mut BlockContext<'_>) -> Result<(
 	}
 
 	// Block header is invalid (and block is invalid) if this lower bound is too heavy for a full block.
-	let weight = TransactionBody::weight_as_block(0, num_outputs, num_kernels);
+	let weight = TransactionBody::weight_by_iok(0, num_outputs, num_kernels);
 	if weight > global::max_block_weight() {
 		return Err(ErrorKind::Block(block::Error::TooHeavy).into());
 	}

@@ -104,7 +104,7 @@ fn process_block_cut_through() -> Result<(), chain::Error> {
 	// Note: We reuse key_ids resulting in an input and an output sharing the same commitment.
 	// The input is coinbase and the output is plain.
 	let tx = build::transaction(
-		KernelFeatures::Plain { fee: 0 },
+		KernelFeatures::Plain { fee_fields: 0 },
 		&[
 			build::coinbase_input(consensus::REWARD, key_id1.clone()),
 			build::coinbase_input(consensus::REWARD, key_id2.clone()),

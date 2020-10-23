@@ -100,7 +100,7 @@ fn test_coinbase_maturity() {
 		// here we build a tx that attempts to spend the earlier coinbase output
 		// this is not a valid tx as the coinbase output cannot be spent yet
 		let coinbase_txn = build::transaction(
-			KernelFeatures::Plain { fee: 2 },
+			KernelFeatures::Plain { fee_fields: 2 },
 			&[
 				build::coinbase_input(amount, key_id1.clone()),
 				build::output(amount - 2, key_id2.clone()),
@@ -182,7 +182,7 @@ fn test_coinbase_maturity() {
 			// here we build a tx that attempts to spend the earlier coinbase output
 			// this is not a valid tx as the coinbase output cannot be spent yet
 			let coinbase_txn = build::transaction(
-				KernelFeatures::Plain { fee: 2 },
+				KernelFeatures::Plain { fee_fields: 2 },
 				&[
 					build::coinbase_input(amount, key_id1.clone()),
 					build::output(amount - 2, key_id2.clone()),
