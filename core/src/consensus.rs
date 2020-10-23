@@ -47,7 +47,7 @@ pub fn reward(fee: u64) -> u64 {
 	REWARD.saturating_add(fee)
 }
 
-// an hour in seconds
+/// an hour in seconds
 pub const HOUR_SEC: u64 = 60 * 60;
 
 /// Nominal height for standard time intervals, hour is 60 blocks
@@ -218,7 +218,7 @@ pub fn graph_weight(height: u64, edge_bits: u8) -> u64 {
 	(2u64 << (edge_bits - global::base_edge_bits()) as u64) * xpr_edge_bits
 }
 
-// minimum solution difficulty after HardFork4 when PoW becomes primary only Cuckatoo32+
+/// minimum solution difficulty after HardFork4 when PoW becomes primary only Cuckatoo32+
 pub const C32_GRAPH_WEIGHT: u64 = (2u64 << (32 - BASE_EDGE_BITS) as u64) * 32; // 16384
 
 /// Minimum difficulty, enforced in Damped Moving Average diff retargetting
