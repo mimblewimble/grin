@@ -26,7 +26,9 @@ use std::path::{Path, PathBuf};
 
 use croaring::Bitmap;
 
-use crate::core::core::pmmr::{bintree_pos_iter, bintree_postorder_height, family};
+use crate::core::core::pmmr::{
+	bintree_leftmost, bintree_pos_iter, bintree_postorder_height, family,
+};
 use crate::{read_bitmap, save_via_temp_file};
 
 /// Maintains a list of previously pruned nodes in PMMR, compacting the list as
@@ -53,17 +55,24 @@ pub struct PruneList {
 
 impl PruneList {
 	/// Instantiate a new prune list from the provided path and bitmap.
-	pub fn new(path: Option<PathBuf>, mut bitmap: Bitmap) -> PruneList {
-		// Note: prune list is 1-indexed so remove any 0 value for safety.
-		bitmap.remove(0);
-
-		PruneList {
+	pub fn new(path: Option<PathBuf>, bitmap: Bitmap) -> PruneList {
+		let mut prune_list = PruneList {
 			path,
-			bitmap,
+			bitmap: Bitmap::create(),
 			pruned_cache: Bitmap::create(),
 			shift_cache: vec![],
 			leaf_shift_cache: vec![],
+		};
+
+		// Append each bitmap entry to our prune_list to ensure we build the caches etc.
+		for pos in bitmap.iter().filter(|x| *x > 0) {
+			prune_list.append_single(pos as u64)
 		}
+
+		prune_list.bitmap.run_optimize();
+		prune_list.pruned_cache.run_optimize();
+
+		prune_list
 	}
 
 	/// Instatiate a new empty prune list.
@@ -72,18 +81,24 @@ impl PruneList {
 	}
 
 	/// Open an existing prune_list or create a new one.
-	pub fn open<P: AsRef<Path>>(path: P) -> io::Result<PruneList> {
+	/// Takes an optional bitmap of new pruned pos to be combined with existing pos.
+	pub fn open<P: AsRef<Path>>(path: P, new_pruned: Option<Bitmap>) -> io::Result<PruneList> {
 		let file_path = PathBuf::from(path.as_ref());
-		let bitmap = if file_path.exists() {
+		let mut bitmap = if file_path.exists() {
 			read_bitmap(&file_path)?
 		} else {
 			Bitmap::create()
 		};
 
-		let mut prune_list = PruneList::new(Some(file_path), bitmap);
+		if let Some(new_pruned) = new_pruned {
+			bitmap.or_inplace(&new_pruned);
+		}
 
+		let prune_list = PruneList::new(Some(file_path), bitmap);
+
+		// TODO - Confirm we no longer need to init caches now (caches built during creation).
 		// Now built the shift and pruned caches from the bitmap we read from disk.
-		prune_list.init_caches();
+		// prune_list.init_caches();
 
 		if !prune_list.bitmap.is_empty() {
 			debug!("bitmap {} pos ({} bytes), pruned_cache {} pos ({} bytes), shift_cache {}, leaf_shift_cache {}",
@@ -106,32 +121,7 @@ impl PruneList {
 		self.rebuild_pruned_cache();
 	}
 
-	/// Append a single pruned subtree root.
-	/// Update existing caches based on size of this subtree.
-	///
-	/// TODO - What happens if something is already pruned beneath this?
-	/// TODO - Consolidate this with add() doing the right thing?
-	///
-	pub fn append_pruned_subtree(&mut self, pos: u64) {
-		println!("append_pruned_subtree: {}", pos);
-		println!("append_pruned_subtree: {:?}", self);
-
-		self.bitmap.add(pos as u32);
-
-		self.shift_cache.push(self.calculate_next_shift(pos));
-		self.leaf_shift_cache
-			.push(self.calculate_next_leaf_shift(pos));
-
-		for x in bintree_pos_iter(pos) {
-			self.pruned_cache.add(x as u32);
-		}
-
-		println!("append_pruned_subtree: {:?}", self);
-	}
-
 	/// Save the prune_list to disk.
-	/// Clears out leaf pos before saving to disk
-	/// as we track these via the leaf_set.
 	pub fn flush(&mut self) -> io::Result<()> {
 		// Run the optimization step on the bitmap.
 		self.bitmap.run_optimize();
@@ -142,10 +132,6 @@ impl PruneList {
 				file.write_all(&self.bitmap.serialize())
 			})?;
 		}
-
-		// Rebuild our "shift caches" here as we are flushing changes to disk
-		// and the contents of our prune_list has likely changed.
-		self.init_caches();
 
 		Ok(())
 	}
@@ -253,24 +239,68 @@ impl PruneList {
 		}
 	}
 
-	/// Push the node at the provided position in the prune list. Compacts the
-	/// list if pruning the additional node means a parent can get pruned as well.
-	pub fn add(&mut self, pos: u64) {
+	// Remove any existing entries in shift_cache and leaf_shift_cache
+	// for any pos contained in the subtree with provided root.
+	fn cleanup_subtree(&mut self, pos: u64) {
+		let lc = bintree_leftmost(pos) as u32;
+		let cleanup_pos: Vec<_> = self.bitmap.iter().skip_while(|x| *x < lc).collect();
+
+		if let Some(first_pos) = cleanup_pos.first() {
+			let idx = self.bitmap.rank(*first_pos);
+			self.shift_cache.truncate(idx.saturating_sub(1) as usize);
+			self.leaf_shift_cache
+				.truncate(idx.saturating_sub(1) as usize);
+		}
+
+		for x in cleanup_pos {
+			self.bitmap.remove(x);
+		}
+	}
+
+	/// Push the node at the provided position in the prune list.
+	/// Assumes no rollup of siblings or children.
+	/// Fast and used when reading a prune_list (assumed valid) off disk.
+	fn append_single(&mut self, pos: u64) {
 		assert!(pos > 0, "prune list 1-indexed, 0 not valid pos");
+		assert!(
+			pos > self.bitmap.maximum().unwrap_or(0) as u64,
+			"prune list append only"
+		);
 
-		let mut current = pos;
-		loop {
-			let (parent, sibling) = family(current);
+		// Add this pos to the bitmap (leaf or subtree root)
+		self.bitmap.add(pos as u32);
 
-			if self.bitmap.contains(sibling as u32) || self.pruned_cache.contains(sibling as u32) {
-				self.pruned_cache.add(current as u32);
-				self.bitmap.remove(sibling as u32);
-				current = parent;
-			} else {
-				self.pruned_cache.add(current as u32);
-				self.bitmap.add(current as u32);
-				break;
-			}
+		// Calculate shift and leaf_shift for this pos.
+		self.shift_cache.push(self.calculate_next_shift(pos));
+		self.leaf_shift_cache
+			.push(self.calculate_next_leaf_shift(pos));
+
+		// Populate pruned_cache with all pos in this subtree, including the root itself.
+		for x in bintree_pos_iter(pos) {
+			self.pruned_cache.add(x as u32);
+		}
+	}
+
+	/// Push the node at the provided position in the prune list.
+	/// Handles rollup of siblings and children as we go (relatively slow).
+	/// Once we find a subtree root that can not be rolled up any further
+	/// we cleanup everything beneath it and replace it with a single appended node.
+	pub fn append(&mut self, pos: u64) {
+		assert!(pos > 0, "prune list 1-indexed, 0 not valid pos");
+		assert!(
+			pos > self.bitmap.maximum().unwrap_or(0) as u64,
+			"prune list append only"
+		);
+
+		let (parent, sibling) = family(pos);
+		if self.is_pruned(sibling) {
+			// Recursively append the parent (removing our sibling in the process).
+			self.append(parent)
+		} else {
+			// Make sure we roll anything beneath this up into this higher level pruned subtree root.
+			// We should have no nested entries in the prune_list.
+			self.cleanup_subtree(pos);
+			self.append_single(pos);
 		}
 	}
 

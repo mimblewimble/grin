@@ -98,7 +98,7 @@ impl<T: PMMRable> Backend<T> for PMMRBackend<T> {
 			.append(&hash)
 			.map_err(|e| format!("Failed to append subtree hash to file. {}", e))?;
 
-		self.prune_list.append_pruned_subtree(pos);
+		self.prune_list.append(pos);
 
 		Ok(())
 	}
@@ -281,7 +281,7 @@ impl<T: PMMRable> PMMRBackend<T> {
 		}
 
 		let leaf_set = LeafSet::open(&leaf_set_path)?;
-		let prune_list = PruneList::open(&data_dir.join(PMMR_PRUN_FILE))?;
+		let prune_list = PruneList::open(&data_dir.join(PMMR_PRUN_FILE), None)?;
 
 		Ok(PMMRBackend {
 			data_dir: data_dir.to_path_buf(),
@@ -398,9 +398,9 @@ impl<T: PMMRable> PMMRBackend<T> {
 
 		// 3. Update the prune list and write to disk.
 		{
-			for pos in leaves_removed.iter() {
-				self.prune_list.add(pos.into());
-			}
+			let prune_list =
+				PruneList::open(&self.data_dir.join(PMMR_PRUN_FILE), Some(leaves_removed))?;
+			self.prune_list = prune_list;
 			self.prune_list.flush()?;
 		}
 
