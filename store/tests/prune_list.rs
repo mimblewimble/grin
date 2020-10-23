@@ -268,3 +268,23 @@ fn test_get_shift() {
 	assert_eq!(pl.get_shift(11), 4);
 	assert_eq!(pl.get_shift(12), 4);
 }
+
+#[test]
+pub fn test_append_pruned_subtree() {
+	let mut pl = PruneList::empty();
+	pl.append_pruned_subtree(1);
+
+	assert_eq!(pl.to_vec(), [1]);
+	assert_eq!(pl.get_shift(2), 0);
+	assert_eq!(pl.get_leaf_shift(2), 0);
+
+	pl.append_pruned_subtree(3);
+
+	pl.init_caches();
+	println!("append_pruned_subtree: {:?}", pl);
+
+	pl.append_pruned_subtree(7);
+
+	pl.init_caches();
+	println!("append_pruned_subtree: {:?}", pl);
+}

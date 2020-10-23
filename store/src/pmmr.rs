@@ -98,9 +98,7 @@ impl<T: PMMRable> Backend<T> for PMMRBackend<T> {
 			.append(&hash)
 			.map_err(|e| format!("Failed to append subtree hash to file. {}", e))?;
 
-		self.prune_list
-			.append_pruned_subtree(pos)
-			.map_err(|e| format!("Failed to append to prune_list. {}", e))?;
+		self.prune_list.append_pruned_subtree(pos);
 
 		Ok(())
 	}

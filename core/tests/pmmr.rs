@@ -131,6 +131,21 @@ fn test_bintree_leaf_pos_iter() {
 }
 
 #[test]
+fn test_bintree_pos_iter() {
+	assert_eq!(pmmr::bintree_pos_iter(0).count(), 0);
+	assert_eq!(pmmr::bintree_pos_iter(1).collect::<Vec<_>>(), [1]);
+	assert_eq!(pmmr::bintree_pos_iter(2).collect::<Vec<_>>(), [2]);
+	assert_eq!(pmmr::bintree_pos_iter(3).collect::<Vec<_>>(), [1, 2, 3]);
+	assert_eq!(pmmr::bintree_pos_iter(4).collect::<Vec<_>>(), [4]);
+	assert_eq!(pmmr::bintree_pos_iter(5).collect::<Vec<_>>(), [5]);
+	assert_eq!(pmmr::bintree_pos_iter(6).collect::<Vec<_>>(), [4, 5, 6]);
+	assert_eq!(
+		pmmr::bintree_pos_iter(7).collect::<Vec<_>>(),
+		[1, 2, 3, 4, 5, 6, 7]
+	);
+}
+
+#[test]
 fn test_is_leaf() {
 	assert_eq!(pmmr::is_leaf(0), false);
 	assert_eq!(pmmr::is_leaf(1), true);

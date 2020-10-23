@@ -12,8 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::marker;
-use std::u64;
+use std::{cmp::max, marker};
 
 use croaring::Bitmap;
 
@@ -662,9 +661,15 @@ pub fn bintree_leftmost(pos: u64) -> u64 {
 	pos + 2 - (2 << height)
 }
 
-/// Iterator over all leaf pos beneath the provided subtree root.
+/// Iterator over all leaf pos beneath the provided subtree root (including the root itself).
 pub fn bintree_leaf_pos_iter(pos: u64) -> impl Iterator<Item = u64> {
-	let leaf_start = bintree_leftmost(pos as u64);
+	let leaf_start = max(1, bintree_leftmost(pos as u64));
 	let leaf_end = bintree_rightmost(pos as u64);
 	(leaf_start..=leaf_end).filter(|x| is_leaf(*x))
+}
+
+/// Iterator over all pos beneath the provided subtree root (including the root itself).
+pub fn bintree_pos_iter(pos: u64) -> impl Iterator<Item = u64> {
+	let leaf_start = max(1, bintree_leftmost(pos as u64));
+	(leaf_start..=pos).into_iter()
 }

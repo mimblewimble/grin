@@ -26,7 +26,7 @@ use std::path::{Path, PathBuf};
 
 use croaring::Bitmap;
 
-use crate::core::core::pmmr::{bintree_leaf_pos_iter, bintree_postorder_height, family};
+use crate::core::core::pmmr::{bintree_pos_iter, bintree_postorder_height, family};
 use crate::{read_bitmap, save_via_temp_file};
 
 /// Maintains a list of previously pruned nodes in PMMR, compacting the list as
@@ -107,21 +107,26 @@ impl PruneList {
 	}
 
 	/// Append a single pruned subtree root.
-	/// Update caches based on size of this subtree.
-	pub fn append_pruned_subtree(&mut self, pos: u64) -> io::Result<()> {
-		debug!("append_pruned_subtree: {}", pos);
-		debug!("append_pruned_subtree: {:?}", self);
+	/// Update existing caches based on size of this subtree.
+	///
+	/// TODO - What happens if something is already pruned beneath this?
+	/// TODO - Consolidate this with add() doing the right thing?
+	///
+	pub fn append_pruned_subtree(&mut self, pos: u64) {
+		println!("append_pruned_subtree: {}", pos);
+		println!("append_pruned_subtree: {:?}", self);
+
+		self.bitmap.add(pos as u32);
 
 		self.shift_cache.push(self.calculate_next_shift(pos));
 		self.leaf_shift_cache
 			.push(self.calculate_next_leaf_shift(pos));
-		for x in bintree_leaf_pos_iter(pos) {
+
+		for x in bintree_pos_iter(pos) {
 			self.pruned_cache.add(x as u32);
 		}
 
-		debug!("append_pruned_subtree: {:?}", self);
-
-		Ok(())
+		println!("append_pruned_subtree: {:?}", self);
 	}
 
 	/// Save the prune_list to disk.
@@ -292,12 +297,12 @@ impl PruneList {
 	}
 
 	// Rebuild the "pruned cache" by expanding every pruned subtree into the contained
-	// leaf pos and adding them all to the cache.
+	// pos and adding them all to the cache.
 	fn rebuild_pruned_cache(&mut self) {
 		let maximum = self.bitmap.maximum().unwrap_or(0);
 		self.pruned_cache = Bitmap::create_with_capacity(maximum);
 		for pos in self.bitmap.iter() {
-			for x in bintree_leaf_pos_iter(pos as u64) {
+			for x in bintree_pos_iter(pos as u64) {
 				self.pruned_cache.add(x as u32);
 			}
 		}
