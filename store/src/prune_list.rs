@@ -40,6 +40,7 @@ use crate::{read_bitmap, save_via_temp_file};
 /// but positions of a node within the PMMR will not match positions in the
 /// backend storage anymore. The PruneList accounts for that mismatch and does
 /// the position translation.
+#[derive(Debug)]
 pub struct PruneList {
 	path: Option<PathBuf>,
 	/// Bitmap representing pruned root node positions.
@@ -103,6 +104,24 @@ impl PruneList {
 		self.rebuild_shift_cache();
 		self.rebuild_leaf_shift_cache();
 		self.rebuild_pruned_cache();
+	}
+
+	/// Append a single pruned subtree root.
+	/// Update caches based on size of this subtree.
+	pub fn append_pruned_subtree(&mut self, pos: u64) -> io::Result<()> {
+		debug!("append_pruned_subtree: {}", pos);
+		debug!("append_pruned_subtree: {:?}", self);
+
+		self.shift_cache.push(self.calculate_next_shift(pos));
+		self.leaf_shift_cache
+			.push(self.calculate_next_leaf_shift(pos));
+		for x in bintree_leaf_pos_iter(pos) {
+			self.pruned_cache.add(x as u32);
+		}
+
+		debug!("append_pruned_subtree: {:?}", self);
+
+		Ok(())
 	}
 
 	/// Save the prune_list to disk.
