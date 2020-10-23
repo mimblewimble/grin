@@ -397,6 +397,7 @@ impl<T: PMMRable> PMMRBackend<T> {
 		}
 
 		// 3. Update the prune list and write to disk.
+		// TODO - encapsulate this in something other than reopening the prune_list...
 		{
 			let prune_list =
 				PruneList::open(&self.data_dir.join(PMMR_PRUN_FILE), Some(leaves_removed))?;

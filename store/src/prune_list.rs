@@ -66,7 +66,7 @@ impl PruneList {
 
 		// Append each bitmap entry to our prune_list to ensure we build the caches etc.
 		for pos in bitmap.iter().filter(|x| *x > 0) {
-			prune_list.append_single(pos as u64)
+			prune_list.append(pos as u64)
 		}
 
 		prune_list.bitmap.run_optimize();
@@ -90,6 +90,7 @@ impl PruneList {
 			Bitmap::create()
 		};
 
+		// TODO - Maybe a bad idea as this breaks all our assumptions and we cannot do a fast open...
 		if let Some(new_pruned) = new_pruned {
 			bitmap.or_inplace(&new_pruned);
 		}
@@ -242,24 +243,29 @@ impl PruneList {
 	// Remove any existing entries in shift_cache and leaf_shift_cache
 	// for any pos contained in the subtree with provided root.
 	fn cleanup_subtree(&mut self, pos: u64) {
+		assert!(pos > 0, "prune list 1-indexed, 0 not valid pos");
+
 		let lc = bintree_leftmost(pos) as u32;
-		let cleanup_pos: Vec<_> = self.bitmap.iter().skip_while(|x| *x < lc).collect();
+		let last_pos = self.bitmap.maximum().unwrap_or(1);
 
-		if let Some(first_pos) = cleanup_pos.first() {
-			let idx = self.bitmap.rank(*first_pos);
-			self.shift_cache.truncate(idx.saturating_sub(1) as usize);
-			self.leaf_shift_cache
-				.truncate(idx.saturating_sub(1) as usize);
+		// If this subtree does not intersect with existing bitmap then nothing to cleanup.
+		if lc > last_pos {
+			return;
 		}
 
-		for x in cleanup_pos {
-			self.bitmap.remove(x);
-		}
+		// Note: We will treat this as a "closed range" below (croaring api weirdness).
+		let cleanup_pos = lc..last_pos;
+
+		// Find point where we can truncate based on bitmap "rank" (index) of pos to the left of subtree.
+		let idx = self.bitmap.rank(lc - 1);
+		self.shift_cache.truncate(idx as usize);
+		self.leaf_shift_cache.truncate(idx as usize);
+
+		self.bitmap.remove_range_closed(cleanup_pos)
 	}
 
 	/// Push the node at the provided position in the prune list.
-	/// Assumes no rollup of siblings or children.
-	/// Fast and used when reading a prune_list (assumed valid) off disk.
+	/// Assumes rollup of siblings and children has already been handled.
 	fn append_single(&mut self, pos: u64) {
 		assert!(pos > 0, "prune list 1-indexed, 0 not valid pos");
 		assert!(
