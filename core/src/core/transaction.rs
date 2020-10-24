@@ -81,12 +81,12 @@ impl FeeFields {
 	/// Fees are limited to 40 bits
 	const FEE_BITS: u32 = 40;
 	/// Used to extract fee field
-	const FEE_MASK: u64 = 1u64 << FeeFields::FEE_BITS - 1;
+	const FEE_MASK: u64 = (1u64 << FeeFields::FEE_BITS) - 1;
 
 	/// Fee shifts are limited to 4 bits
 	pub const FEE_SHIFT_BITS: u32 = 4;
 	/// Used to extract fee_shift field
-	pub const FEE_SHIFT_MASK: u64 = 1u64 << FeeFields::FEE_SHIFT_BITS - 1;
+	pub const FEE_SHIFT_MASK: u64 = (1u64 << FeeFields::FEE_SHIFT_BITS) - 1;
 
 	/// Create a zero FeeFields with 0 fee and 0 fee_shift
 	pub fn zero() -> Self {
@@ -95,7 +95,7 @@ impl FeeFields {
 
 	/// Create a new FeeFields from the provided shift and fee
 	/// Checks both are valid (in range)
-	pub fn neuw(fee_shift: u64, fee: u64) -> Result<Self, Error> {
+	pub fn new(fee_shift: u64, fee: u64) -> Result<Self, Error> {
 		if fee == 0 {
 			Err(Error::InvalidFeeFields)
 		} else if fee > FeeFields::FEE_MASK {
@@ -103,7 +103,7 @@ impl FeeFields {
 		} else if fee_shift > FeeFields::FEE_SHIFT_MASK {
 			Err(Error::InvalidFeeFields)
 		} else {
-			Ok(Self(fee_shift << FeeFields::FEE_BITS | fee))
+			Ok(Self((fee_shift << FeeFields::FEE_BITS) | fee))
 		}
 	}
 
@@ -981,13 +981,9 @@ impl TransactionBody {
 			.fold(0, |acc, fee_fields| acc.saturating_add(fee_fields.fee()))
 	}
 
-	/// Shifted fee for a TransactionBody is the sum of fees shifted right by the maximum fee_shift
-	/// this is used to determine whether a tx can be relayed or accepted in a mempool
-	/// where transactions can specify a higher block-inclusion priority as a positive shift up to 15
-	/// but are required to overpaythe minimum required fees by a factor of 2^priority
-	pub fn shifted_fee(&self) -> u64 {
-		let fee_shift = self
-			.kernels
+	/// fee_shift for a TransactionBody is the maximum of fee_shifts of all fee carrying kernels.
+	pub fn fee_shift(&self) -> u8 {
+		self.kernels
 			.iter()
 			.filter_map(|k| match k.features {
 				KernelFeatures::Coinbase => None,
@@ -995,8 +991,15 @@ impl TransactionBody {
 				KernelFeatures::HeightLocked { fee_fields, .. } => Some(fee_fields),
 				KernelFeatures::NoRecentDuplicate { fee_fields, .. } => Some(fee_fields),
 			})
-			.fold(0, |acc, fee_fields| max(acc, fee_fields.fee_shift()));
-		self.fee() >> fee_shift
+			.fold(0, |acc, fee_fields| max(acc, fee_fields.fee_shift()))
+	}
+
+	/// Shifted fee for a TransactionBody is the sum of fees shifted right by the maximum fee_shift
+	/// this is used to determine whether a tx can be relayed or accepted in a mempool
+	/// where transactions can specify a higher block-inclusion priority as a positive shift up to 15
+	/// but are required to overpaythe minimum required fees by a factor of 2^priority
+	pub fn shifted_fee(&self) -> u64 {
+		self.fee() >> self.fee_shift()
 	}
 
 	fn overage(&self) -> i64 {

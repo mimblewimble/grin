@@ -21,8 +21,8 @@ use self::core::core::block::Error::KernelLockHeight;
 use self::core::core::hash::{Hashed, ZERO_HASH};
 use self::core::core::verifier_cache::{LruVerifierCache, VerifierCache};
 use self::core::core::{
-	aggregate, deaggregate, KernelFeatures, Output, OutputFeatures, OutputIdentifier, Transaction,
-	TxKernel, Weighting,
+	aggregate, deaggregate, FeeFields, KernelFeatures, Output, OutputFeatures, OutputIdentifier,
+	Transaction, TxKernel, Weighting,
 };
 use self::core::libtx::build::{self, initial_tx, input, output, with_excess};
 use self::core::libtx::{aggsig, ProofBuilder};
@@ -132,7 +132,7 @@ fn test_zero_commit_fails() {
 	// blinding should fail as signing with a zero r*G shouldn't work
 	let res = build::transaction(
 		KernelFeatures::Plain {
-			fee_fields: 0.try_into().unwrap(),
+			fee_fields: FeeFields::zero(),
 		},
 		&[input(10, key_id1.clone()), output(10, key_id1)],
 		&keychain,

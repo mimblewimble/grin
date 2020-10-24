@@ -128,7 +128,7 @@ fn test_transaction_pool_block_reconciliation() {
 	// - Copy of 4
 	let block_tx_3 = test_transaction(&keychain, vec![8], vec![5, 1]);
 	// - Output conflict w/ 8
-	let block_tx_4 = test_transaction(&keychain, vec![40], vec![9, 31]);
+	let block_tx_4 = test_transaction(&keychain, vec![40], vec![9, 29]);
 
 	let block_txs = &[block_tx_1, block_tx_2, block_tx_3, block_tx_4];
 	add_block(&chain, block_txs, &keychain);

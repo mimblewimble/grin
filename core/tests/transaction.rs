@@ -19,7 +19,7 @@ use crate::common::tx1i10_v2_compatible;
 use crate::core::core::transaction::{self, Error};
 use crate::core::core::verifier_cache::LruVerifierCache;
 use crate::core::core::{
-	FeeFields, KernelFeatures, Output, OutputFeatures, Transaction, Weighting,
+	FeeFields, KernelFeatures, Output, OutputFeatures, Transaction, TxKernel, Weighting,
 };
 use crate::core::global;
 use crate::core::libtx::build;
@@ -27,6 +27,7 @@ use crate::core::libtx::proof::{self, ProofBuilder};
 use crate::core::{consensus, ser};
 use grin_core as core;
 use keychain::{ExtKeychain, Keychain};
+use std::convert::TryInto;
 use std::sync::Arc;
 use util::RwLock;
 
@@ -47,7 +48,10 @@ fn test_transaction_json_ser_deser() {
 	assert!(value["body"]["outputs"][0]["proof"].is_string());
 
 	// Note: Tx kernel "features" serialize in a slightly unexpected way.
-	assert_eq!(value["body"]["kernels"][0]["features"]["Plain"]["fee"], 2);
+	assert_eq!(
+		value["body"]["kernels"][0]["features"]["Plain"]["fee_fields"],
+		2
+	);
 	assert!(value["body"]["kernels"][0]["excess"].is_string());
 	assert!(value["body"]["kernels"][0]["excess_sig"].is_string());
 
@@ -198,6 +202,48 @@ fn test_verify_cut_through_coinbase() -> Result<(), Error> {
 
 	// Transaction validates via lightweight "read" validation as well.
 	tx.validate_read()?;
+
+	Ok(())
+}
+
+// Test coverage for FeeFields
+#[test]
+fn test_fee_fields() -> Result<(), Error> {
+	global::set_local_chain_type(global::ChainTypes::UserTesting);
+
+	let keychain = ExtKeychain::from_random_seed(false)?;
+
+	let key_id1 = ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
+
+	let builder = ProofBuilder::new(&keychain);
+
+	let mut tx = build::transaction(
+		KernelFeatures::Plain {
+			fee_fields: FeeFields::new(1, 42).unwrap(),
+		},
+		&[
+			build::coinbase_input(consensus::REWARD, key_id1.clone()),
+			build::output(60_000_000_000 - 84 - 42 - 21, key_id1.clone()),
+		],
+		&keychain,
+		&builder,
+	)
+	.expect("valid tx");
+
+	assert_eq!(tx.fee(), 42);
+	assert_eq!(tx.shifted_fee(), 21);
+
+	tx.body.kernels.append(&mut vec![
+		TxKernel::with_features(KernelFeatures::Plain {
+			fee_fields: FeeFields::new(2, 84).unwrap(),
+		}),
+		TxKernel::with_features(KernelFeatures::Plain {
+			fee_fields: 21.try_into().unwrap(),
+		}),
+	]);
+
+	assert_eq!(tx.fee(), 147);
+	assert_eq!(tx.shifted_fee(), 36);
 
 	Ok(())
 }
