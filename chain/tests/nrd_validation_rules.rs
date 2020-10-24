@@ -28,6 +28,7 @@ use crate::core::libtx::{aggsig, build, reward, ProofBuilder};
 use crate::core::{consensus, global, pow};
 use crate::keychain::{BlindingFactor, ExtKeychain, ExtKeychainPath, Identifier, Keychain};
 use chrono::Duration;
+use std::convert::TryInto;
 
 fn build_block<K>(
 	chain: &Chain,
@@ -100,7 +101,7 @@ fn process_block_nrd_validation() -> Result<(), Error> {
 	assert_eq!(chain.head()?.height, 8);
 
 	let mut kernel = TxKernel::with_features(KernelFeatures::NoRecentDuplicate {
-		fee_fields: 20000,
+		fee_fields: 20000.try_into().unwrap(),
 		relative_height: NRDRelativeHeight::new(2)?,
 	});
 
@@ -216,7 +217,7 @@ fn process_block_nrd_validation_relative_height_1() -> Result<(), Error> {
 	assert_eq!(chain.head()?.height, 8);
 
 	let mut kernel = TxKernel::with_features(KernelFeatures::NoRecentDuplicate {
-		fee_fields: 20000,
+		fee_fields: 20000.try_into().unwrap(),
 		relative_height: NRDRelativeHeight::new(1)?,
 	});
 
@@ -315,7 +316,7 @@ fn process_block_nrd_validation_fork() -> Result<(), Error> {
 	assert_eq!(header_8.height, 8);
 
 	let mut kernel = TxKernel::with_features(KernelFeatures::NoRecentDuplicate {
-		fee_fields: 20000,
+		fee_fields: 20000.try_into().unwrap(),
 		relative_height: NRDRelativeHeight::new(2)?,
 	});
 

@@ -36,6 +36,7 @@ use grin_core as core;
 use grin_keychain as keychain;
 use grin_pool as pool;
 use grin_util as util;
+use std::convert::TryInto;
 use std::fs;
 use std::sync::Arc;
 
@@ -207,7 +208,7 @@ where
 
 	build::transaction(
 		KernelFeatures::Plain {
-			fee_fields: fees as u64,
+			fee_fields: (fees as u64).try_into().unwrap(),
 		},
 		&tx_elements,
 		keychain,
@@ -234,7 +235,7 @@ where
 		input_values,
 		output_values,
 		KernelFeatures::Plain {
-			fee_fields: fees as u64,
+			fee_fields: (fees as u64).try_into().unwrap(),
 		},
 	)
 }

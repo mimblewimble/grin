@@ -19,7 +19,8 @@ use crate::core::core::block::{Block, BlockHeader, Error, HeaderVersion, Untrust
 use crate::core::core::hash::Hashed;
 use crate::core::core::id::ShortIdentifiable;
 use crate::core::core::transaction::{
-	self, KernelFeatures, NRDRelativeHeight, Output, OutputFeatures, OutputIdentifier, Transaction,
+	self, FeeFields, KernelFeatures, NRDRelativeHeight, Output, OutputFeatures, OutputIdentifier,
+	Transaction,
 };
 use crate::core::core::verifier_cache::{LruVerifierCache, VerifierCache};
 use crate::core::core::{Committed, CompactBlock};
@@ -29,6 +30,7 @@ use crate::core::{global, pow, ser};
 use chrono::Duration;
 use grin_core as core;
 use keychain::{BlindingFactor, ExtKeychain, Keychain};
+use std::convert::TryInto;
 use std::sync::Arc;
 use util::{secp, RwLock, ToHex};
 
@@ -61,7 +63,9 @@ fn too_large_block() {
 
 	parts.append(&mut vec![input(500000, pks.pop().unwrap())]);
 	let tx = build::transaction(
-		KernelFeatures::Plain { fee_fields: 2 },
+		KernelFeatures::Plain {
+			fee_fields: 2.try_into().unwrap(),
+		},
 		&parts,
 		&keychain,
 		&builder,
@@ -103,7 +107,7 @@ fn block_with_nrd_kernel_pre_post_hf3() {
 
 	let tx = build::transaction(
 		KernelFeatures::NoRecentDuplicate {
-			fee_fields: 2,
+			fee_fields: 2.try_into().unwrap(),
 			relative_height: NRDRelativeHeight::new(1440).unwrap(),
 		},
 		&[input(7, key_id1), output(5, key_id2)],
@@ -188,7 +192,7 @@ fn block_with_nrd_kernel_nrd_not_enabled() {
 
 	let tx = build::transaction(
 		KernelFeatures::NoRecentDuplicate {
-			fee_fields: 2,
+			fee_fields: 2.try_into().unwrap(),
 			relative_height: NRDRelativeHeight::new(1440).unwrap(),
 		},
 		&[input(7, key_id1), output(5, key_id2)],
@@ -276,7 +280,9 @@ fn block_with_cut_through() {
 
 	let btx1 = tx2i1o();
 	let btx2 = build::transaction(
-		KernelFeatures::Plain { fee_fields: 2 },
+		KernelFeatures::Plain {
+			fee_fields: 2.try_into().unwrap(),
+		},
 		&[input(7, key_id1), output(5, key_id2.clone())],
 		&keychain,
 		&builder,
@@ -374,7 +380,9 @@ fn remove_coinbase_kernel_flag() {
 	let mut b = new_block(&[], &keychain, &builder, &prev, &key_id);
 
 	let mut kernel = b.kernels()[0].clone();
-	kernel.features = KernelFeatures::Plain { fee_fields: 0 };
+	kernel.features = KernelFeatures::Plain {
+		fee_fields: FeeFields::zero(),
+	};
 	b.body = b.body.replace_kernel(kernel);
 
 	// Flipping the coinbase flag results in kernels not summing correctly.
@@ -752,7 +760,9 @@ fn same_amount_outputs_copy_range_proof() {
 	let key_id3 = keychain::ExtKeychain::derive_key_id(1, 3, 0, 0, 0);
 
 	let tx = build::transaction(
-		KernelFeatures::Plain { fee_fields: 1 },
+		KernelFeatures::Plain {
+			fee_fields: 1.try_into().unwrap(),
+		},
 		&[input(7, key_id1), output(3, key_id2), output(3, key_id3)],
 		&keychain,
 		&builder,
@@ -793,7 +803,9 @@ fn wrong_amount_range_proof() {
 	let key_id3 = keychain::ExtKeychain::derive_key_id(1, 3, 0, 0, 0);
 
 	let tx1 = build::transaction(
-		KernelFeatures::Plain { fee_fields: 1 },
+		KernelFeatures::Plain {
+			fee_fields: 1.try_into().unwrap(),
+		},
 		&[
 			input(7, key_id1.clone()),
 			output(3, key_id2.clone()),
@@ -804,7 +816,9 @@ fn wrong_amount_range_proof() {
 	)
 	.unwrap();
 	let tx2 = build::transaction(
-		KernelFeatures::Plain { fee_fields: 1 },
+		KernelFeatures::Plain {
+			fee_fields: 1.try_into().unwrap(),
+		},
 		&[input(7, key_id1), output(2, key_id2), output(4, key_id3)],
 		&keychain,
 		&builder,
@@ -884,7 +898,9 @@ fn test_verify_cut_through_plain() -> Result<(), Error> {
 	let builder = ProofBuilder::new(&keychain);
 
 	let tx = build::transaction(
-		KernelFeatures::Plain { fee_fields: 0 },
+		KernelFeatures::Plain {
+			fee_fields: FeeFields::zero(),
+		},
 		&[
 			build::input(10, key_id1.clone()),
 			build::input(10, key_id2.clone()),
@@ -948,7 +964,9 @@ fn test_verify_cut_through_coinbase() -> Result<(), Error> {
 	let builder = ProofBuilder::new(&keychain);
 
 	let tx = build::transaction(
-		KernelFeatures::Plain { fee_fields: 0 },
+		KernelFeatures::Plain {
+			fee_fields: FeeFields::zero(),
+		},
 		&[
 			build::coinbase_input(consensus::REWARD, key_id1.clone()),
 			build::coinbase_input(consensus::REWARD, key_id2.clone()),

@@ -28,6 +28,7 @@ use grin_chain as chain;
 use grin_core as core;
 use grin_keychain as keychain;
 use grin_util as util;
+use std::convert::TryInto;
 use std::fs;
 use std::sync::Arc;
 
@@ -100,7 +101,9 @@ fn test_coinbase_maturity() {
 		// here we build a tx that attempts to spend the earlier coinbase output
 		// this is not a valid tx as the coinbase output cannot be spent yet
 		let coinbase_txn = build::transaction(
-			KernelFeatures::Plain { fee_fields: 2 },
+			KernelFeatures::Plain {
+				fee_fields: 2.try_into().unwrap(),
+			},
 			&[
 				build::coinbase_input(amount, key_id1.clone()),
 				build::output(amount - 2, key_id2.clone()),
@@ -182,7 +185,9 @@ fn test_coinbase_maturity() {
 			// here we build a tx that attempts to spend the earlier coinbase output
 			// this is not a valid tx as the coinbase output cannot be spent yet
 			let coinbase_txn = build::transaction(
-				KernelFeatures::Plain { fee_fields: 2 },
+				KernelFeatures::Plain {
+					fee_fields: 2.try_into().unwrap(),
+				},
 				&[
 					build::coinbase_input(amount, key_id1.clone()),
 					build::output(amount - 2, key_id2.clone()),

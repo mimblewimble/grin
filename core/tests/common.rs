@@ -26,6 +26,7 @@ use grin_core::libtx::{
 use grin_core::pow::Difficulty;
 use grin_core::ser::{self, PMMRable, Readable, Reader, Writeable, Writer};
 use keychain::{Identifier, Keychain};
+use std::convert::TryInto;
 
 // utility producing a transaction with 2 inputs and a single outputs
 #[allow(dead_code)]
@@ -37,7 +38,9 @@ pub fn tx2i1o() -> Transaction {
 	let key_id3 = keychain::ExtKeychain::derive_key_id(1, 3, 0, 0, 0);
 
 	let tx = build::transaction(
-		KernelFeatures::Plain { fee_fields: 2 },
+		KernelFeatures::Plain {
+			fee_fields: 2.try_into().unwrap(),
+		},
 		&[input(10, key_id1), input(11, key_id2), output(19, key_id3)],
 		&keychain,
 		&builder,
@@ -56,7 +59,9 @@ pub fn tx1i1o() -> Transaction {
 	let key_id2 = keychain::ExtKeychain::derive_key_id(1, 2, 0, 0, 0);
 
 	let tx = build::transaction(
-		KernelFeatures::Plain { fee_fields: 2 },
+		KernelFeatures::Plain {
+			fee_fields: 2.try_into().unwrap(),
+		},
 		&[input(5, key_id1), output(3, key_id2)],
 		&keychain,
 		&builder,
@@ -96,7 +101,9 @@ pub fn tx1i2o() -> Transaction {
 	let key_id3 = keychain::ExtKeychain::derive_key_id(1, 3, 0, 0, 0);
 
 	let tx = build::transaction(
-		KernelFeatures::Plain { fee_fields: 2 },
+		KernelFeatures::Plain {
+			fee_fields: 2.try_into().unwrap(),
+		},
 		&[input(6, key_id1), output(3, key_id2), output(1, key_id3)],
 		&keychain,
 		&builder,
@@ -140,7 +147,9 @@ where
 	B: ProofBuild,
 {
 	build::transaction(
-		KernelFeatures::Plain { fee_fields: 2 },
+		KernelFeatures::Plain {
+			fee_fields: 2.try_into().unwrap(),
+		},
 		&[input(v, key_id1), output(3, key_id2)],
 		keychain,
 		builder,

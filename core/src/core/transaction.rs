@@ -95,7 +95,7 @@ impl FeeFields {
 
 	/// Create a new FeeFields from the provided shift and fee
 	/// Checks both are valid (in range)
-	pub fn new(fee_shift: u64, fee: u64) -> Result<Self, Error> {
+	pub fn neuw(fee_shift: u64, fee: u64) -> Result<Self, Error> {
 		if fee == 0 {
 			Err(Error::InvalidFeeFields)
 		} else if fee > FeeFields::FEE_MASK {
@@ -108,8 +108,8 @@ impl FeeFields {
 	}
 
 	/// Extract fee_shift field
-	pub fn fee_shift(&self) -> u64 {
-		(self.0 >> FeeFields::FEE_BITS) & FeeFields::FEE_SHIFT_MASK
+	pub fn fee_shift(&self) -> u8 {
+		((self.0 >> FeeFields::FEE_BITS) & FeeFields::FEE_SHIFT_MASK) as u8
 	}
 
 	/// Extract fee field
@@ -123,15 +123,6 @@ impl FeeFields {
 		let fee = self.0 & FeeFields::FEE_MASK;
 		let fee_shift = (self.0 >> FeeFields::FEE_BITS) & FeeFields::FEE_SHIFT_MASK;
 		(fee, fee_shift)
-	}
-
-	/// Accumulate two fee_fields by adding fees and maxing fee_shift
-	/// THIS CAN'T WORK SINCE A TX CAN HAVE MULTIPLE MAXED-OUT FEES
-	/// WHICH ADDED UP DON'T FIT
-	pub fn accumulate(&self, other: FeeFields) -> Result<Self, Error> {
-		let (fee, fee_shift) = self.as_tuple();
-		let (other_fee, other_fee_shift) = other.as_tuple();
-		FeeFields::new(max(fee_shift, other_fee_shift), fee + other_fee)
 	}
 }
 
@@ -995,7 +986,7 @@ impl TransactionBody {
 	/// where transactions can specify a higher block-inclusion priority as a positive shift up to 15
 	/// but are required to overpaythe minimum required fees by a factor of 2^priority
 	pub fn shifted_fee(&self) -> u64 {
-		let (fee, fee_shift) = self
+		let fee_shift = self
 			.kernels
 			.iter()
 			.filter_map(|k| match k.features {
@@ -1004,11 +995,8 @@ impl TransactionBody {
 				KernelFeatures::HeightLocked { fee_fields, .. } => Some(fee_fields),
 				KernelFeatures::NoRecentDuplicate { fee_fields, .. } => Some(fee_fields),
 			})
-			.fold(FeeFields::zero, |acc: FeeFields, fee_fields| {
-				acc.accumulate(fee_fields)?
-			})
-			.as_tuple();
-		fee >> fee_shift
+			.fold(0, |acc, fee_fields| max(acc, fee_fields.fee_shift()));
+		self.fee() >> fee_shift
 	}
 
 	fn overage(&self) -> i64 {
@@ -2218,6 +2206,7 @@ mod test {
 	use crate::core::hash::Hash;
 	use crate::core::id::{ShortId, ShortIdentifiable};
 	use keychain::{ExtKeychain, Keychain, SwitchCommitmentType};
+	use std::convert::TryInto;
 
 	#[test]
 	fn test_plain_kernel_ser_deser() {
@@ -2232,7 +2221,7 @@ mod test {
 
 		let kernel = TxKernel {
 			features: KernelFeatures::Plain {
-				fee_fields: FeeFields::new(0, 10),
+				fee_fields: 10.try_into().unwrap(),
 			},
 			excess: commit,
 			excess_sig: sig.clone(),
@@ -2246,7 +2235,7 @@ mod test {
 			assert_eq!(
 				kernel2.features,
 				KernelFeatures::Plain {
-					fee_fields: FeeFields::new(0, 10)
+					fee_fields: 10.try_into().unwrap()
 				}
 			);
 			assert_eq!(kernel2.excess, commit);
@@ -2260,7 +2249,7 @@ mod test {
 		assert_eq!(
 			kernel2.features,
 			KernelFeatures::Plain {
-				fee_fields: FeeFields::new(0, 10)
+				fee_fields: 10.try_into().unwrap()
 			}
 		);
 		assert_eq!(kernel2.excess, commit);
@@ -2281,7 +2270,7 @@ mod test {
 		// now check a kernel with lock_height serialize/deserialize correctly
 		let kernel = TxKernel {
 			features: KernelFeatures::HeightLocked {
-				fee_fields: FeeFields::new(0, 10),
+				fee_fields: 10.try_into().unwrap(),
 				lock_height: 100,
 			},
 			excess: commit,
@@ -2323,7 +2312,7 @@ mod test {
 		// now check an NRD kernel will serialize/deserialize correctly
 		let kernel = TxKernel {
 			features: KernelFeatures::NoRecentDuplicate {
-				fee_fields: FeeFields::new(0, 10),
+				fee_fields: 10.try_into().unwrap(),
 				relative_height: NRDRelativeHeight(100),
 			},
 			excess: commit,
@@ -2355,7 +2344,7 @@ mod test {
 		let key_id = ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
 
 		let mut kernel = TxKernel::with_features(KernelFeatures::NoRecentDuplicate {
-			fee_fields: FeeFields::new(0, 10),
+			fee_fields: 10.try_into().unwrap(),
 			relative_height: NRDRelativeHeight(100),
 		});
 
@@ -2381,27 +2370,27 @@ mod test {
 
 		// Modify the fee and check signature no longer verifies.
 		kernel.features = KernelFeatures::NoRecentDuplicate {
-			fee_fields: FeeFields::new(0, 9),
+			fee_fields: 9.try_into().unwrap(),
 			relative_height: NRDRelativeHeight(100),
 		};
 		assert_eq!(kernel.verify(), Err(Error::IncorrectSignature));
 
 		// Modify the relative_height and check signature no longer verifies.
 		kernel.features = KernelFeatures::NoRecentDuplicate {
-			fee_fields: FeeFields::new(0, 10),
+			fee_fields: 10.try_into().unwrap(),
 			relative_height: NRDRelativeHeight(101),
 		};
 		assert_eq!(kernel.verify(), Err(Error::IncorrectSignature));
 
 		// Swap the features out for something different and check signature no longer verifies.
 		kernel.features = KernelFeatures::Plain {
-			fee_fields: FeeFields::new(0, 10),
+			fee_fields: 10.try_into().unwrap(),
 		};
 		assert_eq!(kernel.verify(), Err(Error::IncorrectSignature));
 
 		// Check signature verifies if we use the original features.
 		kernel.features = KernelFeatures::NoRecentDuplicate {
-			fee_fields: FeeFields::new(0, 10),
+			fee_fields: 10.try_into().unwrap(),
 			relative_height: NRDRelativeHeight(100),
 		};
 		assert_eq!(kernel.verify(), Ok(()));
@@ -2465,7 +2454,7 @@ mod test {
 		assert_eq!(
 			features,
 			KernelFeatures::Plain {
-				fee_fields: FeeFields::new(0, 10)
+				fee_fields: 10.try_into().unwrap()
 			}
 		);
 
@@ -2480,7 +2469,7 @@ mod test {
 		assert_eq!(
 			features,
 			KernelFeatures::HeightLocked {
-				fee_fields: FeeFields::new(0, 10),
+				fee_fields: 10.try_into().unwrap(),
 				lock_height: 100
 			}
 		);
@@ -2510,7 +2499,7 @@ mod test {
 		assert_eq!(
 			features,
 			KernelFeatures::NoRecentDuplicate {
-				fee_fields: FeeFields::new(0, 10),
+				fee_fields: 10.try_into().unwrap(),
 				relative_height: NRDRelativeHeight(100)
 			}
 		);

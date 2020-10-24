@@ -15,7 +15,7 @@
 use crate::chain;
 use crate::core::core::hash::Hashed;
 use crate::core::core::merkle_proof::MerkleProof;
-use crate::core::core::{extract_fee_fields, KernelFeatures, TxKernel};
+use crate::core::core::{FeeFields, KernelFeatures, TxKernel};
 use crate::core::{core, ser};
 use crate::p2p;
 use crate::util::secp::pedersen;
@@ -499,7 +499,7 @@ impl<'de> serde::de::Deserialize<'de> for OutputPrintable {
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct TxKernelPrintable {
 	pub features: String,
-	pub fee_shift: u64,
+	pub fee_shift: u8,
 	pub fee: u64,
 	pub lock_height: u64,
 	pub excess: String,
@@ -511,7 +511,7 @@ impl TxKernelPrintable {
 		let features = k.features.as_string();
 		let (fee_fields, lock_height) = match k.features {
 			KernelFeatures::Plain { fee_fields } => (fee_fields, 0),
-			KernelFeatures::Coinbase => (0, 0),
+			KernelFeatures::Coinbase => (FeeFields::zero(), 0),
 			KernelFeatures::HeightLocked {
 				fee_fields,
 				lock_height,
@@ -521,7 +521,8 @@ impl TxKernelPrintable {
 				relative_height,
 			} => (fee_fields, relative_height.into()),
 		};
-		let (fee, fee_shift) = extract_fee_fields(fee_fields);
+		let fee = fee_fields.fee();
+		let fee_shift: u8 = fee_fields.fee_shift();
 		TxKernelPrintable {
 			features,
 			fee_shift,

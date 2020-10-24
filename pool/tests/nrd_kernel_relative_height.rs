@@ -28,6 +28,7 @@ use grin_core as core;
 use grin_keychain as keychain;
 use grin_pool as pool;
 use grin_util as util;
+use std::convert::TryInto;
 use std::sync::Arc;
 
 #[test]
@@ -73,7 +74,7 @@ fn test_nrd_kernel_relative_height() -> Result<(), PoolError> {
 
 	let (tx1, tx2, tx3) = {
 		let mut kernel = TxKernel::with_features(KernelFeatures::NoRecentDuplicate {
-			fee_fields: 6,
+			fee_fields: 6.try_into().unwrap(),
 			relative_height: NRDRelativeHeight::new(2)?,
 		});
 		let msg = kernel.msg_to_sign().unwrap();
@@ -111,7 +112,7 @@ fn test_nrd_kernel_relative_height() -> Result<(), PoolError> {
 
 		// Now reuse kernel excess for tx3 but with NRD relative_height=1 (and different fee).
 		let mut kernel_short = TxKernel::with_features(KernelFeatures::NoRecentDuplicate {
-			fee_fields: 3,
+			fee_fields: 3.try_into().unwrap(),
 			relative_height: NRDRelativeHeight::new(1)?,
 		});
 		let msg_short = kernel_short.msg_to_sign().unwrap();

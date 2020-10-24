@@ -26,6 +26,7 @@ use grin_core as core;
 use grin_keychain as keychain;
 use grin_pool as pool;
 use grin_util as util;
+use std::convert::TryInto;
 use std::sync::Arc;
 
 #[test]
@@ -64,7 +65,7 @@ fn test_nrd_kernels_disabled() {
 		vec![10, 20],
 		vec![24],
 		KernelFeatures::NoRecentDuplicate {
-			fee_fields: 6,
+			fee_fields: 6.try_into().unwrap(),
 			relative_height: NRDRelativeHeight::new(1440).unwrap(),
 		},
 	);

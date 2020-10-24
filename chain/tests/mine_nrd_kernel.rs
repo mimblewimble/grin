@@ -26,6 +26,7 @@ use crate::core::libtx::{build, reward, ProofBuilder};
 use crate::core::{consensus, global, pow};
 use crate::keychain::{ExtKeychain, ExtKeychainPath, Identifier, Keychain};
 use chrono::Duration;
+use std::convert::TryInto;
 
 fn build_block<K>(chain: &Chain, keychain: &K, key_id: &Identifier, txs: Vec<Transaction>) -> Block
 where
@@ -84,7 +85,7 @@ fn mine_block_with_nrd_kernel_and_nrd_feature_enabled() {
 	let key_id2 = ExtKeychainPath::new(1, 2, 0, 0, 0).to_identifier();
 	let tx = build::transaction(
 		KernelFeatures::NoRecentDuplicate {
-			fee_fields: 20000,
+			fee_fields: 20000.try_into().unwrap(),
 			relative_height: NRDRelativeHeight::new(1440).unwrap(),
 		},
 		&[
@@ -131,7 +132,7 @@ fn mine_invalid_block_with_nrd_kernel_and_nrd_feature_enabled_before_hf() {
 	let key_id2 = ExtKeychainPath::new(1, 2, 0, 0, 0).to_identifier();
 	let tx = build::transaction(
 		KernelFeatures::NoRecentDuplicate {
-			fee_fields: 20000,
+			fee_fields: 20000.try_into().unwrap(),
 			relative_height: NRDRelativeHeight::new(1440).unwrap(),
 		},
 		&[
