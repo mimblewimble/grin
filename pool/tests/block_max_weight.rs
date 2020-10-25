@@ -57,7 +57,7 @@ fn test_block_building_max_weight() {
 	let initial_tx = test_transaction_spending_coinbase(
 		&keychain,
 		&header_1,
-		vec![100_000, 200_000, 300_000, 1_000_000],
+		vec![1_000_000_000, 2_000_000_000, 3_000_000_000, 10_000_000_000],
 	);
 
 	// Mine that initial tx so we can spend it with multiple txs.
@@ -70,20 +70,39 @@ fn test_block_building_max_weight() {
 	let txs = vec![
 		test_transaction(
 			&keychain,
-			vec![1_000_000],
-			vec![390_000, 130_000, 120_000, 110_000],
+			vec![10_000_000_000],
+			vec![3_900_000_000, 1_300_000_000, 1_200_000_000, 1_100_000_000],
 		),
-		test_transaction(&keychain, vec![100_000], vec![90_000, 1_000]),
-		test_transaction(&keychain, vec![90_000], vec![80_000, 2_000]),
-		test_transaction(&keychain, vec![200_000], vec![199_000]),
-		test_transaction(&keychain, vec![300_000], vec![290_000, 3_000]),
-		test_transaction(&keychain, vec![290_000], vec![280_000, 4_000]),
+		test_transaction(
+			&keychain,
+			vec![1_000_000_000],
+			vec![900_000_000, 10_000_000],
+		),
+		test_transaction(&keychain, vec![900_000_000], vec![800_000_000, 20_000_000]),
+		test_transaction(&keychain, vec![2_000_000_000], vec![1_970_000_000]),
+		test_transaction(
+			&keychain,
+			vec![3_000_000_000],
+			vec![2_900_000_000, 30_000_000],
+		),
+		test_transaction(
+			&keychain,
+			vec![2_900_000_000],
+			vec![2_800_000_000, 40_000_000],
+		),
 	];
 
 	// Fees and weights of our original txs in insert order.
 	assert_eq!(
 		txs.iter().map(|x| x.fee()).collect::<Vec<_>>(),
-		[250_000, 9_000, 8_000, 1_000, 7_000, 6_000]
+		[
+			2_500_000_000,
+			90_000_000,
+			80_000_000,
+			30_000_000,
+			70_000_000,
+			60_000_000
+		]
 	);
 	assert_eq!(
 		txs.iter().map(|x| x.weight()).collect::<Vec<_>>(),
@@ -91,7 +110,7 @@ fn test_block_building_max_weight() {
 	);
 	assert_eq!(
 		txs.iter().map(|x| x.fee_rate()).collect::<Vec<_>>(),
-		[2840, 195, 173, 40, 152, 130]
+		[28409090, 1956521, 1739130, 1200000, 1521739, 1304347]
 	);
 
 	// Populate our txpool with the txs.
@@ -109,7 +128,7 @@ fn test_block_building_max_weight() {
 	// Fees and weights of the "mineable" txs.
 	assert_eq!(
 		txs.iter().map(|x| x.fee()).collect::<Vec<_>>(),
-		[250_000, 9_000, 8_000, 7_000]
+		[2_500_000_000, 90_000_000, 80_000_000, 70_000_000]
 	);
 	assert_eq!(
 		txs.iter().map(|x| x.weight()).collect::<Vec<_>>(),
@@ -117,7 +136,7 @@ fn test_block_building_max_weight() {
 	);
 	assert_eq!(
 		txs.iter().map(|x| x.fee_rate()).collect::<Vec<_>>(),
-		[2840, 195, 173, 152]
+		[28409090, 1956521, 1739130, 1521739]
 	);
 
 	add_block(&chain, &txs, &keychain);

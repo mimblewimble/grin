@@ -52,7 +52,7 @@ fn test_coinbase_maturity() {
 	add_block(&chain, &[], &keychain);
 
 	let header_1 = chain.get_header_by_height(1).unwrap();
-	let tx = test_transaction_spending_coinbase(&keychain, &header_1, vec![100]);
+	let tx = test_transaction_spending_coinbase(&keychain, &header_1, vec![100_000_000]);
 
 	// Coinbase is not yet matured and cannot be spent.
 	let header = chain.head_header().unwrap();

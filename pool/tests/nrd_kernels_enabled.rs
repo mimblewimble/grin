@@ -57,15 +57,19 @@ fn test_nrd_kernels_enabled() {
 
 	// Spend the initial coinbase.
 	let header_1 = chain.get_header_by_height(1).unwrap();
-	let tx = test_transaction_spending_coinbase(&keychain, &header_1, vec![10, 20, 30, 40]);
+	let tx = test_transaction_spending_coinbase(
+		&keychain,
+		&header_1,
+		vec![1_000_000_000, 2_000_000_000, 3_000_000_000, 4_000_000_000],
+	);
 	add_block(&chain, &[tx], &keychain);
 
 	let tx_1 = test_transaction_with_kernel_features(
 		&keychain,
-		vec![10, 20],
-		vec![24],
+		vec![1_000_000_000, 2_000_000_000],
+		vec![2_400_000_000],
 		KernelFeatures::NoRecentDuplicate {
-			fee_fields: 6.try_into().unwrap(),
+			fee_fields: 600_000_000.try_into().unwrap(),
 			relative_height: NRDRelativeHeight::new(1440).unwrap(),
 		},
 	);

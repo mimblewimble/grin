@@ -24,7 +24,7 @@ use self::core::core::{
 };
 use self::core::genesis;
 use self::core::global;
-use self::core::libtx::{build, reward, ProofBuilder};
+use self::core::libtx::{build, reward, ProofBuilder, DEFAULT_BASE_FEE};
 use self::core::pow;
 use self::keychain::{BlindingFactor, ExtKeychain, ExtKeychainPath, Keychain};
 use self::pool::types::*;
@@ -167,7 +167,7 @@ where
 {
 	TransactionPool::new(
 		PoolConfig {
-			accept_fee_base: 0,
+			accept_fee_base: DEFAULT_BASE_FEE,
 			max_pool_size: 50,
 			max_stempool_size: 50,
 			mineable_max_weight: 10_000,

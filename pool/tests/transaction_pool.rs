@@ -56,7 +56,18 @@ fn test_the_transaction_pool() {
 	let initial_tx = test_transaction_spending_coinbase(
 		&keychain,
 		&header_1,
-		vec![500, 600, 700, 800, 900, 1000, 1100, 1200, 1300, 1400],
+		vec![
+			500_000_000,
+			600_000_000,
+			700_000_000,
+			800_000_000,
+			900_000_000,
+			1000_000_000,
+			1100_000_000,
+			1200_000_000,
+			1300_000_000,
+			1400_000_000,
+		],
 	);
 
 	// Add this tx to the pool (stem=false, direct to txpool).
@@ -69,14 +80,18 @@ fn test_the_transaction_pool() {
 	// Test adding a tx that "double spends" an output currently spent by a tx
 	// already in the txpool. In this case we attempt to spend the original coinbase twice.
 	{
-		let tx = test_transaction_spending_coinbase(&keychain, &header, vec![501]);
+		let tx = test_transaction_spending_coinbase(&keychain, &header, vec![501_000_000]);
 		assert!(pool.add_to_pool(test_source(), tx, false, &header).is_err());
 	}
 
 	// tx1 spends some outputs from the initial test tx.
-	let tx1 = test_transaction(&keychain, vec![500, 600], vec![499, 599]);
+	let tx1 = test_transaction(
+		&keychain,
+		vec![500_000_000, 600_000_000],
+		vec![469_000_000, 569_000_000],
+	);
 	// tx2 spends some outputs from both tx1 and the initial test tx.
-	let tx2 = test_transaction(&keychain, vec![499, 700], vec![498]);
+	let tx2 = test_transaction(&keychain, vec![469_000_000, 700_000_000], vec![498_000_000]);
 
 	{
 		// Check we have a single initial tx in the pool.
@@ -105,7 +120,11 @@ fn test_the_transaction_pool() {
 	// Test adding a duplicate tx with the same input and outputs.
 	// Note: not the *same* tx, just same underlying inputs/outputs.
 	{
-		let tx1a = test_transaction(&keychain, vec![500, 600], vec![499, 599]);
+		let tx1a = test_transaction(
+			&keychain,
+			vec![500_000_000, 600_000_000],
+			vec![469_000_000, 569_000_000],
+		);
 		assert!(pool
 			.add_to_pool(test_source(), tx1a, false, &header)
 			.is_err());
@@ -113,7 +132,7 @@ fn test_the_transaction_pool() {
 
 	// Test adding a tx attempting to spend a non-existent output.
 	{
-		let bad_tx = test_transaction(&keychain, vec![10_001], vec![10_000]);
+		let bad_tx = test_transaction(&keychain, vec![10_001_000_000], vec![9_900_000_000]);
 		assert!(pool
 			.add_to_pool(test_source(), bad_tx, false, &header)
 			.is_err());
@@ -124,13 +143,13 @@ fn test_the_transaction_pool() {
 	// be unique. Otherwise spending one will almost certainly cause the other
 	// to be immediately stolen via a "replay" tx.
 	{
-		let tx = test_transaction(&keychain, vec![900], vec![498]);
+		let tx = test_transaction(&keychain, vec![900_000_000], vec![498_000_000]);
 		assert!(pool.add_to_pool(test_source(), tx, false, &header).is_err());
 	}
 
 	// Confirm the tx pool correctly identifies an invalid tx (already spent).
 	{
-		let tx3 = test_transaction(&keychain, vec![500], vec![497]);
+		let tx3 = test_transaction(&keychain, vec![500_000_000], vec![467_000_000]);
 		assert!(pool
 			.add_to_pool(test_source(), tx3, false, &header)
 			.is_err());
@@ -139,9 +158,9 @@ fn test_the_transaction_pool() {
 
 	// Now add a couple of txs to the stempool (stem = true).
 	{
-		let tx = test_transaction(&keychain, vec![599], vec![598]);
+		let tx = test_transaction(&keychain, vec![569_000_000], vec![538_000_000]);
 		pool.add_to_pool(test_source(), tx, true, &header).unwrap();
-		let tx2 = test_transaction(&keychain, vec![598], vec![597]);
+		let tx2 = test_transaction(&keychain, vec![538_000_000], vec![507_000_000]);
 		pool.add_to_pool(test_source(), tx2, true, &header).unwrap();
 		assert_eq!(pool.total_size(), 3);
 		assert_eq!(pool.stempool.size(), 2);
@@ -165,7 +184,7 @@ fn test_the_transaction_pool() {
 	// Adding a duplicate tx to the stempool will result in it being fluffed.
 	// This handles the case of the stem path having a cycle in it.
 	{
-		let tx = test_transaction(&keychain, vec![597], vec![596]);
+		let tx = test_transaction(&keychain, vec![507_000_000], vec![476_000_000]);
 		pool.add_to_pool(test_source(), tx.clone(), true, &header)
 			.unwrap();
 		assert_eq!(pool.total_size(), 4);
@@ -185,7 +204,7 @@ fn test_the_transaction_pool() {
 	// We will do this be adding a new tx to the pool
 	// that is a superset of a tx already in the pool.
 	{
-		let tx4 = test_transaction(&keychain, vec![800], vec![799]);
+		let tx4 = test_transaction(&keychain, vec![800_000_000], vec![769_000_000]);
 
 		// tx1 and tx2 are already in the txpool (in aggregated form)
 		// tx4 is the "new" part of this aggregated tx that we care about
@@ -206,7 +225,8 @@ fn test_the_transaction_pool() {
 	// Check we cannot "double spend" an output spent in a previous block.
 	// We use the initial coinbase output here for convenience.
 	{
-		let double_spend_tx = test_transaction_spending_coinbase(&keychain, &header, vec![1000]);
+		let double_spend_tx =
+			test_transaction_spending_coinbase(&keychain, &header, vec![1000_000_000]);
 
 		// check we cannot add a double spend to the stempool
 		assert!(pool

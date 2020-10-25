@@ -511,7 +511,7 @@ struct Bucket {
 impl Bucket {
 	/// Construct a new bucket with the given tx.
 	/// also specifies an "age_idx" so we can sort buckets by age
-	/// as well as fee_rate. Txs are maintainedin the pool in insert order
+	/// as well as fee_rate. Txs are maintained in the pool in insert order
 	/// so buckets with low age_idx contain oldest txs.
 	fn new(tx: Transaction, age_idx: usize) -> Bucket {
 		Bucket {
