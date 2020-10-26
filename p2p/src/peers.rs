@@ -107,7 +107,7 @@ impl Peers {
 	/// Iterator over our current peers.
 	/// This allows us to hide try_read_for() behind a cleaner interface.
 	/// PeersIter lets us chain various adaptors for convenience.
-	pub fn peers_iter(&self) -> PeersIter<impl Iterator<Item = Arc<Peer>>> {
+	pub fn iter(&self) -> PeersIter<impl Iterator<Item = Arc<Peer>>> {
 		let peers = match self.peers.try_read_for(LOCK_TIMEOUT) {
 			Some(peers) => peers.values().cloned().collect(),
 			None => {
@@ -122,11 +122,11 @@ impl Peers {
 
 	/// Get a peer we're connected to by address.
 	pub fn get_connected_peer(&self, addr: PeerAddr) -> Option<Arc<Peer>> {
-		self.peers_iter().connected().by_addr(addr)
+		self.iter().connected().by_addr(addr)
 	}
 
 	pub fn max_peer_difficulty(&self) -> Difficulty {
-		self.peers_iter()
+		self.iter()
 			.connected()
 			.max_difficulty()
 			.unwrap_or(Difficulty::zero())
@@ -178,7 +178,7 @@ impl Peers {
 	{
 		let mut count = 0;
 
-		for p in self.peers_iter().connected() {
+		for p in self.iter().connected() {
 			match inner(&p) {
 				Ok(true) => count += 1,
 				Ok(false) => (),
@@ -245,7 +245,7 @@ impl Peers {
 	/// Ping all our connected peers. Always automatically expects a pong back
 	/// or disconnects. This acts as a liveness test.
 	pub fn check_all(&self, total_difficulty: Difficulty, height: u64) {
-		for p in self.peers_iter().connected() {
+		for p in self.iter().connected() {
 			if let Err(e) = p.send_ping(total_difficulty, height) {
 				debug!("Error pinging peer {:?}: {:?}", &p.info.addr, e);
 				let mut peers = match self.peers.try_write_for(LOCK_TIMEOUT) {
@@ -319,7 +319,7 @@ impl Peers {
 
 		// build a list of peers to be cleaned up
 		{
-			for peer in self.peers_iter() {
+			for peer in self.iter() {
 				let ref peer: &Peer = peer.as_ref();
 				if peer.is_banned() {
 					debug!("clean_peers {:?}, peer banned", peer.info.addr);
@@ -353,7 +353,7 @@ impl Peers {
 		}
 
 		// closure to build an iterator of our inbound peers
-		let outbound_peers = || self.peers_iter().outbound().connected().into_iter();
+		let outbound_peers = || self.iter().outbound().connected().into_iter();
 
 		// check here to make sure we don't have too many outgoing connections
 		// Preferred peers are treated preferentially here.
@@ -374,7 +374,7 @@ impl Peers {
 		}
 
 		// closure to build an iterator of our inbound peers
-		let inbound_peers = || self.peers_iter().inbound().connected().into_iter();
+		let inbound_peers = || self.iter().inbound().connected().into_iter();
 
 		// check here to make sure we don't have too many incoming connections
 		let excess_incoming_count = inbound_peers().count().saturating_sub(max_inbound_count);
@@ -415,7 +415,7 @@ impl Peers {
 
 	/// We have enough outbound connected peers
 	pub fn enough_outbound_peers(&self) -> bool {
-		self.peers_iter().outbound().connected().count()
+		self.iter().outbound().connected().count()
 			>= self.config.peer_min_preferred_outbound_count() as usize
 	}
 

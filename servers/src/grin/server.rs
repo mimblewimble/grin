@@ -358,7 +358,7 @@ impl Server {
 	pub fn peer_count(&self) -> u32 {
 		self.p2p
 			.peers
-			.peers_iter()
+			.iter()
 			.connected()
 			.count()
 			.try_into()
@@ -492,7 +492,7 @@ impl Server {
 		let peer_stats = self
 			.p2p
 			.peers
-			.peers_iter()
+			.iter()
 			.connected()
 			.into_iter()
 			.map(|p| PeerStats::from_peer(&p))

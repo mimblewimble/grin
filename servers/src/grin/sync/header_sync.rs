@@ -173,7 +173,7 @@ impl HeaderSync {
 			let max_diff = self.peers.max_peer_difficulty();
 			let peer = self
 				.peers
-				.peers_iter()
+				.iter()
 				.outbound()
 				.with_capabilities(Capabilities::HEADER_HIST)
 				.with_difficulty(|x| x >= max_diff)

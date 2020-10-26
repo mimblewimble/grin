@@ -56,7 +56,7 @@ impl StatusHandler {
 		Ok(Status::from_tip_and_peers(
 			head,
 			w(&self.peers)?
-				.peers_iter()
+				.iter()
 				.connected()
 				.count()
 				.try_into()

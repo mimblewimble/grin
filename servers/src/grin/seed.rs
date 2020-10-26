@@ -174,11 +174,11 @@ fn monitor_peers(
 		total_count += 1;
 	}
 
-	let peers_count = peers.peers_iter().connected().count();
+	let peers_count = peers.iter().connected().count();
 
 	let max_diff = peers.max_peer_difficulty();
 	let most_work_count = peers
-		.peers_iter()
+		.iter()
 		.outbound()
 		.with_difficulty(|x| x >= max_diff)
 		.connected()
@@ -212,7 +212,7 @@ fn monitor_peers(
 	// ask them for their list of peers
 	let mut connected_peers: Vec<PeerAddr> = vec![];
 	for p in peers
-		.peers_iter()
+		.iter()
 		.with_capabilities(p2p::Capabilities::PEER_LIST)
 		.connected()
 	{

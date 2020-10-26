@@ -82,7 +82,7 @@ impl SyncRunner {
 			// Count peers with at least our difficulty.
 			let wp = self
 				.peers
-				.peers_iter()
+				.iter()
 				.outbound()
 				.with_difficulty(|x| x >= head.total_difficulty)
 				.connected()
@@ -234,7 +234,7 @@ impl SyncRunner {
 		let max_diff = self.peers.max_peer_difficulty();
 		let peer = self
 			.peers
-			.peers_iter()
+			.iter()
 			.outbound()
 			.with_difficulty(|x| x >= max_diff)
 			.connected()

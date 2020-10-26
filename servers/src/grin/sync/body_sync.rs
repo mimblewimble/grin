@@ -95,7 +95,7 @@ impl BodySync {
 		// Find connected peers with strictly greater difficulty than us.
 		let peers: Vec<_> = self
 			.peers
-			.peers_iter()
+			.iter()
 			.outbound()
 			.with_difficulty(|x| x > head.total_difficulty)
 			.connected()
