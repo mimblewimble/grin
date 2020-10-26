@@ -244,6 +244,7 @@ fn test_fee_fields() -> Result<(), Error> {
 
 	assert_eq!(tx.fee(), 147);
 	assert_eq!(tx.shifted_fee(), 36);
+	assert_eq!(tx.aggregate_fee_fields(), FeeFields::new(2, 147));
 
 	Ok(())
 }

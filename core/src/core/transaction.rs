@@ -1002,6 +1002,11 @@ impl TransactionBody {
 		self.fee() >> self.fee_shift()
 	}
 
+	/// aggregate fee_fields from all appropriate kernels in TransactionBody into one, if possible
+	pub fn aggregate_fee_fields(&self) -> Result<FeeFields, Error> {
+		FeeFields::new(self.fee_shift() as u64, self.fee())
+	}
+
 	fn overage(&self) -> i64 {
 		self.fee() as i64
 	}
@@ -1374,6 +1379,11 @@ impl Transaction {
 	/// Shifted fee for a transaction is the sum of fees of all kernels shifted right by the maximum fee shift
 	pub fn shifted_fee(&self) -> u64 {
 		self.body.shifted_fee()
+	}
+
+	/// aggregate fee_fields from all appropriate kernels in transaction into one
+	pub fn aggregate_fee_fields(&self) -> Result<FeeFields, Error> {
+		self.body.aggregate_fee_fields()
 	}
 
 	/// Total overage across all kernels.
