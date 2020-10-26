@@ -28,6 +28,7 @@ use keychain::{self, BlindingFactor};
 use std::cmp::Ordering;
 use std::cmp::{max, min};
 use std::convert::{TryFrom, TryInto};
+use std::fmt::Display;
 use std::sync::Arc;
 use std::{error, fmt};
 use util::secp;
@@ -52,6 +53,12 @@ impl Readable for FeeFields {
 	fn read<R: Reader>(reader: &mut R) -> Result<Self, ser::Error> {
 		let fee_fields = reader.read_u64()?;
 		Ok(Self(fee_fields))
+	}
+}
+
+impl Display for FeeFields {
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+		write!(f, "{}", self.0)
 	}
 }
 
