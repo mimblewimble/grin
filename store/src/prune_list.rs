@@ -107,13 +107,6 @@ impl PruneList {
 		Ok(prune_list)
 	}
 
-	// /// Init our internal shift caches.
-	// pub fn init_caches(&mut self) {
-	// 	self.rebuild_shift_cache();
-	// 	self.rebuild_leaf_shift_cache();
-	// 	self.rebuild_pruned_cache();
-	// }
-
 	/// Save the prune_list to disk.
 	pub fn flush(&mut self) -> io::Result<()> {
 		// Run the optimization step on the bitmap.
@@ -174,17 +167,6 @@ impl PruneList {
 		prev_shift + shift
 	}
 
-	// /// Rebuild the shift cache.
-	// /// For each entry in the pruned bitmap calculate the total shift
-	// /// based on previous shift and size of pruned subtree.
-	// fn rebuild_shift_cache(&mut self) {
-	// 	self.shift_cache.clear();
-	// 	for pos in self.bitmap.iter().filter(|x| *x > 0) {
-	// 		let next_shift = self.calculate_next_shift(pos as u64);
-	// 		self.shift_cache.push(next_shift);
-	// 	}
-	// }
-
 	/// As above, but only returning the number of leaf nodes to skip for a
 	/// given leaf. Helpful if, for instance, data for each leaf is being stored
 	/// separately in a continuous flat-file.
@@ -220,17 +202,6 @@ impl PruneList {
 		};
 		prev_shift + shift
 	}
-
-	// /// Rebuild the leaf shift cache.
-	// /// For each entry in the pruned bitmap calculate the total shift
-	// /// based on previous shift and size of pruned subtree.
-	// fn rebuild_leaf_shift_cache(&mut self) {
-	// 	self.leaf_shift_cache.clear();
-	// 	for pos in self.bitmap.iter().filter(|x| *x > 0) {
-	// 		let next_shift = self.calculate_next_leaf_shift(pos as u64);
-	// 		self.leaf_shift_cache.push(next_shift);
-	// 	}
-	// }
 
 	// Remove any existing entries in shift_cache and leaf_shift_cache
 	// for any pos contained in the subtree with provided root.
@@ -317,25 +288,22 @@ impl PruneList {
 		self.bitmap.iter().map(|x| x as u64).collect()
 	}
 
+	/// Internal shift cache as slice.
+	pub fn shift_cache(&self) -> &[u64] {
+		self.shift_cache.as_slice()
+	}
+
+	/// Internal leaf shift cache as slice.
+	pub fn leaf_shift_cache(&self) -> &[u64] {
+		self.leaf_shift_cache.as_slice()
+	}
+
 	/// Is the pos pruned?
 	/// Assumes the pruned_cache is fully built and up to date.
 	pub fn is_pruned(&self, pos: u64) -> bool {
 		assert!(pos > 0, "prune list 1-indexed, 0 not valid pos");
 		self.pruned_cache.contains(pos as u32)
 	}
-
-	// // Rebuild the "pruned cache" by expanding every pruned subtree into the contained
-	// // pos and adding them all to the cache.
-	// fn rebuild_pruned_cache(&mut self) {
-	// 	let maximum = self.bitmap.maximum().unwrap_or(0);
-	// 	self.pruned_cache = Bitmap::create_with_capacity(maximum);
-	// 	for pos in self.bitmap.iter() {
-	// 		for x in bintree_pos_iter(pos as u64) {
-	// 			self.pruned_cache.add(x as u32);
-	// 		}
-	// 	}
-	// 	self.pruned_cache.run_optimize();
-	// }
 
 	/// Is the specified position a root of a pruned subtree?
 	pub fn is_pruned_root(&self, pos: u64) -> bool {

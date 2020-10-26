@@ -256,22 +256,63 @@ fn test_get_shift() {
 	assert_eq!(pl.get_shift(12), 4);
 }
 
-// #[test]
-// pub fn test_append_pruned_subtree() {
-// 	let mut pl = PruneList::empty();
-// 	pl.append_pruned_subtree(1);
+#[test]
+pub fn test_append_pruned_subtree() {
+	let mut pl = PruneList::empty();
 
-// 	assert_eq!(pl.to_vec(), [1]);
-// 	assert_eq!(pl.get_shift(2), 0);
-// 	assert_eq!(pl.get_leaf_shift(2), 0);
+	// append a pruned leaf pos (shift and leaf shift are unaffected).
+	pl.append(1);
 
-// 	pl.append_pruned_subtree(3);
+	assert_eq!(pl.to_vec(), [1]);
+	assert_eq!(pl.get_shift(2), 0);
+	assert_eq!(pl.get_leaf_shift(2), 0);
 
-// 	pl.init_caches();
-// 	println!("append_pruned_subtree: {:?}", pl);
+	pl.append(3);
 
-// 	pl.append_pruned_subtree(7);
+	// subtree beneath root at 3 is pruned
+	// pos 4 is shifted by 2 pruned hashes [1, 2]
+	// pos 4 is shifted by 2 leaves [1, 2]
+	assert_eq!(pl.to_vec(), [3]);
+	assert_eq!(pl.get_shift(4), 2);
+	assert_eq!(pl.get_leaf_shift(4), 2);
 
-// 	pl.init_caches();
-// 	println!("append_pruned_subtree: {:?}", pl);
-// }
+	// append another pruned subtree (ancester of previous one)
+	pl.append(7);
+
+	// subtree beneath root at 7 is pruned
+	// pos 8 is shifted by 6 pruned hashes [1, 2, 3, 4, 5, 6]
+	// pos 4 is shifted by 4 leaves [1, 2, 4, 5]
+	assert_eq!(pl.to_vec(), [7]);
+	assert_eq!(pl.get_shift(8), 6);
+	assert_eq!(pl.get_leaf_shift(8), 4);
+
+	// now append another pruned leaf pos
+	pl.append(8);
+
+	// additional pruned leaf does not affect the shift or leaf shift
+	// pos 9 is shifted by 6 pruned hashes [1, 2, 3, 4, 5, 6]
+	// pos 4 is shifted by 4 leaves [1, 2, 4, 5]
+	assert_eq!(pl.to_vec(), [7, 8]);
+	assert_eq!(pl.get_shift(9), 6);
+	assert_eq!(pl.get_leaf_shift(9), 4);
+}
+
+#[test]
+fn test_recreate_prune_list() {
+	let mut pl = PruneList::empty();
+	pl.append(4);
+	pl.append(5);
+	pl.append(11);
+
+	let pl2 = PruneList::new(None, vec![4, 5, 11].into_iter().collect());
+
+	assert_eq!(pl.to_vec(), pl2.to_vec());
+	assert_eq!(pl.shift_cache(), pl2.shift_cache());
+	assert_eq!(pl.leaf_shift_cache(), pl2.leaf_shift_cache());
+
+	let pl3 = PruneList::new(None, vec![6, 11].into_iter().collect());
+
+	assert_eq!(pl.to_vec(), pl3.to_vec());
+	assert_eq!(pl.shift_cache(), pl3.shift_cache());
+	assert_eq!(pl.leaf_shift_cache(), pl3.leaf_shift_cache());
+}
