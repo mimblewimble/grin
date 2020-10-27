@@ -213,7 +213,7 @@ where
 				// Leaf
 				if bitmap
 					.map(|b| {
-						let idx_1 = pmmr::n_leaves(pos);
+						let idx_1 = pmmr::n_leaves(pos) - 1;
 						let idx_2 = if pmmr::is_left_sibling(pos) {
 							idx_1 + 1
 						} else {
