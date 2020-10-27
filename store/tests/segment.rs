@@ -62,7 +62,7 @@ fn prunable_mmr() {
 
 	// Prune a few leaves
 	let mut mmr = PMMR::at(&mut ba, last_pos);
-	prune(&mut mmr, &mut bitmap, &[9, 10, 14]);
+	prune(&mut mmr, &mut bitmap, &[8, 9, 13]);
 	ba.sync().unwrap();
 	ba.check_compact(last_pos, &Bitmap::create()).unwrap();
 	ba.sync().unwrap();
@@ -78,7 +78,7 @@ fn prunable_mmr() {
 
 	// Prune more
 	let mut mmr = PMMR::at(&mut ba, last_pos);
-	prune(&mut mmr, &mut bitmap, &[11, 12]);
+	prune(&mut mmr, &mut bitmap, &[10, 11]);
 	ba.sync().unwrap();
 	ba.check_compact(last_pos, &Bitmap::create()).unwrap();
 	ba.sync().unwrap();
@@ -94,7 +94,7 @@ fn prunable_mmr() {
 
 	// Prune all but 1
 	let mut mmr = PMMR::at(&mut ba, last_pos);
-	prune(&mut mmr, &mut bitmap, &[15, 16]);
+	prune(&mut mmr, &mut bitmap, &[14, 15]);
 	ba.sync().unwrap();
 	ba.check_compact(last_pos, &Bitmap::create()).unwrap();
 	ba.sync().unwrap();
@@ -110,7 +110,7 @@ fn prunable_mmr() {
 
 	// Prune all: can't create empty segment
 	let mut mmr = PMMR::at(&mut ba, last_pos);
-	prune(&mut mmr, &mut bitmap, &[13]);
+	prune(&mut mmr, &mut bitmap, &[12]);
 	ba.sync().unwrap();
 	ba.check_compact(last_pos, &Bitmap::create()).unwrap();
 	ba.sync().unwrap();
@@ -130,7 +130,7 @@ fn prunable_mmr() {
 
 	// Prune second and third to last leaves (a full peak in the MMR)
 	let mut mmr = PMMR::at(&mut ba, last_pos);
-	prune(&mut mmr, &mut bitmap, &[77, 78]);
+	prune(&mut mmr, &mut bitmap, &[76, 77]);
 	ba.sync().unwrap();
 	ba.check_compact(last_pos, &Bitmap::create()).unwrap();
 	ba.sync().unwrap();
@@ -142,7 +142,7 @@ fn prunable_mmr() {
 
 	// Prune final element
 	let mut mmr = PMMR::at(&mut ba, last_pos);
-	prune(&mut mmr, &mut bitmap, &[79]);
+	prune(&mut mmr, &mut bitmap, &[78]);
 	ba.sync().unwrap();
 	ba.check_compact(last_pos, &Bitmap::create()).unwrap();
 	ba.sync().unwrap();
@@ -176,7 +176,7 @@ fn ser_round_trip() {
 	bitmap.add_range_closed(1..n_leaves);
 	let last_pos = mmr.unpruned_size();
 
-	prune(&mut mmr, &mut bitmap, &[1, 2]);
+	prune(&mut mmr, &mut bitmap, &[0, 1]);
 	ba.sync().unwrap();
 	ba.check_compact(last_pos, &Bitmap::create()).unwrap();
 	ba.sync().unwrap();
@@ -208,7 +208,8 @@ where
 	B: Backend<T>,
 {
 	for &leaf_idx in leaf_idxs {
-		mmr.prune(pmmr::insertion_to_pmmr_index(leaf_idx)).unwrap();
+		mmr.prune(pmmr::insertion_to_pmmr_index(leaf_idx + 1))
+			.unwrap();
 		bitmap.remove(leaf_idx as u32);
 	}
 }
