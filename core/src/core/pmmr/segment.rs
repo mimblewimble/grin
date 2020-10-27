@@ -313,6 +313,29 @@ where
 		self.proof
 			.validate(last_pos, mmr_root, first, last, segment_root)
 	}
+
+	/// Check validity of the segment by calculating its root and validating the merkle proof
+	/// This function assumes a final hashing step together with `other_root`
+	pub fn validate_with(
+		&self,
+		last_pos: u64,
+		bitmap: Option<&Bitmap>,
+		mmr_root: Hash,
+		other_root: Hash,
+		other_is_left: bool,
+	) -> Result<(), SegmentError> {
+		let (first, last) = self.segment_pos_range(last_pos);
+		let segment_root = self.root(last_pos, bitmap)?;
+		self.proof.validate_with(
+			last_pos,
+			mmr_root,
+			first,
+			last,
+			segment_root,
+			other_root,
+			other_is_left,
+		)
+	}
 }
 
 impl<T: Readable> Readable for Segment<T> {
@@ -507,6 +530,34 @@ impl SegmentProof {
 	) -> Result<(), SegmentError> {
 		let root =
 			self.reconstruct_root(last_pos, segment_first_pos, segment_last_pos, segment_root)?;
+		if root == mmr_root {
+			Ok(())
+		} else {
+			Err(SegmentError::Mismatch)
+		}
+	}
+
+	/// Check validity of the proof by equating the reconstructed root with the actual root
+	/// This function assumes a final hashing step together with `other_root`
+	pub fn validate_with(
+		&self,
+		last_pos: u64,
+		mmr_root: Hash,
+		segment_first_pos: u64,
+		segment_last_pos: u64,
+		segment_root: Hash,
+		other_root: Hash,
+		other_is_left: bool,
+	) -> Result<(), SegmentError> {
+		let root =
+			self.reconstruct_root(last_pos, segment_first_pos, segment_last_pos, segment_root)?;
+		println!("SEGMENT ROOT = {:?}", segment_root);
+		println!("OUTPUT ROOT = {:?}", root);
+		let root = if other_is_left {
+			(other_root, root).hash_with_index(last_pos)
+		} else {
+			(root, other_root).hash_with_index(last_pos)
+		};
 		if root == mmr_root {
 			Ok(())
 		} else {
