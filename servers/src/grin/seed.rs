@@ -151,7 +151,7 @@ fn monitor_peers(
 	let mut banned_count = 0;
 	let mut defuncts = vec![];
 
-	for x in peers.all_peers().into_iter() {
+	for x in peers.all_peer_data().into_iter() {
 		match x.flags {
 			p2p::State::Banned => {
 				let interval = Utc::now().timestamp() - x.last_banned;
@@ -174,13 +174,23 @@ fn monitor_peers(
 		total_count += 1;
 	}
 
+	let peers_count = peers.iter().connected().count();
+
+	let max_diff = peers.max_peer_difficulty();
+	let most_work_count = peers
+		.iter()
+		.outbound()
+		.with_difficulty(|x| x >= max_diff)
+		.connected()
+		.count();
+
 	debug!(
 		"monitor_peers: on {}:{}, {} connected ({} most_work). \
 		 all {} = {} healthy + {} banned + {} defunct",
 		config.host,
 		config.port,
-		peers.peer_count(),
-		peers.most_work_peers().len(),
+		peers_count,
+		most_work_count,
 		total_count,
 		healthy_count,
 		banned_count,
@@ -198,10 +208,14 @@ fn monitor_peers(
 		return;
 	}
 
-	// loop over connected peers
+	// loop over connected peers that can provide peer lists
 	// ask them for their list of peers
 	let mut connected_peers: Vec<PeerAddr> = vec![];
-	for p in peers.connected_peers() {
+	for p in peers
+		.iter()
+		.with_capabilities(p2p::Capabilities::PEER_LIST)
+		.connected()
+	{
 		trace!(
 			"monitor_peers: {}:{} ask {} for more peers",
 			config.host,
@@ -331,9 +345,10 @@ fn listen_for_addrs(
 			.name("peer_connect".to_string())
 			.spawn(move || match p2p_c.connect(addr) {
 				Ok(p) => {
-					if p.send_peer_request(capab).is_ok() {
-						let _ = peers_c.update_state(addr, p2p::State::Healthy);
+					if p.info.capabilities.contains(p2p::Capabilities::PEER_LIST) {
+						let _ = p.send_peer_request(capab);
 					}
+					let _ = peers_c.update_state(addr, p2p::State::Healthy);
 				}
 				Err(_) => {
 					let _ = peers_c.update_state(addr, p2p::State::Defunct);

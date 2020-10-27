@@ -233,7 +233,7 @@ impl Server {
 	/// different sets of peers themselves. In addition, it prevent potential
 	/// duplicate connections, malicious or not.
 	fn check_undesirable(&self, stream: &TcpStream) -> bool {
-		if self.peers.peer_inbound_count()
+		if self.peers.iter().inbound().connected().count() as u32
 			>= self.config.peer_max_inbound_count() + self.config.peer_listener_buffer_count()
 		{
 			debug!("Accepting new connection will exceed peer limit, refusing connection.");
