@@ -551,8 +551,6 @@ impl SegmentProof {
 	) -> Result<(), SegmentError> {
 		let root =
 			self.reconstruct_root(last_pos, segment_first_pos, segment_last_pos, segment_root)?;
-		println!("SEGMENT ROOT = {:?}", segment_root);
-		println!("OUTPUT ROOT = {:?}", root);
 		let root = if other_is_left {
 			(other_root, root).hash_with_index(last_pos)
 		} else {
