@@ -816,12 +816,12 @@ impl Chain {
 	}
 
 	/// TODO - Our segmenter is how we build segments for PIBD.
-	/// Handles consistent rewinding etc.
+	/// Handles consistent view of the data etc.
 	///
 	/// TODO - Use the txhashset_archive_header from below?
 	///
-	fn segmenter<'a>(txhashset: &'a TxHashSet, header: BlockHeader) -> Segmenter<'a> {
-		Segmenter::new(txhashset, header)
+	pub fn segmenter(&self, header: BlockHeader) -> Segmenter {
+		Segmenter::new(self.txhashset(), header)
 	}
 
 	/// To support the ability to download the txhashset from multiple peers in parallel,

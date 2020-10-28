@@ -14,9 +14,12 @@
 
 //! Generation of the various necessary segments requested during PIBD.
 
+use std::sync::Arc;
+
 use crate::core::core::BlockHeader;
 use crate::error::Error;
 use crate::txhashset::{self, TxHashSet};
+use crate::util::RwLock;
 
 /// TODO - Replace this with SegmentIdentifier from segment PR.
 pub struct SegmentIdentifier {
@@ -25,23 +28,26 @@ pub struct SegmentIdentifier {
 }
 
 /// Segmenter for generating PIBS segments.
-pub struct Segmenter<'a> {
-	txhashset: &'a TxHashSet,
+pub struct Segmenter {
+	txhashset: Arc<RwLock<TxHashSet>>,
 	header: BlockHeader,
 }
 
-impl<'a> Segmenter<'a> {
+impl Segmenter {
 	/// Create a new segmenter based on the provided txhashset.
-	pub fn new(txhashset: &'a TxHashSet, header: BlockHeader) -> Segmenter<'a> {
+	pub fn new(txhashset: Arc<RwLock<TxHashSet>>, header: BlockHeader) -> Segmenter {
 		Segmenter { txhashset, header }
 	}
 
 	/// Create a kernel segment.
+	/// We use a lightweight "rewindable kernel view" here as we do not need to worry about pruning.
 	pub fn kernel_segment(&self, _id: SegmentIdentifier) -> Result<&str, Error> {
-		txhashset::rewindable_kernel_view(&self.txhashset, |view, batch| {
+		let txhashset = self.txhashset.read();
+		txhashset::rewindable_kernel_view(&txhashset, |view, _| {
 			view.rewind(&self.header)?;
 
-			// now build a segment from the kernel MMR in our view.
+			// TODO - Generate segment from our rewound kernel view.
+			// let segment = Segment::from_pmmr(id, &view.readonly_pmmr(), false)?;
 
 			Ok(())
 		})?;
