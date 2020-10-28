@@ -136,8 +136,8 @@ pub const TESTNET_SECOND_HARD_FORK: u64 = 298_080;
 /// Testnet second hard fork height, set to happen around 2020-06-20
 pub const TESTNET_THIRD_HARD_FORK: u64 = 552_960;
 
-/// Testnet second hard fork height, set to happen around 2020-12-??
-pub const TESTNET_FOURTH_HARD_FORK: u64 = 720_000;
+/// Testnet second hard fork height, set to happen around 2020-12-8
+pub const TESTNET_FOURTH_HARD_FORK: u64 = 649_440;
 
 /// Fork every 3 blocks
 pub const TESTING_HARD_FORK_INTERVAL: u64 = 3;
