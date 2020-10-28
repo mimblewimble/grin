@@ -29,7 +29,7 @@ use crate::error::{Error, ErrorKind};
 use crate::pipe;
 use crate::store;
 use crate::txhashset;
-use crate::txhashset::{PMMRHandle, TxHashSet};
+use crate::txhashset::{PMMRHandle, Segmenter, TxHashSet};
 use crate::types::{
 	BlockStatus, ChainAdapter, CommitPos, NoStatus, Options, Tip, TxHashsetWriteStatus,
 };
@@ -813,6 +813,15 @@ impl Chain {
 			txhashset::zip_read(self.db_root.clone(), &header)
 				.map(|file| (header.output_mmr_size, header.kernel_mmr_size, file))
 		})
+	}
+
+	/// TODO - Our segmenter is how we build segments for PIBD.
+	/// Handles consistent rewinding etc.
+	///
+	/// TODO - Use the txhashset_archive_header from below?
+	///
+	fn segmenter<'a>(txhashset: &'a TxHashSet, header: BlockHeader) -> Segmenter<'a> {
+		Segmenter::new(txhashset, header)
 	}
 
 	/// To support the ability to download the txhashset from multiple peers in parallel,
