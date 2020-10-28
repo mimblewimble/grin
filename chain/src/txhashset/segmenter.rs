@@ -18,7 +18,7 @@ use std::sync::Arc;
 
 use crate::core::core::BlockHeader;
 use crate::error::Error;
-use crate::txhashset::{self, TxHashSet};
+use crate::txhashset::{self, PMMRHandle, TxHashSet};
 use crate::util::RwLock;
 
 /// TODO - Replace this with SegmentIdentifier from segment PR.
@@ -29,14 +29,23 @@ pub struct SegmentIdentifier {
 
 /// Segmenter for generating PIBS segments.
 pub struct Segmenter {
+	header_pmmr: Arc<RwLock<PMMRHandle<BlockHeader>>>,
 	txhashset: Arc<RwLock<TxHashSet>>,
 	header: BlockHeader,
 }
 
 impl Segmenter {
 	/// Create a new segmenter based on the provided txhashset.
-	pub fn new(txhashset: Arc<RwLock<TxHashSet>>, header: BlockHeader) -> Segmenter {
-		Segmenter { txhashset, header }
+	pub fn new(
+		header_pmmr: Arc<RwLock<PMMRHandle<BlockHeader>>>,
+		txhashset: Arc<RwLock<TxHashSet>>,
+		header: BlockHeader,
+	) -> Segmenter {
+		Segmenter {
+			header_pmmr,
+			txhashset,
+			header,
+		}
 	}
 
 	/// Create a kernel segment.
@@ -56,17 +65,30 @@ impl Segmenter {
 	}
 
 	/// Note: we need to rewind both the bitmap and the output MMR as we need both roots here.
+	/// TODO - Return a segment and the corresponding output root.
 	pub fn bitmap_segment(&self, _id: SegmentIdentifier) -> Result<&str, Error> {
 		unimplemented!()
 	}
 
 	/// Note: we need to rewind both the bitmap and the output MMR as we need both roots here.
+	/// TODO - Return a segment and the corresponding bitmap root.
 	pub fn output_segment(&self, _id: SegmentIdentifier) -> Result<&str, Error> {
 		unimplemented!()
 	}
 
 	/// Create a rangeproof segment.
 	pub fn rangeproof_segment(&self, _id: SegmentIdentifier) -> Result<&str, Error> {
-		unimplemented!()
+		let mut header_pmmr = self.header_pmmr.write();
+		let mut txhashset = self.txhashset.write();
+		txhashset::extending_readonly(&mut header_pmmr, &mut txhashset, |ext, batch| {
+			let extension = &mut ext.extension;
+			extension.rewind(&self.header, batch)?;
+
+			// TODO - Generate segment from our rewound extension.
+			// TODO - We need a readonly version of the rangeproof PMMR here.
+			// let segment = Segment::from_pmmr(id, &view.readonly_pmmr(), false)?;
+
+			Ok("this will return a segment")
+		})
 	}
 }
