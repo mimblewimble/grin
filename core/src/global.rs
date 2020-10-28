@@ -144,6 +144,11 @@ lazy_static! {
 	/// to be overridden on a per-thread basis (for testing).
 	pub static ref GLOBAL_CHAIN_TYPE: OneTime<ChainTypes> = OneTime::new();
 
+	/// Global future time limit that must be initialized once on node startup.
+	/// This is accessed via get_future_time_limit() which allows the global value
+	/// to be overridden on a per-thread basis (for testing).
+	pub static ref GLOBAL_FUTURE_TIME_LIMIT: OneTime<u64> = OneTime::new();
+
 	/// Global feature flag for NRD kernel support.
 	/// If enabled NRD kernels are treated as valid after HF3 (based on header version).
 	/// If disabled NRD kernels are invalid regardless of header version or block height.
@@ -154,8 +159,17 @@ thread_local! {
 	/// Mainnet|Testnet|UserTesting|AutomatedTesting
 	pub static CHAIN_TYPE: Cell<Option<ChainTypes>> = Cell::new(None);
 
+	/// maximum number of seconds into future for timestamp of block to be acceptable
+	pub static FUTURE_TIME_LIMIT: Cell<Option<u64>> = Cell::new(None);
+
 	/// Local feature flag for NRD kernel support.
 	pub static NRD_FEATURE_ENABLED: Cell<Option<bool>> = Cell::new(None);
+}
+
+/// One time initialization of the global chain_type.
+/// Will panic if we attempt to re-initialize this (via OneTime).
+pub fn init_global_chain_type(new_type: ChainTypes) {
+	GLOBAL_CHAIN_TYPE.init(new_type)
 }
 
 /// Set the chain type on a per-thread basis via thread_local storage.
@@ -179,19 +193,43 @@ pub fn get_chain_type() -> ChainTypes {
 	})
 }
 
-/// One time initialization of the global chain_type.
+/// One time initialization of the global future time limit
 /// Will panic if we attempt to re-initialize this (via OneTime).
-pub fn init_global_chain_type(new_type: ChainTypes) {
-	GLOBAL_CHAIN_TYPE.init(new_type)
+pub fn init_global_future_time_limit(new_ftl: u64) {
+	GLOBAL_FUTURE_TIME_LIMIT.init(new_ftl)
 }
 
-/// One time initialization of the global chain_type.
+/// Set the future time limit on a per-thread basis via thread_local storage.
+pub fn set_local_future_time_limit(new_ftl: u64) {
+	FUTURE_TIME_LIMIT.with(|ftl| ftl.set(Some(new_ftl)))
+}
+
+/// Future Time Limit (FTL)
+/// Look at thread local config first. If not set fallback to global config.
+/// Default to false if global config unset.
+pub fn get_future_time_limit() -> u64 {
+	FUTURE_TIME_LIMIT.with(|ftl| match ftl.get() {
+		None => {
+			if GLOBAL_FUTURE_TIME_LIMIT.is_init() {
+				let ftl = GLOBAL_FUTURE_TIME_LIMIT.borrow();
+				set_local_future_time_limit(ftl);
+				ftl
+			} else {
+				// Global config unset, default to 5 minutes
+				5 * 60
+			}
+		}
+		Some(ftl) => ftl,
+	})
+}
+
+/// One time initialization of the global NRD feature flag.
 /// Will panic if we attempt to re-initialize this (via OneTime).
 pub fn init_global_nrd_enabled(enabled: bool) {
 	GLOBAL_NRD_FEATURE_ENABLED.init(enabled)
 }
 
-/// Explicitly enable the NRD global feature flag.
+/// Explicitly enable the local NRD feature flag.
 pub fn set_local_nrd_enabled(enabled: bool) {
 	NRD_FEATURE_ENABLED.with(|flag| flag.set(Some(enabled)))
 }

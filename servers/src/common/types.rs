@@ -160,6 +160,9 @@ pub struct ServerConfig {
 	#[serde(default)]
 	pub chain_type: ChainTypes,
 
+	/// Future Time Limit
+	pub future_time_limit: u64,
+
 	/// Automatically run full chain validation during normal block processing?
 	#[serde(default)]
 	pub chain_validation_mode: ChainValidationMode,
@@ -214,6 +217,7 @@ impl Default for ServerConfig {
 			dandelion_config: pool::DandelionConfig::default(),
 			stratum_mining_config: Some(StratumServerConfig::default()),
 			chain_type: ChainTypes::default(),
+			future_time_limit: 5 * 60,
 			archive_mode: Some(false),
 			chain_validation_mode: ChainValidationMode::default(),
 			pool_config: pool::PoolConfig::default(),

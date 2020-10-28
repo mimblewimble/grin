@@ -432,13 +432,14 @@ pub struct UntrustedBlockHeader(BlockHeader);
 impl Readable for UntrustedBlockHeader {
 	fn read<R: Reader>(reader: &mut R) -> Result<UntrustedBlockHeader, ser::Error> {
 		let header = read_block_header(reader)?;
-		if header.timestamp > Utc::now() + Duration::seconds(5 * 60) {
-			// refuse blocks more than 5 minutes in the future
-			// ideally this Future Time Limit (FTL) is specified in grin-server.toml
+		let ftl = global::get_future_time_limit();
+		if header.timestamp > Utc::now() + Duration::seconds(ftl as i64) {
+			// refuse blocks whose timestamp is too far in the future
+			// this future_time_limit (FTL) is specified in grin-server.toml
 			// TODO add warning in p2p code if local time is too different from peers
 			error!(
-				"block header {} validation error: block time is more than 5 minutes in the future",
-				header.hash()
+				"block header {} validation error: block time is more than {} seconds in the future",
+				header.hash(), ftl
 			);
 			return Err(ser::Error::CorruptedData);
 		}
