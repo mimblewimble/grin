@@ -219,8 +219,7 @@ where
 						} else {
 							idx_1 - 1
 						};
-						b.contains(idx_1 as u32)
-							|| b.contains(idx_2 as u32) || pos == segment_last_pos
+						b.contains(idx_1 as u32) || b.contains(idx_2 as u32) || pos == last_pos
 					})
 					.unwrap_or(true)
 				{
