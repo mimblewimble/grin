@@ -34,22 +34,7 @@ use crate::core::Transaction;
 pub use self::proof::ProofBuilder;
 pub use crate::libtx::error::{Error, ErrorKind};
 
-/// make output (of weight 21) cost about 1 Grin-cent, keeping a round number
-/// This should really be set by the `accept_fee_base` parameter in grin-server.toml
-pub const DEFAULT_BASE_FEE: u64 = consensus::GRIN_BASE / 100 / 20; // 500000
-
 /// Transaction fee calculation
-pub fn tx_fee(
-	input_len: usize,
-	output_len: usize,
-	kernel_len: usize,
-	base_fee: Option<u64>,
-) -> u64 {
-	let use_base_fee = match base_fee {
-		Some(bf) => bf,
-		None => DEFAULT_BASE_FEE,
-	};
-
-	Transaction::weight_by_iok(input_len as u64, output_len as u64, kernel_len as u64)
-		* use_base_fee
+pub fn tx_fee(input_len: usize, output_len: usize, kernel_len: usize, base_fee: u64) -> u64 {
+	Transaction::weight_by_iok(input_len as u64, output_len as u64, kernel_len as u64) * base_fee
 }

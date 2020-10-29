@@ -22,8 +22,8 @@ use crate::core::core::{
 	FeeFields, KernelFeatures, Output, OutputFeatures, Transaction, TxKernel, Weighting,
 };
 use crate::core::global;
-use crate::core::libtx::build;
 use crate::core::libtx::proof::{self, ProofBuilder};
+use crate::core::libtx::{build, tx_fee};
 use crate::core::{consensus, ser};
 use grin_core as core;
 use keychain::{ExtKeychain, Keychain};
@@ -245,6 +245,7 @@ fn test_fee_fields() -> Result<(), Error> {
 	assert_eq!(tx.fee(), 147);
 	assert_eq!(tx.shifted_fee(), 36);
 	assert_eq!(tx.aggregate_fee_fields(), FeeFields::new(2, 147));
+	assert_eq!(tx_fee(1, 1, 3, 500_000), 15_500_000);
 
 	Ok(())
 }
