@@ -219,14 +219,17 @@ where
 						} else {
 							idx_1 - 1
 						};
-						b.contains(idx_1 as u32) || b.contains(idx_2 as u32)
+						b.contains(idx_1 as u32)
+							|| b.contains(idx_2 as u32) || pos == segment_last_pos
 					})
 					.unwrap_or(true)
 				{
 					// We require the data of this leaf if either the mmr is not prunable or if
-					// the bitmap indicates it (or its sibling) should be here
+					//  the bitmap indicates it (or its sibling) should be here.
+					// Edge case: if the final segment has an uneven number of leaves, we
+					//  require the last leaf to be present regardless of the status in the bitmap.
 					// TODO: possibly remove requirement on the sibling when we no longer support
-					//  syncing through the txhashset.zip method
+					//  syncing through the txhashset.zip method.
 					let data = leaves
 						.find(|&(&p, _)| p == pos)
 						.map(|(_, l)| l)

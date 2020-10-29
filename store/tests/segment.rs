@@ -47,7 +47,7 @@ fn prunable_mmr() {
 	let root = mmr.root().unwrap();
 
 	let mut bitmap = Bitmap::create();
-	bitmap.add_range_closed(1..n_leaves);
+	bitmap.add_range(0..n_leaves as u64);
 
 	let id = SegmentIdentifier { height: 3, idx: 1 };
 
@@ -173,7 +173,7 @@ fn ser_round_trip() {
 		mmr.push(&TestElem([i / 7, i / 5, i / 3, i])).unwrap();
 	}
 	let mut bitmap = Bitmap::create();
-	bitmap.add_range_closed(1..n_leaves);
+	bitmap.add_range(0..n_leaves as u64);
 	let last_pos = mmr.unpruned_size();
 
 	prune(&mut mmr, &mut bitmap, &[0, 1]);
@@ -208,8 +208,10 @@ where
 	B: Backend<T>,
 {
 	for &leaf_idx in leaf_idxs {
-		mmr.prune(pmmr::insertion_to_pmmr_index(leaf_idx + 1))
-			.unwrap();
+		let pos = pmmr::insertion_to_pmmr_index(leaf_idx + 1);
+		if !pmmr::peaks(mmr.unpruned_size()).contains(&pos) {
+			mmr.prune(pos).unwrap();
+		}
 		bitmap.remove(leaf_idx as u32);
 	}
 }
