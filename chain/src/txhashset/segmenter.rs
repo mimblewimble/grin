@@ -16,8 +16,10 @@
 
 use std::sync::Arc;
 
+use crate::core::core::hash::Hash;
+use crate::core::core::pmmr::ReadablePMMR;
 use crate::core::core::BlockHeader;
-use crate::error::Error;
+use crate::error::{Error, ErrorKind};
 use crate::txhashset::{self, PMMRHandle, TxHashSet};
 use crate::util::RwLock;
 
@@ -53,10 +55,12 @@ impl Segmenter {
 	pub fn kernel_segment(&self, _id: SegmentIdentifier) -> Result<&str, Error> {
 		let txhashset = self.txhashset.read();
 		txhashset::rewindable_kernel_view(&txhashset, |view, _| {
+			// This rewind is fast as we take advantage of our "rewindable kernel view".
 			view.rewind(&self.header)?;
 
 			// TODO - Generate segment from our rewound kernel view.
-			// let segment = Segment::from_pmmr(id, &view.readonly_pmmr(), false)?;
+			let pmmr = view.readonly_pmmr();
+			// let segment = Segment::from_pmmr(id, &pmmr, false)?;
 
 			Ok(())
 		})?;
@@ -66,14 +70,62 @@ impl Segmenter {
 
 	/// Note: we need to rewind both the bitmap and the output MMR as we need both roots here.
 	/// TODO - Return a segment and the corresponding output root.
-	pub fn bitmap_segment(&self, _id: SegmentIdentifier) -> Result<&str, Error> {
-		unimplemented!()
+	pub fn bitmap_segment(&self, _id: SegmentIdentifier) -> Result<(&str, Hash), Error> {
+		let mut header_pmmr = self.header_pmmr.write();
+		let mut txhashset = self.txhashset.write();
+		txhashset::extending_readonly(&mut header_pmmr, &mut txhashset, |ext, batch| {
+			let extension = &mut ext.extension;
+
+			// This rewind is relatively expensive but we need to recreate the utxo (bitmap accumulator)
+			// for our specified header.
+			// We may want to consider taking a "snapshot" of the bitmap accumulator (write to disk?)
+			// to allow for fast subsequent reads?
+			extension.rewind(&self.header, batch)?;
+
+			// TODO - Generate segment from our rewound extension.
+			let bitmap_pmmr = extension.bitmap_readonly_pmmr();
+			// let segment = Segment::from_pmmr(id, &bitmap_pmmr, true)?;
+
+			let output_pmmr = extension.output_readonly_pmmr();
+			let output_root = output_pmmr
+				.root()
+				.map_err(|_| ErrorKind::TxHashSetErr("failed to get output root".into()))?;
+
+			Ok((
+				"this will return a bitmap segment and corresponding output root",
+				output_root,
+			))
+		})
 	}
 
 	/// Note: we need to rewind both the bitmap and the output MMR as we need both roots here.
 	/// TODO - Return a segment and the corresponding bitmap root.
-	pub fn output_segment(&self, _id: SegmentIdentifier) -> Result<&str, Error> {
-		unimplemented!()
+	pub fn output_segment(&self, _id: SegmentIdentifier) -> Result<(&str, Hash), Error> {
+		let mut header_pmmr = self.header_pmmr.write();
+		let mut txhashset = self.txhashset.write();
+		txhashset::extending_readonly(&mut header_pmmr, &mut txhashset, |ext, batch| {
+			let extension = &mut ext.extension;
+
+			// This rewind is relatively expensive as we need to rewind spent outputs over multiple blocks.
+			// We may want to revisit this.
+			// Possible approach would be to rewind this once and cache the root hashes and PMMR sizes.
+			// Then we can directly init a ReadonlyPMMR with the correct sizes for subsequent reads.
+			extension.rewind(&self.header, batch)?;
+
+			// TODO - Generate segment from our rewound extension.
+			let output_pmmr = extension.output_readonly_pmmr();
+			// let segment = Segment::from_pmmr(id, &output_pmmr, true)?;
+
+			let bitmap_pmmr = extension.bitmap_readonly_pmmr();
+			let bitmap_root = bitmap_pmmr
+				.root()
+				.map_err(|_| ErrorKind::TxHashSetErr("failed to get bitmap root".into()))?;
+
+			Ok((
+				"this will return an output segment and corresponding bitmap root",
+				bitmap_root,
+			))
+		})
 	}
 
 	/// Create a rangeproof segment.
@@ -82,11 +134,16 @@ impl Segmenter {
 		let mut txhashset = self.txhashset.write();
 		txhashset::extending_readonly(&mut header_pmmr, &mut txhashset, |ext, batch| {
 			let extension = &mut ext.extension;
+
+			// This rewind is relatively expensive as we need to rewind (unpend) outputs over multiple blocks.
+			// We may want to revisit this.
+			// Possible approach would be to rewind this once and cache the root hashes and PMMR sizes.
+			// Then we can directly init a ReadonlyPMMR with the correct sizes for subsequent reads.
 			extension.rewind(&self.header, batch)?;
 
 			// TODO - Generate segment from our rewound extension.
-			// TODO - We need a readonly version of the rangeproof PMMR here.
-			// let segment = Segment::from_pmmr(id, &view.readonly_pmmr(), false)?;
+			let pmmr = extension.rproof_readonly_pmmr();
+			// let segment = Segment::from_pmmr(id, &pmmr, false)?;
 
 			Ok("this will return a segment")
 		})

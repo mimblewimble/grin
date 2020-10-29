@@ -19,14 +19,16 @@ use crate::core::consensus::WEEK_HEIGHT;
 use crate::core::core::committed::Committed;
 use crate::core::core::hash::{Hash, Hashed};
 use crate::core::core::merkle_proof::MerkleProof;
-use crate::core::core::pmmr::{self, Backend, ReadablePMMR, ReadonlyPMMR, RewindablePMMR, PMMR};
+use crate::core::core::pmmr::{
+	self, Backend, ReadablePMMR, ReadonlyPMMR, RewindablePMMR, VecBackend, PMMR,
+};
 use crate::core::core::{Block, BlockHeader, KernelFeatures, Output, OutputIdentifier, TxKernel};
 use crate::core::global;
 use crate::core::ser::{PMMRable, ProtocolVersion};
 use crate::error::{Error, ErrorKind};
 use crate::linked_list::{ListIndex, PruneableListIndex, RewindableListIndex};
 use crate::store::{self, Batch, ChainStore};
-use crate::txhashset::bitmap_accumulator::BitmapAccumulator;
+use crate::txhashset::bitmap_accumulator::{BitmapAccumulator, BitmapChunk};
 use crate::txhashset::{RewindableKernelView, UTXOView};
 use crate::types::{CommitPos, OutputRoots, Tip, TxHashSetRoots, TxHashsetWriteStatus};
 use crate::util::secp::pedersen::{Commitment, RangeProof};
@@ -1069,9 +1071,25 @@ impl<'a> Extension<'a> {
 	pub fn utxo_view(&'a self, header_ext: &'a HeaderExtension<'a>) -> UTXOView<'a> {
 		UTXOView::new(
 			header_ext.pmmr.readonly_pmmr(),
-			self.output_pmmr.readonly_pmmr(),
-			self.rproof_pmmr.readonly_pmmr(),
+			self.output_readonly_pmmr(),
+			self.rproof_readonly_pmmr(),
 		)
+	}
+
+	/// Readonly view of our output data.
+	pub fn output_readonly_pmmr(
+		&self,
+	) -> ReadonlyPMMR<OutputIdentifier, PMMRBackend<OutputIdentifier>> {
+		self.output_pmmr.readonly_pmmr()
+	}
+
+	pub fn bitmap_readonly_pmmr(&self) -> ReadonlyPMMR<BitmapChunk, VecBackend<BitmapChunk>> {
+		self.bitmap_accumulator.readonly_pmmr()
+	}
+
+	/// Readonly view of our rangeproof data.
+	pub fn rproof_readonly_pmmr(&self) -> ReadonlyPMMR<RangeProof, PMMRBackend<RangeProof>> {
+		self.rproof_pmmr.readonly_pmmr()
 	}
 
 	/// Apply a new block to the current txhashet extension (output, rangeproof, kernel MMRs).
