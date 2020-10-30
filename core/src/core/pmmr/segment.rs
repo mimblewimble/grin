@@ -85,7 +85,19 @@ pub struct Segment<T> {
 }
 
 impl<T> Segment<T> {
-	/// Maximum number of leaves in a segment, given by `2**b`
+	/// Creates an empty segment
+	fn empty(identifier: SegmentIdentifier) -> Self {
+		Segment {
+			identifier,
+			hash_pos: Vec::new(),
+			hashes: Vec::new(),
+			leaf_pos: Vec::new(),
+			leaf_data: Vec::new(),
+			proof: SegmentProof::empty(),
+		}
+	}
+
+	/// Maximum number of leaves in a segment, given by `2**height`
 	fn segment_capacity(&self) -> u64 {
 		1 << self.identifier.height
 	}
@@ -131,23 +143,25 @@ impl<T> Segment<T> {
 			.map(|(_, &h)| h)
 			.ok_or_else(|| SegmentError::MissingHash(pos))
 	}
+
+	/// Iterator of all the leaves in the segment
+	pub fn leaf_iter(&self) -> impl Iterator<Item = (u64, &T)> + '_ {
+		self.leaf_pos.iter().map(|&p| p).zip(&self.leaf_data)
+	}
+
+	/// Iterator of all the hashes in the segment
+	pub fn hash_iter(&self) -> impl Iterator<Item = (u64, Hash)> + '_ {
+		self.hash_pos
+			.iter()
+			.zip(&self.hashes)
+			.map(|(&p, &h)| (p, h))
+	}
 }
 
 impl<T> Segment<T>
 where
 	T: Readable + Writeable + Debug,
 {
-	fn empty(identifier: SegmentIdentifier) -> Self {
-		Segment {
-			identifier,
-			hash_pos: Vec::new(),
-			hashes: Vec::new(),
-			leaf_pos: Vec::new(),
-			leaf_data: Vec::new(),
-			proof: SegmentProof::empty(),
-		}
-	}
-
 	/// Generate a segment from a PMMR
 	pub fn from_pmmr<U, B>(
 		segment_id: SegmentIdentifier,
