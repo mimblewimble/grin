@@ -208,10 +208,8 @@ where
 	B: Backend<T>,
 {
 	for &leaf_idx in leaf_idxs {
-		let pos = pmmr::insertion_to_pmmr_index(leaf_idx + 1);
-		if !pmmr::peaks(mmr.unpruned_size()).contains(&pos) {
-			mmr.prune(pos).unwrap();
-		}
+		mmr.prune(pmmr::insertion_to_pmmr_index(leaf_idx + 1))
+			.unwrap();
 		bitmap.remove(leaf_idx as u32);
 	}
 }
