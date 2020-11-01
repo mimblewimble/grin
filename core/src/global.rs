@@ -19,8 +19,8 @@
 use crate::consensus::{
 	graph_weight, valid_header_version, HeaderInfo, BASE_EDGE_BITS, BLOCK_TIME_SEC,
 	COINBASE_MATURITY, CUT_THROUGH_HORIZON, DAY_HEIGHT, DEFAULT_MIN_EDGE_BITS,
-	DIFFICULTY_ADJUST_WINDOW, INITIAL_DIFFICULTY, KERNEL_WEIGHT, MAX_BLOCK_WEIGHT, OUTPUT_WEIGHT,
-	PROOFSIZE, SECOND_POW_EDGE_BITS, STATE_SYNC_THRESHOLD,
+	DIFFICULTY_ADJUST_WINDOW, GRIN_BASE, INITIAL_DIFFICULTY, KERNEL_WEIGHT, MAX_BLOCK_WEIGHT,
+	OUTPUT_WEIGHT, PROOFSIZE, SECOND_POW_EDGE_BITS, STATE_SYNC_THRESHOLD,
 };
 use crate::core::block::HeaderVersion;
 use crate::{
@@ -144,6 +144,11 @@ lazy_static! {
 	/// to be overridden on a per-thread basis (for testing).
 	pub static ref GLOBAL_CHAIN_TYPE: OneTime<ChainTypes> = OneTime::new();
 
+		/// Global acccept fee base that must be initialized once on node startup.
+		/// This is accessed via get_acccept_fee_base() which allows the global value
+		/// to be overridden on a per-thread basis (for testing).
+		pub static ref GLOBAL_ACCEPT_FEE_BASE: OneTime<u64> = OneTime::new();
+
 	/// Global feature flag for NRD kernel support.
 	/// If enabled NRD kernels are treated as valid after HF3 (based on header version).
 	/// If disabled NRD kernels are invalid regardless of header version or block height.
@@ -153,6 +158,9 @@ lazy_static! {
 thread_local! {
 	/// Mainnet|Testnet|UserTesting|AutomatedTesting
 	pub static CHAIN_TYPE: Cell<Option<ChainTypes>> = Cell::new(None);
+
+		/// minimum transaction fee per unit of transaction weight for mempool acceptance
+		pub static ACCEPT_FEE_BASE: Cell<Option<u64>> = Cell::new(None);
 
 	/// Local feature flag for NRD kernel support.
 	pub static NRD_FEATURE_ENABLED: Cell<Option<bool>> = Cell::new(None);
@@ -183,6 +191,36 @@ pub fn get_chain_type() -> ChainTypes {
 /// Will panic if we attempt to re-initialize this (via OneTime).
 pub fn init_global_chain_type(new_type: ChainTypes) {
 	GLOBAL_CHAIN_TYPE.init(new_type)
+}
+
+/// One time initialization of the global accept fee base
+/// Will panic if we attempt to re-initialize this (via OneTime).
+pub fn init_global_accept_fee_base(new_base: u64) {
+	GLOBAL_ACCEPT_FEE_BASE.init(new_base)
+}
+
+/// Set the accept fee base on a per-thread basis via thread_local storage.
+pub fn set_local_accept_fee_base(new_base: u64) {
+	ACCEPT_FEE_BASE.with(|base| base.set(Some(new_base)))
+}
+
+/// Accept Fee Base
+/// Look at thread local config first. If not set fallback to global config.
+/// Default to grin-cent/20 if global config unset.
+pub fn get_accept_fee_base() -> u64 {
+	ACCEPT_FEE_BASE.with(|base| match base.get() {
+		None => {
+			let base = if GLOBAL_ACCEPT_FEE_BASE.is_init() {
+				GLOBAL_ACCEPT_FEE_BASE.borrow()
+			} else {
+				// Global config unset, default to 1/20 of a Grincent
+				GRIN_BASE / 100 / 20 // 500_000
+			};
+			set_local_accept_fee_base(base);
+			base
+		}
+		Some(base) => base,
+	})
 }
 
 /// One time initialization of the global chain_type.

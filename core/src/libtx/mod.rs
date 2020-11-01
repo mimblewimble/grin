@@ -28,7 +28,6 @@ pub mod proof;
 pub mod reward;
 pub mod secp_ser;
 
-use crate::consensus;
 use crate::core::Transaction;
 
 pub use self::proof::ProofBuilder;

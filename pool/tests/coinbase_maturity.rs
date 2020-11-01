@@ -31,6 +31,7 @@ use std::sync::Arc;
 fn test_coinbase_maturity() {
 	util::init_test_logger();
 	global::set_local_chain_type(global::ChainTypes::AutomatedTesting);
+	global::set_local_accept_fee_base(00_000_000);
 	let keychain: ExtKeychain = Keychain::from_random_seed(false).unwrap();
 
 	let db_root = "target/.coinbase_maturity";
@@ -52,7 +53,7 @@ fn test_coinbase_maturity() {
 	add_block(&chain, &[], &keychain);
 
 	let header_1 = chain.get_header_by_height(1).unwrap();
-	let tx = test_transaction_spending_coinbase(&keychain, &header_1, vec![100_000_000]);
+	let tx = test_transaction_spending_coinbase(&keychain, &header_1, vec![100]);
 
 	// Coinbase is not yet matured and cannot be spent.
 	let header = chain.head_header().unwrap();

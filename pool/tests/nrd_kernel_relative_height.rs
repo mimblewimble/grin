@@ -35,6 +35,7 @@ use std::sync::Arc;
 fn test_nrd_kernel_relative_height() -> Result<(), PoolError> {
 	util::init_test_logger();
 	global::set_local_chain_type(global::ChainTypes::AutomatedTesting);
+	global::set_local_accept_fee_base(10);
 	global::set_local_nrd_enabled(true);
 
 	let keychain: ExtKeychain = Keychain::from_random_seed(false).unwrap();
@@ -60,11 +61,8 @@ fn test_nrd_kernel_relative_height() -> Result<(), PoolError> {
 
 	// Now create tx to spend an early coinbase (now matured).
 	// Provides us with some useful outputs to test with.
-	let initial_tx = test_transaction_spending_coinbase(
-		&keychain,
-		&header_1,
-		vec![1_000_000_000, 2_000_000_000, 3_000_000_000, 4_000_000_000],
-	);
+	let initial_tx =
+		test_transaction_spending_coinbase(&keychain, &header_1, vec![1_000, 2_000, 3_000, 4_000]);
 
 	// Mine that initial tx so we can spend it with multiple txs.
 	add_block(&chain, &[initial_tx], &keychain);
@@ -78,7 +76,7 @@ fn test_nrd_kernel_relative_height() -> Result<(), PoolError> {
 
 	let (tx1, tx2, tx3) = {
 		let mut kernel = TxKernel::with_features(KernelFeatures::NoRecentDuplicate {
-			fee_fields: 600_000_000.try_into().unwrap(),
+			fee_fields: 600.try_into().unwrap(),
 			relative_height: NRDRelativeHeight::new(2)?,
 		});
 		let msg = kernel.msg_to_sign().unwrap();
@@ -100,23 +98,23 @@ fn test_nrd_kernel_relative_height() -> Result<(), PoolError> {
 
 		let tx1 = test_transaction_with_kernel(
 			&keychain,
-			vec![1_000_000_000, 2_000_000_000],
-			vec![2_400_000_000],
+			vec![1_000, 2_000],
+			vec![2_400],
 			kernel.clone(),
 			excess.clone(),
 		);
 
 		let tx2 = test_transaction_with_kernel(
 			&keychain,
-			vec![2_400_000_000],
-			vec![1_800_000_000],
+			vec![2_400],
+			vec![1_800],
 			kernel2.clone(),
 			excess.clone(),
 		);
 
 		// Now reuse kernel excess for tx3 but with NRD relative_height=1 (and different fee).
 		let mut kernel_short = TxKernel::with_features(KernelFeatures::NoRecentDuplicate {
-			fee_fields: 300_000_000.try_into().unwrap(),
+			fee_fields: 300.try_into().unwrap(),
 			relative_height: NRDRelativeHeight::new(1)?,
 		});
 		let msg_short = kernel_short.msg_to_sign().unwrap();
@@ -128,8 +126,8 @@ fn test_nrd_kernel_relative_height() -> Result<(), PoolError> {
 
 		let tx3 = test_transaction_with_kernel(
 			&keychain,
-			vec![1_800_000_000],
-			vec![1_500_000_000],
+			vec![1_800],
+			vec![1_500],
 			kernel_short.clone(),
 			excess.clone(),
 		);

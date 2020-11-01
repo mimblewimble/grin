@@ -365,7 +365,7 @@ where
 		// weight for a basic transaction (2 inputs, 2 outputs, 1 kernel) -
 		// (2 * 1) + (2 * 21) + (1 * 3) = 47
 		// minfees = 47 * 500_000 = 23_500_000
-		let minfees = (tx.weight() as u64) * self.config.accept_fee_base;
+		let minfees = (tx.weight() as u64) * global::get_accept_fee_base();
 		if tx.shifted_fee() < minfees {
 			return Err(PoolError::LowFeeTransaction(minfees));
 		}
