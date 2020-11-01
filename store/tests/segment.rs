@@ -14,7 +14,7 @@
 
 use crate::core::core::hash::DefaultHashable;
 use crate::core::core::pmmr;
-use crate::core::core::pmmr::segment::{Segment, SegmentError, SegmentIdentifier};
+use crate::core::core::pmmr::segment::{Segment, SegmentIdentifier};
 use crate::core::core::pmmr::{Backend, ReadablePMMR, ReadonlyPMMR, PMMR};
 use crate::core::ser::{
 	BinReader, BinWriter, Error, PMMRable, ProtocolVersion, Readable, Reader, Writeable, Writer,
@@ -55,7 +55,7 @@ fn prunable_mmr() {
 	let mmr = ReadonlyPMMR::at(&mut ba, last_pos);
 	let segment = Segment::from_pmmr(id, &mmr, true).unwrap();
 	assert_eq!(
-		segment.root(last_pos, Some(&bitmap)).unwrap(),
+		segment.root(last_pos, Some(&bitmap)).unwrap().unwrap(),
 		mmr.get_hash(30).unwrap()
 	);
 	segment.validate(last_pos, Some(&bitmap), root).unwrap();
@@ -71,7 +71,7 @@ fn prunable_mmr() {
 	let mmr = ReadonlyPMMR::at(&mut ba, last_pos);
 	let segment = Segment::from_pmmr(id, &mmr, true).unwrap();
 	assert_eq!(
-		segment.root(last_pos, Some(&bitmap)).unwrap(),
+		segment.root(last_pos, Some(&bitmap)).unwrap().unwrap(),
 		mmr.get_hash(30).unwrap()
 	);
 	segment.validate(last_pos, Some(&bitmap), root).unwrap();
@@ -87,7 +87,7 @@ fn prunable_mmr() {
 	let mmr = ReadonlyPMMR::at(&mut ba, last_pos);
 	let segment = Segment::from_pmmr(id, &mmr, true).unwrap();
 	assert_eq!(
-		segment.root(last_pos, Some(&bitmap)).unwrap(),
+		segment.root(last_pos, Some(&bitmap)).unwrap().unwrap(),
 		mmr.get_hash(30).unwrap()
 	);
 	segment.validate(last_pos, Some(&bitmap), root).unwrap();
@@ -103,12 +103,12 @@ fn prunable_mmr() {
 	let mmr = ReadonlyPMMR::at(&mut ba, last_pos);
 	let segment = Segment::from_pmmr(id, &mmr, true).unwrap();
 	assert_eq!(
-		segment.root(last_pos, Some(&bitmap)).unwrap(),
+		segment.root(last_pos, Some(&bitmap)).unwrap().unwrap(),
 		mmr.get_hash(30).unwrap()
 	);
 	segment.validate(last_pos, Some(&bitmap), root).unwrap();
 
-	// Prune all: can't create empty segment
+	// Prune all
 	let mut mmr = PMMR::at(&mut ba, last_pos);
 	prune(&mut mmr, &mut bitmap, &[12]);
 	ba.sync().unwrap();
@@ -116,10 +116,7 @@ fn prunable_mmr() {
 	ba.sync().unwrap();
 
 	let mmr = ReadonlyPMMR::at(&mut ba, last_pos);
-	assert_eq!(
-		Segment::from_pmmr(id, &mmr, true).unwrap_err(),
-		SegmentError::Pruned
-	);
+	assert!(Segment::from_pmmr(id, &mmr, true).is_ok());
 
 	// Final segment is not full, test it before pruning
 	let id = SegmentIdentifier { height: 3, idx: 9 };
@@ -153,6 +150,174 @@ fn prunable_mmr() {
 	segment.validate(last_pos, Some(&bitmap), root).unwrap();
 
 	std::mem::drop(ba);
+	fs::remove_dir_all(&data_dir).unwrap();
+}
+
+#[test]
+fn pruned_segment() {
+	let t = Utc::now();
+	let data_dir = format!(
+		"./target/tmp/{}.{}-pruned_segment",
+		t.timestamp(),
+		t.timestamp_subsec_nanos()
+	);
+	fs::create_dir_all(&data_dir).unwrap();
+
+	let n_leaves = 16;
+	let mut ba = PMMRBackend::new(&data_dir, true, ProtocolVersion(1), None).unwrap();
+	let mut mmr = PMMR::new(&mut ba);
+	for i in 0..n_leaves {
+		mmr.push(&TestElem([i / 7, i / 5, i / 3, i])).unwrap();
+	}
+	let last_pos = mmr.unpruned_size();
+	let root = mmr.root().unwrap();
+
+	let mut bitmap = Bitmap::create();
+	bitmap.add_range(0..n_leaves as u64);
+
+	// Prune all leaves of segment 1
+	prune(&mut mmr, &mut bitmap, &[4, 5, 6, 7]);
+	ba.sync().unwrap();
+	ba.check_compact(last_pos, &Bitmap::create()).unwrap();
+	ba.sync().unwrap();
+
+	// Validate the empty segment 1
+	let id = SegmentIdentifier { height: 2, idx: 1 };
+	let mmr = ReadonlyPMMR::at(&mut ba, last_pos);
+	let segment = Segment::from_pmmr(id, &mmr, true).unwrap();
+	assert_eq!(segment.leaf_iter().count(), 0);
+	assert_eq!(segment.hash_iter().count(), 1);
+	assert_eq!(
+		segment
+			.first_unpruned_parent(last_pos, Some(&bitmap))
+			.unwrap(),
+		(ba.get_hash(14).unwrap(), Some(14))
+	);
+	assert!(segment.root(last_pos, Some(&bitmap)).unwrap().is_none());
+	segment.validate(last_pos, Some(&bitmap), root).unwrap();
+
+	// Prune all leaves of segment 0
+	let mut mmr = PMMR::at(&mut ba, last_pos);
+	prune(&mut mmr, &mut bitmap, &[0, 1, 2, 3]);
+	ba.sync().unwrap();
+	ba.check_compact(last_pos, &Bitmap::create()).unwrap();
+	ba.sync().unwrap();
+
+	// Validate the empty segment 1 again
+	let mmr = ReadonlyPMMR::at(&mut ba, last_pos);
+	let segment = Segment::from_pmmr(id, &mmr, true).unwrap();
+	assert_eq!(segment.leaf_iter().count(), 0);
+	assert_eq!(segment.hash_iter().count(), 1);
+	// Since both 7 and 14 are now pruned, the first unpruned hash will be at 15
+	assert_eq!(
+		segment
+			.first_unpruned_parent(last_pos, Some(&bitmap))
+			.unwrap(),
+		(ba.get_hash(15).unwrap(), Some(15))
+	);
+	assert!(segment.root(last_pos, Some(&bitmap)).unwrap().is_none());
+	segment.validate(last_pos, Some(&bitmap), root).unwrap();
+
+	// Prune all leaves of segment 2 & 3
+	let mut mmr = PMMR::at(&mut ba, last_pos);
+	prune(&mut mmr, &mut bitmap, &[8, 9, 10, 11, 12, 13, 14, 15]);
+	ba.sync().unwrap();
+	ba.check_compact(last_pos, &Bitmap::create()).unwrap();
+	ba.sync().unwrap();
+
+	// Validate the empty segment 1 again
+	let mmr = ReadonlyPMMR::at(&mut ba, last_pos);
+	let segment = Segment::from_pmmr(id, &mmr, true).unwrap();
+	assert_eq!(segment.leaf_iter().count(), 0);
+	assert_eq!(segment.hash_iter().count(), 1);
+	// Since both 15 and 30 are now pruned, the first unpruned hash will be at 31: the mmr root
+	assert_eq!(
+		segment
+			.first_unpruned_parent(last_pos, Some(&bitmap))
+			.unwrap(),
+		(root, Some(31))
+	);
+	assert!(segment.root(last_pos, Some(&bitmap)).unwrap().is_none());
+	segment.validate(last_pos, Some(&bitmap), root).unwrap();
+
+	let n_leaves = n_leaves + 4 + 2 + 1;
+	let mut mmr = PMMR::at(&mut ba, last_pos);
+	for i in 16..n_leaves {
+		mmr.push(&TestElem([i / 7, i / 5, i / 3, i])).unwrap();
+	}
+	bitmap.add_range(16..n_leaves as u64);
+	let last_pos = mmr.unpruned_size();
+	let root = mmr.root().unwrap();
+
+	// Prune all leaves of segment 4
+	// The root of this segment is a direct peak of the full MMR
+	prune(&mut mmr, &mut bitmap, &[16, 17, 18, 19]);
+	ba.sync().unwrap();
+	ba.check_compact(last_pos, &Bitmap::create()).unwrap();
+	ba.sync().unwrap();
+
+	// Validate segment 4
+	let id = SegmentIdentifier { height: 2, idx: 4 };
+	let mmr = ReadonlyPMMR::at(&mut ba, last_pos);
+	let segment = Segment::from_pmmr(id, &mmr, true).unwrap();
+	assert_eq!(segment.leaf_iter().count(), 0);
+	assert_eq!(segment.hash_iter().count(), 1);
+	assert_eq!(
+		segment
+			.first_unpruned_parent(last_pos, Some(&bitmap))
+			.unwrap(),
+		(ba.get_hash(38).unwrap(), Some(38))
+	);
+	assert!(segment.root(last_pos, Some(&bitmap)).unwrap().is_none());
+	segment.validate(last_pos, Some(&bitmap), root).unwrap();
+
+	// Segment 5 has 2 peaks
+	let id = SegmentIdentifier { height: 2, idx: 5 };
+	let mmr = ReadonlyPMMR::at(&mut ba, last_pos);
+	let segment = Segment::from_pmmr(id, &mmr, true).unwrap();
+	assert_eq!(segment.leaf_iter().count(), 3);
+	assert!(segment
+		.first_unpruned_parent(last_pos, Some(&bitmap))
+		.unwrap()
+		.1
+		.is_none());
+	assert!(segment.root(last_pos, Some(&bitmap)).unwrap().is_some());
+	segment.validate(last_pos, Some(&bitmap), root).unwrap();
+	let prev_segment = segment;
+
+	// Prune final leaf (a peak)
+	let mut mmr = PMMR::at(&mut ba, last_pos);
+	prune(&mut mmr, &mut bitmap, &[22]);
+	ba.sync().unwrap();
+	ba.check_compact(last_pos, &Bitmap::create()).unwrap();
+	ba.sync().unwrap();
+
+	// Segment 5 should be unchanged
+	let mmr = ReadonlyPMMR::at(&mut ba, last_pos);
+	let segment = Segment::from_pmmr(id, &mmr, true).unwrap();
+	assert_eq!(segment, prev_segment);
+	segment.validate(last_pos, Some(&bitmap), root).unwrap();
+
+	// Prune other peak of segment 5
+	let mut mmr = PMMR::at(&mut ba, last_pos);
+	prune(&mut mmr, &mut bitmap, &[20, 21]);
+	ba.sync().unwrap();
+	ba.check_compact(last_pos, &Bitmap::create()).unwrap();
+	ba.sync().unwrap();
+
+	// Validate segment 5 again
+	let mmr = ReadonlyPMMR::at(&mut ba, last_pos);
+	let segment = Segment::from_pmmr(id, &mmr, true).unwrap();
+	assert_eq!(segment.leaf_iter().count(), 1);
+	assert_eq!(segment.hash_iter().count(), 1);
+	assert!(segment
+		.first_unpruned_parent(last_pos, Some(&bitmap))
+		.unwrap()
+		.1
+		.is_none());
+	assert!(segment.root(last_pos, Some(&bitmap)).unwrap().is_some());
+	segment.validate(last_pos, Some(&bitmap), root).unwrap();
+
 	fs::remove_dir_all(&data_dir).unwrap();
 }
 
