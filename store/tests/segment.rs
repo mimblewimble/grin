@@ -318,6 +318,7 @@ fn pruned_segment() {
 	assert!(segment.root(last_pos, Some(&bitmap)).unwrap().is_some());
 	segment.validate(last_pos, Some(&bitmap), root).unwrap();
 
+	std::mem::drop(ba);
 	fs::remove_dir_all(&data_dir).unwrap();
 }
 
