@@ -83,6 +83,9 @@ pub const TESTING_INITIAL_DIFFICULTY: u64 = 1;
 /// Testing max_block_weight (artifically low, just enough to support a few txs).
 pub const TESTING_MAX_BLOCK_WEIGHT: u64 = 250;
 
+/// default Future Time Limit (FTL) of 5 minutes
+pub const DEFAULT_FUTURE_TIME_LIMIT: u64 = 5 * 60
+
 /// If a peer's last updated difficulty is 2 hours ago and its difficulty's lower than ours,
 /// we're sure this peer is a stuck node, and we will kick out such kind of stuck peers.
 pub const STUCK_PEER_KICK_TIME: i64 = 2 * 3600 * 1000;
@@ -181,13 +184,12 @@ pub fn set_local_chain_type(new_type: ChainTypes) {
 pub fn get_chain_type() -> ChainTypes {
 	CHAIN_TYPE.with(|chain_type| match chain_type.get() {
 		None => {
-			if GLOBAL_CHAIN_TYPE.is_init() {
-				let chain_type = GLOBAL_CHAIN_TYPE.borrow();
-				set_local_chain_type(chain_type);
-				chain_type
-			} else {
+			if !GLOBAL_CHAIN_TYPE.is_init() {
 				panic!("GLOBAL_CHAIN_TYPE and CHAIN_TYPE unset. Consider set_local_chain_type() in tests.");
 			}
+			let chain_type = GLOBAL_CHAIN_TYPE.borrow();
+			set_local_chain_type(chain_type);
+			chain_type
 		}
 		Some(chain_type) => chain_type,
 	})
@@ -210,14 +212,13 @@ pub fn set_local_future_time_limit(new_ftl: u64) {
 pub fn get_future_time_limit() -> u64 {
 	FUTURE_TIME_LIMIT.with(|ftl| match ftl.get() {
 		None => {
-			if GLOBAL_FUTURE_TIME_LIMIT.is_init() {
-				let ftl = GLOBAL_FUTURE_TIME_LIMIT.borrow();
-				set_local_future_time_limit(ftl);
-				ftl
+			let ftl = if GLOBAL_FUTURE_TIME_LIMIT.is_init() {
+				GLOBAL_FUTURE_TIME_LIMIT.borrow();
 			} else {
-				// Global config unset, default to 5 minutes
-				5 * 60
+				DEFAULT_FUTURE_TIME_LIMIT
 			}
+			set_local_future_time_limit(ftl);
+			ftl
 		}
 		Some(ftl) => ftl,
 	})
