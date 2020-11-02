@@ -84,7 +84,7 @@ pub const TESTING_INITIAL_DIFFICULTY: u64 = 1;
 pub const TESTING_MAX_BLOCK_WEIGHT: u64 = 250;
 
 /// default Future Time Limit (FTL) of 5 minutes
-pub const DEFAULT_FUTURE_TIME_LIMIT: u64 = 5 * 60
+pub const DEFAULT_FUTURE_TIME_LIMIT: u64 = 5 * 60;
 
 /// If a peer's last updated difficulty is 2 hours ago and its difficulty's lower than ours,
 /// we're sure this peer is a stuck node, and we will kick out such kind of stuck peers.
@@ -213,10 +213,10 @@ pub fn get_future_time_limit() -> u64 {
 	FUTURE_TIME_LIMIT.with(|ftl| match ftl.get() {
 		None => {
 			let ftl = if GLOBAL_FUTURE_TIME_LIMIT.is_init() {
-				GLOBAL_FUTURE_TIME_LIMIT.borrow();
+				GLOBAL_FUTURE_TIME_LIMIT.borrow()
 			} else {
 				DEFAULT_FUTURE_TIME_LIMIT
-			}
+			};
 			set_local_future_time_limit(ftl);
 			ftl
 		}
