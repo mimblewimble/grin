@@ -35,17 +35,7 @@ pub use self::proof::ProofBuilder;
 pub use crate::libtx::error::{Error, ErrorKind};
 
 /// Transaction fee calculation
-pub fn tx_fee(
-	input_len: usize,
-	output_len: usize,
-	kernel_len: usize,
-	base_fee: Option<u64>,
-) -> u64 {
-	let use_base_fee = match base_fee {
-		Some(bf) => bf,
-		None => get_accept_fee_base(),
-	};
-
+pub fn tx_fee(input_len: usize, output_len: usize, kernel_len: usize) -> u64 {
 	Transaction::weight_by_iok(input_len as u64, output_len as u64, kernel_len as u64)
-		* use_base_fee
+		* get_accept_fee_base()
 }

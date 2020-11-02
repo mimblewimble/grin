@@ -210,6 +210,7 @@ fn test_verify_cut_through_coinbase() -> Result<(), Error> {
 #[test]
 fn test_fee_fields() -> Result<(), Error> {
 	global::set_local_chain_type(global::ChainTypes::UserTesting);
+	global::set_local_accept_fee_base(500_000);
 
 	let keychain = ExtKeychain::from_random_seed(false)?;
 
@@ -245,7 +246,7 @@ fn test_fee_fields() -> Result<(), Error> {
 	assert_eq!(tx.fee(), 147);
 	assert_eq!(tx.shifted_fee(), 36);
 	assert_eq!(tx.aggregate_fee_fields(), FeeFields::new(2, 147));
-	assert_eq!(tx_fee(1, 1, 3, Some(500_000)), 15_500_000);
+	assert_eq!(tx_fee(1, 1, 3), 15_500_000);
 
 	Ok(())
 }
