@@ -83,6 +83,9 @@ pub const TESTING_INITIAL_DIFFICULTY: u64 = 1;
 /// Testing max_block_weight (artifically low, just enough to support a few txs).
 pub const TESTING_MAX_BLOCK_WEIGHT: u64 = 250;
 
+/// Default unit of fee per tx weight, making each output cost about a Grincent
+pub const DEFAULT_ACCEPT_FEE_BASE: u64 = GRIN_BASE / 100 / 20; // 500_000
+
 /// If a peer's last updated difficulty is 2 hours ago and its difficulty's lower than ours,
 /// we're sure this peer is a stuck node, and we will kick out such kind of stuck peers.
 pub const STUCK_PEER_KICK_TIME: i64 = 2 * 3600 * 1000;
@@ -144,10 +147,10 @@ lazy_static! {
 	/// to be overridden on a per-thread basis (for testing).
 	pub static ref GLOBAL_CHAIN_TYPE: OneTime<ChainTypes> = OneTime::new();
 
-		/// Global acccept fee base that must be initialized once on node startup.
-		/// This is accessed via get_acccept_fee_base() which allows the global value
-		/// to be overridden on a per-thread basis (for testing).
-		pub static ref GLOBAL_ACCEPT_FEE_BASE: OneTime<u64> = OneTime::new();
+	/// Global acccept fee base that must be initialized once on node startup.
+	/// This is accessed via get_acccept_fee_base() which allows the global value
+	/// to be overridden on a per-thread basis (for testing).
+	pub static ref GLOBAL_ACCEPT_FEE_BASE: OneTime<u64> = OneTime::new();
 
 	/// Global feature flag for NRD kernel support.
 	/// If enabled NRD kernels are treated as valid after HF3 (based on header version).
@@ -213,8 +216,7 @@ pub fn get_accept_fee_base() -> u64 {
 			let base = if GLOBAL_ACCEPT_FEE_BASE.is_init() {
 				GLOBAL_ACCEPT_FEE_BASE.borrow()
 			} else {
-				// Global config unset, default to 1/20 of a Grincent
-				GRIN_BASE / 100 / 20 // 500_000
+				DEFAULT_ACCEPT_FEE_BASE
 			};
 			set_local_accept_fee_base(base);
 			base
