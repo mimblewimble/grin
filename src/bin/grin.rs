@@ -123,7 +123,7 @@ fn real_main() -> i32 {
 		}
 	}
 
-	let mut config = node_config.clone().unwrap();
+	let config = node_config.clone().unwrap();
 	let mut logging_config = config.members.as_ref().unwrap().logging.clone().unwrap();
 	logging_config.tui_running = config.members.as_ref().unwrap().server.run_tui;
 
