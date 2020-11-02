@@ -124,8 +124,8 @@ fn real_main() -> i32 {
 	}
 
 	let mut config = node_config.clone().unwrap();
-	let mut logging_config = config.members.as_mut().unwrap().logging.clone().unwrap();
-	logging_config.tui_running = config.members.as_mut().unwrap().server.run_tui;
+	let mut logging_config = config.members.as_ref().unwrap().logging.clone().unwrap();
+	logging_config.tui_running = config.members.as_ref().unwrap().server.run_tui;
 
 	let (logs_tx, logs_rx) = if logging_config.tui_running.unwrap() {
 		let (logs_tx, logs_rx) = mpsc::sync_channel::<LogEntry>(200);
@@ -146,9 +146,9 @@ fn real_main() -> i32 {
 
 	log_build_info();
 
-	// Initialize our global chain_type and feature flags (NRD kernel support currently).
+	// Initialize our global chain_type, feature flags (NRD kernel support currently), and future_time_limit.
 	// These are read via global and not read from config beyond this point.
-	global::init_global_chain_type(config.members.as_mut().unwrap().server.chain_type);
+	global::init_global_chain_type(config.members.as_ref().unwrap().server.chain_type);
 	info!("Chain: {:?}", global::get_chain_type());
 	match global::get_chain_type() {
 		global::ChainTypes::Mainnet => {
