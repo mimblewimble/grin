@@ -21,7 +21,7 @@ use rand::prelude::*;
 
 use crate::api;
 use crate::chain;
-use crate::core::global::ChainTypes;
+use crate::core::global::{ChainTypes, DEFAULT_FUTURE_TIME_LIMIT};
 use crate::core::{core, libtx, pow};
 use crate::keychain;
 use crate::p2p;
@@ -161,6 +161,7 @@ pub struct ServerConfig {
 	pub chain_type: ChainTypes,
 
 	/// Future Time Limit
+	#[serde(default = "default_future_time_limit")]
 	pub future_time_limit: u64,
 
 	/// Automatically run full chain validation during normal block processing?
@@ -204,6 +205,10 @@ pub struct ServerConfig {
 	pub webhook_config: WebHooksConfig,
 }
 
+fn default_future_time_limit() -> u64 {
+	DEFAULT_FUTURE_TIME_LIMIT
+}
+
 impl Default for ServerConfig {
 	fn default() -> ServerConfig {
 		ServerConfig {
@@ -217,7 +222,7 @@ impl Default for ServerConfig {
 			dandelion_config: pool::DandelionConfig::default(),
 			stratum_mining_config: Some(StratumServerConfig::default()),
 			chain_type: ChainTypes::default(),
-			future_time_limit: 5 * 60,
+			future_time_limit: default_future_time_limit(),
 			archive_mode: Some(false),
 			chain_validation_mode: ChainValidationMode::default(),
 			pool_config: pool::PoolConfig::default(),
