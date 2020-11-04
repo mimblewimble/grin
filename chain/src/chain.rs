@@ -815,12 +815,25 @@ impl Chain {
 		})
 	}
 
-	/// TODO - Our segmenter is how we build segments for PIBD.
+	/// TODO - Pass header in here. Compare it to expected archive_header and previous archive_header.
+	///
 	/// Handles consistent view of the data etc.
 	///
 	pub fn segmenter(&self) -> Result<Segmenter, Error> {
 		let header = self.txhashset_archive_header()?;
 		Ok(Segmenter::new(self.header_pmmr(), self.txhashset(), header))
+	}
+
+	/// TODO - fn that returns height(s) and then lookup headers by height - make it testable
+	///
+	/// Our *previous* archive header (12 hours prior to current archive header).
+	/// PIBD requires multiple requests and we want to ensure we support PIBD
+	/// as we cross an archive interval boundary (so we support 2 recent header heights).
+	fn prev_archive_header(&self) -> Result<BlockHeader, Error> {
+		let archive_header = self.txhashset_archive_header()?;
+		let archive_interval = global::txhashset_archive_interval();
+		let prev_height = archive_header.height.saturating_sub(archive_interval);
+		self.get_header_by_height(prev_height)
 	}
 
 	/// To support the ability to download the txhashset from multiple peers in parallel,
