@@ -1439,6 +1439,11 @@ impl Transaction {
 		self.body.weight()
 	}
 
+	/// Transaction minimum acceptable fee
+	pub fn accept_fee(&self) -> u64 {
+		self.weight() * global::get_accept_fee_base()
+	}
+
 	/// Calculate transaction weight from transaction details
 	pub fn weight_by_iok(num_inputs: u64, num_outputs: u64, num_kernels: u64) -> u64 {
 		TransactionBody::weight_by_iok(num_inputs, num_outputs, num_kernels)

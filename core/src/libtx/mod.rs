@@ -34,8 +34,13 @@ use crate::global::get_accept_fee_base;
 pub use self::proof::ProofBuilder;
 pub use crate::libtx::error::{Error, ErrorKind};
 
-/// Transaction fee calculation
+/// Transaction fee calculation given numbers of inputs, outputs, and kernels
 pub fn tx_fee(input_len: usize, output_len: usize, kernel_len: usize) -> u64 {
 	Transaction::weight_by_iok(input_len as u64, output_len as u64, kernel_len as u64)
 		* get_accept_fee_base()
+}
+
+/// Transaction fee calculation given transaction
+pub fn accept_fee(tx: Transaction) -> u64 {
+	tx.weight() * get_accept_fee_base()
 }
