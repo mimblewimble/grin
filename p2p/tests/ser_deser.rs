@@ -61,10 +61,7 @@ fn test_capabilities() {
 		expected,
 		p2p::types::Capabilities::from_bits_truncate(0b00001111 as u32),
 	);
-	assert_eq!(
-		expected,
-		p2p::types::Capabilities::from_bits_truncate(0b11111111 as u32),
-	);
+
 	assert_eq!(
 		expected,
 		p2p::types::Capabilities::from_bits_truncate(0b00101111 as u32),
@@ -75,5 +72,15 @@ fn test_capabilities() {
 	assert!(
 		p2p::types::Capabilities::from_bits_truncate(0b00101111 as u32)
 			.contains(p2p::types::Capabilities::TX_KERNEL_HASH)
+	);
+}
+
+// Default capabilities do not currently include PIBD_HIST
+// but it is a supported capability bit flag (currently unused).
+#[test]
+fn test_pibd_capabilities() {
+	assert_eq!(
+		p2p::types::Capabilities::default() | p2p::types::Capabilities::PIBD_HIST,
+		p2p::types::Capabilities::from_bits_truncate(0b11111111 as u32),
 	);
 }
