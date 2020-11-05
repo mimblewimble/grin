@@ -267,7 +267,7 @@ fn comments() -> HashMap<String, String> {
 	);
 
 	retval.insert(
-		"[server.p2p_config.capabilities]".to_string(),
+		"[server.pool_config]".to_string(),
 		"#If the seeding type is List, the list of peers to connect to can
 #be specified as follows:
 #seeds = [\"192.168.0.1:3414\",\"192.168.0.2:3414\"]
@@ -296,19 +296,9 @@ fn comments() -> HashMap<String, String> {
 #amount of incoming connections temporarily allowed to exceed peer_max_inbound_count
 #peer_listener_buffer_count = 8
 
-# 15 = Bit flags for FULL_NODE
-#This structure needs to be changed internally, to make it more configurable
-
 # A preferred dandelion_peer, mainly used for testing dandelion
 # dandelion_peer = \"10.0.0.1:13144\"
 
-"
-		.to_string(),
-	);
-
-	retval.insert(
-		"[server.pool_config]".to_string(),
-		"
 #########################################
 ### MEMPOOL CONFIGURATION             ###
 #########################################

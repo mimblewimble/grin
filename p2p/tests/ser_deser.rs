@@ -42,6 +42,8 @@ fn test_type_enum() {
 
 #[test]
 fn test_capabilities() {
+	let expected = p2p::types::Capabilities::default();
+
 	assert_eq!(
 		p2p::types::Capabilities::from_bits_truncate(0b00000000 as u32),
 		p2p::types::Capabilities::UNKNOWN
@@ -52,26 +54,23 @@ fn test_capabilities() {
 	);
 
 	assert_eq!(
+		expected,
 		p2p::types::Capabilities::from_bits_truncate(0b1111 as u32),
-		p2p::types::Capabilities::FULL_NODE
 	);
 	assert_eq!(
+		expected,
 		p2p::types::Capabilities::from_bits_truncate(0b00001111 as u32),
-		p2p::types::Capabilities::FULL_NODE
 	);
 	assert_eq!(
+		expected,
 		p2p::types::Capabilities::from_bits_truncate(0b11111111 as u32),
-		p2p::types::Capabilities::FULL_NODE
 	);
 	assert_eq!(
+		expected,
 		p2p::types::Capabilities::from_bits_truncate(0b00101111 as u32),
-		p2p::types::Capabilities::FULL_NODE
 	);
 
-	assert!(
-		p2p::types::Capabilities::from_bits_truncate(0b00101111 as u32)
-			.contains(p2p::types::Capabilities::FULL_NODE)
-	);
+	assert!(p2p::types::Capabilities::from_bits_truncate(0b00101111 as u32).contains(expected));
 
 	assert!(
 		p2p::types::Capabilities::from_bits_truncate(0b00101111 as u32)
