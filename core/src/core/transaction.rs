@@ -25,6 +25,8 @@ use crate::ser::{
 use crate::{consensus, global};
 use enum_primitive::FromPrimitive;
 use keychain::{self, BlindingFactor};
+use serde::de;
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::cmp::Ordering;
 use std::cmp::{max, min};
 use std::convert::{TryFrom, TryInto};
@@ -38,7 +40,7 @@ use util::RwLock;
 use util::ToHex;
 
 /// Fee fields as in fix-fees RFC: { future_use: 20, fee_shift: 4, fee: 40 }
-#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct FeeFields(u64);
 
 impl DefaultHashable for FeeFields {}
@@ -59,6 +61,50 @@ impl Readable for FeeFields {
 impl Display for FeeFields {
 	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
 		write!(f, "{}", self.0)
+	}
+}
+
+impl Serialize for FeeFields {
+	fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+	where
+		S: Serializer,
+	{
+		serializer.serialize_str(&format!("{}", self.0))
+	}
+}
+
+impl<'de> Deserialize<'de> for FeeFields {
+	fn deserialize<D>(deserializer: D) -> Result<FeeFields, D::Error>
+	where
+		D: Deserializer<'de>,
+	{
+		struct FeeFieldsVisitor;
+		impl<'de> de::Visitor<'de> for FeeFieldsVisitor {
+			type Value = FeeFields;
+
+			fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+				formatter.write_str("an 64-bit integer")
+			}
+
+			fn visit_str<E>(self, value: &str) -> Result<Self::Value, E>
+			where
+				E: de::Error,
+			{
+				let value = value
+					.parse()
+					.map_err(|_| E::custom(format!("invalid fee field")))?;
+				self.visit_u64(value)
+			}
+
+			fn visit_u64<E>(self, value: u64) -> Result<Self::Value, E>
+			where
+				E: de::Error,
+			{
+				FeeFields::try_from(value).map_err(|_| E::custom(format!("invalid fee field")))
+			}
+		}
+
+		deserializer.deserialize_str(FeeFieldsVisitor)
 	}
 }
 
@@ -130,6 +176,21 @@ impl FeeFields {
 		let fee = self.0 & FeeFields::FEE_MASK;
 		let fee_shift = (self.0 >> FeeFields::FEE_BITS) & FeeFields::FEE_SHIFT_MASK;
 		(fee, fee_shift)
+	}
+
+	/// Turn a zero `FeeField` into a `None`, any other value into a `Some`.
+	/// We need this because a zero `FeeField` cannot be deserialized.
+	pub fn as_opt(&self) -> Option<Self> {
+		if self.is_zero() {
+			None
+		} else {
+			Some(*self)
+		}
+	}
+
+	/// Check if the `FeeFields` is set to zero
+	pub fn is_zero(&self) -> bool {
+		self.0 == 0
 	}
 }
 
