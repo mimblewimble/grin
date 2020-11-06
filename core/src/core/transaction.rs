@@ -108,8 +108,8 @@ impl<'de> Deserialize<'de> for FeeFields {
 	}
 }
 
-/// Conversion from a u64 to a valid FeeFields.
-/// Valid height is between 1 and WEEK_HEIGHT inclusive.
+/// Conversion from a valid fee to a FeeFields with 0 fee_shift
+/// The valid fee range is 1..FEE_MASK
 impl TryFrom<u64> for FeeFields {
 	type Error = Error;
 
