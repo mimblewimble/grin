@@ -132,7 +132,15 @@ where
 			chain: self.chain.clone(),
 		};
 		let hash = block_handler.parse_inputs(height, hash, commit)?;
-		block_handler.get_block(&hash, true, true)
+
+		// We include the rangeproof by default.
+		let include_proof = true;
+
+		// We do *not* include the Merkle proof.
+		// These are not actively used and expensive to generate for historical blocks.
+		let include_merkle_proof = false;
+
+		block_handler.get_block(&hash, include_proof, include_merkle_proof)
 	}
 
 	/// Returns the node version and block header version (used by grin-wallet).
