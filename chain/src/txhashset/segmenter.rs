@@ -21,7 +21,7 @@ use crate::core::core::pmmr::{Backend, ReadablePMMR, ReadonlyPMMR};
 use crate::core::core::{BlockHeader, OutputIdentifier, TxKernel};
 use crate::core::ser::{PMMRable, Readable, Writeable};
 use crate::error::{Error, ErrorKind};
-use crate::txhashset::{self, BitmapChunk, PMMRHandle, TxHashSet};
+use crate::txhashset::{BitmapAccumulator, BitmapChunk, TxHashSet};
 use crate::util::secp::pedersen::RangeProof;
 use crate::util::RwLock;
 
@@ -61,112 +61,77 @@ where
 
 /// Segmenter for generating PIBD segments.
 pub struct Segmenter {
-	header_pmmr: Arc<RwLock<PMMRHandle<BlockHeader>>>,
 	txhashset: Arc<RwLock<TxHashSet>>,
+	bitmap_snapshot: BitmapAccumulator,
 	header: BlockHeader,
 }
 
 impl Segmenter {
 	/// Create a new segmenter based on the provided txhashset.
 	pub fn new(
-		header_pmmr: Arc<RwLock<PMMRHandle<BlockHeader>>>,
 		txhashset: Arc<RwLock<TxHashSet>>,
+		bitmap_snapshot: BitmapAccumulator,
 		header: BlockHeader,
 	) -> Segmenter {
 		Segmenter {
-			header_pmmr,
 			txhashset,
+			bitmap_snapshot,
 			header,
 		}
 	}
 
 	/// Create a kernel segment.
-	/// We use a lightweight "rewindable kernel view" here as we do not need to worry about pruning.
 	pub fn kernel_segment(&self, id: SegmentIdentifier) -> Result<Segment<TxKernel>, Error> {
 		let txhashset = self.txhashset.read();
-		txhashset::rewindable_kernel_view(&txhashset, |view, _| {
-			// This rewind is fast as we take advantage of our "rewindable kernel view".
-			view.rewind(&self.header)?;
-			let pmmr = view.readonly_pmmr();
-			let segment = Segment::from_pmmr(id, &pmmr, false)?;
-			Ok(segment)
-		})
+		let kernel_pmmr = txhashset.kernel_pmmr_at(&self.header);
+		let segment = Segment::from_pmmr(id, &kernel_pmmr, false)?;
+		Ok(segment)
 	}
 
-	/// Create a utxo bitmap segment.
-	/// Note: we need to rewind both the bitmap and the output MMR as we need both roots here.
+	/// The root of the output PMMR based on size from the header.
+	fn output_root(&self) -> Result<Hash, Error> {
+		let txhashset = self.txhashset.read();
+		let pmmr = txhashset.output_pmmr_at(&self.header);
+		let root = pmmr.root().map_err(&ErrorKind::TxHashSetErr)?;
+		Ok(root)
+	}
+
+	/// The root of the bitmap snapshot PMMR.
+	fn bitmap_root(&self) -> Result<Hash, Error> {
+		let pmmr = self.bitmap_snapshot.readonly_pmmr();
+		let root = pmmr.root().map_err(&ErrorKind::TxHashSetErr)?;
+		Ok(root)
+	}
+
+	/// Create a utxo bitmap segment based on our bitmap "snapshot" and return it with
+	/// the corresponding output root.
 	pub fn bitmap_segment(
 		&self,
 		id: SegmentIdentifier,
 	) -> Result<(Segment<BitmapChunk>, Hash), Error> {
-		let mut header_pmmr = self.header_pmmr.write();
-		let mut txhashset = self.txhashset.write();
-		txhashset::extending_readonly(&mut header_pmmr, &mut txhashset, |ext, batch| {
-			let extension = &mut ext.extension;
-
-			// This rewind is relatively expensive but we need to recreate the utxo (bitmap accumulator)
-			// for our specified header.
-			// We may want to consider taking a "snapshot" of the bitmap accumulator (write to disk?)
-			// to allow for fast subsequent reads?
-			extension.rewind(&self.header, batch)?;
-
-			let bitmap_pmmr = extension.bitmap_readonly_pmmr();
-			let segment = Segment::from_pmmr(id, &bitmap_pmmr, true)?;
-
-			let output_pmmr = extension.output_readonly_pmmr();
-			let output_root = output_pmmr
-				.root()
-				.map_err(|_| ErrorKind::TxHashSetErr("failed to get output root".into()))?;
-
-			Ok((segment, output_root))
-		})
+		let bitmap_pmmr = self.bitmap_snapshot.readonly_pmmr();
+		let segment = Segment::from_pmmr(id, &bitmap_pmmr, false)?;
+		let output_root = self.output_root()?;
+		Ok((segment, output_root))
 	}
 
-	/// Create an output segment.
-	/// Note: we need to rewind both the bitmap and the output MMR as we need both roots here.
+	/// Create an output segment and return it with the corresponding bitmap root.
 	pub fn output_segment(
 		&self,
 		id: SegmentIdentifier,
 	) -> Result<(Segment<OutputIdentifier>, Hash), Error> {
-		let mut header_pmmr = self.header_pmmr.write();
-		let mut txhashset = self.txhashset.write();
-		txhashset::extending_readonly(&mut header_pmmr, &mut txhashset, |ext, batch| {
-			let extension = &mut ext.extension;
-
-			// This rewind is relatively expensive as we need to rewind spent outputs over multiple blocks.
-			// We may want to revisit this.
-			// Possible approach would be to rewind this once and cache the root hashes and PMMR sizes.
-			// Then we can directly init a ReadonlyPMMR with the correct sizes for subsequent reads.
-			extension.rewind(&self.header, batch)?;
-
-			let output_pmmr = extension.output_readonly_pmmr();
-			let segment = Segment::from_pmmr(id, &output_pmmr, true)?;
-
-			let bitmap_pmmr = extension.bitmap_readonly_pmmr();
-			let bitmap_root = bitmap_pmmr
-				.root()
-				.map_err(|_| ErrorKind::TxHashSetErr("failed to get bitmap root".into()))?;
-
-			Ok((segment, bitmap_root))
-		})
+		let txhashset = self.txhashset.read();
+		let output_pmmr = txhashset.output_pmmr_at(&self.header);
+		let segment = Segment::from_pmmr(id, &output_pmmr, true)?;
+		let bitmap_root = self.bitmap_root()?;
+		Ok((segment, bitmap_root))
 	}
 
 	/// Create a rangeproof segment.
 	pub fn rangeproof_segment(&self, id: SegmentIdentifier) -> Result<Segment<RangeProof>, Error> {
-		let mut header_pmmr = self.header_pmmr.write();
-		let mut txhashset = self.txhashset.write();
-		txhashset::extending_readonly(&mut header_pmmr, &mut txhashset, |ext, batch| {
-			let extension = &mut ext.extension;
-
-			// This rewind is relatively expensive as we need to rewind (unpend) outputs over multiple blocks.
-			// We may want to revisit this.
-			// Possible approach would be to rewind this once and cache the root hashes and PMMR sizes.
-			// Then we can directly init a ReadonlyPMMR with the correct sizes for subsequent reads.
-			extension.rewind(&self.header, batch)?;
-
-			let pmmr = extension.rproof_readonly_pmmr();
-			let segment = Segment::from_pmmr(id, &pmmr, false)?;
-			Ok(segment)
-		})
+		let txhashset = self.txhashset.read();
+		let pmmr = txhashset.rangeproof_pmmr_at(&self.header);
+		let segment = Segment::from_pmmr(id, &pmmr, true)?;
+		Ok(segment)
 	}
 }

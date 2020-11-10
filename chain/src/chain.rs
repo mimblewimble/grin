@@ -817,11 +817,25 @@ impl Chain {
 
 	/// TODO - Pass header in here. Compare it to expected archive_header and previous archive_header.
 	///
+	/// TODO - "Cache" two recent segmenters in our chain somewhere.
+	///
 	/// Handles consistent view of the data etc.
 	///
 	pub fn segmenter(&self) -> Result<Segmenter, Error> {
 		let header = self.txhashset_archive_header()?;
-		Ok(Segmenter::new(self.header_pmmr(), self.txhashset(), header))
+
+		let mut header_pmmr = self.header_pmmr.write();
+		let mut txhashset = self.txhashset.write();
+
+		// This is an expensive rewind but we only need to do this once.
+		// We can then "cache" our segmenter for use later.
+		let bitmap_snapshot =
+			txhashset::extending_readonly(&mut header_pmmr, &mut txhashset, |ext, batch| {
+				ext.extension.rewind(&header, batch)?;
+				Ok(ext.extension.bitmap_accumulator())
+			})?;
+
+		Ok(Segmenter::new(self.txhashset(), bitmap_snapshot, header))
 	}
 
 	/// TODO - fn that returns height(s) and then lookup headers by height - make it testable

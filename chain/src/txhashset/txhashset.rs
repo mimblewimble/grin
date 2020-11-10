@@ -303,6 +303,30 @@ impl TxHashSet {
 			.get_last_n_insertions(distance)
 	}
 
+	/// Efficient view into the kernel PMMR based on size in header.
+	pub fn kernel_pmmr_at(
+		&self,
+		header: &BlockHeader,
+	) -> ReadonlyPMMR<TxKernel, PMMRBackend<TxKernel>> {
+		ReadonlyPMMR::at(&self.kernel_pmmr_h.backend, header.kernel_mmr_size)
+	}
+
+	/// Efficient view into the output PMMR based on size in header.
+	pub fn output_pmmr_at(
+		&self,
+		header: &BlockHeader,
+	) -> ReadonlyPMMR<OutputIdentifier, PMMRBackend<OutputIdentifier>> {
+		ReadonlyPMMR::at(&self.output_pmmr_h.backend, header.output_mmr_size)
+	}
+
+	/// Efficient view into the rangeproof PMMR based on size in header.
+	pub fn rangeproof_pmmr_at(
+		&self,
+		header: &BlockHeader,
+	) -> ReadonlyPMMR<RangeProof, PMMRBackend<RangeProof>> {
+		ReadonlyPMMR::at(&self.rproof_pmmr_h.backend, header.output_mmr_size)
+	}
+
 	/// Convenience function to query the db for a header by its hash.
 	pub fn get_block_header(&self, hash: &Hash) -> Result<BlockHeader, Error> {
 		Ok(self.commit_index.get_block_header(&hash)?)
@@ -1083,6 +1107,12 @@ impl<'a> Extension<'a> {
 		self.output_pmmr.readonly_pmmr()
 	}
 
+	/// Take a snapshot of our bitmap accumulator
+	pub fn bitmap_accumulator(&self) -> BitmapAccumulator {
+		self.bitmap_accumulator.clone()
+	}
+
+	/// Readonly view of our bitmap accumulator data.
 	pub fn bitmap_readonly_pmmr(&self) -> ReadonlyPMMR<BitmapChunk, VecBackend<BitmapChunk>> {
 		self.bitmap_accumulator.readonly_pmmr()
 	}

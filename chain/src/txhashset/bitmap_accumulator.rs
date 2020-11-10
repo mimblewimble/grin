@@ -50,7 +50,7 @@ impl BitmapAccumulator {
 	/// Crate a new empty bitmap accumulator.
 	pub fn new() -> BitmapAccumulator {
 		BitmapAccumulator {
-			backend: VecBackend::new_hash_only(),
+			backend: VecBackend::new(),
 		}
 	}
 
