@@ -191,7 +191,7 @@ fn pruned_segment() {
 		segment
 			.first_unpruned_parent(last_pos, Some(&bitmap))
 			.unwrap(),
-		(ba.get_hash(14).unwrap(), Some(14))
+		(ba.get_hash(14).unwrap(), 14)
 	);
 	assert!(segment.root(last_pos, Some(&bitmap)).unwrap().is_none());
 	segment.validate(last_pos, Some(&bitmap), root).unwrap();
@@ -213,7 +213,7 @@ fn pruned_segment() {
 		segment
 			.first_unpruned_parent(last_pos, Some(&bitmap))
 			.unwrap(),
-		(ba.get_hash(15).unwrap(), Some(15))
+		(ba.get_hash(15).unwrap(), 15)
 	);
 	assert!(segment.root(last_pos, Some(&bitmap)).unwrap().is_none());
 	segment.validate(last_pos, Some(&bitmap), root).unwrap();
@@ -235,7 +235,7 @@ fn pruned_segment() {
 		segment
 			.first_unpruned_parent(last_pos, Some(&bitmap))
 			.unwrap(),
-		(root, Some(31))
+		(root, 31)
 	);
 	assert!(segment.root(last_pos, Some(&bitmap)).unwrap().is_none());
 	segment.validate(last_pos, Some(&bitmap), root).unwrap();
@@ -266,7 +266,7 @@ fn pruned_segment() {
 		segment
 			.first_unpruned_parent(last_pos, Some(&bitmap))
 			.unwrap(),
-		(ba.get_hash(38).unwrap(), Some(38))
+		(ba.get_hash(38).unwrap(), 38)
 	);
 	assert!(segment.root(last_pos, Some(&bitmap)).unwrap().is_none());
 	segment.validate(last_pos, Some(&bitmap), root).unwrap();
@@ -276,11 +276,13 @@ fn pruned_segment() {
 	let mmr = ReadonlyPMMR::at(&mut ba, last_pos);
 	let segment = Segment::from_pmmr(id, &mmr, true).unwrap();
 	assert_eq!(segment.leaf_iter().count(), 3);
-	assert!(segment
-		.first_unpruned_parent(last_pos, Some(&bitmap))
-		.unwrap()
-		.1
-		.is_none());
+	assert_eq!(
+		segment
+			.first_unpruned_parent(last_pos, Some(&bitmap))
+			.unwrap()
+			.1,
+		segment.segment_pos_range(last_pos).1
+	);
 	assert!(segment.root(last_pos, Some(&bitmap)).unwrap().is_some());
 	segment.validate(last_pos, Some(&bitmap), root).unwrap();
 	let prev_segment = segment;
@@ -310,11 +312,13 @@ fn pruned_segment() {
 	let segment = Segment::from_pmmr(id, &mmr, true).unwrap();
 	assert_eq!(segment.leaf_iter().count(), 1);
 	assert_eq!(segment.hash_iter().count(), 1);
-	assert!(segment
-		.first_unpruned_parent(last_pos, Some(&bitmap))
-		.unwrap()
-		.1
-		.is_none());
+	assert_eq!(
+		segment
+			.first_unpruned_parent(last_pos, Some(&bitmap))
+			.unwrap()
+			.1,
+		segment.segment_pos_range(last_pos).1
+	);
 	assert!(segment.root(last_pos, Some(&bitmap)).unwrap().is_some());
 	segment.validate(last_pos, Some(&bitmap), root).unwrap();
 

@@ -118,7 +118,7 @@ impl<T> Segment<T> {
 	}
 
 	/// Inclusive range of MMR positions for this segment
-	fn segment_pos_range(&self, last_pos: u64) -> (u64, u64) {
+	pub fn segment_pos_range(&self, last_pos: u64) -> (u64, u64) {
 		let segment_size = self.segment_unpruned_size(last_pos);
 		let leaf_offset = self.leaf_offset();
 		let first = pmmr::insertion_to_pmmr_index(leaf_offset + 1);
@@ -336,13 +336,13 @@ where
 		&self,
 		last_pos: u64,
 		bitmap: Option<&Bitmap>,
-	) -> Result<(Hash, Option<u64>), SegmentError> {
+	) -> Result<(Hash, u64), SegmentError> {
 		let root = self.root(last_pos, bitmap)?;
+		let (_, last) = self.segment_pos_range(last_pos);
 		if let Some(root) = root {
-			return Ok((root, None));
+			return Ok((root, last));
 		}
 		let bitmap = bitmap.unwrap();
-		let (_, last) = self.segment_pos_range(last_pos);
 		let n_leaves = pmmr::n_leaves(last_pos);
 
 		let mut cardinality = 0;
@@ -350,7 +350,7 @@ where
 		let mut hash = Err(SegmentError::MissingHash(last));
 		let mut family_branch = pmmr::family_branch(last, last_pos).into_iter();
 		while cardinality == 0 {
-			hash = self.get_hash(pos).map(|h| (h, Some(pos)));
+			hash = self.get_hash(pos).map(|h| (h, pos));
 			if hash.is_ok() {
 				// Return early in case a lower level hash is already present
 				// This can occur if both child trees are pruned but compaction hasn't run yet
@@ -546,7 +546,7 @@ impl SegmentProof {
 		segment_first_pos: u64,
 		segment_last_pos: u64,
 		segment_root: Hash,
-		segment_unpruned_pos: Option<u64>,
+		segment_unpruned_pos: u64,
 	) -> Result<Hash, SegmentError> {
 		let mut iter = self.hashes.iter();
 		let family_branch = pmmr::family_branch(segment_last_pos, last_pos);
@@ -555,7 +555,7 @@ impl SegmentProof {
 		let mut root = segment_root;
 		for &(p, s) in family_branch
 			.iter()
-			.filter(|&&(p, _)| segment_unpruned_pos.map(|u| p > u).unwrap_or(true))
+			.filter(|&&(p, _)| p > segment_unpruned_pos)
 		{
 			let sibling_hash = iter.next().ok_or_else(|| SegmentError::MissingHash(s))?;
 			root = if pmmr::is_left_sibling(s) {
@@ -608,7 +608,7 @@ impl SegmentProof {
 		segment_first_pos: u64,
 		segment_last_pos: u64,
 		segment_root: Hash,
-		segment_unpruned_pos: Option<u64>,
+		segment_unpruned_pos: u64,
 	) -> Result<(), SegmentError> {
 		let root = self.reconstruct_root(
 			last_pos,
@@ -633,7 +633,7 @@ impl SegmentProof {
 		segment_first_pos: u64,
 		segment_last_pos: u64,
 		segment_root: Hash,
-		segment_unpruned_pos: Option<u64>,
+		segment_unpruned_pos: u64,
 		other_root: Hash,
 		other_is_left: bool,
 	) -> Result<(), SegmentError> {
