@@ -69,7 +69,7 @@ impl Serialize for FeeFields {
 	where
 		S: Serializer,
 	{
-		serializer.serialize_str(&format!("{}", self.0))
+		serializer.collect_str(&self.0)
 	}
 }
 
@@ -104,7 +104,7 @@ impl<'de> Deserialize<'de> for FeeFields {
 			}
 		}
 
-		deserializer.deserialize_str(FeeFieldsVisitor)
+		deserializer.deserialize_any(FeeFieldsVisitor)
 	}
 }
 
@@ -194,6 +194,13 @@ impl FeeFields {
 	}
 }
 
+fn fee_fields_as_int<S>(fee_fields: &FeeFields, serializer: S) -> Result<S::Ok, S::Error>
+where
+	S: Serializer,
+{
+	serializer.serialize_u64(fee_fields.0)
+}
+
 /// Relative height field on NRD kernel variant.
 /// u16 representing a height between 1 and MAX (consensus::WEEK_HEIGHT).
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
@@ -264,6 +271,7 @@ pub enum KernelFeatures {
 	/// Plain kernel (the default for Grin txs).
 	Plain {
 		/// Plain kernels have fees.
+		#[serde(serialize_with = "fee_fields_as_int")]
 		fee_fields: FeeFields,
 	},
 	/// A coinbase kernel.
@@ -271,6 +279,7 @@ pub enum KernelFeatures {
 	/// A kernel with an explicit lock height (and fee).
 	HeightLocked {
 		/// Height locked kernels have fees.
+		#[serde(serialize_with = "fee_fields_as_int")]
 		fee_fields: FeeFields,
 		/// Height locked kernels have lock heights.
 		lock_height: u64,
@@ -278,6 +287,7 @@ pub enum KernelFeatures {
 	/// "No Recent Duplicate" (NRD) kernels enforcing relative lock height between instances.
 	NoRecentDuplicate {
 		/// These have fees.
+		#[serde(serialize_with = "fee_fields_as_int")]
 		fee_fields: FeeFields,
 		/// Relative lock height.
 		relative_height: NRDRelativeHeight,
