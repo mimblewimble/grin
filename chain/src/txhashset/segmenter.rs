@@ -60,6 +60,7 @@ where
 }
 
 /// Segmenter for generating PIBD segments.
+#[derive(Clone)]
 pub struct Segmenter {
 	txhashset: Arc<RwLock<TxHashSet>>,
 	bitmap_snapshot: BitmapAccumulator,
@@ -78,6 +79,12 @@ impl Segmenter {
 			bitmap_snapshot,
 			header,
 		}
+	}
+
+	/// Header associated with this segmenter instance.
+	/// The bitmap "snapshot" corresponds to rewound state at this header.
+	pub fn header(&self) -> &BlockHeader {
+		&self.header
 	}
 
 	/// Create a kernel segment.

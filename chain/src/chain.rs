@@ -34,7 +34,8 @@ use crate::types::{
 	BlockStatus, ChainAdapter, CommitPos, NoStatus, Options, Tip, TxHashsetWriteStatus,
 };
 use crate::util::secp::pedersen::{Commitment, RangeProof};
-use crate::{util::RwLock, ChainStore};
+use crate::util::RwLock;
+use crate::ChainStore;
 use grin_core::ser;
 use grin_store::Error::NotFoundErr;
 use std::fs::{self, File};
@@ -152,6 +153,7 @@ pub struct Chain {
 	header_pmmr: Arc<RwLock<txhashset::PMMRHandle<BlockHeader>>>,
 	sync_pmmr: Arc<RwLock<txhashset::PMMRHandle<BlockHeader>>>,
 	verifier_cache: Arc<RwLock<dyn VerifierCache>>,
+	pibd_segmenter: Arc<RwLock<Option<Segmenter>>>,
 	// POW verification function
 	pow_verifier: fn(&BlockHeader) -> Result<(), pow::Error>,
 	archive_mode: bool,
@@ -217,6 +219,7 @@ impl Chain {
 			txhashset: Arc::new(RwLock::new(txhashset)),
 			header_pmmr: Arc::new(RwLock::new(header_pmmr)),
 			sync_pmmr: Arc::new(RwLock::new(sync_pmmr)),
+			pibd_segmenter: Arc::new(RwLock::new(None)),
 			pow_verifier,
 			verifier_cache,
 			archive_mode,
@@ -224,6 +227,15 @@ impl Chain {
 		};
 
 		chain.log_heads()?;
+
+		// Temporarily exercising the initialization process.
+		// Note: This is *really* slow because we are starting from cold.
+		//
+		// This is not required as we will lazily initialize our segmenter as required
+		// once we start receiving PIBD segment requests.
+		// In reality we will do this based on PIBD segment requests and initialization
+		// (once per 12 hour period) will not be this slow.
+		chain.segmenter()?;
 
 		Ok(chain)
 	}
@@ -815,39 +827,62 @@ impl Chain {
 		})
 	}
 
-	/// TODO - Pass header in here. Compare it to expected archive_header and previous archive_header.
+	/// The segmenter is responsible for generation PIBD segments.
+	/// We cache a segmenter instance based on the current archve period (new period every 12 hours).
+	/// This allows us to efficiently generate bitmap segments for the current archive period.
 	///
-	/// TODO - "Cache" two recent segmenters in our chain somewhere.
+	/// It is a relatively expensive operation to initializa and cache a new segmenter instance
+	/// as this involves rewinding the txhashet by approx 720 blocks (12 hours).
 	///
-	/// Handles consistent view of the data etc.
+	/// Caller is responsible for only doing this when required.
+	/// Caller should verify a peer segment request is valid before calling this for example.
 	///
 	pub fn segmenter(&self) -> Result<Segmenter, Error> {
-		let header = self.txhashset_archive_header()?;
+		// The archive header corresponds to the data we will segment.
+		let ref archive_header = self.txhashset_archive_header()?;
+
+		// Use our cached segmenter if we have one and the associated header matches.
+		if let Some(x) = self.pibd_segmenter.read().as_ref() {
+			if x.header() == archive_header {
+				return Ok(x.clone());
+			}
+		}
+
+		// We have no cached segmenter or the cached segmenter is no longer useful.
+		// Initialize a new segment, cache it and return it.
+		let segmenter = self.init_segmenter(archive_header)?;
+		let mut cache = self.pibd_segmenter.write();
+		*cache = Some(segmenter.clone());
+
+		return Ok(segmenter);
+	}
+
+	/// This is an expensive rewind to recreate bitmap state but we only need to do this once.
+	/// Caller is responsible for "caching" the segmenter (per archive period) for reuse.
+	fn init_segmenter(&self, header: &BlockHeader) -> Result<Segmenter, Error> {
+		let now = Instant::now();
+		debug!(
+			"init_segmenter: initializing new segmenter for {} at {}",
+			header.hash(),
+			header.height
+		);
 
 		let mut header_pmmr = self.header_pmmr.write();
 		let mut txhashset = self.txhashset.write();
 
-		// This is an expensive rewind but we only need to do this once.
-		// We can then "cache" our segmenter for use later.
 		let bitmap_snapshot =
 			txhashset::extending_readonly(&mut header_pmmr, &mut txhashset, |ext, batch| {
-				ext.extension.rewind(&header, batch)?;
+				ext.extension.rewind(header, batch)?;
 				Ok(ext.extension.bitmap_accumulator())
 			})?;
 
-		Ok(Segmenter::new(self.txhashset(), bitmap_snapshot, header))
-	}
+		debug!("init_segmenter: done, took {}ms", now.elapsed().as_millis());
 
-	/// TODO - fn that returns height(s) and then lookup headers by height - make it testable
-	///
-	/// Our *previous* archive header (12 hours prior to current archive header).
-	/// PIBD requires multiple requests and we want to ensure we support PIBD
-	/// as we cross an archive interval boundary (so we support 2 recent header heights).
-	fn prev_archive_header(&self) -> Result<BlockHeader, Error> {
-		let archive_header = self.txhashset_archive_header()?;
-		let archive_interval = global::txhashset_archive_interval();
-		let prev_height = archive_header.height.saturating_sub(archive_interval);
-		self.get_header_by_height(prev_height)
+		Ok(Segmenter::new(
+			self.txhashset(),
+			bitmap_snapshot,
+			header.clone(),
+		))
 	}
 
 	/// To support the ability to download the txhashset from multiple peers in parallel,
