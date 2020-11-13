@@ -157,7 +157,7 @@ fn build_tx_kernel() {
 	// first build a valid tx with corresponding blinding factor
 	let tx = build::transaction(
 		KernelFeatures::Plain {
-			fee_fields: 2.try_into().unwrap(),
+			fee_fields: 2.into(),
 		},
 		&[input(10, key_id1), output(5, key_id2), output(3, key_id3)],
 		&keychain,
@@ -177,7 +177,7 @@ fn build_tx_kernel() {
 	assert_eq!(
 		kern.features,
 		KernelFeatures::Plain {
-			fee_fields: 2.try_into().unwrap()
+			fee_fields: 2.into()
 		}
 	);
 	assert_eq!(2, tx.fee());
@@ -203,7 +203,7 @@ fn build_two_half_kernels() {
 
 	// build kernel with associated private excess
 	let mut kernel = TxKernel::with_features(KernelFeatures::Plain {
-		fee_fields: 2.try_into().unwrap(),
+		fee_fields: 2.into(),
 	});
 
 	// Construct the message to be signed.
@@ -493,7 +493,7 @@ fn hash_output() {
 
 	let tx = build::transaction(
 		KernelFeatures::Plain {
-			fee_fields: 1.try_into().unwrap(),
+			fee_fields: 1.into(),
 		},
 		&[input(75, key_id1), output(42, key_id2), output(32, key_id3)],
 		&keychain,
@@ -558,7 +558,7 @@ fn tx_build_exchange() {
 		// Alice builds her transaction, with change, which also produces the sum
 		// of blinding factors before they're obscured.
 		let tx = Transaction::empty().with_kernel(TxKernel::with_features(KernelFeatures::Plain {
-			fee_fields: 2.try_into().unwrap(),
+			fee_fields: 2.into(),
 		}));
 		let (tx, sum) =
 			build::partial_transaction(tx, &[in1, in2, output(1, key_id3)], &keychain, &builder)
@@ -572,7 +572,7 @@ fn tx_build_exchange() {
 	// ready for broadcast.
 	let tx_final = build::transaction(
 		KernelFeatures::Plain {
-			fee_fields: 2.try_into().unwrap(),
+			fee_fields: 2.into(),
 		},
 		&[
 			initial_tx(tx_alice),
@@ -655,7 +655,7 @@ fn test_block_with_timelocked_tx() {
 	// block height and that the resulting block is valid
 	let tx1 = build::transaction(
 		KernelFeatures::HeightLocked {
-			fee_fields: 2.try_into().unwrap(),
+			fee_fields: 2.into(),
 			lock_height: 1,
 		},
 		&[input(5, key_id1.clone()), output(3, key_id2.clone())],
@@ -679,7 +679,7 @@ fn test_block_with_timelocked_tx() {
 	// block height
 	let tx1 = build::transaction(
 		KernelFeatures::HeightLocked {
-			fee_fields: 2.try_into().unwrap(),
+			fee_fields: 2.into(),
 			lock_height: 2,
 		},
 		&[input(5, key_id1), output(3, key_id2)],

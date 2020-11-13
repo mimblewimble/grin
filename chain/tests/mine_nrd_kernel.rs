@@ -85,7 +85,7 @@ fn mine_block_with_nrd_kernel_and_nrd_feature_enabled() {
 	let key_id2 = ExtKeychainPath::new(1, 2, 0, 0, 0).to_identifier();
 	let tx = build::transaction(
 		KernelFeatures::NoRecentDuplicate {
-			fee_fields: 20000.try_into().unwrap(),
+			fee_fields: 20000.into(),
 			relative_height: NRDRelativeHeight::new(1440).unwrap(),
 		},
 		&[
@@ -132,7 +132,7 @@ fn mine_invalid_block_with_nrd_kernel_and_nrd_feature_enabled_before_hf() {
 	let key_id2 = ExtKeychainPath::new(1, 2, 0, 0, 0).to_identifier();
 	let tx = build::transaction(
 		KernelFeatures::NoRecentDuplicate {
-			fee_fields: 20000.try_into().unwrap(),
+			fee_fields: 20000.into(),
 			relative_height: NRDRelativeHeight::new(1440).unwrap(),
 		},
 		&[

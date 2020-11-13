@@ -239,7 +239,7 @@ fn test_fee_fields() -> Result<(), Error> {
 			fee_fields: FeeFields::new(2, 84).unwrap(),
 		}),
 		TxKernel::with_features(KernelFeatures::Plain {
-			fee_fields: 21.try_into().unwrap(),
+			fee_fields: 21.into(),
 		}),
 	]);
 

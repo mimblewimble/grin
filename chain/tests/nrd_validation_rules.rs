@@ -101,7 +101,7 @@ fn process_block_nrd_validation() -> Result<(), Error> {
 	assert_eq!(chain.head()?.height, 8);
 
 	let mut kernel = TxKernel::with_features(KernelFeatures::NoRecentDuplicate {
-		fee_fields: 20000.try_into().unwrap(),
+		fee_fields: 20000.into(),
 		relative_height: NRDRelativeHeight::new(2)?,
 	});
 
@@ -217,7 +217,7 @@ fn process_block_nrd_validation_relative_height_1() -> Result<(), Error> {
 	assert_eq!(chain.head()?.height, 8);
 
 	let mut kernel = TxKernel::with_features(KernelFeatures::NoRecentDuplicate {
-		fee_fields: 20000.try_into().unwrap(),
+		fee_fields: 20000.into(),
 		relative_height: NRDRelativeHeight::new(1)?,
 	});
 
@@ -316,7 +316,7 @@ fn process_block_nrd_validation_fork() -> Result<(), Error> {
 	assert_eq!(header_8.height, 8);
 
 	let mut kernel = TxKernel::with_features(KernelFeatures::NoRecentDuplicate {
-		fee_fields: 20000.try_into().unwrap(),
+		fee_fields: 20000.into(),
 		relative_height: NRDRelativeHeight::new(2)?,
 	});
 

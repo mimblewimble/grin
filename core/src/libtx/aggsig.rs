@@ -240,7 +240,7 @@ pub fn verify_partial_sig(
 /// let height = 20;
 /// let over_commit = secp.commit_value(reward(fees)).unwrap();
 /// let out_commit = output.commitment();
-/// let features = KernelFeatures::HeightLocked{fee_fields: 1.try_into().unwrap(), lock_height: height};
+/// let features = KernelFeatures::HeightLocked{fee_fields: 1.into(), lock_height: height};
 /// let msg = features.kernel_sig_msg().unwrap();
 /// let excess = secp.commit_sum(vec![out_commit], vec![over_commit]).unwrap();
 /// let pubkey = excess.to_pubkey(&secp).unwrap();
@@ -304,7 +304,7 @@ where
 /// let height = 20;
 /// let over_commit = secp.commit_value(reward(fees)).unwrap();
 /// let out_commit = output.commitment();
-/// let features = KernelFeatures::HeightLocked{fee_fields: 1.try_into().unwrap(), lock_height: height};
+/// let features = KernelFeatures::HeightLocked{fee_fields: 1.into(), lock_height: height};
 /// let msg = features.kernel_sig_msg().unwrap();
 /// let excess = secp.commit_sum(vec![out_commit], vec![over_commit]).unwrap();
 /// let pubkey = excess.to_pubkey(&secp).unwrap();

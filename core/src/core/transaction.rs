@@ -124,6 +124,14 @@ impl TryFrom<u64> for FeeFields {
 	}
 }
 
+/// Conversion from a 32-bit fee to a FeeFields with 0 fee_shift
+/// For use exclusively in tests with constant fees
+impl From<u32> for FeeFields {
+	fn from(fee: u32) -> Self {
+		Self(fee as u64)
+	}
+}
+
 impl From<FeeFields> for u64 {
 	fn from(fee_fields: FeeFields) -> Self {
 		fee_fields.0 as u64
@@ -2317,7 +2325,7 @@ mod test {
 
 		let kernel = TxKernel {
 			features: KernelFeatures::Plain {
-				fee_fields: 10.try_into().unwrap(),
+				fee_fields: 10.into(),
 			},
 			excess: commit,
 			excess_sig: sig.clone(),
@@ -2331,7 +2339,7 @@ mod test {
 			assert_eq!(
 				kernel2.features,
 				KernelFeatures::Plain {
-					fee_fields: 10.try_into().unwrap()
+					fee_fields: 10.into()
 				}
 			);
 			assert_eq!(kernel2.excess, commit);
@@ -2345,7 +2353,7 @@ mod test {
 		assert_eq!(
 			kernel2.features,
 			KernelFeatures::Plain {
-				fee_fields: 10.try_into().unwrap()
+				fee_fields: 10.into()
 			}
 		);
 		assert_eq!(kernel2.excess, commit);
@@ -2366,7 +2374,7 @@ mod test {
 		// now check a kernel with lock_height serialize/deserialize correctly
 		let kernel = TxKernel {
 			features: KernelFeatures::HeightLocked {
-				fee_fields: 10.try_into().unwrap(),
+				fee_fields: 10.into(),
 				lock_height: 100,
 			},
 			excess: commit,
@@ -2408,7 +2416,7 @@ mod test {
 		// now check an NRD kernel will serialize/deserialize correctly
 		let kernel = TxKernel {
 			features: KernelFeatures::NoRecentDuplicate {
-				fee_fields: 10.try_into().unwrap(),
+				fee_fields: 10.into(),
 				relative_height: NRDRelativeHeight(100),
 			},
 			excess: commit,
@@ -2440,7 +2448,7 @@ mod test {
 		let key_id = ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
 
 		let mut kernel = TxKernel::with_features(KernelFeatures::NoRecentDuplicate {
-			fee_fields: 10.try_into().unwrap(),
+			fee_fields: 10.into(),
 			relative_height: NRDRelativeHeight(100),
 		});
 
@@ -2466,27 +2474,27 @@ mod test {
 
 		// Modify the fee and check signature no longer verifies.
 		kernel.features = KernelFeatures::NoRecentDuplicate {
-			fee_fields: 9.try_into().unwrap(),
+			fee_fields: 9.into(),
 			relative_height: NRDRelativeHeight(100),
 		};
 		assert_eq!(kernel.verify(), Err(Error::IncorrectSignature));
 
 		// Modify the relative_height and check signature no longer verifies.
 		kernel.features = KernelFeatures::NoRecentDuplicate {
-			fee_fields: 10.try_into().unwrap(),
+			fee_fields: 10.into(),
 			relative_height: NRDRelativeHeight(101),
 		};
 		assert_eq!(kernel.verify(), Err(Error::IncorrectSignature));
 
 		// Swap the features out for something different and check signature no longer verifies.
 		kernel.features = KernelFeatures::Plain {
-			fee_fields: 10.try_into().unwrap(),
+			fee_fields: 10.into(),
 		};
 		assert_eq!(kernel.verify(), Err(Error::IncorrectSignature));
 
 		// Check signature verifies if we use the original features.
 		kernel.features = KernelFeatures::NoRecentDuplicate {
-			fee_fields: 10.try_into().unwrap(),
+			fee_fields: 10.into(),
 			relative_height: NRDRelativeHeight(100),
 		};
 		assert_eq!(kernel.verify(), Ok(()));
@@ -2550,7 +2558,7 @@ mod test {
 		assert_eq!(
 			features,
 			KernelFeatures::Plain {
-				fee_fields: 10.try_into().unwrap()
+				fee_fields: 10.into()
 			}
 		);
 
@@ -2565,7 +2573,7 @@ mod test {
 		assert_eq!(
 			features,
 			KernelFeatures::HeightLocked {
-				fee_fields: 10.try_into().unwrap(),
+				fee_fields: 10.into(),
 				lock_height: 100
 			}
 		);
@@ -2595,7 +2603,7 @@ mod test {
 		assert_eq!(
 			features,
 			KernelFeatures::NoRecentDuplicate {
-				fee_fields: 10.try_into().unwrap(),
+				fee_fields: 10.into(),
 				relative_height: NRDRelativeHeight(100)
 			}
 		);

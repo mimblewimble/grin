@@ -64,7 +64,7 @@ fn too_large_block() {
 	parts.append(&mut vec![input(500000, pks.pop().unwrap())]);
 	let tx = build::transaction(
 		KernelFeatures::Plain {
-			fee_fields: 2.try_into().unwrap(),
+			fee_fields: 2.into(),
 		},
 		&parts,
 		&keychain,
@@ -107,7 +107,7 @@ fn block_with_nrd_kernel_pre_post_hf3() {
 
 	let tx = build::transaction(
 		KernelFeatures::NoRecentDuplicate {
-			fee_fields: 2.try_into().unwrap(),
+			fee_fields: 2.into(),
 			relative_height: NRDRelativeHeight::new(1440).unwrap(),
 		},
 		&[input(7, key_id1), output(5, key_id2)],
@@ -192,7 +192,7 @@ fn block_with_nrd_kernel_nrd_not_enabled() {
 
 	let tx = build::transaction(
 		KernelFeatures::NoRecentDuplicate {
-			fee_fields: 2.try_into().unwrap(),
+			fee_fields: 2.into(),
 			relative_height: NRDRelativeHeight::new(1440).unwrap(),
 		},
 		&[input(7, key_id1), output(5, key_id2)],
@@ -281,7 +281,7 @@ fn block_with_cut_through() {
 	let btx1 = tx2i1o();
 	let btx2 = build::transaction(
 		KernelFeatures::Plain {
-			fee_fields: 2.try_into().unwrap(),
+			fee_fields: 2.into(),
 		},
 		&[input(7, key_id1), output(5, key_id2.clone())],
 		&keychain,
@@ -761,7 +761,7 @@ fn same_amount_outputs_copy_range_proof() {
 
 	let tx = build::transaction(
 		KernelFeatures::Plain {
-			fee_fields: 1.try_into().unwrap(),
+			fee_fields: 1.into(),
 		},
 		&[input(7, key_id1), output(3, key_id2), output(3, key_id3)],
 		&keychain,
@@ -804,7 +804,7 @@ fn wrong_amount_range_proof() {
 
 	let tx1 = build::transaction(
 		KernelFeatures::Plain {
-			fee_fields: 1.try_into().unwrap(),
+			fee_fields: 1.into(),
 		},
 		&[
 			input(7, key_id1.clone()),
@@ -817,7 +817,7 @@ fn wrong_amount_range_proof() {
 	.unwrap();
 	let tx2 = build::transaction(
 		KernelFeatures::Plain {
-			fee_fields: 1.try_into().unwrap(),
+			fee_fields: 1.into(),
 		},
 		&[input(7, key_id1), output(2, key_id2), output(4, key_id3)],
 		&keychain,

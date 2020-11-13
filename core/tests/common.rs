@@ -39,7 +39,7 @@ pub fn tx2i1o() -> Transaction {
 
 	let tx = build::transaction(
 		KernelFeatures::Plain {
-			fee_fields: 2.try_into().unwrap(),
+			fee_fields: 2.into(),
 		},
 		&[input(10, key_id1), input(11, key_id2), output(19, key_id3)],
 		&keychain,
@@ -60,7 +60,7 @@ pub fn tx1i1o() -> Transaction {
 
 	let tx = build::transaction(
 		KernelFeatures::Plain {
-			fee_fields: 2.try_into().unwrap(),
+			fee_fields: 2.into(),
 		},
 		&[input(5, key_id1), output(3, key_id2)],
 		&keychain,
@@ -102,7 +102,7 @@ pub fn tx1i2o() -> Transaction {
 
 	let tx = build::transaction(
 		KernelFeatures::Plain {
-			fee_fields: 2.try_into().unwrap(),
+			fee_fields: 2.into(),
 		},
 		&[input(6, key_id1), output(3, key_id2), output(1, key_id3)],
 		&keychain,
@@ -148,7 +148,7 @@ where
 {
 	build::transaction(
 		KernelFeatures::Plain {
-			fee_fields: 2.try_into().unwrap(),
+			fee_fields: 2.into(),
 		},
 		&[input(v, key_id1), output(3, key_id2)],
 		keychain,

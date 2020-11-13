@@ -281,7 +281,7 @@ mod test {
 
 		let tx = transaction(
 			KernelFeatures::Plain {
-				fee_fields: 2.try_into().unwrap(),
+				fee_fields: 2.into(),
 			},
 			&[input(10, key_id1), input(12, key_id2), output(20, key_id3)],
 			&keychain,
@@ -305,7 +305,7 @@ mod test {
 
 		let tx = transaction(
 			KernelFeatures::Plain {
-				fee_fields: 2.try_into().unwrap(),
+				fee_fields: 2.into(),
 			},
 			&[input(10, key_id1), input(12, key_id2), output(20, key_id3)],
 			&keychain,
@@ -328,7 +328,7 @@ mod test {
 
 		let tx = transaction(
 			KernelFeatures::Plain {
-				fee_fields: 4.try_into().unwrap(),
+				fee_fields: 4.into(),
 			},
 			&[input(6, key_id1), output(2, key_id2)],
 			&keychain,
