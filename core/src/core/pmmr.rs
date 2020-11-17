@@ -40,6 +40,7 @@ mod backend;
 mod pmmr;
 mod readonly_pmmr;
 mod rewindable_pmmr;
+pub mod segment;
 mod vec_backend;
 
 pub use self::backend::*;
