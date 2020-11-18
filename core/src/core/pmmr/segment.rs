@@ -132,6 +132,7 @@ impl<T> Segment<T> {
 		(first, last)
 	}
 
+	/// TODO - binary_search_by_key() here (can we assume these are sorted by pos?)
 	fn get_hash(&self, pos: u64) -> Result<Hash, SegmentError> {
 		self.hash_pos
 			.iter()
@@ -152,6 +153,16 @@ impl<T> Segment<T> {
 			.iter()
 			.zip(&self.hashes)
 			.map(|(&p, &h)| (p, h))
+	}
+
+	/// Segment proof
+	pub fn proof(&self) -> &SegmentProof {
+		&self.proof
+	}
+
+	/// Segment identifier
+	pub fn id(&self) -> SegmentIdentifier {
+		self.identifier
 	}
 }
 
@@ -537,6 +548,11 @@ impl SegmentProof {
 		proof.hashes.extend(peaks?);
 
 		Ok(proof)
+	}
+
+	/// Size of the proof in hashes.
+	pub fn size(&self) -> usize {
+		self.hashes.len()
 	}
 
 	/// Reconstruct PMMR root using this proof

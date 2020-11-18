@@ -20,7 +20,7 @@ use crate::core::core::merkle_proof::MerkleProof;
 use crate::core::core::verifier_cache::VerifierCache;
 use crate::core::core::{
 	Block, BlockHeader, BlockSums, Committed, Inputs, KernelFeatures, Output, OutputIdentifier,
-	Transaction, TxKernel,
+	SegmentIdentifier, Transaction, TxKernel,
 };
 use crate::core::global;
 use crate::core::pow;
@@ -233,9 +233,16 @@ impl Chain {
 		//
 		// This is not required as we will lazily initialize our segmenter as required
 		// once we start receiving PIBD segment requests.
-		// In reality we will do this based on PIBD segment requests and initialization
-		// (once per 12 hour period) will not be this slow.
-		chain.segmenter()?;
+		// In reality we will do this based on PIBD segment requests.
+		// Initialization (once per 12 hour period) will not be this slow once lmdb and PMMRs
+		// are warmed up.
+		{
+			let segmenter = chain.segmenter()?;
+			segmenter.kernel_segment(SegmentIdentifier { height: 9, idx: 0 })?;
+			segmenter.bitmap_segment(SegmentIdentifier { height: 9, idx: 0 })?;
+			segmenter.output_segment(SegmentIdentifier { height: 11, idx: 0 })?;
+			segmenter.rangeproof_segment(SegmentIdentifier { height: 7, idx: 0 })?;
+		}
 
 		Ok(chain)
 	}

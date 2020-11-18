@@ -14,50 +14,15 @@
 
 //! Generation of the various necessary segments requested during PIBD.
 
-use std::{marker, sync::Arc};
+use std::{sync::Arc, time::Instant};
 
 use crate::core::core::hash::Hash;
-use crate::core::core::pmmr::{Backend, ReadablePMMR, ReadonlyPMMR};
-use crate::core::core::{BlockHeader, OutputIdentifier, TxKernel};
-use crate::core::ser::{PMMRable, Readable, Writeable};
+use crate::core::core::pmmr::ReadablePMMR;
+use crate::core::core::{BlockHeader, OutputIdentifier, Segment, SegmentIdentifier, TxKernel};
 use crate::error::{Error, ErrorKind};
 use crate::txhashset::{BitmapAccumulator, BitmapChunk, TxHashSet};
 use crate::util::secp::pedersen::RangeProof;
 use crate::util::RwLock;
-
-/// TODO - Replace this with SegmentIdentifier from segment PR.
-pub struct SegmentIdentifier {
-	height: u8,
-	idx: u64,
-}
-
-/// TODO - Replace this the real Segment
-pub struct Segment<T> {
-	id: SegmentIdentifier,
-	_marker: marker::PhantomData<T>,
-}
-
-/// TODO - Replace this the real Segment
-impl<T> Segment<T>
-where
-	T: std::fmt::Debug + Readable + Writeable,
-{
-	/// Generate a segment from a PMMR
-	pub fn from_pmmr<U, B>(
-		segment_id: SegmentIdentifier,
-		pmmr: &ReadonlyPMMR<'_, U, B>,
-		prunable: bool,
-	) -> Result<Self, Error>
-	where
-		U: PMMRable<E = T>,
-		B: Backend<U>,
-	{
-		Ok(Segment {
-			id: segment_id,
-			_marker: marker::PhantomData,
-		})
-	}
-}
 
 /// Segmenter for generating PIBD segments.
 #[derive(Clone)]
@@ -89,9 +54,19 @@ impl Segmenter {
 
 	/// Create a kernel segment.
 	pub fn kernel_segment(&self, id: SegmentIdentifier) -> Result<Segment<TxKernel>, Error> {
+		let now = Instant::now();
 		let txhashset = self.txhashset.read();
 		let kernel_pmmr = txhashset.kernel_pmmr_at(&self.header);
 		let segment = Segment::from_pmmr(id, &kernel_pmmr, false)?;
+		debug!(
+			"kernel_segment: id: ({}, {}), leaves: {}, hashes: {}, proof hashes: {}, took {}ms",
+			segment.id().height,
+			segment.id().idx,
+			segment.leaf_iter().count(),
+			segment.hash_iter().count(),
+			segment.proof().size(),
+			now.elapsed().as_millis()
+		);
 		Ok(segment)
 	}
 
@@ -116,9 +91,19 @@ impl Segmenter {
 		&self,
 		id: SegmentIdentifier,
 	) -> Result<(Segment<BitmapChunk>, Hash), Error> {
+		let now = Instant::now();
 		let bitmap_pmmr = self.bitmap_snapshot.readonly_pmmr();
 		let segment = Segment::from_pmmr(id, &bitmap_pmmr, false)?;
 		let output_root = self.output_root()?;
+		debug!(
+			"bitmap_segment: id: ({}, {}), leaves: {}, hashes: {}, proof hashes: {}, took {}ms",
+			segment.id().height,
+			segment.id().idx,
+			segment.leaf_iter().count(),
+			segment.hash_iter().count(),
+			segment.proof().size(),
+			now.elapsed().as_millis()
+		);
 		Ok((segment, output_root))
 	}
 
@@ -127,18 +112,38 @@ impl Segmenter {
 		&self,
 		id: SegmentIdentifier,
 	) -> Result<(Segment<OutputIdentifier>, Hash), Error> {
+		let now = Instant::now();
 		let txhashset = self.txhashset.read();
 		let output_pmmr = txhashset.output_pmmr_at(&self.header);
 		let segment = Segment::from_pmmr(id, &output_pmmr, true)?;
 		let bitmap_root = self.bitmap_root()?;
+		debug!(
+			"output_segment: id: ({}, {}), leaves: {}, hashes: {}, proof hashes: {}, took {}ms",
+			segment.id().height,
+			segment.id().idx,
+			segment.leaf_iter().count(),
+			segment.hash_iter().count(),
+			segment.proof().size(),
+			now.elapsed().as_millis()
+		);
 		Ok((segment, bitmap_root))
 	}
 
 	/// Create a rangeproof segment.
 	pub fn rangeproof_segment(&self, id: SegmentIdentifier) -> Result<Segment<RangeProof>, Error> {
+		let now = Instant::now();
 		let txhashset = self.txhashset.read();
 		let pmmr = txhashset.rangeproof_pmmr_at(&self.header);
 		let segment = Segment::from_pmmr(id, &pmmr, true)?;
+		debug!(
+			"rangeproof_segment: id: ({}, {}), leaves: {}, hashes: {}, proof hashes: {}, took {}ms",
+			segment.id().height,
+			segment.id().idx,
+			segment.leaf_iter().count(),
+			segment.hash_iter().count(),
+			segment.proof().size(),
+			now.elapsed().as_millis()
+		);
 		Ok(segment)
 	}
 }
