@@ -238,10 +238,10 @@ impl Chain {
 		// are warmed up.
 		{
 			let segmenter = chain.segmenter()?;
-			segmenter.kernel_segment(SegmentIdentifier { height: 9, idx: 0 })?;
-			segmenter.bitmap_segment(SegmentIdentifier { height: 9, idx: 0 })?;
-			segmenter.output_segment(SegmentIdentifier { height: 11, idx: 0 })?;
-			segmenter.rangeproof_segment(SegmentIdentifier { height: 7, idx: 0 })?;
+			let _ = segmenter.kernel_segment(SegmentIdentifier { height: 9, idx: 0 });
+			let _ = segmenter.bitmap_segment(SegmentIdentifier { height: 9, idx: 0 });
+			let _ = segmenter.output_segment(SegmentIdentifier { height: 11, idx: 0 });
+			let _ = segmenter.rangeproof_segment(SegmentIdentifier { height: 7, idx: 0 });
 		}
 
 		Ok(chain)
