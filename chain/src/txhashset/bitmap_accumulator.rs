@@ -292,11 +292,10 @@ impl From<Segment<BitmapChunk>> for BitmapSegment {
 		let (identifier, _, _, _, leaf_data, proof) = segment.parts();
 
 		let mut chunks_left = leaf_data.len();
-		let mut blocks = Vec::with_capacity(
-			(chunks_left + BitmapBlock::CHUNKS_PER_BLOCK - 1) / BitmapBlock::CHUNKS_PER_BLOCK,
-		);
+		let mut blocks =
+			Vec::with_capacity((chunks_left + BitmapBlock::NCHUNKS - 1) / BitmapBlock::NCHUNKS);
 		while chunks_left > 0 {
-			let n_chunks = min(BitmapBlock::CHUNKS_PER_BLOCK, chunks_left);
+			let n_chunks = min(BitmapBlock::NCHUNKS, chunks_left);
 			chunks_left = chunks_left.saturating_sub(n_chunks);
 			blocks.push(BitmapBlock::new(n_chunks));
 		}
@@ -304,10 +303,10 @@ impl From<Segment<BitmapChunk>> for BitmapSegment {
 		for (chunk_idx, chunk) in leaf_data.into_iter().enumerate() {
 			assert_eq!(chunk.0.len(), BitmapChunk::LEN_BITS);
 			let block = &mut blocks
-				.get_mut(chunk_idx / BitmapBlock::CHUNKS_PER_BLOCK)
+				.get_mut(chunk_idx / BitmapBlock::NCHUNKS)
 				.unwrap()
 				.inner;
-			let offset = (chunk_idx % BitmapBlock::CHUNKS_PER_BLOCK) * BitmapChunk::LEN_BITS;
+			let offset = (chunk_idx % BitmapBlock::NCHUNKS) * BitmapChunk::LEN_BITS;
 			for (i, _) in chunk.0.iter().enumerate().filter(|&(_, v)| v) {
 				block.set(offset + i, true);
 			}
@@ -330,7 +329,7 @@ impl From<BitmapSegment> for Segment<BitmapChunk> {
 			proof,
 		} = segment;
 
-		let n_chunks = blocks.len() * BitmapBlock::CHUNKS_PER_BLOCK;
+		let n_chunks = blocks.len() * BitmapBlock::NCHUNKS;
 		let mut leaf_pos = Vec::with_capacity(n_chunks);
 		let mut chunks = Vec::with_capacity(n_chunks);
 		let offset = (1 << identifier.height) * identifier.idx + 1;
@@ -341,7 +340,7 @@ impl From<BitmapSegment> for Segment<BitmapChunk> {
 
 		for (block_idx, block) in blocks.into_iter().enumerate() {
 			assert_eq!(block.inner.len(), BitmapBlock::NBITS as usize);
-			let offset = block_idx * BitmapBlock::CHUNKS_PER_BLOCK;
+			let offset = block_idx * BitmapBlock::NCHUNKS;
 			for (i, _) in block.inner.iter().enumerate().filter(|&(_, v)| v) {
 				chunks
 					.get_mut(offset + i / BitmapChunk::LEN_BITS)
@@ -365,10 +364,11 @@ struct BitmapBlock {
 impl BitmapBlock {
 	/// Maximum number of bits in a block
 	const NBITS: u32 = 1 << 16;
-	const CHUNKS_PER_BLOCK: usize = Self::NBITS as usize / BitmapChunk::LEN_BITS;
+	/// Maximum number of chunks in a block
+	const NCHUNKS: usize = Self::NBITS as usize / BitmapChunk::LEN_BITS;
 
 	fn new(n_chunks: usize) -> Self {
-		assert!(n_chunks <= BitmapBlock::CHUNKS_PER_BLOCK);
+		assert!(n_chunks <= BitmapBlock::NCHUNKS);
 		Self {
 			inner: BitVec::from_elem(n_chunks * BitmapChunk::LEN_BITS, false),
 		}
@@ -414,7 +414,7 @@ impl Writeable for BitmapBlock {
 impl Readable for BitmapBlock {
 	fn read<R: Reader>(reader: &mut R) -> Result<Self, ser::Error> {
 		let n_chunks = reader.read_u8()?;
-		if n_chunks as usize > BitmapBlock::NBITS as usize / BitmapChunk::LEN_BITS {
+		if n_chunks as usize > BitmapBlock::NCHUNKS {
 			return Err(ser::Error::TooLargeReadErr);
 		}
 		let n_bits = n_chunks as usize * BitmapChunk::LEN_BITS;
