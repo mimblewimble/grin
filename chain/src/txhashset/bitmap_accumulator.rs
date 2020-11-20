@@ -329,7 +329,9 @@ impl From<BitmapSegment> for Segment<BitmapChunk> {
 			proof,
 		} = segment;
 
-		let n_chunks = blocks.len() * BitmapBlock::NCHUNKS;
+		// Count the number of chunks taking into account that the final block might be smaller
+		let n_chunks = blocks.len().saturating_sub(1) * BitmapBlock::NCHUNKS
+			+ blocks.last().map(|b| b.n_chunks()).unwrap_or(0);
 		let mut leaf_pos = Vec::with_capacity(n_chunks);
 		let mut chunks = Vec::with_capacity(n_chunks);
 		let offset = (1 << identifier.height) * identifier.idx + 1;
@@ -372,6 +374,14 @@ impl BitmapBlock {
 		Self {
 			inner: BitVec::from_elem(n_chunks * BitmapChunk::LEN_BITS, false),
 		}
+	}
+
+	fn n_chunks(&self) -> usize {
+		let length = self.inner.len();
+		assert_eq!(length % BitmapChunk::LEN_BITS, 0);
+		let n_chunks = length / BitmapChunk::LEN_BITS;
+		assert!(n_chunks <= BitmapBlock::NCHUNKS);
+		n_chunks
 	}
 }
 
