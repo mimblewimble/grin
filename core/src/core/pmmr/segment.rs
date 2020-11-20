@@ -141,6 +141,64 @@ impl<T> Segment<T> {
 			.ok_or_else(|| SegmentError::MissingHash(pos))
 	}
 
+	/// Get the identifier associated with this segment
+	pub fn identifier(&self) -> SegmentIdentifier {
+		self.identifier
+	}
+
+	/// Consume the segment and return its parts
+	pub fn parts(
+		self,
+	) -> (
+		SegmentIdentifier,
+		Vec<u64>,
+		Vec<Hash>,
+		Vec<u64>,
+		Vec<T>,
+		SegmentProof,
+	) {
+		(
+			self.identifier,
+			self.hash_pos,
+			self.hashes,
+			self.leaf_pos,
+			self.leaf_data,
+			self.proof,
+		)
+	}
+
+	/// Construct a segment from its parts
+	pub fn from_parts(
+		identifier: SegmentIdentifier,
+		hash_pos: Vec<u64>,
+		hashes: Vec<Hash>,
+		leaf_pos: Vec<u64>,
+		leaf_data: Vec<T>,
+		proof: SegmentProof,
+	) -> Self {
+		assert_eq!(hash_pos.len(), hashes.len());
+		let mut last_pos = 0;
+		for &pos in &hash_pos {
+			assert!(pos > last_pos);
+			last_pos = pos;
+		}
+		assert_eq!(leaf_pos.len(), leaf_data.len());
+		last_pos = 0;
+		for &pos in &leaf_pos {
+			assert!(pos > last_pos);
+			last_pos = pos;
+		}
+
+		Self {
+			identifier,
+			hash_pos,
+			hashes,
+			leaf_pos,
+			leaf_data,
+			proof,
+		}
+	}
+
 	/// Iterator of all the leaves in the segment
 	pub fn leaf_iter(&self) -> impl Iterator<Item = (u64, &T)> + '_ {
 		self.leaf_pos.iter().map(|&p| p).zip(&self.leaf_data)
