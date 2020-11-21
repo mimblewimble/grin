@@ -85,19 +85,21 @@ impl TableViewItem<StratumWorkerColumn> for WorkerStats {
 		}
 	}
 
-	fn cmp(&self, _other: &Self, column: StratumWorkerColumn) -> Ordering
+	fn cmp(&self, other: &Self, column: StratumWorkerColumn) -> Ordering
 	where
 		Self: Sized,
 	{
 		match column {
-			StratumWorkerColumn::Id => Ordering::Equal,
-			StratumWorkerColumn::IsConnected => Ordering::Equal,
-			StratumWorkerColumn::LastSeen => Ordering::Equal,
-			StratumWorkerColumn::PowDifficulty => Ordering::Equal,
-			StratumWorkerColumn::NumAccepted => Ordering::Equal,
-			StratumWorkerColumn::NumRejected => Ordering::Equal,
-			StratumWorkerColumn::NumStale => Ordering::Equal,
-			StratumWorkerColumn::NumBlocksFound => Ordering::Equal,
+			StratumWorkerColumn::Id => self.id.cmp(&other.id),
+			StratumWorkerColumn::IsConnected => self.is_connected.cmp(&other.is_connected),
+			StratumWorkerColumn::LastSeen => self.last_seen.cmp(&other.last_seen),
+			StratumWorkerColumn::PowDifficulty => self.pow_difficulty.cmp(&other.pow_difficulty),
+			StratumWorkerColumn::NumAccepted => self.num_accepted.cmp(&other.num_accepted),
+			StratumWorkerColumn::NumRejected => self.num_rejected.cmp(&other.num_rejected),
+			StratumWorkerColumn::NumStale => self.num_stale.cmp(&other.num_stale),
+			StratumWorkerColumn::NumBlocksFound => {
+				self.num_blocks_found.cmp(&other.num_blocks_found)
+			}
 		}
 	}
 }
@@ -147,18 +149,18 @@ impl TableViewItem<DiffColumn> for DiffBlock {
 		}
 	}
 
-	fn cmp(&self, _other: &Self, column: DiffColumn) -> Ordering
+	fn cmp(&self, other: &Self, column: DiffColumn) -> Ordering
 	where
 		Self: Sized,
 	{
 		match column {
-			DiffColumn::Height => Ordering::Equal,
-			DiffColumn::Hash => Ordering::Equal,
-			DiffColumn::PoWType => Ordering::Equal,
-			DiffColumn::Difficulty => Ordering::Equal,
-			DiffColumn::SecondaryScaling => Ordering::Equal,
-			DiffColumn::Time => Ordering::Equal,
-			DiffColumn::Duration => Ordering::Equal,
+			DiffColumn::Height => self.block_height.cmp(&other.block_height),
+			DiffColumn::Hash => self.block_hash.cmp(&other.block_hash),
+			DiffColumn::PoWType => self.is_secondary.cmp(&other.is_secondary),
+			DiffColumn::Difficulty => self.difficulty.cmp(&other.difficulty),
+			DiffColumn::SecondaryScaling => self.secondary_scaling.cmp(&other.secondary_scaling),
+			DiffColumn::Time => self.time.cmp(&other.time),
+			DiffColumn::Duration => self.duration.cmp(&other.duration),
 		}
 	}
 }
@@ -185,7 +187,7 @@ impl TUIMiningView {
 			.child(Panel::new(devices_button))
 			.child(Panel::new(difficulty_button));
 
-		let table_view = TableView::<WorkerStats, StratumWorkerColumn>::new()
+		let mut table_view = TableView::<WorkerStats, StratumWorkerColumn>::new()
 			.column(StratumWorkerColumn::Id, "Worker ID", |c| c.width_percent(8))
 			.column(StratumWorkerColumn::IsConnected, "Connected", |c| {
 				c.width_percent(8)
@@ -207,7 +209,9 @@ impl TUIMiningView {
 			})
 			.column(StratumWorkerColumn::NumBlocksFound, "Blocks Found", |c| {
 				c.width_percent(10)
-			});
+			})
+			.default_column(StratumWorkerColumn::IsConnected);
+		table_view.sort_by(StratumWorkerColumn::IsConnected, Ordering::Greater);
 
 		let status_view = LinearLayout::new(Orientation::Vertical)
 			.child(
@@ -280,7 +284,8 @@ impl TUIMiningView {
 				c.width_percent(10)
 			})
 			.column(DiffColumn::Time, "Block Time", |c| c.width_percent(25))
-			.column(DiffColumn::Duration, "Duration", |c| c.width_percent(25));
+			.column(DiffColumn::Duration, "Duration", |c| c.width_percent(25))
+			.default_column(DiffColumn::Height);
 
 		let mining_difficulty_view = LinearLayout::new(Orientation::Vertical)
 			.child(diff_status_view)
