@@ -86,6 +86,7 @@ jobs:
     - script: |
         git apply .ci/win.patch
         choco install -y llvm
+        refreshenv
       displayName: Windows Install Dependencies
     - template: '.ci/test.yml'
     - template: '.ci/windows-release.yml'
