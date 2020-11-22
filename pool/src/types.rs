@@ -107,6 +107,11 @@ pub struct PoolConfig {
 	#[serde(default = "default_accept_fee_base")]
 	pub accept_fee_base: u64,
 
+	// Reorg cache retention period in minute.
+	// The reorg cache repopulates nodes mempool in a reorg scenario.
+	#[serde(default = "default_reorg_cache_period")]
+	pub reorg_cache_period: i64,
+
 	/// Maximum capacity of the pool in number of transactions
 	#[serde(default = "default_max_pool_size")]
 	pub max_pool_size: usize,
@@ -126,6 +131,7 @@ impl Default for PoolConfig {
 	fn default() -> PoolConfig {
 		PoolConfig {
 			accept_fee_base: default_accept_fee_base(),
+			reorg_cache_period: default_reorg_cache_period(),
 			max_pool_size: default_max_pool_size(),
 			max_stempool_size: default_max_stempool_size(),
 			mineable_max_weight: default_mineable_max_weight(),
@@ -135,6 +141,9 @@ impl Default for PoolConfig {
 
 fn default_accept_fee_base() -> u64 {
 	consensus::MILLI_GRIN
+}
+fn default_reorg_cache_period() -> i64 {
+	30
 }
 fn default_max_pool_size() -> usize {
 	50_000

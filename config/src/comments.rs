@@ -315,6 +315,15 @@ fn comments() -> HashMap<String, String> {
 	);
 
 	retval.insert(
+		"reorg_cache_period".to_string(),
+		"
+#reorg cache retention period in minute.
+#the reorg cache repopulates nodes mempool in a reorg scenario.
+"
+		.to_string(),
+	);
+
+	retval.insert(
 		"max_pool_size".to_string(),
 		"
 #maximum number of transactions allowed in the pool
