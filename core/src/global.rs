@@ -162,8 +162,8 @@ thread_local! {
 	/// Mainnet|Testnet|UserTesting|AutomatedTesting
 	pub static CHAIN_TYPE: Cell<Option<ChainTypes>> = Cell::new(None);
 
-		/// minimum transaction fee per unit of transaction weight for mempool acceptance
-		pub static ACCEPT_FEE_BASE: Cell<Option<u64>> = Cell::new(None);
+	/// minimum transaction fee per unit of transaction weight for mempool acceptance
+	pub static ACCEPT_FEE_BASE: Cell<Option<u64>> = Cell::new(None);
 
 	/// Local feature flag for NRD kernel support.
 	pub static NRD_FEATURE_ENABLED: Cell<Option<bool>> = Cell::new(None);

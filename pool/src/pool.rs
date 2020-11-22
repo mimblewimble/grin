@@ -150,6 +150,7 @@ where
 	pub fn all_transactions_aggregate(
 		&self,
 		extra_tx: Option<Transaction>,
+		height: u64,
 	) -> Result<Option<Transaction>, PoolError> {
 		let mut txs = self.all_transactions();
 		if txs.is_empty() {
@@ -161,7 +162,7 @@ where
 		let tx = transaction::aggregate(&txs)?;
 
 		// Validate the single aggregate transaction "as pool", not subject to tx weight limits.
-		tx.validate(Weighting::NoLimit, self.verifier_cache.clone())?;
+		tx.validate(Weighting::NoLimit, self.verifier_cache.clone(), height)?;
 
 		Ok(Some(tx))
 	}
@@ -229,7 +230,7 @@ where
 	) -> Result<BlockSums, PoolError> {
 		// Validate the tx, conditionally checking against weight limits,
 		// based on weight verification type.
-		tx.validate(weighting, self.verifier_cache.clone())?;
+		tx.validate(weighting, self.verifier_cache.clone(), header.height)?;
 
 		// Validate the tx against current chain state.
 		// Check all inputs are in the current UTXO set.
@@ -304,7 +305,7 @@ where
 		tx: &Transaction,
 		header: &BlockHeader,
 	) -> Result<BlockSums, PoolError> {
-		let overage = tx.overage();
+		let overage = tx.overage(header.height);
 
 		let offset = {
 			let secp = static_secp_instance();
