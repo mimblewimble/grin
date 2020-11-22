@@ -287,6 +287,16 @@ impl MessageHandler for Protocol {
 
 				Consumed::Attachment(Arc::new(meta), file)
 			}
+
+			Message::GetOutputBitmapSegment(_)
+			| Message::OutputBitmapSegment(_)
+			| Message::GetOutputSegment(_)
+			| Message::OutputSegment(_)
+			| Message::GetRangeProofSegment(_)
+			| Message::RangeProofSegment(_)
+			| Message::GetKernelSegment(_)
+			| Message::KernelSegment(_) => Consumed::None,
+
 			Message::Unknown(_) => Consumed::None,
 		};
 		Ok(consumed)
