@@ -28,7 +28,7 @@ use crate::util::RwLock;
 #[derive(Clone)]
 pub struct Segmenter {
 	txhashset: Arc<RwLock<TxHashSet>>,
-	bitmap_snapshot: BitmapAccumulator,
+	bitmap_snapshot: Arc<BitmapAccumulator>,
 	header: BlockHeader,
 }
 
@@ -36,7 +36,7 @@ impl Segmenter {
 	/// Create a new segmenter based on the provided txhashset.
 	pub fn new(
 		txhashset: Arc<RwLock<TxHashSet>>,
-		bitmap_snapshot: BitmapAccumulator,
+		bitmap_snapshot: Arc<BitmapAccumulator>,
 		header: BlockHeader,
 	) -> Segmenter {
 		Segmenter {

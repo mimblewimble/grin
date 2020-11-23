@@ -887,7 +887,7 @@ impl Chain {
 
 		Ok(Segmenter::new(
 			self.txhashset(),
-			bitmap_snapshot,
+			Arc::new(bitmap_snapshot),
 			header.clone(),
 		))
 	}
