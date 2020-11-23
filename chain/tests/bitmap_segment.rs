@@ -29,13 +29,14 @@ fn test_roundtrip(entries: usize) {
 		}
 	}
 
+	// Add a bunch of segments after the one we are interested in
+	let size =
+		bitmap.maximum().unwrap() as u64 + (1 << identifier.height) * 1024 * rng.gen_range(0, 64);
+
 	// Construct the accumulator
 	let mut accumulator = BitmapAccumulator::new();
 	accumulator
-		.init(
-			bitmap.iter().map(|v| v as u64),
-			bitmap.maximum().unwrap() as u64,
-		)
+		.init(bitmap.iter().map(|v| v as u64), size)
 		.unwrap();
 
 	let mmr = accumulator.readonly_pmmr();
