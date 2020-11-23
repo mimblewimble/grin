@@ -29,7 +29,6 @@ use grin_chain::{BlockStatus, ChainAdapter, Options};
 use grin_core as core;
 use grin_keychain as keychain;
 use grin_util as util;
-use std::convert::TryInto;
 use std::sync::Arc;
 
 mod chain_test_helper;
@@ -889,7 +888,8 @@ where
 	let proof_size = global::proofsize();
 	let key_id = ExtKeychainPath::new(1, key_idx, 0, 0, 0).to_identifier();
 
-	let fees = txs.iter().map(|tx| tx.fee()).sum();
+	let height = prev.height + 1;
+	let fees = txs.iter().map(|tx| tx.fee(height)).sum();
 	let reward =
 		libtx::reward::output(kc, &libtx::ProofBuilder::new(kc), &key_id, fees, false).unwrap();
 	let mut b = match core::core::Block::new(prev, txs, Difficulty::from_num(diff), reward) {

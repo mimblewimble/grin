@@ -28,7 +28,6 @@ use crate::core::libtx::{aggsig, build, reward, ProofBuilder};
 use crate::core::{consensus, global, pow};
 use crate::keychain::{BlindingFactor, ExtKeychain, ExtKeychainPath, Identifier, Keychain};
 use chrono::Duration;
-use std::convert::TryInto;
 
 fn build_block<K>(
 	chain: &Chain,
@@ -55,7 +54,7 @@ where
 {
 	let next_header_info =
 		consensus::next_difficulty(prev.height, chain.difficulty_iter().unwrap());
-	let fee = txs.iter().map(|x| x.fee()).sum();
+	let fee = txs.iter().map(|x| x.fee(prev.height + 1)).sum();
 	let reward =
 		reward::output(keychain, &ProofBuilder::new(keychain), key_id, fee, false).unwrap();
 

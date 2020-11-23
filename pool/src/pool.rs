@@ -128,13 +128,13 @@ where
 		//   * maintain dependency ordering
 		//   * maximize cut-through
 		//   * maximize overall fees
+		let header = self.blockchain.chain_head()?;
 		let txs = self.bucket_transactions(weighting);
 
 		// Iteratively apply the txs to the current chain state,
 		// rejecting any that do not result in a valid state.
 		// Verify these txs produce an aggregated tx below max_weight.
 		// Return a vec of all the valid txs.
-		let header = self.blockchain.chain_head()?;
 		let valid_txs = self.validate_raw_txs(&txs, None, &header, weighting)?;
 		Ok(valid_txs)
 	}
@@ -150,7 +150,6 @@ where
 	pub fn all_transactions_aggregate(
 		&self,
 		extra_tx: Option<Transaction>,
-		height: u64,
 	) -> Result<Option<Transaction>, PoolError> {
 		let mut txs = self.all_transactions();
 		if txs.is_empty() {
@@ -162,7 +161,12 @@ where
 		let tx = transaction::aggregate(&txs)?;
 
 		// Validate the single aggregate transaction "as pool", not subject to tx weight limits.
-		tx.validate(Weighting::NoLimit, self.verifier_cache.clone(), height)?;
+		let header = self.blockchain.chain_head()?;
+		tx.validate(
+			Weighting::NoLimit,
+			self.verifier_cache.clone(),
+			header.height,
+		)?;
 
 		Ok(Some(tx))
 	}
@@ -395,13 +399,14 @@ where
 				continue;
 			}
 
+			let height = self.blockchain.chain_head().map(|x| x.height).unwrap_or(0);
 			match insert_pos {
 				None => {
 					// No parent tx, just add to the end in its own bucket.
 					// This is the common case for non 0-conf txs in the txpool.
 					// We assume the tx is valid here as we validated it on the way into the txpool.
 					insert_pos = Some(tx_buckets.len());
-					tx_buckets.push(Bucket::new(entry.tx.clone(), tx_buckets.len()));
+					tx_buckets.push(Bucket::new(entry.tx.clone(), tx_buckets.len(), height));
 				}
 				Some(pos) => {
 					// We found a single parent tx, so aggregate in the bucket
@@ -413,6 +418,7 @@ where
 						entry.tx.clone(),
 						weighting,
 						self.verifier_cache.clone(),
+						height,
 					) {
 						if new_bucket.fee_rate >= bucket.fee_rate {
 							// Only aggregate if it would not reduce the fee_rate ratio.
@@ -421,7 +427,11 @@ where
 							// Otherwise put it in its own bucket at the end.
 							// Note: This bucket will have a lower fee_rate
 							// than the bucket it depends on.
-							tx_buckets.push(Bucket::new(entry.tx.clone(), tx_buckets.len()));
+							tx_buckets.push(Bucket::new(
+								entry.tx.clone(),
+								tx_buckets.len(),
+								height,
+							));
 						}
 					} else {
 						// Aggregation failed so discard this new tx.
@@ -514,9 +524,9 @@ impl Bucket {
 	/// also specifies an "age_idx" so we can sort buckets by age
 	/// as well as fee_rate. Txs are maintained in the pool in insert order
 	/// so buckets with low age_idx contain oldest txs.
-	fn new(tx: Transaction, age_idx: usize) -> Bucket {
+	fn new(tx: Transaction, age_idx: usize, height: u64) -> Bucket {
 		Bucket {
-			fee_rate: tx.fee_rate(),
+			fee_rate: tx.fee_rate(height),
 			raw_txs: vec![tx],
 			age_idx,
 		}
@@ -527,13 +537,14 @@ impl Bucket {
 		new_tx: Transaction,
 		weighting: Weighting,
 		verifier_cache: Arc<RwLock<dyn VerifierCache>>,
+		height: u64,
 	) -> Result<Bucket, PoolError> {
 		let mut raw_txs = self.raw_txs.clone();
 		raw_txs.push(new_tx);
 		let agg_tx = transaction::aggregate(&raw_txs)?;
-		agg_tx.validate(weighting, verifier_cache)?;
+		agg_tx.validate(weighting, verifier_cache, height)?;
 		Ok(Bucket {
-			fee_rate: agg_tx.fee_rate(),
+			fee_rate: agg_tx.fee_rate(height),
 			raw_txs: raw_txs,
 			age_idx: self.age_idx,
 		})

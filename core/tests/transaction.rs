@@ -27,7 +27,6 @@ use crate::core::libtx::{build, tx_fee};
 use crate::core::{consensus, ser};
 use grin_core as core;
 use keychain::{ExtKeychain, Keychain};
-use std::convert::TryInto;
 use std::sync::Arc;
 use util::RwLock;
 
@@ -118,8 +117,9 @@ fn test_verify_cut_through_plain() -> Result<(), Error> {
 	let verifier_cache = Arc::new(RwLock::new(LruVerifierCache::new()));
 
 	// Transaction should fail validation due to cut-through.
+	let height = 42; // arbitrary
 	assert_eq!(
-		tx.validate(Weighting::AsTransaction, verifier_cache.clone()),
+		tx.validate(Weighting::AsTransaction, verifier_cache.clone(), height),
 		Err(Error::CutThrough),
 	);
 
@@ -137,7 +137,7 @@ fn test_verify_cut_through_plain() -> Result<(), Error> {
 		.replace_outputs(outputs);
 
 	// Transaction validates successfully after applying cut-through.
-	tx.validate(Weighting::AsTransaction, verifier_cache.clone())?;
+	tx.validate(Weighting::AsTransaction, verifier_cache.clone(), height)?;
 
 	// Transaction validates via lightweight "read" validation as well.
 	tx.validate_read()?;
@@ -179,8 +179,9 @@ fn test_verify_cut_through_coinbase() -> Result<(), Error> {
 	let verifier_cache = Arc::new(RwLock::new(LruVerifierCache::new()));
 
 	// Transaction should fail validation due to cut-through.
+	let height = 42; // arbitrary
 	assert_eq!(
-		tx.validate(Weighting::AsTransaction, verifier_cache.clone()),
+		tx.validate(Weighting::AsTransaction, verifier_cache.clone(), height),
 		Err(Error::CutThrough),
 	);
 
@@ -198,7 +199,7 @@ fn test_verify_cut_through_coinbase() -> Result<(), Error> {
 		.replace_outputs(outputs);
 
 	// Transaction validates successfully after applying cut-through.
-	tx.validate(Weighting::AsTransaction, verifier_cache.clone())?;
+	tx.validate(Weighting::AsTransaction, verifier_cache.clone(), height)?;
 
 	// Transaction validates via lightweight "read" validation as well.
 	tx.validate_read()?;
@@ -231,8 +232,9 @@ fn test_fee_fields() -> Result<(), Error> {
 	)
 	.expect("valid tx");
 
-	assert_eq!(tx.fee(), 42);
-	assert_eq!(tx.shifted_fee(), 21);
+	let height = 2 * consensus::YEAR_HEIGHT;
+	assert_eq!(tx.fee(height), 42);
+	assert_eq!(tx.shifted_fee(height), 21);
 
 	tx.body.kernels.append(&mut vec![
 		TxKernel::with_features(KernelFeatures::Plain {
@@ -243,9 +245,9 @@ fn test_fee_fields() -> Result<(), Error> {
 		}),
 	]);
 
-	assert_eq!(tx.fee(), 147);
-	assert_eq!(tx.shifted_fee(), 36);
-	assert_eq!(tx.aggregate_fee_fields(), FeeFields::new(2, 147));
+	assert_eq!(tx.fee(height), 147);
+	assert_eq!(tx.shifted_fee(height), 36);
+	assert_eq!(tx.aggregate_fee_fields(height), FeeFields::new(2, 147));
 	assert_eq!(tx_fee(1, 1, 3), 15_500_000);
 
 	Ok(())

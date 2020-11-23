@@ -192,8 +192,9 @@ fn test_the_transaction_pool() {
 		// tx4 is the "new" part of this aggregated tx that we care about
 		let agg_tx = transaction::aggregate(&[tx1.clone(), tx2.clone(), tx4]).unwrap();
 
+		let height = 4;
 		agg_tx
-			.validate(Weighting::AsTransaction, verifier_cache.clone())
+			.validate(Weighting::AsTransaction, verifier_cache.clone(), height)
 			.unwrap();
 
 		pool.add_to_pool(test_source(), agg_tx, false, &header)

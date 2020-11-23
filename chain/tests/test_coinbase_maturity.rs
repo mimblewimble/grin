@@ -28,7 +28,6 @@ use grin_chain as chain;
 use grin_core as core;
 use grin_keychain as keychain;
 use grin_util as util;
-use std::convert::TryInto;
 use std::fs;
 use std::sync::Arc;
 
@@ -114,7 +113,7 @@ fn test_coinbase_maturity() {
 		.unwrap();
 
 		let txs = &[coinbase_txn.clone()];
-		let fees = txs.iter().map(|tx| tx.fee()).sum();
+		let fees = txs.iter().map(|tx| tx.fee(prev.height + 1)).sum();
 		let reward = libtx::reward::output(&keychain, &builder, &key_id3, fees, false).unwrap();
 		let mut block = core::core::Block::new(&prev, txs, Difficulty::min(), reward).unwrap();
 		let next_header_info = consensus::next_difficulty(1, chain.difficulty_iter().unwrap());
@@ -198,7 +197,7 @@ fn test_coinbase_maturity() {
 			.unwrap();
 
 			let txs = &[coinbase_txn.clone()];
-			let fees = txs.iter().map(|tx| tx.fee()).sum();
+			let fees = txs.iter().map(|tx| tx.fee(prev.height + 1)).sum();
 			let reward = libtx::reward::output(&keychain, &builder, &key_id3, fees, false).unwrap();
 			let mut block = core::core::Block::new(&prev, txs, Difficulty::min(), reward).unwrap();
 			let next_header_info = consensus::next_difficulty(1, chain.difficulty_iter().unwrap());
@@ -264,7 +263,7 @@ fn test_coinbase_maturity() {
 				.unwrap();
 
 			let txs = &[coinbase_txn];
-			let fees = txs.iter().map(|tx| tx.fee()).sum();
+			let fees = txs.iter().map(|tx| tx.fee(prev.height + 1)).sum();
 			let next_header_info = consensus::next_difficulty(1, chain.difficulty_iter().unwrap());
 			let reward = libtx::reward::output(&keychain, &builder, &key_id4, fees, false).unwrap();
 			let mut block = core::core::Block::new(&prev, txs, Difficulty::min(), reward).unwrap();

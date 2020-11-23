@@ -26,7 +26,6 @@ use crate::core::libtx::{build, reward, ProofBuilder};
 use crate::core::{consensus, global, pow};
 use crate::keychain::{ExtKeychain, ExtKeychainPath, Identifier, Keychain};
 use chrono::Duration;
-use std::convert::TryInto;
 
 fn build_block<K>(chain: &Chain, keychain: &K, key_id: &Identifier, txs: Vec<Transaction>) -> Block
 where
@@ -34,7 +33,7 @@ where
 {
 	let prev = chain.head_header().unwrap();
 	let next_header_info = consensus::next_difficulty(1, chain.difficulty_iter().unwrap());
-	let fee = txs.iter().map(|x| x.fee()).sum();
+	let fee = txs.iter().map(|x| x.fee(prev.height + 1)).sum();
 	let reward =
 		reward::output(keychain, &ProofBuilder::new(keychain), key_id, fee, false).unwrap();
 

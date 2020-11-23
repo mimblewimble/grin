@@ -262,7 +262,6 @@ mod test {
 	use crate::global;
 	use crate::libtx::ProofBuilder;
 	use keychain::{ExtKeychain, ExtKeychainPath};
-	use std::convert::TryInto;
 
 	fn verifier_cache() -> Arc<RwLock<dyn VerifierCache>> {
 		Arc::new(RwLock::new(LruVerifierCache::new()))
@@ -289,7 +288,9 @@ mod test {
 		)
 		.unwrap();
 
-		tx.validate(Weighting::AsTransaction, vc.clone()).unwrap();
+		let height = 42; // arbitrary
+		tx.validate(Weighting::AsTransaction, vc.clone(), height)
+			.unwrap();
 	}
 
 	#[test]
@@ -313,7 +314,9 @@ mod test {
 		)
 		.unwrap();
 
-		tx.validate(Weighting::AsTransaction, vc.clone()).unwrap();
+		let height = 42; // arbitrary
+		tx.validate(Weighting::AsTransaction, vc.clone(), height)
+			.unwrap();
 	}
 
 	#[test]
@@ -336,6 +339,8 @@ mod test {
 		)
 		.unwrap();
 
-		tx.validate(Weighting::AsTransaction, vc.clone()).unwrap();
+		let height = 42; // arbitrary
+		tx.validate(Weighting::AsTransaction, vc.clone(), height)
+			.unwrap();
 	}
 }

@@ -2322,7 +2322,6 @@ mod test {
 	use crate::core::hash::Hash;
 	use crate::core::id::{ShortId, ShortIdentifiable};
 	use keychain::{ExtKeychain, Keychain, SwitchCommitmentType};
-	use std::convert::TryInto;
 
 	#[test]
 	fn test_plain_kernel_ser_deser() {

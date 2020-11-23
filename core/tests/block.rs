@@ -30,7 +30,6 @@ use crate::core::{global, pow, ser};
 use chrono::Duration;
 use grin_core as core;
 use keychain::{BlindingFactor, ExtKeychain, Keychain};
-use std::convert::TryInto;
 use std::sync::Arc;
 use util::{secp, RwLock, ToHex};
 

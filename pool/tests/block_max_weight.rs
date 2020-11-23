@@ -83,7 +83,7 @@ fn test_block_building_max_weight() {
 
 	// Fees and weights of our original txs in insert order.
 	assert_eq!(
-		txs.iter().map(|x| x.fee()).collect::<Vec<_>>(),
+		txs.iter().map(|x| x.fee(header.height)).collect::<Vec<_>>(),
 		[2_500_000, 90_000, 80_000, 30_000, 70_000, 60_000]
 	);
 	assert_eq!(
@@ -91,7 +91,9 @@ fn test_block_building_max_weight() {
 		[88, 46, 46, 25, 46, 46]
 	);
 	assert_eq!(
-		txs.iter().map(|x| x.fee_rate()).collect::<Vec<_>>(),
+		txs.iter()
+			.map(|x| x.fee_rate(header.height))
+			.collect::<Vec<_>>(),
 		[28409, 1956, 1739, 1200, 1521, 1304]
 	);
 
@@ -109,7 +111,7 @@ fn test_block_building_max_weight() {
 
 	// Fees and weights of the "mineable" txs.
 	assert_eq!(
-		txs.iter().map(|x| x.fee()).collect::<Vec<_>>(),
+		txs.iter().map(|x| x.fee(header.height)).collect::<Vec<_>>(),
 		[2_500_000, 90_000, 80_000, 70_000]
 	);
 	assert_eq!(
@@ -117,7 +119,9 @@ fn test_block_building_max_weight() {
 		[88, 46, 46, 46]
 	);
 	assert_eq!(
-		txs.iter().map(|x| x.fee_rate()).collect::<Vec<_>>(),
+		txs.iter()
+			.map(|x| x.fee_rate(header.height))
+			.collect::<Vec<_>>(),
 		[28409, 1956, 1739, 1521]
 	);
 

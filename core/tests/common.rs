@@ -26,7 +26,6 @@ use grin_core::libtx::{
 use grin_core::pow::Difficulty;
 use grin_core::ser::{self, PMMRable, Readable, Reader, Writeable, Writer};
 use keychain::{Identifier, Keychain};
-use std::convert::TryInto;
 
 // utility producing a transaction with 2 inputs and a single outputs
 #[allow(dead_code)]
@@ -127,7 +126,10 @@ where
 	K: Keychain,
 	B: ProofBuild,
 {
-	let fees = txs.iter().map(|tx| tx.fee()).sum();
+	let fees = txs
+		.iter()
+		.map(|tx| tx.fee(previous_header.height + 1))
+		.sum();
 	let reward_output = reward::output(keychain, builder, &key_id, fees, false).unwrap();
 	Block::new(&previous_header, txs, Difficulty::min(), reward_output).unwrap()
 }

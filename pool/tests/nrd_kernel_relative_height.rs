@@ -28,7 +28,6 @@ use grin_core as core;
 use grin_keychain as keychain;
 use grin_pool as pool;
 use grin_util as util;
-use std::convert::TryInto;
 use std::sync::Arc;
 
 #[test]
