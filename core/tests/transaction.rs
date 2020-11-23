@@ -232,9 +232,11 @@ fn test_fee_fields() -> Result<(), Error> {
 	)
 	.expect("valid tx");
 
-	let height = 2 * consensus::YEAR_HEIGHT;
-	assert_eq!(tx.fee(height), 42);
-	assert_eq!(tx.shifted_fee(height), 21);
+	let hf4_height = 2 * consensus::YEAR_HEIGHT;
+	assert_eq!(tx.fee(hf4_height), 42);
+	assert_eq!(tx.shifted_fee(hf4_height), 21);
+	assert_eq!(tx.fee(hf4_height - 1), 42 + (1u64 << 40));
+	assert_eq!(tx.shifted_fee(hf4_height - 1), 42 + (1u64 << 40));
 
 	tx.body.kernels.append(&mut vec![
 		TxKernel::with_features(KernelFeatures::Plain {
@@ -245,9 +247,9 @@ fn test_fee_fields() -> Result<(), Error> {
 		}),
 	]);
 
-	assert_eq!(tx.fee(height), 147);
-	assert_eq!(tx.shifted_fee(height), 36);
-	assert_eq!(tx.aggregate_fee_fields(height), FeeFields::new(2, 147));
+	assert_eq!(tx.fee(hf4_height), 147);
+	assert_eq!(tx.shifted_fee(hf4_height), 36);
+	assert_eq!(tx.aggregate_fee_fields(hf4_height), FeeFields::new(2, 147));
 	assert_eq!(tx_fee(1, 1, 3), 15_500_000);
 
 	Ok(())
