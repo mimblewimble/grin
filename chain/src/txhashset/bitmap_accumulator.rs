@@ -24,6 +24,7 @@ use crate::core::core::pmmr::segment::{Segment, SegmentIdentifier, SegmentProof}
 use crate::core::core::pmmr::{self, ReadablePMMR, ReadonlyPMMR, VecBackend, PMMR};
 use crate::core::ser::{self, PMMRable, Readable, Reader, Writeable, Writer};
 use crate::error::{Error, ErrorKind};
+use enum_primitive::FromPrimitive;
 
 /// The "bitmap accumulator" allows us to commit to a specific bitmap by splitting it into
 /// fragments and inserting these fragments into an MMR to produce an overall root hash.
@@ -397,21 +398,21 @@ impl Writeable for BitmapBlock {
 		let threshold = Self::NBITS / 16;
 		if count_pos < threshold {
 			// Write positive indices
-			writer.write_u8(1)?;
+			Writeable::write(&BitmapBlockSerialization::Positive, writer)?;
 			writer.write_u16(count_pos as u16)?;
 			for (i, _) in self.inner.iter().enumerate().filter(|&(_, v)| v) {
 				writer.write_u16(i as u16)?;
 			}
 		} else if count_neg < threshold {
 			// Write negative indices
-			writer.write_u8(2)?;
+			Writeable::write(&BitmapBlockSerialization::Negative, writer)?;
 			writer.write_u16(count_neg as u16)?;
 			for (i, _) in self.inner.iter().enumerate().filter(|&(_, v)| !v) {
 				writer.write_u16(i as u16)?;
 			}
 		} else {
 			// Write raw bytes
-			writer.write_u8(0)?;
+			Writeable::write(&BitmapBlockSerialization::Raw, writer)?;
 			let bytes = self.inner.to_bytes();
 			assert_eq!(bytes.len(), Self::NBITS as usize / 8);
 			writer.write_fixed_bytes(&bytes)?;
@@ -429,14 +430,14 @@ impl Readable for BitmapBlock {
 		}
 		let n_bits = n_chunks as usize * BitmapChunk::LEN_BITS;
 
-		let mode = reader.read_u8()?;
+		let mode = Readable::read(reader)?;
 		let inner = match mode {
-			0 => {
+			BitmapBlockSerialization::Raw => {
 				// Raw bytes
 				let bytes = reader.read_fixed_bytes(n_bits / 8)?;
 				BitVec::from_bytes(&bytes)
 			}
-			1 => {
+			BitmapBlockSerialization::Positive => {
 				// Positive indices
 				let mut inner = BitVec::from_elem(n_bits, false);
 				let n = reader.read_u16()?;
@@ -445,7 +446,7 @@ impl Readable for BitmapBlock {
 				}
 				inner
 			}
-			2 => {
+			BitmapBlockSerialization::Negative => {
 				// Negative indices
 				let mut inner = BitVec::from_elem(n_bits, true);
 				let n = reader.read_u16()?;
@@ -454,10 +455,31 @@ impl Readable for BitmapBlock {
 				}
 				inner
 			}
-			_ => return Err(ser::Error::CorruptedData),
 		};
 
 		Ok(BitmapBlock { inner })
+	}
+}
+
+enum_from_primitive! {
+	#[derive(Debug, Clone, Copy, PartialEq)]
+	#[repr(u8)]
+	enum BitmapBlockSerialization {
+		Raw = 0,
+		Positive = 1,
+		Negative = 2,
+	}
+}
+
+impl Writeable for BitmapBlockSerialization {
+	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
+		writer.write_u8(*self as u8)
+	}
+}
+
+impl Readable for BitmapBlockSerialization {
+	fn read<R: Reader>(reader: &mut R) -> Result<Self, ser::Error> {
+		Self::from_u8(reader.read_u8()?).ok_or(ser::Error::CorruptedData)
 	}
 }
 
