@@ -28,8 +28,7 @@ extern crate lazy_static;
 #[macro_use]
 extern crate serde_derive;
 // Re-export so only has to be included once
-pub use parking_lot::Mutex;
-pub use parking_lot::{RwLock, RwLockReadGuard, RwLockWriteGuard};
+pub use parking_lot::{Mutex, RwLock, RwLockReadGuard, RwLockWriteGuard};
 
 // Re-export so only has to be included once
 pub use secp256k1zkp as secp;
