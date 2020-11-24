@@ -569,9 +569,7 @@ fn spend_rewind_spend() {
 		let key_id30 = ExtKeychainPath::new(1, 30, 0, 0, 0).to_identifier();
 
 		let tx1 = build::transaction(
-			KernelFeatures::Plain {
-				fee_fields: 20000.into(),
-			},
+			KernelFeatures::Plain { fee: 20000.into() },
 			&[
 				build::coinbase_input(consensus::REWARD, key_id_coinbase.clone()),
 				build::output(consensus::REWARD - 20000, key_id30.clone()),
@@ -644,9 +642,7 @@ fn spend_in_fork_and_compact() {
 		let key_id31 = ExtKeychainPath::new(1, 31, 0, 0, 0).to_identifier();
 
 		let tx1 = build::transaction(
-			KernelFeatures::Plain {
-				fee_fields: 20000.into(),
-			},
+			KernelFeatures::Plain { fee: 20000.into() },
 			&[
 				build::coinbase_input(consensus::REWARD, key_id2.clone()),
 				build::output(consensus::REWARD - 20000, key_id30.clone()),
@@ -664,9 +660,7 @@ fn spend_in_fork_and_compact() {
 		chain.validate(false).unwrap();
 
 		let tx2 = build::transaction(
-			KernelFeatures::Plain {
-				fee_fields: 20000.into(),
-			},
+			KernelFeatures::Plain { fee: 20000.into() },
 			&[
 				build::input(consensus::REWARD - 20000, key_id30.clone()),
 				build::output(consensus::REWARD - 40000, key_id31.clone()),

@@ -62,9 +62,7 @@ fn too_large_block() {
 
 	parts.append(&mut vec![input(500000, pks.pop().unwrap())]);
 	let tx = build::transaction(
-		KernelFeatures::Plain {
-			fee_fields: 2.into(),
-		},
+		KernelFeatures::Plain { fee: 2.into() },
 		&parts,
 		&keychain,
 		&builder,
@@ -106,7 +104,7 @@ fn block_with_nrd_kernel_pre_post_hf3() {
 
 	let tx = build::transaction(
 		KernelFeatures::NoRecentDuplicate {
-			fee_fields: 2.into(),
+			fee: 2.into(),
 			relative_height: NRDRelativeHeight::new(1440).unwrap(),
 		},
 		&[input(7, key_id1), output(5, key_id2)],
@@ -191,7 +189,7 @@ fn block_with_nrd_kernel_nrd_not_enabled() {
 
 	let tx = build::transaction(
 		KernelFeatures::NoRecentDuplicate {
-			fee_fields: 2.into(),
+			fee: 2.into(),
 			relative_height: NRDRelativeHeight::new(1440).unwrap(),
 		},
 		&[input(7, key_id1), output(5, key_id2)],
@@ -279,9 +277,7 @@ fn block_with_cut_through() {
 
 	let btx1 = tx2i1o();
 	let btx2 = build::transaction(
-		KernelFeatures::Plain {
-			fee_fields: 2.into(),
-		},
+		KernelFeatures::Plain { fee: 2.into() },
 		&[input(7, key_id1), output(5, key_id2.clone())],
 		&keychain,
 		&builder,
@@ -380,7 +376,7 @@ fn remove_coinbase_kernel_flag() {
 
 	let mut kernel = b.kernels()[0].clone();
 	kernel.features = KernelFeatures::Plain {
-		fee_fields: FeeFields::zero(),
+		fee: FeeFields::zero(),
 	};
 	b.body = b.body.replace_kernel(kernel);
 
@@ -759,9 +755,7 @@ fn same_amount_outputs_copy_range_proof() {
 	let key_id3 = keychain::ExtKeychain::derive_key_id(1, 3, 0, 0, 0);
 
 	let tx = build::transaction(
-		KernelFeatures::Plain {
-			fee_fields: 1.into(),
-		},
+		KernelFeatures::Plain { fee: 1.into() },
 		&[input(7, key_id1), output(3, key_id2), output(3, key_id3)],
 		&keychain,
 		&builder,
@@ -802,9 +796,7 @@ fn wrong_amount_range_proof() {
 	let key_id3 = keychain::ExtKeychain::derive_key_id(1, 3, 0, 0, 0);
 
 	let tx1 = build::transaction(
-		KernelFeatures::Plain {
-			fee_fields: 1.into(),
-		},
+		KernelFeatures::Plain { fee: 1.into() },
 		&[
 			input(7, key_id1.clone()),
 			output(3, key_id2.clone()),
@@ -815,9 +807,7 @@ fn wrong_amount_range_proof() {
 	)
 	.unwrap();
 	let tx2 = build::transaction(
-		KernelFeatures::Plain {
-			fee_fields: 1.into(),
-		},
+		KernelFeatures::Plain { fee: 1.into() },
 		&[input(7, key_id1), output(2, key_id2), output(4, key_id3)],
 		&keychain,
 		&builder,
@@ -898,7 +888,7 @@ fn test_verify_cut_through_plain() -> Result<(), Error> {
 
 	let tx = build::transaction(
 		KernelFeatures::Plain {
-			fee_fields: FeeFields::zero(),
+			fee: FeeFields::zero(),
 		},
 		&[
 			build::input(10, key_id1.clone()),
@@ -964,7 +954,7 @@ fn test_verify_cut_through_coinbase() -> Result<(), Error> {
 
 	let tx = build::transaction(
 		KernelFeatures::Plain {
-			fee_fields: FeeFields::zero(),
+			fee: FeeFields::zero(),
 		},
 		&[
 			build::coinbase_input(consensus::REWARD, key_id1.clone()),

@@ -511,18 +511,15 @@ impl TxKernelPrintable {
 	pub fn from_txkernel(k: &core::TxKernel) -> TxKernelPrintable {
 		let features = k.features.as_string();
 		let (fee_fields, lock_height) = match k.features {
-			KernelFeatures::Plain { fee_fields } => (fee_fields, 0),
+			KernelFeatures::Plain { fee } => (fee, 0),
 			KernelFeatures::Coinbase => (FeeFields::zero(), 0),
-			KernelFeatures::HeightLocked {
-				fee_fields,
-				lock_height,
-			} => (fee_fields, lock_height),
+			KernelFeatures::HeightLocked { fee, lock_height } => (fee, lock_height),
 			KernelFeatures::NoRecentDuplicate {
-				fee_fields,
+				fee,
 				relative_height,
-			} => (fee_fields, relative_height.into()),
+			} => (fee, relative_height.into()),
 		};
-		let height = 2 * YEAR_HEIGHT;
+		let height = 2 * YEAR_HEIGHT; // print as if post-HF4
 		let fee = fee_fields.fee(height);
 		let fee_shift: u8 = fee_fields.fee_shift(height);
 		TxKernelPrintable {

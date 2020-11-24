@@ -65,7 +65,7 @@ fn test_nrd_kernels_disabled() {
 		vec![1_000, 2_000],
 		vec![2_400],
 		KernelFeatures::NoRecentDuplicate {
-			fee_fields: 600.into(),
+			fee: 600.into(),
 			relative_height: NRDRelativeHeight::new(1440).unwrap(),
 		},
 	);

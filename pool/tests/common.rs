@@ -208,7 +208,7 @@ where
 
 	build::transaction(
 		KernelFeatures::Plain {
-			fee_fields: (fees as u64).try_into().unwrap(),
+			fee: (fees as u64).try_into().unwrap(),
 		},
 		&tx_elements,
 		keychain,
@@ -235,7 +235,7 @@ where
 		input_values,
 		output_values,
 		KernelFeatures::Plain {
-			fee_fields: (fees as u64).try_into().unwrap(),
+			fee: (fees as u64).try_into().unwrap(),
 		},
 	)
 }

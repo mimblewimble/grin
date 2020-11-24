@@ -105,7 +105,7 @@ fn process_block_cut_through() -> Result<(), chain::Error> {
 	// The input is coinbase and the output is plain.
 	let tx = build::transaction(
 		KernelFeatures::Plain {
-			fee_fields: FeeFields::zero(),
+			fee: FeeFields::zero(),
 		},
 		&[
 			build::coinbase_input(consensus::REWARD, key_id1.clone()),

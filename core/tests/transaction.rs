@@ -47,10 +47,7 @@ fn test_transaction_json_ser_deser() {
 	assert!(value["body"]["outputs"][0]["proof"].is_string());
 
 	// Note: Tx kernel "features" serialize in a slightly unexpected way.
-	assert_eq!(
-		value["body"]["kernels"][0]["features"]["Plain"]["fee_fields"],
-		2
-	);
+	assert_eq!(value["body"]["kernels"][0]["features"]["Plain"]["fee"], 2);
 	assert!(value["body"]["kernels"][0]["excess"].is_string());
 	assert!(value["body"]["kernels"][0]["excess_sig"].is_string());
 
@@ -100,7 +97,7 @@ fn test_verify_cut_through_plain() -> Result<(), Error> {
 
 	let mut tx = build::transaction(
 		KernelFeatures::Plain {
-			fee_fields: FeeFields::zero(),
+			fee: FeeFields::zero(),
 		},
 		&[
 			build::input(10, key_id1.clone()),
@@ -162,7 +159,7 @@ fn test_verify_cut_through_coinbase() -> Result<(), Error> {
 
 	let mut tx = build::transaction(
 		KernelFeatures::Plain {
-			fee_fields: FeeFields::zero(),
+			fee: FeeFields::zero(),
 		},
 		&[
 			build::coinbase_input(consensus::REWARD, key_id1.clone()),
@@ -221,7 +218,7 @@ fn test_fee_fields() -> Result<(), Error> {
 
 	let mut tx = build::transaction(
 		KernelFeatures::Plain {
-			fee_fields: FeeFields::new(1, 42).unwrap(),
+			fee: FeeFields::new(1, 42).unwrap(),
 		},
 		&[
 			build::coinbase_input(consensus::REWARD, key_id1.clone()),
@@ -240,11 +237,9 @@ fn test_fee_fields() -> Result<(), Error> {
 
 	tx.body.kernels.append(&mut vec![
 		TxKernel::with_features(KernelFeatures::Plain {
-			fee_fields: FeeFields::new(2, 84).unwrap(),
+			fee: FeeFields::new(2, 84).unwrap(),
 		}),
-		TxKernel::with_features(KernelFeatures::Plain {
-			fee_fields: 21.into(),
-		}),
+		TxKernel::with_features(KernelFeatures::Plain { fee: 21.into() }),
 	]);
 
 	assert_eq!(tx.fee(hf4_height), 147);

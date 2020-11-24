@@ -132,7 +132,7 @@ fn test_zero_commit_fails() {
 	// blinding should fail as signing with a zero r*G shouldn't work
 	let res = build::transaction(
 		KernelFeatures::Plain {
-			fee_fields: FeeFields::zero(),
+			fee: FeeFields::zero(),
 		},
 		&[input(10, key_id1.clone()), output(10, key_id1)],
 		&keychain,
@@ -156,9 +156,7 @@ fn build_tx_kernel() {
 
 	// first build a valid tx with corresponding blinding factor
 	let tx = build::transaction(
-		KernelFeatures::Plain {
-			fee_fields: 2.into(),
-		},
+		KernelFeatures::Plain { fee: 2.into() },
 		&[input(10, key_id1), output(5, key_id2), output(3, key_id3)],
 		&keychain,
 		&builder,
@@ -175,12 +173,7 @@ fn build_tx_kernel() {
 	let kern = &tx.kernels()[0];
 	kern.verify().unwrap();
 
-	assert_eq!(
-		kern.features,
-		KernelFeatures::Plain {
-			fee_fields: 2.into()
-		}
-	);
+	assert_eq!(kern.features, KernelFeatures::Plain { fee: 2.into() });
 	assert_eq!(2, tx.fee(height));
 }
 
@@ -203,9 +196,7 @@ fn build_two_half_kernels() {
 	let key_id3 = ExtKeychain::derive_key_id(1, 3, 0, 0, 0);
 
 	// build kernel with associated private excess
-	let mut kernel = TxKernel::with_features(KernelFeatures::Plain {
-		fee_fields: 2.into(),
-	});
+	let mut kernel = TxKernel::with_features(KernelFeatures::Plain { fee: 2.into() });
 
 	// Construct the message to be signed.
 	let msg = kernel.msg_to_sign().unwrap();
@@ -561,9 +552,7 @@ fn hash_output() {
 	let key_id3 = ExtKeychain::derive_key_id(1, 3, 0, 0, 0);
 
 	let tx = build::transaction(
-		KernelFeatures::Plain {
-			fee_fields: 1.into(),
-		},
+		KernelFeatures::Plain { fee: 1.into() },
 		&[input(75, key_id1), output(42, key_id2), output(32, key_id3)],
 		&keychain,
 		&builder,
@@ -628,7 +617,7 @@ fn tx_build_exchange() {
 		// Alice builds her transaction, with change, which also produces the sum
 		// of blinding factors before they're obscured.
 		let tx = Transaction::empty().with_kernel(TxKernel::with_features(KernelFeatures::Plain {
-			fee_fields: 2.into(),
+			fee: 2.into(),
 		}));
 		let (tx, sum) =
 			build::partial_transaction(tx, &[in1, in2, output(1, key_id3)], &keychain, &builder)
@@ -641,9 +630,7 @@ fn tx_build_exchange() {
 	// blinding factors. He adds his output, finalizes the transaction so it's
 	// ready for broadcast.
 	let tx_final = build::transaction(
-		KernelFeatures::Plain {
-			fee_fields: 2.into(),
-		},
+		KernelFeatures::Plain { fee: 2.into() },
 		&[
 			initial_tx(tx_alice),
 			with_excess(blind_sum),
@@ -730,7 +717,7 @@ fn test_block_with_timelocked_tx() {
 	// block height and that the resulting block is valid
 	let tx1 = build::transaction(
 		KernelFeatures::HeightLocked {
-			fee_fields: 2.into(),
+			fee: 2.into(),
 			lock_height: 1,
 		},
 		&[input(5, key_id1.clone()), output(3, key_id2.clone())],
@@ -754,7 +741,7 @@ fn test_block_with_timelocked_tx() {
 	// block height
 	let tx1 = build::transaction(
 		KernelFeatures::HeightLocked {
-			fee_fields: 2.into(),
+			fee: 2.into(),
 			lock_height: 2,
 		},
 		&[input(5, key_id1), output(3, key_id2)],
