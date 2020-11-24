@@ -179,9 +179,12 @@ impl BitmapAccumulator {
 
 	/// The root hash of the bitmap accumulator MMR.
 	pub fn root(&self) -> Hash {
+		self.readonly_pmmr().root().expect("no root, invalid tree")
+	}
+
+	/// Readonly access to our internal data.
+	pub fn readonly_pmmr(&self) -> ReadonlyPMMR<BitmapChunk, VecBackend<BitmapChunk>> {
 		ReadonlyPMMR::at(&self.backend, self.backend.size())
-			.root()
-			.expect("no root, invalid tree")
 	}
 
 	/// Readonly access to our internal data.
