@@ -37,6 +37,11 @@ pub fn new_cuckaroo_ctx(edge_bits: u8, proof_size: usize) -> Result<Box<dyn PoWC
 	Ok(Box::new(CuckarooContext { params }))
 }
 
+/// Error returned for cuckaroo request beyond HardFork4
+pub fn no_cuckaroo_ctx() -> Result<Box<dyn PoWContext>, Error> {
+	Err(ErrorKind::Verification("no cuckaroo past HardFork4".to_owned()).into())
+}
+
 /// Cuckaroo cycle context. Only includes the verifier for now.
 pub struct CuckarooContext {
 	params: CuckooParams,

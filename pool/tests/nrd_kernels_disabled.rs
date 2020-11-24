@@ -80,7 +80,7 @@ fn test_nrd_kernels_disabled() {
 	// Now mine several more blocks out to HF3
 	add_some_blocks(&chain, 5, &keychain);
 	let header = chain.head_header().unwrap();
-	assert_eq!(header.height, consensus::TESTING_THIRD_HARD_FORK);
+	assert_eq!(header.height, 3 * consensus::TESTING_HARD_FORK_INTERVAL);
 	assert_eq!(header.version, HeaderVersion(4));
 
 	// NRD kernel support not enabled via feature flag, so not valid.

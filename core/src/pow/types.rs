@@ -214,6 +214,8 @@ pub struct ProofOfWork {
 	/// Total accumulated difficulty since genesis block
 	pub total_difficulty: Difficulty,
 	/// Variable difficulty scaling factor fo secondary proof of work
+	/// After HardFork4, which obsoletes secondary PoW, this effectively
+	/// becomes 4 more bytes of nonce. might be repurposed in future.
 	pub secondary_scaling: u32,
 	/// Nonce increment used to mine this block.
 	pub nonce: u64,

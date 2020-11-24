@@ -14,7 +14,7 @@
 
 mod common;
 use crate::common::{new_block, tx1i2o, tx2i1o, txspend1i1o};
-use crate::core::consensus::{self, BLOCK_OUTPUT_WEIGHT, TESTING_THIRD_HARD_FORK};
+use crate::core::consensus::{self, BLOCK_OUTPUT_WEIGHT, TESTING_HARD_FORK_INTERVAL};
 use crate::core::core::block::{Block, BlockHeader, Error, HeaderVersion, UntrustedBlockHeader};
 use crate::core::core::hash::Hashed;
 use crate::core::core::id::ShortIdentifiable;
@@ -95,7 +95,6 @@ fn block_with_nrd_kernel_pre_post_hf3() {
 	// Enable the global NRD feature flag. NRD kernels valid at HF3 at height 9.
 	global::set_local_chain_type(global::ChainTypes::AutomatedTesting);
 	global::set_local_nrd_enabled(true);
-
 	let keychain = ExtKeychain::from_random_seed(false).unwrap();
 	let builder = ProofBuilder::new(&keychain);
 	let key_id1 = ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
@@ -113,7 +112,7 @@ fn block_with_nrd_kernel_pre_post_hf3() {
 	.unwrap();
 	let txs = &[tx];
 
-	let prev_height = TESTING_THIRD_HARD_FORK - 2;
+	let prev_height = 3 * TESTING_HARD_FORK_INTERVAL - 2;
 	let prev = BlockHeader {
 		height: prev_height,
 		version: consensus::header_version(prev_height),
@@ -134,7 +133,7 @@ fn block_with_nrd_kernel_pre_post_hf3() {
 		Err(Error::NRDKernelPreHF3)
 	);
 
-	let prev_height = TESTING_THIRD_HARD_FORK - 1;
+	let prev_height = 3 * TESTING_HARD_FORK_INTERVAL - 1;
 	let prev = BlockHeader {
 		height: prev_height,
 		version: consensus::header_version(prev_height),
@@ -149,13 +148,13 @@ fn block_with_nrd_kernel_pre_post_hf3() {
 	);
 
 	// Block is valid at header version 4 (at HF height) if it contains an NRD kernel.
-	assert_eq!(b.header.height, TESTING_THIRD_HARD_FORK);
+	assert_eq!(b.header.height, 3 * TESTING_HARD_FORK_INTERVAL);
 	assert_eq!(b.header.version, HeaderVersion(4));
 	assert!(b
 		.validate(&BlindingFactor::zero(), verifier_cache())
 		.is_ok());
 
-	let prev_height = TESTING_THIRD_HARD_FORK;
+	let prev_height = 3 * TESTING_HARD_FORK_INTERVAL;
 	let prev = BlockHeader {
 		height: prev_height,
 		version: consensus::header_version(prev_height),
@@ -199,7 +198,7 @@ fn block_with_nrd_kernel_nrd_not_enabled() {
 
 	let txs = &[tx];
 
-	let prev_height = TESTING_THIRD_HARD_FORK - 2;
+	let prev_height = 3 * TESTING_HARD_FORK_INTERVAL - 2;
 	let prev = BlockHeader {
 		height: prev_height,
 		version: consensus::header_version(prev_height),
@@ -220,7 +219,7 @@ fn block_with_nrd_kernel_nrd_not_enabled() {
 		Err(Error::NRDKernelNotEnabled)
 	);
 
-	let prev_height = TESTING_THIRD_HARD_FORK - 1;
+	let prev_height = 3 * TESTING_HARD_FORK_INTERVAL - 1;
 	let prev = BlockHeader {
 		height: prev_height,
 		version: consensus::header_version(prev_height),
@@ -235,14 +234,14 @@ fn block_with_nrd_kernel_nrd_not_enabled() {
 	);
 
 	// Block is invalid as NRD not enabled.
-	assert_eq!(b.header.height, TESTING_THIRD_HARD_FORK);
+	assert_eq!(b.header.height, 3 * TESTING_HARD_FORK_INTERVAL);
 	assert_eq!(b.header.version, HeaderVersion(4));
 	assert_eq!(
 		b.validate(&BlindingFactor::zero(), verifier_cache()),
 		Err(Error::NRDKernelNotEnabled)
 	);
 
-	let prev_height = TESTING_THIRD_HARD_FORK;
+	let prev_height = 3 * TESTING_HARD_FORK_INTERVAL;
 	let prev = BlockHeader {
 		height: prev_height,
 		version: consensus::header_version(prev_height),
