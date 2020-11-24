@@ -737,11 +737,13 @@ where
 	V: VerifierCache + 'static,
 {
 	fn block_accepted(&self, b: &core::Block, status: BlockStatus, opts: Options) {
-		// not broadcasting blocks received through sync
+		// Trigger all registered "on_block_accepted" hooks (logging and webhooks).
+		for hook in &self.hooks {
+			hook.on_block_accepted(b, status);
+		}
+
+		// Suppress broadcast of new blocks received during sync.
 		if !opts.contains(chain::Options::SYNC) {
-			for hook in &self.hooks {
-				hook.on_block_accepted(b, status);
-			}
 			// If we mined the block then we want to broadcast the compact block.
 			// If we received the block from another node then broadcast "header first"
 			// to minimize network traffic.

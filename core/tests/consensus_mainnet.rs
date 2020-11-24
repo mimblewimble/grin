@@ -435,73 +435,22 @@ fn test_secondary_pow_scale() {
 fn hard_forks() {
 	global::set_local_chain_type(global::ChainTypes::Mainnet);
 
-	assert!(valid_header_version(0, HeaderVersion(1)));
-	assert!(valid_header_version(10, HeaderVersion(1)));
-	assert!(!valid_header_version(10, HeaderVersion(2)));
-	assert!(valid_header_version(
-		HARD_FORK_INTERVAL - 1,
-		HeaderVersion(1)
-	));
-	assert!(!valid_header_version(HARD_FORK_INTERVAL, HeaderVersion(1)));
-	assert!(valid_header_version(HARD_FORK_INTERVAL, HeaderVersion(2)));
-	assert!(valid_header_version(
-		HARD_FORK_INTERVAL + 1,
-		HeaderVersion(2)
-	));
+	assert_eq!(header_version(0), HeaderVersion(1));
+	assert_eq!(header_version(10), HeaderVersion(1));
 
-	assert!(valid_header_version(
-		HARD_FORK_INTERVAL * 2 - 1,
-		HeaderVersion(2)
-	));
-	assert!(!valid_header_version(
-		HARD_FORK_INTERVAL * 2,
-		HeaderVersion(2)
-	));
-	assert!(valid_header_version(
-		HARD_FORK_INTERVAL * 2,
-		HeaderVersion(3)
-	));
-	assert!(valid_header_version(
-		HARD_FORK_INTERVAL * 2 + 1,
-		HeaderVersion(3)
-	));
+	assert_eq!(header_version(HARD_FORK_INTERVAL - 1), HeaderVersion(1));
+	assert_eq!(header_version(HARD_FORK_INTERVAL), HeaderVersion(2));
+	assert_eq!(header_version(HARD_FORK_INTERVAL + 1), HeaderVersion(2));
 
-	assert!(valid_header_version(
-		HARD_FORK_INTERVAL * 3 - 1,
-		HeaderVersion(3)
-	));
-	assert!(!valid_header_version(
-		HARD_FORK_INTERVAL * 3,
-		HeaderVersion(3)
-	));
-	assert!(valid_header_version(
-		HARD_FORK_INTERVAL * 3,
-		HeaderVersion(4)
-	));
-	assert!(valid_header_version(
-		HARD_FORK_INTERVAL * 3 + 1,
-		HeaderVersion(4)
-	));
+	assert_eq!(header_version(HARD_FORK_INTERVAL * 2 - 1), HeaderVersion(2));
+	assert_eq!(header_version(HARD_FORK_INTERVAL * 2), HeaderVersion(3));
+	assert_eq!(header_version(HARD_FORK_INTERVAL * 2 + 1), HeaderVersion(3));
 
-	// v5 not active yet
-	assert!(!valid_header_version(
-		HARD_FORK_INTERVAL * 4,
-		HeaderVersion(5)
-	));
-	assert!(!valid_header_version(
-		HARD_FORK_INTERVAL * 4,
-		HeaderVersion(4)
-	));
-	assert!(!valid_header_version(
-		HARD_FORK_INTERVAL * 4,
-		HeaderVersion(3)
-	));
-	assert!(!valid_header_version(
-		HARD_FORK_INTERVAL * 4,
-		HeaderVersion(2)
-	));
-	assert!(!valid_header_version(
-		HARD_FORK_INTERVAL * 4,
-		HeaderVersion(1)
-	));
+	assert_eq!(header_version(HARD_FORK_INTERVAL * 3 - 1), HeaderVersion(3));
+	assert_eq!(header_version(HARD_FORK_INTERVAL * 3), HeaderVersion(4));
+	assert_eq!(header_version(HARD_FORK_INTERVAL * 3 + 1), HeaderVersion(4));
+
+	assert_eq!(header_version(HARD_FORK_INTERVAL * 4 - 1), HeaderVersion(4));
+	assert_eq!(header_version(HARD_FORK_INTERVAL * 4), HeaderVersion(5));
+	assert_eq!(header_version(HARD_FORK_INTERVAL * 4 + 1), HeaderVersion(5));
 }

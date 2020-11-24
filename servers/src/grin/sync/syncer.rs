@@ -79,7 +79,15 @@ impl SyncRunner {
 			if self.stop_state.is_stopped() {
 				break;
 			}
-			let wp = self.peers.more_or_same_work_peers()?;
+			// Count peers with at least our difficulty.
+			let wp = self
+				.peers
+				.iter()
+				.outbound()
+				.with_difficulty(|x| x >= head.total_difficulty)
+				.connected()
+				.count();
+
 			// exit loop when:
 			// * we have more than MIN_PEERS more_or_same_work peers
 			// * we are synced already, e.g. grin was quickly restarted
@@ -221,7 +229,16 @@ impl SyncRunner {
 	fn needs_syncing(&self) -> Result<(bool, u64), chain::Error> {
 		let local_diff = self.chain.head()?.total_difficulty;
 		let mut is_syncing = self.sync_state.is_syncing();
-		let peer = self.peers.most_work_peer();
+
+		// Find a peer with greatest known difficulty.
+		let max_diff = self.peers.max_peer_difficulty();
+		let peer = self
+			.peers
+			.iter()
+			.outbound()
+			.with_difficulty(|x| x >= max_diff)
+			.connected()
+			.choose_random();
 
 		let peer_info = if let Some(p) = peer {
 			p.info.clone()

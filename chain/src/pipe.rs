@@ -18,7 +18,9 @@ use crate::core::consensus;
 use crate::core::core::hash::Hashed;
 use crate::core::core::verifier_cache::VerifierCache;
 use crate::core::core::Committed;
-use crate::core::core::{block, Block, BlockHeader, BlockSums, OutputIdentifier, TransactionBody};
+use crate::core::core::{
+	block, Block, BlockHeader, BlockSums, HeaderVersion, OutputIdentifier, TransactionBody,
+};
 use crate::core::global;
 use crate::core::pow;
 use crate::error::{Error, ErrorKind};
@@ -394,7 +396,9 @@ fn validate_header(header: &BlockHeader, ctx: &mut BlockContext<'_>) -> Result<(
 			return Err(ErrorKind::WrongTotalDifficulty.into());
 		}
 		// check the secondary PoW scaling factor if applicable
-		if header.pow.secondary_scaling != next_header_info.secondary_scaling {
+		if header.version < HeaderVersion(5)
+			&& header.pow.secondary_scaling != next_header_info.secondary_scaling
+		{
 			info!(
 				"validate_header: header secondary scaling {} != {}",
 				header.pow.secondary_scaling, next_header_info.secondary_scaling

@@ -12,8 +12,8 @@
 // limitations under the License.
 
 use grin_core::consensus::{
-	secondary_pow_ratio, valid_header_version, HARD_FORK_INTERVAL, TESTNET_FIRST_HARD_FORK,
-	TESTNET_SECOND_HARD_FORK, TESTNET_THIRD_HARD_FORK,
+	header_version, secondary_pow_ratio, HARD_FORK_INTERVAL, TESTNET_FIRST_HARD_FORK,
+	TESTNET_FOURTH_HARD_FORK, TESTNET_SECOND_HARD_FORK, TESTNET_THIRD_HARD_FORK,
 };
 use grin_core::core::HeaderVersion;
 use grin_core::global;
@@ -65,109 +65,62 @@ fn test_secondary_pow_ratio() {
 fn hard_forks() {
 	global::set_local_chain_type(global::ChainTypes::Testnet);
 	assert_eq!(global::is_testnet(), true);
-	assert!(valid_header_version(0, HeaderVersion(1)));
-	assert!(valid_header_version(10, HeaderVersion(1)));
-	assert!(!valid_header_version(10, HeaderVersion(2)));
-	assert!(valid_header_version(
-		TESTNET_FIRST_HARD_FORK - 1,
-		HeaderVersion(1)
-	));
-	assert!(valid_header_version(
-		TESTNET_FIRST_HARD_FORK,
-		HeaderVersion(2)
-	));
-	assert!(valid_header_version(
-		TESTNET_FIRST_HARD_FORK + 1,
-		HeaderVersion(2)
-	));
-	assert!(!valid_header_version(
-		TESTNET_FIRST_HARD_FORK,
-		HeaderVersion(1)
-	));
-	assert!(valid_header_version(
-		TESTNET_SECOND_HARD_FORK - 1,
-		HeaderVersion(2)
-	));
-	assert!(valid_header_version(
-		TESTNET_SECOND_HARD_FORK,
-		HeaderVersion(3)
-	));
-	assert!(valid_header_version(
-		TESTNET_SECOND_HARD_FORK + 1,
-		HeaderVersion(3)
-	));
-	assert!(!valid_header_version(
-		TESTNET_SECOND_HARD_FORK,
-		HeaderVersion(2)
-	));
-	assert!(!valid_header_version(
-		TESTNET_SECOND_HARD_FORK,
-		HeaderVersion(1)
-	));
-	assert!(valid_header_version(
-		TESTNET_THIRD_HARD_FORK - 1,
-		HeaderVersion(3)
-	));
-	assert!(valid_header_version(
-		TESTNET_THIRD_HARD_FORK,
-		HeaderVersion(4)
-	));
-	assert!(valid_header_version(
-		TESTNET_THIRD_HARD_FORK + 1,
-		HeaderVersion(4)
-	));
-	assert!(!valid_header_version(
-		TESTNET_THIRD_HARD_FORK,
-		HeaderVersion(3)
-	));
-	assert!(!valid_header_version(
-		TESTNET_THIRD_HARD_FORK,
-		HeaderVersion(2)
-	));
-	assert!(!valid_header_version(
-		TESTNET_THIRD_HARD_FORK,
-		HeaderVersion(1)
-	));
+	assert_eq!(header_version(0), HeaderVersion(1));
+	assert_eq!(header_version(10), HeaderVersion(1));
 
-	assert!(!valid_header_version(
-		HARD_FORK_INTERVAL * 2 - 1,
+	assert_eq!(
+		header_version(TESTNET_FIRST_HARD_FORK - 1),
 		HeaderVersion(1)
-	));
-	assert!(!valid_header_version(
-		HARD_FORK_INTERVAL * 2 - 1,
+	);
+	assert_eq!(header_version(TESTNET_FIRST_HARD_FORK), HeaderVersion(2));
+	assert_eq!(
+		header_version(TESTNET_FIRST_HARD_FORK + 1),
 		HeaderVersion(2)
-	));
-	assert!(valid_header_version(
-		HARD_FORK_INTERVAL * 2 - 1,
+	);
+
+	assert_eq!(
+		header_version(TESTNET_SECOND_HARD_FORK - 1),
+		HeaderVersion(2)
+	);
+	assert_eq!(header_version(TESTNET_SECOND_HARD_FORK), HeaderVersion(3));
+	assert_eq!(
+		header_version(TESTNET_SECOND_HARD_FORK + 1),
 		HeaderVersion(3)
-	));
-	assert!(valid_header_version(
-		HARD_FORK_INTERVAL * 2,
+	);
+
+	assert_eq!(
+		header_version(TESTNET_THIRD_HARD_FORK - 1),
 		HeaderVersion(3)
-	));
-	assert!(valid_header_version(
-		HARD_FORK_INTERVAL * 2 + 1,
-		HeaderVersion(3)
-	));
-	// v5 not active yet
-	assert!(!valid_header_version(
-		HARD_FORK_INTERVAL * 4,
-		HeaderVersion(5)
-	));
-	assert!(!valid_header_version(
-		HARD_FORK_INTERVAL * 4,
+	);
+	assert_eq!(header_version(TESTNET_THIRD_HARD_FORK), HeaderVersion(4));
+	assert_eq!(
+		header_version(TESTNET_THIRD_HARD_FORK + 1),
 		HeaderVersion(4)
-	));
-	assert!(!valid_header_version(
-		HARD_FORK_INTERVAL * 4,
-		HeaderVersion(3)
-	));
-	assert!(!valid_header_version(
-		HARD_FORK_INTERVAL * 4,
-		HeaderVersion(2)
-	));
-	assert!(!valid_header_version(
-		HARD_FORK_INTERVAL * 4,
-		HeaderVersion(1)
-	));
+	);
+
+	assert_eq!(
+		header_version(TESTNET_FOURTH_HARD_FORK - 1),
+		HeaderVersion(4)
+	);
+	assert_eq!(header_version(TESTNET_FOURTH_HARD_FORK), HeaderVersion(5));
+	assert_eq!(
+		header_version(TESTNET_FOURTH_HARD_FORK + 1),
+		HeaderVersion(5)
+	);
+
+	assert_eq!(header_version(HARD_FORK_INTERVAL - 1), HeaderVersion(2));
+	assert_eq!(header_version(HARD_FORK_INTERVAL), HeaderVersion(2));
+	assert_eq!(header_version(HARD_FORK_INTERVAL + 1), HeaderVersion(2));
+
+	assert_eq!(header_version(HARD_FORK_INTERVAL * 2 - 1), HeaderVersion(3));
+	assert_eq!(header_version(HARD_FORK_INTERVAL * 2), HeaderVersion(3));
+	assert_eq!(header_version(HARD_FORK_INTERVAL * 2 + 1), HeaderVersion(3));
+
+	assert_eq!(header_version(HARD_FORK_INTERVAL * 3 - 1), HeaderVersion(5));
+	assert_eq!(header_version(HARD_FORK_INTERVAL * 3), HeaderVersion(5));
+	assert_eq!(header_version(HARD_FORK_INTERVAL * 3 + 1), HeaderVersion(5));
+
+	assert_eq!(header_version(HARD_FORK_INTERVAL * 4 - 1), HeaderVersion(5));
+	assert_eq!(header_version(HARD_FORK_INTERVAL * 4), HeaderVersion(5));
+	assert_eq!(header_version(HARD_FORK_INTERVAL * 4 + 1), HeaderVersion(5));
 }

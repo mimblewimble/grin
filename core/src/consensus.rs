@@ -136,22 +136,22 @@ pub const TESTNET_SECOND_HARD_FORK: u64 = 298_080;
 /// Testnet second hard fork height, set to happen around 2020-06-20
 pub const TESTNET_THIRD_HARD_FORK: u64 = 552_960;
 
-/// AutomatedTesting and UserTesting HF1 height.
-pub const TESTING_FIRST_HARD_FORK: u64 = 3;
+/// Testnet second hard fork height, set to happen around 2020-12-8
+pub const TESTNET_FOURTH_HARD_FORK: u64 = 642_240;
 
-/// AutomatedTesting and UserTesting HF2 height.
-pub const TESTING_SECOND_HARD_FORK: u64 = 6;
-
-/// AutomatedTesting and UserTesting HF3 height.
-pub const TESTING_THIRD_HARD_FORK: u64 = 9;
+/// Fork every 3 blocks
+pub const TESTING_HARD_FORK_INTERVAL: u64 = 3;
 
 /// Compute possible block version at a given height, implements
 /// 6 months interval scheduled hard forks for the first 2 years.
 pub fn header_version(height: u64) -> HeaderVersion {
-	let chain_type = global::get_chain_type();
 	let hf_interval = (1 + height / HARD_FORK_INTERVAL) as u16;
-	match chain_type {
-		global::ChainTypes::Mainnet => HeaderVersion(hf_interval),
+	match global::get_chain_type() {
+		global::ChainTypes::Mainnet => HeaderVersion(min(5, hf_interval)),
+		global::ChainTypes::AutomatedTesting | global::ChainTypes::UserTesting => {
+			let testing_hf_interval = (1 + height / TESTING_HARD_FORK_INTERVAL) as u16;
+			HeaderVersion(min(5, testing_hf_interval))
+		}
 		global::ChainTypes::Testnet => {
 			if height < TESTNET_FIRST_HARD_FORK {
 				HeaderVersion(1)
@@ -159,20 +159,7 @@ pub fn header_version(height: u64) -> HeaderVersion {
 				HeaderVersion(2)
 			} else if height < TESTNET_THIRD_HARD_FORK {
 				HeaderVersion(3)
-			} else if height < 4 * HARD_FORK_INTERVAL {
-				HeaderVersion(4)
-			} else {
-				HeaderVersion(hf_interval)
-			}
-		}
-		global::ChainTypes::AutomatedTesting | global::ChainTypes::UserTesting => {
-			if height < TESTING_FIRST_HARD_FORK {
-				HeaderVersion(1)
-			} else if height < TESTING_SECOND_HARD_FORK {
-				HeaderVersion(2)
-			} else if height < TESTING_THIRD_HARD_FORK {
-				HeaderVersion(3)
-			} else if height < 4 * HARD_FORK_INTERVAL {
+			} else if height < TESTNET_FOURTH_HARD_FORK {
 				HeaderVersion(4)
 			} else {
 				HeaderVersion(5)
@@ -184,7 +171,7 @@ pub fn header_version(height: u64) -> HeaderVersion {
 /// Check whether the block version is valid at a given height, implements
 /// 6 months interval scheduled hard forks for the first 2 years.
 pub fn valid_header_version(height: u64, version: HeaderVersion) -> bool {
-	height < 4 * HARD_FORK_INTERVAL && version == header_version(height)
+	version == header_version(height)
 }
 
 /// Number of blocks used to calculate difficulty adjustments

@@ -17,9 +17,8 @@
 
 use std::marker;
 
-use crate::core::hash::{Hash, ZERO_HASH};
-use crate::core::pmmr::{bintree_postorder_height, is_leaf, peaks, Backend};
-use crate::ser::{PMMRIndexHashable, PMMRable};
+use crate::core::pmmr::{bintree_postorder_height, Backend, ReadonlyPMMR};
+use crate::ser::PMMRable;
 
 /// Rewindable (but still readonly) view of a PMMR.
 pub struct RewindablePMMR<'a, T, B>
@@ -49,11 +48,6 @@ where
 		}
 	}
 
-	/// Reference to the underlying storage backend.
-	pub fn backend(&'a self) -> &dyn Backend<T> {
-		self.backend
-	}
-
 	/// Build a new readonly PMMR pre-initialized to
 	/// last_pos with the provided backend.
 	pub fn at(backend: &'a B, last_pos: u64) -> RewindablePMMR<'_, T, B> {
@@ -74,62 +68,14 @@ where
 		while bintree_postorder_height(pos + 1) > 0 {
 			pos += 1;
 		}
-
 		self.last_pos = pos;
 		Ok(())
 	}
 
-	/// Get the data element at provided position in the MMR.
-	pub fn get_data(&self, pos: u64) -> Option<T::E> {
-		if pos > self.last_pos {
-			// If we are beyond the rhs of the MMR return None.
-			None
-		} else if is_leaf(pos) {
-			// If we are a leaf then get data from the backend.
-			self.backend.get_data(pos)
-		} else {
-			// If we are not a leaf then return None as only leaves have data.
-			None
-		}
-	}
-
-	/// Is the MMR empty?
-	pub fn is_empty(&self) -> bool {
-		self.last_pos == 0
-	}
-
-	/// Computes the root of the MMR. Find all the peaks in the current
-	/// tree and "bags" them to get a single peak.
-	pub fn root(&self) -> Result<Hash, String> {
-		if self.is_empty() {
-			return Ok(ZERO_HASH);
-		}
-		let mut res = None;
-		for peak in self.peaks().iter().rev() {
-			res = match res {
-				None => Some(*peak),
-				Some(rhash) => Some((*peak, rhash).hash_with_index(self.unpruned_size())),
-			}
-		}
-		res.ok_or_else(|| "no root, invalid tree".to_owned())
-	}
-
-	/// Returns a vec of the peaks of this MMR.
-	pub fn peaks(&self) -> Vec<Hash> {
-		let peaks_pos = peaks(self.last_pos);
-		peaks_pos
-			.into_iter()
-			.filter_map(|pi| {
-				// here we want to get from underlying hash file
-				// as the pos *may* have been "removed"
-				self.backend.get_from_file(pi)
-			})
-			.collect()
-	}
-
-	/// Total size of the tree, including intermediary nodes and ignoring any
-	/// pruning.
-	pub fn unpruned_size(&self) -> u64 {
-		self.last_pos
+	/// Allows conversion of a "rewindable" PMMR into a "readonly" PMMR.
+	/// Intended usage is to create a rewindable PMMR, rewind it,
+	/// then convert to "readonly" and read from it.
+	pub fn as_readonly(&self) -> ReadonlyPMMR<'a, T, B> {
+		ReadonlyPMMR::at(&self.backend, self.last_pos)
 	}
 }

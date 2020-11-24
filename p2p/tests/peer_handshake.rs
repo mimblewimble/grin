@@ -97,5 +97,5 @@ fn peer_handshake() {
 
 	let server_peer = server.peers.get_connected_peer(my_addr).unwrap();
 	assert_eq!(server_peer.info.total_difficulty(), Difficulty::min());
-	assert!(server.peers.peer_count() > 0);
+	assert!(server.peers.iter().connected().count() > 0);
 }

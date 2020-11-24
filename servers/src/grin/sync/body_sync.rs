@@ -14,6 +14,7 @@
 
 use chrono::prelude::{DateTime, Utc};
 use chrono::Duration;
+use rand::prelude::*;
 use std::cmp;
 use std::sync::Arc;
 
@@ -89,7 +90,17 @@ impl BodySync {
 
 		hashes.reverse();
 
-		let peers = self.peers.more_work_peers()?;
+		let head = self.chain.head()?;
+
+		// Find connected peers with strictly greater difficulty than us.
+		let peers: Vec<_> = self
+			.peers
+			.iter()
+			.outbound()
+			.with_difficulty(|x| x > head.total_difficulty)
+			.connected()
+			.into_iter()
+			.collect();
 
 		// if we have 5 peers to sync from then ask for 50 blocks total (peer_count *
 		// 10) max will be 80 if all 8 peers are advertising more work
@@ -125,9 +136,9 @@ impl BodySync {
 			self.blocks_requested = 0;
 			self.receive_timeout = Utc::now() + Duration::seconds(6);
 
-			let mut peers_iter = peers.iter().cycle();
+			let mut rng = rand::thread_rng();
 			for hash in hashes_to_get.clone() {
-				if let Some(peer) = peers_iter.next() {
+				if let Some(peer) = peers.choose(&mut rng) {
 					if let Err(e) = peer.send_block_request(*hash, chain::Options::SYNC) {
 						debug!("Skipped request to {}: {:?}", peer.info.addr, e);
 						peer.stop();

@@ -33,6 +33,7 @@ pub use self::block_sums::*;
 pub use self::committed::Committed;
 pub use self::compact_block::*;
 pub use self::id::ShortId;
+pub use self::pmmr::segment::*;
 pub use self::transaction::*;
 
 /// Common errors
