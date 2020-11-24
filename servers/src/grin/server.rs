@@ -16,11 +16,11 @@
 //! the peer-to-peer server, the blockchain and the transaction pool) and acts
 //! as a facade.
 
-use std::fs;
 use std::fs::File;
 use std::io::prelude::*;
 use std::path::Path;
 use std::sync::{mpsc, Arc};
+use std::{convert::TryInto, fs};
 use std::{
 	thread::{self, JoinHandle},
 	time::{self, Duration},
@@ -48,7 +48,7 @@ use crate::grin::{dandelion_monitor, seed, sync};
 use crate::mining::stratumserver;
 use crate::mining::test_miner::Miner;
 use crate::p2p;
-use crate::p2p::types::PeerAddr;
+use crate::p2p::types::{Capabilities, PeerAddr};
 use crate::pool;
 use crate::util::file::get_first_line;
 use crate::util::{RwLock, StopState};
@@ -214,9 +214,14 @@ impl Server {
 			init_net_hooks(&config),
 		));
 
+		// Use our default capabilities here.
+		// We will advertize these to our peers during hand/shake.
+		let capabilities = Capabilities::default();
+		debug!("Capabilities: {:?}", capabilities);
+
 		let p2p_server = Arc::new(p2p::Server::new(
 			&config.db_root,
-			config.p2p_config.capabilities,
+			capabilities,
 			config.p2p_config.clone(),
 			net_adapter.clone(),
 			genesis.hash(),
@@ -255,7 +260,6 @@ impl Server {
 
 			connect_thread = Some(seed::connect_and_monitor(
 				p2p_server.clone(),
-				config.p2p_config.capabilities,
 				seeder,
 				&preferred_peers,
 				stop_state.clone(),
@@ -356,7 +360,13 @@ impl Server {
 
 	/// Number of peers
 	pub fn peer_count(&self) -> u32 {
-		self.p2p.peers.peer_count()
+		self.p2p
+			.peers
+			.iter()
+			.connected()
+			.count()
+			.try_into()
+			.unwrap()
 	}
 
 	/// Start a minimal "stratum" mining service on a separate thread
@@ -486,7 +496,8 @@ impl Server {
 		let peer_stats = self
 			.p2p
 			.peers
-			.connected_peers()
+			.iter()
+			.connected()
 			.into_iter()
 			.map(|p| PeerStats::from_peer(&p))
 			.collect();

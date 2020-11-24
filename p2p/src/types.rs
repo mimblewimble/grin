@@ -266,10 +266,6 @@ pub struct P2PConfig {
 	/// The list of seed nodes, if using Seeding as a seed type
 	pub seeds: Option<PeerAddrs>,
 
-	/// Capabilities expose by this node, also conditions which other peers this
-	/// node will have an affinity toward when connection.
-	pub capabilities: Capabilities,
-
 	pub peers_allow: Option<PeerAddrs>,
 
 	pub peers_deny: Option<PeerAddrs>,
@@ -297,7 +293,6 @@ impl Default for P2PConfig {
 		P2PConfig {
 			host: ipaddr,
 			port: 3414,
-			capabilities: Capabilities::FULL_NODE,
 			seeding_type: Seeding::default(),
 			seeds: None,
 			peers_allow: None,
@@ -385,22 +380,27 @@ bitflags! {
 		/// Can provide full history of headers back to genesis
 		/// (for at least one arbitrary fork).
 		const HEADER_HIST = 0b0000_0001;
-		/// Can provide block headers and the TxHashSet for some recent-enough
-		/// height.
+		/// Can provide recent txhashset archive for fast sync.
 		const TXHASHSET_HIST = 0b0000_0010;
 		/// Can provide a list of healthy peers
 		const PEER_LIST = 0b0000_0100;
 		/// Can broadcast and request txs by kernel hash.
 		const TX_KERNEL_HASH = 0b0000_1000;
+		/// Can provide PIBD segments during initial byte download (fast sync).
+		const PIBD_HIST = 0b0001_0000;
+	}
+}
 
-		/// All nodes right now are "full nodes".
-		/// Some nodes internally may maintain longer block histories (archival_mode)
-		/// but we do not advertise this to other nodes.
-		/// All nodes by default will accept lightweight "kernel first" tx broadcast.
-		const FULL_NODE = Capabilities::HEADER_HIST.bits
-			| Capabilities::TXHASHSET_HIST.bits
-			| Capabilities::PEER_LIST.bits
-			| Capabilities::TX_KERNEL_HASH.bits;
+/// Default capabilities.
+impl Default for Capabilities {
+	fn default() -> Self {
+		Capabilities::HEADER_HIST
+			| Capabilities::TXHASHSET_HIST
+			| Capabilities::PEER_LIST
+			| Capabilities::TX_KERNEL_HASH
+
+		// To be enabled once we start supporting the various PIBD segment msgs.
+		// | Capabilities::PIBD_HIST
 	}
 }
 
