@@ -13,6 +13,7 @@
 // limitations under the License.
 
 //! Error types for chain
+use crate::core::core::pmmr::segment;
 use crate::core::core::{block, committed, transaction};
 use crate::core::ser;
 use crate::keychain;
@@ -149,6 +150,9 @@ pub enum ErrorKind {
 	/// Error during chain sync
 	#[fail(display = "Sync error")]
 	SyncError(String),
+	/// PIBD segment related error
+	#[fail(display = "Segment error")]
+	SegmentError(segment::SegmentError),
 	/// The segmenter is associated to a different block header
 	#[fail(display = "Segmenter header mismatch")]
 	SegmenterHeaderMismatch,
@@ -275,6 +279,14 @@ impl From<ser::Error> for Error {
 	fn from(error: ser::Error) -> Error {
 		Error {
 			inner: Context::new(ErrorKind::SerErr(error)),
+		}
+	}
+}
+
+impl From<segment::SegmentError> for Error {
+	fn from(error: segment::SegmentError) -> Error {
+		Error {
+			inner: Context::new(ErrorKind::SegmentError(error)),
 		}
 	}
 }
