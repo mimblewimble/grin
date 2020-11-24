@@ -186,11 +186,6 @@ impl BitmapAccumulator {
 	pub fn readonly_pmmr(&self) -> ReadonlyPMMR<BitmapChunk, VecBackend<BitmapChunk>> {
 		ReadonlyPMMR::at(&self.backend, self.backend.size())
 	}
-
-	/// Readonly access to our internal data.
-	pub fn readonly_pmmr(&self) -> ReadonlyPMMR<BitmapChunk, VecBackend<BitmapChunk>> {
-		ReadonlyPMMR::at(&self.backend, self.backend.size())
-	}
 }
 
 /// A bitmap "chunk" representing 1024 contiguous bits of the overall bitmap.
