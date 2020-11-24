@@ -28,7 +28,7 @@ pub struct PeersAllHandler {
 
 impl Handler for PeersAllHandler {
 	fn get(&self, _req: Request<Body>) -> ResponseFuture {
-		let peers = &w_fut!(&self.peers).all_peers();
+		let peers = &w_fut!(&self.peers).all_peer_data();
 		json_response_pretty(&peers)
 	}
 }
@@ -40,8 +40,9 @@ pub struct PeersConnectedHandler {
 impl PeersConnectedHandler {
 	pub fn get_connected_peers(&self) -> Result<Vec<PeerInfoDisplay>, Error> {
 		let peers = w(&self.peers)?
-			.connected_peers()
 			.iter()
+			.connected()
+			.into_iter()
 			.map(|p| p.info.clone().into())
 			.collect::<Vec<PeerInfoDisplay>>();
 		Ok(peers)
@@ -51,8 +52,9 @@ impl PeersConnectedHandler {
 impl Handler for PeersConnectedHandler {
 	fn get(&self, _req: Request<Body>) -> ResponseFuture {
 		let peers: Vec<PeerInfoDisplay> = w_fut!(&self.peers)
-			.connected_peers()
 			.iter()
+			.connected()
+			.into_iter()
 			.map(|p| p.info.clone().into())
 			.collect();
 		json_response(&peers)
@@ -77,7 +79,7 @@ impl PeerHandler {
 			})?;
 			return Ok(vec![peer_data]);
 		}
-		let peers = w(&self.peers)?.all_peers();
+		let peers = w(&self.peers)?.all_peer_data();
 		Ok(peers)
 	}
 

@@ -19,7 +19,7 @@ use std::sync::Arc;
 use crate::chain::{self, SyncState, SyncStatus};
 use crate::common::types::Error;
 use crate::core::core::hash::{Hash, Hashed};
-use crate::p2p::{self, types::ReasonForBan, Peer};
+use crate::p2p::{self, types::ReasonForBan, Capabilities, Peer};
 
 pub struct HeaderSync {
 	sync_state: Arc<SyncState>,
@@ -170,10 +170,17 @@ impl HeaderSync {
 
 	fn header_sync(&mut self) -> Option<Arc<Peer>> {
 		if let Ok(header_head) = self.chain.header_head() {
-			let difficulty = header_head.total_difficulty;
-
-			if let Some(peer) = self.peers.most_work_peer() {
-				if peer.info.total_difficulty() > difficulty {
+			let max_diff = self.peers.max_peer_difficulty();
+			let peer = self
+				.peers
+				.iter()
+				.outbound()
+				.with_capabilities(Capabilities::HEADER_HIST)
+				.with_difficulty(|x| x >= max_diff)
+				.connected()
+				.choose_random();
+			if let Some(peer) = peer {
+				if peer.info.total_difficulty() > header_head.total_difficulty {
 					return self.request_headers(peer);
 				}
 			}

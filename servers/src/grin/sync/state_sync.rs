@@ -19,7 +19,7 @@ use std::sync::Arc;
 use crate::chain::{self, SyncState, SyncStatus};
 use crate::core::core::hash::Hashed;
 use crate::core::global;
-use crate::p2p::{self, Peer};
+use crate::p2p::{self, Capabilities, Peer};
 
 /// Fast sync has 3 "states":
 /// * syncing headers
@@ -158,7 +158,16 @@ impl StateSync {
 		let mut txhashset_height = header_head.height.saturating_sub(threshold);
 		txhashset_height = txhashset_height.saturating_sub(txhashset_height % archive_interval);
 
-		if let Some(peer) = self.peers.most_work_peer() {
+		let max_diff = self.peers.max_peer_difficulty();
+		let peer = self
+			.peers
+			.iter()
+			.outbound()
+			.with_capabilities(Capabilities::TXHASHSET_HIST)
+			.with_difficulty(|x| x >= max_diff)
+			.connected()
+			.choose_random();
+		if let Some(peer) = peer {
 			// ask for txhashset at state_sync_threshold
 			let mut txhashset_head = self
 				.chain

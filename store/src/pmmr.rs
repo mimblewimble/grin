@@ -65,17 +65,15 @@ pub struct PMMRBackend<T: PMMRable> {
 impl<T: PMMRable> Backend<T> for PMMRBackend<T> {
 	/// Append the provided data and hashes to the backend storage.
 	/// Add the new leaf pos to our leaf_set if this is a prunable MMR.
-	fn append(&mut self, data: &T, hashes: Vec<Hash>) -> Result<(), String> {
+	fn append(&mut self, data: &T, hashes: &[Hash]) -> Result<(), String> {
 		let size = self
 			.data_file
 			.append(&data.as_elmt())
 			.map_err(|e| format!("Failed to append data to file. {}", e))?;
 
-		for h in &hashes {
-			self.hash_file
-				.append(h)
-				.map_err(|e| format!("Failed to append hash to file. {}", e))?;
-		}
+		self.hash_file
+			.extend_from_slice(hashes)
+			.map_err(|e| format!("Failed to append hash to file. {}", e))?;
 
 		if self.prunable {
 			// (Re)calculate the latest pos given updated size of data file

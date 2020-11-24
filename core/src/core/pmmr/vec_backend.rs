@@ -35,11 +35,11 @@ pub struct VecBackend<T: PMMRable> {
 }
 
 impl<T: PMMRable> Backend<T> for VecBackend<T> {
-	fn append(&mut self, elmt: &T, hashes: Vec<Hash>) -> Result<(), String> {
+	fn append(&mut self, elmt: &T, hashes: &[Hash]) -> Result<(), String> {
 		if let Some(data) = &mut self.data {
 			data.push(elmt.clone());
 		}
-		self.hashes.append(&mut hashes.clone());
+		self.hashes.extend_from_slice(hashes);
 		Ok(())
 	}
 

@@ -49,7 +49,7 @@ pub mod lean;
 mod siphash;
 mod types;
 
-pub use crate::pow::cuckaroo::{new_cuckaroo_ctx, CuckarooContext};
+pub use crate::pow::cuckaroo::{new_cuckaroo_ctx, no_cuckaroo_ctx, CuckarooContext};
 pub use crate::pow::cuckarood::{new_cuckarood_ctx, CuckaroodContext};
 pub use crate::pow::cuckaroom::{new_cuckaroom_ctx, CuckaroomContext};
 pub use crate::pow::cuckarooz::{new_cuckarooz_ctx, CuckaroozContext};
