@@ -14,7 +14,7 @@
 
 //! Message types that transit over the network and related serialization code.
 
-use crate::chain::txhashset::BitmapChunk;
+use crate::chain::txhashset::BitmapSegment;
 use crate::conn::Tracker;
 use crate::core::core::hash::Hash;
 use crate::core::core::transaction::{OutputIdentifier, TxKernel};
@@ -782,23 +782,60 @@ impl<T: Writeable> Writeable for SegmentResponse<T> {
 	}
 }
 
-pub struct SegmentResponseWithRoot<T> {
-	pub response: SegmentResponse<T>,
-	pub root: Hash,
+/// Response to an output PMMR segment request.
+pub struct OutputSegmentResponse {
+	/// The segment response
+	pub response: SegmentResponse<OutputIdentifier>,
+	/// The root hash of the output bitmap MMR
+	pub output_bitmap_root: Hash,
 }
 
-impl<T: Readable> Readable for SegmentResponseWithRoot<T> {
+impl Readable for OutputSegmentResponse {
 	fn read<R: Reader>(reader: &mut R) -> Result<Self, ser::Error> {
 		let response = Readable::read(reader)?;
-		let root = Readable::read(reader)?;
-		Ok(Self { response, root })
+		let output_bitmap_root = Readable::read(reader)?;
+		Ok(Self {
+			response,
+			output_bitmap_root,
+		})
 	}
 }
 
-impl<T: Writeable> Writeable for SegmentResponseWithRoot<T> {
+impl Writeable for OutputSegmentResponse {
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
 		Writeable::write(&self.response, writer)?;
-		Writeable::write(&self.root, writer)
+		Writeable::write(&self.output_bitmap_root, writer)
+	}
+}
+
+/// Response to an output bitmap MMR segment request.
+pub struct OutputBitmapSegmentResponse {
+	/// The hash of the block the MMR is associated with
+	pub block_hash: Hash,
+	/// The MMR segment
+	pub segment: BitmapSegment,
+	/// The root hash of the output PMMR
+	pub output_root: Hash,
+}
+
+impl Readable for OutputBitmapSegmentResponse {
+	fn read<R: Reader>(reader: &mut R) -> Result<Self, ser::Error> {
+		let block_hash = Readable::read(reader)?;
+		let segment = Readable::read(reader)?;
+		let output_root = Readable::read(reader)?;
+		Ok(Self {
+			block_hash,
+			segment,
+			output_root,
+		})
+	}
+}
+
+impl Writeable for OutputBitmapSegmentResponse {
+	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
+		Writeable::write(&self.block_hash, writer)?;
+		Writeable::write(&self.segment, writer)?;
+		Writeable::write(&self.output_root, writer)
 	}
 }
 
@@ -824,9 +861,9 @@ pub enum Message {
 	TxHashSetArchive(TxHashSetArchive),
 	Attachment(AttachmentUpdate, Option<Bytes>),
 	GetOutputBitmapSegment(SegmentRequest),
-	OutputBitmapSegment(SegmentResponseWithRoot<BitmapChunk>),
+	OutputBitmapSegment(OutputBitmapSegmentResponse),
 	GetOutputSegment(SegmentRequest),
-	OutputSegment(SegmentResponseWithRoot<OutputIdentifier>),
+	OutputSegment(OutputSegmentResponse),
 	GetRangeProofSegment(SegmentRequest),
 	RangeProofSegment(SegmentResponse<RangeProof>),
 	GetKernelSegment(SegmentRequest),

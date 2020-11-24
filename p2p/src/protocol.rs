@@ -17,8 +17,8 @@ use crate::conn::MessageHandler;
 use crate::core::core::{hash::Hashed, CompactBlock};
 
 use crate::msg::{
-	Consumed, Headers, Message, Msg, PeerAddrs, Pong, SegmentRequest, SegmentResponse,
-	SegmentResponseWithRoot, TxHashSetArchive, Type,
+	Consumed, Headers, Message, Msg, OutputBitmapSegmentResponse, OutputSegmentResponse, PeerAddrs,
+	Pong, SegmentRequest, SegmentResponse, TxHashSetArchive, Type,
 };
 use crate::types::{AttachmentMeta, Error, NetAdapter, PeerInfo};
 use chrono::prelude::Utc;
@@ -296,16 +296,15 @@ impl MessageHandler for Protocol {
 					block_hash,
 					identifier,
 				} = req;
-				if let Ok((segment, root)) = self.adapter.get_bitmap_segment(block_hash, identifier)
+				if let Ok((segment, output_root)) =
+					self.adapter.get_bitmap_segment(block_hash, identifier)
 				{
 					Consumed::Response(Msg::new(
 						Type::OutputBitmapSegment,
-						SegmentResponseWithRoot {
-							response: SegmentResponse {
-								block_hash,
-								segment,
-							},
-							root,
+						OutputBitmapSegmentResponse {
+							block_hash,
+							segment: segment.into(),
+							output_root,
 						},
 						self.peer_info.version,
 					)?)
@@ -318,16 +317,17 @@ impl MessageHandler for Protocol {
 					block_hash,
 					identifier,
 				} = req;
-				if let Ok((segment, root)) = self.adapter.get_output_segment(block_hash, identifier)
+				if let Ok((segment, output_bitmap_root)) =
+					self.adapter.get_output_segment(block_hash, identifier)
 				{
 					Consumed::Response(Msg::new(
 						Type::OutputSegment,
-						SegmentResponseWithRoot {
+						OutputSegmentResponse {
 							response: SegmentResponse {
 								block_hash,
 								segment,
 							},
-							root,
+							output_bitmap_root,
 						},
 						self.peer_info.version,
 					)?)
