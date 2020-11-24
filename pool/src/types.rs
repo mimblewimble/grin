@@ -108,7 +108,7 @@ pub struct PoolConfig {
 	pub accept_fee_base: u64,
 
 	// Reorg cache retention period in minute.
-	// The reorg cache repopulates nodes mempool in a reorg scenario.
+	// The reorg cache repopulates local mempool in a reorg scenario.
 	#[serde(default = "default_reorg_cache_period")]
 	pub reorg_cache_period: i64,
 

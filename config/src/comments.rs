@@ -318,7 +318,7 @@ fn comments() -> HashMap<String, String> {
 		"reorg_cache_period".to_string(),
 		"
 #reorg cache retention period in minute.
-#the reorg cache repopulates nodes mempool in a reorg scenario.
+#the reorg cache repopulates local mempool in a reorg scenario.
 "
 		.to_string(),
 	);
