@@ -398,9 +398,7 @@ impl Default for Capabilities {
 			| Capabilities::TXHASHSET_HIST
 			| Capabilities::PEER_LIST
 			| Capabilities::TX_KERNEL_HASH
-
-		// To be enabled once we start supporting the various PIBD segment msgs.
-		// | Capabilities::PIBD_HIST
+			| Capabilities::PIBD_HIST
 	}
 }
 
