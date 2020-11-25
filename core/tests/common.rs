@@ -125,7 +125,7 @@ where
 		.map(|tx| tx.fee(previous_header.height + 1))
 		.sum();
 	let reward_output = reward::output(keychain, builder, &key_id, fees, false).unwrap();
-	Block::new(&previous_header, txs, Difficulty::min(), reward_output).unwrap()
+	Block::new(&previous_header, txs, Difficulty::min_dma(), reward_output).unwrap()
 }
 
 // utility producing a transaction that spends an output with the provided

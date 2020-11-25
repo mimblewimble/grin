@@ -284,7 +284,7 @@ pub struct DummyAdapter {}
 
 impl ChainAdapter for DummyAdapter {
 	fn total_difficulty(&self) -> Result<Difficulty, chain::Error> {
-		Ok(Difficulty::min())
+		Ok(Difficulty::min_dma())
 	}
 	fn total_height(&self) -> Result<u64, chain::Error> {
 		Ok(0)

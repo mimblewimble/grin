@@ -368,7 +368,7 @@ impl Default for Tip {
 			height: 0,
 			last_block_h: ZERO_HASH,
 			prev_block_h: ZERO_HASH,
-			total_difficulty: Difficulty::min(),
+			total_difficulty: Difficulty::min_dma(),
 		}
 	}
 }
