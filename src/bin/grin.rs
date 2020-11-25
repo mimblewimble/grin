@@ -160,7 +160,15 @@ fn real_main() -> i32 {
 			global::init_global_nrd_enabled(true);
 		}
 	}
-	global::init_global_accept_fee_base(config.members.unwrap().server.pool_config.accept_fee_base);
+	global::init_global_accept_fee_base(
+		config
+			.members
+			.as_ref()
+			.unwrap()
+			.server
+			.pool_config
+			.accept_fee_base,
+	);
 	info!("Accept Fee Base: {:?}", global::get_accept_fee_base());
 	global::init_global_future_time_limit(config.members.unwrap().server.future_time_limit);
 	info!("Future Time Limit: {:?}", global::get_future_time_limit());
