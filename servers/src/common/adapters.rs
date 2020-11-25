@@ -46,6 +46,12 @@ use crate::util::OneTime;
 use chrono::prelude::*;
 use chrono::Duration;
 use rand::prelude::*;
+use std::ops::Range;
+
+const KERNEL_SEGMENT_HEIGHT_RANGE: Range<u8> = 9..14;
+const BITMAP_SEGMENT_HEIGHT_RANGE: Range<u8> = 9..14;
+const OUTPUT_SEGMENT_HEIGHT_RANGE: Range<u8> = 11..16;
+const RANGEPROOF_SEGMENT_HEIGHT_RANGE: Range<u8> = 7..12;
 
 /// Implementation of the NetAdapter for the . Gets notified when new
 /// blocks and transactions are received and forwards to the chain and pool
@@ -488,7 +494,7 @@ where
 		hash: Hash,
 		id: SegmentIdentifier,
 	) -> Result<Segment<TxKernel>, chain::Error> {
-		if id.height < 9 || id.height > 13 {
+		if !KERNEL_SEGMENT_HEIGHT_RANGE.contains(&id.height) {
 			return Err(chain::ErrorKind::InvalidSegmentHeight.into());
 		}
 		let segmenter = self.chain().segmenter()?;
@@ -503,7 +509,7 @@ where
 		hash: Hash,
 		id: SegmentIdentifier,
 	) -> Result<(Segment<BitmapChunk>, Hash), chain::Error> {
-		if id.height < 9 || id.height > 13 {
+		if !BITMAP_SEGMENT_HEIGHT_RANGE.contains(&id.height) {
 			return Err(chain::ErrorKind::InvalidSegmentHeight.into());
 		}
 		let segmenter = self.chain().segmenter()?;
@@ -518,7 +524,7 @@ where
 		hash: Hash,
 		id: SegmentIdentifier,
 	) -> Result<(Segment<OutputIdentifier>, Hash), chain::Error> {
-		if id.height < 11 || id.height > 15 {
+		if !OUTPUT_SEGMENT_HEIGHT_RANGE.contains(&id.height) {
 			return Err(chain::ErrorKind::InvalidSegmentHeight.into());
 		}
 		let segmenter = self.chain().segmenter()?;
@@ -533,7 +539,7 @@ where
 		hash: Hash,
 		id: SegmentIdentifier,
 	) -> Result<Segment<RangeProof>, chain::Error> {
-		if id.height < 7 || id.height > 11 {
+		if RANGEPROOF_SEGMENT_HEIGHT_RANGE.contains(&id.height) {
 			return Err(chain::ErrorKind::InvalidSegmentHeight.into());
 		}
 		let segmenter = self.chain().segmenter()?;
