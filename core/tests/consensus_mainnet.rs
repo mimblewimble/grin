@@ -109,7 +109,7 @@ fn get_diff_stats(chain_sim: &[HeaderInfo]) -> DiffStats {
 
 	let sum_blocks: Vec<HeaderInfo> = global::difficulty_data_to_vector(diff_iter.iter().cloned())
 		.into_iter()
-		.take(DIFFICULTY_ADJUST_WINDOW as usize)
+		.take(DMA_WINDOW as usize)
 		.collect();
 
 	let sum_entries: Vec<DiffBlock> = sum_blocks
@@ -155,9 +155,9 @@ fn get_diff_stats(chain_sim: &[HeaderInfo]) -> DiffStats {
 	DiffStats {
 		height: tip_height as u64,
 		last_blocks: diff_entries,
-		average_block_time: block_time_sum / (DIFFICULTY_ADJUST_WINDOW),
-		average_difficulty: block_diff_sum / (DIFFICULTY_ADJUST_WINDOW),
-		window_size: DIFFICULTY_ADJUST_WINDOW,
+		average_block_time: block_time_sum / DMA_WINDOW,
+		average_difficulty: block_diff_sum / DMA_WINDOW,
+		window_size: DMA_WINDOW,
 		block_time_sum: block_time_sum,
 		block_diff_sum: block_diff_sum,
 		latest_ts: latest_ts,
@@ -208,10 +208,10 @@ fn print_chain_sim(chain_sim: Vec<(HeaderInfo, DiffStats)>) {
 	let mut last_time = 0;
 	let mut first = true;
 	println!("Constants");
-	println!("DIFFICULTY_ADJUST_WINDOW: {}", DIFFICULTY_ADJUST_WINDOW);
+	println!("DIFFICULTY_ADJUST_WINDOW: {}", DMA_WINDOW);
 	println!("BLOCK_TIME_WINDOW: {}", BLOCK_TIME_WINDOW);
 	println!("CLAMP_FACTOR: {}", CLAMP_FACTOR);
-	println!("DAMP_FACTOR: {}", DIFFICULTY_DAMP_FACTOR);
+	println!("DAMP_FACTOR: {}", DMA_DAMP_FACTOR);
 	chain_sim.iter().enumerate().for_each(|(i, b)| {
 		let block = b.0.clone();
 		let stats = b.1.clone();
@@ -274,7 +274,7 @@ fn adjustment_scenarios() {
 	println!("*********************************************************");
 	print_chain_sim(chain_sim);
 	println!("*********************************************************");
-	let just_enough = (DIFFICULTY_ADJUST_WINDOW) as usize;
+	let just_enough = DMA_WINDOW as usize;
 
 	// Steady difficulty for a good while, then a sudden drop
 	let chain_sim = create_chain_sim(global::initial_block_difficulty());
@@ -360,7 +360,7 @@ fn test_secondary_pow_ratio() {
 fn test_secondary_pow_scale() {
 	global::set_local_chain_type(global::ChainTypes::Mainnet);
 
-	let window = DIFFICULTY_ADJUST_WINDOW;
+	let window = DMA_WINDOW;
 	let mut hi = HeaderInfo::from_diff_scaling(Difficulty::from_num(10), 100);
 
 	// all primary, factor should increase so it becomes easier to find a high
