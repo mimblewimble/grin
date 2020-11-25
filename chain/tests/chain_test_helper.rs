@@ -86,13 +86,14 @@ where
 {
 	for n in 1..chain_length {
 		let prev = chain.head_header().unwrap();
-		let next_header_info = consensus::next_difficulty(1, chain.difficulty_iter().unwrap());
+		let next_header_info =
+			consensus::next_difficulty(prev.height + 1, chain.difficulty_iter().unwrap());
 		let pk = ExtKeychainPath::new(1, n as u32, 0, 0, 0).to_identifier();
 		let reward =
 			libtx::reward::output(keychain, &libtx::ProofBuilder::new(keychain), &pk, 0, false)
 				.unwrap();
-		let mut b = core::core::Block::new(&prev, &[], next_header_info.clone().difficulty, reward)
-			.unwrap();
+		let mut b =
+			core::core::Block::new(&prev, &[], next_header_info.difficulty, reward).unwrap();
 		b.header.timestamp = prev.timestamp + Duration::seconds(60);
 		b.header.pow.secondary_scaling = next_header_info.secondary_scaling;
 
