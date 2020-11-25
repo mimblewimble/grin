@@ -168,6 +168,7 @@ where
 	TransactionPool::new(
 		PoolConfig {
 			accept_fee_base: default_accept_fee_base(),
+			reorg_cache_period: 30,
 			max_pool_size: 50,
 			max_stempool_size: 50,
 			mineable_max_weight: 10_000,
