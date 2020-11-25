@@ -99,6 +99,14 @@ where
 		Ok(self.size_unsync())
 	}
 
+	/// Append a slice of multiple elements to the file.
+	/// Will not be written to disk until flush() is subsequently called.
+	/// Alternatively discard() may be called to discard any pending changes.
+	pub fn extend_from_slice(&mut self, data: &[T]) -> io::Result<u64> {
+		self.file.append_elmts(data)?;
+		Ok(self.size_unsync())
+	}
+
 	/// Read an element from the file by position.
 	/// Assumes we have already "shifted" the position to account for pruned data.
 	/// Note: PMMR API is 1-indexed, but backend storage is 0-indexed.
@@ -277,6 +285,14 @@ where
 		let mut bytes = ser::ser_vec(data, self.version)
 			.map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
 		self.append(&mut bytes)?;
+		Ok(())
+	}
+
+	/// Iterate over the slice and append each element.
+	fn append_elmts(&mut self, data: &[T]) -> io::Result<()> {
+		for x in data {
+			self.append_elmt(x)?;
+		}
 		Ok(())
 	}
 

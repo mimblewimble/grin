@@ -51,7 +51,7 @@ impl Server {
 	/// Creates a new idle p2p server with no peers
 	pub fn new(
 		db_root: &str,
-		capab: Capabilities,
+		capabilities: Capabilities,
 		config: P2PConfig,
 		adapter: Arc<dyn ChainAdapter>,
 		genesis: Hash,
@@ -59,7 +59,7 @@ impl Server {
 	) -> Result<Server, Error> {
 		Ok(Server {
 			config: config.clone(),
-			capabilities: capab,
+			capabilities,
 			handshake: Arc::new(Handshake::new(genesis, config.clone())),
 			peers: Arc::new(Peers::new(PeerStore::new(db_root)?, adapter, config)),
 			stop_state,

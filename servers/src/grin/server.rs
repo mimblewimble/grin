@@ -48,7 +48,7 @@ use crate::grin::{dandelion_monitor, seed, sync};
 use crate::mining::stratumserver;
 use crate::mining::test_miner::Miner;
 use crate::p2p;
-use crate::p2p::types::PeerAddr;
+use crate::p2p::types::{Capabilities, PeerAddr};
 use crate::pool;
 use crate::util::file::get_first_line;
 use crate::util::{RwLock, StopState};
@@ -214,9 +214,14 @@ impl Server {
 			init_net_hooks(&config),
 		));
 
+		// Use our default capabilities here.
+		// We will advertize these to our peers during hand/shake.
+		let capabilities = Capabilities::default();
+		debug!("Capabilities: {:?}", capabilities);
+
 		let p2p_server = Arc::new(p2p::Server::new(
 			&config.db_root,
-			config.p2p_config.capabilities,
+			capabilities,
 			config.p2p_config.clone(),
 			net_adapter.clone(),
 			genesis.hash(),
@@ -255,7 +260,6 @@ impl Server {
 
 			connect_thread = Some(seed::connect_and_monitor(
 				p2p_server.clone(),
-				config.p2p_config.capabilities,
 				seeder,
 				&preferred_peers,
 				stop_state.clone(),

@@ -237,7 +237,7 @@ where
 		}
 
 		// append all the new nodes and update the MMR index
-		self.backend.append(elmt, hashes)?;
+		self.backend.append(elmt, &hashes)?;
 		self.last_pos = pos;
 		Ok(elmt_pos)
 	}

@@ -68,7 +68,7 @@ fn test_nrd_kernel_relative_height() -> Result<(), PoolError> {
 
 	let header = chain.head_header().unwrap();
 
-	assert_eq!(header.height, consensus::TESTING_THIRD_HARD_FORK);
+	assert_eq!(header.height, 3 * consensus::TESTING_HARD_FORK_INTERVAL);
 	assert_eq!(header.version, HeaderVersion(4));
 
 	let (tx1, tx2, tx3) = {

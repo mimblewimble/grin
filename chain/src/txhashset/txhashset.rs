@@ -19,14 +19,16 @@ use crate::core::consensus::WEEK_HEIGHT;
 use crate::core::core::committed::Committed;
 use crate::core::core::hash::{Hash, Hashed};
 use crate::core::core::merkle_proof::MerkleProof;
-use crate::core::core::pmmr::{self, Backend, ReadablePMMR, ReadonlyPMMR, RewindablePMMR, PMMR};
+use crate::core::core::pmmr::{
+	self, Backend, ReadablePMMR, ReadonlyPMMR, RewindablePMMR, VecBackend, PMMR,
+};
 use crate::core::core::{Block, BlockHeader, KernelFeatures, Output, OutputIdentifier, TxKernel};
 use crate::core::global;
 use crate::core::ser::{PMMRable, ProtocolVersion};
 use crate::error::{Error, ErrorKind};
 use crate::linked_list::{ListIndex, PruneableListIndex, RewindableListIndex};
 use crate::store::{self, Batch, ChainStore};
-use crate::txhashset::bitmap_accumulator::BitmapAccumulator;
+use crate::txhashset::bitmap_accumulator::{BitmapAccumulator, BitmapChunk};
 use crate::txhashset::{RewindableKernelView, UTXOView};
 use crate::types::{CommitPos, OutputRoots, Tip, TxHashSetRoots, TxHashsetWriteStatus};
 use crate::util::secp::pedersen::{Commitment, RangeProof};
@@ -299,6 +301,30 @@ impl TxHashSet {
 	pub fn last_n_kernel(&self, distance: u64) -> Vec<(Hash, TxKernel)> {
 		ReadonlyPMMR::at(&self.kernel_pmmr_h.backend, self.kernel_pmmr_h.last_pos)
 			.get_last_n_insertions(distance)
+	}
+
+	/// Efficient view into the kernel PMMR based on size in header.
+	pub fn kernel_pmmr_at(
+		&self,
+		header: &BlockHeader,
+	) -> ReadonlyPMMR<TxKernel, PMMRBackend<TxKernel>> {
+		ReadonlyPMMR::at(&self.kernel_pmmr_h.backend, header.kernel_mmr_size)
+	}
+
+	/// Efficient view into the output PMMR based on size in header.
+	pub fn output_pmmr_at(
+		&self,
+		header: &BlockHeader,
+	) -> ReadonlyPMMR<OutputIdentifier, PMMRBackend<OutputIdentifier>> {
+		ReadonlyPMMR::at(&self.output_pmmr_h.backend, header.output_mmr_size)
+	}
+
+	/// Efficient view into the rangeproof PMMR based on size in header.
+	pub fn rangeproof_pmmr_at(
+		&self,
+		header: &BlockHeader,
+	) -> ReadonlyPMMR<RangeProof, PMMRBackend<RangeProof>> {
+		ReadonlyPMMR::at(&self.rproof_pmmr_h.backend, header.output_mmr_size)
 	}
 
 	/// Convenience function to query the db for a header by its hash.
@@ -1069,9 +1095,31 @@ impl<'a> Extension<'a> {
 	pub fn utxo_view(&'a self, header_ext: &'a HeaderExtension<'a>) -> UTXOView<'a> {
 		UTXOView::new(
 			header_ext.pmmr.readonly_pmmr(),
-			self.output_pmmr.readonly_pmmr(),
-			self.rproof_pmmr.readonly_pmmr(),
+			self.output_readonly_pmmr(),
+			self.rproof_readonly_pmmr(),
 		)
+	}
+
+	/// Readonly view of our output data.
+	pub fn output_readonly_pmmr(
+		&self,
+	) -> ReadonlyPMMR<OutputIdentifier, PMMRBackend<OutputIdentifier>> {
+		self.output_pmmr.readonly_pmmr()
+	}
+
+	/// Take a snapshot of our bitmap accumulator
+	pub fn bitmap_accumulator(&self) -> BitmapAccumulator {
+		self.bitmap_accumulator.clone()
+	}
+
+	/// Readonly view of our bitmap accumulator data.
+	pub fn bitmap_readonly_pmmr(&self) -> ReadonlyPMMR<BitmapChunk, VecBackend<BitmapChunk>> {
+		self.bitmap_accumulator.readonly_pmmr()
+	}
+
+	/// Readonly view of our rangeproof data.
+	pub fn rproof_readonly_pmmr(&self) -> ReadonlyPMMR<RangeProof, PMMRBackend<RangeProof>> {
+		self.rproof_pmmr.readonly_pmmr()
 	}
 
 	/// Apply a new block to the current txhashet extension (output, rangeproof, kernel MMRs).
