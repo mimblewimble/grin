@@ -118,11 +118,11 @@ fn next_dma_difficulty_adjustment() {
 /// Checks different next_wtema_difficulty adjustments and difficulty boundaries
 #[test]
 fn next_wtema_difficulty_adjustment() {
-	global::set_local_chain_type(global::ChainTypes::AutomatedTesting);
+	global::set_local_chain_type(global::ChainTypes::Mainnet);
 	let hf4 = 2 * YEAR_HEIGHT; // height of HardFork4, switching to wtema DAA
 	let diff_min = Difficulty::min_wtema();
 
-	// Check we don't get stuck on difficulty <= Difficulty::min_wtema (at 4x faster blocks at least)
+	// Check we don't get stuck on mainnet difficulty <= Difficulty::min_wtema (on 59s blocks)
 	let mut hi = HeaderInfo::from_diff_scaling(diff_min, 0);
 	hi.is_secondary = false;
 	let hinext = next_wtema_difficulty(hf4, repeat(BLOCK_TIME_SEC - 1, hi.clone(), 2, None));
