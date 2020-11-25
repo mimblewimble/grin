@@ -1061,7 +1061,7 @@ mod test {
 				last_seen: Utc::now(),
 				sent_bytes_per_sec: 0,
 				received_bytes_per_sec: 0,
-				capabilities: Capabilities::FULL_NODE,
+				capabilities: Capabilities::default(),
 			}
 		}
 	}
