@@ -110,7 +110,7 @@ pub struct PoolConfig {
 	// Reorg cache retention period in minute.
 	// The reorg cache repopulates local mempool in a reorg scenario.
 	#[serde(default = "default_reorg_cache_period")]
-	pub reorg_cache_period: i64,
+	pub reorg_cache_period: u32,
 
 	/// Maximum capacity of the pool in number of transactions
 	#[serde(default = "default_max_pool_size")]
@@ -142,7 +142,7 @@ impl Default for PoolConfig {
 fn default_accept_fee_base() -> u64 {
 	consensus::MILLI_GRIN
 }
-fn default_reorg_cache_period() -> i64 {
+fn default_reorg_cache_period() -> u32 {
 	30
 }
 fn default_max_pool_size() -> usize {
