@@ -41,6 +41,7 @@ pub enum PeerColumn {
 	Direction,
 	Version,
 	UserAgent,
+	Capabilities,
 }
 
 impl PeerColumn {
@@ -53,6 +54,7 @@ impl PeerColumn {
 			PeerColumn::TotalDifficulty => "Total Difficulty",
 			PeerColumn::Direction => "Direction",
 			PeerColumn::UserAgent => "User Agent",
+			PeerColumn::Capabilities => "Capabilities",
 		}
 	}
 }
@@ -82,6 +84,7 @@ impl TableViewItem<PeerColumn> for PeerStats {
 			PeerColumn::Direction => self.direction.clone(),
 			PeerColumn::Version => format!("{}", self.version),
 			PeerColumn::UserAgent => self.user_agent.clone(),
+			PeerColumn::Capabilities => format!("{}", self.capabilities.bits()),
 		}
 	}
 
@@ -115,6 +118,10 @@ impl TableViewItem<PeerColumn> for PeerStats {
 			PeerColumn::Direction => self.direction.cmp(&other.direction).then(sort_by_addr()),
 			PeerColumn::Version => self.version.cmp(&other.version).then(sort_by_addr()),
 			PeerColumn::UserAgent => self.user_agent.cmp(&other.user_agent).then(sort_by_addr()),
+			PeerColumn::Capabilities => self
+				.capabilities
+				.cmp(&other.capabilities)
+				.then(sort_by_addr()),
 		}
 	}
 }
@@ -133,7 +140,8 @@ impl TUIPeerView {
 			.column(PeerColumn::TotalDifficulty, "Total Difficulty", |c| {
 				c.width_percent(24)
 			})
-			.column(PeerColumn::Version, "Proto", |c| c.width_percent(6))
+			.column(PeerColumn::Version, "Proto", |c| c.width_percent(4))
+			.column(PeerColumn::Capabilities, "Capab", |c| c.width_percent(4))
 			.column(PeerColumn::UserAgent, "User Agent", |c| c.width_percent(18));
 		let peer_status_view = ResizedView::with_full_screen(
 			LinearLayout::new(Orientation::Vertical)

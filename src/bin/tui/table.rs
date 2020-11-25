@@ -995,6 +995,7 @@ impl<H: Copy + Clone + 'static> TableColumn<H> {
 
 #[cfg(test)]
 mod test {
+	use crate::p2p::Capabilities;
 	use crate::tui::peers::PeerColumn;
 	use crate::tui::table::TableView;
 	use chrono::Utc;
@@ -1060,6 +1061,7 @@ mod test {
 				last_seen: Utc::now(),
 				sent_bytes_per_sec: 0,
 				received_bytes_per_sec: 0,
+				capabilities: Capabilities::FULL_NODE,
 			}
 		}
 	}
