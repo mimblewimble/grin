@@ -22,6 +22,7 @@ use std::sync::{Arc, Weak};
 use std::thread;
 use std::time::Instant;
 
+use crate::chain::txhashset::BitmapChunk;
 use crate::chain::{
 	self, BlockStatus, ChainAdapter, Options, SyncState, SyncStatus, TxHashsetDownloadStats,
 };
@@ -30,17 +31,27 @@ use crate::common::types::{ChainValidationMode, DandelionEpoch, ServerConfig};
 use crate::core::core::hash::{Hash, Hashed};
 use crate::core::core::transaction::Transaction;
 use crate::core::core::verifier_cache::VerifierCache;
-use crate::core::core::{BlockHeader, BlockSums, CompactBlock, Inputs, OutputIdentifier};
+use crate::core::core::{
+	BlockHeader, BlockSums, CompactBlock, Inputs, OutputIdentifier, Segment, SegmentIdentifier,
+	TxKernel,
+};
 use crate::core::pow::Difficulty;
 use crate::core::ser::ProtocolVersion;
 use crate::core::{core, global};
 use crate::p2p;
 use crate::p2p::types::PeerInfo;
 use crate::pool::{self, BlockChain, PoolAdapter};
+use crate::util::secp::pedersen::RangeProof;
 use crate::util::OneTime;
 use chrono::prelude::*;
 use chrono::Duration;
 use rand::prelude::*;
+use std::ops::Range;
+
+const KERNEL_SEGMENT_HEIGHT_RANGE: Range<u8> = 9..14;
+const BITMAP_SEGMENT_HEIGHT_RANGE: Range<u8> = 9..14;
+const OUTPUT_SEGMENT_HEIGHT_RANGE: Range<u8> = 11..16;
+const RANGEPROOF_SEGMENT_HEIGHT_RANGE: Range<u8> = 7..12;
 
 /// Implementation of the NetAdapter for the . Gets notified when new
 /// blocks and transactions are received and forwards to the chain and pool
@@ -476,6 +487,66 @@ where
 
 	fn get_tmpfile_pathname(&self, tmpfile_name: String) -> PathBuf {
 		self.chain().get_tmpfile_pathname(tmpfile_name)
+	}
+
+	fn get_kernel_segment(
+		&self,
+		hash: Hash,
+		id: SegmentIdentifier,
+	) -> Result<Segment<TxKernel>, chain::Error> {
+		if !KERNEL_SEGMENT_HEIGHT_RANGE.contains(&id.height) {
+			return Err(chain::ErrorKind::InvalidSegmentHeight.into());
+		}
+		let segmenter = self.chain().segmenter()?;
+		if segmenter.header().hash() != hash {
+			return Err(chain::ErrorKind::SegmenterHeaderMismatch.into());
+		}
+		segmenter.kernel_segment(id)
+	}
+
+	fn get_bitmap_segment(
+		&self,
+		hash: Hash,
+		id: SegmentIdentifier,
+	) -> Result<(Segment<BitmapChunk>, Hash), chain::Error> {
+		if !BITMAP_SEGMENT_HEIGHT_RANGE.contains(&id.height) {
+			return Err(chain::ErrorKind::InvalidSegmentHeight.into());
+		}
+		let segmenter = self.chain().segmenter()?;
+		if segmenter.header().hash() != hash {
+			return Err(chain::ErrorKind::SegmenterHeaderMismatch.into());
+		}
+		segmenter.bitmap_segment(id)
+	}
+
+	fn get_output_segment(
+		&self,
+		hash: Hash,
+		id: SegmentIdentifier,
+	) -> Result<(Segment<OutputIdentifier>, Hash), chain::Error> {
+		if !OUTPUT_SEGMENT_HEIGHT_RANGE.contains(&id.height) {
+			return Err(chain::ErrorKind::InvalidSegmentHeight.into());
+		}
+		let segmenter = self.chain().segmenter()?;
+		if segmenter.header().hash() != hash {
+			return Err(chain::ErrorKind::SegmenterHeaderMismatch.into());
+		}
+		segmenter.output_segment(id)
+	}
+
+	fn get_rangeproof_segment(
+		&self,
+		hash: Hash,
+		id: SegmentIdentifier,
+	) -> Result<Segment<RangeProof>, chain::Error> {
+		if RANGEPROOF_SEGMENT_HEIGHT_RANGE.contains(&id.height) {
+			return Err(chain::ErrorKind::InvalidSegmentHeight.into());
+		}
+		let segmenter = self.chain().segmenter()?;
+		if segmenter.header().hash() != hash {
+			return Err(chain::ErrorKind::SegmenterHeaderMismatch.into());
+		}
+		segmenter.rangeproof_segment(id)
 	}
 }
 

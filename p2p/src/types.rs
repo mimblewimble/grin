@@ -28,12 +28,15 @@ use serde::{Deserialize, Deserializer};
 use grin_store;
 
 use crate::chain;
+use crate::chain::txhashset::BitmapChunk;
 use crate::core::core;
 use crate::core::core::hash::Hash;
+use crate::core::core::{OutputIdentifier, Segment, SegmentIdentifier, TxKernel};
 use crate::core::global;
 use crate::core::pow::Difficulty;
 use crate::core::ser::{self, ProtocolVersion, Readable, Reader, Writeable, Writer};
 use crate::msg::PeerAddrs;
+use crate::util::secp::pedersen::RangeProof;
 use crate::util::RwLock;
 
 /// Maximum number of block headers a peer should ever send
@@ -642,6 +645,30 @@ pub trait ChainAdapter: Sync + Send {
 	/// Get a tmp file path in above specific tmp dir (create tmp dir if not exist)
 	/// Delete file if tmp file already exists
 	fn get_tmpfile_pathname(&self, tmpfile_name: String) -> PathBuf;
+
+	fn get_kernel_segment(
+		&self,
+		hash: Hash,
+		id: SegmentIdentifier,
+	) -> Result<Segment<TxKernel>, chain::Error>;
+
+	fn get_bitmap_segment(
+		&self,
+		hash: Hash,
+		id: SegmentIdentifier,
+	) -> Result<(Segment<BitmapChunk>, Hash), chain::Error>;
+
+	fn get_output_segment(
+		&self,
+		hash: Hash,
+		id: SegmentIdentifier,
+	) -> Result<(Segment<OutputIdentifier>, Hash), chain::Error>;
+
+	fn get_rangeproof_segment(
+		&self,
+		hash: Hash,
+		id: SegmentIdentifier,
+	) -> Result<Segment<RangeProof>, chain::Error>;
 }
 
 /// Additional methods required by the protocol that don't need to be

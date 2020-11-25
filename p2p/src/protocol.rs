@@ -16,7 +16,10 @@ use crate::chain;
 use crate::conn::MessageHandler;
 use crate::core::core::{hash::Hashed, CompactBlock};
 
-use crate::msg::{Consumed, Headers, Message, Msg, PeerAddrs, Pong, TxHashSetArchive, Type};
+use crate::msg::{
+	Consumed, Headers, Message, Msg, OutputBitmapSegmentResponse, OutputSegmentResponse, PeerAddrs,
+	Pong, SegmentRequest, SegmentResponse, TxHashSetArchive, Type,
+};
 use crate::types::{AttachmentMeta, Error, NetAdapter, PeerInfo};
 use chrono::prelude::Utc;
 use rand::{thread_rng, Rng};
@@ -287,6 +290,92 @@ impl MessageHandler for Protocol {
 
 				Consumed::Attachment(Arc::new(meta), file)
 			}
+
+			Message::GetOutputBitmapSegment(req) => {
+				let SegmentRequest {
+					block_hash,
+					identifier,
+				} = req;
+				if let Ok((segment, output_root)) =
+					self.adapter.get_bitmap_segment(block_hash, identifier)
+				{
+					Consumed::Response(Msg::new(
+						Type::OutputBitmapSegment,
+						OutputBitmapSegmentResponse {
+							block_hash,
+							segment: segment.into(),
+							output_root,
+						},
+						self.peer_info.version,
+					)?)
+				} else {
+					Consumed::None
+				}
+			}
+			Message::GetOutputSegment(req) => {
+				let SegmentRequest {
+					block_hash,
+					identifier,
+				} = req;
+				if let Ok((segment, output_bitmap_root)) =
+					self.adapter.get_output_segment(block_hash, identifier)
+				{
+					Consumed::Response(Msg::new(
+						Type::OutputSegment,
+						OutputSegmentResponse {
+							response: SegmentResponse {
+								block_hash,
+								segment,
+							},
+							output_bitmap_root,
+						},
+						self.peer_info.version,
+					)?)
+				} else {
+					Consumed::None
+				}
+			}
+			Message::GetRangeProofSegment(req) => {
+				let SegmentRequest {
+					block_hash,
+					identifier,
+				} = req;
+				if let Ok(segment) = self.adapter.get_rangeproof_segment(block_hash, identifier) {
+					Consumed::Response(Msg::new(
+						Type::RangeProofSegment,
+						SegmentResponse {
+							block_hash,
+							segment,
+						},
+						self.peer_info.version,
+					)?)
+				} else {
+					Consumed::None
+				}
+			}
+			Message::GetKernelSegment(req) => {
+				let SegmentRequest {
+					block_hash,
+					identifier,
+				} = req;
+				if let Ok(segment) = self.adapter.get_kernel_segment(block_hash, identifier) {
+					Consumed::Response(Msg::new(
+						Type::KernelSegment,
+						SegmentResponse {
+							block_hash,
+							segment,
+						},
+						self.peer_info.version,
+					)?)
+				} else {
+					Consumed::None
+				}
+			}
+			Message::OutputBitmapSegment(_)
+			| Message::OutputSegment(_)
+			| Message::RangeProofSegment(_)
+			| Message::KernelSegment(_) => Consumed::None,
+
 			Message::Unknown(_) => Consumed::None,
 		};
 		Ok(consumed)
