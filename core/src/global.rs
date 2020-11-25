@@ -72,9 +72,6 @@ pub const USER_TESTING_CUT_THROUGH_HORIZON: u32 = 70;
 /// Testing state sync threshold in blocks
 pub const TESTING_STATE_SYNC_THRESHOLD: u32 = 20;
 
-/// Testing initial graph weight
-pub const TESTING_INITIAL_GRAPH_WEIGHT: u32 = 1;
-
 /// Testing initial block difficulty
 pub const TESTING_INITIAL_DIFFICULTY: u64 = 1;
 
@@ -331,8 +328,8 @@ pub fn initial_block_difficulty() -> u64 {
 /// Initial mining secondary scale
 pub fn initial_graph_weight() -> u32 {
 	match get_chain_type() {
-		ChainTypes::AutomatedTesting => TESTING_INITIAL_GRAPH_WEIGHT,
-		ChainTypes::UserTesting => TESTING_INITIAL_GRAPH_WEIGHT,
+		ChainTypes::AutomatedTesting => graph_weight(0, AUTOMATED_TESTING_MIN_EDGE_BITS) as u32,
+		ChainTypes::UserTesting => graph_weight(0, USER_TESTING_MIN_EDGE_BITS) as u32,
 		ChainTypes::Testnet => graph_weight(0, SECOND_POW_EDGE_BITS) as u32,
 		ChainTypes::Mainnet => graph_weight(0, SECOND_POW_EDGE_BITS) as u32,
 	}
@@ -341,8 +338,8 @@ pub fn initial_graph_weight() -> u32 {
 /// Minimum valid graph weight post HF4
 pub fn min_wtema_graph_weight() -> u64 {
 	match get_chain_type() {
-		ChainTypes::AutomatedTesting => TESTING_INITIAL_GRAPH_WEIGHT as u64,
-		ChainTypes::UserTesting => TESTING_INITIAL_GRAPH_WEIGHT as u64,
+		ChainTypes::AutomatedTesting => graph_weight(0, AUTOMATED_TESTING_MIN_EDGE_BITS),
+		ChainTypes::UserTesting => graph_weight(0, USER_TESTING_MIN_EDGE_BITS),
 		ChainTypes::Testnet => graph_weight(0, SECOND_POW_EDGE_BITS),
 		ChainTypes::Mainnet => C32_GRAPH_WEIGHT,
 	}
