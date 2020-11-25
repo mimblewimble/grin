@@ -174,7 +174,7 @@ pub fn valid_header_version(height: u64, version: HeaderVersion) -> bool {
 /// Number of blocks used to calculate difficulty adjustment by Damped Moving Average
 pub const DMA_WINDOW: u64 = HOUR_HEIGHT;
 
-/// Difficulty adjustment half life is 4 hours
+/// Difficulty adjustment half life (actually, 60s * number of 0s-blocks to raise diff by factor e) is 4 hours
 pub const WTEMA_HALF_LIFE: u64 = 4 * HOUR_SEC;
 
 /// Average time span of the DMA difficulty adjustment window
@@ -211,10 +211,6 @@ pub const C32_GRAPH_WEIGHT: u64 = (2u64 << (32 - BASE_EDGE_BITS) as u64) * 32; /
 /// Minimum difficulty, enforced in Damped Moving Average diff retargetting
 /// avoids getting stuck when trying to increase difficulty subject to dampening
 pub const MIN_DMA_DIFFICULTY: u64 = DMA_DAMP_FACTOR;
-
-/// Minimum difficulty, enforced in Weighted Target Exponential Moving Average diff retargetting
-/// avoids getting stuck when trying to increase difficulty
-pub const MIN_WTEMA_DIFFICULTY: u64 = C32_GRAPH_WEIGHT;
 
 /// Minimum scaling factor for AR pow, enforced in diff retargetting
 /// avoids getting stuck when trying to increase ar_scale subject to dampening
@@ -375,11 +371,11 @@ where
 	let next_diff =
 		last_diff * WTEMA_HALF_LIFE / (WTEMA_HALF_LIFE - BLOCK_TIME_SEC + last_block_time);
 
-	// minimum difficulty at graph_weight(32) ensures difficulty increase on 59s block
+	// mainnet minimum difficulty at graph_weight(32) ensures difficulty increase on 59s block
 	// since 16384 * WTEMA_HALF_LIFE / (WTEMA_HALF_LIFE - 1) > 16384
-	let difficulty = max(MIN_WTEMA_DIFFICULTY, next_diff);
+	let difficulty = max(Difficulty::min_wtema(), Difficulty::from_num(next_diff));
 
-	HeaderInfo::from_diff_scaling(Difficulty::from_num(difficulty), 0) // no more secondary PoW
+	HeaderInfo::from_diff_scaling(difficulty, 0) // no more secondary PoW
 }
 
 /// Count, in units of 1/100 (a percent), the number of "secondary" (AR) blocks in the provided window of blocks.
@@ -425,12 +421,12 @@ mod test {
 
 		// initial weights
 		assert_eq!(graph_weight(1, 31), 256 * 31);
-		assert_eq!(graph_weight(1, 32), C32_GRAPH_WEIGHT);
+		assert_eq!(graph_weight(1, 32), 512 * 32);
 		assert_eq!(graph_weight(1, 33), 1024 * 33);
 
 		// one year in, 31 starts going down, the rest stays the same
 		assert_eq!(graph_weight(YEAR_HEIGHT, 31), 256 * 30);
-		assert_eq!(graph_weight(YEAR_HEIGHT, 32), C32_GRAPH_WEIGHT);
+		assert_eq!(graph_weight(YEAR_HEIGHT, 32), 512 * 32);
 		assert_eq!(graph_weight(YEAR_HEIGHT, 33), 1024 * 33);
 
 		// 31 loses one factor per week
@@ -440,7 +436,7 @@ mod test {
 
 		// 2 years in, 31 still at 0, 32 starts decreasing
 		assert_eq!(graph_weight(2 * YEAR_HEIGHT, 31), 0);
-		assert_eq!(graph_weight(2 * YEAR_HEIGHT, 32), C32_GRAPH_WEIGHT);
+		assert_eq!(graph_weight(2 * YEAR_HEIGHT, 32), 512 * 32);
 		assert_eq!(graph_weight(2 * YEAR_HEIGHT, 33), 1024 * 33);
 
 		// 32 phaseout on hold
@@ -460,12 +456,12 @@ mod test {
 
 		// 3 years in, nothing changes
 		assert_eq!(graph_weight(3 * YEAR_HEIGHT, 31), 0);
-		assert_eq!(graph_weight(3 * YEAR_HEIGHT, 32), C32_GRAPH_WEIGHT);
+		assert_eq!(graph_weight(3 * YEAR_HEIGHT, 32), 512 * 32);
 		assert_eq!(graph_weight(3 * YEAR_HEIGHT, 33), 1024 * 33);
 
 		// 4 years in, still on hold
 		assert_eq!(graph_weight(4 * YEAR_HEIGHT, 31), 0);
-		assert_eq!(graph_weight(4 * YEAR_HEIGHT, 32), C32_GRAPH_WEIGHT);
+		assert_eq!(graph_weight(4 * YEAR_HEIGHT, 32), 512 * 32);
 		assert_eq!(graph_weight(4 * YEAR_HEIGHT, 33), 1024 * 33);
 		assert_eq!(graph_weight(4 * YEAR_HEIGHT, 33), 1024 * 33);
 	}

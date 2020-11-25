@@ -12,9 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::consensus::{
-	graph_weight, MIN_DMA_DIFFICULTY, MIN_WTEMA_DIFFICULTY, SECOND_POW_EDGE_BITS,
-};
+use crate::consensus::{graph_weight, MIN_DMA_DIFFICULTY, SECOND_POW_EDGE_BITS};
 use crate::core::hash::{DefaultHashable, Hashed};
 use crate::global;
 use crate::pow::error::Error;
@@ -67,7 +65,7 @@ impl Difficulty {
 	/// Difficulty of MIN_DIFFICULTY
 	pub fn min_wtema() -> Difficulty {
 		Difficulty {
-			num: MIN_WTEMA_DIFFICULTY,
+			num: global::min_wtema_graph_weight(),
 		}
 	}
 
