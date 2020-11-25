@@ -14,7 +14,7 @@
 use chrono::Utc;
 use grin_core::consensus::{
 	next_dma_difficulty, next_wtema_difficulty, HeaderInfo, AR_SCALE_DAMP_FACTOR, BLOCK_TIME_SEC,
-	DMA_WINDOW, MIN_AR_SCALE, MIN_DMA_DIFFICULTY, MIN_WTEMA_DIFFICULTY, YEAR_HEIGHT,
+	DMA_WINDOW, MIN_AR_SCALE, YEAR_HEIGHT,
 };
 use grin_core::global;
 use grin_core::pow::Difficulty;
@@ -26,14 +26,14 @@ fn next_dma_difficulty_adjustment() {
 	let cur_time = Utc::now().timestamp() as u64;
 	let diff_min = Difficulty::min_dma();
 
-	// Check we don't get stuck on difficulty <= MIN_DMA_DIFFICULTY (at 4x faster blocks at least)
+	// Check we don't get stuck on difficulty <= Difficulty::min_dma (at 4x faster blocks at least)
 	let mut hi = HeaderInfo::from_diff_scaling(diff_min, AR_SCALE_DAMP_FACTOR as u32);
 	hi.is_secondary = false;
 	let hinext = next_dma_difficulty(1, repeat(BLOCK_TIME_SEC / 4, hi.clone(), DMA_WINDOW, None));
 
 	assert_ne!(hinext.difficulty, diff_min);
 
-	// Check we don't get stuck on scale MIN_DMA_DIFFICULTY, when primary frequency is too high
+	// Check we don't get stuck on scale MIN_AR_SCALE, when primary frequency is too high
 	assert_ne!(hinext.secondary_scaling, MIN_AR_SCALE as u32);
 
 	// just enough data, right interval, should stay constant
@@ -119,11 +119,10 @@ fn next_dma_difficulty_adjustment() {
 #[test]
 fn next_wtema_difficulty_adjustment() {
 	global::set_local_chain_type(global::ChainTypes::AutomatedTesting);
-	let cur_time = Utc::now().timestamp() as u64;
 	let hf4 = 2 * YEAR_HEIGHT; // height of HardFork4, switching to wtema DAA
 	let diff_min = Difficulty::min_wtema();
 
-	// Check we don't get stuck on difficulty <= MIN_WTEMA_DIFFICULTY (at 4x faster blocks at least)
+	// Check we don't get stuck on difficulty <= Difficulty::min_wtema (at 4x faster blocks at least)
 	let mut hi = HeaderInfo::from_diff_scaling(diff_min, 0);
 	hi.is_secondary = false;
 	let hinext = next_wtema_difficulty(hf4, repeat(BLOCK_TIME_SEC - 1, hi.clone(), 2, None));

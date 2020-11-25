@@ -18,8 +18,8 @@
 
 use crate::consensus::{
 	graph_weight, header_version, HeaderInfo, BASE_EDGE_BITS, BLOCK_KERNEL_WEIGHT,
-	BLOCK_OUTPUT_WEIGHT, BLOCK_TIME_SEC, COINBASE_MATURITY, CUT_THROUGH_HORIZON, DAY_HEIGHT,
-	DEFAULT_MIN_EDGE_BITS, DMA_WINDOW, INITIAL_DIFFICULTY, MAX_BLOCK_WEIGHT, PROOFSIZE,
+	BLOCK_OUTPUT_WEIGHT, BLOCK_TIME_SEC, C32_GRAPH_WEIGHT, COINBASE_MATURITY, CUT_THROUGH_HORIZON,
+	DAY_HEIGHT, DEFAULT_MIN_EDGE_BITS, DMA_WINDOW, INITIAL_DIFFICULTY, MAX_BLOCK_WEIGHT, PROOFSIZE,
 	SECOND_POW_EDGE_BITS, STATE_SYNC_THRESHOLD,
 };
 use crate::core::block::HeaderVersion;
@@ -327,6 +327,7 @@ pub fn initial_block_difficulty() -> u64 {
 		ChainTypes::Mainnet => INITIAL_DIFFICULTY,
 	}
 }
+
 /// Initial mining secondary scale
 pub fn initial_graph_weight() -> u32 {
 	match get_chain_type() {
@@ -334,6 +335,16 @@ pub fn initial_graph_weight() -> u32 {
 		ChainTypes::UserTesting => TESTING_INITIAL_GRAPH_WEIGHT,
 		ChainTypes::Testnet => graph_weight(0, SECOND_POW_EDGE_BITS) as u32,
 		ChainTypes::Mainnet => graph_weight(0, SECOND_POW_EDGE_BITS) as u32,
+	}
+}
+
+/// Minimum valid graph weight post HF4
+pub fn min_wtema_graph_weight() -> u64 {
+	match get_chain_type() {
+		ChainTypes::AutomatedTesting => TESTING_INITIAL_GRAPH_WEIGHT as u64,
+		ChainTypes::UserTesting => TESTING_INITIAL_GRAPH_WEIGHT as u64,
+		ChainTypes::Testnet => graph_weight(0, SECOND_POW_EDGE_BITS),
+		ChainTypes::Mainnet => C32_GRAPH_WEIGHT,
 	}
 }
 
