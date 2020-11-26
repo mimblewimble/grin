@@ -21,6 +21,7 @@ use self::core::core::committed;
 use self::core::core::hash::Hash;
 use self::core::core::transaction::{self, Transaction};
 use self::core::core::{BlockHeader, BlockSums, Inputs, OutputIdentifier};
+use self::core::global::DEFAULT_ACCEPT_FEE_BASE;
 use chrono::prelude::*;
 use failure::Fail;
 use grin_core as core;
@@ -139,8 +140,9 @@ impl Default for PoolConfig {
 	}
 }
 
-fn default_accept_fee_base() -> u64 {
-	consensus::MILLI_GRIN
+/// make output (of weight 21) cost about 1 Grin-cent by default, keeping a round number
+pub fn default_accept_fee_base() -> u64 {
+	DEFAULT_ACCEPT_FEE_BASE
 }
 fn default_reorg_cache_period() -> u32 {
 	30

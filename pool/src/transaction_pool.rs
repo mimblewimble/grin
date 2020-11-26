@@ -182,7 +182,7 @@ where
 		// NRD kernels only valid post HF3 and if NRD feature enabled.
 		self.verify_kernel_variants(tx, header)?;
 
-		// Do we have the capacity to accept this transaction?
+		// Does this transaction pay the required fees and fit within the pool capacity?
 		let acceptability = self.is_acceptable(tx, stem);
 		let mut evict = false;
 		if !stem && acceptability.as_ref().err() == Some(&PoolError::OverCapacity) {
@@ -193,8 +193,12 @@ where
 
 		// Make sure the transaction is valid before anything else.
 		// Validate tx accounting for max tx weight.
-		tx.validate(Weighting::AsTransaction, self.verifier_cache.clone())
-			.map_err(PoolError::InvalidTx)?;
+		tx.validate(
+			Weighting::AsTransaction,
+			self.verifier_cache.clone(),
+			header.height,
+		)
+		.map_err(PoolError::InvalidTx)?;
 
 		// Check the tx lock_time is valid based on current chain state.
 		self.blockchain.verify_tx_lock_height(tx)?;
@@ -274,14 +278,19 @@ where
 		};
 
 		// Validate the tx to ensure our converted inputs are correct.
-		tx.validate(Weighting::AsTransaction, self.verifier_cache.clone())?;
+		let header = self.chain_head()?;
+		tx.validate(
+			Weighting::AsTransaction,
+			self.verifier_cache.clone(),
+			header.height,
+		)?;
 
 		Ok(PoolEntry::new(tx, entry.src))
 	}
 
 	// Evict a transaction from the txpool.
 	// Uses bucket logic to identify the "last" transaction.
-	// No other tx depends on it and it has low fee_to_weight.
+	// No other tx depends on it and it has low fee_rate
 	pub fn evict_from_txpool(&mut self) {
 		self.txpool.evict_transaction()
 	}
@@ -362,14 +371,12 @@ where
 			return Err(PoolError::OverCapacity);
 		}
 
-		// for a basic transaction (1 input, 2 outputs) -
-		// (-1 * 1) + (4 * 2) + 1 = 8
-		// 8 * 10 = 80
-		if self.config.accept_fee_base > 0 {
-			let threshold = (tx.tx_weight() as u64) * self.config.accept_fee_base;
-			if tx.fee() < threshold {
-				return Err(PoolError::LowFeeTransaction(threshold));
-			}
+		// weight for a basic transaction (2 inputs, 2 outputs, 1 kernel) -
+		// (2 * 1) + (2 * 21) + (1 * 3) = 47
+		// minfees = 47 * 500_000 = 23_500_000
+		let header = self.chain_head()?;
+		if tx.shifted_fee(header.height) < tx.accept_fee(header.height) {
+			return Err(PoolError::LowFeeTransaction(tx.shifted_fee(header.height)));
 		}
 		Ok(())
 	}

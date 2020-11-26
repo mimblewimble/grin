@@ -100,7 +100,7 @@ fn test_coinbase_maturity() {
 		// here we build a tx that attempts to spend the earlier coinbase output
 		// this is not a valid tx as the coinbase output cannot be spent yet
 		let coinbase_txn = build::transaction(
-			KernelFeatures::Plain { fee: 2 },
+			KernelFeatures::Plain { fee: 2.into() },
 			&[
 				build::coinbase_input(amount, key_id1.clone()),
 				build::output(amount - 2, key_id2.clone()),
@@ -111,7 +111,7 @@ fn test_coinbase_maturity() {
 		.unwrap();
 
 		let txs = &[coinbase_txn.clone()];
-		let fees = txs.iter().map(|tx| tx.fee()).sum();
+		let fees = txs.iter().map(|tx| tx.fee(prev.height + 1)).sum();
 		let reward = libtx::reward::output(&keychain, &builder, &key_id3, fees, false).unwrap();
 		let next_header_info =
 			consensus::next_difficulty(prev.height + 1, chain.difficulty_iter().unwrap());
@@ -186,7 +186,7 @@ fn test_coinbase_maturity() {
 			// here we build a tx that attempts to spend the earlier coinbase output
 			// this is not a valid tx as the coinbase output cannot be spent yet
 			let coinbase_txn = build::transaction(
-				KernelFeatures::Plain { fee: 2 },
+				KernelFeatures::Plain { fee: 2.into() },
 				&[
 					build::coinbase_input(amount, key_id1.clone()),
 					build::output(amount - 2, key_id2.clone()),
@@ -197,7 +197,7 @@ fn test_coinbase_maturity() {
 			.unwrap();
 
 			let txs = &[coinbase_txn.clone()];
-			let fees = txs.iter().map(|tx| tx.fee()).sum();
+			let fees = txs.iter().map(|tx| tx.fee(prev.height + 1)).sum();
 			let reward = libtx::reward::output(&keychain, &builder, &key_id3, fees, false).unwrap();
 			let next_header_info =
 				consensus::next_difficulty(prev.height + 1, chain.difficulty_iter().unwrap());
@@ -266,7 +266,7 @@ fn test_coinbase_maturity() {
 				.unwrap();
 
 			let txs = &[coinbase_txn];
-			let fees = txs.iter().map(|tx| tx.fee()).sum();
+			let fees = txs.iter().map(|tx| tx.fee(prev.height + 1)).sum();
 			let next_header_info =
 				consensus::next_difficulty(prev.height + 1, chain.difficulty_iter().unwrap());
 			let reward = libtx::reward::output(&keychain, &builder, &key_id4, fees, false).unwrap();

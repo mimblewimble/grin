@@ -31,6 +31,7 @@ use std::sync::Arc;
 fn test_transaction_pool_block_building() -> Result<(), PoolError> {
 	util::init_test_logger();
 	global::set_local_chain_type(global::ChainTypes::AutomatedTesting);
+	global::set_local_accept_fee_base(1);
 	let keychain: ExtKeychain = Keychain::from_random_seed(false).unwrap();
 
 	let db_root = "target/.block_building";
@@ -48,25 +49,27 @@ fn test_transaction_pool_block_building() -> Result<(), PoolError> {
 		verifier_cache,
 	);
 
-	add_some_blocks(&chain, 3, &keychain);
+	// mine enough blocks to get past HF4
+	add_some_blocks(&chain, 4 * 3, &keychain);
 
 	let header_1 = chain.get_header_by_height(1).unwrap();
 
 	// Now create tx to spend an early coinbase (now matured).
 	// Provides us with some useful outputs to test with.
-	let initial_tx = test_transaction_spending_coinbase(&keychain, &header_1, vec![10, 20, 30, 40]);
+	let initial_tx =
+		test_transaction_spending_coinbase(&keychain, &header_1, vec![100, 200, 300, 400]);
 
 	// Mine that initial tx so we can spend it with multiple txs.
 	add_block(&chain, &[initial_tx], &keychain);
 
 	let header = chain.head_header().unwrap();
 
-	let root_tx_1 = test_transaction(&keychain, vec![10, 20], vec![24]);
-	let root_tx_2 = test_transaction(&keychain, vec![30], vec![28]);
-	let root_tx_3 = test_transaction(&keychain, vec![40], vec![38]);
+	let root_tx_1 = test_transaction(&keychain, vec![100, 200], vec![240]);
+	let root_tx_2 = test_transaction(&keychain, vec![300], vec![270]);
+	let root_tx_3 = test_transaction(&keychain, vec![400], vec![370]);
 
-	let child_tx_1 = test_transaction(&keychain, vec![24], vec![22]);
-	let child_tx_2 = test_transaction(&keychain, vec![38], vec![32]);
+	let child_tx_1 = test_transaction(&keychain, vec![240], vec![210]);
+	let child_tx_2 = test_transaction(&keychain, vec![370], vec![320]);
 
 	{
 		// Add the three root txs to the pool.

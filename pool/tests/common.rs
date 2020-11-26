@@ -36,6 +36,7 @@ use grin_core as core;
 use grin_keychain as keychain;
 use grin_pool as pool;
 use grin_util as util;
+use std::convert::TryInto;
 use std::fs;
 use std::sync::Arc;
 
@@ -79,7 +80,7 @@ where
 	let prev = chain.head_header().unwrap();
 	let height = prev.height + 1;
 	let next_header_info = consensus::next_difficulty(height, chain.difficulty_iter().unwrap());
-	let fee = txs.iter().map(|x| x.fee()).sum();
+	let fee = txs.iter().map(|x| x.fee(height)).sum();
 	let key_id = ExtKeychainPath::new(1, height as u32, 0, 0, 0).to_identifier();
 	let reward =
 		reward::output(keychain, &ProofBuilder::new(keychain), &key_id, fee, false).unwrap();
@@ -166,7 +167,7 @@ where
 {
 	TransactionPool::new(
 		PoolConfig {
-			accept_fee_base: 0,
+			accept_fee_base: default_accept_fee_base(),
 			reorg_cache_period: 30,
 			max_pool_size: 50,
 			max_stempool_size: 50,
@@ -207,7 +208,9 @@ where
 	}
 
 	build::transaction(
-		KernelFeatures::Plain { fee: fees as u64 },
+		KernelFeatures::Plain {
+			fee: (fees as u64).try_into().unwrap(),
+		},
 		&tx_elements,
 		keychain,
 		&ProofBuilder::new(keychain),
@@ -232,7 +235,9 @@ where
 		keychain,
 		input_values,
 		output_values,
-		KernelFeatures::Plain { fee: fees as u64 },
+		KernelFeatures::Plain {
+			fee: (fees as u64).try_into().unwrap(),
+		},
 	)
 }
 

@@ -23,7 +23,7 @@ use self::chain_test_helper::{clean_output_dir, genesis_block, init_chain};
 use crate::chain::{pipe, Chain, Options};
 use crate::core::core::verifier_cache::LruVerifierCache;
 use crate::core::core::{block, pmmr, transaction};
-use crate::core::core::{Block, KernelFeatures, Transaction, Weighting};
+use crate::core::core::{Block, FeeFields, KernelFeatures, Transaction, Weighting};
 use crate::core::libtx::{build, reward, ProofBuilder};
 use crate::core::{consensus, global, pow};
 use crate::keychain::{ExtKeychain, ExtKeychainPath, Keychain, SwitchCommitmentType};
@@ -43,7 +43,7 @@ where
 	let prev = chain.head_header().unwrap();
 	let next_height = prev.height + 1;
 	let next_header_info = consensus::next_difficulty(1, chain.difficulty_iter()?);
-	let fee = txs.iter().map(|x| x.fee()).sum();
+	let fee = txs.iter().map(|x| x.fee(next_height)).sum();
 	let key_id = ExtKeychainPath::new(1, next_height as u32, 0, 0, 0).to_identifier();
 	let reward =
 		reward::output(keychain, &ProofBuilder::new(keychain), &key_id, fee, false).unwrap();
@@ -104,7 +104,9 @@ fn process_block_cut_through() -> Result<(), chain::Error> {
 	// Note: We reuse key_ids resulting in an input and an output sharing the same commitment.
 	// The input is coinbase and the output is plain.
 	let tx = build::transaction(
-		KernelFeatures::Plain { fee: 0 },
+		KernelFeatures::Plain {
+			fee: FeeFields::zero(),
+		},
 		&[
 			build::coinbase_input(consensus::REWARD, key_id1.clone()),
 			build::coinbase_input(consensus::REWARD, key_id2.clone()),
@@ -129,8 +131,9 @@ fn process_block_cut_through() -> Result<(), chain::Error> {
 	let verifier_cache = Arc::new(RwLock::new(LruVerifierCache::new()));
 
 	// Transaction is invalid due to cut-through.
+	let height = 7;
 	assert_eq!(
-		tx.validate(Weighting::AsTransaction, verifier_cache.clone()),
+		tx.validate(Weighting::AsTransaction, verifier_cache.clone(), height),
 		Err(transaction::Error::CutThrough),
 	);
 

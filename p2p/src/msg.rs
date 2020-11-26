@@ -87,7 +87,7 @@ enum_from_primitive! {
 
 /// Max theoretical size of a block filled with outputs.
 fn max_block_size() -> u64 {
-	(global::max_block_weight() / consensus::BLOCK_OUTPUT_WEIGHT * 708) as u64
+	(global::max_block_weight() / consensus::OUTPUT_WEIGHT * 708) as u64
 }
 
 // Max msg size when msg type is unknown.

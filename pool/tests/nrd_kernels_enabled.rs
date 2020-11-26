@@ -32,6 +32,7 @@ use std::sync::Arc;
 fn test_nrd_kernels_enabled() {
 	util::init_test_logger();
 	global::set_local_chain_type(global::ChainTypes::AutomatedTesting);
+	global::set_local_accept_fee_base(10);
 	global::set_local_nrd_enabled(true);
 
 	let keychain: ExtKeychain = Keychain::from_random_seed(false).unwrap();
@@ -56,15 +57,20 @@ fn test_nrd_kernels_enabled() {
 
 	// Spend the initial coinbase.
 	let header_1 = chain.get_header_by_height(1).unwrap();
-	let tx = test_transaction_spending_coinbase(&keychain, &header_1, vec![10, 20, 30, 40]);
+	let mg = consensus::MILLI_GRIN;
+	let tx = test_transaction_spending_coinbase(
+		&keychain,
+		&header_1,
+		vec![1_000 * mg, 2_000 * mg, 3_000 * mg, 4_000 * mg],
+	);
 	add_block(&chain, &[tx], &keychain);
 
 	let tx_1 = test_transaction_with_kernel_features(
 		&keychain,
-		vec![10, 20],
-		vec![24],
+		vec![1_000 * mg, 2_000 * mg],
+		vec![2_400 * mg],
 		KernelFeatures::NoRecentDuplicate {
-			fee: 6,
+			fee: (600 * mg as u32).into(),
 			relative_height: NRDRelativeHeight::new(1440).unwrap(),
 		},
 	);
@@ -83,7 +89,7 @@ fn test_nrd_kernels_enabled() {
 	assert_eq!(header.height, 3 * consensus::TESTING_HARD_FORK_INTERVAL);
 	assert_eq!(header.version, HeaderVersion(4));
 
-	// NRD kernel support not enabled via feature flag, so not valid.
+	// NRD kernel support enabled via feature flag, so valid.
 	assert_eq!(
 		pool.add_to_pool(test_source(), tx_1.clone(), false, &header),
 		Ok(())

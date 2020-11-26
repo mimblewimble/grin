@@ -28,25 +28,19 @@ pub mod proof;
 pub mod reward;
 pub mod secp_ser;
 
-use crate::consensus;
 use crate::core::Transaction;
+use crate::global::get_accept_fee_base;
 
 pub use self::proof::ProofBuilder;
 pub use crate::libtx::error::{Error, ErrorKind};
 
-const DEFAULT_BASE_FEE: u64 = consensus::MILLI_GRIN;
+/// Transaction fee calculation given numbers of inputs, outputs, and kernels
+pub fn tx_fee(input_len: usize, output_len: usize, kernel_len: usize) -> u64 {
+	Transaction::weight_by_iok(input_len as u64, output_len as u64, kernel_len as u64)
+		* get_accept_fee_base()
+}
 
-/// Transaction fee calculation
-pub fn tx_fee(
-	input_len: usize,
-	output_len: usize,
-	kernel_len: usize,
-	base_fee: Option<u64>,
-) -> u64 {
-	let use_base_fee = match base_fee {
-		Some(bf) => bf,
-		None => DEFAULT_BASE_FEE,
-	};
-
-	Transaction::weight(input_len as u64, output_len as u64, kernel_len as u64) * use_base_fee
+/// Transaction fee calculation given transaction
+pub fn accept_fee(tx: Transaction, height: u64) -> u64 {
+	tx.accept_fee(height)
 }

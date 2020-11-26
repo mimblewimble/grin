@@ -146,7 +146,7 @@ fn real_main() -> i32 {
 
 	log_build_info();
 
-	// Initialize our global chain_type, feature flags (NRD kernel support currently), and future_time_limit.
+	// Initialize our global chain_type, feature flags (NRD kernel support currently), accept_fee_base, and future_time_limit.
 	// These are read via global and not read from config beyond this point.
 	global::init_global_chain_type(config.members.as_ref().unwrap().server.chain_type);
 	info!("Chain: {:?}", global::get_chain_type());
@@ -160,6 +160,16 @@ fn real_main() -> i32 {
 			global::init_global_nrd_enabled(true);
 		}
 	}
+	global::init_global_accept_fee_base(
+		config
+			.members
+			.as_ref()
+			.unwrap()
+			.server
+			.pool_config
+			.accept_fee_base,
+	);
+	info!("Accept Fee Base: {:?}", global::get_accept_fee_base());
 	global::init_global_future_time_limit(config.members.unwrap().server.future_time_limit);
 	info!("Future Time Limit: {:?}", global::get_future_time_limit());
 	log_feature_flags();
