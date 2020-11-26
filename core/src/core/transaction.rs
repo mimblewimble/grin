@@ -101,7 +101,7 @@ impl<'de> Deserialize<'de> for FeeFields {
 			where
 				E: de::Error,
 			{
-				FeeFields::try_from(value).map_err(|_| E::custom(format!("invalid fee field")))
+				Ok(FeeFields(value))
 			}
 		}
 
