@@ -55,19 +55,19 @@ fn test_capabilities() {
 
 	assert_eq!(
 		expected,
-		p2p::types::Capabilities::from_bits_truncate(0b1111 as u32),
+		p2p::types::Capabilities::from_bits_truncate(0b11111 as u32),
 	);
 	assert_eq!(
 		expected,
-		p2p::types::Capabilities::from_bits_truncate(0b00001111 as u32),
+		p2p::types::Capabilities::from_bits_truncate(0b00011111 as u32),
 	);
 
 	assert_eq!(
 		expected,
-		p2p::types::Capabilities::from_bits_truncate(0b00101111 as u32),
+		p2p::types::Capabilities::from_bits_truncate(0b01011111 as u32),
 	);
 
-	assert!(p2p::types::Capabilities::from_bits_truncate(0b00101111 as u32).contains(expected));
+	assert!(p2p::types::Capabilities::from_bits_truncate(0b01011111 as u32).contains(expected));
 
 	assert!(
 		p2p::types::Capabilities::from_bits_truncate(0b00101111 as u32)

@@ -41,6 +41,7 @@ fn default_capabilities() {
 	assert!(x.contains(Capabilities::TXHASHSET_HIST));
 	assert!(x.contains(Capabilities::PEER_LIST));
 	assert!(x.contains(Capabilities::TX_KERNEL_HASH));
+	assert!(x.contains(Capabilities::PIBD_HIST));
 
 	assert_eq!(
 		x,
@@ -48,5 +49,6 @@ fn default_capabilities() {
 			| Capabilities::TXHASHSET_HIST
 			| Capabilities::PEER_LIST
 			| Capabilities::TX_KERNEL_HASH
+			| Capabilities::PIBD_HIST
 	);
 }
