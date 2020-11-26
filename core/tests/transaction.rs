@@ -230,8 +230,17 @@ fn test_fee_fields() -> Result<(), Error> {
 	.expect("valid tx");
 
 	let hf4_height = 4 * consensus::TESTING_HARD_FORK_INTERVAL;
+	assert_eq!(
+		tx.accept_fee(hf4_height),
+		(1 * 1 + 1 * 21 + 1 * 3) * 500_000
+	);
+	assert_eq!(tx.fee(hf4_height), 42);
 	assert_eq!(tx.fee(hf4_height), 42);
 	assert_eq!(tx.shifted_fee(hf4_height), 21);
+	assert_eq!(
+		tx.accept_fee(hf4_height - 1),
+		(1 * 4 + 1 * 1 - 1 * 1) * 1_000_000
+	);
 	assert_eq!(tx.fee(hf4_height - 1), 42 + (1u64 << 40));
 	assert_eq!(tx.shifted_fee(hf4_height - 1), 42 + (1u64 << 40));
 

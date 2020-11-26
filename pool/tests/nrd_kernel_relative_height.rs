@@ -66,12 +66,13 @@ fn test_nrd_kernel_relative_height() -> Result<(), PoolError> {
 	// Mine that initial tx so we can spend it with multiple txs.
 	add_block(&chain, &[initial_tx], &keychain);
 
-	add_some_blocks(&chain, 5, &keychain);
+	// mine past HF4 to see effect of set_local_accept_fee_base
+	add_some_blocks(&chain, 8, &keychain);
 
 	let header = chain.head_header().unwrap();
 
-	assert_eq!(header.height, 3 * consensus::TESTING_HARD_FORK_INTERVAL);
-	assert_eq!(header.version, HeaderVersion(4));
+	assert_eq!(header.height, 4 * consensus::TESTING_HARD_FORK_INTERVAL);
+	assert_eq!(header.version, HeaderVersion(5));
 
 	let (tx1, tx2, tx3) = {
 		let mut kernel = TxKernel::with_features(KernelFeatures::NoRecentDuplicate {

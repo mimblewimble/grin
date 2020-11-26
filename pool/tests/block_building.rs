@@ -49,7 +49,8 @@ fn test_transaction_pool_block_building() -> Result<(), PoolError> {
 		verifier_cache,
 	);
 
-	add_some_blocks(&chain, 3, &keychain);
+	// mine enough blocks to get past HF4
+	add_some_blocks(&chain, 4 * 3, &keychain);
 
 	let header_1 = chain.get_header_by_height(1).unwrap();
 

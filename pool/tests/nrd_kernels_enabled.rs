@@ -57,16 +57,20 @@ fn test_nrd_kernels_enabled() {
 
 	// Spend the initial coinbase.
 	let header_1 = chain.get_header_by_height(1).unwrap();
-	let tx =
-		test_transaction_spending_coinbase(&keychain, &header_1, vec![1_000, 2_000, 3_000, 4_000]);
+	let mg = consensus::MILLI_GRIN;
+	let tx = test_transaction_spending_coinbase(
+		&keychain,
+		&header_1,
+		vec![1_000 * mg, 2_000 * mg, 3_000 * mg, 4_000 * mg],
+	);
 	add_block(&chain, &[tx], &keychain);
 
 	let tx_1 = test_transaction_with_kernel_features(
 		&keychain,
-		vec![1_000, 2_000],
-		vec![2_400],
+		vec![1_000 * mg, 2_000 * mg],
+		vec![2_400 * mg],
 		KernelFeatures::NoRecentDuplicate {
-			fee: 600.into(),
+			fee: (600 * mg as u32).into(),
 			relative_height: NRDRelativeHeight::new(1440).unwrap(),
 		},
 	);
@@ -85,7 +89,7 @@ fn test_nrd_kernels_enabled() {
 	assert_eq!(header.height, 3 * consensus::TESTING_HARD_FORK_INTERVAL);
 	assert_eq!(header.version, HeaderVersion(4));
 
-	// NRD kernel support not enabled via feature flag, so not valid.
+	// NRD kernel support enabled via feature flag, so valid.
 	assert_eq!(
 		pool.add_to_pool(test_source(), tx_1.clone(), false, &header),
 		Ok(())

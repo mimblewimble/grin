@@ -50,7 +50,8 @@ fn test_the_transaction_pool() {
 		verifier_cache.clone(),
 	);
 
-	add_some_blocks(&chain, 3, &keychain);
+	// mine past HF4 to see effect of set_local_accept_fee_base
+	add_some_blocks(&chain, 4 * 3, &keychain);
 	let header = chain.head_header().unwrap();
 
 	let header_1 = chain.get_header_by_height(1).unwrap();
@@ -192,7 +193,7 @@ fn test_the_transaction_pool() {
 		// tx4 is the "new" part of this aggregated tx that we care about
 		let agg_tx = transaction::aggregate(&[tx1.clone(), tx2.clone(), tx4]).unwrap();
 
-		let height = 4;
+		let height = 12 + 1;
 		agg_tx
 			.validate(Weighting::AsTransaction, verifier_cache.clone(), height)
 			.unwrap();

@@ -48,7 +48,8 @@ fn test_transaction_pool_block_reconciliation() {
 		verifier_cache,
 	);
 
-	add_some_blocks(&chain, 3, &keychain);
+	// mine past HF4 to see effect of set_local_accept_fee_base
+	add_some_blocks(&chain, 4 * 3, &keychain);
 
 	let header_1 = chain.get_header_by_height(1).unwrap();
 

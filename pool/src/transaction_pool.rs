@@ -375,7 +375,7 @@ where
 		// (2 * 1) + (2 * 21) + (1 * 3) = 47
 		// minfees = 47 * 500_000 = 23_500_000
 		let header = self.chain_head()?;
-		if tx.shifted_fee(header.height) < tx.accept_fee() {
+		if tx.shifted_fee(header.height) < tx.accept_fee(header.height) {
 			return Err(PoolError::LowFeeTransaction(tx.shifted_fee(header.height)));
 		}
 		Ok(())

@@ -1516,8 +1516,25 @@ impl Transaction {
 	}
 
 	/// Transaction minimum acceptable fee
-	pub fn accept_fee(&self) -> u64 {
-		self.weight() * global::get_accept_fee_base()
+	pub fn accept_fee(&self, height: u64) -> u64 {
+		if consensus::header_version(height) < HeaderVersion(5) {
+			Transaction::old_weight_by_iok(
+				self.body.inputs.len() as u64,
+				self.body.outputs.len() as u64,
+				self.body.kernels.len() as u64,
+			) * consensus::MILLI_GRIN
+		} else {
+			self.weight() * global::get_accept_fee_base()
+		}
+	}
+
+	/// Old weight definition for pool acceptance
+	pub fn old_weight_by_iok(num_inputs: u64, num_outputs: u64, num_kernels: u64) -> u64 {
+		let body_weight = num_outputs
+			.saturating_mul(4)
+			.saturating_add(num_kernels)
+			.saturating_sub(num_inputs);
+		max(body_weight, 1)
 	}
 
 	/// Calculate transaction weight from transaction details
