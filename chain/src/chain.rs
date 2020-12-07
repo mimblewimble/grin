@@ -1484,8 +1484,11 @@ impl Chain {
 	/// Migrate our local db from v2 to v3.
 	/// "commit only" inputs.
 	fn migrate_db_v2_v3(store: &ChainStore) -> Result<(), Error> {
-		debug!("about to migrate blocks");
-
+		if store.batch()?.is_blocks_v3_migrated()? {
+			// Previously migrated so skipping.
+			debug!("migrate_db_v2_v3: previously migrated, skipping");
+			return Ok(());
+		}
 		let mut total = 0;
 		let mut keys_to_migrate = vec![];
 		for (k, v) in store.batch()?.blocks_raw_iter()? {
@@ -1508,16 +1511,26 @@ impl Chain {
 			total,
 		);
 		let mut count = 0;
-		keys_to_migrate.chunks(100).try_for_each(|keys| {
-			let batch = store.batch()?;
-			for key in keys {
-				batch.migrate_block(&key, ProtocolVersion(2), ProtocolVersion(3))?;
-				count += 1;
-			}
-			batch.commit()?;
-			debug!("migrate_db_v2_v3: successfully migrated {} blocks", count);
-			Ok(())
-		})
+		keys_to_migrate
+			.chunks(100)
+			.try_for_each(|keys| {
+				let batch = store.batch()?;
+				for key in keys {
+					batch.migrate_block(&key, ProtocolVersion(2), ProtocolVersion(3))?;
+					count += 1;
+				}
+				batch.commit()?;
+				debug!("migrate_db_v2_v3: successfully migrated {} blocks", count);
+				Ok(())
+			})
+			.and_then(|_| {
+				// Set flag to indicate we have migrated all blocks in the db.
+				// We will skip migration in the future.
+				let batch = store.batch()?;
+				batch.set_blocks_v3_migrated(true)?;
+				batch.commit()?;
+				Ok(())
+			})
 	}
 
 	/// Gets the block header in which a given output appears in the txhashset.
