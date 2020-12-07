@@ -1484,20 +1484,28 @@ impl Chain {
 	/// Migrate our local db from v2 to v3.
 	/// "commit only" inputs.
 	fn migrate_db_v2_v3(store: &ChainStore) -> Result<(), Error> {
+		debug!("about to migrate blocks");
+
+		let mut total = 0;
 		let mut keys_to_migrate = vec![];
 		for (k, v) in store.batch()?.blocks_raw_iter()? {
+			total += 1;
+
 			// We want to migrate all blocks that cannot be read via v3 protocol version.
-			let block_v2: Result<Block, _> =
-				ser::deserialize(&mut Cursor::new(&v), ProtocolVersion(2));
 			let block_v3: Result<Block, _> =
 				ser::deserialize(&mut Cursor::new(&v), ProtocolVersion(3));
-			if let (Ok(_), Err(_)) = (block_v2, block_v3) {
-				keys_to_migrate.push(k);
+			if block_v3.is_err() {
+				let block_v2: Result<Block, _> =
+					ser::deserialize(&mut Cursor::new(&v), ProtocolVersion(2));
+				if block_v2.is_ok() {
+					keys_to_migrate.push(k);
+				}
 			}
 		}
 		debug!(
-			"migrate_db_v2_v3: {} blocks to migrate",
-			keys_to_migrate.len()
+			"migrate_db_v2_v3: {} (of {}) blocks to migrate",
+			keys_to_migrate.len(),
+			total,
 		);
 		let mut count = 0;
 		keys_to_migrate.chunks(100).try_for_each(|keys| {
