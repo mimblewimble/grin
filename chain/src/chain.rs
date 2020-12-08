@@ -1484,32 +1484,53 @@ impl Chain {
 	/// Migrate our local db from v2 to v3.
 	/// "commit only" inputs.
 	fn migrate_db_v2_v3(store: &ChainStore) -> Result<(), Error> {
+		if store.batch()?.is_blocks_v3_migrated()? {
+			// Previously migrated so skipping.
+			debug!("migrate_db_v2_v3: previously migrated, skipping");
+			return Ok(());
+		}
+		let mut total = 0;
 		let mut keys_to_migrate = vec![];
 		for (k, v) in store.batch()?.blocks_raw_iter()? {
+			total += 1;
+
 			// We want to migrate all blocks that cannot be read via v3 protocol version.
-			let block_v2: Result<Block, _> =
-				ser::deserialize(&mut Cursor::new(&v), ProtocolVersion(2));
 			let block_v3: Result<Block, _> =
 				ser::deserialize(&mut Cursor::new(&v), ProtocolVersion(3));
-			if let (Ok(_), Err(_)) = (block_v2, block_v3) {
-				keys_to_migrate.push(k);
+			if block_v3.is_err() {
+				let block_v2: Result<Block, _> =
+					ser::deserialize(&mut Cursor::new(&v), ProtocolVersion(2));
+				if block_v2.is_ok() {
+					keys_to_migrate.push(k);
+				}
 			}
 		}
 		debug!(
-			"migrate_db_v2_v3: {} blocks to migrate",
-			keys_to_migrate.len()
+			"migrate_db_v2_v3: {} (of {}) blocks to migrate",
+			keys_to_migrate.len(),
+			total,
 		);
 		let mut count = 0;
-		keys_to_migrate.chunks(100).try_for_each(|keys| {
-			let batch = store.batch()?;
-			for key in keys {
-				batch.migrate_block(&key, ProtocolVersion(2), ProtocolVersion(3))?;
-				count += 1;
-			}
-			batch.commit()?;
-			debug!("migrate_db_v2_v3: successfully migrated {} blocks", count);
-			Ok(())
-		})
+		keys_to_migrate
+			.chunks(100)
+			.try_for_each(|keys| {
+				let batch = store.batch()?;
+				for key in keys {
+					batch.migrate_block(&key, ProtocolVersion(2), ProtocolVersion(3))?;
+					count += 1;
+				}
+				batch.commit()?;
+				debug!("migrate_db_v2_v3: successfully migrated {} blocks", count);
+				Ok(())
+			})
+			.and_then(|_| {
+				// Set flag to indicate we have migrated all blocks in the db.
+				// We will skip migration in the future.
+				let batch = store.batch()?;
+				batch.set_blocks_v3_migrated(true)?;
+				batch.commit()?;
+				Ok(())
+			})
 	}
 
 	/// Gets the block header in which a given output appears in the txhashset.
