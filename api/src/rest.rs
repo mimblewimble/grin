@@ -36,6 +36,7 @@ use std::sync::Arc;
 use std::{io, thread};
 use tokio::net::TcpListener;
 use tokio::runtime::Runtime;
+use tokio::stream::StreamExt;
 use tokio_rustls::TlsAcceptor;
 
 /// Errors that can be returned by an ApiEndpoint implementation.
@@ -253,7 +254,10 @@ impl ApiServer {
 			.spawn(move || {
 				let server = async move {
 					let mut listener = TcpListener::bind(&addr).await.expect("failed to bind");
-					let listener = listener.incoming().and_then(move |s| acceptor.accept(s));
+					let listener = listener
+						.incoming()
+						.and_then(move |s| acceptor.accept(s))
+						.filter(|r| r.is_ok());
 
 					let server = Server::builder(accept::from_stream(listener)).serve(
 						make_service_fn(move |_| {
