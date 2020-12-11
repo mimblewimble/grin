@@ -19,6 +19,7 @@ use std::sync::Arc;
 use crate::chain::{self, SyncState, SyncStatus};
 use crate::core::core::hash::Hashed;
 use crate::core::global;
+use crate::core::pow::Difficulty;
 use crate::p2p::{self, Capabilities, Peer};
 
 /// Fast sync has 3 "states":
@@ -158,15 +159,23 @@ impl StateSync {
 		let mut txhashset_height = header_head.height.saturating_sub(threshold);
 		txhashset_height = txhashset_height.saturating_sub(txhashset_height % archive_interval);
 
-		let max_diff = self.peers.max_peer_difficulty();
-		let peer = self
-			.peers
-			.iter()
-			.outbound()
-			.with_capabilities(Capabilities::TXHASHSET_HIST)
-			.with_difficulty(|x| x >= max_diff)
-			.connected()
-			.choose_random();
+		let peers_iter = || {
+			self.peers
+				.iter()
+				.with_capabilities(Capabilities::TXHASHSET_HIST)
+				.connected()
+		};
+
+		// Filter peers further based on max difficulty.
+		let max_diff = peers_iter().max_difficulty().unwrap_or(Difficulty::zero());
+		let peers_iter = || peers_iter().with_difficulty(|x| x >= max_diff);
+
+		// Choose a random "most work" peer, preferring outbound if at all possible.
+		let peer = peers_iter().outbound().choose_random().or_else(|| {
+			warn!("no suitable outbound peer for state sync, considering inbound");
+			peers_iter().inbound().choose_random()
+		});
+
 		if let Some(peer) = peer {
 			// ask for txhashset at state_sync_threshold
 			let mut txhashset_head = self
