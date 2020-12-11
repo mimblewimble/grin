@@ -231,11 +231,18 @@ impl SyncRunner {
 		let mut is_syncing = self.sync_state.is_syncing();
 
 		// Find a peer with greatest known difficulty.
-		let max_diff = self.peers.max_peer_difficulty();
+		// Consider all peers, both inbound and outbound.
+		// We will prioritize syncing against outbound peers exclusively when possible.
+		// But we do support syncing against an inbound peer if greater work than any outbound peers.
+		let max_diff = self
+			.peers
+			.iter()
+			.connected()
+			.max_difficulty()
+			.unwrap_or(Difficulty::zero());
 		let peer = self
 			.peers
 			.iter()
-			.outbound()
 			.with_difficulty(|x| x >= max_diff)
 			.connected()
 			.choose_random();
