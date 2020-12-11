@@ -187,14 +187,6 @@ impl FeeFields {
 		}
 	}
 
-	/// Extract bitfields fee_shift and fee into tuple
-	/// ignore upper 64-FEE_BITS-FEE_SHIFT_BITS bits
-	pub fn as_tuple(&self) -> (u64, u64) {
-		let fee = self.0 & FeeFields::FEE_MASK;
-		let fee_shift = (self.0 >> FeeFields::FEE_BITS) & FeeFields::FEE_SHIFT_MASK;
-		(fee, fee_shift)
-	}
-
 	/// Turn a zero `FeeField` into a `None`, any other value into a `Some`.
 	/// We need this because a zero `FeeField` cannot be deserialized.
 	pub fn as_opt(&self) -> Option<Self> {
