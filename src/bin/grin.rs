@@ -18,6 +18,9 @@
 extern crate clap;
 
 #[macro_use]
+extern crate serde_json;
+
+#[macro_use]
 extern crate log;
 use crate::config::config::SERVER_CONFIG_FILE_NAME;
 use crate::core::global;
