@@ -14,7 +14,7 @@
 
 //! High level JSON/HTTP client API
 
-use crate::rest::{Error, ErrorKind};
+use crate::error::{Error, ErrorKind};
 use crate::util::to_base64;
 use failure::{Fail, ResultExt};
 use hyper::body;

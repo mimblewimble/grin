@@ -18,18 +18,17 @@
 //! To use it, just have your service(s) implement the ApiEndpoint trait and
 //! register them on a ApiServer.
 
-use crate::router::{Handler, HandlerObj, ResponseFuture, Router, RouterError};
-use crate::web::response;
-use failure::{Backtrace, Context, Fail, ResultExt};
+use crate::error::{Error, ErrorKind};
+use crate::router::Router;
+use failure::ResultExt;
 use futures::channel::oneshot;
 use futures::TryStreamExt;
 use hyper::server::accept;
 use hyper::service::make_service_fn;
-use hyper::{Body, Request, Server, StatusCode};
+use hyper::Server;
 use rustls;
 use rustls::internal::pemfile;
 use std::convert::Infallible;
-use std::fmt::{self, Display};
 use std::fs::File;
 use std::net::SocketAddr;
 use std::sync::Arc;
@@ -38,80 +37,6 @@ use tokio::net::TcpListener;
 use tokio::runtime::Runtime;
 use tokio::stream::StreamExt;
 use tokio_rustls::TlsAcceptor;
-
-/// Errors that can be returned by an ApiEndpoint implementation.
-#[derive(Debug)]
-pub struct Error {
-	inner: Context<ErrorKind>,
-}
-
-#[derive(Clone, Eq, PartialEq, Debug, Fail, Serialize, Deserialize)]
-pub enum ErrorKind {
-	#[fail(display = "Internal error: {}", _0)]
-	Internal(String),
-	#[fail(display = "Bad arguments: {}", _0)]
-	Argument(String),
-	#[fail(display = "Not found.")]
-	NotFound,
-	#[fail(display = "Request error: {}", _0)]
-	RequestError(String),
-	#[fail(display = "ResponseError error: {}", _0)]
-	ResponseError(String),
-	#[fail(display = "Router error: {}", _0)]
-	Router(RouterError),
-}
-
-impl Fail for Error {
-	fn cause(&self) -> Option<&dyn Fail> {
-		self.inner.cause()
-	}
-
-	fn backtrace(&self) -> Option<&Backtrace> {
-		self.inner.backtrace()
-	}
-}
-
-impl Display for Error {
-	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-		Display::fmt(&self.inner, f)
-	}
-}
-
-impl Error {
-	pub fn kind(&self) -> &ErrorKind {
-		self.inner.get_context()
-	}
-}
-
-impl From<ErrorKind> for Error {
-	fn from(kind: ErrorKind) -> Error {
-		Error {
-			inner: Context::new(kind),
-		}
-	}
-}
-
-impl From<Context<ErrorKind>> for Error {
-	fn from(inner: Context<ErrorKind>) -> Error {
-		Error { inner: inner }
-	}
-}
-
-impl From<RouterError> for Error {
-	fn from(error: RouterError) -> Error {
-		Error {
-			inner: Context::new(ErrorKind::Router(error)),
-		}
-	}
-}
-
-impl From<crate::chain::Error> for Error {
-	fn from(error: crate::chain::Error) -> Error {
-		Error {
-			inner: Context::new(ErrorKind::Internal(error.to_string())),
-		}
-	}
-}
 
 /// TLS config
 #[derive(Clone)]
@@ -280,6 +205,7 @@ impl ApiServer {
 	}
 
 	/// Stops the API server, it panics in case of error
+	#[allow(dead_code)]
 	pub fn stop(&mut self) -> bool {
 		if self.shutdown_sender.is_some() {
 			// TODO re-enable stop after investigation
@@ -290,22 +216,6 @@ impl ApiServer {
 		} else {
 			error!("Can't stop API server, it's not running or doesn't spport stop operation");
 			false
-		}
-	}
-}
-
-pub struct LoggingMiddleware {}
-
-impl Handler for LoggingMiddleware {
-	fn call(
-		&self,
-		req: Request<Body>,
-		mut handlers: Box<dyn Iterator<Item = HandlerObj>>,
-	) -> ResponseFuture {
-		debug!("REST call: {} {}", req.method(), req.uri().path());
-		match handlers.next() {
-			Some(handler) => handler.call(req, handlers),
-			None => response(StatusCode::INTERNAL_SERVER_ERROR, "no handler found"),
 		}
 	}
 }

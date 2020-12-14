@@ -14,17 +14,13 @@
 
 use super::utils::w;
 use crate::chain;
-use crate::rest::*;
-use crate::router::{Handler, ResponseFuture};
+use crate::error::*;
 use crate::types::Version;
-use crate::web::*;
-use hyper::{Body, Request};
 use std::sync::Weak;
 
 const CRATE_VERSION: &str = env!("CARGO_PKG_VERSION");
 
-/// Version handler. Get running node API version
-/// GET /v1/version
+/// Version handler. Get running node API version.
 pub struct VersionHandler {
 	pub chain: Weak<chain::Chain>,
 }
@@ -39,11 +35,5 @@ impl VersionHandler {
 			node_version: CRATE_VERSION.to_owned(),
 			block_header_version: head.version.into(),
 		})
-	}
-}
-
-impl Handler for VersionHandler {
-	fn get(&self, _req: Request<Body>) -> ResponseFuture {
-		result_to_response(self.get_version())
 	}
 }

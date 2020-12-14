@@ -15,12 +15,12 @@
 //! Owner API External Definition
 
 use crate::chain::{Chain, SyncState};
+use crate::error::*;
 use crate::handlers::chain_api::{ChainCompactHandler, ChainValidationHandler};
 use crate::handlers::peers_api::{PeerHandler, PeersConnectedHandler};
 use crate::handlers::server_api::StatusHandler;
 use crate::p2p::types::PeerInfoDisplay;
 use crate::p2p::{self, PeerData};
-use crate::rest::*;
 use crate::types::Status;
 use std::net::SocketAddr;
 use std::sync::Weak;

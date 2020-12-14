@@ -18,13 +18,12 @@ use crate::chain::{Chain, SyncState};
 use crate::core::core::hash::Hash;
 use crate::core::core::transaction::Transaction;
 use crate::core::core::verifier_cache::VerifierCache;
+use crate::error::*;
 use crate::handlers::blocks_api::{BlockHandler, HeaderHandler};
-use crate::handlers::chain_api::{ChainHandler, KernelHandler, OutputHandler};
+use crate::handlers::chain_api::{ChainHandler, KernelHandler, OutputHandler, TxHashSetHandler};
 use crate::handlers::pool_api::PoolHandler;
-use crate::handlers::transactions_api::TxHashSetHandler;
 use crate::handlers::version_api::VersionHandler;
 use crate::pool::{self, BlockChain, PoolAdapter, PoolEntry};
-use crate::rest::*;
 use crate::types::{
 	BlockHeaderPrintable, BlockPrintable, LocatedTxKernel, OutputListing, OutputPrintable, Tip,
 	Version,
@@ -105,7 +104,7 @@ where
 			chain: self.chain.clone(),
 		};
 		let hash = header_handler.parse_inputs(height, hash, commit)?;
-		header_handler.get_header_v2(&hash)
+		header_handler.get_header(&hash)
 	}
 
 	/// Gets block details given either a height, a hash or an unspent output commitment. Only one parameters is needed.
@@ -199,7 +198,7 @@ where
 		let kernel_handler = KernelHandler {
 			chain: self.chain.clone(),
 		};
-		kernel_handler.get_kernel_v2(excess, min_height, max_height)
+		kernel_handler.get_kernel(excess, min_height, max_height)
 	}
 
 	/// Retrieves details about specifics outputs. Supports retrieval of multiple outputs in a single request.
@@ -229,7 +228,7 @@ where
 		let output_handler = OutputHandler {
 			chain: self.chain.clone(),
 		};
-		output_handler.get_outputs_v2(
+		output_handler.get_outputs(
 			commits,
 			start_height,
 			end_height,

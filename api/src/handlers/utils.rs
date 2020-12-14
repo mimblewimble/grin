@@ -15,7 +15,7 @@
 use crate::chain;
 use crate::chain::types::CommitPos;
 use crate::core::core::OutputIdentifier;
-use crate::rest::*;
+use crate::error::*;
 use crate::types::*;
 use crate::util;
 use crate::util::secp::pedersen::Commitment;
@@ -41,25 +41,8 @@ fn get_unspent(
 	Ok(res)
 }
 
-/// Retrieves an output from the chain given a commitment.
-pub fn get_output(
-	chain: &Weak<chain::Chain>,
-	id: &str,
-) -> Result<Option<(Output, OutputIdentifier)>, Error> {
-	let chain = w(chain)?;
-	let (out, pos) = match get_unspent(&chain, id)? {
-		Some(x) => x,
-		None => return Ok(None),
-	};
-
-	Ok(Some((
-		Output::new(&out.commitment(), pos.height, pos.pos),
-		out,
-	)))
-}
-
 /// Retrieves an output from the chain given a commit id (a tiny bit iteratively)
-pub fn get_output_v2(
+pub fn get_output(
 	chain: &Weak<chain::Chain>,
 	id: &str,
 	include_proof: bool,

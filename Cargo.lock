@@ -969,13 +969,11 @@ dependencies = [
  "grin_pool",
  "grin_store",
  "grin_util",
- "http",
  "hyper",
  "hyper-rustls",
  "hyper-timeout",
  "lazy_static",
  "log",
- "regex",
  "ring",
  "rustls",
  "serde",
@@ -983,7 +981,6 @@ dependencies = [
  "serde_json",
  "tokio",
  "tokio-rustls",
- "url",
 ]
 
 [[package]]

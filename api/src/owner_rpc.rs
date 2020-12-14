@@ -14,10 +14,10 @@
 
 //! JSON-RPC Stub generation for the Owner API
 
+use crate::error::ErrorKind;
 use crate::owner::Owner;
 use crate::p2p::types::PeerInfoDisplay;
 use crate::p2p::PeerData;
-use crate::rest::ErrorKind;
 use crate::types::Status;
 use std::net::SocketAddr;
 

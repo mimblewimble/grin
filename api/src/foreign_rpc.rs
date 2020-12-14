@@ -17,10 +17,10 @@
 use crate::core::core::hash::Hash;
 use crate::core::core::transaction::Transaction;
 use crate::core::core::verifier_cache::VerifierCache;
+use crate::error::ErrorKind;
 use crate::foreign::Foreign;
 use crate::pool::PoolEntry;
 use crate::pool::{BlockChain, PoolAdapter};
-use crate::rest::ErrorKind;
 use crate::types::{
 	BlockHeaderPrintable, BlockPrintable, LocatedTxKernel, OutputListing, OutputPrintable, Tip,
 	Version,

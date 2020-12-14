@@ -17,16 +17,17 @@ pub mod chain_api;
 pub mod peers_api;
 pub mod pool_api;
 pub mod server_api;
-pub mod transactions_api;
 pub mod utils;
 pub mod version_api;
 
+use crate::api::{ApiServer, TLSConfig};
 use crate::auth::{
 	BasicAuthMiddleware, BasicAuthURIMiddleware, GRIN_BASIC_REALM, GRIN_FOREIGN_BASIC_REALM,
 };
 use crate::chain;
 use crate::chain::{Chain, SyncState};
 use crate::core::core::verifier_cache::VerifierCache;
+use crate::error::Error;
 use crate::foreign::Foreign;
 use crate::foreign_rpc::ForeignRpc;
 use crate::owner::Owner;
@@ -34,7 +35,6 @@ use crate::owner_rpc::OwnerRpc;
 use crate::p2p;
 use crate::pool;
 use crate::pool::{BlockChain, PoolAdapter};
-use crate::rest::{ApiServer, Error, TLSConfig};
 use crate::router::ResponseFuture;
 use crate::router::Router;
 use crate::util::to_base64;

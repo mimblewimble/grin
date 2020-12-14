@@ -16,7 +16,6 @@ use grin_chain as chain;
 use grin_core as core;
 use grin_p2p as p2p;
 use grin_pool as pool;
-
 use grin_util as util;
 
 use failure;
@@ -33,26 +32,27 @@ extern crate log;
 
 #[macro_use]
 mod web;
+mod api;
 pub mod auth;
 pub mod client;
+mod error;
 mod foreign;
 mod foreign_rpc;
 mod handlers;
 mod owner;
 mod owner_rpc;
-mod rest;
 mod router;
 mod types;
 
 pub use crate::auth::{
 	BasicAuthMiddleware, BasicAuthURIMiddleware, GRIN_BASIC_REALM, GRIN_FOREIGN_BASIC_REALM,
 };
+pub use crate::error::*;
 pub use crate::foreign::Foreign;
 pub use crate::foreign_rpc::ForeignRpc;
 pub use crate::handlers::node_apis;
 pub use crate::owner::Owner;
 pub use crate::owner_rpc::OwnerRpc;
-pub use crate::rest::*;
 pub use crate::router::*;
 pub use crate::types::*;
 pub use crate::web::*;
