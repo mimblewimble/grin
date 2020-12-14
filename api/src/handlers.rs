@@ -54,7 +54,7 @@ pub fn node_apis<B, P, V>(
 	tx_pool: Arc<RwLock<pool::TransactionPool<B, P, V>>>,
 	peers: Arc<p2p::Peers>,
 	sync_state: Arc<chain::SyncState>,
-	api_secret: Option<String>,
+	owner_api_secret: Option<String>,
 	foreign_api_secret: Option<String>,
 	tls_config: Option<TLSConfig>,
 ) -> Result<(), Error>
@@ -66,7 +66,7 @@ where
 	let mut router = Router::new();
 
 	// Add basic auth to v2 owner API
-	if let Some(api_secret) = api_secret {
+	if let Some(api_secret) = owner_api_secret {
 		let api_basic_auth =
 			"Basic ".to_string() + &to_base64(&("grin:".to_string() + &api_secret));
 		let basic_auth_middleware = Arc::new(BasicAuthMiddleware::new(

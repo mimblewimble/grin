@@ -145,10 +145,10 @@ pub struct ServerConfig {
 	/// Network address for the Rest API HTTP server.
 	pub api_http_addr: String,
 
-	/// Location of secret for basic auth on Rest API HTTP and V2 Owner API server.
-	pub api_secret_path: Option<String>,
+	/// Location of secret for basic auth on Owner API server.
+	pub owner_api_secret_path: Option<String>,
 
-	/// Location of secret for basic auth on v2 Foreign API server.
+	/// Location of secret for basic auth on Foreign API server.
 	pub foreign_api_secret_path: Option<String>,
 
 	/// TLS certificate file
@@ -214,8 +214,8 @@ impl Default for ServerConfig {
 		ServerConfig {
 			db_root: "grin_chain".to_string(),
 			api_http_addr: "127.0.0.1:3413".to_string(),
-			api_secret_path: Some(".api_secret".to_string()),
-			foreign_api_secret_path: Some(".foreign_api_secret".to_string()),
+			owner_api_secret_path: Some(".node_owner_api_secret".to_string()),
+			foreign_api_secret_path: Some(".node_foreign_api_secret".to_string()),
 			tls_certificate_file: None,
 			tls_certificate_key: None,
 			p2p_config: p2p::P2PConfig::default(),

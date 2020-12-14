@@ -9,7 +9,7 @@ This API version uses jsonrpc for its requests. It is split up in a foreign API 
 - [Owner API](https://docs.rs/grin_api/latest/grin_api/trait.OwnerRpc.html)
 - [Foreign API](https://docs.rs/grin_api/latest/grin_api/trait.ForeignRpc.html)
 
-Basic auth passwords can be found in `.api_secret`/`.foreign_api_secret` files respectively.
+Basic auth passwords can be found in `.node_owner_api_secret`/`.node_foreign_api_secret` files respectively.
 
 ## Node API v1
 

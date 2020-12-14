@@ -36,10 +36,10 @@ pub const SERVER_CONFIG_FILE_NAME: &str = "grin-server.toml";
 const SERVER_LOG_FILE_NAME: &str = "grin-server.log";
 const GRIN_HOME: &str = ".grin";
 const GRIN_CHAIN_DIR: &str = "chain_data";
-/// Node Rest API and V2 Owner API secret
-pub const API_SECRET_FILE_NAME: &str = ".api_secret";
-/// Foreign API secret
-pub const FOREIGN_API_SECRET_FILE_NAME: &str = ".foreign_api_secret";
+/// Node Owner API secret
+pub const OWNER_API_SECRET_FILE_NAME: &str = ".node_owner_api_secret";
+/// Node Foreign API secret
+pub const FOREIGN_API_SECRET_FILE_NAME: &str = ".node_foreign_api_secret";
 
 fn get_grin_path(chain_type: &global::ChainTypes) -> Result<PathBuf, ConfigError> {
 	// Check if grin dir exists
@@ -112,7 +112,7 @@ fn check_api_secret_files(
 
 /// Handles setup and detection of paths for node
 pub fn initial_setup_server(chain_type: &global::ChainTypes) -> Result<GlobalConfig, ConfigError> {
-	check_api_secret_files(chain_type, API_SECRET_FILE_NAME)?;
+	check_api_secret_files(chain_type, OWNER_API_SECRET_FILE_NAME)?;
 	check_api_secret_files(chain_type, FOREIGN_API_SECRET_FILE_NAME)?;
 	// Use config file if current directory if it exists, .grin home otherwise
 	if let Some(p) = check_config_current_dir(SERVER_CONFIG_FILE_NAME) {
@@ -247,10 +247,10 @@ impl GlobalConfig {
 		let mut chain_path = grin_home.clone();
 		chain_path.push(GRIN_CHAIN_DIR);
 		self.members.as_mut().unwrap().server.db_root = chain_path.to_str().unwrap().to_owned();
-		let mut api_secret_path = grin_home.clone();
-		api_secret_path.push(API_SECRET_FILE_NAME);
-		self.members.as_mut().unwrap().server.api_secret_path =
-			Some(api_secret_path.to_str().unwrap().to_owned());
+		let mut owner_api_secret_path = grin_home.clone();
+		owner_api_secret_path.push(OWNER_API_SECRET_FILE_NAME);
+		self.members.as_mut().unwrap().server.owner_api_secret_path =
+			Some(owner_api_secret_path.to_str().unwrap().to_owned());
 		let mut foreign_api_secret_path = grin_home.clone();
 		foreign_api_secret_path.push(FOREIGN_API_SECRET_FILE_NAME);
 		self.members
