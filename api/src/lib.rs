@@ -38,6 +38,7 @@ pub mod client;
 mod foreign;
 mod foreign_rpc;
 mod handlers;
+pub mod json_rpc;
 mod owner;
 mod owner_rpc;
 mod rest;

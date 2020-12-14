@@ -940,7 +940,6 @@ dependencies = [
  "grin_store",
  "grin_util",
  "humansize",
- "hyper",
  "log",
  "serde",
  "serde_json",
