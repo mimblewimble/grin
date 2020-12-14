@@ -14,7 +14,6 @@
 
 mod client;
 mod config;
-mod json_rpc;
 mod server;
 
 pub use self::client::client_command;

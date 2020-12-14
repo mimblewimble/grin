@@ -18,13 +18,12 @@ use std::net::SocketAddr;
 use clap::ArgMatches;
 
 use crate::api::client;
+use crate::api::json_rpc::*;
 use crate::api::types::Status;
 use crate::config::GlobalConfig;
 use crate::p2p::types::PeerInfoDisplay;
 use crate::util::file::get_first_line;
 use term;
-
-use crate::cmd::json_rpc::*;
 
 const ENDPOINT: &str = "/v2/owner";
 
