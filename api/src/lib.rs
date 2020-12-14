@@ -44,6 +44,7 @@ mod owner_rpc;
 mod router;
 mod types;
 
+pub use crate::api::TLSConfig;
 pub use crate::auth::{
 	BasicAuthMiddleware, BasicAuthURIMiddleware, GRIN_BASIC_REALM, GRIN_FOREIGN_BASIC_REALM,
 };
