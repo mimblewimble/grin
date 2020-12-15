@@ -23,6 +23,7 @@ use crate::api::types::Status;
 use crate::config::GlobalConfig;
 use crate::p2p::types::PeerInfoDisplay;
 use crate::util::file::get_first_line;
+use serde_json::json;
 use term;
 
 const ENDPOINT: &str = "/v2/owner";

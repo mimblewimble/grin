@@ -18,7 +18,6 @@ use std::{error, fmt};
 
 use hyper;
 use serde::{Deserialize, Serialize};
-use serde_json;
 
 /// Builds a request
 pub fn build_request<'a, 'b>(name: &'a str, params: &'b serde_json::Value) -> Request<'a, 'b> {
