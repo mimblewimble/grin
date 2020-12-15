@@ -19,6 +19,7 @@ use std::sync::Arc;
 use crate::chain::{self, SyncState, SyncStatus};
 use crate::common::types::Error;
 use crate::core::core::hash::{Hash, Hashed};
+use crate::core::pow::Difficulty;
 use crate::p2p::{self, types::ReasonForBan, Capabilities, Peer};
 
 pub struct HeaderSync {
@@ -170,15 +171,23 @@ impl HeaderSync {
 
 	fn header_sync(&mut self) -> Option<Arc<Peer>> {
 		if let Ok(header_head) = self.chain.header_head() {
-			let max_diff = self.peers.max_peer_difficulty();
-			let peer = self
-				.peers
-				.iter()
-				.outbound()
-				.with_capabilities(Capabilities::HEADER_HIST)
-				.with_difficulty(|x| x >= max_diff)
-				.connected()
-				.choose_random();
+			let peers_iter = || {
+				self.peers
+					.iter()
+					.with_capabilities(Capabilities::HEADER_HIST)
+					.connected()
+			};
+
+			// Filter peers further based on max difficulty.
+			let max_diff = peers_iter().max_difficulty().unwrap_or(Difficulty::zero());
+			let peers_iter = || peers_iter().with_difficulty(|x| x >= max_diff);
+
+			// Choose a random "most work" peer, preferring outbound if at all possible.
+			let peer = peers_iter().outbound().choose_random().or_else(|| {
+				warn!("no suitable outbound peer for header sync, considering inbound");
+				peers_iter().inbound().choose_random()
+			});
+
 			if let Some(peer) = peer {
 				if peer.info.total_difficulty() > header_head.total_difficulty {
 					return self.request_headers(peer);
