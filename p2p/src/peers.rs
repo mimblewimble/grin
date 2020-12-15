@@ -128,13 +128,6 @@ impl Peers {
 		self.iter().connected().by_addr(addr)
 	}
 
-	pub fn max_peer_difficulty(&self) -> Difficulty {
-		self.iter()
-			.connected()
-			.max_difficulty()
-			.unwrap_or(Difficulty::zero())
-	}
-
 	pub fn is_banned(&self, peer_addr: PeerAddr) -> bool {
 		if let Ok(peer) = self.store.get_peer(peer_addr) {
 			return peer.flags == State::Banned;
