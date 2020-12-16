@@ -590,6 +590,8 @@ pub struct BlockHeaderPrintable {
 	pub secondary_scaling: u32,
 	/// Total kernel offset since genesis block
 	pub total_kernel_offset: String,
+	/// Pre pow (hex).
+	pub pre_pow: String,
 }
 
 impl BlockHeaderPrintable {
@@ -612,6 +614,7 @@ impl BlockHeaderPrintable {
 			total_difficulty: header.pow.total_difficulty.to_num(),
 			secondary_scaling: header.pow.secondary_scaling,
 			total_kernel_offset: header.total_kernel_offset.to_hex(),
+			pre_pow: header.pre_pow().to_hex(),
 		}
 	}
 }
