@@ -539,7 +539,7 @@ where
 		hash: Hash,
 		id: SegmentIdentifier,
 	) -> Result<Segment<RangeProof>, chain::Error> {
-		if RANGEPROOF_SEGMENT_HEIGHT_RANGE.contains(&id.height) {
+		if !RANGEPROOF_SEGMENT_HEIGHT_RANGE.contains(&id.height) {
 			return Err(chain::ErrorKind::InvalidSegmentHeight.into());
 		}
 		let segmenter = self.chain().segmenter()?;
