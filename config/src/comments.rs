@@ -323,6 +323,7 @@ fn comments() -> HashMap<String, String> {
 		"accept_fee_base".to_string(),
 		"
 #base fee that's accepted into the pool
+#a setting to 1000000 will be overridden to 500000 to respect the fixfees RFC
 "
 		.to_string(),
 	);
