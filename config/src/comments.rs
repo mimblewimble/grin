@@ -94,6 +94,19 @@ fn comments() -> HashMap<String, String> {
 	);
 
 	retval.insert(
+		"future_time_limit".to_string(),
+		"
+#The Future Time Limit (FTL) is a limit on how far into the future,
+#relative to a node's local time, the timestamp on a new block can be,
+#in order for the block to be accepted.
+#At Hard Fork 4, this was reduced from 12 minutes down to 5 minutes,
+#so as to limit possible timestamp manipulation on the new
+#wtema difficulty adjustment algorithm
+"
+		.to_string(),
+	);
+
+	retval.insert(
 		"chain_validation_mode".to_string(),
 		"
 #the chain validation mode, defines how often (if at all) we
@@ -310,6 +323,15 @@ fn comments() -> HashMap<String, String> {
 		"accept_fee_base".to_string(),
 		"
 #base fee that's accepted into the pool
+"
+		.to_string(),
+	);
+
+	retval.insert(
+		"reorg_cache_period".to_string(),
+		"
+#reorg cache retention period in minute.
+#the reorg cache repopulates local mempool in a reorg scenario.
 "
 		.to_string(),
 	);

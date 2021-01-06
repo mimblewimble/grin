@@ -432,14 +432,14 @@ pub struct UntrustedBlockHeader(BlockHeader);
 impl Readable for UntrustedBlockHeader {
 	fn read<R: Reader>(reader: &mut R) -> Result<UntrustedBlockHeader, ser::Error> {
 		let header = read_block_header(reader)?;
-		if header.timestamp
-			> Utc::now() + Duration::seconds(12 * (consensus::BLOCK_TIME_SEC as i64))
-		{
-			// refuse blocks more than 12 blocks intervals in future (as in bitcoin)
+		let ftl = global::get_future_time_limit();
+		if header.timestamp > Utc::now() + Duration::seconds(ftl as i64) {
+			// refuse blocks whose timestamp is too far in the future
+			// this future_time_limit (FTL) is specified in grin-server.toml
 			// TODO add warning in p2p code if local time is too different from peers
 			error!(
-				"block header {} validation error: block time is more than 12 blocks in future",
-				header.hash()
+				"block header {} validation error: block time is more than {} seconds in the future",
+				header.hash(), ftl
 			);
 			return Err(ser::Error::CorruptedData);
 		}
@@ -469,11 +469,8 @@ impl Readable for UntrustedBlockHeader {
 		}
 
 		// Validate global output and kernel MMR sizes against upper bounds based on block height.
-		let global_weight = TransactionBody::weight_as_block(
-			0,
-			header.output_mmr_count(),
-			header.kernel_mmr_count(),
-		);
+		let global_weight =
+			TransactionBody::weight_by_iok(0, header.output_mmr_count(), header.kernel_mmr_count());
 		if global_weight > global::max_block_weight() * (header.height + 1) {
 			return Err(ser::Error::CorruptedData);
 		}
@@ -700,7 +697,7 @@ impl Block {
 
 	/// Sum of all fees (inputs less outputs) in the block
 	pub fn total_fees(&self) -> u64 {
-		self.body.fee()
+		self.body.fee(self.header.height)
 	}
 
 	/// "Lightweight" validation that we can perform quickly during read/deserialization.

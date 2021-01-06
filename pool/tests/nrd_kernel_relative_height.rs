@@ -34,6 +34,7 @@ use std::sync::Arc;
 fn test_nrd_kernel_relative_height() -> Result<(), PoolError> {
 	util::init_test_logger();
 	global::set_local_chain_type(global::ChainTypes::AutomatedTesting);
+	global::set_local_accept_fee_base(10);
 	global::set_local_nrd_enabled(true);
 
 	let keychain: ExtKeychain = Keychain::from_random_seed(false).unwrap();
@@ -59,21 +60,23 @@ fn test_nrd_kernel_relative_height() -> Result<(), PoolError> {
 
 	// Now create tx to spend an early coinbase (now matured).
 	// Provides us with some useful outputs to test with.
-	let initial_tx = test_transaction_spending_coinbase(&keychain, &header_1, vec![10, 20, 30, 40]);
+	let initial_tx =
+		test_transaction_spending_coinbase(&keychain, &header_1, vec![1_000, 2_000, 3_000, 4_000]);
 
 	// Mine that initial tx so we can spend it with multiple txs.
 	add_block(&chain, &[initial_tx], &keychain);
 
-	add_some_blocks(&chain, 5, &keychain);
+	// mine past HF4 to see effect of set_local_accept_fee_base
+	add_some_blocks(&chain, 8, &keychain);
 
 	let header = chain.head_header().unwrap();
 
-	assert_eq!(header.height, 3 * consensus::TESTING_HARD_FORK_INTERVAL);
-	assert_eq!(header.version, HeaderVersion(4));
+	assert_eq!(header.height, 4 * consensus::TESTING_HARD_FORK_INTERVAL);
+	assert_eq!(header.version, HeaderVersion(5));
 
 	let (tx1, tx2, tx3) = {
 		let mut kernel = TxKernel::with_features(KernelFeatures::NoRecentDuplicate {
-			fee: 6,
+			fee: 600.into(),
 			relative_height: NRDRelativeHeight::new(2)?,
 		});
 		let msg = kernel.msg_to_sign().unwrap();
@@ -95,23 +98,23 @@ fn test_nrd_kernel_relative_height() -> Result<(), PoolError> {
 
 		let tx1 = test_transaction_with_kernel(
 			&keychain,
-			vec![10, 20],
-			vec![24],
+			vec![1_000, 2_000],
+			vec![2_400],
 			kernel.clone(),
 			excess.clone(),
 		);
 
 		let tx2 = test_transaction_with_kernel(
 			&keychain,
-			vec![24],
-			vec![18],
+			vec![2_400],
+			vec![1_800],
 			kernel2.clone(),
 			excess.clone(),
 		);
 
 		// Now reuse kernel excess for tx3 but with NRD relative_height=1 (and different fee).
 		let mut kernel_short = TxKernel::with_features(KernelFeatures::NoRecentDuplicate {
-			fee: 3,
+			fee: 300.into(),
 			relative_height: NRDRelativeHeight::new(1)?,
 		});
 		let msg_short = kernel_short.msg_to_sign().unwrap();
@@ -123,8 +126,8 @@ fn test_nrd_kernel_relative_height() -> Result<(), PoolError> {
 
 		let tx3 = test_transaction_with_kernel(
 			&keychain,
-			vec![18],
-			vec![15],
+			vec![1_800],
+			vec![1_500],
 			kernel_short.clone(),
 			excess.clone(),
 		);

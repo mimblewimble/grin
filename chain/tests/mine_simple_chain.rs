@@ -569,7 +569,7 @@ fn spend_rewind_spend() {
 		let key_id30 = ExtKeychainPath::new(1, 30, 0, 0, 0).to_identifier();
 
 		let tx1 = build::transaction(
-			KernelFeatures::Plain { fee: 20000 },
+			KernelFeatures::Plain { fee: 20000.into() },
 			&[
 				build::coinbase_input(consensus::REWARD, key_id_coinbase.clone()),
 				build::output(consensus::REWARD - 20000, key_id30.clone()),
@@ -642,7 +642,7 @@ fn spend_in_fork_and_compact() {
 		let key_id31 = ExtKeychainPath::new(1, 31, 0, 0, 0).to_identifier();
 
 		let tx1 = build::transaction(
-			KernelFeatures::Plain { fee: 20000 },
+			KernelFeatures::Plain { fee: 20000.into() },
 			&[
 				build::coinbase_input(consensus::REWARD, key_id2.clone()),
 				build::output(consensus::REWARD - 20000, key_id30.clone()),
@@ -660,7 +660,7 @@ fn spend_in_fork_and_compact() {
 		chain.validate(false).unwrap();
 
 		let tx2 = build::transaction(
-			KernelFeatures::Plain { fee: 20000 },
+			KernelFeatures::Plain { fee: 20000.into() },
 			&[
 				build::input(consensus::REWARD - 20000, key_id30.clone()),
 				build::output(consensus::REWARD - 40000, key_id31.clone()),
@@ -747,7 +747,9 @@ fn spend_in_fork_and_compact() {
 /// Test ability to retrieve block headers for a given output
 #[test]
 fn output_header_mappings() {
+	clean_output_dir(".grin_header_for_output");
 	global::set_local_chain_type(ChainTypes::AutomatedTesting);
+	util::init_test_logger();
 	{
 		let chain = init_chain(
 			".grin_header_for_output",
@@ -758,7 +760,8 @@ fn output_header_mappings() {
 
 		for n in 1..15 {
 			let prev = chain.head_header().unwrap();
-			let next_header_info = consensus::next_difficulty(1, chain.difficulty_iter().unwrap());
+			let next_header_info =
+				consensus::next_difficulty(prev.height + 1, chain.difficulty_iter().unwrap());
 			let pk = ExtKeychainPath::new(1, n as u32, 0, 0, 0).to_identifier();
 			let reward = libtx::reward::output(
 				&keychain,
@@ -882,7 +885,8 @@ where
 	let proof_size = global::proofsize();
 	let key_id = ExtKeychainPath::new(1, key_idx, 0, 0, 0).to_identifier();
 
-	let fees = txs.iter().map(|tx| tx.fee()).sum();
+	let height = prev.height + 1;
+	let fees = txs.iter().map(|tx| tx.fee(height)).sum();
 	let reward =
 		libtx::reward::output(kc, &libtx::ProofBuilder::new(kc), &key_id, fees, false).unwrap();
 	let mut b = match core::core::Block::new(prev, txs, Difficulty::from_num(diff), reward) {

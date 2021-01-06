@@ -17,10 +17,10 @@
 //! should be used sparingly.
 
 use crate::consensus::{
-	graph_weight, header_version, HeaderInfo, BASE_EDGE_BITS, BLOCK_KERNEL_WEIGHT,
-	BLOCK_OUTPUT_WEIGHT, BLOCK_TIME_SEC, COINBASE_MATURITY, CUT_THROUGH_HORIZON, DAY_HEIGHT,
-	DEFAULT_MIN_EDGE_BITS, DIFFICULTY_ADJUST_WINDOW, INITIAL_DIFFICULTY, MAX_BLOCK_WEIGHT,
-	PROOFSIZE, SECOND_POW_EDGE_BITS, STATE_SYNC_THRESHOLD,
+	graph_weight, header_version, HeaderInfo, BASE_EDGE_BITS, BLOCK_TIME_SEC,
+	C32_GRAPH_WEIGHT, COINBASE_MATURITY, CUT_THROUGH_HORIZON, DAY_HEIGHT, DEFAULT_MIN_EDGE_BITS,
+	DMA_WINDOW, GRIN_BASE, INITIAL_DIFFICULTY, KERNEL_WEIGHT, MAX_BLOCK_WEIGHT,
+	OUTPUT_WEIGHT, PROOFSIZE, SECOND_POW_EDGE_BITS, STATE_SYNC_THRESHOLD,
 };
 use crate::core::block::HeaderVersion;
 use crate::pow::{
@@ -72,14 +72,17 @@ pub const USER_TESTING_CUT_THROUGH_HORIZON: u32 = 70;
 /// Testing state sync threshold in blocks
 pub const TESTING_STATE_SYNC_THRESHOLD: u32 = 20;
 
-/// Testing initial graph weight
-pub const TESTING_INITIAL_GRAPH_WEIGHT: u32 = 1;
-
 /// Testing initial block difficulty
 pub const TESTING_INITIAL_DIFFICULTY: u64 = 1;
 
 /// Testing max_block_weight (artifically low, just enough to support a few txs).
 pub const TESTING_MAX_BLOCK_WEIGHT: u64 = 250;
+
+/// Default unit of fee per tx weight, making each output cost about a Grincent
+pub const DEFAULT_ACCEPT_FEE_BASE: u64 = GRIN_BASE / 100 / 20; // 500_000
+
+/// default Future Time Limit (FTL) of 5 minutes
+pub const DEFAULT_FUTURE_TIME_LIMIT: u64 = 5 * 60;
 
 /// If a peer's last updated difficulty is 2 hours ago and its difficulty's lower than ours,
 /// we're sure this peer is a stuck node, and we will kick out such kind of stuck peers.
@@ -142,6 +145,16 @@ lazy_static! {
 	/// to be overridden on a per-thread basis (for testing).
 	pub static ref GLOBAL_CHAIN_TYPE: OneTime<ChainTypes> = OneTime::new();
 
+	/// Global acccept fee base that must be initialized once on node startup.
+	/// This is accessed via get_acccept_fee_base() which allows the global value
+	/// to be overridden on a per-thread basis (for testing).
+	pub static ref GLOBAL_ACCEPT_FEE_BASE: OneTime<u64> = OneTime::new();
+
+	/// Global future time limit that must be initialized once on node startup.
+	/// This is accessed via get_future_time_limit() which allows the global value
+	/// to be overridden on a per-thread basis (for testing).
+	pub static ref GLOBAL_FUTURE_TIME_LIMIT: OneTime<u64> = OneTime::new();
+
 	/// Global feature flag for NRD kernel support.
 	/// If enabled NRD kernels are treated as valid after HF3 (based on header version).
 	/// If disabled NRD kernels are invalid regardless of header version or block height.
@@ -152,8 +165,20 @@ thread_local! {
 	/// Mainnet|Testnet|UserTesting|AutomatedTesting
 	pub static CHAIN_TYPE: Cell<Option<ChainTypes>> = Cell::new(None);
 
+	/// minimum transaction fee per unit of transaction weight for mempool acceptance
+	pub static ACCEPT_FEE_BASE: Cell<Option<u64>> = Cell::new(None);
+
+	/// maximum number of seconds into future for timestamp of block to be acceptable
+	pub static FUTURE_TIME_LIMIT: Cell<Option<u64>> = Cell::new(None);
+
 	/// Local feature flag for NRD kernel support.
 	pub static NRD_FEATURE_ENABLED: Cell<Option<bool>> = Cell::new(None);
+}
+
+/// One time initialization of the global chain_type.
+/// Will panic if we attempt to re-initialize this (via OneTime).
+pub fn init_global_chain_type(new_type: ChainTypes) {
+	GLOBAL_CHAIN_TYPE.init(new_type)
 }
 
 /// Set the chain type on a per-thread basis via thread_local storage.
@@ -165,31 +190,82 @@ pub fn set_local_chain_type(new_type: ChainTypes) {
 pub fn get_chain_type() -> ChainTypes {
 	CHAIN_TYPE.with(|chain_type| match chain_type.get() {
 		None => {
-			if GLOBAL_CHAIN_TYPE.is_init() {
-				let chain_type = GLOBAL_CHAIN_TYPE.borrow();
-				set_local_chain_type(chain_type);
-				chain_type
-			} else {
+			if !GLOBAL_CHAIN_TYPE.is_init() {
 				panic!("GLOBAL_CHAIN_TYPE and CHAIN_TYPE unset. Consider set_local_chain_type() in tests.");
 			}
+			let chain_type = GLOBAL_CHAIN_TYPE.borrow();
+			set_local_chain_type(chain_type);
+			chain_type
 		}
 		Some(chain_type) => chain_type,
 	})
 }
 
-/// One time initialization of the global chain_type.
+/// One time initialization of the global future time limit
 /// Will panic if we attempt to re-initialize this (via OneTime).
-pub fn init_global_chain_type(new_type: ChainTypes) {
-	GLOBAL_CHAIN_TYPE.init(new_type)
+pub fn init_global_future_time_limit(new_ftl: u64) {
+	GLOBAL_FUTURE_TIME_LIMIT.init(new_ftl)
 }
 
-/// One time initialization of the global chain_type.
+/// One time initialization of the global accept fee base
+/// Will panic if we attempt to re-initialize this (via OneTime).
+pub fn init_global_accept_fee_base(new_base: u64) {
+	GLOBAL_ACCEPT_FEE_BASE.init(new_base)
+}
+
+/// Set the accept fee base on a per-thread basis via thread_local storage.
+pub fn set_local_accept_fee_base(new_base: u64) {
+	ACCEPT_FEE_BASE.with(|base| base.set(Some(new_base)))
+}
+
+/// Accept Fee Base
+/// Look at thread local config first. If not set fallback to global config.
+/// Default to grin-cent/20 if global config unset.
+pub fn get_accept_fee_base() -> u64 {
+	ACCEPT_FEE_BASE.with(|base| match base.get() {
+		None => {
+			let base = if GLOBAL_ACCEPT_FEE_BASE.is_init() {
+				GLOBAL_ACCEPT_FEE_BASE.borrow()
+			} else {
+				DEFAULT_ACCEPT_FEE_BASE
+			};
+			set_local_accept_fee_base(base);
+			base
+		}
+		Some(base) => base,
+	})
+}
+
+/// Set the future time limit on a per-thread basis via thread_local storage.
+pub fn set_local_future_time_limit(new_ftl: u64) {
+	FUTURE_TIME_LIMIT.with(|ftl| ftl.set(Some(new_ftl)))
+}
+
+/// Future Time Limit (FTL)
+/// Look at thread local config first. If not set fallback to global config.
+/// Default to false if global config unset.
+pub fn get_future_time_limit() -> u64 {
+	FUTURE_TIME_LIMIT.with(|ftl| match ftl.get() {
+		None => {
+			let ftl = if GLOBAL_FUTURE_TIME_LIMIT.is_init() {
+				GLOBAL_FUTURE_TIME_LIMIT.borrow()
+			} else {
+				DEFAULT_FUTURE_TIME_LIMIT
+			};
+			set_local_future_time_limit(ftl);
+			ftl
+		}
+		Some(ftl) => ftl,
+	})
+}
+
+/// One time initialization of the global NRD feature flag.
 /// Will panic if we attempt to re-initialize this (via OneTime).
 pub fn init_global_nrd_enabled(enabled: bool) {
 	GLOBAL_NRD_FEATURE_ENABLED.init(enabled)
 }
 
-/// Explicitly enable the NRD global feature flag.
+/// Explicitly enable the local NRD feature flag.
 pub fn set_local_nrd_enabled(enabled: bool) {
 	NRD_FEATURE_ENABLED.with(|flag| flag.set(Some(enabled)))
 }
@@ -288,13 +364,24 @@ pub fn initial_block_difficulty() -> u64 {
 		ChainTypes::Mainnet => INITIAL_DIFFICULTY,
 	}
 }
+
 /// Initial mining secondary scale
 pub fn initial_graph_weight() -> u32 {
 	match get_chain_type() {
-		ChainTypes::AutomatedTesting => TESTING_INITIAL_GRAPH_WEIGHT,
-		ChainTypes::UserTesting => TESTING_INITIAL_GRAPH_WEIGHT,
+		ChainTypes::AutomatedTesting => graph_weight(0, AUTOMATED_TESTING_MIN_EDGE_BITS) as u32,
+		ChainTypes::UserTesting => graph_weight(0, USER_TESTING_MIN_EDGE_BITS) as u32,
 		ChainTypes::Testnet => graph_weight(0, SECOND_POW_EDGE_BITS) as u32,
 		ChainTypes::Mainnet => graph_weight(0, SECOND_POW_EDGE_BITS) as u32,
+	}
+}
+
+/// Minimum valid graph weight post HF4
+pub fn min_wtema_graph_weight() -> u64 {
+	match get_chain_type() {
+		ChainTypes::AutomatedTesting => graph_weight(0, AUTOMATED_TESTING_MIN_EDGE_BITS),
+		ChainTypes::UserTesting => graph_weight(0, USER_TESTING_MIN_EDGE_BITS),
+		ChainTypes::Testnet => graph_weight(0, SECOND_POW_EDGE_BITS),
+		ChainTypes::Mainnet => C32_GRAPH_WEIGHT,
 	}
 }
 
@@ -310,7 +397,7 @@ pub fn max_block_weight() -> u64 {
 
 /// Maximum allowed transaction weight (1 weight unit ~= 32 bytes)
 pub fn max_tx_weight() -> u64 {
-	let coinbase_weight = BLOCK_OUTPUT_WEIGHT + BLOCK_KERNEL_WEIGHT;
+	let coinbase_weight = OUTPUT_WEIGHT + KERNEL_WEIGHT;
 	max_block_weight().saturating_sub(coinbase_weight) as u64
 }
 
@@ -371,7 +458,7 @@ where
 	T: IntoIterator<Item = HeaderInfo>,
 {
 	// Convert iterator to vector, so we can append to it if necessary
-	let needed_block_count = DIFFICULTY_ADJUST_WINDOW as usize + 1;
+	let needed_block_count = DMA_WINDOW as usize + 1;
 	let mut last_n: Vec<HeaderInfo> = cursor.into_iter().take(needed_block_count).collect();
 
 	// Only needed just after blockchain launch... basically ensures there's

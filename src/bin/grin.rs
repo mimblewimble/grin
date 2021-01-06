@@ -123,9 +123,9 @@ fn real_main() -> i32 {
 		}
 	}
 
-	let mut config = node_config.clone().unwrap();
-	let mut logging_config = config.members.as_mut().unwrap().logging.clone().unwrap();
-	logging_config.tui_running = config.members.as_mut().unwrap().server.run_tui;
+	let config = node_config.clone().unwrap();
+	let mut logging_config = config.members.as_ref().unwrap().logging.clone().unwrap();
+	logging_config.tui_running = config.members.as_ref().unwrap().server.run_tui;
 
 	let (logs_tx, logs_rx) = if logging_config.tui_running.unwrap() {
 		let (logs_tx, logs_rx) = mpsc::sync_channel::<LogEntry>(200);
@@ -146,9 +146,9 @@ fn real_main() -> i32 {
 
 	log_build_info();
 
-	// Initialize our global chain_type and feature flags (NRD kernel support currently).
+	// Initialize our global chain_type, feature flags (NRD kernel support currently), accept_fee_base, and future_time_limit.
 	// These are read via global and not read from config beyond this point.
-	global::init_global_chain_type(config.members.unwrap().server.chain_type);
+	global::init_global_chain_type(config.members.as_ref().unwrap().server.chain_type);
 	info!("Chain: {:?}", global::get_chain_type());
 	match global::get_chain_type() {
 		global::ChainTypes::Mainnet => {
@@ -160,6 +160,18 @@ fn real_main() -> i32 {
 			global::init_global_nrd_enabled(true);
 		}
 	}
+	global::init_global_accept_fee_base(
+		config
+			.members
+			.as_ref()
+			.unwrap()
+			.server
+			.pool_config
+			.accept_fee_base,
+	);
+	info!("Accept Fee Base: {:?}", global::get_accept_fee_base());
+	global::init_global_future_time_limit(config.members.unwrap().server.future_time_limit);
+	info!("Future Time Limit: {:?}", global::get_future_time_limit());
 	log_feature_flags();
 
 	// Execute subcommand

@@ -153,6 +153,12 @@ pub enum ErrorKind {
 	/// PIBD segment related error
 	#[fail(display = "Segment error")]
 	SegmentError(segment::SegmentError),
+	/// The segmenter is associated to a different block header
+	#[fail(display = "Segmenter header mismatch")]
+	SegmenterHeaderMismatch,
+	/// Segment height not within allowed range
+	#[fail(display = "Invalid segment height")]
+	InvalidSegmentHeight,
 }
 
 impl Display for Error {

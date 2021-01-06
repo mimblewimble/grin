@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::consensus::{graph_weight, MIN_DIFFICULTY, SECOND_POW_EDGE_BITS};
+use crate::consensus::{graph_weight, MIN_DMA_DIFFICULTY, SECOND_POW_EDGE_BITS};
 use crate::core::hash::{DefaultHashable, Hashed};
 use crate::global;
 use crate::pow::error::Error;
@@ -56,9 +56,16 @@ impl Difficulty {
 	}
 
 	/// Difficulty of MIN_DIFFICULTY
-	pub fn min() -> Difficulty {
+	pub fn min_dma() -> Difficulty {
 		Difficulty {
-			num: MIN_DIFFICULTY,
+			num: MIN_DMA_DIFFICULTY,
+		}
+	}
+
+	/// Difficulty of MIN_DIFFICULTY
+	pub fn min_wtema() -> Difficulty {
+		Difficulty {
+			num: global::min_wtema_graph_weight(),
 		}
 	}
 
@@ -227,7 +234,7 @@ impl Default for ProofOfWork {
 	fn default() -> ProofOfWork {
 		let proof_size = global::proofsize();
 		ProofOfWork {
-			total_difficulty: Difficulty::min(),
+			total_difficulty: Difficulty::min_dma(),
 			secondary_scaling: 1,
 			nonce: 0,
 			proof: Proof::zero(proof_size),

@@ -13,9 +13,10 @@
 // limitations under the License.
 
 use crate::chain;
+use crate::core::consensus::YEAR_HEIGHT;
 use crate::core::core::hash::Hashed;
 use crate::core::core::merkle_proof::MerkleProof;
-use crate::core::core::{KernelFeatures, TxKernel};
+use crate::core::core::{FeeFields, KernelFeatures, TxKernel};
 use crate::core::{core, ser};
 use crate::p2p;
 use crate::util::secp::pedersen;
@@ -499,6 +500,7 @@ impl<'de> serde::de::Deserialize<'de> for OutputPrintable {
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct TxKernelPrintable {
 	pub features: String,
+	pub fee_shift: u8,
 	pub fee: u64,
 	pub lock_height: u64,
 	pub excess: String,
@@ -508,17 +510,21 @@ pub struct TxKernelPrintable {
 impl TxKernelPrintable {
 	pub fn from_txkernel(k: &core::TxKernel) -> TxKernelPrintable {
 		let features = k.features.as_string();
-		let (fee, lock_height) = match k.features {
+		let (fee_fields, lock_height) = match k.features {
 			KernelFeatures::Plain { fee } => (fee, 0),
-			KernelFeatures::Coinbase => (0, 0),
+			KernelFeatures::Coinbase => (FeeFields::zero(), 0),
 			KernelFeatures::HeightLocked { fee, lock_height } => (fee, lock_height),
 			KernelFeatures::NoRecentDuplicate {
 				fee,
 				relative_height,
 			} => (fee, relative_height.into()),
 		};
+		let height = 2 * YEAR_HEIGHT; // print as if post-HF4
+		let fee = fee_fields.fee(height);
+		let fee_shift: u8 = fee_fields.fee_shift(height);
 		TxKernelPrintable {
 			features,
+			fee_shift,
 			fee,
 			lock_height,
 			excess: k.excess.to_hex(),

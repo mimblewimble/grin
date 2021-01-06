@@ -21,8 +21,10 @@ use std::thread;
 use std::time::Duration;
 
 use crate::chain;
+use crate::chain::txhashset::BitmapChunk;
 use crate::core::core;
 use crate::core::core::hash::Hash;
+use crate::core::core::{OutputIdentifier, Segment, SegmentIdentifier, TxKernel};
 use crate::core::global;
 use crate::core::pow::Difficulty;
 use crate::handshake::Handshake;
@@ -33,6 +35,7 @@ use crate::types::{
 	Capabilities, ChainAdapter, Error, NetAdapter, P2PConfig, PeerAddr, PeerInfo, ReasonForBan,
 	TxHashSetRead,
 };
+use crate::util::secp::pedersen::RangeProof;
 use crate::util::StopState;
 use chrono::prelude::{DateTime, Utc};
 
@@ -284,7 +287,7 @@ pub struct DummyAdapter {}
 
 impl ChainAdapter for DummyAdapter {
 	fn total_difficulty(&self) -> Result<Difficulty, chain::Error> {
-		Ok(Difficulty::min())
+		Ok(Difficulty::min_dma())
 	}
 	fn total_height(&self) -> Result<u64, chain::Error> {
 		Ok(0)
@@ -373,6 +376,38 @@ impl ChainAdapter for DummyAdapter {
 	}
 
 	fn get_tmpfile_pathname(&self, _tmpfile_name: String) -> PathBuf {
+		unimplemented!()
+	}
+
+	fn get_kernel_segment(
+		&self,
+		_hash: Hash,
+		_id: SegmentIdentifier,
+	) -> Result<Segment<TxKernel>, chain::Error> {
+		unimplemented!()
+	}
+
+	fn get_bitmap_segment(
+		&self,
+		_hash: Hash,
+		_id: SegmentIdentifier,
+	) -> Result<(Segment<BitmapChunk>, Hash), chain::Error> {
+		unimplemented!()
+	}
+
+	fn get_output_segment(
+		&self,
+		_hash: Hash,
+		_id: SegmentIdentifier,
+	) -> Result<(Segment<OutputIdentifier>, Hash), chain::Error> {
+		unimplemented!()
+	}
+
+	fn get_rangeproof_segment(
+		&self,
+		_hash: Hash,
+		_id: SegmentIdentifier,
+	) -> Result<Segment<RangeProof>, chain::Error> {
 		unimplemented!()
 	}
 }

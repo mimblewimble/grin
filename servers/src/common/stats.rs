@@ -26,6 +26,7 @@ use chrono::prelude::*;
 
 use crate::chain::SyncStatus;
 use crate::p2p;
+use crate::p2p::Capabilities;
 use grin_core::pow::Difficulty;
 
 /// Server state info collection struct, to be passed around into internals
@@ -192,6 +193,8 @@ pub struct PeerStats {
 	pub sent_bytes_per_sec: u64,
 	/// Number of bytes we've received from the peer.
 	pub received_bytes_per_sec: u64,
+	/// Peer advertised capability flags.
+	pub capabilities: Capabilities,
 }
 
 impl PartialEq for PeerStats {
@@ -239,6 +242,7 @@ impl PeerStats {
 			last_seen: peer.info.last_seen(),
 			sent_bytes_per_sec: peer.last_min_sent_bytes().unwrap_or(0) / 60,
 			received_bytes_per_sec: peer.last_min_received_bytes().unwrap_or(0) / 60,
+			capabilities: peer.info.capabilities,
 		}
 	}
 }

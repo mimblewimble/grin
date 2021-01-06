@@ -21,6 +21,7 @@ use self::core::core::committed;
 use self::core::core::hash::Hash;
 use self::core::core::transaction::{self, Transaction};
 use self::core::core::{BlockHeader, BlockSums, Inputs, OutputIdentifier};
+use self::core::global::DEFAULT_ACCEPT_FEE_BASE;
 use chrono::prelude::*;
 use failure::Fail;
 use grin_core as core;
@@ -107,6 +108,11 @@ pub struct PoolConfig {
 	#[serde(default = "default_accept_fee_base")]
 	pub accept_fee_base: u64,
 
+	// Reorg cache retention period in minute.
+	// The reorg cache repopulates local mempool in a reorg scenario.
+	#[serde(default = "default_reorg_cache_period")]
+	pub reorg_cache_period: u32,
+
 	/// Maximum capacity of the pool in number of transactions
 	#[serde(default = "default_max_pool_size")]
 	pub max_pool_size: usize,
@@ -126,6 +132,7 @@ impl Default for PoolConfig {
 	fn default() -> PoolConfig {
 		PoolConfig {
 			accept_fee_base: default_accept_fee_base(),
+			reorg_cache_period: default_reorg_cache_period(),
 			max_pool_size: default_max_pool_size(),
 			max_stempool_size: default_max_stempool_size(),
 			mineable_max_weight: default_mineable_max_weight(),
@@ -133,8 +140,12 @@ impl Default for PoolConfig {
 	}
 }
 
-fn default_accept_fee_base() -> u64 {
-	consensus::MILLI_GRIN
+/// make output (of weight 21) cost about 1 Grin-cent by default, keeping a round number
+pub fn default_accept_fee_base() -> u64 {
+	DEFAULT_ACCEPT_FEE_BASE
+}
+fn default_reorg_cache_period() -> u32 {
+	30
 }
 fn default_max_pool_size() -> usize {
 	50_000

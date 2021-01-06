@@ -21,8 +21,10 @@ use std::sync::Arc;
 use rand::prelude::*;
 
 use crate::chain;
+use crate::chain::txhashset::BitmapChunk;
 use crate::core::core;
 use crate::core::core::hash::{Hash, Hashed};
+use crate::core::core::{OutputIdentifier, Segment, SegmentIdentifier, TxKernel};
 use crate::core::global;
 use crate::core::pow::Difficulty;
 use crate::peer::Peer;
@@ -31,6 +33,7 @@ use crate::types::{
 	Capabilities, ChainAdapter, Error, NetAdapter, P2PConfig, PeerAddr, PeerInfo, ReasonForBan,
 	TxHashSetRead, MAX_PEER_ADDRS,
 };
+use crate::util::secp::pedersen::RangeProof;
 use chrono::prelude::*;
 use chrono::Duration;
 
@@ -123,13 +126,6 @@ impl Peers {
 	/// Get a peer we're connected to by address.
 	pub fn get_connected_peer(&self, addr: PeerAddr) -> Option<Arc<Peer>> {
 		self.iter().connected().by_addr(addr)
-	}
-
-	pub fn max_peer_difficulty(&self) -> Difficulty {
-		self.iter()
-			.connected()
-			.max_difficulty()
-			.unwrap_or(Difficulty::zero())
 	}
 
 	pub fn is_banned(&self, peer_addr: PeerAddr) -> bool {
@@ -624,6 +620,38 @@ impl ChainAdapter for Peers {
 
 	fn get_tmpfile_pathname(&self, tmpfile_name: String) -> PathBuf {
 		self.adapter.get_tmpfile_pathname(tmpfile_name)
+	}
+
+	fn get_kernel_segment(
+		&self,
+		hash: Hash,
+		id: SegmentIdentifier,
+	) -> Result<Segment<TxKernel>, chain::Error> {
+		self.adapter.get_kernel_segment(hash, id)
+	}
+
+	fn get_bitmap_segment(
+		&self,
+		hash: Hash,
+		id: SegmentIdentifier,
+	) -> Result<(Segment<BitmapChunk>, Hash), chain::Error> {
+		self.adapter.get_bitmap_segment(hash, id)
+	}
+
+	fn get_output_segment(
+		&self,
+		hash: Hash,
+		id: SegmentIdentifier,
+	) -> Result<(Segment<OutputIdentifier>, Hash), chain::Error> {
+		self.adapter.get_output_segment(hash, id)
+	}
+
+	fn get_rangeproof_segment(
+		&self,
+		hash: Hash,
+		id: SegmentIdentifier,
+	) -> Result<Segment<RangeProof>, chain::Error> {
+		self.adapter.get_rangeproof_segment(hash, id)
 	}
 }
 
