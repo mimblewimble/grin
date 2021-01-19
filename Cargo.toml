@@ -42,7 +42,7 @@ grin_servers = { path = "./servers", version = "5.1.0-alpha.1" }
 grin_util = { path = "./util", version = "5.1.0-alpha.1" }
 
 [dependencies.cursive]
-version = "0.15"
+version = "0.16"
 default-features = false
 features = ["pancurses-backend"]
 
