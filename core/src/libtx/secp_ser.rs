@@ -83,6 +83,9 @@ pub mod option_sig_serde {
 			Some(string) => from_hex(&string)
 				.map_err(Error::custom)
 				.and_then(|bytes: Vec<u8>| {
+					if bytes.len() < 64 {
+						return Err(Error::invalid_length(bytes.len(), &"64 bytes"));
+					}
 					let mut b = [0u8; 64];
 					b.copy_from_slice(&bytes[0..64]);
 					secp::Signature::from_compact(&static_secp, &b)
@@ -125,6 +128,9 @@ pub mod option_seckey_serde {
 			Some(string) => from_hex(&string)
 				.map_err(Error::custom)
 				.and_then(|bytes: Vec<u8>| {
+					if bytes.len() < 32 {
+						return Err(Error::invalid_length(bytes.len(), &"32 bytes"));
+					}
 					let mut b = [0u8; 32];
 					b.copy_from_slice(&bytes[0..32]);
 					secp::key::SecretKey::from_slice(&static_secp, &b)
@@ -162,6 +168,9 @@ pub mod sig_serde {
 		String::deserialize(deserializer)
 			.and_then(|string| from_hex(&string).map_err(Error::custom))
 			.and_then(|bytes: Vec<u8>| {
+				if bytes.len() < 64 {
+					return Err(Error::invalid_length(bytes.len(), &"64 bytes"));
+				}
 				let mut b = [0u8; 64];
 				b.copy_from_slice(&bytes[0..64]);
 				secp::Signature::from_compact(&static_secp, &b).map_err(Error::custom)
