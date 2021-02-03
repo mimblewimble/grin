@@ -100,6 +100,8 @@ impl BodySync {
 			peers = peers_iter().inbound().into_iter().collect();
 		}
 
+		debug!("*** body_sync: peers: {}", peers.len());
+
 		// If we have no peers (outbound or inbound) then we are done for now.
 		if peers.is_empty() {
 			debug!("no peers (inbound or outbound) with more work");

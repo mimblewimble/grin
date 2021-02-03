@@ -889,6 +889,11 @@ impl Chain {
 	/// If beyond the horizon then we cannot sync via recent full blocks
 	/// and we need a state (txhashset) sync.
 	pub fn check_txhashset_needed(&self, fork_point: &BlockHeader) -> Result<bool, Error> {
+		if self.archive_mode {
+			debug!("check_txhashset_needed: we are running with archive_mode=true, not needed");
+			return Ok(false);
+		}
+
 		let header_head = self.header_head()?;
 		let horizon = global::cut_through_horizon() as u64;
 		Ok(fork_point.height < header_head.height.saturating_sub(horizon))
