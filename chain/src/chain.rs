@@ -15,7 +15,7 @@
 //! Facade and handler for the rest of the blockchain implementation
 //! and mostly the chain pipeline.
 
-use crate::core::core::hash::{Hash, Hashed, ZERO_HASH};
+use crate::core::core::hash::{Hash, Hashed};
 use crate::core::core::merkle_proof::MerkleProof;
 use crate::core::core::verifier_cache::VerifierCache;
 use crate::core::core::{
@@ -38,7 +38,6 @@ use crate::util::RwLock;
 use crate::ChainStore;
 use grin_core::ser;
 use grin_store::Error::NotFoundErr;
-use std::cmp::min;
 use std::fs::{self, File};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -960,115 +959,26 @@ impl Chain {
 		Ok(())
 	}
 
-	/// Check chain status whether a txhashset downloading is needed
-	pub fn check_txhashset_needed(
-		&self,
-		caller: String,
-		hashes: &mut Option<Vec<Hash>>,
-	) -> Result<bool, Error> {
-		let horizon = global::cut_through_horizon() as u64;
+	/// Finds the "fork point" where header chain diverges from full block chain.
+	/// If we are syncing this will correspond to the last full block where
+	/// the next header is known but we do not yet have the full block.
+	/// i.e. This is the last known full block and all subsequent blocks are missing.
+	pub fn fork_point(&self) -> Result<BlockHeader, Error> {
 		let body_head = self.head()?;
+		let mut current = self.get_block_header(&body_head.hash())?;
+		while !self.is_on_current_chain(&current).is_ok() {
+			current = self.get_previous_header(&current)?;
+		}
+		Ok(current)
+	}
+
+	/// Compare fork point to our horizon.
+	/// If beyond the horizon then we cannot sync via recent full blocks
+	/// and we need a state (txhashset) sync.
+	pub fn check_txhashset_needed(&self, fork_point: &BlockHeader) -> Result<bool, Error> {
 		let header_head = self.header_head()?;
-		let sync_head = self.get_sync_head()?;
-
-		debug!(
-			"{}: body_head - {}, {}, header_head - {}, {}, sync_head - {}, {}",
-			caller,
-			body_head.last_block_h,
-			body_head.height,
-			header_head.last_block_h,
-			header_head.height,
-			sync_head.last_block_h,
-			sync_head.height,
-		);
-
-		if body_head.total_difficulty >= header_head.total_difficulty {
-			debug!(
-				"{}: no need txhashset. header_head.total_difficulty: {} <= body_head.total_difficulty: {}",
-				caller, header_head.total_difficulty, body_head.total_difficulty,
-			);
-			return Ok(false);
-		}
-
-		let mut oldest_height = 0;
-		let mut oldest_hash = ZERO_HASH;
-
-		// Start with body_head (head of the full block chain)
-		let mut current = self.get_block_header(&body_head.last_block_h);
-		if current.is_err() {
-			error!(
-				"{}: body_head not found in chain db: {} at {}",
-				caller, body_head.last_block_h, body_head.height,
-			);
-			return Ok(false);
-		}
-
-		//
-		// TODO - Investigate finding the "common header" by comparing header_mmr and
-		// sync_mmr (bytes will be identical up to the common header).
-		//
-		// Traverse back through the full block chain from body head until we find a header
-		// that "is on current chain", which is the "fork point" between existing header chain
-		// and full block chain.
-		while let Ok(header) = current {
-			// break out of the while loop when we find a header common
-			// between the header chain and the current body chain
-			if self.is_on_current_chain(&header).is_ok() {
-				oldest_height = header.height;
-				oldest_hash = header.hash();
-				break;
-			}
-
-			current = self.get_previous_header(&header);
-		}
-
-		// Traverse back through the header chain from header_head back to this fork point.
-		// These are the blocks that we need to request in body sync (we have the header but not the full block).
-		if let Some(hs) = hashes {
-			let foo_height = min(oldest_height + 100, header_head.height);
-			let foo_header = self.get_header_by_height(foo_height);
-
-			// let mut h = self.get_block_header(&header_head.last_block_h);
-			let mut h = foo_header;
-
-			while let Ok(header) = h {
-				if header.height <= oldest_height {
-					break;
-				}
-				hs.push(header.hash());
-				h = self.get_previous_header(&header);
-			}
-		}
-
-		if oldest_height < header_head.height.saturating_sub(horizon) {
-			// TODO - experimental archive mode support.
-			let archive_mode_enabled = true;
-			if archive_mode_enabled {
-				debug!(
-					"{}: no state sync, running archive sync (lots of full blocks)",
-					caller
-				);
-				return Ok(false);
-			}
-
-			if oldest_hash != ZERO_HASH {
-				// this is the normal case. for example:
-				// body head height is 1 (and not a fork), oldest_height will be 1
-				// body head height is 0 (a typical fresh node), oldest_height will be 0
-				// body head height is 10,001 (but at a fork with depth 1), oldest_height will be 10,000
-				// body head height is 10,005 (but at a fork with depth 5), oldest_height will be 10,000
-				debug!(
-					"{}: need a state sync for txhashset. oldest block which is not on local chain: {} at {}",
-					caller, oldest_hash, oldest_height,
-				);
-			} else {
-				// this is the abnormal case, when is_on_current_chain() always return Err, and even for genesis block.
-				error!("{}: corrupted storage? state sync is needed", caller);
-			}
-			Ok(true)
-		} else {
-			Ok(false)
-		}
+		let horizon = global::cut_through_horizon() as u64;
+		Ok(fork_point.height < header_head.height.saturating_sub(horizon))
 	}
 
 	/// Clean the temporary sandbox folder
@@ -1120,8 +1030,8 @@ impl Chain {
 		status.on_setup();
 
 		// Initial check whether this txhashset is needed or not
-		let mut hashes: Option<Vec<Hash>> = None;
-		if !self.check_txhashset_needed("txhashset_write".to_owned(), &mut hashes)? {
+		let fork_point = self.fork_point()?;
+		if !self.check_txhashset_needed(&fork_point)? {
 			warn!("txhashset_write: txhashset received but it's not needed! ignored.");
 			return Err(ErrorKind::InvalidTxHashSet("not needed".to_owned()).into());
 		}
