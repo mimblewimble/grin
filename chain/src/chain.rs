@@ -38,6 +38,7 @@ use crate::util::RwLock;
 use crate::ChainStore;
 use grin_core::ser;
 use grin_store::Error::NotFoundErr;
+use std::cmp::min;
 use std::fs::{self, File};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -1024,7 +1025,12 @@ impl Chain {
 		// Traverse back through the header chain from header_head back to this fork point.
 		// These are the blocks that we need to request in body sync (we have the header but not the full block).
 		if let Some(hs) = hashes {
-			let mut h = self.get_block_header(&header_head.last_block_h);
+			let foo_height = min(oldest_height + 100, header_head.height);
+			let foo_header = self.get_header_by_height(foo_height);
+
+			// let mut h = self.get_block_header(&header_head.last_block_h);
+			let mut h = foo_header;
+
 			while let Ok(header) = h {
 				if header.height <= oldest_height {
 					break;
@@ -1035,6 +1041,16 @@ impl Chain {
 		}
 
 		if oldest_height < header_head.height.saturating_sub(horizon) {
+			// TODO - experimental archive mode support.
+			let archive_mode_enabled = true;
+			if archive_mode_enabled {
+				debug!(
+					"{}: no state sync, running archive sync (lots of full blocks)",
+					caller
+				);
+				return Ok(false);
+			}
+
 			if oldest_hash != ZERO_HASH {
 				// this is the normal case. for example:
 				// body head height is 1 (and not a fork), oldest_height will be 1
