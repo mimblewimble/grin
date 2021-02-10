@@ -34,10 +34,10 @@ use crate::types::{
 use crate::util::secp::pedersen::RangeProof;
 use bytes::Bytes;
 use num::FromPrimitive;
-use std::fmt;
 use std::fs::File;
 use std::io::{Read, Write};
 use std::sync::Arc;
+use std::{fmt, thread, time::Duration};
 
 /// Grin's user agent with current version
 pub const USER_AGENT: &str = concat!("MW/Grin ", env!("CARGO_PKG_VERSION"));
@@ -238,6 +238,17 @@ pub fn write_message<W: Write>(
 	msg: &Msg,
 	tracker: Arc<Tracker>,
 ) -> Result<(), Error> {
+	// Introduce a delay so messages are spaced at least 150ms apart.
+	// This gives a max msg rate of 60000/150 = 400 messages per minute.
+	// Exceeding 500 messages per minute will result in being banned as abusive.
+	if let Some(elapsed) = tracker.sent_bytes.read().elapsed_since_last_msg() {
+		let min_interval: u64 = 150;
+		let sleep_ms = min_interval.saturating_sub(elapsed);
+		if sleep_ms > 0 {
+			thread::sleep(Duration::from_millis(sleep_ms))
+		}
+	}
+
 	let mut buf = ser::ser_vec(&msg.header, msg.version)?;
 	buf.extend(&msg.body[..]);
 	stream.write_all(&buf[..])?;

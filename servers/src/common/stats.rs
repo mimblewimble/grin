@@ -240,8 +240,8 @@ impl PeerStats {
 			height: peer.info.height(),
 			direction: direction.to_string(),
 			last_seen: peer.info.last_seen(),
-			sent_bytes_per_sec: peer.last_min_sent_bytes().unwrap_or(0) / 60,
-			received_bytes_per_sec: peer.last_min_received_bytes().unwrap_or(0) / 60,
+			sent_bytes_per_sec: peer.tracker().sent_bytes.read().bytes_per_min() / 60,
+			received_bytes_per_sec: peer.tracker().received_bytes.read().bytes_per_min() / 60,
 			capabilities: peer.info.capabilities,
 		}
 	}

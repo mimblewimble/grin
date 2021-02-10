@@ -324,12 +324,12 @@ impl Peers {
 					debug!("clean_peers {:?}, not connected", peer.info.addr);
 					rm.push(peer.info.addr.clone());
 				} else if peer.is_abusive() {
-					if let Some(counts) = peer.last_min_message_counts() {
-						debug!(
-							"clean_peers {:?}, abusive ({} sent, {} recv)",
-							peer.info.addr, counts.0, counts.1,
-						);
-					}
+					let received = peer.tracker().received_bytes.read().count_per_min();
+					let sent = peer.tracker().sent_bytes.read().count_per_min();
+					debug!(
+						"clean_peers {:?}, abusive ({} sent, {} recv)",
+						peer.info.addr, sent, received,
+					);
 					let _ = self.update_state(peer.info.addr, State::Banned);
 					rm.push(peer.info.addr.clone());
 				} else {
