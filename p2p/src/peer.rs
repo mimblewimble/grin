@@ -205,27 +205,13 @@ impl Peer {
 
 	/// Whether the peer is considered abusive, mostly for spammy nodes
 	pub fn is_abusive(&self) -> bool {
-		let rec = self.tracker.received_bytes.read();
-		let sent = self.tracker.sent_bytes.read();
-		rec.count_per_min() > MAX_PEER_MSG_PER_MIN || sent.count_per_min() > MAX_PEER_MSG_PER_MIN
+		let rec = self.tracker().received_bytes.read();
+		rec.count_per_min() > MAX_PEER_MSG_PER_MIN
 	}
 
-	/// Number of bytes sent to the peer
-	pub fn last_min_sent_bytes(&self) -> Option<u64> {
-		let sent_bytes = self.tracker.sent_bytes.read();
-		Some(sent_bytes.bytes_per_min())
-	}
-
-	/// Number of bytes received from the peer
-	pub fn last_min_received_bytes(&self) -> Option<u64> {
-		let received_bytes = self.tracker.received_bytes.read();
-		Some(received_bytes.bytes_per_min())
-	}
-
-	pub fn last_min_message_counts(&self) -> Option<(u64, u64)> {
-		let received_bytes = self.tracker.received_bytes.read();
-		let sent_bytes = self.tracker.sent_bytes.read();
-		Some((sent_bytes.count_per_min(), received_bytes.count_per_min()))
+	/// Tracker tracks sent/received bytes and message counts per minute.
+	pub fn tracker(&self) -> &conn::Tracker {
+		&self.tracker
 	}
 
 	/// Set this peer status to banned
