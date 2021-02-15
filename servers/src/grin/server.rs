@@ -214,9 +214,13 @@ impl Server {
 			init_net_hooks(&config),
 		));
 
-		// Use our default capabilities here.
-		// We will advertize these to our peers during hand/shake.
-		let capabilities = Capabilities::default();
+		// Initialize our capabilities.
+		// Currently either "default" or with optional "archive_mode" (block history) support enabled.
+		let capabilities = if let Some(true) = config.archive_mode {
+			Capabilities::default() | Capabilities::BLOCK_HIST
+		} else {
+			Capabilities::default()
+		};
 		debug!("Capabilities: {:?}", capabilities);
 
 		let p2p_server = Arc::new(p2p::Server::new(
