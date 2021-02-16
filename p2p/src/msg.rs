@@ -865,7 +865,7 @@ pub enum Message {
 	CompactBlock(UntrustedCompactBlock),
 	GetHeaders(Locator),
 	Header(UntrustedBlockHeader),
-	Headers(Vec<BlockHeader>),
+	Headers(HeadersData),
 	GetPeerAddrs(GetPeerAddrs),
 	PeerAddrs(PeerAddrs),
 	TxHashSetRequest(TxHashSetRequest),
@@ -879,6 +879,17 @@ pub enum Message {
 	RangeProofSegment(SegmentResponse<RangeProof>),
 	GetKernelSegment(SegmentRequest),
 	KernelSegment(SegmentResponse<TxKernel>),
+}
+
+/// We receive 512 headers from a peer.
+/// But we process them in smaller batches of 32 headers.
+/// HeadersData wraps the current batch and a count of the headers remaining after this batch.
+pub struct HeadersData {
+	/// Batch of headers currently being processed.
+	pub headers: Vec<BlockHeader>,
+	/// Number of headers stil to be processed after this current batch.
+	/// 0 indicates this is the final batch from the larger set of headers received from the peer.
+	pub remaining: u64,
 }
 
 impl fmt::Display for Message {
