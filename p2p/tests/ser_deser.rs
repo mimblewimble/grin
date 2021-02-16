@@ -74,13 +74,3 @@ fn test_capabilities() {
 			.contains(p2p::types::Capabilities::TX_KERNEL_HASH)
 	);
 }
-
-// Default capabilities do not currently include PIBD_HIST
-// but it is a supported capability bit flag (currently unused).
-#[test]
-fn test_pibd_capabilities() {
-	assert_eq!(
-		p2p::types::Capabilities::default() | p2p::types::Capabilities::PIBD_HIST,
-		p2p::types::Capabilities::from_bits_truncate(0b11111111 as u32),
-	);
-}
