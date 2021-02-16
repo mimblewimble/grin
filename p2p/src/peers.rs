@@ -59,23 +59,29 @@ impl Peers {
 	/// Adds the peer to our internal peer mapping. Note that the peer is still
 	/// returned so the server can run it.
 	pub fn add_connected(&self, peer: Arc<Peer>) -> Result<(), Error> {
-		let mut peers = self.peers.try_write_for(LOCK_TIMEOUT).ok_or_else(|| {
-			error!("add_connected: failed to get peers lock");
-			Error::Timeout
-		})?;
-		let peer_data = PeerData {
-			addr: peer.info.addr,
-			capabilities: peer.info.capabilities,
-			user_agent: peer.info.user_agent.clone(),
-			flags: State::Healthy,
-			last_banned: 0,
-			ban_reason: ReasonForBan::None,
-			last_connected: Utc::now().timestamp(),
-		};
+		let peer_data: PeerData;
+		{
+			// Scope for peers vector lock - dont hold the peers lock while adding to lmdb
+			let mut peers = self.peers.try_write_for(LOCK_TIMEOUT).ok_or_else(|| {
+				error!("add_connected: failed to get peers lock");
+				Error::Timeout
+			})?;
+			peer_data = PeerData {
+				addr: peer.info.addr,
+				capabilities: peer.info.capabilities,
+				user_agent: peer.info.user_agent.clone(),
+				flags: State::Healthy,
+				last_banned: 0,
+				ban_reason: ReasonForBan::None,
+				last_connected: Utc::now().timestamp(),
+			};
+			debug!("Adding newly connected peer {}.", peer_data.addr);
+			peers.insert(peer_data.addr, peer);
+		}
 		debug!("Saving newly connected peer {}.", peer_data.addr);
-		self.save_peer(&peer_data)?;
-		peers.insert(peer_data.addr, peer);
-
+		if let Err(e) = self.save_peer(&peer_data) {
+			error!("Could not save connected peer address: {:?}", e);
+		}
 		Ok(())
 	}
 
@@ -136,8 +142,10 @@ impl Peers {
 	}
 	/// Ban a peer, disconnecting it if we're currently connected
 	pub fn ban_peer(&self, peer_addr: PeerAddr, ban_reason: ReasonForBan) -> Result<(), Error> {
+		// Update the peer in peers db
 		self.update_state(peer_addr, State::Banned)?;
 
+		// Update the peer in the peers Vec
 		match self.get_connected_peer(peer_addr) {
 			Some(peer) => {
 				debug!("Banning peer {}", peer_addr);
