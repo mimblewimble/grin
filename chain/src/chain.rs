@@ -1173,6 +1173,7 @@ impl Chain {
 		// Make sure our output_pos index is consistent with the UTXO set.
 		txhashset.init_output_pos_index(&header_pmmr, &batch)?;
 
+		// TODO - Why is this part of chain compaction?
 		// Rebuild our NRD kernel_pos index based on recent kernel history.
 		txhashset.init_recent_kernel_pos_index(&header_pmmr, &batch)?;
 

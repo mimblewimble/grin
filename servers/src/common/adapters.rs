@@ -704,11 +704,6 @@ where
 	}
 
 	fn check_compact(&self) {
-		// Skip compaction if we are syncing.
-		if self.sync_state.is_syncing() {
-			return;
-		}
-
 		// Roll the dice to trigger compaction at 1/COMPACTION_CHECK chance per block,
 		// uses a different thread to avoid blocking the caller thread (likely a peer)
 		let mut rng = thread_rng();
