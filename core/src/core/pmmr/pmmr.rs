@@ -12,8 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::marker;
 use std::u64;
+use std::{marker, ops::RangeInclusive};
 
 use croaring::Bitmap;
 
@@ -541,10 +541,18 @@ pub fn peak_map_height(mut pos: u64) -> (u64, u64) {
 /// index. This function is the base on which all others, as well as the MMR,
 /// are built.
 pub fn bintree_postorder_height(num: u64) -> u64 {
-	if num == 0 {
+	let mut pos = num.saturating_sub(1);
+	if pos == 0 {
 		return 0;
 	}
-	peak_map_height(num - 1).1
+	let mut peak_size = ALL_ONES >> pos.leading_zeros();
+	while peak_size != 0 {
+		if pos >= peak_size {
+			pos -= peak_size;
+		}
+		peak_size >>= 1;
+	}
+	pos
 }
 
 /// Is this position a leaf in the MMR?
@@ -657,4 +665,11 @@ pub fn bintree_rightmost(num: u64) -> u64 {
 pub fn bintree_leftmost(num: u64) -> u64 {
 	let height = bintree_postorder_height(num);
 	num + 2 - (2 << height)
+}
+
+pub fn bintree_range(num: u64) -> RangeInclusive<u64> {
+	let height = bintree_postorder_height(num);
+	let leftmost = num + 2 - (2 << height);
+	let rightmost = num - height;
+	RangeInclusive::new(leftmost, rightmost)
 }

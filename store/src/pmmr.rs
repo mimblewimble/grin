@@ -285,6 +285,9 @@ impl<T: PMMRable> PMMRBackend<T> {
 	}
 
 	fn is_compacted(&self, pos: u64) -> bool {
+		if self.leaf_set.includes(pos) {
+			return false;
+		}
 		self.is_pruned(pos) && !self.is_pruned_root(pos)
 	}
 

@@ -90,6 +90,18 @@ fn first_100_mmr_heights() {
 	}
 }
 
+#[test]
+fn test_bintree_range() {
+	assert_eq!(pmmr::bintree_range(0), 0..=0);
+	assert_eq!(pmmr::bintree_range(1), 1..=1);
+	assert_eq!(pmmr::bintree_range(2), 2..=2);
+	assert_eq!(pmmr::bintree_range(3), 1..=2);
+	assert_eq!(pmmr::bintree_range(4), 4..=4);
+	assert_eq!(pmmr::bintree_range(5), 5..=5);
+	assert_eq!(pmmr::bintree_range(6), 4..=5);
+	assert_eq!(pmmr::bintree_range(7), 1..=5);
+}
+
 // The pos of the rightmost leaf for the provided MMR size (last leaf in subtree).
 #[test]
 fn test_bintree_rightmost() {
