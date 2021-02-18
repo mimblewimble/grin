@@ -515,18 +515,18 @@ where
 			let mut bin_writer = BinWriter::new(&mut buf_writer, self.version);
 
 			let mut current_pos = 0;
-			// let mut prune_pos = prune_pos;
 			while let Ok(elmt) = T::read(&mut streaming_reader) {
 				if let Some(pos) = prune_pos.peek() {
 					if *pos == current_pos {
 						// Pruned pos, moving on.
 						prune_pos.next();
+						current_pos += 1;
+						continue;
 					}
-				} else {
-					// Not pruned, write to file.
-					elmt.write(&mut bin_writer)
-						.map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
 				}
+				// Not pruned, write to file.
+				elmt.write(&mut bin_writer)
+					.map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
 				current_pos += 1;
 			}
 			buf_writer.flush()?;

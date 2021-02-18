@@ -376,7 +376,7 @@ impl<T: PMMRable> PMMRBackend<T> {
 				});
 
 			self.data_file.write_tmp_pruned(pos_to_rm)?;
-			self.hash_file.replace_with_tmp()?;
+			self.data_file.replace_with_tmp()?;
 		}
 
 		// 3. Update the prune list and write to disk.
