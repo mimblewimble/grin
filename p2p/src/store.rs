@@ -127,6 +127,15 @@ impl PeerStore {
 		batch.commit()
 	}
 
+	pub fn save_peers(&self, p: Vec<PeerData>) -> Result<(), Error> {
+		let batch = self.db.batch()?;
+		for pd in p {
+			debug!("save_peers: {:?} marked {:?}", pd.addr, pd.flags);
+			batch.put_ser(&peer_key(pd.addr)[..], &pd)?;
+		}
+		batch.commit()
+	}
+
 	pub fn get_peer(&self, peer_addr: PeerAddr) -> Result<PeerData, Error> {
 		option_to_not_found(self.db.get_ser(&peer_key(peer_addr)[..]), || {
 			format!("Peer at address: {}", peer_addr)
