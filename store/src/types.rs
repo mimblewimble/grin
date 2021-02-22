@@ -154,18 +154,10 @@ where
 	}
 
 	/// Write the file out to disk, pruning removed elements.
-	pub fn write_tmp_pruned<I>(&self, prune_pos: I) -> io::Result<()>
-	where
-		I: IntoIterator<Item = u64>,
-	{
+	pub fn save_prune(&mut self, prune_pos: &[u64]) -> io::Result<()> {
 		// Need to convert from 1-index to 0-index (don't ask).
-		let prune_idx = prune_pos.into_iter().map(|x| x - 1);
-		self.file.write_tmp_pruned(prune_idx)
-	}
-
-	/// Replace underlying file with the file at our tmp path.
-	pub fn replace_with_tmp(&mut self) -> io::Result<()> {
-		self.file.replace_with_tmp()
+		let prune_idx: Vec<_> = prune_pos.iter().map(|x| x - 1).collect();
+		self.file.save_prune(prune_idx.as_slice())
 	}
 }
 
@@ -493,52 +485,39 @@ where
 		Ok(file)
 	}
 
-	fn tmp_file_path(&self) -> PathBuf {
-		self.path.with_extension("tmp")
-	}
-
 	/// Saves a copy of the current file content, skipping data at the provided
 	/// prune positions. prune_pos must be ordered.
-	fn write_tmp_pruned<I>(&self, prune_pos: I) -> io::Result<()>
-	where
-		I: IntoIterator<Item = u64>,
-	{
-		let mut prune_pos = prune_pos.into_iter().peekable();
+	pub fn save_prune(&mut self, prune_pos: &[u64]) -> io::Result<()> {
+		let tmp_path = self.path.with_extension("tmp");
 
 		// Scope the reader and writer to within the block so we can safely replace files later on.
 		{
 			let reader = File::open(&self.path)?;
 			let mut buf_reader = BufReader::new(reader);
 			let mut streaming_reader = StreamingReader::new(&mut buf_reader, self.version);
-			let tmp_path = self.tmp_file_path();
-			let mut buf_writer = BufWriter::new(File::create(tmp_path)?);
+
+			let mut buf_writer = BufWriter::new(File::create(&tmp_path)?);
 			let mut bin_writer = BinWriter::new(&mut buf_writer, self.version);
 
 			let mut current_pos = 0;
+			let mut prune_pos = prune_pos;
 			while let Ok(elmt) = T::read(&mut streaming_reader) {
-				if let Some(pos) = prune_pos.peek() {
-					if *pos == current_pos {
-						// Pruned pos, moving on.
-						prune_pos.next();
-						current_pos += 1;
-						continue;
-					}
+				if prune_pos.contains(&current_pos) {
+					// Pruned pos, moving on.
+					prune_pos = &prune_pos[1..];
+				} else {
+					// Not pruned, write to file.
+					elmt.write(&mut bin_writer)
+						.map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
 				}
-				// Not pruned, write to file.
-				elmt.write(&mut bin_writer)
-					.map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
 				current_pos += 1;
 			}
 			buf_writer.flush()?;
 		}
 
-		Ok(())
-	}
-
-	fn replace_with_tmp(&mut self) -> io::Result<()> {
 		// Replace the underlying file -
 		// pmmr_data.tmp -> pmmr_data.bin
-		self.replace(self.tmp_file_path())?;
+		self.replace(&tmp_path)?;
 
 		// Now rebuild our size file to reflect the pruned data file.
 		// This will replace the underlying file internally.
@@ -596,6 +575,7 @@ where
 	}
 
 	/// Replace the underlying file with another file, deleting the original.
+	/// Takes an optional size_file path in addition to path.
 	fn replace<P>(&mut self, with: P) -> io::Result<()>
 	where
 		P: AsRef<Path> + Debug,

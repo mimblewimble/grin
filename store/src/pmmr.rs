@@ -354,29 +354,29 @@ impl<T: PMMRable> PMMRBackend<T> {
 
 		// 1. Save compact copy of the hash file, skipping removed data.
 		{
-			let pos_to_rm = pos_to_rm.iter().map(|x| x as u64).map(|pos| {
-				let shift = self.prune_list.get_shift(pos);
-				pos - shift
+			let pos_to_rm = map_vec!(pos_to_rm, |pos| {
+				let shift = self.prune_list.get_shift(pos.into());
+				pos as u64 - shift
 			});
 
-			self.hash_file.write_tmp_pruned(pos_to_rm)?;
-			self.hash_file.replace_with_tmp()?;
+			self.hash_file.save_prune(&pos_to_rm)?;
 		}
 
 		// 2. Save compact copy of the data file, skipping removed leaves.
 		{
-			let pos_to_rm = pos_to_rm
+			let leaf_pos_to_rm = pos_to_rm
 				.iter()
+				.filter(|&x| pmmr::is_leaf(x.into()))
 				.map(|x| x as u64)
-				.filter(|&x| pmmr::is_leaf(x))
-				.map(|pos| {
-					let flat_pos = pmmr::n_leaves(pos);
-					let shift = self.prune_list.get_leaf_shift(pos);
-					flat_pos - shift
-				});
+				.collect::<Vec<_>>();
 
-			self.data_file.write_tmp_pruned(pos_to_rm)?;
-			self.data_file.replace_with_tmp()?;
+			let pos_to_rm = map_vec!(leaf_pos_to_rm, |&pos| {
+				let flat_pos = pmmr::n_leaves(pos);
+				let shift = self.prune_list.get_leaf_shift(pos);
+				flat_pos - shift
+			});
+
+			self.data_file.save_prune(&pos_to_rm)?;
 		}
 
 		// 3. Update the prune list and write to disk.
