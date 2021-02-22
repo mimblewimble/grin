@@ -359,7 +359,8 @@ impl<T: PMMRable> PMMRBackend<T> {
 				pos as u64 - shift
 			});
 
-			self.hash_file.save_prune(&pos_to_rm)?;
+			self.hash_file.write_tmp_pruned(&pos_to_rm)?;
+			self.hash_file.replace_with_tmp()?;
 		}
 
 		// 2. Save compact copy of the data file, skipping removed leaves.
@@ -376,7 +377,8 @@ impl<T: PMMRable> PMMRBackend<T> {
 				flat_pos - shift
 			});
 
-			self.data_file.save_prune(&pos_to_rm)?;
+			self.data_file.write_tmp_pruned(&pos_to_rm)?;
+			self.data_file.replace_with_tmp()?;
 		}
 
 		// 3. Update the prune list and write to disk.
