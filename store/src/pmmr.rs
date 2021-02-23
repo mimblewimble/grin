@@ -352,17 +352,17 @@ impl<T: PMMRable> PMMRBackend<T> {
 		// on the cutoff_pos provided.
 		let (leaves_removed, pos_to_rm) = self.pos_to_rm(cutoff_pos, rewind_rm_pos);
 
-		// 1. Save compact copy of the hash file, skipping removed data.
+		// Save compact copy of the hash file, skipping removed data.
 		{
 			let pos_to_rm = map_vec!(pos_to_rm, |pos| {
 				let shift = self.prune_list.get_shift(pos.into());
 				pos as u64 - shift
 			});
 
-			self.hash_file.save_prune(&pos_to_rm)?;
+			self.hash_file.write_tmp_pruned(&pos_to_rm)?;
 		}
 
-		// 2. Save compact copy of the data file, skipping removed leaves.
+		// Save compact copy of the data file, skipping removed leaves.
 		{
 			let leaf_pos_to_rm = pos_to_rm
 				.iter()
@@ -376,10 +376,19 @@ impl<T: PMMRable> PMMRBackend<T> {
 				flat_pos - shift
 			});
 
-			self.data_file.save_prune(&pos_to_rm)?;
+			self.data_file.write_tmp_pruned(&pos_to_rm)?;
 		}
 
-		// 3. Update the prune list and write to disk.
+		// Replace hash and data files with compact copies.
+		// Rebuild and intialize from the new files.
+		{
+			debug!("compact: about to replace hash and data files and rebuild...");
+			self.hash_file.replace_with_tmp()?;
+			self.data_file.replace_with_tmp()?;
+			debug!("compact: ...finished replacing and rebuilding");
+		}
+
+		// Update the prune list and write to disk.
 		{
 			for pos in leaves_removed.iter() {
 				self.prune_list.add(pos.into());
@@ -387,11 +396,10 @@ impl<T: PMMRable> PMMRBackend<T> {
 			self.prune_list.flush()?;
 		}
 
-		// 4. Write the leaf_set to disk.
+		// Write the leaf_set to disk.
 		// Optimize the bitmap storage in the process.
 		self.leaf_set.flush()?;
 
-		// 5. cleanup rewind files
 		self.clean_rewind_files()?;
 
 		Ok(true)
