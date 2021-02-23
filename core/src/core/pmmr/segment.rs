@@ -260,10 +260,6 @@ where
 			// TODO: optimize, no need to send every intermediary hash
 			if prunable {
 				if let Some(hash) = pmmr.get_from_file(pos) {
-					println!(
-						"***** pushing hash at {}, first: {}, last: {}",
-						pos, segment_first_pos, segment_last_pos
-					);
 					segment.hashes.push(hash);
 					segment.hash_pos.push(pos);
 				}

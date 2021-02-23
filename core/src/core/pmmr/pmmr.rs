@@ -12,8 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::u64;
-use std::{marker, ops::RangeInclusive};
+use std::{marker, ops::Range, u64};
 
 use croaring::Bitmap;
 
@@ -667,9 +666,9 @@ pub fn bintree_leftmost(num: u64) -> u64 {
 	num + 2 - (2 << height)
 }
 
-pub fn bintree_range(num: u64) -> RangeInclusive<u64> {
+/// All pos in the subtree beneath the provided root, including root itself.
+pub fn bintree_range(num: u64) -> Range<u64> {
 	let height = bintree_postorder_height(num);
 	let leftmost = num + 2 - (2 << height);
-	let rightmost = num - height;
-	RangeInclusive::new(leftmost, rightmost)
+	leftmost..(num + 1)
 }
