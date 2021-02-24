@@ -94,6 +94,11 @@ impl<T: PMMRable> Backend<T> for PMMRBackend<T> {
 		self.hash_file.read(position - shift)
 	}
 
+	fn get_peak_from_file(&self, position: u64) -> Option<Hash> {
+		let shift = self.prune_list.get_shift(position);
+		self.hash_file.read(position - shift)
+	}
+
 	fn get_data_from_file(&self, position: u64) -> Option<T::E> {
 		if !pmmr::is_leaf(position) {
 			return None;
@@ -284,11 +289,15 @@ impl<T: PMMRable> PMMRBackend<T> {
 		self.prune_list.is_pruned_root(pos)
 	}
 
+	// Check if pos is pruned but not a pruned root itself.
+	// Checking for pruned root is faster so we do this check first.
+	// We can do a fast initial check as well -
+	// if its in the current leaf_set then we know it is not compacted.
 	fn is_compacted(&self, pos: u64) -> bool {
 		if self.leaf_set.includes(pos) {
 			return false;
 		}
-		self.is_pruned(pos) && !self.is_pruned_root(pos)
+		!self.is_pruned_root(pos) && self.is_pruned(pos)
 	}
 
 	/// Number of hashes in the PMMR stored by this backend. Only produces the
