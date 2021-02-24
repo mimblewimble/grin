@@ -21,8 +21,11 @@
 //! must be shifted the appropriate amount when reading from the hash and data
 //! files.
 
-use std::io::{self, Write};
 use std::path::{Path, PathBuf};
+use std::{
+	io::{self, Write},
+	ops::Range,
+};
 
 use croaring::Bitmap;
 use grin_core::core::pmmr;
@@ -256,11 +259,6 @@ impl PruneList {
 		self.bitmap.is_empty()
 	}
 
-	/// Convert the prune_list to a vec of pos.
-	pub fn to_vec(&self) -> Vec<u64> {
-		self.bitmap.iter().map(|x| x as u64).collect()
-	}
-
 	/// A pos is pruned if it is a pruned root directly or if it is
 	/// beneath the "next" pruned subtree.
 	/// We only need to consider the "next" subtree due to the append-only MMR structure.
@@ -282,5 +280,68 @@ impl PruneList {
 	pub fn is_pruned_root(&self, pos: u64) -> bool {
 		assert!(pos > 0, "prune list 1-indexed, 0 not valid pos");
 		self.bitmap.contains(pos as u32)
+	}
+
+	/// Iterator over the entries in the prune list (pruned roots).
+	pub fn iter(&self) -> impl Iterator<Item = u64> + '_ {
+		self.bitmap.iter().map(|x| x as u64)
+	}
+
+	/// Iterator over the pruned "bintree range" for each pruned root.
+	pub fn pruned_bintree_range_iter(&self) -> impl Iterator<Item = Range<u64>> + '_ {
+		self.iter().map(|x| pmmr::bintree_range(x))
+	}
+
+	/// Iterator over all pos that are *not* pruned based on current prune_list.
+	pub fn unpruned_iter(&self, cutoff_pos: u64) -> impl Iterator<Item = u64> + '_ {
+		UnprunedIterator::new(self.pruned_bintree_range_iter())
+			.take_while(move |x| *x <= cutoff_pos)
+	}
+
+	/// Iterator over all leaf pos that are *not* pruned based on current prune_list.
+	/// Note this is not necessarily the same as the "leaf_set" as an output
+	/// can be spent but not yet pruned.
+	pub fn unpruned_leaf_iter(&self, cutoff_pos: u64) -> impl Iterator<Item = u64> + '_ {
+		self.unpruned_iter(cutoff_pos).filter(|x| pmmr::is_leaf(*x))
+	}
+}
+
+struct UnprunedIterator<I> {
+	inner: I,
+	current_excl_range: Option<Range<u64>>,
+	current_pos: u64,
+}
+
+impl<I: Iterator<Item = Range<u64>>> UnprunedIterator<I> {
+	fn new(mut inner: I) -> UnprunedIterator<I> {
+		let current_excl_range = inner.next();
+		UnprunedIterator {
+			inner,
+			current_excl_range,
+			current_pos: 1,
+		}
+	}
+}
+
+impl<I: Iterator<Item = Range<u64>>> Iterator for UnprunedIterator<I> {
+	type Item = u64;
+
+	fn next(&mut self) -> Option<Self::Item> {
+		if let Some(range) = &self.current_excl_range {
+			if self.current_pos < range.start {
+				let next = self.current_pos;
+				self.current_pos += 1;
+				Some(next)
+			} else {
+				// skip the entire excluded range, moving to next excluded range as necessary
+				self.current_pos = range.end;
+				self.current_excl_range = self.inner.next();
+				self.next()
+			}
+		} else {
+			let next = self.current_pos;
+			self.current_pos += 1;
+			Some(next)
+		}
 	}
 }
