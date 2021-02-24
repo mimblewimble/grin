@@ -293,15 +293,16 @@ impl PruneList {
 	}
 
 	/// Iterator over all pos that are *not* pruned based on current prune_list.
-	pub fn unpruned_iter(&self) -> impl Iterator<Item = u64> + '_ {
+	pub fn unpruned_iter(&self, cutoff_pos: u64) -> impl Iterator<Item = u64> + '_ {
 		UnprunedIterator::new(self.pruned_bintree_range_iter())
+			.take_while(move |x| *x <= cutoff_pos)
 	}
 
 	/// Iterator over all leaf pos that are *not* pruned based on current prune_list.
 	/// Note this is not necessarily the same as the "leaf_set" as an output
 	/// can be spent but not yet pruned.
-	pub fn unpruned_leaf_iter(&self) -> impl Iterator<Item = u64> + '_ {
-		self.unpruned_iter().filter(|x| pmmr::is_leaf(*x))
+	pub fn unpruned_leaf_iter(&self, cutoff_pos: u64) -> impl Iterator<Item = u64> + '_ {
+		self.unpruned_iter(cutoff_pos).filter(|x| pmmr::is_leaf(*x))
 	}
 }
 

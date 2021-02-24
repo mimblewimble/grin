@@ -313,16 +313,13 @@ pub fn test_pruned_bintree_range_iter() {
 #[test]
 pub fn test_unpruned_iter() {
 	let pl = PruneList::empty();
-	assert_eq!(
-		pl.unpruned_iter().take(5).collect::<Vec<_>>(),
-		[1, 2, 3, 4, 5]
-	);
+	assert_eq!(pl.unpruned_iter(5).collect::<Vec<_>>(), [1, 2, 3, 4, 5]);
 
 	let mut pl = PruneList::empty();
 	pl.add(2);
 	assert_eq!(pl.iter().collect::<Vec<_>>(), [2]);
 	assert_eq!(pl.pruned_bintree_range_iter().collect::<Vec<_>>(), [2..3]);
-	assert_eq!(pl.unpruned_iter().take(3).collect::<Vec<_>>(), [1, 3, 4]);
+	assert_eq!(pl.unpruned_iter(4).collect::<Vec<_>>(), [1, 3, 4]);
 
 	let mut pl = PruneList::empty();
 	pl.add(2);
@@ -333,17 +330,14 @@ pub fn test_unpruned_iter() {
 		pl.pruned_bintree_range_iter().collect::<Vec<_>>(),
 		[2..3, 4..7]
 	);
-	assert_eq!(
-		pl.unpruned_iter().take(5).collect::<Vec<_>>(),
-		[1, 3, 7, 8, 9]
-	);
+	assert_eq!(pl.unpruned_iter(9).collect::<Vec<_>>(), [1, 3, 7, 8, 9]);
 }
 
 #[test]
 fn test_unpruned_leaf_iter() {
 	let pl = PruneList::empty();
 	assert_eq!(
-		pl.unpruned_leaf_iter().take(5).collect::<Vec<_>>(),
+		pl.unpruned_leaf_iter(8).collect::<Vec<_>>(),
 		[1, 2, 4, 5, 8]
 	);
 
@@ -351,10 +345,7 @@ fn test_unpruned_leaf_iter() {
 	pl.add(2);
 	assert_eq!(pl.iter().collect::<Vec<_>>(), [2]);
 	assert_eq!(pl.pruned_bintree_range_iter().collect::<Vec<_>>(), [2..3]);
-	assert_eq!(
-		pl.unpruned_leaf_iter().take(3).collect::<Vec<_>>(),
-		[1, 4, 5]
-	);
+	assert_eq!(pl.unpruned_leaf_iter(5).collect::<Vec<_>>(), [1, 4, 5]);
 
 	let mut pl = PruneList::empty();
 	pl.add(2);
@@ -365,8 +356,5 @@ fn test_unpruned_leaf_iter() {
 		pl.pruned_bintree_range_iter().collect::<Vec<_>>(),
 		[2..3, 4..7]
 	);
-	assert_eq!(
-		pl.unpruned_leaf_iter().take(3).collect::<Vec<_>>(),
-		[1, 8, 9]
-	);
+	assert_eq!(pl.unpruned_leaf_iter(9).collect::<Vec<_>>(), [1, 8, 9]);
 }
