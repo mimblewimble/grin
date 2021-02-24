@@ -236,9 +236,10 @@ impl PruneList {
 		loop {
 			let (parent, sibling) = family(current);
 			if self.is_pruned_root(sibling) {
-				self.bitmap.remove(sibling as u32);
 				current = parent;
 			} else {
+				// replace the entire subtree with the single pruned root
+				self.bitmap.remove_range(pmmr::bintree_range(current));
 				self.bitmap.add(current as u32);
 				break;
 			}
