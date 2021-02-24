@@ -179,9 +179,9 @@ pub fn process_block(
 	}
 }
 
-/// Sync a chunk of block headers.
+/// Process a batch of sequential block headers.
 /// This is only used during header sync.
-pub fn sync_block_headers(
+pub fn process_block_headers(
 	headers: &[BlockHeader],
 	ctx: &mut BlockContext<'_>,
 ) -> Result<(), Error> {
@@ -193,14 +193,14 @@ pub fn sync_block_headers(
 	// Check if we know about all these headers. If so we can accept them quickly.
 	// If they *do not* increase total work on the sync chain we are done.
 	// If they *do* increase total work then we should process them to update sync_head.
-	let sync_head = {
+	let head = {
 		let hash = ctx.header_pmmr.head_hash()?;
 		let header = ctx.batch.get_block_header(&hash)?;
 		Tip::from_header(&header)
 	};
 
 	if let Ok(existing) = ctx.batch.get_block_header(&last_header.hash()) {
-		if !has_more_work(&existing, &sync_head) {
+		if !has_more_work(&existing, &head) {
 			return Ok(());
 		}
 	}
@@ -216,7 +216,13 @@ pub fn sync_block_headers(
 	txhashset::header_extending(&mut ctx.header_pmmr, &mut ctx.batch, |ext, batch| {
 		rewind_and_apply_header_fork(&last_header, ext, batch)?;
 		Ok(())
-	})
+	})?;
+
+	if has_more_work(last_header, &head) {
+		update_header_head(&Tip::from_header(last_header), &mut ctx.batch)?;
+	}
+
+	Ok(())
 }
 
 /// Process a block header. Update the header MMR and corresponding header_head if this header
