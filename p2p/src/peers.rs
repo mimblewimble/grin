@@ -27,6 +27,7 @@ use crate::core::core::hash::{Hash, Hashed};
 use crate::core::core::{OutputIdentifier, Segment, SegmentIdentifier, TxKernel};
 use crate::core::global;
 use crate::core::pow::Difficulty;
+use crate::msg::PeerAddrs;
 use crate::peer::Peer;
 use crate::store::{PeerData, PeerStore, State};
 use crate::types::{
@@ -322,8 +323,10 @@ impl Peers {
 		&self,
 		max_inbound_count: usize,
 		max_outbound_count: usize,
-		preferred_peers: &[PeerAddr],
+		config: P2PConfig,
 	) {
+		let preferred_peers = config.peers_preferred.unwrap_or(PeerAddrs::default());
+
 		let mut rm = vec![];
 
 		// build a list of peers to be cleaned up

@@ -529,6 +529,40 @@ impl Readable for PeerAddrs {
 	}
 }
 
+impl IntoIterator for PeerAddrs {
+	type Item = PeerAddr;
+	type IntoIter = std::vec::IntoIter<Self::Item>;
+	fn into_iter(self) -> Self::IntoIter {
+		self.peers.into_iter()
+	}
+}
+
+impl Default for PeerAddrs {
+	fn default() -> Self {
+		PeerAddrs { peers: vec![] }
+	}
+}
+
+impl PeerAddrs {
+	pub fn as_slice(&self) -> &[PeerAddr] {
+		self.peers.as_slice()
+	}
+
+	pub fn contains(&self, addr: &PeerAddr) -> bool {
+		self.peers.contains(addr)
+	}
+
+	pub fn difference(&self, other: &[PeerAddr]) -> PeerAddrs {
+		let peers = self
+			.peers
+			.iter()
+			.filter(|x| !other.contains(x))
+			.cloned()
+			.collect();
+		PeerAddrs { peers }
+	}
+}
+
 /// We found some issue in the communication, sending an error back, usually
 /// followed by closing the connection.
 pub struct PeerError {
