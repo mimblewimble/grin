@@ -512,9 +512,9 @@ dependencies = [
 
 [[package]]
 name = "cursive_table_view"
-version = "0.13.0"
+version = "0.13.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e55faadd8300c533f4c894b22db5b3f48ada337ef408630fda6e07e23b1ce784"
+checksum = "2d94aa5dc377345e85b939d4a0c4c0beea86a0095f18386eee31f4e1ba9ae508"
 dependencies = [
  "cursive_core",
 ]

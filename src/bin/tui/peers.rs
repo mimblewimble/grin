@@ -190,7 +190,7 @@ impl TUIStatusListener for TUIPeerView {
 		let _ = c.call_on_name(
 			TABLE_PEER_STATUS,
 			|t: &mut TableView<PeerStats, PeerColumn>| {
-				t.set_items(stats.peer_stats.clone());
+				t.set_items_stable(stats.peer_stats.clone());
 			},
 		);
 		let _ = c.call_on_name("peers_total", |t: &mut TextView| {
