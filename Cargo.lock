@@ -413,7 +413,6 @@ checksum = "c3c7c73a2d1e9fc0886a08b93e98eb643461230d5f1925e4036204d5f2e261a8"
 dependencies = [
  "autocfg 1.0.0",
  "cfg-if 0.1.10",
-<<<<<<< HEAD
  "lazy_static",
 ]
 
@@ -425,8 +424,6 @@ checksum = "02d96d1e189ef58269ebe5b97953da3274d83a93af647c2ddd6f9dab28cedb8d"
 dependencies = [
  "autocfg 1.0.0",
  "cfg-if 1.0.0",
-=======
->>>>>>> 388be75b... Update tokio, hyper versions (#3514)
  "lazy_static",
 ]
 
@@ -506,7 +503,7 @@ dependencies = [
  "log",
  "num 0.3.1",
  "owning_ref",
- "syn 1.0.31",
+ "syn 1.0.54",
  "unicode-segmentation",
  "unicode-width",
  "wasmer_enumset",
@@ -3125,9 +3122,9 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a8d1b32d98e11194200baf6d3f85eb2d6cfe56f6d9af0dd617f90ca48f958a88"
 dependencies = [
  "darling",
- "proc-macro2 1.0.18",
+ "proc-macro2 1.0.24",
  "quote 1.0.7",
- "syn 1.0.31",
+ "syn 1.0.54",
 ]
 
 [[package]]
