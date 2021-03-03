@@ -29,8 +29,8 @@ use cursive::views::{Dialog, LinearLayout, OnEventView, ResizedView, TextView};
 use cursive::Cursive;
 
 use crate::tui::constants::{MAIN_MENU, TABLE_PEER_STATUS, VIEW_PEER_SYNC};
-use crate::tui::table::{TableView, TableViewItem};
 use crate::tui::types::TUIStatusListener;
+use cursive_table_view::{TableView, TableViewItem};
 
 #[derive(Copy, Clone, PartialEq, Eq, Hash)]
 pub enum PeerColumn {
@@ -190,7 +190,7 @@ impl TUIStatusListener for TUIPeerView {
 		let _ = c.call_on_name(
 			TABLE_PEER_STATUS,
 			|t: &mut TableView<PeerStats, PeerColumn>| {
-				t.set_items(stats.peer_stats.clone());
+				t.set_items_stable(stats.peer_stats.clone());
 			},
 		);
 		let _ = c.call_on_name("peers_total", |t: &mut TextView| {
