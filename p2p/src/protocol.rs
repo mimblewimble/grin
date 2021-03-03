@@ -199,8 +199,8 @@ impl MessageHandler for Protocol {
 				Consumed::None
 			}
 
-			Message::Headers(headers) => {
-				adapter.headers_received(&headers, &self.peer_info)?;
+			Message::Headers(data) => {
+				adapter.headers_received(&data.headers, &self.peer_info)?;
 				Consumed::None
 			}
 

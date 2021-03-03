@@ -99,6 +99,14 @@ impl RateCounter {
 			.filter(|x| !x.is_quiet())
 			.count() as u64
 	}
+
+	/// Elapsed time in ms since the last entry.
+	/// We use this to rate limit when sending.
+	pub fn elapsed_since_last_msg(&self) -> Option<u64> {
+		self.last_min_entries
+			.last()
+			.map(|x| millis_since_epoch().saturating_sub(x.timestamp))
+	}
 }
 
 // turns out getting the millisecs since epoch in Rust isn't as easy as it
