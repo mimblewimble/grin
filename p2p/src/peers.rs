@@ -27,6 +27,7 @@ use crate::core::core::hash::{Hash, Hashed};
 use crate::core::core::{OutputIdentifier, Segment, SegmentIdentifier, TxKernel};
 use crate::core::global;
 use crate::core::pow::Difficulty;
+use crate::msg::PeerAddrs;
 use crate::peer::Peer;
 use crate::store::{PeerData, PeerStore, State};
 use crate::types::{
@@ -59,23 +60,29 @@ impl Peers {
 	/// Adds the peer to our internal peer mapping. Note that the peer is still
 	/// returned so the server can run it.
 	pub fn add_connected(&self, peer: Arc<Peer>) -> Result<(), Error> {
-		let mut peers = self.peers.try_write_for(LOCK_TIMEOUT).ok_or_else(|| {
-			error!("add_connected: failed to get peers lock");
-			Error::Timeout
-		})?;
-		let peer_data = PeerData {
-			addr: peer.info.addr,
-			capabilities: peer.info.capabilities,
-			user_agent: peer.info.user_agent.clone(),
-			flags: State::Healthy,
-			last_banned: 0,
-			ban_reason: ReasonForBan::None,
-			last_connected: Utc::now().timestamp(),
-		};
+		let peer_data: PeerData;
+		{
+			// Scope for peers vector lock - dont hold the peers lock while adding to lmdb
+			let mut peers = self.peers.try_write_for(LOCK_TIMEOUT).ok_or_else(|| {
+				error!("add_connected: failed to get peers lock");
+				Error::Timeout
+			})?;
+			peer_data = PeerData {
+				addr: peer.info.addr,
+				capabilities: peer.info.capabilities,
+				user_agent: peer.info.user_agent.clone(),
+				flags: State::Healthy,
+				last_banned: 0,
+				ban_reason: ReasonForBan::None,
+				last_connected: Utc::now().timestamp(),
+			};
+			debug!("Adding newly connected peer {}.", peer_data.addr);
+			peers.insert(peer_data.addr, peer);
+		}
 		debug!("Saving newly connected peer {}.", peer_data.addr);
-		self.save_peer(&peer_data)?;
-		peers.insert(peer_data.addr, peer);
-
+		if let Err(e) = self.save_peer(&peer_data) {
+			error!("Could not save connected peer address: {:?}", e);
+		}
 		Ok(())
 	}
 
@@ -136,8 +143,10 @@ impl Peers {
 	}
 	/// Ban a peer, disconnecting it if we're currently connected
 	pub fn ban_peer(&self, peer_addr: PeerAddr, ban_reason: ReasonForBan) -> Result<(), Error> {
+		// Update the peer in peers db
 		self.update_state(peer_addr, State::Banned)?;
 
+		// Update the peer in the peers Vec
 		match self.get_connected_peer(peer_addr) {
 			Some(peer) => {
 				debug!("Banning peer {}", peer_addr);
@@ -295,6 +304,11 @@ impl Peers {
 		self.store.save_peer(p).map_err(From::from)
 	}
 
+	/// Saves updated information about mulitple peers in batch
+	pub fn save_peers(&self, p: Vec<PeerData>) -> Result<(), Error> {
+		self.store.save_peers(p).map_err(From::from)
+	}
+
 	/// Updates the state of a peer in store
 	pub fn update_state(&self, peer_addr: PeerAddr, new_state: State) -> Result<(), Error> {
 		self.store
@@ -309,8 +323,10 @@ impl Peers {
 		&self,
 		max_inbound_count: usize,
 		max_outbound_count: usize,
-		preferred_peers: &[PeerAddr],
+		config: P2PConfig,
 	) {
+		let preferred_peers = config.peers_preferred.unwrap_or(PeerAddrs::default());
+
 		let mut rm = vec![];
 
 		// build a list of peers to be cleaned up
@@ -667,6 +683,7 @@ impl NetAdapter for Peers {
 	/// A list of peers has been received from one of our peers.
 	fn peer_addrs_received(&self, peer_addrs: Vec<PeerAddr>) {
 		trace!("Received {} peer addrs, saving.", peer_addrs.len());
+		let mut to_save: Vec<PeerData> = Vec::new();
 		for pa in peer_addrs {
 			if let Ok(e) = self.exists_peer(pa) {
 				if e {
@@ -682,9 +699,10 @@ impl NetAdapter for Peers {
 				ban_reason: ReasonForBan::None,
 				last_connected: Utc::now().timestamp(),
 			};
-			if let Err(e) = self.save_peer(&peer) {
-				error!("Could not save received peer address: {:?}", e);
-			}
+			to_save.push(peer);
+		}
+		if let Err(e) = self.save_peers(to_save) {
+			error!("Could not save received peer addresses: {:?}", e);
 		}
 	}
 

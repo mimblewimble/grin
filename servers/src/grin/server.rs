@@ -214,9 +214,13 @@ impl Server {
 			init_net_hooks(&config),
 		));
 
-		// Use our default capabilities here.
-		// We will advertize these to our peers during hand/shake.
-		let capabilities = Capabilities::default();
+		// Initialize our capabilities.
+		// Currently either "default" or with optional "archive_mode" (block history) support enabled.
+		let capabilities = if let Some(true) = config.archive_mode {
+			Capabilities::default() | Capabilities::BLOCK_HIST
+		} else {
+			Capabilities::default()
+		};
 		debug!("Capabilities: {:?}", capabilities);
 
 		let p2p_server = Arc::new(p2p::Server::new(
@@ -236,7 +240,7 @@ impl Server {
 		let mut connect_thread = None;
 
 		if config.p2p_config.seeding_type != p2p::Seeding::Programmatic {
-			let seeder = match config.p2p_config.seeding_type {
+			let seed_list = match config.p2p_config.seeding_type {
 				p2p::Seeding::None => {
 					warn!("No seed configured, will stay solo until connected to");
 					seed::predefined_seeds(vec![])
@@ -253,15 +257,10 @@ impl Server {
 				_ => unreachable!(),
 			};
 
-			let preferred_peers = match &config.p2p_config.peers_preferred {
-				Some(addrs) => addrs.peers.clone(),
-				None => vec![],
-			};
-
 			connect_thread = Some(seed::connect_and_monitor(
 				p2p_server.clone(),
-				seeder,
-				&preferred_peers,
+				seed_list,
+				config.p2p_config.clone(),
 				stop_state.clone(),
 			)?);
 		}

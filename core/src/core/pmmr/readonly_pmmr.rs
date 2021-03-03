@@ -148,6 +148,14 @@ where
 		}
 	}
 
+	fn get_peak_from_file(&self, pos: u64) -> Option<Hash> {
+		if pos > self.last_pos {
+			None
+		} else {
+			self.backend.get_peak_from_file(pos)
+		}
+	}
+
 	fn get_data_from_file(&self, pos: u64) -> Option<Self::Item> {
 		if pos > self.last_pos {
 			None

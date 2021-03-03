@@ -340,7 +340,7 @@ impl From<BitmapSegment> for Segment<BitmapChunk> {
 		}
 
 		for (block_idx, block) in blocks.into_iter().enumerate() {
-			assert_eq!(block.inner.len(), BitmapBlock::NBITS as usize);
+			assert!(block.inner.len() <= BitmapBlock::NBITS as usize);
 			let offset = block_idx * BitmapBlock::NCHUNKS;
 			for (i, _) in block.inner.iter().enumerate().filter(|&(_, v)| v) {
 				chunks
@@ -412,7 +412,7 @@ impl Writeable for BitmapBlock {
 			// Write raw bytes
 			Writeable::write(&BitmapBlockSerialization::Raw, writer)?;
 			let bytes = self.inner.to_bytes();
-			assert_eq!(bytes.len(), Self::NBITS as usize / 8);
+			assert!(bytes.len() <= Self::NBITS as usize / 8);
 			writer.write_fixed_bytes(&bytes)?;
 		}
 

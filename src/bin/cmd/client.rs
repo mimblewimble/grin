@@ -17,30 +17,158 @@ use std::net::SocketAddr;
 
 use clap::ArgMatches;
 
-use crate::api;
+use crate::api::client;
+use crate::api::json_rpc::*;
+use crate::api::types::Status;
 use crate::config::GlobalConfig;
-use crate::p2p;
-use crate::servers::ServerConfig;
+use crate::p2p::types::PeerInfoDisplay;
 use crate::util::file::get_first_line;
+use serde_json::json;
 use term;
+
+const ENDPOINT: &str = "/v2/owner";
+
+#[derive(Clone)]
+pub struct HTTPNodeClient {
+	node_url: String,
+	node_api_secret: Option<String>,
+}
+impl HTTPNodeClient {
+	/// Create a new client that will communicate with the given grin node
+	pub fn new(node_url: &str, node_api_secret: Option<String>) -> HTTPNodeClient {
+		HTTPNodeClient {
+			node_url: node_url.to_owned(),
+			node_api_secret: node_api_secret,
+		}
+	}
+	fn send_json_request<D: serde::de::DeserializeOwned>(
+		&self,
+		method: &str,
+		params: &serde_json::Value,
+	) -> Result<D, Error> {
+		let url = format!("http://{}{}", self.node_url, ENDPOINT);
+		let req = build_request(method, params);
+		let res =
+			client::post::<Request, Response>(url.as_str(), self.node_api_secret.clone(), &req);
+
+		match res {
+			Err(e) => {
+				let report = format!("Error calling {}: {}", method, e);
+				error!("{}", report);
+				Err(Error::RPCError(report))
+			}
+			Ok(inner) => match inner.clone().into_result() {
+				Ok(r) => Ok(r),
+				Err(e) => {
+					error!("{:?}", inner);
+					let report = format!("Unable to parse response for {}: {}", method, e);
+					error!("{}", report);
+					Err(Error::RPCError(report))
+				}
+			},
+		}
+	}
+
+	pub fn show_status(&self) {
+		println!();
+		let title = "Grin Server Status".to_string();
+		if term::stdout().is_none() {
+			println!("Could not open terminal");
+			return;
+		}
+		let mut t = term::stdout().unwrap();
+		let mut e = term::stdout().unwrap();
+		t.fg(term::color::MAGENTA).unwrap();
+		writeln!(t, "{}", title).unwrap();
+		writeln!(t, "--------------------------").unwrap();
+		t.reset().unwrap();
+		match self.send_json_request::<Status>("get_status", &serde_json::Value::Null) {
+			Ok(status) => {
+				writeln!(e, "Protocol version: {:?}", status.protocol_version).unwrap();
+				writeln!(e, "User agent: {}", status.user_agent).unwrap();
+				writeln!(e, "Connections: {}", status.connections).unwrap();
+				writeln!(e, "Chain height: {}", status.tip.height).unwrap();
+				writeln!(e, "Last block hash: {}", status.tip.last_block_pushed).unwrap();
+				writeln!(e, "Previous block hash: {}", status.tip.prev_block_to_last).unwrap();
+				writeln!(e, "Total difficulty: {}", status.tip.total_difficulty).unwrap();
+				writeln!(e, "Sync status: {}", status.sync_status).unwrap();
+				if let Some(sync_info) = status.sync_info {
+					writeln!(e, "Sync info: {}", sync_info).unwrap();
+				}
+			}
+			Err(_) => writeln!(
+				e,
+				"WARNING: Client failed to get data. Is your `grin server` offline or broken?"
+			)
+			.unwrap(),
+		};
+		e.reset().unwrap();
+		println!()
+	}
+
+	pub fn list_connected_peers(&self) {
+		let mut e = term::stdout().unwrap();
+		match self.send_json_request::<Vec<PeerInfoDisplay>>(
+			"get_connected_peers",
+			&serde_json::Value::Null,
+		) {
+			Ok(connected_peers) => {
+				for (index, connected_peer) in connected_peers.into_iter().enumerate() {
+					writeln!(e, "Peer {}:", index).unwrap();
+					writeln!(e, "Capabilities: {:?}", connected_peer.capabilities).unwrap();
+					writeln!(e, "User agent: {}", connected_peer.user_agent).unwrap();
+					writeln!(e, "Version: {:?}", connected_peer.version).unwrap();
+					writeln!(e, "Peer address: {}", connected_peer.addr).unwrap();
+					writeln!(e, "Height: {}", connected_peer.height).unwrap();
+					writeln!(e, "Total difficulty: {}", connected_peer.total_difficulty).unwrap();
+					writeln!(e, "Direction: {:?}", connected_peer.direction).unwrap();
+					println!();
+				}
+			}
+			Err(_) => writeln!(e, "Failed to get connected peers").unwrap(),
+		};
+		e.reset().unwrap();
+	}
+
+	pub fn ban_peer(&self, peer_addr: &SocketAddr) {
+		let mut e = term::stdout().unwrap();
+		let params = json!([peer_addr]);
+		match self.send_json_request::<()>("ban_peer", &params) {
+			Ok(_) => writeln!(e, "Successfully banned peer {}", peer_addr).unwrap(),
+			Err(_) => writeln!(e, "Failed to ban peer {}", peer_addr).unwrap(),
+		};
+		e.reset().unwrap();
+	}
+
+	pub fn unban_peer(&self, peer_addr: &SocketAddr) {
+		let mut e = term::stdout().unwrap();
+		let params = json!([peer_addr]);
+		match self.send_json_request::<()>("unban_peer", &params) {
+			Ok(_) => writeln!(e, "Successfully unbanned peer {}", peer_addr).unwrap(),
+			Err(_) => writeln!(e, "Failed to unban peer {}", peer_addr).unwrap(),
+		};
+		e.reset().unwrap();
+	}
+}
 
 pub fn client_command(client_args: &ArgMatches<'_>, global_config: GlobalConfig) -> i32 {
 	// just get defaults from the global config
 	let server_config = global_config.members.unwrap().server;
 	let api_secret = get_first_line(server_config.api_secret_path.clone());
+	let node_client = HTTPNodeClient::new(&server_config.api_http_addr, api_secret.clone());
 
 	match client_args.subcommand() {
 		("status", Some(_)) => {
-			show_status(&server_config, api_secret);
+			node_client.show_status();
 		}
 		("listconnectedpeers", Some(_)) => {
-			list_connected_peers(&server_config, api_secret);
+			node_client.list_connected_peers();
 		}
 		("ban", Some(peer_args)) => {
 			let peer = peer_args.value_of("peer").unwrap();
 
 			if let Ok(addr) = peer.parse() {
-				ban_peer(&server_config, &addr, api_secret);
+				node_client.ban_peer(&addr);
 			} else {
 				panic!("Invalid peer address format");
 			}
@@ -49,7 +177,7 @@ pub fn client_command(client_args: &ArgMatches<'_>, global_config: GlobalConfig)
 			let peer = peer_args.value_of("peer").unwrap();
 
 			if let Ok(addr) = peer.parse() {
-				unban_peer(&server_config, &addr, api_secret);
+				node_client.unban_peer(&addr);
 			} else {
 				panic!("Invalid peer address format");
 			}
@@ -58,111 +186,9 @@ pub fn client_command(client_args: &ArgMatches<'_>, global_config: GlobalConfig)
 	}
 	0
 }
-
-pub fn show_status(config: &ServerConfig, api_secret: Option<String>) {
-	println!();
-	let title = "Grin Server Status".to_string();
-	if term::stdout().is_none() {
-		println!("Could not open terminal");
-		return;
-	}
-	let mut t = term::stdout().unwrap();
-	let mut e = term::stdout().unwrap();
-	t.fg(term::color::MAGENTA).unwrap();
-	writeln!(t, "{}", title).unwrap();
-	writeln!(t, "--------------------------").unwrap();
-	t.reset().unwrap();
-	match get_status_from_node(config, api_secret) {
-		Ok(status) => {
-			writeln!(e, "Protocol version: {:?}", status.protocol_version).unwrap();
-			writeln!(e, "User agent: {}", status.user_agent).unwrap();
-			writeln!(e, "Connections: {}", status.connections).unwrap();
-			writeln!(e, "Chain height: {}", status.tip.height).unwrap();
-			writeln!(e, "Last block hash: {}", status.tip.last_block_pushed).unwrap();
-			writeln!(e, "Previous block hash: {}", status.tip.prev_block_to_last).unwrap();
-			writeln!(e, "Total difficulty: {}", status.tip.total_difficulty).unwrap();
-		}
-		Err(_) => writeln!(
-			e,
-			"WARNING: Client failed to get data. Is your `grin server` offline or broken?"
-		)
-		.unwrap(),
-	};
-	e.reset().unwrap();
-	println!()
-}
-
-pub fn ban_peer(config: &ServerConfig, peer_addr: &SocketAddr, api_secret: Option<String>) {
-	let params = "";
-	let mut e = term::stdout().unwrap();
-	let url = format!(
-		"http://{}/v1/peers/{}/ban",
-		config.api_http_addr,
-		peer_addr.to_string()
-	);
-	match api::client::post_no_ret(url.as_str(), api_secret, &params).map_err(Error::API) {
-		Ok(_) => writeln!(e, "Successfully banned peer {}", peer_addr.to_string()).unwrap(),
-		Err(_) => writeln!(e, "Failed to ban peer {}", peer_addr).unwrap(),
-	};
-	e.reset().unwrap();
-}
-
-pub fn unban_peer(config: &ServerConfig, peer_addr: &SocketAddr, api_secret: Option<String>) {
-	let params = "";
-	let mut e = term::stdout().unwrap();
-	let url = format!(
-		"http://{}/v1/peers/{}/unban",
-		config.api_http_addr,
-		peer_addr.to_string()
-	);
-	let res: Result<(), api::Error>;
-	res = api::client::post_no_ret(url.as_str(), api_secret, &params);
-
-	match res.map_err(Error::API) {
-		Ok(_) => writeln!(e, "Successfully unbanned peer {}", peer_addr).unwrap(),
-		Err(_) => writeln!(e, "Failed to unban peer {}", peer_addr).unwrap(),
-	};
-	e.reset().unwrap();
-}
-
-pub fn list_connected_peers(config: &ServerConfig, api_secret: Option<String>) {
-	let mut e = term::stdout().unwrap();
-	let url = format!("http://{}/v1/peers/connected", config.api_http_addr);
-	// let peers_info: Result<Vec<p2p::PeerInfoDisplay>, api::Error>;
-
-	let peers_info = api::client::get::<Vec<p2p::types::PeerInfoDisplay>>(url.as_str(), api_secret);
-
-	match peers_info.map_err(Error::API) {
-		Ok(connected_peers) => {
-			for (index, connected_peer) in connected_peers.into_iter().enumerate() {
-				writeln!(e, "Peer {}:", index).unwrap();
-				writeln!(e, "Capabilities: {:?}", connected_peer.capabilities).unwrap();
-				writeln!(e, "User agent: {}", connected_peer.user_agent).unwrap();
-				writeln!(e, "Version: {:?}", connected_peer.version).unwrap();
-				writeln!(e, "Peer address: {}", connected_peer.addr).unwrap();
-				writeln!(e, "Height: {}", connected_peer.height).unwrap();
-				writeln!(e, "Total difficulty: {}", connected_peer.total_difficulty).unwrap();
-				writeln!(e, "Direction: {:?}", connected_peer.direction).unwrap();
-				println!();
-			}
-		}
-		Err(_) => writeln!(e, "Failed to get connected peers").unwrap(),
-	};
-
-	e.reset().unwrap();
-}
-
-fn get_status_from_node(
-	config: &ServerConfig,
-	api_secret: Option<String>,
-) -> Result<api::Status, Error> {
-	let url = format!("http://{}/v1/status", config.api_http_addr);
-	api::client::get::<api::Status>(url.as_str(), api_secret).map_err(Error::API)
-}
-
 /// Error type wrapping underlying module errors.
 #[derive(Debug)]
 enum Error {
-	/// Error originating from HTTP API calls.
-	API(api::Error),
+	/// RPC Error
+	RPCError(String),
 }

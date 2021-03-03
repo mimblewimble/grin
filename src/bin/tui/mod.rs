@@ -22,7 +22,6 @@ mod menu;
 mod mining;
 mod peers;
 mod status;
-pub mod table;
 mod types;
 pub mod ui;
 mod version;

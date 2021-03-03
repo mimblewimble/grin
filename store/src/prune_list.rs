@@ -21,12 +21,16 @@
 //! must be shifted the appropriate amount when reading from the hash and data
 //! files.
 
-use std::io::{self, Write};
 use std::path::{Path, PathBuf};
+use std::{
+	io::{self, Write},
+	ops::Range,
+};
 
 use croaring::Bitmap;
+use grin_core::core::pmmr;
 
-use crate::core::core::pmmr::{bintree_postorder_height, family, path};
+use crate::core::core::pmmr::{bintree_postorder_height, family};
 use crate::{read_bitmap, save_via_temp_file};
 
 /// Maintains a list of previously pruned nodes in PMMR, compacting the list as
@@ -44,8 +48,6 @@ pub struct PruneList {
 	path: Option<PathBuf>,
 	/// Bitmap representing pruned root node positions.
 	bitmap: Bitmap,
-	/// Bitmap representing all pruned node positions (everything under the pruned roots).
-	pruned_cache: Bitmap,
 	shift_cache: Vec<u64>,
 	leaf_shift_cache: Vec<u64>,
 }
@@ -59,7 +61,6 @@ impl PruneList {
 		PruneList {
 			path,
 			bitmap,
-			pruned_cache: Bitmap::create(),
 			shift_cache: vec![],
 			leaf_shift_cache: vec![],
 		}
@@ -85,11 +86,10 @@ impl PruneList {
 		prune_list.init_caches();
 
 		if !prune_list.bitmap.is_empty() {
-			debug!("bitmap {} pos ({} bytes), pruned_cache {} pos ({} bytes), shift_cache {}, leaf_shift_cache {}",
+			debug!(
+				"bitmap {} pos ({} bytes), shift_cache {}, leaf_shift_cache {}",
 				prune_list.bitmap.cardinality(),
 				prune_list.bitmap.get_serialized_size_in_bytes(),
-				prune_list.pruned_cache.cardinality(),
-				prune_list.pruned_cache.get_serialized_size_in_bytes(),
 				prune_list.shift_cache.len(),
 				prune_list.leaf_shift_cache.len(),
 			);
@@ -102,7 +102,6 @@ impl PruneList {
 	pub fn init_caches(&mut self) {
 		self.build_shift_cache();
 		self.build_leaf_shift_cache();
-		self.build_pruned_cache();
 	}
 
 	/// Save the prune_list to disk.
@@ -232,16 +231,18 @@ impl PruneList {
 	pub fn add(&mut self, pos: u64) {
 		assert!(pos > 0, "prune list 1-indexed, 0 not valid pos");
 
+		if self.is_pruned(pos) {
+			return;
+		}
+
 		let mut current = pos;
 		loop {
 			let (parent, sibling) = family(current);
-
-			if self.bitmap.contains(sibling as u32) || self.pruned_cache.contains(sibling as u32) {
-				self.pruned_cache.add(current as u32);
-				self.bitmap.remove(sibling as u32);
+			if self.is_pruned_root(sibling) {
 				current = parent;
 			} else {
-				self.pruned_cache.add(current as u32);
+				// replace the entire subtree with the single pruned root
+				self.bitmap.remove_range(pmmr::bintree_range(current));
 				self.bitmap.add(current as u32);
 				break;
 			}
@@ -258,36 +259,89 @@ impl PruneList {
 		self.bitmap.is_empty()
 	}
 
-	/// Convert the prune_list to a vec of pos.
-	pub fn to_vec(&self) -> Vec<u64> {
-		self.bitmap.iter().map(|x| x as u64).collect()
-	}
-
-	/// Is the pos pruned?
-	/// Assumes the pruned_cache is fully built and up to date.
+	/// A pos is pruned if it is a pruned root directly or if it is
+	/// beneath the "next" pruned subtree.
+	/// We only need to consider the "next" subtree due to the append-only MMR structure.
 	pub fn is_pruned(&self, pos: u64) -> bool {
 		assert!(pos > 0, "prune list 1-indexed, 0 not valid pos");
-		self.pruned_cache.contains(pos as u32)
-	}
-
-	fn build_pruned_cache(&mut self) {
-		if self.bitmap.is_empty() {
-			return;
+		if self.is_pruned_root(pos) {
+			return true;
 		}
-		let maximum = self.bitmap.maximum().unwrap_or(0);
-		self.pruned_cache = Bitmap::create_with_capacity(maximum);
-		for pos in 1..(maximum + 1) {
-			let pruned = path(pos as u64, maximum as u64).any(|x| self.bitmap.contains(x as u32));
-			if pruned {
-				self.pruned_cache.add(pos as u32)
-			}
+		let rank = self.bitmap.rank(pos as u32);
+		if let Some(root) = self.bitmap.select(rank as u32) {
+			let range = pmmr::bintree_range(root as u64);
+			range.contains(&pos)
+		} else {
+			false
 		}
-		self.pruned_cache.run_optimize();
 	}
 
 	/// Is the specified position a root of a pruned subtree?
 	pub fn is_pruned_root(&self, pos: u64) -> bool {
 		assert!(pos > 0, "prune list 1-indexed, 0 not valid pos");
 		self.bitmap.contains(pos as u32)
+	}
+
+	/// Iterator over the entries in the prune list (pruned roots).
+	pub fn iter(&self) -> impl Iterator<Item = u64> + '_ {
+		self.bitmap.iter().map(|x| x as u64)
+	}
+
+	/// Iterator over the pruned "bintree range" for each pruned root.
+	pub fn pruned_bintree_range_iter(&self) -> impl Iterator<Item = Range<u64>> + '_ {
+		self.iter().map(|x| pmmr::bintree_range(x))
+	}
+
+	/// Iterator over all pos that are *not* pruned based on current prune_list.
+	pub fn unpruned_iter(&self, cutoff_pos: u64) -> impl Iterator<Item = u64> + '_ {
+		UnprunedIterator::new(self.pruned_bintree_range_iter())
+			.take_while(move |x| *x <= cutoff_pos)
+	}
+
+	/// Iterator over all leaf pos that are *not* pruned based on current prune_list.
+	/// Note this is not necessarily the same as the "leaf_set" as an output
+	/// can be spent but not yet pruned.
+	pub fn unpruned_leaf_iter(&self, cutoff_pos: u64) -> impl Iterator<Item = u64> + '_ {
+		self.unpruned_iter(cutoff_pos).filter(|x| pmmr::is_leaf(*x))
+	}
+}
+
+struct UnprunedIterator<I> {
+	inner: I,
+	current_excl_range: Option<Range<u64>>,
+	current_pos: u64,
+}
+
+impl<I: Iterator<Item = Range<u64>>> UnprunedIterator<I> {
+	fn new(mut inner: I) -> UnprunedIterator<I> {
+		let current_excl_range = inner.next();
+		UnprunedIterator {
+			inner,
+			current_excl_range,
+			current_pos: 1,
+		}
+	}
+}
+
+impl<I: Iterator<Item = Range<u64>>> Iterator for UnprunedIterator<I> {
+	type Item = u64;
+
+	fn next(&mut self) -> Option<Self::Item> {
+		if let Some(range) = &self.current_excl_range {
+			if self.current_pos < range.start {
+				let next = self.current_pos;
+				self.current_pos += 1;
+				Some(next)
+			} else {
+				// skip the entire excluded range, moving to next excluded range as necessary
+				self.current_pos = range.end;
+				self.current_excl_range = self.inner.next();
+				self.next()
+			}
+		} else {
+			let next = self.current_pos;
+			self.current_pos += 1;
+			Some(next)
+		}
 	}
 }
