@@ -130,8 +130,12 @@ pub struct StratumStats {
 	pub network_difficulty: u64,
 	/// cuckoo size of last share submitted
 	pub edge_bits: u16,
+	/// Number of blocks found by all workers
+	pub blocks_found: u16,
 	/// current network Hashrate (for edge_bits)
 	pub network_hashrate: f64,
+	/// The minimum acceptable share difficulty to request from miners
+	pub minimum_share_difficulty: u64,
 	/// Individual worker status
 	pub worker_stats: Vec<WorkerStats>,
 }
@@ -271,8 +275,10 @@ impl Default for StratumStats {
 			num_workers: 0,
 			block_height: 0,
 			network_difficulty: 0,
-			edge_bits: 0,
+			edge_bits: 32,
+			blocks_found: 0,
 			network_hashrate: 0.0,
+			minimum_share_difficulty: 1,
 			worker_stats: Vec::new(),
 		}
 	}
