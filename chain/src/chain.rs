@@ -15,7 +15,7 @@
 //! Facade and handler for the rest of the blockchain implementation
 //! and mostly the chain pipeline.
 
-use crate::core::core::hash::{Hash, Hashed, ZERO_HASH};
+use crate::core::core::hash::{Hash, Hashed};
 use crate::core::core::merkle_proof::MerkleProof;
 use crate::core::core::verifier_cache::VerifierCache;
 use crate::core::core::{
@@ -151,7 +151,6 @@ pub struct Chain {
 	orphans: Arc<OrphanBlockPool>,
 	txhashset: Arc<RwLock<txhashset::TxHashSet>>,
 	header_pmmr: Arc<RwLock<txhashset::PMMRHandle<BlockHeader>>>,
-	sync_pmmr: Arc<RwLock<txhashset::PMMRHandle<BlockHeader>>>,
 	verifier_cache: Arc<RwLock<dyn VerifierCache>>,
 	pibd_segmenter: Arc<RwLock<Option<Segmenter>>>,
 	// POW verification function
@@ -187,20 +186,8 @@ impl Chain {
 			ProtocolVersion(1),
 			None,
 		)?;
-		let mut sync_pmmr = PMMRHandle::new(
-			Path::new(&db_root).join("header").join("sync_head"),
-			false,
-			ProtocolVersion(1),
-			None,
-		)?;
 
-		setup_head(
-			&genesis,
-			&store,
-			&mut header_pmmr,
-			&mut sync_pmmr,
-			&mut txhashset,
-		)?;
+		setup_head(&genesis, &store, &mut header_pmmr, &mut txhashset)?;
 
 		// Initialize the output_pos index based on UTXO set
 		// and NRD kernel_pos index based recent kernel history.
@@ -218,7 +205,6 @@ impl Chain {
 			orphans: Arc::new(OrphanBlockPool::new()),
 			txhashset: Arc::new(RwLock::new(txhashset)),
 			header_pmmr: Arc::new(RwLock::new(header_pmmr)),
-			sync_pmmr: Arc::new(RwLock::new(sync_pmmr)),
 			pibd_segmenter: Arc::new(RwLock::new(None)),
 			pow_verifier,
 			verifier_cache,
@@ -236,8 +222,7 @@ impl Chain {
 		// In reality we will do this based on PIBD segment requests.
 		// Initialization (once per 12 hour period) will not be this slow once lmdb and PMMRs
 		// are warmed up.
-		{
-			let segmenter = chain.segmenter()?;
+		if let Ok(segmenter) = chain.segmenter() {
 			let _ = segmenter.kernel_segment(SegmentIdentifier { height: 9, idx: 0 });
 			let _ = segmenter.bitmap_segment(SegmentIdentifier { height: 9, idx: 0 });
 			let _ = segmenter.output_segment(SegmentIdentifier { height: 11, idx: 0 });
@@ -274,7 +259,6 @@ impl Chain {
 		};
 		log_head("head", self.head()?);
 		log_head("header_head", self.header_head()?);
-		log_head("sync_head", self.get_sync_head()?);
 		Ok(())
 	}
 
@@ -498,23 +482,14 @@ impl Chain {
 	/// This is only ever used during sync and is based on sync_head.
 	/// We update header_head here if our total work increases.
 	pub fn sync_block_headers(&self, headers: &[BlockHeader], opts: Options) -> Result<(), Error> {
-		let mut sync_pmmr = self.sync_pmmr.write();
 		let mut header_pmmr = self.header_pmmr.write();
 		let mut txhashset = self.txhashset.write();
 
-		// Sync the chunk of block headers, updating sync_head as necessary.
+		// Sync the chunk of block headers, updating header_head if total work increases.
 		{
 			let batch = self.store.batch()?;
-			let mut ctx = self.new_ctx(opts, batch, &mut sync_pmmr, &mut txhashset)?;
-			pipe::sync_block_headers(headers, &mut ctx)?;
-			ctx.batch.commit()?;
-		}
-
-		// Now "process" the last block header, updating header_head to match sync_head.
-		if let Some(header) = headers.last() {
-			let batch = self.store.batch()?;
 			let mut ctx = self.new_ctx(opts, batch, &mut header_pmmr, &mut txhashset)?;
-			pipe::process_block_header(header, &mut ctx)?;
+			pipe::process_block_headers(headers, &mut ctx)?;
 			ctx.batch.commit()?;
 		}
 
@@ -945,115 +920,26 @@ impl Chain {
 		Ok(())
 	}
 
-	/// Rebuild the sync MMR based on current header_head.
-	/// We rebuild the sync MMR when first entering sync mode so ensure we
-	/// have an MMR we can safely rewind based on the headers received from a peer.
-	pub fn rebuild_sync_mmr(&self, head: &Tip) -> Result<(), Error> {
-		let mut sync_pmmr = self.sync_pmmr.write();
-		let mut batch = self.store.batch()?;
-		let header = batch.get_block_header(&head.hash())?;
-		txhashset::header_extending(&mut sync_pmmr, &mut batch, |ext, batch| {
-			pipe::rewind_and_apply_header_fork(&header, ext, batch)?;
-			Ok(())
-		})?;
-		batch.commit()?;
-		Ok(())
+	/// Finds the "fork point" where header chain diverges from full block chain.
+	/// If we are syncing this will correspond to the last full block where
+	/// the next header is known but we do not yet have the full block.
+	/// i.e. This is the last known full block and all subsequent blocks are missing.
+	pub fn fork_point(&self) -> Result<BlockHeader, Error> {
+		let body_head = self.head()?;
+		let mut current = self.get_block_header(&body_head.hash())?;
+		while !self.is_on_current_chain(&current).is_ok() {
+			current = self.get_previous_header(&current)?;
+		}
+		Ok(current)
 	}
 
-	/// Check chain status whether a txhashset downloading is needed
-	pub fn check_txhashset_needed(
-		&self,
-		caller: String,
-		hashes: &mut Option<Vec<Hash>>,
-	) -> Result<bool, Error> {
-		let horizon = global::cut_through_horizon() as u64;
-		let body_head = self.head()?;
+	/// Compare fork point to our horizon.
+	/// If beyond the horizon then we cannot sync via recent full blocks
+	/// and we need a state (txhashset) sync.
+	pub fn check_txhashset_needed(&self, fork_point: &BlockHeader) -> Result<bool, Error> {
 		let header_head = self.header_head()?;
-		let sync_head = self.get_sync_head()?;
-
-		debug!(
-			"{}: body_head - {}, {}, header_head - {}, {}, sync_head - {}, {}",
-			caller,
-			body_head.last_block_h,
-			body_head.height,
-			header_head.last_block_h,
-			header_head.height,
-			sync_head.last_block_h,
-			sync_head.height,
-		);
-
-		if body_head.total_difficulty >= header_head.total_difficulty {
-			debug!(
-				"{}: no need txhashset. header_head.total_difficulty: {} <= body_head.total_difficulty: {}",
-				caller, header_head.total_difficulty, body_head.total_difficulty,
-			);
-			return Ok(false);
-		}
-
-		let mut oldest_height = 0;
-		let mut oldest_hash = ZERO_HASH;
-
-		// Start with body_head (head of the full block chain)
-		let mut current = self.get_block_header(&body_head.last_block_h);
-		if current.is_err() {
-			error!(
-				"{}: body_head not found in chain db: {} at {}",
-				caller, body_head.last_block_h, body_head.height,
-			);
-			return Ok(false);
-		}
-
-		//
-		// TODO - Investigate finding the "common header" by comparing header_mmr and
-		// sync_mmr (bytes will be identical up to the common header).
-		//
-		// Traverse back through the full block chain from body head until we find a header
-		// that "is on current chain", which is the "fork point" between existing header chain
-		// and full block chain.
-		while let Ok(header) = current {
-			// break out of the while loop when we find a header common
-			// between the header chain and the current body chain
-			if self.is_on_current_chain(&header).is_ok() {
-				oldest_height = header.height;
-				oldest_hash = header.hash();
-				break;
-			}
-
-			current = self.get_previous_header(&header);
-		}
-
-		// Traverse back through the header chain from header_head back to this fork point.
-		// These are the blocks that we need to request in body sync (we have the header but not the full block).
-		if let Some(hs) = hashes {
-			let mut h = self.get_block_header(&header_head.last_block_h);
-			while let Ok(header) = h {
-				if header.height <= oldest_height {
-					break;
-				}
-				hs.push(header.hash());
-				h = self.get_previous_header(&header);
-			}
-		}
-
-		if oldest_height < header_head.height.saturating_sub(horizon) {
-			if oldest_hash != ZERO_HASH {
-				// this is the normal case. for example:
-				// body head height is 1 (and not a fork), oldest_height will be 1
-				// body head height is 0 (a typical fresh node), oldest_height will be 0
-				// body head height is 10,001 (but at a fork with depth 1), oldest_height will be 10,000
-				// body head height is 10,005 (but at a fork with depth 5), oldest_height will be 10,000
-				debug!(
-					"{}: need a state sync for txhashset. oldest block which is not on local chain: {} at {}",
-					caller, oldest_hash, oldest_height,
-				);
-			} else {
-				// this is the abnormal case, when is_on_current_chain() always return Err, and even for genesis block.
-				error!("{}: corrupted storage? state sync is needed", caller);
-			}
-			Ok(true)
-		} else {
-			Ok(false)
-		}
+		let horizon = global::cut_through_horizon() as u64;
+		Ok(fork_point.height < header_head.height.saturating_sub(horizon))
 	}
 
 	/// Clean the temporary sandbox folder
@@ -1105,8 +991,8 @@ impl Chain {
 		status.on_setup();
 
 		// Initial check whether this txhashset is needed or not
-		let mut hashes: Option<Vec<Hash>> = None;
-		if !self.check_txhashset_needed("txhashset_write".to_owned(), &mut hashes)? {
+		let fork_point = self.fork_point()?;
+		if !self.check_txhashset_needed(&fork_point)? {
 			warn!("txhashset_write: txhashset received but it's not needed! ignored.");
 			return Err(ErrorKind::InvalidTxHashSet("not needed".to_owned()).into());
 		}
@@ -1647,18 +1533,9 @@ impl Chain {
 		}
 	}
 
-	/// Get the tip of the current "sync" header chain.
-	/// This may be significantly different to current header chain.
-	pub fn get_sync_head(&self) -> Result<Tip, Error> {
-		let hash = self.sync_pmmr.read().head_hash()?;
-		let header = self.store.get_block_header(&hash)?;
-		Ok(Tip::from_header(&header))
-	}
-
 	/// Gets multiple headers at the provided heights.
-	/// Note: Uses the sync pmmr, not the header pmmr.
 	pub fn get_locator_hashes(&self, heights: &[u64]) -> Result<Vec<Hash>, Error> {
-		let pmmr = self.sync_pmmr.read();
+		let pmmr = self.header_pmmr.read();
 		heights
 			.iter()
 			.map(|h| pmmr.get_header_hash_by_height(*h))
@@ -1686,12 +1563,11 @@ fn setup_head(
 	genesis: &Block,
 	store: &store::ChainStore,
 	header_pmmr: &mut txhashset::PMMRHandle<BlockHeader>,
-	sync_pmmr: &mut txhashset::PMMRHandle<BlockHeader>,
 	txhashset: &mut txhashset::TxHashSet,
 ) -> Result<(), Error> {
 	let mut batch = store.batch()?;
 
-	// Apply the genesis header to header and sync MMRs.
+	// Apply the genesis header to header MMR.
 	{
 		if batch.get_block_header(&genesis.hash()).is_err() {
 			batch.save_block_header(&genesis.header)?;
@@ -1699,12 +1575,6 @@ fn setup_head(
 
 		if header_pmmr.last_pos == 0 {
 			txhashset::header_extending(header_pmmr, &mut batch, |ext, _| {
-				ext.apply_header(&genesis.header)
-			})?;
-		}
-
-		if sync_pmmr.last_pos == 0 {
-			txhashset::header_extending(sync_pmmr, &mut batch, |ext, _| {
 				ext.apply_header(&genesis.header)
 			})?;
 		}

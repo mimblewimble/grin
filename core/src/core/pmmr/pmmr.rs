@@ -12,8 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::marker;
-use std::u64;
+use std::{marker, ops::Range, u64};
 
 use croaring::Bitmap;
 
@@ -39,6 +38,11 @@ pub trait ReadablePMMR {
 
 	/// Get the hash from the underlying MMR file (ignores the remove log).
 	fn get_from_file(&self, pos: u64) -> Option<Hash>;
+
+	/// Get the hash for the provided peak pos.
+	/// Optimized for reading peak hashes rather than arbitrary pos hashes.
+	/// Peaks can be assumed to not be compacted.
+	fn get_peak_from_file(&self, pos: u64) -> Option<Hash>;
 
 	/// Get the data element at provided position in the MMR (ignores the remove log).
 	fn get_data_from_file(&self, pos: u64) -> Option<Self::Item>;
@@ -85,11 +89,7 @@ pub trait ReadablePMMR {
 	fn peaks(&self) -> Vec<Hash> {
 		peaks(self.unpruned_size())
 			.into_iter()
-			.filter_map(move |pi| {
-				// here we want to get from underlying hash file
-				// as the pos *may* have been "removed"
-				self.get_from_file(pi)
-			})
+			.filter_map(move |pi| self.get_peak_from_file(pi))
 			.collect()
 	}
 
@@ -99,7 +99,7 @@ pub trait ReadablePMMR {
 		let mut res = peaks(self.unpruned_size())
 			.into_iter()
 			.filter(|&x| x < peak_pos)
-			.filter_map(|x| self.get_from_file(x))
+			.filter_map(|x| self.get_peak_from_file(x))
 			.collect::<Vec<_>>();
 		if let Some(rhs) = rhs {
 			res.push(rhs);
@@ -228,7 +228,7 @@ where
 			let left_sibling = pos + 1 - 2 * peak;
 			let left_hash = self
 				.backend
-				.get_from_file(left_sibling)
+				.get_peak_from_file(left_sibling)
 				.ok_or("missing left sibling in tree, should not have been pruned")?;
 			peak *= 2;
 			pos += 1;
@@ -415,6 +415,14 @@ where
 		}
 	}
 
+	fn get_peak_from_file(&self, pos: u64) -> Option<Hash> {
+		if pos > self.last_pos {
+			None
+		} else {
+			self.backend.get_peak_from_file(pos)
+		}
+	}
+
 	fn get_data_from_file(&self, pos: u64) -> Option<Self::Item> {
 		if pos > self.last_pos {
 			None
@@ -541,10 +549,18 @@ pub fn peak_map_height(mut pos: u64) -> (u64, u64) {
 /// index. This function is the base on which all others, as well as the MMR,
 /// are built.
 pub fn bintree_postorder_height(num: u64) -> u64 {
-	if num == 0 {
+	let mut pos = num.saturating_sub(1);
+	if pos == 0 {
 		return 0;
 	}
-	peak_map_height(num - 1).1
+	let mut peak_size = ALL_ONES >> pos.leading_zeros();
+	while peak_size != 0 {
+		if pos >= peak_size {
+			pos -= peak_size;
+		}
+		peak_size >>= 1;
+	}
+	pos
 }
 
 /// Is this position a leaf in the MMR?
@@ -657,4 +673,11 @@ pub fn bintree_rightmost(num: u64) -> u64 {
 pub fn bintree_leftmost(num: u64) -> u64 {
 	let height = bintree_postorder_height(num);
 	num + 2 - (2 << height)
+}
+
+/// All pos in the subtree beneath the provided root, including root itself.
+pub fn bintree_range(num: u64) -> Range<u64> {
+	let height = bintree_postorder_height(num);
+	let leftmost = num + 2 - (2 << height);
+	leftmost..(num + 1)
 }

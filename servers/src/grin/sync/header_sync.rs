@@ -18,7 +18,7 @@ use std::sync::Arc;
 
 use crate::chain::{self, SyncState, SyncStatus};
 use crate::common::types::Error;
-use crate::core::core::hash::{Hash, Hashed};
+use crate::core::core::hash::Hash;
 use crate::core::pow::Difficulty;
 use crate::p2p::{self, types::ReasonForBan, Capabilities, Peer};
 
@@ -59,28 +59,10 @@ impl HeaderSync {
 		let enable_header_sync = match self.sync_state.status() {
 			SyncStatus::BodySync { .. }
 			| SyncStatus::HeaderSync { .. }
-			| SyncStatus::TxHashsetDone => true,
-			SyncStatus::NoSync | SyncStatus::Initial | SyncStatus::AwaitingPeers(_) => {
-				let sync_head = self.chain.get_sync_head()?;
-				debug!(
-					"sync: initial transition to HeaderSync. sync_head: {} at {}, resetting to: {} at {}",
-					sync_head.hash(),
-					sync_head.height,
-					header_head.hash(),
-					header_head.height,
-				);
-
-				// Reset sync_head to header_head on transition to HeaderSync,
-				// but ONLY on initial transition to HeaderSync state.
-				//
-				// The header_head and sync_head may diverge here in the presence of a fork
-				// in the header chain. Ensure we track the new advertised header chain here
-				// correctly, so reset any previous (and potentially stale) sync_head to match
-				// our last known "good" header_head.
-				//
-				self.chain.rebuild_sync_mmr(&header_head)?;
-				true
-			}
+			| SyncStatus::TxHashsetDone
+			| SyncStatus::NoSync
+			| SyncStatus::Initial
+			| SyncStatus::AwaitingPeers(_) => true,
 			_ => false,
 		};
 
@@ -211,11 +193,9 @@ impl HeaderSync {
 		return None;
 	}
 
-	/// We build a locator based on sync_head.
-	/// Even if sync_head is significantly out of date we will "reset" it once we
-	/// start getting headers back from a peer.
+	/// Build a locator based on header_head.
 	fn get_locator(&mut self) -> Result<Vec<Hash>, Error> {
-		let tip = self.chain.get_sync_head()?;
+		let tip = self.chain.header_head()?;
 		let heights = get_locator_heights(tip.height);
 		let locator = self.chain.get_locator_hashes(&heights)?;
 		Ok(locator)
