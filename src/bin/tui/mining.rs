@@ -33,7 +33,7 @@ use crate::tui::constants::{
 use crate::tui::types::TUIStatusListener;
 
 use crate::servers::{DiffBlock, ServerStats, WorkerStats};
-use crate::tui::table::{TableView, TableViewItem};
+use cursive_table_view::{TableView, TableViewItem};
 
 #[derive(Copy, Clone, PartialEq, Eq, Hash)]
 enum StratumWorkerColumn {
