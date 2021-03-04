@@ -714,7 +714,7 @@ impl WorkersList {
 		let mut worker_stats = WorkerStats::default();
 		worker_stats.is_connected = true;
 		worker_stats.id = worker_id.to_string();
-		worker_stats.pow_difficulty = 1; // XXX TODO
+		worker_stats.pow_difficulty = stratum_stats.minimum_share_difficulty;
 		stratum_stats.worker_stats.push(worker_stats);
 		stratum_stats.num_workers = workers_list.len();
 		worker_id
@@ -885,6 +885,7 @@ impl StratumServer {
 			let mut stratum_stats = self.stratum_stats.write();
 			stratum_stats.is_running = true;
 			stratum_stats.edge_bits = (global::min_edge_bits() + 1) as u16;
+			stratum_stats.minimum_share_difficulty = self.config.minimum_share_difficulty;
 		}
 
 		warn!(
