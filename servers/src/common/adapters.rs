@@ -378,12 +378,14 @@ where
 	}
 
 	/// Gets a full block by its hash.
-	/// Will convert to v2 compatibility based on peer protocol version.
+	/// We only support v3 blocks since HF4.
+	/// If a peer is requesting a block and only appears to support v2
+	/// then ignore the request.
 	fn get_block(&self, h: Hash, peer_info: &PeerInfo) -> Option<core::Block> {
 		self.chain()
 			.get_block(&h)
 			.map(|b| match peer_info.version.value() {
-				0..=2 => self.chain().convert_block_v2(b).ok(),
+				0..=2 => None,
 				3..=ProtocolVersion::MAX => Some(b),
 			})
 			.unwrap_or(None)

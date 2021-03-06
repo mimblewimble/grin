@@ -35,15 +35,13 @@ use crate::types::{
 };
 use crate::util::secp::pedersen::{Commitment, RangeProof};
 use crate::util::RwLock;
-use crate::ChainStore;
-use grin_core::ser;
 use grin_store::Error::NotFoundErr;
+use std::collections::HashMap;
 use std::fs::{self, File};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
-use std::{collections::HashMap, io::Cursor};
 
 /// Orphan pool size is limited by MAX_ORPHAN_SIZE
 pub const MAX_ORPHAN_SIZE: usize = 200;
@@ -173,10 +171,6 @@ impl Chain {
 	) -> Result<Chain, Error> {
 		let store = Arc::new(store::ChainStore::new(&db_root)?);
 
-		// DB migrations to be run prior to the chain being used.
-		// Migrate full blocks to protocol version v3.
-		Chain::migrate_db_v2_v3(&store)?;
-
 		// open the txhashset, creating a new one if necessary
 		let mut txhashset = txhashset::TxHashSet::open(db_root.clone(), store.clone(), None)?;
 
@@ -273,43 +267,6 @@ impl Chain {
 		res
 	}
 
-	/// We plan to support receiving blocks with CommitOnly inputs.
-	/// We also need to support relaying blocks with FeaturesAndCommit inputs to peers.
-	/// So we need a way to convert blocks from CommitOnly to FeaturesAndCommit.
-	/// Validating the inputs against the utxo_view allows us to look the outputs up.
-	pub fn convert_block_v2(&self, block: Block) -> Result<Block, Error> {
-		debug!(
-			"convert_block_v2: {} at {} ({} -> v2)",
-			block.header.hash(),
-			block.header.height,
-			block.inputs().version_str(),
-		);
-
-		if block.inputs().is_empty() {
-			return Ok(Block {
-				header: block.header,
-				body: block.body.replace_inputs(Inputs::FeaturesAndCommit(vec![])),
-			});
-		}
-
-		let mut header_pmmr = self.header_pmmr.write();
-		let mut txhashset = self.txhashset.write();
-		let inputs: Vec<_> =
-			txhashset::extending_readonly(&mut header_pmmr, &mut txhashset, |ext, batch| {
-				let previous_header = batch.get_previous_header(&block.header)?;
-				pipe::rewind_and_apply_fork(&previous_header, ext, batch)?;
-				ext.extension
-					.utxo_view(ext.header_extension)
-					.validate_inputs(&block.inputs(), batch)
-					.map(|outputs| outputs.into_iter().map(|(out, _)| out).collect())
-			})?;
-		let inputs = inputs.as_slice().into();
-		Ok(Block {
-			header: block.header,
-			body: block.body.replace_inputs(inputs),
-		})
-	}
-
 	fn determine_status(
 		&self,
 		head: Option<Tip>,
@@ -400,11 +357,6 @@ impl Chain {
 		// Check if this block is an orphan.
 		// Only do this once we know the header PoW is valid.
 		self.check_orphan(&b, opts)?;
-
-		// We can only reliably convert to "v2" if not an orphan (may spend output from previous block).
-		// We convert from "v3" to "v2" by looking up outputs to be spent.
-		// This conversion also ensures a block received in "v2" has valid input features (prevents malleability).
-		let b = self.convert_block_v2(b)?;
 
 		let (maybe_new_head, prev_head) = {
 			let mut header_pmmr = self.header_pmmr.write();
@@ -1365,58 +1317,6 @@ impl Chain {
 	/// Note: Takes a read lock on the header_pmmr.
 	fn get_header_hash_by_height(&self, height: u64) -> Result<Hash, Error> {
 		self.header_pmmr.read().get_header_hash_by_height(height)
-	}
-
-	/// Migrate our local db from v2 to v3.
-	/// "commit only" inputs.
-	fn migrate_db_v2_v3(store: &ChainStore) -> Result<(), Error> {
-		if store.batch()?.is_blocks_v3_migrated()? {
-			// Previously migrated so skipping.
-			debug!("migrate_db_v2_v3: previously migrated, skipping");
-			return Ok(());
-		}
-		let mut total = 0;
-		let mut keys_to_migrate = vec![];
-		for (k, v) in store.batch()?.blocks_raw_iter()? {
-			total += 1;
-
-			// We want to migrate all blocks that cannot be read via v3 protocol version.
-			let block_v3: Result<Block, _> =
-				ser::deserialize(&mut Cursor::new(&v), ProtocolVersion(3));
-			if block_v3.is_err() {
-				let block_v2: Result<Block, _> =
-					ser::deserialize(&mut Cursor::new(&v), ProtocolVersion(2));
-				if block_v2.is_ok() {
-					keys_to_migrate.push(k);
-				}
-			}
-		}
-		debug!(
-			"migrate_db_v2_v3: {} (of {}) blocks to migrate",
-			keys_to_migrate.len(),
-			total,
-		);
-		let mut count = 0;
-		keys_to_migrate
-			.chunks(100)
-			.try_for_each(|keys| {
-				let batch = store.batch()?;
-				for key in keys {
-					batch.migrate_block(&key, ProtocolVersion(2), ProtocolVersion(3))?;
-					count += 1;
-				}
-				batch.commit()?;
-				debug!("migrate_db_v2_v3: successfully migrated {} blocks", count);
-				Ok(())
-			})
-			.and_then(|_| {
-				// Set flag to indicate we have migrated all blocks in the db.
-				// We will skip migration in the future.
-				let batch = store.batch()?;
-				batch.set_blocks_v3_migrated(true)?;
-				batch.commit()?;
-				Ok(())
-			})
 	}
 
 	/// Gets the block header in which a given output appears in the txhashset.

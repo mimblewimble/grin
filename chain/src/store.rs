@@ -46,11 +46,6 @@ pub const NRD_KERNEL_ENTRY_PREFIX: u8 = b'k';
 const BLOCK_SUMS_PREFIX: u8 = b'M';
 const BLOCK_SPENT_PREFIX: u8 = b'S';
 
-/// Prefix for various boolean flags stored in the db.
-const BOOL_FLAG_PREFIX: u8 = b'B';
-/// Boolean flag for v3 migration.
-const BLOCKS_V3_MIGRATED: &str = "blocks_v3_migrated";
-
 /// All chain-related database operations
 pub struct ChainStore {
 	db: store::Store,
@@ -216,44 +211,6 @@ impl<'a> Batch<'a> {
 	pub fn save_spent_index(&self, h: &Hash, spent: &[CommitPos]) -> Result<(), Error> {
 		self.db
 			.put_ser(&to_key(BLOCK_SPENT_PREFIX, h)[..], &spent.to_vec())?;
-		Ok(())
-	}
-
-	/// DB flag representing full migration of blocks to v3 version.
-	/// Default to false if flag not present.
-	pub fn is_blocks_v3_migrated(&self) -> Result<bool, Error> {
-		let migrated: Option<BoolFlag> = self
-			.db
-			.get_ser(&to_key(BOOL_FLAG_PREFIX, BLOCKS_V3_MIGRATED))?;
-		match migrated {
-			None => Ok(false),
-			Some(x) => Ok(x.into()),
-		}
-	}
-
-	/// Set DB flag representing full migration of blocks to v3 version.
-	pub fn set_blocks_v3_migrated(&self, migrated: bool) -> Result<(), Error> {
-		self.db.put_ser(
-			&to_key(BOOL_FLAG_PREFIX, BLOCKS_V3_MIGRATED)[..],
-			&BoolFlag(migrated),
-		)?;
-		Ok(())
-	}
-
-	/// Migrate a block stored in the db reading from one protocol version and writing
-	/// with new protocol version.
-	pub fn migrate_block(
-		&self,
-		key: &[u8],
-		from_version: ProtocolVersion,
-		to_version: ProtocolVersion,
-	) -> Result<(), Error> {
-		let block: Option<Block> = self.db.get_with(key, move |_, mut v| {
-			ser::deserialize(&mut v, from_version).map_err(From::from)
-		})?;
-		if let Some(block) = block {
-			self.db.put_ser_with_version(key, &block, to_version)?;
-		}
 		Ok(())
 	}
 
