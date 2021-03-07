@@ -116,7 +116,6 @@ impl BodySync {
 				peers = peers_iter().inbound().into_iter().collect();
 			}
 
-<<<<<<< HEAD
 			// If we have no peers (outbound or inbound) then we are done for now.
 			if peers.is_empty() {
 				debug!("no peers (inbound or outbound) with more work");
@@ -125,13 +124,6 @@ impl BodySync {
 
 			peers
 		};
-=======
-		// If we have no peers (outbound or inbound) then we are done for now.
-		if peers.is_empty() {
-			debug!("no peers (inbound or outbound) with more work");
-			return Ok(false);
-		}
->>>>>>> 667624c0 (allow chain compaction during sync)
 
 		// if we have 5 peers to sync from then ask for 50 blocks total (peer_count *
 		// 10) max will be 80 if all 8 peers are advertising more work
