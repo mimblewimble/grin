@@ -14,6 +14,7 @@
 
 use chrono::prelude::{DateTime, Utc};
 use chrono::Duration;
+use p2p::Capabilities;
 use rand::prelude::*;
 use std::cmp;
 use std::sync::Arc;
@@ -85,26 +86,42 @@ impl BodySync {
 			return Ok(true);
 		}
 
-		// Find connected peers with strictly greater difficulty than us.
-		let peers_iter = || {
-			self.peers
-				.iter()
-				.with_difficulty(|x| x > head.total_difficulty)
-				.connected()
+		let peers = {
+			// Find connected peers with strictly greater difficulty than us.
+			let peers_iter = || {
+				// TODO - Once we have "critical mass" of archival nodes on network
+				// we can uncomment this so archive nodes only sync from archive nodes.
+				//
+				// let cap = if self.chain.archive_mode {
+				// 	Capabilities::BLOCK_HIST
+				// } else {
+				// 	Capabilities::UNKNOWN
+				// };
+
+				let cap = Capabilities::UNKNOWN;
+
+				self.peers
+					.iter()
+					.with_capabilities(cap)
+					.with_difficulty(|x| x > head.total_difficulty)
+					.connected()
+			};
+
+			// We prefer outbound peers with greater difficulty.
+			let mut peers: Vec<_> = peers_iter().outbound().into_iter().collect();
+			if peers.is_empty() {
+				debug!("no outbound peers with more work, considering inbound");
+				peers = peers_iter().inbound().into_iter().collect();
+			}
+
+			// If we have no peers (outbound or inbound) then we are done for now.
+			if peers.is_empty() {
+				debug!("no peers (inbound or outbound) with more work");
+				return Ok(false);
+			}
+
+			peers
 		};
-
-		// We prefer outbound peers with greater difficulty.
-		let mut peers: Vec<_> = peers_iter().outbound().into_iter().collect();
-		if peers.is_empty() {
-			debug!("no outbound peers with more work, considering inbound");
-			peers = peers_iter().inbound().into_iter().collect();
-		}
-
-		// If we have no peers (outbound or inbound) then we are done for now.
-		if peers.is_empty() {
-			debug!("no peers (inbound or outbound) with more work");
-			return Ok(false);
-		}
 
 		// if we have 5 peers to sync from then ask for 50 blocks total (peer_count *
 		// 10) max will be 80 if all 8 peers are advertising more work
