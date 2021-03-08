@@ -16,7 +16,7 @@
 
 use std::cmp::Ordering;
 
-use crate::tui::chrono::prelude::{DateTime, NaiveDateTime, Utc};
+use chrono::prelude::{DateTime, NaiveDateTime, Utc};
 use cursive::direction::Orientation;
 use cursive::event::Key;
 use cursive::traits::{Boxable, Identifiable};
