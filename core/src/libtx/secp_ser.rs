@@ -53,8 +53,8 @@ pub mod pubkey_serde {
 
 /// Serializes an Option<secp::Signature> to and from hex
 pub mod option_sig_serde {
-	use crate::serde::{Deserialize, Deserializer, Serializer};
 	use serde::de::Error;
+	use serde::{Deserialize, Deserializer, Serializer};
 	use util::{from_hex, secp, static_secp_instance, ToHex};
 
 	///
@@ -99,8 +99,8 @@ pub mod option_sig_serde {
 
 /// Serializes an Option<secp::SecretKey> to and from hex
 pub mod option_seckey_serde {
-	use crate::serde::{Deserialize, Deserializer, Serializer};
 	use serde::de::Error;
+	use serde::{Deserialize, Deserializer, Serializer};
 	use util::{from_hex, secp, static_secp_instance, ToHex};
 
 	///
@@ -144,8 +144,8 @@ pub mod option_seckey_serde {
 
 /// Serializes a secp::Signature to and from hex
 pub mod sig_serde {
-	use crate::serde::{Deserialize, Deserializer, Serializer};
 	use serde::de::Error;
+	use serde::{Deserialize, Deserializer, Serializer};
 	use util::{from_hex, secp, static_secp_instance, ToHex};
 
 	///
@@ -180,8 +180,8 @@ pub mod sig_serde {
 
 /// Serializes an Option<secp::Commitment> to and from hex
 pub mod option_commitment_serde {
-	use crate::serde::{Deserialize, Deserializer, Serializer};
 	use serde::de::Error;
+	use serde::{Deserialize, Deserializer, Serializer};
 	use util::secp::pedersen::Commitment;
 	use util::{from_hex, ToHex};
 

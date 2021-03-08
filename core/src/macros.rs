@@ -60,7 +60,7 @@ macro_rules! tee {
 	($thing:ident, $thing_expr:expr) => {{
 		$thing_expr;
 		$thing
-		}};
+	}};
 }
 
 /// Eliminate some of the boilerplate of deserialization (package ser) by

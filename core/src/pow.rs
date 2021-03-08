@@ -33,8 +33,6 @@ pub use self::types::*;
 use crate::core::{Block, BlockHeader};
 use crate::genesis;
 use crate::global;
-use chrono;
-use num;
 
 #[macro_use]
 mod common;

@@ -19,7 +19,6 @@ use backtrace::Backtrace;
 use std::{panic, thread};
 
 use log::{Level, Record};
-use log4rs;
 use log4rs::append::console::ConsoleAppender;
 use log4rs::append::file::FileAppender;
 use log4rs::append::rolling_file::{

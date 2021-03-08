@@ -15,7 +15,6 @@
 //! The Committed trait and associated errors.
 
 use failure::Fail;
-use keychain;
 use keychain::BlindingFactor;
 use util::secp::key::SecretKey;
 use util::secp::pedersen::Commitment;
