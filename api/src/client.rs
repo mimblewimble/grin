@@ -20,10 +20,8 @@ use failure::{Fail, ResultExt};
 use hyper::body;
 use hyper::header::{ACCEPT, AUTHORIZATION, CONTENT_TYPE, USER_AGENT};
 use hyper::{Body, Client, Request};
-use hyper_rustls;
 use hyper_timeout::TimeoutConnector;
 use serde::{Deserialize, Serialize};
-use serde_json;
 use std::time::Duration;
 use tokio::runtime::Builder;
 

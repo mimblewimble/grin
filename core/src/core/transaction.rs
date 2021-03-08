@@ -115,9 +115,7 @@ impl TryFrom<u64> for FeeFields {
 	type Error = Error;
 
 	fn try_from(fee: u64) -> Result<Self, Self::Error> {
-		if fee == 0 {
-			Err(Error::InvalidFeeFields)
-		} else if fee > FeeFields::FEE_MASK {
+		if fee == 0 || fee > FeeFields::FEE_MASK {
 			Err(Error::InvalidFeeFields)
 		} else {
 			Ok(Self(fee))
@@ -158,11 +156,7 @@ impl FeeFields {
 	/// Create a new FeeFields from the provided shift and fee
 	/// Checks both are valid (in range)
 	pub fn new(fee_shift: u64, fee: u64) -> Result<Self, Error> {
-		if fee == 0 {
-			Err(Error::InvalidFeeFields)
-		} else if fee > FeeFields::FEE_MASK {
-			Err(Error::InvalidFeeFields)
-		} else if fee_shift > FeeFields::FEE_SHIFT_MASK {
+		if fee == 0 || fee > FeeFields::FEE_MASK || fee_shift > FeeFields::FEE_SHIFT_MASK {
 			Err(Error::InvalidFeeFields)
 		} else {
 			Ok(Self((fee_shift << FeeFields::FEE_BITS) | fee))
@@ -236,12 +230,11 @@ impl TryFrom<u16> for NRDRelativeHeight {
 	type Error = Error;
 
 	fn try_from(height: u16) -> Result<Self, Self::Error> {
-		if height == 0 {
-			Err(Error::InvalidNRDRelativeHeight)
-		} else if height
-			> NRDRelativeHeight::MAX
-				.try_into()
-				.expect("WEEK_HEIGHT const should fit in u16")
+		if height == 0
+			|| height
+				> NRDRelativeHeight::MAX
+					.try_into()
+					.expect("WEEK_HEIGHT const should fit in u16")
 		{
 			Err(Error::InvalidNRDRelativeHeight)
 		} else {
