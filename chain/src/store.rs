@@ -24,7 +24,7 @@ use crate::types::{CommitPos, Tip};
 use crate::util::secp::pedersen::Commitment;
 use croaring::Bitmap;
 use grin_core::{
-	core::{OutputIdentifier, TxKernel},
+	core::{pmmr, OutputIdentifier, TxKernel},
 	ser,
 };
 use grin_store as store;
@@ -115,7 +115,17 @@ impl ChainStore {
 		})
 	}
 
+	pub fn get_header_hash_by_height(&self, height: u64) -> Result<Option<Hash>, Error> {
+		let pos = pmmr::insertion_to_pmmr_index(height + 1);
+
+		unimplemented!();
+	}
+
 	pub fn get_output_by_pos(&self, pos: u64) -> Result<Option<OutputIdentifier>, Error> {
+		unimplemented!();
+	}
+
+	pub fn get_kernel_by_pos(&self, pos: u64) -> Result<Option<TxKernel>, Error> {
 		unimplemented!();
 	}
 
@@ -326,6 +336,12 @@ impl<'a> Batch<'a> {
 	/// Get the previous header.
 	pub fn get_previous_header(&self, header: &BlockHeader) -> Result<BlockHeader, Error> {
 		self.get_block_header(&header.prev_hash)
+	}
+
+	pub fn get_header_hash_by_height(&self, height: u64) -> Result<Option<Hash>, Error> {
+		let pos = pmmr::insertion_to_pmmr_index(height + 1);
+
+		unimplemented!();
 	}
 
 	/// Get block header.

@@ -109,16 +109,16 @@ impl PMMRHandle<BlockHeader> {
 		Ok(())
 	}
 
-	/// Get the header hash at the specified height based on the current header MMR state.
-	pub fn get_header_hash_by_height(&self, height: u64) -> Result<Hash, Error> {
-		let pos = pmmr::insertion_to_pmmr_index(height + 1);
-		let header_pmmr = ReadonlyPMMR::at(&self.backend, self.last_pos);
-		if let Some(entry) = header_pmmr.get_data(pos) {
-			Ok(entry.hash())
-		} else {
-			Err(ErrorKind::Other("get header hash by height".to_string()).into())
-		}
-	}
+	// /// Get the header hash at the specified height based on the current header MMR state.
+	// pub fn get_header_hash_by_height(&self, height: u64) -> Result<Hash, Error> {
+	// 	let pos = pmmr::insertion_to_pmmr_index(height + 1);
+	// 	let header_pmmr = ReadonlyPMMR::at(&self.backend, self.last_pos);
+	// 	if let Some(entry) = self.commit_index.get_header_by_height(height)? {
+	// 		Ok(entry.hash())
+	// 	} else {
+	// 		Err(ErrorKind::Other("get header hash by height".to_string()).into())
+	// 	}
+	// }
 
 	/// Get the header hash for the head of the header chain based on current MMR state.
 	/// Find the last leaf pos based on MMR size and return its header hash.
@@ -376,7 +376,7 @@ impl TxHashSet {
 		excess: &Commitment,
 		min_index: Option<u64>,
 		max_index: Option<u64>,
-	) -> Option<(TxKernel, u64)> {
+	) -> Result<Option<(TxKernel, u64)>, Error> {
 		let min_index = min_index.unwrap_or(1);
 		let max_index = max_index.unwrap_or(self.kernel_pmmr_h.last_pos);
 
@@ -384,13 +384,13 @@ impl TxHashSet {
 		let mut index = max_index + 1;
 		while index > min_index {
 			index -= 1;
-			if let Some(kernel) = pmmr.get_data(index) {
+			if let Some(kernel) = self.commit_index.get_kernel_by_pos(index)? {
 				if &kernel.excess == excess {
-					return Some((kernel, index));
+					return Ok(Some((kernel, index)));
 				}
 			}
 		}
-		None
+		Ok(None)
 	}
 
 	/// Get MMR roots.
@@ -915,10 +915,10 @@ impl<'a> HeaderExtension<'a> {
 		}
 	}
 
-	/// Get the header hash for the specified pos from the underlying MMR backend.
-	fn get_header_hash(&self, pos: u64) -> Option<Hash> {
-		self.pmmr.get_data(pos).map(|x| x.hash())
-	}
+	// /// Get the header hash for the specified pos from the underlying MMR backend.
+	// fn get_header_hash(&self, pos: u64) -> Option<Hash> {
+	// 	self.pmmr.get_data(pos).map(|x| x.hash())
+	// }
 
 	/// The head representing the furthest extent of the current extension.
 	pub fn head(&self) -> Tip {
@@ -926,15 +926,15 @@ impl<'a> HeaderExtension<'a> {
 	}
 
 	/// Get the header at the specified height based on the current state of the header extension.
-	/// Derives the MMR pos from the height (insertion index) and retrieves the header hash.
-	/// Looks the header up in the db by hash.
+	/// This involves two db lookups:
+	///   height -> hash
+	///   hash -> header
 	pub fn get_header_by_height(
 		&self,
 		height: u64,
 		batch: &Batch<'_>,
 	) -> Result<BlockHeader, Error> {
-		let pos = pmmr::insertion_to_pmmr_index(height + 1);
-		if let Some(hash) = self.get_header_hash(pos) {
+		if let Some(hash) = batch.get_header_hash_by_height(height)? {
 			Ok(batch.get_block_header(&hash)?)
 		} else {
 			Err(ErrorKind::Other("get header by height".to_string()).into())

@@ -1099,7 +1099,7 @@ impl Chain {
 		}
 
 		let mut count = 0;
-		let tail_hash = header_pmmr.get_header_hash_by_height(head.height - horizon)?;
+		let tail_hash = batch.get_header_hash_by_height(head.height - horizon)?;
 		let tail = batch.get_block_header(&tail_hash)?;
 
 		// Remove old blocks (including short lived fork blocks) which height < tail.height
@@ -1309,15 +1309,17 @@ impl Chain {
 	/// Gets the block header at the provided height.
 	/// Note: Takes a read lock on the header_pmmr.
 	pub fn get_header_by_height(&self, height: u64) -> Result<BlockHeader, Error> {
+		let hash = self.store.get_header_hash_by_height(height)?;
+
 		let hash = self.get_header_hash_by_height(height)?;
 		self.get_block_header(&hash)
 	}
 
-	/// Gets the header hash at the provided height.
-	/// Note: Takes a read lock on the header_pmmr.
-	fn get_header_hash_by_height(&self, height: u64) -> Result<Hash, Error> {
-		self.header_pmmr.read().get_header_hash_by_height(height)
-	}
+	// /// Gets the header hash at the provided height.
+	// /// Note: Takes a read lock on the header_pmmr.
+	// fn get_header_hash_by_height(&self, height: u64) -> Result<Hash, Error> {
+	// 	self.header_pmmr.read().get_header_hash_by_height(height)
+	// }
 
 	/// Gets the block header in which a given output appears in the txhashset.
 	pub fn get_header_for_output(&self, commit: Commitment) -> Result<BlockHeader, Error> {
@@ -1374,7 +1376,7 @@ impl Chain {
 		let (kernel, mmr_index) = match self
 			.txhashset
 			.read()
-			.find_kernel(&excess, min_index, max_index)
+			.find_kernel(&excess, min_index, max_index)?
 		{
 			Some(k) => k,
 			None => return Ok(None),

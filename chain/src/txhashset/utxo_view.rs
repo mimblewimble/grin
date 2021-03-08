@@ -14,8 +14,7 @@
 
 //! Lightweight readonly view into output MMR for convenience.
 
-use crate::core::core::hash::{Hash, Hashed};
-use crate::core::core::pmmr::{self, ReadablePMMR, ReadonlyPMMR};
+use crate::core::core::pmmr::ReadonlyPMMR;
 use crate::core::core::{Block, BlockHeader, Inputs, Output, OutputIdentifier, Transaction};
 use crate::core::global;
 use crate::error::{Error, ErrorKind};
@@ -213,21 +212,12 @@ impl<'a> UTXOView<'a> {
 		Ok(())
 	}
 
-	/// Get the header hash for the specified pos from the underlying MMR backend.
-	fn get_header_hash(&self, pos: u64) -> Option<Hash> {
-		self.header_pmmr.get_data(pos).map(|x| x.hash())
-	}
-
 	/// Get the header at the specified height based on the current state of the extension.
-	/// Derives the MMR pos from the height (insertion index) and retrieves the header hash.
-	/// Looks the header up in the db by hash.
-	pub fn get_header_by_height(
-		&self,
-		height: u64,
-		batch: &Batch<'_>,
-	) -> Result<BlockHeader, Error> {
-		let pos = pmmr::insertion_to_pmmr_index(height + 1);
-		if let Some(hash) = self.get_header_hash(pos) {
+	/// This involves two db lookups:
+	///   height -> hash
+	///   hash -> header
+	fn get_header_by_height(&self, height: u64, batch: &Batch<'_>) -> Result<BlockHeader, Error> {
+		if let Some(hash) = batch.get_header_hash_by_height(height)? {
 			let header = batch.get_block_header(&hash)?;
 			Ok(header)
 		} else {
