@@ -24,7 +24,6 @@ use crate::core::hash::Hash;
 use crate::pow::{Difficulty, Proof, ProofOfWork};
 use chrono::prelude::{TimeZone, Utc};
 use keychain::BlindingFactor;
-use util;
 use util::secp::constants::SINGLE_BULLET_PROOF_SIZE;
 use util::secp::pedersen::{Commitment, RangeProof};
 use util::secp::Signature;

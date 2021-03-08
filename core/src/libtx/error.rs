@@ -15,7 +15,6 @@
 //! libtx specific errors
 use crate::core::transaction;
 use failure::{Backtrace, Context, Fail};
-use keychain;
 use std::fmt::{self, Display};
 use util::secp;
 
