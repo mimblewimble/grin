@@ -74,43 +74,43 @@ impl<T: PMMRable> PMMRHandle<T> {
 }
 
 impl PMMRHandle<BlockHeader> {
-	/// Used during chain init to ensure the header PMMR is consistent with header_head in the db.
-	pub fn init_head(&mut self, head: &Tip) -> Result<(), Error> {
-		let head_hash = self.head_hash()?;
-		let expected_hash = self.get_header_hash_by_height(head.height)?;
-		if head.hash() != expected_hash {
-			error!(
-				"header PMMR inconsistent: {} vs {} at {}",
-				expected_hash,
-				head.hash(),
-				head.height
-			);
-			return Err(ErrorKind::Other("header PMMR inconsistent".to_string()).into());
-		}
+	// /// Used during chain init to ensure the header PMMR is consistent with header_head in the db.
+	// pub fn init_head(&mut self, head: &Tip, batch: &Batch<'_>) -> Result<(), Error> {
+	// 	let head_hash = self.head_hash()?;
+	// 	let expected_hash = self.get_header_hash_by_height(head.height)?;
+	// 	if head.hash() != expected_hash {
+	// 		error!(
+	// 			"header PMMR inconsistent: {} vs {} at {}",
+	// 			expected_hash,
+	// 			head.hash(),
+	// 			head.height
+	// 		);
+	// 		return Err(ErrorKind::Other("header PMMR inconsistent".to_string()).into());
+	// 	}
 
-		// 1-indexed pos and we want to account for subsequent parent hash pos.
-		// so use next header pos to find our last_pos.
-		let next_height = head.height + 1;
-		let next_pos = pmmr::insertion_to_pmmr_index(next_height + 1);
-		let pos = next_pos.saturating_sub(1);
+	// 	// 1-indexed pos and we want to account for subsequent parent hash pos.
+	// 	// so use next header pos to find our last_pos.
+	// 	let next_height = head.height + 1;
+	// 	let next_pos = pmmr::insertion_to_pmmr_index(next_height + 1);
+	// 	let pos = next_pos.saturating_sub(1);
 
-		debug!(
-			"init_head: header PMMR: current head {} at pos {}",
-			head_hash, self.last_pos
-		);
-		debug!(
-			"init_head: header PMMR: resetting to {} at pos {} (height {})",
-			head.hash(),
-			pos,
-			head.height
-		);
+	// 	debug!(
+	// 		"init_head: header PMMR: current head {} at pos {}",
+	// 		head_hash, self.last_pos
+	// 	);
+	// 	debug!(
+	// 		"init_head: header PMMR: resetting to {} at pos {} (height {})",
+	// 		head.hash(),
+	// 		pos,
+	// 		head.height
+	// 	);
 
-		self.last_pos = pos;
-		Ok(())
-	}
+	// 	self.last_pos = pos;
+	// 	Ok(())
+	// }
 
 	// /// Get the header hash at the specified height based on the current header MMR state.
-	// pub fn get_header_hash_by_height(&self, height: u64) -> Result<Hash, Error> {
+	// fn get_header_hash_by_height(&self, height: u64) -> Result<Hash, Error> {
 	// 	let pos = pmmr::insertion_to_pmmr_index(height + 1);
 	// 	let header_pmmr = ReadonlyPMMR::at(&self.backend, self.last_pos);
 	// 	if let Some(entry) = self.commit_index.get_header_by_height(height)? {
@@ -120,20 +120,21 @@ impl PMMRHandle<BlockHeader> {
 	// 	}
 	// }
 
-	/// Get the header hash for the head of the header chain based on current MMR state.
-	/// Find the last leaf pos based on MMR size and return its header hash.
-	pub fn head_hash(&self) -> Result<Hash, Error> {
-		if self.last_pos == 0 {
-			return Err(ErrorKind::Other("MMR empty, no head".to_string()).into());
-		}
-		let header_pmmr = ReadonlyPMMR::at(&self.backend, self.last_pos);
-		let leaf_pos = pmmr::bintree_rightmost(self.last_pos);
-		if let Some(entry) = header_pmmr.get_data(leaf_pos) {
-			Ok(entry.hash())
-		} else {
-			Err(ErrorKind::Other("failed to find head hash".to_string()).into())
-		}
-	}
+	// /// Get the header hash for the head of the header chain based on current MMR state.
+	// /// Find the last leaf pos based on MMR size and return its header hash.
+	// pub fn head_hash(&self) -> Result<Hash, Error> {
+
+	// 	if self.last_pos == 0 {
+	// 		return Err(ErrorKind::Other("MMR empty, no head".to_string()).into());
+	// 	}
+	// 	let header_pmmr = ReadonlyPMMR::at(&self.backend, self.last_pos);
+	// 	let leaf_pos = pmmr::bintree_rightmost(self.last_pos);
+	// 	if let Some(entry) = header_pmmr.get_data(leaf_pos) {
+	// 		Ok(entry.hash())
+	// 	} else {
+	// 		Err(ErrorKind::Other("failed to find head hash".to_string()).into())
+	// 	}
+	// }
 }
 
 /// An easy to manipulate structure holding the 3 MMRs necessary to
@@ -460,7 +461,9 @@ impl TxHashSet {
 	) -> Result<(), Error> {
 		let head = batch.head()?;
 		let cutoff = head.height.saturating_sub(WEEK_HEIGHT * 2);
-		let cutoff_hash = header_pmmr.get_header_hash_by_height(cutoff)?;
+		let cutoff_hash = batch
+			.get_header_hash_by_height(cutoff)?
+			.ok_or(ErrorKind::HeaderNotFound)?;
 		let cutoff_header = batch.get_block_header(&cutoff_hash)?;
 		self.verify_kernel_pos_index(&cutoff_header, header_pmmr, batch)
 	}
@@ -506,8 +509,9 @@ impl TxHashSet {
 					match kernel.features {
 						KernelFeatures::NoRecentDuplicate { .. } => {
 							while current_pos > current_header.kernel_mmr_size {
-								let hash = header_pmmr
-									.get_header_hash_by_height(current_header.height + 1)?;
+								let hash = batch
+									.get_header_hash_by_height(current_header.height + 1)?
+									.ok_or(ErrorKind::HeaderNotFound)?;
 								current_header = batch.get_block_header(&hash)?;
 							}
 							let new_pos = CommitPos {
@@ -598,7 +602,9 @@ impl TxHashSet {
 
 		let mut i = 0;
 		for search_height in 0..max_height {
-			let hash = header_pmmr.get_header_hash_by_height(search_height + 1)?;
+			let hash = batch
+				.get_header_hash_by_height(search_height + 1)?
+				.ok_or(ErrorKind::HeaderNotFound)?;
 			let h = batch.get_block_header(&hash)?;
 			while i < total_outputs {
 				let (commit, pos) = outputs_pos[i];
@@ -817,15 +823,17 @@ where
 {
 	let batch = store.batch()?;
 
-	// Note: Extending either the sync_head or header_head MMR here.
-	// Use underlying MMR to determine the "head".
-	let head = match handle.head_hash() {
-		Ok(hash) => {
-			let header = batch.get_block_header(&hash)?;
-			Tip::from_header(&header)
-		}
-		Err(_) => Tip::default(),
-	};
+	let head = batch.header_head()?;
+
+	// // Note: Extending either the sync_head or header_head MMR here.
+	// // Use underlying MMR to determine the "head".
+	// let head = match handle.head_hash() {
+	// 	Ok(hash) => {
+	// 		let header = batch.get_block_header(&hash)?;
+	// 		Tip::from_header(&header)
+	// 	}
+	// 	Err(_) => Tip::default(),
+	// };
 
 	let pmmr = PMMR::at(&mut handle.backend, handle.last_pos);
 	let mut extension = HeaderExtension::new(pmmr, head);
@@ -855,15 +863,17 @@ where
 	// index saving can be undone
 	let child_batch = batch.child()?;
 
-	// Note: Extending either the sync_head or header_head MMR here.
-	// Use underlying MMR to determine the "head".
-	let head = match handle.head_hash() {
-		Ok(hash) => {
-			let header = child_batch.get_block_header(&hash)?;
-			Tip::from_header(&header)
-		}
-		Err(_) => Tip::default(),
-	};
+	let head = child_batch.header_head()?;
+
+	// // Note: Extending either the sync_head or header_head MMR here.
+	// // Use underlying MMR to determine the "head".
+	// let head = match handle.head_hash() {
+	// 	Ok(hash) => {
+	// 		let header = child_batch.get_block_header(&hash)?;
+	// 		Tip::from_header(&header)
+	// 	}
+	// 	Err(_) => Tip::default(),
+	// };
 
 	{
 		let pmmr = PMMR::at(&mut handle.backend, handle.last_pos);
@@ -1045,35 +1055,38 @@ pub struct Extension<'a> {
 	rollback: bool,
 }
 
-// TODO - we need a batch here - Committed for (Extension, Batch) ?
+struct ExtensionWithBatch<'a> {
+	extension: &'a Extension<'a>,
+	batch: &'a Batch<'a>,
+}
 
-// impl<'a> Committed for Extension<'a> {
-// 	fn inputs_committed(&self) -> Vec<Commitment> {
-// 		vec![]
-// 	}
+impl<'a> Committed for ExtensionWithBatch<'a> {
+	fn inputs_committed(&self) -> Vec<Commitment> {
+		vec![]
+	}
 
-// 	fn outputs_committed(&self) -> Vec<Commitment> {
-// 		let mut commitments = vec![];
-// 		for pos in self.output_pmmr.leaf_pos_iter() {
-// 			if let Some(out) = self.output_pmmr.get_data(pos) {
-// 				commitments.push(out.commit);
-// 			}
-// 		}
-// 		commitments
-// 	}
+	fn outputs_committed(&self) -> Vec<Commitment> {
+		let mut commitments = vec![];
+		for pos in self.extension.output_pmmr.leaf_pos_iter() {
+			if let Ok(Some(out)) = self.batch.get_output_by_pos(pos) {
+				commitments.push(out.commit);
+			}
+		}
+		commitments
+	}
 
-// 	fn kernels_committed(&self) -> Vec<Commitment> {
-// 		let mut commitments = vec![];
-// 		for n in 1..self.kernel_pmmr.unpruned_size() + 1 {
-// 			if pmmr::is_leaf(n) {
-// 				if let Some(kernel) = self.kernel_pmmr.get_data(n) {
-// 					commitments.push(kernel.excess());
-// 				}
-// 			}
-// 		}
-// 		commitments
-// 	}
-// }
+	fn kernels_committed(&self) -> Vec<Commitment> {
+		let mut commitments = vec![];
+		for n in 1..self.extension.kernel_pmmr.unpruned_size() + 1 {
+			if pmmr::is_leaf(n) {
+				if let Ok(Some(kernel)) = self.batch.get_kernel_by_pos(n) {
+					commitments.push(kernel.excess());
+				}
+			}
+		}
+		commitments
+	}
+}
 
 impl<'a> Extension<'a> {
 	fn new(trees: &'a mut TxHashSet, head: Tip) -> Extension<'a> {
@@ -1554,10 +1567,15 @@ impl<'a> Extension<'a> {
 		&self,
 		genesis: &BlockHeader,
 		header: &BlockHeader,
+		batch: &Batch<'_>,
 	) -> Result<(Commitment, Commitment), Error> {
 		let now = Instant::now();
 
-		let (utxo_sum, kernel_sum) = self.verify_kernel_sums(
+		let ext = ExtensionWithBatch {
+			extension: self,
+			batch: batch,
+		};
+		let (utxo_sum, kernel_sum) = ext.verify_kernel_sums(
 			header.total_overage(genesis.kernel_mmr_size > 0),
 			header.total_kernel_offset(),
 		)?;
@@ -1578,6 +1596,7 @@ impl<'a> Extension<'a> {
 		fast_validation: bool,
 		status: &dyn TxHashsetWriteStatus,
 		header: &BlockHeader,
+		batch: &Batch<'_>,
 	) -> Result<(Commitment, Commitment), Error> {
 		self.validate_mmrs()?;
 		self.validate_roots(header)?;
@@ -1590,15 +1609,15 @@ impl<'a> Extension<'a> {
 
 		// The real magicking happens here. Sum of kernel excesses should equal
 		// sum of unspent outputs minus total supply.
-		let (output_sum, kernel_sum) = self.validate_kernel_sums(genesis, header)?;
+		let (output_sum, kernel_sum) = self.validate_kernel_sums(genesis, header, batch)?;
 
 		// These are expensive verification step (skipped for "fast validation").
 		if !fast_validation {
 			// Verify the rangeproof associated with each unspent output.
-			self.verify_rangeproofs(status)?;
+			self.verify_rangeproofs(status, batch)?;
 
 			// Verify all the kernel signatures.
-			self.verify_kernel_signatures(status)?;
+			self.verify_kernel_signatures(status, batch)?;
 		}
 
 		Ok((output_sum, kernel_sum))
@@ -1641,7 +1660,11 @@ impl<'a> Extension<'a> {
 		)
 	}
 
-	fn verify_kernel_signatures(&self, status: &dyn TxHashsetWriteStatus) -> Result<(), Error> {
+	fn verify_kernel_signatures(
+		&self,
+		status: &dyn TxHashsetWriteStatus,
+		batch: &Batch<'_>,
+	) -> Result<(), Error> {
 		let now = Instant::now();
 		const KERNEL_BATCH_SIZE: usize = 5_000;
 
@@ -1650,10 +1673,13 @@ impl<'a> Extension<'a> {
 		let mut tx_kernels: Vec<TxKernel> = Vec::with_capacity(KERNEL_BATCH_SIZE);
 		for n in 1..self.kernel_pmmr.unpruned_size() + 1 {
 			if pmmr::is_leaf(n) {
-				let kernel = self
-					.kernel_pmmr
-					.get_data(n)
-					.ok_or_else(|| ErrorKind::TxKernelNotFound)?;
+				// let kernel = self
+				// 	.kernel_pmmr
+				// 	.get_data(n)
+				// 	.ok_or_else(|| ErrorKind::TxKernelNotFound)?;
+				let kernel = batch
+					.get_kernel_by_pos(n)?
+					.ok_or(ErrorKind::TxKernelNotFound)?;
 				tx_kernels.push(kernel);
 			}
 
@@ -1679,7 +1705,11 @@ impl<'a> Extension<'a> {
 		Ok(())
 	}
 
-	fn verify_rangeproofs(&self, status: &dyn TxHashsetWriteStatus) -> Result<(), Error> {
+	fn verify_rangeproofs(
+		&self,
+		status: &dyn TxHashsetWriteStatus,
+		batch: &Batch<'_>,
+	) -> Result<(), Error> {
 		let now = Instant::now();
 
 		let mut commits: Vec<Commitment> = Vec::with_capacity(1_000);
@@ -1689,8 +1719,8 @@ impl<'a> Extension<'a> {
 		let total_rproofs = self.output_pmmr.n_unpruned_leaves();
 
 		for pos in self.output_pmmr.leaf_pos_iter() {
-			let output = self.output_pmmr.get_data(pos);
-			let proof = self.rproof_pmmr.get_data(pos);
+			let output = batch.get_output_by_pos(pos)?;
+			let proof = batch.get_rangeproof_by_pos(pos)?;
 
 			// Output and corresponding rangeproof *must* exist.
 			// It is invalid for either to be missing and we fail immediately in this case.

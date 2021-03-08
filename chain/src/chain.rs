@@ -649,7 +649,7 @@ impl Chain {
 		txhashset::extending_readonly(&mut header_pmmr, &mut txhashset, |ext, batch| {
 			pipe::rewind_and_apply_fork(&header, ext, batch)?;
 			ext.extension
-				.validate(&self.genesis, fast_validation, &NoStatus, &header)?;
+				.validate(&self.genesis, fast_validation, &NoStatus, &header, batch)?;
 			Ok(())
 		})
 	}
@@ -999,7 +999,7 @@ impl Chain {
 				// Validate the extension, generating the utxo_sum and kernel_sum.
 				// Full validation, including rangeproofs and kernel signature verification.
 				let (utxo_sum, kernel_sum) =
-					extension.validate(&self.genesis, false, status, &header)?;
+					extension.validate(&self.genesis, false, status, &header, batch)?;
 
 				// Save the block_sums (utxo_sum, kernel_sum) to the db for use later.
 				batch.save_block_sums(
@@ -1099,7 +1099,9 @@ impl Chain {
 		}
 
 		let mut count = 0;
-		let tail_hash = batch.get_header_hash_by_height(head.height - horizon)?;
+		let tail_hash = batch
+			.get_header_hash_by_height(head.height - horizon)?
+			.ok_or(ErrorKind::HeaderNotFound)?;
 		let tail = batch.get_block_header(&tail_hash)?;
 
 		// Remove old blocks (including short lived fork blocks) which height < tail.height
@@ -1154,7 +1156,9 @@ impl Chain {
 			let current_height = head_header.height;
 			let horizon_height =
 				current_height.saturating_sub(global::cut_through_horizon().into());
-			let horizon_hash = header_pmmr.get_header_hash_by_height(horizon_height)?;
+			let horizon_hash = batch
+				.get_header_hash_by_height(horizon_height)?
+				.ok_or(ErrorKind::HeaderNotFound)?;
 			let horizon_header = batch.get_block_header(&horizon_hash)?;
 
 			txhashset.compact(&horizon_header, &batch)?;
@@ -1309,9 +1313,10 @@ impl Chain {
 	/// Gets the block header at the provided height.
 	/// Note: Takes a read lock on the header_pmmr.
 	pub fn get_header_by_height(&self, height: u64) -> Result<BlockHeader, Error> {
-		let hash = self.store.get_header_hash_by_height(height)?;
-
-		let hash = self.get_header_hash_by_height(height)?;
+		let hash = self
+			.store
+			.get_header_hash_by_height(height)?
+			.ok_or(ErrorKind::HeaderNotFound)?;
 		self.get_block_header(&hash)
 	}
 
@@ -1329,7 +1334,10 @@ impl Chain {
 			Some(o) => o,
 			None => return Err(ErrorKind::OutputNotFound.into()),
 		};
-		let hash = header_pmmr.get_header_hash_by_height(pos.height)?;
+		let hash = self
+			.store
+			.get_header_hash_by_height(pos.height)?
+			.ok_or(ErrorKind::HeaderNotFound)?;
 		Ok(self.get_block_header(&hash)?)
 	}
 
@@ -1403,12 +1411,18 @@ impl Chain {
 
 		loop {
 			let search_height = max - (max - min) / 2;
-			let hash = header_pmmr.get_header_hash_by_height(search_height)?;
+			let hash = self
+				.store
+				.get_header_hash_by_height(search_height)?
+				.ok_or(ErrorKind::HeaderNotFound)?;
 			let h = self.get_block_header(&hash)?;
 			if search_height == 0 {
 				return Ok(h);
 			}
-			let hash_prev = header_pmmr.get_header_hash_by_height(search_height - 1)?;
+			let hash_prev = self
+				.store
+				.get_header_hash_by_height(search_height - 1)?
+				.ok_or(ErrorKind::HeaderNotFound)?;
 			let h_prev = self.get_block_header(&hash_prev)?;
 			if kernel_mmr_index > h.kernel_mmr_size {
 				min = search_height;
@@ -1437,11 +1451,15 @@ impl Chain {
 
 	/// Gets multiple headers at the provided heights.
 	pub fn get_locator_hashes(&self, heights: &[u64]) -> Result<Vec<Hash>, Error> {
-		let pmmr = self.header_pmmr.read();
-		heights
-			.iter()
-			.map(|h| pmmr.get_header_hash_by_height(*h))
-			.collect()
+		let mut hashes = Vec::with_capacity(heights.len());
+		for x in heights {
+			let hash = self
+				.store
+				.get_header_hash_by_height(*x)?
+				.ok_or(ErrorKind::HeaderNotFound)?;
+			hashes.push(hash);
+		}
+		Ok(hashes)
 	}
 
 	/// Builds an iterator on blocks starting from the current chain head and
@@ -1483,18 +1501,19 @@ fn setup_head(
 	}
 
 	// Make sure our header PMMR is consistent with header_head from db if it exists.
-	// If header_head is missing in db then use head of header PMMR.
 	if let Ok(head) = batch.header_head() {
-		header_pmmr.init_head(&head)?;
+		// header_pmmr.init_head(&head, &batch)?;
+
 		txhashset::header_extending(header_pmmr, &mut batch, |ext, batch| {
 			let header = batch.get_block_header(&head.hash())?;
 			ext.rewind(&header)
 		})?;
-	} else {
-		let hash = header_pmmr.head_hash()?;
-		let header = batch.get_block_header(&hash)?;
-		batch.save_header_head(&Tip::from_header(&header))?;
 	}
+	// else {
+	// 	let hash = header_pmmr.head_hash()?;
+	// 	let header = batch.get_block_header(&hash)?;
+	// 	batch.save_header_head(&Tip::from_header(&header))?;
+	// }
 
 	// check if we have a head in store, otherwise the genesis block is it
 	let head_res = batch.head();
@@ -1529,7 +1548,7 @@ fn setup_head(
 						// Do a full (and slow) validation of the txhashset extension
 						// to calculate the utxo_sum and kernel_sum at this block height.
 						let (utxo_sum, kernel_sum) =
-							extension.validate_kernel_sums(&genesis.header, &header)?;
+							extension.validate_kernel_sums(&genesis.header, &header, batch)?;
 
 						// Save the block_sums to the db for use later.
 						batch.save_block_sums(

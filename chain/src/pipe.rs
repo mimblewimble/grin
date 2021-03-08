@@ -193,11 +193,14 @@ pub fn process_block_headers(
 	// Check if we know about all these headers. If so we can accept them quickly.
 	// If they *do not* increase total work on the sync chain we are done.
 	// If they *do* increase total work then we should process them to update sync_head.
-	let head = {
-		let hash = ctx.header_pmmr.head_hash()?;
-		let header = ctx.batch.get_block_header(&hash)?;
-		Tip::from_header(&header)
-	};
+
+	let head = ctx.batch.header_head()?;
+
+	// let head = {
+	// 	let hash = ctx.header_pmmr.head_hash()?;
+	// 	let header = ctx.batch.get_block_header(&hash)?;
+	// 	Tip::from_header(&header)
+	// };
 
 	if let Ok(existing) = ctx.batch.get_block_header(&last_header.hash()) {
 		if !has_more_work(&existing, &head) {
