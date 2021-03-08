@@ -73,8 +73,8 @@ fn pmmr_append() {
 			let pmmr: PMMR<'_, TestElem, _> = PMMR::at(&mut backend, mmr_size);
 
 			assert_eq!(pmmr.n_unpruned_leaves(), 4);
-			assert_eq!(pmmr.get_data(1), Some(elems[0]));
-			assert_eq!(pmmr.get_data(2), Some(elems[1]));
+			// assert_eq!(pmmr.get_data(1), Some(elems[0]));
+			// assert_eq!(pmmr.get_data(2), Some(elems[1]));
 
 			assert_eq!(pmmr.get_hash(1), Some(pos_0));
 			assert_eq!(pmmr.get_hash(2), Some(pos_1));
@@ -967,13 +967,13 @@ impl DefaultHashable for TestElem {}
 impl PMMRable for TestElem {
 	type E = Self;
 
-	fn as_elmt(&self) -> Self::E {
-		self.clone()
-	}
+	// fn as_elmt(&self) -> Self::E {
+	// 	self.clone()
+	// }
 
-	fn elmt_size() -> Option<u16> {
-		Some(4)
-	}
+	// fn elmt_size() -> Option<u16> {
+	// 	Some(4)
+	// }
 }
 
 impl Writeable for TestElem {

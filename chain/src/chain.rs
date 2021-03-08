@@ -1311,33 +1311,26 @@ impl Chain {
 	}
 
 	/// Gets the block header at the provided height.
-	/// Note: Takes a read lock on the header_pmmr.
 	pub fn get_header_by_height(&self, height: u64) -> Result<BlockHeader, Error> {
-		let hash = self
-			.store
-			.get_header_hash_by_height(height)?
-			.ok_or(ErrorKind::HeaderNotFound)?;
+		let hash = self.get_header_hash_by_height(height)?;
 		self.get_block_header(&hash)
 	}
 
-	// /// Gets the header hash at the provided height.
-	// /// Note: Takes a read lock on the header_pmmr.
-	// fn get_header_hash_by_height(&self, height: u64) -> Result<Hash, Error> {
-	// 	self.header_pmmr.read().get_header_hash_by_height(height)
-	// }
+	/// Gets the header hash at the provided height.
+	pub fn get_header_hash_by_height(&self, height: u64) -> Result<Hash, Error> {
+		self.store
+			.get_header_hash_by_height(height)?
+			.ok_or(ErrorKind::HeaderNotFound.into())
+	}
 
 	/// Gets the block header in which a given output appears in the txhashset.
 	pub fn get_header_for_output(&self, commit: Commitment) -> Result<BlockHeader, Error> {
-		let header_pmmr = self.header_pmmr.read();
 		let txhashset = self.txhashset.read();
 		let (_, pos) = match txhashset.get_unspent(commit)? {
 			Some(o) => o,
 			None => return Err(ErrorKind::OutputNotFound.into()),
 		};
-		let hash = self
-			.store
-			.get_header_hash_by_height(pos.height)?
-			.ok_or(ErrorKind::HeaderNotFound)?;
+		let hash = self.get_header_hash_by_height(pos.height)?;
 		Ok(self.get_block_header(&hash)?)
 	}
 
@@ -1411,18 +1404,12 @@ impl Chain {
 
 		loop {
 			let search_height = max - (max - min) / 2;
-			let hash = self
-				.store
-				.get_header_hash_by_height(search_height)?
-				.ok_or(ErrorKind::HeaderNotFound)?;
+			let hash = self.get_header_hash_by_height(search_height)?;
 			let h = self.get_block_header(&hash)?;
 			if search_height == 0 {
 				return Ok(h);
 			}
-			let hash_prev = self
-				.store
-				.get_header_hash_by_height(search_height - 1)?
-				.ok_or(ErrorKind::HeaderNotFound)?;
+			let hash_prev = self.get_header_hash_by_height(search_height - 1)?;
 			let h_prev = self.get_block_header(&hash_prev)?;
 			if kernel_mmr_index > h.kernel_mmr_size {
 				min = search_height;
@@ -1453,10 +1440,7 @@ impl Chain {
 	pub fn get_locator_hashes(&self, heights: &[u64]) -> Result<Vec<Hash>, Error> {
 		let mut hashes = Vec::with_capacity(heights.len());
 		for x in heights {
-			let hash = self
-				.store
-				.get_header_hash_by_height(*x)?
-				.ok_or(ErrorKind::HeaderNotFound)?;
+			let hash = self.get_header_hash_by_height(*x)?;
 			hashes.push(hash);
 		}
 		Ok(hashes)
