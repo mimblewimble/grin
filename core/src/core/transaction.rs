@@ -671,13 +671,13 @@ impl Readable for TxKernel {
 impl PMMRable for TxKernel {
 	type E = Self;
 
-	fn as_elmt(&self) -> Self::E {
-		self.clone()
-	}
+	// fn as_elmt(&self) -> Self::E {
+	// 	self.clone()
+	// }
 
-	fn elmt_size() -> Option<u16> {
-		None
-	}
+	// fn elmt_size() -> Option<u16> {
+	// 	None
+	// }
 }
 
 impl KernelFeatures {
@@ -2282,17 +2282,17 @@ impl Readable for OutputIdentifier {
 impl PMMRable for OutputIdentifier {
 	type E = Self;
 
-	fn as_elmt(&self) -> OutputIdentifier {
-		*self
-	}
+	// fn as_elmt(&self) -> OutputIdentifier {
+	// 	*self
+	// }
 
-	fn elmt_size() -> Option<u16> {
-		Some(
-			(1 + secp::constants::PEDERSEN_COMMITMENT_SIZE)
-				.try_into()
-				.unwrap(),
-		)
-	}
+	// fn elmt_size() -> Option<u16> {
+	// 	Some(
+	// 		(1 + secp::constants::PEDERSEN_COMMITMENT_SIZE)
+	// 			.try_into()
+	// 			.unwrap(),
+	// 	)
+	// }
 }
 
 impl From<&Input> for OutputIdentifier {

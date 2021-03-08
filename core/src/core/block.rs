@@ -252,21 +252,21 @@ impl Default for BlockHeader {
 impl PMMRable for BlockHeader {
 	type E = HeaderEntry;
 
-	fn as_elmt(&self) -> Self::E {
-		HeaderEntry {
-			hash: self.hash(),
-			timestamp: self.timestamp.timestamp() as u64,
-			total_difficulty: self.total_difficulty(),
-			secondary_scaling: self.pow.secondary_scaling,
-			is_secondary: self.pow.is_secondary(),
-		}
-	}
+	// fn as_elmt(&self) -> Self::E {
+	// 	HeaderEntry {
+	// 		hash: self.hash(),
+	// 		timestamp: self.timestamp.timestamp() as u64,
+	// 		total_difficulty: self.total_difficulty(),
+	// 		secondary_scaling: self.pow.secondary_scaling,
+	// 		is_secondary: self.pow.is_secondary(),
+	// 	}
+	// }
 
-	// Size is hash + u64 + difficulty + u32 + u8.
-	fn elmt_size() -> Option<u16> {
-		const LEN: usize = Hash::LEN + 8 + Difficulty::LEN + 4 + 1;
-		Some(LEN.try_into().unwrap())
-	}
+	// // Size is hash + u64 + difficulty + u32 + u8.
+	// fn elmt_size() -> Option<u16> {
+	// 	const LEN: usize = Hash::LEN + 8 + Difficulty::LEN + 4 + 1;
+	// 	Some(LEN.try_into().unwrap())
+	// }
 }
 
 /// Serialization of a block header

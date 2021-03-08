@@ -27,7 +27,7 @@ pub trait Backend<T: PMMRable> {
 	/// associated data element to flatfile storage (for leaf nodes only). The
 	/// position of the first element of the Vec in the MMR is provided to
 	/// help the implementation.
-	fn append(&mut self, data: &T, hashes: &[Hash]) -> Result<(), String>;
+	fn append(&mut self, hashes: &[Hash]) -> Result<(), String>;
 
 	/// Rewind the backend state to a previous position, as if all append
 	/// operations after that had been canceled. Expects a position in the PMMR
@@ -39,8 +39,8 @@ pub trait Backend<T: PMMRable> {
 	/// Get a Hash by insertion position.
 	fn get_hash(&self, position: u64) -> Option<Hash>;
 
-	/// Get underlying data by insertion position.
-	fn get_data(&self, position: u64) -> Option<T::E>;
+	// /// Get underlying data by insertion position.
+	// fn get_data(&self, position: u64) -> Option<T::E>;
 
 	/// Get a Hash  by original insertion position
 	/// (ignoring the remove log).
@@ -51,9 +51,9 @@ pub trait Backend<T: PMMRable> {
 	/// Peaks can be assumed to not be compacted.
 	fn get_peak_from_file(&self, position: u64) -> Option<Hash>;
 
-	/// Get a Data Element by original insertion position
-	/// (ignoring the remove log).
-	fn get_data_from_file(&self, position: u64) -> Option<T::E>;
+	// /// Get a Data Element by original insertion position
+	// /// (ignoring the remove log).
+	// fn get_data_from_file(&self, position: u64) -> Option<T::E>;
 
 	/// Iterator over current (unpruned, unremoved) leaf positions.
 	fn leaf_pos_iter(&self) -> Box<dyn Iterator<Item = u64> + '_>;

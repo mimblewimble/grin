@@ -220,13 +220,13 @@ impl BitmapChunk {
 impl PMMRable for BitmapChunk {
 	type E = Self;
 
-	fn as_elmt(&self) -> Self::E {
-		self.clone()
-	}
+	// fn as_elmt(&self) -> Self::E {
+	// 	self.clone()
+	// }
 
-	fn elmt_size() -> Option<u16> {
-		Some(Self::LEN_BYTES as u16)
-	}
+	// fn elmt_size() -> Option<u16> {
+	// 	Some(Self::LEN_BYTES as u16)
+	// }
 }
 
 impl DefaultHashable for BitmapChunk {}

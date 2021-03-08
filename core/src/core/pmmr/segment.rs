@@ -249,13 +249,15 @@ where
 		let (segment_first_pos, segment_last_pos) = segment.segment_pos_range(last_pos);
 		for pos in segment_first_pos..=segment_last_pos {
 			if pmmr::is_leaf(pos) {
-				if let Some(data) = pmmr.get_data_from_file(pos) {
-					segment.leaf_data.push(data);
-					segment.leaf_pos.push(pos);
-					continue;
-				} else if !prunable {
-					return Err(SegmentError::MissingLeaf(pos));
-				}
+				panic!("we need to read data from db here");
+
+				// if let Some(data) = pmmr.get_data_from_file(pos) {
+				// 	segment.leaf_data.push(data);
+				// 	segment.leaf_pos.push(pos);
+				// 	continue;
+				// } else if !prunable {
+				// 	return Err(SegmentError::MissingLeaf(pos));
+				// }
 			}
 			// TODO: optimize, no need to send every intermediary hash
 			if prunable {

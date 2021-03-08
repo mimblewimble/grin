@@ -33,8 +33,8 @@ pub trait ReadablePMMR {
 	/// Get the hash at provided position in the MMR.
 	fn get_hash(&self, pos: u64) -> Option<Hash>;
 
-	/// Get the data element at provided position in the MMR.
-	fn get_data(&self, pos: u64) -> Option<Self::Item>;
+	// /// Get the data element at provided position in the MMR.
+	// fn get_data(&self, pos: u64) -> Option<Self::Item>;
 
 	/// Get the hash from the underlying MMR file (ignores the remove log).
 	fn get_from_file(&self, pos: u64) -> Option<Hash>;
@@ -44,8 +44,8 @@ pub trait ReadablePMMR {
 	/// Peaks can be assumed to not be compacted.
 	fn get_peak_from_file(&self, pos: u64) -> Option<Hash>;
 
-	/// Get the data element at provided position in the MMR (ignores the remove log).
-	fn get_data_from_file(&self, pos: u64) -> Option<Self::Item>;
+	// /// Get the data element at provided position in the MMR (ignores the remove log).
+	// fn get_data_from_file(&self, pos: u64) -> Option<Self::Item>;
 
 	/// Total size of the tree, including intermediary nodes and ignoring any pruning.
 	fn unpruned_size(&self) -> u64;
@@ -237,7 +237,7 @@ where
 		}
 
 		// append all the new nodes and update the MMR index
-		self.backend.append(elmt, &hashes)?;
+		self.backend.append(&hashes)?;
 		self.last_pos = pos;
 		Ok(elmt_pos)
 	}
@@ -394,18 +394,18 @@ where
 		}
 	}
 
-	fn get_data(&self, pos: u64) -> Option<Self::Item> {
-		if pos > self.last_pos {
-			// If we are beyond the rhs of the MMR return None.
-			None
-		} else if is_leaf(pos) {
-			// If we are a leaf then get data from the backend.
-			self.backend.get_data(pos)
-		} else {
-			// If we are not a leaf then return None as only leaves have data.
-			None
-		}
-	}
+	// fn get_data(&self, pos: u64) -> Option<Self::Item> {
+	// 	if pos > self.last_pos {
+	// 		// If we are beyond the rhs of the MMR return None.
+	// 		None
+	// 	} else if is_leaf(pos) {
+	// 		// If we are a leaf then get data from the backend.
+	// 		self.backend.get_data(pos)
+	// 	} else {
+	// 		// If we are not a leaf then return None as only leaves have data.
+	// 		None
+	// 	}
+	// }
 
 	fn get_from_file(&self, pos: u64) -> Option<Hash> {
 		if pos > self.last_pos {
@@ -423,13 +423,13 @@ where
 		}
 	}
 
-	fn get_data_from_file(&self, pos: u64) -> Option<Self::Item> {
-		if pos > self.last_pos {
-			None
-		} else {
-			self.backend.get_data_from_file(pos)
-		}
-	}
+	// fn get_data_from_file(&self, pos: u64) -> Option<Self::Item> {
+	// 	if pos > self.last_pos {
+	// 		None
+	// 	} else {
+	// 		self.backend.get_data_from_file(pos)
+	// 	}
+	// }
 
 	fn unpruned_size(&self) -> u64 {
 		self.last_pos

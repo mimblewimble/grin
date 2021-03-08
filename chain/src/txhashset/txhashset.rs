@@ -184,58 +184,67 @@ impl TxHashSet {
 		// Initialize the bitmap accumulator from the current output PMMR.
 		let bitmap_accumulator = TxHashSet::bitmap_accumulator(&output_pmmr_h)?;
 
-		let mut maybe_kernel_handle: Option<PMMRHandle<TxKernel>> = None;
-		let versions = vec![ProtocolVersion(2), ProtocolVersion(1)];
-		for version in versions {
-			let handle = PMMRHandle::new(
-				Path::new(&root_dir)
-					.join(TXHASHSET_SUBDIR)
-					.join(KERNEL_SUBDIR),
-				false, // not prunable
-				version,
-				None,
-			)?;
-			if handle.last_pos == 0 {
-				debug!(
-					"attempting to open (empty) kernel PMMR using {:?} - SUCCESS",
-					version
-				);
-				maybe_kernel_handle = Some(handle);
-				break;
-			}
-			let kernel: Option<TxKernel> = ReadonlyPMMR::at(&handle.backend, 1).get_data(1);
-			if let Some(kernel) = kernel {
-				if kernel.verify().is_ok() {
-					debug!(
-						"attempting to open kernel PMMR using {:?} - SUCCESS",
-						version
-					);
-					maybe_kernel_handle = Some(handle);
-					break;
-				} else {
-					debug!(
-						"attempting to open kernel PMMR using {:?} - FAIL (verify failed)",
-						version
-					);
-				}
-			} else {
-				debug!(
-					"attempting to open kernel PMMR using {:?} - FAIL (read failed)",
-					version
-				);
-			}
-		}
-		if let Some(kernel_pmmr_h) = maybe_kernel_handle {
-			Ok(TxHashSet {
-				output_pmmr_h,
-				rproof_pmmr_h,
-				kernel_pmmr_h,
-				bitmap_accumulator,
-				commit_index,
-			})
-		} else {
-			Err(ErrorKind::TxHashSetErr("failed to open kernel PMMR".to_string()).into())
-		}
+		let kernel_pmmr_h = PMMRHandle::new(
+			Path::new(&root_dir)
+				.join(TXHASHSET_SUBDIR)
+				.join(KERNEL_SUBDIR),
+			false, // not prunable
+			ProtocolVersion(1),
+			None,
+		)?;
+
+		// let mut maybe_kernel_handle: Option<PMMRHandle<TxKernel>> = None;
+		// let versions = vec![ProtocolVersion(2), ProtocolVersion(1)];
+		// for version in versions {
+		// 	let handle = PMMRHandle::new(
+		// 		Path::new(&root_dir)
+		// 			.join(TXHASHSET_SUBDIR)
+		// 			.join(KERNEL_SUBDIR),
+		// 		false, // not prunable
+		// 		version,
+		// 		None,
+		// 	)?;
+		// 	if handle.last_pos == 0 {
+		// 		debug!(
+		// 			"attempting to open (empty) kernel PMMR using {:?} - SUCCESS",
+		// 			version
+		// 		);
+		// 		maybe_kernel_handle = Some(handle);
+		// 		break;
+		// 	}
+		// 	let kernel: Option<TxKernel> = ReadonlyPMMR::at(&handle.backend, 1).get_data(1);
+		// 	if let Some(kernel) = kernel {
+		// 		if kernel.verify().is_ok() {
+		// 			debug!(
+		// 				"attempting to open kernel PMMR using {:?} - SUCCESS",
+		// 				version
+		// 			);
+		// 			maybe_kernel_handle = Some(handle);
+		// 			break;
+		// 		} else {
+		// 			debug!(
+		// 				"attempting to open kernel PMMR using {:?} - FAIL (verify failed)",
+		// 				version
+		// 			);
+		// 		}
+		// 	} else {
+		// 		debug!(
+		// 			"attempting to open kernel PMMR using {:?} - FAIL (read failed)",
+		// 			version
+		// 		);
+		// 	}
+		// }
+		// if let Some(kernel_pmmr_h) = maybe_kernel_handle {
+		Ok(TxHashSet {
+			output_pmmr_h,
+			rproof_pmmr_h,
+			kernel_pmmr_h,
+			bitmap_accumulator,
+			commit_index,
+		})
+		// } else {
+		// 	Err(ErrorKind::TxHashSetErr("failed to open kernel PMMR".to_string()).into())
+		// }
 	}
 
 	// Build a new bitmap accumulator for the provided output PMMR.
@@ -540,7 +549,7 @@ impl TxHashSet {
 		// do not point to to the expected output.
 		let mut removed_count = 0;
 		for (key, pos) in batch.output_pos_iter()? {
-			if let Some(out) = output_pmmr.get_data(pos.pos) {
+			if let Some(out) = batch.get_output_by_pos(pos.pos)? {
 				if let Ok(pos_via_mmr) = batch.get_output_pos(&out.commitment()) {
 					// If the pos matches and the index key matches the commitment
 					// then keep the entry, other we want to clean it up.
@@ -561,7 +570,7 @@ impl TxHashSet {
 
 		let mut outputs_pos: Vec<(Commitment, u64)> = vec![];
 		for pos in output_pmmr.leaf_pos_iter() {
-			if let Some(out) = output_pmmr.get_data(pos) {
+			if let Some(out) = batch.get_output_by_pos(pos)? {
 				outputs_pos.push((out.commit, pos));
 			}
 		}
@@ -1213,7 +1222,7 @@ impl<'a> Extension<'a> {
 		let commit = out.commitment();
 
 		if let Ok(pos) = batch.get_output_pos(&commit) {
-			if let Some(out_mmr) = self.output_pmmr.get_data(pos) {
+			if let Some(out_mmr) = batch.get_output_by_pos(pos)? {
 				if out_mmr.commitment() == commit {
 					return Err(ErrorKind::DuplicateCommitment(commit).into());
 				}
@@ -1425,7 +1434,7 @@ impl<'a> Extension<'a> {
 		// The output_pos index should be updated to reflect the old pos 1 when unspent.
 		if let Ok(spent) = spent {
 			for pos in spent {
-				if let Some(out) = self.output_pmmr.get_data(pos.pos) {
+				if let Some(out) = batch.get_output_by_pos(pos.pos)? {
 					batch.save_output_pos_height(&out.commitment(), pos)?;
 				}
 			}

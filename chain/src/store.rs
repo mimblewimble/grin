@@ -23,9 +23,10 @@ use crate::linked_list::MultiIndex;
 use crate::types::{CommitPos, Tip};
 use crate::util::secp::pedersen::Commitment;
 use croaring::Bitmap;
-use grin_core::ser;
+use grin_core::{core::OutputIdentifier, ser};
 use grin_store as store;
 use grin_store::{option_to_not_found, to_key, Error};
+use grin_util::secp::pedersen::RangeProof;
 use std::convert::TryInto;
 use std::sync::Arc;
 
@@ -273,6 +274,14 @@ impl<'a> Batch<'a> {
 				.map(|pos| (k.to_vec(), pos))
 				.map_err(From::from)
 		})
+	}
+
+	pub fn get_output_by_pos(&self, pos: u64) -> Result<Option<OutputIdentifier>, Error> {
+		unimplemented!();
+	}
+
+	pub fn get_rangeproof_by_pos(&self, pos: u64) -> Result<Option<RangeProof>, Error> {
+		unimplemented!();
 	}
 
 	/// Get output_pos from index.

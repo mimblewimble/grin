@@ -749,14 +749,14 @@ impl Readable for RangeProof {
 impl PMMRable for RangeProof {
 	type E = Self;
 
-	fn as_elmt(&self) -> Self::E {
-		*self
-	}
+	// fn as_elmt(&self) -> Self::E {
+	// 	*self
+	// }
 
-	// Size is length prefix (8 bytes for u64) + MAX_PROOF_SIZE.
-	fn elmt_size() -> Option<u16> {
-		Some((8 + MAX_PROOF_SIZE).try_into().unwrap())
-	}
+	// // Size is length prefix (8 bytes for u64) + MAX_PROOF_SIZE.
+	// fn elmt_size() -> Option<u16> {
+	// 	Some((8 + MAX_PROOF_SIZE).try_into().unwrap())
+	// }
 }
 
 impl Readable for Signature {
@@ -964,11 +964,11 @@ pub trait PMMRable: Writeable + Clone + Debug + DefaultHashable {
 	/// This allows us to store Hash elements in the header MMR for variable size BlockHeaders.
 	type E: Readable + Writeable + Debug;
 
-	/// Convert the pmmrable into the element to be stored in the MMR data file.
-	fn as_elmt(&self) -> Self::E;
+	// /// Convert the pmmrable into the element to be stored in the MMR data file.
+	// fn as_elmt(&self) -> Self::E;
 
-	/// Size of each element if "fixed" size. Elements are "variable" size if None.
-	fn elmt_size() -> Option<u16>;
+	// /// Size of each element if "fixed" size. Elements are "variable" size if None.
+	// fn elmt_size() -> Option<u16>;
 }
 
 /// Generic trait to ensure PMMR elements can be hashed with an index
