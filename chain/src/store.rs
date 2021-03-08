@@ -23,7 +23,10 @@ use crate::linked_list::MultiIndex;
 use crate::types::{CommitPos, Tip};
 use crate::util::secp::pedersen::Commitment;
 use croaring::Bitmap;
-use grin_core::{core::OutputIdentifier, ser};
+use grin_core::{
+	core::{OutputIdentifier, TxKernel},
+	ser,
+};
 use grin_store as store;
 use grin_store::{option_to_not_found, to_key, Error};
 use grin_util::secp::pedersen::RangeProof;
@@ -110,6 +113,10 @@ impl ChainStore {
 		option_to_not_found(self.db.get_ser(&to_key(BLOCK_HEADER_PREFIX, h)), || {
 			format!("BLOCK HEADER: {}", h)
 		})
+	}
+
+	pub fn get_output_by_pos(&self, pos: u64) -> Result<Option<OutputIdentifier>, Error> {
+		unimplemented!();
 	}
 
 	/// Get PMMR pos for the given output commitment.
@@ -246,6 +253,18 @@ impl<'a> Batch<'a> {
 		Ok(())
 	}
 
+	pub fn save_output_by_pos(&self, out: &OutputIdentifier, pos: u64) -> Result<(), Error> {
+		unimplemented!();
+	}
+
+	pub fn save_rangeproof_by_pos(&self, rp: &RangeProof, pos: u64) -> Result<(), Error> {
+		unimplemented!();
+	}
+
+	pub fn save_kernel_by_pos(&self, kern: &TxKernel, pos: u64) -> Result<(), Error> {
+		unimplemented!();
+	}
+
 	/// Save output_pos and block height to index.
 	pub fn save_output_pos_height(&self, commit: &Commitment, pos: CommitPos) -> Result<(), Error> {
 		self.db
@@ -281,6 +300,10 @@ impl<'a> Batch<'a> {
 	}
 
 	pub fn get_rangeproof_by_pos(&self, pos: u64) -> Result<Option<RangeProof>, Error> {
+		unimplemented!();
+	}
+
+	pub fn get_kernel_by_pos(&self, pos: u64) -> Result<Option<TxKernel>, Error> {
 		unimplemented!();
 	}
 

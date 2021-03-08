@@ -276,7 +276,7 @@ impl TxHashSet {
 			Ok(Some(pos)) => {
 				let output_pmmr: ReadonlyPMMR<'_, OutputIdentifier, _> =
 					ReadonlyPMMR::at(&self.output_pmmr_h.backend, self.output_pmmr_h.last_pos);
-				if let Some(out) = output_pmmr.get_data(pos.pos) {
+				if let Some(out) = self.commit_index.get_output_by_pos(pos.pos)? {
 					if out.commitment() == commit {
 						Ok(Some((out, pos)))
 					} else {
@@ -502,7 +502,7 @@ impl TxHashSet {
 		let mut count = 0;
 		while current_pos <= self.kernel_pmmr_h.last_pos {
 			if pmmr::is_leaf(current_pos) {
-				if let Some(kernel) = kernel_pmmr.get_data(current_pos) {
+				if let Some(kernel) = batch.get_kernel_by_pos(current_pos)? {
 					match kernel.features {
 						KernelFeatures::NoRecentDuplicate { .. } => {
 							while current_pos > current_header.kernel_mmr_size {
@@ -1045,33 +1045,35 @@ pub struct Extension<'a> {
 	rollback: bool,
 }
 
-impl<'a> Committed for Extension<'a> {
-	fn inputs_committed(&self) -> Vec<Commitment> {
-		vec![]
-	}
+// TODO - we need a batch here - Committed for (Extension, Batch) ?
 
-	fn outputs_committed(&self) -> Vec<Commitment> {
-		let mut commitments = vec![];
-		for pos in self.output_pmmr.leaf_pos_iter() {
-			if let Some(out) = self.output_pmmr.get_data(pos) {
-				commitments.push(out.commit);
-			}
-		}
-		commitments
-	}
+// impl<'a> Committed for Extension<'a> {
+// 	fn inputs_committed(&self) -> Vec<Commitment> {
+// 		vec![]
+// 	}
 
-	fn kernels_committed(&self) -> Vec<Commitment> {
-		let mut commitments = vec![];
-		for n in 1..self.kernel_pmmr.unpruned_size() + 1 {
-			if pmmr::is_leaf(n) {
-				if let Some(kernel) = self.kernel_pmmr.get_data(n) {
-					commitments.push(kernel.excess());
-				}
-			}
-		}
-		commitments
-	}
-}
+// 	fn outputs_committed(&self) -> Vec<Commitment> {
+// 		let mut commitments = vec![];
+// 		for pos in self.output_pmmr.leaf_pos_iter() {
+// 			if let Some(out) = self.output_pmmr.get_data(pos) {
+// 				commitments.push(out.commit);
+// 			}
+// 		}
+// 		commitments
+// 	}
+
+// 	fn kernels_committed(&self) -> Vec<Commitment> {
+// 		let mut commitments = vec![];
+// 		for n in 1..self.kernel_pmmr.unpruned_size() + 1 {
+// 			if pmmr::is_leaf(n) {
+// 				if let Some(kernel) = self.kernel_pmmr.get_data(n) {
+// 					commitments.push(kernel.excess());
+// 				}
+// 			}
+// 		}
+// 		commitments
+// 	}
+// }
 
 impl<'a> Extension<'a> {
 	fn new(trees: &'a mut TxHashSet, head: Tip) -> Extension<'a> {
@@ -1148,13 +1150,17 @@ impl<'a> Extension<'a> {
 		for out in b.outputs() {
 			let pos = self.apply_output(out, batch)?;
 			affected_pos.push(pos);
-			batch.save_output_pos_height(
-				&out.commitment(),
-				CommitPos {
-					pos,
-					height: b.header.height,
-				},
-			)?;
+
+			let commit_pos = CommitPos {
+				pos,
+				height: b.header.height,
+			};
+
+			// Save output and associated rangeproof to the db.
+			// Update the output_pos_height index for the output commitment.
+			batch.save_output_by_pos(&out.identifier(), pos)?;
+			batch.save_rangeproof_by_pos(&out.proof(), pos)?;
+			batch.save_output_pos_height(&out.commitment(), commit_pos)?;
 		}
 
 		// Use our utxo_view to identify outputs being spent by block inputs.
@@ -1228,6 +1234,7 @@ impl<'a> Extension<'a> {
 				}
 			}
 		}
+
 		// push the new output to the MMR.
 		let output_pos = self
 			.output_pmmr
@@ -1271,13 +1278,16 @@ impl<'a> Extension<'a> {
 	) -> Result<(), Error> {
 		for kernel in kernels {
 			let pos = self.apply_kernel(kernel)?;
+
+			batch.save_kernel_by_pos(kernel, pos)?;
+
 			let commit_pos = CommitPos { pos, height };
 			apply_kernel_rules(kernel, commit_pos, batch)?;
 		}
 		Ok(())
 	}
 
-	/// Push kernel onto MMR (hash and data files).
+	/// Push kernel onto MMR.
 	fn apply_kernel(&mut self, kernel: &TxKernel) -> Result<u64, Error> {
 		let pos = self
 			.kernel_pmmr
