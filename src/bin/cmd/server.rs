@@ -20,7 +20,6 @@ use std::thread;
 use std::time::Duration;
 
 use clap::ArgMatches;
-use ctrlc;
 
 use crate::config::GlobalConfig;
 use crate::p2p::Seeding;

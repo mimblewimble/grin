@@ -25,8 +25,6 @@ use chrono::prelude::*;
 use serde::de::{SeqAccess, Visitor};
 use serde::{Deserialize, Deserializer};
 
-use grin_store;
-
 use crate::chain;
 use crate::chain::txhashset::BitmapChunk;
 use crate::core::core;

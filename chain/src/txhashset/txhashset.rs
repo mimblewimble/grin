@@ -34,7 +34,6 @@ use crate::types::{CommitPos, OutputRoots, Tip, TxHashSetRoots, TxHashsetWriteSt
 use crate::util::secp::pedersen::{Commitment, RangeProof};
 use crate::util::{file, secp_static, zip};
 use croaring::Bitmap;
-use grin_store;
 use grin_store::pmmr::{clean_files_by_prefix, PMMRBackend};
 use std::fs::{self, File};
 use std::path::{Path, PathBuf};

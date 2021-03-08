@@ -14,7 +14,6 @@
 
 //! Configuration file management
 
-use dirs;
 use rand::distributions::{Alphanumeric, Distribution};
 use rand::thread_rng;
 use std::env;
@@ -23,7 +22,6 @@ use std::io::prelude::*;
 use std::io::BufReader;
 use std::io::Read;
 use std::path::PathBuf;
-use toml;
 
 use crate::comments::insert_comments;
 use crate::core::global;

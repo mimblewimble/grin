@@ -31,7 +31,6 @@ extern crate serde_derive;
 #[macro_use]
 extern crate log;
 
-use failure;
 use grin_core as core;
 use grin_keychain as keychain;
 use grin_util as util;

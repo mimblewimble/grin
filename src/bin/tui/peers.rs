@@ -18,8 +18,8 @@ use std::cmp::Ordering;
 
 use crate::servers::{PeerStats, ServerStats};
 
-use crate::tui::humansize::{file_size_opts::CONVENTIONAL, FileSize};
 use chrono::prelude::*;
+use humansize::{file_size_opts::CONVENTIONAL, FileSize};
 
 use cursive::direction::Orientation;
 use cursive::event::Key;

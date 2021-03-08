@@ -21,7 +21,6 @@ use crate::core::{core, ser};
 use crate::p2p;
 use crate::util::secp::pedersen;
 use crate::util::{self, ToHex};
-use serde;
 use serde::de::MapAccess;
 use serde::ser::SerializeStruct;
 use std::fmt;
@@ -30,7 +29,7 @@ macro_rules! no_dup {
 	($field:ident) => {
 		if $field.is_some() {
 			return Err(serde::de::Error::duplicate_field("$field"));
-			}
+		}
 	};
 }
 
@@ -644,7 +643,7 @@ impl BlockPrintable {
 			.map(|output| {
 				OutputPrintable::from_output(
 					output,
-					chain.clone(),
+					chain,
 					Some(&block.header),
 					include_proof,
 					include_merkle_proof,

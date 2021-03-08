@@ -12,7 +12,6 @@
 // limitations under the License.
 
 //! Common storage-related types
-use memmap;
 use tempfile::tempfile;
 
 use crate::core::ser::{

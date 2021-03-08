@@ -13,7 +13,6 @@
 // limitations under the License.
 
 use futures::future::{self, Future};
-use hyper;
 use hyper::service::Service;
 use hyper::{Body, Method, Request, Response, StatusCode};
 use std::collections::hash_map::DefaultHasher;

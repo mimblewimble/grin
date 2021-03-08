@@ -5,7 +5,6 @@ use futures::future::ok;
 use hyper::body;
 use hyper::{Body, Request, Response, StatusCode};
 use serde::{Deserialize, Serialize};
-use serde_json;
 use std::collections::HashMap;
 use std::fmt::Debug;
 use url::form_urlencoded;
