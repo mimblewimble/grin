@@ -977,8 +977,12 @@ impl<'a> HeaderExtension<'a> {
 	/// Apply a new header to the header MMR extension.
 	/// This may be either the header MMR or the sync MMR depending on the
 	/// extension.
-	pub fn apply_header(&mut self, header: &BlockHeader) -> Result<(), Error> {
+	pub fn apply_header(&mut self, header: &BlockHeader, batch: &Batch<'_>) -> Result<(), Error> {
 		self.pmmr.push(header).map_err(&ErrorKind::TxHashSetErr)?;
+
+		// Update the "header hash by height" index to reflect the new header.
+		batch.save_header_hash_by_height(header.hash(), header.height)?;
+
 		self.head = Tip::from_header(header);
 		Ok(())
 	}

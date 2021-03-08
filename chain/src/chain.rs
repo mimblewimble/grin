@@ -1478,8 +1478,8 @@ fn setup_head(
 		}
 
 		if header_pmmr.last_pos == 0 {
-			txhashset::header_extending(header_pmmr, &mut batch, |ext, _| {
-				ext.apply_header(&genesis.header)
+			txhashset::header_extending(header_pmmr, &mut batch, |ext, batch| {
+				ext.apply_header(&genesis.header, batch)
 			})?;
 		}
 	}

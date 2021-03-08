@@ -339,8 +339,10 @@ impl<'a> Batch<'a> {
 	}
 
 	pub fn get_header_hash_by_height(&self, height: u64) -> Result<Option<Hash>, Error> {
-		let pos = pmmr::insertion_to_pmmr_index(height + 1);
+		unimplemented!();
+	}
 
+	pub fn save_header_hash_by_height(&self, hash: Hash, height: u64) -> Result<(), Error> {
 		unimplemented!();
 	}
 

@@ -264,7 +264,7 @@ pub fn process_block_header(header: &BlockHeader, ctx: &mut BlockContext<'_>) ->
 	txhashset::header_extending(&mut ctx.header_pmmr, &mut ctx.batch, |ext, batch| {
 		rewind_and_apply_header_fork(&prev_header, ext, batch)?;
 		ext.validate_root(header)?;
-		ext.apply_header(header)?;
+		ext.apply_header(header, batch)?;
 		if !has_more_work(&header, &header_head) {
 			ext.force_rollback();
 		}
@@ -561,7 +561,7 @@ pub fn rewind_and_apply_header_fork(
 			.get_block_header(&h)
 			.map_err(|e| ErrorKind::StoreErr(e, "getting forked headers".to_string()))?;
 		ext.validate_root(&header)?;
-		ext.apply_header(&header)?;
+		ext.apply_header(&header, batch)?;
 	}
 
 	Ok(())
