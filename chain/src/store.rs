@@ -131,6 +131,10 @@ impl ChainStore {
 		self.db.get_ser(&u64_to_key(OUTPUT_MMR_PREFIX, pos))
 	}
 
+	pub fn get_rangeproof_by_pos(&self, pos: u64) -> Result<Option<RangeProof>, Error> {
+		self.db.get_ser(&u64_to_key(RANGEPROOF_MMR_PREFIX, pos))
+	}
+
 	/// Get kernel by MMR (leaf) pos.
 	pub fn get_kernel_by_pos(&self, pos: u64) -> Result<Option<TxKernel>, Error> {
 		self.db.get_ser(&u64_to_key(KERNEL_MMR_PREFIX, pos))

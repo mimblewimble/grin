@@ -229,14 +229,16 @@ where
 	T: Readable + Writeable + Debug,
 {
 	/// Generate a segment from a PMMR
-	pub fn from_pmmr<U, B>(
+	pub fn from_pmmr<U, B, F>(
 		segment_id: SegmentIdentifier,
 		pmmr: &ReadonlyPMMR<'_, U, B>,
 		prunable: bool,
+		find: F,
 	) -> Result<Self, SegmentError>
 	where
 		U: PMMRable<E = T>,
 		B: Backend<U>,
+		F: Fn(u64) -> Option<T>,
 	{
 		let mut segment = Segment::empty(segment_id);
 
@@ -249,15 +251,13 @@ where
 		let (segment_first_pos, segment_last_pos) = segment.segment_pos_range(last_pos);
 		for pos in segment_first_pos..=segment_last_pos {
 			if pmmr::is_leaf(pos) {
-				panic!("we need to read data from db here");
-
-				// if let Some(data) = pmmr.get_data_from_file(pos) {
-				// 	segment.leaf_data.push(data);
-				// 	segment.leaf_pos.push(pos);
-				// 	continue;
-				// } else if !prunable {
-				// 	return Err(SegmentError::MissingLeaf(pos));
-				// }
+				if let Some(data) = find(pos) {
+					segment.leaf_data.push(data);
+					segment.leaf_pos.push(pos);
+					continue;
+				} else if !prunable {
+					return Err(SegmentError::MissingLeaf(pos));
+				}
 			}
 			// TODO: optimize, no need to send every intermediary hash
 			if prunable {

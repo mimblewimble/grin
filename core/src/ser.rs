@@ -24,7 +24,6 @@ use crate::global::PROTOCOL_VERSION;
 use byteorder::{BigEndian, ByteOrder, ReadBytesExt};
 use bytes::Buf;
 use keychain::{BlindingFactor, Identifier, IDENTIFIER_SIZE};
-use std::convert::TryInto;
 use std::fmt::{self, Debug};
 use std::io::{self, Read, Write};
 use std::{cmp, error, marker, string};

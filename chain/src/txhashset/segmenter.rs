@@ -16,6 +16,8 @@
 
 use std::{sync::Arc, time::Instant};
 
+use grin_core::core::SegmentError;
+
 use crate::core::core::hash::Hash;
 use crate::core::core::pmmr::ReadablePMMR;
 use crate::core::core::{BlockHeader, OutputIdentifier, Segment, SegmentIdentifier, TxKernel};
@@ -57,7 +59,9 @@ impl Segmenter {
 		let now = Instant::now();
 		let txhashset = self.txhashset.read();
 		let kernel_pmmr = txhashset.kernel_pmmr_at(&self.header);
-		let segment = Segment::from_pmmr(id, &kernel_pmmr, false)?;
+		let segment = Segment::from_pmmr(id, &kernel_pmmr, false, |pos| {
+			txhashset.get_kernel_by_pos(pos).unwrap_or(None)
+		})?;
 		debug!(
 			"kernel_segment: id: ({}, {}), leaves: {}, hashes: {}, proof hashes: {}, took {}ms",
 			segment.id().height,

@@ -337,6 +337,18 @@ impl TxHashSet {
 		ReadonlyPMMR::at(&self.rproof_pmmr_h.backend, header.output_mmr_size)
 	}
 
+	pub fn get_output_by_pos(&self, pos: u64) -> Result<Option<OutputIdentifier>, Error> {
+		Ok(self.commit_index.get_output_by_pos(pos)?)
+	}
+
+	pub fn get_rangeproof_by_pos(&self, pos: u64) -> Result<Option<RangeProof>, Error> {
+		Ok(self.commit_index.get_rangeproof_by_pos(pos)?)
+	}
+
+	pub fn get_kernel_by_pos(&self, pos: u64) -> Result<Option<TxKernel>, Error> {
+		Ok(self.commit_index.get_kernel_by_pos(pos)?)
+	}
+
 	/// Convenience function to query the db for a header by its hash.
 	pub fn get_block_header(&self, hash: &Hash) -> Result<BlockHeader, Error> {
 		Ok(self.commit_index.get_block_header(&hash)?)
