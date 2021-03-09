@@ -981,7 +981,7 @@ impl<'a> HeaderExtension<'a> {
 		self.pmmr.push(header).map_err(&ErrorKind::TxHashSetErr)?;
 
 		// Update the "header hash by height" index to reflect the new header.
-		batch.save_header_hash_by_height(header.hash(), header.height)?;
+		batch.save_header_hash_by_height(header.height, header.hash())?;
 
 		self.head = Tip::from_header(header);
 		Ok(())
@@ -1175,8 +1175,8 @@ impl<'a> Extension<'a> {
 
 			// Save output and associated rangeproof to the db.
 			// Update the output_pos_height index for the output commitment.
-			batch.save_output_by_pos(&out.identifier(), pos)?;
-			batch.save_rangeproof_by_pos(&out.proof(), pos)?;
+			batch.save_output_by_pos(pos, &out.identifier())?;
+			batch.save_rangeproof_by_pos(pos, &out.proof())?;
 			batch.save_output_pos_height(&out.commitment(), commit_pos)?;
 		}
 
@@ -1296,7 +1296,8 @@ impl<'a> Extension<'a> {
 		for kernel in kernels {
 			let pos = self.apply_kernel(kernel)?;
 
-			batch.save_kernel_by_pos(kernel, pos)?;
+			// Save the kernel to the db indexed by MMR pos.
+			batch.save_kernel_by_pos(pos, kernel)?;
 
 			let commit_pos = CommitPos { pos, height };
 			apply_kernel_rules(kernel, commit_pos, batch)?;
