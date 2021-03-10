@@ -68,22 +68,15 @@ impl<T: PMMRable> Backend<T> for PMMRBackend<T> {
 	/// Add the new leaf pos to our leaf_set if this is a prunable MMR.
 	#[allow(unused_variables)]
 	fn append(&mut self, hashes: &[Hash]) -> Result<(), String> {
-		// let size = self
-		// 	.data_file
-		// 	.append(&data.as_elmt())
-		// 	.map_err(|e| format!("Failed to append data to file. {}", e))?;
-
-		self.hash_file
+		let root = self
+			.hash_file
 			.extend_from_slice(hashes)
 			.map_err(|e| format!("Failed to append hash to file. {}", e))?;
 
+		// Find the leaf pos based on the last subtree added.
+		let pos = pmmr::bintree_rightmost(root);
+
 		if self.prunable {
-			// // (Re)calculate the latest pos given updated size of data file
-			// // and the total leaf_shift, and add to our leaf_set.
-			// let pos = pmmr::insertion_to_pmmr_index(size + self.prune_list.get_total_leaf_shift());
-
-			let pos = self.unpruned_size() + 1;
-
 			self.leaf_set.add(pos);
 		}
 

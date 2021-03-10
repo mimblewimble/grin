@@ -72,10 +72,13 @@ fn mine_block_with_nrd_kernel_and_nrd_feature_enabled() {
 	let genesis = genesis_block(&keychain);
 	let chain = init_chain(chain_dir, genesis.clone());
 
+	chain.validate(false).unwrap();
+
 	for n in 1..9 {
 		let key_id = ExtKeychainPath::new(1, n, 0, 0, 0).to_identifier();
 		let block = build_block(&chain, &keychain, &key_id, vec![]);
 		chain.process_block(block, Options::MINE).unwrap();
+		chain.validate(false).unwrap();
 	}
 
 	assert_eq!(chain.head().unwrap().height, 8);

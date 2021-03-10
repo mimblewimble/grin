@@ -16,9 +16,9 @@
 
 use std::marker;
 
-use crate::core::hash::Hash;
-use crate::core::pmmr::pmmr::{bintree_rightmost, ReadablePMMR};
+use crate::core::pmmr::pmmr::ReadablePMMR;
 use crate::core::pmmr::{is_leaf, Backend};
+use crate::core::{hash::Hash, OutputIdentifier};
 use crate::ser::PMMRable;
 
 /// Readonly view of a PMMR.
@@ -28,7 +28,7 @@ where
 	B: Backend<T>,
 {
 	/// The last position in the PMMR
-	last_pos: u64,
+	pub last_pos: u64,
 	/// The backend for this readonly PMMR
 	backend: &'a B,
 	// only needed to parameterise Backend
@@ -68,7 +68,7 @@ where
 		max_count: u64,
 		max_pmmr_pos: Option<u64>,
 	) -> (u64, Vec<T::E>) {
-		panic!("no longer implemented");
+		panic!("implement me");
 	}
 	// 	let mut return_vec = vec![];
 	// 	let last_pos = match max_pmmr_pos {
@@ -91,7 +91,7 @@ where
 	/// n nodes along the bottom of the tree.
 	/// May return less than n items if the MMR has been pruned/compacted.
 	pub fn get_last_n_insertions(&self, n: u64) -> Vec<(Hash, T::E)> {
-		panic!("no longer implemented");
+		panic!("implement me");
 	}
 	// 	let mut return_vec = vec![];
 	// 	let mut last_leaf = self.last_pos;

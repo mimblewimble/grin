@@ -1238,6 +1238,21 @@ impl<'a> Extension<'a> {
 		)
 	}
 
+	/// Read output identifier from the db based on pos.
+	/// Note: We need to be aware of last_pos here to handle MMR truncation correctly.
+	/// We ignore everything beyond the output MMR last_pos.
+	fn get_unspent_at(
+		&self,
+		pos: u64,
+		batch: &Batch<'_>,
+	) -> Result<Option<OutputIdentifier>, Error> {
+		if pos > self.output_pmmr.last_pos {
+			Ok(None)
+		} else {
+			Ok(batch.get_output_by_pos(pos)?)
+		}
+	}
+
 	// Prune output and rangeproof PMMRs based on provided pos.
 	// Input is not valid if we cannot prune successfully.
 	fn apply_input(&mut self, commit: Commitment, pos: CommitPos) -> Result<(), Error> {
@@ -1257,7 +1272,7 @@ impl<'a> Extension<'a> {
 		let commit = out.commitment();
 
 		if let Ok(pos) = batch.get_output_pos(&commit) {
-			if let Some(out_mmr) = batch.get_output_by_pos(pos)? {
+			if let Some(out_mmr) = self.get_unspent_at(pos, batch)? {
 				if out_mmr.commitment() == commit {
 					return Err(ErrorKind::DuplicateCommitment(commit).into());
 				}

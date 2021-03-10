@@ -154,7 +154,7 @@ pub struct Chain {
 	// POW verification function
 	pow_verifier: fn(&BlockHeader) -> Result<(), pow::Error>,
 	archive_mode: bool,
-	genesis: BlockHeader,
+	// genesis: BlockHeader,
 }
 
 impl Chain {
@@ -203,7 +203,7 @@ impl Chain {
 			pow_verifier,
 			verifier_cache,
 			archive_mode,
-			genesis: genesis.header,
+			// genesis: genesis.header,
 		};
 
 		chain.log_heads()?;
@@ -631,8 +631,18 @@ impl Chain {
 		}
 	}
 
+	pub fn genesis(&self) -> Result<BlockHeader, Error> {
+		let hash = self
+			.store
+			.get_header_hash_by_height(0)?
+			.ok_or(ErrorKind::HeaderNotFound)?;
+		let genesis = self.store.get_block_header(&hash)?;
+		Ok(genesis)
+	}
+
 	/// Validate the current chain state.
 	pub fn validate(&self, fast_validation: bool) -> Result<(), Error> {
+		let genesis = self.genesis()?;
 		let header = self.store.head_header()?;
 
 		// Lets just treat an "empty" node that just got started up as valid.
@@ -649,7 +659,7 @@ impl Chain {
 		txhashset::extending_readonly(&mut header_pmmr, &mut txhashset, |ext, batch| {
 			pipe::rewind_and_apply_fork(&header, ext, batch)?;
 			ext.extension
-				.validate(&self.genesis, fast_validation, &NoStatus, &header, batch)?;
+				.validate(&genesis, fast_validation, &NoStatus, &header, batch)?;
 			Ok(())
 		})
 	}
@@ -942,6 +952,8 @@ impl Chain {
 	) -> Result<bool, Error> {
 		status.on_setup();
 
+		let genesis = self.genesis()?;
+
 		// Initial check whether this txhashset is needed or not
 		let fork_point = self.fork_point()?;
 		if !self.check_txhashset_needed(&fork_point)? {
@@ -980,7 +992,7 @@ impl Chain {
 
 			let header_pmmr = self.header_pmmr.read();
 			let batch = self.store.batch()?;
-			txhashset.verify_kernel_pos_index(&self.genesis, &header_pmmr, &batch)?;
+			txhashset.verify_kernel_pos_index(&genesis, &header_pmmr, &batch)?;
 		}
 
 		// all good, prepare a new batch and update all the required records
@@ -999,7 +1011,7 @@ impl Chain {
 				// Validate the extension, generating the utxo_sum and kernel_sum.
 				// Full validation, including rangeproofs and kernel signature verification.
 				let (utxo_sum, kernel_sum) =
-					extension.validate(&self.genesis, false, status, &header, batch)?;
+					extension.validate(&genesis, false, status, &header, batch)?;
 
 				// Save the block_sums (utxo_sum, kernel_sum) to the db for use later.
 				batch.save_block_sums(
@@ -1079,12 +1091,14 @@ impl Chain {
 			return Ok(());
 		}
 
+		let genesis = self.genesis()?;
+
 		let horizon = global::cut_through_horizon() as u64;
 		let head = batch.head()?;
 
 		let tail = match batch.tail() {
 			Ok(tail) => tail,
-			Err(_) => Tip::from_header(&self.genesis),
+			Err(_) => Tip::from_header(&genesis),
 		};
 
 		let cutoff = head.height.saturating_sub(horizon);

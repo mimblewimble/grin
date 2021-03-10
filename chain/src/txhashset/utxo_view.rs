@@ -123,7 +123,7 @@ impl<'a> UTXOView<'a> {
 	) -> Result<(OutputIdentifier, CommitPos), Error> {
 		let pos = batch.get_output_pos_height(&input)?;
 		if let Some(pos) = pos {
-			if let Some(out) = batch.get_output_by_pos(pos.pos)? {
+			if let Some(out) = self.get_unspent_at(pos.pos, batch)? {
 				if out.commitment() == input {
 					return Ok((out, pos));
 				} else {
@@ -141,7 +141,7 @@ impl<'a> UTXOView<'a> {
 	// Output is valid if it would not result in a duplicate commitment in the output MMR.
 	fn validate_output(&self, output: &Output, batch: &Batch<'_>) -> Result<(), Error> {
 		if let Ok(pos) = batch.get_output_pos(&output.commitment()) {
-			if let Some(out_mmr) = batch.get_output_by_pos(pos)? {
+			if let Some(out_mmr) = self.get_unspent_at(pos, batch)? {
 				if out_mmr.commitment() == output.commitment() {
 					return Err(ErrorKind::DuplicateCommitment(output.commitment()).into());
 				}
@@ -150,9 +150,24 @@ impl<'a> UTXOView<'a> {
 		Ok(())
 	}
 
+	/// Read output identifier from the db based on pos.
+	/// Note: We need to be aware of last_pos here to handle MMR truncation correctly.
+	/// We ignore everything beyond the output MMR last_pos.
+	fn get_unspent_at(
+		&self,
+		pos: u64,
+		batch: &Batch<'_>,
+	) -> Result<Option<OutputIdentifier>, Error> {
+		if pos > self.output_pmmr.last_pos {
+			Ok(None)
+		} else {
+			Ok(batch.get_output_by_pos(pos)?)
+		}
+	}
+
 	/// Retrieves an unspent output using its PMMR position
 	pub fn get_unspent_output_at(&self, pos: u64, batch: &Batch<'_>) -> Result<Output, Error> {
-		match batch.get_output_by_pos(pos)? {
+		match self.get_unspent_at(pos, batch)? {
 			Some(output_id) => match batch.get_rangeproof_by_pos(pos)? {
 				Some(rproof) => Ok(output_id.into_output(rproof)),
 				None => Err(ErrorKind::RangeproofNotFound.into()),
