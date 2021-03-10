@@ -150,6 +150,8 @@ impl<'a> UTXOView<'a> {
 		pos: u64,
 		batch: &Batch<'_>,
 	) -> Result<Option<OutputIdentifier>, Error> {
+		// TODO - we should be leaf_set aware here for completeness.
+
 		if pos > self.output_pmmr.last_pos {
 			Ok(None)
 		} else {
