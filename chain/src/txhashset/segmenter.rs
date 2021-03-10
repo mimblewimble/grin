@@ -16,6 +16,8 @@
 
 use std::{sync::Arc, time::Instant};
 
+use grin_core::core::pmmr;
+
 use crate::core::core::hash::Hash;
 use crate::core::core::pmmr::ReadablePMMR;
 use crate::core::core::{BlockHeader, OutputIdentifier, Segment, SegmentIdentifier, TxKernel};
@@ -96,7 +98,8 @@ impl Segmenter {
 		let now = Instant::now();
 		let bitmap_pmmr = self.bitmap_snapshot.readonly_pmmr();
 		let segment = Segment::from_pmmr(id, &bitmap_pmmr, false, |pos| {
-			unimplemented!("feed me");
+			let idx = pmmr::n_leaves(pos).saturating_sub(1);
+			self.bitmap_snapshot.get_chunk(idx).cloned()
 		})?;
 		let output_root = self.output_root()?;
 		debug!(

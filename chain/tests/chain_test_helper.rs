@@ -64,7 +64,7 @@ where
 	)
 	.unwrap();
 
-	genesis::genesis_dev().with_reward(reward.0, reward.1)
+	genesis::genesis_dev_with_reward(reward.0, reward.1)
 }
 
 /// Mine a chain of specified length to assist with automated tests.

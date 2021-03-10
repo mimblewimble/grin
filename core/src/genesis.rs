@@ -44,6 +44,21 @@ pub fn genesis_dev() -> core::Block {
 	})
 }
 
+pub fn genesis_dev_with_reward(out: core::Output, kern: core::TxKernel) -> core::Block {
+	let gen = core::Block::with_header(core::BlockHeader {
+		height: 0,
+		timestamp: Utc.ymd(1997, 8, 4).and_hms(0, 0, 0),
+		output_mmr_size: 1,
+		kernel_mmr_size: 1,
+		pow: ProofOfWork {
+			nonce: 0,
+			..Default::default()
+		},
+		..Default::default()
+	});
+	gen.with_reward(out, kern)
+}
+
 /// Testnet genesis block
 pub fn genesis_test() -> core::Block {
 	let gen = core::Block::with_header(core::BlockHeader {

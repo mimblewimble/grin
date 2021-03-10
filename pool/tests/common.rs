@@ -48,7 +48,7 @@ where
 	let key_id = keychain::ExtKeychain::derive_key_id(1, 0, 0, 0, 0);
 	let reward = reward::output(keychain, &ProofBuilder::new(keychain), &key_id, 0, false).unwrap();
 
-	genesis::genesis_dev().with_reward(reward.0, reward.1)
+	genesis::genesis_dev_with_reward(reward.0, reward.1)
 }
 
 pub fn init_chain(dir_name: &str, genesis: Block) -> Chain {

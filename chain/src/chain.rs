@@ -1475,6 +1475,9 @@ fn setup_head(
 	{
 		if batch.get_block_header(&genesis.hash()).is_err() {
 			batch.save_block_header(&genesis.header)?;
+
+			// We nned to bootstrap the existence of header_head for genesis here.
+			batch.save_header_head(&Tip::from_header(&genesis.header))?;
 		}
 
 		if header_pmmr.last_pos == 0 {

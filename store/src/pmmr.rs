@@ -78,15 +78,11 @@ impl<T: PMMRable> Backend<T> for PMMRBackend<T> {
 			.map_err(|e| format!("Failed to append hash to file. {}", e))?;
 
 		if self.prunable {
-			panic!(
-				"if we are appending a single elmt here then we can use last_pos to determine pos"
-			);
-
 			// // (Re)calculate the latest pos given updated size of data file
 			// // and the total leaf_shift, and add to our leaf_set.
 			// let pos = pmmr::insertion_to_pmmr_index(size + self.prune_list.get_total_leaf_shift());
 
-			let pos = 0;
+			let pos = self.unpruned_size() + 1;
 
 			self.leaf_set.add(pos);
 		}
