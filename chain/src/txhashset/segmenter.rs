@@ -16,8 +16,6 @@
 
 use std::{sync::Arc, time::Instant};
 
-use grin_core::core::SegmentError;
-
 use crate::core::core::hash::Hash;
 use crate::core::core::pmmr::ReadablePMMR;
 use crate::core::core::{BlockHeader, OutputIdentifier, Segment, SegmentIdentifier, TxKernel};
@@ -97,7 +95,9 @@ impl Segmenter {
 	) -> Result<(Segment<BitmapChunk>, Hash), Error> {
 		let now = Instant::now();
 		let bitmap_pmmr = self.bitmap_snapshot.readonly_pmmr();
-		let segment = Segment::from_pmmr(id, &bitmap_pmmr, false)?;
+		let segment = Segment::from_pmmr(id, &bitmap_pmmr, false, |pos| {
+			unimplemented!("feed me");
+		})?;
 		let output_root = self.output_root()?;
 		debug!(
 			"bitmap_segment: id: ({}, {}), leaves: {}, hashes: {}, proof hashes: {}, took {}ms",
@@ -119,7 +119,10 @@ impl Segmenter {
 		let now = Instant::now();
 		let txhashset = self.txhashset.read();
 		let output_pmmr = txhashset.output_pmmr_at(&self.header);
-		let segment = Segment::from_pmmr(id, &output_pmmr, true)?;
+		let segment = Segment::from_pmmr(id, &output_pmmr, true, |pos| {
+			txhashset.get_output_by_pos(pos).unwrap_or(None)
+		})?;
+
 		let bitmap_root = self.bitmap_root()?;
 		debug!(
 			"output_segment: id: ({}, {}), leaves: {}, hashes: {}, proof hashes: {}, took {}ms",
@@ -138,7 +141,9 @@ impl Segmenter {
 		let now = Instant::now();
 		let txhashset = self.txhashset.read();
 		let pmmr = txhashset.rangeproof_pmmr_at(&self.header);
-		let segment = Segment::from_pmmr(id, &pmmr, true)?;
+		let segment = Segment::from_pmmr(id, &pmmr, true, |pos| {
+			txhashset.get_rangeproof_by_pos(pos).unwrap_or(None)
+		})?;
 		debug!(
 			"rangeproof_segment: id: ({}, {}), leaves: {}, hashes: {}, proof hashes: {}, took {}ms",
 			segment.id().height,

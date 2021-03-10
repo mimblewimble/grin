@@ -236,7 +236,7 @@ where
 			hashes.push(current_hash);
 		}
 
-		// append all the new nodes and update the MMR index
+		// Append all the new hashes from leaf up to new peak and update the MMR index.
 		self.backend.append(&hashes)?;
 		self.last_pos = pos;
 		Ok(elmt_pos)

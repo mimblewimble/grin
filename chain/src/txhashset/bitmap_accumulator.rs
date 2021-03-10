@@ -46,6 +46,7 @@ use enum_primitive::FromPrimitive;
 ///
 #[derive(Clone)]
 pub struct BitmapAccumulator {
+	chunks: Vec<BitmapChunk>,
 	backend: VecBackend<BitmapChunk>,
 }
 
@@ -53,6 +54,7 @@ impl BitmapAccumulator {
 	/// Crate a new empty bitmap accumulator.
 	pub fn new() -> BitmapAccumulator {
 		BitmapAccumulator {
+			chunks: Vec::default(),
 			backend: VecBackend::new(),
 		}
 	}
@@ -71,6 +73,11 @@ impl BitmapAccumulator {
 	/// The first 1024 belong to chunk 0, the next 1024 to chunk 1 etc.
 	fn chunk_idx(idx: u64) -> u64 {
 		idx / 1024
+	}
+
+	/// Get underlying chunk (leaf) by insertion index.
+	pub fn get_chunk(&self, idx: u64) -> Option<&BitmapChunk> {
+		self.chunks.get(idx as usize)
 	}
 
 	/// Apply the provided idx iterator to our bitmap accumulator.
@@ -172,9 +179,11 @@ impl BitmapAccumulator {
 	/// Append parent hashes (if any) as necessary to build associated peak.
 	pub fn append_chunk(&mut self, chunk: BitmapChunk) -> Result<u64, Error> {
 		let last_pos = self.backend.size();
-		PMMR::at(&mut self.backend, last_pos)
+		let pos = PMMR::at(&mut self.backend, last_pos)
 			.push(&chunk)
-			.map_err(|e| ErrorKind::Other(e).into())
+			.map_err(|e| ErrorKind::Other(e))?;
+		self.chunks.push(chunk);
+		Ok(pos)
 	}
 
 	/// The root hash of the bitmap accumulator MMR.
@@ -195,7 +204,7 @@ pub struct BitmapChunk(BitVec);
 
 impl BitmapChunk {
 	const LEN_BITS: usize = 1024;
-	const LEN_BYTES: usize = Self::LEN_BITS / 8;
+	// const LEN_BYTES: usize = Self::LEN_BITS / 8;
 
 	/// Create a new bitmap chunk, defaulting all bits in the chunk to false.
 	pub fn new() -> BitmapChunk {
