@@ -1,4 +1,4 @@
-// Copyright 2020 The Grin Developers
+// Copyright 2021 The Grin Developers
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -54,7 +54,7 @@ macro_rules! try_break {
 				// to avoid the heavy polling which will consume CPU 100%
 				thread::sleep(Duration::from_millis(10));
 				None
-				}
+			}
 			Err(Error::Store(_))
 			| Err(Error::Chain(_))
 			| Err(Error::Internal)
@@ -62,8 +62,8 @@ macro_rules! try_break {
 			Err(ref e) => {
 				debug!("try_break: exit the loop: {:?}", e);
 				break;
-				}
 			}
+		}
 	};
 }
 
