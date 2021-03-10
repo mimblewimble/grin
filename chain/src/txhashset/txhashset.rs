@@ -73,70 +73,6 @@ impl<T: PMMRable> PMMRHandle<T> {
 	}
 }
 
-impl PMMRHandle<BlockHeader> {
-	// /// Used during chain init to ensure the header PMMR is consistent with header_head in the db.
-	// pub fn init_head(&mut self, head: &Tip, batch: &Batch<'_>) -> Result<(), Error> {
-	// 	let head_hash = self.head_hash()?;
-	// 	let expected_hash = self.get_header_hash_by_height(head.height)?;
-	// 	if head.hash() != expected_hash {
-	// 		error!(
-	// 			"header PMMR inconsistent: {} vs {} at {}",
-	// 			expected_hash,
-	// 			head.hash(),
-	// 			head.height
-	// 		);
-	// 		return Err(ErrorKind::Other("header PMMR inconsistent".to_string()).into());
-	// 	}
-
-	// 	// 1-indexed pos and we want to account for subsequent parent hash pos.
-	// 	// so use next header pos to find our last_pos.
-	// 	let next_height = head.height + 1;
-	// 	let next_pos = pmmr::insertion_to_pmmr_index(next_height + 1);
-	// 	let pos = next_pos.saturating_sub(1);
-
-	// 	debug!(
-	// 		"init_head: header PMMR: current head {} at pos {}",
-	// 		head_hash, self.last_pos
-	// 	);
-	// 	debug!(
-	// 		"init_head: header PMMR: resetting to {} at pos {} (height {})",
-	// 		head.hash(),
-	// 		pos,
-	// 		head.height
-	// 	);
-
-	// 	self.last_pos = pos;
-	// 	Ok(())
-	// }
-
-	// /// Get the header hash at the specified height based on the current header MMR state.
-	// fn get_header_hash_by_height(&self, height: u64) -> Result<Hash, Error> {
-	// 	let pos = pmmr::insertion_to_pmmr_index(height + 1);
-	// 	let header_pmmr = ReadonlyPMMR::at(&self.backend, self.last_pos);
-	// 	if let Some(entry) = self.commit_index.get_header_by_height(height)? {
-	// 		Ok(entry.hash())
-	// 	} else {
-	// 		Err(ErrorKind::Other("get header hash by height".to_string()).into())
-	// 	}
-	// }
-
-	// /// Get the header hash for the head of the header chain based on current MMR state.
-	// /// Find the last leaf pos based on MMR size and return its header hash.
-	// pub fn head_hash(&self) -> Result<Hash, Error> {
-
-	// 	if self.last_pos == 0 {
-	// 		return Err(ErrorKind::Other("MMR empty, no head".to_string()).into());
-	// 	}
-	// 	let header_pmmr = ReadonlyPMMR::at(&self.backend, self.last_pos);
-	// 	let leaf_pos = pmmr::bintree_rightmost(self.last_pos);
-	// 	if let Some(entry) = header_pmmr.get_data(leaf_pos) {
-	// 		Ok(entry.hash())
-	// 	} else {
-	// 		Err(ErrorKind::Other("failed to find head hash".to_string()).into())
-	// 	}
-	// }
-}
-
 /// An easy to manipulate structure holding the 3 MMRs necessary to
 /// validate blocks and capturing the output set, associated rangeproofs and the
 /// kernels. Also handles the index of Commitments to positions in the
@@ -194,48 +130,6 @@ impl TxHashSet {
 			None,
 		)?;
 
-		// let mut maybe_kernel_handle: Option<PMMRHandle<TxKernel>> = None;
-		// let versions = vec![ProtocolVersion(2), ProtocolVersion(1)];
-		// for version in versions {
-		// 	let handle = PMMRHandle::new(
-		// 		Path::new(&root_dir)
-		// 			.join(TXHASHSET_SUBDIR)
-		// 			.join(KERNEL_SUBDIR),
-		// 		false, // not prunable
-		// 		version,
-		// 		None,
-		// 	)?;
-		// 	if handle.last_pos == 0 {
-		// 		debug!(
-		// 			"attempting to open (empty) kernel PMMR using {:?} - SUCCESS",
-		// 			version
-		// 		);
-		// 		maybe_kernel_handle = Some(handle);
-		// 		break;
-		// 	}
-		// 	let kernel: Option<TxKernel> = ReadonlyPMMR::at(&handle.backend, 1).get_data(1);
-		// 	if let Some(kernel) = kernel {
-		// 		if kernel.verify().is_ok() {
-		// 			debug!(
-		// 				"attempting to open kernel PMMR using {:?} - SUCCESS",
-		// 				version
-		// 			);
-		// 			maybe_kernel_handle = Some(handle);
-		// 			break;
-		// 		} else {
-		// 			debug!(
-		// 				"attempting to open kernel PMMR using {:?} - FAIL (verify failed)",
-		// 				version
-		// 			);
-		// 		}
-		// 	} else {
-		// 		debug!(
-		// 			"attempting to open kernel PMMR using {:?} - FAIL (read failed)",
-		// 			version
-		// 		);
-		// 	}
-		// }
-		// if let Some(kernel_pmmr_h) = maybe_kernel_handle {
 		Ok(TxHashSet {
 			output_pmmr_h,
 			rproof_pmmr_h,
@@ -243,9 +137,6 @@ impl TxHashSet {
 			bitmap_accumulator,
 			commit_index,
 		})
-		// } else {
-		// 	Err(ErrorKind::TxHashSetErr("failed to open kernel PMMR".to_string()).into())
-		// }
 	}
 
 	// Build a new bitmap accumulator for the provided output PMMR.
@@ -477,14 +368,13 @@ impl TxHashSet {
 			.get_header_hash_by_height(cutoff)?
 			.ok_or(ErrorKind::HeaderNotFound)?;
 		let cutoff_header = batch.get_block_header(&cutoff_hash)?;
-		self.verify_kernel_pos_index(&cutoff_header, header_pmmr, batch)
+		self.verify_kernel_pos_index(&cutoff_header, batch)
 	}
 
 	/// Verify and (re)build the NRD kernel_pos index from the provided header onwards.
 	pub fn verify_kernel_pos_index(
 		&self,
 		from_header: &BlockHeader,
-		header_pmmr: &PMMRHandle<BlockHeader>,
 		batch: &Batch<'_>,
 	) -> Result<(), Error> {
 		if !global::is_nrd_enabled() {
@@ -701,16 +591,13 @@ where
 {
 	let res: Result<T, Error>;
 	{
-		let header_pmmr = ReadonlyPMMR::at(&handle.backend, handle.last_pos);
 		let output_pmmr =
 			ReadonlyPMMR::at(&trees.output_pmmr_h.backend, trees.output_pmmr_h.last_pos);
-		let rproof_pmmr =
-			ReadonlyPMMR::at(&trees.rproof_pmmr_h.backend, trees.rproof_pmmr_h.last_pos);
 
 		// Create a new batch here to pass into the utxo_view.
 		// Discard it (rollback) after we finish with the utxo_view.
 		let batch = trees.commit_index.batch()?;
-		let utxo = UTXOView::new(header_pmmr, output_pmmr, rproof_pmmr);
+		let utxo = UTXOView::new(output_pmmr);
 		res = inner(&utxo, &batch);
 	}
 	res
@@ -834,25 +721,11 @@ where
 	F: FnOnce(&mut HeaderExtension<'_>, &Batch<'_>) -> Result<T, Error>,
 {
 	let batch = store.batch()?;
-
 	let head = batch.header_head()?;
-
-	// // Note: Extending either the sync_head or header_head MMR here.
-	// // Use underlying MMR to determine the "head".
-	// let head = match handle.head_hash() {
-	// 	Ok(hash) => {
-	// 		let header = batch.get_block_header(&hash)?;
-	// 		Tip::from_header(&header)
-	// 	}
-	// 	Err(_) => Tip::default(),
-	// };
-
 	let pmmr = PMMR::at(&mut handle.backend, handle.last_pos);
 	let mut extension = HeaderExtension::new(pmmr, head);
 	let res = inner(&mut extension, &batch);
-
 	handle.backend.discard();
-
 	res
 }
 
@@ -876,16 +749,6 @@ where
 	let child_batch = batch.child()?;
 
 	let head = child_batch.header_head()?;
-
-	// // Note: Extending either the sync_head or header_head MMR here.
-	// // Use underlying MMR to determine the "head".
-	// let head = match handle.head_hash() {
-	// 	Ok(hash) => {
-	// 		let header = child_batch.get_block_header(&hash)?;
-	// 		Tip::from_header(&header)
-	// 	}
-	// 	Err(_) => Tip::default(),
-	// };
 
 	{
 		let pmmr = PMMR::at(&mut handle.backend, handle.last_pos);
@@ -936,11 +799,6 @@ impl<'a> HeaderExtension<'a> {
 			rollback: false,
 		}
 	}
-
-	// /// Get the header hash for the specified pos from the underlying MMR backend.
-	// fn get_header_hash(&self, pos: u64) -> Option<Hash> {
-	// 	self.pmmr.get_data(pos).map(|x| x.hash())
-	// }
 
 	/// The head representing the furthest extent of the current extension.
 	pub fn head(&self) -> Tip {
@@ -1132,12 +990,8 @@ impl<'a> Extension<'a> {
 
 	/// Build a view of the current UTXO set based on the output PMMR
 	/// and the provided header extension.
-	pub fn utxo_view(&'a self, header_ext: &'a HeaderExtension<'a>) -> UTXOView<'a> {
-		UTXOView::new(
-			header_ext.pmmr.readonly_pmmr(),
-			self.output_readonly_pmmr(),
-			self.rproof_readonly_pmmr(),
-		)
+	pub fn utxo_view(&'a self) -> UTXOView<'a> {
+		UTXOView::new(self.output_readonly_pmmr())
 	}
 
 	/// Readonly view of our output data.
@@ -1196,9 +1050,7 @@ impl<'a> Extension<'a> {
 		// Apply inputs to remove spent outputs from the output and rangeproof MMRs.
 		// Add spent_pos to affected_pos to update the accumulator later on.
 		// Remove the spent outputs from the output_pos index.
-		let spent = self
-			.utxo_view(header_ext)
-			.validate_inputs(&b.inputs(), batch)?;
+		let spent = self.utxo_view().validate_inputs(&b.inputs(), batch)?;
 		for (out, pos) in &spent {
 			self.apply_input(out.commitment(), *pos)?;
 			affected_pos.push(pos.pos);
@@ -1705,10 +1557,6 @@ impl<'a> Extension<'a> {
 		let mut tx_kernels: Vec<TxKernel> = Vec::with_capacity(KERNEL_BATCH_SIZE);
 		for n in 1..self.kernel_pmmr.unpruned_size() + 1 {
 			if pmmr::is_leaf(n) {
-				// let kernel = self
-				// 	.kernel_pmmr
-				// 	.get_data(n)
-				// 	.ok_or_else(|| ErrorKind::TxKernelNotFound)?;
 				let kernel = batch
 					.get_kernel_by_pos(n)?
 					.ok_or(ErrorKind::TxKernelNotFound)?;

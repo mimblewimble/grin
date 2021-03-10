@@ -990,9 +990,8 @@ impl Chain {
 		{
 			self.validate_kernel_history(&header, &txhashset)?;
 
-			let header_pmmr = self.header_pmmr.read();
 			let batch = self.store.batch()?;
-			txhashset.verify_kernel_pos_index(&genesis, &header_pmmr, &batch)?;
+			txhashset.verify_kernel_pos_index(&genesis, &batch)?;
 		}
 
 		// all good, prepare a new batch and update all the required records

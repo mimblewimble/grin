@@ -433,10 +433,8 @@ fn verify_coinbase_maturity(
 	ext: &txhashset::ExtensionPair<'_>,
 	batch: &store::Batch<'_>,
 ) -> Result<(), Error> {
-	let extension = &ext.extension;
-	let header_extension = &ext.header_extension;
-	extension
-		.utxo_view(header_extension)
+	ext.extension
+		.utxo_view()
 		.verify_coinbase_maturity(&block.inputs(), block.header.height, batch)
 }
 
@@ -631,9 +629,5 @@ fn validate_utxo(
 	ext: &mut txhashset::ExtensionPair<'_>,
 	batch: &store::Batch<'_>,
 ) -> Result<Vec<(OutputIdentifier, CommitPos)>, Error> {
-	let extension = &ext.extension;
-	let header_extension = &ext.header_extension;
-	extension
-		.utxo_view(header_extension)
-		.validate_block(block, batch)
+	ext.extension.utxo_view().validate_block(block, batch)
 }
