@@ -26,8 +26,6 @@ use crate::ser::PMMRable;
 /// Removed pos are maintained in a HashSet<u64>.
 #[derive(Clone, Debug)]
 pub struct VecBackend<T: PMMRable> {
-	// /// Backend elements (optional, possible to just store hashes).
-	// pub data: Option<Vec<T>>,
 	/// Vec of hashes for the PMMR (both leaves and parents).
 	pub hashes: Vec<Hash>,
 	/// Positions of removed elements (is this applicable if we do not store data?)
@@ -37,9 +35,6 @@ pub struct VecBackend<T: PMMRable> {
 
 impl<T: PMMRable> Backend<T> for VecBackend<T> {
 	fn append(&mut self, hashes: &[Hash]) -> Result<(), String> {
-		// if let Some(data) = &mut self.data {
-		// 	data.push(elmt.clone());
-		// }
 		self.hashes.extend_from_slice(hashes);
 		Ok(())
 	}
@@ -52,14 +47,6 @@ impl<T: PMMRable> Backend<T> for VecBackend<T> {
 		}
 	}
 
-	// fn get_data(&self, position: u64) -> Option<T::E> {
-	// 	if self.removed.contains(&position) {
-	// 		None
-	// 	} else {
-	// 		self.get_data_from_file(position)
-	// 	}
-	// }
-
 	fn get_from_file(&self, position: u64) -> Option<Hash> {
 		let idx = usize::try_from(position.saturating_sub(1)).expect("usize from u64");
 		self.hashes.get(idx).cloned()
@@ -68,16 +55,6 @@ impl<T: PMMRable> Backend<T> for VecBackend<T> {
 	fn get_peak_from_file(&self, position: u64) -> Option<Hash> {
 		self.get_from_file(position)
 	}
-
-	// fn get_data_from_file(&self, position: u64) -> Option<T::E> {
-	// 	if let Some(data) = &self.data {
-	// 		let idx = usize::try_from(pmmr::n_leaves(position).saturating_sub(1))
-	// 			.expect("usize from u64");
-	// 		data.get(idx).map(|x| x.as_elmt())
-	// 	} else {
-	// 		None
-	// 	}
-	// }
 
 	/// Number of leaves in the MMR
 	fn n_unpruned_leaves(&self) -> u64 {
@@ -103,16 +80,16 @@ impl<T: PMMRable> Backend<T> for VecBackend<T> {
 		)
 	}
 
+	fn is_leaf(&self, pos: u64) -> bool {
+		pmmr::is_leaf(pos) && !self.removed.contains(&pos)
+	}
+
 	fn remove(&mut self, position: u64) -> Result<(), String> {
 		self.removed.insert(position);
 		Ok(())
 	}
 
 	fn rewind(&mut self, position: u64, _rewind_rm_pos: &Bitmap) -> Result<(), String> {
-		// if let Some(data) = &mut self.data {
-		// 	let idx = pmmr::n_leaves(position);
-		// 	data.truncate(usize::try_from(idx).expect("usize from u64"));
-		// }
 		self.hashes
 			.truncate(usize::try_from(position).expect("usize from u64"));
 		Ok(())
@@ -131,21 +108,11 @@ impl<T: PMMRable> VecBackend<T> {
 	/// Instantiates a new empty vec backend.
 	pub fn new() -> VecBackend<T> {
 		VecBackend {
-			// data: Some(vec![]),
 			hashes: vec![],
 			removed: HashSet::new(),
 			_marker: marker::PhantomData,
 		}
 	}
-
-	// /// Instantiate a new empty "hash only" vec backend.
-	// pub fn new_hash_only() -> VecBackend<T> {
-	// 	VecBackend {
-	// 		data: None,
-	// 		hashes: vec![],
-	// 		removed: HashSet::new(),
-	// 	}
-	// }
 
 	/// Size of this vec backend in hashes.
 	pub fn size(&self) -> u64 {

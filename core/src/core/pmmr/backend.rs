@@ -39,9 +39,6 @@ pub trait Backend<T: PMMRable> {
 	/// Get a Hash by insertion position.
 	fn get_hash(&self, position: u64) -> Option<Hash>;
 
-	// /// Get underlying data by insertion position.
-	// fn get_data(&self, position: u64) -> Option<T::E>;
-
 	/// Get a Hash  by original insertion position
 	/// (ignoring the remove log).
 	fn get_from_file(&self, position: u64) -> Option<Hash>;
@@ -50,10 +47,6 @@ pub trait Backend<T: PMMRable> {
 	/// Optimized for reading peak hashes rather than arbitrary pos hashes.
 	/// Peaks can be assumed to not be compacted.
 	fn get_peak_from_file(&self, position: u64) -> Option<Hash>;
-
-	// /// Get a Data Element by original insertion position
-	// /// (ignoring the remove log).
-	// fn get_data_from_file(&self, position: u64) -> Option<T::E>;
 
 	/// Iterator over current (unpruned, unremoved) leaf positions.
 	fn leaf_pos_iter(&self) -> Box<dyn Iterator<Item = u64> + '_>;
@@ -64,6 +57,8 @@ pub trait Backend<T: PMMRable> {
 	/// Iterator over current (unpruned, unremoved) leaf insertion index.
 	/// Note: This differs from underlying MMR pos - [0, 1, 2, 3, 4] vs. [1, 2, 4, 5, 8].
 	fn leaf_idx_iter(&self, from_idx: u64) -> Box<dyn Iterator<Item = u64> + '_>;
+
+	fn is_leaf(&self, pos: u64) -> bool;
 
 	/// Remove Hash by insertion position. An index is also provided so the
 	/// underlying backend can implement some rollback of positions up to a

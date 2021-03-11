@@ -1098,12 +1098,10 @@ impl<'a> Extension<'a> {
 		pos: u64,
 		batch: &Batch<'_>,
 	) -> Result<Option<OutputIdentifier>, Error> {
-		// TODO - we should be leaf_set aware here for completeness.
-
-		if pos > self.output_pmmr.last_pos {
-			Ok(None)
-		} else {
+		if self.output_pmmr.is_leaf(pos) {
 			Ok(batch.get_output_by_pos(pos)?)
+		} else {
+			Ok(None)
 		}
 	}
 

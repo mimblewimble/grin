@@ -14,7 +14,7 @@
 
 //! Lightweight readonly view into output MMR for convenience.
 
-use crate::core::core::pmmr::ReadonlyPMMR;
+use crate::core::core::pmmr::{ReadablePMMR, ReadonlyPMMR};
 use crate::core::core::{Block, BlockHeader, Inputs, Output, OutputIdentifier, Transaction};
 use crate::core::global;
 use crate::error::{Error, ErrorKind};
@@ -150,12 +150,10 @@ impl<'a> UTXOView<'a> {
 		pos: u64,
 		batch: &Batch<'_>,
 	) -> Result<Option<OutputIdentifier>, Error> {
-		// TODO - we should be leaf_set aware here for completeness.
-
-		if pos > self.output_pmmr.last_pos {
-			Ok(None)
-		} else {
+		if self.output_pmmr.is_leaf(pos) {
 			Ok(batch.get_output_by_pos(pos)?)
+		} else {
+			Ok(None)
 		}
 	}
 

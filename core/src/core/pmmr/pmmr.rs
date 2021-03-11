@@ -50,6 +50,10 @@ pub trait ReadablePMMR {
 	/// Iterator over current (unpruned, unremoved) leaf insertion indices.
 	fn leaf_idx_iter(&self, from_idx: u64) -> Box<dyn Iterator<Item = u64> + '_>;
 
+	/// Is the pos a leaf?
+	/// Takes last_pos and the leaf_set (for prunable MMR) into consideration.
+	fn is_leaf(&self, pos: u64) -> bool;
+
 	/// Number of leaves in the MMR
 	fn n_unpruned_leaves(&self) -> u64;
 
@@ -414,6 +418,10 @@ where
 
 	fn leaf_idx_iter(&self, from_idx: u64) -> Box<dyn Iterator<Item = u64> + '_> {
 		self.backend.leaf_idx_iter(from_idx)
+	}
+
+	fn is_leaf(&self, pos: u64) -> bool {
+		pos <= self.last_pos && is_leaf(pos) && self.backend.is_leaf(pos)
 	}
 
 	fn n_unpruned_leaves(&self) -> u64 {

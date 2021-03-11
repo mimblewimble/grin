@@ -96,18 +96,6 @@ impl<T: PMMRable> Backend<T> for PMMRBackend<T> {
 		self.hash_file.read(position - shift)
 	}
 
-	// fn get_data_from_file(&self, position: u64) -> Option<T::E> {
-	// 	if !pmmr::is_leaf(position) {
-	// 		return None;
-	// 	}
-	// 	if self.is_compacted(position) {
-	// 		return None;
-	// 	}
-	// 	let flatfile_pos = pmmr::n_leaves(position);
-	// 	let shift = self.prune_list.get_leaf_shift(position);
-	// 	self.data_file.read(flatfile_pos - shift)
-	// }
-
 	/// Get the hash at pos.
 	/// Return None if pos is a leaf and it has been removed (or pruned or
 	/// compacted).
@@ -118,17 +106,15 @@ impl<T: PMMRable> Backend<T> for PMMRBackend<T> {
 		self.get_from_file(pos)
 	}
 
-	// /// Get the data at pos.
-	// /// Return None if it has been removed or if pos is not a leaf node.
-	// fn get_data(&self, pos: u64) -> Option<T::E> {
-	// 	if !pmmr::is_leaf(pos) {
-	// 		return None;
-	// 	}
-	// 	if self.prunable && !self.leaf_set.includes(pos) {
-	// 		return None;
-	// 	}
-	// 	self.get_data_from_file(pos)
-	// }
+	fn is_leaf(&self, pos: u64) -> bool {
+		if !pmmr::is_leaf(pos) {
+			false
+		} else if self.prunable && !self.leaf_set.includes(pos) {
+			false
+		} else {
+			true
+		}
+	}
 
 	/// Returns an iterator over all the leaf positions.
 	/// for a prunable PMMR this is an iterator over the leaf_set bitmap.
@@ -182,11 +168,6 @@ impl<T: PMMRable> Backend<T> for PMMRBackend<T> {
 		let shift = self.prune_list.get_shift(position);
 		self.hash_file.rewind(position - shift);
 
-		// // Rewind the data file accounting for pruned/compacted pos
-		// let flatfile_pos = pmmr::n_leaves(position);
-		// let leaf_shift = self.prune_list.get_leaf_shift(position);
-		// self.data_file.rewind(flatfile_pos - leaf_shift);
-
 		Ok(())
 	}
 
@@ -199,7 +180,6 @@ impl<T: PMMRable> Backend<T> for PMMRBackend<T> {
 
 	/// Release underlying data files
 	fn release_files(&mut self) {
-		// self.data_file.release();
 		self.hash_file.release();
 	}
 
@@ -215,7 +195,6 @@ impl<T: PMMRable> Backend<T> for PMMRBackend<T> {
 			"pmmr backend: unpruned: {}, hashes: {}, leaf_set: {}, prune_list: {}",
 			self.unpruned_size(),
 			self.hash_size(),
-			// self.data_size(),
 			self.leaf_set.len(),
 			self.prune_list.len(),
 		);
@@ -234,23 +213,10 @@ impl<T: PMMRable> PMMRBackend<T> {
 	) -> io::Result<PMMRBackend<T>> {
 		let data_dir = data_dir.as_ref();
 
-		// // Are we dealing with "fixed size" data elements or "variable size" data elements
-		// // maintained in an associated size file?
-		// let size_info = if let Some(fixed_size) = T::elmt_size() {
-		// 	SizeInfo::FixedSize(fixed_size)
-		// } else {
-		// 	SizeInfo::VariableSize(Box::new(AppendOnlyFile::open(
-		// 		data_dir.join(PMMR_SIZE_FILE),
-		// 		SizeInfo::FixedSize(SizeEntry::LEN as u16),
-		// 		version,
-		// 	)?))
-		// };
-
 		// Hash file is always "fixed size" and we use 32 bytes per hash.
 		let hash_size_info = SizeInfo::FixedSize(Hash::LEN.try_into().unwrap());
 
 		let hash_file = DataFile::open(&data_dir.join(PMMR_HASH_FILE), hash_size_info, version)?;
-		// let data_file = DataFile::open(&data_dir.join(PMMR_DATA_FILE), size_info, version)?;
 
 		let leaf_set_path = data_dir.join(PMMR_LEAF_FILE);
 
@@ -272,7 +238,6 @@ impl<T: PMMRable> PMMRBackend<T> {
 			data_dir: data_dir.to_path_buf(),
 			prunable,
 			hash_file,
-			// data_file,
 			leaf_set,
 			prune_list,
 			_marker: marker::PhantomData,
@@ -304,12 +269,6 @@ impl<T: PMMRable> PMMRBackend<T> {
 		self.hash_size() + self.prune_list.get_total_shift()
 	}
 
-	// /// Number of elements in the underlying stored data. Extremely dependent on
-	// /// pruning and compaction.
-	// pub fn data_size(&self) -> u64 {
-	// 	self.data_file.size()
-	// }
-
 	/// Size of the underlying hashed data. Extremely dependent on pruning
 	/// and compaction.
 	pub fn hash_size(&self) -> u64 {
@@ -321,7 +280,6 @@ impl<T: PMMRable> PMMRBackend<T> {
 	pub fn sync(&mut self) -> io::Result<()> {
 		Ok(())
 			.and(self.hash_file.flush())
-			// .and(self.data_file.flush())
 			.and(self.sync_leaf_set())
 			.map_err(|e| {
 				io::Error::new(

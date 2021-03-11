@@ -159,6 +159,10 @@ where
 		self.backend.leaf_idx_iter(from_idx)
 	}
 
+	fn is_leaf(&self, pos: u64) -> bool {
+		pos <= self.last_pos && is_leaf(pos) && self.backend.is_leaf(pos)
+	}
+
 	fn n_unpruned_leaves(&self) -> u64 {
 		self.backend.n_unpruned_leaves()
 	}
