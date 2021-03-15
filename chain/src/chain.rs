@@ -226,6 +226,11 @@ impl Chain {
 		Ok(chain)
 	}
 
+	/// Are we running with archive_mode enabled?
+	pub fn archive_mode(&self) -> bool {
+		self.archive_mode
+	}
+
 	/// Return our shared header MMR handle.
 	pub fn header_pmmr(&self) -> Arc<RwLock<PMMRHandle<BlockHeader>>> {
 		self.header_pmmr.clone()
@@ -889,7 +894,7 @@ impl Chain {
 	/// If beyond the horizon then we cannot sync via recent full blocks
 	/// and we need a state (txhashset) sync.
 	pub fn check_txhashset_needed(&self, fork_point: &BlockHeader) -> Result<bool, Error> {
-		if self.archive_mode {
+		if self.archive_mode() {
 			debug!("check_txhashset_needed: we are running with archive_mode=true, not needed");
 			return Ok(false);
 		}
@@ -1080,7 +1085,7 @@ impl Chain {
 		header_pmmr: &txhashset::PMMRHandle<BlockHeader>,
 		batch: &store::Batch<'_>,
 	) -> Result<(), Error> {
-		if self.archive_mode {
+		if self.archive_mode() {
 			return Ok(());
 		}
 
@@ -1166,7 +1171,7 @@ impl Chain {
 		}
 
 		// If we are not in archival mode remove historical blocks from the db.
-		if !self.archive_mode {
+		if !self.archive_mode() {
 			self.remove_historical_blocks(&header_pmmr, &batch)?;
 		}
 

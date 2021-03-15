@@ -72,6 +72,11 @@ impl BodySync {
 		Ok(false)
 	}
 
+	/// Is our local node running in archive_mode?
+	fn archive_mode(&self) -> bool {
+		self.chain.archive_mode()
+	}
+
 	/// Return true if txhashset download is needed (when requested block is under the horizon).
 	/// Otherwise go request some missing blocks and return false.
 	fn body_sync(&mut self) -> Result<bool, chain::Error> {
@@ -89,16 +94,13 @@ impl BodySync {
 		let peers = {
 			// Find connected peers with strictly greater difficulty than us.
 			let peers_iter = || {
-				// TODO - Once we have "critical mass" of archival nodes on network
-				// we can uncomment this so archive nodes only sync from archive nodes.
-				//
-				// let cap = if self.chain.archive_mode {
-				// 	Capabilities::BLOCK_HIST
-				// } else {
-				// 	Capabilities::UNKNOWN
-				// };
-
-				let cap = Capabilities::UNKNOWN;
+				// If we are running with archive mode enabled we only want to sync
+				// from other archive nodes.
+				let cap = if self.archive_mode() {
+					Capabilities::BLOCK_HIST
+				} else {
+					Capabilities::UNKNOWN
+				};
 
 				self.peers
 					.iter()
