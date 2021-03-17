@@ -12,7 +12,7 @@ edition = "2018"
 [dependencies]
 blake2 = { package = "blake2-rfc", version = "0.2"}
 byteorder = "1"
-croaring = { version = "0.4.5", package = "croaring-mw", features = ["compat"] }
+croaring = "0.4.6"
 enum_primitive = "0.1"
 failure = "0.1"
 failure_derive = "0.1"
