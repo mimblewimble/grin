@@ -525,6 +525,15 @@ impl Chain {
 				Ok(head)
 			}
 			Err(e) => match e.kind() {
+				ErrorKind::InvalidBlockProof(err) => {
+					debug!(
+						"Block {} at {}: block proof error: {:?}",
+						b.hash(),
+						b.header.height,
+						&err
+					);
+					Err(e)
+				}
 				ErrorKind::Unfit(ref msg) => {
 					debug!(
 						"Block {} at {} is unfit at this time: {}",
