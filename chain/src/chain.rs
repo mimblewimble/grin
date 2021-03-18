@@ -226,6 +226,10 @@ impl Chain {
 			genesis: genesis.header,
 		};
 
+		// If known bad block exists on "current chain" then rewind prior to this.
+		// Suppress any errors here in case we cannot find
+		chain.rewind_bad_block()?;
+
 		chain.log_heads()?;
 
 		// Temporarily exercising the initialization process.
@@ -259,6 +263,69 @@ impl Chain {
 	/// Shared store instance.
 	pub fn store(&self) -> Arc<store::ChainStore> {
 		self.store.clone()
+	}
+
+	/// Known bad block that we must rewind prior to if seen on "current chain".
+	fn rewind_bad_block(&self) -> Result<(), Error> {
+		let hash =
+			Hash::from_hex("0002897182d8cf7631e86d56ad546b7cf0893bda811592aa9312ae633ce04813")?;
+
+		if let Ok(header) = self.get_block_header(&hash) {
+			if self.is_on_current_chain(&header).is_ok() {
+				debug!(
+					"rewind_bad_block: found header: {} at {}",
+					header.hash(),
+					header.height
+				);
+				if let Ok(block) = self.get_block(&hash) {
+					debug!(
+						"rewind_bad_block: found block: {} at {}",
+						block.header.hash(),
+						block.header.height
+					);
+
+					let prev_header = self.get_previous_header(&header)?;
+					debug!(
+						"rewind_bad_block: rewinding to prev: {} at {}",
+						prev_header.hash(),
+						prev_header.height
+					);
+
+					let mut header_pmmr = self.header_pmmr.write();
+					let mut txhashset = self.txhashset.write();
+					let mut batch = self.store.batch()?;
+
+					let old_head = batch.head()?;
+					let mut new_head = old_head.clone();
+
+					txhashset::extending(
+						&mut header_pmmr,
+						&mut txhashset,
+						&mut batch,
+						|ext, batch| {
+							pipe::rewind_and_apply_fork(&prev_header, ext, batch)?;
+
+							// Reset chain head.
+							new_head = Tip::from_header(&prev_header);
+							batch.save_body_head(&new_head)?;
+
+							Ok(())
+						},
+					)?;
+
+					// Now delete bad block and all subsequent blocks from local db.
+					let mut current = batch.get_block_header(&old_head.hash())?;
+					while current.height > new_head.height {
+						let _ = batch.delete_block(&current.hash());
+						current = batch.get_previous_header(&current)?;
+					}
+
+					batch.commit()?;
+				}
+			}
+		}
+
+		Ok(())
 	}
 
 	fn log_heads(&self) -> Result<(), Error> {
@@ -458,6 +525,15 @@ impl Chain {
 				Ok(head)
 			}
 			Err(e) => match e.kind() {
+				ErrorKind::InvalidBlockProof(err) => {
+					debug!(
+						"Block {} at {}: block proof error: {:?}",
+						b.hash(),
+						b.header.height,
+						&err
+					);
+					Err(e)
+				}
 				ErrorKind::Unfit(ref msg) => {
 					debug!(
 						"Block {} at {} is unfit at this time: {}",
