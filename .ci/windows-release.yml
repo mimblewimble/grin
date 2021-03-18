@@ -1,10 +1,16 @@
 steps:
   - script: |
-      refreshenv && cargo test --all
+      refreshenv
+      LIBCLANG_PATH=C:\Program Files\LLVM\lib
+      LLVM_CONFIG_PATH=C:\Program Files\LLVM\bin\llvm-config
+      cargo test --all
     displayName: Cargo Test All
     condition:  and(succeeded(), contains(variables['Build.SourceBranch'], 'refs/tags/'), eq(variables['CI_JOB'], 'release' ))
   - script: |
-      refreshenv && cargo build --release
+      refreshenv
+      LIBCLANG_PATH=C:\Program Files\LLVM\lib
+      LLVM_CONFIG_PATH=C:\Program Files\LLVM\bin\llvm-config
+      cargo build --release
     displayName: Build Release
     condition:  and(succeeded(), contains(variables['Build.SourceBranch'], 'refs/tags/'), eq(variables['CI_JOB'], 'release' ))
   - script: |
