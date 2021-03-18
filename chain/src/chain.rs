@@ -269,6 +269,7 @@ impl Chain {
 	fn rewind_bad_block(&self) -> Result<(), Error> {
 		let hash =
 			Hash::from_hex("0002897182d8cf7631e86d56ad546b7cf0893bda811592aa9312ae633ce04813")?;
+
 		if let Ok(header) = self.get_block_header(&hash) {
 			if self.is_on_current_chain(&header).is_ok() {
 				debug!(
@@ -293,12 +294,32 @@ impl Chain {
 					let mut header_pmmr = self.header_pmmr.write();
 					let mut txhashset = self.txhashset.write();
 					let mut batch = self.store.batch()?;
+
+					let old_head = batch.head()?;
+					let mut new_head = old_head.clone();
+
 					txhashset::extending(
 						&mut header_pmmr,
 						&mut txhashset,
 						&mut batch,
-						|ext, batch| pipe::rewind_and_apply_fork(&prev_header, ext, batch),
+						|ext, batch| {
+							pipe::rewind_and_apply_fork(&prev_header, ext, batch)?;
+
+							// Reset chain head.
+							new_head = Tip::from_header(&prev_header);
+							batch.save_body_head(&new_head)?;
+
+							Ok(())
+						},
 					)?;
+
+					// Now delete bad block and all subsequent blocks from local db.
+					let mut current = batch.get_block_header(&old_head.hash())?;
+					while current.height > new_head.height {
+						let _ = batch.delete_block(&current.hash());
+						current = batch.get_previous_header(&current)?;
+					}
+
 					batch.commit()?;
 				}
 			}
