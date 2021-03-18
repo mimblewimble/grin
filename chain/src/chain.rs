@@ -300,7 +300,6 @@ impl Chain {
 					let mut batch = self.store.batch()?;
 
 					let old_head = batch.head()?;
-					let old_header_head = batch.header_head()?;
 
 					txhashset::extending(
 						&mut header_pmmr,
@@ -324,6 +323,24 @@ impl Chain {
 						current = batch.get_previous_header(&current)?;
 					}
 
+					batch.commit()?;
+				}
+
+				{
+					let mut header_pmmr = self.header_pmmr.write();
+					let mut batch = self.store.batch()?;
+
+					let old_header_head = batch.header_head()?;
+
+					txhashset::header_extending(&mut header_pmmr, &mut batch, |ext, batch| {
+						pipe::rewind_and_apply_header_fork(&prev_header, ext, batch)?;
+
+						// Reset chain head.
+						batch.save_header_head(&new_head)?;
+
+						Ok(())
+					})?;
+
 					// cleanup all subsequent bad headers (back from old header_head).
 					let mut current = batch.get_block_header(&old_header_head.hash())?;
 					while current.height > new_head.height {
@@ -332,6 +349,9 @@ impl Chain {
 					}
 
 					batch.commit()?;
+
+					// Make sure teh "sync mmr" reflects the updated header_head.
+					self.rebuild_sync_mmr(&new_head)?;
 				}
 			}
 		}
