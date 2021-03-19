@@ -230,6 +230,9 @@ impl Chain {
 		// Suppress any errors here in case we cannot find
 		chain.rewind_bad_block()?;
 
+		let header_head = chain.header_head()?;
+		chain.rebuild_sync_mmr(&header_head)?;
+
 		chain.log_heads()?;
 
 		// Temporarily exercising the initialization process.
@@ -277,6 +280,11 @@ impl Chain {
 					header.hash(),
 					header.height
 				);
+
+				let prev_header = self.get_previous_header(&header)?;
+				let new_head = Tip::from_header(&prev_header);
+
+				// Fix the (full) block chain.
 				if let Ok(block) = self.get_block(&hash) {
 					debug!(
 						"rewind_bad_block: found block: {} at {}",
@@ -284,7 +292,6 @@ impl Chain {
 						block.header.height
 					);
 
-					let prev_header = self.get_previous_header(&header)?;
 					debug!(
 						"rewind_bad_block: rewinding to prev: {} at {}",
 						prev_header.hash(),
@@ -296,7 +303,6 @@ impl Chain {
 					let mut batch = self.store.batch()?;
 
 					let old_head = batch.head()?;
-					let mut new_head = old_head.clone();
 
 					txhashset::extending(
 						&mut header_pmmr,
@@ -306,17 +312,42 @@ impl Chain {
 							pipe::rewind_and_apply_fork(&prev_header, ext, batch)?;
 
 							// Reset chain head.
-							new_head = Tip::from_header(&prev_header);
 							batch.save_body_head(&new_head)?;
+							batch.save_header_head(&new_head)?;
 
 							Ok(())
 						},
 					)?;
 
-					// Now delete bad block and all subsequent blocks from local db.
+					// Cleanup all subsequent bad blocks (back from old head).
 					let mut current = batch.get_block_header(&old_head.hash())?;
 					while current.height > new_head.height {
 						let _ = batch.delete_block(&current.hash());
+						current = batch.get_previous_header(&current)?;
+					}
+
+					batch.commit()?;
+				}
+
+				{
+					let mut header_pmmr = self.header_pmmr.write();
+					let mut batch = self.store.batch()?;
+
+					let old_header_head = batch.header_head()?;
+
+					txhashset::header_extending(&mut header_pmmr, &mut batch, |ext, batch| {
+						pipe::rewind_and_apply_header_fork(&prev_header, ext, batch)?;
+
+						// Reset chain head.
+						batch.save_header_head(&new_head)?;
+
+						Ok(())
+					})?;
+
+					// cleanup all subsequent bad headers (back from old header_head).
+					let mut current = batch.get_block_header(&old_header_head.hash())?;
+					while current.height > new_head.height {
+						let _ = batch.delete_block_header(&current.hash());
 						current = batch.get_previous_header(&current)?;
 					}
 

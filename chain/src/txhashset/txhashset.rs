@@ -850,8 +850,11 @@ where
 	// Use underlying MMR to determine the "head".
 	let head = match handle.head_hash() {
 		Ok(hash) => {
-			let header = child_batch.get_block_header(&hash)?;
-			Tip::from_header(&header)
+			if let Ok(header) = child_batch.get_block_header(&hash) {
+				Tip::from_header(&header)
+			} else {
+				Tip::default()
+			}
 		}
 		Err(_) => Tip::default(),
 	};
