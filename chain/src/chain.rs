@@ -230,6 +230,9 @@ impl Chain {
 		// Suppress any errors here in case we cannot find
 		chain.rewind_bad_block()?;
 
+		let header_head = chain.header_head()?;
+		chain.rebuild_sync_mmr(&header_head)?;
+
 		chain.log_heads()?;
 
 		// Temporarily exercising the initialization process.
@@ -349,9 +352,6 @@ impl Chain {
 					}
 
 					batch.commit()?;
-
-					// Make sure teh "sync mmr" reflects the updated header_head.
-					self.rebuild_sync_mmr(&new_head)?;
 				}
 			}
 		}
