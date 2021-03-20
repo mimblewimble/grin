@@ -3,13 +3,16 @@ steps:
       refreshenv
       LIBCLANG_PATH=C:\Program Files\LLVM\lib
       LLVM_CONFIG_PATH=C:\Program Files\LLVM\bin\llvm-config
+      ROARING_ARCH=x86-64-v2
       cargo test --all
     displayName: Cargo Test All
     condition:  and(succeeded(), contains(variables['Build.SourceBranch'], 'refs/tags/'), eq(variables['CI_JOB'], 'release' ))
   - script: |
+      cargo clean
       refreshenv
       LIBCLANG_PATH=C:\Program Files\LLVM\lib
       LLVM_CONFIG_PATH=C:\Program Files\LLVM\bin\llvm-config
+      ROARING_ARCH=x86-64-v2
       cargo build --release
     displayName: Build Release
     condition:  and(succeeded(), contains(variables['Build.SourceBranch'], 'refs/tags/'), eq(variables['CI_JOB'], 'release' ))
