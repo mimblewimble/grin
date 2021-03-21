@@ -45,6 +45,7 @@ pub fn genesis_dev() -> core::Block {
 }
 
 /// Testnet genesis block
+#[allow(clippy::inconsistent_digit_grouping)]
 pub fn genesis_test() -> core::Block {
 	let gen = core::Block::with_header(core::BlockHeader {
 		height: 0,
@@ -157,6 +158,7 @@ pub fn genesis_test() -> core::Block {
 }
 
 /// Mainnet genesis block
+#[allow(clippy::inconsistent_digit_grouping)]
 pub fn genesis_main() -> core::Block {
 	let gen = core::Block::with_header(core::BlockHeader {
 		height: 0,
