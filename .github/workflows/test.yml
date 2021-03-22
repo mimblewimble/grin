@@ -1,0 +1,36 @@
+name: test
+on: [push, pull_request, workflow_dispatch]
+env: 
+  CARGO_TERM_COLOR: always
+  CI_JOB: test
+jobs:
+  test-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v2
+      - run: choco install -y llvm
+      - run: refreshenv && cargo test --all
+        env:
+          ROARING_ARCH: x86-64-v2
+          LIBCLANG_PATH: C:\Program Files\LLVM\lib
+          LLVM_CONFIG_PATH: C:\Program Files\LLVM\bin\llvm-config
+  test-macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v2
+      - run: ROARING_ARCH=x86-64-v2 cargo test --all
+  test-linux:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        args:
+          - "servers"
+          - "chain core keychain"
+          - "pool p2p src"
+          - "api util store"
+    steps:
+      - uses: actions/checkout@v2
+      - run: ROARING_ARCH=x86-64-v2 .ci/general-jobs
+        env:
+          CI_JOB_ARGS: ${{ matrix.args }}
