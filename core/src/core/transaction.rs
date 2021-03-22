@@ -1250,10 +1250,10 @@ impl TransactionBody {
 	) -> Result<(), Error> {
 		self.validate_read(weighting)?;
 
-		// Find all the outputs that have not had their rangeproofs verified.
+		// Find all the outputs that have not been verified.
 		let outputs = {
 			let mut verifier = verifier.write();
-			verifier.filter_rangeproof_unverified(&self.outputs)
+			verifier.filter_output_unverified(&self.outputs)
 		};
 
 		// Now batch verify all those unverified rangeproofs
@@ -1279,7 +1279,7 @@ impl TransactionBody {
 		// Cache the successful verification results for the new outputs and kernels.
 		{
 			let mut verifier = verifier.write();
-			verifier.add_rangeproof_verified(outputs);
+			verifier.add_output_verified(outputs);
 			verifier.add_kernel_sig_verified(kernels);
 		}
 		Ok(())
@@ -2089,6 +2089,8 @@ impl AsRef<Commitment> for Output {
 		&self.identifier.commit
 	}
 }
+
+impl DefaultHashable for Output {}
 
 /// Implementation of Writeable for a transaction Output, defines how to write
 /// an Output as binary.
