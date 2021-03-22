@@ -42,20 +42,20 @@ fn test_verifier_cache_rangeproofs() {
 	// Check our output is not verified according to the cache.
 	{
 		let mut cache = cache.write();
-		let unverified = cache.filter_rangeproof_unverified(&[out]);
+		let unverified = cache.filter_output_unverified(&[out]);
 		assert_eq!(unverified, vec![out]);
 	}
 
 	// Add our output to the cache.
 	{
 		let mut cache = cache.write();
-		cache.add_rangeproof_verified(vec![out]);
+		cache.add_output_verified(vec![out]);
 	}
 
 	// Check it shows as verified according to the cache.
 	{
 		let mut cache = cache.write();
-		let unverified = cache.filter_rangeproof_unverified(&[out]);
+		let unverified = cache.filter_output_unverified(&[out]);
 		assert_eq!(unverified, vec![]);
 	}
 }
