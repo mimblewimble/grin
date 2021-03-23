@@ -20,6 +20,7 @@ use self::core::libtx::proof;
 use grin_core as core;
 use keychain::{ExtKeychain, Keychain, SwitchCommitmentType};
 use std::sync::Arc;
+use util::secp::pedersen::Commitment;
 use util::RwLock;
 
 fn verifier_cache() -> Arc<RwLock<dyn VerifierCache>> {
@@ -38,6 +39,8 @@ fn test_verifier_cache_rangeproofs() {
 	let proof = proof::create(&keychain, &builder, 5, &key_id, switch, commit, None).unwrap();
 
 	let out = Output::new(OutputFeatures::Plain, commit, proof);
+	let out_different_commitment =
+		Output::new(OutputFeatures::Plain, Commitment::from_vec(vec![]), proof);
 
 	// Check our output is not verified according to the cache.
 	{
@@ -57,5 +60,12 @@ fn test_verifier_cache_rangeproofs() {
 		let mut cache = cache.write();
 		let unverified = cache.filter_rangeproof_unverified(&[out]);
 		assert_eq!(unverified, vec![]);
+	}
+
+	// Check that the same rangeproof with a different output commitment is not verified.
+	{
+		let mut cache = cache.write();
+		let unverified = cache.filter_rangeproof_unverified(&[out_different_commitment]);
+		assert_eq!(unverified, vec![out_different_commitment]);
 	}
 }
