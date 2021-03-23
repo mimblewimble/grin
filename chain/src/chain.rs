@@ -363,63 +363,33 @@ impl Chain {
 		// Only do this once we know the header PoW is valid.
 		self.check_orphan(&b, opts)?;
 
-		let (maybe_new_head, prev_head) = {
+		let (head, fork_point, prev_head) = {
 			let mut header_pmmr = self.header_pmmr.write();
 			let mut txhashset = self.txhashset.write();
 			let batch = self.store.batch()?;
 			let prev_head = batch.head()?;
 			let mut ctx = self.new_ctx(opts, batch, &mut header_pmmr, &mut txhashset)?;
 
-			let maybe_new_head = pipe::process_block(&b, &mut ctx);
+			let (head, fork_point) = pipe::process_block(&b, &mut ctx)?;
 
-			// We have flushed txhashset extension changes to disk
-			// but not yet committed the batch.
-			// A node shutdown at this point can be catastrophic...
-			// We prevent this via the stop_lock (see above).
-			if maybe_new_head.is_ok() {
-				ctx.batch.commit()?;
-			}
+			ctx.batch.commit()?;
 
 			// release the lock and let the batch go before post-processing
-			(maybe_new_head, prev_head)
+			(head, fork_point, prev_head)
 		};
 
-		match maybe_new_head {
-			Ok((head, fork_point)) => {
-				let prev = self.get_previous_header(&b.header)?;
-				let status = self.determine_status(
-					head,
-					Tip::from_header(&prev),
-					prev_head,
-					Tip::from_header(&fork_point),
-				);
+		let prev = self.get_previous_header(&b.header)?;
+		let status = self.determine_status(
+			head,
+			Tip::from_header(&prev),
+			prev_head,
+			Tip::from_header(&fork_point),
+		);
 
-				// notifying other parts of the system of the update
-				self.adapter.block_accepted(&b, status, opts);
+		// notifying other parts of the system of the update
+		self.adapter.block_accepted(&b, status, opts);
 
-				Ok(head)
-			}
-			Err(e) => match e.kind() {
-				ErrorKind::Unfit(ref msg) => {
-					debug!(
-						"Block {} at {} is unfit at this time: {}",
-						b.hash(),
-						b.header.height,
-						msg
-					);
-					Err(ErrorKind::Unfit(msg.clone()).into())
-				}
-				_ => {
-					info!(
-						"Rejected block {} at {}: {:?}",
-						b.hash(),
-						b.header.height,
-						e
-					);
-					Err(ErrorKind::Other(format!("{:?}", e)).into())
-				}
-			},
-		}
+		Ok(head)
 	}
 
 	/// Process a block header received during "header first" propagation.
