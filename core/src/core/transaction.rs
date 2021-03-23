@@ -1253,7 +1253,7 @@ impl TransactionBody {
 		// Find all the outputs that have not been verified.
 		let outputs = {
 			let mut verifier = verifier.write();
-			verifier.filter_output_unverified(&self.outputs)
+			verifier.filter_rangeproof_unverified(&self.outputs)
 		};
 
 		// Now batch verify all those unverified rangeproofs
@@ -1279,7 +1279,7 @@ impl TransactionBody {
 		// Cache the successful verification results for the new outputs and kernels.
 		{
 			let mut verifier = verifier.write();
-			verifier.add_output_verified(outputs);
+			verifier.add_rangeproof_verified(outputs);
 			verifier.add_kernel_sig_verified(kernels);
 		}
 		Ok(())
