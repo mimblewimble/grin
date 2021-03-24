@@ -72,3 +72,9 @@ subcommands:
                   long: peer
                   required: true
                   takes_value: true
+        - resetchainhead:
+            about: Resets the local chain head
+            args:
+                - hash:
+                    help: The header hash to reset to
+                    required: true

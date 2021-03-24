@@ -129,6 +129,16 @@ impl HTTPNodeClient {
 		e.reset().unwrap();
 	}
 
+	pub fn reset_chain_head(&self, hash: String) {
+		let mut e = term::stdout().unwrap();
+		let params = json!([hash]);
+		match self.send_json_request::<()>("reset_chain_head", &params) {
+			Ok(_) => writeln!(e, "Successfully reset chain head {}", hash).unwrap(),
+			Err(_) => writeln!(e, "Failed to reset chain head {}", hash).unwrap(),
+		}
+		e.reset().unwrap();
+	}
+
 	pub fn ban_peer(&self, peer_addr: &SocketAddr) {
 		let mut e = term::stdout().unwrap();
 		let params = json!([peer_addr]);
@@ -162,6 +172,10 @@ pub fn client_command(client_args: &ArgMatches<'_>, global_config: GlobalConfig)
 		}
 		("listconnectedpeers", Some(_)) => {
 			node_client.list_connected_peers();
+		}
+		("resetchainhead", Some(args)) => {
+			let hash = args.value_of("hash").unwrap();
+			node_client.reset_chain_head(hash.to_string());
 		}
 		("ban", Some(peer_args)) => {
 			let peer = peer_args.value_of("peer").unwrap();
