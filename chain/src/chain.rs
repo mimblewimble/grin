@@ -232,13 +232,20 @@ impl Chain {
 		let mut txhashset = self.txhashset.write();
 		let mut batch = self.store.batch()?;
 
+		// Rewind and reapply headers to reset the header MMR
+		txhashset::header_extending(&mut header_pmmr, &mut batch, |ext, batch| {
+			pipe::rewind_and_apply_header_fork(&header, ext, batch)?;
+			batch.save_header_head(&head)?;
+			Ok(())
+		})?;
+
+		// Rewind and reapply blocks to reset the output/rangeproof/kernel MMR.
 		txhashset::extending(
 			&mut header_pmmr,
 			&mut txhashset,
 			&mut batch,
 			|ext, batch| {
 				pipe::rewind_and_apply_fork(&header, ext, batch)?;
-				batch.save_header_head(&head)?;
 				batch.save_body_head(&head)?;
 				Ok(())
 			},
