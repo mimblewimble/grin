@@ -304,8 +304,8 @@ impl Chain {
 	) -> BlockStatus {
 		// If head is updated then we are either "next" block or we just experienced a "reorg" to new head.
 		// Otherwise this is a "fork" off the main chain.
-		if let Some(head) = head {
-			if head.prev_block_h == prev_head.last_block_h {
+		if head.is_some() {
+			if self.is_on_current_chain(prev_head).is_ok() {
 				BlockStatus::Next { prev }
 			} else {
 				BlockStatus::Reorg {
@@ -1432,9 +1432,10 @@ impl Chain {
 	/// Verifies the given block header is actually on the current chain.
 	/// Checks the header_by_height index to verify the header is where we say
 	/// it is
-	pub fn is_on_current_chain(&self, header: &BlockHeader) -> Result<(), Error> {
-		let chain_header = self.get_header_by_height(header.height)?;
-		if chain_header.hash() == header.hash() {
+	pub fn is_on_current_chain<T: Into<Tip>>(&self, t: T) -> Result<(), Error> {
+		let tip: Tip = t.into();
+		let chain_header = self.get_header_by_height(tip.height)?;
+		if chain_header.hash() == tip.hash() {
 			Ok(())
 		} else {
 			Err(ErrorKind::Other("not on current chain".to_string()).into())
