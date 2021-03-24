@@ -178,7 +178,8 @@ impl Owner {
 		peer_handler.unban_peer(addr)
 	}
 
-	pub fn reset_chain_head(&self, hash: Hash) -> Result<(), Error> {
+	pub fn reset_chain_head(&self, hash: String) -> Result<(), Error> {
+		let hash = Hash::from_hex(&hash).map_err(|_| ErrorKind::RequestError("wat".into()))?;
 		let handler = ChainResetHandler {
 			chain: self.chain.clone(),
 		};
