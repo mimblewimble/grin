@@ -222,6 +222,33 @@ impl Chain {
 		Ok(chain)
 	}
 
+	/// Reset both head and header_head to the provided header.
+	/// Handles simple rewind and more complex fork scenarios.
+	/// Used by the reset_chain_head owner api endpoint.
+	pub fn reset_chain_head(&self, header: &BlockHeader) -> Result<(), Error> {
+		let head = Tip::from_header(header);
+
+		let mut header_pmmr = self.header_pmmr.write();
+		let mut txhashset = self.txhashset.write();
+		let mut batch = self.store.batch()?;
+
+		txhashset::extending(
+			&mut header_pmmr,
+			&mut txhashset,
+			&mut batch,
+			|ext, batch| {
+				pipe::rewind_and_apply_fork(&header, ext, batch)?;
+				batch.save_header_head(&head)?;
+				batch.save_body_head(&head)?;
+				Ok(())
+			},
+		)?;
+
+		batch.commit()?;
+
+		Ok(())
+	}
+
 	/// Are we running with archive_mode enabled?
 	pub fn archive_mode(&self) -> bool {
 		self.archive_mode
@@ -297,7 +324,8 @@ impl Chain {
 	}
 
 	/// Quick check for "known" duplicate block up to and including current chain head.
-	fn is_known(&self, header: &BlockHeader) -> Result<(), Error> {
+	/// Returns an error if this block is "known".
+	pub fn is_known(&self, header: &BlockHeader) -> Result<(), Error> {
 		let head = self.head()?;
 		if head.hash() == header.hash() {
 			return Err(ErrorKind::Unfit("duplicate block".into()).into());

@@ -78,7 +78,10 @@ pub struct ChainResetHandler {
 
 impl ChainResetHandler {
 	pub fn reset_chain_head(&self, hash: Hash) -> Result<(), Error> {
-		unimplemented!()
+		let chain = w(&self.chain)?;
+		let header = chain.get_block_header(&hash)?;
+		chain.reset_chain_head(&header)?;
+		Ok(())
 	}
 }
 
@@ -91,9 +94,9 @@ pub struct ChainCompactHandler {
 
 impl ChainCompactHandler {
 	pub fn compact_chain(&self) -> Result<(), Error> {
-		w(&self.chain)?
-			.compact()
-			.map_err(|_| ErrorKind::Internal("chain error".to_owned()).into())
+		let chain = w(&self.chain)?;
+		chain.compact()?;
+		Ok(())
 	}
 }
 

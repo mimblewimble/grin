@@ -14,7 +14,6 @@
 
 //! JSON-RPC Stub generation for the Owner API
 
-use crate::core::core::hash::Hash;
 use crate::owner::Owner;
 use crate::p2p::types::PeerInfoDisplay;
 use crate::p2p::PeerData;

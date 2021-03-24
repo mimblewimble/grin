@@ -179,7 +179,8 @@ impl Owner {
 	}
 
 	pub fn reset_chain_head(&self, hash: String) -> Result<(), Error> {
-		let hash = Hash::from_hex(&hash).map_err(|_| ErrorKind::RequestError("wat".into()))?;
+		let hash = Hash::from_hex(&hash)
+			.map_err(|_| ErrorKind::RequestError("invalid header hash".into()))?;
 		let handler = ChainResetHandler {
 			chain: self.chain.clone(),
 		};
