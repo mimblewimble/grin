@@ -14,6 +14,7 @@
 
 //! JSON-RPC Stub generation for the Owner API
 
+use crate::core::core::hash::Hash;
 use crate::owner::Owner;
 use crate::p2p::types::PeerInfoDisplay;
 use crate::p2p::PeerData;
@@ -131,6 +132,8 @@ pub trait OwnerRpc: Sync + Send {
 	```
 	 */
 	fn compact_chain(&self) -> Result<(), ErrorKind>;
+
+	fn reset_chain_head(&self, hash: Hash) -> Result<(), ErrorKind>;
 
 	/**
 	Networked version of [Owner::get_peers](struct.Owner.html#method.get_peers).
@@ -382,6 +385,10 @@ impl OwnerRpc for Owner {
 	fn unban_peer(&self, addr: SocketAddr) -> Result<(), ErrorKind> {
 		Owner::unban_peer(self, addr).map_err(|e| e.kind().clone())
 	}
+
+	fn reset_chain_head(&self, hash: Hash) -> Result<(), ErrorKind> {
+		Owner::reset_chain_head(self, hash).map_err(|e| e.kind().clone())
+	}
 }
 
 #[doc(hidden)]
@@ -391,7 +398,7 @@ macro_rules! doctest_helper_json_rpc_owner_assert_response {
 		// create temporary grin server, run jsonrpc request on node api, delete server, return
 		// json response.
 
-		{
+			{
 			/*use grin_servers::test_framework::framework::run_doctest;
 			use grin_util as util;
 			use serde_json;
@@ -425,6 +432,6 @@ macro_rules! doctest_helper_json_rpc_owner_assert_response {
 					serde_json::to_string_pretty(&expected_response).unwrap()
 				);
 				}*/
-		}
+			}
 	};
 }

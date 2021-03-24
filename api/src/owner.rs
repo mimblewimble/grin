@@ -15,7 +15,8 @@
 //! Owner API External Definition
 
 use crate::chain::{Chain, SyncState};
-use crate::handlers::chain_api::{ChainCompactHandler, ChainValidationHandler};
+use crate::core::core::hash::Hash;
+use crate::handlers::chain_api::{ChainCompactHandler, ChainResetHandler, ChainValidationHandler};
 use crate::handlers::peers_api::{PeerHandler, PeersConnectedHandler};
 use crate::handlers::server_api::StatusHandler;
 use crate::p2p::types::PeerInfoDisplay;
@@ -175,5 +176,12 @@ impl Owner {
 			peers: self.peers.clone(),
 		};
 		peer_handler.unban_peer(addr)
+	}
+
+	pub fn reset_chain_head(&self, hash: Hash) -> Result<(), Error> {
+		let handler = ChainResetHandler {
+			chain: self.chain.clone(),
+		};
+		handler.reset_chain_head(hash)
 	}
 }

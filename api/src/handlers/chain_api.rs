@@ -14,7 +14,7 @@
 
 use super::utils::{get_output, get_output_v2, w};
 use crate::chain;
-use crate::core::core::hash::Hashed;
+use crate::core::core::hash::{Hash, Hashed};
 use crate::rest::*;
 use crate::router::{Handler, ResponseFuture};
 use crate::types::*;
@@ -69,6 +69,16 @@ impl Handler for ChainValidationHandler {
 				format!("validate failed: {}", e),
 			),
 		}
+	}
+}
+
+pub struct ChainResetHandler {
+	pub chain: Weak<chain::Chain>,
+}
+
+impl ChainResetHandler {
+	pub fn reset_chain_head(&self, hash: Hash) -> Result<(), Error> {
+		unimplemented!()
 	}
 }
 
