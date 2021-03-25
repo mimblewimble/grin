@@ -103,7 +103,7 @@ impl TableViewItem<PeerColumn> for PeerStats {
 			let other_sum = other_recv_bytes + other_sent_bytes;
 
 			curr_sum.cmp(&other_sum)
-		};
+		}
 
 		let sort_by_addr = || self.addr.cmp(&other.addr);
 
