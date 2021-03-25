@@ -134,6 +134,12 @@ impl SyncState {
 		}
 	}
 
+	/// Reset sync status to NoSync.
+	pub fn reset(&self) {
+		self.clear_sync_error();
+		self.update(SyncStatus::NoSync);
+	}
+
 	/// Whether the current state matches any active syncing operation.
 	/// Note: This includes our "initial" state.
 	pub fn is_syncing(&self) -> bool {

@@ -225,12 +225,14 @@ impl Chain {
 	/// Reset both head and header_head to the provided header.
 	/// Handles simple rewind and more complex fork scenarios.
 	/// Used by the reset_chain_head owner api endpoint.
-	pub fn reset_chain_head(&self, header: &BlockHeader) -> Result<(), Error> {
-		let head = Tip::from_header(header);
+	pub fn reset_chain_head<T: Into<Tip>>(&self, head: T) -> Result<(), Error> {
+		let head = head.into();
 
 		let mut header_pmmr = self.header_pmmr.write();
 		let mut txhashset = self.txhashset.write();
 		let mut batch = self.store.batch()?;
+
+		let header = batch.get_block_header(&head.hash())?;
 
 		// Rewind and reapply headers to reset the header MMR
 		txhashset::header_extending(&mut header_pmmr, &mut batch, |ext, batch| {

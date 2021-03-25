@@ -74,6 +74,7 @@ impl Handler for ChainValidationHandler {
 
 pub struct ChainResetHandler {
 	pub chain: Weak<chain::Chain>,
+	pub sync_state: Weak<chain::SyncState>,
 }
 
 impl ChainResetHandler {
@@ -81,6 +82,9 @@ impl ChainResetHandler {
 		let chain = w(&self.chain)?;
 		let header = chain.get_block_header(&hash)?;
 		chain.reset_chain_head(&header)?;
+
+		// Reset the sync status and clear out any sync error.
+		w(&self.sync_state)?.reset();
 		Ok(())
 	}
 }
