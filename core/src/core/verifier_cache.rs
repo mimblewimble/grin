@@ -41,7 +41,7 @@ pub trait VerifierCache: Sync + Send {
 /// Caches outputs by output rangeproof hash (rangeproofs are committed to separately).
 pub struct LruVerifierCache {
 	kernel_sig_verification_cache: LruCache<Hash, ()>,
-	rangeproof_verification_cache: LruCache<Hash, ()>,
+	rangeproof_verification_cache: LruCache<(Hash, Hash), ()>,
 }
 
 impl LruVerifierCache {
@@ -76,7 +76,7 @@ impl VerifierCache for LruVerifierCache {
 			.filter(|x| {
 				!self
 					.rangeproof_verification_cache
-					.contains_key(&x.proof.hash())
+					.contains_key(&(x.identifier.hash(), x.proof.hash()))
 			})
 			.cloned()
 			.collect::<Vec<_>>();
@@ -97,7 +97,75 @@ impl VerifierCache for LruVerifierCache {
 	fn add_rangeproof_verified(&mut self, outputs: Vec<Output>) {
 		for o in outputs {
 			self.rangeproof_verification_cache
-				.insert(o.proof.hash(), ());
+				.insert((o.identifier.hash(), o.proof.hash()), ());
 		}
+	}
+}
+
+#[cfg(test)]
+mod test {
+	#[test]
+	fn test_verifier_cache() {
+		use crate::core::transaction::KernelFeatures;
+		use crate::core::transaction::Output;
+		use crate::core::verifier_cache::LruVerifierCache;
+		use crate::core::verifier_cache::VerifierCache;
+		use crate::global;
+		use crate::libtx::build;
+		use crate::libtx::build::input;
+		use crate::libtx::build::output;
+		use crate::libtx::ProofBuilder;
+		use keychain::{ExtKeychain, Keychain};
+
+		// build some txns to use with cache.
+		global::set_local_chain_type(global::ChainTypes::AutomatedTesting);
+		let keychain = ExtKeychain::from_random_seed(false).unwrap();
+		let builder = ProofBuilder::new(&keychain);
+		let key_id1 = ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
+		let key_id2 = ExtKeychain::derive_key_id(1, 2, 0, 0, 0);
+		let key_id3 = ExtKeychain::derive_key_id(1, 3, 0, 0, 0);
+		let key_id4 = ExtKeychain::derive_key_id(1, 4, 0, 0, 0);
+
+		let mut verifier_cache = LruVerifierCache::new();
+
+		let tx = build::transaction(
+			KernelFeatures::Plain { fee: 2.into() },
+			&[input(7, key_id1), output(5, key_id2)],
+			&keychain,
+			&builder,
+		)
+		.unwrap();
+
+		let tx2 = build::transaction(
+			KernelFeatures::Plain { fee: 3.into() },
+			&[input(9, key_id3), output(6, key_id4)],
+			&keychain,
+			&builder,
+		)
+		.unwrap();
+
+		let output1 = tx.outputs()[0];
+		let output2 = tx2.outputs()[0];
+		let mixed_output = Output {
+			identifier: output2.identifier,
+			proof: output1.proof,
+		};
+
+		// add first output to verifier cache
+		verifier_cache.add_rangeproof_verified(vec![output1]);
+
+		// filter output2, should not be removed
+		let outputs = verifier_cache.filter_rangeproof_unverified(&vec![output2]);
+		assert_eq!(outputs[0], output2);
+		assert_eq!(outputs.len(), 1);
+
+		// filter mixed_output (would fail before the fix)
+		let outputs = verifier_cache.filter_rangeproof_unverified(&vec![mixed_output]);
+		assert_eq!(outputs[0], mixed_output);
+		assert_eq!(outputs.len(), 1);
+
+		// filter output 1, which has been verified
+		let outputs = verifier_cache.filter_rangeproof_unverified(&vec![output1]);
+		assert_eq!(outputs.len(), 0);
 	}
 }
