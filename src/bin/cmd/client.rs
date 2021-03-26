@@ -153,12 +153,8 @@ impl HTTPNodeClient {
 pub fn client_command(client_args: &ArgMatches<'_>, global_config: GlobalConfig) -> i32 {
 	// just get defaults from the global config
 	let server_config = global_config.members.unwrap().server;
-<<<<<<< HEAD
 	let api_secret = get_first_line(server_config.owner_api_secret_path.clone());
 	let node_client = HTTPNodeClient::new(&server_config.api_http_addr, api_secret);
-=======
-	let api_secret = get_first_line(server_config.owner_api_secret_path.clone());
->>>>>>> 5b902a0a... better naming of APIs file and variables
 
 	match client_args.subcommand() {
 		("status", Some(_)) => {
