@@ -318,8 +318,11 @@ impl ProofOfWork {
 ///
 /// The hash of the `Proof` is the hash of its packed nonces when serializing
 /// them at their exact bit size. The resulting bit sequence is padded to be
-/// byte-aligned.
-///
+/// byte-aligned. We form a PROOFSIZE*edge_bits integer by packing the PROOFSIZE edge
+/// indices together, with edge index i occupying bits i * edge_bits through 
+/// (i+1) * edge_bits - 1, padding it with up to 7 0-bits to a multiple of 8 bits, 
+/// writing as a little endian byte array, and hashing with blake2b using 256 bit digest.
+
 #[derive(Clone, PartialOrd, PartialEq, Serialize)]
 pub struct Proof {
 	/// Power of 2 used for the size of the cuckoo graph
