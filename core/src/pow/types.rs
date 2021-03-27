@@ -317,8 +317,9 @@ impl ProofOfWork {
 /// nonces a.k.a. edge indices range from 0 to (1 << edge_bits) - 1
 ///
 /// The hash of the `Proof` is the hash of its packed nonces when serializing
-/// them at their exact bit size. The resulting bit sequence is padded to be
-/// byte-aligned.
+/// them (each nonce) at their exact bit size.
+/// The resulting bit sequence (for each nonce) is padded to be byte-aligned.
+/// The final packed bit sequence of all padded nonces is interpreted as
 ///
 #[derive(Clone, PartialOrd, PartialEq, Serialize)]
 pub struct Proof {
