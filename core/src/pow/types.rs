@@ -320,6 +320,7 @@ impl ProofOfWork {
 /// them (each nonce) at their exact bit size.
 /// The resulting bit sequence (for each nonce) is padded to be byte-aligned.
 /// The final packed bit sequence of all padded nonces is interpreted as
+/// little-endian and hashed using blake2b with 32-byte hex digest.
 ///
 #[derive(Clone, PartialOrd, PartialEq, Serialize)]
 pub struct Proof {
