@@ -183,8 +183,8 @@ struct State {
 	// nothing has changed. We only want to create a key_id for each new block,
 	// and reuse it when we rebuild the current block to add new tx.
 	current_key_id: Option<keychain::Identifier>,
-	current_difficulty: u64,
-	minimum_share_difficulty: u64,
+	current_difficulty: u64,       // scaled
+	minimum_share_difficulty: u64, // unscaled
 }
 
 impl State {
@@ -379,7 +379,8 @@ impl Handler {
 			return Err(RpcError::too_late());
 		}
 
-		let share_difficulty: u64;
+		let scaled_share_difficulty: u64;
+		let unscaled_share_difficulty: u64;
 		let mut share_is_block = false;
 
 		let mut b: Block = b.unwrap().clone();
@@ -399,14 +400,17 @@ impl Handler {
 			return Err(RpcError::cannot_validate());
 		}
 
-		// Get share difficulty
-		share_difficulty = b.header.pow.to_difficulty(b.header.height).to_num();
+		// Get share difficulty values
+		scaled_share_difficulty = b.header.pow.to_difficulty(b.header.height).to_num();
+		unscaled_share_difficulty = b.header.pow.to_unscaled_difficulty().to_num();
+		// Note:  state.minimum_share_difficulty is unscaled
+		//        state.current_difficulty is scaled
 		// If the difficulty is too low its an error
-		if share_difficulty < state.minimum_share_difficulty {
+		if unscaled_share_difficulty < state.minimum_share_difficulty {
 			// Return error status
 			error!(
 					"(Server ID: {}) Share at height {}, hash {}, edge_bits {}, nonce {}, job_id {} rejected due to low difficulty: {}/{}",
-					self.id, params.height, b.hash(), params.edge_bits, params.nonce, params.job_id, share_difficulty, state.minimum_share_difficulty,
+					self.id, params.height, b.hash(), params.edge_bits, params.nonce, params.job_id, unscaled_share_difficulty, state.minimum_share_difficulty,
 				);
 			self.workers
 				.update_stats(worker_id, |worker_stats| worker_stats.num_rejected += 1);
@@ -414,7 +418,7 @@ impl Handler {
 		}
 
 		// If the difficulty is high enough, submit it (which also validates it)
-		if share_difficulty >= state.current_difficulty {
+		if scaled_share_difficulty >= state.current_difficulty {
 			// This is a full solution, submit it to the network
 			let res = self.chain.process_block(b.clone(), chain::Options::MINE);
 			if let Err(e) = res {
@@ -484,7 +488,7 @@ impl Handler {
 				b.header.pow.proof.edge_bits,
 				b.header.pow.nonce,
 				params.job_id,
-				share_difficulty,
+				scaled_share_difficulty,
 				state.current_difficulty,
 				submitted_by,
 			);
@@ -563,13 +567,14 @@ impl Handler {
 						wallet_listener_url,
 					);
 
+					// scaled difficulty
 					state.current_difficulty =
 						(new_block.header.total_difficulty() - head.total_difficulty).to_num();
 
 					state.current_key_id = block_fees.key_id();
 
 					current_hash = latest_hash;
-					// set the minimum acceptable share difficulty for this block
+					// set the minimum acceptable share unscaled difficulty for this block
 					state.minimum_share_difficulty = config.minimum_share_difficulty;
 
 					// set a new deadline for rebuilding with fresh transactions
