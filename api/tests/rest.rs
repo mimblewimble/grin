@@ -78,7 +78,6 @@ fn test_start_api() {
 	assert_eq!(counter.value(), 1);
 	assert!(server.stop());
 	thread::sleep(time::Duration::from_millis(1_000));
-	assert!(!server.is_running());
 }
 
 // To enable this test you need a trusted PKCS12 (p12) certificate bundle
@@ -101,8 +100,6 @@ fn test_start_api_tls() {
 	let index = request_with_retry("https://yourdomain.com:14444/v1/").unwrap();
 	assert_eq!(index.len(), 2);
 	assert!(!server.stop());
-	thread::sleep(time::Duration::from_millis(1_000));
-	assert!(!server.is_running());
 }
 
 fn request_with_retry(url: &str) -> Result<Vec<String>, api::Error> {

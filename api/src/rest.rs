@@ -30,7 +30,6 @@ use rustls::internal::pemfile;
 use std::convert::Infallible;
 use std::fmt::{self, Display};
 use std::fs::File;
-use std::mem;
 use std::net::SocketAddr;
 use std::sync::Arc;
 use std::{io, thread};
@@ -200,26 +199,25 @@ impl ApiServer {
 		addr: SocketAddr,
 		router: Router,
 	) -> Result<thread::JoinHandle<()>, Error> {
-		if self.is_running() {
+		if self.shutdown_sender.is_some() {
 			return Err(ErrorKind::Internal(
 				"Can't start HTTP API server, it's running already".to_string(),
 			)
 			.into());
 		}
-		let (tx, rx) = oneshot::channel::<()>();
+		let (tx, _rx) = oneshot::channel::<()>();
 		self.shutdown_sender = Some(tx);
 		thread::Builder::new()
 			.name("apis".to_string())
 			.spawn(move || {
 				let server = async move {
-					let server = Server::bind(&addr)
-						.serve(make_service_fn(move |_| {
-							let router = router.clone();
-							async move { Ok::<_, Infallible>(router) }
-						}))
-						.with_graceful_shutdown(async {
-							rx.await.ok();
-						});
+					let server = Server::bind(&addr).serve(make_service_fn(move |_| {
+						let router = router.clone();
+						async move { Ok::<_, Infallible>(router) }
+					}));
+					// TODO graceful shutdown is unstable, investigate
+					//.with_graceful_shutdown(rx)
+
 					server.await
 				};
 
@@ -241,7 +239,7 @@ impl ApiServer {
 		router: Router,
 		conf: TLSConfig,
 	) -> Result<thread::JoinHandle<()>, Error> {
-		if self.is_running() {
+		if self.shutdown_sender.is_some() {
 			return Err(ErrorKind::Internal(
 				"Can't start HTTPS API server, it's running already".to_string(),
 			)
@@ -282,19 +280,16 @@ impl ApiServer {
 
 	/// Stops the API server, it panics in case of error
 	pub fn stop(&mut self) -> bool {
-		if self.is_running() {
-			let tx = mem::replace(&mut self.shutdown_sender, None).unwrap();
-			tx.send(()).expect("Failed to stop API server");
+		if self.shutdown_sender.is_some() {
+			// TODO re-enable stop after investigation
+			//let tx = mem::replace(&mut self.shutdown_sender, None).unwrap();
+			//tx.send(()).expect("Failed to stop API server");
 			info!("API server has been stopped");
 			true
 		} else {
 			error!("Can't stop API server, it's not running or doesn't spport stop operation");
 			false
 		}
-	}
-
-	pub fn is_running(&self) -> bool {
-		self.shutdown_sender.is_some()
 	}
 }
 
