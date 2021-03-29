@@ -133,18 +133,21 @@ impl StateSync {
 						.set_sync_error(chain::ErrorKind::SyncError(format!("{:?}", e)).into()),
 				}
 
-				// to avoid the confusing log,
-				// update the final HeaderSync state mainly for 'current_height'
-				self.sync_state.update_if(
-					SyncStatus::HeaderSync {
-						current_height: header_head.height,
-						highest_height,
-					},
-					|s| match s {
-						SyncStatus::HeaderSync { .. } => true,
-						_ => false,
-					},
-				);
+				//
+				// TODO - is this still an issue?
+				//
+				// // to avoid the confusing log,
+				// // update the final HeaderSync state mainly for 'current_height'
+				// self.sync_state.update_if(
+				// 	SyncStatus::HeaderSync {
+				// 		sync_head: header_head.height,
+				// 		highest_height,
+				// 	},
+				// 	|s| match s {
+				// 		SyncStatus::HeaderSync { .. } => true,
+				// 		_ => false,
+				// 	},
+				// );
 
 				self.sync_state
 					.update(SyncStatus::TxHashsetDownload(Default::default()));

@@ -192,9 +192,18 @@ impl SyncRunner {
 			let tail = self.chain.tail().unwrap_or_else(|_| head.clone());
 			let header_head = unwrap_or_restart_loop!(self.chain.header_head());
 
+			// "sync_head" allows us to sync against a large fork on the header chain
+			// we track this during an extended header sync
+			let sync_status = self.sync_state.status();
+
+			let sync_head = match sync_status {
+				SyncStatus::HeaderSync { sync_head, .. } => sync_head,
+				_ => header_head,
+			};
+
 			// run each sync stage, each of them deciding whether they're needed
 			// except for state sync that only runs if body sync return true (means txhashset is needed)
-			unwrap_or_restart_loop!(header_sync.check_run(&header_head, highest_height));
+			unwrap_or_restart_loop!(header_sync.check_run(sync_head));
 
 			let mut check_state_sync = false;
 			match self.sync_state.status() {
@@ -206,7 +215,7 @@ impl SyncRunner {
 				| SyncStatus::TxHashsetDone => check_state_sync = true,
 				_ => {
 					// skip body sync if header chain is not synced.
-					if header_head.height < highest_height {
+					if sync_head.height < highest_height {
 						continue;
 					}
 

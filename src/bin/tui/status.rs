@@ -39,13 +39,13 @@ impl TUIStatusView {
 			SyncStatus::NoSync => Cow::Borrowed("Running"),
 			SyncStatus::AwaitingPeers(_) => Cow::Borrowed("Waiting for peers"),
 			SyncStatus::HeaderSync {
-				current_height,
+				sync_head,
 				highest_height,
 			} => {
 				let percent = if highest_height == 0 {
 					0
 				} else {
-					current_height * 100 / highest_height
+					sync_head.height * 100 / highest_height
 				};
 				Cow::Owned(format!("Sync step 1/7: Downloading headers: {}%", percent))
 			}

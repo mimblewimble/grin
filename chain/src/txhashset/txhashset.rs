@@ -915,6 +915,11 @@ impl<'a> HeaderExtension<'a> {
 		self.head.clone()
 	}
 
+	pub fn get_header_hash_by_height(&self, height: u64) -> Option<Hash> {
+		let pos = pmmr::insertion_to_pmmr_index(height + 1);
+		self.get_header_hash(pos)
+	}
+
 	/// Get the header at the specified height based on the current state of the header extension.
 	/// Derives the MMR pos from the height (insertion index) and retrieves the header hash.
 	/// Looks the header up in the db by hash.
@@ -923,8 +928,7 @@ impl<'a> HeaderExtension<'a> {
 		height: u64,
 		batch: &Batch<'_>,
 	) -> Result<BlockHeader, Error> {
-		let pos = pmmr::insertion_to_pmmr_index(height + 1);
-		if let Some(hash) = self.get_header_hash(pos) {
+		if let Some(hash) = self.get_header_hash_by_height(height) {
 			Ok(batch.get_block_header(&hash)?)
 		} else {
 			Err(ErrorKind::Other("get header by height".to_string()).into())
@@ -933,20 +937,17 @@ impl<'a> HeaderExtension<'a> {
 
 	/// Compares the provided header to the header in the header MMR at that height.
 	/// If these match we know the header is on the current chain.
-	pub fn is_on_current_chain(
+	pub fn is_on_current_chain<T: Into<Tip>>(
 		&self,
-		header: &BlockHeader,
+		t: T,
 		batch: &Batch<'_>,
-	) -> Result<(), Error> {
-		if header.height > self.head.height {
-			return Err(ErrorKind::Other("not on current chain, out beyond".to_string()).into());
+	) -> Result<bool, Error> {
+		let t = t.into();
+		if t.height > self.head.height {
+			return Ok(false);
 		}
-		let chain_header = self.get_header_by_height(header.height, batch)?;
-		if chain_header.hash() == header.hash() {
-			Ok(())
-		} else {
-			Err(ErrorKind::Other("not on current chain".to_string()).into())
-		}
+		let chain_header = self.get_header_by_height(t.height, batch)?;
+		Ok(chain_header.hash() == t.hash())
 	}
 
 	/// Force the rollback of this extension, no matter the result.
