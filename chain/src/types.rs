@@ -178,11 +178,11 @@ impl SyncState {
 		}
 	}
 
+	/// Update sync_head if state is currently HeaderSync.
 	pub fn update_header_sync(&self, new_sync_head: Tip) {
 		let status: &mut SyncStatus = &mut self.current.write();
 		match status {
 			SyncStatus::HeaderSync { sync_head, .. } => {
-				debug!("update_header_sync: updating sync_head: {:?}", sync_head);
 				*sync_head = new_sync_head;
 			}
 			_ => (),

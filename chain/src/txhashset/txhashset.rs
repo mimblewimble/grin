@@ -915,6 +915,8 @@ impl<'a> HeaderExtension<'a> {
 		self.head.clone()
 	}
 
+	/// Get header hash by height.
+	/// Based on current header MMR.
 	pub fn get_header_hash_by_height(&self, height: u64) -> Option<Hash> {
 		let pos = pmmr::insertion_to_pmmr_index(height + 1);
 		self.get_header_hash(pos)
