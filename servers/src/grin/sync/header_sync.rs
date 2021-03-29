@@ -48,33 +48,49 @@ impl HeaderSync {
 	}
 
 	pub fn check_run(&mut self, sync_head: chain::Tip) -> Result<bool, chain::Error> {
-		if !self.header_sync_due(sync_head) {
-			return Ok(false);
-		}
-
-		// TODO - can we safely reuse the peer here?
-		let sync_peer = self.choose_sync_peer();
-		self.syncing_peer = sync_peer;
-
-		match self.sync_state.status() {
+		// We only want to run header_sync for some sync states.
+		let do_run = match self.sync_state.status() {
 			SyncStatus::BodySync { .. }
 			| SyncStatus::HeaderSync { .. }
 			| SyncStatus::TxHashsetDone
 			| SyncStatus::NoSync
 			| SyncStatus::Initial
-			| SyncStatus::AwaitingPeers(_) => {
-				if let Some(ref sync_peer) = self.syncing_peer {
-					self.sync_state.update(SyncStatus::HeaderSync {
-						sync_head,
-						highest_height: sync_peer.info.live_info.read().height,
-					});
+			| SyncStatus::AwaitingPeers(_) => true,
+			_ => false,
+		};
 
-					self.header_sync(sync_head, sync_peer.clone());
-				}
-				Ok(true)
-			}
-			_ => Ok(false),
+		if !do_run {
+			return Ok(false);
 		}
+
+		// TODO - can we safely reuse the peer here across multiple runs?
+		let sync_peer = self.choose_sync_peer();
+
+		if let Some(sync_peer) = sync_peer {
+			let (peer_height, peer_diff) = {
+				let info = sync_peer.info.live_info.read();
+				(info.height, info.total_difficulty)
+			};
+
+			// Quick check - nothing to sync if we are caught up with the peer.
+			if peer_diff <= sync_head.total_difficulty {
+				return Ok(false);
+			}
+
+			if !self.header_sync_due(sync_head) {
+				return Ok(false);
+			}
+
+			self.sync_state.update(SyncStatus::HeaderSync {
+				sync_head,
+				highest_height: peer_height,
+				highest_diff: peer_diff,
+			});
+
+			self.header_sync(sync_head, sync_peer.clone());
+			self.syncing_peer = Some(sync_peer.clone());
+		}
+		Ok(true)
 	}
 
 	fn header_sync_due(&mut self, header_head: chain::Tip) -> bool {

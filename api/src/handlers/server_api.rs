@@ -81,6 +81,7 @@ fn sync_status_to_api(sync_status: SyncStatus) -> (String, Option<serde_json::Va
 		SyncStatus::HeaderSync {
 			sync_head,
 			highest_height,
+			..
 		} => (
 			"header_sync".to_string(),
 			Some(json!({ "current_height": sync_head.height, "highest_height": highest_height })),

@@ -41,6 +41,7 @@ impl TUIStatusView {
 			SyncStatus::HeaderSync {
 				sync_head,
 				highest_height,
+				..
 			} => {
 				let percent = if highest_height == 0 {
 					0

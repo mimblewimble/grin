@@ -52,8 +52,9 @@ pub enum SyncStatus {
 		/// current sync head
 		sync_head: Tip,
 		/// height of the most advanced peer
-		/// (would be useful if we could track the peer itself here)
 		highest_height: u64,
+		/// diff of the most advanced peer
+		highest_diff: Difficulty,
 	},
 	/// Downloading the various txhashsets
 	TxHashsetDownload(TxHashsetDownloadStats),
