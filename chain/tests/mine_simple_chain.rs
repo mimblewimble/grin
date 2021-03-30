@@ -814,6 +814,89 @@ fn output_header_mappings() {
 	clean_output_dir(".grin_header_for_output");
 }
 
+/// Test the duplicate rangeproof bug
+#[test]
+fn test_duplicate_rangeproof() {
+	clean_output_dir(".grin_overflow");
+	global::set_local_chain_type(ChainTypes::AutomatedTesting);
+	util::init_test_logger();
+	{
+		let chain = init_chain(".grin_overflow", pow::mine_genesis_block().unwrap());
+		let prev = chain.head_header().unwrap();
+		let kc = ExtKeychain::from_random_seed(false).unwrap();
+		let pb = ProofBuilder::new(&kc);
+
+		let mut head = prev;
+
+		// mine the first block and keep track of the block_hash
+		// so we can spend the coinbase later
+		let b = prepare_block(&kc, &head, &chain, 2);
+
+		assert!(b.outputs()[0].is_coinbase());
+		head = b.header.clone();
+		chain
+			.process_block(b.clone(), chain::Options::SKIP_POW)
+			.unwrap();
+
+		// now mine three further blocks
+		for n in 3..6 {
+			let b = prepare_block(&kc, &head, &chain, n);
+			head = b.header.clone();
+			chain.process_block(b, chain::Options::SKIP_POW).unwrap();
+		}
+
+		let key_id2 = ExtKeychainPath::new(1, 2, 0, 0, 0).to_identifier();
+		let key_id30 = ExtKeychainPath::new(1, 30, 0, 0, 0).to_identifier();
+		let key_id31 = ExtKeychainPath::new(1, 31, 0, 0, 0).to_identifier();
+		let key_id32 = ExtKeychainPath::new(1, 32, 0, 0, 0).to_identifier();
+
+		// build a regular transaction so we have a rangeproof to copy
+		let tx1 = build::transaction(
+			KernelFeatures::Plain { fee: 20000.into() },
+			&[
+				build::coinbase_input(consensus::REWARD, key_id2.clone()),
+				build::output(consensus::REWARD - 20000, key_id30.clone()),
+			],
+			&kc,
+			&pb,
+		)
+		.unwrap();
+
+		// mine block with tx1
+		let next = prepare_block_tx(&kc, &head, &chain, 7, &[tx1.clone()]);
+		let prev_main = next.header.clone();
+		chain
+			.process_block(next.clone(), chain::Options::SKIP_POW)
+			.unwrap();
+		chain.validate(false).unwrap();
+
+		// create a second tx
+		let mut tx2 = build::transaction(
+			KernelFeatures::Plain { fee: 0.into() },
+			&[
+				build::input(consensus::REWARD - 20000, key_id30.clone()), // 59999980000
+				build::output(consensus::REWARD - 20001, key_id31.clone()),
+				build::output(1, key_id32.clone()),
+			],
+			&kc,
+			&pb,
+		)
+		.unwrap();
+
+		// overwrite our rangeproof with a rangeproof from last block
+		tx2.body.outputs[1].proof = tx1.body.outputs[0].proof;
+
+		let next = prepare_block_tx(&kc, &prev_main, &chain, 8, &[tx2.clone()]);
+		// process_block fails with verifier_cache disabled or with correct verifier_cache
+		// implementations
+		assert_eq!(
+			chain.process_block(next, chain::Options::SKIP_POW).is_ok(),
+			false
+		);
+	}
+	clean_output_dir(".grin_overflow");
+}
+
 // Use diff as both diff *and* key_idx for convenience (deterministic private key for test blocks)
 fn prepare_block<K>(kc: &K, prev: &BlockHeader, chain: &Chain, diff: u64) -> Block
 where
