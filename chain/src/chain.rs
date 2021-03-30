@@ -404,7 +404,7 @@ impl Chain {
 	/// Attempt to add new headers to the header chain (or fork).
 	/// This is only ever used during sync and is based on sync_head.
 	/// We update header_head here if our total work increases.
-	/// Returns the new sync_head (*not* not necessarily the header_head if on a fork).
+	/// Returns the new sync_head (may temporarily diverge from header_head when syncing a long fork).
 	pub fn sync_block_headers(
 		&self,
 		headers: &[BlockHeader],
