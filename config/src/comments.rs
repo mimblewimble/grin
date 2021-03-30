@@ -54,18 +54,18 @@ fn comments() -> HashMap<String, String> {
 	);
 
 	retval.insert(
-		"owner_api_secret_path".to_string(),
+		"node_owner_api_secret_path".to_string(),
 		"
-#path of the secret token used by the Rest API and v2 Owner API to authenticate the calls
+#path of the secret token used by the Node Owner API to authenticate the calls
 #comment the it to disable basic auth
 "
 		.to_string(),
 	);
 
 	retval.insert(
-		"foreign_api_secret_path".to_string(),
+		"node_foreign_api_secret_path".to_string(),
 		"
-#path of the secret token used by the Foreign API to authenticate the calls
+#path of the secret token used by the Node Foreign API to authenticate the calls
 #comment the it to disable basic auth
 "
 		.to_string(),

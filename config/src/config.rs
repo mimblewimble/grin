@@ -37,9 +37,13 @@ const SERVER_LOG_FILE_NAME: &str = "grin-server.log";
 const GRIN_HOME: &str = ".grin";
 const GRIN_CHAIN_DIR: &str = "chain_data";
 /// Node Owner API secret
-pub const OWNER_API_SECRET_FILE_NAME: &str = ".node_owner_api_secret";
+pub const NODE_OWNER_API_SECRET_FILE_NAME: &str = ".node_owner_api_secret";
 /// Node Foreign API secret
-pub const FOREIGN_API_SECRET_FILE_NAME: &str = ".node_foreign_api_secret";
+pub const NODE_FOREIGN_API_SECRET_FILE_NAME: &str = ".node_foreign_api_secret";
+/// Old Node Owner API secret for forward compatibility
+pub const OLD_NODE_OWNER_API_SECRET_FILE_NAME: &str = ".api_secret";
+/// Old Node Foreign API secret for forward compatibility
+pub const OLD_NODE_FOREIGN_API_SECRET_FILE_NAME: &str = ".foreign_api_secret";
 
 fn get_grin_path(chain_type: &global::ChainTypes) -> Result<PathBuf, ConfigError> {
 	// Check if grin dir exists
@@ -99,21 +103,34 @@ pub fn check_api_secret(api_secret_path: &PathBuf) -> Result<(), ConfigError> {
 fn check_api_secret_files(
 	chain_type: &global::ChainTypes,
 	secret_file_name: &str,
+	old_secret_file_name: &str,
 ) -> Result<(), ConfigError> {
 	let grin_path = get_grin_path(chain_type)?;
-	let mut api_secret_path = grin_path;
+	let mut api_secret_path = grin_path.clone();
 	api_secret_path.push(secret_file_name);
-	if !api_secret_path.exists() {
-		init_api_secret(&api_secret_path)
-	} else {
+	let mut old_api_secret_path = grin_path.clone();
+	old_api_secret_path.push(old_secret_file_name);
+	if api_secret_path.exists() {
 		check_api_secret(&api_secret_path)
+	} else if old_api_secret_path.exists() {
+		check_api_secret(&old_api_secret_path)
+	} else {
+		init_api_secret(&api_secret_path)
 	}
 }
 
 /// Handles setup and detection of paths for node
 pub fn initial_setup_server(chain_type: &global::ChainTypes) -> Result<GlobalConfig, ConfigError> {
-	check_api_secret_files(chain_type, OWNER_API_SECRET_FILE_NAME)?;
-	check_api_secret_files(chain_type, FOREIGN_API_SECRET_FILE_NAME)?;
+	check_api_secret_files(
+		chain_type,
+		NODE_OWNER_API_SECRET_FILE_NAME,
+		OLD_NODE_OWNER_API_SECRET_FILE_NAME,
+	)?;
+	check_api_secret_files(
+		chain_type,
+		NODE_FOREIGN_API_SECRET_FILE_NAME,
+		OLD_NODE_FOREIGN_API_SECRET_FILE_NAME,
+	)?;
 	// Use config file if current directory if it exists, .grin home otherwise
 	if let Some(p) = check_config_current_dir(SERVER_CONFIG_FILE_NAME) {
 		GlobalConfig::new(p.to_str().unwrap())
@@ -225,7 +242,7 @@ impl GlobalConfig {
 		let mut file = File::open(self.config_file_path.as_mut().unwrap())?;
 		let mut contents = String::new();
 		file.read_to_string(&mut contents)?;
-		let fixed = GlobalConfig::fix_warning_level(contents);
+		let fixed = GlobalConfig::forwards_compatibility(contents);
 		let decoded: Result<ConfigMembers, toml::de::Error> = toml::from_str(&fixed);
 		match decoded {
 			Ok(gc) => {
@@ -247,17 +264,20 @@ impl GlobalConfig {
 		let mut chain_path = grin_home.clone();
 		chain_path.push(GRIN_CHAIN_DIR);
 		self.members.as_mut().unwrap().server.db_root = chain_path.to_str().unwrap().to_owned();
-		let mut owner_api_secret_path = grin_home.clone();
-		owner_api_secret_path.push(OWNER_API_SECRET_FILE_NAME);
-		self.members.as_mut().unwrap().server.owner_api_secret_path =
-			Some(owner_api_secret_path.to_str().unwrap().to_owned());
-		let mut foreign_api_secret_path = grin_home.clone();
-		foreign_api_secret_path.push(FOREIGN_API_SECRET_FILE_NAME);
+		let mut node_owner_api_secret_path = grin_home.clone();
+		node_owner_api_secret_path.push(NODE_OWNER_API_SECRET_FILE_NAME);
 		self.members
 			.as_mut()
 			.unwrap()
 			.server
-			.foreign_api_secret_path = Some(foreign_api_secret_path.to_str().unwrap().to_owned());
+			.node_owner_api_secret_path = Some(node_owner_api_secret_path.to_str().unwrap().to_owned());
+		let mut node_foreign_api_secret_path = grin_home.clone();
+		node_foreign_api_secret_path.push(NODE_FOREIGN_API_SECRET_FILE_NAME);
+		self.members
+			.as_mut()
+			.unwrap()
+			.server
+			.node_foreign_api_secret_path = Some(node_foreign_api_secret_path.to_str().unwrap().to_owned());
 		let mut log_path = grin_home.clone();
 		log_path.push(SERVER_LOG_FILE_NAME);
 		self.members
@@ -305,9 +325,17 @@ impl GlobalConfig {
 		Ok(())
 	}
 
-	// For forwards compatibility old config needs `Warning` log level changed to standard log::Level `WARN`
-	fn fix_warning_level(conf: String) -> String {
+	// For forwards compatibility of old config
+	fn forwards_compatibility(conf: String) -> String {
+		// Needs `Warning` log level changed to standard log::Level `WARN`
 		conf.replace("Warning", "WARN")
+			// Needs `api_secret_path` toml key compatibility to the actual "node_owner_api_secret_path" field
+			.replace("\napi_secret_path", "\nnode_owner_api_secret_path")
+			// Needs `foreign_api_secret_path` toml key compatibility to the actual "node_foreign_api_secret_path" field
+			.replace(
+				"\nforeign_api_secret_path",
+				"\nnode_foreign_api_secret_path",
+			)
 	}
 
 	// For backwards compatibility only first letter of log level should be capitalised.
@@ -328,8 +356,11 @@ fn test_fix_log_level() {
 }
 
 #[test]
-fn test_fix_warning_level() {
-	let config = "Warning".to_string();
-	let fixed_config = GlobalConfig::fix_warning_level(config);
-	assert_eq!(fixed_config, "WARN");
+fn test_forwards_compatibility() {
+	let config = "Warning | \nforeign_api_secret_path \napi_secret_path".to_string();
+	let fixed_config = GlobalConfig::forwards_compatibility(config);
+	assert_eq!(
+		fixed_config,
+		"WARN | \nnode_foreign_api_secret_path \nnode_owner_api_secret_path"
+	);
 }

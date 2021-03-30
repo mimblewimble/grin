@@ -287,8 +287,8 @@ impl Server {
 			})?;
 
 		info!("Starting rest apis at: {}", &config.api_http_addr);
-		let owner_api_secret = get_first_line(config.owner_api_secret_path.clone());
-		let foreign_api_secret = get_first_line(config.foreign_api_secret_path.clone());
+		let owner_api_secret = get_first_line(config.node_owner_api_secret_path.clone());
+		let foreign_api_secret = get_first_line(config.node_foreign_api_secret_path.clone());
 		let tls_conf = match config.tls_certificate_file.clone() {
 			None => None,
 			Some(file) => {
