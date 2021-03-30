@@ -819,9 +819,10 @@ fn output_header_mappings() {
 
 /// Test the duplicate rangeproof bug
 #[test]
-fn test_duplicate_rangeproof() {
+fn test_overflow_cached_rangeproof() {
 	clean_output_dir(".grin_overflow");
 	global::set_local_chain_type(ChainTypes::AutomatedTesting);
+
 	util::init_test_logger();
 	{
 		let chain = init_chain(".grin_overflow", pow::mine_genesis_block().unwrap());
@@ -848,6 +849,7 @@ fn test_duplicate_rangeproof() {
 			chain.process_block(b, chain::Options::SKIP_POW).unwrap();
 		}
 
+		// create a few keys for use in txns
 		let key_id2 = ExtKeychainPath::new(1, 2, 0, 0, 0).to_identifier();
 		let key_id30 = ExtKeychainPath::new(1, 30, 0, 0, 0).to_identifier();
 		let key_id31 = ExtKeychainPath::new(1, 31, 0, 0, 0).to_identifier();
@@ -873,29 +875,49 @@ fn test_duplicate_rangeproof() {
 			.unwrap();
 		chain.validate(false).unwrap();
 
-		// create a second tx
+		// create a second tx that contains a negative output
+		// and a positive output for 1m grin
 		let mut tx2 = build::transaction(
 			KernelFeatures::Plain { fee: 0.into() },
 			&[
-				build::input(consensus::REWARD - 20000, key_id30.clone()), // 59999980000
-				build::output(consensus::REWARD - 20001, key_id31.clone()),
-				build::output(1, key_id32.clone()),
+				build::input(consensus::REWARD - 20000, key_id30.clone()),
+				build::output(
+					consensus::REWARD - 20000 + 1_000_000_000_000_000,
+					key_id31.clone(),
+				),
+				build::output_negative(1_000_000_000_000_000, key_id32.clone()),
 			],
 			&kc,
 			&pb,
 		)
 		.unwrap();
 
-		// overwrite our rangeproof with a rangeproof from last block
-		tx2.body.outputs[1].proof = tx1.body.outputs[0].proof;
+		// make sure tx1 only has one output as expected
+		assert_eq!(tx1.body.outputs.len(), 1);
+		let last_rp = tx1.body.outputs[0].proof;
+
+		// overwrite all our rangeproofs with the rangeproof from last block
+		for i in 0..tx2.body.outputs.len() {
+			tx2.body.outputs[i].proof = last_rp;
+		}
 
 		let next = prepare_block_tx(&kc, &prev_main, &chain, 8, &[tx2.clone()]);
 		// process_block fails with verifier_cache disabled or with correct verifier_cache
 		// implementations
-		assert_eq!(
-			chain.process_block(next, chain::Options::SKIP_POW).is_ok(),
-			false
-		);
+		let res = chain.process_block(next, chain::Options::SKIP_POW);
+
+		match res {
+			Err(e) => {
+				// error should contain "Invalid Block Proof"
+				// TODO: Better way to check error
+				let error_string = format!("{}", e.to_string());
+				assert_eq!(error_string.contains("Invalid Block Proof"), true);
+			}
+			Ok(_) => {
+				// the block was accepted. This is wrong.
+				panic!("Negative output accepted into block!");
+			}
+		}
 	}
 	clean_output_dir(".grin_overflow");
 }
