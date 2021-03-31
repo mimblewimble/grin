@@ -18,7 +18,6 @@ use self::chain::types::{NoopAdapter, Options};
 use self::chain::Chain;
 use self::core::consensus;
 use self::core::core::hash::Hash;
-use self::core::core::verifier_cache::{LruVerifierCache, VerifierCache};
 use self::core::core::{
 	Block, BlockHeader, BlockSums, Inputs, KernelFeatures, OutputIdentifier, Transaction, TxKernel,
 };
@@ -29,13 +28,11 @@ use self::core::pow;
 use self::keychain::{BlindingFactor, ExtKeychain, ExtKeychainPath, Keychain};
 use self::pool::types::*;
 use self::pool::TransactionPool;
-use self::util::RwLock;
 use chrono::Duration;
 use grin_chain as chain;
 use grin_core as core;
 use grin_keychain as keychain;
 use grin_pool as pool;
-use grin_util as util;
 use std::convert::TryInto;
 use std::fs;
 use std::sync::Arc;
@@ -52,13 +49,11 @@ where
 }
 
 pub fn init_chain(dir_name: &str, genesis: Block) -> Chain {
-	let verifier_cache = Arc::new(RwLock::new(LruVerifierCache::new()));
 	Chain::init(
 		dir_name.to_string(),
 		Arc::new(NoopAdapter {}),
 		genesis,
 		pow::verify_size,
-		verifier_cache,
 		false,
 	)
 	.unwrap()
@@ -157,13 +152,9 @@ impl BlockChain for ChainAdapter {
 	}
 }
 
-pub fn init_transaction_pool<B, V>(
-	chain: Arc<B>,
-	verifier_cache: Arc<RwLock<V>>,
-) -> TransactionPool<B, NoopPoolAdapter, V>
+pub fn init_transaction_pool<B>(chain: Arc<B>) -> TransactionPool<B, NoopPoolAdapter>
 where
 	B: BlockChain,
-	V: VerifierCache + 'static,
 {
 	TransactionPool::new(
 		PoolConfig {
@@ -174,7 +165,6 @@ where
 			mineable_max_weight: 10_000,
 		},
 		chain.clone(),
-		verifier_cache.clone(),
 		Arc::new(NoopPoolAdapter {}),
 	)
 }

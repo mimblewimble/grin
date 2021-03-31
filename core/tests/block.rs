@@ -22,7 +22,6 @@ use crate::core::core::transaction::{
 	self, FeeFields, KernelFeatures, NRDRelativeHeight, Output, OutputFeatures, OutputIdentifier,
 	Transaction,
 };
-use crate::core::core::verifier_cache::{LruVerifierCache, VerifierCache};
 use crate::core::core::{Committed, CompactBlock};
 use crate::core::libtx::build::{self, input, output};
 use crate::core::libtx::ProofBuilder;
@@ -30,17 +29,12 @@ use crate::core::{global, pow, ser};
 use chrono::Duration;
 use grin_core as core;
 use keychain::{BlindingFactor, ExtKeychain, Keychain};
-use std::sync::Arc;
-use util::{secp, RwLock, ToHex};
+use util::{secp, ToHex};
 
 // Setup test with AutomatedTesting chain_type;
 fn test_setup() {
 	util::init_test_logger();
 	global::set_local_chain_type(global::ChainTypes::AutomatedTesting);
-}
-
-fn verifier_cache() -> Arc<RwLock<dyn VerifierCache>> {
-	Arc::new(RwLock::new(LruVerifierCache::new()))
 }
 
 #[test]
@@ -72,9 +66,7 @@ fn too_large_block() {
 	let prev = BlockHeader::default();
 	let key_id = ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
 	let b = new_block(&[tx], &keychain, &builder, &prev, &key_id);
-	assert!(b
-		.validate(&BlindingFactor::zero(), verifier_cache())
-		.is_err());
+	assert!(b.validate(&BlindingFactor::zero()).is_err());
 }
 
 #[test]
@@ -130,7 +122,7 @@ fn block_with_nrd_kernel_pre_post_hf3() {
 	// Block is invalid at header version 3 if it contains an NRD kernel.
 	assert_eq!(b.header.version, HeaderVersion(3));
 	assert_eq!(
-		b.validate(&BlindingFactor::zero(), verifier_cache()),
+		b.validate(&BlindingFactor::zero()),
 		Err(Error::NRDKernelPreHF3)
 	);
 
@@ -151,9 +143,7 @@ fn block_with_nrd_kernel_pre_post_hf3() {
 	// Block is valid at header version 4 (at HF height) if it contains an NRD kernel.
 	assert_eq!(b.header.height, 3 * TESTING_HARD_FORK_INTERVAL);
 	assert_eq!(b.header.version, HeaderVersion(4));
-	assert!(b
-		.validate(&BlindingFactor::zero(), verifier_cache())
-		.is_ok());
+	assert!(b.validate(&BlindingFactor::zero()).is_ok());
 
 	let prev_height = 3 * TESTING_HARD_FORK_INTERVAL;
 	let prev = BlockHeader {
@@ -171,9 +161,7 @@ fn block_with_nrd_kernel_pre_post_hf3() {
 
 	// Block is valid at header version 4 if it contains an NRD kernel.
 	assert_eq!(b.header.version, HeaderVersion(4));
-	assert!(b
-		.validate(&BlindingFactor::zero(), verifier_cache())
-		.is_ok());
+	assert!(b.validate(&BlindingFactor::zero()).is_ok());
 }
 
 #[test]
@@ -216,7 +204,7 @@ fn block_with_nrd_kernel_nrd_not_enabled() {
 	// Block is invalid as NRD not enabled.
 	assert_eq!(b.header.version, HeaderVersion(3));
 	assert_eq!(
-		b.validate(&BlindingFactor::zero(), verifier_cache()),
+		b.validate(&BlindingFactor::zero()),
 		Err(Error::NRDKernelNotEnabled)
 	);
 
@@ -238,7 +226,7 @@ fn block_with_nrd_kernel_nrd_not_enabled() {
 	assert_eq!(b.header.height, 3 * TESTING_HARD_FORK_INTERVAL);
 	assert_eq!(b.header.version, HeaderVersion(4));
 	assert_eq!(
-		b.validate(&BlindingFactor::zero(), verifier_cache()),
+		b.validate(&BlindingFactor::zero()),
 		Err(Error::NRDKernelNotEnabled)
 	);
 
@@ -259,7 +247,7 @@ fn block_with_nrd_kernel_nrd_not_enabled() {
 	// Block is invalid as NRD not enabled.
 	assert_eq!(b.header.version, HeaderVersion(4));
 	assert_eq!(
-		b.validate(&BlindingFactor::zero(), verifier_cache()),
+		b.validate(&BlindingFactor::zero()),
 		Err(Error::NRDKernelNotEnabled)
 	);
 }
@@ -292,8 +280,7 @@ fn block_with_cut_through() {
 
 	// block should have been automatically compacted (including reward
 	// output) and should still be valid
-	b.validate(&BlindingFactor::zero(), verifier_cache())
-		.unwrap();
+	b.validate(&BlindingFactor::zero()).unwrap();
 	assert_eq!(b.inputs().len(), 3);
 	assert_eq!(b.outputs().len(), 3);
 }
@@ -329,9 +316,7 @@ fn empty_block_with_coinbase_is_valid() {
 
 	// the block should be valid here (single coinbase output with corresponding
 	// txn kernel)
-	assert!(b
-		.validate(&BlindingFactor::zero(), verifier_cache())
-		.is_ok());
+	assert!(b.validate(&BlindingFactor::zero()).is_ok());
 }
 
 #[test]
@@ -357,7 +342,7 @@ fn remove_coinbase_output_flag() {
 		.verify_kernel_sums(b.header.overage(), b.header.total_kernel_offset())
 		.is_ok());
 	assert_eq!(
-		b.validate(&BlindingFactor::zero(), verifier_cache()),
+		b.validate(&BlindingFactor::zero()),
 		Err(Error::CoinbaseSumMismatch)
 	);
 }
@@ -388,7 +373,7 @@ fn remove_coinbase_kernel_flag() {
 	// Also results in the block no longer validating correctly
 	// because the message being signed on each tx kernel includes the kernel features.
 	assert_eq!(
-		b.validate(&BlindingFactor::zero(), verifier_cache()),
+		b.validate(&BlindingFactor::zero()),
 		Err(Error::Transaction(transaction::Error::IncorrectSignature))
 	);
 }
@@ -778,7 +763,7 @@ fn same_amount_outputs_copy_range_proof() {
 
 	// block should have been automatically compacted (including reward
 	// output) and should still be valid
-	match b.validate(&BlindingFactor::zero(), verifier_cache()) {
+	match b.validate(&BlindingFactor::zero()) {
 		Err(Error::Transaction(transaction::Error::Secp(secp::Error::InvalidRangeProof))) => {}
 		_ => panic!("Bad range proof should be invalid"),
 	}
@@ -830,7 +815,7 @@ fn wrong_amount_range_proof() {
 
 	// block should have been automatically compacted (including reward
 	// output) and should still be valid
-	match b.validate(&BlindingFactor::zero(), verifier_cache()) {
+	match b.validate(&BlindingFactor::zero()) {
 		Err(Error::Transaction(transaction::Error::Secp(secp::Error::InvalidRangeProof))) => {}
 		_ => panic!("Bad range proof should be invalid"),
 	}
@@ -907,7 +892,7 @@ fn test_verify_cut_through_plain() -> Result<(), Error> {
 
 	// The block should fail validation due to cut-through.
 	assert_eq!(
-		block.validate(&BlindingFactor::zero(), verifier_cache()),
+		block.validate(&BlindingFactor::zero()),
 		Err(Error::Transaction(transaction::Error::CutThrough))
 	);
 
@@ -928,7 +913,7 @@ fn test_verify_cut_through_plain() -> Result<(), Error> {
 		.replace_outputs(outputs);
 
 	// Block validates successfully after applying cut-through.
-	block.validate(&BlindingFactor::zero(), verifier_cache())?;
+	block.validate(&BlindingFactor::zero())?;
 
 	// Block validates via lightweight "read" validation.
 	block.validate_read()?;
@@ -973,7 +958,7 @@ fn test_verify_cut_through_coinbase() -> Result<(), Error> {
 
 	// The block should fail validation due to cut-through.
 	assert_eq!(
-		block.validate(&BlindingFactor::zero(), verifier_cache()),
+		block.validate(&BlindingFactor::zero()),
 		Err(Error::Transaction(transaction::Error::CutThrough))
 	);
 
@@ -994,7 +979,7 @@ fn test_verify_cut_through_coinbase() -> Result<(), Error> {
 		.replace_outputs(outputs);
 
 	// Block validates successfully after applying cut-through.
-	block.validate(&BlindingFactor::zero(), verifier_cache())?;
+	block.validate(&BlindingFactor::zero())?;
 
 	// Block validates via lightweight "read" validation.
 	block.validate_read()?;

@@ -16,7 +16,6 @@
 
 pub mod common;
 use self::core::core::hash::Hashed;
-use self::core::core::verifier_cache::LruVerifierCache;
 use self::core::global;
 use self::keychain::{ExtKeychain, Keychain};
 use self::util::RwLock;
@@ -39,15 +38,11 @@ fn test_block_building_max_weight() {
 
 	let genesis = genesis_block(&keychain);
 	let chain = Arc::new(init_chain(db_root, genesis));
-	let verifier_cache = Arc::new(RwLock::new(LruVerifierCache::new()));
 
 	// Initialize a new pool with our chain adapter.
-	let mut pool = init_transaction_pool(
-		Arc::new(ChainAdapter {
-			chain: chain.clone(),
-		}),
-		verifier_cache,
-	);
+	let mut pool = init_transaction_pool(Arc::new(ChainAdapter {
+		chain: chain.clone(),
+	}));
 
 	// mine past HF4 to see effect of set_local_accept_fee_base
 	add_some_blocks(&chain, 4 * 3, &keychain);

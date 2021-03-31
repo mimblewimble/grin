@@ -21,15 +21,12 @@ use grin_util as util;
 
 use self::chain_test_helper::{clean_output_dir, genesis_block, init_chain};
 use crate::chain::{pipe, Chain, Options};
-use crate::core::core::verifier_cache::LruVerifierCache;
 use crate::core::core::{block, pmmr, transaction};
 use crate::core::core::{Block, FeeFields, KernelFeatures, Transaction, Weighting};
 use crate::core::libtx::{build, reward, ProofBuilder};
 use crate::core::{consensus, global, pow};
 use crate::keychain::{ExtKeychain, ExtKeychainPath, Keychain, SwitchCommitmentType};
-use crate::util::RwLock;
 use chrono::Duration;
-use std::sync::Arc;
 
 fn build_block<K>(
 	chain: &Chain,
@@ -128,12 +125,10 @@ fn process_block_cut_through() -> Result<(), chain::Error> {
 		.iter()
 		.any(|output| output.commitment() == commit));
 
-	let verifier_cache = Arc::new(RwLock::new(LruVerifierCache::new()));
-
 	// Transaction is invalid due to cut-through.
 	let height = 7;
 	assert_eq!(
-		tx.validate(Weighting::AsTransaction, verifier_cache.clone(), height),
+		tx.validate(Weighting::AsTransaction, height),
 		Err(transaction::Error::CutThrough),
 	);
 
@@ -149,7 +144,7 @@ fn process_block_cut_through() -> Result<(), chain::Error> {
 	// The block is invalid due to cut-through.
 	let prev = chain.head_header()?;
 	assert_eq!(
-		block.validate(&prev.total_kernel_offset(), verifier_cache),
+		block.validate(&prev.total_kernel_offset()),
 		Err(block::Error::Transaction(transaction::Error::CutThrough))
 	);
 

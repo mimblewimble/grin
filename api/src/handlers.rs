@@ -26,7 +26,6 @@ use crate::auth::{
 };
 use crate::chain;
 use crate::chain::{Chain, SyncState};
-use crate::core::core::verifier_cache::VerifierCache;
 use crate::foreign::Foreign;
 use crate::foreign_rpc::ForeignRpc;
 use crate::owner::Owner;
@@ -48,10 +47,10 @@ use std::sync::{Arc, Weak};
 
 /// Listener version, providing same API but listening for requests on a
 /// port and wrapping the calls
-pub fn node_apis<B, P, V>(
+pub fn node_apis<B, P>(
 	addr: &str,
 	chain: Arc<chain::Chain>,
-	tx_pool: Arc<RwLock<pool::TransactionPool<B, P, V>>>,
+	tx_pool: Arc<RwLock<pool::TransactionPool<B, P>>>,
 	peers: Arc<p2p::Peers>,
 	sync_state: Arc<chain::SyncState>,
 	api_secret: Option<String>,
@@ -61,7 +60,6 @@ pub fn node_apis<B, P, V>(
 where
 	B: BlockChain + 'static,
 	P: PoolAdapter + 'static,
-	V: VerifierCache + 'static,
 {
 	let mut router = Router::new();
 
@@ -173,27 +171,25 @@ impl crate::router::Handler for OwnerAPIHandlerV2 {
 }
 
 /// V2 API Handler/Wrapper for foreign functions
-pub struct ForeignAPIHandlerV2<B, P, V>
+pub struct ForeignAPIHandlerV2<B, P>
 where
 	B: BlockChain,
 	P: PoolAdapter,
-	V: VerifierCache + 'static,
 {
 	pub chain: Weak<Chain>,
-	pub tx_pool: Weak<RwLock<pool::TransactionPool<B, P, V>>>,
+	pub tx_pool: Weak<RwLock<pool::TransactionPool<B, P>>>,
 	pub sync_state: Weak<SyncState>,
 }
 
-impl<B, P, V> ForeignAPIHandlerV2<B, P, V>
+impl<B, P> ForeignAPIHandlerV2<B, P>
 where
 	B: BlockChain,
 	P: PoolAdapter,
-	V: VerifierCache + 'static,
 {
 	/// Create a new foreign API handler for GET methods
 	pub fn new(
 		chain: Weak<Chain>,
-		tx_pool: Weak<RwLock<pool::TransactionPool<B, P, V>>>,
+		tx_pool: Weak<RwLock<pool::TransactionPool<B, P>>>,
 		sync_state: Weak<SyncState>,
 	) -> Self {
 		ForeignAPIHandlerV2 {
@@ -204,11 +200,10 @@ where
 	}
 }
 
-impl<B, P, V> crate::router::Handler for ForeignAPIHandlerV2<B, P, V>
+impl<B, P> crate::router::Handler for ForeignAPIHandlerV2<B, P>
 where
 	B: BlockChain + 'static,
 	P: PoolAdapter + 'static,
-	V: VerifierCache + 'static,
 {
 	fn post(&self, req: Request<Body>) -> ResponseFuture {
 		let api = Foreign::new(

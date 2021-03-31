@@ -15,7 +15,6 @@
 pub mod common;
 
 use self::core::core::hash::Hashed;
-use self::core::core::verifier_cache::LruVerifierCache;
 use self::core::global;
 use self::keychain::{ExtKeychain, Keychain};
 use self::pool::PoolError;
@@ -39,15 +38,11 @@ fn test_transaction_pool_block_building() -> Result<(), PoolError> {
 
 	let genesis = genesis_block(&keychain);
 	let chain = Arc::new(init_chain(db_root, genesis));
-	let verifier_cache = Arc::new(RwLock::new(LruVerifierCache::new()));
 
 	// Initialize a new pool with our chain adapter.
-	let mut pool = init_transaction_pool(
-		Arc::new(ChainAdapter {
-			chain: chain.clone(),
-		}),
-		verifier_cache,
-	);
+	let mut pool = init_transaction_pool(Arc::new(ChainAdapter {
+		chain: chain.clone(),
+	}));
 
 	// mine enough blocks to get past HF4
 	add_some_blocks(&chain, 4 * 3, &keychain);

@@ -253,19 +253,11 @@ where
 // Just a simple test, most exhaustive tests in the core.
 #[cfg(test)]
 mod test {
-	use std::sync::Arc;
-	use util::RwLock;
-
 	use super::*;
 	use crate::core::transaction::Weighting;
-	use crate::core::verifier_cache::{LruVerifierCache, VerifierCache};
 	use crate::global;
 	use crate::libtx::ProofBuilder;
 	use keychain::{ExtKeychain, ExtKeychainPath};
-
-	fn verifier_cache() -> Arc<RwLock<dyn VerifierCache>> {
-		Arc::new(RwLock::new(LruVerifierCache::new()))
-	}
 
 	#[test]
 	fn blind_simple_tx() {
@@ -276,8 +268,6 @@ mod test {
 		let key_id2 = ExtKeychainPath::new(1, 2, 0, 0, 0).to_identifier();
 		let key_id3 = ExtKeychainPath::new(1, 3, 0, 0, 0).to_identifier();
 
-		let vc = verifier_cache();
-
 		let tx = transaction(
 			KernelFeatures::Plain { fee: 2.into() },
 			&[input(10, key_id1), input(12, key_id2), output(20, key_id3)],
@@ -287,8 +277,7 @@ mod test {
 		.unwrap();
 
 		let height = 42; // arbitrary
-		tx.validate(Weighting::AsTransaction, vc.clone(), height)
-			.unwrap();
+		tx.validate(Weighting::AsTransaction, height).unwrap();
 	}
 
 	#[test]
@@ -300,8 +289,6 @@ mod test {
 		let key_id2 = ExtKeychainPath::new(1, 2, 0, 0, 0).to_identifier();
 		let key_id3 = ExtKeychainPath::new(1, 3, 0, 0, 0).to_identifier();
 
-		let vc = verifier_cache();
-
 		let tx = transaction(
 			KernelFeatures::Plain { fee: 2.into() },
 			&[input(10, key_id1), input(12, key_id2), output(20, key_id3)],
@@ -311,8 +298,7 @@ mod test {
 		.unwrap();
 
 		let height = 42; // arbitrary
-		tx.validate(Weighting::AsTransaction, vc.clone(), height)
-			.unwrap();
+		tx.validate(Weighting::AsTransaction, height).unwrap();
 	}
 
 	#[test]
@@ -323,8 +309,6 @@ mod test {
 		let key_id1 = ExtKeychainPath::new(1, 1, 0, 0, 0).to_identifier();
 		let key_id2 = ExtKeychainPath::new(1, 2, 0, 0, 0).to_identifier();
 
-		let vc = verifier_cache();
-
 		let tx = transaction(
 			KernelFeatures::Plain { fee: 4.into() },
 			&[input(6, key_id1), output(2, key_id2)],
@@ -334,7 +318,6 @@ mod test {
 		.unwrap();
 
 		let height = 42; // arbitrary
-		tx.validate(Weighting::AsTransaction, vc.clone(), height)
-			.unwrap();
+		tx.validate(Weighting::AsTransaction, height).unwrap();
 	}
 }

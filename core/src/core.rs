@@ -23,7 +23,6 @@ pub mod id;
 pub mod merkle_proof;
 pub mod pmmr;
 pub mod transaction;
-pub mod verifier_cache;
 
 use crate::consensus::GRIN_BASE;
 use util::secp::pedersen::Commitment;

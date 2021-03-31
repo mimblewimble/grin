@@ -19,7 +19,6 @@
 
 use self::core::core::hash::{Hash, Hashed};
 use self::core::core::id::ShortId;
-use self::core::core::verifier_cache::VerifierCache;
 use self::core::core::{
 	transaction, Block, BlockHeader, HeaderVersion, OutputIdentifier, Transaction, Weighting,
 };
@@ -34,51 +33,38 @@ use std::collections::VecDeque;
 use std::sync::Arc;
 
 /// Transaction pool implementation.
-pub struct TransactionPool<B, P, V>
+pub struct TransactionPool<B, P>
 where
 	B: BlockChain,
 	P: PoolAdapter,
-	V: VerifierCache,
 {
 	/// Pool Config
 	pub config: PoolConfig,
 	/// Our transaction pool.
-	pub txpool: Pool<B, V>,
+	pub txpool: Pool<B>,
 	/// Our Dandelion "stempool".
-	pub stempool: Pool<B, V>,
+	pub stempool: Pool<B>,
 	/// Cache of previous txs in case of a re-org.
 	pub reorg_cache: Arc<RwLock<VecDeque<PoolEntry>>>,
 	/// The blockchain
 	pub blockchain: Arc<B>,
-	pub verifier_cache: Arc<RwLock<V>>,
 	/// The pool adapter
 	pub adapter: Arc<P>,
 }
 
-impl<B, P, V> TransactionPool<B, P, V>
+impl<B, P> TransactionPool<B, P>
 where
 	B: BlockChain,
 	P: PoolAdapter,
-	V: VerifierCache + 'static,
 {
 	/// Create a new transaction pool
-	pub fn new(
-		config: PoolConfig,
-		chain: Arc<B>,
-		verifier_cache: Arc<RwLock<V>>,
-		adapter: Arc<P>,
-	) -> Self {
+	pub fn new(config: PoolConfig, chain: Arc<B>, adapter: Arc<P>) -> Self {
 		TransactionPool {
 			config,
-			txpool: Pool::new(chain.clone(), verifier_cache.clone(), "txpool".to_string()),
-			stempool: Pool::new(
-				chain.clone(),
-				verifier_cache.clone(),
-				"stempool".to_string(),
-			),
+			txpool: Pool::new(chain.clone(), "txpool".to_string()),
+			stempool: Pool::new(chain.clone(), "stempool".to_string()),
 			reorg_cache: Arc::new(RwLock::new(VecDeque::new())),
 			blockchain: chain,
-			verifier_cache,
 			adapter,
 		}
 	}
@@ -193,12 +179,8 @@ where
 
 		// Make sure the transaction is valid before anything else.
 		// Validate tx accounting for max tx weight.
-		tx.validate(
-			Weighting::AsTransaction,
-			self.verifier_cache.clone(),
-			header.height,
-		)
-		.map_err(PoolError::InvalidTx)?;
+		tx.validate(Weighting::AsTransaction, header.height)
+			.map_err(PoolError::InvalidTx)?;
 
 		// Check the tx lock_time is valid based on current chain state.
 		self.blockchain.verify_tx_lock_height(tx)?;
@@ -279,11 +261,7 @@ where
 
 		// Validate the tx to ensure our converted inputs are correct.
 		let header = self.chain_head()?;
-		tx.validate(
-			Weighting::AsTransaction,
-			self.verifier_cache.clone(),
-			header.height,
-		)?;
+		tx.validate(Weighting::AsTransaction, header.height)?;
 
 		Ok(PoolEntry::new(tx, entry.src))
 	}

@@ -16,19 +16,16 @@ use self::chain::types::NoopAdapter;
 use self::chain::types::Options;
 use self::chain::Chain;
 use self::core::core::hash::Hashed;
-use self::core::core::verifier_cache::LruVerifierCache;
 use self::core::core::Block;
 use self::core::genesis;
 use self::core::global::ChainTypes;
 use self::core::libtx::{self, reward};
 use self::core::{consensus, global, pow};
 use self::keychain::{ExtKeychainPath, Keychain};
-use self::util::RwLock;
 use chrono::Duration;
 use grin_chain as chain;
 use grin_core as core;
 use grin_keychain as keychain;
-use grin_util as util;
 use std::fs;
 use std::sync::Arc;
 
@@ -37,13 +34,11 @@ pub fn clean_output_dir(dir_name: &str) {
 }
 
 pub fn init_chain(dir_name: &str, genesis: Block) -> Chain {
-	let verifier_cache = Arc::new(RwLock::new(LruVerifierCache::new()));
 	Chain::init(
 		dir_name.to_string(),
 		Arc::new(NoopAdapter {}),
 		genesis,
 		pow::verify_size,
-		verifier_cache,
 		false,
 	)
 	.unwrap()
