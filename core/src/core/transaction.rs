@@ -2111,6 +2111,8 @@ impl Readable for Output {
 	}
 }
 
+impl DefaultHashable for Output {}
+
 impl OutputFeatures {
 	/// Is this a coinbase output?
 	pub fn is_coinbase(self) -> bool {

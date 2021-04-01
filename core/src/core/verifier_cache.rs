@@ -41,7 +41,7 @@ pub trait VerifierCache: Sync + Send {
 /// Caches outputs by output rangeproof hash (rangeproofs are committed to separately).
 pub struct LruVerifierCache {
 	kernel_sig_verification_cache: LruCache<Hash, ()>,
-	rangeproof_verification_cache: LruCache<(Hash, Hash), ()>,
+	rangeproof_verification_cache: LruCache<Hash, ()>,
 }
 
 impl LruVerifierCache {
@@ -73,11 +73,7 @@ impl VerifierCache for LruVerifierCache {
 	fn filter_rangeproof_unverified(&mut self, outputs: &[Output]) -> Vec<Output> {
 		let res = outputs
 			.iter()
-			.filter(|x| {
-				!self
-					.rangeproof_verification_cache
-					.contains_key(&(x.identifier.hash(), x.proof.hash()))
-			})
+			.filter(|x| !self.rangeproof_verification_cache.contains_key(&x.hash()))
 			.cloned()
 			.collect::<Vec<_>>();
 		trace!(
@@ -96,8 +92,7 @@ impl VerifierCache for LruVerifierCache {
 
 	fn add_rangeproof_verified(&mut self, outputs: Vec<Output>) {
 		for o in outputs {
-			self.rangeproof_verification_cache
-				.insert((o.identifier.hash(), o.proof.hash()), ());
+			self.rangeproof_verification_cache.insert(o.hash(), ());
 		}
 	}
 }
