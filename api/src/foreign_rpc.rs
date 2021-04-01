@@ -16,7 +16,6 @@
 
 use crate::core::core::hash::Hash;
 use crate::core::core::transaction::Transaction;
-use crate::core::core::verifier_cache::VerifierCache;
 use crate::foreign::Foreign;
 use crate::pool::PoolEntry;
 use crate::pool::{BlockChain, PoolAdapter};
@@ -742,11 +741,10 @@ pub trait ForeignRpc: Sync + Send {
 	fn push_transaction(&self, tx: Transaction, fluff: Option<bool>) -> Result<(), ErrorKind>;
 }
 
-impl<B, P, V> ForeignRpc for Foreign<B, P, V>
+impl<B, P> ForeignRpc for Foreign<B, P>
 where
 	B: BlockChain,
 	P: PoolAdapter,
-	V: VerifierCache + 'static,
 {
 	fn get_header(
 		&self,
@@ -856,7 +854,7 @@ macro_rules! doctest_helper_json_rpc_foreign_assert_response {
 		// create temporary grin server, run jsonrpc request on node api, delete server, return
 		// json response.
 
-		{
+			{
 			/*use grin_servers::test_framework::framework::run_doctest;
 			use grin_util as util;
 			use serde_json;
@@ -890,6 +888,6 @@ macro_rules! doctest_helper_json_rpc_foreign_assert_response {
 					serde_json::to_string_pretty(&expected_response).unwrap()
 				);
 				}*/
-		}
+			}
 	};
 }

@@ -15,7 +15,6 @@
 use self::chain::types::{NoopAdapter, Tip};
 use self::chain::Chain;
 use self::core::core::hash::Hashed;
-use self::core::core::verifier_cache::LruVerifierCache;
 use self::core::core::{Block, BlockHeader, KernelFeatures, Transaction};
 use self::core::global::ChainTypes;
 use self::core::libtx::{self, build, ProofBuilder};
@@ -56,13 +55,11 @@ impl ChainAdapter for StatusAdapter {
 fn setup_with_status_adapter(dir_name: &str, genesis: Block, adapter: Arc<StatusAdapter>) -> Chain {
 	util::init_test_logger();
 	clean_output_dir(dir_name);
-	let verifier_cache = Arc::new(RwLock::new(LruVerifierCache::new()));
 	let chain = chain::Chain::init(
 		dir_name.to_string(),
 		adapter,
 		genesis,
 		pow::verify_size,
-		verifier_cache,
 		false,
 	)
 	.unwrap();
@@ -904,13 +901,11 @@ where
 fn actual_diff_iter_output() {
 	global::set_local_chain_type(ChainTypes::AutomatedTesting);
 	let genesis_block = pow::mine_genesis_block().unwrap();
-	let verifier_cache = Arc::new(RwLock::new(LruVerifierCache::new()));
 	let chain = chain::Chain::init(
 		"../.grin".to_string(),
 		Arc::new(NoopAdapter {}),
 		genesis_block,
 		pow::verify_size,
-		verifier_cache,
 		false,
 	)
 	.unwrap();

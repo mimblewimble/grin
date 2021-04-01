@@ -16,7 +16,6 @@
 
 use crate::core::block::HeaderVersion;
 use crate::core::hash::{DefaultHashable, Hashed};
-use crate::core::verifier_cache::VerifierCache;
 use crate::core::{committed, Committed};
 use crate::libtx::{aggsig, secp_ser};
 use crate::ser::{
@@ -32,12 +31,10 @@ use std::cmp::Ordering;
 use std::cmp::{max, min};
 use std::convert::{TryFrom, TryInto};
 use std::fmt::Display;
-use std::sync::Arc;
 use std::{error, fmt};
 use util::secp;
 use util::secp::pedersen::{Commitment, RangeProof};
 use util::static_secp_instance;
-use util::RwLock;
 use util::ToHex;
 
 /// Fee fields as in fix-fees RFC: { future_use: 20, fee_shift: 4, fee: 40 }
@@ -1243,11 +1240,7 @@ impl TransactionBody {
 	/// Validates all relevant parts of a transaction body. Checks the
 	/// excess value against the signature as well as range proofs for each
 	/// output.
-	pub fn validate(
-		&self,
-		weighting: Weighting,
-		_verifier: Arc<RwLock<dyn VerifierCache>>,
-	) -> Result<(), Error> {
+	pub fn validate(&self, weighting: Weighting) -> Result<(), Error> {
 		self.validate_read(weighting)?;
 
 		// Now batch verify all those unverified rangeproofs
@@ -1458,14 +1451,9 @@ impl Transaction {
 	/// Validates all relevant parts of a fully built transaction. Checks the
 	/// excess value against the signature as well as range proofs for each
 	/// output.
-	pub fn validate(
-		&self,
-		weighting: Weighting,
-		verifier: Arc<RwLock<dyn VerifierCache>>,
-		height: u64,
-	) -> Result<(), Error> {
+	pub fn validate(&self, weighting: Weighting, height: u64) -> Result<(), Error> {
 		self.body.verify_features()?;
-		self.body.validate(weighting, verifier)?;
+		self.body.validate(weighting)?;
 		self.verify_kernel_sums(self.overage(height), self.offset.clone())?;
 		Ok(())
 	}

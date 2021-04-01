@@ -30,7 +30,7 @@ use crate::core::libtx::secp_ser;
 use crate::core::libtx::ProofBuilder;
 use crate::core::{consensus, core, global};
 use crate::keychain::{ExtKeychain, Identifier, Keychain};
-use crate::{ServerTxPool, ServerVerifierCache};
+use crate::ServerTxPool;
 
 /// Fees in block to use for coinbase amount calculation
 /// (Duplicated from Grin wallet project)
@@ -70,19 +70,12 @@ pub struct CbData {
 pub fn get_block(
 	chain: &Arc<chain::Chain>,
 	tx_pool: &ServerTxPool,
-	verifier_cache: ServerVerifierCache,
 	key_id: Option<Identifier>,
 	wallet_listener_url: Option<String>,
 ) -> (core::Block, BlockFees) {
 	let wallet_retry_interval = 5;
 	// get the latest chain state and build a block on top of it
-	let mut result = build_block(
-		chain,
-		tx_pool,
-		verifier_cache.clone(),
-		key_id.clone(),
-		wallet_listener_url.clone(),
-	);
+	let mut result = build_block(chain, tx_pool, key_id.clone(), wallet_listener_url.clone());
 	while let Err(e) = result {
 		let mut new_key_id = key_id.to_owned();
 		match e {
@@ -116,13 +109,7 @@ pub fn get_block(
 			thread::sleep(Duration::from_millis(100));
 		}
 
-		result = build_block(
-			chain,
-			tx_pool,
-			verifier_cache.clone(),
-			new_key_id,
-			wallet_listener_url.clone(),
-		);
+		result = build_block(chain, tx_pool, new_key_id, wallet_listener_url.clone());
 	}
 	return result.unwrap();
 }
@@ -132,7 +119,6 @@ pub fn get_block(
 fn build_block(
 	chain: &Arc<chain::Chain>,
 	tx_pool: &ServerTxPool,
-	verifier_cache: ServerVerifierCache,
 	key_id: Option<Identifier>,
 	wallet_listener_url: Option<String>,
 ) -> Result<(core::Block, BlockFees), Error> {
@@ -178,7 +164,7 @@ fn build_block(
 	let mut b = core::Block::from_reward(&head, &txs, output, kernel, difficulty.difficulty)?;
 
 	// making sure we're not spending time mining a useless block
-	b.validate(&head.total_kernel_offset, verifier_cache)?;
+	b.validate(&head.total_kernel_offset)?;
 
 	b.header.pow.nonce = thread_rng().gen();
 	b.header.pow.secondary_scaling = difficulty.secondary_scaling;

@@ -21,10 +21,9 @@ use std::time::{Duration, Instant};
 use crate::common::adapters::DandelionAdapter;
 use crate::core::core::hash::Hashed;
 use crate::core::core::transaction;
-use crate::core::core::verifier_cache::VerifierCache;
 use crate::pool::{BlockChain, DandelionConfig, Pool, PoolEntry, PoolError, TxSource};
 use crate::util::StopState;
-use crate::{ServerTxPool, ServerVerifierCache};
+use crate::ServerTxPool;
 
 /// A process to monitor transactions in the stempool.
 /// With Dandelion, transaction can be broadcasted in stem or fluff phase.
@@ -38,7 +37,6 @@ pub fn monitor_transactions(
 	dandelion_config: DandelionConfig,
 	tx_pool: ServerTxPool,
 	adapter: Arc<dyn DandelionAdapter>,
-	verifier_cache: ServerVerifierCache,
 	stop_state: Arc<StopState>,
 ) -> std::io::Result<thread::JoinHandle<()>> {
 	debug!("Started Dandelion transaction monitor.");
@@ -58,15 +56,11 @@ pub fn monitor_transactions(
 
 				if last_run.elapsed() > run_interval {
 					if !adapter.is_stem() {
-						let _ = process_fluff_phase(
-							&dandelion_config,
-							&tx_pool,
-							&adapter,
-							&verifier_cache,
-						)
-						.map_err(|e| {
-							error!("dand_mon: Problem processing fluff phase. {:?}", e);
-						});
+						let _ = process_fluff_phase(&dandelion_config, &tx_pool, &adapter).map_err(
+							|e| {
+								error!("dand_mon: Problem processing fluff phase. {:?}", e);
+							},
+						);
 					}
 
 					// Now find all expired entries based on embargo timer.
@@ -91,10 +85,9 @@ pub fn monitor_transactions(
 
 // Query the pool for transactions older than the cutoff.
 // Used for both periodic fluffing and handling expired embargo timer.
-fn select_txs_cutoff<B, V>(pool: &Pool<B, V>, cutoff_secs: u16) -> Vec<PoolEntry>
+fn select_txs_cutoff<B>(pool: &Pool<B>, cutoff_secs: u16) -> Vec<PoolEntry>
 where
 	B: BlockChain,
-	V: VerifierCache,
 {
 	let cutoff = Utc::now().timestamp() - cutoff_secs as i64;
 	pool.entries
@@ -108,7 +101,6 @@ fn process_fluff_phase(
 	dandelion_config: &DandelionConfig,
 	tx_pool: &ServerTxPool,
 	adapter: &Arc<dyn DandelionAdapter>,
-	verifier_cache: &ServerVerifierCache,
 ) -> Result<(), PoolError> {
 	// Take a write lock on the txpool for the duration of this processing.
 	let mut tx_pool = tx_pool.write();
@@ -147,11 +139,7 @@ fn process_fluff_phase(
 	);
 
 	let agg_tx = transaction::aggregate(&fluffable_txs)?;
-	agg_tx.validate(
-		transaction::Weighting::AsTransaction,
-		verifier_cache.clone(),
-		header.height,
-	)?;
+	agg_tx.validate(transaction::Weighting::AsTransaction, header.height)?;
 
 	tx_pool.add_to_pool(TxSource::Fluff, agg_tx, false, &header)?;
 	Ok(())

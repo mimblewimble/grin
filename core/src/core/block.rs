@@ -18,7 +18,6 @@ use crate::consensus::{self, reward, REWARD};
 use crate::core::committed::{self, Committed};
 use crate::core::compact_block::CompactBlock;
 use crate::core::hash::{DefaultHashable, Hash, Hashed, ZERO_HASH};
-use crate::core::verifier_cache::VerifierCache;
 use crate::core::{
 	pmmr, transaction, Commitment, Inputs, KernelFeatures, Output, Transaction, TransactionBody,
 	TxKernel, Weighting,
@@ -34,9 +33,7 @@ use chrono::Duration;
 use keychain::{self, BlindingFactor};
 use std::convert::TryInto;
 use std::fmt;
-use std::sync::Arc;
 use util::from_hex;
-use util::RwLock;
 use util::{secp, static_secp_instance};
 
 /// Errors thrown by Block validation
@@ -732,12 +729,8 @@ impl Block {
 	/// Validates all the elements in a block that can be checked without
 	/// additional data. Includes commitment sums and kernels, Merkle
 	/// trees, reward, etc.
-	pub fn validate(
-		&self,
-		prev_kernel_offset: &BlindingFactor,
-		verifier: Arc<RwLock<dyn VerifierCache>>,
-	) -> Result<(), Error> {
-		self.body.validate(Weighting::AsBlock, verifier)?;
+	pub fn validate(&self, prev_kernel_offset: &BlindingFactor) -> Result<(), Error> {
+		self.body.validate(Weighting::AsBlock)?;
 
 		self.verify_kernel_lock_heights()?;
 		self.verify_nrd_kernels_for_header_version()?;
