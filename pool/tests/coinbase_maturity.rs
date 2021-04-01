@@ -14,11 +14,9 @@
 
 pub mod common;
 
-use self::core::core::verifier_cache::LruVerifierCache;
 use self::core::global;
 use self::keychain::{ExtKeychain, Keychain};
 use self::pool::types::PoolError;
-use self::util::RwLock;
 use crate::common::*;
 use grin_core as core;
 use grin_keychain as keychain;
@@ -39,15 +37,11 @@ fn test_coinbase_maturity() {
 
 	let genesis = genesis_block(&keychain);
 	let chain = Arc::new(init_chain(db_root, genesis));
-	let verifier_cache = Arc::new(RwLock::new(LruVerifierCache::new()));
 
 	// Initialize a new pool with our chain adapter.
-	let mut pool = init_transaction_pool(
-		Arc::new(ChainAdapter {
-			chain: chain.clone(),
-		}),
-		verifier_cache,
-	);
+	let mut pool = init_transaction_pool(Arc::new(ChainAdapter {
+		chain: chain.clone(),
+	}));
 
 	// Add a single block, introducing coinbase output to be spent later.
 	add_block(&chain, &[], &keychain);

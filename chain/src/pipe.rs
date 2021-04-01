@@ -16,7 +16,6 @@
 
 use crate::core::consensus;
 use crate::core::core::hash::Hashed;
-use crate::core::core::verifier_cache::VerifierCache;
 use crate::core::core::Committed;
 use crate::core::core::{
 	block, Block, BlockHeader, BlockSums, HeaderVersion, OutputIdentifier, TransactionBody,
@@ -27,8 +26,6 @@ use crate::error::{Error, ErrorKind};
 use crate::store;
 use crate::txhashset;
 use crate::types::{CommitPos, Options, Tip};
-use crate::util::RwLock;
-use std::sync::Arc;
 
 /// Contextual information required to process a new block and either reject or
 /// accept it.
@@ -43,8 +40,6 @@ pub struct BlockContext<'a> {
 	pub header_pmmr: &'a mut txhashset::PMMRHandle<BlockHeader>,
 	/// The active batch to use for block processing.
 	pub batch: store::Batch<'a>,
-	/// The verifier cache (caching verifier for rangeproofs and kernel signatures)
-	pub verifier_cache: Arc<RwLock<dyn VerifierCache>>,
 }
 
 // If this block has greater total difficulty than treat as unknown in current context.
@@ -419,7 +414,7 @@ fn validate_header(header: &BlockHeader, ctx: &mut BlockContext<'_>) -> Result<(
 fn validate_block(block: &Block, ctx: &mut BlockContext<'_>) -> Result<(), Error> {
 	let prev = ctx.batch.get_previous_header(&block.header)?;
 	block
-		.validate(&prev.total_kernel_offset, ctx.verifier_cache.clone())
+		.validate(&prev.total_kernel_offset)
 		.map_err(ErrorKind::InvalidBlockProof)?;
 	Ok(())
 }

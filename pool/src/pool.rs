@@ -18,11 +18,9 @@
 use self::core::core::hash::{Hash, Hashed};
 use self::core::core::id::{ShortId, ShortIdentifiable};
 use self::core::core::transaction;
-use self::core::core::verifier_cache::VerifierCache;
 use self::core::core::{
 	Block, BlockHeader, BlockSums, Committed, OutputIdentifier, Transaction, TxKernel, Weighting,
 };
-use self::util::RwLock;
 use crate::types::{BlockChain, PoolEntry, PoolError};
 use grin_core as core;
 use grin_util as util;
@@ -31,29 +29,25 @@ use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use util::static_secp_instance;
 
-pub struct Pool<B, V>
+pub struct Pool<B>
 where
 	B: BlockChain,
-	V: VerifierCache,
 {
 	/// Entries in the pool (tx + info + timer) in simple insertion order.
 	pub entries: Vec<PoolEntry>,
 	/// The blockchain
 	pub blockchain: Arc<B>,
-	pub verifier_cache: Arc<RwLock<V>>,
 	pub name: String,
 }
 
-impl<B, V> Pool<B, V>
+impl<B> Pool<B>
 where
 	B: BlockChain,
-	V: VerifierCache + 'static,
 {
-	pub fn new(chain: Arc<B>, verifier_cache: Arc<RwLock<V>>, name: String) -> Self {
+	pub fn new(chain: Arc<B>, name: String) -> Self {
 		Pool {
 			entries: vec![],
 			blockchain: chain,
-			verifier_cache,
 			name,
 		}
 	}
@@ -161,7 +155,7 @@ where
 		let tx = transaction::aggregate(&txs)?;
 
 		// Validate the single aggregate transaction "as pool", not subject to tx weight limits.
-		tx.validate(Weighting::NoLimit, self.verifier_cache.clone())?;
+		tx.validate(Weighting::NoLimit)?;
 
 		Ok(Some(tx))
 	}
@@ -229,7 +223,7 @@ where
 	) -> Result<BlockSums, PoolError> {
 		// Validate the tx, conditionally checking against weight limits,
 		// based on weight verification type.
-		tx.validate(weighting, self.verifier_cache.clone())?;
+		tx.validate(weighting)?;
 
 		// Validate the tx against current chain state.
 		// Check all inputs are in the current UTXO set.
@@ -408,11 +402,9 @@ where
 					// Otherwise discard and let the next block pick this tx up.
 					let bucket = &tx_buckets[pos];
 
-					if let Ok(new_bucket) = bucket.aggregate_with_tx(
-						entry.tx.clone(),
-						weighting,
-						self.verifier_cache.clone(),
-					) {
+					if let Ok(new_bucket) =
+						bucket.aggregate_with_tx(entry.tx.clone(), weighting)
+					{
 						if new_bucket.fee_rate >= bucket.fee_rate {
 							// Only aggregate if it would not reduce the fee_rate ratio.
 							tx_buckets[pos] = new_bucket;
@@ -525,12 +517,11 @@ impl Bucket {
 		&self,
 		new_tx: Transaction,
 		weighting: Weighting,
-		verifier_cache: Arc<RwLock<dyn VerifierCache>>,
 	) -> Result<Bucket, PoolError> {
 		let mut raw_txs = self.raw_txs.clone();
 		raw_txs.push(new_tx);
 		let agg_tx = transaction::aggregate(&raw_txs)?;
-		agg_tx.validate(weighting, verifier_cache)?;
+		agg_tx.validate(weighting)?;
 		Ok(Bucket {
 			fee_rate: agg_tx.fee_rate(),
 			raw_txs: raw_txs,

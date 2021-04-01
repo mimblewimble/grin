@@ -41,4 +41,4 @@ mod mining;
 
 pub use crate::common::stats::{DiffBlock, PeerStats, ServerStats, StratumStats, WorkerStats};
 pub use crate::common::types::{ServerConfig, StratumServerConfig};
-pub use crate::grin::server::{Server, ServerTxPool, ServerVerifierCache};
+pub use crate::grin::server::{Server, ServerTxPool};

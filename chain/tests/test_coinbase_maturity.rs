@@ -14,13 +14,11 @@
 
 use self::chain::types::NoopAdapter;
 use self::chain::ErrorKind;
-use self::core::core::verifier_cache::LruVerifierCache;
 use self::core::core::KernelFeatures;
 use self::core::global::{self, ChainTypes};
 use self::core::libtx::{self, build, ProofBuilder};
 use self::core::{consensus, pow};
 use self::keychain::{ExtKeychain, ExtKeychainPath, Keychain};
-use self::util::RwLock;
 use chrono::Duration;
 use grin_chain as chain;
 use grin_core as core;
@@ -42,15 +40,12 @@ fn test_coinbase_maturity() {
 
 	let genesis_block = pow::mine_genesis_block().unwrap();
 
-	let verifier_cache = Arc::new(RwLock::new(LruVerifierCache::new()));
-
 	{
 		let chain = chain::Chain::init(
 			chain_dir.to_string(),
 			Arc::new(NoopAdapter {}),
 			genesis_block,
 			pow::verify_size,
-			verifier_cache,
 			false,
 		)
 		.unwrap();

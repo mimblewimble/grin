@@ -14,12 +14,10 @@
 
 pub mod common;
 
-use self::core::core::verifier_cache::LruVerifierCache;
 use self::core::core::{transaction, Weighting};
 use self::core::global;
 use self::keychain::{ExtKeychain, Keychain};
 use self::pool::TxSource;
-use self::util::RwLock;
 use crate::common::*;
 use grin_core as core;
 use grin_keychain as keychain;
@@ -40,15 +38,11 @@ fn test_the_transaction_pool() {
 
 	let genesis = genesis_block(&keychain);
 	let chain = Arc::new(init_chain(db_root, genesis));
-	let verifier_cache = Arc::new(RwLock::new(LruVerifierCache::new()));
 
 	// Initialize a new pool with our chain adapter.
-	let mut pool = init_transaction_pool(
-		Arc::new(ChainAdapter {
-			chain: chain.clone(),
-		}),
-		verifier_cache.clone(),
-	);
+	let mut pool = init_transaction_pool(Arc::new(ChainAdapter {
+		chain: chain.clone(),
+	}));
 
 	// mine past HF4 to see effect of set_local_accept_fee_base
 	add_some_blocks(&chain, 4 * 3, &keychain);
@@ -193,9 +187,7 @@ fn test_the_transaction_pool() {
 		// tx4 is the "new" part of this aggregated tx that we care about
 		let agg_tx = transaction::aggregate(&[tx1.clone(), tx2.clone(), tx4]).unwrap();
 
-		agg_tx
-			.validate(Weighting::AsTransaction, verifier_cache.clone())
-			.unwrap();
+		agg_tx.validate(Weighting::AsTransaction).unwrap();
 
 		pool.add_to_pool(test_source(), agg_tx, false, &header)
 			.unwrap();
