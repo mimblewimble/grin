@@ -13,7 +13,6 @@
 // limitations under the License.
 
 use crate::chain;
-use crate::core::consensus::YEAR_HEIGHT;
 use crate::core::core::hash::Hashed;
 use crate::core::core::merkle_proof::MerkleProof;
 use crate::core::core::{FeeFields, KernelFeatures, TxKernel};
@@ -518,13 +517,10 @@ impl TxKernelPrintable {
 				relative_height,
 			} => (fee, relative_height.into()),
 		};
-		let height = 2 * YEAR_HEIGHT; // print as if post-HF4
-		let fee = fee_fields.fee(height);
-		let fee_shift: u8 = fee_fields.fee_shift(height);
 		TxKernelPrintable {
 			features,
-			fee_shift,
-			fee,
+			fee_shift: fee_fields.fee_shift(),
+			fee: fee_fields.fee(),
 			lock_height,
 			excess: k.excess.to_hex(),
 			excess_sig: (&k.excess_sig.to_raw_data()[..]).to_hex(),

@@ -286,9 +286,7 @@ mod test {
 		)
 		.unwrap();
 
-		let height = 42; // arbitrary
-		tx.validate(Weighting::AsTransaction, vc.clone(), height)
-			.unwrap();
+		tx.validate(Weighting::AsTransaction, vc.clone()).unwrap();
 	}
 
 	#[test]
@@ -310,9 +308,7 @@ mod test {
 		)
 		.unwrap();
 
-		let height = 42; // arbitrary
-		tx.validate(Weighting::AsTransaction, vc.clone(), height)
-			.unwrap();
+		tx.validate(Weighting::AsTransaction, vc.clone()).unwrap();
 	}
 
 	#[test]
@@ -333,8 +329,6 @@ mod test {
 		)
 		.unwrap();
 
-		let height = 42; // arbitrary
-		tx.validate(Weighting::AsTransaction, vc.clone(), height)
-			.unwrap();
+		tx.validate(Weighting::AsTransaction, vc.clone()).unwrap();
 	}
 }

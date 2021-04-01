@@ -193,12 +193,8 @@ where
 
 		// Make sure the transaction is valid before anything else.
 		// Validate tx accounting for max tx weight.
-		tx.validate(
-			Weighting::AsTransaction,
-			self.verifier_cache.clone(),
-			header.height,
-		)
-		.map_err(PoolError::InvalidTx)?;
+		tx.validate(Weighting::AsTransaction, self.verifier_cache.clone())
+			.map_err(PoolError::InvalidTx)?;
 
 		// Check the tx lock_time is valid based on current chain state.
 		self.blockchain.verify_tx_lock_height(tx)?;
@@ -278,12 +274,7 @@ where
 		};
 
 		// Validate the tx to ensure our converted inputs are correct.
-		let header = self.chain_head()?;
-		tx.validate(
-			Weighting::AsTransaction,
-			self.verifier_cache.clone(),
-			header.height,
-		)?;
+		tx.validate(Weighting::AsTransaction, self.verifier_cache.clone())?;
 
 		Ok(PoolEntry::new(tx, entry.src))
 	}
@@ -374,9 +365,8 @@ where
 		// weight for a basic transaction (2 inputs, 2 outputs, 1 kernel) -
 		// (2 * 1) + (2 * 21) + (1 * 3) = 47
 		// minfees = 47 * 500_000 = 23_500_000
-		let header = self.chain_head()?;
-		if tx.shifted_fee(header.height) < tx.accept_fee(header.height) {
-			return Err(PoolError::LowFeeTransaction(tx.shifted_fee(header.height)));
+		if tx.shifted_fee() < tx.accept_fee() {
+			return Err(PoolError::LowFeeTransaction(tx.shifted_fee()));
 		}
 		Ok(())
 	}
