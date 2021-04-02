@@ -1,0 +1,23 @@
+[package]
+name = "grin_perf"
+version = "0.0.1"
+edition = "2018"
+authors = ["Grin Developers <mimblewimble@lists.launchpad.net>"]
+description = "Utility to test performance of building blocks"
+license = "Apache-2.0"
+repository = "https://github.com/mimblewimble/grin"
+keywords = [ "crypto", "grin", "mimblewimble" ]
+readme = "README.md"
+
+[[bin]]
+name = "perf"
+path = "src/bin/perf.rs"
+
+[dependencies]
+chrono = "0.4.11"
+failure = "0.1"
+
+grin_chain = { path = "../../chain" }
+grin_core = { path = "../../core" }
+grin_keychain = { path = "../../keychain" }
+grin_util = { path = "../../util" }
