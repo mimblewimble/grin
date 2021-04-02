@@ -15,12 +15,16 @@
 use self::chain::types::{NoopAdapter, Tip};
 use self::chain::Chain;
 use self::core::core::hash::Hashed;
-use self::core::core::{Block, BlockHeader, KernelFeatures, Transaction};
+use self::core::core::{Block, BlockHeader, KernelFeatures, Output, OutputFeatures, Transaction};
 use self::core::global::ChainTypes;
-use self::core::libtx::{self, build, ProofBuilder};
+use self::core::libtx::build::{self, Append};
+use self::core::libtx::proof::{self, ProofBuild};
+use self::core::libtx::{self, Error, ProofBuilder};
 use self::core::pow::Difficulty;
 use self::core::{consensus, global, pow};
-use self::keychain::{ExtKeychain, ExtKeychainPath, Keychain};
+use self::keychain::{
+	BlindSum, ExtKeychain, ExtKeychainPath, Identifier, Keychain, SwitchCommitmentType,
+};
 use self::util::RwLock;
 use chrono::Duration;
 use grin_chain as chain;
@@ -814,6 +818,49 @@ fn output_header_mappings() {
 	clean_output_dir(".grin_header_for_output");
 }
 
+/// Build a negative output. This function must not be used outside of tests.
+/// The commitment will be an inversion of the value passed in and the value is
+/// subtracted from the sum.
+fn build_output_negative<K, B>(value: u64, key_id: Identifier) -> Box<Append<K, B>>
+where
+	K: Keychain,
+	B: ProofBuild,
+{
+	Box::new(
+		move |build, acc| -> Result<(Transaction, BlindSum), Error> {
+			let (tx, sum) = acc?;
+
+			// TODO: proper support for different switch commitment schemes
+			let switch = SwitchCommitmentType::Regular;
+
+			let commit = build.keychain.commit(value, &key_id, switch)?;
+
+			// invert commitment
+			let commit = build.keychain.secp().commit_sum(vec![], vec![commit])?;
+
+			eprintln!("Building output: {}, {:?}", value, commit);
+
+			// build a proof with a rangeproof of 0 as a placeholder
+			// the test will replace this later
+			let proof = proof::create(
+				build.keychain,
+				build.builder,
+				0,
+				&key_id,
+				switch,
+				commit,
+				None,
+			)?;
+
+			// we return the output and the value is subtracted instead of added
+			Ok((
+				tx.with_output(Output::new(OutputFeatures::Plain, commit, proof)),
+				sum.sub_key_id(key_id.to_value_path(value)),
+			))
+		},
+	)
+}
+
 /// Test the duplicate rangeproof bug
 #[test]
 fn test_overflow_cached_rangeproof() {
@@ -882,7 +929,7 @@ fn test_overflow_cached_rangeproof() {
 					consensus::REWARD - 20000 + 1_000_000_000_000_000,
 					key_id31.clone(),
 				),
-				build::output_negative(1_000_000_000_000_000, key_id32.clone()),
+				build_output_negative(1_000_000_000_000_000, key_id32.clone()),
 			],
 			&kc,
 			&pb,
