@@ -140,12 +140,12 @@ where
 
 fn main() -> Result<(), Error> {
 	print("Starting perf test".to_string());
-	clean_output_dir(".perf");
+	clean_output_dir(".grin_perf");
 	global::set_local_chain_type(ChainTypes::PerfTesting);
 
 	let verifier_cache = Arc::new(RwLock::new(LruVerifierCache::new()));
 	let chain = Chain::init(
-		".perf".to_string(),
+		".grin_perf".to_string(),
 		Arc::new(NoopAdapter {}),
 		pow::mine_genesis_block().unwrap(),
 		pow::verify_size,
