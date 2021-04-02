@@ -13,7 +13,7 @@ edition = "2018"
 
 [workspace]
 members = ["api", "chain", "config", "core", "keychain", "p2p", "servers", "store", "util", "pool"]
-exclude = ["etc/gen_gen"]
+exclude = ["etc/gen_gen", "etc/perf"]
 
 [[bin]]
 name = "grin"

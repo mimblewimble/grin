@@ -180,7 +180,7 @@ impl GlobalConfig {
 					.unwrap()
 					.wallet_listener_url = "http://127.0.0.1:13415".to_owned();
 			}
-			global::ChainTypes::UserTesting => {
+			global::ChainTypes::UserTesting | global::ChainTypes::PerfTesting => {
 				defaults.api_http_addr = "127.0.0.1:23413".to_owned();
 				defaults.p2p_config.port = 23414;
 				defaults.p2p_config.seeding_type = p2p::Seeding::None;

@@ -46,6 +46,9 @@ pub use crate::types::ZeroingString;
 
 pub mod macros;
 
+/// PrintUtil
+pub mod print_util;
+
 // other utils
 #[allow(unused_imports)]
 use std::ops::Deref;

@@ -145,7 +145,9 @@ pub fn header_version(height: u64) -> HeaderVersion {
 	let hf_interval = (1 + height / HARD_FORK_INTERVAL) as u16;
 	match global::get_chain_type() {
 		global::ChainTypes::Mainnet => HeaderVersion(min(5, hf_interval)),
-		global::ChainTypes::AutomatedTesting | global::ChainTypes::UserTesting => {
+		global::ChainTypes::AutomatedTesting
+		| global::ChainTypes::UserTesting
+		| global::ChainTypes::PerfTesting => {
 			let testing_hf_interval = (1 + height / TESTING_HARD_FORK_INTERVAL) as u16;
 			HeaderVersion(min(5, testing_hf_interval))
 		}

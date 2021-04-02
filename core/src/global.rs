@@ -113,6 +113,8 @@ pub const TXHASHSET_ARCHIVE_INTERVAL: u64 = 12 * 60;
 pub enum ChainTypes {
 	/// For CI testing
 	AutomatedTesting,
+	/// For Perf Testing
+	PerfTesting,
 	/// For User testing
 	UserTesting,
 	/// Protocol testing network
@@ -126,6 +128,7 @@ impl ChainTypes {
 	pub fn shortname(&self) -> String {
 		match *self {
 			ChainTypes::AutomatedTesting => "auto".to_owned(),
+			ChainTypes::PerfTesting => "perf".to_owned(),
 			ChainTypes::UserTesting => "user".to_owned(),
 			ChainTypes::Testnet => "test".to_owned(),
 			ChainTypes::Mainnet => "main".to_owned(),
@@ -321,6 +324,7 @@ pub fn create_pow_context<T>(
 pub fn min_edge_bits() -> u8 {
 	match get_chain_type() {
 		ChainTypes::AutomatedTesting => AUTOMATED_TESTING_MIN_EDGE_BITS,
+		ChainTypes::PerfTesting => AUTOMATED_TESTING_MIN_EDGE_BITS,
 		ChainTypes::UserTesting => USER_TESTING_MIN_EDGE_BITS,
 		_ => DEFAULT_MIN_EDGE_BITS,
 	}
@@ -332,6 +336,7 @@ pub fn min_edge_bits() -> u8 {
 pub fn base_edge_bits() -> u8 {
 	match get_chain_type() {
 		ChainTypes::AutomatedTesting => AUTOMATED_TESTING_MIN_EDGE_BITS,
+		ChainTypes::PerfTesting => AUTOMATED_TESTING_MIN_EDGE_BITS,
 		ChainTypes::UserTesting => USER_TESTING_MIN_EDGE_BITS,
 		_ => BASE_EDGE_BITS,
 	}
@@ -341,6 +346,7 @@ pub fn base_edge_bits() -> u8 {
 pub fn proofsize() -> usize {
 	match get_chain_type() {
 		ChainTypes::AutomatedTesting => AUTOMATED_TESTING_PROOF_SIZE,
+		ChainTypes::PerfTesting => AUTOMATED_TESTING_PROOF_SIZE,
 		ChainTypes::UserTesting => USER_TESTING_PROOF_SIZE,
 		_ => PROOFSIZE,
 	}
@@ -350,6 +356,7 @@ pub fn proofsize() -> usize {
 pub fn coinbase_maturity() -> u64 {
 	match get_chain_type() {
 		ChainTypes::AutomatedTesting => AUTOMATED_TESTING_COINBASE_MATURITY,
+		ChainTypes::PerfTesting => AUTOMATED_TESTING_COINBASE_MATURITY,
 		ChainTypes::UserTesting => USER_TESTING_COINBASE_MATURITY,
 		_ => COINBASE_MATURITY,
 	}
@@ -359,6 +366,7 @@ pub fn coinbase_maturity() -> u64 {
 pub fn initial_block_difficulty() -> u64 {
 	match get_chain_type() {
 		ChainTypes::AutomatedTesting => TESTING_INITIAL_DIFFICULTY,
+		ChainTypes::PerfTesting => TESTING_INITIAL_DIFFICULTY,
 		ChainTypes::UserTesting => TESTING_INITIAL_DIFFICULTY,
 		ChainTypes::Testnet => INITIAL_DIFFICULTY,
 		ChainTypes::Mainnet => INITIAL_DIFFICULTY,
@@ -369,6 +377,7 @@ pub fn initial_block_difficulty() -> u64 {
 pub fn initial_graph_weight() -> u32 {
 	match get_chain_type() {
 		ChainTypes::AutomatedTesting => graph_weight(0, AUTOMATED_TESTING_MIN_EDGE_BITS) as u32,
+		ChainTypes::PerfTesting => graph_weight(0, AUTOMATED_TESTING_MIN_EDGE_BITS) as u32,
 		ChainTypes::UserTesting => graph_weight(0, USER_TESTING_MIN_EDGE_BITS) as u32,
 		ChainTypes::Testnet => graph_weight(0, SECOND_POW_EDGE_BITS) as u32,
 		ChainTypes::Mainnet => graph_weight(0, SECOND_POW_EDGE_BITS) as u32,
@@ -379,6 +388,7 @@ pub fn initial_graph_weight() -> u32 {
 pub fn min_wtema_graph_weight() -> u64 {
 	match get_chain_type() {
 		ChainTypes::AutomatedTesting => graph_weight(0, AUTOMATED_TESTING_MIN_EDGE_BITS),
+		ChainTypes::PerfTesting => graph_weight(0, AUTOMATED_TESTING_MIN_EDGE_BITS),
 		ChainTypes::UserTesting => graph_weight(0, USER_TESTING_MIN_EDGE_BITS),
 		ChainTypes::Testnet => graph_weight(0, SECOND_POW_EDGE_BITS),
 		ChainTypes::Mainnet => C32_GRAPH_WEIGHT,
@@ -389,6 +399,7 @@ pub fn min_wtema_graph_weight() -> u64 {
 pub fn max_block_weight() -> u64 {
 	match get_chain_type() {
 		ChainTypes::AutomatedTesting => TESTING_MAX_BLOCK_WEIGHT,
+		ChainTypes::PerfTesting => MAX_BLOCK_WEIGHT,
 		ChainTypes::UserTesting => TESTING_MAX_BLOCK_WEIGHT,
 		ChainTypes::Testnet => MAX_BLOCK_WEIGHT,
 		ChainTypes::Mainnet => MAX_BLOCK_WEIGHT,
@@ -405,6 +416,7 @@ pub fn max_tx_weight() -> u64 {
 pub fn cut_through_horizon() -> u32 {
 	match get_chain_type() {
 		ChainTypes::AutomatedTesting => AUTOMATED_TESTING_CUT_THROUGH_HORIZON,
+		ChainTypes::PerfTesting => AUTOMATED_TESTING_CUT_THROUGH_HORIZON,
 		ChainTypes::UserTesting => USER_TESTING_CUT_THROUGH_HORIZON,
 		_ => CUT_THROUGH_HORIZON,
 	}
@@ -414,6 +426,7 @@ pub fn cut_through_horizon() -> u32 {
 pub fn state_sync_threshold() -> u32 {
 	match get_chain_type() {
 		ChainTypes::AutomatedTesting => TESTING_STATE_SYNC_THRESHOLD,
+		ChainTypes::PerfTesting => TESTING_STATE_SYNC_THRESHOLD,
 		ChainTypes::UserTesting => TESTING_STATE_SYNC_THRESHOLD,
 		_ => STATE_SYNC_THRESHOLD,
 	}
@@ -423,6 +436,7 @@ pub fn state_sync_threshold() -> u32 {
 pub fn txhashset_archive_interval() -> u64 {
 	match get_chain_type() {
 		ChainTypes::AutomatedTesting => TESTING_TXHASHSET_ARCHIVE_INTERVAL,
+		ChainTypes::PerfTesting => TESTING_TXHASHSET_ARCHIVE_INTERVAL,
 		ChainTypes::UserTesting => TESTING_TXHASHSET_ARCHIVE_INTERVAL,
 		_ => TXHASHSET_ARCHIVE_INTERVAL,
 	}
@@ -510,6 +524,12 @@ mod test {
 	#[test]
 	fn automated_testing_header_len() {
 		set_local_chain_type(ChainTypes::AutomatedTesting);
+		test_header_len(mine_genesis_block().unwrap());
+	}
+
+	#[test]
+	fn perf_testing_header_len() {
+		set_local_chain_type(ChainTypes::PerfTesting);
 		test_header_len(mine_genesis_block().unwrap());
 	}
 

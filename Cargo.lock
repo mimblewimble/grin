@@ -295,14 +295,16 @@ checksum = "baf1de4339761588bc0619e3cbc0120ee582ebb74b53b4efbf79117bd2da40fd"
 
 [[package]]
 name = "chrono"
-version = "0.4.11"
+version = "0.4.19"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "80094f509cf8b5ae86a4966a39b3ff66cd7e2a3e594accec3743ff3fabeab5b2"
+checksum = "670ad68c9088c2a963aaa298cb369688cf3f9465ce5e2d4ca10e6e0098a1ce73"
 dependencies = [
+ "libc",
  "num-integer",
  "num-traits 0.2.14",
  "serde",
  "time",
+ "winapi 0.3.8",
 ]
 
 [[package]]
@@ -1194,6 +1196,7 @@ dependencies = [
  "backtrace",
  "base64 0.12.1",
  "byteorder",
+ "chrono",
  "grin_secp256k1zkp",
  "lazy_static",
  "log",
