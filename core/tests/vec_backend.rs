@@ -42,26 +42,26 @@ fn leaf_pos_and_idx_iter_test() {
 	);
 }
 
-#[test]
-fn leaf_pos_and_idx_iter_hash_only_test() {
-	let elems = [
-		TestElem([0, 0, 0, 1]),
-		TestElem([0, 0, 0, 2]),
-		TestElem([0, 0, 0, 3]),
-		TestElem([0, 0, 0, 4]),
-		TestElem([0, 0, 0, 5]),
-	];
-	let mut backend = VecBackend::new_hash_only();
-	let mut pmmr = PMMR::new(&mut backend);
-	for x in &elems {
-		pmmr.push(x).unwrap();
-	}
-	assert_eq!(
-		vec![0, 1, 2, 3, 4],
-		pmmr.leaf_idx_iter(0).collect::<Vec<_>>()
-	);
-	assert_eq!(
-		vec![1, 2, 4, 5, 8],
-		pmmr.leaf_pos_iter().collect::<Vec<_>>()
-	);
-}
+// #[test]
+// fn leaf_pos_and_idx_iter_hash_only_test() {
+// 	let elems = [
+// 		TestElem([0, 0, 0, 1]),
+// 		TestElem([0, 0, 0, 2]),
+// 		TestElem([0, 0, 0, 3]),
+// 		TestElem([0, 0, 0, 4]),
+// 		TestElem([0, 0, 0, 5]),
+// 	];
+// 	let mut backend = VecBackend::new_hash_only();
+// 	let mut pmmr = PMMR::new(&mut backend);
+// 	for x in &elems {
+// 		pmmr.push(x).unwrap();
+// 	}
+// 	assert_eq!(
+// 		vec![0, 1, 2, 3, 4],
+// 		pmmr.leaf_idx_iter(0).collect::<Vec<_>>()
+// 	);
+// 	assert_eq!(
+// 		vec![1, 2, 4, 5, 8],
+// 		pmmr.leaf_pos_iter().collect::<Vec<_>>()
+// 	);
+// }

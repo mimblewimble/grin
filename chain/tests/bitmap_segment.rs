@@ -1,4 +1,5 @@
 use self::chain::txhashset::{BitmapAccumulator, BitmapSegment};
+use self::core::core::pmmr;
 use self::core::core::pmmr::segment::{Segment, SegmentIdentifier};
 use self::core::ser::{BinReader, BinWriter, ProtocolVersion, Readable, Writeable};
 use croaring::Bitmap;
@@ -40,7 +41,11 @@ fn test_roundtrip(entries: usize) {
 		.unwrap();
 
 	let mmr = accumulator.readonly_pmmr();
-	let segment = Segment::from_pmmr(identifier, &mmr, false).unwrap();
+	let segment = Segment::from_pmmr(identifier, &mmr, false, |pos| {
+		let idx = pmmr::n_leaves(pos).saturating_sub(1);
+		accumulator.get_chunk(idx).cloned()
+	})
+	.unwrap();
 
 	// Convert to `BitmapSegment`
 	let bms = BitmapSegment::from(segment.clone());

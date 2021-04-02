@@ -33,9 +33,6 @@ pub trait ReadablePMMR {
 	/// Get the hash at provided position in the MMR.
 	fn get_hash(&self, pos: u64) -> Option<Hash>;
 
-	/// Get the data element at provided position in the MMR.
-	fn get_data(&self, pos: u64) -> Option<Self::Item>;
-
 	/// Get the hash from the underlying MMR file (ignores the remove log).
 	fn get_from_file(&self, pos: u64) -> Option<Hash>;
 
@@ -43,9 +40,6 @@ pub trait ReadablePMMR {
 	/// Optimized for reading peak hashes rather than arbitrary pos hashes.
 	/// Peaks can be assumed to not be compacted.
 	fn get_peak_from_file(&self, pos: u64) -> Option<Hash>;
-
-	/// Get the data element at provided position in the MMR (ignores the remove log).
-	fn get_data_from_file(&self, pos: u64) -> Option<Self::Item>;
 
 	/// Total size of the tree, including intermediary nodes and ignoring any pruning.
 	fn unpruned_size(&self) -> u64;
@@ -55,6 +49,10 @@ pub trait ReadablePMMR {
 
 	/// Iterator over current (unpruned, unremoved) leaf insertion indices.
 	fn leaf_idx_iter(&self, from_idx: u64) -> Box<dyn Iterator<Item = u64> + '_>;
+
+	/// Is the pos a leaf?
+	/// Takes last_pos and the leaf_set (for prunable MMR) into consideration.
+	fn is_leaf(&self, pos: u64) -> bool;
 
 	/// Number of leaves in the MMR
 	fn n_unpruned_leaves(&self) -> u64;
@@ -236,8 +234,8 @@ where
 			hashes.push(current_hash);
 		}
 
-		// append all the new nodes and update the MMR index
-		self.backend.append(elmt, &hashes)?;
+		// Append all the new hashes from leaf up to new peak and update the MMR index.
+		self.backend.append(&hashes)?;
 		self.last_pos = pos;
 		Ok(elmt_pos)
 	}
@@ -394,19 +392,6 @@ where
 		}
 	}
 
-	fn get_data(&self, pos: u64) -> Option<Self::Item> {
-		if pos > self.last_pos {
-			// If we are beyond the rhs of the MMR return None.
-			None
-		} else if is_leaf(pos) {
-			// If we are a leaf then get data from the backend.
-			self.backend.get_data(pos)
-		} else {
-			// If we are not a leaf then return None as only leaves have data.
-			None
-		}
-	}
-
 	fn get_from_file(&self, pos: u64) -> Option<Hash> {
 		if pos > self.last_pos {
 			None
@@ -423,14 +408,6 @@ where
 		}
 	}
 
-	fn get_data_from_file(&self, pos: u64) -> Option<Self::Item> {
-		if pos > self.last_pos {
-			None
-		} else {
-			self.backend.get_data_from_file(pos)
-		}
-	}
-
 	fn unpruned_size(&self) -> u64 {
 		self.last_pos
 	}
@@ -441,6 +418,10 @@ where
 
 	fn leaf_idx_iter(&self, from_idx: u64) -> Box<dyn Iterator<Item = u64> + '_> {
 		self.backend.leaf_idx_iter(from_idx)
+	}
+
+	fn is_leaf(&self, pos: u64) -> bool {
+		pos <= self.last_pos && is_leaf(pos) && self.backend.is_leaf(pos)
 	}
 
 	fn n_unpruned_leaves(&self) -> u64 {

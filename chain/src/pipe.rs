@@ -188,11 +188,14 @@ pub fn process_block_headers(
 	// Check if we know about all these headers. If so we can accept them quickly.
 	// If they *do not* increase total work on the sync chain we are done.
 	// If they *do* increase total work then we should process them to update sync_head.
-	let head = {
-		let hash = ctx.header_pmmr.head_hash()?;
-		let header = ctx.batch.get_block_header(&hash)?;
-		Tip::from_header(&header)
-	};
+
+	let head = ctx.batch.header_head()?;
+
+	// let head = {
+	// 	let hash = ctx.header_pmmr.head_hash()?;
+	// 	let header = ctx.batch.get_block_header(&hash)?;
+	// 	Tip::from_header(&header)
+	// };
 
 	if let Ok(existing) = ctx.batch.get_block_header(&last_header.hash()) {
 		if !has_more_work(&existing, &head) {
@@ -256,7 +259,7 @@ pub fn process_block_header(header: &BlockHeader, ctx: &mut BlockContext<'_>) ->
 	txhashset::header_extending(&mut ctx.header_pmmr, &mut ctx.batch, |ext, batch| {
 		rewind_and_apply_header_fork(&prev_header, ext, batch)?;
 		ext.validate_root(header)?;
-		ext.apply_header(header)?;
+		ext.apply_header(header, batch)?;
 		if !has_more_work(&header, &header_head) {
 			ext.force_rollback();
 		}
@@ -425,10 +428,8 @@ fn verify_coinbase_maturity(
 	ext: &txhashset::ExtensionPair<'_>,
 	batch: &store::Batch<'_>,
 ) -> Result<(), Error> {
-	let extension = &ext.extension;
-	let header_extension = &ext.header_extension;
-	extension
-		.utxo_view(header_extension)
+	ext.extension
+		.utxo_view()
 		.verify_coinbase_maturity(&block.inputs(), block.header.height, batch)
 }
 
@@ -553,7 +554,7 @@ pub fn rewind_and_apply_header_fork(
 			.get_block_header(&h)
 			.map_err(|e| ErrorKind::StoreErr(e, "getting forked headers".to_string()))?;
 		ext.validate_root(&header)?;
-		ext.apply_header(&header)?;
+		ext.apply_header(&header, batch)?;
 	}
 
 	Ok(())
@@ -623,9 +624,5 @@ fn validate_utxo(
 	ext: &mut txhashset::ExtensionPair<'_>,
 	batch: &store::Batch<'_>,
 ) -> Result<Vec<(OutputIdentifier, CommitPos)>, Error> {
-	let extension = &ext.extension;
-	let header_extension = &ext.header_extension;
-	extension
-		.utxo_view(header_extension)
-		.validate_block(block, batch)
+	ext.extension.utxo_view().validate_block(block, batch)
 }

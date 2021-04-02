@@ -392,13 +392,13 @@ impl DefaultHashable for TestElem {}
 impl PMMRable for TestElem {
 	type E = Self;
 
-	fn as_elmt(&self) -> Self::E {
-		*self
-	}
+	// fn as_elmt(&self) -> Self::E {
+	// 	*self
+	// }
 
-	fn elmt_size() -> Option<u16> {
-		Some(16)
-	}
+	// fn elmt_size() -> Option<u16> {
+	// 	Some(16)
+	// }
 }
 
 impl Writeable for TestElem {

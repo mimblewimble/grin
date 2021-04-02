@@ -23,11 +23,16 @@ use crate::linked_list::MultiIndex;
 use crate::types::{CommitPos, Tip};
 use crate::util::secp::pedersen::Commitment;
 use croaring::Bitmap;
-use grin_core::ser;
+use grin_core::{
+	core::{OutputIdentifier, TxKernel},
+	ser,
+};
 use grin_store as store;
 use grin_store::{option_to_not_found, to_key, Error};
+use grin_util::secp::pedersen::RangeProof;
 use std::convert::TryInto;
 use std::sync::Arc;
+use store::u64_to_key;
 
 const STORE_SUBPATH: &str = "chain";
 
@@ -37,6 +42,11 @@ const HEAD_PREFIX: u8 = b'H';
 const TAIL_PREFIX: u8 = b'T';
 const HEADER_HEAD_PREFIX: u8 = b'G';
 const OUTPUT_POS_PREFIX: u8 = b'p';
+
+const HEADER_HEIGHT_PREFIX: u8 = b'0';
+const OUTPUT_MMR_PREFIX: u8 = b'1';
+const RANGEPROOF_MMR_PREFIX: u8 = b'2';
+const KERNEL_MMR_PREFIX: u8 = b'3';
 
 /// Prefix for NRD kernel pos index lists.
 pub const NRD_KERNEL_LIST_PREFIX: u8 = b'K';
@@ -109,6 +119,25 @@ impl ChainStore {
 		option_to_not_found(self.db.get_ser(&to_key(BLOCK_HEADER_PREFIX, h)), || {
 			format!("BLOCK HEADER: {}", h)
 		})
+	}
+
+	/// Get header hash by height.
+	pub fn get_header_hash_by_height(&self, height: u64) -> Result<Option<Hash>, Error> {
+		self.db.get_ser(&u64_to_key(HEADER_HEIGHT_PREFIX, height))
+	}
+
+	/// Get output by MMR (leaf) pos.
+	pub fn get_output_by_pos(&self, pos: u64) -> Result<Option<OutputIdentifier>, Error> {
+		self.db.get_ser(&u64_to_key(OUTPUT_MMR_PREFIX, pos))
+	}
+
+	pub fn get_rangeproof_by_pos(&self, pos: u64) -> Result<Option<RangeProof>, Error> {
+		self.db.get_ser(&u64_to_key(RANGEPROOF_MMR_PREFIX, pos))
+	}
+
+	/// Get kernel by MMR (leaf) pos.
+	pub fn get_kernel_by_pos(&self, pos: u64) -> Result<Option<TxKernel>, Error> {
+		self.db.get_ser(&u64_to_key(KERNEL_MMR_PREFIX, pos))
 	}
 
 	/// Get PMMR pos for the given output commitment.
@@ -245,6 +274,24 @@ impl<'a> Batch<'a> {
 		Ok(())
 	}
 
+	/// Save output identifier by MMR (leaf) pos.
+	pub fn save_output_by_pos(&self, pos: u64, out: &OutputIdentifier) -> Result<(), Error> {
+		self.db
+			.put_ser(&u64_to_key(OUTPUT_MMR_PREFIX, pos)[..], out)
+	}
+
+	/// Save rangeproof by MMR (leaf) pos.
+	pub fn save_rangeproof_by_pos(&self, pos: u64, rangeproof: &RangeProof) -> Result<(), Error> {
+		self.db
+			.put_ser(&u64_to_key(RANGEPROOF_MMR_PREFIX, pos)[..], rangeproof)
+	}
+
+	/// Save kernel by MMR (leaf) pos.
+	pub fn save_kernel_by_pos(&self, pos: u64, kernel: &TxKernel) -> Result<(), Error> {
+		self.db
+			.put_ser(&u64_to_key(KERNEL_MMR_PREFIX, pos)[..], kernel)
+	}
+
 	/// Save output_pos and block height to index.
 	pub fn save_output_pos_height(&self, commit: &Commitment, pos: CommitPos) -> Result<(), Error> {
 		self.db
@@ -275,6 +322,26 @@ impl<'a> Batch<'a> {
 		})
 	}
 
+	/// Get header hash by height.
+	pub fn get_header_hash_by_height(&self, height: u64) -> Result<Option<Hash>, Error> {
+		self.db.get_ser(&u64_to_key(HEADER_HEIGHT_PREFIX, height))
+	}
+
+	/// Get output identifier by MMR (leaf) pos.
+	pub fn get_output_by_pos(&self, pos: u64) -> Result<Option<OutputIdentifier>, Error> {
+		self.db.get_ser(&u64_to_key(OUTPUT_MMR_PREFIX, pos))
+	}
+
+	/// Get rangeproof by MMR (leaf) pos.
+	pub fn get_rangeproof_by_pos(&self, pos: u64) -> Result<Option<RangeProof>, Error> {
+		self.db.get_ser(&u64_to_key(RANGEPROOF_MMR_PREFIX, pos))
+	}
+
+	/// Get kernel by MMR (leaf) pos.
+	pub fn get_kernel_by_pos(&self, pos: u64) -> Result<Option<TxKernel>, Error> {
+		self.db.get_ser(&u64_to_key(KERNEL_MMR_PREFIX, pos))
+	}
+
 	/// Get output_pos from index.
 	pub fn get_output_pos(&self, commit: &Commitment) -> Result<u64, Error> {
 		match self.get_output_pos_height(commit)? {
@@ -294,6 +361,12 @@ impl<'a> Batch<'a> {
 	/// Get the previous header.
 	pub fn get_previous_header(&self, header: &BlockHeader) -> Result<BlockHeader, Error> {
 		self.get_block_header(&header.prev_hash)
+	}
+
+	/// Save header hash by height.
+	pub fn save_header_hash_by_height(&self, height: u64, hash: Hash) -> Result<(), Error> {
+		self.db
+			.put_ser(&u64_to_key(HEADER_HEIGHT_PREFIX, height)[..], &hash)
 	}
 
 	/// Get block header.

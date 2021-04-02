@@ -14,35 +14,26 @@
 
 //! Lightweight readonly view into output MMR for convenience.
 
-use crate::core::core::hash::{Hash, Hashed};
-use crate::core::core::pmmr::{self, ReadablePMMR, ReadonlyPMMR};
+use crate::core::core::pmmr::{ReadablePMMR, ReadonlyPMMR};
 use crate::core::core::{Block, BlockHeader, Inputs, Output, OutputIdentifier, Transaction};
 use crate::core::global;
 use crate::error::{Error, ErrorKind};
 use crate::store::Batch;
 use crate::types::CommitPos;
-use crate::util::secp::pedersen::{Commitment, RangeProof};
+use crate::util::secp::pedersen::Commitment;
 use grin_store::pmmr::PMMRBackend;
 
 /// Readonly view of the UTXO set (based on output MMR).
 pub struct UTXOView<'a> {
-	header_pmmr: ReadonlyPMMR<'a, BlockHeader, PMMRBackend<BlockHeader>>,
 	output_pmmr: ReadonlyPMMR<'a, OutputIdentifier, PMMRBackend<OutputIdentifier>>,
-	rproof_pmmr: ReadonlyPMMR<'a, RangeProof, PMMRBackend<RangeProof>>,
 }
 
 impl<'a> UTXOView<'a> {
 	/// Build a new UTXO view.
 	pub fn new(
-		header_pmmr: ReadonlyPMMR<'a, BlockHeader, PMMRBackend<BlockHeader>>,
 		output_pmmr: ReadonlyPMMR<'a, OutputIdentifier, PMMRBackend<OutputIdentifier>>,
-		rproof_pmmr: ReadonlyPMMR<'a, RangeProof, PMMRBackend<RangeProof>>,
 	) -> UTXOView<'a> {
-		UTXOView {
-			header_pmmr,
-			output_pmmr,
-			rproof_pmmr,
-		}
+		UTXOView { output_pmmr }
 	}
 
 	/// Validate a block against the current UTXO set.
@@ -124,7 +115,7 @@ impl<'a> UTXOView<'a> {
 	) -> Result<(OutputIdentifier, CommitPos), Error> {
 		let pos = batch.get_output_pos_height(&input)?;
 		if let Some(pos) = pos {
-			if let Some(out) = self.output_pmmr.get_data(pos.pos) {
+			if let Some(out) = self.get_unspent_at(pos.pos, batch)? {
 				if out.commitment() == input {
 					return Ok((out, pos));
 				} else {
@@ -142,7 +133,7 @@ impl<'a> UTXOView<'a> {
 	// Output is valid if it would not result in a duplicate commitment in the output MMR.
 	fn validate_output(&self, output: &Output, batch: &Batch<'_>) -> Result<(), Error> {
 		if let Ok(pos) = batch.get_output_pos(&output.commitment()) {
-			if let Some(out_mmr) = self.output_pmmr.get_data(pos) {
+			if let Some(out_mmr) = self.get_unspent_at(pos, batch)? {
 				if out_mmr.commitment() == output.commitment() {
 					return Err(ErrorKind::DuplicateCommitment(output.commitment()).into());
 				}
@@ -151,10 +142,25 @@ impl<'a> UTXOView<'a> {
 		Ok(())
 	}
 
+	/// Read output identifier from the db based on pos.
+	/// Note: We need to be aware of last_pos here to handle MMR truncation correctly.
+	/// We ignore everything beyond the output MMR last_pos.
+	fn get_unspent_at(
+		&self,
+		pos: u64,
+		batch: &Batch<'_>,
+	) -> Result<Option<OutputIdentifier>, Error> {
+		if self.output_pmmr.is_leaf(pos) {
+			Ok(batch.get_output_by_pos(pos)?)
+		} else {
+			Ok(None)
+		}
+	}
+
 	/// Retrieves an unspent output using its PMMR position
-	pub fn get_unspent_output_at(&self, pos: u64) -> Result<Output, Error> {
-		match self.output_pmmr.get_data(pos) {
-			Some(output_id) => match self.rproof_pmmr.get_data(pos) {
+	pub fn get_unspent_output_at(&self, pos: u64, batch: &Batch<'_>) -> Result<Output, Error> {
+		match self.get_unspent_at(pos, batch)? {
+			Some(output_id) => match batch.get_rangeproof_by_pos(pos)? {
 				Some(rproof) => Ok(output_id.into_output(rproof)),
 				None => Err(ErrorKind::RangeproofNotFound.into()),
 			},
@@ -213,21 +219,12 @@ impl<'a> UTXOView<'a> {
 		Ok(())
 	}
 
-	/// Get the header hash for the specified pos from the underlying MMR backend.
-	fn get_header_hash(&self, pos: u64) -> Option<Hash> {
-		self.header_pmmr.get_data(pos).map(|x| x.hash())
-	}
-
 	/// Get the header at the specified height based on the current state of the extension.
-	/// Derives the MMR pos from the height (insertion index) and retrieves the header hash.
-	/// Looks the header up in the db by hash.
-	pub fn get_header_by_height(
-		&self,
-		height: u64,
-		batch: &Batch<'_>,
-	) -> Result<BlockHeader, Error> {
-		let pos = pmmr::insertion_to_pmmr_index(height + 1);
-		if let Some(hash) = self.get_header_hash(pos) {
+	/// This involves two db lookups:
+	///   height -> hash
+	///   hash -> header
+	fn get_header_by_height(&self, height: u64, batch: &Batch<'_>) -> Result<BlockHeader, Error> {
+		if let Some(hash) = batch.get_header_hash_by_height(height)? {
 			let header = batch.get_block_header(&hash)?;
 			Ok(header)
 		} else {

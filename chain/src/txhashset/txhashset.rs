@@ -72,69 +72,6 @@ impl<T: PMMRable> PMMRHandle<T> {
 	}
 }
 
-impl PMMRHandle<BlockHeader> {
-	/// Used during chain init to ensure the header PMMR is consistent with header_head in the db.
-	pub fn init_head(&mut self, head: &Tip) -> Result<(), Error> {
-		let head_hash = self.head_hash()?;
-		let expected_hash = self.get_header_hash_by_height(head.height)?;
-		if head.hash() != expected_hash {
-			error!(
-				"header PMMR inconsistent: {} vs {} at {}",
-				expected_hash,
-				head.hash(),
-				head.height
-			);
-			return Err(ErrorKind::Other("header PMMR inconsistent".to_string()).into());
-		}
-
-		// 1-indexed pos and we want to account for subsequent parent hash pos.
-		// so use next header pos to find our last_pos.
-		let next_height = head.height + 1;
-		let next_pos = pmmr::insertion_to_pmmr_index(next_height + 1);
-		let pos = next_pos.saturating_sub(1);
-
-		debug!(
-			"init_head: header PMMR: current head {} at pos {}",
-			head_hash, self.last_pos
-		);
-		debug!(
-			"init_head: header PMMR: resetting to {} at pos {} (height {})",
-			head.hash(),
-			pos,
-			head.height
-		);
-
-		self.last_pos = pos;
-		Ok(())
-	}
-
-	/// Get the header hash at the specified height based on the current header MMR state.
-	pub fn get_header_hash_by_height(&self, height: u64) -> Result<Hash, Error> {
-		let pos = pmmr::insertion_to_pmmr_index(height + 1);
-		let header_pmmr = ReadonlyPMMR::at(&self.backend, self.last_pos);
-		if let Some(entry) = header_pmmr.get_data(pos) {
-			Ok(entry.hash())
-		} else {
-			Err(ErrorKind::Other("get header hash by height".to_string()).into())
-		}
-	}
-
-	/// Get the header hash for the head of the header chain based on current MMR state.
-	/// Find the last leaf pos based on MMR size and return its header hash.
-	pub fn head_hash(&self) -> Result<Hash, Error> {
-		if self.last_pos == 0 {
-			return Err(ErrorKind::Other("MMR empty, no head".to_string()).into());
-		}
-		let header_pmmr = ReadonlyPMMR::at(&self.backend, self.last_pos);
-		let leaf_pos = pmmr::bintree_rightmost(self.last_pos);
-		if let Some(entry) = header_pmmr.get_data(leaf_pos) {
-			Ok(entry.hash())
-		} else {
-			Err(ErrorKind::Other("failed to find head hash".to_string()).into())
-		}
-	}
-}
-
 /// An easy to manipulate structure holding the 3 MMRs necessary to
 /// validate blocks and capturing the output set, associated rangeproofs and the
 /// kernels. Also handles the index of Commitments to positions in the
@@ -183,58 +120,22 @@ impl TxHashSet {
 		// Initialize the bitmap accumulator from the current output PMMR.
 		let bitmap_accumulator = TxHashSet::bitmap_accumulator(&output_pmmr_h)?;
 
-		let mut maybe_kernel_handle: Option<PMMRHandle<TxKernel>> = None;
-		let versions = vec![ProtocolVersion(2), ProtocolVersion(1)];
-		for version in versions {
-			let handle = PMMRHandle::new(
-				Path::new(&root_dir)
-					.join(TXHASHSET_SUBDIR)
-					.join(KERNEL_SUBDIR),
-				false, // not prunable
-				version,
-				None,
-			)?;
-			if handle.last_pos == 0 {
-				debug!(
-					"attempting to open (empty) kernel PMMR using {:?} - SUCCESS",
-					version
-				);
-				maybe_kernel_handle = Some(handle);
-				break;
-			}
-			let kernel: Option<TxKernel> = ReadonlyPMMR::at(&handle.backend, 1).get_data(1);
-			if let Some(kernel) = kernel {
-				if kernel.verify().is_ok() {
-					debug!(
-						"attempting to open kernel PMMR using {:?} - SUCCESS",
-						version
-					);
-					maybe_kernel_handle = Some(handle);
-					break;
-				} else {
-					debug!(
-						"attempting to open kernel PMMR using {:?} - FAIL (verify failed)",
-						version
-					);
-				}
-			} else {
-				debug!(
-					"attempting to open kernel PMMR using {:?} - FAIL (read failed)",
-					version
-				);
-			}
-		}
-		if let Some(kernel_pmmr_h) = maybe_kernel_handle {
-			Ok(TxHashSet {
-				output_pmmr_h,
-				rproof_pmmr_h,
-				kernel_pmmr_h,
-				bitmap_accumulator,
-				commit_index,
-			})
-		} else {
-			Err(ErrorKind::TxHashSetErr("failed to open kernel PMMR".to_string()).into())
-		}
+		let kernel_pmmr_h = PMMRHandle::new(
+			Path::new(&root_dir)
+				.join(TXHASHSET_SUBDIR)
+				.join(KERNEL_SUBDIR),
+			false, // not prunable
+			ProtocolVersion(1),
+			None,
+		)?;
+
+		Ok(TxHashSet {
+			output_pmmr_h,
+			rproof_pmmr_h,
+			kernel_pmmr_h,
+			bitmap_accumulator,
+			commit_index,
+		})
 	}
 
 	// Build a new bitmap accumulator for the provided output PMMR.
@@ -266,7 +167,7 @@ impl TxHashSet {
 			Ok(Some(pos)) => {
 				let output_pmmr: ReadonlyPMMR<'_, OutputIdentifier, _> =
 					ReadonlyPMMR::at(&self.output_pmmr_h.backend, self.output_pmmr_h.last_pos);
-				if let Some(out) = output_pmmr.get_data(pos.pos) {
+				if let Some(out) = self.commit_index.get_output_by_pos(pos.pos)? {
 					if out.commitment() == commit {
 						Ok(Some((out, pos)))
 					} else {
@@ -326,6 +227,18 @@ impl TxHashSet {
 		ReadonlyPMMR::at(&self.rproof_pmmr_h.backend, header.output_mmr_size)
 	}
 
+	pub fn get_output_by_pos(&self, pos: u64) -> Result<Option<OutputIdentifier>, Error> {
+		Ok(self.commit_index.get_output_by_pos(pos)?)
+	}
+
+	pub fn get_rangeproof_by_pos(&self, pos: u64) -> Result<Option<RangeProof>, Error> {
+		Ok(self.commit_index.get_rangeproof_by_pos(pos)?)
+	}
+
+	pub fn get_kernel_by_pos(&self, pos: u64) -> Result<Option<TxKernel>, Error> {
+		Ok(self.commit_index.get_kernel_by_pos(pos)?)
+	}
+
 	/// Convenience function to query the db for a header by its hash.
 	pub fn get_block_header(&self, hash: &Hash) -> Result<BlockHeader, Error> {
 		Ok(self.commit_index.get_block_header(&hash)?)
@@ -366,7 +279,7 @@ impl TxHashSet {
 		excess: &Commitment,
 		min_index: Option<u64>,
 		max_index: Option<u64>,
-	) -> Option<(TxKernel, u64)> {
+	) -> Result<Option<(TxKernel, u64)>, Error> {
 		let min_index = min_index.unwrap_or(1);
 		let max_index = max_index.unwrap_or(self.kernel_pmmr_h.last_pos);
 
@@ -374,13 +287,13 @@ impl TxHashSet {
 		let mut index = max_index + 1;
 		while index > min_index {
 			index -= 1;
-			if let Some(kernel) = pmmr.get_data(index) {
+			if let Some(kernel) = self.commit_index.get_kernel_by_pos(index)? {
 				if &kernel.excess == excess {
-					return Some((kernel, index));
+					return Ok(Some((kernel, index)));
 				}
 			}
 		}
-		None
+		Ok(None)
 	}
 
 	/// Get MMR roots.
@@ -450,16 +363,17 @@ impl TxHashSet {
 	) -> Result<(), Error> {
 		let head = batch.head()?;
 		let cutoff = head.height.saturating_sub(WEEK_HEIGHT * 2);
-		let cutoff_hash = header_pmmr.get_header_hash_by_height(cutoff)?;
+		let cutoff_hash = batch
+			.get_header_hash_by_height(cutoff)?
+			.ok_or(ErrorKind::HeaderNotFound)?;
 		let cutoff_header = batch.get_block_header(&cutoff_hash)?;
-		self.verify_kernel_pos_index(&cutoff_header, header_pmmr, batch)
+		self.verify_kernel_pos_index(&cutoff_header, batch)
 	}
 
 	/// Verify and (re)build the NRD kernel_pos index from the provided header onwards.
 	pub fn verify_kernel_pos_index(
 		&self,
 		from_header: &BlockHeader,
-		header_pmmr: &PMMRHandle<BlockHeader>,
 		batch: &Batch<'_>,
 	) -> Result<(), Error> {
 		if !global::is_nrd_enabled() {
@@ -492,12 +406,13 @@ impl TxHashSet {
 		let mut count = 0;
 		while current_pos <= self.kernel_pmmr_h.last_pos {
 			if pmmr::is_leaf(current_pos) {
-				if let Some(kernel) = kernel_pmmr.get_data(current_pos) {
+				if let Some(kernel) = batch.get_kernel_by_pos(current_pos)? {
 					match kernel.features {
 						KernelFeatures::NoRecentDuplicate { .. } => {
 							while current_pos > current_header.kernel_mmr_size {
-								let hash = header_pmmr
-									.get_header_hash_by_height(current_header.height + 1)?;
+								let hash = batch
+									.get_header_hash_by_height(current_header.height + 1)?
+									.ok_or(ErrorKind::HeaderNotFound)?;
 								current_header = batch.get_block_header(&hash)?;
 							}
 							let new_pos = CommitPos {
@@ -539,7 +454,7 @@ impl TxHashSet {
 		// do not point to to the expected output.
 		let mut removed_count = 0;
 		for (key, pos) in batch.output_pos_iter()? {
-			if let Some(out) = output_pmmr.get_data(pos.pos) {
+			if let Some(out) = batch.get_output_by_pos(pos.pos)? {
 				if let Ok(pos_via_mmr) = batch.get_output_pos(&out.commitment()) {
 					// If the pos matches and the index key matches the commitment
 					// then keep the entry, other we want to clean it up.
@@ -560,7 +475,7 @@ impl TxHashSet {
 
 		let mut outputs_pos: Vec<(Commitment, u64)> = vec![];
 		for pos in output_pmmr.leaf_pos_iter() {
-			if let Some(out) = output_pmmr.get_data(pos) {
+			if let Some(out) = batch.get_output_by_pos(pos)? {
 				outputs_pos.push((out.commit, pos));
 			}
 		}
@@ -588,7 +503,9 @@ impl TxHashSet {
 
 		let mut i = 0;
 		for search_height in 0..max_height {
-			let hash = header_pmmr.get_header_hash_by_height(search_height + 1)?;
+			let hash = batch
+				.get_header_hash_by_height(search_height + 1)?
+				.ok_or(ErrorKind::HeaderNotFound)?;
 			let h = batch.get_block_header(&hash)?;
 			while i < total_outputs {
 				let (commit, pos) = outputs_pos[i];
@@ -673,16 +590,13 @@ where
 {
 	let res: Result<T, Error>;
 	{
-		let header_pmmr = ReadonlyPMMR::at(&handle.backend, handle.last_pos);
 		let output_pmmr =
 			ReadonlyPMMR::at(&trees.output_pmmr_h.backend, trees.output_pmmr_h.last_pos);
-		let rproof_pmmr =
-			ReadonlyPMMR::at(&trees.rproof_pmmr_h.backend, trees.rproof_pmmr_h.last_pos);
 
 		// Create a new batch here to pass into the utxo_view.
 		// Discard it (rollback) after we finish with the utxo_view.
 		let batch = trees.commit_index.batch()?;
-		let utxo = UTXOView::new(header_pmmr, output_pmmr, rproof_pmmr);
+		let utxo = UTXOView::new(output_pmmr);
 		res = inner(&utxo, &batch);
 	}
 	res
@@ -806,23 +720,11 @@ where
 	F: FnOnce(&mut HeaderExtension<'_>, &Batch<'_>) -> Result<T, Error>,
 {
 	let batch = store.batch()?;
-
-	// Note: Extending either the sync_head or header_head MMR here.
-	// Use underlying MMR to determine the "head".
-	let head = match handle.head_hash() {
-		Ok(hash) => {
-			let header = batch.get_block_header(&hash)?;
-			Tip::from_header(&header)
-		}
-		Err(_) => Tip::default(),
-	};
-
+	let head = batch.header_head()?;
 	let pmmr = PMMR::at(&mut handle.backend, handle.last_pos);
 	let mut extension = HeaderExtension::new(pmmr, head);
 	let res = inner(&mut extension, &batch);
-
 	handle.backend.discard();
-
 	res
 }
 
@@ -845,15 +747,7 @@ where
 	// index saving can be undone
 	let child_batch = batch.child()?;
 
-	// Note: Extending either the sync_head or header_head MMR here.
-	// Use underlying MMR to determine the "head".
-	let head = match handle.head_hash() {
-		Ok(hash) => {
-			let header = child_batch.get_block_header(&hash)?;
-			Tip::from_header(&header)
-		}
-		Err(_) => Tip::default(),
-	};
+	let head = child_batch.header_head()?;
 
 	{
 		let pmmr = PMMR::at(&mut handle.backend, handle.last_pos);
@@ -905,26 +799,21 @@ impl<'a> HeaderExtension<'a> {
 		}
 	}
 
-	/// Get the header hash for the specified pos from the underlying MMR backend.
-	fn get_header_hash(&self, pos: u64) -> Option<Hash> {
-		self.pmmr.get_data(pos).map(|x| x.hash())
-	}
-
 	/// The head representing the furthest extent of the current extension.
 	pub fn head(&self) -> Tip {
 		self.head.clone()
 	}
 
 	/// Get the header at the specified height based on the current state of the header extension.
-	/// Derives the MMR pos from the height (insertion index) and retrieves the header hash.
-	/// Looks the header up in the db by hash.
+	/// This involves two db lookups:
+	///   height -> hash
+	///   hash -> header
 	pub fn get_header_by_height(
 		&self,
 		height: u64,
 		batch: &Batch<'_>,
 	) -> Result<BlockHeader, Error> {
-		let pos = pmmr::insertion_to_pmmr_index(height + 1);
-		if let Some(hash) = self.get_header_hash(pos) {
+		if let Some(hash) = batch.get_header_hash_by_height(height)? {
 			Ok(batch.get_block_header(&hash)?)
 		} else {
 			Err(ErrorKind::Other("get header by height".to_string()).into())
@@ -957,8 +846,12 @@ impl<'a> HeaderExtension<'a> {
 	/// Apply a new header to the header MMR extension.
 	/// This may be either the header MMR or the sync MMR depending on the
 	/// extension.
-	pub fn apply_header(&mut self, header: &BlockHeader) -> Result<(), Error> {
+	pub fn apply_header(&mut self, header: &BlockHeader, batch: &Batch<'_>) -> Result<(), Error> {
 		self.pmmr.push(header).map_err(&ErrorKind::TxHashSetErr)?;
+
+		// Update the "header hash by height" index to reflect the new header.
+		batch.save_header_hash_by_height(header.height, header.hash())?;
+
 		self.head = Tip::from_header(header);
 		Ok(())
 	}
@@ -1035,15 +928,20 @@ pub struct Extension<'a> {
 	rollback: bool,
 }
 
-impl<'a> Committed for Extension<'a> {
+struct ExtensionWithBatch<'a> {
+	extension: &'a Extension<'a>,
+	batch: &'a Batch<'a>,
+}
+
+impl<'a> Committed for ExtensionWithBatch<'a> {
 	fn inputs_committed(&self) -> Vec<Commitment> {
 		vec![]
 	}
 
 	fn outputs_committed(&self) -> Vec<Commitment> {
 		let mut commitments = vec![];
-		for pos in self.output_pmmr.leaf_pos_iter() {
-			if let Some(out) = self.output_pmmr.get_data(pos) {
+		for pos in self.extension.output_pmmr.leaf_pos_iter() {
+			if let Ok(Some(out)) = self.batch.get_output_by_pos(pos) {
 				commitments.push(out.commit);
 			}
 		}
@@ -1052,9 +950,9 @@ impl<'a> Committed for Extension<'a> {
 
 	fn kernels_committed(&self) -> Vec<Commitment> {
 		let mut commitments = vec![];
-		for n in 1..self.kernel_pmmr.unpruned_size() + 1 {
+		for n in 1..self.extension.kernel_pmmr.unpruned_size() + 1 {
 			if pmmr::is_leaf(n) {
-				if let Some(kernel) = self.kernel_pmmr.get_data(n) {
+				if let Ok(Some(kernel)) = self.batch.get_kernel_by_pos(n) {
 					commitments.push(kernel.excess());
 				}
 			}
@@ -1091,12 +989,8 @@ impl<'a> Extension<'a> {
 
 	/// Build a view of the current UTXO set based on the output PMMR
 	/// and the provided header extension.
-	pub fn utxo_view(&'a self, header_ext: &'a HeaderExtension<'a>) -> UTXOView<'a> {
-		UTXOView::new(
-			header_ext.pmmr.readonly_pmmr(),
-			self.output_readonly_pmmr(),
-			self.rproof_readonly_pmmr(),
-		)
+	pub fn utxo_view(&'a self) -> UTXOView<'a> {
+		UTXOView::new(self.output_readonly_pmmr())
 	}
 
 	/// Readonly view of our output data.
@@ -1138,22 +1032,24 @@ impl<'a> Extension<'a> {
 		for out in b.outputs() {
 			let pos = self.apply_output(out, batch)?;
 			affected_pos.push(pos);
-			batch.save_output_pos_height(
-				&out.commitment(),
-				CommitPos {
-					pos,
-					height: b.header.height,
-				},
-			)?;
+
+			let commit_pos = CommitPos {
+				pos,
+				height: b.header.height,
+			};
+
+			// Save output and associated rangeproof to the db.
+			// Update the output_pos_height index for the output commitment.
+			batch.save_output_by_pos(pos, &out.identifier())?;
+			batch.save_rangeproof_by_pos(pos, &out.proof())?;
+			batch.save_output_pos_height(&out.commitment(), commit_pos)?;
 		}
 
 		// Use our utxo_view to identify outputs being spent by block inputs.
 		// Apply inputs to remove spent outputs from the output and rangeproof MMRs.
 		// Add spent_pos to affected_pos to update the accumulator later on.
 		// Remove the spent outputs from the output_pos index.
-		let spent = self
-			.utxo_view(header_ext)
-			.validate_inputs(&b.inputs(), batch)?;
+		let spent = self.utxo_view().validate_inputs(&b.inputs(), batch)?;
 		for (out, pos) in &spent {
 			self.apply_input(out.commitment(), *pos)?;
 			affected_pos.push(pos.pos);
@@ -1193,6 +1089,21 @@ impl<'a> Extension<'a> {
 		)
 	}
 
+	/// Read output identifier from the db based on pos.
+	/// Note: We need to be aware of last_pos here to handle MMR truncation correctly.
+	/// We ignore everything beyond the output MMR last_pos.
+	fn get_unspent_at(
+		&self,
+		pos: u64,
+		batch: &Batch<'_>,
+	) -> Result<Option<OutputIdentifier>, Error> {
+		if self.output_pmmr.is_leaf(pos) {
+			Ok(batch.get_output_by_pos(pos)?)
+		} else {
+			Ok(None)
+		}
+	}
+
 	// Prune output and rangeproof PMMRs based on provided pos.
 	// Input is not valid if we cannot prune successfully.
 	fn apply_input(&mut self, commit: Commitment, pos: CommitPos) -> Result<(), Error> {
@@ -1212,12 +1123,13 @@ impl<'a> Extension<'a> {
 		let commit = out.commitment();
 
 		if let Ok(pos) = batch.get_output_pos(&commit) {
-			if let Some(out_mmr) = self.output_pmmr.get_data(pos) {
+			if let Some(out_mmr) = self.get_unspent_at(pos, batch)? {
 				if out_mmr.commitment() == commit {
 					return Err(ErrorKind::DuplicateCommitment(commit).into());
 				}
 			}
 		}
+
 		// push the new output to the MMR.
 		let output_pos = self
 			.output_pmmr
@@ -1261,13 +1173,17 @@ impl<'a> Extension<'a> {
 	) -> Result<(), Error> {
 		for kernel in kernels {
 			let pos = self.apply_kernel(kernel)?;
+
+			// Save the kernel to the db indexed by MMR pos.
+			batch.save_kernel_by_pos(pos, kernel)?;
+
 			let commit_pos = CommitPos { pos, height };
 			apply_kernel_rules(kernel, commit_pos, batch)?;
 		}
 		Ok(())
 	}
 
-	/// Push kernel onto MMR (hash and data files).
+	/// Push kernel onto MMR.
 	fn apply_kernel(&mut self, kernel: &TxKernel) -> Result<u64, Error> {
 		let pos = self
 			.kernel_pmmr
@@ -1424,7 +1340,7 @@ impl<'a> Extension<'a> {
 		// The output_pos index should be updated to reflect the old pos 1 when unspent.
 		if let Ok(spent) = spent {
 			for pos in spent {
-				if let Some(out) = self.output_pmmr.get_data(pos.pos) {
+				if let Some(out) = batch.get_output_by_pos(pos.pos)? {
 					batch.save_output_pos_height(&out.commitment(), pos)?;
 				}
 			}
@@ -1534,10 +1450,15 @@ impl<'a> Extension<'a> {
 		&self,
 		genesis: &BlockHeader,
 		header: &BlockHeader,
+		batch: &Batch<'_>,
 	) -> Result<(Commitment, Commitment), Error> {
 		let now = Instant::now();
 
-		let (utxo_sum, kernel_sum) = self.verify_kernel_sums(
+		let ext = ExtensionWithBatch {
+			extension: self,
+			batch: batch,
+		};
+		let (utxo_sum, kernel_sum) = ext.verify_kernel_sums(
 			header.total_overage(genesis.kernel_mmr_size > 0),
 			header.total_kernel_offset(),
 		)?;
@@ -1558,6 +1479,7 @@ impl<'a> Extension<'a> {
 		fast_validation: bool,
 		status: &dyn TxHashsetWriteStatus,
 		header: &BlockHeader,
+		batch: &Batch<'_>,
 	) -> Result<(Commitment, Commitment), Error> {
 		self.validate_mmrs()?;
 		self.validate_roots(header)?;
@@ -1570,15 +1492,15 @@ impl<'a> Extension<'a> {
 
 		// The real magicking happens here. Sum of kernel excesses should equal
 		// sum of unspent outputs minus total supply.
-		let (output_sum, kernel_sum) = self.validate_kernel_sums(genesis, header)?;
+		let (output_sum, kernel_sum) = self.validate_kernel_sums(genesis, header, batch)?;
 
 		// These are expensive verification step (skipped for "fast validation").
 		if !fast_validation {
 			// Verify the rangeproof associated with each unspent output.
-			self.verify_rangeproofs(status)?;
+			self.verify_rangeproofs(status, batch)?;
 
 			// Verify all the kernel signatures.
-			self.verify_kernel_signatures(status)?;
+			self.verify_kernel_signatures(status, batch)?;
 		}
 
 		Ok((output_sum, kernel_sum))
@@ -1621,7 +1543,11 @@ impl<'a> Extension<'a> {
 		)
 	}
 
-	fn verify_kernel_signatures(&self, status: &dyn TxHashsetWriteStatus) -> Result<(), Error> {
+	fn verify_kernel_signatures(
+		&self,
+		status: &dyn TxHashsetWriteStatus,
+		batch: &Batch<'_>,
+	) -> Result<(), Error> {
 		let now = Instant::now();
 		const KERNEL_BATCH_SIZE: usize = 5_000;
 
@@ -1630,10 +1556,9 @@ impl<'a> Extension<'a> {
 		let mut tx_kernels: Vec<TxKernel> = Vec::with_capacity(KERNEL_BATCH_SIZE);
 		for n in 1..self.kernel_pmmr.unpruned_size() + 1 {
 			if pmmr::is_leaf(n) {
-				let kernel = self
-					.kernel_pmmr
-					.get_data(n)
-					.ok_or_else(|| ErrorKind::TxKernelNotFound)?;
+				let kernel = batch
+					.get_kernel_by_pos(n)?
+					.ok_or(ErrorKind::TxKernelNotFound)?;
 				tx_kernels.push(kernel);
 			}
 
@@ -1659,7 +1584,11 @@ impl<'a> Extension<'a> {
 		Ok(())
 	}
 
-	fn verify_rangeproofs(&self, status: &dyn TxHashsetWriteStatus) -> Result<(), Error> {
+	fn verify_rangeproofs(
+		&self,
+		status: &dyn TxHashsetWriteStatus,
+		batch: &Batch<'_>,
+	) -> Result<(), Error> {
 		let now = Instant::now();
 
 		let mut commits: Vec<Commitment> = Vec::with_capacity(1_000);
@@ -1669,8 +1598,8 @@ impl<'a> Extension<'a> {
 		let total_rproofs = self.output_pmmr.n_unpruned_leaves();
 
 		for pos in self.output_pmmr.leaf_pos_iter() {
-			let output = self.output_pmmr.get_data(pos);
-			let proof = self.rproof_pmmr.get_data(pos);
+			let output = batch.get_output_by_pos(pos)?;
+			let proof = batch.get_rangeproof_by_pos(pos)?;
 
 			// Output and corresponding rangeproof *must* exist.
 			// It is invalid for either to be missing and we fail immediately in this case.

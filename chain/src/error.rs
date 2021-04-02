@@ -90,6 +90,9 @@ pub enum ErrorKind {
 	/// Error validating a Merkle proof (coinbase output)
 	#[fail(display = "Error validating merkle proof")]
 	MerkleProof,
+	/// Header not found
+	#[fail(display = "Header not found")]
+	HeaderNotFound,
 	/// Output not found
 	#[fail(display = "Output not found")]
 	OutputNotFound,
