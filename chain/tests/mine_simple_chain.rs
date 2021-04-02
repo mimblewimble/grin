@@ -15,7 +15,9 @@
 use self::chain::types::{NoopAdapter, Tip};
 use self::chain::Chain;
 use self::core::core::hash::Hashed;
-use self::core::core::{Block, BlockHeader, KernelFeatures, Output, OutputFeatures, Transaction};
+use self::core::core::{
+	block, transaction, Block, BlockHeader, KernelFeatures, Output, OutputFeatures, Transaction,
+};
 use self::core::global::ChainTypes;
 use self::core::libtx::build::{self, Append};
 use self::core::libtx::proof::{self, ProofBuild};
@@ -950,18 +952,12 @@ fn test_overflow_cached_rangeproof() {
 		// implementations
 		let res = chain.process_block(next, chain::Options::SKIP_POW);
 
-		match res {
-			Err(e) => {
-				// error should contain "Invalid Block Proof"
-				// TODO: Better way to check error
-				let error_string = format!("{}", e.to_string());
-				assert_eq!(error_string.contains("Invalid Block Proof"), true);
-			}
-			Ok(_) => {
-				// the block was accepted. This is wrong.
-				panic!("Negative output accepted into block!");
-			}
-		}
+		assert_eq!(
+			res.unwrap_err().kind(),
+			chain::ErrorKind::InvalidBlockProof(block::Error::Transaction(
+				transaction::Error::Secp(util::secp::Error::InvalidRangeProof)
+			))
+		);
 	}
 	clean_output_dir(".grin_overflow");
 }
