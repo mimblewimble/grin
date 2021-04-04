@@ -99,18 +99,7 @@ pub fn check_api_secret(api_secret_path: &PathBuf) -> Result<(), ConfigError> {
 	Ok(())
 }
 
-/// Check that the default/custom api secret file exists and is valid when the config file exist
-fn check_api_file_existing_config(api_secret: String) -> Result<(), ConfigError> {
-	let mut api_secret_path = PathBuf::new();
-	api_secret_path.push(api_secret);
-	if !api_secret_path.exists() {
-		init_api_secret(&api_secret_path)
-	} else {
-		check_api_secret(&api_secret_path)
-	}
-}
-
-/// Check that the api secret file exists and is valid when the config file does not exist
+/// Check that the api secret file exists and is valid
 fn check_api_secret_files(
 	chain_type: &global::ChainTypes,
 	secret_file_name: &str,
@@ -132,6 +121,16 @@ fn check_api_secret_files(
 
 /// Handles setup and detection of paths for node
 pub fn initial_setup_server(chain_type: &global::ChainTypes) -> Result<GlobalConfig, ConfigError> {
+	check_api_secret_files(
+		chain_type,
+		NODE_OWNER_API_SECRET_FILE_NAME,
+		OLD_NODE_OWNER_API_SECRET_FILE_NAME,
+	)?;
+	check_api_secret_files(
+		chain_type,
+		NODE_FOREIGN_API_SECRET_FILE_NAME,
+		OLD_NODE_FOREIGN_API_SECRET_FILE_NAME,
+	)?;
 	// Use config file if current directory if it exists, .grin home otherwise
 	if let Some(p) = check_config_current_dir(SERVER_CONFIG_FILE_NAME) {
 		GlobalConfig::new(p.to_str().unwrap())
@@ -145,16 +144,6 @@ pub fn initial_setup_server(chain_type: &global::ChainTypes) -> Result<GlobalCon
 
 		// Spit it out if it doesn't exist
 		if !config_path.exists() {
-			check_api_secret_files(
-				chain_type,
-				NODE_OWNER_API_SECRET_FILE_NAME,
-				OLD_NODE_OWNER_API_SECRET_FILE_NAME,
-			)?;
-			check_api_secret_files(
-				chain_type,
-				NODE_FOREIGN_API_SECRET_FILE_NAME,
-				OLD_NODE_FOREIGN_API_SECRET_FILE_NAME,
-			)?;
 			let mut default_config = GlobalConfig::for_chain(chain_type);
 			// update paths relative to current dir
 			default_config.update_paths(&grin_path);
@@ -258,26 +247,6 @@ impl GlobalConfig {
 		match decoded {
 			Ok(gc) => {
 				self.members = Some(gc);
-				if let Some(p) = self
-					.members
-					.as_mut()
-					.unwrap()
-					.server
-					.node_owner_api_secret_path
-					.clone()
-				{
-					check_api_file_existing_config(p)?;
-				}
-				if let Some(p) = self
-					.members
-					.as_mut()
-					.unwrap()
-					.server
-					.node_foreign_api_secret_path
-					.clone()
-				{
-					check_api_file_existing_config(p)?;
-				}
 				return Ok(self);
 			}
 			Err(e) => {
