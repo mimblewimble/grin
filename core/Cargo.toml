@@ -14,8 +14,6 @@ blake2 = { package = "blake2-rfc", version = "0.2"}
 byteorder = "1"
 croaring = "0.4.6"
 enum_primitive = "0.1"
-failure = "0.1"
-failure_derive = "0.1"
 lazy_static = "1"
 lru-cache = "0.1"
 num = "0.2"

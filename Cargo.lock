@@ -677,28 +677,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "failure"
-version = "0.1.8"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d32e9bd16cc02eae7db7ef620b392808b89f6a5e16bb3497d159c6b92a0f4f86"
-dependencies = [
- "backtrace",
- "failure_derive",
-]
-
-[[package]]
-name = "failure_derive"
-version = "0.1.8"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "aa4da3c766cd7a0db8242e326e9e4e081edd567072893ed320008189715366a4"
-dependencies = [
- "proc-macro2 1.0.24",
- "quote 1.0.7",
- "syn 1.0.60",
- "synstructure 0.12.4",
-]
-
-[[package]]
 name = "fake-simd"
 version = "0.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -940,8 +918,6 @@ dependencies = [
  "ctrlc",
  "cursive",
  "cursive_table_view",
- "failure",
- "failure_derive",
  "grin_api",
  "grin_chain",
  "grin_config",
@@ -964,8 +940,6 @@ version = "5.1.0-alpha.1"
 dependencies = [
  "bytes",
  "easy-jsonrpc-mw",
- "failure",
- "failure_derive",
  "futures 0.3.5",
  "grin_chain",
  "grin_core",
@@ -1001,8 +975,6 @@ dependencies = [
  "croaring",
  "enum_primitive",
  "env_logger 0.7.1",
- "failure",
- "failure_derive",
  "grin_core",
  "grin_keychain",
  "grin_store",
@@ -1041,8 +1013,6 @@ dependencies = [
  "chrono",
  "croaring",
  "enum_primitive",
- "failure",
- "failure_derive",
  "grin_keychain",
  "grin_util",
  "lazy_static",
@@ -1107,8 +1077,6 @@ version = "5.1.0-alpha.1"
 dependencies = [
  "blake2-rfc",
  "chrono",
- "failure",
- "failure_derive",
  "grin_chain",
  "grin_core",
  "grin_keychain",
@@ -1172,8 +1140,6 @@ dependencies = [
  "chrono",
  "croaring",
  "env_logger 0.7.1",
- "failure",
- "failure_derive",
  "filetime",
  "grin_core",
  "grin_util",
