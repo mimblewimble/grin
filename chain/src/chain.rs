@@ -151,6 +151,7 @@ pub struct Chain {
 	pibd_segmenter: Arc<RwLock<Option<Segmenter>>>,
 	// POW verification function
 	pow_verifier: fn(&BlockHeader) -> Result<(), pow::Error>,
+	denylist: Arc<RwLock<Vec<Hash>>>,
 	archive_mode: bool,
 	genesis: BlockHeader,
 }
@@ -198,6 +199,7 @@ impl Chain {
 			header_pmmr: Arc::new(RwLock::new(header_pmmr)),
 			pibd_segmenter: Arc::new(RwLock::new(None)),
 			pow_verifier,
+			denylist: Arc::new(RwLock::new(vec![])),
 			archive_mode,
 			genesis: genesis.header,
 		};
@@ -384,13 +386,13 @@ impl Chain {
 	/// Returns true if it has been added to the longest chain
 	/// or false if it has added to a fork (or orphan?).
 	fn process_block_single(&self, b: Block, opts: Options) -> Result<Option<Tip>, Error> {
-		// Check if we already know about this block.
-		self.is_known(&b.header)?;
-
 		// Process the header first.
 		// If invalid then fail early.
 		// If valid then continue with block processing with header_head committed to db etc.
 		self.process_block_header(&b.header, opts)?;
+
+		// Check if we already know about this full block.
+		self.is_known(&b.header)?;
 
 		// Check if this block is an orphan.
 		// Only do this once we know the header PoW is valid.
@@ -468,9 +470,7 @@ impl Chain {
 		header_pmmr: &'a mut txhashset::PMMRHandle<BlockHeader>,
 		txhashset: &'a mut txhashset::TxHashSet,
 	) -> Result<pipe::BlockContext<'a>, Error> {
-		// TODO - track "denylist" in current chain instance (interact via api)
-		let denylist = vec![];
-
+		let denylist = self.denylist.read().clone();
 		Ok(pipe::BlockContext {
 			opts,
 			pow_verifier: self.pow_verifier,
