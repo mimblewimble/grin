@@ -118,6 +118,16 @@ impl Owner {
 		handler.reset_chain_head(hash)
 	}
 
+	pub fn invalidate_header(&self, hash: String) -> Result<(), Error> {
+		let hash = Hash::from_hex(&hash)
+			.map_err(|_| ErrorKind::RequestError("invalid header hash".into()))?;
+		let handler = ChainResetHandler {
+			chain: self.chain.clone(),
+			sync_state: self.sync_state.clone(),
+		};
+		handler.invalidate_header(hash)
+	}
+
 	/// Retrieves information about stored peers.
 	/// If `None` is provided, will list all stored peers.
 	///

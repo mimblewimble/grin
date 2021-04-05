@@ -87,6 +87,12 @@ impl ChainResetHandler {
 		w(&self.sync_state)?.reset();
 		Ok(())
 	}
+
+	pub fn invalidate_header(&self, hash: Hash) -> Result<(), Error> {
+		let chain = w(&self.chain)?;
+		chain.invalidate_header(hash)?;
+		Ok(())
+	}
 }
 
 /// Chain compaction handler. Trigger a compaction of the chain state to regain

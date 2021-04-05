@@ -35,7 +35,7 @@ pub struct BlockContext<'a> {
 	/// The pow verifier to use when processing a block.
 	pub pow_verifier: fn(&BlockHeader) -> Result<(), pow::Error>,
 	/// Custom fn allowing arbitrary header validation rules (denylist) to be applied.
-	pub header_invalidated: Box<dyn Fn(&BlockHeader) -> Result<(), Error>>,
+	pub header_allowed: Box<dyn Fn(&BlockHeader) -> Result<(), Error>>,
 	/// The active txhashset (rewindable MMRs) to use for block processing.
 	pub txhashset: &'a mut txhashset::TxHashSet,
 	/// The active header MMR handle.
@@ -121,8 +121,9 @@ pub fn process_block(
 	let header_pmmr = &mut ctx.header_pmmr;
 	let txhashset = &mut ctx.txhashset;
 	let batch = &mut ctx.batch;
+	let ctx_specific_validation = &ctx.header_allowed;
 	let fork_point = txhashset::extending(header_pmmr, txhashset, batch, |ext, batch| {
-		let fork_point = rewind_and_apply_fork(&prev, ext, batch)?;
+		let fork_point = rewind_and_apply_fork(&prev, ext, batch, ctx_specific_validation)?;
 
 		// Check any coinbase being spent have matured sufficiently.
 		// This needs to be done within the context of a potentially
@@ -200,9 +201,11 @@ pub fn process_block_headers(
 		add_block_header(header, &ctx.batch)?;
 	}
 
+	let ctx_specific_validation = &ctx.header_allowed;
+
 	// Now apply this entire chunk of headers to the header MMR.
 	txhashset::header_extending(&mut ctx.header_pmmr, &mut ctx.batch, |ext, batch| {
-		rewind_and_apply_header_fork(&last_header, ext, batch)?;
+		rewind_and_apply_header_fork(&last_header, ext, batch, ctx_specific_validation)?;
 
 		// If previous sync_head is not on the "current" chain then
 		// these headers are on an alternative fork to sync_head.
@@ -257,10 +260,12 @@ pub fn process_block_header(header: &BlockHeader, ctx: &mut BlockContext<'_>) ->
 	// We want to validate this individual header before applying it to our header PMMR.
 	validate_header(header, ctx)?;
 
+	let ctx_specific_validation = &ctx.header_allowed;
+
 	// Apply the header to the header PMMR, making sure we put the extension in the correct state
 	// based on previous header first.
 	txhashset::header_extending(&mut ctx.header_pmmr, &mut ctx.batch, |ext, batch| {
-		rewind_and_apply_header_fork(&prev_header, ext, batch)?;
+		rewind_and_apply_header_fork(&prev_header, ext, batch, ctx_specific_validation)?;
 		ext.validate_root(header)?;
 		ext.apply_header(header)?;
 		if !has_more_work(&header, &header_head) {
@@ -327,7 +332,7 @@ fn prev_header_store(
 /// Apply any "header_invalidated" (aka denylist) rules provided as part of the context.
 fn validate_header_ctx(header: &BlockHeader, ctx: &mut BlockContext<'_>) -> Result<(), Error> {
 	// Apply any custom header validation rules via the context.
-	(ctx.header_invalidated)(header)
+	(ctx.header_allowed)(header)
 }
 
 /// Validate header against an explicit "denylist" of header hashes.
@@ -336,6 +341,16 @@ pub fn validate_header_denylist(header: &BlockHeader, denylist: &[Hash]) -> Resu
 	if denylist.is_empty() {
 		return Ok(());
 	}
+
+	// Assume our denylist is a manageable size for now.
+	// Log it here to occasionally remind us.
+	debug!(
+		"validate_header_denylist: {} at {}, denylist: {:?}",
+		header.hash(),
+		header.height,
+		denylist
+	);
+
 	if denylist.contains(&header.hash()) {
 		return Err(ErrorKind::Block(block::Error::Other("header hash denied".into())).into());
 	} else {
@@ -561,6 +576,7 @@ pub fn rewind_and_apply_header_fork(
 	header: &BlockHeader,
 	ext: &mut txhashset::HeaderExtension<'_>,
 	batch: &store::Batch<'_>,
+	ctx_specific_validation: &dyn Fn(&BlockHeader) -> Result<(), Error>,
 ) -> Result<(), Error> {
 	let mut fork_hashes = vec![];
 	let mut current = header.clone();
@@ -580,6 +596,11 @@ pub fn rewind_and_apply_header_fork(
 		let header = batch
 			.get_block_header(&h)
 			.map_err(|e| ErrorKind::StoreErr(e, "getting forked headers".to_string()))?;
+
+		// Re-validate every header being re-applied.
+		// This makes it possible to check all header hashes against the ctx specific "denylist".
+		(ctx_specific_validation)(&header)?;
+
 		ext.validate_root(&header)?;
 		ext.apply_header(&header)?;
 	}
@@ -596,12 +617,13 @@ pub fn rewind_and_apply_fork(
 	header: &BlockHeader,
 	ext: &mut txhashset::ExtensionPair<'_>,
 	batch: &store::Batch<'_>,
+	ctx_specific_validation: &dyn Fn(&BlockHeader) -> Result<(), Error>,
 ) -> Result<BlockHeader, Error> {
 	let extension = &mut ext.extension;
 	let header_extension = &mut ext.header_extension;
 
 	// Prepare the header MMR.
-	rewind_and_apply_header_fork(header, header_extension, batch)?;
+	rewind_and_apply_header_fork(header, header_extension, batch, ctx_specific_validation)?;
 
 	// Rewind the txhashset extension back to common ancestor based on header MMR.
 	let mut current = batch.head_header()?;

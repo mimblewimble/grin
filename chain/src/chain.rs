@@ -15,7 +15,6 @@
 //! Facade and handler for the rest of the blockchain implementation
 //! and mostly the chain pipeline.
 
-use crate::core::core::hash::{Hash, Hashed};
 use crate::core::core::merkle_proof::MerkleProof;
 use crate::core::core::{
 	Block, BlockHeader, BlockSums, Committed, Inputs, KernelFeatures, Output, OutputIdentifier,
@@ -34,6 +33,11 @@ use crate::types::{
 };
 use crate::util::secp::pedersen::{Commitment, RangeProof};
 use crate::util::RwLock;
+use crate::{
+	core::core::hash::{Hash, Hashed},
+	store::Batch,
+	txhashset::{ExtensionPair, HeaderExtension},
+};
 use grin_store::Error::NotFoundErr;
 use std::collections::HashMap;
 use std::fs::{self, File};
@@ -224,6 +228,14 @@ impl Chain {
 		Ok(chain)
 	}
 
+	/// Add provided header hash to our "denylist".
+	/// The header corresponding to any "denied" hash will be rejected
+	/// and the peer subsequently banned.
+	pub fn invalidate_header(&self, hash: Hash) -> Result<(), Error> {
+		self.denylist.write().push(hash);
+		Ok(())
+	}
+
 	/// Reset both head and header_head to the provided header.
 	/// Handles simple rewind and more complex fork scenarios.
 	/// Used by the reset_chain_head owner api endpoint.
@@ -238,7 +250,7 @@ impl Chain {
 
 		// Rewind and reapply headers to reset the header MMR
 		txhashset::header_extending(&mut header_pmmr, &mut batch, |ext, batch| {
-			pipe::rewind_and_apply_header_fork(&header, ext, batch)?;
+			self.rewind_and_apply_header_fork(&header, ext, batch)?;
 			batch.save_header_head(&head)?;
 			Ok(())
 		})?;
@@ -249,7 +261,7 @@ impl Chain {
 			&mut txhashset,
 			&mut batch,
 			|ext, batch| {
-				pipe::rewind_and_apply_fork(&header, ext, batch)?;
+				self.rewind_and_apply_fork(&header, ext, batch)?;
 				batch.save_body_head(&head)?;
 				Ok(())
 			},
@@ -474,7 +486,7 @@ impl Chain {
 		Ok(pipe::BlockContext {
 			opts,
 			pow_verifier: self.pow_verifier,
-			header_invalidated: Box::new(move |header| {
+			header_allowed: Box::new(move |header| {
 				pipe::validate_header_denylist(header, &denylist)
 			}),
 			header_pmmr,
@@ -664,7 +676,7 @@ impl Chain {
 		// latest block header. Rewind the extension to the specified header to
 		// ensure the view is consistent.
 		txhashset::extending_readonly(&mut header_pmmr, &mut txhashset, |ext, batch| {
-			pipe::rewind_and_apply_fork(&header, ext, batch)?;
+			self.rewind_and_apply_fork(&header, ext, batch)?;
 			ext.extension
 				.validate(&self.genesis, fast_validation, &NoStatus, &header)?;
 			Ok(())
@@ -677,7 +689,7 @@ impl Chain {
 		let prev_root =
 			txhashset::header_extending_readonly(&mut header_pmmr, &self.store(), |ext, batch| {
 				let prev_header = batch.get_previous_header(header)?;
-				pipe::rewind_and_apply_header_fork(&prev_header, ext, batch)?;
+				self.rewind_and_apply_header_fork(&prev_header, ext, batch)?;
 				ext.root()
 			})?;
 
@@ -696,7 +708,7 @@ impl Chain {
 		let (prev_root, roots, sizes) =
 			txhashset::extending_readonly(&mut header_pmmr, &mut txhashset, |ext, batch| {
 				let previous_header = batch.get_previous_header(&b.header)?;
-				pipe::rewind_and_apply_fork(&previous_header, ext, batch)?;
+				self.rewind_and_apply_fork(&previous_header, ext, batch)?;
 
 				let extension = &mut ext.extension;
 				let header_extension = &mut ext.header_extension;
@@ -741,7 +753,7 @@ impl Chain {
 		let mut txhashset = self.txhashset.write();
 		let merkle_proof =
 			txhashset::extending_readonly(&mut header_pmmr, &mut txhashset, |ext, batch| {
-				pipe::rewind_and_apply_fork(&header, ext, batch)?;
+				self.rewind_and_apply_fork(&header, ext, batch)?;
 				ext.extension.merkle_proof(out_id, batch)
 			})?;
 
@@ -753,6 +765,34 @@ impl Chain {
 	pub fn get_merkle_proof_for_pos(&self, commit: Commitment) -> Result<MerkleProof, Error> {
 		let mut txhashset = self.txhashset.write();
 		txhashset.merkle_proof(commit)
+	}
+
+	/// Rewind and apply fork with the chain specific header validation (denylist) rules.
+	/// If we rewind and re-apply a "denied" block then validation will fail.
+	fn rewind_and_apply_fork(
+		&self,
+		header: &BlockHeader,
+		ext: &mut ExtensionPair,
+		batch: &Batch,
+	) -> Result<BlockHeader, Error> {
+		let denylist = self.denylist.read().clone();
+		pipe::rewind_and_apply_fork(header, ext, batch, &|header| {
+			pipe::validate_header_denylist(header, &denylist)
+		})
+	}
+
+	/// Rewind and apply fork with the chain specific header validation (denylist) rules.
+	/// If we rewind and re-apply a "denied" header then validation will fail.
+	fn rewind_and_apply_header_fork(
+		&self,
+		header: &BlockHeader,
+		ext: &mut HeaderExtension,
+		batch: &Batch,
+	) -> Result<(), Error> {
+		let denylist = self.denylist.read().clone();
+		pipe::rewind_and_apply_header_fork(header, ext, batch, &|header| {
+			pipe::validate_header_denylist(header, &denylist)
+		})
 	}
 
 	/// Provides a reading view into the current txhashset state as well as
@@ -768,8 +808,9 @@ impl Chain {
 
 		let mut header_pmmr = self.header_pmmr.write();
 		let mut txhashset = self.txhashset.write();
+
 		txhashset::extending_readonly(&mut header_pmmr, &mut txhashset, |ext, batch| {
-			pipe::rewind_and_apply_fork(&header, ext, batch)?;
+			self.rewind_and_apply_fork(&header, ext, batch)?;
 			ext.extension.snapshot(batch)?;
 
 			// prepare the zip
@@ -1463,7 +1504,7 @@ impl Chain {
 		let mut header_pmmr = self.header_pmmr.write();
 		txhashset::header_extending_readonly(&mut header_pmmr, &self.store(), |ext, batch| {
 			let header = batch.get_block_header(&sync_head.hash())?;
-			pipe::rewind_and_apply_header_fork(&header, ext, batch)?;
+			self.rewind_and_apply_header_fork(&header, ext, batch)?;
 
 			let hashes = heights
 				.iter()
@@ -1540,7 +1581,7 @@ fn setup_head(
 				let header = batch.get_block_header(&head.last_block_h)?;
 
 				let res = txhashset::extending(header_pmmr, txhashset, &mut batch, |ext, batch| {
-					pipe::rewind_and_apply_fork(&header, ext, batch)?;
+					pipe::rewind_and_apply_fork(&header, ext, batch, &|_| Ok(()))?;
 
 					let extension = &mut ext.extension;
 
@@ -1588,7 +1629,7 @@ fn setup_head(
 					let prev_header = batch.get_block_header(&head.prev_block_h)?;
 
 					txhashset::extending(header_pmmr, txhashset, &mut batch, |ext, batch| {
-						pipe::rewind_and_apply_fork(&prev_header, ext, batch)
+						pipe::rewind_and_apply_fork(&prev_header, ext, batch, &|_| Ok(()))
 					})?;
 
 					// Now "undo" the latest block and forget it ever existed.
