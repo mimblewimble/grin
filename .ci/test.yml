@@ -1,9 +1,10 @@
 steps:
   - script: |
       refreshenv
-      LIBCLANG_PATH="C:\Program Files\LLVM\lib"
-      LLVM_CONFIG_PATH="C:\Program Files\LLVM\bin\llvm-config"
-      ROARING_ARCH=x86-64-v2
+      set LIBCLANG_PATH="C:\Program Files\LLVM\lib"
+      set LLVM_CONFIG_PATH="C:\Program Files\LLVM\bin\llvm-config"
+      set ROARING_ARCH=x86-64-v2
+      set
       cargo test --all
     displayName: Windows Cargo Test
     condition: and(eq( variables['Agent.OS'], 'Windows_NT' ), eq( variables['CI_JOB'], 'test-all' ))
