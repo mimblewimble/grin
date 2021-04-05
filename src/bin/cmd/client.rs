@@ -139,6 +139,10 @@ impl HTTPNodeClient {
 		e.reset().unwrap();
 	}
 
+	pub fn invalidate_header(&self, hash: String) {
+		unimplemented!()
+	}
+
 	pub fn ban_peer(&self, peer_addr: &SocketAddr) {
 		let mut e = term::stdout().unwrap();
 		let params = json!([peer_addr]);

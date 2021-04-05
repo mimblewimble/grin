@@ -468,9 +468,15 @@ impl Chain {
 		header_pmmr: &'a mut txhashset::PMMRHandle<BlockHeader>,
 		txhashset: &'a mut txhashset::TxHashSet,
 	) -> Result<pipe::BlockContext<'a>, Error> {
+		// TODO - track "denylist" in current chain instance (interact via api)
+		let denylist = vec![];
+
 		Ok(pipe::BlockContext {
 			opts,
 			pow_verifier: self.pow_verifier,
+			header_invalidated: Box::new(move |header| {
+				pipe::validate_header_denylist(header, &denylist)
+			}),
 			header_pmmr,
 			txhashset,
 			batch,

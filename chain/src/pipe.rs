@@ -15,7 +15,7 @@
 //! Implementation of the chain block acceptance (or refusal) pipeline.
 
 use crate::core::consensus;
-use crate::core::core::hash::Hashed;
+use crate::core::core::hash::{Hash, Hashed};
 use crate::core::core::Committed;
 use crate::core::core::{
 	block, Block, BlockHeader, BlockSums, HeaderVersion, OutputIdentifier, TransactionBody,
@@ -34,6 +34,8 @@ pub struct BlockContext<'a> {
 	pub opts: Options,
 	/// The pow verifier to use when processing a block.
 	pub pow_verifier: fn(&BlockHeader) -> Result<(), pow::Error>,
+	/// Custom fn allowing arbitrary header validation rules (denylist) to be applied.
+	pub header_invalidated: Box<dyn Fn(&BlockHeader) -> Result<(), Error>>,
 	/// The active txhashset (rewindable MMRs) to use for block processing.
 	pub txhashset: &'a mut txhashset::TxHashSet,
 	/// The active header MMR handle.
@@ -322,10 +324,32 @@ fn prev_header_store(
 	Ok(prev)
 }
 
+/// Apply any "header_invalidated" (aka denylist) rules provided as part of the context.
+fn validate_header_ctx(header: &BlockHeader, ctx: &mut BlockContext<'_>) -> Result<(), Error> {
+	// Apply any custom header validation rules via the context.
+	(ctx.header_invalidated)(header)
+}
+
+/// Validate header against an explicit "denylist" of header hashes.
+/// Returns a "Block" error which is "bad_data" and will result in peer being banned.
+pub fn validate_header_denylist(header: &BlockHeader, denylist: &[Hash]) -> Result<(), Error> {
+	if denylist.is_empty() {
+		return Ok(());
+	}
+	if denylist.contains(&header.hash()) {
+		return Err(ErrorKind::Block(block::Error::Other("header hash denied".into())).into());
+	} else {
+		return Ok(());
+	}
+}
+
 /// First level of block validation that only needs to act on the block header
 /// to make it as cheap as possible. The different validations are also
 /// arranged by order of cost to have as little DoS surface as possible.
 fn validate_header(header: &BlockHeader, ctx: &mut BlockContext<'_>) -> Result<(), Error> {
+	// Apply any ctx specific header validation (denylist) rules.
+	validate_header_ctx(header, ctx)?;
+
 	// First I/O cost, delayed as late as possible.
 	let prev = prev_header_store(header, &mut ctx.batch)?;
 
