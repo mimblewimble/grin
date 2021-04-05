@@ -1,8 +1,8 @@
 steps:
   - script: |
       refreshenv
-      LIBCLANG_PATH=C:\Program Files\LLVM\lib
-      LLVM_CONFIG_PATH=C:\Program Files\LLVM\bin\llvm-config
+      LIBCLANG_PATH="C:\Program Files\LLVM\lib"
+      LLVM_CONFIG_PATH="C:\Program Files\LLVM\bin\llvm-config"
       ROARING_ARCH=x86-64-v2
       cargo test --all
     displayName: Windows Cargo Test
