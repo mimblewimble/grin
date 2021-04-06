@@ -47,16 +47,9 @@ impl HeaderSync {
 		}
 	}
 
-	pub fn check_run(
-		&mut self,
-		header_head: &chain::Tip,
-		highest_height: u64,
-	) -> Result<bool, chain::Error> {
-		if !self.header_sync_due(header_head) {
-			return Ok(false);
-		}
-
-		let enable_header_sync = match self.sync_state.status() {
+	pub fn check_run(&mut self, sync_head: chain::Tip) -> Result<bool, chain::Error> {
+		// We only want to run header_sync for some sync states.
+		let do_run = match self.sync_state.status() {
 			SyncStatus::BodySync { .. }
 			| SyncStatus::HeaderSync { .. }
 			| SyncStatus::TxHashsetDone
@@ -66,19 +59,41 @@ impl HeaderSync {
 			_ => false,
 		};
 
-		if enable_header_sync {
+		if !do_run {
+			return Ok(false);
+		}
+
+		// TODO - can we safely reuse the peer here across multiple runs?
+		let sync_peer = self.choose_sync_peer();
+
+		if let Some(sync_peer) = sync_peer {
+			let (peer_height, peer_diff) = {
+				let info = sync_peer.info.live_info.read();
+				(info.height, info.total_difficulty)
+			};
+
+			// Quick check - nothing to sync if we are caught up with the peer.
+			if peer_diff <= sync_head.total_difficulty {
+				return Ok(false);
+			}
+
+			if !self.header_sync_due(sync_head) {
+				return Ok(false);
+			}
+
 			self.sync_state.update(SyncStatus::HeaderSync {
-				current_height: header_head.height,
-				highest_height: highest_height,
+				sync_head,
+				highest_height: peer_height,
+				highest_diff: peer_diff,
 			});
 
-			self.syncing_peer = self.header_sync();
-			return Ok(true);
+			self.header_sync(sync_head, sync_peer.clone());
+			self.syncing_peer = Some(sync_peer.clone());
 		}
-		Ok(false)
+		Ok(true)
 	}
 
-	fn header_sync_due(&mut self, header_head: &chain::Tip) -> bool {
+	fn header_sync_due(&mut self, header_head: chain::Tip) -> bool {
 		let now = Utc::now();
 		let (timeout, latest_height, prev_height) = self.prev_header_sync;
 
@@ -151,53 +166,47 @@ impl HeaderSync {
 		}
 	}
 
-	fn header_sync(&mut self) -> Option<Arc<Peer>> {
-		if let Ok(header_head) = self.chain.header_head() {
-			let peers_iter = || {
-				self.peers
-					.iter()
-					.with_capabilities(Capabilities::HEADER_HIST)
-					.connected()
-			};
+	fn choose_sync_peer(&self) -> Option<Arc<Peer>> {
+		let peers_iter = || {
+			self.peers
+				.iter()
+				.with_capabilities(Capabilities::HEADER_HIST)
+				.connected()
+		};
 
-			// Filter peers further based on max difficulty.
-			let max_diff = peers_iter().max_difficulty().unwrap_or(Difficulty::zero());
-			let peers_iter = || peers_iter().with_difficulty(|x| x >= max_diff);
+		// Filter peers further based on max difficulty.
+		let max_diff = peers_iter().max_difficulty().unwrap_or(Difficulty::zero());
+		let peers_iter = || peers_iter().with_difficulty(|x| x >= max_diff);
 
-			// Choose a random "most work" peer, preferring outbound if at all possible.
-			let peer = peers_iter().outbound().choose_random().or_else(|| {
-				warn!("no suitable outbound peer for header sync, considering inbound");
-				peers_iter().inbound().choose_random()
-			});
+		// Choose a random "most work" peer, preferring outbound if at all possible.
+		peers_iter().outbound().choose_random().or_else(|| {
+			warn!("no suitable outbound peer for header sync, considering inbound");
+			peers_iter().inbound().choose_random()
+		})
+	}
 
-			if let Some(peer) = peer {
-				if peer.info.total_difficulty() > header_head.total_difficulty {
-					return self.request_headers(peer);
-				}
-			}
+	fn header_sync(&self, sync_head: chain::Tip, peer: Arc<Peer>) {
+		if peer.info.total_difficulty() > sync_head.total_difficulty {
+			self.request_headers(sync_head, peer);
 		}
-		return None;
 	}
 
 	/// Request some block headers from a peer to advance us.
-	fn request_headers(&mut self, peer: Arc<Peer>) -> Option<Arc<Peer>> {
-		if let Ok(locator) = self.get_locator() {
+	fn request_headers(&self, sync_head: chain::Tip, peer: Arc<Peer>) {
+		if let Ok(locator) = self.get_locator(sync_head) {
 			debug!(
 				"sync: request_headers: asking {} for headers, {:?}",
 				peer.info.addr, locator,
 			);
 
 			let _ = peer.send_header_request(locator);
-			return Some(peer);
 		}
-		return None;
 	}
 
 	/// Build a locator based on header_head.
-	fn get_locator(&mut self) -> Result<Vec<Hash>, Error> {
-		let tip = self.chain.header_head()?;
-		let heights = get_locator_heights(tip.height);
-		let locator = self.chain.get_locator_hashes(&heights)?;
+	fn get_locator(&self, sync_head: chain::Tip) -> Result<Vec<Hash>, Error> {
+		let heights = get_locator_heights(sync_head.height);
+		let locator = self.chain.get_locator_hashes(sync_head, &heights)?;
 		Ok(locator)
 	}
 }

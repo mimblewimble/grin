@@ -176,48 +176,52 @@ pub fn process_block(
 
 /// Process a batch of sequential block headers.
 /// This is only used during header sync.
+/// Will update header_head locally if this batch of headers increases total work.
+/// Returns the updated sync_head, which may be on a fork.
 pub fn process_block_headers(
 	headers: &[BlockHeader],
+	sync_head: Tip,
 	ctx: &mut BlockContext<'_>,
-) -> Result<(), Error> {
+) -> Result<Option<Tip>, Error> {
 	if headers.is_empty() {
-		return Ok(());
+		return Ok(None);
 	}
 	let last_header = headers.last().expect("last header");
 
-	// Check if we know about all these headers. If so we can accept them quickly.
-	// If they *do not* increase total work on the sync chain we are done.
-	// If they *do* increase total work then we should process them to update sync_head.
-	let head = {
-		let hash = ctx.header_pmmr.head_hash()?;
-		let header = ctx.batch.get_block_header(&hash)?;
-		Tip::from_header(&header)
-	};
-
-	if let Ok(existing) = ctx.batch.get_block_header(&last_header.hash()) {
-		if !has_more_work(&existing, &head) {
-			return Ok(());
-		}
-	}
+	let head = ctx.batch.header_head()?;
 
 	// Validate each header in the chunk and add to our db.
 	// Note: This batch may be rolled back later if the MMR does not validate successfully.
+	// Note: This batch may later be committed even if the MMR itself is rollbacked.
 	for header in headers {
 		validate_header(header, ctx)?;
 		add_block_header(header, &ctx.batch)?;
 	}
 
-	// Now apply this entire chunk of headers to the sync MMR (ctx is sync MMR specific).
+	// Now apply this entire chunk of headers to the header MMR.
 	txhashset::header_extending(&mut ctx.header_pmmr, &mut ctx.batch, |ext, batch| {
 		rewind_and_apply_header_fork(&last_header, ext, batch)?;
-		Ok(())
-	})?;
 
-	if has_more_work(last_header, &head) {
-		update_header_head(&Tip::from_header(last_header), &mut ctx.batch)?;
-	}
+		// If previous sync_head is not on the "current" chain then
+		// these headers are on an alternative fork to sync_head.
+		let alt_fork = !ext.is_on_current_chain(sync_head, batch)?;
 
-	Ok(())
+		// Update our "header_head" if this batch results in an increase in total work.
+		// Otherwise rollback this header extension.
+		// Note the outer batch may still be committed to db assuming no errors occur in the extension.
+		if has_more_work(last_header, &head) {
+			let header_head = last_header.into();
+			update_header_head(&header_head, &batch)?;
+		} else {
+			ext.force_rollback();
+		};
+
+		if alt_fork || has_more_work(last_header, &sync_head) {
+			Ok(Some(last_header.into()))
+		} else {
+			Ok(None)
+		}
+	})
 }
 
 /// Process a block header. Update the header MMR and corresponding header_head if this header
@@ -500,7 +504,7 @@ fn add_block_header(bh: &BlockHeader, batch: &store::Batch<'_>) -> Result<(), Er
 	Ok(())
 }
 
-fn update_header_head(head: &Tip, batch: &mut store::Batch<'_>) -> Result<(), Error> {
+fn update_header_head(head: &Tip, batch: &store::Batch<'_>) -> Result<(), Error> {
 	batch
 		.save_header_head(&head)
 		.map_err(|e| ErrorKind::StoreErr(e, "pipe save header head".to_owned()))?;
@@ -513,7 +517,7 @@ fn update_header_head(head: &Tip, batch: &mut store::Batch<'_>) -> Result<(), Er
 	Ok(())
 }
 
-fn update_head(head: &Tip, batch: &mut store::Batch<'_>) -> Result<(), Error> {
+fn update_head(head: &Tip, batch: &store::Batch<'_>) -> Result<(), Error> {
 	batch
 		.save_body_head(&head)
 		.map_err(|e| ErrorKind::StoreErr(e, "pipe save body".to_owned()))?;
@@ -536,7 +540,7 @@ pub fn rewind_and_apply_header_fork(
 ) -> Result<(), Error> {
 	let mut fork_hashes = vec![];
 	let mut current = header.clone();
-	while current.height > 0 && ext.is_on_current_chain(&current, batch).is_err() {
+	while current.height > 0 && !ext.is_on_current_chain(&current, batch)? {
 		fork_hashes.push(current.hash());
 		current = batch.get_previous_header(&current)?;
 	}
@@ -577,11 +581,7 @@ pub fn rewind_and_apply_fork(
 
 	// Rewind the txhashset extension back to common ancestor based on header MMR.
 	let mut current = batch.head_header()?;
-	while current.height > 0
-		&& header_extension
-			.is_on_current_chain(&current, batch)
-			.is_err()
-	{
+	while current.height > 0 && !header_extension.is_on_current_chain(&current, batch)? {
 		current = batch.get_previous_header(&current)?;
 	}
 	let fork_point = current;

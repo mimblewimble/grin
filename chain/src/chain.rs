@@ -404,19 +404,23 @@ impl Chain {
 	/// Attempt to add new headers to the header chain (or fork).
 	/// This is only ever used during sync and is based on sync_head.
 	/// We update header_head here if our total work increases.
-	pub fn sync_block_headers(&self, headers: &[BlockHeader], opts: Options) -> Result<(), Error> {
+	/// Returns the new sync_head (may temporarily diverge from header_head when syncing a long fork).
+	pub fn sync_block_headers(
+		&self,
+		headers: &[BlockHeader],
+		sync_head: Tip,
+		opts: Options,
+	) -> Result<Option<Tip>, Error> {
 		let mut header_pmmr = self.header_pmmr.write();
 		let mut txhashset = self.txhashset.write();
+		let batch = self.store.batch()?;
 
 		// Sync the chunk of block headers, updating header_head if total work increases.
-		{
-			let batch = self.store.batch()?;
-			let mut ctx = self.new_ctx(opts, batch, &mut header_pmmr, &mut txhashset)?;
-			pipe::process_block_headers(headers, &mut ctx)?;
-			ctx.batch.commit()?;
-		}
+		let mut ctx = self.new_ctx(opts, batch, &mut header_pmmr, &mut txhashset)?;
+		let sync_head = pipe::process_block_headers(headers, sync_head, &mut ctx)?;
+		ctx.batch.commit()?;
 
-		Ok(())
+		Ok(sync_head)
 	}
 
 	/// Build a new block processing context.
@@ -1410,12 +1414,20 @@ impl Chain {
 	}
 
 	/// Gets multiple headers at the provided heights.
-	pub fn get_locator_hashes(&self, heights: &[u64]) -> Result<Vec<Hash>, Error> {
-		let pmmr = self.header_pmmr.read();
-		heights
-			.iter()
-			.map(|h| pmmr.get_header_hash_by_height(*h))
-			.collect()
+	/// Note: This is based on the provided sync_head to support syncing against a fork.
+	pub fn get_locator_hashes(&self, sync_head: Tip, heights: &[u64]) -> Result<Vec<Hash>, Error> {
+		let mut header_pmmr = self.header_pmmr.write();
+		txhashset::header_extending_readonly(&mut header_pmmr, &self.store(), |ext, batch| {
+			let header = batch.get_block_header(&sync_head.hash())?;
+			pipe::rewind_and_apply_header_fork(&header, ext, batch)?;
+
+			let hashes = heights
+				.iter()
+				.filter_map(|h| ext.get_header_hash_by_height(*h))
+				.collect();
+
+			Ok(hashes)
+		})
 	}
 
 	/// Builds an iterator on blocks starting from the current chain head and

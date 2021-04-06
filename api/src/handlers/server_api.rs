@@ -79,11 +79,12 @@ fn sync_status_to_api(sync_status: SyncStatus) -> (String, Option<serde_json::Va
 		SyncStatus::NoSync => ("no_sync".to_string(), None),
 		SyncStatus::AwaitingPeers(_) => ("awaiting_peers".to_string(), None),
 		SyncStatus::HeaderSync {
-			current_height,
+			sync_head,
 			highest_height,
+			..
 		} => (
 			"header_sync".to_string(),
-			Some(json!({ "current_height": current_height, "highest_height": highest_height })),
+			Some(json!({ "current_height": sync_head.height, "highest_height": highest_height })),
 		),
 		SyncStatus::TxHashsetDownload(stats) => (
 			"txhashset_download".to_string(),

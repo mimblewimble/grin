@@ -38,7 +38,7 @@ bitflags! {
 }
 
 /// Various status sync can be in, whether it's fast sync or archival.
-#[derive(Debug, Clone, Copy, Eq, PartialEq, Deserialize, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Deserialize, Serialize)]
 pub enum SyncStatus {
 	/// Initial State (we do not yet know if we are/should be syncing)
 	Initial,
@@ -49,10 +49,12 @@ pub enum SyncStatus {
 	AwaitingPeers(bool),
 	/// Downloading block headers
 	HeaderSync {
-		/// current node height
-		current_height: u64,
+		/// current sync head
+		sync_head: Tip,
 		/// height of the most advanced peer
 		highest_height: u64,
+		/// diff of the most advanced peer
+		highest_diff: Difficulty,
 	},
 	/// Downloading the various txhashsets
 	TxHashsetDownload(TxHashsetDownloadStats),
@@ -173,6 +175,17 @@ impl SyncState {
 			self.update_with_guard(new_status, status)
 		} else {
 			false
+		}
+	}
+
+	/// Update sync_head if state is currently HeaderSync.
+	pub fn update_header_sync(&self, new_sync_head: Tip) {
+		let status: &mut SyncStatus = &mut self.current.write();
+		match status {
+			SyncStatus::HeaderSync { sync_head, .. } => {
+				*sync_head = new_sync_head;
+			}
+			_ => (),
 		}
 	}
 
@@ -346,12 +359,7 @@ pub struct Tip {
 impl Tip {
 	/// Creates a new tip based on provided header.
 	pub fn from_header(header: &BlockHeader) -> Tip {
-		Tip {
-			height: header.height,
-			last_block_h: header.hash(),
-			prev_block_h: header.prev_hash,
-			total_difficulty: header.total_difficulty(),
-		}
+		header.into()
 	}
 }
 
@@ -369,6 +377,16 @@ impl Default for Tip {
 			last_block_h: ZERO_HASH,
 			prev_block_h: ZERO_HASH,
 			total_difficulty: Difficulty::min_dma(),
+		}
+	}
+}
+impl From<&BlockHeader> for Tip {
+	fn from(header: &BlockHeader) -> Tip {
+		Tip {
+			height: header.height,
+			last_block_h: header.hash(),
+			prev_block_h: header.prev_hash,
+			total_difficulty: header.total_difficulty(),
 		}
 	}
 }
