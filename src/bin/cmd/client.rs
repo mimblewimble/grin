@@ -140,7 +140,13 @@ impl HTTPNodeClient {
 	}
 
 	pub fn invalidate_header(&self, hash: String) {
-		unimplemented!()
+		let mut e = term::stdout().unwrap();
+		let params = json!([hash]);
+		match self.send_json_request::<()>("invalidate_header", &params) {
+			Ok(_) => writeln!(e, "Successfully invalidated header: {}", hash).unwrap(),
+			Err(_) => writeln!(e, "Failed to invalidate header: {}", hash).unwrap(),
+		}
+		e.reset().unwrap();
 	}
 
 	pub fn ban_peer(&self, peer_addr: &SocketAddr) {
@@ -180,6 +186,10 @@ pub fn client_command(client_args: &ArgMatches<'_>, global_config: GlobalConfig)
 		("resetchainhead", Some(args)) => {
 			let hash = args.value_of("hash").unwrap();
 			node_client.reset_chain_head(hash.to_string());
+		}
+		("invalidateheader", Some(args)) => {
+			let hash = args.value_of("hash").unwrap();
+			node_client.invalidate_header(hash.to_string());
 		}
 		("ban", Some(peer_args)) => {
 			let peer = peer_args.value_of("peer").unwrap();
