@@ -6,7 +6,7 @@ steps:
       ROARING_ARCH: x86-64-v2
     displayName: Cargo Test All
     condition:  and(succeeded(), contains(variables['Build.SourceBranch'], 'refs/tags/'), eq(variables['CI_JOB'], 'release' ))
-  - script: 'refreshenv && cargo build --release'
+  - script: 'refreshenv && cargo clean && cargo build --release'
     env:
       LIBCLANG_PATH: C:\Program Files\LLVM\lib
       LLVM_CONFIG_PATH: C:\Program Files\LLVM\bin\llvm-config
