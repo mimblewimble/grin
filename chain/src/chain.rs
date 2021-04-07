@@ -248,13 +248,6 @@ impl Chain {
 
 		let header = batch.get_block_header(&head.hash())?;
 
-		// Rewind and reapply headers to reset the header MMR
-		txhashset::header_extending(&mut header_pmmr, &mut batch, |ext, batch| {
-			self.rewind_and_apply_header_fork(&header, ext, batch)?;
-			batch.save_header_head(&head)?;
-			Ok(())
-		})?;
-
 		// Rewind and reapply blocks to reset the output/rangeproof/kernel MMR.
 		txhashset::extending(
 			&mut header_pmmr,
@@ -266,6 +259,14 @@ impl Chain {
 				Ok(())
 			},
 		)?;
+
+		// If the rewind of full blocks was successful then we can rewind the header MMR.
+		// Rewind and reapply headers to reset the header MMR.
+		txhashset::header_extending(&mut header_pmmr, &mut batch, |ext, batch| {
+			self.rewind_and_apply_header_fork(&header, ext, batch)?;
+			batch.save_header_head(&head)?;
+			Ok(())
+		})?;
 
 		batch.commit()?;
 
