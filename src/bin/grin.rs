@@ -102,7 +102,7 @@ fn real_main() -> i32 {
 		// When the subscommand is 'server' take into account the 'config_file' flag
 		("server", Some(server_args)) => {
 			if let Some(_path) = server_args.value_of("config_file") {
-				node_config = Some(config::GlobalConfig::new(_path).unwrap_or_else(|e| {
+				node_config = Some(config::GlobalConfig::new(_path, true).unwrap_or_else(|e| {
 					panic!("Error loading server configuration: {}", e);
 				}));
 			} else {

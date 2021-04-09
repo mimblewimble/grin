@@ -133,8 +133,9 @@ fn check_api_secret_files(
 /// Handles setup and detection of paths for node
 pub fn initial_setup_server(chain_type: &global::ChainTypes) -> Result<GlobalConfig, ConfigError> {
 	// Use config file if current directory if it exists, .grin home otherwise
+	let mut config_file_exist = true;
 	if let Some(p) = check_config_current_dir(SERVER_CONFIG_FILE_NAME) {
-		GlobalConfig::new(p.to_str().unwrap())
+		GlobalConfig::new(p.to_str().unwrap(), config_file_exist)
 	} else {
 		// Check if grin dir exists
 		let grin_path = get_grin_path(chain_type)?;
@@ -145,6 +146,7 @@ pub fn initial_setup_server(chain_type: &global::ChainTypes) -> Result<GlobalCon
 
 		// Spit it out if it doesn't exist
 		if !config_path.exists() {
+			config_file_exist = false;
 			check_api_secret_files(
 				chain_type,
 				NODE_OWNER_API_SECRET_FILE_NAME,
@@ -161,7 +163,7 @@ pub fn initial_setup_server(chain_type: &global::ChainTypes) -> Result<GlobalCon
 			default_config.write_to_file(config_path.to_str().unwrap())?;
 		}
 
-		GlobalConfig::new(config_path.to_str().unwrap())
+		GlobalConfig::new(config_path.to_str().unwrap(), config_file_exist)
 	}
 }
 
@@ -231,7 +233,7 @@ impl GlobalConfig {
 	}
 
 	/// Requires the path to a config file
-	pub fn new(file_path: &str) -> Result<GlobalConfig, ConfigError> {
+	pub fn new(file_path: &str, config_file_exist: bool) -> Result<GlobalConfig, ConfigError> {
 		let mut return_value = GlobalConfig::default();
 		return_value.config_file_path = Some(PathBuf::from(&file_path));
 
@@ -245,11 +247,11 @@ impl GlobalConfig {
 
 		// Try to parse the config file if it exists, explode if it does exist but
 		// something's wrong with it
-		return_value.read_config()
+		return_value.read_config(config_file_exist)
 	}
 
 	/// Read config
-	fn read_config(mut self) -> Result<GlobalConfig, ConfigError> {
+	fn read_config(mut self, config_file_exist: bool) -> Result<GlobalConfig, ConfigError> {
 		let mut file = File::open(self.config_file_path.as_mut().unwrap())?;
 		let mut contents = String::new();
 		file.read_to_string(&mut contents)?;
@@ -258,25 +260,14 @@ impl GlobalConfig {
 		match decoded {
 			Ok(gc) => {
 				self.members = Some(gc);
-				if let Some(p) = self
-					.members
-					.as_mut()
-					.unwrap()
-					.server
-					.node_owner_api_secret_path
-					.clone()
-				{
-					check_api_file_existing_config(p)?;
-				}
-				if let Some(p) = self
-					.members
-					.as_mut()
-					.unwrap()
-					.server
-					.node_foreign_api_secret_path
-					.clone()
-				{
-					check_api_file_existing_config(p)?;
+				if config_file_exist {
+					let server_config = self.members.as_mut().unwrap().server.clone();
+					if let Some(s) = server_config.node_foreign_api_secret_path {
+						check_api_file_existing_config(s)?;
+					}
+					if let Some(s) = server_config.node_owner_api_secret_path {
+						check_api_file_existing_config(s)?;
+					}
 				}
 				return Ok(self);
 			}
