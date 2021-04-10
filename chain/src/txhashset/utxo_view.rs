@@ -104,7 +104,7 @@ impl<'a> UTXOView<'a> {
 									Ok((out, pos))
 								} else {
 									error!("input mismatch: {:?}, {:?}, {:?}", out, pos, input);
-									Err(Error::Other("input mismatch".into()).into())
+									Err(Error::Other("input mismatch".into()))
 								}
 							})
 					})
@@ -129,13 +129,13 @@ impl<'a> UTXOView<'a> {
 					return Ok((out, pos));
 				} else {
 					error!("input mismatch: {:?}, {:?}, {:?}", out, pos, input);
-					return Err(
-						Error::Other("input mismatch (output_pos index mismatch?)".into()).into(),
-					);
+					return Err(Error::Other(
+						"input mismatch (output_pos index mismatch?)".into(),
+					));
 				}
 			}
 		}
-		Err(Error::AlreadySpent(input).into())
+		Err(Error::AlreadySpent(input))
 	}
 
 	// Output is valid if it would not result in a duplicate commitment in the output MMR.
@@ -143,7 +143,7 @@ impl<'a> UTXOView<'a> {
 		if let Ok(pos) = batch.get_output_pos(&output.commitment()) {
 			if let Some(out_mmr) = self.output_pmmr.get_data(pos) {
 				if out_mmr.commitment() == output.commitment() {
-					return Err(Error::DuplicateCommitment(output.commitment()).into());
+					return Err(Error::DuplicateCommitment(output.commitment()));
 				}
 			}
 		}
@@ -155,9 +155,9 @@ impl<'a> UTXOView<'a> {
 		match self.output_pmmr.get_data(pos) {
 			Some(output_id) => match self.rproof_pmmr.get_data(pos) {
 				Some(rproof) => Ok(output_id.into_output(rproof)),
-				None => Err(Error::RangeproofNotFound.into()),
+				None => Err(Error::RangeproofNotFound),
 			},
-			None => Err(Error::OutputNotFound.into()),
+			None => Err(Error::OutputNotFound),
 		}
 	}
 
@@ -193,7 +193,7 @@ impl<'a> UTXOView<'a> {
 			// If we have not yet reached 1440 blocks then
 			// we can fail immediately as coinbase cannot be mature.
 			if height < global::coinbase_maturity() {
-				return Err(Error::ImmatureCoinbase.into());
+				return Err(Error::ImmatureCoinbase);
 			}
 
 			// Find the "cutoff" pos in the output MMR based on the
@@ -205,7 +205,7 @@ impl<'a> UTXOView<'a> {
 			// If any output pos exceed the cutoff_pos
 			// we know they have not yet sufficiently matured.
 			if pos > cutoff_pos {
-				return Err(Error::ImmatureCoinbase.into());
+				return Err(Error::ImmatureCoinbase);
 			}
 		}
 
