@@ -18,6 +18,7 @@ memmap = "0.7"
 tempfile = "3.1"
 serde = "1"
 serde_derive = "1"
+thiserror = "1"
 log = "0.4"
 
 grin_core = { path = "../core", version = "5.1.0-alpha.1" }

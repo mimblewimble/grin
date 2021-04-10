@@ -19,30 +19,23 @@ use crate::core::pmmr::{self, Backend, ReadablePMMR, ReadonlyPMMR};
 use crate::ser::{Error, PMMRIndexHashable, PMMRable, Readable, Reader, Writeable, Writer};
 use croaring::Bitmap;
 use std::cmp::min;
-use std::fmt::{self, Debug};
+use std::fmt::Debug;
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
 /// Error related to segment creation or validation
 pub enum SegmentError {
 	/// An expected leaf was missing
+	#[error("Missing leaf at pos {0}")]
 	MissingLeaf(u64),
 	/// An expected hash was missing
+	#[error("Missing hash at pos {0}")]
 	MissingHash(u64),
 	/// The segment does not exist
+	#[error("Segment does not exist")]
 	NonExistent,
 	/// Mismatch between expected and actual root hash
+	#[error("Root hash mismatch")]
 	Mismatch,
-}
-
-impl fmt::Display for SegmentError {
-	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-		match self {
-			SegmentError::MissingLeaf(idx) => write!(f, "Missing leaf at pos {}", idx),
-			SegmentError::MissingHash(idx) => write!(f, "Missing hash at pos {}", idx),
-			SegmentError::NonExistent => write!(f, "Segment does not exist"),
-			SegmentError::Mismatch => write!(f, "Root hash mismatch"),
-		}
-	}
 }
 
 /// Tuple that defines a segment of a given PMMR

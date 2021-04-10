@@ -23,7 +23,7 @@
 
 use crate::global;
 use crate::pow::common::CuckooParams;
-use crate::pow::error::{Error, ErrorKind};
+use crate::pow::error::Error;
 use crate::pow::siphash::siphash_block;
 use crate::pow::{PoWContext, Proof};
 
@@ -57,7 +57,7 @@ impl PoWContext for CuckaroomContext {
 	fn verify(&self, proof: &Proof) -> Result<(), Error> {
 		let proofsize = proof.proof_size();
 		if proofsize != global::proofsize() {
-			return Err(ErrorKind::Verification("wrong cycle length".to_owned()).into());
+			return Err(Error::Verification("wrong cycle length".to_owned()));
 		}
 		let nonces = &proof.nonces;
 		let mut from = vec![0u64; proofsize];
@@ -67,10 +67,10 @@ impl PoWContext for CuckaroomContext {
 
 		for n in 0..proofsize {
 			if nonces[n] > self.params.edge_mask {
-				return Err(ErrorKind::Verification("edge too big".to_owned()).into());
+				return Err(Error::Verification("edge too big".to_owned()));
 			}
 			if n > 0 && nonces[n] <= nonces[n - 1] {
-				return Err(ErrorKind::Verification("edges not ascending".to_owned()).into());
+				return Err(Error::Verification("edges not ascending".to_owned()));
 			}
 			// 21 is standard siphash rotation constant
 			let edge: u64 = siphash_block(&self.params.siphash_keys, nonces[n], 21, true);
@@ -80,7 +80,7 @@ impl PoWContext for CuckaroomContext {
 			xor_to ^= to[n];
 		}
 		if xor_from != xor_to {
-			return Err(ErrorKind::Verification("endpoints don't match up".to_owned()).into());
+			return Err(Error::Verification("endpoints don't match up".to_owned()));
 		}
 		let mut visited = vec![false; proofsize];
 		let mut n = 0;
@@ -88,14 +88,14 @@ impl PoWContext for CuckaroomContext {
 		loop {
 			// follow cycle
 			if visited[i] {
-				return Err(ErrorKind::Verification("branch in cycle".to_owned()).into());
+				return Err(Error::Verification("branch in cycle".to_owned()));
 			}
 			visited[i] = true;
 			let mut nexti = 0;
 			while from[nexti] != to[i] {
 				nexti += 1;
 				if nexti == proofsize {
-					return Err(ErrorKind::Verification("cycle dead ends".to_owned()).into());
+					return Err(Error::Verification("cycle dead ends".to_owned()));
 				}
 			}
 			i = nexti;
@@ -108,7 +108,7 @@ impl PoWContext for CuckaroomContext {
 		if n == proofsize {
 			Ok(())
 		} else {
-			Err(ErrorKind::Verification("cycle too short".to_owned()).into())
+			Err(Error::Verification("cycle too short".to_owned()))
 		}
 	}
 }

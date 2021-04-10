@@ -134,8 +134,8 @@ fn process_block_cut_through() -> Result<(), chain::Error> {
 
 	// Transaction will not validate against the chain (utxo).
 	assert_eq!(
-		chain.validate_tx(&tx).map_err(|e| e.kind()),
-		Err(chain::ErrorKind::DuplicateCommitment(commit)),
+		chain.validate_tx(&tx),
+		Err(chain::Error::DuplicateCommitment(commit)),
 	);
 
 	// Build a block with this single invalid transaction.
@@ -164,12 +164,12 @@ fn process_block_cut_through() -> Result<(), chain::Error> {
 		let batch = store.batch()?;
 
 		let mut ctx = chain.new_ctx(Options::NONE, batch, &mut header_pmmr, &mut txhashset)?;
-		let res = pipe::process_block(&block, &mut ctx).map_err(|e| e.kind());
+		let res = pipe::process_block(&block, &mut ctx);
 		assert_eq!(
 			res,
-			Err(chain::ErrorKind::InvalidBlockProof(
-				block::Error::Transaction(transaction::Error::CutThrough)
-			))
+			Err(chain::Error::InvalidBlockProof {
+				source: block::Error::Transaction(transaction::Error::CutThrough)
+			})
 		);
 	}
 
