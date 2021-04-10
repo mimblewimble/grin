@@ -181,7 +181,7 @@ impl Error {
 		match self {
 			Error::Unfit(_)
 			| Error::Orphan
-			| Error::StoreErr { .. }
+			| Error::StoreErr(_, _)
 			| Error::SerErr { .. }
 			| Error::TxHashSetErr(_)
 			| Error::GenesisBlockRequired
