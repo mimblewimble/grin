@@ -88,6 +88,8 @@ pub struct GlobalConfig {
 /// want serialised or deserialised
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub struct ConfigMembers {
+	/// Config file version (None == version 1)
+	pub config_file_version: Option<u32>,
 	/// Server config
 	#[serde(default)]
 	pub server: ServerConfig,
