@@ -98,13 +98,6 @@ impl Difficulty {
 		Difficulty::from_num(proof.scaled_difficulty(scaling as u64))
 	}
 
-	/// Computes the difficulty from a hash.  Divides the maximum target by the
-	/// provided hash
-	fn from_proof_unscaled(proof: &Proof) -> Difficulty {
-		// Scaling between 2 proof of work algos
-		Difficulty::from_num(proof.scaled_difficulty(1 as u64))
-	}
-
 	/// Converts the difficulty into a u64
 	pub fn to_num(self) -> u64 {
 		self.num
@@ -299,7 +292,8 @@ impl ProofOfWork {
 
 	/// Maximum unscaled difficulty this proof of work can achieve
 	pub fn to_unscaled_difficulty(&self) -> Difficulty {
-		Difficulty::from_proof_unscaled(&self.proof)
+		// using scale = 1 gives "unscaled" value
+		Difficulty::from_num(self.proof.scaled_difficulty(1 as u64))
 	}
 
 	/// The edge_bits used for the cuckoo cycle size on this proof
