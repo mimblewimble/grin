@@ -51,6 +51,51 @@ pub mod pubkey_serde {
 	}
 }
 
+/// Serializes an Option<secp::key::PublicKey> to and from hex
+pub mod option_pubkey_serde {
+	use serde::de::Error;
+	use serde::{Deserialize, Deserializer, Serializer};
+	use util::secp::key::PublicKey;
+	use util::{from_hex, static_secp_instance, ToHex};
+
+	///
+	pub fn serialize<S>(key: &Option<PublicKey>, serializer: S) -> Result<S::Ok, S::Error>
+	where
+		S: Serializer,
+	{
+		match key {
+			Some(k) => {
+				let static_secp = static_secp_instance();
+				let static_secp = static_secp.lock();
+				serializer.serialize_str(&k.serialize_vec(&static_secp, true).to_hex())
+			}
+			None => serializer.serialize_none(),
+		}
+	}
+
+	///
+	pub fn deserialize<'de, D>(deserializer: D) -> Result<Option<PublicKey>, D::Error>
+	where
+		D: Deserializer<'de>,
+	{
+		Option::<String>::deserialize(deserializer).and_then(|res| match res {
+			Some(string) => {
+				let static_secp = static_secp_instance();
+				let static_secp = static_secp.lock();
+
+				from_hex(&string)
+					.map_err(Error::custom)
+					.and_then(|bytes: Vec<u8>| {
+						Ok(Some(
+							PublicKey::from_slice(&static_secp, &bytes).map_err(Error::custom)?,
+						))
+					})
+			}
+			None => Ok(None),
+		})
+	}
+}
+
 /// Serializes an Option<secp::Signature> to and from hex
 pub mod option_sig_serde {
 	use serde::de::Error;
