@@ -433,7 +433,7 @@ mod test {
 			let mut msg = [0u8; 32];
 			thread_rng().fill(&mut msg);
 			let msg = Message::from_slice(&msg).unwrap();
-			let sig = aggsig::sign_single(&secp, &msg, &sk, None, None).unwrap();
+			let sig = aggsig::sign_single(&secp, &msg, &sk, None, None, None).unwrap();
 			let mut commit = [0u8; 33];
 			commit[0] = 0x09;
 			thread_rng().fill(&mut commit[1..]);

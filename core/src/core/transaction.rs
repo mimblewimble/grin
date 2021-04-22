@@ -742,6 +742,7 @@ impl TxKernel {
 			&sig,
 			&self.msg_to_sign()?,
 			None,
+			None,
 			&pubkey,
 			Some(&pubkey),
 			false,
@@ -2400,7 +2401,7 @@ mod test {
 		let pubkey = excess.to_pubkey(&keychain.secp()).unwrap();
 
 		let excess_sig =
-			aggsig::sign_single(&keychain.secp(), &msg, &skey, None, Some(&pubkey)).unwrap();
+			aggsig::sign_single(&keychain.secp(), &msg, &skey, None, None, Some(&pubkey)).unwrap();
 
 		kernel.excess = excess;
 		kernel.excess_sig = excess_sig;
