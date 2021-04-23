@@ -290,6 +290,12 @@ impl ProofOfWork {
 		}
 	}
 
+	/// Maximum unscaled difficulty this proof of work can achieve
+	pub fn to_unscaled_difficulty(&self) -> Difficulty {
+		// using scale = 1 gives "unscaled" value
+		Difficulty::from_num(self.proof.scaled_difficulty(1u64))
+	}
+
 	/// The edge_bits used for the cuckoo cycle size on this proof
 	pub fn edge_bits(&self) -> u8 {
 		self.proof.edge_bits
