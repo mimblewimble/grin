@@ -140,7 +140,7 @@ pub fn initial_setup_server(chain_type: &global::ChainTypes) -> Result<GlobalCon
 impl Default for ConfigMembers {
 	fn default() -> ConfigMembers {
 		ConfigMembers {
-			config_file_version: None,
+			config_file_version: Some(2),
 			server: ServerConfig::default(),
 			logging: Some(LoggingConfig::default()),
 		}
