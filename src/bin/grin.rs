@@ -167,11 +167,7 @@ fn real_main() -> i32 {
 		.server
 		.pool_config
 		.accept_fee_base;
-	let fix_afb = match afb {
-		1_000_000 => 500_000,
-		_ => afb,
-	};
-	global::init_global_accept_fee_base(fix_afb);
+	global::init_global_accept_fee_base(afb);
 	info!("Accept Fee Base: {:?}", global::get_accept_fee_base());
 	global::init_global_future_time_limit(config.members.unwrap().server.future_time_limit);
 	info!("Future Time Limit: {:?}", global::get_future_time_limit());

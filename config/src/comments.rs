@@ -19,7 +19,7 @@ use std::collections::HashMap;
 fn comments() -> HashMap<String, String> {
 	let mut retval = HashMap::new();
 	retval.insert(
-		"[server]".to_string(),
+		"config_file_version".to_string(),
 		"
 # Generated Server Configuration File for Grin
 #
@@ -31,7 +31,13 @@ fn comments() -> HashMap<String, String> {
 # -[user home]/.grin
 #
 
-#########################################
+"
+		.to_string(),
+	);
+
+	retval.insert(
+		"[server]".to_string(),
+		"#########################################
 ### SERVER CONFIGURATION              ###
 #########################################
 
@@ -323,7 +329,6 @@ fn comments() -> HashMap<String, String> {
 		"accept_fee_base".to_string(),
 		"
 #base fee that's accepted into the pool
-#a setting to 1000000 will be overridden to 500000 to respect the fixfees RFC
 "
 		.to_string(),
 	);
