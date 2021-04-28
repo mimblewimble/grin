@@ -26,7 +26,7 @@ use std::sync::{Arc, Weak};
 // boilerplate of dealing with `Weak`.
 pub fn w<T>(weak: &Weak<T>) -> Result<Arc<T>, Error> {
 	weak.upgrade()
-		.ok_or_else(|| ErrorKind::Internal("failed to upgrade weak reference".to_owned()).into())
+		.ok_or_else(|| Error::Internal("failed to upgrade weak reference".to_owned()))
 }
 
 /// Internal function to retrieves an output by a given commitment
@@ -35,7 +35,7 @@ fn get_unspent(
 	id: &str,
 ) -> Result<Option<(OutputIdentifier, CommitPos)>, Error> {
 	let c = util::from_hex(id)
-		.map_err(|_| ErrorKind::Argument(format!("Not a valid commitment: {}", id)))?;
+		.map_err(|_| Error::Argument(format!("Not a valid commitment: {}", id)))?;
 	let commit = Commitment::from_vec(c);
 	let res = chain.get_unspent(commit)?;
 	Ok(res)

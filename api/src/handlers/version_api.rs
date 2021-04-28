@@ -33,7 +33,7 @@ impl VersionHandler {
 	pub fn get_version(&self) -> Result<Version, Error> {
 		let head = w(&self.chain)?
 			.head_header()
-			.map_err(|e| ErrorKind::Internal(format!("can't get head: {}", e)))?;
+			.map_err(|e| Error::Internal(format!("can't get head: {}", e)))?;
 
 		Ok(Version {
 			node_version: CRATE_VERSION.to_owned(),

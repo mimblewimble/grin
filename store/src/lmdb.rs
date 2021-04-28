@@ -35,22 +35,22 @@ const RESIZE_PERCENT: f32 = 0.9;
 const RESIZE_MIN_TARGET_PERCENT: f32 = 0.65;
 
 /// Main error type for this lmdb
-#[derive(Clone, Eq, PartialEq, Debug, Fail)]
+#[derive(Clone, Eq, PartialEq, Debug, thiserror::Error)]
 pub enum Error {
 	/// Couldn't find what we were looking for
-	#[fail(display = "DB Not Found Error: {}", _0)]
+	#[error("DB Not Found Error: {0}")]
 	NotFoundErr(String),
 	/// Wraps an error originating from LMDB
-	#[fail(display = "LMDB error: {} ", _0)]
+	#[error("LMDB error: {0}")]
 	LmdbErr(lmdb::error::Error),
 	/// Wraps a serialization error for Writeable or Readable
-	#[fail(display = "Serialization Error: {}", _0)]
+	#[error("Serialization Error: {0}")]
 	SerErr(ser::Error),
 	/// File handling error
-	#[fail(display = "File handling Error: {}", _0)]
+	#[error("File handling Error: {0}")]
 	FileErr(String),
 	/// Other error
-	#[fail(display = "Other Error: {}", _0)]
+	#[error("Other Error: {0}")]
 	OtherErr(String),
 }
 

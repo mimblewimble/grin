@@ -19,7 +19,7 @@ use std::{sync::Arc, time::Instant};
 use crate::core::core::hash::Hash;
 use crate::core::core::pmmr::ReadablePMMR;
 use crate::core::core::{BlockHeader, OutputIdentifier, Segment, SegmentIdentifier, TxKernel};
-use crate::error::{Error, ErrorKind};
+use crate::error::Error;
 use crate::txhashset::{BitmapAccumulator, BitmapChunk, TxHashSet};
 use crate::util::secp::pedersen::RangeProof;
 use crate::util::RwLock;
@@ -74,14 +74,14 @@ impl Segmenter {
 	fn output_root(&self) -> Result<Hash, Error> {
 		let txhashset = self.txhashset.read();
 		let pmmr = txhashset.output_pmmr_at(&self.header);
-		let root = pmmr.root().map_err(&ErrorKind::TxHashSetErr)?;
+		let root = pmmr.root().map_err(&Error::TxHashSetErr)?;
 		Ok(root)
 	}
 
 	/// The root of the bitmap snapshot PMMR.
 	fn bitmap_root(&self) -> Result<Hash, Error> {
 		let pmmr = self.bitmap_snapshot.readonly_pmmr();
-		let root = pmmr.root().map_err(&ErrorKind::TxHashSetErr)?;
+		let root = pmmr.root().map_err(&Error::TxHashSetErr)?;
 		Ok(root)
 	}
 

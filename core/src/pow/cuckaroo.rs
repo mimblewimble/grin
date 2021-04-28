@@ -25,7 +25,7 @@
 
 use crate::global;
 use crate::pow::common::CuckooParams;
-use crate::pow::error::{Error, ErrorKind};
+use crate::pow::error::Error;
 use crate::pow::siphash::siphash_block;
 use crate::pow::{PoWContext, Proof};
 
@@ -39,7 +39,7 @@ pub fn new_cuckaroo_ctx(edge_bits: u8, proof_size: usize) -> Result<Box<dyn PoWC
 
 /// Error returned for cuckaroo request beyond HardFork4
 pub fn no_cuckaroo_ctx() -> Result<Box<dyn PoWContext>, Error> {
-	Err(ErrorKind::Verification("no cuckaroo past HardFork4".to_owned()).into())
+	Err(Error::Verification("no cuckaroo past HardFork4".to_owned()))
 }
 
 /// Cuckaroo cycle context. Only includes the verifier for now.
@@ -63,7 +63,7 @@ impl PoWContext for CuckarooContext {
 
 	fn verify(&self, proof: &Proof) -> Result<(), Error> {
 		if proof.proof_size() != global::proofsize() {
-			return Err(ErrorKind::Verification("wrong cycle length".to_owned()).into());
+			return Err(Error::Verification("wrong cycle length".to_owned()));
 		}
 		let nonces = &proof.nonces;
 		let mut uvs = vec![0u64; 2 * proof.proof_size()];
@@ -72,10 +72,10 @@ impl PoWContext for CuckarooContext {
 
 		for n in 0..proof.proof_size() {
 			if nonces[n] > self.params.edge_mask {
-				return Err(ErrorKind::Verification("edge too big".to_owned()).into());
+				return Err(Error::Verification("edge too big".to_owned()));
 			}
 			if n > 0 && nonces[n] <= nonces[n - 1] {
-				return Err(ErrorKind::Verification("edges not ascending".to_owned()).into());
+				return Err(Error::Verification("edges not ascending".to_owned()));
 			}
 			// 21 is standard siphash rotation constant
 			let edge: u64 = siphash_block(&self.params.siphash_keys, nonces[n], 21, false);
@@ -85,7 +85,7 @@ impl PoWContext for CuckarooContext {
 			xor1 ^= uvs[2 * n + 1];
 		}
 		if xor0 | xor1 != 0 {
-			return Err(ErrorKind::Verification("endpoints don't match up".to_owned()).into());
+			return Err(Error::Verification("endpoints don't match up".to_owned()));
 		}
 		let mut n = 0;
 		let mut i = 0;
@@ -102,13 +102,13 @@ impl PoWContext for CuckarooContext {
 				if uvs[k] == uvs[i] {
 					// find other edge endpoint matching one at i
 					if j != i {
-						return Err(ErrorKind::Verification("branch in cycle".to_owned()).into());
+						return Err(Error::Verification("branch in cycle".to_owned()));
 					}
 					j = k;
 				}
 			}
 			if j == i {
-				return Err(ErrorKind::Verification("cycle dead ends".to_owned()).into());
+				return Err(Error::Verification("cycle dead ends".to_owned()));
 			}
 			i = j ^ 1;
 			n += 1;
@@ -119,7 +119,7 @@ impl PoWContext for CuckarooContext {
 		if n == self.params.proof_size {
 			Ok(())
 		} else {
-			Err(ErrorKind::Verification("cycle too short".to_owned()).into())
+			Err(Error::Verification("cycle too short".to_owned()))
 		}
 	}
 }

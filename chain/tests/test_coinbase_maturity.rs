@@ -13,7 +13,7 @@
 // limitations under the License.
 
 use self::chain::types::NoopAdapter;
-use self::chain::ErrorKind;
+use self::chain::Error;
 use self::core::core::KernelFeatures;
 use self::core::global::{self, ChainTypes};
 use self::core::libtx::{self, build, ProofBuilder};
@@ -121,8 +121,8 @@ fn test_coinbase_maturity() {
 		// is not valid at the current block height given the current chain state.
 		match chain.verify_coinbase_maturity(&coinbase_txn.inputs()) {
 			Ok(_) => {}
-			Err(e) => match e.kind() {
-				ErrorKind::ImmatureCoinbase => {}
+			Err(e) => match e {
+				Error::ImmatureCoinbase => {}
 				_ => panic!("Expected transaction error with immature coinbase."),
 			},
 		}
@@ -207,8 +207,8 @@ fn test_coinbase_maturity() {
 			// is not valid at the current block height given the current chain state.
 			match chain.verify_coinbase_maturity(&coinbase_txn.inputs()) {
 				Ok(_) => {}
-				Err(e) => match e.kind() {
-					ErrorKind::ImmatureCoinbase => {}
+				Err(e) => match e {
+					Error::ImmatureCoinbase => {}
 					_ => panic!("Expected transaction error with immature coinbase."),
 				},
 			}

@@ -79,8 +79,8 @@ pub fn get_block(
 	while let Err(e) = result {
 		let mut new_key_id = key_id.to_owned();
 		match e {
-			self::Error::Chain(c) => match c.kind() {
-				chain::ErrorKind::DuplicateCommitment(_) => {
+			self::Error::Chain(c) => match c {
+				chain::Error::DuplicateCommitment(_) => {
 					debug!(
 						"Duplicate commit for potential coinbase detected. Trying next derivation."
 					);
@@ -182,20 +182,18 @@ fn build_block(
 	match chain.set_txhashset_roots(&mut b) {
 		Ok(_) => Ok((b, block_fees)),
 		Err(e) => {
-			match e.kind() {
+			match e {
 				// If this is a duplicate commitment then likely trying to use
 				// a key that hass already been derived but not in the wallet
 				// for some reason, allow caller to retry.
-				chain::ErrorKind::DuplicateCommitment(e) => Err(Error::Chain(
-					chain::ErrorKind::DuplicateCommitment(e).into(),
-				)),
+				chain::Error::DuplicateCommitment(e) => {
+					Err(Error::Chain(chain::Error::DuplicateCommitment(e)))
+				}
 
 				// Some other issue, possibly duplicate kernel
 				_ => {
 					error!("Error setting txhashset root to build a block: {:?}", e);
-					Err(Error::Chain(
-						chain::ErrorKind::Other(format!("{:?}", e)).into(),
-					))
+					Err(Error::Chain(chain::Error::Other(format!("{:?}", e))))
 				}
 			}
 		}

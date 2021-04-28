@@ -14,7 +14,7 @@
 
 mod chain_test_helper;
 use self::chain_test_helper::{clean_output_dir, init_chain, mine_chain};
-use chain::ErrorKind;
+use chain::Error;
 use chain::Tip;
 use grin_chain as chain;
 use grin_core::core::hash::Hashed;
@@ -42,8 +42,8 @@ fn check_known() {
 		let chain = init_chain(chain_dir, genesis.clone());
 		let res = chain.process_block(latest.clone(), chain::Options::NONE);
 		assert_eq!(
-			res.unwrap_err().kind(),
-			ErrorKind::Unfit("duplicate block".to_string()).into()
+			res.unwrap_err(),
+			Error::Unfit("duplicate block".to_string())
 		);
 	}
 
@@ -52,8 +52,8 @@ fn check_known() {
 		let chain = init_chain(chain_dir, genesis.clone());
 		let res = chain.process_block(genesis.clone(), chain::Options::NONE);
 		assert_eq!(
-			res.unwrap_err().kind(),
-			ErrorKind::Unfit("duplicate block".to_string()).into()
+			res.unwrap_err(),
+			Error::Unfit("duplicate block".to_string())
 		);
 	}
 

@@ -14,7 +14,7 @@
 
 //! Rangeproof library functions
 
-use crate::libtx::error::{Error, ErrorKind};
+use crate::libtx::error::Error;
 use blake2::blake2b::blake2b;
 use keychain::extkey_bip32::BIP32GrinHasher;
 use keychain::{Identifier, Keychain, SwitchCommitmentType, ViewKey};
@@ -81,7 +81,7 @@ where
 {
 	let nonce = b
 		.rewind_nonce(secp, &commit)
-		.map_err(|e| ErrorKind::RangeProof(e.to_string()))?;
+		.map_err(|e| Error::RangeProof(e.to_string()))?;
 	let info = secp.rewind_bullet_proof(commit, nonce, extra_data, proof);
 	if info.is_err() {
 		return Ok(None);
@@ -91,7 +91,7 @@ where
 	let amount = info.value;
 	let check = b
 		.check_output(secp, &commit, amount, info.message)
-		.map_err(|e| ErrorKind::RangeProof(e.to_string()))?;
+		.map_err(|e| Error::RangeProof(e.to_string()))?;
 
 	Ok(check.map(|(id, switch)| (amount, id, switch)))
 }
@@ -164,7 +164,7 @@ where
 		};
 		let res = blake2b(32, &commit.0, hash);
 		SecretKey::from_slice(self.keychain.secp(), res.as_bytes())
-			.map_err(|e| ErrorKind::RangeProof(format!("Unable to create nonce: {:?}", e)).into())
+			.map_err(|e| Error::RangeProof(format!("Unable to create nonce: {:?}", e)))
 	}
 }
 
@@ -277,7 +277,7 @@ where
 	fn nonce(&self, commit: &Commitment) -> Result<SecretKey, Error> {
 		let res = blake2b(32, &commit.0, &self.root_hash);
 		SecretKey::from_slice(self.keychain.secp(), res.as_bytes())
-			.map_err(|e| ErrorKind::RangeProof(format!("Unable to create nonce: {:?}", e)).into())
+			.map_err(|e| Error::RangeProof(format!("Unable to create nonce: {:?}", e)))
 	}
 }
 
@@ -360,7 +360,7 @@ impl ProofBuild for ViewKey {
 	fn rewind_nonce(&self, secp: &Secp256k1, commit: &Commitment) -> Result<SecretKey, Error> {
 		let res = blake2b(32, &commit.0, &self.rewind_hash);
 		SecretKey::from_slice(secp, res.as_bytes())
-			.map_err(|e| ErrorKind::RangeProof(format!("Unable to create nonce: {:?}", e)).into())
+			.map_err(|e| Error::RangeProof(format!("Unable to create nonce: {:?}", e)))
 	}
 
 	fn private_nonce(&self, _secp: &Secp256k1, _commit: &Commitment) -> Result<SecretKey, Error> {

@@ -37,7 +37,7 @@ use util::from_hex;
 use util::{secp, static_secp_instance};
 
 /// Errors thrown by Block validation
-#[derive(Debug, Clone, Eq, PartialEq, Fail)]
+#[derive(Debug, Clone, Eq, PartialEq, thiserror::Error)]
 pub enum Error {
 	/// The sum of output minus input commitments does not
 	/// match the sum of kernel commitments

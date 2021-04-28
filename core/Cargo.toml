@@ -14,8 +14,6 @@ blake2 = { package = "blake2-rfc", version = "0.2"}
 byteorder = "1"
 croaring = "0.4.6"
 enum_primitive = "0.1"
-failure = "0.1"
-failure_derive = "0.1"
 lazy_static = "1"
 lru-cache = "0.1"
 num = "0.2"
@@ -24,6 +22,7 @@ rand = "0.6"
 serde = "1"
 serde_derive = "1"
 siphasher = "0.3"
+thiserror = "1"
 log = "0.4"
 chrono = { version = "0.4.11", features = ["serde"] }
 zeroize = { version = "1.1", features =["zeroize_derive"] }

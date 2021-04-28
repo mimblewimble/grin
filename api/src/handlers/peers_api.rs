@@ -74,7 +74,7 @@ impl PeerHandler {
 		if let Some(addr) = addr {
 			let peer_addr = PeerAddr(addr);
 			let peer_data: PeerData = w(&self.peers)?.get_peer(peer_addr).map_err(|e| {
-				let e: Error = ErrorKind::Internal(format!("get peer error: {:?}", e)).into();
+				let e: Error = Error::Internal(format!("get peer error: {:?}", e));
 				e
 			})?;
 			return Ok(vec![peer_data]);
@@ -87,14 +87,14 @@ impl PeerHandler {
 		let peer_addr = PeerAddr(addr);
 		w(&self.peers)?
 			.ban_peer(peer_addr, ReasonForBan::ManualBan)
-			.map_err(|e| ErrorKind::Internal(format!("ban peer error: {:?}", e)).into())
+			.map_err(|e| Error::Internal(format!("ban peer error: {:?}", e)))
 	}
 
 	pub fn unban_peer(&self, addr: SocketAddr) -> Result<(), Error> {
 		let peer_addr = PeerAddr(addr);
 		w(&self.peers)?
 			.unban_peer(peer_addr)
-			.map_err(|e| ErrorKind::Internal(format!("unban peer error: {:?}", e)).into())
+			.map_err(|e| Error::Internal(format!("unban peer error: {:?}", e)))
 	}
 }
 

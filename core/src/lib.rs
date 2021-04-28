@@ -30,8 +30,6 @@ extern crate serde_derive;
 #[macro_use]
 extern crate log;
 #[macro_use]
-extern crate failure_derive;
-#[macro_use]
 pub mod macros;
 
 pub mod consensus;

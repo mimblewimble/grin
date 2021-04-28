@@ -86,13 +86,13 @@ pub trait Handler {
 	}
 }
 
-#[derive(Clone, Fail, Eq, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, thiserror::Error, Eq, Debug, PartialEq, Serialize, Deserialize)]
 pub enum RouterError {
-	#[fail(display = "Route already exists")]
+	#[error("Route already exists")]
 	RouteAlreadyExists,
-	#[fail(display = "Route not found")]
+	#[error("Route not found")]
 	RouteNotFound,
-	#[fail(display = "Value not found")]
+	#[error("Value not found")]
 	NoValue,
 }
 

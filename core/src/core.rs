@@ -36,10 +36,10 @@ pub use self::pmmr::segment::*;
 pub use self::transaction::*;
 
 /// Common errors
-#[derive(Fail, Debug)]
+#[derive(thiserror::Error, Debug)]
 pub enum Error {
 	/// Human readable represenation of amount is invalid
-	#[fail(display = "Amount string was invalid")]
+	#[error("Amount string was invalid")]
 	InvalidAmountString,
 }
 

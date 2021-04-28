@@ -24,7 +24,7 @@
 
 use crate::global;
 use crate::pow::common::CuckooParams;
-use crate::pow::error::{Error, ErrorKind};
+use crate::pow::error::Error;
 use crate::pow::siphash::siphash_block;
 use crate::pow::{PoWContext, Proof};
 
@@ -57,7 +57,7 @@ impl PoWContext for CuckaroodContext {
 
 	fn verify(&self, proof: &Proof) -> Result<(), Error> {
 		if proof.proof_size() != global::proofsize() {
-			return Err(ErrorKind::Verification("wrong cycle length".to_owned()).into());
+			return Err(Error::Verification("wrong cycle length".to_owned()));
 		}
 		let nonces = &proof.nonces;
 		let mut uvs = vec![0u64; 2 * proof.proof_size()];
@@ -68,13 +68,13 @@ impl PoWContext for CuckaroodContext {
 		for n in 0..proof.proof_size() {
 			let dir = (nonces[n] & 1) as usize;
 			if ndir[dir] >= proof.proof_size() / 2 {
-				return Err(ErrorKind::Verification("edges not balanced".to_owned()).into());
+				return Err(Error::Verification("edges not balanced".to_owned()));
 			}
 			if nonces[n] > self.params.edge_mask {
-				return Err(ErrorKind::Verification("edge too big".to_owned()).into());
+				return Err(Error::Verification("edge too big".to_owned()));
 			}
 			if n > 0 && nonces[n] <= nonces[n - 1] {
-				return Err(ErrorKind::Verification("edges not ascending".to_owned()).into());
+				return Err(Error::Verification("edges not ascending".to_owned()));
 			}
 			// cuckarood uses a non-standard siphash rotation constant 25 as anti-ASIC tweak
 			let edge: u64 = siphash_block(&self.params.siphash_keys, nonces[n], 25, false);
@@ -86,7 +86,7 @@ impl PoWContext for CuckaroodContext {
 			ndir[dir] += 1;
 		}
 		if xor0 | xor1 != 0 {
-			return Err(ErrorKind::Verification("endpoints don't match up".to_owned()).into());
+			return Err(Error::Verification("endpoints don't match up".to_owned()));
 		}
 		let mut n = 0;
 		let mut i = 0;
@@ -98,13 +98,13 @@ impl PoWContext for CuckaroodContext {
 				if uvs[k] == uvs[i] {
 					// find reverse edge endpoint identical to one at i
 					if j != i {
-						return Err(ErrorKind::Verification("branch in cycle".to_owned()).into());
+						return Err(Error::Verification("branch in cycle".to_owned()));
 					}
 					j = k;
 				}
 			}
 			if j == i {
-				return Err(ErrorKind::Verification("cycle dead ends".to_owned()).into());
+				return Err(Error::Verification("cycle dead ends".to_owned()));
 			}
 			i = j ^ 1;
 			n += 1;
@@ -115,7 +115,7 @@ impl PoWContext for CuckaroodContext {
 		if n == self.params.proof_size {
 			Ok(())
 		} else {
-			Err(ErrorKind::Verification("cycle too short".to_owned()).into())
+			Err(Error::Verification("cycle too short".to_owned()))
 		}
 	}
 }

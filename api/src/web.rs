@@ -16,10 +16,10 @@ where
 {
 	let raw = body::to_bytes(req.into_body())
 		.await
-		.map_err(|e| ErrorKind::RequestError(format!("Failed to read request: {}", e)))?;
+		.map_err(|e| Error::RequestError(format!("Failed to read request: {}", e)))?;
 
 	serde_json::from_reader(raw.bytes())
-		.map_err(|e| ErrorKind::RequestError(format!("Invalid request body: {}", e)).into())
+		.map_err(|e| Error::RequestError(format!("Invalid request body: {}", e)))
 }
 
 /// Convert Result to ResponseFuture
@@ -29,16 +29,14 @@ where
 {
 	match res {
 		Ok(s) => json_response_pretty(&s),
-		Err(e) => match e.kind() {
-			ErrorKind::Argument(msg) => response(StatusCode::BAD_REQUEST, msg.clone()),
-			ErrorKind::RequestError(msg) => response(StatusCode::BAD_REQUEST, msg.clone()),
-			ErrorKind::NotFound => response(StatusCode::NOT_FOUND, ""),
-			ErrorKind::Internal(msg) => response(StatusCode::INTERNAL_SERVER_ERROR, msg.clone()),
-			ErrorKind::ResponseError(msg) => {
-				response(StatusCode::INTERNAL_SERVER_ERROR, msg.clone())
-			}
+		Err(e) => match e {
+			Error::Argument(msg) => response(StatusCode::BAD_REQUEST, msg.clone()),
+			Error::RequestError(msg) => response(StatusCode::BAD_REQUEST, msg.clone()),
+			Error::NotFound => response(StatusCode::NOT_FOUND, ""),
+			Error::Internal(msg) => response(StatusCode::INTERNAL_SERVER_ERROR, msg.clone()),
+			Error::ResponseError(msg) => response(StatusCode::INTERNAL_SERVER_ERROR, msg.clone()),
 			// place holder
-			ErrorKind::Router(_) => response(StatusCode::INTERNAL_SERVER_ERROR, ""),
+			Error::Router { .. } => response(StatusCode::INTERNAL_SERVER_ERROR, ""),
 		},
 	}
 }
@@ -147,7 +145,7 @@ macro_rules! must_get_query(
 	($req: expr) =>(
 		match $req.uri().query() {
 			Some(q) => q,
-			None => return Err(ErrorKind::RequestError("no query string".to_owned()).into()),
+			None => return Err(Error::RequestError("no query string".to_owned())),
 		}
 	));
 
@@ -158,7 +156,7 @@ macro_rules! parse_param(
 		None => $default,
 		Some(val) =>  match val.parse() {
 			Ok(val) => val,
-			Err(_) => return Err(ErrorKind::RequestError(format!("invalid value of parameter {}", $name)).into()),
+			Err(_) => return Err(Error::RequestError(format!("invalid value of parameter {}", $name))),
 		}
 	}
 	));

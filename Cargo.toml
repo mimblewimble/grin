@@ -30,8 +30,6 @@ serde = "1"
 serde_json = "1"
 log = "0.4"
 term = "0.6"
-failure = "0.1"
-failure_derive = "0.1"
 
 grin_api = { path = "./api", version = "5.1.0-alpha.1" }
 grin_config = { path = "./config", version = "5.1.0-alpha.1" }

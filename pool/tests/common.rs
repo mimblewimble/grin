@@ -125,9 +125,9 @@ impl BlockChain for ChainAdapter {
 	}
 
 	fn validate_tx(&self, tx: &Transaction) -> Result<(), pool::PoolError> {
-		self.chain.validate_tx(tx).map_err(|e| match e.kind() {
-			chain::ErrorKind::Transaction(txe) => txe.into(),
-			chain::ErrorKind::NRDRelativeHeight => PoolError::NRDKernelRelativeHeight,
+		self.chain.validate_tx(tx).map_err(|e| match e {
+			chain::Error::Transaction { source: txe } => txe.into(),
+			chain::Error::NRDRelativeHeight => PoolError::NRDKernelRelativeHeight,
 			_ => PoolError::Other("failed to validate tx".into()),
 		})
 	}

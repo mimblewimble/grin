@@ -20,7 +20,6 @@ use crate::router::{Handler, ResponseFuture};
 use crate::types::*;
 use crate::util;
 use crate::web::*;
-use failure::ResultExt;
 use hyper::{Body, Request, StatusCode};
 use regex::Regex;
 use std::sync::Weak;
@@ -43,33 +42,33 @@ impl HeaderHandler {
 		if let Ok(height) = input.parse() {
 			match w(&self.chain)?.get_header_by_height(height) {
 				Ok(header) => return Ok(BlockHeaderPrintable::from_header(&header)),
-				Err(_) => return Err(ErrorKind::NotFound.into()),
+				Err(_) => return Err(Error::NotFound),
 			}
 		}
 		check_block_param(&input)?;
-		let vec = util::from_hex(&input)
-			.map_err(|e| ErrorKind::Argument(format!("invalid input: {}", e)))?;
+		let vec =
+			util::from_hex(&input).map_err(|e| Error::Argument(format!("invalid input: {}", e)))?;
 		let h = Hash::from_vec(&vec);
 		let header = w(&self.chain)?
 			.get_block_header(&h)
-			.context(ErrorKind::NotFound)?;
+			.map_err(|_| Error::NotFound)?;
 		Ok(BlockHeaderPrintable::from_header(&header))
 	}
 
 	fn get_header_for_output(&self, commit_id: String) -> Result<BlockHeaderPrintable, Error> {
 		let oid = match get_output(&self.chain, &commit_id)? {
 			Some((_, o)) => o,
-			None => return Err(ErrorKind::NotFound.into()),
+			None => return Err(Error::NotFound),
 		};
 		match w(&self.chain)?.get_header_for_output(oid.commitment()) {
 			Ok(header) => Ok(BlockHeaderPrintable::from_header(&header)),
-			Err(_) => Err(ErrorKind::NotFound.into()),
+			Err(_) => Err(Error::NotFound),
 		}
 	}
 
 	pub fn get_header_v2(&self, h: &Hash) -> Result<BlockHeaderPrintable, Error> {
 		let chain = w(&self.chain)?;
-		let header = chain.get_block_header(h).context(ErrorKind::NotFound)?;
+		let header = chain.get_block_header(h).map_err(|_| Error::NotFound)?;
 		Ok(BlockHeaderPrintable::from_header(&header))
 	}
 
@@ -83,7 +82,7 @@ impl HeaderHandler {
 		if let Some(height) = height {
 			match w(&self.chain)?.get_header_by_height(height) {
 				Ok(header) => return Ok(header.hash()),
-				Err(_) => return Err(ErrorKind::NotFound.into()),
+				Err(_) => return Err(Error::NotFound),
 			}
 		}
 		if let Some(hash) = hash {
@@ -92,14 +91,16 @@ impl HeaderHandler {
 		if let Some(commit) = commit {
 			let oid = match get_output_v2(&self.chain, &commit, false, false)? {
 				Some((_, o)) => o,
-				None => return Err(ErrorKind::NotFound.into()),
+				None => return Err(Error::NotFound),
 			};
 			match w(&self.chain)?.get_header_for_output(oid.commitment()) {
 				Ok(header) => return Ok(header.hash()),
-				Err(_) => return Err(ErrorKind::NotFound.into()),
+				Err(_) => return Err(Error::NotFound),
 			}
 		}
-		Err(ErrorKind::Argument("not a valid hash, height or output commit".to_owned()).into())
+		Err(Error::Argument(
+			"not a valid hash, height or output commit".to_owned(),
+		))
 	}
 }
 
@@ -132,16 +133,16 @@ impl BlockHandler {
 		include_merkle_proof: bool,
 	) -> Result<BlockPrintable, Error> {
 		let chain = w(&self.chain)?;
-		let block = chain.get_block(h).context(ErrorKind::NotFound)?;
+		let block = chain.get_block(h).map_err(|_| Error::NotFound)?;
 		BlockPrintable::from_block(&block, &chain, include_proof, include_merkle_proof)
-			.map_err(|_| ErrorKind::Internal("chain error".to_owned()).into())
+			.map_err(|_| Error::Internal("chain error".to_owned()))
 	}
 
 	fn get_compact_block(&self, h: &Hash) -> Result<CompactBlockPrintable, Error> {
 		let chain = w(&self.chain)?;
-		let block = chain.get_block(h).context(ErrorKind::NotFound)?;
+		let block = chain.get_block(h).map_err(|_| Error::NotFound)?;
 		CompactBlockPrintable::from_compact_block(&block.into(), &chain)
-			.map_err(|_| ErrorKind::Internal("chain error".to_owned()).into())
+			.map_err(|_| Error::Internal("chain error".to_owned()))
 	}
 
 	// Try to decode the string as a height or a hash.
@@ -149,12 +150,12 @@ impl BlockHandler {
 		if let Ok(height) = input.parse() {
 			match w(&self.chain)?.get_header_by_height(height) {
 				Ok(header) => return Ok(header.hash()),
-				Err(_) => return Err(ErrorKind::NotFound.into()),
+				Err(_) => return Err(Error::NotFound),
 			}
 		}
 		check_block_param(&input)?;
-		let vec = util::from_hex(&input)
-			.map_err(|e| ErrorKind::Argument(format!("invalid input: {}", e)))?;
+		let vec =
+			util::from_hex(&input).map_err(|e| Error::Argument(format!("invalid input: {}", e)))?;
 		Ok(Hash::from_vec(&vec))
 	}
 
@@ -168,7 +169,7 @@ impl BlockHandler {
 		if let Some(height) = height {
 			match w(&self.chain)?.get_header_by_height(height) {
 				Ok(header) => return Ok(header.hash()),
-				Err(_) => return Err(ErrorKind::NotFound.into()),
+				Err(_) => return Err(Error::NotFound),
 			}
 		}
 		if let Some(hash) = hash {
@@ -177,14 +178,16 @@ impl BlockHandler {
 		if let Some(commit) = commit {
 			let oid = match get_output_v2(&self.chain, &commit, false, false)? {
 				Some((_, o)) => o,
-				None => return Err(ErrorKind::NotFound.into()),
+				None => return Err(Error::NotFound),
 			};
 			match w(&self.chain)?.get_header_for_output(oid.commitment()) {
 				Ok(header) => return Ok(header.hash()),
-				Err(_) => return Err(ErrorKind::NotFound.into()),
+				Err(_) => return Err(Error::NotFound),
 			}
 		}
-		Err(ErrorKind::Argument("not a valid hash, height or output commit".to_owned()).into())
+		Err(Error::Argument(
+			"not a valid hash, height or output commit".to_owned(),
+		))
 	}
 }
 
@@ -193,7 +196,7 @@ fn check_block_param(input: &str) -> Result<(), Error> {
 		static ref RE: Regex = Regex::new(r"[0-9a-fA-F]{64}").unwrap();
 	}
 	if !RE.is_match(&input) {
-		return Err(ErrorKind::Argument("Not a valid hash or height.".to_owned()).into());
+		return Err(Error::Argument("Not a valid hash or height.".to_owned()));
 	}
 	Ok(())
 }
