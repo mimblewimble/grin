@@ -15,7 +15,8 @@
 //! Owner API External Definition
 
 use crate::chain::{Chain, SyncState};
-use crate::handlers::chain_api::{ChainCompactHandler, ChainValidationHandler};
+use crate::core::core::hash::Hash;
+use crate::handlers::chain_api::{ChainCompactHandler, ChainResetHandler, ChainValidationHandler};
 use crate::handlers::peers_api::{PeerHandler, PeersConnectedHandler};
 use crate::handlers::server_api::StatusHandler;
 use crate::p2p::types::PeerInfoDisplay;
@@ -105,6 +106,26 @@ impl Owner {
 			chain: self.chain.clone(),
 		};
 		chain_compact_handler.compact_chain()
+	}
+
+	pub fn reset_chain_head(&self, hash: String) -> Result<(), Error> {
+		let hash = Hash::from_hex(&hash)
+			.map_err(|_| ErrorKind::RequestError("invalid header hash".into()))?;
+		let handler = ChainResetHandler {
+			chain: self.chain.clone(),
+			sync_state: self.sync_state.clone(),
+		};
+		handler.reset_chain_head(hash)
+	}
+
+	pub fn invalidate_header(&self, hash: String) -> Result<(), Error> {
+		let hash = Hash::from_hex(&hash)
+			.map_err(|_| ErrorKind::RequestError("invalid header hash".into()))?;
+		let handler = ChainResetHandler {
+			chain: self.chain.clone(),
+			sync_state: self.sync_state.clone(),
+		};
+		handler.invalidate_header(hash)
 	}
 
 	/// Retrieves information about stored peers.

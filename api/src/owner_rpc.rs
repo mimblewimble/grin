@@ -132,6 +132,10 @@ pub trait OwnerRpc: Sync + Send {
 	 */
 	fn compact_chain(&self) -> Result<(), ErrorKind>;
 
+	fn reset_chain_head(&self, hash: String) -> Result<(), ErrorKind>;
+
+	fn invalidate_header(&self, hash: String) -> Result<(), ErrorKind>;
+
 	/**
 	Networked version of [Owner::get_peers](struct.Owner.html#method.get_peers).
 
@@ -363,6 +367,14 @@ impl OwnerRpc for Owner {
 		Owner::validate_chain(self).map_err(|e| e.kind().clone())
 	}
 
+	fn reset_chain_head(&self, hash: String) -> Result<(), ErrorKind> {
+		Owner::reset_chain_head(self, hash).map_err(|e| e.kind().clone())
+	}
+
+	fn invalidate_header(&self, hash: String) -> Result<(), ErrorKind> {
+		Owner::invalidate_header(self, hash).map_err(|e| e.kind().clone())
+	}
+
 	fn compact_chain(&self) -> Result<(), ErrorKind> {
 		Owner::compact_chain(self).map_err(|e| e.kind().clone())
 	}
@@ -391,7 +403,7 @@ macro_rules! doctest_helper_json_rpc_owner_assert_response {
 		// create temporary grin server, run jsonrpc request on node api, delete server, return
 		// json response.
 
-		{
+			{
 			/*use grin_servers::test_framework::framework::run_doctest;
 			use grin_util as util;
 			use serde_json;
@@ -425,6 +437,6 @@ macro_rules! doctest_helper_json_rpc_owner_assert_response {
 					serde_json::to_string_pretty(&expected_response).unwrap()
 				);
 				}*/
-		}
+			}
 	};
 }

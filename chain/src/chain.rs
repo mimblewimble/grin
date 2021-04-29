@@ -15,7 +15,6 @@
 //! Facade and handler for the rest of the blockchain implementation
 //! and mostly the chain pipeline.
 
-use crate::core::core::hash::{Hash, Hashed};
 use crate::core::core::merkle_proof::MerkleProof;
 use crate::core::core::{
 	Block, BlockHeader, BlockSums, Committed, Inputs, KernelFeatures, Output, OutputIdentifier,
@@ -34,6 +33,11 @@ use crate::types::{
 };
 use crate::util::secp::pedersen::{Commitment, RangeProof};
 use crate::util::RwLock;
+use crate::{
+	core::core::hash::{Hash, Hashed},
+	store::Batch,
+	txhashset::{ExtensionPair, HeaderExtension},
+};
 use grin_store::Error::NotFoundErr;
 use std::collections::HashMap;
 use std::fs::{self, File};
@@ -151,6 +155,7 @@ pub struct Chain {
 	pibd_segmenter: Arc<RwLock<Option<Segmenter>>>,
 	// POW verification function
 	pow_verifier: fn(&BlockHeader) -> Result<(), pow::Error>,
+	denylist: Arc<RwLock<Vec<Hash>>>,
 	archive_mode: bool,
 	genesis: BlockHeader,
 }
@@ -198,6 +203,7 @@ impl Chain {
 			header_pmmr: Arc::new(RwLock::new(header_pmmr)),
 			pibd_segmenter: Arc::new(RwLock::new(None)),
 			pow_verifier,
+			denylist: Arc::new(RwLock::new(vec![])),
 			archive_mode,
 			genesis: genesis.header,
 		};
@@ -220,6 +226,51 @@ impl Chain {
 		}
 
 		Ok(chain)
+	}
+
+	/// Add provided header hash to our "denylist".
+	/// The header corresponding to any "denied" hash will be rejected
+	/// and the peer subsequently banned.
+	pub fn invalidate_header(&self, hash: Hash) -> Result<(), Error> {
+		self.denylist.write().push(hash);
+		Ok(())
+	}
+
+	/// Reset both head and header_head to the provided header.
+	/// Handles simple rewind and more complex fork scenarios.
+	/// Used by the reset_chain_head owner api endpoint.
+	pub fn reset_chain_head<T: Into<Tip>>(&self, head: T) -> Result<(), Error> {
+		let head = head.into();
+
+		let mut header_pmmr = self.header_pmmr.write();
+		let mut txhashset = self.txhashset.write();
+		let mut batch = self.store.batch()?;
+
+		let header = batch.get_block_header(&head.hash())?;
+
+		// Rewind and reapply blocks to reset the output/rangeproof/kernel MMR.
+		txhashset::extending(
+			&mut header_pmmr,
+			&mut txhashset,
+			&mut batch,
+			|ext, batch| {
+				self.rewind_and_apply_fork(&header, ext, batch)?;
+				batch.save_body_head(&head)?;
+				Ok(())
+			},
+		)?;
+
+		// If the rewind of full blocks was successful then we can rewind the header MMR.
+		// Rewind and reapply headers to reset the header MMR.
+		txhashset::header_extending(&mut header_pmmr, &mut batch, |ext, batch| {
+			self.rewind_and_apply_header_fork(&header, ext, batch)?;
+			batch.save_header_head(&head)?;
+			Ok(())
+		})?;
+
+		batch.commit()?;
+
+		Ok(())
 	}
 
 	/// Are we running with archive_mode enabled?
@@ -278,7 +329,7 @@ impl Chain {
 		// If head is updated then we are either "next" block or we just experienced a "reorg" to new head.
 		// Otherwise this is a "fork" off the main chain.
 		if let Some(head) = head {
-			if head.prev_block_h == prev_head.last_block_h {
+			if self.is_on_current_chain(prev_head, head).is_ok() {
 				BlockStatus::Next { prev }
 			} else {
 				BlockStatus::Reorg {
@@ -297,7 +348,8 @@ impl Chain {
 	}
 
 	/// Quick check for "known" duplicate block up to and including current chain head.
-	fn is_known(&self, header: &BlockHeader) -> Result<(), Error> {
+	/// Returns an error if this block is "known".
+	pub fn is_known(&self, header: &BlockHeader) -> Result<(), Error> {
 		let head = self.head()?;
 		if head.hash() == header.hash() {
 			return Err(ErrorKind::Unfit("duplicate block".into()).into());
@@ -347,13 +399,13 @@ impl Chain {
 	/// Returns true if it has been added to the longest chain
 	/// or false if it has added to a fork (or orphan?).
 	fn process_block_single(&self, b: Block, opts: Options) -> Result<Option<Tip>, Error> {
-		// Check if we already know about this block.
-		self.is_known(&b.header)?;
-
 		// Process the header first.
 		// If invalid then fail early.
 		// If valid then continue with block processing with header_head committed to db etc.
 		self.process_block_header(&b.header, opts)?;
+
+		// Check if we already know about this full block.
+		self.is_known(&b.header)?;
 
 		// Check if this block is an orphan.
 		// Only do this once we know the header PoW is valid.
@@ -431,9 +483,13 @@ impl Chain {
 		header_pmmr: &'a mut txhashset::PMMRHandle<BlockHeader>,
 		txhashset: &'a mut txhashset::TxHashSet,
 	) -> Result<pipe::BlockContext<'a>, Error> {
+		let denylist = self.denylist.read().clone();
 		Ok(pipe::BlockContext {
 			opts,
 			pow_verifier: self.pow_verifier,
+			header_allowed: Box::new(move |header| {
+				pipe::validate_header_denylist(header, &denylist)
+			}),
 			header_pmmr,
 			txhashset,
 			batch,
@@ -621,7 +677,7 @@ impl Chain {
 		// latest block header. Rewind the extension to the specified header to
 		// ensure the view is consistent.
 		txhashset::extending_readonly(&mut header_pmmr, &mut txhashset, |ext, batch| {
-			pipe::rewind_and_apply_fork(&header, ext, batch)?;
+			self.rewind_and_apply_fork(&header, ext, batch)?;
 			ext.extension
 				.validate(&self.genesis, fast_validation, &NoStatus, &header)?;
 			Ok(())
@@ -634,7 +690,7 @@ impl Chain {
 		let prev_root =
 			txhashset::header_extending_readonly(&mut header_pmmr, &self.store(), |ext, batch| {
 				let prev_header = batch.get_previous_header(header)?;
-				pipe::rewind_and_apply_header_fork(&prev_header, ext, batch)?;
+				self.rewind_and_apply_header_fork(&prev_header, ext, batch)?;
 				ext.root()
 			})?;
 
@@ -653,7 +709,7 @@ impl Chain {
 		let (prev_root, roots, sizes) =
 			txhashset::extending_readonly(&mut header_pmmr, &mut txhashset, |ext, batch| {
 				let previous_header = batch.get_previous_header(&b.header)?;
-				pipe::rewind_and_apply_fork(&previous_header, ext, batch)?;
+				self.rewind_and_apply_fork(&previous_header, ext, batch)?;
 
 				let extension = &mut ext.extension;
 				let header_extension = &mut ext.header_extension;
@@ -698,7 +754,7 @@ impl Chain {
 		let mut txhashset = self.txhashset.write();
 		let merkle_proof =
 			txhashset::extending_readonly(&mut header_pmmr, &mut txhashset, |ext, batch| {
-				pipe::rewind_and_apply_fork(&header, ext, batch)?;
+				self.rewind_and_apply_fork(&header, ext, batch)?;
 				ext.extension.merkle_proof(out_id, batch)
 			})?;
 
@@ -710,6 +766,34 @@ impl Chain {
 	pub fn get_merkle_proof_for_pos(&self, commit: Commitment) -> Result<MerkleProof, Error> {
 		let mut txhashset = self.txhashset.write();
 		txhashset.merkle_proof(commit)
+	}
+
+	/// Rewind and apply fork with the chain specific header validation (denylist) rules.
+	/// If we rewind and re-apply a "denied" block then validation will fail.
+	fn rewind_and_apply_fork(
+		&self,
+		header: &BlockHeader,
+		ext: &mut ExtensionPair,
+		batch: &Batch,
+	) -> Result<BlockHeader, Error> {
+		let denylist = self.denylist.read().clone();
+		pipe::rewind_and_apply_fork(header, ext, batch, &|header| {
+			pipe::validate_header_denylist(header, &denylist)
+		})
+	}
+
+	/// Rewind and apply fork with the chain specific header validation (denylist) rules.
+	/// If we rewind and re-apply a "denied" header then validation will fail.
+	fn rewind_and_apply_header_fork(
+		&self,
+		header: &BlockHeader,
+		ext: &mut HeaderExtension,
+		batch: &Batch,
+	) -> Result<(), Error> {
+		let denylist = self.denylist.read().clone();
+		pipe::rewind_and_apply_header_fork(header, ext, batch, &|header| {
+			pipe::validate_header_denylist(header, &denylist)
+		})
 	}
 
 	/// Provides a reading view into the current txhashset state as well as
@@ -725,8 +809,9 @@ impl Chain {
 
 		let mut header_pmmr = self.header_pmmr.write();
 		let mut txhashset = self.txhashset.write();
+
 		txhashset::extending_readonly(&mut header_pmmr, &mut txhashset, |ext, batch| {
-			pipe::rewind_and_apply_fork(&header, ext, batch)?;
+			self.rewind_and_apply_fork(&header, ext, batch)?;
 			ext.extension.snapshot(batch)?;
 
 			// prepare the zip
@@ -853,7 +938,7 @@ impl Chain {
 	pub fn fork_point(&self) -> Result<BlockHeader, Error> {
 		let body_head = self.head()?;
 		let mut current = self.get_block_header(&body_head.hash())?;
-		while !self.is_on_current_chain(&current).is_ok() {
+		while !self.is_on_current_chain(&current, body_head).is_ok() {
 			current = self.get_previous_header(&current)?;
 		}
 		Ok(current)
@@ -1404,9 +1489,13 @@ impl Chain {
 	/// Verifies the given block header is actually on the current chain.
 	/// Checks the header_by_height index to verify the header is where we say
 	/// it is
-	pub fn is_on_current_chain(&self, header: &BlockHeader) -> Result<(), Error> {
-		let chain_header = self.get_header_by_height(header.height)?;
-		if chain_header.hash() == header.hash() {
+	fn is_on_current_chain<T: Into<Tip>>(&self, x: T, head: Tip) -> Result<(), Error> {
+		let x: Tip = x.into();
+		if x.height > head.height {
+			return Err(ErrorKind::Other("not on current chain".to_string()).into());
+		}
+
+		if x.hash() == self.get_header_hash_by_height(x.height)? {
 			Ok(())
 		} else {
 			Err(ErrorKind::Other("not on current chain".to_string()).into())
@@ -1419,7 +1508,7 @@ impl Chain {
 		let mut header_pmmr = self.header_pmmr.write();
 		txhashset::header_extending_readonly(&mut header_pmmr, &self.store(), |ext, batch| {
 			let header = batch.get_block_header(&sync_head.hash())?;
-			pipe::rewind_and_apply_header_fork(&header, ext, batch)?;
+			self.rewind_and_apply_header_fork(&header, ext, batch)?;
 
 			let hashes = heights
 				.iter()
@@ -1496,7 +1585,7 @@ fn setup_head(
 				let header = batch.get_block_header(&head.last_block_h)?;
 
 				let res = txhashset::extending(header_pmmr, txhashset, &mut batch, |ext, batch| {
-					pipe::rewind_and_apply_fork(&header, ext, batch)?;
+					pipe::rewind_and_apply_fork(&header, ext, batch, &|_| Ok(()))?;
 
 					let extension = &mut ext.extension;
 
@@ -1544,7 +1633,7 @@ fn setup_head(
 					let prev_header = batch.get_block_header(&head.prev_block_h)?;
 
 					txhashset::extending(header_pmmr, txhashset, &mut batch, |ext, batch| {
-						pipe::rewind_and_apply_fork(&prev_header, ext, batch)
+						pipe::rewind_and_apply_fork(&prev_header, ext, batch, &|_| Ok(()))
 					})?;
 
 					// Now "undo" the latest block and forget it ever existed.

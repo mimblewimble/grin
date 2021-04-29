@@ -134,6 +134,12 @@ impl SyncState {
 		}
 	}
 
+	/// Reset sync status to NoSync.
+	pub fn reset(&self) {
+		self.clear_sync_error();
+		self.update(SyncStatus::NoSync);
+	}
+
 	/// Whether the current state matches any active syncing operation.
 	/// Note: This includes our "initial" state.
 	pub fn is_syncing(&self) -> bool {
@@ -363,6 +369,23 @@ impl Tip {
 	}
 }
 
+impl From<BlockHeader> for Tip {
+	fn from(header: BlockHeader) -> Self {
+		Self::from(&header)
+	}
+}
+
+impl From<&BlockHeader> for Tip {
+	fn from(header: &BlockHeader) -> Self {
+		Tip {
+			height: header.height,
+			last_block_h: header.hash(),
+			prev_block_h: header.prev_hash,
+			total_difficulty: header.total_difficulty(),
+		}
+	}
+}
+
 impl Hashed for Tip {
 	/// The hash of the underlying block.
 	fn hash(&self) -> Hash {
@@ -377,16 +400,6 @@ impl Default for Tip {
 			last_block_h: ZERO_HASH,
 			prev_block_h: ZERO_HASH,
 			total_difficulty: Difficulty::min_dma(),
-		}
-	}
-}
-impl From<&BlockHeader> for Tip {
-	fn from(header: &BlockHeader) -> Tip {
-		Tip {
-			height: header.height,
-			last_block_h: header.hash(),
-			prev_block_h: header.prev_hash,
-			total_difficulty: header.total_difficulty(),
 		}
 	}
 }

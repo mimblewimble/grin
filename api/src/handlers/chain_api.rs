@@ -14,7 +14,7 @@
 
 use super::utils::{get_output, get_output_v2, w};
 use crate::chain;
-use crate::core::core::hash::Hashed;
+use crate::core::core::hash::{Hash, Hashed};
 use crate::rest::*;
 use crate::router::{Handler, ResponseFuture};
 use crate::types::*;
@@ -72,6 +72,29 @@ impl Handler for ChainValidationHandler {
 	}
 }
 
+pub struct ChainResetHandler {
+	pub chain: Weak<chain::Chain>,
+	pub sync_state: Weak<chain::SyncState>,
+}
+
+impl ChainResetHandler {
+	pub fn reset_chain_head(&self, hash: Hash) -> Result<(), Error> {
+		let chain = w(&self.chain)?;
+		let header = chain.get_block_header(&hash)?;
+		chain.reset_chain_head(&header)?;
+
+		// Reset the sync status and clear out any sync error.
+		w(&self.sync_state)?.reset();
+		Ok(())
+	}
+
+	pub fn invalidate_header(&self, hash: Hash) -> Result<(), Error> {
+		let chain = w(&self.chain)?;
+		chain.invalidate_header(hash)?;
+		Ok(())
+	}
+}
+
 /// Chain compaction handler. Trigger a compaction of the chain state to regain
 /// storage space.
 /// POST /v1/chain/compact
@@ -81,9 +104,9 @@ pub struct ChainCompactHandler {
 
 impl ChainCompactHandler {
 	pub fn compact_chain(&self) -> Result<(), Error> {
-		w(&self.chain)?
-			.compact()
-			.map_err(|_| ErrorKind::Internal("chain error".to_owned()).into())
+		let chain = w(&self.chain)?;
+		chain.compact()?;
+		Ok(())
 	}
 }
 
