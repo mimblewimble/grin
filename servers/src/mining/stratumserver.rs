@@ -343,9 +343,10 @@ impl Handler {
 		}
 		let pre_pow = header_buf.to_hex();
 		let current_state = self.current_state.read();
+		let job_id = (current_state.current_block_versions.len() as u64) * bh.height;
 		let job_template = JobTemplate {
 			height: bh.height,
-			job_id: (current_state.current_block_versions.len() - 1) as u64,
+			job_id: job_id,
 			difficulty: current_state.minimum_share_difficulty,
 			pre_pow,
 		};
@@ -366,7 +367,8 @@ impl Handler {
 
 		let state = self.current_state.read();
 		// Find the correct version of the block to match this header
-		let b: Option<&Block> = state.current_block_versions.get(params.job_id as usize);
+		let block_index = (params.job_id / params.height - 1) as usize;
+		let b: Option<&Block> = state.current_block_versions.get(block_index);
 		if params.height != state.current_block_versions.last().unwrap().header.height
 			|| b.is_none()
 		{
