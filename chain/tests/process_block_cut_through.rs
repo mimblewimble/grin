@@ -40,7 +40,7 @@ where
 	let prev = chain.head_header().unwrap();
 	let next_height = prev.height + 1;
 	let next_header_info = consensus::next_difficulty(1, chain.difficulty_iter()?);
-	let fee = txs.iter().map(|x| x.fee(next_height)).sum();
+	let fee = txs.iter().map(|x| x.fee()).sum();
 	let key_id = ExtKeychainPath::new(1, next_height as u32, 0, 0, 0).to_identifier();
 	let reward =
 		reward::output(keychain, &ProofBuilder::new(keychain), &key_id, fee, false).unwrap();
@@ -126,9 +126,8 @@ fn process_block_cut_through() -> Result<(), chain::Error> {
 		.any(|output| output.commitment() == commit));
 
 	// Transaction is invalid due to cut-through.
-	let height = 7;
 	assert_eq!(
-		tx.validate(Weighting::AsTransaction, height),
+		tx.validate(Weighting::AsTransaction),
 		Err(transaction::Error::CutThrough),
 	);
 

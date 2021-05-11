@@ -106,7 +106,7 @@ fn test_coinbase_maturity() {
 		.unwrap();
 
 		let txs = &[coinbase_txn.clone()];
-		let fees = txs.iter().map(|tx| tx.fee(prev.height + 1)).sum();
+		let fees = txs.iter().map(|tx| tx.fee()).sum();
 		let reward = libtx::reward::output(&keychain, &builder, &key_id3, fees, false).unwrap();
 		let next_header_info =
 			consensus::next_difficulty(prev.height + 1, chain.difficulty_iter().unwrap());
@@ -192,7 +192,7 @@ fn test_coinbase_maturity() {
 			.unwrap();
 
 			let txs = &[coinbase_txn.clone()];
-			let fees = txs.iter().map(|tx| tx.fee(prev.height + 1)).sum();
+			let fees = txs.iter().map(|tx| tx.fee()).sum();
 			let reward = libtx::reward::output(&keychain, &builder, &key_id3, fees, false).unwrap();
 			let next_header_info =
 				consensus::next_difficulty(prev.height + 1, chain.difficulty_iter().unwrap());
@@ -261,7 +261,7 @@ fn test_coinbase_maturity() {
 				.unwrap();
 
 			let txs = &[coinbase_txn];
-			let fees = txs.iter().map(|tx| tx.fee(prev.height + 1)).sum();
+			let fees = txs.iter().map(|tx| tx.fee()).sum();
 			let next_header_info =
 				consensus::next_difficulty(prev.height + 1, chain.difficulty_iter().unwrap());
 			let reward = libtx::reward::output(&keychain, &builder, &key_id4, fees, false).unwrap();

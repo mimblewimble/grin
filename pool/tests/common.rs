@@ -75,7 +75,7 @@ where
 	let prev = chain.head_header().unwrap();
 	let height = prev.height + 1;
 	let next_header_info = consensus::next_difficulty(height, chain.difficulty_iter().unwrap());
-	let fee = txs.iter().map(|x| x.fee(height)).sum();
+	let fee = txs.iter().map(|x| x.fee()).sum();
 	let key_id = ExtKeychainPath::new(1, height as u32, 0, 0, 0).to_identifier();
 	let reward =
 		reward::output(keychain, &ProofBuilder::new(keychain), &key_id, fee, false).unwrap();

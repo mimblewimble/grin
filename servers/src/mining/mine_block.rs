@@ -152,7 +152,7 @@ fn build_block(
 	};
 
 	// build the coinbase and the block itself
-	let fees = txs.iter().map(|tx| tx.fee(head.height)).sum();
+	let fees = txs.iter().map(|tx| tx.fee()).sum();
 	let height = head.height + 1;
 	let block_fees = BlockFees {
 		fees,

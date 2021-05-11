@@ -33,7 +33,7 @@ where
 {
 	let prev = chain.head_header().unwrap();
 	let next_header_info = consensus::next_difficulty(1, chain.difficulty_iter().unwrap());
-	let fee = txs.iter().map(|x| x.fee(prev.height + 1)).sum();
+	let fee = txs.iter().map(|x| x.fee()).sum();
 	let reward =
 		reward::output(keychain, &ProofBuilder::new(keychain), key_id, fee, false).unwrap();
 

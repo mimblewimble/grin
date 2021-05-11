@@ -41,6 +41,6 @@ pub fn tx_fee(input_len: usize, output_len: usize, kernel_len: usize) -> u64 {
 }
 
 /// Transaction fee calculation given transaction
-pub fn accept_fee(tx: Transaction, height: u64) -> u64 {
-	tx.accept_fee(height)
+pub fn accept_fee(tx: Transaction) -> u64 {
+	tx.accept_fee()
 }
