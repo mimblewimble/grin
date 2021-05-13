@@ -25,7 +25,7 @@ The main goal and characteristics of the Grin project are:
 
 A detailed post on the step-by-step of how Grin transactions work (with graphics) can be found [in this Medium post](https://medium.com/@brandonarvanaghi/grin-transactions-explained-step-by-step-fdceb905a853).
 
-## Tongue Tying for Everyone
+## Tongue-Tying for Everyone
 
 This document is targeted at readers with a good
 understanding of blockchains and basic cryptography. With that in mind, we attempt
@@ -291,7 +291,7 @@ Recall that a transaction consists of the following:
   * kernel excess (the public key corresponding to the excess value)
   * transaction signature signed by the excess value (and verifies with the kernel excess)
 
-(the presentation above did not explicitly include the kernel excess in the transaction, because it can be computed from the inputs and outputs. This paragrpah shows the benefit in including it, for aggregation within block construction.)
+(The presentation above did not explicitly include the kernel excess in the transaction, because it can be computed from the inputs and outputs. This paragrpah shows the benefit in including it, for aggregation within block construction.)
 
 We can say the following is true for any valid transaction (ignoring fees for simplicity):
 
