@@ -25,7 +25,7 @@ The main goal and characteristics of the Grin project are:
 
 A detailed post on the step-by-step of how Grin transactions work (with graphics) can be found [in this Medium post](https://medium.com/@brandonarvanaghi/grin-transactions-explained-step-by-step-fdceb905a853).
 
-## Tongue Tying for Everyone
+## Tongue-Tying for Everyone
 
 This document is targeted at readers with a good
 understanding of blockchains and basic cryptography. With that in mind, we attempt
