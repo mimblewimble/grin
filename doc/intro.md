@@ -430,7 +430,7 @@ one input or output would change the sum of the transactions to be something oth
 
 ### Conclusion
 
-In this document we covered the basic principles that underlie a Mimblewimble
+In this document we covered the basic principles that underline a Mimblewimble
 blockchain. By using addition of elliptic curve points, we're
 able to build transactions that are completely opaque but can still be properly
 validated. And by generalizing those properties to blocks, we can eliminate a large
