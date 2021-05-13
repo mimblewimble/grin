@@ -291,7 +291,7 @@ Recall that a transaction consists of the following:
   * kernel excess (the public key corresponding to the excess value)
   * transaction signature signed by the excess value (and verifies with the kernel excess)
 
-(the presentation above did not explicitly include the kernel excess in the transaction, because it can be computed from the inputs and outputs. This paragrpah shows the benefit in including it, for aggregation within block construction.)
+(The presentation above did not explicitly include the kernel excess in the transaction, because it can be computed from the inputs and outputs. This paragrpah shows the benefit in including it, for aggregation within block construction.)
 
 We can say the following is true for any valid transaction (ignoring fees for simplicity):
 
