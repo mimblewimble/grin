@@ -35,6 +35,7 @@ use crate::core::{Input, KernelFeatures, Output, OutputFeatures, Transaction, Tx
 use crate::libtx::proof::{self, ProofBuild};
 use crate::libtx::{aggsig, Error};
 use keychain::{BlindSum, BlindingFactor, Identifier, Keychain, SwitchCommitmentType};
+use util::secp::pedersen::{Commitment, RangeProof};
 
 /// Context information available to transaction combinators.
 pub struct Context<'a, K, B>
@@ -137,6 +138,46 @@ where
 
 			Ok((
 				tx.with_output(Output::new(OutputFeatures::Plain, commit, proof)),
+				sum.add_key_id(key_id.to_value_path(value)),
+			))
+		},
+	)
+}
+
+/// Adds an output with the provided value and key identifier from the
+/// keychain.
+///
+/// Adds a blank Rangeproof, to build the multiparty bulletproof over
+/// a number of rounds
+pub fn multisig_output<K, B>(
+	value: u64,
+	key_id: Identifier,
+	part_commit: Commitment,
+) -> Box<Append<K, B>>
+where
+	K: Keychain,
+	B: ProofBuild,
+{
+	Box::new(
+		move |build, acc| -> Result<(Transaction, BlindSum), Error> {
+			let (tx, sum) = acc?;
+
+			// TODO: proper support for different switch commitment schemes
+			let switch = SwitchCommitmentType::Regular;
+
+			// add commit to zero to the initiator's partial commit to the value
+			let commit_key = build.keychain.derive_key(value, &key_id, switch)?;
+			let secp = build.keychain.secp();
+			let commit = secp.commit(0, commit_key)?;
+			let commit_sum = secp.commit_sum(vec![commit, part_commit.clone()], vec![])?;
+
+			debug!("Building output: {}, {:?}", value, commit_sum);
+
+			// add zero Rangeproof to build the multiparty rangeproof over a number of steps
+			let proof = RangeProof::zero();
+
+			Ok((
+				tx.with_output(Output::new(OutputFeatures::Multisig, commit_sum, proof)),
 				sum.add_key_id(key_id.to_value_path(value)),
 			))
 		},
