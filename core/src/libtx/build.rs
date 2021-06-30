@@ -98,6 +98,47 @@ where
 	build_input(value, OutputFeatures::Plain, key_id)
 }
 
+/// Adds a multisig input with the provided value, commit, and blinding key to the transaction
+/// being built.
+fn build_multisig_input<K, B>(
+	value: u64,
+	features: OutputFeatures,
+	key_id: Identifier,
+	commit: Commitment,
+) -> Box<Append<K, B>>
+where
+	K: Keychain,
+	B: ProofBuild,
+{
+	Box::new(
+		move |_build, acc| -> Result<(Transaction, BlindSum), Error> {
+			if let Ok((tx, sum)) = acc {
+				let input = Input::new(features, commit);
+				Ok((
+					tx.with_input(input),
+					sum.sub_key_id(key_id.to_value_path(value)),
+				))
+			} else {
+				acc
+			}
+		},
+	)
+}
+
+/// Adds a multisig input with the provided value and blinding key to the transaction
+/// being built.
+pub fn multisig_input<K, B>(value: u64, key_id: Identifier, commit: Commitment) -> Box<Append<K, B>>
+where
+	K: Keychain,
+	B: ProofBuild,
+{
+	debug!(
+		"Building input (spending multisig output): {}, {}",
+		value, key_id
+	);
+	build_multisig_input(value, OutputFeatures::Multisig, key_id, commit)
+}
+
 /// Adds a coinbase input spending a coinbase output.
 pub fn coinbase_input<K, B>(value: u64, key_id: Identifier) -> Box<Append<K, B>>
 where
