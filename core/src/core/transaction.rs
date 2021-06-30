@@ -2074,6 +2074,11 @@ impl OutputFeatures {
 	pub fn is_plain(self) -> bool {
 		self == OutputFeatures::Plain
 	}
+
+	/// Is this a multisig output?
+	pub fn is_multisig(self) -> bool {
+		self == OutputFeatures::Multisig
+	}
 }
 
 impl Output {
@@ -2108,6 +2113,11 @@ impl Output {
 	/// Is this a plain output?
 	pub fn is_plain(&self) -> bool {
 		self.identifier.is_plain()
+	}
+
+	/// Is this a multisig output?
+	pub fn is_multisig(&self) -> bool {
+		self.identifier.is_multisig()
 	}
 
 	/// Range proof for the output
@@ -2191,6 +2201,11 @@ impl OutputIdentifier {
 	/// Is this a plain output?
 	pub fn is_plain(&self) -> bool {
 		self.features.is_plain()
+	}
+
+	/// Is this a multisig output?
+	pub fn is_multisig(&self) -> bool {
+		self.features.is_multisig()
 	}
 
 	/// Converts this identifier to a full output, provided a RangeProof
