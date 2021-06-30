@@ -86,6 +86,7 @@ pub fn create_secnonce(secp: &Secp256k1) -> Result<SecretKey, Error> {
 ///     &secp,
 ///     &secret_key,
 ///     &secret_nonce,
+///     None,
 ///     &pub_nonce_sum,
 ///     Some(&pub_key_sum),
 ///     &message,
@@ -96,6 +97,7 @@ pub fn calculate_partial_sig(
 	secp: &Secp256k1,
 	sec_key: &SecretKey,
 	sec_nonce: &SecretKey,
+	sec_nonce_extra: Option<&SecretKey>,
 	nonce_sum: &PublicKey,
 	pubkey_sum: Option<&PublicKey>,
 	msg: &secp::Message,
@@ -106,7 +108,7 @@ pub fn calculate_partial_sig(
 		&msg,
 		sec_key,
 		Some(sec_nonce),
-		None,
+		sec_nonce_extra,
 		Some(nonce_sum),
 		pubkey_sum,
 		Some(nonce_sum),
@@ -156,6 +158,7 @@ pub fn calculate_partial_sig(
 ///     &secp,
 ///     &secret_key,
 ///     &secret_nonce,
+///     None,
 ///     &pub_nonce_sum,
 ///     Some(&pub_key_sum),
 ///     &message,
@@ -169,6 +172,7 @@ pub fn calculate_partial_sig(
 ///     &secp,
 ///     &sig_part,
 ///     &pub_nonce_sum,
+///     None,
 ///     &public_key,
 ///     Some(&pub_key_sum),
 ///     &message,
@@ -179,6 +183,7 @@ pub fn verify_partial_sig(
 	secp: &Secp256k1,
 	sig: &Signature,
 	pub_nonce_sum: &PublicKey,
+	pub_nonce_extra: Option<&PublicKey>,
 	pubkey: &PublicKey,
 	pubkey_sum: Option<&PublicKey>,
 	msg: &secp::Message,
@@ -188,6 +193,7 @@ pub fn verify_partial_sig(
 		sig,
 		&msg,
 		Some(&pub_nonce_sum),
+		pub_nonce_extra,
 		pubkey,
 		pubkey_sum,
 		true,
@@ -323,7 +329,7 @@ pub fn verify_single_from_commit(
 	commit: &Commitment,
 ) -> Result<(), Error> {
 	let pubkey = commit.to_pubkey(secp)?;
-	if !verify_single(secp, sig, msg, None, &pubkey, Some(&pubkey), false) {
+	if !verify_single(secp, sig, msg, None, None, &pubkey, Some(&pubkey), false) {
 		return Err(ErrorKind::Signature("Signature validation error".to_string()).into());
 	}
 	Ok(())
@@ -369,6 +375,7 @@ pub fn verify_single_from_commit(
 ///     &secp,
 ///     &secret_key,
 ///     &secret_nonce,
+///     None,
 ///     &pub_nonce_sum,
 ///     Some(&pub_key_sum),
 ///     &message,
@@ -391,7 +398,7 @@ pub fn verify_completed_sig(
 	pubkey_sum: Option<&PublicKey>,
 	msg: &secp::Message,
 ) -> Result<(), Error> {
-	if !verify_single(secp, sig, msg, None, pubkey, pubkey_sum, true) {
+	if !verify_single(secp, sig, msg, None, None, pubkey, pubkey_sum, true) {
 		return Err(ErrorKind::Signature("Signature validation error".to_string()).into());
 	}
 	Ok(())
@@ -414,9 +421,19 @@ pub fn sign_single(
 	msg: &Message,
 	skey: &SecretKey,
 	snonce: Option<&SecretKey>,
+	snonce_extra: Option<&SecretKey>,
 	pubkey_sum: Option<&PublicKey>,
 ) -> Result<Signature, Error> {
-	let sig = aggsig::sign_single(secp, &msg, skey, snonce, None, None, pubkey_sum, None)?;
+	let sig = aggsig::sign_single(
+		secp,
+		&msg,
+		skey,
+		snonce,
+		snonce_extra,
+		None,
+		pubkey_sum,
+		None,
+	)?;
 	Ok(sig)
 }
 
@@ -426,12 +443,20 @@ pub fn verify_single(
 	sig: &Signature,
 	msg: &Message,
 	pubnonce: Option<&PublicKey>,
+	pubnonce_extra: Option<&PublicKey>,
 	pubkey: &PublicKey,
 	pubkey_sum: Option<&PublicKey>,
 	is_partial: bool,
 ) -> bool {
 	aggsig::verify_single(
-		secp, sig, msg, pubnonce, pubkey, pubkey_sum, None, is_partial,
+		secp,
+		sig,
+		msg,
+		pubnonce,
+		pubkey,
+		pubkey_sum,
+		pubnonce_extra,
+		is_partial,
 	)
 }
 

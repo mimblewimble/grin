@@ -88,7 +88,7 @@ Optionally, Merkle proofs can be excluded from the results by adding `?no_merkle
     | - total_kernel_offset | string   | Total kernel offset since genesis block                                     |
     | inputs                | []string | Input transactions                                                          |
     | outputs               | []object | Outputs transactions                                                        |
-    | - output_type         | string   | The type of output Coinbase|Transaction                                     |
+    | - output_type         | string   | The type of output Coinbase|Transaction|Multisig                            |
     | - commit              | string   | The homomorphic commitment representing the output's amount (as hex string) |
     | - spent               | bool     | Whether the output has been spent                                           |
     | - proof               | string   | Rangeproof (as hex string)                                                  |
@@ -414,7 +414,7 @@ Retrieves details about specifics outputs. Supports retrieval of multiple output
     | Field                 | Type     | Description                                                                 |
     |:----------------------|:---------|:----------------------------------------------------------------------------|
     | outputs               | []object | Outputs                                                                     |
-    | - output_type         | string   | The type of output Coinbase|Transaction                                     |
+    | - output_type         | string   | The type of output Coinbase|Transaction|Multisig                            |
     | - commit              | string   | The homomorphic commitment representing the output's amount (as hex string) |
     | - spent               | bool     | Whether the output has been spent                                           |
     | - proof               | string   | Rangeproof (as hex string)                                                  |
@@ -474,7 +474,7 @@ Retrieves details about specifics outputs. Supports retrieval of multiple output
     | - height              | number   | Height of this block since the genesis block (height 0)                     |
     | - previous            | string   | Hash of the block previous to this in the chain                             |
     | outputs               | []object | Outputs                                                                     |
-    | - output_type         | string   | The type of output Coinbase|Transaction                                     |
+    | - output_type         | string   | The type of output Coinbase|Transaction|Multisig                            |
     | - commit              | string   | The homomorphic commitment representing the output's amount (as hex string) |
     | - spent               | bool     | Whether the output has been spent                                           |
     | - proof               | string   | Rangeproof (as hex string)                                                  |
@@ -790,7 +790,7 @@ UTXO traversal. Retrieves last utxos since a start index until a max.
     | highest_index         | number   | The last available output index                                             |
     | last_retrieved_index  | number   | The last insertion index retrieved                                          |
     | outputs               | []object | Outputs                                                                     |
-    | - output_type         | string   | The type of output Coinbase|Transaction                                     |
+    | - output_type         | string   | The type of output Coinbase|Transaction|Multisig                            |
     | - commit              | string   | The homomorphic commitment representing the output's amount (as hex string) |
     | - spent               | bool     | Whether the output has been spent                                           |
     | - proof               | string   | Rangeproof (as hex string)                                                  |
@@ -851,7 +851,7 @@ Build a merkle proof for a given output id and return a dummy output with merkle
     | Field                 | Type     | Description                                                                 |
     |:----------------------|:---------|:----------------------------------------------------------------------------|
     | outputs               | []object | Outputs                                                                     |
-    | - output_type         | string   | The type of output Coinbase|Transaction                                     |
+    | - output_type         | string   | The type of output Coinbase|Transaction|Multisig                            |
     | - commit              | string   | The homomorphic commitment representing the output's amount (as hex string) |
     | - spent               | bool     | Whether the output has been spent                                           |
     | - proof               | string   | Rangeproof (as hex string)                                                  |

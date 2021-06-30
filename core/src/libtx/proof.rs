@@ -19,7 +19,7 @@ use blake2::blake2b::blake2b;
 use keychain::extkey_bip32::BIP32GrinHasher;
 use keychain::{Identifier, Keychain, SwitchCommitmentType, ViewKey};
 use std::convert::TryFrom;
-use util::secp::key::SecretKey;
+use util::secp::key::{PublicKey, SecretKey};
 use util::secp::pedersen::{Commitment, ProofMessage, RangeProof};
 use util::secp::{self, Secp256k1};
 use zeroize::Zeroize;
@@ -57,6 +57,48 @@ where
 	))
 }
 
+/// Create a multisig bulletproof
+pub fn create_multisig<K, B>(
+	k: &K,
+	b: &B,
+	amount: u64,
+	key_id: &Identifier,
+	switch: SwitchCommitmentType,
+	common_nonce: &SecretKey,
+	tau_x: Option<&mut SecretKey>,
+	tau_one: Option<&mut PublicKey>,
+	tau_two: Option<&mut PublicKey>,
+	commits: &[Commitment],
+	step: u8,
+	extra_data: Option<Vec<u8>>,
+) -> Result<Option<RangeProof>, Error>
+where
+	K: Keychain,
+	B: ProofBuild,
+{
+	// TODO: proper support for different switch commitment schemes
+	// The new bulletproof scheme encodes and decodes it, but
+	// it is not supported at the wallet level (yet).
+	let secp = k.secp();
+	let skey = k.derive_key(amount, key_id, switch)?;
+	let private_nonce = b.private_nonce(secp, &commits[0])?;
+	let message = b.proof_message(secp, key_id, switch)?;
+
+	Ok(secp.bullet_proof_multisig(
+		amount,
+		skey,
+		common_nonce.clone(),
+		extra_data,
+		Some(message),
+		tau_x,
+		tau_one,
+		tau_two,
+		commits.to_vec(),
+		Some(&private_nonce),
+		step,
+	))
+}
+
 /// Verify a proof
 pub fn verify(
 	secp: &Secp256k1,
@@ -65,6 +107,17 @@ pub fn verify(
 	extra_data: Option<Vec<u8>>,
 ) -> Result<(), secp::Error> {
 	let result = secp.verify_bullet_proof(commit, proof, extra_data);
+	result.map(|_| ())
+}
+
+/// Verify a multisignature bulletproof
+pub fn verify_multisig(
+	secp: &Secp256k1,
+	commits: Vec<Commitment>,
+	proofs: Vec<RangeProof>,
+	extra_data: Option<Vec<Vec<u8>>>,
+) -> Result<(), secp::Error> {
+	let result = secp.verify_bullet_proof_multi(commits, proofs, extra_data);
 	result.map(|_| ())
 }
 
@@ -492,6 +545,256 @@ mod tests {
 		};
 		// The resulting pedersen commitments should be different
 		assert_ne!(commit_a, commit_b);
+	}
+
+	#[test]
+	fn builder_multisig() {
+		let rng = &mut thread_rng();
+		let a_keychain = ExtKeychain::from_random_seed(true).unwrap();
+		let b_keychain = ExtKeychain::from_random_seed(true).unwrap();
+		let a_builder = ProofBuilder::new(&a_keychain);
+		let b_builder = ProofBuilder::new(&b_keychain);
+		let secp = a_keychain.secp();
+		let amount = 12345678;
+		// ID needs to be the same for both parties to derive the same proof message
+		let id = ExtKeychain::derive_key_id(3, rng.gen(), rng.gen(), rng.gen(), 0);
+		let common_nonce = SecretKey::new(secp, rng);
+		// With switch commitment
+		let commits_a = {
+			let switch = SwitchCommitmentType::Regular;
+			// can't use Keychain::commit here, because the key needs to be derived using amount
+			// the commit for party a is over the amount, party b commits to zero
+			let blind_a = a_keychain.derive_key(amount, &id, switch).unwrap();
+			let blind_b = b_keychain.derive_key(amount, &id, switch).unwrap();
+			let a_commit = secp.commit(amount, blind_a).unwrap();
+			let b_commit = secp.commit(0, blind_b).unwrap();
+			let commits = vec![secp.commit_sum(vec![a_commit, b_commit], vec![]).unwrap()];
+
+			// 1st step, create tau_one and tau_two for each party
+			let mut tau_one_a = PublicKey::new();
+			let mut tau_two_a = PublicKey::new();
+			let mut res = create_multisig(
+				&a_keychain,
+				&a_builder,
+				amount,
+				&id,
+				switch,
+				&common_nonce,
+				None,
+				Some(&mut tau_one_a),
+				Some(&mut tau_two_a),
+				&commits,
+				1,
+				None,
+			)
+			.unwrap();
+			assert!(res.is_none());
+
+			let mut tau_one_b = PublicKey::new();
+			let mut tau_two_b = PublicKey::new();
+			res = create_multisig(
+				&b_keychain,
+				&b_builder,
+				amount,
+				&id,
+				switch,
+				&common_nonce,
+				None,
+				Some(&mut tau_one_b),
+				Some(&mut tau_two_b),
+				&commits,
+				1,
+				None,
+			)
+			.unwrap();
+			assert!(res.is_none());
+
+			// Sum tau_one and tau_two from each party
+			let mut tau_one_sum =
+				PublicKey::from_combination(secp, vec![&tau_one_a, &tau_one_b]).unwrap();
+			let mut tau_two_sum =
+				PublicKey::from_combination(secp, vec![&tau_two_a, &tau_two_b]).unwrap();
+
+			// 2nd step, create tau_x for each party
+			let mut tau_x_a = SecretKey::new(secp, rng);
+			res = create_multisig(
+				&a_keychain,
+				&a_builder,
+				amount,
+				&id,
+				switch,
+				&common_nonce,
+				Some(&mut tau_x_a),
+				Some(&mut tau_one_sum),
+				Some(&mut tau_two_sum),
+				&commits,
+				2,
+				None,
+			)
+			.unwrap();
+			assert!(res.is_none());
+			let mut tau_x_b = SecretKey::new(secp, rng);
+			res = create_multisig(
+				&b_keychain,
+				&b_builder,
+				amount,
+				&id,
+				switch,
+				&common_nonce,
+				Some(&mut tau_x_b),
+				Some(&mut tau_one_sum),
+				Some(&mut tau_two_sum),
+				&commits,
+				2,
+				None,
+			)
+			.unwrap();
+			assert!(res.is_none());
+
+			// Sum tau_x from each party
+			let mut tau_x_sum = tau_x_a;
+			tau_x_sum.add_assign(secp, &tau_x_b).unwrap();
+
+			// 3rd step, party A finalizes the bulletproof
+			let proof = create_multisig(
+				&a_keychain,
+				&a_builder,
+				amount,
+				&id,
+				switch,
+				&common_nonce,
+				Some(&mut tau_x_sum),
+				Some(&mut tau_one_sum),
+				Some(&mut tau_two_sum),
+				&commits,
+				0,
+				None,
+			)
+			.unwrap();
+			assert!(proof.is_some());
+
+			assert!(verify_multisig(secp, commits.clone(), vec![proof.unwrap()], None).is_ok());
+			commits
+		};
+		// Without switch commitment
+		let commits_b = {
+			let switch = SwitchCommitmentType::None;
+			// can't use Keychain::commit here, because the key needs to be derived using amount
+			// the commit for party a is over the amount, party b commits to zero
+			let blind_a = a_keychain.derive_key(amount, &id, switch).unwrap();
+			let blind_b = b_keychain.derive_key(amount, &id, switch).unwrap();
+			let a_commit = secp.commit(amount, blind_a).unwrap();
+			let b_commit = secp.commit(0, blind_b).unwrap();
+			let commits = vec![secp.commit_sum(vec![a_commit, b_commit], vec![]).unwrap()];
+
+			// 1st step, create tau_one and tau_two for each party
+			let mut tau_one_a = PublicKey::new();
+			let mut tau_two_a = PublicKey::new();
+			let mut res = create_multisig(
+				&a_keychain,
+				&a_builder,
+				amount,
+				&id,
+				switch,
+				&common_nonce,
+				None,
+				Some(&mut tau_one_a),
+				Some(&mut tau_two_a),
+				&commits,
+				1,
+				None,
+			)
+			.unwrap();
+			assert!(res.is_none());
+
+			let mut tau_one_b = PublicKey::new();
+			let mut tau_two_b = PublicKey::new();
+			res = create_multisig(
+				&b_keychain,
+				&b_builder,
+				amount,
+				&id,
+				switch,
+				&common_nonce,
+				None,
+				Some(&mut tau_one_b),
+				Some(&mut tau_two_b),
+				&commits,
+				1,
+				None,
+			)
+			.unwrap();
+			assert!(res.is_none());
+
+			// Sum tau_one and tau_two from each party
+			let mut tau_one_sum =
+				PublicKey::from_combination(secp, vec![&tau_one_a, &tau_one_b]).unwrap();
+			let mut tau_two_sum =
+				PublicKey::from_combination(secp, vec![&tau_two_a, &tau_two_b]).unwrap();
+
+			// 2nd step, create tau_x for each party
+			let mut tau_x_a = SecretKey::new(secp, rng);
+			res = create_multisig(
+				&a_keychain,
+				&a_builder,
+				amount,
+				&id,
+				switch,
+				&common_nonce,
+				Some(&mut tau_x_a),
+				Some(&mut tau_one_sum),
+				Some(&mut tau_two_sum),
+				&commits,
+				2,
+				None,
+			)
+			.unwrap();
+			assert!(res.is_none());
+			let mut tau_x_b = SecretKey::new(secp, rng);
+			res = create_multisig(
+				&b_keychain,
+				&b_builder,
+				amount,
+				&id,
+				switch,
+				&common_nonce,
+				Some(&mut tau_x_b),
+				Some(&mut tau_one_sum),
+				Some(&mut tau_two_sum),
+				&commits,
+				2,
+				None,
+			)
+			.unwrap();
+			assert!(res.is_none());
+
+			// Sum tau_x from each party
+			let mut tau_x_sum = tau_x_a;
+			tau_x_sum.add_assign(secp, &tau_x_b).unwrap();
+
+			// 3rd step, party A finalizes the bulletproof
+			let proof = create_multisig(
+				&a_keychain,
+				&a_builder,
+				amount,
+				&id,
+				switch,
+				&common_nonce,
+				Some(&mut tau_x_sum),
+				Some(&mut tau_one_sum),
+				Some(&mut tau_two_sum),
+				&commits,
+				0,
+				None,
+			)
+			.unwrap();
+			assert!(proof.is_some());
+
+			assert!(verify_multisig(secp, commits.clone(), vec![proof.unwrap()], None).is_ok());
+			commits
+		};
+		// The resulting pedersen commitments should be different
+		assert_ne!(commits_a, commits_b);
 	}
 
 	#[test]
