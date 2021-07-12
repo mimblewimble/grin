@@ -28,7 +28,7 @@ What's working so far?
 For Debian-based distributions (Debian, Ubuntu, Mint, etc), all in one line (except Rust):
 
 ```sh
-apt install build-essential cmake git libgit2-dev clang libncurses5-dev libncursesw5-dev zlib1g-dev pkg-config libssl-dev llvm
+apt install build-essential cmake git libgit2-dev clang libncurses5-dev libncursesw5-dev zlib1g-dev pkg-config libssl-dev llvm cargo cargo-doc gdb-doc rust-doc rust-src lld-11
 ```
 
 For Mac:
