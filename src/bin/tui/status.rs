@@ -297,7 +297,7 @@ fn test_status_txhashset_kernels() {
 		kernels_total: 5000,
 	};
 	let basic_status = TUIStatusView::update_sync_status(status);
-	assert!(basic_status.contains("4%"), basic_status);
+	assert!(basic_status.contains("4%"), "{}", basic_status);
 }
 
 #[test]
@@ -307,5 +307,5 @@ fn test_status_txhashset_rproofs() {
 		rproofs_total: 1000,
 	};
 	let basic_status = TUIStatusView::update_sync_status(status);
-	assert!(basic_status.contains("64%"), basic_status);
+	assert!(basic_status.contains("64%"), "{}", basic_status);
 }

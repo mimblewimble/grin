@@ -139,7 +139,7 @@ macro_rules! right_path_element(
 		match $req.uri().path().trim_end_matches('/').rsplit('/').next() {
 			None => return response(StatusCode::BAD_REQUEST, "invalid url"),
 			Some(el) => el,
-		};
+		}
 	));
 
 #[macro_export]

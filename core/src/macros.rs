@@ -20,7 +20,7 @@
 #[macro_export]
 macro_rules! map_vec {
 	($thing:expr, $mapfn:expr) => {
-		$thing.iter().map($mapfn).collect::<Vec<_>>();
+		$thing.iter().map($mapfn).collect::<Vec<_>>()
 	};
 }
 
