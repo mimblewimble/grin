@@ -38,11 +38,11 @@ use byteorder::{ByteOrder, LittleEndian};
 fn sha256d_hash(data: &[u8]) -> [u8; 32] {
 	let mut ret = [0; 32];
 	let mut sha2 = Sha256::new();
-	sha2.input(data);
-	ret.copy_from_slice(sha2.result().as_slice());
+	sha2.update(data);
+	ret.copy_from_slice(sha2.finalize().as_slice());
 	sha2 = Sha256::new();
-	sha2.input(&ret);
-	ret.copy_from_slice(sha2.result().as_slice());
+	sha2.update(&ret);
+	ret.copy_from_slice(sha2.finalize().as_slice());
 	ret
 }
 

@@ -20,10 +20,10 @@ serde_json = "1"
 lazy_static = "1"
 zeroize = { version = "1.1", features =["zeroize_derive"] }
 
-digest = "0.7"
-hmac = "0.6"
-ripemd160 = "0.7"
-sha2 = "0.7"
-pbkdf2 = "0.2"
+digest = "0.9"
+hmac = "0.11"
+ripemd160 = "0.9"
+sha2 = "0.9"
+pbkdf2 = "0.8"
 
 grin_util = { path = "../util", version = "5.2.0-alpha.1" }
