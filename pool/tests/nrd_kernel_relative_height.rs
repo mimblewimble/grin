@@ -21,7 +21,6 @@ use self::core::global;
 use self::core::libtx::aggsig;
 use self::keychain::{BlindingFactor, ExtKeychain, Keychain};
 use self::pool::types::PoolError;
-use self::util::RwLock;
 use crate::common::*;
 use grin_core as core;
 use grin_keychain as keychain;
