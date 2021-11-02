@@ -19,7 +19,6 @@ use self::core::core::{HeaderVersion, KernelFeatures, NRDRelativeHeight};
 use self::core::global;
 use self::keychain::{ExtKeychain, Keychain};
 use self::pool::types::PoolError;
-use self::util::RwLock;
 use crate::common::*;
 use grin_core as core;
 use grin_keychain as keychain;
