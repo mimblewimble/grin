@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::{marker, ops::Range, u64};
+use std::{cmp::max, marker, ops::Range, u64};
 
 use croaring::Bitmap;
 
@@ -568,6 +568,9 @@ pub fn bintree_postorder_height(num: u64) -> u64 {
 /// of any size (somewhat unintuitively but this is how the PMMR is "append
 /// only").
 pub fn is_leaf(pos: u64) -> bool {
+	if pos == 0 {
+		return false;
+	}
 	bintree_postorder_height(pos) == 0
 }
 
@@ -665,14 +668,27 @@ pub fn family_branch(pos: u64, last_pos: u64) -> Vec<(u64, u64)> {
 }
 
 /// Gets the position of the rightmost node (i.e. leaf) beneath the provided subtree root.
-pub fn bintree_rightmost(num: u64) -> u64 {
-	num - bintree_postorder_height(num)
+pub fn bintree_rightmost(pos: u64) -> u64 {
+	pos - bintree_postorder_height(pos)
 }
 
 /// Gets the position of the rightmost node (i.e. leaf) beneath the provided subtree root.
-pub fn bintree_leftmost(num: u64) -> u64 {
-	let height = bintree_postorder_height(num);
-	num + 2 - (2 << height)
+pub fn bintree_leftmost(pos: u64) -> u64 {
+	let height = bintree_postorder_height(pos);
+	pos + 2 - (2 << height)
+}
+
+/// Iterator over all leaf pos beneath the provided subtree root (including the root itself).
+pub fn bintree_leaf_pos_iter(pos: u64) -> impl Iterator<Item = u64> {
+	let leaf_start = max(1, bintree_leftmost(pos as u64));
+	let leaf_end = bintree_rightmost(pos as u64);
+	(leaf_start..=leaf_end).filter(|x| is_leaf(*x))
+}
+
+/// Iterator over all pos beneath the provided subtree root (including the root itself).
+pub fn bintree_pos_iter(pos: u64) -> impl Iterator<Item = u64> {
+	let leaf_start = max(1, bintree_leftmost(pos as u64));
+	(leaf_start..=pos).into_iter()
 }
 
 /// All pos in the subtree beneath the provided root, including root itself.

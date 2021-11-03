@@ -20,7 +20,6 @@ use self::core::ser::PMMRIndexHashable;
 use crate::common::TestElem;
 use chrono::prelude::Utc;
 use grin_core as core;
-use std::u64;
 
 #[test]
 fn some_peak_map() {
@@ -126,6 +125,48 @@ fn test_bintree_leftmost() {
 	assert_eq!(pmmr::bintree_leftmost(5), 5);
 	assert_eq!(pmmr::bintree_leftmost(6), 4);
 	assert_eq!(pmmr::bintree_leftmost(7), 1);
+}
+
+#[test]
+fn test_bintree_leaf_pos_iter() {
+	assert_eq!(pmmr::bintree_leaf_pos_iter(0).count(), 0);
+	assert_eq!(pmmr::bintree_leaf_pos_iter(1).collect::<Vec<_>>(), [1]);
+	assert_eq!(pmmr::bintree_leaf_pos_iter(2).collect::<Vec<_>>(), [2]);
+	assert_eq!(pmmr::bintree_leaf_pos_iter(3).collect::<Vec<_>>(), [1, 2]);
+	assert_eq!(pmmr::bintree_leaf_pos_iter(4).collect::<Vec<_>>(), [4]);
+	assert_eq!(pmmr::bintree_leaf_pos_iter(5).collect::<Vec<_>>(), [5]);
+	assert_eq!(pmmr::bintree_leaf_pos_iter(6).collect::<Vec<_>>(), [4, 5]);
+	assert_eq!(
+		pmmr::bintree_leaf_pos_iter(7).collect::<Vec<_>>(),
+		[1, 2, 4, 5]
+	);
+}
+
+#[test]
+fn test_bintree_pos_iter() {
+	assert_eq!(pmmr::bintree_pos_iter(0).count(), 0);
+	assert_eq!(pmmr::bintree_pos_iter(1).collect::<Vec<_>>(), [1]);
+	assert_eq!(pmmr::bintree_pos_iter(2).collect::<Vec<_>>(), [2]);
+	assert_eq!(pmmr::bintree_pos_iter(3).collect::<Vec<_>>(), [1, 2, 3]);
+	assert_eq!(pmmr::bintree_pos_iter(4).collect::<Vec<_>>(), [4]);
+	assert_eq!(pmmr::bintree_pos_iter(5).collect::<Vec<_>>(), [5]);
+	assert_eq!(pmmr::bintree_pos_iter(6).collect::<Vec<_>>(), [4, 5, 6]);
+	assert_eq!(
+		pmmr::bintree_pos_iter(7).collect::<Vec<_>>(),
+		[1, 2, 3, 4, 5, 6, 7]
+	);
+}
+
+#[test]
+fn test_is_leaf() {
+	assert_eq!(pmmr::is_leaf(0), false);
+	assert_eq!(pmmr::is_leaf(1), true);
+	assert_eq!(pmmr::is_leaf(2), true);
+	assert_eq!(pmmr::is_leaf(3), false);
+	assert_eq!(pmmr::is_leaf(4), true);
+	assert_eq!(pmmr::is_leaf(5), true);
+	assert_eq!(pmmr::is_leaf(6), false);
+	assert_eq!(pmmr::is_leaf(7), false);
 }
 
 #[test]
