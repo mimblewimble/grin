@@ -87,7 +87,10 @@ impl PruneList {
 			Bitmap::create()
 		};
 
-		let prune_list = PruneList::new(Some(file_path), bitmap);
+		let mut prune_list = PruneList::new(Some(file_path), bitmap);
+
+		// Now build the shift caches from the bitmap we read from disk
+		prune_list.init_caches();
 
 		if !prune_list.bitmap.is_empty() {
 			debug!(
@@ -301,7 +304,9 @@ impl PruneList {
 		assert!(pos > 0, "prune list 1-indexed, 0 not valid pos");
 		assert!(
 			pos > self.bitmap.maximum().unwrap_or(0) as u64,
-			"prune list append only"
+			"prune list append only - pos={} bitmap.maximum={}",
+			pos,
+			self.bitmap.maximum().unwrap_or(0)
 		);
 
 		let (parent, sibling) = family(pos);
@@ -385,6 +390,11 @@ impl PruneList {
 	/// can be spent but not yet pruned.
 	pub fn unpruned_leaf_iter(&self, cutoff_pos: u64) -> impl Iterator<Item = u64> + '_ {
 		self.unpruned_iter(cutoff_pos).filter(|x| pmmr::is_leaf(*x))
+	}
+
+	/// Return a clone of our internal bitmap.
+	pub fn bitmap(&self) -> Bitmap {
+		self.bitmap.clone()
 	}
 }
 
