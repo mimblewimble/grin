@@ -417,9 +417,9 @@ impl<T: PMMRable> PMMRBackend<T> {
 
 		// Update the prune list and write to disk.
 		{
-			for pos in leaves_removed.iter() {
-				self.prune_list.append(pos.into());
-			}
+			let mut bitmap = self.prune_list.bitmap();
+			bitmap.or_inplace(&leaves_removed);
+			self.prune_list = PruneList::new(Some(self.data_dir.join(PMMR_PRUN_FILE)), bitmap);
 			self.prune_list.flush()?;
 		}
 

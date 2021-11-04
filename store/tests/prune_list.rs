@@ -64,24 +64,17 @@ fn test_is_pruned() {
 
 	pl.append(4);
 
+	// Flushing the prune_list removes any individual leaf positions.
+	// This assumes we will track these outside the prune_list via the leaf_set.
+	pl.flush().unwrap();
+
 	assert_eq!(pl.len(), 2);
-	assert_eq!(pl.iter().collect::<Vec<_>>(), [3, 4]);
+	assert_eq!(pl.to_vec(), [3, 4]);
 	assert_eq!(pl.is_pruned(1), true);
 	assert_eq!(pl.is_pruned(2), true);
 	assert_eq!(pl.is_pruned(3), true);
 	assert_eq!(pl.is_pruned(4), true);
 	assert_eq!(pl.is_pruned(5), false);
-
-	// Test some poorly organized (out of order, overlapping) pruning.
-	let mut pl = PruneList::empty();
-	pl.append(2);
-	pl.append(4);
-	pl.append(3);
-	assert_eq!(pl.iter().collect::<Vec<_>>(), [3, 4]);
-
-	// now add a higher level pruned root clearing out the subtree.
-	pl.append(7);
-	assert_eq!(pl.iter().collect::<Vec<_>>(), [7]);
 }
 
 #[test]
