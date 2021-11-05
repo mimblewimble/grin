@@ -65,46 +65,20 @@ so we need a method to compute one (otherwise it would defeat the purpose of
 using a hash tree). This process is called "bagging the peaks" for reasons
 described in [1].
 
-First, we identify the peaks of the MMR; we will define one method of doing so
-here. We first write another small example MMR but with the indexes written as
-binary (instead of decimal), starting from 1:
+First, we identify the peaks of the MMR.
 
-```
-Height
-
-2        111
-       /     \
-1     11     110       1010
-     /  \    / \      /    \
-0   1   10 100 101  1000  1001  1011
-```
-
-This MMR has 11 nodes and its peaks are at position 111 (7), 1010 (10) and
-1011 (11). We first notice how the first leftmost peak is always going to be
-the highest and always "all ones" when expressed in binary. Therefore that
-peak will have a position of the form `2^n - 1` and will always be the
-largest such position that is inside the MMR (its position is lesser than the
-total size). We process iteratively for a MMR of size 11:
-
-```
-2^0 - 1 = 0, and 0 < 11
-2^1 - 1 = 1, and 1 < 11
-2^2 - 1 = 3, and 3 < 11
-2^3 - 1 = 7, and 7 < 11
-2^4 - 1 = 15, and 15 is not < 11
-```
-
-(This can also be calculated non-iteratively as `2^(binary logarithm of size + 1) - 1`
-
-Therefore the first peak is 7. To find the next peak, we then need to "jump" to
-its right sibling. If that node is not in the MMR (and it won't), take its left
-child. If that child is not in the MMR either, keep taking its left child
-until we have a node that exists in our MMR. Once we find that next peak,
-keep repeating the process until we're at the last node.
-
-All these operations are very simple. Jumping to the right sibling of a node at
-height `h` is adding `2^(h+1) - 1` to its position. Taking its left child is
-subtracting `2^h`.
+The MMR above has 19 nodes and 3 peaks, each of which
+is the root of a subtree of size a 2-power minus one.
+If the word-size were 8-bits, then 19 is 00010011 in binary, with 3 leading zeros.
+Shifting the all 1-bit word 11111111 right by that number 3 gives us 00011111, or 31,
+the first candidate peak size.
+Since 19 < 31, we have no 31-peak.
+The next candidate peak size is 31 >> 1 = 15.
+Since 19 >= 15, we have a 15-peak, and the relative position beyond identified
+peaks is 19-15=4.
+After 2 more right shifts to peak size 3, we find 4 >= 3 and identify the 2nd peak,
+reducing relative position to 4-3 = 1.
+A final right shift gives a peak size of 1, and with 1 >= 1, we identified the 3rd and final peak.
 
 Finally, once all the positions of the peaks are known, "bagging" the peaks
 consists of hashing them iteratively from the right, using the total size of
