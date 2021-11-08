@@ -170,6 +170,39 @@ fn test_is_leaf() {
 }
 
 #[test]
+fn test_pmmr_leaf_to_insertion_index() {
+	assert_eq!(pmmr::pmmr_leaf_to_insertion_index(1), Some(0));
+	assert_eq!(pmmr::pmmr_leaf_to_insertion_index(2), Some(1));
+	assert_eq!(pmmr::pmmr_leaf_to_insertion_index(4), Some(2));
+	assert_eq!(pmmr::pmmr_leaf_to_insertion_index(5), Some(3));
+	assert_eq!(pmmr::pmmr_leaf_to_insertion_index(8), Some(4));
+	assert_eq!(pmmr::pmmr_leaf_to_insertion_index(9), Some(5));
+	assert_eq!(pmmr::pmmr_leaf_to_insertion_index(11), Some(6));
+	assert_eq!(pmmr::pmmr_leaf_to_insertion_index(12), Some(7));
+	assert_eq!(pmmr::pmmr_leaf_to_insertion_index(16), Some(8));
+	assert_eq!(pmmr::pmmr_leaf_to_insertion_index(17), Some(9));
+	assert_eq!(pmmr::pmmr_leaf_to_insertion_index(19), Some(10));
+	assert_eq!(pmmr::pmmr_leaf_to_insertion_index(20), Some(11));
+	assert_eq!(pmmr::pmmr_leaf_to_insertion_index(23), Some(12));
+	assert_eq!(pmmr::pmmr_leaf_to_insertion_index(24), Some(13));
+	assert_eq!(pmmr::pmmr_leaf_to_insertion_index(26), Some(14));
+	assert_eq!(pmmr::pmmr_leaf_to_insertion_index(27), Some(15));
+	assert_eq!(pmmr::pmmr_leaf_to_insertion_index(32), Some(16));
+
+	// Not a leaf node
+	assert_eq!(pmmr::pmmr_leaf_to_insertion_index(31), None);
+
+	// Sanity check to make sure we don't get an explosion around the u64 max
+	// number of leaves as the value of bintree_postorder_height for each peak
+	// is cast to u32 while determing number of nodes underneath a peak
+	let n_leaves_max_u64 = pmmr::n_leaves(u64::MAX - 256);
+	assert_eq!(
+		pmmr::pmmr_leaf_to_insertion_index(n_leaves_max_u64),
+		Some(4611686018427387884)
+	);
+}
+
+#[test]
 fn test_n_leaves() {
 	// make sure we handle an empty MMR correctly
 	assert_eq!(pmmr::n_leaves(0), 0);

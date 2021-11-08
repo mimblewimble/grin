@@ -495,6 +495,24 @@ pub fn insertion_to_pmmr_index(mut sz: u64) -> u64 {
 	2 * sz - sz.count_ones() as u64 + 1
 }
 
+/// Returns the insertion index of the given leaf index
+pub fn pmmr_leaf_to_insertion_index(pos1: u64) -> Option<u64> {
+	if !is_leaf(pos1) {
+		return None;
+	}
+	let has_odd_leaf = n_leaves(pos1 - 1) % 2;
+	let cur_peaks = if has_odd_leaf == 1 {
+		peaks(pos1 - 1)
+	} else {
+		peaks(pos1)
+	};
+	Some(
+		cur_peaks.iter().fold(has_odd_leaf, |sum, n| {
+			sum + u64::pow(2, (bintree_postorder_height(*n) as u32).into()) + 1 / 2
+		}) - 1,
+	)
+}
+
 /// sizes of peaks and height of next node in mmr of given size
 /// Example: on input 5 returns ([3,1], 1) as mmr state before adding 5 was
 ///    2
@@ -672,7 +690,7 @@ pub fn bintree_rightmost(pos: u64) -> u64 {
 	pos - bintree_postorder_height(pos)
 }
 
-/// Gets the position of the rightmost node (i.e. leaf) beneath the provided subtree root.
+/// Gets the position of the leftmost node (i.e. leaf) beneath the provided subtree root.
 pub fn bintree_leftmost(pos: u64) -> u64 {
 	let height = bintree_postorder_height(pos);
 	pos + 2 - (2 << height)
@@ -680,9 +698,9 @@ pub fn bintree_leftmost(pos: u64) -> u64 {
 
 /// Iterator over all leaf pos beneath the provided subtree root (including the root itself).
 pub fn bintree_leaf_pos_iter(pos: u64) -> impl Iterator<Item = u64> {
-	let leaf_start = max(1, bintree_leftmost(pos as u64));
-	let leaf_end = bintree_rightmost(pos as u64);
-	(leaf_start..=leaf_end).filter(|x| is_leaf(*x))
+	let leaf_start = pmmr_leaf_to_insertion_index(bintree_leftmost(pos)).unwrap();
+	let leaf_end = pmmr_leaf_to_insertion_index(bintree_rightmost(pos)).unwrap();
+	(leaf_start..=leaf_end).map(|n| insertion_to_pmmr_index(n))
 }
 
 /// Iterator over all pos beneath the provided subtree root (including the root itself).
