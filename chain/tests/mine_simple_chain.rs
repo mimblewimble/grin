@@ -754,6 +754,7 @@ fn output_header_mappings() {
 	global::set_local_chain_type(ChainTypes::AutomatedTesting);
 	util::init_test_logger();
 	{
+		clean_output_dir(".grin_header_for_output");
 		let chain = init_chain(
 			".grin_header_for_output",
 			pow::mine_genesis_block().unwrap(),

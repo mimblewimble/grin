@@ -20,7 +20,6 @@ use self::core::ser::PMMRIndexHashable;
 use crate::common::TestElem;
 use chrono::prelude::Utc;
 use grin_core as core;
-use std::u64;
 
 #[test]
 fn some_peak_map() {
@@ -126,6 +125,80 @@ fn test_bintree_leftmost() {
 	assert_eq!(pmmr::bintree_leftmost(5), 5);
 	assert_eq!(pmmr::bintree_leftmost(6), 4);
 	assert_eq!(pmmr::bintree_leftmost(7), 1);
+}
+
+#[test]
+fn test_bintree_leaf_pos_iter() {
+	assert_eq!(pmmr::bintree_leaf_pos_iter(0).count(), 0);
+	assert_eq!(pmmr::bintree_leaf_pos_iter(1).collect::<Vec<_>>(), [1]);
+	assert_eq!(pmmr::bintree_leaf_pos_iter(2).collect::<Vec<_>>(), [2]);
+	assert_eq!(pmmr::bintree_leaf_pos_iter(3).collect::<Vec<_>>(), [1, 2]);
+	assert_eq!(pmmr::bintree_leaf_pos_iter(4).collect::<Vec<_>>(), [4]);
+	assert_eq!(pmmr::bintree_leaf_pos_iter(5).collect::<Vec<_>>(), [5]);
+	assert_eq!(pmmr::bintree_leaf_pos_iter(6).collect::<Vec<_>>(), [4, 5]);
+	assert_eq!(
+		pmmr::bintree_leaf_pos_iter(7).collect::<Vec<_>>(),
+		[1, 2, 4, 5]
+	);
+}
+
+#[test]
+fn test_bintree_pos_iter() {
+	assert_eq!(pmmr::bintree_pos_iter(0).count(), 0);
+	assert_eq!(pmmr::bintree_pos_iter(1).collect::<Vec<_>>(), [1]);
+	assert_eq!(pmmr::bintree_pos_iter(2).collect::<Vec<_>>(), [2]);
+	assert_eq!(pmmr::bintree_pos_iter(3).collect::<Vec<_>>(), [1, 2, 3]);
+	assert_eq!(pmmr::bintree_pos_iter(4).collect::<Vec<_>>(), [4]);
+	assert_eq!(pmmr::bintree_pos_iter(5).collect::<Vec<_>>(), [5]);
+	assert_eq!(pmmr::bintree_pos_iter(6).collect::<Vec<_>>(), [4, 5, 6]);
+	assert_eq!(
+		pmmr::bintree_pos_iter(7).collect::<Vec<_>>(),
+		[1, 2, 3, 4, 5, 6, 7]
+	);
+}
+
+#[test]
+fn test_is_leaf() {
+	assert_eq!(pmmr::is_leaf(0), false);
+	assert_eq!(pmmr::is_leaf(1), true);
+	assert_eq!(pmmr::is_leaf(2), true);
+	assert_eq!(pmmr::is_leaf(3), false);
+	assert_eq!(pmmr::is_leaf(4), true);
+	assert_eq!(pmmr::is_leaf(5), true);
+	assert_eq!(pmmr::is_leaf(6), false);
+	assert_eq!(pmmr::is_leaf(7), false);
+}
+
+#[test]
+fn test_pmmr_leaf_to_insertion_index() {
+	assert_eq!(pmmr::pmmr_leaf_to_insertion_index(1), Some(0));
+	assert_eq!(pmmr::pmmr_leaf_to_insertion_index(2), Some(1));
+	assert_eq!(pmmr::pmmr_leaf_to_insertion_index(4), Some(2));
+	assert_eq!(pmmr::pmmr_leaf_to_insertion_index(5), Some(3));
+	assert_eq!(pmmr::pmmr_leaf_to_insertion_index(8), Some(4));
+	assert_eq!(pmmr::pmmr_leaf_to_insertion_index(9), Some(5));
+	assert_eq!(pmmr::pmmr_leaf_to_insertion_index(11), Some(6));
+	assert_eq!(pmmr::pmmr_leaf_to_insertion_index(12), Some(7));
+	assert_eq!(pmmr::pmmr_leaf_to_insertion_index(16), Some(8));
+	assert_eq!(pmmr::pmmr_leaf_to_insertion_index(17), Some(9));
+	assert_eq!(pmmr::pmmr_leaf_to_insertion_index(19), Some(10));
+	assert_eq!(pmmr::pmmr_leaf_to_insertion_index(20), Some(11));
+	assert_eq!(pmmr::pmmr_leaf_to_insertion_index(23), Some(12));
+	assert_eq!(pmmr::pmmr_leaf_to_insertion_index(24), Some(13));
+	assert_eq!(pmmr::pmmr_leaf_to_insertion_index(26), Some(14));
+	assert_eq!(pmmr::pmmr_leaf_to_insertion_index(27), Some(15));
+	assert_eq!(pmmr::pmmr_leaf_to_insertion_index(32), Some(16));
+
+	// Not a leaf node
+	assert_eq!(pmmr::pmmr_leaf_to_insertion_index(31), None);
+
+	// Sanity check to make sure we don't get an explosion around the u64 max
+	// number of leaves
+	let n_leaves_max_u64 = pmmr::n_leaves(u64::MAX - 256);
+	assert_eq!(
+		pmmr::pmmr_leaf_to_insertion_index(n_leaves_max_u64),
+		Some(4611686018427387884)
+	);
 }
 
 #[test]

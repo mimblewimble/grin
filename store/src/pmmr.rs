@@ -65,7 +65,6 @@ pub struct PMMRBackend<T: PMMRable> {
 impl<T: PMMRable> Backend<T> for PMMRBackend<T> {
 	/// Append the provided data and hashes to the backend storage.
 	/// Add the new leaf pos to our leaf_set if this is a prunable MMR.
-	#[allow(unused_variables)]
 	fn append(&mut self, data: &T, hashes: &[Hash]) -> Result<(), String> {
 		let size = self
 			.data_file
@@ -82,6 +81,22 @@ impl<T: PMMRable> Backend<T> for PMMRBackend<T> {
 			let pos = pmmr::insertion_to_pmmr_index(size + self.prune_list.get_total_leaf_shift());
 			self.leaf_set.add(pos);
 		}
+
+		Ok(())
+	}
+
+	// Supports appending a pruned subtree (single root hash) to an existing hash file.
+	// Update the prune_list "shift cache" to reflect the new pruned leaf pos in the subtree.
+	fn append_pruned_subtree(&mut self, hash: Hash, pos: u64) -> Result<(), String> {
+		if !self.prunable {
+			return Err("Not prunable, cannot append pruned subtree.".into());
+		}
+
+		self.hash_file
+			.append(&hash)
+			.map_err(|e| format!("Failed to append subtree hash to file. {}", e))?;
+
+		self.prune_list.append(pos);
 
 		Ok(())
 	}
@@ -402,9 +417,9 @@ impl<T: PMMRable> PMMRBackend<T> {
 
 		// Update the prune list and write to disk.
 		{
-			for pos in leaves_removed.iter() {
-				self.prune_list.add(pos.into());
-			}
+			let mut bitmap = self.prune_list.bitmap();
+			bitmap.or_inplace(&leaves_removed);
+			self.prune_list = PruneList::new(Some(self.data_dir.join(PMMR_PRUN_FILE)), bitmap);
 			self.prune_list.flush()?;
 		}
 
