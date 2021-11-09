@@ -86,7 +86,7 @@ the MMR as prefix. For a MMR of size N with 3 peaks p1, p2 and p3 we get the
 final top peak:
 
 ```
-P = Blake2b(N | Blake2b(N | Node(p3) | Node(p2)) | Node(p1))
+P = Blake2b(N | Node(p1) | Blake2b(N | Node(p2) | Node(p3)))
 ```
 
 ## Pruning
