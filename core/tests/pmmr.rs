@@ -193,8 +193,7 @@ fn test_pmmr_leaf_to_insertion_index() {
 	assert_eq!(pmmr::pmmr_leaf_to_insertion_index(31), None);
 
 	// Sanity check to make sure we don't get an explosion around the u64 max
-	// number of leaves as the value of bintree_postorder_height for each peak
-	// is cast to u32 while determing number of nodes underneath a peak
+	// number of leaves
 	let n_leaves_max_u64 = pmmr::n_leaves(u64::MAX - 256);
 	assert_eq!(
 		pmmr::pmmr_leaf_to_insertion_index(n_leaves_max_u64),
