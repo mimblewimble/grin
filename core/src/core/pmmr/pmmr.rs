@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::{cmp::max, iter, marker, ops::Range, u64};
+use std::{iter, marker, ops::Range, u64};
 
 use croaring::Bitmap;
 
@@ -21,9 +21,6 @@ use crate::core::merkle_proof::MerkleProof;
 use crate::core::pmmr::{Backend, ReadonlyPMMR};
 use crate::core::BlockHeader;
 use crate::ser::{PMMRIndexHashable, PMMRable};
-
-/// 64 bits all ones: 0b11111111...1
-const ALL_ONES: u64 = u64::MAX;
 
 /// Trait with common methods for reading from a PMMR
 pub trait ReadablePMMR {
@@ -448,57 +445,102 @@ where
 	}
 }
 
+/// 64 bits all ones: 0b11111111...1
+const ALL_ONES: u64 = u64::MAX;
+
+/// peak bitmap and height of next node in mmr of given size
+/// Example: on size 4 returns (0b11, 0) as mmr tree of size 4 is
+///    2
+///   / \
+///  0   1   3
+/// with 0b11 indicating the presence of peaks of height 0 and 1,
+/// and 0 the height of the next node 4, which is a leaf
+/// NOTE:
+/// the peak map also encodes the path taken from the root to the added node
+/// since the path turns left (resp. right) if-and-only-if
+/// a peak at that height is absent (resp. present)
+pub fn peak_map_height(mut size: u64) -> (u64, u64) {
+	if size == 0 {
+		// rust can't shift right by 64
+		return (0, 0);
+	}
+	let mut peak_size = ALL_ONES >> size.leading_zeros();
+	let mut peak_map = 0;
+	while peak_size != 0 {
+		peak_map <<= 1;
+		if size >= peak_size {
+			size -= peak_size;
+			peak_map |= 1;
+		}
+		peak_size >>= 1;
+	}
+	(peak_map, size)
+}
+
+/// sizes of peaks and height of next node in mmr of given size
+/// similar to peak_map_height but replacing bitmap by vector of sizes
+/// Example: on input 5 returns ([3,1], 1) as mmr state before adding 5 was
+///    2
+///   / \
+///  0   1   3   4
+pub fn peak_sizes_height(mut size: u64) -> (Vec<u64>, u64) {
+	if size == 0 {
+		// rust can't shift right by 64
+		return (vec![], 0);
+	}
+	let mut peak_size = ALL_ONES >> size.leading_zeros();
+	let mut peak_sizes = vec![];
+	while peak_size != 0 {
+		if size >= peak_size {
+			peak_sizes.push(peak_size);
+			size -= peak_size;
+		}
+		peak_size >>= 1;
+	}
+	(peak_sizes, size)
+}
+
 /// Gets the postorder traversal index of all peaks in a MMR given its size.
 /// Starts with the top peak, which is always on the left
 /// side of the range, and navigates toward lower siblings toward the right
 /// of the range.
-pub fn peaks(num: u64) -> Vec<u64> {
-	if num == 0 {
-		return vec![];
+/// For some odd reason, return empty when next node is not a leaf
+pub fn peaks(size: u64) -> Vec<u64> {
+	let (peak_sizes, height) = peak_sizes_height(size);
+	if height == 0 {
+		peak_sizes
+			.iter()
+			.scan(0, |acc, &x| {
+				*acc += &x;
+				Some(*acc)
+			})
+			.collect()
+	} else {
+		vec![]
 	}
-	let mut peak_size = ALL_ONES >> num.leading_zeros();
-	let mut num_left = num;
-	let mut sum_prev_peaks = 0;
-	let mut peaks = vec![];
-	while peak_size != 0 {
-		if num_left >= peak_size {
-			peaks.push(sum_prev_peaks + peak_size);
-			sum_prev_peaks += peak_size;
-			num_left -= peak_size;
-		}
-		peak_size >>= 1;
-	}
-	if num_left > 0 {
-		return vec![];
-	}
-	peaks
 }
-
 /// The number of leaves in a MMR of the provided size.
 pub fn n_leaves(size: u64) -> u64 {
-	let (sizes, height) = peak_sizes_height(size);
-	let nleaves = sizes.into_iter().map(|n| (n + 1) / 2 as u64).sum();
+	let (peak_map, height) = peak_map_height(size);
 	if height == 0 {
-		nleaves
+		peak_map
 	} else {
-		nleaves + 1
+		peak_map + 1
 	}
 }
 
-/// Returns the pmmr index of the nth inserted element
-pub fn insertion_to_pmmr_index(mut sz: u64) -> u64 {
-	if sz == 0 {
-		return 0;
+/// Returns the 1-based pmmr index of 1-based leaf n
+pub fn insertion_to_pmmr_index(nleaf1: u64) -> u64 {
+	if nleaf1 == 0 {
+		panic!("insertion_to_pmmr_index called with nleaf1 == 0");
 	}
-	// 1 based pmmrs
-	sz -= 1;
-	2 * sz - sz.count_ones() as u64 + 1
+	2 * (nleaf1 - 1) + 1 - (nleaf1 - 1).count_ones() as u64
 }
 
 /// Returns the insertion index of the given leaf index
 pub fn pmmr_leaf_to_insertion_index(pos1: u64) -> Option<u64> {
 	if pos1 == 0 {
-		return None;
+		panic!("pmmr_leaf_to_insertion_index called with pos1 == 0");
 	}
 	let (insert_idx, height) = peak_map_height(pos1 - 1);
 	if height == 0 {
@@ -508,100 +550,47 @@ pub fn pmmr_leaf_to_insertion_index(pos1: u64) -> Option<u64> {
 	}
 }
 
-/// sizes of peaks and height of next node in mmr of given size
-/// Example: on input 5 returns ([3,1], 1) as mmr state before adding 5 was
-///    2
-///   / \
-///  0   1   3   4
-pub fn peak_sizes_height(size: u64) -> (Vec<u64>, u64) {
-	if size == 0 {
-		return (vec![], 0);
-	}
-	let mut peak_size = ALL_ONES >> size.leading_zeros();
-	let mut sizes = vec![];
-	let mut size_left = size;
-	while peak_size != 0 {
-		if size_left >= peak_size {
-			sizes.push(peak_size);
-			size_left -= peak_size;
-		}
-		peak_size >>= 1;
-	}
-	(sizes, size_left)
-}
-
-/// return (peak_map, pos_height) of given 0-based node pos prior to its
-/// addition
-/// Example: on input 4 returns (0b11, 0) as mmr state before adding 4 was
-///    2
-///   / \
-///  0   1   3
-/// with 0b11 indicating presence of peaks of height 0 and 1.
-/// NOTE:
-/// the peak map also encodes the path taken from the root to the added node
-/// since the path turns left (resp. right) if-and-only-if
-/// a peak at that height is absent (resp. present)
-pub fn peak_map_height(mut pos: u64) -> (u64, u64) {
-	if pos == 0 {
-		return (0, 0);
-	}
-	let mut peak_size = ALL_ONES >> pos.leading_zeros();
-	let mut bitmap = 0;
-	while peak_size != 0 {
-		bitmap <<= 1;
-		if pos >= peak_size {
-			pos -= peak_size;
-			bitmap |= 1;
-		}
-		peak_size >>= 1;
-	}
-	(bitmap, pos)
-}
-
 /// The height of a node in a full binary tree from its postorder traversal
-/// index. This function is the base on which all others, as well as the MMR,
-/// are built.
-pub fn bintree_postorder_height(num: u64) -> u64 {
-	let mut pos = num.saturating_sub(1);
-	if pos == 0 {
-		return 0;
+/// index.
+pub fn bintree_postorder_height(pos1: u64) -> u64 {
+	if pos1 == 0 {
+		panic!("bintree_postorder_height called with pos1 == 0");
 	}
-	let mut peak_size = ALL_ONES >> pos.leading_zeros();
-	while peak_size != 0 {
-		if pos >= peak_size {
-			pos -= peak_size;
-		}
-		peak_size >>= 1;
-	}
-	pos
+	peak_map_height(pos1 - 1).1
 }
 
 /// Is this position a leaf in the MMR?
 /// We know the positions of all leaves based on the postorder height of an MMR
 /// of any size (somewhat unintuitively but this is how the PMMR is "append
 /// only").
-pub fn is_leaf(pos: u64) -> bool {
-	if pos == 0 {
-		return false;
+pub fn is_leaf(pos1: u64) -> bool {
+	if pos1 == 0 {
+		panic!("is_leaf called with pos1 == 0");
 	}
-	bintree_postorder_height(pos) == 0
+	bintree_postorder_height(pos1) == 0
 }
 
 /// Calculates the positions of the parent and sibling of the node at the
 /// provided position.
-pub fn family(pos: u64) -> (u64, u64) {
-	let (peak_map, height) = peak_map_height(pos - 1);
+pub fn family(pos1: u64) -> (u64, u64) {
+	if pos1 == 0 {
+		panic!("family called with pos1 == 0");
+	}
+	let (peak_map, height) = peak_map_height(pos1 - 1);
 	let peak = 1 << height;
 	if (peak_map & peak) != 0 {
-		(pos + 1, pos + 1 - 2 * peak)
+		(pos1 + 1, pos1 + 1 - 2 * peak)
 	} else {
-		(pos + 2 * peak, pos + 2 * peak - 1)
+		(pos1 + 2 * peak, pos1 + 2 * peak - 1)
 	}
 }
 
 /// Is the node at this pos the "left" sibling of its parent?
-pub fn is_left_sibling(pos: u64) -> bool {
-	let (peak_map, height) = peak_map_height(pos - 1);
+pub fn is_left_sibling(pos1: u64) -> bool {
+	if pos1 == 0 {
+		panic!("is_left_sibling called with pos1 == 0");
+	}
+	let (peak_map, height) = peak_map_height(pos1 - 1);
 	let peak = 1 << height;
 	(peak_map & peak) == 0
 }
@@ -610,8 +599,8 @@ pub fn is_left_sibling(pos: u64) -> bool {
 /// corresponding peak in the MMR.
 /// The size (and therefore the set of peaks) of the MMR
 /// is defined by last_pos.
-pub fn path(pos: u64, last_pos: u64) -> impl Iterator<Item = u64> {
-	Path::new(pos, last_pos)
+pub fn path(pos1: u64, last_pos: u64) -> impl Iterator<Item = u64> {
+	Path::new(pos1, last_pos)
 }
 
 struct Path {
@@ -622,10 +611,13 @@ struct Path {
 }
 
 impl Path {
-	fn new(pos: u64, last_pos: u64) -> Self {
-		let (peak_map, height) = peak_map_height(pos - 1);
+	fn new(pos1: u64, last_pos: u64) -> Self {
+		if pos1 == 0 {
+			panic!("Path::new called with pos1 == 0");
+		}
+		let (peak_map, height) = peak_map_height(pos1 - 1);
 		Path {
-			current: pos,
+			current: pos1,
 			peak: 1 << height,
 			peak_map,
 			last_pos,
@@ -655,13 +647,16 @@ impl Iterator for Path {
 /// For a given starting position calculate the parent and sibling positions
 /// for the branch/path from that position to the peak of the tree.
 /// We will use the sibling positions to generate the "path" of a Merkle proof.
-pub fn family_branch(pos: u64, last_pos: u64) -> Vec<(u64, u64)> {
+pub fn family_branch(pos1: u64, last_pos: u64) -> Vec<(u64, u64)> {
+	if pos1 == 0 {
+		panic!("family_branch called with pos1 == 0");
+	}
 	// loop going up the tree, from node to parent, as long as we stay inside
 	// the tree (as defined by last_pos).
-	let (peak_map, height) = peak_map_height(pos - 1);
+	let (peak_map, height) = peak_map_height(pos1 - 1);
 	let mut peak = 1 << height;
 	let mut branch = vec![];
-	let mut current = pos;
+	let mut current = pos1;
 	let mut sibling;
 	while current < last_pos {
 		if (peak_map & peak) != 0 {
@@ -708,13 +703,13 @@ pub fn bintree_leaf_pos_iter(pos1: u64) -> Box<dyn Iterator<Item = u64>> {
 
 /// Iterator over all pos beneath the provided subtree root (including the root itself).
 pub fn bintree_pos_iter(pos1: u64) -> impl Iterator<Item = u64> {
-	let leaf_start = max(1, bintree_leftmost(pos1 as u64));
+	let leaf_start = bintree_leftmost(pos1 as u64);
 	(leaf_start..=pos1).into_iter()
 }
 
 /// All pos in the subtree beneath the provided root, including root itself.
-pub fn bintree_range(num: u64) -> Range<u64> {
-	let height = bintree_postorder_height(num);
-	let leftmost = num + 2 - (2 << height);
-	leftmost..(num + 1)
+pub fn bintree_range(pos1: u64) -> Range<u64> {
+	let height = bintree_postorder_height(pos1);
+	let leftmost = pos1 + 2 - (2 << height);
+	leftmost..(pos1 + 1)
 }
