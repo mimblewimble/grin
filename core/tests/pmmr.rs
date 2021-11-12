@@ -91,7 +91,6 @@ fn first_100_mmr_heights() {
 
 #[test]
 fn test_bintree_range() {
-	assert_eq!(pmmr::bintree_range(0), 0..1);
 	assert_eq!(pmmr::bintree_range(1), 1..2);
 	assert_eq!(pmmr::bintree_range(2), 2..3);
 	assert_eq!(pmmr::bintree_range(3), 1..4);
@@ -104,7 +103,6 @@ fn test_bintree_range() {
 // The pos of the rightmost leaf for the provided MMR size (last leaf in subtree).
 #[test]
 fn test_bintree_rightmost() {
-	assert_eq!(pmmr::bintree_rightmost(0), 0);
 	assert_eq!(pmmr::bintree_rightmost(1), 1);
 	assert_eq!(pmmr::bintree_rightmost(2), 2);
 	assert_eq!(pmmr::bintree_rightmost(3), 2);
@@ -117,7 +115,6 @@ fn test_bintree_rightmost() {
 // The pos of the leftmost leaf for the provided MMR size (first leaf in subtree).
 #[test]
 fn test_bintree_leftmost() {
-	assert_eq!(pmmr::bintree_leftmost(0), 0);
 	assert_eq!(pmmr::bintree_leftmost(1), 1);
 	assert_eq!(pmmr::bintree_leftmost(2), 2);
 	assert_eq!(pmmr::bintree_leftmost(3), 1);
@@ -129,7 +126,6 @@ fn test_bintree_leftmost() {
 
 #[test]
 fn test_bintree_leaf_pos_iter() {
-	assert_eq!(pmmr::bintree_leaf_pos_iter(0).count(), 0);
 	assert_eq!(pmmr::bintree_leaf_pos_iter(1).collect::<Vec<_>>(), [1]);
 	assert_eq!(pmmr::bintree_leaf_pos_iter(2).collect::<Vec<_>>(), [2]);
 	assert_eq!(pmmr::bintree_leaf_pos_iter(3).collect::<Vec<_>>(), [1, 2]);
@@ -144,7 +140,6 @@ fn test_bintree_leaf_pos_iter() {
 
 #[test]
 fn test_bintree_pos_iter() {
-	assert_eq!(pmmr::bintree_pos_iter(0).count(), 0);
 	assert_eq!(pmmr::bintree_pos_iter(1).collect::<Vec<_>>(), [1]);
 	assert_eq!(pmmr::bintree_pos_iter(2).collect::<Vec<_>>(), [2]);
 	assert_eq!(pmmr::bintree_pos_iter(3).collect::<Vec<_>>(), [1, 2, 3]);
@@ -159,7 +154,6 @@ fn test_bintree_pos_iter() {
 
 #[test]
 fn test_is_leaf() {
-	assert_eq!(pmmr::is_leaf(0), false);
 	assert_eq!(pmmr::is_leaf(1), true);
 	assert_eq!(pmmr::is_leaf(2), true);
 	assert_eq!(pmmr::is_leaf(3), false);
