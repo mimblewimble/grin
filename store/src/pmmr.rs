@@ -116,38 +116,38 @@ impl<T: PMMRable> Backend<T> for PMMRBackend<T> {
 		self.hash_file.read(position - shift)
 	}
 
-	fn get_data_from_file(&self, position: u64) -> Option<T::E> {
-		if !pmmr::is_leaf(position) {
+	fn get_data_from_file(&self, pos1: u64) -> Option<T::E> {
+		if !pmmr::is_leaf(pos1 - 1) {
 			return None;
 		}
-		if self.is_compacted(position) {
+		if self.is_compacted(pos1) {
 			return None;
 		}
-		let flatfile_pos = pmmr::n_leaves(position);
-		let shift = self.prune_list.get_leaf_shift(position);
+		let flatfile_pos = pmmr::n_leaves(pos1);
+		let shift = self.prune_list.get_leaf_shift(pos1);
 		self.data_file.read(flatfile_pos - shift)
 	}
 
 	/// Get the hash at pos.
 	/// Return None if pos is a leaf and it has been removed (or pruned or
 	/// compacted).
-	fn get_hash(&self, pos: u64) -> Option<Hash> {
-		if self.prunable && pmmr::is_leaf(pos) && !self.leaf_set.includes(pos) {
+	fn get_hash(&self, pos1: u64) -> Option<Hash> {
+		if self.prunable && pmmr::is_leaf(pos1 - 1) && !self.leaf_set.includes(pos1) {
 			return None;
 		}
-		self.get_from_file(pos)
+		self.get_from_file(pos1)
 	}
 
 	/// Get the data at pos.
 	/// Return None if it has been removed or if pos is not a leaf node.
-	fn get_data(&self, pos: u64) -> Option<T::E> {
-		if !pmmr::is_leaf(pos) {
+	fn get_data(&self, pos1: u64) -> Option<T::E> {
+		if !pmmr::is_leaf(pos1 - 1) {
 			return None;
 		}
-		if self.prunable && !self.leaf_set.includes(pos) {
+		if self.prunable && !self.leaf_set.includes(pos1) {
 			return None;
 		}
-		self.get_data_from_file(pos)
+		self.get_data_from_file(pos1)
 	}
 
 	/// Returns an iterator over all the leaf positions.
@@ -395,8 +395,8 @@ impl<T: PMMRable> PMMRBackend<T> {
 		{
 			let leaf_pos_to_rm = pos_to_rm
 				.iter()
-				.filter(|&x| pmmr::is_leaf(x.into()))
 				.map(|x| x as u64)
+				.filter(|x| pmmr::is_leaf(x - 1))
 				.collect::<Vec<_>>();
 
 			let pos_to_rm = map_vec!(leaf_pos_to_rm, |&pos| {

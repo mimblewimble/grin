@@ -129,7 +129,7 @@ pub trait ReadablePMMR {
 		debug!("merkle_proof  {}, last_pos {}", pos, last_pos);
 
 		// check this pos is actually a leaf in the MMR
-		if !is_leaf(pos) {
+		if !is_leaf(pos - 1) {
 			return Err(format!("not a leaf at pos {}", pos));
 		}
 
@@ -265,16 +265,16 @@ where
 	/// Returns an error if prune is called on a non-leaf position.
 	/// Returns false if the leaf node has already been pruned.
 	/// Returns true if pruning is successful.
-	pub fn prune(&mut self, position: u64) -> Result<bool, String> {
-		if !is_leaf(position) {
-			return Err(format!("Node at {} is not a leaf, can't prune.", position));
+	pub fn prune(&mut self, pos1: u64) -> Result<bool, String> {
+		if !is_leaf(pos1 - 1) {
+			return Err(format!("Node at {} is not a leaf, can't prune.", pos1 - 1));
 		}
 
-		if self.backend.get_hash(position).is_none() {
+		if self.backend.get_hash(pos1).is_none() {
 			return Ok(false);
 		}
 
-		self.backend.remove(position)?;
+		self.backend.remove(pos1)?;
 		Ok(true)
 	}
 
@@ -375,52 +375,52 @@ where
 {
 	type Item = T::E;
 
-	fn get_hash(&self, pos: u64) -> Option<Hash> {
-		if pos > self.last_pos {
+	fn get_hash(&self, pos1: u64) -> Option<Hash> {
+		if pos1 > self.last_pos {
 			None
-		} else if is_leaf(pos) {
+		} else if is_leaf(pos1 - 1) {
 			// If we are a leaf then get hash from the backend.
-			self.backend.get_hash(pos)
+			self.backend.get_hash(pos1)
 		} else {
 			// If we are not a leaf get hash ignoring the remove log.
-			self.backend.get_from_file(pos)
+			self.backend.get_from_file(pos1)
 		}
 	}
 
-	fn get_data(&self, pos: u64) -> Option<Self::Item> {
-		if pos > self.last_pos {
+	fn get_data(&self, pos1: u64) -> Option<Self::Item> {
+		if pos1 > self.last_pos {
 			// If we are beyond the rhs of the MMR return None.
 			None
-		} else if is_leaf(pos) {
+		} else if is_leaf(pos1 - 1) {
 			// If we are a leaf then get data from the backend.
-			self.backend.get_data(pos)
+			self.backend.get_data(pos1)
 		} else {
 			// If we are not a leaf then return None as only leaves have data.
 			None
 		}
 	}
 
-	fn get_from_file(&self, pos: u64) -> Option<Hash> {
-		if pos > self.last_pos {
+	fn get_from_file(&self, pos1: u64) -> Option<Hash> {
+		if pos1 > self.last_pos {
 			None
 		} else {
-			self.backend.get_from_file(pos)
+			self.backend.get_from_file(pos1)
 		}
 	}
 
-	fn get_peak_from_file(&self, pos: u64) -> Option<Hash> {
-		if pos > self.last_pos {
+	fn get_peak_from_file(&self, pos1: u64) -> Option<Hash> {
+		if pos1 > self.last_pos {
 			None
 		} else {
-			self.backend.get_peak_from_file(pos)
+			self.backend.get_peak_from_file(pos1)
 		}
 	}
 
-	fn get_data_from_file(&self, pos: u64) -> Option<Self::Item> {
-		if pos > self.last_pos {
+	fn get_data_from_file(&self, pos1: u64) -> Option<Self::Item> {
+		if pos1 > self.last_pos {
 			None
 		} else {
-			self.backend.get_data_from_file(pos)
+			self.backend.get_data_from_file(pos1)
 		}
 	}
 
@@ -561,11 +561,8 @@ pub fn bintree_postorder_height(pos0: u64) -> u64 {
 /// We know the positions of all leaves based on the postorder height of an MMR
 /// of any size (somewhat unintuitively but this is how the PMMR is "append
 /// only").
-pub fn is_leaf(pos1: u64) -> bool {
-	if pos1 == 0 {
-		panic!("is_leaf called with pos1 == 0");
-	}
-	bintree_postorder_height(pos1 - 1) == 0
+pub fn is_leaf(pos0: u64) -> bool {
+	bintree_postorder_height(pos0) == 0
 }
 
 /// Calculates the positions of the parent and sibling of the node at the

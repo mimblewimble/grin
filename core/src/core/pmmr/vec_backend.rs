@@ -93,7 +93,7 @@ impl<T: PMMRable> Backend<T> for VecBackend<T> {
 				.iter()
 				.enumerate()
 				.map(|(x, _)| (x + 1) as u64)
-				.filter(move |x| pmmr::is_leaf(*x) && !self.removed.contains(x)),
+				.filter(move |x| pmmr::is_leaf(*x - 1) && !self.removed.contains(x)),
 		)
 	}
 

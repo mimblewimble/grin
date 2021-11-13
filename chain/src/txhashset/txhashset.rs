@@ -491,7 +491,7 @@ impl TxHashSet {
 		let mut current_header = from_header.clone();
 		let mut count = 0;
 		while current_pos <= self.kernel_pmmr_h.last_pos {
-			if pmmr::is_leaf(current_pos) {
+			if pmmr::is_leaf(current_pos - 1) {
 				if let Some(kernel) = kernel_pmmr.get_data(current_pos) {
 					match kernel.features {
 						KernelFeatures::NoRecentDuplicate { .. } => {
@@ -1051,9 +1051,9 @@ impl<'a> Committed for Extension<'a> {
 
 	fn kernels_committed(&self) -> Vec<Commitment> {
 		let mut commitments = vec![];
-		for n in 1..self.kernel_pmmr.unpruned_size() + 1 {
+		for n in 0..self.kernel_pmmr.unpruned_size() {
 			if pmmr::is_leaf(n) {
-				if let Some(kernel) = self.kernel_pmmr.get_data(n) {
+				if let Some(kernel) = self.kernel_pmmr.get_data(n + 1) {
 					commitments.push(kernel.excess());
 				}
 			}
@@ -1627,16 +1627,16 @@ impl<'a> Extension<'a> {
 		let mut kern_count = 0;
 		let total_kernels = pmmr::n_leaves(self.kernel_pmmr.unpruned_size());
 		let mut tx_kernels: Vec<TxKernel> = Vec::with_capacity(KERNEL_BATCH_SIZE);
-		for n in 1..self.kernel_pmmr.unpruned_size() + 1 {
+		for n in 0..self.kernel_pmmr.unpruned_size() {
 			if pmmr::is_leaf(n) {
 				let kernel = self
 					.kernel_pmmr
-					.get_data(n)
+					.get_data(n + 1)
 					.ok_or_else(|| ErrorKind::TxKernelNotFound)?;
 				tx_kernels.push(kernel);
 			}
 
-			if tx_kernels.len() >= KERNEL_BATCH_SIZE || n >= self.kernel_pmmr.unpruned_size() {
+			if tx_kernels.len() >= KERNEL_BATCH_SIZE || n + 1 >= self.kernel_pmmr.unpruned_size() {
 				TxKernel::batch_sig_verify(&tx_kernels)?;
 				kern_count += tx_kernels.len() as u64;
 				tx_kernels.clear();

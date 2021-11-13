@@ -154,13 +154,13 @@ fn test_bintree_pos_iter() {
 
 #[test]
 fn test_is_leaf() {
+	assert_eq!(pmmr::is_leaf(0), true);
 	assert_eq!(pmmr::is_leaf(1), true);
-	assert_eq!(pmmr::is_leaf(2), true);
-	assert_eq!(pmmr::is_leaf(3), false);
+	assert_eq!(pmmr::is_leaf(2), false);
+	assert_eq!(pmmr::is_leaf(3), true);
 	assert_eq!(pmmr::is_leaf(4), true);
-	assert_eq!(pmmr::is_leaf(5), true);
+	assert_eq!(pmmr::is_leaf(5), false);
 	assert_eq!(pmmr::is_leaf(6), false);
-	assert_eq!(pmmr::is_leaf(7), false);
 }
 
 #[test]

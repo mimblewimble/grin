@@ -115,52 +115,52 @@ where
 {
 	type Item = T::E;
 
-	fn get_hash(&self, pos: u64) -> Option<Hash> {
-		if pos > self.last_pos {
+	fn get_hash(&self, pos1: u64) -> Option<Hash> {
+		if pos1 > self.last_pos {
 			None
-		} else if is_leaf(pos) {
+		} else if is_leaf(pos1 - 1) {
 			// If we are a leaf then get hash from the backend.
-			self.backend.get_hash(pos)
+			self.backend.get_hash(pos1)
 		} else {
 			// If we are not a leaf get hash ignoring the remove log.
-			self.backend.get_from_file(pos)
+			self.backend.get_from_file(pos1)
 		}
 	}
 
-	fn get_data(&self, pos: u64) -> Option<Self::Item> {
-		if pos > self.last_pos {
+	fn get_data(&self, pos1: u64) -> Option<Self::Item> {
+		if pos1 > self.last_pos {
 			// If we are beyond the rhs of the MMR return None.
 			None
-		} else if is_leaf(pos) {
+		} else if is_leaf(pos1 - 1) {
 			// If we are a leaf then get data from the backend.
-			self.backend.get_data(pos)
+			self.backend.get_data(pos1)
 		} else {
 			// If we are not a leaf then return None as only leaves have data.
 			None
 		}
 	}
 
-	fn get_from_file(&self, pos: u64) -> Option<Hash> {
-		if pos > self.last_pos {
+	fn get_from_file(&self, pos1: u64) -> Option<Hash> {
+		if pos1 > self.last_pos {
 			None
 		} else {
-			self.backend.get_from_file(pos)
+			self.backend.get_from_file(pos1)
 		}
 	}
 
-	fn get_peak_from_file(&self, pos: u64) -> Option<Hash> {
-		if pos > self.last_pos {
+	fn get_peak_from_file(&self, pos1: u64) -> Option<Hash> {
+		if pos1 > self.last_pos {
 			None
 		} else {
-			self.backend.get_peak_from_file(pos)
+			self.backend.get_peak_from_file(pos1)
 		}
 	}
 
-	fn get_data_from_file(&self, pos: u64) -> Option<Self::Item> {
-		if pos > self.last_pos {
+	fn get_data_from_file(&self, pos1: u64) -> Option<Self::Item> {
+		if pos1 > self.last_pos {
 			None
 		} else {
-			self.backend.get_data_from_file(pos)
+			self.backend.get_data_from_file(pos1)
 		}
 	}
 

@@ -389,7 +389,8 @@ impl PruneList {
 	/// Note this is not necessarily the same as the "leaf_set" as an output
 	/// can be spent but not yet pruned.
 	pub fn unpruned_leaf_iter(&self, cutoff_pos: u64) -> impl Iterator<Item = u64> + '_ {
-		self.unpruned_iter(cutoff_pos).filter(|x| pmmr::is_leaf(*x))
+		self.unpruned_iter(cutoff_pos)
+			.filter(|x| pmmr::is_leaf(*x - 1))
 	}
 
 	/// Return a clone of our internal bitmap.
