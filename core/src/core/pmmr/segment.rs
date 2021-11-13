@@ -307,19 +307,19 @@ where
 		let (segment_first_pos, segment_last_pos) = self.segment_pos_range(last_pos);
 		let mut hashes = Vec::<Option<Hash>>::with_capacity(2 * (self.identifier.height as usize));
 		let mut leaves = self.leaf_pos.iter().zip(&self.leaf_data);
-		for pos in segment_first_pos..=segment_last_pos {
-			let height = pmmr::bintree_postorder_height(pos);
+		for pos1 in segment_first_pos..=segment_last_pos {
+			let height = pmmr::bintree_postorder_height(pos1 - 1);
 			let hash = if height == 0 {
 				// Leaf
 				if bitmap
 					.map(|b| {
-						let idx_1 = pmmr::n_leaves(pos) - 1;
-						let idx_2 = if pmmr::is_left_sibling(pos) {
+						let idx_1 = pmmr::n_leaves(pos1) - 1;
+						let idx_2 = if pmmr::is_left_sibling(pos1) {
 							idx_1 + 1
 						} else {
 							idx_1 - 1
 						};
-						b.contains(idx_1 as u32) || b.contains(idx_2 as u32) || pos == last_pos
+						b.contains(idx_1 as u32) || b.contains(idx_2 as u32) || pos1 == last_pos
 					})
 					.unwrap_or(true)
 				{
@@ -330,16 +330,16 @@ where
 					// TODO: possibly remove requirement on the sibling when we no longer support
 					//  syncing through the txhashset.zip method.
 					let data = leaves
-						.find(|&(&p, _)| p == pos)
+						.find(|&(&p, _)| p == pos1)
 						.map(|(_, l)| l)
-						.ok_or_else(|| SegmentError::MissingLeaf(pos))?;
-					Some(data.hash_with_index(pos - 1))
+						.ok_or_else(|| SegmentError::MissingLeaf(pos1))?;
+					Some(data.hash_with_index(pos1 - 1))
 				} else {
 					None
 				}
 			} else {
-				let left_child_pos = pos - (1 << height);
-				let right_child_pos = pos - 1;
+				let left_child_pos = pos1 - (1 << height);
+				let right_child_pos = pos1 - 1;
 
 				let right_child = hashes.pop().unwrap();
 				let left_child = hashes.pop().unwrap();
@@ -348,14 +348,14 @@ where
 					// Prunable MMR
 					match (left_child, right_child) {
 						(None, None) => None,
-						(Some(l), Some(r)) => Some((l, r).hash_with_index(pos - 1)),
+						(Some(l), Some(r)) => Some((l, r).hash_with_index(pos1 - 1)),
 						(None, Some(r)) => {
 							let l = self.get_hash(left_child_pos)?;
-							Some((l, r).hash_with_index(pos - 1))
+							Some((l, r).hash_with_index(pos1 - 1))
 						}
 						(Some(l), None) => {
 							let r = self.get_hash(right_child_pos)?;
-							Some((l, r).hash_with_index(pos - 1))
+							Some((l, r).hash_with_index(pos1 - 1))
 						}
 					}
 				} else {
@@ -366,7 +366,7 @@ where
 							right_child
 								.ok_or_else(|| SegmentError::MissingHash(right_child_pos))?,
 						)
-							.hash_with_index(pos - 1),
+							.hash_with_index(pos1 - 1),
 					)
 				}
 			};

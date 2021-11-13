@@ -165,12 +165,12 @@ impl PruneList {
 		}
 
 		self.shift_cache.clear();
-		for pos in self.bitmap.iter().filter(|x| *x > 0) {
-			let pos = pos as u64;
-			let prev_shift = self.get_shift(pos.saturating_sub(1));
+		for pos1 in self.bitmap.iter().filter(|x| *x > 0) {
+			let pos1 = pos1 as u64;
+			let prev_shift = self.get_shift(pos1.saturating_sub(1));
 
-			let curr_shift = if self.is_pruned_root(pos) {
-				let height = bintree_postorder_height(pos);
+			let curr_shift = if self.is_pruned_root(pos1) {
+				let height = bintree_postorder_height(pos1 - 1);
 				2 * ((1 << height) - 1)
 			} else {
 				0
@@ -181,10 +181,10 @@ impl PruneList {
 	}
 
 	// Calculate the next shift based on provided pos and the previous shift.
-	fn calculate_next_shift(&self, pos: u64) -> u64 {
-		let prev_shift = self.get_shift(pos.saturating_sub(1));
-		let shift = if self.is_pruned_root(pos) {
-			let height = bintree_postorder_height(pos);
+	fn calculate_next_shift(&self, pos1: u64) -> u64 {
+		let prev_shift = self.get_shift(pos1.saturating_sub(1));
+		let shift = if self.is_pruned_root(pos1) {
+			let height = bintree_postorder_height(pos1 - 1);
 			2 * ((1 << height) - 1)
 		} else {
 			0
@@ -219,12 +219,12 @@ impl PruneList {
 
 		self.leaf_shift_cache.clear();
 
-		for pos in self.bitmap.iter().filter(|x| *x > 0) {
-			let pos = pos as u64;
-			let prev_shift = self.get_leaf_shift(pos.saturating_sub(1));
+		for pos1 in self.bitmap.iter().filter(|x| *x > 0) {
+			let pos1 = pos1 as u64;
+			let prev_shift = self.get_leaf_shift(pos1.saturating_sub(1));
 
-			let curr_shift = if self.is_pruned_root(pos) {
-				let height = bintree_postorder_height(pos);
+			let curr_shift = if self.is_pruned_root(pos1) {
+				let height = bintree_postorder_height(pos1 - 1);
 				if height == 0 {
 					0
 				} else {
@@ -239,10 +239,10 @@ impl PruneList {
 	}
 
 	// Calculate the next leaf shift based on provided pos and the previous leaf shift.
-	fn calculate_next_leaf_shift(&self, pos: u64) -> u64 {
-		let prev_shift = self.get_leaf_shift(pos.saturating_sub(1) as u64);
-		let shift = if self.is_pruned_root(pos) {
-			let height = bintree_postorder_height(pos);
+	fn calculate_next_leaf_shift(&self, pos1: u64) -> u64 {
+		let prev_shift = self.get_leaf_shift(pos1.saturating_sub(1) as u64);
+		let shift = if self.is_pruned_root(pos1) {
+			let height = bintree_postorder_height(pos1 - 1);
 			if height == 0 {
 				0
 			} else {

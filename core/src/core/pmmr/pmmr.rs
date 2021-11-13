@@ -255,13 +255,9 @@ where
 		// Identify which actual position we should rewind to as the provided
 		// position is a leaf. We traverse the MMR to include any parent(s) that
 		// need to be included for the MMR to be valid.
-		let mut pos = position;
-		while bintree_postorder_height(pos + 1) > 0 {
-			pos += 1;
-		}
-
-		self.backend.rewind(pos, rewind_rm_pos)?;
-		self.last_pos = pos;
+		let leaf_pos = round_up_to_leaf_pos(position);
+		self.backend.rewind(leaf_pos, rewind_rm_pos)?;
+		self.last_pos = leaf_pos;
 		Ok(())
 	}
 
@@ -285,21 +281,21 @@ where
 	/// Walks all unpruned nodes in the MMR and revalidate all parent hashes
 	pub fn validate(&self) -> Result<(), String> {
 		// iterate on all parent nodes
-		for n in 1..(self.last_pos + 1) {
+		for n in 0..self.last_pos {
 			let height = bintree_postorder_height(n);
 			if height > 0 {
-				if let Some(hash) = self.get_hash(n) {
-					let left_pos = n - (1 << height);
-					let right_pos = n - 1;
+				if let Some(hash) = self.get_hash(n + 1) {
+					let left_pos = n + 1 - (1 << height);
+					let right_pos = n;
 					// using get_from_file here for the children (they may have been "removed")
 					if let Some(left_child_hs) = self.get_from_file(left_pos) {
 						if let Some(right_child_hs) = self.get_from_file(right_pos) {
 							// hash the two child nodes together with parent_pos and compare
-							if (left_child_hs, right_child_hs).hash_with_index(n - 1) != hash {
+							if (left_child_hs, right_child_hs).hash_with_index(n) != hash {
 								return Err(format!(
 									"Invalid MMR, hash of parent at {} does \
 									 not match children.",
-									n
+									n + 1
 								));
 							}
 						}
@@ -529,6 +525,17 @@ pub fn n_leaves(size: u64) -> u64 {
 	}
 }
 
+/// returns least position >= pos0 with height 0
+pub fn round_up_to_leaf_pos(pos0: u64) -> u64 {
+	let (insert_idx, height) = peak_map_height(pos0);
+	let leaf_idx = if height == 0 {
+		insert_idx
+	} else {
+		insert_idx + 1
+	};
+	return insertion_to_pmmr_index(leaf_idx + 1) - 1;
+}
+
 /// Returns the 1-based pmmr index of 1-based leaf n
 pub fn insertion_to_pmmr_index(nleaf1: u64) -> u64 {
 	if nleaf1 == 0 {
@@ -538,11 +545,8 @@ pub fn insertion_to_pmmr_index(nleaf1: u64) -> u64 {
 }
 
 /// Returns the insertion index of the given leaf index
-pub fn pmmr_leaf_to_insertion_index(pos1: u64) -> Option<u64> {
-	if pos1 == 0 {
-		panic!("pmmr_leaf_to_insertion_index called with pos1 == 0");
-	}
-	let (insert_idx, height) = peak_map_height(pos1 - 1);
+pub fn pmmr_leaf_to_insertion_index(pos0: u64) -> Option<u64> {
+	let (insert_idx, height) = peak_map_height(pos0);
 	if height == 0 {
 		Some(insert_idx)
 	} else {
@@ -552,11 +556,8 @@ pub fn pmmr_leaf_to_insertion_index(pos1: u64) -> Option<u64> {
 
 /// The height of a node in a full binary tree from its postorder traversal
 /// index.
-pub fn bintree_postorder_height(pos1: u64) -> u64 {
-	if pos1 == 0 {
-		panic!("bintree_postorder_height called with pos1 == 0");
-	}
-	peak_map_height(pos1 - 1).1
+pub fn bintree_postorder_height(pos0: u64) -> u64 {
+	peak_map_height(pos0).1
 }
 
 /// Is this position a leaf in the MMR?
@@ -567,7 +568,7 @@ pub fn is_leaf(pos1: u64) -> bool {
 	if pos1 == 0 {
 		panic!("is_leaf called with pos1 == 0");
 	}
-	bintree_postorder_height(pos1) == 0
+	bintree_postorder_height(pos1 - 1) == 0
 }
 
 /// Calculates the positions of the parent and sibling of the node at the
@@ -677,19 +678,19 @@ pub fn family_branch(pos1: u64, last_pos: u64) -> Vec<(u64, u64)> {
 
 /// Gets the position of the rightmost node (i.e. leaf) beneath the provided subtree root.
 pub fn bintree_rightmost(pos1: u64) -> u64 {
-	pos1 - bintree_postorder_height(pos1)
+	pos1 - bintree_postorder_height(pos1 - 1)
 }
 
 /// Gets the position of the leftmost node (i.e. leaf) beneath the provided subtree root.
 pub fn bintree_leftmost(pos1: u64) -> u64 {
-	let height = bintree_postorder_height(pos1);
+	let height = bintree_postorder_height(pos1 - 1);
 	pos1 + 2 - (2 << height)
 }
 
 /// Iterator over all leaf pos beneath the provided subtree root (including the root itself).
 pub fn bintree_leaf_pos_iter(pos1: u64) -> Box<dyn Iterator<Item = u64>> {
-	let leaf_start = pmmr_leaf_to_insertion_index(bintree_leftmost(pos1));
-	let leaf_end = pmmr_leaf_to_insertion_index(bintree_rightmost(pos1));
+	let leaf_start = pmmr_leaf_to_insertion_index(bintree_leftmost(pos1) - 1);
+	let leaf_end = pmmr_leaf_to_insertion_index(bintree_rightmost(pos1) - 1);
 	let leaf_start = match leaf_start {
 		Some(l) => l,
 		None => return Box::new(iter::empty::<u64>()),
@@ -709,7 +710,7 @@ pub fn bintree_pos_iter(pos1: u64) -> impl Iterator<Item = u64> {
 
 /// All pos in the subtree beneath the provided root, including root itself.
 pub fn bintree_range(pos1: u64) -> Range<u64> {
-	let height = bintree_postorder_height(pos1);
+	let height = bintree_postorder_height(pos1 - 1);
 	let leftmost = pos1 + 2 - (2 << height);
 	leftmost..(pos1 + 1)
 }

@@ -76,7 +76,7 @@ fn first_100_mmr_heights() {
 	                     0 0 1 0 0 1 2 0 0 1 0 0 1 2 3 0 0 1 0 0 1 2 0 0 1 0 0 1 2 3 4 5 \
 	                     0 0 1 0 0 1 2 0 0 1 0 0 1 2 3 0 0 1 0 0 1 2 0 0 1 0 0 1 2 3 4 0 0 1 0 0";
 	let first_100 = first_100_str.split(' ').map(|n| n.parse::<u64>().unwrap());
-	let mut count = 1;
+	let mut count = 0;
 	for n in first_100 {
 		assert_eq!(
 			n,
@@ -165,30 +165,30 @@ fn test_is_leaf() {
 
 #[test]
 fn test_pmmr_leaf_to_insertion_index() {
-	assert_eq!(pmmr::pmmr_leaf_to_insertion_index(1), Some(0));
-	assert_eq!(pmmr::pmmr_leaf_to_insertion_index(2), Some(1));
-	assert_eq!(pmmr::pmmr_leaf_to_insertion_index(4), Some(2));
-	assert_eq!(pmmr::pmmr_leaf_to_insertion_index(5), Some(3));
-	assert_eq!(pmmr::pmmr_leaf_to_insertion_index(8), Some(4));
-	assert_eq!(pmmr::pmmr_leaf_to_insertion_index(9), Some(5));
-	assert_eq!(pmmr::pmmr_leaf_to_insertion_index(11), Some(6));
-	assert_eq!(pmmr::pmmr_leaf_to_insertion_index(12), Some(7));
-	assert_eq!(pmmr::pmmr_leaf_to_insertion_index(16), Some(8));
-	assert_eq!(pmmr::pmmr_leaf_to_insertion_index(17), Some(9));
-	assert_eq!(pmmr::pmmr_leaf_to_insertion_index(19), Some(10));
-	assert_eq!(pmmr::pmmr_leaf_to_insertion_index(20), Some(11));
-	assert_eq!(pmmr::pmmr_leaf_to_insertion_index(23), Some(12));
-	assert_eq!(pmmr::pmmr_leaf_to_insertion_index(24), Some(13));
-	assert_eq!(pmmr::pmmr_leaf_to_insertion_index(26), Some(14));
-	assert_eq!(pmmr::pmmr_leaf_to_insertion_index(27), Some(15));
-	assert_eq!(pmmr::pmmr_leaf_to_insertion_index(32), Some(16));
+	assert_eq!(pmmr::pmmr_leaf_to_insertion_index(0), Some(0));
+	assert_eq!(pmmr::pmmr_leaf_to_insertion_index(1), Some(1));
+	assert_eq!(pmmr::pmmr_leaf_to_insertion_index(3), Some(2));
+	assert_eq!(pmmr::pmmr_leaf_to_insertion_index(4), Some(3));
+	assert_eq!(pmmr::pmmr_leaf_to_insertion_index(7), Some(4));
+	assert_eq!(pmmr::pmmr_leaf_to_insertion_index(8), Some(5));
+	assert_eq!(pmmr::pmmr_leaf_to_insertion_index(10), Some(6));
+	assert_eq!(pmmr::pmmr_leaf_to_insertion_index(11), Some(7));
+	assert_eq!(pmmr::pmmr_leaf_to_insertion_index(15), Some(8));
+	assert_eq!(pmmr::pmmr_leaf_to_insertion_index(16), Some(9));
+	assert_eq!(pmmr::pmmr_leaf_to_insertion_index(18), Some(10));
+	assert_eq!(pmmr::pmmr_leaf_to_insertion_index(19), Some(11));
+	assert_eq!(pmmr::pmmr_leaf_to_insertion_index(22), Some(12));
+	assert_eq!(pmmr::pmmr_leaf_to_insertion_index(23), Some(13));
+	assert_eq!(pmmr::pmmr_leaf_to_insertion_index(25), Some(14));
+	assert_eq!(pmmr::pmmr_leaf_to_insertion_index(26), Some(15));
+	assert_eq!(pmmr::pmmr_leaf_to_insertion_index(31), Some(16));
 
 	// Not a leaf node
-	assert_eq!(pmmr::pmmr_leaf_to_insertion_index(31), None);
+	assert_eq!(pmmr::pmmr_leaf_to_insertion_index(30), None);
 
 	// Sanity check to make sure we don't get an explosion around the u64 max
 	// number of leaves
-	let n_leaves_max_u64 = pmmr::n_leaves(u64::MAX - 256);
+	let n_leaves_max_u64 = pmmr::n_leaves(u64::MAX - 257);
 	assert_eq!(
 		pmmr::pmmr_leaf_to_insertion_index(n_leaves_max_u64),
 		Some(4611686018427387884)
