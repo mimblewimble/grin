@@ -226,8 +226,8 @@ impl<'a> UTXOView<'a> {
 		height: u64,
 		batch: &Batch<'_>,
 	) -> Result<BlockHeader, Error> {
-		let pos = pmmr::insertion_to_pmmr_index(height + 1);
-		if let Some(hash) = self.get_header_hash(pos) {
+		let pos1 = 1 + pmmr::insertion_to_pmmr_index(height);
+		if let Some(hash) = self.get_header_hash(pos1) {
 			let header = batch.get_block_header(&hash)?;
 			Ok(header)
 		} else {

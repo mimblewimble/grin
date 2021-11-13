@@ -98,7 +98,7 @@ impl<T: PMMRable> Backend<T> for VecBackend<T> {
 	}
 
 	fn leaf_idx_iter(&self, from_idx: u64) -> Box<dyn Iterator<Item = u64> + '_> {
-		let from_pos = pmmr::insertion_to_pmmr_index(from_idx + 1);
+		let from_pos = 1 + pmmr::insertion_to_pmmr_index(from_idx);
 		Box::new(
 			self.leaf_pos_iter()
 				.skip_while(move |x| *x < from_pos)

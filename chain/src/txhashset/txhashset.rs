@@ -90,7 +90,7 @@ impl PMMRHandle<BlockHeader> {
 		// 1-indexed pos and we want to account for subsequent parent hash pos.
 		// so use next header pos to find our last_pos.
 		let next_height = head.height + 1;
-		let next_pos = pmmr::insertion_to_pmmr_index(next_height + 1);
+		let next_pos = 1 + pmmr::insertion_to_pmmr_index(next_height);
 		let pos = next_pos.saturating_sub(1);
 
 		debug!(
@@ -110,7 +110,7 @@ impl PMMRHandle<BlockHeader> {
 
 	/// Get the header hash at the specified height based on the current header MMR state.
 	pub fn get_header_hash_by_height(&self, height: u64) -> Result<Hash, Error> {
-		let pos = pmmr::insertion_to_pmmr_index(height + 1);
+		let pos = 1 + pmmr::insertion_to_pmmr_index(height);
 		let header_pmmr = ReadonlyPMMR::at(&self.backend, self.last_pos);
 		if let Some(entry) = header_pmmr.get_data(pos) {
 			Ok(entry.hash())
@@ -914,7 +914,7 @@ impl<'a> HeaderExtension<'a> {
 	/// Get header hash by height.
 	/// Based on current header MMR.
 	pub fn get_header_hash_by_height(&self, height: u64) -> Option<Hash> {
-		let pos = pmmr::insertion_to_pmmr_index(height + 1);
+		let pos = 1 + pmmr::insertion_to_pmmr_index(height);
 		self.get_header_hash(pos)
 	}
 
@@ -973,7 +973,7 @@ impl<'a> HeaderExtension<'a> {
 			self.head.height,
 		);
 
-		let header_pos = pmmr::insertion_to_pmmr_index(header.height + 1);
+		let header_pos = 1 + pmmr::insertion_to_pmmr_index(header.height);
 		self.pmmr
 			.rewind(header_pos, &Bitmap::create())
 			.map_err(&ErrorKind::TxHashSetErr)?;

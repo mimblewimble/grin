@@ -78,7 +78,9 @@ impl<T: PMMRable> Backend<T> for PMMRBackend<T> {
 		if self.prunable {
 			// (Re)calculate the latest pos given updated size of data file
 			// and the total leaf_shift, and add to our leaf_set.
-			let pos = pmmr::insertion_to_pmmr_index(size + self.prune_list.get_total_leaf_shift());
+			let pos = 1 + pmmr::insertion_to_pmmr_index(
+				size + self.prune_list.get_total_leaf_shift() - 1,
+			);
 			self.leaf_set.add(pos);
 		}
 
@@ -175,7 +177,7 @@ impl<T: PMMRable> Backend<T> for PMMRBackend<T> {
 		// iterate, skipping everything prior to this
 		// pass in from_idx=0 then we want to convert to pos=1
 
-		let from_pos = pmmr::insertion_to_pmmr_index(from_idx + 1);
+		let from_pos = 1 + pmmr::insertion_to_pmmr_index(from_idx);
 
 		if self.prunable {
 			Box::new(

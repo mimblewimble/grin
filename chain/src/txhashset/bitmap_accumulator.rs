@@ -149,7 +149,7 @@ impl BitmapAccumulator {
 		let chunk_idx = BitmapAccumulator::chunk_idx(from_idx);
 		let last_pos = self.backend.size();
 		let mut pmmr = PMMR::at(&mut self.backend, last_pos);
-		let chunk_pos = pmmr::insertion_to_pmmr_index(chunk_idx + 1);
+		let chunk_pos = 1 + pmmr::insertion_to_pmmr_index(chunk_idx);
 		let rewind_pos = chunk_pos.saturating_sub(1);
 		pmmr.rewind(rewind_pos, &Bitmap::create())
 			.map_err(ErrorKind::Other)?;
@@ -333,9 +333,9 @@ impl From<BitmapSegment> for Segment<BitmapChunk> {
 			+ blocks.last().map(|b| b.n_chunks()).unwrap_or(0);
 		let mut leaf_pos = Vec::with_capacity(n_chunks);
 		let mut chunks = Vec::with_capacity(n_chunks);
-		let offset = (1 << identifier.height) * identifier.idx + 1;
+		let offset = (1 << identifier.height) * identifier.idx;
 		for i in 0..(n_chunks as u64) {
-			leaf_pos.push(pmmr::insertion_to_pmmr_index(offset + i));
+			leaf_pos.push(1 + pmmr::insertion_to_pmmr_index(offset + i));
 			chunks.push(BitmapChunk::new());
 		}
 

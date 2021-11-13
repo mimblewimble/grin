@@ -121,9 +121,9 @@ impl<T> Segment<T> {
 	pub fn segment_pos_range(&self, last_pos: u64) -> (u64, u64) {
 		let segment_size = self.segment_unpruned_size(last_pos);
 		let leaf_offset = self.leaf_offset();
-		let first = pmmr::insertion_to_pmmr_index(leaf_offset + 1);
+		let first = 1 + pmmr::insertion_to_pmmr_index(leaf_offset);
 		let last = if self.full_segment(last_pos) {
-			pmmr::insertion_to_pmmr_index(leaf_offset + segment_size)
+			1 + pmmr::insertion_to_pmmr_index(leaf_offset + segment_size - 1)
 				+ (self.identifier.height as u64)
 		} else {
 			last_pos

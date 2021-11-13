@@ -581,14 +581,14 @@ fn pmmr_prune() {
 
 #[test]
 fn check_insertion_to_pmmr_index() {
+	assert_eq!(pmmr::insertion_to_pmmr_index(0), 0);
 	assert_eq!(pmmr::insertion_to_pmmr_index(1), 1);
-	assert_eq!(pmmr::insertion_to_pmmr_index(2), 2);
+	assert_eq!(pmmr::insertion_to_pmmr_index(2), 3);
 	assert_eq!(pmmr::insertion_to_pmmr_index(3), 4);
-	assert_eq!(pmmr::insertion_to_pmmr_index(4), 5);
+	assert_eq!(pmmr::insertion_to_pmmr_index(4), 7);
 	assert_eq!(pmmr::insertion_to_pmmr_index(5), 8);
-	assert_eq!(pmmr::insertion_to_pmmr_index(6), 9);
+	assert_eq!(pmmr::insertion_to_pmmr_index(6), 10);
 	assert_eq!(pmmr::insertion_to_pmmr_index(7), 11);
-	assert_eq!(pmmr::insertion_to_pmmr_index(8), 12);
 }
 
 #[test]
@@ -626,8 +626,8 @@ fn check_elements_from_pmmr_index() {
 	assert_eq!(res.1[6].0[3], 11);
 
 	// pruning a few nodes should get consistent results
-	pmmr.prune(pmmr::insertion_to_pmmr_index(5)).unwrap();
-	pmmr.prune(pmmr::insertion_to_pmmr_index(20)).unwrap();
+	pmmr.prune(1 + pmmr::insertion_to_pmmr_index(4)).unwrap();
+	pmmr.prune(1 + pmmr::insertion_to_pmmr_index(19)).unwrap();
 
 	let res = pmmr
 		.readonly_pmmr()

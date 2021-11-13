@@ -56,8 +56,10 @@ where
 		chain.set_prev_root_only(&mut block.header)?;
 
 		// Manually set the mmr sizes for a "valid" block (increment prev output and kernel counts).
-		block.header.output_mmr_size = pmmr::insertion_to_pmmr_index(prev.output_mmr_count() + 1);
-		block.header.kernel_mmr_size = pmmr::insertion_to_pmmr_index(prev.kernel_mmr_count() + 1);
+		// I don't see how 1 + 0-based index corresponds to a completed size
+		// E.g. output_mmr_count==3 gives size 5
+		block.header.output_mmr_size = 1 + pmmr::insertion_to_pmmr_index(prev.output_mmr_count());
+		block.header.kernel_mmr_size = 1 + pmmr::insertion_to_pmmr_index(prev.kernel_mmr_count());
 	} else {
 		chain.set_txhashset_roots(&mut block)?;
 	}

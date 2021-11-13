@@ -533,15 +533,12 @@ pub fn round_up_to_leaf_pos(pos0: u64) -> u64 {
 	} else {
 		insert_idx + 1
 	};
-	return insertion_to_pmmr_index(leaf_idx + 1) - 1;
+	return insertion_to_pmmr_index(leaf_idx);
 }
 
-/// Returns the 1-based pmmr index of 1-based leaf n
-pub fn insertion_to_pmmr_index(nleaf1: u64) -> u64 {
-	if nleaf1 == 0 {
-		panic!("insertion_to_pmmr_index called with nleaf1 == 0");
-	}
-	2 * (nleaf1 - 1) + 1 - (nleaf1 - 1).count_ones() as u64
+/// Returns the 0-based pmmr index of 0-based leaf index n
+pub fn insertion_to_pmmr_index(nleaf0: u64) -> u64 {
+	2 * nleaf0 - nleaf0.count_ones() as u64
 }
 
 /// Returns the insertion index of the given leaf index
@@ -699,7 +696,7 @@ pub fn bintree_leaf_pos_iter(pos1: u64) -> Box<dyn Iterator<Item = u64>> {
 		Some(l) => l,
 		None => return Box::new(iter::empty::<u64>()),
 	};
-	Box::new((leaf_start..=leaf_end).map(|n| insertion_to_pmmr_index(n + 1)))
+	Box::new((leaf_start..=leaf_end).map(|n| 1 + insertion_to_pmmr_index(n)))
 }
 
 /// Iterator over all pos beneath the provided subtree root (including the root itself).
