@@ -269,12 +269,12 @@ where
 		let mut start_pos = None;
 		// Fully pruned segment: only include a single hash, the first unpruned parent
 		if segment.leaf_data.is_empty() && segment.hashes.is_empty() {
-			let family_branch = pmmr::family_branch(segment_last_pos, last_pos);
-			for (pos, _) in family_branch {
-				if let Some(hash) = pmmr.get_from_file(pos) {
+			let family_branch = pmmr::family_branch(segment_last_pos - 1, last_pos);
+			for (pos0, _) in family_branch {
+				if let Some(hash) = pmmr.get_from_file(1 + pos0) {
 					segment.hashes.push(hash);
-					segment.hash_pos.push(pos);
-					start_pos = Some(pos);
+					segment.hash_pos.push(1 + pos0);
+					start_pos = Some(1 + pos0);
 					break;
 				}
 			}
@@ -417,7 +417,7 @@ where
 		let mut cardinality = 0;
 		let mut pos = last;
 		let mut hash = Err(SegmentError::MissingHash(last));
-		let mut family_branch = pmmr::family_branch(last, last_pos).into_iter();
+		let mut family_branch = pmmr::family_branch(last - 1, last_pos).into_iter();
 		while cardinality == 0 {
 			hash = self.get_hash(pos).map(|h| (h, pos));
 			if hash.is_ok() {
@@ -426,10 +426,10 @@ where
 				return hash;
 			}
 
-			if let Some((p, _)) = family_branch.next() {
-				pos = p;
-				let range = (pmmr::n_leaves(pmmr::bintree_leftmost(p)) - 1)
-					..min(pmmr::n_leaves(pmmr::bintree_rightmost(p)), n_leaves);
+			if let Some((p0, _)) = family_branch.next() {
+				pos = 1 + p0;
+				let range = (pmmr::n_leaves(pmmr::bintree_leftmost(1 + p0)) - 1)
+					..min(pmmr::n_leaves(pmmr::bintree_rightmost(1 + p0)), n_leaves);
 				cardinality = bitmap.range_cardinality(range);
 			} else {
 				break;
@@ -579,20 +579,23 @@ impl SegmentProof {
 		U: PMMRable,
 		B: Backend<U>,
 	{
-		let family_branch = pmmr::family_branch(segment_last_pos, last_pos);
+		let family_branch = pmmr::family_branch(segment_last_pos - 1, last_pos);
 
 		// 1. siblings along the path from the subtree root to the peak
 		let hashes: Result<Vec<_>, _> = family_branch
 			.iter()
-			.filter(|&&(p, _)| start_pos.map(|s| p > s).unwrap_or(true))
-			.map(|&(_, s)| pmmr.get_hash(s).ok_or_else(|| SegmentError::MissingHash(s)))
+			.filter(|&&(p0, _)| start_pos.map(|s| p0 >= s).unwrap_or(true))
+			.map(|&(_, s0)| {
+				pmmr.get_hash(1 + s0)
+					.ok_or_else(|| SegmentError::MissingHash(1 + s0))
+			})
 			.collect();
 		let mut proof = Self { hashes: hashes? };
 
 		// 2. bagged peaks to the right
 		let peak_pos = family_branch
 			.last()
-			.map(|&(p, _)| p)
+			.map(|&(p0, _)| 1 + p0)
 			.unwrap_or(segment_last_pos);
 		if let Some(h) = pmmr.bag_the_rhs(peak_pos) {
 			proof.hashes.push(h);
@@ -625,26 +628,28 @@ impl SegmentProof {
 		segment_unpruned_pos: u64,
 	) -> Result<Hash, SegmentError> {
 		let mut iter = self.hashes.iter();
-		let family_branch = pmmr::family_branch(segment_last_pos, last_pos);
+		let family_branch = pmmr::family_branch(segment_last_pos - 1, last_pos);
 
 		// 1. siblings along the path from the subtree root to the peak
 		let mut root = segment_root;
-		for &(p, s) in family_branch
+		for &(p0, s0) in family_branch
 			.iter()
-			.filter(|&&(p, _)| p > segment_unpruned_pos)
+			.filter(|&&(p0, _)| p0 >= segment_unpruned_pos)
 		{
-			let sibling_hash = iter.next().ok_or_else(|| SegmentError::MissingHash(s))?;
-			root = if pmmr::is_left_sibling(s - 1) {
-				(sibling_hash, root).hash_with_index(p - 1)
+			let sibling_hash = iter
+				.next()
+				.ok_or_else(|| SegmentError::MissingHash(1 + s0))?;
+			root = if pmmr::is_left_sibling(s0) {
+				(sibling_hash, root).hash_with_index(p0)
 			} else {
-				(root, sibling_hash).hash_with_index(p - 1)
+				(root, sibling_hash).hash_with_index(p0)
 			};
 		}
 
 		// 2. bagged peaks to the right
 		let peak_pos = family_branch
 			.last()
-			.map(|&(p, _)| p)
+			.map(|&(p0, _)| 1 + p0)
 			.unwrap_or(segment_last_pos);
 
 		let rhs = pmmr::peaks(last_pos)

@@ -124,35 +124,35 @@ pub trait ReadablePMMR {
 	}
 
 	/// Build a Merkle proof for the element at the given position.
-	fn merkle_proof(&self, pos: u64) -> Result<MerkleProof, String> {
-		let last_pos = self.unpruned_size();
-		debug!("merkle_proof  {}, last_pos {}", pos, last_pos);
+	fn merkle_proof(&self, pos1: u64) -> Result<MerkleProof, String> {
+		let size = self.unpruned_size();
+		debug!("merkle_proof  {}, last_pos {}", pos1, size);
 
 		// check this pos is actually a leaf in the MMR
-		if !is_leaf(pos - 1) {
-			return Err(format!("not a leaf at pos {}", pos));
+		if !is_leaf(pos1 - 1) {
+			return Err(format!("not a leaf at pos {}", pos1));
 		}
 
 		// check we actually have a hash in the MMR at this pos
-		self.get_hash(pos)
-			.ok_or_else(|| format!("no element at pos {}", pos))?;
+		self.get_hash(pos1)
+			.ok_or_else(|| format!("no element at pos {}", pos1))?;
 
-		let family_branch = family_branch(pos, last_pos);
+		let family_branch = family_branch(pos1 - 1, size);
 
 		let mut path = family_branch
 			.iter()
-			.filter_map(|x| self.get_from_file(x.1))
+			.filter_map(|x| self.get_from_file(1 + x.1))
 			.collect::<Vec<_>>();
 
 		let peak_pos = match family_branch.last() {
-			Some(&(x, _)) => x,
-			None => pos,
+			Some(&(x, _)) => 1 + x,
+			None => pos1,
 		};
 
 		path.append(&mut self.peak_path(peak_pos));
 
 		Ok(MerkleProof {
-			mmr_size: last_pos,
+			mmr_size: size,
 			path,
 		})
 	}
@@ -587,29 +587,28 @@ pub fn is_left_sibling(pos0: u64) -> bool {
 /// Returns the path from the specified position up to its
 /// corresponding peak in the MMR.
 /// The size (and therefore the set of peaks) of the MMR
-/// is defined by last_pos.
-pub fn path(pos1: u64, last_pos: u64) -> impl Iterator<Item = u64> {
-	Path::new(pos1, last_pos)
+/// is defined by size.
+/// NOTE this function and the Path struct are currently UNUSED
+/// as evident from the name change
+pub fn path0(pos0: u64, size: u64) -> impl Iterator<Item = u64> {
+	Path::new(pos0, size)
 }
 
 struct Path {
 	current: u64,
-	last_pos: u64,
+	size: u64,
 	peak: u64,
 	peak_map: u64,
 }
 
 impl Path {
-	fn new(pos1: u64, last_pos: u64) -> Self {
-		if pos1 == 0 {
-			panic!("Path::new called with pos1 == 0");
-		}
-		let (peak_map, height) = peak_map_height(pos1 - 1);
+	fn new(pos0: u64, size: u64) -> Self {
+		let (peak_map, height) = peak_map_height(pos0);
 		Path {
-			current: pos1,
+			current: pos0,
 			peak: 1 << height,
 			peak_map,
-			last_pos,
+			size,
 		}
 	}
 }
@@ -618,7 +617,7 @@ impl Iterator for Path {
 	type Item = u64;
 
 	fn next(&mut self) -> Option<Self::Item> {
-		if self.current > self.last_pos {
+		if self.current >= self.size {
 			return None;
 		}
 
@@ -636,18 +635,15 @@ impl Iterator for Path {
 /// For a given starting position calculate the parent and sibling positions
 /// for the branch/path from that position to the peak of the tree.
 /// We will use the sibling positions to generate the "path" of a Merkle proof.
-pub fn family_branch(pos1: u64, last_pos: u64) -> Vec<(u64, u64)> {
-	if pos1 == 0 {
-		panic!("family_branch called with pos1 == 0");
-	}
+pub fn family_branch(pos0: u64, size: u64) -> Vec<(u64, u64)> {
 	// loop going up the tree, from node to parent, as long as we stay inside
 	// the tree (as defined by last_pos).
-	let (peak_map, height) = peak_map_height(pos1 - 1);
+	let (peak_map, height) = peak_map_height(pos0);
 	let mut peak = 1 << height;
 	let mut branch = vec![];
-	let mut current = pos1;
+	let mut current = pos0;
 	let mut sibling;
-	while current < last_pos {
+	while current + 1 < size {
 		if (peak_map & peak) != 0 {
 			current += 1;
 			sibling = current - 2 * peak;
@@ -655,7 +651,7 @@ pub fn family_branch(pos1: u64, last_pos: u64) -> Vec<(u64, u64)> {
 			current += 2 * peak;
 			sibling = current - 1;
 		};
-		if current > last_pos {
+		if current >= size {
 			break;
 		}
 		branch.push((current, sibling));

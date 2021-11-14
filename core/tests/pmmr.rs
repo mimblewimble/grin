@@ -229,9 +229,9 @@ fn various_families() {
 
 #[test]
 fn test_paths() {
-	assert_eq!(pmmr::path(1, 3).collect::<Vec<_>>(), [1, 3]);
-	assert_eq!(pmmr::path(2, 3).collect::<Vec<_>>(), [2, 3]);
-	assert_eq!(pmmr::path(4, 16).collect::<Vec<_>>(), [4, 6, 7, 15]);
+	assert_eq!(pmmr::path0(0, 3).collect::<Vec<_>>(), [0, 2]);
+	assert_eq!(pmmr::path0(1, 3).collect::<Vec<_>>(), [1, 2]);
+	assert_eq!(pmmr::path0(3, 16).collect::<Vec<_>>(), [3, 5, 6, 14]);
 }
 
 #[test]
@@ -244,26 +244,26 @@ fn test_is_left_sibling() {
 #[test]
 fn various_branches() {
 	// the two leaf nodes in a 3 node tree (height 1)
-	assert_eq!(pmmr::family_branch(1, 3), [(3, 2)]);
-	assert_eq!(pmmr::family_branch(2, 3), [(3, 1)]);
+	assert_eq!(pmmr::family_branch(0, 3), [(2, 1)]);
+	assert_eq!(pmmr::family_branch(1, 3), [(2, 0)]);
 
 	// the root node in a 3 node tree
-	assert_eq!(pmmr::family_branch(3, 3), []);
+	assert_eq!(pmmr::family_branch(2, 3), []);
 
 	// leaf node in a larger tree of 7 nodes (height 2)
-	assert_eq!(pmmr::family_branch(1, 7), [(3, 2), (7, 6)]);
+	assert_eq!(pmmr::family_branch(0, 7), [(2, 1), (6, 5)]);
 
 	// note these only go as far up as the local peak, not necessarily the single
 	// root
-	assert_eq!(pmmr::family_branch(1, 4), [(3, 2)]);
+	assert_eq!(pmmr::family_branch(0, 4), [(2, 1)]);
 	// pos 4 in a tree of size 4 is a local peak
-	assert_eq!(pmmr::family_branch(4, 4), []);
+	assert_eq!(pmmr::family_branch(3, 4), []);
 	// pos 4 in a tree of size 5 is also still a local peak
-	assert_eq!(pmmr::family_branch(4, 5), []);
+	assert_eq!(pmmr::family_branch(3, 5), []);
 	// pos 4 in a tree of size 6 has a parent and a sibling
-	assert_eq!(pmmr::family_branch(4, 6), [(6, 5)]);
+	assert_eq!(pmmr::family_branch(3, 6), [(5, 4)]);
 	// a tree of size 7 is all under a single root
-	assert_eq!(pmmr::family_branch(4, 7), [(6, 5), (7, 3)]);
+	assert_eq!(pmmr::family_branch(3, 7), [(5, 4), (6, 2)]);
 
 	// ok now for a more realistic one, a tree with over a million nodes in it
 	// find the "family path" back up the tree from a leaf node at 0
@@ -272,27 +272,27 @@ fn various_branches() {
 	// largest possible list of peaks before we start combining them into larger
 	// peaks.
 	assert_eq!(
-		pmmr::family_branch(1, 1_049_000),
+		pmmr::family_branch(0, 1_049_000),
 		[
-			(3, 2),
-			(7, 6),
-			(15, 14),
-			(31, 30),
-			(63, 62),
-			(127, 126),
-			(255, 254),
-			(511, 510),
-			(1023, 1022),
-			(2047, 2046),
-			(4095, 4094),
-			(8191, 8190),
-			(16383, 16382),
-			(32767, 32766),
-			(65535, 65534),
-			(131071, 131070),
-			(262143, 262142),
-			(524287, 524286),
-			(1048575, 1048574),
+			(2, 1),
+			(6, 5),
+			(14, 13),
+			(30, 29),
+			(62, 61),
+			(126, 125),
+			(254, 253),
+			(510, 509),
+			(1022, 1021),
+			(2046, 2045),
+			(4094, 4093),
+			(8190, 8189),
+			(16382, 16381),
+			(32766, 32765),
+			(65534, 65533),
+			(131070, 131069),
+			(262142, 262141),
+			(524286, 524285),
+			(1048574, 1048573),
 		]
 	);
 }
