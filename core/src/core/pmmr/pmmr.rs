@@ -661,20 +661,20 @@ pub fn family_branch(pos0: u64, size: u64) -> Vec<(u64, u64)> {
 }
 
 /// Gets the position of the rightmost node (i.e. leaf) beneath the provided subtree root.
-pub fn bintree_rightmost(pos1: u64) -> u64 {
-	pos1 - bintree_postorder_height(pos1 - 1)
+pub fn bintree_rightmost(pos0: u64) -> u64 {
+	pos0 - bintree_postorder_height(pos0)
 }
 
 /// Gets the position of the leftmost node (i.e. leaf) beneath the provided subtree root.
-pub fn bintree_leftmost(pos1: u64) -> u64 {
-	let height = bintree_postorder_height(pos1 - 1);
-	pos1 + 2 - (2 << height)
+pub fn bintree_leftmost(pos0: u64) -> u64 {
+	let height = bintree_postorder_height(pos0);
+	pos0 + 2 - (2 << height)
 }
 
 /// Iterator over all leaf pos beneath the provided subtree root (including the root itself).
 pub fn bintree_leaf_pos_iter(pos1: u64) -> Box<dyn Iterator<Item = u64>> {
-	let leaf_start = pmmr_leaf_to_insertion_index(bintree_leftmost(pos1) - 1);
-	let leaf_end = pmmr_leaf_to_insertion_index(bintree_rightmost(pos1) - 1);
+	let leaf_start = pmmr_leaf_to_insertion_index(bintree_leftmost(pos1 - 1));
+	let leaf_end = pmmr_leaf_to_insertion_index(bintree_rightmost(pos1 - 1));
 	let leaf_start = match leaf_start {
 		Some(l) => l,
 		None => return Box::new(iter::empty::<u64>()),
@@ -688,7 +688,7 @@ pub fn bintree_leaf_pos_iter(pos1: u64) -> Box<dyn Iterator<Item = u64>> {
 
 /// Iterator over all pos beneath the provided subtree root (including the root itself).
 pub fn bintree_pos_iter(pos1: u64) -> impl Iterator<Item = u64> {
-	let leaf_start = bintree_leftmost(pos1 as u64);
+	let leaf_start = 1 + bintree_leftmost(pos1 as u64 - 1);
 	(leaf_start..=pos1).into_iter()
 }
 

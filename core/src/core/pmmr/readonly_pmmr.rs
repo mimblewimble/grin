@@ -95,7 +95,7 @@ where
 			if last_leaf == 0 {
 				break;
 			}
-			last_leaf = bintree_rightmost(last_leaf);
+			last_leaf = 1 + bintree_rightmost(last_leaf - 1);
 
 			if let Some(hash) = self.backend.get_hash(last_leaf) {
 				if let Some(data) = self.backend.get_data(last_leaf) {

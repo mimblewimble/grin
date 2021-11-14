@@ -126,7 +126,7 @@ impl PMMRHandle<BlockHeader> {
 			return Err(ErrorKind::Other("MMR empty, no head".to_string()).into());
 		}
 		let header_pmmr = ReadonlyPMMR::at(&self.backend, self.last_pos);
-		let leaf_pos = pmmr::bintree_rightmost(self.last_pos);
+		let leaf_pos = 1 + pmmr::bintree_rightmost(self.last_pos - 1);
 		if let Some(entry) = header_pmmr.get_data(leaf_pos) {
 			Ok(entry.hash())
 		} else {

@@ -259,7 +259,7 @@ impl PruneList {
 	fn cleanup_subtree(&mut self, pos: u64) {
 		assert!(pos > 0, "prune list 1-indexed, 0 not valid pos");
 
-		let lc = bintree_leftmost(pos) as u32;
+		let lc = 1 + bintree_leftmost(pos - 1) as u32;
 		let last_pos = self.bitmap.maximum().unwrap_or(1);
 
 		// If this subtree does not intersect with existing bitmap then nothing to cleanup.
