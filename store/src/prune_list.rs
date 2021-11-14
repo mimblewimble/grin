@@ -300,24 +300,24 @@ impl PruneList {
 	/// Handles rollup of siblings and children as we go (relatively slow).
 	/// Once we find a subtree root that can not be rolled up any further
 	/// we cleanup everything beneath it and replace it with a single appended node.
-	pub fn append(&mut self, pos: u64) {
-		assert!(pos > 0, "prune list 1-indexed, 0 not valid pos");
+	pub fn append(&mut self, pos1: u64) {
+		assert!(pos1 > 0, "prune list 1-indexed, 0 not valid pos");
 		assert!(
-			pos > self.bitmap.maximum().unwrap_or(0) as u64,
+			pos1 > self.bitmap.maximum().unwrap_or(0) as u64,
 			"prune list append only - pos={} bitmap.maximum={}",
-			pos,
+			pos1,
 			self.bitmap.maximum().unwrap_or(0)
 		);
 
-		let (parent, sibling) = family(pos);
-		if self.is_pruned(sibling) {
+		let (parent0, sibling0) = family(pos1 - 1);
+		if self.is_pruned(sibling0 + 1) {
 			// Recursively append the parent (removing our sibling in the process).
-			self.append(parent)
+			self.append(parent0 + 1)
 		} else {
 			// Make sure we roll anything beneath this up into this higher level pruned subtree root.
 			// We should have no nested entries in the prune_list.
-			self.cleanup_subtree(pos);
-			self.append_single(pos);
+			self.cleanup_subtree(pos1);
+			self.append_single(pos1);
 		}
 	}
 

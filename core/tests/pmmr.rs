@@ -217,14 +217,14 @@ fn test_n_leaves() {
 #[test]
 fn various_families() {
 	// 0 0 1 0 0 1 2 0 0 1 0 0 1 2 3
-	assert_eq!(pmmr::family(1), (3, 2));
-	assert_eq!(pmmr::family(2), (3, 1));
-	assert_eq!(pmmr::family(3), (7, 6));
-	assert_eq!(pmmr::family(4), (6, 5));
-	assert_eq!(pmmr::family(5), (6, 4));
-	assert_eq!(pmmr::family(6), (7, 3));
-	assert_eq!(pmmr::family(7), (15, 14));
-	assert_eq!(pmmr::family(1_000), (1_001, 997));
+	assert_eq!(pmmr::family(0), (2, 1));
+	assert_eq!(pmmr::family(1), (2, 0));
+	assert_eq!(pmmr::family(2), (6, 5));
+	assert_eq!(pmmr::family(3), (5, 4));
+	assert_eq!(pmmr::family(4), (5, 3));
+	assert_eq!(pmmr::family(5), (6, 2));
+	assert_eq!(pmmr::family(6), (14, 13));
+	assert_eq!(pmmr::family(999), (1_000, 996));
 }
 
 #[test]

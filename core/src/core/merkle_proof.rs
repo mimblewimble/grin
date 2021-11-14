@@ -132,7 +132,7 @@ impl MerkleProof {
 		}
 
 		let sibling = self.path.remove(0);
-		let (parent_pos, sibling_pos) = pmmr::family(node_pos);
+		let (parent_pos0, sibling_pos0) = pmmr::family(node_pos - 1);
 
 		if let Ok(x) = peaks_pos.binary_search(&node_pos) {
 			let parent = if x == peaks_pos.len() - 1 {
@@ -140,17 +140,17 @@ impl MerkleProof {
 			} else {
 				(node_hash, sibling)
 			};
-			self.verify(root, &parent, parent_pos)
-		} else if parent_pos > self.mmr_size {
+			self.verify(root, &parent, parent_pos0 + 1)
+		} else if parent_pos0 >= self.mmr_size {
 			let parent = (sibling, node_hash);
-			self.verify(root, &parent, parent_pos)
+			self.verify(root, &parent, parent_pos0 + 1)
 		} else {
-			let parent = if pmmr::is_left_sibling(sibling_pos) {
+			let parent = if pmmr::is_left_sibling(sibling_pos0 + 1) {
 				(sibling, node_hash)
 			} else {
 				(node_hash, sibling)
 			};
-			self.verify(root, &parent, parent_pos)
+			self.verify(root, &parent, parent_pos0 + 1)
 		}
 	}
 }

@@ -451,19 +451,19 @@ impl<T: PMMRable> PMMRBackend<T> {
 			expanded.add(x);
 			let mut current = x as u64;
 			loop {
-				let (parent, sibling) = family(current);
-				let sibling_pruned = self.is_pruned_root(sibling);
+				let (parent0, sibling0) = family(current - 1);
+				let sibling_pruned = self.is_pruned_root(sibling0 + 1);
 
 				// if sibling previously pruned
 				// push it back onto list of pos to remove
 				// so we can remove it and traverse up to parent
 				if sibling_pruned {
-					expanded.add(sibling as u32);
+					expanded.add(1 + sibling0 as u32);
 				}
 
-				if sibling_pruned || expanded.contains(sibling as u32) {
-					expanded.add(parent as u32);
-					current = parent;
+				if sibling_pruned || expanded.contains(1 + sibling0 as u32) {
+					expanded.add(1 + parent0 as u32);
+					current = 1 + parent0;
 				} else {
 					break;
 				}
@@ -479,8 +479,8 @@ fn removed_excl_roots(removed: &Bitmap) -> Bitmap {
 	removed
 		.iter()
 		.filter(|pos| {
-			let (parent_pos, _) = family(*pos as u64);
-			removed.contains(parent_pos as u32)
+			let (parent_pos0, _) = family(*pos as u64 - 1);
+			removed.contains(1 + parent_pos0 as u32)
 		})
 		.collect()
 }

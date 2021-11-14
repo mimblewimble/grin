@@ -567,16 +567,13 @@ pub fn is_leaf(pos0: u64) -> bool {
 
 /// Calculates the positions of the parent and sibling of the node at the
 /// provided position.
-pub fn family(pos1: u64) -> (u64, u64) {
-	if pos1 == 0 {
-		panic!("family called with pos1 == 0");
-	}
-	let (peak_map, height) = peak_map_height(pos1 - 1);
+pub fn family(pos0: u64) -> (u64, u64) {
+	let (peak_map, height) = peak_map_height(pos0);
 	let peak = 1 << height;
 	if (peak_map & peak) != 0 {
-		(pos1 + 1, pos1 + 1 - 2 * peak)
+		(pos0 + 1, pos0 + 1 - 2 * peak)
 	} else {
-		(pos1 + 2 * peak, pos1 + 2 * peak - 1)
+		(pos0 + 2 * peak, pos0 + 2 * peak - 1)
 	}
 }
 
