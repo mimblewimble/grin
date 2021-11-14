@@ -578,11 +578,8 @@ pub fn family(pos0: u64) -> (u64, u64) {
 }
 
 /// Is the node at this pos the "left" sibling of its parent?
-pub fn is_left_sibling(pos1: u64) -> bool {
-	if pos1 == 0 {
-		panic!("is_left_sibling called with pos1 == 0");
-	}
-	let (peak_map, height) = peak_map_height(pos1 - 1);
+pub fn is_left_sibling(pos0: u64) -> bool {
+	let (peak_map, height) = peak_map_height(pos0);
 	let peak = 1 << height;
 	(peak_map & peak) == 0
 }

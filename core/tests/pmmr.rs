@@ -236,9 +236,9 @@ fn test_paths() {
 
 #[test]
 fn test_is_left_sibling() {
-	assert_eq!(pmmr::is_left_sibling(1), true);
-	assert_eq!(pmmr::is_left_sibling(2), false);
-	assert_eq!(pmmr::is_left_sibling(3), true);
+	assert_eq!(pmmr::is_left_sibling(0), true);
+	assert_eq!(pmmr::is_left_sibling(1), false);
+	assert_eq!(pmmr::is_left_sibling(2), true);
 }
 
 #[test]

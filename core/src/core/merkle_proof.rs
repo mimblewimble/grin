@@ -145,7 +145,7 @@ impl MerkleProof {
 			let parent = (sibling, node_hash);
 			self.verify(root, &parent, parent_pos0 + 1)
 		} else {
-			let parent = if pmmr::is_left_sibling(sibling_pos0 + 1) {
+			let parent = if pmmr::is_left_sibling(sibling_pos0) {
 				(sibling, node_hash)
 			} else {
 				(node_hash, sibling)

@@ -314,7 +314,7 @@ where
 				if bitmap
 					.map(|b| {
 						let idx_1 = pmmr::n_leaves(pos1) - 1;
-						let idx_2 = if pmmr::is_left_sibling(pos1) {
+						let idx_2 = if pmmr::is_left_sibling(pos1 - 1) {
 							idx_1 + 1
 						} else {
 							idx_1 - 1
@@ -634,7 +634,7 @@ impl SegmentProof {
 			.filter(|&&(p, _)| p > segment_unpruned_pos)
 		{
 			let sibling_hash = iter.next().ok_or_else(|| SegmentError::MissingHash(s))?;
-			root = if pmmr::is_left_sibling(s) {
+			root = if pmmr::is_left_sibling(s - 1) {
 				(sibling_hash, root).hash_with_index(p - 1)
 			} else {
 				(root, sibling_hash).hash_with_index(p - 1)
