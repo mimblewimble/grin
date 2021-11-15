@@ -687,9 +687,9 @@ pub fn bintree_leaf_pos_iter(pos1: u64) -> Box<dyn Iterator<Item = u64>> {
 }
 
 /// Iterator over all pos beneath the provided subtree root (including the root itself).
-pub fn bintree_pos_iter(pos1: u64) -> impl Iterator<Item = u64> {
-	let leaf_start = 1 + bintree_leftmost(pos1 as u64 - 1);
-	(leaf_start..=pos1).into_iter()
+pub fn bintree_pos_iter(pos0: u64) -> impl Iterator<Item = u64> {
+	let leaf_start = bintree_leftmost(pos0);
+	(leaf_start..=pos0).into_iter()
 }
 
 /// All pos in the subtree beneath the provided root, including root itself.
