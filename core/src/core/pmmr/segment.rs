@@ -378,6 +378,7 @@ where
 			Ok(hashes.pop().unwrap())
 		} else {
 			// Not full (only final segment): peaks in segment, bag them together
+			let peaks = pmmr::peaks(last_pos);
 			let peaks = pmmr::peaks(last_pos)
 				.into_iter()
 				.filter(|&pos| pos >= segment_first_pos && pos <= segment_last_pos)
@@ -721,6 +722,8 @@ impl SegmentProof {
 			segment_root,
 			segment_unpruned_pos,
 		)?;
+		debug!("VALIDATE WITH ROOT IS {}", root);
+		debug!("OTHER ROOT IS {}", other_root);
 		let root = if other_is_left {
 			(other_root, root).hash_with_index(hash_last_pos)
 		} else {

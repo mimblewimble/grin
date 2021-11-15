@@ -285,6 +285,22 @@ impl Readable for BitmapSegment {
 	}
 }
 
+impl BitmapSegment {
+	/// NB: This is only intended to recreate small bitmap segments for PIBD validation
+	/// TODO: See if there are ways to optimise, this is a brute force implementation
+	pub fn as_bitmap(&self) -> Bitmap {
+		let mut ret_map = Bitmap::create();
+		for (block_index, block) in self.blocks.iter().enumerate() {
+			for (bit_index, _) in block.inner.iter().enumerate() {
+				if block.inner[bit_index] {
+					ret_map.add(block_index as u32 * 1024 + bit_index as u32);
+				}
+			}
+		}
+		ret_map
+	}
+}
+
 // TODO: this can be sped up with some `unsafe` code
 impl From<Segment<BitmapChunk>> for BitmapSegment {
 	fn from(segment: Segment<BitmapChunk>) -> Self {
