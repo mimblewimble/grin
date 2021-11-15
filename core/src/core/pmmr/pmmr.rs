@@ -693,8 +693,8 @@ pub fn bintree_pos_iter(pos0: u64) -> impl Iterator<Item = u64> {
 }
 
 /// All pos in the subtree beneath the provided root, including root itself.
-pub fn bintree_range(pos1: u64) -> Range<u64> {
-	let height = bintree_postorder_height(pos1 - 1);
-	let leftmost = pos1 + 2 - (2 << height);
-	leftmost..(pos1 + 1)
+pub fn bintree_range(pos0: u64) -> Range<u64> {
+	let height = bintree_postorder_height(pos0);
+	let leftmost = pos0 + 2 - (2 << height);
+	leftmost..(pos0 + 1)
 }

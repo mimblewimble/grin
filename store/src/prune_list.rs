@@ -341,8 +341,8 @@ impl PruneList {
 		}
 		let rank = self.bitmap.rank(pos as u32);
 		if let Some(root) = self.bitmap.select(rank as u32) {
-			let range = pmmr::bintree_range(root as u64);
-			range.contains(&pos)
+			let range = pmmr::bintree_range(root as u64 - 1);
+			range.contains(&(pos - 1))
 		} else {
 			false
 		}
@@ -376,7 +376,10 @@ impl PruneList {
 
 	/// Iterator over the pruned "bintree range" for each pruned root.
 	pub fn pruned_bintree_range_iter(&self) -> impl Iterator<Item = Range<u64>> + '_ {
-		self.iter().map(|x| pmmr::bintree_range(x))
+		self.iter().map(|x| {
+			let rng = pmmr::bintree_range(x - 1);
+			(1 + rng.start)..(1 + rng.end)
+		})
 	}
 
 	/// Iterator over all pos that are *not* pruned based on current prune_list.

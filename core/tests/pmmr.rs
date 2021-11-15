@@ -91,13 +91,13 @@ fn first_100_mmr_heights() {
 
 #[test]
 fn test_bintree_range() {
+	assert_eq!(pmmr::bintree_range(0), 0..1);
 	assert_eq!(pmmr::bintree_range(1), 1..2);
-	assert_eq!(pmmr::bintree_range(2), 2..3);
-	assert_eq!(pmmr::bintree_range(3), 1..4);
+	assert_eq!(pmmr::bintree_range(2), 0..3);
+	assert_eq!(pmmr::bintree_range(3), 3..4);
 	assert_eq!(pmmr::bintree_range(4), 4..5);
-	assert_eq!(pmmr::bintree_range(5), 5..6);
-	assert_eq!(pmmr::bintree_range(6), 4..7);
-	assert_eq!(pmmr::bintree_range(7), 1..8);
+	assert_eq!(pmmr::bintree_range(5), 3..6);
+	assert_eq!(pmmr::bintree_range(6), 0..7);
 }
 
 // The pos of the rightmost leaf for the provided MMR size (last leaf in subtree).
@@ -199,7 +199,6 @@ fn test_pmmr_leaf_to_insertion_index() {
 fn test_n_leaves() {
 	// make sure we handle an empty MMR correctly
 	assert_eq!(pmmr::n_leaves(0), 0);
-
 	// and various sizes on non-empty MMRs
 	assert_eq!(pmmr::n_leaves(1), 1);
 	assert_eq!(pmmr::n_leaves(2), 2);
@@ -211,6 +210,21 @@ fn test_n_leaves() {
 	assert_eq!(pmmr::n_leaves(8), 5);
 	assert_eq!(pmmr::n_leaves(9), 6);
 	assert_eq!(pmmr::n_leaves(10), 6);
+}
+
+#[test]
+fn test_round_up_to_leaf_pos() {
+	assert_eq!(pmmr::round_up_to_leaf_pos(0), 0);
+	assert_eq!(pmmr::round_up_to_leaf_pos(1), 1);
+	assert_eq!(pmmr::round_up_to_leaf_pos(2), 3);
+	assert_eq!(pmmr::round_up_to_leaf_pos(3), 3);
+	assert_eq!(pmmr::round_up_to_leaf_pos(4), 4);
+	assert_eq!(pmmr::round_up_to_leaf_pos(5), 7);
+	assert_eq!(pmmr::round_up_to_leaf_pos(6), 7);
+	assert_eq!(pmmr::round_up_to_leaf_pos(7), 7);
+	assert_eq!(pmmr::round_up_to_leaf_pos(8), 8);
+	assert_eq!(pmmr::round_up_to_leaf_pos(9), 10);
+	assert_eq!(pmmr::round_up_to_leaf_pos(10), 10);
 }
 
 /// Find parent and sibling positions for various node positions.
