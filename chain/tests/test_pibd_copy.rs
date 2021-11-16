@@ -77,21 +77,20 @@ fn test_pibd_copy() {
 		let options = Options::NONE;
 		let sh = src_chain.get_header_by_height(0).unwrap();
 		debug!("S Genesis - {}", sh.hash());
-
 		let dh = dest_chain.get_header_by_height(0).unwrap();
 		debug!("D Genesis - {}", dh.hash());
 
-		let first_segment_height = 2;
+		let horizon_height = 110;
 
 		// Copy the header from source to output
-		for h in 1..=first_segment_height + 1 {
+		for h in 1..=horizon_height {
 			let h = src_chain.get_header_by_height(h).unwrap();
-			debug!("Src Block 1 prev hash -> {}", h.prev_hash);
 			dest_chain.process_block_header(&h, options).unwrap();
 		}
 
 		let src_header_head = src_chain.header_head().unwrap();
 		let dest_header_head = dest_chain.header_head().unwrap();
+
 		debug!(
 			"Source Header Tip - Height: {} Prev Hash: {}",
 			src_header_head.height, src_header_head.last_block_h
@@ -101,48 +100,39 @@ fn test_pibd_copy() {
 			dest_header_head.height, dest_header_head.prev_block_h
 		);
 
-		// Need last completed header for roots
-		let dest_root_header = dest_chain
-			.get_block_header(&dest_header_head.prev_block_h)
-			.unwrap();
-		debug!("Dest header output root: {}", dest_root_header.output_root);
-		debug!(
-			"Dest header range proof root: {}",
-			dest_root_header.range_proof_root
-		);
-		debug!("Dest header kernel root: {}", dest_root_header.kernel_root);
+		// Archive header for this test data is at 110
+		let dest_horizon_header = src_chain.get_header_by_height(horizon_height).unwrap();
+		debug!("Horizon Header: {}", dest_horizon_header.hash());
 
-		let first_segment_header = dest_chain
-			.get_header_by_height(first_segment_height)
-			.unwrap();
 		debug!(
-			"Dest header {} output root: {}",
-			first_segment_height, first_segment_header.output_root
+			"Dest horizon header {} output root: {}",
+			horizon_height, dest_horizon_header.output_root
 		);
 		debug!(
-			"Dest header {} range proof root: {}",
-			first_segment_height, first_segment_header.range_proof_root
+			"Dest horizon  header {} range proof root: {}",
+			horizon_height, dest_horizon_header.range_proof_root
 		);
 		debug!(
-			"Dest header {} kernel root: {}",
-			first_segment_height, first_segment_header.kernel_root
+			"Dest horizon header {} kernel root: {}",
+			horizon_height, dest_horizon_header.kernel_root
 		);
 		debug!(
-			"Dest header {} kernel mmr size: {}",
-			first_segment_height, first_segment_header.kernel_mmr_size
+			"Dest horizon header {} kernel mmr size: {}",
+			horizon_height, dest_horizon_header.kernel_mmr_size
 		);
 		debug!(
-			"Dest header {} output mmr size: {}",
-			first_segment_height, first_segment_header.output_mmr_size
+			"Dest horizon header {} output mmr size: {}",
+			horizon_height, dest_horizon_header.output_mmr_size
 		);
 
-		// Archive header is at 110 for this particular data set
+		let first_segment_height = 11;
 
 		// Get all PMMR segments from the source up to segment height
 		let sid = SegmentIdentifier {
 			height: first_segment_height as u8,
 			idx: 0,
 		};
+
 		let segmenter = src_chain.segmenter().unwrap();
 		let output_segment = segmenter.output_segment(sid).unwrap();
 		let kernel_segment = segmenter.kernel_segment(sid).unwrap();
@@ -150,7 +140,7 @@ fn test_pibd_copy() {
 		let rangeproof_segment = segmenter.rangeproof_segment(sid).unwrap();
 
 		// Last MMR position according to the target header
-		let last_pos = first_segment_header.kernel_mmr_size;
+		let last_pos = dest_horizon_header.kernel_mmr_size;
 
 		// Validate Kernel segment (which does not require a bitmap)
 		let (
@@ -164,7 +154,7 @@ fn test_pibd_copy() {
 
 		let kernel_segment_root_1 = kernel_segment.root(last_pos, None).unwrap().unwrap();
 		debug!("Kernel segment root 1: {}", kernel_segment_root_1);
-		if let Err(e) = kernel_segment.validate(last_pos, None, first_segment_header.kernel_root) {
+		if let Err(e) = kernel_segment.validate(last_pos, None, dest_horizon_header.kernel_root) {
 			panic!("Unable to validate kernel_segment_root");
 		}
 
@@ -210,7 +200,7 @@ fn test_pibd_copy() {
 			.unwrap();
 		debug!("Rangeproof segment root 1: {}", rangeproof_segment_root_1);
 		if let Err(e) =
-			rangeproof_segment.validate(last_pos, None, first_segment_header.range_proof_root)
+			rangeproof_segment.validate(last_pos, None, dest_horizon_header.range_proof_root)
 		{
 			panic!("Unable to validate rangeproof_segment_root");
 		}
@@ -240,10 +230,10 @@ fn test_pibd_copy() {
 
 		// Now validate both together
 		if let Err(e) = output_segment.0.validate_with(
-			last_pos,                             // Last MMR pos at the height being validated
-			Some(&bitmap),                        // Bitmap recreated from segments
-			first_segment_header.output_root,     // Output root we're checking for
-			first_segment_header.output_mmr_size, //
+			last_pos,                            // Last MMR pos at the height being validated
+			Some(&bitmap),                       // Bitmap recreated from segments
+			dest_horizon_header.output_root,     // Output root we're checking for
+			dest_horizon_header.output_mmr_size, //
 			output_bitmap_root,
 			false,
 		) {
