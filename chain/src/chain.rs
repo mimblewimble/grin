@@ -1143,7 +1143,8 @@ impl Chain {
 			return Ok(());
 		}
 
-		let horizon = global::cut_through_horizon() as u64;
+		let mut horizon = global::cut_through_horizon() as u64;
+
 		let head = batch.head()?;
 
 		let tail = match batch.tail() {
@@ -1151,7 +1152,16 @@ impl Chain {
 			Err(_) => Tip::from_header(&self.genesis),
 		};
 
-		let cutoff = head.height.saturating_sub(horizon);
+		let mut cutoff = head.height.saturating_sub(horizon);
+
+		// TODO: Check this, compaction selects a different horizon
+		// block from txhashset horizon/PIBD segmenter when using
+		// Automated testing chain
+		let archive_header = self.txhashset_archive_header()?;
+		if archive_header.height < cutoff {
+			cutoff = archive_header.height;
+			horizon = head.height - archive_header.height;
+		}
 
 		debug!(
 			"remove_historical_blocks: head height: {}, tail height: {}, horizon: {}, cutoff: {}",

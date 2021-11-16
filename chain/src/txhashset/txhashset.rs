@@ -1343,6 +1343,9 @@ impl<'a> Extension<'a> {
 				let block = batch.get_block(&current.hash())?;
 				let mut affected_pos_single_block = self.rewind_single_block(&block, batch)?;
 				affected_pos.append(&mut affected_pos_single_block);
+				if current.height == 116 {
+					println!("Error");
+				}
 				current = batch.get_previous_header(&current)?;
 			}
 			// Now apply a single aggregate "affected_pos" to our bitmap accumulator.

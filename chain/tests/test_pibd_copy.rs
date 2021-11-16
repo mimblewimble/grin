@@ -40,7 +40,7 @@ fn test_pibd_copy() {
 	let genesis = pow::mine_genesis_block().unwrap();
 	// Note there is now a 'test' in grin_wallet that can be manually tweaked to create a
 	// small testing chain with actual transaction data
-	let src_root_dir = format!("./chain/tests/test_data/chain_raw");
+	let src_root_dir = format!("./chain/tests/test_data/chain_compacted");
 	let dest_root_dir = format!("./chain/tests/test_output/.segment_copy");
 	clean_output_dir(&dest_root_dir);
 	{
@@ -73,6 +73,9 @@ fn test_pibd_copy() {
 
 		//TODO: Later test
 		//src_chain.compact().unwrap();
+		/*src_chain
+		.validate(true)
+		.expect("Source chain validation failed, stop");*/
 
 		let options = Options::NONE;
 		let sh = src_chain.get_header_by_height(0).unwrap();
@@ -125,120 +128,117 @@ fn test_pibd_copy() {
 			horizon_height, dest_horizon_header.output_mmr_size
 		);
 
-		let first_segment_height = 11;
-
-		// Get all PMMR segments from the source up to segment height
-		let sid = SegmentIdentifier {
-			height: first_segment_height as u8,
-			idx: 0,
-		};
-
+		// Init segmenter, (note this still has to be lazy init somewhere on a peer)
 		let segmenter = src_chain.segmenter().unwrap();
-		let output_segment = segmenter.output_segment(sid).unwrap();
-		let kernel_segment = segmenter.kernel_segment(sid).unwrap();
-		let bitmap_segment = segmenter.bitmap_segment(sid).unwrap();
-		let rangeproof_segment = segmenter.rangeproof_segment(sid).unwrap();
 
 		// Last MMR position according to the target header
 		let last_pos = dest_horizon_header.kernel_mmr_size;
 
-		// Validate Kernel segment (which does not require a bitmap)
-		let (
-			kernel_sid,
-			_kernel_hash_pos,
-			_kernel_hashes,
-			kernel_leaf_pos,
-			kernel_leaf_data,
-			kernel_proof,
-		) = kernel_segment.clone().parts();
+		// Height at which to read kernel segments (lower than thresholds defined in spec - for testing)
+		let target_segment_height = 3;
 
-		let kernel_segment_root_1 = kernel_segment.root(last_pos, None).unwrap().unwrap();
-		debug!("Kernel segment root 1: {}", kernel_segment_root_1);
-		if let Err(e) = kernel_segment.validate(last_pos, None, dest_horizon_header.kernel_root) {
-			panic!("Unable to validate kernel_segment_root");
-		}
-
-		// Retrieve the output bitmap segment, as well as convert to a bitmap
-		// for use in further output/rangeproof validation. Note this can't be
-		// validated on its own as its root is hashed with output_root in the block header
-		let (
-			bitmap_sid,
-			_bitmap_hash_pos,
-			_bitmap_hashes,
-			bitmap_leaf_pos,
-			bitmap_leaf_data,
-			bitmap_proof,
-		) = bitmap_segment.0.clone().parts();
-
-		debug!("BITMAP_LEAF_POS: {:?}", bitmap_leaf_pos);
-		debug!("BITMAP_LEAF_DATA: {:?}", bitmap_leaf_data);
-
-		let bitmap_segment_root_1 = bitmap_segment
-			.0
-			.root(*bitmap_leaf_pos.last().unwrap(), None)
-			.unwrap()
-			.unwrap();
-		debug!("Bitmap segment root 1: {}", bitmap_segment_root_1);
-
-		let output_bitmap_segment: BitmapSegment = bitmap_segment.0.into();
-
-		let output_bitmap_output_root = bitmap_segment.1;
-		debug!(
-			"OUTPUT ROOT FROM BITMAP SEGMENT: {}",
-			output_bitmap_output_root
+		// KERNELS - Read + Validate
+		// Build up a list of identifiers we'll need in order to reconstruct the MMR
+		// defined at the horizon head
+		// TODO: This can probably be derived from the PMMR we'll eventually be building
+		// (check if total size is equal to total size at horizon header)
+		let identifier_iter = SegmentIdentifier::traversal_iter(
+			dest_horizon_header.kernel_mmr_size,
+			target_segment_height,
 		);
 
+		for sid in identifier_iter {
+			debug!("Getting kernel segment with Segment Identifier {:?}", sid);
+			let kernel_segment = segmenter.kernel_segment(sid).unwrap();
+			// Validate Kernel segment (which does not require a bitmap)
+			if let Err(e) = kernel_segment.validate(last_pos, None, dest_horizon_header.kernel_root)
+			{
+				panic!("Unable to validate kernel_segment root: {}", e);
+			}
+		}
+
+		// BITMAP - Read + Validate
+		// TODO: Check this calc
+		let bitmap_mmr_num_leaves = pmmr::n_leaves(dest_horizon_header.output_mmr_size / 1024) + 1;
+		let bitmap_pmmr_size = pmmr::insertion_to_pmmr_index(bitmap_mmr_num_leaves);
+		let identifier_iter =
+			SegmentIdentifier::traversal_iter(bitmap_mmr_num_leaves, target_segment_height);
+
+		for sid in identifier_iter {
+			debug!("Getting bitmap segment with Segment Identifier {:?}", sid);
+			let (bitmap_segment, output_root_hash) = segmenter.bitmap_segment(sid).unwrap();
+			debug!(
+				"Bitmap segmenter reports output root hash is {:?}",
+				output_root_hash
+			);
+			// Validate bitmap segment with provided output hash
+			if let Err(e) = bitmap_segment.validate_with(
+				bitmap_pmmr_size, // Last MMR pos at the height being validated, in this case of the bitmap root
+				None,
+				dest_horizon_header.output_root, // Output root we're checking for
+				dest_horizon_header.output_mmr_size,
+				output_root_hash, // Other root
+				true,
+			) {
+				panic!("Unable to validate bitmap_root: {}", e);
+			}
+		}
+
+		// OUTPUTS  - Read + Validate
+		let identifier_iter = SegmentIdentifier::traversal_iter(
+			dest_horizon_header.output_mmr_size,
+			target_segment_height,
+		);
+
+		for sid in identifier_iter {
+			debug!("Getting output segment with Segment Identifier {:?}", sid);
+			let (output_segment, bitmap_root_hash) = segmenter.output_segment(sid).unwrap();
+			debug!(
+				"Output segmenter reports bitmap hash is {:?}",
+				bitmap_root_hash
+			);
+			// Validate Output
+			if let Err(e) = output_segment.validate_with(
+				dest_horizon_header.output_mmr_size, // Last MMR pos at the height being validated
+				// TODO: Need to provide Bitmap???
+				None,
+				dest_horizon_header.output_root, // Output root we're checking for
+				dest_horizon_header.output_mmr_size,
+				bitmap_root_hash, // Other root
+				false,
+			) {
+				panic!("Unable to validate output segment root: {}", e);
+			}
+		}
+
+		// PROOFS  - Read + Validate
+		let identifier_iter = SegmentIdentifier::traversal_iter(
+			dest_horizon_header.output_mmr_size,
+			target_segment_height,
+		);
+
+		for sid in identifier_iter {
+			debug!(
+				"Getting rangeproof segment with Segment Identifier {:?}",
+				sid
+			);
+			let rangeproof_segment = segmenter.rangeproof_segment(sid).unwrap();
+			// Validate Kernel segment (which does not require a bitmap)
+			if let Err(e) = rangeproof_segment.validate(
+				dest_horizon_header.output_mmr_size, // Last MMR pos at the height being validated
+				// TODO: Need to provide Bitmap???
+				None,
+				dest_horizon_header.range_proof_root, // Output root we're checking for
+			) {
+				panic!("Unable to validate rangeproof segment root: {}", e);
+			}
+		}
+
+		/*
 		// Recreate a bitmap from the given chunks
 		let bitmap = output_bitmap_segment.as_bitmap();
 		debug!("BIT MAP CONTAINS: {}", bitmap.contains(127));
-
-		// Validate Rangeproof segment (which requires a bitmap when pruned) but
-		// can be valiated directly
-		let rangeproof_segment_root_1 = rangeproof_segment
-			.root(last_pos, Some(&bitmap))
-			.unwrap()
-			.unwrap();
-		debug!("Rangeproof segment root 1: {}", rangeproof_segment_root_1);
-		if let Err(e) =
-			rangeproof_segment.validate(last_pos, None, dest_horizon_header.range_proof_root)
-		{
-			panic!("Unable to validate rangeproof_segment_root");
-		}
-
-		// Test output segment
-		let (
-			output_sid,
-			output_hash_pos,
-			_output_hashes,
-			output_leaf_pos,
-			output_leaf_data,
-			output_proof,
-		) = output_segment.0.clone().parts();
-
-		// Test get output segment root
-		let output_segment_root_1 = output_segment
-			.0
-			.root(last_pos, Some(&bitmap))
-			.unwrap()
-			.unwrap();
-
-		debug!("Output segment root 1: {}", output_segment_root_1);
-		debug!("Output hash pos: {:?}", output_hash_pos);
-
-		let output_bitmap_root = output_segment.1;
-		debug!("BITMAP ROOT FROM OUTPUT SEGMENT: {}", output_bitmap_root);
-
-		// Now validate both together
-		if let Err(e) = output_segment.0.validate_with(
-			last_pos,                            // Last MMR pos at the height being validated
-			Some(&bitmap),                       // Bitmap recreated from segments
-			dest_horizon_header.output_root,     // Output root we're checking for
-			dest_horizon_header.output_mmr_size, //
-			output_bitmap_root,
-			false,
-		) {
-			panic!("Unable to validate output_root");
-		}
+		*/
 
 		println!("urf");
 	}
