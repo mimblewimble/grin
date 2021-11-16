@@ -672,9 +672,9 @@ pub fn bintree_leftmost(pos0: u64) -> u64 {
 }
 
 /// Iterator over all leaf pos beneath the provided subtree root (including the root itself).
-pub fn bintree_leaf_pos_iter(pos1: u64) -> Box<dyn Iterator<Item = u64>> {
-	let leaf_start = pmmr_leaf_to_insertion_index(bintree_leftmost(pos1 - 1));
-	let leaf_end = pmmr_leaf_to_insertion_index(bintree_rightmost(pos1 - 1));
+pub fn bintree_leaf_pos_iter(pos0: u64) -> Box<dyn Iterator<Item = u64>> {
+	let leaf_start = pmmr_leaf_to_insertion_index(bintree_leftmost(pos0));
+	let leaf_end = pmmr_leaf_to_insertion_index(bintree_rightmost(pos0));
 	let leaf_start = match leaf_start {
 		Some(l) => l,
 		None => return Box::new(iter::empty::<u64>()),
@@ -683,7 +683,7 @@ pub fn bintree_leaf_pos_iter(pos1: u64) -> Box<dyn Iterator<Item = u64>> {
 		Some(l) => l,
 		None => return Box::new(iter::empty::<u64>()),
 	};
-	Box::new((leaf_start..=leaf_end).map(|n| 1 + insertion_to_pmmr_index(n)))
+	Box::new((leaf_start..=leaf_end).map(|n| insertion_to_pmmr_index(n)))
 }
 
 /// Iterator over all pos beneath the provided subtree root (including the root itself).

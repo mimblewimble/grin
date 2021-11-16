@@ -126,15 +126,15 @@ fn test_bintree_leftmost() {
 
 #[test]
 fn test_bintree_leaf_pos_iter() {
+	assert_eq!(pmmr::bintree_leaf_pos_iter(0).collect::<Vec<_>>(), [0]);
 	assert_eq!(pmmr::bintree_leaf_pos_iter(1).collect::<Vec<_>>(), [1]);
-	assert_eq!(pmmr::bintree_leaf_pos_iter(2).collect::<Vec<_>>(), [2]);
-	assert_eq!(pmmr::bintree_leaf_pos_iter(3).collect::<Vec<_>>(), [1, 2]);
+	assert_eq!(pmmr::bintree_leaf_pos_iter(2).collect::<Vec<_>>(), [0, 1]);
+	assert_eq!(pmmr::bintree_leaf_pos_iter(3).collect::<Vec<_>>(), [3]);
 	assert_eq!(pmmr::bintree_leaf_pos_iter(4).collect::<Vec<_>>(), [4]);
-	assert_eq!(pmmr::bintree_leaf_pos_iter(5).collect::<Vec<_>>(), [5]);
-	assert_eq!(pmmr::bintree_leaf_pos_iter(6).collect::<Vec<_>>(), [4, 5]);
+	assert_eq!(pmmr::bintree_leaf_pos_iter(5).collect::<Vec<_>>(), [3, 4]);
 	assert_eq!(
-		pmmr::bintree_leaf_pos_iter(7).collect::<Vec<_>>(),
-		[1, 2, 4, 5]
+		pmmr::bintree_leaf_pos_iter(6).collect::<Vec<_>>(),
+		[0, 1, 3, 4]
 	);
 }
 
