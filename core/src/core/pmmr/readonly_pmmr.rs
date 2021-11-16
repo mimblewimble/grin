@@ -28,7 +28,7 @@ where
 	B: Backend<T>,
 {
 	/// The last position in the PMMR
-	last_pos: u64,
+	size: u64,
 	/// The backend for this readonly PMMR
 	backend: &'a B,
 	// only needed to parameterise Backend
@@ -44,17 +44,17 @@ where
 	pub fn new(backend: &'a B) -> ReadonlyPMMR<'_, T, B> {
 		ReadonlyPMMR {
 			backend,
-			last_pos: 0,
+			size: 0,
 			_marker: marker::PhantomData,
 		}
 	}
 
 	/// Build a new readonly PMMR pre-initialized to
-	/// last_pos with the provided backend.
-	pub fn at(backend: &'a B, last_pos: u64) -> ReadonlyPMMR<'_, T, B> {
+	/// size with the provided backend.
+	pub fn at(backend: &'a B, size: u64) -> ReadonlyPMMR<'_, T, B> {
 		ReadonlyPMMR {
 			backend,
-			last_pos,
+			size,
 			_marker: marker::PhantomData,
 		}
 	}
@@ -69,14 +69,14 @@ where
 		max_pmmr_pos: Option<u64>,
 	) -> (u64, Vec<T::E>) {
 		let mut return_vec = vec![];
-		let last_pos = match max_pmmr_pos {
+		let size = match max_pmmr_pos {
 			Some(p) => p,
-			None => self.last_pos,
+			None => self.size,
 		};
 		if pmmr_index == 0 {
 			pmmr_index = 1;
 		}
-		while return_vec.len() < max_count as usize && pmmr_index <= last_pos {
+		while return_vec.len() < max_count as usize && pmmr_index <= size {
 			if let Some(t) = self.get_data(pmmr_index) {
 				return_vec.push(t);
 			}
@@ -90,7 +90,7 @@ where
 	/// May return less than n items if the MMR has been pruned/compacted.
 	pub fn get_last_n_insertions(&self, n: u64) -> Vec<(Hash, T::E)> {
 		let mut return_vec = vec![];
-		let mut last_leaf = self.last_pos;
+		let mut last_leaf = self.size;
 		for _ in 0..n as u64 {
 			if last_leaf == 0 {
 				break;
@@ -116,7 +116,7 @@ where
 	type Item = T::E;
 
 	fn get_hash(&self, pos1: u64) -> Option<Hash> {
-		if pos1 > self.last_pos {
+		if pos1 > self.size {
 			None
 		} else if is_leaf(pos1 - 1) {
 			// If we are a leaf then get hash from the backend.
@@ -128,7 +128,7 @@ where
 	}
 
 	fn get_data(&self, pos1: u64) -> Option<Self::Item> {
-		if pos1 > self.last_pos {
+		if pos1 > self.size {
 			// If we are beyond the rhs of the MMR return None.
 			None
 		} else if is_leaf(pos1 - 1) {
@@ -141,7 +141,7 @@ where
 	}
 
 	fn get_from_file(&self, pos1: u64) -> Option<Hash> {
-		if pos1 > self.last_pos {
+		if pos1 > self.size {
 			None
 		} else {
 			self.backend.get_from_file(pos1)
@@ -149,7 +149,7 @@ where
 	}
 
 	fn get_peak_from_file(&self, pos1: u64) -> Option<Hash> {
-		if pos1 > self.last_pos {
+		if pos1 > self.size {
 			None
 		} else {
 			self.backend.get_peak_from_file(pos1)
@@ -157,7 +157,7 @@ where
 	}
 
 	fn get_data_from_file(&self, pos1: u64) -> Option<Self::Item> {
-		if pos1 > self.last_pos {
+		if pos1 > self.size {
 			None
 		} else {
 			self.backend.get_data_from_file(pos1)
@@ -165,7 +165,7 @@ where
 	}
 
 	fn unpruned_size(&self) -> u64 {
-		self.last_pos
+		self.size
 	}
 
 	fn leaf_pos_iter(&self) -> Box<dyn Iterator<Item = u64> + '_> {

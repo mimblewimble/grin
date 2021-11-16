@@ -1228,7 +1228,7 @@ impl<'a> Extension<'a> {
 				);
 			}
 		}
-		Ok(output_pos)
+		Ok(1 + output_pos)
 	}
 
 	/// Apply kernels to the kernel MMR.
@@ -1256,7 +1256,7 @@ impl<'a> Extension<'a> {
 			.kernel_pmmr
 			.push(kernel)
 			.map_err(&ErrorKind::TxHashSetErr)?;
-		Ok(pos)
+		Ok(1 + pos)
 	}
 
 	/// Build a Merkle proof for the given output and the block

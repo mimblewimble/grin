@@ -208,16 +208,16 @@ where
 
 	/// Push a new element into the MMR. Computes new related peaks at
 	/// the same time if applicable.
-	pub fn push(&mut self, elmt: &T) -> Result<u64, String> {
-		let elmt_pos = self.size + 1;
-		let mut current_hash = elmt.hash_with_index(elmt_pos - 1);
+	pub fn push(&mut self, leaf: &T) -> Result<u64, String> {
+		let leaf_pos = self.size;
+		let mut current_hash = leaf.hash_with_index(leaf_pos);
 
 		let mut hashes = vec![current_hash];
-		let mut pos = elmt_pos;
+		let mut pos = leaf_pos;
 
-		let (peak_map, height) = peak_map_height(pos - 1);
+		let (peak_map, height) = peak_map_height(pos);
 		if height != 0 {
-			return Err(format!("bad mmr size {}", pos - 1));
+			return Err(format!("bad mmr size {}", pos));
 		}
 		// hash with all immediately preceding peaks, as indicated by peak map
 		let mut peak = 1;
@@ -225,18 +225,18 @@ where
 			let left_sibling = pos + 1 - 2 * peak;
 			let left_hash = self
 				.backend
-				.get_peak_from_file(left_sibling)
+				.get_peak_from_file(1 + left_sibling)
 				.ok_or("missing left sibling in tree, should not have been pruned")?;
 			peak *= 2;
 			pos += 1;
-			current_hash = (left_hash, current_hash).hash_with_index(pos - 1);
+			current_hash = (left_hash, current_hash).hash_with_index(pos);
 			hashes.push(current_hash);
 		}
 
 		// append all the new nodes and update the MMR index
-		self.backend.append(elmt, &hashes)?;
-		self.size = pos;
-		Ok(elmt_pos)
+		self.backend.append(leaf, &hashes)?;
+		self.size = pos + 1;
+		Ok(leaf_pos)
 	}
 
 	/// Saves a snapshot of the MMR tagged with the block hash.
@@ -590,7 +590,7 @@ pub fn is_left_sibling(pos0: u64) -> bool {
 /// is defined by size.
 /// NOTE this function and the Path struct is UNUSED and
 /// mostly redundant as family_branch has similar functionality
-pub fn path0(pos0: u64, size: u64) -> impl Iterator<Item = u64> {
+pub fn path(pos0: u64, size: u64) -> impl Iterator<Item = u64> {
 	Path::new(pos0, size)
 }
 
