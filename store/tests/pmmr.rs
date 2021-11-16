@@ -166,10 +166,10 @@ fn pmmr_compact_leaf_sibling() {
 		// prune pos 1
 		{
 			let mut pmmr = PMMR::at(&mut backend, mmr_size);
-			pmmr.prune(1).unwrap();
+			pmmr.prune(0).unwrap();
 
 			// prune pos 8 as well to push the remove list past the cutoff
-			pmmr.prune(8).unwrap();
+			pmmr.prune(7).unwrap();
 		}
 		backend.sync().unwrap();
 
@@ -235,9 +235,9 @@ fn pmmr_prune_compact() {
 		// pruning some choice nodes
 		{
 			let mut pmmr: PMMR<'_, TestElem, _> = PMMR::at(&mut backend, mmr_size);
-			pmmr.prune(1).unwrap();
+			pmmr.prune(0).unwrap();
+			pmmr.prune(3).unwrap();
 			pmmr.prune(4).unwrap();
-			pmmr.prune(5).unwrap();
 		}
 		backend.sync().unwrap();
 
@@ -296,7 +296,7 @@ fn pmmr_reload() {
 			// prune a node so we have prune data
 			{
 				let mut pmmr: PMMR<'_, TestElem, _> = PMMR::at(&mut backend, mmr_size);
-				pmmr.prune(1).unwrap();
+				pmmr.prune(0).unwrap();
 			}
 			backend.sync().unwrap();
 			assert_eq!(backend.unpruned_size(), mmr_size);
@@ -310,8 +310,8 @@ fn pmmr_reload() {
 			// prune another node to force compact to actually do something
 			{
 				let mut pmmr: PMMR<'_, TestElem, _> = PMMR::at(&mut backend, mmr_size);
-				pmmr.prune(4).unwrap();
-				pmmr.prune(2).unwrap();
+				pmmr.prune(3).unwrap();
+				pmmr.prune(1).unwrap();
 			}
 			backend.sync().unwrap();
 			assert_eq!(backend.unpruned_size(), mmr_size);
@@ -324,7 +324,7 @@ fn pmmr_reload() {
 			// prune some more to get rm log data
 			{
 				let mut pmmr: PMMR<'_, TestElem, _> = PMMR::at(&mut backend, mmr_size);
-				pmmr.prune(5).unwrap();
+				pmmr.prune(4).unwrap();
 			}
 			backend.sync().unwrap();
 			assert_eq!(backend.unpruned_size(), mmr_size);
@@ -406,10 +406,10 @@ fn pmmr_rewind() {
 		// prune the first 4 elements (leaves at pos 1, 2, 4, 5)
 		{
 			let mut pmmr: PMMR<'_, TestElem, _> = PMMR::at(&mut backend, mmr_size);
+			pmmr.prune(0).unwrap();
 			pmmr.prune(1).unwrap();
-			pmmr.prune(2).unwrap();
+			pmmr.prune(3).unwrap();
 			pmmr.prune(4).unwrap();
-			pmmr.prune(5).unwrap();
 		}
 		backend.sync().unwrap();
 
@@ -500,8 +500,8 @@ fn pmmr_compact_single_leaves() {
 
 		{
 			let mut pmmr: PMMR<'_, TestElem, _> = PMMR::at(&mut backend, mmr_size);
-			pmmr.prune(1).unwrap();
-			pmmr.prune(4).unwrap();
+			pmmr.prune(0).unwrap();
+			pmmr.prune(3).unwrap();
 		}
 
 		backend.sync().unwrap();
@@ -511,8 +511,8 @@ fn pmmr_compact_single_leaves() {
 
 		{
 			let mut pmmr: PMMR<'_, TestElem, _> = PMMR::at(&mut backend, mmr_size);
-			pmmr.prune(2).unwrap();
-			pmmr.prune(5).unwrap();
+			pmmr.prune(1).unwrap();
+			pmmr.prune(4).unwrap();
 		}
 
 		backend.sync().unwrap();
@@ -542,10 +542,10 @@ fn pmmr_compact_entire_peak() {
 		// prune all leaves under the peak at pos 7
 		{
 			let mut pmmr: PMMR<'_, TestElem, _> = PMMR::at(&mut backend, mmr_size);
+			pmmr.prune(0).unwrap();
 			pmmr.prune(1).unwrap();
-			pmmr.prune(2).unwrap();
+			pmmr.prune(3).unwrap();
 			pmmr.prune(4).unwrap();
-			pmmr.prune(5).unwrap();
 		}
 
 		backend.sync().unwrap();
@@ -611,10 +611,10 @@ fn pmmr_compact_horizon() {
 			// pruning some choice nodes
 			{
 				let mut pmmr: PMMR<'_, TestElem, _> = PMMR::at(&mut backend, mmr_size);
+				pmmr.prune(3).unwrap();
 				pmmr.prune(4).unwrap();
-				pmmr.prune(5).unwrap();
+				pmmr.prune(0).unwrap();
 				pmmr.prune(1).unwrap();
-				pmmr.prune(2).unwrap();
 			}
 			backend.sync().unwrap();
 
@@ -697,8 +697,8 @@ fn pmmr_compact_horizon() {
 			{
 				let mut pmmr: PMMR<'_, TestElem, _> = PMMR::at(&mut backend, mmr_size);
 
+				pmmr.prune(7).unwrap();
 				pmmr.prune(8).unwrap();
-				pmmr.prune(9).unwrap();
 			}
 
 			// compact some more
@@ -758,9 +758,9 @@ fn compact_twice() {
 		// pruning some choice nodes
 		{
 			let mut pmmr: PMMR<'_, TestElem, _> = PMMR::at(&mut backend, mmr_size);
+			pmmr.prune(0).unwrap();
 			pmmr.prune(1).unwrap();
-			pmmr.prune(2).unwrap();
-			pmmr.prune(4).unwrap();
+			pmmr.prune(3).unwrap();
 		}
 		backend.sync().unwrap();
 
@@ -786,9 +786,9 @@ fn compact_twice() {
 		// now prune some more nodes
 		{
 			let mut pmmr: PMMR<'_, TestElem, _> = PMMR::at(&mut backend, mmr_size);
-			pmmr.prune(5).unwrap();
+			pmmr.prune(4).unwrap();
+			pmmr.prune(7).unwrap();
 			pmmr.prune(8).unwrap();
-			pmmr.prune(9).unwrap();
 		}
 		backend.sync().unwrap();
 

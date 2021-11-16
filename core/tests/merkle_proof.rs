@@ -53,7 +53,7 @@ fn pmmr_merkle_proof_prune_and_rewind() {
 
 	// now prune an element and check we can still generate
 	// the correct Merkle proof for the other element (after sibling pruned)
-	pmmr.prune(1).unwrap();
+	pmmr.prune(0).unwrap();
 	let proof_2 = pmmr.merkle_proof(2).unwrap();
 	assert_eq!(proof, proof_2);
 }

@@ -530,7 +530,7 @@ fn pmmr_prune() {
 	// pruning a leaf with no parent should do nothing
 	{
 		let mut pmmr: PMMR<'_, TestElem, _> = PMMR::at(&mut ba, sz);
-		pmmr.prune(16).unwrap();
+		pmmr.prune(15).unwrap();
 		assert_eq!(orig_root, pmmr.root().unwrap());
 	}
 	assert_eq!(ba.hashes.len(), 16);
@@ -539,7 +539,7 @@ fn pmmr_prune() {
 	// pruning leaves with no shared parent just removes 1 element
 	{
 		let mut pmmr: PMMR<'_, TestElem, _> = PMMR::at(&mut ba, sz);
-		pmmr.prune(2).unwrap();
+		pmmr.prune(1).unwrap();
 		assert_eq!(orig_root, pmmr.root().unwrap());
 	}
 	assert_eq!(ba.hashes.len(), 16);
@@ -547,7 +547,7 @@ fn pmmr_prune() {
 
 	{
 		let mut pmmr: PMMR<'_, TestElem, _> = PMMR::at(&mut ba, sz);
-		pmmr.prune(4).unwrap();
+		pmmr.prune(3).unwrap();
 		assert_eq!(orig_root, pmmr.root().unwrap());
 	}
 	assert_eq!(ba.hashes.len(), 16);
@@ -556,7 +556,7 @@ fn pmmr_prune() {
 	// pruning a non-leaf node has no effect
 	{
 		let mut pmmr: PMMR<'_, TestElem, _> = PMMR::at(&mut ba, sz);
-		pmmr.prune(3).unwrap_err();
+		pmmr.prune(2).unwrap_err();
 		assert_eq!(orig_root, pmmr.root().unwrap());
 	}
 	assert_eq!(ba.hashes.len(), 16);
@@ -565,7 +565,7 @@ fn pmmr_prune() {
 	// TODO - no longer true (leaves only now) - pruning sibling removes subtree
 	{
 		let mut pmmr: PMMR<'_, TestElem, _> = PMMR::at(&mut ba, sz);
-		pmmr.prune(5).unwrap();
+		pmmr.prune(4).unwrap();
 		assert_eq!(orig_root, pmmr.root().unwrap());
 	}
 	assert_eq!(ba.hashes.len(), 16);
@@ -575,7 +575,7 @@ fn pmmr_prune() {
 	// removes all subtree
 	{
 		let mut pmmr: PMMR<'_, TestElem, _> = PMMR::at(&mut ba, sz);
-		pmmr.prune(1).unwrap();
+		pmmr.prune(0).unwrap();
 		assert_eq!(orig_root, pmmr.root().unwrap());
 	}
 	assert_eq!(ba.hashes.len(), 16);
@@ -584,7 +584,7 @@ fn pmmr_prune() {
 	// pruning everything should only leave us with a single peak
 	{
 		let mut pmmr: PMMR<'_, TestElem, _> = PMMR::at(&mut ba, sz);
-		for n in 1..16 {
+		for n in 0..15 {
 			let _ = pmmr.prune(n);
 		}
 		assert_eq!(orig_root, pmmr.root().unwrap());
@@ -640,8 +640,8 @@ fn check_elements_from_pmmr_index() {
 	assert_eq!(res.1[6].0[3], 11);
 
 	// pruning a few nodes should get consistent results
-	pmmr.prune(1 + pmmr::insertion_to_pmmr_index(4)).unwrap();
-	pmmr.prune(1 + pmmr::insertion_to_pmmr_index(19)).unwrap();
+	pmmr.prune(pmmr::insertion_to_pmmr_index(4)).unwrap();
+	pmmr.prune(pmmr::insertion_to_pmmr_index(19)).unwrap();
 
 	let res = pmmr
 		.readonly_pmmr()

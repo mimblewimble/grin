@@ -1179,10 +1179,10 @@ impl<'a> Extension<'a> {
 	// Prune output and rangeproof PMMRs based on provided pos.
 	// Input is not valid if we cannot prune successfully.
 	fn apply_input(&mut self, commit: Commitment, pos: CommitPos) -> Result<(), Error> {
-		match self.output_pmmr.prune(pos.pos) {
+		match self.output_pmmr.prune(pos.pos - 1) {
 			Ok(true) => {
 				self.rproof_pmmr
-					.prune(pos.pos)
+					.prune(pos.pos - 1)
 					.map_err(ErrorKind::TxHashSetErr)?;
 				Ok(())
 			}

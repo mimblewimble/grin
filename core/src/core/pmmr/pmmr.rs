@@ -265,16 +265,16 @@ where
 	/// Returns an error if prune is called on a non-leaf position.
 	/// Returns false if the leaf node has already been pruned.
 	/// Returns true if pruning is successful.
-	pub fn prune(&mut self, pos1: u64) -> Result<bool, String> {
-		if !is_leaf(pos1 - 1) {
-			return Err(format!("Node at {} is not a leaf, can't prune.", pos1 - 1));
+	pub fn prune(&mut self, pos0: u64) -> Result<bool, String> {
+		if !is_leaf(pos0) {
+			return Err(format!("Node at {} is not a leaf, can't prune.", pos0));
 		}
 
-		if self.backend.get_hash(pos1).is_none() {
+		if self.backend.get_hash(1 + pos0).is_none() {
 			return Ok(false);
 		}
 
-		self.backend.remove(pos1)?;
+		self.backend.remove(1 + pos0)?;
 		Ok(true)
 	}
 
@@ -313,7 +313,7 @@ where
 		if sz > 2000 && !short {
 			return;
 		}
-		let start = if short && sz > 7 { sz / 8 - 1 } else { 0 };
+		let start = if short { sz / 8 } else { 0 };
 		for n in start..(sz / 8 + 1) {
 			let mut idx = "".to_owned();
 			let mut hashes = "".to_owned();
@@ -347,7 +347,7 @@ where
 		if sz > 2000 && !short {
 			return;
 		}
-		let start = if short && sz > 7 { sz / 8 - 1 } else { 0 };
+		let start = if short { sz / 8 } else { 0 };
 		for n in start..(sz / 8 + 1) {
 			let mut idx = "".to_owned();
 			let mut hashes = "".to_owned();

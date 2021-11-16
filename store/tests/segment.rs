@@ -378,8 +378,7 @@ where
 	B: Backend<T>,
 {
 	for &leaf_idx in leaf_idxs {
-		mmr.prune(1 + pmmr::insertion_to_pmmr_index(leaf_idx))
-			.unwrap();
+		mmr.prune(pmmr::insertion_to_pmmr_index(leaf_idx)).unwrap();
 		bitmap.remove(leaf_idx as u32);
 	}
 }
