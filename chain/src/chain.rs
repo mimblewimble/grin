@@ -1550,7 +1550,7 @@ fn setup_head(
 			batch.save_block_header(&genesis.header)?;
 		}
 
-		if header_pmmr.last_pos == 0 {
+		if header_pmmr.size == 0 {
 			txhashset::header_extending(header_pmmr, &mut batch, |ext, _| {
 				ext.apply_header(&genesis.header)
 			})?;

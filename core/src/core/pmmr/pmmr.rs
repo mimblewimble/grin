@@ -66,8 +66,8 @@ pub trait ReadablePMMR {
 	/// If this return a hash then this is our peaks sibling.
 	/// If none then the sibling of our peak is the peak to the left.
 	fn bag_the_rhs(&self, peak_pos: u64) -> Option<Hash> {
-		let last_pos = self.unpruned_size();
-		let rhs = peaks(last_pos)
+		let size = self.unpruned_size();
+		let rhs = peaks(size)
 			.into_iter()
 			.filter(|&x| x > peak_pos)
 			.filter_map(|x| self.get_from_file(x));
@@ -76,7 +76,7 @@ pub trait ReadablePMMR {
 		for peak in rhs.rev() {
 			res = match res {
 				None => Some(peak),
-				Some(rhash) => Some((peak, rhash).hash_with_index(last_pos)),
+				Some(rhash) => Some((peak, rhash).hash_with_index(size)),
 			}
 		}
 		res
@@ -126,7 +126,7 @@ pub trait ReadablePMMR {
 	/// Build a Merkle proof for the element at the given position.
 	fn merkle_proof(&self, pos1: u64) -> Result<MerkleProof, String> {
 		let size = self.unpruned_size();
-		debug!("merkle_proof  {}, last_pos {}", pos1, size);
+		debug!("merkle_proof  {}, size {}", pos1, size);
 
 		// check this pos is actually a leaf in the MMR
 		if !is_leaf(pos1 - 1) {
@@ -170,8 +170,8 @@ where
 	T: PMMRable,
 	B: Backend<T>,
 {
-	/// The last position in the PMMR
-	pub last_pos: u64,
+	/// Number of nodes in the PMMR
+	pub size: u64,
 	backend: &'a mut B,
 	// only needed to parameterise Backend
 	_marker: marker::PhantomData<T>,
@@ -186,30 +186,30 @@ where
 	pub fn new(backend: &'a mut B) -> PMMR<'_, T, B> {
 		PMMR {
 			backend,
-			last_pos: 0,
+			size: 0,
 			_marker: marker::PhantomData,
 		}
 	}
 
 	/// Build a new prunable Merkle Mountain Range pre-initialized until
-	/// last_pos with the provided backend.
-	pub fn at(backend: &'a mut B, last_pos: u64) -> PMMR<'_, T, B> {
+	/// size with the provided backend.
+	pub fn at(backend: &'a mut B, size: u64) -> PMMR<'_, T, B> {
 		PMMR {
 			backend,
-			last_pos,
+			size,
 			_marker: marker::PhantomData,
 		}
 	}
 
 	/// Build a "readonly" view of this PMMR.
 	pub fn readonly_pmmr(&self) -> ReadonlyPMMR<'_, T, B> {
-		ReadonlyPMMR::at(&self.backend, self.last_pos)
+		ReadonlyPMMR::at(&self.backend, self.size)
 	}
 
 	/// Push a new element into the MMR. Computes new related peaks at
 	/// the same time if applicable.
 	pub fn push(&mut self, elmt: &T) -> Result<u64, String> {
-		let elmt_pos = self.last_pos + 1;
+		let elmt_pos = self.size + 1;
 		let mut current_hash = elmt.hash_with_index(elmt_pos - 1);
 
 		let mut hashes = vec![current_hash];
@@ -235,7 +235,7 @@ where
 
 		// append all the new nodes and update the MMR index
 		self.backend.append(elmt, &hashes)?;
-		self.last_pos = pos;
+		self.size = pos;
 		Ok(elmt_pos)
 	}
 
@@ -257,7 +257,7 @@ where
 		// need to be included for the MMR to be valid.
 		let leaf_pos = round_up_to_leaf_pos(position);
 		self.backend.rewind(leaf_pos, rewind_rm_pos)?;
-		self.last_pos = leaf_pos;
+		self.size = leaf_pos;
 		Ok(())
 	}
 
@@ -281,7 +281,7 @@ where
 	/// Walks all unpruned nodes in the MMR and revalidate all parent hashes
 	pub fn validate(&self) -> Result<(), String> {
 		// iterate on all parent nodes
-		for n in 0..self.last_pos {
+		for n in 0..self.size {
 			let height = bintree_postorder_height(n);
 			if height > 0 {
 				if let Some(hash) = self.get_hash(n + 1) {
@@ -376,7 +376,7 @@ where
 	type Item = T::E;
 
 	fn get_hash(&self, pos1: u64) -> Option<Hash> {
-		if pos1 > self.last_pos {
+		if pos1 > self.size {
 			None
 		} else if is_leaf(pos1 - 1) {
 			// If we are a leaf then get hash from the backend.
@@ -388,7 +388,7 @@ where
 	}
 
 	fn get_data(&self, pos1: u64) -> Option<Self::Item> {
-		if pos1 > self.last_pos {
+		if pos1 > self.size {
 			// If we are beyond the rhs of the MMR return None.
 			None
 		} else if is_leaf(pos1 - 1) {
@@ -401,7 +401,7 @@ where
 	}
 
 	fn get_from_file(&self, pos1: u64) -> Option<Hash> {
-		if pos1 > self.last_pos {
+		if pos1 > self.size {
 			None
 		} else {
 			self.backend.get_from_file(pos1)
@@ -409,7 +409,7 @@ where
 	}
 
 	fn get_peak_from_file(&self, pos1: u64) -> Option<Hash> {
-		if pos1 > self.last_pos {
+		if pos1 > self.size {
 			None
 		} else {
 			self.backend.get_peak_from_file(pos1)
@@ -417,7 +417,7 @@ where
 	}
 
 	fn get_data_from_file(&self, pos1: u64) -> Option<Self::Item> {
-		if pos1 > self.last_pos {
+		if pos1 > self.size {
 			None
 		} else {
 			self.backend.get_data_from_file(pos1)
@@ -425,7 +425,7 @@ where
 	}
 
 	fn unpruned_size(&self) -> u64 {
-		self.last_pos
+		self.size
 	}
 
 	fn leaf_pos_iter(&self) -> Box<dyn Iterator<Item = u64> + '_> {
@@ -588,8 +588,8 @@ pub fn is_left_sibling(pos0: u64) -> bool {
 /// corresponding peak in the MMR.
 /// The size (and therefore the set of peaks) of the MMR
 /// is defined by size.
-/// NOTE this function and the Path struct are currently UNUSED
-/// as evident from the name change
+/// NOTE this function and the Path struct is UNUSED and
+/// mostly redundant as family_branch has similar functionality
 pub fn path0(pos0: u64, size: u64) -> impl Iterator<Item = u64> {
 	Path::new(pos0, size)
 }
@@ -637,7 +637,7 @@ impl Iterator for Path {
 /// We will use the sibling positions to generate the "path" of a Merkle proof.
 pub fn family_branch(pos0: u64, size: u64) -> Vec<(u64, u64)> {
 	// loop going up the tree, from node to parent, as long as we stay inside
-	// the tree (as defined by last_pos).
+	// the tree (as defined by size).
 	let (peak_map, height) = peak_map_height(pos0);
 	let mut peak = 1 << height;
 	let mut branch = vec![];
