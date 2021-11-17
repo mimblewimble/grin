@@ -288,7 +288,7 @@ pub fn init_test_logger() {
 		appenders.push(
 			Appender::builder()
 				.filter(filter)
-				//.filter(Box::new(GrinFilter))
+				.filter(Box::new(GrinFilter))
 				.build("stdout", Box::new(stdout)),
 		);
 
