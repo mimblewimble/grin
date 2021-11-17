@@ -48,7 +48,7 @@ pub trait Backend<T: PMMRable> {
 
 	/// Get a Hash  by original insertion position
 	/// (ignoring the remove log).
-	fn get_from_file(&self, position: u64) -> Option<Hash>;
+	fn get_from_file(&self, pos0: u64) -> Option<Hash>;
 
 	/// Get hash for peak pos.
 	/// Optimized for reading peak hashes rather than arbitrary pos hashes.

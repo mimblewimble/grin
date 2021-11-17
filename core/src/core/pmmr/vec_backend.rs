@@ -47,11 +47,11 @@ impl<T: PMMRable> Backend<T> for VecBackend<T> {
 		unimplemented!()
 	}
 
-	fn get_hash(&self, position: u64) -> Option<Hash> {
-		if self.removed.contains(&position) {
+	fn get_hash(&self, pos1: u64) -> Option<Hash> {
+		if self.removed.contains(&pos1) {
 			None
 		} else {
-			self.get_from_file(position)
+			self.get_from_file(pos1 - 1)
 		}
 	}
 
@@ -63,13 +63,13 @@ impl<T: PMMRable> Backend<T> for VecBackend<T> {
 		}
 	}
 
-	fn get_from_file(&self, position: u64) -> Option<Hash> {
-		let idx = usize::try_from(position.saturating_sub(1)).expect("usize from u64");
+	fn get_from_file(&self, pos0: u64) -> Option<Hash> {
+		let idx = usize::try_from(pos0).expect("usize from u64");
 		self.hashes.get(idx).cloned()
 	}
 
 	fn get_peak_from_file(&self, pos0: u64) -> Option<Hash> {
-		self.get_from_file(1 + pos0)
+		self.get_from_file(pos0)
 	}
 
 	fn get_data_from_file(&self, pos0: u64) -> Option<T::E> {

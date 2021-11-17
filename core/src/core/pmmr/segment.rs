@@ -259,7 +259,7 @@ where
 			}
 			// TODO: optimize, no need to send every intermediary hash
 			if prunable {
-				if let Some(hash) = pmmr.get_from_file(pos) {
+				if let Some(hash) = pmmr.get_from_file(pos - 1) {
 					segment.hashes.push(hash);
 					segment.hash_pos.push(pos);
 				}
@@ -271,7 +271,7 @@ where
 		if segment.leaf_data.is_empty() && segment.hashes.is_empty() {
 			let family_branch = pmmr::family_branch(segment_last_pos - 1, last_pos);
 			for (pos0, _) in family_branch {
-				if let Some(hash) = pmmr.get_from_file(1 + pos0) {
+				if let Some(hash) = pmmr.get_from_file(pos0) {
 					segment.hashes.push(hash);
 					segment.hash_pos.push(1 + pos0);
 					start_pos = Some(1 + pos0);

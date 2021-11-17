@@ -70,7 +70,7 @@ pub trait ReadablePMMR {
 		let rhs = peaks(size)
 			.into_iter()
 			.filter(|&x| x >= peak_pos1)
-			.filter_map(|x| self.get_from_file(1 + x));
+			.filter_map(|x| self.get_from_file(x));
 
 		let mut res = None;
 		for peak in rhs.rev() {
@@ -141,7 +141,7 @@ pub trait ReadablePMMR {
 
 		let mut path = family_branch
 			.iter()
-			.filter_map(|x| self.get_from_file(1 + x.1))
+			.filter_map(|x| self.get_from_file(x.1))
 			.collect::<Vec<_>>();
 
 		let peak_pos = match family_branch.last() {
@@ -285,8 +285,8 @@ where
 			let height = bintree_postorder_height(n);
 			if height > 0 {
 				if let Some(hash) = self.get_hash(n + 1) {
-					let left_pos = n + 1 - (1 << height);
-					let right_pos = n;
+					let left_pos = n - (1 << height);
+					let right_pos = n - 1;
 					// using get_from_file here for the children (they may have been "removed")
 					if let Some(left_child_hs) = self.get_from_file(left_pos) {
 						if let Some(right_child_hs) = self.get_from_file(right_pos) {
@@ -356,7 +356,7 @@ where
 					break;
 				}
 				idx.push_str(&format!("{:>8} ", m + 1));
-				let ohs = self.get_from_file(m + 1);
+				let ohs = self.get_from_file(m);
 				match ohs {
 					Some(hs) => hashes.push_str(&format!("{} ", hs)),
 					None => hashes.push_str(&format!("{:>8} ", " .")),
@@ -383,7 +383,7 @@ where
 			self.backend.get_hash(pos1)
 		} else {
 			// If we are not a leaf get hash ignoring the remove log.
-			self.backend.get_from_file(pos1)
+			self.backend.get_from_file(pos1 - 1)
 		}
 	}
 
@@ -400,11 +400,11 @@ where
 		}
 	}
 
-	fn get_from_file(&self, pos1: u64) -> Option<Hash> {
-		if pos1 > self.size {
+	fn get_from_file(&self, pos0: u64) -> Option<Hash> {
+		if pos0 >= self.size {
 			None
 		} else {
-			self.backend.get_from_file(pos1)
+			self.backend.get_from_file(pos0)
 		}
 	}
 

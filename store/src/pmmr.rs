@@ -103,12 +103,12 @@ impl<T: PMMRable> Backend<T> for PMMRBackend<T> {
 		Ok(())
 	}
 
-	fn get_from_file(&self, position: u64) -> Option<Hash> {
-		if self.is_compacted(position) {
+	fn get_from_file(&self, pos0: u64) -> Option<Hash> {
+		if self.is_compacted(1 + pos0) {
 			return None;
 		}
-		let shift = self.prune_list.get_shift(position);
-		self.hash_file.read(position - shift)
+		let shift = self.prune_list.get_shift(1 + pos0);
+		self.hash_file.read(1 + pos0 - shift)
 	}
 
 	fn get_peak_from_file(&self, pos0: u64) -> Option<Hash> {
@@ -135,7 +135,7 @@ impl<T: PMMRable> Backend<T> for PMMRBackend<T> {
 		if self.prunable && pmmr::is_leaf(pos1 - 1) && !self.leaf_set.includes(pos1) {
 			return None;
 		}
-		self.get_from_file(pos1)
+		self.get_from_file(pos1 - 1)
 	}
 
 	/// Get the data at pos.

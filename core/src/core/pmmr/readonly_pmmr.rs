@@ -123,7 +123,7 @@ where
 			self.backend.get_hash(pos1)
 		} else {
 			// If we are not a leaf get hash ignoring the remove log.
-			self.backend.get_from_file(pos1)
+			self.backend.get_from_file(pos1 - 1)
 		}
 	}
 
@@ -140,11 +140,11 @@ where
 		}
 	}
 
-	fn get_from_file(&self, pos1: u64) -> Option<Hash> {
-		if pos1 > self.size {
+	fn get_from_file(&self, pos0: u64) -> Option<Hash> {
+		if pos0 >= self.size {
 			None
 		} else {
-			self.backend.get_from_file(pos1)
+			self.backend.get_from_file(pos0)
 		}
 	}
 
