@@ -110,7 +110,7 @@ impl PMMRHandle<BlockHeader> {
 
 	/// Get the header hash at the specified height based on the current header MMR state.
 	pub fn get_header_hash_by_height(&self, height: u64) -> Result<Hash, Error> {
-		let pos = 1 + pmmr::insertion_to_pmmr_index(height);
+		let pos = pmmr::insertion_to_pmmr_index(height);
 		let header_pmmr = ReadonlyPMMR::at(&self.backend, self.size);
 		if let Some(entry) = header_pmmr.get_data(pos) {
 			Ok(entry.hash())
@@ -126,7 +126,7 @@ impl PMMRHandle<BlockHeader> {
 			return Err(ErrorKind::Other("MMR empty, no head".to_string()).into());
 		}
 		let header_pmmr = ReadonlyPMMR::at(&self.backend, self.size);
-		let leaf_pos = 1 + pmmr::bintree_rightmost(self.size - 1);
+		let leaf_pos = pmmr::bintree_rightmost(self.size - 1);
 		if let Some(entry) = header_pmmr.get_data(leaf_pos) {
 			Ok(entry.hash())
 		} else {
@@ -202,7 +202,7 @@ impl TxHashSet {
 				maybe_kernel_handle = Some(handle);
 				break;
 			}
-			let kernel: Option<TxKernel> = ReadonlyPMMR::at(&handle.backend, 1).get_data(1);
+			let kernel: Option<TxKernel> = ReadonlyPMMR::at(&handle.backend, 1).get_data(0);
 			if let Some(kernel) = kernel {
 				if kernel.verify().is_ok() {
 					debug!(
@@ -263,12 +263,12 @@ impl TxHashSet {
 		commit: Commitment,
 	) -> Result<Option<(OutputIdentifier, CommitPos)>, Error> {
 		match self.commit_index.get_output_pos_height(&commit) {
-			Ok(Some(pos)) => {
+			Ok(Some(pos1)) => {
 				let output_pmmr: ReadonlyPMMR<'_, OutputIdentifier, _> =
 					ReadonlyPMMR::at(&self.output_pmmr_h.backend, self.output_pmmr_h.size);
-				if let Some(out) = output_pmmr.get_data(pos.pos) {
+				if let Some(out) = output_pmmr.get_data(pos1.pos - 1) {
 					if out.commitment() == commit {
-						Ok(Some((out, pos)))
+						Ok(Some((out, pos1)))
 					} else {
 						Ok(None)
 					}
@@ -374,7 +374,7 @@ impl TxHashSet {
 		let mut index = max_index + 1;
 		while index > min_index {
 			index -= 1;
-			if let Some(kernel) = pmmr.get_data(index) {
+			if let Some(kernel) = pmmr.get_data(index - 1) {
 				if &kernel.excess == excess {
 					return Some((kernel, index));
 				}
@@ -488,7 +488,7 @@ impl TxHashSet {
 		let mut count = 0;
 		while current_pos <= self.kernel_pmmr_h.size {
 			if pmmr::is_leaf(current_pos - 1) {
-				if let Some(kernel) = kernel_pmmr.get_data(current_pos) {
+				if let Some(kernel) = kernel_pmmr.get_data(current_pos - 1) {
 					match kernel.features {
 						KernelFeatures::NoRecentDuplicate { .. } => {
 							while current_pos > current_header.kernel_mmr_size {
@@ -533,12 +533,12 @@ impl TxHashSet {
 		// Iterate over the current output_pos index, removing any entries that
 		// do not point to to the expected output.
 		let mut removed_count = 0;
-		for (key, pos) in batch.output_pos_iter()? {
-			if let Some(out) = output_pmmr.get_data(pos.pos) {
+		for (key, pos1) in batch.output_pos_iter()? {
+			if let Some(out) = output_pmmr.get_data(pos1.pos - 1) {
 				if let Ok(pos_via_mmr) = batch.get_output_pos(&out.commitment()) {
 					// If the pos matches and the index key matches the commitment
 					// then keep the entry, other we want to clean it up.
-					if pos.pos == pos_via_mmr
+					if pos1.pos == pos_via_mmr
 						&& batch.is_match_output_pos_key(&key, &out.commitment())
 					{
 						continue;
@@ -554,9 +554,9 @@ impl TxHashSet {
 		);
 
 		let mut outputs_pos: Vec<(Commitment, u64)> = vec![];
-		for pos in output_pmmr.leaf_pos_iter() {
-			if let Some(out) = output_pmmr.get_data(pos) {
-				outputs_pos.push((out.commit, pos));
+		for pos1 in output_pmmr.leaf_pos_iter() {
+			if let Some(out) = output_pmmr.get_data(pos1 - 1) {
+				outputs_pos.push((out.commit, pos1));
 			}
 		}
 
@@ -895,8 +895,8 @@ impl<'a> HeaderExtension<'a> {
 	}
 
 	/// Get the header hash for the specified pos from the underlying MMR backend.
-	fn get_header_hash(&self, pos: u64) -> Option<Hash> {
-		self.pmmr.get_data(pos).map(|x| x.hash())
+	fn get_header_hash(&self, pos1: u64) -> Option<Hash> {
+		self.pmmr.get_data(pos1 - 1).map(|x| x.hash())
 	}
 
 	/// The head representing the furthest extent of the current extension.
@@ -1034,8 +1034,8 @@ impl<'a> Committed for Extension<'a> {
 
 	fn outputs_committed(&self) -> Vec<Commitment> {
 		let mut commitments = vec![];
-		for pos in self.output_pmmr.leaf_pos_iter() {
-			if let Some(out) = self.output_pmmr.get_data(pos) {
+		for pos1 in self.output_pmmr.leaf_pos_iter() {
+			if let Some(out) = self.output_pmmr.get_data(pos1 - 1) {
 				commitments.push(out.commit);
 			}
 		}
@@ -1046,7 +1046,7 @@ impl<'a> Committed for Extension<'a> {
 		let mut commitments = vec![];
 		for n in 0..self.kernel_pmmr.unpruned_size() {
 			if pmmr::is_leaf(n) {
-				if let Some(kernel) = self.kernel_pmmr.get_data(n + 1) {
+				if let Some(kernel) = self.kernel_pmmr.get_data(n) {
 					commitments.push(kernel.excess());
 				}
 			}
@@ -1194,8 +1194,8 @@ impl<'a> Extension<'a> {
 	fn apply_output(&mut self, out: &Output, batch: &Batch<'_>) -> Result<u64, Error> {
 		let commit = out.commitment();
 
-		if let Ok(pos) = batch.get_output_pos(&commit) {
-			if let Some(out_mmr) = self.output_pmmr.get_data(pos) {
+		if let Ok(pos1) = batch.get_output_pos(&commit) {
+			if let Some(out_mmr) = self.output_pmmr.get_data(pos1 - 1) {
 				if out_mmr.commitment() == commit {
 					return Err(ErrorKind::DuplicateCommitment(commit).into());
 				}
@@ -1406,9 +1406,9 @@ impl<'a> Extension<'a> {
 		// reused output commitment. For example an output at pos 1, spent, reused at pos 2.
 		// The output_pos index should be updated to reflect the old pos 1 when unspent.
 		if let Ok(spent) = spent {
-			for pos in spent {
-				if let Some(out) = self.output_pmmr.get_data(pos.pos) {
-					batch.save_output_pos_height(&out.commitment(), pos)?;
+			for pos1 in spent {
+				if let Some(out) = self.output_pmmr.get_data(pos1.pos - 1) {
+					batch.save_output_pos_height(&out.commitment(), pos1)?;
 				}
 			}
 		}
@@ -1615,7 +1615,7 @@ impl<'a> Extension<'a> {
 			if pmmr::is_leaf(n) {
 				let kernel = self
 					.kernel_pmmr
-					.get_data(n + 1)
+					.get_data(n)
 					.ok_or_else(|| ErrorKind::TxKernelNotFound)?;
 				tx_kernels.push(kernel);
 			}
@@ -1651,9 +1651,9 @@ impl<'a> Extension<'a> {
 		let mut proof_count = 0;
 		let total_rproofs = self.output_pmmr.n_unpruned_leaves();
 
-		for pos in self.output_pmmr.leaf_pos_iter() {
-			let output = self.output_pmmr.get_data(pos);
-			let proof = self.rproof_pmmr.get_data(pos);
+		for pos1 in self.output_pmmr.leaf_pos_iter() {
+			let output = self.output_pmmr.get_data(pos1 - 1);
+			let proof = self.rproof_pmmr.get_data(pos1 - 1);
 
 			// Output and corresponding rangeproof *must* exist.
 			// It is invalid for either to be missing and we fail immediately in this case.

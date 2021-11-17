@@ -73,8 +73,8 @@ fn pmmr_append() {
 			let pmmr: PMMR<'_, TestElem, _> = PMMR::at(&mut backend, mmr_size);
 
 			assert_eq!(pmmr.n_unpruned_leaves(), 4);
-			assert_eq!(pmmr.get_data(1), Some(elems[0]));
-			assert_eq!(pmmr.get_data(2), Some(elems[1]));
+			assert_eq!(pmmr.get_data(0), Some(elems[0]));
+			assert_eq!(pmmr.get_data(1), Some(elems[1]));
 
 			assert_eq!(pmmr.get_hash(1), Some(pos_0));
 			assert_eq!(pmmr.get_hash(2), Some(pos_1));
@@ -111,16 +111,16 @@ fn pmmr_append() {
 			assert_eq!(pmmr.n_unpruned_leaves(), 9);
 
 			// First pair of leaves.
-			assert_eq!(pmmr.get_data(1), Some(elems[0]));
-			assert_eq!(pmmr.get_data(2), Some(elems[1]));
+			assert_eq!(pmmr.get_data(0), Some(elems[0]));
+			assert_eq!(pmmr.get_data(1), Some(elems[1]));
 
 			// Second pair of leaves.
-			assert_eq!(pmmr.get_data(4), Some(elems[2]));
-			assert_eq!(pmmr.get_data(5), Some(elems[3]));
+			assert_eq!(pmmr.get_data(3), Some(elems[2]));
+			assert_eq!(pmmr.get_data(4), Some(elems[3]));
 
 			// Third pair of leaves.
-			assert_eq!(pmmr.get_data(8), Some(elems[4]));
-			assert_eq!(pmmr.get_data(9), Some(elems[5]));
+			assert_eq!(pmmr.get_data(7), Some(elems[4]));
+			assert_eq!(pmmr.get_data(8), Some(elems[5]));
 			assert_eq!(pmmr.get_hash(10), Some(pos_9));
 		}
 
@@ -246,9 +246,9 @@ fn pmmr_prune_compact() {
 			let pmmr: PMMR<'_, TestElem, _> = PMMR::at(&mut backend, mmr_size);
 			assert_eq!(root, pmmr.root().unwrap());
 			// check we can still retrieve same element from leaf index 2
-			assert_eq!(pmmr.get_data(2).unwrap(), TestElem(2));
+			assert_eq!(pmmr.get_data(1).unwrap(), TestElem(2));
 			// and the same for leaf index 7
-			assert_eq!(pmmr.get_data(11).unwrap(), TestElem(7));
+			assert_eq!(pmmr.get_data(10).unwrap(), TestElem(7));
 		}
 
 		// compact
@@ -258,8 +258,8 @@ fn pmmr_prune_compact() {
 		{
 			let pmmr: PMMR<'_, TestElem, _> = PMMR::at(&mut backend, mmr_size);
 			assert_eq!(root, pmmr.root().unwrap());
-			assert_eq!(pmmr.get_data(2).unwrap(), TestElem(2));
-			assert_eq!(pmmr.get_data(11).unwrap(), TestElem(7));
+			assert_eq!(pmmr.get_data(1).unwrap(), TestElem(2));
+			assert_eq!(pmmr.get_data(10).unwrap(), TestElem(7));
 		}
 	}
 
@@ -436,26 +436,26 @@ fn pmmr_rewind() {
 		}
 
 		// Also check the data file looks correct.
-		// pos 1, 2, 4, 5 are all leaves but these have been pruned.
-		for pos in vec![1, 2, 4, 5] {
+		// pos 0, 1, 3, 4 are all leaves but these have been pruned.
+		for pos in vec![0, 1, 3, 4] {
 			assert_eq!(backend.get_data(pos), None);
 		}
-		// pos 3, 6, 7 are non-leaves so we have no data for these
-		for pos in vec![3, 6, 7] {
+		// pos 2, 5, 6 are non-leaves so we have no data for these
+		for pos in vec![2, 5, 6] {
 			assert_eq!(backend.get_data(pos), None);
 		}
 
-		// pos 8 and 9 are both leaves and should be unaffected by prior pruning
+		// pos 7 and 8 are both leaves and should be unaffected by prior pruning
 
-		assert_eq!(backend.get_data(8), Some(elems[4]));
+		assert_eq!(backend.get_data(7), Some(elems[4]));
 		assert_eq!(backend.get_hash(8), Some(elems[4].hash_with_index(7)));
 
-		assert_eq!(backend.get_data(9), Some(elems[5]));
+		assert_eq!(backend.get_data(8), Some(elems[5]));
 		assert_eq!(backend.get_hash(9), Some(elems[5].hash_with_index(8)));
 
 		// TODO - Why is this 2 here?
 		println!("***** backend size here: {}", backend.data_size());
-		// assert_eq!(backend.data_size(), 2);
+		assert_eq!(backend.data_size(), 2);
 
 		{
 			let mut pmmr: PMMR<'_, TestElem, _> = PMMR::at(&mut backend, 10);
@@ -470,9 +470,9 @@ fn pmmr_rewind() {
 		}
 
 		// also check the data file looks correct
-		// everything up to and including pos 7 should be pruned from the data file
-		// but we have rewound to pos 5 so everything after that should be None
-		for pos in 1..17 {
+		// everything up to and including pos 6 should be pruned from the data file
+		// but we have rewound to pos 4 so everything after that should be None
+		for pos in 0..16 {
 			assert_eq!(backend.get_data(pos), None);
 		}
 
@@ -536,7 +536,7 @@ fn pmmr_compact_entire_peak() {
 
 		let pos_7_hash = backend.get_hash(7).unwrap();
 
-		let pos_8 = backend.get_data(8).unwrap();
+		let pos_8 = backend.get_data(7).unwrap();
 		let pos_8_hash = backend.get_hash(8).unwrap();
 
 		// prune all leaves under the peak at pos 7
@@ -559,7 +559,7 @@ fn pmmr_compact_entire_peak() {
 		assert_eq!(backend.get_from_file(6), Some(pos_7_hash));
 
 		// now check we still have subsequent hash and data where we expect
-		assert_eq!(backend.get_data(8), Some(pos_8));
+		assert_eq!(backend.get_data(7), Some(pos_8));
 		assert_eq!(backend.get_hash(8), Some(pos_8_hash));
 		assert_eq!(backend.get_from_file(7), Some(pos_8_hash));
 	}
@@ -602,10 +602,10 @@ fn pmmr_compact_horizon() {
 			pos_6_hash = backend.get_hash(6).unwrap();
 			pos_7_hash = backend.get_hash(7).unwrap();
 
-			pos_8 = backend.get_data(8).unwrap();
+			pos_8 = backend.get_data(7).unwrap();
 			pos_8_hash = backend.get_hash(8).unwrap();
 
-			pos_11 = backend.get_data(11).unwrap();
+			pos_11 = backend.get_data(10).unwrap();
 			pos_11_hash = backend.get_hash(11).unwrap();
 
 			// pruning some choice nodes
@@ -630,11 +630,11 @@ fn pmmr_compact_horizon() {
 				assert_eq!(backend.get_from_file(6), Some(pos_7_hash));
 
 				assert_eq!(backend.get_hash(8), Some(pos_8_hash));
-				assert_eq!(backend.get_data(8), Some(pos_8));
+				assert_eq!(backend.get_data(7), Some(pos_8));
 				assert_eq!(backend.get_from_file(7), Some(pos_8_hash));
 
 				assert_eq!(backend.get_hash(11), Some(pos_11_hash));
-				assert_eq!(backend.get_data(11), Some(pos_11));
+				assert_eq!(backend.get_data(10), Some(pos_11));
 				assert_eq!(backend.get_from_file(10), Some(pos_11_hash));
 			}
 
@@ -728,7 +728,7 @@ fn pmmr_compact_horizon() {
 			assert_eq!(backend.get_from_file(6), Some(pos_7_hash));
 
 			assert_eq!(backend.get_hash(11), Some(pos_11_hash));
-			assert_eq!(backend.get_data(11), Some(pos_11));
+			assert_eq!(backend.get_data(10), Some(pos_11));
 			assert_eq!(backend.get_from_file(10), Some(pos_11_hash));
 		}
 	}
@@ -768,8 +768,8 @@ fn compact_twice() {
 		{
 			let pmmr: PMMR<'_, TestElem, _> = PMMR::at(&mut backend, mmr_size);
 			assert_eq!(root, pmmr.root().unwrap());
-			assert_eq!(pmmr.get_data(5).unwrap(), TestElem(4));
-			assert_eq!(pmmr.get_data(11).unwrap(), TestElem(7));
+			assert_eq!(pmmr.get_data(4).unwrap(), TestElem(4));
+			assert_eq!(pmmr.get_data(10).unwrap(), TestElem(7));
 		}
 
 		// compact
@@ -779,8 +779,8 @@ fn compact_twice() {
 		{
 			let pmmr: PMMR<'_, TestElem, _> = PMMR::at(&mut backend, mmr_size);
 			assert_eq!(root, pmmr.root().unwrap());
-			assert_eq!(pmmr.get_data(5).unwrap(), TestElem(4));
-			assert_eq!(pmmr.get_data(11).unwrap(), TestElem(7));
+			assert_eq!(pmmr.get_data(4).unwrap(), TestElem(4));
+			assert_eq!(pmmr.get_data(10).unwrap(), TestElem(7));
 		}
 
 		// now prune some more nodes
@@ -796,7 +796,7 @@ fn compact_twice() {
 		{
 			let pmmr: PMMR<'_, TestElem, _> = PMMR::at(&mut backend, mmr_size);
 			assert_eq!(root, pmmr.root().unwrap());
-			assert_eq!(pmmr.get_data(11).unwrap(), TestElem(7));
+			assert_eq!(pmmr.get_data(10).unwrap(), TestElem(7));
 		}
 
 		// compact
@@ -806,7 +806,7 @@ fn compact_twice() {
 		{
 			let pmmr: PMMR<'_, TestElem, _> = PMMR::at(&mut backend, mmr_size);
 			assert_eq!(root, pmmr.root().unwrap());
-			assert_eq!(pmmr.get_data(11).unwrap(), TestElem(7));
+			assert_eq!(pmmr.get_data(10).unwrap(), TestElem(7));
 		}
 	}
 

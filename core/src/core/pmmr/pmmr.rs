@@ -387,13 +387,13 @@ where
 		}
 	}
 
-	fn get_data(&self, pos1: u64) -> Option<Self::Item> {
-		if pos1 > self.size {
+	fn get_data(&self, pos0: u64) -> Option<Self::Item> {
+		if pos0 >= self.size {
 			// If we are beyond the rhs of the MMR return None.
 			None
-		} else if is_leaf(pos1 - 1) {
+		} else if is_leaf(pos0) {
 			// If we are a leaf then get data from the backend.
-			self.backend.get_data(pos1)
+			self.backend.get_data(pos0)
 		} else {
 			// If we are not a leaf then return None as only leaves have data.
 			None

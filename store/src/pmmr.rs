@@ -140,14 +140,14 @@ impl<T: PMMRable> Backend<T> for PMMRBackend<T> {
 
 	/// Get the data at pos.
 	/// Return None if it has been removed or if pos is not a leaf node.
-	fn get_data(&self, pos1: u64) -> Option<T::E> {
-		if !pmmr::is_leaf(pos1 - 1) {
+	fn get_data(&self, pos0: u64) -> Option<T::E> {
+		if !pmmr::is_leaf(pos0) {
 			return None;
 		}
-		if self.prunable && !self.leaf_set.includes(pos1) {
+		if self.prunable && !self.leaf_set.includes(1 + pos0) {
 			return None;
 		}
-		self.get_data_from_file(pos1 - 1)
+		self.get_data_from_file(pos0)
 	}
 
 	/// Returns an iterator over all the leaf positions.
