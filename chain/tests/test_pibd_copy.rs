@@ -16,41 +16,38 @@ use grin_chain as chain;
 use grin_core as core;
 use grin_util as util;
 
-#[macro_use]
-extern crate log;
-
 use std::sync::Arc;
 
-use crate::chain::txhashset::{BitmapAccumulator, BitmapChunk, BitmapSegment};
-use crate::chain::types::{NoopAdapter, Options};
+use crate::chain::txhashset::BitmapAccumulator;
+use crate::chain::types::NoopAdapter;
+use crate::core::core::pmmr;
 use crate::core::core::{hash::Hashed, pmmr::segment::SegmentIdentifier};
-use crate::core::core::{pmmr, Segment};
-use crate::core::{global, pow};
+use crate::core::{genesis, global, pow};
 
 use croaring::Bitmap;
 
 mod chain_test_helper;
 
-use self::chain_test_helper::clean_output_dir;
+fn test_pibd_chain_validation_impl(is_test_chain: bool, src_root_dir: &str) {
+	global::set_local_chain_type(global::ChainTypes::Mainnet);
+	let mut genesis = genesis::genesis_main();
+	// Height at which to read kernel segments (lower than thresholds defined in spec - for testing)
+	let mut target_segment_height = 11;
 
-#[test]
-fn test_pibd_copy() {
-	util::init_test_logger();
-	global::set_local_chain_type(global::ChainTypes::AutomatedTesting);
-	let genesis = pow::mine_genesis_block().unwrap();
-	// Note there is now a 'test' in grin_wallet that can be manually tweaked to create a
-	// small testing chain with actual transaction data
-	let src_root_dir = format!("./chain/tests/test_data/chain_compacted");
-	let dest_root_dir = format!("./chain/tests/test_output/.segment_copy");
-	clean_output_dir(&dest_root_dir);
+	if is_test_chain {
+		global::set_local_chain_type(global::ChainTypes::AutomatedTesting);
+		genesis = pow::mine_genesis_block().unwrap();
+		target_segment_height = 3;
+	}
+
 	{
-		debug!("Reading Chain, genesis block: {}", genesis.hash());
+		println!("Reading Chain, genesis block: {}", genesis.hash());
 		let dummy_adapter = Arc::new(NoopAdapter {});
 
 		// The original chain we're reading from
 		let src_chain = Arc::new(
 			chain::Chain::init(
-				src_root_dir.clone(),
+				src_root_dir.into(),
 				dummy_adapter.clone(),
 				genesis.clone(),
 				pow::verify_size,
@@ -59,115 +56,60 @@ fn test_pibd_copy() {
 			.unwrap(),
 		);
 
-		// And the output chain we're writing to
-		let dest_chain = Arc::new(
-			chain::Chain::init(
-				dest_root_dir.clone(),
-				dummy_adapter,
-				genesis.clone(),
-				pow::verify_size,
-				false,
-			)
-			.unwrap(),
-		);
-
-		//TODO: Later test
-		//src_chain.compact().unwrap();
-		/*src_chain
+		// For test compaction purposes
+		/*src_chain.compact().unwrap();
+		src_chain
 		.validate(true)
 		.expect("Source chain validation failed, stop");*/
 
-		let options = Options::NONE;
 		let sh = src_chain.get_header_by_height(0).unwrap();
-		debug!("S Genesis - {}", sh.hash());
-		let dh = dest_chain.get_header_by_height(0).unwrap();
-		debug!("D Genesis - {}", dh.hash());
+		println!("Source Genesis - {}", sh.hash());
 
-		let horizon_height = 110;
+		let horizon_header = src_chain.txhashset_archive_header().unwrap();
+
+		println!("Horizon header: {:?}", horizon_header);
 
 		// Copy the header from source to output
-		for h in 1..=horizon_height {
+		// Not necessary for this test, we're just validating the source
+		/*for h in 1..=horizon_height {
 			let h = src_chain.get_header_by_height(h).unwrap();
 			dest_chain.process_block_header(&h, options).unwrap();
-		}
-
-		let src_header_head = src_chain.header_head().unwrap();
-		let dest_header_head = dest_chain.header_head().unwrap();
-
-		debug!(
-			"Source Header Tip - Height: {} Prev Hash: {}",
-			src_header_head.height, src_header_head.last_block_h
-		);
-		debug!(
-			"Dest Header Tip - Height: {} Prev Hash: {}",
-			dest_header_head.height, dest_header_head.prev_block_h
-		);
-
-		// Archive header for this test data is at 110
-		let dest_horizon_header = src_chain.get_header_by_height(horizon_height).unwrap();
-		debug!("Horizon Header: {}", dest_horizon_header.hash());
-
-		debug!(
-			"Dest horizon header {} output root: {}",
-			horizon_height, dest_horizon_header.output_root
-		);
-		debug!(
-			"Dest horizon  header {} range proof root: {}",
-			horizon_height, dest_horizon_header.range_proof_root
-		);
-		debug!(
-			"Dest horizon header {} kernel root: {}",
-			horizon_height, dest_horizon_header.kernel_root
-		);
-		debug!(
-			"Dest horizon header {} kernel mmr size: {}",
-			horizon_height, dest_horizon_header.kernel_mmr_size
-		);
-		debug!(
-			"Dest horizon header {} output mmr size: {}",
-			horizon_height, dest_horizon_header.output_mmr_size
-		);
+		}*/
 
 		// Init segmenter, (note this still has to be lazy init somewhere on a peer)
+		// This is going to use the same block as horizon_header
 		let segmenter = src_chain.segmenter().unwrap();
 
-		// Last MMR position according to the target header
-		let last_pos = dest_horizon_header.kernel_mmr_size;
+		// BITMAP - Read + Validate, Also recreate bitmap accumulator for target tx hash set
+		// Predict number of leaves (chunks) in the bitmap MMR from the number of outputs
+		let bitmap_mmr_num_leaves =
+			(pmmr::n_leaves(horizon_header.output_mmr_size) as f64 / 1024f64).ceil() as u64;
+		println!("BITMAP PMMR NUM_LEAVES: {}", bitmap_mmr_num_leaves);
 
-		// Height at which to read kernel segments (lower than thresholds defined in spec - for testing)
-		let target_segment_height = 3;
-
-		// KERNELS - Read + Validate
-		// Build up a list of identifiers we'll need in order to reconstruct the MMR
-		// defined at the horizon head
+		// And total size of the bitmap PMMR
+		let bitmap_pmmr_size = pmmr::peaks(bitmap_mmr_num_leaves + 1)
+			.last()
+			.unwrap_or(&pmmr::insertion_to_pmmr_index(bitmap_mmr_num_leaves))
+			.clone();
+		println!("BITMAP PMMR SIZE: {}", bitmap_pmmr_size);
+		println!(
+			"Bitmap Segments required: {}",
+			SegmentIdentifier::count_segments_required(bitmap_pmmr_size, target_segment_height)
+		);
 		// TODO: This can probably be derived from the PMMR we'll eventually be building
 		// (check if total size is equal to total size at horizon header)
-		let identifier_iter = SegmentIdentifier::traversal_iter(
-			dest_horizon_header.kernel_mmr_size,
-			target_segment_height,
-		);
-
-		for sid in identifier_iter {
-			debug!("Getting kernel segment with Segment Identifier {:?}", sid);
-			let kernel_segment = segmenter.kernel_segment(sid).unwrap();
-			// Validate Kernel segment (which does not require a bitmap)
-			if let Err(e) = kernel_segment.validate(last_pos, None, dest_horizon_header.kernel_root)
-			{
-				panic!("Unable to validate kernel_segment root: {}", e);
-			}
-		}
-
-		// BITMAP - Read + Validate
-		// TODO: Check this calc
-		let bitmap_mmr_num_leaves = pmmr::n_leaves(dest_horizon_header.output_mmr_size / 1024) + 1;
-		let bitmap_pmmr_size = pmmr::insertion_to_pmmr_index(bitmap_mmr_num_leaves);
 		let identifier_iter =
-			SegmentIdentifier::traversal_iter(bitmap_mmr_num_leaves, target_segment_height);
+			SegmentIdentifier::traversal_iter(bitmap_pmmr_size, target_segment_height);
+
+		let mut bitmap_accumulator = BitmapAccumulator::new();
+		// Raw bitmap for validation
+		let mut bitmap = Bitmap::create();
+		let mut chunk_count = 0;
 
 		for sid in identifier_iter {
-			debug!("Getting bitmap segment with Segment Identifier {:?}", sid);
+			println!("Getting bitmap segment with Segment Identifier {:?}", sid);
 			let (bitmap_segment, output_root_hash) = segmenter.bitmap_segment(sid).unwrap();
-			debug!(
+			println!(
 				"Bitmap segmenter reports output root hash is {:?}",
 				output_root_hash
 			);
@@ -175,35 +117,49 @@ fn test_pibd_copy() {
 			if let Err(e) = bitmap_segment.validate_with(
 				bitmap_pmmr_size, // Last MMR pos at the height being validated, in this case of the bitmap root
 				None,
-				dest_horizon_header.output_root, // Output root we're checking for
-				dest_horizon_header.output_mmr_size,
+				horizon_header.output_root, // Output root we're checking for
+				horizon_header.output_mmr_size,
 				output_root_hash, // Other root
 				true,
 			) {
 				panic!("Unable to validate bitmap_root: {}", e);
 			}
+
+			let (_sid, _hash_pos, _hashes, _leaf_pos, leaf_data, _proof) = bitmap_segment.parts();
+
+			// Add to raw bitmap to use in further validation
+			for chunk in leaf_data.iter() {
+				bitmap.add_many(&chunk.set_iter(chunk_count * 1024).collect::<Vec<u32>>());
+				chunk_count += 1;
+			}
+
+			// and append to bitmap accumulator
+			for chunk in leaf_data.into_iter() {
+				bitmap_accumulator.append_chunk(chunk).unwrap();
+			}
 		}
+
+		println!("Accumulator Root: {}", bitmap_accumulator.root());
 
 		// OUTPUTS  - Read + Validate
 		let identifier_iter = SegmentIdentifier::traversal_iter(
-			dest_horizon_header.output_mmr_size,
+			horizon_header.output_mmr_size,
 			target_segment_height,
 		);
 
 		for sid in identifier_iter {
-			debug!("Getting output segment with Segment Identifier {:?}", sid);
+			println!("Getting output segment with Segment Identifier {:?}", sid);
 			let (output_segment, bitmap_root_hash) = segmenter.output_segment(sid).unwrap();
-			debug!(
+			println!(
 				"Output segmenter reports bitmap hash is {:?}",
 				bitmap_root_hash
 			);
 			// Validate Output
 			if let Err(e) = output_segment.validate_with(
-				dest_horizon_header.output_mmr_size, // Last MMR pos at the height being validated
-				// TODO: Need to provide Bitmap???
-				None,
-				dest_horizon_header.output_root, // Output root we're checking for
-				dest_horizon_header.output_mmr_size,
+				horizon_header.output_mmr_size, // Last MMR pos at the height being validated
+				Some(&bitmap),
+				horizon_header.output_root, // Output root we're checking for
+				horizon_header.output_mmr_size,
 				bitmap_root_hash, // Other root
 				false,
 			) {
@@ -213,33 +169,67 @@ fn test_pibd_copy() {
 
 		// PROOFS  - Read + Validate
 		let identifier_iter = SegmentIdentifier::traversal_iter(
-			dest_horizon_header.output_mmr_size,
+			horizon_header.output_mmr_size,
 			target_segment_height,
 		);
 
 		for sid in identifier_iter {
-			debug!(
+			println!(
 				"Getting rangeproof segment with Segment Identifier {:?}",
 				sid
 			);
 			let rangeproof_segment = segmenter.rangeproof_segment(sid).unwrap();
 			// Validate Kernel segment (which does not require a bitmap)
 			if let Err(e) = rangeproof_segment.validate(
-				dest_horizon_header.output_mmr_size, // Last MMR pos at the height being validated
-				// TODO: Need to provide Bitmap???
-				None,
-				dest_horizon_header.range_proof_root, // Output root we're checking for
+				horizon_header.output_mmr_size, // Last MMR pos at the height being validated
+				Some(&bitmap),
+				horizon_header.range_proof_root, // Output root we're checking for
 			) {
 				panic!("Unable to validate rangeproof segment root: {}", e);
 			}
 		}
 
-		/*
-		// Recreate a bitmap from the given chunks
-		let bitmap = output_bitmap_segment.as_bitmap();
-		debug!("BIT MAP CONTAINS: {}", bitmap.contains(127));
-		*/
+		// KERNELS - Read + Validate
+		let identifier_iter = SegmentIdentifier::traversal_iter(
+			horizon_header.kernel_mmr_size,
+			target_segment_height,
+		);
 
-		println!("urf");
+		for sid in identifier_iter {
+			println!("Getting kernel segment with Segment Identifier {:?}", sid);
+			let kernel_segment = segmenter.kernel_segment(sid).unwrap();
+			// Validate Kernel segment (which does not require a bitmap)
+			if let Err(e) = kernel_segment.validate(
+				horizon_header.kernel_mmr_size,
+				None,
+				horizon_header.kernel_root,
+			) {
+				panic!("Unable to validate kernel_segment root: {}", e);
+			}
+		}
 	}
+}
+
+#[test]
+fn test_pibd_chain_validation_sample() {
+	util::init_test_logger();
+	// Note there is now a 'test' in grin_wallet_controller/build_chain
+	// that can be manually tweaked to create a
+	// small test chain with actual transaction data
+
+	// Test on uncompacted and non-compacted chains
+	let src_root_dir = format!("./chain/tests/test_data/chain_raw");
+	test_pibd_chain_validation_impl(true, &src_root_dir);
+	let src_root_dir = format!("./chain/tests/test_data/chain_compacted");
+	test_pibd_chain_validation_impl(true, &src_root_dir);
+}
+
+#[test]
+#[ignore]
+// As above, but run on a real instance of a chain pointed where you like
+fn test_pibd_chain_validation_real() {
+	util::init_test_logger();
+	// if testing against a real chain, insert location here
+	let src_root_dir = format!("/Users/yeastplume/Projects/grin_project/server/chain_data");
+	test_pibd_chain_validation_impl(false, &src_root_dir);
 }

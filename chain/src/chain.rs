@@ -210,21 +210,6 @@ impl Chain {
 
 		chain.log_heads()?;
 
-		// Temporarily exercising the initialization process.
-		// Note: This is *really* slow because we are starting from cold.
-		//
-		// This is not required as we will lazily initialize our segmenter as required
-		// once we start receiving PIBD segment requests.
-		// In reality we will do this based on PIBD segment requests.
-		// Initialization (once per 12 hour period) will not be this slow once lmdb and PMMRs
-		// are warmed up.
-		/*if let Ok(segmenter) = chain.segmenter() {
-			let _ = segmenter.kernel_segment(SegmentIdentifier { height: 9, idx: 0 });
-			let _ = segmenter.bitmap_segment(SegmentIdentifier { height: 9, idx: 0 });
-			let _ = segmenter.output_segment(SegmentIdentifier { height: 11, idx: 0 });
-			let _ = segmenter.rangeproof_segment(SegmentIdentifier { height: 7, idx: 0 });
-		}*/
-
 		Ok(chain)
 	}
 

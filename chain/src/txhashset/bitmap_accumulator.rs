@@ -215,6 +215,16 @@ impl BitmapChunk {
 	pub fn any(&self) -> bool {
 		self.0.any()
 	}
+
+	/// Iterator over the integer set represented by this chunk, applying the given
+	/// offset to the values
+	pub fn set_iter(&self, idx_offset: usize) -> impl Iterator<Item = u32> + '_ {
+		self.0
+			.iter()
+			.enumerate()
+			.filter(|(_, val)| *val)
+			.map(move |(idx, _)| (idx as u32 + idx_offset as u32))
+	}
 }
 
 impl PMMRable for BitmapChunk {
@@ -282,22 +292,6 @@ impl Readable for BitmapSegment {
 			blocks,
 			proof,
 		})
-	}
-}
-
-impl BitmapSegment {
-	/// NB: This is only intended to recreate small bitmap segments for PIBD validation
-	/// TODO: See if there are ways to optimise, this is a brute force implementation
-	pub fn as_bitmap(&self) -> Bitmap {
-		let mut ret_map = Bitmap::create();
-		for (block_index, block) in self.blocks.iter().enumerate() {
-			for (bit_index, _) in block.inner.iter().enumerate() {
-				if block.inner[bit_index] {
-					ret_map.add(block_index as u32 * 1024 + bit_index as u32);
-				}
-			}
-		}
-		ret_map
 	}
 }
 

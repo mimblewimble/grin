@@ -76,7 +76,7 @@ impl SegmentIdentifier {
 		target_mmr_size: u64,
 		segment_height: u8,
 	) -> impl Iterator<Item = SegmentIdentifier> {
-		(0..=SegmentIdentifier::count_segments_required(target_mmr_size, segment_height) - 1).map(
+		(0..SegmentIdentifier::count_segments_required(target_mmr_size, segment_height)).map(
 			move |idx| SegmentIdentifier {
 				height: segment_height,
 				idx: idx as u64,
@@ -400,7 +400,6 @@ where
 			Ok(hashes.pop().unwrap())
 		} else {
 			// Not full (only final segment): peaks in segment, bag them together
-			let peaks = pmmr::peaks(last_pos);
 			let peaks = pmmr::peaks(last_pos)
 				.into_iter()
 				.filter(|&pos| pos >= segment_first_pos && pos <= segment_last_pos)
@@ -744,8 +743,6 @@ impl SegmentProof {
 			segment_root,
 			segment_unpruned_pos,
 		)?;
-		debug!("VALIDATE WITH ROOT IS {}", root);
-		debug!("OTHER ROOT IS {}", other_root);
 		let root = if other_is_left {
 			(other_root, root).hash_with_index(hash_last_pos)
 		} else {
