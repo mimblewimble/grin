@@ -124,20 +124,20 @@ pub trait ReadablePMMR {
 	}
 
 	/// Build a Merkle proof for the element at the given position.
-	fn merkle_proof(&self, pos1: u64) -> Result<MerkleProof, String> {
+	fn merkle_proof(&self, pos0: u64) -> Result<MerkleProof, String> {
 		let size = self.unpruned_size();
-		debug!("merkle_proof  {}, size {}", pos1, size);
+		debug!("merkle_proof  {}, size {}", pos0, size);
 
 		// check this pos is actually a leaf in the MMR
-		if !is_leaf(pos1 - 1) {
-			return Err(format!("not a leaf at pos {}", pos1));
+		if !is_leaf(pos0) {
+			return Err(format!("not a leaf at pos {}", pos0));
 		}
 
 		// check we actually have a hash in the MMR at this pos
-		self.get_hash(pos1)
-			.ok_or_else(|| format!("no element at pos {}", pos1))?;
+		self.get_hash(1 + pos0)
+			.ok_or_else(|| format!("no element at pos {}", 1 + pos0))?;
 
-		let family_branch = family_branch(pos1 - 1, size);
+		let family_branch = family_branch(pos0, size);
 
 		let mut path = family_branch
 			.iter()
@@ -145,11 +145,11 @@ pub trait ReadablePMMR {
 			.collect::<Vec<_>>();
 
 		let peak_pos = match family_branch.last() {
-			Some(&(x, _)) => 1 + x,
-			None => pos1,
+			Some(&(x, _)) => x,
+			None => pos0,
 		};
 
-		path.append(&mut self.peak_path(peak_pos));
+		path.append(&mut self.peak_path(1 + peak_pos));
 
 		Ok(MerkleProof {
 			mmr_size: size,

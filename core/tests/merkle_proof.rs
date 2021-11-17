@@ -34,7 +34,7 @@ fn merkle_proof_ser_deser() {
 	for x in 0..15 {
 		pmmr.push(&TestElem([0, 0, 0, x])).unwrap();
 	}
-	let proof = pmmr.merkle_proof(9).unwrap();
+	let proof = pmmr.merkle_proof(8).unwrap();
 
 	let mut vec = Vec::new();
 	ser::serialize_default(&mut vec, &proof).expect("serialization failed");
@@ -49,12 +49,12 @@ fn pmmr_merkle_proof_prune_and_rewind() {
 	let mut pmmr = PMMR::new(&mut ba);
 	pmmr.push(&TestElem([0, 0, 0, 1])).unwrap();
 	pmmr.push(&TestElem([0, 0, 0, 2])).unwrap();
-	let proof = pmmr.merkle_proof(2).unwrap();
+	let proof = pmmr.merkle_proof(1).unwrap();
 
 	// now prune an element and check we can still generate
 	// the correct Merkle proof for the other element (after sibling pruned)
 	pmmr.prune(0).unwrap();
-	let proof_2 = pmmr.merkle_proof(2).unwrap();
+	let proof_2 = pmmr.merkle_proof(1).unwrap();
 	assert_eq!(proof, proof_2);
 }
 
@@ -79,7 +79,7 @@ fn pmmr_merkle_proof() {
 	let pos_0 = elems[0].hash_with_index(0);
 	assert_eq!(pmmr.get_hash(1).unwrap(), pos_0);
 
-	let proof = pmmr.merkle_proof(1).unwrap();
+	let proof = pmmr.merkle_proof(0).unwrap();
 	assert_eq!(proof.path, vec![]);
 	assert!(proof.verify(pmmr.root().unwrap(), &elems[0], 1).is_ok());
 
@@ -93,11 +93,11 @@ fn pmmr_merkle_proof() {
 	assert_eq!(pmmr.peaks(), vec![pos_2]);
 
 	// single peak, path with single sibling
-	let proof = pmmr.merkle_proof(1).unwrap();
+	let proof = pmmr.merkle_proof(0).unwrap();
 	assert_eq!(proof.path, vec![pos_1]);
 	assert!(proof.verify(pmmr.root().unwrap(), &elems[0], 1).is_ok());
 
-	let proof = pmmr.merkle_proof(2).unwrap();
+	let proof = pmmr.merkle_proof(1).unwrap();
 	assert_eq!(proof.path, vec![pos_0]);
 	assert!(proof.verify(pmmr.root().unwrap(), &elems[1], 2).is_ok());
 
@@ -109,15 +109,15 @@ fn pmmr_merkle_proof() {
 	assert_eq!(pmmr.root().unwrap(), (pos_2, pos_3).hash_with_index(4));
 	assert_eq!(pmmr.peaks(), vec![pos_2, pos_3]);
 
-	let proof = pmmr.merkle_proof(1).unwrap();
+	let proof = pmmr.merkle_proof(0).unwrap();
 	assert_eq!(proof.path, vec![pos_1, pos_3]);
 	assert!(proof.verify(pmmr.root().unwrap(), &elems[0], 1).is_ok());
 
-	let proof = pmmr.merkle_proof(2).unwrap();
+	let proof = pmmr.merkle_proof(1).unwrap();
 	assert_eq!(proof.path, vec![pos_0, pos_3]);
 	assert!(proof.verify(pmmr.root().unwrap(), &elems[1], 2).is_ok());
 
-	let proof = pmmr.merkle_proof(4).unwrap();
+	let proof = pmmr.merkle_proof(3).unwrap();
 	assert_eq!(proof.path, vec![pos_2]);
 	assert!(proof.verify(pmmr.root().unwrap(), &elems[2], 4).is_ok());
 
@@ -147,43 +147,43 @@ fn pmmr_merkle_proof() {
 
 	assert_eq!(pmmr.unpruned_size(), 11);
 
-	let proof = pmmr.merkle_proof(1).unwrap();
+	let proof = pmmr.merkle_proof(0).unwrap();
 	assert_eq!(
 		proof.path,
 		vec![pos_1, pos_5, (pos_9, pos_10).hash_with_index(11)]
 	);
 	assert!(proof.verify(pmmr.root().unwrap(), &elems[0], 1).is_ok());
 
-	let proof = pmmr.merkle_proof(2).unwrap();
+	let proof = pmmr.merkle_proof(1).unwrap();
 	assert_eq!(
 		proof.path,
 		vec![pos_0, pos_5, (pos_9, pos_10).hash_with_index(11)]
 	);
 	assert!(proof.verify(pmmr.root().unwrap(), &elems[1], 2).is_ok());
 
-	let proof = pmmr.merkle_proof(4).unwrap();
+	let proof = pmmr.merkle_proof(3).unwrap();
 	assert_eq!(
 		proof.path,
 		vec![pos_4, pos_2, (pos_9, pos_10).hash_with_index(11)]
 	);
 	assert!(proof.verify(pmmr.root().unwrap(), &elems[2], 4).is_ok());
 
-	let proof = pmmr.merkle_proof(5).unwrap();
+	let proof = pmmr.merkle_proof(4).unwrap();
 	assert_eq!(
 		proof.path,
 		vec![pos_3, pos_2, (pos_9, pos_10).hash_with_index(11)]
 	);
 	assert!(proof.verify(pmmr.root().unwrap(), &elems[3], 5).is_ok());
 
-	let proof = pmmr.merkle_proof(8).unwrap();
+	let proof = pmmr.merkle_proof(7).unwrap();
 	assert_eq!(proof.path, vec![pos_8, pos_10, pos_6]);
 	assert!(proof.verify(pmmr.root().unwrap(), &elems[4], 8).is_ok());
 
-	let proof = pmmr.merkle_proof(9).unwrap();
+	let proof = pmmr.merkle_proof(8).unwrap();
 	assert_eq!(proof.path, vec![pos_7, pos_10, pos_6]);
 	assert!(proof.verify(pmmr.root().unwrap(), &elems[5], 9).is_ok());
 
-	let proof = pmmr.merkle_proof(11).unwrap();
+	let proof = pmmr.merkle_proof(10).unwrap();
 	assert_eq!(proof.path, vec![pos_9, pos_6]);
 	assert!(proof.verify(pmmr.root().unwrap(), &elems[6], 11).is_ok());
 }

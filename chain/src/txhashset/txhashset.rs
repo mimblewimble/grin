@@ -406,9 +406,9 @@ impl TxHashSet {
 
 	/// build a new merkle proof for the given position.
 	pub fn merkle_proof(&mut self, commit: Commitment) -> Result<MerkleProof, Error> {
-		let pos = self.commit_index.get_output_pos(&commit)?;
+		let pos1 = self.commit_index.get_output_pos(&commit)?;
 		PMMR::at(&mut self.output_pmmr_h.backend, self.output_pmmr_h.size)
-			.merkle_proof(pos)
+			.merkle_proof(pos1 - 1)
 			.map_err(|_| ErrorKind::MerkleProof.into())
 	}
 
@@ -1272,10 +1272,10 @@ impl<'a> Extension<'a> {
 		let out_id = out_id.as_ref();
 		debug!("txhashset: merkle_proof: output: {:?}", out_id.commit);
 		// then calculate the Merkle Proof based on the known pos
-		let pos = batch.get_output_pos(&out_id.commit)?;
+		let pos1 = batch.get_output_pos(&out_id.commit)?;
 		let merkle_proof = self
 			.output_pmmr
-			.merkle_proof(pos)
+			.merkle_proof(pos1 - 1)
 			.map_err(&ErrorKind::TxHashSetErr)?;
 
 		Ok(merkle_proof)
