@@ -55,11 +55,11 @@ impl<T: PMMRable> Backend<T> for VecBackend<T> {
 		}
 	}
 
-	fn get_data(&self, position: u64) -> Option<T::E> {
-		if self.removed.contains(&position) {
+	fn get_data(&self, pos1: u64) -> Option<T::E> {
+		if self.removed.contains(&pos1) {
 			None
 		} else {
-			self.get_data_from_file(position)
+			self.get_data_from_file(pos1 - 1)
 		}
 	}
 
@@ -72,10 +72,9 @@ impl<T: PMMRable> Backend<T> for VecBackend<T> {
 		self.get_from_file(1 + pos0)
 	}
 
-	fn get_data_from_file(&self, position: u64) -> Option<T::E> {
+	fn get_data_from_file(&self, pos0: u64) -> Option<T::E> {
 		if let Some(data) = &self.data {
-			let idx = usize::try_from(pmmr::n_leaves(position).saturating_sub(1))
-				.expect("usize from u64");
+			let idx = usize::try_from(pmmr::n_leaves(1 + pos0) - 1).expect("usize from u64");
 			data.get(idx).map(|x| x.as_elmt())
 		} else {
 			None

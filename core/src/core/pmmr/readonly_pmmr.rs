@@ -156,11 +156,11 @@ where
 		}
 	}
 
-	fn get_data_from_file(&self, pos1: u64) -> Option<Self::Item> {
-		if pos1 > self.size {
+	fn get_data_from_file(&self, pos0: u64) -> Option<Self::Item> {
+		if pos0 >= self.size {
 			None
 		} else {
-			self.backend.get_data_from_file(pos1)
+			self.backend.get_data_from_file(pos0)
 		}
 	}
 

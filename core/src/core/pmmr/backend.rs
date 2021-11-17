@@ -57,7 +57,7 @@ pub trait Backend<T: PMMRable> {
 
 	/// Get a Data Element by original insertion position
 	/// (ignoring the remove log).
-	fn get_data_from_file(&self, position: u64) -> Option<T::E>;
+	fn get_data_from_file(&self, pos0: u64) -> Option<T::E>;
 
 	/// Iterator over current (unpruned, unremoved) leaf positions.
 	fn leaf_pos_iter(&self) -> Box<dyn Iterator<Item = u64> + '_>;

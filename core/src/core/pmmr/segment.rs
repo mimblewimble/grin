@@ -249,7 +249,7 @@ where
 		let (segment_first_pos, segment_last_pos) = segment.segment_pos_range(last_pos);
 		for pos in segment_first_pos..=segment_last_pos {
 			if pmmr::is_leaf(pos - 1) {
-				if let Some(data) = pmmr.get_data_from_file(pos) {
+				if let Some(data) = pmmr.get_data_from_file(pos - 1) {
 					segment.leaf_data.push(data);
 					segment.leaf_pos.push(pos);
 					continue;

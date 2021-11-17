@@ -116,15 +116,15 @@ impl<T: PMMRable> Backend<T> for PMMRBackend<T> {
 		self.hash_file.read(1 + pos0 - shift)
 	}
 
-	fn get_data_from_file(&self, pos1: u64) -> Option<T::E> {
-		if !pmmr::is_leaf(pos1 - 1) {
+	fn get_data_from_file(&self, pos0: u64) -> Option<T::E> {
+		if !pmmr::is_leaf(pos0) {
 			return None;
 		}
-		if self.is_compacted(pos1) {
+		if self.is_compacted(1 + pos0) {
 			return None;
 		}
-		let flatfile_pos = pmmr::n_leaves(pos1);
-		let shift = self.prune_list.get_leaf_shift(pos1);
+		let flatfile_pos = pmmr::n_leaves(pos0 + 1);
+		let shift = self.prune_list.get_leaf_shift(1 + pos0);
 		self.data_file.read(flatfile_pos - shift)
 	}
 
@@ -147,7 +147,7 @@ impl<T: PMMRable> Backend<T> for PMMRBackend<T> {
 		if self.prunable && !self.leaf_set.includes(pos1) {
 			return None;
 		}
-		self.get_data_from_file(pos1)
+		self.get_data_from_file(pos1 - 1)
 	}
 
 	/// Returns an iterator over all the leaf positions.
