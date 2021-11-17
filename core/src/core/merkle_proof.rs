@@ -102,23 +102,23 @@ impl MerkleProof {
 		// calculate the peaks once as these are based on overall MMR size
 		// (and will not change)
 		let peaks_pos = pmmr::peaks(self.mmr_size);
-		proof.verify_consume(root, element, node_pos, &peaks_pos)
+		proof.verify_consume0(root, element, node_pos, &peaks_pos)
 	}
 
 	/// Consumes the Merkle proof while verifying it.
 	/// The proof can no longer be used by the caller after dong this.
 	/// Caller must clone() the proof first.
-	fn verify_consume(
+	fn verify_consume0(
 		&mut self,
 		root: Hash,
 		element: &dyn PMMRIndexHashable,
-		node_pos: u64,
-		peaks_pos: &[u64],
+		node_pos1: u64,
+		peaks_pos0: &[u64],
 	) -> Result<(), MerkleProofError> {
-		let node_hash = if node_pos > self.mmr_size {
+		let node_hash = if node_pos1 > self.mmr_size {
 			element.hash_with_index(self.mmr_size)
 		} else {
-			element.hash_with_index(node_pos - 1)
+			element.hash_with_index(node_pos1 - 1)
 		};
 
 		// handle special case of only a single entry in the MMR
@@ -132,10 +132,10 @@ impl MerkleProof {
 		}
 
 		let sibling = self.path.remove(0);
-		let (parent_pos0, sibling_pos0) = pmmr::family(node_pos - 1);
+		let (parent_pos0, sibling_pos0) = pmmr::family(node_pos1 - 1);
 
-		if let Ok(x) = peaks_pos.binary_search(&node_pos) {
-			let parent = if x == peaks_pos.len() - 1 {
+		if let Ok(x) = peaks_pos0.binary_search(&(node_pos1 - 1)) {
+			let parent = if x == peaks_pos0.len() - 1 {
 				(sibling, node_hash)
 			} else {
 				(node_hash, sibling)

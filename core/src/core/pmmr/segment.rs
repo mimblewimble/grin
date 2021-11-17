@@ -380,16 +380,18 @@ where
 			// Not full (only final segment): peaks in segment, bag them together
 			let peaks = pmmr::peaks(last_pos)
 				.into_iter()
-				.filter(|&pos| pos >= segment_first_pos && pos <= segment_last_pos)
+				.filter(|&pos0| 1 + pos0 >= segment_first_pos && 1 + pos0 <= segment_last_pos)
 				.rev();
 			let mut hash = None;
-			for pos in peaks {
-				let mut lhash = hashes.pop().ok_or_else(|| SegmentError::MissingHash(pos))?;
+			for pos0 in peaks {
+				let mut lhash = hashes
+					.pop()
+					.ok_or_else(|| SegmentError::MissingHash(1 + pos0))?;
 				if lhash.is_none() && bitmap.is_some() {
 					// If this entire peak is pruned, load it from the segment hashes
-					lhash = Some(self.get_hash(pos)?);
+					lhash = Some(self.get_hash(1 + pos0)?);
 				}
-				let lhash = lhash.ok_or_else(|| SegmentError::MissingHash(pos))?;
+				let lhash = lhash.ok_or_else(|| SegmentError::MissingHash(1 + pos0))?;
 
 				hash = match hash {
 					None => Some(lhash),
@@ -604,9 +606,12 @@ impl SegmentProof {
 		// 3. peaks to the left
 		let peaks: Result<Vec<_>, _> = pmmr::peaks(last_pos)
 			.into_iter()
-			.filter(|&x| x < segment_first_pos)
+			.filter(|&x| 1 + x < segment_first_pos)
 			.rev()
-			.map(|p| pmmr.get_hash(p).ok_or_else(|| SegmentError::MissingHash(p)))
+			.map(|p| {
+				pmmr.get_hash(1 + p)
+					.ok_or_else(|| SegmentError::MissingHash(1 + p))
+			})
 			.collect();
 		proof.hashes.extend(peaks?);
 
@@ -654,13 +659,14 @@ impl SegmentProof {
 
 		let rhs = pmmr::peaks(last_pos)
 			.into_iter()
-			.filter(|&x| x > peak_pos)
+			.filter(|&x| x >= peak_pos)
 			.next();
 
-		if let Some(pos) = rhs {
+		if let Some(pos0) = rhs {
 			root = (
 				root,
-				iter.next().ok_or_else(|| SegmentError::MissingHash(pos))?,
+				iter.next()
+					.ok_or_else(|| SegmentError::MissingHash(1 + pos0))?,
 			)
 				.hash_with_index(last_pos)
 		}
@@ -668,11 +674,12 @@ impl SegmentProof {
 		// 3. peaks to the left
 		let peaks = pmmr::peaks(last_pos)
 			.into_iter()
-			.filter(|&x| x < segment_first_pos)
+			.filter(|&x| 1 + x < segment_first_pos)
 			.rev();
-		for pos in peaks {
+		for pos0 in peaks {
 			root = (
-				iter.next().ok_or_else(|| SegmentError::MissingHash(pos))?,
+				iter.next()
+					.ok_or_else(|| SegmentError::MissingHash(1 + pos0))?,
 				root,
 			)
 				.hash_with_index(last_pos);

@@ -65,12 +65,12 @@ pub trait ReadablePMMR {
 	/// all the peaks to the right of this peak (if any).
 	/// If this return a hash then this is our peaks sibling.
 	/// If none then the sibling of our peak is the peak to the left.
-	fn bag_the_rhs(&self, peak_pos: u64) -> Option<Hash> {
+	fn bag_the_rhs(&self, peak_pos1: u64) -> Option<Hash> {
 		let size = self.unpruned_size();
 		let rhs = peaks(size)
 			.into_iter()
-			.filter(|&x| x > peak_pos)
-			.filter_map(|x| self.get_from_file(x));
+			.filter(|&x| x >= peak_pos1)
+			.filter_map(|x| self.get_from_file(1 + x));
 
 		let mut res = None;
 		for peak in rhs.rev() {
@@ -86,17 +86,17 @@ pub trait ReadablePMMR {
 	fn peaks(&self) -> Vec<Hash> {
 		peaks(self.unpruned_size())
 			.into_iter()
-			.filter_map(move |pi| self.get_peak_from_file(pi))
+			.filter_map(move |pi0| self.get_peak_from_file(1 + pi0))
 			.collect()
 	}
 
 	/// Hashes of the peaks excluding `peak_pos`, where the rhs is bagged together
-	fn peak_path(&self, peak_pos: u64) -> Vec<Hash> {
-		let rhs = self.bag_the_rhs(peak_pos);
+	fn peak_path(&self, peak_pos1: u64) -> Vec<Hash> {
+		let rhs = self.bag_the_rhs(peak_pos1);
 		let mut res = peaks(self.unpruned_size())
 			.into_iter()
-			.filter(|&x| x < peak_pos)
-			.filter_map(|x| self.get_peak_from_file(x))
+			.filter(|&x| 1 + x < peak_pos1)
+			.filter_map(|x| self.get_peak_from_file(1 + x))
 			.collect::<Vec<_>>();
 		if let Some(rhs) = rhs {
 			res.push(rhs);
@@ -496,7 +496,7 @@ pub fn peak_sizes_height(mut size: u64) -> (Vec<u64>, u64) {
 	(peak_sizes, size)
 }
 
-/// Gets the postorder traversal index of all peaks in a MMR given its size.
+/// Gets the postorder traversal 1-based index of all peaks in a MMR given its size.
 /// Starts with the top peak, which is always on the left
 /// side of the range, and navigates toward lower siblings toward the right
 /// of the range.
@@ -510,6 +510,7 @@ pub fn peaks(size: u64) -> Vec<u64> {
 				*acc += &x;
 				Some(*acc)
 			})
+			.map(|x| x - 1)
 			.collect()
 	} else {
 		vec![]

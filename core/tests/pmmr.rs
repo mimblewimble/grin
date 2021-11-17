@@ -321,21 +321,21 @@ fn some_peaks() {
 	assert_eq!(pmmr::peaks(0), empty);
 
 	// and various non-empty MMRs
-	assert_eq!(pmmr::peaks(1), [1]);
+	assert_eq!(pmmr::peaks(1), [0]);
 	assert_eq!(pmmr::peaks(2), empty);
-	assert_eq!(pmmr::peaks(3), [3]);
-	assert_eq!(pmmr::peaks(4), [3, 4]);
+	assert_eq!(pmmr::peaks(3), [2]);
+	assert_eq!(pmmr::peaks(4), [2, 3]);
 	assert_eq!(pmmr::peaks(5), empty);
 	assert_eq!(pmmr::peaks(6), empty);
-	assert_eq!(pmmr::peaks(7), [7]);
-	assert_eq!(pmmr::peaks(8), [7, 8]);
+	assert_eq!(pmmr::peaks(7), [6]);
+	assert_eq!(pmmr::peaks(8), [6, 7]);
 	assert_eq!(pmmr::peaks(9), empty);
-	assert_eq!(pmmr::peaks(10), [7, 10]);
-	assert_eq!(pmmr::peaks(11), [7, 10, 11]);
-	assert_eq!(pmmr::peaks(22), [15, 22]);
-	assert_eq!(pmmr::peaks(32), [31, 32]);
-	assert_eq!(pmmr::peaks(35), [31, 34, 35]);
-	assert_eq!(pmmr::peaks(42), [31, 38, 41, 42]);
+	assert_eq!(pmmr::peaks(10), [6, 9]);
+	assert_eq!(pmmr::peaks(11), [6, 9, 10]);
+	assert_eq!(pmmr::peaks(22), [14, 21]);
+	assert_eq!(pmmr::peaks(32), [30, 31]);
+	assert_eq!(pmmr::peaks(35), [30, 33, 34]);
+	assert_eq!(pmmr::peaks(42), [30, 37, 40, 41]);
 
 	// large realistic example with almost 1.5 million nodes
 	// note the distance between peaks decreases toward the right (trees get
@@ -343,8 +343,8 @@ fn some_peaks() {
 	assert_eq!(
 		pmmr::peaks(1048555),
 		[
-			524287, 786430, 917501, 983036, 1015803, 1032186, 1040377, 1044472, 1046519, 1047542,
-			1048053, 1048308, 1048435, 1048498, 1048529, 1048544, 1048551, 1048554, 1048555,
+			524286, 786429, 917500, 983035, 1015802, 1032185, 1040376, 1044471, 1046518, 1047541,
+			1048052, 1048307, 1048434, 1048497, 1048528, 1048543, 1048550, 1048553, 1048554,
 		],
 	);
 }
