@@ -134,8 +134,8 @@ pub trait ReadablePMMR {
 		}
 
 		// check we actually have a hash in the MMR at this pos
-		self.get_hash(1 + pos0)
-			.ok_or_else(|| format!("no element at pos {}", 1 + pos0))?;
+		self.get_hash(pos0)
+			.ok_or_else(|| format!("no element at pos {}", pos0))?;
 
 		let family_branch = family_branch(pos0, size);
 
@@ -270,7 +270,7 @@ where
 			return Err(format!("Node at {} is not a leaf, can't prune.", pos0));
 		}
 
-		if self.backend.get_hash(1 + pos0).is_none() {
+		if self.backend.get_hash(pos0).is_none() {
 			return Ok(false);
 		}
 
@@ -284,7 +284,7 @@ where
 		for n in 0..self.size {
 			let height = bintree_postorder_height(n);
 			if height > 0 {
-				if let Some(hash) = self.get_hash(n + 1) {
+				if let Some(hash) = self.get_hash(n) {
 					let left_pos = n - (1 << height);
 					let right_pos = n - 1;
 					// using get_from_file here for the children (they may have been "removed")
@@ -322,7 +322,7 @@ where
 					break;
 				}
 				idx.push_str(&format!("{:>8} ", m + 1));
-				let ohs = self.get_hash(m + 1);
+				let ohs = self.get_hash(m);
 				match ohs {
 					Some(hs) => hashes.push_str(&format!("{} ", hs)),
 					None => hashes.push_str(&format!("{:>8} ", "??")),
@@ -375,15 +375,15 @@ where
 {
 	type Item = T::E;
 
-	fn get_hash(&self, pos1: u64) -> Option<Hash> {
-		if pos1 > self.size {
+	fn get_hash(&self, pos0: u64) -> Option<Hash> {
+		if pos0 >= self.size {
 			None
-		} else if is_leaf(pos1 - 1) {
+		} else if is_leaf(pos0) {
 			// If we are a leaf then get hash from the backend.
-			self.backend.get_hash(pos1)
+			self.backend.get_hash(pos0)
 		} else {
 			// If we are not a leaf get hash ignoring the remove log.
-			self.backend.get_from_file(pos1 - 1)
+			self.backend.get_from_file(pos0)
 		}
 	}
 

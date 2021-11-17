@@ -56,7 +56,7 @@ fn prunable_mmr() {
 	let segment = Segment::from_pmmr(id, &mmr, true).unwrap();
 	assert_eq!(
 		segment.root(last_pos, Some(&bitmap)).unwrap().unwrap(),
-		mmr.get_hash(30).unwrap()
+		mmr.get_hash(29).unwrap()
 	);
 	segment.validate(last_pos, Some(&bitmap), root).unwrap();
 
@@ -72,7 +72,7 @@ fn prunable_mmr() {
 	let segment = Segment::from_pmmr(id, &mmr, true).unwrap();
 	assert_eq!(
 		segment.root(last_pos, Some(&bitmap)).unwrap().unwrap(),
-		mmr.get_hash(30).unwrap()
+		mmr.get_hash(29).unwrap()
 	);
 	segment.validate(last_pos, Some(&bitmap), root).unwrap();
 
@@ -88,7 +88,7 @@ fn prunable_mmr() {
 	let segment = Segment::from_pmmr(id, &mmr, true).unwrap();
 	assert_eq!(
 		segment.root(last_pos, Some(&bitmap)).unwrap().unwrap(),
-		mmr.get_hash(30).unwrap()
+		mmr.get_hash(29).unwrap()
 	);
 	segment.validate(last_pos, Some(&bitmap), root).unwrap();
 
@@ -104,7 +104,7 @@ fn prunable_mmr() {
 	let segment = Segment::from_pmmr(id, &mmr, true).unwrap();
 	assert_eq!(
 		segment.root(last_pos, Some(&bitmap)).unwrap().unwrap(),
-		mmr.get_hash(30).unwrap()
+		mmr.get_hash(29).unwrap()
 	);
 	segment.validate(last_pos, Some(&bitmap), root).unwrap();
 
@@ -191,7 +191,7 @@ fn pruned_segment() {
 		segment
 			.first_unpruned_parent(last_pos, Some(&bitmap))
 			.unwrap(),
-		(ba.get_hash(14).unwrap(), 14)
+		(ba.get_hash(13).unwrap(), 14)
 	);
 	assert!(segment.root(last_pos, Some(&bitmap)).unwrap().is_none());
 	segment.validate(last_pos, Some(&bitmap), root).unwrap();
@@ -213,7 +213,7 @@ fn pruned_segment() {
 		segment
 			.first_unpruned_parent(last_pos, Some(&bitmap))
 			.unwrap(),
-		(ba.get_hash(15).unwrap(), 15)
+		(ba.get_hash(14).unwrap(), 15)
 	);
 	assert!(segment.root(last_pos, Some(&bitmap)).unwrap().is_none());
 	segment.validate(last_pos, Some(&bitmap), root).unwrap();
@@ -266,7 +266,7 @@ fn pruned_segment() {
 		segment
 			.first_unpruned_parent(last_pos, Some(&bitmap))
 			.unwrap(),
-		(ba.get_hash(38).unwrap(), 38)
+		(ba.get_hash(37).unwrap(), 38)
 	);
 	assert!(segment.root(last_pos, Some(&bitmap)).unwrap().is_none());
 	segment.validate(last_pos, Some(&bitmap), root).unwrap();

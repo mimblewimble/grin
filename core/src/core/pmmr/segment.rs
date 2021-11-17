@@ -133,13 +133,13 @@ impl<T> Segment<T> {
 	}
 
 	/// TODO - binary_search_by_key() here (can we assume these are sorted by pos?)
-	fn get_hash(&self, pos: u64) -> Result<Hash, SegmentError> {
+	fn get_hash(&self, pos0: u64) -> Result<Hash, SegmentError> {
 		self.hash_pos
 			.iter()
 			.zip(&self.hashes)
-			.find(|&(&p, _)| p == pos)
+			.find(|&(&p, _)| p == 1 + pos0) // sucks that hash_pos is 1-based:-(
 			.map(|(_, &h)| h)
-			.ok_or_else(|| SegmentError::MissingHash(pos))
+			.ok_or_else(|| SegmentError::MissingHash(pos0))
 	}
 
 	/// Get the identifier associated with this segment
@@ -350,11 +350,11 @@ where
 						(None, None) => None,
 						(Some(l), Some(r)) => Some((l, r).hash_with_index(pos1 - 1)),
 						(None, Some(r)) => {
-							let l = self.get_hash(left_child_pos)?;
+							let l = self.get_hash(left_child_pos - 1)?;
 							Some((l, r).hash_with_index(pos1 - 1))
 						}
 						(Some(l), None) => {
-							let r = self.get_hash(right_child_pos)?;
+							let r = self.get_hash(right_child_pos - 1)?;
 							Some((l, r).hash_with_index(pos1 - 1))
 						}
 					}
@@ -389,7 +389,7 @@ where
 					.ok_or_else(|| SegmentError::MissingHash(1 + pos0))?;
 				if lhash.is_none() && bitmap.is_some() {
 					// If this entire peak is pruned, load it from the segment hashes
-					lhash = Some(self.get_hash(1 + pos0)?);
+					lhash = Some(self.get_hash(pos0)?);
 				}
 				let lhash = lhash.ok_or_else(|| SegmentError::MissingHash(1 + pos0))?;
 
@@ -402,7 +402,7 @@ where
 		}
 	}
 
-	/// Get the first unpruned parent hash of this segment
+	/// Get the first 1-based (sucks) unpruned parent hash of this segment
 	pub fn first_unpruned_parent(
 		&self,
 		last_pos: u64,
@@ -417,11 +417,11 @@ where
 		let n_leaves = pmmr::n_leaves(last_pos);
 
 		let mut cardinality = 0;
-		let mut pos = last;
+		let mut pos0 = last - 1;
 		let mut hash = Err(SegmentError::MissingHash(last));
 		let mut family_branch = pmmr::family_branch(last - 1, last_pos).into_iter();
 		while cardinality == 0 {
-			hash = self.get_hash(pos).map(|h| (h, pos));
+			hash = self.get_hash(pos0).map(|h| (h, 1 + pos0));
 			if hash.is_ok() {
 				// Return early in case a lower level hash is already present
 				// This can occur if both child trees are pruned but compaction hasn't run yet
@@ -429,7 +429,7 @@ where
 			}
 
 			if let Some((p0, _)) = family_branch.next() {
-				pos = 1 + p0;
+				pos0 = p0;
 				let range = (pmmr::n_leaves(1 + pmmr::bintree_leftmost(p0)) - 1)
 					..min(pmmr::n_leaves(1 + pmmr::bintree_rightmost(p0)), n_leaves);
 				cardinality = bitmap.range_cardinality(range);
@@ -588,8 +588,8 @@ impl SegmentProof {
 			.iter()
 			.filter(|&&(p0, _)| start_pos.map(|s| p0 >= s).unwrap_or(true))
 			.map(|&(_, s0)| {
-				pmmr.get_hash(1 + s0)
-					.ok_or_else(|| SegmentError::MissingHash(1 + s0))
+				pmmr.get_hash(s0)
+					.ok_or_else(|| SegmentError::MissingHash(s0))
 			})
 			.collect();
 		let mut proof = Self { hashes: hashes? };
@@ -608,10 +608,7 @@ impl SegmentProof {
 			.into_iter()
 			.filter(|&x| 1 + x < segment_first_pos)
 			.rev()
-			.map(|p| {
-				pmmr.get_hash(1 + p)
-					.ok_or_else(|| SegmentError::MissingHash(1 + p))
-			})
+			.map(|p| pmmr.get_hash(p).ok_or_else(|| SegmentError::MissingHash(p)))
 			.collect();
 		proof.hashes.extend(peaks?);
 

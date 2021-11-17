@@ -77,7 +77,7 @@ fn pmmr_merkle_proof() {
 
 	pmmr.push(&elems[0]).unwrap();
 	let pos_0 = elems[0].hash_with_index(0);
-	assert_eq!(pmmr.get_hash(1).unwrap(), pos_0);
+	assert_eq!(pmmr.get_hash(0).unwrap(), pos_0);
 
 	let proof = pmmr.merkle_proof(0).unwrap();
 	assert_eq!(proof.path, vec![]);
@@ -85,9 +85,9 @@ fn pmmr_merkle_proof() {
 
 	pmmr.push(&elems[1]).unwrap();
 	let pos_1 = elems[1].hash_with_index(1);
-	assert_eq!(pmmr.get_hash(2).unwrap(), pos_1);
+	assert_eq!(pmmr.get_hash(1).unwrap(), pos_1);
 	let pos_2 = (pos_0, pos_1).hash_with_index(2);
-	assert_eq!(pmmr.get_hash(3).unwrap(), pos_2);
+	assert_eq!(pmmr.get_hash(2).unwrap(), pos_2);
 
 	assert_eq!(pmmr.root().unwrap(), pos_2);
 	assert_eq!(pmmr.peaks(), vec![pos_2]);
@@ -104,7 +104,7 @@ fn pmmr_merkle_proof() {
 	// three leaves, two peaks (one also the right-most leaf)
 	pmmr.push(&elems[2]).unwrap();
 	let pos_3 = elems[2].hash_with_index(3);
-	assert_eq!(pmmr.get_hash(4).unwrap(), pos_3);
+	assert_eq!(pmmr.get_hash(3).unwrap(), pos_3);
 
 	assert_eq!(pmmr.root().unwrap(), (pos_2, pos_3).hash_with_index(4));
 	assert_eq!(pmmr.peaks(), vec![pos_2, pos_3]);
@@ -124,26 +124,26 @@ fn pmmr_merkle_proof() {
 	// 7 leaves, 3 peaks, 11 pos in total
 	pmmr.push(&elems[3]).unwrap();
 	let pos_4 = elems[3].hash_with_index(4);
-	assert_eq!(pmmr.get_hash(5).unwrap(), pos_4);
+	assert_eq!(pmmr.get_hash(4).unwrap(), pos_4);
 	let pos_5 = (pos_3, pos_4).hash_with_index(5);
-	assert_eq!(pmmr.get_hash(6).unwrap(), pos_5);
+	assert_eq!(pmmr.get_hash(5).unwrap(), pos_5);
 	let pos_6 = (pos_2, pos_5).hash_with_index(6);
-	assert_eq!(pmmr.get_hash(7).unwrap(), pos_6);
+	assert_eq!(pmmr.get_hash(6).unwrap(), pos_6);
 
 	pmmr.push(&elems[4]).unwrap();
 	let pos_7 = elems[4].hash_with_index(7);
-	assert_eq!(pmmr.get_hash(8).unwrap(), pos_7);
+	assert_eq!(pmmr.get_hash(7).unwrap(), pos_7);
 
 	pmmr.push(&elems[5]).unwrap();
 	let pos_8 = elems[5].hash_with_index(8);
-	assert_eq!(pmmr.get_hash(9).unwrap(), pos_8);
+	assert_eq!(pmmr.get_hash(8).unwrap(), pos_8);
 
 	let pos_9 = (pos_7, pos_8).hash_with_index(9);
-	assert_eq!(pmmr.get_hash(10).unwrap(), pos_9);
+	assert_eq!(pmmr.get_hash(9).unwrap(), pos_9);
 
 	pmmr.push(&elems[6]).unwrap();
 	let pos_10 = elems[6].hash_with_index(10);
-	assert_eq!(pmmr.get_hash(11).unwrap(), pos_10);
+	assert_eq!(pmmr.get_hash(10).unwrap(), pos_10);
 
 	assert_eq!(pmmr.unpruned_size(), 11);
 

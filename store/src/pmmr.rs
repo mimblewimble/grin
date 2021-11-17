@@ -131,11 +131,12 @@ impl<T: PMMRable> Backend<T> for PMMRBackend<T> {
 	/// Get the hash at pos.
 	/// Return None if pos is a leaf and it has been removed (or pruned or
 	/// compacted).
-	fn get_hash(&self, pos1: u64) -> Option<Hash> {
-		if self.prunable && pmmr::is_leaf(pos1 - 1) && !self.leaf_set.includes(pos1) {
+	fn get_hash(&self, pos0: u64) -> Option<Hash> {
+		// sucks that leaf_set is 1-based:-(
+		if self.prunable && pmmr::is_leaf(pos0) && !self.leaf_set.includes(1 + pos0) {
 			return None;
 		}
-		self.get_from_file(pos1 - 1)
+		self.get_from_file(pos0)
 	}
 
 	/// Get the data at pos.

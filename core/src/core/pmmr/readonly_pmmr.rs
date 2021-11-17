@@ -86,21 +86,19 @@ where
 	/// Helper function to get the last N nodes inserted, i.e. the last
 	/// n nodes along the bottom of the tree.
 	/// May return less than n items if the MMR has been pruned/compacted.
+	/// NOTE This should just iterate over insertion indices
+	/// to avoid the repeated calls to bintree_rightmost!
 	pub fn get_last_n_insertions(&self, n: u64) -> Vec<(Hash, T::E)> {
 		let mut return_vec = vec![];
 		let mut last_leaf = self.size;
-		for _ in 0..n as u64 {
-			if last_leaf == 0 {
-				break;
-			}
-			last_leaf = 1 + bintree_rightmost(last_leaf - 1);
+		while return_vec.len() < n as usize && last_leaf > 0 {
+			last_leaf = bintree_rightmost(last_leaf - 1);
 
 			if let Some(hash) = self.backend.get_hash(last_leaf) {
-				if let Some(data) = self.backend.get_data(last_leaf - 1) {
+				if let Some(data) = self.backend.get_data(last_leaf) {
 					return_vec.push((hash, data));
 				}
 			}
-			last_leaf -= 1;
 		}
 		return_vec
 	}
@@ -113,15 +111,15 @@ where
 {
 	type Item = T::E;
 
-	fn get_hash(&self, pos1: u64) -> Option<Hash> {
-		if pos1 > self.size {
+	fn get_hash(&self, pos0: u64) -> Option<Hash> {
+		if pos0 >= self.size {
 			None
-		} else if is_leaf(pos1 - 1) {
+		} else if is_leaf(pos0) {
 			// If we are a leaf then get hash from the backend.
-			self.backend.get_hash(pos1)
+			self.backend.get_hash(pos0)
 		} else {
 			// If we are not a leaf get hash ignoring the remove log.
-			self.backend.get_from_file(pos1 - 1)
+			self.backend.get_from_file(pos0)
 		}
 	}
 

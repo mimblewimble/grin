@@ -47,16 +47,17 @@ impl<T: PMMRable> Backend<T> for VecBackend<T> {
 		unimplemented!()
 	}
 
-	fn get_hash(&self, pos1: u64) -> Option<Hash> {
-		if self.removed.contains(&pos1) {
+	fn get_hash(&self, pos0: u64) -> Option<Hash> {
+		if self.removed.contains(&(1 + pos0)) {
 			None
 		} else {
-			self.get_from_file(pos1 - 1)
+			self.get_from_file(pos0)
 		}
 	}
 
 	fn get_data(&self, pos0: u64) -> Option<T::E> {
 		if self.removed.contains(&(1 + pos0)) {
+			// sucks that removed is 1-based:-(
 			None
 		} else {
 			self.get_data_from_file(pos0)
