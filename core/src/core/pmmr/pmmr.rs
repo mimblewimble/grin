@@ -510,7 +510,7 @@ pub fn peaks(size: u64) -> Vec<u64> {
 				*acc += &x;
 				Some(*acc)
 			})
-			.map(|x| { x - 1 }) -- rust doesn't allow starting scan with -1 as u64
+			.map(|x| x - 1) // rust doesn't allow starting scan with -1 as u64
 			.collect()
 	} else {
 		vec![]
