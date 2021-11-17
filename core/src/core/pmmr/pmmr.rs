@@ -86,7 +86,7 @@ pub trait ReadablePMMR {
 	fn peaks(&self) -> Vec<Hash> {
 		peaks(self.unpruned_size())
 			.into_iter()
-			.filter_map(move |pi0| self.get_peak_from_file(1 + pi0))
+			.filter_map(move |pi0| self.get_peak_from_file(pi0))
 			.collect()
 	}
 
@@ -96,7 +96,7 @@ pub trait ReadablePMMR {
 		let mut res = peaks(self.unpruned_size())
 			.into_iter()
 			.filter(|&x| 1 + x < peak_pos1)
-			.filter_map(|x| self.get_peak_from_file(1 + x))
+			.filter_map(|x| self.get_peak_from_file(x))
 			.collect::<Vec<_>>();
 		if let Some(rhs) = rhs {
 			res.push(rhs);
@@ -225,7 +225,7 @@ where
 			let left_sibling = pos + 1 - 2 * peak;
 			let left_hash = self
 				.backend
-				.get_peak_from_file(1 + left_sibling)
+				.get_peak_from_file(left_sibling)
 				.ok_or("missing left sibling in tree, should not have been pruned")?;
 			peak *= 2;
 			pos += 1;
@@ -408,11 +408,11 @@ where
 		}
 	}
 
-	fn get_peak_from_file(&self, pos1: u64) -> Option<Hash> {
-		if pos1 > self.size {
+	fn get_peak_from_file(&self, pos0: u64) -> Option<Hash> {
+		if pos0 >= self.size {
 			None
 		} else {
-			self.backend.get_peak_from_file(pos1)
+			self.backend.get_peak_from_file(pos0)
 		}
 	}
 

@@ -68,8 +68,8 @@ impl<T: PMMRable> Backend<T> for VecBackend<T> {
 		self.hashes.get(idx).cloned()
 	}
 
-	fn get_peak_from_file(&self, position: u64) -> Option<Hash> {
-		self.get_from_file(position)
+	fn get_peak_from_file(&self, pos0: u64) -> Option<Hash> {
+		self.get_from_file(1 + pos0)
 	}
 
 	fn get_data_from_file(&self, position: u64) -> Option<T::E> {

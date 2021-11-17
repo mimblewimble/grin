@@ -53,7 +53,7 @@ pub trait Backend<T: PMMRable> {
 	/// Get hash for peak pos.
 	/// Optimized for reading peak hashes rather than arbitrary pos hashes.
 	/// Peaks can be assumed to not be compacted.
-	fn get_peak_from_file(&self, position: u64) -> Option<Hash>;
+	fn get_peak_from_file(&self, pos0: u64) -> Option<Hash>;
 
 	/// Get a Data Element by original insertion position
 	/// (ignoring the remove log).

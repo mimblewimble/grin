@@ -148,11 +148,11 @@ where
 		}
 	}
 
-	fn get_peak_from_file(&self, pos1: u64) -> Option<Hash> {
-		if pos1 > self.size {
+	fn get_peak_from_file(&self, pos0: u64) -> Option<Hash> {
+		if pos0 >= self.size {
 			None
 		} else {
-			self.backend.get_peak_from_file(pos1)
+			self.backend.get_peak_from_file(pos0)
 		}
 	}
 

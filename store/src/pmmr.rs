@@ -111,9 +111,9 @@ impl<T: PMMRable> Backend<T> for PMMRBackend<T> {
 		self.hash_file.read(position - shift)
 	}
 
-	fn get_peak_from_file(&self, position: u64) -> Option<Hash> {
-		let shift = self.prune_list.get_shift(position);
-		self.hash_file.read(position - shift)
+	fn get_peak_from_file(&self, pos0: u64) -> Option<Hash> {
+		let shift = self.prune_list.get_shift(1 + pos0);
+		self.hash_file.read(1 + pos0 - shift)
 	}
 
 	fn get_data_from_file(&self, pos1: u64) -> Option<T::E> {
