@@ -496,7 +496,7 @@ pub fn peak_sizes_height(mut size: u64) -> (Vec<u64>, u64) {
 	(peak_sizes, size)
 }
 
-/// Gets the postorder traversal 1-based index of all peaks in a MMR given its size.
+/// Gets the postorder traversal 0-based index of all peaks in a MMR given its size.
 /// Starts with the top peak, which is always on the left
 /// side of the range, and navigates toward lower siblings toward the right
 /// of the range.
@@ -510,7 +510,7 @@ pub fn peaks(size: u64) -> Vec<u64> {
 				*acc += &x;
 				Some(*acc)
 			})
-			.map(|x| x - 1)
+			.map(|x| { x - 1 }) -- rust doesn't allow starting scan with -1 as u64
 			.collect()
 	} else {
 		vec![]
