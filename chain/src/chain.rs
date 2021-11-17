@@ -18,7 +18,7 @@
 use crate::core::core::merkle_proof::MerkleProof;
 use crate::core::core::{
 	Block, BlockHeader, BlockSums, Committed, Inputs, KernelFeatures, Output, OutputIdentifier,
-	SegmentIdentifier, Transaction, TxKernel,
+	Transaction, TxKernel,
 };
 use crate::core::global;
 use crate::core::pow;

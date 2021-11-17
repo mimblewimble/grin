@@ -218,9 +218,9 @@ fn test_pibd_chain_validation_sample() {
 	// small test chain with actual transaction data
 
 	// Test on uncompacted and non-compacted chains
-	let src_root_dir = format!("./chain/tests/test_data/chain_raw");
+	let src_root_dir = format!("./tests/test_data/chain_raw");
 	test_pibd_chain_validation_impl(true, &src_root_dir);
-	let src_root_dir = format!("./chain/tests/test_data/chain_compacted");
+	let src_root_dir = format!("./tests/test_data/chain_compacted");
 	test_pibd_chain_validation_impl(true, &src_root_dir);
 }
 
