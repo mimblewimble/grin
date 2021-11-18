@@ -276,7 +276,7 @@ where
 			return Ok(false);
 		}
 
-		self.backend.remove(1 + pos0)?;
+		self.backend.remove(pos0)?;
 		Ok(true)
 	}
 

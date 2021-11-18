@@ -48,7 +48,7 @@ impl<T: PMMRable> Backend<T> for VecBackend<T> {
 	}
 
 	fn get_hash(&self, pos0: u64) -> Option<Hash> {
-		if self.removed.contains(&(1 + pos0)) {
+		if self.removed.contains(&pos0) {
 			None
 		} else {
 			self.get_from_file(pos0)
@@ -56,8 +56,7 @@ impl<T: PMMRable> Backend<T> for VecBackend<T> {
 	}
 
 	fn get_data(&self, pos0: u64) -> Option<T::E> {
-		if self.removed.contains(&(1 + pos0)) {
-			// sucks that removed is 1-based:-(
+		if self.removed.contains(&pos0) {
 			None
 		} else {
 			self.get_data_from_file(pos0)
@@ -93,7 +92,7 @@ impl<T: PMMRable> Backend<T> for VecBackend<T> {
 				.iter()
 				.enumerate()
 				.map(|(x, _)| (x + 1) as u64)
-				.filter(move |x| pmmr::is_leaf(*x - 1) && !self.removed.contains(x)),
+				.filter(move |x| pmmr::is_leaf(*x - 1) && !self.removed.contains(&(x - 1))),
 		)
 	}
 
@@ -106,8 +105,8 @@ impl<T: PMMRable> Backend<T> for VecBackend<T> {
 		)
 	}
 
-	fn remove(&mut self, position: u64) -> Result<(), String> {
-		self.removed.insert(position);
+	fn remove(&mut self, pos0: u64) -> Result<(), String> {
+		self.removed.insert(pos0);
 		Ok(())
 	}
 

@@ -212,9 +212,9 @@ impl<T: PMMRable> Backend<T> for PMMRBackend<T> {
 	}
 
 	/// Remove by insertion position.
-	fn remove(&mut self, pos: u64) -> Result<(), String> {
+	fn remove(&mut self, pos0: u64) -> Result<(), String> {
 		assert!(self.prunable, "Remove on non-prunable MMR");
-		self.leaf_set.remove(pos);
+		self.leaf_set.remove(1 + pos0);
 		Ok(())
 	}
 
