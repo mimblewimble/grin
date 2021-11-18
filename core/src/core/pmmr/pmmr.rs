@@ -28,6 +28,8 @@ pub trait ReadablePMMR {
 	type Item;
 
 	/// Get the hash at provided position in the MMR.
+	/// NOTE all positions are 0-based, so a size n MMR has nodes in positions 0 through n-1
+	/// just like a Rust Range 0..n
 	fn get_hash(&self, pos: u64) -> Option<Hash>;
 
 	/// Get the data element at provided position in the MMR.
@@ -91,11 +93,11 @@ pub trait ReadablePMMR {
 	}
 
 	/// Hashes of the peaks excluding `peak_pos`, where the rhs is bagged together
-	fn peak_path(&self, peak_pos1: u64) -> Vec<Hash> {
-		let rhs = self.bag_the_rhs(peak_pos1);
+	fn peak_path(&self, peak_pos0: u64) -> Vec<Hash> {
+		let rhs = self.bag_the_rhs(1 + peak_pos0);
 		let mut res = peaks(self.unpruned_size())
 			.into_iter()
-			.filter(|&x| 1 + x < peak_pos1)
+			.filter(|&x| x < peak_pos0)
 			.filter_map(|x| self.get_peak_from_file(x))
 			.collect::<Vec<_>>();
 		if let Some(rhs) = rhs {
@@ -149,7 +151,7 @@ pub trait ReadablePMMR {
 			None => pos0,
 		};
 
-		path.append(&mut self.peak_path(1 + peak_pos));
+		path.append(&mut self.peak_path(peak_pos));
 
 		Ok(MerkleProof {
 			mmr_size: size,
