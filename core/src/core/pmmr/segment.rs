@@ -597,8 +597,8 @@ impl SegmentProof {
 		// 2. bagged peaks to the right
 		let peak_pos = family_branch
 			.last()
-			.map(|&(p0, _)| 1 + p0)
-			.unwrap_or(segment_last_pos);
+			.map(|&(p0, _)| p0)
+			.unwrap_or(segment_last_pos - 1);
 		if let Some(h) = pmmr.bag_the_rhs(peak_pos) {
 			proof.hashes.push(h);
 		}

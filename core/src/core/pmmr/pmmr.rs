@@ -67,11 +67,11 @@ pub trait ReadablePMMR {
 	/// all the peaks to the right of this peak (if any).
 	/// If this return a hash then this is our peaks sibling.
 	/// If none then the sibling of our peak is the peak to the left.
-	fn bag_the_rhs(&self, peak_pos1: u64) -> Option<Hash> {
+	fn bag_the_rhs(&self, peak_pos0: u64) -> Option<Hash> {
 		let size = self.unpruned_size();
 		let rhs = peaks(size)
 			.into_iter()
-			.filter(|&x| x >= peak_pos1)
+			.filter(|&x| x > peak_pos0)
 			.filter_map(|x| self.get_from_file(x));
 
 		let mut res = None;
@@ -94,7 +94,7 @@ pub trait ReadablePMMR {
 
 	/// Hashes of the peaks excluding `peak_pos`, where the rhs is bagged together
 	fn peak_path(&self, peak_pos0: u64) -> Vec<Hash> {
-		let rhs = self.bag_the_rhs(1 + peak_pos0);
+		let rhs = self.bag_the_rhs(peak_pos0);
 		let mut res = peaks(self.unpruned_size())
 			.into_iter()
 			.filter(|&x| x < peak_pos0)
@@ -116,10 +116,11 @@ pub trait ReadablePMMR {
 		}
 		let mut res = None;
 		let peaks = self.peaks();
+		let mmr_size = self.unpruned_size();
 		for peak in peaks.into_iter().rev() {
 			res = match res {
 				None => Some(peak),
-				Some(rhash) => Some((peak, rhash).hash_with_index(self.unpruned_size())),
+				Some(rhash) => Some((peak, rhash).hash_with_index(mmr_size)),
 			}
 		}
 		res.ok_or_else(|| "no root, invalid tree".to_owned())
@@ -161,8 +162,7 @@ pub trait ReadablePMMR {
 }
 
 /// Prunable Merkle Mountain Range implementation. All positions within the tree
-/// start at 1 as they're postorder tree traversal positions rather than array
-/// indices.
+/// start at 0 just like array indices.
 ///
 /// Heavily relies on navigation operations within a binary tree. In particular,
 /// all the implementation needs to keep track of the MMR structure is how far
