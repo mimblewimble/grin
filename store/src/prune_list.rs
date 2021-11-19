@@ -181,10 +181,10 @@ impl PruneList {
 	}
 
 	// Calculate the next shift based on provided pos and the previous shift.
-	fn calculate_next_shift(&self, pos1: u64) -> u64 {
-		let prev_shift = self.get_shift(pos1.saturating_sub(1));
-		let shift = if self.is_pruned_root(pos1 - 1) {
-			let height = bintree_postorder_height(pos1 - 1);
+	fn calculate_next_shift(&self, pos0: u64) -> u64 {
+		let prev_shift = self.get_shift(pos0);
+		let shift = if self.is_pruned_root(pos0) {
+			let height = bintree_postorder_height(pos0);
 			2 * ((1 << height) - 1)
 		} else {
 			0
@@ -290,7 +290,7 @@ impl PruneList {
 		self.bitmap.add(1 + pos0 as u32);
 
 		// Calculate shift and leaf_shift for this pos.
-		self.shift_cache.push(self.calculate_next_shift(1 + pos0));
+		self.shift_cache.push(self.calculate_next_shift(pos0));
 		self.leaf_shift_cache
 			.push(self.calculate_next_leaf_shift(pos0));
 	}
