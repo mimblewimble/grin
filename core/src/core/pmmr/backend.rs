@@ -31,7 +31,7 @@ pub trait Backend<T: PMMRable> {
 
 	/// Rebuilding a PMMR locally from PIBD segments requires pruned subtree support.
 	/// This allows us to append an existing pruned subtree directly without the underlying leaf nodes.
-	fn append_pruned_subtree(&mut self, hash: Hash, pos1: u64) -> Result<(), String>;
+	fn append_pruned_subtree(&mut self, hash: Hash, pos0: u64) -> Result<(), String>;
 
 	/// Rewind the backend state to a previous position, as if all append
 	/// operations after that had been canceled. Expects a position in the PMMR

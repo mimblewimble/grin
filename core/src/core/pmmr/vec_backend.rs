@@ -43,7 +43,7 @@ impl<T: PMMRable> Backend<T> for VecBackend<T> {
 		Ok(())
 	}
 
-	fn append_pruned_subtree(&mut self, _hash: Hash, _pos: u64) -> Result<(), String> {
+	fn append_pruned_subtree(&mut self, _hash: Hash, _pos0: u64) -> Result<(), String> {
 		unimplemented!()
 	}
 
