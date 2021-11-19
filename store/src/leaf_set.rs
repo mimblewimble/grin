@@ -142,13 +142,13 @@ impl LeafSet {
 	}
 
 	/// Append a new position to the leaf_set.
-	pub fn add(&mut self, pos: u64) {
-		self.bitmap.add(pos as u32);
+	pub fn add(&mut self, pos0: u64) {
+		self.bitmap.add(1 + pos0 as u32);
 	}
 
 	/// Remove the provided position from the leaf_set.
-	pub fn remove(&mut self, pos: u64) {
-		self.bitmap.remove(pos as u32);
+	pub fn remove(&mut self, pos0: u64) {
+		self.bitmap.remove(1 + pos0 as u32);
 	}
 
 	/// Saves the utxo file tagged with block hash as filename suffix.

@@ -78,9 +78,8 @@ impl<T: PMMRable> Backend<T> for PMMRBackend<T> {
 		if self.prunable {
 			// (Re)calculate the latest pos given updated size of data file
 			// and the total leaf_shift, and add to our leaf_set.
-			let pos = 1 + pmmr::insertion_to_pmmr_index(
-				size + self.prune_list.get_total_leaf_shift() - 1,
-			);
+			let pos =
+				pmmr::insertion_to_pmmr_index(size + self.prune_list.get_total_leaf_shift() - 1);
 			self.leaf_set.add(pos);
 		}
 
@@ -213,7 +212,7 @@ impl<T: PMMRable> Backend<T> for PMMRBackend<T> {
 	/// Remove by insertion position.
 	fn remove(&mut self, pos0: u64) -> Result<(), String> {
 		assert!(self.prunable, "Remove on non-prunable MMR");
-		self.leaf_set.remove(1 + pos0);
+		self.leaf_set.remove(pos0);
 		Ok(())
 	}
 
