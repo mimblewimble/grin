@@ -619,13 +619,13 @@ impl SegmentProof {
 	pub fn reconstruct_root(
 		&self,
 		last_pos: u64,
-		segment_first_pos: u64,
-		segment_last_pos: u64,
+		segment_first_pos0: u64,
+		segment_last_pos0: u64,
 		segment_root: Hash,
 		segment_unpruned_pos: u64,
 	) -> Result<Hash, SegmentError> {
 		let mut iter = self.hashes.iter();
-		let family_branch = pmmr::family_branch(segment_last_pos - 1, last_pos);
+		let family_branch = pmmr::family_branch(segment_last_pos0, last_pos);
 
 		// 1. siblings along the path from the subtree root to the peak
 		let mut root = segment_root;
@@ -644,14 +644,14 @@ impl SegmentProof {
 		}
 
 		// 2. bagged peaks to the right
-		let peak_pos = family_branch
+		let peak_pos0 = family_branch
 			.last()
-			.map(|&(p0, _)| 1 + p0)
-			.unwrap_or(segment_last_pos);
+			.map(|&(p0, _)| p0)
+			.unwrap_or(segment_last_pos0);
 
 		let rhs = pmmr::peaks(last_pos)
 			.into_iter()
-			.filter(|&x| x >= peak_pos)
+			.filter(|&x| x > peak_pos0)
 			.next();
 
 		if let Some(pos0) = rhs {
@@ -666,7 +666,7 @@ impl SegmentProof {
 		// 3. peaks to the left
 		let peaks = pmmr::peaks(last_pos)
 			.into_iter()
-			.filter(|&x| 1 + x < segment_first_pos)
+			.filter(|&x| x < segment_first_pos0)
 			.rev();
 		for pos0 in peaks {
 			root = (
@@ -692,8 +692,8 @@ impl SegmentProof {
 	) -> Result<(), SegmentError> {
 		let root = self.reconstruct_root(
 			last_pos,
-			segment_first_pos,
-			segment_last_pos,
+			segment_first_pos - 1,
+			segment_last_pos - 1,
 			segment_root,
 			segment_unpruned_pos,
 		)?;
@@ -720,8 +720,8 @@ impl SegmentProof {
 	) -> Result<(), SegmentError> {
 		let root = self.reconstruct_root(
 			last_pos,
-			segment_first_pos,
-			segment_last_pos,
+			segment_first_pos - 1,
+			segment_last_pos - 1,
 			segment_root,
 			segment_unpruned_pos,
 		)?;
