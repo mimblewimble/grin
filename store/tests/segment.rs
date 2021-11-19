@@ -281,7 +281,7 @@ fn pruned_segment() {
 			.first_unpruned_parent(last_pos, Some(&bitmap))
 			.unwrap()
 			.1,
-		segment.segment_pos_range(last_pos).1
+		1 + segment.segment_pos_range(last_pos).1
 	);
 	assert!(segment.root(last_pos, Some(&bitmap)).unwrap().is_some());
 	segment.validate(last_pos, Some(&bitmap), root).unwrap();
@@ -317,7 +317,7 @@ fn pruned_segment() {
 			.first_unpruned_parent(last_pos, Some(&bitmap))
 			.unwrap()
 			.1,
-		segment.segment_pos_range(last_pos).1
+		1 + segment.segment_pos_range(last_pos).1
 	);
 	assert!(segment.root(last_pos, Some(&bitmap)).unwrap().is_some());
 	segment.validate(last_pos, Some(&bitmap), root).unwrap();

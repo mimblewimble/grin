@@ -166,11 +166,11 @@ impl PruneList {
 
 		self.shift_cache.clear();
 		for pos1 in self.bitmap.iter().filter(|x| *x > 0) {
-			let pos1 = pos1 as u64;
-			let prev_shift = self.get_shift(pos1.saturating_sub(1));
+			let pos0 = pos1 as u64 - 1;
+			let prev_shift = self.get_shift(pos0);
 
-			let curr_shift = if self.is_pruned_root(pos1 - 1) {
-				let height = bintree_postorder_height(pos1 - 1);
+			let curr_shift = if self.is_pruned_root(pos0) {
+				let height = bintree_postorder_height(pos0);
 				2 * ((1 << height) - 1)
 			} else {
 				0
@@ -220,11 +220,11 @@ impl PruneList {
 		self.leaf_shift_cache.clear();
 
 		for pos1 in self.bitmap.iter().filter(|x| *x > 0) {
-			let pos1 = pos1 as u64;
-			let prev_shift = self.get_leaf_shift(pos1.saturating_sub(1));
+			let pos0 = pos1 as u64 - 1;
+			let prev_shift = self.get_leaf_shift(pos0);
 
-			let curr_shift = if self.is_pruned_root(pos1 - 1) {
-				let height = bintree_postorder_height(pos1 - 1);
+			let curr_shift = if self.is_pruned_root(pos0) {
+				let height = bintree_postorder_height(pos0);
 				if height == 0 {
 					0
 				} else {

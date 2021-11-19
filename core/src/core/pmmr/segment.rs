@@ -118,17 +118,16 @@ impl<T> Segment<T> {
 	}
 
 	/// Inclusive range of MMR positions for this segment
-	pub fn segment_pos_range(&self, last_pos: u64) -> (u64, u64) {
-		let segment_size = self.segment_unpruned_size(last_pos);
+	pub fn segment_pos_range(&self, size: u64) -> (u64, u64) {
+		let segment_size = self.segment_unpruned_size(size);
 		let leaf_offset = self.leaf_offset();
-		let first = 1 + pmmr::insertion_to_pmmr_index(leaf_offset);
-		let last = if self.full_segment(last_pos) {
-			1 + pmmr::insertion_to_pmmr_index(leaf_offset + segment_size - 1)
+		let first = pmmr::insertion_to_pmmr_index(leaf_offset);
+		let last = if self.full_segment(size) {
+			pmmr::insertion_to_pmmr_index(leaf_offset + segment_size - 1)
 				+ (self.identifier.height as u64)
 		} else {
-			last_pos
+			size - 1
 		};
-
 		(first, last)
 	}
 
@@ -240,28 +239,28 @@ where
 	{
 		let mut segment = Segment::empty(segment_id);
 
-		let last_pos = pmmr.unpruned_size();
-		if segment.segment_unpruned_size(last_pos) == 0 {
+		let size = pmmr.unpruned_size();
+		if segment.segment_unpruned_size(size) == 0 {
 			return Err(SegmentError::NonExistent);
 		}
 
 		// Fill leaf data and hashes
-		let (segment_first_pos, segment_last_pos) = segment.segment_pos_range(last_pos);
-		for pos in segment_first_pos..=segment_last_pos {
-			if pmmr::is_leaf(pos - 1) {
-				if let Some(data) = pmmr.get_data_from_file(pos - 1) {
+		let (segment_first_pos, segment_last_pos) = segment.segment_pos_range(size);
+		for pos0 in segment_first_pos..=segment_last_pos {
+			if pmmr::is_leaf(pos0) {
+				if let Some(data) = pmmr.get_data_from_file(pos0) {
 					segment.leaf_data.push(data);
-					segment.leaf_pos.push(pos);
+					segment.leaf_pos.push(1 + pos0);
 					continue;
 				} else if !prunable {
-					return Err(SegmentError::MissingLeaf(pos));
+					return Err(SegmentError::MissingLeaf(pos0));
 				}
 			}
 			// TODO: optimize, no need to send every intermediary hash
 			if prunable {
-				if let Some(hash) = pmmr.get_from_file(pos - 1) {
+				if let Some(hash) = pmmr.get_from_file(pos0) {
 					segment.hashes.push(hash);
-					segment.hash_pos.push(pos);
+					segment.hash_pos.push(1 + pos0);
 				}
 			}
 		}
@@ -269,7 +268,7 @@ where
 		let mut start_pos = None;
 		// Fully pruned segment: only include a single hash, the first unpruned parent
 		if segment.leaf_data.is_empty() && segment.hashes.is_empty() {
-			let family_branch = pmmr::family_branch(segment_last_pos - 1, last_pos);
+			let family_branch = pmmr::family_branch(segment_last_pos, size);
 			for (pos0, _) in family_branch {
 				if let Some(hash) = pmmr.get_from_file(pos0) {
 					segment.hashes.push(hash);
@@ -283,9 +282,9 @@ where
 		// Segment merkle proof
 		segment.proof = SegmentProof::generate(
 			pmmr,
-			last_pos,
-			segment_first_pos,
-			segment_last_pos,
+			size,
+			1 + segment_first_pos,
+			1 + segment_last_pos,
 			start_pos,
 		)?;
 
@@ -299,27 +298,23 @@ where
 {
 	/// Calculate root hash of this segment
 	/// Returns `None` iff the segment is full and completely pruned
-	pub fn root(
-		&self,
-		last_pos: u64,
-		bitmap: Option<&Bitmap>,
-	) -> Result<Option<Hash>, SegmentError> {
-		let (segment_first_pos, segment_last_pos) = self.segment_pos_range(last_pos);
+	pub fn root(&self, size: u64, bitmap: Option<&Bitmap>) -> Result<Option<Hash>, SegmentError> {
+		let (segment_first_pos, segment_last_pos) = self.segment_pos_range(size);
 		let mut hashes = Vec::<Option<Hash>>::with_capacity(2 * (self.identifier.height as usize));
 		let mut leaves = self.leaf_pos.iter().zip(&self.leaf_data);
-		for pos1 in segment_first_pos..=segment_last_pos {
-			let height = pmmr::bintree_postorder_height(pos1 - 1);
+		for pos0 in segment_first_pos..=segment_last_pos {
+			let height = pmmr::bintree_postorder_height(pos0);
 			let hash = if height == 0 {
 				// Leaf
 				if bitmap
 					.map(|b| {
-						let idx_1 = pmmr::n_leaves(pos1) - 1;
-						let idx_2 = if pmmr::is_left_sibling(pos1 - 1) {
+						let idx_1 = pmmr::n_leaves(pos0 + 1) - 1;
+						let idx_2 = if pmmr::is_left_sibling(pos0) {
 							idx_1 + 1
 						} else {
 							idx_1 - 1
 						};
-						b.contains(idx_1 as u32) || b.contains(idx_2 as u32) || pos1 == last_pos
+						b.contains(idx_1 as u32) || b.contains(idx_2 as u32) || pos0 == size - 1
 					})
 					.unwrap_or(true)
 				{
@@ -330,16 +325,16 @@ where
 					// TODO: possibly remove requirement on the sibling when we no longer support
 					//  syncing through the txhashset.zip method.
 					let data = leaves
-						.find(|&(&p, _)| p == pos1)
+						.find(|&(&p, _)| p == 1 + pos0)
 						.map(|(_, l)| l)
-						.ok_or_else(|| SegmentError::MissingLeaf(pos1))?;
-					Some(data.hash_with_index(pos1 - 1))
+						.ok_or_else(|| SegmentError::MissingLeaf(pos0))?;
+					Some(data.hash_with_index(pos0))
 				} else {
 					None
 				}
 			} else {
-				let left_child_pos = pos1 - (1 << height);
-				let right_child_pos = pos1 - 1;
+				let left_child_pos = 1 + pos0 - (1 << height);
+				let right_child_pos = pos0;
 
 				let right_child = hashes.pop().unwrap();
 				let left_child = hashes.pop().unwrap();
@@ -348,14 +343,14 @@ where
 					// Prunable MMR
 					match (left_child, right_child) {
 						(None, None) => None,
-						(Some(l), Some(r)) => Some((l, r).hash_with_index(pos1 - 1)),
+						(Some(l), Some(r)) => Some((l, r).hash_with_index(pos0)),
 						(None, Some(r)) => {
 							let l = self.get_hash(left_child_pos - 1)?;
-							Some((l, r).hash_with_index(pos1 - 1))
+							Some((l, r).hash_with_index(pos0))
 						}
 						(Some(l), None) => {
 							let r = self.get_hash(right_child_pos - 1)?;
-							Some((l, r).hash_with_index(pos1 - 1))
+							Some((l, r).hash_with_index(pos0))
 						}
 					}
 				} else {
@@ -366,21 +361,21 @@ where
 							right_child
 								.ok_or_else(|| SegmentError::MissingHash(right_child_pos))?,
 						)
-							.hash_with_index(pos1 - 1),
+							.hash_with_index(pos0),
 					)
 				}
 			};
 			hashes.push(hash);
 		}
 
-		if self.full_segment(last_pos) {
+		if self.full_segment(size) {
 			// Full segment: last position of segment is subtree root
 			Ok(hashes.pop().unwrap())
 		} else {
 			// Not full (only final segment): peaks in segment, bag them together
-			let peaks = pmmr::peaks(last_pos)
+			let peaks = pmmr::peaks(size)
 				.into_iter()
-				.filter(|&pos0| 1 + pos0 >= segment_first_pos && 1 + pos0 <= segment_last_pos)
+				.filter(|&pos0| pos0 >= segment_first_pos && pos0 <= segment_last_pos)
 				.rev();
 			let mut hash = None;
 			for pos0 in peaks {
@@ -395,7 +390,7 @@ where
 
 				hash = match hash {
 					None => Some(lhash),
-					Some(rhash) => Some((lhash, rhash).hash_with_index(last_pos)),
+					Some(rhash) => Some((lhash, rhash).hash_with_index(size)),
 				};
 			}
 			Ok(Some(hash.unwrap()))
@@ -405,21 +400,21 @@ where
 	/// Get the first 1-based (sucks) unpruned parent hash of this segment
 	pub fn first_unpruned_parent(
 		&self,
-		last_pos: u64,
+		size: u64,
 		bitmap: Option<&Bitmap>,
 	) -> Result<(Hash, u64), SegmentError> {
-		let root = self.root(last_pos, bitmap)?;
-		let (_, last) = self.segment_pos_range(last_pos);
+		let root = self.root(size, bitmap)?;
+		let (_, last) = self.segment_pos_range(size);
 		if let Some(root) = root {
-			return Ok((root, last));
+			return Ok((root, 1 + last));
 		}
 		let bitmap = bitmap.unwrap();
-		let n_leaves = pmmr::n_leaves(last_pos);
+		let n_leaves = pmmr::n_leaves(size);
 
 		let mut cardinality = 0;
-		let mut pos0 = last - 1;
+		let mut pos0 = last;
 		let mut hash = Err(SegmentError::MissingHash(last));
-		let mut family_branch = pmmr::family_branch(last - 1, last_pos).into_iter();
+		let mut family_branch = pmmr::family_branch(last, size).into_iter();
 		while cardinality == 0 {
 			hash = self.get_hash(pos0).map(|h| (h, 1 + pos0));
 			if hash.is_ok() {
@@ -443,17 +438,17 @@ where
 	/// Check validity of the segment by calculating its root and validating the merkle proof
 	pub fn validate(
 		&self,
-		last_pos: u64,
+		size: u64,
 		bitmap: Option<&Bitmap>,
 		mmr_root: Hash,
 	) -> Result<(), SegmentError> {
-		let (first, last) = self.segment_pos_range(last_pos);
-		let (segment_root, segment_unpruned_pos) = self.first_unpruned_parent(last_pos, bitmap)?;
+		let (first, last) = self.segment_pos_range(size);
+		let (segment_root, segment_unpruned_pos) = self.first_unpruned_parent(size, bitmap)?;
 		self.proof.validate(
-			last_pos,
+			size,
 			mmr_root,
-			first,
-			last,
+			1 + first,
+			1 + last,
 			segment_root,
 			segment_unpruned_pos,
 		)
@@ -463,20 +458,20 @@ where
 	/// This function assumes a final hashing step together with `other_root`
 	pub fn validate_with(
 		&self,
-		last_pos: u64,
+		size: u64,
 		bitmap: Option<&Bitmap>,
 		mmr_root: Hash,
 		hash_last_pos: u64,
 		other_root: Hash,
 		other_is_left: bool,
 	) -> Result<(), SegmentError> {
-		let (first, last) = self.segment_pos_range(last_pos);
-		let (segment_root, segment_unpruned_pos) = self.first_unpruned_parent(last_pos, bitmap)?;
+		let (first, last) = self.segment_pos_range(size);
+		let (segment_root, segment_unpruned_pos) = self.first_unpruned_parent(size, bitmap)?;
 		self.proof.validate_with(
-			last_pos,
+			size,
 			mmr_root,
-			first,
-			last,
+			1 + first,
+			1 + last,
 			segment_root,
 			segment_unpruned_pos,
 			hash_last_pos,
