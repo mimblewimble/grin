@@ -169,7 +169,7 @@ impl PruneList {
 			let pos1 = pos1 as u64;
 			let prev_shift = self.get_shift(pos1.saturating_sub(1));
 
-			let curr_shift = if self.is_pruned_root(pos1) {
+			let curr_shift = if self.is_pruned_root(pos1 - 1) {
 				let height = bintree_postorder_height(pos1 - 1);
 				2 * ((1 << height) - 1)
 			} else {
@@ -183,7 +183,7 @@ impl PruneList {
 	// Calculate the next shift based on provided pos and the previous shift.
 	fn calculate_next_shift(&self, pos1: u64) -> u64 {
 		let prev_shift = self.get_shift(pos1.saturating_sub(1));
-		let shift = if self.is_pruned_root(pos1) {
+		let shift = if self.is_pruned_root(pos1 - 1) {
 			let height = bintree_postorder_height(pos1 - 1);
 			2 * ((1 << height) - 1)
 		} else {
@@ -223,7 +223,7 @@ impl PruneList {
 			let pos1 = pos1 as u64;
 			let prev_shift = self.get_leaf_shift(pos1.saturating_sub(1));
 
-			let curr_shift = if self.is_pruned_root(pos1) {
+			let curr_shift = if self.is_pruned_root(pos1 - 1) {
 				let height = bintree_postorder_height(pos1 - 1);
 				if height == 0 {
 					0
@@ -241,7 +241,7 @@ impl PruneList {
 	// Calculate the next leaf shift based on provided pos and the previous leaf shift.
 	fn calculate_next_leaf_shift(&self, pos1: u64) -> u64 {
 		let prev_shift = self.get_leaf_shift(pos1.saturating_sub(1) as u64);
-		let shift = if self.is_pruned_root(pos1) {
+		let shift = if self.is_pruned_root(pos1 - 1) {
 			let height = bintree_postorder_height(pos1 - 1);
 			if height == 0 {
 				0
@@ -310,7 +310,7 @@ impl PruneList {
 		);
 
 		let (parent0, sibling0) = family(pos1 - 1);
-		if self.is_pruned(sibling0 + 1) {
+		if self.is_pruned(sibling0) {
 			// Recursively append the parent (removing our sibling in the process).
 			self.append(parent0 + 1)
 		} else {
@@ -334,15 +334,14 @@ impl PruneList {
 	/// A pos is pruned if it is a pruned root directly or if it is
 	/// beneath the "next" pruned subtree.
 	/// We only need to consider the "next" subtree due to the append-only MMR structure.
-	pub fn is_pruned(&self, pos: u64) -> bool {
-		assert!(pos > 0, "prune list 1-indexed, 0 not valid pos");
-		if self.is_pruned_root(pos) {
+	pub fn is_pruned(&self, pos0: u64) -> bool {
+		if self.is_pruned_root(pos0) {
 			return true;
 		}
-		let rank = self.bitmap.rank(pos as u32);
+		let rank = self.bitmap.rank(1 + pos0 as u32);
 		if let Some(root) = self.bitmap.select(rank as u32) {
 			let range = pmmr::bintree_range(root as u64 - 1);
-			range.contains(&(pos - 1))
+			range.contains(&pos0)
 		} else {
 			false
 		}
@@ -364,9 +363,8 @@ impl PruneList {
 	}
 
 	/// Is the specified position a root of a pruned subtree?
-	pub fn is_pruned_root(&self, pos: u64) -> bool {
-		assert!(pos > 0, "prune list 1-indexed, 0 not valid pos");
-		self.bitmap.contains(pos as u32)
+	pub fn is_pruned_root(&self, pos0: u64) -> bool {
+		self.bitmap.contains(1 + pos0 as u32)
 	}
 
 	/// Iterator over the entries in the prune list (pruned roots).

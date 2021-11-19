@@ -37,18 +37,18 @@ fn test_is_pruned() {
 	let mut pl = PruneList::empty();
 
 	assert_eq!(pl.len(), 0);
+	assert_eq!(pl.is_pruned(0), false);
 	assert_eq!(pl.is_pruned(1), false);
 	assert_eq!(pl.is_pruned(2), false);
-	assert_eq!(pl.is_pruned(3), false);
 
 	pl.append(2);
 	pl.flush().unwrap();
 
 	assert_eq!(pl.iter().collect::<Vec<_>>(), [2]);
-	assert_eq!(pl.is_pruned(1), false);
-	assert_eq!(pl.is_pruned(2), true);
+	assert_eq!(pl.is_pruned(0), false);
+	assert_eq!(pl.is_pruned(1), true);
+	assert_eq!(pl.is_pruned(2), false);
 	assert_eq!(pl.is_pruned(3), false);
-	assert_eq!(pl.is_pruned(4), false);
 
 	let mut pl = PruneList::empty();
 	pl.append(1);
@@ -57,10 +57,10 @@ fn test_is_pruned() {
 
 	assert_eq!(pl.len(), 1);
 	assert_eq!(pl.iter().collect::<Vec<_>>(), [3]);
+	assert_eq!(pl.is_pruned(0), true);
 	assert_eq!(pl.is_pruned(1), true);
 	assert_eq!(pl.is_pruned(2), true);
-	assert_eq!(pl.is_pruned(3), true);
-	assert_eq!(pl.is_pruned(4), false);
+	assert_eq!(pl.is_pruned(3), false);
 
 	pl.append(4);
 
@@ -70,11 +70,11 @@ fn test_is_pruned() {
 
 	assert_eq!(pl.len(), 2);
 	assert_eq!(pl.to_vec(), [3, 4]);
+	assert_eq!(pl.is_pruned(0), true);
 	assert_eq!(pl.is_pruned(1), true);
 	assert_eq!(pl.is_pruned(2), true);
 	assert_eq!(pl.is_pruned(3), true);
-	assert_eq!(pl.is_pruned(4), true);
-	assert_eq!(pl.is_pruned(5), false);
+	assert_eq!(pl.is_pruned(4), false);
 }
 
 #[test]
@@ -224,7 +224,7 @@ fn test_get_shift() {
 
 	// prune a bunch more
 	for x in 6..1000 {
-		if !pl.is_pruned(x) {
+		if !pl.is_pruned(x - 1) {
 			pl.append(x);
 		}
 	}

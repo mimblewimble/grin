@@ -103,7 +103,7 @@ impl<T: PMMRable> Backend<T> for PMMRBackend<T> {
 	}
 
 	fn get_from_file(&self, pos0: u64) -> Option<Hash> {
-		if self.is_compacted(1 + pos0) {
+		if self.is_compacted(pos0) {
 			return None;
 		}
 		let shift = self.prune_list.get_shift(1 + pos0);
@@ -119,7 +119,7 @@ impl<T: PMMRable> Backend<T> for PMMRBackend<T> {
 		if !pmmr::is_leaf(pos0) {
 			return None;
 		}
-		if self.is_compacted(1 + pos0) {
+		if self.is_compacted(pos0) {
 			return None;
 		}
 		let flatfile_pos = pmmr::n_leaves(pos0 + 1);
@@ -297,23 +297,23 @@ impl<T: PMMRable> PMMRBackend<T> {
 		})
 	}
 
-	fn is_pruned(&self, pos: u64) -> bool {
-		self.prune_list.is_pruned(pos)
+	fn is_pruned(&self, pos0: u64) -> bool {
+		self.prune_list.is_pruned(pos0)
 	}
 
-	fn is_pruned_root(&self, pos: u64) -> bool {
-		self.prune_list.is_pruned_root(pos)
+	fn is_pruned_root(&self, pos0: u64) -> bool {
+		self.prune_list.is_pruned_root(pos0)
 	}
 
 	// Check if pos is pruned but not a pruned root itself.
 	// Checking for pruned root is faster so we do this check first.
 	// We can do a fast initial check as well -
 	// if its in the current leaf_set then we know it is not compacted.
-	fn is_compacted(&self, pos1: u64) -> bool {
-		if self.leaf_set.includes(pos1 - 1) {
+	fn is_compacted(&self, pos0: u64) -> bool {
+		if self.leaf_set.includes(pos0) {
 			return false;
 		}
-		!self.is_pruned_root(pos1) && self.is_pruned(pos1)
+		!self.is_pruned_root(pos0) && self.is_pruned(pos0)
 	}
 
 	/// Number of hashes in the PMMR stored by this backend. Only produces the
@@ -451,7 +451,7 @@ impl<T: PMMRable> PMMRBackend<T> {
 			let mut current = x as u64;
 			loop {
 				let (parent0, sibling0) = family(current - 1);
-				let sibling_pruned = self.is_pruned_root(sibling0 + 1);
+				let sibling_pruned = self.is_pruned_root(sibling0);
 
 				// if sibling previously pruned
 				// push it back onto list of pos to remove
