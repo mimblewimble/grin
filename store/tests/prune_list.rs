@@ -41,7 +41,7 @@ fn test_is_pruned() {
 	assert_eq!(pl.is_pruned(1), false);
 	assert_eq!(pl.is_pruned(2), false);
 
-	pl.append(2);
+	pl.append(1);
 	pl.flush().unwrap();
 
 	assert_eq!(pl.iter().collect::<Vec<_>>(), [2]);
@@ -51,8 +51,8 @@ fn test_is_pruned() {
 	assert_eq!(pl.is_pruned(3), false);
 
 	let mut pl = PruneList::empty();
+	pl.append(0);
 	pl.append(1);
-	pl.append(2);
 	pl.flush().unwrap();
 
 	assert_eq!(pl.len(), 1);
@@ -62,7 +62,7 @@ fn test_is_pruned() {
 	assert_eq!(pl.is_pruned(2), true);
 	assert_eq!(pl.is_pruned(3), false);
 
-	pl.append(4);
+	pl.append(3);
 
 	// Flushing the prune_list removes any individual leaf positions.
 	// This assumes we will track these outside the prune_list via the leaf_set.
@@ -91,7 +91,7 @@ fn test_get_leaf_shift() {
 	// now add a single leaf pos to the prune list
 	// leaves will not shift shift anything
 	// we only start shifting after pruning a parent
-	pl.append(1);
+	pl.append(0);
 	pl.flush().unwrap();
 
 	assert_eq!(pl.iter().collect::<Vec<_>>(), [1]);
@@ -102,7 +102,7 @@ fn test_get_leaf_shift() {
 
 	// now add the sibling leaf pos (pos 2) which will prune the parent
 	// at pos 3 this in turn will "leaf shift" the leaf at pos 3 by 2
-	pl.append(2);
+	pl.append(1);
 	pl.flush().unwrap();
 
 	assert_eq!(pl.len(), 1);
@@ -115,7 +115,7 @@ fn test_get_leaf_shift() {
 	// now prune an additional leaf at pos 4
 	// leaf offset of subsequent pos will be 2
 	// 00100120
-	pl.append(4);
+	pl.append(3);
 	pl.flush().unwrap();
 
 	assert_eq!(pl.len(), 2);
@@ -133,7 +133,7 @@ fn test_get_leaf_shift() {
 	// the two smaller subtrees (pos 3 and pos 6) are rolled up to larger subtree
 	// (pos 7) the leaf offset is now 4 to cover entire subtree containing first
 	// 4 leaves 00100120
-	pl.append(5);
+	pl.append(4);
 	pl.flush().unwrap();
 
 	assert_eq!(pl.len(), 1);
@@ -151,10 +151,10 @@ fn test_get_leaf_shift() {
 	// now check we can prune some unconnected nodes
 	// and that leaf_shift is correct for various pos
 	let mut pl = PruneList::empty();
+	pl.append(3);
 	pl.append(4);
-	pl.append(5);
+	pl.append(10);
 	pl.append(11);
-	pl.append(12);
 	pl.flush().unwrap();
 
 	assert_eq!(pl.len(), 2);
@@ -178,7 +178,7 @@ fn test_get_shift() {
 	// prune a single leaf node
 	// pruning only a leaf node does not shift any subsequent pos
 	// we will only start shifting when a parent can be pruned
-	pl.append(1);
+	pl.append(0);
 	pl.flush().unwrap();
 
 	assert_eq!(pl.iter().collect::<Vec<_>>(), [1]);
@@ -186,7 +186,7 @@ fn test_get_shift() {
 	assert_eq!(pl.get_shift(2), 0);
 	assert_eq!(pl.get_shift(3), 0);
 
-	pl.append(2);
+	pl.append(1);
 	pl.flush().unwrap();
 
 	assert_eq!(pl.iter().collect::<Vec<_>>(), [3]);
@@ -197,7 +197,7 @@ fn test_get_shift() {
 	assert_eq!(pl.get_shift(5), 2);
 	assert_eq!(pl.get_shift(6), 2);
 
-	pl.append(4);
+	pl.append(3);
 	pl.flush().unwrap();
 
 	assert_eq!(pl.iter().collect::<Vec<_>>(), [3, 4]);
@@ -208,7 +208,7 @@ fn test_get_shift() {
 	assert_eq!(pl.get_shift(5), 2);
 	assert_eq!(pl.get_shift(6), 2);
 
-	pl.append(5);
+	pl.append(4);
 	pl.flush().unwrap();
 
 	assert_eq!(pl.iter().collect::<Vec<_>>(), [7]);
@@ -223,8 +223,8 @@ fn test_get_shift() {
 	assert_eq!(pl.get_shift(9), 6);
 
 	// prune a bunch more
-	for x in 6..1000 {
-		if !pl.is_pruned(x - 1) {
+	for x in 5..999 {
+		if !pl.is_pruned(x) {
 			pl.append(x);
 		}
 	}
@@ -235,10 +235,10 @@ fn test_get_shift() {
 
 	// now check we can do some sparse pruning
 	let mut pl = PruneList::empty();
+	pl.append(3);
 	pl.append(4);
-	pl.append(5);
+	pl.append(7);
 	pl.append(8);
-	pl.append(9);
 	pl.flush().unwrap();
 
 	assert_eq!(pl.iter().collect::<Vec<_>>(), [6, 10]);
@@ -259,33 +259,33 @@ fn test_get_shift() {
 #[test]
 pub fn test_iter() {
 	let mut pl = PruneList::empty();
+	pl.append(0);
 	pl.append(1);
-	pl.append(2);
-	pl.append(4);
+	pl.append(3);
 	assert_eq!(pl.iter().collect::<Vec<_>>(), [3, 4]);
 
 	let mut pl = PruneList::empty();
+	pl.append(0);
 	pl.append(1);
-	pl.append(2);
-	pl.append(5);
+	pl.append(4);
 	assert_eq!(pl.iter().collect::<Vec<_>>(), [3, 5]);
 }
 
 #[test]
 pub fn test_pruned_bintree_range_iter() {
 	let mut pl = PruneList::empty();
+	pl.append(0);
 	pl.append(1);
-	pl.append(2);
-	pl.append(4);
+	pl.append(3);
 	assert_eq!(
 		pl.pruned_bintree_range_iter().collect::<Vec<_>>(),
 		[1..4, 4..5]
 	);
 
 	let mut pl = PruneList::empty();
+	pl.append(0);
 	pl.append(1);
-	pl.append(2);
-	pl.append(5);
+	pl.append(4);
 	assert_eq!(
 		pl.pruned_bintree_range_iter().collect::<Vec<_>>(),
 		[1..4, 5..6]
@@ -298,15 +298,15 @@ pub fn test_unpruned_iter() {
 	assert_eq!(pl.unpruned_iter(5).collect::<Vec<_>>(), [1, 2, 3, 4, 5]);
 
 	let mut pl = PruneList::empty();
-	pl.append(2);
+	pl.append(1);
 	assert_eq!(pl.iter().collect::<Vec<_>>(), [2]);
 	assert_eq!(pl.pruned_bintree_range_iter().collect::<Vec<_>>(), [2..3]);
 	assert_eq!(pl.unpruned_iter(4).collect::<Vec<_>>(), [1, 3, 4]);
 
 	let mut pl = PruneList::empty();
-	pl.append(2);
+	pl.append(1);
+	pl.append(3);
 	pl.append(4);
-	pl.append(5);
 	assert_eq!(pl.iter().collect::<Vec<_>>(), [2, 6]);
 	assert_eq!(
 		pl.pruned_bintree_range_iter().collect::<Vec<_>>(),
@@ -324,15 +324,15 @@ fn test_unpruned_leaf_iter() {
 	);
 
 	let mut pl = PruneList::empty();
-	pl.append(2);
+	pl.append(1);
 	assert_eq!(pl.iter().collect::<Vec<_>>(), [2]);
 	assert_eq!(pl.pruned_bintree_range_iter().collect::<Vec<_>>(), [2..3]);
 	assert_eq!(pl.unpruned_leaf_iter(5).collect::<Vec<_>>(), [1, 4, 5]);
 
 	let mut pl = PruneList::empty();
-	pl.append(2);
+	pl.append(1);
+	pl.append(3);
 	pl.append(4);
-	pl.append(5);
 	assert_eq!(pl.iter().collect::<Vec<_>>(), [2, 6]);
 	assert_eq!(
 		pl.pruned_bintree_range_iter().collect::<Vec<_>>(),
@@ -345,13 +345,13 @@ pub fn test_append_pruned_subtree() {
 	let mut pl = PruneList::empty();
 
 	// append a pruned leaf pos (shift and leaf shift are unaffected).
-	pl.append(1);
+	pl.append(0);
 
 	assert_eq!(pl.to_vec(), [1]);
 	assert_eq!(pl.get_shift(2), 0);
 	assert_eq!(pl.get_leaf_shift(2), 0);
 
-	pl.append(3);
+	pl.append(2);
 
 	// subtree beneath root at 3 is pruned
 	// pos 4 is shifted by 2 pruned hashes [1, 2]
@@ -361,7 +361,7 @@ pub fn test_append_pruned_subtree() {
 	assert_eq!(pl.get_leaf_shift(4), 2);
 
 	// append another pruned subtree (ancester of previous one)
-	pl.append(7);
+	pl.append(6);
 
 	// subtree beneath root at 7 is pruned
 	// pos 8 is shifted by 6 pruned hashes [1, 2, 3, 4, 5, 6]
@@ -371,7 +371,7 @@ pub fn test_append_pruned_subtree() {
 	assert_eq!(pl.get_leaf_shift(8), 4);
 
 	// now append another pruned leaf pos
-	pl.append(8);
+	pl.append(7);
 
 	// additional pruned leaf does not affect the shift or leaf shift
 	// pos 9 is shifted by 6 pruned hashes [1, 2, 3, 4, 5, 6]
@@ -384,9 +384,9 @@ pub fn test_append_pruned_subtree() {
 #[test]
 fn test_recreate_prune_list() {
 	let mut pl = PruneList::empty();
+	pl.append(3);
 	pl.append(4);
-	pl.append(5);
-	pl.append(11);
+	pl.append(10);
 
 	let pl2 = PruneList::new(None, vec![4, 5, 11].into_iter().collect());
 

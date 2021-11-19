@@ -64,8 +64,8 @@ impl PruneList {
 			leaf_shift_cache: vec![],
 		};
 
-		for pos in bitmap.iter().filter(|x| *x > 0) {
-			prune_list.append(pos as u64)
+		for pos1 in bitmap.iter().filter(|x| *x > 0) {
+			prune_list.append(pos1 as u64 - 1)
 		}
 
 		prune_list.bitmap.run_optimize();
@@ -300,24 +300,24 @@ impl PruneList {
 	/// Handles rollup of siblings and children as we go (relatively slow).
 	/// Once we find a subtree root that can not be rolled up any further
 	/// we cleanup everything beneath it and replace it with a single appended node.
-	pub fn append(&mut self, pos1: u64) {
-		assert!(pos1 > 0, "prune list 1-indexed, 0 not valid pos");
+	pub fn append(&mut self, pos0: u64) {
+		let max = self.bitmap.maximum().unwrap_or(0) as u64;
 		assert!(
-			pos1 > self.bitmap.maximum().unwrap_or(0) as u64,
+			pos0 >= max,
 			"prune list append only - pos={} bitmap.maximum={}",
-			pos1,
-			self.bitmap.maximum().unwrap_or(0)
+			pos0,
+			max
 		);
 
-		let (parent0, sibling0) = family(pos1 - 1);
+		let (parent0, sibling0) = family(pos0);
 		if self.is_pruned(sibling0) {
 			// Recursively append the parent (removing our sibling in the process).
-			self.append(parent0 + 1)
+			self.append(parent0)
 		} else {
 			// Make sure we roll anything beneath this up into this higher level pruned subtree root.
 			// We should have no nested entries in the prune_list.
-			self.cleanup_subtree(pos1);
-			self.append_single(pos1);
+			self.cleanup_subtree(1 + pos0);
+			self.append_single(1 + pos0);
 		}
 	}
 
