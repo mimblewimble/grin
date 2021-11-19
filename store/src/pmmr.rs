@@ -132,8 +132,7 @@ impl<T: PMMRable> Backend<T> for PMMRBackend<T> {
 	/// Return None if pos is a leaf and it has been removed (or pruned or
 	/// compacted).
 	fn get_hash(&self, pos0: u64) -> Option<Hash> {
-		// sucks that leaf_set is 1-based:-(
-		if self.prunable && pmmr::is_leaf(pos0) && !self.leaf_set.includes(1 + pos0) {
+		if self.prunable && pmmr::is_leaf(pos0) && !self.leaf_set.includes(pos0) {
 			return None;
 		}
 		self.get_from_file(pos0)
@@ -145,7 +144,7 @@ impl<T: PMMRable> Backend<T> for PMMRBackend<T> {
 		if !pmmr::is_leaf(pos0) {
 			return None;
 		}
-		if self.prunable && !self.leaf_set.includes(1 + pos0) {
+		if self.prunable && !self.leaf_set.includes(pos0) {
 			return None;
 		}
 		self.get_data_from_file(pos0)
@@ -311,11 +310,11 @@ impl<T: PMMRable> PMMRBackend<T> {
 	// Checking for pruned root is faster so we do this check first.
 	// We can do a fast initial check as well -
 	// if its in the current leaf_set then we know it is not compacted.
-	fn is_compacted(&self, pos: u64) -> bool {
-		if self.leaf_set.includes(pos) {
+	fn is_compacted(&self, pos1: u64) -> bool {
+		if self.leaf_set.includes(pos1 - 1) {
 			return false;
 		}
-		!self.is_pruned_root(pos) && self.is_pruned(pos)
+		!self.is_pruned_root(pos1) && self.is_pruned(pos1)
 	}
 
 	/// Number of hashes in the PMMR stored by this backend. Only produces the

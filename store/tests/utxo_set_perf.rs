@@ -53,7 +53,7 @@ fn test_leaf_set_performance() {
 	// Simulate looking up existence of a large number of pos in the leaf_set.
 	let now = Instant::now();
 	for x in 0..1_000_000 {
-		assert!(leaf_set.includes(x + 1));
+		assert!(leaf_set.includes(x));
 	}
 	println!(
 		"Checking 1,000,000 inclusions in leaf_set took {}ms",

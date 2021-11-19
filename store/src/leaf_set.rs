@@ -187,8 +187,8 @@ impl LeafSet {
 	}
 
 	/// Whether the leaf_set includes the provided position.
-	pub fn includes(&self, pos: u64) -> bool {
-		self.bitmap.contains(pos as u32)
+	pub fn includes(&self, pos0: u64) -> bool {
+		self.bitmap.contains(1 + pos0 as u32)
 	}
 
 	/// Number of positions stored in the leaf_set.
