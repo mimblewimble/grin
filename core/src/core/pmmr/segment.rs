@@ -447,8 +447,8 @@ where
 		self.proof.validate(
 			size,
 			mmr_root,
-			1 + first,
-			1 + last,
+			first,
+			last,
 			segment_root,
 			segment_unpruned_pos,
 		)
@@ -692,8 +692,8 @@ impl SegmentProof {
 	) -> Result<(), SegmentError> {
 		let root = self.reconstruct_root(
 			last_pos,
-			segment_first_pos - 1,
-			segment_last_pos - 1,
+			segment_first_pos,
+			segment_last_pos,
 			segment_root,
 			segment_unpruned_pos,
 		)?;
