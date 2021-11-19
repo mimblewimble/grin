@@ -280,20 +280,19 @@ impl PruneList {
 
 	/// Push the node at the provided position in the prune list.
 	/// Assumes rollup of siblings and children has already been handled.
-	fn append_single(&mut self, pos1: u64) {
-		assert!(pos1 > 0, "prune list 1-indexed, 0 not valid pos");
+	fn append_single(&mut self, pos0: u64) {
 		assert!(
-			pos1 > self.bitmap.maximum().unwrap_or(0) as u64,
+			pos0 >= self.bitmap.maximum().unwrap_or(0) as u64,
 			"prune list append only"
 		);
 
 		// Add this pos to the bitmap (leaf or subtree root)
-		self.bitmap.add(pos1 as u32);
+		self.bitmap.add(1 + pos0 as u32);
 
 		// Calculate shift and leaf_shift for this pos.
-		self.shift_cache.push(self.calculate_next_shift(pos1));
+		self.shift_cache.push(self.calculate_next_shift(1 + pos0));
 		self.leaf_shift_cache
-			.push(self.calculate_next_leaf_shift(pos1 - 1));
+			.push(self.calculate_next_leaf_shift(pos0));
 	}
 
 	/// Push the node at the provided position in the prune list.
@@ -317,7 +316,7 @@ impl PruneList {
 			// Make sure we roll anything beneath this up into this higher level pruned subtree root.
 			// We should have no nested entries in the prune_list.
 			self.cleanup_subtree(1 + pos0);
-			self.append_single(1 + pos0);
+			self.append_single(pos0);
 		}
 	}
 
