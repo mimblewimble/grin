@@ -46,7 +46,7 @@ fn pmmr_leaf_idx_iter() {
 
 			// The first 5 leaves [0,1,2,3,4] are at pos [1,2,4,5,8] in the MMR.
 			assert_eq!(leaf_idx, vec![0, 1, 2, 3, 4]);
-			assert_eq!(leaf_pos, vec![1, 2, 4, 5, 8]);
+			assert_eq!(leaf_pos, vec![0, 1, 3, 4, 7]);
 		}
 	}
 	teardown(data_dir);
@@ -723,7 +723,7 @@ fn pmmr_compact_horizon() {
 
 			// check we can read a hash by pos correctly from recreated backend
 			// get_hash() and get_from_file() should return the same value
-			// and we only store leaves in the leaf_set so pos 7 still has a hash in there
+			// and we only store leaves in the leaf_set so pos 6 still has a hash in there
 			assert_eq!(backend.get_hash(6), Some(pos_6_hash));
 			assert_eq!(backend.get_from_file(6), Some(pos_6_hash));
 

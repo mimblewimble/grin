@@ -156,7 +156,7 @@ impl<T: PMMRable> Backend<T> for PMMRBackend<T> {
 	/// For a non-prunable PMMR this is *all* leaves (this is not yet implemented).
 	fn leaf_pos_iter(&self) -> Box<dyn Iterator<Item = u64> + '_> {
 		if self.prunable {
-			Box::new(self.leaf_set.iter())
+			Box::new(self.leaf_set.iter().map(|x| x - 1))
 		} else {
 			panic!("leaf_pos_iter not implemented for non-prunable PMMR")
 		}

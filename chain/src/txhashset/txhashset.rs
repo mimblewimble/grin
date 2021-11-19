@@ -554,9 +554,9 @@ impl TxHashSet {
 		);
 
 		let mut outputs_pos: Vec<(Commitment, u64)> = vec![];
-		for pos1 in output_pmmr.leaf_pos_iter() {
-			if let Some(out) = output_pmmr.get_data(pos1 - 1) {
-				outputs_pos.push((out.commit, pos1));
+		for pos0 in output_pmmr.leaf_pos_iter() {
+			if let Some(out) = output_pmmr.get_data(pos0) {
+				outputs_pos.push((out.commit, 1 + pos0));
 			}
 		}
 
@@ -588,7 +588,7 @@ impl TxHashSet {
 			while i < total_outputs {
 				let (commit, pos) = outputs_pos[i];
 				if pos > h.output_mmr_size {
-					// Note: MMR position is 1-based and not 0-based, so here must be '>' instead of '>='
+					// NOTE: output position is 1-based and not 0-based, so here must be '>' instead of '>='
 					break;
 				}
 				batch.save_output_pos_height(
@@ -1034,8 +1034,8 @@ impl<'a> Committed for Extension<'a> {
 
 	fn outputs_committed(&self) -> Vec<Commitment> {
 		let mut commitments = vec![];
-		for pos1 in self.output_pmmr.leaf_pos_iter() {
-			if let Some(out) = self.output_pmmr.get_data(pos1 - 1) {
+		for pos0 in self.output_pmmr.leaf_pos_iter() {
+			if let Some(out) = self.output_pmmr.get_data(pos0) {
 				commitments.push(out.commit);
 			}
 		}
@@ -1651,9 +1651,9 @@ impl<'a> Extension<'a> {
 		let mut proof_count = 0;
 		let total_rproofs = self.output_pmmr.n_unpruned_leaves();
 
-		for pos1 in self.output_pmmr.leaf_pos_iter() {
-			let output = self.output_pmmr.get_data(pos1 - 1);
-			let proof = self.rproof_pmmr.get_data(pos1 - 1);
+		for pos0 in self.output_pmmr.leaf_pos_iter() {
+			let output = self.output_pmmr.get_data(pos0);
+			let proof = self.rproof_pmmr.get_data(pos0);
 
 			// Output and corresponding rangeproof *must* exist.
 			// It is invalid for either to be missing and we fail immediately in this case.

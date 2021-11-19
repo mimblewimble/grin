@@ -91,17 +91,18 @@ impl<T: PMMRable> Backend<T> for VecBackend<T> {
 			self.hashes
 				.iter()
 				.enumerate()
-				.map(|(x, _)| (x + 1) as u64)
-				.filter(move |x| pmmr::is_leaf(*x - 1) && !self.removed.contains(&(x - 1))),
+				.map(|(x, _)| x as u64)
+				.filter(move |x| pmmr::is_leaf(*x) && !self.removed.contains(x)),
 		)
 	}
 
+	/// NOTE this function is needlessly inefficient with repeated calls to n_leaves()
 	fn leaf_idx_iter(&self, from_idx: u64) -> Box<dyn Iterator<Item = u64> + '_> {
-		let from_pos = 1 + pmmr::insertion_to_pmmr_index(from_idx);
+		let from_pos = pmmr::insertion_to_pmmr_index(from_idx);
 		Box::new(
 			self.leaf_pos_iter()
 				.skip_while(move |x| *x < from_pos)
-				.map(|x| pmmr::n_leaves(x).saturating_sub(1)),
+				.map(|x| pmmr::n_leaves(x + 1) - 1),
 		)
 	}
 
