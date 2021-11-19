@@ -239,10 +239,10 @@ impl PruneList {
 	}
 
 	// Calculate the next leaf shift based on provided pos and the previous leaf shift.
-	fn calculate_next_leaf_shift(&self, pos1: u64) -> u64 {
-		let prev_shift = self.get_leaf_shift(pos1.saturating_sub(1) as u64);
-		let shift = if self.is_pruned_root(pos1 - 1) {
-			let height = bintree_postorder_height(pos1 - 1);
+	fn calculate_next_leaf_shift(&self, pos0: u64) -> u64 {
+		let prev_shift = self.get_leaf_shift(pos0);
+		let shift = if self.is_pruned_root(pos0) {
+			let height = bintree_postorder_height(pos0);
 			if height == 0 {
 				0
 			} else {
@@ -280,20 +280,20 @@ impl PruneList {
 
 	/// Push the node at the provided position in the prune list.
 	/// Assumes rollup of siblings and children has already been handled.
-	fn append_single(&mut self, pos: u64) {
-		assert!(pos > 0, "prune list 1-indexed, 0 not valid pos");
+	fn append_single(&mut self, pos1: u64) {
+		assert!(pos1 > 0, "prune list 1-indexed, 0 not valid pos");
 		assert!(
-			pos > self.bitmap.maximum().unwrap_or(0) as u64,
+			pos1 > self.bitmap.maximum().unwrap_or(0) as u64,
 			"prune list append only"
 		);
 
 		// Add this pos to the bitmap (leaf or subtree root)
-		self.bitmap.add(pos as u32);
+		self.bitmap.add(pos1 as u32);
 
 		// Calculate shift and leaf_shift for this pos.
-		self.shift_cache.push(self.calculate_next_shift(pos));
+		self.shift_cache.push(self.calculate_next_shift(pos1));
 		self.leaf_shift_cache
-			.push(self.calculate_next_leaf_shift(pos));
+			.push(self.calculate_next_leaf_shift(pos1 - 1));
 	}
 
 	/// Push the node at the provided position in the prune list.
