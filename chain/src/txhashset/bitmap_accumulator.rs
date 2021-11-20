@@ -335,7 +335,7 @@ impl From<BitmapSegment> for Segment<BitmapChunk> {
 		let mut chunks = Vec::with_capacity(n_chunks);
 		let offset = (1 << identifier.height) * identifier.idx;
 		for i in 0..(n_chunks as u64) {
-			leaf_pos.push(1 + pmmr::insertion_to_pmmr_index(offset + i));
+			leaf_pos.push(pmmr::insertion_to_pmmr_index(offset + i));
 			chunks.push(BitmapChunk::new());
 		}
 

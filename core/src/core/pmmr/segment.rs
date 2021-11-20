@@ -136,7 +136,7 @@ impl<T> Segment<T> {
 		self.hash_pos
 			.iter()
 			.zip(&self.hashes)
-			.find(|&(&p, _)| p == 1 + pos0) // sucks that hash_pos is 1-based:-(
+			.find(|&(&p, _)| p == pos0)
 			.map(|(_, &h)| h)
 			.ok_or_else(|| SegmentError::MissingHash(pos0))
 	}
@@ -177,16 +177,16 @@ impl<T> Segment<T> {
 		proof: SegmentProof,
 	) -> Self {
 		assert_eq!(hash_pos.len(), hashes.len());
-		let mut last_pos = 0;
+		let mut last = 0;
 		for &pos in &hash_pos {
-			assert!(pos > last_pos);
-			last_pos = pos;
+			assert!(last == 0 || pos > last);
+			last = pos;
 		}
 		assert_eq!(leaf_pos.len(), leaf_data.len());
-		last_pos = 0;
+		last = 0;
 		for &pos in &leaf_pos {
-			assert!(pos > last_pos);
-			last_pos = pos;
+			assert!(last == 0 || pos > last);
+			last = pos;
 		}
 
 		Self {
@@ -250,7 +250,7 @@ where
 			if pmmr::is_leaf(pos0) {
 				if let Some(data) = pmmr.get_data_from_file(pos0) {
 					segment.leaf_data.push(data);
-					segment.leaf_pos.push(1 + pos0);
+					segment.leaf_pos.push(pos0);
 					continue;
 				} else if !prunable {
 					return Err(SegmentError::MissingLeaf(pos0));
@@ -260,7 +260,7 @@ where
 			if prunable {
 				if let Some(hash) = pmmr.get_from_file(pos0) {
 					segment.hashes.push(hash);
-					segment.hash_pos.push(1 + pos0);
+					segment.hash_pos.push(pos0);
 				}
 			}
 		}
@@ -272,7 +272,7 @@ where
 			for (pos0, _) in family_branch {
 				if let Some(hash) = pmmr.get_from_file(pos0) {
 					segment.hashes.push(hash);
-					segment.hash_pos.push(1 + pos0);
+					segment.hash_pos.push(pos0);
 					start_pos = Some(1 + pos0);
 					break;
 				}
@@ -305,7 +305,7 @@ where
 	) -> Result<Option<Hash>, SegmentError> {
 		let (segment_first_pos, segment_last_pos) = self.segment_pos_range(mmr_size);
 		let mut hashes = Vec::<Option<Hash>>::with_capacity(2 * (self.identifier.height as usize));
-		let mut leaves = self.leaf_pos.iter().zip(&self.leaf_data);
+		let mut leaves0 = self.leaf_pos.iter().zip(&self.leaf_data);
 		for pos0 in segment_first_pos..=segment_last_pos {
 			let height = pmmr::bintree_postorder_height(pos0);
 			let hash = if height == 0 {
@@ -328,8 +328,8 @@ where
 					//  require the last leaf to be present regardless of the status in the bitmap.
 					// TODO: possibly remove requirement on the sibling when we no longer support
 					//  syncing through the txhashset.zip method.
-					let data = leaves
-						.find(|&(&p, _)| p == 1 + pos0)
+					let data = leaves0
+						.find(|&(&p, _)| p == pos0)
 						.map(|(_, l)| l)
 						.ok_or_else(|| SegmentError::MissingLeaf(pos0))?;
 					Some(data.hash_with_index(pos0))
@@ -489,16 +489,16 @@ impl<T: Readable> Readable for Segment<T> {
 	fn read<R: Reader>(reader: &mut R) -> Result<Self, Error> {
 		let identifier = Readable::read(reader)?;
 
-		let mut last_pos = 0;
 		let n_hashes = reader.read_u64()? as usize;
 		let mut hash_pos = Vec::with_capacity(n_hashes);
+		let mut last_pos = 0;
 		for _ in 0..n_hashes {
 			let pos = reader.read_u64()?;
 			if pos <= last_pos {
 				return Err(Error::SortError);
 			}
 			last_pos = pos;
-			hash_pos.push(pos);
+			hash_pos.push(pos - 1);
 		}
 
 		let mut hashes = Vec::<Hash>::with_capacity(n_hashes);
@@ -515,7 +515,7 @@ impl<T: Readable> Readable for Segment<T> {
 				return Err(Error::SortError);
 			}
 			last_pos = pos;
-			leaf_pos.push(pos);
+			leaf_pos.push(pos - 1);
 		}
 
 		let mut leaf_data = Vec::<T>::with_capacity(n_leaves);
@@ -541,14 +541,14 @@ impl<T: Writeable> Writeable for Segment<T> {
 		Writeable::write(&self.identifier, writer)?;
 		writer.write_u64(self.hashes.len() as u64)?;
 		for &pos in &self.hash_pos {
-			writer.write_u64(pos)?;
+			writer.write_u64(1 + pos)?;
 		}
 		for hash in &self.hashes {
 			Writeable::write(hash, writer)?;
 		}
 		writer.write_u64(self.leaf_data.len() as u64)?;
 		for &pos in &self.leaf_pos {
-			writer.write_u64(pos)?;
+			writer.write_u64(1 + pos)?;
 		}
 		for data in &self.leaf_data {
 			Writeable::write(data, writer)?;
