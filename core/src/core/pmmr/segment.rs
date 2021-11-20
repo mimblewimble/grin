@@ -112,21 +112,21 @@ impl<T> Segment<T> {
 		)
 	}
 
-	/// Whether the segment is full (size == capacity)
+	/// Whether the segment is full (segment size == capacity)
 	fn full_segment(&self, last_pos: u64) -> bool {
 		self.segment_unpruned_size(last_pos) == self.segment_capacity()
 	}
 
 	/// Inclusive range of MMR positions for this segment
-	pub fn segment_pos_range(&self, size: u64) -> (u64, u64) {
-		let segment_size = self.segment_unpruned_size(size);
+	pub fn segment_pos_range(&self, mmr_size: u64) -> (u64, u64) {
+		let segment_size = self.segment_unpruned_size(mmr_size);
 		let leaf_offset = self.leaf_offset();
 		let first = pmmr::insertion_to_pmmr_index(leaf_offset);
-		let last = if self.full_segment(size) {
+		let last = if self.full_segment(mmr_size) {
 			pmmr::insertion_to_pmmr_index(leaf_offset + segment_size - 1)
 				+ (self.identifier.height as u64)
 		} else {
-			size - 1
+			mmr_size - 1
 		};
 		(first, last)
 	}
@@ -239,13 +239,13 @@ where
 	{
 		let mut segment = Segment::empty(segment_id);
 
-		let size = pmmr.unpruned_size();
-		if segment.segment_unpruned_size(size) == 0 {
+		let mmr_size = pmmr.unpruned_size();
+		if segment.segment_unpruned_size(mmr_size) == 0 {
 			return Err(SegmentError::NonExistent);
 		}
 
 		// Fill leaf data and hashes
-		let (segment_first_pos, segment_last_pos) = segment.segment_pos_range(size);
+		let (segment_first_pos, segment_last_pos) = segment.segment_pos_range(mmr_size);
 		for pos0 in segment_first_pos..=segment_last_pos {
 			if pmmr::is_leaf(pos0) {
 				if let Some(data) = pmmr.get_data_from_file(pos0) {
@@ -268,7 +268,7 @@ where
 		let mut start_pos = None;
 		// Fully pruned segment: only include a single hash, the first unpruned parent
 		if segment.leaf_data.is_empty() && segment.hashes.is_empty() {
-			let family_branch = pmmr::family_branch(segment_last_pos, size);
+			let family_branch = pmmr::family_branch(segment_last_pos, mmr_size);
 			for (pos0, _) in family_branch {
 				if let Some(hash) = pmmr.get_from_file(pos0) {
 					segment.hashes.push(hash);
@@ -282,7 +282,7 @@ where
 		// Segment merkle proof
 		segment.proof = SegmentProof::generate(
 			pmmr,
-			size,
+			mmr_size,
 			1 + segment_first_pos,
 			1 + segment_last_pos,
 			start_pos,
@@ -298,8 +298,12 @@ where
 {
 	/// Calculate root hash of this segment
 	/// Returns `None` iff the segment is full and completely pruned
-	pub fn root(&self, size: u64, bitmap: Option<&Bitmap>) -> Result<Option<Hash>, SegmentError> {
-		let (segment_first_pos, segment_last_pos) = self.segment_pos_range(size);
+	pub fn root(
+		&self,
+		mmr_size: u64,
+		bitmap: Option<&Bitmap>,
+	) -> Result<Option<Hash>, SegmentError> {
+		let (segment_first_pos, segment_last_pos) = self.segment_pos_range(mmr_size);
 		let mut hashes = Vec::<Option<Hash>>::with_capacity(2 * (self.identifier.height as usize));
 		let mut leaves = self.leaf_pos.iter().zip(&self.leaf_data);
 		for pos0 in segment_first_pos..=segment_last_pos {
@@ -314,7 +318,7 @@ where
 						} else {
 							idx_1 - 1
 						};
-						b.contains(idx_1 as u32) || b.contains(idx_2 as u32) || pos0 == size - 1
+						b.contains(idx_1 as u32) || b.contains(idx_2 as u32) || pos0 == mmr_size - 1
 					})
 					.unwrap_or(true)
 				{
@@ -368,12 +372,12 @@ where
 			hashes.push(hash);
 		}
 
-		if self.full_segment(size) {
+		if self.full_segment(mmr_size) {
 			// Full segment: last position of segment is subtree root
 			Ok(hashes.pop().unwrap())
 		} else {
 			// Not full (only final segment): peaks in segment, bag them together
-			let peaks = pmmr::peaks(size)
+			let peaks = pmmr::peaks(mmr_size)
 				.into_iter()
 				.filter(|&pos0| pos0 >= segment_first_pos && pos0 <= segment_last_pos)
 				.rev();
@@ -390,7 +394,7 @@ where
 
 				hash = match hash {
 					None => Some(lhash),
-					Some(rhash) => Some((lhash, rhash).hash_with_index(size)),
+					Some(rhash) => Some((lhash, rhash).hash_with_index(mmr_size)),
 				};
 			}
 			Ok(Some(hash.unwrap()))
@@ -400,21 +404,21 @@ where
 	/// Get the first 1-based (sucks) unpruned parent hash of this segment
 	pub fn first_unpruned_parent(
 		&self,
-		size: u64,
+		mmr_size: u64,
 		bitmap: Option<&Bitmap>,
 	) -> Result<(Hash, u64), SegmentError> {
-		let root = self.root(size, bitmap)?;
-		let (_, last) = self.segment_pos_range(size);
+		let root = self.root(mmr_size, bitmap)?;
+		let (_, last) = self.segment_pos_range(mmr_size);
 		if let Some(root) = root {
 			return Ok((root, 1 + last));
 		}
 		let bitmap = bitmap.unwrap();
-		let n_leaves = pmmr::n_leaves(size);
+		let n_leaves = pmmr::n_leaves(mmr_size);
 
 		let mut cardinality = 0;
 		let mut pos0 = last;
 		let mut hash = Err(SegmentError::MissingHash(last));
-		let mut family_branch = pmmr::family_branch(last, size).into_iter();
+		let mut family_branch = pmmr::family_branch(last, mmr_size).into_iter();
 		while cardinality == 0 {
 			hash = self.get_hash(pos0).map(|h| (h, 1 + pos0));
 			if hash.is_ok() {
@@ -438,14 +442,14 @@ where
 	/// Check validity of the segment by calculating its root and validating the merkle proof
 	pub fn validate(
 		&self,
-		size: u64,
+		mmr_size: u64,
 		bitmap: Option<&Bitmap>,
 		mmr_root: Hash,
 	) -> Result<(), SegmentError> {
-		let (first, last) = self.segment_pos_range(size);
-		let (segment_root, segment_unpruned_pos) = self.first_unpruned_parent(size, bitmap)?;
+		let (first, last) = self.segment_pos_range(mmr_size);
+		let (segment_root, segment_unpruned_pos) = self.first_unpruned_parent(mmr_size, bitmap)?;
 		self.proof.validate(
-			size,
+			mmr_size,
 			mmr_root,
 			first,
 			last,
@@ -458,17 +462,17 @@ where
 	/// This function assumes a final hashing step together with `other_root`
 	pub fn validate_with(
 		&self,
-		size: u64,
+		mmr_size: u64,
 		bitmap: Option<&Bitmap>,
 		mmr_root: Hash,
 		hash_last_pos: u64,
 		other_root: Hash,
 		other_is_left: bool,
 	) -> Result<(), SegmentError> {
-		let (first, last) = self.segment_pos_range(size);
-		let (segment_root, segment_unpruned_pos) = self.first_unpruned_parent(size, bitmap)?;
+		let (first, last) = self.segment_pos_range(mmr_size);
+		let (segment_root, segment_unpruned_pos) = self.first_unpruned_parent(mmr_size, bitmap)?;
 		self.proof.validate_with(
-			size,
+			mmr_size,
 			mmr_root,
 			first,
 			last,
