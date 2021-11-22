@@ -27,7 +27,7 @@ use crate::error::{Error, ErrorKind};
 use crate::pipe;
 use crate::store;
 use crate::txhashset;
-use crate::txhashset::{PMMRHandle, Segmenter, TxHashSet};
+use crate::txhashset::{Desegmenter, PMMRHandle, Segmenter, TxHashSet};
 use crate::types::{
 	BlockStatus, ChainAdapter, CommitPos, NoStatus, Options, Tip, TxHashsetWriteStatus,
 };
@@ -153,6 +153,7 @@ pub struct Chain {
 	txhashset: Arc<RwLock<txhashset::TxHashSet>>,
 	header_pmmr: Arc<RwLock<txhashset::PMMRHandle<BlockHeader>>>,
 	pibd_segmenter: Arc<RwLock<Option<Segmenter>>>,
+	pibd_desegmenter: Arc<RwLock<Option<Desegmenter>>>,
 	// POW verification function
 	pow_verifier: fn(&BlockHeader) -> Result<(), pow::Error>,
 	denylist: Arc<RwLock<Vec<Hash>>>,
@@ -202,6 +203,7 @@ impl Chain {
 			txhashset: Arc::new(RwLock::new(txhashset)),
 			header_pmmr: Arc::new(RwLock::new(header_pmmr)),
 			pibd_segmenter: Arc::new(RwLock::new(None)),
+			pibd_desegmenter: Arc::new(RwLock::new(None)),
 			pow_verifier,
 			denylist: Arc::new(RwLock::new(vec![])),
 			archive_mode,
@@ -860,6 +862,25 @@ impl Chain {
 			self.txhashset(),
 			Arc::new(bitmap_snapshot),
 			header.clone(),
+		))
+	}
+
+	/// initialize a desegmenter, which is capable of extending the hashset by appending
+	/// PIBD segments of the three PMMR trees + Bitmap PMMR
+	/// header should be the same header as selected for the txhashset.zip archive
+	fn init_desegmenter(&self, header: &BlockHeader) -> Result<Desegmenter, Error> {
+		let now = Instant::now();
+
+		debug!(
+			"init_desegmenter: initializing new desegmenter for {} at {}",
+			header.hash(),
+			header.height
+		);
+
+		Ok(Desegmenter::new(
+			self.txhashset(),
+			self.header_pmmr.clone(),
+			self.store.clone(),
 		))
 	}
 

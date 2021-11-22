@@ -16,12 +16,14 @@
 //! kernel) more conveniently and transactionally.
 
 mod bitmap_accumulator;
+mod desegmenter;
 mod rewindable_kernel_view;
 mod segmenter;
 mod txhashset;
 mod utxo_view;
 
 pub use self::bitmap_accumulator::*;
+pub use self::desegmenter::*;
 pub use self::rewindable_kernel_view::*;
 pub use self::segmenter::*;
 pub use self::txhashset::*;
