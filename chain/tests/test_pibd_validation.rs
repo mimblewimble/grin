@@ -81,7 +81,7 @@ fn test_pibd_chain_validation_impl(is_test_chain: bool, src_root_dir: &str) {
 		let segmenter = src_chain.segmenter().unwrap();
 
 		// BITMAP - Read + Validate, Also recreate bitmap accumulator for target tx hash set
-		// Compute number of leaves (chunks) in the bitmap MMR from the number of outputs
+		// Predict number of leaves (chunks) in the bitmap MMR from the number of outputs
 		let bitmap_mmr_num_leaves =
 			(pmmr::n_leaves(horizon_header.output_mmr_size) as f64 / 1024f64).ceil() as u64;
 		println!("BITMAP PMMR NUM_LEAVES: {}", bitmap_mmr_num_leaves);
@@ -225,7 +225,7 @@ fn test_pibd_chain_validation_sample() {
 }
 
 #[test]
-//#[ignore]
+#[ignore]
 // As above, but run on a real instance of a chain pointed where you like
 fn test_pibd_chain_validation_real() {
 	util::init_test_logger();
