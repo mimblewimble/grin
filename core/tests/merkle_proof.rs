@@ -81,7 +81,7 @@ fn pmmr_merkle_proof() {
 
 	let proof = pmmr.merkle_proof(0).unwrap();
 	assert_eq!(proof.path, vec![]);
-	assert!(proof.verify(pmmr.root().unwrap(), &elems[0], 1).is_ok());
+	assert!(proof.verify(pmmr.root().unwrap(), &elems[0], 0).is_ok());
 
 	pmmr.push(&elems[1]).unwrap();
 	let pos_1 = elems[1].hash_with_index(1);
@@ -95,11 +95,11 @@ fn pmmr_merkle_proof() {
 	// single peak, path with single sibling
 	let proof = pmmr.merkle_proof(0).unwrap();
 	assert_eq!(proof.path, vec![pos_1]);
-	assert!(proof.verify(pmmr.root().unwrap(), &elems[0], 1).is_ok());
+	assert!(proof.verify(pmmr.root().unwrap(), &elems[0], 0).is_ok());
 
 	let proof = pmmr.merkle_proof(1).unwrap();
 	assert_eq!(proof.path, vec![pos_0]);
-	assert!(proof.verify(pmmr.root().unwrap(), &elems[1], 2).is_ok());
+	assert!(proof.verify(pmmr.root().unwrap(), &elems[1], 1).is_ok());
 
 	// three leaves, two peaks (one also the right-most leaf)
 	pmmr.push(&elems[2]).unwrap();
@@ -111,15 +111,15 @@ fn pmmr_merkle_proof() {
 
 	let proof = pmmr.merkle_proof(0).unwrap();
 	assert_eq!(proof.path, vec![pos_1, pos_3]);
-	assert!(proof.verify(pmmr.root().unwrap(), &elems[0], 1).is_ok());
+	assert!(proof.verify(pmmr.root().unwrap(), &elems[0], 0).is_ok());
 
 	let proof = pmmr.merkle_proof(1).unwrap();
 	assert_eq!(proof.path, vec![pos_0, pos_3]);
-	assert!(proof.verify(pmmr.root().unwrap(), &elems[1], 2).is_ok());
+	assert!(proof.verify(pmmr.root().unwrap(), &elems[1], 1).is_ok());
 
 	let proof = pmmr.merkle_proof(3).unwrap();
 	assert_eq!(proof.path, vec![pos_2]);
-	assert!(proof.verify(pmmr.root().unwrap(), &elems[2], 4).is_ok());
+	assert!(proof.verify(pmmr.root().unwrap(), &elems[2], 3).is_ok());
 
 	// 7 leaves, 3 peaks, 11 pos in total
 	pmmr.push(&elems[3]).unwrap();
@@ -152,38 +152,38 @@ fn pmmr_merkle_proof() {
 		proof.path,
 		vec![pos_1, pos_5, (pos_9, pos_10).hash_with_index(11)]
 	);
-	assert!(proof.verify(pmmr.root().unwrap(), &elems[0], 1).is_ok());
+	assert!(proof.verify(pmmr.root().unwrap(), &elems[0], 0).is_ok());
 
 	let proof = pmmr.merkle_proof(1).unwrap();
 	assert_eq!(
 		proof.path,
 		vec![pos_0, pos_5, (pos_9, pos_10).hash_with_index(11)]
 	);
-	assert!(proof.verify(pmmr.root().unwrap(), &elems[1], 2).is_ok());
+	assert!(proof.verify(pmmr.root().unwrap(), &elems[1], 1).is_ok());
 
 	let proof = pmmr.merkle_proof(3).unwrap();
 	assert_eq!(
 		proof.path,
 		vec![pos_4, pos_2, (pos_9, pos_10).hash_with_index(11)]
 	);
-	assert!(proof.verify(pmmr.root().unwrap(), &elems[2], 4).is_ok());
+	assert!(proof.verify(pmmr.root().unwrap(), &elems[2], 3).is_ok());
 
 	let proof = pmmr.merkle_proof(4).unwrap();
 	assert_eq!(
 		proof.path,
 		vec![pos_3, pos_2, (pos_9, pos_10).hash_with_index(11)]
 	);
-	assert!(proof.verify(pmmr.root().unwrap(), &elems[3], 5).is_ok());
+	assert!(proof.verify(pmmr.root().unwrap(), &elems[3], 4).is_ok());
 
 	let proof = pmmr.merkle_proof(7).unwrap();
 	assert_eq!(proof.path, vec![pos_8, pos_10, pos_6]);
-	assert!(proof.verify(pmmr.root().unwrap(), &elems[4], 8).is_ok());
+	assert!(proof.verify(pmmr.root().unwrap(), &elems[4], 7).is_ok());
 
 	let proof = pmmr.merkle_proof(8).unwrap();
 	assert_eq!(proof.path, vec![pos_7, pos_10, pos_6]);
-	assert!(proof.verify(pmmr.root().unwrap(), &elems[5], 9).is_ok());
+	assert!(proof.verify(pmmr.root().unwrap(), &elems[5], 8).is_ok());
 
 	let proof = pmmr.merkle_proof(10).unwrap();
 	assert_eq!(proof.path, vec![pos_9, pos_6]);
-	assert!(proof.verify(pmmr.root().unwrap(), &elems[6], 11).is_ok());
+	assert!(proof.verify(pmmr.root().unwrap(), &elems[6], 10).is_ok());
 }
