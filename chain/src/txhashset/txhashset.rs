@@ -896,8 +896,8 @@ impl<'a> HeaderExtension<'a> {
 	}
 
 	/// Get the header hash for the specified pos from the underlying MMR backend.
-	fn get_header_hash(&self, pos1: u64) -> Option<Hash> {
-		self.pmmr.get_data(pos1 - 1).map(|x| x.hash())
+	fn get_header_hash(&self, pos0: u64) -> Option<Hash> {
+		self.pmmr.get_data(pos0).map(|x| x.hash())
 	}
 
 	/// The head representing the furthest extent of the current extension.
@@ -908,7 +908,7 @@ impl<'a> HeaderExtension<'a> {
 	/// Get header hash by height.
 	/// Based on current header MMR.
 	pub fn get_header_hash_by_height(&self, height: u64) -> Option<Hash> {
-		let pos = 1 + pmmr::insertion_to_pmmr_index(height);
+		let pos = pmmr::insertion_to_pmmr_index(height);
 		self.get_header_hash(pos)
 	}
 
