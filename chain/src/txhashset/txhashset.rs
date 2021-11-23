@@ -360,7 +360,7 @@ impl TxHashSet {
 
 	/// Find a kernel with a given excess. Work backwards from `max_index` to `min_index`
 	/// NOTE: this linear search over all kernel history can be VERY expensive
-	/// we should limit public API access to this method
+	/// public API access to this method should be limited
 	pub fn find_kernel(
 		&self,
 		excess: &Commitment,
@@ -404,11 +404,11 @@ impl TxHashSet {
 		Ok(self.commit_index.get_output_pos(&commit)?)
 	}
 
-	/// build a new merkle proof for the given position.
+	/// build a new merkle proof for the given output commitment
 	pub fn merkle_proof(&mut self, commit: Commitment) -> Result<MerkleProof, Error> {
-		let pos1 = self.commit_index.get_output_pos(&commit)?;
+		let pos0 = self.commit_index.get_output_pos(&commit)?;
 		PMMR::at(&mut self.output_pmmr_h.backend, self.output_pmmr_h.size)
-			.merkle_proof(pos1 - 1)
+			.merkle_proof(pos0)
 			.map_err(|_| ErrorKind::MerkleProof.into())
 	}
 
@@ -534,11 +534,12 @@ impl TxHashSet {
 		// do not point to to the expected output.
 		let mut removed_count = 0;
 		for (key, pos1) in batch.output_pos_iter()? {
-			if let Some(out) = output_pmmr.get_data(pos1.pos - 1) {
-				if let Ok(pos_via_mmr) = batch.get_output_pos(&out.commitment()) {
+			let pos0 = pos1.pos - 1;
+			if let Some(out) = output_pmmr.get_data(pos0) {
+				if let Ok(pos0_via_mmr) = batch.get_output_pos(&out.commitment()) {
 					// If the pos matches and the index key matches the commitment
 					// then keep the entry, other we want to clean it up.
-					if pos1.pos == pos_via_mmr
+					if pos0 == pos0_via_mmr
 						&& batch.is_match_output_pos_key(&key, &out.commitment())
 					{
 						continue;
@@ -1195,8 +1196,8 @@ impl<'a> Extension<'a> {
 	fn apply_output(&mut self, out: &Output, batch: &Batch<'_>) -> Result<u64, Error> {
 		let commit = out.commitment();
 
-		if let Ok(pos1) = batch.get_output_pos(&commit) {
-			if let Some(out_mmr) = self.output_pmmr.get_data(pos1 - 1) {
+		if let Ok(pos0) = batch.get_output_pos(&commit) {
+			if let Some(out_mmr) = self.output_pmmr.get_data(pos0) {
 				if out_mmr.commitment() == commit {
 					return Err(ErrorKind::DuplicateCommitment(commit).into());
 				}
@@ -1273,10 +1274,10 @@ impl<'a> Extension<'a> {
 		let out_id = out_id.as_ref();
 		debug!("txhashset: merkle_proof: output: {:?}", out_id.commit);
 		// then calculate the Merkle Proof based on the known pos
-		let pos1 = batch.get_output_pos(&out_id.commit)?;
+		let pos0 = batch.get_output_pos(&out_id.commit)?;
 		let merkle_proof = self
 			.output_pmmr
-			.merkle_proof(pos1 - 1)
+			.merkle_proof(pos0)
 			.map_err(&ErrorKind::TxHashSetErr)?;
 
 		Ok(merkle_proof)

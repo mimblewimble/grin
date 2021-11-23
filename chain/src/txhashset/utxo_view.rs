@@ -141,8 +141,8 @@ impl<'a> UTXOView<'a> {
 
 	// Output is valid if it would not result in a duplicate commitment in the output MMR.
 	fn validate_output(&self, output: &Output, batch: &Batch<'_>) -> Result<(), Error> {
-		if let Ok(pos1) = batch.get_output_pos(&output.commitment()) {
-			if let Some(out_mmr) = self.output_pmmr.get_data(pos1 - 1) {
+		if let Ok(pos0) = batch.get_output_pos(&output.commitment()) {
+			if let Some(out_mmr) = self.output_pmmr.get_data(pos0) {
 				if out_mmr.commitment() == output.commitment() {
 					return Err(ErrorKind::DuplicateCommitment(output.commitment()).into());
 				}
