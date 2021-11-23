@@ -256,26 +256,24 @@ impl PruneList {
 
 	// Remove any existing entries in shift_cache and leaf_shift_cache
 	// for any pos contained in the subtree with provided root.
-	fn cleanup_subtree(&mut self, pos: u64) {
-		assert!(pos > 0, "prune list 1-indexed, 0 not valid pos");
-
-		let lc = 1 + bintree_leftmost(pos - 1) as u32;
-		let last_pos = self.bitmap.maximum().unwrap_or(1);
+	fn cleanup_subtree(&mut self, pos0: u64) {
+		let lc0 = bintree_leftmost(pos0) as u32;
+		let size = self.bitmap.maximum().unwrap_or(0);
 
 		// If this subtree does not intersect with existing bitmap then nothing to cleanup.
-		if lc > last_pos {
+		if lc0 >= size {
 			return;
 		}
 
 		// Note: We will treat this as a "closed range" below (croaring api weirdness).
-		let cleanup_pos = lc..last_pos;
+		let cleanup_pos1 = (lc0 + 1)..size;
 
 		// Find point where we can truncate based on bitmap "rank" (index) of pos to the left of subtree.
-		let idx = self.bitmap.rank(lc - 1);
+		let idx = self.bitmap.rank(lc0);
 		self.shift_cache.truncate(idx as usize);
 		self.leaf_shift_cache.truncate(idx as usize);
 
-		self.bitmap.remove_range_closed(cleanup_pos)
+		self.bitmap.remove_range_closed(cleanup_pos1)
 	}
 
 	/// Push the node at the provided position in the prune list.
@@ -315,7 +313,7 @@ impl PruneList {
 		} else {
 			// Make sure we roll anything beneath this up into this higher level pruned subtree root.
 			// We should have no nested entries in the prune_list.
-			self.cleanup_subtree(1 + pos0);
+			self.cleanup_subtree(pos0);
 			self.append_single(pos0);
 		}
 	}
