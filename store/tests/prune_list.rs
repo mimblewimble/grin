@@ -17,21 +17,6 @@ use grin_store as store;
 use crate::store::prune_list::PruneList;
 use croaring::Bitmap;
 
-// Prune list is 1-indexed but we implement this internally with a bitmap that supports a 0 value.
-// We need to make sure we safely handle 0 safely.
-#[test]
-fn test_zero_value() {
-	// Create a bitmap with a 0 value in it.
-	let mut bitmap = Bitmap::create();
-	bitmap.add(0);
-
-	// Instantiate a prune list from our existing bitmap.
-	let pl = PruneList::new(None, bitmap);
-
-	// Our prune list should be empty (0 filtered out during creation).
-	assert!(pl.is_empty());
-}
-
 #[test]
 fn test_is_pruned() {
 	let mut pl = PruneList::empty();

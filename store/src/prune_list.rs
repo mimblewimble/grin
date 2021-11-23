@@ -54,9 +54,10 @@ pub struct PruneList {
 }
 
 impl PruneList {
-	/// Instantiate a new prune list from the provided path and bitmap.
+	/// Instantiate a new prune list from the provided path and 1-based bitmap.
 	/// Note: Does not flush the bitmap to disk. Caller is responsible for doing this.
 	pub fn new(path: Option<PathBuf>, bitmap: Bitmap) -> PruneList {
+		assert!(!bitmap.contains(0));
 		let mut prune_list = PruneList {
 			path,
 			bitmap: Bitmap::create(),
@@ -64,7 +65,7 @@ impl PruneList {
 			leaf_shift_cache: vec![],
 		};
 
-		for pos1 in bitmap.iter().filter(|x| *x > 0) {
+		for pos1 in bitmap.iter() {
 			prune_list.append(pos1 as u64 - 1)
 		}
 
@@ -86,6 +87,7 @@ impl PruneList {
 		} else {
 			Bitmap::create()
 		};
+		assert!(!bitmap.contains(0));
 
 		let mut prune_list = PruneList::new(Some(file_path), bitmap);
 
@@ -165,7 +167,7 @@ impl PruneList {
 		}
 
 		self.shift_cache.clear();
-		for pos1 in self.bitmap.iter().filter(|x| *x > 0) {
+		for pos1 in self.bitmap.iter() {
 			let pos0 = pos1 as u64 - 1;
 			let prev_shift = self.get_shift(pos0);
 
@@ -219,7 +221,7 @@ impl PruneList {
 
 		self.leaf_shift_cache.clear();
 
-		for pos1 in self.bitmap.iter().filter(|x| *x > 0) {
+		for pos1 in self.bitmap.iter() {
 			let pos0 = pos1 as u64 - 1;
 			let prev_shift = self.get_leaf_shift(pos0);
 
