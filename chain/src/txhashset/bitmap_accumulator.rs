@@ -92,6 +92,7 @@ impl BitmapAccumulator {
 		let mut idx_iter = idx.into_iter().filter(|&x| x < size).peekable();
 		while let Some(x) = idx_iter.peek() {
 			if *x < chunk_idx * 1024 {
+				// NOTE we never get here if idx starts from from_idx
 				// skip until we reach our first chunk
 				idx_iter.next();
 			} else if *x < (chunk_idx + 1) * 1024 {
@@ -149,8 +150,7 @@ impl BitmapAccumulator {
 		let chunk_idx = BitmapAccumulator::chunk_idx(from_idx);
 		let last_pos = self.backend.size();
 		let mut pmmr = PMMR::at(&mut self.backend, last_pos);
-		let chunk_pos = 1 + pmmr::insertion_to_pmmr_index(chunk_idx);
-		let rewind_pos = chunk_pos.saturating_sub(1);
+		let rewind_pos = pmmr::insertion_to_pmmr_index(chunk_idx);
 		pmmr.rewind(rewind_pos, &Bitmap::create())
 			.map_err(ErrorKind::Other)?;
 		Ok(())
@@ -329,7 +329,7 @@ impl From<BitmapSegment> for Segment<BitmapChunk> {
 		} = segment;
 
 		// Count the number of chunks taking into account that the final block might be smaller
-		let n_chunks = blocks.len().saturating_sub(1) * BitmapBlock::NCHUNKS
+		let n_chunks = (blocks.len() - 1) * BitmapBlock::NCHUNKS
 			+ blocks.last().map(|b| b.n_chunks()).unwrap_or(0);
 		let mut leaf_pos = Vec::with_capacity(n_chunks);
 		let mut chunks = Vec::with_capacity(n_chunks);

@@ -1272,7 +1272,7 @@ impl Chain {
 		let txhashset = self.txhashset.read();
 		let last_index = match max_pmmr_index {
 			Some(i) => i,
-			None => txhashset.highest_output_insertion_index(),
+			None => txhashset.output_mmr_size(),
 		};
 		let outputs = txhashset.outputs_by_pmmr_index(start_index, max_count, max_pmmr_index);
 		let rangeproofs =
@@ -1301,13 +1301,14 @@ impl Chain {
 			None => self.head_header()?.height,
 		};
 		// Return headers at the given heights
-		let prev_to_start_header =
-			self.get_header_by_height(start_block_height.saturating_sub(1))?;
-		let end_header = self.get_header_by_height(end_block_height)?;
-		Ok((
-			prev_to_start_header.output_mmr_size + 1,
-			end_header.output_mmr_size,
-		))
+		let start_mmr_size = if start_block_height == 0 {
+			0
+		} else {
+			self.get_header_by_height(start_block_height - 1)?
+				.output_mmr_size + 1
+		};
+		let end_mmr_size = self.get_header_by_height(end_block_height)?.output_mmr_size;
+		Ok((start_mmr_size, end_mmr_size))
 	}
 
 	/// Orphans pool size

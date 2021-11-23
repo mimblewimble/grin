@@ -52,7 +52,7 @@ const TXHASHSET_ZIP: &str = "txhashset_snapshot";
 pub struct PMMRHandle<T: PMMRable> {
 	/// The backend storage for the MMR.
 	pub backend: PMMRBackend<T>,
-	/// The last position accessible via this MMR handle (backend may continue out beyond this).
+	/// The MMR size accessible via this handle (backend may continue out beyond this).
 	pub size: u64,
 }
 
@@ -87,11 +87,9 @@ impl PMMRHandle<BlockHeader> {
 			return Err(ErrorKind::Other("header PMMR inconsistent".to_string()).into());
 		}
 
-		// 1-indexed pos and we want to account for subsequent parent hash pos.
-		// so use next header pos to find our size.
+		// use next header pos to find our size.
 		let next_height = head.height + 1;
-		let next_pos = 1 + pmmr::insertion_to_pmmr_index(next_height);
-		let pos = next_pos.saturating_sub(1);
+		let size = pmmr::insertion_to_pmmr_index(next_height);
 
 		debug!(
 			"init_head: header PMMR: current head {} at pos {}",
@@ -100,11 +98,11 @@ impl PMMRHandle<BlockHeader> {
 		debug!(
 			"init_head: header PMMR: resetting to {} at pos {} (height {})",
 			head.hash(),
-			pos,
+			size,
 			head.height
 		);
 
-		self.size = pos;
+		self.size = size;
 		Ok(())
 	}
 
@@ -242,9 +240,9 @@ impl TxHashSet {
 		pmmr_h: &PMMRHandle<OutputIdentifier>,
 	) -> Result<BitmapAccumulator, Error> {
 		let pmmr = ReadonlyPMMR::at(&pmmr_h.backend, pmmr_h.size);
-		let size = pmmr::n_leaves(pmmr_h.size);
+		let nbits = pmmr::n_leaves(pmmr_h.size);
 		let mut bitmap_accumulator = BitmapAccumulator::new();
-		bitmap_accumulator.init(&mut pmmr.leaf_idx_iter(0), size)?;
+		bitmap_accumulator.init(&mut pmmr.leaf_idx_iter(0), nbits)?;
 		Ok(bitmap_accumulator)
 	}
 
@@ -344,8 +342,8 @@ impl TxHashSet {
 			.elements_from_pmmr_index(start_index, max_count, max_index)
 	}
 
-	/// highest output insertion index available
-	pub fn highest_output_insertion_index(&self) -> u64 {
+	/// number of outputs
+	pub fn output_mmr_size(&self) -> u64 {
 		self.output_pmmr_h.size
 	}
 
@@ -361,6 +359,8 @@ impl TxHashSet {
 	}
 
 	/// Find a kernel with a given excess. Work backwards from `max_index` to `min_index`
+	/// NOTE: this linear search over all kernel history can be VERY expensive
+	/// we should limit public API access to this method
 	pub fn find_kernel(
 		&self,
 		excess: &Commitment,
@@ -1161,6 +1161,7 @@ impl<'a> Extension<'a> {
 	}
 
 	fn apply_to_bitmap_accumulator(&mut self, output_pos: &[u64]) -> Result<(), Error> {
+		// NOTE: 1-based output_pos shouldn't have 0 in it (but does)
 		let mut output_idx: Vec<_> = output_pos
 			.iter()
 			.map(|x| pmmr::n_leaves(*x).saturating_sub(1))

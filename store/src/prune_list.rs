@@ -153,9 +153,9 @@ impl PruneList {
 		}
 
 		if idx > self.shift_cache.len() as u64 {
-			self.shift_cache[self.shift_cache.len().saturating_sub(1)]
+			self.shift_cache[self.shift_cache.len() - 1]
 		} else {
-			self.shift_cache[(idx as usize).saturating_sub(1)]
+			self.shift_cache[(idx as usize) - 1]
 		}
 	}
 
@@ -195,20 +195,20 @@ impl PruneList {
 	/// As above, but only returning the number of leaf nodes to skip for a
 	/// given leaf. Helpful if, for instance, data for each leaf is being stored
 	/// separately in a continuous flat-file.
-	pub fn get_leaf_shift(&self, pos: u64) -> u64 {
+	pub fn get_leaf_shift(&self, pos1: u64) -> u64 {
 		if self.bitmap.is_empty() {
 			return 0;
 		}
 
-		let idx = self.bitmap.rank(pos as u32);
+		let idx = self.bitmap.rank(pos1 as u32);
 		if idx == 0 {
 			return 0;
 		}
 
 		if idx > self.leaf_shift_cache.len() as u64 {
-			self.leaf_shift_cache[self.leaf_shift_cache.len().saturating_sub(1)]
+			self.leaf_shift_cache[self.leaf_shift_cache.len() - 1]
 		} else {
-			self.leaf_shift_cache[(idx as usize).saturating_sub(1)]
+			self.leaf_shift_cache[idx as usize - 1]
 		}
 	}
 
