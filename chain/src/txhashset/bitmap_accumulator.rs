@@ -215,6 +215,16 @@ impl BitmapChunk {
 	pub fn any(&self) -> bool {
 		self.0.any()
 	}
+
+	/// Iterator over the integer set represented by this chunk, applying the given
+	/// offset to the values
+	pub fn set_iter(&self, idx_offset: usize) -> impl Iterator<Item = u32> + '_ {
+		self.0
+			.iter()
+			.enumerate()
+			.filter(|(_, val)| *val)
+			.map(move |(idx, _)| (idx as u32 + idx_offset as u32))
+	}
 }
 
 impl PMMRable for BitmapChunk {

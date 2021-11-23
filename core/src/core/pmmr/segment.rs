@@ -69,6 +69,28 @@ impl Writeable for SegmentIdentifier {
 	}
 }
 
+impl SegmentIdentifier {
+	/// Test helper to get an iterator of SegmentIdentifiers required to read a
+	/// pmmr of size `target_mmr_size` in segments of height `segment_height`
+	pub fn traversal_iter(
+		target_mmr_size: u64,
+		segment_height: u8,
+	) -> impl Iterator<Item = SegmentIdentifier> {
+		(0..SegmentIdentifier::count_segments_required(target_mmr_size, segment_height)).map(
+			move |idx| SegmentIdentifier {
+				height: segment_height,
+				idx: idx as u64,
+			},
+		)
+	}
+
+	/// Returns number of segments required that would needed in order to read a
+	/// pmmr of size `target_mmr_size` in segments of height `segment_height`
+	pub fn count_segments_required(target_mmr_size: u64, segment_height: u8) -> usize {
+		pmmr::n_leaves(target_mmr_size) as usize / (1 << segment_height as usize)
+	}
+}
+
 /// Segment of a PMMR: unpruned leaves and the necessary data to verify
 /// segment membership in the original MMR.
 #[derive(Clone, Debug, Eq, PartialEq)]

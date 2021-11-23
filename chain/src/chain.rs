@@ -18,7 +18,7 @@
 use crate::core::core::merkle_proof::MerkleProof;
 use crate::core::core::{
 	Block, BlockHeader, BlockSums, Committed, Inputs, KernelFeatures, Output, OutputIdentifier,
-	SegmentIdentifier, Transaction, TxKernel,
+	Transaction, TxKernel,
 };
 use crate::core::global;
 use crate::core::pow;
@@ -209,21 +209,6 @@ impl Chain {
 		};
 
 		chain.log_heads()?;
-
-		// Temporarily exercising the initialization process.
-		// Note: This is *really* slow because we are starting from cold.
-		//
-		// This is not required as we will lazily initialize our segmenter as required
-		// once we start receiving PIBD segment requests.
-		// In reality we will do this based on PIBD segment requests.
-		// Initialization (once per 12 hour period) will not be this slow once lmdb and PMMRs
-		// are warmed up.
-		if let Ok(segmenter) = chain.segmenter() {
-			let _ = segmenter.kernel_segment(SegmentIdentifier { height: 9, idx: 0 });
-			let _ = segmenter.bitmap_segment(SegmentIdentifier { height: 9, idx: 0 });
-			let _ = segmenter.output_segment(SegmentIdentifier { height: 11, idx: 0 });
-			let _ = segmenter.rangeproof_segment(SegmentIdentifier { height: 7, idx: 0 });
-		}
 
 		Ok(chain)
 	}
@@ -1143,7 +1128,8 @@ impl Chain {
 			return Ok(());
 		}
 
-		let horizon = global::cut_through_horizon() as u64;
+		let mut horizon = global::cut_through_horizon() as u64;
+
 		let head = batch.head()?;
 
 		let tail = match batch.tail() {
@@ -1151,7 +1137,16 @@ impl Chain {
 			Err(_) => Tip::from_header(&self.genesis),
 		};
 
-		let cutoff = head.height.saturating_sub(horizon);
+		let mut cutoff = head.height.saturating_sub(horizon);
+
+		// TODO: Check this, compaction selects a different horizon
+		// block from txhashset horizon/PIBD segmenter when using
+		// Automated testing chain
+		let archive_header = self.txhashset_archive_header()?;
+		if archive_header.height < cutoff {
+			cutoff = archive_header.height;
+			horizon = head.height - archive_header.height;
+		}
 
 		debug!(
 			"remove_historical_blocks: head height: {}, tail height: {}, horizon: {}, cutoff: {}",
