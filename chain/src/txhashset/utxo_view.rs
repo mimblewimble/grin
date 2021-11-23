@@ -152,9 +152,9 @@ impl<'a> UTXOView<'a> {
 	}
 
 	/// Retrieves an unspent output using its PMMR position
-	pub fn get_unspent_output_at(&self, pos1: u64) -> Result<Output, Error> {
-		match self.output_pmmr.get_data(pos1 - 1) {
-			Some(output_id) => match self.rproof_pmmr.get_data(pos1 - 1) {
+	pub fn get_unspent_output_at(&self, pos0: u64) -> Result<Output, Error> {
+		match self.output_pmmr.get_data(pos0) {
+			Some(output_id) => match self.rproof_pmmr.get_data(pos0) {
 				Some(rproof) => Ok(output_id.into_output(rproof)),
 				None => Err(ErrorKind::RangeproofNotFound.into()),
 			},

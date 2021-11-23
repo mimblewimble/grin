@@ -572,11 +572,11 @@ impl Chain {
 	}
 
 	/// Retrieves an unspent output using its PMMR position
-	pub fn get_unspent_output_at(&self, pos: u64) -> Result<Output, Error> {
+	pub fn get_unspent_output_at(&self, pos0: u64) -> Result<Output, Error> {
 		let header_pmmr = self.header_pmmr.read();
 		let txhashset = self.txhashset.read();
 		txhashset::utxo_view(&header_pmmr, &txhashset, |utxo, _| {
-			utxo.get_unspent_output_at(pos)
+			utxo.get_unspent_output_at(pos0)
 		})
 	}
 
