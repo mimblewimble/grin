@@ -21,7 +21,7 @@ use croaring::Bitmap;
 
 use crate::core::core::hash::{DefaultHashable, Hash};
 use crate::core::core::pmmr::segment::{Segment, SegmentIdentifier, SegmentProof};
-use crate::core::core::pmmr::{self, ReadablePMMR, ReadonlyPMMR, VecBackend, PMMR};
+use crate::core::core::pmmr::{self, Backend, ReadablePMMR, ReadonlyPMMR, VecBackend, PMMR};
 use crate::core::ser::{self, PMMRable, Readable, Reader, Writeable, Writer};
 use crate::error::{Error, ErrorKind};
 use enum_primitive::FromPrimitive;
@@ -185,6 +185,17 @@ impl BitmapAccumulator {
 	/// Readonly access to our internal data.
 	pub fn readonly_pmmr(&self) -> ReadonlyPMMR<BitmapChunk, VecBackend<BitmapChunk>> {
 		ReadonlyPMMR::at(&self.backend, self.backend.size())
+	}
+
+	/// Return a raw in-memory bitmap representation of the positions in the accumulator leaves
+	pub fn as_bitmap(&self) -> Result<Bitmap, Error> {
+		let mut bitmap = Bitmap::create();
+		for (chunk_count, chunk_index) in self.backend.leaf_idx_iter(1).enumerate() {
+			//TODO: Unwrap
+			let chunk = self.backend.get_data(chunk_index).unwrap();
+			bitmap.add_many(&chunk.set_iter(chunk_count * 1024).collect::<Vec<u32>>());
+		}
+		Ok(bitmap)
 	}
 }
 

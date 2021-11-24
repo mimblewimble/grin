@@ -865,12 +865,29 @@ impl Chain {
 		))
 	}
 
+	/// instantiate desegmenter (in same lazy fashion as segmenter, though this should be be
+	/// an expensive operation)
+	pub fn desegmenter(&self, archive_header: &BlockHeader) -> Result<Desegmenter, Error> {
+		// Use our cached desegmenter if we have one and the associated header matches.
+		if let Some(d) = self.pibd_desegmenter.read().as_ref() {
+			if d.header() == archive_header {
+				return Ok(d.clone());
+			}
+		}
+		// If no desegmenter or headers don't match init
+		// TODO: (Check whether we can do this.. we *should* be able to modify this as the desegmenter
+		// is in flight and we cross a horizon boundary, but needs more thinking)
+		let desegmenter = self.init_desegmenter(archive_header)?;
+		let mut cache = self.pibd_desegmenter.write();
+		*cache = Some(desegmenter.clone());
+
+		return Ok(desegmenter);
+	}
+
 	/// initialize a desegmenter, which is capable of extending the hashset by appending
 	/// PIBD segments of the three PMMR trees + Bitmap PMMR
 	/// header should be the same header as selected for the txhashset.zip archive
 	fn init_desegmenter(&self, header: &BlockHeader) -> Result<Desegmenter, Error> {
-		let now = Instant::now();
-
 		debug!(
 			"init_desegmenter: initializing new desegmenter for {} at {}",
 			header.hash(),
@@ -880,6 +897,7 @@ impl Chain {
 		Ok(Desegmenter::new(
 			self.txhashset(),
 			self.header_pmmr.clone(),
+			header.clone(),
 			self.store.clone(),
 		))
 	}

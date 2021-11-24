@@ -104,32 +104,19 @@ fn test_pibd_copy_impl(is_test_chain: bool, src_root_dir: &str, dest_root_dir: &
 		// Init segmenter, (note this still has to be lazy init somewhere on a peer)
 		// This is going to use the same block as horizon_header
 		let segmenter = src_chain.segmenter().unwrap();
-
-		// BITMAP - Read + Validate, Also recreate bitmap accumulator for target tx hash set
-		// Predict number of leaves (chunks) in the bitmap MMR from the number of outputs
-		let bitmap_mmr_num_leaves =
-			(pmmr::n_leaves(horizon_header.output_mmr_size) as f64 / 1024f64).ceil() as u64;
-		debug!("BITMAP PMMR NUM_LEAVES: {}", bitmap_mmr_num_leaves);
+		// Init desegmenter
+		let mut desegmenter = dest_chain.desegmenter(&horizon_header).unwrap();
 
 		// And total size of the bitmap PMMR
-		let bitmap_pmmr_size = pmmr::peaks(bitmap_mmr_num_leaves + 1)
-			.last()
-			.unwrap_or(&pmmr::insertion_to_pmmr_index(bitmap_mmr_num_leaves))
-			.clone();
-		debug!("BITMAP PMMR SIZE: {}", bitmap_pmmr_size);
+		let bitmap_mmr_size = desegmenter.expected_bitmap_mmr_size();
 		debug!(
 			"Bitmap Segments required: {}",
-			SegmentIdentifier::count_segments_required(bitmap_pmmr_size, target_segment_height)
+			SegmentIdentifier::count_segments_required(bitmap_mmr_size, target_segment_height)
 		);
 		// TODO: This can probably be derived from the PMMR we'll eventually be building
 		// (check if total size is equal to total size at horizon header)
 		let identifier_iter =
-			SegmentIdentifier::traversal_iter(bitmap_pmmr_size, target_segment_height);
-
-		let mut bitmap_accumulator = BitmapAccumulator::new();
-		// Raw bitmap for validation
-		let mut bitmap = Bitmap::create();
-		let mut chunk_count = 0;
+			SegmentIdentifier::traversal_iter(bitmap_mmr_size, target_segment_height);
 
 		for sid in identifier_iter {
 			debug!("Getting bitmap segment with Segment Identifier {:?}", sid);
@@ -138,36 +125,18 @@ fn test_pibd_copy_impl(is_test_chain: bool, src_root_dir: &str, dest_root_dir: &
 				"Bitmap segmenter reports output root hash is {:?}",
 				output_root_hash
 			);
-			// Validate bitmap segment with provided output hash
-			if let Err(e) = bitmap_segment.validate_with(
-				bitmap_pmmr_size, // Last MMR pos at the height being validated, in this case of the bitmap root
-				None,
-				horizon_header.output_root, // Output root we're checking for
-				horizon_header.output_mmr_size,
-				output_root_hash, // Other root
-				true,
-			) {
-				panic!("Unable to validate bitmap_root: {}", e);
-			}
-
-			let (_sid, _hash_pos, _hashes, _leaf_pos, leaf_data, _proof) = bitmap_segment.parts();
-
-			// Add to raw bitmap to use in further validation
-			for chunk in leaf_data.iter() {
-				bitmap.add_many(&chunk.set_iter(chunk_count * 1024).collect::<Vec<u32>>());
-				chunk_count += 1;
-			}
-
-			// and append to bitmap accumulator
-			for chunk in leaf_data.into_iter() {
-				bitmap_accumulator.append_chunk(chunk).unwrap();
+			// Add segment to desegmenter / validate
+			if let Err(e) = desegmenter.add_bitmap_segment(bitmap_segment, output_root_hash) {
+				panic!("Unable to add bitmap segment: {}", e);
 			}
 		}
 
-		debug!("Accumulator Root: {}", bitmap_accumulator.root());
+		// Finalize segmenter bitmap, which means we've recieved all bitmap MMR chunks and
+		// Are ready to use it to validate outputs
+		desegmenter.finalize_bitmap().unwrap();
 
 		// OUTPUTS  - Read + Validate
-		let identifier_iter = SegmentIdentifier::traversal_iter(
+		/*let identifier_iter = SegmentIdentifier::traversal_iter(
 			horizon_header.output_mmr_size,
 			target_segment_height,
 		);
@@ -231,7 +200,7 @@ fn test_pibd_copy_impl(is_test_chain: bool, src_root_dir: &str, dest_root_dir: &
 			) {
 				panic!("Unable to validate kernel_segment root: {}", e);
 			}
-		}
+		}*/
 	}
 }
 
