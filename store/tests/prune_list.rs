@@ -15,7 +15,6 @@
 use grin_store as store;
 
 use crate::store::prune_list::PruneList;
-use croaring::Bitmap;
 
 #[test]
 fn test_is_pruned() {
@@ -68,10 +67,10 @@ fn test_get_leaf_shift() {
 
 	// start with an empty prune list (nothing shifted)
 	assert_eq!(pl.len(), 0);
+	assert_eq!(pl.get_leaf_shift(4), 0);
 	assert_eq!(pl.get_leaf_shift(1), 0);
 	assert_eq!(pl.get_leaf_shift(2), 0);
 	assert_eq!(pl.get_leaf_shift(3), 0);
-	assert_eq!(pl.get_leaf_shift(4), 0);
 
 	// now add a single leaf pos to the prune list
 	// leaves will not shift shift anything
@@ -80,24 +79,24 @@ fn test_get_leaf_shift() {
 	pl.flush().unwrap();
 
 	assert_eq!(pl.iter().collect::<Vec<_>>(), [1]);
+	assert_eq!(pl.get_leaf_shift(0), 0);
 	assert_eq!(pl.get_leaf_shift(1), 0);
 	assert_eq!(pl.get_leaf_shift(2), 0);
 	assert_eq!(pl.get_leaf_shift(3), 0);
-	assert_eq!(pl.get_leaf_shift(4), 0);
 
-	// now add the sibling leaf pos (pos 2) which will prune the parent
-	// at pos 3 this in turn will "leaf shift" the leaf at pos 3 by 2
+	// now add the sibling leaf pos (pos 1) which will prune the parent
+	// at pos 2 this in turn will "leaf shift" the leaf at pos 2 by 2
 	pl.append(1);
 	pl.flush().unwrap();
 
 	assert_eq!(pl.len(), 1);
+	assert_eq!(pl.get_leaf_shift(0), 0);
 	assert_eq!(pl.get_leaf_shift(1), 0);
-	assert_eq!(pl.get_leaf_shift(2), 0);
+	assert_eq!(pl.get_leaf_shift(2), 2);
 	assert_eq!(pl.get_leaf_shift(3), 2);
 	assert_eq!(pl.get_leaf_shift(4), 2);
-	assert_eq!(pl.get_leaf_shift(5), 2);
 
-	// now prune an additional leaf at pos 4
+	// now prune an additional leaf at pos 3
 	// leaf offset of subsequent pos will be 2
 	// 00100120
 	pl.append(3);
@@ -105,33 +104,33 @@ fn test_get_leaf_shift() {
 
 	assert_eq!(pl.len(), 2);
 	assert_eq!(pl.iter().collect::<Vec<_>>(), [3, 4]);
+	assert_eq!(pl.get_leaf_shift(0), 0);
 	assert_eq!(pl.get_leaf_shift(1), 0);
-	assert_eq!(pl.get_leaf_shift(2), 0);
+	assert_eq!(pl.get_leaf_shift(2), 2);
 	assert_eq!(pl.get_leaf_shift(3), 2);
 	assert_eq!(pl.get_leaf_shift(4), 2);
 	assert_eq!(pl.get_leaf_shift(5), 2);
 	assert_eq!(pl.get_leaf_shift(6), 2);
 	assert_eq!(pl.get_leaf_shift(7), 2);
-	assert_eq!(pl.get_leaf_shift(8), 2);
 
-	// now prune the sibling at pos 5
-	// the two smaller subtrees (pos 3 and pos 6) are rolled up to larger subtree
-	// (pos 7) the leaf offset is now 4 to cover entire subtree containing first
+	// now prune the sibling at pos 4
+	// the two smaller subtrees (pos 2 and pos 5) are rolled up to larger subtree
+	// (pos 6) the leaf offset is now 4 to cover entire subtree containing first
 	// 4 leaves 00100120
 	pl.append(4);
 	pl.flush().unwrap();
 
 	assert_eq!(pl.len(), 1);
 	assert_eq!(pl.iter().collect::<Vec<_>>(), [7]);
+	assert_eq!(pl.get_leaf_shift(0), 0);
 	assert_eq!(pl.get_leaf_shift(1), 0);
 	assert_eq!(pl.get_leaf_shift(2), 0);
 	assert_eq!(pl.get_leaf_shift(3), 0);
 	assert_eq!(pl.get_leaf_shift(4), 0);
 	assert_eq!(pl.get_leaf_shift(5), 0);
-	assert_eq!(pl.get_leaf_shift(6), 0);
+	assert_eq!(pl.get_leaf_shift(6), 4);
 	assert_eq!(pl.get_leaf_shift(7), 4);
 	assert_eq!(pl.get_leaf_shift(8), 4);
-	assert_eq!(pl.get_leaf_shift(9), 4);
 
 	// now check we can prune some unconnected nodes
 	// and that leaf_shift is correct for various pos
@@ -144,21 +143,21 @@ fn test_get_leaf_shift() {
 
 	assert_eq!(pl.len(), 2);
 	assert_eq!(pl.iter().collect::<Vec<_>>(), [6, 13]);
-	assert_eq!(pl.get_leaf_shift(2), 0);
-	assert_eq!(pl.get_leaf_shift(4), 0);
+	assert_eq!(pl.get_leaf_shift(1), 0);
+	assert_eq!(pl.get_leaf_shift(3), 0);
+	assert_eq!(pl.get_leaf_shift(7), 2);
 	assert_eq!(pl.get_leaf_shift(8), 2);
-	assert_eq!(pl.get_leaf_shift(9), 2);
+	assert_eq!(pl.get_leaf_shift(12), 4);
 	assert_eq!(pl.get_leaf_shift(13), 4);
-	assert_eq!(pl.get_leaf_shift(14), 4);
 }
 
 #[test]
 fn test_get_shift() {
 	let mut pl = PruneList::empty();
 	assert!(pl.is_empty());
+	assert_eq!(pl.get_shift(0), 0);
 	assert_eq!(pl.get_shift(1), 0);
 	assert_eq!(pl.get_shift(2), 0);
-	assert_eq!(pl.get_shift(3), 0);
 
 	// prune a single leaf node
 	// pruning only a leaf node does not shift any subsequent pos
@@ -167,45 +166,45 @@ fn test_get_shift() {
 	pl.flush().unwrap();
 
 	assert_eq!(pl.iter().collect::<Vec<_>>(), [1]);
+	assert_eq!(pl.get_shift(0), 0);
 	assert_eq!(pl.get_shift(1), 0);
 	assert_eq!(pl.get_shift(2), 0);
-	assert_eq!(pl.get_shift(3), 0);
 
 	pl.append(1);
 	pl.flush().unwrap();
 
 	assert_eq!(pl.iter().collect::<Vec<_>>(), [3]);
+	assert_eq!(pl.get_shift(0), 0);
 	assert_eq!(pl.get_shift(1), 0);
-	assert_eq!(pl.get_shift(2), 0);
+	assert_eq!(pl.get_shift(2), 2);
 	assert_eq!(pl.get_shift(3), 2);
 	assert_eq!(pl.get_shift(4), 2);
 	assert_eq!(pl.get_shift(5), 2);
-	assert_eq!(pl.get_shift(6), 2);
 
 	pl.append(3);
 	pl.flush().unwrap();
 
 	assert_eq!(pl.iter().collect::<Vec<_>>(), [3, 4]);
+	assert_eq!(pl.get_shift(0), 0);
 	assert_eq!(pl.get_shift(1), 0);
-	assert_eq!(pl.get_shift(2), 0);
+	assert_eq!(pl.get_shift(2), 2);
 	assert_eq!(pl.get_shift(3), 2);
 	assert_eq!(pl.get_shift(4), 2);
 	assert_eq!(pl.get_shift(5), 2);
-	assert_eq!(pl.get_shift(6), 2);
 
 	pl.append(4);
 	pl.flush().unwrap();
 
 	assert_eq!(pl.iter().collect::<Vec<_>>(), [7]);
+	assert_eq!(pl.get_shift(0), 0);
 	assert_eq!(pl.get_shift(1), 0);
 	assert_eq!(pl.get_shift(2), 0);
 	assert_eq!(pl.get_shift(3), 0);
 	assert_eq!(pl.get_shift(4), 0);
 	assert_eq!(pl.get_shift(5), 0);
-	assert_eq!(pl.get_shift(6), 0);
+	assert_eq!(pl.get_shift(6), 6);
 	assert_eq!(pl.get_shift(7), 6);
 	assert_eq!(pl.get_shift(8), 6);
-	assert_eq!(pl.get_shift(9), 6);
 
 	// prune a bunch more
 	for x in 5..999 {
@@ -216,7 +215,7 @@ fn test_get_shift() {
 	pl.flush().unwrap();
 
 	// and check we shift by a large number (hopefully the correct number...)
-	assert_eq!(pl.get_shift(1010), 996);
+	assert_eq!(pl.get_shift(1009), 996);
 
 	// now check we can do some sparse pruning
 	let mut pl = PruneList::empty();
@@ -227,18 +226,18 @@ fn test_get_shift() {
 	pl.flush().unwrap();
 
 	assert_eq!(pl.iter().collect::<Vec<_>>(), [6, 10]);
+	assert_eq!(pl.get_shift(0), 0);
 	assert_eq!(pl.get_shift(1), 0);
 	assert_eq!(pl.get_shift(2), 0);
 	assert_eq!(pl.get_shift(3), 0);
 	assert_eq!(pl.get_shift(4), 0);
-	assert_eq!(pl.get_shift(5), 0);
+	assert_eq!(pl.get_shift(5), 2);
 	assert_eq!(pl.get_shift(6), 2);
 	assert_eq!(pl.get_shift(7), 2);
 	assert_eq!(pl.get_shift(8), 2);
-	assert_eq!(pl.get_shift(9), 2);
+	assert_eq!(pl.get_shift(9), 4);
 	assert_eq!(pl.get_shift(10), 4);
 	assert_eq!(pl.get_shift(11), 4);
-	assert_eq!(pl.get_shift(12), 4);
 }
 
 #[test]
@@ -333,37 +332,37 @@ pub fn test_append_pruned_subtree() {
 	pl.append(0);
 
 	assert_eq!(pl.to_vec(), [1]);
-	assert_eq!(pl.get_shift(2), 0);
-	assert_eq!(pl.get_leaf_shift(2), 0);
+	assert_eq!(pl.get_shift(1), 0);
+	assert_eq!(pl.get_leaf_shift(1), 0);
 
 	pl.append(2);
 
-	// subtree beneath root at 3 is pruned
-	// pos 4 is shifted by 2 pruned hashes [1, 2]
-	// pos 4 is shifted by 2 leaves [1, 2]
+	// subtree beneath root at 2 is pruned
+	// pos 3 is shifted by 2 pruned hashes [1, 2]
+	// pos 3 is shifted by 2 leaves [1, 2]
 	assert_eq!(pl.to_vec(), [3]);
-	assert_eq!(pl.get_shift(4), 2);
-	assert_eq!(pl.get_leaf_shift(4), 2);
+	assert_eq!(pl.get_shift(3), 2);
+	assert_eq!(pl.get_leaf_shift(3), 2);
 
 	// append another pruned subtree (ancester of previous one)
 	pl.append(6);
 
-	// subtree beneath root at 7 is pruned
-	// pos 8 is shifted by 6 pruned hashes [1, 2, 3, 4, 5, 6]
-	// pos 4 is shifted by 4 leaves [1, 2, 4, 5]
+	// subtree beneath root at 6 is pruned
+	// pos 7 is shifted by 6 pruned hashes [1, 2, 3, 4, 5, 6]
+	// pos 3 is shifted by 4 leaves [1, 2, 4, 5]
 	assert_eq!(pl.to_vec(), [7]);
-	assert_eq!(pl.get_shift(8), 6);
-	assert_eq!(pl.get_leaf_shift(8), 4);
+	assert_eq!(pl.get_shift(7), 6);
+	assert_eq!(pl.get_leaf_shift(7), 4);
 
 	// now append another pruned leaf pos
 	pl.append(7);
 
 	// additional pruned leaf does not affect the shift or leaf shift
-	// pos 9 is shifted by 6 pruned hashes [1, 2, 3, 4, 5, 6]
-	// pos 4 is shifted by 4 leaves [1, 2, 4, 5]
+	// pos 8 is shifted by 6 pruned hashes [1, 2, 3, 4, 5, 6]
+	// pos 8 is shifted by 4 leaves [1, 2, 4, 5]
 	assert_eq!(pl.to_vec(), [7, 8]);
-	assert_eq!(pl.get_shift(9), 6);
-	assert_eq!(pl.get_leaf_shift(9), 4);
+	assert_eq!(pl.get_shift(8), 6);
+	assert_eq!(pl.get_leaf_shift(8), 4);
 }
 
 #[test]

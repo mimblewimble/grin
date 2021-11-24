@@ -32,6 +32,7 @@ use grin_core::core::pmmr;
 
 use crate::core::core::pmmr::{bintree_leftmost, bintree_postorder_height, family};
 use crate::{read_bitmap, save_via_temp_file};
+use std::cmp::min;
 
 /// Maintains a list of previously pruned nodes in PMMR, compacting the list as
 /// parents get pruned and allowing checking whether a leaf is pruned. Given
@@ -131,45 +132,36 @@ impl PruneList {
 	/// Return the total shift from all entries in the prune_list.
 	/// This is the shift we need to account for when adding new entries to our PMMR.
 	pub fn get_total_shift(&self) -> u64 {
-		self.get_shift(self.bitmap.maximum().unwrap_or(0) as u64)
+		self.get_shift(self.bitmap.maximum().unwrap_or(1) as u64 - 1)
 	}
 
 	/// Return the total leaf_shift from all entries in the prune_list.
 	/// This is the leaf_shift we need to account for when adding new entries to our PMMR.
 	pub fn get_total_leaf_shift(&self) -> u64 {
-		self.get_leaf_shift(self.bitmap.maximum().unwrap_or(0) as u64)
+		self.get_leaf_shift(self.bitmap.maximum().unwrap_or(1) as u64 - 1)
 	}
 
 	/// Computes by how many positions a node at pos should be shifted given the
 	/// number of nodes that have already been pruned before it.
 	/// Note: the node at pos may be pruned and may be compacted away itself and
 	/// the caller needs to be aware of this.
-	pub fn get_shift(&self, pos: u64) -> u64 {
-		if self.bitmap.is_empty() {
-			return 0;
-		}
-
-		let idx = self.bitmap.rank(pos as u32);
+	pub fn get_shift(&self, pos0: u64) -> u64 {
+		let idx = self.bitmap.rank(1 + pos0 as u32);
 		if idx == 0 {
 			return 0;
 		}
-
-		if idx > self.shift_cache.len() as u64 {
-			self.shift_cache[self.shift_cache.len() - 1]
-		} else {
-			self.shift_cache[(idx as usize) - 1]
-		}
+		self.shift_cache[min(idx as usize, self.shift_cache.len()) - 1]
 	}
 
 	fn build_shift_cache(&mut self) {
-		if self.bitmap.is_empty() {
-			return;
-		}
-
 		self.shift_cache.clear();
 		for pos1 in self.bitmap.iter() {
 			let pos0 = pos1 as u64 - 1;
-			let prev_shift = self.get_shift(pos0);
+			let prev_shift = if pos0 == 0 {
+				0
+			} else {
+				self.get_shift(pos0 - 1)
+			};
 
 			let curr_shift = if self.is_pruned_root(pos0) {
 				let height = bintree_postorder_height(pos0);
@@ -184,7 +176,11 @@ impl PruneList {
 
 	// Calculate the next shift based on provided pos and the previous shift.
 	fn calculate_next_shift(&self, pos0: u64) -> u64 {
-		let prev_shift = self.get_shift(pos0);
+		let prev_shift = if pos0 == 0 {
+			0
+		} else {
+			self.get_shift(pos0 - 1)
+		};
 		let shift = if self.is_pruned_root(pos0) {
 			let height = bintree_postorder_height(pos0);
 			2 * ((1 << height) - 1)
@@ -197,33 +193,23 @@ impl PruneList {
 	/// As above, but only returning the number of leaf nodes to skip for a
 	/// given leaf. Helpful if, for instance, data for each leaf is being stored
 	/// separately in a continuous flat-file.
-	pub fn get_leaf_shift(&self, pos1: u64) -> u64 {
-		if self.bitmap.is_empty() {
-			return 0;
-		}
-
-		let idx = self.bitmap.rank(pos1 as u32);
+	pub fn get_leaf_shift(&self, pos0: u64) -> u64 {
+		let idx = self.bitmap.rank(1 + pos0 as u32);
 		if idx == 0 {
 			return 0;
 		}
-
-		if idx > self.leaf_shift_cache.len() as u64 {
-			self.leaf_shift_cache[self.leaf_shift_cache.len() - 1]
-		} else {
-			self.leaf_shift_cache[idx as usize - 1]
-		}
+		self.leaf_shift_cache[min(idx as usize, self.leaf_shift_cache.len()) - 1]
 	}
 
 	fn build_leaf_shift_cache(&mut self) {
-		if self.bitmap.is_empty() {
-			return;
-		}
-
 		self.leaf_shift_cache.clear();
-
 		for pos1 in self.bitmap.iter() {
 			let pos0 = pos1 as u64 - 1;
-			let prev_shift = self.get_leaf_shift(pos0);
+			let prev_shift = if pos0 == 0 {
+				0
+			} else {
+				self.get_leaf_shift(pos0 - 1)
+			};
 
 			let curr_shift = if self.is_pruned_root(pos0) {
 				let height = bintree_postorder_height(pos0);
@@ -242,7 +228,11 @@ impl PruneList {
 
 	// Calculate the next leaf shift based on provided pos and the previous leaf shift.
 	fn calculate_next_leaf_shift(&self, pos0: u64) -> u64 {
-		let prev_shift = self.get_leaf_shift(pos0);
+		let prev_shift = if pos0 == 0 {
+			0
+		} else {
+			self.get_leaf_shift(pos0 - 1)
+		};
 		let shift = if self.is_pruned_root(pos0) {
 			let height = bintree_postorder_height(pos0);
 			if height == 0 {
@@ -352,11 +342,13 @@ impl PruneList {
 	}
 
 	/// Internal shift cache as slice.
+	/// only used in store/tests/prune_list.rs tests
 	pub fn shift_cache(&self) -> &[u64] {
 		self.shift_cache.as_slice()
 	}
 
 	/// Internal leaf shift cache as slice.
+	/// only used in store/tests/prune_list.rs tests
 	pub fn leaf_shift_cache(&self) -> &[u64] {
 		self.leaf_shift_cache.as_slice()
 	}

@@ -106,12 +106,12 @@ impl<T: PMMRable> Backend<T> for PMMRBackend<T> {
 		if self.is_compacted(pos0) {
 			return None;
 		}
-		let shift = self.prune_list.get_shift(1 + pos0);
+		let shift = self.prune_list.get_shift(pos0);
 		self.hash_file.read(1 + pos0 - shift)
 	}
 
 	fn get_peak_from_file(&self, pos0: u64) -> Option<Hash> {
-		let shift = self.prune_list.get_shift(1 + pos0);
+		let shift = self.prune_list.get_shift(pos0);
 		self.hash_file.read(1 + pos0 - shift)
 	}
 
@@ -198,12 +198,20 @@ impl<T: PMMRable> Backend<T> for PMMRBackend<T> {
 		}
 
 		// Rewind the hash file accounting for pruned/compacted pos
-		let shift = self.prune_list.get_shift(position);
+		let shift = if position == 0 {
+			0
+		} else {
+			self.prune_list.get_shift(position - 1)
+		};
 		self.hash_file.rewind(position - shift);
 
 		// Rewind the data file accounting for pruned/compacted pos
 		let flatfile_pos = pmmr::n_leaves(position);
-		let leaf_shift = self.prune_list.get_leaf_shift(position);
+		let leaf_shift = if position == 0 {
+			0
+		} else {
+			self.prune_list.get_leaf_shift(position)
+		};
 		self.data_file.rewind(flatfile_pos - leaf_shift);
 
 		Ok(())
@@ -382,9 +390,9 @@ impl<T: PMMRable> PMMRBackend<T> {
 
 		// Save compact copy of the hash file, skipping removed data.
 		{
-			let pos_to_rm = map_vec!(pos_to_rm, |pos| {
-				let shift = self.prune_list.get_shift(pos.into());
-				pos as u64 - shift
+			let pos_to_rm = map_vec!(pos_to_rm, |pos1| {
+				let shift = self.prune_list.get_shift(pos1 as u64 - 1);
+				pos1 as u64 - shift
 			});
 
 			self.hash_file.write_tmp_pruned(&pos_to_rm)?;
