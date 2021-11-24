@@ -125,6 +125,8 @@ impl BitmapAccumulator {
 	/// If size is 1 then we will have a single chunk.
 	/// If size is 1023 then we will have a single chunk (bits 0 to 1023 inclusive).
 	/// If the size is 1024 then we will have two chunks.
+	/// TODO: first argument is an iterator for no good reason;
+	/// might as well pass from_idx as first argument
 	pub fn apply<T, U>(&mut self, invalidated_idx: T, idx: U, size: u64) -> Result<(), Error>
 	where
 		T: IntoIterator<Item = u64>,

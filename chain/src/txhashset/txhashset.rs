@@ -587,15 +587,14 @@ impl TxHashSet {
 			let hash = header_pmmr.get_header_hash_by_height(search_height + 1)?;
 			let h = batch.get_block_header(&hash)?;
 			while i < total_outputs {
-				let (commit, pos) = outputs_pos[i];
-				if pos > h.output_mmr_size {
-					// NOTE: output position is 1-based and not 0-based, so here must be '>' instead of '>='
+				let (commit, pos1) = outputs_pos[i];
+				if pos1 > h.output_mmr_size {
 					break;
 				}
 				batch.save_output_pos_height(
 					&commit,
 					CommitPos {
-						pos,
+						pos: pos1,
 						height: h.height,
 					},
 				)?;
