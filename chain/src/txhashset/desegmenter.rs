@@ -89,7 +89,7 @@ impl Desegmenter {
 	}
 
 	/// 'Finalize' the bitmap accumulator, storing an in-memory copy of the bitmap for
-	/// use in further validation
+	/// use in further validation and setting the accumulator on the underlying txhashset
 	/// TODO: Could be called automatically when we have the calculated number of
 	/// required segments for the archive header
 	/// TODO: Accumulator will likely need to be stored locally to deal with server
@@ -100,6 +100,22 @@ impl Desegmenter {
 			self.bitmap_accumulator.root()
 		);
 		self.bitmap_cache = Some(self.bitmap_accumulator.as_bitmap()?);
+
+		// Set the txhashset's bitmap accumulator
+		let mut header_pmmr = self.header_pmmr.write();
+		let mut txhashset = self.txhashset.write();
+		let mut batch = self.store.batch()?;
+		txhashset::extending(
+			&mut header_pmmr,
+			&mut txhashset,
+			&mut batch,
+			|ext, _batch| {
+				let extension = &mut ext.extension;
+				// TODO: Unwrap
+				extension.set_bitmap_accumulator(self.bitmap_accumulator.clone());
+				Ok(())
+			},
+		)?;
 		Ok(())
 	}
 
@@ -125,12 +141,13 @@ impl Desegmenter {
 	}
 
 	/// Adds and validates a bitmap chunk
-	/// NB: Still experimenting, this expects chunks received to be in order
+	/// TODO: Still experimenting, this expects chunks received to be in order
 	pub fn add_bitmap_segment(
 		&mut self,
 		segment: Segment<BitmapChunk>,
 		output_root_hash: Hash,
 	) -> Result<(), Error> {
+		debug!("pibd_desegmenter: add bitmap segment");
 		segment.validate_with(
 			self.bitmap_mmr_size, // Last MMR pos at the height being validated, in this case of the bitmap root
 			None,
@@ -148,8 +165,17 @@ impl Desegmenter {
 	}
 
 	/// Adds a output segment
+	/// TODO: Still experimenting, expects chunks received to be in order
 	pub fn add_output_segment(&self, segment: Segment<OutputIdentifier>) -> Result<(), Error> {
-		debug!("pibd_desegmenter write: add bitmap segment");
+		debug!("pibd_desegmenter: add output segment");
+		segment.validate_with(
+			self.archive_header.output_mmr_size, // Last MMR pos at the height being validated
+			self.bitmap_cache.as_ref(),
+			self.archive_header.output_root, // Output root we're checking for
+			self.archive_header.output_mmr_size,
+			self.bitmap_accumulator.root(), // Other root
+			false,
+		)?;
 		let mut header_pmmr = self.header_pmmr.write();
 		let mut txhashset = self.txhashset.write();
 		let mut batch = self.store.batch()?;
@@ -157,9 +183,59 @@ impl Desegmenter {
 			&mut header_pmmr,
 			&mut txhashset,
 			&mut batch,
-			|ext, batch| {
+			|ext, _batch| {
 				let extension = &mut ext.extension;
+				extension.apply_output_segment(segment)?;
+				Ok(())
+			},
+		)?;
+		Ok(())
+	}
 
+	/// Adds a Rangeproof segment
+	/// TODO: Still experimenting, expects chunks received to be in order
+	pub fn add_rangeproof_segment(&self, segment: Segment<RangeProof>) -> Result<(), Error> {
+		debug!("pibd_desegmenter: add rangeproof segment");
+		segment.validate(
+			self.archive_header.output_mmr_size, // Last MMR pos at the height being validated
+			self.bitmap_cache.as_ref(),
+			self.archive_header.range_proof_root, // Range proof root we're checking for
+		)?;
+		let mut header_pmmr = self.header_pmmr.write();
+		let mut txhashset = self.txhashset.write();
+		let mut batch = self.store.batch()?;
+		txhashset::extending(
+			&mut header_pmmr,
+			&mut txhashset,
+			&mut batch,
+			|ext, _batch| {
+				let extension = &mut ext.extension;
+				extension.apply_rangeproof_segment(segment)?;
+				Ok(())
+			},
+		)?;
+		Ok(())
+	}
+
+	/// Adds a Kernel segment
+	/// TODO: Still experimenting, expects chunks received to be in order
+	pub fn add_kernel_segment(&self, segment: Segment<TxKernel>) -> Result<(), Error> {
+		debug!("pibd_desegmenter: add kernel segment");
+		segment.validate(
+			self.archive_header.kernel_mmr_size, // Last MMR pos at the height being validated
+			None,
+			self.archive_header.kernel_root, // Kernel root we're checking for
+		)?;
+		let mut header_pmmr = self.header_pmmr.write();
+		let mut txhashset = self.txhashset.write();
+		let mut batch = self.store.batch()?;
+		txhashset::extending(
+			&mut header_pmmr,
+			&mut txhashset,
+			&mut batch,
+			|ext, _batch| {
+				let extension = &mut ext.extension;
+				extension.apply_kernel_segment(segment)?;
 				Ok(())
 			},
 		)?;

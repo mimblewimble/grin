@@ -21,15 +21,11 @@ extern crate log;
 
 use std::sync::Arc;
 
-use crate::chain::txhashset::BitmapAccumulator;
 use crate::chain::types::{NoopAdapter, Options};
-use crate::core::core::pmmr;
 use crate::core::core::{hash::Hashed, pmmr::segment::SegmentIdentifier};
 use crate::core::{genesis, global, pow};
 
 use self::chain_test_helper::clean_output_dir;
-
-use croaring::Bitmap;
 
 mod chain_test_helper;
 
@@ -136,7 +132,7 @@ fn test_pibd_copy_impl(is_test_chain: bool, src_root_dir: &str, dest_root_dir: &
 		desegmenter.finalize_bitmap().unwrap();
 
 		// OUTPUTS  - Read + Validate
-		/*let identifier_iter = SegmentIdentifier::traversal_iter(
+		let identifier_iter = SegmentIdentifier::traversal_iter(
 			horizon_header.output_mmr_size,
 			target_segment_height,
 		);
@@ -148,16 +144,9 @@ fn test_pibd_copy_impl(is_test_chain: bool, src_root_dir: &str, dest_root_dir: &
 				"Output segmenter reports bitmap hash is {:?}",
 				bitmap_root_hash
 			);
-			// Validate Output
-			if let Err(e) = output_segment.validate_with(
-				horizon_header.output_mmr_size, // Last MMR pos at the height being validated
-				Some(&bitmap),
-				horizon_header.output_root, // Output root we're checking for
-				horizon_header.output_mmr_size,
-				bitmap_root_hash, // Other root
-				false,
-			) {
-				panic!("Unable to validate output segment root: {}", e);
+			// Add segment to desegmenter / validate
+			if let Err(e) = desegmenter.add_output_segment(output_segment) {
+				panic!("Unable to add output segment: {}", e);
 			}
 		}
 
@@ -173,13 +162,9 @@ fn test_pibd_copy_impl(is_test_chain: bool, src_root_dir: &str, dest_root_dir: &
 				sid
 			);
 			let rangeproof_segment = segmenter.rangeproof_segment(sid).unwrap();
-			// Validate Kernel segment (which does not require a bitmap)
-			if let Err(e) = rangeproof_segment.validate(
-				horizon_header.output_mmr_size, // Last MMR pos at the height being validated
-				Some(&bitmap),
-				horizon_header.range_proof_root, // Output root we're checking for
-			) {
-				panic!("Unable to validate rangeproof segment root: {}", e);
+			// Add segment to desegmenter / validate
+			if let Err(e) = desegmenter.add_rangeproof_segment(rangeproof_segment) {
+				panic!("Unable to add rangeproof segment: {}", e);
 			}
 		}
 
@@ -192,15 +177,13 @@ fn test_pibd_copy_impl(is_test_chain: bool, src_root_dir: &str, dest_root_dir: &
 		for sid in identifier_iter {
 			debug!("Getting kernel segment with Segment Identifier {:?}", sid);
 			let kernel_segment = segmenter.kernel_segment(sid).unwrap();
-			// Validate Kernel segment (which does not require a bitmap)
-			if let Err(e) = kernel_segment.validate(
-				horizon_header.kernel_mmr_size,
-				None,
-				horizon_header.kernel_root,
-			) {
-				panic!("Unable to validate kernel_segment root: {}", e);
+			if let Err(e) = desegmenter.add_kernel_segment(kernel_segment) {
+				panic!("Unable to add kernel segment: {}", e);
 			}
-		}*/
+		}
+
+		let dest_txhashset = dest_chain.txhashset();
+		debug!("Dest TxHashset Roots: {:?}", dest_txhashset.read().roots());
 	}
 }
 

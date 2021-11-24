@@ -187,10 +187,10 @@ impl BitmapAccumulator {
 		ReadonlyPMMR::at(&self.backend, self.backend.size())
 	}
 
-	/// Return a raw in-memory bitmap representation of the positions in the accumulator leaves
+	/// Return a raw in-memory bitmap of this accumulator
 	pub fn as_bitmap(&self) -> Result<Bitmap, Error> {
 		let mut bitmap = Bitmap::create();
-		for (chunk_count, chunk_index) in self.backend.leaf_idx_iter(1).enumerate() {
+		for (chunk_count, chunk_index) in self.backend.leaf_idx_iter(0).enumerate() {
 			//TODO: Unwrap
 			let chunk = self.backend.get_data(chunk_index).unwrap();
 			bitmap.add_many(&chunk.set_iter(chunk_count * 1024).collect::<Vec<u32>>());
