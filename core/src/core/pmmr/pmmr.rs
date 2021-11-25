@@ -587,54 +587,6 @@ pub fn is_left_sibling(pos0: u64) -> bool {
 	(peak_map & peak) == 0
 }
 
-/// Returns the path from the specified position up to its
-/// corresponding peak in the MMR.
-/// The size (and therefore the set of peaks) of the MMR
-/// is defined by size.
-/// NOTE this function and the Path struct is UNUSED and
-/// mostly redundant as family_branch has similar functionality
-pub fn path(pos0: u64, size: u64) -> impl Iterator<Item = u64> {
-	Path::new(pos0, size)
-}
-
-struct Path {
-	current: u64,
-	size: u64,
-	peak: u64,
-	peak_map: u64,
-}
-
-impl Path {
-	fn new(pos0: u64, size: u64) -> Self {
-		let (peak_map, height) = peak_map_height(pos0);
-		Path {
-			current: pos0,
-			peak: 1 << height,
-			peak_map,
-			size,
-		}
-	}
-}
-
-impl Iterator for Path {
-	type Item = u64;
-
-	fn next(&mut self) -> Option<Self::Item> {
-		if self.current >= self.size {
-			return None;
-		}
-
-		let next = Some(self.current);
-		self.current += if (self.peak_map & self.peak) != 0 {
-			1
-		} else {
-			2 * self.peak
-		};
-		self.peak <<= 1;
-		next
-	}
-}
-
 /// For a given starting position calculate the parent and sibling positions
 /// for the branch/path from that position to the peak of the tree.
 /// We will use the sibling positions to generate the "path" of a Merkle proof.

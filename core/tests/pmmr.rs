@@ -242,13 +242,6 @@ fn various_families() {
 }
 
 #[test]
-fn test_paths() {
-	assert_eq!(pmmr::path(0, 3).collect::<Vec<_>>(), [0, 2]);
-	assert_eq!(pmmr::path(1, 3).collect::<Vec<_>>(), [1, 2]);
-	assert_eq!(pmmr::path(3, 16).collect::<Vec<_>>(), [3, 5, 6, 14]);
-}
-
-#[test]
 fn test_is_left_sibling() {
 	assert_eq!(pmmr::is_left_sibling(0), true);
 	assert_eq!(pmmr::is_left_sibling(1), false);

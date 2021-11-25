@@ -50,6 +50,8 @@ pub struct BitmapAccumulator {
 }
 
 impl BitmapAccumulator {
+	const NBITS: u64 = BitmapChunk::LEN_BITS as u64;
+
 	/// Crate a new empty bitmap accumulator.
 	pub fn new() -> BitmapAccumulator {
 		BitmapAccumulator {
@@ -65,12 +67,12 @@ impl BitmapAccumulator {
 	/// Find the start of the first "chunk" of 1024 bits from the provided idx.
 	/// Zero the last 10 bits to round down to multiple of 1024.
 	pub fn chunk_start_idx(idx: u64) -> u64 {
-		idx & !0x3ff
+		idx & !(Self::NBITS - 1)
 	}
 
 	/// The first 1024 belong to chunk 0, the next 1024 to chunk 1 etc.
 	fn chunk_idx(idx: u64) -> u64 {
-		idx / 1024
+		idx / Self::NBITS
 	}
 
 	/// Apply the provided idx iterator to our bitmap accumulator.
@@ -91,13 +93,13 @@ impl BitmapAccumulator {
 
 		let mut idx_iter = idx.into_iter().filter(|&x| x < size).peekable();
 		while let Some(x) = idx_iter.peek() {
-			if *x < chunk_idx * 1024 {
+			if *x < chunk_idx * Self::NBITS {
 				// NOTE we never get here if idx starts from from_idx
 				// skip until we reach our first chunk
 				idx_iter.next();
-			} else if *x < (chunk_idx + 1) * 1024 {
+			} else if *x < (chunk_idx + 1) * Self::NBITS {
 				let idx = idx_iter.next().expect("next after peek");
-				chunk.set(idx % 1024, true);
+				chunk.set(idx % Self::NBITS, true);
 			} else {
 				self.append_chunk(chunk)?;
 				chunk_idx += 1;
@@ -538,13 +540,15 @@ mod tests {
 
 	#[test]
 	fn sparse_block_ser_roundtrip() {
-		let entries = thread_rng().gen_range(1024, BitmapBlock::NBITS as usize / 16);
+		let entries =
+			thread_rng().gen_range(BitmapChunk::LEN_BITS, BitmapBlock::NBITS as usize / 16);
 		test_roundtrip(entries, false, 1, 4 + 2 * entries);
 	}
 
 	#[test]
 	fn abdundant_block_ser_roundtrip() {
-		let entries = thread_rng().gen_range(1024, BitmapBlock::NBITS as usize / 16);
+		let entries =
+			thread_rng().gen_range(BitmapChunk::LEN_BITS, BitmapBlock::NBITS as usize / 16);
 		test_roundtrip(entries, true, 2, 4 + 2 * entries);
 	}
 }
