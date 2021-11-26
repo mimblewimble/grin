@@ -43,39 +43,38 @@ impl<T: PMMRable> Backend<T> for VecBackend<T> {
 		Ok(())
 	}
 
-	fn append_pruned_subtree(&mut self, _hash: Hash, _pos: u64) -> Result<(), String> {
+	fn append_pruned_subtree(&mut self, _hash: Hash, _pos0: u64) -> Result<(), String> {
 		unimplemented!()
 	}
 
-	fn get_hash(&self, position: u64) -> Option<Hash> {
-		if self.removed.contains(&position) {
+	fn get_hash(&self, pos0: u64) -> Option<Hash> {
+		if self.removed.contains(&pos0) {
 			None
 		} else {
-			self.get_from_file(position)
+			self.get_from_file(pos0)
 		}
 	}
 
-	fn get_data(&self, position: u64) -> Option<T::E> {
-		if self.removed.contains(&position) {
+	fn get_data(&self, pos0: u64) -> Option<T::E> {
+		if self.removed.contains(&pos0) {
 			None
 		} else {
-			self.get_data_from_file(position)
+			self.get_data_from_file(pos0)
 		}
 	}
 
-	fn get_from_file(&self, position: u64) -> Option<Hash> {
-		let idx = usize::try_from(position.saturating_sub(1)).expect("usize from u64");
+	fn get_from_file(&self, pos0: u64) -> Option<Hash> {
+		let idx = usize::try_from(pos0).expect("usize from u64");
 		self.hashes.get(idx).cloned()
 	}
 
-	fn get_peak_from_file(&self, position: u64) -> Option<Hash> {
-		self.get_from_file(position)
+	fn get_peak_from_file(&self, pos0: u64) -> Option<Hash> {
+		self.get_from_file(pos0)
 	}
 
-	fn get_data_from_file(&self, position: u64) -> Option<T::E> {
+	fn get_data_from_file(&self, pos0: u64) -> Option<T::E> {
 		if let Some(data) = &self.data {
-			let idx = usize::try_from(pmmr::n_leaves(position).saturating_sub(1))
-				.expect("usize from u64");
+			let idx = usize::try_from(pmmr::n_leaves(1 + pos0) - 1).expect("usize from u64");
 			data.get(idx).map(|x| x.as_elmt())
 		} else {
 			None
@@ -92,22 +91,23 @@ impl<T: PMMRable> Backend<T> for VecBackend<T> {
 			self.hashes
 				.iter()
 				.enumerate()
-				.map(|(x, _)| (x + 1) as u64)
+				.map(|(x, _)| x as u64)
 				.filter(move |x| pmmr::is_leaf(*x) && !self.removed.contains(x)),
 		)
 	}
 
+	/// NOTE this function is needlessly inefficient with repeated calls to n_leaves()
 	fn leaf_idx_iter(&self, from_idx: u64) -> Box<dyn Iterator<Item = u64> + '_> {
-		let from_pos = pmmr::insertion_to_pmmr_index(from_idx + 1);
+		let from_pos = pmmr::insertion_to_pmmr_index(from_idx);
 		Box::new(
 			self.leaf_pos_iter()
 				.skip_while(move |x| *x < from_pos)
-				.map(|x| pmmr::n_leaves(x).saturating_sub(1)),
+				.map(|x| pmmr::n_leaves(x + 1) - 1),
 		)
 	}
 
-	fn remove(&mut self, position: u64) -> Result<(), String> {
-		self.removed.insert(position);
+	fn remove(&mut self, pos0: u64) -> Result<(), String> {
+		self.removed.insert(pos0);
 		Ok(())
 	}
 

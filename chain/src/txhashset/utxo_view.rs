@@ -123,12 +123,12 @@ impl<'a> UTXOView<'a> {
 		batch: &Batch<'_>,
 	) -> Result<(OutputIdentifier, CommitPos), Error> {
 		let pos = batch.get_output_pos_height(&input)?;
-		if let Some(pos) = pos {
-			if let Some(out) = self.output_pmmr.get_data(pos.pos) {
+		if let Some(pos1) = pos {
+			if let Some(out) = self.output_pmmr.get_data(pos1.pos - 1) {
 				if out.commitment() == input {
-					return Ok((out, pos));
+					return Ok((out, pos1));
 				} else {
-					error!("input mismatch: {:?}, {:?}, {:?}", out, pos, input);
+					error!("input mismatch: {:?}, {:?}, {:?}", out, pos1, input);
 					return Err(ErrorKind::Other(
 						"input mismatch (output_pos index mismatch?)".into(),
 					)
@@ -141,8 +141,8 @@ impl<'a> UTXOView<'a> {
 
 	// Output is valid if it would not result in a duplicate commitment in the output MMR.
 	fn validate_output(&self, output: &Output, batch: &Batch<'_>) -> Result<(), Error> {
-		if let Ok(pos) = batch.get_output_pos(&output.commitment()) {
-			if let Some(out_mmr) = self.output_pmmr.get_data(pos) {
+		if let Ok(pos0) = batch.get_output_pos(&output.commitment()) {
+			if let Some(out_mmr) = self.output_pmmr.get_data(pos0) {
 				if out_mmr.commitment() == output.commitment() {
 					return Err(ErrorKind::DuplicateCommitment(output.commitment()).into());
 				}
@@ -152,9 +152,9 @@ impl<'a> UTXOView<'a> {
 	}
 
 	/// Retrieves an unspent output using its PMMR position
-	pub fn get_unspent_output_at(&self, pos: u64) -> Result<Output, Error> {
-		match self.output_pmmr.get_data(pos) {
-			Some(output_id) => match self.rproof_pmmr.get_data(pos) {
+	pub fn get_unspent_output_at(&self, pos0: u64) -> Result<Output, Error> {
+		match self.output_pmmr.get_data(pos0) {
+			Some(output_id) => match self.rproof_pmmr.get_data(pos0) {
 				Some(rproof) => Ok(output_id.into_output(rproof)),
 				None => Err(ErrorKind::RangeproofNotFound.into()),
 			},
@@ -214,8 +214,8 @@ impl<'a> UTXOView<'a> {
 	}
 
 	/// Get the header hash for the specified pos from the underlying MMR backend.
-	fn get_header_hash(&self, pos: u64) -> Option<Hash> {
-		self.header_pmmr.get_data(pos).map(|x| x.hash())
+	fn get_header_hash(&self, pos1: u64) -> Option<Hash> {
+		self.header_pmmr.get_data(pos1 - 1).map(|x| x.hash())
 	}
 
 	/// Get the header at the specified height based on the current state of the extension.
@@ -226,8 +226,8 @@ impl<'a> UTXOView<'a> {
 		height: u64,
 		batch: &Batch<'_>,
 	) -> Result<BlockHeader, Error> {
-		let pos = pmmr::insertion_to_pmmr_index(height + 1);
-		if let Some(hash) = self.get_header_hash(pos) {
+		let pos1 = 1 + pmmr::insertion_to_pmmr_index(height);
+		if let Some(hash) = self.get_header_hash(pos1) {
 			let header = batch.get_block_header(&hash)?;
 			Ok(header)
 		} else {

@@ -56,6 +56,9 @@ where
 		chain.set_prev_root_only(&mut block.header)?;
 
 		// Manually set the mmr sizes for a "valid" block (increment prev output and kernel counts).
+		// The 2 lines below were bogus before when using 1-based positions.
+		// They worked only for even output_mmr_count()s
+		// But it was actually correct for 0-based position!
 		block.header.output_mmr_size = pmmr::insertion_to_pmmr_index(prev.output_mmr_count() + 1);
 		block.header.kernel_mmr_size = pmmr::insertion_to_pmmr_index(prev.kernel_mmr_count() + 1);
 	} else {

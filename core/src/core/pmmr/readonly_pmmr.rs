@@ -28,7 +28,7 @@ where
 	B: Backend<T>,
 {
 	/// The last position in the PMMR
-	last_pos: u64,
+	size: u64,
 	/// The backend for this readonly PMMR
 	backend: &'a B,
 	// only needed to parameterise Backend
@@ -44,17 +44,17 @@ where
 	pub fn new(backend: &'a B) -> ReadonlyPMMR<'_, T, B> {
 		ReadonlyPMMR {
 			backend,
-			last_pos: 0,
+			size: 0,
 			_marker: marker::PhantomData,
 		}
 	}
 
 	/// Build a new readonly PMMR pre-initialized to
-	/// last_pos with the provided backend.
-	pub fn at(backend: &'a B, last_pos: u64) -> ReadonlyPMMR<'_, T, B> {
+	/// size with the provided backend.
+	pub fn at(backend: &'a B, size: u64) -> ReadonlyPMMR<'_, T, B> {
 		ReadonlyPMMR {
 			backend,
-			last_pos,
+			size,
 			_marker: marker::PhantomData,
 		}
 	}
@@ -64,45 +64,41 @@ where
 	/// returns last pmmr index returned along with data
 	pub fn elements_from_pmmr_index(
 		&self,
-		mut pmmr_index: u64,
+		pmmr_index1: u64,
 		max_count: u64,
-		max_pmmr_pos: Option<u64>,
+		max_pmmr_pos1: Option<u64>,
 	) -> (u64, Vec<T::E>) {
 		let mut return_vec = vec![];
-		let last_pos = match max_pmmr_pos {
+		let size = match max_pmmr_pos1 {
 			Some(p) => p,
-			None => self.last_pos,
+			None => self.size,
 		};
-		if pmmr_index == 0 {
-			pmmr_index = 1;
-		}
-		while return_vec.len() < max_count as usize && pmmr_index <= last_pos {
+		let mut pmmr_index = pmmr_index1 - 1;
+		while return_vec.len() < max_count as usize && pmmr_index < size {
 			if let Some(t) = self.get_data(pmmr_index) {
 				return_vec.push(t);
 			}
 			pmmr_index += 1;
 		}
-		(pmmr_index.saturating_sub(1), return_vec)
+		(pmmr_index, return_vec)
 	}
 
 	/// Helper function to get the last N nodes inserted, i.e. the last
 	/// n nodes along the bottom of the tree.
 	/// May return less than n items if the MMR has been pruned/compacted.
+	/// NOTE This should just iterate over insertion indices
+	/// to avoid the repeated calls to bintree_rightmost!
 	pub fn get_last_n_insertions(&self, n: u64) -> Vec<(Hash, T::E)> {
 		let mut return_vec = vec![];
-		let mut last_leaf = self.last_pos;
-		for _ in 0..n as u64 {
-			if last_leaf == 0 {
-				break;
-			}
-			last_leaf = bintree_rightmost(last_leaf);
+		let mut last_leaf = self.size;
+		while return_vec.len() < n as usize && last_leaf > 0 {
+			last_leaf = bintree_rightmost(last_leaf - 1);
 
 			if let Some(hash) = self.backend.get_hash(last_leaf) {
 				if let Some(data) = self.backend.get_data(last_leaf) {
 					return_vec.push((hash, data));
 				}
 			}
-			last_leaf -= 1;
 		}
 		return_vec
 	}
@@ -115,57 +111,57 @@ where
 {
 	type Item = T::E;
 
-	fn get_hash(&self, pos: u64) -> Option<Hash> {
-		if pos > self.last_pos {
+	fn get_hash(&self, pos0: u64) -> Option<Hash> {
+		if pos0 >= self.size {
 			None
-		} else if is_leaf(pos) {
+		} else if is_leaf(pos0) {
 			// If we are a leaf then get hash from the backend.
-			self.backend.get_hash(pos)
+			self.backend.get_hash(pos0)
 		} else {
 			// If we are not a leaf get hash ignoring the remove log.
-			self.backend.get_from_file(pos)
+			self.backend.get_from_file(pos0)
 		}
 	}
 
-	fn get_data(&self, pos: u64) -> Option<Self::Item> {
-		if pos > self.last_pos {
+	fn get_data(&self, pos0: u64) -> Option<Self::Item> {
+		if pos0 >= self.size {
 			// If we are beyond the rhs of the MMR return None.
 			None
-		} else if is_leaf(pos) {
+		} else if is_leaf(pos0) {
 			// If we are a leaf then get data from the backend.
-			self.backend.get_data(pos)
+			self.backend.get_data(pos0)
 		} else {
 			// If we are not a leaf then return None as only leaves have data.
 			None
 		}
 	}
 
-	fn get_from_file(&self, pos: u64) -> Option<Hash> {
-		if pos > self.last_pos {
+	fn get_from_file(&self, pos0: u64) -> Option<Hash> {
+		if pos0 >= self.size {
 			None
 		} else {
-			self.backend.get_from_file(pos)
+			self.backend.get_from_file(pos0)
 		}
 	}
 
-	fn get_peak_from_file(&self, pos: u64) -> Option<Hash> {
-		if pos > self.last_pos {
+	fn get_peak_from_file(&self, pos0: u64) -> Option<Hash> {
+		if pos0 >= self.size {
 			None
 		} else {
-			self.backend.get_peak_from_file(pos)
+			self.backend.get_peak_from_file(pos0)
 		}
 	}
 
-	fn get_data_from_file(&self, pos: u64) -> Option<Self::Item> {
-		if pos > self.last_pos {
+	fn get_data_from_file(&self, pos0: u64) -> Option<Self::Item> {
+		if pos0 >= self.size {
 			None
 		} else {
-			self.backend.get_data_from_file(pos)
+			self.backend.get_data_from_file(pos0)
 		}
 	}
 
 	fn unpruned_size(&self) -> u64 {
-		self.last_pos
+		self.size
 	}
 
 	fn leaf_pos_iter(&self) -> Box<dyn Iterator<Item = u64> + '_> {
