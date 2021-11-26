@@ -309,7 +309,7 @@ where
 			let offset = if next_pos == 0 {
 				0
 			} else {
-				let prev_entry = size_file.read_as_elmt(next_pos.saturating_sub(1))?;
+				let prev_entry = size_file.read_as_elmt(next_pos - 1)?;
 				prev_entry.offset + prev_entry.size as u64
 			};
 			size_file.append_elmt(&SizeEntry {
@@ -374,8 +374,7 @@ where
 				if self.buffer_start_pos == 0 {
 					file.set_len(0)?;
 				} else {
-					let (offset, size) =
-						self.offset_and_size(self.buffer_start_pos.saturating_sub(1))?;
+					let (offset, size) = self.offset_and_size(self.buffer_start_pos - 1)?;
 					file.set_len(offset + size as u64)?;
 				};
 			}

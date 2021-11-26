@@ -37,7 +37,7 @@ fn leaf_pos_and_idx_iter_test() {
 		pmmr.leaf_idx_iter(0).collect::<Vec<_>>()
 	);
 	assert_eq!(
-		vec![1, 2, 4, 5, 8],
+		vec![0, 1, 3, 4, 7],
 		pmmr.leaf_pos_iter().collect::<Vec<_>>()
 	);
 }
@@ -61,7 +61,7 @@ fn leaf_pos_and_idx_iter_hash_only_test() {
 		pmmr.leaf_idx_iter(0).collect::<Vec<_>>()
 	);
 	assert_eq!(
-		vec![1, 2, 4, 5, 8],
+		vec![0, 1, 3, 4, 7],
 		pmmr.leaf_pos_iter().collect::<Vec<_>>()
 	);
 }

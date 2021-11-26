@@ -17,7 +17,7 @@
 
 use std::marker;
 
-use crate::core::pmmr::{bintree_postorder_height, Backend, ReadonlyPMMR};
+use crate::core::pmmr::{round_up_to_leaf_pos, Backend, ReadonlyPMMR};
 use crate::ser::PMMRable;
 
 /// Rewindable (but still readonly) view of a PMMR.
@@ -64,11 +64,7 @@ where
 		// Identify which actual position we should rewind to as the provided
 		// position is a leaf. We traverse the MMR to include any parent(s) that
 		// need to be included for the MMR to be valid.
-		let mut pos = position;
-		while bintree_postorder_height(pos + 1) > 0 {
-			pos += 1;
-		}
-		self.last_pos = pos;
+		self.last_pos = round_up_to_leaf_pos(position);
 		Ok(())
 	}
 

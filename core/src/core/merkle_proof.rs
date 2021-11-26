@@ -112,13 +112,13 @@ impl MerkleProof {
 		&mut self,
 		root: Hash,
 		element: &dyn PMMRIndexHashable,
-		node_pos: u64,
-		peaks_pos: &[u64],
+		node_pos0: u64,
+		peaks_pos0: &[u64],
 	) -> Result<(), MerkleProofError> {
-		let node_hash = if node_pos > self.mmr_size {
+		let node_hash = if node_pos0 >= self.mmr_size {
 			element.hash_with_index(self.mmr_size)
 		} else {
-			element.hash_with_index(node_pos - 1)
+			element.hash_with_index(node_pos0)
 		};
 
 		// handle special case of only a single entry in the MMR
@@ -132,25 +132,25 @@ impl MerkleProof {
 		}
 
 		let sibling = self.path.remove(0);
-		let (parent_pos, sibling_pos) = pmmr::family(node_pos);
+		let (parent_pos0, sibling_pos0) = pmmr::family(node_pos0);
 
-		if let Ok(x) = peaks_pos.binary_search(&node_pos) {
-			let parent = if x == peaks_pos.len() - 1 {
+		if let Ok(x) = peaks_pos0.binary_search(&(node_pos0)) {
+			let parent = if x == peaks_pos0.len() - 1 {
 				(sibling, node_hash)
 			} else {
 				(node_hash, sibling)
 			};
-			self.verify(root, &parent, parent_pos)
-		} else if parent_pos > self.mmr_size {
+			self.verify(root, &parent, parent_pos0)
+		} else if parent_pos0 >= self.mmr_size {
 			let parent = (sibling, node_hash);
-			self.verify(root, &parent, parent_pos)
+			self.verify(root, &parent, parent_pos0)
 		} else {
-			let parent = if pmmr::is_left_sibling(sibling_pos) {
+			let parent = if pmmr::is_left_sibling(sibling_pos0) {
 				(sibling, node_hash)
 			} else {
 				(node_hash, sibling)
 			};
-			self.verify(root, &parent, parent_pos)
+			self.verify(root, &parent, parent_pos0)
 		}
 	}
 }

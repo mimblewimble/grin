@@ -50,6 +50,8 @@ pub struct BitmapAccumulator {
 }
 
 impl BitmapAccumulator {
+	const NBITS: u64 = BitmapChunk::LEN_BITS as u64;
+
 	/// Crate a new empty bitmap accumulator.
 	pub fn new() -> BitmapAccumulator {
 		BitmapAccumulator {
@@ -65,12 +67,12 @@ impl BitmapAccumulator {
 	/// Find the start of the first "chunk" of 1024 bits from the provided idx.
 	/// Zero the last 10 bits to round down to multiple of 1024.
 	pub fn chunk_start_idx(idx: u64) -> u64 {
-		idx & !0x3ff
+		idx & !(Self::NBITS - 1)
 	}
 
 	/// The first 1024 belong to chunk 0, the next 1024 to chunk 1 etc.
 	fn chunk_idx(idx: u64) -> u64 {
-		idx / 1024
+		idx / Self::NBITS
 	}
 
 	/// Apply the provided idx iterator to our bitmap accumulator.
@@ -91,12 +93,13 @@ impl BitmapAccumulator {
 
 		let mut idx_iter = idx.into_iter().filter(|&x| x < size).peekable();
 		while let Some(x) = idx_iter.peek() {
-			if *x < chunk_idx * 1024 {
+			if *x < chunk_idx * Self::NBITS {
+				// NOTE we never get here if idx starts from from_idx
 				// skip until we reach our first chunk
 				idx_iter.next();
-			} else if *x < (chunk_idx + 1) * 1024 {
+			} else if *x < (chunk_idx + 1) * Self::NBITS {
 				let idx = idx_iter.next().expect("next after peek");
-				chunk.set(idx % 1024, true);
+				chunk.set(idx % Self::NBITS, true);
 			} else {
 				self.append_chunk(chunk)?;
 				chunk_idx += 1;
@@ -124,6 +127,8 @@ impl BitmapAccumulator {
 	/// If size is 1 then we will have a single chunk.
 	/// If size is 1023 then we will have a single chunk (bits 0 to 1023 inclusive).
 	/// If the size is 1024 then we will have two chunks.
+	/// TODO: first argument is an iterator for no good reason;
+	/// might as well pass from_idx as first argument
 	pub fn apply<T, U>(&mut self, invalidated_idx: T, idx: U, size: u64) -> Result<(), Error>
 	where
 		T: IntoIterator<Item = u64>,
@@ -149,8 +154,7 @@ impl BitmapAccumulator {
 		let chunk_idx = BitmapAccumulator::chunk_idx(from_idx);
 		let last_pos = self.backend.size();
 		let mut pmmr = PMMR::at(&mut self.backend, last_pos);
-		let chunk_pos = pmmr::insertion_to_pmmr_index(chunk_idx + 1);
-		let rewind_pos = chunk_pos.saturating_sub(1);
+		let rewind_pos = pmmr::insertion_to_pmmr_index(chunk_idx);
 		pmmr.rewind(rewind_pos, &Bitmap::create())
 			.map_err(ErrorKind::Other)?;
 		Ok(())
@@ -339,11 +343,11 @@ impl From<BitmapSegment> for Segment<BitmapChunk> {
 		} = segment;
 
 		// Count the number of chunks taking into account that the final block might be smaller
-		let n_chunks = blocks.len().saturating_sub(1) * BitmapBlock::NCHUNKS
+		let n_chunks = (blocks.len() - 1) * BitmapBlock::NCHUNKS
 			+ blocks.last().map(|b| b.n_chunks()).unwrap_or(0);
 		let mut leaf_pos = Vec::with_capacity(n_chunks);
 		let mut chunks = Vec::with_capacity(n_chunks);
-		let offset = (1 << identifier.height) * identifier.idx + 1;
+		let offset = (1 << identifier.height) * identifier.idx;
 		for i in 0..(n_chunks as u64) {
 			leaf_pos.push(pmmr::insertion_to_pmmr_index(offset + i));
 			chunks.push(BitmapChunk::new());
@@ -546,13 +550,15 @@ mod tests {
 
 	#[test]
 	fn sparse_block_ser_roundtrip() {
-		let entries = thread_rng().gen_range(1024, BitmapBlock::NBITS as usize / 16);
+		let entries =
+			thread_rng().gen_range(BitmapChunk::LEN_BITS, BitmapBlock::NBITS as usize / 16);
 		test_roundtrip(entries, false, 1, 4 + 2 * entries);
 	}
 
 	#[test]
 	fn abdundant_block_ser_roundtrip() {
-		let entries = thread_rng().gen_range(1024, BitmapBlock::NBITS as usize / 16);
+		let entries =
+			thread_rng().gen_range(BitmapChunk::LEN_BITS, BitmapBlock::NBITS as usize / 16);
 		test_roundtrip(entries, true, 2, 4 + 2 * entries);
 	}
 }

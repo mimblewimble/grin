@@ -76,7 +76,7 @@ fn first_100_mmr_heights() {
 	                     0 0 1 0 0 1 2 0 0 1 0 0 1 2 3 0 0 1 0 0 1 2 0 0 1 0 0 1 2 3 4 5 \
 	                     0 0 1 0 0 1 2 0 0 1 0 0 1 2 3 0 0 1 0 0 1 2 0 0 1 0 0 1 2 3 4 0 0 1 0 0";
 	let first_100 = first_100_str.split(' ').map(|n| n.parse::<u64>().unwrap());
-	let mut count = 1;
+	let mut count = 0;
 	for n in first_100 {
 		assert_eq!(
 			n,
@@ -91,104 +91,104 @@ fn first_100_mmr_heights() {
 
 #[test]
 fn test_bintree_range() {
+	assert_eq!(pmmr::bintree_range(0), 0..1);
 	assert_eq!(pmmr::bintree_range(1), 1..2);
-	assert_eq!(pmmr::bintree_range(2), 2..3);
-	assert_eq!(pmmr::bintree_range(3), 1..4);
+	assert_eq!(pmmr::bintree_range(2), 0..3);
+	assert_eq!(pmmr::bintree_range(3), 3..4);
 	assert_eq!(pmmr::bintree_range(4), 4..5);
-	assert_eq!(pmmr::bintree_range(5), 5..6);
-	assert_eq!(pmmr::bintree_range(6), 4..7);
-	assert_eq!(pmmr::bintree_range(7), 1..8);
+	assert_eq!(pmmr::bintree_range(5), 3..6);
+	assert_eq!(pmmr::bintree_range(6), 0..7);
 }
 
 // The pos of the rightmost leaf for the provided MMR size (last leaf in subtree).
 #[test]
 fn test_bintree_rightmost() {
+	assert_eq!(pmmr::bintree_rightmost(0), 0);
 	assert_eq!(pmmr::bintree_rightmost(1), 1);
-	assert_eq!(pmmr::bintree_rightmost(2), 2);
-	assert_eq!(pmmr::bintree_rightmost(3), 2);
+	assert_eq!(pmmr::bintree_rightmost(2), 1);
+	assert_eq!(pmmr::bintree_rightmost(3), 3);
 	assert_eq!(pmmr::bintree_rightmost(4), 4);
-	assert_eq!(pmmr::bintree_rightmost(5), 5);
-	assert_eq!(pmmr::bintree_rightmost(6), 5);
-	assert_eq!(pmmr::bintree_rightmost(7), 5);
+	assert_eq!(pmmr::bintree_rightmost(5), 4);
+	assert_eq!(pmmr::bintree_rightmost(6), 4);
 }
 
 // The pos of the leftmost leaf for the provided MMR size (first leaf in subtree).
 #[test]
 fn test_bintree_leftmost() {
+	assert_eq!(pmmr::bintree_leftmost(0), 0);
 	assert_eq!(pmmr::bintree_leftmost(1), 1);
-	assert_eq!(pmmr::bintree_leftmost(2), 2);
-	assert_eq!(pmmr::bintree_leftmost(3), 1);
+	assert_eq!(pmmr::bintree_leftmost(2), 0);
+	assert_eq!(pmmr::bintree_leftmost(3), 3);
 	assert_eq!(pmmr::bintree_leftmost(4), 4);
-	assert_eq!(pmmr::bintree_leftmost(5), 5);
-	assert_eq!(pmmr::bintree_leftmost(6), 4);
-	assert_eq!(pmmr::bintree_leftmost(7), 1);
+	assert_eq!(pmmr::bintree_leftmost(5), 3);
+	assert_eq!(pmmr::bintree_leftmost(6), 0);
 }
 
 #[test]
 fn test_bintree_leaf_pos_iter() {
+	assert_eq!(pmmr::bintree_leaf_pos_iter(0).collect::<Vec<_>>(), [0]);
 	assert_eq!(pmmr::bintree_leaf_pos_iter(1).collect::<Vec<_>>(), [1]);
-	assert_eq!(pmmr::bintree_leaf_pos_iter(2).collect::<Vec<_>>(), [2]);
-	assert_eq!(pmmr::bintree_leaf_pos_iter(3).collect::<Vec<_>>(), [1, 2]);
+	assert_eq!(pmmr::bintree_leaf_pos_iter(2).collect::<Vec<_>>(), [0, 1]);
+	assert_eq!(pmmr::bintree_leaf_pos_iter(3).collect::<Vec<_>>(), [3]);
 	assert_eq!(pmmr::bintree_leaf_pos_iter(4).collect::<Vec<_>>(), [4]);
-	assert_eq!(pmmr::bintree_leaf_pos_iter(5).collect::<Vec<_>>(), [5]);
-	assert_eq!(pmmr::bintree_leaf_pos_iter(6).collect::<Vec<_>>(), [4, 5]);
+	assert_eq!(pmmr::bintree_leaf_pos_iter(5).collect::<Vec<_>>(), [3, 4]);
 	assert_eq!(
-		pmmr::bintree_leaf_pos_iter(7).collect::<Vec<_>>(),
-		[1, 2, 4, 5]
+		pmmr::bintree_leaf_pos_iter(6).collect::<Vec<_>>(),
+		[0, 1, 3, 4]
 	);
 }
 
 #[test]
 fn test_bintree_pos_iter() {
+	assert_eq!(pmmr::bintree_pos_iter(0).collect::<Vec<_>>(), [0]);
 	assert_eq!(pmmr::bintree_pos_iter(1).collect::<Vec<_>>(), [1]);
-	assert_eq!(pmmr::bintree_pos_iter(2).collect::<Vec<_>>(), [2]);
-	assert_eq!(pmmr::bintree_pos_iter(3).collect::<Vec<_>>(), [1, 2, 3]);
+	assert_eq!(pmmr::bintree_pos_iter(2).collect::<Vec<_>>(), [0, 1, 2]);
+	assert_eq!(pmmr::bintree_pos_iter(3).collect::<Vec<_>>(), [3]);
 	assert_eq!(pmmr::bintree_pos_iter(4).collect::<Vec<_>>(), [4]);
-	assert_eq!(pmmr::bintree_pos_iter(5).collect::<Vec<_>>(), [5]);
-	assert_eq!(pmmr::bintree_pos_iter(6).collect::<Vec<_>>(), [4, 5, 6]);
+	assert_eq!(pmmr::bintree_pos_iter(5).collect::<Vec<_>>(), [3, 4, 5]);
 	assert_eq!(
-		pmmr::bintree_pos_iter(7).collect::<Vec<_>>(),
-		[1, 2, 3, 4, 5, 6, 7]
+		pmmr::bintree_pos_iter(6).collect::<Vec<_>>(),
+		[0, 1, 2, 3, 4, 5, 6]
 	);
 }
 
 #[test]
 fn test_is_leaf() {
+	assert_eq!(pmmr::is_leaf(0), true);
 	assert_eq!(pmmr::is_leaf(1), true);
-	assert_eq!(pmmr::is_leaf(2), true);
-	assert_eq!(pmmr::is_leaf(3), false);
+	assert_eq!(pmmr::is_leaf(2), false);
+	assert_eq!(pmmr::is_leaf(3), true);
 	assert_eq!(pmmr::is_leaf(4), true);
-	assert_eq!(pmmr::is_leaf(5), true);
+	assert_eq!(pmmr::is_leaf(5), false);
 	assert_eq!(pmmr::is_leaf(6), false);
-	assert_eq!(pmmr::is_leaf(7), false);
 }
 
 #[test]
 fn test_pmmr_leaf_to_insertion_index() {
-	assert_eq!(pmmr::pmmr_leaf_to_insertion_index(1), Some(0));
-	assert_eq!(pmmr::pmmr_leaf_to_insertion_index(2), Some(1));
-	assert_eq!(pmmr::pmmr_leaf_to_insertion_index(4), Some(2));
-	assert_eq!(pmmr::pmmr_leaf_to_insertion_index(5), Some(3));
-	assert_eq!(pmmr::pmmr_leaf_to_insertion_index(8), Some(4));
-	assert_eq!(pmmr::pmmr_leaf_to_insertion_index(9), Some(5));
-	assert_eq!(pmmr::pmmr_leaf_to_insertion_index(11), Some(6));
-	assert_eq!(pmmr::pmmr_leaf_to_insertion_index(12), Some(7));
-	assert_eq!(pmmr::pmmr_leaf_to_insertion_index(16), Some(8));
-	assert_eq!(pmmr::pmmr_leaf_to_insertion_index(17), Some(9));
-	assert_eq!(pmmr::pmmr_leaf_to_insertion_index(19), Some(10));
-	assert_eq!(pmmr::pmmr_leaf_to_insertion_index(20), Some(11));
-	assert_eq!(pmmr::pmmr_leaf_to_insertion_index(23), Some(12));
-	assert_eq!(pmmr::pmmr_leaf_to_insertion_index(24), Some(13));
-	assert_eq!(pmmr::pmmr_leaf_to_insertion_index(26), Some(14));
-	assert_eq!(pmmr::pmmr_leaf_to_insertion_index(27), Some(15));
-	assert_eq!(pmmr::pmmr_leaf_to_insertion_index(32), Some(16));
+	assert_eq!(pmmr::pmmr_leaf_to_insertion_index(0), Some(0));
+	assert_eq!(pmmr::pmmr_leaf_to_insertion_index(1), Some(1));
+	assert_eq!(pmmr::pmmr_leaf_to_insertion_index(3), Some(2));
+	assert_eq!(pmmr::pmmr_leaf_to_insertion_index(4), Some(3));
+	assert_eq!(pmmr::pmmr_leaf_to_insertion_index(7), Some(4));
+	assert_eq!(pmmr::pmmr_leaf_to_insertion_index(8), Some(5));
+	assert_eq!(pmmr::pmmr_leaf_to_insertion_index(10), Some(6));
+	assert_eq!(pmmr::pmmr_leaf_to_insertion_index(11), Some(7));
+	assert_eq!(pmmr::pmmr_leaf_to_insertion_index(15), Some(8));
+	assert_eq!(pmmr::pmmr_leaf_to_insertion_index(16), Some(9));
+	assert_eq!(pmmr::pmmr_leaf_to_insertion_index(18), Some(10));
+	assert_eq!(pmmr::pmmr_leaf_to_insertion_index(19), Some(11));
+	assert_eq!(pmmr::pmmr_leaf_to_insertion_index(22), Some(12));
+	assert_eq!(pmmr::pmmr_leaf_to_insertion_index(23), Some(13));
+	assert_eq!(pmmr::pmmr_leaf_to_insertion_index(25), Some(14));
+	assert_eq!(pmmr::pmmr_leaf_to_insertion_index(26), Some(15));
+	assert_eq!(pmmr::pmmr_leaf_to_insertion_index(31), Some(16));
 
 	// Not a leaf node
-	assert_eq!(pmmr::pmmr_leaf_to_insertion_index(31), None);
+	assert_eq!(pmmr::pmmr_leaf_to_insertion_index(30), None);
 
 	// Sanity check to make sure we don't get an explosion around the u64 max
 	// number of leaves
-	let n_leaves_max_u64 = pmmr::n_leaves(u64::MAX - 256);
+	let n_leaves_max_u64 = pmmr::n_leaves(u64::MAX - 257);
 	assert_eq!(
 		pmmr::pmmr_leaf_to_insertion_index(n_leaves_max_u64),
 		Some(4611686018427387884)
@@ -199,7 +199,6 @@ fn test_pmmr_leaf_to_insertion_index() {
 fn test_n_leaves() {
 	// make sure we handle an empty MMR correctly
 	assert_eq!(pmmr::n_leaves(0), 0);
-
 	// and various sizes on non-empty MMRs
 	assert_eq!(pmmr::n_leaves(1), 1);
 	assert_eq!(pmmr::n_leaves(2), 2);
@@ -213,57 +212,65 @@ fn test_n_leaves() {
 	assert_eq!(pmmr::n_leaves(10), 6);
 }
 
+#[test]
+fn test_round_up_to_leaf_pos() {
+	assert_eq!(pmmr::round_up_to_leaf_pos(0), 0);
+	assert_eq!(pmmr::round_up_to_leaf_pos(1), 1);
+	assert_eq!(pmmr::round_up_to_leaf_pos(2), 3);
+	assert_eq!(pmmr::round_up_to_leaf_pos(3), 3);
+	assert_eq!(pmmr::round_up_to_leaf_pos(4), 4);
+	assert_eq!(pmmr::round_up_to_leaf_pos(5), 7);
+	assert_eq!(pmmr::round_up_to_leaf_pos(6), 7);
+	assert_eq!(pmmr::round_up_to_leaf_pos(7), 7);
+	assert_eq!(pmmr::round_up_to_leaf_pos(8), 8);
+	assert_eq!(pmmr::round_up_to_leaf_pos(9), 10);
+	assert_eq!(pmmr::round_up_to_leaf_pos(10), 10);
+}
+
 /// Find parent and sibling positions for various node positions.
 #[test]
 fn various_families() {
 	// 0 0 1 0 0 1 2 0 0 1 0 0 1 2 3
-	assert_eq!(pmmr::family(1), (3, 2));
-	assert_eq!(pmmr::family(2), (3, 1));
-	assert_eq!(pmmr::family(3), (7, 6));
-	assert_eq!(pmmr::family(4), (6, 5));
-	assert_eq!(pmmr::family(5), (6, 4));
-	assert_eq!(pmmr::family(6), (7, 3));
-	assert_eq!(pmmr::family(7), (15, 14));
-	assert_eq!(pmmr::family(1_000), (1_001, 997));
-}
-
-#[test]
-fn test_paths() {
-	assert_eq!(pmmr::path(1, 3).collect::<Vec<_>>(), [1, 3]);
-	assert_eq!(pmmr::path(2, 3).collect::<Vec<_>>(), [2, 3]);
-	assert_eq!(pmmr::path(4, 16).collect::<Vec<_>>(), [4, 6, 7, 15]);
+	assert_eq!(pmmr::family(0), (2, 1));
+	assert_eq!(pmmr::family(1), (2, 0));
+	assert_eq!(pmmr::family(2), (6, 5));
+	assert_eq!(pmmr::family(3), (5, 4));
+	assert_eq!(pmmr::family(4), (5, 3));
+	assert_eq!(pmmr::family(5), (6, 2));
+	assert_eq!(pmmr::family(6), (14, 13));
+	assert_eq!(pmmr::family(999), (1_000, 996));
 }
 
 #[test]
 fn test_is_left_sibling() {
-	assert_eq!(pmmr::is_left_sibling(1), true);
-	assert_eq!(pmmr::is_left_sibling(2), false);
-	assert_eq!(pmmr::is_left_sibling(3), true);
+	assert_eq!(pmmr::is_left_sibling(0), true);
+	assert_eq!(pmmr::is_left_sibling(1), false);
+	assert_eq!(pmmr::is_left_sibling(2), true);
 }
 
 #[test]
 fn various_branches() {
 	// the two leaf nodes in a 3 node tree (height 1)
-	assert_eq!(pmmr::family_branch(1, 3), [(3, 2)]);
-	assert_eq!(pmmr::family_branch(2, 3), [(3, 1)]);
+	assert_eq!(pmmr::family_branch(0, 3), [(2, 1)]);
+	assert_eq!(pmmr::family_branch(1, 3), [(2, 0)]);
 
 	// the root node in a 3 node tree
-	assert_eq!(pmmr::family_branch(3, 3), []);
+	assert_eq!(pmmr::family_branch(2, 3), []);
 
 	// leaf node in a larger tree of 7 nodes (height 2)
-	assert_eq!(pmmr::family_branch(1, 7), [(3, 2), (7, 6)]);
+	assert_eq!(pmmr::family_branch(0, 7), [(2, 1), (6, 5)]);
 
 	// note these only go as far up as the local peak, not necessarily the single
 	// root
-	assert_eq!(pmmr::family_branch(1, 4), [(3, 2)]);
+	assert_eq!(pmmr::family_branch(0, 4), [(2, 1)]);
 	// pos 4 in a tree of size 4 is a local peak
-	assert_eq!(pmmr::family_branch(4, 4), []);
+	assert_eq!(pmmr::family_branch(3, 4), []);
 	// pos 4 in a tree of size 5 is also still a local peak
-	assert_eq!(pmmr::family_branch(4, 5), []);
+	assert_eq!(pmmr::family_branch(3, 5), []);
 	// pos 4 in a tree of size 6 has a parent and a sibling
-	assert_eq!(pmmr::family_branch(4, 6), [(6, 5)]);
+	assert_eq!(pmmr::family_branch(3, 6), [(5, 4)]);
 	// a tree of size 7 is all under a single root
-	assert_eq!(pmmr::family_branch(4, 7), [(6, 5), (7, 3)]);
+	assert_eq!(pmmr::family_branch(3, 7), [(5, 4), (6, 2)]);
 
 	// ok now for a more realistic one, a tree with over a million nodes in it
 	// find the "family path" back up the tree from a leaf node at 0
@@ -272,27 +279,27 @@ fn various_branches() {
 	// largest possible list of peaks before we start combining them into larger
 	// peaks.
 	assert_eq!(
-		pmmr::family_branch(1, 1_049_000),
+		pmmr::family_branch(0, 1_049_000),
 		[
-			(3, 2),
-			(7, 6),
-			(15, 14),
-			(31, 30),
-			(63, 62),
-			(127, 126),
-			(255, 254),
-			(511, 510),
-			(1023, 1022),
-			(2047, 2046),
-			(4095, 4094),
-			(8191, 8190),
-			(16383, 16382),
-			(32767, 32766),
-			(65535, 65534),
-			(131071, 131070),
-			(262143, 262142),
-			(524287, 524286),
-			(1048575, 1048574),
+			(2, 1),
+			(6, 5),
+			(14, 13),
+			(30, 29),
+			(62, 61),
+			(126, 125),
+			(254, 253),
+			(510, 509),
+			(1022, 1021),
+			(2046, 2045),
+			(4094, 4093),
+			(8190, 8189),
+			(16382, 16381),
+			(32766, 32765),
+			(65534, 65533),
+			(131070, 131069),
+			(262142, 262141),
+			(524286, 524285),
+			(1048574, 1048573),
 		]
 	);
 }
@@ -307,21 +314,21 @@ fn some_peaks() {
 	assert_eq!(pmmr::peaks(0), empty);
 
 	// and various non-empty MMRs
-	assert_eq!(pmmr::peaks(1), [1]);
+	assert_eq!(pmmr::peaks(1), [0]);
 	assert_eq!(pmmr::peaks(2), empty);
-	assert_eq!(pmmr::peaks(3), [3]);
-	assert_eq!(pmmr::peaks(4), [3, 4]);
+	assert_eq!(pmmr::peaks(3), [2]);
+	assert_eq!(pmmr::peaks(4), [2, 3]);
 	assert_eq!(pmmr::peaks(5), empty);
 	assert_eq!(pmmr::peaks(6), empty);
-	assert_eq!(pmmr::peaks(7), [7]);
-	assert_eq!(pmmr::peaks(8), [7, 8]);
+	assert_eq!(pmmr::peaks(7), [6]);
+	assert_eq!(pmmr::peaks(8), [6, 7]);
 	assert_eq!(pmmr::peaks(9), empty);
-	assert_eq!(pmmr::peaks(10), [7, 10]);
-	assert_eq!(pmmr::peaks(11), [7, 10, 11]);
-	assert_eq!(pmmr::peaks(22), [15, 22]);
-	assert_eq!(pmmr::peaks(32), [31, 32]);
-	assert_eq!(pmmr::peaks(35), [31, 34, 35]);
-	assert_eq!(pmmr::peaks(42), [31, 38, 41, 42]);
+	assert_eq!(pmmr::peaks(10), [6, 9]);
+	assert_eq!(pmmr::peaks(11), [6, 9, 10]);
+	assert_eq!(pmmr::peaks(22), [14, 21]);
+	assert_eq!(pmmr::peaks(32), [30, 31]);
+	assert_eq!(pmmr::peaks(35), [30, 33, 34]);
+	assert_eq!(pmmr::peaks(42), [30, 37, 40, 41]);
 
 	// large realistic example with almost 1.5 million nodes
 	// note the distance between peaks decreases toward the right (trees get
@@ -329,8 +336,8 @@ fn some_peaks() {
 	assert_eq!(
 		pmmr::peaks(1048555),
 		[
-			524287, 786430, 917501, 983036, 1015803, 1032186, 1040377, 1044472, 1046519, 1047542,
-			1048053, 1048308, 1048435, 1048498, 1048529, 1048544, 1048551, 1048554, 1048555,
+			524286, 786429, 917500, 983035, 1015802, 1032185, 1040376, 1044471, 1046518, 1047541,
+			1048052, 1048307, 1048434, 1048497, 1048528, 1048543, 1048550, 1048553, 1048554,
 		],
 	);
 }
@@ -516,7 +523,7 @@ fn pmmr_prune() {
 	// pruning a leaf with no parent should do nothing
 	{
 		let mut pmmr: PMMR<'_, TestElem, _> = PMMR::at(&mut ba, sz);
-		pmmr.prune(16).unwrap();
+		pmmr.prune(15).unwrap();
 		assert_eq!(orig_root, pmmr.root().unwrap());
 	}
 	assert_eq!(ba.hashes.len(), 16);
@@ -525,7 +532,7 @@ fn pmmr_prune() {
 	// pruning leaves with no shared parent just removes 1 element
 	{
 		let mut pmmr: PMMR<'_, TestElem, _> = PMMR::at(&mut ba, sz);
-		pmmr.prune(2).unwrap();
+		pmmr.prune(1).unwrap();
 		assert_eq!(orig_root, pmmr.root().unwrap());
 	}
 	assert_eq!(ba.hashes.len(), 16);
@@ -533,7 +540,7 @@ fn pmmr_prune() {
 
 	{
 		let mut pmmr: PMMR<'_, TestElem, _> = PMMR::at(&mut ba, sz);
-		pmmr.prune(4).unwrap();
+		pmmr.prune(3).unwrap();
 		assert_eq!(orig_root, pmmr.root().unwrap());
 	}
 	assert_eq!(ba.hashes.len(), 16);
@@ -542,7 +549,7 @@ fn pmmr_prune() {
 	// pruning a non-leaf node has no effect
 	{
 		let mut pmmr: PMMR<'_, TestElem, _> = PMMR::at(&mut ba, sz);
-		pmmr.prune(3).unwrap_err();
+		pmmr.prune(2).unwrap_err();
 		assert_eq!(orig_root, pmmr.root().unwrap());
 	}
 	assert_eq!(ba.hashes.len(), 16);
@@ -551,7 +558,7 @@ fn pmmr_prune() {
 	// TODO - no longer true (leaves only now) - pruning sibling removes subtree
 	{
 		let mut pmmr: PMMR<'_, TestElem, _> = PMMR::at(&mut ba, sz);
-		pmmr.prune(5).unwrap();
+		pmmr.prune(4).unwrap();
 		assert_eq!(orig_root, pmmr.root().unwrap());
 	}
 	assert_eq!(ba.hashes.len(), 16);
@@ -561,7 +568,7 @@ fn pmmr_prune() {
 	// removes all subtree
 	{
 		let mut pmmr: PMMR<'_, TestElem, _> = PMMR::at(&mut ba, sz);
-		pmmr.prune(1).unwrap();
+		pmmr.prune(0).unwrap();
 		assert_eq!(orig_root, pmmr.root().unwrap());
 	}
 	assert_eq!(ba.hashes.len(), 16);
@@ -570,7 +577,7 @@ fn pmmr_prune() {
 	// pruning everything should only leave us with a single peak
 	{
 		let mut pmmr: PMMR<'_, TestElem, _> = PMMR::at(&mut ba, sz);
-		for n in 1..16 {
+		for n in 0..15 {
 			let _ = pmmr.prune(n);
 		}
 		assert_eq!(orig_root, pmmr.root().unwrap());
@@ -581,14 +588,14 @@ fn pmmr_prune() {
 
 #[test]
 fn check_insertion_to_pmmr_index() {
+	assert_eq!(pmmr::insertion_to_pmmr_index(0), 0);
 	assert_eq!(pmmr::insertion_to_pmmr_index(1), 1);
-	assert_eq!(pmmr::insertion_to_pmmr_index(2), 2);
+	assert_eq!(pmmr::insertion_to_pmmr_index(2), 3);
 	assert_eq!(pmmr::insertion_to_pmmr_index(3), 4);
-	assert_eq!(pmmr::insertion_to_pmmr_index(4), 5);
+	assert_eq!(pmmr::insertion_to_pmmr_index(4), 7);
 	assert_eq!(pmmr::insertion_to_pmmr_index(5), 8);
-	assert_eq!(pmmr::insertion_to_pmmr_index(6), 9);
+	assert_eq!(pmmr::insertion_to_pmmr_index(6), 10);
 	assert_eq!(pmmr::insertion_to_pmmr_index(7), 11);
-	assert_eq!(pmmr::insertion_to_pmmr_index(8), 12);
 }
 
 #[test]
@@ -626,8 +633,8 @@ fn check_elements_from_pmmr_index() {
 	assert_eq!(res.1[6].0[3], 11);
 
 	// pruning a few nodes should get consistent results
-	pmmr.prune(pmmr::insertion_to_pmmr_index(5)).unwrap();
-	pmmr.prune(pmmr::insertion_to_pmmr_index(20)).unwrap();
+	pmmr.prune(pmmr::insertion_to_pmmr_index(4)).unwrap();
+	pmmr.prune(pmmr::insertion_to_pmmr_index(19)).unwrap();
 
 	let res = pmmr
 		.readonly_pmmr()

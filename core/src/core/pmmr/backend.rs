@@ -31,33 +31,33 @@ pub trait Backend<T: PMMRable> {
 
 	/// Rebuilding a PMMR locally from PIBD segments requires pruned subtree support.
 	/// This allows us to append an existing pruned subtree directly without the underlying leaf nodes.
-	fn append_pruned_subtree(&mut self, hash: Hash, pos: u64) -> Result<(), String>;
+	fn append_pruned_subtree(&mut self, hash: Hash, pos0: u64) -> Result<(), String>;
 
 	/// Rewind the backend state to a previous position, as if all append
 	/// operations after that had been canceled. Expects a position in the PMMR
 	/// to rewind to as well as bitmaps representing the positions added and
 	/// removed since the rewind position. These are what we will "undo"
 	/// during the rewind.
-	fn rewind(&mut self, position: u64, rewind_rm_pos: &Bitmap) -> Result<(), String>;
+	fn rewind(&mut self, pos1: u64, rewind_rm_pos: &Bitmap) -> Result<(), String>;
 
 	/// Get a Hash by insertion position.
-	fn get_hash(&self, position: u64) -> Option<Hash>;
+	fn get_hash(&self, pos0: u64) -> Option<Hash>;
 
 	/// Get underlying data by insertion position.
-	fn get_data(&self, position: u64) -> Option<T::E>;
+	fn get_data(&self, pos0: u64) -> Option<T::E>;
 
 	/// Get a Hash  by original insertion position
 	/// (ignoring the remove log).
-	fn get_from_file(&self, position: u64) -> Option<Hash>;
+	fn get_from_file(&self, pos0: u64) -> Option<Hash>;
 
 	/// Get hash for peak pos.
 	/// Optimized for reading peak hashes rather than arbitrary pos hashes.
 	/// Peaks can be assumed to not be compacted.
-	fn get_peak_from_file(&self, position: u64) -> Option<Hash>;
+	fn get_peak_from_file(&self, pos0: u64) -> Option<Hash>;
 
 	/// Get a Data Element by original insertion position
 	/// (ignoring the remove log).
-	fn get_data_from_file(&self, position: u64) -> Option<T::E>;
+	fn get_data_from_file(&self, pos0: u64) -> Option<T::E>;
 
 	/// Iterator over current (unpruned, unremoved) leaf positions.
 	fn leaf_pos_iter(&self) -> Box<dyn Iterator<Item = u64> + '_>;

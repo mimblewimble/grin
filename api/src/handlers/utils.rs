@@ -71,7 +71,7 @@ pub fn get_output_v2(
 		None => return Ok(None),
 	};
 
-	let output = chain.get_unspent_output_at(pos.pos)?;
+	let output = chain.get_unspent_output_at(pos.pos - 1)?;
 	let header = if include_merkle_proof && output.is_coinbase() {
 		chain.get_header_by_height(pos.height).ok()
 	} else {

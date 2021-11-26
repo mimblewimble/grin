@@ -32,6 +32,7 @@ use grin_core::core::pmmr;
 
 use crate::core::core::pmmr::{bintree_leftmost, bintree_postorder_height, family};
 use crate::{read_bitmap, save_via_temp_file};
+use std::cmp::min;
 
 /// Maintains a list of previously pruned nodes in PMMR, compacting the list as
 /// parents get pruned and allowing checking whether a leaf is pruned. Given
@@ -54,9 +55,10 @@ pub struct PruneList {
 }
 
 impl PruneList {
-	/// Instantiate a new prune list from the provided path and bitmap.
+	/// Instantiate a new prune list from the provided path and 1-based bitmap.
 	/// Note: Does not flush the bitmap to disk. Caller is responsible for doing this.
 	pub fn new(path: Option<PathBuf>, bitmap: Bitmap) -> PruneList {
+		assert!(!bitmap.contains(0));
 		let mut prune_list = PruneList {
 			path,
 			bitmap: Bitmap::create(),
@@ -64,8 +66,8 @@ impl PruneList {
 			leaf_shift_cache: vec![],
 		};
 
-		for pos in bitmap.iter().filter(|x| *x > 0) {
-			prune_list.append(pos as u64)
+		for pos1 in bitmap.iter() {
+			prune_list.append(pos1 as u64 - 1)
 		}
 
 		prune_list.bitmap.run_optimize();
@@ -86,6 +88,7 @@ impl PruneList {
 		} else {
 			Bitmap::create()
 		};
+		assert!(!bitmap.contains(0));
 
 		let mut prune_list = PruneList::new(Some(file_path), bitmap);
 
@@ -129,48 +132,39 @@ impl PruneList {
 	/// Return the total shift from all entries in the prune_list.
 	/// This is the shift we need to account for when adding new entries to our PMMR.
 	pub fn get_total_shift(&self) -> u64 {
-		self.get_shift(self.bitmap.maximum().unwrap_or(0) as u64)
+		self.get_shift(self.bitmap.maximum().unwrap_or(1) as u64 - 1)
 	}
 
 	/// Return the total leaf_shift from all entries in the prune_list.
 	/// This is the leaf_shift we need to account for when adding new entries to our PMMR.
 	pub fn get_total_leaf_shift(&self) -> u64 {
-		self.get_leaf_shift(self.bitmap.maximum().unwrap_or(0) as u64)
+		self.get_leaf_shift(self.bitmap.maximum().unwrap_or(1) as u64 - 1)
 	}
 
 	/// Computes by how many positions a node at pos should be shifted given the
 	/// number of nodes that have already been pruned before it.
 	/// Note: the node at pos may be pruned and may be compacted away itself and
 	/// the caller needs to be aware of this.
-	pub fn get_shift(&self, pos: u64) -> u64 {
-		if self.bitmap.is_empty() {
-			return 0;
-		}
-
-		let idx = self.bitmap.rank(pos as u32);
+	pub fn get_shift(&self, pos0: u64) -> u64 {
+		let idx = self.bitmap.rank(1 + pos0 as u32);
 		if idx == 0 {
 			return 0;
 		}
-
-		if idx > self.shift_cache.len() as u64 {
-			self.shift_cache[self.shift_cache.len().saturating_sub(1)]
-		} else {
-			self.shift_cache[(idx as usize).saturating_sub(1)]
-		}
+		self.shift_cache[min(idx as usize, self.shift_cache.len()) - 1]
 	}
 
 	fn build_shift_cache(&mut self) {
-		if self.bitmap.is_empty() {
-			return;
-		}
-
 		self.shift_cache.clear();
-		for pos in self.bitmap.iter().filter(|x| *x > 0) {
-			let pos = pos as u64;
-			let prev_shift = self.get_shift(pos.saturating_sub(1));
+		for pos1 in self.bitmap.iter() {
+			let pos0 = pos1 as u64 - 1;
+			let prev_shift = if pos0 == 0 {
+				0
+			} else {
+				self.get_shift(pos0 - 1)
+			};
 
-			let curr_shift = if self.is_pruned_root(pos) {
-				let height = bintree_postorder_height(pos);
+			let curr_shift = if self.is_pruned_root(pos0) {
+				let height = bintree_postorder_height(pos0);
 				2 * ((1 << height) - 1)
 			} else {
 				0
@@ -181,10 +175,14 @@ impl PruneList {
 	}
 
 	// Calculate the next shift based on provided pos and the previous shift.
-	fn calculate_next_shift(&self, pos: u64) -> u64 {
-		let prev_shift = self.get_shift(pos.saturating_sub(1));
-		let shift = if self.is_pruned_root(pos) {
-			let height = bintree_postorder_height(pos);
+	fn calculate_next_shift(&self, pos0: u64) -> u64 {
+		let prev_shift = if pos0 == 0 {
+			0
+		} else {
+			self.get_shift(pos0 - 1)
+		};
+		let shift = if self.is_pruned_root(pos0) {
+			let height = bintree_postorder_height(pos0);
 			2 * ((1 << height) - 1)
 		} else {
 			0
@@ -195,36 +193,26 @@ impl PruneList {
 	/// As above, but only returning the number of leaf nodes to skip for a
 	/// given leaf. Helpful if, for instance, data for each leaf is being stored
 	/// separately in a continuous flat-file.
-	pub fn get_leaf_shift(&self, pos: u64) -> u64 {
-		if self.bitmap.is_empty() {
-			return 0;
-		}
-
-		let idx = self.bitmap.rank(pos as u32);
+	pub fn get_leaf_shift(&self, pos0: u64) -> u64 {
+		let idx = self.bitmap.rank(1 + pos0 as u32);
 		if idx == 0 {
 			return 0;
 		}
-
-		if idx > self.leaf_shift_cache.len() as u64 {
-			self.leaf_shift_cache[self.leaf_shift_cache.len().saturating_sub(1)]
-		} else {
-			self.leaf_shift_cache[(idx as usize).saturating_sub(1)]
-		}
+		self.leaf_shift_cache[min(idx as usize, self.leaf_shift_cache.len()) - 1]
 	}
 
 	fn build_leaf_shift_cache(&mut self) {
-		if self.bitmap.is_empty() {
-			return;
-		}
-
 		self.leaf_shift_cache.clear();
+		for pos1 in self.bitmap.iter() {
+			let pos0 = pos1 as u64 - 1;
+			let prev_shift = if pos0 == 0 {
+				0
+			} else {
+				self.get_leaf_shift(pos0 - 1)
+			};
 
-		for pos in self.bitmap.iter().filter(|x| *x > 0) {
-			let pos = pos as u64;
-			let prev_shift = self.get_leaf_shift(pos.saturating_sub(1));
-
-			let curr_shift = if self.is_pruned_root(pos) {
-				let height = bintree_postorder_height(pos);
+			let curr_shift = if self.is_pruned_root(pos0) {
+				let height = bintree_postorder_height(pos0);
 				if height == 0 {
 					0
 				} else {
@@ -239,10 +227,14 @@ impl PruneList {
 	}
 
 	// Calculate the next leaf shift based on provided pos and the previous leaf shift.
-	fn calculate_next_leaf_shift(&self, pos: u64) -> u64 {
-		let prev_shift = self.get_leaf_shift(pos.saturating_sub(1) as u64);
-		let shift = if self.is_pruned_root(pos) {
-			let height = bintree_postorder_height(pos);
+	fn calculate_next_leaf_shift(&self, pos0: u64) -> u64 {
+		let prev_shift = if pos0 == 0 {
+			0
+		} else {
+			self.get_leaf_shift(pos0 - 1)
+		};
+		let shift = if self.is_pruned_root(pos0) {
+			let height = bintree_postorder_height(pos0);
 			if height == 0 {
 				0
 			} else {
@@ -256,68 +248,65 @@ impl PruneList {
 
 	// Remove any existing entries in shift_cache and leaf_shift_cache
 	// for any pos contained in the subtree with provided root.
-	fn cleanup_subtree(&mut self, pos: u64) {
-		assert!(pos > 0, "prune list 1-indexed, 0 not valid pos");
-
-		let lc = bintree_leftmost(pos) as u32;
-		let last_pos = self.bitmap.maximum().unwrap_or(1);
+	fn cleanup_subtree(&mut self, pos0: u64) {
+		let lc0 = bintree_leftmost(pos0) as u32;
+		let size = self.bitmap.maximum().unwrap_or(0);
 
 		// If this subtree does not intersect with existing bitmap then nothing to cleanup.
-		if lc > last_pos {
+		if lc0 >= size {
 			return;
 		}
 
 		// Note: We will treat this as a "closed range" below (croaring api weirdness).
-		let cleanup_pos = lc..last_pos;
+		let cleanup_pos1 = (lc0 + 1)..size;
 
 		// Find point where we can truncate based on bitmap "rank" (index) of pos to the left of subtree.
-		let idx = self.bitmap.rank(lc - 1);
+		let idx = self.bitmap.rank(lc0);
 		self.shift_cache.truncate(idx as usize);
 		self.leaf_shift_cache.truncate(idx as usize);
 
-		self.bitmap.remove_range_closed(cleanup_pos)
+		self.bitmap.remove_range_closed(cleanup_pos1)
 	}
 
 	/// Push the node at the provided position in the prune list.
 	/// Assumes rollup of siblings and children has already been handled.
-	fn append_single(&mut self, pos: u64) {
-		assert!(pos > 0, "prune list 1-indexed, 0 not valid pos");
+	fn append_single(&mut self, pos0: u64) {
 		assert!(
-			pos > self.bitmap.maximum().unwrap_or(0) as u64,
+			pos0 >= self.bitmap.maximum().unwrap_or(0) as u64,
 			"prune list append only"
 		);
 
 		// Add this pos to the bitmap (leaf or subtree root)
-		self.bitmap.add(pos as u32);
+		self.bitmap.add(1 + pos0 as u32);
 
 		// Calculate shift and leaf_shift for this pos.
-		self.shift_cache.push(self.calculate_next_shift(pos));
+		self.shift_cache.push(self.calculate_next_shift(pos0));
 		self.leaf_shift_cache
-			.push(self.calculate_next_leaf_shift(pos));
+			.push(self.calculate_next_leaf_shift(pos0));
 	}
 
 	/// Push the node at the provided position in the prune list.
 	/// Handles rollup of siblings and children as we go (relatively slow).
 	/// Once we find a subtree root that can not be rolled up any further
 	/// we cleanup everything beneath it and replace it with a single appended node.
-	pub fn append(&mut self, pos: u64) {
-		assert!(pos > 0, "prune list 1-indexed, 0 not valid pos");
+	pub fn append(&mut self, pos0: u64) {
+		let max = self.bitmap.maximum().unwrap_or(0) as u64;
 		assert!(
-			pos > self.bitmap.maximum().unwrap_or(0) as u64,
+			pos0 >= max,
 			"prune list append only - pos={} bitmap.maximum={}",
-			pos,
-			self.bitmap.maximum().unwrap_or(0)
+			pos0,
+			max
 		);
 
-		let (parent, sibling) = family(pos);
-		if self.is_pruned(sibling) {
+		let (parent0, sibling0) = family(pos0);
+		if self.is_pruned(sibling0) {
 			// Recursively append the parent (removing our sibling in the process).
-			self.append(parent)
+			self.append(parent0)
 		} else {
 			// Make sure we roll anything beneath this up into this higher level pruned subtree root.
 			// We should have no nested entries in the prune_list.
-			self.cleanup_subtree(pos);
-			self.append_single(pos);
+			self.cleanup_subtree(pos0);
+			self.append_single(pos0);
 		}
 	}
 
@@ -334,15 +323,14 @@ impl PruneList {
 	/// A pos is pruned if it is a pruned root directly or if it is
 	/// beneath the "next" pruned subtree.
 	/// We only need to consider the "next" subtree due to the append-only MMR structure.
-	pub fn is_pruned(&self, pos: u64) -> bool {
-		assert!(pos > 0, "prune list 1-indexed, 0 not valid pos");
-		if self.is_pruned_root(pos) {
+	pub fn is_pruned(&self, pos0: u64) -> bool {
+		if self.is_pruned_root(pos0) {
 			return true;
 		}
-		let rank = self.bitmap.rank(pos as u32);
+		let rank = self.bitmap.rank(1 + pos0 as u32);
 		if let Some(root) = self.bitmap.select(rank as u32) {
-			let range = pmmr::bintree_range(root as u64);
-			range.contains(&pos)
+			let range = pmmr::bintree_range(root as u64 - 1);
+			range.contains(&pos0)
 		} else {
 			false
 		}
@@ -354,19 +342,20 @@ impl PruneList {
 	}
 
 	/// Internal shift cache as slice.
+	/// only used in store/tests/prune_list.rs tests
 	pub fn shift_cache(&self) -> &[u64] {
 		self.shift_cache.as_slice()
 	}
 
 	/// Internal leaf shift cache as slice.
+	/// only used in store/tests/prune_list.rs tests
 	pub fn leaf_shift_cache(&self) -> &[u64] {
 		self.leaf_shift_cache.as_slice()
 	}
 
 	/// Is the specified position a root of a pruned subtree?
-	pub fn is_pruned_root(&self, pos: u64) -> bool {
-		assert!(pos > 0, "prune list 1-indexed, 0 not valid pos");
-		self.bitmap.contains(pos as u32)
+	pub fn is_pruned_root(&self, pos0: u64) -> bool {
+		self.bitmap.contains(1 + pos0 as u32)
 	}
 
 	/// Iterator over the entries in the prune list (pruned roots).
@@ -376,7 +365,10 @@ impl PruneList {
 
 	/// Iterator over the pruned "bintree range" for each pruned root.
 	pub fn pruned_bintree_range_iter(&self) -> impl Iterator<Item = Range<u64>> + '_ {
-		self.iter().map(|x| pmmr::bintree_range(x))
+		self.iter().map(|x| {
+			let rng = pmmr::bintree_range(x - 1);
+			(1 + rng.start)..(1 + rng.end)
+		})
 	}
 
 	/// Iterator over all pos that are *not* pruned based on current prune_list.
@@ -389,7 +381,8 @@ impl PruneList {
 	/// Note this is not necessarily the same as the "leaf_set" as an output
 	/// can be spent but not yet pruned.
 	pub fn unpruned_leaf_iter(&self, cutoff_pos: u64) -> impl Iterator<Item = u64> + '_ {
-		self.unpruned_iter(cutoff_pos).filter(|x| pmmr::is_leaf(*x))
+		self.unpruned_iter(cutoff_pos)
+			.filter(|x| pmmr::is_leaf(*x - 1))
 	}
 
 	/// Return a clone of our internal bitmap.
