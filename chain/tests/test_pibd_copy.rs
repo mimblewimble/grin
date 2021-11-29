@@ -209,13 +209,14 @@ fn test_pibd_copy_sample() {
 	// small test chain with actual transaction data
 
 	// Test on uncompacted and non-compacted chains
-	let src_root_dir = format!("./chain/tests/test_data/chain_raw");
-	let dest_root_dir = format!("./chain/tests/test_output/.segment_copy");
+	let src_root_dir = format!("./tests/test_data/chain_raw");
+	let dest_root_dir = format!("./tests/test_output/.segment_copy");
 	clean_output_dir(&dest_root_dir);
 	test_pibd_copy_impl(true, &src_root_dir, &dest_root_dir);
 	let src_root_dir = format!("./tests/test_data/chain_compacted");
 	clean_output_dir(&dest_root_dir);
 	test_pibd_copy_impl(true, &src_root_dir, &dest_root_dir);
+	clean_output_dir(&dest_root_dir);
 }
 
 #[test]
@@ -228,4 +229,5 @@ fn test_pibd_copy_real() {
 	let dest_root_dir = format!("/Users/yeastplume/Projects/grin_project/server/.chain_data_copy");
 	clean_output_dir(&dest_root_dir);
 	test_pibd_copy_impl(false, &src_root_dir, &dest_root_dir);
+	clean_output_dir(&dest_root_dir);
 }
