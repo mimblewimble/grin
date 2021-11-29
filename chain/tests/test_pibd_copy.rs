@@ -111,8 +111,6 @@ fn test_pibd_copy_impl(is_test_chain: bool, src_root_dir: &str, dest_root_dir: &
 				.unwrap();
 		}
 
-		panic!();
-
 		// Init segmenter, (note this still has to be lazy init somewhere on a peer)
 		// This is going to use the same block as horizon_header
 		let segmenter = src_chain.segmenter().unwrap();
@@ -215,13 +213,13 @@ fn test_pibd_copy_sample() {
 	let dest_root_dir = format!("./chain/tests/test_output/.segment_copy");
 	clean_output_dir(&dest_root_dir);
 	test_pibd_copy_impl(true, &src_root_dir, &dest_root_dir);
-	/*let src_root_dir = format!("./tests/test_data/chain_compacted");
+	let src_root_dir = format!("./tests/test_data/chain_compacted");
+	clean_output_dir(&dest_root_dir);
 	test_pibd_copy_impl(true, &src_root_dir, &dest_root_dir);
-	clean_output_dir(&dest_root_dir);*/
 }
 
 #[test]
-//#[ignore]
+#[ignore]
 // As above, but run on a real instance of a chain pointed where you like
 fn test_pibd_copy_real() {
 	util::init_test_logger();

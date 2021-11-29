@@ -19,9 +19,8 @@ use std::{sync::Arc, time::Instant};
 
 use crate::core::core::hash::Hash;
 use crate::core::core::pmmr;
-use crate::core::core::pmmr::ReadablePMMR;
-use crate::core::core::{BlockHeader, OutputIdentifier, Segment, SegmentIdentifier, TxKernel};
-use crate::error::{Error, ErrorKind};
+use crate::core::core::{BlockHeader, OutputIdentifier, Segment, TxKernel};
+use crate::error::Error;
 use crate::txhashset::{BitmapAccumulator, BitmapChunk, TxHashSet};
 use crate::util::secp::pedersen::RangeProof;
 use crate::util::RwLock;
