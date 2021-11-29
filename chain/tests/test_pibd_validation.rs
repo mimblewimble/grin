@@ -87,7 +87,7 @@ fn test_pibd_chain_validation_impl(is_test_chain: bool, src_root_dir: &str) {
 		println!("BITMAP PMMR NUM_LEAVES: {}", bitmap_mmr_num_leaves);
 
 		// And total size of the bitmap PMMR
-		let bitmap_pmmr_size = pmmr::peaks(bitmap_mmr_num_leaves + 1)
+		let bitmap_pmmr_size = pmmr::peaks(bitmap_mmr_num_leaves)
 			.last()
 			.unwrap_or(&pmmr::insertion_to_pmmr_index(bitmap_mmr_num_leaves))
 			.clone();

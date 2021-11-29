@@ -137,12 +137,6 @@ impl<T> Segment<T> {
 
 	/// Whether the segment is full (segment size == capacity)
 	fn full_segment(&self, mmr_size: u64) -> bool {
-		debug!("SEGMENT CAPACITY: {}", self.segment_capacity());
-		debug!("MMR SIZE: {}", mmr_size);
-		debug!(
-			"SEGMENT_UNPRUNED_SIZE: {}",
-			self.segment_unpruned_size(mmr_size)
-		);
 		self.segment_unpruned_size(mmr_size) == self.segment_capacity()
 	}
 
@@ -408,10 +402,7 @@ where
 			// Not full (only final segment): peaks in segment, bag them together
 			let peaks = pmmr::peaks(mmr_size)
 				.into_iter()
-				.filter(|&pos0| {
-					debug!("POS 0: {}", pos0);
-					pos0 >= segment_first_pos && pos0 <= segment_last_pos
-				})
+				.filter(|&pos0| pos0 >= segment_first_pos && pos0 <= segment_last_pos)
 				.rev();
 			let mut hash = None;
 			for pos0 in peaks {

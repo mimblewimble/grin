@@ -114,6 +114,10 @@ fn test_pibd_copy_impl(is_test_chain: bool, src_root_dir: &str, dest_root_dir: &
 		let identifier_iter =
 			SegmentIdentifier::traversal_iter(bitmap_mmr_size, target_segment_height);
 
+		debug!("ITER SIZE: {}", identifier_iter.count());
+		let identifier_iter =
+			SegmentIdentifier::traversal_iter(bitmap_mmr_size, target_segment_height);
+
 		for sid in identifier_iter {
 			debug!("Getting bitmap segment with Segment Identifier {:?}", sid);
 			let (bitmap_segment, output_root_hash) = segmenter.bitmap_segment(sid).unwrap();

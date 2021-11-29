@@ -130,7 +130,7 @@ impl Desegmenter {
 			self.bitmap_mmr_leaf_count
 		);
 		// Total size of Bitmap PMMR
-		self.bitmap_mmr_size = pmmr::peaks(self.bitmap_mmr_leaf_count + 1)
+		self.bitmap_mmr_size = pmmr::peaks(self.bitmap_mmr_leaf_count)
 			.last()
 			.unwrap_or(&pmmr::insertion_to_pmmr_index(self.bitmap_mmr_leaf_count))
 			.clone();
