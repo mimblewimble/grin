@@ -85,17 +85,33 @@ fn test_pibd_copy_impl(is_test_chain: bool, src_root_dir: &str, dest_root_dir: &
 
 		debug!("Horizon header: {:?}", horizon_header);
 
-		// Copy the header from source to output
-		// TODO: Chunk this for headers from a real chain
+		// Copy the headers from source to output in chunks
 		let dest_sync_head = dest_chain.header_head().unwrap();
+		let copy_chunk_size = 1000;
+		let mut copied_header_index = 1;
 		let mut src_headers = vec![];
-		for h in 1..=horizon_header.height {
-			let h = src_chain.get_header_by_height(h).unwrap();
+		while copied_header_index <= horizon_header.height {
+			let h = src_chain.get_header_by_height(copied_header_index).unwrap();
 			src_headers.push(h);
+			copied_header_index += 1;
+			if copied_header_index % copy_chunk_size == 0 {
+				debug!(
+					"Copying headers to {} of {}",
+					copied_header_index, horizon_header.height
+				);
+				dest_chain
+					.sync_block_headers(&src_headers, dest_sync_head, Options::SKIP_POW)
+					.unwrap();
+				src_headers = vec![];
+			}
 		}
-		dest_chain
-			.sync_block_headers(&src_headers, dest_sync_head, Options::NONE)
-			.unwrap();
+		if !src_headers.is_empty() {
+			dest_chain
+				.sync_block_headers(&src_headers, dest_sync_head, Options::NONE)
+				.unwrap();
+		}
+
+		panic!();
 
 		// Init segmenter, (note this still has to be lazy init somewhere on a peer)
 		// This is going to use the same block as horizon_header
@@ -111,10 +127,6 @@ fn test_pibd_copy_impl(is_test_chain: bool, src_root_dir: &str, dest_root_dir: &
 		);
 		// TODO: This can probably be derived from the PMMR we'll eventually be building
 		// (check if total size is equal to total size at horizon header)
-		let identifier_iter =
-			SegmentIdentifier::traversal_iter(bitmap_mmr_size, target_segment_height);
-
-		debug!("ITER SIZE: {}", identifier_iter.count());
 		let identifier_iter =
 			SegmentIdentifier::traversal_iter(bitmap_mmr_size, target_segment_height);
 
@@ -203,17 +215,19 @@ fn test_pibd_copy_sample() {
 	let dest_root_dir = format!("./chain/tests/test_output/.segment_copy");
 	clean_output_dir(&dest_root_dir);
 	test_pibd_copy_impl(true, &src_root_dir, &dest_root_dir);
-	//let src_root_dir = format!("./tests/test_data/chain_compacted");
-	//test_pibd_copy_impl(true, &src_root_dir);
+	/*let src_root_dir = format!("./tests/test_data/chain_compacted");
+	test_pibd_copy_impl(true, &src_root_dir, &dest_root_dir);
+	clean_output_dir(&dest_root_dir);*/
 }
 
 #[test]
-#[ignore]
+//#[ignore]
 // As above, but run on a real instance of a chain pointed where you like
 fn test_pibd_copy_real() {
 	util::init_test_logger();
 	// if testing against a real chain, insert location here
 	let src_root_dir = format!("/Users/yeastplume/Projects/grin_project/server/chain_data");
 	let dest_root_dir = format!("/Users/yeastplume/Projects/grin_project/server/.chain_data_copy");
+	clean_output_dir(&dest_root_dir);
 	test_pibd_copy_impl(false, &src_root_dir, &dest_root_dir);
 }
