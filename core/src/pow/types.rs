@@ -373,6 +373,11 @@ impl Proof {
 		}
 	}
 
+	/// Number of bytes required store a proof of given edge bits
+	pub fn pack_len(bit_width: u8) -> usize {
+		(bit_width as usize * global::proofsize() + 7) / 8
+	}
+
 	/// Builds a proof with random POW data,
 	/// needed so that tests that ignore POW
 	/// don't fail due to duplicate hashes
@@ -449,8 +454,7 @@ impl Readable for Proof {
 		// prepare nonces and read the right number of bytes
 		let mut nonces = Vec::with_capacity(global::proofsize());
 		let nonce_bits = edge_bits as usize;
-		let bits_len = nonce_bits * global::proofsize();
-		let bytes_len = proof_unpack_len(bits_len);
+		let bytes_len = (nonce_bits * global::proofsize() + 7) / 8;
 		if bytes_len < 8 {
 			return Err(ser::Error::CorruptedData);
 		}
@@ -476,7 +480,7 @@ impl Writeable for Proof {
 		if writer.serialization_mode() != ser::SerializationMode::Hash {
 			writer.write_u8(self.edge_bits)?;
 		}
-		let mut compressed = vec![0u8; proof_pack_len(self.edge_bits)];
+		let mut compressed = vec![0u8; Proof::pack_len(self.edge_bits)];
 		bitpack(
 			self.edge_bits,
 			&self.nonces[0..self.nonces.len()],
@@ -485,16 +489,6 @@ impl Writeable for Proof {
 		writer.write_fixed_bytes(&compressed)?;
 		Ok(())
 	}
-}
-
-/// Number of bytes required to store the provided number of bits
-pub fn proof_unpack_len(bits_len: usize) -> usize {
-	(bits_len + 7) / 8
-}
-
-/// Number of bytes required store a proof of given edge bits
-fn proof_pack_len(bit_width: u8) -> usize {
-	(bit_width as usize * global::proofsize() + 7) / 8
 }
 
 /// Pack an array of u64s into `compressed` at the specified bit width. Caller
