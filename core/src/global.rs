@@ -25,7 +25,7 @@ use crate::consensus::{
 use crate::core::block::HeaderVersion;
 use crate::pow::{
 	self, new_cuckaroo_ctx, new_cuckarood_ctx, new_cuckaroom_ctx, new_cuckarooz_ctx,
-	new_cuckatoo_ctx, no_cuckaroo_ctx, proof_unpack_len, PoWContext,
+	new_cuckatoo_ctx, no_cuckaroo_ctx, PoWContext, Proof,
 };
 use crate::ser::ProtocolVersion;
 use std::cell::Cell;
@@ -488,7 +488,7 @@ where
 #[inline]
 pub fn header_size_bytes(edge_bits: u8) -> usize {
 	let size = 2 + 2 * 8 + 5 * 32 + 32 + 2 * 8;
-	let proof_size = 8 + 4 + 8 + 1 + proof_unpack_len(edge_bits as usize * proofsize());
+	let proof_size = 8 + 4 + 8 + 1 + Proof::pack_len(edge_bits);
 	size + proof_size
 }
 
