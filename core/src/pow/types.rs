@@ -21,8 +21,9 @@ use rand::{thread_rng, Rng};
 use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
 /// Types for a Cuck(at)oo proof of work and its encapsulation as a fully usable
 /// proof of work within a block header.
-use std::cmp::{max, min};
+use std::cmp::{max, min, Ordering};
 use std::ops::{Add, Div, Mul, Sub};
+use std::u64;
 use std::{fmt, iter};
 
 /// Generic trait for a solver/verifier providing common interface into Cuckoo-family PoW
@@ -325,8 +326,8 @@ impl ProofOfWork {
 /// The hash of the `Proof` is the hash of its packed nonces when serializing
 /// them at their exact bit size. The resulting bit sequence is padded to be
 /// byte-aligned. We form a PROOFSIZE*edge_bits integer by packing the PROOFSIZE edge
-/// indices together, with edge index i occupying bits i * edge_bits through 
-/// (i+1) * edge_bits - 1, padding it with up to 7 0-bits to a multiple of 8 bits, 
+/// indices together, with edge index i occupying bits i * edge_bits through
+/// (i+1) * edge_bits - 1, padding it with up to 7 0-bits to a multiple of 8 bits,
 /// writing as a little endian byte array, and hashing with blake2b using 256 bit digest.
 
 #[derive(Clone, PartialOrd, PartialEq, Serialize)]
@@ -449,7 +450,7 @@ impl Readable for Proof {
 		let mut nonces = Vec::with_capacity(global::proofsize());
 		let nonce_bits = edge_bits as usize;
 		let bits_len = nonce_bits * global::proofsize();
-		let bytes_len = BitVec::bytes_len(bits_len);
+		let bytes_len = proof_unpack_len(bits_len);
 		if bytes_len < 8 {
 			return Err(ser::Error::CorruptedData);
 		}
@@ -475,42 +476,68 @@ impl Writeable for Proof {
 		if writer.serialization_mode() != ser::SerializationMode::Hash {
 			writer.write_u8(self.edge_bits)?;
 		}
-		let nonce_bits = self.edge_bits as usize;
-		let mut bitvec = BitVec::new(nonce_bits * global::proofsize());
-		for (n, nonce) in self.nonces.iter().enumerate() {
-			for bit in 0..nonce_bits {
-				if nonce & (1 << bit) != 0 {
-					bitvec.set_bit_at(n * nonce_bits + (bit as usize))
-				}
-			}
-		}
-		writer.write_fixed_bytes(&bitvec.bits)?;
+		let mut compressed = vec![0u8; proof_pack_len(self.edge_bits)];
+		bitpack(
+			self.edge_bits,
+			&self.nonces[0..self.nonces.len()],
+			&mut compressed,
+		);
+		writer.write_fixed_bytes(&compressed)?;
 		Ok(())
 	}
 }
 
-/// A bit vector
-// TODO this could likely be optimized by writing whole bytes (or even words)
-// in the `BitVec` at once, dealing with the truncation, instead of bits by bits
-pub struct BitVec {
-	bits: Vec<u8>,
+/// Number of bytes required to store the provided number of bits
+pub fn proof_unpack_len(bits_len: usize) -> usize {
+	(bits_len + 7) / 8
 }
 
-impl BitVec {
-	/// Number of bytes required to store the provided number of bits
-	#[inline]
-	pub fn bytes_len(bits_len: usize) -> usize {
-		(bits_len + 7) / 8
-	}
+/// Number of bytes required store a proof of given edge bits
+fn proof_pack_len(bit_width: u8) -> usize {
+	((bit_width as f32 * global::proofsize() as f32) / 8f32).ceil() as usize
+}
 
-	fn new(bits_len: usize) -> BitVec {
-		BitVec {
-			bits: vec![0; BitVec::bytes_len(bits_len)],
+pub fn bitpack(bit_width: u8, uncompressed: &[u64], mut compressed: &mut [u8]) {
+	// We will use a `u64` as a mini buffer of 64 bits.
+	// We accumulate bits in it until capacity, at which point we just copy this
+	// mini buffer to compressed.
+	let mut mini_buffer: u64 = 0u64;
+	let mut cursor = 0; //< number of bits written in the mini_buffer.
+	let mut pack_bytes_remaining = compressed.len();
+	for el in uncompressed {
+		let remaining = 64 - cursor;
+		match bit_width.cmp(&remaining) {
+			Ordering::Less => {
+				// Plenty of room remaining in our mini buffer.
+				mini_buffer |= el << cursor;
+				cursor += bit_width;
+			}
+			Ordering::Equal => {
+				mini_buffer |= el << cursor;
+				// We have completed our minibuffer exactly.
+				// Let's write it to `compressed`.
+				compressed[..8].copy_from_slice(&mini_buffer.to_le_bytes());
+				compressed = &mut compressed[8..];
+				pack_bytes_remaining -= 8;
+				mini_buffer = 0u64;
+				cursor = 0;
+			}
+			Ordering::Greater => {
+				mini_buffer |= el << cursor;
+				// We have completed our minibuffer.
+				// Let's write it to `compressed` and set the fresh mini_buffer
+				// with the remaining bits.
+				compressed[..8].copy_from_slice(&mini_buffer.to_le_bytes());
+				compressed = &mut compressed[8..];
+				pack_bytes_remaining -= 8;
+				cursor = bit_width - remaining;
+				mini_buffer = el >> remaining;
+			}
 		}
 	}
-
-	fn set_bit_at(&mut self, pos: usize) {
-		self.bits[pos / 8] |= 1 << (pos % 8) as u8;
+	if pack_bytes_remaining > 0 {
+		compressed[..pack_bytes_remaining]
+			.copy_from_slice(&mini_buffer.to_le_bytes()[..pack_bytes_remaining]);
 	}
 }
 
