@@ -402,10 +402,67 @@ impl Proof {
 		self.nonces.len()
 	}
 
+	/// Pack the nonces of the proof to their exact bit size as described above
+	pub fn pack_nonces(&self) -> Vec<u8> {
+		let mut compressed = vec![0u8; Proof::pack_len(self.edge_bits)];
+		pack_bits(
+			self.edge_bits,
+			&self.nonces[0..self.nonces.len()],
+			&mut compressed,
+		);
+		compressed
+	}
+
 	/// Difficulty achieved by this proof with given scaling factor
 	fn scaled_difficulty(&self, scale: u64) -> u64 {
 		let diff = ((scale as u128) << 64) / (max(1, self.hash().to_u64()) as u128);
 		min(diff, <u64>::max_value() as u128) as u64
+	}
+}
+
+/// Pack an array of u64s into `compressed` at the specified bit width. Caller
+/// must ensure `compressed` is the right size
+fn pack_bits(bit_width: u8, uncompressed: &[u64], mut compressed: &mut [u8]) {
+	// We will use a `u64` as a mini buffer of 64 bits.
+	// We accumulate bits in it until capacity, at which point we just copy this
+	// mini buffer to compressed.
+	let mut mini_buffer: u64 = 0u64;
+	let mut cursor = 0; //< number of bits written in the mini_buffer.
+	let mut pack_bytes_remaining = compressed.len();
+	for el in uncompressed {
+		let remaining = 64 - cursor;
+		match bit_width.cmp(&remaining) {
+			Ordering::Less => {
+				// Plenty of room remaining in our mini buffer.
+				mini_buffer |= el << cursor;
+				cursor += bit_width;
+			}
+			Ordering::Equal => {
+				mini_buffer |= el << cursor;
+				// We have completed our minibuffer exactly.
+				// Let's write it to `compressed`.
+				compressed[..8].copy_from_slice(&mini_buffer.to_le_bytes());
+				compressed = &mut compressed[8..];
+				pack_bytes_remaining -= 8;
+				mini_buffer = 0u64;
+				cursor = 0;
+			}
+			Ordering::Greater => {
+				mini_buffer |= el << cursor;
+				// We have completed our minibuffer.
+				// Let's write it to `compressed` and set the fresh mini_buffer
+				// with the remaining bits.
+				compressed[..8].copy_from_slice(&mini_buffer.to_le_bytes());
+				compressed = &mut compressed[8..];
+				pack_bytes_remaining -= 8;
+				cursor = bit_width - remaining;
+				mini_buffer = el >> remaining;
+			}
+		}
+	}
+	if pack_bytes_remaining > 0 {
+		compressed[..pack_bytes_remaining]
+			.copy_from_slice(&mini_buffer.to_le_bytes()[..pack_bytes_remaining]);
 	}
 }
 
@@ -480,60 +537,7 @@ impl Writeable for Proof {
 		if writer.serialization_mode() != ser::SerializationMode::Hash {
 			writer.write_u8(self.edge_bits)?;
 		}
-		let mut compressed = vec![0u8; Proof::pack_len(self.edge_bits)];
-		bitpack(
-			self.edge_bits,
-			&self.nonces[0..self.nonces.len()],
-			&mut compressed,
-		);
-		writer.write_fixed_bytes(&compressed)?;
-		Ok(())
-	}
-}
-
-/// Pack an array of u64s into `compressed` at the specified bit width. Caller
-/// must ensure `compressed` is the right size
-fn bitpack(bit_width: u8, uncompressed: &[u64], mut compressed: &mut [u8]) {
-	// We will use a `u64` as a mini buffer of 64 bits.
-	// We accumulate bits in it until capacity, at which point we just copy this
-	// mini buffer to compressed.
-	let mut mini_buffer: u64 = 0u64;
-	let mut cursor = 0; //< number of bits written in the mini_buffer.
-	let mut pack_bytes_remaining = compressed.len();
-	for el in uncompressed {
-		let remaining = 64 - cursor;
-		match bit_width.cmp(&remaining) {
-			Ordering::Less => {
-				// Plenty of room remaining in our mini buffer.
-				mini_buffer |= el << cursor;
-				cursor += bit_width;
-			}
-			Ordering::Equal => {
-				mini_buffer |= el << cursor;
-				// We have completed our minibuffer exactly.
-				// Let's write it to `compressed`.
-				compressed[..8].copy_from_slice(&mini_buffer.to_le_bytes());
-				compressed = &mut compressed[8..];
-				pack_bytes_remaining -= 8;
-				mini_buffer = 0u64;
-				cursor = 0;
-			}
-			Ordering::Greater => {
-				mini_buffer |= el << cursor;
-				// We have completed our minibuffer.
-				// Let's write it to `compressed` and set the fresh mini_buffer
-				// with the remaining bits.
-				compressed[..8].copy_from_slice(&mini_buffer.to_le_bytes());
-				compressed = &mut compressed[8..];
-				pack_bytes_remaining -= 8;
-				cursor = bit_width - remaining;
-				mini_buffer = el >> remaining;
-			}
-		}
-	}
-	if pack_bytes_remaining > 0 {
-		compressed[..pack_bytes_remaining]
-			.copy_from_slice(&mini_buffer.to_le_bytes()[..pack_bytes_remaining]);
+		writer.write_fixed_bytes(&self.pack_nonces())
 	}
 }
 
