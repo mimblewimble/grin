@@ -494,10 +494,12 @@ pub fn proof_unpack_len(bits_len: usize) -> usize {
 
 /// Number of bytes required store a proof of given edge bits
 fn proof_pack_len(bit_width: u8) -> usize {
-	((bit_width as f32 * global::proofsize() as f32) / 8f32).ceil() as usize
+	(bit_width as usize * global::proofsize() + 7) / 8
 }
 
-pub fn bitpack(bit_width: u8, uncompressed: &[u64], mut compressed: &mut [u8]) {
+/// Pack an array of u64s into `compressed` at the specified bit width. Caller
+/// must ensure `compressed` is the right size
+fn bitpack(bit_width: u8, uncompressed: &[u64], mut compressed: &mut [u8]) {
 	// We will use a `u64` as a mini buffer of 64 bits.
 	// We accumulate bits in it until capacity, at which point we just copy this
 	// mini buffer to compressed.
