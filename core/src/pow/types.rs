@@ -550,7 +550,7 @@ impl Writeable for Proof {
 #[cfg(test)]
 mod tests {
 	use super::*;
-	use crate::ser::{BinReader, BinWriter, ProtocolVersion};
+	use crate::ser::{BinReader, BinWriter, DeserializationMode, ProtocolVersion};
 	use rand::Rng;
 	use std::io::Cursor;
 
@@ -566,7 +566,11 @@ mod tests {
 				panic!("failed to write proof {:?}", e);
 			}
 			buf.set_position(0);
-			let mut r = BinReader::new(&mut buf, ProtocolVersion::local());
+			let mut r = BinReader::new(
+				&mut buf,
+				ProtocolVersion::local(),
+				DeserializationMode::default(),
+			);
 			match Proof::read(&mut r) {
 				Err(e) => panic!("failed to read proof: {:?}", e),
 				Ok(p) => assert_eq!(p, proof),
