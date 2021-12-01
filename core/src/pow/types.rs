@@ -16,7 +16,7 @@ use crate::consensus::{graph_weight, MIN_DMA_DIFFICULTY, SECOND_POW_EDGE_BITS};
 use crate::core::hash::{DefaultHashable, Hashed};
 use crate::global;
 use crate::pow::error::Error;
-use crate::ser::{self, Readable, Reader, Writeable, Writer};
+use crate::ser::{self, DeserializationMode, Readable, Reader, Writeable, Writer};
 use rand::{thread_rng, Rng};
 use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
 /// Types for a Cuck(at)oo proof of work and its encapsulation as a fully usable
@@ -517,8 +517,10 @@ impl Readable for Proof {
 		}
 		let bits = reader.read_fixed_bytes(bytes_len)?;
 
-		for n in 0..global::proofsize() {
-			nonces.push(read_number(&bits, n * nonce_bits, nonce_bits));
+		if reader.deserialization_mode() != DeserializationMode::SkipPow {
+			for n in 0..global::proofsize() {
+				nonces.push(read_number(&bits, n * nonce_bits, nonce_bits));
+			}
 		}
 
 		//// check the last bits of the last byte are zeroed, we don't use them but

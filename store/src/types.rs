@@ -15,7 +15,8 @@
 use tempfile::tempfile;
 
 use crate::core::ser::{
-	self, BinWriter, ProtocolVersion, Readable, Reader, StreamingReader, Writeable, Writer,
+	self, BinWriter, DeserializationMode, ProtocolVersion, Readable, Reader, StreamingReader,
+	Writeable, Writer,
 };
 use std::fmt::Debug;
 use std::fs::{self, File, OpenOptions};
@@ -442,7 +443,7 @@ where
 
 	fn read_as_elmt(&self, pos: u64) -> io::Result<T> {
 		let data = self.read(pos)?;
-		ser::deserialize(&mut &data[..], self.version)
+		ser::deserialize(&mut &data[..], self.version, DeserializationMode::default())
 			.map_err(|e| io::Error::new(io::ErrorKind::Other, e))
 	}
 

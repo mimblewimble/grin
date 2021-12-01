@@ -214,9 +214,27 @@ pub trait Writer {
 	}
 }
 
+/// Signal to a deserializable object how much of its data should be deserialized
+#[derive(Copy, Clone, PartialEq, Eq)]
+pub enum DeserializationMode {
+	/// Deserialize everything sufficiently to fully reconstruct the object
+	Full,
+	/// For Block Headers, skip reading proof
+	SkipPow,
+}
+
+impl DeserializationMode {
+	// Default deserialization mode
+	pub fn default() -> Self {
+		DeserializationMode::Full
+	}
+}
+
 /// Implementations defined how different numbers and binary structures are
 /// read from an underlying stream or container (depending on implementation).
 pub trait Reader {
+	/// The mode this reader is reading from
+	fn deserialization_mode(&self) -> DeserializationMode;
 	/// Read a u8 from the underlying Read
 	fn read_u8(&mut self) -> Result<u8, Error>;
 	/// Read a u16 from the underlying Read
@@ -391,14 +409,19 @@ where
 pub fn deserialize<T: Readable, R: Read>(
 	source: &mut R,
 	version: ProtocolVersion,
+	mode: DeserializationMode,
 ) -> Result<T, Error> {
-	let mut reader = BinReader::new(source, version);
+	let mut reader = BinReader::new(source, version, mode);
 	T::read(&mut reader)
 }
 
 /// Deserialize a Readable based on our default "local" protocol version.
 pub fn deserialize_default<T: Readable, R: Read>(source: &mut R) -> Result<T, Error> {
-	deserialize(source, ProtocolVersion::local())
+	deserialize(
+		source,
+		ProtocolVersion::local(),
+		DeserializationMode::default(),
+	)
 }
 
 /// Serializes a Writeable into any std::io::Write implementation.
@@ -428,12 +451,17 @@ pub fn ser_vec<W: Writeable>(thing: &W, version: ProtocolVersion) -> Result<Vec<
 pub struct BinReader<'a, R: Read> {
 	source: &'a mut R,
 	version: ProtocolVersion,
+	deser_mode: DeserializationMode,
 }
 
 impl<'a, R: Read> BinReader<'a, R> {
 	/// Constructor for a new BinReader for the provided source and protocol version.
-	pub fn new(source: &'a mut R, version: ProtocolVersion) -> Self {
-		BinReader { source, version }
+	pub fn new(source: &'a mut R, version: ProtocolVersion, mode: DeserializationMode) -> Self {
+		BinReader {
+			source,
+			version,
+			deser_mode: mode,
+		}
 	}
 }
 
@@ -444,6 +472,9 @@ fn map_io_err(err: io::Error) -> Error {
 /// Utility wrapper for an underlying byte Reader. Defines higher level methods
 /// to read numbers, byte vectors, hashes, etc.
 impl<'a, R: Read> Reader for BinReader<'a, R> {
+	fn deserialization_mode(&self) -> DeserializationMode {
+		self.deser_mode
+	}
 	fn read_u8(&mut self) -> Result<u8, Error> {
 		self.source.read_u8().map_err(map_io_err)
 	}
@@ -504,6 +535,7 @@ pub struct StreamingReader<'a> {
 	total_bytes_read: u64,
 	version: ProtocolVersion,
 	stream: &'a mut dyn Read,
+	deser_mode: DeserializationMode,
 }
 
 impl<'a> StreamingReader<'a> {
@@ -514,6 +546,7 @@ impl<'a> StreamingReader<'a> {
 			total_bytes_read: 0,
 			version,
 			stream,
+			deser_mode: DeserializationMode::Full,
 		}
 	}
 
@@ -525,6 +558,9 @@ impl<'a> StreamingReader<'a> {
 
 /// Note: We use read_fixed_bytes() here to ensure our "async" I/O behaves as expected.
 impl<'a> Reader for StreamingReader<'a> {
+	fn deserialization_mode(&self) -> DeserializationMode {
+		self.deser_mode
+	}
 	fn read_u8(&mut self) -> Result<u8, Error> {
 		let buf = self.read_fixed_bytes(1)?;
 		Ok(buf[0])
@@ -587,6 +623,7 @@ pub struct BufReader<'a, B: Buf> {
 	inner: &'a mut B,
 	version: ProtocolVersion,
 	bytes_read: usize,
+	deser_mode: DeserializationMode,
 }
 
 impl<'a, B: Buf> BufReader<'a, B> {
@@ -596,6 +633,7 @@ impl<'a, B: Buf> BufReader<'a, B> {
 			inner: buf,
 			version,
 			bytes_read: 0,
+			deser_mode: DeserializationMode::Full,
 		}
 	}
 
@@ -621,6 +659,10 @@ impl<'a, B: Buf> BufReader<'a, B> {
 }
 
 impl<'a, B: Buf> Reader for BufReader<'a, B> {
+	fn deserialization_mode(&self) -> DeserializationMode {
+		self.deser_mode
+	}
+
 	fn read_u8(&mut self) -> Result<u8, Error> {
 		self.has_remaining(1)?;
 		Ok(self.inner.get_u8())

@@ -24,7 +24,8 @@ use crate::core::core::{
 };
 use crate::core::pow::Difficulty;
 use crate::core::ser::{
-	self, ProtocolVersion, Readable, Reader, StreamingReader, Writeable, Writer,
+	self, DeserializationMode, ProtocolVersion, Readable, Reader, StreamingReader, Writeable,
+	Writer,
 };
 use crate::core::{consensus, global};
 use crate::types::{
@@ -177,7 +178,8 @@ pub fn read_header<R: Read>(
 ) -> Result<MsgHeaderWrapper, Error> {
 	let mut head = vec![0u8; MsgHeader::LEN];
 	stream.read_exact(&mut head)?;
-	let header: MsgHeaderWrapper = ser::deserialize(&mut &head[..], version)?;
+	let header: MsgHeaderWrapper =
+		ser::deserialize(&mut &head[..], version, DeserializationMode::default())?;
 	Ok(header)
 }
 
@@ -202,7 +204,7 @@ pub fn read_body<T: Readable, R: Read>(
 ) -> Result<T, Error> {
 	let mut body = vec![0u8; h.msg_len as usize];
 	stream.read_exact(&mut body)?;
-	ser::deserialize(&mut &body[..], version).map_err(From::from)
+	ser::deserialize(&mut &body[..], version, DeserializationMode::default()).map_err(From::from)
 }
 
 /// Read (an unknown) message from the provided stream and discard it.
