@@ -509,28 +509,32 @@ impl Readable for Proof {
 		}
 
 		// prepare nonces and read the right number of bytes
-		let mut nonces = Vec::with_capacity(global::proofsize());
-		let nonce_bits = edge_bits as usize;
-		let bytes_len = (nonce_bits * global::proofsize() + 7) / 8;
-		if bytes_len < 8 {
-			return Err(ser::Error::CorruptedData);
-		}
-		let bits = reader.read_fixed_bytes(bytes_len)?;
-
+		// If skipping pow proof, we can stop after reading edge bits
 		if reader.deserialization_mode() != DeserializationMode::SkipPow {
+			let mut nonces = Vec::with_capacity(global::proofsize());
+			let nonce_bits = edge_bits as usize;
+			let bytes_len = (nonce_bits * global::proofsize() + 7) / 8;
+			if bytes_len < 8 {
+				return Err(ser::Error::CorruptedData);
+			}
+			let bits = reader.read_fixed_bytes(bytes_len)?;
 			for n in 0..global::proofsize() {
 				nonces.push(read_number(&bits, n * nonce_bits, nonce_bits));
 			}
-		}
 
-		//// check the last bits of the last byte are zeroed, we don't use them but
-		//// still better to enforce to avoid any malleability
-		let end_of_data = global::proofsize() * nonce_bits;
-		if read_number(&bits, end_of_data, bytes_len * 8 - end_of_data) != 0 {
-			return Err(ser::Error::CorruptedData);
+			//// check the last bits of the last byte are zeroed, we don't use them but
+			//// still better to enforce to avoid any malleability
+			let end_of_data = global::proofsize() * nonce_bits;
+			if read_number(&bits, end_of_data, bytes_len * 8 - end_of_data) != 0 {
+				return Err(ser::Error::CorruptedData);
+			}
+			Ok(Proof { edge_bits, nonces })
+		} else {
+			Ok(Proof {
+				edge_bits,
+				nonces: vec![],
+			})
 		}
-
-		Ok(Proof { edge_bits, nonces })
 	}
 }
 
