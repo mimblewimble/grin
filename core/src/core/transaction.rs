@@ -2281,7 +2281,9 @@ mod test {
 		for version in vec![ProtocolVersion(1), ProtocolVersion(2)] {
 			let mut vec = vec![];
 			ser::serialize(&mut vec, version, &kernel).expect("serialized failed");
-			let kernel2: TxKernel = ser::deserialize(&mut &vec[..], version).unwrap();
+			let kernel2: TxKernel =
+				ser::deserialize(&mut &vec[..], version, ser::DeserializationMode::default())
+					.unwrap();
 			assert_eq!(kernel2.features, KernelFeatures::Plain { fee: 10.into() });
 			assert_eq!(kernel2.excess, commit);
 			assert_eq!(kernel2.excess_sig, sig.clone());
@@ -2321,7 +2323,9 @@ mod test {
 		for version in vec![ProtocolVersion(1), ProtocolVersion(2)] {
 			let mut vec = vec![];
 			ser::serialize(&mut vec, version, &kernel).expect("serialized failed");
-			let kernel2: TxKernel = ser::deserialize(&mut &vec[..], version).unwrap();
+			let kernel2: TxKernel =
+				ser::deserialize(&mut &vec[..], version, ser::DeserializationMode::default())
+					.unwrap();
 			assert_eq!(kernel.features, kernel2.features);
 			assert_eq!(kernel2.excess, commit);
 			assert_eq!(kernel2.excess_sig, sig.clone());
@@ -2363,7 +2367,9 @@ mod test {
 		for version in vec![ProtocolVersion(1), ProtocolVersion(2)] {
 			let mut vec = vec![];
 			ser::serialize(&mut vec, version, &kernel).expect("serialized failed");
-			let kernel2: TxKernel = ser::deserialize(&mut &vec[..], version).unwrap();
+			let kernel2: TxKernel =
+				ser::deserialize(&mut &vec[..], version, ser::DeserializationMode::default())
+					.unwrap();
 			assert_eq!(kernel.features, kernel2.features);
 			assert_eq!(kernel2.excess, commit);
 			assert_eq!(kernel2.excess_sig, sig.clone());

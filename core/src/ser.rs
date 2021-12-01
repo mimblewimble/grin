@@ -224,7 +224,7 @@ pub enum DeserializationMode {
 }
 
 impl DeserializationMode {
-	// Default deserialization mode
+	/// Default deserialization mode
 	pub fn default() -> Self {
 		DeserializationMode::Full
 	}
