@@ -255,28 +255,56 @@ impl CuckatooContext {
 	/// Verify that given edges are ascending and form a cycle in a header-generated
 	/// graph
 	pub fn verify_impl(&self, proof: &Proof) -> Result<(), Error> {
-		if proof.proof_size() != global::proofsize() {
+		let size = proof.proof_size();
+		if size != global::proofsize() {
 			return Err(ErrorKind::Verification("wrong cycle length".to_owned()).into());
 		}
 		let nonces = &proof.nonces;
-		let mut uvs = vec![0u64; 2 * proof.proof_size()];
+		let mut uvs = vec![0u64; 2 * size];
+		let mask = u64::MAX >> size.leading_zeros(); // round size up to 2-power - 1
 		let mut xor0: u64 = (self.params.proof_size as u64 / 2) & 1;
 		let mut xor1: u64 = xor0;
+		// the next two arrays form a linked list of nodes with matching bits 6..1
+		let mut headu = vec![2 * size; 1 + mask as usize];
+		let mut headv = vec![2 * size; 1 + mask as usize];
+		let mut prev = vec![0usize; 2 * size];
 
-		for n in 0..proof.proof_size() {
+		for n in 0..size {
 			if nonces[n] > self.params.edge_mask {
 				return Err(ErrorKind::Verification("edge too big".to_owned()).into());
 			}
 			if n > 0 && nonces[n] <= nonces[n - 1] {
 				return Err(ErrorKind::Verification("edges not ascending".to_owned()).into());
 			}
-			uvs[2 * n] = self.params.sipnode(nonces[n], 0)?;
-			uvs[2 * n + 1] = self.params.sipnode(nonces[n], 1)?;
-			xor0 ^= uvs[2 * n];
-			xor1 ^= uvs[2 * n + 1];
+			let u = self.params.sipnode(nonces[n], 0)?;
+			let v = self.params.sipnode(nonces[n], 1)?;
+
+			uvs[2 * n] = u;
+			let ubits = (u >> 1 & mask) as usize; // larger shifts work too, up to edgebits-6
+			prev[2 * n] = headu[ubits];
+			headu[ubits] = 2 * n;
+
+			uvs[2 * n + 1] = v;
+			let vbits = (v >> 1 & mask) as usize;
+			prev[2 * n + 1] = headv[vbits];
+			headv[vbits] = 2 * n + 1;
+
+			xor0 ^= u;
+			xor1 ^= v;
 		}
 		if xor0 | xor1 != 0 {
 			return Err(ErrorKind::Verification("endpoints don't match up".to_owned()).into());
+		}
+		// make prev lists circular
+		for n in 0..size {
+			if prev[2 * n] == 2 * size {
+				let ubits = (uvs[2 * n] >> 1 & mask) as usize;
+				prev[2 * n] = headu[ubits];
+			}
+			if prev[2 * n + 1] == 2 * size {
+				let vbits = (uvs[2 * n + 1] >> 1 & mask) as usize;
+				prev[2 * n + 1] = headv[vbits];
+			}
 		}
 		let mut n = 0;
 		let mut i = 0;
@@ -286,7 +314,7 @@ impl CuckatooContext {
 			j = i;
 			let mut k = j;
 			loop {
-				k = (k + 2) % (2 * self.params.proof_size);
+				k = prev[k];
 				if k == i {
 					break;
 				}
