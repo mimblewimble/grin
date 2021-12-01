@@ -470,7 +470,7 @@ impl<'a> Iterator for DifficultyIter<'a> {
 		// Otherwise we are done.
 		if let Some(header) = self.header.clone() {
 			if let Some(ref batch) = self.batch {
-				self.prev_header = batch.get_previous_header(&header).ok();
+				self.prev_header = batch.get_previous_header_skip_proof(&header).ok();
 			} else if let Some(ref store) = self.store {
 				self.prev_header = store.get_previous_header(&header).ok();
 			} else {
