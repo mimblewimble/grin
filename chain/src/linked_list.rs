@@ -84,7 +84,7 @@ pub trait ListIndex {
 	/// Key is "prefix|commit".
 	/// Note the key for an individual entry in the list is "prefix|commit|pos".
 	fn get_list(&self, batch: &Batch<'_>, commit: Commitment) -> Result<Option<Self::List>, Error> {
-		batch.db.get_ser(&self.list_key(commit))
+		batch.db.get_ser(&self.list_key(commit), None)
 	}
 
 	/// Returns one of "head", "tail" or "middle" entry variants.
@@ -95,7 +95,7 @@ pub trait ListIndex {
 		commit: Commitment,
 		pos: u64,
 	) -> Result<Option<Self::Entry>, Error> {
-		batch.db.get_ser(&self.entry_key(commit, pos))
+		batch.db.get_ser(&self.entry_key(commit, pos), None)
 	}
 
 	/// Peek the head of the list for the specified commitment.

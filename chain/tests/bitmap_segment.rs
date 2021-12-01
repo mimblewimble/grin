@@ -1,6 +1,8 @@
 use self::chain::txhashset::{BitmapAccumulator, BitmapSegment};
 use self::core::core::pmmr::segment::{Segment, SegmentIdentifier};
-use self::core::ser::{BinReader, BinWriter, ProtocolVersion, Readable, Writeable};
+use self::core::ser::{
+	BinReader, BinWriter, DeserializationMode, ProtocolVersion, Readable, Writeable,
+};
 use croaring::Bitmap;
 use grin_chain as chain;
 use grin_core as core;
@@ -52,7 +54,11 @@ fn test_roundtrip(entries: usize) {
 
 	// Read `BitmapSegment`
 	cursor.set_position(0);
-	let mut reader = BinReader::new(&mut cursor, ProtocolVersion(1));
+	let mut reader = BinReader::new(
+		&mut cursor,
+		ProtocolVersion(1),
+		DeserializationMode::default(),
+	);
 	let bms2: BitmapSegment = Readable::read(&mut reader).unwrap();
 	assert_eq!(bms, bms2);
 

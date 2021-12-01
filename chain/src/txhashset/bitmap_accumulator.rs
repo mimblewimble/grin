@@ -509,7 +509,9 @@ impl Readable for BitmapBlockSerialization {
 #[cfg(test)]
 mod tests {
 	use super::*;
-	use crate::core::ser::{BinReader, BinWriter, ProtocolVersion, Readable, Writeable};
+	use crate::core::ser::{
+		BinReader, BinWriter, DeserializationMode, ProtocolVersion, Readable, Writeable,
+	};
 	use byteorder::ReadBytesExt;
 	use grin_util::secp::rand::Rng;
 	use rand::thread_rng;
@@ -546,7 +548,11 @@ mod tests {
 
 		// Deserialize
 		cursor.set_position(0);
-		let mut reader = BinReader::new(&mut cursor, ProtocolVersion(1));
+		let mut reader = BinReader::new(
+			&mut cursor,
+			ProtocolVersion(1),
+			DeserializationMode::default(),
+		);
 		let block2: BitmapBlock = Readable::read(&mut reader).unwrap();
 		assert_eq!(block, block2);
 	}
