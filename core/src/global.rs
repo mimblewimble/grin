@@ -17,10 +17,10 @@
 //! should be used sparingly.
 
 use crate::consensus::{
-	graph_weight, header_version, HeaderInfo, BASE_EDGE_BITS, BLOCK_TIME_SEC, C32_GRAPH_WEIGHT,
-	COINBASE_MATURITY, CUT_THROUGH_HORIZON, DAY_HEIGHT, DEFAULT_MIN_EDGE_BITS, DMA_WINDOW,
-	GRIN_BASE, INITIAL_DIFFICULTY, KERNEL_WEIGHT, MAX_BLOCK_WEIGHT, OUTPUT_WEIGHT, PROOFSIZE,
-	SECOND_POW_EDGE_BITS, STATE_SYNC_THRESHOLD,
+	graph_weight, header_version, HeaderDifficultyInfo, BASE_EDGE_BITS, BLOCK_TIME_SEC,
+	C32_GRAPH_WEIGHT, COINBASE_MATURITY, CUT_THROUGH_HORIZON, DAY_HEIGHT, DEFAULT_MIN_EDGE_BITS,
+	DMA_WINDOW, GRIN_BASE, INITIAL_DIFFICULTY, KERNEL_WEIGHT, MAX_BLOCK_WEIGHT, OUTPUT_WEIGHT,
+	PROOFSIZE, SECOND_POW_EDGE_BITS, STATE_SYNC_THRESHOLD,
 };
 use crate::core::block::HeaderVersion;
 use crate::pow::{
@@ -453,13 +453,14 @@ pub fn is_testnet() -> bool {
 /// vector and pads if needed (which will) only be needed for the first few
 /// blocks after genesis
 
-pub fn difficulty_data_to_vector<T>(cursor: T) -> Vec<HeaderInfo>
+pub fn difficulty_data_to_vector<T>(cursor: T) -> Vec<HeaderDifficultyInfo>
 where
-	T: IntoIterator<Item = HeaderInfo>,
+	T: IntoIterator<Item = HeaderDifficultyInfo>,
 {
 	// Convert iterator to vector, so we can append to it if necessary
 	let needed_block_count = DMA_WINDOW as usize + 1;
-	let mut last_n: Vec<HeaderInfo> = cursor.into_iter().take(needed_block_count).collect();
+	let mut last_n: Vec<HeaderDifficultyInfo> =
+		cursor.into_iter().take(needed_block_count).collect();
 
 	// Only needed just after blockchain launch... basically ensures there's
 	// always enough data by simulating perfectly timed pre-genesis
@@ -477,7 +478,7 @@ where
 		let mut last_ts = last_n.last().unwrap().timestamp;
 		for _ in n..needed_block_count {
 			last_ts = last_ts.saturating_sub(last_ts_delta);
-			last_n.push(HeaderInfo::from_ts_diff(last_ts, last_diff));
+			last_n.push(HeaderDifficultyInfo::from_ts_diff(last_ts, last_diff));
 		}
 	}
 	last_n.reverse();
