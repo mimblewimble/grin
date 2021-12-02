@@ -14,8 +14,8 @@
 
 //! Implements storage primitives required by the chain
 
-use crate::core::consensus::HeaderInfo;
-use crate::core::core::hash::{Hash, Hashed, ZERO_HASH};
+use crate::core::consensus::HeaderDifficultyInfo;
+use crate::core::core::hash::{Hash, Hashed};
 use crate::core::core::{Block, BlockHeader, BlockSums};
 use crate::core::pow::Difficulty;
 use crate::core::ser::{DeserializationMode, ProtocolVersion, Readable, Writeable};
@@ -470,7 +470,7 @@ impl<'a> DifficultyIter<'a> {
 }
 
 impl<'a> Iterator for DifficultyIter<'a> {
-	type Item = HeaderInfo;
+	type Item = HeaderDifficultyInfo;
 
 	fn next(&mut self) -> Option<Self::Item> {
 		// Get both header and previous_header if this is the initial iteration.
@@ -509,8 +509,7 @@ impl<'a> Iterator for DifficultyIter<'a> {
 			let difficulty = header.total_difficulty() - prev_difficulty;
 			let scaling = header.pow.secondary_scaling;
 
-			Some(HeaderInfo::new(
-				ZERO_HASH,
+			Some(HeaderDifficultyInfo::new(
 				header.timestamp.timestamp() as u64,
 				difficulty,
 				scaling,
