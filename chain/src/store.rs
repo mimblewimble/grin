@@ -60,19 +60,19 @@ impl ChainStore {
 
 	/// The current chain head.
 	pub fn head(&self) -> Result<Tip, Error> {
-		option_to_not_found(self.db.get_ser(&[HEAD_PREFIX]), || "HEAD".to_owned())
+		option_to_not_found(self.db.get_ser(&[HEAD_PREFIX], None), || "HEAD".to_owned())
 	}
 
 	/// The current header head (may differ from chain head).
 	pub fn header_head(&self) -> Result<Tip, Error> {
-		option_to_not_found(self.db.get_ser(&[HEADER_HEAD_PREFIX]), || {
+		option_to_not_found(self.db.get_ser(&[HEADER_HEAD_PREFIX], None), || {
 			"HEADER_HEAD".to_owned()
 		})
 	}
 
 	/// The current chain "tail" (earliest block in the store).
 	pub fn tail(&self) -> Result<Tip, Error> {
-		option_to_not_found(self.db.get_ser(&[TAIL_PREFIX]), || "TAIL".to_owned())
+		option_to_not_found(self.db.get_ser(&[TAIL_PREFIX], None), || "TAIL".to_owned())
 	}
 
 	/// Header of the block at the head of the block chain (not the same thing as header_head).
@@ -82,7 +82,7 @@ impl ChainStore {
 
 	/// Get full block.
 	pub fn get_block(&self, h: &Hash) -> Result<Block, Error> {
-		option_to_not_found(self.db.get_ser(&to_key(BLOCK_PREFIX, h)), || {
+		option_to_not_found(self.db.get_ser(&to_key(BLOCK_PREFIX, h), None), || {
 			format!("BLOCK: {}", h)
 		})
 	}
@@ -94,7 +94,7 @@ impl ChainStore {
 
 	/// Get block_sums for the block hash.
 	pub fn get_block_sums(&self, h: &Hash) -> Result<BlockSums, Error> {
-		option_to_not_found(self.db.get_ser(&to_key(BLOCK_SUMS_PREFIX, h)), || {
+		option_to_not_found(self.db.get_ser(&to_key(BLOCK_SUMS_PREFIX, h), None), || {
 			format!("Block sums for block: {}", h)
 		})
 	}
@@ -104,11 +104,32 @@ impl ChainStore {
 		self.get_block_header(&header.prev_hash)
 	}
 
+	/// Get previous header without deserializing the proof nonces
+	pub fn get_previous_header_skip_proof(
+		&self,
+		header: &BlockHeader,
+	) -> Result<BlockHeader, Error> {
+		self.get_block_header_skip_proof(&header.prev_hash)
+	}
+
 	/// Get block header.
 	pub fn get_block_header(&self, h: &Hash) -> Result<BlockHeader, Error> {
-		option_to_not_found(self.db.get_ser(&to_key(BLOCK_HEADER_PREFIX, h)), || {
-			format!("BLOCK HEADER: {}", h)
-		})
+		option_to_not_found(
+			self.db.get_ser(&to_key(BLOCK_HEADER_PREFIX, h), None),
+			|| format!("BLOCK HEADER: {}", h),
+		)
+	}
+
+	/// Get block header without deserializing the full PoW Proof; currently used
+	/// for difficulty iterator which is called many times but doesn't need the proof
+	pub fn get_block_header_skip_proof(&self, h: &Hash) -> Result<BlockHeader, Error> {
+		option_to_not_found(
+			self.db.get_ser(
+				&to_key(BLOCK_HEADER_PREFIX, h),
+				Some(ser::DeserializationMode::SkipPow),
+			),
+			|| format!("BLOCK HEADER: {}", h),
+		)
 	}
 
 	/// Get PMMR pos for the given output commitment.
@@ -124,7 +145,7 @@ impl ChainStore {
 
 	/// Get PMMR pos and block height for the given output commitment.
 	pub fn get_output_pos_height(&self, commit: &Commitment) -> Result<Option<CommitPos>, Error> {
-		self.db.get_ser(&to_key(OUTPUT_POS_PREFIX, commit))
+		self.db.get_ser(&to_key(OUTPUT_POS_PREFIX, commit), None)
 	}
 
 	/// Builds a new batch to be used with this store.
@@ -454,11 +475,15 @@ impl<'a> Iterator for DifficultyIter<'a> {
 	fn next(&mut self) -> Option<Self::Item> {
 		// Get both header and previous_header if this is the initial iteration.
 		// Otherwise move prev_header to header and get the next prev_header.
+		// Note that due to optimizations being called in `get_block_header_skip_proof`,
+		// Items returned by this iterator cannot be expected to correctly
+		// calculate their own hash - This iterator is purely for iterating through
+		// difficulty information
 		self.header = if self.header.is_none() {
 			if let Some(ref batch) = self.batch {
 				batch.get_block_header_skip_proof(&self.start).ok()
 			} else if let Some(ref store) = self.store {
-				store.get_block_header(&self.start).ok()
+				store.get_block_header_skip_proof(&self.start).ok()
 			} else {
 				None
 			}
@@ -472,7 +497,7 @@ impl<'a> Iterator for DifficultyIter<'a> {
 			if let Some(ref batch) = self.batch {
 				self.prev_header = batch.get_previous_header_skip_proof(&header).ok();
 			} else if let Some(ref store) = self.store {
-				self.prev_header = store.get_previous_header(&header).ok();
+				self.prev_header = store.get_previous_header_skip_proof(&header).ok();
 			} else {
 				self.prev_header = None;
 			}

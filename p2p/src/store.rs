@@ -137,7 +137,7 @@ impl PeerStore {
 	}
 
 	pub fn get_peer(&self, peer_addr: PeerAddr) -> Result<PeerData, Error> {
-		option_to_not_found(self.db.get_ser(&peer_key(peer_addr)[..]), || {
+		option_to_not_found(self.db.get_ser(&peer_key(peer_addr)[..], None), || {
 			format!("Peer at address: {}", peer_addr)
 		})
 	}
