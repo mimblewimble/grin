@@ -262,7 +262,7 @@ impl CuckatooContext {
 		let nonces = &proof.nonces;
 		let mut uvs = vec![0u64; 2 * size];
 		let mask = u64::MAX >> size.leading_zeros(); // round size up to 2-power - 1
-		let mut xor0: u64 = (self.params.proof_size as u64 / 2) & 1;
+		let mut xor0: u64 = (size as u64 / 2) & 1;
 		let mut xor1: u64 = xor0;
 		// the next two arrays form a linked list of nodes with matching bits 6..1
 		let mut headu = vec![2 * size; 1 + mask as usize];
@@ -335,7 +335,7 @@ impl CuckatooContext {
 				break;
 			}
 		}
-		if n == self.params.proof_size {
+		if n == size {
 			Ok(())
 		} else {
 			Err(ErrorKind::Verification("cycle too short".to_owned()).into())
@@ -485,13 +485,13 @@ mod test {
 		let mut header = [0u8; 80];
 		header[0] = 1u8;
 		ctx.set_header_nonce(header.to_vec(), Some(20), false)?;
-		assert!(!ctx.verify(&Proof::new(V1_29.to_vec())).is_ok());
+		assert!(ctx.verify(&Proof::new(V1_29.to_vec())).is_err());
 		header[0] = 0u8;
 		ctx.set_header_nonce(header.to_vec(), Some(20), false)?;
 		assert!(ctx.verify(&Proof::new(V1_29.to_vec())).is_ok());
 		let mut bad_proof = V1_29;
 		bad_proof[0] = 0x48a9e1;
-		assert!(!ctx.verify(&Proof::new(bad_proof.to_vec())).is_ok());
+		assert!(ctx.verify(&Proof::new(bad_proof.to_vec())).is_err());
 		Ok(())
 	}
 
