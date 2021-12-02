@@ -271,21 +271,23 @@ impl Store {
 
 	/// Gets a `Readable` value from the db, provided its key.
 	/// Note: Creates a new read transaction so will *not* see any uncommitted data.
-	pub fn get_ser<T: ser::Readable>(&self, key: &[u8]) -> Result<Option<T>, Error> {
+	pub fn get_ser<T: ser::Readable>(
+		&self,
+		key: &[u8],
+		deser_mode: Option<DeserializationMode>,
+	) -> Result<Option<T>, Error> {
 		let lock = self.db.read();
 		let db = lock
 			.as_ref()
 			.ok_or_else(|| Error::NotFoundErr("chain db is None".to_string()))?;
 		let txn = lmdb::ReadTransaction::new(self.env.clone())?;
 		let access = txn.access();
-
+		let d = match deser_mode {
+			Some(d) => d,
+			_ => DeserializationMode::default(),
+		};
 		self.get_with(key, &access, &db, |_, mut data| {
-			ser::deserialize(
-				&mut data,
-				self.protocol_version(),
-				DeserializationMode::default(),
-			)
-			.map_err(From::from)
+			ser::deserialize(&mut data, self.protocol_version(), d).map_err(From::from)
 		})
 	}
 
