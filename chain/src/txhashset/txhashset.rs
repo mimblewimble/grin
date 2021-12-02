@@ -22,7 +22,9 @@ use crate::core::core::merkle_proof::MerkleProof;
 use crate::core::core::pmmr::{
 	self, Backend, ReadablePMMR, ReadonlyPMMR, RewindablePMMR, VecBackend, PMMR,
 };
-use crate::core::core::{Block, BlockHeader, KernelFeatures, Output, OutputIdentifier, TxKernel};
+use crate::core::core::{
+	Block, BlockHeader, KernelFeatures, Output, OutputIdentifier, Segment, TxKernel,
+};
 use crate::core::global;
 use crate::core::ser::{PMMRable, ProtocolVersion};
 use crate::error::{Error, ErrorKind};
@@ -1177,6 +1179,11 @@ impl<'a> Extension<'a> {
 		)
 	}
 
+	/// Sets the bitmap accumulator (as received during PIBD sync)
+	pub fn set_bitmap_accumulator(&mut self, accumulator: BitmapAccumulator) {
+		self.bitmap_accumulator = accumulator;
+	}
+
 	// Prune output and rangeproof PMMRs based on provided pos.
 	// Input is not valid if we cannot prune successfully.
 	fn apply_input(&mut self, commit: Commitment, pos: CommitPos) -> Result<(), Error> {
@@ -1232,6 +1239,33 @@ impl<'a> Extension<'a> {
 		Ok(1 + output_pos)
 	}
 
+	/// Apply an output segment to the output PMMR. must be called in order
+	/// TODO: Not complete
+	pub fn apply_output_segment(
+		&mut self,
+		segment: Segment<OutputIdentifier>,
+	) -> Result<(), Error> {
+		let (_sid, _hash_pos, _hashes, _leaf_pos, leaf_data, _proof) = segment.parts();
+		for output_identifier in leaf_data {
+			self.output_pmmr
+				.push(&output_identifier)
+				.map_err(&ErrorKind::TxHashSetErr)?;
+		}
+		Ok(())
+	}
+
+	/// Apply a rangeproof segment to the output PMMR. must be called in order
+	/// TODO: Not complete
+	pub fn apply_rangeproof_segment(&mut self, segment: Segment<RangeProof>) -> Result<(), Error> {
+		let (_sid, _hash_pos, _hashes, _leaf_pos, leaf_data, _proof) = segment.parts();
+		for proof in leaf_data {
+			self.rproof_pmmr
+				.push(&proof)
+				.map_err(&ErrorKind::TxHashSetErr)?;
+		}
+		Ok(())
+	}
+
 	/// Apply kernels to the kernel MMR.
 	/// Validate any NRD relative height locks via the "recent" kernel index.
 	/// Note: This is used for both block processing and tx validation.
@@ -1247,6 +1281,18 @@ impl<'a> Extension<'a> {
 			let pos = self.apply_kernel(kernel)?;
 			let commit_pos = CommitPos { pos, height };
 			apply_kernel_rules(kernel, commit_pos, batch)?;
+		}
+		Ok(())
+	}
+
+	/// Apply a kernel segment to the output PMMR. must be called in order
+	/// TODO: Not complete
+	pub fn apply_kernel_segment(&mut self, segment: Segment<TxKernel>) -> Result<(), Error> {
+		let (_sid, _hash_pos, _hashes, _leaf_pos, leaf_data, _proof) = segment.parts();
+		for kernel in leaf_data {
+			self.kernel_pmmr
+				.push(&kernel)
+				.map_err(&ErrorKind::TxHashSetErr)?;
 		}
 		Ok(())
 	}

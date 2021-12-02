@@ -87,7 +87,8 @@ impl SegmentIdentifier {
 	/// Returns number of segments required that would needed in order to read a
 	/// pmmr of size `target_mmr_size` in segments of height `segment_height`
 	pub fn count_segments_required(target_mmr_size: u64, segment_height: u8) -> usize {
-		pmmr::n_leaves(target_mmr_size) as usize / (1 << segment_height as usize)
+		let d = 1 << segment_height;
+		((pmmr::n_leaves(target_mmr_size) + d - 1) / d) as usize
 	}
 }
 
@@ -126,17 +127,17 @@ impl<T> Segment<T> {
 		self.identifier.idx * self.segment_capacity()
 	}
 
-	/// Number of leaves in this segment. Equal to capacity except for the final segment, which can be smaller
-	fn segment_unpruned_size(&self, last_pos: u64) -> u64 {
+	// Number of leaves in this segment. Equal to capacity except for the final segment, which can be smaller
+	fn segment_unpruned_size(&self, mmr_size: u64) -> u64 {
 		min(
 			self.segment_capacity(),
-			pmmr::n_leaves(last_pos).saturating_sub(self.leaf_offset()),
+			pmmr::n_leaves(mmr_size).saturating_sub(self.leaf_offset()),
 		)
 	}
 
 	/// Whether the segment is full (segment size == capacity)
-	fn full_segment(&self, last_pos: u64) -> bool {
-		self.segment_unpruned_size(last_pos) == self.segment_capacity()
+	fn full_segment(&self, mmr_size: u64) -> bool {
+		self.segment_unpruned_size(mmr_size) == self.segment_capacity()
 	}
 
 	/// Inclusive range of MMR positions for this segment
