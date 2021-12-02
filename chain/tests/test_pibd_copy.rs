@@ -221,6 +221,8 @@ fn test_pibd_copy_sample() {
 
 #[test]
 #[ignore]
+// Note this test is intended to be run manually, as testing the copy of an
+// entire live chain is beyond the capability of current CI
 // As above, but run on a real instance of a chain pointed where you like
 fn test_pibd_copy_real() {
 	util::init_test_logger();

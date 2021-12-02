@@ -865,8 +865,8 @@ impl Chain {
 		))
 	}
 
-	/// instantiate desegmenter (in same lazy fashion as segmenter, though this should be be
-	/// an expensive operation)
+	/// instantiate desegmenter (in same lazy fashion as segmenter, though this should not be as
+	/// expensive an operation)
 	pub fn desegmenter(&self, archive_header: &BlockHeader) -> Result<Desegmenter, Error> {
 		// Use our cached desegmenter if we have one and the associated header matches.
 		if let Some(d) = self.pibd_desegmenter.read().as_ref() {

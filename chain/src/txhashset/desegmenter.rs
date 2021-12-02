@@ -15,7 +15,7 @@
 //! Manages the reconsitution of a txhashset from segments produced by the
 //! segmenter
 
-use std::{sync::Arc, time::Instant};
+use std::sync::Arc;
 
 use crate::core::core::hash::Hash;
 use crate::core::core::pmmr;
@@ -123,7 +123,7 @@ impl Desegmenter {
 	fn calc_bitmap_mmr_sizes(&mut self) {
 		// Number of leaves (BitmapChunks)
 		self.bitmap_mmr_leaf_count =
-			(pmmr::n_leaves(self.archive_header.output_mmr_size) as f64 / 1024f64).ceil() as u64;
+			(pmmr::n_leaves(self.archive_header.output_mmr_size) + 1023) / 1024;
 		debug!(
 			"pibd_desgmenter - expected number of leaves in bitmap MMR: {}",
 			self.bitmap_mmr_leaf_count

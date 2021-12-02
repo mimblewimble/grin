@@ -87,8 +87,8 @@ impl SegmentIdentifier {
 	/// Returns number of segments required that would needed in order to read a
 	/// pmmr of size `target_mmr_size` in segments of height `segment_height`
 	pub fn count_segments_required(target_mmr_size: u64, segment_height: u8) -> usize {
-		(pmmr::n_leaves(target_mmr_size) as f64 / (1 << segment_height as usize) as f64).ceil()
-			as usize
+		let d = 1 << segment_height;
+		((pmmr::n_leaves(target_mmr_size) + d - 1) / d) as usize
 	}
 }
 
