@@ -68,10 +68,10 @@ impl PoWContext for CuckarooContext {
 		}
 		let nonces = &proof.nonces;
 		let mut uvs = vec![0u64; 2 * size];
-		let mask = u64::MAX >> size.leading_zeros(); // round size up to 2-power - 1
 		let mut xor0: u64 = 0;
 		let mut xor1: u64 = 0;
-		// the next two arrays form a linked list of nodes with matching bits 6..1
+		let mask = u64::MAX >> size.leading_zeros(); // round size up to 2-power - 1
+											 // the next three arrays form a linked list of nodes with matching bits 6..1
 		let mut headu = vec![2 * size; 1 + mask as usize];
 		let mut headv = vec![2 * size; 1 + mask as usize];
 		let mut prev = vec![0usize; 2 * size];
