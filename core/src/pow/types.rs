@@ -427,42 +427,36 @@ fn pack_bits(bit_width: u8, uncompressed: &[u64], mut compressed: &mut [u8]) {
 	// We accumulate bits in it until capacity, at which point we just copy this
 	// mini buffer to compressed.
 	let mut mini_buffer: u64 = 0u64;
-	let mut cursor = 0; //< number of bits written in the mini_buffer.
-	let mut pack_bytes_remaining = compressed.len();
+	let mut remaining = 64;
 	for el in uncompressed {
-		let remaining = 64 - cursor;
+		mini_buffer |= el << (64 - remaining);
 		match bit_width.cmp(&remaining) {
 			Ordering::Less => {
 				// Plenty of room remaining in our mini buffer.
-				mini_buffer |= el << cursor;
-				cursor += bit_width;
+				remaining -= bit_width;
 			}
 			Ordering::Equal => {
-				mini_buffer |= el << cursor;
 				// We have completed our minibuffer exactly.
 				// Let's write it to `compressed`.
 				compressed[..8].copy_from_slice(&mini_buffer.to_le_bytes());
 				compressed = &mut compressed[8..];
-				pack_bytes_remaining -= 8;
 				mini_buffer = 0u64;
-				cursor = 0;
+				remaining = 64;
 			}
 			Ordering::Greater => {
-				mini_buffer |= el << cursor;
-				// We have completed our minibuffer.
+				// We have overflowed our minibuffer.
 				// Let's write it to `compressed` and set the fresh mini_buffer
 				// with the remaining bits.
 				compressed[..8].copy_from_slice(&mini_buffer.to_le_bytes());
 				compressed = &mut compressed[8..];
-				pack_bytes_remaining -= 8;
-				cursor = bit_width - remaining;
 				mini_buffer = el >> remaining;
+				remaining = 64 + remaining - bit_width;
 			}
 		}
 	}
-	if pack_bytes_remaining > 0 {
-		compressed[..pack_bytes_remaining]
-			.copy_from_slice(&mini_buffer.to_le_bytes()[..pack_bytes_remaining]);
+	let remainder = compressed.len() % 8;
+	if remainder > 0 {
+		compressed[..remainder].copy_from_slice(&mini_buffer.to_le_bytes()[..remainder]);
 	}
 }
 
@@ -511,7 +505,7 @@ impl Readable for Proof {
 		// prepare nonces and read the right number of bytes
 		let mut nonces = Vec::with_capacity(global::proofsize());
 		let nonce_bits = edge_bits as usize;
-		let bytes_len = (nonce_bits * global::proofsize() + 7) / 8;
+		let bytes_len = Proof::pack_len(edge_bits);
 		if bytes_len < 8 {
 			return Err(ser::Error::CorruptedData);
 		}
