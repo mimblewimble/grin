@@ -56,18 +56,24 @@ impl PoWContext for CuckaroodContext {
 	}
 
 	fn verify(&self, proof: &Proof) -> Result<(), Error> {
-		if proof.proof_size() != global::proofsize() {
+		let size = proof.proof_size();
+		if size != global::proofsize() {
 			return Err(ErrorKind::Verification("wrong cycle length".to_owned()).into());
 		}
 		let nonces = &proof.nonces;
-		let mut uvs = vec![0u64; 2 * proof.proof_size()];
+		let mut uvs = vec![0u64; 2 * size];
 		let mut ndir = vec![0usize; 2];
 		let mut xor0: u64 = 0;
 		let mut xor1: u64 = 0;
+		let mask = u64::MAX >> size.leading_zeros(); // round size up to 2-power - 1
+											 // the next two arrays form a linked list of nodes with matching bits 4..0|dir
+		let mut headu = vec![2 * size; 1 + mask as usize];
+		let mut headv = vec![2 * size; 1 + mask as usize];
+		let mut prev = vec![0usize; 2 * size];
 
-		for n in 0..proof.proof_size() {
+		for n in 0..size {
 			let dir = (nonces[n] & 1) as usize;
-			if ndir[dir] >= proof.proof_size() / 2 {
+			if ndir[dir] >= size / 2 {
 				return Err(ErrorKind::Verification("edges not balanced".to_owned()).into());
 			}
 			if nonces[n] > self.params.edge_mask {
@@ -79,10 +85,21 @@ impl PoWContext for CuckaroodContext {
 			// cuckarood uses a non-standard siphash rotation constant 25 as anti-ASIC tweak
 			let edge: u64 = siphash_block(&self.params.siphash_keys, nonces[n], 25, false);
 			let idx = 4 * ndir[dir] + 2 * dir;
-			uvs[idx] = edge & self.params.node_mask;
-			xor0 ^= uvs[idx];
-			uvs[idx + 1] = (edge >> 32) & self.params.node_mask;
-			xor1 ^= uvs[idx + 1];
+			let u = edge & self.params.node_mask;
+			let v = (edge >> 32) & self.params.node_mask;
+
+			uvs[idx] = u;
+			let ubits = ((u << 1 | dir as u64) & mask) as usize;
+			prev[idx] = headu[ubits];
+			headu[ubits] = idx;
+
+			uvs[idx + 1] = v;
+			let vbits = ((v << 1 | dir as u64) & mask) as usize;
+			prev[idx + 1] = headv[vbits];
+			headv[vbits] = idx + 1;
+
+			xor0 ^= u;
+			xor1 ^= v;
 			ndir[dir] += 1;
 		}
 		if xor0 | xor1 != 0 {
@@ -94,7 +111,12 @@ impl PoWContext for CuckaroodContext {
 		loop {
 			// follow cycle
 			j = i;
-			for k in (((i % 4) ^ 2)..(2 * self.params.proof_size)).step_by(4) {
+			let mut k = if i & 1 == 0 {
+				headu[((uvs[i] << 1 | 1) & mask) as usize]
+			} else {
+				headv[((uvs[i] << 1 | 0) & mask) as usize]
+			};
+			while k != 2 * size {
 				if uvs[k] == uvs[i] {
 					// find reverse edge endpoint identical to one at i
 					if j != i {
@@ -102,6 +124,7 @@ impl PoWContext for CuckaroodContext {
 					}
 					j = k;
 				}
+				k = prev[k];
 			}
 			if j == i {
 				return Err(ErrorKind::Verification("cycle dead ends".to_owned()).into());
@@ -112,7 +135,7 @@ impl PoWContext for CuckaroodContext {
 				break;
 			}
 		}
-		if n == self.params.proof_size {
+		if n == size {
 			Ok(())
 		} else {
 			Err(ErrorKind::Verification("cycle too short".to_owned()).into())

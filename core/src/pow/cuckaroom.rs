@@ -55,17 +55,21 @@ impl PoWContext for CuckaroomContext {
 	}
 
 	fn verify(&self, proof: &Proof) -> Result<(), Error> {
-		let proofsize = proof.proof_size();
-		if proofsize != global::proofsize() {
+		let size = proof.proof_size();
+		if size != global::proofsize() {
 			return Err(ErrorKind::Verification("wrong cycle length".to_owned()).into());
 		}
 		let nonces = &proof.nonces;
-		let mut from = vec![0u64; proofsize];
-		let mut to = vec![0u64; proofsize];
+		let mut from = vec![0u64; size];
+		let mut to = vec![0u64; size];
 		let mut xor_from: u64 = 0;
 		let mut xor_to: u64 = 0;
+		let mask = u64::MAX >> size.leading_zeros(); // round size up to 2-power - 1
+											 // the next two arrays form a linked list of nodes with matching bits 6..1
+		let mut head = vec![size; 1 + mask as usize];
+		let mut prev = vec![0usize; size];
 
-		for n in 0..proofsize {
+		for n in 0..size {
 			if nonces[n] > self.params.edge_mask {
 				return Err(ErrorKind::Verification("edge too big".to_owned()).into());
 			}
@@ -74,15 +78,20 @@ impl PoWContext for CuckaroomContext {
 			}
 			// 21 is standard siphash rotation constant
 			let edge: u64 = siphash_block(&self.params.siphash_keys, nonces[n], 21, true);
-			from[n] = edge & self.params.node_mask;
+			let u = edge & self.params.node_mask;
+			let v = (edge >> 32) & self.params.node_mask;
+			from[n] = u;
+			let bits = (u & mask) as usize;
+			prev[n] = head[bits];
+			head[bits] = n;
+			to[n] = v;
 			xor_from ^= from[n];
-			to[n] = (edge >> 32) & self.params.node_mask;
 			xor_to ^= to[n];
 		}
 		if xor_from != xor_to {
 			return Err(ErrorKind::Verification("endpoints don't match up".to_owned()).into());
 		}
-		let mut visited = vec![false; proofsize];
+		let mut visited = vec![false; size];
 		let mut n = 0;
 		let mut i = 0;
 		loop {
@@ -91,21 +100,24 @@ impl PoWContext for CuckaroomContext {
 				return Err(ErrorKind::Verification("branch in cycle".to_owned()).into());
 			}
 			visited[i] = true;
-			let mut nexti = 0;
-			while from[nexti] != to[i] {
-				nexti += 1;
-				if nexti == proofsize {
+			let mut k = head[(to[i] & mask) as usize];
+			loop {
+				if k == size {
 					return Err(ErrorKind::Verification("cycle dead ends".to_owned()).into());
 				}
+				if from[k] == to[i] {
+					break;
+				}
+				k = prev[k];
 			}
-			i = nexti;
+			i = k;
 			n += 1;
 			if i == 0 {
 				// must cycle back to start or find branch
 				break;
 			}
 		}
-		if n == proofsize {
+		if n == size {
 			Ok(())
 		} else {
 			Err(ErrorKind::Verification("cycle too short".to_owned()).into())
