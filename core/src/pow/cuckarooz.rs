@@ -56,14 +56,19 @@ impl PoWContext for CuckaroozContext {
 	}
 
 	fn verify(&self, proof: &Proof) -> Result<(), Error> {
-		if proof.proof_size() != global::proofsize() {
+		let size = proof.proof_size();
+		if size != global::proofsize() {
 			return Err(ErrorKind::Verification("wrong cycle length".to_owned()).into());
 		}
 		let nonces = &proof.nonces;
-		let mut uvs = vec![0u64; 2 * proof.proof_size()];
+		let mut uvs = vec![0u64; 2 * size];
 		let mut xoruv: u64 = 0;
+		let mask = u64::MAX >> size.leading_zeros(); // round size up to 2-power - 1
+											 // the next two arrays form a linked list of nodes with matching bits 6..1
+		let mut head = vec![2 * size; 1 + mask as usize];
+		let mut prev = vec![0usize; 2 * size];
 
-		for n in 0..proof.proof_size() {
+		for n in 0..size {
 			if nonces[n] > self.params.edge_mask {
 				return Err(ErrorKind::Verification("edge too big".to_owned()).into());
 			}
@@ -72,12 +77,30 @@ impl PoWContext for CuckaroozContext {
 			}
 			// 21 is standard siphash rotation constant
 			let edge: u64 = siphash_block(&self.params.siphash_keys, nonces[n], 21, true);
-			uvs[2 * n] = edge & self.params.node_mask;
-			uvs[2 * n + 1] = (edge >> 32) & self.params.node_mask;
+			let u = edge & self.params.node_mask;
+			let v = (edge >> 32) & self.params.node_mask;
+
+			uvs[2 * n] = u;
+			let bits = (u & mask) as usize;
+			prev[2 * n] = head[bits];
+			head[bits] = 2 * n;
+
+			uvs[2 * n + 1] = v;
+			let bits = (v & mask) as usize;
+			prev[2 * n + 1] = head[bits];
+			head[bits] = 2 * n + 1;
+
 			xoruv ^= uvs[2 * n] ^ uvs[2 * n + 1];
 		}
 		if xoruv != 0 {
 			return Err(ErrorKind::Verification("endpoints don't match up".to_owned()).into());
+		}
+		// make prev lists circular
+		for n in 0..(2 * size) {
+			if prev[n] == 2 * size {
+				let bits = (uvs[n] & mask) as usize;
+				prev[n] = head[bits];
+			}
 		}
 		let mut n = 0;
 		let mut i = 0;
@@ -87,7 +110,7 @@ impl PoWContext for CuckaroozContext {
 			j = i;
 			let mut k = j;
 			loop {
-				k = (k + 1) % (2 * self.params.proof_size);
+				k = prev[k];
 				if k == i {
 					break;
 				}
