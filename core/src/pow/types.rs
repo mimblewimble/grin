@@ -21,7 +21,7 @@ use rand::{thread_rng, Rng};
 use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
 /// Types for a Cuck(at)oo proof of work and its encapsulation as a fully usable
 /// proof of work within a block header.
-use std::cmp::{max, min, Ordering};
+use std::cmp::{max, min};
 use std::ops::{Add, Div, Mul, Sub};
 use std::u64;
 use std::{fmt, iter};
