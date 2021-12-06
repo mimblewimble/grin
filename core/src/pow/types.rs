@@ -426,32 +426,17 @@ fn pack_bits(bit_width: u8, uncompressed: &[u64], mut compressed: &mut [u8]) {
 	// We will use a `u64` as a mini buffer of 64 bits.
 	// We accumulate bits in it until capacity, at which point we just copy this
 	// mini buffer to compressed.
-	let mut mini_buffer: u64 = 0u64;
+	let mut mini_buffer = 0u64;
 	let mut remaining = 64;
 	for el in uncompressed {
 		mini_buffer |= el << (64 - remaining);
-		match bit_width.cmp(&remaining) {
-			Ordering::Less => {
-				// Plenty of room remaining in our mini buffer.
-				remaining -= bit_width;
-			}
-			Ordering::Equal => {
-				// We have completed our minibuffer exactly.
-				// Let's write it to `compressed`.
-				compressed[..8].copy_from_slice(&mini_buffer.to_le_bytes());
-				compressed = &mut compressed[8..];
-				mini_buffer = 0u64;
-				remaining = 64;
-			}
-			Ordering::Greater => {
-				// We have overflowed our minibuffer.
-				// Let's write it to `compressed` and set the fresh mini_buffer
-				// with the remaining bits.
-				compressed[..8].copy_from_slice(&mini_buffer.to_le_bytes());
-				compressed = &mut compressed[8..];
-				mini_buffer = el >> remaining;
-				remaining = 64 + remaining - bit_width;
-			}
+		if bit_width.cmp(&remaining) == Ordering::Less {
+			remaining -= bit_width;
+		} else {
+			compressed[..8].copy_from_slice(&mini_buffer.to_le_bytes());
+			compressed = &mut compressed[8..];
+			mini_buffer = el >> remaining;
+			remaining = 64 + remaining - bit_width;
 		}
 	}
 	let remainder = compressed.len() % 8;
