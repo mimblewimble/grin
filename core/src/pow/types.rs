@@ -21,7 +21,7 @@ use rand::{thread_rng, Rng};
 use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
 /// Types for a Cuck(at)oo proof of work and its encapsulation as a fully usable
 /// proof of work within a block header.
-use std::cmp::{max, min, Ordering};
+use std::cmp::{max, min};
 use std::ops::{Add, Div, Mul, Sub};
 use std::u64;
 use std::{fmt, iter};
@@ -430,7 +430,7 @@ fn pack_bits(bit_width: u8, uncompressed: &[u64], mut compressed: &mut [u8]) {
 	let mut remaining = 64;
 	for el in uncompressed {
 		mini_buffer |= el << (64 - remaining);
-		if bit_width.cmp(&remaining) == Ordering::Less {
+		if bit_width < remaining {
 			remaining -= bit_width;
 		} else {
 			compressed[..8].copy_from_slice(&mini_buffer.to_le_bytes());
