@@ -488,7 +488,6 @@ impl<'a> Iterator for DifficultyIter<'a> {
 		// difficulty information
 		// Get a lock on the cache
 		//let mut cache_has_start_header = false;
-		let mut cache_has_prev_header = false;
 
 		self.header = if self.header.is_none() {
 			let cache_handle = DIFF_ITER_CACHE.read();
@@ -509,8 +508,14 @@ impl<'a> Iterator for DifficultyIter<'a> {
 			self.prev_header.clone()
 		};
 
+		/*if !cache_has_start_header {
+			let mut cache_handle = DIFF_ITER_CACHE.write();
+			cache_handle.add(self.start, self.header.clone());
+		}*/
+
 		// If we have a header we can do this iteration.
 		// Otherwise we are done.
+		let mut cache_has_prev_header = false;
 		if let Some(header) = self.header.clone() {
 			{
 				let cache_handle = DIFF_ITER_CACHE.read();
@@ -536,10 +541,7 @@ impl<'a> Iterator for DifficultyIter<'a> {
 			let scaling = header.pow.secondary_scaling;
 
 			// Insert into cache if needed
-			/*if !cache_has_start_header {
-				let mut cache_handle = self.cache.write();
-				cache_handle.add(self.start, self.header.clone());
-			}*/
+
 			if !cache_has_prev_header {
 				let mut cache_handle = DIFF_ITER_CACHE.write();
 				cache_handle.add(header.prev_hash, self.prev_header.clone());
@@ -573,7 +575,7 @@ impl DifficultyIterCache {
 	/// Add an element to the cache
 	pub fn add(&mut self, hash: Hash, bh: Option<BlockHeader>) {
 		self.cache.insert(hash, bh);
-		if self.cache.len() > 1000 {
+		if self.cache.len() > 10000 {
 			self.cache.clear();
 		}
 	}
