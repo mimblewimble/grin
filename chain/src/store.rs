@@ -27,7 +27,7 @@ use croaring::Bitmap;
 use grin_core::ser;
 use grin_store as store;
 use grin_store::{option_to_not_found, to_key, Error};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap};
 use std::convert::TryInto;
 use std::sync::Arc;
 
@@ -560,14 +560,14 @@ impl<'a> Iterator for DifficultyIter<'a> {
 /// Required as difficulty iterator lookups from the DB are extremely expensive
 /// accounting for a large percentage of time spent in validation. See #3671 for context.
 pub struct DifficultyIterCache {
-	cache: BTreeMap<Hash, Option<BlockHeader>>,
+	cache: HashMap<Hash, Option<BlockHeader>>,
 }
 
 impl DifficultyIterCache {
 	/// Create with an empty hashmap
 	pub fn new() -> Self {
 		Self {
-			cache: BTreeMap::new(),
+			cache: HashMap::new(),
 		}
 	}
 	/// Add an element to the cache
