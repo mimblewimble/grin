@@ -105,7 +105,7 @@ fn test_header_perf_impl(is_test_chain: bool, src_root_dir: &str, dest_root_dir:
 }
 
 #[test]
-#[ignore]
+//#[ignore]
 // Ignored during CI, but use this to run this test on a real instance of a chain pointed where you like
 fn test_header_perf() {
 	util::init_test_logger();

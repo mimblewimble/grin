@@ -22,10 +22,12 @@ use crate::core::ser::{DeserializationMode, ProtocolVersion, Readable, Writeable
 use crate::linked_list::MultiIndex;
 use crate::types::{CommitPos, Tip};
 use crate::util::secp::pedersen::Commitment;
+use crate::util::RwLock;
 use croaring::Bitmap;
 use grin_core::ser;
 use grin_store as store;
 use grin_store::{option_to_not_found, to_key, Error};
+use std::collections::BTreeMap;
 use std::convert::TryInto;
 use std::sync::Arc;
 
@@ -45,6 +47,11 @@ pub const NRD_KERNEL_ENTRY_PREFIX: u8 = b'k';
 
 const BLOCK_SUMS_PREFIX: u8 = b'M';
 const BLOCK_SPENT_PREFIX: u8 = b'S';
+
+lazy_static! {
+	static ref DIFF_ITER_CACHE: RwLock<DifficultyIterCache> =
+		RwLock::new(DifficultyIterCache::new());
+}
 
 /// All chain-related database operations
 pub struct ChainStore {
@@ -479,8 +486,19 @@ impl<'a> Iterator for DifficultyIter<'a> {
 		// Items returned by this iterator cannot be expected to correctly
 		// calculate their own hash - This iterator is purely for iterating through
 		// difficulty information
+		// Get a lock on the cache
+		//let mut cache_has_start_header = false;
+		let mut cache_has_prev_header = false;
+
 		self.header = if self.header.is_none() {
-			if let Some(ref batch) = self.batch {
+			let cache_handle = DIFF_ITER_CACHE.read();
+			if let Some(bh) = cache_handle.get(&self.start) {
+				//cache_has_start_header = true;
+				//debug!("CACHE HIT: {}", self.start);
+				// TODO: Avoid clone?
+				bh.clone()
+			} else if let Some(ref batch) = self.batch {
+				//debug!("CACHE MISS: {}", self.start);
 				batch.get_block_header_skip_proof(&self.start).ok()
 			} else if let Some(ref store) = self.store {
 				store.get_block_header_skip_proof(&self.start).ok()
@@ -494,12 +512,20 @@ impl<'a> Iterator for DifficultyIter<'a> {
 		// If we have a header we can do this iteration.
 		// Otherwise we are done.
 		if let Some(header) = self.header.clone() {
-			if let Some(ref batch) = self.batch {
-				self.prev_header = batch.get_previous_header_skip_proof(&header).ok();
-			} else if let Some(ref store) = self.store {
-				self.prev_header = store.get_previous_header_skip_proof(&header).ok();
-			} else {
-				self.prev_header = None;
+			{
+				let cache_handle = DIFF_ITER_CACHE.read();
+				if let Some(bh) = cache_handle.get(&header.prev_hash) {
+					//debug!("CACHE PREV HIT: {}", header.prev_hash);
+					cache_has_prev_header = true;
+					self.prev_header = bh.clone()
+				} else if let Some(ref batch) = self.batch {
+					//debug!("CACHE PREV MISS: {}", header.prev_hash);
+					self.prev_header = batch.get_previous_header_skip_proof(&header).ok();
+				} else if let Some(ref store) = self.store {
+					self.prev_header = store.get_previous_header_skip_proof(&header).ok();
+				} else {
+					self.prev_header = None;
+				}
 			}
 
 			let prev_difficulty = self
@@ -508,6 +534,16 @@ impl<'a> Iterator for DifficultyIter<'a> {
 				.map_or(Difficulty::zero(), |x| x.total_difficulty());
 			let difficulty = header.total_difficulty() - prev_difficulty;
 			let scaling = header.pow.secondary_scaling;
+
+			// Insert into cache if needed
+			/*if !cache_has_start_header {
+				let mut cache_handle = self.cache.write();
+				cache_handle.add(self.start, self.header.clone());
+			}*/
+			if !cache_has_prev_header {
+				let mut cache_handle = DIFF_ITER_CACHE.write();
+				cache_handle.add(header.prev_hash, self.prev_header.clone());
+			}
 
 			Some(HeaderDifficultyInfo::new(
 				header.timestamp.timestamp() as u64,
@@ -518,6 +554,33 @@ impl<'a> Iterator for DifficultyIter<'a> {
 		} else {
 			None
 		}
+	}
+}
+
+/// Required as difficulty iterator lookups from the DB are extremely expensive
+/// accounting for a large percentage of time spent in validation. See #3671 for context.
+pub struct DifficultyIterCache {
+	cache: BTreeMap<Hash, Option<BlockHeader>>,
+}
+
+impl DifficultyIterCache {
+	/// Create with an empty hashmap
+	pub fn new() -> Self {
+		Self {
+			cache: BTreeMap::new(),
+		}
+	}
+	/// Add an element to the cache
+	pub fn add(&mut self, hash: Hash, bh: Option<BlockHeader>) {
+		self.cache.insert(hash, bh);
+		if self.cache.len() > 1000 {
+			self.cache.clear();
+		}
+	}
+
+	/// Look up an item in the cache, return None if not there
+	pub fn get(&self, hash: &Hash) -> Option<&Option<BlockHeader>> {
+		self.cache.get(hash)
 	}
 }
 
