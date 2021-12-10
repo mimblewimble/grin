@@ -530,7 +530,7 @@ impl TxKernelPrintable {
 
 // Just the information required for wallet reconstruction
 #[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct BlockHeaderInfo {
+pub struct BlockHeaderDifficultyInfo {
 	// Hash
 	pub hash: String,
 	/// Height of this block since the genesis block (height 0)
@@ -539,9 +539,9 @@ pub struct BlockHeaderInfo {
 	pub previous: String,
 }
 
-impl BlockHeaderInfo {
-	pub fn from_header(header: &core::BlockHeader) -> BlockHeaderInfo {
-		BlockHeaderInfo {
+impl BlockHeaderDifficultyInfo {
+	pub fn from_header(header: &core::BlockHeader) -> BlockHeaderDifficultyInfo {
+		BlockHeaderDifficultyInfo {
 			hash: header.hash().to_hex(),
 			height: header.height,
 			previous: header.prev_hash.to_hex(),
@@ -705,7 +705,7 @@ impl CompactBlockPrintable {
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct BlockOutputs {
 	/// The block header
-	pub header: BlockHeaderInfo,
+	pub header: BlockHeaderDifficultyInfo,
 	/// A printable version of the outputs
 	pub outputs: Vec<OutputPrintable>,
 }

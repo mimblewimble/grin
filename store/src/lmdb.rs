@@ -22,7 +22,7 @@ use lmdb_zero::traits::CreateCursor;
 use lmdb_zero::LmdbResultExt;
 
 use crate::core::global;
-use crate::core::ser::{self, ProtocolVersion};
+use crate::core::ser::{self, DeserializationMode, ProtocolVersion};
 use crate::util::RwLock;
 
 /// number of bytes to grow the database by when needed
@@ -271,16 +271,23 @@ impl Store {
 
 	/// Gets a `Readable` value from the db, provided its key.
 	/// Note: Creates a new read transaction so will *not* see any uncommitted data.
-	pub fn get_ser<T: ser::Readable>(&self, key: &[u8]) -> Result<Option<T>, Error> {
+	pub fn get_ser<T: ser::Readable>(
+		&self,
+		key: &[u8],
+		deser_mode: Option<DeserializationMode>,
+	) -> Result<Option<T>, Error> {
 		let lock = self.db.read();
 		let db = lock
 			.as_ref()
 			.ok_or_else(|| Error::NotFoundErr("chain db is None".to_string()))?;
 		let txn = lmdb::ReadTransaction::new(self.env.clone())?;
 		let access = txn.access();
-
+		let d = match deser_mode {
+			Some(d) => d,
+			_ => DeserializationMode::default(),
+		};
 		self.get_with(key, &access, &db, |_, mut data| {
-			ser::deserialize(&mut data, self.protocol_version()).map_err(From::from)
+			ser::deserialize(&mut data, self.protocol_version(), d).map_err(From::from)
 		})
 	}
 
@@ -402,10 +409,18 @@ impl<'a> Batch<'a> {
 		self.store.iter(prefix, deserialize)
 	}
 
-	/// Gets a `Readable` value from the db by provided key and default deserialization strategy.
-	pub fn get_ser<T: ser::Readable>(&self, key: &[u8]) -> Result<Option<T>, Error> {
+	/// Gets a `Readable` value from the db by provided key and provided deserialization strategy.
+	pub fn get_ser<T: ser::Readable>(
+		&self,
+		key: &[u8],
+		deser_mode: Option<DeserializationMode>,
+	) -> Result<Option<T>, Error> {
+		let d = match deser_mode {
+			Some(d) => d,
+			_ => DeserializationMode::default(),
+		};
 		self.get_with(key, |_, mut data| {
-			match ser::deserialize(&mut data, self.protocol_version()) {
+			match ser::deserialize(&mut data, self.protocol_version(), d) {
 				Ok(res) => Ok(res),
 				Err(e) => Err(From::from(e)),
 			}

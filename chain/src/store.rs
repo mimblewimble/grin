@@ -14,11 +14,11 @@
 
 //! Implements storage primitives required by the chain
 
-use crate::core::consensus::HeaderInfo;
+use crate::core::consensus::HeaderDifficultyInfo;
 use crate::core::core::hash::{Hash, Hashed};
 use crate::core::core::{Block, BlockHeader, BlockSums};
 use crate::core::pow::Difficulty;
-use crate::core::ser::{ProtocolVersion, Readable, Writeable};
+use crate::core::ser::{DeserializationMode, ProtocolVersion, Readable, Writeable};
 use crate::linked_list::MultiIndex;
 use crate::types::{CommitPos, Tip};
 use crate::util::secp::pedersen::Commitment;
@@ -60,19 +60,19 @@ impl ChainStore {
 
 	/// The current chain head.
 	pub fn head(&self) -> Result<Tip, Error> {
-		option_to_not_found(self.db.get_ser(&[HEAD_PREFIX]), || "HEAD".to_owned())
+		option_to_not_found(self.db.get_ser(&[HEAD_PREFIX], None), || "HEAD".to_owned())
 	}
 
 	/// The current header head (may differ from chain head).
 	pub fn header_head(&self) -> Result<Tip, Error> {
-		option_to_not_found(self.db.get_ser(&[HEADER_HEAD_PREFIX]), || {
+		option_to_not_found(self.db.get_ser(&[HEADER_HEAD_PREFIX], None), || {
 			"HEADER_HEAD".to_owned()
 		})
 	}
 
 	/// The current chain "tail" (earliest block in the store).
 	pub fn tail(&self) -> Result<Tip, Error> {
-		option_to_not_found(self.db.get_ser(&[TAIL_PREFIX]), || "TAIL".to_owned())
+		option_to_not_found(self.db.get_ser(&[TAIL_PREFIX], None), || "TAIL".to_owned())
 	}
 
 	/// Header of the block at the head of the block chain (not the same thing as header_head).
@@ -82,7 +82,7 @@ impl ChainStore {
 
 	/// Get full block.
 	pub fn get_block(&self, h: &Hash) -> Result<Block, Error> {
-		option_to_not_found(self.db.get_ser(&to_key(BLOCK_PREFIX, h)), || {
+		option_to_not_found(self.db.get_ser(&to_key(BLOCK_PREFIX, h), None), || {
 			format!("BLOCK: {}", h)
 		})
 	}
@@ -94,7 +94,7 @@ impl ChainStore {
 
 	/// Get block_sums for the block hash.
 	pub fn get_block_sums(&self, h: &Hash) -> Result<BlockSums, Error> {
-		option_to_not_found(self.db.get_ser(&to_key(BLOCK_SUMS_PREFIX, h)), || {
+		option_to_not_found(self.db.get_ser(&to_key(BLOCK_SUMS_PREFIX, h), None), || {
 			format!("Block sums for block: {}", h)
 		})
 	}
@@ -104,11 +104,32 @@ impl ChainStore {
 		self.get_block_header(&header.prev_hash)
 	}
 
+	/// Get previous header without deserializing the proof nonces
+	pub fn get_previous_header_skip_proof(
+		&self,
+		header: &BlockHeader,
+	) -> Result<BlockHeader, Error> {
+		self.get_block_header_skip_proof(&header.prev_hash)
+	}
+
 	/// Get block header.
 	pub fn get_block_header(&self, h: &Hash) -> Result<BlockHeader, Error> {
-		option_to_not_found(self.db.get_ser(&to_key(BLOCK_HEADER_PREFIX, h)), || {
-			format!("BLOCK HEADER: {}", h)
-		})
+		option_to_not_found(
+			self.db.get_ser(&to_key(BLOCK_HEADER_PREFIX, h), None),
+			|| format!("BLOCK HEADER: {}", h),
+		)
+	}
+
+	/// Get block header without deserializing the full PoW Proof; currently used
+	/// for difficulty iterator which is called many times but doesn't need the proof
+	pub fn get_block_header_skip_proof(&self, h: &Hash) -> Result<BlockHeader, Error> {
+		option_to_not_found(
+			self.db.get_ser(
+				&to_key(BLOCK_HEADER_PREFIX, h),
+				Some(ser::DeserializationMode::SkipPow),
+			),
+			|| format!("BLOCK HEADER: {}", h),
+		)
 	}
 
 	/// Get PMMR pos for the given output commitment.
@@ -124,7 +145,7 @@ impl ChainStore {
 
 	/// Get PMMR pos and block height for the given output commitment.
 	pub fn get_output_pos_height(&self, commit: &Commitment) -> Result<Option<CommitPos>, Error> {
-		self.db.get_ser(&to_key(OUTPUT_POS_PREFIX, commit))
+		self.db.get_ser(&to_key(OUTPUT_POS_PREFIX, commit), None)
 	}
 
 	/// Builds a new batch to be used with this store.
@@ -145,17 +166,17 @@ pub struct Batch<'a> {
 impl<'a> Batch<'a> {
 	/// The head.
 	pub fn head(&self) -> Result<Tip, Error> {
-		option_to_not_found(self.db.get_ser(&[HEAD_PREFIX]), || "HEAD".to_owned())
+		option_to_not_found(self.db.get_ser(&[HEAD_PREFIX], None), || "HEAD".to_owned())
 	}
 
 	/// The tail.
 	pub fn tail(&self) -> Result<Tip, Error> {
-		option_to_not_found(self.db.get_ser(&[TAIL_PREFIX]), || "TAIL".to_owned())
+		option_to_not_found(self.db.get_ser(&[TAIL_PREFIX], None), || "TAIL".to_owned())
 	}
 
 	/// The current header head (may differ from chain head).
 	pub fn header_head(&self) -> Result<Tip, Error> {
-		option_to_not_found(self.db.get_ser(&[HEADER_HEAD_PREFIX]), || {
+		option_to_not_found(self.db.get_ser(&[HEADER_HEAD_PREFIX], None), || {
 			"HEADER_HEAD".to_owned()
 		})
 	}
@@ -182,7 +203,7 @@ impl<'a> Batch<'a> {
 
 	/// get block
 	pub fn get_block(&self, h: &Hash) -> Result<Block, Error> {
-		option_to_not_found(self.db.get_ser(&to_key(BLOCK_PREFIX, h)), || {
+		option_to_not_found(self.db.get_ser(&to_key(BLOCK_PREFIX, h), None), || {
 			format!("Block with hash: {}", h)
 		})
 	}
@@ -269,7 +290,7 @@ impl<'a> Batch<'a> {
 		let key = to_key(OUTPUT_POS_PREFIX, "");
 		let protocol_version = self.db.protocol_version();
 		self.db.iter(&key, move |k, mut v| {
-			ser::deserialize(&mut v, protocol_version)
+			ser::deserialize(&mut v, protocol_version, DeserializationMode::default())
 				.map(|pos| (k.to_vec(), pos))
 				.map_err(From::from)
 		})
@@ -288,7 +309,7 @@ impl<'a> Batch<'a> {
 
 	/// Get output_pos and block height from index.
 	pub fn get_output_pos_height(&self, commit: &Commitment) -> Result<Option<CommitPos>, Error> {
-		self.db.get_ser(&to_key(OUTPUT_POS_PREFIX, commit))
+		self.db.get_ser(&to_key(OUTPUT_POS_PREFIX, commit), None)
 	}
 
 	/// Get the previous header.
@@ -296,11 +317,33 @@ impl<'a> Batch<'a> {
 		self.get_block_header(&header.prev_hash)
 	}
 
+	/// Get the previous header, without deserializing the full PoW Proof (or the ability to derive the
+	/// block hash, this is used for the difficulty iterator).
+	pub fn get_previous_header_skip_proof(
+		&self,
+		header: &BlockHeader,
+	) -> Result<BlockHeader, Error> {
+		self.get_block_header_skip_proof(&header.prev_hash)
+	}
+
 	/// Get block header.
 	pub fn get_block_header(&self, h: &Hash) -> Result<BlockHeader, Error> {
-		option_to_not_found(self.db.get_ser(&to_key(BLOCK_HEADER_PREFIX, h)), || {
-			format!("BLOCK HEADER: {}", h)
-		})
+		option_to_not_found(
+			self.db.get_ser(&to_key(BLOCK_HEADER_PREFIX, h), None),
+			|| format!("BLOCK HEADER: {}", h),
+		)
+	}
+
+	/// Get block header without deserializing the full PoW Proof; currently used
+	/// for difficulty iterator which is called many times but doesn't need the proof
+	pub fn get_block_header_skip_proof(&self, h: &Hash) -> Result<BlockHeader, Error> {
+		option_to_not_found(
+			self.db.get_ser(
+				&to_key(BLOCK_HEADER_PREFIX, h),
+				Some(ser::DeserializationMode::SkipPow),
+			),
+			|| format!("BLOCK HEADER: {}", h),
+		)
 	}
 
 	/// Delete the block spent index.
@@ -315,7 +358,7 @@ impl<'a> Batch<'a> {
 
 	/// Get block_sums for the block.
 	pub fn get_block_sums(&self, h: &Hash) -> Result<BlockSums, Error> {
-		option_to_not_found(self.db.get_ser(&to_key(BLOCK_SUMS_PREFIX, h)), || {
+		option_to_not_found(self.db.get_ser(&to_key(BLOCK_SUMS_PREFIX, h), None), || {
 			format!("Block sums for block: {}", h)
 		})
 	}
@@ -339,9 +382,10 @@ impl<'a> Batch<'a> {
 	/// Get the "spent index" from the db for the specified block.
 	/// If we need to rewind a block then we use this to "unspend" the spent outputs.
 	pub fn get_spent_index(&self, bh: &Hash) -> Result<Vec<CommitPos>, Error> {
-		option_to_not_found(self.db.get_ser(&to_key(BLOCK_SPENT_PREFIX, bh)), || {
-			format!("spent index: {}", bh)
-		})
+		option_to_not_found(
+			self.db.get_ser(&to_key(BLOCK_SPENT_PREFIX, bh), None),
+			|| format!("spent index: {}", bh),
+		)
 	}
 
 	/// Commits this batch. If it's a child batch, it will be merged with the
@@ -364,7 +408,8 @@ impl<'a> Batch<'a> {
 		let key = to_key(BLOCK_PREFIX, "");
 		let protocol_version = self.db.protocol_version();
 		self.db.iter(&key, move |_, mut v| {
-			ser::deserialize(&mut v, protocol_version).map_err(From::from)
+			ser::deserialize(&mut v, protocol_version, DeserializationMode::default())
+				.map_err(From::from)
 		})
 	}
 
@@ -425,16 +470,20 @@ impl<'a> DifficultyIter<'a> {
 }
 
 impl<'a> Iterator for DifficultyIter<'a> {
-	type Item = HeaderInfo;
+	type Item = HeaderDifficultyInfo;
 
 	fn next(&mut self) -> Option<Self::Item> {
 		// Get both header and previous_header if this is the initial iteration.
 		// Otherwise move prev_header to header and get the next prev_header.
+		// Note that due to optimizations being called in `get_block_header_skip_proof`,
+		// Items returned by this iterator cannot be expected to correctly
+		// calculate their own hash - This iterator is purely for iterating through
+		// difficulty information
 		self.header = if self.header.is_none() {
 			if let Some(ref batch) = self.batch {
-				batch.get_block_header(&self.start).ok()
+				batch.get_block_header_skip_proof(&self.start).ok()
 			} else if let Some(ref store) = self.store {
-				store.get_block_header(&self.start).ok()
+				store.get_block_header_skip_proof(&self.start).ok()
 			} else {
 				None
 			}
@@ -446,9 +495,9 @@ impl<'a> Iterator for DifficultyIter<'a> {
 		// Otherwise we are done.
 		if let Some(header) = self.header.clone() {
 			if let Some(ref batch) = self.batch {
-				self.prev_header = batch.get_previous_header(&header).ok();
+				self.prev_header = batch.get_previous_header_skip_proof(&header).ok();
 			} else if let Some(ref store) = self.store {
-				self.prev_header = store.get_previous_header(&header).ok();
+				self.prev_header = store.get_previous_header_skip_proof(&header).ok();
 			} else {
 				self.prev_header = None;
 			}
@@ -460,8 +509,7 @@ impl<'a> Iterator for DifficultyIter<'a> {
 			let difficulty = header.total_difficulty() - prev_difficulty;
 			let scaling = header.pow.secondary_scaling;
 
-			Some(HeaderInfo::new(
-				header.hash(),
+			Some(HeaderDifficultyInfo::new(
 				header.timestamp.timestamp() as u64,
 				difficulty,
 				scaling,

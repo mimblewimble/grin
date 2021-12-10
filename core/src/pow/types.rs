@@ -16,7 +16,7 @@ use crate::consensus::{graph_weight, MIN_DMA_DIFFICULTY, SECOND_POW_EDGE_BITS};
 use crate::core::hash::{DefaultHashable, Hashed};
 use crate::global;
 use crate::pow::error::Error;
-use crate::ser::{self, Readable, Reader, Writeable, Writer};
+use crate::ser::{self, DeserializationMode, Readable, Reader, Writeable, Writer};
 use rand::{thread_rng, Rng};
 use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
 /// Types for a Cuck(at)oo proof of work and its encapsulation as a fully usable
@@ -491,26 +491,32 @@ impl Readable for Proof {
 		}
 
 		// prepare nonces and read the right number of bytes
-		let mut nonces = Vec::with_capacity(global::proofsize());
-		let nonce_bits = edge_bits as usize;
-		let bytes_len = Proof::pack_len(edge_bits);
-		if bytes_len < 8 {
-			return Err(ser::Error::CorruptedData);
-		}
-		let bits = reader.read_fixed_bytes(bytes_len)?;
+		// If skipping pow proof, we can stop after reading edge bits
+		if reader.deserialization_mode() != DeserializationMode::SkipPow {
+			let mut nonces = Vec::with_capacity(global::proofsize());
+			let nonce_bits = edge_bits as usize;
+			let bytes_len = Proof::pack_len(edge_bits);
+			if bytes_len < 8 {
+				return Err(ser::Error::CorruptedData);
+			}
+			let bits = reader.read_fixed_bytes(bytes_len)?;
+			for n in 0..global::proofsize() {
+				nonces.push(read_number(&bits, n * nonce_bits, nonce_bits));
+			}
 
-		for n in 0..global::proofsize() {
-			nonces.push(read_number(&bits, n * nonce_bits, nonce_bits));
+			//// check the last bits of the last byte are zeroed, we don't use them but
+			//// still better to enforce to avoid any malleability
+			let end_of_data = global::proofsize() * nonce_bits;
+			if read_number(&bits, end_of_data, bytes_len * 8 - end_of_data) != 0 {
+				return Err(ser::Error::CorruptedData);
+			}
+			Ok(Proof { edge_bits, nonces })
+		} else {
+			Ok(Proof {
+				edge_bits,
+				nonces: vec![],
+			})
 		}
-
-		//// check the last bits of the last byte are zeroed, we don't use them but
-		//// still better to enforce to avoid any malleability
-		let end_of_data = global::proofsize() * nonce_bits;
-		if read_number(&bits, end_of_data, bytes_len * 8 - end_of_data) != 0 {
-			return Err(ser::Error::CorruptedData);
-		}
-
-		Ok(Proof { edge_bits, nonces })
 	}
 }
 
@@ -526,7 +532,7 @@ impl Writeable for Proof {
 #[cfg(test)]
 mod tests {
 	use super::*;
-	use crate::ser::{BinReader, BinWriter, ProtocolVersion};
+	use crate::ser::{BinReader, BinWriter, DeserializationMode, ProtocolVersion};
 	use rand::Rng;
 	use std::io::Cursor;
 
@@ -542,7 +548,11 @@ mod tests {
 				panic!("failed to write proof {:?}", e);
 			}
 			buf.set_position(0);
-			let mut r = BinReader::new(&mut buf, ProtocolVersion::local());
+			let mut r = BinReader::new(
+				&mut buf,
+				ProtocolVersion::local(),
+				DeserializationMode::default(),
+			);
 			match Proof::read(&mut r) {
 				Err(e) => panic!("failed to read proof: {:?}", e),
 				Ok(p) => assert_eq!(p, proof),

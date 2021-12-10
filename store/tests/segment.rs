@@ -17,7 +17,8 @@ use crate::core::core::pmmr;
 use crate::core::core::pmmr::segment::{Segment, SegmentIdentifier};
 use crate::core::core::pmmr::{Backend, ReadablePMMR, ReadonlyPMMR, PMMR};
 use crate::core::ser::{
-	BinReader, BinWriter, Error, PMMRable, ProtocolVersion, Readable, Reader, Writeable, Writer,
+	BinReader, BinWriter, DeserializationMode, Error, PMMRable, ProtocolVersion, Readable, Reader,
+	Writeable, Writer,
 };
 use crate::store::pmmr::PMMRBackend;
 use chrono::Utc;
@@ -364,7 +365,11 @@ fn ser_round_trip() {
 	);
 	cursor.set_position(0);
 
-	let mut reader = BinReader::new(&mut cursor, ProtocolVersion(1));
+	let mut reader = BinReader::new(
+		&mut cursor,
+		ProtocolVersion(1),
+		DeserializationMode::default(),
+	);
 	let segment2: Segment<TestElem> = Readable::read(&mut reader).unwrap();
 	assert_eq!(segment, segment2);
 

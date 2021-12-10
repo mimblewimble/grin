@@ -18,7 +18,7 @@ use chrono::Utc;
 use num::FromPrimitive;
 use rand::prelude::*;
 
-use crate::core::ser::{self, Readable, Reader, Writeable, Writer};
+use crate::core::ser::{self, DeserializationMode, Readable, Reader, Writeable, Writer};
 use crate::types::{Capabilities, PeerAddr, ReasonForBan};
 use grin_store::{self, option_to_not_found, to_key, Error};
 
@@ -137,7 +137,7 @@ impl PeerStore {
 	}
 
 	pub fn get_peer(&self, peer_addr: PeerAddr) -> Result<PeerData, Error> {
-		option_to_not_found(self.db.get_ser(&peer_key(peer_addr)[..]), || {
+		option_to_not_found(self.db.get_ser(&peer_key(peer_addr)[..], None), || {
 			format!("Peer at address: {}", peer_addr)
 		})
 	}
@@ -173,7 +173,8 @@ impl PeerStore {
 		let key = to_key(PEER_PREFIX, "");
 		let protocol_version = self.db.protocol_version();
 		self.db.iter(&key, move |_, mut v| {
-			ser::deserialize(&mut v, protocol_version).map_err(From::from)
+			ser::deserialize(&mut v, protocol_version, DeserializationMode::default())
+				.map_err(From::from)
 		})
 	}
 
@@ -189,10 +190,10 @@ impl PeerStore {
 	pub fn update_state(&self, peer_addr: PeerAddr, new_state: State) -> Result<(), Error> {
 		let batch = self.db.batch()?;
 
-		let mut peer =
-			option_to_not_found(batch.get_ser::<PeerData>(&peer_key(peer_addr)[..]), || {
-				format!("Peer at address: {}", peer_addr)
-			})?;
+		let mut peer = option_to_not_found(
+			batch.get_ser::<PeerData>(&peer_key(peer_addr)[..], None),
+			|| format!("Peer at address: {}", peer_addr),
+		)?;
 		peer.flags = new_state;
 		if new_state == State::Banned {
 			peer.last_banned = Utc::now().timestamp();

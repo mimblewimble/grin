@@ -277,7 +277,7 @@ impl OutputHandler {
 			.context(ErrorKind::Internal("cain error".to_owned()))?;
 
 		Ok(BlockOutputs {
-			header: BlockHeaderInfo::from_header(&header),
+			header: BlockHeaderDifficultyInfo::from_header(&header),
 			outputs: outputs,
 		})
 	}
