@@ -94,7 +94,7 @@ impl ViewKey {
 		})
 	}
 
-	fn rewind_hash(secp: &Secp256k1, public_root_key: PublicKey) -> Vec<u8> {
+	pub fn rewind_hash(secp: &Secp256k1, public_root_key: PublicKey) -> Vec<u8> {
 		let ser = public_root_key.serialize_vec(secp, true);
 		blake2b(32, &[], &ser[..]).as_bytes().to_vec()
 	}
