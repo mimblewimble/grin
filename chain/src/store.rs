@@ -27,7 +27,7 @@ use croaring::Bitmap;
 use grin_core::ser;
 use grin_store as store;
 use grin_store::{option_to_not_found, to_key, Error};
-use std::collections::{BTreeMap, HashMap};
+use std::collections::HashMap;
 use std::convert::TryInto;
 use std::sync::Arc;
 
@@ -487,17 +487,8 @@ impl<'a> Iterator for DifficultyIter<'a> {
 		// calculate their own hash - This iterator is purely for iterating through
 		// difficulty information
 		// Get a lock on the cache
-		//let mut cache_has_start_header = false;
-
 		self.header = if self.header.is_none() {
-			let cache_handle = DIFF_ITER_CACHE.read();
-			if let Some(bh) = cache_handle.get(&self.start) {
-				//cache_has_start_header = true;
-				//debug!("CACHE HIT: {}", self.start);
-				// TODO: Avoid clone?
-				bh.clone()
-			} else if let Some(ref batch) = self.batch {
-				//debug!("CACHE MISS: {}", self.start);
+			if let Some(ref batch) = self.batch {
 				batch.get_block_header_skip_proof(&self.start).ok()
 			} else if let Some(ref store) = self.store {
 				store.get_block_header_skip_proof(&self.start).ok()
@@ -508,11 +499,6 @@ impl<'a> Iterator for DifficultyIter<'a> {
 			self.prev_header.clone()
 		};
 
-		/*if !cache_has_start_header {
-			let mut cache_handle = DIFF_ITER_CACHE.write();
-			cache_handle.add(self.start, self.header.clone());
-		}*/
-
 		// If we have a header we can do this iteration.
 		// Otherwise we are done.
 		let mut cache_has_prev_header = false;
@@ -520,11 +506,9 @@ impl<'a> Iterator for DifficultyIter<'a> {
 			{
 				let cache_handle = DIFF_ITER_CACHE.read();
 				if let Some(bh) = cache_handle.get(&header.prev_hash) {
-					//debug!("CACHE PREV HIT: {}", header.prev_hash);
 					cache_has_prev_header = true;
 					self.prev_header = bh.clone()
 				} else if let Some(ref batch) = self.batch {
-					//debug!("CACHE PREV MISS: {}", header.prev_hash);
 					self.prev_header = batch.get_previous_header_skip_proof(&header).ok();
 				} else if let Some(ref store) = self.store {
 					self.prev_header = store.get_previous_header_skip_proof(&header).ok();
@@ -575,6 +559,11 @@ impl DifficultyIterCache {
 	/// Add an element to the cache
 	pub fn add(&mut self, hash: Hash, bh: Option<BlockHeader>) {
 		self.cache.insert(hash, bh);
+		// Clear out if cache gets large. No reason from this number whatsoever
+		// but leaving this here keeps it simple and avoids having to maintain
+		// some kind of insertion order in the hash table
+		// Worst case is that we just have to pull 60 blocks out of the
+		// db again whenever this clears
 		if self.cache.len() > 10000 {
 			self.cache.clear();
 		}
