@@ -35,7 +35,7 @@ pub fn get<T>(url: &str, api_secret: Option<String>) -> Result<T, Error>
 where
 	for<'de> T: Deserialize<'de>,
 {
-	handle_request(build_request(url, "GET", api_secret, None)?)
+	handle_request(build_request(url, "GET", api_secret, None)?, None)
 }
 
 /// Helper function to easily issue an async HTTP GET request against a given
@@ -52,7 +52,7 @@ where
 /// on a given URL that returns nothing. Handles request
 /// building and response code checking.
 pub fn get_no_ret(url: &str, api_secret: Option<String>) -> Result<(), Error> {
-	send_request(build_request(url, "GET", api_secret, None)?)?;
+	send_request(build_request(url, "GET", api_secret, None)?, None)?;
 	Ok(())
 }
 
@@ -60,13 +60,18 @@ pub fn get_no_ret(url: &str, api_secret: Option<String>) -> Result<(), Error> {
 /// object as body on a given URL that returns a JSON object. Handles request
 /// building, JSON serialization and deserialization, and response code
 /// checking.
-pub fn post<IN, OUT>(url: &str, api_secret: Option<String>, input: &IN) -> Result<OUT, Error>
+pub fn post<IN, OUT>(
+	url: &str,
+	api_secret: Option<String>,
+	input: &IN,
+	read_timeout: Option<u64>,
+) -> Result<OUT, Error>
 where
 	IN: Serialize,
 	for<'de> OUT: Deserialize<'de>,
 {
 	let req = create_post_request(url, api_secret, input)?;
-	handle_request(req)
+	handle_request(req, read_timeout)
 }
 
 /// Helper function to easily issue an async HTTP POST request with the
@@ -94,7 +99,7 @@ pub fn post_no_ret<IN>(url: &str, api_secret: Option<String>, input: &IN) -> Res
 where
 	IN: Serialize,
 {
-	send_request(create_post_request(url, api_secret, input)?)?;
+	send_request(create_post_request(url, api_secret, input)?, None)?;
 	Ok(())
 }
 
@@ -110,7 +115,7 @@ pub async fn post_no_ret_async<IN>(
 where
 	IN: Serialize,
 {
-	send_request_async(create_post_request(url, api_secret, input)?).await?;
+	send_request_async(create_post_request(url, api_secret, input)?, None).await?;
 	Ok(())
 }
 
@@ -155,11 +160,11 @@ where
 	build_request(url, "POST", api_secret, Some(json))
 }
 
-fn handle_request<T>(req: Request<Body>) -> Result<T, Error>
+fn handle_request<T>(req: Request<Body>, read_timeout: Option<u64>) -> Result<T, Error>
 where
 	for<'de> T: Deserialize<'de>,
 {
-	let data = send_request(req)?;
+	let data = send_request(req, read_timeout)?;
 	serde_json::from_str(&data).map_err(|e| {
 		e.context(ErrorKind::ResponseError("Cannot parse response".to_owned()))
 			.into()
@@ -170,17 +175,24 @@ async fn handle_request_async<T>(req: Request<Body>) -> Result<T, Error>
 where
 	for<'de> T: Deserialize<'de> + Send + 'static,
 {
-	let data = send_request_async(req).await?;
+	let data = send_request_async(req, None).await?;
 	let ser = serde_json::from_str(&data)
 		.map_err(|e| e.context(ErrorKind::ResponseError("Cannot parse response".to_owned())))?;
 	Ok(ser)
 }
 
-async fn send_request_async(req: Request<Body>) -> Result<String, Error> {
+async fn send_request_async(
+	req: Request<Body>,
+	read_timeout: Option<u64>,
+) -> Result<String, Error> {
 	let https = hyper_rustls::HttpsConnector::new();
+	let read_timeout = match read_timeout {
+		Some(v) => Duration::from_secs(v),
+		None => Duration::from_secs(20),
+	};
 	let mut connector = TimeoutConnector::new(https);
 	connector.set_connect_timeout(Some(Duration::from_secs(20)));
-	connector.set_read_timeout(Some(Duration::from_secs(20)));
+	connector.set_read_timeout(Some(read_timeout));
 	connector.set_write_timeout(Some(Duration::from_secs(20)));
 	let client = Client::builder().build::<_, Body>(connector);
 
@@ -205,11 +217,11 @@ async fn send_request_async(req: Request<Body>) -> Result<String, Error> {
 	Ok(String::from_utf8_lossy(&raw).to_string())
 }
 
-pub fn send_request(req: Request<Body>) -> Result<String, Error> {
+pub fn send_request(req: Request<Body>, read_timeout: Option<u64>) -> Result<String, Error> {
 	let mut rt = Builder::new()
 		.basic_scheduler()
 		.enable_all()
 		.build()
 		.map_err(|e| ErrorKind::RequestError(format!("{}", e)))?;
-	rt.block_on(send_request_async(req))
+	rt.block_on(send_request_async(req, read_timeout))
 }

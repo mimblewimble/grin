@@ -45,10 +45,18 @@ impl HTTPNodeClient {
 		method: &str,
 		params: &serde_json::Value,
 	) -> Result<D, Error> {
+		let read_timeout: Option<u64> = match method {
+			"validate_chain" => Some(5000),
+			_ => None,
+		};
 		let url = format!("http://{}{}", self.node_url, ENDPOINT);
 		let req = build_request(method, params);
-		let res =
-			client::post::<Request, Response>(url.as_str(), self.node_api_secret.clone(), &req);
+		let res = client::post::<Request, Response>(
+			url.as_str(),
+			self.node_api_secret.clone(),
+			&req,
+			read_timeout,
+		);
 
 		match res {
 			Err(e) => {
