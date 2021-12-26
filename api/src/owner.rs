@@ -80,17 +80,20 @@ impl Owner {
 
 	/// Trigger a validation of the chain state.
 	///
+	/// # Arguments
+	/// * `fast_validation` - if false verify the rangeproof associated with each unspent output and all kernels
+	///
 	/// # Returns
 	/// * Result Containing:
 	/// * `Ok(())` if the validation was done successfully
 	/// * or [`Error`](struct.Error.html) if an error is encountered.
 	///
 
-	pub fn validate_chain(&self) -> Result<(), Error> {
+	pub fn validate_chain(&self, fast_validation: bool) -> Result<(), Error> {
 		let chain_validation_handler = ChainValidationHandler {
 			chain: self.chain.clone(),
 		};
-		chain_validation_handler.validate_chain()
+		chain_validation_handler.validate_chain(fast_validation)
 	}
 
 	/// Trigger a compaction of the chain state to regain storage space.

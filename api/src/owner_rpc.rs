@@ -83,7 +83,7 @@ pub trait OwnerRpc: Sync + Send {
 	{
 		"jsonrpc": "2.0",
 		"method": "validate_chain",
-		"params": [],
+		"params": ["false"],
 		"id": 1
 	}
 	# "#
@@ -100,7 +100,7 @@ pub trait OwnerRpc: Sync + Send {
 	# );
 	```
 	 */
-	fn validate_chain(&self) -> Result<(), ErrorKind>;
+	fn validate_chain(&self, fast_validation: bool) -> Result<(), ErrorKind>;
 
 	/**
 	Networked version of [Owner::compact_chain](struct.Owner.html#method.compact_chain).
@@ -363,8 +363,8 @@ impl OwnerRpc for Owner {
 		Owner::get_status(self).map_err(|e| e.kind().clone())
 	}
 
-	fn validate_chain(&self) -> Result<(), ErrorKind> {
-		Owner::validate_chain(self).map_err(|e| e.kind().clone())
+	fn validate_chain(&self, fast_validation: bool) -> Result<(), ErrorKind> {
+		Owner::validate_chain(self, fast_validation).map_err(|e| e.kind().clone())
 	}
 
 	fn reset_chain_head(&self, hash: String) -> Result<(), ErrorKind> {
@@ -403,7 +403,7 @@ macro_rules! doctest_helper_json_rpc_owner_assert_response {
 		// create temporary grin server, run jsonrpc request on node api, delete server, return
 		// json response.
 
-			{
+		{
 			/*use grin_servers::test_framework::framework::run_doctest;
 			use grin_util as util;
 			use serde_json;
@@ -437,6 +437,6 @@ macro_rules! doctest_helper_json_rpc_owner_assert_response {
 					serde_json::to_string_pretty(&expected_response).unwrap()
 				);
 				}*/
-			}
+		}
 	};
 }
