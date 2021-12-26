@@ -78,6 +78,14 @@ subcommands:
                 - hash:
                     help: The header hash to reset to
                     required: true
+        - verify-chain:
+            about: Verify the chain state
+            args:
+                - fast:
+                    help:  if present, skip validation of the rangeproof associated with each unspent output and all kernels
+                    short: f
+                    long: fast
+                    takes_value: false
         - invalidateheader:
             about: Adds header hash to denylist
             args:

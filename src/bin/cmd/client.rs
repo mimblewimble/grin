@@ -149,6 +149,21 @@ impl HTTPNodeClient {
 		e.reset().unwrap();
 	}
 
+	pub fn validate_chain(&self, fast_validation: bool) {
+		let mut e = term::stdout().unwrap();
+		let params = json!([fast_validation]);
+		writeln!(
+			e,
+			"Checking the state of the chain. This might take time..."
+		)
+		.unwrap();
+		match self.send_json_request::<()>("validate_chain", &params) {
+			Ok(_) => writeln!(e, "Successfully validated chain.").unwrap(),
+			Err(err) => writeln!(e, "Failed to validate chain: {:?}", err).unwrap(),
+		}
+		e.reset().unwrap();
+	}
+
 	pub fn ban_peer(&self, peer_addr: &SocketAddr) {
 		let mut e = term::stdout().unwrap();
 		let params = json!([peer_addr]);
@@ -190,6 +205,10 @@ pub fn client_command(client_args: &ArgMatches<'_>, global_config: GlobalConfig)
 		("invalidateheader", Some(args)) => {
 			let hash = args.value_of("hash").unwrap();
 			node_client.invalidate_header(hash.to_string());
+		}
+		("verify-chain", Some(args)) => {
+			let fast_validation = if args.is_present("fast") { false } else { true };
+			node_client.validate_chain(fast_validation);
 		}
 		("ban", Some(peer_args)) => {
 			let peer = peer_args.value_of("peer").unwrap();
