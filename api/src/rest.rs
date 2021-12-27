@@ -186,10 +186,11 @@ impl ApiServer {
 		addr: SocketAddr,
 		router: Router,
 		conf: Option<TLSConfig>,
+		api_chan: &'static mut (oneshot::Sender<()>, oneshot::Receiver<()>),
 	) -> Result<thread::JoinHandle<()>, Error> {
 		match conf {
-			Some(conf) => self.start_tls(addr, router, conf),
-			None => self.start_no_tls(addr, router),
+			Some(conf) => self.start_tls(addr, router, conf, api_chan),
+			None => self.start_no_tls(addr, router, api_chan),
 		}
 	}
 
@@ -198,6 +199,7 @@ impl ApiServer {
 		&mut self,
 		addr: SocketAddr,
 		router: Router,
+		api_chan: &'static mut (oneshot::Sender<()>, oneshot::Receiver<()>),
 	) -> Result<thread::JoinHandle<()>, Error> {
 		if self.shutdown_sender.is_some() {
 			return Err(ErrorKind::Internal(
@@ -205,18 +207,26 @@ impl ApiServer {
 			)
 			.into());
 		}
-		let (tx, _rx) = oneshot::channel::<()>();
+		let rx = &mut api_chan.1;
+		let tx = &mut api_chan.0;
+
+		// Jones's trick to update memory
+		let m = oneshot::channel::<()>();
+		let tx = std::mem::replace(tx, m.0);
 		self.shutdown_sender = Some(tx);
+
 		thread::Builder::new()
 			.name("apis".to_string())
 			.spawn(move || {
 				let server = async move {
-					let server = Server::bind(&addr).serve(make_service_fn(move |_| {
-						let router = router.clone();
-						async move { Ok::<_, Infallible>(router) }
-					}));
-					// TODO graceful shutdown is unstable, investigate
-					//.with_graceful_shutdown(rx)
+					let server = Server::bind(&addr)
+						.serve(make_service_fn(move |_| {
+							let router = router.clone();
+							async move { Ok::<_, Infallible>(router) }
+						}))
+						.with_graceful_shutdown(async {
+							rx.await.ok();
+						});
 
 					server.await
 				};
@@ -238,6 +248,7 @@ impl ApiServer {
 		addr: SocketAddr,
 		router: Router,
 		conf: TLSConfig,
+		api_chan: &'static mut (oneshot::Sender<()>, oneshot::Receiver<()>),
 	) -> Result<thread::JoinHandle<()>, Error> {
 		if self.shutdown_sender.is_some() {
 			return Err(ErrorKind::Internal(
@@ -245,6 +256,14 @@ impl ApiServer {
 			)
 			.into());
 		}
+
+		let rx = &mut api_chan.1;
+		let tx = &mut api_chan.0;
+
+		// Jones's trick to update memory
+		let m = oneshot::channel::<()>();
+		let tx = std::mem::replace(tx, m.0);
+		self.shutdown_sender = Some(tx);
 
 		let acceptor = TlsAcceptor::from(conf.build_server_config()?);
 
@@ -258,12 +277,14 @@ impl ApiServer {
 						.and_then(move |s| acceptor.accept(s))
 						.filter(|r| r.is_ok());
 
-					let server = Server::builder(accept::from_stream(listener)).serve(
-						make_service_fn(move |_| {
+					let server = Server::builder(accept::from_stream(listener))
+						.serve(make_service_fn(move |_| {
 							let router = router.clone();
 							async move { Ok::<_, Infallible>(router) }
-						}),
-					);
+						}))
+						.with_graceful_shutdown(async {
+							rx.await.ok();
+						});
 
 					server.await
 				};
@@ -281,9 +302,10 @@ impl ApiServer {
 	/// Stops the API server, it panics in case of error
 	pub fn stop(&mut self) -> bool {
 		if self.shutdown_sender.is_some() {
-			// TODO re-enable stop after investigation
-			//let tx = mem::replace(&mut self.shutdown_sender, None).unwrap();
-			//tx.send(()).expect("Failed to stop API server");
+			let tx = self.shutdown_sender.as_mut().unwrap();
+			let m = oneshot::channel::<()>();
+			let tx = std::mem::replace(tx, m.0);
+			tx.send(()).expect("Failed to stop API server");
 			info!("API server has been stopped");
 			true
 		} else {

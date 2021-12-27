@@ -25,21 +25,27 @@ use crate::config::GlobalConfig;
 use crate::p2p::Seeding;
 use crate::servers;
 use crate::tui::ui;
+use futures::channel::oneshot;
 use grin_p2p::msg::PeerAddrs;
 use grin_p2p::PeerAddr;
 use grin_util::logger::LogEntry;
 use std::sync::mpsc;
 
 /// wrap below to allow UI to clean up on stop
-pub fn start_server(config: servers::ServerConfig, logs_rx: Option<mpsc::Receiver<LogEntry>>) {
-	start_server_tui(config, logs_rx);
-	// Just kill process for now, otherwise the process
-	// hangs around until sigint because the API server
-	// currently has no shutdown facility
+pub fn start_server(
+	config: servers::ServerConfig,
+	logs_rx: Option<mpsc::Receiver<LogEntry>>,
+	api_chan: &'static mut (oneshot::Sender<()>, oneshot::Receiver<()>),
+) {
+	start_server_tui(config, logs_rx, api_chan);
 	exit(0);
 }
 
-fn start_server_tui(config: servers::ServerConfig, logs_rx: Option<mpsc::Receiver<LogEntry>>) {
+fn start_server_tui(
+	config: servers::ServerConfig,
+	logs_rx: Option<mpsc::Receiver<LogEntry>>,
+	api_chan: &'static mut (oneshot::Sender<()>, oneshot::Receiver<()>),
+) {
 	// Run the UI controller.. here for now for simplicity to access
 	// everything it might need
 	if config.run_tui.unwrap_or(false) {
@@ -53,6 +59,8 @@ fn start_server_tui(config: servers::ServerConfig, logs_rx: Option<mpsc::Receive
 				});
 				controller.run(serv);
 			},
+			None,
+			api_chan,
 		)
 		.unwrap();
 	} else {
@@ -73,6 +81,8 @@ fn start_server_tui(config: servers::ServerConfig, logs_rx: Option<mpsc::Receive
 				warn!("Received SIGINT (Ctrl+C) or SIGTERM (kill).");
 				serv.stop();
 			},
+			None,
+			api_chan,
 		)
 		.unwrap();
 	}
@@ -86,6 +96,7 @@ pub fn server_command(
 	server_args: Option<&ArgMatches<'_>>,
 	global_config: GlobalConfig,
 	logs_rx: Option<mpsc::Receiver<LogEntry>>,
+	api_chan: &'static mut (oneshot::Sender<()>, oneshot::Receiver<()>),
 ) -> i32 {
 	// just get defaults from the global config
 	let mut server_config = global_config.members.as_ref().unwrap().server.clone();
@@ -118,7 +129,7 @@ pub fn server_command(
 	if let Some(a) = server_args {
 		match a.subcommand() {
 			("run", _) => {
-				start_server(server_config, logs_rx);
+				start_server(server_config, logs_rx, api_chan);
 			}
 			("", _) => {
 				println!("Subcommand required, use 'grin help server' for details");
@@ -132,7 +143,7 @@ pub fn server_command(
 			}
 		}
 	} else {
-		start_server(server_config, logs_rx);
+		start_server(server_config, logs_rx, api_chan);
 	}
 	0
 }

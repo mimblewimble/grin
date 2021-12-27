@@ -38,12 +38,15 @@ use crate::router::ResponseFuture;
 use crate::router::Router;
 use crate::util::to_base64;
 use crate::util::RwLock;
+use crate::util::StopState;
 use crate::web::*;
 use easy_jsonrpc_mw::{Handler, MaybeReply};
+use futures::channel::oneshot;
 use hyper::{Body, Request, Response, StatusCode};
 use serde::Serialize;
 use std::net::SocketAddr;
 use std::sync::{Arc, Weak};
+use std::thread;
 
 /// Listener version, providing same API but listening for requests on a
 /// port and wrapping the calls
@@ -56,6 +59,8 @@ pub fn node_apis<B, P>(
 	api_secret: Option<String>,
 	foreign_api_secret: Option<String>,
 	tls_config: Option<TLSConfig>,
+	api_chan: &'static mut (oneshot::Sender<()>, oneshot::Receiver<()>),
+	stop_state: Arc<StopState>,
 ) -> Result<(), Error>
 where
 	B: BlockChain + 'static,
@@ -104,9 +109,23 @@ where
 	let mut apis = ApiServer::new();
 	warn!("Starting HTTP Node APIs server at {}.", addr);
 	let socket_addr: SocketAddr = addr.parse().expect("unable to parse socket address");
-	let api_thread = apis.start(socket_addr, router, tls_config);
+	let api_thread = apis.start(socket_addr, router, tls_config, api_chan);
 
 	warn!("HTTP Node listener started.");
+
+	thread::Builder::new()
+		.name("api_monitor".to_string())
+		.spawn(move || {
+			// monitor for stop state is_stopped
+			loop {
+				std::thread::sleep(std::time::Duration::from_millis(100));
+				if stop_state.is_stopped() {
+					apis.stop();
+					break;
+				}
+			}
+		})
+		.ok();
 
 	match api_thread {
 		Ok(_) => Ok(()),
