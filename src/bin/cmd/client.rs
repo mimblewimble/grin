@@ -46,7 +46,9 @@ impl HTTPNodeClient {
 		params: &serde_json::Value,
 	) -> Result<D, Error> {
 		let read_timeout: Option<u64> = match method {
-			"validate_chain" => Some(5000),
+			// 2hours
+			"validate_chain" => Some(7200),
+			// (default) 20sec
 			_ => None,
 		};
 		let url = format!("http://{}{}", self.node_url, ENDPOINT);
