@@ -79,10 +79,10 @@ subcommands:
                     help: The header hash to reset to
                     required: true
         - verify-chain:
-            about: Verify the chain state
+            about: Trigger a verication of the rangeproofs, kernel signatures and excesses.
             args:
                 - fast:
-                    help:  if present, skip validation of the rangeproof associated with each unspent output and all kernels
+                    help:  if present, will skip verification of rangeproofs, kernel signatures and will only validate the sum of kernel excesses. 
                     short: f
                     long: fast
                     takes_value: false

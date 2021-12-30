@@ -45,11 +45,10 @@ impl HTTPNodeClient {
 		method: &str,
 		params: &serde_json::Value,
 	) -> Result<D, Error> {
-		let read_timeout: Option<u64> = match method {
-			// 2hours
-			"validate_chain" => Some(7200),
-			// (default) 20sec
-			_ => None,
+		let timeout = match method {
+			// 6 hours read timeout
+			"validate_chain" => client::TimeOut::new(20, 21600, 20),
+			_ => client::TimeOut::default(),
 		};
 		let url = format!("http://{}{}", self.node_url, ENDPOINT);
 		let req = build_request(method, params);
@@ -57,7 +56,7 @@ impl HTTPNodeClient {
 			url.as_str(),
 			self.node_api_secret.clone(),
 			&req,
-			read_timeout,
+			timeout,
 		);
 
 		match res {
@@ -159,7 +158,7 @@ impl HTTPNodeClient {
 		e.reset().unwrap();
 	}
 
-	pub fn validate_chain(&self, fast_validation: bool) {
+	pub fn verify_chain(&self, fast_validation: bool) {
 		let mut e = term::stdout().unwrap();
 		let params = json!([fast_validation]);
 		writeln!(
@@ -168,7 +167,13 @@ impl HTTPNodeClient {
 		)
 		.unwrap();
 		match self.send_json_request::<()>("validate_chain", &params) {
-			Ok(_) => writeln!(e, "Successfully validated chain.").unwrap(),
+			Ok(_) => {
+				if fast_validation {
+					writeln!(e, "Successfully validated the sum of kernel excesses! [fast_verification enabled]").unwrap()
+				} else {
+					writeln!(e, "Successfully validated the sum of kernel excesses, kernel signature and rangeproofs!").unwrap()
+				}
+			}
 			Err(err) => writeln!(e, "Failed to validate chain: {:?}", err).unwrap(),
 		}
 		e.reset().unwrap();
@@ -217,8 +222,8 @@ pub fn client_command(client_args: &ArgMatches<'_>, global_config: GlobalConfig)
 			node_client.invalidate_header(hash.to_string());
 		}
 		("verify-chain", Some(args)) => {
-			let fast_validation = if args.is_present("fast") { false } else { true };
-			node_client.validate_chain(fast_validation);
+			let fast_validation = args.is_present("fast");
+			node_client.verify_chain(fast_validation);
 		}
 		("ban", Some(peer_args)) => {
 			let peer = peer_args.value_of("peer").unwrap();

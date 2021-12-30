@@ -25,6 +25,33 @@ use serde::{Deserialize, Serialize};
 use std::time::Duration;
 use tokio::runtime::Builder;
 
+// Client Request Timeout
+pub struct TimeOut {
+	pub connect: Duration,
+	pub read: Duration,
+	pub write: Duration,
+}
+
+impl TimeOut {
+	pub fn new(connect: u64, read: u64, write: u64) -> Self {
+		Self {
+			connect: Duration::from_secs(connect),
+			read: Duration::from_secs(read),
+			write: Duration::from_secs(write),
+		}
+	}
+}
+
+impl Default for TimeOut {
+	fn default() -> TimeOut {
+		TimeOut {
+			connect: Duration::from_secs(20),
+			read: Duration::from_secs(20),
+			write: Duration::from_secs(20),
+		}
+	}
+}
+
 /// Helper function to easily issue a HTTP GET request against a given URL that
 /// returns a JSON object. Handles request building, JSON deserialization and
 /// response code checking.
@@ -35,7 +62,10 @@ pub fn get<T>(url: &str, api_secret: Option<String>) -> Result<T, Error>
 where
 	for<'de> T: Deserialize<'de>,
 {
-	handle_request(build_request(url, "GET", api_secret, None)?, None)
+	handle_request(
+		build_request(url, "GET", api_secret, None)?,
+		TimeOut::default(),
+	)
 }
 
 /// Helper function to easily issue an async HTTP GET request against a given
@@ -52,7 +82,10 @@ where
 /// on a given URL that returns nothing. Handles request
 /// building and response code checking.
 pub fn get_no_ret(url: &str, api_secret: Option<String>) -> Result<(), Error> {
-	send_request(build_request(url, "GET", api_secret, None)?, None)?;
+	send_request(
+		build_request(url, "GET", api_secret, None)?,
+		TimeOut::default(),
+	)?;
 	Ok(())
 }
 
@@ -64,14 +97,14 @@ pub fn post<IN, OUT>(
 	url: &str,
 	api_secret: Option<String>,
 	input: &IN,
-	read_timeout: Option<u64>,
+	timeout: TimeOut,
 ) -> Result<OUT, Error>
 where
 	IN: Serialize,
 	for<'de> OUT: Deserialize<'de>,
 {
 	let req = create_post_request(url, api_secret, input)?;
-	handle_request(req, read_timeout)
+	handle_request(req, timeout)
 }
 
 /// Helper function to easily issue an async HTTP POST request with the
@@ -99,7 +132,10 @@ pub fn post_no_ret<IN>(url: &str, api_secret: Option<String>, input: &IN) -> Res
 where
 	IN: Serialize,
 {
-	send_request(create_post_request(url, api_secret, input)?, None)?;
+	send_request(
+		create_post_request(url, api_secret, input)?,
+		TimeOut::default(),
+	)?;
 	Ok(())
 }
 
@@ -115,7 +151,11 @@ pub async fn post_no_ret_async<IN>(
 where
 	IN: Serialize,
 {
-	send_request_async(create_post_request(url, api_secret, input)?, None).await?;
+	send_request_async(
+		create_post_request(url, api_secret, input)?,
+		TimeOut::default(),
+	)
+	.await?;
 	Ok(())
 }
 
@@ -160,11 +200,11 @@ where
 	build_request(url, "POST", api_secret, Some(json))
 }
 
-fn handle_request<T>(req: Request<Body>, read_timeout: Option<u64>) -> Result<T, Error>
+fn handle_request<T>(req: Request<Body>, timeout: TimeOut) -> Result<T, Error>
 where
 	for<'de> T: Deserialize<'de>,
 {
-	let data = send_request(req, read_timeout)?;
+	let data = send_request(req, timeout)?;
 	serde_json::from_str(&data).map_err(|e| {
 		e.context(ErrorKind::ResponseError("Cannot parse response".to_owned()))
 			.into()
@@ -175,25 +215,23 @@ async fn handle_request_async<T>(req: Request<Body>) -> Result<T, Error>
 where
 	for<'de> T: Deserialize<'de> + Send + 'static,
 {
-	let data = send_request_async(req, None).await?;
+	let data = send_request_async(req, TimeOut::default()).await?;
 	let ser = serde_json::from_str(&data)
 		.map_err(|e| e.context(ErrorKind::ResponseError("Cannot parse response".to_owned())))?;
 	Ok(ser)
 }
 
-async fn send_request_async(
-	req: Request<Body>,
-	read_timeout: Option<u64>,
-) -> Result<String, Error> {
+async fn send_request_async(req: Request<Body>, timeout: TimeOut) -> Result<String, Error> {
 	let https = hyper_rustls::HttpsConnector::new();
-	let read_timeout = match read_timeout {
-		Some(v) => Duration::from_secs(v),
-		None => Duration::from_secs(20),
-	};
+	let (connect, read, write) = (
+		Some(timeout.connect),
+		Some(timeout.read),
+		Some(timeout.write),
+	);
 	let mut connector = TimeoutConnector::new(https);
-	connector.set_connect_timeout(Some(Duration::from_secs(20)));
-	connector.set_read_timeout(Some(read_timeout));
-	connector.set_write_timeout(Some(Duration::from_secs(20)));
+	connector.set_connect_timeout(connect);
+	connector.set_read_timeout(read);
+	connector.set_write_timeout(write);
 	let client = Client::builder().build::<_, Body>(connector);
 
 	let resp = client
@@ -217,11 +255,11 @@ async fn send_request_async(
 	Ok(String::from_utf8_lossy(&raw).to_string())
 }
 
-pub fn send_request(req: Request<Body>, read_timeout: Option<u64>) -> Result<String, Error> {
+pub fn send_request(req: Request<Body>, timeout: TimeOut) -> Result<String, Error> {
 	let mut rt = Builder::new()
 		.basic_scheduler()
 		.enable_all()
 		.build()
 		.map_err(|e| ErrorKind::RequestError(format!("{}", e)))?;
-	rt.block_on(send_request_async(req, read_timeout))
+	rt.block_on(send_request_async(req, timeout))
 }
