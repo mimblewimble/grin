@@ -158,9 +158,9 @@ impl HTTPNodeClient {
 		e.reset().unwrap();
 	}
 
-	pub fn verify_chain(&self, fast_validation: bool) {
+	pub fn verify_chain(&self, assume_valid_rangeproofs_kernels: bool) {
 		let mut e = term::stdout().unwrap();
-		let params = json!([fast_validation]);
+		let params = json!([assume_valid_rangeproofs_kernels]);
 		writeln!(
 			e,
 			"Checking the state of the chain. This might take time..."
@@ -168,7 +168,7 @@ impl HTTPNodeClient {
 		.unwrap();
 		match self.send_json_request::<()>("validate_chain", &params) {
 			Ok(_) => {
-				if fast_validation {
+				if assume_valid_rangeproofs_kernels {
 					writeln!(e, "Successfully validated the sum of kernel excesses! [fast_verification enabled]").unwrap()
 				} else {
 					writeln!(e, "Successfully validated the sum of kernel excesses, kernel signature and rangeproofs!").unwrap()
@@ -222,8 +222,8 @@ pub fn client_command(client_args: &ArgMatches<'_>, global_config: GlobalConfig)
 			node_client.invalidate_header(hash.to_string());
 		}
 		("verify-chain", Some(args)) => {
-			let fast_validation = args.is_present("fast");
-			node_client.verify_chain(fast_validation);
+			let assume_valid_rangeproofs_kernels = args.is_present("fast");
+			node_client.verify_chain(assume_valid_rangeproofs_kernels);
 		}
 		("ban", Some(peer_args)) => {
 			let peer = peer_args.value_of("peer").unwrap();
