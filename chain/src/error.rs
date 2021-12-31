@@ -135,6 +135,10 @@ pub enum ErrorKind {
 	/// Error from underlying block handling
 	#[fail(display = "Block Validation Error: {:?}", _0)]
 	Block(block::Error),
+	/// Attempt to retrieve a header at a height greater than
+	/// the max allowed by u64 limits
+	#[fail(display = "Invalid Header Height: {}", _0)]
+	InvalidHeaderHeight(u64),
 	/// Anything else
 	#[fail(display = "Other Error: {}", _0)]
 	Other(String),
