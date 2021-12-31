@@ -110,7 +110,7 @@ impl PMMRHandle<BlockHeader> {
 
 	/// Get the header hash at the specified height based on the current header MMR state.
 	pub fn get_header_hash_by_height(&self, height: u64) -> Result<Hash, Error> {
-		if height > self.size {
+		if height >= self.size {
 			return Err(ErrorKind::InvalidHeaderHeight(height).into());
 		}
 		let pos = pmmr::insertion_to_pmmr_index(height);
