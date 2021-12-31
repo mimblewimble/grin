@@ -50,8 +50,6 @@ const KERNEL_SUBDIR: &str = "kernel";
 
 const TXHASHSET_ZIP: &str = "txhashset_snapshot";
 
-const HALF_U64_MAX: u64 = u64::MAX / 2;
-
 /// Convenience wrapper around a single prunable MMR backend.
 pub struct PMMRHandle<T: PMMRable> {
 	/// The backend storage for the MMR.
@@ -112,7 +110,7 @@ impl PMMRHandle<BlockHeader> {
 
 	/// Get the header hash at the specified height based on the current header MMR state.
 	pub fn get_header_hash_by_height(&self, height: u64) -> Result<Hash, Error> {
-		if height >= HALF_U64_MAX {
+		if height > self.size {
 			return Err(ErrorKind::InvalidHeaderHeight(height).into());
 		}
 		let pos = pmmr::insertion_to_pmmr_index(height);
