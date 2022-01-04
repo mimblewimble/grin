@@ -441,6 +441,7 @@ pub struct DifficultyIter<'a> {
 	// toward the genesis block (while maintaining current state)
 	header: Option<BlockHeader>,
 	prev_header: Option<BlockHeader>,
+	prev_header_hash: Option<Hash>,
 }
 
 impl<'a> DifficultyIter<'a> {
@@ -453,6 +454,7 @@ impl<'a> DifficultyIter<'a> {
 			batch: None,
 			header: None,
 			prev_header: None,
+			prev_header_hash: None,
 		}
 	}
 
@@ -465,6 +467,7 @@ impl<'a> DifficultyIter<'a> {
 			batch: Some(batch),
 			header: None,
 			prev_header: None,
+			prev_header_hash: None,
 		}
 	}
 }
@@ -479,17 +482,25 @@ impl<'a> Iterator for DifficultyIter<'a> {
 		// Items returned by this iterator cannot be expected to correctly
 		// calculate their own hash - This iterator is purely for iterating through
 		// difficulty information
-		self.header = if self.header.is_none() {
+		let (cur_header, cur_header_hash) = if self.header.is_none() {
 			if let Some(ref batch) = self.batch {
-				batch.get_block_header_skip_proof(&self.start).ok()
+				(
+					batch.get_block_header_skip_proof(&self.start).ok(),
+					Some(self.start.hash()),
+				)
 			} else if let Some(ref store) = self.store {
-				store.get_block_header_skip_proof(&self.start).ok()
+				(
+					store.get_block_header_skip_proof(&self.start).ok(),
+					Some(self.start.hash()),
+				)
 			} else {
-				None
+				(None, None)
 			}
 		} else {
-			self.prev_header.clone()
+			(self.prev_header.clone(), self.prev_header_hash)
 		};
+
+		self.header = cur_header;
 
 		// If we have a header we can do this iteration.
 		// Otherwise we are done.
@@ -502,6 +513,8 @@ impl<'a> Iterator for DifficultyIter<'a> {
 				self.prev_header = None;
 			}
 
+			self.prev_header_hash = Some(header.prev_hash);
+
 			let prev_difficulty = self
 				.prev_header
 				.clone()
@@ -510,6 +523,7 @@ impl<'a> Iterator for DifficultyIter<'a> {
 			let scaling = header.pow.secondary_scaling;
 
 			Some(HeaderDifficultyInfo::new(
+				cur_header_hash,
 				header.timestamp.timestamp() as u64,
 				difficulty,
 				scaling,

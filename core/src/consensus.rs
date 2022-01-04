@@ -19,6 +19,7 @@
 //! here.
 
 use crate::core::block::HeaderVersion;
+use crate::core::hash::Hash;
 use crate::global;
 use crate::pow::Difficulty;
 use std::cmp::{max, min};
@@ -231,6 +232,8 @@ pub const INITIAL_DIFFICULTY: u64 = 1_000_000 * UNIT_DIFFICULTY;
 /// the header's PoW proof nonces from being deserialized on read
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct HeaderDifficultyInfo {
+	/// Hash of this block
+	pub hash: Option<Hash>,
 	/// Timestamp of the header, 1 when not used (returned info)
 	pub timestamp: u64,
 	/// Network difficulty or next difficulty to use
@@ -244,12 +247,14 @@ pub struct HeaderDifficultyInfo {
 impl HeaderDifficultyInfo {
 	/// Default constructor
 	pub fn new(
+		hash: Option<Hash>,
 		timestamp: u64,
 		difficulty: Difficulty,
 		secondary_scaling: u32,
 		is_secondary: bool,
 	) -> HeaderDifficultyInfo {
 		HeaderDifficultyInfo {
+			hash,
 			timestamp,
 			difficulty,
 			secondary_scaling,
@@ -261,6 +266,7 @@ impl HeaderDifficultyInfo {
 	/// PoW factor
 	pub fn from_ts_diff(timestamp: u64, difficulty: Difficulty) -> HeaderDifficultyInfo {
 		HeaderDifficultyInfo {
+			hash: None,
 			timestamp,
 			difficulty,
 			secondary_scaling: global::initial_graph_weight(),
@@ -276,6 +282,7 @@ impl HeaderDifficultyInfo {
 		secondary_scaling: u32,
 	) -> HeaderDifficultyInfo {
 		HeaderDifficultyInfo {
+			hash: None,
 			timestamp: 1,
 			difficulty,
 			secondary_scaling,
