@@ -213,6 +213,7 @@ fn repeat(
 	pairs
 		.map(|(t, d)| {
 			HeaderDifficultyInfo::new(
+				None,
 				cur_time + t as u64,
 				*d,
 				diff.secondary_scaling,
