@@ -451,11 +451,7 @@ impl Server {
 
 					height += 1;
 
-					let block_hash = if let Some(nh) = next.hash {
-						nh
-					} else {
-						ZERO_HASH
-					};
+					let block_hash = next.hash.unwrap_or(ZERO_HASH);
 
 					DiffBlock {
 						block_height: height,

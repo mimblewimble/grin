@@ -486,12 +486,12 @@ impl<'a> Iterator for DifficultyIter<'a> {
 			if let Some(ref batch) = self.batch {
 				(
 					batch.get_block_header_skip_proof(&self.start).ok(),
-					Some(self.start.hash()),
+					Some(self.start),
 				)
 			} else if let Some(ref store) = self.store {
 				(
 					store.get_block_header_skip_proof(&self.start).ok(),
-					Some(self.start.hash()),
+					Some(self.start),
 				)
 			} else {
 				(None, None)
