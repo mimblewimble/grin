@@ -463,19 +463,7 @@ impl Server {
 
 					height += 1;
 
-					// We need to query again for the actual block hash, as
-					// the difficulty iterator doesn't contain enough info to
-					// create a hash
-					// The diff iterator returns 59 block headers 'before' 0 to give callers
-					// enough detail to calculate initial block difficulties. Ignore these.
-					let block_hash = if height < 0 {
-						ZERO_HASH
-					} else {
-						match self.chain.get_header_by_height(height as u64) {
-							Ok(h) => h.hash(),
-							Err(_) => ZERO_HASH,
-						}
-					};
+					let block_hash = next.hash.unwrap_or(ZERO_HASH);
 
 					DiffBlock {
 						block_height: height,
