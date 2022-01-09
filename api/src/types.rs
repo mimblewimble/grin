@@ -171,6 +171,7 @@ impl TxHashSetNode {
 pub enum OutputType {
 	Coinbase,
 	Transaction,
+	Multisig,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -285,6 +286,8 @@ impl OutputPrintable {
 	) -> Result<OutputPrintable, chain::Error> {
 		let output_type = if output.is_coinbase() {
 			OutputType::Coinbase
+		} else if output.is_multisig() {
+			OutputType::Multisig
 		} else {
 			OutputType::Transaction
 		};

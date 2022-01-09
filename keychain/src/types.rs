@@ -46,6 +46,7 @@ pub enum Error {
 	Transaction(String),
 	RangeProof(String),
 	SwitchCommitment,
+	Path(String),
 }
 
 impl From<secp::Error> for Error {
@@ -192,6 +193,40 @@ impl Identifier {
 	pub fn from_hex(hex: &str) -> Result<Identifier, Error> {
 		let bytes = util::from_hex(hex).unwrap();
 		Ok(Identifier::from_bytes(&bytes))
+	}
+
+	/// Return the identifier specified by the provided path
+	///
+	/// FIXME: only supports unhardened paths, modify to support hardened
+	/// paths when they are implemented in `ExtKeychainPath`
+	pub fn from_bip_32_string(b32: &str) -> Result<Identifier, Error> {
+		if b32.len() < 3 || &b32[..2] != "m/" {
+			return Err(Error::Path(format!(
+				"path is too short, or has invalid start: {}",
+				b32.to_string()
+			)));
+		}
+		let mut depth = 0;
+		let mut ds = [0u32; 4];
+		for nums in b32[2..].split('/') {
+			if depth > 3 {
+				return Err(Error::Path(format!(
+					"path is too long: {}",
+					b32.to_string()
+				)));
+			}
+			ds[depth] = nums
+				.parse::<u32>()
+				.map_err(|_| Error::Path(format!("invalid child number: {}", b32.to_string())))?;
+			depth += 1;
+		}
+		Ok(Identifier::from_path(&ExtKeychainPath::new(
+			depth as u8,
+			ds[0],
+			ds[1],
+			ds[2],
+			ds[3],
+		)))
 	}
 
 	pub fn to_bip_32_string(&self) -> String {
@@ -603,5 +638,45 @@ mod test {
 		let expected_path = ExtKeychainPath::new(2, 0, 0, 0, 0);
 		let expected_id = Identifier::from_path(&expected_path);
 		assert_eq!(expected_id, parent_id);
+	}
+
+	// Check deserializing identifier from a BIP32 path
+	#[test]
+	fn from_bip32() {
+		let path_1 = "m/1";
+		let path_2 = "m/1/2";
+		let path_3 = "m/1/2/3";
+		let path_4 = "m/1/2/3/4";
+		let inv_path_none = "m";
+		let inv_path_0 = "m/";
+		let inv_path_sep = "m?";
+		let inv_empty = "";
+		let inv_path_5 = "m/1/2/3/4/5";
+		let inv_non_m = "n";
+		let inv_non_num = "m/a$";
+
+		let mut ident = Identifier::from_bip_32_string(path_1).unwrap();
+		let mut path = ExtKeychainPath::new(1, 1, 0, 0, 0);
+		assert_eq!(ident.to_path(), path);
+
+		ident = Identifier::from_bip_32_string(path_2).unwrap();
+		path = ExtKeychainPath::new(2, 1, 2, 0, 0);
+		assert_eq!(ident.to_path(), path);
+
+		ident = Identifier::from_bip_32_string(path_3).unwrap();
+		path = ExtKeychainPath::new(3, 1, 2, 3, 0);
+		assert_eq!(ident.to_path(), path);
+
+		ident = Identifier::from_bip_32_string(path_4).unwrap();
+		path = ExtKeychainPath::new(4, 1, 2, 3, 4);
+		assert_eq!(ident.to_path(), path);
+
+		assert!(Identifier::from_bip_32_string(inv_path_none).is_err());
+		assert!(Identifier::from_bip_32_string(inv_path_0).is_err());
+		assert!(Identifier::from_bip_32_string(inv_path_sep).is_err());
+		assert!(Identifier::from_bip_32_string(inv_empty).is_err());
+		assert!(Identifier::from_bip_32_string(inv_path_5).is_err());
+		assert!(Identifier::from_bip_32_string(inv_non_m).is_err());
+		assert!(Identifier::from_bip_32_string(inv_non_num).is_err());
 	}
 }
