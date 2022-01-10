@@ -31,7 +31,9 @@ use crate::core::pow::Difficulty;
 use crate::core::ser::Writeable;
 use crate::core::{core, global};
 use crate::handshake::Handshake;
-use crate::msg::{self, BanReason, GetPeerAddrs, Locator, Msg, Ping, TxHashSetRequest, Type};
+use crate::msg::{
+	self, BanReason, GetPeerAddrs, Locator, Msg, Ping, SegmentRequest, TxHashSetRequest, Type,
+};
 use crate::protocol::Protocol;
 use crate::types::{
 	Capabilities, ChainAdapter, Error, NetAdapter, P2PConfig, PeerAddr, PeerInfo, ReasonForBan,
@@ -368,6 +370,20 @@ impl Peer {
 		self.send(
 			&TxHashSetRequest { hash, height },
 			msg::Type::TxHashSetRequest,
+		)
+	}
+
+	pub fn send_bitmap_segment_request(
+		&self,
+		h: Hash,
+		identifier: SegmentIdentifier,
+	) -> Result<(), Error> {
+		self.send(
+			&SegmentRequest {
+				block_hash: h,
+				identifier,
+			},
+			msg::Type::GetOutputBitmapSegment,
 		)
 	}
 

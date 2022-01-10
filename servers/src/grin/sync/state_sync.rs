@@ -17,7 +17,7 @@ use chrono::Duration;
 use std::sync::Arc;
 
 use crate::chain::{self, SyncState, SyncStatus};
-use crate::core::core::hash::Hashed;
+use crate::core::core::{hash::Hashed, pmmr::segment::SegmentIdentifier};
 use crate::core::global;
 use crate::core::pow::Difficulty;
 use crate::p2p::{self, Capabilities, Peer};
@@ -35,6 +35,8 @@ pub struct StateSync {
 
 	prev_state_sync: Option<DateTime<Utc>>,
 	state_sync_peer: Option<Arc<Peer>>,
+
+	sent_test_pibd_message: bool,
 }
 
 impl StateSync {
@@ -49,6 +51,7 @@ impl StateSync {
 			chain,
 			prev_state_sync: None,
 			state_sync_peer: None,
+			sent_test_pibd_message: false,
 		}
 	}
 
@@ -134,7 +137,7 @@ impl StateSync {
 						.update(SyncStatus::TxHashsetPibd { aborted: false });
 				}
 				// Continue our PIBD process
-				self.continue_pibd();
+				self.continue_pibd(&header_head);
 			} else {
 				let (go, download_timeout) = self.state_sync_due();
 
@@ -167,9 +170,49 @@ impl StateSync {
 		true
 	}
 
-	fn continue_pibd(&self) {
+	fn continue_pibd(&mut self, header_head: &chain::Tip) {
 		// Check the state of our chain to figure out what we should be requesting next
-		debug!("Continuing PIBD process");
+		// TODO: Just faking a single request for testing
+		if !self.sent_test_pibd_message {
+			debug!("Sending test PIBD message");
+			let threshold = global::state_sync_threshold() as u64;
+			let archive_interval = global::txhashset_archive_interval();
+			let mut txhashset_height = header_head.height.saturating_sub(threshold);
+			txhashset_height = txhashset_height.saturating_sub(txhashset_height % archive_interval);
+			let archive_header = self.chain.get_header_by_height(txhashset_height).unwrap();
+
+			let target_segment_height = 11;
+			//let archive_header = self.chain.txhashset_archive_header().unwrap();
+			let desegmenter = self.chain.desegmenter(&archive_header).unwrap();
+			let bitmap_mmr_size = desegmenter.expected_bitmap_mmr_size();
+			let mut identifier_iter =
+				SegmentIdentifier::traversal_iter(bitmap_mmr_size, target_segment_height);
+
+			self.sent_test_pibd_message = true;
+			let peers_iter = || {
+				self.peers
+					.iter()
+					.with_capabilities(Capabilities::PIBD_HIST)
+					.connected()
+			};
+
+			// Filter peers further based on max difficulty.
+			let max_diff = peers_iter().max_difficulty().unwrap_or(Difficulty::zero());
+			let peers_iter = || peers_iter().with_difficulty(|x| x >= max_diff);
+			// Choose a random "most work" peer, preferring outbound if at all possible.
+			let peer = peers_iter().outbound().choose_random().or_else(|| {
+				warn!("no suitable outbound peer for pibd message, considering inbound");
+				peers_iter().inbound().choose_random()
+			});
+			debug!("Chosen peer is {:?}", peer);
+			if let Some(p) = peer {
+				p.send_bitmap_segment_request(
+					archive_header.hash(),
+					identifier_iter.next().unwrap(),
+				)
+				.unwrap();
+			}
+		}
 	}
 
 	fn request_state(&self, header_head: &chain::Tip) -> Result<Arc<Peer>, p2p::Error> {
