@@ -50,6 +50,9 @@ impl TUIStatusView {
 				};
 				Cow::Owned(format!("Sync step 1/7: Downloading headers: {}%", percent))
 			}
+			SyncStatus::TxHashsetPibd { .. } => {
+				Cow::Borrowed("Sync step 2/7: Performing PIBD Body Sync (experimental)")
+			}
 			SyncStatus::TxHashsetDownload(stat) => {
 				if stat.total_size > 0 {
 					let percent = stat.downloaded_size * 100 / stat.total_size;

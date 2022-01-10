@@ -56,6 +56,14 @@ pub enum SyncStatus {
 		/// diff of the most advanced peer
 		highest_diff: Difficulty,
 	},
+	/// Performing PIBD reconstruction of txhashset
+	/// If PIBD syncer determines there's not enough
+	/// PIBD peers to continue, then move on to TxHashsetDownload state
+	TxHashsetPibd {
+		/// Whether the syncer has determined there's not enough
+		/// data to continue via PIBD
+		aborted: bool,
+	},
 	/// Downloading the various txhashsets
 	TxHashsetDownload(TxHashsetDownloadStats),
 	/// Setting up before validation

@@ -207,7 +207,8 @@ impl SyncRunner {
 
 			let mut check_state_sync = false;
 			match self.sync_state.status() {
-				SyncStatus::TxHashsetDownload { .. }
+				SyncStatus::TxHashsetPibd { .. }
+				| SyncStatus::TxHashsetDownload { .. }
 				| SyncStatus::TxHashsetSetup
 				| SyncStatus::TxHashsetRangeProofsValidation { .. }
 				| SyncStatus::TxHashsetKernelsValidation { .. }
