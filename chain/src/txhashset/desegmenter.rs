@@ -129,10 +129,18 @@ impl Desegmenter {
 			self.bitmap_mmr_leaf_count
 		);
 		// Total size of Bitmap PMMR
-		self.bitmap_mmr_size = pmmr::peaks(self.bitmap_mmr_leaf_count)
-			.last()
-			.unwrap_or(&pmmr::insertion_to_pmmr_index(self.bitmap_mmr_leaf_count))
-			.clone();
+		self.bitmap_mmr_size =
+			1 + pmmr::peaks(pmmr::insertion_to_pmmr_index(self.bitmap_mmr_leaf_count))
+				.last()
+				.unwrap_or(
+					&(1 + pmmr::peaks(
+						pmmr::insertion_to_pmmr_index(self.bitmap_mmr_leaf_count) - 1,
+					)
+					.last()
+					.unwrap()),
+				)
+				.clone();
+
 		debug!(
 			"pibd_desgmenter - expected size of bitmap MMR: {}",
 			self.bitmap_mmr_size
