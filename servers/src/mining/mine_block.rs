@@ -262,7 +262,8 @@ fn create_coinbase(dest: &str, block_fees: &BlockFees) -> Result<CbData, Error> 
 
 	trace!("Sending build_coinbase request: {}", req_body);
 	let req = api::client::create_post_request(url.as_str(), None, &req_body)?;
-	let res: String = api::client::send_request(req).map_err(|e| {
+	let timeout = api::client::TimeOut::default();
+	let res: String = api::client::send_request(req, timeout).map_err(|e| {
 		let report = format!(
 			"Failed to get coinbase from {}. Is the wallet listening? {}",
 			dest, e

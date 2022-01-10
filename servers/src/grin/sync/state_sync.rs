@@ -74,15 +74,31 @@ impl StateSync {
 			sync_need_restart = true;
 		}
 
+		// Determine whether we're going to try using PIBD or whether we've already given up
+		// on it
+		let using_pibd =
+			if let SyncStatus::TxHashsetPibd { aborted: true, .. } = self.sync_state.status() {
+				false
+			} else {
+				// Only on testing chains for now
+				if global::get_chain_type() != global::ChainTypes::Mainnet {
+					true
+				} else {
+					false
+				}
+			};
+
 		// check peer connection status of this sync
-		if let Some(ref peer) = self.state_sync_peer {
-			if let SyncStatus::TxHashsetDownload { .. } = self.sync_state.status() {
-				if !peer.is_connected() {
-					sync_need_restart = true;
-					info!(
-						"state_sync: peer connection lost: {:?}. restart",
-						peer.info.addr,
-					);
+		if !using_pibd {
+			if let Some(ref peer) = self.state_sync_peer {
+				if let SyncStatus::TxHashsetDownload { .. } = self.sync_state.status() {
+					if !peer.is_connected() {
+						sync_need_restart = true;
+						info!(
+							"state_sync: peer connection lost: {:?}. restart",
+							peer.info.addr,
+						);
+					}
 				}
 			}
 		}
@@ -111,33 +127,49 @@ impl StateSync {
 
 		// run fast sync if applicable, normally only run one-time, except restart in error
 		if sync_need_restart || header_head.height == highest_height {
-			let (go, download_timeout) = self.state_sync_due();
-
-			if let SyncStatus::TxHashsetDownload { .. } = self.sync_state.status() {
-				if download_timeout {
-					error!("state_sync: TxHashsetDownload status timeout in 10 minutes!");
-					self.sync_state.set_sync_error(
-						chain::ErrorKind::SyncError(format!("{:?}", p2p::Error::Timeout)).into(),
-					);
+			if using_pibd {
+				let (launch, _download_timeout) = self.state_sync_due();
+				if launch {
+					self.sync_state
+						.update(SyncStatus::TxHashsetPibd { aborted: false });
 				}
-			}
+				// Continue our PIBD process
+				self.continue_pibd();
+			} else {
+				let (go, download_timeout) = self.state_sync_due();
 
-			if go {
-				self.state_sync_peer = None;
-				match self.request_state(&header_head) {
-					Ok(peer) => {
-						self.state_sync_peer = Some(peer);
+				if let SyncStatus::TxHashsetDownload { .. } = self.sync_state.status() {
+					if download_timeout {
+						error!("state_sync: TxHashsetDownload status timeout in 10 minutes!");
+						self.sync_state.set_sync_error(
+							chain::ErrorKind::SyncError(format!("{:?}", p2p::Error::Timeout))
+								.into(),
+						);
 					}
-					Err(e) => self
-						.sync_state
-						.set_sync_error(chain::ErrorKind::SyncError(format!("{:?}", e)).into()),
 				}
 
-				self.sync_state
-					.update(SyncStatus::TxHashsetDownload(Default::default()));
+				if go {
+					self.state_sync_peer = None;
+					match self.request_state(&header_head) {
+						Ok(peer) => {
+							self.state_sync_peer = Some(peer);
+						}
+						Err(e) => self
+							.sync_state
+							.set_sync_error(chain::ErrorKind::SyncError(format!("{:?}", e)).into()),
+					}
+
+					self.sync_state
+						.update(SyncStatus::TxHashsetDownload(Default::default()));
+				}
 			}
 		}
 		true
+	}
+
+	fn continue_pibd(&self) {
+		// Check the state of our chain to figure out what we should be requesting next
+		debug!("Continuing PIBD process");
 	}
 
 	fn request_state(&self, header_head: &chain::Tip) -> Result<Arc<Peer>, p2p::Error> {

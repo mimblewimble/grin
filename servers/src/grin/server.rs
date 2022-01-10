@@ -51,6 +51,7 @@ use crate::p2p::types::{Capabilities, PeerAddr};
 use crate::pool;
 use crate::util::file::get_first_line;
 use crate::util::{RwLock, StopState};
+use futures::channel::oneshot;
 use grin_util::logger::LogEntry;
 
 /// Arcified  thread-safe TransactionPool with type parameters used by server components
@@ -87,6 +88,8 @@ impl Server {
 		config: ServerConfig,
 		logs_rx: Option<mpsc::Receiver<LogEntry>>,
 		mut info_callback: F,
+		stop_state: Option<Arc<StopState>>,
+		api_chan: &'static mut (oneshot::Sender<()>, oneshot::Receiver<()>),
 	) -> Result<(), Error>
 	where
 		F: FnMut(Server, Option<mpsc::Receiver<LogEntry>>),
@@ -94,7 +97,7 @@ impl Server {
 		let mining_config = config.stratum_mining_config.clone();
 		let enable_test_miner = config.run_test_miner;
 		let test_miner_wallet_url = config.test_miner_wallet_url.clone();
-		let serv = Server::new(config)?;
+		let serv = Server::new(config, stop_state, api_chan)?;
 
 		if let Some(c) = mining_config {
 			let enable_stratum_server = c.enable_stratum_server;
@@ -145,7 +148,11 @@ impl Server {
 	}
 
 	/// Instantiates a new server associated with the provided future reactor.
-	pub fn new(config: ServerConfig) -> Result<Server, Error> {
+	pub fn new(
+		config: ServerConfig,
+		stop_state: Option<Arc<StopState>>,
+		api_chan: &'static mut (oneshot::Sender<()>, oneshot::Receiver<()>),
+	) -> Result<Server, Error> {
 		// Obtain our lock_file or fail immediately with an error.
 		let lock_file = Server::one_grin_at_a_time(&config)?;
 
@@ -156,7 +163,11 @@ impl Server {
 			Some(b) => b,
 		};
 
-		let stop_state = Arc::new(StopState::new());
+		let stop_state = if stop_state.is_some() {
+			stop_state.unwrap()
+		} else {
+			Arc::new(StopState::new())
+		};
 
 		let pool_adapter = Arc::new(PoolToChainAdapter::new());
 		let pool_net_adapter = Arc::new(PoolToNetAdapter::new(config.dandelion_config.clone()));
@@ -289,7 +300,6 @@ impl Server {
 			}
 		};
 
-		// TODO fix API shutdown and join this thread
 		api::node_apis(
 			&config.api_http_addr,
 			shared_chain.clone(),
@@ -299,6 +309,8 @@ impl Server {
 			api_secret,
 			foreign_api_secret,
 			tls_conf,
+			api_chan,
+			stop_state.clone(),
 		)?;
 
 		info!("Starting dandelion monitor: {}", &config.api_http_addr);
@@ -451,19 +463,7 @@ impl Server {
 
 					height += 1;
 
-					// We need to query again for the actual block hash, as
-					// the difficulty iterator doesn't contain enough info to
-					// create a hash
-					// The diff iterator returns 59 block headers 'before' 0 to give callers
-					// enough detail to calculate initial block difficulties. Ignore these.
-					let block_hash = if height < 0 {
-						ZERO_HASH
-					} else {
-						match self.chain.get_header_by_height(height as u64) {
-							Ok(h) => h.hash(),
-							Err(_) => ZERO_HASH,
-						}
-					};
+					let block_hash = next.hash.unwrap_or(ZERO_HASH);
 
 					DiffBlock {
 						block_height: height,

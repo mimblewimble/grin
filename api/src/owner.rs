@@ -80,17 +80,20 @@ impl Owner {
 
 	/// Trigger a validation of the chain state.
 	///
+	/// # Arguments
+	/// * `assume_valid_rangeproofs_kernels` -  if false, will validate rangeproofs, kernel signatures and sum of kernel excesses. if true, will only validate the sum of kernel excesses should equal the sum of unspent outputs minus total supply.
+	///
 	/// # Returns
 	/// * Result Containing:
 	/// * `Ok(())` if the validation was done successfully
 	/// * or [`Error`](struct.Error.html) if an error is encountered.
 	///
 
-	pub fn validate_chain(&self) -> Result<(), Error> {
+	pub fn validate_chain(&self, assume_valid_rangeproofs_kernels: bool) -> Result<(), Error> {
 		let chain_validation_handler = ChainValidationHandler {
 			chain: self.chain.clone(),
 		};
-		chain_validation_handler.validate_chain()
+		chain_validation_handler.validate_chain(assume_valid_rangeproofs_kernels)
 	}
 
 	/// Trigger a compaction of the chain state to regain storage space.

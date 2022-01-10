@@ -27,6 +27,7 @@ ctrlc = { version = "3.1", features = ["termination"] }
 cursive_table_view = "0.13.2"
 humansize = "1.1.0"
 serde = "1"
+futures = "0.3.19"
 serde_json = "1"
 log = "0.4"
 term = "0.6"

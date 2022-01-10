@@ -23,6 +23,7 @@ use crate::config::config::SERVER_CONFIG_FILE_NAME;
 use crate::core::global;
 use crate::util::init_logger;
 use clap::App;
+use futures::channel::oneshot;
 use grin_api as api;
 use grin_chain as chain;
 use grin_config as config;
@@ -127,6 +128,9 @@ fn real_main() -> i32 {
 	let mut logging_config = config.members.as_ref().unwrap().logging.clone().unwrap();
 	logging_config.tui_running = config.members.as_ref().unwrap().server.run_tui;
 
+	let api_chan: &'static mut (oneshot::Sender<()>, oneshot::Receiver<()>) =
+		Box::leak(Box::new(oneshot::channel::<()>()));
+
 	let (logs_tx, logs_rx) = if logging_config.tui_running.unwrap() {
 		let (logs_tx, logs_rx) = mpsc::sync_channel::<LogEntry>(200);
 		(Some(logs_tx), Some(logs_rx))
@@ -177,7 +181,7 @@ fn real_main() -> i32 {
 	match args.subcommand() {
 		// server commands and options
 		("server", Some(server_args)) => {
-			cmd::server_command(Some(server_args), node_config.unwrap(), logs_rx)
+			cmd::server_command(Some(server_args), node_config.unwrap(), logs_rx, api_chan)
 		}
 
 		// client commands and options
@@ -196,6 +200,6 @@ fn real_main() -> i32 {
 		// If nothing is specified, try to just use the config file instead
 		// this could possibly become the way to configure most things
 		// with most command line options being phased out
-		_ => cmd::server_command(None, node_config.unwrap(), logs_rx),
+		_ => cmd::server_command(None, node_config.unwrap(), logs_rx, api_chan),
 	}
 }
