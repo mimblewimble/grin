@@ -576,8 +576,8 @@ where
 			block_hash, output_root
 		);
 		// TODO: Entire process needs to be restarted if the horizon block
-		// has changed (not here, NB for somewhere)
-		let archive_header = self.chain().txhashset_archive_header()?;
+		// has changed (perhaps not here, NB for somewhere)
+		let archive_header = self.chain().txhashset_archive_header_header_only()?;
 		let mut desegmenter = self.chain().desegmenter(&archive_header)?;
 		desegmenter.add_bitmap_segment(segment, output_root)?;
 		Ok(true)

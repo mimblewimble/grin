@@ -137,7 +137,7 @@ impl StateSync {
 						.update(SyncStatus::TxHashsetPibd { aborted: false });
 				}
 				// Continue our PIBD process
-				self.continue_pibd(&header_head);
+				self.continue_pibd();
 			} else {
 				let (go, download_timeout) = self.state_sync_due();
 
@@ -170,16 +170,12 @@ impl StateSync {
 		true
 	}
 
-	fn continue_pibd(&mut self, header_head: &chain::Tip) {
+	fn continue_pibd(&mut self) {
 		// Check the state of our chain to figure out what we should be requesting next
 		// TODO: Just faking a single request for testing
 		if !self.sent_test_pibd_message {
 			debug!("Sending test PIBD message");
-			let threshold = global::state_sync_threshold() as u64;
-			let archive_interval = global::txhashset_archive_interval();
-			let mut txhashset_height = header_head.height.saturating_sub(threshold);
-			txhashset_height = txhashset_height.saturating_sub(txhashset_height % archive_interval);
-			let archive_header = self.chain.get_header_by_height(txhashset_height).unwrap();
+			let archive_header = self.chain.txhashset_archive_header_header_only().unwrap();
 
 			let target_segment_height = 11;
 			//let archive_header = self.chain.txhashset_archive_header().unwrap();

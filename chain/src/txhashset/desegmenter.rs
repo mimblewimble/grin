@@ -30,6 +30,10 @@ use crate::txhashset;
 
 use croaring::Bitmap;
 
+/// States that the desegmenter can be in, to keep track of what
+/// parts are needed next in the proces
+pub enum DesegmenterState {}
+
 /// Desegmenter for rebuilding a txhashset from PIBD segments
 #[derive(Clone)]
 pub struct Desegmenter {
