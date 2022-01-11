@@ -133,9 +133,9 @@ impl Desegmenter {
 			1 + pmmr::peaks(pmmr::insertion_to_pmmr_index(self.bitmap_mmr_leaf_count))
 				.last()
 				.unwrap_or(
-					&(1 + pmmr::peaks(
-						pmmr::insertion_to_pmmr_index(self.bitmap_mmr_leaf_count) - 1,
-					)
+					&(pmmr::peaks(pmmr::insertion_to_pmmr_index(
+						self.bitmap_mmr_leaf_count - 1,
+					))
 					.last()
 					.unwrap()),
 				)

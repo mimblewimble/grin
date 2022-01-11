@@ -410,6 +410,15 @@ impl ChainAdapter for DummyAdapter {
 	) -> Result<Segment<RangeProof>, chain::Error> {
 		unimplemented!()
 	}
+
+	fn receive_bitmap_segment(
+		&self,
+		block_hash: Hash,
+		output_root: Hash,
+		segment: Segment<BitmapChunk>,
+	) -> Result<bool, chain::Error> {
+		unimplemented!()
+	}
 }
 
 impl NetAdapter for DummyAdapter {
