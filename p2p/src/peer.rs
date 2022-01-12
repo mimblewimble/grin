@@ -612,6 +612,32 @@ impl ChainAdapter for TrackingAdapter {
 		self.adapter
 			.receive_bitmap_segment(block_hash, output_root, segment)
 	}
+
+	fn receive_output_segment(
+		&self,
+		block_hash: Hash,
+		bitmap_root: Hash,
+		segment: Segment<OutputIdentifier>,
+	) -> Result<bool, chain::Error> {
+		self.adapter
+			.receive_output_segment(block_hash, bitmap_root, segment)
+	}
+
+	fn receive_rangeproof_segment(
+		&self,
+		block_hash: Hash,
+		segment: Segment<RangeProof>,
+	) -> Result<bool, chain::Error> {
+		self.adapter.receive_rangeproof_segment(block_hash, segment)
+	}
+
+	fn receive_kernel_segment(
+		&self,
+		block_hash: Hash,
+		segment: Segment<TxKernel>,
+	) -> Result<bool, chain::Error> {
+		self.adapter.receive_kernel_segment(block_hash, segment)
+	}
 }
 
 impl NetAdapter for TrackingAdapter {
