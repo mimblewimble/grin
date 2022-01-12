@@ -667,6 +667,13 @@ pub trait ChainAdapter: Sync + Send {
 		hash: Hash,
 		id: SegmentIdentifier,
 	) -> Result<Segment<RangeProof>, chain::Error>;
+
+	fn receive_bitmap_segment(
+		&self,
+		block_hash: Hash,
+		output_root: Hash,
+		segment: Segment<BitmapChunk>,
+	) -> Result<bool, chain::Error>;
 }
 
 /// Additional methods required by the protocol that don't need to be

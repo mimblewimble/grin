@@ -923,6 +923,17 @@ impl Chain {
 		self.get_header_by_height(txhashset_height)
 	}
 
+	/// Return the Block Header at the txhashset horizon, considering only the
+	/// contents of the header PMMR
+	pub fn txhashset_archive_header_header_only(&self) -> Result<BlockHeader, Error> {
+		let header_head = self.header_head()?;
+		let threshold = global::state_sync_threshold() as u64;
+		let archive_interval = global::txhashset_archive_interval();
+		let mut txhashset_height = header_head.height.saturating_sub(threshold);
+		txhashset_height = txhashset_height.saturating_sub(txhashset_height % archive_interval);
+		self.get_header_by_height(txhashset_height)
+	}
+
 	// Special handling to make sure the whole kernel set matches each of its
 	// roots in each block header, without truncation. We go back header by
 	// header, rewind and check each root. This fixes a potential weakness in

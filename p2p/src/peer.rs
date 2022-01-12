@@ -31,7 +31,9 @@ use crate::core::pow::Difficulty;
 use crate::core::ser::Writeable;
 use crate::core::{core, global};
 use crate::handshake::Handshake;
-use crate::msg::{self, BanReason, GetPeerAddrs, Locator, Msg, Ping, TxHashSetRequest, Type};
+use crate::msg::{
+	self, BanReason, GetPeerAddrs, Locator, Msg, Ping, SegmentRequest, TxHashSetRequest, Type,
+};
 use crate::protocol::Protocol;
 use crate::types::{
 	Capabilities, ChainAdapter, Error, NetAdapter, P2PConfig, PeerAddr, PeerInfo, ReasonForBan,
@@ -371,6 +373,20 @@ impl Peer {
 		)
 	}
 
+	pub fn send_bitmap_segment_request(
+		&self,
+		h: Hash,
+		identifier: SegmentIdentifier,
+	) -> Result<(), Error> {
+		self.send(
+			&SegmentRequest {
+				block_hash: h,
+				identifier,
+			},
+			msg::Type::GetOutputBitmapSegment,
+		)
+	}
+
 	/// Stops the peer
 	pub fn stop(&self) {
 		debug!("Stopping peer {:?}", self.info.addr);
@@ -585,6 +601,16 @@ impl ChainAdapter for TrackingAdapter {
 		id: SegmentIdentifier,
 	) -> Result<Segment<RangeProof>, chain::Error> {
 		self.adapter.get_rangeproof_segment(hash, id)
+	}
+
+	fn receive_bitmap_segment(
+		&self,
+		block_hash: Hash,
+		output_root: Hash,
+		segment: Segment<BitmapChunk>,
+	) -> Result<bool, chain::Error> {
+		self.adapter
+			.receive_bitmap_segment(block_hash, output_root, segment)
 	}
 }
 

@@ -564,6 +564,24 @@ where
 		}
 		segmenter.rangeproof_segment(id)
 	}
+
+	fn receive_bitmap_segment(
+		&self,
+		block_hash: Hash,
+		output_root: Hash,
+		segment: Segment<BitmapChunk>,
+	) -> Result<bool, chain::Error> {
+		debug!(
+			"RECEIVED BITMAP SEGMENT FOR block_hash: {}, output_root: {}",
+			block_hash, output_root
+		);
+		// TODO: Entire process needs to be restarted if the horizon block
+		// has changed (perhaps not here, NB for somewhere)
+		let archive_header = self.chain().txhashset_archive_header_header_only()?;
+		let mut desegmenter = self.chain().desegmenter(&archive_header)?;
+		desegmenter.add_bitmap_segment(segment, output_root)?;
+		Ok(true)
+	}
 }
 
 impl<B, P> NetToChainAdapter<B, P>

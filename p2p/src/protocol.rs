@@ -371,8 +371,20 @@ impl MessageHandler for Protocol {
 					Consumed::None
 				}
 			}
-			Message::OutputBitmapSegment(_)
-			| Message::OutputSegment(_)
+			Message::OutputBitmapSegment(req) => {
+				let OutputBitmapSegmentResponse {
+					block_hash,
+					segment,
+					output_root,
+				} = req;
+				debug!(
+					"Received Output Bitmap Segment: bh, output_root: {}, {}",
+					block_hash, output_root
+				);
+				adapter.receive_bitmap_segment(block_hash, output_root, segment.into())?;
+				Consumed::None
+			}
+			Message::OutputSegment(_)
 			| Message::RangeProofSegment(_)
 			| Message::KernelSegment(_) => Consumed::None,
 

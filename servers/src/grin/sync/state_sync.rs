@@ -17,7 +17,7 @@ use chrono::Duration;
 use std::sync::Arc;
 
 use crate::chain::{self, SyncState, SyncStatus};
-use crate::core::core::hash::Hashed;
+use crate::core::core::{hash::Hashed, pmmr::segment::SegmentIdentifier};
 use crate::core::global;
 use crate::core::pow::Difficulty;
 use crate::p2p::{self, Capabilities, Peer};
@@ -35,6 +35,8 @@ pub struct StateSync {
 
 	prev_state_sync: Option<DateTime<Utc>>,
 	state_sync_peer: Option<Arc<Peer>>,
+
+	sent_test_pibd_message: bool,
 }
 
 impl StateSync {
@@ -49,6 +51,7 @@ impl StateSync {
 			chain,
 			prev_state_sync: None,
 			state_sync_peer: None,
+			sent_test_pibd_message: false,
 		}
 	}
 
@@ -74,15 +77,31 @@ impl StateSync {
 			sync_need_restart = true;
 		}
 
+		// Determine whether we're going to try using PIBD or whether we've already given up
+		// on it
+		let using_pibd =
+			if let SyncStatus::TxHashsetPibd { aborted: true, .. } = self.sync_state.status() {
+				false
+			} else {
+				// Only on testing chains for now
+				if global::get_chain_type() != global::ChainTypes::Mainnet {
+					true
+				} else {
+					false
+				}
+			};
+
 		// check peer connection status of this sync
-		if let Some(ref peer) = self.state_sync_peer {
-			if let SyncStatus::TxHashsetDownload { .. } = self.sync_state.status() {
-				if !peer.is_connected() {
-					sync_need_restart = true;
-					info!(
-						"state_sync: peer connection lost: {:?}. restart",
-						peer.info.addr,
-					);
+		if !using_pibd {
+			if let Some(ref peer) = self.state_sync_peer {
+				if let SyncStatus::TxHashsetDownload { .. } = self.sync_state.status() {
+					if !peer.is_connected() {
+						sync_need_restart = true;
+						info!(
+							"state_sync: peer connection lost: {:?}. restart",
+							peer.info.addr,
+						);
+					}
 				}
 			}
 		}
@@ -111,33 +130,85 @@ impl StateSync {
 
 		// run fast sync if applicable, normally only run one-time, except restart in error
 		if sync_need_restart || header_head.height == highest_height {
-			let (go, download_timeout) = self.state_sync_due();
-
-			if let SyncStatus::TxHashsetDownload { .. } = self.sync_state.status() {
-				if download_timeout {
-					error!("state_sync: TxHashsetDownload status timeout in 10 minutes!");
-					self.sync_state.set_sync_error(
-						chain::ErrorKind::SyncError(format!("{:?}", p2p::Error::Timeout)).into(),
-					);
+			if using_pibd {
+				let (launch, _download_timeout) = self.state_sync_due();
+				if launch {
+					self.sync_state
+						.update(SyncStatus::TxHashsetPibd { aborted: false });
 				}
-			}
+				// Continue our PIBD process
+				self.continue_pibd();
+			} else {
+				let (go, download_timeout) = self.state_sync_due();
 
-			if go {
-				self.state_sync_peer = None;
-				match self.request_state(&header_head) {
-					Ok(peer) => {
-						self.state_sync_peer = Some(peer);
+				if let SyncStatus::TxHashsetDownload { .. } = self.sync_state.status() {
+					if download_timeout {
+						error!("state_sync: TxHashsetDownload status timeout in 10 minutes!");
+						self.sync_state.set_sync_error(
+							chain::ErrorKind::SyncError(format!("{:?}", p2p::Error::Timeout))
+								.into(),
+						);
 					}
-					Err(e) => self
-						.sync_state
-						.set_sync_error(chain::ErrorKind::SyncError(format!("{:?}", e)).into()),
 				}
 
-				self.sync_state
-					.update(SyncStatus::TxHashsetDownload(Default::default()));
+				if go {
+					self.state_sync_peer = None;
+					match self.request_state(&header_head) {
+						Ok(peer) => {
+							self.state_sync_peer = Some(peer);
+						}
+						Err(e) => self
+							.sync_state
+							.set_sync_error(chain::ErrorKind::SyncError(format!("{:?}", e)).into()),
+					}
+
+					self.sync_state
+						.update(SyncStatus::TxHashsetDownload(Default::default()));
+				}
 			}
 		}
 		true
+	}
+
+	fn continue_pibd(&mut self) {
+		// Check the state of our chain to figure out what we should be requesting next
+		// TODO: Just faking a single request for testing
+		if !self.sent_test_pibd_message {
+			debug!("Sending test PIBD message");
+			let archive_header = self.chain.txhashset_archive_header_header_only().unwrap();
+
+			let target_segment_height = 11;
+			//let archive_header = self.chain.txhashset_archive_header().unwrap();
+			let desegmenter = self.chain.desegmenter(&archive_header).unwrap();
+			let bitmap_mmr_size = desegmenter.expected_bitmap_mmr_size();
+			let mut identifier_iter =
+				SegmentIdentifier::traversal_iter(bitmap_mmr_size, target_segment_height);
+
+			self.sent_test_pibd_message = true;
+			let peers_iter = || {
+				self.peers
+					.iter()
+					.with_capabilities(Capabilities::PIBD_HIST)
+					.connected()
+			};
+
+			// Filter peers further based on max difficulty.
+			let max_diff = peers_iter().max_difficulty().unwrap_or(Difficulty::zero());
+			let peers_iter = || peers_iter().with_difficulty(|x| x >= max_diff);
+			// Choose a random "most work" peer, preferring outbound if at all possible.
+			let peer = peers_iter().outbound().choose_random().or_else(|| {
+				warn!("no suitable outbound peer for pibd message, considering inbound");
+				peers_iter().inbound().choose_random()
+			});
+			debug!("Chosen peer is {:?}", peer);
+			if let Some(p) = peer {
+				p.send_bitmap_segment_request(
+					archive_header.hash(),
+					identifier_iter.next().unwrap(),
+				)
+				.unwrap();
+			}
+		}
 	}
 
 	fn request_state(&self, header_head: &chain::Tip) -> Result<Arc<Peer>, p2p::Error> {

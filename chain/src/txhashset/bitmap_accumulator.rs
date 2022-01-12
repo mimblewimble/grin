@@ -194,10 +194,11 @@ impl BitmapAccumulator {
 	/// Return a raw in-memory bitmap of this accumulator
 	pub fn as_bitmap(&self) -> Result<Bitmap, Error> {
 		let mut bitmap = Bitmap::create();
-		for (chunk_count, chunk_index) in self.backend.leaf_idx_iter(0).enumerate() {
+		for (chunk_index, chunk_pos) in self.backend.leaf_pos_iter().enumerate() {
 			//TODO: Unwrap
-			let chunk = self.backend.get_data(chunk_index).unwrap();
-			bitmap.add_many(&chunk.set_iter(chunk_count * 1024).collect::<Vec<u32>>());
+			let chunk = self.backend.get_data(chunk_pos as u64).unwrap();
+			let additive = chunk.set_iter(chunk_index * 1024).collect::<Vec<u32>>();
+			bitmap.add_many(&additive);
 		}
 		Ok(bitmap)
 	}

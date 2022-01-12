@@ -669,6 +669,16 @@ impl ChainAdapter for Peers {
 	) -> Result<Segment<RangeProof>, chain::Error> {
 		self.adapter.get_rangeproof_segment(hash, id)
 	}
+
+	fn receive_bitmap_segment(
+		&self,
+		block_hash: Hash,
+		output_root: Hash,
+		segment: Segment<BitmapChunk>,
+	) -> Result<bool, chain::Error> {
+		self.adapter
+			.receive_bitmap_segment(block_hash, output_root, segment)
+	}
 }
 
 impl NetAdapter for Peers {
