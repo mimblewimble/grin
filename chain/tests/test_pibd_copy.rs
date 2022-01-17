@@ -159,7 +159,7 @@ fn test_pibd_copy_impl(is_test_chain: bool, src_root_dir: &str, dest_root_dir: &
 				bitmap_root_hash
 			);
 			// Add segment to desegmenter / validate
-			if let Err(e) = desegmenter.add_output_segment(output_segment) {
+			if let Err(e) = desegmenter.add_output_segment(output_segment, None) {
 				panic!("Unable to add output segment: {}", e);
 			}
 		}

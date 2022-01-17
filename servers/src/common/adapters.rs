@@ -576,10 +576,44 @@ where
 			block_hash, output_root
 		);
 		// TODO: Entire process needs to be restarted if the horizon block
-		// has changed (perhaps not here, NB for somewhere)
+		// has changed (perhaps not here, NB this has to go somewhere)
 		let archive_header = self.chain().txhashset_archive_header_header_only()?;
 		let mut desegmenter = self.chain().desegmenter(&archive_header)?;
 		desegmenter.add_bitmap_segment(segment, output_root)?;
+		Ok(true)
+	}
+
+	fn receive_output_segment(
+		&self,
+		_block_hash: Hash,
+		bitmap_root: Hash,
+		segment: Segment<OutputIdentifier>,
+	) -> Result<bool, chain::Error> {
+		let archive_header = self.chain().txhashset_archive_header_header_only()?;
+		let desegmenter = self.chain().desegmenter(&archive_header)?;
+		desegmenter.add_output_segment(segment, Some(bitmap_root))?;
+		Ok(true)
+	}
+
+	fn receive_rangeproof_segment(
+		&self,
+		_block_hash: Hash,
+		segment: Segment<RangeProof>,
+	) -> Result<bool, chain::Error> {
+		let archive_header = self.chain().txhashset_archive_header_header_only()?;
+		let desegmenter = self.chain().desegmenter(&archive_header)?;
+		desegmenter.add_rangeproof_segment(segment)?;
+		Ok(true)
+	}
+
+	fn receive_kernel_segment(
+		&self,
+		_block_hash: Hash,
+		segment: Segment<TxKernel>,
+	) -> Result<bool, chain::Error> {
+		let archive_header = self.chain().txhashset_archive_header_header_only()?;
+		let desegmenter = self.chain().desegmenter(&archive_header)?;
+		desegmenter.add_kernel_segment(segment)?;
 		Ok(true)
 	}
 }

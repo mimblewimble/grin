@@ -413,9 +413,34 @@ impl ChainAdapter for DummyAdapter {
 
 	fn receive_bitmap_segment(
 		&self,
-		block_hash: Hash,
-		output_root: Hash,
-		segment: Segment<BitmapChunk>,
+		_block_hash: Hash,
+		_output_root: Hash,
+		_segment: Segment<BitmapChunk>,
+	) -> Result<bool, chain::Error> {
+		unimplemented!()
+	}
+
+	fn receive_output_segment(
+		&self,
+		_block_hash: Hash,
+		_bitmap_root: Hash,
+		_segment: Segment<OutputIdentifier>,
+	) -> Result<bool, chain::Error> {
+		unimplemented!()
+	}
+
+	fn receive_rangeproof_segment(
+		&self,
+		_block_hash: Hash,
+		_segment: Segment<RangeProof>,
+	) -> Result<bool, chain::Error> {
+		unimplemented!()
+	}
+
+	fn receive_kernel_segment(
+		&self,
+		_block_hash: Hash,
+		_segment: Segment<TxKernel>,
 	) -> Result<bool, chain::Error> {
 		unimplemented!()
 	}

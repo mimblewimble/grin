@@ -43,10 +43,10 @@ pub struct Desegmenter {
 	store: Arc<store::ChainStore>,
 
 	bitmap_accumulator: BitmapAccumulator,
-	bitmap_segments: Vec<Segment<BitmapChunk>>,
-	output_segments: Vec<Segment<OutputIdentifier>>,
-	rangeproof_segments: Vec<Segment<RangeProof>>,
-	kernel_segments: Vec<Segment<TxKernel>>,
+	_bitmap_segments: Vec<Segment<BitmapChunk>>,
+	_output_segments: Vec<Segment<OutputIdentifier>>,
+	_rangeproof_segments: Vec<Segment<RangeProof>>,
+	_kernel_segments: Vec<Segment<TxKernel>>,
 
 	bitmap_mmr_leaf_count: u64,
 	bitmap_mmr_size: u64,
@@ -68,10 +68,10 @@ impl Desegmenter {
 			archive_header,
 			store,
 			bitmap_accumulator: BitmapAccumulator::new(),
-			bitmap_segments: vec![],
-			output_segments: vec![],
-			rangeproof_segments: vec![],
-			kernel_segments: vec![],
+			_bitmap_segments: vec![],
+			_output_segments: vec![],
+			_rangeproof_segments: vec![],
+			_kernel_segments: vec![],
 
 			bitmap_mmr_leaf_count: 0,
 			bitmap_mmr_size: 0,
@@ -177,8 +177,13 @@ impl Desegmenter {
 
 	/// Adds a output segment
 	/// TODO: Still experimenting, expects chunks received to be in order
-	pub fn add_output_segment(&self, segment: Segment<OutputIdentifier>) -> Result<(), Error> {
+	pub fn add_output_segment(
+		&self,
+		segment: Segment<OutputIdentifier>,
+		_bitmap_root: Option<Hash>,
+	) -> Result<(), Error> {
 		debug!("pibd_desegmenter: add output segment");
+		// TODO: check bitmap root matches what we already have
 		segment.validate_with(
 			self.archive_header.output_mmr_size, // Last MMR pos at the height being validated
 			self.bitmap_cache.as_ref(),
