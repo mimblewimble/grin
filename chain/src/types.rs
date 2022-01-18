@@ -21,6 +21,7 @@ use crate::core::core::{Block, BlockHeader, HeaderVersion};
 use crate::core::pow::Difficulty;
 use crate::core::ser::{self, PMMRIndexHashable, Readable, Reader, Writeable, Writer};
 use crate::error::{Error, ErrorKind};
+use crate::txhashset::SegmentTypeIdentifier;
 use crate::util::{RwLock, RwLockWriteGuard};
 
 bitflags! {
@@ -131,6 +132,13 @@ impl Default for TxHashsetDownloadStats {
 pub struct SyncState {
 	current: RwLock<SyncStatus>,
 	sync_error: RwLock<Option<Error>>,
+	/// Something has to keep track of segments that have been
+	/// requested from other peers. TODO consider: This may not
+	/// be the best place to put code that's concerned with peers
+	/// but it's currently the only place that makes the info
+	/// available where it will be needed (both in the adapter
+	/// and the sync loop)
+	requested_pibd_segments: RwLock<Vec<SegmentTypeIdentifier>>,
 }
 
 impl SyncState {
@@ -139,6 +147,7 @@ impl SyncState {
 		SyncState {
 			current: RwLock::new(SyncStatus::Initial),
 			sync_error: RwLock::new(None),
+			requested_pibd_segments: RwLock::new(vec![]),
 		}
 	}
 
