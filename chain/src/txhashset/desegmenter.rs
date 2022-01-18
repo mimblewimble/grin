@@ -30,6 +30,39 @@ use crate::txhashset;
 
 use croaring::Bitmap;
 
+#[derive(Clone, Debug, Eq, PartialEq)]
+/// Possible segment types, according to this desegmenter
+pub enum SegmentType {
+	/// Output Bitmap
+	Bitmap,
+	/// Output
+	Output,
+	/// RangeProof
+	RangeProof,
+	/// Kernel
+	Kernel,
+}
+
+/// Lumps possible types with segment ids to enable a unique identifier
+/// for a segment with respect to a particular archive header
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct SegmentTypeIdentifier {
+	/// The type of this segment
+	pub segment_type: SegmentType,
+	/// The identfier itself
+	pub identifier: SegmentIdentifier,
+}
+
+impl SegmentTypeIdentifier {
+	/// Create
+	pub fn new(segment_type: SegmentType, identifier: SegmentIdentifier) -> Self {
+		Self {
+			segment_type,
+			identifier,
+		}
+	}
+}
+
 /// States that the desegmenter can be in, to keep track of what
 /// parts are needed next in the proces
 #[derive(Clone)]
@@ -116,7 +149,7 @@ impl Desegmenter {
 
 	/// Return list of the next preferred segments the desegmenter needs based on
 	/// the current real state of the underlying elements
-	pub fn next_desired_segments(&self, max_elements: usize) -> Vec<SegmentIdentifier> {
+	pub fn next_desired_segments(&self, max_elements: usize) -> Vec<SegmentTypeIdentifier> {
 		let mut return_vec = vec![];
 
 		// First check for required bitmap elements
@@ -138,7 +171,7 @@ impl Desegmenter {
 					id.segment_pos_range(self.bitmap_mmr_size)
 				);
 				if id.segment_pos_range(self.bitmap_mmr_size).1 > local_pmmr_size {
-					return_vec.push(id);
+					return_vec.push(SegmentTypeIdentifier::new(SegmentType::Bitmap, id));
 					if return_vec.len() >= max_elements {
 						return return_vec;
 					}

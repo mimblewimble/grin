@@ -208,11 +208,8 @@ impl StateSync {
 				});
 				debug!("Chosen peer is {:?}", peer);
 				if let Some(p) = peer {
-					p.send_bitmap_segment_request(
-						archive_header.hash(),
-						identifier_iter.next().unwrap(),
-					)
-					.unwrap();
+					p.send_bitmap_segment_request(archive_header.hash(), seg_id.identifier.clone())
+						.unwrap();
 				}
 			}
 		}
