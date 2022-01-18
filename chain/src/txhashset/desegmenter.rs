@@ -18,8 +18,8 @@
 use std::sync::Arc;
 
 use crate::core::core::hash::Hash;
-use crate::core::core::pmmr;
-use crate::core::core::{BlockHeader, OutputIdentifier, Segment, TxKernel};
+use crate::core::core::{pmmr, pmmr::ReadablePMMR};
+use crate::core::core::{BlockHeader, OutputIdentifier, Segment, SegmentIdentifier, TxKernel};
 use crate::error::Error;
 use crate::txhashset::{BitmapAccumulator, BitmapChunk, TxHashSet};
 use crate::util::secp::pedersen::RangeProof;
@@ -32,7 +32,18 @@ use croaring::Bitmap;
 
 /// States that the desegmenter can be in, to keep track of what
 /// parts are needed next in the proces
-pub enum DesegmenterState {}
+#[derive(Clone)]
+pub enum DesegmenterState {
+	/// Uninitialised state
+	Uninitialised,
+	/// Needs Output set bitmap. Ironically also contains a bitmap representing
+	/// what segments of bitmap are still needed
+	NeedsOutputSetBitmap {
+		/// Total required number of segments,
+		/// When we have this we can finalize
+		required_segment_count: usize,
+	},
+}
 
 /// Desegmenter for rebuilding a txhashset from PIBD segments
 #[derive(Clone)]
@@ -41,6 +52,10 @@ pub struct Desegmenter {
 	header_pmmr: Arc<RwLock<txhashset::PMMRHandle<BlockHeader>>>,
 	archive_header: BlockHeader,
 	store: Arc<store::ChainStore>,
+
+	state: DesegmenterState,
+
+	default_segment_height: u8,
 
 	bitmap_accumulator: BitmapAccumulator,
 	_bitmap_segments: Vec<Segment<BitmapChunk>>,
@@ -68,6 +83,8 @@ impl Desegmenter {
 			archive_header,
 			store,
 			bitmap_accumulator: BitmapAccumulator::new(),
+			state: DesegmenterState::Uninitialised,
+			default_segment_height: 9,
 			_bitmap_segments: vec![],
 			_output_segments: vec![],
 			_rangeproof_segments: vec![],
@@ -79,6 +96,12 @@ impl Desegmenter {
 			bitmap_cache: None,
 		};
 		retval.calc_bitmap_mmr_sizes();
+		retval.state = DesegmenterState::NeedsOutputSetBitmap {
+			required_segment_count: SegmentIdentifier::count_segments_required(
+				retval.bitmap_mmr_size,
+				retval.default_segment_height,
+			),
+		};
 		retval
 	}
 
@@ -89,6 +112,40 @@ impl Desegmenter {
 	/// Return size of bitmap mmr
 	pub fn expected_bitmap_mmr_size(&self) -> u64 {
 		self.bitmap_mmr_size
+	}
+
+	/// Return list of the next preferred segments the desegmenter needs based on
+	/// the current real state of the underlying elements
+	pub fn next_desired_segments(&self, max_elements: usize) -> Vec<SegmentIdentifier> {
+		let mut return_vec = vec![];
+
+		// First check for required bitmap elements
+		if self.bitmap_cache.is_none() {
+			debug!("Desegmenter needs bitmap segments");
+			// Get current size of bitmap MMR
+			let local_pmmr_size = self.bitmap_accumulator.readonly_pmmr().unpruned_size();
+			debug!("Local Bitmap PMMR Size is: {}", local_pmmr_size);
+			// Get iterator over expected bitmap elements
+			let mut identifier_iter = SegmentIdentifier::traversal_iter(
+				self.bitmap_mmr_size,
+				self.default_segment_height,
+			);
+			debug!("Expected bitmap MMR size is: {}", self.bitmap_mmr_size);
+			// Advance iterator to next expected segment
+			while let Some(id) = identifier_iter.next() {
+				debug!(
+					"ID segment pos range: {:?}",
+					id.segment_pos_range(self.bitmap_mmr_size)
+				);
+				if id.segment_pos_range(self.bitmap_mmr_size).1 > local_pmmr_size {
+					return_vec.push(id);
+					if return_vec.len() >= max_elements {
+						return return_vec;
+					}
+				}
+			}
+		}
+		return_vec
 	}
 
 	/// 'Finalize' the bitmap accumulator, storing an in-memory copy of the bitmap for

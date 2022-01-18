@@ -177,36 +177,43 @@ impl StateSync {
 			debug!("Sending test PIBD message");
 			let archive_header = self.chain.txhashset_archive_header_header_only().unwrap();
 
-			let target_segment_height = 11;
+			//let target_segment_height = 11;
 			//let archive_header = self.chain.txhashset_archive_header().unwrap();
 			let desegmenter = self.chain.desegmenter(&archive_header).unwrap();
-			let bitmap_mmr_size = desegmenter.expected_bitmap_mmr_size();
-			let mut identifier_iter =
-				SegmentIdentifier::traversal_iter(bitmap_mmr_size, target_segment_height);
 
-			self.sent_test_pibd_message = true;
-			let peers_iter = || {
-				self.peers
-					.iter()
-					.with_capabilities(Capabilities::PIBD_HIST)
-					.connected()
-			};
+			// TODO and consider: number here depends on how many simultaneous
+			// requests we want to send to peers
+			let next_segment_ids = desegmenter.next_desired_segments(10);
 
-			// Filter peers further based on max difficulty.
-			let max_diff = peers_iter().max_difficulty().unwrap_or(Difficulty::zero());
-			let peers_iter = || peers_iter().with_difficulty(|x| x >= max_diff);
-			// Choose a random "most work" peer, preferring outbound if at all possible.
-			let peer = peers_iter().outbound().choose_random().or_else(|| {
-				warn!("no suitable outbound peer for pibd message, considering inbound");
-				peers_iter().inbound().choose_random()
-			});
-			debug!("Chosen peer is {:?}", peer);
-			if let Some(p) = peer {
-				p.send_bitmap_segment_request(
-					archive_header.hash(),
-					identifier_iter.next().unwrap(),
-				)
-				.unwrap();
+			debug!("Next Segments: {:?}", next_segment_ids);
+
+			// For each segment, pick a desirable peer and send message
+			// (Provided we're not waiting for a response for this message from someone else,
+			// handled underneath)
+			for seg_id in next_segment_ids.iter() {
+				let peers_iter = || {
+					self.peers
+						.iter()
+						.with_capabilities(Capabilities::PIBD_HIST)
+						.connected()
+				};
+
+				// Filter peers further based on max difficulty.
+				let max_diff = peers_iter().max_difficulty().unwrap_or(Difficulty::zero());
+				let peers_iter = || peers_iter().with_difficulty(|x| x >= max_diff);
+				// Choose a random "most work" peer, preferring outbound if at all possible.
+				let peer = peers_iter().outbound().choose_random().or_else(|| {
+					warn!("no suitable outbound peer for pibd message, considering inbound");
+					peers_iter().inbound().choose_random()
+				});
+				debug!("Chosen peer is {:?}", peer);
+				if let Some(p) = peer {
+					p.send_bitmap_segment_request(
+						archive_header.hash(),
+						identifier_iter.next().unwrap(),
+					)
+					.unwrap();
+				}
 			}
 		}
 	}

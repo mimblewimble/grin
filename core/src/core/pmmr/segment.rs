@@ -90,6 +90,43 @@ impl SegmentIdentifier {
 		let d = 1 << segment_height;
 		((pmmr::n_leaves(target_mmr_size) + d - 1) / d) as usize
 	}
+
+	/// Maximum number of leaves in a segment, given by `2**height`
+	fn segment_capacity(&self) -> u64 {
+		1 << self.height
+	}
+
+	/// Offset (in leaf idx) of first leaf in the segment
+	fn leaf_offset(&self) -> u64 {
+		self.idx * self.segment_capacity()
+	}
+
+	// Number of leaves in this segment. Equal to capacity except for the final segment, which can be smaller
+	fn segment_unpruned_size(&self, mmr_size: u64) -> u64 {
+		min(
+			self.segment_capacity(),
+			pmmr::n_leaves(mmr_size).saturating_sub(self.leaf_offset()),
+		)
+	}
+
+	/// Inclusive (full) range of MMR positions for the segment that would be produced
+	/// by this Identifier
+	pub fn segment_pos_range(&self, mmr_size: u64) -> (u64, u64) {
+		let segment_size = self.segment_unpruned_size(mmr_size);
+		let leaf_offset = self.leaf_offset();
+		let first = pmmr::insertion_to_pmmr_index(leaf_offset);
+		let last = if self.full_segment(mmr_size) {
+			pmmr::insertion_to_pmmr_index(leaf_offset + segment_size - 1) + (self.height as u64)
+		} else {
+			mmr_size - 1
+		};
+		(first, last)
+	}
+
+	/// Whether the segment is full (segment size == capacity)
+	fn full_segment(&self, mmr_size: u64) -> bool {
+		self.segment_unpruned_size(mmr_size) == self.segment_capacity()
+	}
 }
 
 /// Segment of a PMMR: unpruned leaves and the necessary data to verify
@@ -119,39 +156,27 @@ impl<T> Segment<T> {
 
 	/// Maximum number of leaves in a segment, given by `2**height`
 	fn segment_capacity(&self) -> u64 {
-		1 << self.identifier.height
+		self.identifier.segment_capacity()
 	}
 
 	/// Offset (in leaf idx) of first leaf in the segment
 	fn leaf_offset(&self) -> u64 {
-		self.identifier.idx * self.segment_capacity()
+		self.identifier.leaf_offset()
 	}
 
 	// Number of leaves in this segment. Equal to capacity except for the final segment, which can be smaller
 	fn segment_unpruned_size(&self, mmr_size: u64) -> u64 {
-		min(
-			self.segment_capacity(),
-			pmmr::n_leaves(mmr_size).saturating_sub(self.leaf_offset()),
-		)
+		self.identifier.segment_unpruned_size(mmr_size)
 	}
 
 	/// Whether the segment is full (segment size == capacity)
 	fn full_segment(&self, mmr_size: u64) -> bool {
-		self.segment_unpruned_size(mmr_size) == self.segment_capacity()
+		self.identifier.full_segment(mmr_size)
 	}
 
 	/// Inclusive range of MMR positions for this segment
 	pub fn segment_pos_range(&self, mmr_size: u64) -> (u64, u64) {
-		let segment_size = self.segment_unpruned_size(mmr_size);
-		let leaf_offset = self.leaf_offset();
-		let first = pmmr::insertion_to_pmmr_index(leaf_offset);
-		let last = if self.full_segment(mmr_size) {
-			pmmr::insertion_to_pmmr_index(leaf_offset + segment_size - 1)
-				+ (self.identifier.height as u64)
-		} else {
-			mmr_size - 1
-		};
-		(first, last)
+		self.identifier.segment_pos_range(mmr_size)
 	}
 
 	/// TODO - binary_search_by_key() here (can we assume these are sorted by pos?)
