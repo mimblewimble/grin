@@ -867,11 +867,14 @@ impl Chain {
 
 	/// instantiate desegmenter (in same lazy fashion as segmenter, though this should not be as
 	/// expensive an operation)
-	pub fn desegmenter(&self, archive_header: &BlockHeader) -> Result<Desegmenter, Error> {
+	pub fn desegmenter(
+		&self,
+		archive_header: &BlockHeader,
+	) -> Result<Arc<RwLock<Option<Desegmenter>>>, Error> {
 		// Use our cached desegmenter if we have one and the associated header matches.
-		if let Some(d) = self.pibd_desegmenter.read().as_ref() {
+		if let Some(d) = self.pibd_desegmenter.write().as_ref() {
 			if d.header() == archive_header {
-				return Ok(d.clone());
+				return Ok(self.pibd_desegmenter.clone());
 			}
 		}
 		// If no desegmenter or headers don't match init
@@ -881,7 +884,7 @@ impl Chain {
 		let mut cache = self.pibd_desegmenter.write();
 		*cache = Some(desegmenter.clone());
 
-		return Ok(desegmenter);
+		Ok(self.pibd_desegmenter.clone())
 	}
 
 	/// initialize a desegmenter, which is capable of extending the hashset by appending

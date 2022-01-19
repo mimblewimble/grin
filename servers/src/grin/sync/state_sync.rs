@@ -174,7 +174,10 @@ impl StateSync {
 
 		// TODO and consider: number here depends on how many simultaneous
 		// requests we want to send to peers
-		let next_segment_ids = desegmenter.next_desired_segments(10);
+		let mut next_segment_ids = vec![];
+		if let Some(d) = desegmenter.read().as_ref() {
+			next_segment_ids = d.next_desired_segments(10);
+		}
 
 		// For each segment, pick a desirable peer and send message
 		// (Provided we're not waiting for a response for this message from someone else)

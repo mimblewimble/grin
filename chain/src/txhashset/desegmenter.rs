@@ -118,7 +118,6 @@ impl Desegmenter {
 					id.segment_pos_range(self.bitmap_mmr_size)
 				);
 				if id.segment_pos_range(self.bitmap_mmr_size).1 > local_pmmr_size {
-					debug!("Existing segments: {:?}", self.bitmap_segments);
 					if !self.has_bitmap_segment_with_id(id) {
 						return_vec.push(SegmentTypeIdentifier::new(SegmentType::Bitmap, id));
 						if return_vec.len() >= max_elements {
@@ -199,7 +198,6 @@ impl Desegmenter {
 			.find(|i| i.identifier() == in_seg.identifier())
 			.is_none()
 		{
-			debug!("PUSHING SEG: {:?}", in_seg.identifier());
 			self.bitmap_segments.push(in_seg);
 		}
 	}
