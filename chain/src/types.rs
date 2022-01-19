@@ -17,11 +17,10 @@
 use chrono::prelude::{DateTime, Utc};
 
 use crate::core::core::hash::{Hash, Hashed, ZERO_HASH};
-use crate::core::core::{Block, BlockHeader, HeaderVersion};
+use crate::core::core::{Block, BlockHeader, HeaderVersion, SegmentTypeIdentifier};
 use crate::core::pow::Difficulty;
 use crate::core::ser::{self, PMMRIndexHashable, Readable, Reader, Writeable, Writer};
 use crate::error::{Error, ErrorKind};
-use crate::txhashset::SegmentTypeIdentifier;
 use crate::util::{RwLock, RwLockWriteGuard};
 
 bitflags! {
@@ -138,6 +137,7 @@ pub struct SyncState {
 	/// but it's currently the only place that makes the info
 	/// available where it will be needed (both in the adapter
 	/// and the sync loop)
+	/// TODO: Better struct for this, perhaps hash identifiers
 	requested_pibd_segments: RwLock<Vec<SegmentTypeIdentifier>>,
 }
 
@@ -215,6 +215,21 @@ impl SyncState {
 	/// Update txhashset downloading progress
 	pub fn update_txhashset_download(&self, stats: TxHashsetDownloadStats) {
 		*self.current.write() = SyncStatus::TxHashsetDownload(stats);
+	}
+
+	/// Update PIBD segment list
+	pub fn add_pibd_segment(&self, id: &SegmentTypeIdentifier) {
+		self.requested_pibd_segments.write().push(id.clone());
+	}
+
+	/// Remove segment from list
+	pub fn remove_pibd_segment(&self, id: &SegmentTypeIdentifier) {
+		self.requested_pibd_segments.write().retain(|i| i != id);
+	}
+
+	/// Check whether segment is in list
+	pub fn pibd_segment_exists(&self, id: &SegmentTypeIdentifier) -> bool {
+		self.requested_pibd_segments.read().contains(id)
 	}
 
 	/// Communicate sync error

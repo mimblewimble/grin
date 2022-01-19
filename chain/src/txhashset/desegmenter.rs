@@ -19,7 +19,10 @@ use std::sync::Arc;
 
 use crate::core::core::hash::Hash;
 use crate::core::core::{pmmr, pmmr::ReadablePMMR};
-use crate::core::core::{BlockHeader, OutputIdentifier, Segment, SegmentIdentifier, TxKernel};
+use crate::core::core::{
+	BlockHeader, OutputIdentifier, Segment, SegmentIdentifier, SegmentType, SegmentTypeIdentifier,
+	TxKernel,
+};
 use crate::error::Error;
 use crate::txhashset::{BitmapAccumulator, BitmapChunk, TxHashSet};
 use crate::util::secp::pedersen::RangeProof;
@@ -29,39 +32,6 @@ use crate::store;
 use crate::txhashset;
 
 use croaring::Bitmap;
-
-#[derive(Clone, Debug, Eq, PartialEq)]
-/// Possible segment types, according to this desegmenter
-pub enum SegmentType {
-	/// Output Bitmap
-	Bitmap,
-	/// Output
-	Output,
-	/// RangeProof
-	RangeProof,
-	/// Kernel
-	Kernel,
-}
-
-/// Lumps possible types with segment ids to enable a unique identifier
-/// for a segment with respect to a particular archive header
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct SegmentTypeIdentifier {
-	/// The type of this segment
-	pub segment_type: SegmentType,
-	/// The identfier itself
-	pub identifier: SegmentIdentifier,
-}
-
-impl SegmentTypeIdentifier {
-	/// Create
-	pub fn new(segment_type: SegmentType, identifier: SegmentIdentifier) -> Self {
-		Self {
-			segment_type,
-			identifier,
-		}
-	}
-}
 
 /// States that the desegmenter can be in, to keep track of what
 /// parts are needed next in the proces

@@ -32,7 +32,7 @@ use crate::core::core::hash::{Hash, Hashed};
 use crate::core::core::transaction::Transaction;
 use crate::core::core::{
 	BlockHeader, BlockSums, CompactBlock, Inputs, OutputIdentifier, Segment, SegmentIdentifier,
-	TxKernel,
+	SegmentType, SegmentTypeIdentifier, TxKernel,
 };
 use crate::core::pow::Difficulty;
 use crate::core::ser::ProtocolVersion;
@@ -575,6 +575,12 @@ where
 			"RECEIVED BITMAP SEGMENT FOR block_hash: {}, output_root: {}",
 			block_hash, output_root
 		);
+		// Remove segment from outgoing list TODO: Where is the best place to
+		// do this?
+		self.sync_state.remove_pibd_segment(&SegmentTypeIdentifier {
+			segment_type: SegmentType::Bitmap,
+			identifier: segment.identifier(),
+		});
 		// TODO: Entire process needs to be restarted if the horizon block
 		// has changed (perhaps not here, NB this has to go somewhere)
 		let archive_header = self.chain().txhashset_archive_header_header_only()?;

@@ -21,6 +21,39 @@ use croaring::Bitmap;
 use std::cmp::min;
 use std::fmt::{self, Debug};
 
+#[derive(Clone, Debug, Eq, PartialEq)]
+/// Possible segment types, according to this desegmenter
+pub enum SegmentType {
+	/// Output Bitmap
+	Bitmap,
+	/// Output
+	Output,
+	/// RangeProof
+	RangeProof,
+	/// Kernel
+	Kernel,
+}
+
+/// Lumps possible types with segment ids to enable a unique identifier
+/// for a segment with respect to a particular archive header
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct SegmentTypeIdentifier {
+	/// The type of this segment
+	pub segment_type: SegmentType,
+	/// The identfier itself
+	pub identifier: SegmentIdentifier,
+}
+
+impl SegmentTypeIdentifier {
+	/// Create
+	pub fn new(segment_type: SegmentType, identifier: SegmentIdentifier) -> Self {
+		Self {
+			segment_type,
+			identifier,
+		}
+	}
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 /// Error related to segment creation or validation
 pub enum SegmentError {
