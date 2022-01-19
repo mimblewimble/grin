@@ -63,7 +63,7 @@ impl Desegmenter {
 		archive_header: BlockHeader,
 		store: Arc<store::ChainStore>,
 	) -> Desegmenter {
-		debug!("Creating new desegmenter");
+		trace!("Creating new desegmenter");
 		let mut retval = Desegmenter {
 			txhashset,
 			header_pmmr,
@@ -101,19 +101,19 @@ impl Desegmenter {
 
 		// First check for required bitmap elements
 		if self.bitmap_cache.is_none() {
-			debug!("Desegmenter needs bitmap segments");
+			trace!("Desegmenter needs bitmap segments");
 			// Get current size of bitmap MMR
 			let local_pmmr_size = self.bitmap_accumulator.readonly_pmmr().unpruned_size();
-			debug!("Local Bitmap PMMR Size is: {}", local_pmmr_size);
+			trace!("Local Bitmap PMMR Size is: {}", local_pmmr_size);
 			// Get iterator over expected bitmap elements
 			let mut identifier_iter = SegmentIdentifier::traversal_iter(
 				self.bitmap_mmr_size,
 				self.default_segment_height,
 			);
-			debug!("Expected bitmap MMR size is: {}", self.bitmap_mmr_size);
+			trace!("Expected bitmap MMR size is: {}", self.bitmap_mmr_size);
 			// Advance iterator to next expected segment
 			while let Some(id) = identifier_iter.next() {
-				debug!(
+				trace!(
 					"ID segment pos range: {:?}",
 					id.segment_pos_range(self.bitmap_mmr_size)
 				);
@@ -218,14 +218,14 @@ impl Desegmenter {
 		output_root_hash: Hash,
 	) -> Result<(), Error> {
 		debug!("pibd_desegmenter: add bitmap segment");
-		/*segment.validate_with(
+		segment.validate_with(
 			self.bitmap_mmr_size, // Last MMR pos at the height being validated, in this case of the bitmap root
 			None,
 			self.archive_header.output_root, // Output root we're checking for
 			self.archive_header.output_mmr_size,
 			output_root_hash, // Other root
 			true,
-		)?;*/
+		)?;
 		debug!("pibd_desegmenter: adding segment to cache");
 		// All okay, add to our cached list of bitmap segments
 		self.cache_bitmap_segment(segment);

@@ -572,8 +572,10 @@ where
 		segment: Segment<BitmapChunk>,
 	) -> Result<bool, chain::Error> {
 		debug!(
-			"RECEIVED BITMAP SEGMENT FOR block_hash: {}, output_root: {}",
-			block_hash, output_root
+			"Received bitmap segment {} for block_hash: {}, output_root: {}",
+			segment.identifier().idx,
+			block_hash,
+			output_root
 		);
 		// Remove segment from outgoing list TODO: Where is the best place to
 		// do this?

@@ -183,7 +183,7 @@ impl StateSync {
 		// (Provided we're not waiting for a response for this message from someone else)
 		for seg_id in next_segment_ids.iter() {
 			if self.sync_state.contains_pibd_segment(seg_id) {
-				debug!("Request list contains, continuing: {:?}", seg_id);
+				trace!("Request list contains, continuing: {:?}", seg_id);
 				continue;
 			}
 
