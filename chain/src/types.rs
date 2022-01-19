@@ -227,8 +227,8 @@ impl SyncState {
 		self.requested_pibd_segments.write().retain(|i| i != id);
 	}
 
-	/// Check whether segment is in list
-	pub fn pibd_segment_exists(&self, id: &SegmentTypeIdentifier) -> bool {
+	/// Check whether segment is in request list
+	pub fn contains_pibd_segment(&self, id: &SegmentTypeIdentifier) -> bool {
 		self.requested_pibd_segments.read().contains(id)
 	}
 

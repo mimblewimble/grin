@@ -585,7 +585,15 @@ where
 		// has changed (perhaps not here, NB this has to go somewhere)
 		let archive_header = self.chain().txhashset_archive_header_header_only()?;
 		let mut desegmenter = self.chain().desegmenter(&archive_header)?;
-		desegmenter.add_bitmap_segment(segment, output_root)?;
+		let identifier = segment.identifier().clone();
+		let res = desegmenter.add_bitmap_segment(segment, output_root);
+		if let Err(e) = res {
+			debug!(
+				"Validation of incoming bitmap segment failed: {:?}, reason: {}",
+				identifier, e
+			);
+			return Err(e);
+		}
 		Ok(true)
 	}
 
