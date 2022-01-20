@@ -18,8 +18,11 @@
 use std::sync::Arc;
 
 use crate::core::core::hash::Hash;
-use crate::core::core::pmmr;
-use crate::core::core::{BlockHeader, OutputIdentifier, Segment, TxKernel};
+use crate::core::core::{pmmr, pmmr::ReadablePMMR};
+use crate::core::core::{
+	BlockHeader, OutputIdentifier, Segment, SegmentIdentifier, SegmentType, SegmentTypeIdentifier,
+	TxKernel,
+};
 use crate::error::Error;
 use crate::txhashset::{BitmapAccumulator, BitmapChunk, TxHashSet};
 use crate::util::secp::pedersen::RangeProof;
@@ -30,10 +33,6 @@ use crate::txhashset;
 
 use croaring::Bitmap;
 
-/// States that the desegmenter can be in, to keep track of what
-/// parts are needed next in the proces
-pub enum DesegmenterState {}
-
 /// Desegmenter for rebuilding a txhashset from PIBD segments
 #[derive(Clone)]
 pub struct Desegmenter {
@@ -42,8 +41,10 @@ pub struct Desegmenter {
 	archive_header: BlockHeader,
 	store: Arc<store::ChainStore>,
 
+	default_segment_height: u8,
+
 	bitmap_accumulator: BitmapAccumulator,
-	_bitmap_segments: Vec<Segment<BitmapChunk>>,
+	bitmap_segments: Vec<Segment<BitmapChunk>>,
 	_output_segments: Vec<Segment<OutputIdentifier>>,
 	_rangeproof_segments: Vec<Segment<RangeProof>>,
 	_kernel_segments: Vec<Segment<TxKernel>>,
@@ -62,13 +63,15 @@ impl Desegmenter {
 		archive_header: BlockHeader,
 		store: Arc<store::ChainStore>,
 	) -> Desegmenter {
+		trace!("Creating new desegmenter");
 		let mut retval = Desegmenter {
 			txhashset,
 			header_pmmr,
 			archive_header,
 			store,
 			bitmap_accumulator: BitmapAccumulator::new(),
-			_bitmap_segments: vec![],
+			default_segment_height: 9,
+			bitmap_segments: vec![],
 			_output_segments: vec![],
 			_rangeproof_segments: vec![],
 			_kernel_segments: vec![],
@@ -89,6 +92,42 @@ impl Desegmenter {
 	/// Return size of bitmap mmr
 	pub fn expected_bitmap_mmr_size(&self) -> u64 {
 		self.bitmap_mmr_size
+	}
+
+	/// Return list of the next preferred segments the desegmenter needs based on
+	/// the current real state of the underlying elements
+	pub fn next_desired_segments(&self, max_elements: usize) -> Vec<SegmentTypeIdentifier> {
+		let mut return_vec = vec![];
+
+		// First check for required bitmap elements
+		if self.bitmap_cache.is_none() {
+			trace!("Desegmenter needs bitmap segments");
+			// Get current size of bitmap MMR
+			let local_pmmr_size = self.bitmap_accumulator.readonly_pmmr().unpruned_size();
+			trace!("Local Bitmap PMMR Size is: {}", local_pmmr_size);
+			// Get iterator over expected bitmap elements
+			let mut identifier_iter = SegmentIdentifier::traversal_iter(
+				self.bitmap_mmr_size,
+				self.default_segment_height,
+			);
+			trace!("Expected bitmap MMR size is: {}", self.bitmap_mmr_size);
+			// Advance iterator to next expected segment
+			while let Some(id) = identifier_iter.next() {
+				trace!(
+					"ID segment pos range: {:?}",
+					id.segment_pos_range(self.bitmap_mmr_size)
+				);
+				if id.segment_pos_range(self.bitmap_mmr_size).1 > local_pmmr_size {
+					if !self.has_bitmap_segment_with_id(id) {
+						return_vec.push(SegmentTypeIdentifier::new(SegmentType::Bitmap, id));
+						if return_vec.len() >= max_elements {
+							return return_vec;
+						}
+					}
+				}
+			}
+		}
+		return_vec
 	}
 
 	/// 'Finalize' the bitmap accumulator, storing an in-memory copy of the bitmap for
@@ -151,6 +190,26 @@ impl Desegmenter {
 		);
 	}
 
+	/// Cache a bitmap segment if we don't already have it
+	fn cache_bitmap_segment(&mut self, in_seg: Segment<BitmapChunk>) {
+		if self
+			.bitmap_segments
+			.iter()
+			.find(|i| i.identifier() == in_seg.identifier())
+			.is_none()
+		{
+			self.bitmap_segments.push(in_seg);
+		}
+	}
+
+	/// Whether our list already contains this bitmap segment
+	fn has_bitmap_segment_with_id(&self, seg_id: SegmentIdentifier) -> bool {
+		self.bitmap_segments
+			.iter()
+			.find(|i| i.identifier() == seg_id)
+			.is_some()
+	}
+
 	/// Adds and validates a bitmap chunk
 	/// TODO: Still experimenting, this expects chunks received to be in order
 	pub fn add_bitmap_segment(
@@ -167,11 +226,15 @@ impl Desegmenter {
 			output_root_hash, // Other root
 			true,
 		)?;
+		debug!("pibd_desegmenter: adding segment to cache");
+		// All okay, add to our cached list of bitmap segments
+		self.cache_bitmap_segment(segment);
+
 		// All okay, add leaves to bitmap accumulator
-		let (_sid, _hash_pos, _hashes, _leaf_pos, leaf_data, _proof) = segment.parts();
+		/*let (_sid, _hash_pos, _hashes, _leaf_pos, leaf_data, _proof) = segment.parts();
 		for chunk in leaf_data.into_iter() {
 			self.bitmap_accumulator.append_chunk(chunk)?;
-		}
+		}*/
 		Ok(())
 	}
 

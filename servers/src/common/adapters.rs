@@ -32,7 +32,7 @@ use crate::core::core::hash::{Hash, Hashed};
 use crate::core::core::transaction::Transaction;
 use crate::core::core::{
 	BlockHeader, BlockSums, CompactBlock, Inputs, OutputIdentifier, Segment, SegmentIdentifier,
-	TxKernel,
+	SegmentType, SegmentTypeIdentifier, TxKernel,
 };
 use crate::core::pow::Difficulty;
 use crate::core::ser::ProtocolVersion;
@@ -572,14 +572,31 @@ where
 		segment: Segment<BitmapChunk>,
 	) -> Result<bool, chain::Error> {
 		debug!(
-			"RECEIVED BITMAP SEGMENT FOR block_hash: {}, output_root: {}",
-			block_hash, output_root
+			"Received bitmap segment {} for block_hash: {}, output_root: {}",
+			segment.identifier().idx,
+			block_hash,
+			output_root
 		);
+		// Remove segment from outgoing list TODO: Where is the best place to
+		// do this?
+		self.sync_state.remove_pibd_segment(&SegmentTypeIdentifier {
+			segment_type: SegmentType::Bitmap,
+			identifier: segment.identifier(),
+		});
 		// TODO: Entire process needs to be restarted if the horizon block
 		// has changed (perhaps not here, NB this has to go somewhere)
 		let archive_header = self.chain().txhashset_archive_header_header_only()?;
-		let mut desegmenter = self.chain().desegmenter(&archive_header)?;
-		desegmenter.add_bitmap_segment(segment, output_root)?;
+		let identifier = segment.identifier().clone();
+		if let Some(d) = self.chain().desegmenter(&archive_header)?.write().as_mut() {
+			let res = d.add_bitmap_segment(segment, output_root);
+			if let Err(e) = res {
+				debug!(
+					"Validation of incoming bitmap segment failed: {:?}, reason: {}",
+					identifier, e
+				);
+				return Err(e);
+			}
+		}
 		Ok(true)
 	}
 
@@ -591,7 +608,9 @@ where
 	) -> Result<bool, chain::Error> {
 		let archive_header = self.chain().txhashset_archive_header_header_only()?;
 		let desegmenter = self.chain().desegmenter(&archive_header)?;
-		desegmenter.add_output_segment(segment, Some(bitmap_root))?;
+		if let Some(d) = desegmenter.write().as_ref() {
+			d.add_output_segment(segment, Some(bitmap_root))?;
+		}
 		Ok(true)
 	}
 
@@ -602,7 +621,9 @@ where
 	) -> Result<bool, chain::Error> {
 		let archive_header = self.chain().txhashset_archive_header_header_only()?;
 		let desegmenter = self.chain().desegmenter(&archive_header)?;
-		desegmenter.add_rangeproof_segment(segment)?;
+		if let Some(d) = desegmenter.write().as_ref() {
+			d.add_rangeproof_segment(segment)?;
+		}
 		Ok(true)
 	}
 
@@ -613,7 +634,9 @@ where
 	) -> Result<bool, chain::Error> {
 		let archive_header = self.chain().txhashset_archive_header_header_only()?;
 		let desegmenter = self.chain().desegmenter(&archive_header)?;
-		desegmenter.add_kernel_segment(segment)?;
+		if let Some(d) = desegmenter.write().as_ref() {
+			d.add_kernel_segment(segment)?;
+		}
 		Ok(true)
 	}
 }

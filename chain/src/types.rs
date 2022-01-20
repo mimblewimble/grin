@@ -17,7 +17,7 @@
 use chrono::prelude::{DateTime, Utc};
 
 use crate::core::core::hash::{Hash, Hashed, ZERO_HASH};
-use crate::core::core::{Block, BlockHeader, HeaderVersion};
+use crate::core::core::{Block, BlockHeader, HeaderVersion, SegmentTypeIdentifier};
 use crate::core::pow::Difficulty;
 use crate::core::ser::{self, PMMRIndexHashable, Readable, Reader, Writeable, Writer};
 use crate::error::{Error, ErrorKind};
@@ -131,6 +131,14 @@ impl Default for TxHashsetDownloadStats {
 pub struct SyncState {
 	current: RwLock<SyncStatus>,
 	sync_error: RwLock<Option<Error>>,
+	/// Something has to keep track of segments that have been
+	/// requested from other peers. TODO consider: This may not
+	/// be the best place to put code that's concerned with peers
+	/// but it's currently the only place that makes the info
+	/// available where it will be needed (both in the adapter
+	/// and the sync loop)
+	/// TODO: Better struct for this, perhaps hash identifiers
+	requested_pibd_segments: RwLock<Vec<SegmentTypeIdentifier>>,
 }
 
 impl SyncState {
@@ -139,6 +147,7 @@ impl SyncState {
 		SyncState {
 			current: RwLock::new(SyncStatus::Initial),
 			sync_error: RwLock::new(None),
+			requested_pibd_segments: RwLock::new(vec![]),
 		}
 	}
 
@@ -206,6 +215,21 @@ impl SyncState {
 	/// Update txhashset downloading progress
 	pub fn update_txhashset_download(&self, stats: TxHashsetDownloadStats) {
 		*self.current.write() = SyncStatus::TxHashsetDownload(stats);
+	}
+
+	/// Update PIBD segment list
+	pub fn add_pibd_segment(&self, id: &SegmentTypeIdentifier) {
+		self.requested_pibd_segments.write().push(id.clone());
+	}
+
+	/// Remove segment from list
+	pub fn remove_pibd_segment(&self, id: &SegmentTypeIdentifier) {
+		self.requested_pibd_segments.write().retain(|i| i != id);
+	}
+
+	/// Check whether segment is in request list
+	pub fn contains_pibd_segment(&self, id: &SegmentTypeIdentifier) -> bool {
+		self.requested_pibd_segments.read().contains(id)
 	}
 
 	/// Communicate sync error

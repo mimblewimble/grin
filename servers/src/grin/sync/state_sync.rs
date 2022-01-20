@@ -35,8 +35,6 @@ pub struct StateSync {
 
 	prev_state_sync: Option<DateTime<Utc>>,
 	state_sync_peer: Option<Arc<Peer>>,
-
-	sent_test_pibd_message: bool,
 }
 
 impl StateSync {
@@ -51,7 +49,6 @@ impl StateSync {
 			chain,
 			prev_state_sync: None,
 			state_sync_peer: None,
-			sent_test_pibd_message: false,
 		}
 	}
 
@@ -172,19 +169,24 @@ impl StateSync {
 
 	fn continue_pibd(&mut self) {
 		// Check the state of our chain to figure out what we should be requesting next
-		// TODO: Just faking a single request for testing
-		if !self.sent_test_pibd_message {
-			debug!("Sending test PIBD message");
-			let archive_header = self.chain.txhashset_archive_header_header_only().unwrap();
+		let archive_header = self.chain.txhashset_archive_header_header_only().unwrap();
+		let desegmenter = self.chain.desegmenter(&archive_header).unwrap();
 
-			let target_segment_height = 11;
-			//let archive_header = self.chain.txhashset_archive_header().unwrap();
-			let desegmenter = self.chain.desegmenter(&archive_header).unwrap();
-			let bitmap_mmr_size = desegmenter.expected_bitmap_mmr_size();
-			let mut identifier_iter =
-				SegmentIdentifier::traversal_iter(bitmap_mmr_size, target_segment_height);
+		// TODO and consider: number here depends on how many simultaneous
+		// requests we want to send to peers
+		let mut next_segment_ids = vec![];
+		if let Some(d) = desegmenter.read().as_ref() {
+			next_segment_ids = d.next_desired_segments(10);
+		}
 
-			self.sent_test_pibd_message = true;
+		// For each segment, pick a desirable peer and send message
+		// (Provided we're not waiting for a response for this message from someone else)
+		for seg_id in next_segment_ids.iter() {
+			if self.sync_state.contains_pibd_segment(seg_id) {
+				trace!("Request list contains, continuing: {:?}", seg_id);
+				continue;
+			}
+
 			let peers_iter = || {
 				self.peers
 					.iter()
@@ -202,11 +204,9 @@ impl StateSync {
 			});
 			debug!("Chosen peer is {:?}", peer);
 			if let Some(p) = peer {
-				p.send_bitmap_segment_request(
-					archive_header.hash(),
-					identifier_iter.next().unwrap(),
-				)
-				.unwrap();
+				p.send_bitmap_segment_request(archive_header.hash(), seg_id.identifier.clone())
+					.unwrap();
+				self.sync_state.add_pibd_segment(seg_id);
 			}
 		}
 	}
