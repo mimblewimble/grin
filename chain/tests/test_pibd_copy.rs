@@ -115,7 +115,9 @@ fn test_pibd_copy_impl(is_test_chain: bool, src_root_dir: &str, dest_root_dir: &
 		// This is going to use the same block as horizon_header
 		let segmenter = src_chain.segmenter().unwrap();
 		// Init desegmenter
-		let mut desegmenter = dest_chain.desegmenter(&horizon_header).unwrap();
+		let desegmenter_lock = dest_chain.desegmenter(&horizon_header).unwrap();
+		let mut desegmenter_write = desegmenter_lock.write();
+		let desegmenter = desegmenter_write.as_mut().unwrap();
 
 		// And total size of the bitmap PMMR
 		let bitmap_mmr_size = desegmenter.expected_bitmap_mmr_size();
