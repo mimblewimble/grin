@@ -347,11 +347,6 @@ impl TxHashSet {
 			.elements_from_pmmr_index(start_index, max_count, max_index)
 	}
 
-	/// number of outputs
-	pub fn output_mmr_size(&self) -> u64 {
-		self.output_pmmr_h.size
-	}
-
 	/// As above, for rangeproofs
 	pub fn rangeproofs_by_pmmr_index(
 		&self,
@@ -361,6 +356,21 @@ impl TxHashSet {
 	) -> (u64, Vec<RangeProof>) {
 		ReadonlyPMMR::at(&self.rproof_pmmr_h.backend, self.rproof_pmmr_h.size)
 			.elements_from_pmmr_index(start_index, max_count, max_index)
+	}
+
+	/// size of output mmr
+	pub fn output_mmr_size(&self) -> u64 {
+		self.output_pmmr_h.size
+	}
+
+	/// size of kernel mmr
+	pub fn kernel_mmr_size(&self) -> u64 {
+		self.kernel_pmmr_h.size
+	}
+
+	/// size of rangeproof mmr (can differ from output mmr size during PIBD sync)
+	pub fn rangeproof_mmr_size(&self) -> u64 {
+		self.rproof_pmmr_h.size
 	}
 
 	/// Find a kernel with a given excess. Work backwards from `max_index` to `min_index`

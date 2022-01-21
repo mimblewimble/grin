@@ -17,7 +17,10 @@ use chrono::Duration;
 use std::sync::Arc;
 
 use crate::chain::{self, SyncState, SyncStatus};
-use crate::core::core::{hash::Hashed, pmmr::segment::SegmentIdentifier};
+use crate::core::core::{
+	hash::Hashed,
+	pmmr::segment::{SegmentIdentifier, SegmentType},
+};
 use crate::core::global;
 use crate::core::pow::Difficulty;
 use crate::p2p::{self, Capabilities, Peer};
@@ -185,7 +188,9 @@ impl StateSync {
 		let mut next_segment_ids = vec![];
 		if let Some(d) = desegmenter.write().as_mut() {
 			// Figure out the next segments we need
-			next_segment_ids = d.next_desired_segments(10);
+			// (12 is divisible by 3, to try and evenly spread the requests among the 3
+			// main pmmrs. Bitmaps segments will always be requested first)
+			next_segment_ids = d.next_desired_segments(12);
 		}
 
 		// For each segment, pick a desirable peer and send message
@@ -213,8 +218,33 @@ impl StateSync {
 			});
 			debug!("Chosen peer is {:?}", peer);
 			if let Some(p) = peer {
-				p.send_bitmap_segment_request(archive_header.hash(), seg_id.identifier.clone())
-					.unwrap();
+				match seg_id.segment_type {
+					SegmentType::Bitmap => p
+						.send_bitmap_segment_request(
+							archive_header.hash(),
+							seg_id.identifier.clone(),
+						)
+						.unwrap(),
+					SegmentType::Output => p
+						.send_output_segment_request(
+							archive_header.hash(),
+							seg_id.identifier.clone(),
+						)
+						.unwrap(),
+					SegmentType::RangeProof => p
+						.send_rangeproof_segment_request(
+							archive_header.hash(),
+							seg_id.identifier.clone(),
+						)
+						.unwrap(),
+					SegmentType::Kernel => p
+						.send_kernel_segment_request(
+							archive_header.hash(),
+							seg_id.identifier.clone(),
+						)
+						.unwrap(),
+				};
+				// add to list of segments that are being tracked
 				self.sync_state.add_pibd_segment(seg_id);
 			}
 		}

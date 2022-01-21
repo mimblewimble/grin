@@ -387,6 +387,48 @@ impl Peer {
 		)
 	}
 
+	pub fn send_output_segment_request(
+		&self,
+		h: Hash,
+		identifier: SegmentIdentifier,
+	) -> Result<(), Error> {
+		self.send(
+			&SegmentRequest {
+				block_hash: h,
+				identifier,
+			},
+			msg::Type::GetOutputSegment,
+		)
+	}
+
+	pub fn send_rangeproof_segment_request(
+		&self,
+		h: Hash,
+		identifier: SegmentIdentifier,
+	) -> Result<(), Error> {
+		self.send(
+			&SegmentRequest {
+				block_hash: h,
+				identifier,
+			},
+			msg::Type::GetRangeProofSegment,
+		)
+	}
+
+	pub fn send_kernel_segment_request(
+		&self,
+		h: Hash,
+		identifier: SegmentIdentifier,
+	) -> Result<(), Error> {
+		self.send(
+			&SegmentRequest {
+				block_hash: h,
+				identifier,
+			},
+			msg::Type::GetKernelSegment,
+		)
+	}
+
 	/// Stops the peer
 	pub fn stop(&self) {
 		debug!("Stopping peer {:?}", self.info.addr);

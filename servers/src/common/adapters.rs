@@ -602,14 +602,33 @@ where
 
 	fn receive_output_segment(
 		&self,
-		_block_hash: Hash,
+		block_hash: Hash,
 		bitmap_root: Hash,
 		segment: Segment<OutputIdentifier>,
 	) -> Result<bool, chain::Error> {
+		debug!(
+			"Received output segment {} for block_hash: {}, bitmap_root: {:?}",
+			segment.identifier().idx,
+			block_hash,
+			bitmap_root,
+		);
+		// Remove segment from outgoing list TODO: Where is the best place to
+		// do this?
+		self.sync_state.remove_pibd_segment(&SegmentTypeIdentifier {
+			segment_type: SegmentType::Output,
+			identifier: segment.identifier(),
+		});
 		let archive_header = self.chain().txhashset_archive_header_header_only()?;
-		let desegmenter = self.chain().desegmenter(&archive_header)?;
-		if let Some(d) = desegmenter.write().as_ref() {
-			d.add_output_segment(segment, Some(bitmap_root))?;
+		let identifier = segment.identifier().clone();
+		if let Some(d) = self.chain().desegmenter(&archive_header)?.write().as_mut() {
+			let res = d.add_output_segment(segment, Some(bitmap_root));
+			if let Err(e) = res {
+				debug!(
+					"Validation of incoming output segment failed: {:?}, reason: {}",
+					identifier, e
+				);
+				return Err(e);
+			}
 		}
 		Ok(true)
 	}

@@ -384,10 +384,40 @@ impl MessageHandler for Protocol {
 				adapter.receive_bitmap_segment(block_hash, output_root, segment.into())?;
 				Consumed::None
 			}
-			Message::OutputSegment(_)
-			| Message::RangeProofSegment(_)
-			| Message::KernelSegment(_) => Consumed::None,
-
+			Message::OutputSegment(req) => {
+				let OutputSegmentResponse {
+					response,
+					output_bitmap_root,
+				} = req;
+				debug!(
+					"Received Output Segment: bh, bitmap_root: {}, {}",
+					response.block_hash, output_bitmap_root
+				);
+				adapter.receive_output_segment(
+					response.block_hash,
+					output_bitmap_root,
+					response.segment.into(),
+				)?;
+				Consumed::None
+			}
+			Message::RangeProofSegment(req) => {
+				let SegmentResponse {
+					block_hash,
+					segment,
+				} = req;
+				debug!("Received Rangeproof Segment: bh: {}", block_hash);
+				adapter.receive_rangeproof_segment(block_hash, segment.into())?;
+				Consumed::None
+			}
+			Message::KernelSegment(req) => {
+				let SegmentResponse {
+					block_hash,
+					segment,
+				} = req;
+				debug!("Received Kernel Segment: bh: {}", block_hash);
+				adapter.receive_kernel_segment(block_hash, segment.into())?;
+				Consumed::None
+			}
 			Message::Unknown(_) => Consumed::None,
 		};
 		Ok(consumed)
