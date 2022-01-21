@@ -94,11 +94,33 @@ impl Desegmenter {
 		self.bitmap_mmr_size
 	}
 
+	/// Apply next set of segments that are ready to be appended to their respective trees,
+	/// and kick off any validations that can happen. TODO: figure out where and how
+	/// this should be called considering any thread blocking implications
+	pub fn apply_next_segments(&mut self) -> Result<(), Error> {
+		let next_bmp_idx = self.next_required_bitmap_segment_index();
+		if let Some(bmp_idx) = next_bmp_idx {
+			if let Some((idx, _seg)) = self
+				.bitmap_segments
+				.iter()
+				.enumerate()
+				.find(|s| s.1.identifier().idx == bmp_idx)
+			{
+				self.apply_bitmap_segment(idx)?;
+			}
+		} else {
+			if self.bitmap_cache == None {
+				// Should have all the pieces now, finalize the bitmap cache
+				self.finalize_bitmap()?;
+			}
+		}
+		Ok(())
+	}
+
 	/// Return list of the next preferred segments the desegmenter needs based on
 	/// the current real state of the underlying elements
 	pub fn next_desired_segments(&self, max_elements: usize) -> Vec<SegmentTypeIdentifier> {
 		let mut return_vec = vec![];
-
 		// First check for required bitmap elements
 		if self.bitmap_cache.is_none() {
 			trace!("Desegmenter needs bitmap segments");
@@ -138,7 +160,7 @@ impl Desegmenter {
 	/// being shut down and restarted
 	pub fn finalize_bitmap(&mut self) -> Result<(), Error> {
 		debug!(
-			"pibd_desgmenter: caching bitmap - accumulator root: {}",
+			"pibd_desgmenter: finalizing and caching bitmap - accumulator root: {}",
 			self.bitmap_accumulator.root()
 		);
 		self.bitmap_cache = Some(self.bitmap_accumulator.as_bitmap()?);
@@ -153,7 +175,6 @@ impl Desegmenter {
 			&mut batch,
 			|ext, _batch| {
 				let extension = &mut ext.extension;
-				// TODO: Unwrap
 				extension.set_bitmap_accumulator(self.bitmap_accumulator.clone());
 				Ok(())
 			},
@@ -210,6 +231,24 @@ impl Desegmenter {
 			.is_some()
 	}
 
+	/// Return an identifier for the next segment we need for the bitmap pmmr
+	fn next_required_bitmap_segment_index(&self) -> Option<u64> {
+		let local_bitmap_pmmr_size = self.bitmap_accumulator.readonly_pmmr().unpruned_size();
+		let cur_segment_count = SegmentIdentifier::count_segments_required(
+			local_bitmap_pmmr_size,
+			self.default_segment_height,
+		);
+		let total_segment_count = SegmentIdentifier::count_segments_required(
+			self.bitmap_mmr_size,
+			self.default_segment_height,
+		);
+		if cur_segment_count == total_segment_count {
+			None
+		} else {
+			Some(cur_segment_count as u64)
+		}
+	}
+
 	/// Adds and validates a bitmap chunk
 	/// TODO: Still experimenting, this expects chunks received to be in order
 	pub fn add_bitmap_segment(
@@ -229,12 +268,21 @@ impl Desegmenter {
 		debug!("pibd_desegmenter: adding segment to cache");
 		// All okay, add to our cached list of bitmap segments
 		self.cache_bitmap_segment(segment);
+		Ok(())
+	}
 
-		// All okay, add leaves to bitmap accumulator
-		/*let (_sid, _hash_pos, _hashes, _leaf_pos, leaf_data, _proof) = segment.parts();
+	/// Apply a bitmap segment at the index cache
+	pub fn apply_bitmap_segment(&mut self, idx: usize) -> Result<(), Error> {
+		let segment = self.bitmap_segments.remove(idx);
+		debug!(
+			"pibd_desegmenter: apply bitmap segment at segment idx {}",
+			segment.identifier().idx
+		);
+		// Add leaves to bitmap accumulator
+		let (_sid, _hash_pos, _hashes, _leaf_pos, leaf_data, _proof) = segment.parts();
 		for chunk in leaf_data.into_iter() {
 			self.bitmap_accumulator.append_chunk(chunk)?;
-		}*/
+		}
 		Ok(())
 	}
 

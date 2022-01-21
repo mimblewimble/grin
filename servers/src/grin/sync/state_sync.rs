@@ -172,10 +172,19 @@ impl StateSync {
 		let archive_header = self.chain.txhashset_archive_header_header_only().unwrap();
 		let desegmenter = self.chain.desegmenter(&archive_header).unwrap();
 
+		// Apply segments... TODO: figure out how this should be called, might
+		// need to be a separate thread.
+		if let Some(mut de) = desegmenter.try_write() {
+			if let Some(d) = de.as_mut() {
+				d.apply_next_segments().unwrap();
+			}
+		}
+
 		// TODO and consider: number here depends on how many simultaneous
 		// requests we want to send to peers
 		let mut next_segment_ids = vec![];
-		if let Some(d) = desegmenter.read().as_ref() {
+		if let Some(d) = desegmenter.write().as_mut() {
+			// Figure out the next segments we need
 			next_segment_ids = d.next_desired_segments(10);
 		}
 
