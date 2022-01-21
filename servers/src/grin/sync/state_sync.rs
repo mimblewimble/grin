@@ -17,10 +17,7 @@ use chrono::Duration;
 use std::sync::Arc;
 
 use crate::chain::{self, SyncState, SyncStatus};
-use crate::core::core::{
-	hash::Hashed,
-	pmmr::segment::{SegmentIdentifier, SegmentType},
-};
+use crate::core::core::{hash::Hashed, pmmr::segment::SegmentType};
 use crate::core::global;
 use crate::core::pow::Difficulty;
 use crate::p2p::{self, Capabilities, Peer};
@@ -216,7 +213,7 @@ impl StateSync {
 				warn!("no suitable outbound peer for pibd message, considering inbound");
 				peers_iter().inbound().choose_random()
 			});
-			debug!("Chosen peer is {:?}", peer);
+			trace!("Chosen peer is {:?}", peer);
 			if let Some(p) = peer {
 				match seg_id.segment_type {
 					SegmentType::Bitmap => p

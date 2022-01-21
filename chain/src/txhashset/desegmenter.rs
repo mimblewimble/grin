@@ -111,10 +111,24 @@ impl Desegmenter {
 				self.apply_bitmap_segment(idx)?;
 			}
 		} else {
+			// Check if we need to finalize bitmap
 			if self.bitmap_cache == None {
 				// Should have all the pieces now, finalize the bitmap cache
 				self.finalize_bitmap()?;
 			}
+			// Check if we can apply the next output segment
+			if let Some(next_output_idx) = self.next_required_output_segment_index() {
+				debug!("Next output index to apply: {}", next_output_idx);
+				if let Some((idx, _seg)) = self
+					.output_segment_cache
+					.iter()
+					.enumerate()
+					.find(|s| s.1.identifier().idx == next_output_idx)
+				{
+					self.apply_output_segment(idx)?;
+				}
+			}
+			// TODO: Ditto RP, kernel
 		}
 		Ok(())
 	}
@@ -162,6 +176,7 @@ impl Desegmenter {
 				self.archive_header.output_mmr_size,
 				self.default_output_segment_height,
 			);
+			debug!("local output mmr size is: {}", local_output_mmr_size);
 			while return_vec.len() < max_elements {
 				// Next segment from output PMMR
 				if let Some(id) = output_identifier_iter.next() {
@@ -341,6 +356,55 @@ impl Desegmenter {
 		}
 	}
 
+	/// Apply an output segment at the index cache
+	pub fn apply_output_segment(&mut self, idx: usize) -> Result<(), Error> {
+		let segment = self.output_segment_cache.remove(idx);
+		debug!(
+			"pibd_desegmenter: applying output segment at segment idx {}",
+			segment.identifier().idx
+		);
+		let mut header_pmmr = self.header_pmmr.write();
+		let mut txhashset = self.txhashset.write();
+		let mut batch = self.store.batch()?;
+		txhashset::extending(
+			&mut header_pmmr,
+			&mut txhashset,
+			&mut batch,
+			|ext, _batch| {
+				let extension = &mut ext.extension;
+				extension.apply_output_segment(segment)?;
+				Ok(())
+			},
+		)?;
+		Ok(())
+	}
+
+	/// Return an identifier for the next segment we need for the output pmmr
+	fn next_required_output_segment_index(&self) -> Option<u64> {
+		let local_output_mmr_size;
+		{
+			let txhashset = self.txhashset.read();
+			local_output_mmr_size = txhashset.output_mmr_size();
+		}
+		let cur_segment_count = SegmentIdentifier::count_segments_required(
+			local_output_mmr_size,
+			self.default_output_segment_height,
+		);
+		let total_segment_count = SegmentIdentifier::count_segments_required(
+			self.archive_header.output_mmr_size,
+			self.default_output_segment_height,
+		);
+		debug!(
+			"Next required output segment is {} of {}",
+			cur_segment_count, total_segment_count
+		);
+		if cur_segment_count == total_segment_count {
+			None
+		} else {
+			Some(cur_segment_count as u64)
+		}
+	}
+
 	/// Adds a output segment
 	pub fn add_output_segment(
 		&mut self,
@@ -361,19 +425,6 @@ impl Desegmenter {
 			self.bitmap_accumulator.root(), // Other root
 			false,
 		)?;
-		/*let mut header_pmmr = self.header_pmmr.write();
-		let mut txhashset = self.txhashset.write();
-		let mut batch = self.store.batch()?;
-		txhashset::extending(
-			&mut header_pmmr,
-			&mut txhashset,
-			&mut batch,
-			|ext, _batch| {
-				let extension = &mut ext.extension;
-				extension.apply_output_segment(segment)?;
-				Ok(())
-			},
-		)?;*/
 		self.cache_output_segment(segment);
 		Ok(())
 	}
