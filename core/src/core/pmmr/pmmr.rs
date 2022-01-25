@@ -241,6 +241,13 @@ where
 		Ok(leaf_pos)
 	}
 
+	/// Push a pruned subtree into the PMMR
+	pub fn push_pruned_subtree(&mut self, hash: Hash, pos0: u64) -> Result<(), String> {
+		self.backend.append_pruned_subtree(hash, pos0)?;
+		self.size = crate::core::pmmr::round_up_to_leaf_pos(pos0);
+		Ok(())
+	}
+
 	/// Saves a snapshot of the MMR tagged with the block hash.
 	/// Specifically - snapshots the utxo file as we need this rewound before
 	/// sending the txhashset zip file to another node for fast-sync.
@@ -323,15 +330,15 @@ where
 				if m >= sz {
 					break;
 				}
-				idx.push_str(&format!("{:>8} ", m + 1));
+				idx.push_str(&format!("{:>8} ", m));
 				let ohs = self.get_hash(m);
 				match ohs {
 					Some(hs) => hashes.push_str(&format!("{} ", hs)),
 					None => hashes.push_str(&format!("{:>8} ", "??")),
 				}
 			}
-			trace!("{}", idx);
-			trace!("{}", hashes);
+			debug!("{}", idx);
+			debug!("{}", hashes);
 		}
 	}
 
