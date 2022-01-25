@@ -210,7 +210,7 @@ impl Desegmenter {
 	/// being shut down and restarted
 	pub fn finalize_bitmap(&mut self) -> Result<(), Error> {
 		debug!(
-			"pibd_desgmenter: finalizing and caching bitmap - accumulator root: {}",
+			"pibd_desegmenter: finalizing and caching bitmap - accumulator root: {}",
 			self.bitmap_accumulator.root()
 		);
 		self.bitmap_cache = Some(self.bitmap_accumulator.as_bitmap()?);
@@ -239,7 +239,7 @@ impl Desegmenter {
 		self.bitmap_mmr_leaf_count =
 			(pmmr::n_leaves(self.archive_header.output_mmr_size) + 1023) / 1024;
 		debug!(
-			"pibd_desgmenter - expected number of leaves in bitmap MMR: {}",
+			"pibd_desegmenter - expected number of leaves in bitmap MMR: {}",
 			self.bitmap_mmr_leaf_count
 		);
 		// Total size of Bitmap PMMR
@@ -256,7 +256,7 @@ impl Desegmenter {
 				.clone();
 
 		debug!(
-			"pibd_desgmenter - expected size of bitmap MMR: {}",
+			"pibd_desegmenter - expected size of bitmap MMR: {}",
 			self.bitmap_mmr_size
 		);
 	}
