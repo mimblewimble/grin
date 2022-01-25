@@ -386,10 +386,20 @@ impl Desegmenter {
 			let txhashset = self.txhashset.read();
 			local_output_mmr_size = txhashset.output_mmr_size();
 		}
-		let cur_segment_count = SegmentIdentifier::count_segments_required(
-			local_output_mmr_size,
-			self.default_output_segment_height,
-		);
+
+		// Special case here. If the mmr size is 1, this is a fresh chain
+		// with naught but a humble genesis block. We need segment 0, (and
+		// also need to skip the genesis block when applying the segment)
+
+		let cur_segment_count = if local_output_mmr_size == 1 {
+			0
+		} else {
+			SegmentIdentifier::count_segments_required(
+				local_output_mmr_size,
+				self.default_output_segment_height,
+			)
+		};
+
 		let total_segment_count = SegmentIdentifier::count_segments_required(
 			self.archive_header.output_mmr_size,
 			self.default_output_segment_height,

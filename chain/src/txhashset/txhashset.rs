@@ -1258,8 +1258,13 @@ impl<'a> Extension<'a> {
 		&mut self,
 		segment: Segment<OutputIdentifier>,
 	) -> Result<(), Error> {
-		let (_sid, _hash_pos, _hashes, _leaf_pos, leaf_data, _proof) = segment.parts();
-		for output_identifier in leaf_data {
+		let (sid, _hash_pos, _hashes, _leaf_pos, leaf_data, _proof) = segment.parts();
+		for (index, output_identifier) in leaf_data.iter().enumerate() {
+			// Special case, if this is segment 0, skip the genesis block which should
+			// already be applied
+			if sid.idx == 0 && index == 0 {
+				continue;
+			}
 			self.output_pmmr
 				.push(&output_identifier)
 				.map_err(&ErrorKind::TxHashSetErr)?;
