@@ -33,6 +33,9 @@ pub trait Backend<T: PMMRable> {
 	/// This allows us to append an existing pruned subtree directly without the underlying leaf nodes.
 	fn append_pruned_subtree(&mut self, hash: Hash, pos0: u64) -> Result<(), String>;
 
+	/// Append a single hash to the pmmr
+	fn append_hash(&mut self, hash: Hash) -> Result<(), String>;
+
 	/// Rewind the backend state to a previous position, as if all append
 	/// operations after that had been canceled. Expects a position in the PMMR
 	/// to rewind to as well as bitmaps representing the positions added and

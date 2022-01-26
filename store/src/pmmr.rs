@@ -89,7 +89,6 @@ impl<T: PMMRable> Backend<T> for PMMRBackend<T> {
 	// Supports appending a pruned subtree (single root hash) to an existing hash file.
 	// Update the prune_list "shift cache" to reflect the new pruned leaf pos in the subtree.
 	fn append_pruned_subtree(&mut self, hash: Hash, pos0: u64) -> Result<(), String> {
-		debug!("Append pruned subtree, add {} at position {}", hash, pos0);
 		if !self.prunable {
 			return Err("Not prunable, cannot append pruned subtree.".into());
 		}
@@ -100,6 +99,13 @@ impl<T: PMMRable> Backend<T> for PMMRBackend<T> {
 
 		self.prune_list.append(pos0);
 
+		Ok(())
+	}
+
+	fn append_hash(&mut self, hash: Hash) -> Result<(), String> {
+		self.hash_file
+			.append(&hash)
+			.map_err(|e| format!("Failed to append hash to file. {}", e))?;
 		Ok(())
 	}
 

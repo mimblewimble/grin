@@ -47,6 +47,10 @@ impl<T: PMMRable> Backend<T> for VecBackend<T> {
 		unimplemented!()
 	}
 
+	fn append_hash(&mut self, _hash: Hash) -> Result<(), String> {
+		unimplemented!()
+	}
+
 	fn get_hash(&self, pos0: u64) -> Option<Hash> {
 		if self.removed.contains(&pos0) {
 			None

@@ -1293,30 +1293,30 @@ impl<'a> Extension<'a> {
 		for insert in ordered_inserts {
 			match insert {
 				OrderedHashLeafNode::Hash(idx, pos0) => {
-					if pos0 >= self.output_pmmr.unpruned_size() {
+					if pos0 >= self.output_pmmr.size {
 						debug!(
 							"Merging hash at {}, {} pmmr size: {}",
-							pos0,
-							hashes[idx],
-							self.output_pmmr.unpruned_size()
+							pos0, hashes[idx], self.output_pmmr.size
 						);
 						debug!("BEFORE");
-						self.output_pmmr.dump(false);
+						self.output_pmmr.dump(true);
 						self.output_pmmr
 							.push_pruned_subtree(hashes[idx], pos0)
 							.map_err(&ErrorKind::TxHashSetErr)?;
 						debug!("AFTER");
-						self.output_pmmr.dump(false);
+						debug!("Hash at {} is {:?}", pos0, self.output_pmmr.get_hash(pos0));
+						self.output_pmmr.dump(true);
+					} else {
+						debug!("Not merging {} at {}, redundant", hashes[idx], pos0);
 					}
 				}
 				OrderedHashLeafNode::Leaf(idx, pos0) => {
 					debug!(
 						"Merging leaf, pmmr size: {}, {}",
-						pos0,
-						self.output_pmmr.unpruned_size()
+						pos0, self.output_pmmr.size
 					);
 					debug!("BEFORE");
-					self.output_pmmr.dump(false);
+					self.output_pmmr.dump(true);
 					// Don't re-push genesis output
 					if pos0 != 0 {
 						self.output_pmmr
@@ -1324,7 +1324,7 @@ impl<'a> Extension<'a> {
 							.map_err(&ErrorKind::TxHashSetErr)?;
 					}
 					debug!("AFTER");
-					self.output_pmmr.dump(false);
+					self.output_pmmr.dump(true);
 				}
 			}
 		}
