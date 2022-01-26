@@ -50,6 +50,15 @@ const KERNEL_SUBDIR: &str = "kernel";
 
 const TXHASHSET_ZIP: &str = "txhashset_snapshot";
 
+/// Convenience enum to keep track of hash and leaf insertions when rebuilding an mmr
+/// from segments
+enum OrderedHashLeafNode {
+	/// index of data in hashes array, pmmr position
+	Hash(usize, u64),
+	/// index of data in leaf_data array, pmmr position
+	Leaf(usize, u64),
+}
+
 /// Convenience wrapper around a single prunable MMR backend.
 pub struct PMMRHandle<T: PMMRable> {
 	/// The backend storage for the MMR.
@@ -1258,108 +1267,67 @@ impl<'a> Extension<'a> {
 		&mut self,
 		segment: Segment<OutputIdentifier>,
 	) -> Result<(), Error> {
-		let (sid, hash_pos, hashes, leaf_pos, leaf_data, _proof) = segment.parts();
+		let (_sid, hash_pos, hashes, leaf_pos, leaf_data, _proof) = segment.parts();
 
-		let mut leaf_pos_iter = leaf_pos.iter().enumerate();
-		let mut hash_pos_iter = hash_pos.iter().enumerate();
+		// Merge and into single array and sort into insertion order
+		let mut ordered_inserts = vec![];
+		for (data_index, pos0) in leaf_pos.iter().enumerate() {
+			ordered_inserts.push(OrderedHashLeafNode::Leaf(data_index, *pos0));
+		}
+		for (data_index, pos0) in hash_pos.iter().enumerate() {
+			ordered_inserts.push(OrderedHashLeafNode::Hash(data_index, *pos0));
+		}
+		ordered_inserts.sort_by(|a, b| {
+			let a_val = match a {
+				OrderedHashLeafNode::Hash(_, pos0) => pos0,
+				OrderedHashLeafNode::Leaf(_, pos0) => pos0,
+			};
+			let b_val = match b {
+				OrderedHashLeafNode::Hash(_, pos0) => pos0,
+				OrderedHashLeafNode::Leaf(_, pos0) => pos0,
+			};
+			a_val.cmp(&b_val)
+		});
 
-		// get first leaf
-		let mut next_leaf = leaf_pos_iter.next();
-		// get first hash
-		let mut next_hash = hash_pos_iter.next();
-
-		while next_leaf.is_some() || next_hash.is_some() {
-			if let Some(l) = next_leaf {
-				if let Some(h) = next_hash {
-					if *l.1 < *h.1 {
+		// insert either leaves or pruned subtrees as we go
+		for insert in ordered_inserts {
+			match insert {
+				OrderedHashLeafNode::Hash(idx, pos0) => {
+					if pos0 >= self.output_pmmr.unpruned_size() {
 						debug!(
-							"Merging leaf, pmmr size: {}, {}",
-							*l.1,
+							"Merging hash at {}, {} pmmr size: {}",
+							pos0,
+							hashes[idx],
 							self.output_pmmr.unpruned_size()
 						);
 						debug!("BEFORE");
-						self.output_pmmr.dump(true);
-						// Don't re-push genesis output
-						if *l.1 != 0 {
-							self.output_pmmr
-								.push(&leaf_data[l.0])
-								.map_err(&ErrorKind::TxHashSetErr)?;
-						}
+						self.output_pmmr.dump(false);
+						self.output_pmmr
+							.push_pruned_subtree(hashes[idx], pos0)
+							.map_err(&ErrorKind::TxHashSetErr)?;
 						debug!("AFTER");
-						self.output_pmmr.dump(true);
-						next_leaf = leaf_pos_iter.next();
-
-						continue;
-					} else {
-						if *h.1 >= self.output_pmmr.unpruned_size() {
-							debug!(
-								"Merging hash at {}, {} pmmr size: {}",
-								h.1,
-								hashes[h.0],
-								self.output_pmmr.unpruned_size()
-							);
-							debug!("BEFORE");
-							self.output_pmmr.dump(true);
-							self.output_pmmr
-								.push_pruned_subtree(hashes[h.0], *h.1)
-								.map_err(&ErrorKind::TxHashSetErr)?;
-							debug!("AFTER");
-							self.output_pmmr.dump(true);
-						}
-						next_hash = hash_pos_iter.next();
-						continue;
+						self.output_pmmr.dump(false);
 					}
-				} else {
-					if *l.1 != 0 {
-						self.output_pmmr
-							.push(&leaf_data[l.0])
-							.map_err(&ErrorKind::TxHashSetErr)?;
-					}
-					next_leaf = leaf_pos_iter.next();
-					continue;
 				}
-			}
-			if let Some(h) = next_hash {
-				if let Some(l) = next_leaf {
-					if *h.1 < *l.1 {
-						if *h.1 >= self.output_pmmr.unpruned_size() {
-							self.output_pmmr
-								.push_pruned_subtree(hashes[h.0], *h.1)
-								.map_err(&ErrorKind::TxHashSetErr)?;
-						}
-						next_hash = hash_pos_iter.next();
-						continue;
-					} else {
-						if *l.1 != 0 {
-							self.output_pmmr
-								.push(&leaf_data[l.0])
-								.map_err(&ErrorKind::TxHashSetErr)?;
-						}
-						next_leaf = leaf_pos_iter.next();
-						continue;
-					}
-				} else {
-					if *h.1 >= self.output_pmmr.unpruned_size() {
+				OrderedHashLeafNode::Leaf(idx, pos0) => {
+					debug!(
+						"Merging leaf, pmmr size: {}, {}",
+						pos0,
+						self.output_pmmr.unpruned_size()
+					);
+					debug!("BEFORE");
+					self.output_pmmr.dump(false);
+					// Don't re-push genesis output
+					if pos0 != 0 {
 						self.output_pmmr
-							.push_pruned_subtree(hashes[h.0], *h.1)
+							.push(&leaf_data[idx])
 							.map_err(&ErrorKind::TxHashSetErr)?;
 					}
-					next_hash = hash_pos_iter.next();
-					continue;
+					debug!("AFTER");
+					self.output_pmmr.dump(false);
 				}
 			}
 		}
-
-		/*(for (index, output_identifier) in leaf_data.iter().enumerate() {
-			// Special case, if this is segment 0, skip the genesis block which should
-			// already be applied
-			if sid.idx == 0 && index == 0 {
-				continue;
-			}
-			self.output_pmmr
-				.push(&output_identifier)
-				.map_err(&ErrorKind::TxHashSetErr)?;
-		}*/
 		Ok(())
 	}
 

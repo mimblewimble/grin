@@ -245,6 +245,7 @@ where
 	pub fn push_pruned_subtree(&mut self, hash: Hash, pos0: u64) -> Result<(), String> {
 		self.backend.append_pruned_subtree(hash, pos0)?;
 		self.size = crate::core::pmmr::round_up_to_leaf_pos(pos0);
+		debug!("Hash at {} is: {:?}", pos0, self.backend.get_hash(pos0));
 		Ok(())
 	}
 
