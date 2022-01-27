@@ -219,6 +219,17 @@ impl DesegmenterRequestor {
 			};
 		}
 	}
+
+	pub fn check_roots(&self) {
+		let roots = self.chain.txhashset().read().roots();
+		let archive_header = self.chain.txhashset_archive_header_header_only().unwrap();
+		debug!("Archive Header is {:?}", archive_header);
+		debug!("TXHashset output root is {:?}", roots);
+		debug!(
+			"TXHashset merged output root is {:?}",
+			roots.output_roots.root(&archive_header)
+		);
+	}
 }
 fn test_pibd_copy_impl(
 	is_test_chain: bool,
@@ -256,9 +267,11 @@ fn test_pibd_copy_impl(
 		}
 
 		// Just peform a set number of times for now
-		for _ in 0..100 {
+		for _ in 0..10000 {
 			dest_requestor.continue_pibd();
 		}
+
+		dest_requestor.check_roots();
 
 		/*let horizon_header = src_chain.txhashset_archive_header().unwrap();
 

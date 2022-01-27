@@ -176,25 +176,23 @@ impl Desegmenter {
 				self.archive_header.output_mmr_size,
 				self.default_output_segment_height,
 			);
-			debug!("local output mmr size is: {}", local_output_mmr_size);
-			while return_vec.len() < max_elements {
-				// Next segment from output PMMR
-				if let Some(id) = output_identifier_iter.next() {
-					if id.segment_pos_range(self.archive_header.output_mmr_size).1
-						> local_output_mmr_size
-					{
-						if !self.has_output_segment_with_id(id) {
-							return_vec.push(SegmentTypeIdentifier::new(SegmentType::Output, id));
-							if return_vec.len() >= max_elements {
-								break;
-							}
-						}
-					}
-				}
-				// TODO: likewise next segments from kernel and rangeproof pmmrs
 
-				// No more segments required
-				if return_vec.is_empty() {
+			while let Some(output_id) = output_identifier_iter.next() {
+				// Advance output iterator to next needed position
+				if output_id
+					.segment_pos_range(self.archive_header.output_mmr_size)
+					.1 <= local_output_mmr_size
+				{
+					continue;
+				}
+				// Break if we're full
+				if return_vec.len() > max_elements {
+					break;
+				}
+
+				if !self.has_output_segment_with_id(output_id) {
+					return_vec.push(SegmentTypeIdentifier::new(SegmentType::Output, output_id));
+					// Let other trees have a chance to put in a segment request
 					break;
 				}
 			}
