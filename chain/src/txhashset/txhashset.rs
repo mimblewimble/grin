@@ -1305,19 +1305,19 @@ impl<'a> Extension<'a> {
 		Ok(1 + output_pos)
 	}
 
-	/// Apply an output segment to the output PMMR. must be called in order
-	/// TODO: Not complete
-	pub fn apply_output_segment(
+	/// Order and sort output segments and hashes, returning an array
+	/// of elements that can be applied in order to a pmmr
+	fn sort_pmmr_hashes_and_leaves(
 		&mut self,
-		segment: Segment<OutputIdentifier>,
-	) -> Result<(), Error> {
-		let (_sid, hash_pos, hashes, leaf_pos, leaf_data, _proof) = segment.parts();
-
+		hash_pos: Vec<u64>,
+		leaf_pos: Vec<u64>,
+		skip_leaf_position: Option<u64>,
+	) -> Vec<OrderedHashLeafNode> {
 		// Merge and into single array and sort into insertion order
 		let mut ordered_inserts = vec![];
 		for (data_index, pos0) in leaf_pos.iter().enumerate() {
-			// Don't re-push genesis output
-			if *pos0 == 0 {
+			// Don't re-push genesis output, basically
+			if skip_leaf_position == Some(*pos0) {
 				continue;
 			}
 			ordered_inserts.push(OrderedHashLeafNode::Leaf(data_index, *pos0));
@@ -1326,9 +1326,23 @@ impl<'a> Extension<'a> {
 			ordered_inserts.push(OrderedHashLeafNode::Hash(data_index, *pos0));
 		}
 		ordered_inserts.sort();
+		ordered_inserts
+	}
+
+	/// Apply an output segment to the output PMMR. must be called in order
+	/// Sort and apply hashes and leaves within a segment to output pmmr, skipping over
+	/// genesis position.
+	/// TODO NB: Would like to make this more generic but the hard casting of pmmrs
+	/// held by this struct makes it awkward to do so
+
+	pub fn apply_output_segment(
+		&mut self,
+		segment: Segment<OutputIdentifier>,
+	) -> Result<(), Error> {
+		let (_sid, hash_pos, hashes, leaf_pos, leaf_data, _proof) = segment.parts();
 
 		// insert either leaves or pruned subtrees as we go
-		for insert in ordered_inserts {
+		for insert in self.sort_pmmr_hashes_and_leaves(hash_pos, leaf_pos, Some(0)) {
 			match insert {
 				OrderedHashLeafNode::Hash(idx, pos0) => {
 					if pos0 >= self.output_pmmr.size {
@@ -1337,7 +1351,7 @@ impl<'a> Extension<'a> {
 							.map_err(&ErrorKind::TxHashSetErr)?;
 					}
 				}
-				OrderedHashLeafNode::Leaf(idx, pos0) => {
+				OrderedHashLeafNode::Leaf(idx, _pos0) => {
 					self.output_pmmr
 						.push(&leaf_data[idx])
 						.map_err(&ErrorKind::TxHashSetErr)?;
