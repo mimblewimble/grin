@@ -243,7 +243,8 @@ where
 
 	/// Push a pruned subtree into the PMMR
 	pub fn push_pruned_subtree(&mut self, hash: Hash, pos0: u64) -> Result<(), String> {
-		self.backend.append_pruned_subtree(hash, pos0);
+		// First append the subtree
+		self.backend.append_pruned_subtree(hash, pos0)?;
 		self.size = pos0 + 1;
 
 		let mut pos = pos0;
@@ -251,14 +252,13 @@ where
 
 		let (peak_map, _) = peak_map_height(pos);
 
-		// hash with all immediately preceding peaks, as indicated by peak map
+		// Then hash with all immediately preceding peaks, as indicated by peak map
 		let mut peak = 1;
-
 		while (peak_map & peak) != 0 {
 			let (parent, sibling) = family(pos);
 			peak *= 2;
 			if sibling > pos {
-				// is right sibling, abort
+				// is right sibling, we should be done
 				continue;
 			}
 			let left_hash = self
@@ -267,12 +267,10 @@ where
 				.ok_or("missing left sibling in tree, should not have been pruned")?;
 			pos = parent;
 			current_hash = (left_hash, current_hash).hash_with_index(parent);
-			debug!("adding hash at {}, {}", pos, current_hash);
 			self.backend.append_hash(current_hash)?;
 		}
 
-		//self.backend.append_pruned_subtree(current_hash, pos)?;
-
+		// Round size up to next leaf
 		self.size = crate::core::pmmr::round_up_to_leaf_pos(pos);
 		Ok(())
 	}

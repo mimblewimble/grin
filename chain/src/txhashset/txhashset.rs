@@ -37,6 +37,7 @@ use crate::util::secp::pedersen::{Commitment, RangeProof};
 use crate::util::{file, secp_static, zip};
 use croaring::Bitmap;
 use grin_store::pmmr::{clean_files_by_prefix, PMMRBackend};
+use std::cmp::Ordering;
 use std::fs::{self, File};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -52,11 +53,54 @@ const TXHASHSET_ZIP: &str = "txhashset_snapshot";
 
 /// Convenience enum to keep track of hash and leaf insertions when rebuilding an mmr
 /// from segments
+#[derive(Eq)]
 enum OrderedHashLeafNode {
 	/// index of data in hashes array, pmmr position
 	Hash(usize, u64),
 	/// index of data in leaf_data array, pmmr position
 	Leaf(usize, u64),
+}
+
+impl PartialEq for OrderedHashLeafNode {
+	fn eq(&self, other: &Self) -> bool {
+		let a_val = match self {
+			OrderedHashLeafNode::Hash(_, pos0) => pos0,
+			OrderedHashLeafNode::Leaf(_, pos0) => pos0,
+		};
+		let b_val = match other {
+			OrderedHashLeafNode::Hash(_, pos0) => pos0,
+			OrderedHashLeafNode::Leaf(_, pos0) => pos0,
+		};
+		a_val == b_val
+	}
+}
+
+impl Ord for OrderedHashLeafNode {
+	fn cmp(&self, other: &Self) -> Ordering {
+		let a_val = match self {
+			OrderedHashLeafNode::Hash(_, pos0) => pos0,
+			OrderedHashLeafNode::Leaf(_, pos0) => pos0,
+		};
+		let b_val = match other {
+			OrderedHashLeafNode::Hash(_, pos0) => pos0,
+			OrderedHashLeafNode::Leaf(_, pos0) => pos0,
+		};
+		a_val.cmp(&b_val)
+	}
+}
+
+impl PartialOrd for OrderedHashLeafNode {
+	fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+		let a_val = match self {
+			OrderedHashLeafNode::Hash(_, pos0) => pos0,
+			OrderedHashLeafNode::Leaf(_, pos0) => pos0,
+		};
+		let b_val = match other {
+			OrderedHashLeafNode::Hash(_, pos0) => pos0,
+			OrderedHashLeafNode::Leaf(_, pos0) => pos0,
+		};
+		Some(a_val.cmp(b_val))
+	}
 }
 
 /// Convenience wrapper around a single prunable MMR backend.
@@ -1272,59 +1316,31 @@ impl<'a> Extension<'a> {
 		// Merge and into single array and sort into insertion order
 		let mut ordered_inserts = vec![];
 		for (data_index, pos0) in leaf_pos.iter().enumerate() {
+			// Don't re-push genesis output
+			if *pos0 == 0 {
+				continue;
+			}
 			ordered_inserts.push(OrderedHashLeafNode::Leaf(data_index, *pos0));
 		}
 		for (data_index, pos0) in hash_pos.iter().enumerate() {
 			ordered_inserts.push(OrderedHashLeafNode::Hash(data_index, *pos0));
 		}
-		ordered_inserts.sort_by(|a, b| {
-			let a_val = match a {
-				OrderedHashLeafNode::Hash(_, pos0) => pos0,
-				OrderedHashLeafNode::Leaf(_, pos0) => pos0,
-			};
-			let b_val = match b {
-				OrderedHashLeafNode::Hash(_, pos0) => pos0,
-				OrderedHashLeafNode::Leaf(_, pos0) => pos0,
-			};
-			a_val.cmp(&b_val)
-		});
+		ordered_inserts.sort();
 
 		// insert either leaves or pruned subtrees as we go
 		for insert in ordered_inserts {
 			match insert {
 				OrderedHashLeafNode::Hash(idx, pos0) => {
 					if pos0 >= self.output_pmmr.size {
-						debug!(
-							"Merging hash at {}, {} pmmr size: {}",
-							pos0, hashes[idx], self.output_pmmr.size
-						);
-						debug!("BEFORE");
-						self.output_pmmr.dump(true);
 						self.output_pmmr
 							.push_pruned_subtree(hashes[idx], pos0)
 							.map_err(&ErrorKind::TxHashSetErr)?;
-						debug!("AFTER");
-						debug!("Hash at {} is {:?}", pos0, self.output_pmmr.get_hash(pos0));
-						self.output_pmmr.dump(true);
-					} else {
-						debug!("Not merging {} at {}, redundant", hashes[idx], pos0);
 					}
 				}
 				OrderedHashLeafNode::Leaf(idx, pos0) => {
-					debug!(
-						"Merging leaf, pmmr size: {}, {}",
-						pos0, self.output_pmmr.size
-					);
-					debug!("BEFORE");
-					self.output_pmmr.dump(true);
-					// Don't re-push genesis output
-					if pos0 != 0 {
-						self.output_pmmr
-							.push(&leaf_data[idx])
-							.map_err(&ErrorKind::TxHashSetErr)?;
-					}
-					debug!("AFTER");
-					self.output_pmmr.dump(true);
+					self.output_pmmr
+						.push(&leaf_data[idx])
+						.map_err(&ErrorKind::TxHashSetErr)?;
 				}
 			}
 		}
