@@ -31,6 +31,7 @@ use crate::core::core::{
 	Block, OutputIdentifier,
 };
 use crate::core::{genesis, global, pow};
+use crate::util::secp::pedersen::RangeProof;
 
 use self::chain_test_helper::clean_output_dir;
 
@@ -98,6 +99,11 @@ impl SegmenterResponder {
 		let segmenter = self.chain.segmenter().unwrap();
 		segmenter.output_segment(seg_id).unwrap()
 	}
+
+	pub fn get_rangeproof_segment(&self, seg_id: SegmentIdentifier) -> Segment<RangeProof> {
+		let segmenter = self.chain.segmenter().unwrap();
+		segmenter.rangeproof_segment(seg_id).unwrap()
+	}
 }
 
 // Canned segmenter 'peer', building up its local chain from requested PIBD segments
@@ -164,7 +170,8 @@ impl DesegmenterRequestor {
 	}
 
 	// Emulate `continue_pibd` function, which would be called from state sync
-	pub fn continue_pibd(&mut self) {
+	// return whether is complete
+	pub fn continue_pibd(&mut self) -> bool {
 		let archive_header = self.chain.txhashset_archive_header_header_only().unwrap();
 		let desegmenter = self.chain.desegmenter(&archive_header).unwrap();
 
@@ -177,11 +184,13 @@ impl DesegmenterRequestor {
 		}
 
 		let mut next_segment_ids = vec![];
+		let mut is_complete = false;
 		if let Some(d) = desegmenter.write().as_mut() {
 			// Figure out the next segments we need
 			// (12 is divisible by 3, to try and evenly spread the requests among the 3
 			// main pmmrs. Bitmaps segments will always be requested first)
 			next_segment_ids = d.next_desired_segments(12);
+			is_complete = d.is_complete()
 		}
 
 		debug!("Next segment IDS: {:?}", next_segment_ids);
@@ -204,20 +213,23 @@ impl DesegmenterRequestor {
 						d.add_output_segment(seg, Some(bitmap_root)).unwrap();
 					}
 				}
-				_ => {} /*SegmentType::RangeProof => p
-							.send_rangeproof_segment_request(
-								archive_header.hash(),
-								seg_id.identifier.clone(),
-							)
-							.unwrap(),
-						SegmentType::Kernel => p
-							.send_kernel_segment_request(
-								archive_header.hash(),
-								seg_id.identifier.clone(),
-							)
-							.unwrap(),*/
+				SegmentType::RangeProof => {
+					let seg = self
+						.responder
+						.get_rangeproof_segment(seg_id.identifier.clone());
+					if let Some(d) = desegmenter.write().as_mut() {
+						d.add_rangeproof_segment(seg).unwrap();
+					}
+				}
+				_ => {} /*SegmentType::Kernel => p
+						.send_kernel_segment_request(
+							archive_header.hash(),
+							seg_id.identifier.clone(),
+						)
+						.unwrap(),*/
 			};
 		}
+		is_complete
 	}
 
 	pub fn check_roots(&self) {
@@ -266,10 +278,8 @@ fn test_pibd_copy_impl(
 			return;
 		}
 
-		// Just peform a set number of times for now
-		for _ in 0..10000 {
-			dest_requestor.continue_pibd();
-		}
+		// Perform until desegmenter reports it's done
+		while !dest_requestor.continue_pibd() {}
 
 		dest_requestor.check_roots();
 

@@ -1361,14 +1361,28 @@ impl<'a> Extension<'a> {
 		Ok(())
 	}
 
-	/// Apply a rangeproof segment to the output PMMR. must be called in order
-	/// TODO: Not complete
+	/// Apply a rangeproof segment to the rangeproof PMMR. must be called in order
+	/// Sort and apply hashes and leaves within a segment to rangeproof pmmr, skipping over
+	/// genesis position.
 	pub fn apply_rangeproof_segment(&mut self, segment: Segment<RangeProof>) -> Result<(), Error> {
-		let (_sid, _hash_pos, _hashes, _leaf_pos, leaf_data, _proof) = segment.parts();
-		for proof in leaf_data {
-			self.rproof_pmmr
-				.push(&proof)
-				.map_err(&ErrorKind::TxHashSetErr)?;
+		let (_sid, hash_pos, hashes, leaf_pos, leaf_data, _proof) = segment.parts();
+
+		// insert either leaves or pruned subtrees as we go
+		for insert in self.sort_pmmr_hashes_and_leaves(hash_pos, leaf_pos, Some(0)) {
+			match insert {
+				OrderedHashLeafNode::Hash(idx, pos0) => {
+					if pos0 >= self.rproof_pmmr.size {
+						self.rproof_pmmr
+							.push_pruned_subtree(hashes[idx], pos0)
+							.map_err(&ErrorKind::TxHashSetErr)?;
+					}
+				}
+				OrderedHashLeafNode::Leaf(idx, _pos0) => {
+					self.rproof_pmmr
+						.push(&leaf_data[idx])
+						.map_err(&ErrorKind::TxHashSetErr)?;
+				}
+			}
 		}
 		Ok(())
 	}
