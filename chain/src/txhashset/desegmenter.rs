@@ -44,12 +44,13 @@ pub struct Desegmenter {
 	default_bitmap_segment_height: u8,
 	default_output_segment_height: u8,
 	default_rangeproof_segment_height: u8,
+	default_kernel_segment_height: u8,
 
 	bitmap_accumulator: BitmapAccumulator,
 	bitmap_segment_cache: Vec<Segment<BitmapChunk>>,
 	output_segment_cache: Vec<Segment<OutputIdentifier>>,
 	rangeproof_segment_cache: Vec<Segment<RangeProof>>,
-	_kernel_segments: Vec<Segment<TxKernel>>,
+	kernel_segment_cache: Vec<Segment<TxKernel>>,
 
 	bitmap_mmr_leaf_count: u64,
 	bitmap_mmr_size: u64,
@@ -77,11 +78,12 @@ impl Desegmenter {
 			bitmap_accumulator: BitmapAccumulator::new(),
 			default_bitmap_segment_height: 9,
 			default_output_segment_height: 11,
-			default_rangeproof_segment_height: 7,
+			default_rangeproof_segment_height: 11,
+			default_kernel_segment_height: 13,
 			bitmap_segment_cache: vec![],
 			output_segment_cache: vec![],
 			rangeproof_segment_cache: vec![],
-			_kernel_segments: vec![],
+			kernel_segment_cache: vec![],
 
 			bitmap_mmr_leaf_count: 0,
 			bitmap_mmr_size: 0,
@@ -582,15 +584,33 @@ impl Desegmenter {
 		Ok(())
 	}
 
-	/// Adds a Kernel segment
-	/// TODO: Still experimenting, expects chunks received to be in order
-	pub fn add_kernel_segment(&self, segment: Segment<TxKernel>) -> Result<(), Error> {
-		debug!("pibd_desegmenter: add kernel segment");
-		segment.validate(
-			self.archive_header.kernel_mmr_size, // Last MMR pos at the height being validated
-			None,
-			self.archive_header.kernel_root, // Kernel root we're checking for
-		)?;
+	/// Whether our list already contains this kernel segment
+	fn has_kernel_segment_with_id(&self, seg_id: SegmentIdentifier) -> bool {
+		self.kernel_segment_cache
+			.iter()
+			.find(|i| i.identifier() == seg_id)
+			.is_some()
+	}
+
+	/// Cache a Kernel segment if we don't already have it
+	fn cache_kernel_segment(&mut self, in_seg: Segment<TxKernel>) {
+		if self
+			.kernel_segment_cache
+			.iter()
+			.find(|i| i.identifier() == in_seg.identifier())
+			.is_none()
+		{
+			self.kernel_segment_cache.push(in_seg);
+		}
+	}
+
+	/// Apply a kernel segment at the index cache
+	pub fn apply_kernel_segment(&mut self, idx: usize) -> Result<(), Error> {
+		let segment = self.kernel_segment_cache.remove(idx);
+		debug!(
+			"pibd_desegmenter: applying kernel segment at segment idx {}",
+			segment.identifier().idx
+		);
 		let mut header_pmmr = self.header_pmmr.write();
 		let mut txhashset = self.txhashset.write();
 		let mut batch = self.store.batch()?;
@@ -604,6 +624,51 @@ impl Desegmenter {
 				Ok(())
 			},
 		)?;
+		Ok(())
+	}
+
+	/// Return an identifier for the next segment we need for the kernel pmmr
+	fn next_required_kernel_segment_index(&self) -> Option<u64> {
+		let local_kernel_mmr_size;
+		{
+			let txhashset = self.txhashset.read();
+			local_kernel_mmr_size = txhashset.kernel_mmr_size();
+		}
+
+		let cur_segment_count = if local_kernel_mmr_size == 1 {
+			0
+		} else {
+			SegmentIdentifier::count_segments_required(
+				local_kernel_mmr_size,
+				self.default_kernel_segment_height,
+			)
+		};
+
+		let total_segment_count = SegmentIdentifier::count_segments_required(
+			self.archive_header.kernel_mmr_size,
+			self.default_kernel_segment_height,
+		);
+		trace!(
+			"Next required kernel segment is {} of {}",
+			cur_segment_count,
+			total_segment_count
+		);
+		if cur_segment_count == total_segment_count {
+			None
+		} else {
+			Some(cur_segment_count as u64)
+		}
+	}
+
+	/// Adds a Kernel segment
+	pub fn add_kernel_segment(&mut self, segment: Segment<TxKernel>) -> Result<(), Error> {
+		debug!("pibd_desegmenter: add kernel segment");
+		segment.validate(
+			self.archive_header.kernel_mmr_size, // Last MMR pos at the height being validated
+			self.bitmap_cache.as_ref(),
+			self.archive_header.kernel_root, // Kernel root we're checking for
+		)?;
+		self.cache_kernel_segment(segment);
 		Ok(())
 	}
 }
