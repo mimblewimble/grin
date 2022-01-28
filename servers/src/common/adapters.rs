@@ -623,7 +623,7 @@ where
 		if let Some(d) = self.chain().desegmenter(&archive_header)?.write().as_mut() {
 			let res = d.add_output_segment(segment, Some(bitmap_root));
 			if let Err(e) = res {
-				debug!(
+				error!(
 					"Validation of incoming output segment failed: {:?}, reason: {}",
 					identifier, e
 				);
@@ -639,9 +639,16 @@ where
 		segment: Segment<RangeProof>,
 	) -> Result<bool, chain::Error> {
 		let archive_header = self.chain().txhashset_archive_header_header_only()?;
-		let desegmenter = self.chain().desegmenter(&archive_header)?;
-		if let Some(d) = desegmenter.write().as_ref() {
-			d.add_rangeproof_segment(segment)?;
+		let identifier = segment.identifier().clone();
+		if let Some(d) = self.chain().desegmenter(&archive_header)?.write().as_mut() {
+			let res = d.add_rangeproof_segment(segment);
+			if let Err(e) = res {
+				error!(
+					"Validation of incoming rangeproof segment failed: {:?}, reason: {}",
+					identifier, e
+				);
+				return Err(e);
+			}
 		}
 		Ok(true)
 	}
@@ -652,9 +659,16 @@ where
 		segment: Segment<TxKernel>,
 	) -> Result<bool, chain::Error> {
 		let archive_header = self.chain().txhashset_archive_header_header_only()?;
-		let desegmenter = self.chain().desegmenter(&archive_header)?;
-		if let Some(d) = desegmenter.write().as_ref() {
-			d.add_kernel_segment(segment)?;
+		let identifier = segment.identifier().clone();
+		if let Some(d) = self.chain().desegmenter(&archive_header)?.write().as_mut() {
+			let res = d.add_kernel_segment(segment);
+			if let Err(e) = res {
+				error!(
+					"Validation of incoming rangeproof segment failed: {:?}, reason: {}",
+					identifier, e
+				);
+				return Err(e);
+			}
 		}
 		Ok(true)
 	}

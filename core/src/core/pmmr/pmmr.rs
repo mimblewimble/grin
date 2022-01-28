@@ -241,6 +241,40 @@ where
 		Ok(leaf_pos)
 	}
 
+	/// Push a pruned subtree into the PMMR
+	pub fn push_pruned_subtree(&mut self, hash: Hash, pos0: u64) -> Result<(), String> {
+		// First append the subtree
+		self.backend.append_pruned_subtree(hash, pos0)?;
+		self.size = pos0 + 1;
+
+		let mut pos = pos0;
+		let mut current_hash = hash;
+
+		let (peak_map, _) = peak_map_height(pos);
+
+		// Then hash with all immediately preceding peaks, as indicated by peak map
+		let mut peak = 1;
+		while (peak_map & peak) != 0 {
+			let (parent, sibling) = family(pos);
+			peak *= 2;
+			if sibling > pos {
+				// is right sibling, we should be done
+				continue;
+			}
+			let left_hash = self
+				.backend
+				.get_hash(sibling)
+				.ok_or("missing left sibling in tree, should not have been pruned")?;
+			pos = parent;
+			current_hash = (left_hash, current_hash).hash_with_index(parent);
+			self.backend.append_hash(current_hash)?;
+		}
+
+		// Round size up to next leaf
+		self.size = crate::core::pmmr::round_up_to_leaf_pos(pos);
+		Ok(())
+	}
+
 	/// Saves a snapshot of the MMR tagged with the block hash.
 	/// Specifically - snapshots the utxo file as we need this rewound before
 	/// sending the txhashset zip file to another node for fast-sync.
@@ -323,15 +357,15 @@ where
 				if m >= sz {
 					break;
 				}
-				idx.push_str(&format!("{:>8} ", m + 1));
+				idx.push_str(&format!("{:>8} ", m));
 				let ohs = self.get_hash(m);
 				match ohs {
 					Some(hs) => hashes.push_str(&format!("{} ", hs)),
 					None => hashes.push_str(&format!("{:>8} ", "??")),
 				}
 			}
-			trace!("{}", idx);
-			trace!("{}", hashes);
+			debug!("{}", idx);
+			debug!("{}", hashes);
 		}
 	}
 

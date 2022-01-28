@@ -102,6 +102,13 @@ impl<T: PMMRable> Backend<T> for PMMRBackend<T> {
 		Ok(())
 	}
 
+	fn append_hash(&mut self, hash: Hash) -> Result<(), String> {
+		self.hash_file
+			.append(&hash)
+			.map_err(|e| format!("Failed to append hash to file. {}", e))?;
+		Ok(())
+	}
+
 	fn get_from_file(&self, pos0: u64) -> Option<Hash> {
 		if self.is_compacted(pos0) {
 			return None;

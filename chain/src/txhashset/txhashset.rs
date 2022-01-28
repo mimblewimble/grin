@@ -37,6 +37,7 @@ use crate::util::secp::pedersen::{Commitment, RangeProof};
 use crate::util::{file, secp_static, zip};
 use croaring::Bitmap;
 use grin_store::pmmr::{clean_files_by_prefix, PMMRBackend};
+use std::cmp::Ordering;
 use std::fs::{self, File};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -49,6 +50,58 @@ const RANGE_PROOF_SUBDIR: &str = "rangeproof";
 const KERNEL_SUBDIR: &str = "kernel";
 
 const TXHASHSET_ZIP: &str = "txhashset_snapshot";
+
+/// Convenience enum to keep track of hash and leaf insertions when rebuilding an mmr
+/// from segments
+#[derive(Eq)]
+enum OrderedHashLeafNode {
+	/// index of data in hashes array, pmmr position
+	Hash(usize, u64),
+	/// index of data in leaf_data array, pmmr position
+	Leaf(usize, u64),
+}
+
+impl PartialEq for OrderedHashLeafNode {
+	fn eq(&self, other: &Self) -> bool {
+		let a_val = match self {
+			OrderedHashLeafNode::Hash(_, pos0) => pos0,
+			OrderedHashLeafNode::Leaf(_, pos0) => pos0,
+		};
+		let b_val = match other {
+			OrderedHashLeafNode::Hash(_, pos0) => pos0,
+			OrderedHashLeafNode::Leaf(_, pos0) => pos0,
+		};
+		a_val == b_val
+	}
+}
+
+impl Ord for OrderedHashLeafNode {
+	fn cmp(&self, other: &Self) -> Ordering {
+		let a_val = match self {
+			OrderedHashLeafNode::Hash(_, pos0) => pos0,
+			OrderedHashLeafNode::Leaf(_, pos0) => pos0,
+		};
+		let b_val = match other {
+			OrderedHashLeafNode::Hash(_, pos0) => pos0,
+			OrderedHashLeafNode::Leaf(_, pos0) => pos0,
+		};
+		a_val.cmp(&b_val)
+	}
+}
+
+impl PartialOrd for OrderedHashLeafNode {
+	fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+		let a_val = match self {
+			OrderedHashLeafNode::Hash(_, pos0) => pos0,
+			OrderedHashLeafNode::Leaf(_, pos0) => pos0,
+		};
+		let b_val = match other {
+			OrderedHashLeafNode::Hash(_, pos0) => pos0,
+			OrderedHashLeafNode::Leaf(_, pos0) => pos0,
+		};
+		Some(a_val.cmp(b_val))
+	}
+}
 
 /// Convenience wrapper around a single prunable MMR backend.
 pub struct PMMRHandle<T: PMMRable> {
@@ -1252,34 +1305,84 @@ impl<'a> Extension<'a> {
 		Ok(1 + output_pos)
 	}
 
+	/// Order and sort output segments and hashes, returning an array
+	/// of elements that can be applied in order to a pmmr
+	fn sort_pmmr_hashes_and_leaves(
+		&mut self,
+		hash_pos: Vec<u64>,
+		leaf_pos: Vec<u64>,
+		skip_leaf_position: Option<u64>,
+	) -> Vec<OrderedHashLeafNode> {
+		// Merge and into single array and sort into insertion order
+		let mut ordered_inserts = vec![];
+		for (data_index, pos0) in leaf_pos.iter().enumerate() {
+			// Don't re-push genesis output, basically
+			if skip_leaf_position == Some(*pos0) {
+				continue;
+			}
+			ordered_inserts.push(OrderedHashLeafNode::Leaf(data_index, *pos0));
+		}
+		for (data_index, pos0) in hash_pos.iter().enumerate() {
+			ordered_inserts.push(OrderedHashLeafNode::Hash(data_index, *pos0));
+		}
+		ordered_inserts.sort();
+		ordered_inserts
+	}
+
 	/// Apply an output segment to the output PMMR. must be called in order
-	/// TODO: Not complete
+	/// Sort and apply hashes and leaves within a segment to output pmmr, skipping over
+	/// genesis position.
+	/// TODO NB: Would like to make this more generic but the hard casting of pmmrs
+	/// held by this struct makes it awkward to do so
+
 	pub fn apply_output_segment(
 		&mut self,
 		segment: Segment<OutputIdentifier>,
 	) -> Result<(), Error> {
-		let (sid, _hash_pos, _hashes, _leaf_pos, leaf_data, _proof) = segment.parts();
-		for (index, output_identifier) in leaf_data.iter().enumerate() {
-			// Special case, if this is segment 0, skip the genesis block which should
-			// already be applied
-			if sid.idx == 0 && index == 0 {
-				continue;
+		let (_sid, hash_pos, hashes, leaf_pos, leaf_data, _proof) = segment.parts();
+
+		// insert either leaves or pruned subtrees as we go
+		for insert in self.sort_pmmr_hashes_and_leaves(hash_pos, leaf_pos, Some(0)) {
+			match insert {
+				OrderedHashLeafNode::Hash(idx, pos0) => {
+					if pos0 >= self.output_pmmr.size {
+						self.output_pmmr
+							.push_pruned_subtree(hashes[idx], pos0)
+							.map_err(&ErrorKind::TxHashSetErr)?;
+					}
+				}
+				OrderedHashLeafNode::Leaf(idx, _pos0) => {
+					self.output_pmmr
+						.push(&leaf_data[idx])
+						.map_err(&ErrorKind::TxHashSetErr)?;
+				}
 			}
-			self.output_pmmr
-				.push(&output_identifier)
-				.map_err(&ErrorKind::TxHashSetErr)?;
 		}
 		Ok(())
 	}
 
-	/// Apply a rangeproof segment to the output PMMR. must be called in order
-	/// TODO: Not complete
+	/// Apply a rangeproof segment to the rangeproof PMMR. must be called in order
+	/// Sort and apply hashes and leaves within a segment to rangeproof pmmr, skipping over
+	/// genesis position.
 	pub fn apply_rangeproof_segment(&mut self, segment: Segment<RangeProof>) -> Result<(), Error> {
-		let (_sid, _hash_pos, _hashes, _leaf_pos, leaf_data, _proof) = segment.parts();
-		for proof in leaf_data {
-			self.rproof_pmmr
-				.push(&proof)
-				.map_err(&ErrorKind::TxHashSetErr)?;
+		let (_sid, hash_pos, hashes, leaf_pos, leaf_data, _proof) = segment.parts();
+
+		// insert either leaves or pruned subtrees as we go
+		for insert in self.sort_pmmr_hashes_and_leaves(hash_pos, leaf_pos, Some(0)) {
+			match insert {
+				OrderedHashLeafNode::Hash(idx, pos0) => {
+					if pos0 >= self.rproof_pmmr.size {
+						self.rproof_pmmr
+							.push_pruned_subtree(hashes[idx], pos0)
+							.map_err(&ErrorKind::TxHashSetErr)?;
+					}
+				}
+				OrderedHashLeafNode::Leaf(idx, _pos0) => {
+					self.rproof_pmmr
+						.push(&leaf_data[idx])
+						.map_err(&ErrorKind::TxHashSetErr)?;
+				}
+			}
 		}
 		Ok(())
 	}
@@ -1304,13 +1407,23 @@ impl<'a> Extension<'a> {
 	}
 
 	/// Apply a kernel segment to the output PMMR. must be called in order
-	/// TODO: Not complete
 	pub fn apply_kernel_segment(&mut self, segment: Segment<TxKernel>) -> Result<(), Error> {
-		let (_sid, _hash_pos, _hashes, _leaf_pos, leaf_data, _proof) = segment.parts();
-		for kernel in leaf_data {
-			self.kernel_pmmr
-				.push(&kernel)
-				.map_err(&ErrorKind::TxHashSetErr)?;
+		let (_sid, _hash_pos, _hashes, leaf_pos, leaf_data, _proof) = segment.parts();
+		// Non prunable - insert only leaves (with genesis kernel removedj)
+		for insert in self.sort_pmmr_hashes_and_leaves(vec![], leaf_pos, Some(0)) {
+			match insert {
+				OrderedHashLeafNode::Hash(_, _) => {
+					return Err(ErrorKind::InvalidSegment(
+						"Kernel PMMR is non-prunable, should not have hash data".to_string(),
+					)
+					.into());
+				}
+				OrderedHashLeafNode::Leaf(idx, _pos0) => {
+					self.kernel_pmmr
+						.push(&leaf_data[idx])
+						.map_err(&ErrorKind::TxHashSetErr)?;
+				}
+			}
 		}
 		Ok(())
 	}
