@@ -19,7 +19,7 @@ use grin_util as util;
 #[macro_use]
 extern crate log;
 
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::sync::Arc;
 use std::{fs, io};
 
@@ -28,7 +28,7 @@ use crate::chain::types::{NoopAdapter, Options};
 use crate::core::core::{
 	hash::{Hash, Hashed},
 	pmmr::segment::{Segment, SegmentIdentifier, SegmentType},
-	Block, OutputIdentifier,
+	Block, OutputIdentifier, TxKernel,
 };
 use crate::core::{genesis, global, pow};
 use crate::util::secp::pedersen::RangeProof;
@@ -103,6 +103,11 @@ impl SegmenterResponder {
 	pub fn get_rangeproof_segment(&self, seg_id: SegmentIdentifier) -> Segment<RangeProof> {
 		let segmenter = self.chain.segmenter().unwrap();
 		segmenter.rangeproof_segment(seg_id).unwrap()
+	}
+
+	pub fn get_kernel_segment(&self, seg_id: SegmentIdentifier) -> Segment<TxKernel> {
+		let segmenter = self.chain.segmenter().unwrap();
+		segmenter.kernel_segment(seg_id).unwrap()
 	}
 }
 
@@ -221,12 +226,12 @@ impl DesegmenterRequestor {
 						d.add_rangeproof_segment(seg).unwrap();
 					}
 				}
-				_ => {} /*SegmentType::Kernel => p
-						.send_kernel_segment_request(
-							archive_header.hash(),
-							seg_id.identifier.clone(),
-						)
-						.unwrap(),*/
+				SegmentType::Kernel => {
+					let seg = self.responder.get_kernel_segment(seg_id.identifier.clone());
+					if let Some(d) = desegmenter.write().as_mut() {
+						d.add_kernel_segment(seg).unwrap();
+					}
+				}
 			};
 		}
 		is_complete
@@ -239,6 +244,12 @@ impl DesegmenterRequestor {
 		debug!("TXHashset output root is {:?}", roots);
 		debug!(
 			"TXHashset merged output root is {:?}",
+			roots.output_roots.root(&archive_header)
+		);
+		assert_eq!(archive_header.range_proof_root, roots.rproof_root);
+		assert_eq!(archive_header.kernel_root, roots.kernel_root);
+		assert_eq!(
+			archive_header.output_root,
 			roots.output_roots.root(&archive_header)
 		);
 	}
@@ -267,152 +278,26 @@ fn test_pibd_copy_impl(
 		copy_dir_all(td, dest_root_dir).unwrap();
 	}
 
-	{
-		let src_responder = Arc::new(SegmenterResponder::new(src_root_dir, genesis.clone()));
-		let mut dest_requestor =
-			DesegmenterRequestor::new(dest_root_dir, genesis.clone(), src_responder);
+	let src_responder = Arc::new(SegmenterResponder::new(src_root_dir, genesis.clone()));
+	let mut dest_requestor =
+		DesegmenterRequestor::new(dest_root_dir, genesis.clone(), src_responder);
 
-		// No template provided so copy headers from source
-		if dest_template_dir.is_none() {
-			dest_requestor.copy_headers_from_responder();
+	// No template provided so copy headers from source
+	if dest_template_dir.is_none() {
+		dest_requestor.copy_headers_from_responder();
+		if !is_test_chain {
 			return;
 		}
-
-		// Perform until desegmenter reports it's done
-		while !dest_requestor.continue_pibd() {}
-
-		dest_requestor.check_roots();
-
-		/*let horizon_header = src_chain.txhashset_archive_header().unwrap();
-
-		debug!("Horizon header: {:?}", horizon_header);*/
-
-		// Copy the headers from source to output in chunks
-		/*let dest_sync_head = dest_chain.header_head().unwrap();
-		let copy_chunk_size = 1000;
-		let mut copied_header_index = 1;
-		let mut src_headers = vec![];
-		while copied_header_index <= horizon_header.height {
-			let h = src_chain.get_header_by_height(copied_header_index).unwrap();
-			src_headers.push(h);
-			copied_header_index += 1;
-			if copied_header_index % copy_chunk_size == 0 {
-				debug!(
-					"Copying headers to {} of {}",
-					copied_header_index, horizon_header.height
-				);
-				dest_chain
-					.sync_block_headers(&src_headers, dest_sync_head, Options::SKIP_POW)
-					.unwrap();
-				src_headers = vec![];
-			}
-		}
-		if !src_headers.is_empty() {
-			dest_chain
-				.sync_block_headers(&src_headers, dest_sync_head, Options::NONE)
-				.unwrap();
-		}*/
-
-		// Init segmenter, (note this still has to be lazy init somewhere on a peer)
-		// This is going to use the same block as horizon_header
-		/*klet segmenter = src_chain.segmenter().unwrap();
-		// Init desegmenter
-		let desegmenter_lock = dest_chain.desegmenter(&horizon_header).unwrap();
-		let mut desegmenter_write = desegmenter_lock.write();
-		let desegmenter = desegmenter_write.as_mut().unwrap();
-
-		// And total size of the bitmap PMMR
-		let bitmap_mmr_size = desegmenter.expected_bitmap_mmr_size();
-		debug!(
-			"Bitmap Segments required: {}",
-			SegmentIdentifier::count_segments_required(bitmap_mmr_size, target_segment_height)
-		);
-		// TODO: This can probably be derived from the PMMR we'll eventually be building
-		// (check if total size is equal to total size at horizon header)
-		let identifier_iter =
-			SegmentIdentifier::traversal_iter(bitmap_mmr_size, target_segment_height);
-
-		for sid in identifier_iter {
-			debug!("Getting bitmap segment with Segment Identifier {:?}", sid);
-			let (bitmap_segment, output_root_hash) = segmenter.bitmap_segment(sid).unwrap();
-			debug!(
-				"Bitmap segmenter reports output root hash is {:?}",
-				output_root_hash
-			);
-			// Add segment to desegmenter / validate
-			if let Err(e) = desegmenter.add_bitmap_segment(bitmap_segment, output_root_hash) {
-				panic!("Unable to add bitmap segment: {}", e);
-			}
-			if let Err(e) = desegmenter.apply_next_segments() {
-				panic!("Unable to apply bitmap segment: {}", e);
-			}
-		}
-
-		// Finalize segmenter bitmap, which means we've recieved all bitmap MMR chunks and
-		// Are ready to use it to validate outputs
-		desegmenter.finalize_bitmap().unwrap();
-
-		// OUTPUTS  - Read + Validate
-		let identifier_iter = SegmentIdentifier::traversal_iter(
-			horizon_header.output_mmr_size,
-			target_segment_height,
-		);
-
-		for sid in identifier_iter {
-			debug!("Getting output segment with Segment Identifier {:?}", sid);
-			let (output_segment, bitmap_root_hash) = segmenter.output_segment(sid).unwrap();
-			debug!(
-				"Output segmenter reports bitmap hash is {:?}",
-				bitmap_root_hash
-			);
-			// Add segment to desegmenter / validate
-			if let Err(e) = desegmenter.add_output_segment(output_segment, None) {
-				panic!("Unable to add output segment: {}", e);
-			}
-			if let Err(e) = desegmenter.apply_next_segments() {
-				panic!("Unable to apply output segment: {}", e);
-			}
-		}*/
-
-		// PROOFS  - Read + Validate
-		/*let identifier_iter = SegmentIdentifier::traversal_iter(
-			horizon_header.output_mmr_size,
-			target_segment_height,
-		);
-
-		for sid in identifier_iter {
-			debug!(
-				"Getting rangeproof segment with Segment Identifier {:?}",
-				sid
-			);
-			let rangeproof_segment = segmenter.rangeproof_segment(sid).unwrap();
-			// Add segment to desegmenter / validate
-			if let Err(e) = desegmenter.add_rangeproof_segment(rangeproof_segment) {
-				panic!("Unable to add rangeproof segment: {}", e);
-			}
-		}
-
-		// KERNELS - Read + Validate
-		let identifier_iter = SegmentIdentifier::traversal_iter(
-			horizon_header.kernel_mmr_size,
-			target_segment_height,
-		);
-
-		for sid in identifier_iter {
-			debug!("Getting kernel segment with Segment Identifier {:?}", sid);
-			let kernel_segment = segmenter.kernel_segment(sid).unwrap();
-			if let Err(e) = desegmenter.add_kernel_segment(kernel_segment) {
-				panic!("Unable to add kernel segment: {}", e);
-			}
-		}
-
-		let dest_txhashset = dest_chain.txhashset();
-		debug!("Dest TxHashset Roots: {:?}", dest_txhashset.read().roots());
-		*/
 	}
+
+	// Perform until desegmenter reports it's done
+	while !dest_requestor.continue_pibd() {}
+
+	dest_requestor.check_roots();
 }
 
 #[test]
+#[ignore]
 fn test_pibd_copy_sample() {
 	util::init_test_logger();
 	// Note there is now a 'test' in grin_wallet_controller/build_chain
@@ -431,7 +316,7 @@ fn test_pibd_copy_sample() {
 }
 
 #[test]
-//#[ignore]
+#[ignore]
 // Note this test is intended to be run manually, as testing the copy of an
 // entire live chain is beyond the capability of current CI
 // As above, but run on a real instance of a chain pointed where you like

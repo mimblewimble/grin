@@ -79,7 +79,7 @@ impl Desegmenter {
 			default_bitmap_segment_height: 9,
 			default_output_segment_height: 11,
 			default_rangeproof_segment_height: 11,
-			default_kernel_segment_height: 13,
+			default_kernel_segment_height: 11,
 			bitmap_segment_cache: vec![],
 			output_segment_cache: vec![],
 			rangeproof_segment_cache: vec![],
@@ -155,7 +155,18 @@ impl Desegmenter {
 					self.apply_rangeproof_segment(idx)?;
 				}
 			}
-			// TODO: Kernel
+			// Check if we can apply the next kernel segment
+			if let Some(next_kernel_idx) = self.next_required_kernel_segment_index() {
+				trace!("Next kernel index to apply: {}", next_kernel_idx);
+				if let Some((idx, _seg)) = self
+					.kernel_segment_cache
+					.iter()
+					.enumerate()
+					.find(|s| s.1.identifier().idx == next_kernel_idx)
+				{
+					self.apply_kernel_segment(idx)?;
+				}
+			}
 		}
 		Ok(())
 	}
@@ -190,12 +201,12 @@ impl Desegmenter {
 			// TODO: Outputs only for now, just for testing. we'll want to evenly spread
 			// requests among the 3 PMMRs
 			let local_output_mmr_size;
-			let mut _local_kernel_mmr_size;
+			let local_kernel_mmr_size;
 			let local_rangeproof_mmr_size;
 			{
 				let txhashset = self.txhashset.read();
 				local_output_mmr_size = txhashset.output_mmr_size();
-				_local_kernel_mmr_size = txhashset.kernel_mmr_size();
+				local_kernel_mmr_size = txhashset.kernel_mmr_size();
 				local_rangeproof_mmr_size = txhashset.rangeproof_mmr_size();
 			}
 			// TODO: Fix, alternative approach, this is very inefficient
@@ -230,7 +241,7 @@ impl Desegmenter {
 			);
 
 			while let Some(rp_id) = rangeproof_identifier_iter.next() {
-				// Advance output iterator to next needed position
+				// Advance rangeproof iterator to next needed position
 				if rp_id
 					.segment_pos_range(self.archive_header.output_mmr_size)
 					.1 <= local_rangeproof_mmr_size
@@ -245,6 +256,30 @@ impl Desegmenter {
 				if !self.has_rangeproof_segment_with_id(rp_id) {
 					return_vec.push(SegmentTypeIdentifier::new(SegmentType::RangeProof, rp_id));
 					// Let other trees have a chance to put in a segment request
+					break;
+				}
+			}
+
+			let mut kernel_identifier_iter = SegmentIdentifier::traversal_iter(
+				self.archive_header.kernel_mmr_size,
+				self.default_kernel_segment_height,
+			);
+
+			while let Some(k_id) = kernel_identifier_iter.next() {
+				// Advance kernel iterator to next needed position
+				if k_id
+					.segment_pos_range(self.archive_header.kernel_mmr_size)
+					.1 <= local_kernel_mmr_size
+				{
+					continue;
+				}
+				// Break if we're full
+				if return_vec.len() > max_elements {
+					break;
+				}
+
+				if !self.has_kernel_segment_with_id(k_id) {
+					return_vec.push(SegmentTypeIdentifier::new(SegmentType::Kernel, k_id));
 					break;
 				}
 			}
@@ -493,6 +528,8 @@ impl Desegmenter {
 	}
 
 	/// Whether our list already contains this rangeproof segment
+	/// TODO: Refactor all these similar functions, but will require some time
+	/// refining traits
 	fn has_rangeproof_segment_with_id(&self, seg_id: SegmentIdentifier) -> bool {
 		self.rangeproof_segment_cache
 			.iter()
@@ -665,7 +702,7 @@ impl Desegmenter {
 		debug!("pibd_desegmenter: add kernel segment");
 		segment.validate(
 			self.archive_header.kernel_mmr_size, // Last MMR pos at the height being validated
-			self.bitmap_cache.as_ref(),
+			None,
 			self.archive_header.kernel_root, // Kernel root we're checking for
 		)?;
 		self.cache_kernel_segment(segment);

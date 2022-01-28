@@ -1407,13 +1407,23 @@ impl<'a> Extension<'a> {
 	}
 
 	/// Apply a kernel segment to the output PMMR. must be called in order
-	/// TODO: Not complete
 	pub fn apply_kernel_segment(&mut self, segment: Segment<TxKernel>) -> Result<(), Error> {
-		let (_sid, _hash_pos, _hashes, _leaf_pos, leaf_data, _proof) = segment.parts();
-		for kernel in leaf_data {
-			self.kernel_pmmr
-				.push(&kernel)
-				.map_err(&ErrorKind::TxHashSetErr)?;
+		let (_sid, _hash_pos, _hashes, leaf_pos, leaf_data, _proof) = segment.parts();
+		// Non prunable - insert only leaves (with genesis kernel removedj)
+		for insert in self.sort_pmmr_hashes_and_leaves(vec![], leaf_pos, Some(0)) {
+			match insert {
+				OrderedHashLeafNode::Hash(_, _) => {
+					return Err(ErrorKind::InvalidSegment(
+						"Kernel PMMR is non-prunable, should not have hash data".to_string(),
+					)
+					.into());
+				}
+				OrderedHashLeafNode::Leaf(idx, _pos0) => {
+					self.kernel_pmmr
+						.push(&leaf_data[idx])
+						.map_err(&ErrorKind::TxHashSetErr)?;
+				}
+			}
 		}
 		Ok(())
 	}

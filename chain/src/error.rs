@@ -163,6 +163,9 @@ pub enum ErrorKind {
 	/// Segment height not within allowed range
 	#[fail(display = "Invalid segment height")]
 	InvalidSegmentHeight,
+	/// Other issue with segment
+	#[fail(display = "Invalid segment: {}", _0)]
+	InvalidSegment(String),
 }
 
 impl Display for Error {
