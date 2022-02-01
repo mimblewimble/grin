@@ -377,9 +377,10 @@ impl MessageHandler for Protocol {
 					segment,
 					output_root,
 				} = req;
-				debug!(
+				trace!(
 					"Received Output Bitmap Segment: bh, output_root: {}, {}",
-					block_hash, output_root
+					block_hash,
+					output_root
 				);
 				adapter.receive_bitmap_segment(block_hash, output_root, segment.into())?;
 				Consumed::None
@@ -389,9 +390,10 @@ impl MessageHandler for Protocol {
 					response,
 					output_bitmap_root,
 				} = req;
-				debug!(
+				trace!(
 					"Received Output Segment: bh, bitmap_root: {}, {}",
-					response.block_hash, output_bitmap_root
+					response.block_hash,
+					output_bitmap_root
 				);
 				adapter.receive_output_segment(
 					response.block_hash,
@@ -405,7 +407,7 @@ impl MessageHandler for Protocol {
 					block_hash,
 					segment,
 				} = req;
-				debug!("Received Rangeproof Segment: bh: {}", block_hash);
+				trace!("Received Rangeproof Segment: bh: {}", block_hash);
 				adapter.receive_rangeproof_segment(block_hash, segment.into())?;
 				Consumed::None
 			}
@@ -414,7 +416,7 @@ impl MessageHandler for Protocol {
 					block_hash,
 					segment,
 				} = req;
-				debug!("Received Kernel Segment: bh: {}", block_hash);
+				trace!("Received Kernel Segment: bh: {}", block_hash);
 				adapter.receive_kernel_segment(block_hash, segment.into())?;
 				Consumed::None
 			}

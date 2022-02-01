@@ -189,6 +189,30 @@ impl PMMRHandle<BlockHeader> {
 			Err(ErrorKind::Other("failed to find head hash".to_string()).into())
 		}
 	}
+
+	/// Get the first header with all output and kernel mmrs > provided
+	pub fn get_first_header_with(
+		&self,
+		output_pos: u64,
+		kernel_pos: u64,
+		from_height: u64,
+		store: Arc<store::ChainStore>,
+	) -> Option<BlockHeader> {
+		let mut cur_height = pmmr::round_up_to_leaf_pos(from_height);
+		let header_pmmr = ReadonlyPMMR::at(&self.backend, self.size);
+		let mut candidate: Option<BlockHeader> = None;
+		while let Some(header_entry) = header_pmmr.get_data(cur_height) {
+			if let Ok(bh) = store.get_block_header(&header_entry.hash()) {
+				if bh.output_mmr_size <= output_pos && bh.kernel_mmr_size <= kernel_pos {
+					candidate = Some(bh)
+				} else {
+					return candidate;
+				}
+			}
+			cur_height = pmmr::round_up_to_leaf_pos(cur_height + 1);
+		}
+		None
+	}
 }
 
 /// An easy to manipulate structure holding the 3 MMRs necessary to

@@ -16,6 +16,8 @@
 //! segmenter
 
 use std::sync::Arc;
+use std::thread;
+use std::time::Duration;
 
 use crate::core::core::hash::Hash;
 use crate::core::core::{pmmr, pmmr::ReadablePMMR};
@@ -26,7 +28,7 @@ use crate::core::core::{
 use crate::error::Error;
 use crate::txhashset::{BitmapAccumulator, BitmapChunk, TxHashSet};
 use crate::util::secp::pedersen::RangeProof;
-use crate::util::RwLock;
+use crate::util::{RwLock, StopState};
 
 use crate::store;
 use crate::txhashset;
@@ -40,6 +42,8 @@ pub struct Desegmenter {
 	header_pmmr: Arc<RwLock<txhashset::PMMRHandle<BlockHeader>>>,
 	archive_header: BlockHeader,
 	store: Arc<store::ChainStore>,
+
+	validator_stop_state: Arc<StopState>,
 
 	default_bitmap_segment_height: u8,
 	default_output_segment_height: u8,
@@ -75,6 +79,7 @@ impl Desegmenter {
 			header_pmmr,
 			archive_header,
 			store,
+			validator_stop_state: Arc::new(StopState::new()),
 			bitmap_accumulator: BitmapAccumulator::new(),
 			default_bitmap_segment_height: 9,
 			default_output_segment_height: 11,
@@ -109,6 +114,94 @@ impl Desegmenter {
 	/// Whether we have all the segments we need
 	pub fn is_complete(&self) -> bool {
 		self.all_segments_complete
+	}
+
+	/// Launch a separate validation thread, which will update and validate the body head
+	/// as we go
+	pub fn launch_validation_thread(&self) {
+		let stop_state = self.validator_stop_state.clone();
+		let txhashset = self.txhashset.clone();
+		let header_pmmr = self.header_pmmr.clone();
+		let store = self.store.clone();
+		let _ = thread::Builder::new()
+			.name("pibd-validation".to_string())
+			.spawn(move || {
+				Desegmenter::validation_loop(stop_state, txhashset, store, header_pmmr);
+			});
+	}
+
+	/// Stop the validation loop
+	pub fn stop_validation_thread(&self) {
+		self.validator_stop_state.stop();
+	}
+
+	/// Validation loop
+	fn validation_loop(
+		stop_state: Arc<StopState>,
+		txhashset: Arc<RwLock<TxHashSet>>,
+		store: Arc<store::ChainStore>,
+		header_pmmr: Arc<RwLock<txhashset::PMMRHandle<BlockHeader>>>,
+	) {
+		let mut latest_block_height = 0;
+		loop {
+			if stop_state.is_stopped() {
+				break;
+			}
+			thread::sleep(Duration::from_millis(1000));
+
+			debug!("In Desegmenter Validation Loop");
+			let local_output_mmr_size;
+			let local_kernel_mmr_size;
+			let local_rangeproof_mmr_size;
+			{
+				let txhashset = txhashset.read();
+				local_output_mmr_size = txhashset.output_mmr_size();
+				local_kernel_mmr_size = txhashset.kernel_mmr_size();
+				local_rangeproof_mmr_size = txhashset.rangeproof_mmr_size();
+			}
+
+			debug!("Output MMR Size: {}", local_output_mmr_size);
+			debug!("Rangeproof MMR Size: {}", local_rangeproof_mmr_size);
+			debug!("Kernel MMR Size: {}", local_kernel_mmr_size);
+
+			// Find latest 'complete' header.
+			// First take lesser of rangeproof and output mmr sizes
+			let latest_output_size =
+				std::cmp::min(local_output_mmr_size, local_rangeproof_mmr_size);
+			// Find first header in which 'output_mmr_size' and 'kernel_mmr_size' are greater than
+			// given sizes
+			{
+				let header_pmmr = header_pmmr.read();
+				let res = header_pmmr.get_first_header_with(
+					latest_output_size,
+					local_kernel_mmr_size,
+					latest_block_height,
+					store.clone(),
+				);
+				if let Some(h) = res {
+					latest_block_height = h.height;
+					debug!("Latest block is: {:?}", h);
+				}
+			}
+
+			// Find the corresponding header
+			// get commit from output pmmr
+			//let latest_output_header;
+			/*{
+				let txhashset = txhashset.read();
+				let last_outputs = txhashset.outputs_by_pmmr_index(latest_output_size, 1, None);
+				if !last_outputs.1.is_empty() {
+					let latest_height = store
+						.get_output_pos_height(&last_outputs.1[0].commit)
+						.unwrap();
+					//let latest_output_header = store.get_block_header(h: &Hash)
+					debug!(
+						"Latest height, commit: {:?}, {:?}",
+						latest_height, last_outputs.1[0].commit
+					);
+				}
+			}*/
+		}
 	}
 
 	/// Apply next set of segments that are ready to be appended to their respective trees,
@@ -297,7 +390,7 @@ impl Desegmenter {
 	/// TODO: Accumulator will likely need to be stored locally to deal with server
 	/// being shut down and restarted
 	pub fn finalize_bitmap(&mut self) -> Result<(), Error> {
-		debug!(
+		trace!(
 			"pibd_desegmenter: finalizing and caching bitmap - accumulator root: {}",
 			self.bitmap_accumulator.root()
 		);
@@ -326,7 +419,7 @@ impl Desegmenter {
 		// Number of leaves (BitmapChunks)
 		self.bitmap_mmr_leaf_count =
 			(pmmr::n_leaves(self.archive_header.output_mmr_size) + 1023) / 1024;
-		debug!(
+		trace!(
 			"pibd_desegmenter - expected number of leaves in bitmap MMR: {}",
 			self.bitmap_mmr_leaf_count
 		);
@@ -343,7 +436,7 @@ impl Desegmenter {
 				)
 				.clone();
 
-		debug!(
+		trace!(
 			"pibd_desegmenter - expected size of bitmap MMR: {}",
 			self.bitmap_mmr_size
 		);
@@ -393,7 +486,7 @@ impl Desegmenter {
 		segment: Segment<BitmapChunk>,
 		output_root_hash: Hash,
 	) -> Result<(), Error> {
-		debug!("pibd_desegmenter: add bitmap segment");
+		trace!("pibd_desegmenter: add bitmap segment");
 		segment.validate_with(
 			self.bitmap_mmr_size, // Last MMR pos at the height being validated, in this case of the bitmap root
 			None,
@@ -402,7 +495,7 @@ impl Desegmenter {
 			output_root_hash, // Other root
 			true,
 		)?;
-		debug!("pibd_desegmenter: adding segment to cache");
+		trace!("pibd_desegmenter: adding segment to cache");
 		// All okay, add to our cached list of bitmap segments
 		self.cache_bitmap_segment(segment);
 		Ok(())
@@ -411,7 +504,7 @@ impl Desegmenter {
 	/// Apply a bitmap segment at the index cache
 	pub fn apply_bitmap_segment(&mut self, idx: usize) -> Result<(), Error> {
 		let segment = self.bitmap_segment_cache.remove(idx);
-		debug!(
+		trace!(
 			"pibd_desegmenter: apply bitmap segment at segment idx {}",
 			segment.identifier().idx
 		);
@@ -446,7 +539,7 @@ impl Desegmenter {
 	/// Apply an output segment at the index cache
 	pub fn apply_output_segment(&mut self, idx: usize) -> Result<(), Error> {
 		let segment = self.output_segment_cache.remove(idx);
-		debug!(
+		trace!(
 			"pibd_desegmenter: applying output segment at segment idx {}",
 			segment.identifier().idx
 		);
@@ -460,6 +553,7 @@ impl Desegmenter {
 			|ext, _batch| {
 				let extension = &mut ext.extension;
 				extension.apply_output_segment(segment)?;
+				debug!("Returning Ok");
 				Ok(())
 			},
 		)?;
@@ -509,7 +603,7 @@ impl Desegmenter {
 		segment: Segment<OutputIdentifier>,
 		bitmap_root: Option<Hash>,
 	) -> Result<(), Error> {
-		debug!("pibd_desegmenter: add output segment");
+		trace!("pibd_desegmenter: add output segment");
 		// TODO: This, something very wrong, probably need to reset entire body sync
 		// check bitmap root matches what we already have
 		/*if bitmap_root != Some(self.bitmap_accumulator.root()) {
@@ -552,7 +646,7 @@ impl Desegmenter {
 	/// Apply a rangeproof segment at the index cache
 	pub fn apply_rangeproof_segment(&mut self, idx: usize) -> Result<(), Error> {
 		let segment = self.rangeproof_segment_cache.remove(idx);
-		debug!(
+		trace!(
 			"pibd_desegmenter: applying rangeproof segment at segment idx {}",
 			segment.identifier().idx
 		);
@@ -611,7 +705,7 @@ impl Desegmenter {
 
 	/// Adds a Rangeproof segment
 	pub fn add_rangeproof_segment(&mut self, segment: Segment<RangeProof>) -> Result<(), Error> {
-		debug!("pibd_desegmenter: add rangeproof segment");
+		trace!("pibd_desegmenter: add rangeproof segment");
 		segment.validate(
 			self.archive_header.output_mmr_size, // Last MMR pos at the height being validated
 			self.bitmap_cache.as_ref(),
@@ -644,7 +738,7 @@ impl Desegmenter {
 	/// Apply a kernel segment at the index cache
 	pub fn apply_kernel_segment(&mut self, idx: usize) -> Result<(), Error> {
 		let segment = self.kernel_segment_cache.remove(idx);
-		debug!(
+		trace!(
 			"pibd_desegmenter: applying kernel segment at segment idx {}",
 			segment.identifier().idx
 		);
@@ -699,7 +793,7 @@ impl Desegmenter {
 
 	/// Adds a Kernel segment
 	pub fn add_kernel_segment(&mut self, segment: Segment<TxKernel>) -> Result<(), Error> {
-		debug!("pibd_desegmenter: add kernel segment");
+		trace!("pibd_desegmenter: add kernel segment");
 		segment.validate(
 			self.archive_header.kernel_mmr_size, // Last MMR pos at the height being validated
 			None,

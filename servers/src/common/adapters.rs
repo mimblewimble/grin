@@ -635,9 +635,14 @@ where
 
 	fn receive_rangeproof_segment(
 		&self,
-		_block_hash: Hash,
+		block_hash: Hash,
 		segment: Segment<RangeProof>,
 	) -> Result<bool, chain::Error> {
+		debug!(
+			"Received proof segment {} for block_hash: {}",
+			segment.identifier().idx,
+			block_hash,
+		);
 		let archive_header = self.chain().txhashset_archive_header_header_only()?;
 		let identifier = segment.identifier().clone();
 		if let Some(d) = self.chain().desegmenter(&archive_header)?.write().as_mut() {
@@ -655,9 +660,14 @@ where
 
 	fn receive_kernel_segment(
 		&self,
-		_block_hash: Hash,
+		block_hash: Hash,
 		segment: Segment<TxKernel>,
 	) -> Result<bool, chain::Error> {
+		debug!(
+			"Received kernel segment {} for block_hash: {}",
+			segment.identifier().idx,
+			block_hash,
+		);
 		let archive_header = self.chain().txhashset_archive_header_header_only()?;
 		let identifier = segment.identifier().clone();
 		if let Some(d) = self.chain().desegmenter(&archive_header)?.write().as_mut() {

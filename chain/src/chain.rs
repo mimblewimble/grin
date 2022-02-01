@@ -878,6 +878,10 @@ impl Chain {
 			}
 		}
 		// If no desegmenter or headers don't match init
+		// Stop previous thread if running
+		if let Some(d) = self.pibd_desegmenter.read().as_ref() {
+			d.stop_validation_thread();
+		}
 		// TODO: (Check whether we can do this.. we *should* be able to modify this as the desegmenter
 		// is in flight and we cross a horizon boundary, but needs more thinking)
 		let desegmenter = self.init_desegmenter(archive_header)?;

@@ -132,6 +132,11 @@ impl StateSync {
 				if launch {
 					self.sync_state
 						.update(SyncStatus::TxHashsetPibd { aborted: false });
+					let archive_header = self.chain.txhashset_archive_header_header_only().unwrap();
+					let desegmenter = self.chain.desegmenter(&archive_header).unwrap();
+					if let Some(d) = desegmenter.read().as_ref() {
+						d.launch_validation_thread()
+					};
 				}
 				// Continue our PIBD process
 				self.continue_pibd();
