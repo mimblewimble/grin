@@ -1635,9 +1635,33 @@ fn setup_head(
 				// Note: We are rewinding and validating against a writeable extension.
 				// If validation is successful we will truncate the backend files
 				// to match the provided block header.
-				let header = batch.get_block_header(&head.last_block_h)?;
+				let mut pibd_in_progress = false;
+				let header = {
+					let head = batch.get_block_header(&head.last_block_h)?;
+					let pibd_tip = store.pibd_head()?;
+					let pibd_head = batch.get_block_header(&pibd_tip.last_block_h)?;
+					if pibd_head.height > head.height {
+						pibd_in_progress = true;
+						pibd_head
+					} else {
+						head
+					}
+				};
 
 				let res = txhashset::extending(header_pmmr, txhashset, &mut batch, |ext, batch| {
+					// If we're still downloading via PIBD, don't worry about sums and validations just yet
+					// We still want to rewind to the last completed block to ensure a consistent state
+					if pibd_in_progress {
+						debug!(
+							"init: PIBD appears to be in progress at height {}, hash {}, not validating, will attempt to continue",
+							header.height,
+							header.hash()
+						);
+						let extension = &mut ext.extension;
+						extension.rewind_mmrs_to_last_inserted_leaves()?;
+						return Ok(());
+					}
+
 					pipe::rewind_and_apply_fork(&header, ext, batch, &|_| Ok(()))?;
 
 					let extension = &mut ext.extension;

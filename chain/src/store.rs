@@ -19,6 +19,7 @@ use crate::core::core::hash::{Hash, Hashed};
 use crate::core::core::{Block, BlockHeader, BlockSums};
 use crate::core::pow::Difficulty;
 use crate::core::ser::{DeserializationMode, ProtocolVersion, Readable, Writeable};
+use crate::core::{genesis, global, global::ChainTypes};
 use crate::linked_list::MultiIndex;
 use crate::types::{CommitPos, Tip};
 use crate::util::secp::pedersen::Commitment;
@@ -35,6 +36,7 @@ const BLOCK_HEADER_PREFIX: u8 = b'h';
 const BLOCK_PREFIX: u8 = b'b';
 const HEAD_PREFIX: u8 = b'H';
 const TAIL_PREFIX: u8 = b'T';
+const PIBD_HEAD_PREFIX: u8 = b'I';
 const HEADER_HEAD_PREFIX: u8 = b'G';
 const OUTPUT_POS_PREFIX: u8 = b'p';
 
@@ -73,6 +75,25 @@ impl ChainStore {
 	/// The current chain "tail" (earliest block in the store).
 	pub fn tail(&self) -> Result<Tip, Error> {
 		option_to_not_found(self.db.get_ser(&[TAIL_PREFIX], None), || "TAIL".to_owned())
+	}
+
+	/// The current PIBD head (will differ from the other heads. Return genesis block if PIBD head doesn't exist).
+	pub fn pibd_head(&self) -> Result<Tip, Error> {
+		let res = option_to_not_found(self.db.get_ser(&[PIBD_HEAD_PREFIX], None), || {
+			"PIBD_HEAD".to_owned()
+		});
+
+		match res {
+			Ok(r) => Ok(r),
+			Err(_) => {
+				let gen = match global::get_chain_type() {
+					ChainTypes::Mainnet => genesis::genesis_main(),
+					ChainTypes::Testnet => genesis::genesis_test(),
+					_ => genesis::genesis_dev(),
+				};
+				Ok(Tip::from_header(&gen.header))
+			}
+		}
 	}
 
 	/// Header of the block at the head of the block chain (not the same thing as header_head).
@@ -199,6 +220,11 @@ impl<'a> Batch<'a> {
 	/// Save header head to db.
 	pub fn save_header_head(&self, t: &Tip) -> Result<(), Error> {
 		self.db.put_ser(&[HEADER_HEAD_PREFIX], t)
+	}
+
+	/// Save PIBD head to db.
+	pub fn save_pibd_head(&self, t: &Tip) -> Result<(), Error> {
+		self.db.put_ser(&[PIBD_HEAD_PREFIX], t)
 	}
 
 	/// get block

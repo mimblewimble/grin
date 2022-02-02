@@ -27,6 +27,7 @@ use crate::core::core::{
 };
 use crate::error::Error;
 use crate::txhashset::{BitmapAccumulator, BitmapChunk, TxHashSet};
+use crate::types::Tip;
 use crate::util::secp::pedersen::RangeProof;
 use crate::util::{RwLock, StopState};
 
@@ -170,6 +171,7 @@ impl Desegmenter {
 				std::cmp::min(local_output_mmr_size, local_rangeproof_mmr_size);
 			// Find first header in which 'output_mmr_size' and 'kernel_mmr_size' are greater than
 			// given sizes
+
 			{
 				let header_pmmr = header_pmmr.read();
 				let res = header_pmmr.get_first_header_with(
@@ -181,26 +183,20 @@ impl Desegmenter {
 				if let Some(h) = res {
 					latest_block_height = h.height;
 					debug!("Latest block is: {:?}", h);
+					// flush all data so our block is in sync
+					{
+						let mut txhashset = txhashset.write();
+						let _ = txhashset.sync();
+					}
+					// TODO: Needs to be validated, just testing for the time being
+					// TODO: Unwraps
+					let tip = Tip::from_header(&h);
+					let batch = store.batch().unwrap();
+					batch.save_pibd_head(&tip).unwrap();
+					//batch.save_body_tail(&tip);
+					batch.commit().unwrap();
 				}
 			}
-
-			// Find the corresponding header
-			// get commit from output pmmr
-			//let latest_output_header;
-			/*{
-				let txhashset = txhashset.read();
-				let last_outputs = txhashset.outputs_by_pmmr_index(latest_output_size, 1, None);
-				if !last_outputs.1.is_empty() {
-					let latest_height = store
-						.get_output_pos_height(&last_outputs.1[0].commit)
-						.unwrap();
-					//let latest_output_header = store.get_block_header(h: &Hash)
-					debug!(
-						"Latest height, commit: {:?}, {:?}",
-						latest_height, last_outputs.1[0].commit
-					);
-				}
-			}*/
 		}
 	}
 

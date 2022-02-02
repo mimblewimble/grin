@@ -181,7 +181,10 @@ impl StateSync {
 		// need to be a separate thread.
 		if let Some(mut de) = desegmenter.try_write() {
 			if let Some(d) = de.as_mut() {
-				d.apply_next_segments().unwrap();
+				let res = d.apply_next_segments();
+				if let Err(e) = res {
+					debug!("error applying segment, continuing: {}", e);
+				}
 			}
 		}
 

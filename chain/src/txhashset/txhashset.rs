@@ -531,6 +531,14 @@ impl TxHashSet {
 		Ok(())
 	}
 
+	/// Flush all backend pmmr data manually
+	pub fn sync(&mut self) -> Result<(), Error> {
+		self.rproof_pmmr_h.backend.sync()?;
+		self.output_pmmr_h.backend.sync()?;
+		self.kernel_pmmr_h.backend.sync()?;
+		Ok(())
+	}
+
 	/// (Re)build the NRD kernel_pos index based on 2 weeks of recent kernel history.
 	pub fn init_recent_kernel_pos_index(
 		&self,
@@ -860,7 +868,7 @@ where
 				trees.rproof_pmmr_h.backend.discard();
 				trees.kernel_pmmr_h.backend.discard();
 			} else {
-				trace!("Committing txhashset extension. sizes {:?}", sizes);
+				debug!("Committing txhashset extension. sizes {:?}", sizes);
 				child_batch.commit()?;
 				trees.output_pmmr_h.backend.sync()?;
 				trees.rproof_pmmr_h.backend.sync()?;
@@ -1375,10 +1383,12 @@ impl<'a> Extension<'a> {
 							.map_err(&ErrorKind::TxHashSetErr)?;
 					}
 				}
-				OrderedHashLeafNode::Leaf(idx, _pos0) => {
-					self.output_pmmr
-						.push(&leaf_data[idx])
-						.map_err(&ErrorKind::TxHashSetErr)?;
+				OrderedHashLeafNode::Leaf(idx, pos0) => {
+					if pos0 == self.output_pmmr.size {
+						self.output_pmmr
+							.push(&leaf_data[idx])
+							.map_err(&ErrorKind::TxHashSetErr)?;
+					}
 				}
 			}
 		}
@@ -1401,10 +1411,12 @@ impl<'a> Extension<'a> {
 							.map_err(&ErrorKind::TxHashSetErr)?;
 					}
 				}
-				OrderedHashLeafNode::Leaf(idx, _pos0) => {
-					self.rproof_pmmr
-						.push(&leaf_data[idx])
-						.map_err(&ErrorKind::TxHashSetErr)?;
+				OrderedHashLeafNode::Leaf(idx, pos0) => {
+					if pos0 == self.rproof_pmmr.size {
+						self.rproof_pmmr
+							.push(&leaf_data[idx])
+							.map_err(&ErrorKind::TxHashSetErr)?;
+					}
 				}
 			}
 		}
@@ -1442,10 +1454,12 @@ impl<'a> Extension<'a> {
 					)
 					.into());
 				}
-				OrderedHashLeafNode::Leaf(idx, _pos0) => {
-					self.kernel_pmmr
-						.push(&leaf_data[idx])
-						.map_err(&ErrorKind::TxHashSetErr)?;
+				OrderedHashLeafNode::Leaf(idx, pos0) => {
+					if pos0 == self.kernel_pmmr.size {
+						self.kernel_pmmr
+							.push(&leaf_data[idx])
+							.map_err(&ErrorKind::TxHashSetErr)?;
+					}
 				}
 			}
 		}
@@ -1616,6 +1630,25 @@ impl<'a> Extension<'a> {
 		}
 
 		Ok(affected_pos)
+	}
+
+	/// Rewind MMRs to ensure they're at the position of the last inserted output
+	pub fn rewind_mmrs_to_last_inserted_leaves(&mut self) -> Result<(), Error> {
+		let bitmap: Bitmap = Bitmap::create();
+		// TODO: Unwrap
+		let output_pos = pmmr::insertion_to_pmmr_index(pmmr::n_leaves(self.output_pmmr.size - 1));
+		self.output_pmmr
+			.rewind(output_pos, &bitmap)
+			.map_err(&ErrorKind::TxHashSetErr)?;
+		let rp_pos = pmmr::insertion_to_pmmr_index(pmmr::n_leaves(self.rproof_pmmr.size - 1));
+		self.rproof_pmmr
+			.rewind(rp_pos, &bitmap)
+			.map_err(&ErrorKind::TxHashSetErr)?;
+		let kernel_pos = pmmr::insertion_to_pmmr_index(pmmr::n_leaves(self.kernel_pmmr.size - 1));
+		self.kernel_pmmr
+			.rewind(kernel_pos, &bitmap)
+			.map_err(&ErrorKind::TxHashSetErr)?;
+		Ok(())
 	}
 
 	/// Rewinds the MMRs to the provided positions, given the output and
