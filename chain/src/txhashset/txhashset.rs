@@ -531,14 +531,6 @@ impl TxHashSet {
 		Ok(())
 	}
 
-	/// Flush all backend pmmr data manually
-	pub fn sync(&mut self) -> Result<(), Error> {
-		self.rproof_pmmr_h.backend.sync()?;
-		self.output_pmmr_h.backend.sync()?;
-		self.kernel_pmmr_h.backend.sync()?;
-		Ok(())
-	}
-
 	/// (Re)build the NRD kernel_pos index based on 2 weeks of recent kernel history.
 	pub fn init_recent_kernel_pos_index(
 		&self,

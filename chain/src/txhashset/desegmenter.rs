@@ -150,7 +150,7 @@ impl Desegmenter {
 			}
 			thread::sleep(Duration::from_millis(1000));
 
-			debug!("In Desegmenter Validation Loop");
+			trace!("In Desegmenter Validation Loop");
 			let local_output_mmr_size;
 			let local_kernel_mmr_size;
 			let local_rangeproof_mmr_size;
@@ -161,9 +161,9 @@ impl Desegmenter {
 				local_rangeproof_mmr_size = txhashset.rangeproof_mmr_size();
 			}
 
-			debug!("Output MMR Size: {}", local_output_mmr_size);
-			debug!("Rangeproof MMR Size: {}", local_rangeproof_mmr_size);
-			debug!("Kernel MMR Size: {}", local_kernel_mmr_size);
+			trace!("Output MMR Size: {}", local_output_mmr_size);
+			trace!("Rangeproof MMR Size: {}", local_rangeproof_mmr_size);
+			trace!("Kernel MMR Size: {}", local_kernel_mmr_size);
 
 			// Find latest 'complete' header.
 			// First take lesser of rangeproof and output mmr sizes
@@ -182,18 +182,13 @@ impl Desegmenter {
 				);
 				if let Some(h) = res {
 					latest_block_height = h.height;
-					debug!("Latest block is: {:?}", h);
-					// flush all data so our block is in sync
-					{
-						let mut txhashset = txhashset.write();
-						let _ = txhashset.sync();
-					}
-					// TODO: Needs to be validated, just testing for the time being
+					debug!("PIBD Desegmenter Validation Loop: Latest block is: {:?}", h);
+					// TODO: 'In-flight' validation. At the moment the entire tree
+					// will be presented for validation after all segments are downloaded
 					// TODO: Unwraps
 					let tip = Tip::from_header(&h);
 					let batch = store.batch().unwrap();
 					batch.save_pibd_head(&tip).unwrap();
-					//batch.save_body_tail(&tip);
 					batch.commit().unwrap();
 				}
 			}
