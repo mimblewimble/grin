@@ -83,6 +83,7 @@ impl ChainStore {
 			"PIBD_HEAD".to_owned()
 		});
 
+		// todo: fix duplication in batch below
 		match res {
 			Ok(r) => Ok(r),
 			Err(_) => {
@@ -220,6 +221,26 @@ impl<'a> Batch<'a> {
 	/// Save header head to db.
 	pub fn save_header_head(&self, t: &Tip) -> Result<(), Error> {
 		self.db.put_ser(&[HEADER_HEAD_PREFIX], t)
+	}
+
+	// get pibd head
+	pub fn pibd_head(&self) -> Result<Tip, Error> {
+		let res = option_to_not_found(self.db.get_ser(&[PIBD_HEAD_PREFIX], None), || {
+			"PIBD_HEAD".to_owned()
+		});
+
+		// todo: fix duplication in batch below
+		match res {
+			Ok(r) => Ok(r),
+			Err(_) => {
+				let gen = match global::get_chain_type() {
+					ChainTypes::Mainnet => genesis::genesis_main(),
+					ChainTypes::Testnet => genesis::genesis_test(),
+					_ => genesis::genesis_dev(),
+				};
+				Ok(Tip::from_header(&gen.header))
+			}
+		}
 	}
 
 	/// Save PIBD head to db.
