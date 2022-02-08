@@ -132,6 +132,11 @@ impl StateSync {
 				if launch {
 					self.sync_state
 						.update(SyncStatus::TxHashsetPibd { aborted: false });
+					let archive_header = self.chain.txhashset_archive_header_header_only().unwrap();
+					let desegmenter = self.chain.desegmenter(&archive_header).unwrap();
+					if let Some(d) = desegmenter.read().as_ref() {
+						d.launch_validation_thread()
+					};
 				}
 				// Continue our PIBD process
 				self.continue_pibd();
@@ -176,7 +181,10 @@ impl StateSync {
 		// need to be a separate thread.
 		if let Some(mut de) = desegmenter.try_write() {
 			if let Some(d) = de.as_mut() {
-				d.apply_next_segments().unwrap();
+				let res = d.apply_next_segments();
+				if let Err(e) = res {
+					debug!("error applying segment, continuing: {}", e);
+				}
 			}
 		}
 

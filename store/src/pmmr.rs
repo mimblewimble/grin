@@ -356,6 +356,7 @@ impl<T: PMMRable> PMMRBackend<T> {
 			.and(self.hash_file.flush())
 			.and(self.data_file.flush())
 			.and(self.sync_leaf_set())
+			.and(self.prune_list.flush())
 			.map_err(|e| {
 				io::Error::new(
 					io::ErrorKind::Interrupted,
