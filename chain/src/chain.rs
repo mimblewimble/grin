@@ -382,6 +382,27 @@ impl Chain {
 		Err(ErrorKind::Orphan.into())
 	}
 
+	/// For PIBD, change reported sizes of PMMRs back to last inserted index
+	pub fn rewind_mmrs_to_last_inserted_leaves(
+		&self,
+		archive_header: &BlockHeader,
+	) -> Result<(), Error> {
+		let mut header_pmmr = self.header_pmmr.write();
+		let mut batch = self.store.batch()?;
+		let mut txhashset = self.txhashset.write();
+		txhashset::extending(
+			&mut header_pmmr,
+			&mut txhashset,
+			&mut batch,
+			|ext, _batch| {
+				let extension = &mut ext.extension;
+				extension.rewind_mmrs_to_last_inserted_leaves(archive_header)?;
+				Ok(())
+			},
+		)?;
+		Ok(())
+	}
+
 	/// Attempt to add a new block to the chain.
 	/// Returns true if it has been added to the longest chain
 	/// or false if it has added to a fork (or orphan?).
@@ -1657,8 +1678,6 @@ fn setup_head(
 							header.height,
 							header.hash()
 						);
-						let extension = &mut ext.extension;
-						extension.rewind_mmrs_to_last_inserted_leaves()?;
 						return Ok(());
 					}
 

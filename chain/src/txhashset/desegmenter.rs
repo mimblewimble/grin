@@ -124,10 +124,17 @@ impl Desegmenter {
 		let txhashset = self.txhashset.clone();
 		let header_pmmr = self.header_pmmr.clone();
 		let store = self.store.clone();
+		let desegmenter = Arc::new(RwLock::new(self.clone()));
 		let _ = thread::Builder::new()
 			.name("pibd-validation".to_string())
 			.spawn(move || {
-				Desegmenter::validation_loop(stop_state, txhashset, store, header_pmmr);
+				Desegmenter::validation_loop(
+					stop_state,
+					txhashset,
+					store,
+					desegmenter,
+					header_pmmr,
+				);
 			});
 	}
 
@@ -141,6 +148,7 @@ impl Desegmenter {
 		stop_state: Arc<StopState>,
 		txhashset: Arc<RwLock<TxHashSet>>,
 		store: Arc<store::ChainStore>,
+		desegmenter: Arc<RwLock<Desegmenter>>,
 		header_pmmr: Arc<RwLock<txhashset::PMMRHandle<BlockHeader>>>,
 	) {
 		let mut latest_block_height = 0;
@@ -148,7 +156,7 @@ impl Desegmenter {
 			if stop_state.is_stopped() {
 				break;
 			}
-			thread::sleep(Duration::from_millis(1000));
+			thread::sleep(Duration::from_millis(5000));
 
 			trace!("In Desegmenter Validation Loop");
 			let local_output_mmr_size;
@@ -161,9 +169,10 @@ impl Desegmenter {
 				local_rangeproof_mmr_size = txhashset.rangeproof_mmr_size();
 			}
 
-			trace!("Output MMR Size: {}", local_output_mmr_size);
-			trace!("Rangeproof MMR Size: {}", local_rangeproof_mmr_size);
-			trace!("Kernel MMR Size: {}", local_kernel_mmr_size);
+			let header_head = { desegmenter.read().header().clone() };
+			debug!("Output MMR Size: {}", local_output_mmr_size);
+			debug!("Rangeproof MMR Size: {}", local_rangeproof_mmr_size);
+			debug!("Kernel MMR Size: {}", local_kernel_mmr_size);
 
 			// Find latest 'complete' header.
 			// First take lesser of rangeproof and output mmr sizes
@@ -190,6 +199,7 @@ impl Desegmenter {
 					let batch = store.batch().unwrap();
 					batch.save_pibd_head(&tip).unwrap();
 					batch.commit().unwrap();
+					debug!("Archive Header is: {:?}", header_head);
 				}
 			}
 		}
@@ -295,16 +305,15 @@ impl Desegmenter {
 			}
 			// TODO: Fix, alternative approach, this is very inefficient
 			let mut output_identifier_iter = SegmentIdentifier::traversal_iter(
-				self.archive_header.output_mmr_size,
+				self.archive_header.output_mmr_size + 1,
 				self.default_output_segment_height,
 			);
 
 			while let Some(output_id) = output_identifier_iter.next() {
 				// Advance output iterator to next needed position
-				if output_id
-					.segment_pos_range(self.archive_header.output_mmr_size)
-					.1 <= local_output_mmr_size
-				{
+				let (_first, last) =
+					output_id.segment_pos_range(self.archive_header.output_mmr_size);
+				if last <= local_output_mmr_size {
 					continue;
 				}
 				// Break if we're full
@@ -320,16 +329,14 @@ impl Desegmenter {
 			}
 
 			let mut rangeproof_identifier_iter = SegmentIdentifier::traversal_iter(
-				self.archive_header.output_mmr_size,
+				self.archive_header.output_mmr_size + 1,
 				self.default_rangeproof_segment_height,
 			);
 
 			while let Some(rp_id) = rangeproof_identifier_iter.next() {
+				let (_first, last) = rp_id.segment_pos_range(self.archive_header.output_mmr_size);
 				// Advance rangeproof iterator to next needed position
-				if rp_id
-					.segment_pos_range(self.archive_header.output_mmr_size)
-					.1 <= local_rangeproof_mmr_size
-				{
+				if last <= local_rangeproof_mmr_size {
 					continue;
 				}
 				// Break if we're full
@@ -351,10 +358,10 @@ impl Desegmenter {
 
 			while let Some(k_id) = kernel_identifier_iter.next() {
 				// Advance kernel iterator to next needed position
-				if k_id
-					.segment_pos_range(self.archive_header.kernel_mmr_size)
-					.1 <= local_kernel_mmr_size
-				{
+				let (_first, last) =
+					k_id.segment_pos_range(self.archive_header.kernel_mmr_size + 1);
+				// Advance rangeproof iterator to next needed position
+				if last <= local_kernel_mmr_size {
 					continue;
 				}
 				// Break if we're full
@@ -571,6 +578,10 @@ impl Desegmenter {
 				self.default_output_segment_height,
 			)
 		};
+
+		// TODO: When resuming, the output pmmr size has increased by one and this
+		// returns 1 segment ahead of where it should, requiring a small rewind on startup
+		// Figure out why
 
 		let total_segment_count = SegmentIdentifier::count_segments_required(
 			self.archive_header.output_mmr_size,
