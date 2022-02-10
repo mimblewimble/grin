@@ -222,25 +222,49 @@ impl Desegmenter {
 			}
 		}
 
-		// TODO: This is largely copied from chain.rs txhashset_write and related functions,
-		// the idea being that these will eventually be broken out to perform validation while
-		// segments are still being downloaded and applied. Current validation logic is all tied up
-		// around unzipping, so re-developing this logic separate from the txhashset version
-		// will to allow this to happen more cleanly
+		// If all done, kick off validation, setting error state if necessary
+		if let Err(e) = Desegmenter::validate_complete_state(
+			txhashset,
+			store,
+			header_pmmr,
+			&header_head,
+			genesis,
+			status,
+		) {
+			error!("Error validating pibd hashset: {}", e);
+			// TODO: Set state appropriately, state sync can rewind and start again, etc
+		}
+		stop_state.stop();
+	}
+
+	/// TODO: This is largely copied from chain.rs txhashset_write and related functions,
+	/// the idea being that these will eventually be broken out to perform validation while
+	/// segments are still being downloaded and applied. Current validation logic is all tied up
+	/// around unzipping, so re-developing this logic separate from the txhashset version
+	/// will to allow this to happen more cleanly
+	fn validate_complete_state(
+		txhashset: Arc<RwLock<TxHashSet>>,
+		store: Arc<store::ChainStore>,
+		header_pmmr: Arc<RwLock<txhashset::PMMRHandle<BlockHeader>>>,
+		header_head: &BlockHeader,
+		genesis: BlockHeader,
+		status: Arc<SyncState>,
+	) -> Result<(), Error> {
+		// Quick root check first:
+		{
+			let txhashset = txhashset.read();
+			txhashset.roots().validate(header_head)?;
+		}
+
 		status.on_setup();
 
 		// Validate kernel history
 		{
-			debug!(
-				"desegmenter validation thread: rewinding and validating kernel history (readonly)"
-			);
+			debug!("desegmenter validation: rewinding and validating kernel history (readonly)");
 			let txhashset = txhashset.read();
-			debug!("TXHASHSET ROOTS: {:?}", txhashset.roots());
 			let mut count = 0;
 			let mut current = header_head.clone();
-			// TODO: This needs to error out to the appropriate place, likely
-			// within a sync state
-			let _res = txhashset::rewindable_kernel_view(&txhashset, |view, batch| {
+			txhashset::rewindable_kernel_view(&txhashset, |view, batch| {
 				while current.height > 0 {
 					view.rewind(&current)?;
 					view.validate_root()?;
@@ -248,9 +272,9 @@ impl Desegmenter {
 					count += 1;
 				}
 				Ok(())
-			});
+			})?;
 			debug!(
-				"desegmenter validation thread: validated kernel root on {} headers",
+				"desegmenter validation: validated kernel root on {} headers",
 				count,
 			);
 		}
@@ -261,26 +285,22 @@ impl Desegmenter {
 		{
 			let txhashset = txhashset.read();
 			let header_pmmr = header_pmmr.read();
-			// TODO: Needs to error out properly via sync state
-			let batch = store.batch().unwrap();
-			// TODO: Needs to error out properly via sync state
-			let _res = txhashset.verify_kernel_pos_index(&genesis, &header_pmmr, &batch);
+			let batch = store.batch()?;
+			txhashset.verify_kernel_pos_index(&genesis, &header_pmmr, &batch)?;
 		}
 
 		// Prepare a new batch and update all the required records
 		{
-			debug!("desegmenter validation thread: rewinding a 2nd time (writeable)");
+			debug!("desegmenter validation: rewinding a 2nd time (writeable)");
 			let mut txhashset = txhashset.write();
 			let mut header_pmmr = header_pmmr.write();
-			let mut batch = store.batch().unwrap();
-			// TODO: Sync state error
-			let _res = txhashset::extending(
+			let mut batch = store.batch()?;
+			txhashset::extending(
 				&mut header_pmmr,
 				&mut txhashset,
 				&mut batch,
 				|ext, batch| {
 					let extension = &mut ext.extension;
-					extension.rewind(&header_head, batch)?;
 
 					// Validate the extension, generating the utxo_sum and kernel_sum.
 					// Full validation, including rangeproofs and kernel signature verification.
@@ -298,34 +318,35 @@ impl Desegmenter {
 
 					Ok(())
 				},
-			);
+			)?;
 
-			debug!("desegmenter_validation_thread: finished validating and rebuilding");
-
+			debug!("desegmenter_validation: finished validating and rebuilding");
 			status.on_save();
+
 			{
 				// Save the new head to the db and rebuild the header by height index.
 				let tip = Tip::from_header(&header_head);
 				// TODO: Throw error
-				let _res = batch.save_body_head(&tip);
+				batch.save_body_head(&tip)?;
 
 				// Reset the body tail to the body head after a txhashset write
-				let _res = batch.save_body_tail(&tip);
+				batch.save_body_tail(&tip)?;
 			}
 
 			// Rebuild our output_pos index in the db based on fresh UTXO set.
-			let _res = txhashset.init_output_pos_index(&header_pmmr, &batch);
+			txhashset.init_output_pos_index(&header_pmmr, &batch)?;
 
 			// Rebuild our NRD kernel_pos index based on recent kernel history.
-			let _res = txhashset.init_recent_kernel_pos_index(&header_pmmr, &batch);
+			txhashset.init_recent_kernel_pos_index(&header_pmmr, &batch)?;
 
 			// Commit all the changes to the db.
-			let _res = batch.commit();
+			batch.commit()?;
 
-			debug!("txhashset_write: finished committing the batch (head etc.)");
+			debug!("desegmenter_validation: finished committing the batch (head etc.)");
 
 			status.on_done();
 		}
+		Ok(())
 	}
 
 	/// Apply next set of segments that are ready to be appended to their respective trees,
@@ -674,7 +695,6 @@ impl Desegmenter {
 			|ext, _batch| {
 				let extension = &mut ext.extension;
 				extension.apply_output_segment(segment)?;
-				debug!("Returning Ok");
 				Ok(())
 			},
 		)?;

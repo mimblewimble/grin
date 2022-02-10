@@ -1369,13 +1369,24 @@ impl<'a> Extension<'a> {
 		for insert in self.sort_pmmr_hashes_and_leaves(hash_pos, leaf_pos, Some(0)) {
 			match insert {
 				OrderedHashLeafNode::Hash(idx, pos0) => {
+					//self.output_pmmr.dump(false);
+					//debug!("Position: {}, Hash: {}", pos0, hashes[idx]);
 					if pos0 >= self.output_pmmr.size {
+						if self.output_pmmr.size == 1 {
+							// All initial outputs are spent up to this hash,
+							// Roll back the genesis output
+							self.output_pmmr
+								.rewind(0, &Bitmap::create())
+								.map_err(&ErrorKind::TxHashSetErr)?;
+						}
 						self.output_pmmr
 							.push_pruned_subtree(hashes[idx], pos0)
 							.map_err(&ErrorKind::TxHashSetErr)?;
 					}
 				}
 				OrderedHashLeafNode::Leaf(idx, pos0) => {
+					//self.output_pmmr.dump(false);
+					//debug!("Position: {}, Leaf Data: {:?}", pos0, leaf_data[idx]);
 					if pos0 == self.output_pmmr.size {
 						self.output_pmmr
 							.push(&leaf_data[idx])
@@ -1398,6 +1409,13 @@ impl<'a> Extension<'a> {
 			match insert {
 				OrderedHashLeafNode::Hash(idx, pos0) => {
 					if pos0 >= self.rproof_pmmr.size {
+						if self.rproof_pmmr.size == 1 {
+							// All initial outputs are spent up to this hash,
+							// Roll back the genesis output
+							self.rproof_pmmr
+								.rewind(0, &Bitmap::create())
+								.map_err(&ErrorKind::TxHashSetErr)?;
+						}
 						self.rproof_pmmr
 							.push_pruned_subtree(hashes[idx], pos0)
 							.map_err(&ErrorKind::TxHashSetErr)?;
