@@ -133,7 +133,10 @@ impl StateSync {
 					self.sync_state
 						.update(SyncStatus::TxHashsetPibd { aborted: false });
 					let archive_header = self.chain.txhashset_archive_header_header_only().unwrap();
-					let desegmenter = self.chain.desegmenter(&archive_header).unwrap();
+					let desegmenter = self
+						.chain
+						.desegmenter(&archive_header, self.sync_state.clone())
+						.unwrap();
 
 					// TODO: Find out why this needs to be called
 					if let Err(e) = self
@@ -189,7 +192,10 @@ impl StateSync {
 	fn continue_pibd(&mut self) -> bool {
 		// Check the state of our chain to figure out what we should be requesting next
 		let archive_header = self.chain.txhashset_archive_header_header_only().unwrap();
-		let desegmenter = self.chain.desegmenter(&archive_header).unwrap();
+		let desegmenter = self
+			.chain
+			.desegmenter(&archive_header, self.sync_state.clone())
+			.unwrap();
 
 		// Apply segments... TODO: figure out how this should be called, might
 		// need to be a separate thread.

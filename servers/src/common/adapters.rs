@@ -587,7 +587,12 @@ where
 		// has changed (perhaps not here, NB this has to go somewhere)
 		let archive_header = self.chain().txhashset_archive_header_header_only()?;
 		let identifier = segment.identifier().clone();
-		if let Some(d) = self.chain().desegmenter(&archive_header)?.write().as_mut() {
+		if let Some(d) = self
+			.chain()
+			.desegmenter(&archive_header, self.sync_state.clone())?
+			.write()
+			.as_mut()
+		{
 			let res = d.add_bitmap_segment(segment, output_root);
 			if let Err(e) = res {
 				debug!(
@@ -620,7 +625,12 @@ where
 		});
 		let archive_header = self.chain().txhashset_archive_header_header_only()?;
 		let identifier = segment.identifier().clone();
-		if let Some(d) = self.chain().desegmenter(&archive_header)?.write().as_mut() {
+		if let Some(d) = self
+			.chain()
+			.desegmenter(&archive_header, self.sync_state.clone())?
+			.write()
+			.as_mut()
+		{
 			let res = d.add_output_segment(segment, Some(bitmap_root));
 			if let Err(e) = res {
 				error!(
@@ -645,7 +655,12 @@ where
 		);
 		let archive_header = self.chain().txhashset_archive_header_header_only()?;
 		let identifier = segment.identifier().clone();
-		if let Some(d) = self.chain().desegmenter(&archive_header)?.write().as_mut() {
+		if let Some(d) = self
+			.chain()
+			.desegmenter(&archive_header, self.sync_state.clone())?
+			.write()
+			.as_mut()
+		{
 			let res = d.add_rangeproof_segment(segment);
 			if let Err(e) = res {
 				error!(
@@ -670,7 +685,12 @@ where
 		);
 		let archive_header = self.chain().txhashset_archive_header_header_only()?;
 		let identifier = segment.identifier().clone();
-		if let Some(d) = self.chain().desegmenter(&archive_header)?.write().as_mut() {
+		if let Some(d) = self
+			.chain()
+			.desegmenter(&archive_header, self.sync_state.clone())?
+			.write()
+			.as_mut()
+		{
 			let res = d.add_kernel_segment(segment);
 			if let Err(e) = res {
 				error!(
