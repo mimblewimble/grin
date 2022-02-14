@@ -1642,38 +1642,6 @@ impl<'a> Extension<'a> {
 		Ok(affected_pos)
 	}
 
-	/// Rewind MMRs slightly to resume pibd
-	pub fn rewind_mmrs_to_last_inserted_leaves(
-		&mut self,
-		archive_header: &BlockHeader,
-	) -> Result<(), Error> {
-		let bitmap: Bitmap = Bitmap::create();
-		// TODO: Unwrap
-		// TODO: There is some off-by-one thing somewhere that's making this necessary after resuming,
-		// investigate why
-		if archive_header.output_mmr_size > self.output_pmmr.size && self.output_pmmr.size > 1 {
-			let output_pos =
-				pmmr::insertion_to_pmmr_index(pmmr::n_leaves(self.output_pmmr.size - 1));
-			self.output_pmmr
-				.rewind(output_pos, &bitmap)
-				.map_err(&ErrorKind::TxHashSetErr)?;
-		}
-		if archive_header.output_mmr_size > self.rproof_pmmr.size && self.output_pmmr.size > 1 {
-			let rp_pos = pmmr::insertion_to_pmmr_index(pmmr::n_leaves(self.rproof_pmmr.size - 1));
-			self.rproof_pmmr
-				.rewind(rp_pos, &bitmap)
-				.map_err(&ErrorKind::TxHashSetErr)?;
-		}
-		if archive_header.kernel_mmr_size > self.kernel_pmmr.size && self.kernel_pmmr.size > 1 {
-			let kernel_pos =
-				pmmr::insertion_to_pmmr_index(pmmr::n_leaves(self.kernel_pmmr.size - 1));
-			self.kernel_pmmr
-				.rewind(kernel_pos, &bitmap)
-				.map_err(&ErrorKind::TxHashSetErr)?;
-		}
-		Ok(())
-	}
-
 	/// Rewinds the MMRs to the provided positions, given the output and
 	/// kernel pos we want to rewind to.
 	fn rewind_mmrs_to_pos(

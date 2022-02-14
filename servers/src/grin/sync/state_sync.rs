@@ -138,15 +138,6 @@ impl StateSync {
 						.desegmenter(&archive_header, self.sync_state.clone())
 						.unwrap();
 
-					// TODO: Find out why this needs to be called
-					if let Err(e) = self
-						.chain
-						.rewind_mmrs_to_last_inserted_leaves(&archive_header)
-					{
-						self.sync_state
-							.set_sync_error(chain::ErrorKind::SyncError(format!("{:?}", e)).into());
-					}
-
 					if let Some(d) = desegmenter.read().as_ref() {
 						d.launch_validation_thread()
 					};
