@@ -127,15 +127,8 @@ pub trait Committed {
 		// Sum all input|output|overage commitments.
 		let utxo_sum = self.sum_commitments(overage)?;
 
-		debug!("UTXO SUM: {:?}", utxo_sum);
-
 		// Sum the kernel excesses accounting for the kernel offset.
 		let (kernel_sum, kernel_sum_plus_offset) = self.sum_kernel_excesses(&kernel_offset)?;
-
-		debug!(
-			"KERNEL SUM: {:?}, plus offset: {:?}",
-			kernel_sum, kernel_sum_plus_offset
-		);
 
 		if utxo_sum != kernel_sum_plus_offset {
 			return Err(Error::KernelSumMismatch);

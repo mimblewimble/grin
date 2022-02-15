@@ -78,6 +78,9 @@ pub trait Backend<T: PMMRable> {
 	/// triggered removal).
 	fn remove(&mut self, position: u64) -> Result<(), String>;
 
+	/// Remove a leaf from the leaf set
+	fn remove_from_leaf_set(&mut self, pos0: u64);
+
 	/// Release underlying datafiles and locks
 	fn release_files(&mut self);
 

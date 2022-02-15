@@ -270,9 +270,14 @@ where
 			self.backend.append_hash(current_hash)?;
 		}
 
-		// Round size up to next leaf
+		// Round size up to next leaf, ready for insertion
 		self.size = crate::core::pmmr::round_up_to_leaf_pos(pos);
 		Ok(())
+	}
+
+	/// Remove the specified position from the leaf set
+	pub fn remove_from_leaf_set(&mut self, pos0: u64) {
+		self.backend.remove_from_leaf_set(pos0);
 	}
 
 	/// Saves a snapshot of the MMR tagged with the block hash.

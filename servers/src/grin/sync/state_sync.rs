@@ -83,6 +83,7 @@ impl StateSync {
 				// Only on testing chains for now
 				if global::get_chain_type() != global::ChainTypes::Mainnet {
 					true
+				//false
 				} else {
 					false
 				}
@@ -204,12 +205,6 @@ impl StateSync {
 		let mut next_segment_ids = vec![];
 		if let Some(d) = desegmenter.write().as_mut() {
 			if d.is_complete() {
-				// Ensure MMR sizes are correct
-				/*if let Err(e) = self.chain.rewind_mmrs_to_last_inserted_leaves() {
-					self
-						.sync_state
-						.set_sync_error(chain::ErrorKind::SyncError(format!("{:?}", e)).into());
-				}*/
 				return true;
 			}
 			// Figure out the next segments we need

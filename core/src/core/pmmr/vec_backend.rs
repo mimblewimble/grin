@@ -115,6 +115,10 @@ impl<T: PMMRable> Backend<T> for VecBackend<T> {
 		Ok(())
 	}
 
+	fn remove_from_leaf_set(&mut self, _pos0: u64) {
+		unimplemented!()
+	}
+
 	fn rewind(&mut self, position: u64, _rewind_rm_pos: &Bitmap) -> Result<(), String> {
 		if let Some(data) = &mut self.data {
 			let idx = pmmr::n_leaves(position);

@@ -184,9 +184,18 @@ impl Desegmenter {
 				local_rangeproof_mmr_size = txhashset.rangeproof_mmr_size();
 			}
 
-			debug!("Output MMR Size: {}", local_output_mmr_size);
-			debug!("Rangeproof MMR Size: {}", local_rangeproof_mmr_size);
-			debug!("Kernel MMR Size: {}", local_kernel_mmr_size);
+			trace!(
+				"Desegmenter Validation: Output MMR Size: {}",
+				local_output_mmr_size
+			);
+			trace!(
+				"Desegmenter Validation: Rangeproof MMR Size: {}",
+				local_rangeproof_mmr_size
+			);
+			trace!(
+				"Desegmenter Validation: Kernel MMR Size: {}",
+				local_kernel_mmr_size
+			);
 
 			// Find latest 'complete' header.
 			// First take lesser of rangeproof and output mmr sizes
@@ -205,7 +214,10 @@ impl Desegmenter {
 				);
 				if let Some(h) = res {
 					latest_block_height = h.height;
-					debug!("PIBD Desegmenter Validation Loop: Latest block is: {:?}", h);
+					debug!(
+						"PIBD Desegmenter Validation Loop: PMMRs complete up to block {}: {:?}",
+						h.height, h
+					);
 					// TODO: 'In-flight' validation. At the moment the entire tree
 					// will be presented for validation after all segments are downloaded
 					// TODO: Unwraps
@@ -213,7 +225,6 @@ impl Desegmenter {
 					let batch = store.batch().unwrap();
 					batch.save_pibd_head(&tip).unwrap();
 					batch.commit().unwrap();
-					debug!("Archive Header is: {:?}", header_head);
 					if h == header_head {
 						// get out of this loop and move on to validation
 						break;
@@ -255,6 +266,13 @@ impl Desegmenter {
 			let txhashset = txhashset.read();
 			txhashset.roots().validate(header_head)?;
 		}
+
+		//debug!("desegmenter validation: compacting");
+		/*{
+			let mut txhashset = txhashset.write();
+			let batch = store.batch()?;
+			txhashset.compact(header_head, &batch)?;
+		}*/
 
 		status.on_setup();
 
