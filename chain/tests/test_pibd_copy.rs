@@ -24,7 +24,7 @@ use std::sync::Arc;
 use std::{fs, io};
 
 use crate::chain::txhashset::BitmapChunk;
-use crate::chain::types::{NoopAdapter, Options};
+use crate::chain::types::{NoopAdapter, Options, SyncState};
 use crate::core::core::{
 	hash::{Hash, Hashed},
 	pmmr::segment::{Segment, SegmentIdentifier, SegmentType},
@@ -177,8 +177,9 @@ impl DesegmenterRequestor {
 	// Emulate `continue_pibd` function, which would be called from state sync
 	// return whether is complete
 	pub fn continue_pibd(&mut self) -> bool {
+		let state = Arc::new(SyncState::new());
 		let archive_header = self.chain.txhashset_archive_header_header_only().unwrap();
-		let desegmenter = self.chain.desegmenter(&archive_header).unwrap();
+		let desegmenter = self.chain.desegmenter(&archive_header, state).unwrap();
 
 		// Apply segments... TODO: figure out how this should be called, might
 		// need to be a separate thread.
@@ -260,8 +261,8 @@ fn test_pibd_copy_impl(
 	dest_root_dir: &str,
 	dest_template_dir: Option<&str>,
 ) {
-	global::set_local_chain_type(global::ChainTypes::Mainnet);
-	let mut genesis = genesis::genesis_main();
+	global::set_local_chain_type(global::ChainTypes::Testnet);
+	let mut genesis = genesis::genesis_test();
 
 	if is_test_chain {
 		global::set_local_chain_type(global::ChainTypes::AutomatedTesting);
@@ -327,11 +328,12 @@ fn test_pibd_copy_real() {
 	let copy_headers_to_template = false;
 
 	// if testing against a real chain, insert location here
-	let src_root_dir = format!("/home/yeastplume/Projects/grin-project/servers/sync-1/chain_data");
-	let dest_template_dir =
-		format!("/home/yeastplume/Projects/grin-project/servers/sync-1/chain_data_headers_applied");
+	let src_root_dir = format!("/home/yeastplume/Projects/grin-project/servers/floo-1/chain_data");
+	let dest_template_dir = format!(
+		"/home/yeastplume/Projects/grin-project/servers/floo-pibd-1/chain_data_headers_only"
+	);
 	let dest_root_dir =
-		format!("/home/yeastplume/Projects/grin-project/servers/sync-1/chain_data_copy");
+		format!("/home/yeastplume/Projects/grin-project/servers/floo-pibd-1/chain_data_test_copy");
 	if copy_headers_to_template {
 		clean_output_dir(&dest_template_dir);
 		test_pibd_copy_impl(false, &src_root_dir, &dest_template_dir, None);

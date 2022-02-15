@@ -37,6 +37,7 @@ use crate::{
 	core::core::hash::{Hash, Hashed},
 	store::Batch,
 	txhashset::{ExtensionPair, HeaderExtension},
+	SyncState,
 };
 use grin_store::Error::NotFoundErr;
 use std::collections::HashMap;
@@ -870,6 +871,7 @@ impl Chain {
 	pub fn desegmenter(
 		&self,
 		archive_header: &BlockHeader,
+		sync_state: Arc<SyncState>,
 	) -> Result<Arc<RwLock<Option<Desegmenter>>>, Error> {
 		// Use our cached desegmenter if we have one and the associated header matches.
 		if let Some(d) = self.pibd_desegmenter.write().as_ref() {
@@ -884,7 +886,7 @@ impl Chain {
 		}
 		// TODO: (Check whether we can do this.. we *should* be able to modify this as the desegmenter
 		// is in flight and we cross a horizon boundary, but needs more thinking)
-		let desegmenter = self.init_desegmenter(archive_header)?;
+		let desegmenter = self.init_desegmenter(archive_header, sync_state)?;
 		let mut cache = self.pibd_desegmenter.write();
 		*cache = Some(desegmenter.clone());
 
@@ -894,7 +896,11 @@ impl Chain {
 	/// initialize a desegmenter, which is capable of extending the hashset by appending
 	/// PIBD segments of the three PMMR trees + Bitmap PMMR
 	/// header should be the same header as selected for the txhashset.zip archive
-	fn init_desegmenter(&self, header: &BlockHeader) -> Result<Desegmenter, Error> {
+	fn init_desegmenter(
+		&self,
+		header: &BlockHeader,
+		sync_state: Arc<SyncState>,
+	) -> Result<Desegmenter, Error> {
 		debug!(
 			"init_desegmenter: initializing new desegmenter for {} at {}",
 			header.hash(),
@@ -905,7 +911,9 @@ impl Chain {
 			self.txhashset(),
 			self.header_pmmr.clone(),
 			header.clone(),
+			self.genesis.clone(),
 			self.store.clone(),
+			sync_state,
 		))
 	}
 
@@ -1657,8 +1665,6 @@ fn setup_head(
 							header.height,
 							header.hash()
 						);
-						let extension = &mut ext.extension;
-						extension.rewind_mmrs_to_last_inserted_leaves()?;
 						return Ok(());
 					}
 

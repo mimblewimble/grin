@@ -188,12 +188,12 @@ impl<T> Segment<T> {
 	}
 
 	/// Maximum number of leaves in a segment, given by `2**height`
-	fn segment_capacity(&self) -> u64 {
+	fn _segment_capacity(&self) -> u64 {
 		self.identifier.segment_capacity()
 	}
 
 	/// Offset (in leaf idx) of first leaf in the segment
-	fn leaf_offset(&self) -> u64 {
+	fn _leaf_offset(&self) -> u64 {
 		self.identifier.leaf_offset()
 	}
 

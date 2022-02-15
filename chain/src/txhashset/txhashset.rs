@@ -860,7 +860,7 @@ where
 				trees.rproof_pmmr_h.backend.discard();
 				trees.kernel_pmmr_h.backend.discard();
 			} else {
-				debug!("Committing txhashset extension. sizes {:?}", sizes);
+				trace!("Committing txhashset extension. sizes {:?}", sizes);
 				child_batch.commit()?;
 				trees.output_pmmr_h.backend.sync()?;
 				trees.rproof_pmmr_h.backend.sync()?;
@@ -1114,6 +1114,7 @@ pub struct Extension<'a> {
 	kernel_pmmr: PMMR<'a, TxKernel, PMMRBackend<TxKernel>>,
 
 	bitmap_accumulator: BitmapAccumulator,
+	bitmap_cache: Bitmap,
 
 	/// Rollback flag.
 	rollback: bool,
@@ -1155,6 +1156,10 @@ impl<'a> Extension<'a> {
 			rproof_pmmr: PMMR::at(&mut trees.rproof_pmmr_h.backend, trees.rproof_pmmr_h.size),
 			kernel_pmmr: PMMR::at(&mut trees.kernel_pmmr_h.backend, trees.kernel_pmmr_h.size),
 			bitmap_accumulator: trees.bitmap_accumulator.clone(),
+			bitmap_cache: trees
+				.bitmap_accumulator
+				.as_bitmap()
+				.unwrap_or(Bitmap::create()),
 			rollback: false,
 		}
 	}
@@ -1267,11 +1272,17 @@ impl<'a> Extension<'a> {
 				.leaf_idx_iter(BitmapAccumulator::chunk_start_idx(min_idx)),
 			size,
 		)
+		// TODO: will need to set bitmap cache here if it's ever needed
+		// outside of PIBD sync
 	}
 
 	/// Sets the bitmap accumulator (as received during PIBD sync)
 	pub fn set_bitmap_accumulator(&mut self, accumulator: BitmapAccumulator) {
 		self.bitmap_accumulator = accumulator;
+		self.bitmap_cache = self
+			.bitmap_accumulator
+			.as_bitmap()
+			.unwrap_or(Bitmap::create());
 	}
 
 	// Prune output and rangeproof PMMRs based on provided pos.
@@ -1370,6 +1381,13 @@ impl<'a> Extension<'a> {
 			match insert {
 				OrderedHashLeafNode::Hash(idx, pos0) => {
 					if pos0 >= self.output_pmmr.size {
+						if self.output_pmmr.size == 1 {
+							// All initial outputs are spent up to this hash,
+							// Roll back the genesis output
+							self.output_pmmr
+								.rewind(0, &Bitmap::create())
+								.map_err(&ErrorKind::TxHashSetErr)?;
+						}
 						self.output_pmmr
 							.push_pruned_subtree(hashes[idx], pos0)
 							.map_err(&ErrorKind::TxHashSetErr)?;
@@ -1381,6 +1399,17 @@ impl<'a> Extension<'a> {
 							.push(&leaf_data[idx])
 							.map_err(&ErrorKind::TxHashSetErr)?;
 					}
+					let pmmr_index = pmmr::pmmr_leaf_to_insertion_index(pos0);
+					// Remove any elements that may be spent but not fully
+					// pruned
+					match pmmr_index {
+						Some(i) => {
+							if !self.bitmap_cache.contains(i as u32) {
+								self.output_pmmr.remove_from_leaf_set(pos0);
+							}
+						}
+						None => {}
+					};
 				}
 			}
 		}
@@ -1398,6 +1427,13 @@ impl<'a> Extension<'a> {
 			match insert {
 				OrderedHashLeafNode::Hash(idx, pos0) => {
 					if pos0 >= self.rproof_pmmr.size {
+						if self.rproof_pmmr.size == 1 {
+							// All initial outputs are spent up to this hash,
+							// Roll back the genesis output
+							self.rproof_pmmr
+								.rewind(0, &Bitmap::create())
+								.map_err(&ErrorKind::TxHashSetErr)?;
+						}
 						self.rproof_pmmr
 							.push_pruned_subtree(hashes[idx], pos0)
 							.map_err(&ErrorKind::TxHashSetErr)?;
@@ -1409,6 +1445,15 @@ impl<'a> Extension<'a> {
 							.push(&leaf_data[idx])
 							.map_err(&ErrorKind::TxHashSetErr)?;
 					}
+					let pmmr_index = pmmr::pmmr_leaf_to_insertion_index(pos0);
+					match pmmr_index {
+						Some(i) => {
+							if !self.bitmap_cache.contains(i as u32) {
+								self.output_pmmr.remove_from_leaf_set(pos0);
+							}
+						}
+						None => {}
+					};
 				}
 			}
 		}
@@ -1622,25 +1667,6 @@ impl<'a> Extension<'a> {
 		}
 
 		Ok(affected_pos)
-	}
-
-	/// Rewind MMRs to ensure they're at the position of the last inserted output
-	pub fn rewind_mmrs_to_last_inserted_leaves(&mut self) -> Result<(), Error> {
-		let bitmap: Bitmap = Bitmap::create();
-		// TODO: Unwrap
-		let output_pos = pmmr::insertion_to_pmmr_index(pmmr::n_leaves(self.output_pmmr.size - 1));
-		self.output_pmmr
-			.rewind(output_pos, &bitmap)
-			.map_err(&ErrorKind::TxHashSetErr)?;
-		let rp_pos = pmmr::insertion_to_pmmr_index(pmmr::n_leaves(self.rproof_pmmr.size - 1));
-		self.rproof_pmmr
-			.rewind(rp_pos, &bitmap)
-			.map_err(&ErrorKind::TxHashSetErr)?;
-		let kernel_pos = pmmr::insertion_to_pmmr_index(pmmr::n_leaves(self.kernel_pmmr.size - 1));
-		self.kernel_pmmr
-			.rewind(kernel_pos, &bitmap)
-			.map_err(&ErrorKind::TxHashSetErr)?;
-		Ok(())
 	}
 
 	/// Rewinds the MMRs to the provided positions, given the output and

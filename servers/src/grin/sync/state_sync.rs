@@ -83,6 +83,7 @@ impl StateSync {
 				// Only on testing chains for now
 				if global::get_chain_type() != global::ChainTypes::Mainnet {
 					true
+				//false
 				} else {
 					false
 				}
@@ -133,13 +134,19 @@ impl StateSync {
 					self.sync_state
 						.update(SyncStatus::TxHashsetPibd { aborted: false });
 					let archive_header = self.chain.txhashset_archive_header_header_only().unwrap();
-					let desegmenter = self.chain.desegmenter(&archive_header).unwrap();
+					let desegmenter = self
+						.chain
+						.desegmenter(&archive_header, self.sync_state.clone())
+						.unwrap();
+
 					if let Some(d) = desegmenter.read().as_ref() {
 						d.launch_validation_thread()
 					};
 				}
-				// Continue our PIBD process
-				self.continue_pibd();
+				// Continue our PIBD process (which returns true if all segments are in)
+				if self.continue_pibd() {
+					return false;
+				}
 			} else {
 				let (go, download_timeout) = self.state_sync_due();
 
@@ -172,10 +179,15 @@ impl StateSync {
 		true
 	}
 
-	fn continue_pibd(&mut self) {
+	/// Continue the PIBD process, returning true if the desegmenter is reporting
+	/// that the process is done
+	fn continue_pibd(&mut self) -> bool {
 		// Check the state of our chain to figure out what we should be requesting next
 		let archive_header = self.chain.txhashset_archive_header_header_only().unwrap();
-		let desegmenter = self.chain.desegmenter(&archive_header).unwrap();
+		let desegmenter = self
+			.chain
+			.desegmenter(&archive_header, self.sync_state.clone())
+			.unwrap();
 
 		// Apply segments... TODO: figure out how this should be called, might
 		// need to be a separate thread.
@@ -192,6 +204,9 @@ impl StateSync {
 		// requests we want to send to peers
 		let mut next_segment_ids = vec![];
 		if let Some(d) = desegmenter.write().as_mut() {
+			if d.is_complete() {
+				return true;
+			}
 			// Figure out the next segments we need
 			// (12 is divisible by 3, to try and evenly spread the requests among the 3
 			// main pmmrs. Bitmaps segments will always be requested first)
@@ -253,6 +268,7 @@ impl StateSync {
 				self.sync_state.add_pibd_segment(seg_id);
 			}
 		}
+		false
 	}
 
 	fn request_state(&self, header_head: &chain::Tip) -> Result<Arc<Peer>, p2p::Error> {

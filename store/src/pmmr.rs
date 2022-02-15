@@ -156,6 +156,11 @@ impl<T: PMMRable> Backend<T> for PMMRBackend<T> {
 		self.get_data_from_file(pos0)
 	}
 
+	/// Remove leaf from leaf set
+	fn remove_from_leaf_set(&mut self, pos0: u64) {
+		self.leaf_set.remove(pos0);
+	}
+
 	/// Returns an iterator over all the leaf positions.
 	/// for a prunable PMMR this is an iterator over the leaf_set bitmap.
 	/// For a non-prunable PMMR this is *all* leaves (this is not yet implemented).
