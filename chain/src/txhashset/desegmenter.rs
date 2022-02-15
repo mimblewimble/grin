@@ -468,7 +468,7 @@ impl Desegmenter {
 			}
 			// TODO: Fix, alternative approach, this is very inefficient
 			let mut output_identifier_iter = SegmentIdentifier::traversal_iter(
-				self.archive_header.output_mmr_size + 1,
+				self.archive_header.output_mmr_size,
 				self.default_output_segment_height,
 			);
 
@@ -492,7 +492,7 @@ impl Desegmenter {
 			}
 
 			let mut rangeproof_identifier_iter = SegmentIdentifier::traversal_iter(
-				self.archive_header.output_mmr_size + 1,
+				self.archive_header.output_mmr_size,
 				self.default_rangeproof_segment_height,
 			);
 
@@ -521,8 +521,7 @@ impl Desegmenter {
 
 			while let Some(k_id) = kernel_identifier_iter.next() {
 				// Advance kernel iterator to next needed position
-				let (_first, last) =
-					k_id.segment_pos_range(self.archive_header.kernel_mmr_size + 1);
+				let (_first, last) = k_id.segment_pos_range(self.archive_header.kernel_mmr_size);
 				// Advance rangeproof iterator to next needed position
 				if last <= local_kernel_mmr_size {
 					continue;
