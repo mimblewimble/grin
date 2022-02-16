@@ -1201,6 +1201,12 @@ impl<'a> Extension<'a> {
 		self.rproof_pmmr.readonly_pmmr()
 	}
 
+	/// Reset prune lists
+	pub fn reset_prune_lists(&mut self) {
+		self.output_pmmr.reset_prune_list();
+		self.rproof_pmmr.reset_prune_list();
+	}
+
 	/// Apply a new block to the current txhashet extension (output, rangeproof, kernel MMRs).
 	/// Returns a vec of commit_pos representing the pos and height of the outputs spent
 	/// by this block.

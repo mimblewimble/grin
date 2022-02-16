@@ -267,6 +267,20 @@ impl Chain {
 		Ok(())
 	}
 
+	/// Reset prune lists (when PIBD resets)
+	pub fn reset_prune_lists(&self) -> Result<(), Error> {
+		let mut header_pmmr = self.header_pmmr.write();
+		let mut txhashset = self.txhashset.write();
+		let mut batch = self.store.batch()?;
+
+		txhashset::extending(&mut header_pmmr, &mut txhashset, &mut batch, |ext, _| {
+			let extension = &mut ext.extension;
+			extension.reset_prune_lists();
+			Ok(())
+		})?;
+		Ok(())
+	}
+
 	/// Reset PIBD head
 	pub fn reset_pibd_head(&self) -> Result<(), Error> {
 		let batch = self.store.batch()?;

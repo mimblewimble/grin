@@ -121,6 +121,7 @@ impl Desegmenter {
 		self.bitmap_mmr_size = 0;
 		self.bitmap_cache = None;
 		self.bitmap_accumulator = BitmapAccumulator::new();
+		self.calc_bitmap_mmr_sizes();
 	}
 
 	/// Return reference to the header used for validation
@@ -253,18 +254,18 @@ impl Desegmenter {
 		}
 
 		// If all done, kick off validation, setting error state if necessary
-		/*if let Err(e) = Desegmenter::validate_complete_state(
+		if let Err(e) = Desegmenter::validate_complete_state(
 			txhashset,
 			store,
 			header_pmmr,
 			&header_head,
 			genesis,
 			status.clone(),
-		) {*/
-		//error!("Error validating pibd hashset: {}", e);
-		status.update_pibd_progress(false, true, latest_block_height, header_head.height);
-		/*}
-		stop_state.stop();*/
+		) {
+			error!("Error validating pibd hashset: {}", e);
+			status.update_pibd_progress(false, true, latest_block_height, header_head.height);
+		}
+		stop_state.stop();
 	}
 
 	/// TODO: This is largely copied from chain.rs txhashset_write and related functions,

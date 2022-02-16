@@ -109,6 +109,9 @@ impl StateSync {
 				if let Err(e) = self.chain.reset_pibd_head() {
 					error!("pibd_sync restart: reset pibd_head error = {}", e);
 				}
+				if let Err(e) = self.chain.reset_prune_lists() {
+					error!("pibd_sync restart: reset prune lists error = {}", e);
+				}
 				self.sync_state.update_pibd_progress(false, false, 1, 1);
 				sync_need_restart = true;
 			}
