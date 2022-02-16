@@ -595,7 +595,7 @@ where
 		{
 			let res = d.add_bitmap_segment(segment, output_root);
 			if let Err(e) = res {
-				debug!(
+				error!(
 					"Validation of incoming bitmap segment failed: {:?}, reason: {}",
 					identifier, e
 				);
