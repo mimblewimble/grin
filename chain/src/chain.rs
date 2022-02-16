@@ -227,7 +227,11 @@ impl Chain {
 	/// Reset both head and header_head to the provided header.
 	/// Handles simple rewind and more complex fork scenarios.
 	/// Used by the reset_chain_head owner api endpoint.
-	pub fn reset_chain_head<T: Into<Tip>>(&self, head: T) -> Result<(), Error> {
+	pub fn reset_chain_head<T: Into<Tip>>(
+		&self,
+		head: T,
+		rewind_headers: bool,
+	) -> Result<(), Error> {
 		let head = head.into();
 
 		let mut header_pmmr = self.header_pmmr.write();
@@ -248,16 +252,25 @@ impl Chain {
 			},
 		)?;
 
-		// If the rewind of full blocks was successful then we can rewind the header MMR.
-		// Rewind and reapply headers to reset the header MMR.
-		txhashset::header_extending(&mut header_pmmr, &mut batch, |ext, batch| {
-			self.rewind_and_apply_header_fork(&header, ext, batch)?;
-			batch.save_header_head(&head)?;
-			Ok(())
-		})?;
+		if rewind_headers {
+			// If the rewind of full blocks was successful then we can rewind the header MMR.
+			// Rewind and reapply headers to reset the header MMR.
+			txhashset::header_extending(&mut header_pmmr, &mut batch, |ext, batch| {
+				self.rewind_and_apply_header_fork(&header, ext, batch)?;
+				batch.save_header_head(&head)?;
+				Ok(())
+			})?;
+		}
 
 		batch.commit()?;
 
+		Ok(())
+	}
+
+	/// Reset PIBD head
+	pub fn reset_pibd_head(&self) -> Result<(), Error> {
+		let batch = self.store.batch()?;
+		batch.save_pibd_head(&self.genesis().into())?;
 		Ok(())
 	}
 
@@ -274,6 +287,11 @@ impl Chain {
 	/// Return our shared txhashset instance.
 	pub fn txhashset(&self) -> Arc<RwLock<TxHashSet>> {
 		self.txhashset.clone()
+	}
+
+	/// return genesis header
+	pub fn genesis(&self) -> BlockHeader {
+		self.genesis.clone()
 	}
 
 	/// Shared store instance.

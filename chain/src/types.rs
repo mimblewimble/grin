@@ -63,6 +63,13 @@ pub enum SyncStatus {
 		/// Whether the syncer has determined there's not enough
 		/// data to continue via PIBD
 		aborted: bool,
+		/// whether we got an error anywhere (in which case restart the process)
+		errored: bool,
+		/// 'height', i.e. last 'block' for which there is complete
+		/// pmmr data
+		completed_to_height: u64,
+		/// Total 'height' needed
+		required_height: u64,
 	},
 	/// Downloading the various txhashsets
 	TxHashsetDownload(TxHashsetDownloadStats),
@@ -215,6 +222,22 @@ impl SyncState {
 	/// Update txhashset downloading progress
 	pub fn update_txhashset_download(&self, stats: TxHashsetDownloadStats) {
 		*self.current.write() = SyncStatus::TxHashsetDownload(stats);
+	}
+
+	/// Update PIBD progress
+	pub fn update_pibd_progress(
+		&self,
+		aborted: bool,
+		errored: bool,
+		completed_to_height: u64,
+		required_height: u64,
+	) {
+		*self.current.write() = SyncStatus::TxHashsetPibd {
+			aborted,
+			errored,
+			completed_to_height,
+			required_height,
+		};
 	}
 
 	/// Update PIBD segment list

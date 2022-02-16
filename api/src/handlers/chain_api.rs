@@ -81,7 +81,7 @@ impl ChainResetHandler {
 	pub fn reset_chain_head(&self, hash: Hash) -> Result<(), Error> {
 		let chain = w(&self.chain)?;
 		let header = chain.get_block_header(&hash)?;
-		chain.reset_chain_head(&header)?;
+		chain.reset_chain_head(&header, true)?;
 
 		// Reset the sync status and clear out any sync error.
 		w(&self.sync_state)?.reset();
