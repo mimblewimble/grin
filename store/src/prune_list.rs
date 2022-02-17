@@ -129,21 +129,6 @@ impl PruneList {
 		Ok(())
 	}
 
-	/// Save the prune_list to disk, without temp file
-	pub fn flush_hard(&mut self) -> io::Result<()> {
-		// Run the optimization step on the bitmap.
-		self.bitmap.run_optimize();
-
-		// Write the updated bitmap file to disk.
-		if let Some(ref path) = self.path {
-			save_via_temp_file(path, ".tmp", |file| {
-				file.write_all(&self.bitmap.serialize())
-			})?;
-		}
-
-		Ok(())
-	}
-
 	/// Return the total shift from all entries in the prune_list.
 	/// This is the shift we need to account for when adding new entries to our PMMR.
 	pub fn get_total_shift(&self) -> u64 {
