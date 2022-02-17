@@ -119,6 +119,10 @@ impl<T: PMMRable> Backend<T> for VecBackend<T> {
 		unimplemented!()
 	}
 
+	fn reset_prune_list(&mut self) {
+		unimplemented!()
+	}
+
 	fn rewind(&mut self, position: u64, _rewind_rm_pos: &Bitmap) -> Result<(), String> {
 		if let Some(data) = &mut self.data {
 			let idx = pmmr::n_leaves(position);

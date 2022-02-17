@@ -84,6 +84,9 @@ pub trait Backend<T: PMMRable> {
 	/// Release underlying datafiles and locks
 	fn release_files(&mut self);
 
+	/// Reset prune list, used when PIBD is reset
+	fn reset_prune_list(&mut self);
+
 	/// Saves a snapshot of the rewound utxo file with the block hash as
 	/// filename suffix. We need this when sending a txhashset zip file to a
 	/// node for fast sync.

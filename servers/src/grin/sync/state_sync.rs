@@ -89,6 +89,34 @@ impl StateSync {
 				}
 			};
 
+		// Check whether we've errored and should restart pibd
+		if using_pibd {
+			if let SyncStatus::TxHashsetPibd { errored: true, .. } = self.sync_state.status() {
+				let archive_header = self.chain.txhashset_archive_header_header_only().unwrap();
+				error!("PIBD Reported Failure - Restarting Sync");
+				// reset desegmenter state
+				let desegmenter = self
+					.chain
+					.desegmenter(&archive_header, self.sync_state.clone())
+					.unwrap();
+
+				if let Some(d) = desegmenter.write().as_mut() {
+					d.reset();
+				};
+				if let Err(e) = self.chain.reset_chain_head(self.chain.genesis(), false) {
+					error!("pibd_sync restart: chain reset error = {}", e);
+				}
+				if let Err(e) = self.chain.reset_pibd_head() {
+					error!("pibd_sync restart: reset pibd_head error = {}", e);
+				}
+				if let Err(e) = self.chain.reset_prune_lists() {
+					error!("pibd_sync restart: reset prune lists error = {}", e);
+				}
+				self.sync_state.update_pibd_progress(false, false, 1, 1);
+				sync_need_restart = true;
+			}
+		}
+
 		// check peer connection status of this sync
 		if !using_pibd {
 			if let Some(ref peer) = self.state_sync_peer {
@@ -129,11 +157,14 @@ impl StateSync {
 		// run fast sync if applicable, normally only run one-time, except restart in error
 		if sync_need_restart || header_head.height == highest_height {
 			if using_pibd {
+				if sync_need_restart {
+					return true;
+				}
 				let (launch, _download_timeout) = self.state_sync_due();
 				if launch {
-					self.sync_state
-						.update(SyncStatus::TxHashsetPibd { aborted: false });
 					let archive_header = self.chain.txhashset_archive_header_header_only().unwrap();
+					self.sync_state
+						.update_pibd_progress(false, false, 1, archive_header.height);
 					let desegmenter = self
 						.chain
 						.desegmenter(&archive_header, self.sync_state.clone())
@@ -195,7 +226,9 @@ impl StateSync {
 			if let Some(d) = de.as_mut() {
 				let res = d.apply_next_segments();
 				if let Err(e) = res {
-					debug!("error applying segment, continuing: {}", e);
+					debug!("error applying segment: {}", e);
+					self.sync_state.update_pibd_progress(false, true, 1, 1);
+					return false;
 				}
 			}
 		}

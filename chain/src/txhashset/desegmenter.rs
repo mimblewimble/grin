@@ -110,6 +110,20 @@ impl Desegmenter {
 		retval
 	}
 
+	/// Reset all state
+	pub fn reset(&mut self) {
+		self.all_segments_complete = false;
+		self.bitmap_segment_cache = vec![];
+		self.output_segment_cache = vec![];
+		self.rangeproof_segment_cache = vec![];
+		self.kernel_segment_cache = vec![];
+		self.bitmap_mmr_leaf_count = 0;
+		self.bitmap_mmr_size = 0;
+		self.bitmap_cache = None;
+		self.bitmap_accumulator = BitmapAccumulator::new();
+		self.calc_bitmap_mmr_sizes();
+	}
+
 	/// Return reference to the header used for validation
 	pub fn header(&self) -> &BlockHeader {
 		&self.archive_header
@@ -225,6 +239,12 @@ impl Desegmenter {
 					let batch = store.batch().unwrap();
 					batch.save_pibd_head(&tip).unwrap();
 					batch.commit().unwrap();
+					status.update_pibd_progress(
+						false,
+						false,
+						latest_block_height,
+						header_head.height,
+					);
 					if h == header_head {
 						// get out of this loop and move on to validation
 						break;
@@ -240,10 +260,10 @@ impl Desegmenter {
 			header_pmmr,
 			&header_head,
 			genesis,
-			status,
+			status.clone(),
 		) {
 			error!("Error validating pibd hashset: {}", e);
-			// TODO: Set state appropriately, state sync can rewind and start again, etc
+			status.update_pibd_progress(false, true, latest_block_height, header_head.height);
 		}
 		stop_state.stop();
 	}
@@ -266,13 +286,6 @@ impl Desegmenter {
 			let txhashset = txhashset.read();
 			txhashset.roots().validate(header_head)?;
 		}
-
-		//debug!("desegmenter validation: compacting");
-		/*{
-			let mut txhashset = txhashset.write();
-			let batch = store.batch()?;
-			txhashset.compact(header_head, &batch)?;
-		}*/
 
 		status.on_setup();
 

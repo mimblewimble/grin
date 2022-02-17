@@ -229,6 +229,14 @@ impl<T: PMMRable> Backend<T> for PMMRBackend<T> {
 		Ok(())
 	}
 
+	fn reset_prune_list(&mut self) {
+		let bitmap = Bitmap::create();
+		self.prune_list = PruneList::new(Some(self.data_dir.join(PMMR_PRUN_FILE)), bitmap);
+		if let Err(e) = self.prune_list.flush() {
+			error!("Flushing reset prune list: {}", e);
+		}
+	}
+
 	/// Remove by insertion position.
 	fn remove(&mut self, pos0: u64) -> Result<(), String> {
 		assert!(self.prunable, "Remove on non-prunable MMR");

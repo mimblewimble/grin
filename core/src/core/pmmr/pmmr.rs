@@ -275,6 +275,11 @@ where
 		Ok(())
 	}
 
+	/// Reset prune list
+	pub fn reset_prune_list(&mut self) {
+		self.backend.reset_prune_list();
+	}
+
 	/// Remove the specified position from the leaf set
 	pub fn remove_from_leaf_set(&mut self, pos0: u64) {
 		self.backend.remove_from_leaf_set(pos0);

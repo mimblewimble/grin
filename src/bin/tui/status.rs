@@ -50,8 +50,21 @@ impl TUIStatusView {
 				};
 				Cow::Owned(format!("Sync step 1/7: Downloading headers: {}%", percent))
 			}
-			SyncStatus::TxHashsetPibd { .. } => {
-				Cow::Borrowed("Sync step 2/7: Performing PIBD Body Sync (experimental)")
+			SyncStatus::TxHashsetPibd {
+				aborted: _,
+				errored: _,
+				completed_to_height,
+				required_height,
+			} => {
+				let percent = if required_height == 0 {
+					0
+				} else {
+					completed_to_height * 100 / required_height
+				};
+				Cow::Owned(format!(
+					"Sync step 2/7: Downloading chain state - {} / {} Blocks - {}%",
+					completed_to_height, required_height, percent
+				))
 			}
 			SyncStatus::TxHashsetDownload(stat) => {
 				if stat.total_size > 0 {
