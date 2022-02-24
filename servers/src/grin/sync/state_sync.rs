@@ -243,7 +243,7 @@ impl StateSync {
 			// Figure out the next segments we need
 			// (12 is divisible by 3, to try and evenly spread the requests among the 3
 			// main pmmrs. Bitmaps segments will always be requested first)
-			next_segment_ids = d.next_desired_segments(12);
+			next_segment_ids = d.next_desired_segments(15);
 		}
 
 		// For each segment, pick a desirable peer and send message
