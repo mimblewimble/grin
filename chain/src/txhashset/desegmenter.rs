@@ -467,9 +467,8 @@ impl Desegmenter {
 			}
 		} else {
 			// We have all required bitmap segments and have recreated our local
-			// bitmap, now continue with other segments
-			// TODO: Outputs only for now, just for testing. we'll want to evenly spread
-			// requests among the 3 PMMRs
+			// bitmap, now continue with other segments, evenly spreading requests
+			// among MMRs
 			let local_output_mmr_size;
 			let local_kernel_mmr_size;
 			let local_rangeproof_mmr_size;
@@ -485,6 +484,7 @@ impl Desegmenter {
 				self.default_output_segment_height,
 			);
 
+			let mut elems_added = 0;
 			while let Some(output_id) = output_identifier_iter.next() {
 				// Advance output iterator to next needed position
 				let (_first, last) =
@@ -492,14 +492,11 @@ impl Desegmenter {
 				if last <= local_output_mmr_size {
 					continue;
 				}
-				// Break if we're full
-				if return_vec.len() > max_elements {
-					break;
-				}
-
 				if !self.has_output_segment_with_id(output_id) {
 					return_vec.push(SegmentTypeIdentifier::new(SegmentType::Output, output_id));
-					// Let other trees have a chance to put in a segment request
+					elems_added += 1;
+				}
+				if elems_added == max_elements / 3 {
 					break;
 				}
 			}
@@ -509,20 +506,18 @@ impl Desegmenter {
 				self.default_rangeproof_segment_height,
 			);
 
+			elems_added = 0;
 			while let Some(rp_id) = rangeproof_identifier_iter.next() {
 				let (_first, last) = rp_id.segment_pos_range(self.archive_header.output_mmr_size);
 				// Advance rangeproof iterator to next needed position
 				if last <= local_rangeproof_mmr_size {
 					continue;
 				}
-				// Break if we're full
-				if return_vec.len() > max_elements {
-					break;
-				}
-
 				if !self.has_rangeproof_segment_with_id(rp_id) {
 					return_vec.push(SegmentTypeIdentifier::new(SegmentType::RangeProof, rp_id));
-					// Let other trees have a chance to put in a segment request
+					elems_added += 1;
+				}
+				if elems_added == max_elements / 3 {
 					break;
 				}
 			}
@@ -532,6 +527,7 @@ impl Desegmenter {
 				self.default_kernel_segment_height,
 			);
 
+			elems_added = 0;
 			while let Some(k_id) = kernel_identifier_iter.next() {
 				// Advance kernel iterator to next needed position
 				let (_first, last) = k_id.segment_pos_range(self.archive_header.kernel_mmr_size);
@@ -539,13 +535,11 @@ impl Desegmenter {
 				if last <= local_kernel_mmr_size {
 					continue;
 				}
-				// Break if we're full
-				if return_vec.len() > max_elements {
-					break;
-				}
-
 				if !self.has_kernel_segment_with_id(k_id) {
 					return_vec.push(SegmentTypeIdentifier::new(SegmentType::Kernel, k_id));
+					elems_added += 1;
+				}
+				if elems_added == max_elements / 3 {
 					break;
 				}
 			}

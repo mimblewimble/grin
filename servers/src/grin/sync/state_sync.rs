@@ -243,7 +243,7 @@ impl StateSync {
 			// Figure out the next segments we need
 			// (12 is divisible by 3, to try and evenly spread the requests among the 3
 			// main pmmrs. Bitmaps segments will always be requested first)
-			next_segment_ids = d.next_desired_segments(12);
+			next_segment_ids = d.next_desired_segments(15);
 		}
 
 		// For each segment, pick a desirable peer and send message
@@ -271,34 +271,33 @@ impl StateSync {
 			});
 			trace!("Chosen peer is {:?}", peer);
 			if let Some(p) = peer {
-				match seg_id.segment_type {
-					SegmentType::Bitmap => p
-						.send_bitmap_segment_request(
-							archive_header.hash(),
-							seg_id.identifier.clone(),
-						)
-						.unwrap(),
-					SegmentType::Output => p
-						.send_output_segment_request(
-							archive_header.hash(),
-							seg_id.identifier.clone(),
-						)
-						.unwrap(),
-					SegmentType::RangeProof => p
-						.send_rangeproof_segment_request(
-							archive_header.hash(),
-							seg_id.identifier.clone(),
-						)
-						.unwrap(),
-					SegmentType::Kernel => p
-						.send_kernel_segment_request(
-							archive_header.hash(),
-							seg_id.identifier.clone(),
-						)
-						.unwrap(),
-				};
 				// add to list of segments that are being tracked
 				self.sync_state.add_pibd_segment(seg_id);
+				let res = match seg_id.segment_type {
+					SegmentType::Bitmap => p.send_bitmap_segment_request(
+						archive_header.hash(),
+						seg_id.identifier.clone(),
+					),
+					SegmentType::Output => p.send_output_segment_request(
+						archive_header.hash(),
+						seg_id.identifier.clone(),
+					),
+					SegmentType::RangeProof => p.send_rangeproof_segment_request(
+						archive_header.hash(),
+						seg_id.identifier.clone(),
+					),
+					SegmentType::Kernel => p.send_kernel_segment_request(
+						archive_header.hash(),
+						seg_id.identifier.clone(),
+					),
+				};
+				if let Err(e) = res {
+					info!(
+						"Error sending request to peer at {}, reason: {:?}",
+						p.info.addr, e
+					);
+					self.sync_state.remove_pibd_segment(seg_id);
+				}
 			}
 		}
 		false
