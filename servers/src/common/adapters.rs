@@ -577,16 +577,11 @@ where
 			block_hash,
 			output_root
 		);
-		// Remove segment from outgoing list TODO: Where is the best place to
-		// do this?
-		self.sync_state.remove_pibd_segment(&SegmentTypeIdentifier {
-			segment_type: SegmentType::Bitmap,
-			identifier: segment.identifier(),
-		});
 		// TODO: Entire process needs to be restarted if the horizon block
 		// has changed (perhaps not here, NB this has to go somewhere)
 		let archive_header = self.chain().txhashset_archive_header_header_only()?;
 		let identifier = segment.identifier().clone();
+		let mut retval = Ok(true);
 		if let Some(d) = self
 			.chain()
 			.desegmenter(&archive_header, self.sync_state.clone())?
@@ -599,10 +594,15 @@ where
 					"Validation of incoming bitmap segment failed: {:?}, reason: {}",
 					identifier, e
 				);
-				return Err(e);
+				retval = Err(e);
 			}
 		}
-		Ok(true)
+		// Remove segment from outgoing list
+		self.sync_state.remove_pibd_segment(&SegmentTypeIdentifier {
+			segment_type: SegmentType::Bitmap,
+			identifier,
+		});
+		retval
 	}
 
 	fn receive_output_segment(
@@ -617,14 +617,9 @@ where
 			block_hash,
 			bitmap_root,
 		);
-		// Remove segment from outgoing list TODO: Where is the best place to
-		// do this?
-		self.sync_state.remove_pibd_segment(&SegmentTypeIdentifier {
-			segment_type: SegmentType::Output,
-			identifier: segment.identifier(),
-		});
 		let archive_header = self.chain().txhashset_archive_header_header_only()?;
 		let identifier = segment.identifier().clone();
+		let mut retval = Ok(true);
 		if let Some(d) = self
 			.chain()
 			.desegmenter(&archive_header, self.sync_state.clone())?
@@ -637,10 +632,15 @@ where
 					"Validation of incoming output segment failed: {:?}, reason: {}",
 					identifier, e
 				);
-				return Err(e);
+				retval = Err(e);
 			}
 		}
-		Ok(true)
+		// Remove segment from outgoing list
+		self.sync_state.remove_pibd_segment(&SegmentTypeIdentifier {
+			segment_type: SegmentType::Output,
+			identifier,
+		});
+		retval
 	}
 
 	fn receive_rangeproof_segment(
@@ -655,6 +655,7 @@ where
 		);
 		let archive_header = self.chain().txhashset_archive_header_header_only()?;
 		let identifier = segment.identifier().clone();
+		let mut retval = Ok(true);
 		if let Some(d) = self
 			.chain()
 			.desegmenter(&archive_header, self.sync_state.clone())?
@@ -667,10 +668,15 @@ where
 					"Validation of incoming rangeproof segment failed: {:?}, reason: {}",
 					identifier, e
 				);
-				return Err(e);
+				retval = Err(e);
 			}
 		}
-		Ok(true)
+		// Remove segment from outgoing list
+		self.sync_state.remove_pibd_segment(&SegmentTypeIdentifier {
+			segment_type: SegmentType::RangeProof,
+			identifier,
+		});
+		retval
 	}
 
 	fn receive_kernel_segment(
@@ -685,6 +691,7 @@ where
 		);
 		let archive_header = self.chain().txhashset_archive_header_header_only()?;
 		let identifier = segment.identifier().clone();
+		let mut retval = Ok(true);
 		if let Some(d) = self
 			.chain()
 			.desegmenter(&archive_header, self.sync_state.clone())?
@@ -697,10 +704,15 @@ where
 					"Validation of incoming rangeproof segment failed: {:?}, reason: {}",
 					identifier, e
 				);
-				return Err(e);
+				retval = Err(e);
 			}
 		}
-		Ok(true)
+		// Remove segment from outgoing list
+		self.sync_state.remove_pibd_segment(&SegmentTypeIdentifier {
+			segment_type: SegmentType::Kernel,
+			identifier,
+		});
+		retval
 	}
 }
 
