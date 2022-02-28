@@ -34,7 +34,7 @@ use crate::txhashset::bitmap_accumulator::{BitmapAccumulator, BitmapChunk};
 use crate::txhashset::{RewindableKernelView, UTXOView};
 use crate::types::{CommitPos, OutputRoots, Tip, TxHashSetRoots, TxHashsetWriteStatus};
 use crate::util::secp::pedersen::{Commitment, RangeProof};
-use crate::util::{file, secp_static, zip};
+use crate::util::{file, secp_static, zip, StopState};
 use croaring::Bitmap;
 use grin_store::pmmr::{clean_files_by_prefix, PMMRBackend};
 use std::cmp::Ordering;
@@ -1799,6 +1799,8 @@ impl<'a> Extension<'a> {
 		genesis: &BlockHeader,
 		fast_validation: bool,
 		status: &dyn TxHashsetWriteStatus,
+		output_start_pos: Option<u64>,
+		kernel_start_pos: Option<u64>,
 		header: &BlockHeader,
 	) -> Result<(Commitment, Commitment), Error> {
 		self.validate_mmrs()?;
@@ -1817,13 +1819,30 @@ impl<'a> Extension<'a> {
 		// These are expensive verification step (skipped for "fast validation").
 		if !fast_validation {
 			// Verify the rangeproof associated with each unspent output.
-			self.verify_rangeproofs(status)?;
+			self.verify_rangeproofs(Some(status), output_start_pos, None, false)?;
 
 			// Verify all the kernel signatures.
 			self.verify_kernel_signatures(status)?;
 		}
 
 		Ok((output_sum, kernel_sum))
+	}
+
+	/// Separate, batched validation of rangeproofs intended to complete a batch,
+	/// and then yield
+	/// returns last output (rp) and last kernel mmr pos validated
+	pub fn progressive_validate(
+		&self,
+		stop_state: Arc<StopState>,
+		output_start_pos: u64,
+		kernel_start_pos: u64,
+		output_batch_size: usize,
+		_kernel_batch_size: usize,
+	) -> Result<(u64, u64), Error> {
+		Ok((
+			self.verify_rangeproofs(None, Some(output_start_pos), Some(output_batch_size), true)?,
+			0,
+		))
 	}
 
 	/// Force the rollback of this extension, no matter the result
@@ -1901,16 +1920,29 @@ impl<'a> Extension<'a> {
 		Ok(())
 	}
 
-	fn verify_rangeproofs(&self, status: &dyn TxHashsetWriteStatus) -> Result<(), Error> {
+	fn verify_rangeproofs(
+		&self,
+		status: Option<&dyn TxHashsetWriteStatus>,
+		start_pos: Option<u64>,
+		batch_size: Option<usize>,
+		single_iter: bool,
+	) -> Result<u64, Error> {
 		let now = Instant::now();
 
-		let mut commits: Vec<Commitment> = Vec::with_capacity(1_000);
-		let mut proofs: Vec<RangeProof> = Vec::with_capacity(1_000);
+		let batch_size = batch_size.unwrap_or(1_000);
+
+		let mut commits: Vec<Commitment> = Vec::with_capacity(batch_size);
+		let mut proofs: Vec<RangeProof> = Vec::with_capacity(batch_size);
 
 		let mut proof_count = 0;
 		let total_rproofs = self.output_pmmr.n_unpruned_leaves();
 
 		for pos0 in self.output_pmmr.leaf_pos_iter() {
+			if let Some(p) = start_pos {
+				if pos0 < p {
+					continue;
+				}
+			}
 			let output = self.output_pmmr.get_data(pos0);
 			let proof = self.rproof_pmmr.get_data(pos0);
 
@@ -1927,7 +1959,7 @@ impl<'a> Extension<'a> {
 
 			proof_count += 1;
 
-			if proofs.len() >= 1_000 {
+			if proofs.len() >= batch_size {
 				Output::batch_verify_proofs(&commits, &proofs)?;
 				commits.clear();
 				proofs.clear();
@@ -1935,13 +1967,18 @@ impl<'a> Extension<'a> {
 					"txhashset: verify_rangeproofs: verified {} rangeproofs",
 					proof_count,
 				);
-				if proof_count % 1_000 == 0 {
-					status.on_validation_rproofs(proof_count, total_rproofs);
+				if proof_count % batch_size == 0 {
+					if let Some(s) = status {
+						s.on_validation_rproofs(proof_count as u64, total_rproofs);
+					}
+				}
+				if single_iter {
+					return Ok(pos0);
 				}
 			}
 		}
 
-		// remaining part which not full of 1000 range proofs
+		// remaining part which not full of batch_size range proofs
 		if !proofs.is_empty() {
 			Output::batch_verify_proofs(&commits, &proofs)?;
 			commits.clear();
@@ -1958,7 +1995,7 @@ impl<'a> Extension<'a> {
 			self.rproof_pmmr.unpruned_size(),
 			now.elapsed().as_secs(),
 		);
-		Ok(())
+		Ok(0)
 	}
 }
 

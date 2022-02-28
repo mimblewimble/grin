@@ -182,6 +182,8 @@ impl Desegmenter {
 		let mut latest_block_height = 0;
 		let header_head = { desegmenter.read().header().clone() };
 		let mut completed_leaves = 0;
+		let mut last_validated_rangeproof_pos = 0;
+		let mut last_validated_kernel_pos = 0;
 		loop {
 			if stop_state.is_stopped() {
 				break;
@@ -263,6 +265,28 @@ impl Desegmenter {
 					}
 				}
 			}
+
+			// TODO: Store kernel and output positions in DB to persist between invocations
+			let mut header_pmmr = header_pmmr.write();
+			let mut txhashset = txhashset.write();
+			let batch = store.batch();
+			if let Ok(mut b) = batch {
+				txhashset::extending(&mut header_pmmr, &mut txhashset, &mut b, |ext, _batch| {
+					let extension = &mut ext.extension;
+					let res = extension
+						.progressive_validate(
+							stop_state.clone(),
+							last_validated_rangeproof_pos,
+							0,
+							1000,
+							0,
+						)
+						.unwrap_or((0, 0));
+					last_validated_rangeproof_pos = res.0;
+					last_validated_kernel_pos = res.1;
+					Ok(())
+				});
+			}
 		}
 
 		// If all done, kick off validation, setting error state if necessary
@@ -272,6 +296,7 @@ impl Desegmenter {
 			header_pmmr,
 			&header_head,
 			genesis,
+			last_validated_rangeproof_pos,
 			status.clone(),
 		) {
 			error!("Error validating pibd hashset: {}", e);
@@ -297,6 +322,7 @@ impl Desegmenter {
 		header_pmmr: Arc<RwLock<txhashset::PMMRHandle<BlockHeader>>>,
 		header_head: &BlockHeader,
 		genesis: BlockHeader,
+		last_rangeproof_validation_pos: u64,
 		status: Arc<SyncState>,
 	) -> Result<(), Error> {
 		// Quick root check first:
@@ -354,8 +380,14 @@ impl Desegmenter {
 
 					// Validate the extension, generating the utxo_sum and kernel_sum.
 					// Full validation, including rangeproofs and kernel signature verification.
-					let (utxo_sum, kernel_sum) =
-						extension.validate(&genesis, false, &*status, &header_head)?;
+					let (utxo_sum, kernel_sum) = extension.validate(
+						&genesis,
+						false,
+						&*status,
+						Some(last_rangeproof_validation_pos),
+						None,
+						&header_head,
+					)?;
 
 					// Save the block_sums (utxo_sum, kernel_sum) to the db for use later.
 					batch.save_block_sums(
