@@ -53,17 +53,19 @@ impl TUIStatusView {
 			SyncStatus::TxHashsetPibd {
 				aborted: _,
 				errored: _,
-				completed_to_height,
-				required_height,
+				completed_leaves,
+				leaves_required,
+				completed_to_height: _,
+				required_height: _,
 			} => {
-				let percent = if required_height == 0 {
+				let percent = if completed_leaves == 0 {
 					0
 				} else {
-					completed_to_height * 100 / required_height
+					completed_leaves * 100 / leaves_required
 				};
 				Cow::Owned(format!(
-					"Sync step 2/7: Downloading chain state - {} / {} Blocks - {}%",
-					completed_to_height, required_height, percent
+					"Sync step 2/7: Downloading Tx state (PIBD) - {} / {} entries - {}%",
+					completed_leaves, leaves_required, percent
 				))
 			}
 			SyncStatus::TxHashsetDownload(stat) => {

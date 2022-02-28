@@ -181,6 +181,7 @@ impl Desegmenter {
 	) {
 		let mut latest_block_height = 0;
 		let header_head = { desegmenter.read().header().clone() };
+		let mut completed_leaves = 0;
 		loop {
 			if stop_state.is_stopped() {
 				break;
@@ -211,6 +212,15 @@ impl Desegmenter {
 				local_kernel_mmr_size
 			);
 
+			// going to try presenting PIBD progress as total leaves downloaded
+			// total segments probably doesn't make much sense since the segment
+			// sizes will be able to change over time, and representative block height
+			// can be too lopsided if one pmmr completes faster, so perhaps just
+			// use total leaves downloaded and display as a percentage
+			completed_leaves = pmmr::n_leaves(local_output_mmr_size)
+				+ pmmr::n_leaves(local_rangeproof_mmr_size)
+				+ pmmr::n_leaves(local_kernel_mmr_size);
+
 			// Find latest 'complete' header.
 			// First take lesser of rangeproof and output mmr sizes
 			let latest_output_size =
@@ -239,11 +249,13 @@ impl Desegmenter {
 					let batch = store.batch().unwrap();
 					batch.save_pibd_head(&tip).unwrap();
 					batch.commit().unwrap();
+
 					status.update_pibd_progress(
 						false,
 						false,
+						completed_leaves,
 						latest_block_height,
-						header_head.height,
+						&header_head,
 					);
 					if h == header_head {
 						// get out of this loop and move on to validation
@@ -263,7 +275,13 @@ impl Desegmenter {
 			status.clone(),
 		) {
 			error!("Error validating pibd hashset: {}", e);
-			status.update_pibd_progress(false, true, latest_block_height, header_head.height);
+			status.update_pibd_progress(
+				false,
+				true,
+				completed_leaves,
+				latest_block_height,
+				&header_head,
+			);
 		}
 		stop_state.stop();
 	}

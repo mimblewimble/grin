@@ -112,7 +112,8 @@ impl StateSync {
 				if let Err(e) = self.chain.reset_prune_lists() {
 					error!("pibd_sync restart: reset prune lists error = {}", e);
 				}
-				self.sync_state.update_pibd_progress(false, false, 1, 1);
+				self.sync_state
+					.update_pibd_progress(false, false, 0, 1, &archive_header);
 				sync_need_restart = true;
 			}
 		}
@@ -164,7 +165,7 @@ impl StateSync {
 				if launch {
 					let archive_header = self.chain.txhashset_archive_header_header_only().unwrap();
 					self.sync_state
-						.update_pibd_progress(false, false, 1, archive_header.height);
+						.update_pibd_progress(false, false, 0, 1, &archive_header);
 					let desegmenter = self
 						.chain
 						.desegmenter(&archive_header, self.sync_state.clone())
@@ -227,7 +228,8 @@ impl StateSync {
 				let res = d.apply_next_segments();
 				if let Err(e) = res {
 					debug!("error applying segment: {}", e);
-					self.sync_state.update_pibd_progress(false, true, 1, 1);
+					self.sync_state
+						.update_pibd_progress(false, true, 0, 1, &archive_header);
 					return false;
 				}
 			}

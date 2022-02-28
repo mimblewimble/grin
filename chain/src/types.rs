@@ -17,7 +17,7 @@
 use chrono::prelude::{DateTime, Utc};
 
 use crate::core::core::hash::{Hash, Hashed, ZERO_HASH};
-use crate::core::core::{Block, BlockHeader, HeaderVersion, SegmentTypeIdentifier};
+use crate::core::core::{pmmr, Block, BlockHeader, HeaderVersion, SegmentTypeIdentifier};
 use crate::core::pow::Difficulty;
 use crate::core::ser::{self, PMMRIndexHashable, Readable, Reader, Writeable, Writer};
 use crate::error::{Error, ErrorKind};
@@ -65,6 +65,10 @@ pub enum SyncStatus {
 		aborted: bool,
 		/// whether we got an error anywhere (in which case restart the process)
 		errored: bool,
+		/// total number of leaves applied
+		completed_leaves: u64,
+		/// total number of leaves required by archive header
+		leaves_required: u64,
 		/// 'height', i.e. last 'block' for which there is complete
 		/// pmmr data
 		completed_to_height: u64,
@@ -229,14 +233,19 @@ impl SyncState {
 		&self,
 		aborted: bool,
 		errored: bool,
+		completed_leaves: u64,
 		completed_to_height: u64,
-		required_height: u64,
+		archive_header: &BlockHeader,
 	) {
+		let leaves_required = pmmr::n_leaves(archive_header.output_mmr_size) * 2
+			+ pmmr::n_leaves(archive_header.kernel_mmr_size);
 		*self.current.write() = SyncStatus::TxHashsetPibd {
 			aborted,
 			errored,
+			completed_leaves,
+			leaves_required,
 			completed_to_height,
-			required_height,
+			required_height: archive_header.height,
 		};
 	}
 
