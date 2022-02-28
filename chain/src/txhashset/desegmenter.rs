@@ -141,8 +141,8 @@ impl Desegmenter {
 
 	/// Launch a separate validation thread, which will update and validate the body head
 	/// as we go
-	pub fn launch_validation_thread(&self) {
-		let stop_state = self.validator_stop_state.clone();
+	pub fn launch_validation_thread(&mut self, stop_state: Arc<StopState>) {
+		self.validator_stop_state = stop_state.clone();
 		let txhashset = self.txhashset.clone();
 		let header_pmmr = self.header_pmmr.clone();
 		let store = self.store.clone();
@@ -188,7 +188,7 @@ impl Desegmenter {
 			if stop_state.is_stopped() {
 				break;
 			}
-			thread::sleep(Duration::from_millis(5000));
+			thread::sleep(Duration::from_millis(1000));
 
 			trace!("In Desegmenter Validation Loop");
 			let local_output_mmr_size;
@@ -259,7 +259,10 @@ impl Desegmenter {
 						latest_block_height,
 						&header_head,
 					);
-					if h == header_head {
+					if local_kernel_mmr_size == header_head.kernel_mmr_size
+						&& local_output_mmr_size == header_head.output_mmr_size
+						&& local_rangeproof_mmr_size == header_head.output_mmr_size
+					{
 						// get out of this loop and move on to validation
 						break;
 					}
@@ -287,6 +290,8 @@ impl Desegmenter {
 					Ok(())
 				});
 			}
+
+			error!("LAST VALIDATED RP POS: {}", last_validated_rangeproof_pos);
 		}
 
 		// If all done, kick off validation, setting error state if necessary
@@ -298,6 +303,7 @@ impl Desegmenter {
 			genesis,
 			last_validated_rangeproof_pos,
 			status.clone(),
+			stop_state.clone(),
 		) {
 			error!("Error validating pibd hashset: {}", e);
 			status.update_pibd_progress(
@@ -324,6 +330,7 @@ impl Desegmenter {
 		genesis: BlockHeader,
 		last_rangeproof_validation_pos: u64,
 		status: Arc<SyncState>,
+		stop_state: Arc<StopState>,
 	) -> Result<(), Error> {
 		// Quick root check first:
 		{
@@ -387,7 +394,12 @@ impl Desegmenter {
 						Some(last_rangeproof_validation_pos),
 						None,
 						&header_head,
+						Some(stop_state.clone()),
 					)?;
+
+					if stop_state.is_stopped() {
+						return Ok(());
+					}
 
 					// Save the block_sums (utxo_sum, kernel_sum) to the db for use later.
 					batch.save_block_sums(
@@ -401,6 +413,10 @@ impl Desegmenter {
 					Ok(())
 				},
 			)?;
+
+			if stop_state.is_stopped() {
+				return Ok(());
+			}
 
 			debug!("desegmenter_validation: finished validating and rebuilding");
 			status.on_save();

@@ -229,7 +229,13 @@ impl SyncRunner {
 			}
 
 			if check_state_sync {
-				state_sync.check_run(&header_head, &head, &tail, highest_height);
+				state_sync.check_run(
+					&header_head,
+					&head,
+					&tail,
+					highest_height,
+					self.stop_state.clone(),
+				);
 			}
 		}
 	}

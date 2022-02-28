@@ -1802,6 +1802,7 @@ impl<'a> Extension<'a> {
 		output_start_pos: Option<u64>,
 		kernel_start_pos: Option<u64>,
 		header: &BlockHeader,
+		stop_state: Option<Arc<StopState>>,
 	) -> Result<(Commitment, Commitment), Error> {
 		self.validate_mmrs()?;
 		self.validate_roots(header)?;
@@ -1819,7 +1820,18 @@ impl<'a> Extension<'a> {
 		// These are expensive verification step (skipped for "fast validation").
 		if !fast_validation {
 			// Verify the rangeproof associated with each unspent output.
-			self.verify_rangeproofs(Some(status), output_start_pos, None, false)?;
+			self.verify_rangeproofs(
+				Some(status),
+				output_start_pos,
+				None,
+				false,
+				stop_state.clone(),
+			)?;
+			if let Some(s) = stop_state {
+				if s.is_stopped() {
+					return Err(ErrorKind::Stopped.into());
+				}
+			}
 
 			// Verify all the kernel signatures.
 			self.verify_kernel_signatures(status)?;
@@ -1840,7 +1852,13 @@ impl<'a> Extension<'a> {
 		_kernel_batch_size: usize,
 	) -> Result<(u64, u64), Error> {
 		Ok((
-			self.verify_rangeproofs(None, Some(output_start_pos), Some(output_batch_size), true)?,
+			self.verify_rangeproofs(
+				None,
+				Some(output_start_pos),
+				Some(output_batch_size),
+				true,
+				Some(stop_state),
+			)?,
 			0,
 		))
 	}
@@ -1926,6 +1944,7 @@ impl<'a> Extension<'a> {
 		start_pos: Option<u64>,
 		batch_size: Option<usize>,
 		single_iter: bool,
+		stop_state: Option<Arc<StopState>>,
 	) -> Result<u64, Error> {
 		let now = Instant::now();
 
@@ -1935,6 +1954,12 @@ impl<'a> Extension<'a> {
 		let mut proofs: Vec<RangeProof> = Vec::with_capacity(batch_size);
 
 		let mut proof_count = 0;
+		if let Some(s) = start_pos {
+			if let Some(i) = pmmr::pmmr_leaf_to_insertion_index(s) {
+				proof_count = self.output_pmmr.n_unpruned_leaves_to_index(i) as usize;
+			}
+		}
+
 		let total_rproofs = self.output_pmmr.n_unpruned_leaves();
 
 		for pos0 in self.output_pmmr.leaf_pos_iter() {
@@ -1967,9 +1992,12 @@ impl<'a> Extension<'a> {
 					"txhashset: verify_rangeproofs: verified {} rangeproofs",
 					proof_count,
 				);
-				if proof_count % batch_size == 0 {
-					if let Some(s) = status {
-						s.on_validation_rproofs(proof_count as u64, total_rproofs);
+				if let Some(s) = status {
+					s.on_validation_rproofs(proof_count as u64, total_rproofs);
+				}
+				if let Some(ref s) = stop_state {
+					if s.is_stopped() {
+						return Ok(pos0);
 					}
 				}
 				if single_iter {

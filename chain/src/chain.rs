@@ -705,6 +705,7 @@ impl Chain {
 				None,
 				None,
 				&header,
+				None,
 			)?;
 			Ok(())
 		})
@@ -1151,7 +1152,7 @@ impl Chain {
 				// Validate the extension, generating the utxo_sum and kernel_sum.
 				// Full validation, including rangeproofs and kernel signature verification.
 				let (utxo_sum, kernel_sum) =
-					extension.validate(&self.genesis, false, status, None, None, &header)?;
+					extension.validate(&self.genesis, false, status, None, None, &header, None)?;
 
 				// Save the block_sums (utxo_sum, kernel_sum) to the db for use later.
 				batch.save_block_sums(

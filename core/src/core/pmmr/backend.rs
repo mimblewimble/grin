@@ -68,6 +68,9 @@ pub trait Backend<T: PMMRable> {
 	/// Number of leaves
 	fn n_unpruned_leaves(&self) -> u64;
 
+	/// Number of leaves up to the given leaf index
+	fn n_unpruned_leaves_to_index(&self, to_index: u64) -> u64;
+
 	/// Iterator over current (unpruned, unremoved) leaf insertion index.
 	/// Note: This differs from underlying MMR pos - [0, 1, 2, 3, 4] vs. [1, 2, 4, 5, 8].
 	fn leaf_idx_iter(&self, from_idx: u64) -> Box<dyn Iterator<Item = u64> + '_>;

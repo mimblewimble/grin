@@ -21,6 +21,7 @@ use crate::core::core::{hash::Hashed, pmmr::segment::SegmentType};
 use crate::core::global;
 use crate::core::pow::Difficulty;
 use crate::p2p::{self, Capabilities, Peer};
+use crate::util::StopState;
 
 /// Fast sync has 3 "states":
 /// * syncing headers
@@ -61,6 +62,7 @@ impl StateSync {
 		head: &chain::Tip,
 		tail: &chain::Tip,
 		highest_height: u64,
+		stop_state: Arc<StopState>,
 	) -> bool {
 		trace!("state_sync: head.height: {}, tail.height: {}. header_head.height: {}, highest_height: {}",
 			   head.height, tail.height, header_head.height, highest_height,
@@ -171,8 +173,8 @@ impl StateSync {
 						.desegmenter(&archive_header, self.sync_state.clone())
 						.unwrap();
 
-					if let Some(d) = desegmenter.read().as_ref() {
-						d.launch_validation_thread()
+					if let Some(d) = desegmenter.write().as_mut() {
+						d.launch_validation_thread(stop_state.clone())
 					};
 				}
 				// Continue our PIBD process (which returns true if all segments are in)
