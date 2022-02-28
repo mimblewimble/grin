@@ -188,7 +188,7 @@ impl Desegmenter {
 			if stop_state.is_stopped() {
 				break;
 			}
-			thread::sleep(Duration::from_millis(1000));
+			thread::sleep(Duration::from_millis(100));
 
 			trace!("In Desegmenter Validation Loop");
 			let local_output_mmr_size;
@@ -274,21 +274,27 @@ impl Desegmenter {
 			let mut txhashset = txhashset.write();
 			let batch = store.batch();
 			if let Ok(mut b) = batch {
-				txhashset::extending(&mut header_pmmr, &mut txhashset, &mut b, |ext, _batch| {
-					let extension = &mut ext.extension;
-					let res = extension
-						.progressive_validate(
-							stop_state.clone(),
-							last_validated_rangeproof_pos,
-							0,
-							1000,
-							0,
-						)
-						.unwrap_or((0, 0));
-					last_validated_rangeproof_pos = res.0;
-					last_validated_kernel_pos = res.1;
-					Ok(())
-				});
+				// TODO: Throw toys out of pram if validation doesn't succeed
+				let _res = txhashset::extending(
+					&mut header_pmmr,
+					&mut txhashset,
+					&mut b,
+					|ext, _batch| {
+						let extension = &mut ext.extension;
+						let res = extension
+							.progressive_validate(
+								stop_state.clone(),
+								last_validated_rangeproof_pos,
+								0,
+								1000,
+								0,
+							)
+							.unwrap_or((0, 0));
+						last_validated_rangeproof_pos = res.0;
+						last_validated_kernel_pos = res.1;
+						Ok(())
+					},
+				);
 			}
 
 			error!("LAST VALIDATED RP POS: {}", last_validated_rangeproof_pos);
