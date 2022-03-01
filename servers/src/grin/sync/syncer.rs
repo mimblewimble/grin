@@ -209,7 +209,7 @@ impl SyncRunner {
 			match self.sync_state.status() {
 				SyncStatus::TxHashsetPibd { .. }
 				| SyncStatus::TxHashsetDownload { .. }
-				| SyncStatus::TxHashsetSetup
+				| SyncStatus::TxHashsetSetup { .. }
 				| SyncStatus::TxHashsetRangeProofsValidation { .. }
 				| SyncStatus::TxHashsetKernelsValidation { .. }
 				| SyncStatus::TxHashsetSave

@@ -78,7 +78,12 @@ pub enum SyncStatus {
 	/// Downloading the various txhashsets
 	TxHashsetDownload(TxHashsetDownloadStats),
 	/// Setting up before validation
-	TxHashsetSetup,
+	TxHashsetSetup {
+		/// number of 'headers' for which kernels have been checked
+		headers: Option<u64>,
+		/// headers total
+		headers_total: Option<u64>,
+	},
 	/// Validating the kernels
 	TxHashsetKernelsValidation {
 		/// kernels validated
@@ -138,6 +143,25 @@ impl Default for TxHashsetDownloadStats {
 	}
 }
 
+/// Container for entry in requested PIBD segments
+#[derive(Debug, Clone, Eq, PartialEq)]
+pub struct PIBDSegmentContainer {
+	/// Segment+Type Identifier
+	pub identifier: SegmentTypeIdentifier,
+	/// Time at which this request was made
+	pub request_time: DateTime<Utc>,
+}
+
+impl PIBDSegmentContainer {
+	/// Return container with timestamp
+	pub fn new(identifier: SegmentTypeIdentifier) -> Self {
+		Self {
+			identifier,
+			request_time: Utc::now(),
+		}
+	}
+}
+
 /// Current sync state. Encapsulates the current SyncStatus.
 pub struct SyncState {
 	current: RwLock<SyncStatus>,
@@ -149,7 +173,7 @@ pub struct SyncState {
 	/// available where it will be needed (both in the adapter
 	/// and the sync loop)
 	/// TODO: Better struct for this, perhaps hash identifiers
-	requested_pibd_segments: RwLock<Vec<SegmentTypeIdentifier>>,
+	requested_pibd_segments: RwLock<Vec<PIBDSegmentContainer>>,
 }
 
 impl SyncState {
@@ -251,17 +275,31 @@ impl SyncState {
 
 	/// Update PIBD segment list
 	pub fn add_pibd_segment(&self, id: &SegmentTypeIdentifier) {
-		self.requested_pibd_segments.write().push(id.clone());
+		self.requested_pibd_segments
+			.write()
+			.push(PIBDSegmentContainer::new(id.clone()));
 	}
 
 	/// Remove segment from list
 	pub fn remove_pibd_segment(&self, id: &SegmentTypeIdentifier) {
-		self.requested_pibd_segments.write().retain(|i| i != id);
+		self.requested_pibd_segments
+			.write()
+			.retain(|i| &i.identifier != id);
+	}
+
+	/// Remove segments with request timestamps less cutoff time
+	pub fn remove_stale_pibd_requests(&self, cutoff_time: DateTime<Utc>) {
+		self.requested_pibd_segments
+			.write()
+			.retain(|i| i.request_time < cutoff_time);
 	}
 
 	/// Check whether segment is in request list
 	pub fn contains_pibd_segment(&self, id: &SegmentTypeIdentifier) -> bool {
-		self.requested_pibd_segments.read().contains(id)
+		self.requested_pibd_segments
+			.read()
+			.iter()
+			.any(|i| &i.identifier == id)
 	}
 
 	/// Communicate sync error
@@ -281,8 +319,11 @@ impl SyncState {
 }
 
 impl TxHashsetWriteStatus for SyncState {
-	fn on_setup(&self) {
-		self.update(SyncStatus::TxHashsetSetup);
+	fn on_setup(&self, headers: Option<u64>, headers_total: Option<u64>) {
+		self.update(SyncStatus::TxHashsetSetup {
+			headers,
+			headers_total,
+		});
 	}
 
 	fn on_validation_kernels(&self, kernels: u64, kernels_total: u64) {
@@ -509,7 +550,7 @@ pub trait ChainAdapter {
 /// those values as the processing progresses.
 pub trait TxHashsetWriteStatus {
 	/// First setup of the txhashset
-	fn on_setup(&self);
+	fn on_setup(&self, headers: Option<u64>, header_total: Option<u64>);
 	/// Starting kernel validation
 	fn on_validation_kernels(&self, kernels: u64, kernel_total: u64);
 	/// Starting rproof validation
@@ -524,7 +565,7 @@ pub trait TxHashsetWriteStatus {
 pub struct NoStatus;
 
 impl TxHashsetWriteStatus for NoStatus {
-	fn on_setup(&self) {}
+	fn on_setup(&self, _hs: Option<u64>, _ht: Option<u64>) {}
 	fn on_validation_kernels(&self, _ks: u64, _kts: u64) {}
 	fn on_validation_rproofs(&self, _rs: u64, _rt: u64) {}
 	fn on_save(&self) {}

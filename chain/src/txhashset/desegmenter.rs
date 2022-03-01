@@ -237,8 +237,6 @@ impl Desegmenter {
 			txhashset.roots().validate(&self.archive_header)?;
 		}
 
-		status.on_setup();
-
 		// TODO: Keep track of this in the DB so we can pick up where we left off if needed
 		let last_rangeproof_validation_pos = 0;
 
@@ -248,12 +246,17 @@ impl Desegmenter {
 			let txhashset = self.txhashset.read();
 			let mut count = 0;
 			let mut current = self.archive_header.clone();
+			let total = current.height;
 			txhashset::rewindable_kernel_view(&txhashset, |view, batch| {
 				while current.height > 0 {
 					view.rewind(&current)?;
 					view.validate_root()?;
 					current = batch.get_previous_header(&current)?;
 					count += 1;
+					status.on_setup(Some(total - current.height), Some(total));
+					if stop_state.is_stopped() {
+						return Ok(());
+					}
 				}
 				Ok(())
 			})?;

@@ -1082,7 +1082,7 @@ impl Chain {
 		txhashset_data: File,
 		status: &dyn TxHashsetWriteStatus,
 	) -> Result<bool, Error> {
-		status.on_setup();
+		status.on_setup(None, None);
 
 		// Initial check whether this txhashset is needed or not
 		let fork_point = self.fork_point()?;

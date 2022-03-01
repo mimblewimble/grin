@@ -229,6 +229,11 @@ impl StateSync {
 		let archive_header = self.chain.txhashset_archive_header_header_only().unwrap();
 		let desegmenter = self.chain.desegmenter(&archive_header).unwrap();
 
+		// Remove stale requests
+		// TODO: verify timing
+		let timeout_time = Utc::now() + Duration::seconds(15);
+		self.sync_state.remove_stale_pibd_requests(timeout_time);
+
 		// Apply segments... TODO: figure out how this should be called, might
 		// need to be a separate thread.
 		if let Some(mut de) = desegmenter.try_write() {

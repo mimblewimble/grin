@@ -90,8 +90,21 @@ impl TUIStatusView {
 					))
 				}
 			}
-			SyncStatus::TxHashsetSetup => {
-				Cow::Borrowed("Sync step 3/7: Preparing chain state for validation")
+			SyncStatus::TxHashsetSetup {
+				headers,
+				headers_total,
+			} => {
+				if headers.is_some() && headers_total.is_some() {
+					let h = headers.unwrap();
+					let ht = headers_total.unwrap();
+					let percent = h * 100 / ht;
+					Cow::Owned(format!(
+						"Sync step 3/7: Validating kernel history - {}/{} - {}%",
+						h, ht, percent
+					))
+				} else {
+					Cow::Borrowed("Sync step 3/7: Preparing chain state for validation")
+				}
 			}
 			SyncStatus::TxHashsetRangeProofsValidation {
 				rproofs,
