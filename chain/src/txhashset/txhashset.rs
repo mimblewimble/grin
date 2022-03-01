@@ -1817,7 +1817,7 @@ impl<'a> Extension<'a> {
 		fast_validation: bool,
 		status: &dyn TxHashsetWriteStatus,
 		output_start_pos: Option<u64>,
-		kernel_start_pos: Option<u64>,
+		_kernel_start_pos: Option<u64>,
 		header: &BlockHeader,
 		stop_state: Option<Arc<StopState>>,
 	) -> Result<(Commitment, Commitment), Error> {
@@ -1844,40 +1844,22 @@ impl<'a> Extension<'a> {
 				false,
 				stop_state.clone(),
 			)?;
-			if let Some(s) = stop_state {
+			if let Some(ref s) = stop_state {
 				if s.is_stopped() {
 					return Err(ErrorKind::Stopped.into());
 				}
 			}
 
 			// Verify all the kernel signatures.
-			self.verify_kernel_signatures(status)?;
+			self.verify_kernel_signatures(status, stop_state.clone())?;
+			if let Some(ref s) = stop_state {
+				if s.is_stopped() {
+					return Err(ErrorKind::Stopped.into());
+				}
+			}
 		}
 
 		Ok((output_sum, kernel_sum))
-	}
-
-	/// Separate, batched validation of rangeproofs intended to complete a batch,
-	/// and then yield
-	/// returns last output (rp) and last kernel mmr pos validated
-	pub fn progressive_validate(
-		&self,
-		stop_state: Arc<StopState>,
-		output_start_pos: u64,
-		kernel_start_pos: u64,
-		output_batch_size: usize,
-		_kernel_batch_size: usize,
-	) -> Result<(u64, u64), Error> {
-		Ok((
-			self.verify_rangeproofs(
-				None,
-				Some(output_start_pos),
-				Some(output_batch_size),
-				true,
-				Some(stop_state),
-			)?,
-			0,
-		))
 	}
 
 	/// Force the rollback of this extension, no matter the result
@@ -1917,7 +1899,11 @@ impl<'a> Extension<'a> {
 		)
 	}
 
-	fn verify_kernel_signatures(&self, status: &dyn TxHashsetWriteStatus) -> Result<(), Error> {
+	fn verify_kernel_signatures(
+		&self,
+		status: &dyn TxHashsetWriteStatus,
+		stop_state: Option<Arc<StopState>>,
+	) -> Result<(), Error> {
 		let now = Instant::now();
 		const KERNEL_BATCH_SIZE: usize = 5_000;
 
@@ -1938,6 +1924,11 @@ impl<'a> Extension<'a> {
 				kern_count += tx_kernels.len() as u64;
 				tx_kernels.clear();
 				status.on_validation_kernels(kern_count, total_kernels);
+				if let Some(ref s) = stop_state {
+					if s.is_stopped() {
+						return Ok(());
+					}
+				}
 				debug!(
 					"txhashset: verify_kernel_signatures: verified {} signatures",
 					kern_count,

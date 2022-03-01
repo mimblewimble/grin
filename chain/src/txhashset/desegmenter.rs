@@ -293,7 +293,6 @@ impl Desegmenter {
 		}
 
 		status.on_setup(None, None, None, None);
-
 		// Prepare a new batch and update all the required records
 		{
 			debug!("desegmenter validation: rewinding a 2nd time (writeable)");
