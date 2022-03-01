@@ -90,6 +90,10 @@ impl<T: PMMRable> Backend<T> for VecBackend<T> {
 		unimplemented!()
 	}
 
+	fn n_unpruned_leaves_to_index(&self, _to_index: u64) -> u64 {
+		unimplemented!()
+	}
+
 	fn leaf_pos_iter(&self) -> Box<dyn Iterator<Item = u64> + '_> {
 		Box::new(
 			self.hashes

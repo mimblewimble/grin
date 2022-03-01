@@ -180,6 +180,14 @@ impl<T: PMMRable> Backend<T> for PMMRBackend<T> {
 		}
 	}
 
+	fn n_unpruned_leaves_to_index(&self, to_index: u64) -> u64 {
+		if self.prunable {
+			self.leaf_set.n_unpruned_leaves_to_index(to_index)
+		} else {
+			pmmr::n_leaves(pmmr::insertion_to_pmmr_index(to_index))
+		}
+	}
+
 	/// Returns an iterator over all the leaf insertion indices (0-indexed).
 	/// If our pos are [1,2,4,5,8] (first 5 leaf pos) then our insertion indices are [0,1,2,3,4]
 	fn leaf_idx_iter(&self, from_idx: u64) -> Box<dyn Iterator<Item = u64> + '_> {

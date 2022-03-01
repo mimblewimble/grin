@@ -34,7 +34,8 @@ use crate::txhashset::bitmap_accumulator::{BitmapAccumulator, BitmapChunk};
 use crate::txhashset::{RewindableKernelView, UTXOView};
 use crate::types::{CommitPos, OutputRoots, Tip, TxHashSetRoots, TxHashsetWriteStatus};
 use crate::util::secp::pedersen::{Commitment, RangeProof};
-use crate::util::{file, secp_static, zip};
+use crate::util::{file, secp_static, zip, StopState};
+use crate::SyncState;
 use croaring::Bitmap;
 use grin_store::pmmr::{clean_files_by_prefix, PMMRBackend};
 use std::cmp::Ordering;
@@ -541,7 +542,7 @@ impl TxHashSet {
 		let cutoff = head.height.saturating_sub(WEEK_HEIGHT * 2);
 		let cutoff_hash = header_pmmr.get_header_hash_by_height(cutoff)?;
 		let cutoff_header = batch.get_block_header(&cutoff_hash)?;
-		self.verify_kernel_pos_index(&cutoff_header, header_pmmr, batch)
+		self.verify_kernel_pos_index(&cutoff_header, header_pmmr, batch, None, None)
 	}
 
 	/// Verify and (re)build the NRD kernel_pos index from the provided header onwards.
@@ -550,6 +551,8 @@ impl TxHashSet {
 		from_header: &BlockHeader,
 		header_pmmr: &PMMRHandle<BlockHeader>,
 		batch: &Batch<'_>,
+		status: Option<Arc<SyncState>>,
+		stop_state: Option<Arc<StopState>>,
 	) -> Result<(), Error> {
 		if !global::is_nrd_enabled() {
 			return Ok(());
@@ -578,6 +581,8 @@ impl TxHashSet {
 		let mut current_pos = prev_size + 1;
 		let mut current_header = from_header.clone();
 		let mut count = 0;
+		let total = pmmr::n_leaves(self.kernel_pmmr_h.size);
+		let mut applied = 0;
 		while current_pos <= self.kernel_pmmr_h.size {
 			if pmmr::is_leaf(current_pos - 1) {
 				if let Some(kernel) = kernel_pmmr.get_data(current_pos - 1) {
@@ -598,7 +603,19 @@ impl TxHashSet {
 						_ => {}
 					}
 				}
+				applied += 1;
+				if let Some(ref s) = status {
+					if total % applied == 10000 {
+						s.on_setup(None, None, Some(applied), Some(total));
+					}
+				}
 			}
+			if let Some(ref s) = stop_state {
+				if s.is_stopped() {
+					return Ok(());
+				}
+			}
+
 			current_pos += 1;
 		}
 
@@ -1799,7 +1816,10 @@ impl<'a> Extension<'a> {
 		genesis: &BlockHeader,
 		fast_validation: bool,
 		status: &dyn TxHashsetWriteStatus,
+		output_start_pos: Option<u64>,
+		_kernel_start_pos: Option<u64>,
 		header: &BlockHeader,
+		stop_state: Option<Arc<StopState>>,
 	) -> Result<(Commitment, Commitment), Error> {
 		self.validate_mmrs()?;
 		self.validate_roots(header)?;
@@ -1817,10 +1837,26 @@ impl<'a> Extension<'a> {
 		// These are expensive verification step (skipped for "fast validation").
 		if !fast_validation {
 			// Verify the rangeproof associated with each unspent output.
-			self.verify_rangeproofs(status)?;
+			self.verify_rangeproofs(
+				Some(status),
+				output_start_pos,
+				None,
+				false,
+				stop_state.clone(),
+			)?;
+			if let Some(ref s) = stop_state {
+				if s.is_stopped() {
+					return Err(ErrorKind::Stopped.into());
+				}
+			}
 
 			// Verify all the kernel signatures.
-			self.verify_kernel_signatures(status)?;
+			self.verify_kernel_signatures(status, stop_state.clone())?;
+			if let Some(ref s) = stop_state {
+				if s.is_stopped() {
+					return Err(ErrorKind::Stopped.into());
+				}
+			}
 		}
 
 		Ok((output_sum, kernel_sum))
@@ -1863,7 +1899,11 @@ impl<'a> Extension<'a> {
 		)
 	}
 
-	fn verify_kernel_signatures(&self, status: &dyn TxHashsetWriteStatus) -> Result<(), Error> {
+	fn verify_kernel_signatures(
+		&self,
+		status: &dyn TxHashsetWriteStatus,
+		stop_state: Option<Arc<StopState>>,
+	) -> Result<(), Error> {
 		let now = Instant::now();
 		const KERNEL_BATCH_SIZE: usize = 5_000;
 
@@ -1884,6 +1924,11 @@ impl<'a> Extension<'a> {
 				kern_count += tx_kernels.len() as u64;
 				tx_kernels.clear();
 				status.on_validation_kernels(kern_count, total_kernels);
+				if let Some(ref s) = stop_state {
+					if s.is_stopped() {
+						return Ok(());
+					}
+				}
 				debug!(
 					"txhashset: verify_kernel_signatures: verified {} signatures",
 					kern_count,
@@ -1901,16 +1946,36 @@ impl<'a> Extension<'a> {
 		Ok(())
 	}
 
-	fn verify_rangeproofs(&self, status: &dyn TxHashsetWriteStatus) -> Result<(), Error> {
+	fn verify_rangeproofs(
+		&self,
+		status: Option<&dyn TxHashsetWriteStatus>,
+		start_pos: Option<u64>,
+		batch_size: Option<usize>,
+		single_iter: bool,
+		stop_state: Option<Arc<StopState>>,
+	) -> Result<u64, Error> {
 		let now = Instant::now();
 
-		let mut commits: Vec<Commitment> = Vec::with_capacity(1_000);
-		let mut proofs: Vec<RangeProof> = Vec::with_capacity(1_000);
+		let batch_size = batch_size.unwrap_or(1_000);
+
+		let mut commits: Vec<Commitment> = Vec::with_capacity(batch_size);
+		let mut proofs: Vec<RangeProof> = Vec::with_capacity(batch_size);
 
 		let mut proof_count = 0;
+		if let Some(s) = start_pos {
+			if let Some(i) = pmmr::pmmr_leaf_to_insertion_index(s) {
+				proof_count = self.output_pmmr.n_unpruned_leaves_to_index(i) as usize;
+			}
+		}
+
 		let total_rproofs = self.output_pmmr.n_unpruned_leaves();
 
 		for pos0 in self.output_pmmr.leaf_pos_iter() {
+			if let Some(p) = start_pos {
+				if pos0 < p {
+					continue;
+				}
+			}
 			let output = self.output_pmmr.get_data(pos0);
 			let proof = self.rproof_pmmr.get_data(pos0);
 
@@ -1927,7 +1992,7 @@ impl<'a> Extension<'a> {
 
 			proof_count += 1;
 
-			if proofs.len() >= 1_000 {
+			if proofs.len() >= batch_size {
 				Output::batch_verify_proofs(&commits, &proofs)?;
 				commits.clear();
 				proofs.clear();
@@ -1935,13 +2000,21 @@ impl<'a> Extension<'a> {
 					"txhashset: verify_rangeproofs: verified {} rangeproofs",
 					proof_count,
 				);
-				if proof_count % 1_000 == 0 {
-					status.on_validation_rproofs(proof_count, total_rproofs);
+				if let Some(s) = status {
+					s.on_validation_rproofs(proof_count as u64, total_rproofs);
+				}
+				if let Some(ref s) = stop_state {
+					if s.is_stopped() {
+						return Ok(pos0);
+					}
+				}
+				if single_iter {
+					return Ok(pos0);
 				}
 			}
 		}
 
-		// remaining part which not full of 1000 range proofs
+		// remaining part which not full of batch_size range proofs
 		if !proofs.is_empty() {
 			Output::batch_verify_proofs(&commits, &proofs)?;
 			commits.clear();
@@ -1958,7 +2031,7 @@ impl<'a> Extension<'a> {
 			self.rproof_pmmr.unpruned_size(),
 			now.elapsed().as_secs(),
 		);
-		Ok(())
+		Ok(0)
 	}
 }
 

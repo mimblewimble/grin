@@ -58,6 +58,9 @@ pub trait ReadablePMMR {
 	/// Number of leaves in the MMR
 	fn n_unpruned_leaves(&self) -> u64;
 
+	/// Number of leaves in the MMR up to index
+	fn n_unpruned_leaves_to_index(&self, to_index: u64) -> u64;
+
 	/// Is the MMR empty?
 	fn is_empty(&self) -> bool {
 		self.unpruned_size() == 0
@@ -484,6 +487,10 @@ where
 
 	fn n_unpruned_leaves(&self) -> u64 {
 		self.backend.n_unpruned_leaves()
+	}
+
+	fn n_unpruned_leaves_to_index(&self, to_index: u64) -> u64 {
+		self.backend.n_unpruned_leaves_to_index(to_index)
 	}
 }
 

@@ -37,7 +37,6 @@ use crate::{
 	core::core::hash::{Hash, Hashed},
 	store::Batch,
 	txhashset::{ExtensionPair, HeaderExtension},
-	SyncState,
 };
 use grin_store::Error::NotFoundErr;
 use std::collections::HashMap;
@@ -698,8 +697,15 @@ impl Chain {
 		// ensure the view is consistent.
 		txhashset::extending_readonly(&mut header_pmmr, &mut txhashset, |ext, batch| {
 			self.rewind_and_apply_fork(&header, ext, batch)?;
-			ext.extension
-				.validate(&self.genesis, fast_validation, &NoStatus, &header)?;
+			ext.extension.validate(
+				&self.genesis,
+				fast_validation,
+				&NoStatus,
+				None,
+				None,
+				&header,
+				None,
+			)?;
 			Ok(())
 		})
 	}
@@ -903,7 +909,6 @@ impl Chain {
 	pub fn desegmenter(
 		&self,
 		archive_header: &BlockHeader,
-		sync_state: Arc<SyncState>,
 	) -> Result<Arc<RwLock<Option<Desegmenter>>>, Error> {
 		// Use our cached desegmenter if we have one and the associated header matches.
 		if let Some(d) = self.pibd_desegmenter.write().as_ref() {
@@ -911,14 +916,10 @@ impl Chain {
 				return Ok(self.pibd_desegmenter.clone());
 			}
 		}
-		// If no desegmenter or headers don't match init
-		// Stop previous thread if running
-		if let Some(d) = self.pibd_desegmenter.read().as_ref() {
-			d.stop_validation_thread();
-		}
+
 		// TODO: (Check whether we can do this.. we *should* be able to modify this as the desegmenter
 		// is in flight and we cross a horizon boundary, but needs more thinking)
-		let desegmenter = self.init_desegmenter(archive_header, sync_state)?;
+		let desegmenter = self.init_desegmenter(archive_header)?;
 		let mut cache = self.pibd_desegmenter.write();
 		*cache = Some(desegmenter.clone());
 
@@ -928,11 +929,7 @@ impl Chain {
 	/// initialize a desegmenter, which is capable of extending the hashset by appending
 	/// PIBD segments of the three PMMR trees + Bitmap PMMR
 	/// header should be the same header as selected for the txhashset.zip archive
-	fn init_desegmenter(
-		&self,
-		header: &BlockHeader,
-		sync_state: Arc<SyncState>,
-	) -> Result<Desegmenter, Error> {
+	fn init_desegmenter(&self, header: &BlockHeader) -> Result<Desegmenter, Error> {
 		debug!(
 			"init_desegmenter: initializing new desegmenter for {} at {}",
 			header.hash(),
@@ -945,7 +942,6 @@ impl Chain {
 			header.clone(),
 			self.genesis.clone(),
 			self.store.clone(),
-			sync_state,
 		))
 	}
 
@@ -1086,7 +1082,7 @@ impl Chain {
 		txhashset_data: File,
 		status: &dyn TxHashsetWriteStatus,
 	) -> Result<bool, Error> {
-		status.on_setup();
+		status.on_setup(None, None, None, None);
 
 		// Initial check whether this txhashset is needed or not
 		let fork_point = self.fork_point()?;
@@ -1126,7 +1122,7 @@ impl Chain {
 
 			let header_pmmr = self.header_pmmr.read();
 			let batch = self.store.batch()?;
-			txhashset.verify_kernel_pos_index(&self.genesis, &header_pmmr, &batch)?;
+			txhashset.verify_kernel_pos_index(&self.genesis, &header_pmmr, &batch, None, None)?;
 		}
 
 		// all good, prepare a new batch and update all the required records
@@ -1145,7 +1141,7 @@ impl Chain {
 				// Validate the extension, generating the utxo_sum and kernel_sum.
 				// Full validation, including rangeproofs and kernel signature verification.
 				let (utxo_sum, kernel_sum) =
-					extension.validate(&self.genesis, false, status, &header)?;
+					extension.validate(&self.genesis, false, status, None, None, &header, None)?;
 
 				// Save the block_sums (utxo_sum, kernel_sum) to the db for use later.
 				batch.save_block_sums(

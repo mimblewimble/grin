@@ -16,8 +16,6 @@
 //! segmenter
 
 use std::sync::Arc;
-use std::thread;
-use std::time::Duration;
 
 use crate::core::core::hash::{Hash, Hashed};
 use crate::core::core::{pmmr, pmmr::ReadablePMMR};
@@ -44,11 +42,8 @@ pub struct Desegmenter {
 	header_pmmr: Arc<RwLock<txhashset::PMMRHandle<BlockHeader>>>,
 	archive_header: BlockHeader,
 	store: Arc<store::ChainStore>,
-	sync_state: Arc<SyncState>,
 
 	genesis: BlockHeader,
-
-	validator_stop_state: Arc<StopState>,
 
 	default_bitmap_segment_height: u8,
 	default_output_segment_height: u8,
@@ -78,7 +73,6 @@ impl Desegmenter {
 		archive_header: BlockHeader,
 		genesis: BlockHeader,
 		store: Arc<store::ChainStore>,
-		sync_state: Arc<SyncState>,
 	) -> Desegmenter {
 		trace!("Creating new desegmenter");
 		let mut retval = Desegmenter {
@@ -86,9 +80,7 @@ impl Desegmenter {
 			header_pmmr,
 			archive_header,
 			store,
-			sync_state,
 			genesis,
-			validator_stop_state: Arc::new(StopState::new()),
 			bitmap_accumulator: BitmapAccumulator::new(),
 			default_bitmap_segment_height: 9,
 			default_output_segment_height: 11,
@@ -139,133 +131,94 @@ impl Desegmenter {
 		self.all_segments_complete
 	}
 
-	/// Launch a separate validation thread, which will update and validate the body head
-	/// as we go
-	pub fn launch_validation_thread(&self) {
-		let stop_state = self.validator_stop_state.clone();
-		let txhashset = self.txhashset.clone();
-		let header_pmmr = self.header_pmmr.clone();
-		let store = self.store.clone();
-		let genesis = self.genesis.clone();
-		let status = self.sync_state.clone();
-		let desegmenter = Arc::new(RwLock::new(self.clone()));
-		let _ = thread::Builder::new()
-			.name("pibd-validation".to_string())
-			.spawn(move || {
-				Desegmenter::validation_loop(
-					stop_state,
-					txhashset,
-					store,
-					desegmenter,
-					header_pmmr,
-					genesis,
-					status,
-				);
-			});
-	}
-
-	/// Stop the validation loop
-	pub fn stop_validation_thread(&self) {
-		self.validator_stop_state.stop();
-	}
-
-	/// Validation loop
-	fn validation_loop(
-		stop_state: Arc<StopState>,
-		txhashset: Arc<RwLock<TxHashSet>>,
-		store: Arc<store::ChainStore>,
-		desegmenter: Arc<RwLock<Desegmenter>>,
-		header_pmmr: Arc<RwLock<txhashset::PMMRHandle<BlockHeader>>>,
-		genesis: BlockHeader,
-		status: Arc<SyncState>,
-	) {
+	/// Check progress, update status if needed, returns true if all required
+	/// segments are in place
+	pub fn check_progress(&self, status: Arc<SyncState>) -> bool {
 		let mut latest_block_height = 0;
-		let header_head = { desegmenter.read().header().clone() };
-		loop {
-			if stop_state.is_stopped() {
-				break;
-			}
-			thread::sleep(Duration::from_millis(5000));
 
-			trace!("In Desegmenter Validation Loop");
-			let local_output_mmr_size;
-			let local_kernel_mmr_size;
-			let local_rangeproof_mmr_size;
+		let local_output_mmr_size;
+		let local_kernel_mmr_size;
+		let local_rangeproof_mmr_size;
+		{
+			let txhashset = self.txhashset.read();
+			local_output_mmr_size = txhashset.output_mmr_size();
+			local_kernel_mmr_size = txhashset.kernel_mmr_size();
+			local_rangeproof_mmr_size = txhashset.rangeproof_mmr_size();
+		}
+
+		// going to try presenting PIBD progress as total leaves downloaded
+		// total segments probably doesn't make much sense since the segment
+		// sizes will be able to change over time, and representative block height
+		// can be too lopsided if one pmmr completes faster, so perhaps just
+		// use total leaves downloaded and display as a percentage
+		let completed_leaves = pmmr::n_leaves(local_output_mmr_size)
+			+ pmmr::n_leaves(local_rangeproof_mmr_size)
+			+ pmmr::n_leaves(local_kernel_mmr_size);
+
+		// Find latest 'complete' header.
+		// First take lesser of rangeproof and output mmr sizes
+		let latest_output_size = std::cmp::min(local_output_mmr_size, local_rangeproof_mmr_size);
+
+		// Find first header in which 'output_mmr_size' and 'kernel_mmr_size' are greater than
+		// given sizes
+
+		let res = {
+			let header_pmmr = self.header_pmmr.read();
+			header_pmmr.get_first_header_with(
+				latest_output_size,
+				local_kernel_mmr_size,
+				latest_block_height,
+				self.store.clone(),
+			)
+		};
+
+		if let Some(h) = res {
+			latest_block_height = h.height;
+
+			// TODO: Unwraps
+			let tip = Tip::from_header(&h);
+			let batch = self.store.batch().unwrap();
+			batch.save_pibd_head(&tip).unwrap();
+			batch.commit().unwrap();
+
+			status.update_pibd_progress(
+				false,
+				false,
+				completed_leaves,
+				latest_block_height,
+				&self.archive_header,
+			);
+			if local_kernel_mmr_size == self.archive_header.kernel_mmr_size
+				&& local_output_mmr_size == self.archive_header.output_mmr_size
+				&& local_rangeproof_mmr_size == self.archive_header.output_mmr_size
 			{
-				let txhashset = txhashset.read();
-				local_output_mmr_size = txhashset.output_mmr_size();
-				local_kernel_mmr_size = txhashset.kernel_mmr_size();
-				local_rangeproof_mmr_size = txhashset.rangeproof_mmr_size();
-			}
-
-			trace!(
-				"Desegmenter Validation: Output MMR Size: {}",
-				local_output_mmr_size
-			);
-			trace!(
-				"Desegmenter Validation: Rangeproof MMR Size: {}",
-				local_rangeproof_mmr_size
-			);
-			trace!(
-				"Desegmenter Validation: Kernel MMR Size: {}",
-				local_kernel_mmr_size
-			);
-
-			// Find latest 'complete' header.
-			// First take lesser of rangeproof and output mmr sizes
-			let latest_output_size =
-				std::cmp::min(local_output_mmr_size, local_rangeproof_mmr_size);
-			// Find first header in which 'output_mmr_size' and 'kernel_mmr_size' are greater than
-			// given sizes
-
-			{
-				let header_pmmr = header_pmmr.read();
-				let res = header_pmmr.get_first_header_with(
-					latest_output_size,
-					local_kernel_mmr_size,
-					latest_block_height,
-					store.clone(),
-				);
-				if let Some(h) = res {
-					latest_block_height = h.height;
-					debug!(
-						"PIBD Desegmenter Validation Loop: PMMRs complete up to block {}: {:?}",
-						h.height, h
-					);
-					// TODO: 'In-flight' validation. At the moment the entire tree
-					// will be presented for validation after all segments are downloaded
-					// TODO: Unwraps
-					let tip = Tip::from_header(&h);
-					let batch = store.batch().unwrap();
-					batch.save_pibd_head(&tip).unwrap();
-					batch.commit().unwrap();
-					status.update_pibd_progress(
-						false,
-						false,
-						latest_block_height,
-						header_head.height,
-					);
-					if h == header_head {
-						// get out of this loop and move on to validation
-						break;
-					}
-				}
+				// All is complete
+				return true;
 			}
 		}
 
-		// If all done, kick off validation, setting error state if necessary
-		if let Err(e) = Desegmenter::validate_complete_state(
+		false
+
+		/*if let Err(e) = Desegmenter::validate_complete_state(
 			txhashset,
 			store,
 			header_pmmr,
 			&header_head,
 			genesis,
+			last_validated_rangeproof_pos,
 			status.clone(),
+			stop_state.clone(),
 		) {
 			error!("Error validating pibd hashset: {}", e);
-			status.update_pibd_progress(false, true, latest_block_height, header_head.height);
+			status.update_pibd_progress(
+				false,
+				true,
+				completed_leaves,
+				latest_block_height,
+				&header_head,
+			);
 		}
-		stop_state.stop();
+		stop_state.stop();*/
 	}
 
 	/// TODO: This is largely copied from chain.rs txhashset_write and related functions,
@@ -273,34 +226,39 @@ impl Desegmenter {
 	/// segments are still being downloaded and applied. Current validation logic is all tied up
 	/// around unzipping, so re-developing this logic separate from the txhashset version
 	/// will to allow this to happen more cleanly
-	fn validate_complete_state(
-		txhashset: Arc<RwLock<TxHashSet>>,
-		store: Arc<store::ChainStore>,
-		header_pmmr: Arc<RwLock<txhashset::PMMRHandle<BlockHeader>>>,
-		header_head: &BlockHeader,
-		genesis: BlockHeader,
+	pub fn validate_complete_state(
+		&self,
 		status: Arc<SyncState>,
+		stop_state: Arc<StopState>,
 	) -> Result<(), Error> {
 		// Quick root check first:
 		{
-			let txhashset = txhashset.read();
-			txhashset.roots().validate(header_head)?;
+			let txhashset = self.txhashset.read();
+			txhashset.roots().validate(&self.archive_header)?;
 		}
 
-		status.on_setup();
+		// TODO: Keep track of this in the DB so we can pick up where we left off if needed
+		let last_rangeproof_validation_pos = 0;
 
 		// Validate kernel history
 		{
 			debug!("desegmenter validation: rewinding and validating kernel history (readonly)");
-			let txhashset = txhashset.read();
+			let txhashset = self.txhashset.read();
 			let mut count = 0;
-			let mut current = header_head.clone();
+			let mut current = self.archive_header.clone();
+			let total = current.height;
 			txhashset::rewindable_kernel_view(&txhashset, |view, batch| {
 				while current.height > 0 {
 					view.rewind(&current)?;
 					view.validate_root()?;
 					current = batch.get_previous_header(&current)?;
 					count += 1;
+					if current.height % 100000 == 0 || current.height == total {
+						status.on_setup(Some(total - current.height), Some(total), None, None);
+					}
+					if stop_state.is_stopped() {
+						return Ok(());
+					}
 				}
 				Ok(())
 			})?;
@@ -310,38 +268,64 @@ impl Desegmenter {
 			);
 		}
 
+		if stop_state.is_stopped() {
+			return Ok(());
+		}
+
 		// Check kernel MMR root for every block header.
 		// Check NRD relative height rules for full kernel history.
 
 		{
-			let txhashset = txhashset.read();
-			let header_pmmr = header_pmmr.read();
-			let batch = store.batch()?;
-			txhashset.verify_kernel_pos_index(&genesis, &header_pmmr, &batch)?;
+			let txhashset = self.txhashset.read();
+			let header_pmmr = self.header_pmmr.read();
+			let batch = self.store.batch()?;
+			txhashset.verify_kernel_pos_index(
+				&self.genesis,
+				&header_pmmr,
+				&batch,
+				Some(status.clone()),
+				Some(stop_state.clone()),
+			)?;
 		}
 
+		if stop_state.is_stopped() {
+			return Ok(());
+		}
+
+		status.on_setup(None, None, None, None);
 		// Prepare a new batch and update all the required records
 		{
 			debug!("desegmenter validation: rewinding a 2nd time (writeable)");
-			let mut txhashset = txhashset.write();
-			let mut header_pmmr = header_pmmr.write();
-			let mut batch = store.batch()?;
+			let mut txhashset = self.txhashset.write();
+			let mut header_pmmr = self.header_pmmr.write();
+			let mut batch = self.store.batch()?;
 			txhashset::extending(
 				&mut header_pmmr,
 				&mut txhashset,
 				&mut batch,
 				|ext, batch| {
 					let extension = &mut ext.extension;
-					extension.rewind(&header_head, batch)?;
+					extension.rewind(&self.archive_header, batch)?;
 
 					// Validate the extension, generating the utxo_sum and kernel_sum.
 					// Full validation, including rangeproofs and kernel signature verification.
-					let (utxo_sum, kernel_sum) =
-						extension.validate(&genesis, false, &*status, &header_head)?;
+					let (utxo_sum, kernel_sum) = extension.validate(
+						&self.genesis,
+						false,
+						&*status,
+						Some(last_rangeproof_validation_pos),
+						None,
+						&self.archive_header,
+						Some(stop_state.clone()),
+					)?;
+
+					if stop_state.is_stopped() {
+						return Ok(());
+					}
 
 					// Save the block_sums (utxo_sum, kernel_sum) to the db for use later.
 					batch.save_block_sums(
-						&header_head.hash(),
+						&self.archive_header.hash(),
 						BlockSums {
 							utxo_sum,
 							kernel_sum,
@@ -352,12 +336,16 @@ impl Desegmenter {
 				},
 			)?;
 
+			if stop_state.is_stopped() {
+				return Ok(());
+			}
+
 			debug!("desegmenter_validation: finished validating and rebuilding");
 			status.on_save();
 
 			{
 				// Save the new head to the db and rebuild the header by height index.
-				let tip = Tip::from_header(&header_head);
+				let tip = Tip::from_header(&self.archive_header);
 				// TODO: Throw error
 				batch.save_body_head(&tip)?;
 

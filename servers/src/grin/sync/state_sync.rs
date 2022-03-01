@@ -21,6 +21,7 @@ use crate::core::core::{hash::Hashed, pmmr::segment::SegmentType};
 use crate::core::global;
 use crate::core::pow::Difficulty;
 use crate::p2p::{self, Capabilities, Peer};
+use crate::util::StopState;
 
 /// Fast sync has 3 "states":
 /// * syncing headers
@@ -61,6 +62,7 @@ impl StateSync {
 		head: &chain::Tip,
 		tail: &chain::Tip,
 		highest_height: u64,
+		stop_state: Arc<StopState>,
 	) -> bool {
 		trace!("state_sync: head.height: {}, tail.height: {}. header_head.height: {}, highest_height: {}",
 			   head.height, tail.height, header_head.height, highest_height,
@@ -95,10 +97,7 @@ impl StateSync {
 				let archive_header = self.chain.txhashset_archive_header_header_only().unwrap();
 				error!("PIBD Reported Failure - Restarting Sync");
 				// reset desegmenter state
-				let desegmenter = self
-					.chain
-					.desegmenter(&archive_header, self.sync_state.clone())
-					.unwrap();
+				let desegmenter = self.chain.desegmenter(&archive_header).unwrap();
 
 				if let Some(d) = desegmenter.write().as_mut() {
 					d.reset();
@@ -112,7 +111,8 @@ impl StateSync {
 				if let Err(e) = self.chain.reset_prune_lists() {
 					error!("pibd_sync restart: reset prune lists error = {}", e);
 				}
-				self.sync_state.update_pibd_progress(false, false, 1, 1);
+				self.sync_state
+					.update_pibd_progress(false, false, 0, 1, &archive_header);
 				sync_need_restart = true;
 			}
 		}
@@ -161,22 +161,34 @@ impl StateSync {
 					return true;
 				}
 				let (launch, _download_timeout) = self.state_sync_due();
+				let archive_header = { self.chain.txhashset_archive_header_header_only().unwrap() };
 				if launch {
-					let archive_header = self.chain.txhashset_archive_header_header_only().unwrap();
 					self.sync_state
-						.update_pibd_progress(false, false, 1, archive_header.height);
-					let desegmenter = self
-						.chain
-						.desegmenter(&archive_header, self.sync_state.clone())
-						.unwrap();
-
-					if let Some(d) = desegmenter.read().as_ref() {
-						d.launch_validation_thread()
-					};
+						.update_pibd_progress(false, false, 0, 1, &archive_header);
 				}
 				// Continue our PIBD process (which returns true if all segments are in)
 				if self.continue_pibd() {
-					return false;
+					let desegmenter = self.chain.desegmenter(&archive_header).unwrap();
+					// All segments in, validate
+					if let Some(d) = desegmenter.read().as_ref() {
+						if d.check_progress(self.sync_state.clone()) {
+							if let Err(e) = d.validate_complete_state(
+								self.sync_state.clone(),
+								stop_state.clone(),
+							) {
+								error!("error validating PIBD state: {}", e);
+								self.sync_state.update_pibd_progress(
+									false,
+									true,
+									0,
+									1,
+									&archive_header,
+								);
+								return false;
+							}
+							return true;
+						}
+					};
 				}
 			} else {
 				let (go, download_timeout) = self.state_sync_due();
@@ -215,10 +227,12 @@ impl StateSync {
 	fn continue_pibd(&mut self) -> bool {
 		// Check the state of our chain to figure out what we should be requesting next
 		let archive_header = self.chain.txhashset_archive_header_header_only().unwrap();
-		let desegmenter = self
-			.chain
-			.desegmenter(&archive_header, self.sync_state.clone())
-			.unwrap();
+		let desegmenter = self.chain.desegmenter(&archive_header).unwrap();
+
+		// Remove stale requests
+		// TODO: verify timing
+		let timeout_time = Utc::now() + Duration::seconds(15);
+		self.sync_state.remove_stale_pibd_requests(timeout_time);
 
 		// Apply segments... TODO: figure out how this should be called, might
 		// need to be a separate thread.
@@ -226,8 +240,9 @@ impl StateSync {
 			if let Some(d) = de.as_mut() {
 				let res = d.apply_next_segments();
 				if let Err(e) = res {
-					debug!("error applying segment: {}", e);
-					self.sync_state.update_pibd_progress(false, true, 1, 1);
+					error!("error applying segment: {}", e);
+					self.sync_state
+						.update_pibd_progress(false, true, 0, 1, &archive_header);
 					return false;
 				}
 			}
@@ -237,7 +252,7 @@ impl StateSync {
 		// requests we want to send to peers
 		let mut next_segment_ids = vec![];
 		if let Some(d) = desegmenter.write().as_mut() {
-			if d.is_complete() {
+			if d.check_progress(self.sync_state.clone()) {
 				return true;
 			}
 			// Figure out the next segments we need

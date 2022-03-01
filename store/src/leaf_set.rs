@@ -196,6 +196,11 @@ impl LeafSet {
 		self.bitmap.cardinality() as usize
 	}
 
+	/// Number of positions up to index n in the leaf set
+	pub fn n_unpruned_leaves_to_index(&self, to_index: u64) -> u64 {
+		self.bitmap.range_cardinality(0..to_index)
+	}
+
 	/// Is the leaf_set empty.
 	pub fn is_empty(&self) -> bool {
 		self.len() == 0

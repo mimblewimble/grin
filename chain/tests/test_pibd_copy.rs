@@ -24,7 +24,7 @@ use std::sync::Arc;
 use std::{fs, io};
 
 use crate::chain::txhashset::BitmapChunk;
-use crate::chain::types::{NoopAdapter, Options, SyncState};
+use crate::chain::types::{NoopAdapter, Options};
 use crate::core::core::{
 	hash::{Hash, Hashed},
 	pmmr::segment::{Segment, SegmentIdentifier, SegmentType},
@@ -177,9 +177,8 @@ impl DesegmenterRequestor {
 	// Emulate `continue_pibd` function, which would be called from state sync
 	// return whether is complete
 	pub fn continue_pibd(&mut self) -> bool {
-		let state = Arc::new(SyncState::new());
 		let archive_header = self.chain.txhashset_archive_header_header_only().unwrap();
-		let desegmenter = self.chain.desegmenter(&archive_header, state).unwrap();
+		let desegmenter = self.chain.desegmenter(&archive_header).unwrap();
 
 		// Apply segments... TODO: figure out how this should be called, might
 		// need to be a separate thread.
