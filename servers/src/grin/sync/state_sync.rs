@@ -161,7 +161,7 @@ impl StateSync {
 					return true;
 				}
 				let (launch, _download_timeout) = self.state_sync_due();
-				let archive_header = self.chain.txhashset_archive_header_header_only().unwrap();
+				let archive_header = { self.chain.txhashset_archive_header_header_only().unwrap() };
 				if launch {
 					self.sync_state
 						.update_pibd_progress(false, false, 0, 1, &archive_header);

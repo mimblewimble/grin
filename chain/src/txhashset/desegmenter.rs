@@ -253,7 +253,9 @@ impl Desegmenter {
 					view.validate_root()?;
 					current = batch.get_previous_header(&current)?;
 					count += 1;
-					status.on_setup(Some(total - current.height), Some(total));
+					if current.height % 100000 == 0 || current.height == total {
+						status.on_setup(Some(total - current.height), Some(total), None, None);
+					}
 					if stop_state.is_stopped() {
 						return Ok(());
 					}
@@ -266,6 +268,10 @@ impl Desegmenter {
 			);
 		}
 
+		if stop_state.is_stopped() {
+			return Ok(());
+		}
+
 		// Check kernel MMR root for every block header.
 		// Check NRD relative height rules for full kernel history.
 
@@ -273,8 +279,20 @@ impl Desegmenter {
 			let txhashset = self.txhashset.read();
 			let header_pmmr = self.header_pmmr.read();
 			let batch = self.store.batch()?;
-			txhashset.verify_kernel_pos_index(&self.genesis, &header_pmmr, &batch)?;
+			txhashset.verify_kernel_pos_index(
+				&self.genesis,
+				&header_pmmr,
+				&batch,
+				Some(status.clone()),
+				Some(stop_state.clone()),
+			)?;
 		}
+
+		if stop_state.is_stopped() {
+			return Ok(());
+		}
+
+		status.on_setup(None, None, None, None);
 
 		// Prepare a new batch and update all the required records
 		{

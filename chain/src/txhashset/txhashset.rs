@@ -35,6 +35,7 @@ use crate::txhashset::{RewindableKernelView, UTXOView};
 use crate::types::{CommitPos, OutputRoots, Tip, TxHashSetRoots, TxHashsetWriteStatus};
 use crate::util::secp::pedersen::{Commitment, RangeProof};
 use crate::util::{file, secp_static, zip, StopState};
+use crate::SyncState;
 use croaring::Bitmap;
 use grin_store::pmmr::{clean_files_by_prefix, PMMRBackend};
 use std::cmp::Ordering;
@@ -541,7 +542,7 @@ impl TxHashSet {
 		let cutoff = head.height.saturating_sub(WEEK_HEIGHT * 2);
 		let cutoff_hash = header_pmmr.get_header_hash_by_height(cutoff)?;
 		let cutoff_header = batch.get_block_header(&cutoff_hash)?;
-		self.verify_kernel_pos_index(&cutoff_header, header_pmmr, batch)
+		self.verify_kernel_pos_index(&cutoff_header, header_pmmr, batch, None, None)
 	}
 
 	/// Verify and (re)build the NRD kernel_pos index from the provided header onwards.
@@ -550,6 +551,8 @@ impl TxHashSet {
 		from_header: &BlockHeader,
 		header_pmmr: &PMMRHandle<BlockHeader>,
 		batch: &Batch<'_>,
+		status: Option<Arc<SyncState>>,
+		stop_state: Option<Arc<StopState>>,
 	) -> Result<(), Error> {
 		if !global::is_nrd_enabled() {
 			return Ok(());
@@ -578,6 +581,8 @@ impl TxHashSet {
 		let mut current_pos = prev_size + 1;
 		let mut current_header = from_header.clone();
 		let mut count = 0;
+		let total = pmmr::n_leaves(self.kernel_pmmr_h.size);
+		let mut applied = 0;
 		while current_pos <= self.kernel_pmmr_h.size {
 			if pmmr::is_leaf(current_pos - 1) {
 				if let Some(kernel) = kernel_pmmr.get_data(current_pos - 1) {
@@ -598,7 +603,19 @@ impl TxHashSet {
 						_ => {}
 					}
 				}
+				applied += 1;
+				if let Some(ref s) = status {
+					if total % applied == 10000 {
+						s.on_setup(None, None, Some(applied), Some(total));
+					}
+				}
 			}
+			if let Some(ref s) = stop_state {
+				if s.is_stopped() {
+					return Ok(());
+				}
+			}
+
 			current_pos += 1;
 		}
 

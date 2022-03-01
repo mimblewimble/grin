@@ -83,6 +83,10 @@ pub enum SyncStatus {
 		headers: Option<u64>,
 		/// headers total
 		headers_total: Option<u64>,
+		/// kernel position portion
+		kernel_pos: Option<u64>,
+		/// total kernel position
+		kernel_pos_total: Option<u64>,
 	},
 	/// Validating the kernels
 	TxHashsetKernelsValidation {
@@ -319,10 +323,18 @@ impl SyncState {
 }
 
 impl TxHashsetWriteStatus for SyncState {
-	fn on_setup(&self, headers: Option<u64>, headers_total: Option<u64>) {
+	fn on_setup(
+		&self,
+		headers: Option<u64>,
+		headers_total: Option<u64>,
+		kernel_pos: Option<u64>,
+		kernel_pos_total: Option<u64>,
+	) {
 		self.update(SyncStatus::TxHashsetSetup {
 			headers,
 			headers_total,
+			kernel_pos,
+			kernel_pos_total,
 		});
 	}
 
@@ -550,7 +562,13 @@ pub trait ChainAdapter {
 /// those values as the processing progresses.
 pub trait TxHashsetWriteStatus {
 	/// First setup of the txhashset
-	fn on_setup(&self, headers: Option<u64>, header_total: Option<u64>);
+	fn on_setup(
+		&self,
+		headers: Option<u64>,
+		header_total: Option<u64>,
+		kernel_pos: Option<u64>,
+		kernel_pos_total: Option<u64>,
+	);
 	/// Starting kernel validation
 	fn on_validation_kernels(&self, kernels: u64, kernel_total: u64);
 	/// Starting rproof validation
@@ -565,7 +583,7 @@ pub trait TxHashsetWriteStatus {
 pub struct NoStatus;
 
 impl TxHashsetWriteStatus for NoStatus {
-	fn on_setup(&self, _hs: Option<u64>, _ht: Option<u64>) {}
+	fn on_setup(&self, _hs: Option<u64>, _ht: Option<u64>, _kp: Option<u64>, _kpt: Option<u64>) {}
 	fn on_validation_kernels(&self, _ks: u64, _kts: u64) {}
 	fn on_validation_rproofs(&self, _rs: u64, _rt: u64) {}
 	fn on_save(&self) {}

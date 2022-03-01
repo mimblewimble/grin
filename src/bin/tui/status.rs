@@ -93,14 +93,24 @@ impl TUIStatusView {
 			SyncStatus::TxHashsetSetup {
 				headers,
 				headers_total,
+				kernel_pos,
+				kernel_pos_total,
 			} => {
 				if headers.is_some() && headers_total.is_some() {
 					let h = headers.unwrap();
 					let ht = headers_total.unwrap();
 					let percent = h * 100 / ht;
 					Cow::Owned(format!(
-						"Sync step 3/7: Validating kernel history - {}/{} - {}%",
+						"Sync step 3/7: Preparing for validation (kernel history) - {}/{} - {}%",
 						h, ht, percent
+					))
+				} else if kernel_pos.is_some() && kernel_pos_total.is_some() {
+					let k = kernel_pos.unwrap();
+					let kt = kernel_pos_total.unwrap();
+					let percent = k * 100 / kt;
+					Cow::Owned(format!(
+						"Sync step 3/7: Preparing for validation (kernel position) - {}/{} - {}%",
+						k, kt, percent
 					))
 				} else {
 					Cow::Borrowed("Sync step 3/7: Preparing chain state for validation")

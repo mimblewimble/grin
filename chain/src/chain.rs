@@ -1082,7 +1082,7 @@ impl Chain {
 		txhashset_data: File,
 		status: &dyn TxHashsetWriteStatus,
 	) -> Result<bool, Error> {
-		status.on_setup(None, None);
+		status.on_setup(None, None, None, None);
 
 		// Initial check whether this txhashset is needed or not
 		let fork_point = self.fork_point()?;
@@ -1122,7 +1122,7 @@ impl Chain {
 
 			let header_pmmr = self.header_pmmr.read();
 			let batch = self.store.batch()?;
-			txhashset.verify_kernel_pos_index(&self.genesis, &header_pmmr, &batch)?;
+			txhashset.verify_kernel_pos_index(&self.genesis, &header_pmmr, &batch, None, None)?;
 		}
 
 		// all good, prepare a new batch and update all the required records
