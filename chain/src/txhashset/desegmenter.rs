@@ -29,6 +29,7 @@ use crate::types::{Tip, TxHashsetWriteStatus};
 use crate::util::secp::pedersen::RangeProof;
 use crate::util::{RwLock, StopState};
 use crate::SyncState;
+use std::{thread, time};
 
 use crate::store;
 use crate::txhashset;
@@ -58,6 +59,10 @@ pub struct Desegmenter {
 
 	bitmap_mmr_leaf_count: u64,
 	bitmap_mmr_size: u64,
+
+	/// Maximum number of segments to cache before we stop requesting others
+	max_cached_segments: usize,
+
 	/// In-memory 'raw' bitmap corresponding to contents of bitmap accumulator
 	bitmap_cache: Option<Bitmap>,
 
@@ -93,6 +98,8 @@ impl Desegmenter {
 
 			bitmap_mmr_leaf_count: 0,
 			bitmap_mmr_size: 0,
+
+			max_cached_segments: 15,
 
 			bitmap_cache: None,
 
@@ -198,27 +205,6 @@ impl Desegmenter {
 		}
 
 		false
-
-		/*if let Err(e) = Desegmenter::validate_complete_state(
-			txhashset,
-			store,
-			header_pmmr,
-			&header_head,
-			genesis,
-			last_validated_rangeproof_pos,
-			status.clone(),
-			stop_state.clone(),
-		) {
-			error!("Error validating pibd hashset: {}", e);
-			status.update_pibd_progress(
-				false,
-				true,
-				completed_leaves,
-				latest_block_height,
-				&header_head,
-			);
-		}
-		stop_state.stop();*/
 	}
 
 	/// TODO: This is largely copied from chain.rs txhashset_write and related functions,
@@ -277,7 +263,18 @@ impl Desegmenter {
 
 		{
 			let txhashset = self.txhashset.read();
-			let header_pmmr = self.header_pmmr.read();
+			// TODO: This appears to be locked by something else indefinitely, but only sometimes
+			// should not be the case, figure out why
+			let header_pmmr =
+				{
+					let mut res = self.header_pmmr.try_read();
+					while res.is_none() {
+						error!("Header PMMR is thread locked somewhere (this should not be the case)!!!");
+						thread::sleep(time::Duration::from_secs(1));
+						res = self.header_pmmr.try_read();
+					}
+					res.unwrap()
+				};
 			let batch = self.store.batch()?;
 			txhashset.verify_kernel_pos_index(
 				&self.genesis,
@@ -389,9 +386,9 @@ impl Desegmenter {
 				// Should have all the pieces now, finalize the bitmap cache
 				self.finalize_bitmap()?;
 			}
-			// Check if we can apply the next output segment
+
+			// Check if we can apply the next output segment(s)
 			if let Some(next_output_idx) = self.next_required_output_segment_index() {
-				trace!("Next output index to apply: {}", next_output_idx);
 				if let Some((idx, _seg)) = self
 					.output_segment_cache
 					.iter()
@@ -400,22 +397,28 @@ impl Desegmenter {
 				{
 					self.apply_output_segment(idx)?;
 				}
+			} else {
+				if self.output_segment_cache.len() >= self.max_cached_segments {
+					self.output_segment_cache = vec![];
+				}
 			}
 			// Check if we can apply the next rangeproof segment
-			if let Some(next_rangeproof_idx) = self.next_required_rangeproof_segment_index() {
-				trace!("Next rangeproof index to apply: {}", next_rangeproof_idx);
+			if let Some(next_rp_idx) = self.next_required_rangeproof_segment_index() {
 				if let Some((idx, _seg)) = self
 					.rangeproof_segment_cache
 					.iter()
 					.enumerate()
-					.find(|s| s.1.identifier().idx == next_rangeproof_idx)
+					.find(|s| s.1.identifier().idx == next_rp_idx)
 				{
 					self.apply_rangeproof_segment(idx)?;
+				}
+			} else {
+				if self.rangeproof_segment_cache.len() >= self.max_cached_segments {
+					self.rangeproof_segment_cache = vec![];
 				}
 			}
 			// Check if we can apply the next kernel segment
 			if let Some(next_kernel_idx) = self.next_required_kernel_segment_index() {
-				trace!("Next kernel index to apply: {}", next_kernel_idx);
 				if let Some((idx, _seg)) = self
 					.kernel_segment_cache
 					.iter()
@@ -423,6 +426,10 @@ impl Desegmenter {
 					.find(|s| s.1.identifier().idx == next_kernel_idx)
 				{
 					self.apply_kernel_segment(idx)?;
+				}
+			} else {
+				if self.kernel_segment_cache.len() >= self.max_cached_segments {
+					self.kernel_segment_cache = vec![];
 				}
 			}
 		}
@@ -480,6 +487,9 @@ impl Desegmenter {
 				if last <= local_output_mmr_size {
 					continue;
 				}
+				if self.output_segment_cache.len() >= self.max_cached_segments {
+					break;
+				}
 				if !self.has_output_segment_with_id(output_id) {
 					return_vec.push(SegmentTypeIdentifier::new(SegmentType::Output, output_id));
 					elems_added += 1;
@@ -500,6 +510,9 @@ impl Desegmenter {
 				// Advance rangeproof iterator to next needed position
 				if last <= local_rangeproof_mmr_size {
 					continue;
+				}
+				if self.rangeproof_segment_cache.len() >= self.max_cached_segments {
+					break;
 				}
 				if !self.has_rangeproof_segment_with_id(rp_id) {
 					return_vec.push(SegmentTypeIdentifier::new(SegmentType::RangeProof, rp_id));
@@ -522,6 +535,9 @@ impl Desegmenter {
 				// Advance rangeproof iterator to next needed position
 				if last <= local_kernel_mmr_size {
 					continue;
+				}
+				if self.kernel_segment_cache.len() >= self.max_cached_segments {
+					break;
 				}
 				if !self.has_kernel_segment_with_id(k_id) {
 					return_vec.push(SegmentTypeIdentifier::new(SegmentType::Kernel, k_id));
@@ -607,6 +623,58 @@ impl Desegmenter {
 		{
 			self.bitmap_segment_cache.push(in_seg);
 		}
+	}
+
+	/// Apply a list of segments, in a single extension
+	pub fn _apply_segments(
+		&mut self,
+		output_segments: Vec<Segment<OutputIdentifier>>,
+		rp_segments: Vec<Segment<RangeProof>>,
+		kernel_segments: Vec<Segment<TxKernel>>,
+	) -> Result<(), Error> {
+		let t = self.txhashset.clone();
+		let s = self.store.clone();
+		let mut header_pmmr = self.header_pmmr.write();
+		let mut txhashset = t.write();
+		let mut batch = s.batch()?;
+		txhashset::extending(
+			&mut header_pmmr,
+			&mut txhashset,
+			&mut batch,
+			|ext, _batch| {
+				let extension = &mut ext.extension;
+				// outputs
+				for segment in output_segments {
+					let id = segment.identifier().idx;
+					if let Err(e) = extension.apply_output_segment(segment) {
+						debug!("pibd_desegmenter: applying output segment at idx {}", id);
+						error!("Error applying output segment {}, {}", id, e);
+						break;
+					}
+				}
+				for segment in rp_segments {
+					let id = segment.identifier().idx;
+					if let Err(e) = extension.apply_rangeproof_segment(segment) {
+						debug!(
+							"pibd_desegmenter: applying rangeproof segment at idx {}",
+							id
+						);
+						error!("Error applying rangeproof segment {}, {}", id, e);
+						break;
+					}
+				}
+				for segment in kernel_segments {
+					let id = segment.identifier().idx;
+					if let Err(e) = extension.apply_kernel_segment(segment) {
+						debug!("pibd_desegmenter: applying kernel segment at idx {}", id);
+						error!("Error applying kernel segment {}, {}", id, e);
+						break;
+					}
+				}
+				Ok(())
+			},
+		)?;
+		Ok(())
 	}
 
 	/// Whether our list already contains this bitmap segment
