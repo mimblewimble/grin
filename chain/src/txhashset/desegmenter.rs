@@ -29,7 +29,6 @@ use crate::types::{Tip, TxHashsetWriteStatus};
 use crate::util::secp::pedersen::RangeProof;
 use crate::util::{RwLock, StopState};
 use crate::SyncState;
-use std::{thread, time};
 
 use crate::store;
 use crate::txhashset;
@@ -262,19 +261,8 @@ impl Desegmenter {
 		// Check NRD relative height rules for full kernel history.
 
 		{
+			let header_pmmr = self.header_pmmr.read();
 			let txhashset = self.txhashset.read();
-			// TODO: This appears to be locked by something else indefinitely, but only sometimes
-			// should not be the case, figure out why
-			let header_pmmr =
-				{
-					let mut res = self.header_pmmr.try_read();
-					while res.is_none() {
-						error!("Header PMMR is thread locked somewhere (this should not be the case)!!!");
-						thread::sleep(time::Duration::from_secs(1));
-						res = self.header_pmmr.try_read();
-					}
-					res.unwrap()
-				};
 			let batch = self.store.batch()?;
 			txhashset.verify_kernel_pos_index(
 				&self.genesis,
@@ -293,8 +281,8 @@ impl Desegmenter {
 		// Prepare a new batch and update all the required records
 		{
 			debug!("desegmenter validation: rewinding a 2nd time (writeable)");
-			let mut txhashset = self.txhashset.write();
 			let mut header_pmmr = self.header_pmmr.write();
+			let mut txhashset = self.txhashset.write();
 			let mut batch = self.store.batch()?;
 			txhashset::extending(
 				&mut header_pmmr,
