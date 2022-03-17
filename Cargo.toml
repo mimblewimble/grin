@@ -1,6 +1,6 @@
 [package]
 name = "grin"
-version = "5.1.2"
+version = "5.1.3-alpha.1"
 authors = ["Grin Developers <mimblewimble@lists.launchpad.net>"]
 description = "Simple, private and scalable cryptocurrency implementation based on the Mimblewimble chain format."
 license = "Apache-2.0"
@@ -34,14 +34,14 @@ term = "0.6"
 failure = "0.1"
 failure_derive = "0.1"
 
-grin_api = { path = "./api", version = "5.1.2" }
-grin_config = { path = "./config", version = "5.1.2" }
-grin_chain = { path = "./chain", version = "5.1.2" }
-grin_core = { path = "./core", version = "5.1.2" }
-grin_keychain = { path = "./keychain", version = "5.1.2" }
-grin_p2p = { path = "./p2p", version = "5.1.2" }
-grin_servers = { path = "./servers", version = "5.1.2" }
-grin_util = { path = "./util", version = "5.1.2" }
+grin_api = { path = "./api", version = "5.1.3-alpha.1" }
+grin_config = { path = "./config", version = "5.1.3-alpha.1" }
+grin_chain = { path = "./chain", version = "5.1.3-alpha.1" }
+grin_core = { path = "./core", version = "5.1.3-alpha.1" }
+grin_keychain = { path = "./keychain", version = "5.1.3-alpha.1" }
+grin_p2p = { path = "./p2p", version = "5.1.3-alpha.1" }
+grin_servers = { path = "./servers", version = "5.1.3-alpha.1" }
+grin_util = { path = "./util", version = "5.1.3-alpha.1" }
 
 [dependencies.cursive]
 version = "0.16"
@@ -52,5 +52,5 @@ features = ["pancurses-backend"]
 built = { version = "0.4", features = ["git2"]}
 
 [dev-dependencies]
-grin_chain = { path = "./chain", version = "5.1.2" }
-grin_store = { path = "./store", version = "5.1.2" }
+grin_chain = { path = "./chain", version = "5.1.3-alpha.1" }
+grin_store = { path = "./store", version = "5.1.3-alpha.1" }
