@@ -124,8 +124,13 @@ impl SegmentIdentifier {
 		((pmmr::n_leaves(target_mmr_size) + d - 1) / d) as usize
 	}
 
+	/// Return pmmr size of number of segments of the given height
+	pub fn pmmr_size(num_segments: usize, height: u8) -> u64 {
+		pmmr::insertion_to_pmmr_index(num_segments as u64 * (1 << height))
+	}
+
 	/// Maximum number of leaves in a segment, given by `2**height`
-	fn segment_capacity(&self) -> u64 {
+	pub fn segment_capacity(&self) -> u64 {
 		1 << self.height
 	}
 
