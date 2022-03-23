@@ -1144,7 +1144,13 @@ impl<'a> Committed for Extension<'a> {
 
 	fn outputs_committed(&self) -> Vec<Commitment> {
 		let mut commitments = vec![];
-		for pos0 in self.output_pmmr.leaf_pos_iter() {
+		for pos0 in self.output_pmmr.leaf_pos_iter().filter(|p| {
+			if let Some(i) = pmmr::pmmr_leaf_to_insertion_index(*p) {
+				self.bitmap_cache.contains(i as u32)
+			} else {
+				false
+			}
+		}) {
 			if let Some(out) = self.output_pmmr.get_data(pos0) {
 				commitments.push(out.commit);
 			}
@@ -1574,8 +1580,14 @@ impl<'a> Extension<'a> {
 	}
 
 	/// Rewinds the MMRs to the provided block, rewinding to the last output pos
-	/// and last kernel pos of that block.
-	pub fn rewind(&mut self, header: &BlockHeader, batch: &Batch<'_>) -> Result<(), Error> {
+	/// and last kernel pos of that block. If `updated_bitmap` is supplied, the
+	/// bitmap accumulator will be replaced with its contents
+	pub fn rewind(
+		&mut self,
+		header: &BlockHeader,
+		batch: &Batch<'_>,
+		updated_bitmap: Option<&BitmapAccumulator>,
+	) -> Result<(), Error> {
 		debug!(
 			"Rewind extension to {} at {} from {} at {}",
 			header.hash(),
@@ -1607,6 +1619,10 @@ impl<'a> Extension<'a> {
 			}
 			// Now apply a single aggregate "affected_pos" to our bitmap accumulator.
 			self.apply_to_bitmap_accumulator(&affected_pos)?;
+		}
+
+		if let Some(bmp) = updated_bitmap {
+			self.set_bitmap_accumulator(bmp.clone());
 		}
 
 		// Update our head to reflect the header we rewound to.
@@ -1785,7 +1801,8 @@ impl<'a> Extension<'a> {
 		Ok(())
 	}
 
-	/// Validate full kernel sums against the provided header (for overage and kernel_offset).
+	/// Validate full kernel sums against the provided header and unspent output bitmap
+	/// (for overage and kernel_offset).
 	/// This is an expensive operation as we need to retrieve all the UTXOs and kernels
 	/// from the respective MMRs.
 	/// For a significantly faster way of validating full kernel sums see BlockSums.
