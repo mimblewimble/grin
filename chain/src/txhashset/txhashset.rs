@@ -1428,17 +1428,6 @@ impl<'a> Extension<'a> {
 							.push(&leaf_data[idx])
 							.map_err(&ErrorKind::TxHashSetErr)?;
 					}
-					let pmmr_index = pmmr::pmmr_leaf_to_insertion_index(pos0);
-					// Remove any elements that may be spent but not fully
-					// pruned
-					match pmmr_index {
-						Some(i) => {
-							if !self.bitmap_cache.contains(i as u32) {
-								self.output_pmmr.remove_from_leaf_set(pos0);
-							}
-						}
-						None => {}
-					};
 				}
 			}
 		}
@@ -1474,15 +1463,6 @@ impl<'a> Extension<'a> {
 							.push(&leaf_data[idx])
 							.map_err(&ErrorKind::TxHashSetErr)?;
 					}
-					let pmmr_index = pmmr::pmmr_leaf_to_insertion_index(pos0);
-					match pmmr_index {
-						Some(i) => {
-							if !self.bitmap_cache.contains(i as u32) {
-								self.output_pmmr.remove_from_leaf_set(pos0);
-							}
-						}
-						None => {}
-					};
 				}
 			}
 		}
