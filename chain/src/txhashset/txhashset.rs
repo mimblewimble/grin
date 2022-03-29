@@ -1144,13 +1144,7 @@ impl<'a> Committed for Extension<'a> {
 
 	fn outputs_committed(&self) -> Vec<Commitment> {
 		let mut commitments = vec![];
-		for pos0 in self.output_pmmr.leaf_pos_iter().filter(|p| {
-			if let Some(i) = pmmr::pmmr_leaf_to_insertion_index(*p) {
-				self.bitmap_cache.contains(i as u32)
-			} else {
-				false
-			}
-		}) {
+		for pos0 in self.output_pmmr.leaf_pos_iter() {
 			if let Some(out) = self.output_pmmr.get_data(pos0) {
 				commitments.push(out.commit);
 			}
@@ -1428,6 +1422,15 @@ impl<'a> Extension<'a> {
 							.push(&leaf_data[idx])
 							.map_err(&ErrorKind::TxHashSetErr)?;
 					}
+					let pmmr_index = pmmr::pmmr_leaf_to_insertion_index(pos0);
+					match pmmr_index {
+						Some(i) => {
+							if !self.bitmap_cache.contains(i as u32) {
+								self.output_pmmr.remove_from_leaf_set(pos0);
+							}
+						}
+						None => {}
+					};
 				}
 			}
 		}
@@ -1463,6 +1466,15 @@ impl<'a> Extension<'a> {
 							.push(&leaf_data[idx])
 							.map_err(&ErrorKind::TxHashSetErr)?;
 					}
+					let pmmr_index = pmmr::pmmr_leaf_to_insertion_index(pos0);
+					match pmmr_index {
+						Some(i) => {
+							if !self.bitmap_cache.contains(i as u32) {
+								self.output_pmmr.remove_from_leaf_set(pos0);
+							}
+						}
+						None => {}
+					};
 				}
 			}
 		}
