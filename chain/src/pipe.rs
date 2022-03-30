@@ -631,7 +631,7 @@ pub fn rewind_and_apply_fork(
 		current = batch.get_previous_header(&current)?;
 	}
 	let fork_point = current;
-	extension.rewind(&fork_point, batch, None)?;
+	extension.rewind(&fork_point, batch)?;
 
 	// Then apply all full blocks since this common ancestor
 	// to put txhashet extension in a state to accept the new block.

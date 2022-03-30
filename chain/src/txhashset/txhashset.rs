@@ -1586,12 +1586,7 @@ impl<'a> Extension<'a> {
 	/// Rewinds the MMRs to the provided block, rewinding to the last output pos
 	/// and last kernel pos of that block. If `updated_bitmap` is supplied, the
 	/// bitmap accumulator will be replaced with its contents
-	pub fn rewind(
-		&mut self,
-		header: &BlockHeader,
-		batch: &Batch<'_>,
-		updated_bitmap: Option<&BitmapAccumulator>,
-	) -> Result<(), Error> {
+	pub fn rewind(&mut self, header: &BlockHeader, batch: &Batch<'_>) -> Result<(), Error> {
 		debug!(
 			"Rewind extension to {} at {} from {} at {}",
 			header.hash(),
@@ -1623,10 +1618,6 @@ impl<'a> Extension<'a> {
 			}
 			// Now apply a single aggregate "affected_pos" to our bitmap accumulator.
 			self.apply_to_bitmap_accumulator(&affected_pos)?;
-		}
-
-		if let Some(bmp) = updated_bitmap {
-			self.set_bitmap_accumulator(bmp.clone());
 		}
 
 		// Update our head to reflect the header we rewound to.

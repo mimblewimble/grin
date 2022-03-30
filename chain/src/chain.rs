@@ -891,7 +891,7 @@ impl Chain {
 
 		let bitmap_snapshot =
 			txhashset::extending_readonly(&mut header_pmmr, &mut txhashset, |ext, batch| {
-				ext.extension.rewind(header, batch, None)?;
+				ext.extension.rewind(header, batch)?;
 				Ok(ext.extension.bitmap_accumulator())
 			})?;
 
@@ -1136,7 +1136,7 @@ impl Chain {
 			&mut batch,
 			|ext, batch| {
 				let extension = &mut ext.extension;
-				extension.rewind(&header, batch, None)?;
+				extension.rewind(&header, batch)?;
 
 				// Validate the extension, generating the utxo_sum and kernel_sum.
 				// Full validation, including rangeproofs and kernel signature verification.
