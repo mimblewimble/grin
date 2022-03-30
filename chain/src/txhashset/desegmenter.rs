@@ -197,6 +197,7 @@ impl Desegmenter {
 			if local_kernel_mmr_size == self.archive_header.kernel_mmr_size
 				&& local_output_mmr_size == self.archive_header.output_mmr_size
 				&& local_rangeproof_mmr_size == self.archive_header.output_mmr_size
+				&& self.bitmap_cache.is_some()
 			{
 				// All is complete
 				return true;
@@ -204,6 +205,22 @@ impl Desegmenter {
 		}
 
 		false
+	}
+
+	/// Once the PIBD set is downloaded, we need to ensure that the respective leaf sets
+	/// match the bitmap (particularly in the case of outputs being spent after a PIBD catch-up)
+	pub fn check_update_leaf_set_state(&self) -> Result<(), Error> {
+		let mut header_pmmr = self.header_pmmr.write();
+		let mut txhashset = self.txhashset.write();
+		let mut _batch = self.store.batch()?;
+		txhashset::extending(&mut header_pmmr, &mut txhashset, &mut _batch, |ext, _| {
+			let extension = &mut ext.extension;
+			if let Some(b) = &self.bitmap_cache {
+				extension.update_leaf_sets(&b)?;
+			}
+			Ok(())
+		})?;
+		Ok(())
 	}
 
 	/// TODO: This is largely copied from chain.rs txhashset_write and related functions,
@@ -218,8 +235,8 @@ impl Desegmenter {
 	) -> Result<(), Error> {
 		// Quick root check first:
 		{
-			//let txhashset = self.txhashset.read();
-			//txhashset.roots().validate(&self.archive_header)?;
+			let txhashset = self.txhashset.read();
+			txhashset.roots().validate(&self.archive_header)?;
 		}
 
 		// TODO: Keep track of this in the DB so we can pick up where we left off if needed

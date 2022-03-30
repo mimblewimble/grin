@@ -172,6 +172,17 @@ impl StateSync {
 					// All segments in, validate
 					if let Some(d) = desegmenter.read().as_ref() {
 						if d.check_progress(self.sync_state.clone()) {
+							if let Err(e) = d.check_update_leaf_set_state() {
+								error!("error updating PIBD leaf set: {}", e);
+								self.sync_state.update_pibd_progress(
+									false,
+									true,
+									0,
+									1,
+									&archive_header,
+								);
+								return false;
+							}
 							if let Err(e) = d.validate_complete_state(
 								self.sync_state.clone(),
 								stop_state.clone(),

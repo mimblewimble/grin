@@ -1363,6 +1363,18 @@ impl<'a> Extension<'a> {
 		Ok(1 + output_pos)
 	}
 
+	/// Once the PIBD set is downloaded, we need to ensure that the respective leaf sets
+	/// match the bitmap (particularly in the case of outputs being spent after a PIBD catch-up)
+	pub fn update_leaf_sets(&mut self, bitmap: &Bitmap) -> Result<(), Error> {
+		let flipped = bitmap.flip(0..bitmap.maximum().unwrap() as u64 + 1);
+		for spent_pmmr_index in flipped.iter() {
+			let pos0 = pmmr::insertion_to_pmmr_index(spent_pmmr_index.into());
+			self.output_pmmr.remove_from_leaf_set(pos0);
+			self.rproof_pmmr.remove_from_leaf_set(pos0);
+		}
+		Ok(())
+	}
+
 	/// Order and sort output segments and hashes, returning an array
 	/// of elements that can be applied in order to a pmmr
 	fn sort_pmmr_hashes_and_leaves(
@@ -1470,7 +1482,7 @@ impl<'a> Extension<'a> {
 					match pmmr_index {
 						Some(i) => {
 							if !self.bitmap_cache.contains(i as u32) {
-								self.output_pmmr.remove_from_leaf_set(pos0);
+								self.rproof_pmmr.remove_from_leaf_set(pos0);
 							}
 						}
 						None => {}
