@@ -1295,8 +1295,6 @@ impl<'a> Extension<'a> {
 				.leaf_idx_iter(BitmapAccumulator::chunk_start_idx(min_idx)),
 			size,
 		)
-		// TODO: will need to set bitmap cache here if it's ever needed
-		// outside of PIBD sync
 	}
 
 	/// Sets the bitmap accumulator (as received during PIBD sync)
@@ -1402,7 +1400,7 @@ impl<'a> Extension<'a> {
 	/// Apply an output segment to the output PMMR. must be called in order
 	/// Sort and apply hashes and leaves within a segment to output pmmr, skipping over
 	/// genesis position.
-	/// TODO NB: Would like to make this more generic but the hard casting of pmmrs
+	/// NB: Would like to make this more generic but the hard casting of pmmrs
 	/// held by this struct makes it awkward to do so
 
 	pub fn apply_output_segment(

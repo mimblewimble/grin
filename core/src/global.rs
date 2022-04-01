@@ -22,7 +22,8 @@ use crate::consensus::{
 	DMA_WINDOW, GRIN_BASE, INITIAL_DIFFICULTY, KERNEL_WEIGHT, MAX_BLOCK_WEIGHT, OUTPUT_WEIGHT,
 	PROOFSIZE, SECOND_POW_EDGE_BITS, STATE_SYNC_THRESHOLD,
 };
-use crate::core::block::HeaderVersion;
+use crate::core::block::{Block, HeaderVersion};
+use crate::genesis;
 use crate::pow::{
 	self, new_cuckaroo_ctx, new_cuckarood_ctx, new_cuckaroom_ctx, new_cuckarooz_ctx,
 	new_cuckatoo_ctx, no_cuckaroo_ctx, PoWContext, Proof,
@@ -199,6 +200,15 @@ pub fn get_chain_type() -> ChainTypes {
 		}
 		Some(chain_type) => chain_type,
 	})
+}
+
+/// Return genesis block for the active chain type
+pub fn get_genesis_block() -> Block {
+	match get_chain_type() {
+		ChainTypes::Mainnet => genesis::genesis_main(),
+		ChainTypes::Testnet => genesis::genesis_test(),
+		_ => genesis::genesis_dev(),
+	}
 }
 
 /// One time initialization of the global future time limit

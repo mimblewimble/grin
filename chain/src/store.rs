@@ -17,9 +17,9 @@
 use crate::core::consensus::HeaderDifficultyInfo;
 use crate::core::core::hash::{Hash, Hashed};
 use crate::core::core::{Block, BlockHeader, BlockSums};
+use crate::core::global;
 use crate::core::pow::Difficulty;
 use crate::core::ser::{DeserializationMode, ProtocolVersion, Readable, Writeable};
-use crate::core::{genesis, global, global::ChainTypes};
 use crate::linked_list::MultiIndex;
 use crate::types::{CommitPos, Tip};
 use crate::util::secp::pedersen::Commitment;
@@ -83,17 +83,9 @@ impl ChainStore {
 			"PIBD_HEAD".to_owned()
 		});
 
-		// todo: fix duplication in batch below
 		match res {
 			Ok(r) => Ok(r),
-			Err(_) => {
-				let gen = match global::get_chain_type() {
-					ChainTypes::Mainnet => genesis::genesis_main(),
-					ChainTypes::Testnet => genesis::genesis_test(),
-					_ => genesis::genesis_dev(),
-				};
-				Ok(Tip::from_header(&gen.header))
-			}
+			Err(_) => Ok(Tip::from_header(&global::get_genesis_block().header)),
 		}
 	}
 
