@@ -226,6 +226,9 @@ impl Chain {
 	/// Reset both head and header_head to the provided header.
 	/// Handles simple rewind and more complex fork scenarios.
 	/// Used by the reset_chain_head owner api endpoint.
+	/// Caller can choose not to rewind headers, which can be used
+	/// during PIBD scenarios where it's desirable to restart the PIBD process
+	/// without re-downloading the header chain
 	pub fn reset_chain_head<T: Into<Tip>>(
 		&self,
 		head: T,
@@ -266,7 +269,9 @@ impl Chain {
 		Ok(())
 	}
 
-	/// Reset prune lists (when PIBD resets)
+	/// Reset prune lists (when PIBD resets and rolls back the
+	/// entire chain, the prune list needs to be manually wiped
+	/// as it's currently not included as part of rewind)
 	pub fn reset_prune_lists(&self) -> Result<(), Error> {
 		let mut header_pmmr = self.header_pmmr.write();
 		let mut txhashset = self.txhashset.write();
@@ -917,8 +922,6 @@ impl Chain {
 			}
 		}
 
-		// TODO: (Check whether we can do this.. we *should* be able to modify this as the desegmenter
-		// is in flight and we cross a horizon boundary, but needs more thinking)
 		let desegmenter = self.init_desegmenter(archive_header)?;
 		let mut cache = self.pibd_desegmenter.write();
 		*cache = Some(desegmenter.clone());

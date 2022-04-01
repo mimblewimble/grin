@@ -139,7 +139,7 @@ impl Desegmenter {
 
 	/// Check progress, update status if needed, returns true if all required
 	/// segments are in place
-	pub fn check_progress(&self, status: Arc<SyncState>) -> bool {
+	pub fn check_progress(&self, status: Arc<SyncState>) -> Result<bool, Error> {
 		let mut latest_block_height = 0;
 
 		let local_output_mmr_size;
@@ -183,9 +183,9 @@ impl Desegmenter {
 
 			// TODO: Unwraps
 			let tip = Tip::from_header(&h);
-			let batch = self.store.batch().unwrap();
-			batch.save_pibd_head(&tip).unwrap();
-			batch.commit().unwrap();
+			let batch = self.store.batch()?;
+			batch.save_pibd_head(&tip)?;
+			batch.commit()?;
 
 			status.update_pibd_progress(
 				false,
@@ -200,11 +200,11 @@ impl Desegmenter {
 				&& self.bitmap_cache.is_some()
 			{
 				// All is complete
-				return true;
+				return Ok(true);
 			}
 		}
 
-		false
+		Ok(false)
 	}
 
 	/// Once the PIBD set is downloaded, we need to ensure that the respective leaf sets
@@ -223,11 +223,8 @@ impl Desegmenter {
 		Ok(())
 	}
 
-	/// TODO: This is largely copied from chain.rs txhashset_write and related functions,
-	/// the idea being that these will eventually be broken out to perform validation while
-	/// segments are still being downloaded and applied. Current validation logic is all tied up
-	/// around unzipping, so re-developing this logic separate from the txhashset version
-	/// will to allow this to happen more cleanly
+	/// This is largely copied from chain.rs txhashset_write and related functions,
+	/// the idea being that the txhashset version will eventually be removed
 	pub fn validate_complete_state(
 		&self,
 		status: Arc<SyncState>,
@@ -239,7 +236,7 @@ impl Desegmenter {
 			txhashset.roots().validate(&self.archive_header)?;
 		}
 
-		// TODO: Keep track of this in the DB so we can pick up where we left off if needed
+		// TODO: Possibly Keep track of this in the DB so we can pick up where we left off if needed
 		let last_rangeproof_validation_pos = 0;
 
 		// Validate kernel history
@@ -348,7 +345,7 @@ impl Desegmenter {
 			{
 				// Save the new head to the db and rebuild the header by height index.
 				let tip = Tip::from_header(&self.archive_header);
-				// TODO: Throw error
+
 				batch.save_body_head(&tip)?;
 
 				// Reset the body tail to the body head after a txhashset write
@@ -372,8 +369,7 @@ impl Desegmenter {
 	}
 
 	/// Apply next set of segments that are ready to be appended to their respective trees,
-	/// and kick off any validations that can happen. TODO: figure out where and how
-	/// this should be called considering any thread blocking implications
+	/// and kick off any validations that can happen.
 	pub fn apply_next_segments(&mut self) -> Result<(), Error> {
 		let next_bmp_idx = self.next_required_bitmap_segment_index();
 		if let Some(bmp_idx) = next_bmp_idx {
@@ -561,10 +557,6 @@ impl Desegmenter {
 
 	/// 'Finalize' the bitmap accumulator, storing an in-memory copy of the bitmap for
 	/// use in further validation and setting the accumulator on the underlying txhashset
-	/// TODO: Could be called automatically when we have the calculated number of
-	/// required segments for the archive header
-	/// TODO: Accumulator will likely need to be stored locally to deal with server
-	/// being shut down and restarted
 	pub fn finalize_bitmap(&mut self) -> Result<(), Error> {
 		trace!(
 			"pibd_desegmenter: finalizing and caching bitmap - accumulator root: {}",
@@ -628,58 +620,6 @@ impl Desegmenter {
 		{
 			self.bitmap_segment_cache.push(in_seg);
 		}
-	}
-
-	/// Apply a list of segments, in a single extension
-	pub fn _apply_segments(
-		&mut self,
-		output_segments: Vec<Segment<OutputIdentifier>>,
-		rp_segments: Vec<Segment<RangeProof>>,
-		kernel_segments: Vec<Segment<TxKernel>>,
-	) -> Result<(), Error> {
-		let t = self.txhashset.clone();
-		let s = self.store.clone();
-		let mut header_pmmr = self.header_pmmr.write();
-		let mut txhashset = t.write();
-		let mut batch = s.batch()?;
-		txhashset::extending(
-			&mut header_pmmr,
-			&mut txhashset,
-			&mut batch,
-			|ext, _batch| {
-				let extension = &mut ext.extension;
-				// outputs
-				for segment in output_segments {
-					let id = segment.identifier().idx;
-					if let Err(e) = extension.apply_output_segment(segment) {
-						debug!("pibd_desegmenter: applying output segment at idx {}", id);
-						error!("Error applying output segment {}, {}", id, e);
-						break;
-					}
-				}
-				for segment in rp_segments {
-					let id = segment.identifier().idx;
-					if let Err(e) = extension.apply_rangeproof_segment(segment) {
-						debug!(
-							"pibd_desegmenter: applying rangeproof segment at idx {}",
-							id
-						);
-						error!("Error applying rangeproof segment {}, {}", id, e);
-						break;
-					}
-				}
-				for segment in kernel_segments {
-					let id = segment.identifier().idx;
-					if let Err(e) = extension.apply_kernel_segment(segment) {
-						debug!("pibd_desegmenter: applying kernel segment at idx {}", id);
-						error!("Error applying kernel segment {}, {}", id, e);
-						break;
-					}
-				}
-				Ok(())
-			},
-		)?;
-		Ok(())
 	}
 
 	/// Whether our list already contains this bitmap segment
@@ -798,6 +738,8 @@ impl Desegmenter {
 		// Special case here. If the mmr size is 1, this is a fresh chain
 		// with naught but a humble genesis block. We need segment 0, (and
 		// also need to skip the genesis block when applying the segment)
+		// note this is implementation-specific, the code for creating
+		// a new chain creates the genesis block pmmr entries by default
 
 		let mut cur_segment_count = if local_output_mmr_size == 1 {
 			0
@@ -856,8 +798,6 @@ impl Desegmenter {
 	}
 
 	/// Whether our list already contains this rangeproof segment
-	/// TODO: Refactor all these similar functions, but will require some time
-	/// refining traits
 	fn has_rangeproof_segment_with_id(&self, seg_id: SegmentIdentifier) -> bool {
 		self.rangeproof_segment_cache
 			.iter()

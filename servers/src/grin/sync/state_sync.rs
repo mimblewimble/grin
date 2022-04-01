@@ -171,7 +171,7 @@ impl StateSync {
 					let desegmenter = self.chain.desegmenter(&archive_header).unwrap();
 					// All segments in, validate
 					if let Some(d) = desegmenter.read().as_ref() {
-						if d.check_progress(self.sync_state.clone()) {
+						if let Ok(true) = d.check_progress(self.sync_state.clone()) {
 							if let Err(e) = d.check_update_leaf_set_state() {
 								error!("error updating PIBD leaf set: {}", e);
 								self.sync_state.update_pibd_progress(
@@ -263,7 +263,7 @@ impl StateSync {
 		// requests we want to send to peers
 		let mut next_segment_ids = vec![];
 		if let Some(d) = desegmenter.write().as_mut() {
-			if d.check_progress(self.sync_state.clone()) {
+			if let Ok(true) = d.check_progress(self.sync_state.clone()) {
 				return true;
 			}
 			// Figure out the next segments we need
