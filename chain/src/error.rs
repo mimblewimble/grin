@@ -157,6 +157,10 @@ pub enum ErrorKind {
 	/// PIBD segment related error
 	#[fail(display = "Segment error")]
 	SegmentError(segment::SegmentError),
+	/// We've decided to halt the PIBD process due to lack of supporting peers or
+	/// otherwise failing to progress for a certain amount of time
+	#[fail(display = "Aborting PIBD error")]
+	AbortingPIBDError,
 	/// The segmenter is associated to a different block header
 	#[fail(display = "Segmenter header mismatch")]
 	SegmenterHeaderMismatch,

@@ -15,6 +15,7 @@
 //! Base types that the block chain pipeline requires.
 
 use chrono::prelude::{DateTime, Utc};
+use chrono::Duration;
 
 use crate::core::core::hash::{Hash, Hashed, ZERO_HASH};
 use crate::core::core::{pmmr, Block, BlockHeader, HeaderVersion, SegmentTypeIdentifier};
@@ -176,7 +177,6 @@ pub struct SyncState {
 	/// but it's currently the only place that makes the info
 	/// available where it will be needed (both in the adapter
 	/// and the sync loop)
-	/// TODO: Better struct for this, perhaps hash identifiers
 	requested_pibd_segments: RwLock<Vec<PIBDSegmentContainer>>,
 }
 
@@ -291,11 +291,15 @@ impl SyncState {
 			.retain(|i| &i.identifier != id);
 	}
 
-	/// Remove segments with request timestamps less cutoff time
-	pub fn remove_stale_pibd_requests(&self, cutoff_time: DateTime<Utc>) {
-		self.requested_pibd_segments
-			.write()
-			.retain(|i| i.request_time < cutoff_time);
+	/// Remove segments with request timestamps less than cutoff time
+	pub fn remove_stale_pibd_requests(&self, timeout_seconds: i64) {
+		let cutoff_time = Utc::now() - Duration::seconds(timeout_seconds);
+		self.requested_pibd_segments.write().retain(|i| {
+			if i.request_time <= cutoff_time {
+				debug!("Removing + retrying PIBD request after timeout: {:?}", i)
+			};
+			i.request_time > cutoff_time
+		});
 	}
 
 	/// Check whether segment is in request list
