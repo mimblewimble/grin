@@ -413,7 +413,6 @@ impl BitmapBlock {
 impl Writeable for BitmapBlock {
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
 		let length = self.inner.len();
-
 		assert!(length <= Self::NBITS as usize);
 		assert_eq!(length % BitmapChunk::LEN_BITS, 0);
 		writer.write_u8((length / BitmapChunk::LEN_BITS) as u8)?;
@@ -478,12 +477,9 @@ impl Readable for BitmapBlock {
 				inner
 			}
 			BitmapBlockSerialization::Negative => {
-				// Bug fix adjustment, sender is sending the wrong length
-
 				// Negative indices
 				let mut inner = BitVec::from_elem(n_bits, true);
 				let n = reader.read_u16()?;
-
 				for _ in 0..n {
 					inner.set(reader.read_u16()? as usize, false);
 				}
