@@ -389,6 +389,8 @@ bitflags! {
 		const TX_KERNEL_HASH = 0b0000_1000;
 		/// Can provide PIBD segments during initial byte download (fast sync).
 		const PIBD_HIST = 0b0001_0000;
+		/// As above, with crucial serialization fix #3705 applied
+		const PIBD_HIST_1 = 0b0001_0001;
 		/// Can provide historical blocks for archival sync.
 		const BLOCK_HIST = 0b0010_0000;
 	}
@@ -402,6 +404,7 @@ impl Default for Capabilities {
 			| Capabilities::PEER_LIST
 			| Capabilities::TX_KERNEL_HASH
 			| Capabilities::PIBD_HIST
+			| Capabilities::PIBD_HIST_1
 	}
 }
 

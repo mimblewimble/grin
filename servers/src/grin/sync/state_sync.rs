@@ -305,10 +305,10 @@ impl StateSync {
 			let max_diff = peers_iter().max_difficulty().unwrap_or(Difficulty::zero());
 			let peers_iter_max = || peers_iter().with_difficulty(|x| x >= max_diff);
 
-			// Then, further filter by PIBD capabilities
+			// Then, further filter by PIBD capabilities v1
 			let peers_iter_pibd = || {
 				peers_iter_max()
-					.with_capabilities(Capabilities::PIBD_HIST)
+					.with_capabilities(Capabilities::PIBD_HIST_1)
 					.connected()
 			};
 

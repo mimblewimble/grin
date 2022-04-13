@@ -421,6 +421,8 @@ impl Writeable for BitmapBlock {
 		let count_pos = self.inner.iter().filter(|&v| v).count() as u32;
 		let count_neg = Self::NBITS - count_pos;
 
+		// Negative count needs to be adjusted if the block is not full,
+		// which affects the choice of serialization mode and size written
 		let count_neg_adjust = Self::NBITS - length as u32;
 		let count_neg = count_neg - count_neg_adjust;
 
