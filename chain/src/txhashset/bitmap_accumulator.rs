@@ -418,12 +418,10 @@ impl Writeable for BitmapBlock {
 		writer.write_u8((length / BitmapChunk::LEN_BITS) as u8)?;
 
 		let count_pos = self.inner.iter().filter(|&v| v).count() as u32;
-		let count_neg = Self::NBITS - count_pos;
 
 		// Negative count needs to be adjusted if the block is not full,
 		// which affects the choice of serialization mode and size written
-		let count_neg_adjust = Self::NBITS - length as u32;
-		let count_neg = count_neg - count_neg_adjust;
+		let count_neg = length as u32 - count_pos;
 
 		let threshold = Self::NBITS / 16;
 		if count_pos < threshold {

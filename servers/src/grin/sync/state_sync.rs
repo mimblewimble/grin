@@ -335,10 +335,10 @@ impl StateSync {
 			}
 
 			// Choose a random "most work" peer, preferring outbound if at all possible.
-			let peer = peers_iter_pibd().outbound().choose_random().or_else(|| {
-				warn!("no suitable outbound peer for pibd message, considering inbound");
-				peers_iter_pibd().inbound().choose_random()
-			});
+			let peer = peers_iter_pibd()
+				.outbound()
+				.choose_random()
+				.or_else(|| peers_iter_pibd().inbound().choose_random());
 			trace!("Chosen peer is {:?}", peer);
 
 			if let Some(p) = peer {
