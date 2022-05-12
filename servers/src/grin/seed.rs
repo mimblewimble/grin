@@ -33,8 +33,8 @@ use crate::p2p::types::PeerAddr;
 use crate::p2p::ChainAdapter;
 use crate::util::StopState;
 
-// DNS Seeds with contact email associated
-const MAINNET_DNS_SEEDS: &[&str] = &[
+/// DNS Seeds with contact email associated - Mainnet
+pub const MAINNET_DNS_SEEDS: &[&str] = &[
 	"mainnet.seed.grin.icu",           // gary.peverell@protonmail.com
 	"mainnet.seed.713.mw",             // jasper@713.mw
 	"mainnet.seed.grin.lesceller.com", // q.lesceller@gmail.com
@@ -42,7 +42,8 @@ const MAINNET_DNS_SEEDS: &[&str] = &[
 	"grinseed.yeastplume.org",         // yeastplume@protonmail.com
 	"mainnet-seed.grinnode.live",      // info@grinnode.live
 ];
-const TESTNET_DNS_SEEDS: &[&str] = &[
+/// DNS Seeds with contact email associated - Testnet
+pub const TESTNET_DNS_SEEDS: &[&str] = &[
 	"floonet.seed.grin.icu",           // gary.peverell@protonmail.com
 	"floonet.seed.713.mw",             // jasper@713.mw
 	"floonet.seed.grin.lesceller.com", // q.lesceller@gmail.com
@@ -393,7 +394,8 @@ pub fn default_dns_seeds() -> Box<dyn Fn() -> Vec<PeerAddr> + Send> {
 	})
 }
 
-fn resolve_dns_to_addrs(dns_records: &Vec<String>) -> Vec<PeerAddr> {
+/// Convenience function to resolve dns addresses from DNS records
+pub fn resolve_dns_to_addrs(dns_records: &Vec<String>) -> Vec<PeerAddr> {
 	let mut addresses: Vec<PeerAddr> = vec![];
 	for dns in dns_records {
 		debug!("Retrieving addresses from dns {}", dns);
