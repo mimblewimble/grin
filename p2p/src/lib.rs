@@ -44,7 +44,7 @@ mod peer;
 mod peers;
 mod protocol;
 mod serv;
-mod store;
+pub mod store;
 pub mod types;
 
 pub use crate::conn::SEND_CHANNEL_CAP;
