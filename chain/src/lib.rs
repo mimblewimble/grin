@@ -38,6 +38,7 @@ use grin_util as util;
 mod chain;
 mod error;
 pub mod linked_list;
+pub mod pibd_params;
 pub mod pipe;
 pub mod store;
 pub mod txhashset;

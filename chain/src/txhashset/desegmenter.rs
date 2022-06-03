@@ -30,6 +30,7 @@ use crate::util::secp::pedersen::RangeProof;
 use crate::util::{RwLock, StopState};
 use crate::SyncState;
 
+use crate::pibd_params;
 use crate::store;
 use crate::txhashset;
 
@@ -86,10 +87,10 @@ impl Desegmenter {
 			store,
 			genesis,
 			bitmap_accumulator: BitmapAccumulator::new(),
-			default_bitmap_segment_height: 9,
-			default_output_segment_height: 11,
-			default_rangeproof_segment_height: 11,
-			default_kernel_segment_height: 11,
+			default_bitmap_segment_height: pibd_params::BITMAP_SEGMENT_HEIGHT,
+			default_output_segment_height: pibd_params::OUTPUT_SEGMENT_HEIGHT,
+			default_rangeproof_segment_height: pibd_params::RANGEPROOF_SEGMENT_HEIGHT,
+			default_kernel_segment_height: pibd_params::KERNEL_SEGMENT_HEIGHT,
 			bitmap_segment_cache: vec![],
 			output_segment_cache: vec![],
 			rangeproof_segment_cache: vec![],
@@ -98,7 +99,7 @@ impl Desegmenter {
 			bitmap_mmr_leaf_count: 0,
 			bitmap_mmr_size: 0,
 
-			max_cached_segments: 15,
+			max_cached_segments: pibd_params::MAX_CACHED_SEGMENTS,
 
 			bitmap_cache: None,
 
