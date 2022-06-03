@@ -16,7 +16,7 @@ use chrono::prelude::{DateTime, Utc};
 use chrono::Duration;
 use std::sync::Arc;
 
-use crate::chain::{self, SyncState, SyncStatus};
+use crate::chain::{self, pibd_params, SyncState, SyncStatus};
 use crate::core::core::{hash::Hashed, pmmr::segment::SegmentType};
 use crate::core::global;
 use crate::core::pow::Difficulty;
@@ -260,7 +260,8 @@ impl StateSync {
 
 		// Remove stale requests, if we haven't recieved the segment within a minute re-request
 		// TODO: verify timing
-		self.sync_state.remove_stale_pibd_requests(60);
+		self.sync_state
+			.remove_stale_pibd_requests(pibd_params::SEGMENT_REQUEST_TIMEOUT_SECS);
 
 		// Apply segments... TODO: figure out how this should be called, might
 		// need to be a separate thread.
@@ -286,7 +287,7 @@ impl StateSync {
 			// Figure out the next segments we need
 			// (12 is divisible by 3, to try and evenly spread the requests among the 3
 			// main pmmrs. Bitmaps segments will always be requested first)
-			next_segment_ids = d.next_desired_segments(15);
+			next_segment_ids = d.next_desired_segments(pibd_params::SEGMENT_REQUEST_COUNT);
 		}
 
 		// For each segment, pick a desirable peer and send message
@@ -320,9 +321,12 @@ impl StateSync {
 				if let None = self.earliest_zero_pibd_peer_time {
 					self.set_earliest_zero_pibd_peer_time(Some(Utc::now()));
 				}
-				if self.earliest_zero_pibd_peer_time.unwrap() + Duration::seconds(60) < Utc::now() {
+				if self.earliest_zero_pibd_peer_time.unwrap()
+					+ Duration::seconds(pibd_params::TXHASHSET_ZIP_FALLBACK_TIME_SECS)
+					< Utc::now()
+				{
 					// random abort test
-					info!("No PIBD-enabled max-difficulty peers for the past minute - Aborting PIBD and falling back to TxHashset.zip download");
+					info!("No PIBD-enabled max-difficulty peers for the past {} seconds - Aborting PIBD and falling back to TxHashset.zip download", pibd_params::TXHASHSET_ZIP_FALLBACK_TIME_SECS);
 					self.sync_state
 						.update_pibd_progress(true, true, 0, 1, &archive_header);
 					self.sync_state
