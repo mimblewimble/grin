@@ -28,13 +28,15 @@ The development team will be happy to help and guide you with any of these point
 
 When you are starting to contribute to grin, we really would appreciate if you come by the gitter chat channels.
 
-In case of problems with trying out grin, before starting to contribute, there's the [Support chat](https://gitter.im/grin_community/support). Write there about what you've done, what you want to do, and maybe paste logs through a text paste webservice.
+In case of problems with trying out grin, before starting to contribute, there's the [grincoin#support](https://keybase.io/team/grincoin) on Keybase. Write there about what you've done, what you want to do, and maybe paste logs through a text paste webservice.
 
-* Please [join the grin Lobby](https://gitter.im/grin_community/Lobby) to get a feeling for the community.
-* And [see the developers chat](https://gitter.im/grin_community/dev) if you have questions about source code files.
+* Please [join the grincoin#general  on Keybase](https://keybase.io/team/grincoin) to get a feeling for the community.
+* And see the developers [ grincoin#dev  on Keybase](https://keybase.io/team/grincoin) if you have questions about source code files.
   If you explain what you're looking at and what you want to do, we'll try to help you along the way.
-* Also see `docs/*.md` and the folder structure explanations, and [the wiki](https://github.com/mimblewimble/docs/wiki).
-* Further information and discussions are in the [Forum](https://forum.grin.mw), the [website](https://grin.mw), the [mailing list](https://lists.launchpad.net/mimblewimble/) and news channels like the [@grincouncil](https://twitter.com/grincouncil) and a (mostly unfiltered!) Twitter bot that collects headlines, mailing list posts, and reddit posts related to Mimblewimble/Grin: [@grinmw](https://twitter.com/grinmw)
+* See `docs/*.md` and the folder structure explanations, and [the wiki](https://github.com/mimblewimble/docs/wiki).
+
+* Also visit [Grin Docs and Resources]( https://docs.grin.mw/  ) for understanding and getting started Grin. 
+* Further information and discussions are in the [Forum](https://forum.grin.mw), the [website](https://grin.mw), the [mailing list](https://lists.launchpad.net/mimblewimble/) and news channels like the [Reddit/grincoin](https://www.reddit.com/r/grincoin/) and a (mostly unfiltered!) Twitter bot that collects headlines, mailing list posts, and reddit posts related to Mimblewimble/Grin: [@grinmw](https://twitter.com/grinmw)
 
 ## Testing
 
