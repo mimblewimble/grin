@@ -14,9 +14,8 @@
 
 //! High level JSON/HTTP client API
 
-use crate::rest::{Error, ErrorKind};
+use crate::rest::Error;
 use crate::util::to_base64;
-use failure::{Fail, ResultExt};
 use hyper::body;
 use hyper::header::{ACCEPT, AUTHORIZATION, CONTENT_TYPE, USER_AGENT};
 use hyper::{Body, Client, Request};
@@ -181,9 +180,7 @@ fn build_request(
 			None => Body::empty(),
 			Some(json) => json.into(),
 		})
-		.map_err(|e| {
-			ErrorKind::RequestError(format!("Bad request {} {}: {}", method, url, e)).into()
-		})
+		.map_err(|e| Error::RequestError(format!("Bad request {} {}: {}", method, url, e)))
 }
 
 pub fn create_post_request<IN>(
@@ -194,9 +191,8 @@ pub fn create_post_request<IN>(
 where
 	IN: Serialize,
 {
-	let json = serde_json::to_string(input).context(ErrorKind::Internal(
-		"Could not serialize data to JSON".to_owned(),
-	))?;
+	let json = serde_json::to_string(input)
+		.map_err(|e| Error::Internal(format!("Could not serialize data to JSON: {}", e)))?;
 	build_request(url, "POST", api_secret, Some(json))
 }
 
@@ -205,10 +201,8 @@ where
 	for<'de> T: Deserialize<'de>,
 {
 	let data = send_request(req, timeout)?;
-	serde_json::from_str(&data).map_err(|e| {
-		e.context(ErrorKind::ResponseError("Cannot parse response".to_owned()))
-			.into()
-	})
+	serde_json::from_str(&data)
+		.map_err(|e| Error::ResponseError(format!("Cannot parse response {}", e)))
 }
 
 async fn handle_request_async<T>(req: Request<Body>) -> Result<T, Error>
@@ -217,7 +211,7 @@ where
 {
 	let data = send_request_async(req, TimeOut::default()).await?;
 	let ser = serde_json::from_str(&data)
-		.map_err(|e| e.context(ErrorKind::ResponseError("Cannot parse response".to_owned())))?;
+		.map_err(|e| Error::ResponseError(format!("Cannot parse response {}", e)))?;
 	Ok(ser)
 }
 
@@ -237,10 +231,10 @@ async fn send_request_async(req: Request<Body>, timeout: TimeOut) -> Result<Stri
 	let resp = client
 		.request(req)
 		.await
-		.map_err(|e| ErrorKind::RequestError(format!("Cannot make request: {}", e)))?;
+		.map_err(|e| Error::RequestError(format!("Cannot make request: {}", e)))?;
 
 	if !resp.status().is_success() {
-		return Err(ErrorKind::RequestError(format!(
+		return Err(Error::RequestError(format!(
 			"Wrong response code: {} with data {:?}",
 			resp.status(),
 			resp.body()
@@ -250,7 +244,7 @@ async fn send_request_async(req: Request<Body>, timeout: TimeOut) -> Result<Stri
 
 	let raw = body::to_bytes(resp)
 		.await
-		.map_err(|e| ErrorKind::RequestError(format!("Cannot read response body: {}", e)))?;
+		.map_err(|e| Error::RequestError(format!("Cannot read response body: {}", e)))?;
 
 	Ok(String::from_utf8_lossy(&raw).to_string())
 }
@@ -260,6 +254,6 @@ pub fn send_request(req: Request<Body>, timeout: TimeOut) -> Result<String, Erro
 		.basic_scheduler()
 		.enable_all()
 		.build()
-		.map_err(|e| ErrorKind::RequestError(format!("{}", e)))?;
+		.map_err(|e| Error::RequestError(format!("{}", e)))?;
 	rt.block_on(send_request_async(req, timeout))
 }

@@ -14,26 +14,25 @@
 
 //! The Committed trait and associated errors.
 
-use failure::Fail;
 use keychain::BlindingFactor;
 use util::secp::key::SecretKey;
 use util::secp::pedersen::Commitment;
 use util::{secp, secp_static, static_secp_instance};
 
 /// Errors from summing and verifying kernel excesses via committed trait.
-#[derive(Debug, Clone, PartialEq, Eq, Fail, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error, Serialize, Deserialize)]
 pub enum Error {
 	/// Keychain related error.
-	#[fail(display = "Keychain error {}", _0)]
+	#[error("Keychain error {0}")]
 	Keychain(keychain::Error),
 	/// Secp related error.
-	#[fail(display = "Secp error {}", _0)]
+	#[error("Secp error {0}")]
 	Secp(secp::Error),
 	/// Kernel sums do not equal output sums.
-	#[fail(display = "Kernel sum mismatch")]
+	#[error("Kernel sum mismatch")]
 	KernelSumMismatch,
 	/// Committed overage (fee or reward) is invalid
-	#[fail(display = "Invalid value")]
+	#[error("Invalid value")]
 	InvalidValue,
 }
 

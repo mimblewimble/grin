@@ -19,7 +19,7 @@ use crate::core::core::transaction::Transaction;
 use crate::foreign::Foreign;
 use crate::pool::PoolEntry;
 use crate::pool::{BlockChain, PoolAdapter};
-use crate::rest::ErrorKind;
+use crate::rest::Error;
 use crate::types::{
 	BlockHeaderPrintable, BlockPrintable, LocatedTxKernel, OutputListing, OutputPrintable, Tip,
 	Version,
@@ -126,7 +126,7 @@ pub trait ForeignRpc: Sync + Send {
 		height: Option<u64>,
 		hash: Option<String>,
 		commit: Option<String>,
-	) -> Result<BlockHeaderPrintable, ErrorKind>;
+	) -> Result<BlockHeaderPrintable, Error>;
 
 	/**
 	Networked version of [Foreign::get_block](struct.Foreign.html#method.get_block).
@@ -244,7 +244,7 @@ pub trait ForeignRpc: Sync + Send {
 		height: Option<u64>,
 		hash: Option<String>,
 		commit: Option<String>,
-	) -> Result<BlockPrintable, ErrorKind>;
+	) -> Result<BlockPrintable, Error>;
 
 	/**
 	Networked version of [Foreign::get_version](struct.Foreign.html#method.get_version).
@@ -277,7 +277,7 @@ pub trait ForeignRpc: Sync + Send {
 	# );
 	```
 	 */
-	fn get_version(&self) -> Result<Version, ErrorKind>;
+	fn get_version(&self) -> Result<Version, Error>;
 
 	/**
 	Networked version of [Foreign::get_tip](struct.Foreign.html#method.get_tip).
@@ -312,7 +312,7 @@ pub trait ForeignRpc: Sync + Send {
 	# );
 	```
 	 */
-	fn get_tip(&self) -> Result<Tip, ErrorKind>;
+	fn get_tip(&self) -> Result<Tip, Error>;
 
 	/**
 	Networked version of [Foreign::get_kernel](struct.Foreign.html#method.get_kernel).
@@ -355,7 +355,7 @@ pub trait ForeignRpc: Sync + Send {
 		excess: String,
 		min_height: Option<u64>,
 		max_height: Option<u64>,
-	) -> Result<LocatedTxKernel, ErrorKind>;
+	) -> Result<LocatedTxKernel, Error>;
 
 	/**
 	Networked version of [Foreign::get_outputs](struct.Foreign.html#method.get_outputs).
@@ -442,7 +442,7 @@ pub trait ForeignRpc: Sync + Send {
 		end_height: Option<u64>,
 		include_proof: Option<bool>,
 		include_merkle_proof: Option<bool>,
-	) -> Result<Vec<OutputPrintable>, ErrorKind>;
+	) -> Result<Vec<OutputPrintable>, Error>;
 
 	/**
 	Networked version of [Foreign::get_unspent_outputs](struct.Foreign.html#method.get_unspent_outputs).
@@ -503,7 +503,7 @@ pub trait ForeignRpc: Sync + Send {
 		end_index: Option<u64>,
 		max: u64,
 		include_proof: Option<bool>,
-	) -> Result<OutputListing, ErrorKind>;
+	) -> Result<OutputListing, Error>;
 
 	/**
 	Networked version of [Foreign::get_pmmr_indices](struct.Foreign.html#method.get_pmmr_indices).
@@ -540,7 +540,7 @@ pub trait ForeignRpc: Sync + Send {
 		&self,
 		start_block_height: u64,
 		end_block_height: Option<u64>,
-	) -> Result<OutputListing, ErrorKind>;
+	) -> Result<OutputListing, Error>;
 
 	/**
 	Networked version of [Foreign::get_pool_size](struct.Foreign.html#method.get_pool_size).
@@ -570,7 +570,7 @@ pub trait ForeignRpc: Sync + Send {
 	# );
 	```
 	 */
-	fn get_pool_size(&self) -> Result<usize, ErrorKind>;
+	fn get_pool_size(&self) -> Result<usize, Error>;
 
 	/**
 	Networked version of [Foreign::get_stempool_size](struct.Foreign.html#method.get_stempool_size).
@@ -600,7 +600,7 @@ pub trait ForeignRpc: Sync + Send {
 	# );
 	```
 	 */
-	fn get_stempool_size(&self) -> Result<usize, ErrorKind>;
+	fn get_stempool_size(&self) -> Result<usize, Error>;
 
 	/**
 	Networked version of [Foreign::get_unconfirmed_transactions](struct.Foreign.html#method.get_unconfirmed_transactions).
@@ -673,7 +673,7 @@ pub trait ForeignRpc: Sync + Send {
 	# );
 	```
 	 */
-	fn get_unconfirmed_transactions(&self) -> Result<Vec<PoolEntry>, ErrorKind>;
+	fn get_unconfirmed_transactions(&self) -> Result<Vec<PoolEntry>, Error>;
 
 	/**
 	Networked version of [Foreign::push_transaction](struct.Foreign.html#method.push_transaction).
@@ -738,7 +738,7 @@ pub trait ForeignRpc: Sync + Send {
 	# );
 	```
 	 */
-	fn push_transaction(&self, tx: Transaction, fluff: Option<bool>) -> Result<(), ErrorKind>;
+	fn push_transaction(&self, tx: Transaction, fluff: Option<bool>) -> Result<(), Error>;
 }
 
 impl<B, P> ForeignRpc for Foreign<B, P>
@@ -751,36 +751,36 @@ where
 		height: Option<u64>,
 		hash: Option<String>,
 		commit: Option<String>,
-	) -> Result<BlockHeaderPrintable, ErrorKind> {
+	) -> Result<BlockHeaderPrintable, Error> {
 		let mut parsed_hash: Option<Hash> = None;
 		if let Some(hash) = hash {
 			let vec = util::from_hex(&hash)
-				.map_err(|e| ErrorKind::Argument(format!("invalid block hash: {}", e)))?;
+				.map_err(|e| Error::Argument(format!("invalid block hash: {}", e)))?;
 			parsed_hash = Some(Hash::from_vec(&vec));
 		}
-		Foreign::get_header(self, height, parsed_hash, commit).map_err(|e| e.kind().clone())
+		Foreign::get_header(self, height, parsed_hash, commit)
 	}
 	fn get_block(
 		&self,
 		height: Option<u64>,
 		hash: Option<String>,
 		commit: Option<String>,
-	) -> Result<BlockPrintable, ErrorKind> {
+	) -> Result<BlockPrintable, Error> {
 		let mut parsed_hash: Option<Hash> = None;
 		if let Some(hash) = hash {
 			let vec = util::from_hex(&hash)
-				.map_err(|e| ErrorKind::Argument(format!("invalid block hash: {}", e)))?;
+				.map_err(|e| Error::Argument(format!("invalid block hash: {}", e)))?;
 			parsed_hash = Some(Hash::from_vec(&vec));
 		}
-		Foreign::get_block(self, height, parsed_hash, commit).map_err(|e| e.kind().clone())
+		Foreign::get_block(self, height, parsed_hash, commit)
 	}
 
-	fn get_version(&self) -> Result<Version, ErrorKind> {
-		Foreign::get_version(self).map_err(|e| e.kind().clone())
+	fn get_version(&self) -> Result<Version, Error> {
+		Foreign::get_version(self)
 	}
 
-	fn get_tip(&self) -> Result<Tip, ErrorKind> {
-		Foreign::get_tip(self).map_err(|e| e.kind().clone())
+	fn get_tip(&self) -> Result<Tip, Error> {
+		Foreign::get_tip(self)
 	}
 
 	fn get_kernel(
@@ -788,8 +788,8 @@ where
 		excess: String,
 		min_height: Option<u64>,
 		max_height: Option<u64>,
-	) -> Result<LocatedTxKernel, ErrorKind> {
-		Foreign::get_kernel(self, excess, min_height, max_height).map_err(|e| e.kind().clone())
+	) -> Result<LocatedTxKernel, Error> {
+		Foreign::get_kernel(self, excess, min_height, max_height)
 	}
 
 	fn get_outputs(
@@ -799,7 +799,7 @@ where
 		end_height: Option<u64>,
 		include_proof: Option<bool>,
 		include_merkle_proof: Option<bool>,
-	) -> Result<Vec<OutputPrintable>, ErrorKind> {
+	) -> Result<Vec<OutputPrintable>, Error> {
 		Foreign::get_outputs(
 			self,
 			commits,
@@ -808,7 +808,6 @@ where
 			include_proof,
 			include_merkle_proof,
 		)
-		.map_err(|e| e.kind().clone())
 	}
 
 	fn get_unspent_outputs(
@@ -817,33 +816,31 @@ where
 		end_index: Option<u64>,
 		max: u64,
 		include_proof: Option<bool>,
-	) -> Result<OutputListing, ErrorKind> {
+	) -> Result<OutputListing, Error> {
 		Foreign::get_unspent_outputs(self, start_index, end_index, max, include_proof)
-			.map_err(|e| e.kind().clone())
 	}
 
 	fn get_pmmr_indices(
 		&self,
 		start_block_height: u64,
 		end_block_height: Option<u64>,
-	) -> Result<OutputListing, ErrorKind> {
+	) -> Result<OutputListing, Error> {
 		Foreign::get_pmmr_indices(self, start_block_height, end_block_height)
-			.map_err(|e| e.kind().clone())
 	}
 
-	fn get_pool_size(&self) -> Result<usize, ErrorKind> {
-		Foreign::get_pool_size(self).map_err(|e| e.kind().clone())
+	fn get_pool_size(&self) -> Result<usize, Error> {
+		Foreign::get_pool_size(self)
 	}
 
-	fn get_stempool_size(&self) -> Result<usize, ErrorKind> {
-		Foreign::get_stempool_size(self).map_err(|e| e.kind().clone())
+	fn get_stempool_size(&self) -> Result<usize, Error> {
+		Foreign::get_stempool_size(self)
 	}
 
-	fn get_unconfirmed_transactions(&self) -> Result<Vec<PoolEntry>, ErrorKind> {
-		Foreign::get_unconfirmed_transactions(self).map_err(|e| e.kind().clone())
+	fn get_unconfirmed_transactions(&self) -> Result<Vec<PoolEntry>, Error> {
+		Foreign::get_unconfirmed_transactions(self)
 	}
-	fn push_transaction(&self, tx: Transaction, fluff: Option<bool>) -> Result<(), ErrorKind> {
-		Foreign::push_transaction(self, tx, fluff).map_err(|e| e.kind().clone())
+	fn push_transaction(&self, tx: Transaction, fluff: Option<bool>) -> Result<(), Error> {
+		Foreign::push_transaction(self, tx, fluff)
 	}
 }
 
@@ -854,7 +851,7 @@ macro_rules! doctest_helper_json_rpc_foreign_assert_response {
 		// create temporary grin server, run jsonrpc request on node api, delete server, return
 		// json response.
 
-			{
+		{
 			/*use grin_servers::test_framework::framework::run_doctest;
 			use grin_util as util;
 			use serde_json;
@@ -888,6 +885,6 @@ macro_rules! doctest_helper_json_rpc_foreign_assert_response {
 					serde_json::to_string_pretty(&expected_response).unwrap()
 				);
 				}*/
-			}
+		}
 	};
 }

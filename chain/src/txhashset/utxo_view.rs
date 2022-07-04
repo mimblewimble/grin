@@ -18,7 +18,7 @@ use crate::core::core::hash::{Hash, Hashed};
 use crate::core::core::pmmr::{self, ReadablePMMR, ReadonlyPMMR};
 use crate::core::core::{Block, BlockHeader, Inputs, Output, OutputIdentifier, Transaction};
 use crate::core::global;
-use crate::error::{Error, ErrorKind};
+use crate::error::Error;
 use crate::store::Batch;
 use crate::types::CommitPos;
 use crate::util::secp::pedersen::{Commitment, RangeProof};
@@ -104,7 +104,7 @@ impl<'a> UTXOView<'a> {
 									Ok((out, pos))
 								} else {
 									error!("input mismatch: {:?}, {:?}, {:?}", out, pos, input);
-									Err(ErrorKind::Other("input mismatch".into()).into())
+									Err(Error::Other("input mismatch".into()))
 								}
 							})
 					})
@@ -129,14 +129,13 @@ impl<'a> UTXOView<'a> {
 					return Ok((out, pos1));
 				} else {
 					error!("input mismatch: {:?}, {:?}, {:?}", out, pos1, input);
-					return Err(ErrorKind::Other(
+					return Err(Error::Other(
 						"input mismatch (output_pos index mismatch?)".into(),
-					)
-					.into());
+					));
 				}
 			}
 		}
-		Err(ErrorKind::AlreadySpent(input).into())
+		Err(Error::AlreadySpent(input))
 	}
 
 	// Output is valid if it would not result in a duplicate commitment in the output MMR.
@@ -144,7 +143,7 @@ impl<'a> UTXOView<'a> {
 		if let Ok(pos0) = batch.get_output_pos(&output.commitment()) {
 			if let Some(out_mmr) = self.output_pmmr.get_data(pos0) {
 				if out_mmr.commitment() == output.commitment() {
-					return Err(ErrorKind::DuplicateCommitment(output.commitment()).into());
+					return Err(Error::DuplicateCommitment(output.commitment()));
 				}
 			}
 		}
@@ -156,9 +155,9 @@ impl<'a> UTXOView<'a> {
 		match self.output_pmmr.get_data(pos0) {
 			Some(output_id) => match self.rproof_pmmr.get_data(pos0) {
 				Some(rproof) => Ok(output_id.into_output(rproof)),
-				None => Err(ErrorKind::RangeproofNotFound.into()),
+				None => Err(Error::RangeproofNotFound),
 			},
-			None => Err(ErrorKind::OutputNotFound.into()),
+			None => Err(Error::OutputNotFound),
 		}
 	}
 
@@ -194,7 +193,7 @@ impl<'a> UTXOView<'a> {
 			// If we have not yet reached 1440 blocks then
 			// we can fail immediately as coinbase cannot be mature.
 			if height < global::coinbase_maturity() {
-				return Err(ErrorKind::ImmatureCoinbase.into());
+				return Err(Error::ImmatureCoinbase);
 			}
 
 			// Find the "cutoff" pos in the output MMR based on the
@@ -206,7 +205,7 @@ impl<'a> UTXOView<'a> {
 			// If any output pos exceed the cutoff_pos
 			// we know they have not yet sufficiently matured.
 			if pos > cutoff_pos {
-				return Err(ErrorKind::ImmatureCoinbase.into());
+				return Err(Error::ImmatureCoinbase);
 			}
 		}
 
@@ -231,7 +230,7 @@ impl<'a> UTXOView<'a> {
 			let header = batch.get_block_header(&hash)?;
 			Ok(header)
 		} else {
-			Err(ErrorKind::Other("get header by height".to_string()).into())
+			Err(Error::Other("get header by height".to_string()))
 		}
 	}
 }

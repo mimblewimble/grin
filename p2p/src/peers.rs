@@ -501,11 +501,7 @@ impl ChainAdapter for Peers {
 				hash, peer_info.addr,
 			);
 			self.ban_peer(peer_info.addr, ReasonForBan::BadBlock)
-				.map_err(|e| {
-					let err: chain::Error =
-						chain::ErrorKind::Other(format!("ban peer error :{:?}", e)).into();
-					err
-				})?;
+				.map_err(|e| chain::Error::Other(format!("ban peer error: {:?}", e)))?;
 			Ok(false)
 		} else {
 			Ok(true)
@@ -526,11 +522,7 @@ impl ChainAdapter for Peers {
 				hash, peer_info.addr
 			);
 			self.ban_peer(peer_info.addr, ReasonForBan::BadCompactBlock)
-				.map_err(|e| {
-					let err: chain::Error =
-						chain::ErrorKind::Other(format!("ban peer error :{:?}", e)).into();
-					err
-				})?;
+				.map_err(|e| chain::Error::Other(format!("ban peer error: {:?}", e)))?;
 			Ok(false)
 		} else {
 			Ok(true)
@@ -546,11 +538,7 @@ impl ChainAdapter for Peers {
 			// if the peer sent us a block header that's intrinsically bad
 			// they are either mistaken or malevolent, both of which require a ban
 			self.ban_peer(peer_info.addr, ReasonForBan::BadBlockHeader)
-				.map_err(|e| {
-					let err: chain::Error =
-						chain::ErrorKind::Other(format!("ban peer error :{:?}", e)).into();
-					err
-				})?;
+				.map_err(|e| chain::Error::Other(format!("ban peer error: {:?}", e)))?;
 			Ok(false)
 		} else {
 			Ok(true)
@@ -566,11 +554,7 @@ impl ChainAdapter for Peers {
 			// if the peer sent us a block header that's intrinsically bad
 			// they are either mistaken or malevolent, both of which require a ban
 			self.ban_peer(peer_info.addr, ReasonForBan::BadBlockHeader)
-				.map_err(|e| {
-					let err: chain::Error =
-						chain::ErrorKind::Other(format!("ban peer error :{:?}", e)).into();
-					err
-				})?;
+				.map_err(|e| chain::Error::Other(format!("ban peer error: {:?}", e)))?;
 			Ok(false)
 		} else {
 			Ok(true)
@@ -609,11 +593,7 @@ impl ChainAdapter for Peers {
 				peer_info.addr
 			);
 			self.ban_peer(peer_info.addr, ReasonForBan::BadTxHashSet)
-				.map_err(|e| {
-					let err: chain::Error =
-						chain::ErrorKind::Other(format!("ban peer error :{:?}", e)).into();
-					err
-				})?;
+				.map_err(|e| chain::Error::Other(format!("ban peer error: {:?}", e)))?;
 			Ok(true)
 		} else {
 			Ok(false)
