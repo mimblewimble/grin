@@ -3,15 +3,12 @@ name = "grin_core-fuzz"
 version = "0.0.3"
 authors = ["Grin Developers <mimblewimble@lists.launchpad.net>"]
 publish = false
-
-[package.metadata]
-cargo-fuzz = true
+edition = "2018"
 
 [dependencies]
+libfuzzer-sys = "0.4.0"
 grin_core = { path = ".."}
 grin_keychain = { path = "../../keychain"}
-[dependencies.libfuzzer-sys]
-git = "https://github.com/rust-fuzz/libfuzzer-sys.git"
 
 # Prevent this from interfering with workspaces
 [workspace]
