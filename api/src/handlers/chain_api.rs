@@ -103,9 +103,9 @@ pub struct ChainCompactHandler {
 
 impl ChainCompactHandler {
 	pub fn compact_chain(&self) -> Result<(), Error> {
-		w(&self.chain)?
-			.compact()
-			.map_err(|_| Error::Internal("chain error".to_owned()))
+		let chain = w(&self.chain)?;
+		chain.compact()?;
+		Ok(())
 	}
 }
 

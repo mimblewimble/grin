@@ -88,9 +88,8 @@ impl TLSConfig {
 	}
 
 	fn load_private_key(&self) -> Result<rustls::PrivateKey, Error> {
-		let keyfile = File::open(&self.private_key).map_err(|e| {
-			Error::Internal(format!("failed to open file {} {}", self.private_key, e))
-		})?;
+		let keyfile = File::open(&self.private_key)
+			.map_err(|e| Error::Internal(format!("failed to open private key file {}", e)))?;
 		let mut reader = io::BufReader::new(keyfile);
 
 		let keys = pemfile::pkcs8_private_keys(&mut reader)
