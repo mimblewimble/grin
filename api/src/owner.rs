@@ -112,8 +112,8 @@ impl Owner {
 	}
 
 	pub fn reset_chain_head(&self, hash: String) -> Result<(), Error> {
-		let hash = Hash::from_hex(&hash)
-			.map_err(|_| ErrorKind::RequestError("invalid header hash".into()))?;
+		let hash =
+			Hash::from_hex(&hash).map_err(|_| Error::RequestError("invalid header hash".into()))?;
 		let handler = ChainResetHandler {
 			chain: self.chain.clone(),
 			sync_state: self.sync_state.clone(),
@@ -122,8 +122,8 @@ impl Owner {
 	}
 
 	pub fn invalidate_header(&self, hash: String) -> Result<(), Error> {
-		let hash = Hash::from_hex(&hash)
-			.map_err(|_| ErrorKind::RequestError("invalid header hash".into()))?;
+		let hash =
+			Hash::from_hex(&hash).map_err(|_| Error::RequestError("invalid header hash".into()))?;
 		let handler = ChainResetHandler {
 			chain: self.chain.clone(),
 			sync_state: self.sync_state.clone(),

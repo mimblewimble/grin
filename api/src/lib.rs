@@ -20,8 +20,6 @@ use grin_pool as pool;
 use grin_util as util;
 
 #[macro_use]
-extern crate failure_derive;
-#[macro_use]
 extern crate lazy_static;
 
 #[macro_use]

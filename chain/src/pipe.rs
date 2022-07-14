@@ -22,7 +22,7 @@ use crate::core::core::{
 };
 use crate::core::global;
 use crate::core::pow;
-use crate::error::{Error, ErrorKind};
+use crate::error::Error;
 use crate::store;
 use crate::txhashset;
 use crate::types::{CommitPos, Options, Tip};
@@ -63,14 +63,14 @@ fn validate_pow_only(header: &BlockHeader, ctx: &mut BlockContext<'_>) -> Result
 		return Ok(());
 	}
 	if !header.pow.is_primary() && !header.pow.is_secondary() {
-		return Err(ErrorKind::LowEdgebits.into());
+		return Err(Error::LowEdgebits);
 	}
 	if (ctx.pow_verifier)(header).is_err() {
 		error!(
 			"pipe: error validating header with cuckoo edge_bits {}",
 			header.pow.edge_bits(),
 		);
-		return Err(ErrorKind::InvalidPow.into());
+		return Err(Error::InvalidPow);
 	}
 	Ok(())
 }
@@ -289,7 +289,7 @@ pub fn process_block_header(header: &BlockHeader, ctx: &mut BlockContext<'_>) ->
 fn check_known_head(header: &BlockHeader, head: &Tip) -> Result<(), Error> {
 	let bh = header.hash();
 	if bh == head.last_block_h || bh == head.prev_block_h {
-		return Err(ErrorKind::Unfit("already known in head".to_string()).into());
+		return Err(Error::Unfit("already known in head".to_string()));
 	}
 	Ok(())
 }
@@ -306,16 +306,16 @@ fn check_known_store(
 				// TODO - we flag this as an "abusive peer" but only in the case
 				// where we have the full block in our store.
 				// So this is not a particularly exhaustive check.
-				Err(ErrorKind::OldBlock.into())
+				Err(Error::OldBlock)
 			} else {
-				Err(ErrorKind::Unfit("already known in store".to_string()).into())
+				Err(Error::Unfit("already known in store".to_string()))
 			}
 		}
 		Ok(false) => {
 			// Not yet processed this block, we can proceed.
 			Ok(())
 		}
-		Err(e) => Err(ErrorKind::StoreErr(e, "pipe get this block".to_owned()).into()),
+		Err(e) => Err(Error::StoreErr(e, "pipe get this block".to_owned())),
 	}
 }
 
@@ -352,7 +352,9 @@ pub fn validate_header_denylist(header: &BlockHeader, denylist: &[Hash]) -> Resu
 	);
 
 	if denylist.contains(&header.hash()) {
-		return Err(ErrorKind::Block(block::Error::Other("header hash denied".into())).into());
+		return Err(Error::Block(block::Error::Other(
+			"header hash denied".into(),
+		)));
 	} else {
 		return Ok(());
 	}
@@ -370,18 +372,18 @@ fn validate_header(header: &BlockHeader, ctx: &mut BlockContext<'_>) -> Result<(
 
 	// This header height must increase the height from the previous header by exactly 1.
 	if header.height != prev.height + 1 {
-		return Err(ErrorKind::InvalidBlockHeight.into());
+		return Err(Error::InvalidBlockHeight);
 	}
 
 	// This header must have a valid header version for its height.
 	if !consensus::valid_header_version(header.height, header.version) {
-		return Err(ErrorKind::InvalidBlockVersion(header.version).into());
+		return Err(Error::InvalidBlockVersion(header.version));
 	}
 
 	if header.timestamp <= prev.timestamp {
 		// prevent time warp attacks and some timestamp manipulations by forcing strict
 		// time progression
-		return Err(ErrorKind::InvalidBlockTime.into());
+		return Err(Error::InvalidBlockTime);
 	}
 
 	// We can determine output and kernel counts for this block based on mmr sizes from previous header.
@@ -395,13 +397,13 @@ fn validate_header(header: &BlockHeader, ctx: &mut BlockContext<'_>) -> Result<(
 
 	// Each block must contain at least 1 kernel and 1 output for the block reward.
 	if num_outputs == 0 || num_kernels == 0 {
-		return Err(ErrorKind::InvalidMMRSize.into());
+		return Err(Error::InvalidMMRSize);
 	}
 
 	// Block header is invalid (and block is invalid) if this lower bound is too heavy for a full block.
 	let weight = TransactionBody::weight_by_iok(0, num_outputs, num_kernels);
 	if weight > global::max_block_weight() {
-		return Err(ErrorKind::Block(block::Error::TooHeavy).into());
+		return Err(Error::Block(block::Error::TooHeavy));
 	}
 
 	// verify the proof of work and related parameters
@@ -416,13 +418,13 @@ fn validate_header(header: &BlockHeader, ctx: &mut BlockContext<'_>) -> Result<(
 		validate_pow_only(header, ctx)?;
 
 		if header.total_difficulty() <= prev.total_difficulty() {
-			return Err(ErrorKind::DifficultyTooLow.into());
+			return Err(Error::DifficultyTooLow);
 		}
 
 		let target_difficulty = header.total_difficulty() - prev.total_difficulty();
 
 		if header.pow.to_difficulty(header.height) < target_difficulty {
-			return Err(ErrorKind::DifficultyTooLow.into());
+			return Err(Error::DifficultyTooLow);
 		}
 
 		// explicit check to ensure total_difficulty has increased by exactly
@@ -437,7 +439,7 @@ fn validate_header(header: &BlockHeader, ctx: &mut BlockContext<'_>) -> Result<(
 				target_difficulty.to_num(),
 				next_header_info.difficulty.to_num()
 			);
-			return Err(ErrorKind::WrongTotalDifficulty.into());
+			return Err(Error::WrongTotalDifficulty);
 		}
 		// check the secondary PoW scaling factor if applicable
 		if header.version < HeaderVersion(5)
@@ -447,7 +449,7 @@ fn validate_header(header: &BlockHeader, ctx: &mut BlockContext<'_>) -> Result<(
 				"validate_header: header secondary scaling {} != {}",
 				header.pow.secondary_scaling, next_header_info.secondary_scaling
 			);
-			return Err(ErrorKind::InvalidScaling.into());
+			return Err(Error::InvalidScaling);
 		}
 	}
 
@@ -456,9 +458,7 @@ fn validate_header(header: &BlockHeader, ctx: &mut BlockContext<'_>) -> Result<(
 
 fn validate_block(block: &Block, ctx: &mut BlockContext<'_>) -> Result<(), Error> {
 	let prev = ctx.batch.get_previous_header(&block.header)?;
-	block
-		.validate(&prev.total_kernel_offset)
-		.map_err(ErrorKind::InvalidBlockProof)?;
+	block.validate(&prev.total_kernel_offset)?;
 	Ok(())
 }
 
@@ -530,7 +530,7 @@ fn update_body_tail(bh: &BlockHeader, batch: &store::Batch<'_>) -> Result<(), Er
 	let tip = Tip::from_header(bh);
 	batch
 		.save_body_tail(&tip)
-		.map_err(|e| ErrorKind::StoreErr(e, "pipe save body tail".to_owned()))?;
+		.map_err(|e| Error::StoreErr(e, "pipe save body tail".to_owned()))?;
 	debug!("body tail {} @ {}", bh.hash(), bh.height);
 	Ok(())
 }
@@ -539,14 +539,14 @@ fn update_body_tail(bh: &BlockHeader, batch: &store::Batch<'_>) -> Result<(), Er
 fn add_block_header(bh: &BlockHeader, batch: &store::Batch<'_>) -> Result<(), Error> {
 	batch
 		.save_block_header(bh)
-		.map_err(|e| ErrorKind::StoreErr(e, "pipe save header".to_owned()))?;
+		.map_err(|e| Error::StoreErr(e, "pipe save header".to_owned()))?;
 	Ok(())
 }
 
 fn update_header_head(head: &Tip, batch: &store::Batch<'_>) -> Result<(), Error> {
 	batch
 		.save_header_head(&head)
-		.map_err(|e| ErrorKind::StoreErr(e, "pipe save header head".to_owned()))?;
+		.map_err(|e| Error::StoreErr(e, "pipe save header head".to_owned()))?;
 
 	debug!(
 		"header head updated to {} at {}",
@@ -559,7 +559,7 @@ fn update_header_head(head: &Tip, batch: &store::Batch<'_>) -> Result<(), Error>
 fn update_head(head: &Tip, batch: &store::Batch<'_>) -> Result<(), Error> {
 	batch
 		.save_body_head(&head)
-		.map_err(|e| ErrorKind::StoreErr(e, "pipe save body".to_owned()))?;
+		.map_err(|e| Error::StoreErr(e, "pipe save body".to_owned()))?;
 
 	debug!("head updated to {} at {}", head.last_block_h, head.height);
 
@@ -595,7 +595,7 @@ pub fn rewind_and_apply_header_fork(
 	for h in fork_hashes {
 		let header = batch
 			.get_block_header(&h)
-			.map_err(|e| ErrorKind::StoreErr(e, "getting forked headers".to_string()))?;
+			.map_err(|e| Error::StoreErr(e, "getting forked headers".to_string()))?;
 
 		// Re-validate every header being re-applied.
 		// This makes it possible to check all header hashes against the ctx specific "denylist".
@@ -646,7 +646,7 @@ pub fn rewind_and_apply_fork(
 	for h in fork_hashes {
 		let fb = batch
 			.get_block(&h)
-			.map_err(|e| ErrorKind::StoreErr(e, "getting forked blocks".to_string()))?;
+			.map_err(|e| Error::StoreErr(e, "getting forked blocks".to_string()))?;
 
 		// Re-verify coinbase maturity along this fork.
 		verify_coinbase_maturity(&fb, ext, batch)?;

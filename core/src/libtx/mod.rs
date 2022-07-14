@@ -32,7 +32,7 @@ use crate::core::Transaction;
 use crate::global::get_accept_fee_base;
 
 pub use self::proof::ProofBuilder;
-pub use crate::libtx::error::{Error, ErrorKind};
+pub use crate::libtx::error::Error;
 
 /// Transaction fee calculation given numbers of inputs, outputs, and kernels
 pub fn tx_fee(input_len: usize, output_len: usize, kernel_len: usize) -> u64 {
