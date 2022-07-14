@@ -205,7 +205,7 @@ where
 				.chain()
 				.process_block_header(&cb.header, chain::Options::NONE)
 			{
-				debug!("Invalid compact block header {}: {:?}", cb_hash, e.kind());
+				debug!("Invalid compact block header {}: {:?}", cb_hash, e);
 				return Ok(!e.is_bad_data());
 			}
 
@@ -286,11 +286,7 @@ where
 		let res = self.chain().process_block_header(&bh, chain::Options::NONE);
 
 		if let Err(e) = res {
-			debug!(
-				"Block header {} refused by chain: {:?}",
-				bh.hash(),
-				e.kind()
-			);
+			debug!("Block header {} refused by chain: {:?}", bh.hash(), e);
 			if e.is_bad_data() {
 				return Ok(false);
 			} else {
@@ -480,9 +476,9 @@ where
 				if is_bad_data {
 					self.chain().clean_txhashset_sandbox();
 					error!("Failed to save txhashset archive: bad data");
-					self.sync_state.set_sync_error(
-						chain::ErrorKind::TxHashSetErr("bad txhashset data".to_string()).into(),
-					);
+					self.sync_state.set_sync_error(chain::Error::TxHashSetErr(
+						"bad txhashset data".to_string(),
+					));
 				} else {
 					info!("Received valid txhashset data for {}.", h);
 				}
@@ -511,11 +507,11 @@ where
 		id: SegmentIdentifier,
 	) -> Result<Segment<TxKernel>, chain::Error> {
 		if !KERNEL_SEGMENT_HEIGHT_RANGE.contains(&id.height) {
-			return Err(chain::ErrorKind::InvalidSegmentHeight.into());
+			return Err(chain::Error::InvalidSegmentHeight);
 		}
 		let segmenter = self.chain().segmenter()?;
 		if segmenter.header().hash() != hash {
-			return Err(chain::ErrorKind::SegmenterHeaderMismatch.into());
+			return Err(chain::Error::SegmenterHeaderMismatch);
 		}
 		segmenter.kernel_segment(id)
 	}
@@ -526,11 +522,11 @@ where
 		id: SegmentIdentifier,
 	) -> Result<(Segment<BitmapChunk>, Hash), chain::Error> {
 		if !BITMAP_SEGMENT_HEIGHT_RANGE.contains(&id.height) {
-			return Err(chain::ErrorKind::InvalidSegmentHeight.into());
+			return Err(chain::Error::InvalidSegmentHeight);
 		}
 		let segmenter = self.chain().segmenter()?;
 		if segmenter.header().hash() != hash {
-			return Err(chain::ErrorKind::SegmenterHeaderMismatch.into());
+			return Err(chain::Error::SegmenterHeaderMismatch);
 		}
 		segmenter.bitmap_segment(id)
 	}
@@ -541,11 +537,11 @@ where
 		id: SegmentIdentifier,
 	) -> Result<(Segment<OutputIdentifier>, Hash), chain::Error> {
 		if !OUTPUT_SEGMENT_HEIGHT_RANGE.contains(&id.height) {
-			return Err(chain::ErrorKind::InvalidSegmentHeight.into());
+			return Err(chain::Error::InvalidSegmentHeight);
 		}
 		let segmenter = self.chain().segmenter()?;
 		if segmenter.header().hash() != hash {
-			return Err(chain::ErrorKind::SegmenterHeaderMismatch.into());
+			return Err(chain::Error::SegmenterHeaderMismatch);
 		}
 		segmenter.output_segment(id)
 	}
@@ -556,11 +552,11 @@ where
 		id: SegmentIdentifier,
 	) -> Result<Segment<RangeProof>, chain::Error> {
 		if !RANGEPROOF_SEGMENT_HEIGHT_RANGE.contains(&id.height) {
-			return Err(chain::ErrorKind::InvalidSegmentHeight.into());
+			return Err(chain::Error::InvalidSegmentHeight);
 		}
 		let segmenter = self.chain().segmenter()?;
 		if segmenter.header().hash() != hash {
-			return Err(chain::ErrorKind::SegmenterHeaderMismatch.into());
+			return Err(chain::Error::SegmenterHeaderMismatch);
 		}
 		segmenter.rangeproof_segment(id)
 	}
@@ -790,8 +786,8 @@ where
 				Ok(false)
 			}
 			Err(e) => {
-				match e.kind() {
-					chain::ErrorKind::Orphan => {
+				match e {
+					chain::Error::Orphan => {
 						if let Ok(previous) = previous {
 							// make sure we did not miss the parent block
 							if !self.chain().is_orphan(&previous.hash())
@@ -804,11 +800,7 @@ where
 						Ok(true)
 					}
 					_ => {
-						debug!(
-							"process_block: block {} refused by chain: {}",
-							bhash,
-							e.kind()
-						);
+						debug!("process_block: block {} refused by chain: {}", bhash, e);
 						Ok(true)
 					}
 				}

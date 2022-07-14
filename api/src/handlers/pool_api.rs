@@ -23,7 +23,6 @@ use crate::types::*;
 use crate::util;
 use crate::util::RwLock;
 use crate::web::*;
-use failure::ResultExt;
 use hyper::{Body, Request, StatusCode};
 use std::sync::Weak;
 
@@ -97,10 +96,10 @@ where
 		let header = tx_pool
 			.blockchain
 			.chain_head()
-			.context(ErrorKind::Internal("Failed to get chain head".to_owned()))?;
+			.map_err(|e| Error::Internal(format!("Failed to get chain head: {}", e)))?;
 		tx_pool
 			.add_to_pool(source, tx, !fluff.unwrap_or(false), &header)
-			.context(ErrorKind::Internal("Failed to update pool".to_owned()))?;
+			.map_err(|e| Error::Internal(format!("Failed to update pool: {}", e)))?;
 		Ok(())
 	}
 }
@@ -134,13 +133,13 @@ where
 
 	let wrapper: TxWrapper = parse_body(req).await?;
 	let tx_bin = util::from_hex(&wrapper.tx_hex)
-		.map_err(|e| ErrorKind::RequestError(format!("Bad request: {}", e)))?;
+		.map_err(|e| Error::RequestError(format!("Bad request: {}", e)))?;
 
 	// All wallet api interaction explicitly uses protocol version 1 for now.
 	let version = ProtocolVersion(1);
 	let tx: Transaction =
 		ser::deserialize(&mut &tx_bin[..], version, DeserializationMode::default())
-			.map_err(|e| ErrorKind::RequestError(format!("Bad request: {}", e)))?;
+			.map_err(|e| Error::RequestError(format!("Bad request: {}", e)))?;
 
 	let source = pool::TxSource::PushApi;
 	info!(
@@ -156,10 +155,10 @@ where
 	let header = tx_pool
 		.blockchain
 		.chain_head()
-		.context(ErrorKind::Internal("Failed to get chain head".to_owned()))?;
+		.map_err(|e| Error::Internal(format!("Failed to get chain head: {}", e)))?;
 	tx_pool
 		.add_to_pool(source, tx, !fluff, &header)
-		.context(ErrorKind::Internal("Failed to update pool".to_owned()))?;
+		.map_err(|e| Error::Internal(format!("Failed to update pool: {}", e)))?;
 	Ok(())
 }
 

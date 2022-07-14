@@ -21,7 +21,6 @@ use crate::types::*;
 use crate::util;
 use crate::util::secp::pedersen::Commitment;
 use crate::web::*;
-use failure::ResultExt;
 use hyper::{Body, Request, StatusCode};
 use std::sync::Weak;
 
@@ -35,7 +34,7 @@ impl ChainHandler {
 	pub fn get_tip(&self) -> Result<Tip, Error> {
 		let head = w(&self.chain)?
 			.head()
-			.map_err(|e| ErrorKind::Internal(format!("can't get head: {}", e)))?;
+			.map_err(|e| Error::Internal(format!("can't get head: {}", e)))?;
 		Ok(Tip::from_tip(head))
 	}
 }
@@ -56,7 +55,7 @@ impl ChainValidationHandler {
 	pub fn validate_chain(&self, fast_validation: bool) -> Result<(), Error> {
 		w(&self.chain)?
 			.validate(fast_validation)
-			.map_err(|_| ErrorKind::Internal("chain error".to_owned()).into())
+			.map_err(|_| Error::Internal("chain error".to_owned()))
 	}
 }
 
@@ -144,11 +143,10 @@ impl OutputHandler {
 			// First check the commits length
 			for commit in &commits {
 				if commit.len() != 66 {
-					return Err(ErrorKind::RequestError(format!(
+					return Err(Error::RequestError(format!(
 						"invalid commit length for {}",
 						commit
-					))
-					.into());
+					)));
 				}
 			}
 			for commit in commits {
@@ -202,7 +200,7 @@ impl OutputHandler {
 		let chain = w(&self.chain)?;
 		let outputs = chain
 			.unspent_outputs_by_pmmr_index(start_index, max, end_index)
-			.context(ErrorKind::NotFound)?;
+			.map_err(|_| Error::NotFound)?;
 		let out = OutputListing {
 			last_retrieved_index: outputs.0,
 			highest_index: outputs.1,
@@ -219,7 +217,7 @@ impl OutputHandler {
 					)
 				})
 				.collect::<Result<Vec<_>, _>>()
-				.context(ErrorKind::Internal("chain error".to_owned()))?,
+				.map_err(|_| Error::Internal("chain error".to_owned()))?,
 		};
 		Ok(out)
 	}
@@ -258,14 +256,14 @@ impl OutputHandler {
 	) -> Result<BlockOutputs, Error> {
 		let header = w(&self.chain)?
 			.get_header_by_height(block_height)
-			.map_err(|_| ErrorKind::NotFound)?;
+			.map_err(|_| Error::NotFound)?;
 
 		// TODO - possible to compact away blocks we care about
 		// in the period between accepting the block and refreshing the wallet
 		let chain = w(&self.chain)?;
 		let block = chain
 			.get_block(&header.hash())
-			.map_err(|_| ErrorKind::NotFound)?;
+			.map_err(|_| Error::NotFound)?;
 		let outputs = block
 			.outputs()
 			.iter()
@@ -274,7 +272,7 @@ impl OutputHandler {
 				OutputPrintable::from_output(output, &chain, Some(&header), include_proof, true)
 			})
 			.collect::<Result<Vec<_>, _>>()
-			.context(ErrorKind::Internal("cain error".to_owned()))?;
+			.map_err(|_| Error::Internal("chain error".to_owned()))?;
 
 		Ok(BlockOutputs {
 			header: BlockHeaderDifficultyInfo::from_header(&header),
@@ -291,14 +289,14 @@ impl OutputHandler {
 	) -> Result<Vec<OutputPrintable>, Error> {
 		let header = w(&self.chain)?
 			.get_header_by_height(block_height)
-			.map_err(|_| ErrorKind::NotFound)?;
+			.map_err(|_| Error::NotFound)?;
 
 		// TODO - possible to compact away blocks we care about
 		// in the period between accepting the block and refreshing the wallet
 		let chain = w(&self.chain)?;
 		let block = chain
 			.get_block(&header.hash())
-			.map_err(|_| ErrorKind::NotFound)?;
+			.map_err(|_| Error::NotFound)?;
 		let outputs = block
 			.outputs()
 			.iter()
@@ -313,7 +311,7 @@ impl OutputHandler {
 				)
 			})
 			.collect::<Result<Vec<_>, _>>()
-			.context(ErrorKind::Internal("cain error".to_owned()))?;
+			.map_err(|_| Error::Internal("chain error".to_owned()))?;
 
 		Ok(outputs)
 	}
@@ -408,11 +406,11 @@ impl KernelHandler {
 			.trim_end_matches('/')
 			.rsplit('/')
 			.next()
-			.ok_or_else(|| ErrorKind::RequestError("missing excess".into()))?;
-		let excess = util::from_hex(excess)
-			.map_err(|_| ErrorKind::RequestError("invalid excess hex".into()))?;
+			.ok_or_else(|| Error::RequestError("missing excess".into()))?;
+		let excess =
+			util::from_hex(excess).map_err(|_| Error::RequestError("invalid excess hex".into()))?;
 		if excess.len() != 33 {
-			return Err(ErrorKind::RequestError("invalid excess length".into()).into());
+			return Err(Error::RequestError("invalid excess length".into()));
 		}
 		let excess = Commitment::from_vec(excess);
 
@@ -427,18 +425,18 @@ impl KernelHandler {
 			if let Some(h) = params.get("min_height") {
 				let h = h
 					.parse()
-					.map_err(|_| ErrorKind::RequestError("invalid minimum height".into()))?;
+					.map_err(|_| Error::RequestError("invalid minimum height".into()))?;
 				// Default is genesis
 				min_height = if h == 0 { None } else { Some(h) };
 			}
 			if let Some(h) = params.get("max_height") {
 				let h = h
 					.parse()
-					.map_err(|_| ErrorKind::RequestError("invalid maximum height".into()))?;
+					.map_err(|_| Error::RequestError("invalid maximum height".into()))?;
 				// Default is current head
 				let head_height = chain
 					.head()
-					.map_err(|e| ErrorKind::Internal(format!("{}", e)))?
+					.map_err(|e| Error::Internal(format!("{}", e)))?
 					.height;
 				max_height = if h >= head_height { None } else { Some(h) };
 			}
@@ -446,7 +444,7 @@ impl KernelHandler {
 
 		let kernel = chain
 			.get_kernel_height(&excess, min_height, max_height)
-			.map_err(|e| ErrorKind::Internal(format!("{}", e)))?
+			.map_err(|e| Error::Internal(format!("{}", e)))?
 			.map(|(tx_kernel, height, mmr_index)| LocatedTxKernel {
 				tx_kernel,
 				height,
@@ -462,22 +460,22 @@ impl KernelHandler {
 		max_height: Option<u64>,
 	) -> Result<LocatedTxKernel, Error> {
 		let excess = util::from_hex(&excess)
-			.map_err(|_| ErrorKind::RequestError("invalid excess hex".into()))?;
+			.map_err(|_| Error::RequestError("invalid excess hex".into()))?;
 		if excess.len() != 33 {
-			return Err(ErrorKind::RequestError("invalid excess length".into()).into());
+			return Err(Error::RequestError("invalid excess length".into()));
 		}
 		let excess = Commitment::from_vec(excess);
 
 		let chain = w(&self.chain)?;
 		let kernel = chain
 			.get_kernel_height(&excess, min_height, max_height)
-			.map_err(|e| ErrorKind::Internal(format!("{}", e)))?
+			.map_err(|e| Error::Internal(format!("{}", e)))?
 			.map(|(tx_kernel, height, mmr_index)| LocatedTxKernel {
 				tx_kernel,
 				height,
 				mmr_index,
 			});
-		kernel.ok_or_else(|| ErrorKind::NotFound.into())
+		kernel.ok_or(Error::NotFound)
 	}
 }
 

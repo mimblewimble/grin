@@ -23,7 +23,7 @@ use crate::core::core::hash::{DefaultHashable, Hash};
 use crate::core::core::pmmr::segment::{Segment, SegmentIdentifier, SegmentProof};
 use crate::core::core::pmmr::{self, Backend, ReadablePMMR, ReadonlyPMMR, VecBackend, PMMR};
 use crate::core::ser::{self, PMMRable, Readable, Reader, Writeable, Writer};
-use crate::error::{Error, ErrorKind};
+use crate::error::Error;
 use enum_primitive::FromPrimitive;
 
 /// The "bitmap accumulator" allows us to commit to a specific bitmap by splitting it into
@@ -156,7 +156,7 @@ impl BitmapAccumulator {
 		let mut pmmr = PMMR::at(&mut self.backend, last_pos);
 		let rewind_pos = pmmr::insertion_to_pmmr_index(chunk_idx);
 		pmmr.rewind(rewind_pos, &Bitmap::create())
-			.map_err(ErrorKind::Other)?;
+			.map_err(Error::Other)?;
 		Ok(())
 	}
 
@@ -178,7 +178,7 @@ impl BitmapAccumulator {
 		let last_pos = self.backend.size();
 		PMMR::at(&mut self.backend, last_pos)
 			.push(&chunk)
-			.map_err(|e| ErrorKind::Other(e).into())
+			.map_err(Error::Other)
 	}
 
 	/// The root hash of the bitmap accumulator MMR.

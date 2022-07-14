@@ -23,7 +23,7 @@ use crate::core::core::{
 use crate::core::global;
 use crate::core::pow;
 use crate::core::ser::ProtocolVersion;
-use crate::error::{Error, ErrorKind};
+use crate::error::Error;
 use crate::pipe;
 use crate::store;
 use crate::txhashset;
@@ -376,11 +376,11 @@ impl Chain {
 	pub fn is_known(&self, header: &BlockHeader) -> Result<(), Error> {
 		let head = self.head()?;
 		if head.hash() == header.hash() {
-			return Err(ErrorKind::Unfit("duplicate block".into()).into());
+			return Err(Error::Unfit("duplicate block".into()));
 		}
 		if header.total_difficulty() <= head.total_difficulty {
 			if self.block_exists(header.hash())? {
-				return Err(ErrorKind::Unfit("duplicate block".into()).into());
+				return Err(Error::Unfit("duplicate block".into()));
 			}
 		}
 		Ok(())
@@ -416,7 +416,7 @@ impl Chain {
 			},
 		);
 
-		Err(ErrorKind::Orphan.into())
+		Err(Error::Orphan)
 	}
 
 	/// Attempt to add a new block to the chain.
@@ -681,7 +681,7 @@ impl Chain {
 		if tx.lock_height() <= height {
 			Ok(())
 		} else {
-			Err(ErrorKind::TxLockHeight.into())
+			Err(Error::TxLockHeight)
 		}
 	}
 
@@ -1091,7 +1091,7 @@ impl Chain {
 		let fork_point = self.fork_point()?;
 		if !self.check_txhashset_needed(&fork_point)? {
 			warn!("txhashset_write: txhashset received but it's not needed! ignored.");
-			return Err(ErrorKind::InvalidTxHashSet("not needed".to_owned()).into());
+			return Err(Error::InvalidTxHashSet("not needed".to_owned()));
 		}
 
 		let header = match self.get_block_header(&h) {
@@ -1369,10 +1369,9 @@ impl Chain {
 		let rangeproofs =
 			txhashset.rangeproofs_by_pmmr_index(start_index, max_count, max_pmmr_index);
 		if outputs.0 != rangeproofs.0 || outputs.1.len() != rangeproofs.1.len() {
-			return Err(ErrorKind::TxHashSetErr(String::from(
+			return Err(Error::TxHashSetErr(String::from(
 				"Output and rangeproof sets don't match",
-			))
-			.into());
+			)));
 		}
 		let mut output_vec: Vec<Output> = vec![];
 		for (ref x, &y) in outputs.1.iter().zip(rangeproofs.1.iter()) {
@@ -1411,56 +1410,56 @@ impl Chain {
 	pub fn head(&self) -> Result<Tip, Error> {
 		self.store
 			.head()
-			.map_err(|e| ErrorKind::StoreErr(e, "chain head".to_owned()).into())
+			.map_err(|e| Error::StoreErr(e, "chain head".to_owned()))
 	}
 
 	/// Tail of the block chain in this node after compact (cross-block cut-through)
 	pub fn tail(&self) -> Result<Tip, Error> {
 		self.store
 			.tail()
-			.map_err(|e| ErrorKind::StoreErr(e, "chain tail".to_owned()).into())
+			.map_err(|e| Error::StoreErr(e, "chain tail".to_owned()))
 	}
 
 	/// Tip (head) of the header chain.
 	pub fn header_head(&self) -> Result<Tip, Error> {
 		self.store
 			.header_head()
-			.map_err(|e| ErrorKind::StoreErr(e, "header head".to_owned()).into())
+			.map_err(|e| Error::StoreErr(e, "header head".to_owned()))
 	}
 
 	/// Block header for the chain head
 	pub fn head_header(&self) -> Result<BlockHeader, Error> {
 		self.store
 			.head_header()
-			.map_err(|e| ErrorKind::StoreErr(e, "chain head header".to_owned()).into())
+			.map_err(|e| Error::StoreErr(e, "chain head header".to_owned()))
 	}
 
 	/// Gets a block by hash
 	pub fn get_block(&self, h: &Hash) -> Result<Block, Error> {
 		self.store
 			.get_block(h)
-			.map_err(|e| ErrorKind::StoreErr(e, "chain get block".to_owned()).into())
+			.map_err(|e| Error::StoreErr(e, "chain get block".to_owned()))
 	}
 
 	/// Gets a block header by hash
 	pub fn get_block_header(&self, h: &Hash) -> Result<BlockHeader, Error> {
 		self.store
 			.get_block_header(h)
-			.map_err(|e| ErrorKind::StoreErr(e, "chain get header".to_owned()).into())
+			.map_err(|e| Error::StoreErr(e, "chain get header".to_owned()))
 	}
 
 	/// Get previous block header.
 	pub fn get_previous_header(&self, header: &BlockHeader) -> Result<BlockHeader, Error> {
 		self.store
 			.get_previous_header(header)
-			.map_err(|e| ErrorKind::StoreErr(e, "chain get previous header".to_owned()).into())
+			.map_err(|e| Error::StoreErr(e, "chain get previous header".to_owned()))
 	}
 
 	/// Get block_sums by header hash.
 	pub fn get_block_sums(&self, h: &Hash) -> Result<BlockSums, Error> {
 		self.store
 			.get_block_sums(h)
-			.map_err(|e| ErrorKind::StoreErr(e, "chain get block_sums".to_owned()).into())
+			.map_err(|e| Error::StoreErr(e, "chain get block_sums".to_owned()))
 	}
 
 	/// Gets the block header at the provided height.
@@ -1482,7 +1481,7 @@ impl Chain {
 		let txhashset = self.txhashset.read();
 		let (_, pos) = match txhashset.get_unspent(commit)? {
 			Some(o) => o,
-			None => return Err(ErrorKind::OutputNotFound.into()),
+			None => return Err(Error::OutputNotFound),
 		};
 		let hash = header_pmmr.get_header_hash_by_height(pos.height)?;
 		Ok(self.get_block_header(&hash)?)
@@ -1584,13 +1583,13 @@ impl Chain {
 	fn is_on_current_chain<T: Into<Tip>>(&self, x: T, head: Tip) -> Result<(), Error> {
 		let x: Tip = x.into();
 		if x.height > head.height {
-			return Err(ErrorKind::Other("not on current chain".to_string()).into());
+			return Err(Error::Other("not on current chain".to_string()));
 		}
 
 		if x.hash() == self.get_header_hash_by_height(x.height)? {
 			Ok(())
 		} else {
-			Err(ErrorKind::Other("not on current chain".to_string()).into())
+			Err(Error::Other("not on current chain".to_string()))
 		}
 	}
 
@@ -1624,7 +1623,7 @@ impl Chain {
 	pub fn block_exists(&self, h: Hash) -> Result<bool, Error> {
 		self.store
 			.block_exists(&h)
-			.map_err(|e| ErrorKind::StoreErr(e, "chain block exists".to_owned()).into())
+			.map_err(|e| Error::StoreErr(e, "chain block exists".to_owned()))
 	}
 }
 
@@ -1789,7 +1788,7 @@ fn setup_head(
 
 			info!("init: saved genesis: {:?}", genesis.hash());
 		}
-		Err(e) => return Err(ErrorKind::StoreErr(e, "chain init load head".to_owned()).into()),
+		Err(e) => return Err(Error::StoreErr(e, "chain init load head".to_owned())),
 	};
 	batch.commit()?;
 	Ok(())

@@ -24,7 +24,7 @@
 
 use crate::global;
 use crate::pow::common::CuckooParams;
-use crate::pow::error::{Error, ErrorKind};
+use crate::pow::error::Error;
 use crate::pow::siphash::siphash_block;
 use crate::pow::{PoWContext, Proof};
 
@@ -58,7 +58,7 @@ impl PoWContext for CuckaroozContext {
 	fn verify(&self, proof: &Proof) -> Result<(), Error> {
 		let size = proof.proof_size();
 		if size != global::proofsize() {
-			return Err(ErrorKind::Verification("wrong cycle length".to_owned()).into());
+			return Err(Error::Verification("wrong cycle length".to_owned()));
 		}
 		let nonces = &proof.nonces;
 		let mut uvs = vec![0u64; 2 * size];
@@ -70,10 +70,10 @@ impl PoWContext for CuckaroozContext {
 
 		for n in 0..size {
 			if nonces[n] > self.params.edge_mask {
-				return Err(ErrorKind::Verification("edge too big".to_owned()).into());
+				return Err(Error::Verification("edge too big".to_owned()));
 			}
 			if n > 0 && nonces[n] <= nonces[n - 1] {
-				return Err(ErrorKind::Verification("edges not ascending".to_owned()).into());
+				return Err(Error::Verification("edges not ascending".to_owned()));
 			}
 			// 21 is standard siphash rotation constant
 			let edge: u64 = siphash_block(&self.params.siphash_keys, nonces[n], 21, true);
@@ -93,7 +93,7 @@ impl PoWContext for CuckaroozContext {
 			xoruv ^= uvs[2 * n] ^ uvs[2 * n + 1];
 		}
 		if xoruv != 0 {
-			return Err(ErrorKind::Verification("endpoints don't match up".to_owned()).into());
+			return Err(Error::Verification("endpoints don't match up".to_owned()));
 		}
 		// make prev lists circular
 		for n in 0..(2 * size) {
@@ -117,13 +117,13 @@ impl PoWContext for CuckaroozContext {
 				if uvs[k] == uvs[i] {
 					// find other edge endpoint matching one at i
 					if j != i {
-						return Err(ErrorKind::Verification("branch in cycle".to_owned()).into());
+						return Err(Error::Verification("branch in cycle".to_owned()));
 					}
 					j = k;
 				}
 			}
 			if j == i {
-				return Err(ErrorKind::Verification("cycle dead ends".to_owned()).into());
+				return Err(Error::Verification("cycle dead ends".to_owned()));
 			}
 			i = j ^ 1;
 			n += 1;
@@ -134,7 +134,7 @@ impl PoWContext for CuckaroozContext {
 		if n == self.params.proof_size {
 			Ok(())
 		} else {
-			Err(ErrorKind::Verification("cycle too short".to_owned()).into())
+			Err(Error::Verification("cycle too short".to_owned()))
 		}
 	}
 }
