@@ -46,7 +46,7 @@ impl Default for ServerStateInfo {
 }
 /// Simpler thread-unaware version of above to be populated and returned to
 /// consumers might be interested in, such as test results or UI
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct ServerStats {
 	/// Number of peers
 	pub peer_count: u32,
@@ -141,7 +141,7 @@ pub struct StratumStats {
 }
 
 /// Stats on the last WINDOW blocks and the difficulty calculation
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct DiffStats {
 	/// latest height
 	pub height: u64,
