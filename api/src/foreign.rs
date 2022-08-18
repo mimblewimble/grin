@@ -59,7 +59,6 @@ where
 	/// # Arguments
 	/// * `chain` - A non-owning reference of the chain.
 	/// * `tx_pool` - A non-owning reference of the transaction pool.
-	/// * `peers` - A non-owning reference of the peers.
 	/// * `sync_state` - A non-owning reference of the `sync_state`.
 	///
 	/// # Returns
