@@ -1218,6 +1218,7 @@ impl Chain {
 	fn remove_historical_blocks(
 		&self,
 		header_pmmr: &txhashset::PMMRHandle<BlockHeader>,
+		archive_header: BlockHeader,
 		batch: &store::Batch<'_>,
 	) -> Result<(), Error> {
 		if self.archive_mode() {
@@ -1238,7 +1239,6 @@ impl Chain {
 		// TODO: Check this, compaction selects a different horizon
 		// block from txhashset horizon/PIBD segmenter when using
 		// Automated testing chain
-		let archive_header = self.txhashset_archive_header()?;
 		if archive_header.height < cutoff {
 			cutoff = archive_header.height;
 			horizon = head.height - archive_header.height;
@@ -1298,6 +1298,10 @@ impl Chain {
 			}
 		}
 
+		// Retrieve archive header here, so as not to attempt a read
+		// lock while removing historical blocks
+		let archive_header = self.txhashset_archive_header()?;
+
 		// Take a write lock on the txhashet and start a new writeable db batch.
 		let header_pmmr = self.header_pmmr.read();
 		let mut txhashset = self.txhashset.write();
@@ -1317,7 +1321,7 @@ impl Chain {
 
 		// If we are not in archival mode remove historical blocks from the db.
 		if !self.archive_mode() {
-			self.remove_historical_blocks(&header_pmmr, &batch)?;
+			self.remove_historical_blocks(&header_pmmr, archive_header, &batch)?;
 		}
 
 		// Make sure our output_pos index is consistent with the UTXO set.
