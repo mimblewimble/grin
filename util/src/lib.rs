@@ -91,6 +91,15 @@ where
 		*inner = Some(value);
 	}
 
+	/// Allows the one time to be set again with an override.
+	pub fn set(&self, value: T, is_override: bool) {
+		let mut inner = self.inner.write();
+		if !is_override {
+			assert!(inner.is_none());
+		}
+		*inner = Some(value);
+	}
+
 	/// Borrows the OneTime, should only be called after initialization.
 	/// Will panic (via expect) if called before initialization.
 	pub fn borrow(&self) -> T {
