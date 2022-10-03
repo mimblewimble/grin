@@ -44,10 +44,11 @@ pub const MAINNET_DNS_SEEDS: &[&str] = &[
 ];
 /// DNS Seeds with contact email associated - Testnet
 pub const TESTNET_DNS_SEEDS: &[&str] = &[
-	"floonet.seed.grin.icu",           // gary.peverell@protonmail.com
-	"floonet.seed.713.mw",             // jasper@713.mw
 	"floonet.seed.grin.lesceller.com", // q.lesceller@gmail.com
 	"floonet.seed.grin.prokapi.com",   // hendi@prokapi.com
+	"grintestseed.revcore.net",        // yeastplume@protonmail.com
+	"testnet.grin.punksec.de",         // grin@punksec.de
+	"testnet.grinnode.30-r.com",       // trinitron@30-r.com
 ];
 
 pub fn connect_and_monitor(
