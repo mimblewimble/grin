@@ -73,7 +73,9 @@ where
 			Some(p) => p,
 			None => self.size,
 		};
-		let mut pmmr_index = pmmr_index1 - 1;
+		// default index to 0 if arg index1 is 0
+		let mut pmmr_index = if pmmr_index1 > 1 { pmmr_index1 - 1 } else { 0 };
+
 		while return_vec.len() < max_count as usize && pmmr_index < size {
 			if let Some(t) = self.get_data(pmmr_index) {
 				return_vec.push(t);
