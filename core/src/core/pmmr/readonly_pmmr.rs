@@ -73,7 +73,8 @@ where
 			Some(p) => p,
 			None => self.size,
 		};
-		let mut pmmr_index = pmmr_index1 - 1;
+		let mut pmmr_index = pmmr_index1.saturating_sub(1);
+
 		while return_vec.len() < max_count as usize && pmmr_index < size {
 			if let Some(t) = self.get_data(pmmr_index) {
 				return_vec.push(t);
