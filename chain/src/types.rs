@@ -15,9 +15,10 @@
 //! Base types that the block chain pipeline requires.
 
 use chrono::prelude::{DateTime, Utc};
+use chrono::Duration;
 
 use crate::core::core::hash::{Hash, Hashed, ZERO_HASH};
-use crate::core::core::{Block, BlockHeader, HeaderVersion};
+use crate::core::core::{pmmr, Block, BlockHeader, HeaderVersion, SegmentTypeIdentifier};
 use crate::core::pow::Difficulty;
 use crate::core::ser::{self, PMMRIndexHashable, Readable, Reader, Writeable, Writer};
 use crate::error::Error;
@@ -56,10 +57,38 @@ pub enum SyncStatus {
 		/// diff of the most advanced peer
 		highest_diff: Difficulty,
 	},
+	/// Performing PIBD reconstruction of txhashset
+	/// If PIBD syncer determines there's not enough
+	/// PIBD peers to continue, then move on to TxHashsetDownload state
+	TxHashsetPibd {
+		/// Whether the syncer has determined there's not enough
+		/// data to continue via PIBD
+		aborted: bool,
+		/// whether we got an error anywhere (in which case restart the process)
+		errored: bool,
+		/// total number of leaves applied
+		completed_leaves: u64,
+		/// total number of leaves required by archive header
+		leaves_required: u64,
+		/// 'height', i.e. last 'block' for which there is complete
+		/// pmmr data
+		completed_to_height: u64,
+		/// Total 'height' needed
+		required_height: u64,
+	},
 	/// Downloading the various txhashsets
 	TxHashsetDownload(TxHashsetDownloadStats),
 	/// Setting up before validation
-	TxHashsetSetup,
+	TxHashsetSetup {
+		/// number of 'headers' for which kernels have been checked
+		headers: Option<u64>,
+		/// headers total
+		headers_total: Option<u64>,
+		/// kernel position portion
+		kernel_pos: Option<u64>,
+		/// total kernel position
+		kernel_pos_total: Option<u64>,
+	},
 	/// Validating the kernels
 	TxHashsetKernelsValidation {
 		/// kernels validated
@@ -119,10 +148,36 @@ impl Default for TxHashsetDownloadStats {
 	}
 }
 
+/// Container for entry in requested PIBD segments
+#[derive(Debug, Clone, Eq, PartialEq)]
+pub struct PIBDSegmentContainer {
+	/// Segment+Type Identifier
+	pub identifier: SegmentTypeIdentifier,
+	/// Time at which this request was made
+	pub request_time: DateTime<Utc>,
+}
+
+impl PIBDSegmentContainer {
+	/// Return container with timestamp
+	pub fn new(identifier: SegmentTypeIdentifier) -> Self {
+		Self {
+			identifier,
+			request_time: Utc::now(),
+		}
+	}
+}
+
 /// Current sync state. Encapsulates the current SyncStatus.
 pub struct SyncState {
 	current: RwLock<SyncStatus>,
 	sync_error: RwLock<Option<Error>>,
+	/// Something has to keep track of segments that have been
+	/// requested from other peers. TODO consider: This may not
+	/// be the best place to put code that's concerned with peers
+	/// but it's currently the only place that makes the info
+	/// available where it will be needed (both in the adapter
+	/// and the sync loop)
+	requested_pibd_segments: RwLock<Vec<PIBDSegmentContainer>>,
 }
 
 impl SyncState {
@@ -131,6 +186,7 @@ impl SyncState {
 		SyncState {
 			current: RwLock::new(SyncStatus::Initial),
 			sync_error: RwLock::new(None),
+			requested_pibd_segments: RwLock::new(vec![]),
 		}
 	}
 
@@ -200,6 +256,60 @@ impl SyncState {
 		*self.current.write() = SyncStatus::TxHashsetDownload(stats);
 	}
 
+	/// Update PIBD progress
+	pub fn update_pibd_progress(
+		&self,
+		aborted: bool,
+		errored: bool,
+		completed_leaves: u64,
+		completed_to_height: u64,
+		archive_header: &BlockHeader,
+	) {
+		let leaves_required = pmmr::n_leaves(archive_header.output_mmr_size) * 2
+			+ pmmr::n_leaves(archive_header.kernel_mmr_size);
+		*self.current.write() = SyncStatus::TxHashsetPibd {
+			aborted,
+			errored,
+			completed_leaves,
+			leaves_required,
+			completed_to_height,
+			required_height: archive_header.height,
+		};
+	}
+
+	/// Update PIBD segment list
+	pub fn add_pibd_segment(&self, id: &SegmentTypeIdentifier) {
+		self.requested_pibd_segments
+			.write()
+			.push(PIBDSegmentContainer::new(id.clone()));
+	}
+
+	/// Remove segment from list
+	pub fn remove_pibd_segment(&self, id: &SegmentTypeIdentifier) {
+		self.requested_pibd_segments
+			.write()
+			.retain(|i| &i.identifier != id);
+	}
+
+	/// Remove segments with request timestamps less than cutoff time
+	pub fn remove_stale_pibd_requests(&self, timeout_seconds: i64) {
+		let cutoff_time = Utc::now() - Duration::seconds(timeout_seconds);
+		self.requested_pibd_segments.write().retain(|i| {
+			if i.request_time <= cutoff_time {
+				debug!("Removing + retrying PIBD request after timeout: {:?}", i)
+			};
+			i.request_time > cutoff_time
+		});
+	}
+
+	/// Check whether segment is in request list
+	pub fn contains_pibd_segment(&self, id: &SegmentTypeIdentifier) -> bool {
+		self.requested_pibd_segments
+			.read()
+			.iter()
+			.any(|i| &i.identifier == id)
+	}
+
 	/// Communicate sync error
 	pub fn set_sync_error(&self, error: Error) {
 		*self.sync_error.write() = Some(error);
@@ -217,8 +327,19 @@ impl SyncState {
 }
 
 impl TxHashsetWriteStatus for SyncState {
-	fn on_setup(&self) {
-		self.update(SyncStatus::TxHashsetSetup);
+	fn on_setup(
+		&self,
+		headers: Option<u64>,
+		headers_total: Option<u64>,
+		kernel_pos: Option<u64>,
+		kernel_pos_total: Option<u64>,
+	) {
+		self.update(SyncStatus::TxHashsetSetup {
+			headers,
+			headers_total,
+			kernel_pos,
+			kernel_pos_total,
+		});
 	}
 
 	fn on_validation_kernels(&self, kernels: u64, kernels_total: u64) {
@@ -445,7 +566,13 @@ pub trait ChainAdapter {
 /// those values as the processing progresses.
 pub trait TxHashsetWriteStatus {
 	/// First setup of the txhashset
-	fn on_setup(&self);
+	fn on_setup(
+		&self,
+		headers: Option<u64>,
+		header_total: Option<u64>,
+		kernel_pos: Option<u64>,
+		kernel_pos_total: Option<u64>,
+	);
 	/// Starting kernel validation
 	fn on_validation_kernels(&self, kernels: u64, kernel_total: u64);
 	/// Starting rproof validation
@@ -460,7 +587,7 @@ pub trait TxHashsetWriteStatus {
 pub struct NoStatus;
 
 impl TxHashsetWriteStatus for NoStatus {
-	fn on_setup(&self) {}
+	fn on_setup(&self, _hs: Option<u64>, _ht: Option<u64>, _kp: Option<u64>, _kpt: Option<u64>) {}
 	fn on_validation_kernels(&self, _ks: u64, _kts: u64) {}
 	fn on_validation_rproofs(&self, _rs: u64, _rt: u64) {}
 	fn on_save(&self) {}

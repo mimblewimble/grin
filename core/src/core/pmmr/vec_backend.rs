@@ -47,6 +47,10 @@ impl<T: PMMRable> Backend<T> for VecBackend<T> {
 		unimplemented!()
 	}
 
+	fn append_hash(&mut self, _hash: Hash) -> Result<(), String> {
+		unimplemented!()
+	}
+
 	fn get_hash(&self, pos0: u64) -> Option<Hash> {
 		if self.removed.contains(&pos0) {
 			None
@@ -86,6 +90,10 @@ impl<T: PMMRable> Backend<T> for VecBackend<T> {
 		unimplemented!()
 	}
 
+	fn n_unpruned_leaves_to_index(&self, _to_index: u64) -> u64 {
+		unimplemented!()
+	}
+
 	fn leaf_pos_iter(&self) -> Box<dyn Iterator<Item = u64> + '_> {
 		Box::new(
 			self.hashes
@@ -109,6 +117,14 @@ impl<T: PMMRable> Backend<T> for VecBackend<T> {
 	fn remove(&mut self, pos0: u64) -> Result<(), String> {
 		self.removed.insert(pos0);
 		Ok(())
+	}
+
+	fn remove_from_leaf_set(&mut self, _pos0: u64) {
+		unimplemented!()
+	}
+
+	fn reset_prune_list(&mut self) {
+		unimplemented!()
 	}
 
 	fn rewind(&mut self, position: u64, _rewind_rm_pos: &Bitmap) -> Result<(), String> {

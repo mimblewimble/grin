@@ -85,7 +85,7 @@ impl BodySync {
 		let fork_point = self.chain.fork_point()?;
 
 		if self.chain.check_txhashset_needed(&fork_point)? {
-			debug!(
+			trace!(
 				"body_sync: cannot sync full blocks earlier than horizon. will request txhashset",
 			);
 			return Ok(true);
@@ -211,7 +211,7 @@ impl BodySync {
 		// off by one to account for broadcast adding a couple orphans
 		if self.blocks_requested < 2 {
 			// no pending block requests, ask more
-			debug!("body_sync: no pending block request, asking more");
+			trace!("body_sync: no pending block request, asking more");
 			return Ok(true);
 		}
 

@@ -177,12 +177,19 @@ pub enum Error {
 		/// Conversion
 		source: segment::SegmentError,
 	},
+	/// We've decided to halt the PIBD process due to lack of supporting peers or
+	/// otherwise failing to progress for a certain amount of time
+	#[error("Aborting PIBD error")]
+	AbortingPIBDError,
 	/// The segmenter is associated to a different block header
 	#[error("Segmenter header mismatch")]
 	SegmenterHeaderMismatch,
 	/// Segment height not within allowed range
 	#[error("Invalid segment height")]
 	InvalidSegmentHeight,
+	/// Other issue with segment
+	#[error("Invalid segment: {0}")]
+	InvalidSegment(String),
 }
 
 impl Error {

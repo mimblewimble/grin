@@ -194,10 +194,11 @@ impl BitmapAccumulator {
 	/// Return a raw in-memory bitmap of this accumulator
 	pub fn as_bitmap(&self) -> Result<Bitmap, Error> {
 		let mut bitmap = Bitmap::create();
-		for (chunk_count, chunk_index) in self.backend.leaf_idx_iter(0).enumerate() {
+		for (chunk_index, chunk_pos) in self.backend.leaf_pos_iter().enumerate() {
 			//TODO: Unwrap
-			let chunk = self.backend.get_data(chunk_index).unwrap();
-			bitmap.add_many(&chunk.set_iter(chunk_count * 1024).collect::<Vec<u32>>());
+			let chunk = self.backend.get_data(chunk_pos as u64).unwrap();
+			let additive = chunk.set_iter(chunk_index * 1024).collect::<Vec<u32>>();
+			bitmap.add_many(&additive);
 		}
 		Ok(bitmap)
 	}
@@ -417,7 +418,11 @@ impl Writeable for BitmapBlock {
 		writer.write_u8((length / BitmapChunk::LEN_BITS) as u8)?;
 
 		let count_pos = self.inner.iter().filter(|&v| v).count() as u32;
-		let count_neg = Self::NBITS - count_pos;
+
+		// Negative count needs to be adjusted if the block is not full,
+		// which affects the choice of serialization mode and size written
+		let count_neg = length as u32 - count_pos;
+
 		let threshold = Self::NBITS / 16;
 		if count_pos < threshold {
 			// Write positive indices
@@ -517,17 +522,19 @@ mod tests {
 	use rand::thread_rng;
 	use std::io::Cursor;
 
-	fn test_roundtrip(entries: usize, inverse: bool, encoding: u8, length: usize) {
+	fn test_roundtrip(entries: usize, inverse: bool, encoding: u8, length: usize, n_blocks: usize) {
 		let mut rng = thread_rng();
-		let mut block = BitmapBlock::new(64);
+		let mut block = BitmapBlock::new(n_blocks);
 		if inverse {
 			block.inner.negate();
 		}
 
+		let range_size = n_blocks * BitmapChunk::LEN_BITS as usize;
+
 		// Flip `entries` bits in random spots
 		let mut count = 0;
 		while count < entries {
-			let idx = rng.gen_range(0, BitmapBlock::NBITS as usize);
+			let idx = rng.gen_range(0, range_size);
 			if block.inner.get(idx).unwrap() == inverse {
 				count += 1;
 				block.inner.set(idx, !inverse);
@@ -561,21 +568,35 @@ mod tests {
 	fn block_ser_roundtrip() {
 		let threshold = BitmapBlock::NBITS as usize / 16;
 		let entries = thread_rng().gen_range(threshold, 4 * threshold);
-		test_roundtrip(entries, false, 0, 2 + BitmapBlock::NBITS as usize / 8);
-		test_roundtrip(entries, true, 0, 2 + BitmapBlock::NBITS as usize / 8);
+		test_roundtrip(entries, false, 0, 2 + BitmapBlock::NBITS as usize / 8, 64);
+		test_roundtrip(entries, true, 0, 2 + BitmapBlock::NBITS as usize / 8, 64);
 	}
 
 	#[test]
 	fn sparse_block_ser_roundtrip() {
 		let entries =
 			thread_rng().gen_range(BitmapChunk::LEN_BITS, BitmapBlock::NBITS as usize / 16);
-		test_roundtrip(entries, false, 1, 4 + 2 * entries);
+		test_roundtrip(entries, false, 1, 4 + 2 * entries, 64);
+	}
+
+	#[test]
+	fn sparse_unfull_block_ser_roundtrip() {
+		let entries =
+			thread_rng().gen_range(BitmapChunk::LEN_BITS, BitmapBlock::NBITS as usize / 16);
+		test_roundtrip(entries, false, 1, 4 + 2 * entries, 61);
 	}
 
 	#[test]
 	fn abdundant_block_ser_roundtrip() {
 		let entries =
 			thread_rng().gen_range(BitmapChunk::LEN_BITS, BitmapBlock::NBITS as usize / 16);
-		test_roundtrip(entries, true, 2, 4 + 2 * entries);
+		test_roundtrip(entries, true, 2, 4 + 2 * entries, 64);
+	}
+
+	#[test]
+	fn abdundant_unfull_block_ser_roundtrip() {
+		let entries =
+			thread_rng().gen_range(BitmapChunk::LEN_BITS, BitmapBlock::NBITS as usize / 16);
+		test_roundtrip(entries, true, 2, 4 + 2 * entries, 61);
 	}
 }

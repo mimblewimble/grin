@@ -55,11 +55,7 @@ fn test_capabilities() {
 
 	assert_eq!(
 		expected,
-		p2p::types::Capabilities::from_bits_truncate(0b11111 as u32),
-	);
-	assert_eq!(
-		expected,
-		p2p::types::Capabilities::from_bits_truncate(0b00011111 as u32),
+		p2p::types::Capabilities::from_bits_truncate(0b1011111 as u32),
 	);
 
 	assert_eq!(

@@ -50,6 +50,24 @@ impl TUIStatusView {
 				};
 				Cow::Owned(format!("Sync step 1/7: Downloading headers: {}%", percent))
 			}
+			SyncStatus::TxHashsetPibd {
+				aborted: _,
+				errored: _,
+				completed_leaves,
+				leaves_required,
+				completed_to_height: _,
+				required_height: _,
+			} => {
+				let percent = if completed_leaves == 0 {
+					0
+				} else {
+					completed_leaves * 100 / leaves_required
+				};
+				Cow::Owned(format!(
+					"Sync step 2/7: Downloading Tx state (PIBD) - {} / {} entries - {}%",
+					completed_leaves, leaves_required, percent
+				))
+			}
 			SyncStatus::TxHashsetDownload(stat) => {
 				if stat.total_size > 0 {
 					let percent = stat.downloaded_size * 100 / stat.total_size;
@@ -72,8 +90,31 @@ impl TUIStatusView {
 					))
 				}
 			}
-			SyncStatus::TxHashsetSetup => {
-				Cow::Borrowed("Sync step 3/7: Preparing chain state for validation")
+			SyncStatus::TxHashsetSetup {
+				headers,
+				headers_total,
+				kernel_pos,
+				kernel_pos_total,
+			} => {
+				if headers.is_some() && headers_total.is_some() {
+					let h = headers.unwrap();
+					let ht = headers_total.unwrap();
+					let percent = h * 100 / ht;
+					Cow::Owned(format!(
+						"Sync step 3/7: Preparing for validation (kernel history) - {}/{} - {}%",
+						h, ht, percent
+					))
+				} else if kernel_pos.is_some() && kernel_pos_total.is_some() {
+					let k = kernel_pos.unwrap();
+					let kt = kernel_pos_total.unwrap();
+					let percent = k * 100 / kt;
+					Cow::Owned(format!(
+						"Sync step 3/7: Preparing for validation (kernel position) - {}/{} - {}%",
+						k, kt, percent
+					))
+				} else {
+					Cow::Borrowed("Sync step 3/7: Preparing chain state for validation")
+				}
 			}
 			SyncStatus::TxHashsetRangeProofsValidation {
 				rproofs,

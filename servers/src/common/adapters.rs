@@ -32,7 +32,7 @@ use crate::core::core::hash::{Hash, Hashed};
 use crate::core::core::transaction::Transaction;
 use crate::core::core::{
 	BlockHeader, BlockSums, CompactBlock, Inputs, OutputIdentifier, Segment, SegmentIdentifier,
-	TxKernel,
+	SegmentType, SegmentTypeIdentifier, TxKernel,
 };
 use crate::core::pow::Difficulty;
 use crate::core::ser::ProtocolVersion;
@@ -559,6 +559,136 @@ where
 			return Err(chain::Error::SegmenterHeaderMismatch);
 		}
 		segmenter.rangeproof_segment(id)
+	}
+
+	fn receive_bitmap_segment(
+		&self,
+		block_hash: Hash,
+		output_root: Hash,
+		segment: Segment<BitmapChunk>,
+	) -> Result<bool, chain::Error> {
+		debug!(
+			"Received bitmap segment {} for block_hash: {}, output_root: {}",
+			segment.identifier().idx,
+			block_hash,
+			output_root
+		);
+		// TODO: Entire process needs to be restarted if the horizon block
+		// has changed (perhaps not here, NB this has to go somewhere)
+		let archive_header = self.chain().txhashset_archive_header_header_only()?;
+		let identifier = segment.identifier().clone();
+		let mut retval = Ok(true);
+		if let Some(d) = self.chain().desegmenter(&archive_header)?.write().as_mut() {
+			let res = d.add_bitmap_segment(segment, output_root);
+			if let Err(e) = res {
+				error!(
+					"Validation of incoming bitmap segment failed: {:?}, reason: {}",
+					identifier, e
+				);
+				retval = Err(e);
+			}
+		}
+		// Remove segment from outgoing list
+		self.sync_state.remove_pibd_segment(&SegmentTypeIdentifier {
+			segment_type: SegmentType::Bitmap,
+			identifier,
+		});
+		retval
+	}
+
+	fn receive_output_segment(
+		&self,
+		block_hash: Hash,
+		bitmap_root: Hash,
+		segment: Segment<OutputIdentifier>,
+	) -> Result<bool, chain::Error> {
+		debug!(
+			"Received output segment {} for block_hash: {}, bitmap_root: {:?}",
+			segment.identifier().idx,
+			block_hash,
+			bitmap_root,
+		);
+		let archive_header = self.chain().txhashset_archive_header_header_only()?;
+		let identifier = segment.identifier().clone();
+		let mut retval = Ok(true);
+		if let Some(d) = self.chain().desegmenter(&archive_header)?.write().as_mut() {
+			let res = d.add_output_segment(segment, Some(bitmap_root));
+			if let Err(e) = res {
+				error!(
+					"Validation of incoming output segment failed: {:?}, reason: {}",
+					identifier, e
+				);
+				retval = Err(e);
+			}
+		}
+		// Remove segment from outgoing list
+		self.sync_state.remove_pibd_segment(&SegmentTypeIdentifier {
+			segment_type: SegmentType::Output,
+			identifier,
+		});
+		retval
+	}
+
+	fn receive_rangeproof_segment(
+		&self,
+		block_hash: Hash,
+		segment: Segment<RangeProof>,
+	) -> Result<bool, chain::Error> {
+		debug!(
+			"Received proof segment {} for block_hash: {}",
+			segment.identifier().idx,
+			block_hash,
+		);
+		let archive_header = self.chain().txhashset_archive_header_header_only()?;
+		let identifier = segment.identifier().clone();
+		let mut retval = Ok(true);
+		if let Some(d) = self.chain().desegmenter(&archive_header)?.write().as_mut() {
+			let res = d.add_rangeproof_segment(segment);
+			if let Err(e) = res {
+				error!(
+					"Validation of incoming rangeproof segment failed: {:?}, reason: {}",
+					identifier, e
+				);
+				retval = Err(e);
+			}
+		}
+		// Remove segment from outgoing list
+		self.sync_state.remove_pibd_segment(&SegmentTypeIdentifier {
+			segment_type: SegmentType::RangeProof,
+			identifier,
+		});
+		retval
+	}
+
+	fn receive_kernel_segment(
+		&self,
+		block_hash: Hash,
+		segment: Segment<TxKernel>,
+	) -> Result<bool, chain::Error> {
+		debug!(
+			"Received kernel segment {} for block_hash: {}",
+			segment.identifier().idx,
+			block_hash,
+		);
+		let archive_header = self.chain().txhashset_archive_header_header_only()?;
+		let identifier = segment.identifier().clone();
+		let mut retval = Ok(true);
+		if let Some(d) = self.chain().desegmenter(&archive_header)?.write().as_mut() {
+			let res = d.add_kernel_segment(segment);
+			if let Err(e) = res {
+				error!(
+					"Validation of incoming rangeproof segment failed: {:?}, reason: {}",
+					identifier, e
+				);
+				retval = Err(e);
+			}
+		}
+		// Remove segment from outgoing list
+		self.sync_state.remove_pibd_segment(&SegmentTypeIdentifier {
+			segment_type: SegmentType::Kernel,
+			identifier,
+		});
+		retval
 	}
 }
 

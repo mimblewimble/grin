@@ -226,7 +226,14 @@ impl Chain {
 	/// Reset both head and header_head to the provided header.
 	/// Handles simple rewind and more complex fork scenarios.
 	/// Used by the reset_chain_head owner api endpoint.
-	pub fn reset_chain_head<T: Into<Tip>>(&self, head: T) -> Result<(), Error> {
+	/// Caller can choose not to rewind headers, which can be used
+	/// during PIBD scenarios where it's desirable to restart the PIBD process
+	/// without re-downloading the header chain
+	pub fn reset_chain_head<T: Into<Tip>>(
+		&self,
+		head: T,
+		rewind_headers: bool,
+	) -> Result<(), Error> {
 		let head = head.into();
 
 		let mut header_pmmr = self.header_pmmr.write();
@@ -247,16 +254,41 @@ impl Chain {
 			},
 		)?;
 
-		// If the rewind of full blocks was successful then we can rewind the header MMR.
-		// Rewind and reapply headers to reset the header MMR.
-		txhashset::header_extending(&mut header_pmmr, &mut batch, |ext, batch| {
-			self.rewind_and_apply_header_fork(&header, ext, batch)?;
-			batch.save_header_head(&head)?;
-			Ok(())
-		})?;
+		if rewind_headers {
+			// If the rewind of full blocks was successful then we can rewind the header MMR.
+			// Rewind and reapply headers to reset the header MMR.
+			txhashset::header_extending(&mut header_pmmr, &mut batch, |ext, batch| {
+				self.rewind_and_apply_header_fork(&header, ext, batch)?;
+				batch.save_header_head(&head)?;
+				Ok(())
+			})?;
+		}
 
 		batch.commit()?;
 
+		Ok(())
+	}
+
+	/// Reset prune lists (when PIBD resets and rolls back the
+	/// entire chain, the prune list needs to be manually wiped
+	/// as it's currently not included as part of rewind)
+	pub fn reset_prune_lists(&self) -> Result<(), Error> {
+		let mut header_pmmr = self.header_pmmr.write();
+		let mut txhashset = self.txhashset.write();
+		let mut batch = self.store.batch()?;
+
+		txhashset::extending(&mut header_pmmr, &mut txhashset, &mut batch, |ext, _| {
+			let extension = &mut ext.extension;
+			extension.reset_prune_lists();
+			Ok(())
+		})?;
+		Ok(())
+	}
+
+	/// Reset PIBD head
+	pub fn reset_pibd_head(&self) -> Result<(), Error> {
+		let batch = self.store.batch()?;
+		batch.save_pibd_head(&self.genesis().into())?;
 		Ok(())
 	}
 
@@ -273,6 +305,11 @@ impl Chain {
 	/// Return our shared txhashset instance.
 	pub fn txhashset(&self) -> Arc<RwLock<TxHashSet>> {
 		self.txhashset.clone()
+	}
+
+	/// return genesis header
+	pub fn genesis(&self) -> BlockHeader {
+		self.genesis.clone()
 	}
 
 	/// Shared store instance.
@@ -665,8 +702,15 @@ impl Chain {
 		// ensure the view is consistent.
 		txhashset::extending_readonly(&mut header_pmmr, &mut txhashset, |ext, batch| {
 			self.rewind_and_apply_fork(&header, ext, batch)?;
-			ext.extension
-				.validate(&self.genesis, fast_validation, &NoStatus, &header)?;
+			ext.extension.validate(
+				&self.genesis,
+				fast_validation,
+				&NoStatus,
+				None,
+				None,
+				&header,
+				None,
+			)?;
 			Ok(())
 		})
 	}
@@ -867,21 +911,22 @@ impl Chain {
 
 	/// instantiate desegmenter (in same lazy fashion as segmenter, though this should not be as
 	/// expensive an operation)
-	pub fn desegmenter(&self, archive_header: &BlockHeader) -> Result<Desegmenter, Error> {
+	pub fn desegmenter(
+		&self,
+		archive_header: &BlockHeader,
+	) -> Result<Arc<RwLock<Option<Desegmenter>>>, Error> {
 		// Use our cached desegmenter if we have one and the associated header matches.
-		if let Some(d) = self.pibd_desegmenter.read().as_ref() {
+		if let Some(d) = self.pibd_desegmenter.write().as_ref() {
 			if d.header() == archive_header {
-				return Ok(d.clone());
+				return Ok(self.pibd_desegmenter.clone());
 			}
 		}
-		// If no desegmenter or headers don't match init
-		// TODO: (Check whether we can do this.. we *should* be able to modify this as the desegmenter
-		// is in flight and we cross a horizon boundary, but needs more thinking)
+
 		let desegmenter = self.init_desegmenter(archive_header)?;
 		let mut cache = self.pibd_desegmenter.write();
 		*cache = Some(desegmenter.clone());
 
-		return Ok(desegmenter);
+		Ok(self.pibd_desegmenter.clone())
 	}
 
 	/// initialize a desegmenter, which is capable of extending the hashset by appending
@@ -898,6 +943,7 @@ impl Chain {
 			self.txhashset(),
 			self.header_pmmr.clone(),
 			header.clone(),
+			self.genesis.clone(),
 			self.store.clone(),
 		))
 	}
@@ -920,6 +966,17 @@ impl Chain {
 			body_head.last_block_h, body_head.height, txhashset_height,
 		);
 
+		self.get_header_by_height(txhashset_height)
+	}
+
+	/// Return the Block Header at the txhashset horizon, considering only the
+	/// contents of the header PMMR
+	pub fn txhashset_archive_header_header_only(&self) -> Result<BlockHeader, Error> {
+		let header_head = self.header_head()?;
+		let threshold = global::state_sync_threshold() as u64;
+		let archive_interval = global::txhashset_archive_interval();
+		let mut txhashset_height = header_head.height.saturating_sub(threshold);
+		txhashset_height = txhashset_height.saturating_sub(txhashset_height % archive_interval);
 		self.get_header_by_height(txhashset_height)
 	}
 
@@ -1028,7 +1085,7 @@ impl Chain {
 		txhashset_data: File,
 		status: &dyn TxHashsetWriteStatus,
 	) -> Result<bool, Error> {
-		status.on_setup();
+		status.on_setup(None, None, None, None);
 
 		// Initial check whether this txhashset is needed or not
 		let fork_point = self.fork_point()?;
@@ -1068,7 +1125,7 @@ impl Chain {
 
 			let header_pmmr = self.header_pmmr.read();
 			let batch = self.store.batch()?;
-			txhashset.verify_kernel_pos_index(&self.genesis, &header_pmmr, &batch)?;
+			txhashset.verify_kernel_pos_index(&self.genesis, &header_pmmr, &batch, None, None)?;
 		}
 
 		// all good, prepare a new batch and update all the required records
@@ -1087,7 +1144,7 @@ impl Chain {
 				// Validate the extension, generating the utxo_sum and kernel_sum.
 				// Full validation, including rangeproofs and kernel signature verification.
 				let (utxo_sum, kernel_sum) =
-					extension.validate(&self.genesis, false, status, &header)?;
+					extension.validate(&self.genesis, false, status, None, None, &header, None)?;
 
 				// Save the block_sums (utxo_sum, kernel_sum) to the db for use later.
 				batch.save_block_sums(
@@ -1161,6 +1218,7 @@ impl Chain {
 	fn remove_historical_blocks(
 		&self,
 		header_pmmr: &txhashset::PMMRHandle<BlockHeader>,
+		archive_header: BlockHeader,
 		batch: &store::Batch<'_>,
 	) -> Result<(), Error> {
 		if self.archive_mode() {
@@ -1181,7 +1239,6 @@ impl Chain {
 		// TODO: Check this, compaction selects a different horizon
 		// block from txhashset horizon/PIBD segmenter when using
 		// Automated testing chain
-		let archive_header = self.txhashset_archive_header()?;
 		if archive_header.height < cutoff {
 			cutoff = archive_header.height;
 			horizon = head.height - archive_header.height;
@@ -1241,6 +1298,10 @@ impl Chain {
 			}
 		}
 
+		// Retrieve archive header here, so as not to attempt a read
+		// lock while removing historical blocks
+		let archive_header = self.txhashset_archive_header()?;
+
 		// Take a write lock on the txhashet and start a new writeable db batch.
 		let header_pmmr = self.header_pmmr.read();
 		let mut txhashset = self.txhashset.write();
@@ -1260,7 +1321,7 @@ impl Chain {
 
 		// If we are not in archival mode remove historical blocks from the db.
 		if !self.archive_mode() {
-			self.remove_historical_blocks(&header_pmmr, &batch)?;
+			self.remove_historical_blocks(&header_pmmr, archive_header, &batch)?;
 		}
 
 		// Make sure our output_pos index is consistent with the UTXO set.
@@ -1616,9 +1677,31 @@ fn setup_head(
 				// Note: We are rewinding and validating against a writeable extension.
 				// If validation is successful we will truncate the backend files
 				// to match the provided block header.
-				let header = batch.get_block_header(&head.last_block_h)?;
+				let mut pibd_in_progress = false;
+				let header = {
+					let head = batch.get_block_header(&head.last_block_h)?;
+					let pibd_tip = store.pibd_head()?;
+					let pibd_head = batch.get_block_header(&pibd_tip.last_block_h)?;
+					if pibd_head.height > head.height {
+						pibd_in_progress = true;
+						pibd_head
+					} else {
+						head
+					}
+				};
 
 				let res = txhashset::extending(header_pmmr, txhashset, &mut batch, |ext, batch| {
+					// If we're still downloading via PIBD, don't worry about sums and validations just yet
+					// We still want to rewind to the last completed block to ensure a consistent state
+					if pibd_in_progress {
+						debug!(
+							"init: PIBD appears to be in progress at height {}, hash {}, not validating, will attempt to continue",
+							header.height,
+							header.hash()
+						);
+						return Ok(());
+					}
+
 					pipe::rewind_and_apply_fork(&header, ext, batch, &|_| Ok(()))?;
 
 					let extension = &mut ext.extension;
