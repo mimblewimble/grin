@@ -35,18 +35,18 @@ use crate::util::StopState;
 
 /// DNS Seeds with contact email associated - Mainnet
 pub const MAINNET_DNS_SEEDS: &[&str] = &[
-	"mainnet.seed.grin.icu",           // gary.peverell@protonmail.com
-	"mainnet.seed.713.mw",             // jasper@713.mw
 	"mainnet.seed.grin.lesceller.com", // q.lesceller@gmail.com
 	"mainnet.seed.grin.prokapi.com",   // hendi@prokapi.com
-	"grinseed.yeastplume.org",         // yeastplume@protonmail.com
+	"grinseed.revcore.net",            // yeastplume@gmail.com
 	"mainnet-seed.grinnode.live",      // info@grinnode.live
+	"mainnet.grin.punksec.de",         // grin@punksec.de
+	"grinnode.30-r.com",               // trinitron@30-r.com
 ];
 /// DNS Seeds with contact email associated - Testnet
 pub const TESTNET_DNS_SEEDS: &[&str] = &[
 	"floonet.seed.grin.lesceller.com", // q.lesceller@gmail.com
 	"floonet.seed.grin.prokapi.com",   // hendi@prokapi.com
-	"grintestseed.revcore.net",        // yeastplume@protonmail.com
+	"grintestseed.revcore.net",        // yeastplume@gmail.com
 	"testnet.grin.punksec.de",         // grin@punksec.de
 	"testnet.grinnode.30-r.com",       // trinitron@30-r.com
 ];
