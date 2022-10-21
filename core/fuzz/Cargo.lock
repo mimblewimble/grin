@@ -388,7 +388,7 @@ checksum = "9b919933a397b79c37e33b77bb2aa3dc8eb6e165ad809e58ff75bc7db2e34574"
 
 [[package]]
 name = "grin_core"
-version = "5.2.0-alpha.1"
+version = "5.2.0-alpha.2"
 dependencies = [
  "blake2-rfc",
  "byteorder",
@@ -422,7 +422,7 @@ dependencies = [
 
 [[package]]
 name = "grin_keychain"
-version = "5.2.0-alpha.1"
+version = "5.2.0-alpha.2"
 dependencies = [
  "blake2-rfc",
  "byteorder",
@@ -459,7 +459,7 @@ dependencies = [
 
 [[package]]
 name = "grin_util"
-version = "5.2.0-alpha.1"
+version = "5.2.0-alpha.2"
 dependencies = [
  "backtrace",
  "base64",

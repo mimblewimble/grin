@@ -18,7 +18,7 @@
 //! list of DNS records (the default).
 
 use chrono::prelude::{DateTime, Utc};
-use chrono::{Duration, MIN_DATE};
+use chrono::Duration;
 use p2p::{msg::PeerAddrs, P2PConfig};
 use rand::prelude::*;
 use std::collections::HashMap;
@@ -69,8 +69,8 @@ pub fn connect_and_monitor(
 			// check seeds first
 			connect_to_seeds_and_peers(peers.clone(), tx.clone(), seed_list, config);
 
-			let mut prev = MIN_DATE.and_hms(0, 0, 0);
-			let mut prev_expire_check = MIN_DATE.and_hms(0, 0, 0);
+			let mut prev = chrono::Date::<Utc>::MIN_UTC.and_hms(0, 0, 0);
+			let mut prev_expire_check = chrono::Date::<Utc>::MIN_UTC.and_hms(0, 0, 0);
 			let mut prev_ping = Utc::now();
 			let mut start_attempt = 0;
 			let mut connecting_history: HashMap<PeerAddr, DateTime<Utc>> = HashMap::new();
