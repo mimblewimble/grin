@@ -27,7 +27,6 @@ use crate::pow::{verify_size, Difficulty, Proof, ProofOfWork};
 use crate::ser::{
 	self, deserialize_default, serialize_default, PMMRable, Readable, Reader, Writeable, Writer,
 };
-use chrono::naive::{MAX_DATE, MIN_DATE};
 use chrono::prelude::{DateTime, NaiveDateTime, Utc};
 use chrono::Duration;
 use keychain::{self, BlindingFactor};
@@ -289,8 +288,8 @@ fn read_block_header<R: Reader>(reader: &mut R) -> Result<BlockHeader, ser::Erro
 	let (output_mmr_size, kernel_mmr_size) = ser_multiread!(reader, read_u64, read_u64);
 	let pow = ProofOfWork::read(reader)?;
 
-	if timestamp > MAX_DATE.and_hms(0, 0, 0).timestamp()
-		|| timestamp < MIN_DATE.and_hms(0, 0, 0).timestamp()
+	if timestamp > chrono::NaiveDate::MAX.and_hms(0, 0, 0).timestamp()
+		|| timestamp < chrono::NaiveDate::MIN.and_hms(0, 0, 0).timestamp()
 	{
 		return Err(ser::Error::CorruptedData);
 	}
