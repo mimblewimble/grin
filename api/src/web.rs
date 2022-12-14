@@ -143,10 +143,7 @@ macro_rules! right_path_element(
 #[macro_export]
 macro_rules! must_get_query(
 	($req: expr) =>(
-		match $req.uri().query() {
-			Some(q) => q,
-			None => return Err(Error::RequestError("no query string".to_owned())),
-		}
+		$req.uri().query().ok_or_else(|| Error::RequestError("no query string".to_owned()))?
 	));
 
 #[macro_export]

@@ -246,10 +246,7 @@ impl Node {
 	}
 
 	fn value(&self) -> Option<HandlerObj> {
-		match &self.value {
-			None => None,
-			Some(v) => Some(v.clone()),
-		}
+		self.value.as_ref().cloned()
 	}
 
 	fn set_value(&mut self, value: HandlerObj) {

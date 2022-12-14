@@ -427,7 +427,7 @@ impl KernelHandler {
 					.parse()
 					.map_err(|_| Error::RequestError("invalid minimum height".into()))?;
 				// Default is genesis
-				min_height = if h == 0 { None } else { Some(h) };
+				min_height = (h != 0).then_some(h);
 			}
 			if let Some(h) = params.get("max_height") {
 				let h = h
@@ -438,7 +438,7 @@ impl KernelHandler {
 					.head()
 					.map_err(|e| Error::Internal(format!("{}", e)))?
 					.height;
-				max_height = if h >= head_height { None } else { Some(h) };
+				max_height = (h < head_height).then_some(h);
 			}
 		}
 

@@ -304,11 +304,7 @@ impl OutputPrintable {
 			.map(|(_, x)| x.height)
 			.or(block_header.map(|x| x.height));
 
-		let proof = if include_proof {
-			Some(output.proof_bytes().to_hex())
-		} else {
-			None
-		};
+		let proof = (include_proof).then(|| output.proof_bytes().to_hex());
 
 		// Get the Merkle proof for all unspent coinbase outputs (to verify maturity on
 		// spend). We obtain the Merkle proof by rewinding the PMMR.

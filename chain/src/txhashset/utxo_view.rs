@@ -180,13 +180,7 @@ impl<'a> UTXOView<'a> {
 		// Find the max pos of any coinbase being spent.
 		let pos = spent?
 			.iter()
-			.filter_map(|(out, pos)| {
-				if out.features.is_coinbase() {
-					Some(pos.pos)
-				} else {
-					None
-				}
-			})
+			.filter_map(|(out, pos)| (out.features.is_coinbase()).then(|| pos.pos))
 			.max();
 
 		if let Some(pos) = pos {

@@ -1483,10 +1483,9 @@ impl Chain {
 	pub fn get_header_for_output(&self, commit: Commitment) -> Result<BlockHeader, Error> {
 		let header_pmmr = self.header_pmmr.read();
 		let txhashset = self.txhashset.read();
-		let (_, pos) = match txhashset.get_unspent(commit)? {
-			Some(o) => o,
-			None => return Err(Error::OutputNotFound),
-		};
+		let (_, pos) = txhashset
+			.get_unspent(commit)?
+			.ok_or_else(|| Error::OutputNotFound)?;
 		let hash = header_pmmr.get_header_hash_by_height(pos.height)?;
 		Ok(self.get_block_header(&hash)?)
 	}

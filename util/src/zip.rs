@@ -24,16 +24,16 @@ use zip as zip_rs;
 // Sanitize file path for normal components, excluding '/', '..', and '.'
 // From private function in zip crate
 fn path_to_string(path: &std::path::Path) -> String {
-    let mut path_str = String::new();
-    for component in path.components() {
-        if let std::path::Component::Normal(os_str) = component {
-            if !path_str.is_empty() {
-                path_str.push('/');
-            }
-            path_str.push_str(&*os_str.to_string_lossy());
-        }
-    }
-    path_str
+	let mut path_str = String::new();
+	for component in path.components() {
+		if let std::path::Component::Normal(os_str) = component {
+			if !path_str.is_empty() {
+				path_str.push('/');
+			}
+			path_str.push_str(&*os_str.to_string_lossy());
+		}
+	}
+	path_str
 }
 
 /// Create a zip archive from source dir and list of relative file paths.

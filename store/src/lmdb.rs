@@ -420,10 +420,7 @@ impl<'a> Batch<'a> {
 			_ => DeserializationMode::default(),
 		};
 		self.get_with(key, |_, mut data| {
-			match ser::deserialize(&mut data, self.protocol_version(), d) {
-				Ok(res) => Ok(res),
-				Err(e) => Err(From::from(e)),
-			}
+			ser::deserialize(&mut data, self.protocol_version(), d).map_err(|e| From::from(e))
 		})
 	}
 
@@ -483,11 +480,7 @@ where
 		};
 		kv.ok()
 			.filter(|(k, _)| k.starts_with(self.prefix.as_slice()))
-			.map(|(k, v)| match (self.deserialize)(k, v) {
-				Ok(v) => Some(v),
-				Err(_) => None,
-			})
-			.flatten()
+			.and_then(|(k, v)| (self.deserialize)(k, v).ok())
 	}
 }
 

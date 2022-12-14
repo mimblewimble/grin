@@ -642,11 +642,7 @@ impl Desegmenter {
 			self.bitmap_mmr_size,
 			self.default_bitmap_segment_height,
 		);
-		if cur_segment_count == total_segment_count {
-			None
-		} else {
-			Some(cur_segment_count as u64)
-		}
+		(cur_segment_count != total_segment_count).then(|| cur_segment_count as u64)
 	}
 
 	/// Adds and validates a bitmap chunk
@@ -767,11 +763,7 @@ impl Desegmenter {
 			cur_segment_count,
 			total_segment_count
 		);
-		if cur_segment_count == total_segment_count {
-			None
-		} else {
-			Some(cur_segment_count as u64)
-		}
+		(cur_segment_count != total_segment_count).then(|| cur_segment_count as u64)
 	}
 
 	/// Adds a output segment
@@ -878,11 +870,7 @@ impl Desegmenter {
 			cur_segment_count,
 			total_segment_count
 		);
-		if cur_segment_count == total_segment_count {
-			None
-		} else {
-			Some(cur_segment_count as u64)
-		}
+		(cur_segment_count != total_segment_count).then(|| cur_segment_count as u64)
 	}
 
 	/// Adds a Rangeproof segment
@@ -973,11 +961,7 @@ impl Desegmenter {
 			cur_segment_count,
 			total_segment_count
 		);
-		if cur_segment_count == total_segment_count {
-			None
-		} else {
-			Some(cur_segment_count as u64)
-		}
+		(cur_segment_count != total_segment_count).then(|| cur_segment_count as u64)
 	}
 
 	/// Adds a Kernel segment

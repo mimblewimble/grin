@@ -83,10 +83,7 @@ impl ChainStore {
 			"PIBD_HEAD".to_owned()
 		});
 
-		match res {
-			Ok(r) => Ok(r),
-			Err(_) => Ok(Tip::from_header(&global::get_genesis_block().header)),
-		}
+		res.or_else(|_| Ok(Tip::from_header(&global::get_genesis_block().header)))
 	}
 
 	/// Header of the block at the head of the block chain (not the same thing as header_head).

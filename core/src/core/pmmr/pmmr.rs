@@ -598,11 +598,7 @@ pub fn insertion_to_pmmr_index(nleaf0: u64) -> u64 {
 /// Returns the insertion index of the given leaf index
 pub fn pmmr_leaf_to_insertion_index(pos0: u64) -> Option<u64> {
 	let (insert_idx, height) = peak_map_height(pos0);
-	if height == 0 {
-		Some(insert_idx)
-	} else {
-		None
-	}
+	(height == 0).then(|| insert_idx)
 }
 
 /// The height of a node in a full binary tree from its postorder traversal

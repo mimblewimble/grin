@@ -172,11 +172,7 @@ impl FeeFields {
 	/// Turn a zero `FeeField` into a `None`, any other value into a `Some`.
 	/// We need this because a zero `FeeField` cannot be deserialized.
 	pub fn as_opt(&self) -> Option<Self> {
-		if self.is_zero() {
-			None
-		} else {
-			Some(*self)
-		}
+		(!self.is_zero()).then(|| *self)
 	}
 
 	/// Check if the `FeeFields` is set to zero

@@ -138,11 +138,7 @@ impl Keychain for ExtKeychain {
 					&Identifier::from_path(&k.ext_keychain_path),
 					k.switch,
 				);
-				if let Ok(s) = res {
-					Some(s)
-				} else {
-					None
-				}
+				res.ok()
 			})
 			.collect();
 
@@ -155,11 +151,7 @@ impl Keychain for ExtKeychain {
 					&Identifier::from_path(&k.ext_keychain_path),
 					k.switch,
 				);
-				if let Ok(s) = res {
-					Some(s)
-				} else {
-					None
-				}
+				res.ok()
 			})
 			.collect();
 

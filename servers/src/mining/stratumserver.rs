@@ -544,11 +544,8 @@ impl Handler {
 				{
 					debug!("resend updated block");
 					let mut state = self.current_state.write();
-					let wallet_listener_url = if !config.burn_reward {
-						Some(config.wallet_listener_url.clone())
-					} else {
-						None
-					};
+					let wallet_listener_url =
+						(!config.burn_reward).then(|| config.wallet_listener_url.clone());
 					// If this is a new block we will clear the current_block version history
 					let clear_blocks = current_hash != latest_hash;
 
