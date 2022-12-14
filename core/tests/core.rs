@@ -192,17 +192,17 @@ fn build_two_half_kernels() {
 	let msg = kernel.msg_to_sign().unwrap();
 
 	// Generate a kernel with public excess and associated signature.
-	let excess = BlindingFactor::rand(&keychain.secp());
-	let skey = excess.secret_key(&keychain.secp()).unwrap();
+	let excess = BlindingFactor::rand(keychain.secp());
+	let skey = excess.secret_key(keychain.secp()).unwrap();
 	kernel.excess = keychain.secp().commit(0, skey).unwrap();
-	let pubkey = &kernel.excess.to_pubkey(&keychain.secp()).unwrap();
+	let pubkey = &kernel.excess.to_pubkey(keychain.secp()).unwrap();
 	kernel.excess_sig =
-		aggsig::sign_with_blinding(&keychain.secp(), &msg, &excess, Some(&pubkey)).unwrap();
+		aggsig::sign_with_blinding(keychain.secp(), &msg, &excess, Some(pubkey)).unwrap();
 	kernel.verify().unwrap();
 
 	let tx1 = build::transaction_with_kernel(
 		&[input(10, key_id1), output(8, key_id2.clone())],
-		kernel.clone(),
+		kernel,
 		excess.clone(),
 		&keychain,
 		&builder,
@@ -211,8 +211,8 @@ fn build_two_half_kernels() {
 
 	let tx2 = build::transaction_with_kernel(
 		&[input(8, key_id2), output(6, key_id3)],
-		kernel.clone(),
-		excess.clone(),
+		kernel,
+		excess,
 		&keychain,
 		&builder,
 	)
@@ -586,13 +586,7 @@ fn test_block_with_timelocked_tx() {
 
 	let previous_header = BlockHeader::default();
 
-	let b = new_block(
-		&[tx1],
-		&keychain,
-		&builder,
-		&previous_header,
-		&key_id3.clone(),
-	);
+	let b = new_block(&[tx1], &keychain, &builder, &previous_header, &key_id3);
 	b.validate(&BlindingFactor::zero()).unwrap();
 
 	// now try adding a timelocked tx where lock height is greater than current

@@ -49,7 +49,7 @@ fn bench_peak_map() {
 		}
 		let fin = Utc::now().timestamp_nanos();
 		let dur_ms = (fin - start) as f64 * nano_to_millis;
-		println!("{:9?} peak_map_height() in {:9.3?}ms", v, dur_ms);
+		println!("{v:9?} peak_map_height() in {dur_ms:9.3?}ms");
 	}
 }
 

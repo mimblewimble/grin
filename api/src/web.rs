@@ -16,10 +16,10 @@ where
 {
 	let raw = body::to_bytes(req.into_body())
 		.await
-		.map_err(|e| Error::RequestError(format!("Failed to read request: {}", e)))?;
+		.map_err(|e| Error::RequestError(format!("Failed to read request: {e}")))?;
 
 	serde_json::from_reader(raw.bytes())
-		.map_err(|e| Error::RequestError(format!("Invalid request body: {}", e)))
+		.map_err(|e| Error::RequestError(format!("Invalid request body: {e}")))
 }
 
 /// Convert Result to ResponseFuture
@@ -30,11 +30,11 @@ where
 	match res {
 		Ok(s) => json_response_pretty(&s),
 		Err(e) => match e {
-			Error::Argument(msg) => response(StatusCode::BAD_REQUEST, msg.clone()),
-			Error::RequestError(msg) => response(StatusCode::BAD_REQUEST, msg.clone()),
+			Error::Argument(msg) => response(StatusCode::BAD_REQUEST, msg),
+			Error::RequestError(msg) => response(StatusCode::BAD_REQUEST, msg),
 			Error::NotFound => response(StatusCode::NOT_FOUND, ""),
-			Error::Internal(msg) => response(StatusCode::INTERNAL_SERVER_ERROR, msg.clone()),
-			Error::ResponseError(msg) => response(StatusCode::INTERNAL_SERVER_ERROR, msg.clone()),
+			Error::Internal(msg) => response(StatusCode::INTERNAL_SERVER_ERROR, msg),
+			Error::ResponseError(msg) => response(StatusCode::INTERNAL_SERVER_ERROR, msg),
 			// place holder
 			Error::Router { .. } => response(StatusCode::INTERNAL_SERVER_ERROR, ""),
 		},
@@ -62,7 +62,7 @@ where
 		Ok(json) => response(StatusCode::OK, json),
 		Err(e) => response(
 			StatusCode::INTERNAL_SERVER_ERROR,
-			format!("can't create json response: {}", e),
+			format!("can't create json response: {e}"),
 		),
 	}
 }
@@ -107,7 +107,7 @@ impl From<&str> for QueryParams {
 		let params = form_urlencoded::parse(query_string.as_bytes())
 			.into_owned()
 			.fold(HashMap::new(), |mut hm, (k, v)| {
-				hm.entry(k).or_insert_with(|| vec![]).push(v);
+				hm.entry(k).or_insert_with(std::vec::Vec::new).push(v);
 				hm
 			});
 		QueryParams { params }

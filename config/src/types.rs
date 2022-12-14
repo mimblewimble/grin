@@ -42,17 +42,16 @@ impl fmt::Display for ConfigError {
 		match *self {
 			ConfigError::ParseError(ref file_name, ref message) => write!(
 				f,
-				"Error parsing configuration file at {} - {}",
-				file_name, message
+				"Error parsing configuration file at {file_name} - {message}"
 			),
 			ConfigError::FileIOError(ref file_name, ref message) => {
-				write!(f, "{} {}", message, file_name)
+				write!(f, "{message} {file_name}")
 			}
 			ConfigError::FileNotFoundError(ref file_name) => {
-				write!(f, "Configuration file not found: {}", file_name)
+				write!(f, "Configuration file not found: {file_name}")
 			}
 			ConfigError::SerializationError(ref message) => {
-				write!(f, "Error serializing configuration: {}", message)
+				write!(f, "Error serializing configuration: {message}")
 			}
 		}
 	}
@@ -62,7 +61,7 @@ impl From<io::Error> for ConfigError {
 	fn from(error: io::Error) -> ConfigError {
 		ConfigError::FileIOError(
 			String::from(""),
-			format!("Error loading config file: {}", error),
+			format!("Error loading config file: {error}"),
 		)
 	}
 }

@@ -317,12 +317,12 @@ mod tests {
 		let h1 = Arc::new(HandlerImpl(1));
 		let h2 = Arc::new(HandlerImpl(2));
 		let h3 = Arc::new(HandlerImpl(3));
-		routes.add_route("/v1/users", h1.clone()).unwrap();
+		routes.add_route("/v1/users", h1).unwrap();
 		assert!(routes.add_route("/v1/users", h2.clone()).is_err());
 		routes.add_route("/v1/users/xxx", h3.clone()).unwrap();
 		routes.add_route("/v1/users/xxx/yyy", h3.clone()).unwrap();
-		routes.add_route("/v1/zzz/*", h3.clone()).unwrap();
-		assert!(routes.add_route("/v1/zzz/ccc", h2.clone()).is_err());
+		routes.add_route("/v1/zzz/*", h3).unwrap();
+		assert!(routes.add_route("/v1/zzz/ccc", h2).is_err());
 		routes
 			.add_route("/v1/zzz/*/zzz", Arc::new(HandlerImpl(6)))
 			.unwrap();

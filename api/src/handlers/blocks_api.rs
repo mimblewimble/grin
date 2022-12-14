@@ -47,7 +47,7 @@ impl HeaderHandler {
 		}
 		check_block_param(&input)?;
 		let vec =
-			util::from_hex(&input).map_err(|e| Error::Argument(format!("invalid input: {}", e)))?;
+			util::from_hex(&input).map_err(|e| Error::Argument(format!("invalid input: {e}")))?;
 		let h = Hash::from_vec(&vec);
 		let header = w(&self.chain)?
 			.get_block_header(&h)
@@ -155,7 +155,7 @@ impl BlockHandler {
 		}
 		check_block_param(&input)?;
 		let vec =
-			util::from_hex(&input).map_err(|e| Error::Argument(format!("invalid input: {}", e)))?;
+			util::from_hex(&input).map_err(|e| Error::Argument(format!("invalid input: {e}")))?;
 		Ok(Hash::from_vec(&vec))
 	}
 
@@ -195,7 +195,7 @@ fn check_block_param(input: &str) -> Result<(), Error> {
 	lazy_static! {
 		static ref RE: Regex = Regex::new(r"[0-9a-fA-F]{64}").unwrap();
 	}
-	if !RE.is_match(&input) {
+	if !RE.is_match(input) {
 		return Err(Error::Argument("Not a valid hash or height.".to_owned()));
 	}
 	Ok(())
@@ -208,7 +208,7 @@ impl Handler for BlockHandler {
 			Err(e) => {
 				return response(
 					StatusCode::BAD_REQUEST,
-					format!("failed to parse input: {}", e),
+					format!("failed to parse input: {e}"),
 				);
 			}
 			Ok(h) => h,
@@ -227,7 +227,7 @@ impl Handler for BlockHandler {
 					_ => {
 						return response(
 							StatusCode::BAD_REQUEST,
-							format!("unsupported query parameter: {}", param),
+							format!("unsupported query parameter: {param}"),
 						)
 					}
 				}

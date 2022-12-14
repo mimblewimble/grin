@@ -332,13 +332,13 @@ impl Peers {
 		// build a list of peers to be cleaned up
 		{
 			for peer in self.iter() {
-				let ref peer: &Peer = peer.as_ref();
+				let peer: &Peer = peer.as_ref();
 				if peer.is_banned() {
 					debug!("clean_peers {:?}, peer banned", peer.info.addr);
-					rm.push(peer.info.addr.clone());
+					rm.push(peer.info.addr);
 				} else if !peer.is_connected() {
 					debug!("clean_peers {:?}, not connected", peer.info.addr);
-					rm.push(peer.info.addr.clone());
+					rm.push(peer.info.addr);
 				} else if peer.is_abusive() {
 					let received = peer.tracker().received_bytes.read().count_per_min();
 					let sent = peer.tracker().sent_bytes.read().count_per_min();
@@ -347,7 +347,7 @@ impl Peers {
 						peer.info.addr, sent, received,
 					);
 					let _ = self.update_state(peer.info.addr, State::Banned);
-					rm.push(peer.info.addr.clone());
+					rm.push(peer.info.addr);
 				} else {
 					let (stuck, diff) = peer.is_stuck();
 					match self.adapter.total_difficulty() {
@@ -355,7 +355,7 @@ impl Peers {
 							if stuck && diff < total_difficulty {
 								debug!("clean_peers {:?}, stuck peer", peer.info.addr);
 								let _ = self.update_state(peer.info.addr, State::Defunct);
-								rm.push(peer.info.addr.clone());
+								rm.push(peer.info.addr);
 							}
 						}
 						Err(e) => error!("failed to get total difficulty: {:?}", e),
@@ -501,7 +501,7 @@ impl ChainAdapter for Peers {
 				hash, peer_info.addr,
 			);
 			self.ban_peer(peer_info.addr, ReasonForBan::BadBlock)
-				.map_err(|e| chain::Error::Other(format!("ban peer error: {:?}", e)))?;
+				.map_err(|e| chain::Error::Other(format!("ban peer error: {e:?}")))?;
 			Ok(false)
 		} else {
 			Ok(true)
@@ -522,7 +522,7 @@ impl ChainAdapter for Peers {
 				hash, peer_info.addr
 			);
 			self.ban_peer(peer_info.addr, ReasonForBan::BadCompactBlock)
-				.map_err(|e| chain::Error::Other(format!("ban peer error: {:?}", e)))?;
+				.map_err(|e| chain::Error::Other(format!("ban peer error: {e:?}")))?;
 			Ok(false)
 		} else {
 			Ok(true)
@@ -538,7 +538,7 @@ impl ChainAdapter for Peers {
 			// if the peer sent us a block header that's intrinsically bad
 			// they are either mistaken or malevolent, both of which require a ban
 			self.ban_peer(peer_info.addr, ReasonForBan::BadBlockHeader)
-				.map_err(|e| chain::Error::Other(format!("ban peer error: {:?}", e)))?;
+				.map_err(|e| chain::Error::Other(format!("ban peer error: {e:?}")))?;
 			Ok(false)
 		} else {
 			Ok(true)
@@ -554,7 +554,7 @@ impl ChainAdapter for Peers {
 			// if the peer sent us a block header that's intrinsically bad
 			// they are either mistaken or malevolent, both of which require a ban
 			self.ban_peer(peer_info.addr, ReasonForBan::BadBlockHeader)
-				.map_err(|e| chain::Error::Other(format!("ban peer error: {:?}", e)))?;
+				.map_err(|e| chain::Error::Other(format!("ban peer error: {e:?}")))?;
 			Ok(false)
 		} else {
 			Ok(true)
@@ -593,7 +593,7 @@ impl ChainAdapter for Peers {
 				peer_info.addr
 			);
 			self.ban_peer(peer_info.addr, ReasonForBan::BadTxHashSet)
-				.map_err(|e| chain::Error::Other(format!("ban peer error: {:?}", e)))?;
+				.map_err(|e| chain::Error::Other(format!("ban peer error: {e:?}")))?;
 			Ok(true)
 		} else {
 			Ok(false)
@@ -746,7 +746,7 @@ impl<I: Iterator> IntoIterator for PeersIter<I> {
 	type IntoIter = I;
 
 	fn into_iter(self) -> Self::IntoIter {
-		self.iter.into_iter()
+		self.iter
 	}
 }
 

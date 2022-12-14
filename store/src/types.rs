@@ -20,7 +20,7 @@ use crate::core::ser::{
 };
 use std::fmt::Debug;
 use std::fs::{self, File, OpenOptions};
-use std::io::{self, BufReader, BufWriter, Seek, SeekFrom, Write};
+use std::io::{self, BufReader, BufWriter, Seek, Write};
 use std::marker;
 use std::path::{Path, PathBuf};
 
@@ -263,7 +263,7 @@ where
 		if self.size()? == 0 {
 			self.buffer_start_pos = 0;
 		} else {
-			self.mmap = Some(unsafe { memmap::Mmap::map(&self.file.as_ref().unwrap())? });
+			self.mmap = Some(unsafe { memmap::Mmap::map(self.file.as_ref().unwrap())? });
 			self.buffer_start_pos = self.size_in_elmts()?;
 		}
 
@@ -401,7 +401,7 @@ where
 		if self.file.as_ref().unwrap().metadata()?.len() == 0 {
 			self.mmap = None;
 		} else {
-			self.mmap = Some(unsafe { memmap::Mmap::map(&self.file.as_ref().unwrap())? });
+			self.mmap = Some(unsafe { memmap::Mmap::map(self.file.as_ref().unwrap())? });
 		}
 
 		Ok(())
@@ -484,7 +484,7 @@ where
 
 		// Remember to seek back to start of the file as the caller is likely
 		// to read this file directly without reopening it.
-		writer.seek(SeekFrom::Start(0))?;
+		writer.rewind()?;
 
 		let file = writer.into_inner()?;
 		Ok(file)

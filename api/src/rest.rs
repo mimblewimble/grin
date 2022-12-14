@@ -89,7 +89,7 @@ impl TLSConfig {
 
 	fn load_private_key(&self) -> Result<rustls::PrivateKey, Error> {
 		let keyfile = File::open(&self.private_key)
-			.map_err(|e| Error::Internal(format!("failed to open private key file {}", e)))?;
+			.map_err(|e| Error::Internal(format!("failed to open private key file {e}")))?;
 		let mut reader = io::BufReader::new(keyfile);
 
 		let keys = pemfile::pkcs8_private_keys(&mut reader)
@@ -105,7 +105,7 @@ impl TLSConfig {
 		let key = self.load_private_key()?;
 		let mut cfg = rustls::ServerConfig::new(rustls::NoClientAuth::new());
 		cfg.set_single_cert(certs, key)
-			.map_err(|e| Error::Internal(format!("set single certificate failed {}", e)))?;
+			.map_err(|e| Error::Internal(format!("set single certificate failed {e}")))?;
 		Ok(Arc::new(cfg))
 	}
 }
@@ -176,10 +176,10 @@ impl ApiServer {
 				};
 
 				let mut rt = Runtime::new()
-					.map_err(|e| eprintln!("HTTP API server error: {}", e))
+					.map_err(|e| eprintln!("HTTP API server error: {e}"))
 					.unwrap();
 				if let Err(e) = rt.block_on(server) {
-					eprintln!("HTTP API server error: {}", e)
+					eprintln!("HTTP API server error: {e}")
 				}
 			})
 			.map_err(|_| Error::Internal("failed to spawn API thread".to_string()))
@@ -233,10 +233,10 @@ impl ApiServer {
 				};
 
 				let mut rt = Runtime::new()
-					.map_err(|e| eprintln!("HTTP API server error: {}", e))
+					.map_err(|e| eprintln!("HTTP API server error: {e}"))
 					.unwrap();
 				if let Err(e) = rt.block_on(server) {
-					eprintln!("HTTP API server error: {}", e)
+					eprintln!("HTTP API server error: {e}")
 				}
 			})
 			.map_err(|_| Error::Internal("failed to spawn API thread".to_string()))

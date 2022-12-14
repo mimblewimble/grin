@@ -86,7 +86,7 @@ impl Ord for OrderedHashLeafNode {
 			OrderedHashLeafNode::Hash(_, pos0) => pos0,
 			OrderedHashLeafNode::Leaf(_, pos0) => pos0,
 		};
-		a_val.cmp(&b_val)
+		a_val.cmp(b_val)
 	}
 }
 
@@ -411,7 +411,7 @@ impl TxHashSet {
 
 	/// Convenience function to query the db for a header by its hash.
 	pub fn get_block_header(&self, hash: &Hash) -> Result<BlockHeader, Error> {
-		Ok(self.commit_index.get_block_header(&hash)?)
+		Ok(self.commit_index.get_block_header(hash)?)
 	}
 
 	/// returns outputs from the given pmmr index up to the
@@ -496,7 +496,7 @@ impl TxHashSet {
 
 	/// Return Commit's MMR position
 	pub fn get_output_pos(&self, commit: &Commitment) -> Result<u64, Error> {
-		Ok(self.commit_index.get_output_pos(&commit)?)
+		Ok(self.commit_index.get_output_pos(commit)?)
 	}
 
 	/// build a new merkle proof for the given output commitment
@@ -517,7 +517,7 @@ impl TxHashSet {
 
 		let head_header = batch.head_header()?;
 
-		let rewind_rm_pos = input_pos_to_rewind(&horizon_header, &head_header, batch)?;
+		let rewind_rm_pos = input_pos_to_rewind(horizon_header, &head_header, batch)?;
 
 		debug!("txhashset: check_compact output mmr backend...");
 		self.output_pmmr_h
@@ -567,7 +567,7 @@ impl TxHashSet {
 		let prev_size = if from_header.height == 0 {
 			0
 		} else {
-			let prev_header = batch.get_previous_header(&from_header)?;
+			let prev_header = batch.get_previous_header(from_header)?;
 			prev_header.kernel_mmr_size
 		};
 
@@ -1012,7 +1012,7 @@ impl<'a> HeaderExtension<'a> {
 
 	/// The head representing the furthest extent of the current extension.
 	pub fn head(&self) -> Tip {
-		self.head.clone()
+		self.head
 	}
 
 	/// Get header hash by height.
@@ -1061,7 +1061,7 @@ impl<'a> HeaderExtension<'a> {
 	/// This may be either the header MMR or the sync MMR depending on the
 	/// extension.
 	pub fn apply_header(&mut self, header: &BlockHeader) -> Result<(), Error> {
-		self.pmmr.push(header).map_err(&Error::TxHashSetErr)?;
+		self.pmmr.push(header).map_err(Error::TxHashSetErr)?;
 		self.head = Tip::from_header(header);
 		Ok(())
 	}
@@ -1080,7 +1080,7 @@ impl<'a> HeaderExtension<'a> {
 		let header_pos = 1 + pmmr::insertion_to_pmmr_index(header.height);
 		self.pmmr
 			.rewind(header_pos, &Bitmap::create())
-			.map_err(&Error::TxHashSetErr)?;
+			.map_err(Error::TxHashSetErr)?;
 
 		// Update our head to reflect the header we rewound to.
 		self.head = Tip::from_header(header);
@@ -1095,7 +1095,7 @@ impl<'a> HeaderExtension<'a> {
 
 	/// The root of the header MMR for convenience.
 	pub fn root(&self) -> Result<Hash, Error> {
-		Ok(self.pmmr.root().map_err(|_| Error::InvalidRoot)?)
+		self.pmmr.root().map_err(|_| Error::InvalidRoot)
 	}
 
 	/// Validate the prev_root of the header against the root of the current header MMR.
@@ -1185,7 +1185,7 @@ impl<'a> Extension<'a> {
 
 	/// The head representing the furthest extent of the current extension.
 	pub fn head(&self) -> Tip {
-		self.head.clone()
+		self.head
 	}
 
 	/// Build a view of the current UTXO set based on the output PMMR
@@ -1337,13 +1337,13 @@ impl<'a> Extension<'a> {
 		let output_pos = self
 			.output_pmmr
 			.push(&out.identifier())
-			.map_err(&Error::TxHashSetErr)?;
+			.map_err(Error::TxHashSetErr)?;
 
 		// push the rangeproof to the MMR.
 		let rproof_pos = self
 			.rproof_pmmr
 			.push(&out.proof())
-			.map_err(&Error::TxHashSetErr)?;
+			.map_err(Error::TxHashSetErr)?;
 
 		// The output and rproof MMRs should be exactly the same size
 		// and we should have inserted to both in exactly the same pos.
@@ -1421,18 +1421,18 @@ impl<'a> Extension<'a> {
 							// Roll back the genesis output
 							self.output_pmmr
 								.rewind(0, &Bitmap::create())
-								.map_err(&Error::TxHashSetErr)?;
+								.map_err(Error::TxHashSetErr)?;
 						}
 						self.output_pmmr
 							.push_pruned_subtree(hashes[idx], pos0)
-							.map_err(&Error::TxHashSetErr)?;
+							.map_err(Error::TxHashSetErr)?;
 					}
 				}
 				OrderedHashLeafNode::Leaf(idx, pos0) => {
 					if pos0 == self.output_pmmr.size {
 						self.output_pmmr
 							.push(&leaf_data[idx])
-							.map_err(&Error::TxHashSetErr)?;
+							.map_err(Error::TxHashSetErr)?;
 					}
 					let pmmr_index = pmmr::pmmr_leaf_to_insertion_index(pos0);
 					match pmmr_index {
@@ -1465,18 +1465,18 @@ impl<'a> Extension<'a> {
 							// Roll back the genesis output
 							self.rproof_pmmr
 								.rewind(0, &Bitmap::create())
-								.map_err(&Error::TxHashSetErr)?;
+								.map_err(Error::TxHashSetErr)?;
 						}
 						self.rproof_pmmr
 							.push_pruned_subtree(hashes[idx], pos0)
-							.map_err(&Error::TxHashSetErr)?;
+							.map_err(Error::TxHashSetErr)?;
 					}
 				}
 				OrderedHashLeafNode::Leaf(idx, pos0) => {
 					if pos0 == self.rproof_pmmr.size {
 						self.rproof_pmmr
 							.push(&leaf_data[idx])
-							.map_err(&Error::TxHashSetErr)?;
+							.map_err(Error::TxHashSetErr)?;
 					}
 					let pmmr_index = pmmr::pmmr_leaf_to_insertion_index(pos0);
 					match pmmr_index {
@@ -1521,14 +1521,13 @@ impl<'a> Extension<'a> {
 				OrderedHashLeafNode::Hash(_, _) => {
 					return Err(Error::InvalidSegment(
 						"Kernel PMMR is non-prunable, should not have hash data".to_string(),
-					)
-					.into());
+					));
 				}
 				OrderedHashLeafNode::Leaf(idx, pos0) => {
 					if pos0 == self.kernel_pmmr.size {
 						self.kernel_pmmr
 							.push(&leaf_data[idx])
-							.map_err(&Error::TxHashSetErr)?;
+							.map_err(Error::TxHashSetErr)?;
 					}
 				}
 			}
@@ -1538,10 +1537,7 @@ impl<'a> Extension<'a> {
 
 	/// Push kernel onto MMR (hash and data files).
 	fn apply_kernel(&mut self, kernel: &TxKernel) -> Result<u64, Error> {
-		let pos = self
-			.kernel_pmmr
-			.push(kernel)
-			.map_err(&Error::TxHashSetErr)?;
+		let pos = self.kernel_pmmr.push(kernel).map_err(Error::TxHashSetErr)?;
 		Ok(1 + pos)
 	}
 
@@ -1562,7 +1558,7 @@ impl<'a> Extension<'a> {
 		let merkle_proof = self
 			.output_pmmr
 			.merkle_proof(pos0)
-			.map_err(&Error::TxHashSetErr)?;
+			.map_err(Error::TxHashSetErr)?;
 
 		Ok(merkle_proof)
 	}
@@ -1627,7 +1623,7 @@ impl<'a> Extension<'a> {
 	// accumulator in a single pass for all rewound blocks.
 	fn rewind_single_block(&mut self, block: &Block, batch: &Batch<'_>) -> Result<Vec<u64>, Error> {
 		let header = &block.header;
-		let prev_header = batch.get_previous_header(&header)?;
+		let prev_header = batch.get_previous_header(header)?;
 
 		// The spent index allows us to conveniently "unspend" everything in a block.
 		let spent = batch.get_spent_index(&header.hash());
@@ -1710,13 +1706,13 @@ impl<'a> Extension<'a> {
 		let bitmap: Bitmap = spent_pos.iter().map(|x| *x as u32).collect();
 		self.output_pmmr
 			.rewind(output_pos, &bitmap)
-			.map_err(&Error::TxHashSetErr)?;
+			.map_err(Error::TxHashSetErr)?;
 		self.rproof_pmmr
 			.rewind(output_pos, &bitmap)
-			.map_err(&Error::TxHashSetErr)?;
+			.map_err(Error::TxHashSetErr)?;
 		self.kernel_pmmr
 			.rewind(kernel_pos, &Bitmap::create())
-			.map_err(&Error::TxHashSetErr)?;
+			.map_err(Error::TxHashSetErr)?;
 		Ok(())
 	}
 
@@ -1845,7 +1841,7 @@ impl<'a> Extension<'a> {
 			)?;
 			if let Some(ref s) = stop_state {
 				if s.is_stopped() {
-					return Err(Error::Stopped.into());
+					return Err(Error::Stopped);
 				}
 			}
 
@@ -1853,7 +1849,7 @@ impl<'a> Extension<'a> {
 			self.verify_kernel_signatures(status, stop_state.clone())?;
 			if let Some(ref s) = stop_state {
 				if s.is_stopped() {
-					return Err(Error::Stopped.into());
+					return Err(Error::Stopped);
 				}
 			}
 		}
@@ -1914,7 +1910,7 @@ impl<'a> Extension<'a> {
 				let kernel = self
 					.kernel_pmmr
 					.get_data(n)
-					.ok_or_else(|| Error::TxKernelNotFound)?;
+					.ok_or(Error::TxKernelNotFound)?;
 				tx_kernels.push(kernel);
 			}
 
@@ -2037,7 +2033,7 @@ impl<'a> Extension<'a> {
 /// Packages the txhashset data files into a zip and returns a Read to the
 /// resulting file
 pub fn zip_read(root_dir: String, header: &BlockHeader) -> Result<File, Error> {
-	let txhashset_zip = format!("{}_{}.zip", TXHASHSET_ZIP, header.hash().to_string());
+	let txhashset_zip = format!("{}_{}.zip", TXHASHSET_ZIP, header.hash());
 
 	let txhashset_path = Path::new(&root_dir).join(TXHASHSET_SUBDIR);
 	let zip_path = Path::new(&root_dir).join(txhashset_zip);
@@ -2057,7 +2053,7 @@ pub fn zip_read(root_dir: String, header: &BlockHeader) -> Result<File, Error> {
 		// Theoretically, we only need clean-up those zip files older than STATE_SYNC_THRESHOLD.
 		// But practically, these zip files are not small ones, we just keep the zips in last 24 hours
 		let data_dir = Path::new(&root_dir);
-		let pattern = format!("{}_", TXHASHSET_ZIP);
+		let pattern = format!("{TXHASHSET_ZIP}_");
 		if let Ok(n) = clean_files_by_prefix(data_dir, &pattern, 24 * 60 * 60) {
 			debug!(
 				"{} zip files have been clean up in folder: {:?}",
@@ -2069,11 +2065,8 @@ pub fn zip_read(root_dir: String, header: &BlockHeader) -> Result<File, Error> {
 	// otherwise, create the zip archive
 	let path_to_be_cleanup = {
 		// Temp txhashset directory
-		let temp_txhashset_path = Path::new(&root_dir).join(format!(
-			"{}_zip_{}",
-			TXHASHSET_SUBDIR,
-			header.hash().to_string()
-		));
+		let temp_txhashset_path =
+			Path::new(&root_dir).join(format!("{}_zip_{}", TXHASHSET_SUBDIR, header.hash()));
 		// Remove temp dir if it exist
 		if temp_txhashset_path.exists() {
 			fs::remove_dir_all(&temp_txhashset_path)?;
@@ -2102,7 +2095,7 @@ pub fn zip_read(root_dir: String, header: &BlockHeader) -> Result<File, Error> {
 	let zip_file = File::open(zip_path.clone())?;
 
 	// clean-up temp txhashset directory.
-	if let Err(e) = fs::remove_dir_all(&path_to_be_cleanup) {
+	if let Err(e) = fs::remove_dir_all(path_to_be_cleanup) {
 		warn!(
 			"txhashset zip file: {:?} fail to remove, err: {}",
 			zip_path.to_str(),

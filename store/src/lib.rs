@@ -94,10 +94,10 @@ where
 	// Write temporary file
 	let temp_path = Path::new(&_original);
 	if temp_path.exists() {
-		remove_file(&temp_path)?;
+		remove_file(temp_path)?;
 	}
 
-	let mut temp_file = File::create(&temp_path)?;
+	let mut temp_file = File::create(temp_path)?;
 
 	// write the new data to the temp file
 	writer(&mut temp_file)?;
@@ -105,7 +105,7 @@ where
 	// force an fsync on the temp file to ensure bytes are on disk
 	temp_file.sync_all()?;
 
-	rename(&temp_path, &original)?;
+	rename(temp_path, original)?;
 
 	Ok(())
 }

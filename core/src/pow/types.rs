@@ -344,7 +344,7 @@ impl fmt::Debug for Proof {
 	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
 		write!(f, "Cuckoo{}(", self.edge_bits)?;
 		for (i, val) in self.nonces[..].iter().enumerate() {
-			write!(f, "{:x}", val)?;
+			write!(f, "{val:x}")?;
 			if i < self.nonces.len() - 1 {
 				write!(f, " ")?;
 			}

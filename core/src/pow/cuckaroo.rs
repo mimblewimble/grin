@@ -64,7 +64,7 @@ impl PoWContext for CuckarooContext {
 	fn verify(&self, proof: &Proof) -> Result<(), Error> {
 		let size = proof.proof_size();
 		if size != global::proofsize() {
-			return Err(Error::Verification("wrong cycle length".to_owned()).into());
+			return Err(Error::Verification("wrong cycle length".to_owned()));
 		}
 		let nonces = &proof.nonces;
 		let mut uvs = vec![0u64; 2 * size];

@@ -237,7 +237,7 @@ impl PeerStats {
 		};
 		PeerStats {
 			state: state.to_string(),
-			addr: addr,
+			addr,
 			version: peer.info.version,
 			user_agent: peer.info.user_agent.clone(),
 			total_difficulty: peer.info.total_difficulty().to_num(),

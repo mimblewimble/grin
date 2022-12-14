@@ -358,7 +358,7 @@ fn remove_coinbase_kernel_flag() {
 	let key_id = ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
 	let mut b = new_block(&[], &keychain, &builder, &prev, &key_id);
 
-	let mut kernel = b.kernels()[0].clone();
+	let mut kernel = b.kernels()[0];
 	kernel.features = KernelFeatures::Plain {
 		fee: FeeFields::zero(),
 	};
@@ -877,9 +877,9 @@ fn test_verify_cut_through_plain() -> Result<(), Error> {
 		&[
 			build::input(10, key_id1.clone()),
 			build::input(10, key_id2.clone()),
-			build::output(10, key_id1.clone()),
-			build::output(6, key_id2.clone()),
-			build::output(4, key_id3.clone()),
+			build::output(10, key_id1),
+			build::output(6, key_id2),
+			build::output(4, key_id3),
 		],
 		&keychain,
 		&builder,
@@ -943,9 +943,9 @@ fn test_verify_cut_through_coinbase() -> Result<(), Error> {
 		&[
 			build::coinbase_input(consensus::REWARD, key_id1.clone()),
 			build::coinbase_input(consensus::REWARD, key_id2.clone()),
-			build::output(60_000_000_000, key_id1.clone()),
-			build::output(50_000_000_000, key_id2.clone()),
-			build::output(10_000_000_000, key_id3.clone()),
+			build::output(60_000_000_000, key_id1),
+			build::output(50_000_000_000, key_id2),
+			build::output(10_000_000_000, key_id3),
 		],
 		&keychain,
 		&builder,

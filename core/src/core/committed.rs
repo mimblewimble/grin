@@ -93,7 +93,7 @@ pub trait Committed {
 			let over_commit = {
 				let secp = static_secp_instance();
 				let secp = secp.lock();
-				let overage_abs = overage.checked_abs().ok_or_else(|| Error::InvalidValue)? as u64;
+				let overage_abs = overage.checked_abs().ok_or(Error::InvalidValue)? as u64;
 				secp.commit_value(overage_abs).unwrap()
 			};
 			if overage < 0 {
@@ -173,6 +173,6 @@ pub fn sum_kernel_offsets(
 fn to_secrets(bf: Vec<BlindingFactor>, secp: &secp::Secp256k1) -> Vec<SecretKey> {
 	bf.into_iter()
 		.filter(|x| *x != BlindingFactor::zero())
-		.filter_map(|x| x.secret_key(&secp).ok())
+		.filter_map(|x| x.secret_key(secp).ok())
 		.collect::<Vec<_>>()
 }

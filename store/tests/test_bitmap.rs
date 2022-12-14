@@ -12,8 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use rand;
-
 use chrono::prelude::Utc;
 use croaring::Bitmap;
 use rand::Rng;
@@ -136,7 +134,7 @@ fn bench_fast_or() {
 
 	let bitmaps = init_bitmaps();
 	let start = Utc::now().timestamp_nanos();
-	let bitmap = Bitmap::fast_or(&bitmaps.iter().map(|x| x).collect::<Vec<&Bitmap>>());
+	let bitmap = Bitmap::fast_or(&bitmaps.iter().collect::<Vec<&Bitmap>>());
 	let fin = Utc::now().timestamp_nanos();
 	let dur_ms = (fin - start) as f64 * nano_to_millis;
 	println!(
@@ -147,7 +145,7 @@ fn bench_fast_or() {
 
 	let bitmaps = init_bitmaps();
 	let start = Utc::now().timestamp_nanos();
-	let bitmap = Bitmap::fast_or_heap(&bitmaps.iter().map(|x| x).collect::<Vec<&Bitmap>>());
+	let bitmap = Bitmap::fast_or_heap(&bitmaps.iter().collect::<Vec<&Bitmap>>());
 	let fin = Utc::now().timestamp_nanos();
 	let dur_ms = (fin - start) as f64 * nano_to_millis;
 	println!(

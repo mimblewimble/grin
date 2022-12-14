@@ -60,16 +60,11 @@ impl_array_newtype_show!(ChainCode);
 impl_array_newtype_encodable!(ChainCode, u8, 32);
 
 /// A fingerprint
+#[derive(Default)]
 pub struct Fingerprint([u8; 4]);
 impl_array_newtype!(Fingerprint, u8, 4);
 impl_array_newtype_show!(Fingerprint);
 impl_array_newtype_encodable!(Fingerprint, u8, 4);
-
-impl Default for Fingerprint {
-	fn default() -> Fingerprint {
-		Fingerprint([0, 0, 0, 0])
-	}
-}
 
 /// Allow different implementations of hash functions used in BIP32 Derivations
 /// Grin uses blake2 everywhere but the spec calls for SHA512/Ripemd160, so allow
@@ -99,7 +94,7 @@ impl BIP32GrinHasher {
 	/// New empty hasher
 	pub fn new(is_test: bool) -> BIP32GrinHasher {
 		BIP32GrinHasher {
-			is_test: is_test,
+			is_test,
 			hmac_sha512: HmacSha512::new(GenericArray::from_slice(&[0u8; 128])),
 		}
 	}
@@ -208,10 +203,9 @@ impl ChildNumber {
 		assert_eq!(
 			index & (1 << 31),
 			0,
-			"ChildNumber indices have to be within [0, 2^31 - 1], is: {}",
-			index
+			"ChildNumber indices have to be within [0, 2^31 - 1], is: {index}"
 		);
-		ChildNumber::Normal { index: index }
+		ChildNumber::Normal { index }
 	}
 
 	/// Create a [`Hardened`] from an index, panics if the index is not within
@@ -222,10 +216,9 @@ impl ChildNumber {
 		assert_eq!(
 			index & (1 << 31),
 			0,
-			"ChildNumber indices have to be within [0, 2^31 - 1], is: {}",
-			index
+			"ChildNumber indices have to be within [0, 2^31 - 1], is: {index}"
 		);
-		ChildNumber::Hardened { index: index }
+		ChildNumber::Hardened { index }
 	}
 
 	/// Returns `true` if the child number is a [`Normal`] value.
@@ -270,8 +263,8 @@ impl From<ChildNumber> for u32 {
 impl fmt::Display for ChildNumber {
 	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
 		match *self {
-			ChildNumber::Hardened { index } => write!(f, "{}'", index),
-			ChildNumber::Normal { index } => write!(f, "{}", index),
+			ChildNumber::Hardened { index } => write!(f, "{index}'"),
+			ChildNumber::Normal { index } => write!(f, "{index}"),
 		}
 	}
 }
@@ -318,8 +311,8 @@ impl fmt::Display for Error {
 				f.write_str("cannot derive hardened key from public key")
 			}
 			Error::Ecdsa(ref e) => fmt::Display::fmt(e, f),
-			Error::InvalidChildNumber(ref n) => write!(f, "child number {} is invalid", n),
-			Error::RngError(ref s) => write!(f, "rng error {}", s),
+			Error::InvalidChildNumber(ref n) => write!(f, "child number {n} is invalid"),
+			Error::RngError(ref s) => write!(f, "rng error {s}"),
 			Error::MnemonicError(ref e) => fmt::Display::fmt(e, f),
 		}
 	}
@@ -543,7 +536,7 @@ impl ExtendedPubKey {
 			parent_fingerprint: self.fingerprint(secp, hasher),
 			child_number: i,
 			public_key: pk,
-			chain_code: chain_code,
+			chain_code,
 		})
 	}
 
@@ -571,7 +564,7 @@ impl fmt::Display for ExtendedPrivKey {
 	fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
 		let mut ret = [0; 78];
 		ret[0..4].copy_from_slice(&self.network[0..4]);
-		ret[4] = self.depth as u8;
+		ret[4] = self.depth;
 		ret[5..9].copy_from_slice(&self.parent_fingerprint[..]);
 
 		BigEndian::write_u32(&mut ret[9..13], u32::from(self.child_number));
@@ -601,10 +594,10 @@ impl FromStr for ExtendedPrivKey {
 		network.copy_from_slice(&data[0..4]);
 
 		Ok(ExtendedPrivKey {
-			network: network,
+			network,
 			depth: data[4],
 			parent_fingerprint: Fingerprint::from(&data[5..9]),
-			child_number: child_number,
+			child_number,
 			chain_code: ChainCode::from(&data[13..45]),
 			secret_key: SecretKey::from_slice(&s, &data[46..78])
 				.map_err(|e| base58::Error::Other(e.to_string()))?,
@@ -617,7 +610,7 @@ impl fmt::Display for ExtendedPubKey {
 		let secp = Secp256k1::without_caps();
 		let mut ret = [0; 78];
 		ret[0..4].copy_from_slice(&self.network[0..4]);
-		ret[4] = self.depth as u8;
+		ret[4] = self.depth;
 		ret[5..9].copy_from_slice(&self.parent_fingerprint[..]);
 
 		BigEndian::write_u32(&mut ret[9..13], u32::from(self.child_number));
@@ -646,10 +639,10 @@ impl FromStr for ExtendedPubKey {
 		network.copy_from_slice(&data[0..4]);
 
 		Ok(ExtendedPubKey {
-			network: network,
+			network,
 			depth: data[4],
 			parent_fingerprint: Fingerprint::from(&data[5..9]),
-			child_number: child_number,
+			child_number,
 			chain_code: ChainCode::from(&data[13..45]),
 			public_key: PublicKey::from_slice(&s, &data[45..78])
 				.map_err(|e| base58::Error::Other(e.to_string()))?,

@@ -34,7 +34,7 @@ impl ChainHandler {
 	pub fn get_tip(&self) -> Result<Tip, Error> {
 		let head = w(&self.chain)?
 			.head()
-			.map_err(|e| Error::Internal(format!("can't get head: {}", e)))?;
+			.map_err(|e| Error::Internal(format!("can't get head: {e}")))?;
 		Ok(Tip::from_tip(head))
 	}
 }
@@ -65,7 +65,7 @@ impl Handler for ChainValidationHandler {
 			Ok(_) => response(StatusCode::OK, "{}"),
 			Err(e) => response(
 				StatusCode::INTERNAL_SERVER_ERROR,
-				format!("validate failed: {}", e),
+				format!("validate failed: {e}"),
 			),
 		}
 	}
@@ -115,7 +115,7 @@ impl Handler for ChainCompactHandler {
 			Ok(_) => response(StatusCode::OK, "{}"),
 			Err(e) => response(
 				StatusCode::INTERNAL_SERVER_ERROR,
-				format!("compact failed: {}", e),
+				format!("compact failed: {e}"),
 			),
 		}
 	}
@@ -144,8 +144,7 @@ impl OutputHandler {
 			for commit in &commits {
 				if commit.len() != 66 {
 					return Err(Error::RequestError(format!(
-						"invalid commit length for {}",
-						commit
+						"invalid commit length for {commit}"
 					)));
 				}
 			}
@@ -276,7 +275,7 @@ impl OutputHandler {
 
 		Ok(BlockOutputs {
 			header: BlockHeaderDifficultyInfo::from_header(&header),
-			outputs: outputs,
+			outputs,
 		})
 	}
 
@@ -436,7 +435,7 @@ impl KernelHandler {
 				// Default is current head
 				let head_height = chain
 					.head()
-					.map_err(|e| Error::Internal(format!("{}", e)))?
+					.map_err(|e| Error::Internal(format!("{e}")))?
 					.height;
 				max_height = (h < head_height).then_some(h);
 			}
@@ -444,7 +443,7 @@ impl KernelHandler {
 
 		let kernel = chain
 			.get_kernel_height(&excess, min_height, max_height)
-			.map_err(|e| Error::Internal(format!("{}", e)))?
+			.map_err(|e| Error::Internal(format!("{e}")))?
 			.map(|(tx_kernel, height, mmr_index)| LocatedTxKernel {
 				tx_kernel,
 				height,
@@ -469,7 +468,7 @@ impl KernelHandler {
 		let chain = w(&self.chain)?;
 		let kernel = chain
 			.get_kernel_height(&excess, min_height, max_height)
-			.map_err(|e| Error::Internal(format!("{}", e)))?
+			.map_err(|e| Error::Internal(format!("{e}")))?
 			.map(|(tx_kernel, height, mmr_index)| LocatedTxKernel {
 				tx_kernel,
 				height,

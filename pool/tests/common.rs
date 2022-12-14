@@ -80,7 +80,7 @@ where
 	let reward =
 		reward::output(keychain, &ProofBuilder::new(keychain), &key_id, fee, false).unwrap();
 
-	let mut block = Block::new(&prev, txs, next_header_info.clone().difficulty, reward).unwrap();
+	let mut block = Block::new(&prev, txs, next_header_info.difficulty, reward).unwrap();
 
 	block.header.timestamp = prev.timestamp + Duration::seconds(60);
 	block.header.pow.secondary_scaling = next_header_info.secondary_scaling;
@@ -164,7 +164,7 @@ where
 			max_stempool_size: 50,
 			mineable_max_weight: 10_000,
 		},
-		chain.clone(),
+		chain,
 		Arc::new(NoopPoolAdapter {}),
 	)
 }
@@ -299,6 +299,6 @@ pub fn test_source() -> TxSource {
 
 pub fn clean_output_dir(db_root: String) {
 	if let Err(e) = fs::remove_dir_all(db_root) {
-		println!("cleaning output dir failed - {:?}", e)
+		println!("cleaning output dir failed - {e:?}")
 	}
 }

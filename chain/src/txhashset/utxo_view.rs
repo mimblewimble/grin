@@ -87,7 +87,7 @@ impl<'a> UTXOView<'a> {
 					.iter()
 					.map(|input| {
 						self.validate_input(input.commitment(), batch)
-							.and_then(|(out, pos)| Ok((out, pos)))
+							.map(|(out, pos)| (out, pos))
 					})
 					.collect();
 				outputs_spent
@@ -180,7 +180,7 @@ impl<'a> UTXOView<'a> {
 		// Find the max pos of any coinbase being spent.
 		let pos = spent?
 			.iter()
-			.filter_map(|(out, pos)| (out.features.is_coinbase()).then(|| pos.pos))
+			.filter_map(|(out, pos)| (out.features.is_coinbase()).then_some(pos.pos))
 			.max();
 
 		if let Some(pos) = pos {

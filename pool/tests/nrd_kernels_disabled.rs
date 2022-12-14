@@ -80,7 +80,7 @@ fn test_nrd_kernels_disabled() {
 
 	// NRD kernel support not enabled via feature flag, so not valid.
 	assert_eq!(
-		pool.add_to_pool(test_source(), tx_1.clone(), false, &header),
+		pool.add_to_pool(test_source(), tx_1, false, &header),
 		Err(PoolError::NRDKernelNotEnabled)
 	);
 

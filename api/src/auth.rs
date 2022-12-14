@@ -68,14 +68,14 @@ impl Handler for BasicAuthMiddleware {
 		if req.headers().contains_key(AUTHORIZATION)
 			&& verify_slices_are_equal(
 				req.headers()[AUTHORIZATION].as_bytes(),
-				&self.api_basic_auth.as_bytes(),
+				self.api_basic_auth.as_bytes(),
 			)
 			.is_ok()
 		{
 			next_handler.call(req, handlers)
 		} else {
 			// Unauthorized 401
-			unauthorized_response(&self.basic_realm)
+			unauthorized_response(self.basic_realm)
 		}
 	}
 }
@@ -118,14 +118,14 @@ impl Handler for BasicAuthURIMiddleware {
 			if req.headers().contains_key(AUTHORIZATION)
 				&& verify_slices_are_equal(
 					req.headers()[AUTHORIZATION].as_bytes(),
-					&self.api_basic_auth.as_bytes(),
+					self.api_basic_auth.as_bytes(),
 				)
 				.is_ok()
 			{
 				next_handler.call(req, handlers)
 			} else {
 				// Unauthorized 401
-				unauthorized_response(&self.basic_realm)
+				unauthorized_response(self.basic_realm)
 			}
 		} else {
 			next_handler.call(req, handlers)

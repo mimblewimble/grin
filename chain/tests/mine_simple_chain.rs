@@ -61,16 +61,15 @@ impl ChainAdapter for StatusAdapter {
 fn setup_with_status_adapter(dir_name: &str, genesis: Block, adapter: Arc<StatusAdapter>) -> Chain {
 	util::init_test_logger();
 	clean_output_dir(dir_name);
-	let chain = chain::Chain::init(
+
+	chain::Chain::init(
 		dir_name.to_string(),
 		adapter,
 		genesis,
 		pow::verify_size,
 		false,
 	)
-	.unwrap();
-
-	chain
+	.unwrap()
 }
 
 #[test]
@@ -126,7 +125,7 @@ fn test_block_a_block_b_block_b_fork_header_c_fork_block_c() {
 	let genesis = pow::mine_genesis_block().unwrap();
 	let last_status = RwLock::new(None);
 	let adapter = Arc::new(StatusAdapter::new(last_status));
-	let chain = setup_with_status_adapter(chain_dir, genesis.clone(), adapter.clone());
+	let chain = setup_with_status_adapter(chain_dir, genesis, adapter);
 
 	let block_a = prepare_block(&kc, &chain.head_header().unwrap(), &chain, 1);
 	process_block(&chain, &block_a);
@@ -178,7 +177,7 @@ fn test_block_a_block_b_block_b_fork_header_c_fork_block_c_fork() {
 	let genesis = pow::mine_genesis_block().unwrap();
 	let last_status = RwLock::new(None);
 	let adapter = Arc::new(StatusAdapter::new(last_status));
-	let chain = setup_with_status_adapter(chain_dir, genesis.clone(), adapter.clone());
+	let chain = setup_with_status_adapter(chain_dir, genesis, adapter);
 
 	let block_a = prepare_block(&kc, &chain.head_header().unwrap(), &chain, 1);
 	process_block(&chain, &block_a);
@@ -234,7 +233,7 @@ fn test_block_a_header_b_header_b_fork_block_b_fork_block_b_block_c() {
 	let genesis = pow::mine_genesis_block().unwrap();
 	let last_status = RwLock::new(None);
 	let adapter = Arc::new(StatusAdapter::new(last_status));
-	let chain = setup_with_status_adapter(chain_dir, genesis.clone(), adapter.clone());
+	let chain = setup_with_status_adapter(chain_dir, genesis, adapter);
 
 	let block_a = prepare_block(&kc, &chain.head_header().unwrap(), &chain, 1);
 	process_block(&chain, &block_a);
@@ -290,7 +289,7 @@ fn test_block_a_header_b_header_b_fork_block_b_fork_block_b_block_c_fork() {
 	let genesis = pow::mine_genesis_block().unwrap();
 	let last_status = RwLock::new(None);
 	let adapter = Arc::new(StatusAdapter::new(last_status));
-	let chain = setup_with_status_adapter(chain_dir, genesis.clone(), adapter.clone());
+	let chain = setup_with_status_adapter(chain_dir, genesis, adapter);
 
 	let block_a = prepare_block(&kc, &chain.head_header().unwrap(), &chain, 1);
 	process_block(&chain, &block_a);
@@ -358,7 +357,7 @@ fn mine_reorg() {
 		// Create chain that reports last block status
 		let last_status = RwLock::new(None);
 		let adapter = Arc::new(StatusAdapter::new(last_status));
-		let chain = setup_with_status_adapter(DIR_NAME, genesis.clone(), adapter.clone());
+		let chain = setup_with_status_adapter(DIR_NAME, genesis, adapter.clone());
 
 		// Add blocks to main chain with gradually increasing difficulty
 		let mut prev = chain.head_header().unwrap();
@@ -430,7 +429,7 @@ fn mine_forks() {
 
 			// checking our new head
 			let head = chain.head().unwrap();
-			assert_eq!(head.height, (n + 1) as u64);
+			assert_eq!(head.height, { (n + 1) });
 			assert_eq!(head.last_block_h, bhash);
 			assert_eq!(head.prev_block_h, prev.hash());
 
@@ -443,7 +442,7 @@ fn mine_forks() {
 
 			// checking head switch
 			let head = chain.head().unwrap();
-			assert_eq!(head.height, (n + 1) as u64);
+			assert_eq!(head.height, { (n + 1) });
 			assert_eq!(head.last_block_h, bhash);
 			assert_eq!(head.prev_block_h, prev.hash());
 		}
@@ -499,7 +498,7 @@ fn longer_fork() {
 	// then send back on the 1st
 	let genesis = pow::mine_genesis_block().unwrap();
 	{
-		let chain = init_chain(".grin4", genesis.clone());
+		let chain = init_chain(".grin4", genesis);
 
 		// add blocks to both chains, 20 on the main one, only the first 5
 		// for the forked chain
@@ -554,9 +553,7 @@ fn spend_rewind_spend() {
 		let b = prepare_block_key_idx(&kc, &head, &chain, 2, 1);
 		assert!(b.outputs()[0].is_coinbase());
 		head = b.header.clone();
-		chain
-			.process_block(b.clone(), chain::Options::SKIP_POW)
-			.unwrap();
+		chain.process_block(b, chain::Options::SKIP_POW).unwrap();
 
 		// now mine three further blocks
 		for n in 3..6 {
@@ -574,8 +571,8 @@ fn spend_rewind_spend() {
 		let tx1 = build::transaction(
 			KernelFeatures::Plain { fee: 20000.into() },
 			&[
-				build::coinbase_input(consensus::REWARD, key_id_coinbase.clone()),
-				build::output(consensus::REWARD - 20000, key_id30.clone()),
+				build::coinbase_input(consensus::REWARD, key_id_coinbase),
+				build::output(consensus::REWARD - 20000, key_id30),
 			],
 			&kc,
 			&pb,
@@ -584,9 +581,7 @@ fn spend_rewind_spend() {
 
 		let b = prepare_block_tx(&kc, &head, &chain, 6, &[tx1.clone()]);
 		head = b.header.clone();
-		chain
-			.process_block(b.clone(), chain::Options::SKIP_POW)
-			.unwrap();
+		chain.process_block(b, chain::Options::SKIP_POW).unwrap();
 		chain.validate(false).unwrap();
 
 		// Now mine another block, reusing the private key for the coinbase we just spent.
@@ -599,9 +594,7 @@ fn spend_rewind_spend() {
 		// Rewind back prior to the tx that spends it to "unspend" it.
 		{
 			let b = prepare_block_tx(&kc, &rewind_to, &chain, 6, &[tx1]);
-			chain
-				.process_block(b.clone(), chain::Options::SKIP_POW)
-				.unwrap();
+			chain.process_block(b, chain::Options::SKIP_POW).unwrap();
 			chain.validate(false).unwrap();
 		}
 	}
@@ -627,9 +620,7 @@ fn spend_in_fork_and_compact() {
 		let b = prepare_block(&kc, &fork_head, &chain, 2);
 		assert!(b.outputs()[0].is_coinbase());
 		fork_head = b.header.clone();
-		chain
-			.process_block(b.clone(), chain::Options::SKIP_POW)
-			.unwrap();
+		chain.process_block(b, chain::Options::SKIP_POW).unwrap();
 
 		// now mine three further blocks
 		for n in 3..6 {
@@ -647,7 +638,7 @@ fn spend_in_fork_and_compact() {
 		let tx1 = build::transaction(
 			KernelFeatures::Plain { fee: 20000.into() },
 			&[
-				build::coinbase_input(consensus::REWARD, key_id2.clone()),
+				build::coinbase_input(consensus::REWARD, key_id2),
 				build::output(consensus::REWARD - 20000, key_id30.clone()),
 			],
 			&kc,
@@ -657,16 +648,14 @@ fn spend_in_fork_and_compact() {
 
 		let next = prepare_block_tx(&kc, &fork_head, &chain, 7, &[tx1.clone()]);
 		let prev_main = next.header.clone();
-		chain
-			.process_block(next.clone(), chain::Options::SKIP_POW)
-			.unwrap();
+		chain.process_block(next, chain::Options::SKIP_POW).unwrap();
 		chain.validate(false).unwrap();
 
 		let tx2 = build::transaction(
 			KernelFeatures::Plain { fee: 20000.into() },
 			&[
-				build::input(consensus::REWARD - 20000, key_id30.clone()),
-				build::output(consensus::REWARD - 40000, key_id31.clone()),
+				build::input(consensus::REWARD - 20000, key_id30),
+				build::output(consensus::REWARD - 40000, key_id31),
 			],
 			&kc,
 			&pb,
@@ -775,7 +764,7 @@ fn output_header_mappings() {
 				false,
 			)
 			.unwrap();
-			reward_outputs.push(reward.0.clone());
+			reward_outputs.push(reward.0);
 			let mut b =
 				core::core::Block::new(&prev, &[], next_header_info.clone().difficulty, reward)
 					.unwrap();
@@ -841,7 +830,7 @@ where
 			// invert commitment
 			let commit = build.keychain.secp().commit_sum(vec![], vec![commit])?;
 
-			eprintln!("Building output: {}, {:?}", value, commit);
+			eprintln!("Building output: {value}, {commit:?}");
 
 			// build a proof with a rangeproof of 0 as a placeholder
 			// the test will replace this later
@@ -885,9 +874,7 @@ fn test_overflow_cached_rangeproof() {
 
 		assert!(b.outputs()[0].is_coinbase());
 		head = b.header.clone();
-		chain
-			.process_block(b.clone(), chain::Options::SKIP_POW)
-			.unwrap();
+		chain.process_block(b, chain::Options::SKIP_POW).unwrap();
 
 		// now mine three further blocks
 		for n in 3..6 {
@@ -906,7 +893,7 @@ fn test_overflow_cached_rangeproof() {
 		let tx1 = build::transaction(
 			KernelFeatures::Plain { fee: 20000.into() },
 			&[
-				build::coinbase_input(consensus::REWARD, key_id2.clone()),
+				build::coinbase_input(consensus::REWARD, key_id2),
 				build::output(consensus::REWARD - 20000, key_id30.clone()),
 			],
 			&kc,
@@ -917,9 +904,7 @@ fn test_overflow_cached_rangeproof() {
 		// mine block with tx1
 		let next = prepare_block_tx(&kc, &head, &chain, 7, &[tx1.clone()]);
 		let prev_main = next.header.clone();
-		chain
-			.process_block(next.clone(), chain::Options::SKIP_POW)
-			.unwrap();
+		chain.process_block(next, chain::Options::SKIP_POW).unwrap();
 		chain.validate(false).unwrap();
 
 		// create a second tx that contains a negative output
@@ -927,12 +912,9 @@ fn test_overflow_cached_rangeproof() {
 		let mut tx2 = build::transaction(
 			KernelFeatures::Plain { fee: 0.into() },
 			&[
-				build::input(consensus::REWARD - 20000, key_id30.clone()),
-				build::output(
-					consensus::REWARD - 20000 + 1_000_000_000_000_000,
-					key_id31.clone(),
-				),
-				build_output_negative(1_000_000_000_000_000, key_id32.clone()),
+				build::input(consensus::REWARD - 20000, key_id30),
+				build::output(consensus::REWARD - 20000 + 1_000_000_000_000_000, key_id31),
+				build_output_negative(1_000_000_000_000_000, key_id32),
 			],
 			&kc,
 			&pb,
@@ -1062,7 +1044,7 @@ fn actual_diff_iter_output() {
 	let iter = chain.difficulty_iter().unwrap();
 	let mut last_time = 0;
 	let mut first = true;
-	for elem in iter.into_iter() {
+	for elem in iter {
 		if first {
 			last_time = elem.timestamp;
 			first = false;

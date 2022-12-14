@@ -755,7 +755,7 @@ where
 		let mut parsed_hash: Option<Hash> = None;
 		if let Some(hash) = hash {
 			let vec = util::from_hex(&hash)
-				.map_err(|e| Error::Argument(format!("invalid block hash: {}", e)))?;
+				.map_err(|e| Error::Argument(format!("invalid block hash: {e}")))?;
 			parsed_hash = Some(Hash::from_vec(&vec));
 		}
 		Foreign::get_header(self, height, parsed_hash, commit)
@@ -769,7 +769,7 @@ where
 		let mut parsed_hash: Option<Hash> = None;
 		if let Some(hash) = hash {
 			let vec = util::from_hex(&hash)
-				.map_err(|e| Error::Argument(format!("invalid block hash: {}", e)))?;
+				.map_err(|e| Error::Argument(format!("invalid block hash: {e}")))?;
 			parsed_hash = Some(Hash::from_vec(&vec));
 		}
 		Foreign::get_block(self, height, parsed_hash, commit)

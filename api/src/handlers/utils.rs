@@ -34,8 +34,8 @@ fn get_unspent(
 	chain: &Arc<chain::Chain>,
 	id: &str,
 ) -> Result<Option<(OutputIdentifier, CommitPos)>, Error> {
-	let c = util::from_hex(id)
-		.map_err(|_| Error::Argument(format!("Not a valid commitment: {}", id)))?;
+	let c =
+		util::from_hex(id).map_err(|_| Error::Argument(format!("Not a valid commitment: {id}")))?;
 	let commit = Commitment::from_vec(c);
 	let res = chain.get_unspent(commit)?;
 	Ok(res)

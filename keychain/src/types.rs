@@ -62,17 +62,13 @@ impl From<extkey_bip32::Error> for Error {
 
 impl error::Error for Error {
 	fn description(&self) -> &str {
-		match *self {
-			_ => "some kind of keychain error",
-		}
+		"some kind of keychain error"
 	}
 }
 
 impl fmt::Display for Error {
 	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-		match *self {
-			_ => write!(f, "some kind of keychain error"),
-		}
+		write!(f, "some kind of keychain error")
 	}
 }
 
@@ -125,7 +121,7 @@ impl Identifier {
 	}
 
 	pub fn to_path(&self) -> ExtKeychainPath {
-		ExtKeychainPath::from_identifier(&self)
+		ExtKeychainPath::from_identifier(self)
 	}
 
 	pub fn to_value_path(&self, value: u64) -> ValueExtKeychainPath {
@@ -157,7 +153,7 @@ impl Identifier {
 
 	/// Return the parent path
 	pub fn parent_path(&self) -> Identifier {
-		let mut p = ExtKeychainPath::from_identifier(&self);
+		let mut p = ExtKeychainPath::from_identifier(self);
 		if p.depth > 0 {
 			p.path[p.depth as usize - 1] = ChildNumber::from(0);
 			p.depth -= 1;
@@ -178,7 +174,7 @@ impl Identifier {
 	pub fn from_pubkey(secp: &Secp256k1, pubkey: &PublicKey) -> Identifier {
 		let bytes = pubkey.serialize_vec(secp, true);
 		let identifier = blake2b(IDENTIFIER_SIZE, &[], &bytes[..]);
-		Identifier::from_bytes(&identifier.as_bytes())
+		Identifier::from_bytes(identifier.as_bytes())
 	}
 
 	/// Return the identifier of the secret key
@@ -195,7 +191,7 @@ impl Identifier {
 	}
 
 	pub fn to_bip_32_string(&self) -> String {
-		let p = ExtKeychainPath::from_identifier(&self);
+		let p = ExtKeychainPath::from_identifier(self);
 		let mut retval = String::from("m");
 		for i in 0..p.depth {
 			retval.push_str(&format!("/{}", <u32>::from(p.path[i as usize])));
@@ -206,7 +202,7 @@ impl Identifier {
 
 impl AsRef<[u8]> for Identifier {
 	fn as_ref(&self) -> &[u8] {
-		&self.0.as_ref()
+		self.0.as_ref()
 	}
 }
 
@@ -243,7 +239,7 @@ impl AsRef<[u8]> for BlindingFactor {
 
 impl BlindingFactor {
 	pub fn from_secret_key(skey: SecretKey) -> BlindingFactor {
-		BlindingFactor::from_slice(&skey.as_ref())
+		BlindingFactor::from_slice(skey.as_ref())
 	}
 
 	pub fn from_slice(data: &[u8]) -> BlindingFactor {
@@ -286,7 +282,7 @@ impl BlindingFactor {
 		let keys = vec![self, other]
 			.into_iter()
 			.filter(|x| !x.is_zero())
-			.filter_map(|x| x.secret_key(&secp).ok())
+			.filter_map(|x| x.secret_key(secp).ok())
 			.collect::<Vec<_>>();
 		if keys.is_empty() {
 			Ok(BlindingFactor::zero())
@@ -374,7 +370,7 @@ impl ExtKeychainPath {
 	/// Return a new chain path with given derivation and depth
 	pub fn new(depth: u8, d0: u32, d1: u32, d2: u32, d3: u32) -> ExtKeychainPath {
 		ExtKeychainPath {
-			depth: depth,
+			depth,
 			path: [
 				ChildNumber::from(d0),
 				ChildNumber::from(d1),
@@ -594,8 +590,8 @@ mod test {
 		let ret_path = id.to_path();
 		assert_eq!(path, ret_path);
 
-		println!("id: {:?}", id);
-		println!("ret_path {:?}", ret_path);
+		println!("id: {id:?}");
+		println!("ret_path {ret_path:?}");
 
 		let path = ExtKeychainPath::new(3, 0, 0, 10, 0);
 		let id = Identifier::from_path(&path);

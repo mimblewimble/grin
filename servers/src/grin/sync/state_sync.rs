@@ -101,12 +101,7 @@ impl StateSync {
 				false
 			} else {
 				// Only on testing chains for now
-				if global::get_chain_type() != global::ChainTypes::Mainnet {
-					true
-				//false
-				} else {
-					false
-				}
+				global::get_chain_type() != global::ChainTypes::Mainnet
 			};
 
 		// Check whether we've errored and should restart pibd
@@ -201,10 +196,9 @@ impl StateSync {
 								);
 								return false;
 							}
-							if let Err(e) = d.validate_complete_state(
-								self.sync_state.clone(),
-								stop_state.clone(),
-							) {
+							if let Err(e) =
+								d.validate_complete_state(self.sync_state.clone(), stop_state)
+							{
 								error!("error validating PIBD state: {}", e);
 								self.sync_state.update_pibd_progress(
 									false,
@@ -235,13 +229,13 @@ impl StateSync {
 
 				if go {
 					self.state_sync_peer = None;
-					match self.request_state(&header_head) {
+					match self.request_state(header_head) {
 						Ok(peer) => {
 							self.state_sync_peer = Some(peer);
 						}
 						Err(e) => self
 							.sync_state
-							.set_sync_error(chain::Error::SyncError(format!("{:?}", e))),
+							.set_sync_error(chain::Error::SyncError(format!("{e:?}"))),
 					}
 
 					self.sync_state
@@ -319,7 +313,7 @@ impl StateSync {
 			// Waiting a minute helps ensures that the cancellation isn't simply due to a single non-PIBD enabled
 			// peer having the max difficulty
 			if peers_iter_pibd().count() == 0 {
-				if let None = self.earliest_zero_pibd_peer_time {
+				if self.earliest_zero_pibd_peer_time.is_none() {
 					self.set_earliest_zero_pibd_peer_time(Some(Utc::now()));
 				}
 				if self.earliest_zero_pibd_peer_time.unwrap()
@@ -350,22 +344,18 @@ impl StateSync {
 				// add to list of segments that are being tracked
 				self.sync_state.add_pibd_segment(seg_id);
 				let res = match seg_id.segment_type {
-					SegmentType::Bitmap => p.send_bitmap_segment_request(
-						archive_header.hash(),
-						seg_id.identifier.clone(),
-					),
-					SegmentType::Output => p.send_output_segment_request(
-						archive_header.hash(),
-						seg_id.identifier.clone(),
-					),
-					SegmentType::RangeProof => p.send_rangeproof_segment_request(
-						archive_header.hash(),
-						seg_id.identifier.clone(),
-					),
-					SegmentType::Kernel => p.send_kernel_segment_request(
-						archive_header.hash(),
-						seg_id.identifier.clone(),
-					),
+					SegmentType::Bitmap => {
+						p.send_bitmap_segment_request(archive_header.hash(), seg_id.identifier)
+					}
+					SegmentType::Output => {
+						p.send_output_segment_request(archive_header.hash(), seg_id.identifier)
+					}
+					SegmentType::RangeProof => {
+						p.send_rangeproof_segment_request(archive_header.hash(), seg_id.identifier)
+					}
+					SegmentType::Kernel => {
+						p.send_kernel_segment_request(archive_header.hash(), seg_id.identifier)
+					}
 				};
 				if let Err(e) = res {
 					info!(

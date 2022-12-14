@@ -58,7 +58,7 @@ where
 	let reward =
 		reward::output(keychain, &ProofBuilder::new(keychain), key_id, fee, false).unwrap();
 
-	let mut block = Block::new(prev, &txs, next_header_info.clone().difficulty, reward)?;
+	let mut block = Block::new(prev, &txs, next_header_info.difficulty, reward)?;
 
 	block.header.timestamp = prev.timestamp + Duration::seconds(60);
 	block.header.pow.secondary_scaling = next_header_info.secondary_scaling;
@@ -89,7 +89,7 @@ fn process_block_nrd_validation() -> Result<(), Error> {
 	let keychain = ExtKeychain::from_random_seed(false).unwrap();
 	let builder = ProofBuilder::new(&keychain);
 	let genesis = genesis_block(&keychain);
-	let chain = init_chain(chain_dir, genesis.clone());
+	let chain = init_chain(chain_dir, genesis);
 
 	for n in 1..9 {
 		let key_id = ExtKeychainPath::new(1, n, 0, 0, 0).to_identifier();
@@ -108,12 +108,12 @@ fn process_block_nrd_validation() -> Result<(), Error> {
 	let msg = kernel.msg_to_sign().unwrap();
 
 	// // Generate a kernel with public excess and associated signature.
-	let excess = BlindingFactor::rand(&keychain.secp());
-	let skey = excess.secret_key(&keychain.secp()).unwrap();
+	let excess = BlindingFactor::rand(keychain.secp());
+	let skey = excess.secret_key(keychain.secp()).unwrap();
 	kernel.excess = keychain.secp().commit(0, skey).unwrap();
-	let pubkey = &kernel.excess.to_pubkey(&keychain.secp()).unwrap();
+	let pubkey = &kernel.excess.to_pubkey(keychain.secp()).unwrap();
 	kernel.excess_sig =
-		aggsig::sign_with_blinding(&keychain.secp(), &msg, &excess, Some(&pubkey)).unwrap();
+		aggsig::sign_with_blinding(keychain.secp(), &msg, &excess, Some(pubkey)).unwrap();
 	kernel.verify().unwrap();
 
 	let key_id1 = ExtKeychainPath::new(1, 1, 0, 0, 0).to_identifier();
@@ -122,10 +122,10 @@ fn process_block_nrd_validation() -> Result<(), Error> {
 
 	let tx1 = build::transaction_with_kernel(
 		&[
-			build::coinbase_input(consensus::REWARD, key_id1.clone()),
+			build::coinbase_input(consensus::REWARD, key_id1),
 			build::output(consensus::REWARD - 20000, key_id2.clone()),
 		],
-		kernel.clone(),
+		kernel,
 		excess.clone(),
 		&keychain,
 		&builder,
@@ -134,11 +134,11 @@ fn process_block_nrd_validation() -> Result<(), Error> {
 
 	let tx2 = build::transaction_with_kernel(
 		&[
-			build::input(consensus::REWARD - 20000, key_id2.clone()),
-			build::output(consensus::REWARD - 40000, key_id3.clone()),
+			build::input(consensus::REWARD - 20000, key_id2),
+			build::output(consensus::REWARD - 40000, key_id3),
 		],
-		kernel.clone(),
-		excess.clone(),
+		kernel,
+		excess,
 		&keychain,
 		&builder,
 	)
@@ -163,7 +163,7 @@ fn process_block_nrd_validation() -> Result<(), Error> {
 	assert_eq!(chain.head()?.height, 8);
 
 	// Block containing tx1 is valid.
-	let block_valid_9 = build_block(&chain, &keychain, &key_id9, vec![tx1.clone()])?;
+	let block_valid_9 = build_block(&chain, &keychain, &key_id9, vec![tx1])?;
 	chain.process_block(block_valid_9, Options::NONE)?;
 
 	// Block at height 10 is invalid if it contains tx2 due to NRD rule (relative_height=2).
@@ -185,7 +185,7 @@ fn process_block_nrd_validation() -> Result<(), Error> {
 	chain.process_block(block_valid_10, Options::NONE)?;
 
 	// Block at height 11 is valid with tx2 as NRD rule is met (relative_height=2).
-	let block_valid_11 = build_block(&chain, &keychain, &key_id11, vec![tx2.clone()])?;
+	let block_valid_11 = build_block(&chain, &keychain, &key_id11, vec![tx2])?;
 	chain.process_block(block_valid_11, Options::NONE)?;
 
 	clean_output_dir(chain_dir);
@@ -205,7 +205,7 @@ fn process_block_nrd_validation_relative_height_1() -> Result<(), Error> {
 	let keychain = ExtKeychain::from_random_seed(false).unwrap();
 	let builder = ProofBuilder::new(&keychain);
 	let genesis = genesis_block(&keychain);
-	let chain = init_chain(chain_dir, genesis.clone());
+	let chain = init_chain(chain_dir, genesis);
 
 	for n in 1..9 {
 		let key_id = ExtKeychainPath::new(1, n, 0, 0, 0).to_identifier();
@@ -224,12 +224,12 @@ fn process_block_nrd_validation_relative_height_1() -> Result<(), Error> {
 	let msg = kernel.msg_to_sign().unwrap();
 
 	// // Generate a kernel with public excess and associated signature.
-	let excess = BlindingFactor::rand(&keychain.secp());
-	let skey = excess.secret_key(&keychain.secp()).unwrap();
+	let excess = BlindingFactor::rand(keychain.secp());
+	let skey = excess.secret_key(keychain.secp()).unwrap();
 	kernel.excess = keychain.secp().commit(0, skey).unwrap();
-	let pubkey = &kernel.excess.to_pubkey(&keychain.secp()).unwrap();
+	let pubkey = &kernel.excess.to_pubkey(keychain.secp()).unwrap();
 	kernel.excess_sig =
-		aggsig::sign_with_blinding(&keychain.secp(), &msg, &excess, Some(&pubkey)).unwrap();
+		aggsig::sign_with_blinding(keychain.secp(), &msg, &excess, Some(pubkey)).unwrap();
 	kernel.verify().unwrap();
 
 	let key_id1 = ExtKeychainPath::new(1, 1, 0, 0, 0).to_identifier();
@@ -238,10 +238,10 @@ fn process_block_nrd_validation_relative_height_1() -> Result<(), Error> {
 
 	let tx1 = build::transaction_with_kernel(
 		&[
-			build::coinbase_input(consensus::REWARD, key_id1.clone()),
+			build::coinbase_input(consensus::REWARD, key_id1),
 			build::output(consensus::REWARD - 20000, key_id2.clone()),
 		],
-		kernel.clone(),
+		kernel,
 		excess.clone(),
 		&keychain,
 		&builder,
@@ -250,11 +250,11 @@ fn process_block_nrd_validation_relative_height_1() -> Result<(), Error> {
 
 	let tx2 = build::transaction_with_kernel(
 		&[
-			build::input(consensus::REWARD - 20000, key_id2.clone()),
-			build::output(consensus::REWARD - 40000, key_id3.clone()),
+			build::input(consensus::REWARD - 20000, key_id2),
+			build::output(consensus::REWARD - 40000, key_id3),
 		],
-		kernel.clone(),
-		excess.clone(),
+		kernel,
+		excess,
 		&keychain,
 		&builder,
 	)
@@ -279,11 +279,11 @@ fn process_block_nrd_validation_relative_height_1() -> Result<(), Error> {
 	assert_eq!(chain.head()?.height, 8);
 
 	// Block containing tx1 is valid.
-	let block_valid_9 = build_block(&chain, &keychain, &key_id9, vec![tx1.clone()])?;
+	let block_valid_9 = build_block(&chain, &keychain, &key_id9, vec![tx1])?;
 	chain.process_block(block_valid_9, Options::NONE)?;
 
 	// Block at height 10 is valid with tx2 as NRD rule is met (relative_height=1).
-	let block_valid_10 = build_block(&chain, &keychain, &key_id10, vec![tx2.clone()])?;
+	let block_valid_10 = build_block(&chain, &keychain, &key_id10, vec![tx2])?;
 	chain.process_block(block_valid_10, Options::NONE)?;
 
 	clean_output_dir(chain_dir);
@@ -303,7 +303,7 @@ fn process_block_nrd_validation_fork() -> Result<(), Error> {
 	let keychain = ExtKeychain::from_random_seed(false).unwrap();
 	let builder = ProofBuilder::new(&keychain);
 	let genesis = genesis_block(&keychain);
-	let chain = init_chain(chain_dir, genesis.clone());
+	let chain = init_chain(chain_dir, genesis);
 
 	for n in 1..9 {
 		let key_id = ExtKeychainPath::new(1, n, 0, 0, 0).to_identifier();
@@ -323,12 +323,12 @@ fn process_block_nrd_validation_fork() -> Result<(), Error> {
 	let msg = kernel.msg_to_sign().unwrap();
 
 	// // Generate a kernel with public excess and associated signature.
-	let excess = BlindingFactor::rand(&keychain.secp());
-	let skey = excess.secret_key(&keychain.secp()).unwrap();
+	let excess = BlindingFactor::rand(keychain.secp());
+	let skey = excess.secret_key(keychain.secp()).unwrap();
 	kernel.excess = keychain.secp().commit(0, skey).unwrap();
-	let pubkey = &kernel.excess.to_pubkey(&keychain.secp()).unwrap();
+	let pubkey = &kernel.excess.to_pubkey(keychain.secp()).unwrap();
 	kernel.excess_sig =
-		aggsig::sign_with_blinding(&keychain.secp(), &msg, &excess, Some(&pubkey)).unwrap();
+		aggsig::sign_with_blinding(keychain.secp(), &msg, &excess, Some(pubkey)).unwrap();
 	kernel.verify().unwrap();
 
 	let key_id1 = ExtKeychainPath::new(1, 1, 0, 0, 0).to_identifier();
@@ -337,10 +337,10 @@ fn process_block_nrd_validation_fork() -> Result<(), Error> {
 
 	let tx1 = build::transaction_with_kernel(
 		&[
-			build::coinbase_input(consensus::REWARD, key_id1.clone()),
+			build::coinbase_input(consensus::REWARD, key_id1),
 			build::output(consensus::REWARD - 20000, key_id2.clone()),
 		],
-		kernel.clone(),
+		kernel,
 		excess.clone(),
 		&keychain,
 		&builder,
@@ -349,11 +349,11 @@ fn process_block_nrd_validation_fork() -> Result<(), Error> {
 
 	let tx2 = build::transaction_with_kernel(
 		&[
-			build::input(consensus::REWARD - 20000, key_id2.clone()),
-			build::output(consensus::REWARD - 40000, key_id3.clone()),
+			build::input(consensus::REWARD - 20000, key_id2),
+			build::output(consensus::REWARD - 40000, key_id3),
 		],
-		kernel.clone(),
-		excess.clone(),
+		kernel,
+		excess,
 		&keychain,
 		&builder,
 	)
@@ -376,8 +376,7 @@ fn process_block_nrd_validation_fork() -> Result<(), Error> {
 	// Process an alternative "fork" block also at height 9.
 	// The "other" block at height 9 should not affect this one in terms of NRD kernels
 	// as the recent kernel index should be rewound.
-	let block_valid_9b =
-		build_block_from_prev(&header_8, &chain, &keychain, &key_id9, vec![tx1.clone()])?;
+	let block_valid_9b = build_block_from_prev(&header_8, &chain, &keychain, &key_id9, vec![tx1])?;
 	chain.process_block(block_valid_9b.clone(), Options::NONE)?;
 
 	// Process an alternative block at height 10 on this same fork.
@@ -391,7 +390,7 @@ fn process_block_nrd_validation_fork() -> Result<(), Error> {
 		&chain,
 		&keychain,
 		&key_id11,
-		vec![tx2.clone()],
+		vec![tx2],
 	)?;
 	chain.process_block(block_valid_11b, Options::NONE)?;
 

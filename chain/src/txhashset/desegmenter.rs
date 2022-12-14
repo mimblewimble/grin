@@ -217,7 +217,7 @@ impl Desegmenter {
 		txhashset::extending(&mut header_pmmr, &mut txhashset, &mut _batch, |ext, _| {
 			let extension = &mut ext.extension;
 			if let Some(b) = &self.bitmap_cache {
-				extension.update_leaf_sets(&b)?;
+				extension.update_leaf_sets(b)?;
 			}
 			Ok(())
 		})?;
@@ -384,7 +384,7 @@ impl Desegmenter {
 			}
 		} else {
 			// Check if we need to finalize bitmap
-			if self.bitmap_cache == None {
+			if self.bitmap_cache.is_none() {
 				// Should have all the pieces now, finalize the bitmap cache
 				self.finalize_bitmap()?;
 			}
@@ -399,10 +399,8 @@ impl Desegmenter {
 				{
 					self.apply_output_segment(idx)?;
 				}
-			} else {
-				if self.output_segment_cache.len() >= self.max_cached_segments {
-					self.output_segment_cache = vec![];
-				}
+			} else if self.output_segment_cache.len() >= self.max_cached_segments {
+				self.output_segment_cache = vec![];
 			}
 			// Check if we can apply the next rangeproof segment
 			if let Some(next_rp_idx) = self.next_required_rangeproof_segment_index() {
@@ -414,10 +412,8 @@ impl Desegmenter {
 				{
 					self.apply_rangeproof_segment(idx)?;
 				}
-			} else {
-				if self.rangeproof_segment_cache.len() >= self.max_cached_segments {
-					self.rangeproof_segment_cache = vec![];
-				}
+			} else if self.rangeproof_segment_cache.len() >= self.max_cached_segments {
+				self.rangeproof_segment_cache = vec![];
 			}
 			// Check if we can apply the next kernel segment
 			if let Some(next_kernel_idx) = self.next_required_kernel_segment_index() {
@@ -429,10 +425,8 @@ impl Desegmenter {
 				{
 					self.apply_kernel_segment(idx)?;
 				}
-			} else {
-				if self.kernel_segment_cache.len() >= self.max_cached_segments {
-					self.kernel_segment_cache = vec![];
-				}
+			} else if self.kernel_segment_cache.len() >= self.max_cached_segments {
+				self.kernel_segment_cache = vec![];
 			}
 		}
 		Ok(())
@@ -447,18 +441,18 @@ impl Desegmenter {
 			// Get current size of bitmap MMR
 			let local_pmmr_size = self.bitmap_accumulator.readonly_pmmr().unpruned_size();
 			// Get iterator over expected bitmap elements
-			let mut identifier_iter = SegmentIdentifier::traversal_iter(
+			let identifier_iter = SegmentIdentifier::traversal_iter(
 				self.bitmap_mmr_size,
 				self.default_bitmap_segment_height,
 			);
 			// Advance iterator to next expected segment
-			while let Some(id) = identifier_iter.next() {
-				if id.segment_pos_range(self.bitmap_mmr_size).1 > local_pmmr_size {
-					if !self.has_bitmap_segment_with_id(id) {
-						return_vec.push(SegmentTypeIdentifier::new(SegmentType::Bitmap, id));
-						if return_vec.len() >= max_elements {
-							return return_vec;
-						}
+			for id in identifier_iter {
+				if id.segment_pos_range(self.bitmap_mmr_size).1 > local_pmmr_size
+					&& !self.has_bitmap_segment_with_id(id)
+				{
+					return_vec.push(SegmentTypeIdentifier::new(SegmentType::Bitmap, id));
+					if return_vec.len() >= max_elements {
+						return return_vec;
 					}
 				}
 			}
@@ -476,13 +470,13 @@ impl Desegmenter {
 				local_rangeproof_mmr_size = txhashset.rangeproof_mmr_size();
 			}
 			// TODO: Fix, alternative approach, this is very inefficient
-			let mut output_identifier_iter = SegmentIdentifier::traversal_iter(
+			let output_identifier_iter = SegmentIdentifier::traversal_iter(
 				self.archive_header.output_mmr_size,
 				self.default_output_segment_height,
 			);
 
 			let mut elems_added = 0;
-			while let Some(output_id) = output_identifier_iter.next() {
+			for output_id in output_identifier_iter {
 				// Advance output iterator to next needed position
 				let (_first, last) =
 					output_id.segment_pos_range(self.archive_header.output_mmr_size);
@@ -501,13 +495,13 @@ impl Desegmenter {
 				}
 			}
 
-			let mut rangeproof_identifier_iter = SegmentIdentifier::traversal_iter(
+			let rangeproof_identifier_iter = SegmentIdentifier::traversal_iter(
 				self.archive_header.output_mmr_size,
 				self.default_rangeproof_segment_height,
 			);
 
 			elems_added = 0;
-			while let Some(rp_id) = rangeproof_identifier_iter.next() {
+			for rp_id in rangeproof_identifier_iter {
 				let (_first, last) = rp_id.segment_pos_range(self.archive_header.output_mmr_size);
 				// Advance rangeproof iterator to next needed position
 				if last <= local_rangeproof_mmr_size {
@@ -525,13 +519,13 @@ impl Desegmenter {
 				}
 			}
 
-			let mut kernel_identifier_iter = SegmentIdentifier::traversal_iter(
+			let kernel_identifier_iter = SegmentIdentifier::traversal_iter(
 				self.archive_header.kernel_mmr_size,
 				self.default_kernel_segment_height,
 			);
 
 			elems_added = 0;
-			while let Some(k_id) = kernel_identifier_iter.next() {
+			for k_id in kernel_identifier_iter {
 				// Advance kernel iterator to next needed position
 				let (_first, last) = k_id.segment_pos_range(self.archive_header.kernel_mmr_size);
 				// Advance rangeproof iterator to next needed position
@@ -594,16 +588,15 @@ impl Desegmenter {
 		);
 		// Total size of Bitmap PMMR
 		self.bitmap_mmr_size =
-			1 + pmmr::peaks(pmmr::insertion_to_pmmr_index(self.bitmap_mmr_leaf_count))
+			1 + *pmmr::peaks(pmmr::insertion_to_pmmr_index(self.bitmap_mmr_leaf_count))
 				.last()
 				.unwrap_or(
-					&(pmmr::peaks(pmmr::insertion_to_pmmr_index(
+					pmmr::peaks(pmmr::insertion_to_pmmr_index(
 						self.bitmap_mmr_leaf_count - 1,
 					))
 					.last()
-					.unwrap()),
-				)
-				.clone();
+					.unwrap(),
+				);
 
 		trace!(
 			"pibd_desegmenter - expected size of bitmap MMR: {}",
@@ -613,11 +606,10 @@ impl Desegmenter {
 
 	/// Cache a bitmap segment if we don't already have it
 	fn cache_bitmap_segment(&mut self, in_seg: Segment<BitmapChunk>) {
-		if self
+		if !self
 			.bitmap_segment_cache
 			.iter()
-			.find(|i| i.identifier() == in_seg.identifier())
-			.is_none()
+			.any(|i| i.identifier() == in_seg.identifier())
 		{
 			self.bitmap_segment_cache.push(in_seg);
 		}
@@ -627,8 +619,7 @@ impl Desegmenter {
 	fn has_bitmap_segment_with_id(&self, seg_id: SegmentIdentifier) -> bool {
 		self.bitmap_segment_cache
 			.iter()
-			.find(|i| i.identifier() == seg_id)
-			.is_some()
+			.any(|i| i.identifier() == seg_id)
 	}
 
 	/// Return an identifier for the next segment we need for the bitmap pmmr
@@ -642,7 +633,7 @@ impl Desegmenter {
 			self.bitmap_mmr_size,
 			self.default_bitmap_segment_height,
 		);
-		(cur_segment_count != total_segment_count).then(|| cur_segment_count as u64)
+		(cur_segment_count != total_segment_count).then_some(cur_segment_count as u64)
 	}
 
 	/// Adds and validates a bitmap chunk
@@ -685,17 +676,15 @@ impl Desegmenter {
 	fn has_output_segment_with_id(&self, seg_id: SegmentIdentifier) -> bool {
 		self.output_segment_cache
 			.iter()
-			.find(|i| i.identifier() == seg_id)
-			.is_some()
+			.any(|i| i.identifier() == seg_id)
 	}
 
 	/// Cache an output segment if we don't already have it
 	fn cache_output_segment(&mut self, in_seg: Segment<OutputIdentifier>) {
-		if self
+		if !self
 			.output_segment_cache
 			.iter()
-			.find(|i| i.identifier() == in_seg.identifier())
-			.is_none()
+			.any(|i| i.identifier() == in_seg.identifier())
 		{
 			self.output_segment_cache.push(in_seg);
 		}
@@ -763,7 +752,7 @@ impl Desegmenter {
 			cur_segment_count,
 			total_segment_count
 		);
-		(cur_segment_count != total_segment_count).then(|| cur_segment_count as u64)
+		(cur_segment_count != total_segment_count).then_some(cur_segment_count as u64)
 	}
 
 	/// Adds a output segment
@@ -794,17 +783,15 @@ impl Desegmenter {
 	fn has_rangeproof_segment_with_id(&self, seg_id: SegmentIdentifier) -> bool {
 		self.rangeproof_segment_cache
 			.iter()
-			.find(|i| i.identifier() == seg_id)
-			.is_some()
+			.any(|i| i.identifier() == seg_id)
 	}
 
 	/// Cache a RangeProof segment if we don't already have it
 	fn cache_rangeproof_segment(&mut self, in_seg: Segment<RangeProof>) {
-		if self
+		if !self
 			.rangeproof_segment_cache
 			.iter()
-			.find(|i| i.identifier() == in_seg.identifier())
-			.is_none()
+			.any(|i| i.identifier() == in_seg.identifier())
 		{
 			self.rangeproof_segment_cache.push(in_seg);
 		}
@@ -870,7 +857,7 @@ impl Desegmenter {
 			cur_segment_count,
 			total_segment_count
 		);
-		(cur_segment_count != total_segment_count).then(|| cur_segment_count as u64)
+		(cur_segment_count != total_segment_count).then_some(cur_segment_count as u64)
 	}
 
 	/// Adds a Rangeproof segment
@@ -889,17 +876,15 @@ impl Desegmenter {
 	fn has_kernel_segment_with_id(&self, seg_id: SegmentIdentifier) -> bool {
 		self.kernel_segment_cache
 			.iter()
-			.find(|i| i.identifier() == seg_id)
-			.is_some()
+			.any(|i| i.identifier() == seg_id)
 	}
 
 	/// Cache a Kernel segment if we don't already have it
 	fn cache_kernel_segment(&mut self, in_seg: Segment<TxKernel>) {
-		if self
+		if !self
 			.kernel_segment_cache
 			.iter()
-			.find(|i| i.identifier() == in_seg.identifier())
-			.is_none()
+			.any(|i| i.identifier() == in_seg.identifier())
 		{
 			self.kernel_segment_cache.push(in_seg);
 		}
@@ -961,7 +946,7 @@ impl Desegmenter {
 			cur_segment_count,
 			total_segment_count
 		);
-		(cur_segment_count != total_segment_count).then(|| cur_segment_count as u64)
+		(cur_segment_count != total_segment_count).then_some(cur_segment_count as u64)
 	}
 
 	/// Adds a Kernel segment

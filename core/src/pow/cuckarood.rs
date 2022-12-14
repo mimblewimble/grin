@@ -114,7 +114,7 @@ impl PoWContext for CuckaroodContext {
 			let mut k = if i & 1 == 0 {
 				headu[((uvs[i] << 1 | 1) & mask) as usize]
 			} else {
-				headv[((uvs[i] << 1 | 0) & mask) as usize]
+				headv[(uvs[i] << 1 & mask) as usize]
 			};
 			while k != 2 * size {
 				if uvs[k] == uvs[i] {

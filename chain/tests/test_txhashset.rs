@@ -35,30 +35,26 @@ fn clean_output_dir(dir_name: &str) {
 #[test]
 fn test_unexpected_zip() {
 	global::set_local_chain_type(global::ChainTypes::AutomatedTesting);
-	let db_root = format!(".grin_txhashset_zip");
+	let db_root = ".grin_txhashset_zip".to_string();
 	clean_output_dir(&db_root);
 	{
 		let chain_store = ChainStore::new(&db_root).unwrap();
 		let store = Arc::new(chain_store);
-		txhashset::TxHashSet::open(db_root.clone(), store.clone(), None).unwrap();
+		txhashset::TxHashSet::open(db_root.clone(), store, None).unwrap();
 		let head = BlockHeader::default();
 		// First check if everything works out of the box
 		assert!(txhashset::zip_read(db_root.clone(), &head).is_ok());
-		let zip_path = Path::new(&db_root).join(format!(
-			"txhashset_snapshot_{}.zip",
-			head.hash().to_string()
-		));
+		let zip_path = Path::new(&db_root).join(format!("txhashset_snapshot_{}.zip", head.hash()));
 		let zip_file = File::open(&zip_path).unwrap();
 		assert!(txhashset::zip_write(PathBuf::from(db_root.clone()), zip_file, &head).is_ok());
 		// Remove temp txhashset dir
-		let _ = fs::remove_dir_all(
-			Path::new(&db_root).join(format!("txhashset_zip_{}", head.hash().to_string())),
-		);
+		let _ =
+			fs::remove_dir_all(Path::new(&db_root).join(format!("txhashset_zip_{}", head.hash())));
 		// Then add strange files in the original txhashset folder
-		File::create(&Path::new(&db_root).join("txhashset").join("badfile"))
+		File::create(Path::new(&db_root).join("txhashset").join("badfile"))
 			.expect("problem creating a file");
 		File::create(
-			&Path::new(&db_root)
+			Path::new(&db_root)
 				.join("txhashset")
 				.join("output")
 				.join("badfile"),
@@ -79,16 +75,12 @@ fn test_unexpected_zip() {
 		];
 		assert_eq!(
 			files,
-			expected_files
-				.iter()
-				.map(|x| PathBuf::from(x))
-				.collect::<Vec<_>>()
+			expected_files.iter().map(PathBuf::from).collect::<Vec<_>>()
 		);
 
 		assert!(txhashset::zip_read(db_root.clone(), &head).is_ok());
-		let _ = fs::remove_dir_all(
-			Path::new(&db_root).join(format!("txhashset_zip_{}", head.hash().to_string())),
-		);
+		let _ =
+			fs::remove_dir_all(Path::new(&db_root).join(format!("txhashset_zip_{}", head.hash())));
 		let zip_file = File::open(zip_path).unwrap();
 		let _ = fs::remove_dir_all(Path::new(&db_root).join("txhashset"));
 		assert!(txhashset::zip_write(PathBuf::from(db_root.clone()), zip_file, &head).is_ok());
@@ -106,10 +98,7 @@ fn test_unexpected_zip() {
 		];
 		assert_eq!(
 			files,
-			expected_files
-				.iter()
-				.map(|x| PathBuf::from(x))
-				.collect::<Vec<_>>()
+			expected_files.iter().map(PathBuf::from).collect::<Vec<_>>()
 		);
 	}
 	// Cleanup chain directory

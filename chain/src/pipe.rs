@@ -204,8 +204,8 @@ pub fn process_block_headers(
 	let ctx_specific_validation = &ctx.header_allowed;
 
 	// Now apply this entire chunk of headers to the header MMR.
-	txhashset::header_extending(&mut ctx.header_pmmr, &mut ctx.batch, |ext, batch| {
-		rewind_and_apply_header_fork(&last_header, ext, batch, ctx_specific_validation)?;
+	txhashset::header_extending(ctx.header_pmmr, &mut ctx.batch, |ext, batch| {
+		rewind_and_apply_header_fork(last_header, ext, batch, ctx_specific_validation)?;
 
 		// If previous sync_head is not on the "current" chain then
 		// these headers are on an alternative fork to sync_head.
@@ -216,7 +216,7 @@ pub fn process_block_headers(
 		// Note the outer batch may still be committed to db assuming no errors occur in the extension.
 		if has_more_work(last_header, &head) {
 			let header_head = last_header.into();
-			update_header_head(&header_head, &batch)?;
+			update_header_head(&header_head, batch)?;
 		} else {
 			ext.force_rollback();
 		};
@@ -244,7 +244,7 @@ pub fn process_block_header(header: &BlockHeader, ctx: &mut BlockContext<'_>) ->
 	}
 
 	// Check this header is not an orphan, we must know about the previous header to continue.
-	let prev_header = ctx.batch.get_previous_header(&header)?;
+	let prev_header = ctx.batch.get_previous_header(header)?;
 
 	// If we have not yet seen the full block then check if we have seen this header.
 	// If it does not increase total_difficulty beyond our current header_head
@@ -264,11 +264,11 @@ pub fn process_block_header(header: &BlockHeader, ctx: &mut BlockContext<'_>) ->
 
 	// Apply the header to the header PMMR, making sure we put the extension in the correct state
 	// based on previous header first.
-	txhashset::header_extending(&mut ctx.header_pmmr, &mut ctx.batch, |ext, batch| {
+	txhashset::header_extending(ctx.header_pmmr, &mut ctx.batch, |ext, batch| {
 		rewind_and_apply_header_fork(&prev_header, ext, batch, ctx_specific_validation)?;
 		ext.validate_root(header)?;
 		ext.apply_header(header)?;
-		if !has_more_work(&header, &header_head) {
+		if !has_more_work(header, &header_head) {
 			ext.force_rollback();
 		}
 		Ok(())
@@ -325,7 +325,7 @@ fn prev_header_store(
 	header: &BlockHeader,
 	batch: &mut store::Batch<'_>,
 ) -> Result<BlockHeader, Error> {
-	let prev = batch.get_previous_header(&header)?;
+	let prev = batch.get_previous_header(header)?;
 	Ok(prev)
 }
 
@@ -352,11 +352,11 @@ pub fn validate_header_denylist(header: &BlockHeader, denylist: &[Hash]) -> Resu
 	);
 
 	if denylist.contains(&header.hash()) {
-		return Err(Error::Block(block::Error::Other(
+		Err(Error::Block(block::Error::Other(
 			"header hash denied".into(),
-		)));
+		)))
 	} else {
-		return Ok(());
+		Ok(())
 	}
 }
 
@@ -545,7 +545,7 @@ fn add_block_header(bh: &BlockHeader, batch: &store::Batch<'_>) -> Result<(), Er
 
 fn update_header_head(head: &Tip, batch: &store::Batch<'_>) -> Result<(), Error> {
 	batch
-		.save_header_head(&head)
+		.save_header_head(head)
 		.map_err(|e| Error::StoreErr(e, "pipe save header head".to_owned()))?;
 
 	debug!(
@@ -558,7 +558,7 @@ fn update_header_head(head: &Tip, batch: &store::Batch<'_>) -> Result<(), Error>
 
 fn update_head(head: &Tip, batch: &store::Batch<'_>) -> Result<(), Error> {
 	batch
-		.save_body_head(&head)
+		.save_body_head(head)
 		.map_err(|e| Error::StoreErr(e, "pipe save body".to_owned()))?;
 
 	debug!("head updated to {} at {}", head.last_block_h, head.height);

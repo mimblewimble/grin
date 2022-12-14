@@ -163,10 +163,10 @@ fn get_diff_stats(chain_sim: &[HeaderDifficultyInfo]) -> DiffStats {
 		average_block_time: block_time_sum / DMA_WINDOW,
 		average_difficulty: block_diff_sum / DMA_WINDOW,
 		window_size: DMA_WINDOW,
-		block_time_sum: block_time_sum,
-		block_diff_sum: block_diff_sum,
-		latest_ts: latest_ts,
-		earliest_ts: earliest_ts,
+		block_time_sum,
+		block_diff_sum,
+		latest_ts,
+		earliest_ts,
 		ts_delta: latest_ts - earliest_ts,
 	}
 }
@@ -179,7 +179,7 @@ fn add_block(
 ) -> Vec<(HeaderDifficultyInfo, DiffStats)> {
 	let mut ret_chain_sim = chain_sim.clone();
 	let mut return_chain: Vec<HeaderDifficultyInfo> =
-		chain_sim.clone().iter().map(|e| e.0.clone()).collect();
+		chain_sim.iter().map(|e| e.0.clone()).collect();
 	// get last interval
 	let diff = next_difficulty(1, return_chain.clone());
 	let last_elem = chain_sim.first().unwrap().clone().0;
@@ -217,10 +217,10 @@ fn print_chain_sim(chain_sim: Vec<(HeaderDifficultyInfo, DiffStats)>) {
 	let mut last_time = 0;
 	let mut first = true;
 	println!("Constants");
-	println!("DIFFICULTY_ADJUST_WINDOW: {}", DMA_WINDOW);
-	println!("BLOCK_TIME_WINDOW: {}", BLOCK_TIME_WINDOW);
-	println!("CLAMP_FACTOR: {}", CLAMP_FACTOR);
-	println!("DAMP_FACTOR: {}", DMA_DAMP_FACTOR);
+	println!("DIFFICULTY_ADJUST_WINDOW: {DMA_WINDOW}");
+	println!("BLOCK_TIME_WINDOW: {BLOCK_TIME_WINDOW}");
+	println!("CLAMP_FACTOR: {CLAMP_FACTOR}");
+	println!("DAMP_FACTOR: {DMA_DAMP_FACTOR}");
 	chain_sim.iter().enumerate().for_each(|(i, b)| {
 		let block = b.0.clone();
 		let stats = b.1.clone();
@@ -245,7 +245,7 @@ fn print_chain_sim(chain_sim: Vec<(HeaderDifficultyInfo, DiffStats)>) {
 		let mut sb = stats.last_blocks;
 		sb.reverse();
 		for i in sb {
-			println!("   {}", i);
+			println!("   {i}");
 		}
 		last_time = block.timestamp;
 	});
@@ -287,7 +287,7 @@ fn adjustment_scenarios() {
 
 	// Steady difficulty for a good while, then a sudden drop
 	let chain_sim = create_chain_sim(global::initial_block_difficulty());
-	let chain_sim = add_block_repeated(60, chain_sim, just_enough as usize);
+	let chain_sim = add_block_repeated(60, chain_sim, just_enough);
 	let chain_sim = add_block_repeated(600, chain_sim, 60);
 
 	println!();
@@ -299,7 +299,7 @@ fn adjustment_scenarios() {
 
 	// Sudden increase
 	let chain_sim = create_chain_sim(global::initial_block_difficulty());
-	let chain_sim = add_block_repeated(60, chain_sim, just_enough as usize);
+	let chain_sim = add_block_repeated(60, chain_sim, just_enough);
 	let chain_sim = add_block_repeated(10, chain_sim, 10);
 
 	println!();
@@ -311,7 +311,7 @@ fn adjustment_scenarios() {
 
 	// Oscillations
 	let chain_sim = create_chain_sim(global::initial_block_difficulty());
-	let chain_sim = add_block_repeated(60, chain_sim, just_enough as usize);
+	let chain_sim = add_block_repeated(60, chain_sim, just_enough);
 	let chain_sim = add_block_repeated(10, chain_sim, 10);
 	let chain_sim = add_block_repeated(60, chain_sim, 20);
 	let chain_sim = add_block_repeated(10, chain_sim, 10);

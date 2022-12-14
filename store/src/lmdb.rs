@@ -112,8 +112,7 @@ impl Store {
 		let full_path = [root_path.to_owned(), name].join("/");
 		fs::create_dir_all(&full_path).map_err(|e| {
 			Error::FileErr(format!(
-				"Unable to create directory 'db_root' to store chain_data: {:?}",
-				e
+				"Unable to create directory 'db_root' to store chain_data: {e:?}"
 			))
 		})?;
 
@@ -286,7 +285,7 @@ impl Store {
 			Some(d) => d,
 			_ => DeserializationMode::default(),
 		};
-		self.get_with(key, &access, &db, |_, mut data| {
+		self.get_with(key, &access, db, |_, mut data| {
 			ser::deserialize(&mut data, self.protocol_version(), d).map_err(From::from)
 		})
 	}
@@ -386,7 +385,7 @@ impl<'a> Batch<'a> {
 			.as_ref()
 			.ok_or_else(|| Error::NotFoundErr("chain db is None".to_string()))?;
 
-		self.store.get_with(key, &access, &db, deserialize)
+		self.store.get_with(key, &access, db, deserialize)
 	}
 
 	/// Whether the provided key exists.
@@ -420,7 +419,7 @@ impl<'a> Batch<'a> {
 			_ => DeserializationMode::default(),
 		};
 		self.get_with(key, |_, mut data| {
-			ser::deserialize(&mut data, self.protocol_version(), d).map_err(|e| From::from(e))
+			ser::deserialize(&mut data, self.protocol_version(), d).map_err(From::from)
 		})
 	}
 

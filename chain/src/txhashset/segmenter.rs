@@ -74,14 +74,14 @@ impl Segmenter {
 	fn output_root(&self) -> Result<Hash, Error> {
 		let txhashset = self.txhashset.read();
 		let pmmr = txhashset.output_pmmr_at(&self.header);
-		let root = pmmr.root().map_err(&Error::TxHashSetErr)?;
+		let root = pmmr.root().map_err(Error::TxHashSetErr)?;
 		Ok(root)
 	}
 
 	/// The root of the bitmap snapshot PMMR.
 	fn bitmap_root(&self) -> Result<Hash, Error> {
 		let pmmr = self.bitmap_snapshot.readonly_pmmr();
-		let root = pmmr.root().map_err(&Error::TxHashSetErr)?;
+		let root = pmmr.root().map_err(Error::TxHashSetErr)?;
 		Ok(root)
 	}
 

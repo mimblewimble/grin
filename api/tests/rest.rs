@@ -75,7 +75,7 @@ fn test_start_api() {
 	let api_chan: &'static mut (oneshot::Sender<()>, oneshot::Receiver<()>) =
 		Box::leak(Box::new(oneshot::channel::<()>()));
 	assert!(server.start(addr, router, None, api_chan).is_ok());
-	let url = format!("http://{}/v1/", server_addr);
+	let url = format!("http://{server_addr}/v1/");
 	let index = request_with_retry(url.as_str()).unwrap();
 	assert_eq!(index.len(), 2);
 	assert_eq!(counter.value(), 1);

@@ -277,7 +277,7 @@ fn create_error_response(e: Error) -> Response<Body> {
 			"access-control-allow-headers",
 			"Content-Type, Authorization",
 		)
-		.body(format!("{}", e).into())
+		.body(format!("{e}").into())
 		.unwrap()
 }
 

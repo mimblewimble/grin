@@ -70,7 +70,7 @@ impl SegmenterResponder {
 			chain: Arc::new(
 				chain::Chain::init(
 					chain_src_dir.into(),
-					dummy_adapter.clone(),
+					dummy_adapter,
 					genesis,
 					pow::verify_size,
 					false,
@@ -130,7 +130,7 @@ impl DesegmenterRequestor {
 			chain: Arc::new(
 				chain::Chain::init(
 					chain_src_dir.into(),
-					dummy_adapter.clone(),
+					dummy_adapter,
 					genesis,
 					pow::verify_size,
 					false,
@@ -205,29 +205,25 @@ impl DesegmenterRequestor {
 			// Perform request and response
 			match seg_id.segment_type {
 				SegmentType::Bitmap => {
-					let (seg, output_root) =
-						self.responder.get_bitmap_segment(seg_id.identifier.clone());
+					let (seg, output_root) = self.responder.get_bitmap_segment(seg_id.identifier);
 					if let Some(d) = desegmenter.write().as_mut() {
 						d.add_bitmap_segment(seg, output_root).unwrap();
 					}
 				}
 				SegmentType::Output => {
-					let (seg, bitmap_root) =
-						self.responder.get_output_segment(seg_id.identifier.clone());
+					let (seg, bitmap_root) = self.responder.get_output_segment(seg_id.identifier);
 					if let Some(d) = desegmenter.write().as_mut() {
 						d.add_output_segment(seg, Some(bitmap_root)).unwrap();
 					}
 				}
 				SegmentType::RangeProof => {
-					let seg = self
-						.responder
-						.get_rangeproof_segment(seg_id.identifier.clone());
+					let seg = self.responder.get_rangeproof_segment(seg_id.identifier);
 					if let Some(d) = desegmenter.write().as_mut() {
 						d.add_rangeproof_segment(seg).unwrap();
 					}
 				}
 				SegmentType::Kernel => {
-					let seg = self.responder.get_kernel_segment(seg_id.identifier.clone());
+					let seg = self.responder.get_kernel_segment(seg_id.identifier);
 					if let Some(d) = desegmenter.write().as_mut() {
 						d.add_kernel_segment(seg).unwrap();
 					}
@@ -279,8 +275,7 @@ fn test_pibd_copy_impl(
 	}
 
 	let src_responder = Arc::new(SegmenterResponder::new(src_root_dir, genesis.clone()));
-	let mut dest_requestor =
-		DesegmenterRequestor::new(dest_root_dir, genesis.clone(), src_responder);
+	let mut dest_requestor = DesegmenterRequestor::new(dest_root_dir, genesis, src_responder);
 
 	// No template provided so copy headers from source
 	if dest_template_dir.is_none() {
@@ -305,11 +300,11 @@ fn test_pibd_copy_sample() {
 	// small test chain with actual transaction data
 
 	// Test on uncompacted and non-compacted chains
-	let src_root_dir = format!("./tests/test_data/chain_raw");
-	let dest_root_dir = format!("./tests/test_output/.segment_copy");
+	let src_root_dir = "./tests/test_data/chain_raw".to_string();
+	let dest_root_dir = "./tests/test_output/.segment_copy".to_string();
 	clean_output_dir(&dest_root_dir);
 	test_pibd_copy_impl(true, &src_root_dir, &dest_root_dir, None);
-	let src_root_dir = format!("./tests/test_data/chain_compacted");
+	let src_root_dir = "./tests/test_data/chain_compacted".to_string();
 	clean_output_dir(&dest_root_dir);
 	test_pibd_copy_impl(true, &src_root_dir, &dest_root_dir, None);
 	clean_output_dir(&dest_root_dir);
@@ -327,12 +322,14 @@ fn test_pibd_copy_real() {
 	let copy_headers_to_template = false;
 
 	// if testing against a real chain, insert location here
-	let src_root_dir = format!("/home/yeastplume/Projects/grin-project/servers/floo-1/chain_data");
-	let dest_template_dir = format!(
+	let src_root_dir =
+		"/home/yeastplume/Projects/grin-project/servers/floo-1/chain_data".to_string();
+	let dest_template_dir =
 		"/home/yeastplume/Projects/grin-project/servers/floo-pibd-1/chain_data_headers_only"
-	);
+			.to_string();
 	let dest_root_dir =
-		format!("/home/yeastplume/Projects/grin-project/servers/floo-pibd-1/chain_data_test_copy");
+		"/home/yeastplume/Projects/grin-project/servers/floo-pibd-1/chain_data_test_copy"
+			.to_string();
 	if copy_headers_to_template {
 		clean_output_dir(&dest_template_dir);
 		test_pibd_copy_impl(false, &src_root_dir, &dest_template_dir, None);

@@ -59,7 +59,7 @@ fn test_header_perf_impl(is_test_chain: bool, src_root_dir: &str, dest_root_dir:
 			chain::Chain::init(
 				dest_root_dir.into(),
 				dummy_adapter,
-				genesis.clone(),
+				genesis,
 				pow::verify_size,
 				false,
 			)
@@ -111,8 +111,9 @@ fn test_header_perf() {
 	util::init_test_logger();
 	// if testing against a real chain, insert location here
 	// NOTE: Modify to point at your own paths
-	let src_root_dir = format!("/Users/yeastplume/Projects/grin_project/server/chain_data");
-	let dest_root_dir = format!("/Users/yeastplume/Projects/grin_project/server/.chain_data_copy");
+	let src_root_dir = "/Users/yeastplume/Projects/grin_project/server/chain_data".to_string();
+	let dest_root_dir =
+		"/Users/yeastplume/Projects/grin_project/server/.chain_data_copy".to_string();
 	clean_output_dir(&dest_root_dir);
 	test_header_perf_impl(false, &src_root_dir, &dest_root_dir);
 	clean_output_dir(&dest_root_dir);

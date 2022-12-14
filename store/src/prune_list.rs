@@ -293,9 +293,8 @@ impl PruneList {
 		let max = self.bitmap.maximum().unwrap_or(0) as u64;
 		assert!(
 			pos0 >= max,
-			"prune list append only - pos={} bitmap.maximum={}",
-			pos0,
-			max
+			"{}",
+			"prune list append only - pos={pos0} bitmap.maximum={max}"
 		);
 
 		let (parent0, sibling0) = family(pos0);

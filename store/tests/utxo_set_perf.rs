@@ -12,8 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use env_logger;
-
 use grin_store as store;
 
 use chrono::prelude::Utc;
@@ -25,7 +23,7 @@ use croaring::Bitmap;
 use crate::store::leaf_set::LeafSet;
 
 pub fn as_millis(d: Duration) -> u128 {
-	d.as_secs() as u128 * 1_000 as u128 + (d.subsec_nanos() / (1_000 * 1_000)) as u128
+	d.as_secs() as u128 * 1_000_u128 + d.subsec_millis() as u128
 }
 
 #[test]
@@ -96,10 +94,10 @@ fn test_leaf_set_performance() {
 }
 
 fn setup(test_name: &str) -> (LeafSet, String) {
-	let _ = env_logger::init();
+	env_logger::init();
 	let data_dir = format!("./target/{}-{}", test_name, Utc::now().timestamp());
 	fs::create_dir_all(data_dir.clone()).unwrap();
-	let leaf_set = LeafSet::open(&format!("{}/{}", data_dir, "utxo.bin")).unwrap();
+	let leaf_set = LeafSet::open(format!("{}/{}", data_dir, "utxo.bin")).unwrap();
 	(leaf_set, data_dir)
 }
 

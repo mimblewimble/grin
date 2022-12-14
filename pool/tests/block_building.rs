@@ -73,7 +73,7 @@ fn test_transaction_pool_block_building() -> Result<(), PoolError> {
 
 		// Now add the two child txs to the pool.
 		pool.add_to_pool(test_source(), child_tx_1.clone(), false, &header)?;
-		pool.add_to_pool(test_source(), child_tx_2.clone(), false, &header)?;
+		pool.add_to_pool(test_source(), child_tx_2, false, &header)?;
 
 		assert_eq!(pool.total_size(), 5);
 	}

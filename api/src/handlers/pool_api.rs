@@ -96,10 +96,10 @@ where
 		let header = tx_pool
 			.blockchain
 			.chain_head()
-			.map_err(|e| Error::Internal(format!("Failed to get chain head: {}", e)))?;
+			.map_err(|e| Error::Internal(format!("Failed to get chain head: {e}")))?;
 		tx_pool
 			.add_to_pool(source, tx, !fluff.unwrap_or(false), &header)
-			.map_err(|e| Error::Internal(format!("Failed to update pool: {}", e)))?;
+			.map_err(|e| Error::Internal(format!("Failed to update pool: {e}")))?;
 		Ok(())
 	}
 }
@@ -133,13 +133,13 @@ where
 
 	let wrapper: TxWrapper = parse_body(req).await?;
 	let tx_bin = util::from_hex(&wrapper.tx_hex)
-		.map_err(|e| Error::RequestError(format!("Bad request: {}", e)))?;
+		.map_err(|e| Error::RequestError(format!("Bad request: {e}")))?;
 
 	// All wallet api interaction explicitly uses protocol version 1 for now.
 	let version = ProtocolVersion(1);
 	let tx: Transaction =
 		ser::deserialize(&mut &tx_bin[..], version, DeserializationMode::default())
-			.map_err(|e| Error::RequestError(format!("Bad request: {}", e)))?;
+			.map_err(|e| Error::RequestError(format!("Bad request: {e}")))?;
 
 	let source = pool::TxSource::PushApi;
 	info!(
@@ -155,10 +155,10 @@ where
 	let header = tx_pool
 		.blockchain
 		.chain_head()
-		.map_err(|e| Error::Internal(format!("Failed to get chain head: {}", e)))?;
+		.map_err(|e| Error::Internal(format!("Failed to get chain head: {e}")))?;
 	tx_pool
 		.add_to_pool(source, tx, !fluff, &header)
-		.map_err(|e| Error::Internal(format!("Failed to update pool: {}", e)))?;
+		.map_err(|e| Error::Internal(format!("Failed to update pool: {e}")))?;
 	Ok(())
 }
 
@@ -172,9 +172,7 @@ where
 		Box::pin(async move {
 			let res = match update_pool(pool, req).await {
 				Ok(_) => just_response(StatusCode::OK, ""),
-				Err(e) => {
-					just_response(StatusCode::INTERNAL_SERVER_ERROR, format!("failed: {}", e))
-				}
+				Err(e) => just_response(StatusCode::INTERNAL_SERVER_ERROR, format!("failed: {e}")),
 			};
 			Ok(res)
 		})

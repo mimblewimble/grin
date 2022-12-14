@@ -38,8 +38,7 @@ fn test_unprunable_size(height: u8, n_leaves: u32) {
 		let id = SegmentIdentifier { height, idx };
 		let segment = Segment::from_pmmr(id, &mmr, false).unwrap();
 		println!(
-			"\n\n>>>>>>> N_LEAVES = {}, LAST_POS = {}, SEGMENT = {}:\n{:#?}",
-			n_leaves, last_pos, idx, segment
+			"\n\n>>>>>>> N_LEAVES = {n_leaves}, LAST_POS = {last_pos}, SEGMENT = {idx}:\n{segment:#?}"
 		);
 		if idx < n_segments - 1 || (n_leaves as u64) % size == 0 {
 			// Check if the reconstructed subtree root matches with the hash stored in the mmr

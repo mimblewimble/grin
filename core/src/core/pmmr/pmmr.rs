@@ -136,12 +136,12 @@ pub trait ReadablePMMR {
 
 		// check this pos is actually a leaf in the MMR
 		if !is_leaf(pos0) {
-			return Err(format!("not a leaf at pos {}", pos0));
+			return Err(format!("not a leaf at pos {pos0}"));
 		}
 
 		// check we actually have a hash in the MMR at this pos
 		self.get_hash(pos0)
-			.ok_or_else(|| format!("no element at pos {}", pos0))?;
+			.ok_or_else(|| format!("no element at pos {pos0}"))?;
 
 		let family_branch = family_branch(pos0, size);
 
@@ -208,7 +208,7 @@ where
 
 	/// Build a "readonly" view of this PMMR.
 	pub fn readonly_pmmr(&self) -> ReadonlyPMMR<'_, T, B> {
-		ReadonlyPMMR::at(&self.backend, self.size)
+		ReadonlyPMMR::at(self.backend, self.size)
 	}
 
 	/// Push a new element into the MMR. Computes new related peaks at
@@ -222,7 +222,7 @@ where
 
 		let (peak_map, height) = peak_map_height(pos);
 		if height != 0 {
-			return Err(format!("bad mmr size {}", pos));
+			return Err(format!("bad mmr size {pos}"));
 		}
 		// hash with all immediately preceding peaks, as indicated by peak map
 		let mut peak = 1;
@@ -316,7 +316,7 @@ where
 	/// Returns true if pruning is successful.
 	pub fn prune(&mut self, pos0: u64) -> Result<bool, String> {
 		if !is_leaf(pos0) {
-			return Err(format!("Node at {} is not a leaf, can't prune.", pos0));
+			return Err(format!("Node at {pos0} is not a leaf, can't prune."));
 		}
 
 		if self.backend.get_hash(pos0).is_none() {
@@ -370,10 +370,10 @@ where
 				if m >= sz {
 					break;
 				}
-				idx.push_str(&format!("{:>8} ", m));
+				idx.push_str(&format!("{m:>8} "));
 				let ohs = self.get_hash(m);
 				match ohs {
-					Some(hs) => hashes.push_str(&format!("{} ", hs)),
+					Some(hs) => hashes.push_str(&format!("{hs} ")),
 					None => hashes.push_str(&format!("{:>8} ", "??")),
 				}
 			}
@@ -407,7 +407,7 @@ where
 				idx.push_str(&format!("{:>8} ", m + 1));
 				let ohs = self.get_from_file(m);
 				match ohs {
-					Some(hs) => hashes.push_str(&format!("{} ", hs)),
+					Some(hs) => hashes.push_str(&format!("{hs} ")),
 					None => hashes.push_str(&format!("{:>8} ", " .")),
 				}
 			}
@@ -587,7 +587,7 @@ pub fn round_up_to_leaf_pos(pos0: u64) -> u64 {
 	} else {
 		insert_idx + 1
 	};
-	return insertion_to_pmmr_index(leaf_idx);
+	insertion_to_pmmr_index(leaf_idx)
 }
 
 /// Returns the 0-based pmmr index of 0-based leaf index n
@@ -598,7 +598,7 @@ pub fn insertion_to_pmmr_index(nleaf0: u64) -> u64 {
 /// Returns the insertion index of the given leaf index
 pub fn pmmr_leaf_to_insertion_index(pos0: u64) -> Option<u64> {
 	let (insert_idx, height) = peak_map_height(pos0);
-	(height == 0).then(|| insert_idx)
+	(height == 0).then_some(insert_idx)
 }
 
 /// The height of a node in a full binary tree from its postorder traversal
@@ -685,13 +685,13 @@ pub fn bintree_leaf_pos_iter(pos0: u64) -> Box<dyn Iterator<Item = u64>> {
 		Some(l) => l,
 		None => return Box::new(iter::empty::<u64>()),
 	};
-	Box::new((leaf_start..=leaf_end).map(|n| insertion_to_pmmr_index(n)))
+	Box::new((leaf_start..=leaf_end).map(insertion_to_pmmr_index))
 }
 
 /// Iterator over all pos beneath the provided subtree root (including the root itself).
 pub fn bintree_pos_iter(pos0: u64) -> impl Iterator<Item = u64> {
 	let leaf_start = bintree_leftmost(pos0);
-	(leaf_start..=pos0).into_iter()
+	(leaf_start..=pos0)
 }
 
 /// All pos in the subtree beneath the provided root, including root itself.

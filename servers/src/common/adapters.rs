@@ -196,7 +196,7 @@ where
 				}
 				Err(e) => {
 					debug!("Invalid hydrated block {}: {:?}", cb_hash, e);
-					return Ok(false);
+					Ok(false)
 				}
 			}
 		} else {
@@ -405,10 +405,10 @@ where
 	/// the required indexes for a consumer to rewind to a consistent state
 	/// at the provided block hash.
 	fn txhashset_read(&self, h: Hash) -> Option<p2p::TxHashSetRead> {
-		match self.chain().txhashset_read(h.clone()) {
+		match self.chain().txhashset_read(h) {
 			Ok((out_index, kernel_index, read)) => Some(p2p::TxHashSetRead {
 				output_index: out_index,
-				kernel_index: kernel_index,
+				kernel_index,
 				reader: read,
 			}),
 			Err(e) => {
@@ -576,7 +576,7 @@ where
 		// TODO: Entire process needs to be restarted if the horizon block
 		// has changed (perhaps not here, NB this has to go somewhere)
 		let archive_header = self.chain().txhashset_archive_header_header_only()?;
-		let identifier = segment.identifier().clone();
+		let identifier = segment.identifier();
 		let mut retval = Ok(true);
 		if let Some(d) = self.chain().desegmenter(&archive_header)?.write().as_mut() {
 			let res = d.add_bitmap_segment(segment, output_root);
@@ -609,7 +609,7 @@ where
 			bitmap_root,
 		);
 		let archive_header = self.chain().txhashset_archive_header_header_only()?;
-		let identifier = segment.identifier().clone();
+		let identifier = segment.identifier();
 		let mut retval = Ok(true);
 		if let Some(d) = self.chain().desegmenter(&archive_header)?.write().as_mut() {
 			let res = d.add_output_segment(segment, Some(bitmap_root));
@@ -640,7 +640,7 @@ where
 			block_hash,
 		);
 		let archive_header = self.chain().txhashset_archive_header_header_only()?;
-		let identifier = segment.identifier().clone();
+		let identifier = segment.identifier();
 		let mut retval = Ok(true);
 		if let Some(d) = self.chain().desegmenter(&archive_header)?.write().as_mut() {
 			let res = d.add_rangeproof_segment(segment);
@@ -671,7 +671,7 @@ where
 			block_hash,
 		);
 		let archive_header = self.chain().txhashset_archive_header_header_only()?;
-		let identifier = segment.identifier().clone();
+		let identifier = segment.identifier();
 		let mut retval = Ok(true);
 		if let Some(d) = self.chain().desegmenter(&archive_header)?.write().as_mut() {
 			let res = d.add_kernel_segment(segment);
@@ -740,7 +740,7 @@ where
 		let header_pmmr = header_pmmr.read();
 
 		for hash in locator {
-			if let Ok(header) = self.chain().get_block_header(&hash) {
+			if let Ok(header) = self.chain().get_block_header(hash) {
 				if let Ok(hash_at_height) = header_pmmr.get_header_hash_by_height(header.height) {
 					if let Ok(header_at_height) = self.chain().get_block_header(&hash_at_height) {
 						if header.hash() == header_at_height.hash() {
@@ -989,7 +989,7 @@ where
 		ChainToPoolAndNetAdapter {
 			tx_pool,
 			peers: OneTime::new(),
-			hooks: hooks,
+			hooks,
 		}
 	}
 

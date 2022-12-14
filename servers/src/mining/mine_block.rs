@@ -111,7 +111,7 @@ pub fn get_block(
 
 		result = build_block(chain, tx_pool, new_key_id, wallet_listener_url.clone());
 	}
-	return result.unwrap();
+	result.unwrap()
 }
 
 /// Builds a new block with the chain head as previous and eligible
@@ -193,7 +193,7 @@ fn build_block(
 				// Some other issue, possibly duplicate kernel
 				_ => {
 					error!("Error setting txhashset root to build a block: {:?}", e);
-					Err(Error::Chain(chain::Error::Other(format!("{:?}", e))))
+					Err(Error::Chain(chain::Error::Other(format!("{e:?}"))))
 				}
 			}
 		}
@@ -227,7 +227,7 @@ fn get_coinbase(
 	match wallet_listener_url {
 		None => {
 			// Burn it
-			return burn_reward(block_fees);
+			burn_reward(block_fees)
 		}
 		Some(wallet_listener_url) => {
 			let res = create_coinbase(&wallet_listener_url, &block_fees)?;
@@ -235,12 +235,12 @@ fn get_coinbase(
 			let kernel = res.kernel;
 			let key_id = res.key_id;
 			let block_fees = BlockFees {
-				key_id: key_id,
+				key_id,
 				..block_fees
 			};
 
 			debug!("get_coinbase: {:?}", block_fees);
-			return Ok((output, kernel, block_fees));
+			Ok((output, kernel, block_fees))
 		}
 	}
 }
@@ -248,7 +248,7 @@ fn get_coinbase(
 /// Call the wallet API to create a coinbase output for the given block_fees.
 /// Will retry based on default "retry forever with backoff" behavior.
 fn create_coinbase(dest: &str, block_fees: &BlockFees) -> Result<CbData, Error> {
-	let url = format!("{}/v2/foreign", dest);
+	let url = format!("{dest}/v2/foreign");
 	let req_body = json!({
 		"jsonrpc": "2.0",
 		"method": "build_coinbase",
@@ -262,10 +262,7 @@ fn create_coinbase(dest: &str, block_fees: &BlockFees) -> Result<CbData, Error> 
 	let req = api::client::create_post_request(url.as_str(), None, &req_body)?;
 	let timeout = api::client::TimeOut::default();
 	let res: String = api::client::send_request(req, timeout).map_err(|e| {
-		let report = format!(
-			"Failed to get coinbase from {}. Is the wallet listening? {}",
-			dest, e
-		);
+		let report = format!("Failed to get coinbase from {dest}. Is the wallet listening? {e}");
 		error!("{}", report);
 		Error::WalletComm(report)
 	})?;
@@ -286,7 +283,7 @@ fn create_coinbase(dest: &str, block_fees: &BlockFees) -> Result<CbData, Error> 
 	let ret_val = match serde_json::from_value::<CbData>(cb_data) {
 		Ok(r) => r,
 		Err(e) => {
-			let report = format!("Couldn't deserialize CbData: {}", e);
+			let report = format!("Couldn't deserialize CbData: {e}");
 			error!("{}", report);
 			return Err(Error::WalletComm(report));
 		}

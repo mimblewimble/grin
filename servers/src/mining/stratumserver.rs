@@ -194,7 +194,7 @@ impl State {
 			current_block_versions: blocks,
 			current_key_id: None,
 			current_difficulty: <u64>::max_value(),
-			minimum_share_difficulty: minimum_share_difficulty,
+			minimum_share_difficulty,
 		}
 	}
 }
@@ -216,10 +216,10 @@ impl Handler {
 		chain: Arc<chain::Chain>,
 	) -> Self {
 		Handler {
-			id: id,
+			id,
 			workers: Arc::new(WorkersList::new(stratum_stats)),
-			sync_state: sync_state,
-			chain: chain,
+			sync_state,
+			chain,
 			current_state: Arc::new(RwLock::new(State::new(minimum_share_difficulty))),
 		}
 	}
@@ -283,12 +283,12 @@ impl Handler {
 	fn handle_login(&self, params: Option<Value>, worker_id: usize) -> Result<Value, RpcError> {
 		let params: LoginParams = parse_params(params)?;
 		self.workers.login(worker_id, params.login, params.agent)?;
-		return Ok("ok".into());
+		Ok("ok".into())
 	}
 
 	// Handle KEEPALIVE message
 	fn handle_keepalive(&self) -> Result<Value, RpcError> {
-		return Ok("ok".into());
+		Ok("ok".into())
 	}
 
 	fn handle_status(&self, worker_id: usize) -> Result<Value, RpcError> {
@@ -310,7 +310,7 @@ impl Handler {
 			stale: stats.num_stale,
 		};
 		let response = serde_json::to_value(&status).unwrap();
-		return Ok(response);
+		Ok(response)
 	}
 	// Handle GETJOBTEMPLATE message
 	fn handle_getjobtemplate(&self) -> Result<Value, RpcError> {
@@ -321,7 +321,7 @@ impl Handler {
 			"(Server ID: {}) sending block {} with id {} to single worker",
 			self.id, job_template.height, job_template.job_id,
 		);
-		return Ok(response);
+		Ok(response)
 	}
 
 	// Build and return a JobTemplate for mining the current block
@@ -343,13 +343,13 @@ impl Handler {
 		}
 		let pre_pow = header_buf.to_hex();
 		let current_state = self.current_state.read();
-		let job_template = JobTemplate {
+
+		JobTemplate {
 			height: bh.height,
 			job_id: (current_state.current_block_versions.len() - 1) as u64,
 			difficulty: current_state.minimum_share_difficulty,
 			pre_pow,
-		};
-		return job_template;
+		}
 	}
 	// Handle SUBMIT message
 	// params contains a solved block header
@@ -379,8 +379,6 @@ impl Handler {
 			return Err(RpcError::too_late());
 		}
 
-		let scaled_share_difficulty: u64;
-		let unscaled_share_difficulty: u64;
 		let mut share_is_block = false;
 
 		let mut b: Block = b.unwrap().clone();
@@ -401,8 +399,8 @@ impl Handler {
 		}
 
 		// Get share difficulty values
-		scaled_share_difficulty = b.header.pow.to_difficulty(b.header.height).to_num();
-		unscaled_share_difficulty = b.header.pow.to_unscaled_difficulty().to_num();
+		let scaled_share_difficulty: u64 = b.header.pow.to_difficulty(b.header.height).to_num();
+		let unscaled_share_difficulty: u64 = b.header.pow.to_unscaled_difficulty().to_num();
 		// Note:  state.minimum_share_difficulty is unscaled
 		//        state.current_difficulty is scaled
 		// If the difficulty is too low its an error
@@ -498,10 +496,10 @@ impl Handler {
 		} else {
 			"ok".to_string()
 		};
-		return Ok((
+		Ok((
 			serde_json::to_value(submit_response).unwrap(),
 			share_is_block,
-		));
+		))
 	} // handle submit a solution
 
 	fn broadcast_job(&self) {
@@ -676,11 +674,11 @@ impl Worker {
 	/// Creates a new Stratum Worker.
 	pub fn new(id: usize, tx: Tx) -> Worker {
 		Worker {
-			id: id,
+			id,
 			agent: String::from(""),
 			login: None,
 			authenticated: false,
-			tx: tx,
+			tx,
 		}
 	}
 } // impl Worker
@@ -694,7 +692,7 @@ impl WorkersList {
 	pub fn new(stratum_stats: Arc<RwLock<StratumStats>>) -> Self {
 		WorkersList {
 			workers_list: Arc::new(RwLock::new(HashMap::new())),
-			stratum_stats: stratum_stats,
+			stratum_stats,
 		}
 	}
 
@@ -761,7 +759,7 @@ impl WorkersList {
 		self.update_stats(worker_id, |ws| ws.last_seen = SystemTime::now());
 	}
 
-	pub fn update_stats(&self, worker_id: usize, f: impl FnOnce(&mut WorkerStats) -> ()) {
+	pub fn update_stats(&self, worker_id: usize, f: impl FnOnce(&mut WorkerStats)) {
 		let mut stratum_stats = self.stratum_stats.write();
 		f(&mut stratum_stats.worker_stats[worker_id]);
 	}
@@ -839,7 +837,7 @@ impl StratumServer {
 			chain,
 			tx_pool,
 			sync_state: Arc::new(SyncState::new()),
-			stratum_stats: stratum_stats,
+			stratum_stats,
 		}
 	}
 
@@ -864,7 +862,7 @@ impl StratumServer {
 			.parse()
 			.expect("Stratum: Incorrect address ");
 
-		let handler = Arc::new(Handler::from_stratum(&self));
+		let handler = Arc::new(Handler::from_stratum(self));
 		let h = handler.clone();
 
 		let _listener_th = thread::spawn(move || {

@@ -49,7 +49,7 @@ lazy_static! {
 const LOGGING_PATTERN: &str = "{d(%Y%m%d %H:%M:%S%.3f)} {h({l})} {M} - {m}{n}";
 
 /// 32 log files to rotate over by default
-const DEFAULT_ROTATE_LOG_FILES: u32 = 32 as u32;
+const DEFAULT_ROTATE_LOG_FILES: u32 = 32_u32;
 
 /// Log Entry
 #[derive(Clone, Serialize, Debug)]
@@ -167,7 +167,7 @@ pub fn init_logger(config: Option<LoggingConfig>, logs_tx: Option<mpsc::SyncSend
 
 		// Start logger
 		let stdout = ConsoleAppender::builder()
-			.encoder(Box::new(PatternEncoder::new(&LOGGING_PATTERN)))
+			.encoder(Box::new(PatternEncoder::new(LOGGING_PATTERN)))
 			.build();
 
 		let mut root = Root::builder();
@@ -176,7 +176,7 @@ pub fn init_logger(config: Option<LoggingConfig>, logs_tx: Option<mpsc::SyncSend
 
 		if tui_running {
 			let channel_appender = ChannelAppender {
-				encoder: Box::new(PatternEncoder::new(&LOGGING_PATTERN)),
+				encoder: Box::new(PatternEncoder::new(LOGGING_PATTERN)),
 				output: Mutex::new(logs_tx.unwrap()),
 			};
 
@@ -203,7 +203,7 @@ pub fn init_logger(config: Option<LoggingConfig>, logs_tx: Option<mpsc::SyncSend
 			let filter = Box::new(ThresholdFilter::new(level_file));
 			let file: Box<dyn Append> = {
 				if let Some(size) = c.log_max_size {
-					let count = c.log_max_files.unwrap_or_else(|| DEFAULT_ROTATE_LOG_FILES);
+					let count = c.log_max_files.unwrap_or(DEFAULT_ROTATE_LOG_FILES);
 					let roller = FixedWindowRoller::builder()
 						.build(&format!("{}.{{}}.gz", c.log_file_path), count)
 						.unwrap();
@@ -214,7 +214,7 @@ pub fn init_logger(config: Option<LoggingConfig>, logs_tx: Option<mpsc::SyncSend
 					Box::new(
 						RollingFileAppender::builder()
 							.append(c.log_file_append)
-							.encoder(Box::new(PatternEncoder::new(&LOGGING_PATTERN)))
+							.encoder(Box::new(PatternEncoder::new(LOGGING_PATTERN)))
 							.build(c.log_file_path, Box::new(policy))
 							.expect("Failed to create logfile"),
 					)
@@ -222,7 +222,7 @@ pub fn init_logger(config: Option<LoggingConfig>, logs_tx: Option<mpsc::SyncSend
 					Box::new(
 						FileAppender::builder()
 							.append(c.log_file_append)
-							.encoder(Box::new(PatternEncoder::new(&LOGGING_PATTERN)))
+							.encoder(Box::new(PatternEncoder::new(LOGGING_PATTERN)))
 							.build(c.log_file_path)
 							.expect("Failed to create logfile"),
 					)
@@ -276,7 +276,7 @@ pub fn init_test_logger() {
 
 	// Start logger
 	let stdout = ConsoleAppender::builder()
-		.encoder(Box::new(PatternEncoder::default()))
+		.encoder(Box::<log4rs::encode::pattern::PatternEncoder>::default())
 		.build();
 
 	let mut root = Root::builder();

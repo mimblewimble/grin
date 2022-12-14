@@ -217,7 +217,7 @@ impl<T> Segment<T> {
 			.zip(&self.hashes)
 			.find(|&(&p, _)| p == pos0)
 			.map(|(_, &h)| h)
-			.ok_or_else(|| SegmentError::MissingHash(pos0))
+			.ok_or(SegmentError::MissingHash(pos0))
 	}
 
 	/// Get the identifier associated with this segment
@@ -280,7 +280,7 @@ impl<T> Segment<T> {
 
 	/// Iterator of all the leaves in the segment
 	pub fn leaf_iter(&self) -> impl Iterator<Item = (u64, &T)> + '_ {
-		self.leaf_pos.iter().map(|&p| p).zip(&self.leaf_data)
+		self.leaf_pos.iter().copied().zip(&self.leaf_data)
 	}
 
 	/// Iterator of all the hashes in the segment
@@ -410,7 +410,7 @@ where
 					let data = leaves0
 						.find(|&(&p, _)| p == pos0)
 						.map(|(_, l)| l)
-						.ok_or_else(|| SegmentError::MissingLeaf(pos0))?;
+						.ok_or(SegmentError::MissingLeaf(pos0))?;
 					Some(data.hash_with_index(pos0))
 				} else {
 					None
@@ -440,9 +440,8 @@ where
 					// Non-prunable MMR: require both children
 					Some(
 						(
-							left_child.ok_or_else(|| SegmentError::MissingHash(left_child_pos))?,
-							right_child
-								.ok_or_else(|| SegmentError::MissingHash(right_child_pos))?,
+							left_child.ok_or(SegmentError::MissingHash(left_child_pos))?,
+							right_child.ok_or(SegmentError::MissingHash(right_child_pos))?,
 						)
 							.hash_with_index(pos0),
 					)
@@ -462,14 +461,12 @@ where
 				.rev();
 			let mut hash = None;
 			for pos0 in peaks {
-				let mut lhash = hashes
-					.pop()
-					.ok_or_else(|| SegmentError::MissingHash(1 + pos0))?;
+				let mut lhash = hashes.pop().ok_or(SegmentError::MissingHash(1 + pos0))?;
 				if lhash.is_none() && bitmap.is_some() {
 					// If this entire peak is pruned, load it from the segment hashes
 					lhash = Some(self.get_hash(pos0)?);
 				}
-				let lhash = lhash.ok_or_else(|| SegmentError::MissingHash(1 + pos0))?;
+				let lhash = lhash.ok_or(SegmentError::MissingHash(1 + pos0))?;
 
 				hash = match hash {
 					None => Some(lhash),
@@ -665,10 +662,7 @@ impl SegmentProof {
 		let hashes: Result<Vec<_>, _> = family_branch
 			.iter()
 			.filter(|&&(p0, _)| start_pos.map(|s| p0 >= s).unwrap_or(true))
-			.map(|&(_, s0)| {
-				pmmr.get_hash(s0)
-					.ok_or_else(|| SegmentError::MissingHash(s0))
-			})
+			.map(|&(_, s0)| pmmr.get_hash(s0).ok_or(SegmentError::MissingHash(s0)))
 			.collect();
 		let mut proof = Self { hashes: hashes? };
 
@@ -686,7 +680,7 @@ impl SegmentProof {
 			.into_iter()
 			.filter(|&x| 1 + x < segment_first_pos)
 			.rev()
-			.map(|p| pmmr.get_hash(p).ok_or_else(|| SegmentError::MissingHash(p)))
+			.map(|p| pmmr.get_hash(p).ok_or(SegmentError::MissingHash(p)))
 			.collect();
 		proof.hashes.extend(peaks?);
 
@@ -716,9 +710,7 @@ impl SegmentProof {
 			.iter()
 			.filter(|&&(p0, _)| p0 >= segment_unpruned_pos)
 		{
-			let sibling_hash = iter
-				.next()
-				.ok_or_else(|| SegmentError::MissingHash(1 + s0))?;
+			let sibling_hash = iter.next().ok_or(SegmentError::MissingHash(1 + s0))?;
 			root = if pmmr::is_left_sibling(s0) {
 				(sibling_hash, root).hash_with_index(p0)
 			} else {
@@ -732,16 +724,12 @@ impl SegmentProof {
 			.map(|&(p0, _)| p0)
 			.unwrap_or(segment_last_pos0);
 
-		let rhs = pmmr::peaks(last_pos)
-			.into_iter()
-			.filter(|&x| x > peak_pos0)
-			.next();
+		let rhs = pmmr::peaks(last_pos).into_iter().find(|&x| x > peak_pos0);
 
 		if let Some(pos0) = rhs {
 			root = (
 				root,
-				iter.next()
-					.ok_or_else(|| SegmentError::MissingHash(1 + pos0))?,
+				iter.next().ok_or(SegmentError::MissingHash(1 + pos0))?,
 			)
 				.hash_with_index(last_pos)
 		}
@@ -753,8 +741,7 @@ impl SegmentProof {
 			.rev();
 		for pos0 in peaks {
 			root = (
-				iter.next()
-					.ok_or_else(|| SegmentError::MissingHash(1 + pos0))?,
+				iter.next().ok_or(SegmentError::MissingHash(1 + pos0))?,
 				root,
 			)
 				.hash_with_index(last_pos);

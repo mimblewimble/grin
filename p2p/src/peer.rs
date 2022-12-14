@@ -334,7 +334,7 @@ impl Peer {
 			"Requesting tx (kernel hash) {} from peer {}.",
 			h, self.info.addr
 		);
-		self.send(&h, msg::Type::GetTransaction)
+		self.send(h, msg::Type::GetTransaction)
 	}
 
 	/// Sends a request for a specific block by hash.
@@ -342,13 +342,13 @@ impl Peer {
 	pub fn send_block_request(&self, h: Hash, opts: chain::Options) -> Result<(), Error> {
 		debug!("Requesting block {} from peer {}.", h, self.info.addr);
 		self.tracking_adapter.push_req(h, opts);
-		self.send(&h, msg::Type::GetBlock)
+		self.send(h, msg::Type::GetBlock)
 	}
 
 	/// Sends a request for a specific compact block by hash
 	pub fn send_compact_block_request(&self, h: Hash) -> Result<(), Error> {
 		debug!("Requesting compact block {} from {}", h, self.info.addr);
-		self.send(&h, msg::Type::GetCompactBlock)
+		self.send(h, msg::Type::GetCompactBlock)
 	}
 
 	pub fn send_peer_request(&self, capab: Capabilities) -> Result<(), Error> {
@@ -461,7 +461,7 @@ struct TrackingAdapter {
 impl TrackingAdapter {
 	fn new(adapter: Arc<dyn NetAdapter>) -> TrackingAdapter {
 		TrackingAdapter {
-			adapter: adapter,
+			adapter,
 			received: Arc::new(RwLock::new(LruCache::new(MAX_TRACK_SIZE))),
 			requested: Arc::new(RwLock::new(LruCache::new(MAX_TRACK_SIZE))),
 		}

@@ -683,12 +683,12 @@ impl Block {
 
 	/// Get outputs
 	pub fn outputs(&self) -> &[Output] {
-		&self.body.outputs()
+		self.body.outputs()
 	}
 
 	/// Get kernels
 	pub fn kernels(&self) -> &[TxKernel] {
-		&self.body.kernels()
+		self.body.kernels()
 	}
 
 	/// Sum of all fees (inputs less outputs) in the block

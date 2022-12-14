@@ -42,7 +42,7 @@ impl LeafSet {
 	pub fn open<P: AsRef<Path>>(path: P) -> io::Result<LeafSet> {
 		let file_path = path.as_ref();
 		let bitmap = if file_path.exists() {
-			read_bitmap(&file_path)?
+			read_bitmap(file_path)?
 		} else {
 			Bitmap::create()
 		};
@@ -74,7 +74,7 @@ impl LeafSet {
 			return Ok(());
 		}
 
-		let bitmap = read_bitmap(&cp_file_path)?;
+		let bitmap = read_bitmap(cp_file_path)?;
 		debug!(
 			"leaf_set: copying rewound file {} to {}",
 			cp_file_path.display(),
@@ -119,7 +119,7 @@ impl LeafSet {
 
 		// Then add back output pos to the leaf_set
 		// that were removed.
-		bitmap.or_inplace(&rewind_rm_pos);
+		bitmap.or_inplace(rewind_rm_pos);
 
 		// Invert bitmap for the leaf pos and return the resulting bitmap.
 		bitmap
@@ -138,7 +138,7 @@ impl LeafSet {
 
 		// Then add back output pos to the leaf_set
 		// that were removed.
-		self.bitmap.or_inplace(&rewind_rm_pos);
+		self.bitmap.or_inplace(rewind_rm_pos);
 	}
 
 	/// Append a new position to the leaf_set.

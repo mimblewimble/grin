@@ -93,7 +93,7 @@ impl Status {
 		Status {
 			protocol_version: ser::ProtocolVersion::local().into(),
 			user_agent: p2p::msg::USER_AGENT.to_string(),
-			connections: connections,
+			connections,
 			tip: Tip::from_tip(current_tip),
 			sync_status,
 			sync_info,
@@ -187,8 +187,8 @@ impl Output {
 	pub fn new(commit: &pedersen::Commitment, height: u64, mmr_index: u64) -> Output {
 		Output {
 			commit: PrintableCommitment { commit: *commit },
-			height: height,
-			mmr_index: mmr_index,
+			height,
+			mmr_index,
 		}
 	}
 }
@@ -313,7 +313,7 @@ impl OutputPrintable {
 		let mut merkle_proof = None;
 		if include_merkle_proof && output.is_coinbase() && !spent {
 			if let Some(block_header) = block_header {
-				merkle_proof = chain.get_merkle_proof(output, &block_header).ok();
+				merkle_proof = chain.get_merkle_proof(output, block_header).ok();
 			}
 		};
 
@@ -469,10 +469,10 @@ impl<'de> serde::de::Deserialize<'de> for OutputPrintable {
 					output_type: output_type.unwrap(),
 					commit: commit.unwrap(),
 					spent: spent.unwrap(),
-					proof: proof,
+					proof,
 					proof_hash: proof_hash.unwrap(),
 					block_height: block_height.unwrap(),
-					merkle_proof: merkle_proof,
+					merkle_proof,
 					mmr_index: mmr_index.unwrap(),
 				})
 			}
@@ -646,13 +646,13 @@ impl BlockPrintable {
 		let kernels = block
 			.kernels()
 			.iter()
-			.map(|kernel| TxKernelPrintable::from_txkernel(kernel))
+			.map(TxKernelPrintable::from_txkernel)
 			.collect();
 		Ok(BlockPrintable {
 			header: BlockHeaderPrintable::from_header(&block.header),
-			inputs: inputs,
-			outputs: outputs,
-			kernels: kernels,
+			inputs,
+			outputs,
+			kernels,
 		})
 	}
 }
@@ -685,7 +685,7 @@ impl CompactBlockPrintable {
 		let kern_full = cb
 			.kern_full()
 			.iter()
-			.map(|x| TxKernelPrintable::from_txkernel(x))
+			.map(TxKernelPrintable::from_txkernel)
 			.collect();
 		Ok(CompactBlockPrintable {
 			header: BlockHeaderPrintable::from_header(&cb.header),
@@ -748,7 +748,7 @@ mod test {
 			 \"merkle_proof\":null,\
 			 \"mmr_index\":0\
 			 }";
-		let deserialized: OutputPrintable = serde_json::from_str(&hex_output).unwrap();
+		let deserialized: OutputPrintable = serde_json::from_str(hex_output).unwrap();
 		let serialized = serde_json::to_string(&deserialized).unwrap();
 		assert_eq!(serialized, hex_output);
 	}
@@ -760,7 +760,7 @@ mod test {
 			 \"height\":0,\
 			 \"mmr_index\":0\
 			 }";
-		let deserialized: Output = serde_json::from_str(&hex_commit).unwrap();
+		let deserialized: Output = serde_json::from_str(hex_commit).unwrap();
 		let serialized = serde_json::to_string(&deserialized).unwrap();
 		assert_eq!(serialized, hex_commit);
 	}

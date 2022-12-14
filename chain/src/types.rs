@@ -529,8 +529,8 @@ impl Default for Tip {
 impl ser::Writeable for Tip {
 	fn write<W: ser::Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
 		writer.write_u64(self.height)?;
-		writer.write_fixed_bytes(&self.last_block_h)?;
-		writer.write_fixed_bytes(&self.prev_block_h)?;
+		writer.write_fixed_bytes(self.last_block_h)?;
+		writer.write_fixed_bytes(self.prev_block_h)?;
 		self.total_difficulty.write(writer)
 	}
 }
@@ -542,7 +542,7 @@ impl ser::Readable for Tip {
 		let prev = Hash::read(reader)?;
 		let diff = Difficulty::read(reader)?;
 		Ok(Tip {
-			height: height,
+			height,
 			last_block_h: last,
 			prev_block_h: prev,
 			total_difficulty: diff,

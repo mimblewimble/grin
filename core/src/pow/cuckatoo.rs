@@ -81,7 +81,7 @@ impl Graph {
 		if u >= self.max_nodes || v >= self.max_nodes {
 			return Err(Error::EdgeAddition);
 		}
-		v = v + self.max_nodes;
+		v += self.max_nodes;
 		let adj_u = self.adj_list[(u ^ 1) as usize];
 		let adj_v = self.adj_list[(v ^ 1) as usize];
 		if adj_u != self.nil && adj_v != self.nil {
@@ -243,7 +243,7 @@ impl CuckatooContext {
 			s.nonces.sort_unstable();
 		}
 		for s in &self.graph.solutions {
-			self.verify_impl(&s)?;
+			self.verify_impl(s)?;
 		}
 		if self.graph.solutions.is_empty() {
 			Err(Error::NoSolution)

@@ -169,8 +169,7 @@ fn test_the_transaction_pool() {
 		assert_eq!(pool.stempool.size(), 1);
 
 		// Duplicate stem tx so fluff, adding it to txpool and removing it from stempool.
-		pool.add_to_pool(test_source(), tx.clone(), true, &header)
-			.unwrap();
+		pool.add_to_pool(test_source(), tx, true, &header).unwrap();
 		assert_eq!(pool.total_size(), 5);
 		assert_eq!(pool.txpool.size(), 5);
 		assert!(pool.stempool.is_empty());
@@ -185,7 +184,7 @@ fn test_the_transaction_pool() {
 
 		// tx1 and tx2 are already in the txpool (in aggregated form)
 		// tx4 is the "new" part of this aggregated tx that we care about
-		let agg_tx = transaction::aggregate(&[tx1.clone(), tx2.clone(), tx4]).unwrap();
+		let agg_tx = transaction::aggregate(&[tx1, tx2, tx4]).unwrap();
 
 		agg_tx.validate(Weighting::AsTransaction).unwrap();
 
@@ -209,7 +208,7 @@ fn test_the_transaction_pool() {
 
 		// check we cannot add a double spend to the txpool
 		assert!(pool
-			.add_to_pool(test_source(), double_spend_tx.clone(), false, &header)
+			.add_to_pool(test_source(), double_spend_tx, false, &header)
 			.is_err());
 	}
 

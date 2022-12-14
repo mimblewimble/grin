@@ -123,7 +123,7 @@ impl Writeable for PeerAddr {
 				ser_multiwrite!(
 					writer,
 					[write_u8, 0],
-					[write_fixed_bytes, &sav4.ip().octets().to_vec()],
+					[write_fixed_bytes, sav4.ip().octets()],
 					[write_u16, sav4.port()]
 				);
 			}
@@ -184,7 +184,7 @@ impl<'de> Visitor<'de> for PeerAddrs {
 				// If that fails it's probably a DNS record
 				Err(_) => {
 					let socket_addrs = entry.to_socket_addrs().map_err(|_| {
-						serde::de::Error::custom(format!("Unable to resolve DNS: {}", entry))
+						serde::de::Error::custom(format!("Unable to resolve DNS: {entry}"))
 					})?;
 					peers.append(&mut socket_addrs.map(PeerAddr).collect());
 				}

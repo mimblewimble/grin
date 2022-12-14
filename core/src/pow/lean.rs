@@ -51,7 +51,7 @@ impl Lean {
 	/// and works well for Cuckatoo size above 18.
 	pub fn trim(&mut self) {
 		// trimming successively
-		while self.edges.cardinality() > (7 * (self.params.num_edges >> 8) / 8) as u64 {
+		while self.edges.cardinality() > (7 * (self.params.num_edges >> 8) / 8) {
 			self.count_and_kill();
 		}
 	}

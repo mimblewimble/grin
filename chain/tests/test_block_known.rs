@@ -70,7 +70,7 @@ fn check_known() {
 
 	// reprocess latest block and check the updated head
 	{
-		let chain = init_chain(chain_dir, genesis.clone());
+		let chain = init_chain(chain_dir, genesis);
 		let head = chain
 			.process_block(latest.clone(), chain::Options::NONE)
 			.unwrap();

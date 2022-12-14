@@ -94,7 +94,7 @@ impl ChainStore {
 	/// Get full block.
 	pub fn get_block(&self, h: &Hash) -> Result<Block, Error> {
 		option_to_not_found(self.db.get_ser(&to_key(BLOCK_PREFIX, h), None), || {
-			format!("BLOCK: {}", h)
+			format!("BLOCK: {h}")
 		})
 	}
 
@@ -106,7 +106,7 @@ impl ChainStore {
 	/// Get block_sums for the block hash.
 	pub fn get_block_sums(&self, h: &Hash) -> Result<BlockSums, Error> {
 		option_to_not_found(self.db.get_ser(&to_key(BLOCK_SUMS_PREFIX, h), None), || {
-			format!("Block sums for block: {}", h)
+			format!("Block sums for block: {h}")
 		})
 	}
 
@@ -127,7 +127,7 @@ impl ChainStore {
 	pub fn get_block_header(&self, h: &Hash) -> Result<BlockHeader, Error> {
 		option_to_not_found(
 			self.db.get_ser(&to_key(BLOCK_HEADER_PREFIX, h), None),
-			|| format!("BLOCK HEADER: {}", h),
+			|| format!("BLOCK HEADER: {h}"),
 		)
 	}
 
@@ -139,7 +139,7 @@ impl ChainStore {
 				&to_key(BLOCK_HEADER_PREFIX, h),
 				Some(ser::DeserializationMode::SkipPow),
 			),
-			|| format!("BLOCK HEADER: {}", h),
+			|| format!("BLOCK HEADER: {h}"),
 		)
 	}
 
@@ -148,8 +148,7 @@ impl ChainStore {
 		match self.get_output_pos_height(commit)? {
 			Some(pos) => Ok(pos.pos - 1),
 			None => Err(Error::NotFoundErr(format!(
-				"Output position for: {:?}",
-				commit
+				"Output position for: {commit:?}"
 			))),
 		}
 	}
@@ -220,7 +219,7 @@ impl<'a> Batch<'a> {
 	/// get block
 	pub fn get_block(&self, h: &Hash) -> Result<Block, Error> {
 		option_to_not_found(self.db.get_ser(&to_key(BLOCK_PREFIX, h), None), || {
-			format!("Block with hash: {}", h)
+			format!("Block with hash: {h}")
 		})
 	}
 
@@ -317,8 +316,7 @@ impl<'a> Batch<'a> {
 		match self.get_output_pos_height(commit)? {
 			Some(pos) => Ok(pos.pos - 1),
 			None => Err(Error::NotFoundErr(format!(
-				"Output position for: {:?}",
-				commit
+				"Output position for: {commit:?}"
 			))),
 		}
 	}
@@ -346,7 +344,7 @@ impl<'a> Batch<'a> {
 	pub fn get_block_header(&self, h: &Hash) -> Result<BlockHeader, Error> {
 		option_to_not_found(
 			self.db.get_ser(&to_key(BLOCK_HEADER_PREFIX, h), None),
-			|| format!("BLOCK HEADER: {}", h),
+			|| format!("BLOCK HEADER: {h}"),
 		)
 	}
 
@@ -358,7 +356,7 @@ impl<'a> Batch<'a> {
 				&to_key(BLOCK_HEADER_PREFIX, h),
 				Some(ser::DeserializationMode::SkipPow),
 			),
-			|| format!("BLOCK HEADER: {}", h),
+			|| format!("BLOCK HEADER: {h}"),
 		)
 	}
 
@@ -375,7 +373,7 @@ impl<'a> Batch<'a> {
 	/// Get block_sums for the block.
 	pub fn get_block_sums(&self, h: &Hash) -> Result<BlockSums, Error> {
 		option_to_not_found(self.db.get_ser(&to_key(BLOCK_SUMS_PREFIX, h), None), || {
-			format!("Block sums for block: {}", h)
+			format!("Block sums for block: {h}")
 		})
 	}
 
@@ -400,7 +398,7 @@ impl<'a> Batch<'a> {
 	pub fn get_spent_index(&self, bh: &Hash) -> Result<Vec<CommitPos>, Error> {
 		option_to_not_found(
 			self.db.get_ser(&to_key(BLOCK_SPENT_PREFIX, bh), None),
-			|| format!("spent index: {}", bh),
+			|| format!("spent index: {bh}"),
 		)
 	}
 

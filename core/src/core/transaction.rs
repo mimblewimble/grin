@@ -89,7 +89,7 @@ impl<'de> Deserialize<'de> for FeeFields {
 			{
 				let value = value
 					.parse()
-					.map_err(|_| E::custom(format!("invalid fee field")))?;
+					.map_err(|_| E::custom("invalid fee field".to_string()))?;
 				self.visit_u64(value)
 			}
 
@@ -129,7 +129,7 @@ impl From<u32> for FeeFields {
 
 impl From<FeeFields> for u64 {
 	fn from(fee_fields: FeeFields) -> Self {
-		fee_fields.0 as u64
+		fee_fields.0
 	}
 }
 
@@ -172,7 +172,7 @@ impl FeeFields {
 	/// Turn a zero `FeeField` into a `None`, any other value into a `Some`.
 	/// We need this because a zero `FeeField` cannot be deserialized.
 	pub fn as_opt(&self) -> Option<Self> {
-		(!self.is_zero()).then(|| *self)
+		(!self.is_zero()).then_some(*self)
 	}
 
 	/// Check if the `FeeFields` is set to zero
@@ -323,7 +323,7 @@ impl KernelFeatures {
 			} => (x, fee, relative_height).hash(),
 		};
 
-		let msg = secp::Message::from_slice(&hash.as_bytes())?;
+		let msg = secp::Message::from_slice(hash.as_bytes())?;
 		Ok(msg)
 	}
 
@@ -550,17 +550,13 @@ pub enum Error {
 
 impl error::Error for Error {
 	fn description(&self) -> &str {
-		match *self {
-			_ => "some kind of keychain error",
-		}
+		"some kind of keychain error"
 	}
 }
 
 impl fmt::Display for Error {
 	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-		match *self {
-			_ => write!(f, "some kind of keychain error"),
-		}
+		write!(f, "some kind of keychain error")
 	}
 }
 
@@ -649,7 +645,7 @@ impl PMMRable for TxKernel {
 	type E = Self;
 
 	fn as_elmt(&self) -> Self::E {
-		self.clone()
+		*self
 	}
 
 	fn elmt_size() -> Option<u16> {
@@ -735,11 +731,11 @@ impl TxKernel {
 		let pubkey = &self.excess.to_pubkey(&secp)?;
 		if !aggsig::verify_single(
 			&secp,
-			&sig,
+			sig,
 			&self.msg_to_sign()?,
 			None,
-			&pubkey,
-			Some(&pubkey),
+			pubkey,
+			Some(pubkey),
 			false,
 		) {
 			return Err(Error::IncorrectSignature);
@@ -1073,9 +1069,9 @@ impl TransactionBody {
 	/// details. Consensus critical and uses consensus weight values.
 	pub fn weight_by_iok(num_inputs: u64, num_outputs: u64, num_kernels: u64) -> u64 {
 		num_inputs
-			.saturating_mul(consensus::INPUT_WEIGHT as u64)
-			.saturating_add(num_outputs.saturating_mul(consensus::OUTPUT_WEIGHT as u64))
-			.saturating_add(num_kernels.saturating_mul(consensus::KERNEL_WEIGHT as u64))
+			.saturating_mul(consensus::INPUT_WEIGHT)
+			.saturating_add(num_outputs.saturating_mul(consensus::OUTPUT_WEIGHT))
+			.saturating_add(num_kernels.saturating_mul(consensus::KERNEL_WEIGHT))
 	}
 
 	/// Lock height of a body is the max lock height of the kernels.
@@ -1389,12 +1385,12 @@ impl Transaction {
 
 	/// Get outputs
 	pub fn outputs(&self) -> &[Output] {
-		&self.body.outputs()
+		self.body.outputs()
 	}
 
 	/// Get kernels
 	pub fn kernels(&self) -> &[TxKernel] {
-		&self.body.kernels()
+		self.body.kernels()
 	}
 
 	/// Total fee for a transaction is the sum of fees of all kernels.
@@ -1446,7 +1442,7 @@ impl Transaction {
 	/// Can be used to compare txs by their fee/weight ratio, aka feerate.
 	/// Don't use these values for anything else though due to precision multiplier.
 	pub fn fee_rate(&self) -> u64 {
-		self.fee() / self.weight() as u64
+		self.fee() / self.weight()
 	}
 
 	/// Calculate transaction weight
@@ -1504,7 +1500,7 @@ where
 	while inputs_idx < inputs.len() && outputs_idx < outputs.len() {
 		match inputs[inputs_idx]
 			.as_ref()
-			.cmp(&outputs[outputs_idx].as_ref())
+			.cmp(outputs[outputs_idx].as_ref())
 		{
 			Ordering::Less => {
 				inputs.swap(inputs_idx - ncut, inputs_idx);
@@ -1631,12 +1627,12 @@ pub fn deaggregate(mk_tx: Transaction, txs: &[Transaction]) -> Result<Transactio
 		}
 	}
 	for mk_output in mk_tx.outputs() {
-		if !tx.outputs().contains(&mk_output) && !outputs.contains(mk_output) {
+		if !tx.outputs().contains(mk_output) && !outputs.contains(mk_output) {
 			outputs.push(*mk_output);
 		}
 	}
 	for mk_kernel in mk_tx.kernels() {
-		if !tx.kernels().contains(&mk_kernel) && !kernels.contains(mk_kernel) {
+		if !tx.kernels().contains(mk_kernel) && !kernels.contains(mk_kernel) {
 			kernels.push(*mk_kernel);
 		}
 	}

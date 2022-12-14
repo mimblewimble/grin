@@ -100,7 +100,7 @@ fn test_transaction_pool_block_reconciliation() {
 		pool_child.clone(),
 		conflict_child,
 		conflict_valid_child.clone(),
-		valid_child_conflict.clone(),
+		valid_child_conflict,
 		valid_child_valid.clone(),
 		mixed_child,
 	];

@@ -97,7 +97,7 @@ impl Readable for PeerData {
 				addr,
 				capabilities,
 				user_agent,
-				flags: flags,
+				flags,
 				last_banned: lb,
 				ban_reason,
 				last_connected,
@@ -116,7 +116,7 @@ impl PeerStore {
 	/// Instantiates a new peer store under the provided root path.
 	pub fn new(db_root: &str) -> Result<PeerStore, Error> {
 		let db = grin_store::Store::new(db_root, Some(DB_NAME), Some(STORE_SUBPATH), None)?;
-		Ok(PeerStore { db: db })
+		Ok(PeerStore { db })
 	}
 
 	pub fn save_peer(&self, p: &PeerData) -> Result<(), Error> {
@@ -138,7 +138,7 @@ impl PeerStore {
 
 	pub fn get_peer(&self, peer_addr: PeerAddr) -> Result<PeerData, Error> {
 		option_to_not_found(self.db.get_ser(&peer_key(peer_addr)[..], None), || {
-			format!("Peer at address: {}", peer_addr)
+			format!("Peer at address: {peer_addr}")
 		})
 	}
 
@@ -192,7 +192,7 @@ impl PeerStore {
 
 		let mut peer = option_to_not_found(
 			batch.get_ser::<PeerData>(&peer_key(peer_addr)[..], None),
-			|| format!("Peer at address: {}", peer_addr),
+			|| format!("Peer at address: {peer_addr}"),
 		)?;
 		peer.flags = new_state;
 		if new_state == State::Banned {
@@ -233,5 +233,5 @@ impl PeerStore {
 
 // Ignore the port unless ip is loopback address.
 fn peer_key(peer_addr: PeerAddr) -> Vec<u8> {
-	to_key(PEER_PREFIX, &peer_addr.as_key())
+	to_key(PEER_PREFIX, peer_addr.as_key())
 }

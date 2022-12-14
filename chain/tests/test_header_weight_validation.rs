@@ -37,7 +37,7 @@ fn build_block(chain: &Chain) -> Block {
 	let prev = chain.head_header().unwrap();
 	let next_header_info = consensus::next_difficulty(1, chain.difficulty_iter().unwrap());
 	let reward = reward::output(&keychain, &ProofBuilder::new(&keychain), &pk, 0, false).unwrap();
-	let mut block = Block::new(&prev, &[], next_header_info.clone().difficulty, reward).unwrap();
+	let mut block = Block::new(&prev, &[], next_header_info.difficulty, reward).unwrap();
 
 	block.header.timestamp = prev.timestamp + Duration::seconds(60);
 	block.header.pow.secondary_scaling = next_header_info.secondary_scaling;

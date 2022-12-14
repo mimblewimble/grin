@@ -45,28 +45,26 @@ fn test_capabilities() {
 	let expected = p2p::types::Capabilities::default();
 
 	assert_eq!(
-		p2p::types::Capabilities::from_bits_truncate(0b00000000 as u32),
+		p2p::types::Capabilities::from_bits_truncate(0b00000000_u32),
 		p2p::types::Capabilities::UNKNOWN
 	);
 	assert_eq!(
-		p2p::types::Capabilities::from_bits_truncate(0b10000000 as u32),
+		p2p::types::Capabilities::from_bits_truncate(0b10000000_u32),
 		p2p::types::Capabilities::UNKNOWN
 	);
 
 	assert_eq!(
 		expected,
-		p2p::types::Capabilities::from_bits_truncate(0b1011111 as u32),
+		p2p::types::Capabilities::from_bits_truncate(0b1011111_u32),
 	);
 
 	assert_eq!(
 		expected,
-		p2p::types::Capabilities::from_bits_truncate(0b01011111 as u32),
+		p2p::types::Capabilities::from_bits_truncate(0b01011111_u32),
 	);
 
-	assert!(p2p::types::Capabilities::from_bits_truncate(0b01011111 as u32).contains(expected));
+	assert!(p2p::types::Capabilities::from_bits_truncate(0b01011111_u32).contains(expected));
 
-	assert!(
-		p2p::types::Capabilities::from_bits_truncate(0b00101111 as u32)
-			.contains(p2p::types::Capabilities::TX_KERNEL_HASH)
-	);
+	assert!(p2p::types::Capabilities::from_bits_truncate(0b00101111_u32)
+		.contains(p2p::types::Capabilities::TX_KERNEL_HASH));
 }

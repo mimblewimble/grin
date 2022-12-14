@@ -22,7 +22,7 @@ use std::fmt::Write;
 fn to_hex(bytes: &[u8]) -> String {
 	let mut s = String::with_capacity(bytes.len() * 2);
 	for byte in bytes {
-		write!(&mut s, "{:02x}", byte).expect("Unable to write hex");
+		write!(&mut s, "{byte:02x}").expect("Unable to write hex");
 	}
 	s
 }

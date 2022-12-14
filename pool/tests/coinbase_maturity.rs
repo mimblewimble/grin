@@ -60,10 +60,7 @@ fn test_coinbase_maturity() {
 	// Add 2 more blocks. Original coinbase output is now matured and can be spent.
 	add_some_blocks(&chain, 2, &keychain);
 	let header = chain.head_header().unwrap();
-	assert_eq!(
-		pool.add_to_pool(test_source(), tx.clone(), true, &header),
-		Ok(())
-	);
+	assert_eq!(pool.add_to_pool(test_source(), tx, true, &header), Ok(()));
 
 	clean_output_dir(db_root.into());
 }

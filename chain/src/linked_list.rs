@@ -234,11 +234,11 @@ where
 	type Entry = ListEntry<T>;
 
 	fn list_key(&self, commit: Commitment) -> Vec<u8> {
-		to_key(self.list_prefix, &mut commit.as_ref().to_vec())
+		to_key(self.list_prefix, commit.as_ref())
 	}
 
 	fn entry_key(&self, commit: Commitment, pos: u64) -> Vec<u8> {
-		to_key_u64(self.entry_prefix, &mut commit.as_ref().to_vec(), pos)
+		to_key_u64(self.entry_prefix, commit.as_ref(), pos)
 	}
 
 	fn peek_pos(&self, batch: &Batch<'_>, commit: Commitment) -> Result<Option<T>, Error> {

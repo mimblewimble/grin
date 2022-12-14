@@ -73,8 +73,8 @@ impl Hash {
 
 	/// Convert hex string back to hash.
 	pub fn from_hex(hex: &str) -> Result<Hash, Error> {
-		let bytes = util::from_hex(hex)
-			.map_err(|_| Error::HexError(format!("failed to decode {}", hex)))?;
+		let bytes =
+			util::from_hex(hex).map_err(|_| Error::HexError(format!("failed to decode {hex}")))?;
 		Ok(Hash::from_vec(&bytes))
 	}
 
@@ -141,7 +141,7 @@ impl Readable for Hash {
 
 impl Writeable for Hash {
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), Error> {
-		writer.write_fixed_bytes(&self.0)
+		writer.write_fixed_bytes(self.0)
 	}
 }
 

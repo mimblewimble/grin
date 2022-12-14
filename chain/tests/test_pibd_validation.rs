@@ -48,8 +48,8 @@ fn test_pibd_chain_validation_impl(is_test_chain: bool, src_root_dir: &str) {
 		let src_chain = Arc::new(
 			chain::Chain::init(
 				src_root_dir.into(),
-				dummy_adapter.clone(),
-				genesis.clone(),
+				dummy_adapter,
+				genesis,
 				pow::verify_size,
 				false,
 			)
@@ -67,7 +67,7 @@ fn test_pibd_chain_validation_impl(is_test_chain: bool, src_root_dir: &str) {
 
 		let horizon_header = src_chain.txhashset_archive_header().unwrap();
 
-		println!("Horizon header: {:?}", horizon_header);
+		println!("Horizon header: {horizon_header:?}");
 
 		// Copy the header from source to output
 		// Not necessary for this test, we're just validating the source
@@ -84,14 +84,13 @@ fn test_pibd_chain_validation_impl(is_test_chain: bool, src_root_dir: &str) {
 		// Predict number of leaves (chunks) in the bitmap MMR from the number of outputs
 		let bitmap_mmr_num_leaves =
 			(pmmr::n_leaves(horizon_header.output_mmr_size) as f64 / 1024f64).ceil() as u64;
-		println!("BITMAP PMMR NUM_LEAVES: {}", bitmap_mmr_num_leaves);
+		println!("BITMAP PMMR NUM_LEAVES: {bitmap_mmr_num_leaves}");
 
 		// And total size of the bitmap PMMR
-		let bitmap_pmmr_size = pmmr::peaks(bitmap_mmr_num_leaves)
+		let bitmap_pmmr_size = *pmmr::peaks(bitmap_mmr_num_leaves)
 			.last()
-			.unwrap_or(&pmmr::insertion_to_pmmr_index(bitmap_mmr_num_leaves))
-			.clone();
-		println!("BITMAP PMMR SIZE: {}", bitmap_pmmr_size);
+			.unwrap_or(&pmmr::insertion_to_pmmr_index(bitmap_mmr_num_leaves));
+		println!("BITMAP PMMR SIZE: {bitmap_pmmr_size}");
 		println!(
 			"Bitmap Segments required: {}",
 			SegmentIdentifier::count_segments_required(bitmap_pmmr_size, target_segment_height)
@@ -107,12 +106,9 @@ fn test_pibd_chain_validation_impl(is_test_chain: bool, src_root_dir: &str) {
 		let mut chunk_count = 0;
 
 		for sid in identifier_iter {
-			println!("Getting bitmap segment with Segment Identifier {:?}", sid);
+			println!("Getting bitmap segment with Segment Identifier {sid:?}");
 			let (bitmap_segment, output_root_hash) = segmenter.bitmap_segment(sid).unwrap();
-			println!(
-				"Bitmap segmenter reports output root hash is {:?}",
-				output_root_hash
-			);
+			println!("Bitmap segmenter reports output root hash is {output_root_hash:?}");
 			// Validate bitmap segment with provided output hash
 			if let Err(e) = bitmap_segment.validate_with(
 				bitmap_pmmr_size, // Last MMR pos at the height being validated, in this case of the bitmap root
@@ -148,12 +144,9 @@ fn test_pibd_chain_validation_impl(is_test_chain: bool, src_root_dir: &str) {
 		);
 
 		for sid in identifier_iter {
-			println!("Getting output segment with Segment Identifier {:?}", sid);
+			println!("Getting output segment with Segment Identifier {sid:?}");
 			let (output_segment, bitmap_root_hash) = segmenter.output_segment(sid).unwrap();
-			println!(
-				"Output segmenter reports bitmap hash is {:?}",
-				bitmap_root_hash
-			);
+			println!("Output segmenter reports bitmap hash is {bitmap_root_hash:?}");
 			// Validate Output
 			if let Err(e) = output_segment.validate_with(
 				horizon_header.output_mmr_size, // Last MMR pos at the height being validated
@@ -174,10 +167,7 @@ fn test_pibd_chain_validation_impl(is_test_chain: bool, src_root_dir: &str) {
 		);
 
 		for sid in identifier_iter {
-			println!(
-				"Getting rangeproof segment with Segment Identifier {:?}",
-				sid
-			);
+			println!("Getting rangeproof segment with Segment Identifier {sid:?}");
 			let rangeproof_segment = segmenter.rangeproof_segment(sid).unwrap();
 			// Validate Kernel segment (which does not require a bitmap)
 			if let Err(e) = rangeproof_segment.validate(
@@ -196,7 +186,7 @@ fn test_pibd_chain_validation_impl(is_test_chain: bool, src_root_dir: &str) {
 		);
 
 		for sid in identifier_iter {
-			println!("Getting kernel segment with Segment Identifier {:?}", sid);
+			println!("Getting kernel segment with Segment Identifier {sid:?}");
 			let kernel_segment = segmenter.kernel_segment(sid).unwrap();
 			// Validate Kernel segment (which does not require a bitmap)
 			if let Err(e) = kernel_segment.validate(
@@ -220,9 +210,9 @@ fn test_pibd_chain_validation_sample() {
 	// small test chain with actual transaction data
 
 	// Test on uncompacted and non-compacted chains
-	let src_root_dir = format!("./tests/test_data/chain_raw");
+	let src_root_dir = "./tests/test_data/chain_raw".to_string();
 	test_pibd_chain_validation_impl(true, &src_root_dir);
-	let src_root_dir = format!("./tests/test_data/chain_compacted");
+	let src_root_dir = "./tests/test_data/chain_compacted".to_string();
 	test_pibd_chain_validation_impl(true, &src_root_dir);
 }
 
@@ -232,6 +222,6 @@ fn test_pibd_chain_validation_sample() {
 fn test_pibd_chain_validation_real() {
 	util::init_test_logger();
 	// if testing against a real chain, insert location here
-	let src_root_dir = format!("/Users/yeastplume/Projects/grin_project/server/chain_data");
+	let src_root_dir = "/Users/yeastplume/Projects/grin_project/server/chain_data".to_string();
 	test_pibd_chain_validation_impl(false, &src_root_dir);
 }

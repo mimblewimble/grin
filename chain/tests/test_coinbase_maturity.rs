@@ -97,7 +97,7 @@ fn test_coinbase_maturity() {
 		let coinbase_txn = build::transaction(
 			KernelFeatures::Plain { fee: 2.into() },
 			&[
-				build::coinbase_input(amount, key_id1.clone()),
+				build::coinbase_input(amount, key_id1),
 				build::output(amount - 2, key_id2.clone()),
 			],
 			&keychain,

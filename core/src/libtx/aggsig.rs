@@ -103,7 +103,7 @@ pub fn calculate_partial_sig(
 	//Now calculate signature using message M=fee, nonce in e=nonce_sum
 	let sig = aggsig::sign_single(
 		secp,
-		&msg,
+		msg,
 		sec_key,
 		Some(sec_nonce),
 		None,
@@ -186,8 +186,8 @@ pub fn verify_partial_sig(
 	if !verify_single(
 		secp,
 		sig,
-		&msg,
-		Some(&pub_nonce_sum),
+		msg,
+		Some(pub_nonce_sum),
 		pubkey,
 		pubkey_sum,
 		true,
@@ -260,7 +260,7 @@ where
 	K: Keychain,
 {
 	let skey = k.derive_key(value, key_id, SwitchCommitmentType::Regular)?; // TODO: proper support for different switch commitment schemes
-	let sig = aggsig::sign_single(secp, &msg, &skey, s_nonce, None, None, blind_sum, None)?;
+	let sig = aggsig::sign_single(secp, msg, &skey, s_nonce, None, None, blind_sum, None)?;
 	Ok(sig)
 }
 
@@ -404,7 +404,7 @@ pub fn add_signatures(
 	nonce_sum: &PublicKey,
 ) -> Result<Signature, Error> {
 	// Add public nonces kR*G + kS*G
-	let sig = aggsig::add_signatures_single(&secp, part_sigs, &nonce_sum)?;
+	let sig = aggsig::add_signatures_single(secp, part_sigs, nonce_sum)?;
 	Ok(sig)
 }
 
@@ -416,7 +416,7 @@ pub fn sign_single(
 	snonce: Option<&SecretKey>,
 	pubkey_sum: Option<&PublicKey>,
 ) -> Result<Signature, Error> {
-	let sig = aggsig::sign_single(secp, &msg, skey, snonce, None, None, pubkey_sum, None)?;
+	let sig = aggsig::sign_single(secp, msg, skey, snonce, None, None, pubkey_sum, None)?;
 	Ok(sig)
 }
 
@@ -452,7 +452,7 @@ pub fn sign_with_blinding(
 	blinding: &BlindingFactor,
 	pubkey_sum: Option<&PublicKey>,
 ) -> Result<Signature, Error> {
-	let skey = &blinding.secret_key(&secp)?;
-	let sig = aggsig::sign_single(secp, &msg, skey, None, None, None, pubkey_sum, None)?;
+	let skey = &blinding.secret_key(secp)?;
+	let sig = aggsig::sign_single(secp, msg, skey, None, None, None, pubkey_sum, None)?;
 	Ok(sig)
 }

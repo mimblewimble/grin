@@ -162,7 +162,7 @@ impl GlobalConfig {
 	pub fn for_chain(chain_type: &global::ChainTypes) -> GlobalConfig {
 		let mut defaults_conf = GlobalConfig::default();
 		let mut defaults = &mut defaults_conf.members.as_mut().unwrap().server;
-		defaults.chain_type = chain_type.clone();
+		defaults.chain_type = *chain_type;
 
 		match *chain_type {
 			global::ChainTypes::Mainnet => {}
@@ -234,12 +234,12 @@ impl GlobalConfig {
 		match decoded {
 			Ok(gc) => {
 				self.members = Some(gc);
-				return Ok(self);
+				Ok(self)
 			}
 			Err(e) => {
 				return Err(ConfigError::ParseError(
 					self.config_file_path.unwrap().to_str().unwrap().to_string(),
-					format!("{}", e),
+					format!("{e}"),
 				));
 			}
 		}
@@ -292,9 +292,9 @@ impl GlobalConfig {
 		let encoded: Result<String, toml::ser::Error> =
 			toml::to_string(self.members.as_mut().unwrap());
 		match encoded {
-			Ok(enc) => return Ok(enc),
+			Ok(enc) => Ok(enc),
 			Err(e) => {
-				return Err(ConfigError::SerializationError(format!("{}", e)));
+				return Err(ConfigError::SerializationError(format!("{e}")));
 			}
 		}
 	}
@@ -318,7 +318,7 @@ impl GlobalConfig {
 
 		let mut config: ConfigMembers =
 			toml::from_str(&GlobalConfig::fix_warning_level(config_str.clone())).unwrap();
-		if config.config_file_version != None {
+		if config.config_file_version.is_some() {
 			return config_str;
 		}
 

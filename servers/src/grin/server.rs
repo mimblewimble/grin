@@ -127,7 +127,7 @@ impl Server {
 	// This uses fs2 and should be safe cross-platform unless somebody abuses the file itself.
 	fn one_grin_at_a_time(config: &ServerConfig) -> Result<Arc<File>, Error> {
 		let path = Path::new(&config.db_root);
-		fs::create_dir_all(&path)?;
+		fs::create_dir_all(path)?;
 		let path = path.join("grin.lock");
 		let lock_file = fs::OpenOptions::new()
 			.read(true)
@@ -138,8 +138,7 @@ impl Server {
 			let mut stderr = std::io::stderr();
 			writeln!(
 				&mut stderr,
-				"Failed to lock {:?} (grin server already running?)",
-				path
+				"Failed to lock {path:?} (grin server already running?)"
 			)
 			.expect("Could not write to stderr");
 			e
@@ -158,10 +157,7 @@ impl Server {
 
 		// Defaults to None (optional) in config file.
 		// This translates to false here.
-		let archive_mode = match config.archive_mode {
-			None => false,
-			Some(b) => b,
-		};
+		let archive_mode = config.archive_mode.unwrap_or(false);
 
 		let stop_state = if stop_state.is_some() {
 			stop_state.unwrap()
@@ -453,7 +449,7 @@ impl Server {
 					.collect();
 
 			let tip_height = self.head()?.height as i64;
-			let mut height = tip_height as i64 - last_blocks.len() as i64 + 1;
+			let mut height = tip_height - last_blocks.len() as i64 + 1;
 
 			let diff_entries: Vec<DiffBlock> = last_blocks
 				.windows(2)
@@ -539,13 +535,13 @@ impl Server {
 		Ok(ServerStats {
 			peer_count: self.peer_count(),
 			chain_stats: head_stats,
-			header_stats: header_stats,
+			header_stats,
 			sync_status: self.sync_state.status(),
-			disk_usage_gb: disk_usage_gb,
-			stratum_stats: stratum_stats,
-			peer_stats: peer_stats,
-			diff_stats: diff_stats,
-			tx_stats: tx_stats,
+			disk_usage_gb,
+			stratum_stats,
+			peer_stats,
+			diff_stats,
+			tx_stats,
 		})
 	}
 

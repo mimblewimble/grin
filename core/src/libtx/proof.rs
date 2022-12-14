@@ -164,7 +164,7 @@ where
 		};
 		let res = blake2b(32, &commit.0, hash);
 		SecretKey::from_slice(self.keychain.secp(), res.as_bytes())
-			.map_err(|e| Error::RangeProof(format!("Unable to create nonce: {:?}", e)))
+			.map_err(|e| Error::RangeProof(format!("Unable to create nonce: {e:?}")))
 	}
 }
 
@@ -277,7 +277,7 @@ where
 	fn nonce(&self, commit: &Commitment) -> Result<SecretKey, Error> {
 		let res = blake2b(32, &commit.0, &self.root_hash);
 		SecretKey::from_slice(self.keychain.secp(), res.as_bytes())
-			.map_err(|e| Error::RangeProof(format!("Unable to create nonce: {:?}", e)))
+			.map_err(|e| Error::RangeProof(format!("Unable to create nonce: {e:?}")))
 	}
 }
 
@@ -360,7 +360,7 @@ impl ProofBuild for ViewKey {
 	fn rewind_nonce(&self, secp: &Secp256k1, commit: &Commitment) -> Result<SecretKey, Error> {
 		let res = blake2b(32, &commit.0, &self.rewind_hash);
 		SecretKey::from_slice(secp, res.as_bytes())
-			.map_err(|e| Error::RangeProof(format!("Unable to create nonce: {:?}", e)))
+			.map_err(|e| Error::RangeProof(format!("Unable to create nonce: {e:?}")))
 	}
 
 	fn private_nonce(&self, _secp: &Secp256k1, _commit: &Commitment) -> Result<SecretKey, Error> {
@@ -418,10 +418,10 @@ impl ProofBuild for ViewKey {
 			if child_number.is_hardened() {
 				return Ok(None);
 			}
-			key = key.ckd_pub(&secp, &mut hasher, child_number)?;
+			key = key.ckd_pub(secp, &mut hasher, child_number)?;
 		}
 		let pub_key = key.commit(secp, amount, switch)?;
-		if commit.to_pubkey(&secp)? == pub_key {
+		if commit.to_pubkey(secp)? == pub_key {
 			Ok(Some((id, switch)))
 		} else {
 			Ok(None)

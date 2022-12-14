@@ -50,8 +50,8 @@ impl Keychain for ExtKeychain {
 		let secp = secp::Secp256k1::with_caps(secp::ContextFlag::Commit);
 		let master = ExtendedPrivKey::new_master(&secp, &mut h, seed)?;
 		let keychain = ExtKeychain {
-			secp: secp,
-			master: master,
+			secp,
+			master,
 			hasher: h,
 		};
 		Ok(keychain)
@@ -62,8 +62,8 @@ impl Keychain for ExtKeychain {
 		let h = BIP32GrinHasher::new(is_test);
 		let master = ExtendedPrivKey::from_mnemonic(&secp, word_list, extension_word, is_test)?;
 		let keychain = ExtKeychain {
-			secp: secp,
-			master: master,
+			secp,
+			master,
 			hasher: h,
 		};
 		Ok(keychain)
@@ -191,7 +191,7 @@ impl Keychain for ExtKeychain {
 		blinding: &BlindingFactor,
 	) -> Result<Signature, Error> {
 		let skey = &blinding.secret_key(&self.secp)?;
-		let sig = self.secp.sign(msg, &skey)?;
+		let sig = self.secp.sign(msg, skey)?;
 		Ok(sig)
 	}
 

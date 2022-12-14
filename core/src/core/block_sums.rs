@@ -34,8 +34,8 @@ pub struct BlockSums {
 
 impl Writeable for BlockSums {
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
-		writer.write_fixed_bytes(&self.utxo_sum)?;
-		writer.write_fixed_bytes(&self.kernel_sum)?;
+		writer.write_fixed_bytes(self.utxo_sum)?;
+		writer.write_fixed_bytes(self.kernel_sum)?;
 		Ok(())
 	}
 }

@@ -78,9 +78,9 @@ impl MessageHandler for Protocol {
 					);
 
 					let zip = File::open(meta.path.clone())?;
-					let res =
-						self.adapter
-							.txhashset_write(meta.hash.clone(), zip, &self.peer_info)?;
+					let res = self
+						.adapter
+						.txhashset_write(meta.hash, zip, &self.peer_info)?;
 
 					debug!(
 						"handle_payload: txhashset archive for {} at {}, DONE. Data Ok: {}",
@@ -233,7 +233,7 @@ impl MessageHandler for Protocol {
 					let mut resp = Msg::new(
 						Type::TxHashSetArchive,
 						&TxHashSetArchive {
-							height: txhashset_header.height as u64,
+							height: txhashset_header.height,
 							hash: txhashset_header_hash,
 							bytes: file_sz,
 						},
@@ -398,7 +398,7 @@ impl MessageHandler for Protocol {
 				adapter.receive_output_segment(
 					response.block_hash,
 					output_bitmap_root,
-					response.segment.into(),
+					response.segment,
 				)?;
 				Consumed::None
 			}
@@ -408,7 +408,7 @@ impl MessageHandler for Protocol {
 					segment,
 				} = req;
 				trace!("Received Rangeproof Segment: bh: {}", block_hash);
-				adapter.receive_rangeproof_segment(block_hash, segment.into())?;
+				adapter.receive_rangeproof_segment(block_hash, segment)?;
 				Consumed::None
 			}
 			Message::KernelSegment(req) => {
@@ -417,7 +417,7 @@ impl MessageHandler for Protocol {
 					segment,
 				} = req;
 				trace!("Received Kernel Segment: bh: {}", block_hash);
-				adapter.receive_kernel_segment(block_hash, segment.into())?;
+				adapter.receive_kernel_segment(block_hash, segment)?;
 				Consumed::None
 			}
 			Message::Unknown(_) => Consumed::None,

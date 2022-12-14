@@ -63,7 +63,7 @@ fn peer_handshake() {
 			p2p::Capabilities::UNKNOWN,
 			p2p_config.clone(),
 			net_adapter.clone(),
-			Hash::from_vec(&vec![]),
+			Hash::from_vec(&[]),
 			Arc::new(StopState::new()),
 		)
 		.unwrap(),
@@ -83,7 +83,7 @@ fn peer_handshake() {
 		p2p::Capabilities::UNKNOWN,
 		Difficulty::min_dma(),
 		my_addr,
-		&p2p::handshake::Handshake::new(Hash::from_vec(&vec![]), p2p_config.clone()),
+		&p2p::handshake::Handshake::new(Hash::from_vec(&[]), p2p_config),
 		net_adapter,
 	)
 	.unwrap();

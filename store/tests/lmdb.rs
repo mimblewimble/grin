@@ -141,9 +141,9 @@ fn lmdb_allocate() -> Result<(), store::Error> {
 		let store = store::Store::new(test_dir, Some("test1"), None, None)?;
 
 		for i in 0..WRITE_CHUNK_SIZE * 2 {
-			println!("Allocating chunk: {}", i);
+			println!("Allocating chunk: {i}");
 			let chunk = PhatChunkStruct::new();
-			let key_val = format!("phat_chunk_set_1_{}", i);
+			let key_val = format!("phat_chunk_set_1_{i}");
 			let batch = store.batch()?;
 			let key = store::to_key(b'P', &key_val);
 			batch.put_ser(&key, &chunk)?;
@@ -157,9 +157,9 @@ fn lmdb_allocate() -> Result<(), store::Error> {
 	{
 		let store = store::Store::new(test_dir, Some("test1"), None, None)?;
 		for i in 0..WRITE_CHUNK_SIZE * 2 {
-			println!("Allocating chunk: {}", i);
+			println!("Allocating chunk: {i}");
 			let chunk = PhatChunkStruct::new();
-			let key_val = format!("phat_chunk_set_2_{}", i);
+			let key_val = format!("phat_chunk_set_2_{i}");
 			let batch = store.batch()?;
 			let key = store::to_key(b'P', &key_val);
 			batch.put_ser(&key, &chunk)?;

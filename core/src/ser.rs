@@ -76,7 +76,7 @@ pub enum Error {
 
 impl From<io::Error> for Error {
 	fn from(e: io::Error) -> Error {
-		Error::IOErr(format!("{}", e), e.kind())
+		Error::IOErr(format!("{e}"), e.kind())
 	}
 }
 
@@ -89,17 +89,17 @@ impl From<io::ErrorKind> for Error {
 impl fmt::Display for Error {
 	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
 		match *self {
-			Error::IOErr(ref e, ref _k) => write!(f, "{}", e),
+			Error::IOErr(ref e, ref _k) => write!(f, "{e}"),
 			Error::UnexpectedData {
 				expected: ref e,
 				received: ref r,
-			} => write!(f, "expected {:?}, got {:?}", e, r),
+			} => write!(f, "expected {e:?}, got {r:?}"),
 			Error::CorruptedData => f.write_str("corrupted data"),
 			Error::CountError => f.write_str("count error"),
 			Error::SortError => f.write_str("sort order"),
 			Error::DuplicateError => f.write_str("duplicate"),
 			Error::TooLargeReadErr => f.write_str("too large read"),
-			Error::HexError(ref e) => write!(f, "hex error {:?}", e),
+			Error::HexError(ref e) => write!(f, "hex error {e:?}"),
 			Error::InvalidBlockVersion => f.write_str("invalid block version"),
 			Error::UnsupportedProtocolVersion => f.write_str("unsupported protocol version"),
 		}
@@ -160,42 +160,42 @@ pub trait Writer {
 
 	/// Writes a u8 as bytes
 	fn write_u8(&mut self, n: u8) -> Result<(), Error> {
-		self.write_fixed_bytes(&[n])
+		self.write_fixed_bytes([n])
 	}
 
 	/// Writes a u16 as bytes
 	fn write_u16(&mut self, n: u16) -> Result<(), Error> {
 		let mut bytes = [0; 2];
 		BigEndian::write_u16(&mut bytes, n);
-		self.write_fixed_bytes(&bytes)
+		self.write_fixed_bytes(bytes)
 	}
 
 	/// Writes a u32 as bytes
 	fn write_u32(&mut self, n: u32) -> Result<(), Error> {
 		let mut bytes = [0; 4];
 		BigEndian::write_u32(&mut bytes, n);
-		self.write_fixed_bytes(&bytes)
+		self.write_fixed_bytes(bytes)
 	}
 
 	/// Writes a u32 as bytes
 	fn write_i32(&mut self, n: i32) -> Result<(), Error> {
 		let mut bytes = [0; 4];
 		BigEndian::write_i32(&mut bytes, n);
-		self.write_fixed_bytes(&bytes)
+		self.write_fixed_bytes(bytes)
 	}
 
 	/// Writes a u64 as bytes
 	fn write_u64(&mut self, n: u64) -> Result<(), Error> {
 		let mut bytes = [0; 8];
 		BigEndian::write_u64(&mut bytes, n);
-		self.write_fixed_bytes(&bytes)
+		self.write_fixed_bytes(bytes)
 	}
 
 	/// Writes a i64 as bytes
 	fn write_i64(&mut self, n: i64) -> Result<(), Error> {
 		let mut bytes = [0; 8];
 		BigEndian::write_i64(&mut bytes, n);
-		self.write_fixed_bytes(&bytes)
+		self.write_fixed_bytes(bytes)
 	}
 
 	/// Writes a variable number of bytes. The length is encoded as a 64-bit
@@ -466,7 +466,7 @@ impl<'a, R: Read> BinReader<'a, R> {
 }
 
 fn map_io_err(err: io::Error) -> Error {
-	Error::IOErr(format!("{}", err), err.kind())
+	Error::IOErr(format!("{err}"), err.kind())
 }
 
 /// Utility wrapper for an underlying byte Reader. Defines higher level methods

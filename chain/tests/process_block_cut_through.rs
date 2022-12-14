@@ -45,7 +45,7 @@ where
 	let reward =
 		reward::output(keychain, &ProofBuilder::new(keychain), &key_id, fee, false).unwrap();
 
-	let mut block = Block::new(&prev, txs, next_header_info.clone().difficulty, reward)?;
+	let mut block = Block::new(&prev, txs, next_header_info.difficulty, reward)?;
 
 	block.header.timestamp = prev.timestamp + Duration::seconds(60);
 	block.header.pow.secondary_scaling = next_header_info.secondary_scaling;
@@ -88,7 +88,7 @@ fn process_block_cut_through() -> Result<(), chain::Error> {
 	let keychain = ExtKeychain::from_random_seed(false)?;
 	let pb = ProofBuilder::new(&keychain);
 	let genesis = genesis_block(&keychain);
-	let chain = init_chain(chain_dir, genesis.clone());
+	let chain = init_chain(chain_dir, genesis);
 
 	// Mine a few empty blocks.
 	for _ in 1..6 {
@@ -111,8 +111,8 @@ fn process_block_cut_through() -> Result<(), chain::Error> {
 			build::coinbase_input(consensus::REWARD, key_id1.clone()),
 			build::coinbase_input(consensus::REWARD, key_id2.clone()),
 			build::output(60_000_000_000, key_id1.clone()),
-			build::output(50_000_000_000, key_id2.clone()),
-			build::output(10_000_000_000, key_id3.clone()),
+			build::output(50_000_000_000, key_id2),
+			build::output(10_000_000_000, key_id3),
 		],
 		&keychain,
 		&pb,
@@ -141,7 +141,7 @@ fn process_block_cut_through() -> Result<(), chain::Error> {
 	);
 
 	// Build a block with this single invalid transaction.
-	let block = build_block(&chain, &keychain, &[tx.clone()], true)?;
+	let block = build_block(&chain, &keychain, &[tx], true)?;
 
 	// The block is invalid due to cut-through.
 	let prev = chain.head_header()?;

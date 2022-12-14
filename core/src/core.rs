@@ -62,7 +62,7 @@ pub fn amount_from_hr_string(amount: &str) -> Result<u64, Error> {
 }
 
 fn parse_grins(amount: &str) -> Result<u64, Error> {
-	if amount == "" {
+	if amount.is_empty() {
 		Ok(0)
 	} else {
 		amount
@@ -81,7 +81,7 @@ fn parse_ngrins(amount: &str) -> Result<u64, Error> {
 	} else {
 		amount
 	};
-	format!("{:0<width$}", amount, width = WIDTH)
+	format!("{amount:0<WIDTH$}")
 		.parse::<u64>()
 		.map_err(|_| Error::InvalidAmountString)
 }
@@ -89,8 +89,8 @@ fn parse_ngrins(amount: &str) -> Result<u64, Error> {
 /// Common method for converting an amount to a human-readable string
 
 pub fn amount_to_hr_string(amount: u64, truncate: bool) -> String {
-	let amount = (amount as f64 / GRIN_BASE as f64) as f64;
-	let hr = format!("{:.*}", WIDTH, amount);
+	let amount = (amount as f64 / GRIN_BASE as f64);
+	let hr = format!("{amount:.WIDTH$}");
 	if truncate {
 		let nzeros = hr.chars().rev().take_while(|x| x == &'0').count();
 		if nzeros < *WIDTH {

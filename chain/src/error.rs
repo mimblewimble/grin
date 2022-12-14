@@ -211,7 +211,7 @@ impl Error {
 
 impl From<store::Error> for Error {
 	fn from(error: store::Error) -> Error {
-		Error::StoreErr(error.clone(), format!("{:?}", error))
+		Error::StoreErr(error.clone(), format!("{error:?}"))
 	}
 }
 

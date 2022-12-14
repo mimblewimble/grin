@@ -196,7 +196,7 @@ impl BitmapAccumulator {
 		let mut bitmap = Bitmap::create();
 		for (chunk_index, chunk_pos) in self.backend.leaf_pos_iter().enumerate() {
 			//TODO: Unwrap
-			let chunk = self.backend.get_data(chunk_pos as u64).unwrap();
+			let chunk = self.backend.get_data(chunk_pos).unwrap();
 			let additive = chunk.set_iter(chunk_index * 1024).collect::<Vec<u32>>();
 			bitmap.add_many(&additive);
 		}
@@ -529,7 +529,7 @@ mod tests {
 			block.inner.negate();
 		}
 
-		let range_size = n_blocks * BitmapChunk::LEN_BITS as usize;
+		let range_size = n_blocks * BitmapChunk::LEN_BITS;
 
 		// Flip `entries` bits in random spots
 		let mut count = 0;

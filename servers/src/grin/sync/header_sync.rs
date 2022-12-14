@@ -88,7 +88,7 @@ impl HeaderSync {
 			});
 
 			self.header_sync(sync_head, sync_peer.clone());
-			self.syncing_peer = Some(sync_peer.clone());
+			self.syncing_peer = Some(sync_peer);
 		}
 		Ok(true)
 	}

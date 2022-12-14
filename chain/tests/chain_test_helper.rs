@@ -69,7 +69,7 @@ pub fn mine_chain(dir_name: &str, chain_length: u64) -> Chain {
 	global::set_local_chain_type(ChainTypes::AutomatedTesting);
 	let keychain = keychain::ExtKeychain::from_random_seed(false).unwrap();
 	let genesis = genesis_block(&keychain);
-	let mut chain = init_chain(dir_name, genesis.clone());
+	let mut chain = init_chain(dir_name, genesis);
 	mine_some_on_top(&mut chain, chain_length, &keychain);
 	chain
 }

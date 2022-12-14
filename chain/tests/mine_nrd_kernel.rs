@@ -37,7 +37,7 @@ where
 	let reward =
 		reward::output(keychain, &ProofBuilder::new(keychain), key_id, fee, false).unwrap();
 
-	let mut block = Block::new(&prev, &txs, next_header_info.clone().difficulty, reward).unwrap();
+	let mut block = Block::new(&prev, &txs, next_header_info.difficulty, reward).unwrap();
 
 	block.header.timestamp = prev.timestamp + Duration::seconds(60);
 	block.header.pow.secondary_scaling = next_header_info.secondary_scaling;
@@ -70,7 +70,7 @@ fn mine_block_with_nrd_kernel_and_nrd_feature_enabled() {
 	let keychain = ExtKeychain::from_random_seed(false).unwrap();
 	let pb = ProofBuilder::new(&keychain);
 	let genesis = genesis_block(&keychain);
-	let chain = init_chain(chain_dir, genesis.clone());
+	let chain = init_chain(chain_dir, genesis);
 
 	for n in 1..9 {
 		let key_id = ExtKeychainPath::new(1, n, 0, 0, 0).to_identifier();
@@ -88,8 +88,8 @@ fn mine_block_with_nrd_kernel_and_nrd_feature_enabled() {
 			relative_height: NRDRelativeHeight::new(1440).unwrap(),
 		},
 		&[
-			build::coinbase_input(consensus::REWARD, key_id1.clone()),
-			build::output(consensus::REWARD - 20000, key_id2.clone()),
+			build::coinbase_input(consensus::REWARD, key_id1),
+			build::output(consensus::REWARD - 20000, key_id2),
 		],
 		&keychain,
 		&pb,
@@ -117,7 +117,7 @@ fn mine_invalid_block_with_nrd_kernel_and_nrd_feature_enabled_before_hf() {
 	let keychain = ExtKeychain::from_random_seed(false).unwrap();
 	let pb = ProofBuilder::new(&keychain);
 	let genesis = genesis_block(&keychain);
-	let chain = init_chain(chain_dir, genesis.clone());
+	let chain = init_chain(chain_dir, genesis);
 
 	for n in 1..8 {
 		let key_id = ExtKeychainPath::new(1, n, 0, 0, 0).to_identifier();
@@ -135,8 +135,8 @@ fn mine_invalid_block_with_nrd_kernel_and_nrd_feature_enabled_before_hf() {
 			relative_height: NRDRelativeHeight::new(1440).unwrap(),
 		},
 		&[
-			build::coinbase_input(consensus::REWARD, key_id1.clone()),
-			build::output(consensus::REWARD - 20000, key_id2.clone()),
+			build::coinbase_input(consensus::REWARD, key_id1),
+			build::output(consensus::REWARD - 20000, key_id2),
 		],
 		&keychain,
 		&pb,

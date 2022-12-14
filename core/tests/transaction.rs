@@ -34,7 +34,7 @@ fn test_transaction_json_ser_deser() {
 	let tx1 = tx1i10_v2_compatible();
 
 	let value = serde_json::to_value(&tx1).unwrap();
-	println!("{:?}", value);
+	println!("{value:?}");
 
 	assert!(value["offset"].is_string());
 	assert_eq!(value["body"]["inputs"][0]["features"], "Plain");
@@ -52,7 +52,7 @@ fn test_transaction_json_ser_deser() {
 	assert_eq!(tx1, tx2);
 
 	let str = serde_json::to_string(&tx1).unwrap();
-	println!("{}", str);
+	println!("{str}");
 	let tx2: Transaction = serde_json::from_str(&str).unwrap();
 	assert_eq!(tx1, tx2);
 }
@@ -99,9 +99,9 @@ fn test_verify_cut_through_plain() -> Result<(), Error> {
 		&[
 			build::input(10, key_id1.clone()),
 			build::input(10, key_id2.clone()),
-			build::output(10, key_id1.clone()),
-			build::output(6, key_id2.clone()),
-			build::output(4, key_id3.clone()),
+			build::output(10, key_id1),
+			build::output(6, key_id2),
+			build::output(4, key_id3),
 		],
 		&keychain,
 		&builder,
@@ -158,9 +158,9 @@ fn test_verify_cut_through_coinbase() -> Result<(), Error> {
 		&[
 			build::coinbase_input(consensus::REWARD, key_id1.clone()),
 			build::coinbase_input(consensus::REWARD, key_id2.clone()),
-			build::output(60_000_000_000, key_id1.clone()),
-			build::output(50_000_000_000, key_id2.clone()),
-			build::output(10_000_000_000, key_id3.clone()),
+			build::output(60_000_000_000, key_id1),
+			build::output(50_000_000_000, key_id2),
+			build::output(10_000_000_000, key_id3),
 		],
 		&keychain,
 		&builder,
@@ -213,14 +213,14 @@ fn test_fee_fields() -> Result<(), Error> {
 		},
 		&[
 			build::coinbase_input(consensus::REWARD, key_id1.clone()),
-			build::output(60_000_000_000 - 84 - 42 - 21, key_id1.clone()),
+			build::output(60_000_000_000 - 84 - 42 - 21, key_id1),
 		],
 		&keychain,
 		&builder,
 	)
 	.expect("valid tx");
 
-	assert_eq!(tx.accept_fee(), (1 * 1 + 1 * 21 + 1 * 3) * 500_000);
+	assert_eq!(tx.accept_fee(), (1 + 21 + 3) * 500_000);
 	assert_eq!(tx.fee(), 42);
 	assert_eq!(tx.shifted_fee(), 21);
 

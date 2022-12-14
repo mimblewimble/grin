@@ -162,7 +162,7 @@ where
 		} else {
 			self.deaggregate_tx(PoolEntry::new(tx, src))?
 		};
-		let ref tx = entry.tx;
+		let tx = &entry.tx;
 
 		// Check this tx is valid based on current header version.
 		// NRD kernels only valid post HF3 and if NRD feature enabled.
@@ -209,7 +209,7 @@ where
 			.verify_coinbase_maturity(&coinbase_inputs.as_slice().into())?;
 
 		// Convert the tx to "v2" compatibility with "features and commit" inputs.
-		let ref entry = self.convert_tx_v2(entry, &spent_pool, &spent_utxo)?;
+		let entry = &(self.convert_tx_v2(entry, &spent_pool, &spent_utxo)?);
 
 		// If this is a stem tx then attempt to add it to stempool.
 		// If the adapter fails to accept the new stem tx then fallback to fluff via txpool.

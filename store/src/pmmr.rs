@@ -69,11 +69,11 @@ impl<T: PMMRable> Backend<T> for PMMRBackend<T> {
 		let size = self
 			.data_file
 			.append(&data.as_elmt())
-			.map_err(|e| format!("Failed to append data to file. {}", e))?;
+			.map_err(|e| format!("Failed to append data to file. {e}"))?;
 
 		self.hash_file
 			.extend_from_slice(hashes)
-			.map_err(|e| format!("Failed to append hash to file. {}", e))?;
+			.map_err(|e| format!("Failed to append hash to file. {e}"))?;
 
 		if self.prunable {
 			// (Re)calculate the latest pos given updated size of data file
@@ -95,7 +95,7 @@ impl<T: PMMRable> Backend<T> for PMMRBackend<T> {
 
 		self.hash_file
 			.append(&hash)
-			.map_err(|e| format!("Failed to append subtree hash to file. {}", e))?;
+			.map_err(|e| format!("Failed to append subtree hash to file. {e}"))?;
 
 		self.prune_list.append(pos0);
 
@@ -105,7 +105,7 @@ impl<T: PMMRable> Backend<T> for PMMRBackend<T> {
 	fn append_hash(&mut self, hash: Hash) -> Result<(), String> {
 		self.hash_file
 			.append(&hash)
-			.map_err(|e| format!("Failed to append hash to file. {}", e))?;
+			.map_err(|e| format!("Failed to append hash to file. {e}"))?;
 		Ok(())
 	}
 
@@ -296,7 +296,7 @@ impl<T: PMMRable> PMMRBackend<T> {
 		} else {
 			SizeInfo::VariableSize(Box::new(AppendOnlyFile::open(
 				data_dir.join(PMMR_SIZE_FILE),
-				SizeInfo::FixedSize(SizeEntry::LEN as u16),
+				SizeInfo::FixedSize(SizeEntry::LEN),
 				version,
 			)?))
 		};
@@ -304,8 +304,8 @@ impl<T: PMMRable> PMMRBackend<T> {
 		// Hash file is always "fixed size" and we use 32 bytes per hash.
 		let hash_size_info = SizeInfo::FixedSize(Hash::LEN.try_into().unwrap());
 
-		let hash_file = DataFile::open(&data_dir.join(PMMR_HASH_FILE), hash_size_info, version)?;
-		let data_file = DataFile::open(&data_dir.join(PMMR_DATA_FILE), size_info, version)?;
+		let hash_file = DataFile::open(data_dir.join(PMMR_HASH_FILE), hash_size_info, version)?;
+		let data_file = DataFile::open(data_dir.join(PMMR_DATA_FILE), size_info, version)?;
 
 		let leaf_set_path = data_dir.join(PMMR_LEAF_FILE);
 
@@ -321,7 +321,7 @@ impl<T: PMMRable> PMMRBackend<T> {
 		}
 
 		let leaf_set = LeafSet::open(&leaf_set_path)?;
-		let prune_list = PruneList::open(&data_dir.join(PMMR_PRUN_FILE))?;
+		let prune_list = PruneList::open(data_dir.join(PMMR_PRUN_FILE))?;
 
 		Ok(PMMRBackend {
 			data_dir: data_dir.to_path_buf(),
@@ -381,7 +381,7 @@ impl<T: PMMRable> PMMRBackend<T> {
 			.map_err(|e| {
 				io::Error::new(
 					io::ErrorKind::Interrupted,
-					format!("Could not sync pmmr to disk: {:?}", e),
+					format!("Could not sync pmmr to disk: {e:?}"),
 				)
 			})
 	}
@@ -472,7 +472,7 @@ impl<T: PMMRable> PMMRBackend<T> {
 
 	fn clean_rewind_files(&self) -> io::Result<u32> {
 		let data_dir = self.data_dir.clone();
-		let pattern = format!("{}.", PMMR_LEAF_FILE);
+		let pattern = format!("{PMMR_LEAF_FILE}.");
 		clean_files_by_prefix(data_dir, &pattern, REWIND_FILE_CLEANUP_DURATION_SECONDS)
 	}
 

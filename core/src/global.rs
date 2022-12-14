@@ -428,7 +428,7 @@ pub fn max_block_weight() -> u64 {
 /// Maximum allowed transaction weight (1 weight unit ~= 32 bytes)
 pub fn max_tx_weight() -> u64 {
 	let coinbase_weight = OUTPUT_WEIGHT + KERNEL_WEIGHT;
-	max_block_weight().saturating_sub(coinbase_weight) as u64
+	max_block_weight().saturating_sub(coinbase_weight)
 }
 
 /// Horizon at which we can cut-through and do full local pruning

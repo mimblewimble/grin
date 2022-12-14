@@ -48,7 +48,7 @@ impl TxHashSetHandler {
 	fn get_roots(&self) -> Result<TxHashSet, Error> {
 		let chain = w(&self.chain)?;
 		TxHashSet::from_head(&chain)
-			.map_err(|e| Error::Internal(format!("failed to read roots from txhashset: {}", e)))
+			.map_err(|e| Error::Internal(format!("failed to read roots from txhashset: {e}")))
 	}
 
 	// gets last n outputs inserted in to the tree
@@ -92,7 +92,7 @@ impl TxHashSetHandler {
 				.iter()
 				.map(|x| OutputPrintable::from_output(x, &chain, None, true, true))
 				.collect::<Result<Vec<_>, _>>()
-				.map_err(|e| Error::Internal(format!("chain error: {}", e)))?,
+				.map_err(|e| Error::Internal(format!("chain error: {e}")))?,
 		};
 		Ok(out)
 	}
@@ -119,7 +119,7 @@ impl TxHashSetHandler {
 	// (to avoid having to create a new type to pass around)
 	fn get_merkle_proof_for_output(&self, id: &str) -> Result<OutputPrintable, Error> {
 		let c = util::from_hex(id)
-			.map_err(|_| Error::Argument(format!("Not a valid commitment: {}", id)))?;
+			.map_err(|_| Error::Argument(format!("Not a valid commitment: {id}")))?;
 		let commit = Commitment::from_vec(c);
 		let chain = w(&self.chain)?;
 		let output_pos = chain.get_output_pos(&commit).map_err(|_| Error::NotFound)?;

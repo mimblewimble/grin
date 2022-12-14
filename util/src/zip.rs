@@ -30,7 +30,7 @@ fn path_to_string(path: &std::path::Path) -> String {
 			if !path_str.is_empty() {
 				path_str.push('/');
 			}
-			path_str.push_str(&*os_str.to_string_lossy());
+			path_str.push_str(&os_str.to_string_lossy());
 		}
 	}
 	path_str
@@ -74,7 +74,7 @@ pub fn extract_files(from_archive: File, dest: &Path, files: Vec<PathBuf>) -> io
 			if let Ok(file) = archive.by_name(x.to_str().expect("valid path")) {
 				let path = dest.join(file.mangled_name());
 				let parent_dir = path.parent().expect("valid parent dir");
-				fs::create_dir_all(&parent_dir).expect("create parent dir");
+				fs::create_dir_all(parent_dir).expect("create parent dir");
 				let outfile = fs::File::create(&path).expect("file created");
 				io::copy(&mut BufReader::new(file), &mut BufWriter::new(outfile))
 					.expect("write to file");
