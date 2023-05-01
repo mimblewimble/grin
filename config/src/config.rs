@@ -224,7 +224,16 @@ impl GlobalConfig {
 	fn read_config(mut self) -> Result<GlobalConfig, ConfigError> {
 		let config_file_path = self.config_file_path.as_ref().unwrap();
 		let contents = fs::read_to_string(config_file_path)?;
-		let migrated = GlobalConfig::migrate_config_file_version_none_to_2(contents.clone());
+		let migrated_content = self.migrate_config_file_version_none_to_2(contents.clone());
+		let migrated: String = match migrated_content {
+			Ok(m) => m,
+			Err(e) => {
+				return Err(ConfigError::ParseError(
+					self.config_file_path.unwrap().to_str().unwrap().to_string(),
+					format!("{}", e),
+				));
+			}
+		};
 		if contents != migrated {
 			fs::write(config_file_path, &migrated)?;
 		}
@@ -313,13 +322,31 @@ impl GlobalConfig {
 	/// - Adds "config_file_version = 2"
 	/// - If server.pool_config.accept_fee_base is 1000000, change it to 500000
 	/// - Remove "#a setting to 1000000 will be overridden to 500000 to respect the fixfees RFC"
-	fn migrate_config_file_version_none_to_2(config_str: String) -> String {
+	fn migrate_config_file_version_none_to_2(
+		&self,
+		config_str: String,
+	) -> Result<String, ConfigError> {
 		// Parse existing config and return unchanged if not eligible for migration
 
-		let mut config: ConfigMembers =
-			toml::from_str(&GlobalConfig::fix_warning_level(config_str.clone())).unwrap();
+		let mut config_members: Result<ConfigMembers, toml::de::Error> =
+			toml::from_str(&GlobalConfig::fix_warning_level(config_str.clone()));
+		let mut config: ConfigMembers = match config_members {
+			Ok(p) => p,
+			Err(e) => {
+				return Err(ConfigError::ParseError(
+					self.config_file_path
+						.as_ref()
+						.unwrap()
+						.to_str()
+						.unwrap()
+						.to_string(),
+					format!("{}", e),
+				));
+			}
+		};
+
 		if config.config_file_version != None {
-			return config_str;
+			return Ok(config_str);
 		}
 
 		// Apply changes both textually and structurally
@@ -347,7 +374,7 @@ impl GlobalConfig {
 			toml::from_str(&GlobalConfig::fix_warning_level(config_str.clone())).unwrap()
 		);
 
-		config_str
+		Ok(config_str)
 	}
 
 	// For forwards compatibility old config needs `Warning` log level changed to standard log::Level `WARN`
