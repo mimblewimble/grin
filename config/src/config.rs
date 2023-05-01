@@ -328,7 +328,7 @@ impl GlobalConfig {
 	) -> Result<String, ConfigError> {
 		// Parse existing config and return unchanged if not eligible for migration
 
-		let mut config_members: Result<ConfigMembers, toml::de::Error> =
+		let config_members: Result<ConfigMembers, toml::de::Error> =
 			toml::from_str(&GlobalConfig::fix_warning_level(config_str.clone()));
 		let mut config: ConfigMembers = match config_members {
 			Ok(p) => p,
