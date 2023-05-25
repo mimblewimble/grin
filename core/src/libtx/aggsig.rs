@@ -408,6 +408,16 @@ pub fn add_signatures(
 	Ok(sig)
 }
 
+/// Subtract a partial signature from a completed signature
+/// see https://github.com/mimblewimble/rust-secp256k1-zkp/blob/e9e4f09bd0c85da914774a52219457ba10ac3e57/src/aggsig.rs#L267
+pub fn subtract_signature(
+	secp: &Secp256k1,
+	sig: &Signature,
+	partial_sig: &Signature,
+) -> Result<(Signature, Option<Signature>), Error> {
+	let sig = aggsig::subtract_partial_signature(secp, sig, partial_sig)?;
+	Ok(sig)
+}
 /// Just a simple sig, creates its own nonce if not provided
 pub fn sign_single(
 	secp: &Secp256k1,
