@@ -88,8 +88,8 @@ impl StateSync {
 		// Determine whether we're going to try using PIBD or whether we've already given up
 		// on it
 		let using_pibd = matches!(
-			SyncStatus::TxHashsetPibd { aborted: true, .. },
-			self.sync_state.status()
+			self.sync_state.status(),
+			SyncStatus::TxHashsetPibd { aborted: false, .. },
 		);
 
 		// Check whether we've errored and should restart pibd
