@@ -139,6 +139,34 @@ where
 		block_handler.get_block(&hash, include_proof, include_merkle_proof)
 	}
 
+	/// TODO
+	pub fn get_blocks(
+		&self,
+		start_height: u64,
+		end_height: u64,
+		include_proof: Option<bool>,
+	) -> Result<Vec<BlockPrintable>, Error> {
+		let block_handler = BlockHandler {
+			chain: self.chain.clone(),
+		};
+		let mut result_set = vec![];
+		for h in start_height..=end_height {
+			let hash = block_handler.parse_inputs(Some(h), None, None)?;
+			let block_res = block_handler.get_block(&hash, include_proof == Some(true), false);
+			match block_res {
+				Err(e) => {
+					if let Error::NotFound = e {
+						continue;
+					} else {
+						return Err(e);
+					}
+				}
+				Ok(b) => result_set.push(b),
+			}
+		}
+		Ok(result_set)
+	}
+
 	/// Returns the node version and block header version (used by grin-wallet).
 	///
 	/// # Returns
