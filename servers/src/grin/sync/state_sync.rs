@@ -100,13 +100,7 @@ impl StateSync {
 			} else if self.pibd_aborted {
 				false
 			} else {
-				// Only on testing chains for now
-				if global::get_chain_type() != global::ChainTypes::Mainnet {
-					true
-				//false
-				} else {
-					false
-				}
+				true
 			};
 
 		// Check whether we've errored and should restart pibd
