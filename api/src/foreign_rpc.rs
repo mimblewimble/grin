@@ -247,6 +247,124 @@ pub trait ForeignRpc: Sync + Send {
 	) -> Result<BlockPrintable, Error>;
 
 	/**
+	Networked version of [Foreign::get_blocks](struct.Foreign.html#method.get_block).
+
+	# Json rpc example (NOT WORKING YET TBD)
+
+	```
+	# grin_api::doctest_helper_json_rpc_foreign_assert_response!(
+	# r#"
+	{
+		"jsonrpc": "2.0",
+		"method": "get_blocks",
+		"params": [1, 100, true],
+		"id": 1
+	}
+	# "#
+	# ,
+	# r#"
+	{
+		"id": 1,
+		"jsonrpc": "2.0",
+		"result": {
+			"Ok": {
+			"header": {
+				"cuckoo_solution": [
+				1263501,
+				14648727,
+				42430559,
+				58137254,
+				68666726,
+				72784903,
+				101936839,
+				104273571,
+				123886748,
+				131179768,
+				155443226,
+				162493783,
+				164784425,
+				167313215,
+				169806918,
+				183041591,
+				184403611,
+				210351649,
+				215159650,
+				239995384,
+				240935454,
+				257742462,
+				280820644,
+				300143903,
+				303146496,
+				311804841,
+				341039986,
+				354918290,
+				363508555,
+				377618528,
+				396693709,
+				397417856,
+				399875872,
+				413238540,
+				413767813,
+				432697194,
+				436903767,
+				447257325,
+				453337210,
+				459401597,
+				496068509,
+				511300624
+				],
+				"edge_bits": 29,
+				"hash": "000001e16cb374e38c979c353a0aaffbf5b939da7688f69ad99efda6c112ea9b",
+				"height": 374274,
+				"kernel_root": "e17920c0e456a6feebf19e24a46f510a85f21cb60e81012f843c00fe2c4cad6e",
+				"nonce": 4354431877761457166,
+				"output_root": "1e9daee31b80c6b83573eacfd3048a4af57c614bd36f9acd5fb50fbd236beb16",
+				"prev_root": "9827b8ffab942e264b6ac81f2b487e3de65e411145c514092ce783df9344fa8a",
+				"previous": "00001266a73ba6a8032ef8b4d4f5508407ffb1c270c105dac06f4669c17af020",
+				"range_proof_root": "3491b8c46a3919df637a636ca72824377f89c4967dcfe4857379a4a82b510069",
+				"secondary_scaling": 571,
+				"timestamp": "2019-10-03T15:15:35+00:00",
+				"total_difficulty": 1133438031814173,
+				"total_kernel_offset": "63315ca0be65c9f6ddf2d3306876caf9f458a01d1a0bf50cc4d3c9b699161958",
+				"version": 2
+			},
+			"inputs": [],
+			"kernels": [
+				{
+				"excess": "08761e9cb1eea5bfcf771d1218b5ec802798d6eecaf75faae50ba3a1997aaef009",
+				"excess_sig": "971317046c533d21dff3e449cc9380c2be10b0274f70e009aa2453f755239e3299883c09a1785b15a141d89d563cdd59395886c7d63aba9c2b6438575555e2c4",
+				"features": "Coinbase",
+				"fee": 0,
+				"lock_height": 0
+				}
+			],
+			"outputs": [
+				{
+				"block_height": 374274,
+				"commit": "09d33615563ba2d65acc2b295a024337166b9f520122d49730c73e8bfb43017610",
+				"merkle_proof": null,
+				"mmr_index": 4091742,
+				"output_type": "Coinbase",
+				"proof": "7adae7bcecf735c70eaa21e8fdce1d3c83d7b593f082fc29e16ff2c64ee5aaa15b682e5583257cf351de457dda8f877f4d8c1492af3aaf25cf5f496fce7ca54a0ef78cc61c4252c490386f3c69132960e9edc811add6415a6026d53d604414a5f4dd330a63fcbb005ba908a45b2fb1950a9529f793405832e57c89a36d3920715bc2d43db16a718ecd19aeb23428b5d3eeb89d73c28272a7f2b39b8923e777d8eb2c5ce9872353ba026dc79fdb093a6538868b4d184215afc29a9f90548f9c32aa663f9197fea1cadbb28d40d35ed79947b4b2b722e30e877a15aa2ecf95896faad173af2e2795b36ce342dfdacf13a2f4f273ab9927371f52913367d1d58246a0c35c8f0d2330fcddb9eec34c277b1cfdaf7639eec2095930b2adef17e0eb94f32e071bf1c607d2ef1757d66647477335188e5afc058c07fe0440a67804fbdd5d35d850391ead3e9c8a3136ae1c42a33d5b01fb2c6ec84a465df3f74358cbc28542036ae4ef3e63046fbd2bce6b12f829ed193fb51ea87790e88f1ea686d943c46714b076fb8c6be7c577bca5b2792e63d5f7b8f6018730b6f9ddaf5758a5fa6a3859d68b317ad4383719211e78f2ca832fd34c6a222a8488e40519179209ad1979f3095b7b7ba7f57e81c371989a4ace465149b0fe576d89473bc596c54cee663fbf78196e7eb31e4d56604c5226e9242a68bda95e1b45473c52f63fe865901839e82079a9935e25fe8d44e339484ba0a62d20857c6b3f15ab5c56b59c7523b63f86fa8977e3f4c35dc8b1c446c48a28947f9d9bd9992763404bcba95f94b45d643f07bb7c352bfad30809c741938b103a44218696206ca1e18f0b10b222d8685cc1ed89d5fdb0c7258b66486e35c0fd560a678864fd64c642b2b689a0c46d1be6b402265b7808cd61a95c2b4a4df280e3f0ec090197fb039d32538d05d3f0a082f5",
+				"proof_hash": "cfd97db403c274220bb0dbaf3ecc88e483c0b707d8e6f16dfda37cd4f2c3211c",
+				"spent": false
+				}
+			]
+			}
+		}
+	}
+	# "#
+	# );
+	```
+	 */
+	fn get_blocks(
+		&self,
+		start_height: u64,
+		end_height: u64,
+		include_proof: Option<bool>,
+	) -> Result<Vec<BlockPrintable>, Error>;
+
+	/**
 	Networked version of [Foreign::get_version](struct.Foreign.html#method.get_version).
 
 	# Json rpc example
@@ -760,6 +878,7 @@ where
 		}
 		Foreign::get_header(self, height, parsed_hash, commit)
 	}
+
 	fn get_block(
 		&self,
 		height: Option<u64>,
@@ -773,6 +892,15 @@ where
 			parsed_hash = Some(Hash::from_vec(&vec));
 		}
 		Foreign::get_block(self, height, parsed_hash, commit)
+	}
+
+	fn get_blocks(
+		&self,
+		start_height: u64,
+		end_height: u64,
+		include_proof: Option<bool>,
+	) -> Result<Vec<BlockPrintable>, Error> {
+		Foreign::get_blocks(self, start_height, end_height, include_proof)
 	}
 
 	fn get_version(&self) -> Result<Version, Error> {
