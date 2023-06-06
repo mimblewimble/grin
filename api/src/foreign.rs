@@ -23,13 +23,15 @@ use crate::handlers::pool_api::PoolHandler;
 use crate::handlers::transactions_api::TxHashSetHandler;
 use crate::handlers::version_api::VersionHandler;
 use crate::pool::{self, BlockChain, PoolAdapter, PoolEntry};
-use crate::rest::*;
 use crate::types::{
 	BlockHeaderPrintable, BlockPrintable, LocatedTxKernel, OutputListing, OutputPrintable, Tip,
 	Version,
 };
 use crate::util::RwLock;
+use crate::{rest::*, BlockListing};
 use std::sync::Weak;
+
+pub const BLOCK_TRANSFER_LIMIT: u64 = 1000;
 
 /// Main interface into all node API functions.
 /// Node APIs are split into two seperate blocks of functionality
@@ -139,17 +141,42 @@ where
 		block_handler.get_block(&hash, include_proof, include_merkle_proof)
 	}
 
-	/// TODO
+	/// Returns a [`BlockListing`](types/struct.BlockListing.html) of available blocks
+	/// betwee `min_height` and `max_height`
+	/// The method will query the database for blocks starting at the block height `min_height`
+	/// and continue until `max_height`, skipping any blocks that aren't available.
+	///
+	/// # Arguments
+	/// * `start_height` - starting height to lookup.
+	/// * `end_height` - ending height to to lookup.
+	/// * 'max` - The max number of blocks to return.
+	///   Note this is overriden with BLOCK_TRANSFER_LIMIT if BLOCK_TRANSFER_LIMIT is exceeded
+	///
+	/// # Returns
+	/// * Result Containing:
+	/// * A [`BlockListing`](types/struct.BlockListing.html)
+	/// * or [`Error`](struct.Error.html) if an error is encountered.
+	///
+
 	pub fn get_blocks(
 		&self,
 		start_height: u64,
 		end_height: u64,
+		mut max: u64,
 		include_proof: Option<bool>,
-	) -> Result<Vec<BlockPrintable>, Error> {
+	) -> Result<BlockListing, Error> {
+		// set a limit here
+		if max > BLOCK_TRANSFER_LIMIT {
+			max = BLOCK_TRANSFER_LIMIT;
+		}
 		let block_handler = BlockHandler {
 			chain: self.chain.clone(),
 		};
-		let mut result_set = vec![];
+		let mut result_set = BlockListing {
+			last_retrieved_height: 0,
+			blocks: vec![],
+		};
+		let mut block_count = 0;
 		for h in start_height..=end_height {
 			let hash = block_handler.parse_inputs(Some(h), None, None)?;
 			let block_res = block_handler.get_block(&hash, include_proof == Some(true), false);
@@ -161,7 +188,14 @@ where
 						return Err(e);
 					}
 				}
-				Ok(b) => result_set.push(b),
+				Ok(b) => {
+					block_count += 1;
+					result_set.blocks.push(b);
+					result_set.last_retrieved_height = h;
+				}
+			}
+			if block_count == max {
+				break;
 			}
 		}
 		Ok(result_set)

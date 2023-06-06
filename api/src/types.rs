@@ -722,6 +722,15 @@ pub struct OutputListing {
 	pub outputs: Vec<OutputPrintable>,
 }
 
+// For traversing a set of all available blocks
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct BlockListing {
+	/// The last height retrieved
+	pub last_retrieved_height: u64,
+	/// A printable version of the retrieved Blocks
+	pub blocks: Vec<BlockPrintable>,
+}
+
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct LocatedTxKernel {
 	pub tx_kernel: TxKernel,
