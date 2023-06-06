@@ -142,7 +142,7 @@ where
 	}
 
 	/// Returns a [`BlockListing`](types/struct.BlockListing.html) of available blocks
-	/// betwee `min_height` and `max_height`
+	/// between `min_height` and `max_height`
 	/// The method will query the database for blocks starting at the block height `min_height`
 	/// and continue until `max_height`, skipping any blocks that aren't available.
 	///
