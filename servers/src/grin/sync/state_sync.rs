@@ -37,7 +37,6 @@ pub struct StateSync {
 	prev_state_sync: Option<DateTime<Utc>>,
 	state_sync_peer: Option<Arc<Peer>>,
 
-	pibd_aborted: bool,
 	earliest_zero_pibd_peer_time: Option<DateTime<Utc>>,
 }
 
@@ -53,14 +52,8 @@ impl StateSync {
 			chain,
 			prev_state_sync: None,
 			state_sync_peer: None,
-			pibd_aborted: false,
 			earliest_zero_pibd_peer_time: None,
 		}
-	}
-
-	/// Flag to abort PIBD process
-	pub fn set_pibd_aborted(&mut self) {
-		self.pibd_aborted = true;
 	}
 
 	/// Record earliest time at which we had no suitable
@@ -94,20 +87,10 @@ impl StateSync {
 
 		// Determine whether we're going to try using PIBD or whether we've already given up
 		// on it
-		let using_pibd =
-			if let SyncStatus::TxHashsetPibd { aborted: true, .. } = self.sync_state.status() {
-				false
-			} else if self.pibd_aborted {
-				false
-			} else {
-				// Only on testing chains for now
-				if global::get_chain_type() != global::ChainTypes::Mainnet {
-					true
-				//false
-				} else {
-					false
-				}
-			};
+		let using_pibd = !matches!(
+			self.sync_state.status(),
+			SyncStatus::TxHashsetPibd { aborted: true, .. },
+		);
 
 		// Check whether we've errored and should restart pibd
 		if using_pibd {
@@ -332,7 +315,6 @@ impl StateSync {
 						.update_pibd_progress(true, true, 0, 1, &archive_header);
 					self.sync_state
 						.set_sync_error(chain::Error::AbortingPIBDError);
-					self.set_pibd_aborted();
 					return false;
 				}
 			} else {
