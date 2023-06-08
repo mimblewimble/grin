@@ -31,8 +31,6 @@ use crate::util::RwLock;
 use crate::{rest::*, BlockListing};
 use std::sync::Weak;
 
-pub const BLOCK_TRANSFER_LIMIT: u64 = 1000;
-
 /// Main interface into all node API functions.
 /// Node APIs are split into two seperate blocks of functionality
 /// called the ['Owner'](struct.Owner.html) and ['Foreign'](struct.Foreign.html) APIs
@@ -162,43 +160,13 @@ where
 		&self,
 		start_height: u64,
 		end_height: u64,
-		mut max: u64,
+		max: u64,
 		include_proof: Option<bool>,
 	) -> Result<BlockListing, Error> {
-		// set a limit here
-		if max > BLOCK_TRANSFER_LIMIT {
-			max = BLOCK_TRANSFER_LIMIT;
-		}
 		let block_handler = BlockHandler {
 			chain: self.chain.clone(),
 		};
-		let mut result_set = BlockListing {
-			last_retrieved_height: 0,
-			blocks: vec![],
-		};
-		let mut block_count = 0;
-		for h in start_height..=end_height {
-			let hash = block_handler.parse_inputs(Some(h), None, None)?;
-			let block_res = block_handler.get_block(&hash, include_proof == Some(true), false);
-			match block_res {
-				Err(e) => {
-					if let Error::NotFound = e {
-						continue;
-					} else {
-						return Err(e);
-					}
-				}
-				Ok(b) => {
-					block_count += 1;
-					result_set.blocks.push(b);
-					result_set.last_retrieved_height = h;
-				}
-			}
-			if block_count == max {
-				break;
-			}
-		}
-		Ok(result_set)
+		block_handler.get_blocks(start_height, end_height, max, include_proof)
 	}
 
 	/// Returns the node version and block header version (used by grin-wallet).

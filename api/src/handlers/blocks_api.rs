@@ -24,6 +24,8 @@ use hyper::{Body, Request, StatusCode};
 use regex::Regex;
 use std::sync::Weak;
 
+pub const BLOCK_TRANSFER_LIMIT: u64 = 1000;
+
 /// Gets block headers given either a hash or height or an output commit.
 /// GET /v1/headers/<hash>
 /// GET /v1/headers/<height>
@@ -136,6 +138,69 @@ impl BlockHandler {
 		let block = chain.get_block(h).map_err(|_| Error::NotFound)?;
 		BlockPrintable::from_block(&block, &chain, include_proof, include_merkle_proof)
 			.map_err(|_| Error::Internal("chain error".to_owned()))
+	}
+
+	pub fn get_blocks(
+		&self,
+		mut start_height: u64,
+		end_height: u64,
+		mut max: u64,
+		include_proof: Option<bool>,
+	) -> Result<BlockListing, Error> {
+		// set a limit here
+		if max > BLOCK_TRANSFER_LIMIT {
+			max = BLOCK_TRANSFER_LIMIT;
+		}
+		let tail_height = self.get_tail_height()?;
+
+		if start_height < tail_height {
+			start_height = tail_height;
+		}
+
+		let mut result_set = BlockListing {
+			last_retrieved_height: 0,
+			blocks: vec![],
+		};
+		let mut block_count = 0;
+		for h in start_height..=end_height {
+			result_set.last_retrieved_height = h;
+
+			let hash = match self.parse_inputs(Some(h), None, None) {
+				Err(e) => {
+					if let Error::NotFound = e {
+						continue;
+					} else {
+						return Err(e);
+					}
+				}
+				Ok(h) => h,
+			};
+
+			let block_res = self.get_block(&hash, include_proof == Some(true), false);
+
+			match block_res {
+				Err(e) => {
+					if let Error::NotFound = e {
+						continue;
+					} else {
+						return Err(e);
+					}
+				}
+				Ok(b) => {
+					block_count += 1;
+					result_set.blocks.push(b);
+				}
+			}
+			if block_count == max {
+				break;
+			}
+		}
+		Ok(result_set)
+	}
+
+	pub fn get_tail_height(&self) -> Result<u64, Error> {
+		let chain = w(&self.chain)?;
+		Ok(chain.get_tail().map_err(|_| Error::NotFound)?.height)
 	}
 
 	fn get_compact_block(&self, h: &Hash) -> Result<CompactBlockPrintable, Error> {
