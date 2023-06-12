@@ -23,12 +23,12 @@ use crate::handlers::pool_api::PoolHandler;
 use crate::handlers::transactions_api::TxHashSetHandler;
 use crate::handlers::version_api::VersionHandler;
 use crate::pool::{self, BlockChain, PoolAdapter, PoolEntry};
-use crate::rest::*;
 use crate::types::{
 	BlockHeaderPrintable, BlockPrintable, LocatedTxKernel, OutputListing, OutputPrintable, Tip,
 	Version,
 };
 use crate::util::RwLock;
+use crate::{rest::*, BlockListing};
 use std::sync::Weak;
 
 /// Main interface into all node API functions.
@@ -137,6 +137,36 @@ where
 		let include_merkle_proof = false;
 
 		block_handler.get_block(&hash, include_proof, include_merkle_proof)
+	}
+
+	/// Returns a [`BlockListing`](types/struct.BlockListing.html) of available blocks
+	/// between `min_height` and `max_height`
+	/// The method will query the database for blocks starting at the block height `min_height`
+	/// and continue until `max_height`, skipping any blocks that aren't available.
+	///
+	/// # Arguments
+	/// * `start_height` - starting height to lookup.
+	/// * `end_height` - ending height to to lookup.
+	/// * 'max` - The max number of blocks to return.
+	///   Note this is overriden with BLOCK_TRANSFER_LIMIT if BLOCK_TRANSFER_LIMIT is exceeded
+	///
+	/// # Returns
+	/// * Result Containing:
+	/// * A [`BlockListing`](types/struct.BlockListing.html)
+	/// * or [`Error`](struct.Error.html) if an error is encountered.
+	///
+
+	pub fn get_blocks(
+		&self,
+		start_height: u64,
+		end_height: u64,
+		max: u64,
+		include_proof: Option<bool>,
+	) -> Result<BlockListing, Error> {
+		let block_handler = BlockHandler {
+			chain: self.chain.clone(),
+		};
+		block_handler.get_blocks(start_height, end_height, max, include_proof)
 	}
 
 	/// Returns the node version and block header version (used by grin-wallet).

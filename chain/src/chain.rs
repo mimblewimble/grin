@@ -1445,6 +1445,13 @@ impl Chain {
 			.map_err(|e| Error::StoreErr(e, "chain get block".to_owned()))
 	}
 
+	/// Gets the earliest stored block (tail)
+	pub fn get_tail(&self) -> Result<Tip, Error> {
+		self.store
+			.tail()
+			.map_err(|e| Error::StoreErr(e, "chain get tail".to_owned()))
+	}
+
 	/// Gets a block header by hash
 	pub fn get_block_header(&self, h: &Hash) -> Result<BlockHeader, Error> {
 		self.store
