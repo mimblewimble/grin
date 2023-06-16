@@ -68,6 +68,8 @@ pub struct Desegmenter {
 
 	/// Flag indicating there are no more segments to request
 	all_segments_complete: bool,
+
+	latest_block_height: u64,
 }
 
 impl Desegmenter {
@@ -104,6 +106,8 @@ impl Desegmenter {
 			bitmap_cache: None,
 
 			all_segments_complete: false,
+
+			latest_block_height: 0,
 		};
 		retval.calc_bitmap_mmr_sizes();
 		retval
@@ -120,6 +124,7 @@ impl Desegmenter {
 		self.bitmap_mmr_size = 0;
 		self.bitmap_cache = None;
 		self.bitmap_accumulator = BitmapAccumulator::new();
+		self.latest_block_height = 0;
 		self.calc_bitmap_mmr_sizes();
 	}
 
@@ -140,9 +145,7 @@ impl Desegmenter {
 
 	/// Check progress, update status if needed, returns true if all required
 	/// segments are in place
-	pub fn check_progress(&self, status: Arc<SyncState>) -> Result<bool, Error> {
-		let mut latest_block_height = 0;
-
+	pub fn check_progress(&mut self, status: Arc<SyncState>) -> Result<bool, Error> {
 		let local_output_mmr_size;
 		let local_kernel_mmr_size;
 		let local_rangeproof_mmr_size;
@@ -174,13 +177,13 @@ impl Desegmenter {
 			header_pmmr.get_first_header_with(
 				latest_output_size,
 				local_kernel_mmr_size,
-				latest_block_height,
+				self.latest_block_height,
 				self.store.clone(),
 			)
 		};
 
 		if let Some(h) = res {
-			latest_block_height = h.height;
+			self.latest_block_height = h.height;
 
 			// TODO: Unwraps
 			let tip = Tip::from_header(&h);
@@ -192,7 +195,7 @@ impl Desegmenter {
 				false,
 				false,
 				completed_leaves,
-				latest_block_height,
+				self.latest_block_height,
 				&self.archive_header,
 			);
 			if local_kernel_mmr_size == self.archive_header.kernel_mmr_size
