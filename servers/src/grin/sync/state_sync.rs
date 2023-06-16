@@ -37,6 +37,7 @@ pub struct StateSync {
 	prev_state_sync: Option<DateTime<Utc>>,
 	state_sync_peer: Option<Arc<Peer>>,
 
+	pibd_aborted: bool,
 	earliest_zero_pibd_peer_time: Option<DateTime<Utc>>,
 }
 
@@ -52,6 +53,7 @@ impl StateSync {
 			chain,
 			prev_state_sync: None,
 			state_sync_peer: None,
+			pibd_aborted: false,
 			earliest_zero_pibd_peer_time: None,
 		}
 	}
@@ -60,6 +62,12 @@ impl StateSync {
 	/// peers for continuing PIBD
 	pub fn set_earliest_zero_pibd_peer_time(&mut self, t: Option<DateTime<Utc>>) {
 		self.earliest_zero_pibd_peer_time = t;
+	}
+
+	/// Flag to abort PIBD process within StateSync, intentionally separate from `sync_state`,
+	/// which can be reset between calls
+	pub fn set_pibd_aborted(&mut self) {
+		self.pibd_aborted = true;
 	}
 
 	/// Check whether state sync should run and triggers a state download when
@@ -90,7 +98,7 @@ impl StateSync {
 		let using_pibd = !matches!(
 			self.sync_state.status(),
 			SyncStatus::TxHashsetPibd { aborted: true, .. },
-		);
+		) && !self.pibd_aborted;
 
 		// Check whether we've errored and should restart pibd
 		if using_pibd {
@@ -171,7 +179,7 @@ impl StateSync {
 				if self.continue_pibd() {
 					let desegmenter = self.chain.desegmenter(&archive_header).unwrap();
 					// All segments in, validate
-					if let Some(d) = desegmenter.read().as_ref() {
+					if let Some(d) = desegmenter.write().as_mut() {
 						if let Ok(true) = d.check_progress(self.sync_state.clone()) {
 							if let Err(e) = d.check_update_leaf_set_state() {
 								error!("error updating PIBD leaf set: {}", e);
@@ -315,6 +323,7 @@ impl StateSync {
 						.update_pibd_progress(true, true, 0, 1, &archive_header);
 					self.sync_state
 						.set_sync_error(chain::Error::AbortingPIBDError);
+					self.set_pibd_aborted();
 					return false;
 				}
 			} else {
