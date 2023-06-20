@@ -231,7 +231,10 @@ impl Default for BlockHeader {
 		BlockHeader {
 			version: HeaderVersion(1),
 			height: 0,
-			timestamp: DateTime::<Utc>::from_utc(NaiveDateTime::from_timestamp(0, 0), Utc),
+			timestamp: DateTime::<Utc>::from_utc(
+				NaiveDateTime::from_timestamp_opt(0, 0).unwrap(),
+				Utc,
+			),
 			prev_hash: ZERO_HASH,
 			prev_root: ZERO_HASH,
 			output_root: ZERO_HASH,
@@ -288,16 +291,29 @@ fn read_block_header<R: Reader>(reader: &mut R) -> Result<BlockHeader, ser::Erro
 	let (output_mmr_size, kernel_mmr_size) = ser_multiread!(reader, read_u64, read_u64);
 	let pow = ProofOfWork::read(reader)?;
 
-	if timestamp > chrono::NaiveDate::MAX.and_hms(0, 0, 0).timestamp()
-		|| timestamp < chrono::NaiveDate::MIN.and_hms(0, 0, 0).timestamp()
+	if timestamp
+		> chrono::NaiveDate::MAX
+			.and_hms_opt(0, 0, 0)
+			.unwrap()
+			.timestamp()
+		|| timestamp
+			< chrono::NaiveDate::MIN
+				.and_hms_opt(0, 0, 0)
+				.unwrap()
+				.timestamp()
 	{
+		return Err(ser::Error::CorruptedData);
+	}
+
+	let ts = NaiveDateTime::from_timestamp_opt(timestamp, 0);
+	if ts.is_none() {
 		return Err(ser::Error::CorruptedData);
 	}
 
 	Ok(BlockHeader {
 		version,
 		height,
-		timestamp: DateTime::<Utc>::from_utc(NaiveDateTime::from_timestamp(timestamp, 0), Utc),
+		timestamp: DateTime::<Utc>::from_utc(ts.unwrap(), Utc),
 		prev_hash,
 		prev_root,
 		output_root,
@@ -645,8 +661,13 @@ impl Block {
 		let version = consensus::header_version(height);
 
 		let now = Utc::now().timestamp();
-		let timestamp = DateTime::<Utc>::from_utc(NaiveDateTime::from_timestamp(now, 0), Utc);
 
+		let ts = NaiveDateTime::from_timestamp_opt(now, 0);
+		if ts.is_none() {
+			return Err(Error::Other("Converting Utc::now() into timestamp".into()));
+		}
+
+		let timestamp = DateTime::<Utc>::from_utc(ts.unwrap(), Utc);
 		// Now build the block with all the above information.
 		// Note: We have not validated the block here.
 		// Caller must validate the block as necessary.

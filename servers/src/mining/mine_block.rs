@@ -168,7 +168,11 @@ fn build_block(
 
 	b.header.pow.nonce = thread_rng().gen();
 	b.header.pow.secondary_scaling = difficulty.secondary_scaling;
-	b.header.timestamp = DateTime::<Utc>::from_utc(NaiveDateTime::from_timestamp(now_sec, 0), Utc);
+	let ts = NaiveDateTime::from_timestamp_opt(now_sec, 0);
+	if ts.is_none() {
+		return Err(Error::General("Utc::now into timestamp".into()));
+	}
+	b.header.timestamp = DateTime::<Utc>::from_utc(ts.unwrap(), Utc);
 
 	debug!(
 		"Built new block with {} inputs and {} outputs, block difficulty: {}, cumulative difficulty {}",
