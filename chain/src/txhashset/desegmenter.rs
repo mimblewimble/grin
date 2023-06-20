@@ -106,6 +106,7 @@ impl Desegmenter {
 			bitmap_cache: None,
 
 			all_segments_complete: false,
+
 			latest_block_height: 0,
 		};
 		retval.calc_bitmap_mmr_sizes();
