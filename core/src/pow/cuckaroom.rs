@@ -64,8 +64,8 @@ impl PoWContext for CuckaroomContext {
 		let mut to = vec![0u64; size];
 		let mut xor_from: u64 = 0;
 		let mut xor_to: u64 = 0;
-		let mask = u64::MAX >> size.leading_zeros(); // round size up to 2-power - 1
-											 // the next two arrays form a linked list of nodes with matching bits 6..1
+		let mask = u64::MAX >> (size as u64).leading_zeros(); // round size up to 2-power - 1
+													  // the next two arrays form a linked list of nodes with matching bits 6..1
 		let mut head = vec![size; 1 + mask as usize];
 		let mut prev = vec![0usize; size];
 
