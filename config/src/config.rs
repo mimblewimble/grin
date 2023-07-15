@@ -161,7 +161,7 @@ impl GlobalConfig {
 	/// apply defaults for each chain type
 	pub fn for_chain(chain_type: &global::ChainTypes) -> GlobalConfig {
 		let mut defaults_conf = GlobalConfig::default();
-		let mut defaults = &mut defaults_conf.members.as_mut().unwrap().server;
+		let defaults = &mut defaults_conf.members.as_mut().unwrap().server;
 		defaults.chain_type = chain_type.clone();
 
 		match *chain_type {
