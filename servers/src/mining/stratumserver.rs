@@ -729,7 +729,7 @@ impl WorkersList {
 
 	pub fn login(&self, worker_id: usize, login: String, agent: String) -> Result<(), RpcError> {
 		let mut wl = self.workers_list.write();
-		let mut worker = wl
+		let worker = wl
 			.get_mut(&worker_id)
 			.ok_or_else(RpcError::internal_error)?;
 		worker.login = Some(login);

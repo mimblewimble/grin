@@ -261,7 +261,7 @@ impl CuckatooContext {
 		}
 		let nonces = &proof.nonces;
 		let mut uvs = vec![0u64; 2 * size];
-		let mask = u64::MAX >> size.leading_zeros(); // round size up to 2-power - 1
+		let mask = u64::MAX >> (size as u64).leading_zeros(); // round size up to 2-power - 1
 		let mut xor0: u64 = (size as u64 / 2) & 1;
 		let mut xor1: u64 = xor0;
 		// the next two arrays form a linked list of nodes with matching bits 6..1
