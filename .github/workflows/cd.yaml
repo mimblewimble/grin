@@ -1,0 +1,73 @@
+name: Continuous Deployment
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+jobs:
+    linux-release:
+        name: Linux Release
+        runs-on: ubuntu-latest
+        steps:
+          - uses: actions/checkout@v3
+          - name: Build
+            run: cargo build --release
+          - name: Archive
+            working-directory: target/release
+            run: tar -czvf grin-${{  github.ref_name }}-linux-x86_64.tar.gz grin
+          - name: Create Checksum
+            working-directory: target/release
+            run: openssl sha256 grin-${{  github.ref_name }}-linux-x86_64.tar.gz > grin-${{  github.ref_name }}-linux-x86_64-sha256sum.txt
+          - name: Release
+            uses: softprops/action-gh-release@v1
+            with:
+                generate_release_notes: true
+                files: |
+                    target/release/grin-${{  github.ref_name }}-linux-x86_64.tar.gz
+                    target/release/grin-${{  github.ref_name }}-linux-x86_64-sha256sum.txt
+
+    macos-release:
+        name: macOS Release
+        runs-on: macos-latest
+        steps:
+          - name: Checkout
+            uses: actions/checkout@v3
+          - name: Build
+            run: cargo build --release
+          - name: Archive
+            working-directory: target/release
+            run: tar -czvf grin-${{  github.ref_name }}-macos-x86_64.tar.gz grin
+          - name: Create Checksum
+            working-directory: target/release
+            run: openssl sha256 grin-${{  github.ref_name }}-macos-x86_64.tar.gz > grin-${{  github.ref_name }}-macos-x86_64-sha256sum.txt
+          - name: Release
+            uses: softprops/action-gh-release@v1
+            with:
+                files: |
+                    target/release/grin-${{  github.ref_name }}-macos-x86_64.tar.gz
+                    target/release/grin-${{  github.ref_name }}-macos-x86_64-sha256sum.txt
+    
+    windows-release:
+        name: Windows Release
+        runs-on: windows-latest
+        steps:
+          - name: Checkout
+            uses: actions/checkout@v3
+          - name: Build
+            run: cargo build --release
+          - name: Archive
+            uses: vimtor/action-zip@v1
+            with:
+                files: target/release/grin.exe
+                dest: target/release/grin-${{  github.ref_name }}-win-x86_64.zip
+          - name: Create Checksum
+            working-directory: target/release
+            shell: pwsh
+            run: get-filehash -algorithm sha256 grin-${{  github.ref_name }}-win-x86_64.zip | Format-List |  Out-String | ForEach-Object { $_.Trim() } > grin-${{  github.ref_name }}-win-x86_64-sha256sum.txt
+          - name: Release
+            uses: softprops/action-gh-release@v1
+            with:
+              files: |
+                target/release/grin-${{  github.ref_name }}-win-x86_64.zip
+                target/release/grin-${{  github.ref_name }}-win-x86_64-sha256sum.txt
