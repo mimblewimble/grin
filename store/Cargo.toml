@@ -11,7 +11,7 @@ edition = "2018"
 
 [dependencies]
 byteorder = "1"
-croaring = "0.4.6"
+croaring = "0.5.2"
 libc = "0.2"
 lmdb-zero = "0.4.4"
 memmap = "0.7"
