@@ -30,7 +30,7 @@ use std::{
 use croaring::Bitmap;
 use grin_core::core::pmmr;
 
-use crate::core::core::pmmr::{bintree_leftmost, bintree_postorder_height, family};
+use crate::grin_core::core::pmmr::{bintree_leftmost, bintree_postorder_height, family};
 use crate::{read_bitmap, save_via_temp_file};
 use std::cmp::min;
 

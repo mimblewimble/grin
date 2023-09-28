@@ -19,9 +19,9 @@ use std::path::{Path, PathBuf};
 
 use croaring::Bitmap;
 
-use crate::core::core::hash::Hashed;
-use crate::core::core::pmmr;
-use crate::core::core::BlockHeader;
+use crate::grin_core::core::hash::Hashed;
+use crate::grin_core::core::pmmr;
+use crate::grin_core::core::BlockHeader;
 use crate::prune_list::PruneList;
 use crate::{read_bitmap, save_via_temp_file};
 

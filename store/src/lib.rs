@@ -23,7 +23,7 @@
 #[macro_use]
 extern crate log;
 #[macro_use]
-extern crate grin_core as core;
+extern crate grin_core as grin_core;
 extern crate grin_util as util;
 
 //use grin_core as core;
