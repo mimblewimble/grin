@@ -21,8 +21,8 @@ use lmdb_zero as lmdb;
 use lmdb_zero::traits::CreateCursor;
 use lmdb_zero::LmdbResultExt;
 
-use crate::core::global;
-use crate::core::ser::{self, DeserializationMode, ProtocolVersion};
+use crate::grin_core::global;
+use crate::grin_core::ser::{self, DeserializationMode, ProtocolVersion};
 use crate::util::RwLock;
 
 /// number of bytes to grow the database by when needed
