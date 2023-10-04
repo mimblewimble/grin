@@ -152,9 +152,16 @@ impl BlockHandler {
 			max = BLOCK_TRANSFER_LIMIT;
 		}
 		let tail_height = self.get_tail_height()?;
+		let orig_start_height = start_height;
 
 		if start_height < tail_height {
 			start_height = tail_height;
+		}
+
+		// In full archive node, tail will be set to 1, so include genesis block as well
+		// for consistency
+		if start_height == 1 && orig_start_height == 0 {
+			start_height = 0;
 		}
 
 		let mut result_set = BlockListing {
