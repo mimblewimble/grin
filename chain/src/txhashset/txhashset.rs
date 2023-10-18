@@ -479,19 +479,19 @@ impl TxHashSet {
 	}
 
 	/// Get MMR roots.
-	pub fn roots(&self) -> TxHashSetRoots {
+	pub fn roots(&self) -> Result<TxHashSetRoots, Error> {
 		let output_pmmr = ReadonlyPMMR::at(&self.output_pmmr_h.backend, self.output_pmmr_h.size);
 		let rproof_pmmr = ReadonlyPMMR::at(&self.rproof_pmmr_h.backend, self.rproof_pmmr_h.size);
 		let kernel_pmmr = ReadonlyPMMR::at(&self.kernel_pmmr_h.backend, self.kernel_pmmr_h.size);
 
-		TxHashSetRoots {
+		Ok(TxHashSetRoots {
 			output_roots: OutputRoots {
-				pmmr_root: output_pmmr.root().expect("no root, invalid tree"),
+				pmmr_root: output_pmmr.root().map_err(|_| Error::InvalidRoot)?,
 				bitmap_root: self.bitmap_accumulator.root(),
 			},
-			rproof_root: rproof_pmmr.root().expect("no root, invalid tree"),
-			kernel_root: kernel_pmmr.root().expect("no root, invalid tree"),
-		}
+			rproof_root: rproof_pmmr.root().map_err(|_| Error::InvalidRoot)?,
+			kernel_root: kernel_pmmr.root().map_err(|_| Error::InvalidRoot)?,
+		})
 	}
 
 	/// Return Commit's MMR position
