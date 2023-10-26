@@ -729,7 +729,6 @@ impl Chain {
 		// ensure the view is consistent.
 		txhashset::extending_readonly(&mut header_pmmr, &mut txhashset, |ext, batch| {
 			self.rewind_and_apply_fork(&header, ext, batch)?;
-			error!("VALIDATE");
 			ext.extension.validate(
 				&self.genesis.header,
 				fast_validation,
