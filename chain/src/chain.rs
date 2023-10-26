@@ -242,7 +242,6 @@ impl Chain {
 
 		let header = batch.get_block_header(&head.hash())?;
 
-		error!("RESET CHAIN HEAD");
 		// Rewind and reapply blocks to reset the output/rangeproof/kernel MMR.
 		txhashset::extending(
 			&mut header_pmmr,
