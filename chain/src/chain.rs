@@ -271,10 +271,9 @@ impl Chain {
 	}
 
 	/// wipes the chain head down to genesis, without attempting to rewind
-	/// Used upon PIBD failure, where you want to keep the header chain but
-	/// restart the MMRs from scratch
+	/// Used upon PIBD failure, where we want to keep the header chain but
+	/// restart the output PMMRs from scratch
 	pub fn reset_chain_head_to_genesis(&self) -> Result<(), Error> {
-		error!("RESET CHAIN HEAD TO GENESIS");
 		let mut header_pmmr = self.header_pmmr.write();
 		let mut txhashset = self.txhashset.write();
 		let batch = self.store.batch()?;
@@ -769,7 +768,6 @@ impl Chain {
 
 		let (prev_root, roots, sizes) =
 			txhashset::extending_readonly(&mut header_pmmr, &mut txhashset, |ext, batch| {
-				error!("SETTING ROOTS");
 				let previous_header = batch.get_previous_header(&b.header)?;
 				self.rewind_and_apply_fork(&previous_header, ext, batch)?;
 
@@ -814,7 +812,6 @@ impl Chain {
 	) -> Result<MerkleProof, Error> {
 		let mut header_pmmr = self.header_pmmr.write();
 		let mut txhashset = self.txhashset.write();
-		error!("GET MERKLE PROOF");
 		let merkle_proof =
 			txhashset::extending_readonly(&mut header_pmmr, &mut txhashset, |ext, batch| {
 				self.rewind_and_apply_fork(&header, ext, batch)?;
@@ -840,7 +837,6 @@ impl Chain {
 		batch: &Batch,
 	) -> Result<BlockHeader, Error> {
 		let denylist = self.denylist.read().clone();
-		error!("REWIND INNER");
 		pipe::rewind_and_apply_fork(header, ext, batch, &|header| {
 			pipe::validate_header_denylist(header, &denylist)
 		})
@@ -875,7 +871,6 @@ impl Chain {
 		let mut txhashset = self.txhashset.write();
 
 		txhashset::extending_readonly(&mut header_pmmr, &mut txhashset, |ext, batch| {
-			error!("HASHSET READ");
 			self.rewind_and_apply_fork(&header, ext, batch)?;
 			ext.extension.snapshot(batch)?;
 
@@ -1757,8 +1752,6 @@ fn setup_head(
 						return Ok(());
 					}
 
-					debug!("SETTING UP HEAD 1");
-
 					pipe::rewind_and_apply_fork(&header, ext, batch, &|_| Ok(()))?;
 
 					let extension = &mut ext.extension;
@@ -1806,7 +1799,6 @@ fn setup_head(
 					// delete the "bad" block and try again.
 					let prev_header = batch.get_block_header(&head.prev_block_h)?;
 
-					error!("SETTING UP HEAD 2");
 					txhashset::extending(header_pmmr, txhashset, &mut batch, |ext, batch| {
 						pipe::rewind_and_apply_fork(&prev_header, ext, batch, &|_| Ok(()))
 					})?;

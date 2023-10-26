@@ -1606,7 +1606,6 @@ impl<'a> Extension<'a> {
 		} else {
 			let mut affected_pos = vec![];
 			let mut current = head_header;
-			error!("REWINDING TWO");
 			while header.height < current.height {
 				let block = batch.get_block(&current.hash())?;
 				let mut affected_pos_single_block = self.rewind_single_block(&block, batch)?;
