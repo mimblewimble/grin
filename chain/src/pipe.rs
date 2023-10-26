@@ -122,6 +122,7 @@ pub fn process_block(
 	let txhashset = &mut ctx.txhashset;
 	let batch = &mut ctx.batch;
 	let ctx_specific_validation = &ctx.header_allowed;
+	error!("PROCESSING BLOCK?");
 	let fork_point = txhashset::extending(header_pmmr, txhashset, batch, |ext, batch| {
 		let fork_point = rewind_and_apply_fork(&prev, ext, batch, ctx_specific_validation)?;
 
@@ -630,6 +631,7 @@ pub fn rewind_and_apply_fork(
 	while current.height > 0 && !header_extension.is_on_current_chain(&current, batch)? {
 		current = batch.get_previous_header(&current)?;
 	}
+	error!("REWIND AND APPLY FORK!");
 	let fork_point = current;
 	extension.rewind(&fork_point, batch)?;
 

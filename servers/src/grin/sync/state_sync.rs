@@ -111,11 +111,11 @@ impl StateSync {
 				if let Some(d) = desegmenter.write().as_mut() {
 					d.reset();
 				};
-				if let Err(e) = self.chain.reset_chain_head(self.chain.genesis(), false) {
-					error!("pibd_sync restart: chain reset error = {}", e);
-				}
 				if let Err(e) = self.chain.reset_pibd_head() {
 					error!("pibd_sync restart: reset pibd_head error = {}", e);
+				}
+				if let Err(e) = self.chain.reset_chain_head_to_genesis() {
+					error!("pibd_sync restart: chain reset to genesis error = {}", e);
 				}
 				if let Err(e) = self.chain.reset_prune_lists() {
 					error!("pibd_sync restart: reset prune lists error = {}", e);

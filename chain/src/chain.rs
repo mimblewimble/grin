@@ -158,7 +158,7 @@ pub struct Chain {
 	pow_verifier: fn(&BlockHeader) -> Result<(), pow::Error>,
 	denylist: Arc<RwLock<Vec<Hash>>>,
 	archive_mode: bool,
-	genesis: BlockHeader,
+	genesis: Block,
 }
 
 impl Chain {
@@ -184,7 +184,7 @@ impl Chain {
 			None,
 		)?;
 
-		setup_head(&genesis, &store, &mut header_pmmr, &mut txhashset)?;
+		setup_head(&genesis, &store, &mut header_pmmr, &mut txhashset, false)?;
 
 		// Initialize the output_pos index based on UTXO set
 		// and NRD kernel_pos index based recent kernel history.
@@ -207,7 +207,7 @@ impl Chain {
 			pow_verifier,
 			denylist: Arc::new(RwLock::new(vec![])),
 			archive_mode,
-			genesis: genesis.header,
+			genesis: genesis,
 		};
 
 		chain.log_heads()?;
@@ -242,6 +242,7 @@ impl Chain {
 
 		let header = batch.get_block_header(&head.hash())?;
 
+		error!("RESET CHAIN HEAD");
 		// Rewind and reapply blocks to reset the output/rangeproof/kernel MMR.
 		txhashset::extending(
 			&mut header_pmmr,
@@ -265,6 +266,34 @@ impl Chain {
 		}
 
 		batch.commit()?;
+
+		Ok(())
+	}
+
+	/// wipes the chain head down to genesis, without attempting to rewind
+	/// Used upon PIBD failure, where you want to keep the header chain but
+	/// restart the MMRs from scratch
+	pub fn reset_chain_head_to_genesis(&self) -> Result<(), Error> {
+		error!("RESET CHAIN HEAD TO GENESIS");
+		let mut header_pmmr = self.header_pmmr.write();
+		let mut txhashset = self.txhashset.write();
+		let batch = self.store.batch()?;
+
+		// Change head back to genesis
+		{
+			let head = Tip::from_header(&self.genesis.header);
+			batch.save_body_head(&head)?;
+			batch.commit()?;
+		}
+
+		// Reinit
+		setup_head(
+			&self.genesis,
+			&self.store,
+			&mut header_pmmr,
+			&mut txhashset,
+			true,
+		)?;
 
 		Ok(())
 	}
@@ -309,7 +338,7 @@ impl Chain {
 
 	/// return genesis header
 	pub fn genesis(&self) -> BlockHeader {
-		self.genesis.clone()
+		self.genesis.header.clone()
 	}
 
 	/// Shared store instance.
@@ -702,8 +731,9 @@ impl Chain {
 		// ensure the view is consistent.
 		txhashset::extending_readonly(&mut header_pmmr, &mut txhashset, |ext, batch| {
 			self.rewind_and_apply_fork(&header, ext, batch)?;
+			error!("VALIDATE");
 			ext.extension.validate(
-				&self.genesis,
+				&self.genesis.header,
 				fast_validation,
 				&NoStatus,
 				None,
@@ -739,6 +769,7 @@ impl Chain {
 
 		let (prev_root, roots, sizes) =
 			txhashset::extending_readonly(&mut header_pmmr, &mut txhashset, |ext, batch| {
+				error!("SETTING ROOTS");
 				let previous_header = batch.get_previous_header(&b.header)?;
 				self.rewind_and_apply_fork(&previous_header, ext, batch)?;
 
@@ -783,6 +814,7 @@ impl Chain {
 	) -> Result<MerkleProof, Error> {
 		let mut header_pmmr = self.header_pmmr.write();
 		let mut txhashset = self.txhashset.write();
+		error!("GET MERKLE PROOF");
 		let merkle_proof =
 			txhashset::extending_readonly(&mut header_pmmr, &mut txhashset, |ext, batch| {
 				self.rewind_and_apply_fork(&header, ext, batch)?;
@@ -808,6 +840,7 @@ impl Chain {
 		batch: &Batch,
 	) -> Result<BlockHeader, Error> {
 		let denylist = self.denylist.read().clone();
+		error!("REWIND INNER");
 		pipe::rewind_and_apply_fork(header, ext, batch, &|header| {
 			pipe::validate_header_denylist(header, &denylist)
 		})
@@ -842,6 +875,7 @@ impl Chain {
 		let mut txhashset = self.txhashset.write();
 
 		txhashset::extending_readonly(&mut header_pmmr, &mut txhashset, |ext, batch| {
+			error!("HASHSET READ");
 			self.rewind_and_apply_fork(&header, ext, batch)?;
 			ext.extension.snapshot(batch)?;
 
@@ -943,7 +977,7 @@ impl Chain {
 			self.txhashset(),
 			self.header_pmmr.clone(),
 			header.clone(),
-			self.genesis.clone(),
+			self.genesis.header.clone(),
 			self.store.clone(),
 		))
 	}
@@ -1125,7 +1159,13 @@ impl Chain {
 
 			let header_pmmr = self.header_pmmr.read();
 			let batch = self.store.batch()?;
-			txhashset.verify_kernel_pos_index(&self.genesis, &header_pmmr, &batch, None, None)?;
+			txhashset.verify_kernel_pos_index(
+				&self.genesis.header,
+				&header_pmmr,
+				&batch,
+				None,
+				None,
+			)?;
 		}
 
 		// all good, prepare a new batch and update all the required records
@@ -1143,8 +1183,15 @@ impl Chain {
 
 				// Validate the extension, generating the utxo_sum and kernel_sum.
 				// Full validation, including rangeproofs and kernel signature verification.
-				let (utxo_sum, kernel_sum) =
-					extension.validate(&self.genesis, false, status, None, None, &header, None)?;
+				let (utxo_sum, kernel_sum) = extension.validate(
+					&self.genesis.header,
+					false,
+					status,
+					None,
+					None,
+					&header,
+					None,
+				)?;
 
 				// Save the block_sums (utxo_sum, kernel_sum) to the db for use later.
 				batch.save_block_sums(
@@ -1231,7 +1278,7 @@ impl Chain {
 
 		let tail = match batch.tail() {
 			Ok(tail) => tail,
-			Err(_) => Tip::from_header(&self.genesis),
+			Err(_) => Tip::from_header(&self.genesis.header),
 		};
 
 		let mut cutoff = head.height.saturating_sub(horizon);
@@ -1643,6 +1690,7 @@ fn setup_head(
 	store: &store::ChainStore,
 	header_pmmr: &mut txhashset::PMMRHandle<BlockHeader>,
 	txhashset: &mut txhashset::TxHashSet,
+	resetting_pibd: bool,
 ) -> Result<(), Error> {
 	let mut batch = store.batch()?;
 
@@ -1689,7 +1737,7 @@ fn setup_head(
 					let head = batch.get_block_header(&head.last_block_h)?;
 					let pibd_tip = store.pibd_head()?;
 					let pibd_head = batch.get_block_header(&pibd_tip.last_block_h)?;
-					if pibd_head.height > head.height {
+					if pibd_head.height > head.height && !resetting_pibd {
 						pibd_in_progress = true;
 						pibd_head
 					} else {
@@ -1708,6 +1756,8 @@ fn setup_head(
 						);
 						return Ok(());
 					}
+
+					debug!("SETTING UP HEAD 1");
 
 					pipe::rewind_and_apply_fork(&header, ext, batch, &|_| Ok(()))?;
 
@@ -1756,6 +1806,7 @@ fn setup_head(
 					// delete the "bad" block and try again.
 					let prev_header = batch.get_block_header(&head.prev_block_h)?;
 
+					error!("SETTING UP HEAD 2");
 					txhashset::extending(header_pmmr, txhashset, &mut batch, |ext, batch| {
 						pipe::rewind_and_apply_fork(&prev_header, ext, batch, &|_| Ok(()))
 					})?;
