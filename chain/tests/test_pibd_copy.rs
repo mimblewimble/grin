@@ -238,7 +238,7 @@ impl DesegmenterRequestor {
 	}
 
 	pub fn check_roots(&self) {
-		let roots = self.chain.txhashset().read().roots();
+		let roots = self.chain.txhashset().read().roots().unwrap();
 		let archive_header = self.chain.txhashset_archive_header_header_only().unwrap();
 		debug!("Archive Header is {:?}", archive_header);
 		debug!("TXHashset output root is {:?}", roots);

@@ -237,7 +237,7 @@ impl Desegmenter {
 		// Quick root check first:
 		{
 			let txhashset = self.txhashset.read();
-			txhashset.roots().validate(&self.archive_header)?;
+			txhashset.roots()?.validate(&self.archive_header)?;
 		}
 
 		// TODO: Possibly Keep track of this in the DB so we can pick up where we left off if needed
