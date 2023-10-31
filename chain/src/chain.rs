@@ -158,7 +158,7 @@ pub struct Chain {
 	pow_verifier: fn(&BlockHeader) -> Result<(), pow::Error>,
 	denylist: Arc<RwLock<Vec<Hash>>>,
 	archive_mode: bool,
-	genesis: BlockHeader,
+	genesis: Block,
 }
 
 impl Chain {
@@ -184,7 +184,7 @@ impl Chain {
 			None,
 		)?;
 
-		setup_head(&genesis, &store, &mut header_pmmr, &mut txhashset)?;
+		setup_head(&genesis, &store, &mut header_pmmr, &mut txhashset, false)?;
 
 		// Initialize the output_pos index based on UTXO set
 		// and NRD kernel_pos index based recent kernel history.
@@ -207,7 +207,7 @@ impl Chain {
 			pow_verifier,
 			denylist: Arc::new(RwLock::new(vec![])),
 			archive_mode,
-			genesis: genesis.header,
+			genesis: genesis,
 		};
 
 		chain.log_heads()?;
@@ -269,6 +269,33 @@ impl Chain {
 		Ok(())
 	}
 
+	/// wipes the chain head down to genesis, without attempting to rewind
+	/// Used upon PIBD failure, where we want to keep the header chain but
+	/// restart the output PMMRs from scratch
+	pub fn reset_chain_head_to_genesis(&self) -> Result<(), Error> {
+		let mut header_pmmr = self.header_pmmr.write();
+		let mut txhashset = self.txhashset.write();
+		let batch = self.store.batch()?;
+
+		// Change head back to genesis
+		{
+			let head = Tip::from_header(&self.genesis.header);
+			batch.save_body_head(&head)?;
+			batch.commit()?;
+		}
+
+		// Reinit
+		setup_head(
+			&self.genesis,
+			&self.store,
+			&mut header_pmmr,
+			&mut txhashset,
+			true,
+		)?;
+
+		Ok(())
+	}
+
 	/// Reset prune lists (when PIBD resets and rolls back the
 	/// entire chain, the prune list needs to be manually wiped
 	/// as it's currently not included as part of rewind)
@@ -309,7 +336,7 @@ impl Chain {
 
 	/// return genesis header
 	pub fn genesis(&self) -> BlockHeader {
-		self.genesis.clone()
+		self.genesis.header.clone()
 	}
 
 	/// Shared store instance.
@@ -703,7 +730,7 @@ impl Chain {
 		txhashset::extending_readonly(&mut header_pmmr, &mut txhashset, |ext, batch| {
 			self.rewind_and_apply_fork(&header, ext, batch)?;
 			ext.extension.validate(
-				&self.genesis,
+				&self.genesis.header,
 				fast_validation,
 				&NoStatus,
 				None,
@@ -943,7 +970,7 @@ impl Chain {
 			self.txhashset(),
 			self.header_pmmr.clone(),
 			header.clone(),
-			self.genesis.clone(),
+			self.genesis.header.clone(),
 			self.store.clone(),
 		))
 	}
@@ -1125,7 +1152,13 @@ impl Chain {
 
 			let header_pmmr = self.header_pmmr.read();
 			let batch = self.store.batch()?;
-			txhashset.verify_kernel_pos_index(&self.genesis, &header_pmmr, &batch, None, None)?;
+			txhashset.verify_kernel_pos_index(
+				&self.genesis.header,
+				&header_pmmr,
+				&batch,
+				None,
+				None,
+			)?;
 		}
 
 		// all good, prepare a new batch and update all the required records
@@ -1143,8 +1176,15 @@ impl Chain {
 
 				// Validate the extension, generating the utxo_sum and kernel_sum.
 				// Full validation, including rangeproofs and kernel signature verification.
-				let (utxo_sum, kernel_sum) =
-					extension.validate(&self.genesis, false, status, None, None, &header, None)?;
+				let (utxo_sum, kernel_sum) = extension.validate(
+					&self.genesis.header,
+					false,
+					status,
+					None,
+					None,
+					&header,
+					None,
+				)?;
 
 				// Save the block_sums (utxo_sum, kernel_sum) to the db for use later.
 				batch.save_block_sums(
@@ -1231,7 +1271,7 @@ impl Chain {
 
 		let tail = match batch.tail() {
 			Ok(tail) => tail,
-			Err(_) => Tip::from_header(&self.genesis),
+			Err(_) => Tip::from_header(&self.genesis.header),
 		};
 
 		let mut cutoff = head.height.saturating_sub(horizon);
@@ -1643,6 +1683,7 @@ fn setup_head(
 	store: &store::ChainStore,
 	header_pmmr: &mut txhashset::PMMRHandle<BlockHeader>,
 	txhashset: &mut txhashset::TxHashSet,
+	resetting_pibd: bool,
 ) -> Result<(), Error> {
 	let mut batch = store.batch()?;
 
@@ -1689,7 +1730,7 @@ fn setup_head(
 					let head = batch.get_block_header(&head.last_block_h)?;
 					let pibd_tip = store.pibd_head()?;
 					let pibd_head = batch.get_block_header(&pibd_tip.last_block_h)?;
-					if pibd_head.height > head.height {
+					if pibd_head.height > head.height && !resetting_pibd {
 						pibd_in_progress = true;
 						pibd_head
 					} else {
