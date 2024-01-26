@@ -1,0 +1,33 @@
+name: Continuous Integration
+on: [push, pull_request]
+
+jobs:
+  linux-tests:
+    name: Linux Tests
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        job_args: [servers, chain, core, keychain, pool, p2p, src, api, util, store]
+    steps:
+      - uses: actions/checkout@v3
+      - name: Test ${{ matrix.job_args }}
+        working-directory: ${{ matrix.job_args }}
+        run: cargo test --release
+
+  macos-tests:
+    name: macOS Tests
+    runs-on: macos-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+      - name: Tests
+        run: cargo test --release --all
+
+  windows-tests:
+    name: Windows Tests
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+      - name: Tests
+        run: cargo test --release --all
