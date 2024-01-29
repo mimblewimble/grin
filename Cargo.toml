@@ -24,7 +24,7 @@ blake2-rfc = "0.2"
 chrono = "0.4.11"
 clap = { version = "2.33", features = ["yaml"] }
 ctrlc = { version = "3.1", features = ["termination"] }
-cursive_table_view = "0.13.2"
+cursive_table_view = "0.14.0"
 humansize = "1.1.0"
 serde = "1"
 futures = "0.3.19"
@@ -42,7 +42,7 @@ grin_servers = { path = "./servers", version = "5.3.0-alpha.1" }
 grin_util = { path = "./util", version = "5.3.0-alpha.1" }
 
 [dependencies.cursive]
-version = "0.16"
+version = "0.20"
 default-features = false
 features = ["pancurses-backend"]
 

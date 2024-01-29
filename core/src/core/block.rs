@@ -231,7 +231,7 @@ impl Default for BlockHeader {
 		BlockHeader {
 			version: HeaderVersion(1),
 			height: 0,
-			timestamp: DateTime::<Utc>::from_utc(
+			timestamp: DateTime::from_naive_utc_and_offset(
 				NaiveDateTime::from_timestamp_opt(0, 0).unwrap(),
 				Utc,
 			),
@@ -313,7 +313,7 @@ fn read_block_header<R: Reader>(reader: &mut R) -> Result<BlockHeader, ser::Erro
 	Ok(BlockHeader {
 		version,
 		height,
-		timestamp: DateTime::<Utc>::from_utc(ts.unwrap(), Utc),
+		timestamp: DateTime::from_naive_utc_and_offset(ts.unwrap(), Utc),
 		prev_hash,
 		prev_root,
 		output_root,
@@ -667,7 +667,7 @@ impl Block {
 			return Err(Error::Other("Converting Utc::now() into timestamp".into()));
 		}
 
-		let timestamp = DateTime::<Utc>::from_utc(ts.unwrap(), Utc);
+		let timestamp = DateTime::from_naive_utc_and_offset(ts.unwrap(), Utc);
 		// Now build the block with all the above information.
 		// Note: We have not validated the block here.
 		// Caller must validate the block as necessary.

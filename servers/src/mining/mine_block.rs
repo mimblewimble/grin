@@ -172,7 +172,7 @@ fn build_block(
 	if ts.is_none() {
 		return Err(Error::General("Utc::now into timestamp".into()));
 	}
-	b.header.timestamp = DateTime::<Utc>::from_utc(ts.unwrap(), Utc);
+	b.header.timestamp = DateTime::from_naive_utc_and_offset(ts.unwrap(), Utc);
 
 	debug!(
 		"Built new block with {} inputs and {} outputs, block difficulty: {}, cumulative difficulty {}",

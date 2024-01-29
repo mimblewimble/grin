@@ -16,7 +16,7 @@
 
 use chrono::prelude::Utc;
 use cursive::direction::Orientation;
-use cursive::traits::Identifiable;
+use cursive::traits::Nameable;
 use cursive::view::View;
 use cursive::views::{LinearLayout, ResizedView, TextView};
 use cursive::Cursive;
@@ -71,8 +71,11 @@ impl TUIStatusView {
 			SyncStatus::TxHashsetDownload(stat) => {
 				if stat.total_size > 0 {
 					let percent = stat.downloaded_size * 100 / stat.total_size;
-					let start = stat.prev_update_time.timestamp_nanos();
-					let fin = Utc::now().timestamp_nanos();
+					let start = stat
+						.prev_update_time
+						.timestamp_nanos_opt()
+						.unwrap_or_default();
+					let fin = Utc::now().timestamp_nanos_opt().unwrap_or_default();
 					let dur_ms = (fin - start) as f64 * NANO_TO_MILLIS;
 
 					Cow::Owned(format!("Sync step 2/7: Downloading {}(MB) chain state for state sync: {}% at {:.1?}(kB/s)",

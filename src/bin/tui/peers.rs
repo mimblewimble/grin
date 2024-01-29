@@ -23,7 +23,7 @@ use humansize::{file_size_opts::CONVENTIONAL, FileSize};
 
 use cursive::direction::Orientation;
 use cursive::event::Key;
-use cursive::traits::{Boxable, Identifiable};
+use cursive::traits::{Nameable, Resizable};
 use cursive::view::View;
 use cursive::views::{Dialog, LinearLayout, OnEventView, ResizedView, TextView};
 use cursive::Cursive;
