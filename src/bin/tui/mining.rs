@@ -64,13 +64,14 @@ impl StratumWorkerColumn {
 
 impl TableViewItem<StratumWorkerColumn> for WorkerStats {
 	fn to_column(&self, column: StratumWorkerColumn) -> String {
-		let naive_datetime = NaiveDateTime::from_timestamp(
+		let naive_datetime = NaiveDateTime::from_timestamp_opt(
 			self.last_seen
 				.duration_since(time::UNIX_EPOCH)
 				.unwrap()
 				.as_secs() as i64,
 			0,
-		);
+		)
+		.unwrap_or_default();
 		let datetime: DateTime<Utc> = DateTime::from_utc(naive_datetime, Utc);
 
 		match column {
@@ -126,7 +127,8 @@ impl DiffColumn {
 
 impl TableViewItem<DiffColumn> for DiffBlock {
 	fn to_column(&self, column: DiffColumn) -> String {
-		let naive_datetime = NaiveDateTime::from_timestamp(self.time as i64, 0);
+		let naive_datetime =
+			NaiveDateTime::from_timestamp_opt(self.time as i64, 0).unwrap_or_default();
 		let datetime: DateTime<Utc> = DateTime::from_utc(naive_datetime, Utc);
 
 		match column {

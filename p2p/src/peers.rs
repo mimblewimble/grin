@@ -437,7 +437,7 @@ impl Peers {
 
 		// Delete defunct peers from storage
 		let _ = self.store.delete_peers(|peer| {
-			let diff = now - Utc.timestamp(peer.last_connected, 0);
+			let diff = now - Utc.timestamp_opt(peer.last_connected, 0).unwrap();
 
 			let should_remove = peer.flags == State::Defunct
 				&& diff > Duration::seconds(global::PEER_EXPIRATION_REMOVE_TIME);
