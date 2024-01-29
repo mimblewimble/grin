@@ -19,7 +19,7 @@ use std::cmp::Ordering;
 use chrono::prelude::{DateTime, NaiveDateTime, Utc};
 use cursive::direction::Orientation;
 use cursive::event::Key;
-use cursive::traits::{Boxable, Identifiable};
+use cursive::traits::{Nameable, Resizable};
 use cursive::view::View;
 use cursive::views::{
 	Button, Dialog, LinearLayout, OnEventView, Panel, ResizedView, StackView, TextView,
@@ -72,7 +72,7 @@ impl TableViewItem<StratumWorkerColumn> for WorkerStats {
 			0,
 		)
 		.unwrap_or_default();
-		let datetime: DateTime<Utc> = DateTime::from_utc(naive_datetime, Utc);
+		let datetime: DateTime<Utc> = DateTime::from_naive_utc_and_offset(naive_datetime, Utc);
 
 		match column {
 			StratumWorkerColumn::Id => self.id.clone(),
@@ -129,7 +129,7 @@ impl TableViewItem<DiffColumn> for DiffBlock {
 	fn to_column(&self, column: DiffColumn) -> String {
 		let naive_datetime =
 			NaiveDateTime::from_timestamp_opt(self.time as i64, 0).unwrap_or_default();
-		let datetime: DateTime<Utc> = DateTime::from_utc(naive_datetime, Utc);
+		let datetime: DateTime<Utc> = DateTime::from_naive_utc_and_offset(naive_datetime, Utc);
 
 		match column {
 			DiffColumn::Height => self.block_height.to_string(),

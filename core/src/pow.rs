@@ -115,8 +115,10 @@ pub fn pow_size(
 		// and if we're back where we started, update the time (changes the hash as
 		// well)
 		if bh.pow.nonce == start_nonce {
-			bh.timestamp =
-				DateTime::<Utc>::from_utc(NaiveDateTime::from_timestamp_opt(0, 0).unwrap(), Utc);
+			bh.timestamp = DateTime::from_naive_utc_and_offset(
+				NaiveDateTime::from_timestamp_opt(0, 0).unwrap(),
+				Utc,
+			);
 		}
 	}
 }
