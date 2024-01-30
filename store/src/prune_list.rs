@@ -27,7 +27,7 @@ use std::{
 	ops::Range,
 };
 
-use croaring::Bitmap;
+use croaring::{Bitmap, Portable};
 use grin_core::core::pmmr;
 
 use crate::grin_core::core::pmmr::{bintree_leftmost, bintree_postorder_height, family};
@@ -61,7 +61,7 @@ impl PruneList {
 		assert!(!bitmap.contains(0));
 		let mut prune_list = PruneList {
 			path,
-			bitmap: Bitmap::create(),
+			bitmap: Bitmap::new(),
 			shift_cache: vec![],
 			leaf_shift_cache: vec![],
 		};
@@ -76,7 +76,7 @@ impl PruneList {
 
 	/// Instatiate a new empty prune list.
 	pub fn empty() -> PruneList {
-		PruneList::new(None, Bitmap::create())
+		PruneList::new(None, Bitmap::new())
 	}
 
 	/// Open an existing prune_list or create a new one.
@@ -86,7 +86,7 @@ impl PruneList {
 		let bitmap = if file_path.exists() {
 			read_bitmap(&file_path)?
 		} else {
-			Bitmap::create()
+			Bitmap::new()
 		};
 		assert!(!bitmap.contains(0));
 
@@ -99,7 +99,7 @@ impl PruneList {
 			debug!(
 				"bitmap {} pos ({} bytes), shift_cache {}, leaf_shift_cache {}",
 				prune_list.bitmap.cardinality(),
-				prune_list.bitmap.get_serialized_size_in_bytes(),
+				prune_list.bitmap.get_serialized_size_in_bytes::<Portable>(),
 				prune_list.shift_cache.len(),
 				prune_list.leaf_shift_cache.len(),
 			);
@@ -122,7 +122,7 @@ impl PruneList {
 		// Write the updated bitmap file to disk.
 		if let Some(ref path) = self.path {
 			save_via_temp_file(path, ".tmp", |file| {
-				file.write_all(&self.bitmap.serialize())
+				file.write_all(&self.bitmap.serialize::<Portable>())
 			})?;
 		}
 
@@ -149,6 +149,13 @@ impl PruneList {
 		let idx = self.bitmap.rank(1 + pos0 as u32);
 		if idx == 0 {
 			return 0;
+		}
+		if min(idx as usize, self.shift_cache.len()) == 0 {
+			println!(
+				"idx: {}, shift_cache.len(): {}",
+				idx,
+				self.shift_cache.len()
+			);
 		}
 		self.shift_cache[min(idx as usize, self.shift_cache.len()) - 1]
 	}
@@ -265,7 +272,7 @@ impl PruneList {
 		self.shift_cache.truncate(idx as usize);
 		self.leaf_shift_cache.truncate(idx as usize);
 
-		self.bitmap.remove_range_closed(cleanup_pos1)
+		self.bitmap.remove_range(cleanup_pos1)
 	}
 
 	/// Push the node at the provided position in the prune list.

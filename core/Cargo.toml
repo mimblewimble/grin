@@ -12,7 +12,7 @@ edition = "2018"
 [dependencies]
 blake2 = { package = "blake2-rfc", version = "0.2"}
 byteorder = "1"
-croaring = "0.5.2"
+croaring = "1.0.1"
 enum_primitive = "0.1"
 lazy_static = "1"
 lru-cache = "0.1"

@@ -36,8 +36,8 @@ impl Lean {
 		let params = CuckooParams::new(edge_bits, edge_bits, 42).unwrap();
 
 		// edge bitmap, before trimming all of them are on
-		let mut edges = Bitmap::create_with_capacity(params.num_edges as u32);
-		edges.flip_inplace(0..params.num_edges);
+		let mut edges = Bitmap::with_container_capacity(params.num_edges as u32);
+		edges.flip_inplace(0u32..params.num_edges as u32);
 
 		Lean { params, edges }
 	}
@@ -65,7 +65,7 @@ impl Lean {
 	fn count_and_kill(&mut self) {
 		// on each side u or v of the bipartite graph
 		for uorv in 0..2 {
-			let mut nodes = Bitmap::create();
+			let mut nodes = Bitmap::new();
 			// increment count for each node
 			for e in self.edges.iter() {
 				let node = self.params.sipnode(e.into(), uorv).unwrap();
@@ -73,7 +73,7 @@ impl Lean {
 			}
 
 			// then kill edges with lone nodes (no neighbour at ^1)
-			let mut to_kill = Bitmap::create();
+			let mut to_kill = Bitmap::new();
 			for e in self.edges.iter() {
 				let node = self.params.sipnode(e.into(), uorv).unwrap();
 				if !nodes.contains((node ^ 1) as u32) {

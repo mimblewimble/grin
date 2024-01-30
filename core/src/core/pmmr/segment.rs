@@ -508,8 +508,8 @@ where
 
 			if let Some((p0, _)) = family_branch.next() {
 				pos0 = p0;
-				let range = (pmmr::n_leaves(1 + pmmr::bintree_leftmost(p0)) - 1)
-					..min(pmmr::n_leaves(1 + pmmr::bintree_rightmost(p0)), n_leaves);
+				let range = (pmmr::n_leaves(1 + pmmr::bintree_leftmost(p0)) - 1) as u32
+					..min(pmmr::n_leaves(1 + pmmr::bintree_rightmost(p0)), n_leaves) as u32;
 				cardinality = bitmap.range_cardinality(range);
 			} else {
 				break;

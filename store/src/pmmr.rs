@@ -238,7 +238,7 @@ impl<T: PMMRable> Backend<T> for PMMRBackend<T> {
 	}
 
 	fn reset_prune_list(&mut self) {
-		let bitmap = Bitmap::create();
+		let bitmap = Bitmap::new();
 		self.prune_list = PruneList::new(Some(self.data_dir.join(PMMR_PRUN_FILE)), bitmap);
 		if let Err(e) = self.prune_list.flush() {
 			error!("Flushing reset prune list: {}", e);
@@ -477,7 +477,7 @@ impl<T: PMMRable> PMMRBackend<T> {
 	}
 
 	fn pos_to_rm(&self, cutoff_pos: u64, rewind_rm_pos: &Bitmap) -> (Bitmap, Bitmap) {
-		let mut expanded = Bitmap::create();
+		let mut expanded = Bitmap::new();
 
 		let leaf_pos_to_rm =
 			self.leaf_set
