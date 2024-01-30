@@ -26,6 +26,8 @@ jobs:
   windows-tests:
     name: Windows Tests
     runs-on: windows-latest
+    env:
+      ROARING_ARCH: x86-64-v2
     steps:
       - name: Checkout
         uses: actions/checkout@v3

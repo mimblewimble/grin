@@ -51,6 +51,8 @@ jobs:
     windows-release:
         name: Windows Release
         runs-on: windows-latest
+        env:
+          ROARING_ARCH: x86-64-v2
         steps:
           - name: Checkout
             uses: actions/checkout@v3
