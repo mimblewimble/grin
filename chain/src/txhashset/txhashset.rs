@@ -1363,7 +1363,7 @@ impl<'a> Extension<'a> {
 	/// Once the PIBD set is downloaded, we need to ensure that the respective leaf sets
 	/// match the bitmap (particularly in the case of outputs being spent after a PIBD catch-up)
 	pub fn update_leaf_sets(&mut self, bitmap: &Bitmap) -> Result<(), Error> {
-		let flipped = bitmap.flip(0u32..bitmap.maximum().unwrap() as u32 + 1);
+		let flipped = bitmap.flip(0u32..bitmap.maximum().unwrap() + 1);
 		for spent_pmmr_index in flipped.iter() {
 			let pos0 = pmmr::insertion_to_pmmr_index(spent_pmmr_index.into());
 			self.output_pmmr.remove_from_leaf_set(pos0);
