@@ -152,9 +152,10 @@ impl PruneList {
 		}
 		if min(idx as usize, self.shift_cache.len()) == 0 {
 			println!(
-				"idx: {}, shift_cache.len(): {}",
+				"idx: {}, shift_cache.len(): {}, pos0: {}",
 				idx,
-				self.shift_cache.len()
+				self.shift_cache.len(),
+				pos0
 			);
 		}
 		self.shift_cache[min(idx as usize, self.shift_cache.len()) - 1]
