@@ -19,7 +19,7 @@ fn test_roundtrip(entries: usize) {
 	};
 	let block = rng.gen_range(2, 64);
 
-	let mut bitmap = Bitmap::create();
+	let mut bitmap = Bitmap::new();
 	let block_size = 1 << 16;
 	let offset = (1 << identifier.height) * 1024 * identifier.idx + block_size * block;
 	let mut count = 0;

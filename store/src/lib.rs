@@ -118,5 +118,5 @@ pub fn read_bitmap<P: AsRef<Path>>(file_path: P) -> io::Result<Bitmap> {
 	let f_md = bitmap_file.metadata()?;
 	let mut buffer = Vec::with_capacity(f_md.len() as usize);
 	bitmap_file.read_to_end(&mut buffer)?;
-	Ok(Bitmap::deserialize(&buffer))
+	Ok(Bitmap::deserialize::<croaring::Portable>(&buffer))
 }

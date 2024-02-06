@@ -1079,7 +1079,7 @@ impl<'a> HeaderExtension<'a> {
 
 		let header_pos = 1 + pmmr::insertion_to_pmmr_index(header.height);
 		self.pmmr
-			.rewind(header_pos, &Bitmap::create())
+			.rewind(header_pos, &Bitmap::new())
 			.map_err(&Error::TxHashSetErr)?;
 
 		// Update our head to reflect the header we rewound to.
@@ -1178,7 +1178,7 @@ impl<'a> Extension<'a> {
 			bitmap_cache: trees
 				.bitmap_accumulator
 				.as_bitmap()
-				.unwrap_or(Bitmap::create()),
+				.unwrap_or(Bitmap::new()),
 			rollback: false,
 		}
 	}
@@ -1302,10 +1302,7 @@ impl<'a> Extension<'a> {
 	/// Sets the bitmap accumulator (as received during PIBD sync)
 	pub fn set_bitmap_accumulator(&mut self, accumulator: BitmapAccumulator) {
 		self.bitmap_accumulator = accumulator;
-		self.bitmap_cache = self
-			.bitmap_accumulator
-			.as_bitmap()
-			.unwrap_or(Bitmap::create());
+		self.bitmap_cache = self.bitmap_accumulator.as_bitmap().unwrap_or(Bitmap::new());
 	}
 
 	// Prune output and rangeproof PMMRs based on provided pos.
@@ -1366,7 +1363,7 @@ impl<'a> Extension<'a> {
 	/// Once the PIBD set is downloaded, we need to ensure that the respective leaf sets
 	/// match the bitmap (particularly in the case of outputs being spent after a PIBD catch-up)
 	pub fn update_leaf_sets(&mut self, bitmap: &Bitmap) -> Result<(), Error> {
-		let flipped = bitmap.flip(0..bitmap.maximum().unwrap() as u64 + 1);
+		let flipped = bitmap.flip(0u32..bitmap.maximum().unwrap() + 1);
 		for spent_pmmr_index in flipped.iter() {
 			let pos0 = pmmr::insertion_to_pmmr_index(spent_pmmr_index.into());
 			self.output_pmmr.remove_from_leaf_set(pos0);
@@ -1420,7 +1417,7 @@ impl<'a> Extension<'a> {
 							// All initial outputs are spent up to this hash,
 							// Roll back the genesis output
 							self.output_pmmr
-								.rewind(0, &Bitmap::create())
+								.rewind(0, &Bitmap::new())
 								.map_err(&Error::TxHashSetErr)?;
 						}
 						self.output_pmmr
@@ -1464,7 +1461,7 @@ impl<'a> Extension<'a> {
 							// All initial outputs are spent up to this hash,
 							// Roll back the genesis output
 							self.rproof_pmmr
-								.rewind(0, &Bitmap::create())
+								.rewind(0, &Bitmap::new())
 								.map_err(&Error::TxHashSetErr)?;
 						}
 						self.rproof_pmmr
@@ -1715,7 +1712,7 @@ impl<'a> Extension<'a> {
 			.rewind(output_pos, &bitmap)
 			.map_err(&Error::TxHashSetErr)?;
 		self.kernel_pmmr
-			.rewind(kernel_pos, &Bitmap::create())
+			.rewind(kernel_pos, &Bitmap::new())
 			.map_err(&Error::TxHashSetErr)?;
 		Ok(())
 	}
@@ -2197,7 +2194,7 @@ fn input_pos_to_rewind(
 	head_header: &BlockHeader,
 	batch: &Batch<'_>,
 ) -> Result<Bitmap, Error> {
-	let mut bitmap = Bitmap::create();
+	let mut bitmap = Bitmap::new();
 	let mut current = head_header.clone();
 	while current.height > block_header.height {
 		if let Ok(block_bitmap) = batch.get_block_input_bitmap(&current.hash()) {

@@ -103,7 +103,7 @@ fn test_pibd_chain_validation_impl(is_test_chain: bool, src_root_dir: &str) {
 
 		let mut bitmap_accumulator = BitmapAccumulator::new();
 		// Raw bitmap for validation
-		let mut bitmap = Bitmap::create();
+		let mut bitmap = Bitmap::new();
 		let mut chunk_count = 0;
 
 		for sid in identifier_iter {

@@ -155,7 +155,7 @@ impl BitmapAccumulator {
 		let last_pos = self.backend.size();
 		let mut pmmr = PMMR::at(&mut self.backend, last_pos);
 		let rewind_pos = pmmr::insertion_to_pmmr_index(chunk_idx);
-		pmmr.rewind(rewind_pos, &Bitmap::create())
+		pmmr.rewind(rewind_pos, &Bitmap::new())
 			.map_err(Error::Other)?;
 		Ok(())
 	}
@@ -193,7 +193,7 @@ impl BitmapAccumulator {
 
 	/// Return a raw in-memory bitmap of this accumulator
 	pub fn as_bitmap(&self) -> Result<Bitmap, Error> {
-		let mut bitmap = Bitmap::create();
+		let mut bitmap = Bitmap::new();
 		for (chunk_index, chunk_pos) in self.backend.leaf_pos_iter().enumerate() {
 			//TODO: Unwrap
 			let chunk = self.backend.get_data(chunk_pos as u64).unwrap();

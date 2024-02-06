@@ -56,7 +56,7 @@ impl Graph {
 			proof_size,
 			links: vec![],
 			adj_list: vec![],
-			visited: Bitmap::create(),
+			visited: Bitmap::new(),
 			solutions: vec![],
 			nil: u64::max_value(),
 		})
@@ -67,7 +67,7 @@ impl Graph {
 		self.links = Vec::with_capacity(2 * self.max_nodes as usize);
 		self.adj_list = vec![u64::max_value(); 2 * self.max_nodes as usize];
 		self.solutions = vec![Proof::zero(self.proof_size); 1];
-		self.visited = Bitmap::create();
+		self.visited = Bitmap::new();
 		Ok(())
 	}
 
