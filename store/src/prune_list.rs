@@ -150,14 +150,14 @@ impl PruneList {
 		if idx == 0 {
 			return 0;
 		}
-		if min(idx as usize, self.shift_cache.len()) == 0 {
-			println!(
-				"idx: {}, shift_cache.len(): {}, pos0: {}",
-				idx,
-				self.shift_cache.len(),
-				pos0
-			);
-		}
+		//if min(idx as usize, self.shift_cache.len()) == 0 {
+		println!(
+			"idx: {}, shift_cache.len(): {}, pos0: {}",
+			idx,
+			self.shift_cache.len(),
+			pos0
+		);
+		//}
 		self.shift_cache[min(idx as usize, self.shift_cache.len()) - 1]
 	}
 
@@ -271,6 +271,11 @@ impl PruneList {
 		// Find point where we can truncate based on bitmap "rank" (index) of pos to the left of subtree.
 		let idx = self.bitmap.rank(lc0);
 		self.shift_cache.truncate(idx as usize);
+		println!(
+			"Post truncate shift cache length: {}",
+			self.shift_cache.len()
+		);
+		println!("Cleanup pos 1: {:?}", cleanup_pos1);
 		self.leaf_shift_cache.truncate(idx as usize);
 
 		self.bitmap.remove_range(cleanup_pos1)
