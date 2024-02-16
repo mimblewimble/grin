@@ -15,7 +15,7 @@
 //! Version and build info
 
 use cursive::direction::Orientation;
-use cursive::traits::Identifiable;
+use cursive::traits::Nameable;
 use cursive::view::View;
 use cursive::views::{LinearLayout, ResizedView, TextView};
 
