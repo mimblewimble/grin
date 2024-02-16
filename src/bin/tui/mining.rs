@@ -19,7 +19,7 @@ use std::cmp::Ordering;
 use chrono::prelude::{DateTime, NaiveDateTime, Utc};
 use cursive::direction::Orientation;
 use cursive::event::Key;
-use cursive::traits::{Boxable, Identifiable};
+use cursive::traits::{Nameable, Resizable};
 use cursive::view::View;
 use cursive::views::{
 	Button, Dialog, LinearLayout, OnEventView, Panel, ResizedView, StackView, TextView,
