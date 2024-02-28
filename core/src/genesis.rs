@@ -17,7 +17,7 @@
 // required for genesis replacement
 //! #![allow(unused_imports)]
 
-#![cfg_attr(feature = "cargo-clippy", allow(clippy::unreadable_literal))]
+#![allow(clippy::unreadable_literal)]
 
 use crate::core;
 use crate::core::hash::Hash;
