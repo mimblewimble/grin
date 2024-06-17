@@ -28,5 +28,5 @@ zeroize = { version = "1.1", features =["zeroize_derive"] }
 #git = "https://github.com/mimblewimble/rust-secp256k1-zkp"
 #tag = "grin_integration_29"
 #path = "../../rust-secp256k1-zkp"
-version = "0.7.13"
+version = "0.7.14"
 features = ["bullet-proof-sizing"]
