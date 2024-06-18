@@ -236,7 +236,9 @@ where
 	/// * `start_height` - start height to start the lookup.
 	/// * `end_height` - end height to stop the lookup.
 	/// * `include_proof` - whether or not to include the range proof in the response.
-	/// * `include_merkle_proof` - whether or not to include the merkle proof in the response.
+	/// * `include_merkle_proof` (currently ignored) - whether or not to include the merkle proof in the response.
+	///    removed as it is not used and expensive to generate for historical blocks. See comments below to
+	///    re-enable this feature at compile-time.
 	///
 	/// # Returns
 	/// * Result Containing:
@@ -250,7 +252,7 @@ where
 		start_height: Option<u64>,
 		end_height: Option<u64>,
 		include_proof: Option<bool>,
-		include_merkle_proof: Option<bool>,
+		_include_merkle_proof: Option<bool>,
 	) -> Result<Vec<OutputPrintable>, Error> {
 		let output_handler = OutputHandler {
 			chain: self.chain.clone(),
@@ -260,7 +262,7 @@ where
 			start_height,
 			end_height,
 			include_proof,
-			include_merkle_proof,
+			Some(false), // To re-enable merkle proof generation, change to _include_merkle_proof
 		)
 	}
 
