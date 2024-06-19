@@ -92,6 +92,7 @@ impl HTTPNodeClient {
 		t.reset().unwrap();
 		match self.send_json_request::<Status>("get_status", &serde_json::Value::Null) {
 			Ok(status) => {
+				writeln!(e, "Chain type: {}", status.chain).unwrap();
 				writeln!(e, "Protocol version: {:?}", status.protocol_version).unwrap();
 				writeln!(e, "User agent: {}", status.user_agent).unwrap();
 				writeln!(e, "Connections: {}", status.connections).unwrap();
