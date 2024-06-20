@@ -1,6 +1,6 @@
 [package]
 name = "grin_pool"
-version = "5.3.1"
+version = "5.3.2"
 authors = ["Grin Developers <mimblewimble@lists.launchpad.net>"]
 description = "Chain implementation for grin, a simple, private and scalable cryptocurrency implementation based on the Mimblewimble chain format."
 license = "Apache-2.0"
@@ -18,9 +18,9 @@ thiserror = "1"
 log = "0.4"
 chrono = "0.4.11"
 
-grin_core = { path = "../core", version = "5.3.1" }
-grin_keychain = { path = "../keychain", version = "5.3.1" }
-grin_util = { path = "../util", version = "5.3.1" }
+grin_core = { path = "../core", version = "5.3.2" }
+grin_keychain = { path = "../keychain", version = "5.3.2" }
+grin_util = { path = "../util", version = "5.3.2" }
 
 [dev-dependencies]
-grin_chain = { path = "../chain", version = "5.3.1" }
+grin_chain = { path = "../chain", version = "5.3.2" }
