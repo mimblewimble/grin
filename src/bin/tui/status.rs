@@ -81,7 +81,7 @@ impl TUIStatusView {
 					Cow::Owned(format!("Sync step 2/7: Downloading {}(MB) chain state for state sync: {}% at {:.1?}(kB/s)",
 							stat.total_size / 1_000_000,
 							percent,
-							if dur_ms > 1.0f64 { stat.downloaded_size.saturating_sub(stat.prev_downloaded_size) as f64 / dur_ms as f64 } else { 0f64 },
+							if dur_ms > 1.0f64 { stat.downloaded_size.saturating_sub(stat.prev_downloaded_size) as f64 / dur_ms } else { 0f64 },
 					))
 				} else {
 					let start = stat.start_time.timestamp_millis();
