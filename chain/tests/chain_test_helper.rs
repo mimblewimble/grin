@@ -29,6 +29,7 @@ use grin_keychain as keychain;
 use std::fs;
 use std::sync::Arc;
 
+#[cfg(test)]
 pub fn clean_output_dir(dir_name: &str) {
 	let _ = fs::remove_dir_all(dir_name);
 }
