@@ -16,7 +16,7 @@
 
 use std::cmp::Ordering;
 
-use chrono::prelude::{DateTime, NaiveDateTime, Utc};
+use chrono::prelude::{DateTime, Utc};
 use cursive::direction::Orientation;
 use cursive::event::Key;
 use cursive::traits::{Nameable, Resizable};
@@ -64,14 +64,15 @@ impl StratumWorkerColumn {
 
 impl TableViewItem<StratumWorkerColumn> for WorkerStats {
 	fn to_column(&self, column: StratumWorkerColumn) -> String {
-		let naive_datetime = NaiveDateTime::from_timestamp_opt(
+		let naive_datetime = DateTime::<Utc>::from_timestamp(
 			self.last_seen
 				.duration_since(time::UNIX_EPOCH)
 				.unwrap()
 				.as_secs() as i64,
 			0,
 		)
-		.unwrap_or_default();
+		.unwrap_or_default()
+		.naive_utc();
 		let datetime: DateTime<Utc> = DateTime::from_naive_utc_and_offset(naive_datetime, Utc);
 
 		match column {
@@ -127,8 +128,9 @@ impl DiffColumn {
 
 impl TableViewItem<DiffColumn> for DiffBlock {
 	fn to_column(&self, column: DiffColumn) -> String {
-		let naive_datetime =
-			NaiveDateTime::from_timestamp_opt(self.time as i64, 0).unwrap_or_default();
+		let naive_datetime = DateTime::<Utc>::from_timestamp(self.time as i64, 0)
+			.unwrap_or_default()
+			.naive_utc();
 		let datetime: DateTime<Utc> = DateTime::from_naive_utc_and_offset(naive_datetime, Utc);
 
 		match column {

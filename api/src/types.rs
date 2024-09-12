@@ -16,7 +16,7 @@ use crate::chain;
 use crate::core::core::hash::Hashed;
 use crate::core::core::merkle_proof::MerkleProof;
 use crate::core::core::{FeeFields, KernelFeatures, TxKernel};
-use crate::core::{core, ser};
+use crate::core::{core, global, ser};
 use crate::p2p;
 use crate::util::secp::pedersen;
 use crate::util::{self, ToHex};
@@ -68,6 +68,8 @@ impl Tip {
 /// Status page containing different server information
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Status {
+	// The chain type
+	pub chain: String,
 	// The protocol version
 	pub protocol_version: u32,
 	// The user user agent
@@ -91,6 +93,7 @@ impl Status {
 		sync_info: Option<serde_json::Value>,
 	) -> Status {
 		Status {
+			chain: global::get_chain_type().shortname(),
 			protocol_version: ser::ProtocolVersion::local().into(),
 			user_agent: p2p::msg::USER_AGENT.to_string(),
 			connections: connections,

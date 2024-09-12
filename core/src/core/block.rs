@@ -27,7 +27,7 @@ use crate::pow::{verify_size, Difficulty, Proof, ProofOfWork};
 use crate::ser::{
 	self, deserialize_default, serialize_default, PMMRable, Readable, Reader, Writeable, Writer,
 };
-use chrono::prelude::{DateTime, NaiveDateTime, Utc};
+use chrono::prelude::{DateTime, Utc};
 use chrono::Duration;
 use keychain::{self, BlindingFactor};
 use std::convert::TryInto;
@@ -232,7 +232,7 @@ impl Default for BlockHeader {
 			version: HeaderVersion(1),
 			height: 0,
 			timestamp: DateTime::from_naive_utc_and_offset(
-				NaiveDateTime::from_timestamp_opt(0, 0).unwrap(),
+				DateTime::<Utc>::from_timestamp(0, 0).unwrap().naive_utc(),
 				Utc,
 			),
 			prev_hash: ZERO_HASH,
@@ -295,17 +295,19 @@ fn read_block_header<R: Reader>(reader: &mut R) -> Result<BlockHeader, ser::Erro
 		> chrono::NaiveDate::MAX
 			.and_hms_opt(0, 0, 0)
 			.unwrap()
+			.and_utc()
 			.timestamp()
 		|| timestamp
 			< chrono::NaiveDate::MIN
 				.and_hms_opt(0, 0, 0)
 				.unwrap()
+				.and_utc()
 				.timestamp()
 	{
 		return Err(ser::Error::CorruptedData);
 	}
 
-	let ts = NaiveDateTime::from_timestamp_opt(timestamp, 0);
+	let ts = DateTime::<Utc>::from_timestamp(timestamp, 0);
 	if ts.is_none() {
 		return Err(ser::Error::CorruptedData);
 	}
@@ -313,7 +315,7 @@ fn read_block_header<R: Reader>(reader: &mut R) -> Result<BlockHeader, ser::Erro
 	Ok(BlockHeader {
 		version,
 		height,
-		timestamp: DateTime::from_naive_utc_and_offset(ts.unwrap(), Utc),
+		timestamp: DateTime::from_naive_utc_and_offset(ts.unwrap().naive_utc(), Utc),
 		prev_hash,
 		prev_root,
 		output_root,
@@ -662,12 +664,12 @@ impl Block {
 
 		let now = Utc::now().timestamp();
 
-		let ts = NaiveDateTime::from_timestamp_opt(now, 0);
+		let ts = DateTime::<Utc>::from_timestamp(now, 0);
 		if ts.is_none() {
 			return Err(Error::Other("Converting Utc::now() into timestamp".into()));
 		}
 
-		let timestamp = DateTime::from_naive_utc_and_offset(ts.unwrap(), Utc);
+		let timestamp = DateTime::from_naive_utc_and_offset(ts.unwrap().naive_utc(), Utc);
 		// Now build the block with all the above information.
 		// Note: We have not validated the block here.
 		// Caller must validate the block as necessary.

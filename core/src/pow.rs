@@ -53,7 +53,7 @@ pub use crate::pow::cuckaroom::{new_cuckaroom_ctx, CuckaroomContext};
 pub use crate::pow::cuckarooz::{new_cuckarooz_ctx, CuckaroozContext};
 pub use crate::pow::cuckatoo::{new_cuckatoo_ctx, CuckatooContext};
 pub use crate::pow::error::Error;
-use chrono::prelude::{DateTime, NaiveDateTime, Utc};
+use chrono::prelude::{DateTime, Utc};
 
 const MAX_SOLS: u32 = 10;
 
@@ -116,7 +116,7 @@ pub fn pow_size(
 		// well)
 		if bh.pow.nonce == start_nonce {
 			bh.timestamp = DateTime::from_naive_utc_and_offset(
-				NaiveDateTime::from_timestamp_opt(0, 0).unwrap(),
+				DateTime::<Utc>::from_timestamp(0, 0).unwrap().naive_utc(),
 				Utc,
 			);
 		}

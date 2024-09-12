@@ -32,7 +32,6 @@ use log4rs::encode::pattern::PatternEncoder;
 use log4rs::encode::writer::simple::SimpleWriter;
 use log4rs::encode::Encode;
 use log4rs::filter::{threshold::ThresholdFilter, Filter, Response};
-use std::error::Error;
 use std::sync::mpsc;
 use std::sync::mpsc::SyncSender;
 
@@ -123,7 +122,7 @@ struct ChannelAppender {
 }
 
 impl Append for ChannelAppender {
-	fn append(&self, record: &Record) -> Result<(), Box<dyn Error + Sync + Send>> {
+	fn append(&self, record: &Record) -> Result<(), anyhow::Error> {
 		let mut writer = SimpleWriter(Vec::new());
 		self.encoder.encode(&mut writer, record)?;
 
