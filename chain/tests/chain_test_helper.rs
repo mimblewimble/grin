@@ -11,7 +11,6 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-#![allow(dead_code)]
 
 use self::chain::types::NoopAdapter;
 use self::chain::types::Options;
@@ -30,6 +29,7 @@ use grin_keychain as keychain;
 use std::fs;
 use std::sync::Arc;
 
+#[allow(dead_code)]
 #[cfg(test)]
 pub fn clean_output_dir(dir_name: &str) {
 	let _ = fs::remove_dir_all(dir_name);
