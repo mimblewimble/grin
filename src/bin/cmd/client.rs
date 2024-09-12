@@ -63,7 +63,7 @@ impl HTTPNodeClient {
 			Err(e) => {
 				let report = format!("Error calling {}: {}", method, e);
 				error!("{}", report);
-				Err(Error::RPCError(report))
+				Err(Error::RPCError)
 			}
 			Ok(inner) => match inner.clone().into_result() {
 				Ok(r) => Ok(r),
@@ -71,7 +71,7 @@ impl HTTPNodeClient {
 					error!("{:?}", inner);
 					let report = format!("Unable to parse response for {}: {}", method, e);
 					error!("{}", report);
-					Err(Error::RPCError(report))
+					Err(Error::RPCError)
 				}
 			},
 		}
@@ -251,5 +251,5 @@ pub fn client_command(client_args: &ArgMatches<'_>, global_config: GlobalConfig)
 #[derive(Debug)]
 enum Error {
 	/// RPC Error
-	RPCError(String),
+	RPCError,
 }
