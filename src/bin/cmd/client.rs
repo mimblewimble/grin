@@ -63,7 +63,7 @@ impl HTTPNodeClient {
 			Err(e) => {
 				let report = format!("Error calling {}: {}", method, e);
 				error!("{}", report);
-				Err(Error::RPCError(report))
+				Err(Error::RPCError)
 			}
 			Ok(inner) => match inner.clone().into_result() {
 				Ok(r) => Ok(r),
@@ -71,7 +71,7 @@ impl HTTPNodeClient {
 					error!("{:?}", inner);
 					let report = format!("Unable to parse response for {}: {}", method, e);
 					error!("{}", report);
-					Err(Error::RPCError(report))
+					Err(Error::RPCError)
 				}
 			},
 		}
@@ -92,6 +92,7 @@ impl HTTPNodeClient {
 		t.reset().unwrap();
 		match self.send_json_request::<Status>("get_status", &serde_json::Value::Null) {
 			Ok(status) => {
+				writeln!(e, "Chain type: {}", status.chain).unwrap();
 				writeln!(e, "Protocol version: {:?}", status.protocol_version).unwrap();
 				writeln!(e, "User agent: {}", status.user_agent).unwrap();
 				writeln!(e, "Connections: {}", status.connections).unwrap();
@@ -251,5 +252,5 @@ pub fn client_command(client_args: &ArgMatches<'_>, global_config: GlobalConfig)
 #[derive(Debug)]
 enum Error {
 	/// RPC Error
-	RPCError(String),
+	RPCError,
 }

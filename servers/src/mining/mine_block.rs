@@ -15,7 +15,7 @@
 //! Build a block to mine: gathers transactions from the pool, assembles
 //! them into a block and returns it.
 
-use chrono::prelude::{DateTime, NaiveDateTime, Utc};
+use chrono::prelude::{DateTime, Utc};
 use rand::{thread_rng, Rng};
 use serde_json::{json, Value};
 use std::sync::Arc;
@@ -168,11 +168,11 @@ fn build_block(
 
 	b.header.pow.nonce = thread_rng().gen();
 	b.header.pow.secondary_scaling = difficulty.secondary_scaling;
-	let ts = NaiveDateTime::from_timestamp_opt(now_sec, 0);
+	let ts = DateTime::<Utc>::from_timestamp(now_sec, 0);
 	if ts.is_none() {
 		return Err(Error::General("Utc::now into timestamp".into()));
 	}
-	b.header.timestamp = DateTime::from_naive_utc_and_offset(ts.unwrap(), Utc);
+	b.header.timestamp = DateTime::from_naive_utc_and_offset(ts.unwrap().naive_utc(), Utc);
 
 	debug!(
 		"Built new block with {} inputs and {} outputs, block difficulty: {}, cumulative difficulty {}",

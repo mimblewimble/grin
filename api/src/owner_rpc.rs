@@ -49,6 +49,7 @@ pub trait OwnerRpc: Sync + Send {
 		"jsonrpc": "2.0",
 		"result": {
 			"Ok": {
+			"chain": "main",
 			"protocol_version": "2",
 			"user_agent": "MW/Grin 2.x.x",
 			"connections": "8",

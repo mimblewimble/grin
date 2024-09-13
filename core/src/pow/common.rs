@@ -82,7 +82,6 @@ pub fn create_siphash_keys(header: &[u8]) -> Result<[u64; 4], Error> {
 /// Utility struct to calculate commonly used Cuckoo parameters calculated
 /// from header, nonce, edge_bits, etc.
 pub struct CuckooParams {
-	pub edge_bits: u8,
 	pub proof_size: usize,
 	pub num_edges: u64,
 	pub siphash_keys: [u64; 4],
@@ -98,7 +97,6 @@ impl CuckooParams {
 		let num_nodes = 1u64 << node_bits;
 		let node_mask = num_nodes - 1;
 		Ok(CuckooParams {
-			edge_bits,
 			proof_size,
 			num_edges,
 			siphash_keys: [0; 4],
