@@ -30,8 +30,6 @@
 //! Modified from above to integrate into grin and allow for different
 //! hashing algorithms if desired
 
-#[cfg(feature = "serde")]
-use serde;
 use std::default::Default;
 use std::io::Cursor;
 use std::str::FromStr;
@@ -273,26 +271,6 @@ impl fmt::Display for ChildNumber {
 			ChildNumber::Hardened { index } => write!(f, "{}'", index),
 			ChildNumber::Normal { index } => write!(f, "{}", index),
 		}
-	}
-}
-
-#[cfg(feature = "serde")]
-impl<'de> serde::Deserialize<'de> for ChildNumber {
-	fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-	where
-		D: serde::Deserializer<'de>,
-	{
-		u32::deserialize(deserializer).map(ChildNumber::from)
-	}
-}
-
-#[cfg(feature = "serde")]
-impl serde::Serialize for ChildNumber {
-	fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-	where
-		S: serde::Serializer,
-	{
-		u32::from(*self).serialize(serializer)
 	}
 }
 
@@ -874,16 +852,5 @@ mod tests {
 		test_path(&secp, &seed, &[ChildNumber::from_hardened_idx(0)],
                   "xprv9uPDJpEQgRQfDcW7BkF7eTya6RPxXeJCqCJGHuCJ4GiRVLzkTXBAJMu2qaMWPrS7AANYqdq6vcBcBUdJCVVFceUvJFjaPdGZ2y9WACViL4L",
                   "xpub68NZiKmJWnxxS6aaHmn81bvJeTESw724CRDs6HbuccFQN9Ku14VQrADWgqbhhTHBaohPX4CjNLf9fq9MYo6oDaPPLPxSb7gwQN3ih19Zm4Y");
-	}
-
-	#[test]
-	#[cfg(all(feature = "serde", feature = "strason"))]
-	pub fn encode_decode_childnumber() {
-		serde_round_trip!(ChildNumber::from_normal_idx(0));
-		serde_round_trip!(ChildNumber::from_normal_idx(1));
-		serde_round_trip!(ChildNumber::from_normal_idx((1 << 31) - 1));
-		serde_round_trip!(ChildNumber::from_hardened_idx(0));
-		serde_round_trip!(ChildNumber::from_hardened_idx(1));
-		serde_round_trip!(ChildNumber::from_hardened_idx((1 << 31) - 1));
 	}
 }
