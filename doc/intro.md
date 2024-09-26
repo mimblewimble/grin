@@ -252,7 +252,9 @@ which can be signed by the attacker because Carol's blinding factor cancels out 
 
 This output (`(113 + 99)*G + 2*H`) requires that both the numbers 113 and 99 are known in order to be spent; the attacker
 would thus have successfully locked Carol's UTXO. The requirement for a range proof for the blinding factor prevents this
-because the attacker doesn't know the number 113 and thus neither (113 + 99). A more detailed description of range proofs is further detailed in the [range proof paper](https://eprint.iacr.org/2017/1066.pdf).
+because the attacker doesn't know the number 113 and thus neither (113 + 99); without knowing the private key (113 + 99)
+the attacker can not produce a valid range proof for the public key `(113 + 99)*G`.
+A more detailed description of range proofs is further detailed in the [range proof paper](https://eprint.iacr.org/2017/1066.pdf).
 
 #### Putting It All Together
 
