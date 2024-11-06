@@ -10,7 +10,7 @@ workspace = ".."
 edition = "2018"
 
 [dependencies]
-hyper = "0.13"
+hyper = "0.14"
 hyper-rustls = "0.20"
 fs2 = "0.4"
 futures = "0.3"
