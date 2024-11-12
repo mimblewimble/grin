@@ -31,6 +31,8 @@ jobs:
         name: macOS Release - x86_64
         runs-on: macos-latest
         steps:
+          - name: Install Rust Target
+            run: rustup target add x86_64-apple-darwin
           - name: Checkout
             uses: actions/checkout@v3
           - name: Build
