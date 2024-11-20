@@ -952,8 +952,10 @@ dependencies = [
  "humansize",
  "log",
  "serde",
+ "serde_derive",
  "serde_json",
  "term",
+ "thiserror",
 ]
 
 [[package]]

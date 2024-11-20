@@ -22,11 +22,13 @@ path = "src/bin/grin.rs"
 [dependencies]
 blake2-rfc = "0.2"
 chrono = "0.4.11"
+thiserror = "1"
 clap = { version = "2.33", features = ["yaml"] }
 ctrlc = { version = "3.1", features = ["termination"] }
 cursive_table_view = "0.15.0"
 humansize = "1.1.0"
 serde = "1"
+serde_derive = "1"
 futures = "0.3.19"
 serde_json = "1"
 log = "0.4"
@@ -40,6 +42,7 @@ grin_keychain = { path = "./keychain", version = "5.4.0-alpha.0" }
 grin_p2p = { path = "./p2p", version = "5.4.0-alpha.0" }
 grin_servers = { path = "./servers", version = "5.4.0-alpha.0" }
 grin_util = { path = "./util", version = "5.4.0-alpha.0" }
+grin_store = { path = "./store", version = "5.4.0-alpha.0" }
 
 [dependencies.cursive]
 version = "0.21"

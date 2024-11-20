@@ -34,7 +34,12 @@ use grin_util as util;
 use grin_util::logger::LogEntry;
 use std::sync::mpsc;
 
+#[macro_use]
+extern crate serde_derive;
+extern crate serde_json;
+
 mod cmd;
+mod tools;
 pub mod tui;
 
 // include build information
