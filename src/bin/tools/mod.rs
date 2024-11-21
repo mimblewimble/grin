@@ -14,3 +14,5 @@
 
 /// Grin tools
 mod seedcheck;
+
+pub use seedcheck::check_seeds;

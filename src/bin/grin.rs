@@ -202,6 +202,20 @@ fn real_main() -> i32 {
 			}
 		}
 
+		// seedcheck command
+		("seedcheck", Some(seedcheck_args)) => {
+			let is_testnet = seedcheck_args.is_present("testnet");
+			let results = tools::check_seeds(is_testnet);
+			println!(
+				"Generating seed check report, testnet={}. (This make take a few minutes)",
+				is_testnet
+			);
+			for result in results {
+				println!("{}", serde_json::to_string_pretty(&result).unwrap());
+			}
+			0
+		}
+
 		// If nothing is specified, try to just use the config file instead
 		// this could possibly become the way to configure most things
 		// with most command line options being phased out
