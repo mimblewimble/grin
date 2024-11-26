@@ -99,3 +99,7 @@ subcommands:
               help: Run seed check against Testnet (as opposed to Mainnet)
               long: testnet
               takes_value: false
+          - output:
+              help: Output file to write the results to
+              long: output
+              takes_value: true

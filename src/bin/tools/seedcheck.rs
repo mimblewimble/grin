@@ -20,6 +20,7 @@ use grin_core::pow::Difficulty;
 use grin_core::{genesis, global};
 use grin_p2p as p2p;
 use grin_servers::{resolve_dns_to_addrs, MAINNET_DNS_SEEDS, TESTNET_DNS_SEEDS};
+use std::fs;
 use std::net::{SocketAddr, TcpStream};
 use std::time::Duration;
 
@@ -100,6 +101,14 @@ pub fn check_seeds(is_testnet: bool) -> Vec<SeedCheckResult> {
 		global::set_local_chain_type(global::ChainTypes::Testnet);
 	}
 
+	let config = p2p::types::P2PConfig::default();
+	let adapter = Arc::new(p2p::DummyAdapter {});
+	let peers = Arc::new(p2p::Peers::new(
+		p2p::store::PeerStore::new(".__grintmp__/peer_store_root").unwrap(),
+		adapter,
+		config.clone(),
+	));
+
 	for s in default_seeds.iter() {
 		info!("Checking seed health for {}", s);
 		let mut seed_result = SeedCheckResult::default();
@@ -113,7 +122,7 @@ pub fn check_seeds(is_testnet: bool) -> Vec<SeedCheckResult> {
 		seed_result.dns_resolutions_found = true;
 		// Check backwards, last contains the latest (at least on my machine!)
 		for r in resolved_dns_entries.iter().rev() {
-			let res = check_seed_health(*r, is_testnet);
+			let res = check_seed_health(*r, is_testnet, &peers);
 			if let Ok(p) = res {
 				info!(
 					"SUCCESS - Performed Handshake with seed for {} at {}. {} - {:?}",
@@ -150,18 +159,20 @@ pub fn check_seeds(is_testnet: bool) -> Vec<SeedCheckResult> {
 
 		result.push(seed_result);
 	}
+
+	// Clean up temporary files
+	fs::remove_dir_all(".__grintmp__").expect("Unable to delete temporary files");
+
 	result
 }
 
-fn check_seed_health(addr: p2p::PeerAddr, is_testnet: bool) -> Result<p2p::Peer, SeedCheckError> {
-	let capabilities = p2p::types::Capabilities::default();
+fn check_seed_health(
+	addr: p2p::PeerAddr,
+	is_testnet: bool,
+	peers: &Arc<p2p::Peers>,
+) -> Result<p2p::Peer, SeedCheckError> {
 	let config = p2p::types::P2PConfig::default();
-	let adapter = Arc::new(p2p::DummyAdapter {});
-	let peers = Arc::new(p2p::Peers::new(
-		p2p::store::PeerStore::new("peer_store_root")?,
-		adapter,
-		config.clone(),
-	));
+	let capabilities = p2p::types::Capabilities::default();
 	let genesis_hash = match is_testnet {
 		true => genesis::genesis_test().hash(),
 		false => genesis::genesis_main().hash(),
@@ -180,7 +191,7 @@ fn check_seed_health(addr: p2p::PeerAddr, is_testnet: bool) -> Result<p2p::Peer,
 				total_diff,
 				p2p::PeerAddr(addr),
 				&handshake,
-				peers,
+				peers.clone(),
 			)?;
 			Ok(peer)
 		}

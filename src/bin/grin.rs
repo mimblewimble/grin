@@ -21,6 +21,7 @@ extern crate clap;
 extern crate log;
 use crate::config::config::SERVER_CONFIG_FILE_NAME;
 use crate::core::global;
+use crate::tools::check_seeds;
 use crate::util::init_logger;
 use clap::App;
 use futures::channel::oneshot;
@@ -32,6 +33,8 @@ use grin_p2p as p2p;
 use grin_servers as servers;
 use grin_util as util;
 use grin_util::logger::LogEntry;
+use std::fs::File;
+use std::io::Write;
 use std::sync::mpsc;
 
 #[macro_use]
@@ -205,13 +208,16 @@ fn real_main() -> i32 {
 		// seedcheck command
 		("seedcheck", Some(seedcheck_args)) => {
 			let is_testnet = seedcheck_args.is_present("testnet");
-			let results = tools::check_seeds(is_testnet);
-			println!(
-				"Generating seed check report, testnet={}. (This make take a few minutes)",
-				is_testnet
-			);
-			for result in results {
-				println!("{}", serde_json::to_string_pretty(&result).unwrap());
+			let results = check_seeds(is_testnet);
+			let output =
+				serde_json::to_string_pretty(&results).expect("Unable to serialize results");
+
+			if let Some(output_file) = seedcheck_args.value_of("output") {
+				let mut file = File::create(output_file).expect("Unable to create file");
+				writeln!(file, "{}", output).expect("Unable to write data");
+				println!("Results written to {}", output_file);
+			} else {
+				println!("{}", output);
 			}
 			0
 		}
