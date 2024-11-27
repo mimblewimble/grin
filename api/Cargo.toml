@@ -11,7 +11,7 @@ edition = "2018"
 
 [dependencies]
 easy-jsonrpc-mw = "0.5.4"
-hyper = "0.13"
+hyper = "0.14"
 lazy_static = "1"
 regex = "1"
 ring = "0.16"
