@@ -92,3 +92,14 @@ subcommands:
                 - hash:
                     help: The header hash to invalidate
                     required: true
+  - seedcheck:
+      about: Check the health of seed nodes
+      args:
+          - testnet:
+              help: Run seed check against Testnet (as opposed to Mainnet)
+              long: testnet
+              takes_value: false
+          - output:
+              help: Output file to write the results to
+              long: output
+              takes_value: true
