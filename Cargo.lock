@@ -954,6 +954,8 @@ dependencies = [
  "serde",
  "serde_derive",
  "serde_json",
+ "serde_yaml",
+ "syn 2.0.75",
  "term",
  "thiserror",
 ]
