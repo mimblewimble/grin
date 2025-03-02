@@ -11,7 +11,7 @@ edition = "2018"
 
 [dependencies]
 easy-jsonrpc-mw = "0.5.4"
-hyper = "0.13"
+hyper = { version = "0.14", features = ["full"] }
 lazy_static = "1"
 regex = "1"
 ring = "0.16"
@@ -20,15 +20,17 @@ serde_derive = "1"
 serde_json = "1"
 thiserror = "1"
 log = "0.4"
-tokio = { version = "0.2", features = ["full"] }
-tokio-rustls = "0.13"
+tokio = { version = "1", features = ["full"] }
+tokio-rustls = "0.23"
 http = "0.2"
-hyper-rustls = "0.20"
-hyper-timeout = "0.3"
+hyper-rustls = "0.23"
+hyper-timeout = "0.4"
 futures = "0.3"
-rustls = "0.17"
+rustls = "0.20"
+rustls-pemfile = "1.0"
+async-stream = "0.3"
 url = "2.1"
-bytes = "0.5"
+bytes = "1"
 
 grin_core = { path = "../core", version = "5.4.0-alpha.0" }
 grin_chain = { path = "../chain", version = "5.4.0-alpha.0" }

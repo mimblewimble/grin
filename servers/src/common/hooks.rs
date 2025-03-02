@@ -220,7 +220,12 @@ impl WebHook {
 			nthreads, timeout
 		);
 
-		let https = HttpsConnector::new();
+		let https = hyper_rustls::HttpsConnectorBuilder::new()
+			.with_native_roots()
+			.https_only()
+			.enable_http1()
+			.build();
+
 		let client = Client::builder()
 			.pool_idle_timeout(keep_alive)
 			.build::<_, hyper::Body>(https);
@@ -231,10 +236,9 @@ impl WebHook {
 			header_received_url,
 			block_accepted_url,
 			client,
-			runtime: Builder::new()
-				.threaded_scheduler()
+			runtime: Builder::new_multi_thread()
 				.enable_all()
-				.core_threads(nthreads as usize)
+				.worker_threads(nthreads as usize)
 				.build()
 				.unwrap(),
 		}

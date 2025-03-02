@@ -216,7 +216,12 @@ where
 }
 
 async fn send_request_async(req: Request<Body>, timeout: TimeOut) -> Result<String, Error> {
-	let https = hyper_rustls::HttpsConnector::new();
+	let https = hyper_rustls::HttpsConnectorBuilder::new()
+		.with_native_roots()
+		.https_only()
+		.enable_http1()
+		.build();
+
 	let (connect, read, write) = (
 		Some(timeout.connect),
 		Some(timeout.read),
@@ -242,7 +247,7 @@ async fn send_request_async(req: Request<Body>, timeout: TimeOut) -> Result<Stri
 		.into());
 	}
 
-	let raw = body::to_bytes(resp)
+	let raw = body::to_bytes(resp.into_body())
 		.await
 		.map_err(|e| Error::RequestError(format!("Cannot read response body: {}", e)))?;
 
@@ -250,8 +255,7 @@ async fn send_request_async(req: Request<Body>, timeout: TimeOut) -> Result<Stri
 }
 
 pub fn send_request(req: Request<Body>, timeout: TimeOut) -> Result<String, Error> {
-	let mut rt = Builder::new()
-		.basic_scheduler()
+	let rt = Builder::new_current_thread()
 		.enable_all()
 		.build()
 		.map_err(|e| Error::RequestError(format!("{}", e)))?;
