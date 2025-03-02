@@ -218,7 +218,7 @@ where
 async fn send_request_async(req: Request<Body>, timeout: TimeOut) -> Result<String, Error> {
 	let https = hyper_rustls::HttpsConnectorBuilder::new()
 		.with_native_roots()
-		.https_only()
+		.https_or_http()
 		.enable_http1()
 		.build();
 
