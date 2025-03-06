@@ -15,6 +15,7 @@
 //! Server types
 use std::convert::From;
 use std::sync::Arc;
+use std::thread::available_parallelism;
 
 use chrono::prelude::Utc;
 use rand::prelude::*;
@@ -293,11 +294,18 @@ pub struct WebHooksConfig {
 }
 
 fn default_timeout() -> u16 {
-	10
+	2 //10
 }
 
 fn default_nthreads() -> u16 {
-	4
+	let default_parallelism_approx = available_parallelism().unwrap().get() as u16;
+	if default_parallelism_approx > 4 {
+		warn!("Threads {:?}", default_parallelism_approx);
+		default_parallelism_approx
+	} else {
+		war!("Threads {:?}", 4);
+		4
+	}
 }
 
 impl Default for WebHooksConfig {
