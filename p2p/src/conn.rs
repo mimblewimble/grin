@@ -34,9 +34,9 @@ use std::sync::{mpsc, Arc};
 use std::thread::{self, JoinHandle};
 use std::time::Duration;
 
-pub const SEND_CHANNEL_CAP: usize = 1000;
+pub const SEND_CHANNEL_CAP: usize = 10000;
 
-const CHANNEL_TIMEOUT: Duration = Duration::from_millis(10000);
+const CHANNEL_TIMEOUT: Duration = Duration::from_millis(100000);
 
 /// A trait to be implemented in order to receive messages from the
 /// connection. Allows providing an optional response.
