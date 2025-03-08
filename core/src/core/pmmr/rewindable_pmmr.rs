@@ -40,7 +40,7 @@ where
 	B: 'a + Backend<T>,
 {
 	/// Build a new readonly PMMR.
-	pub fn new(backend: &'a B) -> RewindablePMMR<'_, T, B> {
+	pub fn new(backend: &'a B) -> RewindablePMMR<'a, T, B> {
 		RewindablePMMR {
 			backend,
 			last_pos: 0,
@@ -50,7 +50,7 @@ where
 
 	/// Build a new readonly PMMR pre-initialized to
 	/// last_pos with the provided backend.
-	pub fn at(backend: &'a B, last_pos: u64) -> RewindablePMMR<'_, T, B> {
+	pub fn at(backend: &'a B, last_pos: u64) -> RewindablePMMR<'a, T, B> {
 		RewindablePMMR {
 			backend,
 			last_pos,

@@ -602,64 +602,72 @@ impl Handler {
 fn accept_connections(listen_addr: SocketAddr, handler: Arc<Handler>) {
 	info!("Start tokio stratum server");
 	let task = async move {
-		let mut listener = TcpListener::bind(&listen_addr).await.unwrap_or_else(|_| {
+		let listener = TcpListener::bind(&listen_addr).await.unwrap_or_else(|_| {
 			panic!("Stratum: Failed to bind to listen address {}", listen_addr)
 		});
-		let server = listener
-			.incoming()
-			.filter_map(|s| async { s.map_err(|e| error!("accept error = {:?}", e)).ok() })
-			.for_each(move |socket| {
-				let handler = handler.clone();
-				async move {
-					// Spawn a task to process the connection
-					let (tx, mut rx) = mpsc::unbounded();
-
-					let worker_id = handler.workers.add_worker(tx);
-					info!("Worker {} connected", worker_id);
-
-					let framed = Framed::new(socket, LinesCodec::new());
-					let (mut writer, mut reader) = framed.split();
-
-					let h = handler.clone();
-					let read = async move {
-						while let Some(line) = reader
-							.try_next()
-							.await
-							.map_err(|e| error!("error reading line: {}", e))?
-						{
-							let request = serde_json::from_str(&line)
-								.map_err(|e| error!("error serializing line: {}", e))?;
-							let resp = h.handle_rpc_requests(request, worker_id);
-							h.workers.send_to(worker_id, resp);
-						}
-
-						Result::<_, ()>::Ok(())
-					};
-
-					let write = async move {
-						while let Some(line) = rx.next().await {
-							writer
-								.send(line)
-								.await
-								.map_err(|e| error!("error writing line: {}", e))?;
-						}
-
-						Result::<_, ()>::Ok(())
-					};
-
-					let task = async move {
-						pin_mut!(read, write);
-						futures::future::select(read, write).await;
-						handler.workers.remove_worker(worker_id);
-						info!("Worker {} disconnected", worker_id);
-					};
-					tokio::spawn(task);
+		let server = async_stream::stream! {
+			loop {
+				match listener.accept().await {
+					Ok((socket, _)) => yield socket,
+					Err(e) => {
+						error!("accept error = {:?}", e);
+						continue;
+					}
 				}
-			});
+			}
+		}
+		.for_each(move |socket| {
+			let handler = handler.clone();
+			async move {
+				// Spawn a task to process the connection
+				let (tx, mut rx) = mpsc::unbounded();
+
+				let worker_id = handler.workers.add_worker(tx);
+				info!("Worker {} connected", worker_id);
+
+				let framed = Framed::new(socket, LinesCodec::new());
+				let (mut writer, mut reader) = framed.split();
+
+				let h = handler.clone();
+				let read = async move {
+					while let Some(line) = reader
+						.try_next()
+						.await
+						.map_err(|e| error!("error reading line: {}", e))?
+					{
+						let request = serde_json::from_str(&line)
+							.map_err(|e| error!("error serializing line: {}", e))?;
+						let resp = h.handle_rpc_requests(request, worker_id);
+						h.workers.send_to(worker_id, resp);
+					}
+
+					Result::<_, ()>::Ok(())
+				};
+
+				let write = async move {
+					while let Some(line) = rx.next().await {
+						writer
+							.send(line)
+							.await
+							.map_err(|e| error!("error writing line: {}", e))?;
+					}
+
+					Result::<_, ()>::Ok(())
+				};
+
+				let task = async move {
+					pin_mut!(read, write);
+					futures::future::select(read, write).await;
+					handler.workers.remove_worker(worker_id);
+					info!("Worker {} disconnected", worker_id);
+				};
+				tokio::spawn(task);
+			}
+		});
 		server.await
 	};
 
-	let mut rt = Runtime::new().unwrap();
+	let rt = Runtime::new().unwrap();
 	rt.block_on(task);
 }
 

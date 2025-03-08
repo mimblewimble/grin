@@ -1,12 +1,12 @@
 use crate::rest::*;
 use crate::router::ResponseFuture;
-use bytes::Buf;
 use futures::future::ok;
 use hyper::body;
 use hyper::{Body, Request, Response, StatusCode};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fmt::Debug;
+use std::io::Cursor;
 use url::form_urlencoded;
 
 /// Parse request body
@@ -18,7 +18,8 @@ where
 		.await
 		.map_err(|e| Error::RequestError(format!("Failed to read request: {}", e)))?;
 
-	serde_json::from_reader(raw.bytes())
+	let cursor = Cursor::new(raw);
+	serde_json::from_reader(cursor)
 		.map_err(|e| Error::RequestError(format!("Invalid request body: {}", e)))
 }
 

@@ -10,8 +10,8 @@ workspace = ".."
 edition = "2018"
 
 [dependencies]
-hyper = "0.13"
-hyper-rustls = "0.20"
+hyper = { version = "0.14", features = ["full"] }
+hyper-rustls = "0.23"
 fs2 = "0.4"
 futures = "0.3"
 http = "0.2"
@@ -22,8 +22,10 @@ log = "0.4"
 serde_derive = "1"
 serde_json = "1"
 chrono = "0.4.11"
-tokio = {version = "0.2", features = ["full"] }
-tokio-util = { version = "0.2", features = ["codec"] }
+tokio = { version = "1", features = ["full"] }
+tokio-util = { version = "0.7", features = ["codec"] }
+async-stream = "0.3"
+rustls = "0.20"
 walkdir = "2.3.1"
 
 grin_api = { path = "../api", version = "5.4.0-alpha.0" }
