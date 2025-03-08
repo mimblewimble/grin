@@ -29,7 +29,7 @@ pub const RANGEPROOF_SEGMENT_HEIGHT: u8 = 11;
 pub const KERNEL_SEGMENT_HEIGHT: u8 = 11;
 
 /// Maximum number of received segments to cache (across all trees) before we stop requesting others
-pub const MAX_CACHED_SEGMENTS: usize = 15;
+pub const MAX_CACHED_SEGMENTS: usize = 150;
 
 /// How long the state sync should wait after requesting a segment from a peer before
 /// deciding the segment isn't going to arrive. The syncer will then re-request the segment

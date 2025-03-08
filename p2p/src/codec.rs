@@ -39,9 +39,9 @@ use std::time::{Duration, Instant};
 use MsgHeaderWrapper::*;
 use State::*;
 
-const HEADER_IO_TIMEOUT: Duration = Duration::from_millis(2000);
+const HEADER_IO_TIMEOUT: Duration = Duration::from_millis(20000);
 pub const BODY_IO_TIMEOUT: Duration = Duration::from_millis(60000);
-const HEADER_BATCH_SIZE: usize = 32;
+const HEADER_BATCH_SIZE: usize = 256;
 
 enum State {
 	None,
@@ -76,7 +76,7 @@ impl Codec {
 		Self {
 			version,
 			stream,
-			buffer: BytesMut::with_capacity(8 * 1024),
+			buffer: BytesMut::with_capacity(256 * 1024),
 			state: None,
 			bytes_read: 0,
 		}

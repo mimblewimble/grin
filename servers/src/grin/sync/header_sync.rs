@@ -160,7 +160,7 @@ impl HeaderSync {
 			// resetting the timeout as long as we progress
 			if header_head.height > latest_height {
 				self.prev_header_sync =
-					(now + Duration::seconds(2), header_head.height, prev_height);
+					(now + Duration::seconds(1), header_head.height, prev_height);
 			}
 			false
 		}
