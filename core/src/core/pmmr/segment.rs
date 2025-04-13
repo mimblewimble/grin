@@ -14,11 +14,11 @@
 
 //! Segment of a PMMR.
 
-use crate::core::hash::{Hash, Hashed};
-use crate::core::pmmr::{self, Backend, ReadablePMMR, ReadonlyPMMR};
-use crate::core::BlockHeader;
+use crate::core::hash::Hash;
+use crate::core::pmmr;
+use crate::core::pmmr::{Backend, ReadablePMMR, ReadonlyPMMR};
 use crate::ser::{
-	self, Error as SerError, PMMRIndexHashable, PMMRable, Readable, Reader, Writeable, Writer,
+	Error as SerError, PMMRIndexHashable, PMMRable, Readable, Reader, Writeable, Writer,
 };
 use croaring::Bitmap;
 use log::error;
@@ -602,6 +602,12 @@ impl<T: Readable> Readable for Segment<T> {
 			hash_pos.push(pos - 1);
 		}
 
+		let mut hashes = Vec::<Hash>::with_capacity(n_hashes);
+		for _ in 0..n_hashes {
+			let hash: Hash = Readable::read(reader)?;
+			hashes.push(hash);
+		}
+
 		let n_leaves = reader.read_u64()? as usize;
 		// Also check leaves count for safety
 		if n_leaves > MAX_LEAVES_PER_SEGMENT {
@@ -621,12 +627,6 @@ impl<T: Readable> Readable for Segment<T> {
 			}
 			last_pos = pos;
 			leaf_pos.push(pos - 1);
-		}
-
-		let mut hashes = Vec::<Hash>::with_capacity(n_hashes);
-		for _ in 0..n_hashes {
-			let hash: Hash = Readable::read(reader)?;
-			hashes.push(hash);
 		}
 
 		let mut leaf_data = Vec::<T>::with_capacity(n_leaves);
