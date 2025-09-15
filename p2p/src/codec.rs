@@ -22,6 +22,7 @@
 
 use crate::core::global::header_size_bytes;
 use crate::core::ser::{BufReader, ProtocolVersion, Readable};
+use crate::msg::max_msg_size;
 use crate::msg::{Message, MsgHeader, MsgHeaderWrapper, Type};
 use crate::types::{AttachmentMeta, AttachmentUpdate, Error};
 use crate::{
@@ -30,6 +31,7 @@ use crate::{
 };
 use bytes::{Buf, BufMut, Bytes, BytesMut};
 use core::ser::Reader;
+use log::{info, warn};
 use std::cmp::min;
 use std::io::Read;
 use std::mem;
@@ -152,6 +154,34 @@ impl Codec {
 					self.state = Header(header);
 				}
 				Header(Known(header)) => {
+					let msg_type = header.msg_type;
+					let msg_len = header.msg_len as usize;
+
+					let one_x = max_msg_size(msg_type) as usize;
+					let four_x = one_x * 4;
+
+					match msg_type {
+						Type::Ping | Type::Pong => {
+							debug!(
+								"p2p(codec): {:?} size={} (1x={}, 4x={})",
+								msg_type, msg_len, one_x, four_x
+							);
+						}
+
+						_ => {
+							info!(
+								"p2p(codec): {:?} size={} (1x={}, 4x={})",
+								msg_type, msg_len, one_x, four_x
+							);
+						}
+					}
+					if msg_len > one_x {
+						warn!(
+							"p2p(codec): {:?} exceeds 1x limit ({} > {})",
+							msg_type, msg_len, one_x,
+						);
+					}
+
 					let mut raw = self.buffer.split_to(next_len).freeze();
 					if header.msg_type == Type::Headers {
 						// Special consideration for a list of headers, as we want to verify and process
