@@ -97,7 +97,7 @@ fn default_max_msg_size() -> u64 {
 }
 
 // Max msg size for each msg type.
-fn max_msg_size(msg_type: Type) -> u64 {
+pub fn max_msg_size(msg_type: Type) -> u64 {
 	match msg_type {
 		Type::Error => 0,
 		Type::Hand => 128,
