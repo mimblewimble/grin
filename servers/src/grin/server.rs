@@ -577,8 +577,7 @@ impl Server {
 		// this call is blocking and makes sure all peers stop, however
 		// we can't be sure that we stopped a listener blocked on accept, so we don't join the p2p thread
 		self.p2p.stop();
-		// let _ = self.lock_file.unlock();
-		let _ = fs2::FileExt::unlock(&*self.lock_file);
+		let _ = self.lock_file.unlock();
 		warn!("Shutdown complete");
 	}
 

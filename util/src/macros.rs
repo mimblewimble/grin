@@ -124,9 +124,7 @@ macro_rules! impl_array_newtype {
 			}
 		}
 
-		// Single implementation for Clone - no need for conditional compilation
-		// as both branches were identical
-		#[allow(expl_impl_clone_on_copy)] // we don't define the `struct`, we have to explicitly impl
+		#[cfg_attr(feature = "clippy", allow(expl_impl_clone_on_copy))] // we don't define the `struct`, we have to explicitly impl
 		impl Clone for $thing {
 			#[inline]
 			fn clone(&self) -> $thing {
@@ -161,16 +159,16 @@ macro_rules! impl_array_newtype {
 #[macro_export]
 macro_rules! impl_array_newtype_encodable {
 	($thing:ident, $ty:ty, $len:expr) => {
-		// Implement serde traits unconditionally
-		impl<'de> ::serde::Deserialize<'de> for $thing {
+		#[cfg(feature = "serde")]
+		impl<'de> $crate::serde::Deserialize<'de> for $thing {
 			fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
 			where
-				D: ::serde::Deserializer<'de>,
+				D: $crate::serde::Deserializer<'de>,
 			{
-				use ::std::fmt::{self, Formatter};
+				use $crate::std::fmt::{self, Formatter};
 
 				struct Visitor;
-				impl<'de> ::serde::de::Visitor<'de> for Visitor {
+				impl<'de> $crate::serde::de::Visitor<'de> for Visitor {
 					type Value = $thing;
 
 					fn expecting(&self, formatter: &mut Formatter) -> fmt::Result {
@@ -180,14 +178,14 @@ macro_rules! impl_array_newtype_encodable {
 					#[inline]
 					fn visit_seq<A>(self, mut seq: A) -> Result<Self::Value, A::Error>
 					where
-						A: ::serde::de::SeqAccess<'de>,
+						A: $crate::serde::de::SeqAccess<'de>,
 					{
 						let mut ret: [$ty; $len] = [0; $len];
 						for item in ret.iter_mut() {
 							*item = match seq.next_element()? {
 								Some(c) => c,
 								None => {
-									return Err(::serde::de::Error::custom("end of stream"));
+									return Err($crate::serde::de::Error::custom("end of stream"));
 								}
 							};
 						}
@@ -199,10 +197,11 @@ macro_rules! impl_array_newtype_encodable {
 			}
 		}
 
-		impl ::serde::Serialize for $thing {
+		#[cfg(feature = "serde")]
+		impl $crate::serde::Serialize for $thing {
 			fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
 			where
-				S: ::serde::Serializer,
+				S: $crate::serde::Serializer,
 			{
 				let &$thing(ref dat) = self;
 				(&dat[..]).serialize(serializer)

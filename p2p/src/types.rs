@@ -90,7 +90,6 @@ pub enum Error {
 	PeerNotBanned,
 	PeerException,
 	Internal,
-	MsgTooLarge(usize, u64), // Message size, maximum allowed size
 }
 
 impl From<ser::Error> for Error {
@@ -111,38 +110,6 @@ impl From<chain::Error> for Error {
 impl From<io::Error> for Error {
 	fn from(e: io::Error) -> Error {
 		Error::Connection(e)
-	}
-}
-
-impl fmt::Display for Error {
-	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-		match self {
-			Error::Serialization(ref e) => write!(f, "Serialization error: {}", e),
-			Error::Connection(ref e) => write!(f, "Connection error: {}", e),
-			Error::BadMessage => write!(f, "Bad message"),
-			Error::UnexpectedMessage => write!(f, "Unexpected message"),
-			Error::MsgLen => write!(f, "Wrong message length"),
-			Error::Banned => write!(f, "Peer banned"),
-			Error::ConnectionClose => write!(f, "Connection closed"),
-			Error::Timeout => write!(f, "Connection timed out"),
-			Error::Store(ref e) => write!(f, "Store error: {}", e),
-			Error::Chain(ref e) => write!(f, "Chain error: {}", e),
-			Error::PeerWithSelf => write!(f, "Connect to self"),
-			Error::NoDandelionRelay => write!(f, "No Dandelion relay"),
-			Error::GenesisMismatch { us, peer } => {
-				write!(f, "Genesis mismatch: our={}, peer={}", us, peer)
-			}
-			Error::Send(ref s) => write!(f, "Send error: {}", s),
-			Error::PeerNotFound => write!(f, "Peer not found"),
-			Error::PeerNotBanned => write!(f, "Peer not banned"),
-			Error::PeerException => write!(f, "Peer exception"),
-			Error::Internal => write!(f, "Internal error"),
-			Error::MsgTooLarge(size, max) => write!(
-				f,
-				"Message too large: {} bytes, maximum: {} bytes",
-				size, max
-			),
-		}
 	}
 }
 

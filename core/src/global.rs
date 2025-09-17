@@ -197,7 +197,7 @@ pub fn get_chain_type() -> ChainTypes {
 	CHAIN_TYPE.with(|chain_type| match chain_type.get() {
 		None => {
 			if !GLOBAL_CHAIN_TYPE.is_init() {
-				std::panic!("GLOBAL_CHAIN_TYPE and CHAIN_TYPE unset. Consider set_local_chain_type() in tests.");
+				panic!("GLOBAL_CHAIN_TYPE and CHAIN_TYPE unset. Consider set_local_chain_type() in tests.");
 			}
 			let chain_type = GLOBAL_CHAIN_TYPE.borrow();
 			set_local_chain_type(chain_type);
