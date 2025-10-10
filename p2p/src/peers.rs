@@ -60,6 +60,17 @@ impl Peers {
 	/// Adds the peer to our internal peer mapping. Note that the peer is still
 	/// returned so the server can run it.
 	pub fn add_connected(&self, peer: Arc<Peer>) -> Result<(), Error> {
+		// ---hard filter: ignore Grin++ nodes
+		let ua_lc = peer.info.user_agent.to_lowercase();
+		if ua_lc.contains("grin++") || ua_lc.contains("grinplusplus") {
+			warn!(
+				"Ignore Grin++ peer {} [{}]",
+				peer.info.addr, peer.info.user_agent
+			);
+			peer.stop();
+			return Err(Error::PeerException);
+		}
+
 		let peer_data: PeerData;
 		{
 			// Scope for peers vector lock - dont hold the peers lock while adding to lmdb
