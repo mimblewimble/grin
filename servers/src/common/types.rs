@@ -298,15 +298,14 @@ fn default_timeout() -> u16 {
 }
 
 fn default_nthreads() -> u16 {
-	// let default_parallelism_approx = available_parallelism().unwrap().get() as u16;
-	// if default_parallelism_approx > 4 {
-	// 	warn!("Threads {:?}", default_parallelism_approx);
-	// 	default_parallelism_approx
-	// } else {
-	// 	warn!("Threads {:?}", 4);
-	// 	4
-	// }
-	16
+	let default_parallelism_approx = available_parallelism().unwrap().get() as u16;
+	if default_parallelism_approx <= 4 {
+		warn!("Threads {:?}", default_parallelism_approx);
+		default_parallelism_approx - 1 // Always leave 1 thread for the OS,
+	} else {
+		warn!("Threads {:?}", default_parallelism_approx - 2); // If more than 4 threads, keep 2 for OS
+		default_parallelism_approx - 2
+	}
 }
 
 impl Default for WebHooksConfig {

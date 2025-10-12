@@ -76,7 +76,7 @@ impl Codec {
 		Self {
 			version,
 			stream,
-			buffer: BytesMut::with_capacity(256 * 1024),
+			buffer: BytesMut::with_capacity(2048 * 1024),
 			state: None,
 			bytes_read: 0,
 		}

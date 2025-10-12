@@ -15,6 +15,7 @@
 use chrono::prelude::{DateTime, Utc};
 use chrono::Duration;
 use std::sync::Arc;
+use std::thread;
 
 use crate::chain::{self, SyncState, SyncStatus};
 use crate::common::types::Error;
@@ -47,52 +48,78 @@ impl HeaderSync {
 		}
 	}
 
-	pub fn check_run(&mut self, sync_head: chain::Tip) -> Result<bool, chain::Error> {
-		// We only want to run header_sync for some sync states.
-		let do_run = match self.sync_state.status() {
-			SyncStatus::BodySync { .. }
-			| SyncStatus::HeaderSync { .. }
-			| SyncStatus::TxHashsetDone
-			| SyncStatus::NoSync
-			| SyncStatus::Initial
-			| SyncStatus::AwaitingPeers(_) => true,
+    pub fn check_run(self: Arc<Mutex<Self>>, sync_head: chain::Tip) -> Result<bool, chain::Error> {
+        let do_run = {
+            let this = self.lock().unwrap();
+            matches!(
+                this.sync_state.status(),
+                SyncStatus::BodySync { .. }
+                    | SyncStatus::HeaderSync { .. }
+                    | SyncStatus::TxHashsetDone
+                    | SyncStatus::NoSync
+                    | SyncStatus::Initial
+                    | SyncStatus::AwaitingPeers(_) => true,
 			_ => false,
-		};
+            )
+        };
 
-		if !do_run {
-			return Ok(false);
-		}
+        if !do_run {
+            return Ok(false);
+        }
 
-		// TODO - can we safely reuse the peer here across multiple runs?
-		let sync_peer = self.choose_sync_peer();
+        let sync_peers = {
+            let this = self.lock().unwrap();
+            this.choose_sync_peers()
+        };
 
-		if let Some(sync_peer) = sync_peer {
-			let (peer_height, peer_diff) = {
-				let info = sync_peer.info.live_info.read();
-				(info.height, info.total_difficulty)
-			};
+        if sync_peers.is_empty() {
+            return Ok(false);
+        }
 
-			// Quick check - nothing to sync if we are caught up with the peer.
-			if peer_diff <= sync_head.total_difficulty {
-				return Ok(false);
-			}
+        let mut handles = vec![];
 
-			if !self.header_sync_due(sync_head) {
-				return Ok(false);
-			}
+        for sync_peer in sync_peers {
+            let sync_head = sync_head.clone();
+            let self_arc = Arc::clone(&self);
+            let sync_peer = Arc::new(sync_peer);
 
-			self.sync_state.update(SyncStatus::HeaderSync {
-				sync_head,
-				highest_height: peer_height,
-				highest_diff: peer_diff,
-			});
+            let handle = thread::spawn(move || {
+                let (peer_height, peer_diff) = {
+                    let info = sync_peer.info.live_info.read();
+                    (info.height, info.total_difficulty)
+                };
 
-			self.header_sync(sync_head, sync_peer.clone());
-			self.syncing_peer = Some(sync_peer.clone());
-		}
-		Ok(true)
-	}
+                if peer_diff <= sync_head.total_difficulty {
+                    return;
+                }
 
+                let mut self = self_arc.lock().unwrap();
+
+                if !self.header_sync_due(sync_head) {
+                    return;
+                }
+
+                self.sync_state.update(SyncStatus::HeaderSync {
+                    sync_head,
+                    highest_height: peer_height,
+                    highest_diff: peer_diff,
+                });
+
+                self.header_sync(sync_head, Arc::clone(&sync_peer));
+                self.syncing_peer = Some(Arc::clone(&sync_peer));
+            });
+
+            handles.push(handle);
+        }
+
+        for handle in handles {
+            let _ = handle.join();
+        }
+
+        Ok(true)
+    }
+
+    /// NEW PARALLEL HEADERR SYNC NEEDS TESTING
 	fn header_sync_due(&mut self, header_head: chain::Tip) -> bool {
 		let now = Utc::now();
 		let (timeout, latest_height, prev_height) = self.prev_header_sync;
@@ -160,7 +187,7 @@ impl HeaderSync {
 			// resetting the timeout as long as we progress
 			if header_head.height > latest_height {
 				self.prev_header_sync =
-					(now + Duration::seconds(1), header_head.height, prev_height);
+					(now + Duration::seconds(2), header_head.height, prev_height);
 			}
 			false
 		}
