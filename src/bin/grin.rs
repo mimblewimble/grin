@@ -87,7 +87,7 @@ fn real_main() -> i32 {
 	let args = App::from_yaml(yml)
 		.version(built_info::PKG_VERSION)
 		.get_matches();
-	let node_config;
+	let mut node_config;
 
 	let chain_type = if args.is_present("testnet") {
 		global::ChainTypes::Testnet
@@ -135,6 +135,25 @@ fn real_main() -> i32 {
 	let config = node_config.clone().unwrap();
 	let mut logging_config = config.members.as_ref().unwrap().logging.clone().unwrap();
 	logging_config.tui_running = config.members.as_ref().unwrap().server.run_tui;
+
+	// --- handle global --no-tui flag and GRIN_NO_TUI env var ---
+	let no_tui = args.is_present("no-tui")
+		|| std::env::var("GRIN_NO_TUI")
+			.map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
+			.unwrap_or(false);
+
+	if no_tui {
+		// a) Logger-TUI deaktivieren
+		logging_config.tui_running = Some(false);
+
+		// b) WICHTIG: auch Server-TUI in der Node-Konfig deaktivieren,
+		//    damit cmd::server_command(...) keine TUI startet
+		if let Some(gc) = node_config.as_mut() {
+			if let Some(members) = gc.members.as_mut() {
+				members.server.run_tui = Some(false);
+			}
+		}
+	}
 
 	let api_chan: &'static mut (oneshot::Sender<()>, oneshot::Receiver<()>) =
 		Box::leak(Box::new(oneshot::channel::<()>()));
