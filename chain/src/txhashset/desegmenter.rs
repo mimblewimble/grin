@@ -553,6 +553,21 @@ impl Desegmenter {
 				}
 			}
 		}
+		// Always ensure we explicitly ask for the very next kernel segment we are waiting on.
+		// The regular round-robin above can get saturated with outputs and rangeproofs while
+		// the desegmenter is blocked on a missing kernel, so we force this one in.
+		if let Some(next_kernel_idx) = self.next_required_kernel_segment_index() {
+			let seg_id = SegmentIdentifier {
+				height: self.default_kernel_segment_height,
+				idx: next_kernel_idx,
+			};
+			if !self.has_kernel_segment_with_id(seg_id) {
+				if return_vec.len() >= max_elements {
+					return_vec.pop();
+				}
+				return_vec.push(SegmentTypeIdentifier::new(SegmentType::Kernel, seg_id));
+			}
+		}
 		if return_vec.is_empty() && self.bitmap_cache.is_some() {
 			self.all_segments_complete = true;
 		}
@@ -923,9 +938,11 @@ impl Desegmenter {
 	/// Apply a kernel segment at the index cache
 	pub fn apply_kernel_segment(&mut self, idx: usize) -> Result<(), Error> {
 		let segment = self.kernel_segment_cache.remove(idx);
-		trace!(
-			"pibd_desegmenter: applying kernel segment at segment idx {}",
-			segment.identifier().idx
+		let seg_idx = segment.identifier().idx;
+		debug!(
+			"pibd_desegmenter: applying kernel segment idx {} (cache size after removal: {})",
+			seg_idx,
+			self.kernel_segment_cache.len()
 		);
 		let mut header_pmmr = self.header_pmmr.write();
 		let mut txhashset = self.txhashset.write();
@@ -936,7 +953,17 @@ impl Desegmenter {
 			&mut batch,
 			|ext, _batch| {
 				let extension = &mut ext.extension;
-				extension.apply_kernel_segment(segment)?;
+				if let Err(e) = extension.apply_kernel_segment(segment) {
+					error!(
+						"pibd_desegmenter: failed to apply kernel segment idx {}: {}",
+						seg_idx, e
+					);
+					return Err(e);
+				}
+				debug!(
+					"pibd_desegmenter: successfully applied kernel segment idx {}",
+					seg_idx
+				);
 				Ok(())
 			},
 		)?;
@@ -985,13 +1012,31 @@ impl Desegmenter {
 
 	/// Adds a Kernel segment
 	pub fn add_kernel_segment(&mut self, segment: Segment<TxKernel>) -> Result<(), Error> {
-		trace!("pibd_desegmenter: add kernel segment");
-		segment.validate(
-			self.archive_header.kernel_mmr_size, // Last MMR pos at the height being validated
-			None,
-			self.archive_header.kernel_root, // Kernel root we're checking for
-		)?;
+		let idx = segment.identifier().idx;
+		debug!(
+			"pibd_desegmenter: received kernel segment idx {} (cache size {})",
+			idx,
+			self.kernel_segment_cache.len()
+		);
+		segment
+			.validate(
+				self.archive_header.kernel_mmr_size, // Last MMR pos at the height being validated
+				None,
+				self.archive_header.kernel_root, // Kernel root we're checking for
+			)
+			.map_err(|e| {
+				error!(
+					"pibd_desegmenter: kernel segment idx {} failed validation: {}",
+					idx, e
+				);
+				e
+			})?;
 		self.cache_kernel_segment(segment);
+		debug!(
+			"pibd_desegmenter: cached kernel segment idx {} (cache size {})",
+			idx,
+			self.kernel_segment_cache.len()
+		);
 		Ok(())
 	}
 }
