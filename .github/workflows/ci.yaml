@@ -25,7 +25,7 @@ jobs:
 
   windows-tests:
     name: Windows Tests
-    runs-on: windows-latest
+    runs-on: windows-2022
     env:
       ROARING_ARCH: x86-64-v2
     steps:
