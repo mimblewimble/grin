@@ -167,6 +167,8 @@ impl StateSync {
 		if sync_need_restart || header_head.height == highest_height {
 			if using_pibd {
 				if sync_need_restart {
+					self.state_sync_reset();
+					self.sync_state.clear_sync_error();
 					return true;
 				}
 				let (launch, _download_timeout) = self.state_sync_due();
@@ -358,12 +360,25 @@ impl StateSync {
 						seg_id.identifier.clone(),
 					),
 				};
+
 				if let Err(e) = res {
-					info!(
-						"Error sending request to peer at {}, reason: {:?}",
-						p.info.addr, e
-					);
-					self.sync_state.remove_pibd_segment(seg_id);
+					match e {
+						p2p::Error::Send(ref s) if s == "try_send disconnected" => {
+							warn!("pibd: peer {} send channel discconected; soft-restarting state sync", p.info.addr);
+							self.sync_state.remove_pibd_segment(seg_id);
+							self.sync_state.set_sync_error(chain::Error::SyncError(
+								"try_send disconnected".into(),
+							));
+							continue;
+						}
+						_ => {
+							info!(
+								"pibd: error sending request to peer {}: {:?}",
+								p.info.addr, e
+							);
+							self.sync_state.remove_pibd_segment(seg_id);
+						}
+					}
 				}
 			}
 		}
