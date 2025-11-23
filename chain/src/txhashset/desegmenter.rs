@@ -478,11 +478,13 @@ impl Desegmenter {
 				local_kernel_mmr_size = txhashset.kernel_mmr_size();
 				local_rangeproof_mmr_size = txhashset.rangeproof_mmr_size();
 			}
-			// TODO: Fix, alternative approach, this is very inefficient
+			let output_skip = (pmmr::n_leaves(local_output_mmr_size)
+				>> self.default_output_segment_height) as usize;
 			let mut output_identifier_iter = SegmentIdentifier::traversal_iter(
 				self.archive_header.output_mmr_size,
 				self.default_output_segment_height,
-			);
+			)
+			.skip(output_skip);
 
 			let mut elems_added = 0;
 			while let Some(output_id) = output_identifier_iter.next() {
@@ -504,10 +506,13 @@ impl Desegmenter {
 				}
 			}
 
+			let rangeproof_skip = (pmmr::n_leaves(local_rangeproof_mmr_size)
+				>> self.default_rangeproof_segment_height) as usize;
 			let mut rangeproof_identifier_iter = SegmentIdentifier::traversal_iter(
 				self.archive_header.output_mmr_size,
 				self.default_rangeproof_segment_height,
-			);
+			)
+			.skip(rangeproof_skip);
 
 			elems_added = 0;
 			while let Some(rp_id) = rangeproof_identifier_iter.next() {
@@ -528,10 +533,13 @@ impl Desegmenter {
 				}
 			}
 
+			let kernel_skip = (pmmr::n_leaves(local_kernel_mmr_size)
+				>> self.default_kernel_segment_height) as usize;
 			let mut kernel_identifier_iter = SegmentIdentifier::traversal_iter(
 				self.archive_header.kernel_mmr_size,
 				self.default_kernel_segment_height,
-			);
+			)
+			.skip(kernel_skip);
 
 			elems_added = 0;
 			while let Some(k_id) = kernel_identifier_iter.next() {
