@@ -478,86 +478,86 @@ impl Desegmenter {
 				local_kernel_mmr_size = txhashset.kernel_mmr_size();
 				local_rangeproof_mmr_size = txhashset.rangeproof_mmr_size();
 			}
-			let output_skip = (pmmr::n_leaves(local_output_mmr_size)
-				>> self.default_output_segment_height) as usize;
-			let mut output_identifier_iter = SegmentIdentifier::traversal_iter(
+			let total_output_segments = SegmentIdentifier::count_segments_required(
 				self.archive_header.output_mmr_size,
 				self.default_output_segment_height,
-			)
-			.skip(output_skip);
-
+			);
 			let mut elems_added = 0;
-			while let Some(output_id) = output_identifier_iter.next() {
-				// Advance output iterator to next needed position
-				let (_first, last) =
-					output_id.segment_pos_range(self.archive_header.output_mmr_size);
-				if last <= local_output_mmr_size {
-					continue;
-				}
-				if self.output_segment_cache.len() >= self.max_cached_segments {
-					break;
-				}
-				if !self.has_output_segment_with_id(output_id) {
-					return_vec.push(SegmentTypeIdentifier::new(SegmentType::Output, output_id));
-					elems_added += 1;
-				}
-				if elems_added == max_elements / 3 {
-					break;
+			if let Some(mut next_output_idx) = self.next_required_output_segment_index() {
+				while (next_output_idx as usize) < total_output_segments {
+					if self.output_segment_cache.len() >= self.max_cached_segments {
+						break;
+					}
+					if elems_added == max_elements / 3 {
+						break;
+					}
+					let output_id = SegmentIdentifier {
+						height: self.default_output_segment_height,
+						idx: next_output_idx,
+					};
+					let (_first, last) =
+						output_id.segment_pos_range(self.archive_header.output_mmr_size);
+					if last > local_output_mmr_size && !self.has_output_segment_with_id(output_id) {
+						return_vec.push(SegmentTypeIdentifier::new(SegmentType::Output, output_id));
+						elems_added += 1;
+					}
+					next_output_idx += 1;
 				}
 			}
 
-			let rangeproof_skip = (pmmr::n_leaves(local_rangeproof_mmr_size)
-				>> self.default_rangeproof_segment_height) as usize;
-			let mut rangeproof_identifier_iter = SegmentIdentifier::traversal_iter(
+			let total_rangeproof_segments = SegmentIdentifier::count_segments_required(
 				self.archive_header.output_mmr_size,
 				self.default_rangeproof_segment_height,
-			)
-			.skip(rangeproof_skip);
-
+			);
 			elems_added = 0;
-			while let Some(rp_id) = rangeproof_identifier_iter.next() {
-				let (_first, last) = rp_id.segment_pos_range(self.archive_header.output_mmr_size);
-				// Advance rangeproof iterator to next needed position
-				if last <= local_rangeproof_mmr_size {
-					continue;
-				}
-				if self.rangeproof_segment_cache.len() >= self.max_cached_segments {
-					break;
-				}
-				if !self.has_rangeproof_segment_with_id(rp_id) {
-					return_vec.push(SegmentTypeIdentifier::new(SegmentType::RangeProof, rp_id));
-					elems_added += 1;
-				}
-				if elems_added == max_elements / 3 {
-					break;
+			if let Some(mut next_rp_idx) = self.next_required_rangeproof_segment_index() {
+				while (next_rp_idx as usize) < total_rangeproof_segments {
+					if self.rangeproof_segment_cache.len() >= self.max_cached_segments {
+						break;
+					}
+					if elems_added == max_elements / 3 {
+						break;
+					}
+					let rp_id = SegmentIdentifier {
+						height: self.default_rangeproof_segment_height,
+						idx: next_rp_idx,
+					};
+					let (_first, last) =
+						rp_id.segment_pos_range(self.archive_header.output_mmr_size);
+					if last > local_rangeproof_mmr_size
+						&& !self.has_rangeproof_segment_with_id(rp_id)
+					{
+						return_vec.push(SegmentTypeIdentifier::new(SegmentType::RangeProof, rp_id));
+						elems_added += 1;
+					}
+					next_rp_idx += 1;
 				}
 			}
 
-			let kernel_skip = (pmmr::n_leaves(local_kernel_mmr_size)
-				>> self.default_kernel_segment_height) as usize;
-			let mut kernel_identifier_iter = SegmentIdentifier::traversal_iter(
+			let total_kernel_segments = SegmentIdentifier::count_segments_required(
 				self.archive_header.kernel_mmr_size,
 				self.default_kernel_segment_height,
-			)
-			.skip(kernel_skip);
-
+			);
 			elems_added = 0;
-			while let Some(k_id) = kernel_identifier_iter.next() {
-				// Advance kernel iterator to next needed position
-				let (_first, last) = k_id.segment_pos_range(self.archive_header.kernel_mmr_size);
-				// Advance rangeproof iterator to next needed position
-				if last <= local_kernel_mmr_size {
-					continue;
-				}
-				if self.kernel_segment_cache.len() >= self.max_cached_segments {
-					break;
-				}
-				if !self.has_kernel_segment_with_id(k_id) {
-					return_vec.push(SegmentTypeIdentifier::new(SegmentType::Kernel, k_id));
-					elems_added += 1;
-				}
-				if elems_added == max_elements / 3 {
-					break;
+			if let Some(mut next_kernel_idx) = self.next_required_kernel_segment_index() {
+				while (next_kernel_idx as usize) < total_kernel_segments {
+					if self.kernel_segment_cache.len() >= self.max_cached_segments {
+						break;
+					}
+					if elems_added == max_elements / 3 {
+						break;
+					}
+					let k_id = SegmentIdentifier {
+						height: self.default_kernel_segment_height,
+						idx: next_kernel_idx,
+					};
+					let (_first, last) =
+						k_id.segment_pos_range(self.archive_header.kernel_mmr_size);
+					if last > local_kernel_mmr_size && !self.has_kernel_segment_with_id(k_id) {
+						return_vec.push(SegmentTypeIdentifier::new(SegmentType::Kernel, k_id));
+						elems_added += 1;
+					}
+					next_kernel_idx += 1;
 				}
 			}
 		}
