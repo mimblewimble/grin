@@ -2,7 +2,7 @@ name: Build and Push to GHCR
 
 on:
   push:
-    branches: [main, docker_package]
+    branches: [master]
 
 jobs:
   build-andpush:
