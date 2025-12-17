@@ -101,17 +101,15 @@ grin client --help
 ## Docker 사용하기
 
 ```sh
-docker build -t grin -f etc/Dockerfile .
+docker build -t grin .
 ```
-
-testnet을 사용하려면 `etc/Dockerfile.testnet` 을 사용하세요.
 container 안에서 grin cache를 bind-mount로 사용 할 수 있습니다.
 
 ```sh
-docker run -it -d -v $HOME/.grin:/root/.grin grin
+docker run -it -d -v $HOME/.grin:/home/grin/.grin grin
 ```
 
-Docker를 named volume으로 사용하는 것을 선호한다면 `-v dotgrin:/root/.grin` 명령어를 대신 사용할 수 있습니다.
+Docker를 named volume으로 사용하는 것을 선호한다면 `-v dotgrin:/home/grin/.grin` 명령어를 대신 사용할 수 있습니다.
 named volume샤용시 volume 생성시 기본 설정을 복사합니다.
 
 ## 크로스 플랫폼 빌드

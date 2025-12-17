@@ -100,16 +100,14 @@ grin client --help
 ## Docker
 
 ```sh
-docker build -t grin -f etc/Dockerfile .
+docker build -t grin .
 ```
-testnetを使用する場合、代わりに`etc/Dockerfile.testnet`を指定。
-
 コンテナ内で実行する場合、grinのキャッシュをバインドマウントすることも可能。
 
 ```sh
-docker run -it -d -v $HOME/.grin:/root/.grin grin
+docker run -it -d -v $HOME/.grin:/home/grin/.grin grin
 ```
-dockerの名前付きボリュームを使用する場合、代わりに`-v dotgrin:/root/.grin`を指定。
+dockerの名前付きボリュームを使用する場合、代わりに`-v dotgrin:/home/grin/.grin`を指定。
 ボリュームが作成される前に、名前付きボリュームがコピーされる。
 
 ## クロスプラットフォームビルド

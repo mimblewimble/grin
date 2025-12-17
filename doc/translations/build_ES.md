@@ -96,13 +96,13 @@ grin client --help
 ## Docker
 
 ```sh
-docker build -t grin -f etc/Dockerfile .
+docker build -t grin .
 ```
 
 Puede ubicar la caché de Grin para que se ejecute dentro del contenedor
 
 ```sh
-docker run -it -d -v $HOME/.grin:/root/.grin grin
+docker run -it -d -v $HOME/.grin:/home/grin/.grin grin
 ```
 ## Compilación multiplataforma
 
