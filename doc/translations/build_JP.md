@@ -105,9 +105,9 @@ docker build -t grin .
 コンテナ内で実行する場合、grinのキャッシュをバインドマウントすることも可能。
 
 ```sh
-docker run -it -d -v $HOME/.grin:/home/grin/.grin grin
+docker run -it -d -v $HOME/.grin:/root/.grin grin
 ```
-dockerの名前付きボリュームを使用する場合、代わりに`-v dotgrin:/home/grin/.grin`を指定。
+dockerの名前付きボリュームを使用する場合、代わりに`-v dotgrin:/root/.grin`を指定。
 ボリュームが作成される前に、名前付きボリュームがコピーされる。
 
 ## クロスプラットフォームビルド

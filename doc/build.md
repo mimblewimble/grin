@@ -111,9 +111,9 @@ docker build -t grin .
 You can bind-mount your grin cache to run inside the container.
 
 ```sh
-docker run -it -d -v $HOME/.grin:/home/grin/.grin grin
+docker run -it -d -v $HOME/.grin:/root/.grin grin
 ```
-If you prefer to use a docker named volume, you can pass `-v dotgrin:/home/grin/.grin` instead.
+If you prefer to use a docker named volume, you can pass `-v dotgrin:/root/.grin` instead.
 Using a named volume copies default configurations upon volume creation.
 
 ## Cross-platform builds

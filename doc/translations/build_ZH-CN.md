@@ -103,9 +103,9 @@ docker build -t grin .
 您可以绑定安装您的 grin 缓存以在容器中运行。
 
 ```sh
-docker run -it -d -v $HOME/.grin:/home/grin/.grin grin
+docker run -it -d -v $HOME/.grin:/root/.grin grin
 ```
-如果您更喜欢使用名为 volume 的 docker，则可以传递 `-v dotgrin: /home/grin/.grin` 以替换。
+如果您更喜欢使用名为 volume 的 docker，则可以传递 `-v dotgrin: /root/.grin` 以替换。
 使用命名卷在创建卷时会复制默认配置。
 
 ## 跨平台构建
