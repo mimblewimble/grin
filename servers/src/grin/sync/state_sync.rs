@@ -250,9 +250,10 @@ impl StateSync {
 		let archive_header = self.chain.txhashset_archive_header_header_only().unwrap();
 		let desegmenter = self.chain.desegmenter(&archive_header).unwrap();
 
-		// Remove stale requests, if we haven't recieved the segment within a minute re-request
+		// Remove stale requests, if we haven't received the segment within a minute re-request
 		// TODO: verify timing
-		self.sync_state
+		let stale_segments = self
+			.sync_state
 			.remove_stale_pibd_requests(pibd_params::SEGMENT_REQUEST_TIMEOUT_SECS);
 
 		// Apply segments... TODO: figure out how this should be called, might
@@ -280,12 +281,24 @@ impl StateSync {
 			// (12 is divisible by 3, to try and evenly spread the requests among the 3
 			// main pmmrs. Bitmaps segments will always be requested first)
 			next_segment_ids = d.next_desired_segments(pibd_params::SEGMENT_REQUEST_COUNT);
+			if !next_segment_ids.is_empty() {
+				debug!(
+					"state_sync: requesting next PIBD segments {:?}",
+					next_segment_ids
+				);
+			} else {
+				trace!("state_sync: no PIBD segments requested this loop");
+			}
 		}
 
 		// For each segment, pick a desirable peer and send message
 		// (Provided we're not waiting for a response for this message from someone else)
 		for seg_id in next_segment_ids.iter() {
 			if self.sync_state.contains_pibd_segment(seg_id) {
+				debug!(
+					"state_sync: segment {:?} already requested, waiting for response",
+					seg_id
+				);
 				trace!("Request list contains, continuing: {:?}", seg_id);
 				continue;
 			}
@@ -330,16 +343,39 @@ impl StateSync {
 				self.set_earliest_zero_pibd_peer_time(None)
 			}
 
-			// Choose a random "most work" peer, preferring outbound if at all possible.
-			let peer = peers_iter_pibd()
-				.outbound()
-				.choose_random()
-				.or_else(|| peers_iter_pibd().inbound().choose_random());
+			// Choose a random "most work" peer, excluding peer from stale segment and preferring outbound if at all possible.
+			let mut peer = None;
+			let excluded_peer = stale_segments
+				.iter()
+				.find(|(stale_id, _)| stale_id == seg_id)
+				.and_then(|(_, addr)| *addr);
+			for _ in 0..5 {
+				let candidate = peers_iter_pibd()
+					.outbound()
+					.choose_random()
+					.or_else(|| peers_iter_pibd().inbound().choose_random());
+				if let (Some(ex), Some(ref c)) = (excluded_peer, candidate.as_ref()) {
+					if c.info.addr.0 == ex {
+						continue;
+					}
+				}
+				if candidate.is_none() {
+					continue;
+				}
+				peer = candidate;
+				break;
+			}
+			if peer.is_none() {
+				peer = peers_iter_pibd()
+					.outbound()
+					.choose_random()
+					.or_else(|| peers_iter_pibd().inbound().choose_random());
+			}
 			trace!("Chosen peer is {:?}", peer);
 
 			if let Some(p) = peer {
 				// add to list of segments that are being tracked
-				self.sync_state.add_pibd_segment(seg_id);
+				self.sync_state.add_pibd_segment(seg_id, p.info.addr.0);
 				let res = match seg_id.segment_type {
 					SegmentType::Bitmap => p.send_bitmap_segment_request(
 						archive_header.hash(),
@@ -364,6 +400,11 @@ impl StateSync {
 						p.info.addr, e
 					);
 					self.sync_state.remove_pibd_segment(seg_id);
+				} else {
+					debug!(
+						"state_sync: requested segment {:?} from peer {}",
+						seg_id, p.info.addr
+					);
 				}
 			}
 		}
