@@ -400,6 +400,18 @@ impl StateSync {
 						p.info.addr, e
 					);
 					self.sync_state.remove_pibd_segment(seg_id);
+				} else if let Some(prev_peer) = excluded_peer {
+					if p.info.addr.0 != prev_peer {
+						info!(
+							"state_sync: retrying segment {:?} with new peer {} (previously {})",
+							seg_id, p.info.addr, prev_peer
+						);
+					} else {
+						debug!(
+							"state_sync: requested segment {:?} from peer {}",
+							seg_id, p.info.addr
+						);
+					}
 				} else {
 					debug!(
 						"state_sync: requested segment {:?} from peer {}",
