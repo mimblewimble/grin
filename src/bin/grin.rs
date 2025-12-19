@@ -136,18 +136,18 @@ fn real_main() -> i32 {
 	let mut logging_config = config.members.as_ref().unwrap().logging.clone().unwrap();
 	logging_config.tui_running = config.members.as_ref().unwrap().server.run_tui;
 
-	// --- handle global --no-tui flag and GRIN_NO_TUI env var ---
+	// Handle global --no-tui flag and GRIN_NO_TUI environment variable
 	let no_tui = args.is_present("no-tui")
 		|| std::env::var("GRIN_NO_TUI")
 			.map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
 			.unwrap_or(false);
 
 	if no_tui {
-		// a) Logger-TUI deaktivieren
+		// Deactivate logger TUI
 		logging_config.tui_running = Some(false);
 
-		// b) WICHTIG: auch Server-TUI in der Node-Konfig deaktivieren,
-		//    damit cmd::server_command(...) keine TUI startet
+		// Deactivate Server TUI in node config, so
+		// cmd::server_command(...) will not use it
 		if let Some(gc) = node_config.as_mut() {
 			if let Some(members) = gc.members.as_mut() {
 				members.server.run_tui = Some(false);
