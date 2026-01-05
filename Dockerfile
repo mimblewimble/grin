@@ -36,4 +36,5 @@ EXPOSE 13413 13414
 EXPOSE 3416
 
 WORKDIR /root/.grin
-ENTRYPOINT ["grin", "server", "run"]
+ENTRYPOINT ["grin"]
+CMD ["server", "run"]
