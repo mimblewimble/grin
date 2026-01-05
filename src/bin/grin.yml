@@ -47,15 +47,6 @@ subcommands:
             about: Generate a configuration grin-server.toml file in the current directory
         - run:
             about: Run the Grin server in this console
-            args:
-              - testnet:
-                  help: Run grin against the Testnet (as opposed to mainnet)
-                  long: testnet
-                  takes_value: false
-              - usernet:
-                  help: Run grin as a local-only network. Doesn't block peer connections but will not connect to any peer or seed
-                  long: usernet
-                  takes_value: false
   - client:
       about: Communicates with the Grin server
       subcommands:

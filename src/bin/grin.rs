@@ -115,19 +115,6 @@ fn real_main() -> i32 {
 					panic!("Error loading server configuration: {}", e);
 				}));
 			} else {
-				// Get chain type from run command argument.
-				let chain_type = match server_args.subcommand() {
-					("run", Some(run_args)) => {
-						if run_args.is_present("testnet") {
-							global::ChainTypes::Testnet
-						} else if run_args.is_present("usernet") {
-							global::ChainTypes::UserTesting
-						} else {
-							chain_type
-						}
-					}
-					_ => chain_type,
-				};
 				node_config = Some(
 					config::initial_setup_server(&chain_type).unwrap_or_else(|e| {
 						panic!("Error loading server configuration: {}", e);
