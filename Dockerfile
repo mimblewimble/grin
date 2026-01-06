@@ -19,12 +19,12 @@ RUN apt update && \
 # Create mainnet config
 WORKDIR /root/.grin/main
 RUN grin server config
-RUN sed -i '/^run_tui /s/=.*$/= true/' grin-server.toml
+RUN sed -i '/^run_tui /s/=.*$/= false/' grin-server.toml
 
 # Create testnet config
 WORKDIR /root/.grin/test
 RUN grin --testnet server config
-RUN sed -i '/^run_tui /s/=.*$/= true/' grin-server.toml
+RUN sed -i '/^run_tui /s/=.*$/= false/' grin-server.toml
 
 # Mainnet ports
 EXPOSE 3413 3414
