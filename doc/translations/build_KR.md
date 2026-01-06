@@ -101,10 +101,8 @@ grin client --help
 ## Docker 사용하기
 
 ```sh
-docker build -t grin -f etc/Dockerfile .
+docker build -t grin .
 ```
-
-testnet을 사용하려면 `etc/Dockerfile.testnet` 을 사용하세요.
 container 안에서 grin cache를 bind-mount로 사용 할 수 있습니다.
 
 ```sh

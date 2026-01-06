@@ -100,10 +100,8 @@ grin client --help
 ## Docker
 
 ```sh
-docker build -t grin -f etc/Dockerfile .
+docker build -t grin .
 ```
-testnetを使用する場合、代わりに`etc/Dockerfile.testnet`を指定。
-
 コンテナ内で実行する場合、grinのキャッシュをバインドマウントすることも可能。
 
 ```sh
