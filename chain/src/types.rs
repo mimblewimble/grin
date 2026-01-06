@@ -306,7 +306,7 @@ impl SyncState {
 		let mut removed_segments = vec![];
 		self.requested_pibd_segments.write().retain(|i| {
 			if i.request_time <= cutoff_time {
-				info!("Removing + retrying PIBD request after timeout: {:?}", i);
+				debug!("Removing + retrying PIBD request after timeout: {:?}", i);
 				removed_segments.push((i.identifier.clone(), i.last_peer));
 				false
 			} else {
