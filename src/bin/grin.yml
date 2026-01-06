@@ -12,7 +12,7 @@ args:
       long: usernet
       takes_value: false
   - no-tui:
-      help: Disable the interactive TUI (force log-only mode)
+      help: Disable the interactive TUI ignoring configuration file value (force log-only mode)
       long: no-tui
       takes_value: false
 subcommands:
