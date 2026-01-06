@@ -344,33 +344,21 @@ impl StateSync {
 			}
 
 			// Choose a random "most work" peer, excluding peer from stale segment and preferring outbound if at all possible.
-			let mut peer = None;
 			let excluded_peer = stale_segments
 				.iter()
 				.find(|(stale_id, _)| stale_id == seg_id)
 				.and_then(|(_, addr)| *addr);
-			for _ in 0..5 {
-				let candidate = peers_iter_pibd()
-					.outbound()
+			let peer = if peers_iter_pibd().outbound().count() == 0 {
+				peers_iter_pibd()
+					.inbound()
+					.exclude(excluded_peer)
 					.choose_random()
-					.or_else(|| peers_iter_pibd().inbound().choose_random());
-				if let (Some(ex), Some(ref c)) = (excluded_peer, candidate.as_ref()) {
-					if c.info.addr.0 == ex {
-						continue;
-					}
-				}
-				if candidate.is_none() {
-					continue;
-				}
-				peer = candidate;
-				break;
-			}
-			if peer.is_none() {
-				peer = peers_iter_pibd()
+			} else {
+				peers_iter_pibd()
 					.outbound()
+					.exclude(excluded_peer)
 					.choose_random()
-					.or_else(|| peers_iter_pibd().inbound().choose_random());
-			}
+			};
 			trace!("Chosen peer is {:?}", peer);
 
 			if let Some(p) = peer {
