@@ -601,11 +601,14 @@ impl Desegmenter {
 				height: self.default_kernel_segment_height,
 				idx: next_kernel_idx,
 			};
-			if !self.has_kernel_segment_with_id(seg_id) {
+			let next_kernel_seg_id = SegmentTypeIdentifier::new(SegmentType::Kernel, seg_id);
+			if !self.has_kernel_segment_with_id(seg_id)
+				&& !return_vec.iter().any(|x| x == &next_kernel_seg_id)
+			{
 				if return_vec.len() >= max_elements {
 					return_vec.pop();
 				}
-				return_vec.push(SegmentTypeIdentifier::new(SegmentType::Kernel, seg_id));
+				return_vec.push(next_kernel_seg_id);
 			}
 		}
 		if return_vec.is_empty() && self.bitmap_cache.is_some() {
