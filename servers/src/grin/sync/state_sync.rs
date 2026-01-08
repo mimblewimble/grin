@@ -348,17 +348,16 @@ impl StateSync {
 				.iter()
 				.find(|(stale_id, _)| stale_id == seg_id)
 				.and_then(|(_, addr)| *addr);
-			let peer = if peers_iter_pibd().outbound().count() == 0 {
-				peers_iter_pibd()
-					.inbound()
-					.exclude(excluded_peer)
-					.choose_random()
-			} else {
-				peers_iter_pibd()
-					.outbound()
-					.exclude(excluded_peer)
-					.choose_random()
-			};
+			let peer = peers_iter_pibd()
+				.outbound()
+				.exclude(excluded_peer)
+				.choose_random()
+				.or_else(|| {
+					peers_iter_pibd()
+						.inbound()
+						.exclude(excluded_peer)
+						.choose_random()
+				});
 			trace!("Chosen peer is {:?}", peer);
 
 			if let Some(p) = peer {
