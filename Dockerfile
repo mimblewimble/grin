@@ -36,5 +36,5 @@ EXPOSE 13413 13414
 EXPOSE 3416
 
 WORKDIR /root/.grin
-ENTRYPOINT ["grin"]
+ENTRYPOINT ["grin", "--no-tui"]
 CMD ["server", "run"]
