@@ -106,7 +106,7 @@ jobs:
         with:
           images: ${{ env.GHCR_IMAGE }}
           tags: |
-            type=raw,value={{ steps.vars.outputs.tag }},enable=true
+            type=raw,value=${{ steps.vars.outputs.tag }},enable=true
             type=raw,value=latest,enable=true
 
       - name: Create manifest list and push
