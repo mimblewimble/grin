@@ -57,7 +57,7 @@ impl Segmenter {
 		let now = Instant::now();
 		let txhashset = self.txhashset.read();
 		let kernel_pmmr = txhashset.kernel_pmmr_at(&self.header);
-		let segment = Segment::from_pmmr(id, &kernel_pmmr, false)?;
+		let segment = Segment::from_pmmr(id, &kernel_pmmr, None)?;
 		debug!(
 			"kernel_segment: id: ({}, {}), leaves: {}, hashes: {}, proof hashes: {}, took {}ms",
 			segment.id().height,
@@ -93,7 +93,7 @@ impl Segmenter {
 	) -> Result<(Segment<BitmapChunk>, Hash), Error> {
 		let now = Instant::now();
 		let bitmap_pmmr = self.bitmap_snapshot.readonly_pmmr();
-		let segment = Segment::from_pmmr(id, &bitmap_pmmr, false)?;
+		let segment = Segment::from_pmmr(id, &bitmap_pmmr, None)?;
 		let output_root = self.output_root()?;
 		debug!(
 			"bitmap_segment: id: ({}, {}), leaves: {}, hashes: {}, proof hashes: {}, took {}ms",
@@ -113,9 +113,10 @@ impl Segmenter {
 		id: SegmentIdentifier,
 	) -> Result<(Segment<OutputIdentifier>, Hash), Error> {
 		let now = Instant::now();
+		let bitmap = self.bitmap_snapshot.as_bitmap().ok();
 		let txhashset = self.txhashset.read();
 		let output_pmmr = txhashset.output_pmmr_at(&self.header);
-		let segment = Segment::from_pmmr(id, &output_pmmr, true)?;
+		let segment = Segment::from_pmmr(id, &output_pmmr, bitmap.as_ref())?;
 		let bitmap_root = self.bitmap_root()?;
 		debug!(
 			"output_segment: id: ({}, {}), leaves: {}, hashes: {}, proof hashes: {}, took {}ms",
@@ -132,9 +133,10 @@ impl Segmenter {
 	/// Create a rangeproof segment.
 	pub fn rangeproof_segment(&self, id: SegmentIdentifier) -> Result<Segment<RangeProof>, Error> {
 		let now = Instant::now();
+		let bitmap = self.bitmap_snapshot.as_bitmap().ok();
 		let txhashset = self.txhashset.read();
 		let pmmr = txhashset.rangeproof_pmmr_at(&self.header);
-		let segment = Segment::from_pmmr(id, &pmmr, true)?;
+		let segment = Segment::from_pmmr(id, &pmmr, bitmap.as_ref())?;
 		debug!(
 			"rangeproof_segment: id: ({}, {}), leaves: {}, hashes: {}, proof hashes: {}, took {}ms",
 			segment.id().height,
