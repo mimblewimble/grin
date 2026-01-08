@@ -50,6 +50,7 @@ pub struct Desegmenter {
 	default_output_segment_height: u8,
 	default_rangeproof_segment_height: u8,
 	default_kernel_segment_height: u8,
+	segment_apply_batch_size: usize,
 
 	bitmap_accumulator: BitmapAccumulator,
 	bitmap_segment_cache: Vec<Segment<BitmapChunk>>,
@@ -93,6 +94,7 @@ impl Desegmenter {
 			default_output_segment_height: pibd_params::OUTPUT_SEGMENT_HEIGHT,
 			default_rangeproof_segment_height: pibd_params::RANGEPROOF_SEGMENT_HEIGHT,
 			default_kernel_segment_height: pibd_params::KERNEL_SEGMENT_HEIGHT,
+			segment_apply_batch_size: pibd_params::SEGMENT_APPLY_BATCH_SIZE,
 			bitmap_segment_cache: vec![],
 			output_segment_cache: vec![],
 			rangeproof_segment_cache: vec![],
@@ -384,6 +386,12 @@ impl Desegmenter {
 				.find(|s| s.1.identifier().idx == bmp_idx)
 			{
 				self.apply_bitmap_segment(idx)?;
+			} else {
+				debug!(
+					"desegmenter: waiting for bitmap segment idx {} (cache size {})",
+					bmp_idx,
+					self.bitmap_segment_cache.len()
+				);
 			}
 		} else {
 			// Check if we need to finalize bitmap
@@ -394,48 +402,72 @@ impl Desegmenter {
 
 			// Check if we can apply the next output segment(s)
 			if let Some(next_output_idx) = self.next_required_output_segment_index() {
-				if let Some((idx, _seg)) = self
-					.output_segment_cache
-					.iter()
-					.enumerate()
-					.find(|s| s.1.identifier().idx == next_output_idx)
-				{
-					self.apply_output_segment(idx)?;
+				let segments = Self::take_segment_batch(
+					&mut self.output_segment_cache,
+					next_output_idx,
+					self.segment_apply_batch_size,
+				);
+				if segments.is_empty() {
+					debug!(
+						"desegmenter: waiting for output segment idx {} (cache size {})",
+						next_output_idx,
+						self.output_segment_cache.len()
+					);
+				} else {
+					self.apply_output_segments(segments)?;
 				}
-			} else {
-				if self.output_segment_cache.len() >= self.max_cached_segments {
-					self.output_segment_cache = vec![];
-				}
+			} else if self.output_segment_cache.len() >= self.max_cached_segments {
+				debug!(
+					"desegmenter: dropping {} cached output segments waiting for next requirement",
+					self.output_segment_cache.len()
+				);
+				self.output_segment_cache = vec![];
 			}
 			// Check if we can apply the next rangeproof segment
 			if let Some(next_rp_idx) = self.next_required_rangeproof_segment_index() {
-				if let Some((idx, _seg)) = self
-					.rangeproof_segment_cache
-					.iter()
-					.enumerate()
-					.find(|s| s.1.identifier().idx == next_rp_idx)
-				{
-					self.apply_rangeproof_segment(idx)?;
+				let segments = Self::take_segment_batch(
+					&mut self.rangeproof_segment_cache,
+					next_rp_idx,
+					self.segment_apply_batch_size,
+				);
+				if segments.is_empty() {
+					debug!(
+						"desegmenter: waiting for rangeproof segment idx {} (cache size {})",
+						next_rp_idx,
+						self.rangeproof_segment_cache.len()
+					);
+				} else {
+					self.apply_rangeproof_segments(segments)?;
 				}
-			} else {
-				if self.rangeproof_segment_cache.len() >= self.max_cached_segments {
-					self.rangeproof_segment_cache = vec![];
-				}
+			} else if self.rangeproof_segment_cache.len() >= self.max_cached_segments {
+				debug!(
+					"desegmenter: dropping {} cached rangeproof segments waiting for next requirement",
+					self.rangeproof_segment_cache.len()
+				);
+				self.rangeproof_segment_cache = vec![];
 			}
 			// Check if we can apply the next kernel segment
 			if let Some(next_kernel_idx) = self.next_required_kernel_segment_index() {
-				if let Some((idx, _seg)) = self
-					.kernel_segment_cache
-					.iter()
-					.enumerate()
-					.find(|s| s.1.identifier().idx == next_kernel_idx)
-				{
-					self.apply_kernel_segment(idx)?;
+				let segments = Self::take_segment_batch(
+					&mut self.kernel_segment_cache,
+					next_kernel_idx,
+					self.segment_apply_batch_size,
+				);
+				if segments.is_empty() {
+					debug!(
+						"desegmenter: waiting for kernel segment idx {} (cache size {})",
+						next_kernel_idx,
+						self.kernel_segment_cache.len()
+					);
+				} else {
+					self.apply_kernel_segments(segments)?;
 				}
-			} else {
-				if self.kernel_segment_cache.len() >= self.max_cached_segments {
-					self.kernel_segment_cache = vec![];
-				}
+			} else if self.kernel_segment_cache.len() >= self.max_cached_segments {
+				debug!(
+					"desegmenter: dropping {} cached kernel segments waiting for next requirement",
+					self.kernel_segment_cache.len()
+				);
+				self.kernel_segment_cache = vec![];
 			}
 		}
 		Ok(())
@@ -478,79 +510,105 @@ impl Desegmenter {
 				local_kernel_mmr_size = txhashset.kernel_mmr_size();
 				local_rangeproof_mmr_size = txhashset.rangeproof_mmr_size();
 			}
-			// TODO: Fix, alternative approach, this is very inefficient
-			let mut output_identifier_iter = SegmentIdentifier::traversal_iter(
+			let total_output_segments = SegmentIdentifier::count_segments_required(
 				self.archive_header.output_mmr_size,
 				self.default_output_segment_height,
 			);
-
 			let mut elems_added = 0;
-			while let Some(output_id) = output_identifier_iter.next() {
-				// Advance output iterator to next needed position
-				let (_first, last) =
-					output_id.segment_pos_range(self.archive_header.output_mmr_size);
-				if last <= local_output_mmr_size {
-					continue;
-				}
-				if self.output_segment_cache.len() >= self.max_cached_segments {
-					break;
-				}
-				if !self.has_output_segment_with_id(output_id) {
-					return_vec.push(SegmentTypeIdentifier::new(SegmentType::Output, output_id));
-					elems_added += 1;
-				}
-				if elems_added == max_elements / 3 {
-					break;
+			if let Some(mut next_output_idx) = self.next_required_output_segment_index() {
+				while (next_output_idx as usize) < total_output_segments {
+					if self.output_segment_cache.len() >= self.max_cached_segments {
+						break;
+					}
+					if elems_added == max_elements / 3 {
+						break;
+					}
+					let output_id = SegmentIdentifier {
+						height: self.default_output_segment_height,
+						idx: next_output_idx,
+					};
+					let (_first, last) =
+						output_id.segment_pos_range(self.archive_header.output_mmr_size);
+					if last > local_output_mmr_size && !self.has_output_segment_with_id(output_id) {
+						return_vec.push(SegmentTypeIdentifier::new(SegmentType::Output, output_id));
+						elems_added += 1;
+					}
+					next_output_idx += 1;
 				}
 			}
 
-			let mut rangeproof_identifier_iter = SegmentIdentifier::traversal_iter(
+			let total_rangeproof_segments = SegmentIdentifier::count_segments_required(
 				self.archive_header.output_mmr_size,
 				self.default_rangeproof_segment_height,
 			);
-
 			elems_added = 0;
-			while let Some(rp_id) = rangeproof_identifier_iter.next() {
-				let (_first, last) = rp_id.segment_pos_range(self.archive_header.output_mmr_size);
-				// Advance rangeproof iterator to next needed position
-				if last <= local_rangeproof_mmr_size {
-					continue;
-				}
-				if self.rangeproof_segment_cache.len() >= self.max_cached_segments {
-					break;
-				}
-				if !self.has_rangeproof_segment_with_id(rp_id) {
-					return_vec.push(SegmentTypeIdentifier::new(SegmentType::RangeProof, rp_id));
-					elems_added += 1;
-				}
-				if elems_added == max_elements / 3 {
-					break;
+			if let Some(mut next_rp_idx) = self.next_required_rangeproof_segment_index() {
+				while (next_rp_idx as usize) < total_rangeproof_segments {
+					if self.rangeproof_segment_cache.len() >= self.max_cached_segments {
+						break;
+					}
+					if elems_added == max_elements / 3 {
+						break;
+					}
+					let rp_id = SegmentIdentifier {
+						height: self.default_rangeproof_segment_height,
+						idx: next_rp_idx,
+					};
+					let (_first, last) =
+						rp_id.segment_pos_range(self.archive_header.output_mmr_size);
+					if last > local_rangeproof_mmr_size
+						&& !self.has_rangeproof_segment_with_id(rp_id)
+					{
+						return_vec.push(SegmentTypeIdentifier::new(SegmentType::RangeProof, rp_id));
+						elems_added += 1;
+					}
+					next_rp_idx += 1;
 				}
 			}
 
-			let mut kernel_identifier_iter = SegmentIdentifier::traversal_iter(
+			let total_kernel_segments = SegmentIdentifier::count_segments_required(
 				self.archive_header.kernel_mmr_size,
 				self.default_kernel_segment_height,
 			);
-
 			elems_added = 0;
-			while let Some(k_id) = kernel_identifier_iter.next() {
-				// Advance kernel iterator to next needed position
-				let (_first, last) = k_id.segment_pos_range(self.archive_header.kernel_mmr_size);
-				// Advance rangeproof iterator to next needed position
-				if last <= local_kernel_mmr_size {
-					continue;
+			if let Some(mut next_kernel_idx) = self.next_required_kernel_segment_index() {
+				while (next_kernel_idx as usize) < total_kernel_segments {
+					if self.kernel_segment_cache.len() >= self.max_cached_segments {
+						break;
+					}
+					if elems_added == max_elements / 3 {
+						break;
+					}
+					let k_id = SegmentIdentifier {
+						height: self.default_kernel_segment_height,
+						idx: next_kernel_idx,
+					};
+					let (_first, last) =
+						k_id.segment_pos_range(self.archive_header.kernel_mmr_size);
+					if last > local_kernel_mmr_size && !self.has_kernel_segment_with_id(k_id) {
+						return_vec.push(SegmentTypeIdentifier::new(SegmentType::Kernel, k_id));
+						elems_added += 1;
+					}
+					next_kernel_idx += 1;
 				}
-				if self.kernel_segment_cache.len() >= self.max_cached_segments {
-					break;
+			}
+		}
+		// Always ensure we explicitly ask for the very next kernel segment we are waiting on.
+		// The regular round-robin above can get saturated with outputs and rangeproofs while
+		// the desegmenter is blocked on a missing kernel, so we force this one in.
+		if let Some(next_kernel_idx) = self.next_required_kernel_segment_index() {
+			let seg_id = SegmentIdentifier {
+				height: self.default_kernel_segment_height,
+				idx: next_kernel_idx,
+			};
+			let next_kernel_seg_id = SegmentTypeIdentifier::new(SegmentType::Kernel, seg_id);
+			if !self.has_kernel_segment_with_id(seg_id)
+				&& !return_vec.iter().any(|x| x == &next_kernel_seg_id)
+			{
+				if return_vec.len() >= max_elements {
+					return_vec.pop();
 				}
-				if !self.has_kernel_segment_with_id(k_id) {
-					return_vec.push(SegmentTypeIdentifier::new(SegmentType::Kernel, k_id));
-					elems_added += 1;
-				}
-				if elems_added == max_elements / 3 {
-					break;
-				}
+				return_vec.push(next_kernel_seg_id);
 			}
 		}
 		if return_vec.is_empty() && self.bitmap_cache.is_some() {
@@ -708,12 +766,36 @@ impl Desegmenter {
 		}
 	}
 
-	/// Apply an output segment at the index cache
-	pub fn apply_output_segment(&mut self, idx: usize) -> Result<(), Error> {
-		let segment = self.output_segment_cache.remove(idx);
+	fn take_segment_batch<T>(
+		cache: &mut Vec<Segment<T>>,
+		start_idx: u64,
+		max_segments: usize,
+	) -> Vec<Segment<T>> {
+		let mut result = Vec::new();
+		let mut next_idx = start_idx;
+		while result.len() < max_segments {
+			if let Some(pos) = cache.iter().position(|s| s.identifier().idx == next_idx) {
+				result.push(cache.remove(pos));
+				next_idx += 1;
+			} else {
+				break;
+			}
+		}
+		result
+	}
+
+	/// Apply a batch of output segments
+	pub fn apply_output_segments(
+		&mut self,
+		segments: Vec<Segment<OutputIdentifier>>,
+	) -> Result<(), Error> {
+		if segments.is_empty() {
+			return Ok(());
+		}
 		trace!(
-			"pibd_desegmenter: applying output segment at segment idx {}",
-			segment.identifier().idx
+			"pibd_desegmenter: applying {} output segment(s) starting at idx {}",
+			segments.len(),
+			segments.first().map(|s| s.identifier().idx).unwrap_or(0)
 		);
 		let mut header_pmmr = self.header_pmmr.write();
 		let mut txhashset = self.txhashset.write();
@@ -724,7 +806,9 @@ impl Desegmenter {
 			&mut batch,
 			|ext, _batch| {
 				let extension = &mut ext.extension;
-				extension.apply_output_segment(segment)?;
+				for segment in segments {
+					extension.apply_output_segment(segment)?;
+				}
 				Ok(())
 			},
 		)?;
@@ -821,12 +905,18 @@ impl Desegmenter {
 		}
 	}
 
-	/// Apply a rangeproof segment at the index cache
-	pub fn apply_rangeproof_segment(&mut self, idx: usize) -> Result<(), Error> {
-		let segment = self.rangeproof_segment_cache.remove(idx);
+	/// Apply a batch of rangeproof segments
+	pub fn apply_rangeproof_segments(
+		&mut self,
+		segments: Vec<Segment<RangeProof>>,
+	) -> Result<(), Error> {
+		if segments.is_empty() {
+			return Ok(());
+		}
 		trace!(
-			"pibd_desegmenter: applying rangeproof segment at segment idx {}",
-			segment.identifier().idx
+			"pibd_desegmenter: applying {} rangeproof segment(s) starting at idx {}",
+			segments.len(),
+			segments.first().map(|s| s.identifier().idx).unwrap_or(0)
 		);
 		let mut header_pmmr = self.header_pmmr.write();
 		let mut txhashset = self.txhashset.write();
@@ -837,7 +927,9 @@ impl Desegmenter {
 			&mut batch,
 			|ext, _batch| {
 				let extension = &mut ext.extension;
-				extension.apply_rangeproof_segment(segment)?;
+				for segment in segments {
+					extension.apply_rangeproof_segment(segment)?;
+				}
 				Ok(())
 			},
 		)?;
@@ -920,12 +1012,16 @@ impl Desegmenter {
 		}
 	}
 
-	/// Apply a kernel segment at the index cache
-	pub fn apply_kernel_segment(&mut self, idx: usize) -> Result<(), Error> {
-		let segment = self.kernel_segment_cache.remove(idx);
-		trace!(
-			"pibd_desegmenter: applying kernel segment at segment idx {}",
-			segment.identifier().idx
+	/// Apply a batch of kernel segments at the index cache
+	pub fn apply_kernel_segments(&mut self, segments: Vec<Segment<TxKernel>>) -> Result<(), Error> {
+		if segments.is_empty() {
+			return Ok(());
+		}
+		let first_idx = segments.first().map(|s| s.identifier().idx).unwrap_or(0);
+		debug!(
+			"pibd_desegmenter: applying {} kernel segment(s) starting at idx {}",
+			segments.len(),
+			first_idx
 		);
 		let mut header_pmmr = self.header_pmmr.write();
 		let mut txhashset = self.txhashset.write();
@@ -936,7 +1032,20 @@ impl Desegmenter {
 			&mut batch,
 			|ext, _batch| {
 				let extension = &mut ext.extension;
-				extension.apply_kernel_segment(segment)?;
+				for segment in segments {
+					let seg_idx = segment.identifier().idx;
+					if let Err(e) = extension.apply_kernel_segment(segment) {
+						error!(
+							"pibd_desegmenter: failed to apply kernel segment idx {}: {}",
+							seg_idx, e
+						);
+						return Err(e);
+					}
+					debug!(
+						"pibd_desegmenter: successfully applied kernel segment idx {}",
+						seg_idx
+					);
+				}
 				Ok(())
 			},
 		)?;
@@ -985,13 +1094,31 @@ impl Desegmenter {
 
 	/// Adds a Kernel segment
 	pub fn add_kernel_segment(&mut self, segment: Segment<TxKernel>) -> Result<(), Error> {
-		trace!("pibd_desegmenter: add kernel segment");
-		segment.validate(
-			self.archive_header.kernel_mmr_size, // Last MMR pos at the height being validated
-			None,
-			self.archive_header.kernel_root, // Kernel root we're checking for
-		)?;
+		let idx = segment.identifier().idx;
+		debug!(
+			"pibd_desegmenter: received kernel segment idx {} (cache size {})",
+			idx,
+			self.kernel_segment_cache.len()
+		);
+		segment
+			.validate(
+				self.archive_header.kernel_mmr_size, // Last MMR pos at the height being validated
+				None,
+				self.archive_header.kernel_root, // Kernel root we're checking for
+			)
+			.map_err(|e| {
+				error!(
+					"pibd_desegmenter: kernel segment idx {} failed validation: {}",
+					idx, e
+				);
+				e
+			})?;
 		self.cache_kernel_segment(segment);
+		debug!(
+			"pibd_desegmenter: cached kernel segment idx {} (cache size {})",
+			idx,
+			self.kernel_segment_cache.len()
+		);
 		Ok(())
 	}
 }
