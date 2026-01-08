@@ -15,6 +15,7 @@
 use crate::util::RwLock;
 use std::collections::HashMap;
 use std::fs::File;
+use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::sync::Arc;
 
@@ -771,6 +772,13 @@ impl<I: Iterator<Item = Arc<Peer>>> PeersIter<I> {
 	pub fn outbound(self) -> PeersIter<impl Iterator<Item = Arc<Peer>>> {
 		PeersIter {
 			iter: self.iter.filter(|p| p.info.is_outbound()),
+		}
+	}
+
+	/// Filter to exclude peer by address.
+	pub fn exclude(self, addr: Option<SocketAddr>) -> PeersIter<impl Iterator<Item = Arc<Peer>>> {
+		PeersIter {
+			iter: self.iter.filter(move |p| Some(p.info.addr.0) != addr),
 		}
 	}
 
