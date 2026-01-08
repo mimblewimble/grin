@@ -33,6 +33,8 @@ futures = "0.3.19"
 serde_json = "1"
 log = "0.4"
 term = "0.6"
+serde_yaml = "0.9"
+syn = { version = "2.0", features = ["full", "parsing"] }
 
 grin_api = { path = "./api", version = "5.4.0-alpha.0" }
 grin_config = { path = "./config", version = "5.4.0-alpha.0" }

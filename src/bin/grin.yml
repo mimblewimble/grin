@@ -103,3 +103,18 @@ subcommands:
               help: Output file to write the results to
               long: output
               takes_value: true
+  - openapi:
+      about: Generate OpenAPI documentation from JSON-RPC endpoints
+      args:
+        - output:
+            help: Output file path
+            short: o
+            long: output
+            takes_value: true
+            required: true
+        - format:
+            help: Output format (json or yaml)
+            short: f
+            long: format
+            takes_value: true
+            default_value: json
