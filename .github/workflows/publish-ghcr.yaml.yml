@@ -93,6 +93,9 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
+      - name: Checkout code
+        uses: actions/checkout@v6
+
       - name: Generate image tag
         id: vars
         run: echo "tag=$(awk -F'"' '/^version/{ print $2; exit; }' Cargo.toml)" >> $GITHUB_OUTPUT
